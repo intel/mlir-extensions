@@ -56,6 +56,28 @@ class TestMlirBasic(TestCase):
             for val in _test_values:
                 self.assertEqual(py_func(val), jit_func(val))
 
+    def test_var(self):
+        def py_func(a):
+            c = 1
+            c = c + a
+            return c
+
+        jit_func = njit(py_func)
+        for val in _test_values:
+            self.assertEqual(py_func(val), jit_func(val))
+
+    def test_jump(self):
+        def py_func(a, b):
+            c = 3
+            if a > 5:
+                c = c + a
+            c = c + b
+            return c
+
+        jit_func = njit(py_func)
+        for a, b in itertools.product(_test_values, _test_values):
+            self.assertEqual(py_func(a, b), jit_func(a, b))
+
 
 if __name__ == '__main__':
     unittest.main()
