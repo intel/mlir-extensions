@@ -20,7 +20,8 @@ class TestMlirBasic(TestCase):
     def test_ops(self):
         py_funcs = [
             lambda a, b: a + b,
-            #lambda a, b: a - b,
+            lambda a, b: a - b,
+            lambda a, b: a * b,
             ]
 
         for py_func in py_funcs:
