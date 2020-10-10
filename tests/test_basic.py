@@ -45,6 +45,17 @@ class TestMlirBasic(TestCase):
             for a, b in itertools.product(_test_values, _test_values):
                 self.assertEqual(py_func(a, b), jit_func(a, b))
 
+    def test_const_ops(self):
+        py_funcs = [
+            lambda a: a + 42,
+            lambda a: 43 + a,
+            ]
+
+        for py_func in py_funcs:
+            jit_func = njit(py_func)
+            for val in _test_values:
+                self.assertEqual(py_func(val), jit_func(val))
+
 
 if __name__ == '__main__':
     unittest.main()
