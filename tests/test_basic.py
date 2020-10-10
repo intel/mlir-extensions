@@ -22,6 +22,22 @@ class TestMlirBasic(TestCase):
             lambda a, b: a + b,
             lambda a, b: a - b,
             lambda a, b: a * b,
+            # TODO: div
+            ]
+
+        for py_func in py_funcs:
+            jit_func = njit(py_func)
+            for a, b in itertools.product(_test_values, _test_values):
+                self.assertEqual(py_func(a, b), jit_func(a, b))
+
+    def test_cmp_ops(self):
+        py_funcs = [
+            lambda a, b: a if a > b else b,
+            lambda a, b: a if a < b else b,
+            lambda a, b: a if a >= b else b,
+            lambda a, b: a if a <= b else b,
+            lambda a, b: a if a == b else b,
+            lambda a, b: a if a != b else b,
             ]
 
         for py_func in py_funcs:
