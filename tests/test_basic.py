@@ -8,7 +8,7 @@ import unittest
 
 import itertools
 
-_test_values = [-3,-2,-1,0,1,2,3,-2.5,-1.0,-0.5 -0.0, 0.0, 0.5, 1.0, 2.5, -inf, inf] # nans
+_test_values = [-3,-2,-1,0,1,2,3,-2.5,-1.0,-0.5 -0.0, 0.0, 0.5, 1.0, 2.5, -inf, inf] # TODO: nans
 class TestMlirBasic(TestCase):
 
     def test_ret(self):
