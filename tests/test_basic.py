@@ -1,12 +1,14 @@
 import numba
 from numba import njit
+from math import nan, inf
+from numpy.testing import assert_equal # for nans comparison
 
 from numba.tests.support import TestCase
 import unittest
 
 import itertools
 
-_test_values = [-3,-2,-1,0,1,2,3]
+_test_values = [-3,-2,-1,0,1,2,3,-2.5,-1.0,-0.5 -0.0, 0.0, 0.5, 1.0, 2.5, -inf, inf] # nans
 class TestMlirBasic(TestCase):
 
     def test_ret(self):
@@ -15,7 +17,7 @@ class TestMlirBasic(TestCase):
 
         jit_func = njit(py_func)
         for val in _test_values:
-            self.assertEqual(py_func(val), jit_func(val))
+            assert_equal(py_func(val), jit_func(val))
 
     def test_ops(self):
         py_funcs = [
@@ -28,7 +30,7 @@ class TestMlirBasic(TestCase):
         for py_func in py_funcs:
             jit_func = njit(py_func)
             for a, b in itertools.product(_test_values, _test_values):
-                self.assertEqual(py_func(a, b), jit_func(a, b))
+                assert_equal(py_func(a, b), jit_func(a, b))
 
     def test_cmp_ops(self):
         py_funcs = [
@@ -43,7 +45,7 @@ class TestMlirBasic(TestCase):
         for py_func in py_funcs:
             jit_func = njit(py_func)
             for a, b in itertools.product(_test_values, _test_values):
-                self.assertEqual(py_func(a, b), jit_func(a, b))
+                assert_equal(py_func(a, b), jit_func(a, b))
 
     def test_const_ops(self):
         py_funcs = [
@@ -54,7 +56,7 @@ class TestMlirBasic(TestCase):
         for py_func in py_funcs:
             jit_func = njit(py_func)
             for val in _test_values:
-                self.assertEqual(py_func(val), jit_func(val))
+                assert_equal(py_func(val), jit_func(val))
 
     def test_var(self):
         def py_func(a):
@@ -64,7 +66,7 @@ class TestMlirBasic(TestCase):
 
         jit_func = njit(py_func)
         for val in _test_values:
-            self.assertEqual(py_func(val), jit_func(val))
+            assert_equal(py_func(val), jit_func(val))
 
     def test_jump(self):
         def py_func(a, b):
@@ -76,7 +78,7 @@ class TestMlirBasic(TestCase):
 
         jit_func = njit(py_func)
         for a, b in itertools.product(_test_values, _test_values):
-            self.assertEqual(py_func(a, b), jit_func(a, b))
+            assert_equal(py_func(a, b), jit_func(a, b))
 
 
 if __name__ == '__main__':
