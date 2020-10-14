@@ -80,6 +80,15 @@ class TestMlirBasic(TestCase):
         for a, b in itertools.product(_test_values, _test_values):
             assert_equal(py_func(a, b), jit_func(a, b))
 
+    def test_tuple(self):
+        def py_func(a, b, c):
+            t = (a,b,c)
+            return t[0] + t[1] + t[2]
+
+        jit_func = njit(py_func)
+        for a, b, c in itertools.product(_test_values, _test_values, _test_values):
+            assert_equal(py_func(a, b, c), jit_func(a, b, c))
+
 
 if __name__ == '__main__':
     unittest.main()
