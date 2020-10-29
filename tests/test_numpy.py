@@ -7,6 +7,14 @@ import unittest
 
 class TestMlirBasic(TestCase):
 
+    def test_staticgetitem(self):
+        def py_func(a):
+            return a[1]
+
+        jit_func = njit(py_func)
+        arr = np.asarray([5,6,7])
+        assert_equal(py_func(arr), jit_func(arr))
+
     def test_getitem(self):
         def py_func(a, b):
             return a[b]
