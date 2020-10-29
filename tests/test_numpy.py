@@ -7,6 +7,16 @@ import unittest
 
 class TestMlirBasic(TestCase):
 
+    def test_getitem(self):
+        def py_func(a, b):
+            return a[b]
+
+        jit_func = njit(py_func)
+        arr = np.asarray([5,6,7])
+        for i in range(3):
+            assert_equal(py_func(arr, i), jit_func(arr, i))
+
+    @unittest.skip
     def test_sum(self):
         def py_func(a):
             return a.sum()
