@@ -16,7 +16,6 @@ class TestMlirBasic(TestCase):
         for i in range(3):
             assert_equal(py_func(arr, i), jit_func(arr, i))
 
-    @unittest.skip
     def test_sum(self):
         def py_func(a):
             return a.sum()
