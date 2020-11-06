@@ -90,6 +90,36 @@ class TestMlirBasic(TestCase):
         for a, b, c in itertools.product(_test_values, _test_values, _test_values):
             assert_equal(py_func(a, b, c), jit_func(a, b, c))
 
+    def test_range1(self):
+        def py_func(a):
+            res = 0
+            for i in range(a):
+                res = res + i
+            return res
+
+        jit_func = njit(py_func)
+        assert_equal(py_func(10), jit_func(10))
+
+    def test_range2(self):
+        def py_func(a, b):
+            res = 0
+            for i in range(a, b):
+                res = res + i
+            return res
+
+        jit_func = njit(py_func)
+        assert_equal(py_func(10, 20), jit_func(10, 20))
+
+    def test_range3(self):
+        def py_func(a, b, c):
+            res = 0
+            for i in range(a, b, c):
+                res = res + i
+            return res
+
+        jit_func = njit(py_func)
+        assert_equal(py_func(10, 20, 2), jit_func(10, 20, 2))
+
 
 if __name__ == '__main__':
     unittest.main()
