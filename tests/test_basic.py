@@ -120,6 +120,18 @@ class TestMlirBasic(TestCase):
         jit_func = njit(py_func)
         assert_equal(py_func(10, 20, 2), jit_func(10, 20, 2))
 
+    def test_range_nested(self):
+        def py_func(a, b, c):
+            res = 0
+            for i in range(a):
+                for j in range(b):
+                    for k in range(c):
+                        res = res + i + j * 10 + k * 100
+            return res
+
+        jit_func = njit(py_func)
+        assert_equal(py_func(10, 20, 2), jit_func(10, 20, 2))
+
 
 if __name__ == '__main__':
     unittest.main()
