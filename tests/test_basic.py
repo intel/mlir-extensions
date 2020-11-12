@@ -66,6 +66,8 @@ class TestMlirBasic(TestCase):
         py_funcs = [
             lambda a: a + 42,
             lambda a: 43 + a,
+            lambda a: a + 42.5,
+            lambda a: 43.5 + a,
             ]
 
         for py_func in py_funcs:
