@@ -24,13 +24,17 @@ class TestMlirBasic(TestCase):
             lambda a, b: a + b,
             lambda a, b: a - b,
             lambda a, b: a * b,
-            # TODO: div
+            lambda a, b: a / b,
+            # TODO: floordiv
             ]
 
         for py_func in py_funcs:
             jit_func = njit(py_func)
             for a, b in itertools.product(_test_values, _test_values):
-                assert_equal(py_func(a, b), jit_func(a, b))
+                try:
+                    assert_equal(py_func(a, b), jit_func(a, b))
+                except ZeroDivisionError:
+                    pass
 
     def test_unary_ops(self):
         py_funcs = [
