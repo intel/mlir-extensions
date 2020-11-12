@@ -32,6 +32,17 @@ class TestMlirBasic(TestCase):
             for a, b in itertools.product(_test_values, _test_values):
                 assert_equal(py_func(a, b), jit_func(a, b))
 
+    def test_unary_ops(self):
+        py_funcs = [
+            lambda a: +a,
+            lambda a: -a,
+            ]
+
+        for py_func in py_funcs:
+            jit_func = njit(py_func)
+            for a in _test_values:
+                assert_equal(py_func(a), jit_func(a))
+
     def test_cmp_ops(self):
         py_funcs = [
             lambda a, b: a if a > b else b,
