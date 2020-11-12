@@ -85,6 +85,18 @@ class TestMlirBasic(TestCase):
         for val in _test_values:
             assert_equal(py_func(val), jit_func(val))
 
+    def test_ret_none(self):
+        def py_func1():
+            return None
+
+        def py_func2():
+            pass
+
+        jit_func1 = njit(py_func1)
+        jit_func2 = njit(py_func2)
+        assert_equal(py_func1(), jit_func1())
+        assert_equal(py_func2(), jit_func2())
+
     def test_jump(self):
         def py_func(a, b):
             c = 3
