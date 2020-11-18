@@ -24,6 +24,14 @@ class TestMlirBasic(TestCase):
         for i in range(3):
             assert_equal(py_func(arr, i), jit_func(arr, i))
 
+    def test_array_len(self):
+        def py_func(a):
+            return len(a)
+
+        jit_func = njit(py_func)
+        arr = np.asarray([5,6,7])
+        assert_equal(py_func(arr), jit_func(arr))
+
     def test_sum(self):
         def py_func(a):
             return a.sum()
