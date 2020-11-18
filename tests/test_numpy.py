@@ -60,5 +60,14 @@ class TestMlirBasic(TestCase):
         arr3 = np.asarray([7,8,9])
         assert_equal(py_func(arr1, arr2, arr3), jit_func(arr1, arr2, arr3))
 
+    def test_setitem(self):
+        def py_func(a, b):
+            a[b] = 42
+            return a.sum()
+
+        jit_func = njit(py_func)
+        arr = np.asarray([1,2,3])
+        assert_equal(py_func(arr, 1), jit_func(arr, 1))
+
 if __name__ == '__main__':
     unittest.main()
