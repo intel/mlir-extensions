@@ -163,6 +163,20 @@ class TestMlirBasic(TestCase):
         jit_func = njit(py_func)
         assert_equal(py_func(10), jit_func(10))
 
+    def test_range_continue(self):
+        def py_func(n):
+            res = 0
+            res1 = 2
+            for i in range(n):
+                res = res + i
+                if i < 5:
+                    continue
+                res1 = res1 + i * 2
+            return res + res1
+
+        jit_func = njit(py_func)
+        assert_equal(py_func(10), jit_func(10))
+
     def test_range_nested(self):
         def py_func(a, b, c):
             res = 0
