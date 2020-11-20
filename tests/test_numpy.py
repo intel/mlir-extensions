@@ -63,7 +63,7 @@ class TestMlirBasic(TestCase):
     def test_setitem(self):
         def py_func(a, b):
             a[b] = 42
-            return a.sum()
+            return a[b]
 
         jit_func = njit(py_func)
         arr = np.asarray([1,2,3])
