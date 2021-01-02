@@ -216,6 +216,16 @@ class TestMlirBasic(TestCase):
         jit_func = njit(py_func)
         assert_equal(py_func(10, 20, 2), jit_func(10, 20, 2))
 
+    def test_prange1(self):
+        def py_func(a):
+            res = 0
+            for i in numba.prange(a):
+                res = res + i
+            return res
+
+        jit_func = njit(py_func)
+        assert_equal(py_func(10), jit_func(10))
+
 
 if __name__ == '__main__':
     unittest.main()
