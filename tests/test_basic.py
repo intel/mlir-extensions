@@ -223,8 +223,18 @@ class TestMlirBasic(TestCase):
                 res = res + i
             return res
 
-        jit_func = njit(py_func)
+        jit_func = njit(py_func, parallel=True)
         assert_equal(py_func(10), jit_func(10))
+
+    def test_prange2(self):
+        def py_func(a, b):
+            res = 0
+            for i in numba.prange(a, b):
+                res = res + i
+            return res
+
+        jit_func = njit(py_func, parallel=True)
+        assert_equal(py_func(10, 20), jit_func(10, 20))
 
 
 if __name__ == '__main__':
