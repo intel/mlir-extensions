@@ -204,7 +204,19 @@ class TestMlirBasic(TestCase):
         jit_func = njit(py_func)
         assert_equal(py_func(10), jit_func(10))
 
-    def test_range_nested(self):
+    def test_range_nested1(self):
+        def py_func(a, b, c):
+            res = 0
+            for i in range(a):
+                for j in range(b):
+                    for k in range(c):
+                        res = res + i
+            return res
+
+        jit_func = njit(py_func)
+        assert_equal(py_func(10, 20, 2), jit_func(10, 20, 2))
+
+    def test_range_nested2(self):
         def py_func(a, b, c):
             res = 0
             for i in range(a):
