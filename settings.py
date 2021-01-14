@@ -12,4 +12,5 @@ def _readenv(name, ctor, default):
         return default
 
 USE_MLIR = _readenv('NUMBA_MLIR_ENABLE', int, 1)
+DUMP_PLIER = _readenv('NUMBA_MLIR_DUMP_PLIER', int, 0)
 PRINT_IR = _readenv('NUMBA_MLIR_PRINT_IR', int, 0)
