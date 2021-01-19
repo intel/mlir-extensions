@@ -248,6 +248,32 @@ class TestMlirBasic(TestCase):
         jit_func = njit(py_func, parallel=True)
         assert_equal(py_func(10, 20), jit_func(10, 20))
 
+    def test_func_call1(self):
+        def py_func1(b):
+            return b + 3
+
+        jit_func1 = njit(py_func1)
+
+        def py_func2(a):
+            return jit_func1(a) * 4
+
+        jit_func2 = njit(py_func2)
+
+        assert_equal(py_func2(10), jit_func2(10))
+
+    def test_func_call2(self):
+        def py_func1(b):
+            return b + 3
+
+        jit_func1 = njit(py_func1)
+
+        def py_func2(a):
+            return jit_func1(a) * jit_func1(a + 1)
+
+        jit_func2 = njit(py_func2)
+
+        assert_equal(py_func2(10), jit_func2(10))
+
 
 if __name__ == '__main__':
     unittest.main()
