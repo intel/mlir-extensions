@@ -79,5 +79,19 @@ class TestMlirBasic(TestCase):
         arr = np.asarray([3,2,1])
         assert_equal(py_func(arr.copy()), jit_func(arr.copy()))
 
+    def test_array_bounds(self):
+        def py_func(a):
+            res = 0
+            for i in range(len(a)):
+                if i >= len(a):
+                    res = res + 1
+                else:
+                    res = res + a[i]
+            return res
+
+        jit_func = njit(py_func)
+        arr = np.asarray([3,2,1])
+        assert_equal(py_func(arr.copy()), jit_func(arr.copy()))
+
 if __name__ == '__main__':
     unittest.main()
