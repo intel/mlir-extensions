@@ -97,13 +97,24 @@ class TestMlirBasic(TestCase):
         assert_equal(py_func1(), jit_func1())
         assert_equal(py_func2(), jit_func2())
 
-    def test_jump(self):
+    def test_if1(self):
         def py_func(a, b):
             c = 3
             if a > 5:
                 c = c + a
             c = c + b
             return c
+
+        jit_func = njit(py_func)
+        for a, b in itertools.product(_test_values, _test_values):
+            assert_equal(py_func(a, b), jit_func(a, b))
+
+    def test_if2(self):
+        def py_func(a, b):
+            if a > b:
+                return a + b
+            else:
+                return a - b
 
         jit_func = njit(py_func)
         for a, b in itertools.product(_test_values, _test_values):
