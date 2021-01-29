@@ -160,6 +160,36 @@ class TestMlirBasic(TestCase):
         jit_func = njit(py_func)
         assert_equal(py_func(10, 20, 2), jit_func(10, 20, 2))
 
+    def test_range_negative_step(self):
+        def py_func(a, b, c):
+            res = 0
+            for i in range(a, b, c):
+                res = res + i
+            return res
+
+        jit_func = njit(py_func)
+        assert_equal(py_func(5, -8, -2), jit_func(5, -8, -2))
+
+    def test_range_const_step1(self):
+        def py_func(a, b):
+            res = 0
+            for i in range(a, b, -2):
+                res = res + i
+            return res
+
+        jit_func = njit(py_func)
+        assert_equal(py_func(5, -8), jit_func(5, -8))
+
+    def test_range_const_step2(self):
+        def py_func(a, b):
+            res = 0
+            for i in range(a, b, 2):
+                res = res + i
+            return res
+
+        jit_func = njit(py_func)
+        assert_equal(py_func(-5, 8), jit_func(-5, 8))
+
     def test_range_use_index_after(self):
         def py_func(n):
             res = 0
