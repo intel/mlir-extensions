@@ -1,8 +1,10 @@
 from numba import runtests
 
-import numba.mlir.builtin_funcs
-import numba.mlir.numpy_funcs
-import numba.mlir.math_funcs
+from . import builtin_funcs
+from . import numpy_funcs
+from . import math_funcs
+
+from .numpy import funcs
 
 def test(*args, **kwargs):
     return runtests.main("numba.mlir.tests", *args, **kwargs)
