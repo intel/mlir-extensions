@@ -1,4 +1,4 @@
-
+from .func_registry import add_func
 
 class Var:
     def __init__(self, ssa_val, shape, dtype):
@@ -49,11 +49,13 @@ def compile_func(*args, **kwargs):
 
 _func_registry = {}
 
-def register_func(name):
+def register_func(name, orig_func = None):
     def _decorator(func):
         global _func_registry
         assert not name in _func_registry
         _func_registry[name] = func
+        if not orig_func is None:
+            add_func(orig_func, name)
         return func
     return _decorator
 

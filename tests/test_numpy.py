@@ -40,6 +40,15 @@ class TestMlirBasic(TestCase):
         arr = np.asarray([1,2,3])
         assert_equal(py_func(arr), jit_func(arr))
 
+    def test_add_scalar(self):
+        def py_func(a, b):
+            return np.add(a, b)
+
+        jit_func = njit(py_func)
+        arr1 = 1
+        arr2 = 2
+        assert_equal(py_func(arr1, arr2), jit_func(arr1, arr2))
+
     def test_sum_add(self):
         def py_func(a, b):
             return np.add(a, b).sum()

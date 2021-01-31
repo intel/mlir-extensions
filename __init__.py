@@ -1,7 +1,6 @@
 from numba import runtests
 
 from . import builtin_funcs
-from . import numpy_funcs
 from . import math_funcs
 
 from .numpy import funcs

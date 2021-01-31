@@ -1,6 +1,8 @@
 from  ..linalg_builder import register_func
 
-@register_func('numpy.add')
+import numpy
+
+@register_func('numpy.add', numpy.add)
 def add_impl(builder, arg1, arg2):
     a1, a2 = builder.broadcast(arg1, arg2)
     shape = a1.shape
