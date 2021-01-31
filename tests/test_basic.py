@@ -36,6 +36,15 @@ class TestMlirBasic(TestCase):
                 except ZeroDivisionError:
                     pass
 
+    def test_inplace_op(self):
+        def py_func(a,b):
+            a += b
+            return a
+
+        jit_func = njit(py_func)
+        for a, b in itertools.product(_test_values, _test_values):
+            assert_equal(py_func(a, b), jit_func(a, b))
+
     def test_unary_ops(self):
         py_funcs = [
             lambda a: +a,
