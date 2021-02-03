@@ -102,5 +102,14 @@ class TestMlirBasic(TestCase):
         arr = np.asarray([3,2,1])
         assert_equal(py_func(arr.copy()), jit_func(arr.copy()))
 
+    def test_array_shape(self):
+        def py_func(a):
+            shape = a.shape
+            return shape[0] + shape[1]
+
+        jit_func = njit(py_func)
+        arr = np.array([[1,2,3],[4,5,6]])
+        assert_equal(py_func(arr), jit_func(arr))
+
 if __name__ == '__main__':
     unittest.main()
