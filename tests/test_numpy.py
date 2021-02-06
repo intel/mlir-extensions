@@ -88,14 +88,56 @@ class TestMlirBasic(TestCase):
         arr = np.asarray([3,2,1])
         assert_equal(py_func(arr.copy()), jit_func(arr.copy()))
 
-    def test_array_bounds(self):
+    def test_array_bounds1(self):
         def py_func(a):
             res = 0
             for i in range(len(a)):
-                if i >= len(a):
+                if i >= len(a) or i < 0:
                     res = res + 1
                 else:
                     res = res + a[i]
+            return res
+
+        jit_func = njit(py_func)
+        arr = np.asarray([3,2,1])
+        assert_equal(py_func(arr.copy()), jit_func(arr.copy()))
+
+    def test_array_bounds2(self):
+        def py_func(a):
+            res = 0
+            for i in range(len(a)):
+                if i < len(a) and i >= 0:
+                    res = res + a[i]
+                else:
+                    res = res + 1
+            return res
+
+        jit_func = njit(py_func)
+        arr = np.asarray([3,2,1])
+        assert_equal(py_func(arr.copy()), jit_func(arr.copy()))
+
+    def test_array_bounds3(self):
+        def py_func(a):
+            res = 0
+            for i in range(len(a)):
+                if 0 <= i < len(a):
+                    res = res + a[i]
+                else:
+                    res = res + 1
+            return res
+
+        jit_func = njit(py_func)
+        arr = np.asarray([3,2,1])
+        assert_equal(py_func(arr.copy()), jit_func(arr.copy()))
+
+    def test_array_bounds4(self):
+        def py_func(a):
+            res = 0
+            for i in range(len(a) - 1):
+                if 0 <= i < (len(a) - 1):
+                    res = res + a[i]
+                else:
+                    res = res + 1
             return res
 
         jit_func = njit(py_func)
