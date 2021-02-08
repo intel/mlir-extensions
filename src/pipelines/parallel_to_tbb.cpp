@@ -10,6 +10,7 @@
 #include "plier/dialect.hpp"
 
 #include "plier/compiler/pipeline_registry.hpp"
+#include "plier/transforms/const_utils.hpp"
 #include "pipelines/base_pipeline.hpp"
 #include "pipelines/lower_to_llvm.hpp"
 
@@ -26,13 +27,10 @@ mlir::MemRefType getReduceType(mlir::Type type, int64_t count)
 
 mlir::Value getZeroVal(mlir::OpBuilder& builder, mlir::Location loc, mlir::Type type)
 {
-    if (type.isa<mlir::IntegerType>())
+    auto const_val = plier::getZeroVal(type);
+    if (const_val)
     {
-        return builder.create<mlir::ConstantIntOp>(loc, 0, type.cast<mlir::IntegerType>());
-    }
-    if (type.isa<mlir::FloatType>())
-    {
-        return builder.create<mlir::ConstantFloatOp>(loc, llvm::APFloat(0.0), type.cast<mlir::FloatType>());
+        return builder.create<mlir::ConstantOp>(loc, const_val);
     }
     llvm_unreachable("Unhandled type");
 }

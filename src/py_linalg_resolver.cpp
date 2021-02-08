@@ -14,6 +14,7 @@
 #include "plier/dialect.hpp"
 #include "py_map_types.hpp"
 #include "plier/utils.hpp"
+#include "plier/transforms/const_utils.hpp"
 
 namespace py = pybind11;
 
@@ -267,19 +268,6 @@ auto generic_op_body_result_types(mlir::ValueRange outputs)
     return ret;
 }
 
-mlir::Attribute zero_attr(mlir::Type type)
-{
-    if (type.isa<mlir::IntegerType>())
-    {
-        return mlir::IntegerAttr::get(type, 0);
-    }
-    if (type.isa<mlir::FloatType>())
-    {
-        return mlir::FloatAttr::get(type, 0.0);
-    }
-    plier::report_error("zero_attr: unhandled type");
-}
-
 py::object broadcast_impl(py::capsule /*context*/, py::tuple args)
 {
     if (1 == args.size())
@@ -300,7 +288,9 @@ py::object init_tensor_impl(py::capsule context, py::list shape, py::capsule dty
     if (shape.empty())
     {
         // TODO: undef
-        init = ctx.builder.create<mlir::ConstantOp>(ctx.loc, zero_attr(elem_type));
+        auto zero_val = plier::getZeroVal(elem_type);
+        assert(zero_val);
+        init = ctx.builder.create<mlir::ConstantOp>(ctx.loc, zero_val);
     }
     else
     {
