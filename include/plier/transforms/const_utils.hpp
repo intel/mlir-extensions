@@ -1,11 +1,11 @@
 #pragma once
 
 #include <mlir/IR/Attributes.h>
+#include <mlir/IR/Value.h>
 
 namespace mlir
 {
 class Operation;
-class Value;
 }
 
 namespace plier
@@ -24,4 +24,6 @@ T getConstVal(mlir::Value op)
 {
     return getConstVal(op).dyn_cast_or_null<T>();
 }
+
+mlir::Attribute getZeroVal(mlir::Type type);
 }
