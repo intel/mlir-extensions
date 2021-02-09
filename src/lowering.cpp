@@ -72,6 +72,7 @@ static const constexpr OpId inst_ops_names[] = {
     {"*",  "mul"},
     {"/",  "truediv"},
     {"//", "floordiv"},
+    {"%", "mod"},
 
     {">",  "gt"},
     {">=", "ge"},

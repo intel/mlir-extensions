@@ -511,9 +511,32 @@ void replace_op(mlir::Operation* op, mlir::PatternRewriter& rewriter, mlir::Type
 void replace_itruediv_op(mlir::Operation* op, mlir::PatternRewriter& rewriter, mlir::Type new_type, mlir::ValueRange operands)
 {
     assert(nullptr != op);
+    assert(new_type.isa<mlir::FloatType>());
     auto lhs = do_cast(new_type, operands[0], rewriter);
     auto rhs = do_cast(new_type, operands[1], rewriter);
     rewriter.replaceOpWithNewOp<mlir::DivFOp>(op, lhs, rhs);
+}
+
+void replace_imod_op(mlir::Operation* op, mlir::PatternRewriter& rewriter, mlir::Type /*new_type*/, mlir::ValueRange operands)
+{
+    auto loc = op->getLoc();
+    auto a = operands[0];
+    auto b = operands[1];
+    auto v1 = rewriter.create<mlir::SignedRemIOp>(loc, a, b).getResult();
+    auto v2 = rewriter.create<mlir::AddIOp>(loc, v1, b).getResult();
+    auto res = rewriter.create<mlir::SignedRemIOp>(loc, v2, b).getResult();
+    rewriter.replaceOp(op, res);
+}
+
+void replace_fmod_op(mlir::Operation* op, mlir::PatternRewriter& rewriter, mlir::Type /*new_type*/, mlir::ValueRange operands)
+{
+    auto loc = op->getLoc();
+    auto a = operands[0];
+    auto b = operands[1];
+    auto v1 = rewriter.create<mlir::RemFOp>(loc, a, b).getResult();
+    auto v2 = rewriter.create<mlir::AddFOp>(loc, v1, b).getResult();
+    auto res = rewriter.create<mlir::RemFOp>(loc, v2, b).getResult();
+    rewriter.replaceOp(op, res);
 }
 
 template<typename T, uint64_t Pred>
@@ -577,6 +600,7 @@ struct BinOpLowering : public mlir::OpRewritePattern<plier::BinOp>
             {"-", &replace_op<mlir::SubIOp>, &replace_op<mlir::SubFOp>},
             {"*", &replace_op<mlir::MulIOp>, &replace_op<mlir::MulFOp>},
             {"/", &replace_itruediv_op, &replace_op<mlir::DivFOp>},
+            {"%", &replace_imod_op, &replace_fmod_op},
 
             {">", &replace_cmp_op<mlir::CmpIOp, static_cast<uint64_t>(mlir::CmpIPredicate::sgt)>,
                   &replace_cmp_op<mlir::CmpFOp, static_cast<uint64_t>(mlir::CmpFPredicate::OGT)>},
