@@ -1,6 +1,6 @@
 import numba
 from numba import njit
-from math import nan, inf
+from math import nan, inf, isnan
 from numpy.testing import assert_equal # for nans comparison
 
 from numba.tests.support import TestCase
@@ -8,7 +8,9 @@ import unittest
 
 import itertools
 
-_test_values = [-3,-2,-1,0,1,2,3,-2.5,-1.0,-0.5 -0.0, 0.0, 0.5, 1.0, 2.5, -inf, inf] # TODO: nans
+# TODO: nans and infs not tested yet, we are not sure if want exactly follow
+# interpreted python rules
+_test_values = [-3,-2,-1,0,1,2,3,-2.5,-1.0,-0.5 -0.0, 0.0, 0.5, 1.0, 2.5]
 class TestMlirBasic(TestCase):
 
     def test_ret(self):
@@ -25,6 +27,7 @@ class TestMlirBasic(TestCase):
             lambda a, b: a - b,
             lambda a, b: a * b,
             lambda a, b: a / b,
+            lambda a, b: a % b,
             # TODO: floordiv
             ]
 
