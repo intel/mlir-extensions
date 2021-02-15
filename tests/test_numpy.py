@@ -40,6 +40,15 @@ class TestMlirBasic(TestCase):
         arr = np.asarray([1,2,3])
         assert_equal(py_func(arr), jit_func(arr))
 
+    def test_add(self):
+        def py_func(a, b):
+            return np.add(a, b)
+
+        jit_func = njit(py_func)
+        arr1 = np.array([1,2,3])
+        arr2 = np.array([4,5,6])
+        assert_equal(py_func(arr1,arr2), jit_func(arr1,arr2))
+
     def test_add_scalar(self):
         def py_func(a, b):
             return np.add(a, b)
@@ -151,6 +160,14 @@ class TestMlirBasic(TestCase):
 
         jit_func = njit(py_func)
         arr = np.array([[1,2,3],[4,5,6]])
+        assert_equal(py_func(arr), jit_func(arr))
+
+    def test_array_return(self):
+        def py_func(a):
+            return a
+
+        jit_func = njit(py_func)
+        arr = np.array([1,2,3])
         assert_equal(py_func(arr), jit_func(arr))
 
 if __name__ == '__main__':
