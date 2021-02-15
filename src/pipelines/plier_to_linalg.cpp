@@ -10,6 +10,7 @@
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/Dialect/Tensor/Transforms/Passes.h>
 #include <mlir/Dialect/SCF/SCF.h>
+#include <mlir/Dialect/SCF/Passes.h>
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
 #include <mlir/Pass/Pass.h>
 #include <mlir/Pass/PassManager.h>
@@ -653,16 +654,15 @@ void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager& pm)
 {
     pm.addPass(mlir::createLinalgFusionOfTensorOpsPass());
 
-    pm.addNestedPass<mlir::FuncOp>(mlir::createTensorBufferizePass());
+    pm.addPass(mlir::createTensorConstantBufferizePass());
+    pm.addNestedPass<mlir::FuncOp>(mlir::createSCFBufferizePass());
     pm.addNestedPass<mlir::FuncOp>(mlir::createLinalgBufferizePass());
     pm.addNestedPass<mlir::FuncOp>(mlir::createStdBufferizePass());
+    pm.addNestedPass<mlir::FuncOp>(mlir::createTensorBufferizePass());
     pm.addPass(mlir::createFuncBufferizePass());
+    pm.addNestedPass<mlir::FuncOp>(mlir::createFinalizingBufferizePass());
 
-    pm.addNestedPass<mlir::FuncOp>(mlir::createPromoteBuffersToStackPass(1024));
-    pm.addNestedPass<mlir::FuncOp>(mlir::createBufferHoistingPass());
-    pm.addNestedPass<mlir::FuncOp>(mlir::createBufferLoopHoistingPass());
     pm.addNestedPass<mlir::FuncOp>(mlir::createBufferDeallocationPass());
-    pm.addNestedPass<mlir::FuncOp>(mlir::createCopyRemovalPass());
 
     pm.addPass(std::make_unique<LowerLinalgPass>());
     pm.addPass(std::make_unique<PostLinalgOptPass>());
