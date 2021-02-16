@@ -1105,6 +1105,27 @@ struct FixupWhileTypes : public mlir::OpRewritePattern<mlir::scf::WhileOp>
     }
 };
 
+struct PropagateBuildTupleTypes : public mlir::OpRewritePattern<plier::BuildTupleOp>
+{
+    PropagateBuildTupleTypes(mlir::TypeConverter &/*typeConverter*/,
+                             mlir::MLIRContext *context):
+        OpRewritePattern(context) {}
+
+    mlir::LogicalResult matchAndRewrite(
+        plier::BuildTupleOp op, mlir::PatternRewriter &rewriter) const override
+    {
+        if (op.getType().isa<mlir::TupleType>() ||
+            llvm::any_of(op.getOperandTypes(), [](mlir::Type type){ return type.isa<plier::PyType>(); }))
+        {
+            return mlir::failure();
+        }
+
+        auto new_type = mlir::TupleType::get(op.getContext(), op.getOperandTypes());
+        rewriter.replaceOpWithNewOp<plier::BuildTupleOp>(op, new_type, op.getOperands());
+        return mlir::success();
+    }
+};
+
 template<typename Op>
 struct FoldTupleGetitem : public mlir::OpRewritePattern<Op>
 {
@@ -1352,6 +1373,7 @@ void PlierToStdPass::runOnOperation()
         ScfIfRewrite,
         ScfWhileRewrite,
         FixupWhileTypes,
+        PropagateBuildTupleTypes,
         FoldTupleGetitem<plier::GetItemOp>,
         FoldTupleGetitem<plier::StaticGetItemOp>
         >(type_converter, context);
