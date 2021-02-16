@@ -78,7 +78,7 @@ class TestMlirBasic(TestCase):
         arr3 = np.asarray([7,8,9])
         assert_equal(py_func(arr1, arr2, arr3), jit_func(arr1, arr2, arr3))
 
-    def test_setitem(self):
+    def test_setitem1(self):
         def py_func(a, b):
             a[b] = 42
             return a[b]
@@ -86,6 +86,15 @@ class TestMlirBasic(TestCase):
         jit_func = njit(py_func)
         arr = np.asarray([1,2,3])
         assert_equal(py_func(arr, 1), jit_func(arr, 1))
+
+    def test_setitem2(self):
+        def py_func(a, b, c):
+            a[b, c] = 42
+            return a[b, c]
+
+        jit_func = njit(py_func)
+        arr = np.asarray([[1,2,3],[4,5,6]])
+        assert_equal(py_func(arr, 1, 2), jit_func(arr, 1, 2))
 
     def test_setitem_loop(self):
         def py_func(a):
