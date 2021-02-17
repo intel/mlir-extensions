@@ -5,6 +5,11 @@ import numpy as np
 from numba.tests.support import TestCase
 import unittest
 
+_arr_1d_int = [1,2,3,4,5,6,7,8]
+_arr_1d_float = [1.0,2.1,3.2,4.3,5.4,6.5,7.6,8.7]
+_arr_2d_int = [[1,2,3,4],[5,6,7,8]]
+_arr_2d_float = [[1.0,2.1,3.2,4.3],[5.4,6.5,7.6,8.7]]
+_test_arrays = [_arr_1d_int, _arr_1d_float, _arr_2d_int, _arr_2d_float]
 class TestMlirBasic(TestCase):
 
     def test_staticgetitem(self):
@@ -32,13 +37,18 @@ class TestMlirBasic(TestCase):
         arr = np.asarray([5,6,7])
         assert_equal(py_func(arr), jit_func(arr))
 
-    def test_sum(self):
-        def py_func(a):
-            return a.sum()
+    def test_unary(self):
+        funcs = [
+            lambda a: a.sum(),
+            lambda a: np.sqrt(a),
+            lambda a: np.square(a),
+        ]
 
-        jit_func = njit(py_func)
-        arr = np.asarray([1,2,3])
-        assert_equal(py_func(arr), jit_func(arr))
+        for py_func in funcs:
+            jit_func = njit(py_func)
+            for a in _test_arrays:
+                arr = np.array(a)
+                assert_equal(py_func(arr), jit_func(arr))
 
     def test_add(self):
         def py_func(a, b):
