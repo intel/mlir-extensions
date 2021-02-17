@@ -429,13 +429,27 @@ py::object extract_impl(py::capsule context, py::handle value, py::handle indice
     return ctx.context.create_var(ctx.loc, ctx.builder, res);
 }
 
-void setup_py_builder(py::handle builder)
+void setup_py_builder(py::handle builder, mlir::OpBuilder& b)
 {
     py::setattr(builder, "_broadcast", py::cpp_function(&broadcast_impl));
     py::setattr(builder, "_init_tensor", py::cpp_function(&init_tensor_impl));
     py::setattr(builder, "_generic", py::cpp_function(&generic_impl));
     py::setattr(builder, "_from_elements", py::cpp_function(&from_elements_impl));
     py::setattr(builder, "_extract", py::cpp_function(&extract_impl));
+
+    auto add_type = [&](const char* name, mlir::Type type)
+    {
+        py::setattr(builder, name, wrap_mlir(type));
+    };
+
+    add_type("int8", b.getIntegerType(8));
+    add_type("int16", b.getIntegerType(16));
+    add_type("int32", b.getIntegerType(32));
+    add_type("int64", b.getIntegerType(64));
+
+    add_type("float16", b.getF16Type());
+    add_type("float32", b.getF32Type());
+    add_type("float64", b.getF64Type());
 }
 
 PyLinalgResolver::Values unpack_results(py::handle object)
@@ -494,7 +508,7 @@ llvm::Optional<PyLinalgResolver::Values> PyLinalgResolver::rewrite(llvm::StringR
 
     PyBuilderContext py_builder_context{loc, builder, *context};
     auto py_builder = context->builder(py::capsule(&py_builder_context));
-    setup_py_builder(py_builder);
+    setup_py_builder(py_builder, builder);
 
     assert(!args.empty());
     auto module = args.front().getParentRegion()->getParentOfType<mlir::ModuleOp>();

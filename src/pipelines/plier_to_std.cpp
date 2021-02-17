@@ -1255,13 +1255,15 @@ mlir::LogicalResult lower_math_func(
     auto ret_type = map_plier_type(op.getType());
     auto valid_type = [&](mlir::Type type)
     {
-        return ret_type == type && type.isa<mlir::Float32Type, mlir::Float64Type>();
+        return type.isa<mlir::Float32Type, mlir::Float64Type, mlir::IntegerType>();
     };
     if (ret_type && name.consume_front("math.") && args.size() == 1 &&
         valid_type(args[0].getType()))
     {
+        auto loc = op.getLoc();
+        mlir::Value arg = rewriter.create<plier::CastOp>(loc, ret_type, args[0]);
         auto is_float = ret_type.isa<mlir::Float32Type>();
-        auto func_type = mlir::FunctionType::get(op.getContext(), args[0].getType(), ret_type);
+        auto func_type = mlir::FunctionType::get(op.getContext(), ret_type, ret_type);
         auto module = op->getParentOfType<mlir::ModuleOp>();
         mlir::FuncOp func;
         if (is_float)
@@ -1272,7 +1274,7 @@ mlir::LogicalResult lower_math_func(
         {
             func = get_lib_symbol(module, name, func_type, rewriter);
         }
-        auto call = rewriter.create<mlir::CallOp>(op.getLoc(), func, args);
+        auto call = rewriter.create<mlir::CallOp>(loc, func, arg);
         rewriter.replaceOp(op, call.getResults());
         return mlir::success();
     }
