@@ -108,14 +108,17 @@ void createScalarStore(
 mlir::LogicalResult plier::CanonicalizeReduction::matchAndRewrite(mlir::scf::ForOp op, mlir::PatternRewriter& rewriter) const
 {
     llvm::SmallVector<mlir::Value, 8> to_process;
-    op.walk([&](mlir::LoadOp load)
+    for (auto& current : op.getLoopBody().front())
     {
-        auto memref = load.memref();
-        if (checkMemref(memref, op))
+        if (auto load = mlir::dyn_cast<mlir::LoadOp>(current))
         {
-            to_process.emplace_back(memref);
+            auto memref = load.memref();
+            if (checkMemref(memref, op))
+            {
+                to_process.emplace_back(memref);
+            }
         }
-    });
+    }
 
     if (!to_process.empty())
     {
