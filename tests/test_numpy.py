@@ -88,6 +88,15 @@ class TestMlirBasic(TestCase):
         arr3 = np.asarray([7,8,9])
         assert_equal(py_func(arr1, arr2, arr3), jit_func(arr1, arr2, arr3))
 
+    def test_static_setitem(self):
+        def py_func(a):
+            a[1] = 42
+            return a[1]
+
+        jit_func = njit(py_func)
+        arr = np.asarray([1,2,3])
+        assert_equal(py_func(arr), jit_func(arr))
+
     def test_setitem1(self):
         def py_func(a, b):
             a[b] = 42
@@ -188,6 +197,17 @@ class TestMlirBasic(TestCase):
         jit_func = njit(py_func)
         arr = np.array([1,2,3])
         assert_equal(py_func(arr), jit_func(arr))
+
+    def test_array_prange_const(self):
+        def py_func(a, b):
+            a[0] = 42
+            for i in numba.prange(b):
+                a[0] = 1
+            return a[0]
+
+        jit_func = njit(py_func, parallel=True)
+        arr = np.array([0.0])
+        assert_equal(py_func(arr, 5), jit_func(arr, 5))
 
 if __name__ == '__main__':
     unittest.main()
