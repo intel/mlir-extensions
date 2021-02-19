@@ -176,13 +176,27 @@ mlir::Value unflatten(mlir::Type type, mlir::Location loc, mlir::OpBuilder& buil
     }
 }
 
+void write_memref_desc(llvm::raw_ostream& os, mlir::MemRefType memref_type)
+{
+    if (memref_type.hasRank())
+    {
+        os << memref_type.getRank();
+    }
+    else
+    {
+        os << "?";
+    }
+    os << "x";
+    memref_type.getElementType().print(os);
+}
+
 std::string gen_to_memref_conversion_func_name(mlir::MemRefType memref_type)
 {
     assert(memref_type);
     std::string ret;
     llvm::raw_string_ostream ss(ret);
     ss << "__convert_to_memref_";
-    memref_type.getElementType().print(ss);
+    write_memref_desc(ss, memref_type);
     ss.flush();
     return ret;
 }
@@ -193,7 +207,7 @@ std::string gen_from_memref_conversion_func_name(mlir::MemRefType memref_type)
     std::string ret;
     llvm::raw_string_ostream ss(ret);
     ss << "__convert_from_memref_";
-    memref_type.getElementType().print(ss);
+    write_memref_desc(ss, memref_type);
     ss.flush();
     return ret;
 }

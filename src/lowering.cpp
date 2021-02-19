@@ -93,6 +93,7 @@ struct inst_handles
         Branch = mod.attr("Branch");
         Jump = mod.attr("Jump");
         SetItem = mod.attr("SetItem");
+        StaticSetItem = mod.attr("StaticSetItem");
 
         Arg = mod.attr("Arg");
         Expr = mod.attr("Expr");
@@ -116,6 +117,7 @@ struct inst_handles
     py::handle Branch;
     py::handle Jump;
     py::handle SetItem;
+    py::handle StaticSetItem;
 
     py::handle Arg;
     py::handle Expr;
@@ -232,7 +234,8 @@ private:
             auto val = lower_assign(inst, target);
             storevar(val, target);
         }
-        else if (py::isinstance(inst, insts.SetItem))
+        else if (py::isinstance(inst, insts.SetItem) ||
+                 py::isinstance(inst, insts.StaticSetItem))
         {
             setitem(inst.attr("target"), inst.attr("index"), inst.attr("value"));
         }
@@ -473,7 +476,15 @@ private:
 
     void setitem(const py::handle& target, const py::handle& index, const py::handle& value)
     {
-        builder.create<plier::SetItemOp>(get_current_loc(), loadvar(target), loadvar(index), loadvar(value));
+        auto ind = [&]()->mlir::Value
+        {
+            if (py::isinstance<py::int_>(index))
+            {
+                return builder.create<mlir::ConstantIndexOp>(get_current_loc(), index.cast<int64_t>());
+            }
+            return loadvar(index);
+        }();
+        builder.create<plier::SetItemOp>(get_current_loc(), loadvar(target), ind, loadvar(value));
     }
 
     void storevar(mlir::Value val, const py::handle& inst)

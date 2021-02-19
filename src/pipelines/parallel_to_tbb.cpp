@@ -50,6 +50,10 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp>
         {
             return mlir::failure();
         }
+        if (!op->hasAttr(plier::attributes::getParallelName()))
+        {
+            return mlir::failure();
+        }
 
         int64_t max_concurrency = 0;
         auto mod = op->getParentOfType<mlir::ModuleOp>();
@@ -96,16 +100,16 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp>
         auto orig_step = op.step().front();
         auto body_builder = [&](mlir::OpBuilder &builder, ::mlir::Location loc, mlir::Value lower_bound, mlir::Value upper_bound, mlir::Value thread_index)
         {
-            mapping.map(orig_lower_bound, lower_bound);
-            mapping.map(orig_upper_bound, upper_bound);
             for (auto it : llvm::enumerate(op.initVals()))
             {
                 auto reduce_var = reduce_vars[it.index()];
                 auto val = builder.create<mlir::LoadOp>(loc, reduce_var, thread_index);
                 mapping.map(it.value(), val);
             }
-            auto new_op = builder.clone(*op, mapping);
+            auto new_op = mlir::cast<mlir::scf::ParallelOp>(builder.clone(*op, mapping));
             assert(new_op->getNumResults() == reduce_vars.size());
+            new_op.lowerBoundMutable().assign(lower_bound);
+            new_op.upperBoundMutable().assign(upper_bound);
             for (auto it : llvm::enumerate(new_op->getResults()))
             {
                 auto reduce_var = reduce_vars[it.index()];
