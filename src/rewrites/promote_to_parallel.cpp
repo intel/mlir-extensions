@@ -133,6 +133,10 @@ mlir::LogicalResult plier::PromoteToParallel::matchAndRewrite(mlir::scf::ForOp o
     };
 
     auto parallel_op = rewriter.create<mlir::scf::ParallelOp>(op.getLoc(), op.lowerBound(), op.upperBound(), op.step(), op.initArgs(), body_builder);
+    if (has_parallel_attr)
+    {
+        parallel_op->setAttr(plier::attributes::getParallelName(), rewriter.getUnitAttr());
+    }
     rewriter.replaceOp(op, parallel_op.getResults());
 
     return mlir::success();
