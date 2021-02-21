@@ -15,7 +15,7 @@ namespace plier
 {
 struct CallOpLowering : public mlir::OpRewritePattern<plier::PyCallOp>
 {
-    using resolver_t = llvm::function_ref<mlir::LogicalResult(plier::PyCallOp, llvm::StringRef, llvm::ArrayRef<mlir::Value>, mlir::PatternRewriter&)>;
+    using resolver_t = llvm::function_ref<mlir::LogicalResult(plier::PyCallOp, llvm::StringRef, llvm::ArrayRef<mlir::Value>, llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> , mlir::PatternRewriter&)>;
 
     CallOpLowering(mlir::TypeConverter &typeConverter,
                    mlir::MLIRContext *context,

@@ -18,23 +18,22 @@ mlir::LogicalResult plier::CallOpLowering::matchAndRewrite(plier::PyCallOp op, m
         return mlir::failure();
     }
 
-    llvm::SmallVector<mlir::Type, 8> arg_types;
     llvm::SmallVector<mlir::Value, 8> args;
+    llvm::SmallVector<std::pair<llvm::StringRef, mlir::Value>, 8> kwargs;
     auto getattr = mlir::dyn_cast_or_null<plier::GetattrOp>(operands[0].getDefiningOp());
-    if (!getattr)
+    if (getattr)
     {
-        llvm::copy(llvm::drop_begin(op.getOperandTypes(), 1), std::back_inserter(arg_types));
-        llvm::copy(llvm::drop_begin(op.getOperands(), 1), std::back_inserter(args));
-        // TODO kwargs
-    }
-    else
-    {
-        arg_types.push_back(getattr.getOperand().getType());
         args.push_back(getattr.getOperand());
-        llvm::copy(llvm::drop_begin(op.getOperandTypes(), 1), std::back_inserter(arg_types));
-        llvm::copy(llvm::drop_begin(op.getOperands(), 1), std::back_inserter(args));
-        // TODO kwargs
+    }
+    auto kw_start = op.kw_start();
+    operands = operands.drop_front();
+    llvm::copy(operands.take_front(kw_start), std::back_inserter(args));
+    for (auto it : llvm::zip(operands.drop_front(kw_start), op.kw_names()))
+    {
+        auto arg = std::get<0>(it);
+        auto name = std::get<1>(it).cast<mlir::StringAttr>();
+        kwargs.emplace_back(name.getValue(), arg);
     }
 
-    return resolver(op, op.func_name(), args, rewriter);
+    return resolver(op, op.func_name(), args, kwargs, rewriter);
 }
