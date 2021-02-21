@@ -133,8 +133,12 @@ bool is_int(mlir::Type type)
     return type.isa<mlir::IntegerType>();
 }
 
-mlir::LogicalResult lower_prange(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands, mlir::PatternRewriter& rewriter)
+mlir::LogicalResult lower_prange(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands, llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs, mlir::PatternRewriter& rewriter)
 {
+    if (!kwargs.empty())
+    {
+        return mlir::failure();
+    }
     if ((operands.size() < 1 || operands.size() > 3) ||
         !llvm::all_of(operands, [](mlir::Value val) { return is_int(val.getType());}))
     {
@@ -177,9 +181,9 @@ struct CallLowerer
 {
     mlir::LogicalResult operator()(
         plier::PyCallOp op, llvm::StringRef name, llvm::ArrayRef<mlir::Value> args,
-        mlir::PatternRewriter& rewriter)
+        llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs, mlir::PatternRewriter& rewriter)
     {
-        using func_t = mlir::LogicalResult(*)(plier::PyCallOp, llvm::ArrayRef<mlir::Value>, mlir::PatternRewriter&);
+        using func_t = mlir::LogicalResult(*)(plier::PyCallOp, llvm::ArrayRef<mlir::Value>, llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>>, mlir::PatternRewriter&);
         std::pair<llvm::StringRef, func_t> handlers[] = {
             {"numba.prange", lower_prange},
         };
@@ -187,11 +191,11 @@ struct CallLowerer
         {
             if (handler.first == name)
             {
-                return handler.second(op, args, rewriter);
+                return handler.second(op, args, kwargs, rewriter);
             }
         }
 
-        if (auto result = linalg_resolver.rewrite(name, op.getLoc(), rewriter, args))
+        if (auto result = linalg_resolver.rewrite(name, op.getLoc(), rewriter, args, kwargs))
         {
             assert(result->size() == op->getNumResults());
             rerun_std_pipeline(op);
@@ -206,7 +210,7 @@ struct CallLowerer
             return mlir::success();
         }
 
-        if (name == "len" && check_numpy_args(args, 1))
+        if (name == "len" && check_numpy_args(args, 1) && kwargs.empty())
         {
             auto loc = op.getLoc();
             mlir::Value dim = rewriter.create<mlir::DimOp>(loc, args[0], 0);
@@ -219,7 +223,6 @@ struct CallLowerer
     }
 
 private:
-
     PyLinalgResolver linalg_resolver;
 };
 
@@ -436,7 +439,7 @@ struct SetitemOpLowering : public mlir::OpRewritePattern<T>
             mlir::OpBuilder::InsertionGuard g(rewriter);
             if (auto parent_op = target.getDefiningOp())
             {
-                rewriter.setInsertionPoint(parent_op);
+                rewriter.setInsertionPointAfter(parent_op);
             }
             else
             {
@@ -456,6 +459,7 @@ struct SetitemOpLowering : public mlir::OpRewritePattern<T>
                     }
                     else
                     {
+                        mlir::OpBuilder::InsertionGuard g(rewriter);
                         rewriter.setInsertionPoint(use_op);
                         auto new_val = rewriter.create<mlir::TensorLoadOp>(use_op->getLoc(), memref);
                         rewriter.updateRootInPlace(use_op, [&]()
@@ -602,6 +606,7 @@ struct LowerLinalgPass :
         mlir::DialectRegistry &registry) const override
     {
         registry.insert<mlir::StandardOpsDialect>();
+        registry.insert<mlir::tensor::TensorDialect>();
         registry.insert<mlir::linalg::LinalgDialect>();
         registry.insert<mlir::scf::SCFDialect>();
         registry.insert<mlir::AffineDialect>();
@@ -686,6 +691,7 @@ void PostLinalgOptPass::runOnOperation()
 void populate_plier_to_linalg_gen_pipeline(mlir::OpPassManager& pm)
 {
     pm.addPass(std::make_unique<PlierToLinalgPass>());
+    pm.addPass(mlir::createSymbolDCEPass());
 }
 
 void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager& pm)
@@ -708,6 +714,7 @@ void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager& pm)
 
     pm.addPass(std::make_unique<LowerLinalgPass>());
     pm.addPass(std::make_unique<PostLinalgOptPass>());
+    pm.addPass(mlir::createSymbolDCEPass());
 }
 }
 

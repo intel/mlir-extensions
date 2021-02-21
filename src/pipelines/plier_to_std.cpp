@@ -1156,8 +1156,12 @@ struct FoldTupleGetitem : public mlir::OpRewritePattern<Op>
     }
 };
 
-mlir::LogicalResult lower_range(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands, mlir::PatternRewriter& rewriter)
+mlir::LogicalResult lower_range(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands, llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs, mlir::PatternRewriter& rewriter)
 {
+    if (!kwargs.empty())
+    {
+        return mlir::failure();
+    }
     if ((operands.size() < 1 || operands.size() > 3) ||
         !llvm::all_of(operands, [](mlir::Value val) { return is_int(val.getType());}))
     {
@@ -1191,8 +1195,12 @@ mlir::LogicalResult lower_range(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> 
     return mlir::success();
 }
 
-mlir::LogicalResult lower_len(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands, mlir::PatternRewriter& rewriter)
+mlir::LogicalResult lower_len(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands, llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs, mlir::PatternRewriter& rewriter)
 {
+    if (!kwargs.empty())
+    {
+        return mlir::failure();
+    }
     if (operands.size() != 1)
     {
         return mlir::failure();
@@ -1210,8 +1218,12 @@ mlir::LogicalResult lower_len(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> op
     return mlir::success();
 }
 
-mlir::LogicalResult lower_bool_cast(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands, mlir::PatternRewriter& rewriter)
+mlir::LogicalResult lower_bool_cast(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands, llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs, mlir::PatternRewriter& rewriter)
 {
+    if (!kwargs.empty())
+    {
+        return mlir::failure();
+    }
     if (operands.size() != 1)
     {
         return mlir::failure();
@@ -1250,8 +1262,12 @@ mlir::FuncOp get_lib_symbol(
 
 mlir::LogicalResult lower_math_func(
     plier::PyCallOp op, llvm::StringRef name, llvm::ArrayRef<mlir::Value> args,
-    mlir::PatternRewriter& rewriter)
+    llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs, mlir::PatternRewriter& rewriter)
 {
+    if (!kwargs.empty())
+    {
+        return mlir::failure();
+    }
     auto ret_type = map_plier_type(op.getType());
     auto valid_type = [&](mlir::Type type)
     {
@@ -1285,14 +1301,14 @@ mlir::LogicalResult lower_math_func(
 struct CallLowerer
 {
     mlir::LogicalResult operator()(plier::PyCallOp op, llvm::StringRef name,
-        llvm::ArrayRef<mlir::Value> args, mlir::PatternRewriter& rewriter)
+        llvm::ArrayRef<mlir::Value> args, llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs, mlir::PatternRewriter& rewriter)
     {
-        if (mlir::succeeded(lower_math_func(op, name, args, rewriter)))
+        if (mlir::succeeded(lower_math_func(op, name, args, kwargs, rewriter)))
         {
             return mlir::success();
         }
 
-        using func_t = mlir::LogicalResult(*)(plier::PyCallOp, llvm::ArrayRef<mlir::Value>, mlir::PatternRewriter&);
+        using func_t = mlir::LogicalResult(*)(plier::PyCallOp, llvm::ArrayRef<mlir::Value>, llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>>, mlir::PatternRewriter&);
         std::pair<llvm::StringRef, func_t> handlers[] = {
             {"bool", lower_bool_cast},
             {"range", lower_range},
@@ -1302,7 +1318,7 @@ struct CallLowerer
         {
             if (handler.first == name)
             {
-                return handler.second(op, args, rewriter);
+                return handler.second(op, args, kwargs, rewriter);
             }
         }
 
