@@ -1,28 +1,26 @@
 from .func_registry import add_func
 
 class Var:
-    def __init__(self, ssa_val, shape, dtype):
+    def __init__(self, context, ssa_val):
+        self._context = context
         self._ssa_val = ssa_val
-        self._shape = shape
-        self._dtype = dtype
 
     @property
     def shape(self):
-        return self._shape
+        return self._shape(self._context, self._ssa_val)
 
     @property
     def dtype(self):
-        return self._dtype
+        return self._dtype(self._context, self._ssa_val)
 
+    def __len__(self):
+        return self._len(self._context, self._ssa_val)
 
+    def __getitem__(self, index):
+        return self._getitem(self._context, self._ssa_val, index)
 
-class Val:
-    def __init__(self, const_val, ssa_val):
-        self._const_val = const_val
-        self._ssa_val = ssa_val
-
-    def is_const(self):
-        return not _const_val is None
+def is_literal(val):
+    return not isinstance(val, Var)
 
 class Builder:
     def __init__(self, context):
@@ -31,8 +29,11 @@ class Builder:
     def broadcast(self, *args):
         return self._broadcast(self._context, args)
 
-    def init_tensor(self, shape, dtype):
-        return self._init_tensor(self._context, shape, dtype)
+    def init_tensor(self, shape, dtype, init_val=None):
+        return self._init_tensor(self._context, shape, dtype, init_val)
+
+    def fill_tensor(self, tensor, value):
+        return self._fill_tensor(self._context, tensor, value)
 
     def generic(self, inputs, outputs, iterators, maps, body):
         return self._generic(self._context, inputs, outputs, iterators, maps, body)

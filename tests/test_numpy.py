@@ -40,6 +40,7 @@ class TestMlirBasic(TestCase):
     def test_unary(self):
         funcs = [
             lambda a: a.sum(),
+            lambda a: np.sum(a),
             lambda a: np.sqrt(a),
             lambda a: np.square(a),
         ]
@@ -49,6 +50,17 @@ class TestMlirBasic(TestCase):
             for a in _test_arrays:
                 arr = np.array(a)
                 assert_equal(py_func(arr), jit_func(arr))
+
+    def test_sum_axis(self):
+        funcs = [
+            lambda a: np.sum(a, axis=0),
+            lambda a: np.sum(a, axis=1),
+        ]
+
+        for py_func in funcs:
+            jit_func = njit(py_func)
+            arr = np.array([[1,2,3],[4,5,6]])
+            assert_equal(py_func(arr), jit_func(arr))
 
     def test_add(self):
         def py_func(a, b):
@@ -208,6 +220,27 @@ class TestMlirBasic(TestCase):
         jit_func = njit(py_func, parallel=True)
         arr = np.array([0.0])
         assert_equal(py_func(arr, 5), jit_func(arr, 5))
+
+    def test_empty1(self):
+        def py_func(d):
+            a = np.empty(d)
+            for i in range(d):
+                a[i] = i
+            return a
+
+        jit_func = njit(py_func)
+        assert_equal(py_func(5), jit_func(5))
+
+    def test_empty2(self):
+        def py_func(d1, d2):
+            a = np.empty((d1, d2))
+            for i in range(d1):
+                for j in range(d2):
+                    a[i, j] = i + j * 10
+            return a
+
+        jit_func = njit(py_func)
+        assert_equal(py_func(5, 7), jit_func(5, 7))
 
 if __name__ == '__main__':
     unittest.main()
