@@ -43,6 +43,9 @@ class TestMlirBasic(TestCase):
             lambda a: np.sum(a),
             lambda a: np.sqrt(a),
             lambda a: np.square(a),
+            lambda a: a.size,
+            # lambda a: a.T, TODO: need fortran layout support
+            lambda a: a.T.T,
         ]
 
         for py_func in funcs:
@@ -50,17 +53,6 @@ class TestMlirBasic(TestCase):
             for a in _test_arrays:
                 arr = np.array(a)
                 assert_equal(py_func(arr), jit_func(arr))
-
-    def test_sum_axis(self):
-        funcs = [
-            lambda a: np.sum(a, axis=0),
-            lambda a: np.sum(a, axis=1),
-        ]
-
-        for py_func in funcs:
-            jit_func = njit(py_func)
-            arr = np.array([[1,2,3],[4,5,6]])
-            assert_equal(py_func(arr), jit_func(arr))
 
     def test_add(self):
         def py_func(a, b):
@@ -79,6 +71,18 @@ class TestMlirBasic(TestCase):
         arr1 = 1
         arr2 = 2
         assert_equal(py_func(arr1, arr2), jit_func(arr1, arr2))
+
+    def test_sum_axis(self):
+        funcs = [
+            lambda a: np.sum(a, axis=0),
+            lambda a: np.sum(a, axis=1),
+        ]
+
+        for py_func in funcs:
+            jit_func = njit(py_func)
+            arr = np.array([[1,2,3],[4,5,6]])
+            for a in [arr, arr.astype(np.float32)]:
+                assert_equal(py_func(a), jit_func(a))
 
     def test_sum_add(self):
         def py_func(a, b):
@@ -99,6 +103,19 @@ class TestMlirBasic(TestCase):
         arr2 = np.asarray([4,5,6])
         arr3 = np.asarray([7,8,9])
         assert_equal(py_func(arr1, arr2, arr3), jit_func(arr1, arr2, arr3))
+
+    def test_dot(self):
+        def py_func(a, b):
+            return np.dot(a, b)
+
+        jit_func = njit(py_func)
+        arr1 = np.asarray([1,2,3], np.float32)
+        arr2 = np.asarray([4,5,6], np.float32)
+        arr3 = np.asarray([[1,2,3],[4,5,6]], np.float32)
+        arr4 = np.asarray([[1,2],[3,4],[5,6]], np.float32)
+
+        for a, b in [(arr1,arr2), (arr3,arr4)]:
+            assert_equal(py_func(a, b), jit_func(a, b))
 
     def test_static_setitem(self):
         def py_func(a):

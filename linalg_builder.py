@@ -19,6 +19,17 @@ class Var:
     def __getitem__(self, index):
         return self._getitem(self._context, self._ssa_val, index)
 
+    def __mul__(self, o): return self._binop(self._context, self._ssa_val, o, '*')
+    def __rmul__(self, o): return self._binop(self._context, self._ssa_val, o, '*')
+
+class Type:
+    def __init__(self, mlir_type, eq):
+        self._mlir_type = mlir_type
+        self._eq = eq
+
+    def __eq__(self, other):
+        return self._eq(self._mlir_type, other._mlir_type)
+
 def is_literal(val):
     return not isinstance(val, Var)
 
@@ -53,10 +64,19 @@ _func_registry = {}
 def register_func(name, orig_func = None):
     def _decorator(func):
         global _func_registry
-        assert not name in _func_registry
-        _func_registry[name] = func
+        mangled_name = name + '()'
+        assert not mangled_name in _func_registry
+        _func_registry[mangled_name] = func
         if not orig_func is None:
             add_func(orig_func, name)
+        return func
+    return _decorator
+
+def register_attr(name):
+    def _decorator(func):
+        global _func_registry
+        assert not name in _func_registry
+        _func_registry[name] = func
         return func
     return _decorator
 

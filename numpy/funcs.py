@@ -1,7 +1,13 @@
-from  ..linalg_builder import register_func, is_literal
+from  ..linalg_builder import register_func, register_attr
 
 import numpy
 import math
+
+def is_int(t, b):
+    return t == b.int8 or t == b.int16 or t == b.int32 or t == b.int64
+
+def is_float(t, b):
+    return t == b.float16 or t == b.float32 or t == b.float64
 
 def eltwise(builder, args, body, res_type = None):
     if isinstance(args, tuple):
@@ -59,8 +65,12 @@ def sum_impl(builder, arg, axis=None):
         maps = [expr1,expr2]
         res_shape = tuple(shape[i] for i in range(len(shape)) if i != axis)
 
-        init = builder.init_tensor(res_shape, builder.int64, 0) #TODO: type
-        # val = builder.fill_tensor(init, 0)
+        orig_type = arg.dtype
+        if is_int(orig_type, builder):
+            res_type = builder.int64
+        else:
+            res_type = orig_type
+        init = builder.init_tensor(res_shape, res_type, 0)
 
         def body(a, b):
             return a + b
@@ -88,3 +98,60 @@ def square_impl(builder, arg):
 def empty_impl(builder, shape):
     # TODO: dtype
     return builder.init_tensor(shape, builder.float64)
+
+@register_func('numpy.dot', numpy.dot)
+def empty_impl(builder, a, b):
+    shape1 = a.shape
+    shape2 = b.shape
+    if len(shape1) == 1 and len(shape2) == 1:
+        iterators = ['reduction']
+        expr1 = '(d0) -> (d0)'
+        expr2 = '(d0) -> (0)'
+        maps = [expr1,expr1,expr2]
+        init = builder.from_elements(0, a.dtype)
+
+        def body(a, b, c):
+            return a * b + c
+
+        res = builder.generic((a,b), init, iterators, maps, body)
+        return builder.extract(res, 0)
+    if len(shape1) == 2 and len(shape2) == 2:
+        iterators = ['parallel','parallel','reduction']
+        expr1 = '(d0,d1,d2) -> (d0,d2)'
+        expr2 = '(d0,d1,d2) -> (d2,d1)'
+        expr3 = '(d0,d1,d2) -> (d0,d1)'
+        maps = [expr1,expr2,expr3]
+        res_shape = (shape1[0], shape2[1])
+        init = builder.init_tensor(res_shape, a.dtype, 0)
+
+        def body(a, b, c):
+            return a * b + c
+
+        return builder.generic((a,b), init, iterators, maps, body)
+
+@register_attr('array.size')
+def size_impl(builder, arg):
+    shape = arg.shape
+    res = builder.init_tensor([], builder.index, 1)
+    for i in range(len(shape)):
+        res = res * shape[i]
+    return res
+
+@register_attr('array.T')
+def size_impl(builder, arg):
+    shape = arg.shape
+    dims = len(shape)
+    if dims == 1:
+        return arg
+    if dims == 2:
+        iterators = ['parallel','parallel']
+        expr1 = '(d0,d1) -> (d0,d1)'
+        expr2 = '(d0,d1) -> (d1,d0)'
+        maps = [expr1,expr2]
+        res_shape = (shape[1], shape[0])
+        init = builder.init_tensor(res_shape, arg.dtype)
+
+        def body(a, b):
+            return a
+
+        return builder.generic(arg, init, iterators, maps, body)
