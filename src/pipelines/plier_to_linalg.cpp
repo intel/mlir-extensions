@@ -43,9 +43,25 @@
 
 namespace
 {
-bool parse_layout(llvm::StringRef& name)
+enum class ArrayLayout
 {
-    return name.consume_back("C"); // TODO
+    C,
+    F
+};
+
+bool parse_layout(llvm::StringRef& name, ArrayLayout& layout)
+{
+    if (name.consume_back("C"))
+    {
+        layout = ArrayLayout::C;
+        return true;
+    }
+    if (name.consume_back("F"))
+    {
+        layout = ArrayLayout::F;
+        return true;
+    }
+    return false;
 }
 
 template<typename T>
@@ -67,24 +83,43 @@ bool consume_int_back(llvm::StringRef& name, T& result)
     return false;
 }
 
-mlir::Type map_array_type(mlir::MLIRContext& ctx, mlir::TypeConverter& conveter,
-                          llvm::StringRef& name)
+struct ArrayDesc
+{
+    unsigned dims = 0;
+    ArrayLayout layout = {};
+    llvm::StringRef name;
+};
+
+llvm::Optional<ArrayDesc> parse_array_desc(llvm::StringRef& name)
 {
     unsigned num_dims = 0;
+    ArrayLayout layout = {};
     if (name.consume_front("array(") &&
         name.consume_back(")") &&
-        parse_layout(name) &&
+        parse_layout(name, layout) &&
         name.consume_back(", ") &&
         name.consume_back("d") &&
         consume_int_back(name, num_dims) &&
         name.consume_back(", ") &&
         !name.empty())
     {
-        if (auto type = conveter.convertType(plier::PyType::get(&ctx, name)))
+        return ArrayDesc{num_dims, layout, name};
+    }
+    return {};
+}
+
+mlir::Type map_array_type(mlir::MLIRContext& ctx, mlir::TypeConverter& conveter,
+                          llvm::StringRef& name)
+{
+    if (auto desc = parse_array_desc(name))
+    {
+        if (desc->layout == ArrayLayout::C)
         {
-            llvm::SmallVector<int64_t, 8> shape(num_dims, -1);
-//            return mlir::MemRefType::get(shape, type);
-            return mlir::RankedTensorType::get(shape, type);
+            if (auto type = conveter.convertType(plier::PyType::get(&ctx, desc->name)))
+            {
+                llvm::SmallVector<int64_t, 8> shape(desc->dims, -1);
+                return mlir::RankedTensorType::get(shape, type);
+            }
         }
     }
     return nullptr;
@@ -181,7 +216,8 @@ struct CallLowerer
 {
     mlir::LogicalResult operator()(
         plier::PyCallOp op, llvm::StringRef name, llvm::ArrayRef<mlir::Value> args,
-        llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs, mlir::PatternRewriter& rewriter)
+        llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs,
+        mlir::PatternRewriter& rewriter)
     {
         using func_t = mlir::LogicalResult(*)(plier::PyCallOp, llvm::ArrayRef<mlir::Value>, llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>>, mlir::PatternRewriter&);
         std::pair<llvm::StringRef, func_t> handlers[] = {
@@ -195,7 +231,7 @@ struct CallLowerer
             }
         }
 
-        if (auto result = linalg_resolver.rewrite(name, op.getLoc(), rewriter, args, kwargs))
+        if (auto result = linalg_resolver.rewrite_func(name, op.getLoc(), rewriter, args, kwargs))
         {
             assert(result->size() == op->getNumResults());
             rerun_std_pipeline(op);
@@ -217,6 +253,32 @@ struct CallLowerer
             mlir::Value res = rewriter.create<plier::CastOp>(loc, op.getType(), dim);
             rerun_std_pipeline(op);
             rewriter.replaceOp(op, res);
+            return mlir::success();
+        }
+        return mlir::failure();
+    }
+
+    mlir::LogicalResult operator()(
+        plier::GetattrOp op, llvm::StringRef name, mlir::Value arg,
+        mlir::PatternRewriter& rewriter)
+    {
+        if (!arg.getType().isa<mlir::ShapedType>())
+        {
+            return mlir::failure();
+        }
+        auto full_name = (llvm::Twine("array.") + name).str();
+        if (auto result = linalg_resolver.rewrite_attr(full_name, op.getLoc(), rewriter, arg))
+        {
+            assert(result->size() == op->getNumResults());
+            rerun_std_pipeline(op);
+            if (result->empty())
+            {
+                rewriter.eraseOp(op);
+            }
+            else
+            {
+                rewriter.replaceOp(op, *result);
+            }
             return mlir::success();
         }
         return mlir::failure();
@@ -550,6 +612,28 @@ private:
     mlir::TypeConverter& converter;
 };
 
+struct GetattrRewriter : public mlir::OpRewritePattern<plier::GetattrOp>
+{
+    using resolver_t = llvm::function_ref<mlir::LogicalResult(plier::GetattrOp, llvm::StringRef, mlir::Value,
+                                                              mlir::PatternRewriter&)>;
+
+    GetattrRewriter(mlir::TypeConverter &/*typeConverter*/,
+                    mlir::MLIRContext *context,
+                    resolver_t resolver):
+        OpRewritePattern(context),
+        resolver(resolver)
+    {}
+
+    mlir::LogicalResult matchAndRewrite(
+        plier::GetattrOp op, mlir::PatternRewriter &rewriter) const override
+    {
+        return resolver(op, op.name(), op.value(), rewriter);
+    }
+
+private:
+    resolver_t resolver;
+};
+
 
 void PlierToLinalgPass::runOnOperation()
 {
@@ -579,7 +663,8 @@ void PlierToLinalgPass::runOnOperation()
     CallLowerer callLowerer;
 
     patterns.insert<
-        plier::CallOpLowering
+        plier::CallOpLowering,
+        GetattrRewriter
         >(type_converter, context, callLowerer);
 
     patterns.insert<

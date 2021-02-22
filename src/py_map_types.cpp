@@ -59,8 +59,8 @@ py::object map_type(const py::handle& types_mod, mlir::Type type)
         {&is_int<64, mlir::IntegerType::Signless>,  "int64"},
         {&is_int<64, mlir::IntegerType::Unsigned>, "uint64"},
 
-        {&is_float<32>, "float"},
-        {&is_float<64>, "double"},
+        {&is_float<32>, "float32"},
+        {&is_float<64>, "float64"},
     };
 
     for (auto h : primitive_types)
