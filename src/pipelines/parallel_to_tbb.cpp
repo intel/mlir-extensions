@@ -50,7 +50,9 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp>
         {
             return mlir::failure();
         }
-        if (!op->hasAttr(plier::attributes::getParallelName()))
+        bool need_parallel = op->hasAttr(plier::attributes::getParallelName()) ||
+                             !op->getParentOfType<mlir::scf::ParallelOp>();
+        if (!need_parallel)
         {
             return mlir::failure();
         }
@@ -85,14 +87,26 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp>
             auto reduce = rewriter.create<mlir::AllocaOp>(loc, reduce_type);
             auto index = static_cast<unsigned>(it.index());
             reduce_vars[index] = reduce;
-            auto zero = getZeroVal(rewriter, loc, type);
-            mapping.map(op.initVals()[index], zero);
-            for (unsigned i = 0; i < max_concurrency; ++i)
-            {
-                mlir::Value index = rewriter.create<mlir::ConstantIndexOp>(loc, i);
-                rewriter.create<mlir::StoreOp>(loc, zero, reduce, index);
-            }
         }
+
+        auto reduce_init_body_builder = [&](mlir::OpBuilder &builder, mlir::Location loc, mlir::Value index, mlir::ValueRange args)
+        {
+            assert(args.empty());
+            (void)args;
+            for (auto it : llvm::enumerate(reduce_vars))
+            {
+                auto reduce = it.value();
+                auto type = op.getResultTypes()[it.index()];
+                auto zero = getZeroVal(rewriter, loc, type);
+                builder.create<mlir::StoreOp>(loc, zero, reduce, index);
+            }
+            builder.create<mlir::scf::YieldOp>(loc);
+        };
+
+        auto reduce_lower_bound = rewriter.create<mlir::ConstantIndexOp>(loc, 0);
+        auto reduce_upper_bound = rewriter.create<mlir::ConstantIndexOp>(loc, max_concurrency);
+        auto reduce_step = rewriter.create<mlir::ConstantIndexOp>(loc, 1);
+        rewriter.create<mlir::scf::ForOp>(loc, reduce_lower_bound, reduce_upper_bound, reduce_step, llvm::None, reduce_init_body_builder);
 
         auto& old_body = op.getLoopBody().front();
         auto orig_lower_bound = op.lowerBound().front();
@@ -100,16 +114,19 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp>
         auto orig_step = op.step().front();
         auto body_builder = [&](mlir::OpBuilder &builder, ::mlir::Location loc, mlir::Value lower_bound, mlir::Value upper_bound, mlir::Value thread_index)
         {
+            llvm::SmallVector<mlir::Value, 8> initVals(op.initVals().size());
             for (auto it : llvm::enumerate(op.initVals()))
             {
                 auto reduce_var = reduce_vars[it.index()];
                 auto val = builder.create<mlir::LoadOp>(loc, reduce_var, thread_index);
-                mapping.map(it.value(), val);
+                initVals[it.index()] = val;
             }
             auto new_op = mlir::cast<mlir::scf::ParallelOp>(builder.clone(*op, mapping));
+            new_op->removeAttr(plier::attributes::getParallelName());
             assert(new_op->getNumResults() == reduce_vars.size());
             new_op.lowerBoundMutable().assign(lower_bound);
             new_op.upperBoundMutable().assign(upper_bound);
+            new_op.initValsMutable().assign(initVals);
             for (auto it : llvm::enumerate(new_op->getResults()))
             {
                 auto reduce_var = reduce_vars[it.index()];
@@ -118,10 +135,6 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp>
         };
 
         rewriter.create<plier::ParallelOp>(loc, orig_lower_bound, orig_upper_bound, orig_step, body_builder);
-
-        auto reduce_lower_bound = rewriter.create<mlir::ConstantIndexOp>(loc, 0);
-        auto reduce_upper_bound = rewriter.create<mlir::ConstantIndexOp>(loc, max_concurrency);
-        auto reduce_step = rewriter.create<mlir::ConstantIndexOp>(loc, 1);
 
         auto reduce_body_builder = [&](mlir::OpBuilder &builder, mlir::Location loc, mlir::Value index, mlir::ValueRange args)
         {
