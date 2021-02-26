@@ -1,4 +1,4 @@
-from  ..linalg_builder import register_func, register_attr
+from  ..linalg_builder import register_func, register_attr, is_literal
 
 import numpy
 import math
@@ -100,7 +100,7 @@ def empty_impl(builder, shape):
     return builder.init_tensor(shape, builder.float64)
 
 @register_func('numpy.dot', numpy.dot)
-def empty_impl(builder, a, b):
+def dot_impl(builder, a, b):
     shape1 = a.shape
     shape2 = b.shape
     if len(shape1) == 1 and len(shape2) == 1:
@@ -138,7 +138,7 @@ def size_impl(builder, arg):
     return res
 
 @register_attr('array.T')
-def size_impl(builder, arg):
+def transpose_impl(builder, arg):
     shape = arg.shape
     dims = len(shape)
     if dims == 1:
@@ -155,3 +155,55 @@ def size_impl(builder, arg):
             return a
 
         return builder.generic(arg, init, iterators, maps, body)
+
+def flatten(builder, arg, src_dims_count):
+    if 1 == src_dims_count:
+        return arg
+    dims = ','.join(['d%s' % i for i in range(src_dims_count)])
+    expr = f'({dims}) -> ({dims})'
+    maps = [
+        expr
+    ]
+    return builder.reshape(arg, 1, maps)
+
+def find_size_index(shape):
+    size_index = -1
+    for i in range(len(shape)):
+            d = shape[i]
+            if is_literal(d):
+                if 1 != d:
+                    return -1
+            else:
+                if size_index != -1:
+                    return -1
+                size_index = i
+    return size_index
+
+@register_func('array.reshape')
+def reshape_impl(builder, arg, new_shape):
+    shape = arg.shape
+    src_count = len(shape)
+    count = len(new_shape)
+    if count == 1:
+        return flatten(builder, arg, src_count)
+    else:
+        size_index = find_size_index(new_shape)
+        if size_index < 0:
+            return
+
+        flat = flatten(builder, arg, src_count)
+        init = builder.init_tensor(new_shape, arg.dtype)
+
+        iterators = ['parallel']
+        # dims1 = ','.join(['d%s' % i for i in range(count)])
+        # dims2 = ','.join(['d%s' % i if i == size_index else '0' for i in range(count)])
+        dims3 = ','.join(['d0' if i == size_index else '0' for i in range(count)])
+        expr1 = f'(d0) -> (d0)'
+        expr2 = f'(d0) -> ({dims3})'
+        maps = [expr1, expr2]
+
+        def body(a, b):
+            return a
+
+        return builder.generic(flat, init, iterators, maps, body)
+

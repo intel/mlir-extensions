@@ -213,7 +213,7 @@ class TestMlirBasic(TestCase):
     def test_array_shape(self):
         def py_func(a):
             shape = a.shape
-            return shape[0] + shape[1]
+            return shape[0] + shape[1] * 10
 
         jit_func = njit(py_func)
         arr = np.array([[1,2,3],[4,5,6]])
@@ -258,6 +258,24 @@ class TestMlirBasic(TestCase):
 
         jit_func = njit(py_func)
         assert_equal(py_func(5, 7), jit_func(5, 7))
+
+    def test_reshape(self):
+        funcs = [
+            lambda a: a.reshape(a.size),
+            lambda a: a.reshape((a.size,)),
+            lambda a: a.reshape((a.size,1)),
+            lambda a: a.reshape((1, a.size)),
+            lambda a: a.reshape((1, a.size, 1)),
+        ]
+
+        arr1 = np.array([1,2,3,4,5,6,7,8,9,10,11,12])
+        # arr2 = arr1.reshape((2,6))
+        # arr3 = arr1.reshape((2,3,2))
+        for py_func in funcs:
+            jit_func = njit(py_func)
+            # for a in [arr1,arr2,arr3]: TODO: flatten support
+            for a in [arr1]:
+                assert_equal(py_func(a), jit_func(a))
 
 if __name__ == '__main__':
     unittest.main()
