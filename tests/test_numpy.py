@@ -46,6 +46,8 @@ class TestMlirBasic(TestCase):
             lambda a: a.size,
             # lambda a: a.T, TODO: need fortran layout support
             lambda a: a.T.T,
+            lambda a: np.add(a, 1),
+            lambda a: np.add(a, 2.5),
         ]
 
         for py_func in funcs:
