@@ -33,7 +33,7 @@ bool is_compatible_type(mlir::Type type)
     {
         return llvm::all_of(tuple_type, &is_compatible_type);
     }
-    return type.isIntOrFloat() || type.isa<mlir::RankedTensorType>();
+    return type.isa<mlir::IntegerType, mlir::IndexType, mlir::FloatType, mlir::RankedTensorType>();
 }
 
 template<typename R>
@@ -304,14 +304,18 @@ auto get_iterators(py::list iterators, mlir::MLIRContext& ctx)
     return ret;
 }
 
+mlir::AffineMapAttr get_affine_map_attr(py::handle obj, mlir::MLIRContext& ctx)
+{
+    auto str = (llvm::Twine("affine_map<") + obj.cast<std::string>() + ">").str();
+    return mlir::parseAttribute(str, &ctx).cast<mlir::AffineMapAttr>();
+}
+
 auto get_affine_maps(py::list maps, mlir::MLIRContext& ctx)
 {
     llvm::SmallVector<mlir::AffineMap, 8> ret(maps.size());
     for (auto it : llvm::enumerate(maps))
     {
-        auto str = (llvm::Twine("affine_map<") + it.value().cast<std::string>() + ">").str();
-        auto attr = mlir::parseAttribute(str, &ctx);
-        ret[it.index()] = attr.cast<mlir::AffineMapAttr>().getValue();
+        ret[it.index()] = get_affine_map_attr(it.value(), ctx).getValue();
     }
     return ret;
 }
@@ -582,6 +586,32 @@ py::object extract_impl(py::capsule context, py::handle value, py::handle indice
     return ctx.context.create_var(context, res);
 }
 
+py::object reshape_impl(py::capsule context, py::handle tensor, py::int_ out_dims, py::list maps)
+{
+    auto& ctx = get_py_context(context);
+    auto& builder = ctx.builder;
+    auto loc = ctx.loc;
+
+    auto tensor_val = ctx.context.unwrap_val(loc, builder, tensor);
+    if (!tensor_val.getType().isa<mlir::RankedTensorType>())
+    {
+        plier::report_error("Invalid reshapa argument");
+    }
+    auto elem_type = tensor_val.getType().cast<mlir::RankedTensorType>().getElementType();
+    auto new_dims = out_dims.cast<size_t>();
+    llvm::SmallVector<int64_t, 8> dims(new_dims, -1);
+    auto new_type = mlir::RankedTensorType::get(dims, elem_type);
+
+    llvm::SmallVector<mlir::Attribute, 8> affine_maps(container_size(maps));
+    container_iterate(maps, [&](auto index, py::handle obj)
+    {
+        affine_maps[index] = get_affine_map_attr(obj, *builder.getContext());
+    });
+    auto affine_maps_attr = mlir::ArrayAttr::get(affine_maps, builder.getContext());
+    auto reshape = builder.create<mlir::linalg::TensorReshapeOp>(loc, new_type, tensor_val, affine_maps_attr);
+    return ctx.context.create_var(context, reshape);
+}
+
 void setup_py_builder(py::handle builder, mlir::OpBuilder& b, llvm::function_ref<py::object(mlir::Type)> create_type)
 {
     py::setattr(builder, "_broadcast", py::cpp_function(&broadcast_impl));
@@ -590,6 +620,7 @@ void setup_py_builder(py::handle builder, mlir::OpBuilder& b, llvm::function_ref
     py::setattr(builder, "_generic", py::cpp_function(&generic_impl));
     py::setattr(builder, "_from_elements", py::cpp_function(&from_elements_impl));
     py::setattr(builder, "_extract", py::cpp_function(&extract_impl));
+    py::setattr(builder, "_reshape", py::cpp_function(&reshape_impl));
 
     auto add_type = [&](const char* name, mlir::Type type)
     {
@@ -667,7 +698,11 @@ py::object getitem_impl(py::capsule context, py::capsule ssa_val, py::handle ind
     {
         if (index_val < 0 || index_val >= static_cast<int64_t>(tuple_type.size()))
         {
-            plier::report_error("Invelid getitem index");
+            plier::report_error("Invalid getitem index");
+        }
+        if (auto parent_op = value.getDefiningOp<plier::BuildTupleOp>())
+        {
+            return ctx.context.create_var(context, parent_op.getOperand(static_cast<unsigned>(index_val)));
         }
         auto elem_type = tuple_type.getType(static_cast<size_t>(index_val));
         auto ind = builder.create<mlir::ConstantIndexOp>(loc, index_val);
@@ -678,7 +713,7 @@ py::object getitem_impl(py::capsule context, py::capsule ssa_val, py::handle ind
     {
         if (0 != index_val)
         {
-            plier::report_error("Invelid getitem index");
+            plier::report_error("Invalid getitem index");
         }
         return ctx.context.create_var(context, value);
     }

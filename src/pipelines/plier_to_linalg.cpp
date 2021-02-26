@@ -612,6 +612,51 @@ private:
     mlir::TypeConverter& converter;
 };
 
+template<typename T>
+bool has_compatibale_shape(T&& a1, T&& a2)
+{
+    if (!a1.hasRank() || !a2.hasRank() || a1.getRank() != a2.getRank())
+    {
+        return false;
+    }
+    for (auto it : llvm::zip(a1.getShape(), a2.getShape()))
+    {
+        auto s1 = std::get<0>(it);
+        auto s2 = std::get<1>(it);
+        if (s1 >= 0 && s2 >= 0 && s1 != s2)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+struct RankedTypesCasts : public mlir::OpRewritePattern<plier::CastOp>
+{
+    RankedTypesCasts(mlir::TypeConverter& /*type_converter*/,
+                     mlir::MLIRContext* context):
+        OpRewritePattern(context){}
+
+    mlir::LogicalResult matchAndRewrite(
+        plier::CastOp op, mlir::PatternRewriter &rewriter) const override
+    {
+        auto src_type = op.value().getType();
+        auto dst_type = op.getType();
+        if (src_type.isa<mlir::TensorType>() && dst_type.isa<mlir::TensorType>())
+        {
+            auto src = src_type.cast<mlir::TensorType>();
+            auto dst = dst_type.cast<mlir::TensorType>();
+            if (!has_compatibale_shape(src,dst))
+            {
+                return mlir::failure();
+            }
+            rewriter.replaceOpWithNewOp<mlir::tensor::CastOp>(op, dst, op.value());
+            return mlir::success();
+        }
+        return mlir::failure();
+    }
+};
+
 struct GetattrRewriter : public mlir::OpRewritePattern<plier::GetattrOp>
 {
     using resolver_t = llvm::function_ref<mlir::LogicalResult(plier::GetattrOp, llvm::StringRef, mlir::Value,
@@ -657,6 +702,7 @@ void PlierToLinalgPass::runOnOperation()
     patterns.insert<
         plier::FuncOpSignatureConversion,
         plier::CastOpLowering,
+        RankedTypesCasts,
         ArrayShape
         >(type_converter, context);
 
