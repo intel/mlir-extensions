@@ -354,16 +354,183 @@ auto generic_op_body_result_types(mlir::ValueRange outputs)
     return ret;
 }
 
-py::object broadcast_impl(py::capsule /*context*/, py::tuple args)
+bool is_int(mlir::Type type)
+{
+    return type.isa<mlir::IntegerType, mlir::IndexType>();
+}
+
+unsigned get_int_bit_width(mlir::Type type)
+{
+    if (type.isa<mlir::IntegerType>())
+    {
+        return type.cast<mlir::IntegerType>().getWidth();
+    }
+    if (type.isa<mlir::IndexType>())
+    {
+        return 64; // TODO
+    }
+    llvm_unreachable("No an integer type");
+}
+
+bool is_float(mlir::Type type)
+{
+    return type.isa<mlir::FloatType>();
+}
+
+unsigned get_float_bit_width(mlir::Type type)
+{
+    return type.cast<mlir::FloatType>().getWidth();
+}
+
+mlir::Type broadcast_type(mlir::Type type1, mlir::Type type2)
+{
+    if (type1 == type2)
+    {
+        return type1;
+    }
+    // TODO
+    if (is_int(type1) && is_int(type2))
+    {
+        auto width = std::max(get_int_bit_width(type1), get_int_bit_width(type2));
+        return mlir::IntegerType::get(type1.getContext(), width);
+    }
+    if (is_float(type1) && is_float(type2))
+    {
+        return (get_float_bit_width(type1) > get_float_bit_width(type2) ? type1 : type2);
+    }
+    if (is_float(type1) && is_int(type2))
+    {
+        return type1;
+    }
+    if (is_int(type1) && is_float(type2))
+    {
+        return type2;
+    }
+    llvm_unreachable("Unable to broadcast type");
+}
+
+py::object broadcast_impl(py::capsule context, py::tuple args)
 {
     if (1 == args.size())
     {
         return args[0];
     }
+    auto& ctx = get_py_context(context);
+    auto loc = ctx.loc;
+    auto& builder = ctx.builder;
+    llvm::SmallVector<mlir::Value, 8> mlir_args(args.size());
+    for (auto it : llvm::enumerate(args))
+    {
+        mlir_args[it.index()] = ctx.context.unwrap_val(loc, builder, it.value());
+    }
+    using shape_t = llvm::SmallVector<mlir::Value, 8>;
+    auto get_shape = [&](mlir::Value val)->llvm::Optional<std::pair<shape_t, mlir::Type>>
+    {
+        auto type = val.getType();
+        if (auto shaped = type.dyn_cast<mlir::ShapedType>())
+        {
+            if (!shaped.hasRank())
+            {
+                return {};
+            }
+            shape_t ret(static_cast<size_t>(shaped.getRank()));
+            for (auto it : llvm::enumerate(ret))
+            {
+                auto dim = builder.create<mlir::DimOp>(loc, val, it.index());
+                ret[it.index()] = dim;
+            }
+            return std::make_pair(ret, shaped.getElementType());
+        }
+        if (type.isa<mlir::IntegerType, mlir::IndexType, mlir::FloatType>())
+        {
+            return std::make_pair(shape_t{}, type);
+        }
+        return {};
+    };
+    mlir::Type res_type;
+    mlir::SmallVector<mlir::Value, 8> shape_vals;
+    if (auto shape_and_type = get_shape(mlir_args.front()))
+    {
+        res_type = shape_and_type->second;
+        shape_vals = shape_and_type->first;
+    }
     else
     {
-        return std::move(args);
+        return py::none();
     }
+
+    for (auto arg : llvm::drop_begin(mlir_args))
+    {
+        auto shape_and_type = get_shape(arg);
+        if (!shape_and_type)
+        {
+            py::none();
+        }
+        res_type = broadcast_type(res_type, shape_and_type->second);
+        if (shape_and_type->first.size() > shape_vals.size())
+        {
+            shape_vals = shape_and_type->first; // TODO
+        }
+    }
+
+    llvm::SmallVector<int64_t, 8> shape(static_cast<size_t>(shape_vals.size()), -1);
+    py::tuple ret(args.size());
+    if (shape_vals.empty())
+    {
+        for (auto it : llvm::enumerate(mlir_args))
+        {
+            mlir::Value val = it.value();
+            if (val.getType() != res_type)
+            {
+                val = builder.create<plier::CastOp>(loc, res_type, val);
+            }
+            ret[it.index()] = ctx.context.create_var(context, val);
+        }
+        return std::move(ret);
+    }
+
+    auto tensor_type = mlir::RankedTensorType::get(shape, res_type);
+    for (auto it : llvm::enumerate(mlir_args))
+    {
+        mlir::Value val = it.value();
+        auto type = val.getType();
+        if (type != tensor_type)
+        {
+            if (auto src_type = type.dyn_cast<mlir::ShapedType>())
+            {
+                assert(src_type.hasRank());
+                auto num_dims = static_cast<unsigned>(src_type.getRank());
+                auto init = builder.create<mlir::linalg::InitTensorOp>(loc, shape_vals, tensor_type.getElementType()).getResult();
+                llvm::SmallVector<llvm::StringRef, 8> iterators(num_dims, "parallel");
+                auto map = mlir::AffineMap::getMultiDimIdentityMap(num_dims, builder.getContext());
+                mlir::AffineMap maps[] = {
+                    map,
+                    map,
+                };
+                auto body = [&](mlir::OpBuilder &builder, mlir::Location loc, mlir::ValueRange values)
+                {
+                    assert(values.size() == 2);
+                    auto res = builder.create<plier::CastOp>(loc, tensor_type.getElementType(), values[0]);
+                    builder.create<mlir::linalg::YieldOp>(loc, res.getResult());
+                };
+                val = builder.create<mlir::linalg::GenericOp>(loc, tensor_type, val, init, maps, iterators, body).getResult(0);
+            }
+            else
+            {
+                if (tensor_type.getElementType() != type)
+                {
+                    val = builder.create<plier::CastOp>(loc, tensor_type.getElementType(), val);
+                }
+                auto body = [&](mlir::OpBuilder &builder, mlir::Location loc, mlir::ValueRange /*indices*/)
+                {
+                    builder.create<mlir::tensor::YieldOp>(loc, val);
+                };
+                val = builder.create<mlir::tensor::GenerateOp>(loc, tensor_type, shape_vals, body);
+            }
+        }
+        ret[it.index()] = ctx.context.create_var(context, val);
+    }
+    return std::move(ret);
 }
 
 py::object init_tensor_impl(py::capsule context, py::handle shape, py::handle dtype, py::handle init_val)
