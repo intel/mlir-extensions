@@ -1404,7 +1404,7 @@ void PlierToStdPass::runOnOperation()
 
     patterns.insert<
         plier::CallOpLowering
-        >(type_converter, context, callLowerer);
+        >(type_converter, context, std::ref(callLowerer));
 
     mlir::populateStdExpandOpsPatterns(context, patterns);
 

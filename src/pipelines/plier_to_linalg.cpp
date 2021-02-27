@@ -214,12 +214,14 @@ mlir::LogicalResult lower_prange(plier::PyCallOp op, llvm::ArrayRef<mlir::Value>
 
 struct CallLowerer
 {
+    using args_t = llvm::ArrayRef<mlir::Value>;
+    using kwargs_t = llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>>;
     mlir::LogicalResult operator()(
-        plier::PyCallOp op, llvm::StringRef name, llvm::ArrayRef<mlir::Value> args,
-        llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs,
+        plier::PyCallOp op, llvm::StringRef name, args_t args,
+        kwargs_t kwargs,
         mlir::PatternRewriter& rewriter)
     {
-        using func_t = mlir::LogicalResult(*)(plier::PyCallOp, llvm::ArrayRef<mlir::Value>, llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>>, mlir::PatternRewriter&);
+        using func_t = mlir::LogicalResult(*)(plier::PyCallOp, args_t, kwargs_t, mlir::PatternRewriter&);
         std::pair<llvm::StringRef, func_t> handlers[] = {
             {"numba.prange", lower_prange},
         };
@@ -231,18 +233,8 @@ struct CallLowerer
             }
         }
 
-        if (auto result = linalg_resolver.rewrite_func(name, op.getLoc(), rewriter, args, kwargs))
+        if (mlir::succeeded(applyRewrite(op, rewriter, linalg_resolver.rewrite_func(name, op.getLoc(), rewriter, args, kwargs))))
         {
-            assert(result->size() == op->getNumResults());
-            rerun_std_pipeline(op);
-            if (result->empty())
-            {
-                rewriter.eraseOp(op);
-            }
-            else
-            {
-                rewriter.replaceOp(op, *result);
-            }
             return mlir::success();
         }
 
@@ -267,7 +259,39 @@ struct CallLowerer
             return mlir::failure();
         }
         auto full_name = (llvm::Twine("array.") + name).str();
-        if (auto result = linalg_resolver.rewrite_attr(full_name, op.getLoc(), rewriter, arg))
+        return applyRewrite(op, rewriter, linalg_resolver.rewrite_attr(full_name, op.getLoc(), rewriter, arg));
+    }
+
+    mlir::LogicalResult operator()(
+        plier::BinOp op, llvm::StringRef name, mlir::Value lhs, mlir::Value rhs,
+        mlir::PatternRewriter& rewriter)
+    {
+        if (!lhs.getType().isa<mlir::ShapedType>() &&
+            !rhs.getType().isa<mlir::ShapedType>())
+        {
+            return mlir::failure();
+        }
+        const std::pair<llvm::StringRef, llvm::StringRef> names[] = {
+            {"+", "operator.add"},
+            {"-", "operator.sub"},
+            {"*", "operator.mul"},
+        };
+        for (auto it : names)
+        {
+            if (it.first == name)
+            {
+                return applyRewrite(op, rewriter, linalg_resolver.rewrite_func(it.second, op.getLoc(), rewriter, {lhs, rhs}, {}));
+            }
+        }
+        return mlir::failure();
+    }
+
+private:
+    PyLinalgResolver linalg_resolver;
+
+    mlir::LogicalResult applyRewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter, llvm::Optional<PyLinalgResolver::Values> result)
+    {
+        if (result)
         {
             assert(result->size() == op->getNumResults());
             rerun_std_pipeline(op);
@@ -283,9 +307,6 @@ struct CallLowerer
         }
         return mlir::failure();
     }
-
-private:
-    PyLinalgResolver linalg_resolver;
 };
 
 mlir::Value index_cast(mlir::Value value, mlir::Location loc, mlir::OpBuilder& builder)
@@ -659,8 +680,8 @@ struct RankedTypesCasts : public mlir::OpRewritePattern<plier::CastOp>
 
 struct GetattrRewriter : public mlir::OpRewritePattern<plier::GetattrOp>
 {
-    using resolver_t = llvm::function_ref<mlir::LogicalResult(plier::GetattrOp, llvm::StringRef, mlir::Value,
-                                                              mlir::PatternRewriter&)>;
+    using resolver_t = std::function<mlir::LogicalResult(plier::GetattrOp, llvm::StringRef, mlir::Value,
+                                                         mlir::PatternRewriter&)>;
 
     GetattrRewriter(mlir::TypeConverter &/*typeConverter*/,
                     mlir::MLIRContext *context,
@@ -679,6 +700,27 @@ private:
     resolver_t resolver;
 };
 
+struct BinopRewriter : public mlir::OpRewritePattern<plier::BinOp>
+{
+    using resolver_t = std::function<mlir::LogicalResult(plier::BinOp, llvm::StringRef, mlir::Value, mlir::Value,
+                                                         mlir::PatternRewriter&)>;
+
+    BinopRewriter(mlir::TypeConverter &/*typeConverter*/,
+                  mlir::MLIRContext *context,
+                  resolver_t resolver):
+        OpRewritePattern(context),
+        resolver(resolver)
+    {}
+
+    mlir::LogicalResult matchAndRewrite(
+        plier::BinOp op, mlir::PatternRewriter &rewriter) const override
+    {
+        return resolver(op, op.op(), op.lhs(), op.rhs(), rewriter);
+    }
+
+private:
+    resolver_t resolver;
+};
 
 void PlierToLinalgPass::runOnOperation()
 {
@@ -710,8 +752,9 @@ void PlierToLinalgPass::runOnOperation()
 
     patterns.insert<
         plier::CallOpLowering,
-        GetattrRewriter
-        >(type_converter, context, callLowerer);
+        GetattrRewriter,
+        BinopRewriter
+        >(type_converter, context, std::ref(callLowerer));
 
     patterns.insert<
         GetitemOpLowering<plier::GetItemOp>,
