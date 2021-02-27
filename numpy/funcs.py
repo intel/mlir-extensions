@@ -30,9 +30,26 @@ def eltwise(builder, args, body, res_type = None):
     return builder.generic(args, init, iterators, maps, body)
 
 @register_func('numpy.add', numpy.add)
+@register_func('operator.add')
 def add_impl(builder, arg1, arg2):
     def body(a, b, c):
         return a + b
+
+    return eltwise(builder, (arg1, arg2), body)
+
+@register_func('numpy.subtract', numpy.subtract)
+@register_func('operator.sub')
+def sub_impl(builder, arg1, arg2):
+    def body(a, b, c):
+        return a - b
+
+    return eltwise(builder, (arg1, arg2), body)
+
+@register_func('numpy.multiply', numpy.multiply)
+@register_func('operator.mul')
+def mul_impl(builder, arg1, arg2):
+    def body(a, b, c):
+        return a * b
 
     return eltwise(builder, (arg1, arg2), body)
 

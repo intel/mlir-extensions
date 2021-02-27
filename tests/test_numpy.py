@@ -4,6 +4,7 @@ from numpy.testing import assert_equal # for nans comparison
 import numpy as np
 from numba.tests.support import TestCase
 import unittest
+import itertools
 
 _arr_1d_int = [1,2,3,4,5,6,7,8]
 _arr_1d_float = [1.0,2.1,3.2,4.3,5.4,6.5,7.6,8.7]
@@ -46,8 +47,6 @@ class TestMlirBasic(TestCase):
             lambda a: a.size,
             # lambda a: a.T, TODO: need fortran layout support
             lambda a: a.T.T,
-            lambda a: np.add(a, 1),
-            lambda a: np.add(a, 2.5),
         ]
 
         for py_func in funcs:
@@ -56,23 +55,21 @@ class TestMlirBasic(TestCase):
                 arr = np.array(a)
                 assert_equal(py_func(arr), jit_func(arr))
 
-    def test_add(self):
-        def py_func(a, b):
-            return np.add(a, b)
+    def test_binary(self):
+        funcs = [
+            lambda a, b: np.add(a, b),
+            lambda a, b: a + b,
+            lambda a, b: np.subtract(a, b),
+            lambda a, b: a - b,
+            lambda a, b: np.multiply(a, b),
+            lambda a, b: a * b,
+        ]
 
-        jit_func = njit(py_func)
-        arr1 = np.array([1,2,3])
-        arr2 = np.array([4,5,6])
-        assert_equal(py_func(arr1,arr2), jit_func(arr1,arr2))
-
-    def test_add_scalar(self):
-        def py_func(a, b):
-            return np.add(a, b)
-
-        jit_func = njit(py_func)
-        arr1 = 1
-        arr2 = 2
-        assert_equal(py_func(arr1, arr2), jit_func(arr1, arr2))
+        test_data = [1, 2.5, np.array([1,2,3]), np.array([4.4,5.5,6.6])]
+        for py_func in funcs:
+            jit_func = njit(py_func)
+            for a1, a2 in itertools.product(test_data, test_data):
+                assert_equal(py_func(a1,a2), jit_func(a1,a2))
 
     def test_sum_axis(self):
         funcs = [
