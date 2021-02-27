@@ -56,14 +56,14 @@ def GlobalOp : Plier_Op<"global", [NoSideEffect]> {
 
 def BinOp : Plier_Op<"binop", []> {
     let arguments = (ins
-                     AnyType:$rhs,
                      AnyType:$lhs,
+                     AnyType:$rhs,
                      StrAttr:$op);
 
     let results = (outs AnyType);
 
     let builders = [
-        OpBuilderDAG<(ins "::mlir::Value":$rhs, "::mlir::Value":$lhs, "::mlir::StringRef ":$op)>
+        OpBuilderDAG<(ins "::mlir::Value":$lhs, "::mlir::Value":$rhs, "::mlir::StringRef ":$op)>
     ];
 }
 

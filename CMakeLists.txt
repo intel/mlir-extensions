@@ -85,7 +85,7 @@ target_include_directories(${PLIER_LIB} PRIVATE
 
 target_include_directories(${PLIER_LIB} PUBLIC
     ./include
-    ${PROJECT_BINARY_DIR}/include
+    ${PROJECT_BINARY_DIR}/plier/include
     )
 
 add_dependencies(${PLIER_LIB} MLIRPlierOpsIncGen)
