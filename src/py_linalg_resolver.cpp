@@ -8,6 +8,7 @@
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/Dialect/Linalg/IR/LinalgOps.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
+#include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Parser.h>
 #include <mlir/IR/BuiltinAttributes.h>
 
@@ -206,8 +207,8 @@ struct PyLinalgResolver::Context
 
 namespace
 {
-py::list get_args(py::handle inspect, py::handle func, llvm::function_ref<py::object(mlir::Value)> create_var,
-                  mlir::ValueRange args, llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs)
+py::object get_args(py::handle inspect, py::handle func, llvm::function_ref<py::object(mlir::Value)> create_var,
+                    mlir::ValueRange args, llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs)
 {
     auto sig_func = inspect.attr("signature");
     auto sig = sig_func(func);
@@ -258,7 +259,11 @@ py::list get_args(py::handle inspect, py::handle func, llvm::function_ref<py::ob
             return py::none();
         }
     }
-    return ret;
+    if (!args.empty())
+    {
+        return py::none();
+    }
+    return std::move(ret);
 }
 
 PyBuilderContext& get_py_context(py::capsule& ctx)
@@ -409,6 +414,97 @@ mlir::Type broadcast_type(mlir::Type type1, mlir::Type type2)
     llvm_unreachable("Unable to broadcast type");
 }
 
+mlir::Value broadcast_dim(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value val1, mlir::Value val2)
+{
+    assert(val1.getType().isa<mlir::IndexType>());
+    assert(val2.getType().isa<mlir::IndexType>());
+    auto one = builder.create<mlir::ConstantIndexOp>(loc, 1);
+    auto cond = builder.create<mlir::CmpIOp>(loc, mlir::CmpIPredicate::eq, val1, one);
+    return builder.create<mlir::SelectOp>(loc, cond, val2, val1);
+}
+
+mlir::Value expand_dim(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value src, unsigned dim, mlir::ValueRange target_shape)
+{
+    auto context = builder.getContext();
+    auto src_type = src.getType().cast<mlir::ShapedType>();
+    auto num_dims = static_cast<unsigned>(src_type.getRank());
+    auto shape = llvm::to_vector<8>(src_type.getShape());
+    shape[dim] = -1;
+    mlir::Type target_type = mlir::RankedTensorType::get(shape, src_type.getElementType());
+    auto dim_val = builder.create<mlir::DimOp>(loc, src, dim);
+    auto one = builder.create<mlir::ConstantIndexOp>(loc, 1);
+    mlir::Value cond = builder.create<mlir::CmpIOp>(loc, mlir::CmpIPredicate::eq, one, dim_val);
+    mlir::Value cond2 = builder.create<mlir::CmpIOp>(loc, mlir::CmpIPredicate::ne, target_shape[dim], dim_val);
+    cond = builder.create<mlir::AndOp>(loc, cond, cond2);
+    llvm::SmallVector<mlir::Value, 8> new_shape(num_dims);
+    for (unsigned i = 0 ; i < num_dims; ++i)
+    {
+        if (i == dim)
+        {
+            new_shape[i] = target_shape[i];
+        }
+        else
+        {
+            new_shape[i] = builder.create<mlir::DimOp>(loc, src, i);
+        }
+    }
+    auto true_body = [&](mlir::OpBuilder &builder, mlir::Location loc)
+    {
+        assert(dim < shape.size());
+        shape[dim] = 1;
+        mlir::Type casted_type = mlir::RankedTensorType::get(shape, src_type.getElementType());
+        auto casted = builder.create<mlir::tensor::CastOp>(loc, casted_type, src).getResult();
+        auto init = builder.create<mlir::linalg::InitTensorOp>(loc, new_shape, src_type.getElementType()).getResult();
+        llvm::SmallVector<mlir::AffineExpr, 8> exprs(num_dims);
+        for (unsigned i = 0; i < num_dims; ++i)
+        {
+            if (i == dim)
+            {
+                exprs[i] = mlir::getAffineConstantExpr(0, context);
+            }
+            else
+            {
+                exprs[i] = mlir::getAffineDimExpr(i, context);
+            }
+        }
+        const mlir::AffineMap maps[] = {
+            mlir::AffineMap::get(num_dims, 0, exprs, context),
+            mlir::AffineMap::getMultiDimIdentityMap(num_dims, context),
+        };
+        llvm::SmallVector<mlir::StringRef, 8> iterators(num_dims, "parallel");
+
+        auto body = [&](mlir::OpBuilder &builder, mlir::Location loc, mlir::ValueRange values)
+        {
+            assert(values.size() == 2);
+            builder.create<mlir::linalg::YieldOp>(loc, values[0]);
+        };
+
+        auto expanded = builder.create<mlir::linalg::GenericOp>(loc, target_type, casted, init, maps, iterators, body);
+        auto res = builder.create<mlir::tensor::CastOp>(loc, target_type, expanded.getResult(0));
+        builder.create<mlir::scf::YieldOp>(loc, res.getResult());
+    };
+    auto false_body = [&](mlir::OpBuilder &builder, mlir::Location loc)
+    {
+        auto res = builder.create<mlir::tensor::CastOp>(loc, target_type, src);
+        builder.create<mlir::scf::YieldOp>(loc, res.getResult());
+    };
+    return builder.create<mlir::scf::IfOp>(loc, target_type, cond, true_body, false_body).getResult(0);
+}
+
+mlir::Value expand_dims(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value val, unsigned num_dims, mlir::ValueRange target_shape)
+{
+    assert(num_dims <= target_shape.size());
+    if (num_dims < target_shape.size())
+    {
+        target_shape = target_shape.drop_front(target_shape.size() - num_dims);
+    }
+    for (unsigned i = 0; i < num_dims; ++i)
+    {
+        val = expand_dim(builder, loc, val, i, target_shape);
+    }
+    return val;
+}
+
 py::object broadcast_impl(py::capsule context, py::tuple args)
 {
     if (1 == args.size())
@@ -467,14 +563,22 @@ py::object broadcast_impl(py::capsule context, py::tuple args)
             py::none();
         }
         res_type = broadcast_type(res_type, shape_and_type->second);
-        if (shape_and_type->first.size() > shape_vals.size())
+        auto new_shape_vals = shape_and_type->first;
+        for (auto it : llvm::zip(llvm::reverse(shape_vals), llvm::reverse(new_shape_vals)))
         {
-            shape_vals = shape_and_type->first; // TODO
+            auto& old_val = std::get<0>(it);
+            auto new_val =  std::get<1>(it);
+            old_val = broadcast_dim(builder, loc, old_val, new_val);
+        }
+        if (new_shape_vals.size() > shape_vals.size())
+        {
+            auto front = llvm::makeArrayRef(new_shape_vals).drop_back(shape_vals.size());
+            assert(!front.empty());
+            shape_vals.insert(shape_vals.begin(), front.begin(), front.end());
         }
     }
 
-    llvm::SmallVector<int64_t, 8> shape(static_cast<size_t>(shape_vals.size()), -1);
-    py::tuple ret(args.size());
+    py::tuple ret(mlir_args.size());
     if (shape_vals.empty())
     {
         for (auto it : llvm::enumerate(mlir_args))
@@ -489,24 +593,31 @@ py::object broadcast_impl(py::capsule context, py::tuple args)
         return std::move(ret);
     }
 
+    llvm::SmallVector<int64_t, 8> shape(static_cast<size_t>(shape_vals.size()), -1);
     auto tensor_type = mlir::RankedTensorType::get(shape, res_type);
     for (auto it : llvm::enumerate(mlir_args))
     {
         mlir::Value val = it.value();
-        auto type = val.getType();
-        if (type != tensor_type)
+        if (auto src_type = val.getType().dyn_cast<mlir::ShapedType>())
         {
+            assert(src_type.hasRank());
+            val = expand_dims(builder, loc, val, static_cast<unsigned>(src_type.getRank()), shape_vals);
+        }
+        if (val.getType() != tensor_type)
+        {
+            auto type = val.getType();
             if (auto src_type = type.dyn_cast<mlir::ShapedType>())
             {
                 assert(src_type.hasRank());
-                auto num_dims = static_cast<unsigned>(src_type.getRank());
+                auto src_num_dims = static_cast<unsigned>(src_type.getRank());
+                auto num_dims = static_cast<unsigned>(tensor_type.getRank());
                 auto init = builder.create<mlir::linalg::InitTensorOp>(loc, shape_vals, tensor_type.getElementType()).getResult();
-                llvm::SmallVector<llvm::StringRef, 8> iterators(num_dims, "parallel");
-                auto map = mlir::AffineMap::getMultiDimIdentityMap(num_dims, builder.getContext());
                 mlir::AffineMap maps[] = {
-                    map,
-                    map,
+                    mlir::AffineMap::getMinorIdentityMap(num_dims, src_num_dims, builder.getContext()),
+//                    mlir::AffineMap::getMultiDimIdentityMap(num_dims, builder.getContext()).getMajorSubMap(src_num_dims),
+                    mlir::AffineMap::getMultiDimIdentityMap(num_dims, builder.getContext()),
                 };
+                llvm::SmallVector<llvm::StringRef, 8> iterators(num_dims, "parallel");
                 auto body = [&](mlir::OpBuilder &builder, mlir::Location loc, mlir::ValueRange values)
                 {
                     assert(values.size() == 2);
@@ -559,9 +670,15 @@ py::object init_tensor_impl(py::capsule context, py::handle shape, py::handle dt
     {
         auto index_type = builder.getIndexType();
         llvm::SmallVector<mlir::Value, 8> shape_val(count);
+        llvm::SmallVector<int64_t> static_shape(count, -1);
         for (size_t i = 0; i < count; ++i)
         {
-            shape_val[i] = do_cast(loc, builder, ctx.context.unwrap_val(loc, builder, shape[py::int_(i)]), index_type);
+            auto elem = shape[py::int_(i)];
+            if (py::isinstance<py::int_>(elem))
+            {
+                static_shape[i] = elem.cast<int64_t>();
+            }
+            shape_val[i] = do_cast(loc, builder, ctx.context.unwrap_val(loc, builder, elem), index_type);
         }
 
         if (init_val.is_none())
@@ -578,6 +695,11 @@ py::object init_tensor_impl(py::capsule context, py::handle shape, py::handle dt
             llvm::SmallVector<int64_t, 8> shape(count, -1);
             auto type = mlir::RankedTensorType::get(shape, elem_type);
             init = builder.create<mlir::tensor::GenerateOp>(loc, type, shape_val, body);
+        }
+        if (llvm::any_of(static_shape, [](auto val){ return val >= 0;}))
+        {
+            auto new_type = mlir::RankedTensorType::get(static_shape, elem_type);
+            init = builder.create<mlir::tensor::CastOp>(loc, new_type, init);
         }
     }
     return ctx.context.create_var(context, init);

@@ -802,8 +802,8 @@ void LowerLinalgPass::runOnOperation()
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
 }
 
-struct PostLinalgOptPass :
-    public mlir::PassWrapper<PostLinalgOptPass, mlir::OperationPass<mlir::ModuleOp>>
+struct PostFusionOptPass :
+    public mlir::PassWrapper<PostFusionOptPass, mlir::OperationPass<mlir::ModuleOp>>
 {
     virtual void getDependentDialects(
         mlir::DialectRegistry &registry) const override
@@ -816,6 +816,26 @@ struct PostLinalgOptPass :
 
     void runOnOperation() override;
 };
+
+void PostFusionOptPass::runOnOperation()
+{
+    mlir::OwningRewritePatternList patterns;
+
+    auto& context = getContext();
+    for (auto *op : context.getRegisteredOperations())
+    {
+        op->getCanonicalizationPatterns(patterns, &context);
+    }
+
+    patterns.insert<
+        //        LoopInvariantCodeMotion, TODO
+        plier::CSERewrite<mlir::FuncOp>
+        >(&context);
+
+    plier::populate_index_propagate_patterns(context, patterns);
+
+    mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+}
 
 struct LoopInvariantCodeMotion : public mlir::OpRewritePattern<mlir::scf::ForOp>
 {
@@ -837,6 +857,21 @@ struct LoopInvariantCodeMotion : public mlir::OpRewritePattern<mlir::scf::ForOp>
         }
         return res;
     }
+};
+
+struct PostLinalgOptPass :
+    public mlir::PassWrapper<PostLinalgOptPass, mlir::OperationPass<mlir::ModuleOp>>
+{
+    virtual void getDependentDialects(
+        mlir::DialectRegistry &registry) const override
+    {
+        registry.insert<mlir::StandardOpsDialect>();
+        registry.insert<mlir::linalg::LinalgDialect>();
+        registry.insert<mlir::scf::SCFDialect>();
+        registry.insert<mlir::AffineDialect>();
+    }
+
+    void runOnOperation() override;
 };
 
 void PostLinalgOptPass::runOnOperation()
@@ -871,6 +906,7 @@ void populate_plier_to_linalg_gen_pipeline(mlir::OpPassManager& pm)
 void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager& pm)
 {
     pm.addPass(mlir::createLinalgFusionOfTensorOpsPass());
+    pm.addPass(std::make_unique<PostFusionOptPass>());
 
     pm.addPass(mlir::createTensorConstantBufferizePass());
     pm.addNestedPass<mlir::FuncOp>(mlir::createSCFBufferizePass());
