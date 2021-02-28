@@ -276,5 +276,24 @@ class TestMlirBasic(TestCase):
             for a in [arr1]:
                 assert_equal(py_func(a), jit_func(a))
 
+    def test_broadcast(self):
+        def py_func(a, b):
+            return np.add(a, b)
+
+        jit_func = njit(py_func)
+
+        test_data = [
+            1,
+            np.array([1]),
+            np.array([[1]]),
+            np.array([[1,2],[3,4]]),
+            np.array([5,6]),
+            np.array([[5],[6]]),
+            np.array([[5,6]]),
+        ]
+
+        for a, b in itertools.product(test_data, test_data):
+            assert_equal(py_func(a,b), jit_func(a,b))
+
 if __name__ == '__main__':
     unittest.main()
