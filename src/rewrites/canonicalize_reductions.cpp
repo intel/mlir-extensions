@@ -74,7 +74,7 @@ mlir::Value createScalarLoad(
     else if (llvm::all_of(shape, [](auto s) { return s == 1; }))
     {
         auto index = builder.create<mlir::ConstantIndexOp>(loc, 0);
-        llvm::SmallVector<mlir::Value, 8> indices(shape.size(), index);
+        llvm::SmallVector<mlir::Value> indices(shape.size(), index);
         return builder.create<mlir::LoadOp>(loc, memref, indices);
     }
     else
@@ -95,7 +95,7 @@ void createScalarStore(
     else if (llvm::all_of(shape, [](auto s) { return s == 1; }))
     {
         auto index = builder.create<mlir::ConstantIndexOp>(loc, 0);
-        llvm::SmallVector<mlir::Value, 8> indices(shape.size(), index);
+        llvm::SmallVector<mlir::Value> indices(shape.size(), index);
         builder.create<mlir::StoreOp>(loc, val, memref, indices);
     }
     else
@@ -107,7 +107,7 @@ void createScalarStore(
 
 mlir::LogicalResult plier::CanonicalizeReduction::matchAndRewrite(mlir::scf::ForOp op, mlir::PatternRewriter& rewriter) const
 {
-    llvm::SmallVector<mlir::Value, 8> to_process;
+    llvm::SmallVector<mlir::Value> to_process;
     for (auto& current : op.getLoopBody().front())
     {
         if (auto load = mlir::dyn_cast<mlir::LoadOp>(current))

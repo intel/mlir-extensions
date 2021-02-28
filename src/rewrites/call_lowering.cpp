@@ -18,8 +18,8 @@ mlir::LogicalResult plier::CallOpLowering::matchAndRewrite(plier::PyCallOp op, m
         return mlir::failure();
     }
 
-    llvm::SmallVector<mlir::Value, 8> args;
-    llvm::SmallVector<std::pair<llvm::StringRef, mlir::Value>, 8> kwargs;
+    llvm::SmallVector<mlir::Value> args;
+    llvm::SmallVector<std::pair<llvm::StringRef, mlir::Value>> kwargs;
     auto getattr = mlir::dyn_cast_or_null<plier::GetattrOp>(operands[0].getDefiningOp());
     if (getattr)
     {

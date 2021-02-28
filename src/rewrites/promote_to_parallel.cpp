@@ -43,7 +43,7 @@ mlir::LogicalResult plier::PromoteToParallel::matchAndRewrite(mlir::scf::ForOp o
     auto& old_body = op.getLoopBody().front();
     auto old_yield = mlir::cast<mlir::scf::YieldOp>(old_body.getTerminator());
     auto reduce_args = old_body.getArguments().drop_front();
-    llvm::SmallVector<llvm::SmallVector<mlir::Operation*, 1>, 8> reduce_bodies(reduce_args.size());
+    llvm::SmallVector<llvm::SmallVector<mlir::Operation*, 1>> reduce_bodies(reduce_args.size());
     llvm::DenseSet<mlir::Operation*> reduce_ops;
     for (auto it : llvm::enumerate(reduce_args))
     {

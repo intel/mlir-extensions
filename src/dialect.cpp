@@ -169,7 +169,7 @@ void PyCallOp::build(mlir::OpBuilder &builder, mlir::OperationState &state, mlir
     all_args.reserve(args.size() + kwargs.size());
     std::copy(args.begin(), args.end(), std::back_inserter(all_args));
     auto kw_start = static_cast<uint32_t>(all_args.size());
-    mlir::SmallVector<mlir::Attribute, 8> kw_names;
+    mlir::SmallVector<mlir::Attribute> kw_names;
     kw_names.reserve(kwargs.size());
     for (auto& a : kwargs)
     {
