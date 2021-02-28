@@ -113,7 +113,7 @@ mlir::Type map_unituple_type(mlir::MLIRContext& ctx, llvm::StringRef& name)
         !name.consumeInteger<unsigned>(10, count) &&
         name.consume_front(")"))
     {
-        llvm::SmallVector<mlir::Type, 8> types(count, type);
+        llvm::SmallVector<mlir::Type> types(count, type);
         return mlir::TupleType::get(&ctx, types);
     }
     return nullptr;
@@ -125,7 +125,7 @@ mlir::Type map_tuple_type(mlir::MLIRContext& ctx, llvm::StringRef& name)
     {
         return nullptr;
     }
-    llvm::SmallVector<mlir::Type, 8> types;
+    llvm::SmallVector<mlir::Type> types;
     while (true)
     {
         if (name.consume_front(")"))
@@ -500,7 +500,7 @@ template<typename T>
 void replace_op(mlir::Operation* op, mlir::PatternRewriter& rewriter, mlir::Type new_type, mlir::ValueRange operands)
 {
     assert(nullptr != op);
-    llvm::SmallVector<mlir::Value, 8> new_operands(operands.size());
+    llvm::SmallVector<mlir::Value> new_operands(operands.size());
     for (auto it : llvm::enumerate(operands))
     {
         new_operands[it.index()] = do_cast(new_type, it.value(), rewriter);
@@ -776,7 +776,7 @@ struct ScfIfRewrite : public mlir::OpRewritePattern<mlir::CondBranchOp>
             }
 
             mlir::BlockAndValueMapping mapper;
-            llvm::SmallVector<mlir::Value, 8> yield_vals;
+            llvm::SmallVector<mlir::Value> yield_vals;
             auto copy_block = [&](mlir::OpBuilder& builder, mlir::Location loc, mlir::Block& block)
             {
                 mapper.clear();
@@ -954,9 +954,9 @@ struct ScfWhileRewrite : public mlir::OpRewritePattern<mlir::BranchOp>
         }
 
         mlir::BlockAndValueMapping mapper;
-        llvm::SmallVector<mlir::Value, 8> yield_vars;
+        llvm::SmallVector<mlir::Value> yield_vars;
         auto before_block_args = before_block->getArguments();
-        llvm::SmallVector<mlir::Value, 8> orig_vars(before_block_args.begin(), before_block_args.end());
+        llvm::SmallVector<mlir::Value> orig_vars(before_block_args.begin(), before_block_args.end());
 
         auto before_body = [&](mlir::OpBuilder& builder, mlir::Location loc, mlir::ValueRange iterargs)
         {

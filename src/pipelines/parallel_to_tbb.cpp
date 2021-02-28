@@ -78,7 +78,7 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp>
 
         auto loc = op.getLoc();
         mlir::BlockAndValueMapping mapping;
-        llvm::SmallVector<mlir::Value, 8> reduce_vars(op.getNumResults());
+        llvm::SmallVector<mlir::Value> reduce_vars(op.getNumResults());
         for (auto it : llvm::enumerate(op.getResultTypes()))
         {
             auto type = it.value();
@@ -114,7 +114,7 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp>
         auto orig_step = op.step().front();
         auto body_builder = [&](mlir::OpBuilder &builder, ::mlir::Location loc, mlir::Value lower_bound, mlir::Value upper_bound, mlir::Value thread_index)
         {
-            llvm::SmallVector<mlir::Value, 8> initVals(op.initVals().size());
+            llvm::SmallVector<mlir::Value> initVals(op.initVals().size());
             for (auto it : llvm::enumerate(op.initVals()))
             {
                 auto reduce_var = reduce_vars[it.index()];
@@ -144,7 +144,7 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp>
             {
                 return mlir::isa<mlir::scf::ReduceOp>(op);
             });
-            llvm::SmallVector<mlir::Value, 8> yield_args;
+            llvm::SmallVector<mlir::Value> yield_args;
             yield_args.reserve(args.size());
             for (auto it : llvm::enumerate(reduce_ops))
             {

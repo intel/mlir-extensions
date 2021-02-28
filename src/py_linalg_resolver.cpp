@@ -278,7 +278,7 @@ auto get_types(mlir::ValueRange values)
 
 auto get_agrs_from_tuple(py::handle args, llvm::function_ref<mlir::Value(py::handle)> unpack)
 {
-    llvm::SmallVector<mlir::Value, 8> ret;
+    llvm::SmallVector<mlir::Value> ret;
     if (args.is_none())
     {
         return ret;
@@ -301,7 +301,7 @@ auto get_agrs_from_tuple(py::handle args, llvm::function_ref<mlir::Value(py::han
 
 auto get_iterators(py::list iterators, mlir::MLIRContext& ctx)
 {
-    llvm::SmallVector<llvm::StringRef, 8> ret(iterators.size());
+    llvm::SmallVector<llvm::StringRef> ret(iterators.size());
     for (auto it : llvm::enumerate(iterators))
     {
         ret[it.index()] = mlir::StringAttr::get(it.value().cast<std::string>(), &ctx).getValue();
@@ -317,7 +317,7 @@ mlir::AffineMapAttr get_affine_map_attr(py::handle obj, mlir::MLIRContext& ctx)
 
 auto get_affine_maps(py::list maps, mlir::MLIRContext& ctx)
 {
-    llvm::SmallVector<mlir::AffineMap, 8> ret(maps.size());
+    llvm::SmallVector<mlir::AffineMap> ret(maps.size());
     for (auto it : llvm::enumerate(maps))
     {
         ret[it.index()] = get_affine_map_attr(it.value(), ctx).getValue();
@@ -327,7 +327,7 @@ auto get_affine_maps(py::list maps, mlir::MLIRContext& ctx)
 
 auto get_generic_op_body_types(mlir::ValueRange inputs, mlir::ValueRange outputs)
 {
-    llvm::SmallVector<mlir::Type, 8> ret;
+    llvm::SmallVector<mlir::Type> ret;
     ret.reserve(inputs.size() + outputs.size());
     for (auto r : {inputs, outputs})
     {
@@ -349,7 +349,7 @@ auto get_generic_op_body_types(mlir::ValueRange inputs, mlir::ValueRange outputs
 
 auto generic_op_body_result_types(mlir::ValueRange outputs)
 {
-    llvm::SmallVector<mlir::Type, 8> ret;
+    llvm::SmallVector<mlir::Type> ret;
     ret.reserve(outputs.size());
     for (auto type : outputs.getTypes())
     {
@@ -436,7 +436,7 @@ mlir::Value expand_dim(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value
     mlir::Value cond = builder.create<mlir::CmpIOp>(loc, mlir::CmpIPredicate::eq, one, dim_val);
     mlir::Value cond2 = builder.create<mlir::CmpIOp>(loc, mlir::CmpIPredicate::ne, target_shape[dim], dim_val);
     cond = builder.create<mlir::AndOp>(loc, cond, cond2);
-    llvm::SmallVector<mlir::Value, 8> new_shape(num_dims);
+    llvm::SmallVector<mlir::Value> new_shape(num_dims);
     for (unsigned i = 0 ; i < num_dims; ++i)
     {
         if (i == dim)
@@ -455,7 +455,7 @@ mlir::Value expand_dim(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value
         mlir::Type casted_type = mlir::RankedTensorType::get(shape, src_type.getElementType());
         auto casted = builder.create<mlir::tensor::CastOp>(loc, casted_type, src).getResult();
         auto init = builder.create<mlir::linalg::InitTensorOp>(loc, new_shape, src_type.getElementType()).getResult();
-        llvm::SmallVector<mlir::AffineExpr, 8> exprs(num_dims);
+        llvm::SmallVector<mlir::AffineExpr> exprs(num_dims);
         for (unsigned i = 0; i < num_dims; ++i)
         {
             if (i == dim)
@@ -471,7 +471,7 @@ mlir::Value expand_dim(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value
             mlir::AffineMap::get(num_dims, 0, exprs, context),
             mlir::AffineMap::getMultiDimIdentityMap(num_dims, context),
         };
-        llvm::SmallVector<mlir::StringRef, 8> iterators(num_dims, "parallel");
+        llvm::SmallVector<mlir::StringRef> iterators(num_dims, "parallel");
 
         auto body = [&](mlir::OpBuilder &builder, mlir::Location loc, mlir::ValueRange values)
         {
@@ -514,12 +514,12 @@ py::object broadcast_impl(py::capsule context, py::tuple args)
     auto& ctx = get_py_context(context);
     auto loc = ctx.loc;
     auto& builder = ctx.builder;
-    llvm::SmallVector<mlir::Value, 8> mlir_args(args.size());
+    llvm::SmallVector<mlir::Value> mlir_args(args.size());
     for (auto it : llvm::enumerate(args))
     {
         mlir_args[it.index()] = ctx.context.unwrap_val(loc, builder, it.value());
     }
-    using shape_t = llvm::SmallVector<mlir::Value, 8>;
+    using shape_t = llvm::SmallVector<mlir::Value>;
     auto get_shape = [&](mlir::Value val)->llvm::Optional<std::pair<shape_t, mlir::Type>>
     {
         auto type = val.getType();
@@ -544,7 +544,7 @@ py::object broadcast_impl(py::capsule context, py::tuple args)
         return {};
     };
     mlir::Type res_type;
-    mlir::SmallVector<mlir::Value, 8> shape_vals;
+    mlir::SmallVector<mlir::Value> shape_vals;
     if (auto shape_and_type = get_shape(mlir_args.front()))
     {
         res_type = shape_and_type->second;
@@ -593,7 +593,7 @@ py::object broadcast_impl(py::capsule context, py::tuple args)
         return std::move(ret);
     }
 
-    llvm::SmallVector<int64_t, 8> shape(static_cast<size_t>(shape_vals.size()), -1);
+    llvm::SmallVector<int64_t> shape(static_cast<size_t>(shape_vals.size()), -1);
     auto tensor_type = mlir::RankedTensorType::get(shape, res_type);
     for (auto it : llvm::enumerate(mlir_args))
     {
@@ -617,7 +617,7 @@ py::object broadcast_impl(py::capsule context, py::tuple args)
 //                    mlir::AffineMap::getMultiDimIdentityMap(num_dims, builder.getContext()).getMajorSubMap(src_num_dims),
                     mlir::AffineMap::getMultiDimIdentityMap(num_dims, builder.getContext()),
                 };
-                llvm::SmallVector<llvm::StringRef, 8> iterators(num_dims, "parallel");
+                llvm::SmallVector<llvm::StringRef> iterators(num_dims, "parallel");
                 auto body = [&](mlir::OpBuilder &builder, mlir::Location loc, mlir::ValueRange values)
                 {
                     assert(values.size() == 2);
@@ -669,7 +669,7 @@ py::object init_tensor_impl(py::capsule context, py::handle shape, py::handle dt
     else
     {
         auto index_type = builder.getIndexType();
-        llvm::SmallVector<mlir::Value, 8> shape_val(count);
+        llvm::SmallVector<mlir::Value> shape_val(count);
         llvm::SmallVector<int64_t> static_shape(count, -1);
         for (size_t i = 0; i < count; ++i)
         {
@@ -692,7 +692,7 @@ py::object init_tensor_impl(py::capsule context, py::handle shape, py::handle dt
             {
                 builder.create<mlir::tensor::YieldOp>(loc, val);
             };
-            llvm::SmallVector<int64_t, 8> shape(count, -1);
+            llvm::SmallVector<int64_t> shape(count, -1);
             auto type = mlir::RankedTensorType::get(shape, elem_type);
             init = builder.create<mlir::tensor::GenerateOp>(loc, type, shape_val, body);
         }
@@ -723,7 +723,7 @@ py::object fill_tensor_impl(py::capsule context, py::handle tensor, py::handle v
     mlir::AffineMap affine_maps[] = {
         mlir::AffineMap::getMultiDimIdentityMap(rank, builder.getContext()),
     };
-    llvm::SmallVector<llvm::StringRef, 8> iterators(rank, "parallel");
+    llvm::SmallVector<llvm::StringRef> iterators(rank, "parallel");
     auto body = [&](mlir::OpBuilder &builder, mlir::Location loc, mlir::ValueRange values)
     {
         assert(values.size() == 1);
@@ -763,7 +763,7 @@ py::object generic_impl(py::capsule context, py::handle inputs, py::handle outpu
     auto cast_values = [&](mlir::ValueRange vals, mlir::TypeRange types)
     {
         assert(vals.size() == types.size());
-        llvm::SmallVector<mlir::Value, 8> ret(vals.size());
+        llvm::SmallVector<mlir::Value> ret(vals.size());
         auto do_cast = [&](mlir::Value val, mlir::Type type)
         {
             if (val.getType() == type)
@@ -816,7 +816,7 @@ py::object from_elements_impl(py::capsule context, py::handle values, py::handle
     auto loc = ctx.loc;
     auto type = unwrap_type(dtype);
 
-    llvm::SmallVector<mlir::Value, 8> vals(container_size(values));
+    llvm::SmallVector<mlir::Value> vals(container_size(values));
     container_iterate(values, [&](auto index, py::handle obj)
     {
         if (py::isinstance(obj, ctx.context.var))
@@ -855,7 +855,7 @@ py::object extract_impl(py::capsule context, py::handle value, py::handle indice
     auto& builder = ctx.builder;
     auto loc = ctx.loc;
 
-    llvm::SmallVector<mlir::Value, 8> ind(container_size(indices));
+    llvm::SmallVector<mlir::Value> ind(container_size(indices));
     container_iterate(indices, [&](auto index, py::handle obj)
     {
         if (py::isinstance(obj, ctx.context.var))
@@ -888,10 +888,10 @@ py::object reshape_impl(py::capsule context, py::handle tensor, py::int_ out_dim
     }
     auto elem_type = tensor_val.getType().cast<mlir::RankedTensorType>().getElementType();
     auto new_dims = out_dims.cast<size_t>();
-    llvm::SmallVector<int64_t, 8> dims(new_dims, -1);
+    llvm::SmallVector<int64_t> dims(new_dims, -1);
     auto new_type = mlir::RankedTensorType::get(dims, elem_type);
 
-    llvm::SmallVector<mlir::Attribute, 8> affine_maps(container_size(maps));
+    llvm::SmallVector<mlir::Attribute> affine_maps(container_size(maps));
     container_iterate(maps, [&](auto index, py::handle obj)
     {
         affine_maps[index] = get_affine_map_attr(obj, *builder.getContext());
@@ -937,14 +937,14 @@ py::object shape_impl(py::capsule context, py::capsule ssa_val)
         auto loc = ctx.loc;
         auto mlir_type = value.getType().cast<mlir::RankedTensorType>();
         auto shape = mlir_type.getShape();
-        llvm::SmallVector<mlir::Value, 8> shape_vals(shape.size());
+        llvm::SmallVector<mlir::Value> shape_vals(shape.size());
         for (auto it : llvm::enumerate(shape))
         {
             auto i = it.index();
             mlir::Value mlir_dim = builder.create<mlir::DimOp>(loc, value, i);
             shape_vals[i] = mlir_dim;
         }
-        llvm::SmallVector<mlir::Type, 8> shape_types(shape.size(), builder.getIndexType());
+        llvm::SmallVector<mlir::Type> shape_types(shape.size(), builder.getIndexType());
         auto shape_type = mlir::TupleType::get(builder.getContext(), shape_types);
         auto shape_var = builder.create<plier::BuildTupleOp>(loc, shape_type, shape_vals);
         return ctx.context.create_var(context, shape_var.getResult());

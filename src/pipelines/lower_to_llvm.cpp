@@ -406,7 +406,7 @@ void fix_func_sig(LLVMTypeHelper& type_helper, mlir::FuncOp func)
     auto old_type = func.getType();
     assert(old_type.getNumResults() <= 1);
     auto& ctx = *old_type.getContext();
-    llvm::SmallVector<mlir::Type, 8> args;
+    llvm::SmallVector<mlir::Type> args;
 
     auto ptr = [&](auto arg)
     {
@@ -426,7 +426,7 @@ void fix_func_sig(LLVMTypeHelper& type_helper, mlir::FuncOp func)
     builder.setInsertionPointToStart(&func.getBody().front());
 
     auto loc = builder.getUnknownLoc();
-    llvm::SmallVector<mlir::Value, 8> new_args;
+    llvm::SmallVector<mlir::Value> new_args;
     auto process_arg = [&](mlir::Type type)
     {
         if (auto memref_type = type.dyn_cast<mlir::MemRefType>())
@@ -871,8 +871,8 @@ struct LowerParallel : public mlir::OpRewritePattern<plier::ParallelOp>
     mlir::LogicalResult
     matchAndRewrite(plier::ParallelOp op,
                     mlir::PatternRewriter &rewriter) const override {
-        llvm::SmallVector<mlir::Value, 8> context_vars;
-        llvm::SmallVector<mlir::Operation*, 8> context_constants;
+        llvm::SmallVector<mlir::Value> context_vars;
+        llvm::SmallVector<mlir::Operation*> context_constants;
         llvm::DenseSet<mlir::Value> context_vars_set;
         auto add_context_var = [&](mlir::Value value)
         {
@@ -930,7 +930,7 @@ struct LowerParallel : public mlir::OpRewritePattern<plier::ParallelOp>
 
         auto context_type = [&]()->mlir::LLVM::LLVMStructType
         {
-            llvm::SmallVector<mlir::Type, 8> fields;
+            llvm::SmallVector<mlir::Type> fields;
             fields.reserve(context_vars.size());
             for (auto var : context_vars)
             {

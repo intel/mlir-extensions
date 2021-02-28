@@ -132,7 +132,7 @@ template<typename F>
 void mangle_ident_impl(llvm::raw_ostream& res, llvm::StringRef ident, F&& template_params)
 {
     assert(!ident.empty());
-    llvm::SmallVector<llvm::StringRef, 8> parts;
+    llvm::SmallVector<llvm::StringRef> parts;
     ident.split(parts, '.');
     assert(!parts.empty());
     auto write_part = [&](auto part)

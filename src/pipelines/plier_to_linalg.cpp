@@ -117,7 +117,7 @@ mlir::Type map_array_type(mlir::MLIRContext& ctx, mlir::TypeConverter& conveter,
         {
             if (auto type = conveter.convertType(plier::PyType::get(&ctx, desc->name)))
             {
-                llvm::SmallVector<int64_t, 8> shape(desc->dims, -1);
+                llvm::SmallVector<int64_t> shape(desc->dims, -1);
                 return mlir::RankedTensorType::get(shape, type);
             }
         }
@@ -350,7 +350,7 @@ struct GetitemOpLowering : public mlir::OpRewritePattern<T>
         }
         auto loc = op.getLoc();
 
-        llvm::SmallVector<mlir::Value, 8> indices;
+        llvm::SmallVector<mlir::Value> indices;
         if (auto tuple_type = index.getType().template dyn_cast<mlir::TupleType>())
         {
             indices.resize(tuple_type.size());
@@ -572,7 +572,7 @@ struct SetitemOpLowering : public mlir::OpRewritePattern<T>
             rerun_std_pipeline(op);
         }
 
-        llvm::SmallVector<mlir::Value, 8> indices;
+        llvm::SmallVector<mlir::Value> indices;
         if (auto tuple_type = index.getType().template dyn_cast<mlir::TupleType>())
         {
             indices.resize(tuple_type.size());
@@ -617,7 +617,7 @@ struct ArrayShape : public mlir::OpRewritePattern<plier::GetattrOp>
             return mlir::failure();
         }
 
-        llvm::SmallVector<mlir::Value, 8> dims(rank);
+        llvm::SmallVector<mlir::Value> dims(rank);
         for (size_t i = 0; i < rank; ++i)
         {
             auto dim = rewriter.create<mlir::DimOp>(op.getLoc(), op.value(), i);

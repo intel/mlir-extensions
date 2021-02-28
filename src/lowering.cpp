@@ -356,7 +356,7 @@ private:
     mlir::Value lower_build_tuple(const py::handle& inst)
     {
         auto items = inst.attr("items").cast<py::list>();
-        mlir::SmallVector<mlir::Value, 8> args;
+        mlir::SmallVector<mlir::Value> args;
         for (auto item : items)
         {
             args.push_back(loadvar(item));
@@ -396,8 +396,8 @@ private:
         auto kws = expr.attr("kws").cast<py::list>();
         auto vararg = expr.attr("vararg");
 
-        mlir::SmallVector<mlir::Value, 8> args_list;
-        mlir::SmallVector<std::pair<std::string, mlir::Value>, 8> kwargs_list;
+        mlir::SmallVector<mlir::Value> args_list;
+        mlir::SmallVector<std::pair<std::string, mlir::Value>> kwargs_list;
         for (auto a : args)
         {
             args_list.push_back(loadvar(a));
@@ -558,7 +558,7 @@ private:
     mlir::FunctionType get_func_type(const py::handle& fnargs, const py::handle& restype)
     {
         auto ret = get_obj_type(restype());
-        llvm::SmallVector<mlir::Type, 8> args;
+        llvm::SmallVector<mlir::Type> args;
         for (auto arg : fnargs())
         {
             args.push_back(get_obj_type(arg));
@@ -608,7 +608,7 @@ private:
                 if (auto op = mlir::dyn_cast<mlir::BranchOp>(term))
                 {
                     auto dest = op.getDest();
-                    mlir::SmallVector<mlir::Value, 8> args;
+                    mlir::SmallVector<mlir::Value> args;
                     build_arg_list(dest, info.outgoing_phi_nodes, args);
                     op.erase();
                     builder.create<mlir::BranchOp>(builder.getUnknownLoc(), dest, args);
@@ -618,8 +618,8 @@ private:
                     auto true_dest = op.trueDest();
                     auto false_dest = op.falseDest();
                     auto cond = op.getCondition();
-                    mlir::SmallVector<mlir::Value, 8> true_args;
-                    mlir::SmallVector<mlir::Value, 8> false_args;
+                    mlir::SmallVector<mlir::Value> true_args;
+                    mlir::SmallVector<mlir::Value> false_args;
                     build_arg_list(true_dest, info.outgoing_phi_nodes, true_args);
                     build_arg_list(false_dest, info.outgoing_phi_nodes, false_args);
                     op.erase();
