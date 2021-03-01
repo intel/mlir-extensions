@@ -46,10 +46,6 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp>
         {
             return mlir::failure();
         }
-        if (op.getNumLoops() != 1)
-        {
-            return mlir::failure();
-        }
         bool need_parallel = op->hasAttr(plier::attributes::getParallelName()) ||
                              !op->getParentOfType<mlir::scf::ParallelOp>();
         if (!need_parallel)
@@ -109,10 +105,10 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp>
         rewriter.create<mlir::scf::ForOp>(loc, reduce_lower_bound, reduce_upper_bound, reduce_step, llvm::None, reduce_init_body_builder);
 
         auto& old_body = op.getLoopBody().front();
-        auto orig_lower_bound = op.lowerBound().front();
-        auto orig_upper_bound = op.upperBound().front();
-        auto orig_step = op.step().front();
-        auto body_builder = [&](mlir::OpBuilder &builder, ::mlir::Location loc, mlir::Value lower_bound, mlir::Value upper_bound, mlir::Value thread_index)
+        auto orig_lower_bound = op.lowerBound();
+        auto orig_upper_bound = op.upperBound();
+        auto orig_step = op.step();
+        auto body_builder = [&](mlir::OpBuilder &builder, ::mlir::Location loc, mlir::ValueRange lower_bound, mlir::ValueRange upper_bound, mlir::Value thread_index)
         {
             llvm::SmallVector<mlir::Value> initVals(op.initVals().size());
             for (auto it : llvm::enumerate(op.initVals()))

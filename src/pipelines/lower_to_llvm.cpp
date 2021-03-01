@@ -11,6 +11,7 @@
 #include <mlir/Pass/PassManager.h>
 #include <mlir/Pass/Pass.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
+#include <mlir/Transforms/Passes.h>
 
 #include <llvm/ADT/Triple.h>
 #include <llvm/ADT/TypeSwitch.h>
@@ -871,6 +872,7 @@ struct LowerParallel : public mlir::OpRewritePattern<plier::ParallelOp>
     mlir::LogicalResult
     matchAndRewrite(plier::ParallelOp op,
                     mlir::PatternRewriter &rewriter) const override {
+        auto num_loops = op.getNumLoops();
         llvm::SmallVector<mlir::Value> context_vars;
         llvm::SmallVector<mlir::Operation*> context_constants;
         llvm::DenseSet<mlir::Value> context_vars_set;
@@ -951,6 +953,24 @@ struct LowerParallel : public mlir::OpRewritePattern<plier::ParallelOp>
         auto context_ptr_type = mlir::LLVM::LLVMPointerType::get(context_type);
 
         auto loc = op.getLoc();
+        auto index_type = rewriter.getIndexType();
+        auto llvm_index_type = mlir::IntegerType::get(op.getContext(), 64); // TODO
+        auto to_llvm_index = [&](mlir::Value val)->mlir::Value
+        {
+            if (val.getType() != llvm_index_type)
+            {
+                return rewriter.create<mlir::LLVM::BitcastOp>(loc, llvm_index_type, val);
+            }
+            return val;
+        };
+        auto from_llvm_index = [&](mlir::Value val)->mlir::Value
+        {
+            if (val.getType() != index_type)
+            {
+                return rewriter.create<plier::CastOp>(loc, index_type, val);
+            }
+            return val;
+        };
         auto llvm_i32_type = mlir::IntegerType::get(op.getContext(), 32);
         auto zero = rewriter.create<mlir::LLVM::ConstantOp>(loc, llvm_i32_type, rewriter.getI32IntegerAttr(0));
         auto one = rewriter.create<mlir::LLVM::ConstantOp>(loc, llvm_i32_type, rewriter.getI32IntegerAttr(1));
@@ -971,12 +991,29 @@ struct LowerParallel : public mlir::OpRewritePattern<plier::ParallelOp>
         auto void_ptr_type = mlir::LLVM::LLVMPointerType::get(mlir::IntegerType::get(op.getContext(), 8));
         auto context_abstract = rewriter.create<mlir::LLVM::BitcastOp>(loc, void_ptr_type, context);
 
-        auto index_type = rewriter.getIndexType();
+        auto input_range_type = [&]()
+        {
+            const mlir::Type members[] = {
+                llvm_index_type, // lower_bound
+                llvm_index_type, // upper_bound
+                llvm_index_type, // step
+            };
+            return mlir::LLVM::LLVMStructType::getLiteral(op.getContext(), members);
+        }();
+        auto input_range_ptr = mlir::LLVM::LLVMPointerType::get(input_range_type);
+        auto range_type = [&]()
+        {
+            const mlir::Type members[] = {
+                llvm_index_type, // lower_bound
+                llvm_index_type, // upper_bound
+            };
+            return mlir::LLVM::LLVMStructType::getLiteral(op.getContext(), members);
+        }();
+        auto range_ptr = mlir::LLVM::LLVMPointerType::get(range_type);
         auto func_type = [&]()
         {
-            mlir::Type args[] = {
-                index_type, // lower_bound
-                index_type, // upper_bound
+            const mlir::Type args[] = {
+                range_ptr, // bounds
                 index_type, // thread index
                 void_ptr_type // context
             };
@@ -1014,21 +1051,34 @@ struct LowerParallel : public mlir::OpRewritePattern<plier::ParallelOp>
             auto entry = func.addEntryBlock();
             auto loc = rewriter.getUnknownLoc();
             mlir::OpBuilder::InsertionGuard guard(rewriter);
-            mapping.map(old_entry.getArgument(0), entry->getArgument(0));
-            mapping.map(old_entry.getArgument(1), entry->getArgument(1));
-            mapping.map(old_entry.getArgument(2), entry->getArgument(2));
             rewriter.setInsertionPointToStart(entry);
+            auto pos0 = rewriter.getI64ArrayAttr(0);
+            auto pos1 = rewriter.getI64ArrayAttr(1);
+            for (unsigned i = 0; i < num_loops; ++i)
+            {
+                auto arg = entry->getArgument(0);
+                const mlir::Value indices[] = {
+                    rewriter.create<mlir::LLVM::ConstantOp>(loc, llvm_i32_type, rewriter.getI32IntegerAttr(static_cast<int32_t>(i)))
+                };
+                auto ptr = rewriter.create<mlir::LLVM::GEPOp>(loc, range_ptr, arg, indices);
+                auto dims = rewriter.create<mlir::LLVM::LoadOp>(loc, ptr);
+                auto lower = rewriter.create<mlir::LLVM::ExtractValueOp>(loc, llvm_index_type, dims, pos0);
+                auto upper = rewriter.create<mlir::LLVM::ExtractValueOp>(loc, llvm_index_type, dims, pos1);
+                mapping.map(old_entry.getArgument(i),             from_llvm_index(lower));
+                mapping.map(old_entry.getArgument(i + num_loops), from_llvm_index(upper));
+            }
+            mapping.map(old_entry.getArgument(2 * num_loops), entry->getArgument(1)); // thread index
             for (auto arg : context_constants)
             {
                 rewriter.clone(*arg, mapping);
             }
-            auto context_ptr = rewriter.create<mlir::LLVM::BitcastOp>(loc, context_ptr_type, entry->getArgument(3));
+            auto context_ptr = rewriter.create<mlir::LLVM::BitcastOp>(loc, context_ptr_type, entry->getArgument(2));
             auto zero = rewriter.create<mlir::LLVM::ConstantOp>(loc, llvm_i32_type, rewriter.getI32IntegerAttr(0));
             for (auto it : llvm::enumerate(context_vars))
             {
                 auto index = it.index();
                 auto old_val = it.value();
-                mlir::Value indices[] = {
+                const mlir::Value indices[] = {
                     zero,
                     rewriter.create<mlir::LLVM::ConstantOp>(loc, llvm_i32_type, rewriter.getI32IntegerAttr(static_cast<int32_t>(index)))
                 };
@@ -1060,21 +1110,39 @@ struct LowerParallel : public mlir::OpRewritePattern<plier::ParallelOp>
             {
                 return sym;
             }
-            mlir::Type args[] = {
-                index_type, // lower bound
-                index_type, // upper bound
-                index_type, // step
-                func_type,
-                void_ptr_type
+            const mlir::Type args[] = {
+                input_range_ptr, // bounds
+                index_type, // num_loops
+                func_type, // func
+                void_ptr_type // context
             };
-            auto func_type = mlir::FunctionType::get(op.getContext(), args, {});
-            return plier::add_function(rewriter, mod, func_name, func_type);
+            auto parallel_func_type = mlir::FunctionType::get(op.getContext(), args, {});
+            return plier::add_function(rewriter, mod, func_name, parallel_func_type);
         }();
         auto func_addr = rewriter.create<mlir::ConstantOp>(loc, func_type, rewriter.getSymbolRefAttr(outlined_func));
-        mlir::Value pf_args[] = {
-            op.lowerBound(),
-            op.upperBound(),
-            op.step(),
+
+        auto num_loops_var = rewriter.create<mlir::ConstantIndexOp>(loc, num_loops);
+        auto input_ranges = rewriter.create<mlir::LLVM::AllocaOp>(loc, input_range_ptr, to_llvm_index(num_loops_var), 0);
+        for (unsigned i = 0; i < num_loops; ++i)
+        {
+            mlir::Value input_range = rewriter.create<mlir::LLVM::UndefOp>(loc, input_range_type);
+            auto insert = [&](mlir::Value val, unsigned index)
+            {
+                input_range = rewriter.create<mlir::LLVM::InsertValueOp>(loc, input_range, val, rewriter.getI64ArrayAttr(index));
+            };
+            insert(to_llvm_index(op.lowerBounds()[i]), 0);
+            insert(to_llvm_index(op.upperBounds()[i]), 1);
+            insert(to_llvm_index(op.steps()[i]), 2);
+            const mlir::Value indices[] = {
+                rewriter.create<mlir::LLVM::ConstantOp>(loc, llvm_i32_type, rewriter.getI32IntegerAttr(static_cast<int>(i)))
+            };
+            auto ptr = rewriter.create<mlir::LLVM::GEPOp>(loc, input_range_ptr, input_ranges, indices);
+            rewriter.create<mlir::LLVM::StoreOp>(loc, input_range, ptr);
+        }
+
+        const mlir::Value pf_args[] = {
+            input_ranges,
+            num_loops_var,
             func_addr,
             context_abstract
         };
@@ -1226,6 +1294,7 @@ void populate_lower_to_llvm_pipeline(mlir::OpPassManager& pm)
 {
     pm.addPass(std::make_unique<LowerParallelToCFGPass>());
     pm.addPass(mlir::createLowerToCFGPass());
+    pm.addPass(mlir::createCanonicalizerPass());
 //    pm.addPass(std::make_unique<CheckForPlierTypes>());
     pm.addNestedPass<mlir::FuncOp>(std::make_unique<PreLLVMLowering>());
     pm.addPass(std::make_unique<LLVMLoweringPass>(getLLVMOptions()));
