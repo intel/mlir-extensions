@@ -354,23 +354,33 @@ bool ParallelOp::isDefinedOutsideOfLoop(mlir::Value value)
 
 void ParallelOp::build(
     mlir::OpBuilder &odsBuilder, mlir::OperationState &odsState,
-    mlir::Value lowerBound, mlir::Value upperBound, mlir::Value step,
-    mlir::function_ref<void(mlir::OpBuilder &, mlir::Location, mlir::Value,
-                            mlir::Value, mlir::Value)> bodyBuilder) {
-    odsState.addOperands({lowerBound, upperBound, step});
+    mlir::ValueRange lowerBounds, mlir::ValueRange upperBounds, mlir::ValueRange steps,
+    mlir::function_ref<void(mlir::OpBuilder &, mlir::Location, mlir::ValueRange,
+                            mlir::ValueRange, mlir::Value)> bodyBuilder) {
+    assert(lowerBounds.size() == upperBounds.size());
+    assert(lowerBounds.size() == steps.size());
+    odsState.addOperands(lowerBounds);
+    odsState.addOperands(upperBounds);
+    odsState.addOperands(steps);
+    odsState.addAttribute(
+        ParallelOp::getOperandSegmentSizeAttr(),
+        odsBuilder.getI32VectorAttr({static_cast<int32_t>(lowerBounds.size()),
+                                     static_cast<int32_t>(upperBounds.size()),
+                                     static_cast<int32_t>(steps.size())}));
     auto bodyRegion = odsState.addRegion();
-    bodyRegion->push_back(new mlir::Block);
-    auto& bodyBlock = bodyRegion->front();
-    bodyBlock.addArgument(odsBuilder.getIndexType()); // lower bound
-    bodyBlock.addArgument(odsBuilder.getIndexType()); // upper bound
-    bodyBlock.addArgument(odsBuilder.getIndexType()); // thread index
+    auto count = lowerBounds.size();
+    mlir::OpBuilder::InsertionGuard guard(odsBuilder);
+    llvm::SmallVector<mlir::Type> argTypes(count * 2 + 1, odsBuilder.getIndexType());
+    auto *bodyBlock = odsBuilder.createBlock(bodyRegion, {}, argTypes);
 
     if (bodyBuilder)
     {
-        mlir::OpBuilder::InsertionGuard guard(odsBuilder);
-        odsBuilder.setInsertionPointToStart(&bodyBlock);
-        bodyBuilder(odsBuilder, odsState.location, bodyBlock.getArgument(0),
-                    bodyBlock.getArgument(1), bodyBlock.getArgument(2));
+        odsBuilder.setInsertionPointToStart(bodyBlock);
+        auto args = bodyBlock->getArguments();
+        bodyBuilder(odsBuilder, odsState.location,
+                    args.take_front(count),
+                    args.drop_front(count).take_front(count),
+                    args.back());
         ParallelOp::ensureTerminator(*bodyRegion, odsBuilder, odsState.location);
     }
 }

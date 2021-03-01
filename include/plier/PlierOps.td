@@ -215,21 +215,26 @@ def GetattrOp : Plier_Op<"getattr", [NoSideEffect]> {
 }
 
 def ParallelOp : Plier_Op<"parallel",
-      [DeclareOpInterfaceMethods<LoopLikeOpInterface>,
+      [AttrSizedOperandSegments,
+       DeclareOpInterfaceMethods<LoopLikeOpInterface>,
        SingleBlockImplicitTerminator<"plier::YieldOp">,
        RecursiveSideEffects]> {
 
-    let arguments = (ins Index:$lowerBound,
-                     Index:$upperBound,
-                     Index:$step);
+    let arguments = (ins Variadic<Index>:$lowerBounds,
+                         Variadic<Index>:$upperBounds,
+                         Variadic<Index>:$steps);
     let regions = (region SizedRegion<1>:$region);
 
     let skipDefaultBuilders = 1;
     let builders = [
-        OpBuilderDAG<(ins "::mlir::Value":$lowerBound, "::mlir::Value":$upperBound, "::mlir::Value":$step,
-            CArg<"::mlir::function_ref<void(::mlir::OpBuilder &, ::mlir::Location, ::mlir::Value, ::mlir::Value, ::mlir::Value)>",
+        OpBuilderDAG<(ins "::mlir::ValueRange":$lowerBounds, "::mlir::ValueRange":$upperBounds, "::mlir::ValueRange":$steps,
+            CArg<"::mlir::function_ref<void(::mlir::OpBuilder &, ::mlir::Location, ::mlir::ValueRange, ::mlir::ValueRange, ::mlir::Value)>",
                  "nullptr">)>
     ];
+
+    let extraClassDeclaration = [{
+        unsigned getNumLoops() { return steps().size(); }
+    }];
 }
 
 def YieldOp : Plier_Op<"yield", [NoSideEffect, ReturnLike, Terminator,
