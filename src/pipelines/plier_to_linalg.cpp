@@ -156,7 +156,7 @@ bool check_numpy_args(llvm::ArrayRef<mlir::Value> args, unsigned expected_count)
 void rerun_std_pipeline(mlir::Operation* op)
 {
     assert(nullptr != op);
-    auto marker = mlir::StringAttr::get(plier_to_std_pipeline_name(), op->getContext());
+    auto marker = mlir::StringAttr::get(op->getContext(), plier_to_std_pipeline_name());
     auto mod = op->getParentOfType<mlir::ModuleOp>();
     assert(nullptr != mod);
     plier::add_pipeline_jump_marker(mod, marker);
@@ -834,7 +834,7 @@ void PostFusionOptPass::runOnOperation()
 
     plier::populate_index_propagate_patterns(context, patterns);
 
-    mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
 }
 
 struct LoopInvariantCodeMotion : public mlir::OpRewritePattern<mlir::scf::ForOp>
@@ -894,7 +894,7 @@ void PostLinalgOptPass::runOnOperation()
 
     plier::populate_index_propagate_patterns(context, patterns);
 
-    mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
 }
 
 void populate_plier_to_linalg_gen_pipeline(mlir::OpPassManager& pm)

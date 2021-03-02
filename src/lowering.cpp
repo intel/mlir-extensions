@@ -13,6 +13,7 @@
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
 
 #include <mlir/Target/LLVMIR.h>
+#include <mlir/Target/LLVMIR/Export.h>
 
 #include <llvm/Bitcode/BitcodeWriter.h>
 
@@ -660,6 +661,7 @@ py::bytes gen_ll_module(mlir::ModuleOp mod)
     std::unique_ptr<llvm::Module> ll_mod;
     plier::scoped_diag_handler(*mod.getContext(), diag_handler, [&]()
     {
+        mlir::registerLLVMDialectTranslation(*mod.getContext());
         ll_mod = mlir::translateModuleToLLVMIR(mod, ll_ctx);
         if (nullptr == ll_mod)
         {

@@ -304,7 +304,7 @@ auto get_iterators(py::list iterators, mlir::MLIRContext& ctx)
     llvm::SmallVector<llvm::StringRef> ret(iterators.size());
     for (auto it : llvm::enumerate(iterators))
     {
-        ret[it.index()] = mlir::StringAttr::get(it.value().cast<std::string>(), &ctx).getValue();
+        ret[it.index()] = mlir::StringAttr::get(&ctx, it.value().cast<std::string>()).getValue();
     }
     return ret;
 }
@@ -896,7 +896,7 @@ py::object reshape_impl(py::capsule context, py::handle tensor, py::int_ out_dim
     {
         affine_maps[index] = get_affine_map_attr(obj, *builder.getContext());
     });
-    auto affine_maps_attr = mlir::ArrayAttr::get(affine_maps, builder.getContext());
+    auto affine_maps_attr = mlir::ArrayAttr::get(builder.getContext(), affine_maps);
     auto reshape = builder.create<mlir::linalg::TensorReshapeOp>(loc, new_type, tensor_val, affine_maps_attr);
     return ctx.context.create_var(context, reshape);
 }

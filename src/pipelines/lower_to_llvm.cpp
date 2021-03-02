@@ -273,8 +273,8 @@ mlir::FuncOp get_to_memref_conversion_func(
     auto func_type = mlir::FunctionType::get(builder.getContext(), src_type, dst_type);
     auto loc = builder.getUnknownLoc();
     auto new_func = plier::add_function(builder, module, func_name, func_type);
-    auto alwaysinline = mlir::StringAttr::get("alwaysinline", builder.getContext());
-    new_func->setAttr("passthrough", mlir::ArrayAttr::get(alwaysinline, builder.getContext()));
+    auto alwaysinline = mlir::StringAttr::get(builder.getContext(), "alwaysinline");
+    new_func->setAttr("passthrough", mlir::ArrayAttr::get(builder.getContext(), alwaysinline));
     mlir::OpBuilder::InsertionGuard guard(builder);
     auto block = new_func.addEntryBlock();
     builder.setInsertionPointToStart(block);
@@ -326,8 +326,8 @@ mlir::FuncOp get_from_memref_conversion_func(
     auto func_type = mlir::FunctionType::get(builder.getContext(), src_type, dst_type);
     auto loc = builder.getUnknownLoc();
     auto new_func = plier::add_function(builder, module, func_name, func_type);
-    auto alwaysinline = mlir::StringAttr::get("alwaysinline", builder.getContext());
-    new_func->setAttr("passthrough", mlir::ArrayAttr::get(alwaysinline, builder.getContext()));
+    auto alwaysinline = mlir::StringAttr::get(builder.getContext(), "alwaysinline");
+    new_func->setAttr("passthrough", mlir::ArrayAttr::get(builder.getContext(), alwaysinline));
     mlir::OpBuilder::InsertionGuard guard(builder);
     auto block = new_func.addEntryBlock();
     builder.setInsertionPointToStart(block);
@@ -377,10 +377,10 @@ mlir::Attribute get_fastmath_attrs(mlir::MLIRContext& ctx)
     auto add_pair = [&](auto name, auto val)
     {
         const mlir::Attribute attrs[] = {
-            mlir::StringAttr::get(name, &ctx),
-            mlir::StringAttr::get(val, &ctx)
+            mlir::StringAttr::get(&ctx, name),
+            mlir::StringAttr::get(&ctx, val)
         };
-        return mlir::ArrayAttr::get(attrs, &ctx);
+        return mlir::ArrayAttr::get(&ctx, attrs);
     };
     const mlir::Attribute attrs[] = {
         add_pair("denormal-fp-math", "preserve-sign,preserve-sign"),
@@ -391,7 +391,7 @@ mlir::Attribute get_fastmath_attrs(mlir::MLIRContext& ctx)
         add_pair("unsafe-fp-math", "true"),
         add_pair(plier::attributes::getFastmathName(), "1"),
     };
-    return mlir::ArrayAttr::get(attrs, &ctx);
+    return mlir::ArrayAttr::get(&ctx, attrs);
 }
 
 void fix_func_sig(LLVMTypeHelper& type_helper, mlir::FuncOp func)
@@ -805,9 +805,10 @@ class CheckForPlierTypes :
     void runOnOperation() override
     {
         markAllAnalysesPreserved();
+        auto plier_dialect = getContext().getOrLoadDialect<plier::PlierDialect>();
         getOperation()->walk([&](mlir::Operation* op)
         {
-            if (op->getName().getDialect() == plier::PlierDialect::getDialectNamespace())
+            if (op->getName().getDialect() == plier_dialect)
             {
                 op->emitOpError(": not all plier ops were translated\n");
                 signalPassFailure();
@@ -1170,7 +1171,7 @@ struct LowerParallelToCFGPass :
         mlir::OwningRewritePatternList patterns;
         patterns.insert<LowerParallel>(&getContext());
 
-        mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+        (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
     }
 };
 
@@ -1194,7 +1195,7 @@ struct PreLLVMLowering : public mlir::PassWrapper<PreLLVMLowering, mlir::Functio
         patterns.insert<ReturnOpLowering>(&getContext(),
                                           type_helper.get_type_converter());
 
-        mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+        (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
     }
 };
 
@@ -1283,7 +1284,7 @@ struct LLVMLoweringPass : public mlir::PassWrapper<LLVMLoweringPass, mlir::Opera
     if (failed(applyPartialConversion(m, target, std::move(patterns))))
       signalPassFailure();
     m->setAttr(LLVM::LLVMDialect::getDataLayoutAttrName(),
-               StringAttr::get(options.dataLayout.getStringRepresentation(), m.getContext()));
+               StringAttr::get(m.getContext(), options.dataLayout.getStringRepresentation()));
   }
 
 private:
