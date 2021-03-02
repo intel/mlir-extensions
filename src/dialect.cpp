@@ -173,11 +173,11 @@ void PyCallOp::build(mlir::OpBuilder &builder, mlir::OperationState &state, mlir
     kw_names.reserve(kwargs.size());
     for (auto& a : kwargs)
     {
-        kw_names.push_back(mlir::StringAttr::get(a.first, ctx));
+        kw_names.push_back(mlir::StringAttr::get(ctx, a.first));
         all_args.push_back(a.second);
     }
     PyCallOp::build(builder, state, PyType::getUndefined(state.getContext()),
-        func, all_args, func_name, kw_start, mlir::ArrayAttr::get(kw_names, ctx));
+        func, all_args, func_name, kw_start, mlir::ArrayAttr::get(ctx, kw_names));
 }
 
 void BuildTupleOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,

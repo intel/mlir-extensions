@@ -34,7 +34,7 @@ void plier::add_pipeline_jump_marker(mlir::ModuleOp module, mlir::StringAttr nam
     {
         name_list.insert(it, name);
     }
-    module->setAttr(jump_markers, mlir::ArrayAttr::get(name_list, module.getContext()));
+    module->setAttr(jump_markers, mlir::ArrayAttr::get(module.getContext(), name_list));
 }
 
 
@@ -56,5 +56,5 @@ void plier::remove_pipeline_jump_marker(mlir::ModuleOp module, mlir::StringAttr 
     });
     assert(it != name_list.end());
     name_list.erase(it);
-    module->setAttr(jump_markers, mlir::ArrayAttr::get(name_list, module.getContext()));
+    module->setAttr(jump_markers, mlir::ArrayAttr::get(module.getContext(), name_list));
 }

@@ -42,7 +42,7 @@ mlir::LogicalResult simplifyRegion(ScopedMapTy& map, mlir::Region& region, mlir:
     bool success = false;
     for (auto &inst : llvm::make_early_inc_range(region.front()))
     {
-        if (inst.isKnownTerminator())
+        if (inst.hasTrait<mlir::OpTrait::IsTerminator>())
         {
             break;
         }

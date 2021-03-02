@@ -136,7 +136,7 @@ struct PassManagerSchedule
                     auto it = stages_map.find(jump.data());
                     assert(it != stages_map.end());
                     assert(nullptr != it->second);
-                    auto name = mlir::StringAttr::get(jump, &ctx);
+                    auto name = mlir::StringAttr::get(&ctx, jump);
                     stage.stage->add_jump(name, it->second);
                 }
             }
