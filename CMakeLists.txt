@@ -1,6 +1,3 @@
-if(UNIX)
-    add_link_options("-Wl,--exclude-libs,ALL")
-endif()
 
 find_package(pybind11 REQUIRED)
 
@@ -46,6 +43,11 @@ pybind11_add_module(${PROJECT_NAME} ${SOURCES_LIST} ${HEADERS_LIST})
 if (MSVC)
     target_compile_options(${PROJECT_NAME} PRIVATE /EHsc)
 endif ()
+
+if(UNIX)
+    target_link_options(${PROJECT_NAME} PRIVATE "LINKER:--exclude-libs,ALL")
+endif()
+
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE ${LLVM_DEFINITIONS})
 

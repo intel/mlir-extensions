@@ -193,7 +193,7 @@ void ParallelToTbbPass::runOnOperation()
         ParallelToTbb
         >(&getContext());
 
-    mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
 }
 
 void populate_parallel_to_tbb_pipeline(mlir::OpPassManager& pm)

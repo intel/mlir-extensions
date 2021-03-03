@@ -1131,7 +1131,7 @@ struct FoldTupleGetitem : public mlir::OpRewritePattern<Op>
 {
     FoldTupleGetitem(mlir::TypeConverter &/*typeConverter*/,
                      mlir::MLIRContext *context):
-        OpRewritePattern(context) {}
+        mlir::OpRewritePattern<Op>(context) {}
 
     mlir::LogicalResult matchAndRewrite(
         Op op, mlir::PatternRewriter &rewriter) const override
