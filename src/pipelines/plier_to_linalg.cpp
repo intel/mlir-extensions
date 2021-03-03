@@ -759,8 +759,7 @@ void PlierToLinalgPass::runOnOperation()
     patterns.insert<
         GetitemOpLowering<plier::GetItemOp>,
         GetitemOpLowering<plier::StaticGetItemOp>,
-        SetitemOpLowering<plier::SetItemOp>,
-        plier::ForceInline
+        SetitemOpLowering<plier::SetItemOp>
         >(&getContext());
 
     // range/prange lowering need dead branch pruning to properly
@@ -802,8 +801,8 @@ void LowerLinalgPass::runOnOperation()
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
 }
 
-struct PostFusionOptPass :
-    public mlir::PassWrapper<PostFusionOptPass, mlir::OperationPass<mlir::ModuleOp>>
+struct CommonOptPass :
+    public mlir::PassWrapper<CommonOptPass, mlir::OperationPass<mlir::ModuleOp>>
 {
     virtual void getDependentDialects(
         mlir::DialectRegistry &registry) const override
@@ -817,7 +816,7 @@ struct PostFusionOptPass :
     void runOnOperation() override;
 };
 
-void PostFusionOptPass::runOnOperation()
+void CommonOptPass::runOnOperation()
 {
     mlir::OwningRewritePatternList patterns;
 
@@ -829,6 +828,7 @@ void PostFusionOptPass::runOnOperation()
 
     patterns.insert<
         //        LoopInvariantCodeMotion, TODO
+        plier::ForceInline,
         plier::CSERewrite<mlir::FuncOp>
         >(&context);
 
@@ -858,6 +858,41 @@ struct LoopInvariantCodeMotion : public mlir::OpRewritePattern<mlir::scf::ForOp>
         return res;
     }
 };
+
+struct RetainArgsPass :
+    public mlir::PassWrapper<RetainArgsPass, mlir::FunctionPass>
+{
+    virtual void getDependentDialects(
+        mlir::DialectRegistry &registry) const override
+    {
+        registry.insert<plier::PlierDialect>();
+    }
+
+    void runOnFunction() override;
+};
+
+void RetainArgsPass::runOnFunction()
+{
+    auto func = getFunction();
+    if (func.isPrivate() || func.isDeclaration() || func.body().empty())
+    {
+        return;
+    }
+
+    mlir::OpBuilder builder(&getContext());
+    auto loc = builder.getUnknownLoc();
+    auto block = &func.body().front();
+    builder.setInsertionPointToStart(block);
+    for (auto arg : block->getArguments())
+    {
+        if (arg.getType().isa<mlir::MemRefType>())
+        {
+            auto retained = builder.create<plier::RetainOp>(loc, arg);
+            llvm::SmallPtrSet<mlir::Operation*, 1> except({retained});
+            arg.replaceAllUsesExcept(retained, except);
+        }
+    }
+}
 
 struct PostLinalgOptPass :
     public mlir::PassWrapper<PostLinalgOptPass, mlir::OperationPass<mlir::ModuleOp>>
@@ -900,13 +935,14 @@ void PostLinalgOptPass::runOnOperation()
 void populate_plier_to_linalg_gen_pipeline(mlir::OpPassManager& pm)
 {
     pm.addPass(std::make_unique<PlierToLinalgPass>());
+    pm.addPass(std::make_unique<CommonOptPass>());
     pm.addPass(mlir::createSymbolDCEPass());
 }
 
 void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager& pm)
 {
     pm.addPass(mlir::createLinalgFusionOfTensorOpsPass());
-    pm.addPass(std::make_unique<PostFusionOptPass>());
+    pm.addPass(std::make_unique<CommonOptPass>());
 
     pm.addPass(mlir::createTensorConstantBufferizePass());
     pm.addNestedPass<mlir::FuncOp>(mlir::createSCFBufferizePass());
@@ -920,6 +956,7 @@ void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager& pm)
     pm.addNestedPass<mlir::FuncOp>(mlir::createBufferLoopHoistingPass());
     pm.addNestedPass<mlir::FuncOp>(mlir::createPromoteBuffersToStackPass());
 
+    pm.addNestedPass<mlir::FuncOp>(std::make_unique<RetainArgsPass>());
     pm.addNestedPass<mlir::FuncOp>(mlir::createBufferDeallocationPass());
 
     pm.addPass(std::make_unique<LowerLinalgPass>());

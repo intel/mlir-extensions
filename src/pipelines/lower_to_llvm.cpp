@@ -610,12 +610,6 @@ private:
 };
 
 // Copypaste from StandardToLLVM
-mlir::Value createIndexAttrConstant(mlir::OpBuilder &builder, mlir::Location loc,
-                                     mlir::Type resultType, int64_t value) {
-    return builder.create<mlir::LLVM::ConstantOp>(
-        loc, resultType, builder.getIntegerAttr(builder.getIndexType(), value));
-}
-
 struct AllocLikeOpLowering : public mlir::ConvertToLLVMPattern {
     using ConvertToLLVMPattern::createIndexConstant;
     using ConvertToLLVMPattern::getIndexType;
@@ -625,19 +619,6 @@ struct AllocLikeOpLowering : public mlir::ConvertToLLVMPattern {
         : ConvertToLLVMPattern(opName, &converter.getContext(), converter, /*benefit*/99) {}
 
 protected:
-    // Returns 'input' aligned up to 'alignment'. Computes
-    // bumped = input + alignement - 1
-    // aligned = bumped - bumped % alignment
-//    static mlir::Value createAligned(mlir::ConversionPatternRewriter &rewriter, mlir::Location loc,
-//                               mlir::Value input, mlir::Value alignment) {
-//        using namespace mlir;
-//        Value one = createIndexAttrConstant(rewriter, loc, alignment.getType(), 1);
-//        Value bump = rewriter.create<LLVM::SubOp>(loc, alignment, one);
-//        Value bumped = rewriter.create<LLVM::AddOp>(loc, input, bump);
-//        Value mod = rewriter.create<LLVM::URemOp>(loc, bumped, alignment);
-//        return rewriter.create<LLVM::SubOp>(loc, bumped, mod);
-//    }
-
     // Creates a call to an allocation function with params and casts the
     // resulting void pointer to ptrType.
     mlir::Value createAllocCall(mlir::Location loc, mlir::StringRef name, mlir::Type ptrType,
@@ -1227,6 +1208,51 @@ struct PostLLVMLowering :
     }
 };
 
+struct LowerRetain : public mlir::OpConversionPattern<plier::RetainOp>
+{
+    using mlir::OpConversionPattern<plier::RetainOp>::OpConversionPattern;
+
+    mlir::LogicalResult
+    matchAndRewrite(plier::RetainOp op, llvm::ArrayRef<mlir::Value> operands,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+        assert(operands.size() == 1);
+        auto arg = operands[0];
+        if (!arg.getType().isa<mlir::LLVM::LLVMStructType>())
+        {
+            return mlir::failure();
+        }
+
+        auto llvmVoidPointerType =
+            mlir::LLVM::LLVMPointerType::get(rewriter.getIntegerType(8));
+        auto incref_func = [&]()
+        {
+            auto mod = op->getParentOfType<mlir::ModuleOp>();
+            assert(mod);
+            auto func = mod.lookupSymbol<mlir::LLVM::LLVMFuncOp>("NRT_incref");
+            if (!func)
+            {
+                mlir::OpBuilder::InsertionGuard guard(rewriter);
+                rewriter.setInsertionPointToStart(mod.getBody());
+                auto llvmVoidType = mlir::LLVM::LLVMVoidType::get(rewriter.getContext());
+                func = rewriter.create<mlir::LLVM::LLVMFuncOp>(
+                    rewriter.getUnknownLoc(), "NRT_incref",
+                    mlir::LLVM::LLVMFunctionType::get(llvmVoidType, llvmVoidPointerType));
+            }
+            return func;
+        }();
+
+        auto loc = op.getLoc();
+        auto index = rewriter.getI64ArrayAttr(0);
+        auto elemType = arg.getType().cast<mlir::LLVM::LLVMStructType>().getBody()[0];
+        mlir::Value ptr = rewriter.create<mlir::LLVM::ExtractValueOp>(loc, elemType, arg, index);
+        ptr = rewriter.create<mlir::LLVM::BitcastOp>(loc, llvmVoidPointerType, ptr);
+        rewriter.create<mlir::LLVM::CallOp>(loc, incref_func, ptr);
+        rewriter.replaceOp(op, arg);
+
+        return mlir::success();
+    }
+};
+
 struct LowerCasts : public mlir::OpConversionPattern<plier::CastOp>
 {
     using mlir::OpConversionPattern<plier::CastOp>::OpConversionPattern;
@@ -1277,7 +1303,7 @@ struct LLVMLoweringPass : public mlir::PassWrapper<LLVMLoweringPass, mlir::Opera
 
     OwningRewritePatternList patterns;
     populateStdToLLVMConversionPatterns(typeConverter, patterns);
-    patterns.insert<LowerCasts>(typeConverter, &getContext());
+    patterns.insert<LowerCasts, LowerRetain>(typeConverter, &getContext());
     patterns.insert<AllocOpLowering, DeallocOpLowering>(typeConverter);
 
     LLVMConversionTarget target(getContext());
