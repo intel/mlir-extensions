@@ -1,6 +1,3 @@
-if(UNIX)
-    add_link_options("-Wl,--exclude-libs,ALL")
-endif()
 
 find_package(LLVM REQUIRED CONFIG)
 find_package(MLIR REQUIRED CONFIG)
