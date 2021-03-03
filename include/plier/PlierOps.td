@@ -214,6 +214,16 @@ def GetattrOp : Plier_Op<"getattr", [NoSideEffect]> {
     ];
 }
 
+def RetainOp : Plier_Op<"retain"> {
+    let arguments = (ins AnyMemRef:$value);
+
+    let results = (outs Res<AnyMemRef, "", [MemAlloc<DefaultResource>]>:$memref);
+
+    let builders = [
+        OpBuilderDAG<(ins "::mlir::Value":$value)>
+    ];
+}
+
 def ParallelOp : Plier_Op<"parallel",
       [AttrSizedOperandSegments,
        DeclareOpInterfaceMethods<LoopLikeOpInterface>,

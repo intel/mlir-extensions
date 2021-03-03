@@ -1,5 +1,6 @@
 #pragma once
 
+#include <mlir/IR/BuiltinTypes.h>
 #include <mlir/IR/Dialect.h>
 #include <mlir/IR/Types.h>
 #include <mlir/IR/OpDefinition.h>
@@ -14,6 +15,7 @@ using Value = ::mlir::Value;
 using Region = ::mlir::Region;
 using LogicalResult = ::mlir::LogicalResult;
 using Operation = ::mlir::Operation;
+namespace MemoryEffects = ::mlir::MemoryEffects;
 
 template<typename T>
 using ArrayRef = ::mlir::ArrayRef<T>;
