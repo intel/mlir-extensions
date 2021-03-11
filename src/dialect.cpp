@@ -5,10 +5,31 @@
 #include <mlir/IR/BuiltinTypes.h>
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/PatternMatch.h>
+#include <mlir/Transforms/InliningUtils.h>
 
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
 
 #include <llvm/ADT/TypeSwitch.h>
+
+#include "plier/transforms/const_utils.hpp"
+
+namespace
+{
+struct PLierInlinerInterface : public mlir::DialectInlinerInterface
+{
+    using mlir::DialectInlinerInterface::DialectInlinerInterface;
+    bool isLegalToInline(mlir::Region *, mlir::Region *, bool,
+                         mlir::BlockAndValueMapping &) const final override
+    {
+        return true;
+    }
+    bool isLegalToInline(mlir::Operation *op, mlir::Region *, bool,
+                         mlir::BlockAndValueMapping &) const final override
+    {
+        return !mlir::isa<plier::ArgOp>(op);
+    }
+};
+}
 
 namespace plier
 {
@@ -70,6 +91,7 @@ void PlierDialect::initialize()
 #include "plier/PlierOps.cpp.inc"
         >();
     addTypes<plier::PyType>();
+    addInterfaces<PLierInlinerInterface>();
 }
 
 mlir::Type PlierDialect::parseType(mlir::DialectAsmParser &parser) const {
@@ -334,6 +356,95 @@ void GetattrOp::getCanonicalizationPatterns(
     ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context)
 {
     results.insert<GetattrGlobalRewrite>(context);
+}
+
+void EnforceShapeOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
+                            mlir::Value value, mlir::ValueRange shape) {
+    EnforceShapeOp::build(builder, state, value.getType(), value, shape);
+}
+
+mlir::OpFoldResult EnforceShapeOp::fold(llvm::ArrayRef<mlir::Attribute> operands) {
+    operands = operands.drop_front();
+    auto num_dims = static_cast<unsigned>(operands.size());
+    auto src_type = getType().cast<mlir::ShapedType>();
+    llvm::SmallVector<int64_t> final_shape(num_dims, -1);
+    if (src_type.hasRank())
+    {
+        auto shape = src_type.getShape();
+        if (shape.size() != num_dims)
+        {
+            return nullptr;
+        }
+        final_shape.assign(shape.begin(), shape.end());
+    }
+    bool changed = false;
+    for (unsigned i = 0; i < num_dims; ++i)
+    {
+        if (auto attr = operands[i].dyn_cast_or_null<mlir::IntegerAttr>())
+        {
+            auto val = attr.getInt();
+            if (val != -1)
+            {
+                if (final_shape[i] != -1)
+                {
+                    if (final_shape[i] != val)
+                    {
+                        return nullptr;
+                    }
+                }
+                else
+                {
+                    changed = true;
+                    final_shape[i] = val;
+                }
+            }
+        }
+    }
+
+    if (changed)
+    {
+        auto final_type = mlir::RankedTensorType::get(final_shape, src_type.getElementType());
+        result().setType(final_type);
+        return result();
+    }
+    return nullptr;
+}
+
+namespace
+{
+struct EnforceShapeDim : public mlir::OpRewritePattern<mlir::DimOp>
+{
+    using mlir::OpRewritePattern<mlir::DimOp>::OpRewritePattern;
+
+    mlir::LogicalResult matchAndRewrite(
+        mlir::DimOp op, mlir::PatternRewriter &rewriter) const override
+    {
+        auto enforce_op = mlir::dyn_cast_or_null<plier::EnforceShapeOp>(op.memrefOrTensor().getDefiningOp());
+        if (!enforce_op)
+        {
+            return mlir::failure();
+        }
+        auto const_ind = plier::getConstVal<mlir::IntegerAttr>(op.index());
+        if (!const_ind)
+        {
+            return mlir::failure();
+        }
+        auto index = const_ind.getInt();
+        if (index < 0 || index >= static_cast<int64_t>(enforce_op.sizes().size()))
+        {
+            return mlir::failure();
+        }
+
+        rewriter.replaceOp(op, enforce_op.sizes()[static_cast<unsigned>(index)]);
+        return mlir::success();
+    }
+};
+}
+
+void EnforceShapeOp::getCanonicalizationPatterns(
+    ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context)
+{
+    results.insert<EnforceShapeDim>(context);
 }
 
 void RetainOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,

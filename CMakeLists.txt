@@ -18,9 +18,11 @@ set(SOURCES_LIST
     src/rewrites/call_lowering.cpp
     src/rewrites/canonicalize_reductions.cpp
     src/rewrites/cast_lowering.cpp
+    src/rewrites/common_opts.cpp
     src/rewrites/cse.cpp
     src/rewrites/force_inline.cpp
     src/rewrites/index_type_propagation.cpp
+    include/plier/rewrites/if_rewrites.cpp
     src/rewrites/loop_rewrites.cpp
     src/rewrites/promote_to_parallel.cpp
     src/rewrites/type_conversion.cpp
@@ -39,9 +41,11 @@ set(HEADERS_LIST
     include/plier/rewrites/call_lowering.hpp
     include/plier/rewrites/canonicalize_reductions.hpp
     include/plier/rewrites/cast_lowering.hpp
+    include/plier/rewrites/common_opts.hpp
     include/plier/rewrites/cse.hpp
     include/plier/rewrites/force_inline.hpp
     include/plier/rewrites/index_type_propagation.hpp
+    include/plier/rewrites/if_rewrites.hpp
     include/plier/rewrites/loop_rewrites.hpp
     include/plier/rewrites/promote_to_parallel.hpp
     include/plier/rewrites/type_conversion.hpp

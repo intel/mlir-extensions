@@ -214,6 +214,20 @@ def GetattrOp : Plier_Op<"getattr", [NoSideEffect]> {
     ];
 }
 
+def EnforceShapeOp : Plier_Op<"enforce_shape"> {
+    let arguments = (ins AnyRankedTensor:$value,
+                         Variadic<Index>:$sizes);
+
+    let results = (outs AnyRankedTensor:$result);
+
+    let builders = [
+        OpBuilderDAG<(ins "::mlir::Value":$value, "::mlir::ValueRange":$shape)>
+    ];
+
+    let hasFolder = 1;
+    let hasCanonicalizer = 1;
+}
+
 def RetainOp : Plier_Op<"retain"> {
     let arguments = (ins AnyMemRef:$value);
 

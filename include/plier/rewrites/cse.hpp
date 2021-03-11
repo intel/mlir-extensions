@@ -7,10 +7,10 @@ namespace plier
 {
 namespace detail
 {
-mlir::LogicalResult applyCSE(mlir::Region& region, mlir::PatternRewriter& rewriter);
+mlir::LogicalResult applyCSE(mlir::Region& region, mlir::PatternRewriter& rewriter, bool recusive);
 }
 
-template<typename Op>
+template<typename Op, bool Recursive>
 struct CSERewrite : public mlir::OpRewritePattern<Op>
 {
     CSERewrite(mlir::MLIRContext *context):
@@ -19,7 +19,7 @@ struct CSERewrite : public mlir::OpRewritePattern<Op>
     mlir::LogicalResult matchAndRewrite(
         Op op, mlir::PatternRewriter &rewriter) const override
     {
-        return ::plier::detail::applyCSE(op.getRegion(), rewriter);
+        return ::plier::detail::applyCSE(op.getRegion(), rewriter, Recursive);
     }
 };
 }

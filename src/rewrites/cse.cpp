@@ -32,6 +32,7 @@ using AllocatorTy = llvm::RecyclingAllocator<
 using ScopedMapTy = llvm::ScopedHashTable<mlir::Operation *, mlir::Operation *,
                                           SimpleOperationInfo, AllocatorTy>;
 
+template<bool Recursive>
 mlir::LogicalResult simplifyRegion(ScopedMapTy& map, mlir::Region& region, mlir::PatternRewriter& rewriter)
 {
     if (region.empty() || std::next(region.begin()) != region.end())
@@ -52,12 +53,27 @@ mlir::LogicalResult simplifyRegion(ScopedMapTy& map, mlir::Region& region, mlir:
         }
         if (!inst.getRegions().empty())
         {
-            for (auto& reg : inst.getRegions())
+            if (Recursive && !inst.hasTrait<mlir::OpTrait::IsIsolatedFromAbove>())
             {
-                ScopedMapTy::ScopeTy scope(map);
-                if (mlir::succeeded(simplifyRegion(map, reg, rewriter)))
+                for (auto& reg : inst.getRegions())
                 {
-                    success = true;
+                    ScopedMapTy::ScopeTy scope(map);
+                    if (mlir::succeeded(simplifyRegion<Recursive>(map, reg, rewriter)))
+                    {
+                        success = true;
+                    }
+                }
+            }
+            else
+            {
+                for (auto& reg : inst.getRegions())
+                {
+                    ScopedMapTy new_map;
+                    ScopedMapTy::ScopeTy scope(new_map);
+                    if (mlir::succeeded(simplifyRegion<Recursive>(new_map, reg, rewriter)))
+                    {
+                        success = true;
+                    }
                 }
             }
             continue;
@@ -78,9 +94,16 @@ mlir::LogicalResult simplifyRegion(ScopedMapTy& map, mlir::Region& region, mlir:
 }
 }
 
-mlir::LogicalResult plier::detail::applyCSE(mlir::Region& region, mlir::PatternRewriter& rewriter)
+mlir::LogicalResult plier::detail::applyCSE(mlir::Region& region, mlir::PatternRewriter& rewriter, bool recusive)
 {
     ScopedMapTy map;
     ScopedMapTy::ScopeTy scope(map);
-    return simplifyRegion(map, region, rewriter);
+    if (recusive)
+    {
+        return simplifyRegion<true>(map, region, rewriter);
+    }
+    else
+    {
+        return simplifyRegion<false>(map, region, rewriter);
+    }
 }
