@@ -211,12 +211,11 @@ def reshape_impl(builder, arg, new_shape):
         flat = flatten(builder, arg, src_count)
         init = builder.init_tensor(new_shape, arg.dtype)
 
-        iterators = ['parallel']
-        # dims1 = ','.join(['d%s' % i for i in range(count)])
-        # dims2 = ','.join(['d%s' % i if i == size_index else '0' for i in range(count)])
-        dims3 = ','.join(['d0' if i == size_index else '0' for i in range(count)])
-        expr1 = f'(d0) -> (d0)'
-        expr2 = f'(d0) -> ({dims3})'
+        iterators = ['parallel' for _ in range(count)]
+        dims1 = ','.join(['d%s' % i for i in range(count)])
+        dims3 = ','.join(['d%s' % i if i == size_index else '0' for i in range(count)])
+        expr1 = f'({dims1}) -> (d{size_index})'
+        expr2 = f'({dims1}) -> ({dims1})'
         maps = [expr1, expr2]
 
         def body(a, b):
