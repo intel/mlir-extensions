@@ -27,6 +27,7 @@
 #include "plier/rewrites/call_lowering.hpp"
 #include "plier/rewrites/canonicalize_reductions.hpp"
 #include "plier/rewrites/cast_lowering.hpp"
+#include "plier/rewrites/common_opts.hpp"
 #include "plier/rewrites/cse.hpp"
 #include "plier/rewrites/promote_to_parallel.hpp"
 #include "plier/rewrites/type_conversion.hpp"
@@ -722,6 +723,103 @@ private:
     resolver_t resolver;
 };
 
+struct SimplifyExpandDims : public mlir::OpRewritePattern<mlir::linalg::GenericOp>
+{
+    using mlir::OpRewritePattern<mlir::linalg::GenericOp>::OpRewritePattern;
+
+    mlir::LogicalResult matchAndRewrite(
+        mlir::linalg::GenericOp op, mlir::PatternRewriter &rewriter) const override
+    {
+        if (!op.hasTensorSemantics())
+        {
+            return mlir::failure();
+        }
+        if (op.getNumInputs() != 1 || op.getNumOutputs() != 1)
+        {
+            return mlir::failure();
+        }
+
+        auto context = op.getContext();
+        auto parallel_attr = mlir::StringAttr::get(context, "parallel");
+        if (llvm::any_of(op.iterator_types(), [&](auto attr) { return  attr != parallel_attr; }))
+        {
+            return mlir::failure();
+        }
+
+        auto maps = op.indexing_maps();
+        assert(maps.size() == 2);
+        auto out_map = maps[1].cast<mlir::AffineMapAttr>().getValue();
+        if (!out_map.isIdentity())
+        {
+            return mlir::failure();
+        }
+        auto in_map = maps[0].cast<mlir::AffineMapAttr>().getValue();
+        auto num_dims = op.getNumLoops();
+        if (in_map.getNumResults() != num_dims)
+        {
+            return mlir::failure();
+        }
+
+        bool changed = false;
+        auto out_shape = op.getOutput(0).getType().cast<mlir::RankedTensorType>().getShape();
+        llvm::SmallVector<mlir::AffineExpr> exprs(num_dims);
+        for (unsigned i = 0; i < num_dims; ++i)
+        {
+            auto prev_expr = in_map.getResult(i);
+            bool can_convert = [&]()
+            {
+                if (out_shape[i] == 1)
+                {
+                    auto const_expr = prev_expr.dyn_cast<mlir::AffineConstantExpr>();
+                    if (const_expr && const_expr.getValue() == 0)
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }();
+            if (can_convert)
+            {
+                changed = true;
+                exprs[i] = mlir::getAffineDimExpr(i, context);
+            }
+            else
+            {
+                exprs[i] = prev_expr;
+            }
+        }
+
+        if (changed)
+        {
+            const mlir::Attribute new_maps[] = {
+                mlir::AffineMapAttr::get(mlir::AffineMap::get(num_dims, 0, exprs, context)),
+                maps[1]
+            };
+            auto new_maps_attr = mlir::ArrayAttr::get(context, new_maps);
+            rewriter.updateRootInPlace(op, [&]()
+            {
+                op.indexing_mapsAttr(new_maps_attr);
+            });
+        }
+
+        return mlir::success(changed);
+    }
+};
+
+struct LowerEnforceShape : public mlir::OpRewritePattern<plier::EnforceShapeOp>
+{
+    using mlir::OpRewritePattern<plier::EnforceShapeOp>::OpRewritePattern;
+
+    mlir::LogicalResult matchAndRewrite(
+        plier::EnforceShapeOp op, mlir::PatternRewriter &rewriter) const override
+    {
+        auto type = op.getType();
+        auto src = op.value();
+        rewriter.replaceOpWithNewOp<mlir::tensor::CastOp>(op, type, src);
+        return mlir::success();
+    }
+};
+
 void PlierToLinalgPass::runOnOperation()
 {
     auto context = &getContext();
@@ -801,18 +899,52 @@ void LowerLinalgPass::runOnOperation()
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
 }
 
+struct PostPlierToLinalgPass :
+    public mlir::PassWrapper<PostPlierToLinalgPass, mlir::OperationPass<mlir::ModuleOp>>
+{
+    void runOnOperation() override;
+};
+
+void PostPlierToLinalgPass::runOnOperation()
+{
+    mlir::OwningRewritePatternList patterns;
+
+    auto& context = getContext();
+    plier::populate_common_opts_patterns(context, patterns);
+
+    patterns.insert<
+        SimplifyExpandDims
+        >(&getContext());
+
+    (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+}
+
+struct TensorFusionPass :
+    public mlir::PassWrapper<TensorFusionPass, mlir::OperationPass<mlir::ModuleOp>>
+{
+    void runOnOperation() override;
+};
+
+void TensorFusionPass::runOnOperation()
+{
+    mlir::OwningRewritePatternList patterns;
+
+    auto& context = getContext();
+    plier::populate_common_opts_patterns(context, patterns);
+
+    patterns.insert<
+        SimplifyExpandDims,
+        LowerEnforceShape
+        >(&getContext());
+
+    mlir::populateLinalgTensorOpsFusionPatterns(&context, patterns);
+
+    (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+}
+
 struct CommonOptPass :
     public mlir::PassWrapper<CommonOptPass, mlir::OperationPass<mlir::ModuleOp>>
 {
-    virtual void getDependentDialects(
-        mlir::DialectRegistry &registry) const override
-    {
-        registry.insert<mlir::StandardOpsDialect>();
-        registry.insert<mlir::linalg::LinalgDialect>();
-        registry.insert<mlir::scf::SCFDialect>();
-        registry.insert<mlir::AffineDialect>();
-    }
-
     void runOnOperation() override;
 };
 
@@ -821,18 +953,7 @@ void CommonOptPass::runOnOperation()
     mlir::OwningRewritePatternList patterns;
 
     auto& context = getContext();
-    for (auto *op : context.getRegisteredOperations())
-    {
-        op->getCanonicalizationPatterns(patterns, &context);
-    }
-
-    patterns.insert<
-        //        LoopInvariantCodeMotion, TODO
-        plier::ForceInline,
-        plier::CSERewrite<mlir::FuncOp>
-        >(&context);
-
-    plier::populate_index_propagate_patterns(context, patterns);
+    plier::populate_common_opts_patterns(context, patterns);
 
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
 }
@@ -897,15 +1018,6 @@ void RetainArgsPass::runOnFunction()
 struct PostLinalgOptPass :
     public mlir::PassWrapper<PostLinalgOptPass, mlir::OperationPass<mlir::ModuleOp>>
 {
-    virtual void getDependentDialects(
-        mlir::DialectRegistry &registry) const override
-    {
-        registry.insert<mlir::StandardOpsDialect>();
-        registry.insert<mlir::linalg::LinalgDialect>();
-        registry.insert<mlir::scf::SCFDialect>();
-        registry.insert<mlir::AffineDialect>();
-    }
-
     void runOnOperation() override;
 };
 
@@ -914,20 +1026,12 @@ void PostLinalgOptPass::runOnOperation()
     mlir::OwningRewritePatternList patterns;
 
     auto& context = getContext();
-    for (auto *op : context.getRegisteredOperations())
-    {
-        op->getCanonicalizationPatterns(patterns, &context);
-    }
+    plier::populate_common_opts_patterns(context, patterns);
 
     patterns.insert<
         plier::CanonicalizeReduction,
-//        LoopInvariantCodeMotion, TODO
-        plier::PromoteToParallel,
-        plier::CmpLoopBoundsSimplify,
-        plier::CSERewrite<mlir::FuncOp>
+        plier::PromoteToParallel
         >(&context);
-
-    plier::populate_index_propagate_patterns(context, patterns);
 
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
 }
@@ -935,14 +1039,13 @@ void PostLinalgOptPass::runOnOperation()
 void populate_plier_to_linalg_gen_pipeline(mlir::OpPassManager& pm)
 {
     pm.addPass(std::make_unique<PlierToLinalgPass>());
-    pm.addPass(std::make_unique<CommonOptPass>());
+    pm.addPass(std::make_unique<PostPlierToLinalgPass>());
     pm.addPass(mlir::createSymbolDCEPass());
 }
 
 void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager& pm)
 {
-    pm.addPass(mlir::createLinalgFusionOfTensorOpsPass());
-    pm.addPass(std::make_unique<CommonOptPass>());
+    pm.addPass(std::make_unique<TensorFusionPass>());
 
     pm.addPass(mlir::createTensorConstantBufferizePass());
     pm.addNestedPass<mlir::FuncOp>(mlir::createSCFBufferizePass());
@@ -958,10 +1061,14 @@ void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager& pm)
 
     pm.addNestedPass<mlir::FuncOp>(std::make_unique<RetainArgsPass>());
     pm.addNestedPass<mlir::FuncOp>(mlir::createBufferDeallocationPass());
+    pm.addPass(mlir::createCopyRemovalPass());
 
     pm.addPass(std::make_unique<LowerLinalgPass>());
+    pm.addPass(mlir::createParallelLoopFusionPass());
     pm.addPass(std::make_unique<PostLinalgOptPass>());
     pm.addPass(mlir::createSymbolDCEPass());
+    pm.addPass(mlir::createParallelLoopFusionPass()); // TODO: make this rewrite and add to PostLinalgOptPass
+    pm.addPass(std::make_unique<PostLinalgOptPass>());
 }
 }
 

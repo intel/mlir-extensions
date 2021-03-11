@@ -452,8 +452,9 @@ mlir::Value expand_dim(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value
     {
         assert(dim < shape.size());
         shape[dim] = 1;
-        mlir::Type casted_type = mlir::RankedTensorType::get(shape, src_type.getElementType());
-        auto casted = builder.create<mlir::tensor::CastOp>(loc, casted_type, src).getResult();
+//        mlir::Type casted_type = mlir::RankedTensorType::get(shape, src_type.getElementType());
+//        auto casted = builder.create<mlir::tensor::CastOp>(loc, casted_type, src).getResult();
+        auto casted = src; // TODO
         auto init = builder.create<mlir::linalg::InitTensorOp>(loc, new_shape, src_type.getElementType()).getResult();
         llvm::SmallVector<mlir::AffineExpr> exprs(num_dims);
         for (unsigned i = 0; i < num_dims; ++i)
@@ -503,6 +504,7 @@ mlir::Value expand_dims(mlir::OpBuilder& builder, mlir::Location loc, mlir::Valu
     {
         current = expand_dim(builder, loc, val, current, i, target_shape);
     }
+    current = builder.create<plier::EnforceShapeOp>(loc, current, target_shape);
     return current;
 }
 
