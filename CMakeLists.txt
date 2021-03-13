@@ -70,7 +70,6 @@ target_compile_definitions(${PLIER_LIB} PRIVATE ${LLVM_DEFINITIONS})
 target_link_libraries(${PLIER_LIB} PRIVATE
     MLIRIR
     MLIRLLVMIR
-    MLIRTargetLLVMIR
     MLIRTransforms
     MLIRStandardOpsTransforms
     MLIRLinalgTransforms

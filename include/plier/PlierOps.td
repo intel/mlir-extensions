@@ -28,7 +28,7 @@ def ArgOp : Plier_Op<"arg", [NoSideEffect]> {
     let hasFolder = 1;
 
     let builders = [
-        OpBuilderDAG<(ins "unsigned":$index, "::mlir::StringRef":$name)>
+        OpBuilder<(ins "unsigned":$index, "::mlir::StringRef":$name)>
     ];
 }
 
@@ -39,7 +39,7 @@ def ConstOp : Plier_Op<"const", [NoSideEffect]> {
     let results = (outs AnyType);
 
     let builders = [
-        OpBuilderDAG<(ins "::mlir::Attribute":$val)>
+        OpBuilder<(ins "::mlir::Attribute":$val)>
     ];
 }
 
@@ -50,7 +50,7 @@ def GlobalOp : Plier_Op<"global", [NoSideEffect]> {
     let results = (outs AnyType);
 
     let builders = [
-        OpBuilderDAG<(ins "::mlir::StringRef":$name)>
+        OpBuilder<(ins "::mlir::StringRef":$name)>
     ];
 }
 
@@ -63,7 +63,7 @@ def BinOp : Plier_Op<"binop", []> {
     let results = (outs AnyType);
 
     let builders = [
-        OpBuilderDAG<(ins "::mlir::Value":$lhs, "::mlir::Value":$rhs, "::mlir::StringRef ":$op)>
+        OpBuilder<(ins "::mlir::Value":$lhs, "::mlir::Value":$rhs, "::mlir::StringRef ":$op)>
     ];
 }
 
@@ -75,7 +75,7 @@ def UnaryOp : Plier_Op<"unary", []> {
     let results = (outs AnyType);
 
     let builders = [
-        OpBuilderDAG<(ins "::mlir::Value":$value, "::mlir::StringRef ":$op)>
+        OpBuilder<(ins "::mlir::Value":$value, "::mlir::StringRef ":$op)>
     ];
 }
 
@@ -98,7 +98,7 @@ def PyCallOp : Plier_Op<"call", []> {
     let results = (outs AnyType);
 
     let builders = [
-        OpBuilderDAG<(ins "::mlir::Value":$func, "::mlir::StringRef":$func_name,
+        OpBuilder<(ins "::mlir::Value":$func, "::mlir::StringRef":$func_name,
                       "::mlir::ValueRange":$args,
                       "::mlir::ArrayRef<std::pair<std::string, ::mlir::Value>>":$kwargs)>
     ];
@@ -111,7 +111,7 @@ def BuildTupleOp : Plier_Op<"build_tuple", [NoSideEffect]> {
     let results = (outs AnyType);
 
     let builders = [
-        OpBuilderDAG<(ins "::mlir::ValueRange":$args)>
+        OpBuilder<(ins "::mlir::ValueRange":$args)>
     ];
 }
 
@@ -124,7 +124,7 @@ def GetItemOp : Plier_Op<"getitem", []> {
     let hasFolder = 1;
 
     let builders = [
-        OpBuilderDAG<(ins "::mlir::Value":$value, "::mlir::Value":$index)>
+        OpBuilder<(ins "::mlir::Value":$value, "::mlir::Value":$index)>
     ];
 }
 
@@ -138,7 +138,7 @@ def StaticGetItemOp : Plier_Op<"static_getitem", []> {
     let hasFolder = 1;
 
     let builders = [
-        OpBuilderDAG<(ins "::mlir::Value":$value, "::mlir::Value":$index_var, "unsigned":$index)>
+        OpBuilder<(ins "::mlir::Value":$value, "::mlir::Value":$index_var, "unsigned":$index)>
     ];
 }
 
@@ -158,7 +158,7 @@ def GetiterOp : Plier_Op<"getiter", [NoSideEffect]> {
     let results = (outs AnyType);
 
     let builders = [
-        OpBuilderDAG<(ins "::mlir::Value":$value)>
+        OpBuilder<(ins "::mlir::Value":$value)>
     ];
 }
 
@@ -169,7 +169,7 @@ def IternextOp : Plier_Op<"iternext", []> {
     let results = (outs AnyType);
 
     let builders = [
-        OpBuilderDAG<(ins "::mlir::Value":$value)>
+        OpBuilder<(ins "::mlir::Value":$value)>
     ];
 }
 
@@ -180,7 +180,7 @@ def PairfirstOp : Plier_Op<"pair_first", [NoSideEffect]> {
     let results = (outs AnyType);
 
     let builders = [
-        OpBuilderDAG<(ins "::mlir::Value":$value)>
+        OpBuilder<(ins "::mlir::Value":$value)>
     ];
 }
 
@@ -191,7 +191,7 @@ def PairsecondOp : Plier_Op<"pair_second", [NoSideEffect]> {
     let results = (outs AnyType);
 
     let builders = [
-        OpBuilderDAG<(ins "::mlir::Value":$value)>
+        OpBuilder<(ins "::mlir::Value":$value)>
     ];
 }
 
@@ -210,7 +210,7 @@ def GetattrOp : Plier_Op<"getattr", [NoSideEffect]> {
     let hasCanonicalizer = 1;
 
     let builders = [
-        OpBuilderDAG<(ins "::mlir::Value":$value, "::mlir::StringRef":$name)>
+        OpBuilder<(ins "::mlir::Value":$value, "::mlir::StringRef":$name)>
     ];
 }
 
@@ -221,7 +221,7 @@ def EnforceShapeOp : Plier_Op<"enforce_shape"> {
     let results = (outs AnyRankedTensor:$result);
 
     let builders = [
-        OpBuilderDAG<(ins "::mlir::Value":$value, "::mlir::ValueRange":$shape)>
+        OpBuilder<(ins "::mlir::Value":$value, "::mlir::ValueRange":$shape)>
     ];
 
     let hasFolder = 1;
@@ -234,7 +234,7 @@ def RetainOp : Plier_Op<"retain"> {
     let results = (outs Res<AnyMemRef, "", [MemAlloc<DefaultResource>]>:$memref);
 
     let builders = [
-        OpBuilderDAG<(ins "::mlir::Value":$value)>
+        OpBuilder<(ins "::mlir::Value":$value)>
     ];
 }
 
@@ -251,7 +251,7 @@ def ParallelOp : Plier_Op<"parallel",
 
     let skipDefaultBuilders = 1;
     let builders = [
-        OpBuilderDAG<(ins "::mlir::ValueRange":$lowerBounds, "::mlir::ValueRange":$upperBounds, "::mlir::ValueRange":$steps,
+        OpBuilder<(ins "::mlir::ValueRange":$lowerBounds, "::mlir::ValueRange":$upperBounds, "::mlir::ValueRange":$steps,
             CArg<"::mlir::function_ref<void(::mlir::OpBuilder &, ::mlir::Location, ::mlir::ValueRange, ::mlir::ValueRange, ::mlir::Value)>",
                  "nullptr">)>
     ];
@@ -264,7 +264,7 @@ def ParallelOp : Plier_Op<"parallel",
 def YieldOp : Plier_Op<"yield", [NoSideEffect, ReturnLike, Terminator,
                                  ParentOneOf<["ParallelOp"]>]> {
     let arguments = (ins Variadic<AnyType>:$results);
-    let builders = [OpBuilderDAG<(ins), [{ /* nothing to do */ }]>];
+    let builders = [OpBuilder<(ins), [{ /* nothing to do */ }]>];
     // Override default verifier (defined in SCF_Op), no custom verification
     // needed.
     let verifier = ?;
