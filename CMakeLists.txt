@@ -58,7 +58,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     LLVMTarget
     MLIRIR
     MLIRLLVMIR
-    MLIRTargetLLVMIR
+    MLIRLLVMToLLVMIRTranslation
     MLIRTransforms
     MLIRStandardOpsTransforms
     MLIRLinalgTransforms

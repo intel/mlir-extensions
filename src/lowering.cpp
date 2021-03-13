@@ -12,8 +12,8 @@
 #include <mlir/IR/BuiltinTypes.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
 
-#include <mlir/Target/LLVMIR.h>
 #include <mlir/Target/LLVMIR/Export.h>
+#include <mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h>
 
 #include <llvm/Bitcode/BitcodeWriter.h>
 
