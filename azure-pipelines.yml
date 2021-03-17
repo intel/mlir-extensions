@@ -1,0 +1,22 @@
+trigger:
+- '*'
+
+pr:
+- '*'
+
+jobs:
+- job: Windows
+
+  pool:
+    vmImage: windows-2019
+
+  steps:
+  - task: DownloadPipelineArtifact@2
+    displayName: "Get LLVM cache"
+    inputs:
+      source: 'specific'
+      project: 'mlir-llvm'
+      pipeline: 'IntelPython.mlir-llvm-recipe'
+      runVersion: 'latest'
+      artifact: 'mlir-llvm_latest_Windows_NT'
+      path: '$(System.DefaultWorkingDirectory)\llvm_cache'
