@@ -20,3 +20,25 @@ jobs:
       runVersion: 'latest'
       artifact: 'mlir-llvm_latest_Windows_NT'
       path: '$(System.DefaultWorkingDirectory)\llvm_cache'
+
+  - script: |
+      call cmake --version
+      call cmake -A x64 . -DLLVM_DIR="$(System.DefaultWorkingDirectory)\llvm_cache\lib\cmake\llvm" -DMLIR_DIR="$(System.DefaultWorkingDirectory)\llvm_cache\lib\cmake\mlir"
+      call cmake --build . --config Release
+    displayName: 'Build'
+
+  - script: |
+      call "C:\Miniconda\Scripts\activate"
+      call conda install pybind11 llvmlite numpy scipy jinja2 cffi tbb tbb-devel
+      call cmake --version
+      git clone https://github.com/IntelPython/numba.git
+      cd numba
+      git checkout mlir-develop
+      cd mlir-compiler
+      call cmake -A x64 . -DLLVM_DIR="$(System.DefaultWorkingDirectory)\llvm_cache\lib\cmake\llvm" -DMLIR_DIR="$(System.DefaultWorkingDirectory)\llvm_cache\lib\cmake\mlir" -DDPCOMP_DIR="$(System.DefaultWorkingDirectory)"
+      call cmake --build . --config Release
+      cd ..
+      python setup.py develop
+      set PYTHONPATH=$(System.DefaultWorkingDirectory)\numba\mlir-compiler\mlir-compiler\Release
+      python runtests.py numba.mlir.tests
+    displayName: 'Tests'
