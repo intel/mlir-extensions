@@ -209,91 +209,6 @@ void plier::MemorySSA::print(plier::MemorySSA::Node* node, llvm::raw_ostream& os
     os << "\n";
 }
 
-void plier::MemorySSA::simplify()
-{
-    llvm::SmallVector<Node*> worklist;
-    llvm::DenseSet<Node*> worklistMap;
-
-    auto push = [&](Node* node)
-    {
-        assert(nullptr != node);
-        if (worklistMap.count(node) == 0)
-        {
-            worklist.push_back(node);
-            worklistMap.insert(node);
-        }
-    };
-    auto pop = [&]()->Node*
-    {
-        assert(worklistMap.size() == worklist.size());
-        if (worklist.empty())
-        {
-            return nullptr;
-        }
-        auto node = worklist.back();
-        assert(nullptr != node);
-        assert(worklistMap.count(node) != 0);
-        worklist.pop_back();
-        worklistMap.erase(node);
-        return node;
-    };
-
-    for (auto& n : llvm::reverse(getNodes()))
-    {
-        worklist.push_back(&n);
-        worklistMap.insert(&n);
-    }
-
-    while(true)
-    {
-        auto node = pop();
-        if (nullptr == node)
-        {
-            break;
-        }
-
-        if (node->getType() == Node::Type::Phi)
-        {
-            llvm::SmallVector<Node*> phiArgs;
-            for (auto arg : node->getArguments())
-            {
-                if (arg != nullptr && arg != node && llvm::find(phiArgs, arg) == phiArgs.end())
-                {
-                    phiArgs.push_back(arg);
-                }
-            }
-            assert(!phiArgs.empty());
-            if (phiArgs.size() == 1)
-            {
-                auto prev = phiArgs.front();
-                for (auto use : llvm::make_early_inc_range(node->getUses()))
-                {
-                    auto user = use.user;
-                    if (user != node)
-                    {
-                        user->setArgument(use.index, prev);
-                        push(user);
-                    }
-                    else
-                    {
-                        user->setArgument(use.index, nullptr);
-                    }
-                }
-                eraseNode(node);
-            }
-            else if (phiArgs.size() != node->getNumArguments())
-            {
-                for (auto it : llvm::enumerate(phiArgs))
-                {
-                    assert(it.value() != nullptr);
-                    node->setArgument(static_cast<unsigned>(it.index()), it.value());
-                }
-                node->argCount = static_cast<unsigned>(phiArgs.size()); // TODO
-            }
-        }
-    }
-}
-
 namespace
 {
 plier::MemorySSA::Node* memSSAProcessRegion(mlir::Region& region, plier::MemorySSA::Node* entryNode, plier::MemorySSA& memSSA)
@@ -321,8 +236,26 @@ plier::MemorySSA::Node* memSSAProcessRegion(mlir::Region& region, plier::MemoryS
                 assert(llvm::hasSingleElement(op.getRegions()));
                 std::array<plier::MemorySSA::Node*, 2> phiArgs = {nullptr, currentNode};
                 auto phi = createNode(NodeType::Phi, phiArgs);
-                currentNode = memSSAProcessRegion(op.getRegions().front(), phi, memSSA);
-                phi->setArgument(0, currentNode);
+                auto result = memSSAProcessRegion(op.getRegions().front(), phi, memSSA);
+                if (nullptr == result)
+                {
+                    return nullptr;
+                }
+
+                if (result != phi)
+                {
+                    phi->setArgument(0, result);
+                    currentNode = result;
+                }
+                else
+                {
+                    for (auto use : llvm::make_early_inc_range(phi->getUses()))
+                    {
+                        assert(use.user != nullptr);
+                        use.user->setArgument(use.index, currentNode);
+                    }
+                    memSSA.eraseNode(phi);
+                }
             }
             else if (mlir::isa<mlir::scf::ReduceOp>(op))
             {
@@ -369,7 +302,7 @@ llvm::Optional<plier::MemorySSA> plier::buildMemorySSA(mlir::FuncOp func)
         return {};
     }
     llvm::errs() << "buildMemorySSA3\n";
-    ret.simplify();
+//    ret.simplify();
     llvm::errs() << "buildMemorySSA4\n";
     func.dump();
     for (auto& node : ret.getNodes())

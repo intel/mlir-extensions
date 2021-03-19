@@ -46,8 +46,6 @@ public:
 
     void print(Node* node, llvm::raw_ostream& os);
 
-    void simplify();
-
 private:
     Node* root = nullptr;
     llvm::DenseMap<mlir::Operation*, Node*> nodesMap;
