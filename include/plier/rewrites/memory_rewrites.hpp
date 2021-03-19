@@ -10,6 +10,10 @@ class StoreOp;
 
 namespace plier
 {
+
+mlir::LogicalResult promoteLoads(mlir::Region& region, mlir::PatternRewriter& rewriter);
+mlir::LogicalResult promoteLoads(mlir::Region& region);
+
 struct PromoteLoads : public mlir::OpRewritePattern<mlir::FuncOp>
 {
     using mlir::OpRewritePattern<mlir::FuncOp>::OpRewritePattern;
