@@ -233,6 +233,11 @@ public:
             return type;
         }
 
+        unsigned getNumArguments() const
+        {
+            return argCount;
+        }
+
         auto getArguments()
         {
             return llvm::map_range(llvm::makeArrayRef(&args[0], argCount), [](auto& a)->Node*
@@ -247,6 +252,26 @@ public:
             {
                 return a.getParent();
             });
+        }
+
+        auto getUses()
+        {
+            struct Use
+            {
+                Node* user;
+                unsigned index;
+            };
+
+            return llvm::map_range(users, [](auto& a)->Use
+            {
+                return {a.getParent(), a.index};
+            });
+        }
+
+        Node* getArgument(unsigned i)
+        {
+            assert(i < argCount);
+            return args[i].arg;
         }
 
         void setArgument(unsigned i, Node* node)
@@ -281,7 +306,7 @@ public:
                     new(&args[i]) Arg();
                 }
                 auto arg = it.value();
-                args[i].offset = static_cast<unsigned>(offsetof(Node, args) + sizeof(Arg) * i);
+                args[i].index = static_cast<unsigned>(i);
                 if (nullptr != arg)
                 {
                     args[i].arg = arg;
@@ -293,7 +318,14 @@ public:
         {
             for (unsigned i = 0; i < argCount; ++i)
             {
-                args[i].~Arg();
+                if (args[i].arg != nullptr)
+                {
+                    args[i].arg->users.erase(args[i].getIterator());
+                }
+                if (i >= 1)
+                {
+                    args[i].~Arg();
+                }
             }
         }
         friend class MemorySSA;
@@ -310,10 +342,11 @@ public:
         struct Arg : public llvm::ilist_node<Arg>
         {
             Node* arg = nullptr;
-            unsigned offset = 0;
+            unsigned index = 0;
 
             Node* getParent()
             {
+                auto offset = static_cast<unsigned>(offsetof(Node, args) + sizeof(Arg) * index);
                 return reinterpret_cast<Node*>(reinterpret_cast<char*>(this) - offset);
             }
         };
@@ -330,6 +363,14 @@ public:
         nodesMap[op] = node;
         nodes.push_back(*node);
         return node;
+    }
+
+    void eraseNode(Node* node)
+    {
+        assert(nullptr != node);
+        assert(node->getUsers().empty());
+        nodes.erase(node->getIterator());
+        node->~Node();
     }
 
     Node* getRoot()
@@ -366,24 +407,116 @@ public:
             "MemoryUse",
             "MemoryPhi",
         };
-        auto getId = [this](const Node* node)
+        auto writeId = [&](const Node* node)
         {
-            assert(nullptr != node);
-            return *allocator.identifyObject(node);
+            if (nullptr != node)
+            {
+                os << *allocator.identifyObject(node);
+            }
+            else
+            {
+                os << "null";
+            }
         };
         auto type = node->getType();
-        os << getId(node) << " = ";
+        writeId(node);
+        os << " = ";
         os << types[static_cast<int>(type)] << "(";
         auto args = node->getArguments();
-        llvm::interleaveComma(args, os, [&](const Node* n) { os << getId(n); });
+        llvm::interleaveComma(args, os, writeId);
         os << ")";
         auto users = node->getUsers();
         if (!users.empty())
         {
             os << " users: ";
-            llvm::interleaveComma(users, os, [&](const Node* n) { os << getId(n); });
+            llvm::interleaveComma(users, os, writeId);
         }
         os << "\n";
+    }
+
+    void simplify()
+    {
+        llvm::SmallVector<Node*> worklist;
+        llvm::DenseSet<Node*> worklistMap;
+
+        auto push = [&](Node* node)
+        {
+            assert(nullptr != node);
+            if (worklistMap.count(node) == 0)
+            {
+                worklist.push_back(node);
+                worklistMap.insert(node);
+            }
+        };
+        auto pop = [&]()->Node*
+        {
+            assert(worklistMap.size() == worklist.size());
+            if (worklist.empty())
+            {
+                return nullptr;
+            }
+            auto node = worklist.back();
+            assert(nullptr != node);
+            assert(worklistMap.count(node) != 0);
+            worklist.pop_back();
+            worklistMap.erase(node);
+            return node;
+        };
+
+        for (auto& n : llvm::reverse(getNodes()))
+        {
+            worklist.push_back(&n);
+            worklistMap.insert(&n);
+        }
+
+        while(true)
+        {
+            auto node = pop();
+            if (nullptr == node)
+            {
+                break;
+            }
+
+            if (node->getType() == Node::Type::Phi)
+            {
+                llvm::SmallVector<Node*> phiArgs;
+                for (auto arg : node->getArguments())
+                {
+                    if (arg != nullptr && arg != node && llvm::find(phiArgs, arg) == phiArgs.end())
+                    {
+                        phiArgs.push_back(arg);
+                    }
+                }
+                assert(!phiArgs.empty());
+                if (phiArgs.size() == 1)
+                {
+                    auto prev = phiArgs.front();
+                    for (auto use : llvm::make_early_inc_range(node->getUses()))
+                    {
+                        auto user = use.user;
+                        if (user != node)
+                        {
+                            user->setArgument(use.index, prev);
+                            push(user);
+                        }
+                        else
+                        {
+                            user->setArgument(use.index, nullptr);
+                        }
+                    }
+                    eraseNode(node);
+                }
+                else if (phiArgs.size() != node->getNumArguments())
+                {
+                    for (auto it : llvm::enumerate(phiArgs))
+                    {
+                        assert(it.value() != nullptr);
+                        node->setArgument(static_cast<unsigned>(it.index()), it.value());
+                    }
+                    node->argCount = static_cast<unsigned>(phiArgs.size()); // TODO
+                }
+            }
+        }
     }
 
 private:
@@ -462,6 +595,7 @@ llvm::Optional<MemorySSA> buildMemorySSAImpl(mlir::FuncOp func)
     {
         return {};
     }
+    ret.simplify();
     return std::move(ret);
 }
 }
