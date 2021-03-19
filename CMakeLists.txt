@@ -29,10 +29,12 @@ set(SOURCES_LIST
     src/rewrites/cse.cpp
     src/rewrites/force_inline.cpp
     src/rewrites/index_type_propagation.cpp
-    include/plier/rewrites/if_rewrites.cpp
+    src/rewrites/if_rewrites.cpp
     src/rewrites/loop_rewrites.cpp
+    src/rewrites/memory_rewrites.cpp
     src/rewrites/promote_to_parallel.cpp
     src/rewrites/type_conversion.cpp
+    src/transforms/block_utils.cpp
     src/transforms/cast_utils.cpp
     src/transforms/const_utils.cpp
     src/transforms/func_utils.cpp
@@ -54,8 +56,10 @@ set(HEADERS_LIST
     include/plier/rewrites/index_type_propagation.hpp
     include/plier/rewrites/if_rewrites.hpp
     include/plier/rewrites/loop_rewrites.hpp
+    include/plier/rewrites/memory_rewrites.hpp
     include/plier/rewrites/promote_to_parallel.hpp
     include/plier/rewrites/type_conversion.hpp
+    include/plier/transforms/block_utils.hpp
     include/plier/transforms/cast_utils.hpp
     include/plier/transforms/const_utils.hpp
     include/plier/transforms/func_utils.hpp

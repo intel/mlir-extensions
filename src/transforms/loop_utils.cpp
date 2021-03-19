@@ -237,3 +237,161 @@ mlir::LogicalResult plier::lower_while_to_for(
     return mlir::success(changed);
 }
 
+// TODO: Copypasted from mlir
+namespace
+{
+using namespace mlir;
+
+/// Verify there are no nested ParallelOps.
+static bool hasNestedParallelOp(scf::ParallelOp ploop) {
+  auto walkResult =
+      ploop.getBody()->walk([](scf::ParallelOp) { return WalkResult::interrupt(); });
+  return walkResult.wasInterrupted();
+}
+
+/// Verify equal iteration spaces.
+static bool equalIterationSpaces(scf::ParallelOp firstPloop,
+                                 scf::ParallelOp secondPloop) {
+  if (firstPloop.getNumLoops() != secondPloop.getNumLoops())
+    return false;
+
+  auto matchOperands = [&](const OperandRange &lhs,
+                           const OperandRange &rhs) -> bool {
+    // TODO: Extend this to support aliases and equal constants.
+    return std::equal(lhs.begin(), lhs.end(), rhs.begin());
+  };
+  return matchOperands(firstPloop.lowerBound(), secondPloop.lowerBound()) &&
+         matchOperands(firstPloop.upperBound(), secondPloop.upperBound()) &&
+         matchOperands(firstPloop.step(), secondPloop.step());
+}
+
+/// Checks if the parallel loops have mixed access to the same buffers. Returns
+/// `true` if the first parallel loop writes to the same indices that the second
+/// loop reads.
+static bool haveNoReadsAfterWriteExceptSameIndex(
+    scf::ParallelOp firstPloop, scf::ParallelOp secondPloop,
+    const BlockAndValueMapping &firstToSecondPloopIndices) {
+  DenseMap<Value, SmallVector<ValueRange, 1>> bufferStores;
+  firstPloop.getBody()->walk([&](StoreOp store) {
+    bufferStores[store.getMemRef()].push_back(store.indices());
+  });
+  auto walkResult = secondPloop.getBody()->walk([&](LoadOp load) {
+    // Stop if the memref is defined in secondPloop body. Careful alias analysis
+    // is needed.
+    auto *memrefDef = load.getMemRef().getDefiningOp();
+    if (memrefDef && memrefDef->getBlock() == load->getBlock())
+      return WalkResult::interrupt();
+
+    auto write = bufferStores.find(load.getMemRef());
+    if (write == bufferStores.end())
+      return WalkResult::advance();
+
+    // Allow only single write access per buffer.
+    if (write->second.size() != 1)
+      return WalkResult::interrupt();
+
+    // Check that the load indices of secondPloop coincide with store indices of
+    // firstPloop for the same memrefs.
+    auto storeIndices = write->second.front();
+    auto loadIndices = load.indices();
+    if (storeIndices.size() != loadIndices.size())
+      return WalkResult::interrupt();
+    for (size_t i = 0, e = storeIndices.size(); i < e; ++i) {
+      if (firstToSecondPloopIndices.lookupOrDefault(storeIndices[i]) !=
+          loadIndices[i])
+        return WalkResult::interrupt();
+    }
+    return WalkResult::advance();
+  });
+  return !walkResult.wasInterrupted();
+}
+
+/// Analyzes dependencies in the most primitive way by checking simple read and
+/// write patterns.
+static LogicalResult
+verifyDependencies(scf::ParallelOp firstPloop, scf::ParallelOp secondPloop,
+                   const BlockAndValueMapping &firstToSecondPloopIndices) {
+  if (!haveNoReadsAfterWriteExceptSameIndex(firstPloop, secondPloop,
+                                            firstToSecondPloopIndices))
+    return failure();
+
+  BlockAndValueMapping secondToFirstPloopIndices;
+  secondToFirstPloopIndices.map(secondPloop.getBody()->getArguments(),
+                                firstPloop.getBody()->getArguments());
+  return success(haveNoReadsAfterWriteExceptSameIndex(
+      secondPloop, firstPloop, secondToFirstPloopIndices));
+}
+
+static bool
+isFusionLegal(scf::ParallelOp firstPloop, scf::ParallelOp secondPloop,
+              const BlockAndValueMapping &firstToSecondPloopIndices) {
+  return !hasNestedParallelOp(firstPloop) &&
+         !hasNestedParallelOp(secondPloop) &&
+         equalIterationSpaces(firstPloop, secondPloop) &&
+         succeeded(verifyDependencies(firstPloop, secondPloop,
+                                      firstToSecondPloopIndices));
+}
+
+/// Prepends operations of firstPloop's body into secondPloop's body.
+static bool fuseIfLegal(scf::ParallelOp firstPloop, scf::ParallelOp secondPloop,
+                        OpBuilder &b) {
+  BlockAndValueMapping firstToSecondPloopIndices;
+  firstToSecondPloopIndices.map(firstPloop.getBody()->getArguments(),
+                                secondPloop.getBody()->getArguments());
+
+  if (!isFusionLegal(firstPloop, secondPloop, firstToSecondPloopIndices))
+    return false;
+
+  b.setInsertionPointToStart(secondPloop.getBody());
+  for (auto &op : firstPloop.getBody()->without_terminator())
+    b.clone(op, firstToSecondPloopIndices);
+  firstPloop.erase();
+  return true;
+}
+
+bool hasNoEffect(mlir::Operation* op)
+{
+    if (op->getNumRegions() != 0)
+    {
+        return false;
+    }
+    if (auto interface = dyn_cast<MemoryEffectOpInterface>(op))
+    {
+        return !interface.hasEffect<mlir::MemoryEffects::Read>() &&
+               !interface.hasEffect<mlir::MemoryEffects::Write>();
+    }
+    return !op->hasTrait<::mlir::OpTrait::HasRecursiveSideEffects>();
+}
+}
+
+mlir::LogicalResult plier::naivelyFuseParallelOps(Region &region) {
+  OpBuilder b(region);
+  // Consider every single block and attempt to fuse adjacent loops.
+  bool changed = false;
+  for (auto &block : region) {
+    SmallVector<SmallVector<scf::ParallelOp, 8>, 1> ploopChains{{}};
+    // Not using `walk()` to traverse only top-level parallel loops and also
+    // make sure that there are no side-effecting ops between the parallel
+    // loops.
+    bool noSideEffects = true;
+    for (auto &op : block) {
+      if (auto ploop = dyn_cast<scf::ParallelOp>(op)) {
+        if (noSideEffects) {
+          ploopChains.back().push_back(ploop);
+        } else {
+          ploopChains.push_back({ploop});
+          noSideEffects = true;
+        }
+        continue;
+      }
+      // TODO: Handle region side effects properly.
+      noSideEffects &= hasNoEffect(&op);
+    }
+    for (llvm::ArrayRef<scf::ParallelOp> ploops : ploopChains) {
+      for (size_t i = 0, e = ploops.size(); i + 1 < e; ++i)
+        if (fuseIfLegal(ploops[i], ploops[i + 1], b))
+            changed = true;
+    }
+  }
+  return mlir::success(changed);
+}
