@@ -357,35 +357,25 @@ plier::MemorySSA::Node* memSSAProcessRegion(mlir::Region& region, plier::MemoryS
 
     return currentNode;
 }
+}
 
-llvm::Optional<plier::MemorySSA> buildMemorySSAImpl(mlir::FuncOp func)
+llvm::Optional<plier::MemorySSA> plier::buildMemorySSA(mlir::FuncOp func)
 {
+    llvm::errs() << "buildMemorySSA1\n";
     plier::MemorySSA ret;
     if (nullptr == memSSAProcessRegion(func.getRegion(), ret.getRoot(), ret))
     {
+        llvm::errs() << "buildMemorySSA2\n";
         return {};
     }
-    ret.simplify();
-    return std::move(ret);
-}
-}
-
-mlir::LogicalResult plier::buildMemorySSA(mlir::FuncOp func)
-{
-    llvm::errs() << "buildMemorySSA1\n";
-    auto res = buildMemorySSAImpl(func);
-    if (!res)
-    {
-        llvm::errs() << "buildMemorySSA2\n";
-        return mlir::failure();
-    }
-    auto& memSSA = *res;
-    func.dump();
     llvm::errs() << "buildMemorySSA3\n";
-    for (auto& node : memSSA.getNodes())
+    ret.simplify();
+    llvm::errs() << "buildMemorySSA4\n";
+    func.dump();
+    for (auto& node : ret.getNodes())
     {
         llvm::errs() << "\n";
-        memSSA.print(&node, llvm::errs());
+        ret.print(&node, llvm::errs());
         if (node.getOperation())
         {
             node.getOperation()->dump();
@@ -393,5 +383,5 @@ mlir::LogicalResult plier::buildMemorySSA(mlir::FuncOp func)
     }
 
     llvm::errs() << "buildMemorySSAend\n";
-    return mlir::success();
+    return std::move(ret);
 }

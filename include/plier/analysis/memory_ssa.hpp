@@ -1,7 +1,8 @@
 #pragma once
 
-#include <llvm/ADT/simple_ilist.h>
 #include <llvm/ADT/DenseMap.h>
+#include <llvm/ADT/Optional.h>
+#include <llvm/ADT/simple_ilist.h>
 #include <llvm/Support/Allocator.h>
 
 namespace mlir
@@ -54,5 +55,5 @@ private:
     llvm::simple_ilist<Node> nodes;
 };
 
-mlir::LogicalResult buildMemorySSA(mlir::FuncOp func);
+llvm::Optional<plier::MemorySSA> buildMemorySSA(mlir::FuncOp func);
 }
