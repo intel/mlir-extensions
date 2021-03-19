@@ -233,14 +233,34 @@ public:
             return type;
         }
 
-        llvm::ArrayRef<Node*> getArguments() const
+        auto getArguments()
         {
-            return llvm::makeArrayRef(&args[0], argCount);
+            return llvm::map_range(llvm::makeArrayRef(&args[0], argCount), [](auto& a)->Node*
+            {
+                return a.arg;
+            });
+        }
+
+        auto getUsers()
+        {
+            return llvm::map_range(users, [](auto& a)->Node*
+            {
+                return a.getParent();
+            });
         }
 
         void setArgument(unsigned i, Node* node)
         {
-            args[i] = node;
+            assert(i < argCount);
+            if (nullptr != args[i].arg)
+            {
+                args[i].arg->users.erase(args[i].getIterator());
+            }
+            args[i].arg = node;
+            if (nullptr != node)
+            {
+                node->users.push_back(args[i]);
+            }
         }
 
     private:
@@ -253,20 +273,53 @@ public:
             operation = op;
             argCount = static_cast<unsigned>(a.size());
             type = t;
-            llvm::copy(a, std::begin(args));
+            for (auto it : llvm::enumerate(a))
+            {
+                auto i = it.index();
+                if (i > 1)
+                {
+                    new(&args[i]) Arg();
+                }
+                auto arg = it.value();
+                args[i].offset = static_cast<unsigned>(offsetof(Node, args) + sizeof(Arg) * i);
+                if (nullptr != arg)
+                {
+                    args[i].arg = arg;
+                    arg->users.push_back(args[i]);
+                }
+            }
+        }
+        ~Node()
+        {
+            for (unsigned i = 0; i < argCount; ++i)
+            {
+                args[i].~Arg();
+            }
         }
         friend class MemorySSA;
 
         static size_t computeSize(size_t numArgs)
         {
-            return sizeof(Node) + (numArgs > 1 ? sizeof(Node*) * numArgs : 0);
+            return sizeof(Node) + (numArgs > 1 ? sizeof(Arg) * (numArgs - 1) : 0);
         }
 
         mlir::Operation* operation = nullptr;
         Type type = Type::Root;
         unsigned argCount = 0;
 
-        Node* args[1]; // Variadic size
+        struct Arg : public llvm::ilist_node<Arg>
+        {
+            Node* arg = nullptr;
+            unsigned offset = 0;
+
+            Node* getParent()
+            {
+                return reinterpret_cast<Node*>(reinterpret_cast<char*>(this) - offset);
+            }
+        };
+        llvm::simple_ilist<Arg> users;
+
+        Arg args[1]; // Variadic size
     };
 
     Node* createNode(mlir::Operation* op, Node::Type type, llvm::ArrayRef<Node*> args)
@@ -305,7 +358,7 @@ public:
         return nodes;
     }
 
-    void print(const Node* node, llvm::raw_ostream& os) /*const*/ // TODO: identifyObject const
+    void print(Node* node, llvm::raw_ostream& os) /*const*/ // TODO: identifyObject const
     {
         const llvm::StringRef types[] = {
             "MemoryRoot",
@@ -319,14 +372,18 @@ public:
             return *allocator.identifyObject(node);
         };
         auto type = node->getType();
-        if (type != Node::Type::Use)
-        {
-            os << getId(node) << " = ";
-        }
+        os << getId(node) << " = ";
         os << types[static_cast<int>(type)] << "(";
         auto args = node->getArguments();
         llvm::interleaveComma(args, os, [&](const Node* n) { os << getId(n); });
-        os << ")\n";
+        os << ")";
+        auto users = node->getUsers();
+        if (!users.empty())
+        {
+            os << " users: ";
+            llvm::interleaveComma(users, os, [&](const Node* n) { os << getId(n); });
+        }
+        os << "\n";
     }
 
 private:
