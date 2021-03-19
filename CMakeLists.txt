@@ -45,9 +45,8 @@ if (MSVC)
 endif ()
 
 if(UNIX)
-    target_link_options(${PROJECT_NAME} PRIVATE "LINKER:--exclude-libs,ALL")
+    target_link_options(${PROJECT_NAME} PRIVATE "LINKER:--version-script=export.txt")
 endif()
-
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE ${LLVM_DEFINITIONS})
 
