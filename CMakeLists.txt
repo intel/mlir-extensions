@@ -44,8 +44,12 @@ if (MSVC)
     target_compile_options(${PROJECT_NAME} PRIVATE /EHsc)
 endif ()
 
-if(UNIX)
+if (CMAKE_SYSTEM_NAME STREQUAL Linux)
     target_link_options(${PROJECT_NAME} PRIVATE "LINKER:--version-script=export.txt")
+endif()
+
+if (CMAKE_SYSTEM_NAME STREQUAL Darwin)
+    target_link_libraries(${PROJECT_NAME} PRIVATE "-Wl,-exported_symbols_list,export_darwin.txt")
 endif()
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE ${LLVM_DEFINITIONS})
