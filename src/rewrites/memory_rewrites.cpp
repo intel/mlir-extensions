@@ -28,9 +28,9 @@ llvm::Optional<Meminfo> getMeminfo(mlir::Operation* op)
     return {};
 }
 
-mlir::LogicalResult optimizeUses(mlir::BufferAliasAnalysis& aliases, plier::MemorySSA& memSSA)
+struct MayAlias
 {
-    auto mayAlias = [&](mlir::Operation* op1, mlir::Operation* op2)
+    bool operator()(mlir::Operation* op1, mlir::Operation* op2) const
     {
         auto meminfo1 = getMeminfo(op1);
         if (!meminfo1)
@@ -43,15 +43,14 @@ mlir::LogicalResult optimizeUses(mlir::BufferAliasAnalysis& aliases, plier::Memo
             return true;
         }
         return aliases.resolve(meminfo1->memref).count(meminfo2->memref) != 0;
-    };
+    }
 
-    (void)memSSA.optimizeUses(mayAlias);
-    return mlir::failure();
-}
+    mlir::BufferAliasAnalysis& aliases;
+};
 
-mlir::LogicalResult foldLoads(mlir::BufferAliasAnalysis& /*aliases*/, plier::MemorySSA& memSSA)
+struct MustAlias
 {
-    auto mustAlias = [&](mlir::Operation* op1, mlir::Operation* op2)
+    bool operator()(mlir::Operation* op1, mlir::Operation* op2) const
     {
         auto meminfo1 = getMeminfo(op1);
         if (!meminfo1)
@@ -65,7 +64,19 @@ mlir::LogicalResult foldLoads(mlir::BufferAliasAnalysis& /*aliases*/, plier::Mem
         }
         return meminfo1->memref == meminfo2->memref &&
                meminfo1->indices == meminfo2->indices;
-    };
+    }
+
+    mlir::BufferAliasAnalysis& aliases;
+};
+
+mlir::LogicalResult optimizeUses(mlir::BufferAliasAnalysis& aliases, plier::MemorySSA& memSSA)
+{
+    (void)memSSA.optimizeUses(MayAlias{aliases});
+    return mlir::failure();
+}
+
+mlir::LogicalResult foldLoads(mlir::BufferAliasAnalysis& aliases, plier::MemorySSA& memSSA)
+{
     bool changed = false;
     for (auto& node : llvm::make_early_inc_range(memSSA.getNodes()))
     {
@@ -81,7 +92,7 @@ mlir::LogicalResult foldLoads(mlir::BufferAliasAnalysis& /*aliases*/, plier::Mem
             auto op2 = memSSA.getNodeOperation(def);
             assert(nullptr != op1);
             assert(nullptr != op2);
-            if (mustAlias(op1, op2))
+            if (MustAlias{aliases}(op1, op2))
             {
                 mlir::ValueRange val = mlir::cast<mlir::StoreOp>(op2).value();
                 op1->replaceAllUsesWith(val);
@@ -106,7 +117,7 @@ mlir::LogicalResult plier::optimizeMemoryOps(mlir::FuncOp func)
 
     using fptr_t = mlir::LogicalResult (*)(mlir::BufferAliasAnalysis&, MemorySSA&);
     const fptr_t funcs[] = {
-        &optimizeUses,
+        &optimizeUses, // must be first
         &foldLoads,
     };
 
