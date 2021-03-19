@@ -395,7 +395,6 @@ bool checkPhisAlias(C& phiCache, plier::MemorySSA::Node* phi, plier::MemorySSA::
 template<typename F>
 plier::MemorySSA::Node* getDef(plier::MemorySSA::Node* def, mlir::Operation* useOp, F&& mayAlias)
 {
-    useOp->dump();
     while(true)
     {
         assert(nullptr != def);
