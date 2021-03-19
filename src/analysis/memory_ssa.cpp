@@ -1,7 +1,7 @@
 #include "plier/analysis/memory_ssa.hpp"
 
-#include <mlir/IR/BuiltinOps.h>
 #include <mlir/Interfaces/LoopLikeInterface.h>
+#include <mlir/Interfaces/SideEffectInterfaces.h>
 
 struct plier::MemorySSA::Node : public llvm::ilist_node<Node>
 {
@@ -264,7 +264,6 @@ plier::MemorySSA::Node* memSSAProcessRegion(mlir::Region& region, plier::MemoryS
 
     auto& block = region.front();
     plier::MemorySSA::Node* currentNode = entryNode;
-    using NodeType = plier::MemorySSA::Node::Type;
     for (auto& op : block)
     {
         if (!op.getRegions().empty())
@@ -330,11 +329,11 @@ plier::MemorySSA::Node* memSSAProcessRegion(mlir::Region& region, plier::MemoryS
 }
 }
 
-llvm::Optional<plier::MemorySSA> plier::buildMemorySSA(mlir::FuncOp func)
+llvm::Optional<plier::MemorySSA> plier::buildMemorySSA(mlir::Region& region)
 {
     llvm::errs() << "buildMemorySSA1\n";
     plier::MemorySSA ret;
-    if (nullptr == memSSAProcessRegion(func.getRegion(), ret.getRoot(), ret))
+    if (nullptr == memSSAProcessRegion(region, ret.getRoot(), ret))
     {
         llvm::errs() << "buildMemorySSA2\n";
         return {};
@@ -342,7 +341,7 @@ llvm::Optional<plier::MemorySSA> plier::buildMemorySSA(mlir::FuncOp func)
     llvm::errs() << "buildMemorySSA3\n";
 //    ret.simplify();
     llvm::errs() << "buildMemorySSA4\n";
-    func.dump();
+//    region.dump();
     for (auto& node : ret.getNodes())
     {
         llvm::errs() << "\n";

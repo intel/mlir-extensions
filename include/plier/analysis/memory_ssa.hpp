@@ -9,7 +9,7 @@ namespace mlir
 {
 struct LogicalResult;
 class Operation;
-class FuncOp;
+class Region;
 }
 
 namespace plier
@@ -58,5 +58,5 @@ private:
     Node* createNode(mlir::Operation* op, NodeType type, llvm::ArrayRef<Node*> args);
 };
 
-llvm::Optional<plier::MemorySSA> buildMemorySSA(mlir::FuncOp func);
+llvm::Optional<plier::MemorySSA> buildMemorySSA(mlir::Region& region);
 }
