@@ -52,7 +52,57 @@ struct plier::MemorySSA::Node : public llvm::ilist_node<Node>
         });
     }
 
-    Node* getArgument(unsigned i)
+    void setDominator(Node* node)
+    {
+        dominator = node;
+    }
+
+    Node* getDominator() const
+    {
+        if (nullptr != dominator)
+        {
+            return dominator;
+        }
+        if (getType() == Type::Root)
+        {
+            return nullptr;
+        }
+        assert(getNumArguments() == 1);
+        return getArgument(0);
+    }
+
+    void setPostDominator(Node* node)
+    {
+        postDominator = node;
+    }
+
+    Node* getPostDominator()
+    {
+        if (nullptr != postDominator)
+        {
+            return postDominator;
+        }
+        if (getType() == Type::Term || getType() == Type::Use)
+        {
+            return nullptr;
+        }
+        auto isNotUse = [](Node* n)
+        {
+            return n->getType() != Type::Use;
+        };
+        // TODO: cache?
+        assert(llvm::count_if(getUsers(), isNotUse) == 1);
+        for (auto user : getUsers())
+        {
+            if (isNotUse(user))
+            {
+                return user;
+            }
+        }
+        llvm_unreachable("");
+    }
+
+    Node* getArgument(unsigned i) const
     {
         assert(i < argCount);
         return args[i].arg;
@@ -77,7 +127,6 @@ private:
     Node(const Node&) = delete;
     Node(mlir::Operation* op, Type t, llvm::ArrayRef<Node*> a)
     {
-        assert(nullptr != op);
         assert(a.size() == 1 || t == Type::Phi);
         operation = op;
         argCount = static_cast<unsigned>(a.size());
@@ -85,7 +134,7 @@ private:
         for (auto it : llvm::enumerate(a))
         {
             auto i = it.index();
-            if (i > 1)
+            if (i >= 1)
             {
                 new(&args[i]) Arg();
             }
@@ -120,6 +169,8 @@ private:
     }
 
     mlir::Operation* operation = nullptr;
+    Node* dominator = nullptr;
+    Node* postDominator = nullptr;
     Type type = Type::Root;
     unsigned argCount = 0;
 
@@ -141,7 +192,6 @@ private:
 
 plier::MemorySSA::Node* plier::MemorySSA::createNode(mlir::Operation* op, NodeType type, llvm::ArrayRef<plier::MemorySSA::Node*> args)
 {
-    assert(nullptr != op);
     auto ptr = allocator.Allocate(Node::computeSize(args.size()), std::alignment_of<Node>::value);
     auto node = new(ptr) Node(op, type, args);
     nodesMap[op] = node;
@@ -182,6 +232,17 @@ plier::MemorySSA::Node* plier::MemorySSA::getRoot()
     return root;
 }
 
+plier::MemorySSA::Node* plier::MemorySSA::getTerm()
+{
+    if (nullptr == term)
+    {
+        Node* temp = nullptr;
+        term = new(allocator.Allocate(Node::computeSize(1), std::alignment_of<Node>::value)) Node(nullptr, NodeType::Term, temp);
+        nodes.push_back(*term);
+    }
+    return term;
+}
+
 plier::MemorySSA::Node* plier::MemorySSA::getNode(mlir::Operation* op) const
 {
     assert(nullptr != op);
@@ -196,12 +257,13 @@ void plier::MemorySSA::print(plier::MemorySSA::Node* node, llvm::raw_ostream& os
         "MemoryDef",
         "MemoryUse",
         "MemoryPhi",
+        "MemoryTerm",
     };
     auto writeId = [&](const Node* node)
     {
         if (nullptr != node)
         {
-            os << *allocator.identifyObject(node);
+            os << allocator.identifyKnownObject(node);
         }
         else
         {
@@ -211,14 +273,26 @@ void plier::MemorySSA::print(plier::MemorySSA::Node* node, llvm::raw_ostream& os
     auto type = node->getType();
     writeId(node);
     os << " = ";
-    os << types[static_cast<int>(type)] << "(";
+    auto typeInd = static_cast<int>(type);
+    assert(typeInd >= 0 && typeInd < static_cast<int>(llvm::array_lengthof(types)));
+    os << types[typeInd] << "(";
     auto args = node->getArguments();
     llvm::interleaveComma(args, os, writeId);
-    os << ")";
+    os << ") ";
+    if (auto dom = node->getDominator())
+    {
+        os << "dom ";
+        writeId(dom);
+    }
+    if (auto postDom = node->getPostDominator())
+    {
+        os << "; post-dom ";
+        writeId(postDom);
+    }
     auto users = node->getUsers();
     if (!users.empty())
     {
-        os << " users: ";
+        os << "; users: ";
         llvm::interleaveComma(users, os, writeId);
     }
     os << "\n";
@@ -281,7 +355,9 @@ plier::MemorySSA::Node* memSSAProcessRegion(mlir::Region& region, plier::MemoryS
                 if (result != phi)
                 {
                     phi->setArgument(0, result);
-                    currentNode = result;
+                    phi->setDominator(currentNode);
+                    currentNode->setPostDominator(phi);
+                    currentNode = phi;
                 }
                 else
                 {
@@ -315,7 +391,10 @@ plier::MemorySSA::Node* memSSAProcessRegion(mlir::Region& region, plier::MemoryS
             auto res = hasMemEffect(op);
             if (res.write)
             {
-                currentNode = memSSA.createDef(&op, currentNode);
+                auto newNode = memSSA.createDef(&op, currentNode);
+                newNode->setDominator(currentNode);
+                currentNode->setPostDominator(newNode);
+                currentNode = newNode;
             }
             if (res.read)
             {
@@ -333,7 +412,11 @@ llvm::Optional<plier::MemorySSA> plier::buildMemorySSA(mlir::Region& region)
 {
     llvm::errs() << "buildMemorySSA1\n";
     plier::MemorySSA ret;
-    if (nullptr == memSSAProcessRegion(region, ret.getRoot(), ret))
+    if (auto last = memSSAProcessRegion(region, ret.getRoot(), ret))
+    {
+        ret.getTerm()->setArgument(0, last);
+    }
+    else
     {
         llvm::errs() << "buildMemorySSA2\n";
         return {};

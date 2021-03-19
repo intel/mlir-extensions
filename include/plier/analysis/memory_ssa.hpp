@@ -20,19 +20,18 @@ class MemorySSA
 public:
     struct Node;
 
-    Node* createDef(mlir::Operation* op, Node* arg);
-    Node* createUse(mlir::Operation* op, Node* arg);
-    Node* createPhi(mlir::Operation* op, llvm::ArrayRef<Node*> args);
-
-
-    void eraseNode(Node* node);
-
-    Node* getRoot();
-
     MemorySSA() = default;
     MemorySSA(const MemorySSA&) = delete;
     MemorySSA(MemorySSA&&) = default;
 
+    Node* createDef(mlir::Operation* op, Node* arg);
+    Node* createUse(mlir::Operation* op, Node* arg);
+    Node* createPhi(mlir::Operation* op, llvm::ArrayRef<Node*> args);
+
+    void eraseNode(Node* node);
+
+    Node* getRoot();
+    Node* getTerm();
     Node* getNode(mlir::Operation* op) const;
 
     auto& getNodes()
@@ -44,6 +43,7 @@ public:
 
 private:
     Node* root = nullptr;
+    Node* term = nullptr;
     llvm::DenseMap<mlir::Operation*, Node*> nodesMap;
     llvm::BumpPtrAllocator allocator;
     llvm::simple_ilist<Node> nodes;
@@ -53,7 +53,8 @@ private:
         Root,
         Def,
         Use,
-        Phi
+        Phi,
+        Term
     };
     Node* createNode(mlir::Operation* op, NodeType type, llvm::ArrayRef<Node*> args);
 };
