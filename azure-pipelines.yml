@@ -67,8 +67,53 @@ jobs:
     displayName: 'Build'
 
   - script: |
-      source /usr/share/miniconda//bin/activate
+      source /usr/share/miniconda/bin/activate
       conda install -y pybind11 llvmlite numpy scipy jinja2 cffi tbb tbb-devel
+      cmake --version
+      git clone https://github.com/IntelPython/numba.git
+      cd numba
+      git checkout mlir-develop
+      cd mlir-compiler
+      cmake . -DLLVM_DIR=$(System.DefaultWorkingDirectory)/llvm_cache/lib/cmake/llvm -DMLIR_DIR=$(System.DefaultWorkingDirectory)/llvm_cache/lib/cmake/mlir -DDPCOMP_DIR=$(System.DefaultWorkingDirectory)
+      cmake --build .
+      cd ..
+      python setup.py develop
+      export PYTHONPATH="$(System.DefaultWorkingDirectory)/numba/mlir-compiler/mlir-compiler"
+      python runtests.py numba.mlir.tests
+    displayName: 'Tests'
+
+- job: MacOS
+
+  pool:
+    vmImage: macOS-10.15
+
+  steps:
+  - task: DownloadPipelineArtifact@2
+    displayName: "Get LLVM cache"
+    inputs:
+      source: 'specific'
+      project: 'mlir-llvm'
+      pipeline: 'IntelPython.mlir-llvm-recipe'
+      runVersion: 'latest'
+      artifact: 'mlir-llvm_latest_Darwin'
+      path: '$(System.DefaultWorkingDirectory)/llvm_cache'
+
+  - script: |
+      cmake --version
+      chmod -R 777 $(System.DefaultWorkingDirectory)/llvm_cache
+      cmake . -DLLVM_DIR=$(System.DefaultWorkingDirectory)/llvm_cache/lib/cmake/llvm -DMLIR_DIR=$(System.DefaultWorkingDirectory)/llvm_cache/lib/cmake/mlir
+      cmake --build .
+    displayName: 'Build'
+
+  # On Hosted macOS, the agent user doesn't have ownership of Miniconda's installation directory/
+  # We need to take ownership if we want to update conda or install packages globally
+  - bash: sudo chown -R $USER $CONDA
+    displayName: Take ownership of conda installation
+
+  - script: |
+      source /usr/local/miniconda/bin/activate
+      conda create -y -n test_env python=3.9 pybind11 llvmlite numpy scipy jinja2 cffi tbb tbb-devel
+      conda activate test_env
       cmake --version
       git clone https://github.com/IntelPython/numba.git
       cd numba
