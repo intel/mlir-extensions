@@ -18,16 +18,12 @@ namespace plier
 class MemorySSA
 {
 public:
-    enum class NodeType
-    {
-        Root,
-        Def,
-        Use,
-        Phi
-    };
     struct Node;
 
-    Node* createNode(mlir::Operation* op, NodeType type, llvm::ArrayRef<Node*> args);
+    Node* createDef(mlir::Operation* op, Node* arg);
+    Node* createUse(mlir::Operation* op, Node* arg);
+    Node* createPhi(mlir::Operation* op, llvm::ArrayRef<Node*> args);
+
 
     void eraseNode(Node* node);
 
@@ -51,6 +47,15 @@ private:
     llvm::DenseMap<mlir::Operation*, Node*> nodesMap;
     llvm::BumpPtrAllocator allocator;
     llvm::simple_ilist<Node> nodes;
+
+    enum class NodeType
+    {
+        Root,
+        Def,
+        Use,
+        Phi
+    };
+    Node* createNode(mlir::Operation* op, NodeType type, llvm::ArrayRef<Node*> args);
 };
 
 llvm::Optional<plier::MemorySSA> buildMemorySSA(mlir::FuncOp func);

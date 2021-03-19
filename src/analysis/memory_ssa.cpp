@@ -149,6 +149,21 @@ plier::MemorySSA::Node* plier::MemorySSA::createNode(mlir::Operation* op, NodeTy
     return node;
 }
 
+plier::MemorySSA::Node* plier::MemorySSA::createDef(mlir::Operation* op, plier::MemorySSA::Node* arg)
+{
+    return createNode(op, NodeType::Def, arg);
+}
+
+plier::MemorySSA::Node* plier::MemorySSA::createUse(mlir::Operation* op, plier::MemorySSA::Node* arg)
+{
+    return createNode(op, NodeType::Use, arg);
+}
+
+plier::MemorySSA::Node* plier::MemorySSA::createPhi(mlir::Operation* op, llvm::ArrayRef<plier::MemorySSA::Node*> args)
+{
+    return createNode(op, NodeType::Phi, args);
+}
+
 void plier::MemorySSA::eraseNode(plier::MemorySSA::Node* node)
 {
     assert(nullptr != node);
@@ -252,16 +267,12 @@ plier::MemorySSA::Node* memSSAProcessRegion(mlir::Region& region, plier::MemoryS
     using NodeType = plier::MemorySSA::Node::Type;
     for (auto& op : block)
     {
-        auto createNode = [&](NodeType type, auto args)
-        {
-            return memSSA.createNode(&op, type, args);
-        };
         if (!op.getRegions().empty())
         {
             if (auto loop = mlir::dyn_cast<mlir::LoopLikeOpInterface>(op))
             {
                 std::array<plier::MemorySSA::Node*, 2> phiArgs = {nullptr, currentNode};
-                auto phi = createNode(NodeType::Phi, phiArgs);
+                auto phi = memSSA.createPhi(&op, phiArgs);
                 auto result = memSSAProcessRegion(loop.getLoopBody(), phi, memSSA);
                 if (nullptr == result)
                 {
@@ -305,11 +316,11 @@ plier::MemorySSA::Node* memSSAProcessRegion(mlir::Region& region, plier::MemoryS
             auto res = hasMemEffect(op);
             if (res.write)
             {
-                currentNode = createNode(NodeType::Def, currentNode);
+                currentNode = memSSA.createDef(&op, currentNode);
             }
             if (res.read)
             {
-                createNode(NodeType::Use, currentNode);
+                memSSA.createUse(&op, currentNode);
             }
         }
 
