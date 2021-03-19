@@ -19,6 +19,7 @@ include(HandleLLVMOptions)
 add_subdirectory(include/plier)
 
 set(SOURCES_LIST
+    src/analysis/memory_ssa.cpp
     src/compiler/compiler.cpp
     src/compiler/pipeline_registry.cpp
     src/dialect.cpp
@@ -43,6 +44,7 @@ set(SOURCES_LIST
     src/utils.cpp
     )
 set(HEADERS_LIST
+    include/plier/analysis/memory_ssa.hpp
     include/plier/compiler/compiler.hpp
     include/plier/compiler/pipeline_registry.hpp
     include/plier/dialect.hpp
