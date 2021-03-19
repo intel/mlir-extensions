@@ -3,6 +3,7 @@
 #include "plier/rewrites/force_inline.hpp"
 #include "plier/rewrites/index_type_propagation.hpp"
 #include "plier/rewrites/loop_rewrites.hpp"
+#include "plier/rewrites/memory_rewrites.hpp"
 #include "plier/rewrites/cse.hpp"
 #include "plier/rewrites/if_rewrites.hpp"
 
@@ -26,7 +27,9 @@ void plier::populate_common_opts_patterns(mlir::MLIRContext& context, mlir::Owni
         plier::IfOpConstCond,
         SimplifySelect,
         SimplifySelectEq,
-        plier::CSERewrite<mlir::FuncOp, /*recusive*/false>
+        plier::CSERewrite<mlir::FuncOp, /*recusive*/false>,
+        PromoteLoads,
+        SingeWriteMemref
         >(&context);
 
     plier::populate_index_propagate_patterns(context, patterns);
