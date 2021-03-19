@@ -1029,8 +1029,49 @@ void PostLinalgOptPass::runOnOperation()
     plier::populate_common_opts_patterns(context, patterns);
 
     patterns.insert<
+        plier::CanonicalizeReduction
+        >(&context);
+
+    mlir::FrozenRewritePatternList frozenPatterns(std::move(patterns));
+
+    while (true)
+    {
+        (void)mlir::applyPatternsAndFoldGreedily(getOperation(), frozenPatterns);
+        bool rerun = false;
+        for (auto& op : getOperation().getRegion().front())
+        {
+            if (auto func = mlir::dyn_cast<mlir::FuncOp>(op))
+            {
+                if (mlir::succeeded(plier::naivelyFuseParallelOps(func.getRegion())))
+                {
+                    rerun = true;
+                }
+            }
+        }
+        if (!rerun)
+        {
+            break;
+        }
+    }
+
+}
+
+struct PromoteParallelPass :
+    public mlir::PassWrapper<PromoteParallelPass, mlir::OperationPass<mlir::ModuleOp>>
+{
+    void runOnOperation() override;
+};
+
+void PromoteParallelPass::runOnOperation()
+{
+    mlir::OwningRewritePatternList patterns;
+
+    auto& context = getContext();
+    plier::populate_common_opts_patterns(context, patterns);
+
+    patterns.insert<
         plier::CanonicalizeReduction,
-        plier::PromoteToParallel
+        plier::PromoteToParallel // TODO
         >(&context);
 
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
@@ -1064,11 +1105,9 @@ void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager& pm)
     pm.addPass(mlir::createCopyRemovalPass());
 
     pm.addPass(std::make_unique<LowerLinalgPass>());
-    pm.addPass(mlir::createParallelLoopFusionPass());
     pm.addPass(std::make_unique<PostLinalgOptPass>());
     pm.addPass(mlir::createSymbolDCEPass());
-    pm.addPass(mlir::createParallelLoopFusionPass()); // TODO: make this rewrite and add to PostLinalgOptPass
-    pm.addPass(std::make_unique<PostLinalgOptPass>());
+    pm.addPass(std::make_unique<PromoteParallelPass>());
 }
 }
 
