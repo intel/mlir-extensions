@@ -1,7 +1,8 @@
 #include "plier/rewrites/memory_rewrites.hpp"
 
-#include <mlir/IR/BuiltinOps.h>
+#include <mlir/Analysis/BufferAliasAnalysis.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
+#include <mlir/IR/BuiltinOps.h>
 
 #include <plier/analysis/memory_ssa.hpp>
 
@@ -207,11 +208,46 @@ mlir::LogicalResult plier::SingeWriteMemref::matchAndRewrite(mlir::StoreOp op, m
     return mlir::success();
 }
 
+namespace
+{
+struct Meminfo
+{
+    mlir::Value memref;
+    mlir::ValueRange indices;
+};
+
+llvm::Optional<Meminfo> getMeminfo(mlir::Operation* op)
+{
+    assert(nullptr != op);
+    if (auto load = mlir::dyn_cast<mlir::LoadOp>(op))
+    {
+        return Meminfo{load.memref(), load.indices()};
+    }
+    if (auto store = mlir::dyn_cast<mlir::StoreOp>(op))
+    {
+        return Meminfo{store.memref(), store.indices()};
+    }
+    return {};
+}
+
+}
+
 mlir::LogicalResult plier::optimizeMemoryOps(mlir::FuncOp func)
 {
-    auto mayAlias = [](mlir::Operation* op1, mlir::Operation* op2)
+    mlir::BufferAliasAnalysis aliases(func);
+    auto mayAlias = [&](mlir::Operation* op1, mlir::Operation* op2)
     {
-        return true;
+        auto meminfo1 = getMeminfo(op1);
+        if (!meminfo1)
+        {
+            return true;
+        }
+        auto meminfo2 = getMeminfo(op2);
+        if (!meminfo2)
+        {
+            return true;
+        }
+        return aliases.resolve(meminfo1->memref).count(meminfo2->memref) != 0;
     };
     llvm::errs() << "optimizeMemoryOps1\n";
     auto memSSA = buildMemorySSA(func.getRegion());
