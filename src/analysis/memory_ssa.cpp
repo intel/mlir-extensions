@@ -227,6 +227,27 @@ void plier::MemorySSA::eraseNode(plier::MemorySSA::Node* node)
     node->~Node();
 }
 
+plier::MemorySSA::NodeType plier::MemorySSA::getNodeType(plier::MemorySSA::Node* node) const
+{
+    assert(nullptr != node);
+    return node->getType();
+}
+
+mlir::Operation* plier::MemorySSA::getNodeOperation(plier::MemorySSA::Node* node) const
+{
+    assert(nullptr != node);
+    return node->getOperation();
+}
+
+plier::MemorySSA::Node* plier::MemorySSA::getNodeDef(plier::MemorySSA::Node* node) const
+{
+    node->getIterator();
+    assert(nullptr != node);
+    assert(NodeType::Use == node->getType());
+    assert(node->getNumArguments() == 1);
+    return node->getArgument(0);
+}
+
 plier::MemorySSA::Node* plier::MemorySSA::getRoot()
 {
     if (nullptr == root)
@@ -253,6 +274,11 @@ plier::MemorySSA::Node* plier::MemorySSA::getNode(mlir::Operation* op) const
     assert(nullptr != op);
     auto it = nodesMap.find(op);
     return it != nodesMap.end() ? it->second : nullptr;
+}
+
+llvm::iterator_range<plier::MemorySSA::NodesIterator> plier::MemorySSA::getNodes()
+{
+    return llvm::make_range(nodes.begin(), nodes.end());
 }
 
 void plier::MemorySSA::print(llvm::raw_ostream& os)
@@ -552,4 +578,46 @@ llvm::Optional<plier::MemorySSA> plier::buildMemorySSA(mlir::Region& region)
         return {};
     }
     return std::move(ret);
+}
+
+plier::MemorySSA::NodesIterator::NodesIterator(plier::MemorySSA::NodesIterator::internal_iterator iter):
+    iterator(iter)
+{
+
+}
+
+plier::MemorySSA::NodesIterator& plier::MemorySSA::NodesIterator::operator++()
+{
+    ++iterator;
+    return *this;
+}
+
+plier::MemorySSA::NodesIterator plier::MemorySSA::NodesIterator::operator++(int)
+{
+    auto tmp = *this;
+    ++iterator;
+    return tmp;
+}
+
+plier::MemorySSA::NodesIterator& plier::MemorySSA::NodesIterator::operator--()
+{
+    --iterator;
+    return *this;
+}
+
+plier::MemorySSA::NodesIterator plier::MemorySSA::NodesIterator::operator--(int)
+{
+    auto tmp = *this;
+    --iterator;
+    return tmp;
+}
+
+plier::MemorySSA::NodesIterator::reference plier::MemorySSA::NodesIterator::operator*()
+{
+    return *iterator;
+}
+
+plier::MemorySSA::NodesIterator::pointer plier::MemorySSA::NodesIterator::operator->()
+{
+    return iterator.operator->();
 }
