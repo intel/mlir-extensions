@@ -3,6 +3,8 @@
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
 
+#include <plier/analysis/memory_ssa.hpp>
+
 namespace
 {
 bool isWrite(mlir::Operation& op)
@@ -203,4 +205,17 @@ mlir::LogicalResult plier::SingeWriteMemref::matchAndRewrite(mlir::StoreOp op, m
     }
     rewriter.eraseOp(parent);
     return mlir::success();
+}
+
+mlir::LogicalResult plier::optimizeMemoryOps(mlir::FuncOp func)
+{
+    auto memSSA = buildMemorySSA(func.getRegion());
+    if (!memSSA)
+    {
+        return mlir::failure();
+    }
+
+    bool changed = false;
+
+    return mlir::success(changed);
 }
