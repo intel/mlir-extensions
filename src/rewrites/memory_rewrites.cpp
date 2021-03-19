@@ -209,11 +209,22 @@ mlir::LogicalResult plier::SingeWriteMemref::matchAndRewrite(mlir::StoreOp op, m
 
 mlir::LogicalResult plier::optimizeMemoryOps(mlir::FuncOp func)
 {
+    auto mayAlias = [](mlir::Operation* op1, mlir::Operation* op2)
+    {
+        return true;
+    };
+    llvm::errs() << "optimizeMemoryOps1\n";
     auto memSSA = buildMemorySSA(func.getRegion());
     if (!memSSA)
     {
         return mlir::failure();
     }
+    llvm::errs() << "optimizeMemoryOps2\n";
+    memSSA->print(llvm::errs());
+    (void)memSSA->optimizeUses(mayAlias);
+    llvm::errs() << "optimizeMemoryOps3\n";
+    memSSA->print(llvm::errs());
+    llvm::errs() << "optimizeMemoryOps4\n";
 
     bool changed = false;
 

@@ -39,7 +39,10 @@ public:
         return nodes;
     }
 
+    void print(llvm::raw_ostream& os);
     void print(Node* node, llvm::raw_ostream& os);
+
+    mlir::LogicalResult optimizeUses(llvm::function_ref<bool(mlir::Operation*, mlir::Operation*)> mayAlias);
 
 private:
     Node* root = nullptr;

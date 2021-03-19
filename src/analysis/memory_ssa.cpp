@@ -218,6 +218,11 @@ void plier::MemorySSA::eraseNode(plier::MemorySSA::Node* node)
 {
     assert(nullptr != node);
     assert(node->getUsers().empty());
+    auto op = node->getOperation();
+    if (op != nullptr)
+    {
+        nodesMap.erase(op);
+    }
     nodes.erase(node->getIterator());
     node->~Node();
 }
@@ -248,6 +253,20 @@ plier::MemorySSA::Node* plier::MemorySSA::getNode(mlir::Operation* op) const
     assert(nullptr != op);
     auto it = nodesMap.find(op);
     return it != nodesMap.end() ? it->second : nullptr;
+}
+
+void plier::MemorySSA::print(llvm::raw_ostream& os)
+{
+    for (auto& node : getNodes())
+    {
+        os << "\n";
+        print(&node, os);
+        if (node.getOperation())
+        {
+            node.getOperation()->print(os);
+            os << "\n";
+        }
+    }
 }
 
 void plier::MemorySSA::print(plier::MemorySSA::Node* node, llvm::raw_ostream& os) /*const*/ // TODO: identifyObject const
@@ -296,6 +315,119 @@ void plier::MemorySSA::print(plier::MemorySSA::Node* node, llvm::raw_ostream& os
         llvm::interleaveComma(users, os, writeId);
     }
     os << "\n";
+}
+
+namespace
+{
+template<typename C, typename F>
+bool checkPhisAlias(C& phiCache, plier::MemorySSA::Node* phi, plier::MemorySSA::Node* stop, mlir::Operation* useOp, F&& mayAlias)
+{
+    assert(nullptr != phi);
+    assert(nullptr != stop);
+    assert(nullptr != useOp);
+    using NodeType = plier::MemorySSA::Node::Type;
+    assert(phi->getType() == NodeType::Phi);
+    if (phiCache.count(phi) == 0)
+    {
+        phiCache.insert(phi);
+        for (auto node : phi->getArguments())
+        {
+            assert(nullptr != node);
+            while(node != stop)
+            {
+                auto type = node->getType();
+                if (type == NodeType::Def)
+                {
+                    assert(nullptr != node->getOperation());
+                    if (mayAlias(node->getOperation(), useOp))
+                    {
+                        return false;
+                    }
+                }
+                else if(type == NodeType::Phi)
+                {
+                    if (!checkPhisAlias(phiCache, node, stop, useOp, std::forward<F>(mayAlias)))
+                    {
+                        return false;
+                    }
+                }
+                else
+                {
+                    llvm_unreachable("");
+                }
+                node = node->getDominator();
+                if (nullptr == node)
+                {
+                    break;
+                }
+            }
+        }
+    }
+    return true;
+}
+
+template<typename F>
+plier::MemorySSA::Node* getDef(plier::MemorySSA::Node* def, mlir::Operation* useOp, F&& mayAlias)
+{
+    useOp->dump();
+    while(true)
+    {
+        assert(nullptr != def);
+        auto dom = def->getDominator();
+        if (nullptr == dom)
+        {
+            return def;
+        }
+
+        auto type = def->getType();
+        if (type == plier::MemorySSA::Node::Type::Phi)
+        {
+            llvm::SmallDenseSet<plier::MemorySSA::Node*> phiCache;
+            if (!checkPhisAlias(phiCache, def, dom, useOp, std::forward<F>(mayAlias)))
+            {
+                return def;
+            }
+        }
+        else if (type == plier::MemorySSA::Node::Type::Def)
+        {
+            assert(nullptr != def->getOperation());
+            if (mayAlias(def->getOperation(), useOp))
+            {
+                return def;
+            }
+        }
+        else
+        {
+            llvm_unreachable("");
+        }
+        def = dom;
+    }
+}
+}
+
+mlir::LogicalResult plier::MemorySSA::optimizeUses(llvm::function_ref<bool (mlir::Operation*, mlir::Operation*)> mayAlias)
+{
+    assert(mayAlias);
+    bool changed = false;
+    for (auto& node : getNodes())
+    {
+        if (node.getType() == NodeType::Use)
+        {
+            assert(node.getNumArguments() == 1);
+            auto def = node.getDominator();
+            assert(nullptr != def);
+            auto op = node.getOperation();
+            assert(nullptr != op);
+            auto newDef = getDef(def, op, mayAlias);
+            assert(nullptr != newDef);
+            if (newDef != def)
+            {
+                node.setArgument(0, newDef);
+                changed = true;
+            }
+        }
+    }
+    return mlir::success(changed);
 }
 
 namespace
@@ -410,7 +542,6 @@ plier::MemorySSA::Node* memSSAProcessRegion(mlir::Region& region, plier::MemoryS
 
 llvm::Optional<plier::MemorySSA> plier::buildMemorySSA(mlir::Region& region)
 {
-    llvm::errs() << "buildMemorySSA1\n";
     plier::MemorySSA ret;
     if (auto last = memSSAProcessRegion(region, ret.getRoot(), ret))
     {
@@ -418,23 +549,7 @@ llvm::Optional<plier::MemorySSA> plier::buildMemorySSA(mlir::Region& region)
     }
     else
     {
-        llvm::errs() << "buildMemorySSA2\n";
         return {};
     }
-    llvm::errs() << "buildMemorySSA3\n";
-//    ret.simplify();
-    llvm::errs() << "buildMemorySSA4\n";
-//    region.dump();
-    for (auto& node : ret.getNodes())
-    {
-        llvm::errs() << "\n";
-        ret.print(&node, llvm::errs());
-        if (node.getOperation())
-        {
-            node.getOperation()->dump();
-        }
-    }
-
-    llvm::errs() << "buildMemorySSAend\n";
     return std::move(ret);
 }
