@@ -29,4 +29,6 @@ struct SingeWriteMemref : public mlir::OpRewritePattern<mlir::StoreOp>
     mlir::LogicalResult matchAndRewrite(
         mlir::StoreOp op, mlir::PatternRewriter &rewriter) const override;
 };
+
+mlir::LogicalResult buildMemorySSA(mlir::FuncOp func);
 }

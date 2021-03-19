@@ -1,8 +1,10 @@
 #include "plier/rewrites/memory_rewrites.hpp"
 
 #include <mlir/IR/BuiltinOps.h>
-
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
+
+#include <llvm/Support/Allocator.h>
+#include <mlir/Dialect/SCF/SCF.h>
 
 namespace
 {
@@ -203,5 +205,232 @@ mlir::LogicalResult plier::SingeWriteMemref::matchAndRewrite(mlir::StoreOp op, m
         rewriter.eraseOp(user);
     }
     rewriter.eraseOp(parent);
+    return mlir::success();
+}
+
+namespace
+{
+class MemorySSA
+{
+public:
+    struct Node : public llvm::ilist_node<Node>
+    {
+        enum class Type
+        {
+            Root,
+            Def,
+            Use,
+            Phi
+        };
+
+        mlir::Operation* getOperation() const
+        {
+            return operation;
+        }
+
+        Type getType() const
+        {
+            return type;
+        }
+
+        llvm::ArrayRef<Node*> getArguments() const
+        {
+            return llvm::makeArrayRef(&args[0], argCount);
+        }
+
+        void setArgument(unsigned i, Node* node)
+        {
+            args[i] = node;
+        }
+
+    private:
+        Node() = default;
+        Node(const Node&) = delete;
+        Node(mlir::Operation* op, Type t, llvm::ArrayRef<Node*> a)
+        {
+            assert(nullptr != op);
+            assert(a.size() == 1 || t == Type::Phi);
+            operation = op;
+            argCount = static_cast<unsigned>(a.size());
+            type = t;
+            llvm::copy(a, std::begin(args));
+        }
+        friend class MemorySSA;
+
+        static size_t computeSize(size_t numArgs)
+        {
+            return sizeof(Node) + (numArgs > 1 ? sizeof(Node*) * numArgs : 0);
+        }
+
+        mlir::Operation* operation = nullptr;
+        Type type = Type::Root;
+        unsigned argCount = 0;
+
+        Node* args[1]; // Variadic size
+    };
+
+    Node* createNode(mlir::Operation* op, Node::Type type, llvm::ArrayRef<Node*> args)
+    {
+        assert(nullptr != op);
+        auto ptr = allocator.Allocate(Node::computeSize(args.size()), std::alignment_of<Node>::value);
+        auto node = new(ptr) Node(op, type, args);
+        nodesMap[op] = node;
+        nodes.push_back(*node);
+        return node;
+    }
+
+    Node* getRoot()
+    {
+        if (nullptr == root)
+        {
+            root = new(allocator.Allocate(Node::computeSize(0), std::alignment_of<Node>::value)) Node();
+            nodes.push_back(*root);
+        }
+        return root;
+    }
+
+    MemorySSA() = default;
+    MemorySSA(const MemorySSA&) = delete;
+    MemorySSA(MemorySSA&&) = default;
+
+    Node* getNode(mlir::Operation* op) const
+    {
+        assert(nullptr != op);
+        auto it = nodesMap.find(op);
+        return it != nodesMap.end() ? it->second : nullptr;
+    }
+
+    auto& getNodes()
+    {
+        return nodes;
+    }
+
+    void print(const Node* node, llvm::raw_ostream& os) /*const*/ // TODO: identifyObject const
+    {
+        const llvm::StringRef types[] = {
+            "MemoryRoot",
+            "MemoryDef",
+            "MemoryUse",
+            "MemoryPhi",
+        };
+        auto getId = [this](const Node* node)
+        {
+            assert(nullptr != node);
+            return *allocator.identifyObject(node);
+        };
+        auto type = node->getType();
+        if (type != Node::Type::Use)
+        {
+            os << getId(node) << " = ";
+        }
+        os << types[static_cast<int>(type)] << "(";
+        auto args = node->getArguments();
+        llvm::interleaveComma(args, os, [&](const Node* n) { os << getId(n); });
+        os << ")\n";
+    }
+
+private:
+    Node* root = nullptr;
+    llvm::DenseMap<mlir::Operation*, Node*> nodesMap;
+    llvm::BumpPtrAllocator allocator;
+    llvm::simple_ilist<Node> nodes;
+};
+
+MemorySSA::Node* memSSAProcessRegion(mlir::Region& region, MemorySSA::Node* entryNode, MemorySSA& memSSA)
+{
+    assert(nullptr != entryNode);
+    if (!llvm::hasSingleElement(region))
+    {
+        // Only structured control flow is supported for now
+        return nullptr;
+    }
+
+    auto& block = region.front();
+    MemorySSA::Node* currentNode = entryNode;
+    using NodeType = MemorySSA::Node::Type;
+    for (auto& op : block)
+    {
+        auto createNode = [&](NodeType type, auto args)
+        {
+            return memSSA.createNode(&op, type, args);
+        };
+        if (!op.getRegions().empty())
+        {
+            if (mlir::isa<mlir::scf::ForOp, mlir::scf::ParallelOp>(op))
+            {
+                assert(llvm::hasSingleElement(op.getRegions()));
+                std::array<MemorySSA::Node*, 2> phiArgs = {nullptr, currentNode};
+                auto phi = createNode(NodeType::Phi, phiArgs);
+                currentNode = memSSAProcessRegion(op.getRegions().front(), phi, memSSA);
+                phi->setArgument(0, currentNode);
+            }
+            else if (mlir::isa<mlir::scf::ReduceOp>(op))
+            {
+                // TODO: handle reduce
+            }
+            else
+            {
+                // Unsupported op
+                return nullptr;
+            }
+        }
+        else
+        {
+            if (auto effects = mlir::dyn_cast<mlir::MemoryEffectOpInterface>(op))
+            {
+                if (effects.hasEffect<mlir::MemoryEffects::Write>())
+                {
+                    currentNode = createNode(NodeType::Def, currentNode);
+                }
+                if (effects.hasEffect<mlir::MemoryEffects::Read>())
+                {
+                    createNode(NodeType::Use, currentNode);
+                }
+            }
+            else if(op.hasTrait<mlir::OpTrait::HasRecursiveSideEffects>())
+            {
+                currentNode = createNode(NodeType::Def, currentNode);
+            }
+        }
+
+    }
+
+    return currentNode;
+}
+
+llvm::Optional<MemorySSA> buildMemorySSAImpl(mlir::FuncOp func)
+{
+    MemorySSA ret;
+    if (nullptr == memSSAProcessRegion(func.getRegion(), ret.getRoot(), ret))
+    {
+        return {};
+    }
+    return std::move(ret);
+}
+}
+
+mlir::LogicalResult plier::buildMemorySSA(mlir::FuncOp func)
+{
+    llvm::errs() << "buildMemorySSA1\n";
+    auto res = buildMemorySSAImpl(func);
+    if (!res)
+    {
+        llvm::errs() << "buildMemorySSA2\n";
+        return mlir::failure();
+    }
+    auto& memSSA = *res;
+    func.dump();
+    llvm::errs() << "buildMemorySSA3\n";
+    for (auto& node : memSSA.getNodes())
+    {
+        llvm::errs() << "\n";
+        memSSA.print(&node, llvm::errs());
+        if (node.getOperation())
+        {
+            node.getOperation()->dump();
+        }
+    }
+
+    llvm::errs() << "buildMemorySSAend\n";
     return mlir::success();
 }
