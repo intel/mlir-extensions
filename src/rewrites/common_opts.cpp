@@ -27,7 +27,9 @@ void plier::populate_common_opts_patterns(mlir::MLIRContext& context, mlir::Owni
         plier::IfOpConstCond,
         SimplifySelect,
         SimplifySelectEq,
-        plier::CSERewrite<mlir::FuncOp, /*recusive*/false>
+        plier::CSERewrite<mlir::FuncOp, /*recusive*/false>,
+        RemoveTrivialAlloc,
+        RemoveTrivialAlloca
         >(&context);
 
     plier::populate_index_propagate_patterns(context, patterns);
