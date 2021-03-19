@@ -42,6 +42,7 @@ public:
     NodeType getNodeType(Node* node) const;
     mlir::Operation* getNodeOperation(Node* node) const;
     Node* getNodeDef(Node* node) const;
+    llvm::SmallVector<Node*> getUsers(Node* node);
 
     Node* getRoot();
     Node* getTerm();

@@ -77,14 +77,15 @@ mlir::LogicalResult optimizeUses(mlir::BufferAliasAnalysis& aliases, plier::Memo
 
 mlir::LogicalResult foldLoads(mlir::BufferAliasAnalysis& aliases, plier::MemorySSA& memSSA)
 {
+    using NodeType = plier::MemorySSA::NodeType;
     bool changed = false;
     for (auto& node : llvm::make_early_inc_range(memSSA.getNodes()))
     {
-        if (plier::MemorySSA::NodeType::Use == memSSA.getNodeType(&node))
+        if (NodeType::Use == memSSA.getNodeType(&node))
         {
             auto def = memSSA.getNodeDef(&node);
             assert(nullptr != def);
-            if (plier::MemorySSA::NodeType::Def != memSSA.getNodeType(def))
+            if (NodeType::Def != memSSA.getNodeType(def))
             {
                 continue;
             }
@@ -104,21 +105,69 @@ mlir::LogicalResult foldLoads(mlir::BufferAliasAnalysis& aliases, plier::MemoryS
     return mlir::success(changed);
 }
 
+mlir::LogicalResult deadStoreElemination(mlir::BufferAliasAnalysis& aliases, plier::MemorySSA& memSSA)
+{
+    using NodeType = plier::MemorySSA::NodeType;
+    auto getNextDef = [&](plier::MemorySSA::Node* node)->plier::MemorySSA::Node*
+    {
+        plier::MemorySSA::Node* def = nullptr;
+        for (auto user : memSSA.getUsers(node))
+        {
+            auto type = memSSA.getNodeType(user);
+            if (NodeType::Def == type)
+            {
+                if (def != nullptr)
+                {
+                    return nullptr;
+                }
+                def = user;
+            }
+            else
+            {
+                return nullptr;
+            }
+        }
+        return def;
+    };
+    bool changed = false;
+    for (auto& node : llvm::make_early_inc_range(memSSA.getNodes()))
+    {
+        if (NodeType::Def == memSSA.getNodeType(&node))
+        {
+            if (auto nextDef = getNextDef(&node))
+            {
+                auto op1 = memSSA.getNodeOperation(&node);
+                auto op2 = memSSA.getNodeOperation(nextDef);
+                assert(nullptr != op1);
+                assert(nullptr != op2);
+                if (MustAlias{aliases}(op1, op2))
+                {
+                    op1->erase();
+                    memSSA.eraseNode(&node);
+                    changed = true;
+                }
+            }
+        }
+    }
+    return mlir::success(changed);
+}
+
 }
 
 mlir::LogicalResult plier::optimizeMemoryOps(mlir::FuncOp func)
 {
-    mlir::BufferAliasAnalysis aliases(func);
     auto memSSA = buildMemorySSA(func.getRegion());
     if (!memSSA)
     {
         return mlir::failure();
     }
+    mlir::BufferAliasAnalysis aliases(func);
 
     using fptr_t = mlir::LogicalResult (*)(mlir::BufferAliasAnalysis&, MemorySSA&);
     const fptr_t funcs[] = {
         &optimizeUses, // must be first
         &foldLoads,
+        &deadStoreElemination
     };
 
     bool changed = false;

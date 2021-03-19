@@ -217,6 +217,27 @@ plier::MemorySSA::Node* plier::MemorySSA::createPhi(mlir::Operation* op, llvm::A
 void plier::MemorySSA::eraseNode(plier::MemorySSA::Node* node)
 {
     assert(nullptr != node);
+    if (NodeType::Def == node->getType())
+    {
+        assert(node->getNumArguments() == 1);
+        auto prev = node->getArgument(0);
+        assert(nullptr != prev);
+        for (auto use : llvm::make_early_inc_range(node->getUses()))
+        {
+            use.user->setArgument(use.index, prev);
+        }
+
+        auto postDom = node->postDominator;
+        if (nullptr != postDom)
+        {
+            assert(postDom->dominator == node);
+            postDom->setDominator(prev);
+            if (nullptr == prev->postDominator)
+            {
+                prev->setPostDominator(postDom);
+            }
+        }
+    }
     assert(node->getUsers().empty());
     auto op = node->getOperation();
     if (op != nullptr)
@@ -246,6 +267,13 @@ plier::MemorySSA::Node* plier::MemorySSA::getNodeDef(plier::MemorySSA::Node* nod
     assert(NodeType::Use == node->getType());
     assert(node->getNumArguments() == 1);
     return node->getArgument(0);
+}
+
+llvm::SmallVector<plier::MemorySSA::Node*> plier::MemorySSA::getUsers(plier::MemorySSA::Node* node)
+{
+    assert(nullptr != node);
+    auto users = node->getUsers();
+    return {users.begin(), users.end()};
 }
 
 plier::MemorySSA::Node* plier::MemorySSA::getRoot()
