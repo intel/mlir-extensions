@@ -1,7 +1,7 @@
 #include "plier/analysis/memory_ssa.hpp"
 
-#include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/IR/BuiltinOps.h>
+#include <mlir/Interfaces/LoopLikeInterface.h>
 
 struct plier::MemorySSA::Node : public llvm::ilist_node<Node>
 {
@@ -258,12 +258,11 @@ plier::MemorySSA::Node* memSSAProcessRegion(mlir::Region& region, plier::MemoryS
         };
         if (!op.getRegions().empty())
         {
-            if (mlir::isa<mlir::scf::ForOp, mlir::scf::ParallelOp>(op))
+            if (auto loop = mlir::dyn_cast<mlir::LoopLikeOpInterface>(op))
             {
-                assert(llvm::hasSingleElement(op.getRegions()));
                 std::array<plier::MemorySSA::Node*, 2> phiArgs = {nullptr, currentNode};
                 auto phi = createNode(NodeType::Phi, phiArgs);
-                auto result = memSSAProcessRegion(op.getRegions().front(), phi, memSSA);
+                auto result = memSSAProcessRegion(loop.getLoopBody(), phi, memSSA);
                 if (nullptr == result)
                 {
                     return nullptr;
