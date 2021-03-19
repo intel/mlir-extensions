@@ -211,6 +211,33 @@ void plier::MemorySSA::print(plier::MemorySSA::Node* node, llvm::raw_ostream& os
 
 namespace
 {
+auto hasMemEffect(mlir::Operation& op)
+{
+    struct Result
+    {
+        bool read = false;
+        bool write = false;
+    };
+
+    Result ret;
+    if (auto effects = mlir::dyn_cast<mlir::MemoryEffectOpInterface>(op))
+    {
+        if (effects.hasEffect<mlir::MemoryEffects::Write>())
+        {
+            ret.write = true;
+        }
+        if (effects.hasEffect<mlir::MemoryEffects::Read>())
+        {
+            ret.read = true;
+        }
+    }
+    else if(op.hasTrait<mlir::OpTrait::HasRecursiveSideEffects>())
+    {
+        ret.write = true;
+    }
+    return ret;
+}
+
 plier::MemorySSA::Node* memSSAProcessRegion(mlir::Region& region, plier::MemorySSA::Node* entryNode, plier::MemorySSA& memSSA)
 {
     assert(nullptr != entryNode);
@@ -257,32 +284,33 @@ plier::MemorySSA::Node* memSSAProcessRegion(mlir::Region& region, plier::MemoryS
                     memSSA.eraseNode(phi);
                 }
             }
-            else if (mlir::isa<mlir::scf::ReduceOp>(op))
-            {
-                // TODO: handle reduce
-            }
             else
             {
-                // Unsupported op
-                return nullptr;
+                // Unsupported op, check if it has any mem effects
+                if (op.walk([](mlir::Operation* nestedOp)
+                    {
+                        auto res = hasMemEffect(*nestedOp);
+                        if (res.read || res.write)
+                        {
+                            return mlir::WalkResult::interrupt();
+                        }
+                        return mlir::WalkResult::advance();
+                    }).wasInterrupted())
+                {
+                    return nullptr;
+                }
             }
         }
         else
         {
-            if (auto effects = mlir::dyn_cast<mlir::MemoryEffectOpInterface>(op))
-            {
-                if (effects.hasEffect<mlir::MemoryEffects::Write>())
-                {
-                    currentNode = createNode(NodeType::Def, currentNode);
-                }
-                if (effects.hasEffect<mlir::MemoryEffects::Read>())
-                {
-                    createNode(NodeType::Use, currentNode);
-                }
-            }
-            else if(op.hasTrait<mlir::OpTrait::HasRecursiveSideEffects>())
+            auto res = hasMemEffect(op);
+            if (res.write)
             {
                 currentNode = createNode(NodeType::Def, currentNode);
+            }
+            if (res.read)
+            {
+                createNode(NodeType::Use, currentNode);
             }
         }
 
