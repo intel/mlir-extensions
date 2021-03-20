@@ -94,11 +94,11 @@ mlir::LogicalResult simplifyRegion(ScopedMapTy& map, mlir::Region& region, mlir:
 }
 }
 
-mlir::LogicalResult plier::detail::applyCSE(mlir::Region& region, mlir::PatternRewriter& rewriter, bool recusive)
+mlir::LogicalResult plier::applyCSE(mlir::Region& region, mlir::PatternRewriter& rewriter, bool recursive)
 {
     ScopedMapTy map;
     ScopedMapTy::ScopeTy scope(map);
-    if (recusive)
+    if (recursive)
     {
         return simplifyRegion<true>(map, region, rewriter);
     }
@@ -106,4 +106,16 @@ mlir::LogicalResult plier::detail::applyCSE(mlir::Region& region, mlir::PatternR
     {
         return simplifyRegion<false>(map, region, rewriter);
     }
+}
+
+mlir::LogicalResult plier::applyCSE(mlir::Region& region, bool recursive)
+{
+    class MyPatternRewriter : public mlir::PatternRewriter
+    {
+    public:
+        MyPatternRewriter(mlir::MLIRContext *ctx) : PatternRewriter(ctx) {}
+    };
+
+    MyPatternRewriter dummyRewriter(region.getContext());
+    return applyCSE(region, dummyRewriter, recursive);
 }

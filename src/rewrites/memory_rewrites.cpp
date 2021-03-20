@@ -31,22 +31,22 @@ struct Result
     bool hasReads;
 };
 
-Result promoteLoads(llvm::MutableArrayRef<mlir::Region> regions, mlir::PatternRewriter& rewriter)
+Result promoteLoadsImpl(mlir::Region& region, mlir::PatternRewriter& rewriter)
 {
     bool changed = false;
     bool hasWrites = false;
     bool hasReads = false;
     bool storeDead = false;
-    for (auto& region : regions)
+    for (auto& block : region.getBlocks())
     {
-        for (auto& block : region.getBlocks())
+        mlir::StoreOp currentStore;
+        for (auto& op : llvm::make_early_inc_range(block))
         {
-            mlir::StoreOp currentStore;
-            for (auto& op : llvm::make_early_inc_range(block))
+            if (!op.getRegions().empty())
             {
-                if (!op.getRegions().empty())
+                for (auto& nestedRegion : op.getRegions())
                 {
-                    auto res = promoteLoads(op.getRegions(), rewriter);
+                    auto res = promoteLoadsImpl(nestedRegion, rewriter);
                     if (res.changed)
                     {
                         changed = true;
@@ -59,55 +59,55 @@ Result promoteLoads(llvm::MutableArrayRef<mlir::Region> regions, mlir::PatternRe
                     {
                         storeDead = false;
                     }
-                    continue;
                 }
+                continue;
+            }
 
-                if (auto load = mlir::dyn_cast<mlir::LoadOp>(op))
+            if (auto load = mlir::dyn_cast<mlir::LoadOp>(op))
+            {
+                hasReads = true;
+                if (currentStore)
                 {
-                    hasReads = true;
-                    if (currentStore)
+                    if (load.memref() == currentStore.memref() &&
+                        load.indices() == currentStore.indices())
                     {
-                        if (load.memref() == currentStore.memref() &&
-                            load.indices() == currentStore.indices())
-                        {
-                            rewriter.replaceOp(&op, currentStore.value());
-                            changed = true;
-                        }
-                        else
-                        {
-                            storeDead = false;
-                        }
+                        rewriter.replaceOp(&op, currentStore.value());
+                        changed = true;
+                    }
+                    else
+                    {
+                        storeDead = false;
                     }
                 }
-                else if (auto store = mlir::dyn_cast<mlir::StoreOp>(op))
+            }
+            else if (auto store = mlir::dyn_cast<mlir::StoreOp>(op))
+            {
+                if (currentStore && storeDead &&
+                    currentStore.memref() == store.memref() &&
+                    currentStore.indices() == store.indices())
                 {
-                    if (currentStore && storeDead &&
-                        currentStore.memref() == store.memref() &&
-                        currentStore.indices() == store.indices())
-                    {
-                        rewriter.eraseOp(currentStore);
-                    }
-                    hasWrites = true;
-                    currentStore = store;
-                    storeDead = true;
+                    rewriter.eraseOp(currentStore);
                 }
-                else if (isWrite(op))
-                {
-                    hasWrites = true;
-                    currentStore = {};
-                }
-                else if (isRead(op))
-                {
-                    hasReads = true;
-                    storeDead = false;
-                }
-                else if(op.hasTrait<mlir::OpTrait::HasRecursiveSideEffects>())
-                {
-                    currentStore = {};
-                    hasWrites = true;
-                    hasReads = true;
-                    storeDead = false;
-                }
+                hasWrites = true;
+                currentStore = store;
+                storeDead = true;
+            }
+            else if (isWrite(op))
+            {
+                hasWrites = true;
+                currentStore = {};
+            }
+            else if (isRead(op))
+            {
+                hasReads = true;
+                storeDead = false;
+            }
+            else if(op.hasTrait<mlir::OpTrait::HasRecursiveSideEffects>())
+            {
+                currentStore = {};
+                hasWrites = true;
+                hasReads = true;
+                storeDead = false;
             }
         }
     }
@@ -124,10 +124,26 @@ bool checkIsSingleElementsMemref(mlir::ShapedType type)
 }
 }
 
+mlir::LogicalResult plier::promoteLoads(mlir::Region& region, mlir::PatternRewriter& rewriter)
+{
+    return mlir::success(promoteLoadsImpl(region, rewriter).changed);
+}
+
+mlir::LogicalResult plier::promoteLoads(mlir::Region& region)
+{
+    class MyPatternRewriter : public mlir::PatternRewriter
+    {
+    public:
+        MyPatternRewriter(mlir::MLIRContext *ctx) : PatternRewriter(ctx) {}
+    };
+
+    MyPatternRewriter dummyRewriter(region.getContext());
+    return mlir::success(promoteLoadsImpl(region, dummyRewriter).changed);
+}
+
 mlir::LogicalResult plier::PromoteLoads::matchAndRewrite(mlir::FuncOp op, mlir::PatternRewriter& rewriter) const
 {
-    auto res = promoteLoads(op->getRegions(), rewriter);
-    return mlir::success(res.changed);
+    return promoteLoads(op.getRegion(), rewriter);
 }
 
 mlir::LogicalResult plier::SingeWriteMemref::matchAndRewrite(mlir::StoreOp op, mlir::PatternRewriter& rewriter) const
