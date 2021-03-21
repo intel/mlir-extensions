@@ -4,29 +4,30 @@
 
 namespace mlir
 {
+class AllocOp;
+class AllocaOp;
 class FuncOp;
-class StoreOp;
+struct LogicalResult;
 }
 
 namespace plier
 {
 
-mlir::LogicalResult promoteLoads(mlir::Region& region, mlir::PatternRewriter& rewriter);
-mlir::LogicalResult promoteLoads(mlir::Region& region);
-
-struct PromoteLoads : public mlir::OpRewritePattern<mlir::FuncOp>
+struct RemoveTrivialAlloc : public mlir::OpRewritePattern<mlir::AllocOp>
 {
-    using mlir::OpRewritePattern<mlir::FuncOp>::OpRewritePattern;
+    using mlir::OpRewritePattern<mlir::AllocOp>::OpRewritePattern;
 
     mlir::LogicalResult matchAndRewrite(
-        mlir::FuncOp op, mlir::PatternRewriter &rewriter) const override;
+        mlir::AllocOp op, mlir::PatternRewriter &rewriter) const override;
 };
 
-struct SingeWriteMemref : public mlir::OpRewritePattern<mlir::StoreOp>
+struct RemoveTrivialAlloca : public mlir::OpRewritePattern<mlir::AllocaOp>
 {
-    using mlir::OpRewritePattern<mlir::StoreOp>::OpRewritePattern;
+    using mlir::OpRewritePattern<mlir::AllocaOp>::OpRewritePattern;
 
     mlir::LogicalResult matchAndRewrite(
-        mlir::StoreOp op, mlir::PatternRewriter &rewriter) const override;
+        mlir::AllocaOp op, mlir::PatternRewriter &rewriter) const override;
 };
+
+mlir::LogicalResult optimizeMemoryOps(mlir::FuncOp func);
 }
