@@ -56,7 +56,7 @@ void applyOptimizations(mlir::FuncOp op, const mlir::FrozenRewritePatternList& p
         {
             repeat = true;
         }
-        if (mlir::succeeded(plier::promoteLoads(op.getRegion())))
+        if (mlir::succeeded(plier::optimizeMemoryOps(op)))
         {
             repeat = true;
         }
