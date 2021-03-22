@@ -1,8 +1,9 @@
-from numba.core.typed_passes import get_mlir_func, NopythonTypeInference, AnnotateTypes, MlirBackendInner
+from numba.core.typed_passes import NopythonTypeInference, AnnotateTypes
 from numba.core.compiler import CompilerBase, DefaultPassBuilder, DEFAULT_FLAGS, compile_extra
 from numba.core.compiler_machinery import PassManager
 from numba.core import typing, cpu
-# from numba import njit
+
+from numba.mlir.passes import MlirBackendInner, get_mlir_func
 
 class MlirTempCompiler(CompilerBase): # custom compiler extends from CompilerBase
 
