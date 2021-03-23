@@ -59,8 +59,8 @@ class Builder:
         return self._reshape(self._context, src, num_dims, affine_maps)
 
 def compile_func(*args, **kwargs):
-    import numba.mlir.inner_compiler
-    return numba.mlir.inner_compiler.compile_func(*args, **kwargs)
+    import numba_dpcomp.mlir.inner_compiler
+    return numba_dpcomp.mlir.inner_compiler.compile_func(*args, **kwargs)
 
 _func_registry = {}
 

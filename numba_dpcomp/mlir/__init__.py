@@ -6,4 +6,4 @@ from . import math_funcs
 from .numpy import funcs
 
 def test(*args, **kwargs):
-    return runtests.main("numba.mlir.tests", *args, **kwargs)
+    return runtests.main("numba_dpcomp.mlir.tests", *args, **kwargs)

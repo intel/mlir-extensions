@@ -1102,7 +1102,7 @@ PyLinalgResolver::Values unpack_results(py::handle object)
 PyLinalgResolver::PyLinalgResolver():
     context(std::make_unique<Context>())
 {
-    auto builder_mod = py::module::import("numba.mlir.linalg_builder");
+    auto builder_mod = py::module::import("numba_dpcomp.mlir.linalg_builder");
     context->var = builder_mod.attr("Var");
     context->type = builder_mod.attr("Type");
     context->builder = builder_mod.attr("Builder");

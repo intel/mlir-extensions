@@ -1,8 +1,8 @@
 from numba.core.compiler_machinery import (FunctionPass, register_pass)
 from numba.core import (types)
 
-import numba.mlir.settings
-import numba.mlir.func_registry
+import numba_dpcomp.mlir.settings
+import numba_dpcomp.mlir.func_registry
 import numba.core.types.functions
 _mlir_last_compiled_func = None
 _mlir_active_module = None
@@ -17,22 +17,22 @@ def _reload_parfors():
 class MlirBackendBase(FunctionPass):
 
     def __init__(self):
-        import numba.mlir.func_registry
-        self._get_func_name = numba.mlir.func_registry.get_func_name
+        import numba_dpcomp.mlir.func_registry
+        self._get_func_name = numba_dpcomp.mlir.func_registry.get_func_name
         FunctionPass.__init__(self)
 
     def run_pass(self, state):
-        numba.mlir.func_registry.push_active_funcs_stack()
+        numba_dpcomp.mlir.func_registry.push_active_funcs_stack()
         try:
             res = self.run_pass_impl(state)
         finally:
-            numba.mlir.func_registry.pop_active_funcs_stack()
+            numba_dpcomp.mlir.func_registry.pop_active_funcs_stack()
         return res
 
     def _resolve_func_name(self, obj):
         name, func = self._resolve_func_name_impl(obj)
         if not (name is None or func is None):
-            numba.mlir.func_registry.add_active_funcs(name, func)
+            numba_dpcomp.mlir.func_registry.add_active_funcs(name, func)
         return name
 
     def _resolve_func_name_impl(self, obj):
@@ -58,7 +58,7 @@ class MlirBackendBase(FunctionPass):
         from numba.np.ufunc.parallel import get_thread_count
 
         ctx = {}
-        ctx['compiler_settings'] = {'verify': True, 'pass_statistics': False, 'pass_timings': False, 'ir_printing': numba.mlir.settings.PRINT_IR}
+        ctx['compiler_settings'] = {'verify': True, 'pass_statistics': False, 'pass_timings': False, 'ir_printing': numba_dpcomp.mlir.settings.PRINT_IR}
         ctx['typemap'] = lambda op: state.typemap[op.name]
         ctx['fnargs'] = lambda: state.args
         ctx['restype'] = lambda: state.return_type
