@@ -22,25 +22,22 @@ jobs:
       path: '$(System.DefaultWorkingDirectory)\llvm_cache'
 
   - script: |
+      call "C:\Miniconda\Scripts\activate"
+      call conda install numba=0.53 scipy pybind11 tbb tbb-devel pytest
       call cmake --version
       call cmake -A x64 . -DLLVM_DIR="$(System.DefaultWorkingDirectory)\llvm_cache\lib\cmake\llvm" -DMLIR_DIR="$(System.DefaultWorkingDirectory)\llvm_cache\lib\cmake\mlir"
       call cmake --build . --config Release
+      python setup.py develop
     displayName: 'Build'
 
   - script: |
       call "C:\Miniconda\Scripts\activate"
-      call conda install pybind11 llvmlite numpy scipy jinja2 cffi tbb tbb-devel
-      call cmake --version
-      git clone https://github.com/IntelPython/numba.git
-      cd numba
-      git checkout mlir-develop
-      cd mlir-compiler
-      call cmake -A x64 . -DLLVM_DIR="$(System.DefaultWorkingDirectory)\llvm_cache\lib\cmake\llvm" -DMLIR_DIR="$(System.DefaultWorkingDirectory)\llvm_cache\lib\cmake\mlir" -DDPCOMP_DIR="$(System.DefaultWorkingDirectory)"
-      call cmake --build . --config Release
-      cd ..
-      python setup.py develop
-      set PYTHONPATH=$(System.DefaultWorkingDirectory)\numba\mlir-compiler\mlir-compiler\Release
-      python runtests.py numba.mlir.tests
+      set PYTHONPATH=$(System.DefaultWorkingDirectory)\numba_dpcomp\mlir_compiler\Release
+      pytest ^
+      --deselect numba_dpcomp/mlir/tests/test_basic.py::TestMlirBasic::test_prange1 ^
+      --deselect numba_dpcomp/mlir/tests/test_basic.py::TestMlirBasic::test_prange2 ^
+      --deselect numba_dpcomp/mlir/tests/test_numpy.py::TestMlirBasic::test_array_prange_const ^
+      --deselect numba_dpcomp/mlir/tests/test_numpy.py::TestMlirBasic::test_parallel
     displayName: 'Tests'
 
 - job: Linux
@@ -60,26 +57,23 @@ jobs:
       path: '$(System.DefaultWorkingDirectory)/llvm_cache'
 
   - script: |
+      source /usr/share/miniconda/bin/activate
+      conda install -y numba=0.53 scipy pybind11 tbb tbb-devel pytest
       cmake --version
       chmod -R 777 $(System.DefaultWorkingDirectory)/llvm_cache
       cmake . -DLLVM_DIR=$(System.DefaultWorkingDirectory)/llvm_cache/lib/cmake/llvm -DMLIR_DIR=$(System.DefaultWorkingDirectory)/llvm_cache/lib/cmake/mlir
       cmake --build .
+      python setup.py develop
     displayName: 'Build'
 
   - script: |
       source /usr/share/miniconda/bin/activate
-      conda install -y pybind11 llvmlite numpy scipy jinja2 cffi tbb tbb-devel
-      cmake --version
-      git clone https://github.com/IntelPython/numba.git
-      cd numba
-      git checkout mlir-develop
-      cd mlir-compiler
-      cmake . -DLLVM_DIR=$(System.DefaultWorkingDirectory)/llvm_cache/lib/cmake/llvm -DMLIR_DIR=$(System.DefaultWorkingDirectory)/llvm_cache/lib/cmake/mlir -DDPCOMP_DIR=$(System.DefaultWorkingDirectory)
-      cmake --build .
-      cd ..
-      python setup.py develop
-      export PYTHONPATH="$(System.DefaultWorkingDirectory)/numba/mlir-compiler/mlir-compiler"
-      python runtests.py numba.mlir.tests
+      export PYTHONPATH="$(System.DefaultWorkingDirectory)/numba_dpcomp/mlir_compiler"
+      pytest \
+      --deselect numba_dpcomp/mlir/tests/test_basic.py::TestMlirBasic::test_prange1 \
+      --deselect numba_dpcomp/mlir/tests/test_basic.py::TestMlirBasic::test_prange2 \
+      --deselect numba_dpcomp/mlir/tests/test_numpy.py::TestMlirBasic::test_array_prange_const \
+      --deselect numba_dpcomp/mlir/tests/test_numpy.py::TestMlirBasic::test_parallel
     displayName: 'Tests'
 
 - job: MacOS
@@ -98,13 +92,6 @@ jobs:
       artifact: 'mlir-llvm_latest_Darwin'
       path: '$(System.DefaultWorkingDirectory)/llvm_cache'
 
-  - script: |
-      cmake --version
-      chmod -R 777 $(System.DefaultWorkingDirectory)/llvm_cache
-      cmake . -DLLVM_DIR=$(System.DefaultWorkingDirectory)/llvm_cache/lib/cmake/llvm -DMLIR_DIR=$(System.DefaultWorkingDirectory)/llvm_cache/lib/cmake/mlir
-      cmake --build .
-    displayName: 'Build'
-
   # On Hosted macOS, the agent user doesn't have ownership of Miniconda's installation directory/
   # We need to take ownership if we want to update conda or install packages globally
   - bash: sudo chown -R $USER $CONDA
@@ -112,17 +99,22 @@ jobs:
 
   - script: |
       source /usr/local/miniconda/bin/activate
-      conda create -y -n test_env python=3.9 pybind11 llvmlite numpy scipy jinja2 cffi tbb tbb-devel
+      conda create -y -n test_env python=3.9 numba=0.53 scipy pybind11 tbb tbb-devel pytest
       conda activate test_env
       cmake --version
-      git clone https://github.com/IntelPython/numba.git
-      cd numba
-      git checkout mlir-develop
-      cd mlir-compiler
-      cmake . -DLLVM_DIR=$(System.DefaultWorkingDirectory)/llvm_cache/lib/cmake/llvm -DMLIR_DIR=$(System.DefaultWorkingDirectory)/llvm_cache/lib/cmake/mlir -DDPCOMP_DIR=$(System.DefaultWorkingDirectory)
+      chmod -R 777 $(System.DefaultWorkingDirectory)/llvm_cache
+      cmake . -DLLVM_DIR=$(System.DefaultWorkingDirectory)/llvm_cache/lib/cmake/llvm -DMLIR_DIR=$(System.DefaultWorkingDirectory)/llvm_cache/lib/cmake/mlir
       cmake --build .
-      cd ..
       python setup.py develop
-      export PYTHONPATH="$(System.DefaultWorkingDirectory)/numba/mlir-compiler/mlir-compiler"
-      python runtests.py numba.mlir.tests
+    displayName: 'Build'
+
+  - script: |
+      source /usr/local/miniconda/bin/activate
+      conda activate test_env
+      export PYTHONPATH="$(System.DefaultWorkingDirectory)/numba_dpcomp/mlir_compiler"
+      pytest \
+      --deselect numba_dpcomp/mlir/tests/test_basic.py::TestMlirBasic::test_prange1 \
+      --deselect numba_dpcomp/mlir/tests/test_basic.py::TestMlirBasic::test_prange2 \
+      --deselect numba_dpcomp/mlir/tests/test_numpy.py::TestMlirBasic::test_array_prange_const \
+      --deselect numba_dpcomp/mlir/tests/test_numpy.py::TestMlirBasic::test_parallel
     displayName: 'Tests'
