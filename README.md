@@ -22,18 +22,24 @@ For build LLVM and MLIR paths should be specified.
 
 ### Windows
 
+```bash
 cmake -A x64 . -DLLVM_DIR="..\llvm\lib\cmake\llvm" -DMLIR_DIR="..\llvm\lib\cmake\mlir"
 cmake --build . --config Release
+```
 
 ### Linux/MacOS
 
+```bash
 cmake . -DLLVM_DIR="../llvm/lib/cmake/llvm" -DMLIR_DIR="../llvm/lib/cmake/mlir"
 cmake --build .
+```
 
 ## Run tests
 
 For now it is necessary to add directory with mlir_compiler module to PYTHONPATH environment variable:
+
 `...\dpcomp\numba_dpcomp\mlir_compiler\Release` - for Windows
+
 `.../dpcomp/numba_dpcomp/mlir_compiler` - for Linux/MacOS
 
 Use Pytest from root of repository to run tests.
