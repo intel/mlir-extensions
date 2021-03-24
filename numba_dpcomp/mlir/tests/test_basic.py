@@ -1,5 +1,5 @@
 import numba
-from numba import njit
+from numba_dpcomp import njit
 from math import nan, inf, isnan
 from numpy.testing import assert_equal # for nans comparison
 
