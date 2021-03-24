@@ -1087,7 +1087,7 @@ struct LowerParallel : public mlir::OpRewritePattern<plier::ParallelOp>
 
         auto parallel_for = [&]()
         {
-            auto func_name = "numba_parallel_for2";
+            auto func_name = "dpcomp_parallel_for";
             if (auto sym = mod.lookupSymbol<mlir::FuncOp>(func_name))
             {
                 return sym;

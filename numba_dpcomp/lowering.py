@@ -18,6 +18,7 @@ from numba.core.typed_passes import NoPythonBackend as orig_NoPythonBackend
 # looks like that we don't need it but it is inherited from BaseLower too
 # from numba.core.pylowering import PyLower as orig_PyLower
 
+from .runtime import *
 
 class mlir_lower(orig_Lower):
     def lower(self):

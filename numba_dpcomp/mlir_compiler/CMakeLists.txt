@@ -1,9 +1,5 @@
 project(mlir_compiler LANGUAGES CXX C)
 
-set(CMAKE_CXX_STANDARD 14)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
 find_package(pybind11 REQUIRED)
 
 find_package(LLVM REQUIRED CONFIG)
@@ -79,3 +75,10 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${LLVM_INCLUDE_DIRS}
     ${MLIR_INCLUDE_DIRS}
     )
+
+add_dependencies(${PROJECT_NAME} dpcomp-runtime)
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E copy
+        "$<TARGET_FILE:dpcomp-runtime>"
+        "${PROJECT_BINARY_DIR}/$<TARGET_FILE_NAME:dpcomp-runtime>"
+        COMMENT "Copy runtime lib")
