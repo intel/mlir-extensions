@@ -47,3 +47,9 @@ Use Pytest from root of repository to run tests.
 ```bash
 pytest
 ```
+
+To run tests in parallel and to prevent segfaults from terminating your test runner use you can use `pytest-xdist`
+```bash
+conda install pytest-xdist
+pytest -n4
+```
