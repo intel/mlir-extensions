@@ -76,9 +76,9 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${MLIR_INCLUDE_DIRS}
     )
 
-add_dependencies(${PROJECT_NAME} dpcomp-runtime)
-add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+add_custom_target(copy-runtime ALL
+    DEPENDS dpcomp-runtime
     COMMAND "${CMAKE_COMMAND}" -E copy
         "$<TARGET_FILE:dpcomp-runtime>"
         "${PROJECT_BINARY_DIR}/$<TARGET_FILE_NAME:dpcomp-runtime>"
-        COMMENT "Copy runtime lib")
+    COMMENT "Copy runtime lib")
