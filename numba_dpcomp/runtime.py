@@ -1,6 +1,7 @@
 import ctypes
 import os
 import atexit
+import sys
 from numba.np.ufunc.parallel import get_thread_count
 import llvmlite.binding as ll
 
@@ -12,7 +13,14 @@ def load_runtume_lib():
     except KeyError:
         pass
 
-    lib_name = 'dpcomp-runtime'
+    if sys.platform.startswith('linux'):
+        lib_name = 'libdpcomp-runtime.so'
+    elif sys.platform.startswith('darwin'):
+        lib_name = 'libdpcomp-runtime.dylib'
+    elif sys.platform.startswith('win'):
+        lib_name = 'dpcomp-runtime.dll'
+    else:
+        return None
 
     for path in runtime_search_paths:
         lib_path = lib_name if len(path) == 0 else os.path.join(path, lib_name)
