@@ -18,7 +18,3 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     )
 
 target_link_libraries(${PROJECT_NAME} TBB::tbb)
-
-if (CMAKE_SYSTEM_NAME STREQUAL Darwin)
-    target_link_libraries(${PROJECT_NAME} "-bundle")
-endif()
