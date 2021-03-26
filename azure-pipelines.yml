@@ -22,22 +22,24 @@ jobs:
       path: '$(System.DefaultWorkingDirectory)\llvm_cache'
 
   - script: |
+      curl --output tbb.zip -L "https://github.com/oneapi-src/oneTBB/releases/download/v2021.1.1/oneapi-tbb-2021.1.1-win.zip"
+      mkdir tbb
+      tar -xf "tbb.zip" -C tbb --strip-components=1
+    displayName: 'Get TBB'
+
+  - script: |
       call "C:\Miniconda\Scripts\activate"
-      call conda install numba=0.53 scipy pybind11 tbb tbb-devel pytest
+      call conda install numba=0.53 scipy pybind11 tbb=2021.1 pytest
       call cmake --version
-      call cmake -A x64 . -DLLVM_DIR="$(System.DefaultWorkingDirectory)\llvm_cache\lib\cmake\llvm" -DMLIR_DIR="$(System.DefaultWorkingDirectory)\llvm_cache\lib\cmake\mlir"
+      call cmake -A x64 . -DLLVM_DIR="$(System.DefaultWorkingDirectory)\llvm_cache\lib\cmake\llvm" -DMLIR_DIR="$(System.DefaultWorkingDirectory)\llvm_cache\lib\cmake\mlir" -DTBB_DIR=$(System.DefaultWorkingDirectory)\tbb\lib\cmake\tbb
       call cmake --build . --config Release
       python setup.py develop
     displayName: 'Build'
 
   - script: |
       call "C:\Miniconda\Scripts\activate"
-      set PYTHONPATH=$(System.DefaultWorkingDirectory)\numba_dpcomp\mlir_compiler\Release
-      pytest ^
-      --deselect numba_dpcomp/mlir/tests/test_basic.py::TestMlirBasic::test_prange1 ^
-      --deselect numba_dpcomp/mlir/tests/test_basic.py::TestMlirBasic::test_prange2 ^
-      --deselect numba_dpcomp/mlir/tests/test_numpy.py::TestMlirBasic::test_array_prange_const ^
-      --deselect numba_dpcomp/mlir/tests/test_numpy.py::TestMlirBasic::test_parallel
+      set PYTHONPATH=$(System.DefaultWorkingDirectory)\numba_dpcomp\mlir_compiler\Release;$(System.DefaultWorkingDirectory)\dpcomp_runtime\Release
+      pytest
     displayName: 'Tests'
 
 - job: Linux
