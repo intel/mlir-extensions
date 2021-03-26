@@ -126,8 +126,9 @@ mlir::LogicalResult foldLoads(mlir::BufferAliasAnalysis& aliases, plier::MemoryS
             assert(nullptr != op2);
             if (MustAlias{aliases}(op1, op2))
             {
-                mlir::ValueRange val = mlir::cast<mlir::StoreOp>(op2).value();
-                op1->replaceAllUsesWith(val);
+                auto val = mlir::cast<mlir::StoreOp>(op2).value();
+                op1->replaceAllUsesWith(mlir::ValueRange(val));
+                op1->erase();
                 memSSA.eraseNode(&node);
                 changed = true;
             }
