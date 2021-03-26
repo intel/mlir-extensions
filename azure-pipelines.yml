@@ -29,7 +29,7 @@ jobs:
 
   - script: |
       call "C:\Miniconda\Scripts\activate"
-      call conda install numba=0.53 scipy pybind11 tbb=2021.1 pytest
+      call conda install numba=0.53 scipy pybind11 tbb=2021.1 pytest -c conda-forge
       call cmake --version
       call cmake -A x64 . -DLLVM_DIR="$(System.DefaultWorkingDirectory)\llvm_cache\lib\cmake\llvm" -DMLIR_DIR="$(System.DefaultWorkingDirectory)\llvm_cache\lib\cmake\mlir" -DTBB_DIR=$(System.DefaultWorkingDirectory)\tbb\lib\cmake\tbb
       call cmake --build . --config Release
