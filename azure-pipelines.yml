@@ -5,80 +5,80 @@ pr:
 - '*'
 
 jobs:
-- job: Windows
+# - job: Windows
 
-  pool:
-    vmImage: windows-2019
+  # pool:
+    # vmImage: windows-2019
 
-  steps:
-  - task: DownloadPipelineArtifact@2
-    displayName: "Get LLVM cache"
-    inputs:
-      source: 'specific'
-      project: 'mlir-llvm'
-      pipeline: 'IntelPython.mlir-llvm-recipe'
-      runVersion: 'latest'
-      artifact: 'mlir-llvm_latest_Windows_NT'
-      path: '$(System.DefaultWorkingDirectory)\llvm_cache'
+  # steps:
+  # - task: DownloadPipelineArtifact@2
+    # displayName: "Get LLVM cache"
+    # inputs:
+      # source: 'specific'
+      # project: 'mlir-llvm'
+      # pipeline: 'IntelPython.mlir-llvm-recipe'
+      # runVersion: 'latest'
+      # artifact: 'mlir-llvm_latest_Windows_NT'
+      # path: '$(System.DefaultWorkingDirectory)\llvm_cache'
 
-  - script: |
-      curl --output tbb.zip -L "https://github.com/oneapi-src/oneTBB/releases/download/v2021.1.1/oneapi-tbb-2021.1.1-win.zip"
-      mkdir tbb
-      tar -xf "tbb.zip" -C tbb --strip-components=1
-    displayName: 'Get TBB'
+  # - script: |
+      # curl --output tbb.zip -L "https://github.com/oneapi-src/oneTBB/releases/download/v2021.1.1/oneapi-tbb-2021.1.1-win.zip"
+      # mkdir tbb
+      # tar -xf "tbb.zip" -C tbb --strip-components=1
+    # displayName: 'Get TBB'
 
-  - script: |
-      call "C:\Miniconda\Scripts\activate"
-      call conda install numba=0.53 scipy pybind11 tbb=2021.1 pytest -c conda-forge
-      call cmake --version
-      call cmake -A x64 . -DLLVM_DIR="$(System.DefaultWorkingDirectory)\llvm_cache\lib\cmake\llvm" -DMLIR_DIR="$(System.DefaultWorkingDirectory)\llvm_cache\lib\cmake\mlir" -DTBB_DIR=$(System.DefaultWorkingDirectory)\tbb\lib\cmake\tbb
-      call cmake --build . --config Release
-      python setup.py develop
-    displayName: 'Build'
+  # - script: |
+      # call "C:\Miniconda\Scripts\activate"
+      # call conda install numba=0.53 scipy pybind11 tbb=2021.1 pytest -c conda-forge
+      # call cmake --version
+      # call cmake -A x64 . -DLLVM_DIR="$(System.DefaultWorkingDirectory)\llvm_cache\lib\cmake\llvm" -DMLIR_DIR="$(System.DefaultWorkingDirectory)\llvm_cache\lib\cmake\mlir" -DTBB_DIR=$(System.DefaultWorkingDirectory)\tbb\lib\cmake\tbb
+      # call cmake --build . --config Release
+      # python setup.py develop
+    # displayName: 'Build'
 
-  - script: |
-      call "C:\Miniconda\Scripts\activate"
-      set PYTHONPATH=$(System.DefaultWorkingDirectory)\numba_dpcomp\mlir_compiler\Release;$(System.DefaultWorkingDirectory)\dpcomp_runtime\Release
-      pytest
-    displayName: 'Tests'
+  # - script: |
+      # call "C:\Miniconda\Scripts\activate"
+      # set PYTHONPATH=$(System.DefaultWorkingDirectory)\numba_dpcomp\mlir_compiler\Release;$(System.DefaultWorkingDirectory)\dpcomp_runtime\Release
+      # pytest
+    # displayName: 'Tests'
 
-- job: Linux
+# - job: Linux
 
-  pool:
-    vmImage: ubuntu-20.04
+  # pool:
+    # vmImage: ubuntu-20.04
 
-  steps:
-  - task: DownloadPipelineArtifact@2
-    displayName: "Get LLVM cache"
-    inputs:
-      source: 'specific'
-      project: 'mlir-llvm'
-      pipeline: 'IntelPython.mlir-llvm-recipe'
-      runVersion: 'latest'
-      artifact: 'mlir-llvm_latest_Linux'
-      path: '$(System.DefaultWorkingDirectory)/llvm_cache'
+  # steps:
+  # - task: DownloadPipelineArtifact@2
+    # displayName: "Get LLVM cache"
+    # inputs:
+      # source: 'specific'
+      # project: 'mlir-llvm'
+      # pipeline: 'IntelPython.mlir-llvm-recipe'
+      # runVersion: 'latest'
+      # artifact: 'mlir-llvm_latest_Linux'
+      # path: '$(System.DefaultWorkingDirectory)/llvm_cache'
 
-  - script: |
-      wget -O tbb.tgz "https://github.com/oneapi-src/oneTBB/releases/download/v2021.1.1/oneapi-tbb-2021.1.1-lin.tgz"
-      mkdir tbb
-      tar -xf "tbb.tgz" -C tbb --strip-components=1
-    displayName: 'Get TBB'
+  # - script: |
+      # wget -O tbb.tgz "https://github.com/oneapi-src/oneTBB/releases/download/v2021.1.1/oneapi-tbb-2021.1.1-lin.tgz"
+      # mkdir tbb
+      # tar -xf "tbb.tgz" -C tbb --strip-components=1
+    # displayName: 'Get TBB'
 
-  - script: |
-      source /usr/share/miniconda/bin/activate
-      conda install -y numba=0.53 scipy pybind11 tbb=2021.1 pytest -c conda-forge
-      cmake --version
-      chmod -R 777 $(System.DefaultWorkingDirectory)/llvm_cache
-      cmake . -DLLVM_DIR=$(System.DefaultWorkingDirectory)/llvm_cache/lib/cmake/llvm -DMLIR_DIR=$(System.DefaultWorkingDirectory)/llvm_cache/lib/cmake/mlir -DTBB_DIR=$(System.DefaultWorkingDirectory)/tbb/lib/cmake/tbb
-      cmake --build .
-      python setup.py develop
-    displayName: 'Build'
+  # - script: |
+      # source /usr/share/miniconda/bin/activate
+      # conda install -y numba=0.53 scipy pybind11 tbb=2021.1 pytest -c conda-forge
+      # cmake --version
+      # chmod -R 777 $(System.DefaultWorkingDirectory)/llvm_cache
+      # cmake . -DLLVM_DIR=$(System.DefaultWorkingDirectory)/llvm_cache/lib/cmake/llvm -DMLIR_DIR=$(System.DefaultWorkingDirectory)/llvm_cache/lib/cmake/mlir -DTBB_DIR=$(System.DefaultWorkingDirectory)/tbb/lib/cmake/tbb
+      # cmake --build .
+      # python setup.py develop
+    # displayName: 'Build'
 
-  - script: |
-      source /usr/share/miniconda/bin/activate
-      export PYTHONPATH="$(System.DefaultWorkingDirectory)/numba_dpcomp/mlir_compiler:$(System.DefaultWorkingDirectory)/dpcomp_runtime"
-      pytest
-    displayName: 'Tests'
+  # - script: |
+      # source /usr/share/miniconda/bin/activate
+      # export PYTHONPATH="$(System.DefaultWorkingDirectory)/numba_dpcomp/mlir_compiler:$(System.DefaultWorkingDirectory)/dpcomp_runtime"
+      # pytest
+    # displayName: 'Tests'
 
 - job: MacOS
 
