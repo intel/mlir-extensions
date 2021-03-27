@@ -24,10 +24,7 @@ void plier::populate_common_opts_patterns(mlir::MLIRContext& context, mlir::Rewr
         //        LoopInvariantCodeMotion, TODO
         plier::ForceInline,
         plier::CmpLoopBoundsSimplify,
-        SimplifyEmptyIf,
         plier::IfOpConstCond,
-        SimplifySelect,
-        SimplifySelectEq,
         plier::CSERewrite<mlir::FuncOp, /*recusive*/false>,
         RemoveTrivialAlloc,
         RemoveTrivialAlloca
