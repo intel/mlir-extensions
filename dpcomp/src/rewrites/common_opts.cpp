@@ -9,10 +9,11 @@
 
 #include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
+#include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/IR/BuiltinOps.h>
 
-void plier::populate_common_opts_patterns(mlir::MLIRContext& context, mlir::OwningRewritePatternList& patterns)
+void plier::populate_common_opts_patterns(mlir::MLIRContext& context, mlir::RewritePatternSet& patterns)
 {
     for (auto *op : context.getRegisteredOperations())
     {

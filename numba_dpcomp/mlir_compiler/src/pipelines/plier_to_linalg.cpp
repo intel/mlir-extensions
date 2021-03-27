@@ -12,6 +12,7 @@
 #include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Dialect/SCF/Passes.h>
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
+#include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Pass/Pass.h>
 #include <mlir/Pass/PassManager.h>
 #include <mlir/Transforms/DialectConversion.h>
@@ -266,7 +267,7 @@ struct CallLowerer
         if (name == "len" && check_numpy_args(args, 1) && kwargs.empty())
         {
             auto loc = op.getLoc();
-            mlir::Value dim = rewriter.create<mlir::DimOp>(loc, args[0], 0);
+            mlir::Value dim = rewriter.create<mlir::memref::DimOp>(loc, args[0], 0);
             mlir::Value res = rewriter.create<plier::CastOp>(loc, op.getType(), dim);
             rerun_std_pipeline(op);
             rewriter.replaceOp(op, res);
@@ -394,7 +395,7 @@ struct GetitemOpLowering : public mlir::OpRewritePattern<T>
         mlir::Value res;
         if (is_memref)
         {
-            res = rewriter.create<mlir::LoadOp>(loc, val, indices);
+            res = rewriter.create<mlir::memref::LoadOp>(loc, val, indices);
         }
         else if (is_tensor)
         {
@@ -554,7 +555,7 @@ struct SetitemOpLowering : public mlir::OpRewritePattern<T>
                 rewriter.setInsertionPointToStart(target.getParentBlock());
             }
             auto memref_type = mlir::MemRefType::get(target_type.getShape(), target_type.getElementType());
-            auto memref = rewriter.create<mlir::TensorToMemrefOp>(target.getLoc(), memref_type, target);
+            auto memref = rewriter.create<mlir::memref::BufferCastOp>(target.getLoc(), memref_type, target);
             for (auto& use : llvm::make_early_inc_range(target.getUses()))
             {
                 auto use_op = use.getOwner();
@@ -569,7 +570,7 @@ struct SetitemOpLowering : public mlir::OpRewritePattern<T>
                     {
                         mlir::OpBuilder::InsertionGuard g(rewriter);
                         rewriter.setInsertionPoint(use_op);
-                        auto new_val = rewriter.create<mlir::TensorLoadOp>(use_op->getLoc(), memref);
+                        auto new_val = rewriter.create<mlir::memref::TensorLoadOp>(use_op->getLoc(), memref);
                         rewriter.updateRootInPlace(use_op, [&]()
                         {
                             use_op->setOperand(use.getOperandNumber(), new_val);
@@ -613,7 +614,7 @@ struct SetitemOpLowering : public mlir::OpRewritePattern<T>
         {
             indices.push_back(index_cast(index, loc, rewriter));
         }
-        rewriter.create<mlir::StoreOp>(loc, value, target, indices);
+        rewriter.create<mlir::memref::StoreOp>(loc, value, target, indices);
         rewriter.eraseOp(op);
         return mlir::success();
     }
@@ -645,7 +646,7 @@ struct ArrayShape : public mlir::OpRewritePattern<plier::GetattrOp>
         llvm::SmallVector<mlir::Value> dims(rank);
         for (size_t i = 0; i < rank; ++i)
         {
-            auto dim = rewriter.create<mlir::DimOp>(op.getLoc(), op.value(), i);
+            auto dim = rewriter.create<mlir::memref::DimOp>(op.getLoc(), op.value(), i);
             dims[i] = rewriter.create<plier::CastOp>(op.getLoc(), elem_type.getType(i), dim);
         }
         auto res = rewriter.create<plier::BuildTupleOp>(op.getLoc(), op.getType(), dims);
@@ -851,7 +852,7 @@ void PlierToLinalgPass::runOnOperation()
     mlir::TypeConverter type_converter;
     // Convert unknown types to itself
     type_converter.addConversion([](mlir::Type type) { return type; });
-    populate_std_type_converter(getContext(), type_converter);
+    populate_std_type_converter(*context, type_converter);
     type_converter.addConversion([&](plier::PyType type)->llvm::Optional<mlir::Type>
     {
         auto ret =  map_plier_type(type_converter, type);
@@ -862,7 +863,7 @@ void PlierToLinalgPass::runOnOperation()
         return ret;
     });
 
-    mlir::OwningRewritePatternList patterns;
+    mlir::OwningRewritePatternList patterns(context);
     patterns.insert<
         plier::FuncOpSignatureConversion,
         plier::CastOpLowering,
@@ -912,7 +913,7 @@ struct LowerLinalgPass :
 
 void LowerLinalgPass::runOnOperation()
 {
-    mlir::OwningRewritePatternList patterns;
+    mlir::OwningRewritePatternList patterns(&getContext());
 
     patterns.insert<
         mlir::linalg::LinalgLoweringPattern<mlir::linalg::GenericOp>,
@@ -931,14 +932,14 @@ struct PostPlierToLinalgPass :
 
 void PostPlierToLinalgPass::runOnFunction()
 {
-    mlir::OwningRewritePatternList patterns;
-
     auto& context = getContext();
+    mlir::OwningRewritePatternList patterns(&context);
+
     plier::populate_common_opts_patterns(context, patterns);
 
     patterns.insert<
         SimplifyExpandDims
-        >(&getContext());
+        >(&context);
 
     applyOptimizations(getFunction(), std::move(patterns));
 }
@@ -951,17 +952,17 @@ struct TensorFusionPass :
 
 void TensorFusionPass::runOnOperation()
 {
-    mlir::OwningRewritePatternList patterns;
-
     auto& context = getContext();
+    mlir::OwningRewritePatternList patterns(&context);
+
     plier::populate_common_opts_patterns(context, patterns);
 
     patterns.insert<
         SimplifyExpandDims,
         LowerEnforceShape
-        >(&getContext());
+        >(&context);
 
-    mlir::populateLinalgTensorOpsFusionPatterns(&context, patterns);
+    mlir::populateLinalgTensorOpsFusionPatterns(patterns);
 
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
 }
@@ -974,9 +975,9 @@ struct CommonOptPass :
 
 void CommonOptPass::runOnOperation()
 {
-    mlir::OwningRewritePatternList patterns;
-
     auto& context = getContext();
+    mlir::OwningRewritePatternList patterns(&context);
+
     plier::populate_common_opts_patterns(context, patterns);
 
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
@@ -1047,9 +1048,9 @@ struct PostLinalgOptPass :
 
 void PostLinalgOptPass::runOnFunction()
 {
-    mlir::OwningRewritePatternList patterns;
-
     auto& context = getContext();
+    mlir::OwningRewritePatternList patterns(&context);
+
     plier::populate_common_opts_patterns(context, patterns);
 
     patterns.insert<
@@ -1070,9 +1071,9 @@ struct PromoteParallelPass :
 
 void PromoteParallelPass::runOnFunction()
 {
-    mlir::OwningRewritePatternList patterns;
-
     auto& context = getContext();
+    mlir::OwningRewritePatternList patterns(&context);
+
     plier::populate_common_opts_patterns(context, patterns);
 
     patterns.insert<

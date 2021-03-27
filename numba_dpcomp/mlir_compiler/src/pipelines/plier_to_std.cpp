@@ -539,13 +539,18 @@ void replace_fmod_op(mlir::Operation* op, mlir::PatternRewriter& rewriter, mlir:
     rewriter.replaceOp(op, res);
 }
 
-template<typename T, uint64_t Pred>
-void replace_cmp_op(mlir::Operation* op, mlir::PatternRewriter& rewriter, mlir::Type /*new_type*/, mlir::ValueRange operands)
+template<mlir::CmpIPredicate Pred>
+void replace_cmpi_op(mlir::Operation* op, mlir::PatternRewriter& rewriter, mlir::Type /*new_type*/, mlir::ValueRange operands)
 {
     assert(nullptr != op);
-    auto pred_attr = mlir::IntegerAttr::get(mlir::IntegerType::get(op->getContext(), 64), Pred);
-    mlir::Type new_type = mlir::IntegerType::get(op->getContext(), 1);
-    rewriter.replaceOpWithNewOp<T>(op, new_type, pred_attr, operands[0], operands[1]);
+    rewriter.replaceOpWithNewOp<mlir::CmpIOp>(op, Pred, operands[0], operands[1]);
+}
+
+template<mlir::CmpFPredicate Pred>
+void replace_cmpf_op(mlir::Operation* op, mlir::PatternRewriter& rewriter, mlir::Type /*new_type*/, mlir::ValueRange operands)
+{
+    assert(nullptr != op);
+    rewriter.replaceOpWithNewOp<mlir::CmpFOp>(op, Pred, operands[0], operands[1]);
 }
 
 
@@ -602,18 +607,18 @@ struct BinOpLowering : public mlir::OpRewritePattern<plier::BinOp>
             {"/", &replace_itruediv_op, &replace_op<mlir::DivFOp>},
             {"%", &replace_imod_op, &replace_fmod_op},
 
-            {">", &replace_cmp_op<mlir::CmpIOp, static_cast<uint64_t>(mlir::CmpIPredicate::sgt)>,
-                  &replace_cmp_op<mlir::CmpFOp, static_cast<uint64_t>(mlir::CmpFPredicate::OGT)>},
-            {">=", &replace_cmp_op<mlir::CmpIOp, static_cast<uint64_t>(mlir::CmpIPredicate::sge)>,
-                   &replace_cmp_op<mlir::CmpFOp, static_cast<uint64_t>(mlir::CmpFPredicate::OGE)>},
-            {"<", &replace_cmp_op<mlir::CmpIOp, static_cast<uint64_t>(mlir::CmpIPredicate::slt)>,
-                  &replace_cmp_op<mlir::CmpFOp, static_cast<uint64_t>(mlir::CmpFPredicate::OLT)>},
-            {"<=", &replace_cmp_op<mlir::CmpIOp, static_cast<uint64_t>(mlir::CmpIPredicate::sle)>,
-                   &replace_cmp_op<mlir::CmpFOp, static_cast<uint64_t>(mlir::CmpFPredicate::OLE)>},
-            {"!=", &replace_cmp_op<mlir::CmpIOp, static_cast<uint64_t>(mlir::CmpIPredicate::ne)>,
-                   &replace_cmp_op<mlir::CmpFOp, static_cast<uint64_t>(mlir::CmpFPredicate::ONE)>},
-            {"==", &replace_cmp_op<mlir::CmpIOp, static_cast<uint64_t>(mlir::CmpIPredicate::eq)>,
-                   &replace_cmp_op<mlir::CmpFOp, static_cast<uint64_t>(mlir::CmpFPredicate::OEQ)>},
+            {">",  &replace_cmpi_op<mlir::CmpIPredicate::sgt>,
+                   &replace_cmpf_op<mlir::CmpFPredicate::OGT>},
+            {">=", &replace_cmpi_op<mlir::CmpIPredicate::sge>,
+                   &replace_cmpf_op<mlir::CmpFPredicate::OGE>},
+            {"<",  &replace_cmpi_op<mlir::CmpIPredicate::slt>,
+                   &replace_cmpf_op<mlir::CmpFPredicate::OLT>},
+            {"<=", &replace_cmpi_op<mlir::CmpIPredicate::sle>,
+                   &replace_cmpf_op<mlir::CmpFPredicate::OLE>},
+            {"!=", &replace_cmpi_op<mlir::CmpIPredicate::ne>,
+                   &replace_cmpf_op<mlir::CmpFPredicate::ONE>},
+            {"==", &replace_cmpi_op<mlir::CmpIPredicate::eq>,
+                   &replace_cmpf_op<mlir::CmpFPredicate::OEQ>},
         };
 
         using membptr_t = func_t OpDesc::*;
@@ -1377,7 +1382,7 @@ void PlierToStdPass::runOnOperation()
     auto context = &getContext();
     populate_std_type_converter(*context, type_converter);
 
-    mlir::OwningRewritePatternList patterns;
+    mlir::OwningRewritePatternList patterns(context);
 
     patterns.insert<
         plier::FuncOpSignatureConversion,
@@ -1406,7 +1411,7 @@ void PlierToStdPass::runOnOperation()
         plier::CallOpLowering
         >(type_converter, context, std::ref(callLowerer));
 
-    mlir::populateStdExpandOpsPatterns(context, patterns);
+    mlir::populateStdExpandOpsPatterns(patterns);
 
     // range/prange lowering need dead branch pruning to properly
     // handle negative steps

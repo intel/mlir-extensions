@@ -4,8 +4,11 @@
 
 namespace mlir
 {
+namespace memref
+{
 class AllocOp;
 class AllocaOp;
+}
 class FuncOp;
 struct LogicalResult;
 }
@@ -13,20 +16,20 @@ struct LogicalResult;
 namespace plier
 {
 
-struct RemoveTrivialAlloc : public mlir::OpRewritePattern<mlir::AllocOp>
+struct RemoveTrivialAlloc : public mlir::OpRewritePattern<mlir::memref::AllocOp>
 {
-    using mlir::OpRewritePattern<mlir::AllocOp>::OpRewritePattern;
+    using mlir::OpRewritePattern<mlir::memref::AllocOp>::OpRewritePattern;
 
     mlir::LogicalResult matchAndRewrite(
-        mlir::AllocOp op, mlir::PatternRewriter &rewriter) const override;
+        mlir::memref::AllocOp op, mlir::PatternRewriter &rewriter) const override;
 };
 
-struct RemoveTrivialAlloca : public mlir::OpRewritePattern<mlir::AllocaOp>
+struct RemoveTrivialAlloca : public mlir::OpRewritePattern<mlir::memref::AllocaOp>
 {
-    using mlir::OpRewritePattern<mlir::AllocaOp>::OpRewritePattern;
+    using mlir::OpRewritePattern<mlir::memref::AllocaOp>::OpRewritePattern;
 
     mlir::LogicalResult matchAndRewrite(
-        mlir::AllocaOp op, mlir::PatternRewriter &rewriter) const override;
+        mlir::memref::AllocaOp op, mlir::PatternRewriter &rewriter) const override;
 };
 
 mlir::LogicalResult optimizeMemoryOps(mlir::FuncOp func);

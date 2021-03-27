@@ -8,6 +8,7 @@
 #include <mlir/Conversion/SCFToStandard/SCFToStandard.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/Dialect/LLVMIR/LLVMDialect.h>
+#include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Pass/PassManager.h>
 #include <mlir/Pass/Pass.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
@@ -32,9 +33,9 @@
 
 namespace
 {
-const mlir::LowerToLLVMOptions &getLLVMOptions()
+mlir::LowerToLLVMOptions getLLVMOptions(mlir::MLIRContext& context)
 {
-    static mlir::LowerToLLVMOptions options = []()
+    static llvm::DataLayout dl = []()
     {
         llvm::InitializeNativeTarget();
         auto triple = llvm::sys::getProcessTriple();
@@ -46,12 +47,12 @@ const mlir::LowerToLLVMOptions &getLLVMOptions()
         }
         llvm::TargetOptions target_opts;
         std::unique_ptr<llvm::TargetMachine> machine(target->createTargetMachine(triple, llvm::sys::getHostCPUName(), "", target_opts, llvm::None));
-        mlir::LowerToLLVMOptions opts;
-        opts.dataLayout = machine->createDataLayout();
-        opts.useBarePtrCallConv = true;
-        return opts;
+        return machine->createDataLayout();
     }();
-    return options;
+    mlir::LowerToLLVMOptions opts(&context);
+    opts.dataLayout = dl;
+    opts.useBarePtrCallConv = true;
+    return opts;
 }
 
 struct LLVMTypeHelper
@@ -708,12 +709,12 @@ private:
 
 struct AllocOpLowering : public AllocLikeOpLowering {
     AllocOpLowering(mlir::LLVMTypeConverter &converter)
-        : AllocLikeOpLowering(mlir::AllocOp::getOperationName(), converter) {}
+        : AllocLikeOpLowering(mlir::memref::AllocOp::getOperationName(), converter) {}
 
     std::tuple<mlir::Value, mlir::Value> allocateBuffer(mlir::ConversionPatternRewriter &rewriter,
                                             mlir::Location loc, mlir::Value sizeBytes,
                                             mlir::Operation *op) const override {
-        auto allocOp = mlir::cast<mlir::AllocOp>(op);
+        auto allocOp = mlir::cast<mlir::memref::AllocOp>(op);
         auto memRefType = allocOp.getType();
         mlir::Value alignment;
         if (auto alignmentAttr = allocOp.alignment()) {
@@ -746,17 +747,17 @@ struct AllocOpLowering : public AllocLikeOpLowering {
     }
 };
 
-struct DeallocOpLowering : public mlir::ConvertOpToLLVMPattern<mlir::DeallocOp> {
-    using ConvertOpToLLVMPattern<mlir::DeallocOp>::ConvertOpToLLVMPattern;
+struct DeallocOpLowering : public mlir::ConvertOpToLLVMPattern<mlir::memref::DeallocOp> {
+    using ConvertOpToLLVMPattern<mlir::memref::DeallocOp>::ConvertOpToLLVMPattern;
 
     explicit DeallocOpLowering(mlir::LLVMTypeConverter &converter)
-        : ConvertOpToLLVMPattern<mlir::DeallocOp>(converter, /*benefit*/99) {}
+        : ConvertOpToLLVMPattern<mlir::memref::DeallocOp>(converter, /*benefit*/99) {}
 
     mlir::LogicalResult
-    matchAndRewrite(mlir::DeallocOp op, mlir::ArrayRef<mlir::Value> operands,
+    matchAndRewrite(mlir::memref::DeallocOp op, mlir::ArrayRef<mlir::Value> operands,
                     mlir::ConversionPatternRewriter &rewriter) const override {
         assert(operands.size() == 1 && "dealloc takes one operand");
-        mlir::DeallocOp::Adaptor transformed(operands);
+        mlir::memref::DeallocOp::Adaptor transformed(operands);
 
         // Insert the `free` declaration if it is not already present.
         auto freeFunc =
@@ -1149,7 +1150,8 @@ struct LowerParallelToCFGPass :
 
     void runOnOperation() override final
     {
-        mlir::OwningRewritePatternList patterns;
+        auto& context = getContext();
+        mlir::OwningRewritePatternList patterns(&context);
         patterns.insert<LowerParallel>(&getContext());
 
         (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
@@ -1167,13 +1169,14 @@ struct PreLLVMLowering : public mlir::PassWrapper<PreLLVMLowering, mlir::Functio
 
     void runOnFunction() override final
     {
-        LLVMTypeHelper type_helper(getContext());
+        auto& context = getContext();
+        LLVMTypeHelper type_helper(context);
 
-        mlir::OwningRewritePatternList patterns;
+        mlir::OwningRewritePatternList patterns(&context);
         auto func = getFunction();
         fix_func_sig(type_helper, func);
 
-        patterns.insert<ReturnOpLowering>(&getContext(),
+        patterns.insert<ReturnOpLowering>(&context,
                                           type_helper.get_type_converter());
 
         (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
@@ -1191,7 +1194,8 @@ struct PostLLVMLowering :
 
     void runOnFunction() override final
     {
-        mlir::OwningRewritePatternList patterns;
+        auto& context = getContext();
+        mlir::OwningRewritePatternList patterns(&context);
 
         patterns.insert<
             RemoveBitcasts,
@@ -1202,7 +1206,7 @@ struct PostLLVMLowering :
             ApplyFastmathFlags<mlir::LLVM::FRemOp>,
             ApplyFastmathFlags<mlir::LLVM::FCmpOp>,
             ApplyFastmathFlags<mlir::LLVM::CallOp>
-            >(&getContext());
+            >(&context);
 
         (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
     }
@@ -1276,12 +1280,12 @@ struct LowerCasts : public mlir::OpConversionPattern<plier::CastOp>
 
 // Copypasted from mlir
 struct LLVMLoweringPass : public mlir::PassWrapper<LLVMLoweringPass, mlir::OperationPass<mlir::ModuleOp>> {
-  LLVMLoweringPass(const mlir::LowerToLLVMOptions& opts):
-    options(opts) {}
 
   /// Run the dialect converter on the module.
   void runOnOperation() override {
     using namespace mlir;
+    auto& context = getContext();
+    auto options = getLLVMOptions(context);
     if (options.useBarePtrCallConv && options.emitCWrappers) {
       getOperation().emitError()
           << "incompatible conversion options: bare-pointer calling convention "
@@ -1299,14 +1303,14 @@ struct LLVMLoweringPass : public mlir::PassWrapper<LLVMLoweringPass, mlir::Opera
 
     ModuleOp m = getOperation();
 
-    LLVMTypeConverter typeConverter(&getContext(), options);
+    LLVMTypeConverter typeConverter(&context, options);
 
-    OwningRewritePatternList patterns;
+    OwningRewritePatternList patterns(&context);
     populateStdToLLVMConversionPatterns(typeConverter, patterns);
     patterns.insert<LowerCasts, LowerRetain>(typeConverter, &getContext());
     patterns.insert<AllocOpLowering, DeallocOpLowering>(typeConverter);
 
-    LLVMConversionTarget target(getContext());
+    LLVMConversionTarget target(context);
     if (failed(applyPartialConversion(m, target, std::move(patterns))))
       signalPassFailure();
     m->setAttr(LLVM::LLVMDialect::getDataLayoutAttrName(),
@@ -1314,7 +1318,6 @@ struct LLVMLoweringPass : public mlir::PassWrapper<LLVMLoweringPass, mlir::Opera
   }
 
 private:
-  mlir::LowerToLLVMOptions options;
 };
 
 void populate_lower_to_llvm_pipeline(mlir::OpPassManager& pm)
@@ -1324,7 +1327,7 @@ void populate_lower_to_llvm_pipeline(mlir::OpPassManager& pm)
     pm.addPass(mlir::createCanonicalizerPass());
 //    pm.addPass(std::make_unique<CheckForPlierTypes>());
     pm.addNestedPass<mlir::FuncOp>(std::make_unique<PreLLVMLowering>());
-    pm.addPass(std::make_unique<LLVMLoweringPass>(getLLVMOptions()));
+    pm.addPass(std::make_unique<LLVMLoweringPass>());
     pm.addNestedPass<mlir::LLVM::LLVMFuncOp>(std::make_unique<PostLLVMLowering>());
 }
 }

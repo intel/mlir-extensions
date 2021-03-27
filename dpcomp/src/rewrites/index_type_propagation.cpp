@@ -146,7 +146,7 @@ struct CmpIndexCastSimplify : public mlir::OpRewritePattern<mlir::CmpIOp>
 };
 }
 
-void plier::populate_index_propagate_patterns(mlir::MLIRContext& context, mlir::OwningRewritePatternList& patterns)
+void plier::populate_index_propagate_patterns(mlir::MLIRContext& context, mlir::RewritePatternSet& patterns)
 {
     patterns.insert<
         CmpIndexCastSimplify,

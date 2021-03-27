@@ -3,6 +3,7 @@
 #include <mlir/Pass/Pass.h>
 #include <mlir/Pass/PassManager.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
+#include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
@@ -92,7 +93,7 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp>
         {
             if (auto reduce = mlir::dyn_cast<mlir::scf::ReduceOp>(nestedOp))
             {
-                auto ind = initVals.size();
+                auto ind = static_cast<unsigned>(initVals.size());
                 if (ind >= op.getNumResults())
                 {
                     return mlir::failure();
@@ -123,7 +124,7 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp>
             auto type = it.value();
             auto reduce_type = getReduceType(type, max_concurrency);
             assert(reduce_type);
-            auto reduce = rewriter.create<mlir::AllocaOp>(loc, reduce_type);
+            auto reduce = rewriter.create<mlir::memref::AllocaOp>(loc, reduce_type);
             auto index = static_cast<unsigned>(it.index());
             reduce_vars[index] = reduce;
         }
@@ -137,7 +138,7 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp>
                 auto reduce = it.value();
                 auto initVal = initVals[it.index()];
                 auto init = builder.create<mlir::ConstantOp>(loc, initVal);
-                builder.create<mlir::StoreOp>(loc, init, reduce, index);
+                builder.create<mlir::memref::StoreOp>(loc, init, reduce, index);
             }
             builder.create<mlir::scf::YieldOp>(loc);
         };
@@ -157,7 +158,7 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp>
             for (auto it : llvm::enumerate(op.initVals()))
             {
                 auto reduce_var = reduce_vars[it.index()];
-                auto val = builder.create<mlir::LoadOp>(loc, reduce_var, thread_index);
+                auto val = builder.create<mlir::memref::LoadOp>(loc, reduce_var, thread_index);
                 initVals[it.index()] = val;
             }
             auto new_op = mlir::cast<mlir::scf::ParallelOp>(builder.clone(*op, mapping));
@@ -169,7 +170,7 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp>
             for (auto it : llvm::enumerate(new_op->getResults()))
             {
                 auto reduce_var = reduce_vars[it.index()];
-                builder.create<mlir::StoreOp>(loc, it.value(), reduce_var, thread_index);
+                builder.create<mlir::memref::StoreOp>(loc, it.value(), reduce_var, thread_index);
             }
         };
 
@@ -192,7 +193,7 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp>
                 auto reduce_op = mlir::cast<mlir::scf::ReduceOp>(it.value());
                 auto& reduce_op_body = reduce_op.reductionOperator().front();
                 assert(reduce_op_body.getNumArguments() == 2);
-                auto prev_val = builder.create<mlir::LoadOp>(loc, reduce_var, index);
+                auto prev_val = builder.create<mlir::memref::LoadOp>(loc, reduce_var, index);
                 mapping.map(reduce_op_body.getArgument(0), arg);
                 mapping.map(reduce_op_body.getArgument(1), prev_val);
                 for (auto& old_reduce_op : reduce_op_body.without_terminator())
@@ -230,11 +231,12 @@ struct ParallelToTbbPass :
 
 void ParallelToTbbPass::runOnOperation()
 {
-    mlir::OwningRewritePatternList patterns;
+    auto& context = getContext();
+    mlir::OwningRewritePatternList patterns(&context);
 
     patterns.insert<
         ParallelToTbb
-        >(&getContext());
+        >(&context);
 
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
 }
