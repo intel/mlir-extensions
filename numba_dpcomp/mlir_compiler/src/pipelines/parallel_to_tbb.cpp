@@ -25,14 +25,27 @@ mlir::MemRefType getReduceType(mlir::Type type, int64_t count)
     return {};
 }
 
-mlir::Value getZeroVal(mlir::OpBuilder& builder, mlir::Location loc, mlir::Type type)
+mlir::Attribute getReduceInitVal(mlir::Type type, mlir::Block& reduceBlock)
 {
-    auto const_val = plier::getZeroVal(type);
-    if (const_val)
+    if (!llvm::hasSingleElement(reduceBlock.without_terminator()))
     {
-        return builder.create<mlir::ConstantOp>(loc, const_val);
+        return {};
     }
-    llvm_unreachable("Unhandled type");
+    auto& reduceOp = reduceBlock.front();
+    double reduceInit;
+    if (mlir::isa<mlir::AddFOp, mlir::AddIOp, mlir::SubFOp, mlir::SubIOp>(reduceOp))
+    {
+        reduceInit = 0.0;
+    }
+    else if (mlir::isa<mlir::MulFOp, mlir::MulIOp>(reduceOp))
+    {
+        reduceInit = 1.0;
+    }
+    else
+    {
+        return {};
+    }
+    return plier::getConstAttr(type, reduceInit);
 }
 
 struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp>
@@ -64,12 +77,42 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp>
         {
             return mlir::failure();
         }
+
         for (auto type : op.getResultTypes())
         {
             if (!getReduceType(type, max_concurrency))
             {
                 return mlir::failure();
             }
+        }
+
+        llvm::SmallVector<mlir::Attribute> initVals;
+        initVals.reserve(op.getNumResults());
+        for (auto& nestedOp : op.getLoopBody().front().without_terminator())
+        {
+            if (auto reduce = mlir::dyn_cast<mlir::scf::ReduceOp>(nestedOp))
+            {
+                auto ind = initVals.size();
+                if (ind >= op.getNumResults())
+                {
+                    return mlir::failure();
+                }
+                auto& region = reduce.reductionOperator();
+                if (!llvm::hasSingleElement(region))
+                {
+                    return mlir::failure();
+                }
+                auto reduceInitVal = getReduceInitVal(op.getResult(ind).getType(), region.front());
+                if (!reduceInitVal)
+                {
+                    return mlir::failure();
+                }
+                initVals.emplace_back(reduceInitVal);
+            }
+        }
+        if (initVals.size() != op.getNumResults())
+        {
+            return mlir::failure();
         }
 
         auto loc = op.getLoc();
@@ -92,9 +135,9 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp>
             for (auto it : llvm::enumerate(reduce_vars))
             {
                 auto reduce = it.value();
-                auto type = op.getResultTypes()[it.index()];
-                auto zero = getZeroVal(rewriter, loc, type);
-                builder.create<mlir::StoreOp>(loc, zero, reduce, index);
+                auto initVal = initVals[it.index()];
+                auto init = builder.create<mlir::ConstantOp>(loc, initVal);
+                builder.create<mlir::StoreOp>(loc, init, reduce, index);
             }
             builder.create<mlir::scf::YieldOp>(loc);
         };

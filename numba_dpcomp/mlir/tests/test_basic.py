@@ -309,6 +309,39 @@ class TestMlirBasic(TestCase):
         jit_func = njit(py_func, parallel=True)
         assert_equal(py_func(10, 20), jit_func(10, 20))
 
+    def test_prange_reduce1(self):
+        def py_func(a):
+            res = 0
+            for i in numba.prange(1, a):
+                res = res + i
+            return res
+
+        jit_func = njit(py_func, parallel=True)
+        assert_equal(py_func(10), jit_func(10))
+
+    def test_prange_reduce2(self):
+        def py_func(a):
+            res = 1
+            for i in numba.prange(1, a):
+                res = res * i
+            return res
+
+        jit_func = njit(py_func, parallel=True)
+        assert_equal(py_func(10), jit_func(10))
+
+    def test_prange_reduce3(self):
+        def py_func(a):
+            res1 = 0
+            res2 = 1
+            for i in numba.prange(1, a):
+                res1 = res1 + i
+                res2 = res2 * i
+            return res1 + res2
+
+        jit_func = njit(py_func, parallel=True)
+        assert_equal(py_func(10), jit_func(10))
+
+
     def test_func_call1(self):
         def py_func1(b):
             return b + 3
