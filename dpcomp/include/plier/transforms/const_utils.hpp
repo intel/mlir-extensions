@@ -25,5 +25,5 @@ T getConstVal(mlir::Value op)
     return getConstVal(op).dyn_cast_or_null<T>();
 }
 
-mlir::Attribute getZeroVal(mlir::Type type);
+mlir::Attribute getConstAttr(mlir::Type type, double val);
 }

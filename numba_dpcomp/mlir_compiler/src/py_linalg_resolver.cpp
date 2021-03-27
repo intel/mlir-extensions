@@ -669,7 +669,7 @@ py::object init_tensor_impl(py::capsule context, py::handle shape, py::handle dt
         if (init_val.is_none())
         {
             // TODO: undef
-            auto zero_val = plier::getZeroVal(elem_type);
+            auto zero_val = plier::getConstAttr(elem_type, 0.0);
             assert(zero_val);
             init = builder.create<mlir::ConstantOp>(loc, zero_val);
         }

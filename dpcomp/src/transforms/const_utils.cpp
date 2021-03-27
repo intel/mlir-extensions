@@ -24,16 +24,16 @@ mlir::Attribute plier::getConstVal(mlir::Value op)
     return {};
 }
 
-mlir::Attribute plier::getZeroVal(mlir::Type type)
+mlir::Attribute plier::getConstAttr(mlir::Type type, double val)
 {
     assert(type);
     if (type.isa<mlir::FloatType>())
     {
-        return mlir::FloatAttr::get(type, 0.0);
+        return mlir::FloatAttr::get(type, val);
     }
     if (type.isa<mlir::IntegerType, mlir::IndexType>())
     {
-        return mlir::IntegerAttr::get(type, 0);
+        return mlir::IntegerAttr::get(type, static_cast<int64_t>(val));
     }
     return {};
 }
