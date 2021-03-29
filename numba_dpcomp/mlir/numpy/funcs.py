@@ -111,6 +111,14 @@ def square_impl(builder, arg):
 
     return eltwise(builder, arg, body)
 
+@register_func('numpy.log', numpy.log)
+def log_impl(builder, arg):
+
+    def body(a, b):
+        return math.log(a)
+
+    return eltwise(builder, arg, body, builder.float64)
+
 @register_func('numpy.empty', numpy.empty)
 def empty_impl(builder, shape):
     # TODO: dtype
