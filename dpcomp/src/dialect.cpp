@@ -8,6 +8,7 @@
 #include <mlir/Transforms/InliningUtils.h>
 
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
+#include <mlir/Dialect/MemRef/IR/MemRef.h>
 
 #include <llvm/ADT/TypeSwitch.h>
 
@@ -412,12 +413,12 @@ mlir::OpFoldResult EnforceShapeOp::fold(llvm::ArrayRef<mlir::Attribute> operands
 
 namespace
 {
-struct EnforceShapeDim : public mlir::OpRewritePattern<mlir::DimOp>
+struct EnforceShapeDim : public mlir::OpRewritePattern<mlir::memref::DimOp>
 {
-    using mlir::OpRewritePattern<mlir::DimOp>::OpRewritePattern;
+    using mlir::OpRewritePattern<mlir::memref::DimOp>::OpRewritePattern;
 
     mlir::LogicalResult matchAndRewrite(
-        mlir::DimOp op, mlir::PatternRewriter &rewriter) const override
+        mlir::memref::DimOp op, mlir::PatternRewriter &rewriter) const override
     {
         auto enforce_op = mlir::dyn_cast_or_null<plier::EnforceShapeOp>(op.memrefOrTensor().getDefiningOp());
         if (!enforce_op)

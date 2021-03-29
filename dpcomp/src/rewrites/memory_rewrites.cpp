@@ -2,6 +2,7 @@
 
 #include <mlir/Analysis/BufferAliasAnalysis.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
+#include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/IR/BuiltinOps.h>
 
 #include <plier/analysis/memory_ssa.hpp>
@@ -12,7 +13,7 @@ mlir::LogicalResult simplifyAlloc(mlir::Operation* op, mlir::PatternRewriter& re
 {
     for (auto user : op->getUsers())
     {
-        if (!mlir::isa<mlir::StoreOp, mlir::DeallocOp>(user))
+        if (!mlir::isa<mlir::memref::StoreOp, mlir::memref::DeallocOp>(user))
         {
             return mlir::failure();
         }
@@ -27,12 +28,12 @@ mlir::LogicalResult simplifyAlloc(mlir::Operation* op, mlir::PatternRewriter& re
 }
 }
 
-mlir::LogicalResult plier::RemoveTrivialAlloc::matchAndRewrite(mlir::AllocOp op, mlir::PatternRewriter& rewriter) const
+mlir::LogicalResult plier::RemoveTrivialAlloc::matchAndRewrite(mlir::memref::AllocOp op, mlir::PatternRewriter& rewriter) const
 {
     return simplifyAlloc(op, rewriter);
 }
 
-mlir::LogicalResult plier::RemoveTrivialAlloca::matchAndRewrite(mlir::AllocaOp op, mlir::PatternRewriter& rewriter) const
+mlir::LogicalResult plier::RemoveTrivialAlloca::matchAndRewrite(mlir::memref::AllocaOp op, mlir::PatternRewriter& rewriter) const
 {
     return simplifyAlloc(op, rewriter);
 }
@@ -48,11 +49,11 @@ struct Meminfo
 llvm::Optional<Meminfo> getMeminfo(mlir::Operation* op)
 {
     assert(nullptr != op);
-    if (auto load = mlir::dyn_cast<mlir::LoadOp>(op))
+    if (auto load = mlir::dyn_cast<mlir::memref::LoadOp>(op))
     {
         return Meminfo{load.memref(), load.indices()};
     }
-    if (auto store = mlir::dyn_cast<mlir::StoreOp>(op))
+    if (auto store = mlir::dyn_cast<mlir::memref::StoreOp>(op))
     {
         return Meminfo{store.memref(), store.indices()};
     }
@@ -126,7 +127,7 @@ mlir::LogicalResult foldLoads(mlir::BufferAliasAnalysis& aliases, plier::MemoryS
             assert(nullptr != op2);
             if (MustAlias{aliases}(op1, op2))
             {
-                auto val = mlir::cast<mlir::StoreOp>(op2).value();
+                auto val = mlir::cast<mlir::memref::StoreOp>(op2).value();
                 op1->replaceAllUsesWith(mlir::ValueRange(val));
                 op1->erase();
                 memSSA.eraseNode(&node);

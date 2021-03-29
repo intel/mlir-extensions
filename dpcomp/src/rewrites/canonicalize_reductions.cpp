@@ -2,6 +2,7 @@
 
 #include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
+#include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 
 #include "plier/transforms/block_utils.hpp"
@@ -53,8 +54,8 @@ bool checkForPotentialAliases(mlir::Value value, mlir::Operation* parent)
         return false;
     }
 
-    mlir::LoadOp load;
-    mlir::StoreOp store;
+    mlir::memref::LoadOp load;
+    mlir::memref::StoreOp store;
     auto& parentBlock = parent->getRegions().front().front();
     for (auto user : value.getUsers())
     {
@@ -78,19 +79,19 @@ bool checkForPotentialAliases(mlir::Value value, mlir::Operation* parent)
                 }
                 if (effects.hasEffect<mlir::MemoryEffects::Read>())
                 {
-                    if (load || !mlir::isa<mlir::LoadOp>(user))
+                    if (load || !mlir::isa<mlir::memref::LoadOp>(user))
                     {
                         return false;
                     }
-                    load = mlir::cast<mlir::LoadOp>(user);
+                    load = mlir::cast<mlir::memref::LoadOp>(user);
                 }
                 if (effects.hasEffect<mlir::MemoryEffects::Write>())
                 {
-                    if (store || !mlir::isa<mlir::StoreOp>(user))
+                    if (store || !mlir::isa<mlir::memref::StoreOp>(user))
                     {
                         return false;
                     }
-                    store = mlir::cast<mlir::StoreOp>(user);
+                    store = mlir::cast<mlir::memref::StoreOp>(user);
                 }
             }
         }
@@ -107,7 +108,7 @@ bool checkSupportedOps(mlir::Value value, mlir::Operation* parent)
 {
     for (auto user : value.getUsers())
     {
-        if (user->getParentOp() == parent && !mlir::isa<mlir::LoadOp, mlir::StoreOp>(user))
+        if (user->getParentOp() == parent && !mlir::isa<mlir::memref::LoadOp, mlir::memref::StoreOp>(user))
         {
             return false;
         }
@@ -124,14 +125,14 @@ bool checkMemref(mlir::Value value, mlir::Operation* parent)
 
 mlir::Value createScalarLoad(mlir::PatternRewriter &builder, mlir::Location loc, mlir::Value memref, mlir::ValueRange indices)
 {
-    return builder.create<mlir::LoadOp>(loc, memref, indices);
+    return builder.create<mlir::memref::LoadOp>(loc, memref, indices);
 }
 
 void createScalarStore(
     mlir::PatternRewriter &builder, mlir::Location loc, mlir::Value val,
     mlir::Value memref, mlir::ValueRange indices)
 {
-    builder.create<mlir::StoreOp>(loc, val, memref, indices);
+    builder.create<mlir::memref::StoreOp>(loc, val, memref, indices);
 }
 }
 
@@ -140,7 +141,7 @@ mlir::LogicalResult plier::CanonicalizeReduction::matchAndRewrite(mlir::scf::For
     llvm::SmallVector<std::pair<mlir::Value, mlir::ValueRange>> to_process;
     for (auto& current : op.getLoopBody().front())
     {
-        if (auto load = mlir::dyn_cast<mlir::LoadOp>(current))
+        if (auto load = mlir::dyn_cast<mlir::memref::LoadOp>(current))
         {
             auto memref = load.memref();
             if (checkMemref(memref, op))
@@ -181,7 +182,7 @@ mlir::LogicalResult plier::CanonicalizeReduction::matchAndRewrite(mlir::scf::For
                     }
                     return invalid_index;
                 };
-                if (auto load = mlir::dyn_cast<mlir::LoadOp>(body_op))
+                if (auto load = mlir::dyn_cast<mlir::memref::LoadOp>(body_op))
                 {
                     auto index = get_iter_index(load);
                     if (index != invalid_index)
@@ -193,7 +194,7 @@ mlir::LogicalResult plier::CanonicalizeReduction::matchAndRewrite(mlir::scf::For
                         builder.clone(body_op, mapping);
                     }
                 }
-                else if (auto store = mlir::dyn_cast<mlir::StoreOp>(body_op))
+                else if (auto store = mlir::dyn_cast<mlir::memref::StoreOp>(body_op))
                 {
                     auto index = get_iter_index(store);
                     if (index != invalid_index)
