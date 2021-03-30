@@ -33,12 +33,12 @@ jobs:
       call cmake --version
       call cmake -A x64 . -DLLVM_DIR="$(System.DefaultWorkingDirectory)\llvm_cache\lib\cmake\llvm" -DMLIR_DIR="$(System.DefaultWorkingDirectory)\llvm_cache\lib\cmake\mlir" -DTBB_DIR=$(System.DefaultWorkingDirectory)\tbb\lib\cmake\tbb
       call cmake --build . --config Release
+      call cmake --install . --config Release
       python setup.py develop
     displayName: 'Build'
 
   - script: |
       call "C:\Miniconda\Scripts\activate"
-      set PYTHONPATH=$(System.DefaultWorkingDirectory)\numba_dpcomp\mlir_compiler\Release;$(System.DefaultWorkingDirectory)\dpcomp_runtime\Release
       pytest
     displayName: 'Tests'
 
@@ -72,12 +72,12 @@ jobs:
       chmod -R 777 $(System.DefaultWorkingDirectory)/llvm_cache
       cmake . -DLLVM_DIR=$(System.DefaultWorkingDirectory)/llvm_cache/lib/cmake/llvm -DMLIR_DIR=$(System.DefaultWorkingDirectory)/llvm_cache/lib/cmake/mlir -DTBB_DIR=$(System.DefaultWorkingDirectory)/tbb/lib/cmake/tbb
       cmake --build .
+      cmake --install .
       python setup.py develop
     displayName: 'Build'
 
   - script: |
       source /usr/share/miniconda/bin/activate
-      export PYTHONPATH="$(System.DefaultWorkingDirectory)/numba_dpcomp/mlir_compiler:$(System.DefaultWorkingDirectory)/dpcomp_runtime"
       pytest
     displayName: 'Tests'
 
@@ -116,12 +116,12 @@ jobs:
       chmod -R 777 $(System.DefaultWorkingDirectory)/llvm_cache
       cmake . -DLLVM_DIR=$(System.DefaultWorkingDirectory)/llvm_cache/lib/cmake/llvm -DMLIR_DIR=$(System.DefaultWorkingDirectory)/llvm_cache/lib/cmake/mlir -DTBB_DIR=$(System.DefaultWorkingDirectory)/tbb/lib/cmake/tbb
       cmake --build .
+      cmake --install .
       python setup.py develop
     displayName: 'Build'
 
   - script: |
       source /usr/local/miniconda/bin/activate
       conda activate test_env
-      export PYTHONPATH="$(System.DefaultWorkingDirectory)/numba_dpcomp/mlir_compiler:$(System.DefaultWorkingDirectory)/dpcomp_runtime"
       pytest
     displayName: 'Tests'
