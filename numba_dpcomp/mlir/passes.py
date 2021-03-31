@@ -77,7 +77,7 @@ class MlirDumpPlier(MlirBackendBase):
         MlirBackendBase.__init__(self)
 
     def run_pass(self, state):
-        import mlir_compiler
+        import numba_dpcomp.mlir_compiler as mlir_compiler
         module = mlir_compiler.create_module()
         ctx = self._get_func_context(state)
         mlir_compiler.lower_function(ctx, module, state.func_ir)
@@ -97,7 +97,7 @@ class MlirBackend(MlirBackendBase):
         MlirBackendBase.__init__(self)
 
     def run_pass_impl(self, state):
-        import mlir_compiler
+        import numba_dpcomp.mlir_compiler as mlir_compiler
         global _mlir_active_module
         old_module = _mlir_active_module
 
@@ -124,7 +124,7 @@ class MlirBackendInner(MlirBackendBase):
         MlirBackendBase.__init__(self)
 
     def run_pass_impl(self, state):
-        import mlir_compiler
+        import numba_dpcomp.mlir_compiler as mlir_compiler
         global _mlir_active_module
         module = _mlir_active_module
         assert not module is None

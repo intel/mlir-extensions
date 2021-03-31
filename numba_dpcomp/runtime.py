@@ -4,9 +4,10 @@ import atexit
 import sys
 from numba.np.ufunc.parallel import get_thread_count
 import llvmlite.binding as ll
+import numba_dpcomp
 
 def load_runtume_lib():
-    runtime_search_paths = ['']
+    runtime_search_paths = [os.path.dirname(numba_dpcomp.__file__)]
 
     try:
         runtime_search_paths += os.environ['PYTHONPATH'].split(os.pathsep)
@@ -46,4 +47,3 @@ ll.add_symbol('dpcomp_parallel_for', ctypes.cast(_parallel_for_func, ctypes.c_vo
 @atexit.register
 def _cleanup():
     _finalize_func()
-
