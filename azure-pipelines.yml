@@ -31,7 +31,7 @@ jobs:
       call "C:\Miniconda\Scripts\activate"
       call conda install numba=0.53 scipy pybind11 tbb=2021.1 pytest -c conda-forge
       call cmake --version
-      call cmake -A x64 . -DLLVM_DIR="$(System.DefaultWorkingDirectory)\llvm_cache\lib\cmake\llvm" -DMLIR_DIR="$(System.DefaultWorkingDirectory)\llvm_cache\lib\cmake\mlir" -DTBB_DIR=$(System.DefaultWorkingDirectory)\tbb\lib\cmake\tbb
+      call cmake -A x64 . -DLLVM_DIR="$(System.DefaultWorkingDirectory)\llvm_cache\lib\cmake\llvm" -DMLIR_DIR="$(System.DefaultWorkingDirectory)\llvm_cache\lib\cmake\mlir" -DTBB_DIR=$(System.DefaultWorkingDirectory)\tbb\lib\cmake\tbb -DCMAKE_INSTALL_PREFIX=$(System.DefaultWorkingDirectory)\numba_dpcomp
       call cmake --build . --config Release
       call cmake --install . --config Release
       python setup.py develop
@@ -70,7 +70,7 @@ jobs:
       conda install -y tbb=2021.1 --force
       cmake --version
       chmod -R 777 $(System.DefaultWorkingDirectory)/llvm_cache
-      cmake . -DLLVM_DIR=$(System.DefaultWorkingDirectory)/llvm_cache/lib/cmake/llvm -DMLIR_DIR=$(System.DefaultWorkingDirectory)/llvm_cache/lib/cmake/mlir -DTBB_DIR=$(System.DefaultWorkingDirectory)/tbb/lib/cmake/tbb
+      cmake . -DLLVM_DIR=$(System.DefaultWorkingDirectory)/llvm_cache/lib/cmake/llvm -DMLIR_DIR=$(System.DefaultWorkingDirectory)/llvm_cache/lib/cmake/mlir -DTBB_DIR=$(System.DefaultWorkingDirectory)/tbb/lib/cmake/tbb -DCMAKE_INSTALL_PREFIX=$(System.DefaultWorkingDirectory)/numba_dpcomp
       cmake --build .
       cmake --install .
       python setup.py develop
@@ -78,6 +78,7 @@ jobs:
 
   - script: |
       source /usr/share/miniconda/bin/activate
+      source $(System.DefaultWorkingDirectory)/tbb/env/vars.sh
       pytest
     displayName: 'Tests'
 
@@ -114,7 +115,7 @@ jobs:
       conda activate test_env
       cmake --version
       chmod -R 777 $(System.DefaultWorkingDirectory)/llvm_cache
-      cmake . -DLLVM_DIR=$(System.DefaultWorkingDirectory)/llvm_cache/lib/cmake/llvm -DMLIR_DIR=$(System.DefaultWorkingDirectory)/llvm_cache/lib/cmake/mlir -DTBB_DIR=$(System.DefaultWorkingDirectory)/tbb/lib/cmake/tbb
+      cmake . -DLLVM_DIR=$(System.DefaultWorkingDirectory)/llvm_cache/lib/cmake/llvm -DMLIR_DIR=$(System.DefaultWorkingDirectory)/llvm_cache/lib/cmake/mlir -DTBB_DIR=$(System.DefaultWorkingDirectory)/tbb/lib/cmake/tbb -DCMAKE_INSTALL_PREFIX=$(System.DefaultWorkingDirectory)/numba_dpcomp
       cmake --build .
       cmake --install .
       python setup.py develop
