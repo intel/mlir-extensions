@@ -41,6 +41,8 @@
 #include "base_pipeline.hpp"
 #include "plier/compiler/pipeline_registry.hpp"
 #include "py_linalg_resolver.hpp"
+#include "py_func_resolver.hpp"
+#include "mangle.hpp"
 
 #include <cctype>
 
@@ -273,6 +275,32 @@ struct CallLowerer
             rewriter.replaceOp(op, res);
             return mlir::success();
         }
+
+        mlir::ValueRange r(args);
+        auto mangled_name = mangle(name, r.getTypes());
+        if (!mangled_name.empty())
+        {
+            auto mod = op->getParentOfType<mlir::ModuleOp>();
+            assert(mod);
+            auto func = mod.lookupSymbol<mlir::FuncOp>(mangled_name);
+            if (!func)
+            {
+                func = py_resolver.get_func(name, r.getTypes());
+                if (func)
+                {
+                    func.setPrivate();
+                    func.setName(mangled_name);
+                }
+            }
+            if (func)
+            {
+                assert(func.getType().getNumResults() == op->getNumResults());
+                auto new_func_call = rewriter.create<mlir::CallOp>(op.getLoc(), func, args);
+                rerun_std_pipeline(op);
+                rewriter.replaceOp(op, new_func_call.getResults());
+                return mlir::success();
+            }
+        }
         return mlir::failure();
     }
 
@@ -314,6 +342,7 @@ struct CallLowerer
 
 private:
     PyLinalgResolver linalg_resolver;
+    PyFuncResolver py_resolver;
 
     mlir::LogicalResult applyRewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter, llvm::Optional<PyLinalgResolver::Values> result)
     {
@@ -678,6 +707,40 @@ bool has_compatibale_shape(T&& a1, T&& a2)
     return true;
 }
 
+struct ArgOpLowering : public mlir::OpRewritePattern<plier::ArgOp>
+{
+    ArgOpLowering(mlir::TypeConverter &typeConverter,
+                  mlir::MLIRContext *context):
+        OpRewritePattern(context), converter(typeConverter) {}
+
+    mlir::LogicalResult matchAndRewrite(
+        plier::ArgOp op, mlir::PatternRewriter &rewriter) const override
+    {
+        auto func = op->getParentOfType<mlir::FuncOp>();
+        if (!func)
+        {
+            return mlir::failure();
+        }
+
+        auto index= op.index();
+        if (index >= func.getNumArguments())
+        {
+            return mlir::failure();
+        }
+
+        auto arg = func.getArgument(index);
+        if(converter.convertType(op.getType()) != arg.getType())
+        {
+            return mlir::failure();
+        }
+        rewriter.replaceOp(op, arg);
+        return mlir::success();
+    }
+private:
+    mlir::TypeConverter& converter;
+};
+
+
 struct RankedTypesCasts : public mlir::OpRewritePattern<plier::CastOp>
 {
     RankedTypesCasts(mlir::TypeConverter& /*type_converter*/,
@@ -867,6 +930,7 @@ void PlierToLinalgPass::runOnOperation()
     patterns.insert<
         plier::FuncOpSignatureConversion,
         plier::CastOpLowering,
+        ArgOpLowering,
         RankedTypesCasts,
         ArrayShape
         >(type_converter, context);

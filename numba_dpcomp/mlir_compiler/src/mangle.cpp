@@ -41,11 +41,11 @@ bool mangle_float(llvm::raw_ostream& res, mlir::Type type)
     return false;
 }
 
-void mangle_memref_impl(llvm::raw_ostream& res, mlir::MemRefType type);
+void mangle_memref_impl(llvm::raw_ostream& res, mlir::ShapedType type);
 
 bool mangle_memref(llvm::raw_ostream& res, mlir::Type type)
 {
-    if (auto m = type.dyn_cast<mlir::MemRefType>())
+    if (auto m = type.dyn_cast<mlir::ShapedType>())
     {
         mangle_memref_impl(res, m);
         return true;
@@ -194,7 +194,7 @@ void mangle_type(llvm::raw_ostream& res, mlir::Type type)
     llvm_unreachable("Cannot mangle type");
 }
 
-void mangle_memref_impl(llvm::raw_ostream& res, mlir::MemRefType type)
+void mangle_memref_impl(llvm::raw_ostream& res, mlir::ShapedType type)
 {
     auto params = [&](llvm::raw_ostream& s)
     {
