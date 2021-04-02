@@ -1120,6 +1120,7 @@ void populate_plier_to_linalg_gen_pipeline(mlir::OpPassManager& pm)
     pm.addPass(std::make_unique<PlierToLinalgPass>());
     pm.addNestedPass<mlir::FuncOp>(std::make_unique<PostPlierToLinalgPass>());
     pm.addPass(mlir::createSymbolDCEPass());
+    pm.addNestedPass<mlir::FuncOp>(mlir::createCSEPass());
 }
 
 void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager& pm)

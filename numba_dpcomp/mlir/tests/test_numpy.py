@@ -312,14 +312,19 @@ class TestMlirBasic(TestCase):
         assert_equal(py_func(arr,arr), jit_func(arr,arr))
 
     def test_vectorize(self):
-        def func(a):
-            return a + 1
+        import math
+        funcs = [
+            lambda a : a + 1,
+            lambda a : math.erf(a),
+            # lambda a : 5 if a == 1 else a, # TODO: investigate
+        ]
 
-        vec_func = vectorize(func)
+        for func in funcs:
+            vec_func = vectorize(func)
 
-        for a in _test_arrays:
-            arr = np.array(a)
-            assert_equal(_vectorize_reference(func, arr), vec_func(arr))
+            for a in _test_arrays:
+                arr = np.array(a)
+                assert_equal(_vectorize_reference(func, arr), vec_func(arr))
 
     def test_vectorize_indirect(self):
         def func(a):

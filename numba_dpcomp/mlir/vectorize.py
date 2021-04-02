@@ -5,43 +5,44 @@ from numba.core import types
 import sys
 
 def vectorize(arg_or_function=(), **kws):
-    print(arg_or_function, kws)
     if inspect.isfunction(arg_or_function):
         return _gen_vectorize(arg_or_function)
 
     return _gen_vectorize
 
-# def _dummy_vec_func(*args): pass
-
-# @infer_global(_dummy_vec_func)
-class VecFuncTyper(CallableTemplate):
+class _VecFuncTyper(CallableTemplate):
     def generic(self):
         def typer(a):
             if isinstance(a, types.Array):
                 return a
         return typer
 
-def _gen_vectorized_func_name(func):
+def _gen_vectorized_func_name(func, mod):
     func_name =  f'_{func.__module__}_{func.__qualname__}_vectorized'
     for c in ['<','>','.']:
         func_name = func_name.replace(c, '_')
-    return func_name
+
+    i = 0
+    while True:
+        new_name = func_name if i ==0 else f'{func_name}{i}'
+        if not hasattr(mod, new_name):
+            return new_name
+        i += 1
 
 def _gen_vectorize(func):
     num_args = len(inspect.signature(func).parameters)
     if num_args == 1:
-        func_name = _gen_vectorized_func_name(func)
+        mod = sys.modules[__name__]
+        func_name = _gen_vectorized_func_name(func, mod)
 
         exec(f'def {func_name}(arg): pass')
         vec_func_inner = eval(func_name)
-        print(vec_func_inner)
-        mod = sys.modules[__name__]
+
         setattr(mod, func_name, vec_func_inner)
-        print(dir(mod))
-        infer_global(vec_func_inner)(VecFuncTyper)
+        infer_global(vec_func_inner)(_VecFuncTyper)
 
         from ..decorators import njit
-        jit_func = njit(func)
+        jit_func = njit(func, inline='always')
 
         @register_func(func_name, vec_func_inner)
         def impl(builder, arg):
@@ -50,6 +51,6 @@ def _gen_vectorize(func):
         def vec_func(arg):
             return vec_func_inner(arg)
 
-        return njit(vec_func)
+        return njit(vec_func, inline='always')
     else:
         assert(False)
