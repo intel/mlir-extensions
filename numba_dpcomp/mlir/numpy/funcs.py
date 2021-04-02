@@ -1,4 +1,4 @@
-from  ..linalg_builder import register_func, register_attr, is_literal
+from  ..linalg_builder import register_func, register_attr, is_literal, eltwise
 
 import numpy
 import math
@@ -8,26 +8,6 @@ def is_int(t, b):
 
 def is_float(t, b):
     return t == b.float16 or t == b.float32 or t == b.float64
-
-def eltwise(builder, args, body, res_type = None):
-    if isinstance(args, tuple):
-        args = builder.broadcast(*args)
-    else:
-        args = (args,)
-
-    if res_type is None:
-        res_type = args[0].dtype
-
-    shape = args[0].shape
-
-    num_dims = len(shape)
-    iterators = ['parallel' for _ in range(num_dims)]
-    dims = ','.join(['d%s' % i for i in range(num_dims)])
-    expr = f'({dims}) -> ({dims})'
-    maps = [expr for _ in range(len(args) + 1)]
-    init = builder.init_tensor(shape, res_type)
-
-    return builder.generic(args, init, iterators, maps, body)
 
 @register_func('numpy.add', numpy.add)
 @register_func('operator.add')

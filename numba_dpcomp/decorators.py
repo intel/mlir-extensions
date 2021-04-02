@@ -3,10 +3,12 @@ Define @jit and related decorators.
 """
 
 from .compiler import mlir_compiler
+from .mlir.vectorize import vectorize as mlir_vectorize
 from .mlir.settings import USE_MLIR
 
 from numba.core.decorators import jit as orig_jit
 from numba.core.decorators import njit as orig_njit
+from numba.np.ufunc import vectorize as orig_vectorize
 
 if USE_MLIR:
     def jit(signature_or_function=None, locals={}, cache=False,
@@ -32,6 +34,8 @@ if USE_MLIR:
             del kws['forceobj']
         kws.update({'nopython': True})
         return jit(*args, **kws)
+    vectorize = mlir_vectorize
 else:
     jit = orig_jit
     njit = orig_njit
+    vectorize = orig_vectorize
