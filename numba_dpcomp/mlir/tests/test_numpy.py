@@ -1,10 +1,16 @@
 import numba
-from numba_dpcomp import njit
+from numba_dpcomp import njit, vectorize
 from numpy.testing import assert_equal # for nans comparison
 import numpy as np
 from numba.tests.support import TestCase
 import unittest
 import itertools
+
+def _vectorize_reference(func, arg1):
+    ret = np.empty(arg1.shape, arg1.dtype)
+    for ind, val in np.ndenumerate(arg1):
+        ret[ind] = func(val)
+    return ret
 
 _arr_1d_int = [1,2,3,4,5,6,7,8]
 _arr_1d_float = [1.0,2.1,3.2,4.3,5.4,6.5,7.6,8.7]
@@ -44,6 +50,7 @@ class TestMlirBasic(TestCase):
             lambda a: np.sum(a),
             lambda a: np.sqrt(a),
             lambda a: np.square(a),
+            lambda a: np.log(a),
             lambda a: a.size,
             # lambda a: a.T, TODO: need fortran layout support
             lambda a: a.T.T,
@@ -303,6 +310,36 @@ class TestMlirBasic(TestCase):
         arr = np.asarray([[[1,2,3],[4,5,6]],
                           [[1,2,3],[4,5,6]]])
         assert_equal(py_func(arr,arr), jit_func(arr,arr))
+
+    def test_vectorize(self):
+        import math
+        funcs = [
+            lambda a : a + 1,
+            lambda a : math.erf(a),
+            # lambda a : 5 if a == 1 else a, # TODO: investigate
+        ]
+
+        for func in funcs:
+            vec_func = vectorize(func)
+
+            for a in _test_arrays:
+                arr = np.array(a)
+                assert_equal(_vectorize_reference(func, arr), vec_func(arr))
+
+    def test_vectorize_indirect(self):
+        def func(a):
+            return a + 1
+
+        vec_func = vectorize(func)
+
+        def py_func(a):
+            return vec_func(a)
+
+        jit_func = njit(py_func, parallel=True)
+
+        for a in _test_arrays:
+            arr = np.array(a)
+            assert_equal(_vectorize_reference(func, arr), jit_func(arr))
 
 if __name__ == '__main__':
     unittest.main()

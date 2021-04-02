@@ -15,6 +15,7 @@
 
 #include "plier/dialect.hpp"
 
+#include "plier/rewrites/arg_lowering.hpp"
 #include "plier/rewrites/call_lowering.hpp"
 #include "plier/rewrites/cast_lowering.hpp"
 #include "plier/rewrites/type_conversion.hpp"
@@ -233,41 +234,6 @@ struct ConstOpLowering : public mlir::OpRewritePattern<plier::ConstOp>
         return mlir::success();
     }
 };
-
-struct ArgOpLowering : public mlir::OpRewritePattern<plier::ArgOp>
-{
-    ArgOpLowering(mlir::TypeConverter &typeConverter,
-                  mlir::MLIRContext *context):
-        OpRewritePattern(context), converter(typeConverter) {}
-
-    mlir::LogicalResult matchAndRewrite(
-        plier::ArgOp op, mlir::PatternRewriter &rewriter) const override
-    {
-        auto func = op->getParentOfType<mlir::FuncOp>();
-        if (!func)
-        {
-            return mlir::failure();
-        }
-
-        auto index= op.index();
-        if (index >= func.getNumArguments())
-        {
-            return mlir::failure();
-        }
-
-        auto arg = func.getArgument(index);
-        if(converter.convertType(op.getType()) != arg.getType())
-        {
-            return mlir::failure();
-        }
-        rewriter.replaceOp(op, arg);
-        return mlir::success();
-    }
-private:
-    mlir::TypeConverter& converter;
-};
-
-
 
 struct ReturnOpLowering : public mlir::OpRewritePattern<mlir::ReturnOp>
 {
@@ -1386,7 +1352,7 @@ void PlierToStdPass::runOnOperation()
 
     patterns.insert<
         plier::FuncOpSignatureConversion,
-        ArgOpLowering,
+        plier::ArgOpLowering,
         ReturnOpLowering,
         ConstOpLowering,
         SelectOpLowering,

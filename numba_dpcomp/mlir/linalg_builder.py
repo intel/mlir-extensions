@@ -86,3 +86,23 @@ def register_attr(name):
 def lookup_func(name):
     global _func_registry
     return _func_registry.get(name)
+
+def eltwise(builder, args, body, res_type = None):
+    if isinstance(args, tuple):
+        args = builder.broadcast(*args)
+    else:
+        args = (args,)
+
+    if res_type is None:
+        res_type = args[0].dtype
+
+    shape = args[0].shape
+
+    num_dims = len(shape)
+    iterators = ['parallel' for _ in range(num_dims)]
+    dims = ','.join(['d%s' % i for i in range(num_dims)])
+    expr = f'({dims}) -> ({dims})'
+    maps = [expr for _ in range(len(args) + 1)]
+    init = builder.init_tensor(shape, res_type)
+
+    return builder.generic(args, init, iterators, maps, body)

@@ -4,6 +4,7 @@ from numba.core import (types)
 import numba_dpcomp.mlir.settings
 import numba_dpcomp.mlir.func_registry
 import numba.core.types.functions
+
 _mlir_last_compiled_func = None
 _mlir_active_module = None
 
@@ -16,18 +17,22 @@ def _reload_parfors():
 
 class MlirBackendBase(FunctionPass):
 
-    def __init__(self):
+    def __init__(self, push_func_stack):
+        self._push_func_stack = push_func_stack
         import numba_dpcomp.mlir.func_registry
         self._get_func_name = numba_dpcomp.mlir.func_registry.get_func_name
         FunctionPass.__init__(self)
 
     def run_pass(self, state):
-        numba_dpcomp.mlir.func_registry.push_active_funcs_stack()
-        try:
-            res = self.run_pass_impl(state)
-        finally:
-            numba_dpcomp.mlir.func_registry.pop_active_funcs_stack()
-        return res
+        if self._push_func_stack:
+            numba_dpcomp.mlir.func_registry.push_active_funcs_stack()
+            try:
+                res = self.run_pass_impl(state)
+            finally:
+                numba_dpcomp.mlir.func_registry.pop_active_funcs_stack()
+            return res
+        else:
+            return self.run_pass_impl(state)
 
     def _resolve_func_name(self, obj):
         name, func = self._resolve_func_name_impl(obj)
@@ -74,7 +79,7 @@ class MlirDumpPlier(MlirBackendBase):
     _name = "mlir_dump_plier"
 
     def __init__(self):
-        MlirBackendBase.__init__(self)
+        MlirBackendBase.__init__(self, push_func_stack=True)
 
     def run_pass(self, state):
         import numba_dpcomp.mlir_compiler as mlir_compiler
@@ -94,7 +99,7 @@ class MlirBackend(MlirBackendBase):
     _name = "mlir_backend"
 
     def __init__(self):
-        MlirBackendBase.__init__(self)
+        MlirBackendBase.__init__(self, push_func_stack=True)
 
     def run_pass_impl(self, state):
         import numba_dpcomp.mlir_compiler as mlir_compiler
@@ -121,7 +126,7 @@ class MlirBackendInner(MlirBackendBase):
     _name = "mlir_backend_inner"
 
     def __init__(self):
-        MlirBackendBase.__init__(self)
+        MlirBackendBase.__init__(self, push_func_stack=False)
 
     def run_pass_impl(self, state):
         import numba_dpcomp.mlir_compiler as mlir_compiler

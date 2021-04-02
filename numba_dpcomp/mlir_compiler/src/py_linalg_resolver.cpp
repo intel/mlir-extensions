@@ -771,6 +771,7 @@ py::object generic_impl(py::capsule context, py::handle inputs, py::handle outpu
     auto mlir_iterators = get_iterators(iterators, mlir_context);
 
     auto func_types = map_types_to_numba(ctx.context.types_mod, get_generic_op_body_types(inputs_args, output_args));
+    assert(!func_types.is_none());
     auto body_func = ctx.context.compile_body(body, func_types);
 
     auto cast_values = [&](mlir::ValueRange vals, mlir::TypeRange types)

@@ -25,6 +25,7 @@
 #include "pipelines/plier_to_std.hpp"
 
 #include "plier/transforms/pipeline_utils.hpp"
+#include "plier/rewrites/arg_lowering.hpp"
 #include "plier/rewrites/call_lowering.hpp"
 #include "plier/rewrites/canonicalize_reductions.hpp"
 #include "plier/rewrites/cast_lowering.hpp"
@@ -41,6 +42,8 @@
 #include "base_pipeline.hpp"
 #include "plier/compiler/pipeline_registry.hpp"
 #include "py_linalg_resolver.hpp"
+#include "py_func_resolver.hpp"
+#include "mangle.hpp"
 
 #include <cctype>
 
@@ -273,6 +276,32 @@ struct CallLowerer
             rewriter.replaceOp(op, res);
             return mlir::success();
         }
+
+        mlir::ValueRange r(args);
+        auto mangled_name = mangle(name, r.getTypes());
+        if (!mangled_name.empty())
+        {
+            auto mod = op->getParentOfType<mlir::ModuleOp>();
+            assert(mod);
+            auto func = mod.lookupSymbol<mlir::FuncOp>(mangled_name);
+            if (!func)
+            {
+                func = py_resolver.get_func(name, r.getTypes());
+                if (func)
+                {
+                    func.setPrivate();
+                    func.setName(mangled_name);
+                }
+            }
+            if (func)
+            {
+                assert(func.getType().getNumResults() == op->getNumResults());
+                auto new_func_call = rewriter.create<mlir::CallOp>(op.getLoc(), func, args);
+                rerun_std_pipeline(op);
+                rewriter.replaceOp(op, new_func_call.getResults());
+                return mlir::success();
+            }
+        }
         return mlir::failure();
     }
 
@@ -314,6 +343,7 @@ struct CallLowerer
 
 private:
     PyLinalgResolver linalg_resolver;
+    PyFuncResolver py_resolver;
 
     mlir::LogicalResult applyRewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter, llvm::Optional<PyLinalgResolver::Values> result)
     {
@@ -867,6 +897,7 @@ void PlierToLinalgPass::runOnOperation()
     patterns.insert<
         plier::FuncOpSignatureConversion,
         plier::CastOpLowering,
+        plier::ArgOpLowering,
         RankedTypesCasts,
         ArrayShape
         >(type_converter, context);
@@ -1089,6 +1120,7 @@ void populate_plier_to_linalg_gen_pipeline(mlir::OpPassManager& pm)
     pm.addPass(std::make_unique<PlierToLinalgPass>());
     pm.addNestedPass<mlir::FuncOp>(std::make_unique<PostPlierToLinalgPass>());
     pm.addPass(mlir::createSymbolDCEPass());
+    pm.addNestedPass<mlir::FuncOp>(mlir::createCSEPass());
 }
 
 void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager& pm)

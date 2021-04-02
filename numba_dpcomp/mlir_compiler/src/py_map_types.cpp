@@ -72,7 +72,7 @@ py::object map_type(const py::handle& types_mod, mlir::Type type)
         }
     }
 
-    if (auto m = type.dyn_cast<mlir::MemRefType>())
+    if (auto m = type.dyn_cast<mlir::ShapedType>())
     {
         auto elem_type = map_type(types_mod, m.getElementType());
         if (!elem_type)
@@ -86,7 +86,8 @@ py::object map_type(const py::handle& types_mod, mlir::Type type)
     return {};
 }
 }
-pybind11::object map_type_to_numba(pybind11::handle types_mod, mlir::Type type)
+
+py::object map_type_to_numba(pybind11::handle types_mod, mlir::Type type)
 {
     auto elem = map_type(types_mod, type);
     if (!elem)
@@ -96,13 +97,18 @@ pybind11::object map_type_to_numba(pybind11::handle types_mod, mlir::Type type)
     return elem;
 }
 
-pybind11::list map_types_to_numba(pybind11::handle types_mod, mlir::TypeRange types)
+py::object map_types_to_numba(pybind11::handle types_mod, mlir::TypeRange types)
 {
     py::list ret(types.size());
     for (auto it : llvm::enumerate(types))
     {
-        ret[it.index()] = map_type_to_numba(types_mod, it.value());
+        auto type = map_type_to_numba(types_mod, it.value());
+        if (type.is_none())
+        {
+            return py::none();
+        }
+        ret[it.index()] = std::move(type);
     }
-    return ret;
+    return std::move(ret);
 }
 
