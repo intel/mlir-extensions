@@ -17,6 +17,7 @@ set(SOURCES_LIST
     src/compiler/compiler.cpp
     src/compiler/pipeline_registry.cpp
     src/dialect.cpp
+    src/rewrites/arg_lowering.cpp
     src/rewrites/call_lowering.cpp
     src/rewrites/canonicalize_reductions.cpp
     src/rewrites/cast_lowering.cpp
@@ -43,6 +44,7 @@ set(HEADERS_LIST
     include/plier/compiler/pipeline_registry.hpp
     include/plier/dialect.hpp
     include/plier/PlierOps.td
+    include/plier/rewrites/arg_lowering.hpp
     include/plier/rewrites/call_lowering.hpp
     include/plier/rewrites/canonicalize_reductions.hpp
     include/plier/rewrites/cast_lowering.hpp

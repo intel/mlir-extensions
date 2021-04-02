@@ -25,6 +25,7 @@
 #include "pipelines/plier_to_std.hpp"
 
 #include "plier/transforms/pipeline_utils.hpp"
+#include "plier/rewrites/arg_lowering.hpp"
 #include "plier/rewrites/call_lowering.hpp"
 #include "plier/rewrites/canonicalize_reductions.hpp"
 #include "plier/rewrites/cast_lowering.hpp"
@@ -707,40 +708,6 @@ bool has_compatibale_shape(T&& a1, T&& a2)
     return true;
 }
 
-struct ArgOpLowering : public mlir::OpRewritePattern<plier::ArgOp>
-{
-    ArgOpLowering(mlir::TypeConverter &typeConverter,
-                  mlir::MLIRContext *context):
-        OpRewritePattern(context), converter(typeConverter) {}
-
-    mlir::LogicalResult matchAndRewrite(
-        plier::ArgOp op, mlir::PatternRewriter &rewriter) const override
-    {
-        auto func = op->getParentOfType<mlir::FuncOp>();
-        if (!func)
-        {
-            return mlir::failure();
-        }
-
-        auto index= op.index();
-        if (index >= func.getNumArguments())
-        {
-            return mlir::failure();
-        }
-
-        auto arg = func.getArgument(index);
-        if(converter.convertType(op.getType()) != arg.getType())
-        {
-            return mlir::failure();
-        }
-        rewriter.replaceOp(op, arg);
-        return mlir::success();
-    }
-private:
-    mlir::TypeConverter& converter;
-};
-
-
 struct RankedTypesCasts : public mlir::OpRewritePattern<plier::CastOp>
 {
     RankedTypesCasts(mlir::TypeConverter& /*type_converter*/,
@@ -930,7 +897,7 @@ void PlierToLinalgPass::runOnOperation()
     patterns.insert<
         plier::FuncOpSignatureConversion,
         plier::CastOpLowering,
-        ArgOpLowering,
+        plier::ArgOpLowering,
         RankedTypesCasts,
         ArrayShape
         >(type_converter, context);
