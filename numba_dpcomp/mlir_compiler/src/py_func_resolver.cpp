@@ -45,6 +45,5 @@ mlir::FuncOp PyFuncResolver::get_func(llvm::StringRef name, mlir::TypeRange type
         return {};
     }
     auto res = static_cast<mlir::Operation*>(context->compiler(py_func, py_types).cast<py::capsule>());
-    auto func = (res ? mlir::cast<mlir::FuncOp>(res) : nullptr);
-    return func;
+    return mlir::cast_or_null<mlir::FuncOp>(res);
 }
