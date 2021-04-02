@@ -21,10 +21,16 @@ class VecFuncTyper(CallableTemplate):
                 return a
         return typer
 
+def _gen_vectorized_func_name(func):
+    func_name =  f'_{func.__module__}_{func.__qualname__}_vectorized'
+    for c in ['<','>','.']:
+        func_name = func_name.replace(c, '_')
+    return func_name
+
 def _gen_vectorize(func):
     num_args = len(inspect.signature(func).parameters)
     if num_args == 1:
-        func_name =  f'_{func.__module__}_{func.__qualname__}_vectorized'.replace('<', '_').replace('>', '_').replace('.', '_')
+        func_name = _gen_vectorized_func_name(func)
 
         exec(f'def {func_name}(arg): pass')
         vec_func_inner = eval(func_name)
