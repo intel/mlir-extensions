@@ -1,4 +1,4 @@
-from numba_dpcomp.mlir.func_registry import add_func
+from .func_registry import add_func
 
 import math
 
