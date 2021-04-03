@@ -2,7 +2,7 @@
 Define @jit and related decorators.
 """
 
-from .compiler import mlir_compiler
+from .mlir.compiler import mlir_compiler_pipeline
 from .mlir.vectorize import vectorize as mlir_vectorize
 from .mlir.settings import USE_MLIR
 
@@ -16,7 +16,7 @@ if USE_MLIR:
         return orig_jit(signature_or_function=signature_or_function,
                         locals=locals,
                         cache=cache,
-                        pipeline_class=mlir_compiler,
+                        pipeline_class=mlir_compiler_pipeline,
                         boundscheck=boundscheck,
                         **options)
 

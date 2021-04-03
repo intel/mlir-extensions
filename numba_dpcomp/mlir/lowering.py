@@ -2,9 +2,8 @@
 Define lowering and related passes.
 """
 
-from numba_dpcomp.mlir.passes import MlirDumpPlier, MlirBackend
-import numba_dpcomp.mlir.settings
-_use_mlir = numba_dpcomp.mlir.settings.USE_MLIR
+from .passes import MlirDumpPlier, MlirBackend
+from .settings import USE_MLIR
 
 
 from numba.core.typed_passes import fallback_context
@@ -63,7 +62,7 @@ class mlir_lower(orig_Lower):
         # Run target specific post lowering transformation
         self.context.post_lowering(self.module, self.library)
 
-        if not _use_mlir:
+        if not USE_MLIR:
             # Materialize LLVM Module
             self.library.add_ir_module(self.module)
 
@@ -71,14 +70,14 @@ class mlir_lower(orig_Lower):
         """
         Lower non-generator *fndesc*.
         """
-        if _use_mlir:
+        if USE_MLIR:
             mod_ir = self.mlir_blob
             import llvmlite.binding as llvm
             mod = llvm.parse_bitcode(mod_ir)
 
         self.setup_function(fndesc)
 
-        if _use_mlir:
+        if USE_MLIR:
             self.library.add_llvm_module(mod);
         else:
             # Init argument values
@@ -118,7 +117,7 @@ class mlir_NativeLowering(orig_NativeLowering):
             with targetctx.push_code_library(library):
                 lower = mlir_lower(targetctx, library, fndesc, interp,
                                    metadata=metadata)
-                if _use_mlir:
+                if USE_MLIR:
                     setattr(lower, 'mlir_blob', state.mlir_blob)
 
                 lower.lower()

@@ -82,7 +82,7 @@ class mlir_PassBuilder(orig_DefaultPassBuilder):
         return pm
 
 
-class mlir_compiler(orig_CompilerBase):
+class mlir_compiler_pipeline(orig_CompilerBase):
     def define_pipelines(self):
         # this maintains the objmode fallback behaviour
         pms = []

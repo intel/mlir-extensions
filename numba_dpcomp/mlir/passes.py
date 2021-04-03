@@ -1,35 +1,27 @@
 from numba.core.compiler_machinery import (FunctionPass, register_pass)
 from numba.core import (types)
-
-import numba_dpcomp.mlir.settings
-import numba_dpcomp.mlir.func_registry
 import numba.core.types.functions
+
+from .settings import PRINT_IR
+from . import func_registry
 
 _mlir_last_compiled_func = None
 _mlir_active_module = None
-
-def _reload_parfors():
-    """Reloader for cached parfors
-    """
-    # Re-initialize the parallel backend when load from cache.
-    from numba.np.ufunc.parallel import _launch_threads
-    _launch_threads()
 
 class MlirBackendBase(FunctionPass):
 
     def __init__(self, push_func_stack):
         self._push_func_stack = push_func_stack
-        import numba_dpcomp.mlir.func_registry
-        self._get_func_name = numba_dpcomp.mlir.func_registry.get_func_name
+        self._get_func_name = func_registry.get_func_name
         FunctionPass.__init__(self)
 
     def run_pass(self, state):
         if self._push_func_stack:
-            numba_dpcomp.mlir.func_registry.push_active_funcs_stack()
+            func_registry.push_active_funcs_stack()
             try:
                 res = self.run_pass_impl(state)
             finally:
-                numba_dpcomp.mlir.func_registry.pop_active_funcs_stack()
+                func_registry.pop_active_funcs_stack()
             return res
         else:
             return self.run_pass_impl(state)
@@ -37,7 +29,7 @@ class MlirBackendBase(FunctionPass):
     def _resolve_func_name(self, obj):
         name, func = self._resolve_func_name_impl(obj)
         if not (name is None or func is None):
-            numba_dpcomp.mlir.func_registry.add_active_funcs(name, func)
+            func_registry.add_active_funcs(name, func)
         return name
 
     def _resolve_func_name_impl(self, obj):
@@ -63,7 +55,7 @@ class MlirBackendBase(FunctionPass):
         from numba.np.ufunc.parallel import get_thread_count
 
         ctx = {}
-        ctx['compiler_settings'] = {'verify': True, 'pass_statistics': False, 'pass_timings': False, 'ir_printing': numba_dpcomp.mlir.settings.PRINT_IR}
+        ctx['compiler_settings'] = {'verify': True, 'pass_statistics': False, 'pass_timings': False, 'ir_printing': PRINT_IR}
         ctx['typemap'] = lambda op: state.typemap[op.name]
         ctx['fnargs'] = lambda: state.args
         ctx['restype'] = lambda: state.return_type
@@ -116,8 +108,6 @@ class MlirBackend(MlirBackendBase):
         finally:
             _mlir_active_module = old_module
         setattr(state, 'mlir_blob', mod_ir)
-        _reload_parfors()
-        state.reload_init.append(_reload_parfors)
         return True
 
 @register_pass(mutates_CFG=True, analysis_only=False)
