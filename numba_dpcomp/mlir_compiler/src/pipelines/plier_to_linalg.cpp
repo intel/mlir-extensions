@@ -1005,7 +1005,9 @@ void TensorFusionPass::runOnOperation()
         LowerEnforceShape
         >(&context);
 
-    mlir::populateLinalgTensorOpsFusionPatterns(patterns);
+    mlir::linalg::populateElementwiseOpsFusionPatterns(
+        patterns,
+        mlir::linalg::LinalgElementwiseFusionOptions().setAllowFoldingUnitDimReshapes(true));
 
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
 }
