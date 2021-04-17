@@ -28,6 +28,8 @@
 
 #include "plier/transforms/const_utils.hpp"
 
+namespace MemoryEffects = ::mlir::MemoryEffects;
+
 namespace
 {
 struct PLierInlinerInterface : public mlir::DialectInlinerInterface
