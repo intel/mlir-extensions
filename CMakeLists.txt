@@ -24,6 +24,7 @@ set(CMAKE_VISIBILITY_INLINES_HIDDEN 1)
 
 add_subdirectory(dpcomp)
 add_subdirectory(dpcomp_runtime)
+add_subdirectory(tools)
 add_subdirectory(numba_dpcomp/mlir_compiler)
 
 set(CMAKE_INSTALL_BINDIR .)
