@@ -12,5 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_subdirectory(dpcomp-opt)
-add_subdirectory(FileCheck)
+find_package(LLVM REQUIRED CONFIG)
+
+configure_file(lit.site.cfg.py.in lit.site.cfg.py)
+configure_file(runlit.py runlit.py COPYONLY)
+
+add_test(NAME lit-tests
+    COMMAND python runlit.py -v .
+)

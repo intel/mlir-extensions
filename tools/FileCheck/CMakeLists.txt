@@ -12,5 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_subdirectory(dpcomp-opt)
-add_subdirectory(FileCheck)
+find_package(LLVM REQUIRED CONFIG)
+
+list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
+include(AddLLVM)
+include(HandleLLVMOptions)
+
+add_executable(FileCheck FileCheck.cpp)
+
+if (MSVC)
+    target_compile_options(FileCheck PRIVATE /EHsc)
+endif ()
+
+target_compile_definitions(FileCheck PRIVATE ${LLVM_DEFINITIONS})
+
+target_link_libraries(FileCheck PRIVATE LLVMFileCheck LLVMSupport)
+
+target_include_directories(FileCheck PRIVATE
+    ${LLVM_INCLUDE_DIRS}
+    )
