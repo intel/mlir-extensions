@@ -29,14 +29,14 @@ struct RewriteWrapperPass :
 {
     void runOnOperation() override
     {
-        auto& context = getContext();
+        auto& context = this->getContext();
         mlir::OwningRewritePatternList patterns(&context);
 
         patterns.insert<Rewrite>(&context);
 
-        if (mlir::failed(mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns))))
+        if (mlir::failed(mlir::applyPatternsAndFoldGreedily(this->getOperation(), std::move(patterns))))
         {
-            signalPassFailure();
+            this->signalPassFailure();
         }
     }
 };
