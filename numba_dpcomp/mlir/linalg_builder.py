@@ -72,6 +72,9 @@ class Builder:
     def reshape(self, src, num_dims, affine_maps):
         return self._reshape(self._context, src, num_dims, affine_maps)
 
+    def external_call(self, name, inputs, outputs):
+        return self._external_call(self._context, name, inputs, outputs)
+
 def compile_func(*args, **kwargs):
     import numba_dpcomp.mlir.inner_compiler
     return numba_dpcomp.mlir.inner_compiler.compile_func(*args, **kwargs)

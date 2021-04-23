@@ -355,5 +355,15 @@ class TestMlirBasic(TestCase):
             arr = np.array(a)
             assert_equal(_vectorize_reference(func, arr), jit_func(arr))
 
+    def test_fortran_layout(self):
+        def py_func(a):
+            return a.T
+
+        jit_func = njit(py_func)
+
+        arr = np.array([[1,2],[3,4]])
+        for a in [arr]: # TODO: arr.T
+            assert_equal(py_func(a), jit_func(a))
+
 if __name__ == '__main__':
     unittest.main()

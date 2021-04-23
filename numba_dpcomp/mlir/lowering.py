@@ -32,6 +32,7 @@ from numba.core.typed_passes import NoPythonBackend as orig_NoPythonBackend
 # from numba.core.pylowering import PyLower as orig_PyLower
 
 from .runtime import *
+from .math_runtime import *
 
 class mlir_lower(orig_Lower):
     def lower(self):

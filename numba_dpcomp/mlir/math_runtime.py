@@ -14,21 +14,26 @@
 
 import ctypes
 import atexit
-from numba.np.ufunc.parallel import get_thread_count
 import llvmlite.binding as ll
-from .utils import load_lib
+from .utils import load_lib, mlir_func_name
 
-runtime_lib = load_lib('dpcomp-runtime')
+runtime_lib = load_lib('dpcomp-math-runtime')
 assert not runtime_lib is None
 
-_init_func = runtime_lib.dpcomp_parallel_init
-_init_func.argtypes = [ctypes.c_int]
-_init_func(get_thread_count())
+_init_func = runtime_lib.dpcomp_math_runtime_init
+_init_func()
 
-_finalize_func = runtime_lib.dpcomp_parallel_finalize
 
-_parallel_for_func = runtime_lib.dpcomp_parallel_for
-ll.add_symbol('dpcomp_parallel_for', ctypes.cast(_parallel_for_func, ctypes.c_void_p).value)
+def load_function_variants(func_name, suffixes):
+    for s in suffixes:
+        name = func_name + s
+        mlir_name = mlir_func_name(name)
+        func = getattr(runtime_lib, name)
+        ll.add_symbol(mlir_name, ctypes.cast(func, ctypes.c_void_p).value)
+
+load_function_variants('dpcomp_linalg_eig_', ['float32','float64'])
+
+_finalize_func = runtime_lib.dpcomp_math_runtime_finalize
 
 @atexit.register
 def _cleanup():
