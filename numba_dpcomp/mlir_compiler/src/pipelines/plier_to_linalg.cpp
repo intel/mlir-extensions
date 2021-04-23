@@ -1193,7 +1193,7 @@ void PromoteParallelPass::runOnFunction()
 
 void populate_plier_to_linalg_gen_pipeline(mlir::OpPassManager& pm)
 {
-    pm.addNestedPass<mlir::FuncOp>(std::make_unique<TransposeFLayout>());
+//    pm.addNestedPass<mlir::FuncOp>(std::make_unique<TransposeFLayout>());
     pm.addPass(std::make_unique<PlierToLinalgPass>());
     pm.addNestedPass<mlir::FuncOp>(std::make_unique<PostPlierToLinalgPass>());
     pm.addPass(mlir::createSymbolDCEPass());
