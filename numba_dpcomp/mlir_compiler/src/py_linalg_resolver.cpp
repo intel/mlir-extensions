@@ -987,6 +987,7 @@ py::object external_call_impl(py::capsule context, py::str func_name, py::handle
         else
         {
             f = plier::add_function(builder, mod, name, funcType);
+            f->setAttr("llvm.emit_c_interface", mlir::UnitAttr::get(builder.getContext()));
         }
         return f;
     }();
