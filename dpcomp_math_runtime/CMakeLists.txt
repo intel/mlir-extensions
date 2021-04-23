@@ -17,6 +17,7 @@ project(dpcomp-math-runtime LANGUAGES CXX C)
 include(GenerateExportHeader)
 
 set(SOURCES_LIST
+    src/common.cpp
     src/numpy_linalg.cpp
     )
 set(HEADERS_LIST

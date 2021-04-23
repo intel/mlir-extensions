@@ -20,10 +20,9 @@ from .utils import load_lib, mlir_func_name
 runtime_lib = load_lib('dpcomp-math-runtime')
 assert not runtime_lib is None
 
-# _init_func = runtime_lib.dpcomp_parallel_init
-# _init_func()
+_init_func = runtime_lib.dpcomp_math_runtime_init
+_init_func()
 
-# _finalize_func = runtime_lib.dpcomp_parallel_finalize
 
 def load_function_variants(func_name, suffixes):
     for s in suffixes:
@@ -34,7 +33,8 @@ def load_function_variants(func_name, suffixes):
 
 load_function_variants('dpcomp_linalg_eig_', ['float32','float64'])
 
+_finalize_func = runtime_lib.dpcomp_math_runtime_finalize
 
-# @atexit.register
-# def _cleanup():
-#     _finalize_func()
+@atexit.register
+def _cleanup():
+    _finalize_func()
