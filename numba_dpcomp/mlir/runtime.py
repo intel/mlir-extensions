@@ -16,7 +16,7 @@ import ctypes
 import atexit
 from numba.np.ufunc.parallel import get_thread_count
 import llvmlite.binding as ll
-from .utils import load_lib
+from .utils import load_lib, mlir_func_name
 
 runtime_lib = load_lib('dpcomp-runtime')
 assert not runtime_lib is None
@@ -28,7 +28,7 @@ _init_func(get_thread_count())
 _finalize_func = runtime_lib.dpcomp_parallel_finalize
 
 _parallel_for_func = runtime_lib.dpcomp_parallel_for
-ll.add_symbol('dpcomp_parallel_for', ctypes.cast(_parallel_for_func, ctypes.c_void_p).value)
+ll.add_symbol(mlir_func_name('dpcomp_parallel_for'), ctypes.cast(_parallel_for_func, ctypes.c_void_p).value)
 
 @atexit.register
 def _cleanup():
