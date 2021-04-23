@@ -66,6 +66,7 @@ mlir::LowerToLLVMOptions getLLVMOptions(mlir::MLIRContext& context)
     mlir::LowerToLLVMOptions opts(&context);
     opts.dataLayout = dl;
     opts.useBarePtrCallConv = false;
+    opts.emitCWrappers = true;
     return opts;
 }
 

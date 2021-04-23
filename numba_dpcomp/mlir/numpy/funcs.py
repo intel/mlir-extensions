@@ -225,3 +225,27 @@ def reshape_impl(builder, arg, new_shape):
 
         return builder.generic(flat, init, iterators, maps, body)
 
+def dtype_str(builder, dtype):
+    names = [
+        (builder.int8,  'int8'),
+        (builder.int16, 'int16'),
+        (builder.int32, 'int32'),
+        (builder.int64, 'int64'),
+        (builder.float32, 'float32'),
+        (builder.float64, 'float64'),
+    ]
+    for t, name in names:
+        if t == dtype:
+            return name
+    assert(False)
+
+@register_func('numpy.linalg.eig', numpy.linalg.eig)
+def eig_impl(builder, arg):
+    shape = arg.shape
+    if len(shape) == 2:
+        dtype = arg.dtype
+        func_name = f'numpy_linalg_eig_{dtype_str(builder, dtype)}'
+        size = shape[0]
+        vals = builder.init_tensor([size], dtype)
+        vecs = builder.init_tensor([size,size], dtype)
+        return builder.external_call(func_name, arg, (vals, vecs))
