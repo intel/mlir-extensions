@@ -30,10 +30,6 @@ extern "C"
 #define EIG_VARIANT(T, Suff) DPCOMP_MATH_RUNTIME_EXPORT void dpcomp_linalg_eig_##Suff \
 (Memref<2, const T>* input, Memref<2, T>* vals, Memref<2, T>* vecs) { eig_impl(input, vals, vecs); }
 
-EIG_VARIANT(int8_t, int8)
-EIG_VARIANT(int16_t, int16)
-EIG_VARIANT(int32_t, int32)
-EIG_VARIANT(int64_t, int64)
 EIG_VARIANT(float, float32)
 EIG_VARIANT(double, float64)
 

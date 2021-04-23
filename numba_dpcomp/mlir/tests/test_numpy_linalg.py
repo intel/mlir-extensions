@@ -35,7 +35,7 @@ def vvsort(val, vec, size):
 
 @pytest.mark.parametrize("type",
                          [numpy.float64, numpy.float32, numpy.int64, numpy.int32],
-                         ids=['float64', 'float32', 'int64', 'int32'])
+                         ids=['float64', 'float32'])
 @pytest.mark.parametrize("size",
                          [2, 4, 8, 16, 300])
 def test_eig_arange(type, size):

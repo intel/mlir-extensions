@@ -25,15 +25,6 @@ assert not runtime_lib is None
 
 # _finalize_func = runtime_lib.dpcomp_parallel_finalize
 
-_data_types_str = [
-    'int8',
-    'int16',
-    'int32',
-    'int64',
-    'float32',
-    'float64',
-]
-
 def load_function_variants(func_name, suffixes):
     for s in suffixes:
         name = func_name + s
@@ -41,7 +32,7 @@ def load_function_variants(func_name, suffixes):
         func = getattr(runtime_lib, name)
         ll.add_symbol(mlir_name, ctypes.cast(func, ctypes.c_void_p).value)
 
-load_function_variants('dpcomp_linalg_eig_', _data_types_str)
+load_function_variants('dpcomp_linalg_eig_', ['float32','float64'])
 
 
 # @atexit.register
