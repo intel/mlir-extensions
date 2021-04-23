@@ -244,7 +244,7 @@ def eig_impl(builder, arg):
     shape = arg.shape
     if len(shape) == 2:
         dtype = arg.dtype
-        func_name = f'numpy_linalg_eig_{dtype_str(builder, dtype)}'
+        func_name = f'dpcomp_linalg_eig_{dtype_str(builder, dtype)}'
         size = shape[0]
         vals = builder.init_tensor([size], dtype)
         vecs = builder.init_tensor([size,size], dtype)
