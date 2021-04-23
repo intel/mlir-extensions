@@ -154,7 +154,8 @@ mlir::Type map_array_type(mlir::MLIRContext& ctx, mlir::TypeConverter& conveter,
 {
     if (auto desc = parse_array_desc(name))
     {
-        if (desc->layout == ArrayLayout::C)
+        if (desc->layout == ArrayLayout::C ||
+            desc->layout == ArrayLayout::F)
         {
             if (auto type = conveter.convertType(plier::PyType::get(&ctx, desc->name)))
             {
@@ -550,6 +551,67 @@ struct SetitemOpLoweringSSA : public mlir::OpRewritePattern<T>
         return mlir::success();
     }
 };
+
+struct TransposeFLayout :
+    public mlir::PassWrapper<TransposeFLayout, mlir::FunctionPass>
+{
+    void runOnFunction() override;
+};
+
+void TransposeFLayout::runOnFunction()
+{
+    auto func = getFunction();
+    if (func.getRegion().empty())
+    {
+        return;
+    }
+    auto needTranspose = [](mlir::Type type)
+    {
+        if (auto plierType = type.dyn_cast<plier::PyType>())
+        {
+            auto name = plierType.getName();
+            if (auto arrayDesc = parse_array_desc(name))
+            {
+                if (arrayDesc->layout == ArrayLayout::F)
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+
+    mlir::OpBuilder builder(func.body());
+    auto loc = builder.getUnknownLoc();
+    for (auto arg : func.body().front().getArguments())
+    {
+        auto type = arg.getType();
+        if (needTranspose(type))
+        {
+            auto transposed = builder.create<plier::GetattrOp>(loc, arg, "T");
+            transposed->getResult(0).setType(type);
+            arg.replaceAllUsesExcept(transposed, llvm::SmallPtrSet<mlir::Operation *, 1>{transposed});
+        }
+    }
+    for (auto& block : func.body())
+    {
+        if (auto ret = mlir::dyn_cast<mlir::ReturnOp>(block.getTerminator()))
+        {
+            builder.setInsertionPoint(ret);
+            for (auto it : llvm::enumerate(ret.getOperands()))
+            {
+                auto op = it.value();
+                auto type = op.getType();
+                if (needTranspose(type))
+                {
+                    auto transposed = builder.create<plier::GetattrOp>(loc, op, "T")->getResult(0);
+                    transposed.setType(type);
+                    ret.setOperand(static_cast<unsigned>(it.index()), transposed);
+                }
+            }
+        }
+    }
+}
 
 struct PlierToLinalgPass :
     public mlir::PassWrapper<PlierToLinalgPass, mlir::OperationPass<mlir::ModuleOp>>
@@ -1131,6 +1193,7 @@ void PromoteParallelPass::runOnFunction()
 
 void populate_plier_to_linalg_gen_pipeline(mlir::OpPassManager& pm)
 {
+    pm.addNestedPass<mlir::FuncOp>(std::make_unique<TransposeFLayout>());
     pm.addPass(std::make_unique<PlierToLinalgPass>());
     pm.addNestedPass<mlir::FuncOp>(std::make_unique<PostPlierToLinalgPass>());
     pm.addPass(mlir::createSymbolDCEPass());
