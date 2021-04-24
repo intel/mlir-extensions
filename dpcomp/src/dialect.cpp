@@ -464,11 +464,6 @@ void EnforceShapeOp::getCanonicalizationPatterns(
     results.insert<EnforceShapeDim>(context);
 }
 
-void RetainOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
-                     mlir::Value value) {
-    RetainOp::build(builder, state, value.getType(), value);
-}
-
 mlir::LogicalResult ParallelOp::moveOutOfLoop(mlir::ArrayRef<mlir::Operation *> ops)
 {
     for (mlir::Operation *op : ops)

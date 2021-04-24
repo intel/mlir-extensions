@@ -242,16 +242,6 @@ def EnforceShapeOp : Plier_Op<"enforce_shape"> {
     let hasCanonicalizer = 1;
 }
 
-def RetainOp : Plier_Op<"retain"> {
-    let arguments = (ins AnyMemRef:$value);
-
-    let results = (outs Res<AnyMemRef, "", [MemAlloc<DefaultResource>]>:$memref);
-
-    let builders = [
-        OpBuilder<(ins "::mlir::Value":$value)>
-    ];
-}
-
 def ParallelOp : Plier_Op<"parallel",
       [AttrSizedOperandSegments,
        DeclareOpInterfaceMethods<LoopLikeOpInterface>,
