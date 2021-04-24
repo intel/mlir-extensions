@@ -61,7 +61,7 @@
 
 namespace
 {
-void applyOptimizations(mlir::FuncOp op, const mlir::FrozenRewritePatternList& patterns, llvm::function_ref<mlir::LogicalResult(mlir::FuncOp)> additionalOpts = nullptr)
+void applyOptimizations(mlir::FuncOp op, const mlir::FrozenRewritePatternList& patterns, mlir::AnalysisManager am, llvm::function_ref<mlir::LogicalResult(mlir::FuncOp)> additionalOpts = nullptr)
 {
     bool repeat = false;
     do
@@ -72,13 +72,17 @@ void applyOptimizations(mlir::FuncOp op, const mlir::FrozenRewritePatternList& p
         {
             repeat = true;
         }
-        if (mlir::succeeded(plier::optimizeMemoryOps(op)))
+        if (mlir::succeeded(plier::optimizeMemoryOps(am)))
         {
             repeat = true;
         }
         if (additionalOpts && mlir::succeeded(additionalOpts(op)))
         {
             repeat = true;
+        }
+        if (repeat)
+        {
+            am.invalidate({});
         }
     }
     while(repeat);
@@ -1046,7 +1050,7 @@ void PostPlierToLinalgPass::runOnFunction()
         SimplifyExpandDims
         >(&context);
 
-    applyOptimizations(getFunction(), std::move(patterns));
+    applyOptimizations(getFunction(), std::move(patterns), getAnalysisManager());
 }
 
 struct TensorFusionPass :
@@ -1164,7 +1168,8 @@ void PostLinalgOptPass::runOnFunction()
         plier::CanonicalizeReduction
         >(&context);
 
-    applyOptimizations(getFunction(), std::move(patterns), [](mlir::FuncOp op)
+    applyOptimizations(getFunction(), std::move(patterns), getAnalysisManager(),
+                       [](mlir::FuncOp op)
     {
         return plier::naivelyFuseParallelOps(op.getRegion());
     });
@@ -1188,7 +1193,7 @@ void PromoteParallelPass::runOnFunction()
         plier::PromoteToParallel // TODO
         >(&context);
 
-    applyOptimizations(getFunction(), std::move(patterns));
+    applyOptimizations(getFunction(), std::move(patterns), getAnalysisManager());
 }
 
 void populate_plier_to_linalg_gen_pipeline(mlir::OpPassManager& pm)

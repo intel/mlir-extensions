@@ -48,6 +48,9 @@ public:
     MemorySSA(const MemorySSA&) = delete;
     MemorySSA(MemorySSA&&) = default;
 
+    MemorySSA& operator=(const MemorySSA&) = delete;
+    MemorySSA& operator=(MemorySSA&&) = default;
+
     Node* createDef(mlir::Operation* op, Node* arg);
     Node* createUse(mlir::Operation* op, Node* arg);
     Node* createPhi(mlir::Operation* op, llvm::ArrayRef<Node*> args);

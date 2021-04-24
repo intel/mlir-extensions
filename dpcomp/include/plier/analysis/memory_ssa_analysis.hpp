@@ -14,21 +14,29 @@
 
 #pragma once
 
-#include <mlir/IR/PatternMatch.h>
+#include "plier/analysis/memory_ssa.hpp"
+
+#include <mlir/Pass/AnalysisManager.h>
 
 namespace mlir
 {
-namespace memref
-{
-class AllocOp;
-class AllocaOp;
-}
-class FuncOp;
-struct LogicalResult;
-class AnalysisManager;
+class Operation;
+class BufferAliasAnalysis;
 }
 
 namespace plier
 {
-mlir::LogicalResult optimizeMemoryOps(mlir::AnalysisManager& am);
+class MemorySSAAnalysis
+{
+public:
+    MemorySSAAnalysis(mlir::Operation* op, mlir::AnalysisManager& am);
+    MemorySSAAnalysis(const MemorySSAAnalysis&) = delete;
+
+    mlir::LogicalResult optimizeUses();
+
+    static bool isInvalidated(const mlir::AnalysisManager::PreservedAnalyses& pa);
+
+    llvm::Optional<plier::MemorySSA> memssa;
+    mlir::BufferAliasAnalysis* aliasAnalysis = nullptr;
+};
 }
