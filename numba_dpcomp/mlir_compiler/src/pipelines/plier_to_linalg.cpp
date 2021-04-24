@@ -80,6 +80,10 @@ void applyOptimizations(mlir::FuncOp op, const mlir::FrozenRewritePatternList& p
         {
             repeat = true;
         }
+        if (repeat)
+        {
+            am.invalidate({});
+        }
     }
     while(repeat);
 }

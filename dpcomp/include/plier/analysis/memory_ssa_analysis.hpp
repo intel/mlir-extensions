@@ -21,6 +21,7 @@
 namespace mlir
 {
 class Operation;
+class BufferAliasAnalysis;
 }
 
 namespace plier
@@ -31,8 +32,11 @@ public:
     MemorySSAAnalysis(mlir::Operation* op, mlir::AnalysisManager& am);
     MemorySSAAnalysis(const MemorySSAAnalysis&) = delete;
 
+    mlir::LogicalResult optimizeUses();
+
     static bool isInvalidated(const mlir::AnalysisManager::PreservedAnalyses& pa);
 
     llvm::Optional<plier::MemorySSA> memssa;
+    mlir::BufferAliasAnalysis* aliasAnalysis = nullptr;
 };
 }

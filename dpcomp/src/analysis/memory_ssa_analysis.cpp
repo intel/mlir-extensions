@@ -14,7 +14,7 @@
 
 #include "plier/analysis/memory_ssa_analysis.hpp"
 
-#include <mlir/Analysis/AliasAnalysis.h>
+#include <mlir/Analysis/BufferAliasAnalysis.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 
 namespace
@@ -49,7 +49,16 @@ plier::MemorySSAAnalysis::MemorySSAAnalysis(mlir::Operation* op, mlir::AnalysisM
     memssa = buildMemorySSA(op->getRegion(0));
     if (memssa)
     {
-        auto& aliasAnalysis = am.getAnalysis<mlir::AliasAnalysis>();
+        aliasAnalysis = &am.getAnalysis<mlir::BufferAliasAnalysis>();
+        (void)optimizeUses();
+    }
+}
+
+mlir::LogicalResult plier::MemorySSAAnalysis::optimizeUses()
+{
+    if (memssa)
+    {
+        assert(nullptr != aliasAnalysis);
         auto mayAlias = [&](mlir::Operation* op1, mlir::Operation* op2)
         {
             auto info1 = getMeminfo(op1);
@@ -62,14 +71,15 @@ plier::MemorySSAAnalysis::MemorySSAAnalysis(mlir::Operation* op, mlir::AnalysisM
             {
                 return true;
             }
-            return !aliasAnalysis.alias(info1->memref, info2->memref).isNo();
+            return aliasAnalysis->resolve(info1->memref).count(info2->memref) != 0;
         };
-        (void)memssa->optimizeUses(mayAlias);
+        return memssa->optimizeUses(mayAlias);
     }
+    return mlir::failure();
 }
 
 bool plier::MemorySSAAnalysis::isInvalidated(const mlir::AnalysisManager::PreservedAnalyses& pa)
 {
     return !pa.isPreserved<MemorySSAAnalysis>() ||
-           !pa.isPreserved<mlir::AliasAnalysis>();
+           !pa.isPreserved<mlir::BufferAliasAnalysis>();
 }
