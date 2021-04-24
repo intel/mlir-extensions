@@ -23,37 +23,6 @@
 
 namespace
 {
-mlir::LogicalResult simplifyAlloc(mlir::Operation* op, mlir::PatternRewriter& rewriter)
-{
-    for (auto user : op->getUsers())
-    {
-        if (!mlir::isa<mlir::memref::StoreOp, mlir::memref::DeallocOp>(user))
-        {
-            return mlir::failure();
-        }
-    }
-
-    for (auto user : llvm::make_early_inc_range(op->getUsers()))
-    {
-        rewriter.eraseOp(user);
-    }
-    rewriter.eraseOp(op);
-    return mlir::success();
-}
-}
-
-mlir::LogicalResult plier::RemoveTrivialAlloc::matchAndRewrite(mlir::memref::AllocOp op, mlir::PatternRewriter& rewriter) const
-{
-    return simplifyAlloc(op, rewriter);
-}
-
-mlir::LogicalResult plier::RemoveTrivialAlloca::matchAndRewrite(mlir::memref::AllocaOp op, mlir::PatternRewriter& rewriter) const
-{
-    return simplifyAlloc(op, rewriter);
-}
-
-namespace
-{
 struct Meminfo
 {
     mlir::Value memref;
