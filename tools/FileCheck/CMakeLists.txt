@@ -20,11 +20,7 @@ include(HandleLLVMOptions)
 
 add_executable(FileCheck FileCheck.cpp)
 
-if (MSVC)
-    target_compile_options(FileCheck PRIVATE /EHsc)
-endif ()
-
-target_compile_definitions(FileCheck PRIVATE ${LLVM_DEFINITIONS})
+apply_llvm_compile_flags(FileCheck)
 
 target_link_libraries(FileCheck PRIVATE LLVMFileCheck LLVMSupport)
 

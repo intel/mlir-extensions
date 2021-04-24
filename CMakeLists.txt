@@ -22,6 +22,14 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 set(CMAKE_VISIBILITY_INLINES_HIDDEN 1)
 
+macro(apply_llvm_compile_flags target)
+    if (MSVC)
+        target_compile_options(${target} PRIVATE /EHsc)
+    endif ()
+
+    target_compile_definitions(${target} PRIVATE ${LLVM_DEFINITIONS})
+endmacro()
+
 add_subdirectory(dpcomp)
 add_subdirectory(dpcomp_math_runtime)
 add_subdirectory(dpcomp_runtime)

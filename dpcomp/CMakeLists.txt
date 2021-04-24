@@ -84,11 +84,7 @@ set(PLIER_LIB "plier")
 
 add_library(${PLIER_LIB} STATIC ${SOURCES_LIST} ${HEADERS_LIST})
 
-if (MSVC)
-    target_compile_options(${PLIER_LIB} PRIVATE /EHsc)
-endif ()
-
-target_compile_definitions(${PLIER_LIB} PRIVATE ${LLVM_DEFINITIONS})
+apply_llvm_compile_flags(${PLIER_LIB})
 
 target_link_libraries(${PLIER_LIB} PRIVATE
     MLIRIR
