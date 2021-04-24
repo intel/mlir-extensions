@@ -14,12 +14,12 @@
 
 #include "plier/rewrites/memory_rewrites.hpp"
 
-#include <mlir/Analysis/BufferAliasAnalysis.h>
+#include <mlir/Analysis/AliasAnalysis.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/IR/BuiltinOps.h>
 
-#include <plier/analysis/memory_ssa.hpp>
+#include "plier/analysis/memory_ssa_analysis.hpp"
 
 namespace
 {
@@ -43,26 +43,6 @@ llvm::Optional<Meminfo> getMeminfo(mlir::Operation* op)
     return {};
 }
 
-struct MayAlias
-{
-    bool operator()(mlir::Operation* op1, mlir::Operation* op2) const
-    {
-        auto meminfo1 = getMeminfo(op1);
-        if (!meminfo1)
-        {
-            return true;
-        }
-        auto meminfo2 = getMeminfo(op2);
-        if (!meminfo2)
-        {
-            return true;
-        }
-        return aliases.resolve(meminfo1->memref).count(meminfo2->memref) != 0;
-    }
-
-    mlir::BufferAliasAnalysis& aliases;
-};
-
 struct MustAlias
 {
     bool operator()(mlir::Operation* op1, mlir::Operation* op2) const
@@ -81,16 +61,10 @@ struct MustAlias
                meminfo1->indices == meminfo2->indices;
     }
 
-    mlir::BufferAliasAnalysis& aliases;
+    mlir::AliasAnalysis& aliases;
 };
 
-mlir::LogicalResult optimizeUses(mlir::BufferAliasAnalysis& aliases, plier::MemorySSA& memSSA)
-{
-    (void)memSSA.optimizeUses(MayAlias{aliases});
-    return mlir::failure();
-}
-
-mlir::LogicalResult foldLoads(mlir::BufferAliasAnalysis& aliases, plier::MemorySSA& memSSA)
+mlir::LogicalResult foldLoads(mlir::AliasAnalysis& aliases, plier::MemorySSA& memSSA)
 {
     using NodeType = plier::MemorySSA::NodeType;
     bool changed = false;
@@ -121,7 +95,7 @@ mlir::LogicalResult foldLoads(mlir::BufferAliasAnalysis& aliases, plier::MemoryS
     return mlir::success(changed);
 }
 
-mlir::LogicalResult deadStoreElemination(mlir::BufferAliasAnalysis& aliases, plier::MemorySSA& memSSA)
+mlir::LogicalResult deadStoreElemination(mlir::AliasAnalysis& aliases, plier::MemorySSA& memSSA)
 {
     using NodeType = plier::MemorySSA::NodeType;
     auto getNextDef = [&](plier::MemorySSA::Node* node)->plier::MemorySSA::Node*
@@ -170,18 +144,18 @@ mlir::LogicalResult deadStoreElemination(mlir::BufferAliasAnalysis& aliases, pli
 
 }
 
-mlir::LogicalResult plier::optimizeMemoryOps(mlir::FuncOp func)
+mlir::LogicalResult plier::optimizeMemoryOps(mlir::AnalysisManager& am)
 {
-    auto memSSA = buildMemorySSA(func.getRegion());
-    if (!memSSA)
+    auto& memSSAAnalysis = am.getAnalysis<plier::MemorySSAAnalysis>();
+    if (!memSSAAnalysis.memssa)
     {
         return mlir::failure();
     }
-    mlir::BufferAliasAnalysis aliases(func);
+    auto& memSSA = *memSSAAnalysis.memssa;
+    auto& aliasAnalysis = am.getAnalysis<mlir::AliasAnalysis>();
 
-    using fptr_t = mlir::LogicalResult (*)(mlir::BufferAliasAnalysis&, MemorySSA&);
+    using fptr_t = mlir::LogicalResult (*)(mlir::AliasAnalysis&, MemorySSA&);
     const fptr_t funcs[] = {
-        &optimizeUses, // must be first
         &foldLoads,
         &deadStoreElemination
     };
@@ -194,7 +168,7 @@ mlir::LogicalResult plier::optimizeMemoryOps(mlir::FuncOp func)
         repeat = false;
         for (auto func : funcs)
         {
-            if (mlir::succeeded(func(aliases, *memSSA)))
+            if (mlir::succeeded(func(aliasAnalysis, memSSA)))
             {
                 changed = true;
                 repeat = true;
