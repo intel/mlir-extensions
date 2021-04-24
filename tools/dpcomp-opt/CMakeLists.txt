@@ -35,11 +35,7 @@ set(HEADERS_LIST
 
 add_executable(${PROJECT_NAME} ${SOURCES_LIST} ${HEADERS_LIST})
 
-if (MSVC)
-    target_compile_options(${PROJECT_NAME} PRIVATE /EHsc)
-endif ()
-
-target_compile_definitions(${PROJECT_NAME} PRIVATE ${LLVM_DEFINITIONS})
+apply_llvm_compile_flags(${PROJECT_NAME})
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
     plier

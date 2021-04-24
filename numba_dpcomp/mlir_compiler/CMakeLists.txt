@@ -55,10 +55,6 @@ set(HEADERS_LIST
 
 pybind11_add_module(${PROJECT_NAME} ${SOURCES_LIST} ${HEADERS_LIST})
 
-if (MSVC)
-    target_compile_options(${PROJECT_NAME} PRIVATE /EHsc)
-endif ()
-
 if (CMAKE_SYSTEM_NAME STREQUAL Linux)
     target_link_options(${PROJECT_NAME} PRIVATE "LINKER:--version-script=${CMAKE_CURRENT_SOURCE_DIR}/export.txt")
 endif()
@@ -67,7 +63,7 @@ if (CMAKE_SYSTEM_NAME STREQUAL Darwin)
     target_link_libraries(${PROJECT_NAME} PRIVATE "-Wl,-exported_symbols_list,${CMAKE_CURRENT_SOURCE_DIR}/export_darwin.txt")
 endif()
 
-target_compile_definitions(${PROJECT_NAME} PRIVATE ${LLVM_DEFINITIONS})
+apply_llvm_compile_flags(${PROJECT_NAME})
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
     plier

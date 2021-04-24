@@ -22,12 +22,25 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 set(CMAKE_VISIBILITY_INLINES_HIDDEN 1)
 
+include(CTest)
+
+macro(apply_llvm_compile_flags target)
+    if (MSVC)
+        target_compile_options(${target} PRIVATE /EHsc)
+    endif ()
+
+    target_compile_definitions(${target} PRIVATE ${LLVM_DEFINITIONS})
+endmacro()
+
 add_subdirectory(dpcomp)
 add_subdirectory(dpcomp_math_runtime)
 add_subdirectory(dpcomp_runtime)
 add_subdirectory(tools)
 add_subdirectory(numba_dpcomp/mlir_compiler)
-add_subdirectory(test)
+
+if(${BUILD_TESTING})
+    add_subdirectory(test)
+endif()
 
 set(CMAKE_INSTALL_BINDIR .)
 set(CMAKE_INSTALL_LIBDIR .)

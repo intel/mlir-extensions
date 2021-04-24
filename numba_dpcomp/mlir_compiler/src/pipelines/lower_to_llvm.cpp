@@ -1227,13 +1227,12 @@ struct PostLLVMLowering :
     }
 };
 
-template <typename T>
-struct LowerRetain : public mlir::OpConversionPattern<T>
+struct LowerCloneOp : public mlir::OpConversionPattern<mlir::memref::CloneOp>
 {
-    using mlir::OpConversionPattern<T>::OpConversionPattern;
+    using mlir::OpConversionPattern<mlir::memref::CloneOp>::OpConversionPattern;
 
     mlir::LogicalResult
-    matchAndRewrite(T op, llvm::ArrayRef<mlir::Value> operands,
+    matchAndRewrite(mlir::memref::CloneOp op, llvm::ArrayRef<mlir::Value> operands,
                     mlir::ConversionPatternRewriter &rewriter) const override {
         assert(operands.size() == 1);
         auto arg = operands[0];
@@ -1325,8 +1324,7 @@ struct LLVMLoweringPass : public mlir::PassWrapper<LLVMLoweringPass, mlir::Opera
     populateStdToLLVMConversionPatterns(typeConverter, patterns);
     patterns.insert<
         LowerCasts,
-        LowerRetain<plier::RetainOp>,
-        LowerRetain<mlir::memref::CloneOp>
+        LowerCloneOp
         >(typeConverter, &getContext());
     patterns.insert<AllocOpLowering, DeallocOpLowering>(typeConverter);
 

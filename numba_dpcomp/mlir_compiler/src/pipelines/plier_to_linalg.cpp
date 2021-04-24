@@ -1140,7 +1140,7 @@ void RetainArgsPass::runOnFunction()
     {
         if (arg.getType().isa<mlir::MemRefType>())
         {
-            auto retained = builder.create<plier::RetainOp>(loc, arg);
+            auto retained = builder.create<mlir::memref::CloneOp>(loc, arg);
             llvm::SmallPtrSet<mlir::Operation*, 1> except({retained});
             arg.replaceAllUsesExcept(retained, except);
         }
