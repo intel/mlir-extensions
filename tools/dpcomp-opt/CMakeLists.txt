@@ -50,3 +50,9 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${LLVM_INCLUDE_DIRS}
     ${MLIR_INCLUDE_DIRS}
     )
+
+set(CMAKE_INSTALL_BINDIR ../tools/dpcomp-opt)
+
+install(TARGETS dpcomp-opt
+        PERMISSIONS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+        )

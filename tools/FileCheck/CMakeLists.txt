@@ -27,3 +27,9 @@ target_link_libraries(FileCheck PRIVATE LLVMFileCheck LLVMSupport)
 target_include_directories(FileCheck PRIVATE
     ${LLVM_INCLUDE_DIRS}
     )
+
+set(CMAKE_INSTALL_BINDIR ../tools/FileCheck)
+
+install(TARGETS FileCheck
+        PERMISSIONS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+        )

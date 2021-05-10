@@ -29,7 +29,7 @@ jobs:
 
   - script: |
       call "C:\Miniconda\Scripts\activate"
-      call conda install numba=0.53 scipy pybind11 tbb=2021.1 pytest -c conda-forge
+      call conda install numba=0.53 scipy pybind11 tbb=2021.1 pytest lit -c conda-forge
       call cmake --version
       call set LLVM_PATH=$(System.DefaultWorkingDirectory)\llvm_cache
       call set TBB_PATH=$(System.DefaultWorkingDirectory)\tbb
@@ -40,6 +40,11 @@ jobs:
       call "C:\Miniconda\Scripts\activate"
       pytest
     displayName: 'Tests'
+
+  - script: |
+      call "C:\Miniconda\Scripts\activate"
+      call ctest -C Release
+    displayName: 'CTests'
 
 - job: Linux
 
@@ -65,7 +70,7 @@ jobs:
 
   - script: |
       source /usr/share/miniconda/bin/activate
-      conda install -y numba=0.53 scipy pybind11 pytest -c conda-forge
+      conda install -y numba=0.53 scipy pybind11 pytest lit -c conda-forge
       conda install -y tbb=2021.1 --force
       cmake --version
       chmod -R 777 $(System.DefaultWorkingDirectory)/llvm_cache
@@ -79,6 +84,12 @@ jobs:
       source $(System.DefaultWorkingDirectory)/tbb/env/vars.sh
       pytest
     displayName: 'Tests'
+
+  - script: |
+      source /usr/share/miniconda/bin/activate
+      source $(System.DefaultWorkingDirectory)/tbb/env/vars.sh
+      ctest -C Release
+    displayName: 'CTests'
 
 - job: MacOS
 
@@ -109,7 +120,7 @@ jobs:
 
   - script: |
       source /usr/local/miniconda/bin/activate
-      conda create -y -n test_env python=3.9 numba=0.53 scipy pybind11 tbb=2021.1 pytest -c conda-forge
+      conda create -y -n test_env python=3.9 numba=0.53 scipy pybind11 tbb=2021.1 pytest lit -c conda-forge
       conda activate test_env
       cmake --version
       chmod -R 777 $(System.DefaultWorkingDirectory)/llvm_cache
@@ -123,3 +134,9 @@ jobs:
       conda activate test_env
       pytest
     displayName: 'Tests'
+
+  - script: |
+      source /usr/local/miniconda/bin/activate
+      conda activate test_env
+      ctest -C Release
+    displayName: 'CTests'
