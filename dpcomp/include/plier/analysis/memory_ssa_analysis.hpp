@@ -21,7 +21,7 @@
 namespace mlir
 {
 class Operation;
-class BufferAliasAnalysis;
+class BufferViewFlowAnalysis;
 }
 
 namespace plier
@@ -37,6 +37,6 @@ public:
     static bool isInvalidated(const mlir::AnalysisManager::PreservedAnalyses& pa);
 
     llvm::Optional<plier::MemorySSA> memssa;
-    mlir::BufferAliasAnalysis* aliasAnalysis = nullptr;
+    mlir::BufferViewFlowAnalysis* aliasAnalysis = nullptr;
 };
 }

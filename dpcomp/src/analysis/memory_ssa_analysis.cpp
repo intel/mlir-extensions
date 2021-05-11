@@ -14,7 +14,7 @@
 
 #include "plier/analysis/memory_ssa_analysis.hpp"
 
-#include <mlir/Analysis/BufferAliasAnalysis.h>
+#include <mlir/Analysis/BufferViewFlowAnalysis.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 
 namespace
@@ -49,7 +49,7 @@ plier::MemorySSAAnalysis::MemorySSAAnalysis(mlir::Operation* op, mlir::AnalysisM
     memssa = buildMemorySSA(op->getRegion(0));
     if (memssa)
     {
-        aliasAnalysis = &am.getAnalysis<mlir::BufferAliasAnalysis>();
+        aliasAnalysis = &am.getAnalysis<mlir::BufferViewFlowAnalysis>();
         (void)optimizeUses();
     }
 }
@@ -81,5 +81,5 @@ mlir::LogicalResult plier::MemorySSAAnalysis::optimizeUses()
 bool plier::MemorySSAAnalysis::isInvalidated(const mlir::AnalysisManager::PreservedAnalyses& pa)
 {
     return !pa.isPreserved<MemorySSAAnalysis>() ||
-           !pa.isPreserved<mlir::BufferAliasAnalysis>();
+           !pa.isPreserved<mlir::BufferViewFlowAnalysis>();
 }

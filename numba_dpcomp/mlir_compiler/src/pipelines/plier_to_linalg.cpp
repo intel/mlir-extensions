@@ -61,7 +61,7 @@
 
 namespace
 {
-void applyOptimizations(mlir::FuncOp op, const mlir::FrozenRewritePatternList& patterns, mlir::AnalysisManager am, llvm::function_ref<mlir::LogicalResult(mlir::FuncOp)> additionalOpts = nullptr)
+void applyOptimizations(mlir::FuncOp op, const mlir::FrozenRewritePatternSet& patterns, mlir::AnalysisManager am, llvm::function_ref<mlir::LogicalResult(mlir::FuncOp)> additionalOpts = nullptr)
 {
     bool repeat = false;
     do
@@ -1071,9 +1071,7 @@ void TensorFusionPass::runOnOperation()
         LowerEnforceShape
         >(&context);
 
-    mlir::linalg::populateElementwiseOpsFusionPatterns(
-        patterns,
-        mlir::linalg::LinalgElementwiseFusionOptions().setAllowFoldingUnitDimReshapes(true));
+    mlir::linalg::populateElementwiseOpsFusionPatterns(patterns);
 
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
 }
