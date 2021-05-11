@@ -31,3 +31,14 @@ mlir::FuncOp plier::add_function(
     func.setPrivate();
     return func;
 }
+
+plier::AllocaInsertionPoint::AllocaInsertionPoint(mlir::Operation* inst)
+{
+    assert(nullptr != inst);
+    auto parent = inst->getParentWithTrait<mlir::OpTrait::IsIsolatedFromAbove>();
+    assert(parent->getNumRegions() == 1);
+    assert(!parent->getRegions().front().empty());
+    auto& block = parent->getRegions().front().front();
+    assert(!block.empty());
+    insertionPoint = &block.front();
+}

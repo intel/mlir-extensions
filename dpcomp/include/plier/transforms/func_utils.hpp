@@ -14,12 +14,15 @@
 
 #pragma once
 
+#include <mlir/IR/Builders.h>
+
 namespace mlir
 {
 class ModuleOp;
 class FuncOp;
 class OpBuilder;
 class FunctionType;
+class Operation;
 }
 
 namespace llvm
@@ -31,4 +34,24 @@ namespace plier
 {
 mlir::FuncOp add_function(mlir::OpBuilder& builder, mlir::ModuleOp module,
                           llvm::StringRef name, mlir::FunctionType type);
+
+struct AllocaInsertionPoint
+{
+    AllocaInsertionPoint(mlir::Operation* inst);
+
+    template <typename F>
+    auto insert(mlir::OpBuilder& builder, F&& func)
+    {
+        assert(nullptr != insertionPoint);
+        if (builder.getBlock() == insertionPoint->getBlock())
+        {
+            return func();
+        }
+        mlir::OpBuilder::InsertionGuard g(builder);
+        builder.setInsertionPoint(insertionPoint);
+        return func();
+    }
+private:
+    mlir::Operation* insertionPoint = nullptr;
+};
 }
