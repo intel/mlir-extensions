@@ -551,6 +551,11 @@ void ParallelOp::build(
     }
 }
 
+void RetainOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
+                           mlir::Value value) {
+    RetainOp::build(builder, state, value.getType(), value);
+}
+
 }
 
 #define GET_OP_CLASSES
