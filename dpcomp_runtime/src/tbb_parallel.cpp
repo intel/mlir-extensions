@@ -16,8 +16,10 @@
 #include <cstdio>
 
 #define TBB_PREVIEW_WAITING_FOR_WORKERS 1
+#define TBB_PREVIEW_BLOCKED_RANGE_ND 1
 
 #include <tbb/task_arena.h>
+#include <tbb/blocked_rangeNd.h>
 #include <tbb/global_control.h>
 #include <tbb/parallel_for.h>
 
@@ -39,6 +41,7 @@ struct TBBContext
 
     ~TBBContext()
     {
+        arena.terminate();
         (void)tbb::finalize(scheduler_handle, std::nothrow);
     }
 
@@ -97,13 +100,37 @@ static void parallel_for_nested(const InputRange* input_ranges, size_t depth, si
                static_cast<int>(depth));
     }
 
+    auto runFunc = [&](Dim* current)
+    {
+        auto thread_index = static_cast<size_t>(tbb::this_task_arena::current_thread_index());
+        std::array<Range, 8> static_ranges;
+        std::unique_ptr<Range[]> dyn_ranges;
+        auto* range_ptr = [&]()->Range*
+        {
+            if (num_loops <= static_ranges.size())
+            {
+                return static_ranges.data();
+            }
+            dyn_ranges.reset(new Range[num_loops]);
+            return dyn_ranges.get();
+        }();
+
+        for (size_t i = 0; i < num_loops; ++i)
+        {
+            range_ptr[num_loops - i - 1] = current->val;
+            current = current->prev;
+        }
+        func(range_ptr, thread_index, ctx);
+    };
+
     size_t count = (upper_bound - lower_bound + step - 1) / step;
     size_t grain = std::max(size_t(1), std::min(count / num_threads / 2, size_t(64)));
-    tbb::parallel_for(tbb::blocked_range<size_t>(0, count, grain),
-        [&](const tbb::blocked_range<size_t>& r)
+    tbb::parallel_for(tbb::blocked_rangeNd<size_t, 1>(tbb::blocked_range<size_t>(0, count, grain)),
+        [&](const tbb::blocked_rangeNd<size_t, 1>& r)
         {
-            auto begin = lower_bound + r.begin() * step;
-            auto end = lower_bound + r.end() * step;
+            auto rDim = r.dim(0);
+            auto begin = lower_bound + rDim.begin() * step;
+            auto end = lower_bound + rDim.end() * step;
             if(DEBUG)
             {
                 printf("parallel_for_nested body: begin=%d, end=%d, depth=%d\n\n",
@@ -115,26 +142,7 @@ static void parallel_for_nested(const InputRange* input_ranges, size_t depth, si
             Dim dim{Range{begin, end}, prev_dim};
             if (next == num_loops)
             {
-                auto thread_index = static_cast<size_t>(tbb::this_task_arena::current_thread_index());
-                std::array<Range, 8> static_ranges;
-                std::unique_ptr<Range[]> dyn_ranges;
-                auto* range_ptr = [&]()->Range*
-                {
-                    if (num_loops <= static_ranges.size())
-                    {
-                        return static_ranges.data();
-                    }
-                    dyn_ranges.reset(new Range[num_loops]);
-                    return dyn_ranges.get();
-                }();
-
-                Dim* current = &dim;
-                for (size_t i = 0; i < num_loops; ++i)
-                {
-                    range_ptr[num_loops - i - 1] = current->val;
-                    current = current->prev;
-                }
-                func(range_ptr, thread_index, ctx);
+                runFunc(&dim);
             }
             else
             {
