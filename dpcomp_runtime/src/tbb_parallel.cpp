@@ -15,6 +15,7 @@
 #include <array>
 #include <cstdio>
 #include <cassert>
+#include <mutex>
 
 #define TBB_PREVIEW_WAITING_FOR_WORKERS 1
 #define TBB_PREVIEW_BLOCKED_RANGE_ND 1
@@ -30,6 +31,12 @@
 
 namespace
 {
+static std::mutex& getDebugMutext()
+{
+    static std::mutex mut;
+    return mut;
+}
+
 struct TBBContext
 {
     TBBContext(int numThreads):
@@ -96,6 +103,7 @@ static void run_parallel_for(const InputRange* input_ranges, size_t depth, size_
 
     if(DEBUG)
     {
+        std::lock_guard<std::mutex> lock(getDebugMutext());
         fprintf(stderr, "parallel_for_nested: depth=%d",
                static_cast<int>(depth));
         for (unsigned i = 0; i < N; ++i)
@@ -145,12 +153,29 @@ static void run_parallel_for(const InputRange* input_ranges, size_t depth, size_
             range_ptr[num_loops - i - 1] = current->val;
             current = current->prev;
         }
+        if(DEBUG)
+        {
+            std::lock_guard<std::mutex> lock(getDebugMutext());
+            fprintf(stderr, "parallel_for func: thread_index=%d",
+                    static_cast<int>(thread_index));
+            for (size_t i = 0; i < num_loops; ++i)
+            {
+                auto& input = range_ptr[i];
+                auto lower_bound = input.lower;
+                auto upper_bound = input.upper;
+                fprintf(stderr, " (lower_bound=%d, upper_bound=%d)",
+                        static_cast<int>(lower_bound),
+                        static_cast<int>(upper_bound));
+            }
+            fprintf(stderr, "\n");
+        }
         func(range_ptr, thread_index, ctx);
     };
 
     auto loopBody = [&](const tbb::blocked_rangeNd<size_t, N>& r)
     {
-        Dim dims[N];
+        std::array<Dim, N> dims;
+        auto prev = prev_dim;
         for (unsigned i = 0; i < N; ++i)
         {
             auto& input = tempRanges[i];
@@ -159,13 +184,13 @@ static void run_parallel_for(const InputRange* input_ranges, size_t depth, size_
             auto rDim = r.dim(i);
             auto begin = lower_bound + rDim.begin() * step;
             auto end = lower_bound + rDim.end() * step;
-            dims[i] = Dim{Range{begin, end}, prev_dim};
-            prev_dim = &dims[i];
+            dims[i] = Dim{Range{begin, end}, prev};
+            prev = &dims[i];
         }
 
         if (Term)
         {
-            runFunc(prev_dim);
+            runFunc(prev);
         }
         else
         {
@@ -208,6 +233,7 @@ DPCOMP_RUNTIME_EXPORT void dpcomp_parallel_for(const InputRange* input_ranges, s
     auto num_threads = static_cast<size_t>(context.numThreads);
     if(DEBUG)
     {
+        std::lock_guard<std::mutex> lock(getDebugMutext());
         fprintf(stderr, "parallel_for num_loops=%d: ", static_cast<int>(num_loops));
         for (size_t i = 0; i < num_loops; ++i)
         {
