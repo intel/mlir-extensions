@@ -75,7 +75,8 @@ mlir::LogicalResult plier::MemorySSAAnalysis::optimizeUses()
             auto memref2 = info2->memref;
             assert(memref1);
             assert(memref2);
-            return !aliasAnalysis->alias(memref1, memref2).isNo();
+            auto result = aliasAnalysis->alias(memref1, memref2);
+            return !result.isNo();
         };
         return memssa->optimizeUses(mayAlias);
     }
