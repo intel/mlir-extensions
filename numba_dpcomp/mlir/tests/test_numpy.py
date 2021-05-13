@@ -325,6 +325,20 @@ class TestMlirBasic(TestCase):
                           [[1,2,3],[4,5,6]]])
         assert_equal(py_func(arr,arr), jit_func(arr,arr))
 
+    def test_parallel_reduce(self):
+        def py_func(a):
+            shape = a.shape
+            res = 0
+            for i in range(shape[0]):
+                for j in numba.prange(shape[1]):
+                    for k in numba.prange(shape[2]):
+                        res = res + a[i,j,k]
+            return res
+
+        jit_func = njit(py_func, parallel=True)
+        arr = np.asarray([[[1,2,3],[4,5,6]]]).repeat(10000,0)
+        assert_equal(py_func(arr), jit_func(arr))
+
     def test_vectorize(self):
         import math
         funcs = [
