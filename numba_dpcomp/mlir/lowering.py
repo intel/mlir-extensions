@@ -46,7 +46,7 @@ class mlir_lower(orig_Lower):
 
     def lower_normal_function(self, fndesc):
         if USE_MLIR:
-            mod_ir = self.mlir_blob
+            mod_ir = self.metadata['mlir_blob']
             import llvmlite.binding as llvm
             mod = llvm.parse_bitcode(mod_ir)
             self.setup_function(fndesc)
@@ -83,8 +83,6 @@ class mlir_NativeLowering(orig_NativeLowering):
             with targetctx.push_code_library(library):
                 lower = mlir_lower(targetctx, library, fndesc, interp,
                                    metadata=metadata)
-                if USE_MLIR:
-                    setattr(lower, 'mlir_blob', state.mlir_blob)
 
                 lower.lower()
                 if not flags.no_cpython_wrapper:

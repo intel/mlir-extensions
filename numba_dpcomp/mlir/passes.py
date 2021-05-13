@@ -121,7 +121,7 @@ class MlirBackend(MlirBackendBase):
             mod_ir = mlir_compiler.compile_module(ctx, module)
         finally:
             _mlir_active_module = old_module
-        setattr(state, 'mlir_blob', mod_ir)
+        state.metadata['mlir_blob'] = mod_ir
         return True
 
 @register_pass(mutates_CFG=True, analysis_only=False)
