@@ -26,6 +26,7 @@
 
 #include "plier/compiler/pipeline_registry.hpp"
 #include "plier/transforms/const_utils.hpp"
+#include "plier/transforms/func_utils.hpp"
 #include "pipelines/base_pipeline.hpp"
 #include "pipelines/lower_to_llvm.hpp"
 
@@ -130,6 +131,8 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp>
             return mlir::failure();
         }
 
+        plier::AllocaInsertionPoint allocaIP(op);
+
         auto loc = op.getLoc();
         mlir::BlockAndValueMapping mapping;
         llvm::SmallVector<mlir::Value> reduce_vars(op.getNumResults());
@@ -138,7 +141,10 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp>
             auto type = it.value();
             auto reduce_type = getReduceType(type, max_concurrency);
             assert(reduce_type);
-            auto reduce = rewriter.create<mlir::memref::AllocaOp>(loc, reduce_type);
+            auto reduce = allocaIP.insert(rewriter, [&]()
+            {
+                return rewriter.create<mlir::memref::AllocaOp>(loc, reduce_type);
+            });
             auto index = static_cast<unsigned>(it.index());
             reduce_vars[index] = reduce;
         }
