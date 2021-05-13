@@ -42,4 +42,12 @@ struct MergeNestedForIntoParallel : public mlir::OpRewritePattern<mlir::scf::Par
     mlir::LogicalResult matchAndRewrite(
         mlir::scf::ParallelOp op, mlir::PatternRewriter &rewriter) const override;
 };
+
+struct MergeNestedParallel : public mlir::OpRewritePattern<mlir::scf::ParallelOp>
+{
+    using mlir::OpRewritePattern<mlir::scf::ParallelOp>::OpRewritePattern;
+
+    mlir::LogicalResult matchAndRewrite(
+        mlir::scf::ParallelOp op, mlir::PatternRewriter &rewriter) const override;
+};
 }
