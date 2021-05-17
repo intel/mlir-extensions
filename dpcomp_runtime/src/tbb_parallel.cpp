@@ -14,10 +14,13 @@
 
 #include <array>
 #include <cstdio>
+#include <cassert>
 
 #define TBB_PREVIEW_WAITING_FOR_WORKERS 1
+#define TBB_PREVIEW_BLOCKED_RANGE_ND 1
 
 #include <tbb/task_arena.h>
+#include <tbb/blocked_rangeNd.h>
 #include <tbb/global_control.h>
 #include <tbb/parallel_for.h>
 
@@ -39,6 +42,7 @@ struct TBBContext
 
     ~TBBContext()
     {
+        arena.terminate();
         (void)tbb::finalize(scheduler_handle, std::nothrow);
     }
 
@@ -79,68 +83,120 @@ struct Dim
     Dim* prev;
 };
 
+
 using parallel_for_fptr = void(*)(const Range*, size_t, void*);
 
-static void parallel_for_nested(const InputRange* input_ranges, size_t depth, size_t num_threads, size_t num_loops, Dim* prev_dim, parallel_for_fptr func, void* ctx)
+static void parallel_for_nested(const InputRange* input_ranges, size_t depth, size_t num_threads, size_t num_loops, Dim* prev_dim, parallel_for_fptr func, void* ctx);
+
+template<unsigned N, bool Term, size_t... Is>
+static void run_parallel_for(const InputRange* input_ranges, size_t depth, size_t num_threads, size_t num_loops, Dim* prev_dim, parallel_for_fptr func, void* ctx)
 {
-    auto input = input_ranges[depth];
-    auto lower_bound = input.lower;
-    auto upper_bound = input.upper;
-    auto step = input.step;
+    std::array<InputRange, N> tempRanges;
+    std::copy_n(input_ranges + depth, N, tempRanges.begin());
 
     if(DEBUG)
     {
-        printf("parallel_for_nested: lower_bound=%d, upper_bound=%d, step=%d, depth=%d\n",
-               static_cast<int>(lower_bound),
-               static_cast<int>(upper_bound),
-               static_cast<int>(step),
+        fprintf(stderr, "parallel_for_nested: depth=%d",
                static_cast<int>(depth));
+        for (unsigned i = 0; i < N; ++i)
+        {
+            auto& input = tempRanges[i];
+            auto lower_bound = input.lower;
+            auto upper_bound = input.upper;
+            auto step = input.step;
+            fprintf(stderr, " (lower_bound=%d, upper_bound=%d, step=%d)",
+                   static_cast<int>(lower_bound),
+                   static_cast<int>(upper_bound),
+                   static_cast<int>(step));
+        }
+        fprintf(stderr, "\n");
     }
 
-    size_t count = (upper_bound - lower_bound + step - 1) / step;
-    size_t grain = std::max(size_t(1), std::min(count / num_threads / 2, size_t(64)));
-    tbb::parallel_for(tbb::blocked_range<size_t>(0, count, grain),
-        [&](const tbb::blocked_range<size_t>& r)
-        {
-            auto begin = lower_bound + r.begin() * step;
-            auto end = lower_bound + r.end() * step;
-            if(DEBUG)
-            {
-                printf("parallel_for_nested body: begin=%d, end=%d, depth=%d\n\n",
-                       static_cast<int>(begin),
-                       static_cast<int>(end),
-                       static_cast<int>(depth));
-            }
-            auto next = depth + 1;
-            Dim dim{Range{begin, end}, prev_dim};
-            if (next == num_loops)
-            {
-                auto thread_index = static_cast<size_t>(tbb::this_task_arena::current_thread_index());
-                std::array<Range, 8> static_ranges;
-                std::unique_ptr<Range[]> dyn_ranges;
-                auto* range_ptr = [&]()->Range*
-                {
-                    if (num_loops <= static_ranges.size())
-                    {
-                        return static_ranges.data();
-                    }
-                    dyn_ranges.reset(new Range[num_loops]);
-                    return dyn_ranges.get();
-                }();
+    auto getRange = [&](size_t i)
+    {
+        auto& input = tempRanges[i];
+        auto lower_bound = input.lower;
+        auto upper_bound = input.upper;
+        auto step = input.step;
+        size_t count = (upper_bound - lower_bound + step - 1) / step;
+        size_t grain = std::max(size_t(1), std::min(count / num_threads / 2, size_t(64)));
+        return tbb::blocked_range<size_t>(0, count, grain);
+    };
 
-                Dim* current = &dim;
-                for (size_t i = 0; i < num_loops; ++i)
-                {
-                    range_ptr[num_loops - i - 1] = current->val;
-                    current = current->prev;
-                }
-                func(range_ptr, thread_index, ctx);
-            }
-            else
+    tbb::blocked_rangeNd<size_t, N> range(getRange(Is)...);
+
+    auto runFunc = [&](Dim* current)
+    {
+        auto thread_index = static_cast<size_t>(tbb::this_task_arena::current_thread_index());
+        std::array<Range, 8> static_ranges;
+        std::unique_ptr<Range[]> dyn_ranges;
+        auto* range_ptr = [&]()->Range*
+        {
+            if (num_loops <= static_ranges.size())
             {
-                parallel_for_nested(input_ranges, next, num_threads, num_loops, &dim, func, ctx);
+                return static_ranges.data();
             }
-        }, tbb::auto_partitioner());
+            dyn_ranges.reset(new Range[num_loops]);
+            return dyn_ranges.get();
+        }();
+
+        for (size_t i = 0; i < num_loops; ++i)
+        {
+            range_ptr[num_loops - i - 1] = current->val;
+            current = current->prev;
+        }
+        func(range_ptr, thread_index, ctx);
+    };
+
+    auto loopBody = [&](const tbb::blocked_rangeNd<size_t, N>& r)
+    {
+        Dim dims[N];
+        for (unsigned i = 0; i < N; ++i)
+        {
+            auto& input = tempRanges[i];
+            auto lower_bound = input.lower;
+            auto step = input.step;
+            auto rDim = r.dim(i);
+            auto begin = lower_bound + rDim.begin() * step;
+            auto end = lower_bound + rDim.end() * step;
+            dims[i] = Dim{Range{begin, end}, prev_dim};
+            prev_dim = &dims[i];
+        }
+
+        if (Term)
+        {
+            runFunc(prev_dim);
+        }
+        else
+        {
+            auto next = depth + N;
+            parallel_for_nested(input_ranges, next, num_threads, num_loops, prev_dim, func, ctx);
+        }
+    };
+
+    tbb::parallel_for(range, loopBody, tbb::auto_partitioner());
+}
+
+static void parallel_for_nested(const InputRange* input_ranges, size_t depth, size_t num_threads, size_t num_loops, Dim* prev_dim, parallel_for_fptr func, void* ctx)
+{
+    assert(num_loops > depth);
+    auto rem = num_loops - depth;
+    if (rem == 1)
+    {
+        run_parallel_for<1, true, 0>(input_ranges, depth, num_threads, num_loops, prev_dim, func, ctx);
+    }
+    else if (rem == 2)
+    {
+        run_parallel_for<2, true, 0, 1>(input_ranges, depth, num_threads, num_loops, prev_dim, func, ctx);
+    }
+    else if (rem == 3)
+    {
+        run_parallel_for<3, true, 0, 1, 2>(input_ranges, depth, num_threads, num_loops, prev_dim, func, ctx);
+    }
+    else
+    {
+        run_parallel_for<3, false, 0, 1, 2>(input_ranges, depth, num_threads, num_loops, prev_dim, func, ctx);
+    }
 }
 }
 
@@ -152,16 +208,16 @@ DPCOMP_RUNTIME_EXPORT void dpcomp_parallel_for(const InputRange* input_ranges, s
     auto num_threads = static_cast<size_t>(context.numThreads);
     if(DEBUG)
     {
-        printf("parallel_for num_loops=%d: ", static_cast<int>(num_loops));
+        fprintf(stderr, "parallel_for num_loops=%d: ", static_cast<int>(num_loops));
         for (size_t i = 0; i < num_loops; ++i)
         {
             auto r = input_ranges[i];
-            printf("(%d, %d, %d) ",
+            fprintf(stderr, "(%d, %d, %d) ",
                    static_cast<int>(r.lower),
                    static_cast<int>(r.upper),
                    static_cast<int>(r.step));
         }
-        puts("\n");
+        fprintf(stderr, "\n");
     }
 
     context.arena.execute([&]
@@ -174,7 +230,7 @@ DPCOMP_RUNTIME_EXPORT void dpcomp_parallel_init(int numThreads)
 {
     if(DEBUG)
     {
-        printf("dpcomp_parallel_init %d\n", numThreads);
+        fprintf(stderr, "dpcomp_parallel_init %d\n", numThreads);
     }
     if (nullptr == globalContext)
     {
@@ -186,7 +242,7 @@ DPCOMP_RUNTIME_EXPORT void dpcomp_parallel_finalize()
 {
     if(DEBUG)
     {
-        puts("dpcomp_parallel_finalize\n");
+        fprintf(stderr, "dpcomp_parallel_finalize\n");
     }
     globalContext.reset();
 }
