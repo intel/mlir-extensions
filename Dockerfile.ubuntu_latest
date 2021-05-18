@@ -1,0 +1,66 @@
+FROM ubuntu:latest
+
+# Set proxie if required
+
+# Install required packages
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update --fix-missing
+RUN apt-get install -y bzip2\
+                       cmake\
+                       g++\
+                       gcc\
+                       git\
+                       locales\
+                       make\
+                       patch\
+                       wget
+
+ENV HOME=/work
+RUN mkdir $HOME
+WORKDIR $HOME
+
+# Install miniconda3 to $HOME/miniconda3
+# Source link: https://repo.anaconda.com/miniconda/
+RUN wget https://repo.anaconda.com/miniconda/Miniconda3-py37_4.9.2-Linux-x86_64.sh -O $HOME/miniconda.sh
+RUN bash $HOME/miniconda.sh -b -p $HOME/miniconda3
+ENV PATH=$HOME/miniconda3/bin:$PATH
+
+# Install base conda packages
+RUN /bin/bash -c "source $HOME/miniconda3/bin/activate &&\
+    conda list &&\
+    conda install -q -y -c anaconda --override-channels\
+        conda-build\
+        conda-verify &&\
+    conda list"
+
+# LLVM build
+RUN git clone https://github.com/IntelPython/mlir-llvm-recipe.git &&\
+    export SHA=$(cat mlir-llvm-recipe/llvm-sha.txt) &&\
+    git clone https://github.com/llvm/llvm-project.git &&\
+    cd llvm-project &&\
+    git checkout $SHA &&\
+    cmake --version &&\
+    cmake ../llvm-project/llvm -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_BUILD_EXAMPLES=ON -DLLVM_TARGETS_TO_BUILD="host" -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_ENABLE_RTTI=ON -DCMAKE_INSTALL_PREFIX=../mlir-llvm &&\
+    make -j$(nproc --all) all &&\
+    cmake --install .
+
+# Dpcomp build
+# Use git clone https://<token>@github.com/IntelPython/dpcomp.git to clone with token
+RUN git clone https://github.com/IntelPython/dpcomp.git &&\
+    wget -O tbb.tgz "https://github.com/oneapi-src/oneTBB/releases/download/v2021.1.1/oneapi-tbb-2021.1.1-lin.tgz" &&\
+    mkdir tbb &&\
+    tar -xf "tbb.tgz" -C tbb --strip-components=1 &&\
+    /bin/bash -c "source $HOME/miniconda3/bin/activate &&\
+    conda install -y numba=0.53 scipy pybind11 pytest -c conda-forge &&\
+    cmake --version &&\
+    chmod -R 777 mlir-llvm &&\
+    export LLVM_PATH=$(pwd)/mlir-llvm &&\
+    export TBB_PATH=$(pwd)/tbb &&\
+    cd dpcomp &&\
+    python setup.py develop"
+
+# Run tests
+RUN cd /work/dpcomp &&\
+    /bin/bash -c "source $HOME/miniconda3/bin/activate &&\
+    source $(pwd)/../tbb/env/vars.sh &&\
+    pytest"
