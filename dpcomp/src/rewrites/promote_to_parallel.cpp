@@ -44,12 +44,18 @@ bool hasSideEffects(mlir::Operation *op)
         return mlir::WalkResult::advance();
     }).wasInterrupted();
 }
+
+bool canParallelizeLoop(mlir::Operation* op, bool hasParallelAttr)
+{
+    return hasParallelAttr || !hasSideEffects(op);
+}
+
 }
 
 mlir::LogicalResult plier::PromoteToParallel::matchAndRewrite(mlir::scf::ForOp op, mlir::PatternRewriter& rewriter) const
 {
-    auto has_parallel_attr = op->hasAttr(plier::attributes::getParallelName());
-    if (!has_parallel_attr && hasSideEffects(op))
+    auto hasParallelAttr = op->hasAttr(plier::attributes::getParallelName());
+    if (!canParallelizeLoop(op, hasParallelAttr))
     {
         return mlir::failure();
     }
@@ -146,12 +152,148 @@ mlir::LogicalResult plier::PromoteToParallel::matchAndRewrite(mlir::scf::ForOp o
         }
     };
 
-    auto parallel_op = rewriter.create<mlir::scf::ParallelOp>(op.getLoc(), op.lowerBound(), op.upperBound(), op.step(), op.initArgs(), body_builder);
-    if (has_parallel_attr)
+    auto parallelOp = rewriter.replaceOpWithNewOp<mlir::scf::ParallelOp>(op, op.lowerBound(), op.upperBound(), op.step(), op.initArgs(), body_builder);
+    if (hasParallelAttr)
     {
-        parallel_op->setAttr(plier::attributes::getParallelName(), rewriter.getUnitAttr());
+        parallelOp->setAttr(plier::attributes::getParallelName(), rewriter.getUnitAttr());
     }
-    rewriter.replaceOp(op, parallel_op.getResults());
 
+    return mlir::success();
+}
+
+mlir::LogicalResult plier::MergeNestedForIntoParallel::matchAndRewrite(mlir::scf::ParallelOp op, mlir::PatternRewriter& rewriter) const
+{
+    auto parent = mlir::dyn_cast<mlir::scf::ForOp>(op->getParentOp());
+    if (!parent)
+    {
+        return mlir::failure();
+    }
+    auto& block = parent.getLoopBody().front();
+    if (!llvm::hasSingleElement(block.without_terminator()))
+    {
+        return mlir::failure();
+    }
+    if (parent.initArgs().size() != op.initVals().size())
+    {
+        return mlir::failure();
+    }
+    auto yield = mlir::cast<mlir::scf::YieldOp>(block.getTerminator());
+    assert(yield.getNumOperands() == op.getNumResults());
+    for (auto it : llvm::zip(block.getArguments().drop_front(), op.initVals(), op.getResults(), yield.getOperands()))
+    {
+        auto arg = std::get<0>(it);
+        auto initVal = std::get<1>(it);
+        auto result = std::get<2>(it);
+        auto yieldOp = std::get<3>(it);
+        if (!arg.hasOneUse() || arg != initVal || result != yieldOp)
+        {
+            return mlir::failure();
+        }
+    }
+    auto checkVals = [&](auto vals)
+    {
+        for (auto val : vals)
+        {
+            if (val.getParentBlock() == &block)
+            {
+                return true;
+            }
+        }
+        return false;
+    };
+    if (checkVals(op.lowerBound()) || checkVals(op.upperBound()) || checkVals(op.step()))
+    {
+        return mlir::failure();
+    }
+    auto hasParallelAttr = op->hasAttr(plier::attributes::getParallelName());
+    if (!canParallelizeLoop(op, hasParallelAttr))
+    {
+        return mlir::failure();
+    }
+
+    auto makeValueList = [](auto op, auto ops)
+    {
+        llvm::SmallVector<mlir::Value> ret;
+        ret.reserve(ops.size() + 1);
+        ret.emplace_back(op);
+        ret.append(ops.begin(), ops.end());
+        return ret;
+    };
+
+    auto lowerBounds = makeValueList(parent.lowerBound(), op.lowerBound());
+    auto upperBounds = makeValueList(parent.upperBound(), op.upperBound());
+    auto steps = makeValueList(parent.step(), op.step());
+
+    auto& oldBody = op.getLoopBody().front();
+    auto bodyBuilder = [&](mlir::OpBuilder &builder, mlir::Location /*loc*/, mlir::ValueRange iter_vals, mlir::ValueRange temp)
+    {
+        assert(iter_vals.size() == lowerBounds.size());
+        assert(temp.empty());
+        mlir::BlockAndValueMapping mapping;
+        assert((oldBody.getNumArguments() + 1) == iter_vals.size());
+        mapping.map(block.getArgument(0), iter_vals.front());
+        mapping.map(oldBody.getArguments(), iter_vals.drop_front());
+        for (auto& op : oldBody.without_terminator())
+        {
+            builder.clone(op, mapping);
+        }
+    };
+
+    rewriter.setInsertionPoint(parent);
+    auto newOp = rewriter.replaceOpWithNewOp<mlir::scf::ParallelOp>(parent, lowerBounds, upperBounds, steps, parent.initArgs(), bodyBuilder);
+    if (hasParallelAttr)
+    {
+        newOp->setAttr(plier::attributes::getParallelName(), rewriter.getUnitAttr());
+    }
+    return mlir::success();
+}
+
+mlir::LogicalResult plier::MergeNestedParallel::matchAndRewrite(mlir::scf::ParallelOp op, mlir::PatternRewriter& rewriter) const
+{
+    auto& outerBody = op.getLoopBody().front();
+    if (!llvm::hasSingleElement(outerBody.without_terminator()))
+    {
+        return mlir::failure();
+    }
+
+    auto outerOp = mlir::dyn_cast<mlir::scf::ParallelOp>(outerBody.front());
+    if (!outerOp)
+    {
+        return mlir::failure();
+    }
+
+    if (!op.initVals().empty() || !outerOp.initVals().empty())
+    {
+        return mlir::failure();
+    }
+
+    auto bodyBuilder = [&](mlir::OpBuilder &builder, mlir::Location /*loc*/, mlir::ValueRange iter_vals, mlir::ValueRange temp)
+    {
+        assert(temp.empty());
+        auto& innerBody = outerOp.getLoopBody().front();
+        assert(iter_vals.size() == (outerBody.getNumArguments() + innerBody.getNumArguments()));
+        mlir::BlockAndValueMapping mapping;
+        mapping.map(outerBody.getArguments(), iter_vals.take_front(outerBody.getNumArguments()));
+        mapping.map(innerBody.getArguments(), iter_vals.take_back(innerBody.getNumArguments()));
+        for (auto& op : innerBody.without_terminator())
+        {
+            builder.clone(op, mapping);
+        }
+    };
+
+    auto concatValues = [](const auto& first, const auto& second)
+    {
+        mlir::SmallVector<mlir::Value> ret;
+        ret.reserve(first.size() + second.size());
+        ret.assign(first.begin(), first.end());
+        ret.append(second.begin(), second.end());
+        return ret;
+    };
+
+    auto newLowerBounds = concatValues(op.lowerBound(), outerOp.lowerBound());
+    auto newUpperBounds = concatValues(op.upperBound(), outerOp.upperBound());
+    auto newSteps = concatValues(op.step(), outerOp.step());
+
+    rewriter.replaceOpWithNewOp<mlir::scf::ParallelOp>(op, newLowerBounds, newUpperBounds, newSteps, llvm::None, bodyBuilder);
     return mlir::success();
 }

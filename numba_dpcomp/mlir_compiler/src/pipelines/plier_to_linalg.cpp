@@ -1188,7 +1188,9 @@ void PromoteParallelPass::runOnFunction()
 
     patterns.insert<
         plier::CanonicalizeReduction,
-        plier::PromoteToParallel // TODO
+        plier::PromoteToParallel,
+        plier::MergeNestedForIntoParallel,
+        plier::MergeNestedParallel
         >(&context);
 
     applyOptimizations(getFunction(), std::move(patterns), getAnalysisManager());

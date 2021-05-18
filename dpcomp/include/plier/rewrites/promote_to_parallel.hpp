@@ -21,6 +21,7 @@ namespace mlir
 namespace scf
 {
 class ForOp;
+class ParallelOp;
 }
 }
 
@@ -32,5 +33,21 @@ struct PromoteToParallel : public mlir::OpRewritePattern<mlir::scf::ForOp>
 
     mlir::LogicalResult matchAndRewrite(
         mlir::scf::ForOp op, mlir::PatternRewriter &rewriter) const override;
+};
+
+struct MergeNestedForIntoParallel : public mlir::OpRewritePattern<mlir::scf::ParallelOp>
+{
+    using mlir::OpRewritePattern<mlir::scf::ParallelOp>::OpRewritePattern;
+
+    mlir::LogicalResult matchAndRewrite(
+        mlir::scf::ParallelOp op, mlir::PatternRewriter &rewriter) const override;
+};
+
+struct MergeNestedParallel : public mlir::OpRewritePattern<mlir::scf::ParallelOp>
+{
+    using mlir::OpRewritePattern<mlir::scf::ParallelOp>::OpRewritePattern;
+
+    mlir::LogicalResult matchAndRewrite(
+        mlir::scf::ParallelOp op, mlir::PatternRewriter &rewriter) const override;
 };
 }
