@@ -12,12 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from  ..linalg_builder import register_func, register_attr, is_literal, broadcast_type, eltwise, convert_array
+from ..linalg_builder import register_func, register_attr, is_literal, broadcast_type, eltwise, convert_array
 
 import numpy
 import math
 from numba import prange
-from numba.core.extending import register_jitable
 
 def is_int(t, b):
     return t == b.int8 or t == b.int16 or t == b.int32 or t == b.int64
@@ -258,19 +257,9 @@ def concat_impl(builder, arrays, axis=0):
             offsets[axis] += sizes[axis]
         return res
 
-@register_jitable # TODO: remove
-def _row_wise_average(a):
-    m, n = a.shape
-    out = numpy.empty((m, 1), dtype=a.dtype)
-
-    for i in prange(m):
-        out[i, 0] = numpy.sum(a[i, :]) / n
-
-    return out
-
-def _cov_impl_inner(X, bias, ddof):
+def _cov_impl_inner(X, bias, ddof, ddof_is_none):
     # determine degrees of freedom
-    if ddof is None:
+    if ddof_is_none:
         if bias:
             ddof = 0
         else:
@@ -283,10 +272,16 @@ def _cov_impl_inner(X, bias, ddof):
     # fact = max(fact, 0.0)
     fact = fact if fact > 0.0 else 0.0
 
-    # de-mean
-    X = X - _row_wise_average(X)
+    # _row_wise_average
+    m, n = X.shape
+    R = numpy.empty((m, 1), dtype=X.dtype)
 
-    # calculate result - requires blas
+    for i in prange(m):
+        R[i, 0] = numpy.sum(X[i, :]) / n
+
+    # de-mean
+    X = X - R
+
     c = numpy.dot(X, X.T)
     # c = numpy.dot(X, numpy.conj(X.T))
     c = c * numpy.true_divide(1, fact)
@@ -337,4 +332,4 @@ def _prepare_cov_input(builder, m, y, rowvar):
 @register_func('numpy.cov', numpy.cov)
 def cov_impl(builder, m, y=None, rowvar=True, bias=False, ddof=None):
     X = _prepare_cov_input(builder, m, y, rowvar)
-    return builder.inline_func(_cov_impl_inner, X, bias, ddof)
+    return builder.inline_func(_cov_impl_inner, X, bias, ddof, ddof is None)
