@@ -100,6 +100,27 @@ struct PyTypeStorage : public mlir::TypeStorage
     mlir::StringRef name;
 };
 
+struct LiteralTypeStorage : public mlir::TypeStorage
+{
+    using KeyTy = mlir::Attribute;
+
+    LiteralTypeStorage(mlir::Attribute val): value(val) {}
+
+    bool operator==(const KeyTy& key) const
+    {
+        return key == value;
+    }
+
+    static LiteralTypeStorage* construct(mlir::TypeStorageAllocator& allocator,
+                                         const KeyTy& key)
+    {
+        return new(allocator.allocate<LiteralTypeStorage>())
+            LiteralTypeStorage(key);
+    }
+
+    mlir::Attribute value;
+};
+
 struct TypeVarStorage : public mlir::TypeStorage
 {
     using KeyTy = mlir::Type;
@@ -128,7 +149,7 @@ void PlierDialect::initialize()
 #define GET_OP_LIST
 #include "plier/PlierOps.cpp.inc"
         >();
-    addTypes<plier::PyType, plier::TypeVar>();
+    addTypes<plier::PyType, plier::LiteralType, plier::TypeVar>();
     addInterfaces<PlierInlinerInterface>();
 }
 
@@ -140,6 +161,12 @@ mlir::Type PlierDialect::parseType(mlir::DialectAsmParser &parser) const {
 void PlierDialect::printType(mlir::Type type, mlir::DialectAsmPrinter &os) const {
     llvm::TypeSwitch<mlir::Type>(type)
         .Case<plier::PyType>([&](auto t){ os << "PyType<" << t.getName() << ">"; })
+        .Case<plier::LiteralType>([&](auto t)
+                                  {
+                                      os << "LiteralType<";
+                                      os.printAttribute(t.getValue());
+                                      os << ">";
+                                  })
         .Case<plier::TypeVar>([&](auto t)
                               {
                                   os << "TypeVar<";
@@ -168,6 +195,17 @@ PyType PyType::getNone(mlir::MLIRContext* context)
 llvm::StringRef PyType::getName() const
 {
     return getImpl()->name;
+}
+
+LiteralType LiteralType::get(mlir::Attribute value)
+{
+    assert(value);
+    return Base::get(value.getContext(), value);
+}
+
+mlir::Attribute LiteralType::getValue() const
+{
+    return getImpl()->value;
 }
 
 TypeVar TypeVar::get(mlir::Type type)

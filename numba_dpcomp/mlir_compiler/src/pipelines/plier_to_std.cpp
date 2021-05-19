@@ -57,11 +57,13 @@ mlir::Type map_int_type(mlir::MLIRContext& ctx, llvm::StringRef& name)
 
 mlir::Type map_int_literal_type(mlir::MLIRContext& ctx, llvm::StringRef& name)
 {
-    unsigned dummy = 0;
+    int64_t value = 0;
     if (name.consume_front("Literal[int](") &&
-        !name.consumeInteger<unsigned>(10, dummy) && name.consume_front(")"))
+        !name.consumeInteger<int64_t>(10, value) && name.consume_front(")"))
     {
-        return mlir::IntegerType::get(&ctx, 64); // TODO
+        auto type = mlir::IntegerType::get(&ctx, 64);
+        auto attr = mlir::IntegerAttr::get(type, value);
+        return plier::LiteralType::get(attr);
     }
     return nullptr;
 }
@@ -262,6 +264,28 @@ struct ConstOpLowering : public mlir::OpRewritePattern<plier::ConstOp>
         rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, value);
         return mlir::success();
     }
+};
+
+struct LiteralArgLowering : public mlir::OpRewritePattern<plier::ArgOp>
+{
+    LiteralArgLowering(mlir::TypeConverter &typeConverter,
+                       mlir::MLIRContext *context):
+        OpRewritePattern(context), converter(typeConverter) {}
+
+    mlir::LogicalResult matchAndRewrite(
+        plier::ArgOp op, mlir::PatternRewriter &rewriter) const override
+    {
+        auto converted = converter.convertType(op.getType()).dyn_cast<plier::LiteralType>();
+        if (!converted)
+        {
+            return mlir::failure();
+        }
+
+        rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, converted.getValue());
+        return mlir::success();
+    }
+private:
+    mlir::TypeConverter& converter;
 };
 
 struct UndefOpLowering : public mlir::OpRewritePattern<plier::UndefOp>
@@ -1722,6 +1746,7 @@ void PlierToStdPass::runOnOperation()
     patterns.insert<
         plier::FuncOpSignatureConversion,
         plier::ArgOpLowering,
+        LiteralArgLowering,
         UndefOpLowering,
         ReturnOpLowering,
         ConstOpLowering,
