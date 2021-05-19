@@ -1778,7 +1778,7 @@ mlir::LogicalResult lower_slice(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> 
         return mlir::failure();
     }
 
-    if (llvm::any_of(operands, [](mlir::Value op) { return !op.getType().isa<mlir::IntegerType, mlir::IndexType>(); }))
+    if (llvm::any_of(operands, [](mlir::Value op) { return !op.getType().isa<mlir::IntegerType, mlir::IndexType, plier::NoneType>(); }))
     {
         return mlir::failure();
     }
