@@ -1127,9 +1127,10 @@ py::object getitem_impl(py::capsule context, py::capsule ssa_val, py::handle ind
     auto type = value.getType();
     if (auto tuple_type = type.dyn_cast<mlir::TupleType>())
     {
-        if (index_val < 0 || index_val >= static_cast<int64_t>(tuple_type.size()))
+        auto maxIndex = static_cast<int64_t>(tuple_type.size());
+        if (index_val < 0 || index_val >= maxIndex)
         {
-            plier::report_error("Invalid getitem index");
+            throw py::index_error(("Invalid getitem index: " + llvm::Twine(index_val) + ", expected [0:" + llvm::Twine(maxIndex) + ")").str());
         }
         if (auto parent_op = value.getDefiningOp<plier::BuildTupleOp>())
         {
@@ -1144,7 +1145,7 @@ py::object getitem_impl(py::capsule context, py::capsule ssa_val, py::handle ind
     {
         if (0 != index_val)
         {
-            plier::report_error("Invalid getitem index");
+            throw py::index_error(("Invalid getitem index: " + llvm::Twine(index_val) + ", 0 is expected").str());
         }
         return ctx.context.create_var(context, value);
     }
