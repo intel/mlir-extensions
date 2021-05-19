@@ -50,7 +50,7 @@ bool is_compatible_type(mlir::Type type)
     {
         return llvm::all_of(tuple_type, &is_compatible_type);
     }
-    return type.isa<mlir::IntegerType, mlir::IndexType, mlir::FloatType, mlir::RankedTensorType, plier::TypeVar>();
+    return type.isa<mlir::IntegerType, mlir::IndexType, mlir::FloatType, mlir::RankedTensorType, plier::LiteralType, plier::TypeVar>();
 }
 
 template<typename R>
@@ -129,16 +129,30 @@ auto to_values(py::handle obj, UnwrapFunc&& unwrapFunc)
     return ret;
 }
 
+llvm::Optional<py::object> getPyLiteral(mlir::Attribute attr)
+{
+    assert(attr);
+    if (auto intAttr = attr.dyn_cast<mlir::IntegerAttr>())
+    {
+        return py::int_(intAttr.getInt());
+    }
+    if (auto floatAttr = attr.dyn_cast<mlir::FloatAttr>())
+    {
+        return py::float_(floatAttr.getValueAsDouble());
+    }
+    return {};
+}
+
 llvm::Optional<py::object> make_py_literal(mlir::Value val)
 {
     assert(val);
-    if (auto int_val = plier::getConstVal<mlir::IntegerAttr>(val))
+    if (auto literal = val.getType().dyn_cast<plier::LiteralType>())
     {
-        return py::int_(int_val.getInt());
+        return getPyLiteral(literal.getValue());
     }
-    if (auto float_val = plier::getConstVal<mlir::FloatAttr>(val))
+    if (auto attr = plier::getConstVal<mlir::Attribute>(val))
     {
-        return py::float_(float_val.getValueAsDouble());
+        return getPyLiteral(attr);
     }
     return {};
 }
@@ -173,7 +187,8 @@ struct PyLinalgResolver::Context
     py::object create_var(py::capsule context, mlir::Value value)
     {
         assert(value);
-        if (auto typevar = value.getType().dyn_cast<plier::TypeVar>())
+        auto type = value.getType();
+        if (auto typevar = type.dyn_cast<plier::TypeVar>())
         {
             return create_type(typevar.getType());
         }
