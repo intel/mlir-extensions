@@ -1084,6 +1084,7 @@ void PlierToLinalgPass::runOnOperation()
         plier::FixupIfTypes,
         plier::CastOpLowering,
         plier::ArgOpLowering,
+        plier::FixCallOmittedArgs,
         RankedTypesCasts,
         UnrankedToElementCasts,
         ArrayShape
