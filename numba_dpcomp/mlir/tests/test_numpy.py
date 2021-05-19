@@ -19,6 +19,7 @@ import numpy as np
 from numba.tests.support import TestCase
 import unittest
 import itertools
+from functools import partial
 import pytest
 
 def _vectorize_reference(func, arg1):
@@ -564,6 +565,86 @@ def test_tensor_if(a, b):
     jit_func = njit(py_func)
 
     assert_equal(py_func(a, b), jit_func(a, b))
+
+def cov(m, y=None, rowvar=True, bias=False, ddof=None):
+    return np.cov(m, y, rowvar, bias, ddof)
+
+class TestNPFunctions(TestCase):
+
+    def _check_output(self, pyfunc, cfunc, params, abs_tol=None):
+        expected = pyfunc(**params)
+        got = cfunc(**params)
+        self.assertPreciseEqual(expected, got, abs_tol=abs_tol)
+
+    def corr_corrcoef_basic(self, pyfunc, first_arg_name):
+        cfunc = njit(pyfunc)
+        _check = partial(self._check_output, pyfunc, cfunc, abs_tol=1e-14)
+
+        def input_variations():
+            # array inputs
+            yield np.array([[0, 2], [1, 1], [2, 0]]).T
+            yield self.rnd.randn(100).reshape(5, 20)
+            yield np.asfortranarray(np.array([[0, 2], [1, 1], [2, 0]]).T)
+            yield self.rnd.randn(100).reshape(5, 20)[:, ::2]
+            yield np.array([0.3942, 0.5969, 0.7730, 0.9918, 0.7964])
+            yield np.full((4, 5), fill_value=True)
+            yield np.array([np.nan, 0.5969, -np.inf, 0.9918, 0.7964])
+            yield np.linspace(-3, 3, 33).reshape(33, 1)
+
+            # non-array inputs
+            yield ((0.1, 0.2), (0.11, 0.19), (0.09, 0.21))  # UniTuple
+            yield ((0.1, 0.2), (0.11, 0.19), (0.09j, 0.21j))  # Tuple
+            yield (-2.1, -1, 4.3)
+            yield (1, 2, 3)
+            yield [4, 5, 6]
+            yield ((0.1, 0.2, 0.3), (0.1, 0.2, 0.3))
+            yield [(1, 2, 3), (1, 3, 2)]
+            yield 3.142
+            yield ((1.1, 2.2, 1.5),)
+
+            # empty data structures
+            yield np.array([])
+            yield np.array([]).reshape(0, 2)
+            yield np.array([]).reshape(2, 0)
+            yield ()
+
+        # all inputs other than the first are defaulted
+        for input_arr in input_variations():
+            _check({first_arg_name: input_arr})
+
+    def test_cov_basic(self):
+        pyfunc = cov
+        self.corr_corrcoef_basic(pyfunc, first_arg_name='m')
+
+    def test_cov_explicit_arguments(self):
+        pyfunc = cov
+        cfunc = njit(pyfunc)
+        _check = partial(self._check_output, pyfunc, cfunc, abs_tol=1e-14)
+
+        m = self.rnd.randn(105).reshape(15, 7)
+        y_choices = None, m[::-1]
+        rowvar_choices = False, True
+        bias_choices = False, True
+        ddof_choice = None, -1, 0, 1, 3.0, True
+
+        products = itertools.product(y_choices, rowvar_choices,
+                                     bias_choices, ddof_choice)
+        for y, rowvar, bias, ddof in products:
+            params = {'m': m, 'y': y, 'ddof': ddof,
+                      'bias': bias, 'rowvar': rowvar}
+            _check(params)
+
+    def test_cov_edge_cases(self):
+        pyfunc = cov
+        self.cov_corrcoef_edge_cases(pyfunc, first_arg_name='m')
+
+        cfunc = njit(pyfunc)
+        _check = partial(self._check_output, pyfunc, cfunc, abs_tol=1e-14)
+
+        # invalid ddof
+        m = np.array([[0, 2], [1, 1], [2, 0]]).T
+        params = {'m': m, 'ddof': 5}
+        _check(params)
 
 if __name__ == '__main__':
     unittest.main()
