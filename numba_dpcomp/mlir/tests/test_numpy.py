@@ -651,13 +651,14 @@ class TestNPFunctions(TestCase):
 _rnd = np.random.RandomState(42)
 _cov_inputs = [
     np.array([[0, 2], [1, 1], [2, 0]]).T,
-    # _rnd.randn(100).reshape(5, 20),
-    # np.asfortranarray(np.array([[0, 2], [1, 1], [2, 0]]).T),
-    # _rnd.randn(100).reshape(5, 20)[:, ::2],
-    # np.array([0.3942, 0.5969, 0.7730, 0.9918, 0.7964]),
-    # np.full((4, 5), fill_value=True),
-    # np.array([np.nan, 0.5969, -np.inf, 0.9918, 0.7964]),
-    # np.linspace(-3, 3, 33).reshape(33, 1),
+    np.array([[0, 2], [1, 1], [2, 0]]).T.copy(),
+    _rnd.randn(100).reshape(5, 20),
+    np.asfortranarray(np.array([[0, 2], [1, 1], [2, 0]]).T),
+    _rnd.randn(100).reshape(5, 20)[:, ::2],
+    np.array([0.3942, 0.5969, 0.7730, 0.9918, 0.7964]),
+    np.full((4, 5), fill_value=True),
+    np.array([np.nan, 0.5969, -np.inf, 0.9918, 0.7964]),
+    np.linspace(-3, 3, 33).reshape(33, 1),
 
     # # non-array inputs
     # ((0.1, 0.2), (0.11, 0.19), (0.09, 0.21)),  # UniTuple
@@ -682,7 +683,8 @@ _cov_inputs = [
 def test_cov_basic(y):
     py_func = _cov
     jit_func = njit(py_func)
-    print(py_func(y))
+    # print(y)
+    # print(py_func(y))
     assert_equal(py_func(y), jit_func(y))
 
 
