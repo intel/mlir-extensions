@@ -18,6 +18,7 @@
 
 #include <llvm/ADT/DenseMap.h>
 #include <llvm/ADT/Optional.h>
+#include <llvm/ADT/ArrayRef.h>
 #include <llvm/ADT/simple_ilist.h>
 #include <llvm/Support/Allocator.h>
 
