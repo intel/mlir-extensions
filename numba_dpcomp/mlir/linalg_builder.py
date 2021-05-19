@@ -71,8 +71,8 @@ class Builder:
     def extract(self, value, indices):
         return self._extract(self._context, value, indices)
 
-    def reshape(self, src, num_dims, affine_maps):
-        return self._reshape(self._context, src, num_dims, affine_maps)
+    def reshape(self, src, dims):
+        return self._reshape(self._context, src, dims)
 
     def external_call(self, name, inputs, outputs):
         return self._external_call(self._context, name, inputs, outputs)
