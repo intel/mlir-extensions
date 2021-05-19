@@ -281,11 +281,15 @@ def UndefOp : Plier_Op<"undef", [NoSideEffect]> {
 
 def BuildSliceOp : Plier_Op<"build_slice", [NoSideEffect]> {
     let arguments = (ins
-                     AnyType:$low,
-                     AnyType:$high,
+                     AnyType:$begin,
+                     AnyType:$end,
                      AnyType:$step);
 
     let results = (outs AnyType);
+
+    let builders = [
+        OpBuilder<(ins "::mlir::Value":$begin, "::mlir::Value":$end, "::mlir::Value":$stride)>
+    ];
 }
 
 def RetainOp : Plier_Op<"retain", [ViewLikeOpInterface]> {

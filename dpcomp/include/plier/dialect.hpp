@@ -43,6 +43,7 @@ namespace detail
 {
 struct PyTypeStorage;
 struct LiteralTypeStorage;
+struct SliceTypeStorage;
 struct TypeVarStorage;
 
 struct OperatorNamePair
@@ -106,6 +107,21 @@ class NoneType : public mlir::Type::TypeBase<::plier::NoneType, mlir::Type,
 {
 public:
     using Base::Base;
+};
+
+class SliceType : public mlir::Type::TypeBase<::plier::SliceType, mlir::Type,
+                                              ::plier::detail::SliceTypeStorage>
+{
+public:
+    using Base::Base;
+
+    static SliceType get(mlir::Type begin, mlir::Type end, mlir::Type stride);
+
+    mlir::Type getBegin() const;
+    mlir::Type getEnd() const;
+    mlir::Type getStride() const;
+
+    std::array<mlir::Type, 3> getTypes() const;
 };
 
 class TypeVar : public mlir::Type::TypeBase<::plier::TypeVar, mlir::Type,
