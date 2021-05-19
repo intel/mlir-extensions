@@ -56,6 +56,8 @@ def test_unary(py_func, arr_list, request):
     arr = np.array(arr_list)
     assert_allclose(py_func(arr), jit_func(arr), rtol=1e-15, atol=1e-15)
 
+_test_binary_test_arrays = [1, 2.5, np.array([1,2,3]), np.array([4.4,5.5,6.6])]
+_test_binary_test_arrays_ids = ['1', '2.5', 'np.array([1,2,3])', 'np.array([4.4,5.5,6.6])']
 @pytest.mark.parametrize("py_func",
                          [lambda a, b: np.add(a, b),
                           lambda a, b: a + b,
@@ -80,52 +82,40 @@ def test_unary(py_func, arr_list, request):
                           'np.true_divide(a, b)',
                           'a / b',
                          ])
-@pytest.mark.parametrize("array1",
-                         [1, 2.5, np.array([1,2,3]), np.array([4.4,5.5,6.6])],
-                         ids=['1', '2.5', 'np.array([1,2,3])', 'np.array([4.4,5.5,6.6])'])
-@pytest.mark.parametrize("array2",
-                         [1, 2.5, np.array([1,2,3]), np.array([4.4,5.5,6.6])],
-                         ids=['1', '2.5', 'np.array([1,2,3])', 'np.array([4.4,5.5,6.6])'])
-def test_binary(py_func, array1, array2):
-    jit_func = njit(py_func)
-    assert_equal(py_func(array1,array2), jit_func(array1,array2))
-
 @pytest.mark.parametrize("a",
-                         [1,
-                          np.array([1]),
-                          np.array([[1]]),
-                          np.array([[1,2],[3,4]]),
-                          np.array([5,6]),
-                          np.array([[5],[6]]),
-                          np.array([[5,6]]),
-                         ],
-                         ids=[
-                          '1',
-                          'np.array([1])',
-                          'np.array([[1]])',
-                          'np.array([[1,2],[3,4]])',
-                          'np.array([5,6])',
-                          'np.array([[5],[6]])',
-                          'np.array([[5,6]])',
-                         ])
+                         _test_binary_test_arrays,
+                         ids=_test_binary_test_arrays_ids)
 @pytest.mark.parametrize("b",
-                         [1,
-                          np.array([1]),
-                          np.array([[1]]),
-                          np.array([[1,2],[3,4]]),
-                          np.array([5,6]),
-                          np.array([[5],[6]]),
-                          np.array([[5,6]]),
-                         ],
-                         ids=[
-                          '1',
-                          'np.array([1])',
-                          'np.array([[1]])',
-                          'np.array([[1,2],[3,4]])',
-                          'np.array([5,6])',
-                          'np.array([[5],[6]])',
-                          'np.array([[5,6]])',
-                         ])
+                         _test_binary_test_arrays,
+                         ids=_test_binary_test_arrays_ids)
+def test_binary(py_func, a, b):
+    jit_func = njit(py_func)
+    assert_equal(py_func(a,b), jit_func(a,b))
+
+_test_broadcast_test_arrays = [
+    1,
+    np.array([1]),
+    np.array([[1]]),
+    np.array([[1,2],[3,4]]),
+    np.array([5,6]),
+    np.array([[5],[6]]),
+    np.array([[5,6]]),
+]
+_test_broadcast_test_arrays_ids = [
+    '1',
+    'np.array([1])',
+    'np.array([[1]])',
+    'np.array([[1,2],[3,4]])',
+    'np.array([5,6])',
+    'np.array([[5],[6]])',
+    'np.array([[5,6]])',
+]
+@pytest.mark.parametrize("a",
+                         _test_broadcast_test_arrays,
+                         ids=_test_broadcast_test_arrays_ids)
+@pytest.mark.parametrize("b",
+                         _test_broadcast_test_arrays,
+                         ids=_test_broadcast_test_arrays_ids)
 def test_broadcast(a, b):
     def py_func(a, b):
         return np.add(a, b)
