@@ -473,6 +473,18 @@ class TestMlirBasic(TestCase):
         assert_equal(py_func2(), jit_func2())
         assert_equal(py_func2(1), jit_func2(1))
 
+    def test_tuple_ret(self):
+        py_funcs = [
+            lambda a, b: (),
+            lambda a, b: (a,b),
+            lambda a, b: (a,a),
+            lambda a, b: (b,b),
+            lambda a, b: ((a,b),(a,a),(b,b),()),
+            ]
+
+        for py_func in py_funcs:
+            jit_func = njit(py_func)
+            assert_equal(py_func(1,2.5), jit_func(1,2.5))
 
 if __name__ == '__main__':
     unittest.main()

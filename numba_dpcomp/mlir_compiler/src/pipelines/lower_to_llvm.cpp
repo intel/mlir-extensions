@@ -70,10 +70,66 @@ mlir::LowerToLLVMOptions getLLVMOptions(mlir::MLIRContext& context)
     return opts;
 }
 
+llvm::Optional<mlir::Type> convertTuple(mlir::LLVMTypeConverter& converter, mlir::TupleType tuple)
+{
+    if (tuple.getTypes().empty())
+    {
+        return mlir::LLVM::LLVMStructType::getLiteral(tuple.getContext(), llvm::None);
+    }
+
+    auto unitupleType = [&]()->mlir::Type
+    {
+        auto types = tuple.getTypes();
+        assert(!types.empty());
+        auto elemType = types.front();
+        types = types.drop_front();
+        if (llvm::all_of(types, [&](auto t) { return t == elemType; }))
+        {
+            return elemType;
+        }
+        return nullptr;
+    }();
+
+    auto count = static_cast<unsigned>(tuple.getTypes().size());
+    if (unitupleType)
+    {
+        auto newType = converter.convertType(unitupleType);
+        if (!newType)
+        {
+            return llvm::None;
+        }
+        return mlir::LLVM::LLVMArrayType::get(unitupleType, count);
+    }
+    llvm::SmallVector<mlir::Type> newTypes;
+    newTypes.reserve(count);
+    for (auto type : tuple.getTypes())
+    {
+        auto newType = converter.convertType(type);
+        if (!newType)
+        {
+            return llvm::None;
+        }
+        newTypes.emplace_back(newType);
+    }
+
+    return mlir::LLVM::LLVMStructType::getLiteral(tuple.getContext(), newTypes);
+}
+
+void populateTupleToLLVMTypeConversion(mlir::LLVMTypeConverter &converter)
+{
+    converter.addConversion([&converter](mlir::TupleType type)
+    {
+        return convertTuple(converter, type);
+    });
+}
+
 struct LLVMTypeHelper
 {
     LLVMTypeHelper(mlir::MLIRContext& ctx):
-        type_converter(&ctx) {}
+        type_converter(&ctx)
+    {
+        populateTupleToLLVMTypeConversion(type_converter);
+    }
 
     mlir::Type i(unsigned bits)
     {
@@ -1297,6 +1353,44 @@ struct LowerRetainOp : public mlir::OpConversionPattern<plier::RetainOp>
     }
 };
 
+struct LowerBuildTuple : public mlir::OpConversionPattern<plier::BuildTupleOp>
+{
+    using mlir::OpConversionPattern<plier::BuildTupleOp>::OpConversionPattern;
+
+    mlir::LogicalResult
+    matchAndRewrite(plier::BuildTupleOp op, llvm::ArrayRef<mlir::Value> /*operands*/,
+                    mlir::ConversionPatternRewriter &rewriter) const override
+    {
+        auto converter = getTypeConverter();
+        auto type = converter->convertType(op.getType());
+        if (!type)
+        {
+            return mlir::failure();
+        }
+        for (auto arg : op.args())
+        {
+            if (!converter->convertType(arg.getType()))
+            {
+                return mlir::failure();
+            }
+        }
+
+        auto loc = op.getLoc();
+        mlir::Value init = rewriter.create<mlir::LLVM::UndefOp>(loc, type);
+        for (auto it : llvm::enumerate(op.args()))
+        {
+            auto arg = it.value();
+            auto newType = converter->convertType(arg.getType());
+            assert(newType);
+            auto casted = rewriter.create<plier::CastOp>(loc, newType, arg);
+            auto index = rewriter.getI64ArrayAttr(static_cast<int64_t>(it.index()));
+            init = rewriter.create<mlir::LLVM::InsertValueOp>(loc, init, casted, index);
+        }
+
+        rewriter.replaceOp(op, init);
+        return mlir::success();
+    }
+};
 
 struct LowerUndef : public mlir::OpConversionPattern<plier::UndefOp>
 {
@@ -1365,13 +1459,15 @@ struct LLVMLoweringPass : public mlir::PassWrapper<LLVMLoweringPass, mlir::Opera
     ModuleOp m = getOperation();
 
     LLVMTypeConverter typeConverter(&context, options);
+    populateTupleToLLVMTypeConversion(typeConverter);
 
     OwningRewritePatternList patterns(&context);
     populateStdToLLVMConversionPatterns(typeConverter, patterns);
     patterns.insert<
         LowerUndef,
         LowerCasts,
-        LowerRetainOp
+        LowerRetainOp,
+        LowerBuildTuple
         >(typeConverter, &getContext());
     patterns.insert<AllocOpLowering, DeallocOpLowering>(typeConverter);
 
