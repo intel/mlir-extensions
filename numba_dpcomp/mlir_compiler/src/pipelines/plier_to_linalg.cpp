@@ -1337,9 +1337,33 @@ struct FixTupleTypesRewrite : public mlir::OpRewritePattern<plier::BuildTupleOp>
     }
 };
 
+struct BufferizeReshapeRewrite : public mlir::OpRewritePattern<mlir::tensor::ReshapeOp>
+{
+    using mlir::OpRewritePattern<mlir::tensor::ReshapeOp>::OpRewritePattern;
 
-struct BufferizeTuples :
-    public mlir::PassWrapper<BufferizeTuples, mlir::FunctionPass>
+    mlir::LogicalResult matchAndRewrite(
+        mlir::tensor::ReshapeOp op, mlir::PatternRewriter &rewriter) const override
+    {
+        auto loc = op.getLoc();
+        auto getType = [&](mlir::Type type)
+        {
+            auto shapedType = type.cast<mlir::ShapedType>();
+            return mlir::MemRefType::get(shapedType.getShape(), shapedType.getElementType());
+        };
+        auto sourceType = getType(op.source().getType());
+        auto shapeType = getType(op.shape().getType());
+        auto resType = getType(op.getType());
+        auto source = rewriter.createOrFold<mlir::memref::BufferCastOp>(loc, sourceType, op.source());
+        auto shape = rewriter.createOrFold<mlir::memref::BufferCastOp>(loc, shapeType, op.shape());
+        auto res = rewriter.create<mlir::memref::ReshapeOp>(loc, resType, source, shape);
+        rewriter.replaceOpWithNewOp<mlir::memref::TensorLoadOp>(op, res);
+        return mlir::success();
+    }
+};
+
+
+struct AdditionalBufferize :
+    public mlir::PassWrapper<AdditionalBufferize, mlir::FunctionPass>
 {
     virtual void getDependentDialects(
         mlir::DialectRegistry &registry) const override
@@ -1350,14 +1374,15 @@ struct BufferizeTuples :
     void runOnFunction() override;
 };
 
-void BufferizeTuples::runOnFunction()
+void AdditionalBufferize::runOnFunction()
 {
     auto& context = getContext();
     mlir::OwningRewritePatternList patterns(&context);
 
     patterns.insert<
         BufferizeTuplesRewrite,
-        FixTupleTypesRewrite
+        FixTupleTypesRewrite,
+        BufferizeReshapeRewrite
         >(&context);
 
     auto func = getFunction();
@@ -1497,7 +1522,7 @@ void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager& pm)
     pm.addNestedPass<mlir::FuncOp>(mlir::createStdBufferizePass());
     pm.addNestedPass<mlir::FuncOp>(mlir::createTensorBufferizePass());
     pm.addPass(mlir::createFuncBufferizePass());
-    pm.addNestedPass<mlir::FuncOp>(std::make_unique<BufferizeTuples>());
+    pm.addNestedPass<mlir::FuncOp>(std::make_unique<AdditionalBufferize>());
     pm.addNestedPass<mlir::FuncOp>(mlir::createFinalizingBufferizePass());
 
     pm.addNestedPass<mlir::FuncOp>(mlir::createBufferHoistingPass());
