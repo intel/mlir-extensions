@@ -1181,6 +1181,7 @@ py::object binop_impl(py::capsule context, py::capsule ssa_val, py::handle rhs, 
 
     using binop_func_t = mlir::Value(*)(mlir::Location loc, mlir::OpBuilder& builder, mlir::Value lhs, mlir::Value rhs);
     const std::tuple<llvm::StringRef, binop_func_t, binop_func_t> funcs[] = {
+        {"+", &binop_func<mlir::AddIOp>, &binop_func<mlir::AddFOp>},
         {"*", &binop_func<mlir::MulIOp>, &binop_func<mlir::MulFOp>},
     };
 

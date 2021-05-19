@@ -33,6 +33,8 @@ class Var:
     def __getitem__(self, index):
         return self._getitem(self._context, self._ssa_val, index)
 
+    def __add__(self, o): return self._binop(self._context, self._ssa_val, o, '+')
+    def __radd__(self, o): return self._binop(self._context, self._ssa_val, o, '+')
     def __mul__(self, o): return self._binop(self._context, self._ssa_val, o, '*')
     def __rmul__(self, o): return self._binop(self._context, self._ssa_val, o, '*')
 
