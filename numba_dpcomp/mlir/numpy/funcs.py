@@ -279,9 +279,9 @@ def concat_impl(builder, arrays, axis=0):
     if isinstance(axis, int):
         shapes = [a.shape for a in arrays]
         num_dims = len(shapes[0])
-        dtype = broadcast_type(builder, tuple(a.dtype for a in arrays))
+        dtype = broadcast_type(builder, arrays)
         new_len = sum((s[axis] for s in shapes), 0)
-        new_shape = [new_len if i == axis else shapes[0][i] for i in range(len(shape1))]
+        new_shape = [new_len if i == axis else shapes[0][i] for i in range(len(shapes[0]))]
         res = builder.init_tensor(new_shape, dtype)
         offsets = [0]*num_dims
         strides = [1]*num_dims

@@ -490,18 +490,18 @@ def test_concat(arrays, axis):
         pytest.skip() # TODO: unselect
     num_arrays = len(arrays)
     if num_arrays == 2:
-        def py_func(arr1, arr2, ax):
-            return np.concatenate((arr1, arr2), axis=ax)
+        def py_func(arr1, arr2):
+            return np.concatenate((arr1, arr2), axis=axis)
     elif num_arrays == 3:
-        def py_func(arr1, arr2, arr3, ax):
-            return np.concatenate((arr1, arr2, arr3), axis=ax)
+        def py_func(arr1, arr2, arr3):
+            return np.concatenate((arr1, arr2, arr3), axis=axis)
     elif num_arrays == 4:
-        def py_func(arr1, arr2, arr3, arr4, ax):
-            return np.concatenate((arr1, arr2, arr3, arr4), axis=ax)
+        def py_func(arr1, arr2, arr3, arr4):
+            return np.concatenate((arr1, arr2, arr3, arr4), axis=axis)
     else:
         assert False
     jit_func = njit(py_func)
-    assert_equal(py_func(*arr, axis), jit_func(*arr, axis))
+    assert_equal(py_func(*arr), jit_func(*arr))
 
 if __name__ == '__main__':
     unittest.main()
