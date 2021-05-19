@@ -143,6 +143,11 @@ struct TypeVarStorage : public mlir::TypeStorage
 };
 }
 
+mlir::ArrayRef<detail::OperatorNamePair> getOperators()
+{
+    return llvm::makeArrayRef(detail::OperatorNames);
+}
+
 void PlierDialect::initialize()
 {
     addOperations<
