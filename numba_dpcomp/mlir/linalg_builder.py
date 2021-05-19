@@ -75,6 +75,9 @@ class Builder:
     def external_call(self, name, inputs, outputs):
         return self._external_call(self._context, name, inputs, outputs)
 
+    def insert(self, src, dst, offsets, sizes, strides):
+        return self._insert(self._context, src, dst, offsets, sizes, strides)
+
 def compile_func(*args, **kwargs):
     import numba_dpcomp.mlir.inner_compiler
     return numba_dpcomp.mlir.inner_compiler.compile_func(*args, **kwargs)
@@ -104,6 +107,9 @@ def lookup_func(name):
     global _func_registry
     return _func_registry.get(name)
 
+def broadcast_type(builder, args):
+    return args[0].dtype # TODO
+
 def eltwise(builder, args, body, res_type = None):
     if isinstance(args, tuple):
         args = builder.broadcast(*args)
@@ -111,7 +117,7 @@ def eltwise(builder, args, body, res_type = None):
         args = (args,)
 
     if res_type is None:
-        res_type = args[0].dtype
+        res_type = broadcast_type(builder, args)
 
     shape = args[0].shape
 
