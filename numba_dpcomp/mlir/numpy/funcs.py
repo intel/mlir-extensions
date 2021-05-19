@@ -88,30 +88,24 @@ def sum_impl(builder, arg, axis=None):
 
         return builder.generic(arg, init, iterators, maps, body)
 
+def _gen_unary_ops():
+    unary_ops = [
+        (register_func('numpy.sqrt', numpy.sqrt), True, lambda a, b: math.sqrt(a)),
+        (register_func('numpy.square', numpy.square), False, lambda a, b: a * a),
+        (register_func('numpy.log', numpy.log), True, lambda a, b: math.log(a)),
+        (register_func('numpy.sin', numpy.sin), True, lambda a, b: math.sin(a)),
+        (register_func('numpy.cos', numpy.cos), True, lambda a, b: math.cos(a)),
+    ]
 
-@register_func('numpy.sqrt', numpy.sqrt)
-def sqrt_impl(builder, arg):
+    def make_func(f64, body):
+        def func(builder, arg):
+            return eltwise(builder, arg, body, builder.float64 if f64 else None)
+        return func
 
-    def body(a, b):
-        return math.sqrt(a)
+    for reg, f64, body in unary_ops:
+        reg(make_func(f64, body))
 
-    return eltwise(builder, arg, body, builder.float64)
-
-@register_func('numpy.square', numpy.square)
-def square_impl(builder, arg):
-
-    def body(a, b):
-        return a * a
-
-    return eltwise(builder, arg, body)
-
-@register_func('numpy.log', numpy.log)
-def log_impl(builder, arg):
-
-    def body(a, b):
-        return math.log(a)
-
-    return eltwise(builder, arg, body, builder.float64)
+_gen_unary_ops()
 
 @register_func('numpy.empty', numpy.empty)
 def empty_impl(builder, shape, dtype=None):
@@ -157,23 +151,6 @@ def dot_impl(builder, a, b):
             return a * b + c
 
         return builder.generic((a,b), init, iterators, maps, body)
-
-
-@register_func('numpy.sin', numpy.sin)
-def sin_impl(builder, arg):
-    def body(a, b):
-        return math.sin(a)
-
-    return eltwise(builder, arg, body, builder.float64)
-
-
-@register_func('numpy.cos', numpy.cos)
-def cos_impl(builder, arg):
-    def body(a, b):
-        return math.cos(a)
-
-    return eltwise(builder, arg, body, builder.float64)
-
 
 @register_attr('array.size')
 def size_impl(builder, arg):
