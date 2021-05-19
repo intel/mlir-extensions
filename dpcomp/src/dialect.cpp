@@ -154,7 +154,7 @@ void PlierDialect::initialize()
 #define GET_OP_LIST
 #include "plier/PlierOps.cpp.inc"
         >();
-    addTypes<plier::PyType, plier::LiteralType, plier::TypeVar>();
+    addTypes<plier::PyType, plier::LiteralType, plier::NoneType, plier::TypeVar>();
     addInterfaces<PlierInlinerInterface>();
 }
 
@@ -172,6 +172,7 @@ void PlierDialect::printType(mlir::Type type, mlir::DialectAsmPrinter &os) const
                                       os.printAttribute(t.getValue());
                                       os << ">";
                                   })
+        .Case<plier::NoneType>([&](auto){ os << "NoneType"; })
         .Case<plier::TypeVar>([&](auto t)
                               {
                                   os << "TypeVar<";
@@ -190,11 +191,6 @@ PyType PyType::get(mlir::MLIRContext* context, llvm::StringRef name)
 PyType PyType::getUndefined(mlir::MLIRContext* context)
 {
     return Base::get(context, "");
-}
-
-PyType PyType::getNone(mlir::MLIRContext* context)
-{
-    return Base::get(context, "none");
 }
 
 llvm::StringRef PyType::getName() const

@@ -53,7 +53,7 @@ bool is_float(mlir::Type type)
 
 bool is_none(mlir::Type type)
 {
-    return type == plier::PyType::getNone(type.getContext());
+    return type.isa<plier::NoneType>();
 }
 
 py::object map_type(const py::handle& types_mod, mlir::Type type)

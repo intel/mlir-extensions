@@ -208,6 +208,15 @@ mlir::Type map_dtype_type(mlir::MLIRContext& ctx, llvm::StringRef& name)
     return nullptr;
 }
 
+mlir::Type map_none_type(mlir::MLIRContext& ctx, llvm::StringRef& name)
+{
+    if (name.consume_front("none"))
+    {
+        return plier::NoneType::get(&ctx);
+    }
+    return nullptr;
+}
+
 mlir::Type map_plier_type_name(mlir::MLIRContext& ctx, llvm::StringRef& name)
 {
     using func_t = mlir::Type(*)(mlir::MLIRContext& ctx, llvm::StringRef& name);
@@ -221,7 +230,8 @@ mlir::Type map_plier_type_name(mlir::MLIRContext& ctx, llvm::StringRef& name)
         &map_unituple_type,
         &map_tuple_type,
         &map_func_type,
-        &map_dtype_type
+        &map_dtype_type,
+        &map_none_type,
     };
     for (auto h : handlers)
     {
@@ -273,21 +283,31 @@ bool is_index(mlir::Type type)
 
 struct ConstOpLowering : public mlir::OpRewritePattern<plier::ConstOp>
 {
-    ConstOpLowering(mlir::TypeConverter &/*typeConverter*/,
+    ConstOpLowering(mlir::TypeConverter &typeConverter,
                    mlir::MLIRContext *context):
-        OpRewritePattern(context) {}
+        OpRewritePattern(context), converter(typeConverter) {}
 
     mlir::LogicalResult matchAndRewrite(
         plier::ConstOp op, mlir::PatternRewriter &rewriter) const override
     {
         auto value = op.val();
-        if (!is_supported_type(value.getType()))
+        if (is_supported_type(value.getType()))
         {
-            return mlir::failure();
+            rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, value);
+            return mlir::success();
         }
-        rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, value);
-        return mlir::success();
+        if (auto type = converter.convertType(op.getType()))
+        {
+            if (type.isa<plier::NoneType>())
+            {
+                rewriter.replaceOpWithNewOp<plier::UndefOp>(op, type);
+                return mlir::success();
+            }
+        }
+        return mlir::failure();
     }
+private:
+    mlir::TypeConverter& converter;
 };
 
 bool isOmittedType(mlir::Type type)
@@ -347,15 +367,15 @@ struct LiteralArgLowering : public mlir::OpRewritePattern<plier::ArgOp>
         plier::ArgOp op, mlir::PatternRewriter &rewriter) const override
     {
         auto type = op.getType();
-        if (type == plier::PyType::getNone(op.getContext()))
-        {
-            rewriter.replaceOpWithNewOp<plier::UndefOp>(op, type);
-            return mlir::success();
-        }
         auto convertedType = converter.convertType(type);
         if (!convertedType)
         {
             return mlir::failure();
+        }
+        if (convertedType.isa<plier::NoneType>())
+        {
+            rewriter.replaceOpWithNewOp<plier::UndefOp>(op, convertedType);
+            return mlir::success();
         }
         if (auto literal = convertedType.dyn_cast<plier::LiteralType>())
         {
@@ -393,11 +413,11 @@ struct FixCallOmittedArgs : public mlir::OpRewritePattern<mlir::CallOp>
             {
                 newResultsTypes.emplace_back(res.getType());
             }
-
-            if (argTypes.empty() && !res.getUsers().empty())
+            else
             {
                 needChanges = true;
             }
+
             newResultsMask[it.index()] = argTypes.empty();
         }
         llvm::SmallVector<mlir::Value> newArgs;
@@ -423,7 +443,8 @@ struct FixCallOmittedArgs : public mlir::OpRewritePattern<mlir::CallOp>
             return mlir::failure();
         }
 
-        auto newOpResults = rewriter.create<mlir::CallOp>(op.getLoc(), op.getCallee(), newResultsTypes, newArgs).getResults();
+        auto newOp = rewriter.create<mlir::CallOp>(op.getLoc(), op.getCallee(), newResultsTypes, newArgs);
+        auto newOpResults = newOp.getResults();
         auto filterResults = [&]()
         {
             while (!newOpResults.empty())
@@ -1979,14 +2000,13 @@ void populate_plier_to_std_pipeline(mlir::OpPassManager& pm)
 }
 }
 
-void populate_std_type_converter(mlir::MLIRContext& context, mlir::TypeConverter& converter)
+void populate_std_type_converter(mlir::MLIRContext& /*context*/, mlir::TypeConverter& converter)
 {
-    auto none_type = plier::PyType::getNone(&context);
     converter.addConversion(
-    [none_type](mlir::Type type, llvm::SmallVectorImpl<mlir::Type>& ret_types)
+    [](mlir::Type type, llvm::SmallVectorImpl<mlir::Type>& ret_types)
     ->llvm::Optional<mlir::LogicalResult>
     {
-        if (type == none_type || isOmittedType(type))
+        if (type.isa<plier::NoneType>() || isOmittedType(type))
         {
             return mlir::success();
         }

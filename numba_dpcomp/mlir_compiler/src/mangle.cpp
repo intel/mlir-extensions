@@ -69,9 +69,9 @@ bool mangle_memref(llvm::raw_ostream& res, mlir::Type type)
     return false;
 }
 
-bool mangle_none(llvm::raw_ostream& res, mlir::Type type)
+bool mangle_none(llvm::raw_ostream& /*res*/, mlir::Type type)
 {
-    if (type = plier::PyType::getNone(type.getContext()))
+    if (type.isa<plier::NoneType>())
     {
         // Nothing
         return true;
