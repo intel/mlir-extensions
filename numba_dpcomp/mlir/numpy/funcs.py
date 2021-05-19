@@ -169,7 +169,7 @@ def cos_impl(builder, arg):
 @register_attr('array.size')
 def size_impl(builder, arg):
     shape = arg.shape
-    res = builder.init_tensor([], builder.index, 1)
+    res = 1
     for i in range(len(shape)):
         res = res * shape[i]
     return res
