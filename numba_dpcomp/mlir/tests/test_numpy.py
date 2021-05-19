@@ -86,6 +86,8 @@ class TestMlirBasic(TestCase):
             lambda a, b: a - b,
             lambda a, b: np.multiply(a, b),
             lambda a, b: a * b,
+            lambda a, b: np.true_divide(a, b),
+            lambda a, b: a / b,
         ]
 
         test_data = [1, 2.5, np.array([1,2,3]), np.array([4.4,5.5,6.6])]

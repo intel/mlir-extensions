@@ -354,6 +354,7 @@ struct CallLowerer
             {"+", "operator.add"},
             {"-", "operator.sub"},
             {"*", "operator.mul"},
+            {"/", "operator.truediv"},
         };
         for (auto it : names)
         {
