@@ -605,6 +605,63 @@ struct GetitemOpLowering : public mlir::OpRewritePattern<plier::GetItemOp>
     }
 };
 
+mlir::Value unstride(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value src)
+{
+    auto srcType = src.getType().dyn_cast<mlir::MemRefType>();
+    if (!srcType ||
+        llvm::all_of(srcType.getAffineMaps(), [](auto m) { return m.isIdentity(); }))
+    {
+        return src;
+    }
+    auto rank = static_cast<unsigned>(srcType.getRank());
+    llvm::SmallVector<mlir::Value> sizes(rank);
+    for (unsigned i = 0; i < rank; ++i)
+    {
+        sizes[i] = builder.create<mlir::memref::DimOp>(loc, src, i).getResult();
+    }
+
+    auto allocType = mlir::MemRefType::get(llvm::SmallVector<int64_t>(rank, mlir::ShapedType::kDynamicSize), srcType.getElementType());
+    auto newType = mlir::MemRefType::get(srcType.getShape(), srcType.getElementType());
+    auto newMemref = builder.create<mlir::memref::AllocOp>(loc, allocType, sizes);
+    auto result = builder.createOrFold<mlir::memref::CastOp>(loc, newMemref, newType);
+    builder.create<mlir::linalg::CopyOp>(loc, src, result);
+    return result;
+}
+
+struct FixStridedClone : public mlir::OpRewritePattern<mlir::memref::CloneOp>
+{
+    using OpRewritePattern::OpRewritePattern;
+
+    mlir::LogicalResult matchAndRewrite(
+        mlir::memref::CloneOp op, mlir::PatternRewriter &rewriter) const override
+    {
+        if (op.input().getType() != op.getType())
+        {
+            rewriter.replaceOpWithNewOp<mlir::memref::CloneOp>(op, op.input());
+            return mlir::success();
+        }
+        return mlir::failure();
+    }
+};
+
+struct FixStridedReshape : public mlir::OpRewritePattern<mlir::memref::ReshapeOp>
+{
+    using OpRewritePattern::OpRewritePattern;
+
+    mlir::LogicalResult matchAndRewrite(
+        mlir::memref::ReshapeOp op, mlir::PatternRewriter &rewriter) const override
+    {
+        auto source = op.source();
+        auto newSource = unstride(rewriter, op.getLoc(), source);
+        if (newSource == source)
+        {
+            return mlir::failure();
+        }
+        rewriter.replaceOpWithNewOp<mlir::memref::ReshapeOp>(op, op.getType(), newSource, op.shape());
+        return mlir::success();
+    }
+};
+
 struct MakeStridedLayout :
     public mlir::PassWrapper<MakeStridedLayout, mlir::FunctionPass>
 {
@@ -613,6 +670,7 @@ struct MakeStridedLayout :
 
 void MakeStridedLayout::runOnFunction()
 {
+    auto context = &getContext();
     auto func = getFunction();
     if (func.getRegion().empty() || !func.isPublic())
     {
@@ -653,7 +711,7 @@ void MakeStridedLayout::runOnFunction()
                 return llvm::SmallVector<int64_t>(rank, val);
             };
             auto strideVal = mlir::ShapedType::kDynamicStrideOrOffset;
-            auto affineMap = mlir::makeStridedLinearLayoutMap(makeShape(strideVal), strideVal, builder.getContext());
+            auto affineMap = mlir::makeStridedLinearLayoutMap(makeShape(strideVal), strideVal, context);
             auto memrefType = mlir::MemRefType::get(makeShape(mlir::ShapedType::kDynamicSize), memref.getElementType(), affineMap);
 //            auto dst = builder.create<mlir::memref::CastOp>(loc, arg, memrefType);
 //            arg.replaceAllUsesExcept(dst, dst);
@@ -668,6 +726,15 @@ void MakeStridedLayout::runOnFunction()
         return;
     }
     func.setType(newFuncType);
+
+    mlir::OwningRewritePatternList patterns(context);
+
+    patterns.insert<
+        FixStridedClone,
+        FixStridedReshape
+        >(context);
+
+    (void)mlir::applyPatternsAndFoldGreedily(func, std::move(patterns));
 }
 
 struct PlierToLinalgPass :
@@ -1655,7 +1722,8 @@ void LowerCloneOpsPass::runOnFunction()
     mlir::OwningRewritePatternList patterns(&context);
 
     patterns.insert<
-        ReplaceClones
+        ReplaceClones,
+        FixStridedReshape
         >(&context);
 
 
@@ -1738,10 +1806,10 @@ void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager& pm)
     pm.addNestedPass<mlir::FuncOp>(mlir::createPromoteBuffersToStackPass());
 
     pm.addNestedPass<mlir::FuncOp>(std::make_unique<CloneArgsPass>());
+    pm.addNestedPass<mlir::FuncOp>(std::make_unique<MakeStridedLayout>());
     pm.addNestedPass<mlir::FuncOp>(mlir::createBufferDeallocationPass());
     pm.addPass(mlir::createCanonicalizerPass());
 
-    pm.addNestedPass<mlir::FuncOp>(std::make_unique<MakeStridedLayout>());
     pm.addNestedPass<mlir::FuncOp>(std::make_unique<LowerCloneOpsPass>());
 
     pm.addPass(std::make_unique<LowerLinalgPass>());
