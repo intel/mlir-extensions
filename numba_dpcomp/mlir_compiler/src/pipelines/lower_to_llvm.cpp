@@ -410,11 +410,11 @@ mlir::Attribute get_fastmath_attrs(mlir::MLIRContext& ctx)
     return mlir::ArrayAttr::get(&ctx, attrs);
 }
 
-void fix_func_sig(LLVMTypeHelper& type_helper, mlir::FuncOp func)
+mlir::LogicalResult fix_func_sig(LLVMTypeHelper& type_helper, mlir::FuncOp func)
 {
     if (func.isPrivate())
     {
-        return;
+        return mlir::success();
     }
     if (func->getAttr(plier::attributes::getFastmathName()))
     {
@@ -438,6 +438,22 @@ void fix_func_sig(LLVMTypeHelper& type_helper, mlir::FuncOp func)
         ++index;
         return ret;
     };
+
+    auto get_res_type = [&](mlir::Type type)->mlir::Type
+    {
+        if (auto memreftype = type.dyn_cast<mlir::MemRefType>())
+        {
+            return get_array_type(type_helper.get_type_converter(), memreftype);
+        }
+        return type;
+    };
+
+    auto orig_ret_type = (old_type.getNumResults() != 0 ? get_res_type(old_type.getResult(0)) : type_helper.ptr(type_helper.i(8)));
+
+    if (!type_helper.get_type_converter().convertType(orig_ret_type))
+    {
+        return mlir::failure();
+    }
 
     mlir::OpBuilder builder(&ctx);
     builder.setInsertionPointToStart(&func.getBody().front());
@@ -478,16 +494,6 @@ void fix_func_sig(LLVMTypeHelper& type_helper, mlir::FuncOp func)
         }
     };
 
-    auto get_res_type = [&](mlir::Type type)->mlir::Type
-    {
-        if (auto memreftype = type.dyn_cast<mlir::MemRefType>())
-        {
-            return get_array_type(type_helper.get_type_converter(), memreftype);
-        }
-        return type;
-    };
-
-    auto orig_ret_type = (old_type.getNumResults() != 0 ? get_res_type(old_type.getResult(0)) : type_helper.ptr(type_helper.i(8)));
     add_arg(ptr(orig_ret_type));
     add_arg(ptr(ptr(getExceptInfoType(type_helper))));
 
@@ -498,6 +504,7 @@ void fix_func_sig(LLVMTypeHelper& type_helper, mlir::FuncOp func)
     }
     auto ret_type = mlir::IntegerType::get(&ctx, 32);
     func.setType(mlir::FunctionType::get(&ctx, args, ret_type));
+    return mlir::success();
 }
 
 struct ReturnOpLowering : public mlir::OpRewritePattern<mlir::ReturnOp>
@@ -540,7 +547,10 @@ struct ReturnOpLowering : public mlir::OpRewritePattern<mlir::ReturnOp>
             mlir::Value val = op.getOperand(0);
             auto orig_type = val.getType();
             auto ll_ret_type = type_converter.convertType(orig_type);
-            assert(ll_ret_type);
+            if (!ll_ret_type)
+            {
+                return mlir::failure();
+            }
             val = rewriter.create<plier::CastOp>(loc, ll_ret_type, val);
             if (auto memref_type = orig_type.dyn_cast<mlir::MemRefType>())
             {
@@ -1201,7 +1211,10 @@ struct PreLLVMLowering : public mlir::PassWrapper<PreLLVMLowering, mlir::Functio
 
         mlir::OwningRewritePatternList patterns(&context);
         auto func = getFunction();
-        fix_func_sig(type_helper, func);
+        if (mlir::failed(fix_func_sig(type_helper, func)))
+        {
+            signalPassFailure();
+        }
 
         patterns.insert<ReturnOpLowering>(&context,
                                           type_helper.get_type_converter());
