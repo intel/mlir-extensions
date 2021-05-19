@@ -256,6 +256,10 @@ def concat_impl(builder, arrays, axis=0):
             offsets[axis] += sizes[axis]
         return res
 
+def _prepare_cov_input(m, y, rowvar, dtype):
+    pass
+
 @register_func('numpy.cov', numpy.cov)
 def cov_impl(builder, m, y=None, rowvar=True, bias=False, ddof=None):
+    print('-=-=-=-=-=-=-=-=-=-=-=-=-=-',m, y, rowvar, bias, ddof)
     pass
