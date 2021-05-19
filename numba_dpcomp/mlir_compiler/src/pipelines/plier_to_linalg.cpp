@@ -605,6 +605,71 @@ struct GetitemOpLowering : public mlir::OpRewritePattern<plier::GetItemOp>
     }
 };
 
+struct MakeStridedLayout :
+    public mlir::PassWrapper<MakeStridedLayout, mlir::FunctionPass>
+{
+    void runOnFunction() override;
+};
+
+void MakeStridedLayout::runOnFunction()
+{
+    auto func = getFunction();
+    if (func.getRegion().empty() || !func.isPublic())
+    {
+        return;
+    }
+
+    mlir::OpBuilder builder(func.body());
+    auto loc = builder.getUnknownLoc();
+    auto funcType = func.getType();
+    auto argTypes = funcType.getInputs();
+    llvm::SmallVector<mlir::Type> newArgTypes;
+    newArgTypes.assign(argTypes.begin(), argTypes.end());
+    for (auto it : llvm::enumerate(func.body().front().getArguments()))
+    {
+        auto arg = it.value();
+        auto type = arg.getType();
+        if (auto tensor = type.dyn_cast<mlir::RankedTensorType>())
+        {
+            auto rank = static_cast<unsigned>(tensor.getRank());
+            auto makeShape = [&](int64_t val)
+            {
+                return llvm::SmallVector<int64_t>(rank, val);
+            };
+            auto strideVal = mlir::ShapedType::kDynamicStrideOrOffset;
+            auto affineMap = mlir::makeStridedLinearLayoutMap(makeShape(strideVal), strideVal, builder.getContext());
+            auto memrefType = mlir::MemRefType::get(makeShape(mlir::ShapedType::kDynamicSize), tensor.getElementType(), affineMap);
+            arg.setType(memrefType);
+            newArgTypes[it.index()] = memrefType;
+
+            auto dst = builder.create<mlir::memref::TensorLoadOp>(loc, arg);
+            arg.replaceAllUsesExcept(dst, dst);
+        }
+        else if (auto memref = type.dyn_cast<mlir::MemRefType>())
+        {
+            auto rank = static_cast<unsigned>(memref.getRank());
+            auto makeShape = [&](int64_t val)
+            {
+                return llvm::SmallVector<int64_t>(rank, val);
+            };
+            auto strideVal = mlir::ShapedType::kDynamicStrideOrOffset;
+            auto affineMap = mlir::makeStridedLinearLayoutMap(makeShape(strideVal), strideVal, builder.getContext());
+            auto memrefType = mlir::MemRefType::get(makeShape(mlir::ShapedType::kDynamicSize), memref.getElementType(), affineMap);
+//            auto dst = builder.create<mlir::memref::CastOp>(loc, arg, memrefType);
+//            arg.replaceAllUsesExcept(dst, dst);
+            arg.setType(memrefType);
+            newArgTypes[it.index()] = memrefType;
+        }
+    }
+
+    auto newFuncType = mlir::FunctionType::get(&getContext(), newArgTypes, funcType.getResults());
+    if (newFuncType == funcType)
+    {
+        return;
+    }
+    func.setType(newFuncType);
+}
+
 struct PlierToLinalgPass :
     public mlir::PassWrapper<PlierToLinalgPass, mlir::OperationPass<mlir::ModuleOp>>
 {
@@ -1558,11 +1623,10 @@ void CloneArgsPass::runOnFunction()
     builder.setInsertionPointToStart(block);
     for (auto arg : block->getArguments())
     {
-        if (arg.getType().isa<mlir::MemRefType>())
+        if (auto type = arg.getType().dyn_cast<mlir::MemRefType>())
         {
-            auto retained = builder.create<mlir::memref::CloneOp>(loc, arg);
-            llvm::SmallPtrSet<mlir::Operation*, 1> except({retained});
-            arg.replaceAllUsesExcept(retained, except);
+            auto retained = builder.create<mlir::memref::CloneOp>(loc, type, arg);
+            arg.replaceAllUsesExcept(retained, retained);
         }
     }
 }
@@ -1676,6 +1740,8 @@ void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager& pm)
     pm.addNestedPass<mlir::FuncOp>(std::make_unique<CloneArgsPass>());
     pm.addNestedPass<mlir::FuncOp>(mlir::createBufferDeallocationPass());
     pm.addPass(mlir::createCanonicalizerPass());
+
+    pm.addNestedPass<mlir::FuncOp>(std::make_unique<MakeStridedLayout>());
     pm.addNestedPass<mlir::FuncOp>(std::make_unique<LowerCloneOpsPass>());
 
     pm.addPass(std::make_unique<LowerLinalgPass>());
