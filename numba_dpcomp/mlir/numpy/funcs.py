@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from  ..linalg_builder import register_func, register_attr, is_literal, broadcast_type, eltwise
+from  ..linalg_builder import register_func, register_attr, is_literal, broadcast_type, eltwise, convert_array
 
 import numpy
 import math
+from numba import prange
+from numba.core.extending import register_jitable
 
 def is_int(t, b):
     return t == b.int8 or t == b.int16 or t == b.int32 or t == b.int64
@@ -256,20 +258,56 @@ def concat_impl(builder, arrays, axis=0):
             offsets[axis] += sizes[axis]
         return res
 
-def _prepare_cov_input(m, y, rowvar, dtype):
+@register_jitable # TODO: remove
+def _row_wise_average(a):
+    m, n = a.shape
+    out = numpy.empty((m, 1), dtype=a.dtype)
+
+    for i in prange(m):
+        out[i, 0] = numpy.sum(a[i, :]) / n
+
+    return out
+
+def _cov_impl_inner(X, bias, ddof):
+    # determine degrees of freedom
+    if ddof is None:
+        if bias:
+            ddof = 0
+        else:
+            ddof = 1
+
+    # determine the normalization factor
+    fact = X.shape[1] - ddof
+
+    # numpy warns if less than 0 and floors at 0
+    # fact = max(fact, 0.0)
+    fact = fact if fact > 0.0 else 0.0
+
+    # de-mean
+    X = X - _row_wise_average(X)
+
+    # calculate result - requires blas
+    c = numpy.dot(X, X.T)
+    # c = numpy.dot(X, numpy.conj(X.T))
+    c = c * numpy.true_divide(1, fact)
+    return c
+
+def _prepare_cov_input(builder, m, y, rowvar):
     def get_func():
         if y is None:
-            def _prepare_cov_input_inner(m, y, rowvar, dtype):
-                m_arr = np.atleast_2d(m)
+            dtype = m.dtype
+            def _prepare_cov_input_impl(m, y, rowvar):
+                m_arr = numpy.atleast_2d(m)
 
                 if not rowvar:
                     m_arr = m_arr.T
 
                 return m_arr
         else:
-            def _prepare_cov_input_inner(m, y, rowvar, dtype):
-                m_arr = np.atleast_2d(m)
-                y_arr = np.atleast_2d(y)
+            dtype = broadcast_type(builder, (m, y))
+            def _prepare_cov_input_impl(m, y, rowvar):
+                m_arr = numpy.atleast_2d(m)
+                y_arr = numpy.atleast_2d(y)
 
                 # transpose if asked to and not a (1, n) vector - this looks
                 # wrong as you might end up transposing one and not the other,
@@ -287,12 +325,16 @@ def _prepare_cov_input(m, y, rowvar, dtype):
                 #     raise ValueError("m and y have incompatible dimensions")
 
                 # allocate and fill output array
-                return np.concatenate((m_arr, y_arr), axis=0, dtype=dtype)
+                return numpy.concatenate((m_arr, y_arr), axis=0)
 
-            return _prepare_cov_input_inner
-    pass
+        return dtype, _prepare_cov_input_impl
+    dtype, func = get_func()
+    if is_int(dtype, builder):
+        dtype = builder.float64
+    res = builder.inline_func(func, m, y, rowvar)
+    return convert_array(builder, res, dtype)
 
 @register_func('numpy.cov', numpy.cov)
 def cov_impl(builder, m, y=None, rowvar=True, bias=False, ddof=None):
-    print('-=-=-=-=-=-=-=-=-=-=-=-=-=-',m, y, rowvar, bias, ddof)
-    pass
+    X = _prepare_cov_input(builder, m, y, rowvar)
+    return builder.inline_func(_cov_impl_inner, X, bias, ddof)
