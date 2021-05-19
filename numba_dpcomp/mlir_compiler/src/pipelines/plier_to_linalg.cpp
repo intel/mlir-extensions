@@ -91,7 +91,8 @@ void applyOptimizations(mlir::FuncOp op, const mlir::FrozenRewritePatternSet& pa
 enum class ArrayLayout
 {
     C,
-    F
+    F,
+    A
 };
 
 bool parse_layout(llvm::StringRef& name, ArrayLayout& layout)
@@ -104,6 +105,11 @@ bool parse_layout(llvm::StringRef& name, ArrayLayout& layout)
     if (name.consume_back("F"))
     {
         layout = ArrayLayout::F;
+        return true;
+    }
+    if (name.consume_back("A"))
+    {
+        layout = ArrayLayout::A;
         return true;
     }
     return false;
@@ -159,7 +165,8 @@ mlir::Type map_array_type(mlir::MLIRContext& ctx, mlir::TypeConverter& conveter,
     if (auto desc = parse_array_desc(name))
     {
         if (desc->layout == ArrayLayout::C ||
-            desc->layout == ArrayLayout::F)
+            desc->layout == ArrayLayout::F ||
+            desc->layout == ArrayLayout::A)
         {
             if (auto type = conveter.convertType(plier::PyType::get(&ctx, desc->name)))
             {
@@ -394,8 +401,26 @@ mlir::Value index_cast(mlir::Value value, mlir::Location loc, mlir::OpBuilder& b
     return value;
 }
 
+bool isSlice(mlir::Type type)
+{
+    if (auto pyType = type.dyn_cast<plier::PyType>())
+    {
+        auto name = pyType.getName();
+        return name.consume_front("slice<") && name.consume_back(">");
+    }
+    return false;
+}
+
 bool isValidGetitemIndex(mlir::Type type)
 {
+    if (isSlice(type))
+    {
+        return true;
+    }
+    if (auto tupleType = type.dyn_cast<mlir::TupleType>())
+    {
+        return llvm::all_of(tupleType.getTypes(), &isValidGetitemIndex);
+    }
     return type.isa<mlir::IntegerType, mlir::IndexType, mlir::TupleType>();
 }
 
@@ -423,34 +448,64 @@ struct GetitemOpLowering : public mlir::OpRewritePattern<T>
         }
         auto loc = op.getLoc();
 
-        llvm::SmallVector<mlir::Value> indices;
-        if (auto tuple_type = index.getType().template dyn_cast<mlir::TupleType>())
+        auto indexType = index.getType();
+
+        mlir::Value res;
+        if (isSlice(indexType))
         {
-            indices.resize(tuple_type.size());
-            for (auto it : llvm::enumerate(tuple_type))
+            auto buildSliceOp = index.template getDefiningOp<plier::BuildSliceOp>();
+            if (!buildSliceOp)
             {
-                auto getitem_ind = rewriter.create<mlir::ConstantIndexOp>(loc, it.index());
-                auto ind = rewriter.create<plier::GetItemOp>(loc, index, getitem_ind);
-                indices[it.index()] = index_cast(ind, loc, rewriter);
+                return mlir::failure();
+            }
+            auto low = index_cast(buildSliceOp.low(), loc, rewriter);
+            auto high = index_cast(buildSliceOp.high(), loc, rewriter);
+            auto step = index_cast(buildSliceOp.step(), loc, rewriter);
+            auto size = rewriter.create<mlir::SubIOp>(loc, high, low).getResult();
+
+            if (is_memref)
+            {
+                res = rewriter.create<mlir::memref::SubViewOp>(loc, val, low, size, step);
+            }
+            else if (is_tensor)
+            {
+                res = rewriter.create<mlir::SubTensorOp>(loc, val, low, size, step);
+            }
+            else
+            {
+                llvm_unreachable("Invalid getitem");
             }
         }
         else
         {
-            indices.push_back(index_cast(index, loc, rewriter));
-        }
+            llvm::SmallVector<mlir::Value> indices;
+            if (auto tuple_type = indexType.template dyn_cast<mlir::TupleType>())
+            {
+                indices.resize(tuple_type.size());
+                for (auto it : llvm::enumerate(tuple_type))
+                {
+                    auto getitem_ind = rewriter.create<mlir::ConstantIndexOp>(loc, it.index());
+                    auto ind = rewriter.create<plier::GetItemOp>(loc, index, getitem_ind);
+                    indices[it.index()] = index_cast(ind, loc, rewriter);
+                }
+            }
+            else
+            {
+                indices.push_back(index_cast(index, loc, rewriter));
+            }
 
-        mlir::Value res;
-        if (is_memref)
-        {
-            res = rewriter.create<mlir::memref::LoadOp>(loc, val, indices);
-        }
-        else if (is_tensor)
-        {
-            res = rewriter.create<mlir::tensor::ExtractOp>(loc, val, indices);
-        }
-        else
-        {
-            llvm_unreachable("Invalid getitem");
+            if (is_memref)
+            {
+                res = rewriter.create<mlir::memref::LoadOp>(loc, val, indices);
+            }
+            else if (is_tensor)
+            {
+                res = rewriter.create<mlir::tensor::ExtractOp>(loc, val, indices);
+            }
+            else
+            {
+                llvm_unreachable("Invalid getitem");
+            }
         }
         rerun_std_pipeline(op);
         rewriter.replaceOp(op, res);

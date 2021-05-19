@@ -278,4 +278,13 @@ def UndefOp : Plier_Op<"undef", [NoSideEffect]> {
   let results = (outs AnyType);
 }
 
+def BuildSliceOp : Plier_Op<"build_slice", [NoSideEffect]> {
+    let arguments = (ins
+                     AnyType:$low,
+                     AnyType:$high,
+                     AnyType:$step);
+
+    let results = (outs AnyType);
+}
+
 #endif // PLIER_OPS
