@@ -511,7 +511,6 @@ struct GetitemOpLowering : public mlir::OpRewritePattern<plier::GetItemOp>
             auto numDims = static_cast<unsigned>(dimsIndices.size());
             auto needReshape = (numDims != type.cast<mlir::ShapedType>().getRank());
             auto elemType = type.cast<mlir::ShapedType>().getElementType();
-            auto i32 = rewriter.getI32Type();
             if (is_memref)
             {
                 if (needReshape)
@@ -530,7 +529,7 @@ struct GetitemOpLowering : public mlir::OpRewritePattern<plier::GetItemOp>
                     for (auto it : llvm::enumerate(dimsIndices))
                     {
                         auto dim = rewriter.create<mlir::memref::DimOp>(loc, value, it.value());
-                        elements[it.index()] = rewriter.create<mlir::IndexCastOp>(loc, dim, i32);
+                        elements[it.index()] = dim;
                     }
                     auto shape = rewriter.create<mlir::tensor::FromElementsOp>(loc, elements);
                     res = rewriter.create<mlir::tensor::ReshapeOp>(loc, resultType, res, shape);

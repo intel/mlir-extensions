@@ -1011,7 +1011,7 @@ py::object reshape_impl(py::capsule context, py::handle src, py::iterable newDim
 
     auto newDimsVals = [&]()
     {
-        auto dimType = builder.getI32Type();
+        auto dimType = builder.getIndexType();
         auto dims = unwrapVal(newDims);
         llvm::SmallVector<mlir::Value> ret;
         if (auto tupleType = dims.getType().dyn_cast<mlir::TupleType>())
