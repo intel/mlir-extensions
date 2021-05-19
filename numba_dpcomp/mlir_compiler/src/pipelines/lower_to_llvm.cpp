@@ -1284,6 +1284,27 @@ struct LowerCloneOp : public mlir::OpConversionPattern<mlir::memref::CloneOp>
     }
 };
 
+
+struct LowerUndef : public mlir::OpConversionPattern<plier::UndefOp>
+{
+    using mlir::OpConversionPattern<plier::UndefOp>::OpConversionPattern;
+
+    mlir::LogicalResult
+    matchAndRewrite(plier::UndefOp op, llvm::ArrayRef<mlir::Value> /*operands*/,
+                    mlir::ConversionPatternRewriter &rewriter) const override
+    {
+        auto converter = getTypeConverter();
+        auto type = converter->convertType(op.getType());
+        if (!type)
+        {
+            return mlir::failure();
+        }
+
+        rewriter.replaceOpWithNewOp<mlir::LLVM::UndefOp>(op, type);
+        return mlir::success();
+    }
+};
+
 struct LowerCasts : public mlir::OpConversionPattern<plier::CastOp>
 {
     using mlir::OpConversionPattern<plier::CastOp>::OpConversionPattern;
@@ -1335,6 +1356,7 @@ struct LLVMLoweringPass : public mlir::PassWrapper<LLVMLoweringPass, mlir::Opera
     OwningRewritePatternList patterns(&context);
     populateStdToLLVMConversionPatterns(typeConverter, patterns);
     patterns.insert<
+        LowerUndef,
         LowerCasts,
         LowerCloneOp
         >(typeConverter, &getContext());

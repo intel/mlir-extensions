@@ -273,17 +273,13 @@ struct UndefOpLowering : public mlir::OpRewritePattern<plier::UndefOp>
     mlir::LogicalResult matchAndRewrite(
         plier::UndefOp op, mlir::PatternRewriter &rewriter) const override
     {
-        auto type = converter.convertType(op.getType());
-        if (!type)
+        auto oldType = op.getType();
+        auto type = converter.convertType(oldType);
+        if (!type || oldType == type)
         {
             return mlir::failure();
         }
-        auto attr = plier::getConstAttr(type, 0);
-        if (!attr)
-        {
-            return mlir::failure();
-        }
-        rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, attr);
+        rewriter.replaceOpWithNewOp<plier::UndefOp>(op, type);
         return mlir::success();
     }
 
