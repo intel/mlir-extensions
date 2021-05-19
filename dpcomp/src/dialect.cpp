@@ -32,7 +32,7 @@ namespace MemoryEffects = ::mlir::MemoryEffects;
 
 namespace
 {
-struct PLierInlinerInterface : public mlir::DialectInlinerInterface
+struct PlierInlinerInterface : public mlir::DialectInlinerInterface
 {
     using mlir::DialectInlinerInterface::DialectInlinerInterface;
     bool isLegalToInline(mlir::Region *, mlir::Region *, bool,
@@ -99,6 +99,27 @@ struct PyTypeStorage : public mlir::TypeStorage
 
     mlir::StringRef name;
 };
+
+struct TypeVarStorage : public mlir::TypeStorage
+{
+    using KeyTy = mlir::Type;
+
+    TypeVarStorage(mlir::Type type): type(type) {}
+
+    bool operator==(const KeyTy& key) const
+    {
+        return key == type;
+    }
+
+    static TypeVarStorage* construct(mlir::TypeStorageAllocator& allocator,
+                                    const KeyTy& key)
+    {
+        return new(allocator.allocate<TypeVarStorage>())
+            TypeVarStorage(key);
+    }
+
+    mlir::Type type;
+};
 }
 
 void PlierDialect::initialize()
@@ -107,8 +128,8 @@ void PlierDialect::initialize()
 #define GET_OP_LIST
 #include "plier/PlierOps.cpp.inc"
         >();
-    addTypes<plier::PyType>();
-    addInterfaces<PLierInlinerInterface>();
+    addTypes<plier::PyType, plier::TypeVar>();
+    addInterfaces<PlierInlinerInterface>();
 }
 
 mlir::Type PlierDialect::parseType(mlir::DialectAsmParser &parser) const {
@@ -119,6 +140,12 @@ mlir::Type PlierDialect::parseType(mlir::DialectAsmParser &parser) const {
 void PlierDialect::printType(mlir::Type type, mlir::DialectAsmPrinter &os) const {
     llvm::TypeSwitch<mlir::Type>(type)
         .Case<plier::PyType>([&](auto t){ os << "PyType<" << t.getName() << ">"; })
+        .Case<plier::TypeVar>([&](auto t)
+                              {
+                                  os << "TypeVar<";
+                                  os.printType(t.getType());
+                                  os << ">";
+                              })
         .Default([](auto){ llvm_unreachable("unexpected type"); });
 }
 
@@ -141,6 +168,17 @@ PyType PyType::getNone(mlir::MLIRContext* context)
 llvm::StringRef PyType::getName() const
 {
     return getImpl()->name;
+}
+
+TypeVar TypeVar::get(mlir::Type type)
+{
+    assert(type);
+    return Base::get(type.getContext(), type);
+}
+
+mlir::Type TypeVar::getType() const
+{
+    return getImpl()->type;
 }
 
 void ArgOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,

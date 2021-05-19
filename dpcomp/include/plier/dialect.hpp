@@ -41,6 +41,7 @@ llvm::StringRef getForceInlineName();
 namespace detail
 {
 struct PyTypeStorage;
+struct TypeVarStorage;
 }
 
 class PyType : public mlir::Type::TypeBase<::plier::PyType, mlir::Type,
@@ -56,5 +57,15 @@ public:
     mlir::StringRef getName() const;
 };
 
+class TypeVar : public mlir::Type::TypeBase<::plier::TypeVar, mlir::Type,
+                                            ::plier::detail::TypeVarStorage>
+{
+public:
+    using Base::Base;
+
+    static TypeVar get(mlir::Type type);
+
+    mlir::Type getType() const;
+};
 
 }
