@@ -25,53 +25,35 @@ from numba_dpcomp.mlir.passes import MlirDumpPlier, MlirBackend
 from numba.core.compiler_machinery import PassManager
 from numba.core.compiler import CompilerBase as orig_CompilerBase
 from numba.core.compiler import DefaultPassBuilder as orig_DefaultPassBuilder
+from numba.core.typed_passes import NoPythonBackend as orig_NoPythonBackend
 
+def _replace_pass(passes, old_pass, new_pass):
+    count = 0;
+    ret = []
+    for p, n in passes:
+        if p == old_pass:
+            count += 1
+            ret.append((new_pass, str(new_pass)))
+        else:
+            ret.append((p, n))
+    return ret, count
 
 class mlir_PassBuilder(orig_DefaultPassBuilder):
     @staticmethod
     def define_nopython_pipeline(state, name='nopython'):
-        """Returns an nopython mode pipeline based PassManager
-        """
-        # compose pipeline from untyped, typed and lowering parts
-        dpb = mlir_PassBuilder
-        pm = PassManager(name)
-        untyped_passes = dpb.define_untyped_pipeline(state)
-        pm.passes.extend(untyped_passes.passes)
+        pm = orig_DefaultPassBuilder.define_nopython_pipeline(state, name)
 
-        typed_passes = dpb.define_typed_pipeline(state)
-        pm.passes.extend(typed_passes.passes)
-
-        lowering_passes = dpb.define_nopython_lowering_pipeline(state)
-        pm.passes.extend(lowering_passes.passes)
-
-        pm.finalize()
-        return pm
-
-    @staticmethod
-    def define_nopython_lowering_pipeline(state, name='nopython_lowering'):
-        pm = PassManager(name)
-        # legalise
-        pm.add_pass(IRLegalization,
-                    "ensure IR is legal prior to lowering")
-
-        # lower
-        pm.add_pass(mlir_NoPythonBackend, "nopython mode backend")
-        pm.finalize()
-        return pm
-
-    @staticmethod
-    def define_typed_pipeline(state, name="typed"):
-        pm = orig_DefaultPassBuilder.define_typed_pipeline(state, name)
         import numba_dpcomp.mlir.settings
         if numba_dpcomp.mlir.settings.USE_MLIR:
             pm.add_pass_after(MlirBackend, AnnotateTypes)
+            pm.passes, replaced = _replace_pass(pm.passes, orig_NoPythonBackend, mlir_NoPythonBackend)
+            assert replaced == 1
 
         if numba_dpcomp.mlir.settings.DUMP_PLIER:
             pm.add_pass_after(MlirDumpPlier, AnnotateTypes)
 
         pm.finalize()
         return pm
-
 
 class mlir_compiler_pipeline(orig_CompilerBase):
     def define_pipelines(self):
