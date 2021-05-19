@@ -255,3 +255,7 @@ def concat_impl(builder, arrays, axis=0):
             res = builder.insert(array, res, offsets, sizes, strides)
             offsets[axis] += sizes[axis]
         return res
+
+@register_func('numpy.cov', numpy.cov)
+def cov_impl(builder, m, y=None, rowvar=True, bias=False, ddof=None):
+    pass
