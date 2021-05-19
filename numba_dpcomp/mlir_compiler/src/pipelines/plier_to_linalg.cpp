@@ -416,7 +416,7 @@ bool isValidGetitemIndex(mlir::Type type)
     {
         return llvm::all_of(tupleType.getTypes(), &isValidGetitemIndex);
     }
-    return type.isa<mlir::IntegerType, mlir::IndexType, mlir::TupleType>();
+    return type.isa<mlir::IntegerType, mlir::IndexType>();
 }
 
 struct GetitemOpLowering : public mlir::OpRewritePattern<plier::GetItemOp>
@@ -441,29 +441,72 @@ struct GetitemOpLowering : public mlir::OpRewritePattern<plier::GetItemOp>
             return mlir::failure();
         }
         auto loc = op.getLoc();
-
-        auto indexType = index.getType();
+        auto getPos = [&](mlir::Value val)->std::tuple<mlir::OpFoldResult, mlir::OpFoldResult, mlir::OpFoldResult, bool>
+        {
+            if (isSlice(val.getType()))
+            {
+                auto indexType = rewriter.getIndexType();
+                auto createInd = [&](int64_t i)
+                {
+                    return rewriter.create<mlir::ConstantIndexOp>(loc, i);
+                };
+                auto offset = rewriter.create<plier::GetItemOp>(loc, indexType, val, createInd(0));
+                auto size = rewriter.create<plier::GetItemOp>(loc, indexType, val, createInd(1));
+                auto stride = rewriter.create<plier::GetItemOp>(loc, indexType, val, createInd(2));
+                return {offset.getResult(), size.getResult(), stride.getResult(), true};
+            }
+            else
+            {
+                auto offset = index_cast(val, loc, rewriter);
+                return {offset, rewriter.getIndexAttr(1), rewriter.getIndexAttr(1), false};
+            }
+        };
+        llvm::SmallVector<mlir::OpFoldResult> offsets(1);
+        llvm::SmallVector<mlir::OpFoldResult> sizes(1);
+        llvm::SmallVector<mlir::OpFoldResult> strides(1);
+        unsigned resultRank = 0;
+        if (auto tuple_type = index.getType().dyn_cast<mlir::TupleType>())
+        {
+            offsets.resize(tuple_type.size());
+            sizes.resize(tuple_type.size());
+            strides.resize(tuple_type.size());
+            for (auto it : llvm::enumerate(tuple_type))
+            {
+                auto i = it.index();
+                auto getitem_ind = rewriter.create<mlir::ConstantIndexOp>(loc, it.index());
+                auto ind = rewriter.create<plier::GetItemOp>(loc, it.value(), index, getitem_ind);
+                bool isSlice = false;
+                std::tie(offsets[i], sizes[i], strides[i], isSlice) = getPos(ind.getResult());
+                if (isSlice)
+                {
+                    ++resultRank;
+                }
+            }
+        }
+        else
+        {
+            bool isSlice = false;
+            std::tie(offsets[0], sizes[0], strides[0], isSlice) = getPos(index);
+            if (isSlice)
+            {
+                ++resultRank;
+            }
+        }
 
         mlir::Value res;
-        if (isSlice(indexType))
+        if (resultRank > 0)
         {
-            auto buildSliceOp = index.template getDefiningOp<plier::BuildSliceOp>();
-            if (!buildSliceOp)
-            {
-                return mlir::failure();
-            }
-            auto low = index_cast(buildSliceOp.low(), loc, rewriter);
-            auto high = index_cast(buildSliceOp.high(), loc, rewriter);
-            auto step = index_cast(buildSliceOp.step(), loc, rewriter);
-            auto size = rewriter.create<mlir::SubIOp>(loc, high, low).getResult();
-
+            llvm::SmallVector<int64_t> resultShape(resultRank, -1);
+            auto elemType = val.getType().cast<mlir::ShapedType>().getElementType();
             if (is_memref)
             {
-                res = rewriter.create<mlir::memref::SubViewOp>(loc, val, low, size, step);
+                auto resultType = mlir::MemRefType::get(resultShape, elemType);
+                res = rewriter.create<mlir::memref::SubViewOp>(loc, resultType, val, offsets, sizes, strides);
             }
             else if (is_tensor)
             {
-                res = rewriter.create<mlir::SubTensorOp>(loc, val, low, size, step);
+                auto resultType = mlir::RankedTensorType::get(resultShape, elemType);
+                res = rewriter.create<mlir::SubTensorOp>(loc, resultType, val, offsets, sizes, strides);
             }
             else
             {
@@ -472,29 +515,22 @@ struct GetitemOpLowering : public mlir::OpRewritePattern<plier::GetItemOp>
         }
         else
         {
-            llvm::SmallVector<mlir::Value> indices;
-            if (auto tuple_type = indexType.template dyn_cast<mlir::TupleType>())
+            auto toValues = [](auto vals)
             {
-                indices.resize(tuple_type.size());
-                for (auto it : llvm::enumerate(tuple_type))
+                llvm::SmallVector<mlir::Value> ret(vals.size());
+                for (auto it : llvm::enumerate(vals))
                 {
-                    auto getitem_ind = rewriter.create<mlir::ConstantIndexOp>(loc, it.index());
-                    auto ind = rewriter.create<plier::GetItemOp>(loc, index, getitem_ind);
-                    indices[it.index()] = index_cast(ind, loc, rewriter);
+                    ret[it.index()] = it.value().template get<mlir::Value>();
                 }
-            }
-            else
-            {
-                indices.push_back(index_cast(index, loc, rewriter));
-            }
-
+                return ret;
+            };
             if (is_memref)
             {
-                res = rewriter.create<mlir::memref::LoadOp>(loc, val, indices);
+                res = rewriter.create<mlir::memref::LoadOp>(loc, val, toValues(offsets));
             }
             else if (is_tensor)
             {
-                res = rewriter.create<mlir::tensor::ExtractOp>(loc, val, indices);
+                res = rewriter.create<mlir::tensor::ExtractOp>(loc, val, toValues(offsets));
             }
             else
             {
@@ -502,7 +538,7 @@ struct GetitemOpLowering : public mlir::OpRewritePattern<plier::GetItemOp>
             }
         }
         rerun_std_pipeline(op);
-        rewriter.replaceOp(op, res);
+        rewriter.replaceOpWithNewOp<plier::CastOp>(op, op.getType(), res);
         return mlir::success();
     }
 };

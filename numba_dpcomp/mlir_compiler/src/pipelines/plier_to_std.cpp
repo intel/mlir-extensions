@@ -1664,14 +1664,14 @@ struct PropagateBuildTupleTypes : public mlir::OpRewritePattern<plier::BuildTupl
     mlir::LogicalResult matchAndRewrite(
         plier::BuildTupleOp op, mlir::PatternRewriter &rewriter) const override
     {
-        if (op.getType().isa<mlir::TupleType>() ||
-            llvm::any_of(op.getOperandTypes(), [](mlir::Type type){ return type.isa<plier::PyType>(); }))
+        auto tupleType = op.getType().dyn_cast<mlir::TupleType>();
+        if (tupleType && op.getOperandTypes() == tupleType.getTypes())
         {
             return mlir::failure();
         }
 
-        auto new_type = mlir::TupleType::get(op.getContext(), op.getOperandTypes());
-        rewriter.replaceOpWithNewOp<plier::BuildTupleOp>(op, new_type, op.getOperands());
+        auto newType = mlir::TupleType::get(op.getContext(), op.getOperandTypes());
+        rewriter.replaceOpWithNewOp<plier::BuildTupleOp>(op, newType, op.getOperands());
         return mlir::success();
     }
 };

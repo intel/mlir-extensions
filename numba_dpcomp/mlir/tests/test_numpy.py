@@ -534,5 +534,13 @@ def test_concat(arrays, axis):
     jit_func = njit(py_func)
     assert_equal(py_func(*arr), jit_func(*arr))
 
+def test_multidim_slice():
+    def py_func(a, b):
+        return a[1, b,:]
+    jit_func = njit(py_func)
+
+    a = np.array([[[1],[2],[3]],[[4],[5],[6]]])
+    assert_equal(py_func(a, 0), jit_func(a, 0))
+
 if __name__ == '__main__':
     unittest.main()
