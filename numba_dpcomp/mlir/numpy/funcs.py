@@ -257,6 +257,39 @@ def concat_impl(builder, arrays, axis=0):
         return res
 
 def _prepare_cov_input(m, y, rowvar, dtype):
+    def get_func():
+        if y is None:
+            def _prepare_cov_input_inner(m, y, rowvar, dtype):
+                m_arr = np.atleast_2d(m)
+
+                if not rowvar:
+                    m_arr = m_arr.T
+
+                return m_arr
+        else:
+            def _prepare_cov_input_inner(m, y, rowvar, dtype):
+                m_arr = np.atleast_2d(m)
+                y_arr = np.atleast_2d(y)
+
+                # transpose if asked to and not a (1, n) vector - this looks
+                # wrong as you might end up transposing one and not the other,
+                # but it's what numpy does
+                if not rowvar:
+                    if m_arr.shape[0] != 1:
+                        m_arr = m_arr.T
+                    if y_arr.shape[0] != 1:
+                        y_arr = y_arr.T
+
+                m_rows, m_cols = m_arr.shape
+                y_rows, y_cols = y_arr.shape
+
+                # if m_cols != y_cols:
+                #     raise ValueError("m and y have incompatible dimensions")
+
+                # allocate and fill output array
+                return np.concatenate((m_arr, y_arr), axis=0, dtype=dtype)
+
+            return _prepare_cov_input_inner
     pass
 
 @register_func('numpy.cov', numpy.cov)
