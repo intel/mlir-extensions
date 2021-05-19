@@ -49,8 +49,8 @@ _test_arrays_ids = ["1d_int", "1d_float", "2d_int", "2d_float"]
     'lambda a: np.sin(a)',
     'lambda a: np.cos(a)',
     'lambda a: a.size',
+    'lambda a: a.T',
     'lambda a: a.T.T',
-    # lambda a: a.T, TODO: need fortran layout support
 ])
 @pytest.mark.parametrize("arr_list",
                          _test_arrays,
