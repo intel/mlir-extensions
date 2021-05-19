@@ -23,30 +23,6 @@ def is_int(t, b):
 def is_float(t, b):
     return t == b.float16 or t == b.float32 or t == b.float64
 
-@register_func('numpy.add', numpy.add)
-@register_func('operator.add')
-def add_impl(builder, arg1, arg2):
-    def body(a, b, c):
-        return a + b
-
-    return eltwise(builder, (arg1, arg2), body)
-
-@register_func('numpy.subtract', numpy.subtract)
-@register_func('operator.sub')
-def sub_impl(builder, arg1, arg2):
-    def body(a, b, c):
-        return a - b
-
-    return eltwise(builder, (arg1, arg2), body)
-
-@register_func('numpy.multiply', numpy.multiply)
-@register_func('operator.mul')
-def mul_impl(builder, arg1, arg2):
-    def body(a, b, c):
-        return a * b
-
-    return eltwise(builder, (arg1, arg2), body)
-
 @register_func('array.sum')
 @register_func('numpy.sum', numpy.sum)
 def sum_impl(builder, arg, axis=None):
@@ -106,6 +82,26 @@ def _gen_unary_ops():
         reg(make_func(f64, body))
 
 _gen_unary_ops()
+
+def _gen_binary_ops():
+    binary_ops = [
+        (register_func('numpy.add', numpy.add), False, lambda a, b, c: a + b),
+        (register_func('operator.add'), False, lambda a, b, c: a + b),
+        (register_func('numpy.subtract', numpy.subtract), False, lambda a, b, c: a - b),
+        (register_func('operator.sub'), False, lambda a, b, c: a - b),
+        (register_func('numpy.multiply', numpy.multiply), False, lambda a, b, c: a * b),
+        (register_func('operator.mul'), False, lambda a, b, c: a * b),
+    ]
+
+    def make_func(f64, body):
+        def func(builder, arg1, arg2):
+            return eltwise(builder, (arg1, arg2), body, builder.float64 if f64 else None)
+        return func
+
+    for reg, f64, body in binary_ops:
+        reg(make_func(f64, body))
+
+_gen_binary_ops()
 
 @register_func('numpy.empty', numpy.empty)
 def empty_impl(builder, shape, dtype=None):
