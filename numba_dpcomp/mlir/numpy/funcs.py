@@ -148,6 +148,23 @@ def dot_impl(builder, a, b):
 
         return builder.generic((a,b), init, iterators, maps, body)
 
+
+@register_func('numpy.sin', numpy.sin)
+def sin_impl(builder, arg):
+    def body(a, b):
+        return math.sin(a)
+
+    return eltwise(builder, arg, body, builder.float64)
+
+
+@register_func('numpy.cos', numpy.cos)
+def cos_impl(builder, arg):
+    def body(a, b):
+        return math.cos(a)
+
+    return eltwise(builder, arg, body, builder.float64)
+
+
 @register_attr('array.size')
 def size_impl(builder, arg):
     shape = arg.shape

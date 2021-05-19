@@ -16,7 +16,7 @@ from .func_registry import add_func
 
 import math
 
-_funcs = ['log', 'sqrt', 'exp', 'erf']
+_funcs = ['log', 'sqrt', 'exp', 'erf', 'sin', 'cos']
 
 for f in _funcs:
     fname = 'math.' + f

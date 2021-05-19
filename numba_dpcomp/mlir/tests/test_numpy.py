@@ -65,6 +65,8 @@ class TestMlirBasic(TestCase):
             lambda a: np.sqrt(a),
             lambda a: np.square(a),
             lambda a: np.log(a),
+            lambda a: np.sin(a),
+            lambda a: np.cos(a),
             lambda a: a.size,
             # lambda a: a.T, TODO: need fortran layout support
             lambda a: a.T.T,
