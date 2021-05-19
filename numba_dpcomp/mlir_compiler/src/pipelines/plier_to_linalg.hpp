@@ -24,6 +24,14 @@ namespace llvm
 class StringRef;
 }
 
+namespace mlir
+{
+class MLIRContext;
+class TypeConverter;
+}
+
+void populate_array_type_converter(mlir::MLIRContext& context, mlir::TypeConverter& converter);
+
 void register_plier_to_linalg_pipeline(plier::PipelineRegistry& registry);
 
 llvm::StringRef plier_to_linalg_gen_pipeline_name();

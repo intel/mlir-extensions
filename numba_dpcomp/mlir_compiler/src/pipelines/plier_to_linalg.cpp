@@ -1221,15 +1221,7 @@ void PlierToLinalgPass::runOnOperation()
     // Convert unknown types to itself
     type_converter.addConversion([](mlir::Type type) { return type; });
     populate_std_type_converter(*context, type_converter);
-    type_converter.addConversion([&](plier::PyType type)->llvm::Optional<mlir::Type>
-    {
-        auto ret =  map_plier_type(type_converter, type);
-        if (!ret)
-        {
-            return llvm::None;
-        }
-        return ret;
-    });
+    populate_array_type_converter(*context, type_converter);
 
     mlir::OwningRewritePatternList patterns(context);
     patterns.insert<
@@ -1645,6 +1637,19 @@ void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager& pm)
     pm.addPass(mlir::createSymbolDCEPass());
     pm.addNestedPass<mlir::FuncOp>(std::make_unique<PromoteParallelPass>());
 }
+}
+
+void populate_array_type_converter(mlir::MLIRContext& /*context*/, mlir::TypeConverter& converter)
+{
+    converter.addConversion([&](plier::PyType type)->llvm::Optional<mlir::Type>
+    {
+        auto ret =  map_plier_type(converter, type);
+        if (!ret)
+        {
+            return llvm::None;
+        }
+        return ret;
+    });
 }
 
 void register_plier_to_linalg_pipeline(plier::PipelineRegistry& registry)
