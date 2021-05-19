@@ -419,20 +419,19 @@ bool isValidGetitemIndex(mlir::Type type)
     return type.isa<mlir::IntegerType, mlir::IndexType, mlir::TupleType>();
 }
 
-template<typename T>
-struct GetitemOpLowering : public mlir::OpRewritePattern<T>
+struct GetitemOpLowering : public mlir::OpRewritePattern<plier::GetItemOp>
 {
-    using mlir::OpRewritePattern<T>::OpRewritePattern;
+    using OpRewritePattern::OpRewritePattern;
 
     mlir::LogicalResult matchAndRewrite(
-        T op, mlir::PatternRewriter &rewriter) const override
+        plier::GetItemOp op, mlir::PatternRewriter &rewriter) const override
     {
         assert(op.getNumOperands() == 2);
         auto val = op.getOperand(0);
         auto index = op.getOperand(1);
         auto type = val.getType();
-        bool is_memref = type.template isa<mlir::MemRefType>();
-        bool is_tensor = type.template isa<mlir::TensorType>();
+        bool is_memref = type.isa<mlir::MemRefType>();
+        bool is_tensor = type.isa<mlir::TensorType>();
         if (!is_memref && !is_tensor)
         {
             return mlir::failure();
@@ -681,13 +680,12 @@ struct PlierToLinalgPass :
     void runOnOperation() override;
 };
 
-template<typename T>
-struct SetitemOpLowering : public mlir::OpRewritePattern<T>
+struct SetitemOpLowering : public mlir::OpRewritePattern<plier::SetItemOp>
 {
-    using mlir::OpRewritePattern<T>::OpRewritePattern;
+    using OpRewritePattern::OpRewritePattern;
 
     mlir::LogicalResult matchAndRewrite(
-        T op, mlir::PatternRewriter &rewriter) const override
+        plier::SetItemOp op, mlir::PatternRewriter &rewriter) const override
     {
         auto get_target_type = [&]()
         {
@@ -700,7 +698,7 @@ struct SetitemOpLowering : public mlir::OpRewritePattern<T>
             return mlir::failure();
         }
 
-        if (auto target_type = get_target_type().template dyn_cast<mlir::RankedTensorType>())
+        if (auto target_type = get_target_type().dyn_cast<mlir::RankedTensorType>())
         {
             auto target = op.getOperand(0);
             mlir::OpBuilder::InsertionGuard g(rewriter);
@@ -737,7 +735,7 @@ struct SetitemOpLowering : public mlir::OpRewritePattern<T>
                 }
             }
         }
-        else if (get_target_type().template isa<mlir::MemRefType>())
+        else if (get_target_type().isa<mlir::MemRefType>())
         {
             // nothing
         }
@@ -1088,8 +1086,8 @@ void PlierToLinalgPass::runOnOperation()
         >(type_converter, context, std::ref(callLowerer));
 
     patterns.insert<
-        GetitemOpLowering<plier::GetItemOp>,
-        SetitemOpLowering<plier::SetItemOp>,
+        GetitemOpLowering,
+        SetitemOpLowering,
         CheckForBuildTuple
         >(&getContext());
 

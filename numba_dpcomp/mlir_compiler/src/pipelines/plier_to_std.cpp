@@ -1676,17 +1676,16 @@ struct PropagateBuildTupleTypes : public mlir::OpRewritePattern<plier::BuildTupl
     }
 };
 
-template<typename Op>
-struct FoldTupleGetitem : public mlir::OpRewritePattern<Op>
+struct FoldTupleGetitem : public mlir::OpRewritePattern<plier::GetItemOp>
 {
     FoldTupleGetitem(mlir::TypeConverter &/*typeConverter*/,
                      mlir::MLIRContext *context):
-        mlir::OpRewritePattern<Op>(context) {}
+        OpRewritePattern(context) {}
 
     mlir::LogicalResult matchAndRewrite(
-        Op op, mlir::PatternRewriter &rewriter) const override
+        plier::GetItemOp op, mlir::PatternRewriter &rewriter) const override
     {
-        auto build_tuple = op.value().template getDefiningOp<plier::BuildTupleOp>();
+        auto build_tuple = op.value().getDefiningOp<plier::BuildTupleOp>();
         if (!build_tuple)
         {
             return mlir::failure();
@@ -1983,7 +1982,7 @@ void PlierToStdPass::runOnOperation()
         FixupWhileTypes,
         ScfIfFixupTypes,
         PropagateBuildTupleTypes,
-        FoldTupleGetitem<plier::GetItemOp>
+        FoldTupleGetitem
         >(type_converter, context);
 
     patterns.insert<
