@@ -67,6 +67,7 @@ mlir::LowerToLLVMOptions getLLVMOptions(mlir::MLIRContext& context)
     opts.dataLayout = dl;
     opts.useBarePtrCallConv = false;
     opts.emitCWrappers = false;
+    opts.allocLowering = mlir::LowerToLLVMOptions::AllocLowering::None;
     return opts;
 }
 
@@ -691,106 +692,9 @@ private:
     }
 };
 
-// Copypaste from StandardToLLVM
-struct AllocLikeOpLowering : public mlir::ConvertToLLVMPattern {
-    using ConvertToLLVMPattern::createIndexConstant;
-    using ConvertToLLVMPattern::getIndexType;
-    using ConvertToLLVMPattern::getVoidPtrType;
-
-    explicit AllocLikeOpLowering(mlir::StringRef opName, mlir::LLVMTypeConverter &converter)
-        : ConvertToLLVMPattern(opName, &converter.getContext(), converter, /*benefit*/99) {}
-
-protected:
-    // Creates a call to an allocation function with params and casts the
-    // resulting void pointer to ptrType.
-    mlir::Value createAllocCall(mlir::Location loc, mlir::StringRef name, mlir::Type ptrType,
-                                mlir::ArrayRef<mlir::Value> params, mlir::ModuleOp module,
-                                mlir::ConversionPatternRewriter &rewriter) const {
-        using namespace mlir;
-        SmallVector<Type, 2> paramTypes;
-        auto allocFuncOp = module.lookupSymbol<LLVM::LLVMFuncOp>(name);
-        if (!allocFuncOp) {
-            for (Value param : params)
-                paramTypes.push_back(param.getType());
-            auto allocFuncType =
-                LLVM::LLVMFunctionType::get(getVoidPtrType(), paramTypes);
-            OpBuilder::InsertionGuard guard(rewriter);
-            rewriter.setInsertionPointToStart(module.getBody());
-            allocFuncOp = rewriter.create<LLVM::LLVMFuncOp>(rewriter.getUnknownLoc(),
-                                                            name, allocFuncType);
-        }
-        auto allocFuncSymbol = rewriter.getSymbolRefAttr(allocFuncOp);
-        auto allocatedPtr = rewriter
-                                .create<LLVM::CallOp>(loc, getVoidPtrType(),
-                                                      allocFuncSymbol, params)
-                                .getResult(0);
-        return rewriter.create<LLVM::BitcastOp>(loc, ptrType, allocatedPtr);
-    }
-
-    /// Allocates the underlying buffer. Returns the allocated pointer and the
-    /// aligned pointer.
-    virtual std::tuple<mlir::Value, mlir::Value>
-    allocateBuffer(mlir::ConversionPatternRewriter &rewriter, mlir::Location loc,
-                   mlir::Value sizeBytes, mlir::Operation *op) const = 0;
-
-private:
-    static mlir::MemRefType getMemRefResultType(mlir::Operation *op) {
-        return op->getResult(0).getType().cast<mlir::MemRefType>();
-    }
-
-    mlir::LogicalResult match(mlir::Operation *op) const override {
-        mlir::MemRefType memRefType = getMemRefResultType(op);
-        return mlir::success(isConvertibleAndHasIdentityMaps(memRefType));
-    }
-
-    // An `alloc` is converted into a definition of a memref descriptor value and
-    // a call to `malloc` to allocate the underlying data buffer.  The memref
-    // descriptor is of the LLVM structure type where:
-    //   1. the first element is a pointer to the allocated (typed) data buffer,
-    //   2. the second element is a pointer to the (typed) payload, aligned to the
-    //      specified alignment,
-    //   3. the remaining elements serve to store all the sizes and strides of the
-    //      memref using LLVM-converted `index` type.
-    //
-    // Alignment is performed by allocating `alignment` more bytes than
-    // requested and shifting the aligned pointer relative to the allocated
-    // memory. Note: `alignment - <minimum malloc alignment>` would actually be
-    // sufficient. If alignment is unspecified, the two pointers are equal.
-
-    // An `alloca` is converted into a definition of a memref descriptor value and
-    // an llvm.alloca to allocate the underlying data buffer.
-    void rewrite(mlir::Operation *op, mlir::ArrayRef<mlir::Value> operands,
-                 mlir::ConversionPatternRewriter &rewriter) const override {
-        mlir::MemRefType memRefType = getMemRefResultType(op);
-        auto loc = op->getLoc();
-
-        // Get actual sizes of the memref as values: static sizes are constant
-        // values and dynamic sizes are passed to 'alloc' as operands.  In case of
-        // zero-dimensional memref, assume a scalar (size 1).
-        mlir::SmallVector<mlir::Value, 4> sizes;
-        mlir::SmallVector<mlir::Value, 4> strides;
-        mlir::Value sizeBytes;
-        this->getMemRefDescriptorSizes(loc, memRefType, operands, rewriter, sizes,
-                                       strides, sizeBytes);
-
-        // Allocate the underlying buffer.
-        mlir::Value allocatedPtr;
-        mlir::Value alignedPtr;
-        std::tie(allocatedPtr, alignedPtr) =
-            this->allocateBuffer(rewriter, loc, sizeBytes, op);
-
-        // Create the MemRef descriptor.
-        auto memRefDescriptor = this->createMemRefDescriptor(
-            loc, memRefType, allocatedPtr, alignedPtr, sizes, strides, rewriter);
-
-        // Return the final value of the descriptor.
-        rewriter.replaceOp(op, {memRefDescriptor});
-    }
-};
-
-struct AllocOpLowering : public AllocLikeOpLowering {
+struct AllocOpLowering : public mlir::AllocLikeOpLLVMLowering {
     AllocOpLowering(mlir::LLVMTypeConverter &converter)
-        : AllocLikeOpLowering(mlir::memref::AllocOp::getOperationName(), converter) {}
+        : AllocLikeOpLLVMLowering (mlir::memref::AllocOp::getOperationName(), converter) {}
 
     std::tuple<mlir::Value, mlir::Value> allocateBuffer(mlir::ConversionPatternRewriter &rewriter,
                                             mlir::Location loc, mlir::Value sizeBytes,
@@ -825,6 +729,31 @@ struct AllocOpLowering : public AllocLikeOpLowering {
         };
 
         return std::make_tuple(bitcast(meminfo_ptr), bitcast(data_ptr));
+    }
+
+private:
+    mlir::Value createAllocCall(mlir::Location loc, mlir::StringRef name, mlir::Type ptrType,
+                                mlir::ArrayRef<mlir::Value> params, mlir::ModuleOp module,
+                                mlir::ConversionPatternRewriter &rewriter) const {
+        using namespace mlir;
+        SmallVector<Type, 2> paramTypes;
+        auto allocFuncOp = module.lookupSymbol<LLVM::LLVMFuncOp>(name);
+        if (!allocFuncOp) {
+            for (Value param : params)
+                paramTypes.push_back(param.getType());
+            auto allocFuncType =
+                LLVM::LLVMFunctionType::get(getVoidPtrType(), paramTypes);
+            OpBuilder::InsertionGuard guard(rewriter);
+            rewriter.setInsertionPointToStart(module.getBody());
+            allocFuncOp = rewriter.create<LLVM::LLVMFuncOp>(rewriter.getUnknownLoc(),
+                                                            name, allocFuncType);
+        }
+        auto allocFuncSymbol = rewriter.getSymbolRefAttr(allocFuncOp);
+        auto allocatedPtr = rewriter
+                                .create<LLVM::CallOp>(loc, getVoidPtrType(),
+                                                      allocFuncSymbol, params)
+                                .getResult(0);
+        return rewriter.create<LLVM::BitcastOp>(loc, ptrType, allocatedPtr);
     }
 };
 
