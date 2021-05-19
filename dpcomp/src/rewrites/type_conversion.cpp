@@ -139,12 +139,17 @@ mlir::LogicalResult plier::FuncOpSignatureConversion::matchAndRewrite(
         return mlir::failure();
     }
 
-    bool ret_type_changed = false;
+    auto newFuncType = mlir::FunctionType::get(
+        funcOp.getContext(), result.getConvertedTypes(), newResults);
+    if (newFuncType == funcOp.getType())
+    {
+        return mlir::failure();
+    }
+
+    bool ret_type_changed = (newResults != funcOp.getType().getResults());
     // Update the function signature in-place.
     rewriter.updateRootInPlace(funcOp, [&] {
-        ret_type_changed = (newResults != funcOp.getType().getResults());
-        funcOp.setType(mlir::FunctionType::get(
-            funcOp.getContext(), result.getConvertedTypes(), newResults));
+        funcOp.setType(newFuncType);
         auto res = convertRegionTypes(&funcOp.getBody(), converter, true);
         assert(mlir::succeeded(res));
     });
