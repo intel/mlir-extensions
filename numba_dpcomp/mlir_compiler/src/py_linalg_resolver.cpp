@@ -1042,6 +1042,35 @@ py::object external_call_impl(py::capsule context, py::str func_name, py::handle
     return std::move(ret);
 }
 
+py::object insert_impl(py::capsule context, py::handle src, py::handle dst, py::handle offsets, py::handle sizes, py::handle strides)
+{
+    auto& ctx = get_py_context(context);
+    auto& builder = ctx.builder;
+    auto loc = ctx.loc;
+    auto unwrapVal = [&](py::handle obj)
+    {
+        return ctx.context.unwrap_val(loc, builder, obj);
+    };
+    auto indexType = builder.getIndexType();
+    auto unwrapList = [&](py::handle obj)
+    {
+        auto len = py::len(obj);
+        llvm::SmallVector<mlir::Value> res(len);
+        for (auto it : llvm::enumerate(obj))
+        {
+            res[it.index()] = do_cast(loc, builder, unwrapVal(it.value()), indexType);
+        }
+        return res;
+    };
+    auto srcTensor = unwrapVal(src);
+    auto dstTensor = unwrapVal(dst);
+    auto offsetsVec = unwrapList(offsets);
+    auto sizesVec = unwrapList(sizes);
+    auto stridesVec = unwrapList(strides);
+    auto res = builder.create<mlir::SubTensorInsertOp>(loc, srcTensor, dstTensor, offsetsVec, sizesVec, stridesVec);
+    return ctx.context.create_var(context, res);
+}
+
 void setup_py_builder(py::handle builder, mlir::OpBuilder& b, llvm::function_ref<py::object(mlir::Type)> create_type)
 {
     py::setattr(builder, "_broadcast", py::cpp_function(&broadcast_impl));
@@ -1052,6 +1081,7 @@ void setup_py_builder(py::handle builder, mlir::OpBuilder& b, llvm::function_ref
     py::setattr(builder, "_extract", py::cpp_function(&extract_impl));
     py::setattr(builder, "_reshape", py::cpp_function(&reshape_impl));
     py::setattr(builder, "_external_call", py::cpp_function(&external_call_impl));
+    py::setattr(builder, "_insert", py::cpp_function(&insert_impl));
 
     auto add_type = [&](const char* name, mlir::Type type)
     {
