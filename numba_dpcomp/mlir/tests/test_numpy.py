@@ -546,21 +546,21 @@ def test_concat(arrays, axis):
     lambda a, b, c, d: a[b:c],
     lambda a, b, c, d: a[3:c],
     lambda a, b, c, d: a[b:4],
-    # lambda a, b, c, d: a[3:4], static_getitem with slice
+    lambda a, b, c, d: a[3:4],
     lambda a, b, c, d: a[b:c:d],
     lambda a, b, c, d: a[b:c:1],
     lambda a, b, c, d: a[b:c:2],
-    # lambda a, b, c, d: a[3:4:2],
+    lambda a, b, c, d: a[3:4:2],
     ],
     ids=[
     'lambda a, b, c, d: a[b:c]',
     'lambda a, b, c, d: a[3:c]',
     'lambda a, b, c, d: a[b:4]',
-    # 'lambda a, b, c, d: a[3:4]',
+    'lambda a, b, c, d: a[3:4]',
     'lambda a, b, c, d: a[b:c:d]',
     'lambda a, b, c, d: a[b:c:1]',
     'lambda a, b, c, d: a[b:c:2]',
-    # 'lambda a, b, c, d: a[3:4:2]',
+    'lambda a, b, c, d: a[3:4:2]',
     ])
 def test_slice(py_func):
     arr = np.array([1,2,3,4,5,6,7,8])
