@@ -819,13 +819,21 @@ struct CheckForBuildTuple : public mlir::OpRewritePattern<plier::BuildTupleOp>
     mlir::LogicalResult matchAndRewrite(
         plier::BuildTupleOp op, mlir::PatternRewriter &/*rewriter*/) const override
     {
-        if (op.getType().isa<mlir::TupleType>())
-        {
-            return mlir::failure();
-        }
-        if (llvm::any_of(op.args(), [](mlir::Value a) { return a.getType().isa<mlir::ShapedType>(); }))
+        auto tupleType = op.getType().dyn_cast<mlir::TupleType>();
+        if (!tupleType)
         {
             rerun_std_pipeline(op);
+            return mlir::failure();
+        }
+        for (auto it : llvm::zip(op.getOperandTypes(), tupleType.getTypes()))
+        {
+            auto srcType = std::get<0>(it);
+            auto dstType = std::get<1>(it);
+            if (srcType != dstType && srcType.isa<mlir::ShapedType>())
+            {
+                rerun_std_pipeline(op);
+                break;
+            }
         }
         return mlir::failure();
     }
