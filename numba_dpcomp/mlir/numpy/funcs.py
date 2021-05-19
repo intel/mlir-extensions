@@ -257,14 +257,20 @@ def concat_impl(builder, arrays, axis=0):
             offsets[axis] += sizes[axis]
         return res
 
-def _cov_impl_inner(X, bias, ddof, ddof_is_none):
-    # determine degrees of freedom
+def _cov_get_ddof_func(ddof_is_none):
     if ddof_is_none:
-        if bias:
-            ddof = 0
-        else:
-            ddof = 1
+        def ddof_func(bias, ddof):
+            if bias:
+                return 0
+            else:
+                return 1
+    else:
+        def ddof_func(bias, ddof):
+            return ddof
+    return ddof_func
 
+
+def _cov_impl_inner(X, ddof):
     # determine the normalization factor
     fact = X.shape[1] - ddof
 
@@ -332,4 +338,5 @@ def _prepare_cov_input(builder, m, y, rowvar):
 @register_func('numpy.cov', numpy.cov)
 def cov_impl(builder, m, y=None, rowvar=True, bias=False, ddof=None):
     X = _prepare_cov_input(builder, m, y, rowvar)
-    return builder.inline_func(_cov_impl_inner, X, bias, ddof, ddof is None)
+    ddof = builder.inline_func(_cov_get_ddof_func(ddof is None), bias, ddof)
+    return builder.inline_func(_cov_impl_inner, X, ddof)
