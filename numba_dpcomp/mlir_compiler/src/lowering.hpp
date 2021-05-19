@@ -20,7 +20,10 @@ class bytes;
 class capsule;
 class object;
 class str;
+class dict;
 }
+
+void init_compiler(pybind11::dict settings);
 
 pybind11::capsule create_module();
 
