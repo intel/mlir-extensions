@@ -992,7 +992,7 @@ struct SimplifyExpandDims : public mlir::OpRewritePattern<mlir::linalg::GenericO
         }
 
         bool changed = false;
-        auto out_shape = op.getOutput(0).getType().cast<mlir::RankedTensorType>().getShape();
+        auto out_shape = op.getOutputOperand(0)->get().getType().cast<mlir::RankedTensorType>().getShape();
         llvm::SmallVector<mlir::AffineExpr> exprs(num_dims);
         for (unsigned i = 0; i < num_dims; ++i)
         {
