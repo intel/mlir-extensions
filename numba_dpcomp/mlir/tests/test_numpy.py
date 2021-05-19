@@ -56,6 +56,40 @@ def test_unary(py_func, arr_list, request):
     arr = np.array(arr_list)
     assert_allclose(py_func(arr), jit_func(arr), rtol=1e-15, atol=1e-15)
 
+@pytest.mark.parametrize("py_func",
+                         [lambda a, b: np.add(a, b),
+                          lambda a, b: a + b,
+                          lambda a, b: np.subtract(a, b),
+                          lambda a, b: a - b,
+                          lambda a, b: np.multiply(a, b),
+                          lambda a, b: a * b,
+                          lambda a, b: np.power(a, b),
+                          lambda a, b: a ** b,
+                          lambda a, b: np.true_divide(a, b),
+                          lambda a, b: a / b,
+                         ],
+                         ids=[
+                          'np.add(a, b)',
+                          'a + b',
+                          'np.subtract(a, b)',
+                          'a - b',
+                          'np.multiply(a, b)',
+                          'a * b',
+                          'np.power(a, b)',
+                          'a ** b',
+                          'np.true_divide(a, b)',
+                          'a / b',
+                         ])
+@pytest.mark.parametrize("array1",
+                         [1, 2.5, np.array([1,2,3]), np.array([4.4,5.5,6.6])],
+                         ids=['1', '2.5', 'np.array([1,2,3])', 'np.array([4.4,5.5,6.6])'])
+@pytest.mark.parametrize("array2",
+                         [1, 2.5, np.array([1,2,3]), np.array([4.4,5.5,6.6])],
+                         ids=['1', '2.5', 'np.array([1,2,3])', 'np.array([4.4,5.5,6.6])'])
+def test_binary(py_func, array1, array2):
+    jit_func = njit(py_func)
+    assert_equal(py_func(array1,array2), jit_func(array1,array2))
+
 class TestMlirBasic(TestCase):
 
     def test_staticgetitem(self):
@@ -82,26 +116,6 @@ class TestMlirBasic(TestCase):
         jit_func = njit(py_func)
         arr = np.asarray([5,6,7])
         assert_equal(py_func(arr), jit_func(arr))
-
-    def test_binary(self):
-        funcs = [
-            lambda a, b: np.add(a, b),
-            lambda a, b: a + b,
-            lambda a, b: np.subtract(a, b),
-            lambda a, b: a - b,
-            lambda a, b: np.multiply(a, b),
-            lambda a, b: a * b,
-            lambda a, b: np.power(a, b),
-            lambda a, b: a ** b,
-            lambda a, b: np.true_divide(a, b),
-            lambda a, b: a / b,
-        ]
-
-        test_data = [1, 2.5, np.array([1,2,3]), np.array([4.4,5.5,6.6])]
-        for py_func in funcs:
-            jit_func = njit(py_func)
-            for a1, a2 in itertools.product(test_data, test_data):
-                assert_equal(py_func(a1,a2), jit_func(a1,a2))
 
     def test_sum_axis(self):
         funcs = [
