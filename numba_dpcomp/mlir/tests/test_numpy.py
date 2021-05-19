@@ -19,6 +19,7 @@ import numpy as np
 from numba.tests.support import TestCase
 import unittest
 import itertools
+import pytest
 
 def _vectorize_reference(func, arg1):
     ret = np.empty(arg1.shape, arg1.dtype)
@@ -31,6 +32,7 @@ _arr_1d_float = [1.0,2.1,3.2,4.3,5.4,6.5,7.6,8.7]
 _arr_2d_int = [[1,2,3,4],[5,6,7,8]]
 _arr_2d_float = [[1.0,2.1,3.2,4.3],[5.4,6.5,7.6,8.7]]
 _test_arrays = [_arr_1d_int, _arr_1d_float, _arr_2d_int, _arr_2d_float]
+
 class TestMlirBasic(TestCase):
 
     def test_staticgetitem(self):
@@ -452,6 +454,25 @@ class TestMlirBasic(TestCase):
         for val in ([], [1,2,3], [[1,2],[3,4],[5,6]]):
             a = np.array(val)
             assert_equal(py_func(a), jit_func(a))
+
+@pytest.mark.parametrize("py_func", [
+    lambda a, b: (),
+    lambda a, b: (a,b),
+    lambda a, b: ((a,b),(a,a),(b,b),()),
+    ],
+    ids=[
+    '()',
+    '(a,b)',
+    '((a,b),(a,a),(b,b),())',
+    ])
+@pytest.mark.parametrize("a,b",
+        itertools.product(*(([1,2.5,np.array([1,2,3]), np.array([4.5,6.7,8.9])],)*2))
+    )
+def test_tuple_ret(py_func, a, b):
+    if isinstance(a, np.ndarray) or isinstance(b, np.ndarray):
+        pytest.xfail()
+    jit_func = njit(py_func)
+    assert_equal(py_func(a, b), jit_func(a, b))
 
 if __name__ == '__main__':
     unittest.main()
