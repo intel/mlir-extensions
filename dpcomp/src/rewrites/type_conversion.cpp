@@ -98,8 +98,10 @@ mlir::LogicalResult convertRegionTypes(
     if (apply)
     {
         auto res = setBlockSig(region->front(), builder, *sig);
-        assert(mlir::succeeded(res));
-        (void)res;
+        if (mlir::failed(res))
+        {
+            return mlir::failure();
+        }
     }
     for (auto &block : llvm::make_early_inc_range(llvm::drop_begin(*region, 1)))
     {
@@ -139,20 +141,25 @@ mlir::LogicalResult plier::FuncOpSignatureConversion::matchAndRewrite(
         return mlir::failure();
     }
 
+    auto oldFuncType = funcOp.getType();
     auto newFuncType = mlir::FunctionType::get(
         funcOp.getContext(), result.getConvertedTypes(), newResults);
-    if (newFuncType == funcOp.getType())
+    if (newFuncType == oldFuncType)
     {
         return mlir::failure();
     }
 
-    bool ret_type_changed = (newResults != funcOp.getType().getResults());
+    bool ret_type_changed = (newResults != oldFuncType.getResults());
     // Update the function signature in-place.
-    rewriter.updateRootInPlace(funcOp, [&] {
-        funcOp.setType(newFuncType);
-        auto res = convertRegionTypes(&funcOp.getBody(), converter, true);
-        assert(mlir::succeeded(res));
-    });
+    rewriter.startRootUpdate(funcOp);
+    funcOp.setType(newFuncType);
+    auto res = convertRegionTypes(&funcOp.getBody(), converter, true);
+    if (mlir::failed(res))
+    {
+        funcOp.setType(oldFuncType);
+        rewriter.cancelRootUpdate(funcOp);
+        return mlir::failure();
+    }
 
     if (ret_type_changed)
     {
@@ -200,5 +207,6 @@ mlir::LogicalResult plier::FuncOpSignatureConversion::matchAndRewrite(
             }
         }
     }
+    rewriter.finalizeRootUpdate(funcOp);
     return mlir::success();
 }
