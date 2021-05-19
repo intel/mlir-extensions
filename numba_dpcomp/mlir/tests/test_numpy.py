@@ -438,5 +438,16 @@ class TestMlirBasic(TestCase):
 
             assert_equal(py_func(arr, 3, 4,2), jit_func(arr, 3, 4,2))
 
+    def test_atleast2d(self):
+        def py_func(a):
+            return np.atleast_2d(a)
+
+        jit_func = njit(py_func)
+
+        # for val in (1, 2.5, [], [1,2,3], [[1,2],[3,4],[5,6]]): // TODO: unranked array support
+        for val in ([], [1,2,3], [[1,2],[3,4],[5,6]]):
+            a = np.array(val)
+            assert_equal(py_func(a), jit_func(a))
+
 if __name__ == '__main__':
     unittest.main()

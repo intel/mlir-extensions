@@ -867,6 +867,35 @@ struct RankedTypesCasts : public mlir::OpRewritePattern<plier::CastOp>
     }
 };
 
+struct UnrankedToElementCasts : public mlir::OpRewritePattern<plier::CastOp>
+{
+    UnrankedToElementCasts(mlir::TypeConverter& /*type_converter*/,
+                           mlir::MLIRContext* context):
+        OpRewritePattern(context){}
+
+    mlir::LogicalResult matchAndRewrite(
+        plier::CastOp op, mlir::PatternRewriter &rewriter) const override
+    {
+        auto srcType = op.value().getType();
+        auto dstType = op.getType();
+        auto isCompatible = [](mlir::Type tensor, mlir::Type element)
+        {
+            if (auto tensorType = tensor.dyn_cast<mlir::RankedTensorType>())
+            {
+                return tensorType.getRank() == 0 && tensorType.getElementType() == element;
+            }
+            return false;
+        };
+        if (isCompatible(srcType, dstType))
+        {
+            rewriter.replaceOpWithNewOp<mlir::tensor::ExtractOp>(op, op.value());
+            return mlir::success();
+        }
+//        if (isCompatible(dstType, srcType)) : TODO
+        return mlir::failure();
+    }
+};
+
 struct GetattrRewriter : public mlir::OpRewritePattern<plier::GetattrOp>
 {
     using resolver_t = std::function<mlir::LogicalResult(plier::GetattrOp, llvm::StringRef, mlir::Value,
@@ -1032,6 +1061,7 @@ void PlierToLinalgPass::runOnOperation()
         plier::CastOpLowering,
         plier::ArgOpLowering,
         RankedTypesCasts,
+        UnrankedToElementCasts,
         ArrayShape
         >(type_converter, context);
 
