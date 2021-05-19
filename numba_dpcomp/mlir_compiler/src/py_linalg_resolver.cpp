@@ -42,6 +42,7 @@ struct PyBuilderContext
 {
     mlir::Location loc;
     mlir::OpBuilder& builder;
+    mlir::TypeConverter typeConverter;
     PyLinalgResolver::Context& context;
 };
 
@@ -1181,7 +1182,13 @@ py::object inline_func_impl(py::capsule context, py::handle func, py::tuple args
     {
         plier::report_error("Invalid number of return values");
     }
-    return ctx.context.create_var(context, res.getResult(0));
+    auto resValue = res.getResult(0);
+    auto resType = resValue.getType();
+    if (auto convertedType = ctx.typeConverter.convertType(resType))
+    {
+        resValue = do_cast(loc, builder, resValue, convertedType);
+    }
+    return ctx.context.create_var(context, resValue);
 }
 
 void setup_py_builder(py::handle builder, mlir::OpBuilder& b, llvm::function_ref<py::object(mlir::Type)> create_type)
@@ -1430,7 +1437,10 @@ llvm::Optional<PyLinalgResolver::Values> PyLinalgResolver::rewrite(llvm::StringR
         return {};
     }
 
-    PyBuilderContext py_builder_context{loc, builder, *context};
+    PyBuilderContext py_builder_context{loc, builder, {}, *context};
+    auto& mlirContext = *builder.getContext();
+    populate_std_type_converter(mlirContext, py_builder_context.typeConverter);
+    populate_array_type_converter(mlirContext, py_builder_context.typeConverter);
     auto py_context = py::capsule(&py_builder_context);
     auto py_args = get_args(
         context->inspect,
