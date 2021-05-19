@@ -662,6 +662,41 @@ struct FixStridedReshape : public mlir::OpRewritePattern<mlir::memref::ReshapeOp
     }
 };
 
+struct FixStridedSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp>
+{
+    using OpRewritePattern::OpRewritePattern;
+
+    mlir::LogicalResult matchAndRewrite(
+        mlir::memref::SubViewOp op, mlir::PatternRewriter &rewriter) const override
+    {
+        auto source = op.source();
+        auto srcType = source.getType().cast<mlir::MemRefType>();
+        auto dstType = op.getType().cast<mlir::MemRefType>();
+        auto offsets = op.getMixedOffsets();
+        auto sizes = op.getMixedSizes();
+        auto strides = op.getMixedStrides();
+        auto inferredType = [&]()
+        {
+            auto dstRank = static_cast<unsigned>(dstType.getRank());
+            if (srcType.getRank() != dstRank)
+            {
+                return mlir::memref::SubViewOp::inferRankReducedResultType(dstRank, srcType, offsets, sizes, strides);
+            }
+            else
+            {
+                return mlir::memref::SubViewOp::inferResultType(srcType, offsets, sizes, strides);
+            }
+        }();
+        if (inferredType == dstType)
+        {
+            return mlir::failure();
+        }
+
+        rewriter.replaceOpWithNewOp<mlir::memref::SubViewOp>(op, source, offsets, sizes, strides);
+        return mlir::success();
+    }
+};
+
 struct MakeStridedLayout :
     public mlir::PassWrapper<MakeStridedLayout, mlir::FunctionPass>
 {
@@ -731,7 +766,8 @@ void MakeStridedLayout::runOnFunction()
 
     patterns.insert<
         FixStridedClone,
-        FixStridedReshape
+        FixStridedReshape,
+        FixStridedSubview
         >(context);
 
     (void)mlir::applyPatternsAndFoldGreedily(func, std::move(patterns));
