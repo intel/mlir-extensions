@@ -68,6 +68,29 @@ mlir::Type map_int_literal_type(mlir::MLIRContext& ctx, llvm::StringRef& name)
     return nullptr;
 }
 
+mlir::Type map_bool_literal_type(mlir::MLIRContext& ctx, llvm::StringRef& name)
+{
+    if (name.consume_front("Literal[bool]("))
+    {
+        auto type = mlir::IntegerType::get(&ctx, 1);
+        mlir::IntegerAttr attr;
+        if (name.consume_front("True") && name.consume_front(")"))
+        {
+            attr = mlir::IntegerAttr::get(type, 1);
+        }
+        else if (name.consume_front("False") && name.consume_front(")"))
+        {
+            attr = mlir::IntegerAttr::get(type, 0);
+        }
+        else
+        {
+            return nullptr;
+        }
+        return plier::LiteralType::get(attr);
+    }
+    return nullptr;
+}
+
 mlir::Type map_bool_type(mlir::MLIRContext& ctx, llvm::StringRef& name)
 {
     if (name.consume_front("bool"))
@@ -191,6 +214,7 @@ mlir::Type map_plier_type_name(mlir::MLIRContext& ctx, llvm::StringRef& name)
     const func_t handlers[] = {
         &map_int_type,
         &map_int_literal_type,
+        &map_bool_literal_type,
         &map_bool_type,
         &map_float_type,
         &map_pair_type,
@@ -313,7 +337,7 @@ struct LiteralArgLowering : public mlir::OpRewritePattern<plier::ArgOp>
     mlir::LogicalResult matchAndRewrite(
         plier::ArgOp op, mlir::PatternRewriter &rewriter) const override
     {
-        auto converted = converter.convertType(op.getType()).dyn_cast<plier::LiteralType>();
+        auto converted = converter.convertType(op.getType()).dyn_cast_or_null<plier::LiteralType>();
         if (!converted)
         {
             return mlir::failure();
