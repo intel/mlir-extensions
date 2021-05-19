@@ -1299,6 +1299,48 @@ struct BufferizeReshapeRewrite : public mlir::OpRewritePattern<mlir::tensor::Res
     }
 };
 
+struct FixDeallocPlacement : public mlir::OpRewritePattern<mlir::memref::DeallocOp>
+{
+    using mlir::OpRewritePattern<mlir::memref::DeallocOp>::OpRewritePattern;
+
+    mlir::LogicalResult matchAndRewrite(
+        mlir::memref::DeallocOp op, mlir::PatternRewriter &rewriter) const override
+    {
+        auto block = op->getBlock();
+        auto blockIt = mlir::Block::iterator(op);
+        mlir::Operation* newPos = op;
+        ++blockIt;
+        auto memref = op.memref();
+        for (auto& it : llvm::make_range(blockIt, block->end()))
+        {
+            auto visitor = [&](mlir::Operation* inner)
+            {
+                for (auto arg : inner->getOperands())
+                {
+                    if (arg == memref)
+                    {
+                        return mlir::WalkResult::interrupt();
+                    }
+                }
+                return mlir::WalkResult::advance();
+            };
+            if (it.walk(visitor).wasInterrupted())
+            {
+                newPos = &it;
+            }
+        }
+
+        if (newPos != op)
+        {
+            rewriter.setInsertionPointAfter(newPos);
+            rewriter.create<mlir::memref::DeallocOp>(op.getLoc(), memref);
+            rewriter.eraseOp(op);
+            return mlir::success();
+        }
+        return mlir::failure();
+    }
+};
+
 
 struct AdditionalBufferize :
     public mlir::PassWrapper<AdditionalBufferize, mlir::FunctionPass>
@@ -1380,7 +1422,6 @@ struct ReplaceClones : public mlir::OpRewritePattern<mlir::memref::CloneOp>
     }
 };
 
-
 void LowerCloneOpsPass::runOnFunction()
 {
     auto& context = getContext();
@@ -1409,7 +1450,8 @@ void PostLinalgOptPass::runOnFunction()
     plier::populate_common_opts_patterns(context, patterns);
 
     patterns.insert<
-        plier::CanonicalizeReduction
+        plier::CanonicalizeReduction,
+        FixDeallocPlacement
         >(&context);
 
     applyOptimizations(getFunction(), std::move(patterns), getAnalysisManager(),
