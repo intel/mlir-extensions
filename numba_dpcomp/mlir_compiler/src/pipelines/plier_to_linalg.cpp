@@ -397,19 +397,9 @@ mlir::Value index_cast(mlir::Value value, mlir::Location loc, mlir::OpBuilder& b
     return value;
 }
 
-bool isSlice(mlir::Type type)
-{
-    if (auto pyType = type.dyn_cast<plier::PyType>())
-    {
-        auto name = pyType.getName();
-        return name.consume_front("slice<") && name.consume_back(">");
-    }
-    return false;
-}
-
 bool isValidGetitemIndex(mlir::Type type)
 {
-    if (isSlice(type))
+    if (type.isa<plier::SliceType>())
     {
         return true;
     }
@@ -428,9 +418,9 @@ struct GetitemOpLowering : public mlir::OpRewritePattern<plier::GetItemOp>
         plier::GetItemOp op, mlir::PatternRewriter &rewriter) const override
     {
         assert(op.getNumOperands() == 2);
-        auto val = op.value();
+        auto value = op.value();
         auto index = op.index();
-        auto type = val.getType();
+        auto type = value.getType();
         bool is_memref = type.isa<mlir::MemRefType>();
         bool is_tensor = type.isa<mlir::TensorType>();
         if (!is_memref && !is_tensor)
@@ -442,19 +432,40 @@ struct GetitemOpLowering : public mlir::OpRewritePattern<plier::GetItemOp>
             return mlir::failure();
         }
         auto loc = op.getLoc();
-        auto getPos = [&](mlir::Value val)->std::tuple<mlir::OpFoldResult, mlir::OpFoldResult, mlir::OpFoldResult, bool>
+        auto indexType = rewriter.getIndexType();
+        auto getPos = [&](mlir::Value val, unsigned dim)->std::tuple<mlir::OpFoldResult, mlir::OpFoldResult, mlir::OpFoldResult, bool>
         {
-            if (isSlice(val.getType()))
+            if (auto sliceType = val.getType().dyn_cast<plier::SliceType>())
             {
-                auto indexType = rewriter.getIndexType();
                 auto createInd = [&](int64_t i)
                 {
                     return rewriter.create<mlir::ConstantIndexOp>(loc, i);
                 };
-                auto offset = rewriter.create<plier::GetItemOp>(loc, indexType, val, createInd(0));
-                auto size = rewriter.create<plier::GetItemOp>(loc, indexType, val, createInd(1));
-                auto stride = rewriter.create<plier::GetItemOp>(loc, indexType, val, createInd(2));
-                return {offset.getResult(), size.getResult(), stride.getResult(), true};
+                auto getItemOrConst = [&](unsigned i)->mlir::Value
+                {
+                    assert(i >= 0 && i < 3);
+                    if (sliceType.getTypes()[i].isa<plier::NoneType>())
+                    {
+                        if (i == 0)
+                        {
+                            return createInd(0);
+                        }
+                        else if (i == 1)
+                        {
+                            return rewriter.createOrFold<mlir::memref::DimOp>(loc, value, dim);
+                        }
+                        else // i == 2
+                        {
+                            return createInd(1);
+                        }
+                    }
+                    return rewriter.create<plier::GetItemOp>(loc, indexType, val, createInd(i));
+                };
+                auto offset = getItemOrConst(0);
+                auto end    = getItemOrConst(1);
+                auto stride = getItemOrConst(2);
+                auto size = rewriter.create<mlir::SubIOp>(loc, end, offset).getResult();
+                return {offset, size, stride, true};
             }
             else
             {
@@ -466,18 +477,18 @@ struct GetitemOpLowering : public mlir::OpRewritePattern<plier::GetItemOp>
         llvm::SmallVector<mlir::OpFoldResult> sizes(1);
         llvm::SmallVector<mlir::OpFoldResult> strides(1);
         llvm::SmallVector<unsigned> dimsIndices;
-        if (auto tuple_type = index.getType().dyn_cast<mlir::TupleType>())
+        if (auto tupleType = index.getType().dyn_cast<mlir::TupleType>())
         {
-            offsets.resize(tuple_type.size());
-            sizes.resize(tuple_type.size());
-            strides.resize(tuple_type.size());
-            for (auto it : llvm::enumerate(tuple_type))
+            offsets.resize(tupleType.size());
+            sizes.resize(tupleType.size());
+            strides.resize(tupleType.size());
+            for (auto it : llvm::enumerate(tupleType))
             {
                 auto i = it.index();
                 auto getitem_ind = rewriter.create<mlir::ConstantIndexOp>(loc, it.index());
                 auto ind = rewriter.create<plier::GetItemOp>(loc, it.value(), index, getitem_ind);
                 bool isSlice = false;
-                std::tie(offsets[i], sizes[i], strides[i], isSlice) = getPos(ind.getResult());
+                std::tie(offsets[i], sizes[i], strides[i], isSlice) = getPos(ind.getResult(), static_cast<unsigned>(i));
                 if (isSlice)
                 {
                     dimsIndices.emplace_back(i);
@@ -487,7 +498,7 @@ struct GetitemOpLowering : public mlir::OpRewritePattern<plier::GetItemOp>
         else
         {
             bool isSlice = false;
-            std::tie(offsets[0], sizes[0], strides[0], isSlice) = getPos(index);
+            std::tie(offsets[0], sizes[0], strides[0], isSlice) = getPos(index, 0);
             if (isSlice)
             {
                 dimsIndices.emplace_back(0);
@@ -507,18 +518,18 @@ struct GetitemOpLowering : public mlir::OpRewritePattern<plier::GetItemOp>
                 {
                     return mlir::failure(); // TODO: not implemented
                 }
-                res = rewriter.create<mlir::memref::SubViewOp>(loc, val, offsets, sizes, strides);
+                res = rewriter.create<mlir::memref::SubViewOp>(loc, value, offsets, sizes, strides);
             }
             else if (is_tensor)
             {
-                res = rewriter.create<mlir::SubTensorOp>(loc, val, offsets, sizes, strides);
+                res = rewriter.create<mlir::SubTensorOp>(loc, value, offsets, sizes, strides);
                 if (needReshape)
                 {
                     auto resultType = mlir::RankedTensorType::get(llvm::SmallVector<int64_t>(numDims, -1), elemType);
                     llvm::SmallVector<mlir::Value> elements(numDims);
                     for (auto it : llvm::enumerate(dimsIndices))
                     {
-                        auto dim = rewriter.create<mlir::memref::DimOp>(loc, val, it.value());
+                        auto dim = rewriter.create<mlir::memref::DimOp>(loc, value, it.value());
                         elements[it.index()] = rewriter.create<mlir::IndexCastOp>(loc, dim, i32);
                     }
                     auto shape = rewriter.create<mlir::tensor::FromElementsOp>(loc, elements);
@@ -543,11 +554,11 @@ struct GetitemOpLowering : public mlir::OpRewritePattern<plier::GetItemOp>
             };
             if (is_memref)
             {
-                res = rewriter.create<mlir::memref::LoadOp>(loc, val, toValues(offsets));
+                res = rewriter.create<mlir::memref::LoadOp>(loc, value, toValues(offsets));
             }
             else if (is_tensor)
             {
-                res = rewriter.create<mlir::tensor::ExtractOp>(loc, val, toValues(offsets));
+                res = rewriter.create<mlir::tensor::ExtractOp>(loc, value, toValues(offsets));
             }
             else
             {

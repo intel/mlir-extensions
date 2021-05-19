@@ -1727,7 +1727,7 @@ struct FoldSliceGetitem : public mlir::OpRewritePattern<plier::GetItemOp>
                 !buildSice.getOperand(static_cast<unsigned>(index)).getType().isa<plier::NoneType>())
             {
                 auto val = buildSice.getOperand(static_cast<unsigned>(index));
-                rewriter.replaceOp(op, val);
+                rewriter.replaceOp(op, do_cast(rewriter.getIndexType(), val, rewriter));
                 return mlir::success();
             }
         }
@@ -1813,9 +1813,9 @@ mlir::LogicalResult lower_slice(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> 
         return mlir::failure();
     }
 
-    auto low = operands[0];
-    auto high = operands[1];
-    auto step = [&]()->mlir::Value
+    auto begin = operands[0];
+    auto end = operands[1];
+    auto stride = [&]()->mlir::Value
     {
         if (operands.size() == 3)
         {
@@ -1824,7 +1824,7 @@ mlir::LogicalResult lower_slice(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> 
         return rewriter.create<mlir::ConstantIndexOp>(op.getLoc(), 1);
     }();
 
-    rewriter.replaceOpWithNewOp<plier::BuildSliceOp>(op, op.getType(), low, high, step);
+    rewriter.replaceOpWithNewOp<plier::BuildSliceOp>(op, begin, end, stride);
     return mlir::success();
 }
 
