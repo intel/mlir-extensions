@@ -266,6 +266,44 @@ struct ConstOpLowering : public mlir::OpRewritePattern<plier::ConstOp>
     }
 };
 
+struct RemoveOmittedFuncArgs : public mlir::OpRewritePattern<mlir::FuncOp>
+{
+    RemoveOmittedFuncArgs(mlir::TypeConverter &/*typeConverter*/,
+                          mlir::MLIRContext *context):
+        OpRewritePattern(context) {}
+
+    mlir::LogicalResult matchAndRewrite(
+        mlir::FuncOp op, mlir::PatternRewriter &rewriter) const override
+    {
+        llvm::SmallVector<unsigned> indices;
+        for (auto it : llvm::enumerate(op.getArguments()))
+        {
+            auto arg = it.value();
+            if (arg.getUsers().empty())
+            {
+                if (auto type = arg.getType().dyn_cast<plier::PyType>())
+                {
+                    auto name = type.getName();
+                    if (name.consume_front("omitted(") && name.consume_back(")") )
+                    {
+                        indices.emplace_back(it.index());
+                    }
+                }
+            }
+        }
+
+        if (indices.empty())
+        {
+            return mlir::failure();
+        }
+        rewriter.updateRootInPlace(op, [&]()
+        {
+            op.eraseArguments(indices);
+        });
+        return mlir::success();
+    }
+};
+
 struct LiteralArgLowering : public mlir::OpRewritePattern<plier::ArgOp>
 {
     LiteralArgLowering(mlir::TypeConverter &typeConverter,
@@ -1746,6 +1784,7 @@ void PlierToStdPass::runOnOperation()
     patterns.insert<
         plier::FuncOpSignatureConversion,
         plier::ArgOpLowering,
+        RemoveOmittedFuncArgs,
         LiteralArgLowering,
         UndefOpLowering,
         ReturnOpLowering,
