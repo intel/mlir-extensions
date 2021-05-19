@@ -130,7 +130,7 @@ def BuildTupleOp : Plier_Op<"build_tuple", [NoSideEffect]> {
     ];
 }
 
-def GetItemOp : Plier_Op<"getitem", []> {
+def GetItemOp : Plier_Op<"getitem", [NoSideEffect]> {
     let arguments = (ins
                      AnyType:$value,
                      AnyType:$index);
