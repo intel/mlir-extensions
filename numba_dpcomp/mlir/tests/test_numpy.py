@@ -457,6 +457,11 @@ class TestMlirBasic(TestCase):
             assert_equal(py_func(a), jit_func(a))
 
 _test_reshape_test_array = np.array([1,2,3,4,5,6,7,8,9,10,11,12])
+_test_reshape_test_arrays = [
+    _test_reshape_test_array,
+    _test_reshape_test_array.reshape((2,6)),
+    _test_reshape_test_array.reshape((2,3,2)),
+]
 @pytest.mark.parametrize("py_func", [
     lambda a: a.reshape(a.size),
     lambda a: a.reshape((a.size,)),
@@ -471,12 +476,21 @@ _test_reshape_test_array = np.array([1,2,3,4,5,6,7,8,9,10,11,12])
     'lambda a: a.reshape((1, a.size))',
     'lambda a: a.reshape((1, a.size, 1))',
     ])
-@pytest.mark.parametrize("array", [
-    _test_reshape_test_array,
-    _test_reshape_test_array.reshape((2,6)),
-    _test_reshape_test_array.reshape((2,3,2)),
-    ])
+@pytest.mark.parametrize("array", _test_reshape_test_arrays)
 def test_reshape(py_func, array):
+    jit_func = njit(py_func)
+    assert_equal(py_func(array), jit_func(array))
+
+@pytest.mark.parametrize("py_func", [
+    # lambda a: a.flat, TODO: flat support
+    lambda a: a.flatten(),
+    ],
+    ids=[
+    # 'lambda a: a.flat',
+    'lambda a: a.flatten()',
+    ])
+@pytest.mark.parametrize("array", _test_reshape_test_arrays)
+def test_flatten(py_func, array):
     jit_func = njit(py_func)
     assert_equal(py_func(array), jit_func(array))
 

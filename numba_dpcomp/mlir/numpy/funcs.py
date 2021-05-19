@@ -187,6 +187,12 @@ def dtype_impl(builder, arg):
 def reshape_impl(builder, arg, new_shape):
     return builder.reshape(arg, new_shape)
 
+# @register_attr('array.flat')
+@register_func('array.flatten')
+def flatten_impl(builder, arg):
+    size = size_impl(builder, arg)
+    return builder.reshape(arg, size)
+
 def dtype_str(builder, dtype):
     names = [
         (builder.int8,  'int8'),
