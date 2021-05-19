@@ -1685,18 +1685,48 @@ struct FoldTupleGetitem : public mlir::OpRewritePattern<plier::GetItemOp>
     mlir::LogicalResult matchAndRewrite(
         plier::GetItemOp op, mlir::PatternRewriter &rewriter) const override
     {
-        auto build_tuple = op.value().getDefiningOp<plier::BuildTupleOp>();
-        if (!build_tuple)
+        auto buildTuple = op.value().getDefiningOp<plier::BuildTupleOp>();
+        if (!buildTuple)
         {
             return mlir::failure();
         }
 
-        if (auto val = plier::getConstVal<mlir::IntegerAttr>(op.getOperand(1)))
+        if (auto val = plier::getConstVal<mlir::IntegerAttr>(op.index()))
         {
             auto index = val.getInt();
-            if (index >= 0 && index < build_tuple.getNumOperands())
+            if (index >= 0 && index < buildTuple.getNumOperands())
             {
-                auto val = build_tuple.getOperand(static_cast<unsigned>(index));
+                auto val = buildTuple.getOperand(static_cast<unsigned>(index));
+                rewriter.replaceOp(op, val);
+                return mlir::success();
+            }
+        }
+        return mlir::failure();
+    }
+};
+
+struct FoldSliceGetitem : public mlir::OpRewritePattern<plier::GetItemOp>
+{
+    FoldSliceGetitem(mlir::TypeConverter &/*typeConverter*/,
+                     mlir::MLIRContext *context):
+        OpRewritePattern(context) {}
+
+    mlir::LogicalResult matchAndRewrite(
+        plier::GetItemOp op, mlir::PatternRewriter &rewriter) const override
+    {
+        auto buildSice = op.value().getDefiningOp<plier::BuildSliceOp>();
+        if (!buildSice)
+        {
+            return mlir::failure();
+        }
+
+        if (auto val = plier::getConstVal<mlir::IntegerAttr>(op.index()))
+        {
+            auto index = val.getInt();
+            if (index >= 0 && index < 3 &&
+                !buildSice.getOperand(static_cast<unsigned>(index)).getType().isa<plier::NoneType>())
+            {
+                auto val = buildSice.getOperand(static_cast<unsigned>(index));
                 rewriter.replaceOp(op, val);
                 return mlir::success();
             }
@@ -1982,7 +2012,8 @@ void PlierToStdPass::runOnOperation()
         FixupWhileTypes,
         ScfIfFixupTypes,
         PropagateBuildTupleTypes,
-        FoldTupleGetitem
+        FoldTupleGetitem,
+        FoldSliceGetitem
         >(type_converter, context);
 
     patterns.insert<
