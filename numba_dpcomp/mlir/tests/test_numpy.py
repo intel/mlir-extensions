@@ -90,6 +90,49 @@ def test_binary(py_func, array1, array2):
     jit_func = njit(py_func)
     assert_equal(py_func(array1,array2), jit_func(array1,array2))
 
+@pytest.mark.parametrize("a",
+                         [1,
+                          np.array([1]),
+                          np.array([[1]]),
+                          np.array([[1,2],[3,4]]),
+                          np.array([5,6]),
+                          np.array([[5],[6]]),
+                          np.array([[5,6]]),
+                         ],
+                         ids=[
+                          '1',
+                          'np.array([1])',
+                          'np.array([[1]])',
+                          'np.array([[1,2],[3,4]])',
+                          'np.array([5,6])',
+                          'np.array([[5],[6]])',
+                          'np.array([[5,6]])',
+                         ])
+@pytest.mark.parametrize("b",
+                         [1,
+                          np.array([1]),
+                          np.array([[1]]),
+                          np.array([[1,2],[3,4]]),
+                          np.array([5,6]),
+                          np.array([[5],[6]]),
+                          np.array([[5,6]]),
+                         ],
+                         ids=[
+                          '1',
+                          'np.array([1])',
+                          'np.array([[1]])',
+                          'np.array([[1,2],[3,4]])',
+                          'np.array([5,6])',
+                          'np.array([[5],[6]])',
+                          'np.array([[5,6]])',
+                         ])
+def test_broadcast(a, b):
+    def py_func(a, b):
+        return np.add(a, b)
+
+    jit_func = njit(py_func)
+    assert_equal(py_func(a,b), jit_func(a,b))
+
 class TestMlirBasic(TestCase):
 
     def test_staticgetitem(self):
@@ -366,25 +409,6 @@ class TestMlirBasic(TestCase):
             # for a in [arr1,arr2,arr3]: TODO: flatten support
             for a in [arr1]:
                 assert_equal(py_func(a), jit_func(a))
-
-    def test_broadcast(self):
-        def py_func(a, b):
-            return np.add(a, b)
-
-        jit_func = njit(py_func)
-
-        test_data = [
-            1,
-            np.array([1]),
-            np.array([[1]]),
-            np.array([[1,2],[3,4]]),
-            np.array([5,6]),
-            np.array([[5],[6]]),
-            np.array([[5,6]]),
-        ]
-
-        for a, b in itertools.product(test_data, test_data):
-            assert_equal(py_func(a,b), jit_func(a,b))
 
     def test_parallel(self):
         def py_func(a, b):
