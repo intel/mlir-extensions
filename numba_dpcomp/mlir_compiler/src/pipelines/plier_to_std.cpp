@@ -1983,8 +1983,7 @@ void PlierToStdPass::runOnOperation()
         FixupWhileTypes,
         ScfIfFixupTypes,
         PropagateBuildTupleTypes,
-        FoldTupleGetitem<plier::GetItemOp>,
-        FoldTupleGetitem<plier::StaticGetItemOp>
+        FoldTupleGetitem<plier::GetItemOp>
         >(type_converter, context);
 
     patterns.insert<

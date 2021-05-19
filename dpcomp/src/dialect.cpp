@@ -354,24 +354,6 @@ mlir::OpFoldResult GetItemOp::fold(llvm::ArrayRef<mlir::Attribute> operands)
     return nullptr;
 }
 
-void StaticGetItemOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
-                            ::mlir::Value value, ::mlir::Value index_var,
-                            unsigned int index)
-{
-    StaticGetItemOp::build(builder, state,
-                           PyType::getUndefined(state.getContext()),
-                           value, index_var, index);
-}
-
-mlir::OpFoldResult StaticGetItemOp::fold(llvm::ArrayRef<mlir::Attribute> operands)
-{
-    if (auto val = fold_build_tuple_getitem(value(), getType(), operands))
-    {
-        return val;
-    }
-    return nullptr;
-}
-
 void GetiterOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                             ::mlir::Value value)
 {
@@ -393,15 +375,6 @@ void PairfirstOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                        value);
 }
 
-//mlir::OpFoldResult PairfirstOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/)
-//{
-//    if (getNumOperands() == 2)
-//    {
-//        return getOperand(0);
-//    }
-//    return nullptr;
-//}
-
 void PairsecondOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                          ::mlir::Value value)
 {
@@ -409,19 +382,26 @@ void PairsecondOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                         PyType::getUndefined(state.getContext()), value);
 }
 
-//mlir::OpFoldResult PairsecondOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/)
-//{
-//    if (getNumOperands() == 2)
-//    {
-//        return getOperand(1);
-//    }
-//    return nullptr;
-//}
-
 void GetattrOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                       mlir::Value value, mlir::StringRef name) {
     GetattrOp::build(builder, state, PyType::getUndefined(state.getContext()),
                      value, name);
+}
+
+void ExhaustIterOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
+                          mlir::Value value, int64_t count) {
+    ExhaustIterOp::build(builder, state, PyType::getUndefined(state.getContext()),
+                         value, builder.getI64IntegerAttr(count));
+}
+
+mlir::OpFoldResult ExhaustIterOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/)
+{
+    if (getType() == getOperand().getType() &&
+        getType() != plier::PyType::getUndefined(getContext()))
+    {
+        return getOperand();
+    }
+    return nullptr;
 }
 
 namespace

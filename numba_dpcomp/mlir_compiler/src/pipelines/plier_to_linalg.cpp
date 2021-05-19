@@ -1089,7 +1089,6 @@ void PlierToLinalgPass::runOnOperation()
 
     patterns.insert<
         GetitemOpLowering<plier::GetItemOp>,
-        GetitemOpLowering<plier::StaticGetItemOp>,
         SetitemOpLowering<plier::SetItemOp>,
         CheckForBuildTuple
         >(&getContext());
