@@ -274,4 +274,8 @@ def YieldOp : Plier_Op<"yield", [NoSideEffect, ReturnLike, Terminator,
     let verifier = ?;
 }
 
+def UndefOp : Plier_Op<"undef", [NoSideEffect]> {
+  let results = (outs AnyType);
+}
+
 #endif // PLIER_OPS
