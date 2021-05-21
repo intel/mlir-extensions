@@ -114,9 +114,10 @@ def log_impl(builder, arg):
     return eltwise(builder, arg, body, builder.float64)
 
 @register_func('numpy.empty', numpy.empty)
-def empty_impl(builder, shape):
-    # TODO: dtype
-    return builder.init_tensor(shape, builder.float64)
+def empty_impl(builder, shape, dtype=None):
+    if dtype is None:
+        dtype = builder.float64
+    return builder.init_tensor(shape, dtype)
 
 @register_func('numpy.dot', numpy.dot)
 def dot_impl(builder, a, b):
@@ -191,6 +192,10 @@ def transpose_impl(builder, arg):
             return a
 
         return builder.generic(arg, init, iterators, maps, body)
+
+@register_attr('array.dtype')
+def dtype_impl(builder, arg):
+    return arg.dtype
 
 def flatten(builder, arg, src_dims_count):
     if 1 == src_dims_count:

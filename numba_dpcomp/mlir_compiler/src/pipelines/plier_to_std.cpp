@@ -169,6 +169,20 @@ mlir::Type map_func_type(mlir::MLIRContext& ctx, llvm::StringRef& name)
     return nullptr;
 }
 
+mlir::Type map_dtype_type(mlir::MLIRContext& ctx, llvm::StringRef& name)
+{
+    if (name.consume_front("dtype(") &&
+        name.consume_back(")"))
+    {
+        auto innerType = map_plier_type_name(ctx, name);
+        if (innerType)
+        {
+            return plier::TypeVar::get(innerType);
+        }
+    }
+    return nullptr;
+}
+
 mlir::Type map_plier_type_name(mlir::MLIRContext& ctx, llvm::StringRef& name)
 {
     using func_t = mlir::Type(*)(mlir::MLIRContext& ctx, llvm::StringRef& name);
@@ -181,6 +195,7 @@ mlir::Type map_plier_type_name(mlir::MLIRContext& ctx, llvm::StringRef& name)
         &map_unituple_type,
         &map_tuple_type,
         &map_func_type,
+        &map_dtype_type
     };
     for (auto h : handlers)
     {
