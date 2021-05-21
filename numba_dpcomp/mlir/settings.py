@@ -28,3 +28,4 @@ def _readenv(name, ctor, default):
 USE_MLIR = _readenv('DPCOMP_ENABLE', int, 1)
 DUMP_PLIER = _readenv('DPCOMP_DUMP_PLIER', int, 0)
 PRINT_IR = _readenv('DPCOMP_PRINT_IR', int, 0)
+DEBUG_TYPE = list(filter(None, _readenv('DPCOMP_DEBUG_TYPE', str, '').split(',')))

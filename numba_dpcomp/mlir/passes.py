@@ -16,11 +16,19 @@ from numba.core.compiler_machinery import (FunctionPass, register_pass)
 from numba.core import (types)
 import numba.core.types.functions
 
-from .settings import PRINT_IR
+from .settings import PRINT_IR, DEBUG_TYPE
 from . import func_registry
+from .. import mlir_compiler
 
 _mlir_last_compiled_func = None
 _mlir_active_module = None
+
+def _init_compiler():
+    settings = {}
+    settings['debug_type'] = DEBUG_TYPE
+    mlir_compiler.init_compiler(settings)
+
+_init_compiler()
 
 class MlirBackendBase(FunctionPass):
 
@@ -88,7 +96,6 @@ class MlirDumpPlier(MlirBackendBase):
         MlirBackendBase.__init__(self, push_func_stack=True)
 
     def run_pass(self, state):
-        import numba_dpcomp.mlir_compiler as mlir_compiler
         module = mlir_compiler.create_module()
         ctx = self._get_func_context(state)
         mlir_compiler.lower_function(ctx, module, state.func_ir)
@@ -133,7 +140,6 @@ class MlirBackendInner(MlirBackendBase):
         MlirBackendBase.__init__(self, push_func_stack=False)
 
     def run_pass_impl(self, state):
-        import numba_dpcomp.mlir_compiler as mlir_compiler
         global _mlir_active_module
         module = _mlir_active_module
         assert not module is None

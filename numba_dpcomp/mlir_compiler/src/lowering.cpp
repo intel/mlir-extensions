@@ -30,6 +30,7 @@
 #include <mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h>
 
 #include <llvm/Bitcode/BitcodeWriter.h>
+#include <llvm/Support/Debug.h>
 
 #include "plier/dialect.hpp"
 
@@ -719,6 +720,24 @@ void run_compiler(Module& mod, const py::object& compilation_context)
     plier::CompilerContext compiler(context, settings, registry);
     compiler.run(module);
 }
+}
+
+void init_compiler(pybind11::dict settings)
+{
+    auto debugType = settings["debug_type"].cast<py::list>();
+    auto debugTypeSize = debugType.size();
+    if (debugTypeSize != 0)
+    {
+         llvm::DebugFlag = true;
+         llvm::BumpPtrAllocator alloc;
+         auto types = alloc.Allocate<const char*>(debugTypeSize);
+         llvm::StringSaver strSaver(alloc);
+         for (size_t i = 0 ; i < debugTypeSize; ++i)
+         {
+             types[i] = strSaver.save(debugType[i].cast<std::string>()).data();
+         }
+         llvm::setCurrentDebugTypes(types, static_cast<unsigned>(debugTypeSize));
+    }
 }
 
 py::capsule create_module()
