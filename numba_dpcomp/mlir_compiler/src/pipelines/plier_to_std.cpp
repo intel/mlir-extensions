@@ -1530,6 +1530,37 @@ mlir::LogicalResult lower_len(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> op
     return mlir::success();
 }
 
+mlir::LogicalResult lower_slice(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands, llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs, mlir::PatternRewriter& rewriter)
+{
+    if (!kwargs.empty())
+    {
+        return mlir::failure();
+    }
+    if (operands.size() != 2 && operands.size() != 3)
+    {
+        return mlir::failure();
+    }
+
+    if (llvm::any_of(operands, [](mlir::Value op) { return !op.getType().isa<mlir::IntegerType, mlir::IndexType>(); }))
+    {
+        return mlir::failure();
+    }
+
+    auto low = operands[0];
+    auto high = operands[1];
+    auto step = [&]()->mlir::Value
+    {
+        if (operands.size() == 3)
+        {
+            return operands[2];
+        }
+        return rewriter.create<mlir::ConstantIndexOp>(op.getLoc(), 1);
+    }();
+
+    rewriter.replaceOpWithNewOp<plier::BuildSliceOp>(op, op.getType(), low, high, step);
+    return mlir::success();
+}
+
 mlir::LogicalResult lower_bool_cast(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands, llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs, mlir::PatternRewriter& rewriter)
 {
     if (!kwargs.empty())
@@ -1625,6 +1656,7 @@ struct CallLowerer
             {"bool", lower_bool_cast},
             {"range", lower_range},
             {"len", lower_len},
+            {"slice", lower_slice},
         };
         for (auto& handler : handlers)
         {

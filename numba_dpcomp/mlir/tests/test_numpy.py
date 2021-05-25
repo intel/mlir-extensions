@@ -392,5 +392,17 @@ class TestMlirBasic(TestCase):
         for a in [arr]: # TODO: arr.T
             assert_equal(py_func(a), jit_func(a))
 
+    def test_slice1(self):
+        funcs = [
+            lambda a, b, c, d: a[b:c],
+            lambda a, b, c, d: a[b:c:d],
+        ]
+
+        arr = np.array([1,2,3,4,5,6,7,8])
+        for py_func in funcs:
+            jit_func = njit(py_func)
+
+            assert_equal(py_func(arr, 3, 4,2), jit_func(arr, 3, 4,2))
+
 if __name__ == '__main__':
     unittest.main()

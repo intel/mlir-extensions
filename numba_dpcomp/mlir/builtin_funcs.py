@@ -19,5 +19,6 @@ from numba import prange
 add_func(range, 'range')
 add_func(len, 'len')
 add_func(bool, 'bool')
+add_func(slice, 'slice')
 
 add_func(prange, 'numba.prange')
