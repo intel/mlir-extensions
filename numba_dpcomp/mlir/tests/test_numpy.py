@@ -292,6 +292,40 @@ class TestMlirBasic(TestCase):
             assert_equal(py_func(a).shape, jit_func(a).shape)
             assert_equal(py_func(a).dtype, jit_func(a).dtype)
 
+    def test_zeros1(self):
+        def py_func(d):
+            return np.zeros(d)
+
+        jit_func = njit(py_func)
+        assert_equal(py_func(5), jit_func(5))
+
+    def test_zeros2(self):
+        def py_func(a):
+            return np.zeros(a.shape, a.dtype)
+
+        jit_func = njit(py_func)
+        arr = np.array([1, 2, 3])
+        for t in ['int32', 'int64', 'float32', 'float64']:
+            a = arr.astype(t)
+            assert_equal(py_func(a).shape, jit_func(a).shape)
+            assert_equal(py_func(a).dtype, jit_func(a).dtype)
+
+    @unittest.expectedFailure
+    def test_zeros3(self):
+        def py_func(d):
+            return np.zeros(d, dtype=np.dtype('int64'))
+
+        jit_func = njit(py_func)
+        assert_equal(py_func(5), jit_func(5))
+
+    @unittest.expectedFailure
+    def test_zeros4(self):
+        def py_func(d):
+            return np.zeros(d)
+
+        jit_func = njit(py_func)
+        assert_equal(py_func((2, 1)), jit_func((2, 1)))
+
     def test_reshape(self):
         funcs = [
             lambda a: a.reshape(a.size),

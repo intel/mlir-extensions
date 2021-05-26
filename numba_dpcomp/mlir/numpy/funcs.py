@@ -119,6 +119,15 @@ def empty_impl(builder, shape, dtype=None):
         dtype = builder.float64
     return builder.init_tensor(shape, dtype)
 
+
+@register_func('numpy.zeros', numpy.zeros)
+def zeros_impl(builder, shape, dtype=None):
+    if dtype is None:
+        dtype = builder.float64
+
+    return builder.init_tensor(shape, dtype, 0)
+
+
 @register_func('numpy.dot', numpy.dot)
 def dot_impl(builder, a, b):
     shape1 = a.shape
