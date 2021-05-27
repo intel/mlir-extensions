@@ -102,7 +102,6 @@ mlir::LogicalResult foldLoads(plier::MemorySSAAnalysis& memSSAAnalysis)
 mlir::LogicalResult deadStoreElemination(plier::MemorySSAAnalysis& memSSAAnalysis)
 {
     assert(memSSAAnalysis.memssa);
-    assert(memSSAAnalysis.aliasAnalysis);
     auto& memSSA = *memSSAAnalysis.memssa;
     using NodeType = plier::MemorySSA::NodeType;
     auto getNextDef = [&](plier::MemorySSA::Node* node)->plier::MemorySSA::Node*

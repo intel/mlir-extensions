@@ -1169,8 +1169,8 @@ struct LoopInvariantCodeMotion : public mlir::OpRewritePattern<mlir::scf::ForOp>
     }
 };
 
-struct RetainArgsPass :
-    public mlir::PassWrapper<RetainArgsPass, mlir::FunctionPass>
+struct CloneArgsPass :
+    public mlir::PassWrapper<CloneArgsPass, mlir::FunctionPass>
 {
     virtual void getDependentDialects(
         mlir::DialectRegistry &registry) const override
@@ -1181,7 +1181,7 @@ struct RetainArgsPass :
     void runOnFunction() override;
 };
 
-void RetainArgsPass::runOnFunction()
+void CloneArgsPass::runOnFunction()
 {
     auto func = getFunction();
     if (func.isPrivate() || func.isDeclaration() || func.body().empty())
@@ -1202,6 +1202,39 @@ void RetainArgsPass::runOnFunction()
             arg.replaceAllUsesExcept(retained, except);
         }
     }
+}
+
+struct LowerCloneOpsPass :
+    public mlir::PassWrapper<LowerCloneOpsPass, mlir::FunctionPass>
+{
+    void runOnFunction() override;
+};
+
+struct ReplaceClones : public mlir::OpRewritePattern<mlir::memref::CloneOp>
+{
+    using mlir::OpRewritePattern<mlir::memref::CloneOp>::OpRewritePattern;
+
+    mlir::LogicalResult matchAndRewrite(
+        mlir::memref::CloneOp op, mlir::PatternRewriter &rewriter) const override
+    {
+        rewriter.replaceOpWithNewOp<plier::RetainOp>(op, op.getSource());
+        return mlir::success();
+    }
+};
+
+
+void LowerCloneOpsPass::runOnFunction()
+{
+    auto& context = getContext();
+    mlir::OwningRewritePatternList patterns(&context);
+
+    patterns.insert<
+        ReplaceClones
+        >(&context);
+
+
+    auto func = getFunction();
+    (void)mlir::applyPatternsAndFoldGreedily(func, std::move(patterns));
 }
 
 struct PostLinalgOptPass :
@@ -1275,10 +1308,10 @@ void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager& pm)
     pm.addNestedPass<mlir::FuncOp>(mlir::createBufferLoopHoistingPass());
     pm.addNestedPass<mlir::FuncOp>(mlir::createPromoteBuffersToStackPass());
 
-    pm.addNestedPass<mlir::FuncOp>(std::make_unique<RetainArgsPass>());
+    pm.addNestedPass<mlir::FuncOp>(std::make_unique<CloneArgsPass>());
     pm.addNestedPass<mlir::FuncOp>(mlir::createBufferDeallocationPass());
-//    pm.addPass(mlir::createCopyRemovalPass());
     pm.addPass(mlir::createCanonicalizerPass());
+    pm.addNestedPass<mlir::FuncOp>(std::make_unique<LowerCloneOpsPass>());
 
     pm.addPass(std::make_unique<LowerLinalgPass>());
     pm.addNestedPass<mlir::FuncOp>(std::make_unique<PostLinalgOptPass>());

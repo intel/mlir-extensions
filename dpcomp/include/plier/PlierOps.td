@@ -19,6 +19,7 @@ include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/LoopLikeInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/Interfaces/ViewLikeInterface.td"
 
 def Plier_Dialect : Dialect {
   let name = "plier";
@@ -285,6 +286,20 @@ def BuildSliceOp : Plier_Op<"build_slice", [NoSideEffect]> {
                      AnyType:$step);
 
     let results = (outs AnyType);
+}
+
+def RetainOp : Plier_Op<"retain", [ViewLikeOpInterface]> {
+    let arguments = (ins AnyMemRef:$source);
+
+    let results = (outs AnyMemRef);
+
+    let builders = [
+        OpBuilder<(ins "::mlir::Value":$value)>
+    ];
+
+    let extraClassDeclaration = [{
+        ::mlir::Value getViewSource() { return source(); }
+    }];
 }
 
 #endif // PLIER_OPS
