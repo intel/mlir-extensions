@@ -440,5 +440,13 @@ class TestMlirBasic(TestCase):
             assert_equal(py_func(1,66), jit_func(1,66))
 
 
+    def test_omitted_args1(self):
+        def py_func(a = 3, b = 7):
+            return a + b
+
+        jit_func = njit(py_func)
+        assert_equal(py_func(), jit_func())
+
+
 if __name__ == '__main__':
     unittest.main()
