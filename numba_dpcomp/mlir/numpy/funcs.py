@@ -23,30 +23,6 @@ def is_int(t, b):
 def is_float(t, b):
     return t == b.float16 or t == b.float32 or t == b.float64
 
-@register_func('numpy.add', numpy.add)
-@register_func('operator.add')
-def add_impl(builder, arg1, arg2):
-    def body(a, b, c):
-        return a + b
-
-    return eltwise(builder, (arg1, arg2), body)
-
-@register_func('numpy.subtract', numpy.subtract)
-@register_func('operator.sub')
-def sub_impl(builder, arg1, arg2):
-    def body(a, b, c):
-        return a - b
-
-    return eltwise(builder, (arg1, arg2), body)
-
-@register_func('numpy.multiply', numpy.multiply)
-@register_func('operator.mul')
-def mul_impl(builder, arg1, arg2):
-    def body(a, b, c):
-        return a * b
-
-    return eltwise(builder, (arg1, arg2), body)
-
 @register_func('array.sum')
 @register_func('numpy.sum', numpy.sum)
 def sum_impl(builder, arg, axis=None):
@@ -88,30 +64,46 @@ def sum_impl(builder, arg, axis=None):
 
         return builder.generic(arg, init, iterators, maps, body)
 
+def _gen_unary_ops():
+    unary_ops = [
+        (register_func('numpy.sqrt', numpy.sqrt), True, lambda a, b: math.sqrt(a)),
+        (register_func('numpy.square', numpy.square), False, lambda a, b: a * a),
+        (register_func('numpy.log', numpy.log), True, lambda a, b: math.log(a)),
+        (register_func('numpy.sin', numpy.sin), True, lambda a, b: math.sin(a)),
+        (register_func('numpy.cos', numpy.cos), True, lambda a, b: math.cos(a)),
+    ]
 
-@register_func('numpy.sqrt', numpy.sqrt)
-def sqrt_impl(builder, arg):
+    def make_func(f64, body):
+        def func(builder, arg):
+            return eltwise(builder, arg, body, builder.float64 if f64 else None)
+        return func
 
-    def body(a, b):
-        return math.sqrt(a)
+    for reg, f64, body in unary_ops:
+        reg(make_func(f64, body))
 
-    return eltwise(builder, arg, body, builder.float64)
+_gen_unary_ops()
 
-@register_func('numpy.square', numpy.square)
-def square_impl(builder, arg):
+def _gen_binary_ops():
+    binary_ops = [
+        (register_func('numpy.add', numpy.add), False, lambda a, b, c: a + b),
+        (register_func('operator.add'), False, lambda a, b, c: a + b),
+        (register_func('numpy.subtract', numpy.subtract), False, lambda a, b, c: a - b),
+        (register_func('operator.sub'), False, lambda a, b, c: a - b),
+        (register_func('numpy.multiply', numpy.multiply), False, lambda a, b, c: a * b),
+        (register_func('operator.mul'), False, lambda a, b, c: a * b),
+        (register_func('numpy.true_divide', numpy.true_divide), True, lambda a, b, c: a / b),
+        (register_func('operator.truediv'), True, lambda a, b, c: a / b),
+    ]
 
-    def body(a, b):
-        return a * a
+    def make_func(f64, body):
+        def func(builder, arg1, arg2):
+            return eltwise(builder, (arg1, arg2), body, builder.float64 if f64 else None)
+        return func
 
-    return eltwise(builder, arg, body)
+    for reg, f64, body in binary_ops:
+        reg(make_func(f64, body))
 
-@register_func('numpy.log', numpy.log)
-def log_impl(builder, arg):
-
-    def body(a, b):
-        return math.log(a)
-
-    return eltwise(builder, arg, body, builder.float64)
+_gen_binary_ops()
 
 @register_func('numpy.empty', numpy.empty)
 def empty_impl(builder, shape, dtype=None):
@@ -157,23 +149,6 @@ def dot_impl(builder, a, b):
             return a * b + c
 
         return builder.generic((a,b), init, iterators, maps, body)
-
-
-@register_func('numpy.sin', numpy.sin)
-def sin_impl(builder, arg):
-    def body(a, b):
-        return math.sin(a)
-
-    return eltwise(builder, arg, body, builder.float64)
-
-
-@register_func('numpy.cos', numpy.cos)
-def cos_impl(builder, arg):
-    def body(a, b):
-        return math.cos(a)
-
-    return eltwise(builder, arg, body, builder.float64)
-
 
 @register_attr('array.size')
 def size_impl(builder, arg):
