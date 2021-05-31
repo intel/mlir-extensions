@@ -280,3 +280,19 @@ def eig_impl(builder, arg):
         vals = builder.init_tensor([size], dtype)
         vecs = builder.init_tensor([size,size], dtype)
         return builder.external_call(func_name, arg, (vals, vecs))
+
+@register_func('numpy.atleast_2d', numpy.atleast_2d)
+def atleast2d_impl(builder, arr):
+    shape = arr.shape
+    dims = len(shape)
+    if dims == 0:
+        return builder.init_tensor([1,1], arr.dtype, arr)
+    elif dims == 1:
+        init = builder.init_tensor([1,shape[0]], arr.dtype)
+        iterators = ['parallel', 'parallel']
+        expr1 = '(d0,d1) -> (d1)'
+        expr2 = '(d0,d1) -> (d0,d1)'
+        maps = [expr1,expr2]
+        return builder.generic(arr, init, iterators, maps, lambda a, b: a)
+    else:
+        return arr
