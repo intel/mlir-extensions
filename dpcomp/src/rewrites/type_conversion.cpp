@@ -25,24 +25,40 @@ mlir::LogicalResult setBlockSig(
     mlir::Block& block, mlir::OpBuilder& builder,
     const mlir::TypeConverter::SignatureConversion& conversion)
 {
-    if (conversion.getConvertedTypes().size() != block.getNumArguments())
+    llvm::SmallVector<unsigned> argsToErase;
+    for (auto it : llvm::enumerate(block.getArguments()))
     {
-        return mlir::failure();
-    }
-    unsigned i = 0;
-    for (auto it : llvm::zip(block.getArguments(), conversion.getConvertedTypes()))
-    {
-        auto arg = std::get<0>(it);
-        auto type = std::get<1>(it);
-        if (arg.getType() != type)
+        auto arg = it.value();
+        auto i = static_cast<unsigned>(it.index());
+        auto input = conversion.getInputMapping(i);
+        bool hasInput = static_cast<bool>(input);
+        auto getNewType = [&]()
         {
-            builder.setInsertionPointToStart(&block);
-            auto res = builder.create<plier::CastOp>(builder.getUnknownLoc(), arg.getType(), arg);
-            arg.replaceUsesWithIf(res, [&](mlir::OpOperand& op)
+            assert(hasInput);
+            return conversion.getConvertedTypes()[input->inputNo];
+        };
+        if (!hasInput || arg.getType() != getNewType())
+        {
+            auto type = (hasInput ? getNewType() : arg.getType());
+            if (!arg.getUses().empty())
             {
-                return op.getOwner() != res;
-            });
-
+                builder.setInsertionPointToStart(&block);
+                auto loc = builder.getUnknownLoc();
+                if (hasInput)
+                {
+                    auto res = builder.create<plier::CastOp>(loc, arg.getType(), arg);
+                    arg.replaceAllUsesExcept(res, res);
+                }
+                else
+                {
+                    auto res = builder.create<plier::UndefOp>(loc, arg.getType());
+                    arg.replaceAllUsesWith(res);
+                }
+            }
+            if (!hasInput)
+            {
+                argsToErase.emplace_back(i);
+            }
             for (auto& use : block.getUses())
             {
                 auto op = use.getOwner();
@@ -76,8 +92,8 @@ mlir::LogicalResult setBlockSig(
             }
             arg.setType(type);
         }
-        ++i;
     }
+    block.eraseArguments(argsToErase);
     return mlir::success();
 }
 
@@ -98,8 +114,10 @@ mlir::LogicalResult convertRegionTypes(
     if (apply)
     {
         auto res = setBlockSig(region->front(), builder, *sig);
-        assert(mlir::succeeded(res));
-        (void)res;
+        if (mlir::failed(res))
+        {
+            return mlir::failure();
+        }
     }
     for (auto &block : llvm::make_early_inc_range(llvm::drop_begin(*region, 1)))
     {
@@ -127,13 +145,13 @@ plier::FuncOpSignatureConversion::FuncOpSignatureConversion(mlir::TypeConverter&
 mlir::LogicalResult plier::FuncOpSignatureConversion::matchAndRewrite(
     mlir::FuncOp funcOp, mlir::PatternRewriter& rewriter) const
 {
-    auto type = funcOp.getType();
+    auto oldFuncType = funcOp.getType();
 
     // Convert the original function types.
-    mlir::TypeConverter::SignatureConversion result(type.getNumInputs());
+    mlir::TypeConverter::SignatureConversion result(oldFuncType.getNumInputs());
     llvm::SmallVector<mlir::Type, 1> newResults;
-    if (mlir::failed(converter.convertSignatureArgs(type.getInputs(), result)) ||
-        mlir::failed(converter.convertTypes(type.getResults(), newResults)) ||
+    if (mlir::failed(converter.convertSignatureArgs(oldFuncType.getInputs(), result)) ||
+        mlir::failed(converter.convertTypes(oldFuncType.getResults(), newResults)) ||
         mlir::failed(convertRegionTypes(&funcOp.getBody(), converter, false)))
     {
         return mlir::failure();
@@ -141,18 +159,22 @@ mlir::LogicalResult plier::FuncOpSignatureConversion::matchAndRewrite(
 
     auto newFuncType = mlir::FunctionType::get(
         funcOp.getContext(), result.getConvertedTypes(), newResults);
-    if (newFuncType == funcOp.getType())
+    if (newFuncType == oldFuncType)
     {
         return mlir::failure();
     }
 
-    bool ret_type_changed = (newResults != funcOp.getType().getResults());
+    bool ret_type_changed = (newResults != oldFuncType.getResults());
     // Update the function signature in-place.
-    rewriter.updateRootInPlace(funcOp, [&] {
-        funcOp.setType(newFuncType);
-        auto res = convertRegionTypes(&funcOp.getBody(), converter, true);
-        assert(mlir::succeeded(res));
-    });
+    rewriter.startRootUpdate(funcOp);
+    funcOp.setType(newFuncType);
+    auto res = convertRegionTypes(&funcOp.getBody(), converter, true);
+    if (mlir::failed(res))
+    {
+        funcOp.setType(oldFuncType);
+        rewriter.cancelRootUpdate(funcOp);
+        return mlir::failure();
+    }
 
     if (ret_type_changed)
     {
@@ -200,5 +222,6 @@ mlir::LogicalResult plier::FuncOpSignatureConversion::matchAndRewrite(
             }
         }
     }
+    rewriter.finalizeRootUpdate(funcOp);
     return mlir::success();
 }

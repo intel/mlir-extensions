@@ -23,6 +23,8 @@
 
 #include <cctype>
 
+#include "plier/dialect.hpp"
+
 namespace
 {
 static const constexpr auto PREFIX = "_Z";
@@ -67,6 +69,16 @@ bool mangle_memref(llvm::raw_ostream& res, mlir::Type type)
     return false;
 }
 
+bool mangle_none(llvm::raw_ostream& res, mlir::Type type)
+{
+    if (type = plier::PyType::getNone(type.getContext()))
+    {
+        // Nothing
+        return true;
+    }
+    return false;
+}
+
 using type_mangler_t = bool(*)(llvm::raw_ostream&, mlir::Type);
 
 static const constexpr type_mangler_t type_manglers[] = {
@@ -100,6 +112,8 @@ static const constexpr type_mangler_t type_manglers[] = {
     &mangle_float<128, 'g'>,
 
     &mangle_memref,
+
+    &mangle_none,
 };
 
 bool check_type(mlir::Type type)
