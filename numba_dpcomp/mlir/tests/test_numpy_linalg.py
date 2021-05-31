@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import sys
 import pytest
 import numpy
 from numba_dpcomp import njit
@@ -32,7 +33,7 @@ def vvsort(val, vec, size):
             vec[k, i] = vec[k, imax]
             vec[k, imax] = temp
 
-@pytest.mark.skip("Not yet implemented")
+@pytest.mark.skipif(sys.platform in ['win32', 'cygwin', 'darwin'], reason="Not yet implemented")
 @pytest.mark.parametrize("type",
                          [numpy.float64, numpy.float32],
                          ids=['float64', 'float32'])

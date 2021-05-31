@@ -14,13 +14,21 @@
 
 
 #include "common.hpp"
+#include <dpnp_iface.hpp>
 
 namespace
 {
 template <typename T>
 void eig_impl(Memref<2, const T>* input, Memref<2, T>* vals, Memref<2, T>* vecs)
 {
-
+    if constexpr (std::is_same<T, float>::value)
+    {
+        dpnp_eig_c<T, float>(input->data, vals->data, vecs->data, input->dims[0]);
+    }
+    else
+    {
+        dpnp_eig_c<T, double>(input->data, vals->data, vecs->data, input->dims[0]);
+    }
 }
 }
 
