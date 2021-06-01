@@ -86,7 +86,6 @@ public:
 
     static PyType get(mlir::MLIRContext *context, mlir::StringRef name);
     static PyType getUndefined(mlir::MLIRContext *context);
-    static PyType getNone(mlir::MLIRContext *context);
 
     mlir::StringRef getName() const;
 };
@@ -100,6 +99,13 @@ public:
     static LiteralType get(mlir::Attribute value);
 
     mlir::Attribute getValue() const;
+};
+
+class NoneType : public mlir::Type::TypeBase<::plier::NoneType, mlir::Type,
+                                             mlir::TypeStorage>
+{
+public:
+    using Base::Base;
 };
 
 class TypeVar : public mlir::Type::TypeBase<::plier::TypeVar, mlir::Type,
