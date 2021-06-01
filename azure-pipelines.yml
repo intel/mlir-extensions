@@ -70,7 +70,7 @@ jobs:
 
   - script: |
       source /usr/share/miniconda/bin/activate
-      conda install -y numba=0.53 scipy pybind11 pytest lit -c conda-forge
+      conda install -y numba scipy pybind11 pytest lit dpnp -c conda-forge -c intel
       conda install -y tbb=2021.1 --force
       cmake --version
       chmod -R 777 $(System.DefaultWorkingDirectory)/llvm_cache

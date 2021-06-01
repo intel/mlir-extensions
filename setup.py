@@ -56,9 +56,6 @@ cmake_cmd += [
 
 # DPNP
 from dpnp import get_include as dpnp_get_include
-# TODO: add path to libs for package build
-# for package build + for local build
-# DPNP_LIBRARY_DIR = ['$ORIGIN/../dpnp'] + [os.path.join(dpnp_get_include(), '..', '..')]
 DPNP_LIBRARY_DIR = os.path.join(dpnp_get_include(), '..', '..')
 DPNP_INCLUDE_DIR = dpnp_get_include()
 cmake_cmd += [
