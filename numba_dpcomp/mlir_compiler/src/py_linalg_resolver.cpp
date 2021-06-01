@@ -1248,15 +1248,14 @@ PyLinalgResolver::~PyLinalgResolver()
 
 }
 
-llvm::Optional<PyLinalgResolver::Values> PyLinalgResolver::rewrite_func(llvm::StringRef name, mlir::Location loc, mlir::OpBuilder& builder, mlir::ValueRange args, KWArgs kwargs)
+llvm::Optional<PyLinalgResolver::Values> PyLinalgResolver::rewrite_func(llvm::Twine name, mlir::Location loc, mlir::OpBuilder& builder, mlir::ValueRange args, KWArgs kwargs)
 {
-    auto mangled_name = (llvm::Twine(name) + "()").str();
-    return rewrite(mangled_name, loc, builder, args, kwargs);
+    return rewrite((name + "()").str(), loc, builder, args, kwargs);
 }
 
-llvm::Optional<PyLinalgResolver::Values> PyLinalgResolver::rewrite_attr(llvm::StringRef name, mlir::Location loc, mlir::OpBuilder& builder, mlir::Value arg)
+llvm::Optional<PyLinalgResolver::Values> PyLinalgResolver::rewrite_attr(llvm::Twine name, mlir::Location loc, mlir::OpBuilder& builder, mlir::Value arg)
 {
-    return rewrite(name, loc, builder, arg, {});
+    return rewrite(name.str(), loc, builder, arg, {});
 }
 
 llvm::Optional<PyLinalgResolver::Values> PyLinalgResolver::rewrite(llvm::StringRef name, mlir::Location loc, mlir::OpBuilder& builder, mlir::ValueRange args, KWArgs kwargs)

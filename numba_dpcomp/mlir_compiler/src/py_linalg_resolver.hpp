@@ -43,10 +43,10 @@ public:
     using Values = llvm::SmallVector<mlir::Value, 8>;
     using KWArgs = llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>>;
 
-    llvm::Optional<Values> rewrite_func(llvm::StringRef name, mlir::Location loc, mlir::OpBuilder& builder, mlir::ValueRange args,
+    llvm::Optional<Values> rewrite_func(llvm::Twine name, mlir::Location loc, mlir::OpBuilder& builder, mlir::ValueRange args,
                                         KWArgs kwargs);
 
-    llvm::Optional<Values> rewrite_attr(llvm::StringRef name, mlir::Location loc, mlir::OpBuilder& builder, mlir::Value arg);
+    llvm::Optional<Values> rewrite_attr(llvm::Twine name, mlir::Location loc, mlir::OpBuilder& builder, mlir::Value arg);
 
 private:
     friend struct PyBuilderContext;

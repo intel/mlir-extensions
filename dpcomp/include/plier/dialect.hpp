@@ -44,7 +44,39 @@ namespace detail
 struct PyTypeStorage;
 struct LiteralTypeStorage;
 struct TypeVarStorage;
+
+struct OperatorNamePair
+{
+    mlir::StringRef op;
+    mlir::StringRef name;
+};
+
+static const constexpr OperatorNamePair OperatorNames[] = {
+    {"+",  "add"}, // binary
+    {"+",  "pos"}, // unary
+    {"-",  "sub"}, // binary
+    {"-",  "neg"}, // unary
+    {"*",  "mul"},
+    {"**", "pow"},
+    {"/",  "truediv"},
+    {"//", "floordiv"},
+    {"%",  "mod"},
+
+    {">",  "gt"},
+    {">=", "ge"},
+    {"<",  "lt"},
+    {"<=", "le"},
+    {"!=", "ne"},
+    {"==", "eq"},
+};
 }
+
+enum
+{
+    OperatorsCount = llvm::array_lengthof(detail::OperatorNames)
+};
+
+mlir::ArrayRef<detail::OperatorNamePair> getOperators();
 
 class PyType : public mlir::Type::TypeBase<::plier::PyType, mlir::Type,
                                            ::plier::detail::PyTypeStorage>

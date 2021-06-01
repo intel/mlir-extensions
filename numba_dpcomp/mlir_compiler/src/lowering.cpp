@@ -74,30 +74,6 @@ py::list get_body(const py::handle& block)
     return block.attr("body").cast<py::list>();
 }
 
-struct OpId
-{
-    llvm::StringRef op;
-    llvm::StringRef name;
-};
-
-static const constexpr OpId inst_ops_names[] = {
-    {"+",  "add"}, // binary
-    {"+",  "pos"}, // unary
-    {"-",  "sub"}, // binary
-    {"-",  "neg"}, // unary
-    {"*",  "mul"},
-    {"/",  "truediv"},
-    {"//", "floordiv"},
-    {"%", "mod"},
-
-    {">",  "gt"},
-    {">=", "ge"},
-    {"<",  "lt"},
-    {"<=", "le"},
-    {"!=", "ne"},
-    {"==", "eq"},
-};
-
 struct inst_handles
 {
     inst_handles()
@@ -120,7 +96,7 @@ struct inst_handles
 
         auto ops = py::module::import("operator");
 
-        for (auto elem : llvm::zip(inst_ops_names, ops_handles))
+        for (auto elem : llvm::zip(plier::getOperators(), ops_handles))
         {
             auto name = std::get<0>(elem).name;
             std::get<1>(elem) = ops.attr(name.data());
@@ -142,7 +118,7 @@ struct inst_handles
     py::handle Global;
     py::handle FreeVar;
 
-    std::array<py::handle, llvm::array_lengthof(inst_ops_names)> ops_handles;
+    std::array<py::handle, plier::OperatorsCount> ops_handles;
 };
 
 struct plier_lowerer final
@@ -471,7 +447,7 @@ private:
 
     llvm::StringRef resolve_op(const py::handle& op)
     {
-        for (auto elem : llvm::zip(inst_ops_names, insts.ops_handles))
+        for (auto elem : llvm::zip(plier::getOperators(), insts.ops_handles))
         {
             if (op.is(std::get<1>(elem)))
             {

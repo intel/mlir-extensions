@@ -350,17 +350,11 @@ struct CallLowerer
         {
             return mlir::failure();
         }
-        const std::pair<llvm::StringRef, llvm::StringRef> names[] = {
-            {"+", "operator.add"},
-            {"-", "operator.sub"},
-            {"*", "operator.mul"},
-            {"/", "operator.truediv"},
-        };
-        for (auto it : names)
+        for (auto it : plier::getOperators())
         {
-            if (it.first == name)
+            if (it.op == name)
             {
-                return applyRewrite(op, rewriter, linalg_resolver.rewrite_func(it.second, op.getLoc(), rewriter, {lhs, rhs}, {}));
+                return applyRewrite(op, rewriter, linalg_resolver.rewrite_func(llvm::Twine("operator.") + it.name, op.getLoc(), rewriter, {lhs, rhs}, {}));
             }
         }
         return mlir::failure();
