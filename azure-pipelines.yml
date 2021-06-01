@@ -77,7 +77,8 @@ jobs:
       chmod -R 777 $(System.DefaultWorkingDirectory)/llvm_cache
       export LLVM_PATH=$(System.DefaultWorkingDirectory)/llvm_cache
       export TBB_PATH=$(System.DefaultWorkingDirectory)/tbb
-      export SYCL_DEVICE_FILTER=host:cpu:0
+      clinfo
+      export SYCL_DEVICE_FILTER=opencl:cpu:0
       python setup.py develop
     displayName: 'Build'
 
@@ -85,7 +86,7 @@ jobs:
       source /usr/share/miniconda/bin/activate
       conda activate build_env
       source $(System.DefaultWorkingDirectory)/tbb/env/vars.sh
-      export SYCL_DEVICE_FILTER=host:cpu:0
+      export SYCL_DEVICE_FILTER=opencl:cpu:0
       pytest
     displayName: 'Tests'
 

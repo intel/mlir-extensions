@@ -32,11 +32,17 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${DPNP_INCLUDE_DIR}
     )
 
-target_link_directories(${PROJECT_NAME} PUBLIC ${DPNP_LIBRARY_DIR})
-target_link_libraries(${PROJECT_NAME} PUBLIC "dpnp_backend_c")
+if(DEFINED ENV{DPNP_ENABLE})
+    target_include_directories(${PROJECT_NAME} PRIVATE
+        ${DPNP_INCLUDE_DIR}
+        )
 
-set(DPNP_RPATH "${DPNP_LIBRARY_DIR}" "$ORIGIN/../dpnp")
-set_target_properties(${PROJECT_NAME}
-    PROPERTIES
-    INSTALL_RPATH "${DPNP_RPATH}"
-)
+    target_link_directories(${PROJECT_NAME} PUBLIC ${DPNP_LIBRARY_DIR})
+    target_link_libraries(${PROJECT_NAME} PUBLIC "dpnp_backend_c")
+
+    set(DPNP_RPATH "${DPNP_LIBRARY_DIR}" "$ORIGIN/../dpnp")
+    set_target_properties(${PROJECT_NAME}
+        PROPERTIES
+        INSTALL_RPATH "${DPNP_RPATH}"
+    )
+endif()
