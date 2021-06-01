@@ -72,11 +72,12 @@ jobs:
       source /usr/share/miniconda/bin/activate
       conda create -y -n build_env numba scipy pybind11 pytest lit dpnp -c conda-forge -c intel
       conda activate build_env
-      conda install -y tbb=2021.1 --force
+      conda install -y tbb=2021 -c conda-forge -c intel --force
       cmake --version
       chmod -R 777 $(System.DefaultWorkingDirectory)/llvm_cache
       export LLVM_PATH=$(System.DefaultWorkingDirectory)/llvm_cache
       export TBB_PATH=$(System.DefaultWorkingDirectory)/tbb
+      export SYCL_DEVICE_FILTER=host:cpu:0
       python setup.py develop
     displayName: 'Build'
 
@@ -84,6 +85,7 @@ jobs:
       source /usr/share/miniconda/bin/activate
       conda activate build_env
       source $(System.DefaultWorkingDirectory)/tbb/env/vars.sh
+      export SYCL_DEVICE_FILTER=host:cpu:0
       pytest
     displayName: 'Tests'
 

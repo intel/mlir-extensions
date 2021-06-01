@@ -62,6 +62,7 @@ try:
     cmake_cmd += [
                   '-DDPNP_LIBRARY_DIR=' + DPNP_LIBRARY_DIR,
                   '-DDPNP_INCLUDE_DIR=' + DPNP_INCLUDE_DIR,
+                  '-DDPNP_ENABLE=1',
                  ]
     print("Found DPNP at", DPNP_LIBRARY_DIR)
 except ImportError:
