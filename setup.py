@@ -55,13 +55,17 @@ cmake_cmd += [
 ]
 
 # DPNP
-from dpnp import get_include as dpnp_get_include
-DPNP_LIBRARY_DIR = os.path.join(dpnp_get_include(), '..', '..')
-DPNP_INCLUDE_DIR = dpnp_get_include()
-cmake_cmd += [
-'-DDPNP_LIBRARY_DIR=' + DPNP_LIBRARY_DIR,
-'-DDPNP_INCLUDE_DIR=' + DPNP_INCLUDE_DIR,
-]
+try:
+    from dpnp import get_include as dpnp_get_include
+    DPNP_LIBRARY_DIR = os.path.join(dpnp_get_include(), '..', '..')
+    DPNP_INCLUDE_DIR = dpnp_get_include()
+    cmake_cmd += [
+                  '-DDPNP_LIBRARY_DIR=' + DPNP_LIBRARY_DIR,
+                  '-DDPNP_INCLUDE_DIR=' + DPNP_INCLUDE_DIR,
+                 ]
+    print("Found DPNP at", DPNP_LIBRARY_DIR)
+except ImportError:
+    print("DPNP not found")
 
 subprocess.check_call(cmake_cmd, stderr=subprocess.STDOUT, shell=False)
 subprocess.check_call(["cmake", "--build", ".", "--config", "Release"])
