@@ -80,7 +80,8 @@ jobs:
       export SYCL_BE=PI_OPENCL
       export SYCL_DEVICE_TYPE=CPU
       export SYCL_DEVICE_FILTER=opencl:cpu:0
-      python -c "import dpctl; dpctl.lsplatform()"
+      export OCL_ICD_FILENAMES_RESET=1
+      export OCL_ICD_FILENAMES=libintelocl.so
       python setup.py develop
     displayName: 'Build'
 
@@ -88,7 +89,11 @@ jobs:
       source /usr/share/miniconda/bin/activate
       conda activate build_env
       source $(System.DefaultWorkingDirectory)/tbb/env/vars.sh
+      export SYCL_BE=PI_OPENCL
+      export SYCL_DEVICE_TYPE=CPU
       export SYCL_DEVICE_FILTER=opencl:cpu:0
+      export OCL_ICD_FILENAMES_RESET=1
+      export OCL_ICD_FILENAMES=libintelocl.so
       pytest
     displayName: 'Tests'
 
