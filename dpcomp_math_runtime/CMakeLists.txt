@@ -29,10 +29,9 @@ generate_export_header(${PROJECT_NAME})
 
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${PROJECT_BINARY_DIR}
-    ${DPNP_INCLUDE_DIR}
     )
 
-if(DEFINED ENV{DPNP_ENABLE})
+if(${DPNP_ENABLE})
     target_include_directories(${PROJECT_NAME} PRIVATE
         ${DPNP_INCLUDE_DIR}
         )
@@ -45,4 +44,6 @@ if(DEFINED ENV{DPNP_ENABLE})
         PROPERTIES
         INSTALL_RPATH "${DPNP_RPATH}"
     )
+
+    add_definitions(-DDPNP_ENABLE=1)
 endif()

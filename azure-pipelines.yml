@@ -5,46 +5,46 @@ pr:
 - '*'
 
 jobs:
-# - job: Windows
+- job: Windows
 
-  # pool:
-    # vmImage: windows-2019
+  pool:
+    vmImage: windows-2019
 
-  # steps:
-  # - task: DownloadPipelineArtifact@2
-    # displayName: "Get LLVM cache"
-    # inputs:
-      # source: 'specific'
-      # project: 'mlir-llvm'
-      # pipeline: 'IntelPython.mlir-llvm-recipe'
-      # runVersion: 'latest'
-      # artifact: 'mlir-llvm_latest_Windows_NT'
-      # path: '$(System.DefaultWorkingDirectory)\llvm_cache'
+  steps:
+  - task: DownloadPipelineArtifact@2
+    displayName: "Get LLVM cache"
+    inputs:
+      source: 'specific'
+      project: 'mlir-llvm'
+      pipeline: 'IntelPython.mlir-llvm-recipe'
+      runVersion: 'latest'
+      artifact: 'mlir-llvm_latest_Windows_NT'
+      path: '$(System.DefaultWorkingDirectory)\llvm_cache'
 
-  # - script: |
-      # curl --output tbb.zip -L "https://github.com/oneapi-src/oneTBB/releases/download/v2021.1.1/oneapi-tbb-2021.1.1-win.zip"
-      # mkdir tbb
-      # tar -xf "tbb.zip" -C tbb --strip-components=1
-    # displayName: 'Get TBB'
+  - script: |
+      curl --output tbb.zip -L "https://github.com/oneapi-src/oneTBB/releases/download/v2021.1.1/oneapi-tbb-2021.1.1-win.zip"
+      mkdir tbb
+      tar -xf "tbb.zip" -C tbb --strip-components=1
+    displayName: 'Get TBB'
 
-  # - script: |
-      # call "C:\Miniconda\Scripts\activate"
-      # call conda install numba=0.53 scipy pybind11 tbb=2021.1 pytest lit -c conda-forge
-      # call cmake --version
-      # call set LLVM_PATH=$(System.DefaultWorkingDirectory)\llvm_cache
-      # call set TBB_PATH=$(System.DefaultWorkingDirectory)\tbb
-      # python setup.py develop
-    # displayName: 'Build'
+  - script: |
+      call "C:\Miniconda\Scripts\activate"
+      call conda install numba=0.53 scipy pybind11 tbb=2021.1 pytest lit -c conda-forge
+      call cmake --version
+      call set LLVM_PATH=$(System.DefaultWorkingDirectory)\llvm_cache
+      call set TBB_PATH=$(System.DefaultWorkingDirectory)\tbb
+      python setup.py develop
+    displayName: 'Build'
 
-  # - script: |
-      # call "C:\Miniconda\Scripts\activate"
-      # pytest
-    # displayName: 'Tests'
+  - script: |
+      call "C:\Miniconda\Scripts\activate"
+      pytest
+    displayName: 'Tests'
 
-  # - script: |
-      # call "C:\Miniconda\Scripts\activate"
-      # call ctest -C Release
-    # displayName: 'CTests'
+  - script: |
+      call "C:\Miniconda\Scripts\activate"
+      call ctest -C Release
+    displayName: 'CTests'
 
 - job: Linux
 
@@ -77,9 +77,6 @@ jobs:
       chmod -R 777 $(System.DefaultWorkingDirectory)/llvm_cache
       export LLVM_PATH=$(System.DefaultWorkingDirectory)/llvm_cache
       export TBB_PATH=$(System.DefaultWorkingDirectory)/tbb
-      export SYCL_BE=PI_OPENCL
-      export SYCL_DEVICE_TYPE=CPU
-      export SYCL_DEVICE_FILTER=opencl:cpu:0
       export OCL_ICD_FILENAMES_RESET=1
       export OCL_ICD_FILENAMES=libintelocl.so
       python setup.py develop
@@ -89,9 +86,6 @@ jobs:
       source /usr/share/miniconda/bin/activate
       conda activate build_env
       source $(System.DefaultWorkingDirectory)/tbb/env/vars.sh
-      export SYCL_BE=PI_OPENCL
-      export SYCL_DEVICE_TYPE=CPU
-      export SYCL_DEVICE_FILTER=opencl:cpu:0
       export OCL_ICD_FILENAMES_RESET=1
       export OCL_ICD_FILENAMES=libintelocl.so
       pytest
@@ -104,52 +98,52 @@ jobs:
       ctest -C Release
     displayName: 'CTests'
 
-# - job: MacOS
+- job: MacOS
 
-  # pool:
-    # vmImage: macOS-10.15
+  pool:
+    vmImage: macOS-10.15
 
-  # steps:
-  # - task: DownloadPipelineArtifact@2
-    # displayName: "Get LLVM cache"
-    # inputs:
-      # source: 'specific'
-      # project: 'mlir-llvm'
-      # pipeline: 'IntelPython.mlir-llvm-recipe'
-      # runVersion: 'latest'
-      # artifact: 'mlir-llvm_latest_Darwin'
-      # path: '$(System.DefaultWorkingDirectory)/llvm_cache'
+  steps:
+  - task: DownloadPipelineArtifact@2
+    displayName: "Get LLVM cache"
+    inputs:
+      source: 'specific'
+      project: 'mlir-llvm'
+      pipeline: 'IntelPython.mlir-llvm-recipe'
+      runVersion: 'latest'
+      artifact: 'mlir-llvm_latest_Darwin'
+      path: '$(System.DefaultWorkingDirectory)/llvm_cache'
 
-  # - script: |
-      # wget -O tbb.tgz "https://github.com/oneapi-src/oneTBB/releases/download/v2021.1.1/oneapi-tbb-2021.1.1-mac.tgz"
-      # mkdir tbb
-      # tar -xf "tbb.tgz" -C tbb --strip-components=1
-    # displayName: 'Get TBB'
+  - script: |
+      wget -O tbb.tgz "https://github.com/oneapi-src/oneTBB/releases/download/v2021.1.1/oneapi-tbb-2021.1.1-mac.tgz"
+      mkdir tbb
+      tar -xf "tbb.tgz" -C tbb --strip-components=1
+    displayName: 'Get TBB'
 
-  # # On Hosted macOS, the agent user doesn't have ownership of Miniconda's installation directory/
-  # # We need to take ownership if we want to update conda or install packages globally
-  # - bash: sudo chown -R $USER $CONDA
-    # displayName: Take ownership of conda installation
+  # On Hosted macOS, the agent user doesn't have ownership of Miniconda's installation directory/
+  # We need to take ownership if we want to update conda or install packages globally
+  - bash: sudo chown -R $USER $CONDA
+    displayName: Take ownership of conda installation
 
-  # - script: |
-      # source /usr/local/miniconda/bin/activate
-      # conda create -y -n test_env python=3.9 numba=0.53 scipy pybind11 tbb=2021.1 pytest lit -c conda-forge
-      # conda activate test_env
-      # cmake --version
-      # chmod -R 777 $(System.DefaultWorkingDirectory)/llvm_cache
-      # export LLVM_PATH=$(System.DefaultWorkingDirectory)/llvm_cache
-      # export TBB_PATH=$(System.DefaultWorkingDirectory)/tbb
-      # python setup.py develop
-    # displayName: 'Build'
+  - script: |
+      source /usr/local/miniconda/bin/activate
+      conda create -y -n test_env python=3.9 numba=0.53 scipy pybind11 tbb=2021.1 pytest lit -c conda-forge
+      conda activate test_env
+      cmake --version
+      chmod -R 777 $(System.DefaultWorkingDirectory)/llvm_cache
+      export LLVM_PATH=$(System.DefaultWorkingDirectory)/llvm_cache
+      export TBB_PATH=$(System.DefaultWorkingDirectory)/tbb
+      python setup.py develop
+    displayName: 'Build'
 
-  # - script: |
-      # source /usr/local/miniconda/bin/activate
-      # conda activate test_env
-      # pytest
-    # displayName: 'Tests'
+  - script: |
+      source /usr/local/miniconda/bin/activate
+      conda activate test_env
+      pytest
+    displayName: 'Tests'
 
-  # - script: |
-      # source /usr/local/miniconda/bin/activate
-      # conda activate test_env
-      # ctest -C Release
-    # displayName: 'CTests'
+  - script: |
+      source /usr/local/miniconda/bin/activate
+      conda activate test_env
+      ctest -C Release
+    displayName: 'CTests'
