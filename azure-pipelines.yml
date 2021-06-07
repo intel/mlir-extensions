@@ -79,6 +79,7 @@ jobs:
       export TBB_PATH=$(System.DefaultWorkingDirectory)/tbb
       export OCL_ICD_FILENAMES_RESET=1
       export OCL_ICD_FILENAMES=libintelocl.so
+      export SYCL_DEVICE_FILTER=level_zero:cpu:0
       python setup.py develop
     displayName: 'Build'
 
@@ -88,6 +89,7 @@ jobs:
       source $(System.DefaultWorkingDirectory)/tbb/env/vars.sh
       export OCL_ICD_FILENAMES_RESET=1
       export OCL_ICD_FILENAMES=libintelocl.so
+      export SYCL_DEVICE_FILTER=level_zero:cpu:0
       pytest
     displayName: 'Tests'
 
