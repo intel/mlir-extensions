@@ -22,6 +22,27 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 set(CMAKE_VISIBILITY_INLINES_HIDDEN 1)
 
+# SDL
+# set(CMAKE_VERBOSE_MAKEFILE on) # enable for debug
+if (CMAKE_SYSTEM_NAME STREQUAL Windows)
+    add_compile_options(-GS -O3 -Wall)
+    add_link_options(-DYNAMICBASE -NXCOMPAT -GUARD:CF)
+    # add_link_options(-INTEGRITYCHECK) # require signatures of libs, only recommended
+endif()
+if (CMAKE_SYSTEM_NAME STREQUAL Linux)
+    add_compile_options(-D_FORTIFY_SOURCE=2 -Wformat -Wformat-security -Werror=format-security -fno-delete-null-pointer-checks -fstack-protector-strong -fno-strict-overflow -fPIE -fPIC -Wall)
+    add_compile_options(-fstack-clash-protection -fcf-protection=full) # v8.0 and newer
+    # add_compile_options(-mcet) # v8.0 and newer # unrecognized command line option '-mcet', only recommended
+    add_link_options(-Wl,-z,noexecstack,-z,relro,-z,now)
+    # add_link_options(-pie) # mlir_compiler.cpython-38-x86_64-linux-gnu.so: cannot dynamically load position-independent executable
+endif()
+if (CMAKE_SYSTEM_NAME STREQUAL Darwin)
+    add_compile_options(-D_FORTIFY_SOURCE=2 -Wformat -Wformat-security -Werror=format-security -fno-delete-null-pointer-checks -fstack-protector-strong -fno-strict-overflow -fPIE -fPIC -Wall)
+    add_compile_options(-fcf-protection=full) # v8.0 and newer
+    # add_compile_options(-mcet) # v8.0 and newer # unrecognized command line option '-mcet', only recommended
+    add_link_options(-Wl,-pie)
+endif()
+
 include(CTest)
 
 macro(apply_llvm_compile_flags target)
