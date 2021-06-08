@@ -70,7 +70,7 @@ jobs:
 
   - script: |
       source /usr/share/miniconda/bin/activate
-      conda create -y -n build_env numba scipy pybind11 pytest lit dpnp -c conda-forge -c intel
+      conda create -y -n build_env numba scipy pybind11 pytest lit dpnp mkl=2021.1 -c conda-forge -c intel
       conda activate build_env
       conda install -y tbb=2021 -c conda-forge -c intel --force
       cmake --version
@@ -79,7 +79,7 @@ jobs:
       export TBB_PATH=$(System.DefaultWorkingDirectory)/tbb
       export OCL_ICD_FILENAMES_RESET=1
       export OCL_ICD_FILENAMES=libintelocl.so
-      export SYCL_DEVICE_FILTER=level_zero:cpu:0
+      export SYCL_DEVICE_FILTER=opencl:cpu
       python setup.py develop
     displayName: 'Build'
 
@@ -89,7 +89,7 @@ jobs:
       source $(System.DefaultWorkingDirectory)/tbb/env/vars.sh
       export OCL_ICD_FILENAMES_RESET=1
       export OCL_ICD_FILENAMES=libintelocl.so
-      export SYCL_DEVICE_FILTER=level_zero:cpu:0
+      export SYCL_DEVICE_FILTER=opencl:cpu
       pytest
     displayName: 'Tests'
 
