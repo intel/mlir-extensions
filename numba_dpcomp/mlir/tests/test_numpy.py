@@ -86,6 +86,8 @@ class TestMlirBasic(TestCase):
             lambda a, b: a - b,
             lambda a, b: np.multiply(a, b),
             lambda a, b: a * b,
+            lambda a, b: np.power(a, b),
+            lambda a, b: a ** b,
             lambda a, b: np.true_divide(a, b),
             lambda a, b: a / b,
         ]

@@ -93,6 +93,8 @@ def _gen_binary_ops():
         (register_func('operator.mul'), False, lambda a, b, c: a * b),
         (register_func('numpy.true_divide', numpy.true_divide), True, lambda a, b, c: a / b),
         (register_func('operator.truediv'), True, lambda a, b, c: a / b),
+        (register_func('numpy.power', numpy.power), False, lambda a, b, c: a ** b),
+        (register_func('operator.pow'), False, lambda a, b, c: a ** b),
     ]
 
     def make_func(f64, body):

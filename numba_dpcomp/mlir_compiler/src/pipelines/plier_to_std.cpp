@@ -18,6 +18,7 @@
 #include <mlir/IR/Dialect.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/Dialect/StandardOps/Transforms/Passes.h>
+#include <mlir/Dialect/Math/IR/Math.h>
 #include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Pass/Pass.h>
 #include <mlir/Pass/PassManager.h>
@@ -754,6 +755,17 @@ void replace_op(mlir::Operation* op, mlir::PatternRewriter& rewriter, mlir::Type
     rewriter.replaceOpWithNewOp<T>(op, new_type, new_operands);
 }
 
+void replace_ipow_op(mlir::Operation* op, mlir::PatternRewriter& rewriter, mlir::Type new_type, mlir::ValueRange operands)
+{
+    assert(nullptr != op);
+    auto loc = op->getLoc();
+    auto a = do_cast(rewriter.getF64Type(), operands[0], rewriter);
+    auto b = do_cast(rewriter.getF64Type(), operands[1], rewriter);
+    auto fres = rewriter.create<mlir::math::PowFOp>(loc, a, b).getResult();
+    auto res = do_cast(new_type, fres, rewriter);
+    rewriter.replaceOp(op, res);
+}
+
 void replace_itruediv_op(mlir::Operation* op, mlir::PatternRewriter& rewriter, mlir::Type new_type, mlir::ValueRange operands)
 {
     assert(nullptr != op);
@@ -847,11 +859,12 @@ struct BinOpLowering : public mlir::OpRewritePattern<plier::BinOp>
         };
 
         const OpDesc handlers[] = {
-            {"+", &replace_op<mlir::AddIOp>, &replace_op<mlir::AddFOp>},
-            {"-", &replace_op<mlir::SubIOp>, &replace_op<mlir::SubFOp>},
-            {"*", &replace_op<mlir::MulIOp>, &replace_op<mlir::MulFOp>},
-            {"/", &replace_itruediv_op, &replace_op<mlir::DivFOp>},
-            {"%", &replace_imod_op, &replace_fmod_op},
+            {"+",  &replace_op<mlir::AddIOp>, &replace_op<mlir::AddFOp>},
+            {"-",  &replace_op<mlir::SubIOp>, &replace_op<mlir::SubFOp>},
+            {"*",  &replace_op<mlir::MulIOp>, &replace_op<mlir::MulFOp>},
+            {"**", &replace_ipow_op,          &replace_op<mlir::math::PowFOp>},
+            {"/",  &replace_itruediv_op,      &replace_op<mlir::DivFOp>},
+            {"%",  &replace_imod_op,          &replace_fmod_op},
 
             {">",  &replace_cmpi_op<mlir::CmpIPredicate::sgt>,
                    &replace_cmpf_op<mlir::CmpFPredicate::OGT>},
@@ -1931,6 +1944,7 @@ struct PlierToStdPass :
         registry.insert<plier::PlierDialect>();
         registry.insert<mlir::StandardOpsDialect>();
         registry.insert<mlir::scf::SCFDialect>();
+        registry.insert<mlir::math::MathDialect>();
     }
 
     void runOnOperation() override;
