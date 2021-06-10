@@ -91,6 +91,10 @@ class TestMlirBasic(TestCase):
             lambda a, b: a - b,
             lambda a, b: np.multiply(a, b),
             lambda a, b: a * b,
+            lambda a, b: np.power(a, b),
+            lambda a, b: a ** b,
+            lambda a, b: np.true_divide(a, b),
+            lambda a, b: a / b,
         ]
 
         test_data = [1, 2.5, np.array([1,2,3]), np.array([4.4,5.5,6.6])]
@@ -286,6 +290,51 @@ class TestMlirBasic(TestCase):
         jit_func = njit(py_func)
         assert_equal(py_func(5, 7), jit_func(5, 7))
 
+    def test_empty3(self):
+        def py_func(a):
+            return np.empty(a.shape, a.dtype)
+
+        jit_func = njit(py_func)
+        arr = np.array([1,2,3])
+        for t in ['int32','int64','float32','float64']:
+            a = arr.astype(t)
+            assert_equal(py_func(a).shape, jit_func(a).shape)
+            assert_equal(py_func(a).dtype, jit_func(a).dtype)
+
+    def test_zeros1(self):
+        def py_func(d):
+            return np.zeros(d)
+
+        jit_func = njit(py_func)
+        assert_equal(py_func(5), jit_func(5))
+
+    def test_zeros2(self):
+        def py_func(a):
+            return np.zeros(a.shape, a.dtype)
+
+        jit_func = njit(py_func)
+        arr = np.array([1, 2, 3])
+        for t in ['int32', 'int64', 'float32', 'float64']:
+            a = arr.astype(t)
+            assert_equal(py_func(a).shape, jit_func(a).shape)
+            assert_equal(py_func(a).dtype, jit_func(a).dtype)
+
+    @unittest.expectedFailure
+    def test_zeros3(self):
+        def py_func(d):
+            return np.zeros(d, dtype=np.dtype('int64'))
+
+        jit_func = njit(py_func)
+        assert_equal(py_func(5), jit_func(5))
+
+    @unittest.expectedFailure
+    def test_zeros4(self):
+        def py_func(d):
+            return np.zeros(d)
+
+        jit_func = njit(py_func)
+        assert_equal(py_func((2, 1)), jit_func((2, 1)))
+
     def test_reshape(self):
         funcs = [
             lambda a: a.reshape(a.size),
@@ -384,6 +433,29 @@ class TestMlirBasic(TestCase):
 
         arr = np.array([[1,2],[3,4]])
         for a in [arr]: # TODO: arr.T
+            assert_equal(py_func(a), jit_func(a))
+
+    def test_slice1(self):
+        funcs = [
+            lambda a, b, c, d: a[b:c],
+            lambda a, b, c, d: a[b:c:d],
+        ]
+
+        arr = np.array([1,2,3,4,5,6,7,8])
+        for py_func in funcs:
+            jit_func = njit(py_func)
+
+            assert_equal(py_func(arr, 3, 4,2), jit_func(arr, 3, 4,2))
+
+    def test_atleast2d(self):
+        def py_func(a):
+            return np.atleast_2d(a)
+
+        jit_func = njit(py_func)
+
+        # for val in (1, 2.5, [], [1,2,3], [[1,2],[3,4],[5,6]]): // TODO: unranked array support
+        for val in ([], [1,2,3], [[1,2],[3,4],[5,6]]):
+            a = np.array(val)
             assert_equal(py_func(a), jit_func(a))
 
 if __name__ == '__main__':

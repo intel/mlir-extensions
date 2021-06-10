@@ -91,7 +91,8 @@ void applyOptimizations(mlir::FuncOp op, const mlir::FrozenRewritePatternSet& pa
 enum class ArrayLayout
 {
     C,
-    F
+    F,
+    A
 };
 
 bool parse_layout(llvm::StringRef& name, ArrayLayout& layout)
@@ -104,6 +105,11 @@ bool parse_layout(llvm::StringRef& name, ArrayLayout& layout)
     if (name.consume_back("F"))
     {
         layout = ArrayLayout::F;
+        return true;
+    }
+    if (name.consume_back("A"))
+    {
+        layout = ArrayLayout::A;
         return true;
     }
     return false;
@@ -159,7 +165,8 @@ mlir::Type map_array_type(mlir::MLIRContext& ctx, mlir::TypeConverter& conveter,
     if (auto desc = parse_array_desc(name))
     {
         if (desc->layout == ArrayLayout::C ||
-            desc->layout == ArrayLayout::F)
+            desc->layout == ArrayLayout::F ||
+            desc->layout == ArrayLayout::A)
         {
             if (auto type = conveter.convertType(plier::PyType::get(&ctx, desc->name)))
             {
@@ -343,16 +350,11 @@ struct CallLowerer
         {
             return mlir::failure();
         }
-        const std::pair<llvm::StringRef, llvm::StringRef> names[] = {
-            {"+", "operator.add"},
-            {"-", "operator.sub"},
-            {"*", "operator.mul"},
-        };
-        for (auto it : names)
+        for (auto it : plier::getOperators())
         {
-            if (it.first == name)
+            if (it.op == name)
             {
-                return applyRewrite(op, rewriter, linalg_resolver.rewrite_func(it.second, op.getLoc(), rewriter, {lhs, rhs}, {}));
+                return applyRewrite(op, rewriter, linalg_resolver.rewrite_func(llvm::Twine("operator.") + it.name, op.getLoc(), rewriter, {lhs, rhs}, {}));
             }
         }
         return mlir::failure();
@@ -394,8 +396,26 @@ mlir::Value index_cast(mlir::Value value, mlir::Location loc, mlir::OpBuilder& b
     return value;
 }
 
+bool isSlice(mlir::Type type)
+{
+    if (auto pyType = type.dyn_cast<plier::PyType>())
+    {
+        auto name = pyType.getName();
+        return name.consume_front("slice<") && name.consume_back(">");
+    }
+    return false;
+}
+
 bool isValidGetitemIndex(mlir::Type type)
 {
+    if (isSlice(type))
+    {
+        return true;
+    }
+    if (auto tupleType = type.dyn_cast<mlir::TupleType>())
+    {
+        return llvm::all_of(tupleType.getTypes(), &isValidGetitemIndex);
+    }
     return type.isa<mlir::IntegerType, mlir::IndexType, mlir::TupleType>();
 }
 
@@ -423,34 +443,64 @@ struct GetitemOpLowering : public mlir::OpRewritePattern<T>
         }
         auto loc = op.getLoc();
 
-        llvm::SmallVector<mlir::Value> indices;
-        if (auto tuple_type = index.getType().template dyn_cast<mlir::TupleType>())
+        auto indexType = index.getType();
+
+        mlir::Value res;
+        if (isSlice(indexType))
         {
-            indices.resize(tuple_type.size());
-            for (auto it : llvm::enumerate(tuple_type))
+            auto buildSliceOp = index.template getDefiningOp<plier::BuildSliceOp>();
+            if (!buildSliceOp)
             {
-                auto getitem_ind = rewriter.create<mlir::ConstantIndexOp>(loc, it.index());
-                auto ind = rewriter.create<plier::GetItemOp>(loc, index, getitem_ind);
-                indices[it.index()] = index_cast(ind, loc, rewriter);
+                return mlir::failure();
+            }
+            auto low = index_cast(buildSliceOp.low(), loc, rewriter);
+            auto high = index_cast(buildSliceOp.high(), loc, rewriter);
+            auto step = index_cast(buildSliceOp.step(), loc, rewriter);
+            auto size = rewriter.create<mlir::SubIOp>(loc, high, low).getResult();
+
+            if (is_memref)
+            {
+                res = rewriter.create<mlir::memref::SubViewOp>(loc, val, low, size, step);
+            }
+            else if (is_tensor)
+            {
+                res = rewriter.create<mlir::SubTensorOp>(loc, val, low, size, step);
+            }
+            else
+            {
+                llvm_unreachable("Invalid getitem");
             }
         }
         else
         {
-            indices.push_back(index_cast(index, loc, rewriter));
-        }
+            llvm::SmallVector<mlir::Value> indices;
+            if (auto tuple_type = indexType.template dyn_cast<mlir::TupleType>())
+            {
+                indices.resize(tuple_type.size());
+                for (auto it : llvm::enumerate(tuple_type))
+                {
+                    auto getitem_ind = rewriter.create<mlir::ConstantIndexOp>(loc, it.index());
+                    auto ind = rewriter.create<plier::GetItemOp>(loc, index, getitem_ind);
+                    indices[it.index()] = index_cast(ind, loc, rewriter);
+                }
+            }
+            else
+            {
+                indices.push_back(index_cast(index, loc, rewriter));
+            }
 
-        mlir::Value res;
-        if (is_memref)
-        {
-            res = rewriter.create<mlir::memref::LoadOp>(loc, val, indices);
-        }
-        else if (is_tensor)
-        {
-            res = rewriter.create<mlir::tensor::ExtractOp>(loc, val, indices);
-        }
-        else
-        {
-            llvm_unreachable("Invalid getitem");
+            if (is_memref)
+            {
+                res = rewriter.create<mlir::memref::LoadOp>(loc, val, indices);
+            }
+            else if (is_tensor)
+            {
+                res = rewriter.create<mlir::tensor::ExtractOp>(loc, val, indices);
+            }
+            else
+            {
+                llvm_unreachable("Invalid getitem");
+            }
         }
         rerun_std_pipeline(op);
         rewriter.replaceOp(op, res);
@@ -812,6 +862,35 @@ struct RankedTypesCasts : public mlir::OpRewritePattern<plier::CastOp>
     }
 };
 
+struct UnrankedToElementCasts : public mlir::OpRewritePattern<plier::CastOp>
+{
+    UnrankedToElementCasts(mlir::TypeConverter& /*type_converter*/,
+                           mlir::MLIRContext* context):
+        OpRewritePattern(context){}
+
+    mlir::LogicalResult matchAndRewrite(
+        plier::CastOp op, mlir::PatternRewriter &rewriter) const override
+    {
+        auto srcType = op.value().getType();
+        auto dstType = op.getType();
+        auto isCompatible = [](mlir::Type tensor, mlir::Type element)
+        {
+            if (auto tensorType = tensor.dyn_cast<mlir::RankedTensorType>())
+            {
+                return tensorType.getRank() == 0 && tensorType.getElementType() == element;
+            }
+            return false;
+        };
+        if (isCompatible(srcType, dstType))
+        {
+            rewriter.replaceOpWithNewOp<mlir::tensor::ExtractOp>(op, op.value());
+            return mlir::success();
+        }
+//        if (isCompatible(dstType, srcType)) : TODO
+        return mlir::failure();
+    }
+};
+
 struct GetattrRewriter : public mlir::OpRewritePattern<plier::GetattrOp>
 {
     using resolver_t = std::function<mlir::LogicalResult(plier::GetattrOp, llvm::StringRef, mlir::Value,
@@ -977,6 +1056,7 @@ void PlierToLinalgPass::runOnOperation()
         plier::CastOpLowering,
         plier::ArgOpLowering,
         RankedTypesCasts,
+        UnrankedToElementCasts,
         ArrayShape
         >(type_converter, context);
 
@@ -1114,8 +1194,8 @@ struct LoopInvariantCodeMotion : public mlir::OpRewritePattern<mlir::scf::ForOp>
     }
 };
 
-struct RetainArgsPass :
-    public mlir::PassWrapper<RetainArgsPass, mlir::FunctionPass>
+struct CloneArgsPass :
+    public mlir::PassWrapper<CloneArgsPass, mlir::FunctionPass>
 {
     virtual void getDependentDialects(
         mlir::DialectRegistry &registry) const override
@@ -1126,7 +1206,7 @@ struct RetainArgsPass :
     void runOnFunction() override;
 };
 
-void RetainArgsPass::runOnFunction()
+void CloneArgsPass::runOnFunction()
 {
     auto func = getFunction();
     if (func.isPrivate() || func.isDeclaration() || func.body().empty())
@@ -1147,6 +1227,39 @@ void RetainArgsPass::runOnFunction()
             arg.replaceAllUsesExcept(retained, except);
         }
     }
+}
+
+struct LowerCloneOpsPass :
+    public mlir::PassWrapper<LowerCloneOpsPass, mlir::FunctionPass>
+{
+    void runOnFunction() override;
+};
+
+struct ReplaceClones : public mlir::OpRewritePattern<mlir::memref::CloneOp>
+{
+    using mlir::OpRewritePattern<mlir::memref::CloneOp>::OpRewritePattern;
+
+    mlir::LogicalResult matchAndRewrite(
+        mlir::memref::CloneOp op, mlir::PatternRewriter &rewriter) const override
+    {
+        rewriter.replaceOpWithNewOp<plier::RetainOp>(op, op.getSource());
+        return mlir::success();
+    }
+};
+
+
+void LowerCloneOpsPass::runOnFunction()
+{
+    auto& context = getContext();
+    mlir::OwningRewritePatternList patterns(&context);
+
+    patterns.insert<
+        ReplaceClones
+        >(&context);
+
+
+    auto func = getFunction();
+    (void)mlir::applyPatternsAndFoldGreedily(func, std::move(patterns));
 }
 
 struct PostLinalgOptPass :
@@ -1189,8 +1302,7 @@ void PromoteParallelPass::runOnFunction()
     patterns.insert<
         plier::CanonicalizeReduction,
         plier::PromoteToParallel,
-        plier::MergeNestedForIntoParallel,
-        plier::MergeNestedParallel
+        plier::MergeNestedForIntoParallel
         >(&context);
 
     applyOptimizations(getFunction(), std::move(patterns), getAnalysisManager());
@@ -1221,10 +1333,10 @@ void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager& pm)
     pm.addNestedPass<mlir::FuncOp>(mlir::createBufferLoopHoistingPass());
     pm.addNestedPass<mlir::FuncOp>(mlir::createPromoteBuffersToStackPass());
 
-    pm.addNestedPass<mlir::FuncOp>(std::make_unique<RetainArgsPass>());
+    pm.addNestedPass<mlir::FuncOp>(std::make_unique<CloneArgsPass>());
     pm.addNestedPass<mlir::FuncOp>(mlir::createBufferDeallocationPass());
-//    pm.addPass(mlir::createCopyRemovalPass());
     pm.addPass(mlir::createCanonicalizerPass());
+    pm.addNestedPass<mlir::FuncOp>(std::make_unique<LowerCloneOpsPass>());
 
     pm.addPass(std::make_unique<LowerLinalgPass>());
     pm.addNestedPass<mlir::FuncOp>(std::make_unique<PostLinalgOptPass>());

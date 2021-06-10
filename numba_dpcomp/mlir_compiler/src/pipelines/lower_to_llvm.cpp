@@ -1239,12 +1239,12 @@ struct PostLLVMLowering :
     }
 };
 
-struct LowerCloneOp : public mlir::OpConversionPattern<mlir::memref::CloneOp>
+struct LowerRetainOp : public mlir::OpConversionPattern<plier::RetainOp>
 {
-    using mlir::OpConversionPattern<mlir::memref::CloneOp>::OpConversionPattern;
+    using mlir::OpConversionPattern<plier::RetainOp>::OpConversionPattern;
 
     mlir::LogicalResult
-    matchAndRewrite(mlir::memref::CloneOp op, llvm::ArrayRef<mlir::Value> operands,
+    matchAndRewrite(plier::RetainOp op, llvm::ArrayRef<mlir::Value> operands,
                     mlir::ConversionPatternRewriter &rewriter) const override {
         assert(operands.size() == 1);
         auto arg = operands[0];
@@ -1280,6 +1280,27 @@ struct LowerCloneOp : public mlir::OpConversionPattern<mlir::memref::CloneOp>
         rewriter.create<mlir::LLVM::CallOp>(loc, incref_func, ptr);
         rewriter.replaceOp(op, arg);
 
+        return mlir::success();
+    }
+};
+
+
+struct LowerUndef : public mlir::OpConversionPattern<plier::UndefOp>
+{
+    using mlir::OpConversionPattern<plier::UndefOp>::OpConversionPattern;
+
+    mlir::LogicalResult
+    matchAndRewrite(plier::UndefOp op, llvm::ArrayRef<mlir::Value> /*operands*/,
+                    mlir::ConversionPatternRewriter &rewriter) const override
+    {
+        auto converter = getTypeConverter();
+        auto type = converter->convertType(op.getType());
+        if (!type)
+        {
+            return mlir::failure();
+        }
+
+        rewriter.replaceOpWithNewOp<mlir::LLVM::UndefOp>(op, type);
         return mlir::success();
     }
 };
@@ -1335,8 +1356,9 @@ struct LLVMLoweringPass : public mlir::PassWrapper<LLVMLoweringPass, mlir::Opera
     OwningRewritePatternList patterns(&context);
     populateStdToLLVMConversionPatterns(typeConverter, patterns);
     patterns.insert<
+        LowerUndef,
         LowerCasts,
-        LowerCloneOp
+        LowerRetainOp
         >(typeConverter, &getContext());
     patterns.insert<AllocOpLowering, DeallocOpLowering>(typeConverter);
 

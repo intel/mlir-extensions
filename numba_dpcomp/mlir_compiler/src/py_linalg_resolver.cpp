@@ -50,7 +50,7 @@ bool is_compatible_type(mlir::Type type)
     {
         return llvm::all_of(tuple_type, &is_compatible_type);
     }
-    return type.isa<mlir::IntegerType, mlir::IndexType, mlir::FloatType, mlir::RankedTensorType>();
+    return type.isa<mlir::IntegerType, mlir::IndexType, mlir::FloatType, mlir::RankedTensorType, plier::TypeVar>();
 }
 
 template<typename R>
@@ -173,6 +173,10 @@ struct PyLinalgResolver::Context
     py::object create_var(py::capsule context, mlir::Value value)
     {
         assert(value);
+        if (auto typevar = value.getType().dyn_cast<plier::TypeVar>())
+        {
+            return create_type(typevar.getType());
+        }
         if (auto literal = make_py_literal(value))
         {
             return *literal;
@@ -1195,25 +1199,32 @@ PyLinalgResolver::Values unpack_results(mlir::Location loc, mlir::OpBuilder& bui
     {
         return ret;
     }
+    auto unpack = [&](py::handle obj)
+    {
+        if (py::hasattr(obj, "_ssa_val"))
+        {
+            return unwrap_ssa_val(obj);
+        }
+        if (py::hasattr(obj, "_mlir_type"))
+        {
+            auto type = plier::TypeVar::get(unwrap_type(obj));
+            return builder.create<plier::UndefOp>(loc, type).getResult();
+        }
+        llvm_unreachable("Invalid type");
+    };
     if (py::isinstance<py::tuple>(object))
     {
         auto tuple = object.cast<py::tuple>();
         llvm::SmallVector<mlir::Value> vals(tuple.size());
         for (auto it : llvm::enumerate(tuple))
         {
-            vals[it.index()] = unwrap_ssa_val(it.value());
+            vals[it.index()] = unpack(it.value());
         }
         ret.emplace_back(builder.create<plier::BuildTupleOp>(loc, vals));
-//        ret.resize(tuple.size());
-//        for (auto it : llvm::enumerate(tuple))
-//        {
-//            ret[it.index()] = unwrap_ssa_val(it.value());
-//        }
-//        return ret;
     }
     else
     {
-        ret.emplace_back(unwrap_ssa_val(object));
+        ret.emplace_back(unpack(object));
     }
     return ret;
 }
@@ -1237,15 +1248,14 @@ PyLinalgResolver::~PyLinalgResolver()
 
 }
 
-llvm::Optional<PyLinalgResolver::Values> PyLinalgResolver::rewrite_func(llvm::StringRef name, mlir::Location loc, mlir::OpBuilder& builder, mlir::ValueRange args, KWArgs kwargs)
+llvm::Optional<PyLinalgResolver::Values> PyLinalgResolver::rewrite_func(llvm::Twine name, mlir::Location loc, mlir::OpBuilder& builder, mlir::ValueRange args, KWArgs kwargs)
 {
-    auto mangled_name = (llvm::Twine(name) + "()").str();
-    return rewrite(mangled_name, loc, builder, args, kwargs);
+    return rewrite((name + "()").str(), loc, builder, args, kwargs);
 }
 
-llvm::Optional<PyLinalgResolver::Values> PyLinalgResolver::rewrite_attr(llvm::StringRef name, mlir::Location loc, mlir::OpBuilder& builder, mlir::Value arg)
+llvm::Optional<PyLinalgResolver::Values> PyLinalgResolver::rewrite_attr(llvm::Twine name, mlir::Location loc, mlir::OpBuilder& builder, mlir::Value arg)
 {
-    return rewrite(name, loc, builder, arg, {});
+    return rewrite(name.str(), loc, builder, arg, {});
 }
 
 llvm::Optional<PyLinalgResolver::Values> PyLinalgResolver::rewrite(llvm::StringRef name, mlir::Location loc, mlir::OpBuilder& builder, mlir::ValueRange args, KWArgs kwargs)

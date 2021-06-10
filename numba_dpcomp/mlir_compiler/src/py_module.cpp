@@ -20,8 +20,9 @@
 
 PYBIND11_MODULE(mlir_compiler, m)
 {
-    m.def("create_module", &create_module, "todo");
-    m.def("lower_function", &lower_function, "todo");
-    m.def("compile_module", &compile_module, "todo");
-    m.def("module_str", &module_str, "todo");
+    m.def("init_compiler", &init_compiler, "No docs");
+    m.def("create_module", &create_module, "No docs");
+    m.def("lower_function", &lower_function, "No docs");
+    m.def("compile_module", &compile_module, "No docs");
+    m.def("module_str", &module_str, "No docs");
 }

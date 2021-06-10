@@ -19,6 +19,7 @@ include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/LoopLikeInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/Interfaces/ViewLikeInterface.td"
 
 def Plier_Dialect : Dialect {
   let name = "plier";
@@ -272,6 +273,33 @@ def YieldOp : Plier_Op<"yield", [NoSideEffect, ReturnLike, Terminator,
     // Override default verifier (defined in SCF_Op), no custom verification
     // needed.
     let verifier = ?;
+}
+
+def UndefOp : Plier_Op<"undef", [NoSideEffect]> {
+  let results = (outs AnyType);
+}
+
+def BuildSliceOp : Plier_Op<"build_slice", [NoSideEffect]> {
+    let arguments = (ins
+                     AnyType:$low,
+                     AnyType:$high,
+                     AnyType:$step);
+
+    let results = (outs AnyType);
+}
+
+def RetainOp : Plier_Op<"retain", [ViewLikeOpInterface]> {
+    let arguments = (ins AnyMemRef:$source);
+
+    let results = (outs AnyMemRef);
+
+    let builders = [
+        OpBuilder<(ins "::mlir::Value":$value)>
+    ];
+
+    let extraClassDeclaration = [{
+        ::mlir::Value getViewSource() { return source(); }
+    }];
 }
 
 #endif // PLIER_OPS

@@ -21,6 +21,7 @@
 #include <mlir/Interfaces/ControlFlowInterfaces.h>
 #include <mlir/Interfaces/LoopLikeInterface.h>
 #include <mlir/Interfaces/SideEffectInterfaces.h>
+#include <mlir/Interfaces/ViewLikeInterface.h>
 
 #include "plier/PlierOpsEnums.h.inc"
 #include "plier/PlierOpsDialect.h.inc"
@@ -41,7 +42,41 @@ llvm::StringRef getForceInlineName();
 namespace detail
 {
 struct PyTypeStorage;
+struct LiteralTypeStorage;
+struct TypeVarStorage;
+
+struct OperatorNamePair
+{
+    mlir::StringRef op;
+    mlir::StringRef name;
+};
+
+static const constexpr OperatorNamePair OperatorNames[] = {
+    {"+",  "add"}, // binary
+    {"+",  "pos"}, // unary
+    {"-",  "sub"}, // binary
+    {"-",  "neg"}, // unary
+    {"*",  "mul"},
+    {"**", "pow"},
+    {"/",  "truediv"},
+    {"//", "floordiv"},
+    {"%",  "mod"},
+
+    {">",  "gt"},
+    {">=", "ge"},
+    {"<",  "lt"},
+    {"<=", "le"},
+    {"!=", "ne"},
+    {"==", "eq"},
+};
 }
+
+enum
+{
+    OperatorsCount = llvm::array_lengthof(detail::OperatorNames)
+};
+
+mlir::ArrayRef<detail::OperatorNamePair> getOperators();
 
 class PyType : public mlir::Type::TypeBase<::plier::PyType, mlir::Type,
                                            ::plier::detail::PyTypeStorage>
@@ -51,10 +86,37 @@ public:
 
     static PyType get(mlir::MLIRContext *context, mlir::StringRef name);
     static PyType getUndefined(mlir::MLIRContext *context);
-    static PyType getNone(mlir::MLIRContext *context);
 
     mlir::StringRef getName() const;
 };
 
+class LiteralType : public mlir::Type::TypeBase<::plier::LiteralType, mlir::Type,
+                                                ::plier::detail::LiteralTypeStorage>
+{
+public:
+    using Base::Base;
+
+    static LiteralType get(mlir::Attribute value);
+
+    mlir::Attribute getValue() const;
+};
+
+class NoneType : public mlir::Type::TypeBase<::plier::NoneType, mlir::Type,
+                                             mlir::TypeStorage>
+{
+public:
+    using Base::Base;
+};
+
+class TypeVar : public mlir::Type::TypeBase<::plier::TypeVar, mlir::Type,
+                                            ::plier::detail::TypeVarStorage>
+{
+public:
+    using Base::Base;
+
+    static TypeVar get(mlir::Type type);
+
+    mlir::Type getType() const;
+};
 
 }

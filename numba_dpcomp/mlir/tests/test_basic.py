@@ -382,6 +382,97 @@ class TestMlirBasic(TestCase):
 
         assert_equal(py_func2(10), jit_func2(10))
 
+    def test_while(self):
+        def py_func_simple(a, b):
+            while a < b:
+                a = a * 2
+            return a
+
+        def py_func_multiple_conds1(a, b):
+            while a < 44 and a < b:
+                a = a * 2
+            return a
+
+        def py_func_multiple_conds2(a, b):
+            while not a >= 44 and a < b:
+                a = a * 2
+            return a
+
+        def py_func_multiple_conds3(a, b):
+            while a < 44 and not a >= b:
+                a = a * 2
+            return a
+
+        def py_func_multiple_conds4(a, b):
+            while not a >= 44 and not a >= b:
+                a = a * 2
+            return a
+
+        def py_func_break_middle(a, b):
+            while a < b:
+                a = a * 2
+                if a == 3: break
+                a = a + 1
+            return a
+
+        def py_func_nested_break(a, b):
+            while a < b:
+                a = a * 2
+                if a == 3 or a == 7:
+                    a = a + 7
+                else:
+                    break
+                a = a + 1
+            return a
+
+        funcs = [
+            py_func_simple,
+            py_func_multiple_conds1,
+            py_func_multiple_conds2,
+            py_func_multiple_conds3,
+            py_func_multiple_conds4,
+            py_func_break_middle,
+            # py_func_nested_break,
+        ]
+
+        for py_func in funcs:
+            jit_func = njit(py_func)
+            assert_equal(py_func(1,66), jit_func(1,66))
+
+
+    def test_omitted_args1(self):
+        def py_func(a = 3, b = 7):
+            return a + b
+
+        jit_func = njit(py_func)
+        assert_equal(py_func(), jit_func())
+
+    def test_omitted_args2(self):
+        def py_func(a = True, b = False):
+            res = 1
+            if a:
+                res = res + 1
+            if b:
+                res = res * 2
+            return res
+
+        jit_func = njit(py_func)
+        assert_equal(py_func(), jit_func())
+
+    def test_omitted_args3(self):
+        def py_func1(a = None):
+            return a
+
+        jit_func1 = njit(py_func1)
+
+        def py_func2(a = None):
+            return jit_func1(a)
+
+        jit_func2 = njit(py_func2)
+
+        assert_equal(py_func2(), jit_func2())
+        assert_equal(py_func2(1), jit_func2(1))
+
 
 if __name__ == '__main__':
     unittest.main()

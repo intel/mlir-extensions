@@ -32,7 +32,7 @@ namespace MemoryEffects = ::mlir::MemoryEffects;
 
 namespace
 {
-struct PLierInlinerInterface : public mlir::DialectInlinerInterface
+struct PlierInlinerInterface : public mlir::DialectInlinerInterface
 {
     using mlir::DialectInlinerInterface::DialectInlinerInterface;
     bool isLegalToInline(mlir::Region *, mlir::Region *, bool,
@@ -99,6 +99,53 @@ struct PyTypeStorage : public mlir::TypeStorage
 
     mlir::StringRef name;
 };
+
+struct LiteralTypeStorage : public mlir::TypeStorage
+{
+    using KeyTy = mlir::Attribute;
+
+    LiteralTypeStorage(mlir::Attribute val): value(val) {}
+
+    bool operator==(const KeyTy& key) const
+    {
+        return key == value;
+    }
+
+    static LiteralTypeStorage* construct(mlir::TypeStorageAllocator& allocator,
+                                         const KeyTy& key)
+    {
+        return new(allocator.allocate<LiteralTypeStorage>())
+            LiteralTypeStorage(key);
+    }
+
+    mlir::Attribute value;
+};
+
+struct TypeVarStorage : public mlir::TypeStorage
+{
+    using KeyTy = mlir::Type;
+
+    TypeVarStorage(mlir::Type type): type(type) {}
+
+    bool operator==(const KeyTy& key) const
+    {
+        return key == type;
+    }
+
+    static TypeVarStorage* construct(mlir::TypeStorageAllocator& allocator,
+                                    const KeyTy& key)
+    {
+        return new(allocator.allocate<TypeVarStorage>())
+            TypeVarStorage(key);
+    }
+
+    mlir::Type type;
+};
+}
+
+mlir::ArrayRef<detail::OperatorNamePair> getOperators()
+{
+    return llvm::makeArrayRef(detail::OperatorNames);
 }
 
 void PlierDialect::initialize()
@@ -107,8 +154,8 @@ void PlierDialect::initialize()
 #define GET_OP_LIST
 #include "plier/PlierOps.cpp.inc"
         >();
-    addTypes<plier::PyType>();
-    addInterfaces<PLierInlinerInterface>();
+    addTypes<plier::PyType, plier::LiteralType, plier::NoneType, plier::TypeVar>();
+    addInterfaces<PlierInlinerInterface>();
 }
 
 mlir::Type PlierDialect::parseType(mlir::DialectAsmParser &parser) const {
@@ -119,6 +166,19 @@ mlir::Type PlierDialect::parseType(mlir::DialectAsmParser &parser) const {
 void PlierDialect::printType(mlir::Type type, mlir::DialectAsmPrinter &os) const {
     llvm::TypeSwitch<mlir::Type>(type)
         .Case<plier::PyType>([&](auto t){ os << "PyType<" << t.getName() << ">"; })
+        .Case<plier::LiteralType>([&](auto t)
+                                  {
+                                      os << "LiteralType<";
+                                      os.printAttribute(t.getValue());
+                                      os << ">";
+                                  })
+        .Case<plier::NoneType>([&](auto){ os << "NoneType"; })
+        .Case<plier::TypeVar>([&](auto t)
+                              {
+                                  os << "TypeVar<";
+                                  os.printType(t.getType());
+                                  os << ">";
+                              })
         .Default([](auto){ llvm_unreachable("unexpected type"); });
 }
 
@@ -133,14 +193,31 @@ PyType PyType::getUndefined(mlir::MLIRContext* context)
     return Base::get(context, "");
 }
 
-PyType PyType::getNone(mlir::MLIRContext* context)
-{
-    return Base::get(context, "none");
-}
-
 llvm::StringRef PyType::getName() const
 {
     return getImpl()->name;
+}
+
+LiteralType LiteralType::get(mlir::Attribute value)
+{
+    assert(value);
+    return Base::get(value.getContext(), value);
+}
+
+mlir::Attribute LiteralType::getValue() const
+{
+    return getImpl()->value;
+}
+
+TypeVar TypeVar::get(mlir::Type type)
+{
+    assert(type);
+    return Base::get(type.getContext(), type);
+}
+
+mlir::Type TypeVar::getType() const
+{
+    return getImpl()->type;
 }
 
 void ArgOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
@@ -511,6 +588,11 @@ void ParallelOp::build(
                     args.back());
         ParallelOp::ensureTerminator(*bodyRegion, odsBuilder, odsState.location);
     }
+}
+
+void RetainOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
+                           mlir::Value value) {
+    RetainOp::build(builder, state, value.getType(), value);
 }
 
 }
