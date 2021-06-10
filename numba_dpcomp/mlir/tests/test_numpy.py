@@ -32,6 +32,7 @@ _arr_1d_float = [1.0,2.1,3.2,4.3,5.4,6.5,7.6,8.7]
 _arr_2d_int = [[1,2,3,4],[5,6,7,8]]
 _arr_2d_float = [[1.0,2.1,3.2,4.3],[5.4,6.5,7.6,8.7]]
 _test_arrays = [_arr_1d_int, _arr_1d_float, _arr_2d_int, _arr_2d_float]
+_test_arrays_ids = ["1d_int", "1d_float", "2d_int", "2d_float"]
 
 @pytest.mark.parametrize("py_func",
                          [lambda a: a.sum(),
@@ -49,15 +50,11 @@ _test_arrays = [_arr_1d_int, _arr_1d_float, _arr_2d_int, _arr_2d_float]
                               "cos", "a.size", "a.T.T"])
 @pytest.mark.parametrize("arr_list",
                          _test_arrays,
-                         ids=["1d_int", "1d_float", "2d_int", "2d_float"])
+                         ids=_test_arrays_ids)
 def test_unary(py_func, arr_list, request):
     jit_func = njit(py_func)
     arr = np.array(arr_list)
-    if request.node.callspec.id.split('-') in [["1d_float", "log"], ["2d_float", "log"]]:
-        # not identical, depends on MKL version?
-        assert_allclose(py_func(arr), jit_func(arr), rtol=1e-15, atol=1e-15)
-    else:
-        assert_equal(py_func(arr), jit_func(arr))
+    assert_allclose(py_func(arr), jit_func(arr), rtol=1e-15, atol=1e-15)
 
 class TestMlirBasic(TestCase):
 
