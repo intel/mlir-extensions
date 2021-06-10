@@ -778,6 +778,25 @@ struct SetitemOpLowering : public mlir::OpRewritePattern<T>
     }
 };
 
+struct CheckForBuildTuple : public mlir::OpRewritePattern<plier::BuildTupleOp>
+{
+    using mlir::OpRewritePattern<plier::BuildTupleOp>::OpRewritePattern;
+
+    mlir::LogicalResult matchAndRewrite(
+        plier::BuildTupleOp op, mlir::PatternRewriter &/*rewriter*/) const override
+    {
+        if (op.getType().isa<mlir::TupleType>())
+        {
+            return mlir::failure();
+        }
+        if (llvm::any_of(op.args(), [](mlir::Value a) { return a.getType().isa<mlir::ShapedType>(); }))
+        {
+            rerun_std_pipeline(op);
+        }
+        return mlir::failure();
+    }
+};
+
 struct ArrayShape : public mlir::OpRewritePattern<plier::GetattrOp>
 {
     ArrayShape(mlir::TypeConverter& type_converter,
@@ -1071,7 +1090,8 @@ void PlierToLinalgPass::runOnOperation()
     patterns.insert<
         GetitemOpLowering<plier::GetItemOp>,
         GetitemOpLowering<plier::StaticGetItemOp>,
-        SetitemOpLowering<plier::SetItemOp>
+        SetitemOpLowering<plier::SetItemOp>,
+        CheckForBuildTuple
         >(&getContext());
 
     // range/prange lowering need dead branch pruning to properly
@@ -1193,6 +1213,99 @@ struct LoopInvariantCodeMotion : public mlir::OpRewritePattern<mlir::scf::ForOp>
         return res;
     }
 };
+
+
+struct BufferizeTuplesRewrite : public mlir::OpRewritePattern<plier::BuildTupleOp>
+{
+    using mlir::OpRewritePattern<plier::BuildTupleOp>::OpRewritePattern;
+
+    mlir::LogicalResult matchAndRewrite(
+        plier::BuildTupleOp op, mlir::PatternRewriter &rewriter) const override
+    {
+        bool needConversion = false;
+        for (auto arg : op.args())
+        {
+            if (auto tensor = arg.getType().dyn_cast<mlir::TensorType>())
+            {
+                needConversion = true;
+            }
+        }
+
+        if (!needConversion)
+        {
+            return mlir::failure();
+        }
+
+        llvm::SmallVector<mlir::Value> newArgs;
+        llvm::SmallVector<mlir::Type> newArgsTypes;
+        newArgs.reserve(op.args().size());
+        newArgsTypes.reserve(op.args().size());
+        auto loc = op.getLoc();
+        for (auto arg : op.args())
+        {
+            if (auto tensor = arg.getType().dyn_cast<mlir::TensorType>())
+            {
+                auto memref = mlir::MemRefType::get(tensor.getShape(), tensor.getElementType());
+                auto newOp = rewriter.create<mlir::memref::BufferCastOp>(loc, memref, arg);
+                newArgs.emplace_back(newOp);
+                newArgsTypes.emplace_back(memref);
+            }
+            else
+            {
+                newArgs.emplace_back(arg);
+                newArgsTypes.emplace_back(arg.getType());
+            }
+        }
+        auto newType = mlir::TupleType::get(op.getContext(), newArgsTypes);
+        rewriter.replaceOpWithNewOp<plier::BuildTupleOp>(op, newType, newArgs);
+        return mlir::success();
+    }
+};
+
+struct FixTupleTypesRewrite : public mlir::OpRewritePattern<plier::BuildTupleOp>
+{
+    using mlir::OpRewritePattern<plier::BuildTupleOp>::OpRewritePattern;
+
+    mlir::LogicalResult matchAndRewrite(
+        plier::BuildTupleOp op, mlir::PatternRewriter &rewriter) const override
+    {
+        auto srcType = mlir::TupleType::get(op.getContext(), op.args().getTypes());
+        if (srcType == op.getType())
+        {
+            return mlir::failure();
+        }
+
+        rewriter.replaceOpWithNewOp<plier::BuildTupleOp>(op, srcType, op.args());
+        return mlir::success();
+    }
+};
+
+
+struct BufferizeTuples :
+    public mlir::PassWrapper<BufferizeTuples, mlir::FunctionPass>
+{
+    virtual void getDependentDialects(
+        mlir::DialectRegistry &registry) const override
+    {
+        registry.insert<plier::PlierDialect>();
+    }
+
+    void runOnFunction() override;
+};
+
+void BufferizeTuples::runOnFunction()
+{
+    auto& context = getContext();
+    mlir::OwningRewritePatternList patterns(&context);
+
+    patterns.insert<
+        BufferizeTuplesRewrite,
+        FixTupleTypesRewrite
+        >(&context);
+
+    auto func = getFunction();
+    (void)mlir::applyPatternsAndFoldGreedily(func, std::move(patterns));
+}
 
 struct CloneArgsPass :
     public mlir::PassWrapper<CloneArgsPass, mlir::FunctionPass>
@@ -1327,6 +1440,7 @@ void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager& pm)
     pm.addNestedPass<mlir::FuncOp>(mlir::createStdBufferizePass());
     pm.addNestedPass<mlir::FuncOp>(mlir::createTensorBufferizePass());
     pm.addPass(mlir::createFuncBufferizePass());
+    pm.addNestedPass<mlir::FuncOp>(std::make_unique<BufferizeTuples>());
     pm.addNestedPass<mlir::FuncOp>(mlir::createFinalizingBufferizePass());
 
     pm.addNestedPass<mlir::FuncOp>(mlir::createBufferHoistingPass());

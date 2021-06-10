@@ -473,6 +473,5 @@ class TestMlirBasic(TestCase):
         assert_equal(py_func2(), jit_func2())
         assert_equal(py_func2(1), jit_func2(1))
 
-
 if __name__ == '__main__':
     unittest.main()
