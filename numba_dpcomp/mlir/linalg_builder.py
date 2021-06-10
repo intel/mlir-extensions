@@ -35,6 +35,7 @@ class Var:
 
     def __mul__(self, o): return self._binop(self._context, self._ssa_val, o, '*')
     def __rmul__(self, o): return self._binop(self._context, self._ssa_val, o, '*')
+    def __truediv__(self, o): return self._binop(self._context, self._ssa_val, o, '/')
 
 class Type:
     def __init__(self, mlir_type, eq):
