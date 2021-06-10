@@ -14,7 +14,7 @@
 
 import numba
 from numba_dpcomp import njit, vectorize
-from numpy.testing import assert_equal # for nans comparison
+from numpy.testing import assert_equal, assert_allclose # for nans comparison
 import numpy as np
 from numba.tests.support import TestCase
 import unittest
@@ -50,10 +50,14 @@ _test_arrays = [_arr_1d_int, _arr_1d_float, _arr_2d_int, _arr_2d_float]
 @pytest.mark.parametrize("arr_list",
                          _test_arrays,
                          ids=["1d_int", "1d_float", "2d_int", "2d_float"])
-def test_unary(py_func, arr_list):
+def test_unary(py_func, arr_list, request):
     jit_func = njit(py_func)
     arr = np.array(arr_list)
-    assert_equal(py_func(arr), jit_func(arr))
+    if request.node.callspec.id.split('-') in [["1d_float", "log"], ["2d_float", "log"]]:
+        # not identical, depends on MKL version?
+        assert_allclose(py_func(arr), jit_func(arr), rtol=1e-15, atol=1e-15)
+    else:
+        assert_equal(py_func(arr), jit_func(arr))
 
 class TestMlirBasic(TestCase):
 
