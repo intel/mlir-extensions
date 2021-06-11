@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from  ..linalg_builder import register_func, register_attr, is_literal, eltwise
+from  ..linalg_builder import register_func, register_attr, is_literal, broadcast_type, eltwise
 
 import numpy
 import math
@@ -273,3 +273,19 @@ def atleast2d_impl(builder, arr):
         return builder.generic(arr, init, iterators, maps, lambda a, b: a)
     else:
         return arr
+
+@register_func('numpy.concatenate', numpy.concatenate)
+def concat_impl(builder, arrays, axis=0):
+    if isinstance(axis, int):
+        shapes = [a.shape for a in arrays]
+        num_dims = len(shapes[0])
+        dtype = broadcast_type(builder, arrays)
+        new_len = sum((s[axis] for s in shapes), 0)
+        new_shape = [new_len if i == axis else shapes[0][i] for i in range(len(shapes[0]))]
+        res = builder.init_tensor(new_shape, dtype)
+        offsets = [0]*num_dims
+        strides = [1]*num_dims
+        for sizes, array in zip(shapes, arrays):
+            res = builder.insert(array, res, offsets, sizes, strides)
+            offsets[axis] += sizes[axis]
+        return res

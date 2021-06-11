@@ -458,5 +458,53 @@ class TestMlirBasic(TestCase):
             a = np.array(val)
             assert_equal(py_func(a), jit_func(a))
 
+@pytest.mark.parametrize("py_func", [
+    lambda a, b: (),
+    lambda a, b: (a,b),
+    lambda a, b: ((a,b),(a,a),(b,b),()),
+    ],
+    ids=[
+    '()',
+    '(a,b)',
+    '((a,b),(a,a),(b,b),())',
+    ])
+@pytest.mark.parametrize("a,b",
+        itertools.product(*(([1,2.5,np.array([1,2,3]), np.array([4.5,6.7,8.9])],)*2))
+    )
+def test_tuple_ret(py_func, a, b):
+    if isinstance(a, np.ndarray) or isinstance(b, np.ndarray):
+        pytest.xfail()
+    jit_func = njit(py_func)
+    assert_equal(py_func(a, b), jit_func(a, b))
+
+@pytest.mark.parametrize("arrays",
+                         [([1,2,3],[4,5,6]),
+                          ([[1,2],[3,4]],[[5,6],[7,8]]),
+                          ([[[1],[2]],[[3],[4]]],[[[5],[6]],[[7],[8]]]),
+                          ([1,2,3],[4,5,6],[7,8,9]),
+                          ([1,2],[3,4],[5,6],[7,8]),
+                         ])
+@pytest.mark.parametrize("axis",
+                         [0,1,2]) # TODO: None
+def test_concat(arrays, axis):
+    arr = tuple(np.array(a) for a in arrays)
+    num_dims = len(arr[0].shape);
+    if axis >= num_dims:
+        pytest.skip() # TODO: unselect
+    num_arrays = len(arrays)
+    if num_arrays == 2:
+        def py_func(arr1, arr2):
+            return np.concatenate((arr1, arr2), axis=axis)
+    elif num_arrays == 3:
+        def py_func(arr1, arr2, arr3):
+            return np.concatenate((arr1, arr2, arr3), axis=axis)
+    elif num_arrays == 4:
+        def py_func(arr1, arr2, arr3, arr4):
+            return np.concatenate((arr1, arr2, arr3, arr4), axis=axis)
+    else:
+        assert False
+    jit_func = njit(py_func)
+    assert_equal(py_func(*arr), jit_func(*arr))
+
 if __name__ == '__main__':
     unittest.main()

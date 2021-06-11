@@ -70,10 +70,66 @@ mlir::LowerToLLVMOptions getLLVMOptions(mlir::MLIRContext& context)
     return opts;
 }
 
+llvm::Optional<mlir::Type> convertTuple(mlir::LLVMTypeConverter& converter, mlir::TupleType tuple)
+{
+    if (tuple.getTypes().empty())
+    {
+        return mlir::LLVM::LLVMStructType::getLiteral(tuple.getContext(), llvm::None);
+    }
+
+    auto unitupleType = [&]()->mlir::Type
+    {
+        auto types = tuple.getTypes();
+        assert(!types.empty());
+        auto elemType = types.front();
+        types = types.drop_front();
+        if (llvm::all_of(types, [&](auto t) { return t == elemType; }))
+        {
+            return elemType;
+        }
+        return nullptr;
+    }();
+
+    auto count = static_cast<unsigned>(tuple.getTypes().size());
+    if (unitupleType)
+    {
+        auto newType = converter.convertType(unitupleType);
+        if (!newType)
+        {
+            return llvm::None;
+        }
+        return mlir::LLVM::LLVMArrayType::get(unitupleType, count);
+    }
+    llvm::SmallVector<mlir::Type> newTypes;
+    newTypes.reserve(count);
+    for (auto type : tuple.getTypes())
+    {
+        auto newType = converter.convertType(type);
+        if (!newType)
+        {
+            return llvm::None;
+        }
+        newTypes.emplace_back(newType);
+    }
+
+    return mlir::LLVM::LLVMStructType::getLiteral(tuple.getContext(), newTypes);
+}
+
+void populateTupleToLLVMTypeConversion(mlir::LLVMTypeConverter &converter)
+{
+    converter.addConversion([&converter](mlir::TupleType type)
+    {
+        return convertTuple(converter, type);
+    });
+}
+
 struct LLVMTypeHelper
 {
     LLVMTypeHelper(mlir::MLIRContext& ctx):
-        type_converter(&ctx) {}
+        type_converter(&ctx)
+    {
+        populateTupleToLLVMTypeConversion(type_converter);
+    }
 
     mlir::Type i(unsigned bits)
     {
@@ -410,11 +466,11 @@ mlir::Attribute get_fastmath_attrs(mlir::MLIRContext& ctx)
     return mlir::ArrayAttr::get(&ctx, attrs);
 }
 
-void fix_func_sig(LLVMTypeHelper& type_helper, mlir::FuncOp func)
+mlir::LogicalResult fix_func_sig(LLVMTypeHelper& type_helper, mlir::FuncOp func)
 {
     if (func.isPrivate())
     {
-        return;
+        return mlir::success();
     }
     if (func->getAttr(plier::attributes::getFastmathName()))
     {
@@ -438,6 +494,22 @@ void fix_func_sig(LLVMTypeHelper& type_helper, mlir::FuncOp func)
         ++index;
         return ret;
     };
+
+    auto get_res_type = [&](mlir::Type type)->mlir::Type
+    {
+        if (auto memreftype = type.dyn_cast<mlir::MemRefType>())
+        {
+            return get_array_type(type_helper.get_type_converter(), memreftype);
+        }
+        return type;
+    };
+
+    auto orig_ret_type = (old_type.getNumResults() != 0 ? get_res_type(old_type.getResult(0)) : type_helper.ptr(type_helper.i(8)));
+
+    if (!type_helper.get_type_converter().convertType(orig_ret_type))
+    {
+        return mlir::failure();
+    }
 
     mlir::OpBuilder builder(&ctx);
     builder.setInsertionPointToStart(&func.getBody().front());
@@ -478,16 +550,6 @@ void fix_func_sig(LLVMTypeHelper& type_helper, mlir::FuncOp func)
         }
     };
 
-    auto get_res_type = [&](mlir::Type type)->mlir::Type
-    {
-        if (auto memreftype = type.dyn_cast<mlir::MemRefType>())
-        {
-            return get_array_type(type_helper.get_type_converter(), memreftype);
-        }
-        return type;
-    };
-
-    auto orig_ret_type = (old_type.getNumResults() != 0 ? get_res_type(old_type.getResult(0)) : type_helper.ptr(type_helper.i(8)));
     add_arg(ptr(orig_ret_type));
     add_arg(ptr(ptr(getExceptInfoType(type_helper))));
 
@@ -498,6 +560,7 @@ void fix_func_sig(LLVMTypeHelper& type_helper, mlir::FuncOp func)
     }
     auto ret_type = mlir::IntegerType::get(&ctx, 32);
     func.setType(mlir::FunctionType::get(&ctx, args, ret_type));
+    return mlir::success();
 }
 
 struct ReturnOpLowering : public mlir::OpRewritePattern<mlir::ReturnOp>
@@ -540,7 +603,10 @@ struct ReturnOpLowering : public mlir::OpRewritePattern<mlir::ReturnOp>
             mlir::Value val = op.getOperand(0);
             auto orig_type = val.getType();
             auto ll_ret_type = type_converter.convertType(orig_type);
-            assert(ll_ret_type);
+            if (!ll_ret_type)
+            {
+                return mlir::failure();
+            }
             val = rewriter.create<plier::CastOp>(loc, ll_ret_type, val);
             if (auto memref_type = orig_type.dyn_cast<mlir::MemRefType>())
             {
@@ -1201,7 +1267,10 @@ struct PreLLVMLowering : public mlir::PassWrapper<PreLLVMLowering, mlir::Functio
 
         mlir::OwningRewritePatternList patterns(&context);
         auto func = getFunction();
-        fix_func_sig(type_helper, func);
+        if (mlir::failed(fix_func_sig(type_helper, func)))
+        {
+            signalPassFailure();
+        }
 
         patterns.insert<ReturnOpLowering>(&context,
                                           type_helper.get_type_converter());
@@ -1284,6 +1353,44 @@ struct LowerRetainOp : public mlir::OpConversionPattern<plier::RetainOp>
     }
 };
 
+struct LowerBuildTuple : public mlir::OpConversionPattern<plier::BuildTupleOp>
+{
+    using mlir::OpConversionPattern<plier::BuildTupleOp>::OpConversionPattern;
+
+    mlir::LogicalResult
+    matchAndRewrite(plier::BuildTupleOp op, llvm::ArrayRef<mlir::Value> /*operands*/,
+                    mlir::ConversionPatternRewriter &rewriter) const override
+    {
+        auto converter = getTypeConverter();
+        auto type = converter->convertType(op.getType());
+        if (!type)
+        {
+            return mlir::failure();
+        }
+        for (auto arg : op.args())
+        {
+            if (!converter->convertType(arg.getType()))
+            {
+                return mlir::failure();
+            }
+        }
+
+        auto loc = op.getLoc();
+        mlir::Value init = rewriter.create<mlir::LLVM::UndefOp>(loc, type);
+        for (auto it : llvm::enumerate(op.args()))
+        {
+            auto arg = it.value();
+            auto newType = converter->convertType(arg.getType());
+            assert(newType);
+            auto casted = rewriter.create<plier::CastOp>(loc, newType, arg);
+            auto index = rewriter.getI64ArrayAttr(static_cast<int64_t>(it.index()));
+            init = rewriter.create<mlir::LLVM::InsertValueOp>(loc, init, casted, index);
+        }
+
+        rewriter.replaceOp(op, init);
+        return mlir::success();
+    }
+};
 
 struct LowerUndef : public mlir::OpConversionPattern<plier::UndefOp>
 {
@@ -1352,13 +1459,15 @@ struct LLVMLoweringPass : public mlir::PassWrapper<LLVMLoweringPass, mlir::Opera
     ModuleOp m = getOperation();
 
     LLVMTypeConverter typeConverter(&context, options);
+    populateTupleToLLVMTypeConversion(typeConverter);
 
     OwningRewritePatternList patterns(&context);
     populateStdToLLVMConversionPatterns(typeConverter, patterns);
     patterns.insert<
         LowerUndef,
         LowerCasts,
-        LowerRetainOp
+        LowerRetainOp,
+        LowerBuildTuple
         >(typeConverter, &getContext());
     patterns.insert<AllocOpLowering, DeallocOpLowering>(typeConverter);
 

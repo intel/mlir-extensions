@@ -50,7 +50,7 @@ bool is_compatible_type(mlir::Type type)
     {
         return llvm::all_of(tuple_type, &is_compatible_type);
     }
-    return type.isa<mlir::IntegerType, mlir::IndexType, mlir::FloatType, mlir::RankedTensorType, plier::TypeVar>();
+    return type.isa<mlir::IntegerType, mlir::IndexType, mlir::FloatType, mlir::RankedTensorType, plier::LiteralType, plier::TypeVar>();
 }
 
 template<typename R>
@@ -129,16 +129,30 @@ auto to_values(py::handle obj, UnwrapFunc&& unwrapFunc)
     return ret;
 }
 
+llvm::Optional<py::object> getPyLiteral(mlir::Attribute attr)
+{
+    assert(attr);
+    if (auto intAttr = attr.dyn_cast<mlir::IntegerAttr>())
+    {
+        return py::int_(intAttr.getInt());
+    }
+    if (auto floatAttr = attr.dyn_cast<mlir::FloatAttr>())
+    {
+        return py::float_(floatAttr.getValueAsDouble());
+    }
+    return {};
+}
+
 llvm::Optional<py::object> make_py_literal(mlir::Value val)
 {
     assert(val);
-    if (auto int_val = plier::getConstVal<mlir::IntegerAttr>(val))
+    if (auto literal = val.getType().dyn_cast<plier::LiteralType>())
     {
-        return py::int_(int_val.getInt());
+        return getPyLiteral(literal.getValue());
     }
-    if (auto float_val = plier::getConstVal<mlir::FloatAttr>(val))
+    if (auto attr = plier::getConstVal<mlir::Attribute>(val))
     {
-        return py::float_(float_val.getValueAsDouble());
+        return getPyLiteral(attr);
     }
     return {};
 }
@@ -173,7 +187,8 @@ struct PyLinalgResolver::Context
     py::object create_var(py::capsule context, mlir::Value value)
     {
         assert(value);
-        if (auto typevar = value.getType().dyn_cast<plier::TypeVar>())
+        auto type = value.getType();
+        if (auto typevar = type.dyn_cast<plier::TypeVar>())
         {
             return create_type(typevar.getType());
         }
@@ -1027,6 +1042,35 @@ py::object external_call_impl(py::capsule context, py::str func_name, py::handle
     return std::move(ret);
 }
 
+py::object insert_impl(py::capsule context, py::handle src, py::handle dst, py::handle offsets, py::handle sizes, py::handle strides)
+{
+    auto& ctx = get_py_context(context);
+    auto& builder = ctx.builder;
+    auto loc = ctx.loc;
+    auto unwrapVal = [&](py::handle obj)
+    {
+        return ctx.context.unwrap_val(loc, builder, obj);
+    };
+    auto indexType = builder.getIndexType();
+    auto unwrapList = [&](py::handle obj)
+    {
+        auto len = py::len(obj);
+        llvm::SmallVector<mlir::Value> res(len);
+        for (auto it : llvm::enumerate(obj))
+        {
+            res[it.index()] = do_cast(loc, builder, unwrapVal(it.value()), indexType);
+        }
+        return res;
+    };
+    auto srcTensor = unwrapVal(src);
+    auto dstTensor = unwrapVal(dst);
+    auto offsetsVec = unwrapList(offsets);
+    auto sizesVec = unwrapList(sizes);
+    auto stridesVec = unwrapList(strides);
+    auto res = builder.create<mlir::SubTensorInsertOp>(loc, srcTensor, dstTensor, offsetsVec, sizesVec, stridesVec);
+    return ctx.context.create_var(context, res);
+}
+
 void setup_py_builder(py::handle builder, mlir::OpBuilder& b, llvm::function_ref<py::object(mlir::Type)> create_type)
 {
     py::setattr(builder, "_broadcast", py::cpp_function(&broadcast_impl));
@@ -1037,6 +1081,7 @@ void setup_py_builder(py::handle builder, mlir::OpBuilder& b, llvm::function_ref
     py::setattr(builder, "_extract", py::cpp_function(&extract_impl));
     py::setattr(builder, "_reshape", py::cpp_function(&reshape_impl));
     py::setattr(builder, "_external_call", py::cpp_function(&external_call_impl));
+    py::setattr(builder, "_insert", py::cpp_function(&insert_impl));
 
     auto add_type = [&](const char* name, mlir::Type type)
     {
@@ -1112,9 +1157,10 @@ py::object getitem_impl(py::capsule context, py::capsule ssa_val, py::handle ind
     auto type = value.getType();
     if (auto tuple_type = type.dyn_cast<mlir::TupleType>())
     {
-        if (index_val < 0 || index_val >= static_cast<int64_t>(tuple_type.size()))
+        auto maxIndex = static_cast<int64_t>(tuple_type.size());
+        if (index_val < 0 || index_val >= maxIndex)
         {
-            plier::report_error("Invalid getitem index");
+            throw py::index_error(("Invalid getitem index: " + llvm::Twine(index_val) + ", expected [0:" + llvm::Twine(maxIndex) + ")").str());
         }
         if (auto parent_op = value.getDefiningOp<plier::BuildTupleOp>())
         {
@@ -1129,7 +1175,7 @@ py::object getitem_impl(py::capsule context, py::capsule ssa_val, py::handle ind
     {
         if (0 != index_val)
         {
-            plier::report_error("Invalid getitem index");
+            throw py::index_error(("Invalid getitem index: " + llvm::Twine(index_val) + ", 0 is expected").str());
         }
         return ctx.context.create_var(context, value);
     }
@@ -1165,6 +1211,7 @@ py::object binop_impl(py::capsule context, py::capsule ssa_val, py::handle rhs, 
 
     using binop_func_t = mlir::Value(*)(mlir::Location loc, mlir::OpBuilder& builder, mlir::Value lhs, mlir::Value rhs);
     const std::tuple<llvm::StringRef, binop_func_t, binop_func_t> funcs[] = {
+        {"+", &binop_func<mlir::AddIOp>, &binop_func<mlir::AddFOp>},
         {"*", &binop_func<mlir::MulIOp>, &binop_func<mlir::MulFOp>},
     };
 
