@@ -14,7 +14,7 @@
 
 import numba
 from numba_dpcomp import njit, vectorize
-from numpy.testing import assert_equal # for nans comparison
+from numpy.testing import assert_equal, assert_allclose # for nans comparison
 import numpy as np
 from numba.tests.support import TestCase
 import unittest
@@ -32,6 +32,29 @@ _arr_1d_float = [1.0,2.1,3.2,4.3,5.4,6.5,7.6,8.7]
 _arr_2d_int = [[1,2,3,4],[5,6,7,8]]
 _arr_2d_float = [[1.0,2.1,3.2,4.3],[5.4,6.5,7.6,8.7]]
 _test_arrays = [_arr_1d_int, _arr_1d_float, _arr_2d_int, _arr_2d_float]
+_test_arrays_ids = ["1d_int", "1d_float", "2d_int", "2d_float"]
+
+@pytest.mark.parametrize("py_func",
+                         [lambda a: a.sum(),
+                          lambda a: np.sum(a),
+                          lambda a: np.sqrt(a),
+                          lambda a: np.square(a),
+                          lambda a: np.log(a),
+                          lambda a: np.sin(a),
+                          lambda a: np.cos(a),
+                          lambda a: a.size,
+                          # lambda a: a.T, TODO: need fortran layout support
+                          lambda a: a.T.T,
+                         ],
+                         ids=["a.sum", "sum", "sqrt", "square", "log", "sin",
+                              "cos", "a.size", "a.T.T"])
+@pytest.mark.parametrize("arr_list",
+                         _test_arrays,
+                         ids=_test_arrays_ids)
+def test_unary(py_func, arr_list, request):
+    jit_func = njit(py_func)
+    arr = np.array(arr_list)
+    assert_allclose(py_func(arr), jit_func(arr), rtol=1e-15, atol=1e-15)
 
 class TestMlirBasic(TestCase):
 
@@ -59,26 +82,6 @@ class TestMlirBasic(TestCase):
         jit_func = njit(py_func)
         arr = np.asarray([5,6,7])
         assert_equal(py_func(arr), jit_func(arr))
-
-    def test_unary(self):
-        funcs = [
-            lambda a: a.sum(),
-            lambda a: np.sum(a),
-            lambda a: np.sqrt(a),
-            lambda a: np.square(a),
-            lambda a: np.log(a),
-            lambda a: np.sin(a),
-            lambda a: np.cos(a),
-            lambda a: a.size,
-            # lambda a: a.T, TODO: need fortran layout support
-            lambda a: a.T.T,
-        ]
-
-        for py_func in funcs:
-            jit_func = njit(py_func)
-            for a in _test_arrays:
-                arr = np.array(a)
-                assert_equal(py_func(arr), jit_func(arr))
 
     def test_binary(self):
         funcs = [
