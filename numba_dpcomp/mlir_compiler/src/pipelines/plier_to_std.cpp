@@ -358,14 +358,15 @@ struct RemoveOmittedFuncArgs : public mlir::OpRewritePattern<mlir::FuncOp>
     }
 };
 
-struct LiteralArgLowering : public mlir::OpRewritePattern<plier::ArgOp>
+template<typename Op>
+struct LiteralLowering : public mlir::OpRewritePattern<Op>
 {
-    LiteralArgLowering(mlir::TypeConverter &typeConverter,
-                       mlir::MLIRContext *context):
-        OpRewritePattern(context), converter(typeConverter) {}
+    LiteralLowering(mlir::TypeConverter &typeConverter,
+                    mlir::MLIRContext *context):
+        mlir::OpRewritePattern<Op>(context), converter(typeConverter) {}
 
     mlir::LogicalResult matchAndRewrite(
-        plier::ArgOp op, mlir::PatternRewriter &rewriter) const override
+        Op op, mlir::PatternRewriter &rewriter) const override
     {
         auto type = op.getType();
         auto convertedType = converter.convertType(type);
@@ -373,12 +374,12 @@ struct LiteralArgLowering : public mlir::OpRewritePattern<plier::ArgOp>
         {
             return mlir::failure();
         }
-        if (convertedType.isa<plier::NoneType>())
+        if (convertedType.template isa<plier::NoneType>())
         {
             rewriter.replaceOpWithNewOp<plier::UndefOp>(op, convertedType);
             return mlir::success();
         }
-        if (auto literal = convertedType.dyn_cast<plier::LiteralType>())
+        if (auto literal = convertedType.template dyn_cast<plier::LiteralType>())
         {
             rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, literal.getValue());
             return mlir::success();
@@ -1965,7 +1966,8 @@ void PlierToStdPass::runOnOperation()
         plier::FuncOpSignatureConversion,
         plier::ArgOpLowering,
 //        RemoveOmittedFuncArgs,
-        LiteralArgLowering,
+        LiteralLowering<plier::ArgOp>,
+        LiteralLowering<plier::GlobalOp>,
         FixCallOmittedArgs,
         UndefOpLowering,
         ReturnOpLowering,
