@@ -143,20 +143,6 @@ def GetItemOp : Plier_Op<"getitem", []> {
     ];
 }
 
-def StaticGetItemOp : Plier_Op<"static_getitem", []> {
-    let arguments = (ins
-                     AnyType:$value,
-                     AnyType:$index_var,
-                     UI32Attr:$index);
-
-    let results = (outs AnyType);
-    let hasFolder = 1;
-
-    let builders = [
-        OpBuilder<(ins "::mlir::Value":$value, "::mlir::Value":$index_var, "unsigned":$index)>
-    ];
-}
-
 def SetItemOp : Plier_Op<"setitem", []> {
     let arguments = (ins
                      AnyType:$target,
@@ -226,6 +212,20 @@ def GetattrOp : Plier_Op<"getattr", [NoSideEffect]> {
 
     let builders = [
         OpBuilder<(ins "::mlir::Value":$value, "::mlir::StringRef":$name)>
+    ];
+}
+
+def ExhaustIterOp : Plier_Op<"exhaust_iter", [NoSideEffect]> {
+    let arguments = (ins
+                     AnyType:$value,
+                     I64Attr:$count);
+
+    let results = (outs AnyType);
+
+    let hasFolder = 1;
+
+    let builders = [
+        OpBuilder<(ins "::mlir::Value":$value, "int64_t":$count)>
     ];
 }
 

@@ -69,7 +69,7 @@ std::vector<std::pair<int, py::handle>> get_blocks(const py::object& func)
     return ret;
 }
 
-py::list get_body(const py::handle& block)
+py::list get_body(py::handle block)
 {
     return block.attr("body").cast<py::list>();
 }
@@ -176,12 +176,12 @@ private:
 
     std::unordered_map<mlir::Block*, BlockInfo> block_infos;
 
-    plier::PyType get_obj_type(const py::handle& obj) const
+    plier::PyType get_obj_type(py::handle obj) const
     {
         return plier::PyType::get(&ctx, py::str(obj).cast<std::string>());
     }
 
-    plier::PyType get_type(const py::handle& inst) const
+    plier::PyType get_type(py::handle inst) const
     {
         auto type = typemap(inst);
         return get_obj_type(type);
@@ -206,7 +206,7 @@ private:
         fixup_phis();
     }
 
-    void lower_block(mlir::Block* bb, const py::handle& ir_block)
+    void lower_block(mlir::Block* bb, py::handle ir_block)
     {
         assert(nullptr != bb);
         builder.setInsertionPointToEnd(bb);
@@ -218,7 +218,7 @@ private:
         }
     }
 
-    void lower_inst(const py::handle& inst)
+    void lower_inst(py::handle inst)
     {
         if (py::isinstance(inst, insts.Assign))
         {
@@ -253,7 +253,7 @@ private:
         }
     }
 
-    mlir::Value lower_assign(const py::handle& inst, const py::handle& target)
+    mlir::Value lower_assign(py::handle inst, py::handle target)
     {
         auto value = inst.attr("value");
         if (py::isinstance(value, insts.Arg))
@@ -285,10 +285,10 @@ private:
         plier::report_error(llvm::Twine("lower_assign not handled: \"") + py::str(value.get_type()).cast<std::string>() + "\"");
     }
 
-    mlir::Value lower_expr(const py::handle& expr)
+    mlir::Value lower_expr(py::handle expr)
     {
         auto op = expr.attr("op").cast<std::string>();
-        using func_t = mlir::Value (plier_lowerer::*)(const py::handle&);
+        using func_t = mlir::Value (plier_lowerer::*)(py::handle);
         const std::pair<mlir::StringRef, func_t> handlers[] = {
             {"binop", &plier_lowerer::lower_binop},
             {"inplace_binop", &plier_lowerer::lower_inplce_binop},
@@ -304,6 +304,7 @@ private:
             {"pair_first", &plier_lowerer::lower_simple<plier::PairfirstOp>},
             {"pair_second", &plier_lowerer::lower_simple<plier::PairsecondOp>},
             {"getattr", &plier_lowerer::lower_getattr},
+            {"exhaust_iter", &plier_lowerer::lower_exhaust_iter},
         };
         for (auto& h : handlers)
         {
@@ -316,36 +317,36 @@ private:
     }
 
     template <typename T>
-    mlir::Value lower_simple(const py::handle& inst)
+    mlir::Value lower_simple(py::handle inst)
     {
         auto value = loadvar(inst.attr("value"));
         return builder.create<T>(get_current_loc(), value);
     }
 
-    mlir::Value lower_cast(const py::handle& inst)
+    mlir::Value lower_cast(py::handle inst)
     {
         auto value = loadvar(inst.attr("value"));
         auto res_type = get_type(current_instr.attr("target"));
         return builder.create<plier::CastOp>(get_current_loc(), res_type, value);
     }
 
-    mlir::Value lower_getitem(const py::handle& inst)
+    mlir::Value lower_getitem(py::handle inst)
     {
         auto value = loadvar(inst.attr("value"));
         auto index = loadvar(inst.attr("index"));
         return builder.create<plier::GetItemOp>(get_current_loc(), value, index);
     }
 
-    mlir::Value lower_static_getitem(const py::handle& inst)
+    mlir::Value lower_static_getitem(py::handle inst)
     {
         auto value = loadvar(inst.attr("value"));
-        auto index_var = loadvar(inst.attr("index_var"));
         auto index = inst.attr("index").cast<unsigned>();
-        return builder.create<plier::StaticGetItemOp>(get_current_loc(),
-                                                      value, index_var, index);
+        auto loc = get_current_loc();
+        auto index_var = builder.create<mlir::ConstantIndexOp>(loc, index);
+        return builder.create<plier::GetItemOp>(loc, value, index_var);
     }
 
-    mlir::Value lower_build_tuple(const py::handle& inst)
+    mlir::Value lower_build_tuple(py::handle inst)
     {
         auto items = inst.attr("items").cast<py::list>();
         mlir::SmallVector<mlir::Value> args;
@@ -356,7 +357,7 @@ private:
         return builder.create<plier::BuildTupleOp>(get_current_loc(), args);
     }
 
-    mlir::Value lower_phi(const py::handle& expr)
+    mlir::Value lower_phi(py::handle expr)
     {
         auto incoming_vals = expr.attr("incoming_values").cast<py::list>();
         auto incoming_blocks = expr.attr("incoming_blocks").cast<py::list>();
@@ -380,7 +381,7 @@ private:
     }
 
 
-    mlir::Value lower_call(const py::handle& expr)
+    mlir::Value lower_call(py::handle expr)
     {
         auto py_func = expr.attr("func");
         auto func = loadvar(py_func);
@@ -414,7 +415,7 @@ private:
                                                args_list, kwargs_list);
     }
 
-    mlir::Value lower_binop(const py::handle& expr)
+    mlir::Value lower_binop(py::handle expr)
     {
         auto op = expr.attr("fn");
         auto lhs_name = expr.attr("lhs");
@@ -425,7 +426,7 @@ private:
         return builder.create<plier::BinOp>(get_current_loc(), lhs, rhs, op_name);
     }
 
-    mlir::Value lower_inplce_binop(const py::handle& expr)
+    mlir::Value lower_inplce_binop(py::handle expr)
     {
         auto op = expr.attr("immutable_fn");
         auto lhs_name = expr.attr("lhs");
@@ -436,7 +437,7 @@ private:
         return builder.create<plier::BinOp>(get_current_loc(), lhs, rhs, op_name);
     }
 
-    mlir::Value lower_unary(const py::handle& expr)
+    mlir::Value lower_unary(py::handle expr)
     {
         auto op = expr.attr("fn");
         auto val_name = expr.attr("value");
@@ -445,7 +446,7 @@ private:
         return builder.create<plier::UnaryOp>(get_current_loc(), val, op_name);
     }
 
-    llvm::StringRef resolve_op(const py::handle& op)
+    llvm::StringRef resolve_op(py::handle op)
     {
         for (auto elem : llvm::zip(plier::getOperators(), insts.ops_handles))
         {
@@ -458,15 +459,21 @@ private:
         plier::report_error(llvm::Twine("resolve_op not handled: \"") + py::str(op).cast<std::string>() + "\"");
     }
 
-    mlir::Value lower_getattr(const py::handle& inst)
+    mlir::Value lower_getattr(py::handle inst)
     {
-        auto val = inst.attr("value");
-        auto value = loadvar(val);
+        auto value = loadvar(inst.attr("value"));
         auto name = inst.attr("attr").cast<std::string>();
         return builder.create<plier::GetattrOp>(get_current_loc(), value, name);
     }
 
-    void setitem(const py::handle& target, const py::handle& index, const py::handle& value)
+    mlir::Value lower_exhaust_iter(py::handle inst)
+    {
+        auto value = loadvar(inst.attr("value"));
+        auto count = inst.attr("count").cast<int64_t>();
+        return builder.create<plier::ExhaustIterOp>(get_current_loc(), value, count);
+    }
+
+    void setitem(py::handle target, py::handle index, py::handle value)
     {
         auto ind = [&]()->mlir::Value
         {
@@ -479,26 +486,26 @@ private:
         builder.create<plier::SetItemOp>(get_current_loc(), loadvar(target), ind, loadvar(value));
     }
 
-    void storevar(mlir::Value val, const py::handle& inst)
+    void storevar(mlir::Value val, py::handle inst)
     {
         vars_map[inst.attr("name").cast<std::string>()] = val;
         val.setType(get_type(inst));
     }
 
-    mlir::Value loadvar(const py::handle& inst)
+    mlir::Value loadvar(py::handle inst)
     {
         auto it = vars_map.find(inst.attr("name").cast<std::string>());
         assert(vars_map.end() != it);
         return it->second;
     }
 
-    void delvar(const py::handle& inst)
+    void delvar(py::handle inst)
     {
         auto var = loadvar(inst);
         builder.create<plier::DelOp>(get_current_loc(), var);
     }
 
-    void retvar(const py::handle& inst)
+    void retvar(py::handle inst)
     {
         auto var = loadvar(inst);
         auto func_type = func.getType();
@@ -511,7 +518,7 @@ private:
         builder.create<mlir::ReturnOp>(get_current_loc(), var);
     }
 
-    void branch(const py::handle& cond, const py::handle& tr, const py::handle& fl)
+    void branch(py::handle cond, py::handle tr, py::handle fl)
     {
         auto c = loadvar(cond);
         auto tr_block = blocks_map.find(tr.cast<int>())->second;
@@ -520,13 +527,13 @@ private:
         builder.create<mlir::CondBranchOp>(get_current_loc(), cond_val, tr_block, fl_block);
     }
 
-    void jump(const py::handle& target)
+    void jump(py::handle target)
     {
         auto block = blocks_map.find(target.cast<int>())->second;
         builder.create<mlir::BranchOp>(get_current_loc(), mlir::None, block);
     }
 
-    mlir::Value get_const(const py::handle& val)
+    mlir::Value get_const(py::handle val)
     {
         auto get_val = [&](mlir::Attribute attr)
         {
@@ -547,7 +554,7 @@ private:
         plier::report_error(llvm::Twine("get_const unhandled type \"") + py::str(val.get_type()).cast<std::string>() + "\"");
     }
 
-    mlir::FunctionType get_func_type(const py::handle& fnargs, const py::handle& restype)
+    mlir::FunctionType get_func_type(py::handle fnargs, py::handle restype)
     {
         auto ret = get_obj_type(restype());
         llvm::SmallVector<mlir::Type> args;
@@ -627,7 +634,7 @@ private:
 
 };
 
-plier::CompilerContext::Settings get_settings(const py::handle& settings)
+plier::CompilerContext::Settings get_settings(py::handle settings)
 {
     plier::CompilerContext::Settings ret;
     ret.verify = settings["verify"].cast<bool>();
