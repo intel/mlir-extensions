@@ -56,6 +56,73 @@ def test_unary(py_func, arr_list, request):
     arr = np.array(arr_list)
     assert_allclose(py_func(arr), jit_func(arr), rtol=1e-15, atol=1e-15)
 
+_test_binary_test_arrays = [1, 2.5, np.array([1,2,3]), np.array([4.4,5.5,6.6])]
+_test_binary_test_arrays_ids = ['1', '2.5', 'np.array([1,2,3])', 'np.array([4.4,5.5,6.6])']
+@pytest.mark.parametrize("py_func",
+                         [lambda a, b: np.add(a, b),
+                          lambda a, b: a + b,
+                          lambda a, b: np.subtract(a, b),
+                          lambda a, b: a - b,
+                          lambda a, b: np.multiply(a, b),
+                          lambda a, b: a * b,
+                          lambda a, b: np.power(a, b),
+                          lambda a, b: a ** b,
+                          lambda a, b: np.true_divide(a, b),
+                          lambda a, b: a / b,
+                         ],
+                         ids=[
+                          'np.add(a, b)',
+                          'a + b',
+                          'np.subtract(a, b)',
+                          'a - b',
+                          'np.multiply(a, b)',
+                          'a * b',
+                          'np.power(a, b)',
+                          'a ** b',
+                          'np.true_divide(a, b)',
+                          'a / b',
+                         ])
+@pytest.mark.parametrize("a",
+                         _test_binary_test_arrays,
+                         ids=_test_binary_test_arrays_ids)
+@pytest.mark.parametrize("b",
+                         _test_binary_test_arrays,
+                         ids=_test_binary_test_arrays_ids)
+def test_binary(py_func, a, b):
+    jit_func = njit(py_func)
+    assert_equal(py_func(a,b), jit_func(a,b))
+
+_test_broadcast_test_arrays = [
+    1,
+    np.array([1]),
+    np.array([[1]]),
+    np.array([[1,2],[3,4]]),
+    np.array([5,6]),
+    np.array([[5],[6]]),
+    np.array([[5,6]]),
+]
+_test_broadcast_test_arrays_ids = [
+    '1',
+    'np.array([1])',
+    'np.array([[1]])',
+    'np.array([[1,2],[3,4]])',
+    'np.array([5,6])',
+    'np.array([[5],[6]])',
+    'np.array([[5,6]])',
+]
+@pytest.mark.parametrize("a",
+                         _test_broadcast_test_arrays,
+                         ids=_test_broadcast_test_arrays_ids)
+@pytest.mark.parametrize("b",
+                         _test_broadcast_test_arrays,
+                         ids=_test_broadcast_test_arrays_ids)
+def test_broadcast(a, b):
+    def py_func(a, b):
+        return np.add(a, b)
+
+    jit_func = njit(py_func)
+    assert_equal(py_func(a,b), jit_func(a,b))
+
 class TestMlirBasic(TestCase):
 
     def test_staticgetitem(self):
@@ -82,26 +149,6 @@ class TestMlirBasic(TestCase):
         jit_func = njit(py_func)
         arr = np.asarray([5,6,7])
         assert_equal(py_func(arr), jit_func(arr))
-
-    def test_binary(self):
-        funcs = [
-            lambda a, b: np.add(a, b),
-            lambda a, b: a + b,
-            lambda a, b: np.subtract(a, b),
-            lambda a, b: a - b,
-            lambda a, b: np.multiply(a, b),
-            lambda a, b: a * b,
-            lambda a, b: np.power(a, b),
-            lambda a, b: a ** b,
-            lambda a, b: np.true_divide(a, b),
-            lambda a, b: a / b,
-        ]
-
-        test_data = [1, 2.5, np.array([1,2,3]), np.array([4.4,5.5,6.6])]
-        for py_func in funcs:
-            jit_func = njit(py_func)
-            for a1, a2 in itertools.product(test_data, test_data):
-                assert_equal(py_func(a1,a2), jit_func(a1,a2))
 
     def test_sum_axis(self):
         funcs = [
@@ -352,25 +399,6 @@ class TestMlirBasic(TestCase):
             # for a in [arr1,arr2,arr3]: TODO: flatten support
             for a in [arr1]:
                 assert_equal(py_func(a), jit_func(a))
-
-    def test_broadcast(self):
-        def py_func(a, b):
-            return np.add(a, b)
-
-        jit_func = njit(py_func)
-
-        test_data = [
-            1,
-            np.array([1]),
-            np.array([[1]]),
-            np.array([[1,2],[3,4]]),
-            np.array([5,6]),
-            np.array([[5],[6]]),
-            np.array([[5,6]]),
-        ]
-
-        for a, b in itertools.product(test_data, test_data):
-            assert_equal(py_func(a,b), jit_func(a,b))
 
     def test_parallel(self):
         def py_func(a, b):
