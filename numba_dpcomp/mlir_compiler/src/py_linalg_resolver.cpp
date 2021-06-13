@@ -44,6 +44,15 @@ struct PyBuilderContext
 
 namespace
 {
+std::string to_str(mlir::Type type)
+{
+    std::string ret;
+    llvm::raw_string_ostream ss(ret);
+    ss << type;
+    ss.flush();
+    return ret;
+}
+
 bool is_compatible_type(mlir::Type type)
 {
     if (auto tuple_type = type.dyn_cast<mlir::TupleType>())
@@ -934,31 +943,54 @@ py::object extract_impl(py::capsule context, py::handle value, py::handle indice
     return ctx.context.create_var(context, res);
 }
 
-py::object reshape_impl(py::capsule context, py::handle tensor, py::int_ out_dims, py::list maps)
+py::object reshape_impl(py::capsule context, py::handle src, py::iterable newDims)
 {
-    abort(); // not implemented
-//    auto& ctx = get_py_context(context);
-//    auto& builder = ctx.builder;
-//    auto loc = ctx.loc;
+    auto& ctx = get_py_context(context);
+    auto& builder = ctx.builder;
+    auto loc = ctx.loc;
 
-//    auto tensor_val = ctx.context.unwrap_val(loc, builder, tensor);
-//    if (!tensor_val.getType().isa<mlir::RankedTensorType>())
-//    {
-//        plier::report_error("Invalid reshapa argument");
-//    }
-//    auto elem_type = tensor_val.getType().cast<mlir::RankedTensorType>().getElementType();
-//    auto new_dims = out_dims.cast<size_t>();
-//    llvm::SmallVector<int64_t> dims(new_dims, -1);
-//    auto new_type = mlir::RankedTensorType::get(dims, elem_type);
+    auto unwrapVal = [&](py::handle obj)
+    {
+        return ctx.context.unwrap_val(loc, builder, obj);
+    };
 
-//    llvm::SmallVector<mlir::Attribute> affine_maps(container_size(maps));
-//    container_iterate(maps, [&](auto index, py::handle obj)
-//    {
-//        affine_maps[index] = get_affine_map_attr(obj, *builder.getContext());
-//    });
-//    auto affine_maps_attr = mlir::ArrayAttr::get(builder.getContext(), affine_maps);
-//    auto reshape = builder.create<mlir::linalg::TensorReshapeOp>(loc, new_type, tensor_val, affine_maps_attr);
-//    return ctx.context.create_var(context, reshape);
+    auto srcVal = unwrapVal(src);
+    auto srcType = srcVal.getType().dyn_cast<mlir::TensorType>();
+    if (!srcType)
+    {
+        plier::report_error(llvm::Twine("invalid reshape argument: ") + to_str(srcVal.getType()));
+    }
+
+    auto newDimsVals = [&]()
+    {
+        auto dimType = builder.getI32Type();
+        auto dims = unwrapVal(newDims);
+        llvm::SmallVector<mlir::Value> ret;
+        if (auto tupleType = dims.getType().dyn_cast<mlir::TupleType>())
+        {
+            auto dimsCount = tupleType.size();
+            ret.resize(dimsCount);
+            for (size_t i = 0; i < dimsCount; ++i)
+            {
+                auto ind = builder.create<mlir::ConstantIndexOp>(loc, i);
+                auto elemType = tupleType.getType(i);
+                auto item = builder.create<plier::GetItemOp>(loc, elemType, dims, ind);
+                ret[i] = do_cast(loc, builder, item, dimType);
+            }
+        }
+        else
+        {
+            ret.emplace_back(do_cast(loc, builder, dims, dimType));
+        }
+        return ret;
+    }();
+
+    auto shapeTensor = builder.create<mlir::tensor::FromElementsOp>(loc, newDimsVals);
+
+    auto resultType = mlir::RankedTensorType::get(llvm::SmallVector<int64_t>(newDimsVals.size(), -1), srcType.getElementType());
+    auto reshaped = builder.create<mlir::tensor::ReshapeOp>(loc, resultType, srcVal, shapeTensor);
+
+    return ctx.context.create_var(context, reshaped);
 }
 
 py::object external_call_impl(py::capsule context, py::str func_name, py::handle inputs, py::handle outputs)

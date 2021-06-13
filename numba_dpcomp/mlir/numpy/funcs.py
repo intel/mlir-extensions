@@ -183,55 +183,15 @@ def transpose_impl(builder, arg):
 def dtype_impl(builder, arg):
     return arg.dtype
 
-def flatten(builder, arg, src_dims_count):
-    if 1 == src_dims_count:
-        return arg
-    dims = ','.join(['d%s' % i for i in range(src_dims_count)])
-    expr = f'({dims}) -> ({dims})'
-    maps = [
-        expr
-    ]
-    return builder.reshape(arg, 1, maps)
-
-def find_size_index(shape):
-    size_index = -1
-    for i in range(len(shape)):
-            d = shape[i]
-            if is_literal(d):
-                if 1 != d:
-                    return -1
-            else:
-                if size_index != -1:
-                    return -1
-                size_index = i
-    return size_index
-
 @register_func('array.reshape')
 def reshape_impl(builder, arg, new_shape):
-    shape = arg.shape
-    src_count = len(shape)
-    count = len(new_shape)
-    if count == 1:
-        return flatten(builder, arg, src_count)
-    else:
-        size_index = find_size_index(new_shape)
-        if size_index < 0:
-            return
+    return builder.reshape(arg, new_shape)
 
-        flat = flatten(builder, arg, src_count)
-        init = builder.init_tensor(new_shape, arg.dtype)
-
-        iterators = ['parallel' for _ in range(count)]
-        dims1 = ','.join(['d%s' % i for i in range(count)])
-        dims3 = ','.join(['d%s' % i if i == size_index else '0' for i in range(count)])
-        expr1 = f'({dims1}) -> (d{size_index})'
-        expr2 = f'({dims1}) -> ({dims1})'
-        maps = [expr1, expr2]
-
-        def body(a, b):
-            return a
-
-        return builder.generic(flat, init, iterators, maps, body)
+# @register_attr('array.flat')
+@register_func('array.flatten')
+def flatten_impl(builder, arg):
+    size = size_impl(builder, arg)
+    return builder.reshape(arg, size)
 
 def dtype_str(builder, dtype):
     names = [
