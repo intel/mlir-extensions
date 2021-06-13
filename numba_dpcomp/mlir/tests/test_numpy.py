@@ -463,18 +463,6 @@ class TestMlirBasic(TestCase):
         for a in [arr]: # TODO: arr.T
             assert_equal(py_func(a), jit_func(a))
 
-    def test_slice1(self):
-        funcs = [
-            lambda a, b, c, d: a[b:c],
-            lambda a, b, c, d: a[b:c:d],
-        ]
-
-        arr = np.array([1,2,3,4,5,6,7,8])
-        for py_func in funcs:
-            jit_func = njit(py_func)
-
-            assert_equal(py_func(arr, 3, 4,2), jit_func(arr, 3, 4,2))
-
     def test_atleast2d(self):
         def py_func(a):
             return np.atleast_2d(a)
@@ -533,6 +521,39 @@ def test_concat(arrays, axis):
         assert False
     jit_func = njit(py_func)
     assert_equal(py_func(*arr), jit_func(*arr))
+
+@pytest.mark.parametrize("py_func", [
+    lambda a, b, c, d: a[b:c],
+    lambda a, b, c, d: a[3:c],
+    lambda a, b, c, d: a[b:4],
+    # lambda a, b, c, d: a[3:4], static_getitem with slice
+    lambda a, b, c, d: a[b:c:d],
+    lambda a, b, c, d: a[b:c:1],
+    lambda a, b, c, d: a[b:c:2],
+    # lambda a, b, c, d: a[3:4:2],
+    ],
+    ids=[
+    'lambda a, b, c, d: a[b:c]',
+    'lambda a, b, c, d: a[3:c]',
+    'lambda a, b, c, d: a[b:4]',
+    # 'lambda a, b, c, d: a[3:4]',
+    'lambda a, b, c, d: a[b:c:d]',
+    'lambda a, b, c, d: a[b:c:1]',
+    'lambda a, b, c, d: a[b:c:2]',
+    # 'lambda a, b, c, d: a[3:4:2]',
+    ])
+def test_slice(py_func):
+    arr = np.array([1,2,3,4,5,6,7,8])
+    jit_func = njit(py_func)
+    assert_equal(py_func(arr, 3, 4, 2), jit_func(arr, 3, 4, 2))
+
+def test_multidim_slice():
+    def py_func(a, b):
+        return a[1, b,:]
+    jit_func = njit(py_func)
+
+    a = np.array([[[1],[2],[3]],[[4],[5],[6]]])
+    assert_equal(py_func(a, 0), jit_func(a, 0))
 
 if __name__ == '__main__':
     unittest.main()

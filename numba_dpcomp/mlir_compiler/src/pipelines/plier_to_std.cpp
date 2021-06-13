@@ -1664,41 +1664,70 @@ struct PropagateBuildTupleTypes : public mlir::OpRewritePattern<plier::BuildTupl
     mlir::LogicalResult matchAndRewrite(
         plier::BuildTupleOp op, mlir::PatternRewriter &rewriter) const override
     {
-        if (op.getType().isa<mlir::TupleType>() ||
-            llvm::any_of(op.getOperandTypes(), [](mlir::Type type){ return type.isa<plier::PyType>(); }))
+        auto tupleType = op.getType().dyn_cast<mlir::TupleType>();
+        if (tupleType && op.getOperandTypes() == tupleType.getTypes())
         {
             return mlir::failure();
         }
 
-        auto new_type = mlir::TupleType::get(op.getContext(), op.getOperandTypes());
-        rewriter.replaceOpWithNewOp<plier::BuildTupleOp>(op, new_type, op.getOperands());
+        auto newType = mlir::TupleType::get(op.getContext(), op.getOperandTypes());
+        rewriter.replaceOpWithNewOp<plier::BuildTupleOp>(op, newType, op.getOperands());
         return mlir::success();
     }
 };
 
-template<typename Op>
-struct FoldTupleGetitem : public mlir::OpRewritePattern<Op>
+struct FoldTupleGetitem : public mlir::OpRewritePattern<plier::GetItemOp>
 {
     FoldTupleGetitem(mlir::TypeConverter &/*typeConverter*/,
                      mlir::MLIRContext *context):
-        mlir::OpRewritePattern<Op>(context) {}
+        OpRewritePattern(context) {}
 
     mlir::LogicalResult matchAndRewrite(
-        Op op, mlir::PatternRewriter &rewriter) const override
+        plier::GetItemOp op, mlir::PatternRewriter &rewriter) const override
     {
-        auto build_tuple = op.value().template getDefiningOp<plier::BuildTupleOp>();
-        if (!build_tuple)
+        auto buildTuple = op.value().getDefiningOp<plier::BuildTupleOp>();
+        if (!buildTuple)
         {
             return mlir::failure();
         }
 
-        if (auto val = plier::getConstVal<mlir::IntegerAttr>(op.getOperand(1)))
+        if (auto val = plier::getConstVal<mlir::IntegerAttr>(op.index()))
         {
             auto index = val.getInt();
-            if (index >= 0 && index < build_tuple.getNumOperands())
+            if (index >= 0 && index < buildTuple.getNumOperands())
             {
-                auto val = build_tuple.getOperand(static_cast<unsigned>(index));
+                auto val = buildTuple.getOperand(static_cast<unsigned>(index));
                 rewriter.replaceOp(op, val);
+                return mlir::success();
+            }
+        }
+        return mlir::failure();
+    }
+};
+
+struct FoldSliceGetitem : public mlir::OpRewritePattern<plier::GetItemOp>
+{
+    FoldSliceGetitem(mlir::TypeConverter &/*typeConverter*/,
+                     mlir::MLIRContext *context):
+        OpRewritePattern(context) {}
+
+    mlir::LogicalResult matchAndRewrite(
+        plier::GetItemOp op, mlir::PatternRewriter &rewriter) const override
+    {
+        auto buildSice = op.value().getDefiningOp<plier::BuildSliceOp>();
+        if (!buildSice)
+        {
+            return mlir::failure();
+        }
+
+        if (auto val = plier::getConstVal<mlir::IntegerAttr>(op.index()))
+        {
+            auto index = val.getInt();
+            if (index >= 0 && index < 3 &&
+                !buildSice.getOperand(static_cast<unsigned>(index)).getType().isa<plier::NoneType>())
+            {
+                auto val = buildSice.getOperand(static_cast<unsigned>(index));
+                rewriter.replaceOp(op, do_cast(rewriter.getIndexType(), val, rewriter));
                 return mlir::success();
             }
         }
@@ -1779,14 +1808,14 @@ mlir::LogicalResult lower_slice(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> 
         return mlir::failure();
     }
 
-    if (llvm::any_of(operands, [](mlir::Value op) { return !op.getType().isa<mlir::IntegerType, mlir::IndexType>(); }))
+    if (llvm::any_of(operands, [](mlir::Value op) { return !op.getType().isa<mlir::IntegerType, mlir::IndexType, plier::NoneType>(); }))
     {
         return mlir::failure();
     }
 
-    auto low = operands[0];
-    auto high = operands[1];
-    auto step = [&]()->mlir::Value
+    auto begin = operands[0];
+    auto end = operands[1];
+    auto stride = [&]()->mlir::Value
     {
         if (operands.size() == 3)
         {
@@ -1795,7 +1824,7 @@ mlir::LogicalResult lower_slice(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> 
         return rewriter.create<mlir::ConstantIndexOp>(op.getLoc(), 1);
     }();
 
-    rewriter.replaceOpWithNewOp<plier::BuildSliceOp>(op, op.getType(), low, high, step);
+    rewriter.replaceOpWithNewOp<plier::BuildSliceOp>(op, begin, end, stride);
     return mlir::success();
 }
 
@@ -1983,7 +2012,8 @@ void PlierToStdPass::runOnOperation()
         FixupWhileTypes,
         ScfIfFixupTypes,
         PropagateBuildTupleTypes,
-        FoldTupleGetitem<plier::GetItemOp>
+        FoldTupleGetitem,
+        FoldSliceGetitem
         >(type_converter, context);
 
     patterns.insert<
