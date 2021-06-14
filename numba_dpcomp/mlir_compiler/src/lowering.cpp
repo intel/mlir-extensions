@@ -337,12 +337,42 @@ private:
         return builder.create<plier::GetItemOp>(get_current_loc(), value, index);
     }
 
+    mlir::Value lower_static_index(mlir::Location loc, py::handle obj)
+    {
+        if (obj.is_none())
+        {
+            auto type = plier::NoneType::get(builder.getContext());
+            return builder.create<plier::UndefOp>(loc, type);
+        }
+        if (py::isinstance<py::int_>(obj))
+        {
+            auto index = obj.cast<int64_t>();
+            return builder.create<mlir::ConstantIndexOp>(loc, index);
+        }
+        if (py::isinstance<py::slice>(obj))
+        {
+            auto start = lower_static_index(loc, obj.attr("start"));
+            auto stop = lower_static_index(loc, obj.attr("stop"));
+            auto step = lower_static_index(loc, obj.attr("step"));
+            return builder.create<plier::BuildSliceOp>(loc, start, stop, step);
+        }
+        if (py::isinstance<py::iterable>(obj))
+        {
+            llvm::SmallVector<mlir::Value> args(py::len(obj));
+            for (auto it : llvm::enumerate(obj))
+            {
+                args[it.index()] = lower_static_index(loc, it.value());
+            }
+            return builder.create<plier::BuildTupleOp>(loc, args);
+        }
+        plier::report_error(llvm::Twine("Unhandled index type: ") + py::str(obj.get_type()).cast<std::string>());
+    }
+
     mlir::Value lower_static_getitem(py::handle inst)
     {
         auto value = loadvar(inst.attr("value"));
-        auto index = inst.attr("index").cast<unsigned>();
         auto loc = get_current_loc();
-        auto index_var = builder.create<mlir::ConstantIndexOp>(loc, index);
+        auto index_var = lower_static_index(loc, inst.attr("index"));
         return builder.create<plier::GetItemOp>(loc, value, index_var);
     }
 

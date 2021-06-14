@@ -290,7 +290,8 @@ mlir::Value div_strides(mlir::Location loc, mlir::OpBuilder& builder, mlir::Valu
 {
     auto array_type = strides.getType().cast<mlir::LLVM::LLVMArrayType>();
     mlir::Value array = builder.create<mlir::LLVM::UndefOp>(loc, array_type);
-    for (unsigned i = 0 ; i < array_type.getNumElements(); ++i)
+    auto count = array_type.getNumElements();
+    for (unsigned i = 0 ; i < count; ++i)
     {
         auto index = builder.getI64ArrayAttr(i);
         auto prev = builder.create<mlir::LLVM::ExtractValueOp>(loc, array_type.getElementType(), strides, index);
@@ -304,7 +305,8 @@ mlir::Value mul_strides(mlir::Location loc, mlir::OpBuilder& builder, mlir::Valu
 {
     auto array_type = strides.getType().cast<mlir::LLVM::LLVMArrayType>();
     mlir::Value array = builder.create<mlir::LLVM::UndefOp>(loc, array_type);
-    for (unsigned i = 0 ; i < array_type.getNumElements(); ++i)
+    auto count = array_type.getNumElements();
+    for (unsigned i = 0 ; i < count; ++i)
     {
         auto index = builder.getI64ArrayAttr(i);
         auto prev = builder.create<mlir::LLVM::ExtractValueOp>(loc, array_type.getElementType(), strides, index);
@@ -1498,6 +1500,8 @@ void populate_lower_to_llvm_pipeline(mlir::OpPassManager& pm)
     pm.addNestedPass<mlir::FuncOp>(std::make_unique<PreLLVMLowering>());
     pm.addPass(std::make_unique<LLVMLoweringPass>());
     pm.addNestedPass<mlir::LLVM::LLVMFuncOp>(std::make_unique<PostLLVMLowering>());
+    pm.addNestedPass<mlir::LLVM::LLVMFuncOp>(mlir::createCSEPass());
+    pm.addPass(mlir::createCanonicalizerPass());
 }
 }
 
