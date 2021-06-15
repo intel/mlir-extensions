@@ -762,9 +762,6 @@ private:
 struct DeallocOpLowering : public mlir::ConvertOpToLLVMPattern<mlir::memref::DeallocOp> {
     using ConvertOpToLLVMPattern<mlir::memref::DeallocOp>::ConvertOpToLLVMPattern;
 
-    explicit DeallocOpLowering(mlir::LLVMTypeConverter &converter)
-        : ConvertOpToLLVMPattern<mlir::memref::DeallocOp>(converter) {}
-
     mlir::LogicalResult
     matchAndRewrite(mlir::memref::DeallocOp op, mlir::ArrayRef<mlir::Value> operands,
                     mlir::ConversionPatternRewriter &rewriter) const override {
@@ -1313,22 +1310,22 @@ struct PostLLVMLowering :
     }
 };
 
-struct LowerRetainOp : public mlir::OpConversionPattern<plier::RetainOp>
+struct LowerRetainOp : public mlir::ConvertOpToLLVMPattern<plier::RetainOp>
 {
-    using mlir::OpConversionPattern<plier::RetainOp>::OpConversionPattern;
+    using mlir::ConvertOpToLLVMPattern<plier::RetainOp>::ConvertOpToLLVMPattern;
 
     mlir::LogicalResult
     matchAndRewrite(plier::RetainOp op, llvm::ArrayRef<mlir::Value> operands,
                     mlir::ConversionPatternRewriter &rewriter) const override {
         assert(operands.size() == 1);
-        auto arg = operands[0];
+        plier::RetainOp::Adaptor transformed(operands);
+        auto arg = transformed.source();
         if (!arg.getType().isa<mlir::LLVM::LLVMStructType>())
         {
             return mlir::failure();
         }
 
-        auto llvmVoidPointerType =
-            mlir::LLVM::LLVMPointerType::get(rewriter.getIntegerType(8));
+        auto llvmVoidPointerType = getVoidPtrType();
         auto incref_func = [&]()
         {
             auto mod = op->getParentOfType<mlir::ModuleOp>();
@@ -1338,7 +1335,7 @@ struct LowerRetainOp : public mlir::OpConversionPattern<plier::RetainOp>
             {
                 mlir::OpBuilder::InsertionGuard guard(rewriter);
                 rewriter.setInsertionPointToStart(mod.getBody());
-                auto llvmVoidType = mlir::LLVM::LLVMVoidType::get(rewriter.getContext());
+                auto llvmVoidType = getVoidType();
                 func = rewriter.create<mlir::LLVM::LLVMFuncOp>(
                     rewriter.getUnknownLoc(), "NRT_incref",
                     mlir::LLVM::LLVMFunctionType::get(llvmVoidType, llvmVoidPointerType));
@@ -1346,10 +1343,10 @@ struct LowerRetainOp : public mlir::OpConversionPattern<plier::RetainOp>
             return func;
         }();
 
+        mlir::MemRefDescriptor source(arg);
+
         auto loc = op.getLoc();
-        auto index = rewriter.getI64ArrayAttr(0);
-        auto elemType = arg.getType().cast<mlir::LLVM::LLVMStructType>().getBody()[0];
-        mlir::Value ptr = rewriter.create<mlir::LLVM::ExtractValueOp>(loc, elemType, arg, index);
+        mlir::Value ptr = source.allocatedPtr(rewriter, loc);
         ptr = rewriter.create<mlir::LLVM::BitcastOp>(loc, llvmVoidPointerType, ptr);
         rewriter.create<mlir::LLVM::CallOp>(loc, incref_func, ptr);
         rewriter.replaceOp(op, arg);
@@ -1358,9 +1355,9 @@ struct LowerRetainOp : public mlir::OpConversionPattern<plier::RetainOp>
     }
 };
 
-struct LowerBuildTuple : public mlir::OpConversionPattern<plier::BuildTupleOp>
+struct LowerBuildTuple : public mlir::ConvertOpToLLVMPattern<plier::BuildTupleOp>
 {
-    using mlir::OpConversionPattern<plier::BuildTupleOp>::OpConversionPattern;
+    using mlir::ConvertOpToLLVMPattern<plier::BuildTupleOp>::ConvertOpToLLVMPattern;
 
     mlir::LogicalResult
     matchAndRewrite(plier::BuildTupleOp op, llvm::ArrayRef<mlir::Value> /*operands*/,
@@ -1397,9 +1394,9 @@ struct LowerBuildTuple : public mlir::OpConversionPattern<plier::BuildTupleOp>
     }
 };
 
-struct LowerUndef : public mlir::OpConversionPattern<plier::UndefOp>
+struct LowerUndef : public mlir::ConvertOpToLLVMPattern<plier::UndefOp>
 {
-    using mlir::OpConversionPattern<plier::UndefOp>::OpConversionPattern;
+    using mlir::ConvertOpToLLVMPattern<plier::UndefOp>::ConvertOpToLLVMPattern;
 
     mlir::LogicalResult
     matchAndRewrite(plier::UndefOp op, llvm::ArrayRef<mlir::Value> /*operands*/,
@@ -1417,9 +1414,9 @@ struct LowerUndef : public mlir::OpConversionPattern<plier::UndefOp>
     }
 };
 
-struct LowerCasts : public mlir::OpConversionPattern<plier::CastOp>
+struct LowerCasts : public mlir::ConvertOpToLLVMPattern<plier::CastOp>
 {
-    using mlir::OpConversionPattern<plier::CastOp>::OpConversionPattern;
+    using mlir::ConvertOpToLLVMPattern<plier::CastOp>::ConvertOpToLLVMPattern;
 
     mlir::LogicalResult
     matchAndRewrite(plier::CastOp op, llvm::ArrayRef<mlir::Value> operands,
@@ -1468,14 +1465,12 @@ struct LLVMLoweringPass : public mlir::PassWrapper<LLVMLoweringPass, mlir::Opera
 
     OwningRewritePatternList patterns(&context);
     populateStdToLLVMConversionPatterns(typeConverter, patterns);
+
     patterns.insert<
         LowerUndef,
         LowerCasts,
+        LowerBuildTuple,
         LowerRetainOp,
-        LowerBuildTuple
-        >(typeConverter, &getContext());
-
-    patterns.insert<
         AllocOpLowering,
         DeallocOpLowering,
         ReshapeLowering
