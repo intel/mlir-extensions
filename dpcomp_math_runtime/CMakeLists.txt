@@ -45,5 +45,5 @@ if(${DPNP_ENABLE})
         INSTALL_RPATH "${DPNP_RPATH}"
     )
 
-    add_definitions(-DDPNP_ENABLE=1)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE DPNP_ENABLE=1)
 endif()
