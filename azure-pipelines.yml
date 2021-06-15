@@ -38,7 +38,7 @@ jobs:
 
   - script: |
       call "C:\Miniconda\Scripts\activate"
-      pytest
+      pytest -vv --capture=tee-sys
     displayName: 'Tests'
 
   - script: |
@@ -90,7 +90,7 @@ jobs:
       export OCL_ICD_FILENAMES_RESET=1
       export OCL_ICD_FILENAMES=libintelocl.so
       export SYCL_DEVICE_FILTER=opencl:cpu
-      pytest
+      pytest -vv --capture=tee-sys
     displayName: 'Tests'
 
   - script: |
@@ -141,7 +141,7 @@ jobs:
   - script: |
       source /usr/local/miniconda/bin/activate
       conda activate test_env
-      pytest
+      pytest -vv --capture=tee-sys
     displayName: 'Tests'
 
   - script: |

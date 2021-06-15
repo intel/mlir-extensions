@@ -15,7 +15,7 @@
 import sys
 import pytest
 import numpy
-from numba_dpcomp import njit
+from numba_dpcomp import njit, DPNP_AVAILABLE
 
 def vvsort(val, vec, size):
     for i in range(size):
@@ -33,7 +33,7 @@ def vvsort(val, vec, size):
             vec[k, i] = vec[k, imax]
             vec[k, imax] = temp
 
-@pytest.mark.skipif(sys.platform in ['win32', 'cygwin', 'darwin'], reason="Not yet implemented")
+@pytest.mark.skipif(not DPNP_AVAILABLE, reason="DPNP is not available")
 @pytest.mark.parametrize("type",
                          [numpy.float64, numpy.float32],
                          ids=['float64', 'float32'])
