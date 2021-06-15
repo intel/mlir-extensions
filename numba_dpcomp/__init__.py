@@ -13,3 +13,5 @@
 # limitations under the License.
 
 from .decorators import *
+
+from .mlir.settings import DPNP_AVAILABLE

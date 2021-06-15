@@ -14,6 +14,8 @@
 
 from os import environ
 
+from ..mlir_compiler import is_dpnp_supported
+
 def _readenv(name, ctor, default):
     value = environ.get(name)
     if value is None:
@@ -29,3 +31,4 @@ USE_MLIR = _readenv('DPCOMP_ENABLE', int, 1)
 DUMP_PLIER = _readenv('DPCOMP_DUMP_PLIER', int, 0)
 PRINT_IR = _readenv('DPCOMP_PRINT_IR', int, 0)
 DEBUG_TYPE = list(filter(None, _readenv('DPCOMP_DEBUG_TYPE', str, '').split(',')))
+DPNP_AVAILABLE = is_dpnp_supported() # TODO: check if dpnp library is available at runtime

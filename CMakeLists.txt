@@ -41,6 +41,8 @@ if (CMAKE_SYSTEM_NAME STREQUAL Darwin)
     # add_compile_options(-mcet) # v8.0 and newer # unrecognized command line option '-mcet', only recommended
 endif()
 
+option(DPNP_ENABLE "Use DPNP for some math functions" OFF)
+
 include(CTest)
 
 macro(apply_llvm_compile_flags target)
