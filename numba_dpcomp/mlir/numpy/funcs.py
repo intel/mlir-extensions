@@ -335,8 +335,19 @@ def _prepare_cov_input(builder, m, y, rowvar):
     res = builder.inline_func(func, m, y, rowvar)
     return convert_array(builder, res, dtype)
 
+def _cov_scalar_result_expected(mandatory_input, optional_input):
+    opt_is_none = optional_input is None
+
+    if len(mandatory_input.shape) == 1:
+        return opt_is_none
+
+    return False
+
 @register_func('numpy.cov', numpy.cov)
 def cov_impl(builder, m, y=None, rowvar=True, bias=False, ddof=None):
     X = _prepare_cov_input(builder, m, y, rowvar)
     ddof = builder.inline_func(_cov_get_ddof_func(ddof is None), bias, ddof)
-    return builder.inline_func(_cov_impl_inner, X, ddof)
+    res = builder.inline_func(_cov_impl_inner, X, ddof)
+    if _cov_scalar_result_expected(m, y):
+        res = res[0, 0]
+    return res
