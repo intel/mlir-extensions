@@ -9,6 +9,8 @@ jobs:
 
   pool: 'AWS'
 
+steps:
+
   - script: |
       source /localdisk/miniconda3/bin/activate
       conda activate dpcomp_build_env
