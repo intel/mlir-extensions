@@ -16,6 +16,7 @@
 
 #include <mlir/Transforms/DialectConversion.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
+#include <mlir/Dialect/SCF/SCF.h>
 
 #include "plier/dialect.hpp"
 
@@ -224,4 +225,58 @@ mlir::LogicalResult plier::FuncOpSignatureConversion::matchAndRewrite(
     }
     rewriter.finalizeRootUpdate(funcOp);
     return mlir::success();
+}
+
+plier::FixupIfTypes::FixupIfTypes(mlir::TypeConverter& typeConverter, mlir::MLIRContext* context):
+    OpRewritePattern(context), converter(typeConverter) {}
+
+mlir::LogicalResult plier::FixupIfTypes::matchAndRewrite(mlir::scf::IfOp op, mlir::PatternRewriter& rewriter) const
+{
+    if (op->getNumResults() == 0)
+    {
+        return mlir::failure();
+    }
+
+    llvm::SmallVector<mlir::Type> newTypes;
+    newTypes.reserve(op->getNumResults());
+    auto trueYield = mlir::cast<mlir::scf::YieldOp>(op.thenBlock()->getTerminator());
+    auto falseYield = mlir::cast<mlir::scf::YieldOp>(op.elseBlock()->getTerminator());
+    bool needUpdate = false;
+    for (auto it : llvm::zip(op->getResultTypes(), trueYield->getOperandTypes(), falseYield->getOperandTypes()))
+    {
+        auto retType = std::get<0>(it);
+        auto trueType = std::get<1>(it);
+        auto falseType = std::get<2>(it);
+        if (trueType != falseType)
+        {
+            return mlir::failure();
+        }
+
+        if (retType == trueType)
+        {
+            newTypes.emplace_back(trueType);
+        }
+        else if (converter.convertType(retType) == trueType)
+        {
+            newTypes.emplace_back(trueType);
+            needUpdate = true;
+        }
+        else
+        {
+            return mlir::failure();
+        }
+    }
+
+    if (needUpdate)
+    {
+        rewriter.updateRootInPlace(op, [&]()
+        {
+            for (auto it : llvm::enumerate(op->getResults()))
+            {
+                it.value().setType(newTypes[it.index()]);
+            }
+        });
+        return mlir::success();
+    }
+    return mlir::failure();
 }

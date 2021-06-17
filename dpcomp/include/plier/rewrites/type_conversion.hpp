@@ -20,6 +20,10 @@
 namespace mlir
 {
 class TypeConverter;
+namespace scf
+{
+class IfOp;
+}
 }
 
 namespace plier
@@ -35,5 +39,17 @@ struct FuncOpSignatureConversion : public mlir::OpRewritePattern<mlir::FuncOp>
 
 private:
     mlir::TypeConverter& converter;
+};
+
+struct FixupIfTypes : public mlir::OpRewritePattern<mlir::scf::IfOp>
+{
+    FixupIfTypes(mlir::TypeConverter &typeConverter,
+                 mlir::MLIRContext *context);
+
+    mlir::LogicalResult matchAndRewrite(
+        mlir::scf::IfOp op, mlir::PatternRewriter &rewriter) const override;
+
+private:
+    mlir::TypeConverter &converter;
 };
 }

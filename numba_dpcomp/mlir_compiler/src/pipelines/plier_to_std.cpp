@@ -1277,68 +1277,6 @@ struct ScfIfRewriteTwoExits : public mlir::OpRewritePattern<mlir::CondBranchOp>
     }
 };
 
-struct ScfIfFixupTypes : public mlir::OpRewritePattern<mlir::scf::IfOp>
-{
-    ScfIfFixupTypes(mlir::TypeConverter &typeConverter,
-                    mlir::MLIRContext *context):
-        OpRewritePattern(context), converter(typeConverter) {}
-
-    mlir::LogicalResult matchAndRewrite(
-        mlir::scf::IfOp op, mlir::PatternRewriter &rewriter) const override
-    {
-        if (op->getNumResults() == 0)
-        {
-            return mlir::failure();
-        }
-
-        llvm::SmallVector<mlir::Type> newTypes;
-        newTypes.reserve(op->getNumResults());
-        auto trueYield = mlir::cast<mlir::scf::YieldOp>(op.thenBlock()->getTerminator());
-        auto falseYield = mlir::cast<mlir::scf::YieldOp>(op.elseBlock()->getTerminator());
-        bool needUpdate = false;
-        for (auto it : llvm::zip(op->getResultTypes(), trueYield->getOperandTypes(), falseYield->getOperandTypes()))
-        {
-            auto retType = std::get<0>(it);
-            auto trueType = std::get<1>(it);
-            auto falseType = std::get<2>(it);
-            if (trueType != falseType)
-            {
-                return mlir::failure();
-            }
-
-            if (retType == trueType)
-            {
-                newTypes.emplace_back(trueType);
-            }
-            else if (converter.convertType(retType) == trueType)
-            {
-                newTypes.emplace_back(trueType);
-                needUpdate = true;
-            }
-            else
-            {
-                return mlir::failure();
-            }
-        }
-
-        if (needUpdate)
-        {
-            rewriter.updateRootInPlace(op, [&]()
-            {
-                for (auto it : llvm::enumerate(op->getResults()))
-                {
-                    it.value().setType(newTypes[it.index()]);
-                }
-            });
-            return mlir::success();
-        }
-        return mlir::failure();
-    }
-
-private:
-    mlir::TypeConverter &converter;
-};
-
 mlir::scf::WhileOp create_while(
     mlir::OpBuilder& builder, mlir::Location loc, mlir::ValueRange iterArgs,
     llvm::function_ref<void(mlir::OpBuilder&, mlir::Location, mlir::ValueRange)> beforeBuilder,
@@ -1994,6 +1932,7 @@ void PlierToStdPass::runOnOperation()
     patterns.insert<
         plier::FuncOpSignatureConversion,
         plier::ArgOpLowering,
+        plier::FixupIfTypes,
 //        RemoveOmittedFuncArgs,
         LiteralLowering<plier::ArgOp>,
         LiteralLowering<plier::GlobalOp>,
@@ -2010,7 +1949,6 @@ void PlierToStdPass::runOnOperation()
         ScfIfRewriteTwoExits,
         ScfWhileRewrite,
         FixupWhileTypes,
-        ScfIfFixupTypes,
         PropagateBuildTupleTypes,
         FoldTupleGetitem,
         FoldSliceGetitem
