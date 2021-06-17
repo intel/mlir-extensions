@@ -575,5 +575,19 @@ def test_multidim_slice():
     a = np.array([[[1],[2],[3]],[[4],[5],[6]]])
     assert_equal(py_func(a, 0), jit_func(a, 0))
 
+@pytest.mark.parametrize("a", [
+    np.array([[1,2],[4,5]])
+    ])
+@pytest.mark.parametrize("b", [True, False])
+def test_func1(a, b):
+    def py_func(m, rowvar):
+        m_arr = np.atleast_2d(m)
+        if not rowvar:
+            m_arr = m_arr.T
+        return m_arr
+    jit_func = njit(py_func)
+
+    assert_equal(py_func(a, b), jit_func(a, b))
+
 if __name__ == '__main__':
     unittest.main()

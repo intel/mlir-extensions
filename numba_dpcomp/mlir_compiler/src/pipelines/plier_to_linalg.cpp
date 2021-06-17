@@ -1234,6 +1234,7 @@ void PlierToLinalgPass::runOnOperation()
     mlir::OwningRewritePatternList patterns(context);
     patterns.insert<
         plier::FuncOpSignatureConversion,
+        plier::FixupIfTypes,
         plier::CastOpLowering,
         plier::ArgOpLowering,
         RankedTypesCasts,
