@@ -677,16 +677,36 @@ _cov_inputs = [
     # (),
 ]
 
-@pytest.mark.parametrize("y",
+@pytest.mark.parametrize("m",
                          _cov_inputs)
-def test_cov_basic(y):
+def test_cov_basic(m):
     py_func = _cov
     jit_func = njit(py_func)
-    y = y.copy() # TODO: fix strides
-    # print(y)
-    # print(py_func(y))
-    assert_allclose(py_func(y), jit_func(y), rtol=1e-15, atol=1e-15)
+    m = m.copy() # TODO: fix strides
+    assert_allclose(py_func(m), jit_func(m), rtol=1e-15, atol=1e-15)
 
+def _copy_not_none(arg):
+    if not arg is None:
+        arg = arg.copy();
+    return arg
+
+_cov_inputs_m = _rnd.randn(105).reshape(15, 7)
+@pytest.mark.parametrize("m",
+                         [_cov_inputs_m])
+@pytest.mark.parametrize("y",
+                         [None, _cov_inputs_m[::-1]])
+@pytest.mark.parametrize("rowvar",
+                         [False, True])
+@pytest.mark.parametrize("bias",
+                         [False, True])
+@pytest.mark.parametrize("ddof",
+                         [None, -1, 0, 1, 3.0, True])
+def test_cov_explicit_arguments(m, y, rowvar, bias, ddof):
+    py_func = _cov
+    jit_func = njit(py_func)
+    m = _copy_not_none(m) # TODO: fix strides
+    y = _copy_not_none(y) # TODO: fix strides
+    assert_allclose(py_func(m=m, y=y, rowvar=rowvar, bias=bias, ddof=ddof), jit_func(m=m, y=y, rowvar=rowvar, bias=bias, ddof=ddof), rtol=1e-14, atol=1e-14)
 
 if __name__ == '__main__':
     unittest.main()
