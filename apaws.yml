@@ -9,7 +9,7 @@ jobs:
 
   pool: 'AWS'
 
-steps:
+  steps:
 
   - script: |
       source /localdisk/miniconda3/bin/activate
