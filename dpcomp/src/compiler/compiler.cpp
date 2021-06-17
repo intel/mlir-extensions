@@ -208,11 +208,15 @@ public:
     {
         std::string err;
         llvm::raw_string_ostream err_stream(err);
-        auto diag_handler = [&](mlir::Diagnostic& diag)
+        auto diag_handler = [&](const mlir::Diagnostic& diag)
         {
             if (diag.getSeverity() == mlir::DiagnosticSeverity::Error)
             {
                 err_stream << diag;
+                for (auto& note : diag.getNotes())
+                {
+                    err_stream << "\n" << note;
+                }
             }
         };
 
