@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from numba.core.untyped_passes import ReconstructSSA
 from numba.core.typed_passes import NopythonTypeInference, AnnotateTypes
 from numba.core.compiler import CompilerBase, DefaultPassBuilder, DEFAULT_FLAGS, compile_extra
 from numba.core.compiler_machinery import PassManager
@@ -27,6 +28,7 @@ class MlirTempCompiler(CompilerBase): # custom compiler extends from CompilerBas
         untyped_passes = dpb.define_untyped_pipeline(self.state)
         pm.passes.extend(untyped_passes.passes)
 
+        pm.add_pass(ReconstructSSA, "ssa")
         pm.add_pass(NopythonTypeInference, "nopython frontend")
         pm.add_pass(AnnotateTypes, "annotate types")
         pm.add_pass(MlirBackendInner, "mlir backend")
