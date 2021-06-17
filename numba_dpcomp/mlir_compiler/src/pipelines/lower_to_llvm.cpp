@@ -20,6 +20,7 @@
 #include <mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h>
 #include <mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h>
 #include <mlir/Conversion/SCFToStandard/SCFToStandard.h>
+#include <mlir/Conversion/LinalgToLLVM/LinalgToLLVM.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/Dialect/LLVMIR/LLVMDialect.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
@@ -183,19 +184,33 @@ mlir::LLVM::LLVMStructType get_array_type(mlir::TypeConverter& converter, mlir::
     auto ctx = type.getContext();
     auto i8p = mlir::LLVM::LLVMPointerType::get(mlir::IntegerType::get(ctx, 8));
     auto i64 = mlir::IntegerType::get(ctx, 64);
-    auto data_type = converter.convertType(type.getElementType());
-    assert(data_type);
-    auto shape_type = mlir::LLVM::LLVMArrayType::get(i64, static_cast<unsigned>(type.getRank()));
-    const mlir::Type members[] = {
-        i8p, // 0, meminfo
-        i8p, // 1, parent
-        i64, // 2, nitems
-        i64, // 3, itemsize
-        mlir::LLVM::LLVMPointerType::get(data_type), // 4, data
-        shape_type, // 5, shape
-        shape_type, // 6, strides
-    };
-    return mlir::LLVM::LLVMStructType::getLiteral(ctx, members);
+    auto dataType = converter.convertType(type.getElementType());
+    assert(dataType);
+    if (type.getRank() > 0)
+    {
+        auto shapeType = mlir::LLVM::LLVMArrayType::get(i64, static_cast<unsigned>(type.getRank()));
+        const mlir::Type members[] = {
+            i8p, // 0, meminfo
+            i8p, // 1, parent
+            i64, // 2, nitems
+            i64, // 3, itemsize
+            mlir::LLVM::LLVMPointerType::get(dataType), // 4, data
+            shapeType, // 5, shape
+            shapeType, // 6, strides
+        };
+        return mlir::LLVM::LLVMStructType::getLiteral(ctx, members);
+    }
+    else
+    {
+        const mlir::Type members[] = {
+            i8p, // 0, meminfo
+            i8p, // 1, parent
+            i64, // 2, nitems
+            i64, // 3, itemsize
+            mlir::LLVM::LLVMPointerType::get(dataType), // 4, data
+        };
+        return mlir::LLVM::LLVMStructType::getLiteral(ctx, members);
+    }
 }
 
 template<typename F>
@@ -262,13 +277,17 @@ void write_memref_desc(llvm::raw_ostream& os, mlir::MemRefType memref_type)
 {
     if (memref_type.hasRank())
     {
-        os << memref_type.getRank();
+        auto rank = memref_type.getRank();
+        assert(rank >= 0);
+        if (rank > 0)
+        {
+            os << memref_type.getRank() << "x";
+        }
     }
     else
     {
-        os << "?";
+        os << "?x";
     }
-    os << "x";
     memref_type.getElementType().print(os);
 }
 
@@ -393,13 +412,13 @@ mlir::FuncOp get_to_memref_conversion_func(
 }
 
 mlir::FuncOp get_from_memref_conversion_func(
-    mlir::ModuleOp module, mlir::OpBuilder& builder, mlir::MemRefType memref_type,
+    mlir::ModuleOp module, mlir::OpBuilder& builder, mlir::MemRefType memrefType,
     mlir::LLVM::LLVMStructType src_type, mlir::LLVM::LLVMStructType dst_type)
 {
-    assert(memref_type);
+    assert(memrefType);
     assert(src_type);
     assert(dst_type);
-    auto func_name = gen_from_memref_conversion_func_name(memref_type);
+    auto func_name = gen_from_memref_conversion_func_name(memrefType);
     if (auto func = module.lookupSymbol<mlir::FuncOp>(func_name))
     {
         assert(func.getType().getNumResults() == 1);
@@ -427,18 +446,19 @@ mlir::FuncOp get_from_memref_conversion_func(
     auto meminfo = builder.create<mllvm::BitcastOp>(loc, i8ptr_type, extract(0));
     auto orig_ptr = extract(1);
     auto offset = extract(2);
-    auto shape = extract(3);
-    auto strides = extract(4);
+    auto rank = memrefType.getRank();
+    auto shape = (rank > 0 ? extract(3) : mlir::Value());
+    auto strides = (rank > 0 ? extract(4) : mlir::Value());
     auto ptr = builder.create<mllvm::GEPOp>(loc, orig_ptr.getType(), orig_ptr, offset.getResult());
     mlir::Value res = builder.create<mllvm::UndefOp>(loc, dst_type);
     auto null = builder.create<mllvm::NullOp>(loc, i8ptr_type);
     mlir::Value nitems = builder.create<mllvm::ConstantOp>(loc, i64_type, builder.getI64IntegerAttr(1));
-    for (int64_t i = 0; i < memref_type.getRank(); ++i)
+    for (int64_t i = 0; i < rank; ++i)
     {
         auto dim = builder.create<mllvm::ExtractValueOp>(loc, nitems.getType(), shape, builder.getI64ArrayAttr(i));
         nitems = builder.create<mllvm::MulOp>(loc, nitems, dim);
     }
-    auto itemsize = builder.create<mllvm::ConstantOp>(loc, i64_type, builder.getI64IntegerAttr(item_size(memref_type.getElementType())));
+    auto itemsize = builder.create<mllvm::ConstantOp>(loc, i64_type, builder.getI64IntegerAttr(item_size(memrefType.getElementType())));
     auto insert = [&](unsigned index, mlir::Value val)
     {
         auto i = builder.getI64ArrayAttr(index);
@@ -449,8 +469,11 @@ mlir::FuncOp get_from_memref_conversion_func(
     insert(2, nitems);
     insert(3, itemsize);
     insert(4, ptr);
-    insert(5, shape);
-    insert(6, mul_strides(loc, builder, strides, itemsize));
+    if (rank > 0)
+    {
+        insert(5, shape);
+        insert(6, mul_strides(loc, builder, strides, itemsize));
+    }
     builder.create<mllvm::ReturnOp>(loc, res);
     return new_func;
 }
@@ -1280,6 +1303,7 @@ struct PreLLVMLowering : public mlir::PassWrapper<PreLLVMLowering, mlir::Functio
         if (mlir::failed(fix_func_sig(type_helper, func)))
         {
             signalPassFailure();
+            return;
         }
 
         patterns.insert<ReturnOpLowering>(&context,
@@ -1472,6 +1496,7 @@ struct LLVMLoweringPass : public mlir::PassWrapper<LLVMLoweringPass, mlir::Opera
     populateToLLVMAdditionalTypeConversion(typeConverter);
     OwningRewritePatternList patterns(&context);
     populateStdToLLVMConversionPatterns(typeConverter, patterns);
+    populateLinalgToLLVMConversionPatterns(typeConverter, patterns);
 
     patterns.insert<
         LowerUndef,
