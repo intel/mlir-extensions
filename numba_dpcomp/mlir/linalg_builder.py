@@ -83,6 +83,12 @@ class Builder:
     def inline_func(self, func, *args): # TODO: kwargs
         return self._inline_func(self._context, func, args)
 
+    def cast(self, arg, dtype):
+        return self._cast(self._context, arg, dtype)
+
+    def undef(self, dtype):
+        return self._undef(self._context, dtype)
+
 def compile_func(*args, **kwargs):
     import numba_dpcomp.mlir.inner_compiler
     return numba_dpcomp.mlir.inner_compiler.compile_func(*args, **kwargs)
@@ -128,6 +134,8 @@ def eltwise(builder, args, body, res_type = None):
 
     num_dims = len(shape)
     if num_dims == 0:
+        dummy = builder.cast(0, res_type)
+        return builder.inline_func(body, *(args + (dummy,)))
     else:
         iterators = ['parallel' for _ in range(num_dims)]
         dims = ','.join(['d%s' % i for i in range(num_dims)])

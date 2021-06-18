@@ -107,20 +107,26 @@ def _gen_binary_ops():
 
 _gen_binary_ops()
 
-@register_func('numpy.empty', numpy.empty)
-def empty_impl(builder, shape, dtype=None):
+def _init_impl(builder, shape, dtype, init=None):
     if dtype is None:
         dtype = builder.float64
-    return builder.init_tensor(shape, dtype)
 
+    if len(shape) == 0:
+        shape = (shape,)
+
+    if init is None:
+        return builder.init_tensor(shape, dtype)
+    else:
+        init = builder.cast(init, dtype)
+        return builder.init_tensor(shape, dtype, init)
+
+@register_func('numpy.empty', numpy.empty)
+def empty_impl(builder, shape, dtype=None):
+    return _init_impl(builder, shape, dtype)
 
 @register_func('numpy.zeros', numpy.zeros)
 def zeros_impl(builder, shape, dtype=None):
-    if dtype is None:
-        dtype = builder.float64
-
-    return builder.init_tensor(shape, dtype, 0)
-
+    return _init_impl(builder, shape, dtype, 0)
 
 @register_func('numpy.dot', numpy.dot)
 def dot_impl(builder, a, b):

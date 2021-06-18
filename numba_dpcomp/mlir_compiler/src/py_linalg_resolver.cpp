@@ -138,7 +138,20 @@ auto unwrap_ssa_val(py::handle obj)
 
 auto unwrap_type(py::handle obj)
 {
-    return unwrap_mlir<mlir::Type>(obj.attr("_mlir_type").cast<py::capsule>());
+    if (py::hasattr(obj, "_ssa_val"))
+    {
+        auto val = unwrap_ssa_val(obj);
+        if (auto type = val.getType().dyn_cast<plier::TypeVar>())
+        {
+            return type.getType();
+        }
+        val.dump();
+    }
+    else if (py::hasattr(obj, "_mlir_type"))
+    {
+        return unwrap_mlir<mlir::Type>(obj.attr("_mlir_type").cast<py::capsule>());
+    }
+    plier::report_error(llvm::Twine("Invalid type object: ") + to_str(obj.get_type()));
 }
 
 size_t container_size(py::handle obj)
@@ -301,7 +314,7 @@ struct PyLinalgResolver::Context
         }
         if (py::isinstance(obj, type))
         {
-            auto type = unwrap_type(obj);
+            auto type = plier::TypeVar::get(unwrap_type(obj));
             return builder.create<plier::UndefOp>(loc, type);
         }
         if (obj.is_none())
@@ -779,56 +792,39 @@ py::object init_tensor_impl(py::capsule context, py::handle shape, py::handle dt
     auto& builder = ctx.builder;
     auto elem_type = unwrap_type(dtype);
     mlir::Value init;
+    auto index_type = builder.getIndexType();
     auto count = py::len(shape);
-    if (count == 0)
+    llvm::SmallVector<mlir::Value> shape_val(count);
+    llvm::SmallVector<int64_t> static_shape(count, -1);
+    for (size_t i = 0; i < count; ++i)
     {
-        if (init_val.is_none())
+        auto elem = shape[py::int_(i)];
+        if (py::isinstance<py::int_>(elem))
         {
-            // TODO: undef
-            auto zero_val = plier::getConstAttr(elem_type, 0.0);
-            assert(zero_val);
-            init = builder.create<mlir::ConstantOp>(loc, zero_val);
+            static_shape[i] = elem.cast<int64_t>();
         }
-        else
-        {
-            init = do_cast(loc, builder, ctx.context.unwrap_val(loc, builder, init_val), elem_type);
-        }
+        shape_val[i] = do_cast(loc, builder, ctx.context.unwrap_val(loc, builder, elem), index_type);
+    }
+
+    if (init_val.is_none())
+    {
+        init = builder.create<mlir::linalg::InitTensorOp>(loc, shape_val, elem_type);
     }
     else
     {
-        auto index_type = builder.getIndexType();
-        llvm::SmallVector<mlir::Value> shape_val(count);
-        llvm::SmallVector<int64_t> static_shape(count, -1);
-        for (size_t i = 0; i < count; ++i)
+        auto val = do_cast(loc, builder, ctx.context.unwrap_val(loc, builder, init_val), elem_type);
+        llvm::SmallVector<int64_t> shape(count, -1);
+        auto type = mlir::RankedTensorType::get(shape, elem_type);
+        auto body = [&](mlir::OpBuilder &builder, mlir::Location loc, mlir::ValueRange /*indices*/)
         {
-            auto elem = shape[py::int_(i)];
-            if (py::isinstance<py::int_>(elem))
-            {
-                static_shape[i] = elem.cast<int64_t>();
-            }
-            shape_val[i] = do_cast(loc, builder, ctx.context.unwrap_val(loc, builder, elem), index_type);
-        }
-
-        if (init_val.is_none())
-        {
-            init = builder.create<mlir::linalg::InitTensorOp>(loc, shape_val, elem_type);
-        }
-        else
-        {
-            auto val = do_cast(loc, builder, ctx.context.unwrap_val(loc, builder, init_val), elem_type);
-            llvm::SmallVector<int64_t> shape(count, -1);
-            auto type = mlir::RankedTensorType::get(shape, elem_type);
-            auto body = [&](mlir::OpBuilder &builder, mlir::Location loc, mlir::ValueRange /*indices*/)
-            {
-                builder.create<mlir::tensor::YieldOp>(loc, val);
-            };
-            init = builder.create<mlir::tensor::GenerateOp>(loc, type, shape_val, body);
-        }
-        if (llvm::any_of(static_shape, [](auto val){ return val >= 0;}))
-        {
-            auto new_type = mlir::RankedTensorType::get(static_shape, elem_type);
-            init = builder.create<mlir::tensor::CastOp>(loc, new_type, init);
-        }
+            builder.create<mlir::tensor::YieldOp>(loc, val);
+        };
+        init = builder.create<mlir::tensor::GenerateOp>(loc, type, shape_val, body);
+    }
+    if (llvm::any_of(static_shape, [](auto val){ return val >= 0;}))
+    {
+        auto new_type = mlir::RankedTensorType::get(static_shape, elem_type);
+        init = builder.create<mlir::tensor::CastOp>(loc, new_type, init);
     }
     return ctx.context.create_var(context, init);
 }
@@ -1191,6 +1187,31 @@ py::object inline_func_impl(py::capsule context, py::handle func, py::tuple args
     return ctx.context.create_var(context, resValue);
 }
 
+py::object cast_impl(py::capsule context, py::handle src, py::handle dtype)
+{
+    auto& ctx = get_py_context(context);
+    auto& builder = ctx.builder;
+    auto loc = ctx.loc;
+    auto unwrapVal = [&](py::handle obj)
+    {
+        return ctx.context.unwrap_val(loc, builder, obj);
+    };
+    auto val = unwrapVal(src);
+    auto type = unwrap_type(dtype);
+    auto ret = builder.createOrFold<plier::CastOp>(loc, type, val);
+    return ctx.context.create_var(context, ret);
+}
+
+py::object undef_impl(py::capsule context, py::handle dtype)
+{
+    auto& ctx = get_py_context(context);
+    auto& builder = ctx.builder;
+    auto loc = ctx.loc;
+    auto type = unwrap_type(dtype);
+    auto ret = builder.createOrFold<plier::UndefOp>(loc, type);
+    return ctx.context.create_var(context, ret);
+}
+
 void setup_py_builder(py::handle builder, mlir::OpBuilder& b, llvm::function_ref<py::object(mlir::Type)> create_type)
 {
     py::setattr(builder, "_broadcast", py::cpp_function(&broadcast_impl));
@@ -1203,6 +1224,8 @@ void setup_py_builder(py::handle builder, mlir::OpBuilder& b, llvm::function_ref
     py::setattr(builder, "_external_call", py::cpp_function(&external_call_impl));
     py::setattr(builder, "_insert", py::cpp_function(&insert_impl));
     py::setattr(builder, "_inline_func", py::cpp_function(&inline_func_impl));
+    py::setattr(builder, "_cast", py::cpp_function(&cast_impl));
+    py::setattr(builder, "_undef", py::cpp_function(&undef_impl));
 
     auto add_type = [&](const char* name, mlir::Type type)
     {
@@ -1250,9 +1273,9 @@ py::object dtype_impl(py::capsule context, py::capsule ssa_val)
     auto& ctx = get_py_context(context);
     auto value = unwrap_mlir<mlir::Value>(ssa_val);
     auto type = value.getType();
-    if (auto tensor_type = type.dyn_cast<mlir::RankedTensorType>())
+    if (auto tensorType = type.dyn_cast<mlir::RankedTensorType>())
     {
-        return ctx.context.create_type(tensor_type.getElementType());
+        type = tensorType.getElementType();
     }
     return ctx.context.create_type(type);
 }
@@ -1356,25 +1379,18 @@ void setup_py_var(pybind11::handle var)
     py::setattr(var, "_binop", py::cpp_function(&binop_impl));
 }
 
-PyLinalgResolver::Values unpack_results(mlir::Location loc, mlir::OpBuilder& builder, py::handle object)
+PyLinalgResolver::Values unpack_results(PyBuilderContext& ctx, py::handle object)
 {
     PyLinalgResolver::Values ret;
     if (object.is_none())
     {
         return ret;
     }
-    auto unpack = [&](py::handle obj)
+    auto& builder = ctx.builder;
+    auto loc = ctx.loc;
+    auto unwrapVal = [&](py::handle obj)
     {
-        if (py::hasattr(obj, "_ssa_val"))
-        {
-            return unwrap_ssa_val(obj);
-        }
-        if (py::hasattr(obj, "_mlir_type"))
-        {
-            auto type = plier::TypeVar::get(unwrap_type(obj));
-            return builder.create<plier::UndefOp>(loc, type).getResult();
-        }
-        llvm_unreachable("Invalid type");
+        return ctx.context.unwrap_val(loc, builder, obj);
     };
     if (py::isinstance<py::tuple>(object))
     {
@@ -1382,13 +1398,13 @@ PyLinalgResolver::Values unpack_results(mlir::Location loc, mlir::OpBuilder& bui
         llvm::SmallVector<mlir::Value> vals(tuple.size());
         for (auto it : llvm::enumerate(tuple))
         {
-            vals[it.index()] = unpack(it.value());
+            vals[it.index()] = unwrapVal(it.value());
         }
         ret.emplace_back(builder.create<plier::BuildTupleOp>(loc, vals));
     }
     else
     {
-        ret.emplace_back(unpack(object));
+        ret.emplace_back(unwrapVal(object));
     }
     return ret;
 }
@@ -1460,5 +1476,5 @@ llvm::Optional<PyLinalgResolver::Values> PyLinalgResolver::rewrite(llvm::StringR
     {
         return {};
     }
-    return unpack_results(loc, builder, result);
+    return unpack_results(py_builder_context, result);
 }
