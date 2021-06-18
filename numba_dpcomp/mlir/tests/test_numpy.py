@@ -452,14 +452,7 @@ _test_reshape_test_arrays = [
     _test_reshape_test_array.reshape((2,6)),
     _test_reshape_test_array.reshape((2,3,2)),
 ]
-@pytest.mark.parametrize("py_func", [
-    lambda a: a.reshape(a.size),
-    lambda a: a.reshape((a.size,)),
-    lambda a: a.reshape((a.size,1)),
-    lambda a: a.reshape((1, a.size)),
-    lambda a: a.reshape((1, a.size, 1)),
-    ],
-    ids=[
+@parametrize_function_variants("py_func", [
     'lambda a: a.reshape(a.size)',
     'lambda a: a.reshape((a.size,))',
     'lambda a: a.reshape((a.size,1))',
@@ -471,12 +464,8 @@ def test_reshape(py_func, array):
     jit_func = njit(py_func)
     assert_equal(py_func(array), jit_func(array))
 
-@pytest.mark.parametrize("py_func", [
-    # lambda a: a.flat, TODO: flat support
-    lambda a: a.flatten(),
-    ],
-    ids=[
-    # 'lambda a: a.flat',
+@parametrize_function_variants("py_func", [
+    # 'lambda a: a.flat', TODO: flat support
     'lambda a: a.flatten()',
     ])
 @pytest.mark.parametrize("array", _test_reshape_test_arrays)
@@ -484,15 +473,10 @@ def test_flatten(py_func, array):
     jit_func = njit(py_func)
     assert_equal(py_func(array), jit_func(array))
 
-@pytest.mark.parametrize("py_func", [
-    lambda a, b: (),
-    lambda a, b: (a,b),
-    lambda a, b: ((a,b),(a,a),(b,b),()),
-    ],
-    ids=[
-    '()',
-    '(a,b)',
-    '((a,b),(a,a),(b,b),())',
+@parametrize_function_variants("py_func", [
+    'lambda a, b: ()',
+    'lambda a, b: (a,b)',
+    'lambda a, b: ((a,b),(a,a),(b,b),())',
     ])
 @pytest.mark.parametrize("a,b",
         itertools.product(*(([1,2.5,np.array([1,2,3]), np.array([4.5,6.7,8.9])],)*2))
@@ -532,17 +516,7 @@ def test_concat(arrays, axis):
     jit_func = njit(py_func)
     assert_equal(py_func(*arr), jit_func(*arr))
 
-@pytest.mark.parametrize("py_func", [
-    lambda a, b, c, d: a[b:c],
-    lambda a, b, c, d: a[3:c],
-    lambda a, b, c, d: a[b:4],
-    lambda a, b, c, d: a[3:4],
-    lambda a, b, c, d: a[b:c:d],
-    lambda a, b, c, d: a[b:c:1],
-    lambda a, b, c, d: a[b:c:2],
-    lambda a, b, c, d: a[3:4:2],
-    ],
-    ids=[
+@parametrize_function_variants("py_func", [
     'lambda a, b, c, d: a[b:c]',
     'lambda a, b, c, d: a[3:c]',
     'lambda a, b, c, d: a[b:4]',
