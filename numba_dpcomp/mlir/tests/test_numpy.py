@@ -551,7 +551,7 @@ def test_size_ret():
     np.array([[1,2],[4,5]])
     ])
 @pytest.mark.parametrize("b", [True, False])
-def test_func1(a, b):
+def test_tensor_if(a, b):
     def py_func(m, rowvar):
         m_arr = np.atleast_2d(m)
         if not rowvar:
