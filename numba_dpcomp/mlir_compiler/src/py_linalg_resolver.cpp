@@ -110,7 +110,7 @@ bool is_compatible_type(mlir::Type type)
     {
         return llvm::all_of(tuple_type, &is_compatible_type);
     }
-    return type.isa<mlir::IntegerType, mlir::IndexType, mlir::FloatType, mlir::RankedTensorType, plier::LiteralType, plier::TypeVar>();
+    return type.isa<mlir::IntegerType, mlir::IndexType, mlir::FloatType, mlir::RankedTensorType, plier::NoneType, plier::LiteralType, plier::TypeVar>();
 }
 
 template<typename R>
@@ -261,6 +261,10 @@ struct PyLinalgResolver::Context
     {
         assert(value);
         auto type = value.getType();
+        if (type.isa<plier::NoneType>())
+        {
+            return py::none();
+        }
         if (auto typevar = type.dyn_cast<plier::TypeVar>())
         {
             return create_type(typevar.getType());
@@ -1011,7 +1015,7 @@ py::object reshape_impl(py::capsule context, py::handle src, py::iterable newDim
 
     auto newDimsVals = [&]()
     {
-        auto dimType = builder.getI32Type();
+        auto dimType = builder.getIndexType();
         auto dims = unwrapVal(newDims);
         llvm::SmallVector<mlir::Value> ret;
         if (auto tupleType = dims.getType().dyn_cast<mlir::TupleType>())

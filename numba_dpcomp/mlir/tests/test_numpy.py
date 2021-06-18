@@ -27,6 +27,10 @@ def _vectorize_reference(func, arg1):
         ret[ind] = func(val)
     return ret
 
+def parametrize_function_variants(name, strings):
+    funcs = [eval(f) for f in strings]
+    return pytest.mark.parametrize(name, funcs, ids=strings)
+
 _arr_1d_int = [1,2,3,4,5,6,7,8]
 _arr_1d_float = [1.0,2.1,3.2,4.3,5.4,6.5,7.6,8.7]
 _arr_2d_int = [[1,2,3,4],[5,6,7,8]]
@@ -34,20 +38,18 @@ _arr_2d_float = [[1.0,2.1,3.2,4.3],[5.4,6.5,7.6,8.7]]
 _test_arrays = [_arr_1d_int, _arr_1d_float, _arr_2d_int, _arr_2d_float]
 _test_arrays_ids = ["1d_int", "1d_float", "2d_int", "2d_float"]
 
-@pytest.mark.parametrize("py_func",
-                         [lambda a: a.sum(),
-                          lambda a: np.sum(a),
-                          lambda a: np.sqrt(a),
-                          lambda a: np.square(a),
-                          lambda a: np.log(a),
-                          lambda a: np.sin(a),
-                          lambda a: np.cos(a),
-                          lambda a: a.size,
-                          # lambda a: a.T, TODO: need fortran layout support
-                          lambda a: a.T.T,
-                         ],
-                         ids=["a.sum", "sum", "sqrt", "square", "log", "sin",
-                              "cos", "a.size", "a.T.T"])
+@parametrize_function_variants("py_func", [
+    'lambda a: a.sum()',
+    'lambda a: np.sum(a)',
+    'lambda a: np.sqrt(a)',
+    'lambda a: np.square(a)',
+    'lambda a: np.log(a)',
+    'lambda a: np.sin(a)',
+    'lambda a: np.cos(a)',
+    'lambda a: a.size',
+    'lambda a: a.T.T',
+    # lambda a: a.T, TODO: need fortran layout support
+])
 @pytest.mark.parametrize("arr_list",
                          _test_arrays,
                          ids=_test_arrays_ids)
@@ -58,30 +60,18 @@ def test_unary(py_func, arr_list, request):
 
 _test_binary_test_arrays = [1, 2.5, np.array([1,2,3]), np.array([4.4,5.5,6.6])]
 _test_binary_test_arrays_ids = ['1', '2.5', 'np.array([1,2,3])', 'np.array([4.4,5.5,6.6])']
-@pytest.mark.parametrize("py_func",
-                         [lambda a, b: np.add(a, b),
-                          lambda a, b: a + b,
-                          lambda a, b: np.subtract(a, b),
-                          lambda a, b: a - b,
-                          lambda a, b: np.multiply(a, b),
-                          lambda a, b: a * b,
-                          lambda a, b: np.power(a, b),
-                          lambda a, b: a ** b,
-                          lambda a, b: np.true_divide(a, b),
-                          lambda a, b: a / b,
-                         ],
-                         ids=[
-                          'np.add(a, b)',
-                          'a + b',
-                          'np.subtract(a, b)',
-                          'a - b',
-                          'np.multiply(a, b)',
-                          'a * b',
-                          'np.power(a, b)',
-                          'a ** b',
-                          'np.true_divide(a, b)',
-                          'a / b',
-                         ])
+@parametrize_function_variants("py_func", [
+    'lambda a, b: np.add(a, b)',
+    'lambda a, b: a + b',
+    'lambda a, b: np.subtract(a, b)',
+    'lambda a, b: a - b',
+    'lambda a, b: np.multiply(a, b)',
+    'lambda a, b: a * b',
+    'lambda a, b: np.power(a, b)',
+    'lambda a, b: a ** b',
+    'lambda a, b: np.true_divide(a, b)',
+    'lambda a, b: a / b',
+])
 @pytest.mark.parametrize("a",
                          _test_binary_test_arrays,
                          ids=_test_binary_test_arrays_ids)
@@ -462,14 +452,7 @@ _test_reshape_test_arrays = [
     _test_reshape_test_array.reshape((2,6)),
     _test_reshape_test_array.reshape((2,3,2)),
 ]
-@pytest.mark.parametrize("py_func", [
-    lambda a: a.reshape(a.size),
-    lambda a: a.reshape((a.size,)),
-    lambda a: a.reshape((a.size,1)),
-    lambda a: a.reshape((1, a.size)),
-    lambda a: a.reshape((1, a.size, 1)),
-    ],
-    ids=[
+@parametrize_function_variants("py_func", [
     'lambda a: a.reshape(a.size)',
     'lambda a: a.reshape((a.size,))',
     'lambda a: a.reshape((a.size,1))',
@@ -481,12 +464,8 @@ def test_reshape(py_func, array):
     jit_func = njit(py_func)
     assert_equal(py_func(array), jit_func(array))
 
-@pytest.mark.parametrize("py_func", [
-    # lambda a: a.flat, TODO: flat support
-    lambda a: a.flatten(),
-    ],
-    ids=[
-    # 'lambda a: a.flat',
+@parametrize_function_variants("py_func", [
+    # 'lambda a: a.flat', TODO: flat support
     'lambda a: a.flatten()',
     ])
 @pytest.mark.parametrize("array", _test_reshape_test_arrays)
@@ -494,15 +473,10 @@ def test_flatten(py_func, array):
     jit_func = njit(py_func)
     assert_equal(py_func(array), jit_func(array))
 
-@pytest.mark.parametrize("py_func", [
-    lambda a, b: (),
-    lambda a, b: (a,b),
-    lambda a, b: ((a,b),(a,a),(b,b),()),
-    ],
-    ids=[
-    '()',
-    '(a,b)',
-    '((a,b),(a,a),(b,b),())',
+@parametrize_function_variants("py_func", [
+    'lambda a, b: ()',
+    'lambda a, b: (a,b)',
+    'lambda a, b: ((a,b),(a,a),(b,b),())',
     ])
 @pytest.mark.parametrize("a,b",
         itertools.product(*(([1,2.5,np.array([1,2,3]), np.array([4.5,6.7,8.9])],)*2))
@@ -542,17 +516,7 @@ def test_concat(arrays, axis):
     jit_func = njit(py_func)
     assert_equal(py_func(*arr), jit_func(*arr))
 
-@pytest.mark.parametrize("py_func", [
-    lambda a, b, c, d: a[b:c],
-    lambda a, b, c, d: a[3:c],
-    lambda a, b, c, d: a[b:4],
-    lambda a, b, c, d: a[3:4],
-    lambda a, b, c, d: a[b:c:d],
-    lambda a, b, c, d: a[b:c:1],
-    lambda a, b, c, d: a[b:c:2],
-    lambda a, b, c, d: a[3:4:2],
-    ],
-    ids=[
+@parametrize_function_variants("py_func", [
     'lambda a, b, c, d: a[b:c]',
     'lambda a, b, c, d: a[3:c]',
     'lambda a, b, c, d: a[b:4]',
@@ -575,11 +539,19 @@ def test_multidim_slice():
     a = np.array([[[1],[2],[3]],[[4],[5],[6]]])
     assert_equal(py_func(a, 0), jit_func(a, 0))
 
+def test_size_ret():
+    def py_func(a, b):
+        return a.size / b
+    jit_func = njit(py_func)
+
+    a = np.array([[[1],[2],[3]],[[4],[5],[6]]])
+    assert_equal(py_func(a, 3), jit_func(a, 3))
+
 @pytest.mark.parametrize("a", [
     np.array([[1,2],[4,5]])
     ])
 @pytest.mark.parametrize("b", [True, False])
-def test_func1(a, b):
+def test_tensor_if(a, b):
     def py_func(m, rowvar):
         m_arr = np.atleast_2d(m)
         if not rowvar:
