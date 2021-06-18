@@ -80,6 +80,15 @@ class Builder:
     def insert(self, src, dst, offsets, sizes, strides):
         return self._insert(self._context, src, dst, offsets, sizes, strides)
 
+    def inline_func(self, func, *args): # TODO: kwargs
+        return self._inline_func(self._context, func, args)
+
+    def cast(self, arg, dtype):
+        return self._cast(self._context, arg, dtype)
+
+    def undef(self, dtype):
+        return self._undef(self._context, dtype)
+
 def compile_func(*args, **kwargs):
     import numba_dpcomp.mlir.inner_compiler
     return numba_dpcomp.mlir.inner_compiler.compile_func(*args, **kwargs)
@@ -119,15 +128,25 @@ def eltwise(builder, args, body, res_type = None):
         args = (args,)
 
     if res_type is None:
-        res_type = broadcast_type(builder, args)
+        res_type = args[0].dtype
 
     shape = args[0].shape
 
     num_dims = len(shape)
-    iterators = ['parallel' for _ in range(num_dims)]
-    dims = ','.join(['d%s' % i for i in range(num_dims)])
-    expr = f'({dims}) -> ({dims})'
-    maps = [expr for _ in range(len(args) + 1)]
-    init = builder.init_tensor(shape, res_type)
+    if num_dims == 0:
+        dummy = builder.cast(0, res_type)
+        return builder.inline_func(body, *(args + (dummy,)))
+    else:
+        iterators = ['parallel' for _ in range(num_dims)]
+        dims = ','.join(['d%s' % i for i in range(num_dims)])
+        expr = f'({dims}) -> ({dims})'
+        maps = [expr for _ in range(len(args) + 1)]
+        init = builder.init_tensor(shape, res_type)
 
-    return builder.generic(args, init, iterators, maps, body)
+        return builder.generic(args, init, iterators, maps, body)
+
+def convert_array(builder, arr, dtype):
+    if arr.dtype == dtype:
+        return arr
+
+    return eltwise(builder, arr, lambda a, b: a, dtype)
