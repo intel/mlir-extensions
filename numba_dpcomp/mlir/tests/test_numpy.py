@@ -539,6 +539,14 @@ def test_multidim_slice():
     a = np.array([[[1],[2],[3]],[[4],[5],[6]]])
     assert_equal(py_func(a, 0), jit_func(a, 0))
 
+def test_size_ret():
+    def py_func(a, b):
+        return a.size / b
+    jit_func = njit(py_func)
+
+    a = np.array([[[1],[2],[3]],[[4],[5],[6]]])
+    assert_equal(py_func(a, 3), jit_func(a, 3))
+
 @pytest.mark.parametrize("a", [
     np.array([[1,2],[4,5]])
     ])

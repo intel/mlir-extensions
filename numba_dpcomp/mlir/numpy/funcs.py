@@ -164,7 +164,7 @@ def size_impl(builder, arg):
     res = 1
     for i in range(len(shape)):
         res = res * shape[i]
-    return res
+    return builder.cast(res, builder.int64)
 
 @register_attr('array.T')
 def transpose_impl(builder, arg):
