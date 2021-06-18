@@ -119,15 +119,17 @@ def eltwise(builder, args, body, res_type = None):
         args = (args,)
 
     if res_type is None:
-        res_type = broadcast_type(builder, args)
+        res_type = args[0].dtype
 
     shape = args[0].shape
 
     num_dims = len(shape)
-    iterators = ['parallel' for _ in range(num_dims)]
-    dims = ','.join(['d%s' % i for i in range(num_dims)])
-    expr = f'({dims}) -> ({dims})'
-    maps = [expr for _ in range(len(args) + 1)]
-    init = builder.init_tensor(shape, res_type)
+    if num_dims == 0:
+    else:
+        iterators = ['parallel' for _ in range(num_dims)]
+        dims = ','.join(['d%s' % i for i in range(num_dims)])
+        expr = f'({dims}) -> ({dims})'
+        maps = [expr for _ in range(len(args) + 1)]
+        init = builder.init_tensor(shape, res_type)
 
-    return builder.generic(args, init, iterators, maps, body)
+        return builder.generic(args, init, iterators, maps, body)

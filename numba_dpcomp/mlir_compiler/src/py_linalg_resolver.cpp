@@ -847,34 +847,26 @@ py::object generic_impl(py::capsule context, py::handle inputs, py::handle outpu
         }
         return ret;
     };
-    if (mlir_iterators.empty())
-    {
-        inputs_args.append(output_args.begin(), output_args.end());
-        auto res = builder.create<mlir::CallOp>(loc, body_func, inputs_args);
-        return ctx.context.wrap_result(context, cast_values(res.getResults(), ret_types));
-    }
-    else
-    {
-        auto affine_maps = get_affine_maps(maps, mlir_context);
-        auto body_builder = [&](mlir::OpBuilder& builder, mlir::Location loc, mlir::ValueRange args)
-        {
-            auto func_type = body_func.getType();
-            auto new_args = cast_values(args, func_type.getInputs());
-            auto call = builder.create<mlir::CallOp>(loc, body_func, new_args);
-            auto new_results = cast_values(call.getResults(), generic_op_body_result_types(output_args));
-            builder.create<mlir::linalg::YieldOp>(loc, new_results);
-        };
 
-        auto generic_op = builder.create<mlir::linalg::GenericOp>(
-            loc,
-            ret_types,
-            inputs_args,
-            output_args,
-            affine_maps,
-            mlir_iterators,
-            body_builder);
-        return ctx.context.wrap_result(context, generic_op.getResults());
-    }
+    auto affine_maps = get_affine_maps(maps, mlir_context);
+    auto body_builder = [&](mlir::OpBuilder& builder, mlir::Location loc, mlir::ValueRange args)
+    {
+        auto func_type = body_func.getType();
+        auto new_args = cast_values(args, func_type.getInputs());
+        auto call = builder.create<mlir::CallOp>(loc, body_func, new_args);
+        auto new_results = cast_values(call.getResults(), generic_op_body_result_types(output_args));
+        builder.create<mlir::linalg::YieldOp>(loc, new_results);
+    };
+
+    auto generic_op = builder.create<mlir::linalg::GenericOp>(
+        loc,
+        ret_types,
+        inputs_args,
+        output_args,
+        affine_maps,
+        mlir_iterators,
+        body_builder);
+    return ctx.context.wrap_result(context, generic_op.getResults());
 }
 
 py::object from_elements_impl(py::capsule context, py::handle values, py::handle dtype)
@@ -1177,7 +1169,7 @@ py::object len_impl(py::capsule /*context*/, py::capsule ssa_val)
     {
         return py::int_(tuple_type.size());
     }
-    return py::int_(1);
+    return py::int_(0);
 }
 
 py::object getitem_impl(py::capsule context, py::capsule ssa_val, py::handle index)
@@ -1206,11 +1198,7 @@ py::object getitem_impl(py::capsule context, py::capsule ssa_val, py::handle ind
     }
     else
     {
-        if (0 != index_val)
-        {
-            throw py::index_error(("Invalid getitem index: " + llvm::Twine(index_val) + ", 0 is expected").str());
-        }
-        return ctx.context.create_var(context, value);
+        throw py::index_error("Invalid getitem");
     }
 }
 
