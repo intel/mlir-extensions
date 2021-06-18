@@ -80,6 +80,9 @@ class Builder:
     def insert(self, src, dst, offsets, sizes, strides):
         return self._insert(self._context, src, dst, offsets, sizes, strides)
 
+    def inline_func(self, func, *args): # TODO: kwargs
+        return self._inline_func(self._context, func, args)
+
 def compile_func(*args, **kwargs):
     import numba_dpcomp.mlir.inner_compiler
     return numba_dpcomp.mlir.inner_compiler.compile_func(*args, **kwargs)
@@ -133,3 +136,9 @@ def eltwise(builder, args, body, res_type = None):
         init = builder.init_tensor(shape, res_type)
 
         return builder.generic(args, init, iterators, maps, body)
+
+def convert_array(builder, arr, dtype):
+    if arr.dtype == dtype:
+        return arr
+
+    return eltwise(builder, arr, lambda a, b: a, dtype)

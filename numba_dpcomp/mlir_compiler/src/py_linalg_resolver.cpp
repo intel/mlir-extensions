@@ -26,9 +26,12 @@
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Parser.h>
 #include <mlir/IR/BuiltinAttributes.h>
+#include <mlir/Transforms/DialectConversion.h>
 
 #include "plier/dialect.hpp"
 #include "py_map_types.hpp"
+#include "pipelines/plier_to_std.hpp"
+#include "pipelines/plier_to_linalg.hpp"
 #include "plier/utils.hpp"
 #include "plier/transforms/const_utils.hpp"
 #include "plier/transforms/func_utils.hpp"
@@ -51,6 +54,53 @@ std::string to_str(mlir::Type type)
     ss << type;
     ss.flush();
     return ret;
+}
+
+std::string to_str(mlir::TypeRange typesRange)
+{
+    std::string str;
+    llvm::raw_string_ostream ss(str);
+    for (auto type : typesRange)
+    {
+        ss << type << " ";
+    }
+    ss.flush();
+    return str;
+}
+
+std::string to_str(py::handle obj)
+{
+    return py::str(obj).cast<std::string>();
+}
+
+py::object mapTypesToNumbaChecked(py::handle typesMod, mlir::TypeRange typesRange)
+{
+    auto funcTypes = map_types_to_numba(typesMod, typesRange);
+    if (funcTypes.is_none())
+    {
+        assert(!typesRange.empty());
+        auto context = typesRange.front().getContext();
+        mlir::TypeConverter converter;
+        populate_std_type_converter(*context, converter);
+        populate_array_type_converter(*context, converter);
+        llvm::SmallVector<mlir::Type> convertedTypes(typesRange.size());
+        for (auto it : llvm::enumerate(typesRange))
+        {
+            auto oldType = it.value();
+            auto newType = converter.convertType(oldType);
+            if (!newType)
+            {
+                newType = oldType;
+            }
+            convertedTypes[it.index()] = newType;
+        }
+        funcTypes = map_types_to_numba(typesMod, convertedTypes);
+        if (funcTypes.is_none())
+        {
+            plier::report_error(llvm::Twine("map_types_to_numba failed: ") + to_str(typesRange));
+        }
+    }
+    return funcTypes;
 }
 
 bool is_compatible_type(mlir::Type type)
@@ -248,6 +298,16 @@ struct PyLinalgResolver::Context
         {
             return unwrap_ssa_val(obj);
         }
+        if (py::isinstance(obj, type))
+        {
+            auto type = unwrap_type(obj);
+            return builder.create<plier::UndefOp>(loc, type);
+        }
+        if (obj.is_none())
+        {
+            auto type = plier::NoneType::get(builder.getContext());
+            return builder.create<plier::UndefOp>(loc, type);
+        }
         if (py::isinstance<py::int_>(obj))
         {
             auto attr = builder.getI64IntegerAttr(obj.cast<int64_t>());
@@ -258,7 +318,7 @@ struct PyLinalgResolver::Context
             auto attr = builder.getF64FloatAttr(obj.cast<double>());
             return builder.create<mlir::ConstantOp>(loc, attr);
         }
-        plier::report_error("Invalid element type");
+        plier::report_error(llvm::Twine("Invalid element type: ") + to_str(obj.get_type()));
     }
 };
 
@@ -824,8 +884,7 @@ py::object generic_impl(py::capsule context, py::handle inputs, py::handle outpu
     auto ret_types = get_types(output_args);
     auto mlir_iterators = get_iterators(iterators, mlir_context);
 
-    auto func_types = map_types_to_numba(ctx.context.types_mod, get_generic_op_body_types(inputs_args, output_args));
-    assert(!func_types.is_none());
+    auto func_types = mapTypesToNumbaChecked(ctx.context.types_mod, get_generic_op_body_types(inputs_args, output_args));
     auto body_func = ctx.context.compile_body(body, func_types);
 
     auto cast_values = [&](mlir::ValueRange vals, mlir::TypeRange types)
@@ -1096,6 +1155,35 @@ py::object insert_impl(py::capsule context, py::handle src, py::handle dst, py::
     return ctx.context.create_var(context, res);
 }
 
+py::object inline_func_impl(py::capsule context, py::handle func, py::tuple args)
+{
+    auto& ctx = get_py_context(context);
+    auto& builder = ctx.builder;
+    auto loc = ctx.loc;
+
+    auto argsValues = [&]()
+    {
+        auto unwrapVal = [&](py::handle obj)
+        {
+            return ctx.context.unwrap_val(loc, builder, obj);
+        };
+        llvm::SmallVector<mlir::Value> ret(args.size());
+        for (auto it : llvm::enumerate(args))
+        {
+            ret[it.index()] = unwrapVal(it.value());
+        }
+        return ret;
+    }();
+    auto funcTypes = mapTypesToNumbaChecked(ctx.context.types_mod, mlir::ValueRange(argsValues).getTypes());
+    auto bodyFunc = ctx.context.compile_body(func, funcTypes);
+    auto res = builder.create<mlir::CallOp>(loc, bodyFunc, argsValues);
+    if (res.getNumResults() != 1)
+    {
+        plier::report_error("Invalid number of return values");
+    }
+    return ctx.context.create_var(context, res.getResult(0));
+}
+
 void setup_py_builder(py::handle builder, mlir::OpBuilder& b, llvm::function_ref<py::object(mlir::Type)> create_type)
 {
     py::setattr(builder, "_broadcast", py::cpp_function(&broadcast_impl));
@@ -1107,6 +1195,7 @@ void setup_py_builder(py::handle builder, mlir::OpBuilder& b, llvm::function_ref
     py::setattr(builder, "_reshape", py::cpp_function(&reshape_impl));
     py::setattr(builder, "_external_call", py::cpp_function(&external_call_impl));
     py::setattr(builder, "_insert", py::cpp_function(&insert_impl));
+    py::setattr(builder, "_inline_func", py::cpp_function(&inline_func_impl));
 
     auto add_type = [&](const char* name, mlir::Type type)
     {
