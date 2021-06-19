@@ -1989,7 +1989,7 @@ void populate_std_type_converter(mlir::MLIRContext& /*context*/, mlir::TypeConve
     [](mlir::Type type, llvm::SmallVectorImpl<mlir::Type>& ret_types)
     ->llvm::Optional<mlir::LogicalResult>
     {
-        if (type.isa<plier::NoneType>() || isOmittedType(type))
+        if (isOmittedType(type))
         {
             return mlir::success();
         }
