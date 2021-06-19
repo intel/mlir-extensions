@@ -116,20 +116,28 @@ llvm::Optional<mlir::Type> convertTuple(mlir::LLVMTypeConverter& converter, mlir
     return mlir::LLVM::LLVMStructType::getLiteral(tuple.getContext(), newTypes);
 }
 
-void populateTupleToLLVMTypeConversion(mlir::LLVMTypeConverter &converter)
+void populateToLLVMAdditionalTypeConversion(mlir::LLVMTypeConverter &converter)
 {
     converter.addConversion([&converter](mlir::TupleType type)
     {
         return convertTuple(converter, type);
     });
+    auto voidPtrType = mlir::LLVM::LLVMPointerType::get(mlir::IntegerType::get(&converter.getContext(), 8));
+    converter.addConversion([voidPtrType](plier::NoneType)->llvm::Optional<mlir::Type>
+    {
+        return voidPtrType;
+    });
+
 }
+
+
 
 struct LLVMTypeHelper
 {
     LLVMTypeHelper(mlir::MLIRContext& ctx):
         type_converter(&ctx)
     {
-        populateTupleToLLVMTypeConversion(type_converter);
+        populateToLLVMAdditionalTypeConversion(type_converter);
     }
 
     mlir::Type i(unsigned bits)
@@ -1461,8 +1469,7 @@ struct LLVMLoweringPass : public mlir::PassWrapper<LLVMLoweringPass, mlir::Opera
     ModuleOp m = getOperation();
 
     LLVMTypeConverter typeConverter(&context, options);
-    populateTupleToLLVMTypeConversion(typeConverter);
-
+    populateToLLVMAdditionalTypeConversion(typeConverter);
     OwningRewritePatternList patterns(&context);
     populateStdToLLVMConversionPatterns(typeConverter, patterns);
 
