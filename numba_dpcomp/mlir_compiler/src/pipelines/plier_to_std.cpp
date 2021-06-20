@@ -34,6 +34,7 @@
 #include "plier/rewrites/call_lowering.hpp"
 #include "plier/rewrites/cast_lowering.hpp"
 #include "plier/rewrites/type_conversion.hpp"
+#include "plier/transforms/cast_utils.hpp"
 #include "plier/transforms/const_utils.hpp"
 #include "plier/transforms/func_utils.hpp"
 #include "plier/transforms/loop_utils.hpp"
@@ -660,9 +661,9 @@ mlir::Value float_int_cast(mlir::Type dst_type, mlir::Value val, mlir::PatternRe
     return res;
 }
 
-mlir::Value index_cast_impl(mlir::Type dst_type, mlir::Value val, mlir::PatternRewriter& rewriter)
+mlir::Value index_cast_impl(mlir::Type dstType, mlir::Value val, mlir::PatternRewriter& rewriter)
 {
-    return rewriter.create<mlir::IndexCastOp>(val.getLoc(), val, dst_type);
+    return plier::index_cast(rewriter, val.getLoc(), val, dstType);
 }
 
 mlir::Value do_cast(mlir::Type dst_type, mlir::Value val, mlir::PatternRewriter& rewriter)
