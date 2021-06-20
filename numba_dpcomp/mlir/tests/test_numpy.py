@@ -685,8 +685,8 @@ def test_cov_basic(m):
     m = m.copy() # TODO: fix strides
     assert_allclose(py_func(m), jit_func(m), rtol=1e-15, atol=1e-15)
 
-def _copy_not_none(arg):
-    if not arg is None:
+def _copy_array(arg):
+    if isinstance(arg, np.ndarray):
         arg = arg.copy();
     return arg
 
@@ -702,11 +702,36 @@ _cov_inputs_m = _rnd.randn(105).reshape(15, 7)
 @pytest.mark.parametrize("ddof",
                          [None, -1, 0, 1, 3.0, True])
 def test_cov_explicit_arguments(m, y, rowvar, bias, ddof):
+    if isinstance(ddof, bool):
+        pytest.xfail()
     py_func = _cov
     jit_func = njit(py_func)
-    m = _copy_not_none(m) # TODO: fix strides
-    y = _copy_not_none(y) # TODO: fix strides
+    m = _copy_array(m) # TODO: fix strides
+    y = _copy_array(y) # TODO: fix strides
     assert_allclose(py_func(m=m, y=y, rowvar=rowvar, bias=bias, ddof=ddof), jit_func(m=m, y=y, rowvar=rowvar, bias=bias, ddof=ddof), rtol=1e-14, atol=1e-14)
+
+@parametrize_function_variants("m, y, rowvar", [
+    '(np.array([-2.1, -1, 4.3]), np.array([3, 1.1, 0.12]), True)',
+    '(np.array([1, 2, 3]), np.array([1j, 2j, 3j]), True)',
+    '(np.array([1j, 2j, 3j]), np.array([1, 2, 3]), True)',
+    '(np.array([1, 2, 3]), np.array([1j, 2j, 3]), True)',
+    '(np.array([1j, 2j, 3]), np.array([1, 2, 3]), True)',
+    '(np.array([]), np.array([]), True)',
+    '(1.1, 2.2, True)',
+    '(_rnd.randn(10, 3), np.array([-2.1, -1, 4.3]).reshape(1, 3) / 10, True)',
+    '(np.array([-2.1, -1, 4.3]), np.array([[3, 1.1, 0.12], [3, 1.1, 0.12]]), True)',
+    # '(np.array([-2.1, -1, 4.3]), np.array([[3, 1.1, 0.12], [3, 1.1, 0.12]]), False)',
+    '(np.array([[3, 1.1, 0.12], [3, 1.1, 0.12]]), np.array([-2.1, -1, 4.3]), True)',
+    # '(np.array([[3, 1.1, 0.12], [3, 1.1, 0.12]]), np.array([-2.1, -1, 4.3]), False)',
+    ])
+def test_cov_edge_cases(m, y, rowvar):
+    if not isinstance(m, np.ndarray) or not isinstance(y, np.ndarray) or np.iscomplexobj(m) or np.iscomplexobj(y):
+        pytest.xfail()
+    py_func = _cov
+    jit_func = njit(py_func)
+    m = _copy_array(m) # TODO: fix strides
+    y = _copy_array(y) # TODO: fix strides
+    assert_allclose(py_func(m=m, y=y, rowvar=rowvar), jit_func(m=m, y=y, rowvar=rowvar), rtol=1e-14, atol=1e-14)
 
 if __name__ == '__main__':
     unittest.main()
