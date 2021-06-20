@@ -729,37 +729,38 @@ mlir::Value replace_op(mlir::Operation* op, mlir::PatternRewriter& rewriter, mli
     return do_cast(newType, res, rewriter);
 }
 
-mlir::Value replace_ipow_op(mlir::Operation* op, mlir::PatternRewriter& rewriter, mlir::Type new_type, mlir::ValueRange operands)
+mlir::Value replace_ipow_op(mlir::Operation* op, mlir::PatternRewriter& rewriter, mlir::Type newType, mlir::ValueRange operands)
 {
     assert(nullptr != op);
     auto loc = op->getLoc();
     auto a = do_cast(rewriter.getF64Type(), operands[0], rewriter);
     auto b = do_cast(rewriter.getF64Type(), operands[1], rewriter);
     auto fres = rewriter.create<mlir::math::PowFOp>(loc, a, b).getResult();
-    return do_cast(new_type, fres, rewriter);
+    return do_cast(newType, fres, rewriter);
 }
 
-mlir::Value replace_itruediv_op(mlir::Operation* op, mlir::PatternRewriter& rewriter, mlir::Type new_type, mlir::ValueRange operands)
+mlir::Value replace_itruediv_op(mlir::Operation* op, mlir::PatternRewriter& rewriter, mlir::Type newType, mlir::ValueRange operands)
 {
     assert(nullptr != op);
-    assert(new_type.isa<mlir::FloatType>());
-    auto lhs = do_cast(new_type, operands[0], rewriter);
-    auto rhs = do_cast(new_type, operands[1], rewriter);
+    assert(newType.isa<mlir::FloatType>());
+    auto lhs = do_cast(newType, operands[0], rewriter);
+    auto rhs = do_cast(newType, operands[1], rewriter);
     return rewriter.createOrFold<mlir::DivFOp>(op->getLoc(), lhs, rhs);
 }
 
 mlir::Value replace_imod_op(mlir::Operation* op, mlir::PatternRewriter& rewriter, mlir::Type newType, mlir::ValueRange operands)
 {
     auto loc = op->getLoc();
-    auto a = operands[0];
-    auto b = operands[1];
+    auto signlessType = makeSignlessType(operands[0].getType());
+    auto a = do_cast(signlessType, operands[0], rewriter);
+    auto b = do_cast(signlessType, operands[1], rewriter);
     auto v1 = rewriter.create<mlir::SignedRemIOp>(loc, a, b).getResult();
     auto v2 = rewriter.create<mlir::AddIOp>(loc, v1, b).getResult();
     auto res = rewriter.create<mlir::SignedRemIOp>(loc, v2, b).getResult();
     return do_cast(newType, res, rewriter);
 }
 
-mlir::Value replace_fmod_op(mlir::Operation* op, mlir::PatternRewriter& rewriter, mlir::Type /*new_type*/, mlir::ValueRange operands)
+mlir::Value replace_fmod_op(mlir::Operation* op, mlir::PatternRewriter& rewriter, mlir::Type /*newType*/, mlir::ValueRange operands)
 {
     auto loc = op->getLoc();
     auto a = operands[0];
