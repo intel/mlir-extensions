@@ -128,10 +128,15 @@ void populateToLLVMAdditionalTypeConversion(mlir::LLVMTypeConverter &converter)
     {
         return voidPtrType;
     });
-
+    converter.addConversion([](mlir::IntegerType type)->llvm::Optional<mlir::Type>
+    {
+        if (!type.isSignless())
+        {
+            return mlir::IntegerType::get(type.getContext(), type.getWidth());
+        }
+        return llvm::None;
+    });
 }
-
-
 
 struct LLVMTypeHelper
 {
@@ -1461,14 +1466,15 @@ struct LowerUndef : public mlir::ConvertOpToLLVMPattern<plier::UndefOp>
     }
 };
 
-struct LowerCasts : public mlir::ConvertOpToLLVMPattern<plier::CastOp>
+template<typename Op>
+struct LowerCasts : public mlir::ConvertOpToLLVMPattern<Op>
 {
-    using mlir::ConvertOpToLLVMPattern<plier::CastOp>::ConvertOpToLLVMPattern;
+    using mlir::ConvertOpToLLVMPattern<Op>::ConvertOpToLLVMPattern;
 
     mlir::LogicalResult
-    matchAndRewrite(plier::CastOp op, llvm::ArrayRef<mlir::Value> operands,
+    matchAndRewrite(Op op, llvm::ArrayRef<mlir::Value> operands,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-        plier::CastOp::Adaptor transformed(operands);
+        typename Op::Adaptor transformed(operands);
         rewriter.replaceOpWithNewOp<mlir::LLVM::DialectCastOp>(op, op.getType(), transformed.value());
         return mlir::success();
     }
@@ -1507,7 +1513,8 @@ struct LLVMLoweringPass : public mlir::PassWrapper<LLVMLoweringPass, mlir::Opera
 
     patterns.insert<
         LowerUndef,
-        LowerCasts,
+        LowerCasts<plier::CastOp>,
+        LowerCasts<plier::SignCastOp>,
         LowerBuildTuple,
         LowerRetainOp,
         AllocOpLowering,
