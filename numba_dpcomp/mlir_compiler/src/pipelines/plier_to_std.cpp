@@ -898,9 +898,19 @@ mlir::Value negate(mlir::Value val, mlir::Location loc, mlir::PatternRewriter &r
     auto type = val.getType();
     if (auto itype = type.dyn_cast<mlir::IntegerType>())
     {
+        auto signless = makeSignlessType(itype);
+        if (signless != itype)
+        {
+            val = rewriter.create<plier::SignCastOp>(loc, signless, val);
+        }
         // TODO: not int negation?
-        auto zero = rewriter.create<mlir::ConstantOp>(loc, mlir::IntegerAttr::get(itype, 0));
-        return rewriter.create<mlir::SubIOp>(loc, zero, val);
+        auto zero = rewriter.create<mlir::ConstantOp>(loc, mlir::IntegerAttr::get(signless, 0));
+        auto res = rewriter.create<mlir::SubIOp>(loc, zero, val).getResult();
+        if (signless != itype)
+        {
+            res = rewriter.create<plier::SignCastOp>(loc, itype, res);
+        }
+        return res;
     }
     if (type.isa<mlir::FloatType>())
     {
