@@ -571,7 +571,9 @@ private:
         };
         if (py::isinstance<py::int_>(val))
         {
-            return get_val(builder.getI64IntegerAttr(val.cast<int64_t>()));
+            auto type = mlir::IntegerType::get(builder.getContext(), 64, mlir::IntegerType::Signed);
+            auto attr = builder.getIntegerAttr(type, val.cast<int64_t>());
+            return get_val(attr);
         }
         if (py::isinstance<py::float_>(val))
         {

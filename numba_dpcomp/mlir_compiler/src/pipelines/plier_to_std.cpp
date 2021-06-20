@@ -51,7 +51,7 @@ mlir::Type map_int_type(mlir::MLIRContext& ctx, llvm::StringRef& name)
     if (name.consume_front("int") &&
         !name.consumeInteger<unsigned>(10, num_bits))
     {
-        return mlir::IntegerType::get(&ctx, num_bits);
+        return mlir::IntegerType::get(&ctx, num_bits, mlir::IntegerType::Signed);
     }
     return nullptr;
 }
@@ -62,7 +62,7 @@ mlir::Type map_int_literal_type(mlir::MLIRContext& ctx, llvm::StringRef& name)
     if (name.consume_front("Literal[int](") &&
         !name.consumeInteger<int64_t>(10, value) && name.consume_front(")"))
     {
-        auto type = mlir::IntegerType::get(&ctx, 64);
+        auto type = mlir::IntegerType::get(&ctx, 64, mlir::IntegerType::Signed);
         auto attr = mlir::IntegerAttr::get(type, value);
         return plier::LiteralType::get(attr);
     }
