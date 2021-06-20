@@ -359,13 +359,13 @@ unsigned item_size(mlir::Type type)
 }
 
 mlir::FuncOp get_to_memref_conversion_func(
-    mlir::ModuleOp module, mlir::OpBuilder& builder, mlir::MemRefType memref_type,
+    mlir::ModuleOp module, mlir::OpBuilder& builder, mlir::MemRefType memrefType,
     mlir::LLVM::LLVMStructType src_type, mlir::LLVM::LLVMStructType dst_type)
 {
-    assert(memref_type);
+    assert(memrefType);
     assert(src_type);
     assert(dst_type);
-    auto func_name = gen_to_memref_conversion_func_name(memref_type);
+    auto func_name = gen_to_memref_conversion_func_name(memrefType);
     if (auto func = module.lookupSymbol<mlir::FuncOp>(func_name))
     {
         assert(func.getType().getNumResults() == 1);
@@ -390,13 +390,14 @@ mlir::FuncOp get_to_memref_conversion_func(
     };
     auto meminfo = extract(0);
     auto ptr = extract(4);
-    auto shape = extract(5);
-    auto strides = extract(6);
+    auto rank = memrefType.getRank();
+    auto shape = (rank > 0 ? extract(5) : mlir::Value());
+    auto strides = (rank > 0 ? extract(6) : mlir::Value());
     auto i64 = mlir::IntegerType::get(builder.getContext(), 64);
     auto offset = builder.create<mllvm::ConstantOp>(loc, i64, builder.getI64IntegerAttr(0));
     mlir::Value res = builder.create<mllvm::UndefOp>(loc, dst_type);
     auto meminfo_casted = builder.create<mllvm::BitcastOp>(loc, ptr.getType(), meminfo);
-    auto itemsize = builder.create<mllvm::ConstantOp>(loc, i64, builder.getI64IntegerAttr(item_size(memref_type.getElementType())));
+    auto itemsize = builder.create<mllvm::ConstantOp>(loc, i64, builder.getI64IntegerAttr(item_size(memrefType.getElementType())));
     auto insert = [&](unsigned index, mlir::Value val)
     {
         auto i = builder.getI64ArrayAttr(index);
@@ -405,8 +406,11 @@ mlir::FuncOp get_to_memref_conversion_func(
     insert(0, meminfo_casted);
     insert(1, ptr);
     insert(2, offset);
-    insert(3, shape);
-    insert(4, div_strides(loc, builder, strides, itemsize));
+    if (rank > 0)
+    {
+        insert(3, shape);
+        insert(4, div_strides(loc, builder, strides, itemsize));
+    }
     builder.create<mllvm::ReturnOp>(loc, res);
     return new_func;
 }
