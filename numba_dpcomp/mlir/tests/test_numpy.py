@@ -435,16 +435,20 @@ class TestMlirBasic(TestCase):
         for a in [arr]: # TODO: arr.T
             assert_equal(py_func(a), jit_func(a))
 
-    def test_atleast2d(self):
-        def py_func(a):
-            return np.atleast_2d(a)
+@parametrize_function_variants("a", [
+    'np.array(1)',
+    'np.array(2.5)',
+    'np.array([])',
+    'np.array([1,2,3])',
+    'np.array([[1,2,3]])',
+    'np.array([[1,2],[3,4],[5,6]])',
+    ])
+def test_atleast2d(a):
+    def py_func(a):
+        return np.atleast_2d(a)
 
-        jit_func = njit(py_func)
-
-        # for val in (1, 2.5, [], [1,2,3], [[1,2],[3,4],[5,6]]): // TODO: unranked array support
-        for val in ([], [1,2,3], [[1,2],[3,4],[5,6]]):
-            a = np.array(val)
-            assert_equal(py_func(a), jit_func(a))
+    jit_func = njit(py_func)
+    assert_equal(py_func(a), jit_func(a))
 
 _test_reshape_test_array = np.array([1,2,3,4,5,6,7,8,9,10,11,12])
 _test_reshape_test_arrays = [
