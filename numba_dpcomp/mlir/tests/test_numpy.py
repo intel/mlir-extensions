@@ -570,36 +570,34 @@ def _cov(m, y=None, rowvar=True, bias=False, ddof=None):
     return np.cov(m, y, rowvar, bias, ddof)
 
 _rnd = np.random.RandomState(42)
-_cov_inputs = [
-    np.array([[0, 2], [1, 1], [2, 0]]).T,
-    _rnd.randn(100).reshape(5, 20),
-    np.asfortranarray(np.array([[0, 2], [1, 1], [2, 0]]).T),
-    _rnd.randn(100).reshape(5, 20)[:, ::2],
-    np.array([0.3942, 0.5969, 0.7730, 0.9918, 0.7964]),
-    # np.full((4, 5), fill_value=True), TODO
-    np.array([np.nan, 0.5969, -np.inf, 0.9918, 0.7964]),
-    np.linspace(-3, 3, 33).reshape(33, 1),
 
-    # # non-array inputs
-    # ((0.1, 0.2), (0.11, 0.19), (0.09, 0.21)),  # UniTuple
-    # ((0.1, 0.2), (0.11, 0.19), (0.09j, 0.21j)),  # Tuple
-    # (-2.1, -1, 4.3),
-    # (1, 2, 3),
-    # [4, 5, 6],
-    # ((0.1, 0.2, 0.3), (0.1, 0.2, 0.3)),
-    # [(1, 2, 3), (1, 3, 2)],
-    # 3.142,
-    # ((1.1, 2.2, 1.5),),
+@parametrize_function_variants("m", [
+    'np.array([[0, 2], [1, 1], [2, 0]]).T',
+    '_rnd.randn(100).reshape(5, 20)',
+    'np.asfortranarray(np.array([[0, 2], [1, 1], [2, 0]]).T)',
+    '_rnd.randn(100).reshape(5, 20)[:, ::2]',
+    'np.array([0.3942, 0.5969, 0.7730, 0.9918, 0.7964])',
+    # 'np.full((4, 5), fill_value=True)', TODO
+    'np.array([np.nan, 0.5969, -np.inf, 0.9918, 0.7964])',
+    'np.linspace(-3, 3, 33).reshape(33, 1)',
 
-    # # empty data structures
-    # np.array([]),
-    # np.array([]).reshape(0, 2),
-    # np.array([]).reshape(2, 0),
-    # (),
-]
+    # non-array inputs
+    # '((0.1, 0.2), (0.11, 0.19), (0.09, 0.21))',  # UniTuple
+    # '((0.1, 0.2), (0.11, 0.19), (0.09j, 0.21j))',  # Tuple
+    # '(-2.1, -1, 4.3)',
+    # '(1, 2, 3)',
+    # '[4, 5, 6]',
+    # '((0.1, 0.2, 0.3), (0.1, 0.2, 0.3))',
+    # '[(1, 2, 3), (1, 3, 2)]',
+    # '3.142',
+    # '((1.1, 2.2, 1.5),)',
 
-@pytest.mark.parametrize("m",
-                         _cov_inputs)
+    # empty data structures
+    # 'np.array([])',
+    # 'np.array([]).reshape(0, 2)',
+    # 'np.array([]).reshape(2, 0)',
+    # '()',
+    ])
 def test_cov_basic(m):
     py_func = _cov
     jit_func = njit(py_func)
