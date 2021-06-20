@@ -579,42 +579,52 @@ mlir::Type coerce(mlir::Type type0, mlir::Type type1)
     return get_bits_count(type0) < get_bits_count(type1) ? type1 : type0;
 }
 
+mlir::Type makeSignlessType(mlir::Type type)
+{
+    if (auto intType = type.dyn_cast<mlir::IntegerType>())
+    {
+        if (!intType.isSignless())
+        {
+            return mlir::IntegerType::get(type.getContext(),intType.getWidth());
+        }
+    }
+    return type;
+}
+
 mlir::Value int_cast(mlir::Type dstType, mlir::Value val, mlir::PatternRewriter& rewriter)
 {
     auto srcIntType = val.getType().cast<mlir::IntegerType>();
     auto dstIntType = dstType.cast<mlir::IntegerType>();
+    auto srcSignless = makeSignlessType(srcIntType);
+    auto dstSignless = makeSignlessType(dstIntType);
     auto srcBits = srcIntType.getWidth();
     auto dstBits = dstIntType.getWidth();
     auto loc = val.getLoc();
-    if (srcIntType.getSignedness() != dstIntType.getSignedness())
+
+    if (srcIntType != srcSignless)
     {
-        val = rewriter.createOrFold<plier::SignCastOp>(loc, dstType, val);
+        val = rewriter.createOrFold<plier::SignCastOp>(loc, srcSignless, val);
     }
 
-    if (dstBits == srcBits)
+    if (dstBits > srcBits)
     {
-        // Signess change
-        return val;
-    }
-    else if (dstBits > srcBits)
-    {
-        if (dstIntType.isSigned())
+        if (srcIntType.isSigned() || dstIntType.isSigned())
         {
-            val = rewriter.createOrFold<mlir::SignExtendIOp>(loc, val, dstType);
+            val = rewriter.createOrFold<mlir::SignExtendIOp>(loc, val, dstSignless);
         }
         else
         {
-            val = rewriter.createOrFold<mlir::ZeroExtendIOp>(loc, val, dstType);
+            val = rewriter.createOrFold<mlir::ZeroExtendIOp>(loc, val, dstSignless);
         }
     }
-    else
+    else if (dstBits < srcBits)
     {
-        val = rewriter.createOrFold<mlir::TruncateIOp>(loc, val, dstType);
+        val = rewriter.createOrFold<mlir::TruncateIOp>(loc, val, dstSignless);
     }
 
-    if (!dstIntType.isSignless())
+    if (dstIntType != dstSignless)
     {
-        val = rewriter.createOrFold<plier::SignCastOp>(loc, dstType, val);
+        val = rewriter.createOrFold<plier::SignCastOp>(loc, dstIntType, val);
     }
     return val;
 }
@@ -701,18 +711,6 @@ mlir::Value do_cast(mlir::Type dst_type, mlir::Value val, mlir::PatternRewriter&
     }
 
     return nullptr;
-}
-
-mlir::Type makeSignlessType(mlir::Type type)
-{
-    if (auto intType = type.dyn_cast<mlir::IntegerType>())
-    {
-        if (!intType.isSignless())
-        {
-            return mlir::IntegerType::get(type.getContext(),intType.getWidth());
-        }
-    }
-    return type;
 }
 
 template<typename T>
