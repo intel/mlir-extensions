@@ -647,6 +647,33 @@ void RetainOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
     RetainOp::build(builder, state, value.getType(), value);
 }
 
+
+mlir::OpFoldResult SignCastOp::fold(llvm::ArrayRef<mlir::Attribute> operands)
+{
+    assert(operands.size() == 1);
+    auto thisType = getType();
+    auto attrOperand = operands.front();
+    if (attrOperand && attrOperand.getType() == thisType)
+    {
+        return attrOperand;
+    }
+
+    auto arg = getOperand();
+    if (arg.getType() == thisType)
+    {
+        return arg;
+    }
+    if (auto prevOp = arg.getDefiningOp<SignCastOp>())
+    {
+        auto prevArg = prevOp.getOperand();
+        if (prevArg.getType() == thisType)
+        {
+            return prevArg;
+        }
+    }
+    return nullptr;
+}
+
 }
 
 #define GET_OP_CLASSES
