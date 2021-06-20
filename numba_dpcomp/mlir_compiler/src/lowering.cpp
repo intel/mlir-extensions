@@ -679,29 +679,30 @@ plier::CompilerContext::Settings get_settings(py::handle settings)
 py::bytes gen_ll_module(mlir::ModuleOp mod)
 {
     std::string err;
-    llvm::raw_string_ostream err_stream(err);
+    llvm::raw_string_ostream errStream(err);
     auto diag_handler = [&](mlir::Diagnostic& diag)
     {
         if (diag.getSeverity() == mlir::DiagnosticSeverity::Error)
         {
-            err_stream << diag;
+            errStream << diag;
         }
     };
-    llvm::LLVMContext ll_ctx;
-    std::unique_ptr<llvm::Module> ll_mod;
+    llvm::LLVMContext llCtx;
+    std::unique_ptr<llvm::Module> llMod;
     plier::scoped_diag_handler(*mod.getContext(), diag_handler, [&]()
     {
         mlir::registerLLVMDialectTranslation(*mod.getContext());
-        ll_mod = mlir::translateModuleToLLVMIR(mod, ll_ctx);
-        if (nullptr == ll_mod)
+        llMod = mlir::translateModuleToLLVMIR(mod, llCtx);
+        if (nullptr == llMod)
         {
-            err_stream.flush();
+            errStream << "\n";
+            mod.print(errStream);
+            errStream.flush();
             plier::report_error(llvm::Twine("Cannot generate LLVM module\n") + err);
         }
     });
-    assert(nullptr != ll_mod);
-//    ll_mod->dump();
-    return serialize_mod(*ll_mod);
+    assert(nullptr != llMod);
+    return serialize_mod(*llMod);
 }
 
 void create_pipeline(plier::PipelineRegistry& registry)
