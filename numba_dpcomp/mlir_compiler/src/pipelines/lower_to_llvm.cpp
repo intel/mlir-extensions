@@ -504,6 +504,17 @@ mlir::Attribute get_fastmath_attrs(mlir::MLIRContext& ctx)
     return mlir::ArrayAttr::get(&ctx, attrs);
 }
 
+mlir::Value doCast(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value src, mlir::Type dstType)
+{
+    auto srcType = src.getType();
+    if (srcType == dstType)
+    {
+        return src;
+    }
+
+    return builder.create<mlir::LLVM::DialectCastOp>(loc, dstType, src);
+}
+
 mlir::LogicalResult fix_func_sig(LLVMTypeHelper& type_helper, mlir::FuncOp func)
 {
     if (func.isPrivate())
@@ -556,10 +567,10 @@ mlir::LogicalResult fix_func_sig(LLVMTypeHelper& type_helper, mlir::FuncOp func)
     llvm::SmallVector<mlir::Value> new_args;
     auto process_arg = [&](mlir::Type type)
     {
-        if (auto memref_type = type.dyn_cast<mlir::MemRefType>())
+        if (auto memrefType = type.dyn_cast<mlir::MemRefType>())
         {
             new_args.clear();
-            auto arr_type = get_array_type(type_helper.get_type_converter(), memref_type);
+            auto arr_type = get_array_type(type_helper.get_type_converter(), memrefType);
             flatten_type(arr_type, [&](mlir::Type new_type)
             {
                 new_args.push_back(add_arg(new_type));
@@ -573,11 +584,11 @@ mlir::LogicalResult fix_func_sig(LLVMTypeHelper& type_helper, mlir::FuncOp func)
             });
 
             auto mod = mlir::cast<mlir::ModuleOp>(func->getParentOp());
-            auto dst_type = type_helper.get_type_converter().convertType(memref_type);
+            auto dst_type = type_helper.get_type_converter().convertType(memrefType);
             assert(dst_type);
-            auto conv_func = get_to_memref_conversion_func(mod, builder, memref_type, arr_type, dst_type.cast<mlir::LLVM::LLVMStructType>());
+            auto conv_func = get_to_memref_conversion_func(mod, builder, memrefType, arr_type, dst_type.cast<mlir::LLVM::LLVMStructType>());
             auto converted = builder.create<mlir::CallOp>(loc, conv_func, desc).getResult(0);
-            auto casted = builder.create<plier::CastOp>(loc, memref_type, converted);
+            auto casted = builder.createOrFold<plier::CastOp>(loc, memrefType, converted); // TODO: replace castop with dialect cast
             func.getBody().getArgument(index).replaceAllUsesWith(casted);
             func.getBody().eraseArgument(index);
         }
@@ -640,17 +651,17 @@ struct ReturnOpLowering : public mlir::OpRewritePattern<mlir::ReturnOp>
         {
             mlir::Value val = op.getOperand(0);
             auto orig_type = val.getType();
-            auto ll_ret_type = type_converter.convertType(orig_type);
-            if (!ll_ret_type)
+            auto llRetType = type_converter.convertType(orig_type);
+            if (!llRetType)
             {
                 return mlir::failure();
             }
-            val = rewriter.create<plier::CastOp>(loc, ll_ret_type, val);
+            val = rewriter.createOrFold<plier::CastOp>(loc, llRetType, val);  // TODO: replace castop with dialect cast
             if (auto memref_type = orig_type.dyn_cast<mlir::MemRefType>())
             {
                 auto dst_type = get_array_type(type_converter, memref_type).cast<mlir::LLVM::LLVMStructType>();
                 auto mod = op->getParentOfType<mlir::ModuleOp>();
-                auto func = get_from_memref_conversion_func(mod, rewriter, memref_type, ll_ret_type.cast<mlir::LLVM::LLVMStructType>(), dst_type);
+                auto func = get_from_memref_conversion_func(mod, rewriter, memref_type, llRetType.cast<mlir::LLVM::LLVMStructType>(), dst_type);
                 val = rewriter.create<mlir::CallOp>(loc, func, val).getResult(0);
             }
             rewriter.create<mlir::LLVM::StoreOp>(loc, val, addr);
@@ -1057,21 +1068,21 @@ struct LowerParallel : public mlir::OpRewritePattern<plier::ParallelOp>
         auto context_ptr_type = mlir::LLVM::LLVMPointerType::get(context_type);
 
         auto loc = op.getLoc();
-        auto index_type = rewriter.getIndexType();
-        auto llvm_index_type = mlir::IntegerType::get(op.getContext(), 64); // TODO
+        auto indexType = rewriter.getIndexType();
+        auto llvmIndexType = mlir::IntegerType::get(op.getContext(), 64); // TODO
         auto to_llvm_index = [&](mlir::Value val)->mlir::Value
         {
-            if (val.getType() != llvm_index_type)
+            if (val.getType() != llvmIndexType)
             {
-                return rewriter.create<mlir::LLVM::BitcastOp>(loc, llvm_index_type, val);
+                return rewriter.create<mlir::LLVM::BitcastOp>(loc, llvmIndexType, val);
             }
             return val;
         };
         auto from_llvm_index = [&](mlir::Value val)->mlir::Value
         {
-            if (val.getType() != index_type)
+            if (val.getType() != indexType)
             {
-                return rewriter.create<plier::CastOp>(loc, index_type, val);
+                return doCast(rewriter, loc, val, indexType);
             }
             return val;
         };
@@ -1086,7 +1097,7 @@ struct LowerParallel : public mlir::OpRewritePattern<plier::ParallelOp>
         for (auto it : llvm::enumerate(context_vars))
         {
             auto type = context_type.getBody()[it.index()];
-            auto llvm_val = rewriter.create<plier::CastOp>(loc, type, it.value());
+            auto llvmVal = rewriter.create<plier::CastOp>(loc, type, it.value()); // TODO: replace castop with dialect cast
             auto i = rewriter.getI32IntegerAttr(static_cast<int32_t>(it.index()));
             mlir::Value indices[] = {
                 zero,
@@ -1094,7 +1105,7 @@ struct LowerParallel : public mlir::OpRewritePattern<plier::ParallelOp>
             };
             auto pointer_type = mlir::LLVM::LLVMPointerType::get(type);
             auto ptr = rewriter.create<mlir::LLVM::GEPOp>(loc, pointer_type, context, indices);
-            rewriter.create<mlir::LLVM::StoreOp>(loc, llvm_val, ptr);
+            rewriter.create<mlir::LLVM::StoreOp>(loc, llvmVal, ptr);
         }
         auto void_ptr_type = mlir::LLVM::LLVMPointerType::get(mlir::IntegerType::get(op.getContext(), 8));
         auto context_abstract = rewriter.create<mlir::LLVM::BitcastOp>(loc, void_ptr_type, context);
@@ -1102,9 +1113,9 @@ struct LowerParallel : public mlir::OpRewritePattern<plier::ParallelOp>
         auto input_range_type = [&]()
         {
             const mlir::Type members[] = {
-                llvm_index_type, // lower_bound
-                llvm_index_type, // upper_bound
-                llvm_index_type, // step
+                llvmIndexType, // lower_bound
+                llvmIndexType, // upper_bound
+                llvmIndexType, // step
             };
             return mlir::LLVM::LLVMStructType::getLiteral(op.getContext(), members);
         }();
@@ -1112,8 +1123,8 @@ struct LowerParallel : public mlir::OpRewritePattern<plier::ParallelOp>
         auto range_type = [&]()
         {
             const mlir::Type members[] = {
-                llvm_index_type, // lower_bound
-                llvm_index_type, // upper_bound
+                llvmIndexType, // lower_bound
+                llvmIndexType, // upper_bound
             };
             return mlir::LLVM::LLVMStructType::getLiteral(op.getContext(), members);
         }();
@@ -1122,7 +1133,7 @@ struct LowerParallel : public mlir::OpRewritePattern<plier::ParallelOp>
         {
             const mlir::Type args[] = {
                 range_ptr, // bounds
-                index_type, // thread index
+                indexType, // thread index
                 void_ptr_type // context
             };
             return mlir::FunctionType::get(op.getContext(), args, {});
@@ -1170,8 +1181,8 @@ struct LowerParallel : public mlir::OpRewritePattern<plier::ParallelOp>
                 };
                 auto ptr = rewriter.create<mlir::LLVM::GEPOp>(loc, range_ptr, arg, indices);
                 auto dims = rewriter.create<mlir::LLVM::LoadOp>(loc, ptr);
-                auto lower = rewriter.create<mlir::LLVM::ExtractValueOp>(loc, llvm_index_type, dims, pos0);
-                auto upper = rewriter.create<mlir::LLVM::ExtractValueOp>(loc, llvm_index_type, dims, pos1);
+                auto lower = rewriter.create<mlir::LLVM::ExtractValueOp>(loc, llvmIndexType, dims, pos0);
+                auto upper = rewriter.create<mlir::LLVM::ExtractValueOp>(loc, llvmIndexType, dims, pos1);
                 mapping.map(old_entry.getArgument(i),             from_llvm_index(lower));
                 mapping.map(old_entry.getArgument(i + num_loops), from_llvm_index(upper));
             }
@@ -1185,16 +1196,16 @@ struct LowerParallel : public mlir::OpRewritePattern<plier::ParallelOp>
             for (auto it : llvm::enumerate(context_vars))
             {
                 auto index = it.index();
-                auto old_val = it.value();
+                auto oldVal = it.value();
                 const mlir::Value indices[] = {
                     zero,
                     rewriter.create<mlir::LLVM::ConstantOp>(loc, llvm_i32_type, rewriter.getI32IntegerAttr(static_cast<int32_t>(index)))
                 };
                 auto pointer_type = mlir::LLVM::LLVMPointerType::get(context_type.getBody()[index]);
                 auto ptr = rewriter.create<mlir::LLVM::GEPOp>(loc, pointer_type, context_ptr, indices);
-                auto llvm_val = rewriter.create<mlir::LLVM::LoadOp>(loc, ptr);
-                auto val = rewriter.create<plier::CastOp>(loc, old_val.getType(), llvm_val);
-                mapping.map(old_val, val);
+                auto llvmVal = rewriter.create<mlir::LLVM::LoadOp>(loc, ptr);
+                auto val = doCast(rewriter, loc, llvmVal, oldVal.getType());
+                mapping.map(oldVal, val);
             }
             op.getLoopBody().cloneInto(&func.getBody(), mapping);
             auto& orig_entry = *std::next(func.getBody().begin());
@@ -1220,7 +1231,7 @@ struct LowerParallel : public mlir::OpRewritePattern<plier::ParallelOp>
             }
             const mlir::Type args[] = {
                 input_range_ptr, // bounds
-                index_type, // num_loops
+                indexType, // num_loops
                 func_type, // func
                 void_ptr_type // context
             };
@@ -1231,8 +1242,8 @@ struct LowerParallel : public mlir::OpRewritePattern<plier::ParallelOp>
 
         auto input_ranges = allocaInsertionPoint.insert(rewriter, [&]()
         {
-            auto num_loops_attr = rewriter.getIntegerAttr(llvm_index_type, num_loops);
-            auto num_loops_var = rewriter.create<mlir::LLVM::ConstantOp>(loc, llvm_index_type, num_loops_attr);
+            auto num_loops_attr = rewriter.getIntegerAttr(llvmIndexType, num_loops);
+            auto num_loops_var = rewriter.create<mlir::LLVM::ConstantOp>(loc, llvmIndexType, num_loops_attr);
             return rewriter.create<mlir::LLVM::AllocaOp>(loc, input_range_ptr, num_loops_var, 0);
         });
         for (unsigned i = 0; i < num_loops; ++i)
@@ -1420,7 +1431,7 @@ struct LowerBuildTuple : public mlir::ConvertOpToLLVMPattern<plier::BuildTupleOp
             auto arg = it.value();
             auto newType = converter->convertType(arg.getType());
             assert(newType);
-            auto casted = rewriter.create<plier::CastOp>(loc, newType, arg);
+            auto casted = doCast(rewriter, loc, arg, newType);
             auto index = rewriter.getI64ArrayAttr(static_cast<int64_t>(it.index()));
             init = rewriter.create<mlir::LLVM::InsertValueOp>(loc, init, casted, index);
         }
@@ -1457,17 +1468,9 @@ struct LowerCasts : public mlir::ConvertOpToLLVMPattern<plier::CastOp>
     mlir::LogicalResult
     matchAndRewrite(plier::CastOp op, llvm::ArrayRef<mlir::Value> operands,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-        assert(operands.size() == 1);
-        auto converter = getTypeConverter();
-        assert(nullptr != converter);
-        auto src_type = operands[0].getType();
-        auto dst_type = converter->convertType(op.getType());
-        if (src_type == dst_type)
-        {
-            rewriter.replaceOp(op, operands[0]);
-            return mlir::success();
-        }
-        return mlir::failure();
+        plier::CastOp::Adaptor transformed(operands);
+        rewriter.replaceOpWithNewOp<mlir::LLVM::DialectCastOp>(op, op.getType(), transformed.value());
+        return mlir::success();
     }
 };
 
