@@ -443,7 +443,7 @@ struct GetitemOpLowering : public mlir::OpRewritePattern<plier::GetItemOp>
                 };
                 auto getItemOrConst = [&](unsigned i)->mlir::Value
                 {
-                    assert(i >= 0 && i < 3);
+                    assert(i < 3);
                     if (sliceType.getTypes()[i].isa<plier::NoneType>())
                     {
                         if (i == 0)
@@ -1167,22 +1167,6 @@ void TensorFusionPass::runOnOperation()
         >(&context);
 
     mlir::linalg::populateElementwiseOpsFusionPatterns(patterns);
-
-    (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
-}
-
-struct CommonOptPass :
-    public mlir::PassWrapper<CommonOptPass, mlir::OperationPass<mlir::ModuleOp>>
-{
-    void runOnOperation() override;
-};
-
-void CommonOptPass::runOnOperation()
-{
-    auto& context = getContext();
-    mlir::OwningRewritePatternList patterns(&context);
-
-    plier::populate_common_opts_patterns(context, patterns);
 
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
 }
