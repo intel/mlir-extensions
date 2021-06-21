@@ -841,7 +841,7 @@ private:
 template<typename T>
 bool has_compatibale_shape(T&& a1, T&& a2)
 {
-    if (!a1.hasRank() || !a2.hasRank() || a1.getRank() != a2.getRank())
+    if (a1.getRank() != a2.getRank())
     {
         return false;
     }
@@ -849,7 +849,9 @@ bool has_compatibale_shape(T&& a1, T&& a2)
     {
         auto s1 = std::get<0>(it);
         auto s2 = std::get<1>(it);
-        if (s1 >= 0 && s2 >= 0 && s1 != s2)
+        if (s1 != mlir::ShapedType::kDynamicSize &&
+            s2 != mlir::ShapedType::kDynamicSize &&
+            s1 != s2)
         {
             return false;
         }
@@ -859,19 +861,24 @@ bool has_compatibale_shape(T&& a1, T&& a2)
 
 struct RankedTypesCasts : public mlir::OpRewritePattern<plier::CastOp>
 {
-    RankedTypesCasts(mlir::TypeConverter& /*type_converter*/,
+    RankedTypesCasts(mlir::TypeConverter& typeConverter,
                      mlir::MLIRContext* context):
-        OpRewritePattern(context){}
+        OpRewritePattern(context), converter(typeConverter) {}
 
     mlir::LogicalResult matchAndRewrite(
         plier::CastOp op, mlir::PatternRewriter &rewriter) const override
     {
         auto src_type = op.value().getType();
-        auto dst_type = op.getType();
-        if (src_type.isa<mlir::TensorType>() && dst_type.isa<mlir::TensorType>())
+        auto dst_type = converter.convertType(op.getType());
+        if (!dst_type)
         {
-            auto src = src_type.cast<mlir::TensorType>();
-            auto dst = dst_type.cast<mlir::TensorType>();
+            return mlir::failure();
+        }
+        if (src_type.isa<mlir::RankedTensorType>() &&
+            dst_type.isa<mlir::RankedTensorType>())
+        {
+            auto src = src_type.cast<mlir::RankedTensorType>();
+            auto dst = dst_type.cast<mlir::RankedTensorType>();
             if (!has_compatibale_shape(src,dst))
             {
                 return mlir::failure();
@@ -881,6 +888,8 @@ struct RankedTypesCasts : public mlir::OpRewritePattern<plier::CastOp>
         }
         return mlir::failure();
     }
+private:
+    mlir::TypeConverter& converter;
 };
 
 struct UnrankedToElementCasts : public mlir::OpRewritePattern<plier::CastOp>
@@ -907,7 +916,13 @@ struct UnrankedToElementCasts : public mlir::OpRewritePattern<plier::CastOp>
             rewriter.replaceOpWithNewOp<mlir::tensor::ExtractOp>(op, op.value());
             return mlir::success();
         }
-//        if (isCompatible(dstType, srcType)) : TODO
+        if (isCompatible(dstType, srcType))
+        {
+            auto singleElemTensor = rewriter.create<mlir::tensor::FromElementsOp>(op.getLoc(), op.value());
+            rewriter.replaceOpWithNewOp<mlir::linalg::TensorCollapseShapeOp>(
+                op, dstType, singleElemTensor, llvm::ArrayRef<mlir::linalg::ReassociationExprs>{});
+            return mlir::success();
+        }
         return mlir::failure();
     }
 };
