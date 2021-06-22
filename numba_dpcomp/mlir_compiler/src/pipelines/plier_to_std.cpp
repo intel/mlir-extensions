@@ -390,110 +390,6 @@ private:
     mlir::TypeConverter& converter;
 };
 
-struct FixCallOmittedArgs : public mlir::OpRewritePattern<mlir::CallOp>
-{
-    FixCallOmittedArgs(mlir::TypeConverter &typeConverter,
-                       mlir::MLIRContext *context):
-        OpRewritePattern(context), converter(typeConverter) {}
-
-    mlir::LogicalResult matchAndRewrite(
-        mlir::CallOp op, mlir::PatternRewriter &rewriter) const override
-    {
-        bool needChanges = false;
-        llvm::SmallVector<bool> newResultsMask(op->getNumResults());
-        llvm::SmallVector<mlir::Type> newResultsTypes;
-        llvm::SmallVector<mlir::Type, 1> argTypes;
-        for (auto it : llvm::enumerate(op.getResults()))
-        {
-            auto res = it.value();
-            if (mlir::failed(converter.convertType(res.getType(), argTypes)) ||
-                argTypes.size() > 1)
-            {
-                return mlir::failure();
-            }
-            if (!argTypes.empty())
-            {
-                newResultsTypes.emplace_back(res.getType());
-            }
-            else
-            {
-                needChanges = true;
-            }
-
-            newResultsMask[it.index()] = argTypes.empty();
-        }
-        llvm::SmallVector<mlir::Value> newArgs;
-        for (auto arg : op.operands())
-        {
-            argTypes.clear();
-            if (mlir::failed(converter.convertType(arg.getType(), argTypes)) ||
-                argTypes.size() > 1)
-            {
-                return mlir::failure();
-            }
-            if (argTypes.empty())
-            {
-                needChanges = true;
-            }
-            else
-            {
-                newArgs.emplace_back(arg);
-            }
-        }
-        if (!needChanges)
-        {
-            return mlir::failure();
-        }
-
-        auto newOp = rewriter.create<mlir::CallOp>(op.getLoc(), op.getCallee(), newResultsTypes, newArgs);
-        auto newOpResults = newOp.getResults();
-        auto filterResults = [&]()
-        {
-            while (!newOpResults.empty())
-            {
-                auto type = newOpResults.front().getType();
-                argTypes.clear();
-                auto res = converter.convertType(type, argTypes);
-                assert(mlir::succeeded(res));
-                (void)res;
-                assert(argTypes.size() < 2);
-                if (!argTypes.empty())
-                {
-                    break;
-                }
-                newOpResults = newOpResults.drop_front();
-            }
-        };
-        mlir::Value undef;
-        llvm::SmallVector<mlir::Value> newResults(op->getNumResults());
-        filterResults();
-        for (auto it : llvm::enumerate(newResultsMask))
-        {
-            auto omitted = it.value();
-            auto ind = it.index();
-            if (omitted)
-            {
-                if (!undef)
-                {
-                    undef = rewriter.create<plier::UndefOp>(op.getLoc(), op->getResultTypes()[0]);
-                }
-                newResults[ind] = undef;
-            }
-            else
-            {
-                newResults[ind] = newOpResults.front();
-                newOpResults = newOpResults.drop_front();
-                filterResults();
-            }
-        }
-        assert((filterResults(), newOpResults.empty()));
-        rewriter.replaceOp(op, newResults);
-        return mlir::success();
-    }
-private:
-    mlir::TypeConverter& converter;
-};
-
 struct UndefOpLowering : public mlir::OpRewritePattern<plier::UndefOp>
 {
     UndefOpLowering(mlir::TypeConverter &typeConverter,
@@ -1933,10 +1829,10 @@ void PlierToStdPass::runOnOperation()
         plier::FuncOpSignatureConversion,
         plier::ArgOpLowering,
         plier::FixupIfTypes,
+        plier::FixCallOmittedArgs,
 //        RemoveOmittedFuncArgs,
         LiteralLowering<plier::ArgOp>,
         LiteralLowering<plier::GlobalOp>,
-        FixCallOmittedArgs,
         UndefOpLowering,
         ReturnOpLowering,
         ConstOpLowering,

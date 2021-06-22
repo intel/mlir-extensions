@@ -326,6 +326,17 @@ struct PyLinalgResolver::Context
             auto type = plier::NoneType::get(builder.getContext());
             return builder.create<plier::UndefOp>(loc, type);
         }
+        if (py::isinstance<py::tuple>(obj))
+        {
+            llvm::SmallVector<mlir::Value> elems(py::len(obj));
+            for (auto it : llvm::enumerate(obj))
+            {
+                elems[it.index()] = unwrap_val(loc, builder, it.value());
+            }
+            mlir::ValueRange vr(elems);
+            auto resType = mlir::TupleType::get(builder.getContext(), vr.getTypes());
+            return builder.create<plier::BuildTupleOp>(loc, resType, elems);
+        }
         if (py::isinstance<py::int_>(obj))
         {
             auto attr = builder.getI64IntegerAttr(obj.cast<int64_t>());
@@ -1295,28 +1306,36 @@ py::object len_impl(py::capsule /*context*/, py::capsule ssa_val)
     return py::int_(0);
 }
 
-py::object getitem_impl(py::capsule context, py::capsule ssa_val, py::handle index)
+py::object getitem_impl(py::capsule context, py::capsule ssaVal, py::handle index)
 {
     auto& ctx = get_py_context(context);
-    auto value = unwrap_mlir<mlir::Value>(ssa_val);
+    auto value = unwrap_mlir<mlir::Value>(ssaVal);
     auto& builder = ctx.builder;
     auto loc = ctx.loc;
-    auto index_val = index.cast<int64_t>();
     auto type = value.getType();
+    if (auto tensor = type.dyn_cast<mlir::TensorType>())
+    {
+        auto indexVal = ctx.context.unwrap_val(loc, builder, index);
+        auto elemType = tensor.getElementType();
+        auto res = builder.create<plier::GetItemOp>(loc, elemType, value, indexVal);
+        return ctx.context.create_var(context, res.getResult());
+    }
+
+    auto indexVal = index.cast<int64_t>();
     if (auto tuple_type = type.dyn_cast<mlir::TupleType>())
     {
         auto maxIndex = static_cast<int64_t>(tuple_type.size());
-        if (index_val < 0 || index_val >= maxIndex)
+        if (indexVal < 0 || indexVal >= maxIndex)
         {
-            throw py::index_error(("Invalid getitem index: " + llvm::Twine(index_val) + ", expected [0:" + llvm::Twine(maxIndex) + ")").str());
+            throw py::index_error(("Invalid getitem index: " + llvm::Twine(indexVal) + ", expected [0:" + llvm::Twine(maxIndex) + ")").str());
         }
         if (auto parent_op = value.getDefiningOp<plier::BuildTupleOp>())
         {
-            return ctx.context.create_var(context, parent_op.getOperand(static_cast<unsigned>(index_val)));
+            return ctx.context.create_var(context, parent_op.getOperand(static_cast<unsigned>(indexVal)));
         }
-        auto elem_type = tuple_type.getType(static_cast<size_t>(index_val));
-        auto ind = builder.create<mlir::ConstantIndexOp>(loc, index_val);
-        auto item = builder.create<plier::GetItemOp>(loc, elem_type, value, ind);
+        auto elemType = tuple_type.getType(static_cast<size_t>(indexVal));
+        auto ind = builder.create<mlir::ConstantIndexOp>(loc, indexVal);
+        auto item = builder.create<plier::GetItemOp>(loc, elemType, value, ind);
         return ctx.context.create_var(context, item.getResult());
     }
     else

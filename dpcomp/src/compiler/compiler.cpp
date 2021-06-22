@@ -40,6 +40,9 @@ struct PassManagerStage
                      F&& init_func):
         pm(&ctx)
     {
+        // TODO: random failures during verify in parallel mode, investigate
+        ctx.disableMultithreading();
+
         pm.enableVerifier(settings.verify);
 
         if (settings.pass_statistics)
@@ -52,7 +55,7 @@ struct PassManagerStage
         }
         if (settings.ir_printing)
         {
-            ctx.enableMultithreading(false);
+            ctx.disableMultithreading();
             pm.enableIRPrinting();
         }
 

@@ -19,6 +19,7 @@ import numpy as np
 from numba.tests.support import TestCase
 import unittest
 import itertools
+from functools import partial
 import pytest
 
 def _vectorize_reference(func, arg1):
@@ -564,6 +565,92 @@ def test_tensor_if(a, b):
     jit_func = njit(py_func)
 
     assert_equal(py_func(a, b), jit_func(a, b))
+
+def _cov(m, y=None, rowvar=True, bias=False, ddof=None):
+    return np.cov(m, y, rowvar, bias, ddof)
+
+_rnd = np.random.RandomState(42)
+
+@parametrize_function_variants("m", [
+    'np.array([[0, 2], [1, 1], [2, 0]]).T',
+    '_rnd.randn(100).reshape(5, 20)',
+    'np.asfortranarray(np.array([[0, 2], [1, 1], [2, 0]]).T)',
+    '_rnd.randn(100).reshape(5, 20)[:, ::2]',
+    'np.array([0.3942, 0.5969, 0.7730, 0.9918, 0.7964])',
+    # 'np.full((4, 5), fill_value=True)', TODO
+    'np.array([np.nan, 0.5969, -np.inf, 0.9918, 0.7964])',
+    'np.linspace(-3, 3, 33).reshape(33, 1)',
+
+    # non-array inputs
+    # '((0.1, 0.2), (0.11, 0.19), (0.09, 0.21))',  # UniTuple
+    # '((0.1, 0.2), (0.11, 0.19), (0.09j, 0.21j))',  # Tuple
+    # '(-2.1, -1, 4.3)',
+    # '(1, 2, 3)',
+    # '[4, 5, 6]',
+    # '((0.1, 0.2, 0.3), (0.1, 0.2, 0.3))',
+    # '[(1, 2, 3), (1, 3, 2)]',
+    # '3.142',
+    # '((1.1, 2.2, 1.5),)',
+
+    # empty data structures
+    # 'np.array([])',
+    # 'np.array([]).reshape(0, 2)',
+    # 'np.array([]).reshape(2, 0)',
+    # '()',
+    ])
+def test_cov_basic(m):
+    py_func = _cov
+    jit_func = njit(py_func)
+    m = m.copy() # TODO: fix strides
+    assert_allclose(py_func(m), jit_func(m), rtol=1e-15, atol=1e-15)
+
+def _copy_array(arg):
+    if isinstance(arg, np.ndarray):
+        arg = arg.copy();
+    return arg
+
+_cov_inputs_m = _rnd.randn(105).reshape(15, 7)
+@pytest.mark.parametrize("m",
+                         [_cov_inputs_m])
+@pytest.mark.parametrize("y",
+                         [None, _cov_inputs_m[::-1]])
+@pytest.mark.parametrize("rowvar",
+                         [False, True])
+@pytest.mark.parametrize("bias",
+                         [False, True])
+@pytest.mark.parametrize("ddof",
+                         [None, -1, 0, 1, 3.0, True])
+def test_cov_explicit_arguments(m, y, rowvar, bias, ddof):
+    if isinstance(ddof, bool):
+        pytest.xfail()
+    py_func = _cov
+    jit_func = njit(py_func)
+    m = _copy_array(m) # TODO: fix strides
+    y = _copy_array(y) # TODO: fix strides
+    assert_allclose(py_func(m=m, y=y, rowvar=rowvar, bias=bias, ddof=ddof), jit_func(m=m, y=y, rowvar=rowvar, bias=bias, ddof=ddof), rtol=1e-14, atol=1e-14)
+
+@parametrize_function_variants("m, y, rowvar", [
+    '(np.array([-2.1, -1, 4.3]), np.array([3, 1.1, 0.12]), True)',
+    '(np.array([1, 2, 3]), np.array([1j, 2j, 3j]), True)',
+    '(np.array([1j, 2j, 3j]), np.array([1, 2, 3]), True)',
+    '(np.array([1, 2, 3]), np.array([1j, 2j, 3]), True)',
+    '(np.array([1j, 2j, 3]), np.array([1, 2, 3]), True)',
+    '(np.array([]), np.array([]), True)',
+    '(1.1, 2.2, True)',
+    '(_rnd.randn(10, 3), np.array([-2.1, -1, 4.3]).reshape(1, 3) / 10, True)',
+    '(np.array([-2.1, -1, 4.3]), np.array([[3, 1.1, 0.12], [3, 1.1, 0.12]]), True)',
+    # '(np.array([-2.1, -1, 4.3]), np.array([[3, 1.1, 0.12], [3, 1.1, 0.12]]), False)',
+    '(np.array([[3, 1.1, 0.12], [3, 1.1, 0.12]]), np.array([-2.1, -1, 4.3]), True)',
+    # '(np.array([[3, 1.1, 0.12], [3, 1.1, 0.12]]), np.array([-2.1, -1, 4.3]), False)',
+    ])
+def test_cov_edge_cases(m, y, rowvar):
+    if not isinstance(m, np.ndarray) or not isinstance(y, np.ndarray) or np.iscomplexobj(m) or np.iscomplexobj(y):
+        pytest.xfail()
+    py_func = _cov
+    jit_func = njit(py_func)
+    m = _copy_array(m) # TODO: fix strides
+    y = _copy_array(y) # TODO: fix strides
+    assert_allclose(py_func(m=m, y=y, rowvar=rowvar), jit_func(m=m, y=y, rowvar=rowvar), rtol=1e-14, atol=1e-14)
 
 if __name__ == '__main__':
     unittest.main()

@@ -20,6 +20,7 @@
 namespace mlir
 {
 class TypeConverter;
+class CallOp;
 namespace scf
 {
 class IfOp;
@@ -51,5 +52,16 @@ struct FixupIfTypes : public mlir::OpRewritePattern<mlir::scf::IfOp>
 
 private:
     mlir::TypeConverter &converter;
+};
+
+struct FixCallOmittedArgs : public mlir::OpRewritePattern<mlir::CallOp>
+{
+    FixCallOmittedArgs(mlir::TypeConverter &typeConverter,
+                       mlir::MLIRContext *context);
+
+    mlir::LogicalResult matchAndRewrite(
+        mlir::CallOp op, mlir::PatternRewriter &rewriter) const override;
+private:
+    mlir::TypeConverter& converter;
 };
 }
