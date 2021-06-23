@@ -1922,13 +1922,15 @@ struct FixDeallocPlacement : public mlir::OpRewritePattern<mlir::memref::Dealloc
         mlir::Operation* newPos = op;
         ++blockIt;
         auto memref = op.memref();
+        mlir::BufferViewFlowAnalysis analysis(op->getParentOfType<mlir::FuncOp>());
+        auto aliases = analysis.resolve(memref);
         for (auto& it : llvm::make_range(blockIt, block->end()))
         {
             auto visitor = [&](mlir::Operation* inner)
             {
                 for (auto arg : inner->getOperands())
                 {
-                    if (arg == memref)
+                    if (aliases.count(arg))
                     {
                         return mlir::WalkResult::interrupt();
                     }
@@ -2042,7 +2044,6 @@ void LowerCloneOpsPass::runOnFunction()
         FixStridedReshape
         >(&context);
 
-
     auto func = getFunction();
     (void)mlir::applyPatternsAndFoldGreedily(func, std::move(patterns));
 }
@@ -2061,8 +2062,7 @@ void PostLinalgOptPass::runOnFunction()
     plier::populate_common_opts_patterns(context, patterns);
 
     patterns.insert<
-        plier::CanonicalizeReduction,
-        FixDeallocPlacement
+        plier::CanonicalizeReduction
         >(&context);
 
     auto additionalOpt = [](mlir::FuncOp op)
@@ -2099,6 +2099,23 @@ void PromoteParallelPass::runOnFunction()
         signalPassFailure();
     }
 }
+
+struct FixDeallocPlacementPass :
+    public mlir::PassWrapper<FixDeallocPlacementPass, mlir::FunctionPass>
+{
+    void runOnFunction() override
+    {
+        auto& context = getContext();
+        mlir::OwningRewritePatternList patterns(&context);
+
+        patterns.insert<
+            FixDeallocPlacement
+            >(&context);
+
+        auto func = getFunction();
+        (void)mlir::applyPatternsAndFoldGreedily(func, std::move(patterns));
+    }
+};
 
 void populate_plier_to_linalg_gen_pipeline(mlir::OpPassManager& pm)
 {
@@ -2140,6 +2157,8 @@ void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager& pm)
     pm.addPass(mlir::createSymbolDCEPass());
     pm.addNestedPass<mlir::FuncOp>(std::make_unique<PostLinalgOptPass>());
     pm.addNestedPass<mlir::FuncOp>(std::make_unique<PromoteParallelPass>());
+
+    pm.addNestedPass<mlir::FuncOp>(std::make_unique<FixDeallocPlacementPass>());
 }
 }
 
