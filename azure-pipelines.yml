@@ -70,8 +70,9 @@ jobs:
 
   - script: |
       source /usr/share/miniconda/bin/activate
-      conda create -y -n build_env numba=0.53 scipy pybind11 pytest lit dpnp mkl=2021.2 -c conda-forge -c intel
+      conda create -y -n build_env scipy pybind11 pytest lit dpnp mkl=2021.1 -c conda-forge -c intel
       conda activate build_env
+      pip install numba==0.53
       conda install -y tbb=2021 -c conda-forge -c intel --force
       conda list
       python -c "import numba; print('numba', numba.__version__)"
