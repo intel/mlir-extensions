@@ -870,42 +870,48 @@ py::object init_tensor_impl(py::capsule context, py::handle shape, py::handle dt
     auto& ctx = get_py_context(context);
     auto loc = ctx.loc;
     auto& builder = ctx.builder;
-    auto elem_type = unwrap_type(dtype);
+    auto elemType = unwrap_type(dtype);
+    auto signlessElemType = makeSignlessType(elemType);
     mlir::Value init;
-    auto index_type = builder.getIndexType();
+    auto indexType = builder.getIndexType();
     auto count = py::len(shape);
-    llvm::SmallVector<mlir::Value> shape_val(count);
-    llvm::SmallVector<int64_t> static_shape(count, -1);
+    llvm::SmallVector<mlir::Value> shapeVal(count);
+    llvm::SmallVector<int64_t> staticShape(count, -1);
     for (size_t i = 0; i < count; ++i)
     {
         auto elem = shape[py::int_(i)];
         if (py::isinstance<py::int_>(elem))
         {
-            static_shape[i] = elem.cast<int64_t>();
+            staticShape[i] = elem.cast<int64_t>();
         }
-        shape_val[i] = do_cast(loc, builder, ctx.context.unwrap_val(loc, builder, elem), index_type);
+        auto elemVal = ctx.context.unwrap_val(loc, builder, elem);
+        elemVal = doSignCast(builder, loc, elemVal);
+        shapeVal[i] = do_cast(loc, builder, elemVal, indexType);
     }
 
     if (init_val.is_none())
     {
-        init = builder.create<mlir::linalg::InitTensorOp>(loc, shape_val, elem_type);
+        init = builder.create<mlir::linalg::InitTensorOp>(loc, shapeVal, signlessElemType);
     }
     else
     {
-        auto val = do_cast(loc, builder, ctx.context.unwrap_val(loc, builder, init_val), elem_type);
+        auto val = do_cast(loc, builder, ctx.context.unwrap_val(loc, builder, init_val), signlessElemType);
         llvm::SmallVector<int64_t> shape(count, -1);
-        auto type = mlir::RankedTensorType::get(shape, elem_type);
+        auto type = mlir::RankedTensorType::get(shape, signlessElemType);
         auto body = [&](mlir::OpBuilder &builder, mlir::Location loc, mlir::ValueRange /*indices*/)
         {
             builder.create<mlir::tensor::YieldOp>(loc, val);
         };
-        init = builder.create<mlir::tensor::GenerateOp>(loc, type, shape_val, body);
+        init = builder.create<mlir::tensor::GenerateOp>(loc, type, shapeVal, body);
     }
-    if (llvm::any_of(static_shape, [](auto val){ return val >= 0;}))
+    if (llvm::any_of(staticShape, [](auto val){ return val >= 0;}))
     {
-        auto new_type = mlir::RankedTensorType::get(static_shape, elem_type);
-        init = builder.create<mlir::tensor::CastOp>(loc, new_type, init);
+        auto newType = mlir::RankedTensorType::get(staticShape, signlessElemType);
+        init = builder.create<mlir::tensor::CastOp>(loc, newType, init);
     }
+    auto resTensorTypeSigness = init.getType().cast<mlir::RankedTensorType>();
+    auto resTensorType = mlir::RankedTensorType::get(resTensorTypeSigness.getShape(), elemType, resTensorTypeSigness.getEncoding());
+    init = doSignCast(builder, loc, init, resTensorType);
     return ctx.context.create_var(context, init);
 }
 
