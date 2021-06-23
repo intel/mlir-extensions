@@ -44,6 +44,9 @@ cmake_cmd = [
 "-GNinja",
 ]
 
+if IS_WIN:
+    cmake_cmd += ["-DCMAKE_C_COMPILER=cl.exe", "-DCMAKE_CXX_COMPILER=cl.exe"]
+
 cmake_cmd += [
 "..",
 '-DCMAKE_BUILD_TYPE=Release',
