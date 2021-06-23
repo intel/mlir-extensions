@@ -21,10 +21,12 @@
 #include <mlir/Dialect/Linalg/Passes.h>
 #include <mlir/Dialect/Linalg/Transforms/Transforms.h>
 #include <mlir/Dialect/StandardOps/Transforms/Passes.h>
+#include <mlir/Dialect/StandardOps/Transforms/FuncConversions.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/Dialect/Tensor/Transforms/Passes.h>
 #include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Dialect/SCF/Passes.h>
+#include <mlir/Dialect/SCF/Transforms.h>
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Pass/Pass.h>
@@ -1188,21 +1190,11 @@ void PlierToLinalgPass::runOnOperation()
 {
     auto context = &getContext();
 
-    mlir::TypeConverter type_converter;
+    mlir::TypeConverter typeConverter;
     // Convert unknown types to itself
-    type_converter.addConversion([](mlir::Type type) { return type; });
-    populate_std_type_converter(*context, type_converter);
-    populate_array_type_converter(*context, type_converter);
-    type_converter.addConversion([](mlir::RankedTensorType type)->llvm::Optional<mlir::Type>
-    {
-        auto elemType = type.getElementType().dyn_cast<mlir::IntegerType>();
-        if (elemType && !elemType.isSignless())
-        {
-            auto signless = mlir::IntegerType::get(type.getContext(), elemType.getWidth());
-            return mlir::RankedTensorType::get(type.getShape(), signless, type.getEncoding());
-        }
-        return llvm::None;
-    });
+    typeConverter.addConversion([](mlir::Type type) { return type; });
+    populate_std_type_converter(*context, typeConverter);
+    populate_array_type_converter(*context, typeConverter);
 
     mlir::OwningRewritePatternList patterns(context);
     patterns.insert<
@@ -1214,7 +1206,7 @@ void PlierToLinalgPass::runOnOperation()
         RankedTypesCasts,
         UnrankedToElementCasts,
         ArrayShape
-        >(type_converter, context);
+        >(typeConverter, context);
 
     CallLowerer callLowerer;
 
@@ -1222,7 +1214,7 @@ void PlierToLinalgPass::runOnOperation()
         plier::CallOpLowering,
         GetattrRewriter,
         BinopRewriter
-        >(type_converter, context, std::ref(callLowerer));
+        >(typeConverter, context, std::ref(callLowerer));
 
     patterns.insert<
         GetitemOpLowering,
@@ -1289,6 +1281,68 @@ void PostPlierToLinalgPass::runOnFunction()
         >(&context);
 
     applyOptimizations(getFunction(), std::move(patterns), getAnalysisManager());
+}
+
+struct MakeTensorsSignlessPass :
+    public mlir::PassWrapper<MakeTensorsSignlessPass, mlir::OperationPass<mlir::ModuleOp>>
+{
+    void runOnOperation() override;
+};
+
+void MakeTensorsSignlessPass::runOnOperation()
+{
+    auto module = getOperation();
+    auto* context = &getContext();
+
+    mlir::TypeConverter typeConverter;
+    typeConverter.addConversion([](mlir::Type type) { return type; });
+    typeConverter.addConversion([](mlir::RankedTensorType type)->llvm::Optional<mlir::Type>
+    {
+        auto elemType = type.getElementType().dyn_cast<mlir::IntegerType>();
+        if (elemType && !elemType.isSignless())
+        {
+            auto signless = mlir::IntegerType::get(type.getContext(), elemType.getWidth());
+            return mlir::RankedTensorType::get(type.getShape(), signless, type.getEncoding());
+        }
+        return llvm::None;
+    });
+    auto materializeSignCast = [](mlir::OpBuilder &builder, mlir::Type type,
+                                  mlir::ValueRange inputs, mlir::Location loc)->mlir::Value
+    {
+        assert(inputs.size() == 1);
+        return builder.create<plier::SignCastOp>(loc, type, inputs[0]);
+    };
+    typeConverter.addArgumentMaterialization(materializeSignCast);
+    typeConverter.addSourceMaterialization(materializeSignCast);
+    typeConverter.addTargetMaterialization(materializeSignCast);
+
+    mlir::RewritePatternSet patterns(context);
+    mlir::ConversionTarget target(*context);
+
+    mlir::populateFuncOpTypeConversionPattern(patterns, typeConverter);
+    target.addDynamicallyLegalOp<mlir::FuncOp>([&](mlir::FuncOp op) {
+        return typeConverter.isSignatureLegal(op.getType()) &&
+               typeConverter.isLegal(&op.getBody());
+    });
+    mlir::populateCallOpTypeConversionPattern(patterns, typeConverter);
+    target.addDynamicallyLegalOp<mlir::CallOp>(
+        [&](mlir::CallOp op) { return typeConverter.isLegal(op); });
+
+    mlir::populateBranchOpInterfaceTypeConversionPattern(patterns, typeConverter);
+    mlir::populateReturnOpTypeConversionPattern(patterns, typeConverter);
+    target.addLegalOp<mlir::ModuleOp, plier::SignCastOp>();
+    mlir::scf::populateSCFStructuralTypeConversionsAndLegality(typeConverter, patterns,
+                                                          target);
+
+    target.markUnknownOpDynamicallyLegal([&](mlir::Operation *op) {
+        return mlir::isNotBranchOpInterfaceOrReturnLikeOp(op) ||
+               mlir::isLegalForBranchOpInterfaceTypeConversionPattern(op,
+                                                                      typeConverter) ||
+               mlir::isLegalForReturnOpTypeConversionPattern(op, typeConverter);
+    });
+
+    if (failed(applyFullConversion(module, target, std::move(patterns))))
+        signalPassFailure();
 }
 
 struct TensorFusionPass :
@@ -1620,6 +1674,7 @@ void populate_plier_to_linalg_gen_pipeline(mlir::OpPassManager& pm)
 
 void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager& pm)
 {
+    pm.addPass(std::make_unique<MakeTensorsSignlessPass>());
     pm.addPass(std::make_unique<TensorFusionPass>());
 
     pm.addPass(mlir::createTensorConstantBufferizePass());
