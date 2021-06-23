@@ -41,11 +41,12 @@ CMAKE_INSTALL_PREFIX = os.path.join(os.getcwd(), "numba_dpcomp")
 cmake_build_dir = os.path.join(os.getcwd(), "cmake_build")
 cmake_cmd = [
 "cmake",
-"-GNinja",
 ]
 
 if IS_WIN:
-    cmake_cmd += ["-DCMAKE_C_COMPILER=cl.exe", "-DCMAKE_CXX_COMPILER=cl.exe"]
+    cmake_cmd += ["-A", "x64"]
+else:
+    cmake_cmd += ["-GNinja"]
 
 cmake_cmd += [
 "..",
