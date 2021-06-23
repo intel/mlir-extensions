@@ -180,20 +180,27 @@ mlir::Type map_tuple_type(mlir::MLIRContext &ctx, llvm::StringRef &name) {
   if (!name.consume_front("Tuple("))
     return nullptr;
 
+  if (name.consume_front(")"))
+    return mlir::TupleType::get(&ctx, llvm::None);
+
   llvm::SmallVector<mlir::Type> types;
-  if (!name.consume_front(")")) {
-    while (true) {
-      mlir::Type type;
-      if (map_type_helper(ctx, name, type, ", ")) {
-        types.push_back(type);
-        continue;
-      }
-      if (map_type_helper(ctx, name, type, ")")) {
-        types.push_back(type);
-        break;
-      }
+  auto temp = name;
+  if (!consume_until(temp, ")"))
+    return nullptr;
+  auto len = name.size() - temp.size();
+  temp = name.take_front(len);
+  while (true) {
+    mlir::Type type;
+    if (map_type_helper(ctx, temp, type, ", ")) {
+      types.push_back(type);
+      continue;
+    }
+    if (map_type_helper(ctx, temp, type, ")")) {
+      types.push_back(type);
+      break;
     }
   }
+  name = name.drop_front(len);
   return mlir::TupleType::get(&ctx, types);
 }
 
