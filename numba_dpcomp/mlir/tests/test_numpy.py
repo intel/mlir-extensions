@@ -13,7 +13,8 @@
 # limitations under the License.
 
 import numba
-from numba_dpcomp import njit, vectorize
+# from numba_dpcomp import njit
+from numba_dpcomp import vectorize
 from numpy.testing import assert_equal, assert_allclose # for nans comparison
 import numpy as np
 from numba.tests.support import TestCase
@@ -23,6 +24,7 @@ from functools import partial
 import pytest
 
 from .utils import parametrize_function_variants
+from .utils import njit_cached as njit
 
 def _vectorize_reference(func, arg1):
     ret = np.empty(arg1.shape, arg1.dtype)

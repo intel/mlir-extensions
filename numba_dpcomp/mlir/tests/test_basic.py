@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import numba
-from numba_dpcomp import njit
+#from numba_dpcomp import njit
 from math import nan, inf, isnan
 from numpy.testing import assert_equal # for nans comparison
 
@@ -25,6 +25,7 @@ import sys
 import itertools
 
 from .utils import parametrize_function_variants
+from .utils import njit_cached as njit
 
 # TODO: nans and infs not tested yet, we are not sure if want exactly follow
 # interpreted python rules

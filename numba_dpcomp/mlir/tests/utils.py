@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from numba_dpcomp import njit
 import inspect
 import pytest
 
@@ -21,3 +22,15 @@ def parametrize_function_variants(name, strings):
     g = vars(caller_module)
     funcs = [eval(f, g) for f in strings]
     return pytest.mark.parametrize(name, funcs, ids=strings)
+
+_cached_funcs = {}
+
+def njit_cached(func, *args, **kwargs):
+    if args or kwargs:
+        return njit(func, *args, **kwargs)
+    global _cached_funcs
+    if func in _cached_funcs:
+        return _cached_funcs[func]
+    jitted = njit(func)
+    _cached_funcs[func] = jitted
+    return jitted
