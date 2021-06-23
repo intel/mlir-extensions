@@ -20,6 +20,7 @@
 #include <mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h>
 #include <mlir/Dialect/LLVMIR/LLVMDialect.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
+#include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 #include <mlir/IR/Builders.h>
@@ -37,13 +38,13 @@
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Target/TargetMachine.h>
 
-#include "plier/dialect.hpp"
-
-#include "plier/transforms/func_utils.hpp"
-
 #include "base_pipeline.hpp"
-#include "plier/compiler/pipeline_registry.hpp"
+#include "pipelines/plier_to_std.hpp"
 
+#include "plier/compiler/pipeline_registry.hpp"
+#include "plier/dialect.hpp"
+#include "plier/rewrites/type_conversion.hpp"
+#include "plier/transforms/func_utils.hpp"
 #include "plier/utils.hpp"
 
 namespace {
@@ -126,13 +127,6 @@ void populateToLLVMAdditionalTypeConversion(
   converter.addConversion(
       [voidPtrType](plier::NoneType) -> llvm::Optional<mlir::Type> {
         return voidPtrType;
-      });
-  converter.addConversion(
-      [](mlir::IntegerType type) -> llvm::Optional<mlir::Type> {
-        if (!type.isSignless()) {
-          return mlir::IntegerType::get(type.getContext(), type.getWidth());
-        }
-        return llvm::None;
       });
 }
 
@@ -1161,6 +1155,52 @@ private:
   mutable mlir::LLVMTypeConverter converter; // TODO
 };
 
+struct MakeSignlessPass
+    : public mlir::PassWrapper<MakeSignlessPass, mlir::OperationPass<void>> {
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::StandardOpsDialect>();
+    registry.insert<plier::PlierDialect>();
+  }
+
+  void runOnOperation() override final {
+    auto module = getOperation();
+    auto *context = &getContext();
+
+    mlir::TypeConverter typeConverter;
+    typeConverter.addConversion([](mlir::Type type) { return type; });
+    typeConverter.addConversion(
+        [](mlir::IntegerType type) -> llvm::Optional<mlir::Type> {
+          if (!type.isSignless()) {
+            return mlir::IntegerType::get(type.getContext(), type.getWidth());
+          }
+          return llvm::None;
+        });
+    populate_tuple_type_converter(*context, typeConverter);
+
+    auto materializeSignCast = [](mlir::OpBuilder &builder, mlir::Type type,
+                                  mlir::ValueRange inputs,
+                                  mlir::Location loc) -> mlir::Value {
+      assert(inputs.size() == 1);
+      return builder.create<plier::SignCastOp>(loc, type, inputs[0]);
+    };
+    typeConverter.addArgumentMaterialization(materializeSignCast);
+    typeConverter.addSourceMaterialization(materializeSignCast);
+    typeConverter.addTargetMaterialization(materializeSignCast);
+
+    mlir::RewritePatternSet patterns(context);
+    mlir::ConversionTarget target(*context);
+
+    plier::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
+                                                              patterns, target);
+    plier::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
+                                                        target);
+
+    if (failed(applyFullConversion(module, target, std::move(patterns))))
+      signalPassFailure();
+  }
+};
+
 struct LowerParallelToCFGPass
     : public mlir::PassWrapper<LowerParallelToCFGPass,
                                mlir::OperationPass<void>> {
@@ -1419,7 +1459,6 @@ struct LLVMLoweringPass
         // clang-format off
         LowerUndef,
         LowerCasts<plier::CastOp>,
-        LowerCasts<plier::SignCastOp>,
         LowerBuildTuple,
         LowerRetainOp,
         AllocOpLowering,
@@ -1441,6 +1480,7 @@ private:
 };
 
 void populate_lower_to_llvm_pipeline(mlir::OpPassManager &pm) {
+  pm.addPass(std::make_unique<MakeSignlessPass>());
   pm.addPass(std::make_unique<LowerParallelToCFGPass>());
   pm.addPass(mlir::createLowerToCFGPass());
   pm.addPass(mlir::createCanonicalizerPass());
