@@ -617,6 +617,30 @@ struct FixStridedClone : public mlir::OpRewritePattern<mlir::memref::CloneOp> {
   }
 };
 
+llvm::Optional<unsigned> getSingleDynamicDim(mlir::ShapedType type) {
+  if (!type.hasRank()) {
+    return llvm::None;
+  }
+
+  int dimIndex = -1;
+  for (auto it : llvm::enumerate(type.getShape())) {
+    auto i = static_cast<int>(it.index());
+    auto dim = it.value();
+    if (dim == mlir::ShapedType::kDynamicSize) {
+      if (dimIndex != -1) {
+        return llvm::None;
+      }
+      dimIndex = i;
+    } else if (dim != 1) {
+      return llvm::None;
+    }
+  }
+  if (dimIndex != -1) {
+    return static_cast<unsigned>(dimIndex);
+  }
+  return llvm::None;
+}
+
 struct FixStridedReshape
     : public mlir::OpRewritePattern<mlir::memref::ReshapeOp> {
   using OpRewritePattern::OpRewritePattern;
@@ -625,7 +649,29 @@ struct FixStridedReshape
   matchAndRewrite(mlir::memref::ReshapeOp op,
                   mlir::PatternRewriter &rewriter) const override {
     auto source = op.source();
+    auto shape = op.shape();
     auto srcType = source.getType().cast<mlir::MemRefType>();
+    auto dstType = op.getType().cast<mlir::MemRefType>();
+    if (dstType.getRank() == 1) {
+      if (auto srcDimIndex = getSingleDynamicDim(srcType)) {
+        auto srcRank = static_cast<unsigned>(srcType.getRank());
+        assert(*srcDimIndex < srcRank);
+        auto loc = op.getLoc();
+        auto zero = rewriter.create<mlir::ConstantIndexOp>(loc, 0).getResult();
+        llvm::SmallVector<mlir::OpFoldResult> offsets(srcRank,
+                                                      rewriter.getIndexAttr(0));
+        llvm::SmallVector<mlir::OpFoldResult> sizes(srcRank,
+                                                    rewriter.getIndexAttr(1));
+        sizes[*srcDimIndex] =
+            rewriter.createOrFold<mlir::memref::LoadOp>(loc, shape, zero);
+        llvm::SmallVector<mlir::OpFoldResult> strides(srcRank,
+                                                      rewriter.getIndexAttr(1));
+        rewriter.replaceOpWithNewOp<mlir::memref::SubViewOp>(
+            op, dstType, source, offsets, sizes, strides);
+        return mlir::success();
+      }
+    }
+
     auto newType =
         mlir::MemRefType::get(srcType.getShape(), srcType.getElementType());
     auto newSource = unstride(rewriter, op.getLoc(), source, newType);
@@ -633,7 +679,7 @@ struct FixStridedReshape
       return mlir::failure();
     }
     rewriter.replaceOpWithNewOp<mlir::memref::ReshapeOp>(op, op.getType(),
-                                                         newSource, op.shape());
+                                                         newSource, shape);
     return mlir::success();
   }
 };
@@ -715,22 +761,26 @@ struct FixStridedSubview
     auto offsets = op.getMixedOffsets();
     auto sizes = op.getMixedSizes();
     auto strides = op.getMixedStrides();
-    auto inferredType = [&]() {
-      auto dstRank = static_cast<unsigned>(dstType.getRank());
-      if (srcType.getRank() != dstRank) {
-        return mlir::memref::SubViewOp::inferRankReducedResultType(
-            dstRank, srcType, offsets, sizes, strides);
-      } else {
-        return mlir::memref::SubViewOp::inferResultType(srcType, offsets, sizes,
-                                                        strides);
-      }
-    }();
+    auto inferredType =
+        [&]() {
+          auto dstRank = static_cast<unsigned>(dstType.getRank());
+          if (srcType.getRank() != dstRank) {
+            return mlir::memref::SubViewOp::inferRankReducedResultType(
+                dstRank, srcType, offsets, sizes, strides);
+          } else {
+            return mlir::memref::SubViewOp::inferResultType(srcType, offsets,
+                                                            sizes, strides);
+          }
+        }()
+            .cast<mlir::MemRefType>();
+
     if (inferredType == dstType) {
       return mlir::failure();
     }
 
-    rewriter.replaceOpWithNewOp<mlir::memref::SubViewOp>(op, source, offsets,
-                                                         sizes, strides);
+    ::mlir::OffsetSizeAndStrideOpInterface;
+    rewriter.replaceOpWithNewOp<mlir::memref::SubViewOp>(
+        op, inferredType, source, offsets, sizes, strides);
     return mlir::success();
   }
 };
@@ -929,6 +979,8 @@ void MakeStridedLayout::runOnOperation() {
 
   if (changed) {
     mlir::OwningRewritePatternList patterns(context);
+
+    plier::populate_common_opts_patterns(*context, patterns);
 
     patterns.insert<FixStridedIf, FixStridedClone, FixStridedReshape,
                     FixStridedSubview, FixStridedReturn, FixStridedCall>(
