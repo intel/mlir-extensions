@@ -19,7 +19,17 @@ import math
 from numba import prange
 
 def is_int(t, b):
-    return t == b.int8 or t == b.int16 or t == b.int32 or t == b.int64
+    types = [
+        b.int8,
+        b.uint8,
+        b.int16,
+        b.uint16,
+        b.int32,
+        b.uint32,
+        b.int64,
+        b.uint64,
+    ]
+    return t in types
 
 def is_float(t, b):
     return t == b.float16 or t == b.float32 or t == b.float64
@@ -42,7 +52,7 @@ def sum_impl(builder, arg, axis=None):
 
         res = builder.generic(arg, init, iterators, maps, body)
         return builder.extract(res, 0)
-    elif  isinstance(axis, int):
+    elif isinstance(axis, int):
         shape = arg.shape
         num_dims = len(shape)
         iterators = [('reduction' if i == axis else 'parallel') for i in range(num_dims)]

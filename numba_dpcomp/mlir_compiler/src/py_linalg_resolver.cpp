@@ -1353,20 +1353,25 @@ void setup_py_builder(py::handle builder, mlir::OpBuilder& b, llvm::function_ref
     py::setattr(builder, "_cast", py::cpp_function(&cast_impl));
     py::setattr(builder, "_undef", py::cpp_function(&undef_impl));
 
-    auto add_type = [&](const char* name, mlir::Type type)
+    auto addType = [&](const char* name, mlir::Type type)
     {
         py::setattr(builder, name, create_type(type));
     };
 
-    add_type("int8", b.getIntegerType(8));
-    add_type("int16", b.getIntegerType(16));
-    add_type("int32", b.getIntegerType(32));
-    add_type("int64", b.getIntegerType(64));
-    add_type("index", b.getIndexType());
+    addType("int8",   b.getIntegerType(8,  true));
+    addType("uint8",  b.getIntegerType(8,  false));
+    addType("int16",  b.getIntegerType(16, true));
+    addType("uint16", b.getIntegerType(16, false));
+    addType("int32",  b.getIntegerType(32, true));
+    addType("uint32", b.getIntegerType(32, false));
+    addType("int64",  b.getIntegerType(64, true));
+    addType("uint64", b.getIntegerType(64, false));
 
-    add_type("float16", b.getF16Type());
-    add_type("float32", b.getF32Type());
-    add_type("float64", b.getF64Type());
+    addType("index", b.getIndexType());
+
+    addType("float16", b.getF16Type());
+    addType("float32", b.getF32Type());
+    addType("float64", b.getF64Type());
 }
 
 py::object shape_impl(py::capsule context, py::capsule ssa_val)
