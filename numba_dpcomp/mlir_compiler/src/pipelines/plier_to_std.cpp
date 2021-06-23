@@ -911,17 +911,17 @@ private:
     mlir::TypeConverter& converter;
 };
 
-mlir::Value negate(mlir::Value val, mlir::Location loc, mlir::PatternRewriter &rewriter)
+mlir::Value negate(mlir::PatternRewriter &rewriter, mlir::Location loc, mlir::Value val, mlir::Type resType)
 {
-    auto type = val.getType();
-    if (auto itype = type.dyn_cast<mlir::IntegerType>())
+    val = do_cast(resType, val ,rewriter);
+    if (auto itype = resType.dyn_cast<mlir::IntegerType>())
     {
-        auto signless = plier::makeSignlessType(itype);
+        auto signless = plier::makeSignlessType(resType);
         if (signless != itype)
         {
             val = rewriter.create<plier::SignCastOp>(loc, signless, val);
         }
-        // TODO: not int negation?
+        // TODO: no int negation?
         auto zero = rewriter.create<mlir::ConstantOp>(loc, mlir::IntegerAttr::get(signless, 0));
         auto res = rewriter.create<mlir::SubIOp>(loc, zero, val).getResult();
         if (signless != itype)
@@ -930,7 +930,7 @@ mlir::Value negate(mlir::Value val, mlir::Location loc, mlir::PatternRewriter &r
         }
         return res;
     }
-    if (type.isa<mlir::FloatType>())
+    if (resType.isa<mlir::FloatType>())
     {
         return rewriter.create<mlir::NegFOp>(loc, val);
     }
@@ -939,29 +939,38 @@ mlir::Value negate(mlir::Value val, mlir::Location loc, mlir::PatternRewriter &r
 
 struct UnaryOpLowering : public mlir::OpRewritePattern<plier::UnaryOp>
 {
-    UnaryOpLowering(mlir::TypeConverter &/*typeConverter*/,
+    UnaryOpLowering(mlir::TypeConverter &typeConverter,
                     mlir::MLIRContext *context):
-        OpRewritePattern(context) {}
+        OpRewritePattern(context), converter(typeConverter) {}
 
     mlir::LogicalResult matchAndRewrite(
         plier::UnaryOp op, mlir::PatternRewriter &rewriter) const override
     {
-        auto arg = op.getOperand();
+        auto arg = op.value();
         auto type = arg.getType();
         if (!is_supported_type(type))
         {
             return mlir::failure();
         }
+        auto resType = converter.convertType(op.getType());
+        if (!resType)
+        {
+            return mlir::failure();
+        }
         if (op.op() == "+")
         {
+            arg = do_cast(resType, arg, rewriter);
             rewriter.replaceOp(op, arg);
             return mlir::success();
         }
         assert(op.op() == "-");
-        auto new_val = negate(arg, op.getLoc(), rewriter);
+        auto new_val = negate(rewriter, op.getLoc(), arg, resType);
         rewriter.replaceOp(op, new_val);
         return mlir::success();
     }
+
+private:
+    mlir::TypeConverter& converter;
 };
 
 mlir::Block* get_next_block(mlir::Block* block)
