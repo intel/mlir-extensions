@@ -49,6 +49,7 @@
 #include "plier/rewrites/type_conversion.hpp"
 #include "plier/rewrites/loop_rewrites.hpp"
 #include "plier/rewrites/memory_rewrites.hpp"
+#include "plier/transforms/cast_utils.hpp"
 #include "plier/transforms/const_utils.hpp"
 #include "plier/transforms/loop_utils.hpp"
 
@@ -868,22 +869,38 @@ struct RankedTypesCasts : public mlir::OpRewritePattern<plier::CastOp>
     mlir::LogicalResult matchAndRewrite(
         plier::CastOp op, mlir::PatternRewriter &rewriter) const override
     {
-        auto src_type = op.value().getType();
-        auto dst_type = converter.convertType(op.getType());
-        if (!dst_type)
+        auto srcType = op.value().getType();
+        auto dstType = converter.convertType(op.getType());
+        if (!dstType)
         {
             return mlir::failure();
         }
-        if (src_type.isa<mlir::RankedTensorType>() &&
-            dst_type.isa<mlir::RankedTensorType>())
+        if (srcType.isa<mlir::RankedTensorType>() &&
+            dstType.isa<mlir::RankedTensorType>())
         {
-            auto src = src_type.cast<mlir::RankedTensorType>();
-            auto dst = dst_type.cast<mlir::RankedTensorType>();
+            auto src = srcType.cast<mlir::RankedTensorType>();
+            auto dst = dstType.cast<mlir::RankedTensorType>();
+            auto srcElem = src.getElementType();
+            auto dstElem = dst.getElementType();
             if (!has_compatibale_shape(src,dst))
             {
                 return mlir::failure();
             }
-            rewriter.replaceOpWithNewOp<mlir::tensor::CastOp>(op, dst, op.value());
+
+            auto signlessSrcType = mlir::RankedTensorType::get(src.getShape(), plier::makeSignlessType(srcElem), src.getEncoding());
+            auto signlessDstType = mlir::RankedTensorType::get(dst.getShape(), plier::makeSignlessType(dstElem), dst.getEncoding());
+            auto loc = op.getLoc();
+            auto value = op.value();
+            if (signlessSrcType != src)
+            {
+                value = rewriter.createOrFold<plier::SignCastOp>(loc, signlessSrcType, value);
+            }
+            value = rewriter.createOrFold<mlir::tensor::CastOp>(loc, signlessDstType, value);
+            if (signlessDstType != dst)
+            {
+                value = rewriter.createOrFold<plier::SignCastOp>(loc, dst, value);
+            }
+            rewriter.replaceOp(op, value);
             return mlir::success();
         }
         return mlir::failure();
