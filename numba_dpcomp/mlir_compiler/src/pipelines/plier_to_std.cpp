@@ -619,7 +619,7 @@ mlir::Value int_cast(mlir::Type dstType, mlir::Value val, mlir::PatternRewriter&
 
     if (dstBits > srcBits)
     {
-        if (srcIntType.isSigned() || dstIntType.isSigned())
+        if (srcIntType.isSigned())
         {
             val = rewriter.createOrFold<mlir::SignExtendIOp>(loc, val, dstSignless);
         }
@@ -778,14 +778,24 @@ mlir::Value replace_fmod_op(mlir::Operation* op, mlir::PatternRewriter& rewriter
     return rewriter.create<mlir::RemFOp>(loc, v2, b).getResult();
 }
 
-template<mlir::CmpIPredicate Pred>
+template<mlir::CmpIPredicate SignedPred, mlir::CmpIPredicate UnsignedPred = SignedPred>
 mlir::Value replace_cmpi_op(mlir::Operation* op, mlir::PatternRewriter& rewriter, mlir::Type /*newType*/, mlir::ValueRange operands)
 {
     assert(nullptr != op);
-    auto signlessType = plier::makeSignlessType(operands[0].getType());
+    assert(operands.size() == 2);
+    assert(operands[0].getType() == operands[1].getType());
+    auto type = operands[0].getType().cast<mlir::IntegerType>();
+    auto signlessType = plier::makeSignlessType(type);
     auto a = do_cast(signlessType, operands[0], rewriter);
     auto b = do_cast(signlessType, operands[1], rewriter);
-    return rewriter.createOrFold<mlir::CmpIOp>(op->getLoc(), Pred, a, b);
+    if (SignedPred == UnsignedPred || type.isSigned())
+    {
+        return rewriter.createOrFold<mlir::CmpIOp>(op->getLoc(), SignedPred, a, b);
+    }
+    else
+    {
+        return rewriter.createOrFold<mlir::CmpIOp>(op->getLoc(), UnsignedPred, a, b);
+    }
 }
 
 template<mlir::CmpFPredicate Pred>
@@ -854,13 +864,13 @@ struct BinOpLowering : public mlir::OpRewritePattern<plier::BinOp>
             {"/",  &replace_itruediv_op,      &replace_op<mlir::DivFOp>},
             {"%",  &replace_imod_op,          &replace_fmod_op},
 
-            {">",  &replace_cmpi_op<mlir::CmpIPredicate::sgt>,
+            {">",  &replace_cmpi_op<mlir::CmpIPredicate::sgt, mlir::CmpIPredicate::ugt>,
                    &replace_cmpf_op<mlir::CmpFPredicate::OGT>},
-            {">=", &replace_cmpi_op<mlir::CmpIPredicate::sge>,
+            {">=", &replace_cmpi_op<mlir::CmpIPredicate::sge, mlir::CmpIPredicate::uge>,
                    &replace_cmpf_op<mlir::CmpFPredicate::OGE>},
-            {"<",  &replace_cmpi_op<mlir::CmpIPredicate::slt>,
+            {"<",  &replace_cmpi_op<mlir::CmpIPredicate::slt, mlir::CmpIPredicate::ult>,
                    &replace_cmpf_op<mlir::CmpFPredicate::OLT>},
-            {"<=", &replace_cmpi_op<mlir::CmpIPredicate::sle>,
+            {"<=", &replace_cmpi_op<mlir::CmpIPredicate::sle, mlir::CmpIPredicate::ule>,
                    &replace_cmpf_op<mlir::CmpFPredicate::OLE>},
             {"!=", &replace_cmpi_op<mlir::CmpIPredicate::ne>,
                    &replace_cmpf_op<mlir::CmpFPredicate::ONE>},
