@@ -800,6 +800,58 @@ struct FixStridedSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp
     }
 };
 
+struct FixStridedReturn : public mlir::OpRewritePattern<mlir::ReturnOp>
+{
+    using OpRewritePattern::OpRewritePattern;
+
+    mlir::LogicalResult matchAndRewrite(
+        mlir::ReturnOp op, mlir::PatternRewriter &rewriter) const override
+    {
+        auto func = op->getParentOfType<mlir::FuncOp>();
+        auto argsCount = op.getNumOperands();
+        if (!func || func.getNumResults() != argsCount)
+        {
+            return mlir::failure();
+        }
+
+        auto loc = op.getLoc();
+        auto retTypes = func.getType().getResults();
+        bool changed = false;
+        llvm::SmallVector<mlir::Value> newArgs(argsCount);
+        for (auto it : llvm::enumerate(op.getOperands()))
+        {
+            auto arg = it.value();
+            auto i = it.index();
+            auto retType = retTypes[i];
+            if (arg.getType() != retType)
+            {
+                auto srcMemrefType = arg.getType().dyn_cast<mlir::MemRefType>();
+                auto dstMemrefType = retType.dyn_cast<mlir::MemRefType>();
+                if (srcMemrefType && dstMemrefType)
+                {
+                    auto newMemrefType = dstMemrefType;
+                    if (!dstMemrefType.getAffineMaps().empty())
+                    {
+                        newMemrefType = mlir::MemRefType::get(dstMemrefType.getShape(), dstMemrefType.getElementType());
+                    }
+                    if (newMemrefType != dstMemrefType)
+                    {
+                        arg = rewriter.create<mlir::memref::CastOp>(loc, arg, dstMemrefType);
+                        changed = true;
+                    }
+                }
+            }
+            newArgs[i] = arg;
+        }
+
+        if (changed)
+        {
+            rewriter.replaceOpWithNewOp<mlir::ReturnOp>(op, newArgs);
+        }
+        return mlir::success(changed);
+    }
+};
+
 struct MakeStridedLayout :
     public mlir::PassWrapper<MakeStridedLayout, mlir::FunctionPass>
 {
@@ -819,8 +871,11 @@ void MakeStridedLayout::runOnFunction()
     auto loc = builder.getUnknownLoc();
     auto funcType = func.getType();
     auto argTypes = funcType.getInputs();
+    auto resTypes = funcType.getResults();
     llvm::SmallVector<mlir::Type> newArgTypes;
+    llvm::SmallVector<mlir::Type> newResTypes;
     newArgTypes.assign(argTypes.begin(), argTypes.end());
+    newResTypes.assign(resTypes.begin(), resTypes.end());
     for (auto it : llvm::enumerate(func.body().front().getArguments()))
     {
         auto arg = it.value();
@@ -857,8 +912,24 @@ void MakeStridedLayout::runOnFunction()
             newArgTypes[it.index()] = memrefType;
         }
     }
+    for (auto it : llvm::enumerate(resTypes))
+    {
+        auto type = it.value();
+        if (auto memref = type.dyn_cast<mlir::MemRefType>())
+        {
+            auto rank = static_cast<unsigned>(memref.getRank());
+            auto makeShape = [&](int64_t val)
+            {
+                return llvm::SmallVector<int64_t>(rank, val);
+            };
+            auto strideVal = mlir::ShapedType::kDynamicStrideOrOffset;
+            auto affineMap = mlir::makeStridedLinearLayoutMap(makeShape(strideVal), strideVal, builder.getContext());
+            auto memrefType = mlir::MemRefType::get(makeShape(mlir::ShapedType::kDynamicSize), memref.getElementType(), affineMap);
+            newResTypes[it.index()] = memrefType;
+        }
+    }
 
-    auto newFuncType = mlir::FunctionType::get(&getContext(), newArgTypes, funcType.getResults());
+    auto newFuncType = mlir::FunctionType::get(&getContext(), newArgTypes, newResTypes);
     if (newFuncType == funcType)
     {
         return;
@@ -871,7 +942,8 @@ void MakeStridedLayout::runOnFunction()
         FixStridedIf,
         FixStridedClone,
         FixStridedReshape,
-        FixStridedSubview
+        FixStridedSubview,
+        FixStridedReturn
         >(context);
 
     (void)mlir::applyPatternsAndFoldGreedily(func, std::move(patterns));
