@@ -657,27 +657,27 @@ mlir::Value broadcast_dim(mlir::OpBuilder& builder, mlir::Location loc, mlir::Va
     return builder.create<mlir::SelectOp>(loc, cond, val2, val1);
 }
 
-mlir::Value expand_dim(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value initial, mlir::Value src, unsigned dim, mlir::ValueRange target_shape)
+mlir::Value expand_dim(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value initial, mlir::Value src, unsigned dim, mlir::ValueRange targetShape)
 {
     auto context = builder.getContext();
-    auto src_type = src.getType().cast<mlir::ShapedType>();
-    auto num_dims = static_cast<unsigned>(src_type.getRank());
-    auto shape = llvm::to_vector<8>(src_type.getShape());
+    auto srcType = src.getType().cast<mlir::ShapedType>();
+    auto numDims = static_cast<unsigned>(srcType.getRank());
+    auto shape = llvm::to_vector<8>(srcType.getShape());
     shape[dim] = -1;
-    mlir::Type target_type = mlir::RankedTensorType::get(shape, src_type.getElementType());
-    auto dim_val = builder.create<mlir::memref::DimOp>(loc, initial, dim);
+    mlir::Type targetType = mlir::RankedTensorType::get(shape, srcType.getElementType());
+    auto dimVal = builder.create<mlir::memref::DimOp>(loc, initial, dim);
     auto one = builder.create<mlir::ConstantIndexOp>(loc, 1);
-    mlir::Value cond = builder.create<mlir::CmpIOp>(loc, mlir::CmpIPredicate::eq, one, dim_val);
-    llvm::SmallVector<mlir::Value> new_shape(num_dims);
-    for (unsigned i = 0 ; i < num_dims; ++i)
+    mlir::Value cond = builder.create<mlir::CmpIOp>(loc, mlir::CmpIPredicate::eq, one, dimVal);
+    llvm::SmallVector<mlir::Value> newShape(numDims);
+    for (unsigned i = 0 ; i < numDims; ++i)
     {
         if (i == dim)
         {
-            new_shape[i] = target_shape[i];
+            newShape[i] = targetShape[i];
         }
         else
         {
-            new_shape[i] = builder.create<mlir::memref::DimOp>(loc, src, i);
+            newShape[i] = builder.create<mlir::memref::DimOp>(loc, src, i);
         }
     }
     auto true_body = [&](mlir::OpBuilder &builder, mlir::Location loc)
@@ -687,9 +687,9 @@ mlir::Value expand_dim(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value
 //        mlir::Type casted_type = mlir::RankedTensorType::get(shape, src_type.getElementType());
 //        auto casted = builder.create<mlir::tensor::CastOp>(loc, casted_type, src).getResult();
         auto casted = src; // TODO
-        auto init = builder.create<mlir::linalg::InitTensorOp>(loc, new_shape, src_type.getElementType()).getResult();
-        llvm::SmallVector<mlir::AffineExpr> exprs(num_dims);
-        for (unsigned i = 0; i < num_dims; ++i)
+        auto init = builder.create<mlir::linalg::InitTensorOp>(loc, newShape, srcType.getElementType()).getResult();
+        llvm::SmallVector<mlir::AffineExpr> exprs(numDims);
+        for (unsigned i = 0; i < numDims; ++i)
         {
             if (i == dim)
             {
@@ -701,10 +701,10 @@ mlir::Value expand_dim(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value
             }
         }
         const mlir::AffineMap maps[] = {
-            mlir::AffineMap::get(num_dims, 0, exprs, context),
-            mlir::AffineMap::getMultiDimIdentityMap(num_dims, context),
+            mlir::AffineMap::get(numDims, 0, exprs, context),
+            mlir::AffineMap::getMultiDimIdentityMap(numDims, context),
         };
-        llvm::SmallVector<mlir::StringRef> iterators(num_dims, "parallel");
+        llvm::SmallVector<mlir::StringRef> iterators(numDims, "parallel");
 
         auto body = [&](mlir::OpBuilder &builder, mlir::Location loc, mlir::ValueRange values)
         {
@@ -712,16 +712,16 @@ mlir::Value expand_dim(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value
             builder.create<mlir::linalg::YieldOp>(loc, values[0]);
         };
 
-        auto expanded = builder.create<mlir::linalg::GenericOp>(loc, target_type, casted, init, maps, iterators, body);
-        auto res = builder.create<mlir::tensor::CastOp>(loc, target_type, expanded.getResult(0));
-        builder.create<mlir::scf::YieldOp>(loc, res.getResult());
+        auto expanded = builder.create<mlir::linalg::GenericOp>(loc, init.getType(), casted, init, maps, iterators, body);
+        auto res = builder.createOrFold<mlir::tensor::CastOp>(loc, targetType, expanded.getResult(0));
+        builder.create<mlir::scf::YieldOp>(loc, res);
     };
     auto false_body = [&](mlir::OpBuilder &builder, mlir::Location loc)
     {
-        auto res = builder.create<mlir::tensor::CastOp>(loc, target_type, src);
+        auto res = builder.create<mlir::tensor::CastOp>(loc, targetType, src);
         builder.create<mlir::scf::YieldOp>(loc, res.getResult());
     };
-    return builder.create<mlir::scf::IfOp>(loc, target_type, cond, true_body, false_body).getResult(0);
+    return builder.create<mlir::scf::IfOp>(loc, targetType, cond, true_body, false_body).getResult(0);
 }
 
 mlir::Value expand_dims(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value val, unsigned num_dims, mlir::ValueRange target_shape)
