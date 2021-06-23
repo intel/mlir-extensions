@@ -642,10 +642,9 @@ mlir::Value int_cast(mlir::Type dstType, mlir::Value val, mlir::PatternRewriter&
 
 mlir::Value int_float_cast(mlir::Type dstType, mlir::Value val, mlir::PatternRewriter& rewriter)
 {
-    auto srcIntType = val.getType().cast<mlir::IntegerType>();
-    assert(!srcIntType.isSignless());
     auto loc = val.getLoc();
-    auto signlessType = mlir::IntegerType::get(rewriter.getContext(), srcIntType.getWidth());
+    auto srcIntType = val.getType().cast<mlir::IntegerType>();
+    auto signlessType = plier::makeSignlessType(srcIntType);
     if (val.getType() != signlessType)
     {
         val = rewriter.createOrFold<plier::SignCastOp>(loc, signlessType, val);
