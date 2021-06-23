@@ -707,7 +707,7 @@ def test_mean_loop_cov(arr, parallel):
             m[i] = np.mean(tdata[i])
         c = data - m
         v = np.cov(c.T)
-        return v
+        return c, v
 
     jit_func = njit(py_func, parallel=parallel)
     assert_equal(py_func(arr), jit_func(arr))
