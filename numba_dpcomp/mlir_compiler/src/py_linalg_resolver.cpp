@@ -665,7 +665,7 @@ mlir::Value expand_dim(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value
     auto shape = llvm::to_vector<8>(srcType.getShape());
     shape[dim] = -1;
     mlir::Type targetType = mlir::RankedTensorType::get(shape, srcType.getElementType());
-    auto dimVal = builder.create<mlir::memref::DimOp>(loc, initial, dim);
+    auto dimVal = builder.create<mlir::tensor::DimOp>(loc, initial, dim);
     auto one = builder.create<mlir::ConstantIndexOp>(loc, 1);
     mlir::Value cond = builder.create<mlir::CmpIOp>(loc, mlir::CmpIPredicate::eq, one, dimVal);
     llvm::SmallVector<mlir::Value> newShape(numDims);
@@ -677,7 +677,7 @@ mlir::Value expand_dim(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value
         }
         else
         {
-            newShape[i] = builder.create<mlir::memref::DimOp>(loc, src, i);
+            newShape[i] = builder.create<mlir::tensor::DimOp>(loc, src, i);
         }
     }
     auto true_body = [&](mlir::OpBuilder &builder, mlir::Location loc)
@@ -768,7 +768,7 @@ py::object broadcast_impl(py::capsule context, py::tuple args)
             shape_t ret(static_cast<size_t>(shaped.getRank()));
             for (auto it : llvm::enumerate(ret))
             {
-                auto dim = builder.create<mlir::memref::DimOp>(loc, val, it.index());
+                auto dim = builder.create<mlir::tensor::DimOp>(loc, val, it.index());
                 ret[it.index()] = dim;
             }
             return std::make_pair(ret, shaped.getElementType());
@@ -1424,7 +1424,7 @@ py::object shape_impl(py::capsule context, py::capsule ssa_val)
         for (auto it : llvm::enumerate(shape))
         {
             auto i = it.index();
-            mlir::Value mlir_dim = builder.create<mlir::memref::DimOp>(loc, value, i);
+            mlir::Value mlir_dim = builder.create<mlir::tensor::DimOp>(loc, value, i);
             shape_vals[i] = mlir_dim;
         }
         llvm::SmallVector<mlir::Type> shape_types(shape.size(), builder.getIndexType());

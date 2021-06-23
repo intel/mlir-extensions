@@ -559,7 +559,7 @@ struct EnforceShapeDim : public mlir::OpRewritePattern<mlir::memref::DimOp>
     mlir::LogicalResult matchAndRewrite(
         mlir::memref::DimOp op, mlir::PatternRewriter &rewriter) const override
     {
-        auto enforce_op = mlir::dyn_cast_or_null<plier::EnforceShapeOp>(op.memrefOrTensor().getDefiningOp());
+        auto enforce_op = mlir::dyn_cast_or_null<plier::EnforceShapeOp>(op.source().getDefiningOp());
         if (!enforce_op)
         {
             return mlir::failure();
@@ -676,20 +676,21 @@ mlir::OpFoldResult SignCastOp::fold(llvm::ArrayRef<mlir::Attribute> operands)
 
 namespace
 {
-struct SignCastDimPropagate : public mlir::OpRewritePattern<mlir::memref::DimOp>
+template<typename Op>
+struct SignCastDimPropagate : public mlir::OpRewritePattern<Op>
 {
-    using mlir::OpRewritePattern<mlir::memref::DimOp>::OpRewritePattern;
+    using mlir::OpRewritePattern<Op>::OpRewritePattern;
 
     mlir::LogicalResult matchAndRewrite(
-        mlir::memref::DimOp op, mlir::PatternRewriter &rewriter) const override
+        Op op, mlir::PatternRewriter &rewriter) const override
     {
-        auto castOp = mlir::dyn_cast_or_null<plier::SignCastOp>(op.memrefOrTensor().getDefiningOp());
+        auto castOp = mlir::dyn_cast_or_null<plier::SignCastOp>(op.source().getDefiningOp());
         if (!castOp)
         {
             return mlir::failure();
         }
         auto val = castOp.value();
-        rewriter.replaceOpWithNewOp<mlir::memref::DimOp>(op, val, op.index());
+        rewriter.replaceOpWithNewOp<Op>(op, val, op.index());
         return mlir::success();
     }
 };
@@ -698,11 +699,15 @@ struct SignCastDimPropagate : public mlir::OpRewritePattern<mlir::memref::DimOp>
 void SignCastOp::getCanonicalizationPatterns(
     ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context)
 {
-    results.insert<SignCastDimPropagate>(context);
+    results.insert<SignCastDimPropagate<mlir::tensor::DimOp>,
+                   SignCastDimPropagate<mlir::memref::DimOp>
+        >(context);
 }
 
 
 }
+
+#include "plier/PlierOpsDialect.cpp.inc"
 
 #define GET_OP_CLASSES
 #include "plier/PlierOps.cpp.inc"

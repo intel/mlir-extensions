@@ -298,7 +298,7 @@ struct CallLowerer
         if (name == "len" && check_numpy_args(args, 1) && kwargs.empty())
         {
             auto loc = op.getLoc();
-            mlir::Value dim = rewriter.create<mlir::memref::DimOp>(loc, args[0], 0);
+            mlir::Value dim = rewriter.create<mlir::tensor::DimOp>(loc, args[0], 0);
             mlir::Value res = rewriter.create<plier::CastOp>(loc, op.getType(), dim);
             rerun_std_pipeline(op);
             rewriter.replaceOp(op, res);
@@ -455,7 +455,7 @@ struct GetitemOpLowering : public mlir::OpRewritePattern<plier::GetItemOp>
                         }
                         else if (i == 1)
                         {
-                            return rewriter.createOrFold<mlir::memref::DimOp>(loc, value, dim);
+                            return rewriter.createOrFold<mlir::tensor::DimOp>(loc, value, dim);
                         }
                         else // i == 2
                         {
@@ -553,7 +553,7 @@ struct GetitemOpLowering : public mlir::OpRewritePattern<plier::GetItemOp>
                     llvm::SmallVector<mlir::Value> elements(numDims);
                     for (auto it : llvm::enumerate(dimsIndices))
                     {
-                        auto dim = rewriter.create<mlir::memref::DimOp>(loc, value, it.value());
+                        auto dim = rewriter.create<mlir::tensor::DimOp>(loc, value, it.value());
                         elements[it.index()] = dim;
                     }
                     auto shape = rewriter.create<mlir::tensor::FromElementsOp>(loc, elements);
@@ -1182,7 +1182,7 @@ struct SliceNoneLowering : public mlir::OpRewritePattern<mlir::tensor::ExtractSl
             else if (index == 1)
             {
                 // end
-                return rewriter.create<mlir::memref::DimOp>(loc, source, argIndex);
+                return rewriter.create<mlir::tensor::DimOp>(loc, source, argIndex);
             }
             else // index == 2
             {
@@ -1280,7 +1280,7 @@ struct ArrayShape : public mlir::OpRewritePattern<plier::GetattrOp>
         llvm::SmallVector<mlir::Value> dims(rank);
         for (size_t i = 0; i < rank; ++i)
         {
-            auto dim = rewriter.create<mlir::memref::DimOp>(op.getLoc(), op.value(), i);
+            auto dim = rewriter.create<mlir::tensor::DimOp>(op.getLoc(), op.value(), i);
             dims[i] = rewriter.create<plier::CastOp>(op.getLoc(), elem_type.getType(i), dim);
         }
         auto res = rewriter.create<plier::BuildTupleOp>(op.getLoc(), op.getType(), dims);
