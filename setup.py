@@ -44,9 +44,6 @@ cmake_cmd = [
 "-GNinja",
 ]
 
-if IS_WIN:
-    cmake_cmd += ["-A", "x64"]
-
 cmake_cmd += [
 "..",
 '-DCMAKE_BUILD_TYPE=Release',
