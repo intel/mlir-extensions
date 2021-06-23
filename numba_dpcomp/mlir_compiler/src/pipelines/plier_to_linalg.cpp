@@ -666,8 +666,16 @@ struct FixStridedReshape
             rewriter.createOrFold<mlir::memref::LoadOp>(loc, shape, zero);
         llvm::SmallVector<mlir::OpFoldResult> strides(srcRank,
                                                       rewriter.getIndexAttr(1));
-        rewriter.replaceOpWithNewOp<mlir::memref::SubViewOp>(
-            op, dstType, source, offsets, sizes, strides);
+        auto view = rewriter.createOrFold<mlir::memref::SubViewOp>(
+            loc, source, offsets, sizes, strides);
+        if (view.getType().cast<mlir::MemRefType>().getRank() >
+            dstType.getRank()) {
+          std::array<int32_t, 1> mapping;
+          mapping[0] = static_cast<int32_t>(*srcDimIndex);
+          rewriter.replaceOpWithNewOp<plier::ReduceRankOp>(op, view, mapping);
+        } else {
+          rewriter.replaceOp(op, view);
+        }
         return mlir::success();
       }
     }
@@ -778,7 +786,6 @@ struct FixStridedSubview
       return mlir::failure();
     }
 
-    ::mlir::OffsetSizeAndStrideOpInterface;
     rewriter.replaceOpWithNewOp<mlir::memref::SubViewOp>(
         op, inferredType, source, offsets, sizes, strides);
     return mlir::success();
