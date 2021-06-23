@@ -22,6 +22,7 @@ import unittest
 import itertools
 from functools import partial
 import pytest
+from sklearn.datasets import make_regression
 
 from .utils import parametrize_function_variants
 from .utils import njit_cached as njit
@@ -695,6 +696,7 @@ def test_mean_loop(arr, parallel):
     np.array([1,2,3,4,5,6,7,8,9,0], dtype=np.float32).reshape((5,2)),
     np.array([1,2,3,4,5,6,7,8,9,0], dtype=np.int32).reshape((5,2)).T,
     np.array([1,2,3,4,5,6,7,8,9,0], dtype=np.float32).reshape((5,2)).T,
+    make_regression(n_samples=2**10, n_features=2**7, random_state=0)[0],
     ])
 @pytest.mark.parametrize("parallel", [False, True])
 def test_mean_loop_cov(arr, parallel):
@@ -708,7 +710,10 @@ def test_mean_loop_cov(arr, parallel):
         return c, v
 
     jit_func = njit(py_func, parallel=parallel)
-    assert_equal(py_func(arr), jit_func(arr))
+    c1, v1 = py_func(arr)
+    c2, v2 = jit_func(arr)
+    assert_allclose(c1, c2, rtol=1e-15, atol=1e-11)
+    assert_allclose(v1, v2, rtol=1e-15, atol=1e-11)
 
 
 if __name__ == '__main__':
