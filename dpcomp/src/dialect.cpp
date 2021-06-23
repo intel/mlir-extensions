@@ -137,8 +137,7 @@ void PlierDialect::initialize() {
 #define GET_OP_LIST
 #include "plier/PlierOps.cpp.inc"
       >();
-  addTypes<plier::PyType, plier::LiteralType, plier::NoneType, SliceType,
-           plier::TypeVar>();
+  addTypes<plier::PyType, plier::LiteralType, SliceType, plier::TypeVar>();
   addInterfaces<PlierInlinerInterface>();
 }
 
@@ -157,7 +156,6 @@ void PlierDialect::printType(mlir::Type type,
         os.printAttribute(t.getValue());
         os << ">";
       })
-      .Case<plier::NoneType>([&](auto) { os << "NoneType"; })
       .Case<plier::SliceType>([&](auto t) {
         os << "SliceType<";
         os.printType(t.getBegin());

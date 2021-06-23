@@ -62,7 +62,7 @@ bool mangle_memref(llvm::raw_ostream &res, mlir::Type type) {
 }
 
 bool mangle_none(llvm::raw_ostream & /*res*/, mlir::Type type) {
-  if (type.isa<plier::NoneType>()) {
+  if (type.isa<mlir::NoneType>()) {
     // Nothing
     return true;
   }
