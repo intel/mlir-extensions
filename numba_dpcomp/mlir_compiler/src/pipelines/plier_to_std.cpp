@@ -370,6 +370,32 @@ struct RemoveOmittedFuncArgs : public mlir::OpRewritePattern<mlir::FuncOp>
     }
 };
 
+mlir::Type makeSignlessType(mlir::Type type)
+{
+    if (auto intType = type.dyn_cast<mlir::IntegerType>())
+    {
+        if (!intType.isSignless())
+        {
+            return mlir::IntegerType::get(type.getContext(),intType.getWidth());
+        }
+    }
+    return type;
+}
+
+mlir::Attribute makeSignlessAttr(mlir::Attribute val)
+{
+    auto type = val.getType();
+    if (auto intType = type.dyn_cast<mlir::IntegerType>())
+    {
+        if (!intType.isSignless())
+        {
+            auto newType = makeSignlessType(intType);
+            return mlir::IntegerAttr::get(newType, plier::getIntAttrValue(val.cast<mlir::IntegerAttr>()));
+        }
+    }
+    return val;
+}
+
 template<typename Op>
 struct LiteralLowering : public mlir::OpRewritePattern<Op>
 {
@@ -393,7 +419,16 @@ struct LiteralLowering : public mlir::OpRewritePattern<Op>
         }
         if (auto literal = convertedType.template dyn_cast<plier::LiteralType>())
         {
-            rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, literal.getValue());
+            auto loc = op.getLoc();
+            auto attrVal = literal.getValue();
+            auto dstType = attrVal.getType();
+            auto val = makeSignlessAttr(attrVal);
+            auto newVal = rewriter.create<mlir::ConstantOp>(loc, val).getResult();
+            if (dstType != val.getType())
+            {
+                newVal = rewriter.create<plier::SignCastOp>(loc, dstType, newVal);
+            }
+            rewriter.replaceOp(op, newVal);
             return mlir::success();
         }
         return mlir::failure();
@@ -577,18 +612,6 @@ mlir::Type coerce(mlir::Type type0, mlir::Type type1)
         return type1;
     }
     return get_bits_count(type0) < get_bits_count(type1) ? type1 : type0;
-}
-
-mlir::Type makeSignlessType(mlir::Type type)
-{
-    if (auto intType = type.dyn_cast<mlir::IntegerType>())
-    {
-        if (!intType.isSignless())
-        {
-            return mlir::IntegerType::get(type.getContext(),intType.getWidth());
-        }
-    }
-    return type;
 }
 
 mlir::Value int_cast(mlir::Type dstType, mlir::Value val, mlir::PatternRewriter& rewriter)
