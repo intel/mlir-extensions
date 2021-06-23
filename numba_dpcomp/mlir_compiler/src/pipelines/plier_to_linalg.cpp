@@ -590,10 +590,11 @@ struct GetitemOpLowering : public mlir::OpRewritePattern<plier::GetItemOp>
             {
                 llvm_unreachable("Invalid getitem");
             }
-        }
-        if (elemType != elemTypeSignless)
-        {
-            res = rewriter.create<plier::SignCastOp>(loc, elemType, res);
+
+            if (elemType != elemTypeSignless)
+            {
+                res = rewriter.create<plier::SignCastOp>(loc, elemType, res);
+            }
         }
 
         rerun_std_pipeline(op);
