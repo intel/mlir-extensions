@@ -224,8 +224,7 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
 };
 
 struct ParallelToTbbPass
-    : public mlir::PassWrapper<ParallelToTbbPass,
-                               mlir::OperationPass<mlir::FuncOp>> {
+    : public mlir::PassWrapper<ParallelToTbbPass, mlir::FunctionPass> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<plier::PlierDialect>();
@@ -233,16 +232,16 @@ struct ParallelToTbbPass
     registry.insert<mlir::scf::SCFDialect>();
   }
 
-  void runOnOperation() override;
+  void runOnFunction() override;
 };
 
-void ParallelToTbbPass::runOnOperation() {
+void ParallelToTbbPass::runOnFunction() {
   auto &context = getContext();
   mlir::OwningRewritePatternList patterns(&context);
 
   patterns.insert<ParallelToTbb>(&context);
 
-  (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+  (void)mlir::applyPatternsAndFoldGreedily(getFunction(), std::move(patterns));
 }
 
 void populate_parallel_to_tbb_pipeline(mlir::OpPassManager &pm) {
