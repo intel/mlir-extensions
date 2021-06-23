@@ -1302,9 +1302,9 @@ struct LowerReduceRankOp
     mlir::MemRefDescriptor dst =
         mlir::MemRefDescriptor::undef(rewriter, loc, dstType);
 
-    dst.setAllocatedPtr(rewriter, loc, dst.allocatedPtr(rewriter, loc));
-    dst.setAlignedPtr(rewriter, loc, dst.alignedPtr(rewriter, loc));
-    dst.setOffset(rewriter, loc, dst.offset(rewriter, loc));
+    dst.setAllocatedPtr(rewriter, loc, src.allocatedPtr(rewriter, loc));
+    dst.setAlignedPtr(rewriter, loc, src.alignedPtr(rewriter, loc));
+    dst.setOffset(rewriter, loc, src.offset(rewriter, loc));
 
     auto mapping = op.mapping();
     for (auto it : llvm::enumerate(mapping)) {
