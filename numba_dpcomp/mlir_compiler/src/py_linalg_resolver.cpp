@@ -104,6 +104,71 @@ py::object mapTypesToNumbaChecked(py::handle typesMod, mlir::TypeRange typesRang
     return funcTypes;
 }
 
+mlir::Type makeSignlessType(mlir::Type type)
+{
+    if (auto tensor = type.dyn_cast<mlir::RankedTensorType>())
+    {
+        auto origElemType = tensor.getElementType();
+        auto signlessElemType = makeSignlessType(origElemType);
+        if (origElemType != signlessElemType)
+        {
+            return mlir::RankedTensorType::get(tensor.getShape(), signlessElemType, tensor.getEncoding());
+        }
+    }
+    else if (auto intType = type.dyn_cast<mlir::IntegerType>())
+    {
+        if (!intType.isSignless())
+        {
+            return mlir::IntegerType::get(intType.getContext(), intType.getWidth());
+        }
+    }
+    return type;
+}
+
+mlir::Value doSignCast(mlir::OpBuilder& builder, mlir::Location& loc, mlir::Value val)
+{
+    auto origType = val.getType();
+    auto signlessType = makeSignlessType(origType);
+    if (signlessType != origType)
+    {
+        val = builder.create<plier::SignCastOp>(loc, signlessType, val);
+    }
+    return val;
+}
+
+mlir::Value doSignCast(mlir::OpBuilder& builder, mlir::Location& loc, mlir::Value val, mlir::Type dstType)
+{
+    auto origType = val.getType();
+    if (dstType != origType)
+    {
+        val = builder.create<plier::SignCastOp>(loc, dstType, val);
+    }
+    return val;
+}
+
+auto doSignCast(mlir::OpBuilder& builder, mlir::Location& loc, mlir::ValueRange vals)
+{
+    llvm::SmallVector<mlir::Value> ret(vals.size());
+    for (auto it : llvm::enumerate(vals))
+    {
+        ret[it.index()] = doSignCast(builder, loc, it.value());
+    }
+    return ret;
+}
+
+auto doSignCast(mlir::OpBuilder& builder, mlir::Location& loc, mlir::ValueRange vals, mlir::TypeRange dstTypes)
+{
+    assert(vals.size() == dstTypes.size());
+    llvm::SmallVector<mlir::Value> ret(vals.size());
+    for (auto it : llvm::enumerate(llvm::zip(vals, dstTypes)))
+    {
+        auto val = std::get<0>(it.value());
+        auto type = std::get<1>(it.value());
+        ret[it.index()] = doSignCast(builder, loc, val, type);
+    }
+    return ret;
+}
+
 bool is_compatible_type(mlir::Type type)
 {
     if (auto tuple_type = type.dyn_cast<mlir::TupleType>())
@@ -207,7 +272,7 @@ llvm::Optional<py::object> getPyLiteral(mlir::Attribute attr)
     assert(attr);
     if (auto intAttr = attr.dyn_cast<mlir::IntegerAttr>())
     {
-        return py::int_(intAttr.getInt());
+        return py::int_(plier::getIntAttrValue(intAttr));
     }
     if (auto floatAttr = attr.dyn_cast<mlir::FloatAttr>())
     {
@@ -422,7 +487,7 @@ auto get_types(mlir::ValueRange values)
     return values.getTypes();
 }
 
-auto get_agrs_from_tuple(py::handle args, llvm::function_ref<mlir::Value(py::handle)> unpack)
+auto getAgrsFromTuple(py::handle args, llvm::function_ref<mlir::Value(py::handle)> unpack)
 {
     llvm::SmallVector<mlir::Value> ret;
     if (args.is_none())
@@ -471,7 +536,7 @@ auto get_affine_maps(py::list maps, mlir::MLIRContext& ctx)
     return ret;
 }
 
-auto get_generic_op_body_types(mlir::ValueRange inputs, mlir::ValueRange outputs)
+auto getGenericOpBodyTypes(mlir::ValueRange inputs, mlir::ValueRange outputs)
 {
     llvm::SmallVector<mlir::Type> ret;
     ret.reserve(inputs.size() + outputs.size());
@@ -493,7 +558,7 @@ auto get_generic_op_body_types(mlir::ValueRange inputs, mlir::ValueRange outputs
     return ret;
 }
 
-auto generic_op_body_result_types(mlir::ValueRange outputs)
+auto genericOpBodyResultTypes(mlir::ValueRange outputs)
 {
     llvm::SmallVector<mlir::Type> ret;
     ret.reserve(outputs.size());
@@ -884,26 +949,26 @@ py::object generic_impl(py::capsule context, py::handle inputs, py::handle outpu
     auto& ctx = get_py_context(context);
     auto loc = ctx.loc;
     auto& builder = ctx.builder;
-    auto& mlir_context = *builder.getContext();
+    auto& mlirContext = *builder.getContext();
 
     auto unpack = [&](py::handle obj)->mlir::Value
     {
         return ctx.context.unwrap_val(loc, builder, obj);
     };
 
-    auto inputs_args = get_agrs_from_tuple(inputs, unpack);
-    auto output_args = get_agrs_from_tuple(outputs, unpack);
-    auto ret_types = get_types(output_args);
-    auto mlir_iterators = get_iterators(iterators, mlir_context);
+    auto inputsArgs = getAgrsFromTuple(inputs, unpack);
+    auto outputArgs = getAgrsFromTuple(outputs, unpack);
+    auto mlirIterators = get_iterators(iterators, mlirContext);
 
-    auto func_types = mapTypesToNumbaChecked(ctx.context.types_mod, get_generic_op_body_types(inputs_args, output_args));
-    auto body_func = ctx.context.compile_body(body, func_types);
+    auto bodyTypes = getGenericOpBodyTypes(inputsArgs, outputArgs);
+    auto funcTypes = mapTypesToNumbaChecked(ctx.context.types_mod, bodyTypes);
+    auto bodyFunc = ctx.context.compile_body(body, funcTypes);
 
-    auto cast_values = [&](mlir::ValueRange vals, mlir::TypeRange types)
+    auto castValues = [&](mlir::ValueRange vals, mlir::TypeRange types)
     {
         assert(vals.size() == types.size());
         llvm::SmallVector<mlir::Value> ret(vals.size());
-        auto do_cast = [&](mlir::Value val, mlir::Type type)
+        auto doCast = [&](mlir::Value val, mlir::Type type)
         {
             if (val.getType() == type)
             {
@@ -914,30 +979,35 @@ py::object generic_impl(py::capsule context, py::handle inputs, py::handle outpu
         for (auto it : llvm::enumerate(vals))
         {
             auto index = static_cast<unsigned>(it.index());
-            ret[index] = do_cast(it.value(), types[index]);
+            ret[index] = doCast(it.value(), types[index]);
         }
         return ret;
     };
 
-    auto affine_maps = get_affine_maps(maps, mlir_context);
+    auto affine_maps = get_affine_maps(maps, mlirContext);
     auto body_builder = [&](mlir::OpBuilder& builder, mlir::Location loc, mlir::ValueRange args)
     {
-        auto func_type = body_func.getType();
-        auto new_args = cast_values(args, func_type.getInputs());
-        auto call = builder.create<mlir::CallOp>(loc, body_func, new_args);
-        auto new_results = cast_values(call.getResults(), generic_op_body_result_types(output_args));
-        builder.create<mlir::linalg::YieldOp>(loc, new_results);
+        auto funcType = bodyFunc.getType();
+        auto newArgs = castValues(doSignCast(builder, loc, args, bodyTypes), funcType.getInputs());
+        auto call = builder.create<mlir::CallOp>(loc, bodyFunc, newArgs);
+        auto newResults = doSignCast(builder, loc, castValues(call.getResults(), genericOpBodyResultTypes(outputArgs)));
+        builder.create<mlir::linalg::YieldOp>(loc, newResults);
     };
+
+    auto inputsArgsSignless = doSignCast(builder, loc, inputsArgs);
+    auto outputArgsSignless = doSignCast(builder, loc, outputArgs);
+    auto retTypes = get_types(outputArgsSignless);
 
     auto generic_op = builder.create<mlir::linalg::GenericOp>(
         loc,
-        ret_types,
-        inputs_args,
-        output_args,
+        retTypes,
+        inputsArgsSignless,
+        outputArgsSignless,
         affine_maps,
-        mlir_iterators,
+        mlirIterators,
         body_builder);
-    return ctx.context.wrap_result(context, generic_op.getResults());
+    auto results = doSignCast(builder, loc, generic_op.getResults(), mlir::ValueRange(outputArgs).getTypes());
+    return ctx.context.wrap_result(context, results);
 }
 
 py::object from_elements_impl(py::capsule context, py::handle values, py::handle dtype)
@@ -961,7 +1031,8 @@ py::object from_elements_impl(py::capsule context, py::handle values, py::handle
             {
                 if (type.isa<mlir::IntegerType>())
                 {
-                    return mlir::IntegerAttr::get(type, obj.cast<int64_t>());
+                    auto signless = makeSignlessType(type);
+                    return mlir::IntegerAttr::get(signless, obj.cast<int64_t>());
                 }
                 if (type.isa<mlir::FloatType>())
                 {
@@ -969,15 +1040,27 @@ py::object from_elements_impl(py::capsule context, py::handle values, py::handle
                 }
                 plier::report_error("Invalid dtype");
             }();
-            vals[index] = builder.create<mlir::ConstantOp>(loc, attr);
+            auto res = builder.create<mlir::ConstantOp>(loc, attr);
+            vals[index] = doSignCast(builder, loc, res, type);
         }
         else
         {
             plier::report_error("Invalid element type");
         }
     });
+
+    if (vals.empty())
+    {
+        plier::report_error("Invalid from_elemets size");
+    }
+
+    auto tensorType = mlir::RankedTensorType::get(static_cast<int64_t>(vals.size()), type);
+    for (auto& val : vals)
+    {
+        val = doSignCast(builder, loc, val);
+    }
     auto res = builder.create<mlir::tensor::FromElementsOp>(loc, vals);
-    return ctx.context.create_var(context, res);
+    return ctx.context.create_var(context, doSignCast(builder, loc, res, tensorType));
 }
 
 py::object extract_impl(py::capsule context, py::handle value, py::handle indices)
@@ -991,7 +1074,7 @@ py::object extract_impl(py::capsule context, py::handle value, py::handle indice
     {
         if (py::isinstance(obj, ctx.context.var))
         {
-            ind[index] = unwrap_ssa_val(obj);
+            ind[index] = doSignCast(builder, loc, unwrap_ssa_val(obj));
         }
         else if (py::isinstance<py::int_>(obj))
         {
@@ -1002,7 +1085,15 @@ py::object extract_impl(py::capsule context, py::handle value, py::handle indice
             plier::report_error("Invalid element type");
         }
     });
-    auto res = builder.create<mlir::tensor::ExtractOp>(loc, ctx.context.unwrap_val(loc, builder, value), ind);
+    auto tensor = ctx.context.unwrap_val(loc, builder, value);
+    auto tensorType = tensor.getType().dyn_cast<mlir::RankedTensorType>();
+    if (!tensorType)
+    {
+        plier::report_error(llvm::Twine("extract: invalid source type ") + to_str(tensor.getType()));
+    }
+    auto origElement = tensorType.getElementType();
+    auto res = builder.create<mlir::tensor::ExtractOp>(loc, doSignCast(builder, loc, tensor), ind).getResult();
+    res = doSignCast(builder, loc, res, origElement);
     return ctx.context.create_var(context, res);
 }
 
