@@ -81,6 +81,7 @@ mlir::LogicalResult applyOptimizations(mlir::FuncOp op, const mlir::FrozenRewrit
         auto memOptRes = plier::optimizeMemoryOps(am);
         if (!memOptRes)
         {
+            op.emitError() << "Failed to build memssa analysis";
             return mlir::failure();
         }
         if (mlir::succeeded(*memOptRes))
