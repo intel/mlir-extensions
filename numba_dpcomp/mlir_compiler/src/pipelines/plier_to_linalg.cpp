@@ -710,7 +710,7 @@ struct SliceNoneLowering : public mlir::OpRewritePattern<mlir::SubTensorOp>
             {
                 return nullptr;
             }
-            auto index = indexAttr.getInt();
+            auto index = plier::getIntAttrValue(indexAttr);
             if (index < 0 || index >= 3)
             {
                 return nullptr;

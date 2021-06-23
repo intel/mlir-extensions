@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "plier/rewrites/loop_rewrites.hpp"
+#include "plier/transforms/const_utils.hpp"
 
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/Dialect/SCF/SCF.h>
@@ -67,7 +68,7 @@ mlir::LogicalResult plier::CmpLoopBoundsSimplify::matchAndRewrite(mlir::scf::For
     auto index_var = op.getLoopBody().front().getArgument(0);
     if (auto step_var = mlir::dyn_cast_or_null<mlir::ConstantOp>(op.step().getDefiningOp()))
     {
-        assert(step_var.value().cast<mlir::IntegerAttr>().getInt() > 0);
+        assert(getIntAttrValue(step_var.value().cast<mlir::IntegerAttr>()) > 0);
     }
     bool matched = false;
     for (auto user : llvm::make_early_inc_range(index_var.getUsers()))

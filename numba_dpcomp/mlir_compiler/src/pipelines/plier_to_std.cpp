@@ -1622,7 +1622,7 @@ struct FoldTupleGetitem : public mlir::OpRewritePattern<plier::GetItemOp>
 
         if (auto val = plier::getConstVal<mlir::IntegerAttr>(op.index()))
         {
-            auto index = val.getInt();
+            auto index = plier::getIntAttrValue(val);
             if (index >= 0 && index < buildTuple.getNumOperands())
             {
                 auto val = buildTuple.getOperand(static_cast<unsigned>(index));
@@ -1651,7 +1651,7 @@ struct FoldSliceGetitem : public mlir::OpRewritePattern<plier::GetItemOp>
 
         if (auto val = plier::getConstVal<mlir::IntegerAttr>(op.index()))
         {
-            auto index = val.getInt();
+            auto index = plier::getIntAttrValue(val);
             if (index >= 0 && index < 3 &&
                 !buildSice.getOperand(static_cast<unsigned>(index)).getType().isa<plier::NoneType>())
             {
