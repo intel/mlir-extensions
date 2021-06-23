@@ -1919,13 +1919,39 @@ void CloneArgsPass::runOnFunction() {
   }
 
   mlir::OpBuilder builder(&getContext());
-  auto loc = builder.getUnknownLoc();
-  auto block = &func.body().front();
-  builder.setInsertionPointToStart(block);
-  for (auto arg : block->getArguments()) {
-    if (auto type = arg.getType().dyn_cast<mlir::MemRefType>()) {
-      auto retained = builder.create<mlir::memref::CloneOp>(loc, type, arg);
-      arg.replaceAllUsesExcept(retained, retained);
+  //  auto loc = builder.getUnknownLoc();
+  //  auto block = &func.body().front();
+  //  builder.setInsertionPointToStart(block);
+  //  for (auto arg : block->getArguments()) {
+  //    if (auto type = arg.getType().dyn_cast<mlir::MemRefType>()) {
+  //      auto retained = builder.create<mlir::memref::CloneOp>(loc, type, arg);
+  //      arg.replaceAllUsesExcept(retained, retained);
+  //    }
+  //  }
+
+  for (auto &block : func.getBody()) {
+    auto ret = mlir::dyn_cast_or_null<mlir::ReturnOp>(block.getTerminator());
+    if (!ret)
+      continue;
+
+    auto loc = ret.getLoc();
+    bool needReplace = false;
+    llvm::SmallVector<mlir::Value> newArgs(ret.operands().size());
+    builder.setInsertionPoint(ret);
+    for (auto it : llvm::enumerate(ret.operands())) {
+      auto i = it.index();
+      auto arg = it.value();
+      if (arg.getType().isa<mlir::MemRefType>()) {
+        newArgs[i] = builder.create<mlir::memref::CloneOp>(loc, arg);
+        needReplace = true;
+      } else {
+        newArgs[i] = arg;
+      }
+    }
+
+    if (needReplace) {
+      builder.create<mlir::ReturnOp>(loc, newArgs);
+      ret.erase();
     }
   }
 }
