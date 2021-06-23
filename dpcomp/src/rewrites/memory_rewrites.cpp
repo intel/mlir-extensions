@@ -19,6 +19,7 @@
 #include <mlir/IR/BuiltinOps.h>
 
 #include "plier/analysis/memory_ssa_analysis.hpp"
+#include "plier/transforms/block_utils.hpp"
 
 namespace {
 struct Meminfo {
@@ -124,6 +125,75 @@ deadStoreElemination(plier::MemorySSAAnalysis &memSSAAnalysis) {
   return mlir::success(changed);
 }
 
+struct SimpleOperationInfo : public llvm::DenseMapInfo<mlir::Operation *> {
+  static unsigned getHashValue(const mlir::Operation *opC) {
+    return static_cast<unsigned>(mlir::OperationEquivalence::computeHash(
+        const_cast<mlir::Operation *>(opC)));
+  }
+  static bool isEqual(const mlir::Operation *lhsC,
+                      const mlir::Operation *rhsC) {
+    auto *lhs = const_cast<mlir::Operation *>(lhsC);
+    auto *rhs = const_cast<mlir::Operation *>(rhsC);
+    if (lhs == rhs)
+      return true;
+    if (lhs == getTombstoneKey() || lhs == getEmptyKey() ||
+        rhs == getTombstoneKey() || rhs == getEmptyKey())
+      return false;
+    return mlir::OperationEquivalence::isEquivalentTo(
+        const_cast<mlir::Operation *>(lhsC),
+        const_cast<mlir::Operation *>(rhsC));
+  }
+};
+
+mlir::LogicalResult loadCSE(plier::MemorySSAAnalysis &memSSAAnalysis) {
+  assert(memSSAAnalysis.memssa);
+  auto &memSSA = *memSSAAnalysis.memssa;
+  using NodeType = plier::MemorySSA::NodeType;
+  bool changed = false;
+  llvm::SmallDenseMap<mlir::Operation *, mlir::Operation *, 4> opsMap;
+  for (auto &node : memSSA.getNodes()) {
+    auto nodeType = memSSA.getNodeType(&node);
+    if (NodeType::Def != nodeType && NodeType::Phi != nodeType)
+      continue;
+
+    opsMap.clear();
+    for (auto user : memSSA.getUsers(&node)) {
+      if (memSSA.getNodeType(user) != NodeType::Use)
+        continue;
+
+      auto op = memSSA.getNodeOperation(user);
+      if (!op->getRegions().empty())
+        continue;
+
+      auto it = opsMap.find(op);
+      if (it == opsMap.end()) {
+        opsMap.insert({op, op});
+      } else {
+        auto firstUser = it->second;
+        if (!MustAlias()(op, firstUser))
+          continue;
+
+        auto relation = plier::relativeTo(op, firstUser);
+        if (relation == plier::OpRelation::Before) {
+          firstUser->replaceAllUsesWith(op);
+          opsMap[firstUser] = op;
+          auto firstUserNode = memSSA.getNode(firstUser);
+          assert(firstUserNode);
+          memSSA.eraseNode(firstUserNode);
+          firstUser->erase();
+          changed = true;
+        } else if (relation == plier::OpRelation::After) {
+          op->replaceAllUsesWith(firstUser);
+          op->erase();
+          memSSA.eraseNode(user);
+          changed = true;
+        }
+      }
+    }
+  }
+  return mlir::success(changed);
+}
+
 } // namespace
 
 llvm::Optional<mlir::LogicalResult>
@@ -138,6 +208,7 @@ plier::optimizeMemoryOps(mlir::AnalysisManager &am) {
       &optimizeUses,
       &foldLoads,
       &deadStoreElemination,
+      &loadCSE,
   };
 
   bool changed = false;
