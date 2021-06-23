@@ -675,6 +675,10 @@ def test_cov_edge_cases(m, y, rowvar):
 @pytest.mark.parametrize("arr", [
     np.array([1,2,3,4,5,6,7,8,9], dtype=np.int32).reshape((3,3)),
     np.array([1,2,3,4,5,6,7,8,9], dtype=np.float32).reshape((3,3)),
+    np.array([1,2,3,4,5,6,7,8,9,0], dtype=np.int32).reshape((5,2)),
+    np.array([1,2,3,4,5,6,7,8,9,0], dtype=np.float32).reshape((5,2)),
+    np.array([1,2,3,4,5,6,7,8,9,0], dtype=np.int32).reshape((5,2)).T,
+    np.array([1,2,3,4,5,6,7,8,9,0], dtype=np.float32).reshape((5,2)).T,
     ])
 def test_mean_loop(arr):
     def py_func(data):
@@ -690,6 +694,10 @@ def test_mean_loop(arr):
 @pytest.mark.parametrize("arr", [
     np.array([1,2,3,4,5,6,7,8,9], dtype=np.int32).reshape((3,3)),
     np.array([1,2,3,4,5,6,7,8,9], dtype=np.float32).reshape((3,3)),
+    np.array([1,2,3,4,5,6,7,8,9,0], dtype=np.int32).reshape((5,2)),
+    np.array([1,2,3,4,5,6,7,8,9,0], dtype=np.float32).reshape((5,2)),
+    np.array([1,2,3,4,5,6,7,8,9,0], dtype=np.int32).reshape((5,2)).T,
+    np.array([1,2,3,4,5,6,7,8,9,0], dtype=np.float32).reshape((5,2)).T,
     ])
 def test_mean_loop_cov(arr):
     def py_func(data):
