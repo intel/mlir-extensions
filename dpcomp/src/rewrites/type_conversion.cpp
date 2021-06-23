@@ -347,3 +347,45 @@ void plier::populateControlFlowTypeConversionRewritesAndTarget(
            mlir::isLegalForReturnOpTypeConversionPattern(op, typeConverter);
   });
 }
+
+namespace {
+class BuildTupleConversionPattern
+    : public mlir::OpConversionPattern<plier::BuildTupleOp> {
+public:
+  using OpConversionPattern<plier::BuildTupleOp>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::BuildTupleOp op, llvm::ArrayRef<mlir::Value> operands,
+                  mlir::ConversionPatternRewriter &rewriter) const final {
+    plier::BuildTupleOp::Adaptor transformed(operands);
+    auto retType =
+        mlir::TupleType::get(op.getContext(), transformed.args().getTypes());
+    rewriter.replaceOpWithNewOp<plier::BuildTupleOp>(op, retType,
+                                                     transformed.args());
+    return mlir::success();
+  }
+};
+} // namespace
+
+void plier::populateTupleTypeConversionRewritesAndTarget(
+    mlir::TypeConverter &typeConverter, mlir::RewritePatternSet &patterns,
+    mlir::ConversionTarget &target) {
+  typeConverter.addConversion(
+      [&typeConverter](mlir::TupleType type) -> llvm::Optional<mlir::Type> {
+        llvm::SmallVector<mlir::Type> newTypes(type.size());
+        for (auto it : llvm::enumerate(type)) {
+          auto converted = typeConverter.convertType(it.value());
+          if (!converted)
+            return mlir::Type{};
+          newTypes[it.index()] = converted;
+        }
+        return mlir::TupleType::get(type.getContext(), newTypes);
+      });
+  patterns.insert<BuildTupleConversionPattern>(typeConverter,
+                                               patterns.getContext());
+  target.addDynamicallyLegalOp<plier::BuildTupleOp>(
+      [&typeConverter](mlir::Operation *op) {
+        return typeConverter.isLegal(
+            mlir::cast<plier::BuildTupleOp>(op).getResult().getType());
+      });
+}

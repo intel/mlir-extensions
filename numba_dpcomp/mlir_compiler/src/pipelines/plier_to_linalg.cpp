@@ -1721,6 +1721,8 @@ void MakeTensorsSignlessPass::runOnOperation() {
 
   plier::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
                                                             patterns, target);
+  plier::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
+                                                      target);
 
   target.addLegalOp<mlir::ModuleOp, plier::SignCastOp>();
 
