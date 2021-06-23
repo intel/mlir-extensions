@@ -29,7 +29,7 @@ from .utils import njit_cached as njit
 
 # TODO: nans and infs not tested yet, we are not sure if want exactly follow
 # interpreted python rules
-_test_values = [-3,-2,-1,0,1,2,3,-2.5,-1.0,-0.5 -0.0, 0.0, 0.5, 1.0, 2.5]
+_test_values = [True,False,-3,-2,-1,0,1,2,3,-2.5,-1.0,-0.5 -0.0, 0.0, 0.5, 1.0, 2.5]
 
 @pytest.mark.parametrize("val", _test_values)
 def test_ret(val):
