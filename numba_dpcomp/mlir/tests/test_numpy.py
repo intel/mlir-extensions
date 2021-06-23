@@ -42,6 +42,7 @@ _test_arrays_ids = ["1d_int", "1d_float", "2d_int", "2d_float"]
 @parametrize_function_variants("py_func", [
     'lambda a: a.sum()',
     'lambda a: np.sum(a)',
+    'lambda a: np.mean(a)',
     'lambda a: np.sqrt(a)',
     'lambda a: np.square(a)',
     'lambda a: np.log(a)',
