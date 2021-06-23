@@ -36,7 +36,6 @@ void plier::populate_common_opts_patterns(mlir::MLIRContext& context, mlir::Rewr
 
     patterns.insert<
         //        LoopInvariantCodeMotion, TODO
-        plier::ForceInline,
         plier::CmpLoopBoundsSimplify,
         plier::IfOpConstCond,
         plier::CSERewrite<mlir::FuncOp, /*recusive*/false>
