@@ -1129,7 +1129,7 @@ py::object reshape_impl(py::capsule context, py::handle src, py::iterable newDim
     };
 
     auto srcVal = unwrapVal(src);
-    auto srcType = srcVal.getType().dyn_cast<mlir::TensorType>();
+    auto srcType = srcVal.getType().dyn_cast<mlir::RankedTensorType>();
     if (!srcType)
     {
         plier::report_error(llvm::Twine("invalid reshape argument: ") + to_str(srcVal.getType()));
@@ -1148,12 +1148,14 @@ py::object reshape_impl(py::capsule context, py::handle src, py::iterable newDim
             {
                 auto ind = builder.create<mlir::ConstantIndexOp>(loc, i);
                 auto elemType = tupleType.getType(i);
-                auto item = builder.create<plier::GetItemOp>(loc, elemType, dims, ind);
+                auto item = builder.create<plier::GetItemOp>(loc, elemType, dims, ind).getResult();
+                item = doSignCast(builder, loc, item);
                 ret[i] = do_cast(loc, builder, item, dimType);
             }
         }
         else
         {
+            dims = doSignCast(builder, loc, dims);
             ret.emplace_back(do_cast(loc, builder, dims, dimType));
         }
         return ret;
@@ -1161,8 +1163,15 @@ py::object reshape_impl(py::capsule context, py::handle src, py::iterable newDim
 
     auto shapeTensor = builder.create<mlir::tensor::FromElementsOp>(loc, newDimsVals);
 
-    auto resultType = mlir::RankedTensorType::get(llvm::SmallVector<int64_t>(newDimsVals.size(), -1), srcType.getElementType());
-    auto reshaped = builder.create<mlir::tensor::ReshapeOp>(loc, resultType, srcVal, shapeTensor);
+    auto elemType = srcType.getElementType();
+    auto signlessElemType = makeSignlessType(elemType);
+
+    llvm::SmallVector<int64_t> shape(newDimsVals.size(), -1);
+    auto resultType = mlir::RankedTensorType::get(shape, elemType, srcType.getEncoding());
+    auto resultTypeSignless = mlir::RankedTensorType::get(shape, signlessElemType, srcType.getEncoding());
+    srcVal = doSignCast(builder, loc, srcVal);
+    auto reshaped = builder.create<mlir::tensor::ReshapeOp>(loc, resultTypeSignless, srcVal, shapeTensor).getResult();
+    reshaped = doSignCast(builder, loc, reshaped, resultType);
 
     return ctx.context.create_var(context, reshaped);
 }
