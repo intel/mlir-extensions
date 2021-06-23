@@ -1311,12 +1311,22 @@ py::object inline_func_impl(py::capsule context, py::handle func, py::tuple args
     }();
     auto funcTypes = mapTypesToNumbaChecked(ctx.context.types_mod, getTypes(argsValues));
     auto bodyFunc = ctx.context.compile_body(func, funcTypes);
-    auto res = builder.create<mlir::CallOp>(loc, bodyFunc, argsValues);
-    if (res.getNumResults() != 1)
+    auto funcType = bodyFunc.getType();
+    auto funcArgsTypes = funcType.getInputs();
+    if (funcArgsTypes.size() != argsValues.size())
     {
-        plier::report_error("Invalid number of return values");
+        plier::report_error(
+            llvm::Twine("Invalid function arguments count, expected ") +
+            llvm::Twine(argsValues.size()) + ", got" +
+            llvm::Twine(funcArgsTypes.size()));
     }
-    auto resValue = res.getResult(0);
+    if (funcType.getNumResults() != 1)
+    {
+        plier::report_error(llvm::Twine("Invalid number of return values: ") +
+                            llvm::Twine(funcType.getNumResults()));
+    }
+
+    auto resValue = builder.create<mlir::CallOp>(loc, bodyFunc, argsValues).getResult(0);
     auto resType = resValue.getType();
     if (auto convertedType = ctx.typeConverter.convertType(resType))
     {
