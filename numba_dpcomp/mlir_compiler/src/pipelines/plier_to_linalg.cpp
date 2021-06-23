@@ -1675,6 +1675,7 @@ void populate_plier_to_linalg_gen_pipeline(mlir::OpPassManager& pm)
 void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager& pm)
 {
     pm.addPass(std::make_unique<MakeTensorsSignlessPass>());
+    pm.addPass(mlir::createCanonicalizerPass());
     pm.addPass(std::make_unique<TensorFusionPass>());
 
     pm.addPass(mlir::createTensorConstantBufferizePass());
