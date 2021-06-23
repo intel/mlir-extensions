@@ -396,7 +396,6 @@ class TestMlirBasic(TestCase):
         jit_func = njit(py_func)
         assert_equal(py_func(5), jit_func(5))
 
-    @unittest.expectedFailure
     def test_zeros4(self):
         def py_func(d):
             return np.zeros(d)
