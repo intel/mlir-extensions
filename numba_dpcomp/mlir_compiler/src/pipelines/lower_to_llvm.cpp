@@ -75,7 +75,7 @@ mlir::Value doCast(mlir::OpBuilder &builder, mlir::Location loc,
   if (src.getType() == dstType)
     return src;
 
-  return builder.createOrFold<plier::CastOp>(loc, dstType, src);
+  return builder.createOrFold<mlir::LLVM::DialectCastOp>(loc, dstType, src);
 }
 
 mlir::Type convertTupleTypes(mlir::MLIRContext &context,
@@ -603,6 +603,9 @@ struct ReturnOpLowering : public mlir::OpRewritePattern<mlir::ReturnOp> {
       auto llRetType = typeConverter.convertType(origType);
       if (!llRetType)
         return {};
+
+      if (origType.isa<plier::NoneType>())
+        return rewriter.create<mlir::LLVM::NullOp>(loc, llRetType);
 
       val = doCast(rewriter, loc, val, llRetType);
       if (auto memrefType = origType.dyn_cast<mlir::MemRefType>()) {
@@ -1440,20 +1443,6 @@ struct LowerUndef : public mlir::ConvertOpToLLVMPattern<plier::UndefOp> {
   }
 };
 
-template <typename Op>
-struct LowerCasts : public mlir::ConvertOpToLLVMPattern<Op> {
-  using mlir::ConvertOpToLLVMPattern<Op>::ConvertOpToLLVMPattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(Op op, llvm::ArrayRef<mlir::Value> operands,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
-    typename Op::Adaptor transformed(operands);
-    rewriter.replaceOpWithNewOp<mlir::LLVM::DialectCastOp>(op, op.getType(),
-                                                           transformed.value());
-    return mlir::success();
-  }
-};
-
 // Copypasted from mlir
 struct LLVMLoweringPass
     : public mlir::PassWrapper<LLVMLoweringPass,
@@ -1491,7 +1480,6 @@ struct LLVMLoweringPass
     patterns.insert<
         // clang-format off
         LowerUndef,
-        LowerCasts<plier::CastOp>,
         LowerBuildTuple,
         LowerRetainOp,
         AllocOpLowering,
