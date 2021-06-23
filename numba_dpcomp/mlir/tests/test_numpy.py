@@ -517,8 +517,6 @@ def test_flatten(py_func, array):
         itertools.product(*(([1,2.5,np.array([1,2,3]), np.array([4.5,6.7,8.9])],)*2))
     )
 def test_tuple_ret(py_func, a, b):
-    if isinstance(a, np.ndarray) or isinstance(b, np.ndarray):
-        pytest.xfail()
     jit_func = njit(py_func)
     assert_equal(py_func(a, b), jit_func(a, b))
 
