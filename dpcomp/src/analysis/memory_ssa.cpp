@@ -15,6 +15,7 @@
 #include "plier/analysis/memory_ssa.hpp"
 
 #include <mlir/Interfaces/LoopLikeInterface.h>
+#include <mlir/Interfaces/ControlFlowInterfaces.h>
 #include <mlir/Interfaces/SideEffectInterfaces.h>
 
 struct plier::MemorySSA::Node : public llvm::ilist_node<Node>
@@ -566,6 +567,164 @@ plier::MemorySSA::Node* memSSAProcessRegion(mlir::Region& region, plier::MemoryS
                         use.user->setArgument(use.index, currentNode);
                     }
                     memSSA.eraseNode(phi);
+                }
+            }
+            else if (auto branchReg = mlir::dyn_cast<mlir::RegionBranchOpInterface>(op))
+            {
+                auto numRegions = op.getNumRegions();
+                llvm::SmallVector<llvm::Optional<unsigned>, 2> parentPredecessors;
+                llvm::SmallVector<llvm::SmallVector<llvm::Optional<unsigned>, 2>, 2> predecessors(numRegions);
+
+                auto getRegionIndex = [&](mlir::Region* reg)->llvm::Optional<unsigned>
+                {
+                    if (nullptr == reg)
+                    {
+                        return {};
+                    }
+                    for (auto it : llvm::enumerate(op.getRegions()))
+                    {
+                        auto& r = it.value();
+                        if (&r == reg)
+                        {
+                            return static_cast<unsigned>(it.index());
+                        }
+                    }
+                    llvm_unreachable("Invalid region");
+                };
+
+                llvm::SmallVector<mlir::RegionSuccessor> successorsTemp;
+                branchReg.getSuccessorRegions(/*index*/llvm::None, successorsTemp);
+                for (auto& successor: successorsTemp)
+                {
+                    auto ind = getRegionIndex(successor.getSuccessor());
+                    if (ind)
+                    {
+                        predecessors[*ind].push_back({});
+                    }
+                    else
+                    {
+                        parentPredecessors.push_back({});
+                    }
+                }
+
+                for (auto i : llvm::seq(0u, numRegions))
+                {
+                    successorsTemp.clear();
+                    branchReg.getSuccessorRegions(i, successorsTemp);
+                    for (auto& successor: successorsTemp)
+                    {
+                        auto ind = getRegionIndex(successor.getSuccessor());
+                        if (ind)
+                        {
+                            predecessors[*ind].emplace_back(i);
+                        }
+                        else
+                        {
+                            parentPredecessors.emplace_back(i);
+                        }
+                    }
+                }
+
+                llvm::SmallVector<plier::MemorySSA::Node*> regResults(numRegions);
+
+                struct RegionVisitor
+                {
+                    decltype (branchReg) _op;
+                    decltype (currentNode) _currentNode;
+                    decltype (regResults)& _regResults;
+                    decltype (memSSA)& _memSSA;
+                    decltype (predecessors)& _predecessors;
+
+                    plier::MemorySSA::Node* visit(llvm::Optional<unsigned> ii)
+                    {
+                        if (!ii)
+                        {
+                            return _currentNode;
+                        }
+                        auto i = *ii;
+                        if (_regResults[i] != nullptr)
+                        {
+                            return _regResults[i];
+                        }
+                        auto& pred = _predecessors[i];
+                        assert(!pred.empty());
+                        if (pred.empty())
+                        {
+                            return nullptr;
+                        }
+                        if (pred.size() == 1)
+                        {
+                            auto ind = pred[0];
+                            auto prevNode = visit(ind);
+                            if (prevNode == nullptr)
+                            {
+                                return nullptr;
+                            }
+                            auto res = memSSAProcessRegion(_op->getRegion(i), prevNode, _memSSA);
+                            if (res == nullptr)
+                            {
+                                return nullptr;
+                            }
+                            _regResults[i] = res;
+                            return res;
+                        }
+                        else
+                        {
+                            llvm::SmallVector<plier::MemorySSA::Node*> prevNodes(pred.size(), nullptr);
+                            auto phi = _memSSA.createPhi(_op, prevNodes);
+                            phi->setDominator(_currentNode); // TODO: not very robust
+                            _currentNode->setPostDominator(phi);
+                            auto res = memSSAProcessRegion(_op->getRegion(i), phi, _memSSA);
+                            if (res == nullptr)
+                            {
+                                return nullptr;
+                            }
+                            _regResults[i] = res;
+                            for (auto it : llvm::enumerate(pred))
+                            {
+                                auto ind = it.value();
+                                auto prevNode = visit(ind);
+                                if (prevNode == nullptr)
+                                {
+                                    return nullptr;
+                                }
+                                phi->setArgument(static_cast<unsigned>(it.index()), prevNode);
+                            }
+                            return res;
+                        }
+                    }
+                };
+
+                RegionVisitor visitor{branchReg, currentNode, regResults, memSSA, predecessors};
+
+                if (parentPredecessors.empty())
+                {
+                    return nullptr;
+                }
+                else if (parentPredecessors.size() == 1)
+                {
+                    currentNode = visitor.visit(parentPredecessors[0]);
+                    if (currentNode == nullptr)
+                    {
+                        return nullptr;
+                    }
+                }
+                else
+                {
+                    llvm::SmallVector<plier::MemorySSA::Node*> prevNodes(parentPredecessors.size());
+                    for (auto it : llvm::enumerate(parentPredecessors))
+                    {
+                        auto prev = visitor.visit(it.value());
+                        if (prev == nullptr)
+                        {
+                            return nullptr;
+                        }
+                        prevNodes[it.index()] = prev;
+                    }
+                    auto phi = memSSA.createPhi(&op, prevNodes);
+                    phi->setDominator(currentNode); // TODO: not very robust
+                    currentNode->setPostDominator(phi);
+                    currentNode = phi;
                 }
             }
             else
