@@ -886,6 +886,30 @@ struct FixStridedCall : public mlir::OpRewritePattern<mlir::CallOp> {
   }
 };
 
+struct CleanupLoads : public mlir::OpRewritePattern<mlir::memref::LoadOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::LoadOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto block = op->getBlock();
+    auto it = mlir::Block::iterator(op);
+    if (it == block->begin())
+      return mlir::failure();
+
+    --it;
+    auto store = mlir::dyn_cast<mlir::memref::StoreOp>(*it);
+    if (!store)
+      return mlir::failure();
+
+    if (store.memref() != op.memref() || store.indices() != op.indices())
+      return mlir::failure();
+
+    rewriter.replaceOp(op, store.value());
+    return mlir::success();
+  }
+};
+
 struct MakeStridedLayout
     : public mlir::PassWrapper<MakeStridedLayout,
                                mlir::OperationPass<mlir::ModuleOp>> {
@@ -988,9 +1012,17 @@ void MakeStridedLayout::runOnOperation() {
 
     plier::populate_common_opts_patterns(*context, patterns);
 
-    patterns.insert<FixStridedIf, FixStridedClone, FixStridedReshape,
-                    FixStridedSubview, FixStridedReturn, FixStridedCall>(
-        context);
+    patterns.insert<
+        // clang-format off
+        FixStridedIf,
+        FixStridedClone,
+        FixStridedReshape,
+        FixStridedSubview,
+        FixStridedReturn,
+        FixStridedCall,
+        CleanupLoads
+        // clang-format on
+        >(context);
 
     (void)mlir::applyPatternsAndFoldGreedily(mod, std::move(patterns));
   }
