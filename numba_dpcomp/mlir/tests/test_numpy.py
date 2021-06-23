@@ -672,5 +672,38 @@ def test_cov_edge_cases(m, y, rowvar):
     jit_func = njit(py_func)
     assert_allclose(py_func(m=m, y=y, rowvar=rowvar), jit_func(m=m, y=y, rowvar=rowvar), rtol=1e-14, atol=1e-14)
 
+@pytest.mark.parametrize("arr", [
+    np.array([1,2,3,4,5,6,7,8,9], dtype=np.int32).reshape((3,3)),
+    np.array([1,2,3,4,5,6,7,8,9], dtype=np.float32).reshape((3,3)),
+    ])
+def test_mean_loop(arr):
+    def py_func(data):
+        tdata = data.T
+        m = np.empty(tdata.shape[0])
+        for i in numba.prange(tdata.shape[0]):
+            m[i] = np.mean(tdata[i])
+        return m
+
+    jit_func = njit(py_func)
+    assert_equal(py_func(arr), jit_func(arr))
+
+@pytest.mark.parametrize("arr", [
+    np.array([1,2,3,4,5,6,7,8,9], dtype=np.int32).reshape((3,3)),
+    np.array([1,2,3,4,5,6,7,8,9], dtype=np.float32).reshape((3,3)),
+    ])
+def test_mean_loop_cov(arr):
+    def py_func(data):
+        tdata = data.T
+        m = np.empty(tdata.shape[0])
+        for i in numba.prange(tdata.shape[0]):
+            m[i] = np.mean(tdata[i])
+        c = data - m
+        v = np.cov(c.T)
+        return v
+
+    jit_func = njit(py_func)
+    assert_equal(py_func(arr), jit_func(arr))
+
+
 if __name__ == '__main__':
     unittest.main()

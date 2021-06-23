@@ -279,32 +279,6 @@ bool isOmittedType(mlir::Type type) {
   return false;
 }
 
-struct RemoveOmittedFuncArgs : public mlir::OpRewritePattern<mlir::FuncOp> {
-  RemoveOmittedFuncArgs(mlir::TypeConverter & /*typeConverter*/,
-                        mlir::MLIRContext *context)
-      : OpRewritePattern(context) {}
-
-  mlir::LogicalResult
-  matchAndRewrite(mlir::FuncOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    llvm::SmallVector<unsigned> indices;
-    for (auto it : llvm::enumerate(op.getArguments())) {
-      auto arg = it.value();
-      if (arg.getUsers().empty()) {
-        if (isOmittedType(arg.getType())) {
-          indices.emplace_back(it.index());
-        }
-      }
-    }
-
-    if (indices.empty()) {
-      return mlir::failure();
-    }
-    rewriter.updateRootInPlace(op, [&]() { op.eraseArguments(indices); });
-    return mlir::success();
-  }
-};
-
 mlir::Attribute makeSignlessAttr(mlir::Attribute val) {
   auto type = val.getType();
   if (auto intType = type.dyn_cast<mlir::IntegerType>()) {
@@ -592,6 +566,18 @@ mlir::Value index_cast_impl(mlir::PatternRewriter &rewriter, mlir::Location loc,
   return plier::index_cast(rewriter, loc, val, dstType);
 }
 
+mlir::Value float_cast_impl(mlir::PatternRewriter &rewriter, mlir::Location loc,
+                            mlir::Value val, mlir::Type dstType) {
+  auto srcFloatType = val.getType().cast<mlir::FloatType>();
+  auto dstFloatType = dstType.cast<mlir::FloatType>();
+  assert(srcFloatType != dstFloatType);
+  if (dstFloatType.getWidth() > srcFloatType.getWidth()) {
+    return rewriter.createOrFold<mlir::FPExtOp>(loc, val, dstFloatType);
+  } else {
+    return rewriter.createOrFold<mlir::FPTruncOp>(loc, val, dstFloatType);
+  }
+}
+
 mlir::Value doCast(mlir::PatternRewriter &rewriter, mlir::Location loc,
                    mlir::Value val, mlir::Type dstType) {
   assert(dstType);
@@ -615,6 +601,7 @@ mlir::Value doCast(mlir::PatternRewriter &rewriter, mlir::Location loc,
       {&is_float, &is_int, &float_int_cast},
       {&is_index, &is_int, &index_cast_impl},
       {&is_int, &is_index, &index_cast_impl},
+      {&is_float, &is_float, &float_cast_impl},
   };
 
   for (auto &h : handlers) {
@@ -1765,17 +1752,31 @@ void PlierToStdPass::runOnOperation() {
 
   mlir::OwningRewritePatternList patterns(context);
 
-  patterns
-      .insert<plier::FuncOpSignatureConversion, plier::ArgOpLowering,
-              plier::FixupIfTypes, plier::FixCallOmittedArgs,
-              //        RemoveOmittedFuncArgs,
-              LiteralLowering<plier::ArgOp>, LiteralLowering<plier::GlobalOp>,
-              UndefOpLowering, ReturnOpLowering, ConstOpLowering,
-              SelectOpLowering, CondBrOpLowering, BinOpLowering,
-              UnaryOpLowering, BreakRewrite, ScfIfRewriteOneExit,
-              ScfIfRewriteTwoExits, ScfWhileRewrite, FixupWhileTypes,
-              PropagateBuildTupleTypes, FoldTupleGetitem, FoldSliceGetitem>(
-          typeConverter, context);
+  patterns.insert<
+      // clang-format off
+      plier::FuncOpSignatureConversion,
+      plier::ArgOpLowering,
+      plier::FixupIfTypes,
+      plier::FixCallOmittedArgs,
+      LiteralLowering<plier::ArgOp>,
+      LiteralLowering<plier::GlobalOp>,
+      UndefOpLowering,
+      ReturnOpLowering,
+      ConstOpLowering,
+      SelectOpLowering,
+      CondBrOpLowering,
+      BinOpLowering,
+      UnaryOpLowering,
+      BreakRewrite,
+      ScfIfRewriteOneExit,
+      ScfIfRewriteTwoExits,
+      ScfWhileRewrite,
+      FixupWhileTypes,
+      PropagateBuildTupleTypes,
+      FoldTupleGetitem,
+      FoldSliceGetitem
+      // clang-format on
+      >(typeConverter, context);
 
   patterns.insert<plier::CastOpLowering>(typeConverter, context, &doCast);
 
