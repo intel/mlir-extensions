@@ -661,6 +661,15 @@ ReduceRankOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
   return nullptr;
 }
 
+llvm::SmallVector<int32_t> ReduceRankOp::getMapping() {
+  auto m = mapping();
+  llvm::SmallVector<int32_t> ret(m.size());
+  llvm::transform(m, ret.begin(), [](mlir::Attribute a) {
+    return a.cast<mlir::IntegerAttr>().getValue().getSExtValue();
+  });
+  return ret;
+}
+
 namespace {
 template <typename Op>
 struct ReduceRankDimPropagate : public mlir::OpRewritePattern<Op> {
@@ -684,12 +693,72 @@ struct ReduceRankDimPropagate : public mlir::OpRewritePattern<Op> {
     return mlir::success();
   }
 };
+
+static auto mapReduceRankIndices(mlir::OpBuilder &builder, mlir::Location loc,
+                                 plier::ReduceRankOp src,
+                                 mlir::ValueRange srcIndices) {
+  auto srcMemref = src.getViewSource();
+  auto srcMemrefType = srcMemref.getType().cast<mlir::MemRefType>();
+  auto rank = static_cast<unsigned>(srcMemrefType.getRank());
+  auto zero = builder.createOrFold<mlir::ConstantIndexOp>(loc, 0);
+  auto mapping = src.getMapping();
+  llvm::SmallVector<mlir::Value> indices(rank);
+  for (auto i : llvm::seq(0u, rank)) {
+    auto it = llvm::find(mapping, static_cast<int32_t>(i));
+    if (mapping.end() == it) {
+      indices[i] = zero;
+    } else {
+      auto dstIndex = static_cast<size_t>(it - mapping.begin());
+      indices[i] = srcIndices[dstIndex];
+    }
+  }
+  return indices;
+}
+
+struct ReduceRankLoadPropagate
+    : public mlir::OpRewritePattern<mlir::memref::LoadOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::LoadOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto src = op.memref().getDefiningOp<plier::ReduceRankOp>();
+    if (!src)
+      return mlir::failure();
+
+    auto indices =
+        mapReduceRankIndices(rewriter, op.getLoc(), src, op.indices());
+    rewriter.replaceOpWithNewOp<mlir::memref::LoadOp>(op, src.getViewSource(),
+                                                      indices);
+    return mlir::success();
+  }
+};
+
+struct ReduceRankStorePropagate
+    : public mlir::OpRewritePattern<mlir::memref::StoreOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::StoreOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto src = op.memref().getDefiningOp<plier::ReduceRankOp>();
+    if (!src)
+      return mlir::failure();
+
+    auto indices =
+        mapReduceRankIndices(rewriter, op.getLoc(), src, op.indices());
+    rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(
+        op, op.value(), src.getViewSource(), indices);
+    return mlir::success();
+  }
+};
 } // namespace
 
 void ReduceRankOp::getCanonicalizationPatterns(
     ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context) {
   results.insert<ReduceRankDimPropagate<mlir::tensor::DimOp>,
-                 ReduceRankDimPropagate<mlir::memref::DimOp>>(context);
+                 ReduceRankDimPropagate<mlir::memref::DimOp>,
+                 ReduceRankLoadPropagate, ReduceRankStorePropagate>(context);
 }
 
 } // namespace plier
