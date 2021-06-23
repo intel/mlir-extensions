@@ -1971,10 +1971,7 @@ void PlierToStdPass::runOnOperation()
 
     patterns.insert<
         plier::CastOpLowering
-        >(type_converter, context, [](mlir::Type type, mlir::Value val, mlir::PatternRewriter& rewriter)
-          {
-              return doCast(rewriter, val.getLoc(), val, type);
-          });
+        >(type_converter, context, &doCast);
 
     CallLowerer callLowerer;
 

@@ -29,7 +29,7 @@ namespace plier
 {
 struct CastOpLowering : public mlir::OpRewritePattern<plier::CastOp>
 {
-    using cast_t = std::function<mlir::Value(mlir::Type, mlir::Value, mlir::PatternRewriter&)>;
+    using cast_t = std::function<mlir::Value(mlir::PatternRewriter&, mlir::Location, mlir::Value, mlir::Type)>;
 
     CastOpLowering(mlir::TypeConverter &typeConverter,
                    mlir::MLIRContext *context,
@@ -40,6 +40,6 @@ struct CastOpLowering : public mlir::OpRewritePattern<plier::CastOp>
 
 private:
     mlir::TypeConverter& converter;
-    cast_t cast_func;
+    cast_t castFunc;
 };
 }
