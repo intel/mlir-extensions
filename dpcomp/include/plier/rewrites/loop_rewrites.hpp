@@ -16,21 +16,18 @@
 
 #include <mlir/IR/PatternMatch.h>
 
-namespace mlir
-{
-namespace scf
-{
+namespace mlir {
+namespace scf {
 class ForOp;
 }
-}
+} // namespace mlir
 
-namespace plier
-{
-struct CmpLoopBoundsSimplify : public mlir::OpRewritePattern<mlir::scf::ForOp>
-{
-    using mlir::OpRewritePattern<mlir::scf::ForOp>::OpRewritePattern;
+namespace plier {
+struct CmpLoopBoundsSimplify : public mlir::OpRewritePattern<mlir::scf::ForOp> {
+  using mlir::OpRewritePattern<mlir::scf::ForOp>::OpRewritePattern;
 
-    mlir::LogicalResult matchAndRewrite(
-        mlir::scf::ForOp op, mlir::PatternRewriter &rewriter) const override;
+  mlir::LogicalResult
+  matchAndRewrite(mlir::scf::ForOp op,
+                  mlir::PatternRewriter &rewriter) const override;
 };
-}
+} // namespace plier

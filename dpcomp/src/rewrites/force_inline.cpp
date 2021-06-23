@@ -14,60 +14,55 @@
 
 #include "plier/rewrites/force_inline.hpp"
 
-#include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/Dialect/SCF/SCF.h>
+#include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/Transforms/InliningUtils.h>
 
 #include "plier/dialect.hpp"
 
-mlir::LogicalResult plier::ForceInline::matchAndRewrite(mlir::CallOp op, mlir::PatternRewriter& rewriter) const
-{
-    auto attrName = plier::attributes::getForceInlineName();
-    auto mod = op->getParentOfType<mlir::ModuleOp>();
-    assert(mod);
-    auto func = mod.lookupSymbol<mlir::FuncOp>(op.callee());
-    if (!func)
-    {
-        return mlir::failure();
-    }
-    if (!op->hasAttr(attrName) &&
-        !func->hasAttr(attrName))
-    {
-        return mlir::failure();
-    }
+mlir::LogicalResult
+plier::ForceInline::matchAndRewrite(mlir::CallOp op,
+                                    mlir::PatternRewriter &rewriter) const {
+  auto attrName = plier::attributes::getForceInlineName();
+  auto mod = op->getParentOfType<mlir::ModuleOp>();
+  assert(mod);
+  auto func = mod.lookupSymbol<mlir::FuncOp>(op.callee());
+  if (!func) {
+    return mlir::failure();
+  }
+  if (!op->hasAttr(attrName) && !func->hasAttr(attrName)) {
+    return mlir::failure();
+  }
 
-    if (!llvm::hasNItems(func.getRegion(), 1))
-    {
-        return mlir::failure();
-    }
+  if (!llvm::hasNItems(func.getRegion(), 1)) {
+    return mlir::failure();
+  }
 
-    auto loc = op.getLoc();
-    auto reg = rewriter.create<mlir::scf::ExecuteRegionOp>(loc, op.getResultTypes());
-    auto newCall = [&]()->mlir::Operation*
-    {
-        auto& regBlock = reg.region().emplaceBlock();
-        mlir::OpBuilder::InsertionGuard g(rewriter);
-        rewriter.setInsertionPointToStart(&regBlock);
-        auto call = rewriter.clone(*op);
-        rewriter.create<mlir::scf::YieldOp>(loc, call->getResults());
-        return call;
-    }();
+  auto loc = op.getLoc();
+  auto reg =
+      rewriter.create<mlir::scf::ExecuteRegionOp>(loc, op.getResultTypes());
+  auto newCall = [&]() -> mlir::Operation * {
+    auto &regBlock = reg.region().emplaceBlock();
+    mlir::OpBuilder::InsertionGuard g(rewriter);
+    rewriter.setInsertionPointToStart(&regBlock);
+    auto call = rewriter.clone(*op);
+    rewriter.create<mlir::scf::YieldOp>(loc, call->getResults());
+    return call;
+  }();
 
-    mlir::InlinerInterface inlinerInterface(op->getContext());
-    auto parent = op->getParentOp();
-    rewriter.startRootUpdate(parent);
-    auto res = mlir::inlineCall(inlinerInterface, newCall, func, &func.getRegion());
-    if (mlir::succeeded(res))
-    {
-        assert(newCall->getUsers().empty());
-        rewriter.eraseOp(newCall);
-        rewriter.replaceOp(op, reg.getResults());
-        rewriter.finalizeRootUpdate(parent);
-    }
-    else
-    {
-        rewriter.eraseOp(reg);
-        rewriter.cancelRootUpdate(parent);
-    }
-    return res;
+  mlir::InlinerInterface inlinerInterface(op->getContext());
+  auto parent = op->getParentOp();
+  rewriter.startRootUpdate(parent);
+  auto res =
+      mlir::inlineCall(inlinerInterface, newCall, func, &func.getRegion());
+  if (mlir::succeeded(res)) {
+    assert(newCall->getUsers().empty());
+    rewriter.eraseOp(newCall);
+    rewriter.replaceOp(op, reg.getResults());
+    rewriter.finalizeRootUpdate(parent);
+  } else {
+    rewriter.eraseOp(reg);
+    rewriter.cancelRootUpdate(parent);
+  }
+  return res;
 }

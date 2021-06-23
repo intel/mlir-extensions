@@ -12,32 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 #include "common.hpp"
 
 #ifdef DPNP_ENABLE
 #include <dpnp_iface.hpp>
 #endif
 
-namespace
-{
+namespace {
 template <typename T>
-void eig_impl(Memref<2, const T>* input, Memref<1, T>* vals, Memref<2, T>* vecs)
-{
+void eig_impl(Memref<2, const T> *input, Memref<1, T> *vals,
+              Memref<2, T> *vecs) {
 #ifdef DPNP_ENABLE
-    dpnp_eig_c<T, T>(input->data, vals->data, vecs->data, input->dims[0]);
+  dpnp_eig_c<T, T>(input->data, vals->data, vecs->data, input->dims[0]);
 #else
-    // direct MKL call or another implementation?
-    abort();
+  // direct MKL call or another implementation?
+  abort();
 #endif
 }
-}
+} // namespace
 
-extern "C"
-{
+extern "C" {
 
-#define EIG_VARIANT(T, Suff) DPCOMP_MATH_RUNTIME_EXPORT void dpcomp_linalg_eig_##Suff \
-(Memref<2, const T>* input, Memref<1, T>* vals, Memref<2, T>* vecs) { eig_impl(input, vals, vecs); }
+#define EIG_VARIANT(T, Suff)                                                   \
+  DPCOMP_MATH_RUNTIME_EXPORT void dpcomp_linalg_eig_##Suff(                    \
+      Memref<2, const T> *input, Memref<1, T> *vals, Memref<2, T> *vecs) {     \
+    eig_impl(input, vals, vecs);                                               \
+  }
 
 EIG_VARIANT(float, float32)
 EIG_VARIANT(double, float64)

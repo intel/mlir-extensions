@@ -16,30 +16,28 @@
 
 #include <mlir/IR/PatternMatch.h>
 
-namespace mlir
-{
-namespace scf
-{
+namespace mlir {
+namespace scf {
 class ForOp;
 class ParallelOp;
-}
-}
+} // namespace scf
+} // namespace mlir
 
-namespace plier
-{
-struct PromoteToParallel : public mlir::OpRewritePattern<mlir::scf::ForOp>
-{
-    using mlir::OpRewritePattern<mlir::scf::ForOp>::OpRewritePattern;
+namespace plier {
+struct PromoteToParallel : public mlir::OpRewritePattern<mlir::scf::ForOp> {
+  using mlir::OpRewritePattern<mlir::scf::ForOp>::OpRewritePattern;
 
-    mlir::LogicalResult matchAndRewrite(
-        mlir::scf::ForOp op, mlir::PatternRewriter &rewriter) const override;
+  mlir::LogicalResult
+  matchAndRewrite(mlir::scf::ForOp op,
+                  mlir::PatternRewriter &rewriter) const override;
 };
 
-struct MergeNestedForIntoParallel : public mlir::OpRewritePattern<mlir::scf::ParallelOp>
-{
-    using mlir::OpRewritePattern<mlir::scf::ParallelOp>::OpRewritePattern;
+struct MergeNestedForIntoParallel
+    : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
+  using mlir::OpRewritePattern<mlir::scf::ParallelOp>::OpRewritePattern;
 
-    mlir::LogicalResult matchAndRewrite(
-        mlir::scf::ParallelOp op, mlir::PatternRewriter &rewriter) const override;
+  mlir::LogicalResult
+  matchAndRewrite(mlir::scf::ParallelOp op,
+                  mlir::PatternRewriter &rewriter) const override;
 };
-}
+} // namespace plier

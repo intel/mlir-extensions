@@ -14,16 +14,14 @@
 
 #pragma once
 
-namespace mlir
-{
+namespace mlir {
 class ArrayAttr;
 class ModuleOp;
 class StringAttr;
-}
+} // namespace mlir
 
-namespace plier
-{
+namespace plier {
 mlir::ArrayAttr get_pipeline_jump_markers(mlir::ModuleOp module);
 void add_pipeline_jump_marker(mlir::ModuleOp module, mlir::StringAttr name);
 void remove_pipeline_jump_marker(mlir::ModuleOp module, mlir::StringAttr name);
-}
+} // namespace plier

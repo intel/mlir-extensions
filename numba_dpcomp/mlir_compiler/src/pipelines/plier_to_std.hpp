@@ -14,24 +14,22 @@
 
 #pragma once
 
-namespace plier
-{
+namespace plier {
 class PipelineRegistry;
 }
 
-namespace llvm
-{
+namespace llvm {
 class StringRef;
 }
 
-namespace mlir
-{
+namespace mlir {
 class MLIRContext;
 class TypeConverter;
-}
+} // namespace mlir
 
-void populate_std_type_converter(mlir::MLIRContext& context, mlir::TypeConverter& converter);
+void populate_std_type_converter(mlir::MLIRContext &context,
+                                 mlir::TypeConverter &converter);
 
-void register_plier_to_std_pipeline(plier::PipelineRegistry& registry);
+void register_plier_to_std_pipeline(plier::PipelineRegistry &registry);
 
 llvm::StringRef plier_to_std_pipeline_name();

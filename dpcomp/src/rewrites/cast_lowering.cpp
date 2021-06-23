@@ -16,34 +16,30 @@
 
 #include <mlir/Transforms/DialectConversion.h>
 
-plier::CastOpLowering::CastOpLowering(
-    mlir::TypeConverter& typeConverter, mlir::MLIRContext* context,
-    CastOpLowering::cast_t cast_func):
-    OpRewritePattern(context), converter(typeConverter),
-    castFunc(std::move(cast_func)) {}
+plier::CastOpLowering::CastOpLowering(mlir::TypeConverter &typeConverter,
+                                      mlir::MLIRContext *context,
+                                      CastOpLowering::cast_t cast_func)
+    : OpRewritePattern(context), converter(typeConverter),
+      castFunc(std::move(cast_func)) {}
 
-mlir::LogicalResult plier::CastOpLowering::matchAndRewrite(
-    plier::CastOp op, mlir::PatternRewriter& rewriter) const
-{
-    auto src = op.value();
-    auto srcType = src.getType();
-    auto dstType = converter.convertType(op.getType());
-    if (dstType)
-    {
-        if (srcType == dstType)
-        {
-            rewriter.replaceOp(op, src);
-            return mlir::success();
-        }
-        if (nullptr != castFunc)
-        {
-            auto loc = op.getLoc();
-            if (auto newOp = castFunc(rewriter, loc, src, dstType))
-            {
-                rewriter.replaceOp(op, newOp);
-                return mlir::success();
-            }
-        }
+mlir::LogicalResult
+plier::CastOpLowering::matchAndRewrite(plier::CastOp op,
+                                       mlir::PatternRewriter &rewriter) const {
+  auto src = op.value();
+  auto srcType = src.getType();
+  auto dstType = converter.convertType(op.getType());
+  if (dstType) {
+    if (srcType == dstType) {
+      rewriter.replaceOp(op, src);
+      return mlir::success();
     }
-    return mlir::failure();
+    if (nullptr != castFunc) {
+      auto loc = op.getLoc();
+      if (auto newOp = castFunc(rewriter, loc, src, dstType)) {
+        rewriter.replaceOp(op, newOp);
+        return mlir::success();
+      }
+    }
+  }
+  return mlir::failure();
 }

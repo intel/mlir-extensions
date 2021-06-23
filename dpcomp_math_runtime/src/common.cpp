@@ -12,18 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 #include "common.hpp"
 
-extern "C"
-{
-DPCOMP_MATH_RUNTIME_EXPORT void dpcomp_math_runtime_init()
-{
-    // Nothing
+extern "C" {
+DPCOMP_MATH_RUNTIME_EXPORT void dpcomp_math_runtime_init() {
+  // Nothing
 }
 
-DPCOMP_MATH_RUNTIME_EXPORT void dpcomp_math_runtime_finalize()
-{
-    // Nothing
+DPCOMP_MATH_RUNTIME_EXPORT void dpcomp_math_runtime_finalize() {
+  // Nothing
 }
 }

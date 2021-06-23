@@ -17,12 +17,11 @@
 #include <llvm/ADT/Optional.h>
 #include <mlir/IR/PatternMatch.h>
 
-namespace mlir
-{
+namespace mlir {
 class AnalysisManager;
 }
 
-namespace plier
-{
-llvm::Optional<mlir::LogicalResult> optimizeMemoryOps(mlir::AnalysisManager& am);
+namespace plier {
+llvm::Optional<mlir::LogicalResult>
+optimizeMemoryOps(mlir::AnalysisManager &am);
 }

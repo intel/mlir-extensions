@@ -14,15 +14,15 @@
 
 #include "plier/dialect.hpp"
 
-#include <mlir/IR/DialectImplementation.h>
+#include <mlir/IR/Builders.h>
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/IR/BuiltinTypes.h>
-#include <mlir/IR/Builders.h>
+#include <mlir/IR/DialectImplementation.h>
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Transforms/InliningUtils.h>
 
-#include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
+#include <mlir/Dialect/StandardOps/IR/Ops.h>
 
 #include <llvm/ADT/TypeSwitch.h>
 
@@ -30,346 +30,271 @@
 
 namespace MemoryEffects = ::mlir::MemoryEffects;
 
-namespace
-{
-struct PlierInlinerInterface : public mlir::DialectInlinerInterface
-{
-    using mlir::DialectInlinerInterface::DialectInlinerInterface;
-    bool isLegalToInline(mlir::Region *, mlir::Region *, bool,
-                         mlir::BlockAndValueMapping &) const final override
-    {
-        return true;
-    }
-    bool isLegalToInline(mlir::Operation *op, mlir::Region *, bool,
-                         mlir::BlockAndValueMapping &) const final override
-    {
-        return !mlir::isa<plier::ArgOp>(op);
-    }
+namespace {
+struct PlierInlinerInterface : public mlir::DialectInlinerInterface {
+  using mlir::DialectInlinerInterface::DialectInlinerInterface;
+  bool isLegalToInline(mlir::Region *, mlir::Region *, bool,
+                       mlir::BlockAndValueMapping &) const final override {
+    return true;
+  }
+  bool isLegalToInline(mlir::Operation *op, mlir::Region *, bool,
+                       mlir::BlockAndValueMapping &) const final override {
+    return !mlir::isa<plier::ArgOp>(op);
+  }
 };
+} // namespace
+
+namespace plier {
+
+llvm::StringRef attributes::getFastmathName() { return "#plier.fastmath"; }
+
+llvm::StringRef attributes::getJumpMarkersName() {
+  return "#plier.pipeline_jump_markers";
 }
 
-namespace plier
-{
+llvm::StringRef attributes::getParallelName() { return "#plier.parallel"; }
 
-llvm::StringRef attributes::getFastmathName()
-{
-    return "#plier.fastmath";
+llvm::StringRef attributes::getMaxConcurrencyName() {
+  return "#plier.max_concurrency";
 }
 
-llvm::StringRef attributes::getJumpMarkersName()
-{
-    return "#plier.pipeline_jump_markers";
+llvm::StringRef attributes::getForceInlineName() {
+  return "#plier.force_inline";
 }
 
-llvm::StringRef attributes::getParallelName()
-{
-    return "#plier.parallel";
-}
+namespace detail {
+struct PyTypeStorage : public mlir::TypeStorage {
+  using KeyTy = mlir::StringRef;
 
-llvm::StringRef attributes::getMaxConcurrencyName()
-{
-    return "#plier.max_concurrency";
-}
+  PyTypeStorage(mlir::StringRef name) : name(name) {}
 
-llvm::StringRef attributes::getForceInlineName()
-{
-    return "#plier.force_inline";
-}
+  bool operator==(const KeyTy &key) const { return key == name; }
 
+  static PyTypeStorage *construct(mlir::TypeStorageAllocator &allocator,
+                                  const KeyTy &key) {
+    return new (allocator.allocate<PyTypeStorage>())
+        PyTypeStorage(allocator.copyInto(key));
+  }
 
-namespace detail
-{
-struct PyTypeStorage : public mlir::TypeStorage
-{
-    using KeyTy = mlir::StringRef;
-
-    PyTypeStorage(mlir::StringRef name): name(name) {}
-
-    bool operator==(const KeyTy& key) const
-    {
-        return key == name;
-    }
-
-    static PyTypeStorage* construct(mlir::TypeStorageAllocator& allocator,
-                                    const KeyTy& key)
-    {
-        return new(allocator.allocate<PyTypeStorage>())
-            PyTypeStorage(allocator.copyInto(key));
-    }
-
-    mlir::StringRef name;
+  mlir::StringRef name;
 };
 
-struct LiteralTypeStorage : public mlir::TypeStorage
-{
-    using KeyTy = mlir::Attribute;
+struct LiteralTypeStorage : public mlir::TypeStorage {
+  using KeyTy = mlir::Attribute;
 
-    LiteralTypeStorage(mlir::Attribute val): value(val) {}
+  LiteralTypeStorage(mlir::Attribute val) : value(val) {}
 
-    bool operator==(const KeyTy& key) const
-    {
-        return key == value;
-    }
+  bool operator==(const KeyTy &key) const { return key == value; }
 
-    static LiteralTypeStorage* construct(mlir::TypeStorageAllocator& allocator,
-                                         const KeyTy& key)
-    {
-        return new(allocator.allocate<LiteralTypeStorage>())
-            LiteralTypeStorage(key);
-    }
+  static LiteralTypeStorage *construct(mlir::TypeStorageAllocator &allocator,
+                                       const KeyTy &key) {
+    return new (allocator.allocate<LiteralTypeStorage>())
+        LiteralTypeStorage(key);
+  }
 
-    mlir::Attribute value;
+  mlir::Attribute value;
 };
 
-struct SliceTypeStorage : public mlir::TypeStorage
-{
-    using KeyTy = std::tuple<mlir::Type, mlir::Type, mlir::Type>;
+struct SliceTypeStorage : public mlir::TypeStorage {
+  using KeyTy = std::tuple<mlir::Type, mlir::Type, mlir::Type>;
 
-    SliceTypeStorage(const KeyTy& t):
-        types(t) {}
+  SliceTypeStorage(const KeyTy &t) : types(t) {}
 
-    bool operator==(const KeyTy& key) const
-    {
-        return key == types;
-    }
+  bool operator==(const KeyTy &key) const { return key == types; }
 
-    static SliceTypeStorage* construct(mlir::TypeStorageAllocator& allocator,
-                                       const KeyTy& key)
-    {
-        return new(allocator.allocate<TypeVarStorage>())
-            SliceTypeStorage(key);
-    }
+  static SliceTypeStorage *construct(mlir::TypeStorageAllocator &allocator,
+                                     const KeyTy &key) {
+    return new (allocator.allocate<TypeVarStorage>()) SliceTypeStorage(key);
+  }
 
-    KeyTy types;
+  KeyTy types;
 };
 
-struct TypeVarStorage : public mlir::TypeStorage
-{
-    using KeyTy = mlir::Type;
+struct TypeVarStorage : public mlir::TypeStorage {
+  using KeyTy = mlir::Type;
 
-    TypeVarStorage(mlir::Type type): type(type) {}
+  TypeVarStorage(mlir::Type type) : type(type) {}
 
-    bool operator==(const KeyTy& key) const
-    {
-        return key == type;
-    }
+  bool operator==(const KeyTy &key) const { return key == type; }
 
-    static TypeVarStorage* construct(mlir::TypeStorageAllocator& allocator,
-                                    const KeyTy& key)
-    {
-        return new(allocator.allocate<TypeVarStorage>())
-            TypeVarStorage(key);
-    }
+  static TypeVarStorage *construct(mlir::TypeStorageAllocator &allocator,
+                                   const KeyTy &key) {
+    return new (allocator.allocate<TypeVarStorage>()) TypeVarStorage(key);
+  }
 
-    mlir::Type type;
+  mlir::Type type;
 };
+} // namespace detail
+
+mlir::ArrayRef<detail::OperatorNamePair> getOperators() {
+  return llvm::makeArrayRef(detail::OperatorNames);
 }
 
-mlir::ArrayRef<detail::OperatorNamePair> getOperators()
-{
-    return llvm::makeArrayRef(detail::OperatorNames);
-}
-
-void PlierDialect::initialize()
-{
-    addOperations<
+void PlierDialect::initialize() {
+  addOperations<
 #define GET_OP_LIST
 #include "plier/PlierOps.cpp.inc"
-        >();
-    addTypes<
-        plier::PyType,
-        plier::LiteralType,
-        plier::NoneType,
-        SliceType,
-        plier::TypeVar
-    >();
-    addInterfaces<PlierInlinerInterface>();
+      >();
+  addTypes<plier::PyType, plier::LiteralType, plier::NoneType, SliceType,
+           plier::TypeVar>();
+  addInterfaces<PlierInlinerInterface>();
 }
 
 mlir::Type PlierDialect::parseType(mlir::DialectAsmParser &parser) const {
-    parser.emitError(parser.getNameLoc(), "unknown type");
-    return mlir::Type();
+  parser.emitError(parser.getNameLoc(), "unknown type");
+  return mlir::Type();
 }
 
-void PlierDialect::printType(mlir::Type type, mlir::DialectAsmPrinter &os) const {
-    llvm::TypeSwitch<mlir::Type>(type)
-        .Case<plier::PyType>([&](auto t){ os << "PyType<" << t.getName() << ">"; })
-        .Case<plier::LiteralType>([&](auto t)
-                                  {
-                                      os << "LiteralType<";
-                                      os.printAttribute(t.getValue());
-                                      os << ">";
-                                  })
-        .Case<plier::NoneType>([&](auto){ os << "NoneType"; })
-        .Case<plier::SliceType>([&](auto t)
-                              {
-                                  os << "SliceType<";
-                                  os.printType(t.getBegin());
-                                  os << ", ";
-                                  os.printType(t.getEnd());
-                                  os << ", ";
-                                  os.printType(t.getStride());
-                                  os << ">";
-                              })
-        .Case<plier::TypeVar>([&](auto t)
-                              {
-                                  os << "TypeVar<";
-                                  os.printType(t.getType());
-                                  os << ">";
-                              })
-        .Default([](auto){ llvm_unreachable("unexpected type"); });
+void PlierDialect::printType(mlir::Type type,
+                             mlir::DialectAsmPrinter &os) const {
+  llvm::TypeSwitch<mlir::Type>(type)
+      .Case<plier::PyType>(
+          [&](auto t) { os << "PyType<" << t.getName() << ">"; })
+      .Case<plier::LiteralType>([&](auto t) {
+        os << "LiteralType<";
+        os.printAttribute(t.getValue());
+        os << ">";
+      })
+      .Case<plier::NoneType>([&](auto) { os << "NoneType"; })
+      .Case<plier::SliceType>([&](auto t) {
+        os << "SliceType<";
+        os.printType(t.getBegin());
+        os << ", ";
+        os.printType(t.getEnd());
+        os << ", ";
+        os.printType(t.getStride());
+        os << ">";
+      })
+      .Case<plier::TypeVar>([&](auto t) {
+        os << "TypeVar<";
+        os.printType(t.getType());
+        os << ">";
+      })
+      .Default([](auto) { llvm_unreachable("unexpected type"); });
 }
 
-PyType PyType::get(mlir::MLIRContext* context, llvm::StringRef name)
-{
-    assert(!name.empty());
-    return Base::get(context, name);
+PyType PyType::get(mlir::MLIRContext *context, llvm::StringRef name) {
+  assert(!name.empty());
+  return Base::get(context, name);
 }
 
-PyType PyType::getUndefined(mlir::MLIRContext* context)
-{
-    return Base::get(context, "");
+PyType PyType::getUndefined(mlir::MLIRContext *context) {
+  return Base::get(context, "");
 }
 
-llvm::StringRef PyType::getName() const
-{
-    return getImpl()->name;
+llvm::StringRef PyType::getName() const { return getImpl()->name; }
+
+LiteralType LiteralType::get(mlir::Attribute value) {
+  assert(value);
+  return Base::get(value.getContext(), value);
 }
 
-LiteralType LiteralType::get(mlir::Attribute value)
-{
-    assert(value);
-    return Base::get(value.getContext(), value);
+mlir::Attribute LiteralType::getValue() const { return getImpl()->value; }
+
+SliceType SliceType::get(mlir::Type begin, mlir::Type end, mlir::Type stride) {
+  assert(begin);
+  assert(end);
+  assert(stride);
+  return Base::get(begin.getContext(), std::make_tuple(begin, end, stride));
 }
 
-mlir::Attribute LiteralType::getValue() const
-{
-    return getImpl()->value;
+mlir::Type SliceType::getBegin() const { return std::get<0>(getImpl()->types); }
+
+mlir::Type SliceType::getEnd() const { return std::get<1>(getImpl()->types); }
+
+mlir::Type SliceType::getStride() const {
+  return std::get<2>(getImpl()->types);
 }
 
-SliceType SliceType::get(mlir::Type begin, mlir::Type end, mlir::Type stride)
-{
-    assert(begin);
-    assert(end);
-    assert(stride);
-    return Base::get(begin.getContext(), std::make_tuple(begin, end, stride));
+std::array<mlir::Type, 3> SliceType::getTypes() const {
+  return {getBegin(), getEnd(), getStride()};
 }
 
-mlir::Type SliceType::getBegin() const
-{
-    return std::get<0>(getImpl()->types);
+TypeVar TypeVar::get(mlir::Type type) {
+  assert(type);
+  return Base::get(type.getContext(), type);
 }
 
-mlir::Type SliceType::getEnd() const
-{
-    return std::get<1>(getImpl()->types);
-}
-
-mlir::Type SliceType::getStride() const
-{
-    return std::get<2>(getImpl()->types);
-}
-
-std::array<mlir::Type, 3> SliceType::getTypes() const
-{
-    return {getBegin(), getEnd(), getStride()};
-}
-
-TypeVar TypeVar::get(mlir::Type type)
-{
-    assert(type);
-    return Base::get(type.getContext(), type);
-}
-
-mlir::Type TypeVar::getType() const
-{
-    return getImpl()->type;
-}
+mlir::Type TypeVar::getType() const { return getImpl()->type; }
 
 void ArgOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                   unsigned index, mlir::StringRef name) {
-    ArgOp::build(builder, state, PyType::getUndefined(state.getContext()),
-                 index, name);
+  ArgOp::build(builder, state, PyType::getUndefined(state.getContext()), index,
+               name);
 }
 
-mlir::OpFoldResult ArgOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/)
-{
-    auto func = getOperation()->getParentOfType<mlir::FuncOp>();
-    if (func)
-    {
-        auto ind = index();
-        if (ind < func.getNumArguments() &&
-            func.getArgument(ind).getType() == getType())
-        {
-            return func.getArgument(ind);
-        }
+mlir::OpFoldResult ArgOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
+  auto func = getOperation()->getParentOfType<mlir::FuncOp>();
+  if (func) {
+    auto ind = index();
+    if (ind < func.getNumArguments() &&
+        func.getArgument(ind).getType() == getType()) {
+      return func.getArgument(ind);
     }
-    return nullptr;
+  }
+  return nullptr;
 }
 
 void ConstOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
 
-                   mlir::Attribute val) {
-    ConstOp::build(builder, state, PyType::getUndefined(state.getContext()),
-                   val);
+                    mlir::Attribute val) {
+  ConstOp::build(builder, state, PyType::getUndefined(state.getContext()), val);
 }
 
 void GlobalOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                      mlir::StringRef name) {
-    GlobalOp::build(builder, state, PyType::getUndefined(state.getContext()),
-                    name);
+  GlobalOp::build(builder, state, PyType::getUndefined(state.getContext()),
+                  name);
 }
 
 void BinOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                   mlir::Value lhs, mlir::Value rhs, mlir::StringRef op) {
-    BinOp::build(builder, state, PyType::getUndefined(state.getContext()), lhs,
-                 rhs, op);
+  BinOp::build(builder, state, PyType::getUndefined(state.getContext()), lhs,
+               rhs, op);
 }
 
 void UnaryOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
-                  mlir::Value value, mlir::StringRef op) {
-    UnaryOp::build(builder, state, PyType::getUndefined(state.getContext()),
-                   value, op);
+                    mlir::Value value, mlir::StringRef op) {
+  UnaryOp::build(builder, state, PyType::getUndefined(state.getContext()),
+                 value, op);
 }
 
-mlir::OpFoldResult CastOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/)
-{
-    auto op_type = getOperand().getType();
-    auto ret_type = getType();
-    if (op_type == ret_type && op_type != PyType::getUndefined(getContext()))
-    {
-        return getOperand();
-    }
-    return nullptr;
+mlir::OpFoldResult CastOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
+  auto op_type = getOperand().getType();
+  auto ret_type = getType();
+  if (op_type == ret_type && op_type != PyType::getUndefined(getContext())) {
+    return getOperand();
+  }
+  return nullptr;
 }
 
-void PyCallOp::build(mlir::OpBuilder &builder, mlir::OperationState &state, mlir::Value func,
-                     llvm::StringRef func_name, mlir::ValueRange args,
-                     mlir::ArrayRef<std::pair<std::string, mlir::Value>> kwargs) {
-    auto ctx = builder.getContext();
-    mlir::SmallVector<mlir::Value, 16> all_args;
-    all_args.reserve(args.size() + kwargs.size());
-    std::copy(args.begin(), args.end(), std::back_inserter(all_args));
-    auto kw_start = static_cast<uint32_t>(all_args.size());
-    mlir::SmallVector<mlir::Attribute> kw_names;
-    kw_names.reserve(kwargs.size());
-    for (auto& a : kwargs)
-    {
-        kw_names.push_back(mlir::StringAttr::get(ctx, a.first));
-        all_args.push_back(a.second);
-    }
-    PyCallOp::build(builder, state, PyType::getUndefined(state.getContext()),
-        func, all_args, func_name, kw_start, mlir::ArrayAttr::get(ctx, kw_names));
+void PyCallOp::build(
+    mlir::OpBuilder &builder, mlir::OperationState &state, mlir::Value func,
+    llvm::StringRef func_name, mlir::ValueRange args,
+    mlir::ArrayRef<std::pair<std::string, mlir::Value>> kwargs) {
+  auto ctx = builder.getContext();
+  mlir::SmallVector<mlir::Value, 16> all_args;
+  all_args.reserve(args.size() + kwargs.size());
+  std::copy(args.begin(), args.end(), std::back_inserter(all_args));
+  auto kw_start = static_cast<uint32_t>(all_args.size());
+  mlir::SmallVector<mlir::Attribute> kw_names;
+  kw_names.reserve(kwargs.size());
+  for (auto &a : kwargs) {
+    kw_names.push_back(mlir::StringAttr::get(ctx, a.first));
+    all_args.push_back(a.second);
+  }
+  PyCallOp::build(builder, state, PyType::getUndefined(state.getContext()),
+                  func, all_args, func_name, kw_start,
+                  mlir::ArrayAttr::get(ctx, kw_names));
 }
 
 void BuildTupleOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
-                         ::mlir::ValueRange args)
-{
-    BuildTupleOp::build(builder, state,
-                        PyType::getUndefined(state.getContext()), args);
+                         ::mlir::ValueRange args) {
+  BuildTupleOp::build(builder, state, PyType::getUndefined(state.getContext()),
+                      args);
 }
 
-//mlir::LogicalResult BuildTupleOp::fold(
+// mlir::LogicalResult BuildTupleOp::fold(
 //    llvm::ArrayRef<mlir::Attribute> /*operands*/,
 //    llvm::SmallVectorImpl<mlir::OpFoldResult> &results)
 //{
@@ -383,329 +308,290 @@ void BuildTupleOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
 //    return mlir::failure();
 //}
 
-mlir::Value fold_build_tuple_getitem(mlir::Value val, mlir::Type type, llvm::ArrayRef<mlir::Attribute> operands)
-{
-    auto build_tuple = val.getDefiningOp<plier::BuildTupleOp>();
-    if (build_tuple)
-    {
-        if (auto val = operands[1].dyn_cast_or_null<mlir::IntegerAttr>())
-        {
-            auto index = val.getInt();
-            if (index >= 0 && index < build_tuple.getNumOperands())
-            {
-                auto op = build_tuple.getOperand(static_cast<unsigned>(index));
-                if (op.getType() == type)
-                {
-                    return op;
-                }
-            }
+mlir::Value fold_build_tuple_getitem(mlir::Value val, mlir::Type type,
+                                     llvm::ArrayRef<mlir::Attribute> operands) {
+  auto build_tuple = val.getDefiningOp<plier::BuildTupleOp>();
+  if (build_tuple) {
+    if (auto val = operands[1].dyn_cast_or_null<mlir::IntegerAttr>()) {
+      auto index = val.getInt();
+      if (index >= 0 && index < build_tuple.getNumOperands()) {
+        auto op = build_tuple.getOperand(static_cast<unsigned>(index));
+        if (op.getType() == type) {
+          return op;
         }
+      }
     }
-    return {};
+  }
+  return {};
 }
 
 void GetItemOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
-                            ::mlir::Value value, ::mlir::Value index)
-{
-    GetItemOp::build(builder, state,
-                     PyType::getUndefined(state.getContext()), value, index);
+                      ::mlir::Value value, ::mlir::Value index) {
+  GetItemOp::build(builder, state, PyType::getUndefined(state.getContext()),
+                   value, index);
 }
 
-mlir::OpFoldResult GetItemOp::fold(llvm::ArrayRef<mlir::Attribute> operands)
-{
-    if (auto val = fold_build_tuple_getitem(value(), getType(), operands))
-    {
-        return val;
-    }
-    return nullptr;
+mlir::OpFoldResult GetItemOp::fold(llvm::ArrayRef<mlir::Attribute> operands) {
+  if (auto val = fold_build_tuple_getitem(value(), getType(), operands)) {
+    return val;
+  }
+  return nullptr;
 }
 
 void GetiterOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
-                            ::mlir::Value value)
-{
-    GetiterOp::build(builder, state, PyType::getUndefined(state.getContext()),
-                     value);
+                      ::mlir::Value value) {
+  GetiterOp::build(builder, state, PyType::getUndefined(state.getContext()),
+                   value);
 }
 
 void IternextOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
-                            ::mlir::Value value)
-{
-    IternextOp::build(builder, state, PyType::getUndefined(state.getContext()),
-                      value);
+                       ::mlir::Value value) {
+  IternextOp::build(builder, state, PyType::getUndefined(state.getContext()),
+                    value);
 }
 
 void PairfirstOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
-                            ::mlir::Value value)
-{
-    PairfirstOp::build(builder, state, PyType::getUndefined(state.getContext()),
-                       value);
+                        ::mlir::Value value) {
+  PairfirstOp::build(builder, state, PyType::getUndefined(state.getContext()),
+                     value);
 }
 
 void PairsecondOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
-                         ::mlir::Value value)
-{
-    PairsecondOp::build(builder, state,
-                        PyType::getUndefined(state.getContext()), value);
+                         ::mlir::Value value) {
+  PairsecondOp::build(builder, state, PyType::getUndefined(state.getContext()),
+                      value);
 }
 
 void GetattrOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                       mlir::Value value, mlir::StringRef name) {
-    GetattrOp::build(builder, state, PyType::getUndefined(state.getContext()),
-                     value, name);
+  GetattrOp::build(builder, state, PyType::getUndefined(state.getContext()),
+                   value, name);
 }
 
 void ExhaustIterOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                           mlir::Value value, int64_t count) {
-    ExhaustIterOp::build(builder, state, PyType::getUndefined(state.getContext()),
-                         value, builder.getI64IntegerAttr(count));
+  ExhaustIterOp::build(builder, state, PyType::getUndefined(state.getContext()),
+                       value, builder.getI64IntegerAttr(count));
 }
 
-mlir::OpFoldResult ExhaustIterOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/)
-{
-    if (getType() == getOperand().getType() &&
-        getType() != plier::PyType::getUndefined(getContext()))
-    {
-        return getOperand();
-    }
-    return nullptr;
+mlir::OpFoldResult
+ExhaustIterOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
+  if (getType() == getOperand().getType() &&
+      getType() != plier::PyType::getUndefined(getContext())) {
+    return getOperand();
+  }
+  return nullptr;
 }
 
-namespace
-{
-struct GetattrGlobalRewrite : public mlir::OpRewritePattern<GetattrOp>
-{
-    using mlir::OpRewritePattern<GetattrOp>::OpRewritePattern;
+namespace {
+struct GetattrGlobalRewrite : public mlir::OpRewritePattern<GetattrOp> {
+  using mlir::OpRewritePattern<GetattrOp>::OpRewritePattern;
 
-    mlir::LogicalResult matchAndRewrite(
-        GetattrOp op, mlir::PatternRewriter &rewriter) const override
-    {
-        auto prev_op = mlir::dyn_cast_or_null<plier::GlobalOp>(op.getOperand().getDefiningOp());
-        if (prev_op)
-        {
-            auto new_name = llvm::Twine(prev_op.name() + "." + op.name()).str();
-            auto new_op = rewriter.create<plier::GlobalOp>(op.getLoc(), op.getType(), new_name);
-            rewriter.replaceOp(op, new_op.getResult());
-            return mlir::success();
-        }
-        return mlir::failure();
+  mlir::LogicalResult
+  matchAndRewrite(GetattrOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto prev_op = mlir::dyn_cast_or_null<plier::GlobalOp>(
+        op.getOperand().getDefiningOp());
+    if (prev_op) {
+      auto new_name = llvm::Twine(prev_op.name() + "." + op.name()).str();
+      auto new_op =
+          rewriter.create<plier::GlobalOp>(op.getLoc(), op.getType(), new_name);
+      rewriter.replaceOp(op, new_op.getResult());
+      return mlir::success();
     }
+    return mlir::failure();
+  }
 };
-}
+} // namespace
 
 void GetattrOp::getCanonicalizationPatterns(
-    ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context)
-{
-    results.insert<GetattrGlobalRewrite>(context);
+    ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context) {
+  results.insert<GetattrGlobalRewrite>(context);
 }
 
-void EnforceShapeOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
-                            mlir::Value value, mlir::ValueRange shape) {
-    EnforceShapeOp::build(builder, state, value.getType(), value, shape);
+void EnforceShapeOp::build(mlir::OpBuilder &builder,
+                           mlir::OperationState &state, mlir::Value value,
+                           mlir::ValueRange shape) {
+  EnforceShapeOp::build(builder, state, value.getType(), value, shape);
 }
 
-mlir::OpFoldResult EnforceShapeOp::fold(llvm::ArrayRef<mlir::Attribute> operands) {
-    operands = operands.drop_front();
-    auto num_dims = static_cast<unsigned>(operands.size());
-    auto src_type = getType().cast<mlir::ShapedType>();
-    llvm::SmallVector<int64_t> final_shape(num_dims, -1);
-    if (src_type.hasRank())
-    {
-        auto shape = src_type.getShape();
-        if (shape.size() != num_dims)
-        {
+mlir::OpFoldResult
+EnforceShapeOp::fold(llvm::ArrayRef<mlir::Attribute> operands) {
+  operands = operands.drop_front();
+  auto num_dims = static_cast<unsigned>(operands.size());
+  auto src_type = getType().cast<mlir::ShapedType>();
+  llvm::SmallVector<int64_t> final_shape(num_dims, -1);
+  if (src_type.hasRank()) {
+    auto shape = src_type.getShape();
+    if (shape.size() != num_dims) {
+      return nullptr;
+    }
+    final_shape.assign(shape.begin(), shape.end());
+  }
+  bool changed = false;
+  for (unsigned i = 0; i < num_dims; ++i) {
+    if (auto attr = operands[i].dyn_cast_or_null<mlir::IntegerAttr>()) {
+      auto val = attr.getInt();
+      if (val != -1) {
+        if (final_shape[i] != -1) {
+          if (final_shape[i] != val) {
             return nullptr;
+          }
+        } else {
+          changed = true;
+          final_shape[i] = val;
         }
-        final_shape.assign(shape.begin(), shape.end());
+      }
     }
-    bool changed = false;
-    for (unsigned i = 0; i < num_dims; ++i)
-    {
-        if (auto attr = operands[i].dyn_cast_or_null<mlir::IntegerAttr>())
-        {
-            auto val = attr.getInt();
-            if (val != -1)
-            {
-                if (final_shape[i] != -1)
-                {
-                    if (final_shape[i] != val)
-                    {
-                        return nullptr;
-                    }
-                }
-                else
-                {
-                    changed = true;
-                    final_shape[i] = val;
-                }
-            }
-        }
-    }
+  }
 
-    if (changed)
-    {
-        auto final_type = mlir::RankedTensorType::get(final_shape, src_type.getElementType());
-        result().setType(final_type);
-        return result();
-    }
-    return nullptr;
+  if (changed) {
+    auto final_type =
+        mlir::RankedTensorType::get(final_shape, src_type.getElementType());
+    result().setType(final_type);
+    return result();
+  }
+  return nullptr;
 }
 
-namespace
-{
-struct EnforceShapeDim : public mlir::OpRewritePattern<mlir::memref::DimOp>
-{
-    using mlir::OpRewritePattern<mlir::memref::DimOp>::OpRewritePattern;
+namespace {
+struct EnforceShapeDim : public mlir::OpRewritePattern<mlir::memref::DimOp> {
+  using mlir::OpRewritePattern<mlir::memref::DimOp>::OpRewritePattern;
 
-    mlir::LogicalResult matchAndRewrite(
-        mlir::memref::DimOp op, mlir::PatternRewriter &rewriter) const override
-    {
-        auto enforce_op = mlir::dyn_cast_or_null<plier::EnforceShapeOp>(op.source().getDefiningOp());
-        if (!enforce_op)
-        {
-            return mlir::failure();
-        }
-        auto const_ind = plier::getConstVal<mlir::IntegerAttr>(op.index());
-        if (!const_ind)
-        {
-            return mlir::failure();
-        }
-        auto index = const_ind.getInt();
-        if (index < 0 || index >= static_cast<int64_t>(enforce_op.sizes().size()))
-        {
-            return mlir::failure();
-        }
-
-        rewriter.replaceOp(op, enforce_op.sizes()[static_cast<unsigned>(index)]);
-        return mlir::success();
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::DimOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto enforce_op = mlir::dyn_cast_or_null<plier::EnforceShapeOp>(
+        op.source().getDefiningOp());
+    if (!enforce_op) {
+      return mlir::failure();
     }
+    auto const_ind = plier::getConstVal<mlir::IntegerAttr>(op.index());
+    if (!const_ind) {
+      return mlir::failure();
+    }
+    auto index = const_ind.getInt();
+    if (index < 0 || index >= static_cast<int64_t>(enforce_op.sizes().size())) {
+      return mlir::failure();
+    }
+
+    rewriter.replaceOp(op, enforce_op.sizes()[static_cast<unsigned>(index)]);
+    return mlir::success();
+  }
 };
-}
+} // namespace
 
 void EnforceShapeOp::getCanonicalizationPatterns(
-    ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context)
-{
-    results.insert<EnforceShapeDim>(context);
+    ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context) {
+  results.insert<EnforceShapeDim>(context);
 }
 
-mlir::LogicalResult ParallelOp::moveOutOfLoop(mlir::ArrayRef<mlir::Operation *> ops)
-{
-    for (mlir::Operation *op : ops)
-    {
-        op->moveBefore(*this);
-    }
-    return mlir::success();
+mlir::LogicalResult
+ParallelOp::moveOutOfLoop(mlir::ArrayRef<mlir::Operation *> ops) {
+  for (mlir::Operation *op : ops) {
+    op->moveBefore(*this);
+  }
+  return mlir::success();
 }
 
 mlir::Region &ParallelOp::getLoopBody() { return region(); }
 
-bool ParallelOp::isDefinedOutsideOfLoop(mlir::Value value)
-{
+bool ParallelOp::isDefinedOutsideOfLoop(mlir::Value value) {
   return !region().isAncestor(value.getParentRegion());
 }
 
 void ParallelOp::build(
     mlir::OpBuilder &odsBuilder, mlir::OperationState &odsState,
-    mlir::ValueRange lowerBounds, mlir::ValueRange upperBounds, mlir::ValueRange steps,
+    mlir::ValueRange lowerBounds, mlir::ValueRange upperBounds,
+    mlir::ValueRange steps,
     mlir::function_ref<void(mlir::OpBuilder &, mlir::Location, mlir::ValueRange,
-                            mlir::ValueRange, mlir::Value)> bodyBuilder) {
-    assert(lowerBounds.size() == upperBounds.size());
-    assert(lowerBounds.size() == steps.size());
-    odsState.addOperands(lowerBounds);
-    odsState.addOperands(upperBounds);
-    odsState.addOperands(steps);
-    odsState.addAttribute(
-        ParallelOp::getOperandSegmentSizeAttr(),
-        odsBuilder.getI32VectorAttr({static_cast<int32_t>(lowerBounds.size()),
-                                     static_cast<int32_t>(upperBounds.size()),
-                                     static_cast<int32_t>(steps.size())}));
-    auto bodyRegion = odsState.addRegion();
-    auto count = lowerBounds.size();
-    mlir::OpBuilder::InsertionGuard guard(odsBuilder);
-    llvm::SmallVector<mlir::Type> argTypes(count * 2 + 1, odsBuilder.getIndexType());
-    auto *bodyBlock = odsBuilder.createBlock(bodyRegion, {}, argTypes);
+                            mlir::ValueRange, mlir::Value)>
+        bodyBuilder) {
+  assert(lowerBounds.size() == upperBounds.size());
+  assert(lowerBounds.size() == steps.size());
+  odsState.addOperands(lowerBounds);
+  odsState.addOperands(upperBounds);
+  odsState.addOperands(steps);
+  odsState.addAttribute(
+      ParallelOp::getOperandSegmentSizeAttr(),
+      odsBuilder.getI32VectorAttr({static_cast<int32_t>(lowerBounds.size()),
+                                   static_cast<int32_t>(upperBounds.size()),
+                                   static_cast<int32_t>(steps.size())}));
+  auto bodyRegion = odsState.addRegion();
+  auto count = lowerBounds.size();
+  mlir::OpBuilder::InsertionGuard guard(odsBuilder);
+  llvm::SmallVector<mlir::Type> argTypes(count * 2 + 1,
+                                         odsBuilder.getIndexType());
+  auto *bodyBlock = odsBuilder.createBlock(bodyRegion, {}, argTypes);
 
-    if (bodyBuilder)
-    {
-        odsBuilder.setInsertionPointToStart(bodyBlock);
-        auto args = bodyBlock->getArguments();
-        bodyBuilder(odsBuilder, odsState.location,
-                    args.take_front(count),
-                    args.drop_front(count).take_front(count),
-                    args.back());
-        ParallelOp::ensureTerminator(*bodyRegion, odsBuilder, odsState.location);
-    }
+  if (bodyBuilder) {
+    odsBuilder.setInsertionPointToStart(bodyBlock);
+    auto args = bodyBlock->getArguments();
+    bodyBuilder(odsBuilder, odsState.location, args.take_front(count),
+                args.drop_front(count).take_front(count), args.back());
+    ParallelOp::ensureTerminator(*bodyRegion, odsBuilder, odsState.location);
+  }
 }
 
 void BuildSliceOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
-                         mlir::Value begin, mlir::Value end, mlir::Value stride) {
-    auto type = SliceType::get(begin.getType(), end.getType(), stride.getType());
-    BuildSliceOp::build(builder, state, type, begin, end, stride);
+                         mlir::Value begin, mlir::Value end,
+                         mlir::Value stride) {
+  auto type = SliceType::get(begin.getType(), end.getType(), stride.getType());
+  BuildSliceOp::build(builder, state, type, begin, end, stride);
 }
 
 void RetainOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
-                           mlir::Value value) {
-    RetainOp::build(builder, state, value.getType(), value);
+                     mlir::Value value) {
+  RetainOp::build(builder, state, value.getType(), value);
 }
 
+mlir::OpFoldResult SignCastOp::fold(llvm::ArrayRef<mlir::Attribute> operands) {
+  assert(operands.size() == 1);
+  auto thisType = getType();
+  auto attrOperand = operands.front();
+  if (attrOperand && attrOperand.getType() == thisType) {
+    return attrOperand;
+  }
 
-mlir::OpFoldResult SignCastOp::fold(llvm::ArrayRef<mlir::Attribute> operands)
-{
-    assert(operands.size() == 1);
-    auto thisType = getType();
-    auto attrOperand = operands.front();
-    if (attrOperand && attrOperand.getType() == thisType)
-    {
-        return attrOperand;
+  auto arg = getOperand();
+  if (arg.getType() == thisType) {
+    return arg;
+  }
+  if (auto prevOp = arg.getDefiningOp<SignCastOp>()) {
+    auto prevArg = prevOp.getOperand();
+    if (prevArg.getType() == thisType) {
+      return prevArg;
     }
-
-    auto arg = getOperand();
-    if (arg.getType() == thisType)
-    {
-        return arg;
-    }
-    if (auto prevOp = arg.getDefiningOp<SignCastOp>())
-    {
-        auto prevArg = prevOp.getOperand();
-        if (prevArg.getType() == thisType)
-        {
-            return prevArg;
-        }
-    }
-    return nullptr;
+  }
+  return nullptr;
 }
 
-namespace
-{
-template<typename Op>
-struct SignCastDimPropagate : public mlir::OpRewritePattern<Op>
-{
-    using mlir::OpRewritePattern<Op>::OpRewritePattern;
+namespace {
+template <typename Op>
+struct SignCastDimPropagate : public mlir::OpRewritePattern<Op> {
+  using mlir::OpRewritePattern<Op>::OpRewritePattern;
 
-    mlir::LogicalResult matchAndRewrite(
-        Op op, mlir::PatternRewriter &rewriter) const override
-    {
-        auto castOp = mlir::dyn_cast_or_null<plier::SignCastOp>(op.source().getDefiningOp());
-        if (!castOp)
-        {
-            return mlir::failure();
-        }
-        auto val = castOp.value();
-        rewriter.replaceOpWithNewOp<Op>(op, val, op.index());
-        return mlir::success();
+  mlir::LogicalResult
+  matchAndRewrite(Op op, mlir::PatternRewriter &rewriter) const override {
+    auto castOp =
+        mlir::dyn_cast_or_null<plier::SignCastOp>(op.source().getDefiningOp());
+    if (!castOp) {
+      return mlir::failure();
     }
+    auto val = castOp.value();
+    rewriter.replaceOpWithNewOp<Op>(op, val, op.index());
+    return mlir::success();
+  }
 };
-}
+} // namespace
 
 void SignCastOp::getCanonicalizationPatterns(
-    ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context)
-{
-    results.insert<SignCastDimPropagate<mlir::tensor::DimOp>,
-                   SignCastDimPropagate<mlir::memref::DimOp>
-        >(context);
+    ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context) {
+  results.insert<SignCastDimPropagate<mlir::tensor::DimOp>,
+                 SignCastDimPropagate<mlir::memref::DimOp>>(context);
 }
 
-
-}
+} // namespace plier
 
 #include "plier/PlierOpsDialect.cpp.inc"
 

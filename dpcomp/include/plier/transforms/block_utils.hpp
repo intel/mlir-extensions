@@ -14,21 +14,13 @@
 
 #pragma once
 
-namespace mlir
-{
+namespace mlir {
 class Operation;
 }
 
-namespace plier
-{
+namespace plier {
 
-enum class OpRelation
-{
-    Before,
-    After,
-    In,
-    Unknown
-};
+enum class OpRelation { Before, After, In, Unknown };
 
-OpRelation relativeTo(mlir::Operation* op, mlir::Operation* relativeTo);
-}
+OpRelation relativeTo(mlir::Operation *op, mlir::Operation *relativeTo);
+} // namespace plier

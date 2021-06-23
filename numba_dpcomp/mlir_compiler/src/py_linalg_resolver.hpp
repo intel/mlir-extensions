@@ -16,43 +16,44 @@
 
 #include <memory>
 
+#include <llvm/ADT/ArrayRef.h>
 #include <llvm/ADT/Optional.h>
 #include <llvm/ADT/SmallVector.h>
-#include <llvm/ADT/ArrayRef.h>
 
-namespace llvm
-{
+namespace llvm {
 class StringRef;
 }
 
-namespace mlir
-{
+namespace mlir {
 class Value;
 class FuncOp;
 class ValueRange;
 class OpBuilder;
 class Location;
-}
+} // namespace mlir
 
-class PyLinalgResolver
-{
+class PyLinalgResolver {
 public:
-    PyLinalgResolver();
-    ~PyLinalgResolver();
+  PyLinalgResolver();
+  ~PyLinalgResolver();
 
-    using Values = llvm::SmallVector<mlir::Value, 8>;
-    using KWArgs = llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>>;
+  using Values = llvm::SmallVector<mlir::Value, 8>;
+  using KWArgs = llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>>;
 
-    llvm::Optional<Values> rewrite_func(llvm::Twine name, mlir::Location loc, mlir::OpBuilder& builder, mlir::ValueRange args,
-                                        KWArgs kwargs);
+  llvm::Optional<Values> rewrite_func(llvm::Twine name, mlir::Location loc,
+                                      mlir::OpBuilder &builder,
+                                      mlir::ValueRange args, KWArgs kwargs);
 
-    llvm::Optional<Values> rewrite_attr(llvm::Twine name, mlir::Location loc, mlir::OpBuilder& builder, mlir::Value arg);
+  llvm::Optional<Values> rewrite_attr(llvm::Twine name, mlir::Location loc,
+                                      mlir::OpBuilder &builder,
+                                      mlir::Value arg);
 
 private:
-    friend struct PyBuilderContext;
-    struct Context;
-    std::unique_ptr<Context> context;
+  friend struct PyBuilderContext;
+  struct Context;
+  std::unique_ptr<Context> context;
 
-    llvm::Optional<Values> rewrite(llvm::StringRef name, mlir::Location loc, mlir::OpBuilder& builder, mlir::ValueRange args,
-                                   KWArgs kwargs);
+  llvm::Optional<Values> rewrite(llvm::StringRef name, mlir::Location loc,
+                                 mlir::OpBuilder &builder,
+                                 mlir::ValueRange args, KWArgs kwargs);
 };

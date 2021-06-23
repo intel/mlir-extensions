@@ -18,24 +18,21 @@
 
 #include "lowering.hpp"
 
-namespace
-{
-bool is_dpnp_supported()
-{
+namespace {
+bool is_dpnp_supported() {
 #ifdef DPNP_ENABLE
-    return true;
+  return true;
 #else
-    return false;
+  return false;
 #endif
 }
-}
+} // namespace
 
-PYBIND11_MODULE(mlir_compiler, m)
-{
-    m.def("init_compiler", &init_compiler, "No docs");
-    m.def("create_module", &create_module, "No docs");
-    m.def("lower_function", &lower_function, "No docs");
-    m.def("compile_module", &compile_module, "No docs");
-    m.def("module_str", &module_str, "No docs");
-    m.def("is_dpnp_supported", &is_dpnp_supported, "No docs");
+PYBIND11_MODULE(mlir_compiler, m) {
+  m.def("init_compiler", &init_compiler, "No docs");
+  m.def("create_module", &create_module, "No docs");
+  m.def("lower_function", &lower_function, "No docs");
+  m.def("compile_module", &compile_module, "No docs");
+  m.def("module_str", &module_str, "No docs");
+  m.def("is_dpnp_supported", &is_dpnp_supported, "No docs");
 }

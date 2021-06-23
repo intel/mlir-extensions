@@ -18,25 +18,22 @@
 
 #include <mlir/Pass/AnalysisManager.h>
 
-namespace mlir
-{
+namespace mlir {
 class Operation;
 class AliasAnalysis;
-}
+} // namespace mlir
 
-namespace plier
-{
-class MemorySSAAnalysis
-{
+namespace plier {
+class MemorySSAAnalysis {
 public:
-    MemorySSAAnalysis(mlir::Operation* op, mlir::AnalysisManager& am);
-    MemorySSAAnalysis(const MemorySSAAnalysis&) = delete;
+  MemorySSAAnalysis(mlir::Operation *op, mlir::AnalysisManager &am);
+  MemorySSAAnalysis(const MemorySSAAnalysis &) = delete;
 
-    mlir::LogicalResult optimizeUses();
+  mlir::LogicalResult optimizeUses();
 
-    static bool isInvalidated(const mlir::AnalysisManager::PreservedAnalyses& pa);
+  static bool isInvalidated(const mlir::AnalysisManager::PreservedAnalyses &pa);
 
-    llvm::Optional<plier::MemorySSA> memssa;
-    mlir::AliasAnalysis* aliasAnalysis = nullptr;
+  llvm::Optional<plier::MemorySSA> memssa;
+  mlir::AliasAnalysis *aliasAnalysis = nullptr;
 };
-}
+} // namespace plier
