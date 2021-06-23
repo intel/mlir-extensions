@@ -477,41 +477,42 @@ mlir::Attribute get_fastmath_attrs(mlir::MLIRContext &ctx) {
   return mlir::ArrayAttr::get(&ctx, attrs);
 }
 
-mlir::LogicalResult fix_func_sig(LLVMTypeHelper &type_helper,
-                                 mlir::FuncOp func) {
+mlir::LogicalResult fixFuncSig(LLVMTypeHelper &typeHelper, mlir::FuncOp func) {
   if (func.isPrivate()) {
     return mlir::success();
   }
   if (func->getAttr(plier::attributes::getFastmathName())) {
     func->setAttr("passthrough", get_fastmath_attrs(*func.getContext()));
   }
-  auto old_type = func.getType();
-  assert(old_type.getNumResults() <= 1);
-  auto &ctx = *old_type.getContext();
+  auto oldType = func.getType();
+  assert(oldType.getNumResults() <= 1);
+  auto &ctx = *oldType.getContext();
   llvm::SmallVector<mlir::Type> args;
 
-  auto ptr = [&](auto arg) { return type_helper.ptr(arg); };
+  auto ptr = [&](auto arg) { return typeHelper.ptr(arg); };
 
   unsigned index = 0;
-  auto add_arg = [&](mlir::Type type) {
+  auto addArg = [&](mlir::Type type) {
     args.push_back(type);
     auto ret = func.getBody().insertArgument(index, type);
     ++index;
     return ret;
   };
 
-  auto get_res_type = [&](mlir::Type type) -> mlir::Type {
+  auto getResType = [&](mlir::Type type) -> mlir::Type {
     if (auto memreftype = type.dyn_cast<mlir::MemRefType>()) {
-      return get_array_type(type_helper.get_type_converter(), memreftype);
+      return get_array_type(typeHelper.get_type_converter(), memreftype);
     }
     return type;
   };
 
-  auto orig_ret_type =
-      (old_type.getNumResults() != 0 ? get_res_type(old_type.getResult(0))
-                                     : type_helper.ptr(type_helper.i(8)));
+  auto origRetType =
+      (oldType.getNumResults() != 0 ? getResType(oldType.getResult(0))
+                                    : typeHelper.ptr(typeHelper.i(8)));
 
-  if (!type_helper.get_type_converter().convertType(orig_ret_type)) {
+  if (!typeHelper.get_type_converter().convertType(origRetType)) {
+    func->emitError("fixFuncSig: couldn't convert return type: ")
+        << origRetType;
     return mlir::failure();
   }
 
@@ -519,30 +520,30 @@ mlir::LogicalResult fix_func_sig(LLVMTypeHelper &type_helper,
   builder.setInsertionPointToStart(&func.getBody().front());
 
   auto loc = builder.getUnknownLoc();
-  llvm::SmallVector<mlir::Value> new_args;
-  auto process_arg = [&](mlir::Type type) {
+  llvm::SmallVector<mlir::Value> newArgs;
+  auto processArg = [&](mlir::Type type) {
     if (auto memrefType = type.dyn_cast<mlir::MemRefType>()) {
-      new_args.clear();
-      auto arr_type =
-          get_array_type(type_helper.get_type_converter(), memrefType);
-      flatten_type(arr_type, [&](mlir::Type new_type) {
-        new_args.push_back(add_arg(new_type));
+      newArgs.clear();
+      auto arrType =
+          get_array_type(typeHelper.get_type_converter(), memrefType);
+      flatten_type(arrType, [&](mlir::Type new_type) {
+        newArgs.push_back(addArg(new_type));
       });
-      auto it = new_args.begin();
-      mlir::Value desc = unflatten(arr_type, loc, builder, [&]() {
+      auto it = newArgs.begin();
+      mlir::Value desc = unflatten(arrType, loc, builder, [&]() {
         auto ret = *it;
         ++it;
         return ret;
       });
 
       auto mod = mlir::cast<mlir::ModuleOp>(func->getParentOp());
-      auto dst_type = type_helper.get_type_converter().convertType(memrefType);
-      assert(dst_type);
-      auto conv_func = get_to_memref_conversion_func(
-          mod, builder, memrefType, arr_type,
-          dst_type.cast<mlir::LLVM::LLVMStructType>());
+      auto dstType = typeHelper.get_type_converter().convertType(memrefType);
+      assert(dstType);
+      auto convFunc = get_to_memref_conversion_func(
+          mod, builder, memrefType, arrType,
+          dstType.cast<mlir::LLVM::LLVMStructType>());
       auto converted =
-          builder.create<mlir::CallOp>(loc, conv_func, desc).getResult(0);
+          builder.create<mlir::CallOp>(loc, convFunc, desc).getResult(0);
       auto casted = doCast(builder, loc, converted, memrefType);
       func.getBody().getArgument(index).replaceAllUsesWith(casted);
       func.getBody().eraseArgument(index);
@@ -552,15 +553,15 @@ mlir::LogicalResult fix_func_sig(LLVMTypeHelper &type_helper,
     }
   };
 
-  add_arg(ptr(orig_ret_type));
-  add_arg(ptr(ptr(getExceptInfoType(type_helper))));
+  addArg(ptr(origRetType));
+  addArg(ptr(ptr(getExceptInfoType(typeHelper))));
 
-  auto old_args = old_type.getInputs();
-  for (auto arg : old_args) {
-    process_arg(arg);
+  auto oldArgs = oldType.getInputs();
+  for (auto arg : oldArgs) {
+    processArg(arg);
   }
-  auto ret_type = mlir::IntegerType::get(&ctx, 32);
-  func.setType(mlir::FunctionType::get(&ctx, args, ret_type));
+  auto retType = mlir::IntegerType::get(&ctx, 32);
+  func.setType(mlir::FunctionType::get(&ctx, args, retType));
   return mlir::success();
 }
 
@@ -1193,7 +1194,7 @@ struct PreLLVMLowering
 
     mlir::OwningRewritePatternList patterns(&context);
     auto func = getFunction();
-    if (mlir::failed(fix_func_sig(type_helper, func))) {
+    if (mlir::failed(fixFuncSig(type_helper, func))) {
       signalPassFailure();
       return;
     }
