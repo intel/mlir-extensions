@@ -656,21 +656,6 @@ private:
   mlir::TypeConverter &typeConverter;
 };
 
-// Remove redundant bitcasts we have created on PreLowering
-struct RemoveBitcasts : public mlir::OpRewritePattern<mlir::LLVM::BitcastOp> {
-  using mlir::OpRewritePattern<mlir::LLVM::BitcastOp>::OpRewritePattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(mlir::LLVM::BitcastOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    if (op.getType() == op.getOperand().getType()) {
-      rewriter.replaceOp(op, op.getOperand());
-      return mlir::success();
-    }
-    return mlir::failure();
-  }
-};
-
 template <typename Op>
 struct ApplyFastmathFlags : public mlir::OpRewritePattern<Op> {
   using mlir::OpRewritePattern<Op>::OpRewritePattern;
@@ -1294,7 +1279,7 @@ struct PostLLVMLowering
     auto &context = getContext();
     mlir::OwningRewritePatternList patterns(&context);
 
-    patterns.insert<RemoveBitcasts, ApplyFastmathFlags<mlir::LLVM::FAddOp>,
+    patterns.insert<ApplyFastmathFlags<mlir::LLVM::FAddOp>,
                     ApplyFastmathFlags<mlir::LLVM::FSubOp>,
                     ApplyFastmathFlags<mlir::LLVM::FMulOp>,
                     ApplyFastmathFlags<mlir::LLVM::FDivOp>,
