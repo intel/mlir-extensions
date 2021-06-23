@@ -1791,88 +1791,25 @@ struct LoopInvariantCodeMotion
   }
 };
 
-struct BufferizeTuplesRewrite
-    : public mlir::OpRewritePattern<plier::BuildTupleOp> {
-  using mlir::OpRewritePattern<plier::BuildTupleOp>::OpRewritePattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(plier::BuildTupleOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    bool needConversion = false;
-    for (auto arg : op.args()) {
-      if (auto tensor = arg.getType().dyn_cast<mlir::TensorType>()) {
-        needConversion = true;
-      }
-    }
-
-    if (!needConversion) {
-      return mlir::failure();
-    }
-
-    llvm::SmallVector<mlir::Value> newArgs;
-    llvm::SmallVector<mlir::Type> newArgsTypes;
-    newArgs.reserve(op.args().size());
-    newArgsTypes.reserve(op.args().size());
-    auto loc = op.getLoc();
-    for (auto arg : op.args()) {
-      if (auto tensor = arg.getType().dyn_cast<mlir::TensorType>()) {
-        auto memref =
-            mlir::MemRefType::get(tensor.getShape(), tensor.getElementType());
-        auto newOp =
-            rewriter.create<mlir::memref::BufferCastOp>(loc, memref, arg);
-        newArgs.emplace_back(newOp);
-        newArgsTypes.emplace_back(memref);
-      } else {
-        newArgs.emplace_back(arg);
-        newArgsTypes.emplace_back(arg.getType());
-      }
-    }
-    auto newType = mlir::TupleType::get(op.getContext(), newArgsTypes);
-    rewriter.replaceOpWithNewOp<plier::BuildTupleOp>(op, newType, newArgs);
-    return mlir::success();
-  }
-};
-
-struct FixTupleTypesRewrite
-    : public mlir::OpRewritePattern<plier::BuildTupleOp> {
-  using mlir::OpRewritePattern<plier::BuildTupleOp>::OpRewritePattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(plier::BuildTupleOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto srcType = mlir::TupleType::get(op.getContext(), op.args().getTypes());
-    if (srcType == op.getType()) {
-      return mlir::failure();
-    }
-
-    rewriter.replaceOpWithNewOp<plier::BuildTupleOp>(op, srcType, op.args());
-    return mlir::success();
-  }
-};
-
-struct BufferizeReshapeRewrite
-    : public mlir::OpRewritePattern<mlir::tensor::ReshapeOp> {
-  using mlir::OpRewritePattern<mlir::tensor::ReshapeOp>::OpRewritePattern;
+struct BufferizeReshape
+    : public mlir::OpConversionPattern<mlir::tensor::ReshapeOp> {
+  using mlir::OpConversionPattern<mlir::tensor::ReshapeOp>::OpConversionPattern;
 
   mlir::LogicalResult
   matchAndRewrite(mlir::tensor::ReshapeOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto loc = op.getLoc();
+                  llvm::ArrayRef<mlir::Value> operands,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    mlir::memref::ReshapeOp::Adaptor transformed(operands);
     auto getType = [&](mlir::Type type) {
       auto shapedType = type.cast<mlir::ShapedType>();
       return mlir::MemRefType::get(shapedType.getShape(),
                                    shapedType.getElementType());
     };
-    auto sourceType = getType(op.source().getType());
-    auto shapeType = getType(op.shape().getType());
+    auto source = transformed.source();
+    auto shape = transformed.shape();
     auto resType = getType(op.getType());
-    auto source = rewriter.createOrFold<mlir::memref::BufferCastOp>(
-        loc, sourceType, op.source());
-    auto shape = rewriter.createOrFold<mlir::memref::BufferCastOp>(
-        loc, shapeType, op.shape());
-    auto res =
-        rewriter.create<mlir::memref::ReshapeOp>(loc, resType, source, shape);
-    rewriter.replaceOpWithNewOp<mlir::memref::TensorLoadOp>(op, res);
+    rewriter.replaceOpWithNewOp<mlir::memref::ReshapeOp>(op, resType, source,
+                                                         shape);
     return mlir::success();
   }
 };
@@ -1927,19 +1864,42 @@ struct AdditionalBufferize
 };
 
 void AdditionalBufferize::runOnFunction() {
-  auto &context = getContext();
-  mlir::OwningRewritePatternList patterns(&context);
+  auto module = getOperation();
+  auto *context = &getContext();
 
-  patterns.insert<
-      // clang-format off
-      BufferizeTuplesRewrite,
-      FixTupleTypesRewrite,
-      BufferizeReshapeRewrite
-      // clang-format on
-      >(&context);
+  mlir::BufferizeTypeConverter typeConverter;
+  populate_tuple_type_converter(*context, typeConverter);
 
-  auto func = getFunction();
-  (void)mlir::applyPatternsAndFoldGreedily(func, std::move(patterns));
+  auto materializeTupleCast =
+      [](mlir::OpBuilder &builder, mlir::Type type, mlir::ValueRange inputs,
+         mlir::Location loc) -> llvm::Optional<mlir::Value> {
+    if (inputs.size() != 1)
+      return llvm::None;
+
+    auto input = inputs.front();
+    if (input.getType().isa<mlir::TupleType>() || type.isa<mlir::TupleType>())
+      return builder.createOrFold<plier::CastOp>(loc, type, input);
+
+    return llvm::None;
+  };
+  typeConverter.addArgumentMaterialization(materializeTupleCast);
+  typeConverter.addSourceMaterialization(materializeTupleCast);
+  typeConverter.addTargetMaterialization(materializeTupleCast);
+
+  mlir::RewritePatternSet patterns(context);
+  mlir::ConversionTarget target(*context);
+
+  plier::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
+                                                            patterns, target);
+  plier::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
+                                                      target);
+  target.addIllegalOp<mlir::tensor::ReshapeOp>();
+  target.addLegalOp<mlir::memref::ReshapeOp>();
+
+  patterns.insert<BufferizeReshape>(typeConverter, context);
+
+  if (failed(applyPartialConversion(module, target, std::move(patterns))))
+    signalPassFailure();
 }
 
 struct CloneArgsPass
