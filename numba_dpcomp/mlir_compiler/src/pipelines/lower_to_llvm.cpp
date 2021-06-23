@@ -1280,6 +1280,46 @@ struct LowerRetainOp : public mlir::ConvertOpToLLVMPattern<plier::RetainOp> {
   }
 };
 
+struct LowerReduceRankOp
+    : public mlir::ConvertOpToLLVMPattern<plier::ReduceRankOp> {
+  using mlir::ConvertOpToLLVMPattern<
+      plier::ReduceRankOp>::ConvertOpToLLVMPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::ReduceRankOp op, llvm::ArrayRef<mlir::Value> operands,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    plier::ReduceRankOp::Adaptor transformed(operands);
+    auto arg = transformed.source();
+    if (!arg.getType().isa<mlir::LLVM::LLVMStructType>())
+      return mlir::failure();
+
+    auto dstType = getTypeConverter()->convertType(op.getType());
+    if (!dstType)
+      return mlir::failure();
+
+    auto loc = op.getLoc();
+    mlir::MemRefDescriptor src(arg);
+    mlir::MemRefDescriptor dst =
+        mlir::MemRefDescriptor::undef(rewriter, loc, dstType);
+
+    dst.setAllocatedPtr(rewriter, loc, dst.allocatedPtr(rewriter, loc));
+    dst.setAlignedPtr(rewriter, loc, dst.alignedPtr(rewriter, loc));
+    dst.setOffset(rewriter, loc, dst.offset(rewriter, loc));
+
+    auto mapping = op.mapping();
+    for (auto it : llvm::enumerate(mapping)) {
+      auto index = static_cast<unsigned>(it.index());
+      auto originalIndex = static_cast<unsigned>(
+          it.value().cast<mlir::IntegerAttr>().getValue().getSExtValue());
+      dst.setSize(rewriter, loc, index, src.size(rewriter, loc, originalIndex));
+      dst.setStride(rewriter, loc, index,
+                    src.stride(rewriter, loc, originalIndex));
+    }
+    rewriter.replaceOp(op, static_cast<mlir::Value>(dst));
+    return mlir::success();
+  }
+};
+
 struct LowerBuildTuple
     : public mlir::ConvertOpToLLVMPattern<plier::BuildTupleOp> {
   using mlir::ConvertOpToLLVMPattern<
@@ -1382,11 +1422,19 @@ struct LLVMLoweringPass
     populateStdToLLVMConversionPatterns(typeConverter, patterns);
     populateLinalgToLLVMConversionPatterns(typeConverter, patterns);
 
-    patterns
-        .insert<LowerUndef, LowerCasts<plier::CastOp>,
-                LowerCasts<plier::SignCastOp>, LowerBuildTuple, LowerRetainOp,
-                AllocOpLowering, DeallocOpLowering, ReshapeLowering>(
-            typeConverter);
+    patterns.insert<
+        // clang-format off
+        LowerUndef,
+        LowerCasts<plier::CastOp>,
+        LowerCasts<plier::SignCastOp>,
+        LowerBuildTuple,
+        LowerRetainOp,
+        AllocOpLowering,
+        DeallocOpLowering,
+        ReshapeLowering,
+        LowerReduceRankOp
+        // clang-format on
+        >(typeConverter);
 
     LLVMConversionTarget target(context);
     if (failed(applyPartialConversion(m, target, std::move(patterns))))
