@@ -12,10 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from  ..linalg_builder import register_func, register_attr, is_literal, eltwise
+from ..linalg_builder import register_func, register_attr, is_literal, broadcast_type, eltwise, convert_array
 
 import numpy
 import math
+from numba import prange
 
 def is_int(t, b):
     return t == b.int8 or t == b.int16 or t == b.int32 or t == b.int64
@@ -113,20 +114,26 @@ def _gen_binary_ops():
 
 _gen_binary_ops()
 
-@register_func('numpy.empty', numpy.empty)
-def empty_impl(builder, shape, dtype=None):
+def _init_impl(builder, shape, dtype, init=None):
     if dtype is None:
         dtype = builder.float64
-    return builder.init_tensor(shape, dtype)
 
+    if len(shape) == 0:
+        shape = (shape,)
+
+    if init is None:
+        return builder.init_tensor(shape, dtype)
+    else:
+        init = builder.cast(init, dtype)
+        return builder.init_tensor(shape, dtype, init)
+
+@register_func('numpy.empty', numpy.empty)
+def empty_impl(builder, shape, dtype=None):
+    return _init_impl(builder, shape, dtype)
 
 @register_func('numpy.zeros', numpy.zeros)
 def zeros_impl(builder, shape, dtype=None):
-    if dtype is None:
-        dtype = builder.float64
-
-    return builder.init_tensor(shape, dtype, 0)
-
+    return _init_impl(builder, shape, dtype, 0)
 
 @register_func('numpy.dot', numpy.dot)
 def dot_impl(builder, a, b):
@@ -164,7 +171,7 @@ def size_impl(builder, arg):
     res = 1
     for i in range(len(shape)):
         res = res * shape[i]
-    return res
+    return builder.cast(res, builder.int64)
 
 @register_attr('array.T')
 def transpose_impl(builder, arg):
@@ -189,55 +196,15 @@ def transpose_impl(builder, arg):
 def dtype_impl(builder, arg):
     return arg.dtype
 
-def flatten(builder, arg, src_dims_count):
-    if 1 == src_dims_count:
-        return arg
-    dims = ','.join(['d%s' % i for i in range(src_dims_count)])
-    expr = f'({dims}) -> ({dims})'
-    maps = [
-        expr
-    ]
-    return builder.reshape(arg, 1, maps)
-
-def find_size_index(shape):
-    size_index = -1
-    for i in range(len(shape)):
-            d = shape[i]
-            if is_literal(d):
-                if 1 != d:
-                    return -1
-            else:
-                if size_index != -1:
-                    return -1
-                size_index = i
-    return size_index
-
 @register_func('array.reshape')
 def reshape_impl(builder, arg, new_shape):
-    shape = arg.shape
-    src_count = len(shape)
-    count = len(new_shape)
-    if count == 1:
-        return flatten(builder, arg, src_count)
-    else:
-        size_index = find_size_index(new_shape)
-        if size_index < 0:
-            return
+    return builder.reshape(arg, new_shape)
 
-        flat = flatten(builder, arg, src_count)
-        init = builder.init_tensor(new_shape, arg.dtype)
-
-        iterators = ['parallel' for _ in range(count)]
-        dims1 = ','.join(['d%s' % i for i in range(count)])
-        dims3 = ','.join(['d%s' % i if i == size_index else '0' for i in range(count)])
-        expr1 = f'({dims1}) -> (d{size_index})'
-        expr2 = f'({dims1}) -> ({dims1})'
-        maps = [expr1, expr2]
-
-        def body(a, b):
-            return a
-
-        return builder.generic(flat, init, iterators, maps, body)
+# @register_attr('array.flat')
+@register_func('array.flatten')
+def flatten_impl(builder, arg):
+    size = size_impl(builder, arg)
+    return builder.reshape(arg, size)
 
 def dtype_str(builder, dtype):
     names = [
@@ -279,3 +246,114 @@ def atleast2d_impl(builder, arr):
         return builder.generic(arr, init, iterators, maps, lambda a, b: a)
     else:
         return arr
+
+@register_func('numpy.concatenate', numpy.concatenate)
+def concat_impl(builder, arrays, axis=0):
+    if isinstance(axis, int):
+        shapes = [a.shape for a in arrays]
+        num_dims = len(shapes[0])
+        dtype = broadcast_type(builder, arrays)
+        new_len = sum((s[axis] for s in shapes), 0)
+        new_shape = [new_len if i == axis else shapes[0][i] for i in range(len(shapes[0]))]
+        res = builder.init_tensor(new_shape, dtype)
+        offsets = [0]*num_dims
+        strides = [1]*num_dims
+        for sizes, array in zip(shapes, arrays):
+            res = builder.insert(array, res, offsets, sizes, strides)
+            offsets[axis] += sizes[axis]
+        return res
+
+def _cov_get_ddof_func(ddof_is_none):
+    if ddof_is_none:
+        def ddof_func(bias, ddof):
+            if bias:
+                return 0
+            else:
+                return 1
+    else:
+        def ddof_func(bias, ddof):
+            return ddof
+    return ddof_func
+
+
+def _cov_impl_inner(X, ddof):
+    # determine the normalization factor
+    fact = X.shape[1] - ddof
+
+    # numpy warns if less than 0 and floors at 0
+    # fact = max(fact, 0.0)
+    fact = fact if fact > 0.0 else 0.0
+
+    # _row_wise_average
+    m, n = X.shape
+    R = numpy.empty((m, 1), dtype=X.dtype)
+
+    for i in prange(m):
+        R[i, 0] = numpy.sum(X[i, :]) / n
+
+    # de-mean
+    X = X - R
+
+    c = numpy.dot(X, X.T)
+    # c = numpy.dot(X, numpy.conj(X.T))
+    c = c * numpy.true_divide(1, fact)
+    return c
+
+def _prepare_cov_input(builder, m, y, rowvar):
+    def get_func():
+        if y is None:
+            dtype = m.dtype
+            def _prepare_cov_input_impl(m, y, rowvar):
+                m_arr = numpy.atleast_2d(m)
+
+                if not rowvar:
+                    m_arr = m_arr.T
+
+                return m_arr
+        else:
+            dtype = broadcast_type(builder, (m, y))
+            def _prepare_cov_input_impl(m, y, rowvar):
+                m_arr = numpy.atleast_2d(m)
+                y_arr = numpy.atleast_2d(y)
+
+                # transpose if asked to and not a (1, n) vector - this looks
+                # wrong as you might end up transposing one and not the other,
+                # but it's what numpy does
+                if not rowvar:
+                    if m_arr.shape[0] != 1:
+                        m_arr = m_arr.T
+                    if y_arr.shape[0] != 1:
+                        y_arr = y_arr.T
+
+                m_rows, m_cols = m_arr.shape
+                y_rows, y_cols = y_arr.shape
+
+                # if m_cols != y_cols:
+                #     raise ValueError("m and y have incompatible dimensions")
+
+                # allocate and fill output array
+                return numpy.concatenate((m_arr, y_arr), axis=0)
+
+        return dtype, _prepare_cov_input_impl
+    dtype, func = get_func()
+    if is_int(dtype, builder):
+        dtype = builder.float64
+    res = builder.inline_func(func, m, y, rowvar)
+    return convert_array(builder, res, dtype)
+
+def _cov_scalar_result_expected(mandatory_input, optional_input):
+    opt_is_none = optional_input is None
+
+    if len(mandatory_input.shape) == 1:
+        return opt_is_none
+
+    return False
+
+@register_func('numpy.cov', numpy.cov)
+def cov_impl(builder, m, y=None, rowvar=True, bias=False, ddof=None):
+    X = _prepare_cov_input(builder, m, y, rowvar)
+    ddof = builder.inline_func(_cov_get_ddof_func(ddof is None), bias, ddof)
+    res = builder.inline_func(_cov_impl_inner, X, ddof)
+    if _cov_scalar_result_expected(m, y):
+        res = res[0, 0]
+    return res

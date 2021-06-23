@@ -33,6 +33,8 @@ class Var:
     def __getitem__(self, index):
         return self._getitem(self._context, self._ssa_val, index)
 
+    def __add__(self, o): return self._binop(self._context, self._ssa_val, o, '+')
+    def __radd__(self, o): return self._binop(self._context, self._ssa_val, o, '+')
     def __mul__(self, o): return self._binop(self._context, self._ssa_val, o, '*')
     def __rmul__(self, o): return self._binop(self._context, self._ssa_val, o, '*')
     def __truediv__(self, o): return self._binop(self._context, self._ssa_val, o, '/')
@@ -70,11 +72,23 @@ class Builder:
     def extract(self, value, indices):
         return self._extract(self._context, value, indices)
 
-    def reshape(self, src, num_dims, affine_maps):
-        return self._reshape(self._context, src, num_dims, affine_maps)
+    def reshape(self, src, dims):
+        return self._reshape(self._context, src, dims)
 
     def external_call(self, name, inputs, outputs):
         return self._external_call(self._context, name, inputs, outputs)
+
+    def insert(self, src, dst, offsets, sizes, strides):
+        return self._insert(self._context, src, dst, offsets, sizes, strides)
+
+    def inline_func(self, func, *args): # TODO: kwargs
+        return self._inline_func(self._context, func, args)
+
+    def cast(self, arg, dtype):
+        return self._cast(self._context, arg, dtype)
+
+    def undef(self, dtype):
+        return self._undef(self._context, dtype)
 
 def compile_func(*args, **kwargs):
     import numba_dpcomp.mlir.inner_compiler
@@ -105,6 +119,9 @@ def lookup_func(name):
     global _func_registry
     return _func_registry.get(name)
 
+def broadcast_type(builder, args):
+    return args[0].dtype # TODO
+
 def eltwise(builder, args, body, res_type = None):
     if isinstance(args, tuple):
         args = builder.broadcast(*args)
@@ -117,10 +134,20 @@ def eltwise(builder, args, body, res_type = None):
     shape = args[0].shape
 
     num_dims = len(shape)
-    iterators = ['parallel' for _ in range(num_dims)]
-    dims = ','.join(['d%s' % i for i in range(num_dims)])
-    expr = f'({dims}) -> ({dims})'
-    maps = [expr for _ in range(len(args) + 1)]
-    init = builder.init_tensor(shape, res_type)
+    if num_dims == 0:
+        dummy = builder.cast(0, res_type)
+        return builder.inline_func(body, *(args + (dummy,)))
+    else:
+        iterators = ['parallel' for _ in range(num_dims)]
+        dims = ','.join(['d%s' % i for i in range(num_dims)])
+        expr = f'({dims}) -> ({dims})'
+        maps = [expr for _ in range(len(args) + 1)]
+        init = builder.init_tensor(shape, res_type)
 
-    return builder.generic(args, init, iterators, maps, body)
+        return builder.generic(args, init, iterators, maps, body)
+
+def convert_array(builder, arr, dtype):
+    if arr.dtype == dtype:
+        return arr
+
+    return eltwise(builder, arr, lambda a, b: a, dtype)

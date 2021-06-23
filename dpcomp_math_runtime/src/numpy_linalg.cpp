@@ -15,12 +15,28 @@
 
 #include "common.hpp"
 
+#ifdef DPNP_ENABLE
+#include <dpnp_iface.hpp>
+#endif
+
 namespace
 {
 template <typename T>
-void eig_impl(Memref<2, const T>* input, Memref<2, T>* vals, Memref<2, T>* vecs)
+void eig_impl(Memref<2, const T>* input, Memref<1, T>* vals, Memref<2, T>* vecs)
 {
-
+#ifdef DPNP_ENABLE
+    if constexpr (std::is_same<T, float>::value)
+    {
+        dpnp_eig_c<T, float>(input->data, vals->data, vecs->data, input->dims[0]);
+    }
+    else
+    {
+        dpnp_eig_c<T, double>(input->data, vals->data, vecs->data, input->dims[0]);
+    }
+#else
+    // direct MKL call or another implementation?
+    abort();
+#endif
 }
 }
 
@@ -28,7 +44,7 @@ extern "C"
 {
 
 #define EIG_VARIANT(T, Suff) DPCOMP_MATH_RUNTIME_EXPORT void dpcomp_linalg_eig_##Suff \
-(Memref<2, const T>* input, Memref<2, T>* vals, Memref<2, T>* vecs) { eig_impl(input, vals, vecs); }
+(Memref<2, const T>* input, Memref<1, T>* vals, Memref<2, T>* vecs) { eig_impl(input, vals, vecs); }
 
 EIG_VARIANT(float, float32)
 EIG_VARIANT(double, float64)

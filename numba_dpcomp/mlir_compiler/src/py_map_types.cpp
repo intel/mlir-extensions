@@ -110,7 +110,7 @@ py::object map_type(const py::handle& types_mod, mlir::Type type)
 }
 }
 
-py::object map_type_to_numba(pybind11::handle types_mod, mlir::Type type)
+py::object map_type_to_numba(py::handle types_mod, mlir::Type type)
 {
     auto elem = map_type(types_mod, type);
     if (!elem)
@@ -120,7 +120,7 @@ py::object map_type_to_numba(pybind11::handle types_mod, mlir::Type type)
     return elem;
 }
 
-py::object map_types_to_numba(pybind11::handle types_mod, mlir::TypeRange types)
+py::object map_types_to_numba(py::handle types_mod, mlir::TypeRange types)
 {
     py::list ret(types.size());
     for (auto it : llvm::enumerate(types))

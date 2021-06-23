@@ -40,6 +40,9 @@ struct PassManagerStage
                      F&& init_func):
         pm(&ctx)
     {
+        // TODO: random failures during verify in parallel mode, investigate
+        ctx.disableMultithreading();
+
         pm.enableVerifier(settings.verify);
 
         if (settings.pass_statistics)
@@ -52,7 +55,7 @@ struct PassManagerStage
         }
         if (settings.ir_printing)
         {
-            ctx.enableMultithreading(false);
+            ctx.disableMultithreading();
             pm.enableIRPrinting();
         }
 
@@ -208,11 +211,15 @@ public:
     {
         std::string err;
         llvm::raw_string_ostream err_stream(err);
-        auto diag_handler = [&](mlir::Diagnostic& diag)
+        auto diag_handler = [&](const mlir::Diagnostic& diag)
         {
             if (diag.getSeverity() == mlir::DiagnosticSeverity::Error)
             {
                 err_stream << diag;
+                for (auto& note : diag.getNotes())
+                {
+                    err_stream << "\n" << note;
+                }
             }
         };
 

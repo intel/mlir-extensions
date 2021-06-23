@@ -19,6 +19,8 @@ from numpy.testing import assert_equal # for nans comparison
 
 from numba.tests.support import TestCase
 import unittest
+import pytest
+import sys
 
 import itertools
 
@@ -111,6 +113,13 @@ class TestMlirBasic(TestCase):
         for val in _test_values:
             assert_equal(py_func(val), jit_func(val))
 
+    def test_none_args(self):
+        def py_func(a, b, c, d):
+            return b + d
+
+        jit_func = njit(py_func)
+        assert_equal(py_func(None, 7, None, 30), jit_func(None, 7, None, 30))
+
     def test_ret_none(self):
         def py_func1():
             return None
@@ -146,10 +155,20 @@ class TestMlirBasic(TestCase):
         for a, b in itertools.product(_test_values, _test_values):
             assert_equal(py_func(a, b), jit_func(a, b))
 
-    def test_tuple(self):
+    def test_tuple1(self):
         def py_func(a, b, c):
             t = (a,b,c)
             return t[0] + t[1] + t[2]
+
+        jit_func = njit(py_func)
+        for a, b, c in itertools.product(_test_values, _test_values, _test_values):
+            assert_equal(py_func(a, b, c), jit_func(a, b, c))
+
+    def test_tuple2(self):
+        def py_func(a, b, c):
+            t = (a,b,c)
+            x, y, z = t
+            return x + y + y
 
         jit_func = njit(py_func)
         for a, b, c in itertools.product(_test_values, _test_values, _test_values):
@@ -447,6 +466,12 @@ class TestMlirBasic(TestCase):
         jit_func = njit(py_func)
         assert_equal(py_func(), jit_func())
 
+    # DPNP is available only on Linux and changes versions of dependencies
+    # Looks like it makes effect and test fails:
+    # RuntimeError: Failed in nopython mode pipeline (step: <class 'numba_dpcomp.mlir.passes.MlirBackend'>)
+    # Cannot generate LLVM module
+    # cannot be converted to LLVM IR: missing `LLVMTranslationDialectInterface` registration for dialect for op: plier.arg
+    @pytest.mark.skipif(sys.platform in ['linux'], reason="Unexpected behaviour in DPNP/Linux environment")
     def test_omitted_args2(self):
         def py_func(a = True, b = False):
             res = 1
@@ -472,7 +497,6 @@ class TestMlirBasic(TestCase):
 
         assert_equal(py_func2(), jit_func2())
         assert_equal(py_func2(1), jit_func2(1))
-
 
 if __name__ == '__main__':
     unittest.main()

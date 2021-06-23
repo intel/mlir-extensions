@@ -130,7 +130,7 @@ def BuildTupleOp : Plier_Op<"build_tuple", [NoSideEffect]> {
     ];
 }
 
-def GetItemOp : Plier_Op<"getitem", []> {
+def GetItemOp : Plier_Op<"getitem", [NoSideEffect]> {
     let arguments = (ins
                      AnyType:$value,
                      AnyType:$index);
@@ -140,20 +140,6 @@ def GetItemOp : Plier_Op<"getitem", []> {
 
     let builders = [
         OpBuilder<(ins "::mlir::Value":$value, "::mlir::Value":$index)>
-    ];
-}
-
-def StaticGetItemOp : Plier_Op<"static_getitem", []> {
-    let arguments = (ins
-                     AnyType:$value,
-                     AnyType:$index_var,
-                     UI32Attr:$index);
-
-    let results = (outs AnyType);
-    let hasFolder = 1;
-
-    let builders = [
-        OpBuilder<(ins "::mlir::Value":$value, "::mlir::Value":$index_var, "unsigned":$index)>
     ];
 }
 
@@ -229,6 +215,20 @@ def GetattrOp : Plier_Op<"getattr", [NoSideEffect]> {
     ];
 }
 
+def ExhaustIterOp : Plier_Op<"exhaust_iter", [NoSideEffect]> {
+    let arguments = (ins
+                     AnyType:$value,
+                     I64Attr:$count);
+
+    let results = (outs AnyType);
+
+    let hasFolder = 1;
+
+    let builders = [
+        OpBuilder<(ins "::mlir::Value":$value, "int64_t":$count)>
+    ];
+}
+
 def EnforceShapeOp : Plier_Op<"enforce_shape"> {
     let arguments = (ins AnyRankedTensor:$value,
                          Variadic<Index>:$sizes);
@@ -281,11 +281,15 @@ def UndefOp : Plier_Op<"undef", [NoSideEffect]> {
 
 def BuildSliceOp : Plier_Op<"build_slice", [NoSideEffect]> {
     let arguments = (ins
-                     AnyType:$low,
-                     AnyType:$high,
+                     AnyType:$begin,
+                     AnyType:$end,
                      AnyType:$step);
 
     let results = (outs AnyType);
+
+    let builders = [
+        OpBuilder<(ins "::mlir::Value":$begin, "::mlir::Value":$end, "::mlir::Value":$stride)>
+    ];
 }
 
 def RetainOp : Plier_Op<"retain", [ViewLikeOpInterface]> {

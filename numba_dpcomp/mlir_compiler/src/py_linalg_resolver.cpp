@@ -26,9 +26,12 @@
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Parser.h>
 #include <mlir/IR/BuiltinAttributes.h>
+#include <mlir/Transforms/DialectConversion.h>
 
 #include "plier/dialect.hpp"
 #include "py_map_types.hpp"
+#include "pipelines/plier_to_std.hpp"
+#include "pipelines/plier_to_linalg.hpp"
 #include "plier/utils.hpp"
 #include "plier/transforms/const_utils.hpp"
 #include "plier/transforms/func_utils.hpp"
@@ -39,18 +42,75 @@ struct PyBuilderContext
 {
     mlir::Location loc;
     mlir::OpBuilder& builder;
+    mlir::TypeConverter typeConverter;
     PyLinalgResolver::Context& context;
 };
 
 namespace
 {
+std::string to_str(mlir::Type type)
+{
+    std::string ret;
+    llvm::raw_string_ostream ss(ret);
+    ss << type;
+    ss.flush();
+    return ret;
+}
+
+std::string to_str(mlir::TypeRange typesRange)
+{
+    std::string str;
+    llvm::raw_string_ostream ss(str);
+    for (auto type : typesRange)
+    {
+        ss << type << " ";
+    }
+    ss.flush();
+    return str;
+}
+
+std::string to_str(py::handle obj)
+{
+    return py::str(obj).cast<std::string>();
+}
+
+py::object mapTypesToNumbaChecked(py::handle typesMod, mlir::TypeRange typesRange)
+{
+    auto funcTypes = map_types_to_numba(typesMod, typesRange);
+    if (funcTypes.is_none())
+    {
+        assert(!typesRange.empty());
+        auto context = typesRange.front().getContext();
+        mlir::TypeConverter converter;
+        populate_std_type_converter(*context, converter);
+        populate_array_type_converter(*context, converter);
+        llvm::SmallVector<mlir::Type> convertedTypes(typesRange.size());
+        for (auto it : llvm::enumerate(typesRange))
+        {
+            auto oldType = it.value();
+            auto newType = converter.convertType(oldType);
+            if (!newType)
+            {
+                newType = oldType;
+            }
+            convertedTypes[it.index()] = newType;
+        }
+        funcTypes = map_types_to_numba(typesMod, convertedTypes);
+        if (funcTypes.is_none())
+        {
+            plier::report_error(llvm::Twine("map_types_to_numba failed: ") + to_str(typesRange));
+        }
+    }
+    return funcTypes;
+}
+
 bool is_compatible_type(mlir::Type type)
 {
     if (auto tuple_type = type.dyn_cast<mlir::TupleType>())
     {
         return llvm::all_of(tuple_type, &is_compatible_type);
     }
-    return type.isa<mlir::IntegerType, mlir::IndexType, mlir::FloatType, mlir::RankedTensorType, plier::TypeVar>();
+    return type.isa<mlir::IntegerType, mlir::IndexType, mlir::FloatType, mlir::RankedTensorType, plier::NoneType, plier::LiteralType, plier::TypeVar>();
 }
 
 template<typename R>
@@ -78,7 +138,20 @@ auto unwrap_ssa_val(py::handle obj)
 
 auto unwrap_type(py::handle obj)
 {
-    return unwrap_mlir<mlir::Type>(obj.attr("_mlir_type").cast<py::capsule>());
+    if (py::hasattr(obj, "_ssa_val"))
+    {
+        auto val = unwrap_ssa_val(obj);
+        if (auto type = val.getType().dyn_cast<plier::TypeVar>())
+        {
+            return type.getType();
+        }
+        val.dump();
+    }
+    else if (py::hasattr(obj, "_mlir_type"))
+    {
+        return unwrap_mlir<mlir::Type>(obj.attr("_mlir_type").cast<py::capsule>());
+    }
+    plier::report_error(llvm::Twine("Invalid type object: ") + to_str(obj.get_type()));
 }
 
 size_t container_size(py::handle obj)
@@ -129,16 +202,30 @@ auto to_values(py::handle obj, UnwrapFunc&& unwrapFunc)
     return ret;
 }
 
+llvm::Optional<py::object> getPyLiteral(mlir::Attribute attr)
+{
+    assert(attr);
+    if (auto intAttr = attr.dyn_cast<mlir::IntegerAttr>())
+    {
+        return py::int_(intAttr.getInt());
+    }
+    if (auto floatAttr = attr.dyn_cast<mlir::FloatAttr>())
+    {
+        return py::float_(floatAttr.getValueAsDouble());
+    }
+    return {};
+}
+
 llvm::Optional<py::object> make_py_literal(mlir::Value val)
 {
     assert(val);
-    if (auto int_val = plier::getConstVal<mlir::IntegerAttr>(val))
+    if (auto literal = val.getType().dyn_cast<plier::LiteralType>())
     {
-        return py::int_(int_val.getInt());
+        return getPyLiteral(literal.getValue());
     }
-    if (auto float_val = plier::getConstVal<mlir::FloatAttr>(val))
+    if (auto attr = plier::getConstVal<mlir::Attribute>(val))
     {
-        return py::float_(float_val.getValueAsDouble());
+        return getPyLiteral(attr);
     }
     return {};
 }
@@ -173,7 +260,12 @@ struct PyLinalgResolver::Context
     py::object create_var(py::capsule context, mlir::Value value)
     {
         assert(value);
-        if (auto typevar = value.getType().dyn_cast<plier::TypeVar>())
+        auto type = value.getType();
+        if (type.isa<plier::NoneType>())
+        {
+            return py::none();
+        }
+        if (auto typevar = type.dyn_cast<plier::TypeVar>())
         {
             return create_type(typevar.getType());
         }
@@ -224,6 +316,27 @@ struct PyLinalgResolver::Context
         {
             return unwrap_ssa_val(obj);
         }
+        if (py::isinstance(obj, type))
+        {
+            auto type = plier::TypeVar::get(unwrap_type(obj));
+            return builder.create<plier::UndefOp>(loc, type);
+        }
+        if (obj.is_none())
+        {
+            auto type = plier::NoneType::get(builder.getContext());
+            return builder.create<plier::UndefOp>(loc, type);
+        }
+        if (py::isinstance<py::tuple>(obj))
+        {
+            llvm::SmallVector<mlir::Value> elems(py::len(obj));
+            for (auto it : llvm::enumerate(obj))
+            {
+                elems[it.index()] = unwrap_val(loc, builder, it.value());
+            }
+            mlir::ValueRange vr(elems);
+            auto resType = mlir::TupleType::get(builder.getContext(), vr.getTypes());
+            return builder.create<plier::BuildTupleOp>(loc, resType, elems);
+        }
         if (py::isinstance<py::int_>(obj))
         {
             auto attr = builder.getI64IntegerAttr(obj.cast<int64_t>());
@@ -234,7 +347,7 @@ struct PyLinalgResolver::Context
             auto attr = builder.getF64FloatAttr(obj.cast<double>());
             return builder.create<mlir::ConstantOp>(loc, attr);
         }
-        plier::report_error("Invalid element type");
+        plier::report_error(llvm::Twine("Invalid element type: ") + to_str(obj.get_type()));
     }
 };
 
@@ -694,56 +807,39 @@ py::object init_tensor_impl(py::capsule context, py::handle shape, py::handle dt
     auto& builder = ctx.builder;
     auto elem_type = unwrap_type(dtype);
     mlir::Value init;
+    auto index_type = builder.getIndexType();
     auto count = py::len(shape);
-    if (count == 0)
+    llvm::SmallVector<mlir::Value> shape_val(count);
+    llvm::SmallVector<int64_t> static_shape(count, -1);
+    for (size_t i = 0; i < count; ++i)
     {
-        if (init_val.is_none())
+        auto elem = shape[py::int_(i)];
+        if (py::isinstance<py::int_>(elem))
         {
-            // TODO: undef
-            auto zero_val = plier::getConstAttr(elem_type, 0.0);
-            assert(zero_val);
-            init = builder.create<mlir::ConstantOp>(loc, zero_val);
+            static_shape[i] = elem.cast<int64_t>();
         }
-        else
-        {
-            init = do_cast(loc, builder, ctx.context.unwrap_val(loc, builder, init_val), elem_type);
-        }
+        shape_val[i] = do_cast(loc, builder, ctx.context.unwrap_val(loc, builder, elem), index_type);
+    }
+
+    if (init_val.is_none())
+    {
+        init = builder.create<mlir::linalg::InitTensorOp>(loc, shape_val, elem_type);
     }
     else
     {
-        auto index_type = builder.getIndexType();
-        llvm::SmallVector<mlir::Value> shape_val(count);
-        llvm::SmallVector<int64_t> static_shape(count, -1);
-        for (size_t i = 0; i < count; ++i)
+        auto val = do_cast(loc, builder, ctx.context.unwrap_val(loc, builder, init_val), elem_type);
+        llvm::SmallVector<int64_t> shape(count, -1);
+        auto type = mlir::RankedTensorType::get(shape, elem_type);
+        auto body = [&](mlir::OpBuilder &builder, mlir::Location loc, mlir::ValueRange /*indices*/)
         {
-            auto elem = shape[py::int_(i)];
-            if (py::isinstance<py::int_>(elem))
-            {
-                static_shape[i] = elem.cast<int64_t>();
-            }
-            shape_val[i] = do_cast(loc, builder, ctx.context.unwrap_val(loc, builder, elem), index_type);
-        }
-
-        if (init_val.is_none())
-        {
-            init = builder.create<mlir::linalg::InitTensorOp>(loc, shape_val, elem_type);
-        }
-        else
-        {
-            auto val = do_cast(loc, builder, ctx.context.unwrap_val(loc, builder, init_val), elem_type);
-            llvm::SmallVector<int64_t> shape(count, -1);
-            auto type = mlir::RankedTensorType::get(shape, elem_type);
-            auto body = [&](mlir::OpBuilder &builder, mlir::Location loc, mlir::ValueRange /*indices*/)
-            {
-                builder.create<mlir::tensor::YieldOp>(loc, val);
-            };
-            init = builder.create<mlir::tensor::GenerateOp>(loc, type, shape_val, body);
-        }
-        if (llvm::any_of(static_shape, [](auto val){ return val >= 0;}))
-        {
-            auto new_type = mlir::RankedTensorType::get(static_shape, elem_type);
-            init = builder.create<mlir::tensor::CastOp>(loc, new_type, init);
-        }
+            builder.create<mlir::tensor::YieldOp>(loc, val);
+        };
+        init = builder.create<mlir::tensor::GenerateOp>(loc, type, shape_val, body);
+    }
+    if (llvm::any_of(static_shape, [](auto val){ return val >= 0;}))
+    {
+        auto new_type = mlir::RankedTensorType::get(static_shape, elem_type);
+        init = builder.create<mlir::tensor::CastOp>(loc, new_type, init);
     }
     return ctx.context.create_var(context, init);
 }
@@ -800,8 +896,7 @@ py::object generic_impl(py::capsule context, py::handle inputs, py::handle outpu
     auto ret_types = get_types(output_args);
     auto mlir_iterators = get_iterators(iterators, mlir_context);
 
-    auto func_types = map_types_to_numba(ctx.context.types_mod, get_generic_op_body_types(inputs_args, output_args));
-    assert(!func_types.is_none());
+    auto func_types = mapTypesToNumbaChecked(ctx.context.types_mod, get_generic_op_body_types(inputs_args, output_args));
     auto body_func = ctx.context.compile_body(body, func_types);
 
     auto cast_values = [&](mlir::ValueRange vals, mlir::TypeRange types)
@@ -823,34 +918,26 @@ py::object generic_impl(py::capsule context, py::handle inputs, py::handle outpu
         }
         return ret;
     };
-    if (mlir_iterators.empty())
-    {
-        inputs_args.append(output_args.begin(), output_args.end());
-        auto res = builder.create<mlir::CallOp>(loc, body_func, inputs_args);
-        return ctx.context.wrap_result(context, cast_values(res.getResults(), ret_types));
-    }
-    else
-    {
-        auto affine_maps = get_affine_maps(maps, mlir_context);
-        auto body_builder = [&](mlir::OpBuilder& builder, mlir::Location loc, mlir::ValueRange args)
-        {
-            auto func_type = body_func.getType();
-            auto new_args = cast_values(args, func_type.getInputs());
-            auto call = builder.create<mlir::CallOp>(loc, body_func, new_args);
-            auto new_results = cast_values(call.getResults(), generic_op_body_result_types(output_args));
-            builder.create<mlir::linalg::YieldOp>(loc, new_results);
-        };
 
-        auto generic_op = builder.create<mlir::linalg::GenericOp>(
-            loc,
-            ret_types,
-            inputs_args,
-            output_args,
-            affine_maps,
-            mlir_iterators,
-            body_builder);
-        return ctx.context.wrap_result(context, generic_op.getResults());
-    }
+    auto affine_maps = get_affine_maps(maps, mlir_context);
+    auto body_builder = [&](mlir::OpBuilder& builder, mlir::Location loc, mlir::ValueRange args)
+    {
+        auto func_type = body_func.getType();
+        auto new_args = cast_values(args, func_type.getInputs());
+        auto call = builder.create<mlir::CallOp>(loc, body_func, new_args);
+        auto new_results = cast_values(call.getResults(), generic_op_body_result_types(output_args));
+        builder.create<mlir::linalg::YieldOp>(loc, new_results);
+    };
+
+    auto generic_op = builder.create<mlir::linalg::GenericOp>(
+        loc,
+        ret_types,
+        inputs_args,
+        output_args,
+        affine_maps,
+        mlir_iterators,
+        body_builder);
+    return ctx.context.wrap_result(context, generic_op.getResults());
 }
 
 py::object from_elements_impl(py::capsule context, py::handle values, py::handle dtype)
@@ -919,30 +1006,54 @@ py::object extract_impl(py::capsule context, py::handle value, py::handle indice
     return ctx.context.create_var(context, res);
 }
 
-py::object reshape_impl(py::capsule context, py::handle tensor, py::int_ out_dims, py::list maps)
+py::object reshape_impl(py::capsule context, py::handle src, py::iterable newDims)
 {
     auto& ctx = get_py_context(context);
     auto& builder = ctx.builder;
     auto loc = ctx.loc;
 
-    auto tensor_val = ctx.context.unwrap_val(loc, builder, tensor);
-    if (!tensor_val.getType().isa<mlir::RankedTensorType>())
+    auto unwrapVal = [&](py::handle obj)
     {
-        plier::report_error("Invalid reshapa argument");
-    }
-    auto elem_type = tensor_val.getType().cast<mlir::RankedTensorType>().getElementType();
-    auto new_dims = out_dims.cast<size_t>();
-    llvm::SmallVector<int64_t> dims(new_dims, -1);
-    auto new_type = mlir::RankedTensorType::get(dims, elem_type);
+        return ctx.context.unwrap_val(loc, builder, obj);
+    };
 
-    llvm::SmallVector<mlir::Attribute> affine_maps(container_size(maps));
-    container_iterate(maps, [&](auto index, py::handle obj)
+    auto srcVal = unwrapVal(src);
+    auto srcType = srcVal.getType().dyn_cast<mlir::TensorType>();
+    if (!srcType)
     {
-        affine_maps[index] = get_affine_map_attr(obj, *builder.getContext());
-    });
-    auto affine_maps_attr = mlir::ArrayAttr::get(builder.getContext(), affine_maps);
-    auto reshape = builder.create<mlir::linalg::TensorReshapeOp>(loc, new_type, tensor_val, affine_maps_attr);
-    return ctx.context.create_var(context, reshape);
+        plier::report_error(llvm::Twine("invalid reshape argument: ") + to_str(srcVal.getType()));
+    }
+
+    auto newDimsVals = [&]()
+    {
+        auto dimType = builder.getIndexType();
+        auto dims = unwrapVal(newDims);
+        llvm::SmallVector<mlir::Value> ret;
+        if (auto tupleType = dims.getType().dyn_cast<mlir::TupleType>())
+        {
+            auto dimsCount = tupleType.size();
+            ret.resize(dimsCount);
+            for (size_t i = 0; i < dimsCount; ++i)
+            {
+                auto ind = builder.create<mlir::ConstantIndexOp>(loc, i);
+                auto elemType = tupleType.getType(i);
+                auto item = builder.create<plier::GetItemOp>(loc, elemType, dims, ind);
+                ret[i] = do_cast(loc, builder, item, dimType);
+            }
+        }
+        else
+        {
+            ret.emplace_back(do_cast(loc, builder, dims, dimType));
+        }
+        return ret;
+    }();
+
+    auto shapeTensor = builder.create<mlir::tensor::FromElementsOp>(loc, newDimsVals);
+
+    auto resultType = mlir::RankedTensorType::get(llvm::SmallVector<int64_t>(newDimsVals.size(), -1), srcType.getElementType());
+    auto reshaped = builder.create<mlir::tensor::ReshapeOp>(loc, resultType, srcVal, shapeTensor);
+
+    return ctx.context.create_var(context, reshaped);
 }
 
 py::object external_call_impl(py::capsule context, py::str func_name, py::handle inputs, py::handle outputs)
@@ -1027,6 +1138,95 @@ py::object external_call_impl(py::capsule context, py::str func_name, py::handle
     return std::move(ret);
 }
 
+py::object insert_impl(py::capsule context, py::handle src, py::handle dst, py::handle offsets, py::handle sizes, py::handle strides)
+{
+    auto& ctx = get_py_context(context);
+    auto& builder = ctx.builder;
+    auto loc = ctx.loc;
+    auto unwrapVal = [&](py::handle obj)
+    {
+        return ctx.context.unwrap_val(loc, builder, obj);
+    };
+    auto indexType = builder.getIndexType();
+    auto unwrapList = [&](py::handle obj)
+    {
+        auto len = py::len(obj);
+        llvm::SmallVector<mlir::Value> res(len);
+        for (auto it : llvm::enumerate(obj))
+        {
+            res[it.index()] = do_cast(loc, builder, unwrapVal(it.value()), indexType);
+        }
+        return res;
+    };
+    auto srcTensor = unwrapVal(src);
+    auto dstTensor = unwrapVal(dst);
+    auto offsetsVec = unwrapList(offsets);
+    auto sizesVec = unwrapList(sizes);
+    auto stridesVec = unwrapList(strides);
+    auto res = builder.create<mlir::SubTensorInsertOp>(loc, srcTensor, dstTensor, offsetsVec, sizesVec, stridesVec);
+    return ctx.context.create_var(context, res);
+}
+
+py::object inline_func_impl(py::capsule context, py::handle func, py::tuple args)
+{
+    auto& ctx = get_py_context(context);
+    auto& builder = ctx.builder;
+    auto loc = ctx.loc;
+
+    auto argsValues = [&]()
+    {
+        auto unwrapVal = [&](py::handle obj)
+        {
+            return ctx.context.unwrap_val(loc, builder, obj);
+        };
+        llvm::SmallVector<mlir::Value> ret(args.size());
+        for (auto it : llvm::enumerate(args))
+        {
+            ret[it.index()] = unwrapVal(it.value());
+        }
+        return ret;
+    }();
+    auto funcTypes = mapTypesToNumbaChecked(ctx.context.types_mod, mlir::ValueRange(argsValues).getTypes());
+    auto bodyFunc = ctx.context.compile_body(func, funcTypes);
+    auto res = builder.create<mlir::CallOp>(loc, bodyFunc, argsValues);
+    if (res.getNumResults() != 1)
+    {
+        plier::report_error("Invalid number of return values");
+    }
+    auto resValue = res.getResult(0);
+    auto resType = resValue.getType();
+    if (auto convertedType = ctx.typeConverter.convertType(resType))
+    {
+        resValue = do_cast(loc, builder, resValue, convertedType);
+    }
+    return ctx.context.create_var(context, resValue);
+}
+
+py::object cast_impl(py::capsule context, py::handle src, py::handle dtype)
+{
+    auto& ctx = get_py_context(context);
+    auto& builder = ctx.builder;
+    auto loc = ctx.loc;
+    auto unwrapVal = [&](py::handle obj)
+    {
+        return ctx.context.unwrap_val(loc, builder, obj);
+    };
+    auto val = unwrapVal(src);
+    auto type = unwrap_type(dtype);
+    auto ret = builder.createOrFold<plier::CastOp>(loc, type, val);
+    return ctx.context.create_var(context, ret);
+}
+
+py::object undef_impl(py::capsule context, py::handle dtype)
+{
+    auto& ctx = get_py_context(context);
+    auto& builder = ctx.builder;
+    auto loc = ctx.loc;
+    auto type = unwrap_type(dtype);
+    auto ret = builder.createOrFold<plier::UndefOp>(loc, type);
+    return ctx.context.create_var(context, ret);
+}
+
 void setup_py_builder(py::handle builder, mlir::OpBuilder& b, llvm::function_ref<py::object(mlir::Type)> create_type)
 {
     py::setattr(builder, "_broadcast", py::cpp_function(&broadcast_impl));
@@ -1037,6 +1237,10 @@ void setup_py_builder(py::handle builder, mlir::OpBuilder& b, llvm::function_ref
     py::setattr(builder, "_extract", py::cpp_function(&extract_impl));
     py::setattr(builder, "_reshape", py::cpp_function(&reshape_impl));
     py::setattr(builder, "_external_call", py::cpp_function(&external_call_impl));
+    py::setattr(builder, "_insert", py::cpp_function(&insert_impl));
+    py::setattr(builder, "_inline_func", py::cpp_function(&inline_func_impl));
+    py::setattr(builder, "_cast", py::cpp_function(&cast_impl));
+    py::setattr(builder, "_undef", py::cpp_function(&undef_impl));
 
     auto add_type = [&](const char* name, mlir::Type type)
     {
@@ -1084,9 +1288,9 @@ py::object dtype_impl(py::capsule context, py::capsule ssa_val)
     auto& ctx = get_py_context(context);
     auto value = unwrap_mlir<mlir::Value>(ssa_val);
     auto type = value.getType();
-    if (auto tensor_type = type.dyn_cast<mlir::RankedTensorType>())
+    if (auto tensorType = type.dyn_cast<mlir::RankedTensorType>())
     {
-        return ctx.context.create_type(tensor_type.getElementType());
+        type = tensorType.getElementType();
     }
     return ctx.context.create_type(type);
 }
@@ -1099,39 +1303,44 @@ py::object len_impl(py::capsule /*context*/, py::capsule ssa_val)
     {
         return py::int_(tuple_type.size());
     }
-    return py::int_(1);
+    return py::int_(0);
 }
 
-py::object getitem_impl(py::capsule context, py::capsule ssa_val, py::handle index)
+py::object getitem_impl(py::capsule context, py::capsule ssaVal, py::handle index)
 {
     auto& ctx = get_py_context(context);
-    auto value = unwrap_mlir<mlir::Value>(ssa_val);
+    auto value = unwrap_mlir<mlir::Value>(ssaVal);
     auto& builder = ctx.builder;
     auto loc = ctx.loc;
-    auto index_val = index.cast<int64_t>();
     auto type = value.getType();
+    if (auto tensor = type.dyn_cast<mlir::TensorType>())
+    {
+        auto indexVal = ctx.context.unwrap_val(loc, builder, index);
+        auto elemType = tensor.getElementType();
+        auto res = builder.create<plier::GetItemOp>(loc, elemType, value, indexVal);
+        return ctx.context.create_var(context, res.getResult());
+    }
+
+    auto indexVal = index.cast<int64_t>();
     if (auto tuple_type = type.dyn_cast<mlir::TupleType>())
     {
-        if (index_val < 0 || index_val >= static_cast<int64_t>(tuple_type.size()))
+        auto maxIndex = static_cast<int64_t>(tuple_type.size());
+        if (indexVal < 0 || indexVal >= maxIndex)
         {
-            plier::report_error("Invalid getitem index");
+            throw py::index_error(("Invalid getitem index: " + llvm::Twine(indexVal) + ", expected [0:" + llvm::Twine(maxIndex) + ")").str());
         }
         if (auto parent_op = value.getDefiningOp<plier::BuildTupleOp>())
         {
-            return ctx.context.create_var(context, parent_op.getOperand(static_cast<unsigned>(index_val)));
+            return ctx.context.create_var(context, parent_op.getOperand(static_cast<unsigned>(indexVal)));
         }
-        auto elem_type = tuple_type.getType(static_cast<size_t>(index_val));
-        auto ind = builder.create<mlir::ConstantIndexOp>(loc, index_val);
-        auto item = builder.create<plier::GetItemOp>(loc, elem_type, value, ind);
+        auto elemType = tuple_type.getType(static_cast<size_t>(indexVal));
+        auto ind = builder.create<mlir::ConstantIndexOp>(loc, indexVal);
+        auto item = builder.create<plier::GetItemOp>(loc, elemType, value, ind);
         return ctx.context.create_var(context, item.getResult());
     }
     else
     {
-        if (0 != index_val)
-        {
-            plier::report_error("Invalid getitem index");
-        }
-        return ctx.context.create_var(context, value);
+        throw py::index_error("Invalid getitem");
     }
 }
 
@@ -1165,6 +1374,7 @@ py::object binop_impl(py::capsule context, py::capsule ssa_val, py::handle rhs, 
 
     using binop_func_t = mlir::Value(*)(mlir::Location loc, mlir::OpBuilder& builder, mlir::Value lhs, mlir::Value rhs);
     const std::tuple<llvm::StringRef, binop_func_t, binop_func_t> funcs[] = {
+        {"+", &binop_func<mlir::AddIOp>, &binop_func<mlir::AddFOp>},
         {"*", &binop_func<mlir::MulIOp>, &binop_func<mlir::MulFOp>},
         {"/", &binop_func<mlir::SignedFloorDivIOp>, &binop_func<mlir::DivFOp>},
     };
@@ -1193,25 +1403,18 @@ void setup_py_var(pybind11::handle var)
     py::setattr(var, "_binop", py::cpp_function(&binop_impl));
 }
 
-PyLinalgResolver::Values unpack_results(mlir::Location loc, mlir::OpBuilder& builder, py::handle object)
+PyLinalgResolver::Values unpack_results(PyBuilderContext& ctx, py::handle object)
 {
     PyLinalgResolver::Values ret;
     if (object.is_none())
     {
         return ret;
     }
-    auto unpack = [&](py::handle obj)
+    auto& builder = ctx.builder;
+    auto loc = ctx.loc;
+    auto unwrapVal = [&](py::handle obj)
     {
-        if (py::hasattr(obj, "_ssa_val"))
-        {
-            return unwrap_ssa_val(obj);
-        }
-        if (py::hasattr(obj, "_mlir_type"))
-        {
-            auto type = plier::TypeVar::get(unwrap_type(obj));
-            return builder.create<plier::UndefOp>(loc, type).getResult();
-        }
-        llvm_unreachable("Invalid type");
+        return ctx.context.unwrap_val(loc, builder, obj);
     };
     if (py::isinstance<py::tuple>(object))
     {
@@ -1219,13 +1422,13 @@ PyLinalgResolver::Values unpack_results(mlir::Location loc, mlir::OpBuilder& bui
         llvm::SmallVector<mlir::Value> vals(tuple.size());
         for (auto it : llvm::enumerate(tuple))
         {
-            vals[it.index()] = unpack(it.value());
+            vals[it.index()] = unwrapVal(it.value());
         }
         ret.emplace_back(builder.create<plier::BuildTupleOp>(loc, vals));
     }
     else
     {
-        ret.emplace_back(unpack(object));
+        ret.emplace_back(unwrapVal(object));
     }
     return ret;
 }
@@ -1274,7 +1477,10 @@ llvm::Optional<PyLinalgResolver::Values> PyLinalgResolver::rewrite(llvm::StringR
         return {};
     }
 
-    PyBuilderContext py_builder_context{loc, builder, *context};
+    PyBuilderContext py_builder_context{loc, builder, {}, *context};
+    auto& mlirContext = *builder.getContext();
+    populate_std_type_converter(mlirContext, py_builder_context.typeConverter);
+    populate_array_type_converter(mlirContext, py_builder_context.typeConverter);
     auto py_context = py::capsule(&py_builder_context);
     auto py_args = get_args(
         context->inspect,
@@ -1294,5 +1500,5 @@ llvm::Optional<PyLinalgResolver::Values> PyLinalgResolver::rewrite(llvm::StringR
     {
         return {};
     }
-    return unpack_results(loc, builder, result);
+    return unpack_results(py_builder_context, result);
 }

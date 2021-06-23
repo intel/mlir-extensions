@@ -76,6 +76,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     MLIRTransforms
     MLIRStandardOpsTransforms
     MLIRLinalgTransforms
+    MLIRLinalgToLLVM
     MLIRSCFToStandard
     MLIRTensorTransforms
     )
@@ -85,3 +86,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${LLVM_INCLUDE_DIRS}
     ${MLIR_INCLUDE_DIRS}
     )
+
+if(${DPNP_ENABLE})
+    target_compile_definitions(${PROJECT_NAME} PRIVATE DPNP_ENABLE=1)
+endif()

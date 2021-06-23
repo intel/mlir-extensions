@@ -14,11 +14,13 @@
 
 import numba
 from numba_dpcomp import njit, vectorize
-from numpy.testing import assert_equal # for nans comparison
+from numpy.testing import assert_equal, assert_allclose # for nans comparison
 import numpy as np
 from numba.tests.support import TestCase
 import unittest
 import itertools
+from functools import partial
+import pytest
 
 def _vectorize_reference(func, arg1):
     ret = np.empty(arg1.shape, arg1.dtype)
@@ -26,11 +28,92 @@ def _vectorize_reference(func, arg1):
         ret[ind] = func(val)
     return ret
 
+def parametrize_function_variants(name, strings):
+    funcs = [eval(f) for f in strings]
+    return pytest.mark.parametrize(name, funcs, ids=strings)
+
 _arr_1d_int = [1,2,3,4,5,6,7,8]
 _arr_1d_float = [1.0,2.1,3.2,4.3,5.4,6.5,7.6,8.7]
 _arr_2d_int = [[1,2,3,4],[5,6,7,8]]
 _arr_2d_float = [[1.0,2.1,3.2,4.3],[5.4,6.5,7.6,8.7]]
 _test_arrays = [_arr_1d_int, _arr_1d_float, _arr_2d_int, _arr_2d_float]
+_test_arrays_ids = ["1d_int", "1d_float", "2d_int", "2d_float"]
+
+@parametrize_function_variants("py_func", [
+    'lambda a: a.sum()',
+    'lambda a: np.sum(a)',
+    'lambda a: np.sqrt(a)',
+    'lambda a: np.square(a)',
+    'lambda a: np.log(a)',
+    'lambda a: np.sin(a)',
+    'lambda a: np.cos(a)',
+    'lambda a: a.size',
+    'lambda a: a.T.T',
+    # lambda a: a.T, TODO: need fortran layout support
+])
+@pytest.mark.parametrize("arr_list",
+                         _test_arrays,
+                         ids=_test_arrays_ids)
+def test_unary(py_func, arr_list, request):
+    jit_func = njit(py_func)
+    arr = np.array(arr_list)
+    assert_allclose(py_func(arr), jit_func(arr), rtol=1e-15, atol=1e-15)
+
+_test_binary_test_arrays = [1, 2.5, np.array([1,2,3]), np.array([4.4,5.5,6.6])]
+_test_binary_test_arrays_ids = ['1', '2.5', 'np.array([1,2,3])', 'np.array([4.4,5.5,6.6])']
+@parametrize_function_variants("py_func", [
+    'lambda a, b: np.add(a, b)',
+    'lambda a, b: a + b',
+    'lambda a, b: np.subtract(a, b)',
+    'lambda a, b: a - b',
+    'lambda a, b: np.multiply(a, b)',
+    'lambda a, b: a * b',
+    'lambda a, b: np.power(a, b)',
+    'lambda a, b: a ** b',
+    'lambda a, b: np.true_divide(a, b)',
+    'lambda a, b: a / b',
+])
+@pytest.mark.parametrize("a",
+                         _test_binary_test_arrays,
+                         ids=_test_binary_test_arrays_ids)
+@pytest.mark.parametrize("b",
+                         _test_binary_test_arrays,
+                         ids=_test_binary_test_arrays_ids)
+def test_binary(py_func, a, b):
+    jit_func = njit(py_func)
+    assert_equal(py_func(a,b), jit_func(a,b))
+
+_test_broadcast_test_arrays = [
+    1,
+    np.array([1]),
+    np.array([[1]]),
+    np.array([[1,2],[3,4]]),
+    np.array([5,6]),
+    np.array([[5],[6]]),
+    np.array([[5,6]]),
+]
+_test_broadcast_test_arrays_ids = [
+    '1',
+    'np.array([1])',
+    'np.array([[1]])',
+    'np.array([[1,2],[3,4]])',
+    'np.array([5,6])',
+    'np.array([[5],[6]])',
+    'np.array([[5,6]])',
+]
+@pytest.mark.parametrize("a",
+                         _test_broadcast_test_arrays,
+                         ids=_test_broadcast_test_arrays_ids)
+@pytest.mark.parametrize("b",
+                         _test_broadcast_test_arrays,
+                         ids=_test_broadcast_test_arrays_ids)
+def test_broadcast(a, b):
+    def py_func(a, b):
+        return np.add(a, b)
+
+    jit_func = njit(py_func)
+    assert_equal(py_func(a,b), jit_func(a,b))
+
 class TestMlirBasic(TestCase):
 
     def test_staticgetitem(self):
@@ -57,47 +140,6 @@ class TestMlirBasic(TestCase):
         jit_func = njit(py_func)
         arr = np.asarray([5,6,7])
         assert_equal(py_func(arr), jit_func(arr))
-
-    def test_unary(self):
-        funcs = [
-            lambda a: a.sum(),
-            lambda a: np.sum(a),
-            lambda a: np.sqrt(a),
-            lambda a: np.square(a),
-            lambda a: np.log(a),
-            lambda a: np.sin(a),
-            lambda a: np.cos(a),
-            lambda a: np.mean(a),
-            lambda a: a.size,
-            # lambda a: a.T, TODO: need fortran layout support
-            lambda a: a.T.T,
-        ]
-
-        for py_func in funcs:
-            jit_func = njit(py_func)
-            for a in _test_arrays:
-                arr = np.array(a)
-                assert_equal(py_func(arr), jit_func(arr))
-
-    def test_binary(self):
-        funcs = [
-            lambda a, b: np.add(a, b),
-            lambda a, b: a + b,
-            lambda a, b: np.subtract(a, b),
-            lambda a, b: a - b,
-            lambda a, b: np.multiply(a, b),
-            lambda a, b: a * b,
-            lambda a, b: np.power(a, b),
-            lambda a, b: a ** b,
-            lambda a, b: np.true_divide(a, b),
-            lambda a, b: a / b,
-        ]
-
-        test_data = [1, 2.5, np.array([1,2,3]), np.array([4.4,5.5,6.6])]
-        for py_func in funcs:
-            jit_func = njit(py_func)
-            for a1, a2 in itertools.product(test_data, test_data):
-                assert_equal(py_func(a1,a2), jit_func(a1,a2))
 
     def test_sum_axis(self):
         funcs = [
@@ -331,43 +373,6 @@ class TestMlirBasic(TestCase):
         jit_func = njit(py_func)
         assert_equal(py_func((2, 1)), jit_func((2, 1)))
 
-    def test_reshape(self):
-        funcs = [
-            lambda a: a.reshape(a.size),
-            lambda a: a.reshape((a.size,)),
-            lambda a: a.reshape((a.size,1)),
-            lambda a: a.reshape((1, a.size)),
-            lambda a: a.reshape((1, a.size, 1)),
-        ]
-
-        arr1 = np.array([1,2,3,4,5,6,7,8,9,10,11,12])
-        # arr2 = arr1.reshape((2,6))
-        # arr3 = arr1.reshape((2,3,2))
-        for py_func in funcs:
-            jit_func = njit(py_func)
-            # for a in [arr1,arr2,arr3]: TODO: flatten support
-            for a in [arr1]:
-                assert_equal(py_func(a), jit_func(a))
-
-    def test_broadcast(self):
-        def py_func(a, b):
-            return np.add(a, b)
-
-        jit_func = njit(py_func)
-
-        test_data = [
-            1,
-            np.array([1]),
-            np.array([[1]]),
-            np.array([[1,2],[3,4]]),
-            np.array([5,6]),
-            np.array([[5],[6]]),
-            np.array([[5,6]]),
-        ]
-
-        for a, b in itertools.product(test_data, test_data):
-            assert_equal(py_func(a,b), jit_func(a,b))
-
     def test_parallel(self):
         def py_func(a, b):
             return np.add(a, b)
@@ -431,28 +436,221 @@ class TestMlirBasic(TestCase):
         for a in [arr]: # TODO: arr.T
             assert_equal(py_func(a), jit_func(a))
 
-    def test_slice1(self):
-        funcs = [
-            lambda a, b, c, d: a[b:c],
-            lambda a, b, c, d: a[b:c:d],
-        ]
+@parametrize_function_variants("a", [
+    'np.array(1)',
+    'np.array(2.5)',
+    'np.array([])',
+    'np.array([1,2,3])',
+    'np.array([[1,2,3]])',
+    'np.array([[1,2],[3,4],[5,6]])',
+    ])
+def test_atleast2d(a):
+    def py_func(a):
+        return np.atleast_2d(a)
 
-        arr = np.array([1,2,3,4,5,6,7,8])
-        for py_func in funcs:
-            jit_func = njit(py_func)
+    jit_func = njit(py_func)
+    assert_equal(py_func(a), jit_func(a))
 
-            assert_equal(py_func(arr, 3, 4,2), jit_func(arr, 3, 4,2))
+_test_reshape_test_array = np.array([1,2,3,4,5,6,7,8,9,10,11,12])
+_test_reshape_test_arrays = [
+    _test_reshape_test_array,
+    _test_reshape_test_array.reshape((2,6)),
+    _test_reshape_test_array.reshape((2,3,2)),
+]
+@parametrize_function_variants("py_func", [
+    'lambda a: a.reshape(a.size)',
+    'lambda a: a.reshape((a.size,))',
+    'lambda a: a.reshape((a.size,1))',
+    'lambda a: a.reshape((1, a.size))',
+    'lambda a: a.reshape((1, a.size, 1))',
+    ])
+@pytest.mark.parametrize("array", _test_reshape_test_arrays)
+def test_reshape(py_func, array):
+    jit_func = njit(py_func)
+    assert_equal(py_func(array), jit_func(array))
 
-    def test_atleast2d(self):
-        def py_func(a):
-            return np.atleast_2d(a)
+@parametrize_function_variants("py_func", [
+    # 'lambda a: a.flat', TODO: flat support
+    'lambda a: a.flatten()',
+    ])
+@pytest.mark.parametrize("array", _test_reshape_test_arrays)
+def test_flatten(py_func, array):
+    jit_func = njit(py_func)
+    assert_equal(py_func(array), jit_func(array))
 
-        jit_func = njit(py_func)
+@parametrize_function_variants("py_func", [
+    'lambda a, b: ()',
+    'lambda a, b: (a,b)',
+    'lambda a, b: ((a,b),(a,a),(b,b),())',
+    ])
+@pytest.mark.parametrize("a,b",
+        itertools.product(*(([1,2.5,np.array([1,2,3]), np.array([4.5,6.7,8.9])],)*2))
+    )
+def test_tuple_ret(py_func, a, b):
+    if isinstance(a, np.ndarray) or isinstance(b, np.ndarray):
+        pytest.xfail()
+    jit_func = njit(py_func)
+    assert_equal(py_func(a, b), jit_func(a, b))
 
-        # for val in (1, 2.5, [], [1,2,3], [[1,2],[3,4],[5,6]]): // TODO: unranked array support
-        for val in ([], [1,2,3], [[1,2],[3,4],[5,6]]):
-            a = np.array(val)
-            assert_equal(py_func(a), jit_func(a))
+@pytest.mark.parametrize("arrays",
+                         [([1,2,3],[4,5,6]),
+                          ([[1,2],[3,4]],[[5,6],[7,8]]),
+                          ([[[1],[2]],[[3],[4]]],[[[5],[6]],[[7],[8]]]),
+                          ([1,2,3],[4,5,6],[7,8,9]),
+                          ([1,2],[3,4],[5,6],[7,8]),
+                         ])
+@pytest.mark.parametrize("axis",
+                         [0,1,2]) # TODO: None
+def test_concat(arrays, axis):
+    arr = tuple(np.array(a) for a in arrays)
+    num_dims = len(arr[0].shape);
+    if axis >= num_dims:
+        pytest.skip() # TODO: unselect
+    num_arrays = len(arrays)
+    if num_arrays == 2:
+        def py_func(arr1, arr2):
+            return np.concatenate((arr1, arr2), axis=axis)
+    elif num_arrays == 3:
+        def py_func(arr1, arr2, arr3):
+            return np.concatenate((arr1, arr2, arr3), axis=axis)
+    elif num_arrays == 4:
+        def py_func(arr1, arr2, arr3, arr4):
+            return np.concatenate((arr1, arr2, arr3, arr4), axis=axis)
+    else:
+        assert False
+    jit_func = njit(py_func)
+    assert_equal(py_func(*arr), jit_func(*arr))
+
+@parametrize_function_variants("py_func", [
+    'lambda a, b, c, d: a[b:c]',
+    'lambda a, b, c, d: a[3:c]',
+    'lambda a, b, c, d: a[b:4]',
+    'lambda a, b, c, d: a[3:4]',
+    'lambda a, b, c, d: a[b:c:d]',
+    'lambda a, b, c, d: a[b:c:1]',
+    'lambda a, b, c, d: a[b:c:2]',
+    'lambda a, b, c, d: a[3:4:2]',
+    ])
+def test_slice(py_func):
+    arr = np.array([1,2,3,4,5,6,7,8])
+    jit_func = njit(py_func)
+    assert_equal(py_func(arr, 3, 4, 2), jit_func(arr, 3, 4, 2))
+
+def test_multidim_slice():
+    def py_func(a, b):
+        return a[1, b,:]
+    jit_func = njit(py_func)
+
+    a = np.array([[[1],[2],[3]],[[4],[5],[6]]])
+    assert_equal(py_func(a, 0), jit_func(a, 0))
+
+def test_size_ret():
+    def py_func(a, b):
+        return a.size / b
+    jit_func = njit(py_func)
+
+    a = np.array([[[1],[2],[3]],[[4],[5],[6]]])
+    assert_equal(py_func(a, 3), jit_func(a, 3))
+
+@pytest.mark.parametrize("a", [
+    np.array([[1,2],[4,5]])
+    ])
+@pytest.mark.parametrize("b", [True, False])
+def test_tensor_if(a, b):
+    def py_func(m, rowvar):
+        m_arr = np.atleast_2d(m)
+        if not rowvar:
+            m_arr = m_arr.T
+        return m_arr
+    jit_func = njit(py_func)
+
+    assert_equal(py_func(a, b), jit_func(a, b))
+
+def _cov(m, y=None, rowvar=True, bias=False, ddof=None):
+    return np.cov(m, y, rowvar, bias, ddof)
+
+_rnd = np.random.RandomState(42)
+
+@parametrize_function_variants("m", [
+    'np.array([[0, 2], [1, 1], [2, 0]]).T',
+    '_rnd.randn(100).reshape(5, 20)',
+    'np.asfortranarray(np.array([[0, 2], [1, 1], [2, 0]]).T)',
+    '_rnd.randn(100).reshape(5, 20)[:, ::2]',
+    'np.array([0.3942, 0.5969, 0.7730, 0.9918, 0.7964])',
+    # 'np.full((4, 5), fill_value=True)', TODO
+    'np.array([np.nan, 0.5969, -np.inf, 0.9918, 0.7964])',
+    'np.linspace(-3, 3, 33).reshape(33, 1)',
+
+    # non-array inputs
+    # '((0.1, 0.2), (0.11, 0.19), (0.09, 0.21))',  # UniTuple
+    # '((0.1, 0.2), (0.11, 0.19), (0.09j, 0.21j))',  # Tuple
+    # '(-2.1, -1, 4.3)',
+    # '(1, 2, 3)',
+    # '[4, 5, 6]',
+    # '((0.1, 0.2, 0.3), (0.1, 0.2, 0.3))',
+    # '[(1, 2, 3), (1, 3, 2)]',
+    # '3.142',
+    # '((1.1, 2.2, 1.5),)',
+
+    # empty data structures
+    # 'np.array([])',
+    # 'np.array([]).reshape(0, 2)',
+    # 'np.array([]).reshape(2, 0)',
+    # '()',
+    ])
+def test_cov_basic(m):
+    py_func = _cov
+    jit_func = njit(py_func)
+    m = m.copy() # TODO: fix strides
+    assert_allclose(py_func(m), jit_func(m), rtol=1e-15, atol=1e-15)
+
+def _copy_array(arg):
+    if isinstance(arg, np.ndarray):
+        arg = arg.copy();
+    return arg
+
+_cov_inputs_m = _rnd.randn(105).reshape(15, 7)
+@pytest.mark.parametrize("m",
+                         [_cov_inputs_m])
+@pytest.mark.parametrize("y",
+                         [None, _cov_inputs_m[::-1]])
+@pytest.mark.parametrize("rowvar",
+                         [False, True])
+@pytest.mark.parametrize("bias",
+                         [False, True])
+@pytest.mark.parametrize("ddof",
+                         [None, -1, 0, 1, 3.0, True])
+def test_cov_explicit_arguments(m, y, rowvar, bias, ddof):
+    if isinstance(ddof, bool):
+        pytest.xfail()
+    py_func = _cov
+    jit_func = njit(py_func)
+    m = _copy_array(m) # TODO: fix strides
+    y = _copy_array(y) # TODO: fix strides
+    assert_allclose(py_func(m=m, y=y, rowvar=rowvar, bias=bias, ddof=ddof), jit_func(m=m, y=y, rowvar=rowvar, bias=bias, ddof=ddof), rtol=1e-14, atol=1e-14)
+
+@parametrize_function_variants("m, y, rowvar", [
+    '(np.array([-2.1, -1, 4.3]), np.array([3, 1.1, 0.12]), True)',
+    '(np.array([1, 2, 3]), np.array([1j, 2j, 3j]), True)',
+    '(np.array([1j, 2j, 3j]), np.array([1, 2, 3]), True)',
+    '(np.array([1, 2, 3]), np.array([1j, 2j, 3]), True)',
+    '(np.array([1j, 2j, 3]), np.array([1, 2, 3]), True)',
+    '(np.array([]), np.array([]), True)',
+    '(1.1, 2.2, True)',
+    '(_rnd.randn(10, 3), np.array([-2.1, -1, 4.3]).reshape(1, 3) / 10, True)',
+    '(np.array([-2.1, -1, 4.3]), np.array([[3, 1.1, 0.12], [3, 1.1, 0.12]]), True)',
+    # '(np.array([-2.1, -1, 4.3]), np.array([[3, 1.1, 0.12], [3, 1.1, 0.12]]), False)',
+    '(np.array([[3, 1.1, 0.12], [3, 1.1, 0.12]]), np.array([-2.1, -1, 4.3]), True)',
+    # '(np.array([[3, 1.1, 0.12], [3, 1.1, 0.12]]), np.array([-2.1, -1, 4.3]), False)',
+    ])
+def test_cov_edge_cases(m, y, rowvar):
+    if not isinstance(m, np.ndarray) or not isinstance(y, np.ndarray) or np.iscomplexobj(m) or np.iscomplexobj(y):
+        pytest.xfail()
+    py_func = _cov
+    jit_func = njit(py_func)
+    m = _copy_array(m) # TODO: fix strides
+    y = _copy_array(y) # TODO: fix strides
+    assert_allclose(py_func(m=m, y=y, rowvar=rowvar), jit_func(m=m, y=y, rowvar=rowvar), rtol=1e-14, atol=1e-14)
 
 if __name__ == '__main__':
     unittest.main()

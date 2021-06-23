@@ -16,6 +16,7 @@
 
 #include <mlir/Transforms/DialectConversion.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
+#include <mlir/Dialect/SCF/SCF.h>
 
 #include "plier/dialect.hpp"
 
@@ -223,5 +224,156 @@ mlir::LogicalResult plier::FuncOpSignatureConversion::matchAndRewrite(
         }
     }
     rewriter.finalizeRootUpdate(funcOp);
+    return mlir::success();
+}
+
+plier::FixupIfTypes::FixupIfTypes(mlir::TypeConverter& typeConverter, mlir::MLIRContext* context):
+    OpRewritePattern(context), converter(typeConverter) {}
+
+mlir::LogicalResult plier::FixupIfTypes::matchAndRewrite(mlir::scf::IfOp op, mlir::PatternRewriter& rewriter) const
+{
+    if (op->getNumResults() == 0)
+    {
+        return mlir::failure();
+    }
+
+    llvm::SmallVector<mlir::Type> newTypes;
+    newTypes.reserve(op->getNumResults());
+    auto trueYield = mlir::cast<mlir::scf::YieldOp>(op.thenBlock()->getTerminator());
+    auto falseYield = mlir::cast<mlir::scf::YieldOp>(op.elseBlock()->getTerminator());
+    bool needUpdate = false;
+    for (auto it : llvm::zip(op->getResultTypes(), trueYield->getOperandTypes(), falseYield->getOperandTypes()))
+    {
+        auto retType = std::get<0>(it);
+        auto trueType = std::get<1>(it);
+        auto falseType = std::get<2>(it);
+        if (trueType != falseType)
+        {
+            return mlir::failure();
+        }
+
+        if (retType == trueType)
+        {
+            newTypes.emplace_back(trueType);
+        }
+        else if (converter.convertType(retType) == trueType)
+        {
+            newTypes.emplace_back(trueType);
+            needUpdate = true;
+        }
+        else
+        {
+            return mlir::failure();
+        }
+    }
+
+    if (needUpdate)
+    {
+        rewriter.updateRootInPlace(op, [&]()
+        {
+            for (auto it : llvm::enumerate(op->getResults()))
+            {
+                it.value().setType(newTypes[it.index()]);
+            }
+        });
+        return mlir::success();
+    }
+    return mlir::failure();
+}
+
+plier::FixCallOmittedArgs::FixCallOmittedArgs(mlir::TypeConverter& typeConverter, mlir::MLIRContext* context):
+    OpRewritePattern(context), converter(typeConverter) {}
+
+mlir::LogicalResult plier::FixCallOmittedArgs::matchAndRewrite(mlir::CallOp op, mlir::PatternRewriter& rewriter) const
+{
+    bool needChanges = false;
+    llvm::SmallVector<bool> newResultsMask(op->getNumResults());
+    llvm::SmallVector<mlir::Type> newResultsTypes;
+    llvm::SmallVector<mlir::Type, 1> argTypes;
+    for (auto it : llvm::enumerate(op.getResults()))
+    {
+        auto res = it.value();
+        if (mlir::failed(converter.convertType(res.getType(), argTypes)) ||
+                argTypes.size() > 1)
+        {
+            return mlir::failure();
+        }
+        if (!argTypes.empty())
+        {
+            newResultsTypes.emplace_back(res.getType());
+        }
+        else
+        {
+            needChanges = true;
+        }
+
+        newResultsMask[it.index()] = argTypes.empty();
+    }
+    llvm::SmallVector<mlir::Value> newArgs;
+    for (auto arg : op.operands())
+    {
+        argTypes.clear();
+        if (mlir::failed(converter.convertType(arg.getType(), argTypes)) ||
+                argTypes.size() > 1)
+        {
+            return mlir::failure();
+        }
+        if (argTypes.empty())
+        {
+            needChanges = true;
+        }
+        else
+        {
+            newArgs.emplace_back(arg);
+        }
+    }
+    if (!needChanges)
+    {
+        return mlir::failure();
+    }
+
+    auto newOp = rewriter.create<mlir::CallOp>(op.getLoc(), op.getCallee(), newResultsTypes, newArgs);
+    auto newOpResults = newOp.getResults();
+    auto filterResults = [&]()
+    {
+        while (!newOpResults.empty())
+        {
+            auto type = newOpResults.front().getType();
+            argTypes.clear();
+            auto res = converter.convertType(type, argTypes);
+            assert(mlir::succeeded(res));
+            (void)res;
+            assert(argTypes.size() < 2);
+            if (!argTypes.empty())
+            {
+                break;
+            }
+            newOpResults = newOpResults.drop_front();
+        }
+    };
+    mlir::Value undef;
+    llvm::SmallVector<mlir::Value> newResults(op->getNumResults());
+    filterResults();
+    for (auto it : llvm::enumerate(newResultsMask))
+    {
+        auto omitted = it.value();
+        auto ind = it.index();
+        if (omitted)
+        {
+            if (!undef)
+            {
+                undef = rewriter.create<plier::UndefOp>(op.getLoc(), op->getResultTypes()[0]);
+            }
+            newResults[ind] = undef;
+        }
+        else
+        {
+            newResults[ind] = newOpResults.front();
+            newOpResults = newOpResults.drop_front();
+            filterResults();
+        }
+    }
+    assert((filterResults(), newOpResults.empty()));
+    rewriter.replaceOp(op, newResults);
     return mlir::success();
 }
