@@ -128,25 +128,41 @@ def test_broadcast(a, b):
     jit_func = njit(py_func)
     assert_equal(py_func(a,b), jit_func(a,b))
 
+def test_staticgetitem():
+    def py_func(a):
+        return a[1]
+
+    jit_func = njit(py_func)
+    arr = np.asarray([5,6,7])
+    assert_equal(py_func(arr), jit_func(arr))
+
+@pytest.mark.parametrize("i",
+                         list(range(3)))
+def test_getitem1(i):
+    def py_func(a, b):
+        return a[b]
+
+    jit_func = njit(py_func)
+    arr = np.asarray([5,6,7])
+    assert_equal(py_func(arr, i), jit_func(arr, i))
+
+def test_getitem2():
+    def py_func(a, b):
+        return a[b]
+
+    jit_func = njit(py_func)
+    arr = np.asarray([[[1,2,3],[5,6,7]]])
+    assert_equal(py_func(arr, 0), jit_func(arr, 0))
+
+def test_getitem3():
+    def py_func(a, b, c):
+        return a[b, c]
+
+    jit_func = njit(py_func)
+    arr = np.asarray([[[1,2,3],[5,6,7]]])
+    assert_equal(py_func(arr, 0, 0), jit_func(arr, 0, 0))
+
 class TestMlirBasic(TestCase):
-
-    def test_staticgetitem(self):
-        def py_func(a):
-            return a[1]
-
-        jit_func = njit(py_func)
-        arr = np.asarray([5,6,7])
-        assert_equal(py_func(arr), jit_func(arr))
-
-    def test_getitem(self):
-        def py_func(a, b):
-            return a[b]
-
-        jit_func = njit(py_func)
-        arr = np.asarray([5,6,7])
-        for i in range(3):
-            assert_equal(py_func(arr, i), jit_func(arr, i))
-
     def test_array_len(self):
         def py_func(a):
             return len(a)

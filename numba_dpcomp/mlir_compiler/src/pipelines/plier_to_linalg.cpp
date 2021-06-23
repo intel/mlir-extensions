@@ -440,13 +440,13 @@ struct GetitemOpLowering : public mlir::OpRewritePattern<plier::GetItemOp>
         {
             if (auto sliceType = val.getType().dyn_cast<plier::SliceType>())
             {
-                auto createInd = [&](int64_t i)
-                {
-                    return rewriter.create<mlir::ConstantIndexOp>(loc, i);
-                };
                 auto getItemOrConst = [&](unsigned i)->mlir::Value
                 {
                     assert(i < 3);
+                    auto createInd = [&](int64_t i)
+                    {
+                        return rewriter.create<mlir::ConstantIndexOp>(loc, i);
+                    };
                     if (sliceType.getTypes()[i].isa<plier::NoneType>())
                     {
                         if (i == 0)
@@ -476,15 +476,29 @@ struct GetitemOpLowering : public mlir::OpRewritePattern<plier::GetItemOp>
                 return {offset, rewriter.getIndexAttr(1), rewriter.getIndexAttr(1), false};
             }
         };
-        llvm::SmallVector<mlir::OpFoldResult> offsets(1);
-        llvm::SmallVector<mlir::OpFoldResult> sizes(1);
-        llvm::SmallVector<mlir::OpFoldResult> strides(1);
+
+        auto makeFullSlice = [&](unsigned dim)->std::tuple<mlir::OpFoldResult, mlir::OpFoldResult, mlir::OpFoldResult>
+        {
+            auto begin = rewriter.getIndexAttr(0);
+            auto end = rewriter.createOrFold<mlir::tensor::DimOp>(loc, value, dim);
+            auto step = rewriter.getIndexAttr(1);
+            return {begin, end, step};
+        };
+
+        auto shapedType = type.cast<mlir::ShapedType>();
+        auto rank = static_cast<unsigned>(shapedType.getRank());
+        llvm::SmallVector<mlir::OpFoldResult> offsets(rank);
+        llvm::SmallVector<mlir::OpFoldResult> sizes(rank);
+        llvm::SmallVector<mlir::OpFoldResult> strides(rank);
         llvm::SmallVector<unsigned> dimsIndices;
         if (auto tupleType = index.getType().dyn_cast<mlir::TupleType>())
         {
-            offsets.resize(tupleType.size());
-            sizes.resize(tupleType.size());
-            strides.resize(tupleType.size());
+            auto count = static_cast<unsigned>(tupleType.size());
+            if (count > rank)
+            {
+                return mlir::failure();
+            }
+
             for (auto it : llvm::enumerate(tupleType))
             {
                 auto i = it.index();
@@ -497,6 +511,12 @@ struct GetitemOpLowering : public mlir::OpRewritePattern<plier::GetItemOp>
                     dimsIndices.emplace_back(i);
                 }
             }
+
+            for (auto i : llvm::seq(count, rank))
+            {
+                std::tie(offsets[i], sizes[i], strides[i]) = makeFullSlice(i);
+                dimsIndices.emplace_back(i);
+            }
         }
         else
         {
@@ -506,10 +526,16 @@ struct GetitemOpLowering : public mlir::OpRewritePattern<plier::GetItemOp>
             {
                 dimsIndices.emplace_back(0);
             }
+
+            for (auto i : llvm::seq(1u, rank))
+            {
+                std::tie(offsets[i], sizes[i], strides[i]) = makeFullSlice(i);
+                dimsIndices.emplace_back(i);
+            }
         }
 
         mlir::Value res;
-        auto elemType = type.cast<mlir::ShapedType>().getElementType();
+        auto elemType = shapedType.getElementType();
         auto elemTypeSignless = plier::makeSignlessType(elemType);
         if (elemType != elemTypeSignless)
         {
