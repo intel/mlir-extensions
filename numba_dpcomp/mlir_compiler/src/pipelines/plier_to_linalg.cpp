@@ -1695,79 +1695,71 @@ void LowerLinalgPass::runOnOperation()
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
 }
 
-struct OptimizeGlobalsConstsLoadPass :
-    public mlir::PassWrapper<OptimizeGlobalsConstsLoadPass, mlir::OperationPass<mlir::ModuleOp>>
+struct OptimizeGlobalsConstsLoad : public mlir::OpRewritePattern<mlir::memref::LoadOp>
 {
-    void runOnOperation() override
+    using mlir::OpRewritePattern<mlir::memref::LoadOp>::OpRewritePattern;
+
+    mlir::LogicalResult matchAndRewrite(
+        mlir::memref::LoadOp op, mlir::PatternRewriter &rewriter) const override
     {
-        auto mod = getOperation();
+        // We access data outside function, but doesnt change it, lets hope it
+        // is safe.
+        auto mod = op->getParentOfType<mlir::ModuleOp>();
+        if (!mod)
+        {
+            return mlir::failure();
+        }
         mlir::SymbolTable symbolTable(mod);
 
-        llvm::SmallVector<std::pair<mlir::memref::LoadOp, mlir::Attribute>> toReplace;
-        auto visitor = [&](mlir::memref::LoadOp load)
+        llvm::SmallVector<uint64_t> indices(op.indices().size());
+        for (auto it : llvm::enumerate(op.indices()))
         {
-            llvm::SmallVector<uint64_t> indices(load.indices().size());
-            for (auto it : llvm::enumerate(load.indices()))
+            auto constIndex = it.value().getDefiningOp<mlir::ConstantIndexOp>();
+            if (!constIndex)
             {
-                auto constIndex = it.value().getDefiningOp<mlir::ConstantIndexOp>();
-                if (!constIndex)
-                {
-                    return;
-                }
-                auto val = constIndex.getValue();
-                if (val < 0)
-                {
-                    return;
-                }
-                indices[it.index()] = static_cast<uint64_t>(val);
+                return mlir::failure();
             }
-            auto getGlobal = load.memref().getDefiningOp<mlir::memref::GetGlobalOp>();
-            if (!getGlobal)
+            auto val = constIndex.getValue();
+            if (val < 0)
             {
-                return;
+                return mlir::failure();
             }
-            auto sym = symbolTable.lookup<mlir::memref::GlobalOp>(getGlobal.name());
-            if (!sym)
-            {
-                return;
-            }
-            if (!sym.constant())
-            {
-                return;
-            }
-            auto initAttr = sym.initial_value();
-            if (!initAttr)
-            {
-                return;
-            }
-            auto elements = initAttr->dyn_cast<mlir::ElementsAttr>();
-            if (!elements)
-            {
-                return;
-            }
-            if (elements.getType().getElementType() != load.getType() ||
-                !elements.isValidIndex(indices))
-            {
-                return;
-            }
-            auto val = elements.getValue(indices);
-            toReplace.push_back({load, val});
-        };
-        mod.walk(visitor);
-
-        mlir::OpBuilder builder(&getContext());
-        for (auto& it : toReplace)
-        {
-            auto load = it.first;
-            auto val = it.second;
-            builder.setInsertionPoint(load);
-            auto newVal = builder.create<mlir::ConstantOp>(load.getLoc(), val).getResult();
-            load.replaceAllUsesWith(newVal);
-            load.erase();
+            indices[it.index()] = static_cast<uint64_t>(val);
         }
+        auto getGlobal = op.memref().getDefiningOp<mlir::memref::GetGlobalOp>();
+        if (!getGlobal)
+        {
+            return mlir::failure();
+        }
+        auto sym = symbolTable.lookup<mlir::memref::GlobalOp>(getGlobal.name());
+        if (!sym)
+        {
+            return mlir::failure();
+        }
+        if (!sym.constant())
+        {
+            return mlir::failure();
+        }
+        auto initAttr = sym.initial_value();
+        if (!initAttr)
+        {
+            return mlir::failure();
+        }
+        auto elements = initAttr->dyn_cast<mlir::ElementsAttr>();
+        if (!elements)
+        {
+            return mlir::failure();
+        }
+        if (elements.getType().getElementType() != op.getType() ||
+            !elements.isValidIndex(indices))
+        {
+            return mlir::failure();
+        }
+        auto val = elements.getValue(indices);
+        rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, val);
+        return mlir::success();
     }
 };
-
 
 struct ForceInlinePass :
     public mlir::PassWrapper<ForceInlinePass, mlir::OperationPass<mlir::ModuleOp>>
@@ -2136,6 +2128,7 @@ void PostLinalgOptPass::runOnFunction()
     plier::populate_common_opts_patterns(context, patterns);
 
     patterns.insert<
+        OptimizeGlobalsConstsLoad,
         plier::CanonicalizeReduction,
         plier::PromoteToParallel,
         plier::MergeNestedForIntoParallel
@@ -2206,8 +2199,6 @@ void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager& pm)
     pm.addPass(std::make_unique<LowerLinalgPass>());
     pm.addPass(std::make_unique<ForceInlinePass>());
     pm.addPass(mlir::createSymbolDCEPass());
-    pm.addPass(mlir::createCanonicalizerPass());
-    pm.addPass(std::make_unique<OptimizeGlobalsConstsLoadPass>());
 
     pm.addNestedPass<mlir::FuncOp>(std::make_unique<PostLinalgOptPass>());
 
