@@ -87,8 +87,8 @@ mlir::Type convertTupleTypes(mlir::MLIRContext &context,
   auto unitupleType = [&]() -> mlir::Type {
     assert(!types.empty());
     auto elemType = types.front();
-    types = types.drop_front();
-    if (llvm::all_of(types, [&](auto t) { return t == elemType; }))
+    auto tail = types.drop_front();
+    if (llvm::all_of(tail, [&](auto t) { return t == elemType; }))
       return elemType;
     return nullptr;
   }();
@@ -98,7 +98,7 @@ mlir::Type convertTupleTypes(mlir::MLIRContext &context,
     auto newType = converter.convertType(unitupleType);
     if (!newType)
       return {};
-    return mlir::LLVM::LLVMArrayType::get(unitupleType, count);
+    return mlir::LLVM::LLVMArrayType::get(newType, count);
   }
   llvm::SmallVector<mlir::Type> newTypes;
   newTypes.reserve(count);
@@ -481,10 +481,21 @@ mlir::Type getFunctionResType(mlir::LLVMTypeConverter &converter,
   if (types.empty())
     return mlir::LLVM::LLVMPointerType::get(mlir::IntegerType::get(context, 8));
 
-  if (types.size() == 1)
-    return types.front();
+  llvm::SmallVector<mlir::Type> newResTypes(types.size());
+  for (auto it : llvm::enumerate(types)) {
+    auto i = it.index();
+    auto type = it.value();
+    if (auto memreftype = type.dyn_cast<mlir::MemRefType>()) {
+      newResTypes[i] = get_array_type(converter, memreftype);
+    } else {
+      newResTypes[i] = type;
+    }
+  }
 
-  return convertTupleTypes(converter.getContext(), converter, types);
+  if (newResTypes.size() == 1)
+    return newResTypes.front();
+
+  return convertTupleTypes(converter.getContext(), converter, newResTypes);
 }
 
 mlir::LogicalResult fixFuncSig(LLVMTypeHelper &typeHelper, mlir::FuncOp func) {
@@ -576,9 +587,12 @@ struct ReturnOpLowering : public mlir::OpRewritePattern<mlir::ReturnOp> {
   matchAndRewrite(mlir::ReturnOp op,
                   mlir::PatternRewriter &rewriter) const override {
     auto parent = op->getParentOfType<mlir::FuncOp>();
-    if (nullptr == parent || parent.isPrivate()) {
+    if (nullptr == parent || parent.isPrivate())
       return mlir::failure();
-    }
+
+    auto mod = op->getParentOfType<mlir::ModuleOp>();
+    if (!mod)
+      return mlir::failure();
 
     auto ctx = op.getContext();
     auto loc = op.getLoc();
@@ -592,7 +606,6 @@ struct ReturnOpLowering : public mlir::OpRewritePattern<mlir::ReturnOp> {
       if (auto memrefType = origType.dyn_cast<mlir::MemRefType>()) {
         auto dstType = get_array_type(typeConverter, memrefType)
                            .cast<mlir::LLVM::LLVMStructType>();
-        auto mod = op->getParentOfType<mlir::ModuleOp>();
         auto func = get_from_memref_conversion_func(
             mod, rewriter, memrefType,
             llRetType.cast<mlir::LLVM::LLVMStructType>(), dstType);
