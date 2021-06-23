@@ -65,6 +65,16 @@
 #include <cctype>
 
 namespace {
+int64_t getOptLevel(mlir::Operation *op) {
+  assert(op);
+  auto attr = op->getAttr(plier::attributes::getOptLevelName())
+                  .dyn_cast_or_null<mlir::IntegerAttr>();
+  if (!attr) {
+    return 0;
+  }
+  return std::max(static_cast<int64_t>(0), attr.getInt());
+}
+
 mlir::LogicalResult applyOptimizations(
     mlir::FuncOp op, const mlir::FrozenRewritePatternSet &patterns,
     mlir::AnalysisManager am,
@@ -1872,6 +1882,12 @@ struct PostLinalgOptPass
 };
 
 void PostLinalgOptPass::runOnFunction() {
+  auto func = getFunction();
+  auto optLevel = getOptLevel(func);
+  if (0 == optLevel) {
+    return;
+  }
+
   auto &context = getContext();
   mlir::OwningRewritePatternList patterns(&context);
 
@@ -1884,7 +1900,7 @@ void PostLinalgOptPass::runOnFunction() {
   auto additionalOpt = [](mlir::FuncOp op) {
     return plier::naivelyFuseParallelOps(op.getRegion());
   };
-  if (mlir::failed(applyOptimizations(getFunction(), std::move(patterns),
+  if (mlir::failed(applyOptimizations(func, std::move(patterns),
                                       getAnalysisManager(), additionalOpt))) {
     signalPassFailure();
   }
