@@ -370,18 +370,6 @@ struct RemoveOmittedFuncArgs : public mlir::OpRewritePattern<mlir::FuncOp>
     }
 };
 
-mlir::Type makeSignlessType(mlir::Type type)
-{
-    if (auto intType = type.dyn_cast<mlir::IntegerType>())
-    {
-        if (!intType.isSignless())
-        {
-            return mlir::IntegerType::get(type.getContext(),intType.getWidth());
-        }
-    }
-    return type;
-}
-
 mlir::Attribute makeSignlessAttr(mlir::Attribute val)
 {
     auto type = val.getType();
@@ -389,7 +377,7 @@ mlir::Attribute makeSignlessAttr(mlir::Attribute val)
     {
         if (!intType.isSignless())
         {
-            auto newType = makeSignlessType(intType);
+            auto newType = plier::makeSignlessType(intType);
             return mlir::IntegerAttr::get(newType, plier::getIntAttrValue(val.cast<mlir::IntegerAttr>()));
         }
     }
@@ -618,8 +606,8 @@ mlir::Value int_cast(mlir::Type dstType, mlir::Value val, mlir::PatternRewriter&
 {
     auto srcIntType = val.getType().cast<mlir::IntegerType>();
     auto dstIntType = dstType.cast<mlir::IntegerType>();
-    auto srcSignless = makeSignlessType(srcIntType);
-    auto dstSignless = makeSignlessType(dstIntType);
+    auto srcSignless = plier::makeSignlessType(srcIntType);
+    auto dstSignless = plier::makeSignlessType(dstIntType);
     auto srcBits = srcIntType.getWidth();
     auto dstBits = dstIntType.getWidth();
     auto loc = val.getLoc();
@@ -740,7 +728,7 @@ template<typename T>
 mlir::Value replace_op(mlir::Operation* op, mlir::PatternRewriter& rewriter, mlir::Type newType, mlir::ValueRange operands)
 {
     assert(nullptr != op);
-    auto signlessType = makeSignlessType(newType);
+    auto signlessType = plier::makeSignlessType(newType);
     llvm::SmallVector<mlir::Value> newOperands(operands.size());
     for (auto it : llvm::enumerate(operands))
     {
@@ -772,7 +760,7 @@ mlir::Value replace_itruediv_op(mlir::Operation* op, mlir::PatternRewriter& rewr
 mlir::Value replace_imod_op(mlir::Operation* op, mlir::PatternRewriter& rewriter, mlir::Type newType, mlir::ValueRange operands)
 {
     auto loc = op->getLoc();
-    auto signlessType = makeSignlessType(operands[0].getType());
+    auto signlessType = plier::makeSignlessType(operands[0].getType());
     auto a = do_cast(signlessType, operands[0], rewriter);
     auto b = do_cast(signlessType, operands[1], rewriter);
     auto v1 = rewriter.create<mlir::SignedRemIOp>(loc, a, b).getResult();
@@ -795,7 +783,7 @@ template<mlir::CmpIPredicate Pred>
 mlir::Value replace_cmpi_op(mlir::Operation* op, mlir::PatternRewriter& rewriter, mlir::Type /*newType*/, mlir::ValueRange operands)
 {
     assert(nullptr != op);
-    auto signlessType = makeSignlessType(operands[0].getType());
+    auto signlessType = plier::makeSignlessType(operands[0].getType());
     auto a = do_cast(signlessType, operands[0], rewriter);
     auto b = do_cast(signlessType, operands[1], rewriter);
     return rewriter.createOrFold<mlir::CmpIOp>(op->getLoc(), Pred, a, b);
@@ -805,7 +793,7 @@ template<mlir::CmpFPredicate Pred>
 mlir::Value replace_cmpf_op(mlir::Operation* op, mlir::PatternRewriter& rewriter, mlir::Type /*newType*/, mlir::ValueRange operands)
 {
     assert(nullptr != op);
-    auto signlessType = makeSignlessType(operands[0].getType());
+    auto signlessType = plier::makeSignlessType(operands[0].getType());
     auto a = do_cast(signlessType, operands[0], rewriter);
     auto b = do_cast(signlessType, operands[1], rewriter);
     return rewriter.createOrFold<mlir::CmpFOp>(op->getLoc(), Pred, a, b);
@@ -919,7 +907,7 @@ mlir::Value negate(mlir::Value val, mlir::Location loc, mlir::PatternRewriter &r
     auto type = val.getType();
     if (auto itype = type.dyn_cast<mlir::IntegerType>())
     {
-        auto signless = makeSignlessType(itype);
+        auto signless = plier::makeSignlessType(itype);
         if (signless != itype)
         {
             val = rewriter.create<plier::SignCastOp>(loc, signless, val);
