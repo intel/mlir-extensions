@@ -17,6 +17,8 @@
 #include <mlir/Transforms/DialectConversion.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/Dialect/SCF/SCF.h>
+#include <mlir/Dialect/SCF/Transforms.h>
+#include <mlir/Dialect/StandardOps/Transforms/FuncConversions.h>
 
 #include "plier/dialect.hpp"
 
@@ -376,4 +378,29 @@ mlir::LogicalResult plier::FixCallOmittedArgs::matchAndRewrite(mlir::CallOp op, 
     assert((filterResults(), newOpResults.empty()));
     rewriter.replaceOp(op, newResults);
     return mlir::success();
+}
+
+void plier::populateControlFlowTypeConversionRewritesAndTarget(
+    mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns, mlir::ConversionTarget& target)
+{
+    mlir::populateFuncOpTypeConversionPattern(patterns, typeConverter);
+    target.addDynamicallyLegalOp<mlir::FuncOp>([&](mlir::FuncOp op) {
+        return typeConverter.isSignatureLegal(op.getType()) &&
+               typeConverter.isLegal(&op.getBody());
+    });
+    mlir::populateCallOpTypeConversionPattern(patterns, typeConverter);
+    target.addDynamicallyLegalOp<mlir::CallOp>(
+        [&](mlir::CallOp op) { return typeConverter.isLegal(op); });
+
+    mlir::populateBranchOpInterfaceTypeConversionPattern(patterns, typeConverter);
+    mlir::populateReturnOpTypeConversionPattern(patterns, typeConverter);
+    mlir::scf::populateSCFStructuralTypeConversionsAndLegality(typeConverter, patterns,
+                                                               target);
+
+    target.markUnknownOpDynamicallyLegal([&](mlir::Operation *op) {
+        return mlir::isNotBranchOpInterfaceOrReturnLikeOp(op) ||
+               mlir::isLegalForBranchOpInterfaceTypeConversionPattern(op,
+                                                                      typeConverter) ||
+               mlir::isLegalForReturnOpTypeConversionPattern(op, typeConverter);
+    });
 }
