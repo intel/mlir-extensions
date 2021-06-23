@@ -137,12 +137,14 @@ bool consume_until(llvm::StringRef &name, llvm::StringRef end) {
 mlir::Type map_plier_type_name(mlir::MLIRContext &ctx, llvm::StringRef &name);
 bool map_type_helper(mlir::MLIRContext &ctx, llvm::StringRef &name,
                      mlir::Type &ret, llvm::StringRef end) {
-  auto type = map_plier_type_name(ctx, name);
-  if (type && name.consume_front(end)) {
+  auto nameCopy = name;
+  auto type = map_plier_type_name(ctx, nameCopy);
+  if (type && nameCopy.consume_front(end)) {
     ret = type;
+    name = nameCopy;
     return true;
   }
-  auto nameCopy = name;
+  nameCopy = name;
   if (consume_until(nameCopy, end)) {
     auto len = name.size() - nameCopy.size() - end.size();
     ret = plier::PyType::get(&ctx, name.take_front(len));
