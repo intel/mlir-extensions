@@ -55,7 +55,12 @@ mlir::Attribute plier::getConstAttr(mlir::Type type, double val)
 int64_t plier::getIntAttrValue(mlir::IntegerAttr attr)
 {
     assert(attr);
-    auto type = attr.getType().cast<mlir::IntegerType>();
+    auto attrType = attr.getType();
+    if (attrType.isa<mlir::IndexType>())
+    {
+        return attr.getInt();
+    }
+    auto type = attrType.cast<mlir::IntegerType>();
     if (type.isSigned())
     {
         return attr.getSInt();
