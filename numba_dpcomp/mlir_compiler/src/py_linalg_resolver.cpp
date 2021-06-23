@@ -287,13 +287,19 @@ llvm::Optional<py::object> getPyLiteral(mlir::Attribute attr)
     return {};
 }
 
-llvm::Optional<py::object> make_py_literal(mlir::Value val)
+llvm::Optional<py::object> makePyLiteral(mlir::Value val)
 {
     assert(val);
     if (auto literal = val.getType().dyn_cast<plier::LiteralType>())
     {
         return getPyLiteral(literal.getValue());
     }
+
+    if (auto cast = val.getDefiningOp<plier::SignCastOp>())
+    {
+        val = cast.value();
+    }
+
     if (auto attr = plier::getConstVal<mlir::Attribute>(val))
     {
         return getPyLiteral(attr);
@@ -340,7 +346,7 @@ struct PyLinalgResolver::Context
         {
             return create_type(typevar.getType());
         }
-        if (auto literal = make_py_literal(value))
+        if (auto literal = makePyLiteral(value))
         {
             return *literal;
         }
