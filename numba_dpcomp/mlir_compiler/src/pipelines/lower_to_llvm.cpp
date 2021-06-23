@@ -69,8 +69,8 @@ mlir::LowerToLLVMOptions getLLVMOptions(mlir::MLIRContext &context) {
   return opts;
 }
 
-mlir::Value doCast(mlir::OpBuilder &builder, mlir::Location loc, mlir::Value src, mlir::Type dstType)
-{
+mlir::Value doCast(mlir::OpBuilder &builder, mlir::Location loc,
+                   mlir::Value src, mlir::Type dstType) {
   if (src.getType() == dstType)
     return src;
 
