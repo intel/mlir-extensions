@@ -692,26 +692,27 @@ struct FixStridedReshape
   }
 };
 
-struct FixStridedIf : public mlir::OpRewritePattern<mlir::scf::IfOp> {
+struct FixStridedIf : public mlir::OpRewritePattern<mlir::scf::YieldOp> {
   using OpRewritePattern::OpRewritePattern;
 
   mlir::LogicalResult
-  matchAndRewrite(mlir::scf::IfOp op,
+  matchAndRewrite(mlir::scf::YieldOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    if (op.getNumResults() == 0) {
+    if (op.getNumOperands() == 0)
       return mlir::failure();
-    }
 
-    llvm::SmallVector<mlir::Type> resultTypes(op.getNumResults());
-    auto trueYield = op.thenYield();
-    auto falseYield = op.elseYield();
+    auto ifOp = mlir::dyn_cast<mlir::scf::IfOp>(op->getParentOp());
+    if (!ifOp)
+      return mlir::failure();
+
+    llvm::SmallVector<mlir::Type> resultTypes(ifOp.getNumResults());
+    auto trueYield = ifOp.thenYield();
+    auto falseYield = ifOp.elseYield();
 
     bool changed = false;
-    rewriter.startRootUpdate(op);
-
     for (auto it : llvm::enumerate(llvm::zip(trueYield.getOperandTypes(),
                                              falseYield.getOperandTypes(),
-                                             op.getResultTypes()))) {
+                                             ifOp.getResultTypes()))) {
       auto index = static_cast<unsigned>(it.index());
       auto trueType = std::get<0>(it.value());
       auto falseType = std::get<1>(it.value());
@@ -744,14 +745,12 @@ struct FixStridedIf : public mlir::OpRewritePattern<mlir::scf::IfOp> {
       }
     }
 
-    if (changed) {
-      for (auto it : llvm::enumerate(op->getResults())) {
-        it.value().setType(resultTypes[it.index()]);
-      }
-      rewriter.finalizeRootUpdate(op);
-    } else {
-      rewriter.cancelRootUpdate(op);
-    }
+    if (changed)
+      rewriter.updateRootInPlace(ifOp, [&]() {
+        for (auto it : llvm::enumerate(ifOp->getResults()))
+          it.value().setType(resultTypes[it.index()]);
+      });
+
     return mlir::success(changed);
   }
 };
