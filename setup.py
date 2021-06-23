@@ -36,17 +36,19 @@ LLVM_PATH = os.environ['LLVM_PATH']
 LLVM_DIR = os.path.join(LLVM_PATH, "lib", "cmake", "llvm")
 MLIR_DIR = os.path.join(LLVM_PATH, "lib", "cmake", "mlir")
 TBB_DIR = os.path.join(os.environ['TBB_PATH'], "lib", "cmake", "tbb")
-CMAKE_INSTALL_PREFIX = os.path.join(".", "numba_dpcomp")
+CMAKE_INSTALL_PREFIX = os.path.join(os.getcwd(), "numba_dpcomp")
 
+cmake_build_dir = os.path.join(os.getcwd(), "cmake_build")
 cmake_cmd = [
 "cmake",
+"-GNinja",
 ]
 
 if IS_WIN:
     cmake_cmd += ["-A", "x64"]
 
 cmake_cmd += [
-".",
+"..",
 '-DCMAKE_BUILD_TYPE=Release',
 "-DLLVM_DIR=" + LLVM_DIR,
 "-DMLIR_DIR=" + MLIR_DIR,
@@ -68,9 +70,14 @@ try:
 except ImportError:
     print("DPNP not found")
 
-subprocess.check_call(cmake_cmd, stderr=subprocess.STDOUT, shell=False)
-subprocess.check_call(["cmake", "--build", ".", "--config", "Release"])
-subprocess.check_call(["cmake", "--install", ".", "--config", "Release"])
+try:
+    os.mkdir(cmake_build_dir)
+except FileExistsError:
+    pass
+
+subprocess.check_call(cmake_cmd, stderr=subprocess.STDOUT, shell=False, cwd=cmake_build_dir)
+subprocess.check_call(["cmake", "--build", ".", "--config", "Release"], cwd=cmake_build_dir)
+subprocess.check_call(["cmake", "--install", ".", "--config", "Release"], cwd=cmake_build_dir)
 
 # =============================================================================
 

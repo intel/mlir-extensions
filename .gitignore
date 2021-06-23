@@ -173,3 +173,5 @@ cython_debug/
 # Qt Creator files
 CMakeLists.txt.user
 
+# Build dir
+/cmake_build
