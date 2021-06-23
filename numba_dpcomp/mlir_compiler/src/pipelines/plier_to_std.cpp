@@ -1851,6 +1851,25 @@ void PlierToStdPass::runOnOperation() {
   (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
 }
 
+static void flattenTuple(mlir::OpBuilder &builder, mlir::Location loc,
+                         mlir::ValueRange values,
+                         llvm::SmallVectorImpl<mlir::Value> &ret) {
+  for (auto arg : values) {
+    if (auto tupleType = arg.getType().dyn_cast<mlir::TupleType>()) {
+      for (auto it : llvm::enumerate(tupleType.getTypes())) {
+        auto i = it.index();
+        auto argType = it.value();
+        auto ind = builder.createOrFold<mlir::ConstantIndexOp>(loc, i);
+        auto res =
+            builder.createOrFold<plier::GetItemOp>(loc, argType, arg, ind);
+        flattenTuple(builder, loc, res, ret);
+      }
+    } else {
+      ret.emplace_back(arg);
+    }
+  }
+}
+
 struct UntupleReturn : public mlir::OpConversionPattern<mlir::ReturnOp> {
   using mlir::OpConversionPattern<mlir::ReturnOp>::OpConversionPattern;
 
@@ -1859,20 +1878,7 @@ struct UntupleReturn : public mlir::OpConversionPattern<mlir::ReturnOp> {
                   mlir::ConversionPatternRewriter &rewriter) const override {
     llvm::SmallVector<mlir::Value> newOperands;
     auto loc = op.getLoc();
-    for (auto arg : operands) {
-      if (auto tupleType = arg.getType().dyn_cast<mlir::TupleType>()) {
-        for (auto it : llvm::enumerate(tupleType.getTypes())) {
-          auto i = it.index();
-          auto argType = it.value();
-          auto ind = rewriter.createOrFold<mlir::ConstantIndexOp>(loc, i);
-          auto res =
-              rewriter.createOrFold<plier::GetItemOp>(loc, argType, arg, ind);
-          newOperands.emplace_back(res);
-        }
-      } else {
-        newOperands.emplace_back(arg);
-      }
-    }
+    flattenTuple(rewriter, loc, operands, newOperands);
     auto *operation = op.getOperation();
     rewriter.updateRootInPlace(op,
                                [&]() { operation->setOperands(newOperands); });
@@ -1891,9 +1897,11 @@ struct UntuplePass
     // Convert unknown types to itself
     typeConverter.addConversion([](mlir::Type type) { return type; });
     typeConverter.addConversion(
-        [](mlir::TupleType type, llvm::SmallVectorImpl<mlir::Type> &ret) {
-          ret.resize(type.size());
-          llvm::copy(type.getTypes(), ret.begin());
+        [&typeConverter](mlir::TupleType type,
+                         llvm::SmallVectorImpl<mlir::Type> &ret)
+            -> llvm::Optional<mlir::LogicalResult> {
+          if (mlir::failed(typeConverter.convertTypes(type.getTypes(), ret)))
+            return llvm::None;
           return mlir::success();
         });
 
