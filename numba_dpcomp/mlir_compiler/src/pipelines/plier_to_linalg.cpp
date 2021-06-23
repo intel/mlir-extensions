@@ -614,39 +614,13 @@ mlir::Value unstride(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value s
     }
     auto rank = static_cast<unsigned>(srcType.getRank());
     llvm::SmallVector<mlir::Value> sizes(rank);
-    llvm::SmallVector<mlir::Value> strides;
-    if (llvm::all_of(newType.getAffineMaps(), [](auto m) { return m.isIdentity(); }))
+    for (unsigned i = 0; i < rank; ++i)
     {
-        for (unsigned i = 0; i < rank; ++i)
-        {
-            sizes[i] = builder.createOrFold<mlir::memref::DimOp>(loc, src, i);
-        }
-    }
-    else
-    {
-        strides.resize(rank + 1);
-        strides[0] = builder.createOrFold<mlir::ConstantIndexOp>(loc, 0);
-        for (unsigned i = 0; i < rank; ++i)
-        {
-            auto size = builder.createOrFold<mlir::memref::DimOp>(loc, src, i);
-            sizes[i] = size;
-            auto stride = [&]()->mlir::Value
-            {
-                if (i == 0)
-                {
-                    return builder.createOrFold<mlir::ConstantIndexOp>(loc, 1);
-                }
-                else
-                {
-                    return builder.createOrFold<mlir::MulIOp>(loc, strides[i], sizes[i - 1]);
-                }
-            }();
-            strides[i + 1] = stride;
-        }
+        sizes[i] = builder.createOrFold<mlir::memref::DimOp>(loc, src, i);
     }
 
-    auto allocType = mlir::MemRefType::get(llvm::SmallVector<int64_t>(rank, mlir::ShapedType::kDynamicSize), srcType.getElementType(), newType.getAffineMaps());
-    auto result = builder.create<mlir::memref::AllocOp>(loc, allocType, sizes, strides).getResult();
+    auto allocType = mlir::MemRefType::get(llvm::SmallVector<int64_t>(rank, mlir::ShapedType::kDynamicSize), srcType.getElementType());
+    auto result = builder.create<mlir::memref::AllocOp>(loc, allocType, sizes).getResult();
     if (result.getType() != newType)
     {
         result = builder.createOrFold<mlir::memref::CastOp>(loc, result, newType);
