@@ -107,6 +107,16 @@ def test_var(val):
     jit_func = njit(py_func)
     assert_equal(py_func(val), jit_func(val))
 
+@parametrize_function_variants("py_func", [
+    'lambda a : bool(a)',
+    'lambda a : int(a)',
+    # 'lambda a : float(a)', TODO: numba can't into float(bool)
+    # TODO: str
+    ])
+@pytest.mark.parametrize("val", _test_values)
+def test_cast(py_func, val):
+    jit_func = njit(py_func)
+    assert_equal(py_func(val), jit_func(val))
 
 class TestMlirBasic(TestCase):
     def test_none_args(self):
