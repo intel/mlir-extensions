@@ -70,9 +70,11 @@ jobs:
 
   - script: |
       source /usr/share/miniconda/bin/activate
-      conda create -y -n build_env numba scipy pybind11 pytest lit dpnp mkl=2021.1 -c conda-forge -c intel
+      conda create -y -n build_env numba=0.53 scipy pybind11 pytest lit dpnp mkl=2021.1 -c conda-forge -c intel
       conda activate build_env
       conda install -y tbb=2021 -c conda-forge -c intel --force
+      conda list
+      python -c "import numba; print('numba', numba.__version__)"
       cmake --version
       chmod -R 777 $(System.DefaultWorkingDirectory)/llvm_cache
       export LLVM_PATH=$(System.DefaultWorkingDirectory)/llvm_cache
