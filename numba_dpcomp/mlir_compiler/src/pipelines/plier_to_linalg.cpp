@@ -174,8 +174,8 @@ mlir::Type map_array_type(mlir::MLIRContext &ctx, mlir::TypeConverter &conveter,
 }
 
 mlir::Type map_plier_type(mlir::TypeConverter &converter, mlir::Type type) {
-  if (type.isa<plier::PyType>()) {
-    auto name = type.cast<plier::PyType>().getName();
+  if (auto pyType = type.dyn_cast<plier::PyType>()) {
+    auto name = pyType.getName();
     return map_array_type(*type.getContext(), converter, name);
   }
   return nullptr;
