@@ -683,10 +683,9 @@ mlir::Value index_cast_impl(mlir::PatternRewriter& rewriter, mlir::Location loc,
     return plier::index_cast(rewriter, loc, val, dstType);
 }
 
-mlir::Value doCast(mlir::Type dstType, mlir::Value val, mlir::PatternRewriter& rewriter)
+mlir::Value doCast(mlir::PatternRewriter& rewriter, mlir::Location loc, mlir::Value val, mlir::Type dstType)
 {
     assert(dstType);
-    auto loc = val.getLoc();
     auto src_type = val.getType();
     if (src_type == dstType)
     {
@@ -722,49 +721,47 @@ mlir::Value doCast(mlir::Type dstType, mlir::Value val, mlir::PatternRewriter& r
 }
 
 template<typename T>
-mlir::Value replace_op(mlir::PatternRewriter& rewriter, mlir::Location loc, mlir::Operation* op, mlir::ValueRange operands, mlir::Type newType)
+mlir::Value replace_op(mlir::PatternRewriter& rewriter, mlir::Location loc, mlir::ValueRange operands, mlir::Type newType)
 {
-    assert(nullptr != op);
     auto signlessType = plier::makeSignlessType(newType);
     llvm::SmallVector<mlir::Value> newOperands(operands.size());
     for (auto it : llvm::enumerate(operands))
     {
-        newOperands[it.index()] = doCast(signlessType, it.value(), rewriter);
+        newOperands[it.index()] = doCast(rewriter, loc, it.value(), signlessType);
     }
     auto res = rewriter.createOrFold<T>(loc, newOperands);
-    return doCast(newType, res, rewriter);
+    return doCast(rewriter, loc, res, newType);
 }
 
-mlir::Value replace_ipow_op(mlir::PatternRewriter& rewriter, mlir::Location loc, mlir::Operation* op, mlir::ValueRange operands, mlir::Type newType)
+mlir::Value replace_ipow_op(mlir::PatternRewriter& rewriter, mlir::Location loc, mlir::ValueRange operands, mlir::Type newType)
 {
-    assert(nullptr != op);
-    auto a = doCast(rewriter.getF64Type(), operands[0], rewriter);
-    auto b = doCast(rewriter.getF64Type(), operands[1], rewriter);
+    auto f64Type = rewriter.getF64Type();
+    auto a = doCast(rewriter, loc, operands[0], f64Type);
+    auto b = doCast(rewriter, loc, operands[1], f64Type);
     auto fres = rewriter.create<mlir::math::PowFOp>(loc, a, b).getResult();
-    return doCast(newType, fres, rewriter);
+    return doCast(rewriter, loc, fres, newType);
 }
 
-mlir::Value replace_itruediv_op(mlir::PatternRewriter& rewriter, mlir::Location loc, mlir::Operation* op, mlir::ValueRange operands, mlir::Type newType)
+mlir::Value replace_itruediv_op(mlir::PatternRewriter& rewriter, mlir::Location loc, mlir::ValueRange operands, mlir::Type newType)
 {
-    assert(nullptr != op);
     assert(newType.isa<mlir::FloatType>());
-    auto lhs = doCast(newType, operands[0], rewriter);
-    auto rhs = doCast(newType, operands[1], rewriter);
+    auto lhs = doCast(rewriter, loc, operands[0], newType);
+    auto rhs = doCast(rewriter, loc, operands[1], newType);
     return rewriter.createOrFold<mlir::DivFOp>(loc, lhs, rhs);
 }
 
-mlir::Value replace_imod_op(mlir::PatternRewriter& rewriter, mlir::Location loc, mlir::Operation* op, mlir::ValueRange operands, mlir::Type newType)
+mlir::Value replace_imod_op(mlir::PatternRewriter& rewriter, mlir::Location loc, mlir::ValueRange operands, mlir::Type newType)
 {
     auto signlessType = plier::makeSignlessType(operands[0].getType());
-    auto a = doCast(signlessType, operands[0], rewriter);
-    auto b = doCast(signlessType, operands[1], rewriter);
+    auto a = doCast(rewriter, loc, operands[0], signlessType);
+    auto b = doCast(rewriter, loc, operands[1], signlessType);
     auto v1 = rewriter.create<mlir::SignedRemIOp>(loc, a, b).getResult();
     auto v2 = rewriter.create<mlir::AddIOp>(loc, v1, b).getResult();
     auto res = rewriter.create<mlir::SignedRemIOp>(loc, v2, b).getResult();
-    return doCast(newType, res, rewriter);
+    return doCast(rewriter, loc, res, newType);
 }
 
-mlir::Value replace_fmod_op(mlir::PatternRewriter& rewriter, mlir::Location loc, mlir::Operation* op, mlir::ValueRange operands, mlir::Type newType)
+mlir::Value replace_fmod_op(mlir::PatternRewriter& rewriter, mlir::Location loc, mlir::ValueRange operands, mlir::Type /*newType*/)
 {
     auto a = operands[0];
     auto b = operands[1];
@@ -774,15 +771,14 @@ mlir::Value replace_fmod_op(mlir::PatternRewriter& rewriter, mlir::Location loc,
 }
 
 template<mlir::CmpIPredicate SignedPred, mlir::CmpIPredicate UnsignedPred = SignedPred>
-mlir::Value replace_cmpi_op(mlir::PatternRewriter& rewriter, mlir::Location loc, mlir::Operation* op, mlir::ValueRange operands, mlir::Type newType)
+mlir::Value replace_cmpi_op(mlir::PatternRewriter& rewriter, mlir::Location loc, mlir::ValueRange operands, mlir::Type /*newType*/)
 {
-    assert(nullptr != op);
     assert(operands.size() == 2);
     assert(operands[0].getType() == operands[1].getType());
     auto type = operands[0].getType().cast<mlir::IntegerType>();
     auto signlessType = plier::makeSignlessType(type);
-    auto a = doCast(signlessType, operands[0], rewriter);
-    auto b = doCast(signlessType, operands[1], rewriter);
+    auto a = doCast(rewriter, loc, operands[0], signlessType);
+    auto b = doCast(rewriter, loc, operands[1], signlessType);
     if (SignedPred == UnsignedPred || type.isSigned())
     {
         return rewriter.createOrFold<mlir::CmpIOp>(loc, SignedPred, a, b);
@@ -794,12 +790,11 @@ mlir::Value replace_cmpi_op(mlir::PatternRewriter& rewriter, mlir::Location loc,
 }
 
 template<mlir::CmpFPredicate Pred>
-mlir::Value replace_cmpf_op(mlir::PatternRewriter& rewriter, mlir::Location loc, mlir::Operation* op, mlir::ValueRange operands, mlir::Type /*newType*/)
+mlir::Value replace_cmpf_op(mlir::PatternRewriter& rewriter, mlir::Location loc, mlir::ValueRange operands, mlir::Type /*newType*/)
 {
-    assert(nullptr != op);
     auto signlessType = plier::makeSignlessType(operands[0].getType());
-    auto a = doCast(signlessType, operands[0], rewriter);
-    auto b = doCast(signlessType, operands[1], rewriter);
+    auto a = doCast(rewriter, loc, operands[0], signlessType);
+    auto b = doCast(rewriter, loc, operands[1], signlessType);
     return rewriter.createOrFold<mlir::CmpFOp>(loc, Pred, a, b);
 }
 
@@ -829,12 +824,13 @@ struct BinOpLowering : public mlir::OpRewritePattern<plier::BinOp>
         mlir::Type finalType;
         std::array<mlir::Value, 2> convertedOperands;
 
+        auto loc = op.getLoc();
         if (type0 != type1)
         {
             finalType = coerce(type0, type1);
             convertedOperands = {
-                doCast(finalType, operands[0], rewriter),
-                doCast(finalType, operands[1], rewriter)};
+                doCast(rewriter, loc, operands[0], finalType),
+                doCast(rewriter, loc, operands[1], finalType)};
         }
         else
         {
@@ -843,7 +839,7 @@ struct BinOpLowering : public mlir::OpRewritePattern<plier::BinOp>
         }
         assert(finalType);
 
-        using func_t = mlir::Value(*)(mlir::PatternRewriter&, mlir::Location, mlir::Operation*, mlir::ValueRange, mlir::Type);
+        using func_t = mlir::Value(*)(mlir::PatternRewriter&, mlir::Location, mlir::ValueRange, mlir::Type);
         struct OpDesc
         {
             llvm::StringRef type;
@@ -873,7 +869,6 @@ struct BinOpLowering : public mlir::OpRewritePattern<plier::BinOp>
                    &replace_cmpf_op<mlir::CmpFPredicate::OEQ>},
         };
 
-        auto loc = op.getLoc();
         using membptr_t = func_t OpDesc::*;
         auto call_handler = [&](membptr_t mem)
         {
@@ -881,7 +876,7 @@ struct BinOpLowering : public mlir::OpRewritePattern<plier::BinOp>
             {
                 if (h.type == op.op())
                 {
-                    auto res = (h.*mem)(rewriter, loc, op, convertedOperands, resType);
+                    auto res = (h.*mem)(rewriter, loc, convertedOperands, resType);
                     if (res.getType() != resType)
                     {
                         res = rewriter.createOrFold<plier::SignCastOp>(op.getLoc(), resType, res);
@@ -909,7 +904,7 @@ private:
 
 mlir::Value negate(mlir::PatternRewriter &rewriter, mlir::Location loc, mlir::Value val, mlir::Type resType)
 {
-    val = doCast(resType, val ,rewriter);
+    val = doCast(rewriter, loc, val, resType);
     if (auto itype = resType.dyn_cast<mlir::IntegerType>())
     {
         auto signless = plier::makeSignlessType(resType);
@@ -953,14 +948,15 @@ struct UnaryOpLowering : public mlir::OpRewritePattern<plier::UnaryOp>
         {
             return mlir::failure();
         }
+        auto loc = op.getLoc();
         if (op.op() == "+")
         {
-            arg = doCast(resType, arg, rewriter);
+            arg = doCast(rewriter, loc, arg, resType);
             rewriter.replaceOp(op, arg);
             return mlir::success();
         }
         assert(op.op() == "-");
-        auto new_val = negate(rewriter, op.getLoc(), arg, resType);
+        auto new_val = negate(rewriter, loc, arg, resType);
         rewriter.replaceOp(op, new_val);
         return mlir::success();
     }
@@ -1674,6 +1670,8 @@ struct FoldSliceGetitem : public mlir::OpRewritePattern<plier::GetItemOp>
             return mlir::failure();
         }
 
+        auto loc = op.getLoc();
+        auto indexType = rewriter.getIndexType();
         if (auto val = plier::getConstVal<mlir::IntegerAttr>(op.index()))
         {
             auto index = plier::getIntAttrValue(val);
@@ -1681,7 +1679,7 @@ struct FoldSliceGetitem : public mlir::OpRewritePattern<plier::GetItemOp>
                 !buildSice.getOperand(static_cast<unsigned>(index)).getType().isa<plier::NoneType>())
             {
                 auto val = buildSice.getOperand(static_cast<unsigned>(index));
-                rewriter.replaceOp(op, doCast(rewriter.getIndexType(), val, rewriter));
+                rewriter.replaceOp(op, doCast(rewriter, loc, val, indexType));
                 return mlir::success();
             }
         }
@@ -1803,10 +1801,11 @@ mlir::LogicalResult lower_bool_cast(plier::PyCallOp op, llvm::ArrayRef<mlir::Val
             success = true;
         }
     };
-    auto src_type = val.getType();
-    auto dst_type = mlir::IntegerType::get(op.getContext(), 1);
-    mlir::TypeSwitch<mlir::Type>(src_type)
-        .Case<mlir::IntegerType>([&](auto) { replace_op(doCast(dst_type, val, rewriter)); });
+    auto srcType = val.getType();
+    auto dstType = mlir::IntegerType::get(op.getContext(), 1);
+    auto loc = op.getLoc();
+    mlir::TypeSwitch<mlir::Type>(srcType)
+        .Case<mlir::IntegerType>([&](auto) { replace_op(doCast(rewriter, loc, val, dstType)); });
     return mlir::success(success);
 }
 
@@ -1972,7 +1971,10 @@ void PlierToStdPass::runOnOperation()
 
     patterns.insert<
         plier::CastOpLowering
-        >(type_converter, context, &doCast);
+        >(type_converter, context, [](mlir::Type type, mlir::Value val, mlir::PatternRewriter& rewriter)
+          {
+              return doCast(rewriter, val.getLoc(), val, type);
+          });
 
     CallLowerer callLowerer;
 
