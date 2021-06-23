@@ -278,6 +278,14 @@ llvm::Optional<py::object> getPyLiteral(mlir::Attribute attr)
     assert(attr);
     if (auto intAttr = attr.dyn_cast<mlir::IntegerAttr>())
     {
+        if (auto intType = attr.getType().dyn_cast<mlir::IntegerType>())
+        {
+            // Ignore index type
+            if (intType.getWidth() == 1)
+            {
+                return py::bool_(intAttr.getInt() != 0);
+            }
+        }
         return py::int_(plier::getIntAttrValue(intAttr));
     }
     if (auto floatAttr = attr.dyn_cast<mlir::FloatAttr>())
@@ -413,6 +421,12 @@ struct PyLinalgResolver::Context
             mlir::ValueRange vr(elems);
             auto resType = mlir::TupleType::get(builder.getContext(), vr.getTypes());
             return builder.create<plier::BuildTupleOp>(loc, resType, elems);
+        }
+        if (py::isinstance<py::bool_>(obj))
+        {
+            auto type = builder.getI1Type();
+            auto attr = builder.getIntegerAttr(type, (obj.cast<bool>() ? 1 : 0));
+            return builder.create<mlir::ConstantOp>(loc, attr);
         }
         if (py::isinstance<py::int_>(obj))
         {
