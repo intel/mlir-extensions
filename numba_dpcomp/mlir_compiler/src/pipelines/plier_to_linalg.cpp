@@ -2062,7 +2062,9 @@ void PostLinalgOptPass::runOnFunction()
     plier::populate_common_opts_patterns(context, patterns);
 
     patterns.insert<
-        plier::CanonicalizeReduction
+        plier::CanonicalizeReduction,
+        plier::PromoteToParallel,
+        plier::MergeNestedForIntoParallel
         >(&context);
 
     auto additionalOpt = [](mlir::FuncOp op)
@@ -2070,31 +2072,6 @@ void PostLinalgOptPass::runOnFunction()
         return plier::naivelyFuseParallelOps(op.getRegion());
     };
     if (mlir::failed(applyOptimizations(getFunction(), std::move(patterns), getAnalysisManager(), additionalOpt)))
-    {
-        signalPassFailure();
-    }
-}
-
-struct PromoteParallelPass :
-    public mlir::PassWrapper<PromoteParallelPass, mlir::FunctionPass>
-{
-    void runOnFunction() override;
-};
-
-void PromoteParallelPass::runOnFunction()
-{
-    auto& context = getContext();
-    mlir::OwningRewritePatternList patterns(&context);
-
-    plier::populate_common_opts_patterns(context, patterns);
-
-    patterns.insert<
-        plier::CanonicalizeReduction,
-        plier::PromoteToParallel,
-        plier::MergeNestedForIntoParallel
-        >(&context);
-
-    if (mlir::failed(applyOptimizations(getFunction(), std::move(patterns), getAnalysisManager())))
     {
         signalPassFailure();
     }
@@ -2156,7 +2133,6 @@ void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager& pm)
     pm.addPass(std::make_unique<ForceInlinePass>());
     pm.addPass(mlir::createSymbolDCEPass());
     pm.addNestedPass<mlir::FuncOp>(std::make_unique<PostLinalgOptPass>());
-    pm.addNestedPass<mlir::FuncOp>(std::make_unique<PromoteParallelPass>());
 
     pm.addNestedPass<mlir::FuncOp>(std::make_unique<FixDeallocPlacementPass>());
 }
