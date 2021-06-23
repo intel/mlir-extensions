@@ -20,6 +20,7 @@
 namespace mlir
 {
 class Operation;
+class IntegerAttr;
 }
 
 namespace plier
@@ -40,4 +41,6 @@ T getConstVal(mlir::Value op)
 }
 
 mlir::Attribute getConstAttr(mlir::Type type, double val);
+
+int64_t getIntAttrValue(mlir::IntegerAttr attr);
 }

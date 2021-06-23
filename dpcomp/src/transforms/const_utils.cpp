@@ -51,3 +51,22 @@ mlir::Attribute plier::getConstAttr(mlir::Type type, double val)
     }
     return {};
 }
+
+int64_t plier::getIntAttrValue(mlir::IntegerAttr attr)
+{
+    assert(attr);
+    auto type = attr.getType().cast<mlir::IntegerType>();
+    if (type.isSigned())
+    {
+        return attr.getSInt();
+    }
+    else if (type.isUnsigned())
+    {
+        return static_cast<int64_t>(attr.getUInt());
+    }
+    else
+    {
+        assert(type.isSignless());
+        return attr.getInt();
+    }
+}
