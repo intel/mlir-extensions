@@ -66,7 +66,7 @@
 
 namespace
 {
-void applyOptimizations(mlir::FuncOp op, const mlir::FrozenRewritePatternSet& patterns, mlir::AnalysisManager am, llvm::function_ref<mlir::LogicalResult(mlir::FuncOp)> additionalOpts = nullptr)
+mlir::LogicalResult applyOptimizations(mlir::FuncOp op, const mlir::FrozenRewritePatternSet& patterns, mlir::AnalysisManager am, llvm::function_ref<mlir::LogicalResult(mlir::FuncOp)> additionalOpts = nullptr)
 {
     bool repeat = false;
     do
@@ -77,10 +77,17 @@ void applyOptimizations(mlir::FuncOp op, const mlir::FrozenRewritePatternSet& pa
         {
             repeat = true;
         }
-        if (mlir::succeeded(plier::optimizeMemoryOps(am)))
+
+        auto memOptRes = plier::optimizeMemoryOps(am);
+        if (!memOptRes)
+        {
+            return mlir::failure();
+        }
+        if (mlir::succeeded(*memOptRes))
         {
             repeat = true;
         }
+
         if (additionalOpts && mlir::succeeded(additionalOpts(op)))
         {
             repeat = true;
@@ -91,6 +98,7 @@ void applyOptimizations(mlir::FuncOp op, const mlir::FrozenRewritePatternSet& pa
         }
     }
     while(repeat);
+    return mlir::success();
 }
 
 enum class ArrayLayout
@@ -1719,7 +1727,7 @@ void PostPlierToLinalgPass::runOnFunction()
         SimplifyExpandDims
         >(&context);
 
-    applyOptimizations(getFunction(), std::move(patterns), getAnalysisManager());
+    (void)mlir::applyPatternsAndFoldGreedily(getFunction(), std::move(patterns));
 }
 
 struct MakeTensorsSignlessPass :
@@ -2056,11 +2064,14 @@ void PostLinalgOptPass::runOnFunction()
         FixDeallocPlacement
         >(&context);
 
-    applyOptimizations(getFunction(), std::move(patterns), getAnalysisManager(),
-                       [](mlir::FuncOp op)
+    auto additionalOpt = [](mlir::FuncOp op)
     {
         return plier::naivelyFuseParallelOps(op.getRegion());
-    });
+    };
+    if (mlir::failed(applyOptimizations(getFunction(), std::move(patterns), getAnalysisManager(), additionalOpt)))
+    {
+        signalPassFailure();
+    }
 }
 
 struct PromoteParallelPass :
@@ -2082,7 +2093,10 @@ void PromoteParallelPass::runOnFunction()
         plier::MergeNestedForIntoParallel
         >(&context);
 
-    applyOptimizations(getFunction(), std::move(patterns), getAnalysisManager());
+    if (mlir::failed(applyOptimizations(getFunction(), std::move(patterns), getAnalysisManager())))
+    {
+        signalPassFailure();
+    }
 }
 
 void populate_plier_to_linalg_gen_pipeline(mlir::OpPassManager& pm)
