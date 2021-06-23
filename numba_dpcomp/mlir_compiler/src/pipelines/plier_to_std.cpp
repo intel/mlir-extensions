@@ -660,23 +660,23 @@ mlir::Value int_float_cast(mlir::Type dstType, mlir::Value val, mlir::PatternRew
     }
 }
 
-mlir::Value float_int_cast(mlir::Type dst_type, mlir::Value val, mlir::PatternRewriter& rewriter)
+mlir::Value float_int_cast(mlir::Type dstType, mlir::Value val, mlir::PatternRewriter& rewriter)
 {
-    auto dstIntType = val.getType().cast<mlir::IntegerType>();
-    assert(!dstIntType.isSignless());
+    auto dstIntType = dstType.cast<mlir::IntegerType>();
     auto loc = val.getLoc();
     mlir::Value res;
+    auto dstSignlessType = plier::makeSignlessType(dstIntType);
     if (dstIntType.isSigned())
     {
-        res = rewriter.create<mlir::FPToSIOp>(loc, val, dst_type);
+        res = rewriter.create<mlir::FPToSIOp>(loc, val, dstSignlessType);
     }
     else
     {
-        res = rewriter.create<mlir::FPToUIOp>(loc, val, dst_type);
+        res = rewriter.create<mlir::FPToUIOp>(loc, val, dstSignlessType);
     }
-    if(res.getType() != dstIntType)
+    if(dstSignlessType != dstIntType)
     {
-        return rewriter.createOrFold<plier::SignCastOp>(loc, dstIntType, val);
+        return rewriter.createOrFold<plier::SignCastOp>(loc, dstIntType, res);
     }
     return res;
 }
