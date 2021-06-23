@@ -615,13 +615,7 @@ _rnd = np.random.RandomState(42)
 def test_cov_basic(m):
     py_func = _cov
     jit_func = njit(py_func)
-    m = m.copy() # TODO: fix strides
     assert_allclose(py_func(m), jit_func(m), rtol=1e-15, atol=1e-15)
-
-def _copy_array(arg):
-    if isinstance(arg, np.ndarray):
-        arg = arg.copy();
-    return arg
 
 _cov_inputs_m = _rnd.randn(105).reshape(15, 7)
 @pytest.mark.parametrize("m",
@@ -639,8 +633,6 @@ def test_cov_explicit_arguments(m, y, rowvar, bias, ddof):
         pytest.xfail()
     py_func = _cov
     jit_func = njit(py_func)
-    m = _copy_array(m) # TODO: fix strides
-    y = _copy_array(y) # TODO: fix strides
     assert_allclose(py_func(m=m, y=y, rowvar=rowvar, bias=bias, ddof=ddof), jit_func(m=m, y=y, rowvar=rowvar, bias=bias, ddof=ddof), rtol=1e-14, atol=1e-14)
 
 @parametrize_function_variants("m, y, rowvar", [
@@ -662,8 +654,6 @@ def test_cov_edge_cases(m, y, rowvar):
         pytest.xfail()
     py_func = _cov
     jit_func = njit(py_func)
-    m = _copy_array(m) # TODO: fix strides
-    y = _copy_array(y) # TODO: fix strides
     assert_allclose(py_func(m=m, y=y, rowvar=rowvar), jit_func(m=m, y=y, rowvar=rowvar), rtol=1e-14, atol=1e-14)
 
 if __name__ == '__main__':
