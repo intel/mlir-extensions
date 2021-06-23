@@ -915,37 +915,6 @@ struct ReshapeLowering : public mlir::ConvertOpToLLVMPattern<mlir::memref::Resha
     }
 };
 
-class CheckForPlierTypes :
-    public mlir::PassWrapper<CheckForPlierTypes, mlir::OperationPass<void>>
-{
-    void runOnOperation() override
-    {
-        markAllAnalysesPreserved();
-        auto plier_dialect = getContext().getOrLoadDialect<plier::PlierDialect>();
-        getOperation()->walk([&](mlir::Operation* op)
-        {
-            if (op->getName().getDialect() == plier_dialect)
-            {
-                op->emitOpError(": not all plier ops were translated\n");
-                signalPassFailure();
-                return;
-            }
-
-            auto check_type = [](mlir::Type type)
-            {
-                return type.isa<plier::PyType>();
-            };
-
-            if (llvm::any_of(op->getResultTypes(), check_type) ||
-                llvm::any_of(op->getOperandTypes(), check_type))
-            {
-                op->emitOpError(": plier types weren't translated\n");
-                signalPassFailure();
-            }
-        });
-    }
-};
-
 class LLVMFunctionPass : public mlir::OperationPass<mlir::LLVM::LLVMFuncOp>
 {
 public:
@@ -1537,7 +1506,6 @@ void populate_lower_to_llvm_pipeline(mlir::OpPassManager& pm)
     pm.addPass(std::make_unique<LowerParallelToCFGPass>());
     pm.addPass(mlir::createLowerToCFGPass());
     pm.addPass(mlir::createCanonicalizerPass());
-//    pm.addPass(std::make_unique<CheckForPlierTypes>());
     pm.addNestedPass<mlir::FuncOp>(std::make_unique<PreLLVMLowering>());
     pm.addPass(std::make_unique<LLVMLoweringPass>());
     pm.addNestedPass<mlir::LLVM::LLVMFuncOp>(std::make_unique<PostLLVMLowering>());

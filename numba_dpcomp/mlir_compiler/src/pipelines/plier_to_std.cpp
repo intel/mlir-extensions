@@ -2045,14 +2045,6 @@ void populate_std_type_converter(mlir::MLIRContext& /*context*/, mlir::TypeConve
         ret_types.push_back(ret);
         return mlir::success();
     });
-//    converter.addConversion([](mlir::IntegerType type)->llvm::Optional<mlir::Type>
-//    {
-//        if (!type.isSignless())
-//        {
-//            return mlir::IntegerType::get(type.getContext(), type.getWidth());
-//        }
-//        return llvm::None;
-//    });
 }
 
 void register_plier_to_std_pipeline(plier::PipelineRegistry& registry)
