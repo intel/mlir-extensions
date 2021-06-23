@@ -370,17 +370,6 @@ public:
 void plier::populateTupleTypeConversionRewritesAndTarget(
     mlir::TypeConverter &typeConverter, mlir::RewritePatternSet &patterns,
     mlir::ConversionTarget &target) {
-  typeConverter.addConversion(
-      [&typeConverter](mlir::TupleType type) -> llvm::Optional<mlir::Type> {
-        llvm::SmallVector<mlir::Type> newTypes(type.size());
-        for (auto it : llvm::enumerate(type)) {
-          auto converted = typeConverter.convertType(it.value());
-          if (!converted)
-            return mlir::Type{};
-          newTypes[it.index()] = converted;
-        }
-        return mlir::TupleType::get(type.getContext(), newTypes);
-      });
   patterns.insert<BuildTupleConversionPattern>(typeConverter,
                                                patterns.getContext());
   target.addDynamicallyLegalOp<plier::BuildTupleOp>(
