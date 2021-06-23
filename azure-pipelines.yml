@@ -29,7 +29,7 @@ jobs:
 
   - script: |
       call "C:\Miniconda\Scripts\activate"
-      call conda install numba=0.53 scipy pybind11 tbb=2021.1 pytest lit -c conda-forge
+      call conda install numba=0.53 numpy=1.20 scipy pybind11 tbb=2021.1 pytest lit -c conda-forge
       call cmake --version
       call set LLVM_PATH=$(System.DefaultWorkingDirectory)\llvm_cache
       call set TBB_PATH=$(System.DefaultWorkingDirectory)\tbb
@@ -70,7 +70,7 @@ jobs:
 
   - script: |
       source /usr/share/miniconda/bin/activate
-      conda create -y -n build_env scipy pybind11 pytest lit dpnp mkl=2021.1 -c conda-forge -c intel
+      conda create -y -n build_env numpy=1.20 scipy pybind11 pytest lit dpnp mkl=2021.1 -c conda-forge -c intel
       conda activate build_env
       pip install numba==0.53
       conda install -y tbb=2021 -c conda-forge -c intel --force
