@@ -66,10 +66,6 @@ llvm::Optional<int64_t> handler_impl(mlir::CmpIPredicate pred, mlir::Value lhs, 
 mlir::LogicalResult plier::CmpLoopBoundsSimplify::matchAndRewrite(mlir::scf::ForOp op, mlir::PatternRewriter& rewriter) const
 {
     auto index_var = op.getLoopBody().front().getArgument(0);
-    if (auto step_var = mlir::dyn_cast_or_null<mlir::ConstantOp>(op.step().getDefiningOp()))
-    {
-        assert(getIntAttrValue(step_var.value().cast<mlir::IntegerAttr>()) > 0);
-    }
     bool matched = false;
     for (auto user : llvm::make_early_inc_range(index_var.getUsers()))
     {
