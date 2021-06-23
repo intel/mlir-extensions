@@ -1299,7 +1299,7 @@ py::object insert_impl(py::capsule context, py::handle src, py::handle dst, py::
     auto offsetsVec = unwrapList(offsets);
     auto sizesVec = unwrapList(sizes);
     auto stridesVec = unwrapList(strides);
-    auto res = builder.create<mlir::SubTensorInsertOp>(loc, signlessSrc, signlessDst, offsetsVec, sizesVec, stridesVec).getResult();
+    auto res = builder.create<mlir::tensor::InsertSliceOp>(loc, signlessSrc, signlessDst, offsetsVec, sizesVec, stridesVec).getResult();
     res = doSignCast(builder, loc, res, dstTensor.getType());
     return ctx.context.create_var(context, res);
 }
