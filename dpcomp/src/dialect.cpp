@@ -647,6 +647,61 @@ void RetainOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
     RetainOp::build(builder, state, value.getType(), value);
 }
 
+
+mlir::OpFoldResult SignCastOp::fold(llvm::ArrayRef<mlir::Attribute> operands)
+{
+    assert(operands.size() == 1);
+    auto thisType = getType();
+    auto attrOperand = operands.front();
+    if (attrOperand && attrOperand.getType() == thisType)
+    {
+        return attrOperand;
+    }
+
+    auto arg = getOperand();
+    if (arg.getType() == thisType)
+    {
+        return arg;
+    }
+    if (auto prevOp = arg.getDefiningOp<SignCastOp>())
+    {
+        auto prevArg = prevOp.getOperand();
+        if (prevArg.getType() == thisType)
+        {
+            return prevArg;
+        }
+    }
+    return nullptr;
+}
+
+namespace
+{
+struct SignCastDimPropagate : public mlir::OpRewritePattern<mlir::memref::DimOp>
+{
+    using mlir::OpRewritePattern<mlir::memref::DimOp>::OpRewritePattern;
+
+    mlir::LogicalResult matchAndRewrite(
+        mlir::memref::DimOp op, mlir::PatternRewriter &rewriter) const override
+    {
+        auto castOp = mlir::dyn_cast_or_null<plier::SignCastOp>(op.memrefOrTensor().getDefiningOp());
+        if (!castOp)
+        {
+            return mlir::failure();
+        }
+        auto val = castOp.value();
+        rewriter.replaceOpWithNewOp<mlir::memref::DimOp>(op, val, op.index());
+        return mlir::success();
+    }
+};
+}
+
+void SignCastOp::getCanonicalizationPatterns(
+    ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context)
+{
+    results.insert<SignCastDimPropagate>(context);
+}
+
+
 }
 
 #define GET_OP_CLASSES

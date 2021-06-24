@@ -306,4 +306,13 @@ def RetainOp : Plier_Op<"retain", [ViewLikeOpInterface]> {
     }];
 }
 
+def SignCastOp : Plier_Op<"sign_cast", [NoSideEffect]> {
+    let arguments = (ins
+                     AnyType:$value);
+
+    let results = (outs AnyType);
+    let hasFolder = 1;
+    let hasCanonicalizer = 1;
+}
+
 #endif // PLIER_OPS

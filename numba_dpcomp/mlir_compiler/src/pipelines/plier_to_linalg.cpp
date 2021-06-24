@@ -21,10 +21,12 @@
 #include <mlir/Dialect/Linalg/Passes.h>
 #include <mlir/Dialect/Linalg/Transforms/Transforms.h>
 #include <mlir/Dialect/StandardOps/Transforms/Passes.h>
+#include <mlir/Dialect/StandardOps/Transforms/FuncConversions.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/Dialect/Tensor/Transforms/Passes.h>
 #include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Dialect/SCF/Passes.h>
+#include <mlir/Dialect/SCF/Transforms.h>
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Pass/Pass.h>
@@ -49,6 +51,7 @@
 #include "plier/rewrites/type_conversion.hpp"
 #include "plier/rewrites/loop_rewrites.hpp"
 #include "plier/rewrites/memory_rewrites.hpp"
+#include "plier/transforms/cast_utils.hpp"
 #include "plier/transforms/const_utils.hpp"
 #include "plier/transforms/loop_utils.hpp"
 
@@ -421,9 +424,9 @@ struct GetitemOpLowering : public mlir::OpRewritePattern<plier::GetItemOp>
         auto value = op.value();
         auto index = op.index();
         auto type = value.getType();
-        bool is_memref = type.isa<mlir::MemRefType>();
-        bool is_tensor = type.isa<mlir::TensorType>();
-        if (!is_memref && !is_tensor)
+        bool isMemref = type.isa<mlir::MemRefType>();
+        bool isTensor = type.isa<mlir::TensorType>();
+        if (!isMemref && !isTensor)
         {
             return mlir::failure();
         }
@@ -506,12 +509,33 @@ struct GetitemOpLowering : public mlir::OpRewritePattern<plier::GetItemOp>
         }
 
         mlir::Value res;
+        auto elemType = type.cast<mlir::ShapedType>().getElementType();
+        auto elemTypeSignless = plier::makeSignlessType(elemType);
+        if (elemType != elemTypeSignless)
+        {
+            if (isMemref)
+            {
+                auto memrefType = type.cast<mlir::MemRefType>();
+                auto signlessType = mlir::MemRefType::get(memrefType.getShape(), elemTypeSignless, memrefType.getAffineMaps());
+                value = rewriter.create<plier::SignCastOp>(loc, signlessType, value);
+            }
+            else if (isTensor)
+            {
+                auto tensorType = type.cast<mlir::RankedTensorType>();
+                auto signlessType = mlir::RankedTensorType::get(tensorType.getShape(), elemTypeSignless, tensorType.getEncoding());
+                value = rewriter.create<plier::SignCastOp>(loc, signlessType, value);
+            }
+            else
+            {
+                llvm_unreachable("Invalid getitem");
+            }
+        }
+
         if (!dimsIndices.empty())
         {
             auto numDims = static_cast<unsigned>(dimsIndices.size());
             auto needReshape = (numDims != type.cast<mlir::ShapedType>().getRank());
-            auto elemType = type.cast<mlir::ShapedType>().getElementType();
-            if (is_memref)
+            if (isMemref)
             {
                 if (needReshape)
                 {
@@ -519,12 +543,13 @@ struct GetitemOpLowering : public mlir::OpRewritePattern<plier::GetItemOp>
                 }
                 res = rewriter.create<mlir::memref::SubViewOp>(loc, value, offsets, sizes, strides);
             }
-            else if (is_tensor)
+            else if (isTensor)
             {
                 res = rewriter.create<mlir::SubTensorOp>(loc, value, offsets, sizes, strides);
                 if (needReshape)
                 {
                     auto resultType = mlir::RankedTensorType::get(llvm::SmallVector<int64_t>(numDims, -1), elemType);
+                    auto resultTypeSignless = mlir::RankedTensorType::get(llvm::SmallVector<int64_t>(numDims, -1), elemTypeSignless);
                     llvm::SmallVector<mlir::Value> elements(numDims);
                     for (auto it : llvm::enumerate(dimsIndices))
                     {
@@ -532,7 +557,11 @@ struct GetitemOpLowering : public mlir::OpRewritePattern<plier::GetItemOp>
                         elements[it.index()] = dim;
                     }
                     auto shape = rewriter.create<mlir::tensor::FromElementsOp>(loc, elements);
-                    res = rewriter.create<mlir::tensor::ReshapeOp>(loc, resultType, res, shape);
+                    res = rewriter.create<mlir::tensor::ReshapeOp>(loc, resultTypeSignless, res, shape);
+                    if (resultType != resultTypeSignless)
+                    {
+                        res = rewriter.create<plier::SignCastOp>(loc, resultType, res);
+                    }
                 }
             }
             else
@@ -551,11 +580,11 @@ struct GetitemOpLowering : public mlir::OpRewritePattern<plier::GetItemOp>
                 }
                 return ret;
             };
-            if (is_memref)
+            if (isMemref)
             {
                 res = rewriter.create<mlir::memref::LoadOp>(loc, value, toValues(offsets));
             }
-            else if (is_tensor)
+            else if (isTensor)
             {
                 res = rewriter.create<mlir::tensor::ExtractOp>(loc, value, toValues(offsets));
             }
@@ -563,7 +592,13 @@ struct GetitemOpLowering : public mlir::OpRewritePattern<plier::GetItemOp>
             {
                 llvm_unreachable("Invalid getitem");
             }
+
+            if (elemType != elemTypeSignless)
+            {
+                res = rewriter.create<plier::SignCastOp>(loc, elemType, res);
+            }
         }
+
         rerun_std_pipeline(op);
         rewriter.replaceOpWithNewOp<plier::CastOp>(op, op.getType(), res);
         return mlir::success();
@@ -591,55 +626,68 @@ struct SetitemOpLowering : public mlir::OpRewritePattern<plier::SetItemOp>
     mlir::LogicalResult matchAndRewrite(
         plier::SetItemOp op, mlir::PatternRewriter &rewriter) const override
     {
-        auto get_target_type = [&]()
+        auto target = op.target();
+        auto targetType = target.getType().dyn_cast<mlir::ShapedType>();
+        if (!targetType)
         {
-            return op.getOperand(0).getType();
-        };
-
+            return mlir::failure();
+        }
         auto index = op.index();
         if (!isValidGetitemIndex(index.getType()))
         {
             return mlir::failure();
         }
 
-        if (auto target_type = get_target_type().dyn_cast<mlir::RankedTensorType>())
+        auto elemType = targetType.getElementType();
+        auto signlessElemType = plier::makeSignlessType(elemType);
+        if (auto targetTensorType = targetType.template dyn_cast<mlir::RankedTensorType>())
         {
-            auto target = op.getOperand(0);
             mlir::OpBuilder::InsertionGuard g(rewriter);
-            if (auto parent_op = target.getDefiningOp())
+            if (auto parentOp = target.getDefiningOp())
             {
-                rewriter.setInsertionPointAfter(parent_op);
+                rewriter.setInsertionPointAfter(parentOp);
             }
             else
             {
                 rewriter.setInsertionPointToStart(target.getParentBlock());
             }
-            auto memref_type = mlir::MemRefType::get(target_type.getShape(), target_type.getElementType());
-            auto memref = rewriter.create<mlir::memref::BufferCastOp>(target.getLoc(), memref_type, target);
+
+            auto loc = target.getLoc();
+            if (elemType != signlessElemType)
+            {
+                auto tensorType = mlir::RankedTensorType::get(targetTensorType.getShape(), signlessElemType, targetTensorType.getEncoding());
+                target = rewriter.create<plier::SignCastOp>(loc, tensorType, target);
+            }
+            auto memrefType = mlir::MemRefType::get(targetTensorType.getShape(), signlessElemType);
+            auto memref = rewriter.create<mlir::memref::BufferCastOp>(loc, memrefType, target);
+            target = memref;
             for (auto& use : llvm::make_early_inc_range(target.getUses()))
             {
-                auto use_op = use.getOwner();
-                assert(nullptr != use_op);
-                if (use_op != memref)
+                auto useOp = use.getOwner();
+                assert(nullptr != useOp);
+                if (useOp != memref)
                 {
-                    if (mlir::isa<plier::SetItemOp>(use_op))
+                    if (mlir::isa<plier::SetItemOp>(useOp))
                     {
-                        use_op->setOperand(use.getOperandNumber(), memref);
+                        rewriter.updateRootInPlace(useOp, [&]()
+                        {
+                            useOp->setOperand(use.getOperandNumber(), memref);
+                        });
                     }
                     else
                     {
                         mlir::OpBuilder::InsertionGuard g(rewriter);
-                        rewriter.setInsertionPoint(use_op);
-                        auto new_val = rewriter.create<mlir::memref::TensorLoadOp>(use_op->getLoc(), memref);
-                        rewriter.updateRootInPlace(use_op, [&]()
+                        rewriter.setInsertionPoint(useOp);
+                        auto new_val = rewriter.create<mlir::memref::TensorLoadOp>(useOp->getLoc(), memref);
+                        rewriter.updateRootInPlace(useOp, [&]()
                         {
-                            use_op->setOperand(use.getOperandNumber(), new_val);
+                            useOp->setOperand(use.getOperandNumber(), new_val);
                         });
                     }
                 }
             }
         }
-        else if (get_target_type().isa<mlir::MemRefType>())
+        else if (targetType.isa<mlir::MemRefType>())
         {
             // nothing
         }
@@ -647,25 +695,31 @@ struct SetitemOpLowering : public mlir::OpRewritePattern<plier::SetItemOp>
         {
             return mlir::failure();
         }
-        auto target = op.getOperand(0);
-        auto value = op.getOperand(2);
+
+        auto value = op.value();
         auto loc = op.getLoc();
-        auto elem_type = target.getType().template cast<mlir::MemRefType>().getElementType();
-        if (value.getType() != elem_type)
+        if (value.getType() != elemType)
         {
             // TODO
-            value = rewriter.create<plier::CastOp>(loc, elem_type, value);
+            value = rewriter.create<plier::CastOp>(loc, elemType, value);
             rerun_std_pipeline(op);
         }
 
         llvm::SmallVector<mlir::Value> indices;
-        if (auto tuple_type = index.getType().template dyn_cast<mlir::TupleType>())
+        if (auto tupleType = index.getType().template dyn_cast<mlir::TupleType>())
         {
-            indices.resize(tuple_type.size());
-            for (auto it : llvm::enumerate(tuple_type))
+            indices.resize(tupleType.size());
+            for (auto it : llvm::enumerate(tupleType))
             {
-                auto getitem_ind = rewriter.create<mlir::ConstantIndexOp>(loc, it.index());
-                auto ind = rewriter.create<plier::GetItemOp>(loc, index, getitem_ind);
+                auto i = it.index();
+                auto getitemInd = rewriter.create<mlir::ConstantIndexOp>(loc, i);
+                auto ind = rewriter.create<plier::GetItemOp>(loc, index, getitemInd).getResult();
+                auto indType = tupleType.getType(i);
+                auto signlessIndType = plier::makeSignlessType(indType);
+                if (signlessIndType != indType)
+                {
+                    ind = rewriter.create<plier::SignCastOp>(loc, signlessIndType, ind);
+                }
                 indices[it.index()] = index_cast(ind, loc, rewriter);
             }
             rerun_std_pipeline(op);
@@ -674,8 +728,13 @@ struct SetitemOpLowering : public mlir::OpRewritePattern<plier::SetItemOp>
         {
             indices.push_back(index_cast(index, loc, rewriter));
         }
-        rewriter.create<mlir::memref::StoreOp>(loc, value, target, indices);
-        rewriter.eraseOp(op);
+
+        if (elemType != signlessElemType)
+        {
+            value = rewriter.create<plier::SignCastOp>(loc, signlessElemType, value);
+        }
+
+        rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(op, value, target, indices);
         return mlir::success();
     }
 };
@@ -710,7 +769,7 @@ struct SliceNoneLowering : public mlir::OpRewritePattern<mlir::SubTensorOp>
             {
                 return nullptr;
             }
-            auto index = indexAttr.getInt();
+            auto index = plier::getIntAttrValue(indexAttr);
             if (index < 0 || index >= 3)
             {
                 return nullptr;
@@ -868,22 +927,38 @@ struct RankedTypesCasts : public mlir::OpRewritePattern<plier::CastOp>
     mlir::LogicalResult matchAndRewrite(
         plier::CastOp op, mlir::PatternRewriter &rewriter) const override
     {
-        auto src_type = op.value().getType();
-        auto dst_type = converter.convertType(op.getType());
-        if (!dst_type)
+        auto srcType = op.value().getType();
+        auto dstType = converter.convertType(op.getType());
+        if (!dstType)
         {
             return mlir::failure();
         }
-        if (src_type.isa<mlir::RankedTensorType>() &&
-            dst_type.isa<mlir::RankedTensorType>())
+        if (srcType.isa<mlir::RankedTensorType>() &&
+            dstType.isa<mlir::RankedTensorType>())
         {
-            auto src = src_type.cast<mlir::RankedTensorType>();
-            auto dst = dst_type.cast<mlir::RankedTensorType>();
+            auto src = srcType.cast<mlir::RankedTensorType>();
+            auto dst = dstType.cast<mlir::RankedTensorType>();
+            auto srcElem = src.getElementType();
+            auto dstElem = dst.getElementType();
             if (!has_compatibale_shape(src,dst))
             {
                 return mlir::failure();
             }
-            rewriter.replaceOpWithNewOp<mlir::tensor::CastOp>(op, dst, op.value());
+
+            auto signlessSrcType = mlir::RankedTensorType::get(src.getShape(), plier::makeSignlessType(srcElem), src.getEncoding());
+            auto signlessDstType = mlir::RankedTensorType::get(dst.getShape(), plier::makeSignlessType(dstElem), dst.getEncoding());
+            auto loc = op.getLoc();
+            auto value = op.value();
+            if (signlessSrcType != src)
+            {
+                value = rewriter.createOrFold<plier::SignCastOp>(loc, signlessSrcType, value);
+            }
+            value = rewriter.createOrFold<mlir::tensor::CastOp>(loc, signlessDstType, value);
+            if (signlessDstType != dst)
+            {
+                value = rewriter.createOrFold<plier::SignCastOp>(loc, dst, value);
+            }
+            rewriter.replaceOp(op, value);
             return mlir::success();
         }
         return mlir::failure();
@@ -1068,15 +1143,58 @@ struct LowerEnforceShape : public mlir::OpRewritePattern<plier::EnforceShapeOp>
     }
 };
 
+struct CastToSignCastRewrite : public mlir::OpRewritePattern<plier::CastOp>
+{
+    CastToSignCastRewrite(mlir::MLIRContext *context):
+        OpRewritePattern(context, /*benefit*/2) {}
+
+    mlir::LogicalResult matchAndRewrite(
+        plier::CastOp op, mlir::PatternRewriter &rewriter) const override
+    {
+        auto srcType = op.value().getType().dyn_cast<mlir::RankedTensorType>();
+        if (!srcType)
+        {
+            return mlir::failure();
+        }
+        auto dstType = op.getType().dyn_cast<mlir::RankedTensorType>();
+        if (!dstType)
+        {
+            return mlir::failure();
+        }
+        if (srcType.getShape() != dstType.getShape() ||
+            srcType.getEncoding() != dstType.getEncoding())
+        {
+            return mlir::failure();
+        }
+        auto srcElemType = srcType.getElementType().cast<mlir::IntegerType>();
+        if (!srcElemType)
+        {
+            return mlir::failure();
+        }
+        auto dstElemType = dstType.getElementType().cast<mlir::IntegerType>();
+        if (!dstElemType)
+        {
+            return mlir::failure();
+        }
+        if (srcElemType.getWidth() != dstElemType.getWidth() ||
+            srcElemType.getSignedness() == dstElemType.getSignedness())
+        {
+            return mlir::failure();
+        }
+        rewriter.replaceOpWithNewOp<plier::SignCastOp>(op, dstType, op.value());
+        return mlir::success();
+    }
+};
+
 void PlierToLinalgPass::runOnOperation()
 {
     auto context = &getContext();
 
-    mlir::TypeConverter type_converter;
+    mlir::TypeConverter typeConverter;
     // Convert unknown types to itself
-    type_converter.addConversion([](mlir::Type type) { return type; });
-    populate_std_type_converter(*context, type_converter);
-    populate_array_type_converter(*context, type_converter);
+    typeConverter.addConversion([](mlir::Type type) { return type; });
+    populate_std_type_converter(*context, typeConverter);
+    populate_array_type_converter(*context, typeConverter);
 
     mlir::OwningRewritePatternList patterns(context);
     patterns.insert<
@@ -1088,7 +1206,7 @@ void PlierToLinalgPass::runOnOperation()
         RankedTypesCasts,
         UnrankedToElementCasts,
         ArrayShape
-        >(type_converter, context);
+        >(typeConverter, context);
 
     CallLowerer callLowerer;
 
@@ -1096,12 +1214,13 @@ void PlierToLinalgPass::runOnOperation()
         plier::CallOpLowering,
         GetattrRewriter,
         BinopRewriter
-        >(type_converter, context, std::ref(callLowerer));
+        >(typeConverter, context, std::ref(callLowerer));
 
     patterns.insert<
         GetitemOpLowering,
         SetitemOpLowering,
         SliceNoneLowering,
+        CastToSignCastRewrite,
         CheckForBuildTuple
         >(&getContext());
 
@@ -1162,6 +1281,68 @@ void PostPlierToLinalgPass::runOnFunction()
         >(&context);
 
     applyOptimizations(getFunction(), std::move(patterns), getAnalysisManager());
+}
+
+struct MakeTensorsSignlessPass :
+    public mlir::PassWrapper<MakeTensorsSignlessPass, mlir::OperationPass<mlir::ModuleOp>>
+{
+    void runOnOperation() override;
+};
+
+void MakeTensorsSignlessPass::runOnOperation()
+{
+    auto module = getOperation();
+    auto* context = &getContext();
+
+    mlir::TypeConverter typeConverter;
+    typeConverter.addConversion([](mlir::Type type) { return type; });
+    typeConverter.addConversion([](mlir::RankedTensorType type)->llvm::Optional<mlir::Type>
+    {
+        auto elemType = type.getElementType().dyn_cast<mlir::IntegerType>();
+        if (elemType && !elemType.isSignless())
+        {
+            auto signless = mlir::IntegerType::get(type.getContext(), elemType.getWidth());
+            return mlir::RankedTensorType::get(type.getShape(), signless, type.getEncoding());
+        }
+        return llvm::None;
+    });
+    auto materializeSignCast = [](mlir::OpBuilder &builder, mlir::Type type,
+                                  mlir::ValueRange inputs, mlir::Location loc)->mlir::Value
+    {
+        assert(inputs.size() == 1);
+        return builder.create<plier::SignCastOp>(loc, type, inputs[0]);
+    };
+    typeConverter.addArgumentMaterialization(materializeSignCast);
+    typeConverter.addSourceMaterialization(materializeSignCast);
+    typeConverter.addTargetMaterialization(materializeSignCast);
+
+    mlir::RewritePatternSet patterns(context);
+    mlir::ConversionTarget target(*context);
+
+    mlir::populateFuncOpTypeConversionPattern(patterns, typeConverter);
+    target.addDynamicallyLegalOp<mlir::FuncOp>([&](mlir::FuncOp op) {
+        return typeConverter.isSignatureLegal(op.getType()) &&
+               typeConverter.isLegal(&op.getBody());
+    });
+    mlir::populateCallOpTypeConversionPattern(patterns, typeConverter);
+    target.addDynamicallyLegalOp<mlir::CallOp>(
+        [&](mlir::CallOp op) { return typeConverter.isLegal(op); });
+
+    mlir::populateBranchOpInterfaceTypeConversionPattern(patterns, typeConverter);
+    mlir::populateReturnOpTypeConversionPattern(patterns, typeConverter);
+    target.addLegalOp<mlir::ModuleOp, plier::SignCastOp>();
+    mlir::scf::populateSCFStructuralTypeConversionsAndLegality(typeConverter, patterns,
+                                                          target);
+
+    target.markUnknownOpDynamicallyLegal([&](mlir::Operation *op) {
+        return mlir::isNotBranchOpInterfaceOrReturnLikeOp(op) ||
+               mlir::isLegalForBranchOpInterfaceTypeConversionPattern(op,
+                                                                      typeConverter) ||
+               mlir::isLegalForReturnOpTypeConversionPattern(op, typeConverter);
+    });
+
+    if (failed(applyFullConversion(module, target, std::move(patterns))))
+        signalPassFailure();
 }
 
 struct TensorFusionPass :
@@ -1493,6 +1674,8 @@ void populate_plier_to_linalg_gen_pipeline(mlir::OpPassManager& pm)
 
 void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager& pm)
 {
+    pm.addPass(std::make_unique<MakeTensorsSignlessPass>());
+    pm.addPass(mlir::createCanonicalizerPass());
     pm.addPass(std::make_unique<TensorFusionPass>());
 
     pm.addPass(mlir::createTensorConstantBufferizePass());
