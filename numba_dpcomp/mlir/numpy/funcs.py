@@ -65,6 +65,12 @@ def sum_impl(builder, arg, axis=None):
 
         return builder.generic(arg, init, iterators, maps, body)
 
+
+@register_func('numpy.mean', numpy.mean)
+def mean_impl(builder, arg, axis=None):
+    return sum_impl(builder, arg, axis) / size_impl(builder, arg)
+
+
 def _gen_unary_ops():
     unary_ops = [
         (register_func('numpy.sqrt', numpy.sqrt), True, lambda a, b: math.sqrt(a)),

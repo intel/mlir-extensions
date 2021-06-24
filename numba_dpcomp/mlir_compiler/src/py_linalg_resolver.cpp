@@ -1350,6 +1350,13 @@ mlir::Value binop_func(mlir::Location loc, mlir::OpBuilder& builder, mlir::Value
     return builder.create<Op>(loc, lhs, rhs);
 }
 
+mlir::Value binop_func_idiv(mlir::Location loc, mlir::OpBuilder& builder, mlir::Value lhs, mlir::Value rhs)
+{
+    auto lhs_var = do_cast(loc, builder, lhs, builder.getF64Type());
+    auto rhs_var = do_cast(loc, builder, rhs, builder.getF64Type());
+    return builder.create<mlir::DivFOp>(loc, lhs_var, rhs_var);
+}
+
 py::object binop_impl(py::capsule context, py::capsule ssa_val, py::handle rhs, py::str op)
 {
     auto& ctx = get_py_context(context);
@@ -1376,6 +1383,7 @@ py::object binop_impl(py::capsule context, py::capsule ssa_val, py::handle rhs, 
     const std::tuple<llvm::StringRef, binop_func_t, binop_func_t> funcs[] = {
         {"+", &binop_func<mlir::AddIOp>, &binop_func<mlir::AddFOp>},
         {"*", &binop_func<mlir::MulIOp>, &binop_func<mlir::MulFOp>},
+        {"/", &binop_func_idiv,          &binop_func<mlir::DivFOp>},
     };
 
     auto op_name = static_cast<std::string>(op);
