@@ -1319,27 +1319,9 @@ void MakeTensorsSignlessPass::runOnOperation()
     mlir::RewritePatternSet patterns(context);
     mlir::ConversionTarget target(*context);
 
-    mlir::populateFuncOpTypeConversionPattern(patterns, typeConverter);
-    target.addDynamicallyLegalOp<mlir::FuncOp>([&](mlir::FuncOp op) {
-        return typeConverter.isSignatureLegal(op.getType()) &&
-               typeConverter.isLegal(&op.getBody());
-    });
-    mlir::populateCallOpTypeConversionPattern(patterns, typeConverter);
-    target.addDynamicallyLegalOp<mlir::CallOp>(
-        [&](mlir::CallOp op) { return typeConverter.isLegal(op); });
+    plier::populateControlFlowTypeConversionRewritesAndTarget(typeConverter, patterns, target);
 
-    mlir::populateBranchOpInterfaceTypeConversionPattern(patterns, typeConverter);
-    mlir::populateReturnOpTypeConversionPattern(patterns, typeConverter);
     target.addLegalOp<mlir::ModuleOp, plier::SignCastOp>();
-    mlir::scf::populateSCFStructuralTypeConversionsAndLegality(typeConverter, patterns,
-                                                          target);
-
-    target.markUnknownOpDynamicallyLegal([&](mlir::Operation *op) {
-        return mlir::isNotBranchOpInterfaceOrReturnLikeOp(op) ||
-               mlir::isLegalForBranchOpInterfaceTypeConversionPattern(op,
-                                                                      typeConverter) ||
-               mlir::isLegalForReturnOpTypeConversionPattern(op, typeConverter);
-    });
 
     if (failed(applyFullConversion(module, target, std::move(patterns))))
         signalPassFailure();

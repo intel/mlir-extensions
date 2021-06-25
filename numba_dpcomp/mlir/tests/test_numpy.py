@@ -13,7 +13,8 @@
 # limitations under the License.
 
 import numba
-from numba_dpcomp import njit, vectorize
+# from numba_dpcomp import njit
+from numba_dpcomp import vectorize
 from numpy.testing import assert_equal, assert_allclose # for nans comparison
 import numpy as np
 from numba.tests.support import TestCase
@@ -22,15 +23,14 @@ import itertools
 from functools import partial
 import pytest
 
+from .utils import parametrize_function_variants
+from .utils import njit_cached as njit
+
 def _vectorize_reference(func, arg1):
     ret = np.empty(arg1.shape, arg1.dtype)
     for ind, val in np.ndenumerate(arg1):
         ret[ind] = func(val)
     return ret
-
-def parametrize_function_variants(name, strings):
-    funcs = [eval(f) for f in strings]
-    return pytest.mark.parametrize(name, funcs, ids=strings)
 
 _arr_1d_int = [1,2,3,4,5,6,7,8]
 _arr_1d_float = [1.0,2.1,3.2,4.3,5.4,6.5,7.6,8.7]

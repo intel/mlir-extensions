@@ -21,6 +21,8 @@ namespace mlir
 {
 class TypeConverter;
 class CallOp;
+class RewritePatternSet;
+class ConversionTarget;
 namespace scf
 {
 class IfOp;
@@ -64,4 +66,7 @@ struct FixCallOmittedArgs : public mlir::OpRewritePattern<mlir::CallOp>
 private:
     mlir::TypeConverter& converter;
 };
+
+void populateControlFlowTypeConversionRewritesAndTarget(
+    mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns, mlir::ConversionTarget& target);
 }

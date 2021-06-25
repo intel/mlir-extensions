@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import numba
-from numba_dpcomp import njit
+#from numba_dpcomp import njit
 from math import nan, inf, isnan
 from numpy.testing import assert_equal # for nans comparison
 
@@ -24,95 +24,91 @@ import sys
 
 import itertools
 
+from .utils import parametrize_function_variants
+from .utils import njit_cached as njit
+
 # TODO: nans and infs not tested yet, we are not sure if want exactly follow
 # interpreted python rules
 _test_values = [-3,-2,-1,0,1,2,3,-2.5,-1.0,-0.5 -0.0, 0.0, 0.5, 1.0, 2.5]
+
+@pytest.mark.parametrize("val", _test_values)
+def test_ret(val):
+    def py_func(a):
+        return a
+
+    jit_func = njit(py_func)
+    assert_equal(py_func(val), jit_func(val))
+
+@parametrize_function_variants("py_func", [
+    'lambda a, b: a + b',
+    'lambda a, b: a - b',
+    'lambda a, b: a * b',
+    'lambda a, b: a / b',
+    'lambda a, b: a % b',
+    # TODO: floordiv
+    ])
+@pytest.mark.parametrize("a, b", itertools.product(_test_values, _test_values))
+def test_ops(py_func, a, b):
+    jit_func = njit(py_func)
+    try:
+        assert_equal(py_func(a, b), jit_func(a, b))
+    except ZeroDivisionError:
+        pass
+
+@pytest.mark.parametrize("a, b", itertools.product(_test_values, _test_values))
+def test_inplace_op(a, b):
+    def py_func(a,b):
+        a += b
+        return a
+
+    jit_func = njit(py_func)
+    assert_equal(py_func(a, b), jit_func(a, b))
+
+@parametrize_function_variants("py_func", [
+    'lambda a: +a',
+    'lambda a: -a',
+    ])
+@pytest.mark.parametrize("val", _test_values)
+def test_unary_ops(py_func, val):
+    jit_func = njit(py_func)
+    assert_equal(py_func(val), jit_func(val))
+
+@parametrize_function_variants("py_func", [
+    'lambda a, b: a if a > b else b',
+    'lambda a, b: a if a < b else b',
+    'lambda a, b: a if a >= b else b',
+    'lambda a, b: a if a <= b else b',
+    'lambda a, b: a if a == b else b',
+    'lambda a, b: a if a != b else b',
+    ])
+@pytest.mark.parametrize("a, b", itertools.product(_test_values, _test_values))
+def test_cmp_ops(py_func, a, b):
+    jit_func = njit(py_func)
+    assert_equal(py_func(a, b), jit_func(a, b))
+
+@parametrize_function_variants("py_func", [
+    'lambda a: a + 42',
+    'lambda a: 43 + a',
+    'lambda a: a + 42.5',
+    'lambda a: 43.5 + a',
+    ])
+@pytest.mark.parametrize("val", _test_values)
+def test_const_ops(py_func, val):
+    jit_func = njit(py_func)
+    assert_equal(py_func(val), jit_func(val))
+
+@pytest.mark.parametrize("val", _test_values)
+def test_var(val):
+    def py_func(a):
+        c = 1
+        c = c + a
+        return c
+
+    jit_func = njit(py_func)
+    assert_equal(py_func(val), jit_func(val))
+
+
 class TestMlirBasic(TestCase):
-
-    def test_ret(self):
-        def py_func(a):
-            return a
-
-        jit_func = njit(py_func)
-        for val in _test_values:
-            assert_equal(py_func(val), jit_func(val))
-
-    def test_ops(self):
-        py_funcs = [
-            lambda a, b: a + b,
-            lambda a, b: a - b,
-            lambda a, b: a * b,
-            lambda a, b: a / b,
-            lambda a, b: a % b,
-            # TODO: floordiv
-            ]
-
-        for py_func in py_funcs:
-            jit_func = njit(py_func)
-            for a, b in itertools.product(_test_values, _test_values):
-                try:
-                    assert_equal(py_func(a, b), jit_func(a, b))
-                except ZeroDivisionError:
-                    pass
-
-    def test_inplace_op(self):
-        def py_func(a,b):
-            a += b
-            return a
-
-        jit_func = njit(py_func)
-        for a, b in itertools.product(_test_values, _test_values):
-            assert_equal(py_func(a, b), jit_func(a, b))
-
-    def test_unary_ops(self):
-        py_funcs = [
-            lambda a: +a,
-            lambda a: -a,
-            ]
-
-        for py_func in py_funcs:
-            jit_func = njit(py_func)
-            for a in _test_values:
-                assert_equal(py_func(a), jit_func(a))
-
-    def test_cmp_ops(self):
-        py_funcs = [
-            lambda a, b: a if a > b else b,
-            lambda a, b: a if a < b else b,
-            lambda a, b: a if a >= b else b,
-            lambda a, b: a if a <= b else b,
-            lambda a, b: a if a == b else b,
-            lambda a, b: a if a != b else b,
-            ]
-
-        for py_func in py_funcs:
-            jit_func = njit(py_func)
-            for a, b in itertools.product(_test_values, _test_values):
-                assert_equal(py_func(a, b), jit_func(a, b))
-
-    def test_const_ops(self):
-        py_funcs = [
-            lambda a: a + 42,
-            lambda a: 43 + a,
-            lambda a: a + 42.5,
-            lambda a: 43.5 + a,
-            ]
-
-        for py_func in py_funcs:
-            jit_func = njit(py_func)
-            for val in _test_values:
-                assert_equal(py_func(val), jit_func(val))
-
-    def test_var(self):
-        def py_func(a):
-            c = 1
-            c = c + a
-            return c
-
-        jit_func = njit(py_func)
-        for val in _test_values:
-            assert_equal(py_func(val), jit_func(val))
-
     def test_none_args(self):
         def py_func(a, b, c, d):
             return b + d
