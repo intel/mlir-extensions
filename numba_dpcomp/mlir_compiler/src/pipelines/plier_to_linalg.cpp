@@ -545,7 +545,7 @@ struct GetitemOpLowering : public mlir::OpRewritePattern<plier::GetItemOp>
             }
             else if (isTensor)
             {
-                res = rewriter.create<mlir::SubTensorOp>(loc, value, offsets, sizes, strides);
+                res = rewriter.create<mlir::tensor::ExtractSliceOp>(loc, value, offsets, sizes, strides);
                 if (needReshape)
                 {
                     auto resultType = mlir::RankedTensorType::get(llvm::SmallVector<int64_t>(numDims, -1), elemType);
@@ -739,12 +739,12 @@ struct SetitemOpLowering : public mlir::OpRewritePattern<plier::SetItemOp>
     }
 };
 
-struct SliceNoneLowering : public mlir::OpRewritePattern<mlir::SubTensorOp>
+struct SliceNoneLowering : public mlir::OpRewritePattern<mlir::tensor::ExtractSliceOp>
 {
     using OpRewritePattern::OpRewritePattern;
 
     mlir::LogicalResult matchAndRewrite(
-        mlir::SubTensorOp op, mlir::PatternRewriter &rewriter) const override
+        mlir::tensor::ExtractSliceOp op, mlir::PatternRewriter &rewriter) const override
     {
         auto loc = op.getLoc();
         auto source = op.source();
@@ -824,7 +824,7 @@ struct SliceNoneLowering : public mlir::OpRewritePattern<mlir::SubTensorOp>
 
         if (changed)
         {
-            rewriter.replaceOpWithNewOp<mlir::SubTensorOp>(op, op.getType(), source, offsets, sizes, strides);
+            rewriter.replaceOpWithNewOp<mlir::tensor::ExtractSliceOp>(op, op.getType(), source, offsets, sizes, strides);
             return mlir::success();
         }
         return mlir::failure();
