@@ -32,12 +32,26 @@ def _vectorize_reference(func, arg1):
         ret[ind] = func(val)
     return ret
 
-_arr_1d_int = [1,2,3,4,5,6,7,8]
-_arr_1d_float = [1.0,2.1,3.2,4.3,5.4,6.5,7.6,8.7]
-_arr_2d_int = [[1,2,3,4],[5,6,7,8]]
-_arr_2d_float = [[1.0,2.1,3.2,4.3],[5.4,6.5,7.6,8.7]]
-_test_arrays = [_arr_1d_int, _arr_1d_float, _arr_2d_int, _arr_2d_float]
-_test_arrays_ids = ["1d_int", "1d_float", "2d_int", "2d_float"]
+_arr_1d_int = np.array([1,2,3,4,5,6,7,8])
+_arr_1d_float = np.array([1.0,2.1,3.2,4.3,5.4,6.5,7.6,8.7])
+_arr_2d_int = np.array([[1,2,3,4],[5,6,7,8]])
+_arr_2d_float = np.array([[1.0,2.1,3.2,4.3],[5.4,6.5,7.6,8.7]])
+_test_arrays = [
+    _arr_1d_int,
+    _arr_1d_float,
+    _arr_2d_int,
+    _arr_2d_float,
+    _arr_2d_int.T,
+    _arr_2d_float.T,
+]
+_test_arrays_ids = [
+    '1d_int',
+    '1d_float',
+    '2d_int',
+    '2d_float',
+    '2d_int.T',
+    '2d_float.T',
+]
 
 @parametrize_function_variants("py_func", [
     'lambda a: a.sum()',
@@ -49,15 +63,14 @@ _test_arrays_ids = ["1d_int", "1d_float", "2d_int", "2d_float"]
     'lambda a: np.sin(a)',
     'lambda a: np.cos(a)',
     'lambda a: a.size',
+    'lambda a: a.T',
     'lambda a: a.T.T',
-    # lambda a: a.T, TODO: need fortran layout support
 ])
-@pytest.mark.parametrize("arr_list",
+@pytest.mark.parametrize("arr",
                          _test_arrays,
                          ids=_test_arrays_ids)
-def test_unary(py_func, arr_list, request):
+def test_unary(py_func, arr, request):
     jit_func = njit(py_func)
-    arr = np.array(arr_list)
     assert_allclose(py_func(arr), jit_func(arr), rtol=1e-15, atol=1e-15)
 
 _test_binary_test_arrays = [1, 2.5, np.array([1,2,3]), np.array([4.4,5.5,6.6])]
@@ -602,13 +615,7 @@ _rnd = np.random.RandomState(42)
 def test_cov_basic(m):
     py_func = _cov
     jit_func = njit(py_func)
-    m = m.copy() # TODO: fix strides
     assert_allclose(py_func(m), jit_func(m), rtol=1e-15, atol=1e-15)
-
-def _copy_array(arg):
-    if isinstance(arg, np.ndarray):
-        arg = arg.copy();
-    return arg
 
 _cov_inputs_m = _rnd.randn(105).reshape(15, 7)
 @pytest.mark.parametrize("m",
@@ -626,8 +633,6 @@ def test_cov_explicit_arguments(m, y, rowvar, bias, ddof):
         pytest.xfail()
     py_func = _cov
     jit_func = njit(py_func)
-    m = _copy_array(m) # TODO: fix strides
-    y = _copy_array(y) # TODO: fix strides
     assert_allclose(py_func(m=m, y=y, rowvar=rowvar, bias=bias, ddof=ddof), jit_func(m=m, y=y, rowvar=rowvar, bias=bias, ddof=ddof), rtol=1e-14, atol=1e-14)
 
 @parametrize_function_variants("m, y, rowvar", [
@@ -649,8 +654,6 @@ def test_cov_edge_cases(m, y, rowvar):
         pytest.xfail()
     py_func = _cov
     jit_func = njit(py_func)
-    m = _copy_array(m) # TODO: fix strides
-    y = _copy_array(y) # TODO: fix strides
     assert_allclose(py_func(m=m, y=y, rowvar=rowvar), jit_func(m=m, y=y, rowvar=rowvar), rtol=1e-14, atol=1e-14)
 
 if __name__ == '__main__':
