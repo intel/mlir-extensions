@@ -315,7 +315,7 @@ llvm::Optional<py::object> makePyLiteral(mlir::Value val)
     return {};
 }
 
-mlir::Value do_cast(mlir::Location loc, mlir::OpBuilder& builder, mlir::Value val, mlir::Type type)
+mlir::Value doCast(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value val, mlir::Type type)
 {
     if (val.getType() != type)
     {
@@ -914,7 +914,7 @@ py::object init_tensor_impl(py::capsule context, py::handle shape, py::handle dt
         }
         auto elemVal = ctx.context.unwrap_val(loc, builder, elem);
         elemVal = doSignCast(builder, loc, elemVal);
-        shapeVal[i] = do_cast(loc, builder, elemVal, indexType);
+        shapeVal[i] = doCast(builder, loc, elemVal, indexType);
     }
 
     if (init_val.is_none())
@@ -923,7 +923,7 @@ py::object init_tensor_impl(py::capsule context, py::handle shape, py::handle dt
     }
     else
     {
-        auto val = do_cast(loc, builder, ctx.context.unwrap_val(loc, builder, init_val), signlessElemType);
+        auto val = doCast(builder, loc, ctx.context.unwrap_val(loc, builder, init_val), signlessElemType);
         llvm::SmallVector<int64_t> shape(count, -1);
         auto type = mlir::RankedTensorType::get(shape, signlessElemType);
         auto body = [&](mlir::OpBuilder &builder, mlir::Location loc, mlir::ValueRange /*indices*/)
@@ -1164,13 +1164,13 @@ py::object reshape_impl(py::capsule context, py::handle src, py::iterable newDim
                 auto elemType = tupleType.getType(i);
                 auto item = builder.create<plier::GetItemOp>(loc, elemType, dims, ind).getResult();
                 item = doSignCast(builder, loc, item);
-                ret[i] = do_cast(loc, builder, item, dimType);
+                ret[i] = doCast(builder, loc, item, dimType);
             }
         }
         else
         {
             dims = doSignCast(builder, loc, dims);
-            ret.emplace_back(do_cast(loc, builder, dims, dimType));
+            ret.emplace_back(doCast(builder, loc, dims, dimType));
         }
         return ret;
     }();
@@ -1288,7 +1288,7 @@ py::object insert_impl(py::capsule context, py::handle src, py::handle dst, py::
         llvm::SmallVector<mlir::Value> res(len);
         for (auto it : llvm::enumerate(obj))
         {
-            res[it.index()] = do_cast(loc, builder, unwrapVal(it.value()), indexType);
+            res[it.index()] = doCast(builder, loc, unwrapVal(it.value()), indexType);
         }
         return res;
     };
@@ -1344,7 +1344,7 @@ py::object inline_func_impl(py::capsule context, py::handle func, py::tuple args
     auto resType = resValue.getType();
     if (auto convertedType = ctx.typeConverter.convertType(resType))
     {
-        resValue = do_cast(loc, builder, resValue, convertedType);
+        resValue = doCast(builder, loc, resValue, convertedType);
     }
     return ctx.context.create_var(context, resValue);
 }
@@ -1504,8 +1504,8 @@ mlir::Value binop_func(mlir::Location loc, mlir::OpBuilder& builder, mlir::Value
 
 mlir::Value binop_func_idiv(mlir::Location loc, mlir::OpBuilder& builder, mlir::Value lhs, mlir::Value rhs)
 {
-    auto lhs_var = do_cast(loc, builder, lhs, builder.getF64Type());
-    auto rhs_var = do_cast(loc, builder, rhs, builder.getF64Type());
+    auto lhs_var = doCast(builder, loc, lhs, builder.getF64Type());
+    auto rhs_var = doCast(builder, loc, rhs, builder.getF64Type());
     return builder.create<mlir::DivFOp>(loc, lhs_var, rhs_var);
 }
 
@@ -1545,7 +1545,7 @@ py::object binop_impl(py::capsule context, py::capsule ssa_val, py::handle rhs, 
         auto func = (is_float ? std::get<2>(f) : std::get<1>(f));
         if (name == op_name)
         {
-            auto rhs_var = do_cast(loc, builder, ctx.context.unwrap_val(loc, builder, rhs), type);
+            auto rhs_var = doCast(builder, loc, ctx.context.unwrap_val(loc, builder, rhs), type);
             auto res = func(loc, builder, lhs, rhs_var);
             return ctx.context.create_var(context, res);
         }

@@ -20,26 +20,27 @@ plier::CastOpLowering::CastOpLowering(
     mlir::TypeConverter& typeConverter, mlir::MLIRContext* context,
     CastOpLowering::cast_t cast_func):
     OpRewritePattern(context), converter(typeConverter),
-    cast_func(std::move(cast_func)) {}
+    castFunc(std::move(cast_func)) {}
 
 mlir::LogicalResult plier::CastOpLowering::matchAndRewrite(
     plier::CastOp op, mlir::PatternRewriter& rewriter) const
 {
-    auto src = op.getOperand();
-    auto src_type = src.getType();
-    auto dst_type = converter.convertType(op.getType());
-    if (dst_type)
+    auto src = op.value();
+    auto srcType = src.getType();
+    auto dstType = converter.convertType(op.getType());
+    if (dstType)
     {
-        if (src_type == dst_type)
+        if (srcType == dstType)
         {
             rewriter.replaceOp(op, src);
             return mlir::success();
         }
-        if (nullptr != cast_func)
+        if (nullptr != castFunc)
         {
-            if (auto new_op = cast_func(dst_type, src, rewriter))
+            auto loc = op.getLoc();
+            if (auto newOp = castFunc(rewriter, loc, src, dstType))
             {
-                rewriter.replaceOp(op, new_op);
+                rewriter.replaceOp(op, newOp);
                 return mlir::success();
             }
         }

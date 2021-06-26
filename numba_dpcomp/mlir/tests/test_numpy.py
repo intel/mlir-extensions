@@ -629,8 +629,6 @@ _cov_inputs_m = _rnd.randn(105).reshape(15, 7)
 @pytest.mark.parametrize("ddof",
                          [None, -1, 0, 1, 3.0, True])
 def test_cov_explicit_arguments(m, y, rowvar, bias, ddof):
-    if isinstance(ddof, bool):
-        pytest.xfail()
     py_func = _cov
     jit_func = njit(py_func)
     assert_allclose(py_func(m=m, y=y, rowvar=rowvar, bias=bias, ddof=ddof), jit_func(m=m, y=y, rowvar=rowvar, bias=bias, ddof=ddof), rtol=1e-14, atol=1e-14)
