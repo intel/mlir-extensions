@@ -629,7 +629,19 @@ mlir::Value int_cast(mlir::PatternRewriter& rewriter, mlir::Location loc, mlir::
     }
     else if (dstBits < srcBits)
     {
-        val = rewriter.createOrFold<mlir::TruncateIOp>(loc, val, dstSignless);
+        if (dstBits == 1)
+        {
+            // Special handling for bool
+            auto zero = rewriter.create<mlir::ConstantIntOp>(loc, 0, srcBits);
+            auto cmp = rewriter.createOrFold<mlir::CmpIOp>(loc, mlir::CmpIPredicate::eq, val, zero);
+            auto trueVal = rewriter.create<mlir::ConstantIntOp>(loc, 1, 1);
+            auto falseVal = rewriter.create<mlir::ConstantIntOp>(loc, 0, 1);
+            val = rewriter.createOrFold<mlir::SelectOp>(loc, cmp, falseVal, trueVal);
+        }
+        else
+        {
+            val = rewriter.createOrFold<mlir::TruncateIOp>(loc, val, dstSignless);
+        }
     }
 
     if (dstIntType != dstSignless)
@@ -663,7 +675,16 @@ mlir::Value float_int_cast(mlir::PatternRewriter& rewriter, mlir::Location loc, 
     auto dstIntType = dstType.cast<mlir::IntegerType>();
     mlir::Value res;
     auto dstSignlessType = plier::makeSignlessType(dstIntType);
-    if (dstIntType.isSigned())
+    if (dstIntType.getWidth() == 1)
+    {
+        // Special handling for bool
+        auto zero = rewriter.create<mlir::ConstantFloatOp>(loc, llvm::APFloat(0.0), val.getType().cast<mlir::FloatType>());
+        auto cmp = rewriter.createOrFold<mlir::CmpFOp>(loc, mlir::CmpFPredicate::OEQ, val, zero);
+        auto trueVal = rewriter.create<mlir::ConstantIntOp>(loc, 1, 1);
+        auto falseVal = rewriter.create<mlir::ConstantIntOp>(loc, 0, 1);
+        res = rewriter.createOrFold<mlir::SelectOp>(loc, cmp, falseVal, trueVal);
+    }
+    else if (dstIntType.isSigned())
     {
         res = rewriter.create<mlir::FPToSIOp>(loc, val, dstSignlessType);
     }
@@ -1687,7 +1708,7 @@ struct FoldSliceGetitem : public mlir::OpRewritePattern<plier::GetItemOp>
     }
 };
 
-mlir::LogicalResult lower_range(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands, llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs, mlir::PatternRewriter& rewriter)
+mlir::LogicalResult lowerRange(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands, llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs, mlir::PatternRewriter& rewriter, mlir::Type /*dstType*/)
 {
     if (!kwargs.empty())
     {
@@ -1726,7 +1747,7 @@ mlir::LogicalResult lower_range(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> 
     return mlir::success();
 }
 
-mlir::LogicalResult lower_len(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands, llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs, mlir::PatternRewriter& rewriter)
+mlir::LogicalResult lowerLen(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands, llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs, mlir::PatternRewriter& rewriter, mlir::Type /*dstType*/)
 {
     if (!kwargs.empty())
     {
@@ -1749,7 +1770,7 @@ mlir::LogicalResult lower_len(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> op
     return mlir::success();
 }
 
-mlir::LogicalResult lower_slice(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands, llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs, mlir::PatternRewriter& rewriter)
+mlir::LogicalResult lowerSlice(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands, llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs, mlir::PatternRewriter& rewriter, mlir::Type /*dstType*/)
 {
     if (!kwargs.empty())
     {
@@ -1780,7 +1801,7 @@ mlir::LogicalResult lower_slice(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> 
     return mlir::success();
 }
 
-mlir::LogicalResult lower_bool_cast(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands, llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs, mlir::PatternRewriter& rewriter)
+mlir::LogicalResult lowerCastFunc(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands, llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs, mlir::PatternRewriter& rewriter, mlir::Type dstType)
 {
     if (!kwargs.empty())
     {
@@ -1801,11 +1822,8 @@ mlir::LogicalResult lower_bool_cast(plier::PyCallOp op, llvm::ArrayRef<mlir::Val
             success = true;
         }
     };
-    auto srcType = val.getType();
-    auto dstType = mlir::IntegerType::get(op.getContext(), 1);
     auto loc = op.getLoc();
-    mlir::TypeSwitch<mlir::Type>(srcType)
-        .Case<mlir::IntegerType>([&](auto) { replace_op(doCast(rewriter, loc, val, dstType)); });
+    replace_op(doCast(rewriter, loc, val, dstType));
     return mlir::success(success);
 }
 
@@ -1863,6 +1881,8 @@ mlir::LogicalResult lower_math_func(
 
 struct CallLowerer
 {
+    CallLowerer(mlir::TypeConverter& typeConverter): converter(typeConverter) {}
+
     mlir::LogicalResult operator()(plier::PyCallOp op, llvm::StringRef name,
         llvm::ArrayRef<mlir::Value> args, llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs, mlir::PatternRewriter& rewriter)
     {
@@ -1871,18 +1891,26 @@ struct CallLowerer
             return mlir::success();
         }
 
-        using func_t = mlir::LogicalResult(*)(plier::PyCallOp, llvm::ArrayRef<mlir::Value>, llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>>, mlir::PatternRewriter&);
-        std::pair<llvm::StringRef, func_t> handlers[] = {
-            {"bool", lower_bool_cast},
-            {"range", lower_range},
-            {"len", lower_len},
-            {"slice", lower_slice},
+        auto resType = converter.convertType(op->getResult(0).getType());
+        if (!resType)
+        {
+            return mlir::failure();
+        }
+
+        using func_t = mlir::LogicalResult(*)(plier::PyCallOp, llvm::ArrayRef<mlir::Value>, llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>>, mlir::PatternRewriter&, mlir::Type);
+        const std::pair<llvm::StringRef, func_t> handlers[] = {
+            {"bool", lowerCastFunc},
+            {"int", lowerCastFunc},
+            {"float", lowerCastFunc},
+            {"range", lowerRange},
+            {"len", lowerLen},
+            {"slice", lowerSlice},
         };
         for (auto& handler : handlers)
         {
             if (handler.first == name)
             {
-                return handler.second(op, args, kwargs, rewriter);
+                return handler.second(op, args, kwargs, rewriter, resType);
             }
         }
 
@@ -1895,7 +1923,7 @@ struct CallLowerer
             auto func = mod.lookupSymbol<mlir::FuncOp>(mangled_name);
             if (!func)
             {
-                func = py_resolver.get_func(name, r.getTypes());
+                func = pyResolver.get_func(name, r.getTypes());
                 if (func)
                 {
                     func.setPrivate();
@@ -1915,7 +1943,8 @@ struct CallLowerer
     }
 
 private:
-    PyFuncResolver py_resolver;
+    mlir::TypeConverter& converter;
+    PyFuncResolver pyResolver;
 };
 
 struct PlierToStdPass :
@@ -1935,12 +1964,12 @@ struct PlierToStdPass :
 
 void PlierToStdPass::runOnOperation()
 {
-    mlir::TypeConverter type_converter;
+    mlir::TypeConverter typeConverter;
     // Convert unknown types to itself
-    type_converter.addConversion([](mlir::Type type) { return type; });
+    typeConverter.addConversion([](mlir::Type type) { return type; });
 
     auto context = &getContext();
-    populate_std_type_converter(*context, type_converter);
+    populate_std_type_converter(*context, typeConverter);
 
     mlir::OwningRewritePatternList patterns(context);
 
@@ -1967,17 +1996,17 @@ void PlierToStdPass::runOnOperation()
         PropagateBuildTupleTypes,
         FoldTupleGetitem,
         FoldSliceGetitem
-        >(type_converter, context);
+        >(typeConverter, context);
 
     patterns.insert<
         plier::CastOpLowering
-        >(type_converter, context, &doCast);
+        >(typeConverter, context, &doCast);
 
-    CallLowerer callLowerer;
+    CallLowerer callLowerer(typeConverter);
 
     patterns.insert<
         plier::CallOpLowering
-        >(type_converter, context, std::ref(callLowerer));
+        >(typeConverter, context, std::ref(callLowerer));
 
     mlir::populateStdExpandOpsPatterns(patterns);
 
