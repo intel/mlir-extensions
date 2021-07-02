@@ -49,6 +49,7 @@
 #include "plier/rewrites/cse.hpp"
 #include "plier/rewrites/promote_to_parallel.hpp"
 #include "plier/rewrites/type_conversion.hpp"
+#include "plier/rewrites/force_inline.hpp"
 #include "plier/rewrites/loop_rewrites.hpp"
 #include "plier/rewrites/memory_rewrites.hpp"
 #include "plier/transforms/cast_utils.hpp"
@@ -1685,6 +1686,22 @@ void LowerLinalgPass::runOnOperation()
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
 }
 
+struct ForceInlinePass :
+    public mlir::PassWrapper<ForceInlinePass, mlir::OperationPass<mlir::ModuleOp>>
+{
+    void runOnOperation() override
+    {
+        auto& context = getContext();
+        mlir::OwningRewritePatternList patterns(&context);
+
+        patterns.insert<
+            plier::ForceInline
+            >(&context);
+
+        (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    }
+};
+
 struct PostPlierToLinalgPass :
     public mlir::PassWrapper<PostPlierToLinalgPass, mlir::FunctionPass>
 {
@@ -2071,8 +2088,9 @@ void PromoteParallelPass::runOnFunction()
 void populate_plier_to_linalg_gen_pipeline(mlir::OpPassManager& pm)
 {
     pm.addPass(std::make_unique<PlierToLinalgPass>());
-    pm.addNestedPass<mlir::FuncOp>(std::make_unique<PostPlierToLinalgPass>());
+    pm.addPass(std::make_unique<ForceInlinePass>());
     pm.addPass(mlir::createSymbolDCEPass());
+    pm.addNestedPass<mlir::FuncOp>(std::make_unique<PostPlierToLinalgPass>());
     pm.addNestedPass<mlir::FuncOp>(mlir::createCSEPass());
 }
 
@@ -2103,8 +2121,9 @@ void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager& pm)
     pm.addNestedPass<mlir::FuncOp>(std::make_unique<LowerCloneOpsPass>());
 
     pm.addPass(std::make_unique<LowerLinalgPass>());
-    pm.addNestedPass<mlir::FuncOp>(std::make_unique<PostLinalgOptPass>());
+    pm.addPass(std::make_unique<ForceInlinePass>());
     pm.addPass(mlir::createSymbolDCEPass());
+    pm.addNestedPass<mlir::FuncOp>(std::make_unique<PostLinalgOptPass>());
     pm.addNestedPass<mlir::FuncOp>(std::make_unique<PromoteParallelPass>());
 }
 }

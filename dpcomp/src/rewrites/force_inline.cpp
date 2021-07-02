@@ -15,13 +15,14 @@
 #include "plier/rewrites/force_inline.hpp"
 
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
+#include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Transforms/InliningUtils.h>
 
 #include "plier/dialect.hpp"
 
 mlir::LogicalResult plier::ForceInline::matchAndRewrite(mlir::CallOp op, mlir::PatternRewriter& rewriter) const
 {
-    auto attr_name = plier::attributes::getForceInlineName();
+    auto attrName = plier::attributes::getForceInlineName();
     auto mod = op->getParentOfType<mlir::ModuleOp>();
     assert(mod);
     auto func = mod.lookupSymbol<mlir::FuncOp>(op.callee());
@@ -29,8 +30,8 @@ mlir::LogicalResult plier::ForceInline::matchAndRewrite(mlir::CallOp op, mlir::P
     {
         return mlir::failure();
     }
-    if (!op->hasAttr(attr_name) &&
-        !func->hasAttr(attr_name))
+    if (!op->hasAttr(attrName) &&
+        !func->hasAttr(attrName))
     {
         return mlir::failure();
     }
@@ -39,18 +40,33 @@ mlir::LogicalResult plier::ForceInline::matchAndRewrite(mlir::CallOp op, mlir::P
     {
         return mlir::failure();
     }
-    mlir::InlinerInterface inliner_interface(op->getContext());
+
+    auto loc = op.getLoc();
+    auto reg = rewriter.create<mlir::scf::ExecuteRegionOp>(loc, op.getResultTypes());
+    auto newCall = [&]()->mlir::Operation*
+    {
+        auto& regBlock = reg.region().emplaceBlock();
+        mlir::OpBuilder::InsertionGuard g(rewriter);
+        rewriter.setInsertionPointToStart(&regBlock);
+        auto call = rewriter.clone(*op);
+        rewriter.create<mlir::scf::YieldOp>(loc, call->getResults());
+        return call;
+    }();
+
+    mlir::InlinerInterface inlinerInterface(op->getContext());
     auto parent = op->getParentOp();
     rewriter.startRootUpdate(parent);
-    auto res = mlir::inlineCall(inliner_interface, op, func, &func.getRegion());
+    auto res = mlir::inlineCall(inlinerInterface, newCall, func, &func.getRegion());
     if (mlir::succeeded(res))
     {
-        assert(op->getUsers().empty());
-        rewriter.eraseOp(op);
+        assert(newCall->getUsers().empty());
+        rewriter.eraseOp(newCall);
+        rewriter.replaceOp(op, reg.getResults());
         rewriter.finalizeRootUpdate(parent);
     }
     else
     {
+        rewriter.eraseOp(reg);
         rewriter.cancelRootUpdate(parent);
     }
     return res;
