@@ -623,7 +623,7 @@ struct ReturnOpLowering : public mlir::OpRewritePattern<mlir::ReturnOp>
         OpRewritePattern(ctx), type_converter(converter) {}
 
     mlir::LogicalResult matchAndRewrite(mlir::ReturnOp op,
-                                        mlir::PatternRewriter& rewriter) const
+                                        mlir::PatternRewriter& rewriter) const override
     {
         auto parent = op->getParentOfType<mlir::FuncOp>();
         if (nullptr == parent || parent.isPrivate())
@@ -689,7 +689,7 @@ struct RemoveBitcasts : public mlir::OpRewritePattern<mlir::LLVM::BitcastOp>
     using mlir::OpRewritePattern<mlir::LLVM::BitcastOp>::OpRewritePattern;
 
     mlir::LogicalResult matchAndRewrite(mlir::LLVM::BitcastOp op,
-                                        mlir::PatternRewriter& rewriter) const
+                                        mlir::PatternRewriter& rewriter) const override
     {
         if (op.getType() == op.getOperand().getType())
         {
@@ -706,7 +706,7 @@ struct ApplyFastmathFlags : public mlir::OpRewritePattern<Op>
     using mlir::OpRewritePattern<Op>::OpRewritePattern;
 
     mlir::LogicalResult matchAndRewrite(
-        Op op, mlir::PatternRewriter& rewriter) const
+        Op op, mlir::PatternRewriter& rewriter) const override
     {
         auto parent = mlir::cast<mlir::LLVM::LLVMFuncOp>(op->getParentOp());
         bool changed = false;
