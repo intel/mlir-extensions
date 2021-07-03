@@ -66,7 +66,7 @@
 
 namespace
 {
-void applyOptimizations(mlir::FuncOp op, const mlir::FrozenRewritePatternSet& patterns, mlir::AnalysisManager am, llvm::function_ref<mlir::LogicalResult(mlir::FuncOp)> additionalOpts = nullptr)
+mlir::LogicalResult applyOptimizations(mlir::FuncOp op, const mlir::FrozenRewritePatternSet& patterns, mlir::AnalysisManager am, llvm::function_ref<mlir::LogicalResult(mlir::FuncOp)> additionalOpts = nullptr)
 {
     bool repeat = false;
     do
@@ -77,10 +77,18 @@ void applyOptimizations(mlir::FuncOp op, const mlir::FrozenRewritePatternSet& pa
         {
             repeat = true;
         }
-        if (mlir::succeeded(plier::optimizeMemoryOps(am)))
+
+        auto memOptRes = plier::optimizeMemoryOps(am);
+        if (!memOptRes)
+        {
+            op.emitError() << "Failed to build memssa analysis";
+            return mlir::failure();
+        }
+        if (mlir::succeeded(*memOptRes))
         {
             repeat = true;
         }
+
         if (additionalOpts && mlir::succeeded(additionalOpts(op)))
         {
             repeat = true;
@@ -91,6 +99,7 @@ void applyOptimizations(mlir::FuncOp op, const mlir::FrozenRewritePatternSet& pa
         }
     }
     while(repeat);
+    return mlir::success();
 }
 
 enum class ArrayLayout
@@ -1719,7 +1728,7 @@ void PostPlierToLinalgPass::runOnFunction()
         SimplifyExpandDims
         >(&context);
 
-    applyOptimizations(getFunction(), std::move(patterns), getAnalysisManager());
+    (void)mlir::applyPatternsAndFoldGreedily(getFunction(), std::move(patterns));
 }
 
 struct MakeTensorsSignlessPass :
@@ -1913,13 +1922,15 @@ struct FixDeallocPlacement : public mlir::OpRewritePattern<mlir::memref::Dealloc
         mlir::Operation* newPos = op;
         ++blockIt;
         auto memref = op.memref();
+        mlir::BufferViewFlowAnalysis analysis(op->getParentOfType<mlir::FuncOp>());
+        auto aliases = analysis.resolve(memref);
         for (auto& it : llvm::make_range(blockIt, block->end()))
         {
             auto visitor = [&](mlir::Operation* inner)
             {
                 for (auto arg : inner->getOperands())
                 {
-                    if (arg == memref)
+                    if (aliases.count(arg))
                     {
                         return mlir::WalkResult::interrupt();
                     }
@@ -2033,7 +2044,6 @@ void LowerCloneOpsPass::runOnFunction()
         FixStridedReshape
         >(&context);
 
-
     auto func = getFunction();
     (void)mlir::applyPatternsAndFoldGreedily(func, std::move(patterns));
 }
@@ -2053,37 +2063,36 @@ void PostLinalgOptPass::runOnFunction()
 
     patterns.insert<
         plier::CanonicalizeReduction,
-        FixDeallocPlacement
-        >(&context);
-
-    applyOptimizations(getFunction(), std::move(patterns), getAnalysisManager(),
-                       [](mlir::FuncOp op)
-    {
-        return plier::naivelyFuseParallelOps(op.getRegion());
-    });
-}
-
-struct PromoteParallelPass :
-    public mlir::PassWrapper<PromoteParallelPass, mlir::FunctionPass>
-{
-    void runOnFunction() override;
-};
-
-void PromoteParallelPass::runOnFunction()
-{
-    auto& context = getContext();
-    mlir::OwningRewritePatternList patterns(&context);
-
-    plier::populate_common_opts_patterns(context, patterns);
-
-    patterns.insert<
-        plier::CanonicalizeReduction,
         plier::PromoteToParallel,
         plier::MergeNestedForIntoParallel
         >(&context);
 
-    applyOptimizations(getFunction(), std::move(patterns), getAnalysisManager());
+    auto additionalOpt = [](mlir::FuncOp op)
+    {
+        return plier::naivelyFuseParallelOps(op.getRegion());
+    };
+    if (mlir::failed(applyOptimizations(getFunction(), std::move(patterns), getAnalysisManager(), additionalOpt)))
+    {
+        signalPassFailure();
+    }
 }
+
+struct FixDeallocPlacementPass :
+    public mlir::PassWrapper<FixDeallocPlacementPass, mlir::FunctionPass>
+{
+    void runOnFunction() override
+    {
+        auto& context = getContext();
+        mlir::OwningRewritePatternList patterns(&context);
+
+        patterns.insert<
+            FixDeallocPlacement
+            >(&context);
+
+        auto func = getFunction();
+        (void)mlir::applyPatternsAndFoldGreedily(func, std::move(patterns));
+    }
+};
 
 void populate_plier_to_linalg_gen_pipeline(mlir::OpPassManager& pm)
 {
@@ -2124,7 +2133,8 @@ void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager& pm)
     pm.addPass(std::make_unique<ForceInlinePass>());
     pm.addPass(mlir::createSymbolDCEPass());
     pm.addNestedPass<mlir::FuncOp>(std::make_unique<PostLinalgOptPass>());
-    pm.addNestedPass<mlir::FuncOp>(std::make_unique<PromoteParallelPass>());
+
+    pm.addNestedPass<mlir::FuncOp>(std::make_unique<FixDeallocPlacementPass>());
 }
 }
 

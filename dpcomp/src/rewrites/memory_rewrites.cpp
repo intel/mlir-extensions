@@ -150,12 +150,12 @@ mlir::LogicalResult deadStoreElemination(plier::MemorySSAAnalysis& memSSAAnalysi
 
 }
 
-mlir::LogicalResult plier::optimizeMemoryOps(mlir::AnalysisManager& am)
+llvm::Optional<mlir::LogicalResult> plier::optimizeMemoryOps(mlir::AnalysisManager& am)
 {
     auto& memSSAAnalysis = am.getAnalysis<MemorySSAAnalysis>();
     if (!memSSAAnalysis.memssa)
     {
-        return mlir::failure();
+        return {};
     }
 
     using fptr_t = mlir::LogicalResult (*)(MemorySSAAnalysis&);

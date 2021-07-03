@@ -14,21 +14,15 @@
 
 #pragma once
 
+#include <llvm/ADT/Optional.h>
 #include <mlir/IR/PatternMatch.h>
 
 namespace mlir
 {
-namespace memref
-{
-class AllocOp;
-class AllocaOp;
-}
-class FuncOp;
-struct LogicalResult;
 class AnalysisManager;
 }
 
 namespace plier
 {
-mlir::LogicalResult optimizeMemoryOps(mlir::AnalysisManager& am);
+llvm::Optional<mlir::LogicalResult> optimizeMemoryOps(mlir::AnalysisManager& am);
 }
