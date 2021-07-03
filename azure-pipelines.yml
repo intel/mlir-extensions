@@ -38,6 +38,7 @@ jobs:
 
   - script: |
       call "C:\Miniconda\Scripts\activate"
+      call set NUMBA_DISABLE_PERFORMANCE_WARNINGS=1
       pytest -vv --capture=tee-sys
     displayName: 'Tests'
 
@@ -93,6 +94,7 @@ jobs:
       export OCL_ICD_FILENAMES_RESET=1
       export OCL_ICD_FILENAMES=libintelocl.so
       export SYCL_DEVICE_FILTER=opencl:cpu
+      export NUMBA_DISABLE_PERFORMANCE_WARNINGS=1
       pytest -vv --capture=tee-sys
     displayName: 'Tests'
 

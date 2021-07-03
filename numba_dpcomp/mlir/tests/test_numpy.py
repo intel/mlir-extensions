@@ -26,6 +26,8 @@ import pytest
 from .utils import parametrize_function_variants
 from .utils import njit_cached as njit
 
+np.seterr(all='ignore')
+
 def _vectorize_reference(func, arg1):
     ret = np.empty(arg1.shape, arg1.dtype)
     for ind, val in np.ndenumerate(arg1):
