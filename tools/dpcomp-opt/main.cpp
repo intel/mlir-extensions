@@ -18,10 +18,10 @@
 #include <mlir/Support/MlirOptMain.h>
 
 int main(int argc, char **argv) {
-    mlir::registerAllPasses();
-    mlir::DialectRegistry registry;
-    mlir::registerAllDialects(registry);
-    return mlir::failed(MlirOptMain(argc, argv, "DPCOMP modular optimizer driver\n",
-                              registry,
-                              /*preloadDialectsInContext=*/false));
+  mlir::registerAllPasses();
+  mlir::DialectRegistry registry;
+  mlir::registerAllDialects(registry);
+  return mlir::failed(MlirOptMain(argc, argv,
+                                  "DPCOMP modular optimizer driver\n", registry,
+                                  /*preloadDialectsInContext=*/false));
 }

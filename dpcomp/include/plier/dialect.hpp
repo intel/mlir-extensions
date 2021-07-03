@@ -16,123 +16,106 @@
 
 #include <mlir/IR/BuiltinTypes.h>
 #include <mlir/IR/Dialect.h>
-#include <mlir/IR/Types.h>
 #include <mlir/IR/OpDefinition.h>
+#include <mlir/IR/Types.h>
 #include <mlir/Interfaces/ControlFlowInterfaces.h>
 #include <mlir/Interfaces/LoopLikeInterface.h>
 #include <mlir/Interfaces/SideEffectInterfaces.h>
 #include <mlir/Interfaces/ViewLikeInterface.h>
 
-#include "plier/PlierOpsEnums.h.inc"
 #include "plier/PlierOpsDialect.h.inc"
+#include "plier/PlierOpsEnums.h.inc"
 #define GET_OP_CLASSES
 #include "plier/PlierOps.h.inc"
 
-namespace plier
-{
-namespace attributes
-{
+namespace plier {
+namespace attributes {
 llvm::StringRef getFastmathName();
 llvm::StringRef getJumpMarkersName();
 llvm::StringRef getParallelName();
 llvm::StringRef getMaxConcurrencyName();
 llvm::StringRef getForceInlineName();
-}
+} // namespace attributes
 
-namespace detail
-{
+namespace detail {
 struct PyTypeStorage;
 struct LiteralTypeStorage;
 struct SliceTypeStorage;
 struct TypeVarStorage;
 
-struct OperatorNamePair
-{
-    mlir::StringRef op;
-    mlir::StringRef name;
+struct OperatorNamePair {
+  mlir::StringRef op;
+  mlir::StringRef name;
 };
 
 static const constexpr OperatorNamePair OperatorNames[] = {
-    {"+",  "add"}, // binary
-    {"+",  "pos"}, // unary
-    {"-",  "sub"}, // binary
-    {"-",  "neg"}, // unary
-    {"*",  "mul"},
-    {"**", "pow"},
-    {"/",  "truediv"},
-    {"//", "floordiv"},
-    {"%",  "mod"},
+    {"+", "add"}, // binary
+    {"+", "pos"}, // unary
+    {"-", "sub"}, // binary
+    {"-", "neg"}, // unary
+    {"*", "mul"},       {"**", "pow"}, {"/", "truediv"},
+    {"//", "floordiv"}, {"%", "mod"},
 
-    {">",  "gt"},
-    {">=", "ge"},
-    {"<",  "lt"},
-    {"<=", "le"},
-    {"!=", "ne"},
-    {"==", "eq"},
+    {">", "gt"},        {">=", "ge"},  {"<", "lt"},
+    {"<=", "le"},       {"!=", "ne"},  {"==", "eq"},
 };
-}
+} // namespace detail
 
-enum
-{
-    OperatorsCount = llvm::array_lengthof(detail::OperatorNames)
-};
+enum { OperatorsCount = llvm::array_lengthof(detail::OperatorNames) };
 
 mlir::ArrayRef<detail::OperatorNamePair> getOperators();
 
 class PyType : public mlir::Type::TypeBase<::plier::PyType, mlir::Type,
-                                           ::plier::detail::PyTypeStorage>
-{
+                                           ::plier::detail::PyTypeStorage> {
 public:
-    using Base::Base;
+  using Base::Base;
 
-    static PyType get(mlir::MLIRContext *context, mlir::StringRef name);
-    static PyType getUndefined(mlir::MLIRContext *context);
+  static PyType get(mlir::MLIRContext *context, mlir::StringRef name);
+  static PyType getUndefined(mlir::MLIRContext *context);
 
-    mlir::StringRef getName() const;
+  mlir::StringRef getName() const;
 };
 
-class LiteralType : public mlir::Type::TypeBase<::plier::LiteralType, mlir::Type,
-                                                ::plier::detail::LiteralTypeStorage>
-{
+class LiteralType
+    : public mlir::Type::TypeBase<::plier::LiteralType, mlir::Type,
+                                  ::plier::detail::LiteralTypeStorage> {
 public:
-    using Base::Base;
+  using Base::Base;
 
-    static LiteralType get(mlir::Attribute value);
+  static LiteralType get(mlir::Attribute value);
 
-    mlir::Attribute getValue() const;
+  mlir::Attribute getValue() const;
 };
 
 class NoneType : public mlir::Type::TypeBase<::plier::NoneType, mlir::Type,
-                                             mlir::TypeStorage>
-{
+                                             mlir::TypeStorage> {
 public:
-    using Base::Base;
+  using Base::Base;
 };
 
-class SliceType : public mlir::Type::TypeBase<::plier::SliceType, mlir::Type,
-                                              ::plier::detail::SliceTypeStorage>
-{
+class SliceType
+    : public mlir::Type::TypeBase<::plier::SliceType, mlir::Type,
+                                  ::plier::detail::SliceTypeStorage> {
 public:
-    using Base::Base;
+  using Base::Base;
 
-    static SliceType get(mlir::Type begin, mlir::Type end, mlir::Type stride);
+  static SliceType get(mlir::Type begin, mlir::Type end, mlir::Type stride);
 
-    mlir::Type getBegin() const;
-    mlir::Type getEnd() const;
-    mlir::Type getStride() const;
+  mlir::Type getBegin() const;
+  mlir::Type getEnd() const;
+  mlir::Type getStride() const;
 
-    std::array<mlir::Type, 3> getTypes() const;
+  std::array<mlir::Type, 3> getTypes() const;
 };
 
 class TypeVar : public mlir::Type::TypeBase<::plier::TypeVar, mlir::Type,
-                                            ::plier::detail::TypeVarStorage>
-{
+                                            ::plier::detail::TypeVarStorage> {
 public:
-    using Base::Base;
+  using Base::Base;
 
-    static TypeVar get(mlir::Type type);
+  static TypeVar get(mlir::Type type);
 
-    mlir::Type getType() const;
+  mlir::Type getType() const;
 };
 
-}
+} // namespace plier

@@ -12,67 +12,57 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "plier/dialect.hpp"
 #include "plier/transforms/cast_utils.hpp"
+#include "plier/dialect.hpp"
 
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
 
-namespace
-{
-mlir::Type makeSignless(mlir::Type type)
-{
-    if (auto intType = type.dyn_cast<mlir::IntegerType>())
-    {
-        if (!intType.isSignless())
-        {
-            return mlir::IntegerType::get(intType.getContext(), intType.getWidth());
-        }
+namespace {
+mlir::Type makeSignless(mlir::Type type) {
+  if (auto intType = type.dyn_cast<mlir::IntegerType>()) {
+    if (!intType.isSignless()) {
+      return mlir::IntegerType::get(intType.getContext(), intType.getWidth());
     }
-    return type;
+  }
+  return type;
 }
-}
+} // namespace
 
-mlir::Value plier::index_cast(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value val, mlir::Type dstType)
-{
-    auto srcType = val.getType();
-    assert(srcType.isa<mlir::IndexType>() || dstType.isa<mlir::IndexType>());
-    if (srcType == dstType)
-    {
-        return val;
-    }
-    auto newSrcType = makeSignless(srcType);
-    if (newSrcType != srcType)
-    {
-        val = builder.create<plier::SignCastOp>(loc, newSrcType, val);
-    }
-    auto newDstType = makeSignless(dstType);
-    val = builder.create<mlir::IndexCastOp>(loc, val, newDstType);
-    if (newDstType != dstType)
-    {
-        val = builder.create<plier::SignCastOp>(loc, dstType, val);
-    }
+mlir::Value plier::index_cast(mlir::OpBuilder &builder, mlir::Location loc,
+                              mlir::Value val, mlir::Type dstType) {
+  auto srcType = val.getType();
+  assert(srcType.isa<mlir::IndexType>() || dstType.isa<mlir::IndexType>());
+  if (srcType == dstType) {
     return val;
+  }
+  auto newSrcType = makeSignless(srcType);
+  if (newSrcType != srcType) {
+    val = builder.create<plier::SignCastOp>(loc, newSrcType, val);
+  }
+  auto newDstType = makeSignless(dstType);
+  val = builder.create<mlir::IndexCastOp>(loc, val, newDstType);
+  if (newDstType != dstType) {
+    val = builder.create<plier::SignCastOp>(loc, dstType, val);
+  }
+  return val;
 }
 
-mlir::Value plier::index_cast(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value src)
-{
-    return index_cast(builder, loc, src, mlir::IndexType::get(builder.getContext()));
+mlir::Value plier::index_cast(mlir::OpBuilder &builder, mlir::Location loc,
+                              mlir::Value src) {
+  return index_cast(builder, loc, src,
+                    mlir::IndexType::get(builder.getContext()));
 }
 
-mlir::Type plier::makeSignlessType(mlir::Type type)
-{
-    if (auto intType = type.dyn_cast<mlir::IntegerType>())
-    {
-        return makeSignlessType(intType);
-    }
-    return type;
+mlir::Type plier::makeSignlessType(mlir::Type type) {
+  if (auto intType = type.dyn_cast<mlir::IntegerType>()) {
+    return makeSignlessType(intType);
+  }
+  return type;
 }
 
-mlir::IntegerType plier::makeSignlessType(mlir::IntegerType type)
-{
-    if (!type.isSignless())
-    {
-        return mlir::IntegerType::get(type.getContext(), type.getWidth());
-    }
-    return type;
+mlir::IntegerType plier::makeSignlessType(mlir::IntegerType type) {
+  if (!type.isSignless()) {
+    return mlir::IntegerType::get(type.getContext(), type.getWidth());
+  }
+  return type;
 }

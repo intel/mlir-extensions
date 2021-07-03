@@ -12,37 +12,37 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <mlir/IR/PatternMatch.h>
 #include <mlir/Pass/Pass.h>
 #include <mlir/Pass/PassRegistry.h>
-#include <mlir/IR/PatternMatch.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 
 #include <mlir/Dialect/SCF/SCF.h>
 
 #include "plier/rewrites/promote_to_parallel.hpp"
 
-namespace
-{
+namespace {
 template <typename Op, typename Rewrite>
-struct RewriteWrapperPass :
-    public mlir::PassWrapper<RewriteWrapperPass<Op, Rewrite>, mlir::OperationPass<Op>>
-{
-    void runOnOperation() override
-    {
-        auto& context = this->getContext();
-        mlir::OwningRewritePatternList patterns(&context);
+struct RewriteWrapperPass
+    : public mlir::PassWrapper<RewriteWrapperPass<Op, Rewrite>,
+                               mlir::OperationPass<Op>> {
+  void runOnOperation() override {
+    auto &context = this->getContext();
+    mlir::OwningRewritePatternList patterns(&context);
 
-        patterns.insert<Rewrite>(&context);
+    patterns.insert<Rewrite>(&context);
 
-        if (mlir::failed(mlir::applyPatternsAndFoldGreedily(this->getOperation(), std::move(patterns))))
-        {
-            this->signalPassFailure();
-        }
+    if (mlir::failed(mlir::applyPatternsAndFoldGreedily(this->getOperation(),
+                                                        std::move(patterns)))) {
+      this->signalPassFailure();
     }
+  }
 };
 
 template <typename Op, typename Rewrite>
-using WrapperRegistration = mlir::PassRegistration<RewriteWrapperPass<Op, Rewrite>>;
+using WrapperRegistration =
+    mlir::PassRegistration<RewriteWrapperPass<Op, Rewrite>>;
 
-static WrapperRegistration<mlir::FuncOp, plier::PromoteToParallel> promoteToParallelReg("dpcomp-promote-to-parallel", "");
-}
+static WrapperRegistration<mlir::FuncOp, plier::PromoteToParallel>
+    promoteToParallelReg("dpcomp-promote-to-parallel", "");
+} // namespace

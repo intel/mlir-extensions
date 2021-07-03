@@ -16,105 +16,100 @@
 
 #include <iterator>
 
+#include <llvm/ADT/ArrayRef.h>
 #include <llvm/ADT/DenseMap.h>
 #include <llvm/ADT/Optional.h>
-#include <llvm/ADT/ArrayRef.h>
 #include <llvm/ADT/simple_ilist.h>
 #include <llvm/Support/Allocator.h>
 
-namespace mlir
-{
+namespace mlir {
 struct LogicalResult;
 class Operation;
 class Region;
-}
+} // namespace mlir
 
-namespace plier
-{
+namespace plier {
 
-class MemorySSA
-{
+class MemorySSA {
 public:
-    enum class NodeType
-    {
-        Root,
-        Def,
-        Use,
-        Phi,
-        Term
-    };
-    struct Node;
+  enum class NodeType { Root, Def, Use, Phi, Term };
+  struct Node;
 
-    MemorySSA() = default;
-    MemorySSA(const MemorySSA&) = delete;
-    MemorySSA(MemorySSA&&) = default;
+  MemorySSA() = default;
+  MemorySSA(const MemorySSA &) = delete;
+  MemorySSA(MemorySSA &&) = default;
 
-    MemorySSA& operator=(const MemorySSA&) = delete;
-    MemorySSA& operator=(MemorySSA&&) = default;
+  MemorySSA &operator=(const MemorySSA &) = delete;
+  MemorySSA &operator=(MemorySSA &&) = default;
 
-    Node* createDef(mlir::Operation* op, Node* arg);
-    Node* createUse(mlir::Operation* op, Node* arg);
-    Node* createPhi(mlir::Operation* op, llvm::ArrayRef<Node*> args);
+  Node *createDef(mlir::Operation *op, Node *arg);
+  Node *createUse(mlir::Operation *op, Node *arg);
+  Node *createPhi(mlir::Operation *op, llvm::ArrayRef<Node *> args);
 
-    void eraseNode(Node* node);
-    NodeType getNodeType(Node* node) const;
-    mlir::Operation* getNodeOperation(Node* node) const;
-    Node* getNodeDef(Node* node) const;
-    llvm::SmallVector<Node*> getUsers(Node* node);
+  void eraseNode(Node *node);
+  NodeType getNodeType(Node *node) const;
+  mlir::Operation *getNodeOperation(Node *node) const;
+  Node *getNodeDef(Node *node) const;
+  llvm::SmallVector<Node *> getUsers(Node *node);
 
-    Node* getRoot();
-    Node* getTerm();
-    Node* getNode(mlir::Operation* op) const;
+  Node *getRoot();
+  Node *getTerm();
+  Node *getNode(mlir::Operation *op) const;
 
-    struct NodesIterator
-    {
-        using iterator_category = std::bidirectional_iterator_tag;
-        using difference_type = std::ptrdiff_t;
-        using value_type = Node;
-        using pointer = value_type*;
-        using reference = value_type&;
+  struct NodesIterator {
+    using iterator_category = std::bidirectional_iterator_tag;
+    using difference_type = std::ptrdiff_t;
+    using value_type = Node;
+    using pointer = value_type *;
+    using reference = value_type &;
 
-        using internal_iterator = llvm::simple_ilist<Node>::iterator;
+    using internal_iterator = llvm::simple_ilist<Node>::iterator;
 
-        NodesIterator(internal_iterator iter);
-        NodesIterator(const NodesIterator&) = default;
-        NodesIterator(NodesIterator&&) = default;
+    NodesIterator(internal_iterator iter);
+    NodesIterator(const NodesIterator &) = default;
+    NodesIterator(NodesIterator &&) = default;
 
-        NodesIterator& operator=(const NodesIterator&) = default;
-        NodesIterator& operator=(NodesIterator&&) = default;
+    NodesIterator &operator=(const NodesIterator &) = default;
+    NodesIterator &operator=(NodesIterator &&) = default;
 
-        bool operator==(const NodesIterator& rhs) const { return iterator == rhs.iterator; }
-        bool operator!=(const NodesIterator& rhs) const { return iterator != rhs.iterator; }
+    bool operator==(const NodesIterator &rhs) const {
+      return iterator == rhs.iterator;
+    }
+    bool operator!=(const NodesIterator &rhs) const {
+      return iterator != rhs.iterator;
+    }
 
-        NodesIterator& operator++();
-        NodesIterator operator++(int);
+    NodesIterator &operator++();
+    NodesIterator operator++(int);
 
-        NodesIterator& operator--();
-        NodesIterator operator--(int);
+    NodesIterator &operator--();
+    NodesIterator operator--(int);
 
-        reference operator*();
-        pointer operator->();
+    reference operator*();
+    pointer operator->();
 
-    private:
-        internal_iterator iterator;
-    };
+  private:
+    internal_iterator iterator;
+  };
 
-    llvm::iterator_range<NodesIterator> getNodes();
+  llvm::iterator_range<NodesIterator> getNodes();
 
-    void print(llvm::raw_ostream& os);
-    void print(Node* node, llvm::raw_ostream& os);
+  void print(llvm::raw_ostream &os);
+  void print(Node *node, llvm::raw_ostream &os);
 
-    mlir::LogicalResult optimizeUses(llvm::function_ref<bool(mlir::Operation*, mlir::Operation*)> mayAlias);
+  mlir::LogicalResult optimizeUses(
+      llvm::function_ref<bool(mlir::Operation *, mlir::Operation *)> mayAlias);
 
 private:
-    Node* root = nullptr;
-    Node* term = nullptr;
-    llvm::DenseMap<mlir::Operation*, Node*> nodesMap;
-    llvm::BumpPtrAllocator allocator;
-    llvm::simple_ilist<Node> nodes;
+  Node *root = nullptr;
+  Node *term = nullptr;
+  llvm::DenseMap<mlir::Operation *, Node *> nodesMap;
+  llvm::BumpPtrAllocator allocator;
+  llvm::simple_ilist<Node> nodes;
 
-    Node* createNode(mlir::Operation* op, NodeType type, llvm::ArrayRef<Node*> args);
+  Node *createNode(mlir::Operation *op, NodeType type,
+                   llvm::ArrayRef<Node *> args);
 };
 
-llvm::Optional<plier::MemorySSA> buildMemorySSA(mlir::Region& region);
-}
+llvm::Optional<plier::MemorySSA> buildMemorySSA(mlir::Region &region);
+} // namespace plier

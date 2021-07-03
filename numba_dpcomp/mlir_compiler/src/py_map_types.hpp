@@ -14,18 +14,17 @@
 
 #pragma once
 
-namespace pybind11
-{
+namespace pybind11 {
 class list;
 class object;
 class handle;
-}
+} // namespace pybind11
 
-namespace mlir
-{
+namespace mlir {
 class Type;
 class TypeRange;
-}
+} // namespace mlir
 
 pybind11::object map_type_to_numba(pybind11::handle types_mod, mlir::Type type);
-pybind11::object map_types_to_numba(pybind11::handle types_mod, mlir::TypeRange types);
+pybind11::object map_types_to_numba(pybind11::handle types_mod,
+                                    mlir::TypeRange types);

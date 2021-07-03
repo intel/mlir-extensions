@@ -17,56 +17,53 @@
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/IR/PatternMatch.h>
 
-namespace mlir
-{
+namespace mlir {
 class TypeConverter;
 class CallOp;
 class RewritePatternSet;
 class ConversionTarget;
-namespace scf
-{
+namespace scf {
 class IfOp;
 }
-}
+} // namespace mlir
 
-namespace plier
-{
-struct FuncOpSignatureConversion : public mlir::OpRewritePattern<mlir::FuncOp>
-{
-    FuncOpSignatureConversion(mlir::TypeConverter& conv,
-                              mlir::MLIRContext* ctx);
+namespace plier {
+struct FuncOpSignatureConversion : public mlir::OpRewritePattern<mlir::FuncOp> {
+  FuncOpSignatureConversion(mlir::TypeConverter &conv, mlir::MLIRContext *ctx);
 
-    /// Hook for derived classes to implement combined matching and rewriting.
-    mlir::LogicalResult
-    matchAndRewrite(mlir::FuncOp funcOp, mlir::PatternRewriter &rewriter) const override;
+  /// Hook for derived classes to implement combined matching and rewriting.
+  mlir::LogicalResult
+  matchAndRewrite(mlir::FuncOp funcOp,
+                  mlir::PatternRewriter &rewriter) const override;
 
 private:
-    mlir::TypeConverter& converter;
+  mlir::TypeConverter &converter;
 };
 
-struct FixupIfTypes : public mlir::OpRewritePattern<mlir::scf::IfOp>
-{
-    FixupIfTypes(mlir::TypeConverter &typeConverter,
-                 mlir::MLIRContext *context);
+struct FixupIfTypes : public mlir::OpRewritePattern<mlir::scf::IfOp> {
+  FixupIfTypes(mlir::TypeConverter &typeConverter, mlir::MLIRContext *context);
 
-    mlir::LogicalResult matchAndRewrite(
-        mlir::scf::IfOp op, mlir::PatternRewriter &rewriter) const override;
+  mlir::LogicalResult
+  matchAndRewrite(mlir::scf::IfOp op,
+                  mlir::PatternRewriter &rewriter) const override;
 
 private:
-    mlir::TypeConverter &converter;
+  mlir::TypeConverter &converter;
 };
 
-struct FixCallOmittedArgs : public mlir::OpRewritePattern<mlir::CallOp>
-{
-    FixCallOmittedArgs(mlir::TypeConverter &typeConverter,
-                       mlir::MLIRContext *context);
+struct FixCallOmittedArgs : public mlir::OpRewritePattern<mlir::CallOp> {
+  FixCallOmittedArgs(mlir::TypeConverter &typeConverter,
+                     mlir::MLIRContext *context);
 
-    mlir::LogicalResult matchAndRewrite(
-        mlir::CallOp op, mlir::PatternRewriter &rewriter) const override;
+  mlir::LogicalResult
+  matchAndRewrite(mlir::CallOp op,
+                  mlir::PatternRewriter &rewriter) const override;
+
 private:
-    mlir::TypeConverter& converter;
+  mlir::TypeConverter &converter;
 };
 
 void populateControlFlowTypeConversionRewritesAndTarget(
-    mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns, mlir::ConversionTarget& target);
-}
+    mlir::TypeConverter &typeConverter, mlir::RewritePatternSet &patterns,
+    mlir::ConversionTarget &target);
+} // namespace plier

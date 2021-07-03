@@ -14,13 +14,12 @@
 
 #pragma once
 
-namespace mlir
-{
+namespace mlir {
 class RewritePatternSet;
 class MLIRContext;
-}
+} // namespace mlir
 
-namespace plier
-{
-void populate_common_opts_patterns(mlir::MLIRContext& context, mlir::RewritePatternSet& patterns);
+namespace plier {
+void populate_common_opts_patterns(mlir::MLIRContext &context,
+                                   mlir::RewritePatternSet &patterns);
 }

@@ -16,23 +16,20 @@
 
 #include <mlir/IR/PatternMatch.h>
 
-namespace mlir
-{
+namespace mlir {
 class SelectOp;
-namespace scf
-{
+namespace scf {
 class IfOp;
 }
-}
+} // namespace mlir
 
-namespace plier
-{
-struct IfOpConstCond : public mlir::OpRewritePattern<mlir::scf::IfOp>
-{
-    IfOpConstCond(mlir::MLIRContext *context):
-        mlir::OpRewritePattern<mlir::scf::IfOp>(context, /*benefit*/1) {}
+namespace plier {
+struct IfOpConstCond : public mlir::OpRewritePattern<mlir::scf::IfOp> {
+  IfOpConstCond(mlir::MLIRContext *context)
+      : mlir::OpRewritePattern<mlir::scf::IfOp>(context, /*benefit*/ 1) {}
 
-    mlir::LogicalResult matchAndRewrite(
-        mlir::scf::IfOp op, mlir::PatternRewriter &rewriter) const override;
+  mlir::LogicalResult
+  matchAndRewrite(mlir::scf::IfOp op,
+                  mlir::PatternRewriter &rewriter) const override;
 };
-}
+} // namespace plier

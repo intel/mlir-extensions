@@ -16,26 +16,23 @@
 
 #include <memory>
 
-namespace llvm
-{
+namespace llvm {
 class StringRef;
 }
 
-namespace mlir
-{
+namespace mlir {
 class FuncOp;
 class TypeRange;
-}
+} // namespace mlir
 
-class PyFuncResolver
-{
+class PyFuncResolver {
 public:
-    PyFuncResolver();
-    ~PyFuncResolver();
+  PyFuncResolver();
+  ~PyFuncResolver();
 
-    mlir::FuncOp get_func(llvm::StringRef name, mlir::TypeRange types);
+  mlir::FuncOp get_func(llvm::StringRef name, mlir::TypeRange types);
 
 private:
-    struct Context;
-    std::unique_ptr<Context> context;
+  struct Context;
+  std::unique_ptr<Context> context;
 };

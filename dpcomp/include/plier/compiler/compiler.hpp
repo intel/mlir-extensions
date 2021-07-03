@@ -16,38 +16,34 @@
 
 #include <memory>
 
-namespace mlir
-{
+namespace mlir {
 class MLIRContext;
 class ModuleOp;
-}
+} // namespace mlir
 
-namespace plier
-{
+namespace plier {
 class PipelineRegistry;
 
-class CompilerContext
-{
+class CompilerContext {
 public:
-    struct Settings
-    {
-        bool verify = false;
-        bool pass_statistics = false;
-        bool pass_timings = false;
-        bool ir_printing = false;
-    };
+  struct Settings {
+    bool verify = false;
+    bool pass_statistics = false;
+    bool pass_timings = false;
+    bool ir_printing = false;
+  };
 
-    class CompilerContextImpl;
+  class CompilerContextImpl;
 
-    CompilerContext(mlir::MLIRContext& ctx, const Settings& settings,
-                    const PipelineRegistry& registry);
-    ~CompilerContext();
+  CompilerContext(mlir::MLIRContext &ctx, const Settings &settings,
+                  const PipelineRegistry &registry);
+  ~CompilerContext();
 
-    CompilerContext(CompilerContext&&) = default;
+  CompilerContext(CompilerContext &&) = default;
 
-    void run(mlir::ModuleOp module);
+  void run(mlir::ModuleOp module);
 
 private:
-    std::unique_ptr<CompilerContextImpl> impl;
+  std::unique_ptr<CompilerContextImpl> impl;
 };
-}
+} // namespace plier

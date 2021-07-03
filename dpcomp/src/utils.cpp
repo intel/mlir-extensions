@@ -18,7 +18,6 @@
 
 #include "llvm/ADT/Twine.h"
 
-void plier::report_error(const llvm::Twine& msg)
-{
-    throw std::runtime_error(msg.str());
+void plier::report_error(const llvm::Twine &msg) {
+  throw std::runtime_error(msg.str());
 }
