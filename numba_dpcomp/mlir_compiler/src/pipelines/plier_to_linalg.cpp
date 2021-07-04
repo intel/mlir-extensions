@@ -572,6 +572,9 @@ mlir::Value unstride(mlir::OpBuilder &builder, mlir::Location loc,
   if (newType == srcType) {
     return src;
   }
+  if (srcType.getAffineMaps().empty()) {
+    return builder.createOrFold<mlir::memref::CastOp>(loc, src, newType);
+  }
   auto rank = static_cast<unsigned>(srcType.getRank());
   llvm::SmallVector<mlir::Value> sizes(rank);
   for (unsigned i = 0; i < rank; ++i) {
@@ -1763,7 +1766,8 @@ struct FixDeallocPlacement
     auto memref = op.memref();
     mlir::BufferViewFlowAnalysis analysis(op->getParentOfType<mlir::FuncOp>());
     auto aliases = analysis.resolve(memref);
-    for (auto &it : llvm::make_range(blockIt, block->end())) {
+    auto blockEnd = block->without_terminator().end();
+    for (auto &it : llvm::make_range(blockIt, blockEnd)) {
       auto visitor = [&](mlir::Operation *inner) {
         for (auto arg : inner->getOperands()) {
           if (aliases.count(arg)) {
