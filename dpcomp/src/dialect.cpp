@@ -62,6 +62,8 @@ llvm::StringRef attributes::getForceInlineName() {
   return "#plier.force_inline";
 }
 
+llvm::StringRef attributes::getOptLevelName() { return "#plier.opt_level"; }
+
 namespace detail {
 struct PyTypeStorage : public mlir::TypeStorage {
   using KeyTy = mlir::StringRef;

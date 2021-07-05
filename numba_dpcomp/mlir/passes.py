@@ -16,7 +16,7 @@ from numba.core.compiler_machinery import (FunctionPass, register_pass)
 from numba.core import (types)
 import numba.core.types.functions
 
-from .settings import PRINT_IR, DEBUG_TYPE
+from .settings import DUMP_IR, DEBUG_TYPE, OPT_LEVEL
 from . import func_registry
 from .. import mlir_compiler
 
@@ -77,7 +77,7 @@ class MlirBackendBase(FunctionPass):
         from numba.np.ufunc.parallel import get_thread_count
 
         ctx = {}
-        ctx['compiler_settings'] = {'verify': True, 'pass_statistics': False, 'pass_timings': False, 'ir_printing': PRINT_IR}
+        ctx['compiler_settings'] = {'verify': True, 'pass_statistics': False, 'pass_timings': False, 'ir_printing': DUMP_IR}
         ctx['typemap'] = lambda op: state.typemap[op.name]
         ctx['fnargs'] = lambda: state.args
         ctx['restype'] = lambda: state.return_type
@@ -85,6 +85,7 @@ class MlirBackendBase(FunctionPass):
         ctx['resolve_func'] = self._resolve_func_name
         ctx['fastmath'] = lambda: state.targetctx.fastmath
         ctx['max_concurrency'] = lambda: get_thread_count() if state.flags.auto_parallel.enabled else 0
+        ctx['opt_level'] = lambda: OPT_LEVEL
         return ctx
 
 @register_pass(mutates_CFG=True, analysis_only=False)
