@@ -593,6 +593,107 @@ void SignCastOp::getCanonicalizationPatterns(
                  SignCastDimPropagate<mlir::memref::DimOp>>(context);
 }
 
+void ReduceRankOp::build(::mlir::OpBuilder &odsBuilder,
+                         ::mlir::OperationState &odsState, ::mlir::Value src,
+                         ::mlir::ArrayRef<int32_t> mapping) {
+  assert(src.getType().isa<mlir::ShapedType>());
+  auto srcType = src.getType().cast<mlir::ShapedType>();
+  assert(srcType.hasRank());
+  auto srcRank = static_cast<unsigned>(srcType.getRank());
+  assert(!mapping.empty());
+  assert(llvm::all_of(mapping,
+                      [&](unsigned val) { return val >= 0 && val < srcRank; }));
+  auto mapAttr = odsBuilder.getI32ArrayAttr(mapping);
+  auto srcShape = srcType.getShape();
+  llvm::SmallVector<int64_t> shape(mapping.size());
+  for (auto it : llvm::enumerate(mapping)) {
+    shape[it.index()] = srcShape[static_cast<size_t>(it.value())];
+  }
+
+  if (auto tensorType = srcType.dyn_cast<mlir::RankedTensorType>()) {
+    auto retType = mlir::RankedTensorType::get(
+        shape, tensorType.getElementType(), tensorType.getEncoding());
+    build(odsBuilder, odsState, retType, src, mapAttr);
+  } else if (auto memrefType = srcType.dyn_cast<mlir::MemRefType>()) {
+    auto affineMaps = [&]() {
+      llvm::SmallVector<mlir::AffineMap, 1> ret;
+      auto affineMaps = memrefType.getAffineMaps();
+      assert(affineMaps.size() < 2);
+      if (!affineMaps.empty() && !affineMaps[0].isIdentity()) {
+        auto context = odsBuilder.getContext();
+        llvm::SmallVector<mlir::AffineExpr> dimReplacements(srcRank);
+        llvm::SmallVector<mlir::AffineExpr> symReplacements(srcRank + 1);
+        symReplacements[0] = mlir::getAffineSymbolExpr(0, context);
+        for (auto i : llvm::seq(0u, srcRank)) {
+          auto it = llvm::find(mapping, i);
+          if (it != mapping.end()) {
+            auto srcIndex = static_cast<unsigned>(it - mapping.begin());
+            dimReplacements[i] = mlir::getAffineDimExpr(srcIndex, context);
+            symReplacements[i + 1] =
+                mlir::getAffineSymbolExpr(srcIndex, context);
+          } else {
+            dimReplacements[i] = mlir::getAffineConstantExpr(0, context);
+            symReplacements[i + 1] = mlir::getAffineConstantExpr(0, context);
+          }
+        }
+        auto srcMap = memrefType.getAffineMaps().front();
+        auto dstRank = static_cast<unsigned>(mapping.size());
+        auto resMap = srcMap.replaceDimsAndSymbols(
+            dimReplacements, symReplacements, dstRank, dstRank + 1);
+        ret.emplace_back(mlir::simplifyAffineMap(resMap));
+      }
+      return ret;
+    }();
+
+    auto retType =
+        mlir::MemRefType::get(shape, memrefType.getElementType(), affineMaps,
+                              memrefType.getMemorySpace());
+    build(odsBuilder, odsState, retType, src, mapAttr);
+  } else {
+    llvm_unreachable("ReduceRankOp: Invalid src type");
+  }
+}
+
+mlir::OpFoldResult
+ReduceRankOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
+  auto src = source();
+  if (src.getType() == getType()) {
+    return src;
+  }
+  return nullptr;
+}
+
+namespace {
+template <typename Op>
+struct ReduceRankDimPropagate : public mlir::OpRewritePattern<Op> {
+  using mlir::OpRewritePattern<Op>::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(Op op, mlir::PatternRewriter &rewriter) const override {
+    auto index = mlir::getConstantIntValue(op.index());
+    if (!index)
+      return mlir::failure();
+
+    auto prev = op.source().template getDefiningOp<plier::ReduceRankOp>();
+    if (!prev)
+      return mlir::failure();
+
+    auto mappedArg = prev.mapping()[*index]
+                         .template cast<mlir::IntegerAttr>()
+                         .getValue()
+                         .getSExtValue();
+    rewriter.replaceOpWithNewOp<Op>(op, prev.source(), mappedArg);
+    return mlir::success();
+  }
+};
+} // namespace
+
+void ReduceRankOp::getCanonicalizationPatterns(
+    ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context) {
+  results.insert<ReduceRankDimPropagate<mlir::tensor::DimOp>,
+                 ReduceRankDimPropagate<mlir::memref::DimOp>>(context);
+}
+
 } // namespace plier
 
 #include "plier/PlierOpsDialect.cpp.inc"
