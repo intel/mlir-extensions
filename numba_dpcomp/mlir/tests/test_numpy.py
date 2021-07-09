@@ -204,20 +204,19 @@ def test_sum_add2():
     arr3 = np.asarray([7,8,9])
     assert_equal(py_func(arr1, arr2, arr3), jit_func(arr1, arr2, arr3))
 
+@pytest.mark.parametrize("a,b", [
+    (np.array([1,2,3], np.float32), np.array([4,5,6], np.float32)),
+    (np.array([[1,2,3],[4,5,6]], np.float32), np.array([[1,2],[3,4],[5,6]], np.float32)),
+    ])
+@pytest.mark.parametrize("parallel", [False, True])
+def test_dot(a, b, parallel):
+    def py_func(a, b):
+        return np.dot(a, b)
+
+    jit_func = njit(py_func, parallel=parallel)
+    assert_equal(py_func(a, b), jit_func(a, b))
+
 class TestMlirBasic(TestCase):
-    def test_dot(self):
-        def py_func(a, b):
-            return np.dot(a, b)
-
-        jit_func = njit(py_func)
-        arr1 = np.asarray([1,2,3], np.float32)
-        arr2 = np.asarray([4,5,6], np.float32)
-        arr3 = np.asarray([[1,2,3],[4,5,6]], np.float32)
-        arr4 = np.asarray([[1,2],[3,4],[5,6]], np.float32)
-
-        for a, b in [(arr1,arr2), (arr3,arr4)]:
-            assert_equal(py_func(a, b), jit_func(a, b))
-
     def test_static_setitem(self):
         def py_func(a):
             a[1] = 42
@@ -680,7 +679,8 @@ def test_cov_edge_cases(m, y, rowvar):
     np.array([1,2,3,4,5,6,7,8,9,0], dtype=np.int32).reshape((5,2)).T,
     np.array([1,2,3,4,5,6,7,8,9,0], dtype=np.float32).reshape((5,2)).T,
     ])
-def test_mean_loop(arr):
+@pytest.mark.parametrize("parallel", [False, True])
+def test_mean_loop(arr, parallel):
     def py_func(data):
         tdata = data.T
         m = np.empty(tdata.shape[0])
@@ -688,7 +688,7 @@ def test_mean_loop(arr):
             m[i] = np.mean(tdata[i])
         return m
 
-    jit_func = njit(py_func)
+    jit_func = njit(py_func, parallel=parallel)
     assert_equal(py_func(arr), jit_func(arr))
 
 @pytest.mark.parametrize("arr", [
@@ -699,7 +699,8 @@ def test_mean_loop(arr):
     np.array([1,2,3,4,5,6,7,8,9,0], dtype=np.int32).reshape((5,2)).T,
     np.array([1,2,3,4,5,6,7,8,9,0], dtype=np.float32).reshape((5,2)).T,
     ])
-def test_mean_loop_cov(arr):
+@pytest.mark.parametrize("parallel", [False, True])
+def test_mean_loop_cov(arr, parallel):
     def py_func(data):
         tdata = data.T
         m = np.empty(tdata.shape[0])
@@ -709,7 +710,7 @@ def test_mean_loop_cov(arr):
         v = np.cov(c.T)
         return v
 
-    jit_func = njit(py_func)
+    jit_func = njit(py_func, parallel=parallel)
     assert_equal(py_func(arr), jit_func(arr))
 
 
