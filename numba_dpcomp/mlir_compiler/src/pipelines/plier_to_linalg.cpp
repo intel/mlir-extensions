@@ -1547,21 +1547,42 @@ void PlierToLinalgPass::runOnOperation() {
   // Convert unknown types to itself
   typeConverter.addConversion([](mlir::Type type) { return type; });
   populate_std_type_converter(*context, typeConverter);
+  populate_tuple_type_converter(*context, typeConverter);
   populate_array_type_converter(*context, typeConverter);
 
   mlir::OwningRewritePatternList patterns(context);
-  patterns.insert<plier::FuncOpSignatureConversion, plier::FixupIfTypes,
-                  plier::CastOpLowering, plier::ArgOpLowering,
-                  plier::FixCallOmittedArgs, RankedTypesCasts,
-                  UnrankedToElementCasts, ArrayShape>(typeConverter, context);
+  patterns.insert<
+      // clang-format off
+      plier::FuncOpSignatureConversion,
+      plier::FixupIfTypes,
+      plier::CastOpLowering,
+      plier::ArgOpLowering,
+      plier::FixCallOmittedArgs,
+      RankedTypesCasts,
+      UnrankedToElementCasts,
+      ArrayShape
+      // clang-format on
+      >(typeConverter, context);
 
   CallLowerer callLowerer;
 
-  patterns.insert<plier::CallOpLowering, GetattrRewriter, BinopRewriter>(
-      typeConverter, context, std::ref(callLowerer));
+  patterns.insert<
+      // clang-format off
+      plier::CallOpLowering,
+      GetattrRewriter,
+      BinopRewriter
+      // clang-format on
+      >(typeConverter, context, std::ref(callLowerer));
 
-  patterns.insert<GetitemOpLowering, SetitemOpLowering, SliceNoneLowering,
-                  CastToSignCastRewrite, CheckForBuildTuple>(&getContext());
+  patterns.insert<
+      // clang-format off
+      GetitemOpLowering,
+      SetitemOpLowering,
+      SliceNoneLowering,
+      CastToSignCastRewrite,
+      CheckForBuildTuple
+      // clang-format on
+      >(&getContext());
 
   // range/prange lowering need dead branch pruning to properly
   // handle negative steps
@@ -1706,6 +1727,8 @@ void MakeTensorsSignlessPass::runOnOperation() {
         }
         return llvm::None;
       });
+  populate_tuple_type_converter(*context, typeConverter);
+
   auto materializeSignCast = [](mlir::OpBuilder &builder, mlir::Type type,
                                 mlir::ValueRange inputs,
                                 mlir::Location loc) -> mlir::Value {
@@ -1721,6 +1744,8 @@ void MakeTensorsSignlessPass::runOnOperation() {
 
   plier::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
                                                             patterns, target);
+  plier::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
+                                                      target);
 
   target.addLegalOp<mlir::ModuleOp, plier::SignCastOp>();
 
@@ -1905,8 +1930,13 @@ void AdditionalBufferize::runOnFunction() {
   auto &context = getContext();
   mlir::OwningRewritePatternList patterns(&context);
 
-  patterns.insert<BufferizeTuplesRewrite, FixTupleTypesRewrite,
-                  BufferizeReshapeRewrite>(&context);
+  patterns.insert<
+      // clang-format off
+      BufferizeTuplesRewrite,
+      FixTupleTypesRewrite,
+      BufferizeReshapeRewrite
+      // clang-format on
+      >(&context);
 
   auto func = getFunction();
   (void)mlir::applyPatternsAndFoldGreedily(func, std::move(patterns));

@@ -1819,6 +1819,21 @@ void populate_std_type_converter(mlir::MLIRContext & /*context*/,
       });
 }
 
+void populate_tuple_type_converter(mlir::MLIRContext & /*context*/,
+                                   mlir::TypeConverter &converter) {
+  converter.addConversion(
+      [&converter](mlir::TupleType type) -> llvm::Optional<mlir::Type> {
+        llvm::SmallVector<mlir::Type> newTypes(type.size());
+        for (auto it : llvm::enumerate(type)) {
+          auto converted = converter.convertType(it.value());
+          if (!converted)
+            return mlir::Type{};
+          newTypes[it.index()] = converted;
+        }
+        return mlir::TupleType::get(type.getContext(), newTypes);
+      });
+}
+
 void register_plier_to_std_pipeline(plier::PipelineRegistry &registry) {
   registry.register_pipeline([](auto sink) {
     auto stage = get_high_lowering_stage();
