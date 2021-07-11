@@ -323,6 +323,61 @@ mlir::LogicalResult plier::FixCallOmittedArgs::matchAndRewrite(
   return mlir::success();
 }
 
+namespace {
+class ConvertSelectOp : public mlir::OpConversionPattern<mlir::SelectOp> {
+public:
+  using mlir::OpConversionPattern<mlir::SelectOp>::OpConversionPattern;
+  mlir::LogicalResult
+  matchAndRewrite(mlir::SelectOp op, llvm::ArrayRef<mlir::Value> operands,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    mlir::SelectOp::Adaptor adaptor(operands);
+    rewriter.replaceOpWithNewOp<mlir::SelectOp>(
+        op, adaptor.condition(), adaptor.true_value(), adaptor.false_value());
+    return mlir::success();
+  }
+};
+
+class ConvertWhileOp : public mlir::OpConversionPattern<mlir::scf::WhileOp> {
+public:
+  using mlir::OpConversionPattern<mlir::scf::WhileOp>::OpConversionPattern;
+  mlir::LogicalResult
+  matchAndRewrite(mlir::scf::WhileOp op, llvm::ArrayRef<mlir::Value> operands,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto converter = getTypeConverter();
+    assert(converter);
+    llvm::SmallVector<mlir::Type> newResultTypes;
+    if (mlir::failed(
+            converter->convertTypes(op.getResultTypes(), newResultTypes)))
+      return mlir::failure();
+
+    mlir::scf::WhileOp::Adaptor adaptor(operands);
+    auto newOp = rewriter.create<mlir::scf::WhileOp>(
+        op.getLoc(), newResultTypes, adaptor.getOperands());
+    for (auto i : {0u, 1u}) {
+      auto &dstRegion = newOp.getRegion(i);
+      rewriter.inlineRegionBefore(op.getRegion(i), dstRegion, dstRegion.end());
+      if (mlir::failed(rewriter.convertRegionTypes(&dstRegion, *converter)))
+        return rewriter.notifyMatchFailure(op, "could not convert body types");
+    }
+    rewriter.replaceOp(op, newOp.getResults());
+    return mlir::success();
+  }
+};
+
+class ConvertConditionOp
+    : public mlir::OpConversionPattern<mlir::scf::ConditionOp> {
+public:
+  using mlir::OpConversionPattern<mlir::scf::ConditionOp>::OpConversionPattern;
+  mlir::LogicalResult
+  matchAndRewrite(mlir::scf::ConditionOp op,
+                  llvm::ArrayRef<mlir::Value> operands,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    rewriter.updateRootInPlace(op, [&]() { op->setOperands(operands); });
+    return mlir::success();
+  }
+};
+} // namespace
+
 void plier::populateControlFlowTypeConversionRewritesAndTarget(
     mlir::TypeConverter &typeConverter, mlir::RewritePatternSet &patterns,
     mlir::ConversionTarget &target) {
@@ -339,6 +394,16 @@ void plier::populateControlFlowTypeConversionRewritesAndTarget(
   mlir::populateReturnOpTypeConversionPattern(patterns, typeConverter);
   mlir::scf::populateSCFStructuralTypeConversionsAndLegality(typeConverter,
                                                              patterns, target);
+
+  patterns.insert<ConvertSelectOp, ConvertWhileOp, ConvertConditionOp>(
+      typeConverter, patterns.getContext());
+  target.addDynamicallyLegalOp<mlir::SelectOp>(
+      [&typeConverter](mlir::SelectOp op) {
+        return typeConverter.isLegal(op);
+      });
+  target.addDynamicallyLegalOp<mlir::scf::WhileOp, mlir::scf::ConditionOp,
+                               mlir::scf::YieldOp>(
+      [&](mlir::Operation *op) { return typeConverter.isLegal(op); });
 
   target.markUnknownOpDynamicallyLegal([&](mlir::Operation *op) {
     return mlir::isNotBranchOpInterfaceOrReturnLikeOp(op) ||
