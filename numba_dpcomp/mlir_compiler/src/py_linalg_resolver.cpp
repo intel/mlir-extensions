@@ -160,7 +160,7 @@ bool is_compatible_type(mlir::Type type) {
     return llvm::all_of(tuple_type, &is_compatible_type);
   }
   return type.isa<mlir::IntegerType, mlir::IndexType, mlir::FloatType,
-                  mlir::RankedTensorType, plier::NoneType, plier::LiteralType,
+                  mlir::RankedTensorType, mlir::NoneType, plier::LiteralType,
                   plier::TypeVar>();
 }
 
@@ -287,7 +287,7 @@ struct PyLinalgResolver::Context {
   py::object create_var(py::capsule context, mlir::Value value) {
     assert(value);
     auto type = value.getType();
-    if (type.isa<plier::NoneType>()) {
+    if (type.isa<mlir::NoneType>()) {
       return py::none();
     }
     if (auto typevar = type.dyn_cast<plier::TypeVar>()) {
@@ -339,7 +339,7 @@ struct PyLinalgResolver::Context {
       return builder.create<plier::UndefOp>(loc, type);
     }
     if (obj.is_none()) {
-      auto type = plier::NoneType::get(builder.getContext());
+      auto type = mlir::NoneType::get(builder.getContext());
       return builder.create<plier::UndefOp>(loc, type);
     }
     if (py::isinstance<py::tuple>(obj)) {

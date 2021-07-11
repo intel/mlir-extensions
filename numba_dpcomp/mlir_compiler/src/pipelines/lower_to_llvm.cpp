@@ -129,7 +129,7 @@ void populateToLLVMAdditionalTypeConversion(
   auto voidPtrType = mlir::LLVM::LLVMPointerType::get(
       mlir::IntegerType::get(&converter.getContext(), 8));
   converter.addConversion(
-      [voidPtrType](plier::NoneType) -> llvm::Optional<mlir::Type> {
+      [voidPtrType](mlir::NoneType) -> llvm::Optional<mlir::Type> {
         return voidPtrType;
       });
 }
@@ -604,7 +604,7 @@ struct ReturnOpLowering : public mlir::OpRewritePattern<mlir::ReturnOp> {
       if (!llRetType)
         return {};
 
-      if (origType.isa<plier::NoneType>())
+      if (origType.isa<mlir::NoneType>())
         return rewriter.create<mlir::LLVM::NullOp>(loc, llRetType);
 
       val = doCast(rewriter, loc, val, llRetType);

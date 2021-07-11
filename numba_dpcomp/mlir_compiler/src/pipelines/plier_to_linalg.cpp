@@ -415,7 +415,7 @@ struct GetitemOpLowering : public mlir::OpRewritePattern<plier::GetItemOp> {
           auto createInd = [&](int64_t i) {
             return rewriter.create<mlir::ConstantIndexOp>(loc, i);
           };
-          if (sliceType.getTypes()[i].isa<plier::NoneType>()) {
+          if (sliceType.getTypes()[i].isa<mlir::NoneType>()) {
             if (i == 0) {
               return createInd(0);
             } else if (i == 1) {
@@ -1174,7 +1174,7 @@ struct SliceNoneLowering
       }
       if (!buildSlice.getOperand(static_cast<unsigned>(index))
                .getType()
-               .isa<plier::NoneType>()) {
+               .isa<mlir::NoneType>()) {
         return nullptr;
       }
       if (index == 0) {

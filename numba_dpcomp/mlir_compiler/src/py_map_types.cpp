@@ -43,7 +43,7 @@ template <unsigned Width> bool is_float(mlir::Type type) {
   return false;
 }
 
-bool is_none(mlir::Type type) { return type.isa<plier::NoneType>(); }
+bool is_none(mlir::Type type) { return type.isa<mlir::NoneType>(); }
 
 py::object map_type(const py::handle &types_mod, mlir::Type type) {
   using fptr_t = bool (*)(mlir::Type);

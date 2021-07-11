@@ -88,12 +88,6 @@ public:
   mlir::Attribute getValue() const;
 };
 
-class NoneType : public mlir::Type::TypeBase<::plier::NoneType, mlir::Type,
-                                             mlir::TypeStorage> {
-public:
-  using Base::Base;
-};
-
 class SliceType
     : public mlir::Type::TypeBase<::plier::SliceType, mlir::Type,
                                   ::plier::detail::SliceTypeStorage> {

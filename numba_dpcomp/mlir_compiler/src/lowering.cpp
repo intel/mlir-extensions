@@ -297,7 +297,7 @@ private:
 
   mlir::Value lower_static_index(mlir::Location loc, py::handle obj) {
     if (obj.is_none()) {
-      auto type = plier::NoneType::get(builder.getContext());
+      auto type = mlir::NoneType::get(builder.getContext());
       return builder.create<plier::UndefOp>(loc, type);
     }
     if (py::isinstance<py::int_>(obj)) {

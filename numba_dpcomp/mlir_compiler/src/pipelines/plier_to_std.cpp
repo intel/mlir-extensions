@@ -225,7 +225,7 @@ mlir::Type map_dtype_type(mlir::MLIRContext &ctx, llvm::StringRef &name) {
 
 mlir::Type map_none_type(mlir::MLIRContext &ctx, llvm::StringRef &name) {
   if (name.consume_front("none")) {
-    return plier::NoneType::get(&ctx);
+    return mlir::NoneType::get(&ctx);
   }
   return nullptr;
 }
@@ -312,7 +312,7 @@ struct ConstOpLowering : public mlir::OpRewritePattern<plier::ConstOp> {
       return mlir::success();
     }
     if (auto type = converter.convertType(op.getType())) {
-      if (type.isa<plier::NoneType>()) {
+      if (type.isa<mlir::NoneType>()) {
         rewriter.replaceOpWithNewOp<plier::UndefOp>(op, type);
         return mlir::success();
       }
@@ -359,7 +359,7 @@ struct LiteralLowering : public mlir::OpRewritePattern<Op> {
     if (!convertedType) {
       return mlir::failure();
     }
-    if (convertedType.template isa<plier::NoneType>()) {
+    if (convertedType.template isa<mlir::NoneType>()) {
       rewriter.replaceOpWithNewOp<plier::UndefOp>(op, convertedType);
       return mlir::success();
     }
@@ -1545,7 +1545,7 @@ struct FoldSliceGetitem : public mlir::OpRewritePattern<plier::GetItemOp> {
       if (index >= 0 && index < 3 &&
           !buildSice.getOperand(static_cast<unsigned>(index))
                .getType()
-               .isa<plier::NoneType>()) {
+               .isa<mlir::NoneType>()) {
         auto val = buildSice.getOperand(static_cast<unsigned>(index));
         rewriter.replaceOp(op, doCast(rewriter, loc, val, indexType));
         return mlir::success();
@@ -1632,7 +1632,7 @@ lowerSlice(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands,
 
   if (llvm::any_of(operands, [](mlir::Value op) {
         return !op.getType()
-                    .isa<mlir::IntegerType, mlir::IndexType, plier::NoneType>();
+                    .isa<mlir::IntegerType, mlir::IndexType, mlir::NoneType>();
       })) {
     return mlir::failure();
   }
