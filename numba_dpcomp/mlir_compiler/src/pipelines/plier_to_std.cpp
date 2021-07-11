@@ -105,12 +105,50 @@ mlir::Type map_float_type(mlir::MLIRContext &ctx, llvm::StringRef &name) {
   return nullptr;
 }
 
+bool consume_until(llvm::StringRef &name, llvm::StringRef end) {
+  while (!name.empty()) {
+    if (name.consume_front(end))
+      return true;
+
+    const std::pair<const char *, const char *> pairs[] = {
+        // clang-format off
+            {"(",")"},
+            {"[","]"},
+            {"<",">"},
+            {"{","}"},
+        // clang-format on
+    };
+
+    bool consumed = false;
+    for (auto it : pairs) {
+      if (name.consume_front(it.first)) {
+        consumed = true;
+        if (!consume_until(name, it.second))
+          return false;
+      }
+    }
+
+    if (!consumed)
+      name = name.drop_front();
+  }
+  return false;
+}
+
 mlir::Type map_plier_type_name(mlir::MLIRContext &ctx, llvm::StringRef &name);
 bool map_type_helper(mlir::MLIRContext &ctx, llvm::StringRef &name,
-                     mlir::Type &ret) {
-  auto type = map_plier_type_name(ctx, name);
-  if (static_cast<bool>(type)) {
+                     mlir::Type &ret, llvm::StringRef end) {
+  auto nameCopy = name;
+  auto type = map_plier_type_name(ctx, nameCopy);
+  if (type && nameCopy.consume_front(end)) {
     ret = type;
+    name = nameCopy;
+    return true;
+  }
+  nameCopy = name;
+  if (consume_until(nameCopy, end)) {
+    auto len = name.size() - nameCopy.size() - end.size();
+    ret = plier::PyType::get(&ctx, name.take_front(len));
+    name = nameCopy;
     return true;
   }
   return false;
@@ -119,9 +157,8 @@ bool map_type_helper(mlir::MLIRContext &ctx, llvm::StringRef &name,
 mlir::Type map_pair_type(mlir::MLIRContext &ctx, llvm::StringRef &name) {
   mlir::Type first;
   mlir::Type second;
-  if (name.consume_front("pair<") && map_type_helper(ctx, name, first) &&
-      name.consume_front(", ") && map_type_helper(ctx, name, second) &&
-      name.consume_front(">")) {
+  if (name.consume_front("pair<") && map_type_helper(ctx, name, first, ", ") &&
+      map_type_helper(ctx, name, second, ">")) {
     return mlir::TupleType::get(&ctx, {first, second});
   }
   return nullptr;
@@ -130,9 +167,9 @@ mlir::Type map_pair_type(mlir::MLIRContext &ctx, llvm::StringRef &name) {
 mlir::Type map_unituple_type(mlir::MLIRContext &ctx, llvm::StringRef &name) {
   mlir::Type type;
   unsigned count = 0;
-  if (name.consume_front("UniTuple(") && map_type_helper(ctx, name, type) &&
-      name.consume_front(" x ") && !name.consumeInteger<unsigned>(10, count) &&
-      name.consume_front(")")) {
+  if (name.consume_front("UniTuple(") &&
+      map_type_helper(ctx, name, type, " x ") &&
+      !name.consumeInteger<unsigned>(10, count) && name.consume_front(")")) {
     llvm::SmallVector<mlir::Type> types(count, type);
     return mlir::TupleType::get(&ctx, types);
   }
@@ -140,21 +177,30 @@ mlir::Type map_unituple_type(mlir::MLIRContext &ctx, llvm::StringRef &name) {
 }
 
 mlir::Type map_tuple_type(mlir::MLIRContext &ctx, llvm::StringRef &name) {
-  if (!name.consume_front("Tuple(")) {
+  if (!name.consume_front("Tuple("))
     return nullptr;
-  }
+
+  if (name.consume_front(")"))
+    return mlir::TupleType::get(&ctx, llvm::None);
+
   llvm::SmallVector<mlir::Type> types;
+  auto temp = name;
+  if (!consume_until(temp, ")"))
+    return nullptr;
+  auto len = name.size() - temp.size();
+  temp = name.take_front(len);
   while (true) {
-    if (name.consume_front(")")) {
+    mlir::Type type;
+    if (map_type_helper(ctx, temp, type, ", ")) {
+      types.push_back(type);
+      continue;
+    }
+    if (map_type_helper(ctx, temp, type, ")")) {
+      types.push_back(type);
       break;
     }
-    auto type = map_plier_type_name(ctx, name);
-    if (!static_cast<bool>(type)) {
-      return nullptr;
-    }
-    types.push_back(type);
-    (void)name.consume_front(", ");
   }
+  name = name.drop_front(len);
   return mlir::TupleType::get(&ctx, types);
 }
 
@@ -188,10 +234,19 @@ mlir::Type map_plier_type_name(mlir::MLIRContext &ctx, llvm::StringRef &name) {
   using func_t =
       mlir::Type (*)(mlir::MLIRContext & ctx, llvm::StringRef & name);
   const func_t handlers[] = {
-      &map_int_type,      &map_int_literal_type, &map_bool_literal_type,
-      &map_bool_type,     &map_float_type,       &map_pair_type,
-      &map_unituple_type, &map_tuple_type,       &map_func_type,
-      &map_dtype_type,    &map_none_type,
+      // clang-format off
+      &map_int_type,
+      &map_int_literal_type,
+      &map_bool_literal_type,
+      &map_bool_type,
+      &map_float_type,
+      &map_pair_type,
+      &map_unituple_type,
+      &map_tuple_type,
+      &map_func_type,
+      &map_dtype_type,
+      &map_none_type,
+      // clang-format on
   };
   for (auto h : handlers) {
     auto temp_name = name;
@@ -1796,9 +1851,93 @@ void PlierToStdPass::runOnOperation() {
   (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
 }
 
+static void flattenTuple(mlir::OpBuilder &builder, mlir::Location loc,
+                         mlir::ValueRange values,
+                         llvm::SmallVectorImpl<mlir::Value> &ret) {
+  for (auto arg : values) {
+    if (auto tupleType = arg.getType().dyn_cast<mlir::TupleType>()) {
+      for (auto it : llvm::enumerate(tupleType.getTypes())) {
+        auto i = it.index();
+        auto argType = it.value();
+        auto ind = builder.createOrFold<mlir::ConstantIndexOp>(loc, i);
+        auto res =
+            builder.createOrFold<plier::GetItemOp>(loc, argType, arg, ind);
+        flattenTuple(builder, loc, res, ret);
+      }
+    } else {
+      ret.emplace_back(arg);
+    }
+  }
+}
+
+struct UntupleReturn : public mlir::OpConversionPattern<mlir::ReturnOp> {
+  using mlir::OpConversionPattern<mlir::ReturnOp>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::ReturnOp op, llvm::ArrayRef<mlir::Value> operands,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    llvm::SmallVector<mlir::Value> newOperands;
+    auto loc = op.getLoc();
+    flattenTuple(rewriter, loc, operands, newOperands);
+    auto *operation = op.getOperation();
+    rewriter.updateRootInPlace(op,
+                               [&]() { operation->setOperands(newOperands); });
+    return mlir::success();
+  }
+};
+
+struct UntuplePass
+    : public mlir::PassWrapper<UntuplePass,
+                               mlir::OperationPass<mlir::ModuleOp>> {
+  void runOnOperation() override {
+    auto module = getOperation();
+    auto *context = &getContext();
+
+    mlir::TypeConverter typeConverter;
+    // Convert unknown types to itself
+    typeConverter.addConversion([](mlir::Type type) { return type; });
+    typeConverter.addConversion(
+        [&typeConverter](mlir::TupleType type,
+                         llvm::SmallVectorImpl<mlir::Type> &ret)
+            -> llvm::Optional<mlir::LogicalResult> {
+          if (mlir::failed(typeConverter.convertTypes(type.getTypes(), ret)))
+            return llvm::None;
+          return mlir::success();
+        });
+
+    auto materializeTupleCast =
+        [](mlir::OpBuilder &builder, mlir::Type type, mlir::ValueRange inputs,
+           mlir::Location loc) -> llvm::Optional<mlir::Value> {
+      if (auto tuple = type.dyn_cast<mlir::TupleType>()) {
+        auto retType =
+            mlir::TupleType::get(type.getContext(), inputs.getTypes());
+        return builder.create<plier::BuildTupleOp>(loc, retType, inputs)
+            .getResult();
+      }
+      return llvm::None;
+    };
+    typeConverter.addArgumentMaterialization(materializeTupleCast);
+    typeConverter.addSourceMaterialization(materializeTupleCast);
+    typeConverter.addTargetMaterialization(materializeTupleCast);
+
+    mlir::RewritePatternSet patterns(context);
+    mlir::ConversionTarget target(*context);
+
+    plier::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
+                                                              patterns, target);
+
+    patterns.insert<UntupleReturn>(typeConverter, context);
+
+    if (failed(applyPartialConversion(module, target, std::move(patterns))))
+      signalPassFailure();
+  }
+};
+
 void populate_plier_to_std_pipeline(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(std::make_unique<PlierToStdPass>());
+  pm.addPass(std::make_unique<UntuplePass>());
+  pm.addPass(mlir::createCanonicalizerPass());
 }
 } // namespace
 

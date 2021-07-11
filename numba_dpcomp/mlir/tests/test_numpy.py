@@ -396,7 +396,6 @@ class TestMlirBasic(TestCase):
         jit_func = njit(py_func)
         assert_equal(py_func(5), jit_func(5))
 
-    @unittest.expectedFailure
     def test_zeros4(self):
         def py_func(d):
             return np.zeros(d)
@@ -518,8 +517,6 @@ def test_flatten(py_func, array):
         itertools.product(*(([1,2.5,np.array([1,2,3]), np.array([4.5,6.7,8.9])],)*2))
     )
 def test_tuple_ret(py_func, a, b):
-    if isinstance(a, np.ndarray) or isinstance(b, np.ndarray):
-        pytest.xfail()
     jit_func = njit(py_func)
     assert_equal(py_func(a, b), jit_func(a, b))
 
@@ -708,7 +705,7 @@ def test_mean_loop_cov(arr, parallel):
             m[i] = np.mean(tdata[i])
         c = data - m
         v = np.cov(c.T)
-        return v
+        return c, v
 
     jit_func = njit(py_func, parallel=parallel)
     assert_equal(py_func(arr), jit_func(arr))
