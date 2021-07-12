@@ -27,6 +27,81 @@
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/IR/PatternMatch.h>
 
+namespace {
+static bool isSameRank(mlir::Type type1, mlir::Type type2) {
+  auto shaped1 = type1.dyn_cast<mlir::ShapedType>();
+  if (!shaped1)
+    return false;
+
+  auto shaped2 = type2.dyn_cast<mlir::ShapedType>();
+  if (!shaped2)
+    return false;
+
+  if (!shaped1.hasRank() || !shaped2.hasRank())
+    return false;
+
+  return shaped1.getRank() == shaped2.getRank();
+}
+
+static bool isMixedValuesEqual(llvm::ArrayRef<mlir::OpFoldResult> values,
+                               int64_t expectedVal) {
+  for (auto val : values) {
+    auto intVal = mlir::getConstantIntValue(val);
+    if (!intVal || *intVal != expectedVal)
+      return false;
+  }
+  return true;
+}
+
+struct SubviewLoadPropagate
+    : public mlir::OpRewritePattern<mlir::memref::LoadOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::LoadOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto src = op.memref().getDefiningOp<mlir::memref::SubViewOp>();
+    if (!src)
+      return mlir::failure();
+
+    if (!isSameRank(src.source().getType(), src.getType()))
+      return mlir::failure();
+
+    if (!isMixedValuesEqual(src.getMixedOffsets(), 0) ||
+        !isMixedValuesEqual(src.getMixedStrides(), 1))
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::memref::LoadOp>(op, src.source(),
+                                                      op.indices());
+    return mlir::success();
+  }
+};
+
+struct SubviewStorePropagate
+    : public mlir::OpRewritePattern<mlir::memref::StoreOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::StoreOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto src = op.memref().getDefiningOp<mlir::memref::SubViewOp>();
+    if (!src)
+      return mlir::failure();
+
+    if (!isSameRank(src.source().getType(), src.getType()))
+      return mlir::failure();
+
+    if (!isMixedValuesEqual(src.getMixedOffsets(), 0) ||
+        !isMixedValuesEqual(src.getMixedStrides(), 1))
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(
+        op, op.value(), src.source(), op.indices());
+    return mlir::success();
+  }
+};
+} // namespace
+
 void plier::populate_common_opts_patterns(mlir::MLIRContext &context,
                                           mlir::RewritePatternSet &patterns) {
   for (auto *op : context.getRegisteredOperations()) {
@@ -34,9 +109,15 @@ void plier::populate_common_opts_patterns(mlir::MLIRContext &context,
   }
 
   patterns.insert<
-      //        LoopInvariantCodeMotion, TODO
-      plier::CmpLoopBoundsSimplify, plier::IfOpConstCond,
-      plier::CSERewrite<mlir::FuncOp, /*recusive*/ false>>(&context);
+      // clang-format off
+//      LoopInvariantCodeMotion, TODO
+      plier::CmpLoopBoundsSimplify,
+      plier::IfOpConstCond,
+      plier::CSERewrite<mlir::FuncOp, /*recusive*/ false>,
+      SubviewLoadPropagate,
+      SubviewStorePropagate
+      // clang-format on
+      >(&context);
 
   plier::populate_index_propagate_patterns(context, patterns);
 }

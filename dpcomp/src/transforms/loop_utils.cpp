@@ -352,8 +352,15 @@ mlir::LogicalResult plier::naivelyFuseParallelOps(Region &region) {
   OpBuilder b(region);
   // Consider every single block and attempt to fuse adjacent loops.
   bool changed = false;
+  SmallVector<SmallVector<scf::ParallelOp, 8>, 1> ploopChains;
   for (auto &block : region) {
-    SmallVector<SmallVector<scf::ParallelOp, 8>, 1> ploopChains{{}};
+    for (auto &op : block)
+      for (auto &innerReg : op.getRegions())
+        if (succeeded(naivelyFuseParallelOps(innerReg)))
+          changed = true;
+
+    ploopChains.clear();
+    ploopChains.push_back({});
     // Not using `walk()` to traverse only top-level parallel loops and also
     // make sure that there are no side-effecting ops between the parallel
     // loops.

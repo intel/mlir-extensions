@@ -289,10 +289,12 @@ def ReduceRankOp
                              : $src, "::mlir::ArrayRef<int32_t>"
                              : $mapping)>];
 
+  // clang-format off
   let extraClassDeclaration = [{
-      ::mlir::Value getViewSource() { return source();
-}
-}];
+      ::mlir::Value getViewSource() { return source(); }
+      ::llvm::SmallVector<int32_t> getMapping();
+  }];
+  // clang-format on
 }
 
 #endif // PLIER_OPS
