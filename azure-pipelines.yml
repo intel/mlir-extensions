@@ -113,6 +113,15 @@ jobs:
       cd dpbench
       git checkout 9fde7e8e8e66dea6f65b37665a732cdaf03a4a47
       python automate_run.py -r execute -i numba -ws blackscholes -a test -p cpu
+      python automate_run.py -r execute -i numba -ws dbscan -a test -p cpu
+      #python automate_run.py -r execute -i numba -ws gpairs -a test -p cpu
+      python automate_run.py -r execute -i numba -ws kmeans -a test -p cpu
+      python automate_run.py -r execute -i numba -ws knn -a test -p cpu
+      python automate_run.py -r execute -i numba -ws l2_distance -a test -p cpu
+      python automate_run.py -r execute -i numba -ws pairwise_distance -a test -p cpu
+      #python automate_run.py -r execute -i numba -ws pathfinder -a test -p cpu
+      python automate_run.py -r execute -i numba -ws pca -a test -p cpu
+      #python automate_run.py -r execute -i numba -ws rambo -a test -p cpu
     displayName: 'dpbench'
 
 # Disabled for now in purpose to save CI resources
