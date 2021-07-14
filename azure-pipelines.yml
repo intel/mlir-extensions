@@ -105,6 +105,16 @@ jobs:
       ctest -C Release
     displayName: 'CTests'
 
+  - script: |
+      source /usr/share/miniconda/bin/activate
+      conda activate build_env
+      source $(System.DefaultWorkingDirectory)/tbb/env/vars.sh
+      git clone https://github.com/IntelPython/dpbench.git
+      cd dpbench
+      git checkout 9fde7e8e8e66dea6f65b37665a732cdaf03a4a47
+      python automate_run.py -r execute -i numba -ws blackscholes -a test -p cpu
+    displayName: 'dpbench'
+
 # Disabled for now in purpose to save CI resources
 # - job: MacOS
 
