@@ -217,6 +217,60 @@ def test_dot(a, b, parallel):
     jit_func = njit(py_func, parallel=parallel)
     assert_equal(py_func(a, b), jit_func(a, b))
 
+
+def test_loop_fusion1():
+    def py_func(arr):
+        l = len(arr)
+        res1 = 0
+        for i in numba.prange(l):
+            res1 += arr[i];
+
+        res2 = 0
+        for i in numba. prange(l):
+            res2 *= arr[i];
+
+        return res1, res2
+
+    jit_func = njit(py_func)
+    arr = np.arange(10000, dtype=np.float32)
+    assert_equal(py_func(arr), jit_func(arr))
+
+def test_loop_fusion2():
+    def py_func(arr):
+        l = len(arr)
+        res1 = 0
+        for i in numba.prange(l):
+            res1 += arr[i];
+
+        res1 += 10
+
+        res2 = 0
+        for i in numba. prange(l):
+            res2 *= arr[i];
+
+        return res1, res2
+
+    jit_func = njit(py_func)
+    arr = np.arange(10000, dtype=np.float32)
+    assert_equal(py_func(arr), jit_func(arr))
+
+def test_loop_fusion3():
+    def py_func(arr):
+        l = len(arr)
+        res1 = 0
+        for i in numba.prange(l):
+            res1 += arr[i];
+
+        res2 = 0
+        for i in numba. prange(l):
+            res2 *= (arr[i] * res1);
+
+        return res1, res2
+
+    jit_func = njit(py_func)
+    arr = np.arange(10000, dtype=np.float32)
+    assert_equal(py_func(arr), jit_func(arr))
+
 class TestMlirBasic(TestCase):
     def test_static_setitem(self):
         def py_func(a):

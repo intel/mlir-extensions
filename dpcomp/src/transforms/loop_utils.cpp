@@ -298,6 +298,13 @@ static bool haveNoReadsAfterWriteExceptSameIndex(
 static LogicalResult
 verifyDependencies(scf::ParallelOp firstPloop, scf::ParallelOp secondPloop,
                    const BlockAndValueMapping &firstToSecondPloopIndices) {
+  for (auto res : firstPloop.getResults()) {
+    for (auto user : res.getUsers()) {
+      if (secondPloop->isAncestor(user))
+        return mlir::failure();
+    }
+  }
+
   if (!haveNoReadsAfterWriteExceptSameIndex(firstPloop, secondPloop,
                                             firstToSecondPloopIndices))
     return failure();
@@ -312,8 +319,7 @@ verifyDependencies(scf::ParallelOp firstPloop, scf::ParallelOp secondPloop,
 static bool
 isFusionLegal(scf::ParallelOp firstPloop, scf::ParallelOp secondPloop,
               const BlockAndValueMapping &firstToSecondPloopIndices) {
-  return firstPloop.getNumResults() == 0 && // TODO
-         !hasNestedParallelOp(firstPloop) &&
+  return !hasNestedParallelOp(firstPloop) &&
          !hasNestedParallelOp(secondPloop) &&
          equalIterationSpaces(firstPloop, secondPloop) &&
          succeeded(verifyDependencies(firstPloop, secondPloop,
@@ -321,8 +327,8 @@ isFusionLegal(scf::ParallelOp firstPloop, scf::ParallelOp secondPloop,
 }
 
 /// Prepends operations of firstPloop's body into secondPloop's body.
-static bool fuseIfLegal(scf::ParallelOp firstPloop, scf::ParallelOp secondPloop,
-                        OpBuilder &b) {
+static bool fuseIfLegal(scf::ParallelOp firstPloop,
+                        scf::ParallelOp &secondPloop, OpBuilder &b) {
   BlockAndValueMapping firstToSecondPloopIndices;
   firstToSecondPloopIndices.map(firstPloop.getBody()->getArguments(),
                                 secondPloop.getBody()->getArguments());
@@ -330,21 +336,64 @@ static bool fuseIfLegal(scf::ParallelOp firstPloop, scf::ParallelOp secondPloop,
   if (!isFusionLegal(firstPloop, secondPloop, firstToSecondPloopIndices))
     return false;
 
-  b.setInsertionPointToStart(secondPloop.getBody());
-  for (auto &op : firstPloop.getBody()->without_terminator())
-    b.clone(op, firstToSecondPloopIndices);
+  auto init1 = firstPloop.initVals();
+  auto numResults1 = init1.size();
+  auto init2 = secondPloop.initVals();
+  auto numResults2 = init2.size();
+
+  SmallVector<mlir::Value> newInitVars;
+  newInitVars.reserve(numResults1 + numResults2);
+  newInitVars.assign(init2.begin(), init2.end());
+  newInitVars.append(init1.begin(), init1.end());
+
+  b.setInsertionPoint(secondPloop);
+  auto newSecondPloop = b.create<mlir::scf::ParallelOp>(
+      secondPloop.getLoc(), secondPloop.lowerBound(), secondPloop.upperBound(),
+      secondPloop.step(), newInitVars);
+  if (secondPloop->hasAttr(plier::attributes::getParallelName()))
+    newSecondPloop->setAttr(plier::attributes::getParallelName(),
+                            mlir::UnitAttr::get(b.getContext()));
+
+  newSecondPloop.getRegion().getBlocks().splice(
+      newSecondPloop.getRegion().begin(), secondPloop.getRegion().getBlocks());
+  auto term =
+      mlir::cast<mlir::scf::YieldOp>(newSecondPloop.getBody()->getTerminator());
+
+  b.setInsertionPointToStart(newSecondPloop.getBody());
+  for (auto &op : firstPloop.getBody()->without_terminator()) {
+    if (isa<mlir::scf::ReduceOp>(op)) {
+      mlir::OpBuilder::InsertionGuard g(b);
+      b.setInsertionPoint(term);
+      b.clone(op, firstToSecondPloopIndices);
+    } else {
+      b.clone(op, firstToSecondPloopIndices);
+    }
+  }
+  firstPloop.replaceAllUsesWith(
+      newSecondPloop.getResults().take_back(numResults1));
   firstPloop.erase();
+  secondPloop.replaceAllUsesWith(
+      newSecondPloop.getResults().take_front(numResults2));
+  secondPloop.erase();
+  secondPloop = newSecondPloop;
   return true;
 }
 
-bool hasNoEffect(mlir::Operation *op) {
-  if (op->getNumRegions() != 0) {
+bool hasNoEffect(mlir::scf::ParallelOp currentPloop, mlir::Operation *op) {
+  if (op->getNumRegions() != 0)
     return false;
+
+  if (currentPloop && currentPloop->getNumResults() != 0) {
+    for (auto arg : op->getOperands()) {
+      if (llvm::is_contained(currentPloop.getResults(), arg))
+        return false;
+    }
   }
-  if (auto interface = dyn_cast<MemoryEffectOpInterface>(op)) {
+
+  if (auto interface = dyn_cast<MemoryEffectOpInterface>(op))
     return !interface.hasEffect<mlir::MemoryEffects::Read>() &&
            !interface.hasEffect<mlir::MemoryEffects::Write>();
-  }
+
   return !op->hasTrait<::mlir::OpTrait::HasRecursiveSideEffects>();
 }
 } // namespace
@@ -365,9 +414,11 @@ mlir::LogicalResult plier::naivelyFuseParallelOps(Region &region) {
     // Not using `walk()` to traverse only top-level parallel loops and also
     // make sure that there are no side-effecting ops between the parallel
     // loops.
+    scf::ParallelOp currentPloop;
     bool noSideEffects = true;
     for (auto &op : block) {
       if (auto ploop = dyn_cast<scf::ParallelOp>(op)) {
+        currentPloop = ploop;
         if (noSideEffects) {
           ploopChains.back().push_back(ploop);
         } else {
@@ -377,9 +428,9 @@ mlir::LogicalResult plier::naivelyFuseParallelOps(Region &region) {
         continue;
       }
       // TODO: Handle region side effects properly.
-      noSideEffects &= hasNoEffect(&op);
+      noSideEffects &= hasNoEffect(currentPloop, &op);
     }
-    for (llvm::ArrayRef<scf::ParallelOp> ploops : ploopChains) {
+    for (llvm::MutableArrayRef<scf::ParallelOp> ploops : ploopChains) {
       for (size_t i = 0, e = ploops.size(); i + 1 < e; ++i)
         if (fuseIfLegal(ploops[i], ploops[i + 1], b))
           changed = true;
