@@ -15,6 +15,7 @@
 #include "pipelines/pre_low_simplifications.hpp"
 
 #include "pipelines/base_pipeline.hpp"
+#include "pipelines/plier_to_std.hpp"
 
 #include "plier/compiler/pipeline_registry.hpp"
 #include "plier/dialect.hpp"
@@ -110,13 +111,61 @@ struct UntuplePass
   }
 };
 
+struct MakeSignlessPass
+    : public mlir::PassWrapper<MakeSignlessPass, mlir::OperationPass<void>> {
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::StandardOpsDialect>();
+    registry.insert<plier::PlierDialect>();
+  }
+
+  void runOnOperation() override final {
+    auto module = getOperation();
+    auto *context = &getContext();
+
+    mlir::TypeConverter typeConverter;
+    typeConverter.addConversion([](mlir::Type type) { return type; });
+    typeConverter.addConversion(
+        [](mlir::IntegerType type) -> llvm::Optional<mlir::Type> {
+          if (!type.isSignless()) {
+            return mlir::IntegerType::get(type.getContext(), type.getWidth());
+          }
+          return llvm::None;
+        });
+    populate_tuple_type_converter(*context, typeConverter);
+
+    auto materializeSignCast = [](mlir::OpBuilder &builder, mlir::Type type,
+                                  mlir::ValueRange inputs,
+                                  mlir::Location loc) -> mlir::Value {
+      assert(inputs.size() == 1);
+      return builder.create<plier::SignCastOp>(loc, type, inputs[0]);
+    };
+    typeConverter.addArgumentMaterialization(materializeSignCast);
+    typeConverter.addSourceMaterialization(materializeSignCast);
+    typeConverter.addTargetMaterialization(materializeSignCast);
+
+    mlir::RewritePatternSet patterns(context);
+    mlir::ConversionTarget target(*context);
+
+    plier::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
+                                                              patterns, target);
+    plier::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
+                                                        target);
+
+    if (failed(applyFullConversion(module, target, std::move(patterns))))
+      signalPassFailure();
+  }
+};
+
 void populateUntuplePipeline(mlir::OpPassManager &pm) {
-  pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(std::make_unique<UntuplePass>());
   pm.addPass(mlir::createCanonicalizerPass());
 }
 
-void populateRemoveSignPipeline(mlir::OpPassManager &pm) {}
+void populateRemoveSignPipeline(mlir::OpPassManager &pm) {
+  pm.addPass(std::make_unique<MakeSignlessPass>());
+  pm.addPass(mlir::createCanonicalizerPass());
+}
 } // namespace
 
 void registerPreLowSimpleficationsPipeline(plier::PipelineRegistry &registry) {
