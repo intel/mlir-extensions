@@ -64,6 +64,26 @@ struct UntupleReturn : public mlir::OpConversionPattern<mlir::ReturnOp> {
   }
 };
 
+static mlir::Value reconstructTuple(mlir::OpBuilder &builder,
+                                    mlir::Location loc,
+                                    mlir::TupleType tupleType,
+                                    mlir::ValueRange &values) {
+  llvm::SmallVector<mlir::Value, 4> vals(tupleType.size());
+  for (auto it : llvm::enumerate(tupleType.getTypes())) {
+    auto i = it.index();
+    auto type = it.value();
+    if (auto innerTuple = type.dyn_cast<mlir::TupleType>()) {
+      vals[i] = reconstructTuple(builder, loc, innerTuple, values);
+    } else {
+      if (values.empty())
+        return {};
+      vals[i] = values.front();
+      values = values.drop_front();
+    }
+  }
+  return builder.create<plier::BuildTupleOp>(loc, tupleType, vals);
+}
+
 struct UntuplePass
     : public mlir::PassWrapper<UntuplePass,
                                mlir::OperationPass<mlir::ModuleOp>> {
@@ -84,14 +104,12 @@ struct UntuplePass
         });
 
     auto materializeTupleCast =
-        [](mlir::OpBuilder &builder, mlir::Type type, mlir::ValueRange inputs,
+        [](mlir::OpBuilder &builder, mlir::TupleType type,
+           mlir::ValueRange inputs,
            mlir::Location loc) -> llvm::Optional<mlir::Value> {
-      if (auto tuple = type.dyn_cast<mlir::TupleType>()) {
-        auto retType =
-            mlir::TupleType::get(type.getContext(), inputs.getTypes());
-        return builder.create<plier::BuildTupleOp>(loc, retType, inputs)
-            .getResult();
-      }
+      if (auto ret = reconstructTuple(builder, loc, type, inputs))
+        return ret;
+
       return llvm::None;
     };
     typeConverter.addArgumentMaterialization(materializeTupleCast);
@@ -103,6 +121,7 @@ struct UntuplePass
 
     plier::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
                                                               patterns, target);
+    //    target.addIllegalOp<plier::GetItemOp, plier::BuildTupleOp>();
 
     patterns.insert<UntupleReturn>(typeConverter, context);
 

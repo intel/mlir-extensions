@@ -39,6 +39,9 @@ class Var:
     def __rmul__(self, o): return self._binop(self._context, self._ssa_val, o, '*')
     def __truediv__(self, o): return self._binop(self._context, self._ssa_val, o, '/')
 
+    def __str__(self): return self._str(self._context, self._ssa_val)
+    def __repr__(self): return self._str(self._context, self._ssa_val)
+
 class Type:
     def __init__(self, mlir_type, eq):
         self._mlir_type = mlir_type
@@ -151,3 +154,35 @@ def convert_array(builder, arr, dtype):
         return arr
 
     return eltwise(builder, arr, lambda a, b: a, dtype)
+
+def _flatten_tuple(src):
+    l = len(src)
+    if isinstance(l, int) and l != 0:
+        shape, elements = _flatten_tuple(src[0])
+        for i in range(1, l):
+            shape1, elements1 = _flatten_tuple(src[i])
+            assert(shape == shape1)
+            elements += elements1
+
+        if shape is None:
+            shape = [l]
+        else:
+            shape = [l] + shape
+        return (shape, elements)
+    return (None, [src])
+
+def asarray(builder, src, dtype=None):
+    shape, elements = _flatten_tuple(src)
+
+    if shape is None:
+        return src
+
+    if dtype is None:
+        dtype = broadcast_type(builder, elements)
+
+    arr = builder.from_elements(elements, dtype)
+
+    if len(shape) > 1:
+        arr = builder.reshape(arr, shape)
+
+    return arr

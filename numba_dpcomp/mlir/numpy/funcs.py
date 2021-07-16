@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..linalg_builder import register_func, register_attr, is_literal, broadcast_type, eltwise, convert_array
+from ..linalg_builder import register_func, register_attr, is_literal, broadcast_type, eltwise, convert_array, asarray
 
 import numpy
 import math
@@ -361,6 +361,9 @@ def _cov_scalar_result_expected(mandatory_input, optional_input):
 
 @register_func('numpy.cov', numpy.cov)
 def cov_impl(builder, m, y=None, rowvar=True, bias=False, ddof=None):
+    m = asarray(builder, m)
+    if not y is None:
+        y = asarray(builder, y)
     X = _prepare_cov_input(builder, m, y, rowvar)
     ddof = builder.inline_func(_cov_get_ddof_func(ddof is None), bias, ddof)
     res = builder.inline_func(_cov_impl_inner, X, ddof)

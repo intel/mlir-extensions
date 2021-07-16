@@ -46,6 +46,14 @@ struct PyBuilderContext {
 };
 
 namespace {
+std::string to_str(mlir::Value val) {
+  std::string ret;
+  llvm::raw_string_ostream ss(ret);
+  ss << val;
+  ss.flush();
+  return ret;
+}
+
 std::string to_str(mlir::Type type) {
   std::string ret;
   llvm::raw_string_ostream ss(ret);
@@ -342,7 +350,7 @@ struct PyLinalgResolver::Context {
       auto type = mlir::NoneType::get(builder.getContext());
       return builder.create<plier::UndefOp>(loc, type);
     }
-    if (py::isinstance<py::tuple>(obj)) {
+    if (py::isinstance<py::iterable>(obj)) {
       llvm::SmallVector<mlir::Value> elems(py::len(obj));
       for (auto it : llvm::enumerate(obj)) {
         elems[it.index()] = unwrap_val(loc, builder, it.value());
@@ -957,14 +965,20 @@ py::object from_elements_impl(py::capsule context, py::handle values,
     plier::report_error("Invalid from_elemets size");
   }
 
-  auto tensorType =
-      mlir::RankedTensorType::get(static_cast<int64_t>(vals.size()), type);
-  for (auto &val : vals) {
-    val = doSignCast(builder, loc, val);
-  }
-  auto res = builder.create<mlir::tensor::FromElementsOp>(loc, vals);
+  auto resTensorType =
+      mlir::RankedTensorType::get(mlir::ShapedType::kDynamicSize, type);
+  for (auto &val : vals)
+    val = doSignCast(builder, loc, doCast(builder, loc, val, type));
+
+  auto res =
+      builder.create<mlir::tensor::FromElementsOp>(loc, vals).getResult();
+  auto sizelessTensorType = mlir::RankedTensorType::get(
+      mlir::ShapedType::kDynamicSize, makeSignlessType(type));
+  res =
+      builder.createOrFold<mlir::tensor::CastOp>(loc, sizelessTensorType, res);
+
   return ctx.context.create_var(context,
-                                doSignCast(builder, loc, res, tensorType));
+                                doSignCast(builder, loc, res, resTensorType));
 }
 
 py::object extract_impl(py::capsule context, py::handle value,
@@ -1401,12 +1415,17 @@ py::object binop_impl(py::capsule context, py::capsule ssa_val, py::handle rhs,
   plier::report_error("Unhandled binop type");
 }
 
+py::object str_impl(py::capsule /*context*/, py::capsule ssa_val) {
+  return py::str("Var: \"" + to_str(unwrap_mlir<mlir::Value>(ssa_val)) + "\"");
+}
+
 void setup_py_var(pybind11::handle var) {
   py::setattr(var, "_shape", py::cpp_function(&shape_impl));
   py::setattr(var, "_dtype", py::cpp_function(&dtype_impl));
   py::setattr(var, "_len", py::cpp_function(&len_impl));
   py::setattr(var, "_getitem", py::cpp_function(&getitem_impl));
   py::setattr(var, "_binop", py::cpp_function(&binop_impl));
+  py::setattr(var, "_str", py::cpp_function(&str_impl));
 }
 
 PyLinalgResolver::Values unpack_results(PyBuilderContext &ctx,
