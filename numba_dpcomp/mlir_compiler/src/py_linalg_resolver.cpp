@@ -46,6 +46,14 @@ struct PyBuilderContext {
 };
 
 namespace {
+std::string to_str(mlir::Value val) {
+  std::string ret;
+  llvm::raw_string_ostream ss(ret);
+  ss << val;
+  ss.flush();
+  return ret;
+}
+
 std::string to_str(mlir::Type type) {
   std::string ret;
   llvm::raw_string_ostream ss(ret);
@@ -1401,12 +1409,17 @@ py::object binop_impl(py::capsule context, py::capsule ssa_val, py::handle rhs,
   plier::report_error("Unhandled binop type");
 }
 
+py::object str_impl(py::capsule /*context*/, py::capsule ssa_val) {
+  return py::str("Var: " + to_str(unwrap_mlir<mlir::Value>(ssa_val)));
+}
+
 void setup_py_var(pybind11::handle var) {
   py::setattr(var, "_shape", py::cpp_function(&shape_impl));
   py::setattr(var, "_dtype", py::cpp_function(&dtype_impl));
   py::setattr(var, "_len", py::cpp_function(&len_impl));
   py::setattr(var, "_getitem", py::cpp_function(&getitem_impl));
   py::setattr(var, "_binop", py::cpp_function(&binop_impl));
+  py::setattr(var, "_str", py::cpp_function(&str_impl));
 }
 
 PyLinalgResolver::Values unpack_results(PyBuilderContext &ctx,
