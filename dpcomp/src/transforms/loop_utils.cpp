@@ -312,7 +312,8 @@ verifyDependencies(scf::ParallelOp firstPloop, scf::ParallelOp secondPloop,
 static bool
 isFusionLegal(scf::ParallelOp firstPloop, scf::ParallelOp secondPloop,
               const BlockAndValueMapping &firstToSecondPloopIndices) {
-  return !hasNestedParallelOp(firstPloop) &&
+  return firstPloop.getNumResults() == 0 && // TODO
+         !hasNestedParallelOp(firstPloop) &&
          !hasNestedParallelOp(secondPloop) &&
          equalIterationSpaces(firstPloop, secondPloop) &&
          succeeded(verifyDependencies(firstPloop, secondPloop,
