@@ -350,7 +350,7 @@ struct PyLinalgResolver::Context {
       auto type = mlir::NoneType::get(builder.getContext());
       return builder.create<plier::UndefOp>(loc, type);
     }
-    if (py::isinstance<py::tuple>(obj)) {
+    if (py::isinstance<py::iterable>(obj)) {
       llvm::SmallVector<mlir::Value> elems(py::len(obj));
       for (auto it : llvm::enumerate(obj)) {
         elems[it.index()] = unwrap_val(loc, builder, it.value());
@@ -968,12 +968,14 @@ py::object from_elements_impl(py::capsule context, py::handle values,
   auto resTensorType =
       mlir::RankedTensorType::get(mlir::ShapedType::kDynamicSize, type);
   for (auto &val : vals)
-    val = doSignCast(builder, loc, val);
+    val = doSignCast(builder, loc, doCast(builder, loc, val, type));
 
-  auto res = builder.create<mlir::tensor::FromElementsOp>(loc, vals).getResult();
-  auto sizelessTensorType =
-      mlir::RankedTensorType::get(mlir::ShapedType::kDynamicSize, makeSignlessType(type));
-  res = builder.createOrFold<mlir::tensor::CastOp>(loc, sizelessTensorType, res);
+  auto res =
+      builder.create<mlir::tensor::FromElementsOp>(loc, vals).getResult();
+  auto sizelessTensorType = mlir::RankedTensorType::get(
+      mlir::ShapedType::kDynamicSize, makeSignlessType(type));
+  res =
+      builder.createOrFold<mlir::tensor::CastOp>(loc, sizelessTensorType, res);
 
   return ctx.context.create_var(context,
                                 doSignCast(builder, loc, res, resTensorType));
