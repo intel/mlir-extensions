@@ -620,12 +620,12 @@ py::bytes gen_ll_module(mlir::ModuleOp mod) {
 }
 
 void create_pipeline(plier::PipelineRegistry &registry) {
-  register_base_pipeline(registry);
-  register_lower_to_llvm_pipeline(registry);
-  register_plier_to_std_pipeline(registry);
-  register_plier_to_linalg_pipeline(registry);
+  registerBasePipeline(registry);
+  registerLowerToLLVMPipeline(registry);
+  registerPlierToStdPipeline(registry);
+  registerPlierToLinalgPipeline(registry);
   registerPreLowSimpleficationsPipeline(registry);
-  register_parallel_to_tbb_pipeline(registry);
+  registerParallelToTBBPipeline(registry);
 }
 
 struct Module {

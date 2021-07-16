@@ -249,13 +249,13 @@ void populate_parallel_to_tbb_pipeline(mlir::OpPassManager &pm) {
 }
 } // namespace
 
-void register_parallel_to_tbb_pipeline(plier::PipelineRegistry &registry) {
+void registerParallelToTBBPipeline(plier::PipelineRegistry &registry) {
   registry.register_pipeline([](auto sink) {
-    auto stage = get_lower_lowering_stage();
-    auto llvm_pipeline = lower_to_llvm_pipeline_name();
-    sink(parallel_to_tbb_pipeline_name(), {stage.begin}, {llvm_pipeline}, {},
+    auto stage = getLowerLoweringStage();
+    auto llvm_pipeline = lowerToLLVMPipelineName();
+    sink(parallelToTBBPipelineName(), {stage.begin}, {llvm_pipeline}, {},
          &populate_parallel_to_tbb_pipeline);
   });
 }
 
-llvm::StringRef parallel_to_tbb_pipeline_name() { return "parallel_to_tbb"; }
+llvm::StringRef parallelToTBBPipelineName() { return "parallel_to_tbb"; }

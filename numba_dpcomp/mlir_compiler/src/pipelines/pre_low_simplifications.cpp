@@ -132,7 +132,7 @@ struct MakeSignlessPass
           }
           return llvm::None;
         });
-    populate_tuple_type_converter(*context, typeConverter);
+    populateTupleTypeConverter(*context, typeConverter);
 
     auto materializeSignCast = [](mlir::OpBuilder &builder, mlir::Type type,
                                   mlir::ValueRange inputs,
@@ -170,12 +170,12 @@ void populateRemoveSignPipeline(mlir::OpPassManager &pm) {
 
 void registerPreLowSimpleficationsPipeline(plier::PipelineRegistry &registry) {
   registry.register_pipeline([](auto sink) {
-    auto stage = get_high_lowering_stage();
+    auto stage = getHighLoweringStage();
     sink(untuplePipelineName(), {stage.begin}, {stage.end}, {},
          &populateUntuplePipeline);
   });
   registry.register_pipeline([](auto sink) {
-    auto stage = get_high_lowering_stage();
+    auto stage = getHighLoweringStage();
     sink(removeSignPipelineName(), {untuplePipelineName(), stage.begin},
          {stage.end}, {}, &populateRemoveSignPipeline);
   });

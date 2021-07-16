@@ -26,7 +26,7 @@ const constexpr llvm::StringRef passes[] = {
 void dummy_pass_func(mlir::OpPassManager &) {}
 } // namespace
 
-void register_base_pipeline(plier::PipelineRegistry &registry) {
+void registerBasePipeline(plier::PipelineRegistry &registry) {
   for (std::size_t i = 0; i < llvm::array_lengthof(passes); ++i) {
     registry.register_pipeline([i](auto sink) {
       if (0 == i) {
@@ -38,6 +38,6 @@ void register_base_pipeline(plier::PipelineRegistry &registry) {
   }
 }
 
-PipelineStage get_high_lowering_stage() { return {passes[0], passes[1]}; }
+PipelineStage getHighLoweringStage() { return {passes[0], passes[1]}; }
 
-PipelineStage get_lower_lowering_stage() { return {passes[1], passes[2]}; }
+PipelineStage getLowerLoweringStage() { return {passes[1], passes[2]}; }

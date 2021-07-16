@@ -1804,7 +1804,7 @@ void PlierToStdPass::runOnOperation() {
   typeConverter.addConversion([](mlir::Type type) { return type; });
 
   auto context = &getContext();
-  populate_std_type_converter(*context, typeConverter);
+  populateStdTypeConverter(*context, typeConverter);
 
   mlir::OwningRewritePatternList patterns(context);
 
@@ -1859,8 +1859,8 @@ void populate_plier_to_std_pipeline(mlir::OpPassManager &pm) {
 }
 } // namespace
 
-void populate_std_type_converter(mlir::MLIRContext & /*context*/,
-                                 mlir::TypeConverter &converter) {
+void populateStdTypeConverter(mlir::MLIRContext & /*context*/,
+                              mlir::TypeConverter &converter) {
   converter.addConversion(
       [](mlir::Type type, llvm::SmallVectorImpl<mlir::Type> &ret_types)
           -> llvm::Optional<mlir::LogicalResult> {
@@ -1876,8 +1876,8 @@ void populate_std_type_converter(mlir::MLIRContext & /*context*/,
       });
 }
 
-void populate_tuple_type_converter(mlir::MLIRContext & /*context*/,
-                                   mlir::TypeConverter &converter) {
+void populateTupleTypeConverter(mlir::MLIRContext & /*context*/,
+                                mlir::TypeConverter &converter) {
   converter.addConversion(
       [&converter](mlir::TupleType type) -> llvm::Optional<mlir::Type> {
         llvm::SmallVector<mlir::Type> newTypes(type.size());
@@ -1891,12 +1891,12 @@ void populate_tuple_type_converter(mlir::MLIRContext & /*context*/,
       });
 }
 
-void register_plier_to_std_pipeline(plier::PipelineRegistry &registry) {
+void registerPlierToStdPipeline(plier::PipelineRegistry &registry) {
   registry.register_pipeline([](auto sink) {
-    auto stage = get_high_lowering_stage();
-    sink(plier_to_std_pipeline_name(), {stage.begin}, {stage.end}, {},
+    auto stage = getHighLoweringStage();
+    sink(plierToStdPipelineName(), {stage.begin}, {stage.end}, {},
          &populate_plier_to_std_pipeline);
   });
 }
 
-llvm::StringRef plier_to_std_pipeline_name() { return "plier_to_std"; }
+llvm::StringRef plierToStdPipelineName() { return "plier_to_std"; }

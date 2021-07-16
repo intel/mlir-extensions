@@ -27,12 +27,12 @@ class MLIRContext;
 class TypeConverter;
 } // namespace mlir
 
-void populate_std_type_converter(mlir::MLIRContext &context,
-                                 mlir::TypeConverter &converter);
+void populateStdTypeConverter(mlir::MLIRContext &context,
+                              mlir::TypeConverter &converter);
 
-void populate_tuple_type_converter(mlir::MLIRContext &context,
-                                   mlir::TypeConverter &converter);
+void populateTupleTypeConverter(mlir::MLIRContext &context,
+                                mlir::TypeConverter &converter);
 
-void register_plier_to_std_pipeline(plier::PipelineRegistry &registry);
+void registerPlierToStdPipeline(plier::PipelineRegistry &registry);
 
-llvm::StringRef plier_to_std_pipeline_name();
+llvm::StringRef plierToStdPipelineName();

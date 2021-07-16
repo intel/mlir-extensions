@@ -1452,12 +1452,12 @@ void populate_lower_to_llvm_pipeline(mlir::OpPassManager &pm) {
 }
 } // namespace
 
-void register_lower_to_llvm_pipeline(plier::PipelineRegistry &registry) {
+void registerLowerToLLVMPipeline(plier::PipelineRegistry &registry) {
   registry.register_pipeline([](auto sink) {
-    auto stage = get_lower_lowering_stage();
-    sink(lower_to_llvm_pipeline_name(), {stage.begin}, {stage.end}, {},
+    auto stage = getLowerLoweringStage();
+    sink(lowerToLLVMPipelineName(), {stage.begin}, {stage.end}, {},
          &populate_lower_to_llvm_pipeline);
   });
 }
 
-llvm::StringRef lower_to_llvm_pipeline_name() { return "lower_to_llvm"; }
+llvm::StringRef lowerToLLVMPipelineName() { return "lower_to_llvm"; }

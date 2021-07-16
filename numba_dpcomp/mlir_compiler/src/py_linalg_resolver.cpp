@@ -73,8 +73,8 @@ py::object mapTypesToNumbaChecked(py::handle typesMod,
     assert(!typesRange.empty());
     auto context = typesRange.front().getContext();
     mlir::TypeConverter converter;
-    populate_std_type_converter(*context, converter);
-    populate_array_type_converter(*context, converter);
+    populateStdTypeConverter(*context, converter);
+    populateArrayTypeConverter(*context, converter);
     llvm::SmallVector<mlir::Type> convertedTypes(typesRange.size());
     for (auto it : llvm::enumerate(typesRange)) {
       auto oldType = it.value();
@@ -1477,8 +1477,8 @@ PyLinalgResolver::rewrite(llvm::StringRef name, mlir::Location loc,
 
   PyBuilderContext py_builder_context{loc, builder, {}, *context};
   auto &mlirContext = *builder.getContext();
-  populate_std_type_converter(mlirContext, py_builder_context.typeConverter);
-  populate_array_type_converter(mlirContext, py_builder_context.typeConverter);
+  populateStdTypeConverter(mlirContext, py_builder_context.typeConverter);
+  populateArrayTypeConverter(mlirContext, py_builder_context.typeConverter);
   auto py_context = py::capsule(&py_builder_context);
   auto py_args = get_args(
       context->inspect, builder_func,

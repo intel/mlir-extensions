@@ -27,10 +27,10 @@ class MLIRContext;
 class TypeConverter;
 } // namespace mlir
 
-void populate_array_type_converter(mlir::MLIRContext &context,
-                                   mlir::TypeConverter &converter);
+void populateArrayTypeConverter(mlir::MLIRContext &context,
+                                mlir::TypeConverter &converter);
 
-void register_plier_to_linalg_pipeline(plier::PipelineRegistry &registry);
+void registerPlierToLinalgPipeline(plier::PipelineRegistry &registry);
 
-llvm::StringRef plier_to_linalg_gen_pipeline_name();
-llvm::StringRef plier_to_linalg_opt_pipeline_name();
+llvm::StringRef plierToLinalgGenPipelineName();
+llvm::StringRef plierToLinalgOptPipelineName();
