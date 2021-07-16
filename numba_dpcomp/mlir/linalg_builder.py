@@ -167,7 +167,7 @@ def _flatten_tuple(src):
         if shape is None:
             shape = [l]
         else:
-            shape.append(l)
+            shape = [l] + shape
         return (shape, elements)
     return (None, [src])
 
