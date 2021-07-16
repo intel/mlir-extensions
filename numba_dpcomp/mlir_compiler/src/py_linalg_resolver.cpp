@@ -965,14 +965,18 @@ py::object from_elements_impl(py::capsule context, py::handle values,
     plier::report_error("Invalid from_elemets size");
   }
 
-  auto tensorType =
-      mlir::RankedTensorType::get(static_cast<int64_t>(vals.size()), type);
-  for (auto &val : vals) {
+  auto resTensorType =
+      mlir::RankedTensorType::get(mlir::ShapedType::kDynamicSize, type);
+  for (auto &val : vals)
     val = doSignCast(builder, loc, val);
-  }
-  auto res = builder.create<mlir::tensor::FromElementsOp>(loc, vals);
+
+  auto res = builder.create<mlir::tensor::FromElementsOp>(loc, vals).getResult();
+  auto sizelessTensorType =
+      mlir::RankedTensorType::get(mlir::ShapedType::kDynamicSize, makeSignlessType(type));
+  res = builder.createOrFold<mlir::tensor::CastOp>(loc, sizelessTensorType, res);
+
   return ctx.context.create_var(context,
-                                doSignCast(builder, loc, res, tensorType));
+                                doSignCast(builder, loc, res, resTensorType));
 }
 
 py::object extract_impl(py::capsule context, py::handle value,
@@ -1410,7 +1414,7 @@ py::object binop_impl(py::capsule context, py::capsule ssa_val, py::handle rhs,
 }
 
 py::object str_impl(py::capsule /*context*/, py::capsule ssa_val) {
-  return py::str("Var: " + to_str(unwrap_mlir<mlir::Value>(ssa_val)));
+  return py::str("Var: \"" + to_str(unwrap_mlir<mlir::Value>(ssa_val)) + "\"");
 }
 
 void setup_py_var(pybind11::handle var) {
