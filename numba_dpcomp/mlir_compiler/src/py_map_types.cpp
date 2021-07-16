@@ -90,6 +90,17 @@ py::object map_type(const py::handle &types_mod, mlir::Type type) {
     auto array_type = types_mod.attr("Array");
     return array_type(elem_type, ndims, py::str("C"));
   }
+
+  if (auto t = type.dyn_cast<mlir::TupleType>()) {
+    py::tuple ret(t.size());
+    for (auto it : llvm::enumerate(t.getTypes())) {
+      auto inner = map_type(types_mod, it.value());
+      if (!inner)
+        return {};
+      ret[it.index()] = std::move(inner);
+    }
+    return std::move(ret);
+  }
   return {};
 }
 } // namespace
