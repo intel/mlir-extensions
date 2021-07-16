@@ -22,6 +22,12 @@ namespace llvm {
 class StringRef;
 }
 
-void registerLowerToLLVMPipeline(plier::PipelineRegistry &registry);
+namespace mlir {
+class MLIRContext;
+class TypeConverter;
+} // namespace mlir
 
-llvm::StringRef lowerToLLVMPipelineName();
+void registerPreLowSimpleficationsPipeline(plier::PipelineRegistry &registry);
+
+llvm::StringRef untuplePipelineName();
+llvm::StringRef removeSignPipelineName();

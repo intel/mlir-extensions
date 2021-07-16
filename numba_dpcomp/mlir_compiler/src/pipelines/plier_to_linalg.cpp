@@ -39,6 +39,7 @@
 #include "plier/dialect.hpp"
 
 #include "pipelines/plier_to_std.hpp"
+#include "pipelines/pre_low_simplifications.hpp"
 
 #include "plier/rewrites/arg_lowering.hpp"
 #include "plier/rewrites/call_lowering.hpp"
@@ -198,7 +199,7 @@ bool check_numpy_args(llvm::ArrayRef<mlir::Value> args,
 void rerun_std_pipeline(mlir::Operation *op) {
   assert(nullptr != op);
   auto marker =
-      mlir::StringAttr::get(op->getContext(), plier_to_std_pipeline_name());
+      mlir::StringAttr::get(op->getContext(), plierToStdPipelineName());
   auto mod = op->getParentOfType<mlir::ModuleOp>();
   assert(nullptr != mod);
   plier::add_pipeline_jump_marker(mod, marker);
@@ -1546,9 +1547,9 @@ void PlierToLinalgPass::runOnOperation() {
   mlir::TypeConverter typeConverter;
   // Convert unknown types to itself
   typeConverter.addConversion([](mlir::Type type) { return type; });
-  populate_std_type_converter(*context, typeConverter);
-  populate_tuple_type_converter(*context, typeConverter);
-  populate_array_type_converter(*context, typeConverter);
+  populateStdTypeConverter(*context, typeConverter);
+  populateTupleTypeConverter(*context, typeConverter);
+  populateArrayTypeConverter(*context, typeConverter);
 
   mlir::OwningRewritePatternList patterns(context);
   patterns.insert<
@@ -1727,7 +1728,7 @@ void MakeTensorsSignlessPass::runOnOperation() {
         }
         return llvm::None;
       });
-  populate_tuple_type_converter(*context, typeConverter);
+  populateTupleTypeConverter(*context, typeConverter);
 
   auto materializeSignCast = [](mlir::OpBuilder &builder, mlir::Type type,
                                 mlir::ValueRange inputs,
@@ -1868,7 +1869,7 @@ void AdditionalBufferize::runOnFunction() {
   auto *context = &getContext();
 
   mlir::BufferizeTypeConverter typeConverter;
-  populate_tuple_type_converter(*context, typeConverter);
+  populateTupleTypeConverter(*context, typeConverter);
 
   auto materializeTupleCast =
       [](mlir::OpBuilder &builder, mlir::Type type, mlir::ValueRange inputs,
@@ -2070,8 +2071,8 @@ void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager &pm) {
 }
 } // namespace
 
-void populate_array_type_converter(mlir::MLIRContext & /*context*/,
-                                   mlir::TypeConverter &converter) {
+void populateArrayTypeConverter(mlir::MLIRContext & /*context*/,
+                                mlir::TypeConverter &converter) {
   converter.addConversion(
       [&](plier::PyType type) -> llvm::Optional<mlir::Type> {
         auto ret = map_plier_type(converter, type);
@@ -2082,22 +2083,19 @@ void populate_array_type_converter(mlir::MLIRContext & /*context*/,
       });
 }
 
-void register_plier_to_linalg_pipeline(plier::PipelineRegistry &registry) {
+void registerPlierToLinalgPipeline(plier::PipelineRegistry &registry) {
   registry.register_pipeline([](auto sink) {
-    auto stage = get_high_lowering_stage();
-    sink(plier_to_linalg_gen_pipeline_name(), {plier_to_std_pipeline_name()},
-         {plier_to_linalg_opt_pipeline_name()}, {plier_to_std_pipeline_name()},
+    auto stage = getHighLoweringStage();
+    sink(plierToLinalgGenPipelineName(), {plierToStdPipelineName()},
+         {plierToLinalgOptPipelineName()}, {plierToStdPipelineName()},
          &populate_plier_to_linalg_gen_pipeline);
-    sink(plier_to_linalg_opt_pipeline_name(),
-         {plier_to_linalg_gen_pipeline_name()}, {stage.end}, {},
+    sink(plierToLinalgOptPipelineName(),
+         {plierToLinalgGenPipelineName(), untuplePipelineName()},
+         {removeSignPipelineName(), stage.end}, {},
          &populate_plier_to_linalg_opt_pipeline);
   });
 }
 
-llvm::StringRef plier_to_linalg_gen_pipeline_name() {
-  return "plier_to_linalg_gen";
-}
+llvm::StringRef plierToLinalgGenPipelineName() { return "plier_to_linalg_gen"; }
 
-llvm::StringRef plier_to_linalg_opt_pipeline_name() {
-  return "plier_to_linalg_opt";
-}
+llvm::StringRef plierToLinalgOptPipelineName() { return "plier_to_linalg_opt"; }

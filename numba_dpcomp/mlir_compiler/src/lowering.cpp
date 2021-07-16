@@ -43,6 +43,7 @@
 #include "pipelines/parallel_to_tbb.hpp"
 #include "pipelines/plier_to_linalg.hpp"
 #include "pipelines/plier_to_std.hpp"
+#include "pipelines/pre_low_simplifications.hpp"
 
 namespace py = pybind11;
 namespace {
@@ -619,11 +620,12 @@ py::bytes gen_ll_module(mlir::ModuleOp mod) {
 }
 
 void create_pipeline(plier::PipelineRegistry &registry) {
-  register_base_pipeline(registry);
-  register_lower_to_llvm_pipeline(registry);
-  register_plier_to_std_pipeline(registry);
-  register_plier_to_linalg_pipeline(registry);
-  register_parallel_to_tbb_pipeline(registry);
+  registerBasePipeline(registry);
+  registerLowerToLLVMPipeline(registry);
+  registerPlierToStdPipeline(registry);
+  registerPlierToLinalgPipeline(registry);
+  registerPreLowSimpleficationsPipeline(registry);
+  registerParallelToTBBPipeline(registry);
 }
 
 struct Module {
