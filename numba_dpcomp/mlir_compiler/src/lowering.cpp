@@ -43,6 +43,7 @@
 #include "pipelines/parallel_to_tbb.hpp"
 #include "pipelines/plier_to_linalg.hpp"
 #include "pipelines/plier_to_std.hpp"
+#include "pipelines/pre_low_simplifications.hpp"
 
 namespace py = pybind11;
 namespace {
@@ -623,6 +624,7 @@ void create_pipeline(plier::PipelineRegistry &registry) {
   register_lower_to_llvm_pipeline(registry);
   register_plier_to_std_pipeline(registry);
   register_plier_to_linalg_pipeline(registry);
+  registerPreLowSimpleficationsPipeline(registry);
   register_parallel_to_tbb_pipeline(registry);
 }
 

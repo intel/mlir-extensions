@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "pipelines/plier_to_std.hpp"
+#include "pipelines/pre_low_simplifications.hpp"
 
 #include <mlir/Dialect/Math/IR/Math.h>
 #include <mlir/Dialect/SCF/SCF.h>
@@ -1851,92 +1852,9 @@ void PlierToStdPass::runOnOperation() {
   (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
 }
 
-static void flattenTuple(mlir::OpBuilder &builder, mlir::Location loc,
-                         mlir::ValueRange values,
-                         llvm::SmallVectorImpl<mlir::Value> &ret) {
-  for (auto arg : values) {
-    if (auto tupleType = arg.getType().dyn_cast<mlir::TupleType>()) {
-      for (auto it : llvm::enumerate(tupleType.getTypes())) {
-        auto i = it.index();
-        auto argType = it.value();
-        auto ind = builder.createOrFold<mlir::ConstantIndexOp>(loc, i);
-        auto res =
-            builder.createOrFold<plier::GetItemOp>(loc, argType, arg, ind);
-        flattenTuple(builder, loc, res, ret);
-      }
-    } else {
-      ret.emplace_back(arg);
-    }
-  }
-}
-
-struct UntupleReturn : public mlir::OpConversionPattern<mlir::ReturnOp> {
-  using mlir::OpConversionPattern<mlir::ReturnOp>::OpConversionPattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(mlir::ReturnOp op, llvm::ArrayRef<mlir::Value> operands,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
-    llvm::SmallVector<mlir::Value> newOperands;
-    auto loc = op.getLoc();
-    flattenTuple(rewriter, loc, operands, newOperands);
-    auto *operation = op.getOperation();
-    rewriter.updateRootInPlace(op,
-                               [&]() { operation->setOperands(newOperands); });
-    return mlir::success();
-  }
-};
-
-struct UntuplePass
-    : public mlir::PassWrapper<UntuplePass,
-                               mlir::OperationPass<mlir::ModuleOp>> {
-  void runOnOperation() override {
-    auto module = getOperation();
-    auto *context = &getContext();
-
-    mlir::TypeConverter typeConverter;
-    // Convert unknown types to itself
-    typeConverter.addConversion([](mlir::Type type) { return type; });
-    typeConverter.addConversion(
-        [&typeConverter](mlir::TupleType type,
-                         llvm::SmallVectorImpl<mlir::Type> &ret)
-            -> llvm::Optional<mlir::LogicalResult> {
-          if (mlir::failed(typeConverter.convertTypes(type.getTypes(), ret)))
-            return llvm::None;
-          return mlir::success();
-        });
-
-    auto materializeTupleCast =
-        [](mlir::OpBuilder &builder, mlir::Type type, mlir::ValueRange inputs,
-           mlir::Location loc) -> llvm::Optional<mlir::Value> {
-      if (auto tuple = type.dyn_cast<mlir::TupleType>()) {
-        auto retType =
-            mlir::TupleType::get(type.getContext(), inputs.getTypes());
-        return builder.create<plier::BuildTupleOp>(loc, retType, inputs)
-            .getResult();
-      }
-      return llvm::None;
-    };
-    typeConverter.addArgumentMaterialization(materializeTupleCast);
-    typeConverter.addSourceMaterialization(materializeTupleCast);
-    typeConverter.addTargetMaterialization(materializeTupleCast);
-
-    mlir::RewritePatternSet patterns(context);
-    mlir::ConversionTarget target(*context);
-
-    plier::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
-                                                              patterns, target);
-
-    patterns.insert<UntupleReturn>(typeConverter, context);
-
-    if (failed(applyPartialConversion(module, target, std::move(patterns))))
-      signalPassFailure();
-  }
-};
-
 void populate_plier_to_std_pipeline(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(std::make_unique<PlierToStdPass>());
-  pm.addPass(std::make_unique<UntuplePass>());
   pm.addPass(mlir::createCanonicalizerPass());
 }
 } // namespace

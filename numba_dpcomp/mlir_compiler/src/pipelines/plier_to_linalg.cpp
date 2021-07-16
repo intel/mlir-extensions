@@ -39,6 +39,7 @@
 #include "plier/dialect.hpp"
 
 #include "pipelines/plier_to_std.hpp"
+#include "pipelines/pre_low_simplifications.hpp"
 
 #include "plier/rewrites/arg_lowering.hpp"
 #include "plier/rewrites/call_lowering.hpp"
@@ -2089,7 +2090,8 @@ void register_plier_to_linalg_pipeline(plier::PipelineRegistry &registry) {
          {plier_to_linalg_opt_pipeline_name()}, {plier_to_std_pipeline_name()},
          &populate_plier_to_linalg_gen_pipeline);
     sink(plier_to_linalg_opt_pipeline_name(),
-         {plier_to_linalg_gen_pipeline_name()}, {stage.end}, {},
+         {plier_to_linalg_gen_pipeline_name(), untuplePipelineName()},
+         {removeSignPipelineName(), stage.end}, {},
          &populate_plier_to_linalg_opt_pipeline);
   });
 }
