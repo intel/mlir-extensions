@@ -20,6 +20,7 @@
 #include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/IR/BlockAndValueMapping.h>
+#include <mlir/IR/Dominance.h>
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Support/LogicalResult.h>
 
@@ -379,10 +380,18 @@ static bool fuseIfLegal(scf::ParallelOp firstPloop,
   return true;
 }
 
-bool hasNoEffect(mlir::scf::ParallelOp currentPloop, mlir::Operation *op) {
+bool hasNoEffect(mlir::Operation *op) {
   if (op->getNumRegions() != 0)
     return false;
 
+  if (auto interface = dyn_cast<MemoryEffectOpInterface>(op))
+    return !interface.hasEffect<mlir::MemoryEffects::Read>() &&
+           !interface.hasEffect<mlir::MemoryEffects::Write>();
+
+  return !op->hasTrait<::mlir::OpTrait::HasRecursiveSideEffects>();
+}
+
+bool hasNoEffect(mlir::scf::ParallelOp currentPloop, mlir::Operation *op) {
   if (currentPloop && currentPloop->getNumResults() != 0) {
     for (auto arg : op->getOperands()) {
       if (llvm::is_contained(currentPloop.getResults(), arg))
@@ -390,11 +399,7 @@ bool hasNoEffect(mlir::scf::ParallelOp currentPloop, mlir::Operation *op) {
     }
   }
 
-  if (auto interface = dyn_cast<MemoryEffectOpInterface>(op))
-    return !interface.hasEffect<mlir::MemoryEffects::Read>() &&
-           !interface.hasEffect<mlir::MemoryEffects::Write>();
-
-  return !op->hasTrait<::mlir::OpTrait::HasRecursiveSideEffects>();
+  return hasNoEffect(op);
 }
 } // namespace
 
@@ -434,6 +439,57 @@ mlir::LogicalResult plier::naivelyFuseParallelOps(Region &region) {
       for (size_t i = 0, e = ploops.size(); i + 1 < e; ++i)
         if (fuseIfLegal(ploops[i], ploops[i + 1], b))
           changed = true;
+    }
+  }
+  return mlir::success(changed);
+}
+
+LogicalResult plier::prepareForFusion(Region &region) {
+  DominanceInfo dom(region.getParentOp());
+  bool changed = false;
+  for (auto &block : region) {
+    for (auto &op : llvm::make_early_inc_range(block)) {
+      for (auto &innerReg : op.getRegions())
+        if (succeeded(prepareForFusion(innerReg)))
+          changed = true;
+
+      if (!isa<scf::ParallelOp>(op))
+        continue;
+
+      auto it = Block::iterator(op);
+      if (it == block.begin())
+        continue;
+      --it;
+
+      auto terminate = false;
+      while (!terminate) {
+        auto &currentOp = *it;
+        if (isa<scf::ParallelOp>(currentOp))
+          break;
+
+        if (it == block.begin()) {
+          terminate = true;
+        } else {
+          --it;
+        }
+
+        bool canMove = [&]() {
+          if (!hasNoEffect(&currentOp))
+            return false;
+
+          for (auto user : currentOp.getUsers()) {
+            if (op.isAncestor(user) || !dom.properlyDominates(&op, user))
+              return false;
+          }
+
+          return true;
+        }();
+
+        if (canMove) {
+          currentOp.moveAfter(&op);
+          changed = true;
+        }
+      }
     }
   }
   return mlir::success(changed);
