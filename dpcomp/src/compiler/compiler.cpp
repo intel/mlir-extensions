@@ -56,6 +56,7 @@ struct PassManagerStage {
         bool operator()(mlir::Pass *pass, mlir::Operation *) const {
           auto name = pass->getName();
           name.consume_front("`anonymous-namespace'::");
+          name.consume_front("{anonymous}::");
           return llvm::is_contained(names, name);
         }
       };
