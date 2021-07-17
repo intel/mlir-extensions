@@ -15,6 +15,7 @@
 import numba
 # from numba_dpcomp import njit
 from numba_dpcomp import vectorize
+from numba_dpcomp.mlir.passes import print_pass_ir, get_print_buffer
 from numpy.testing import assert_equal, assert_allclose # for nans comparison
 import numpy as np
 from numba.tests.support import TestCase
@@ -216,6 +217,69 @@ def test_dot(a, b, parallel):
 
     jit_func = njit(py_func, parallel=parallel)
     assert_equal(py_func(a, b), jit_func(a, b))
+
+
+def test_loop_fusion1():
+    def py_func(arr):
+        l = len(arr)
+        res1 = 0
+        for i in numba.prange(l):
+            res1 += arr[i];
+
+        res2 = 0
+        for i in numba. prange(l):
+            res2 *= arr[i];
+
+        return res1, res2
+
+    with print_pass_ir([],['PostLinalgOptPass']):
+        jit_func = njit(py_func)
+        arr = np.arange(10000, dtype=np.float32)
+        assert_equal(py_func(arr), jit_func(arr))
+        ir = get_print_buffer()
+        assert ir.count('scf.parallel') == 1, ir
+
+def test_loop_fusion2():
+    def py_func(arr):
+        l = len(arr)
+        res1 = 0
+        for i in numba.prange(l):
+            res1 += arr[i];
+
+        res1 += 10
+
+        res2 = 0
+        for i in numba. prange(l):
+            res2 *= arr[i];
+
+        return res1, res2
+
+    with print_pass_ir([],['PostLinalgOptPass']):
+        jit_func = njit(py_func)
+        arr = np.arange(10000, dtype=np.float32)
+        assert_equal(py_func(arr), jit_func(arr))
+        ir = get_print_buffer()
+        assert ir.count('scf.parallel') == 1, ir
+
+def test_loop_fusion3():
+    def py_func(arr):
+        l = len(arr)
+        res1 = 0
+        for i in numba.prange(l):
+            res1 += arr[i];
+
+        res2 = 0
+        for i in numba. prange(l):
+            res2 *= (arr[i] * res1);
+
+        return res1, res2
+
+    with print_pass_ir([],['PostLinalgOptPass']):
+        jit_func = njit(py_func)
+        arr = np.arange(10000, dtype=np.float32)
+        assert_equal(py_func(arr), jit_func(arr))
+        ir = get_print_buffer()
+        assert ir.count('scf.parallel') == 2, ir
 
 class TestMlirBasic(TestCase):
     def test_static_setitem(self):

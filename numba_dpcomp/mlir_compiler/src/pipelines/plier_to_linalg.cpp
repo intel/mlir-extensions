@@ -2005,6 +2005,7 @@ void PostLinalgOptPass::runOnFunction() {
       &context);
 
   auto additionalOpt = [](mlir::FuncOp op) {
+    (void)plier::prepareForFusion(op.getRegion());
     return plier::naivelyFuseParallelOps(op.getRegion());
   };
   if (mlir::failed(applyOptimizations(func, std::move(patterns),

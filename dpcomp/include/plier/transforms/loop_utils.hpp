@@ -45,4 +45,5 @@ mlir::LogicalResult lower_while_to_for(
     llvm::function_ref<void(mlir::scf::ForOp)> results = nullptr);
 
 mlir::LogicalResult naivelyFuseParallelOps(mlir::Region &region);
+mlir::LogicalResult prepareForFusion(mlir::Region &region);
 } // namespace plier

@@ -14,7 +14,13 @@
 
 #pragma once
 
+#include <functional>
 #include <memory>
+#include <string>
+
+#include <llvm/ADT/Optional.h>
+#include <llvm/ADT/SmallVector.h>
+#include <llvm/ADT/StringRef.h>
 
 namespace mlir {
 class MLIRContext;
@@ -27,10 +33,18 @@ class PipelineRegistry;
 class CompilerContext {
 public:
   struct Settings {
+    struct IRPrintingSettings {
+      llvm::SmallVector<std::string, 1> printBefore;
+      llvm::SmallVector<std::string, 1> printAfter;
+      llvm::raw_ostream *out;
+    };
+
     bool verify = false;
-    bool pass_statistics = false;
-    bool pass_timings = false;
-    bool ir_printing = false;
+    bool passStatistics = false;
+    bool passTimings = false;
+    bool irDumpStderr = false;
+
+    llvm::Optional<IRPrintingSettings> irPrinting;
   };
 
   class CompilerContextImpl;
