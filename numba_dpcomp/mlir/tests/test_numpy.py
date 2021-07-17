@@ -238,6 +238,7 @@ def test_loop_fusion1():
         assert_equal(py_func(arr), jit_func(arr))
         ir = get_print_buffer()
         assert ir.count('scf.parallel') == 1, ir
+        assert ir.count('memref.load') == 1, ir
 
 def test_loop_fusion2():
     def py_func(arr):
@@ -260,6 +261,7 @@ def test_loop_fusion2():
         assert_equal(py_func(arr), jit_func(arr))
         ir = get_print_buffer()
         assert ir.count('scf.parallel') == 1, ir
+        assert ir.count('memref.load') == 1, ir
 
 def test_loop_fusion3():
     def py_func(arr):
@@ -280,6 +282,7 @@ def test_loop_fusion3():
         assert_equal(py_func(arr), jit_func(arr))
         ir = get_print_buffer()
         assert ir.count('scf.parallel') == 2, ir
+        assert ir.count('memref.load') == 2, ir
 
 class TestMlirBasic(TestCase):
     def test_static_setitem(self):

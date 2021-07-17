@@ -17,9 +17,9 @@
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/IR/BuiltinOps.h>
+#include <mlir/IR/Dominance.h>
 
 #include "plier/analysis/memory_ssa_analysis.hpp"
-#include "plier/transforms/block_utils.hpp"
 
 namespace {
 struct Meminfo {
@@ -146,14 +146,18 @@ struct SimpleOperationInfo : public llvm::DenseMapInfo<mlir::Operation *> {
 };
 
 mlir::LogicalResult loadCSE(plier::MemorySSAAnalysis &memSSAAnalysis) {
+  mlir::DominanceInfo dom;
   assert(memSSAAnalysis.memssa);
   auto &memSSA = *memSSAAnalysis.memssa;
   using NodeType = plier::MemorySSA::NodeType;
   bool changed = false;
-  llvm::SmallDenseMap<mlir::Operation *, mlir::Operation *, 4> opsMap;
+  llvm::SmallDenseMap<mlir::Operation *, mlir::Operation *, 4,
+                      SimpleOperationInfo>
+      opsMap;
   for (auto &node : memSSA.getNodes()) {
     auto nodeType = memSSA.getNodeType(&node);
-    if (NodeType::Def != nodeType && NodeType::Phi != nodeType)
+    if (NodeType::Def != nodeType && NodeType::Phi != nodeType &&
+        NodeType::Root != nodeType)
       continue;
 
     opsMap.clear();
@@ -173,8 +177,7 @@ mlir::LogicalResult loadCSE(plier::MemorySSAAnalysis &memSSAAnalysis) {
         if (!MustAlias()(op, firstUser))
           continue;
 
-        auto relation = plier::relativeTo(op, firstUser);
-        if (relation == plier::OpRelation::Before) {
+        if (dom.properlyDominates(op, firstUser)) {
           firstUser->replaceAllUsesWith(op);
           opsMap[firstUser] = op;
           auto firstUserNode = memSSA.getNode(firstUser);
@@ -182,7 +185,7 @@ mlir::LogicalResult loadCSE(plier::MemorySSAAnalysis &memSSAAnalysis) {
           memSSA.eraseNode(firstUserNode);
           firstUser->erase();
           changed = true;
-        } else if (relation == plier::OpRelation::After) {
+        } else if (dom.properlyDominates(firstUser, op)) {
           op->replaceAllUsesWith(firstUser);
           op->erase();
           memSSA.eraseNode(user);
