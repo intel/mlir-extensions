@@ -15,6 +15,7 @@
 import numba
 # from numba_dpcomp import njit
 from numba_dpcomp import vectorize
+from numba_dpcomp.mlir.passes import print_pass_ir, get_print_buffer
 from numpy.testing import assert_equal, assert_allclose # for nans comparison
 import numpy as np
 from numba.tests.support import TestCase
@@ -231,9 +232,12 @@ def test_loop_fusion1():
 
         return res1, res2
 
-    jit_func = njit(py_func)
-    arr = np.arange(10000, dtype=np.float32)
-    assert_equal(py_func(arr), jit_func(arr))
+    with print_pass_ir([],['PostLinalgOptPass']):
+        jit_func = njit(py_func)
+        arr = np.arange(10000, dtype=np.float32)
+        assert_equal(py_func(arr), jit_func(arr))
+        ir = get_print_buffer()
+        assert ir.count('scf.parallel') == 1, ir
 
 def test_loop_fusion2():
     def py_func(arr):
@@ -250,9 +254,12 @@ def test_loop_fusion2():
 
         return res1, res2
 
-    jit_func = njit(py_func)
-    arr = np.arange(10000, dtype=np.float32)
-    assert_equal(py_func(arr), jit_func(arr))
+    with print_pass_ir([],['PostLinalgOptPass']):
+        jit_func = njit(py_func)
+        arr = np.arange(10000, dtype=np.float32)
+        assert_equal(py_func(arr), jit_func(arr))
+        ir = get_print_buffer()
+        assert ir.count('scf.parallel') == 1, ir
 
 def test_loop_fusion3():
     def py_func(arr):
@@ -267,9 +274,12 @@ def test_loop_fusion3():
 
         return res1, res2
 
-    jit_func = njit(py_func)
-    arr = np.arange(10000, dtype=np.float32)
-    assert_equal(py_func(arr), jit_func(arr))
+    with print_pass_ir([],['PostLinalgOptPass']):
+        jit_func = njit(py_func)
+        arr = np.arange(10000, dtype=np.float32)
+        assert_equal(py_func(arr), jit_func(arr))
+        ir = get_print_buffer()
+        assert ir.count('scf.parallel') == 2, ir
 
 class TestMlirBasic(TestCase):
     def test_static_setitem(self):
