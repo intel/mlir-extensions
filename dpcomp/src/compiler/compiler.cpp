@@ -39,15 +39,34 @@ struct PassManagerStage {
       : pm(&ctx) {
     pm.enableVerifier(settings.verify);
 
-    if (settings.pass_statistics) {
+    if (settings.passStatistics) {
       pm.enableStatistics();
     }
-    if (settings.pass_timings) {
+    if (settings.passTimings) {
       pm.enableTiming();
     }
-    if (settings.ir_printing) {
+    if (settings.irDumpStderr) {
       ctx.disableMultithreading();
       pm.enableIRPrinting();
+    }
+    if (settings.irPrinting) {
+      struct Checker {
+        llvm::SmallVector<std::string, 1> names;
+
+        bool operator()(mlir::Pass *pass, mlir::Operation *) const {
+          auto name = pass->getName();
+          name.consume_front("`anonymous-namespace'::");
+          return llvm::is_contained(names, name);
+        }
+      };
+
+      ctx.disableMultithreading();
+      pm.enableIRPrinting(Checker{settings.irPrinting->printBefore},
+                          Checker{settings.irPrinting->printAfter},
+                          /*printModuleScope*/ true,
+                          /*printAfterOnlyOnChange*/ true,
+                          /*printAfterOnlyOnFailure*/ false,
+                          *(settings.irPrinting->out));
     }
 
     init_func(pm);

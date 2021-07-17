@@ -15,10 +15,41 @@
 from numba.core.compiler_machinery import (FunctionPass, register_pass)
 from numba.core import (types)
 import numba.core.types.functions
+from contextlib import contextmanager
 
 from .settings import DUMP_IR, DEBUG_TYPE, OPT_LEVEL
 from . import func_registry
 from .. import mlir_compiler
+
+_print_before = []
+_print_after = []
+_print_buffer = ''
+
+def write_print_buffer(text):
+    global _print_buffer
+    _print_buffer += text
+
+def get_print_buffer():
+    global _print_buffer
+    return _print_buffer
+
+@contextmanager
+def print_pass_ir(print_before, print_after):
+    global _print_before
+    global _print_after
+    global _print_buffer
+    old_before = _print_before
+    old_after = _print_after
+    old_buffer = _print_buffer
+    _print_before = print_before
+    _print_after = print_after
+    _print_buffer = ''
+    try:
+        yield (print_before, print_after)
+    finally:
+        _print_before = old_before
+        _print_after = old_after
+        _print_buffer = old_buffer
 
 _mlir_last_compiled_func = None
 _mlir_active_module = None
@@ -77,7 +108,14 @@ class MlirBackendBase(FunctionPass):
         from numba.np.ufunc.parallel import get_thread_count
 
         ctx = {}
-        ctx['compiler_settings'] = {'verify': True, 'pass_statistics': False, 'pass_timings': False, 'ir_printing': DUMP_IR}
+        ctx['compiler_settings'] = {
+            'verify': True,
+            'pass_statistics': False,
+            'pass_timings': False,
+            'ir_printing': DUMP_IR,
+            'print_before' : _print_before,
+            'print_after' : _print_after,
+            'print_callback' : write_print_buffer}
         ctx['typemap'] = lambda op: state.typemap[op.name]
         ctx['fnargs'] = lambda: state.args
         ctx['restype'] = lambda: state.return_type

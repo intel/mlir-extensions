@@ -48,6 +48,30 @@
 namespace py = pybind11;
 namespace {
 
+class CallbackOstream : public llvm::raw_ostream {
+public:
+  using Func = std::function<void(llvm::StringRef)>;
+
+  CallbackOstream(Func func = nullptr)
+      : raw_ostream(/*unbuffered=*/false), callback(std::move(func)), pos(0u) {}
+
+  ~CallbackOstream() override { flush(); }
+
+  void write_impl(const char *ptr, size_t size) override {
+    if (callback)
+      callback(llvm::StringRef(ptr, size));
+    pos += size;
+  }
+
+  uint64_t current_pos() const override { return pos; }
+
+  void setCallback(Func func) { callback = std::move(func); }
+
+private:
+  Func callback;
+  uint64_t pos;
+};
+
 std::string serialize_mod(const llvm::Module &mod) {
   std::string ret;
   llvm::raw_string_ostream stream(ret);
@@ -586,12 +610,31 @@ private:
   }
 };
 
-plier::CompilerContext::Settings get_settings(py::handle settings) {
+plier::CompilerContext::Settings getSettings(py::handle settings,
+                                             CallbackOstream &os) {
   plier::CompilerContext::Settings ret;
   ret.verify = settings["verify"].cast<bool>();
-  ret.pass_statistics = settings["pass_statistics"].cast<bool>();
-  ret.pass_timings = settings["pass_timings"].cast<bool>();
-  ret.ir_printing = settings["ir_printing"].cast<bool>();
+  ret.passStatistics = settings["pass_statistics"].cast<bool>();
+  ret.passTimings = settings["pass_timings"].cast<bool>();
+  ret.irDumpStderr = settings["ir_printing"].cast<bool>();
+
+  auto printBefore = settings["print_before"].cast<py::list>();
+  auto printAfter = settings["print_after"].cast<py::list>();
+  if (!printBefore.empty() || !printAfter.empty()) {
+    auto callback = settings["print_callback"].cast<py::function>();
+    auto getList = [](py::list src) {
+      llvm::SmallVector<std::string, 1> res(src.size());
+      for (auto it : llvm::enumerate(src)) {
+        res[it.index()] = py::str(it.value()).cast<std::string>();
+      }
+      return res;
+    };
+    os.setCallback([callback](llvm::StringRef text) {
+      callback(py::str(text.data(), text.size()));
+    });
+    using S = plier::CompilerContext::Settings::IRPrintingSettings;
+    ret.irPrinting = S{getList(printBefore), getList(printAfter), &os};
+  }
   return ret;
 }
 
@@ -641,7 +684,9 @@ void run_compiler(Module &mod, const py::object &compilation_context) {
   auto &module = mod.module;
   auto &registry = mod.registry;
 
-  auto settings = get_settings(compilation_context["compiler_settings"]);
+  CallbackOstream printStream;
+  auto settings =
+      getSettings(compilation_context["compiler_settings"], printStream);
   plier::CompilerContext compiler(context, settings, registry);
   compiler.run(module);
 }
