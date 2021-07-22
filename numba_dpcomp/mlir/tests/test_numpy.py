@@ -284,6 +284,19 @@ def test_loop_fusion3():
         assert ir.count('scf.parallel') == 2, ir
         assert ir.count('memref.load') == 2, ir
 
+@pytest.mark.parametrize("dtype", [np.int32, np.int64, np.float32])
+def test_np_reduce(dtype):
+    def py_func(arr):
+        return arr.sum()
+
+    with print_pass_ir([],['PostLinalgOptPass']):
+        jit_func = njit(py_func)
+        arr = np.array([[1,2,3],[4,5,6]], dtype=dtype)
+        assert_equal(py_func(arr), jit_func(arr))
+        ir = get_print_buffer()
+        assert ir.count('scf.parallel') == 1, ir
+        assert ir.count('memref.load') == 1, ir
+
 def test_loop_if():
     def py_func(arr):
         for i in range(len(arr)):
