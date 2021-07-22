@@ -699,6 +699,32 @@ mlir::Value replace_itruediv_op(mlir::PatternRewriter &rewriter,
   return rewriter.createOrFold<mlir::DivFOp>(loc, lhs, rhs);
 }
 
+mlir::Value replace_ifloordiv_op(mlir::PatternRewriter &rewriter,
+                                 mlir::Location loc, mlir::ValueRange operands,
+                                 mlir::Type newType) {
+  auto newIntType = newType.cast<mlir::IntegerType>();
+  auto signlessType = plier::makeSignlessType(newIntType);
+  auto lhs = doCast(rewriter, loc, operands[0], signlessType);
+  auto rhs = doCast(rewriter, loc, operands[1], signlessType);
+  mlir::Value res;
+  if (newIntType.isSigned()) {
+    res = rewriter.createOrFold<mlir::SignedFloorDivIOp>(loc, lhs, rhs);
+  } else {
+    res = rewriter.createOrFold<mlir::UnsignedDivIOp>(loc, lhs, rhs);
+  }
+  return doCast(rewriter, loc, res, newType);
+}
+
+mlir::Value replace_ffloordiv_op(mlir::PatternRewriter &rewriter,
+                                 mlir::Location loc, mlir::ValueRange operands,
+                                 mlir::Type newType) {
+  assert(newType.isa<mlir::FloatType>());
+  auto lhs = doCast(rewriter, loc, operands[0], newType);
+  auto rhs = doCast(rewriter, loc, operands[1], newType);
+  auto res = rewriter.createOrFold<mlir::DivFOp>(loc, lhs, rhs);
+  return rewriter.createOrFold<mlir::FloorFOp>(loc, res);
+}
+
 mlir::Value replace_imod_op(mlir::PatternRewriter &rewriter, mlir::Location loc,
                             mlir::ValueRange operands, mlir::Type newType) {
   auto signlessType = plier::makeSignlessType(operands[0].getType());
@@ -791,6 +817,7 @@ struct BinOpLowering : public mlir::OpRewritePattern<plier::BinOp> {
         {"*", &replace_op<mlir::MulIOp>, &replace_op<mlir::MulFOp>},
         {"**", &replace_ipow_op, &replace_op<mlir::math::PowFOp>},
         {"/", &replace_itruediv_op, &replace_op<mlir::DivFOp>},
+        {"//", &replace_ifloordiv_op, &replace_ffloordiv_op},
         {"%", &replace_imod_op, &replace_fmod_op},
 
         {">",
