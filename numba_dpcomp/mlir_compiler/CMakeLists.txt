@@ -28,6 +28,7 @@ include(HandleLLVMOptions)
 
 set(SOURCES_LIST
     src/pipelines/base_pipeline.cpp
+    src/pipelines/lower_to_gpu.cpp
     src/pipelines/lower_to_llvm.cpp
     src/pipelines/parallel_to_tbb.cpp
     src/pipelines/plier_to_linalg.cpp
@@ -43,6 +44,7 @@ set(SOURCES_LIST
     )
 set(HEADERS_LIST
     src/pipelines/base_pipeline.hpp
+    src/pipelines/lower_to_gpu.hpp
     src/pipelines/lower_to_llvm.hpp
     src/pipelines/parallel_to_tbb.hpp
     src/pipelines/plier_to_linalg.hpp
@@ -83,6 +85,8 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     MLIRLinalgToLLVM
     MLIRMathToLLVM
     MLIRSCFToStandard
+    MLIRSCFToGPU
+    MLIRGPUToSPIRV
     MLIRTensorTransforms
     )
 

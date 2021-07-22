@@ -39,6 +39,7 @@
 #include "plier/utils.hpp"
 
 #include "pipelines/base_pipeline.hpp"
+#include "pipelines/lower_to_gpu.hpp"
 #include "pipelines/lower_to_llvm.hpp"
 #include "pipelines/parallel_to_tbb.hpp"
 #include "pipelines/plier_to_linalg.hpp"
@@ -672,6 +673,7 @@ py::bytes gen_ll_module(mlir::ModuleOp mod) {
 void create_pipeline(plier::PipelineRegistry &registry) {
   registerBasePipeline(registry);
   registerLowerToLLVMPipeline(registry);
+  registerLowerToGPUPipeline(registry);
   registerPlierToStdPipeline(registry);
   registerPlierToLinalgPipeline(registry);
   registerPreLowSimpleficationsPipeline(registry);
