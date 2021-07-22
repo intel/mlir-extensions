@@ -28,6 +28,7 @@
 #include <mlir/Dialect/SPIRV/IR/TargetAndABI.h>
 #include <mlir/Dialect/SPIRV/Transforms/Passes.h>
 #include <mlir/Pass/PassManager.h>
+#include <mlir/Target/SPIRV/Serialization.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 #include <mlir/Transforms/Passes.h>
 
@@ -233,6 +234,54 @@ struct SetSPIRVCapabilitiesPass
   }
 };
 
+template <typename Op> static Op getOp(mlir::Region &reg) {
+  auto ops = reg.getOps<Op>();
+  if (llvm::hasSingleElement(ops))
+    return *std::begin(ops);
+
+  return {};
+}
+
+struct SerializeSPIRVPass
+    : public mlir::PassWrapper<SerializeSPIRVPass,
+                               mlir::OperationPass<mlir::ModuleOp>> {
+  void runOnOperation() override {
+    auto mod = getOperation();
+
+    namespace gpu = mlir::gpu;
+    auto gpuMod = getOp<gpu::GPUModuleOp>(mod.getRegion());
+    if (!gpuMod) {
+      mod.emitError() << "Invalid gpu module";
+      signalPassFailure();
+      return;
+    }
+
+    namespace spirv = mlir::spirv;
+    auto spvMod = getOp<spirv::ModuleOp>(mod.getRegion());
+    if (!spvMod) {
+      mod.emitError() << "Invalid spir-v module";
+      signalPassFailure();
+      return;
+    }
+
+    llvm::SmallVector<uint32_t, 0> spvBinary;
+    if (mlir::failed(
+            spirv::serialize(spvMod, spvBinary, /*emitDebugInfo*/ false))) {
+      mod.emitError() << "Failed to serialize spir-v module";
+      signalPassFailure();
+      return;
+    }
+    spvBinary.insert(spvBinary.begin(),
+                     static_cast<uint32_t>(spvBinary.size())); // size
+
+    auto spvData =
+        llvm::StringRef(reinterpret_cast<const char *>(spvBinary.data()),
+                        spvBinary.size() * sizeof(uint32_t));
+    auto spvAttr = mlir::StringAttr::get(&getContext(), spvData);
+    gpuMod->setAttr(gpu::getDefaultGpuBinaryAnnotation(), spvAttr);
+  }
+};
+
 static void populateLowerToGPUPipeline(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::FuncOp>(
       std::make_unique<ParallelLoopGPUMappingPass>());
@@ -251,6 +300,7 @@ static void populateLowerToGPUPipeline(mlir::OpPassManager &pm) {
   auto &modulePM = pm.nest<mlir::spirv::ModuleOp>();
   modulePM.addPass(mlir::spirv::createLowerABIAttributesPass());
   modulePM.addPass(mlir::spirv::createUpdateVersionCapabilityExtensionPass());
+  pm.addPass(std::make_unique<SerializeSPIRVPass>());
   //  pm.addPass(mlir::createGpuToLLVMConversionPass());
   pm.addPass(mlir::createCanonicalizerPass());
 }

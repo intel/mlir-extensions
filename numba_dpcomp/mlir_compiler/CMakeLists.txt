@@ -89,6 +89,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     MLIRGPUToSPIRV
     MLIRGPUToGPURuntimeTransforms
     MLIRSPIRVTransforms
+    MLIRSPIRVSerialization
     MLIRTensorTransforms
     )
 
