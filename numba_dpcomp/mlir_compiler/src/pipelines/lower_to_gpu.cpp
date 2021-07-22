@@ -15,17 +15,17 @@
 #include "pipelines/lower_to_gpu.hpp"
 
 #include <mlir/Conversion/AffineToStandard/AffineToStandard.h>
-#include <mlir/Conversion/GPUToSPIRV/GPUToSPIRVPass.h>
 #include <mlir/Conversion/GPUCommon/GPUCommonPass.h>
+#include <mlir/Conversion/GPUToSPIRV/GPUToSPIRVPass.h>
 #include <mlir/Conversion/SCFToGPU/SCFToGPUPass.h>
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
 #include <mlir/Dialect/GPU/ParallelLoopMapper.h>
 #include <mlir/Dialect/GPU/Passes.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/SCF.h>
-#include <mlir/Dialect/SPIRV/IR/TargetAndABI.h>
-#include <mlir/Dialect/SPIRV/IR/SPIRVOps.h>
 #include <mlir/Dialect/SPIRV/IR/SPIRVDialect.h>
+#include <mlir/Dialect/SPIRV/IR/SPIRVOps.h>
+#include <mlir/Dialect/SPIRV/IR/TargetAndABI.h>
 #include <mlir/Dialect/SPIRV/Transforms/Passes.h>
 #include <mlir/Pass/PassManager.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
@@ -63,28 +63,48 @@ static mlir::Value getFlatIndex(mlir::OpBuilder &builder, mlir::Location loc,
                                 mlir::Value memref, mlir::ValueRange indices) {
   auto memrefType = memref.getType().cast<mlir::MemRefType>();
   auto rank = static_cast<unsigned>(memrefType.getRank());
-  assert(memrefType.getAffineMaps().size() <= 1);
-  auto affineMap =
-      memrefType.getAffineMaps().empty()
-          ? mlir::AffineMap::getMultiDimIdentityMap(rank, builder.getContext())
-          : memrefType.getAffineMaps()[0];
   assert(indices.size() == rank);
-  llvm::SmallVector<mlir::Value> applyOperands(rank * 2 + 1);
-  {
-    mlir::OpBuilder::InsertionGuard g(builder);
-    setInsertionPointToStart(builder, memref);
-    llvm::copy(indices, applyOperands.begin());
-    applyOperands[rank] =
-        builder.createOrFold<plier::ExtractMemrefMetadataOp>(loc, memref);
-    auto strides =
-        llvm::MutableArrayRef<mlir::Value>(applyOperands).drop_front(rank + 1);
-    for (auto i : llvm::seq(0u, rank)) {
-      strides[i] =
-          builder.createOrFold<plier::ExtractMemrefMetadataOp>(loc, memref, i);
+  assert(memrefType.getAffineMaps().size() <= 1);
+  if (memrefType.getAffineMaps().empty()) {
+    auto shape = memrefType.getShape();
+    auto expr =
+        mlir::makeCanonicalStridedLayoutExpr(shape, builder.getContext());
+    llvm::SmallVector<mlir::Value> applyOperands;
+    applyOperands.reserve(rank * 2);
+    applyOperands.assign(indices.begin(), indices.end());
+    if (rank != 0) {
+      mlir::OpBuilder::InsertionGuard g(builder);
+      setInsertionPointToStart(builder, memref);
+      for (auto i : llvm::seq(0u, rank - 1)) {
+        if (shape[i] == mlir::ShapedType::kDynamicSize) {
+          auto dim = builder.createOrFold<mlir::memref::DimOp>(loc, memref, i);
+          applyOperands.emplace_back(dim);
+        }
+      }
     }
+    auto affineMap = mlir::AffineMap::get(
+        rank, static_cast<unsigned>(applyOperands.size()) - rank, expr);
+    return builder.createOrFold<mlir::AffineApplyOp>(loc, affineMap,
+                                                     applyOperands);
+  } else {
+    llvm::SmallVector<mlir::Value> applyOperands(rank * 2 + 1);
+    {
+      mlir::OpBuilder::InsertionGuard g(builder);
+      setInsertionPointToStart(builder, memref);
+      llvm::copy(indices, applyOperands.begin());
+      applyOperands[rank] =
+          builder.createOrFold<plier::ExtractMemrefMetadataOp>(loc, memref);
+      auto strides = llvm::MutableArrayRef<mlir::Value>(applyOperands)
+                         .drop_front(rank + 1);
+      for (auto i : llvm::seq(0u, rank)) {
+        strides[i] = builder.createOrFold<plier::ExtractMemrefMetadataOp>(
+            loc, memref, i);
+      }
+    }
+    auto affineMap = memrefType.getAffineMaps()[0];
+    return builder.createOrFold<mlir::AffineApplyOp>(loc, affineMap,
+                                                     applyOperands);
   }
-  return builder.createOrFold<mlir::AffineApplyOp>(loc, affineMap,
-                                                   applyOperands);
 }
 
 static mlir::Value getFlatMemref(mlir::OpBuilder &builder, mlir::Location loc,
@@ -231,7 +251,7 @@ static void populateLowerToGPUPipeline(mlir::OpPassManager &pm) {
   auto &modulePM = pm.nest<mlir::spirv::ModuleOp>();
   modulePM.addPass(mlir::spirv::createLowerABIAttributesPass());
   modulePM.addPass(mlir::spirv::createUpdateVersionCapabilityExtensionPass());
-//  pm.addPass(mlir::createGpuToLLVMConversionPass());
+  //  pm.addPass(mlir::createGpuToLLVMConversionPass());
   pm.addPass(mlir::createCanonicalizerPass());
 }
 } // namespace
