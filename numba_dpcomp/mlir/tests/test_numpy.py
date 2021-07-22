@@ -284,6 +284,18 @@ def test_loop_fusion3():
         assert ir.count('scf.parallel') == 2, ir
         assert ir.count('memref.load') == 2, ir
 
+def test_loop_if():
+    def py_func(arr):
+        for i in range(len(arr)):
+            if arr[i] == 5:
+                arr[i] = 6
+        return arr
+
+    jit_func = njit(py_func)
+    arr1 = np.arange(100)
+    arr2 = np.arange(100)
+    assert_equal(py_func(arr1), jit_func(arr2))
+
 class TestMlirBasic(TestCase):
     def test_static_setitem(self):
         def py_func(a):
