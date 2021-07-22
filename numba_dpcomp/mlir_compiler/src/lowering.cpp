@@ -617,6 +617,7 @@ plier::CompilerContext::Settings getSettings(py::handle settings,
   ret.passStatistics = settings["pass_statistics"].cast<bool>();
   ret.passTimings = settings["pass_timings"].cast<bool>();
   ret.irDumpStderr = settings["ir_printing"].cast<bool>();
+  ret.diagDumpStderr = settings["diag_printing"].cast<bool>();
 
   auto printBefore = settings["print_before"].cast<py::list>();
   auto printAfter = settings["print_after"].cast<py::list>();

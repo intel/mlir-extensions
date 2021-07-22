@@ -122,28 +122,28 @@ struct PassManagerSchedule {
       };
 
       assert(nullptr == stages);
-      llvm::SmallVector<StageDesc, 64> stages_temp;
+      llvm::SmallVector<StageDesc, 64> stagesTemp;
       std::unordered_map<const void *, PassManagerStage *> stages_map;
 
       auto add_stage = [&](llvm::StringRef name,
                            llvm::ArrayRef<llvm::StringRef> jumps,
                            auto pm_init_func) {
         assert(!name.empty());
-        auto prev_stage =
-            (stages_map.empty() ? nullptr : stages_temp.back().stage.get());
-        stages_temp.push_back(
+        auto prevStage =
+            (stages_map.empty() ? nullptr : stagesTemp.back().stage.get());
+        stagesTemp.push_back(
             {name, jumps,
              std::make_unique<PassManagerStage>(ctx, settings, pm_init_func)});
         assert(stages_map.count(name.data()) == 0);
-        stages_map.insert({name.data(), stages_temp.back().stage.get()});
-        if (nullptr != prev_stage) {
-          prev_stage->set_next_stage(stages_temp.back().stage.get());
+        stages_map.insert({name.data(), stagesTemp.back().stage.get()});
+        if (nullptr != prevStage) {
+          prevStage->set_next_stage(stagesTemp.back().stage.get());
         }
       };
 
       sink(add_stage);
 
-      for (auto &stage : stages_temp) {
+      for (auto &stage : stagesTemp) {
         for (auto jump : stage.jumps) {
           assert(!jump.empty());
           auto it = stages_map.find(jump.data());
@@ -155,8 +155,8 @@ struct PassManagerSchedule {
       }
 
       stages = std::make_unique<std::unique_ptr<PassManagerStage>[]>(
-          stages_temp.size());
-      for (auto it : llvm::enumerate(stages_temp)) {
+          stagesTemp.size());
+      for (auto it : llvm::enumerate(stagesTemp)) {
         stages[it.index()] = std::move(it.value().stage);
       }
     };
@@ -172,10 +172,10 @@ struct PassManagerSchedule {
         return mlir::failure();
       }
       auto markers = plier::get_pipeline_jump_markers(module);
-      auto jump_target = current->get_jump(markers);
-      if (nullptr != jump_target.first) {
-        plier::remove_pipeline_jump_marker(module, jump_target.second);
-        current = jump_target.first;
+      auto jumpTarget = current->get_jump(markers);
+      if (nullptr != jumpTarget.first) {
+        plier::remove_pipeline_jump_marker(module, jumpTarget.second);
+        current = jumpTarget.first;
       } else {
         current = current->get_next_stage();
       }
@@ -186,6 +186,13 @@ struct PassManagerSchedule {
 private:
   std::unique_ptr<std::unique_ptr<PassManagerStage>[]> stages;
 };
+
+static void printDiag(llvm::raw_ostream &os, const mlir::Diagnostic &diag) {
+  os << diag;
+  for (auto &note : diag.getNotes())
+    os << "\n" << note;
+}
+
 } // namespace
 
 class plier::CompilerContext::CompilerContextImpl {
@@ -193,25 +200,24 @@ public:
   CompilerContextImpl(mlir::MLIRContext &ctx,
                       const CompilerContext::Settings &settings,
                       const plier::PipelineRegistry &registry)
-      : schedule(ctx, settings, registry) {}
+      : schedule(ctx, settings, registry), dumpDiag(settings.diagDumpStderr) {}
 
   void run(mlir::ModuleOp module) {
     std::string err;
-    llvm::raw_string_ostream err_stream(err);
-    auto diag_handler = [&](const mlir::Diagnostic &diag) {
-      if (diag.getSeverity() == mlir::DiagnosticSeverity::Error) {
-        err_stream << diag;
-        for (auto &note : diag.getNotes()) {
-          err_stream << "\n" << note;
-        }
-      }
+    llvm::raw_string_ostream errStream(err);
+    auto diagHandler = [&](const mlir::Diagnostic &diag) {
+      if (dumpDiag)
+        printDiag(llvm::errs(), diag);
+
+      if (diag.getSeverity() == mlir::DiagnosticSeverity::Error)
+        printDiag(errStream, diag);
     };
 
-    plier::scoped_diag_handler(*module.getContext(), diag_handler, [&]() {
+    plier::scoped_diag_handler(*module.getContext(), diagHandler, [&]() {
       if (mlir::failed(schedule.run(module))) {
-        err_stream << "\n";
-        module.print(err_stream);
-        err_stream.flush();
+        errStream << "\n";
+        module.print(errStream);
+        errStream.flush();
         plier::report_error(llvm::Twine("MLIR pipeline failed\n") + err);
       }
     });
@@ -219,6 +225,7 @@ public:
 
 private:
   PassManagerSchedule schedule;
+  bool dumpDiag = false;
 };
 
 plier::CompilerContext::CompilerContext(mlir::MLIRContext &ctx,
