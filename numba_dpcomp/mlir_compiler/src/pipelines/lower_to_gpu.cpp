@@ -15,12 +15,16 @@
 #include "pipelines/lower_to_gpu.hpp"
 
 #include <mlir/Conversion/AffineToStandard/AffineToStandard.h>
+#include <mlir/Conversion/AsyncToLLVM/AsyncToLLVM.h>
 #include <mlir/Conversion/GPUCommon/GPUCommonPass.h>
 #include <mlir/Conversion/GPUToSPIRV/GPUToSPIRVPass.h>
+#include <mlir/Conversion/LLVMCommon/ConversionTarget.h>
+#include <mlir/Conversion/LLVMCommon/TypeConverter.h>
 #include <mlir/Conversion/SCFToGPU/SCFToGPUPass.h>
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
 #include <mlir/Dialect/GPU/ParallelLoopMapper.h>
 #include <mlir/Dialect/GPU/Passes.h>
+#include <mlir/Dialect/LLVMIR/LLVMDialect.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Dialect/SPIRV/IR/SPIRVDialect.h>
@@ -29,6 +33,7 @@
 #include <mlir/Dialect/SPIRV/Transforms/Passes.h>
 #include <mlir/Pass/PassManager.h>
 #include <mlir/Target/SPIRV/Serialization.h>
+#include <mlir/Transforms/DialectConversion.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 #include <mlir/Transforms/Passes.h>
 
@@ -279,6 +284,81 @@ struct SerializeSPIRVPass
                         spvBinary.size() * sizeof(uint32_t));
     auto spvAttr = mlir::StringAttr::get(&getContext(), spvData);
     gpuMod->setAttr(gpu::getDefaultGpuBinaryAnnotation(), spvAttr);
+    spvMod->erase();
+  }
+};
+
+struct GPUToLLVMPass
+    : public mlir::PassWrapper<GPUToLLVMPass,
+                               mlir::OperationPass<mlir::ModuleOp>> {
+  void runOnOperation() override {
+    mlir::LLVMTypeConverter converter(&getContext());
+    mlir::RewritePatternSet patterns(&getContext());
+    mlir::LLVMConversionTarget target(getContext());
+
+    target.addIllegalDialect<mlir::gpu::GPUDialect>();
+
+    mlir::populateAsyncStructuralTypeConversionsAndLegality(converter, patterns,
+                                                            target);
+    mlir::populateGpuToLLVMConversionPatterns(
+        converter, patterns, mlir::gpu::getDefaultGpuBinaryAnnotation());
+
+    auto mod = getOperation();
+    if (mlir::failed(
+            mlir::applyPartialConversion(mod, target, std::move(patterns))))
+      signalPassFailure();
+
+    // TODO: populateGpuToLLVMConversionPatterns can generate call with invalid
+    // types, fix upstream.
+    mlir::OpBuilder builder(&getContext());
+    llvm::SmallVector<mlir::Value> args;
+    if (mod.walk([&](mlir::LLVM::CallOp call) {
+             auto funcName = call.callee();
+             if (!funcName) {
+               mod.emitError() << "Failed to get llvm function";
+               return mlir::WalkResult::interrupt();
+             }
+
+             auto func = mod.lookupSymbol<mlir::LLVM::LLVMFuncOp>(*funcName);
+             if (!func) {
+               mod.emitError() << "Failed to get llvm function";
+               return mlir::WalkResult::interrupt();
+             }
+
+             auto funcType = func.getType();
+
+             if (call.getNumOperands() != funcType.getNumParams()) {
+               mod.emitError() << "Invalid LLVM::CallOp operands count";
+               return mlir::WalkResult::interrupt();
+             }
+
+             bool needFix = false;
+             args.resize(funcType.getNumParams());
+             builder.setInsertionPoint(call);
+
+             for (auto it : llvm::enumerate(
+                      llvm::zip(call.getOperands(), funcType.getParams()))) {
+               auto i = it.index();
+               auto operand = std::get<0>(it.value());
+               auto type = std::get<1>(it.value());
+               if (operand.getType() != type) {
+                 args[i] = builder
+                               .create<mlir::UnrealizedConversionCastOp>(
+                                   call.getLoc(), type, operand)
+                               .getResult(0);
+                 needFix = true;
+               } else {
+                 args[i] = operand;
+               }
+             }
+
+             if (needFix)
+               call->setOperands(args);
+
+             return mlir::WalkResult::advance();
+           })
+            .wasInterrupted())
+      signalPassFailure();
   }
 };
 
@@ -301,7 +381,7 @@ static void populateLowerToGPUPipeline(mlir::OpPassManager &pm) {
   modulePM.addPass(mlir::spirv::createLowerABIAttributesPass());
   modulePM.addPass(mlir::spirv::createUpdateVersionCapabilityExtensionPass());
   pm.addPass(std::make_unique<SerializeSPIRVPass>());
-  //  pm.addPass(mlir::createGpuToLLVMConversionPass());
+  pm.addPass(std::make_unique<GPUToLLVMPass>());
   pm.addPass(mlir::createCanonicalizerPass());
 }
 } // namespace
