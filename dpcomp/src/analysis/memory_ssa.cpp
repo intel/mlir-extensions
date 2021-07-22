@@ -475,14 +475,13 @@ plier::MemorySSA::Node *memSSAProcessRegion(mlir::Region &region,
 
         auto getRegionIndex =
             [&](mlir::Region *reg) -> llvm::Optional<unsigned> {
-          if (nullptr == reg) {
+          if (nullptr == reg)
             return {};
-          }
+
           for (auto it : llvm::enumerate(op.getRegions())) {
             auto &r = it.value();
-            if (&r == reg) {
+            if (&r == reg)
               return static_cast<unsigned>(it.index());
-            }
           }
           llvm_unreachable("Invalid region");
         };
@@ -499,6 +498,8 @@ plier::MemorySSA::Node *memSSAProcessRegion(mlir::Region &region,
         }
 
         for (auto i : llvm::seq(0u, numRegions)) {
+          if (op.getRegion(i).empty())
+            continue;
           successorsTemp.clear();
           branchReg.getSuccessorRegions(i, successorsTemp);
           for (auto &successor : successorsTemp) {
@@ -525,25 +526,24 @@ plier::MemorySSA::Node *memSSAProcessRegion(mlir::Region &region,
               return _currentNode;
             }
             auto i = *ii;
-            if (_regResults[i] != nullptr) {
+            if (_regResults[i] != nullptr)
               return _regResults[i];
-            }
+
             auto &pred = _predecessors[i];
-            assert(!pred.empty());
-            if (pred.empty()) {
+            if (pred.empty())
               return nullptr;
-            }
+
             if (pred.size() == 1) {
               auto ind = pred[0];
               auto prevNode = visit(ind);
-              if (prevNode == nullptr) {
+              if (prevNode == nullptr)
                 return nullptr;
-              }
+
               auto res =
                   memSSAProcessRegion(_op->getRegion(i), prevNode, _memSSA);
-              if (res == nullptr) {
+              if (res == nullptr)
                 return nullptr;
-              }
+
               _regResults[i] = res;
               return res;
             } else {
@@ -560,9 +560,9 @@ plier::MemorySSA::Node *memSSAProcessRegion(mlir::Region &region,
               for (auto it : llvm::enumerate(pred)) {
                 auto ind = it.value();
                 auto prevNode = visit(ind);
-                if (prevNode == nullptr) {
+                if (prevNode == nullptr)
                   return nullptr;
-                }
+
                 phi->setArgument(static_cast<unsigned>(it.index()), prevNode);
               }
               return res;
@@ -577,17 +577,16 @@ plier::MemorySSA::Node *memSSAProcessRegion(mlir::Region &region,
           return nullptr;
         } else if (parentPredecessors.size() == 1) {
           currentNode = visitor.visit(parentPredecessors[0]);
-          if (currentNode == nullptr) {
+          if (currentNode == nullptr)
             return nullptr;
-          }
         } else {
           llvm::SmallVector<plier::MemorySSA::Node *> prevNodes(
               parentPredecessors.size());
           for (auto it : llvm::enumerate(parentPredecessors)) {
             auto prev = visitor.visit(it.value());
-            if (prev == nullptr) {
+            if (prev == nullptr)
               return nullptr;
-            }
+
             prevNodes[it.index()] = prev;
           }
           auto phi = memSSA.createPhi(&op, prevNodes);
