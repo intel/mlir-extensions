@@ -38,7 +38,10 @@ struct SimpleOperationInfo : public llvm::DenseMapInfo<mlir::Operation *> {
       return false;
     return mlir::OperationEquivalence::isEquivalentTo(
         const_cast<mlir::Operation *>(lhsC),
-        const_cast<mlir::Operation *>(rhsC));
+        const_cast<mlir::Operation *>(rhsC),
+        mlir::OperationEquivalence::exactValueMatch,
+        mlir::OperationEquivalence::exactValueMatch,
+        mlir::OperationEquivalence::IgnoreLocations);
   }
 };
 

@@ -79,6 +79,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     MLIRStandardOpsTransforms
     MLIRLinalgTransforms
     MLIRLinalgToLLVM
+    MLIRMathToLLVM
     MLIRSCFToStandard
     MLIRTensorTransforms
     )

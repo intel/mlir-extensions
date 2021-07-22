@@ -1374,7 +1374,7 @@ struct UnrankedToElementCasts : public mlir::OpRewritePattern<plier::CastOp> {
           op.getLoc(), op.value());
       rewriter.replaceOpWithNewOp<mlir::linalg::TensorCollapseShapeOp>(
           op, dstType, singleElemTensor,
-          llvm::ArrayRef<mlir::linalg::ReassociationExprs>{});
+          llvm::ArrayRef<mlir::ReassociationExprs>{});
       return mlir::success();
     }
     return mlir::failure();
