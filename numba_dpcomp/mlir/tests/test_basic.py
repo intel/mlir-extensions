@@ -118,6 +118,61 @@ def test_cast(py_func, val):
     jit_func = njit(py_func)
     assert_equal(py_func(val), jit_func(val))
 
+def _while_py_func_simple(a, b):
+    while a < b:
+        a = a * 2
+    return a
+
+def _while_py_func_multiple_conds1(a, b):
+    while a < 44 and a < b:
+        a = a * 2
+    return a
+
+def _while_py_func_multiple_conds2(a, b):
+    while not a >= 44 and a < b:
+        a = a * 2
+    return a
+
+def _while_py_func_multiple_conds3(a, b):
+    while a < 44 and not a >= b:
+        a = a * 2
+    return a
+
+def _while_py_func_multiple_conds4(a, b):
+    while not a >= 44 and not a >= b:
+        a = a * 2
+    return a
+
+def _while_py_func_break_middle(a, b):
+    while a < b:
+        a = a * 2
+        if a == 3: break
+        a = a + 1
+    return a
+
+def _while_py_func_nested_break(a, b):
+    while a < b:
+        a = a * 2
+        if a == 3 or a == 7:
+            a = a + 7
+        else:
+            break
+        a = a + 1
+    return a
+
+@parametrize_function_variants("py_func", [
+    '_while_py_func_simple',
+    '_while_py_func_multiple_conds1',
+    '_while_py_func_multiple_conds2',
+    '_while_py_func_multiple_conds3',
+    '_while_py_func_multiple_conds4',
+    '_while_py_func_break_middle',
+    # '_while_py_func_nested_break',
+    ])
+def test_while(py_func):
+    jit_func = njit(py_func)
+    assert_equal(py_func(1,66), jit_func(1,66))
+
 class TestMlirBasic(TestCase):
     def test_none_args(self):
         def py_func(a, b, c, d):
@@ -406,64 +461,6 @@ class TestMlirBasic(TestCase):
         jit_func2 = njit(py_func2)
 
         assert_equal(py_func2(10), jit_func2(10))
-
-    def test_while(self):
-        def py_func_simple(a, b):
-            while a < b:
-                a = a * 2
-            return a
-
-        def py_func_multiple_conds1(a, b):
-            while a < 44 and a < b:
-                a = a * 2
-            return a
-
-        def py_func_multiple_conds2(a, b):
-            while not a >= 44 and a < b:
-                a = a * 2
-            return a
-
-        def py_func_multiple_conds3(a, b):
-            while a < 44 and not a >= b:
-                a = a * 2
-            return a
-
-        def py_func_multiple_conds4(a, b):
-            while not a >= 44 and not a >= b:
-                a = a * 2
-            return a
-
-        def py_func_break_middle(a, b):
-            while a < b:
-                a = a * 2
-                if a == 3: break
-                a = a + 1
-            return a
-
-        def py_func_nested_break(a, b):
-            while a < b:
-                a = a * 2
-                if a == 3 or a == 7:
-                    a = a + 7
-                else:
-                    break
-                a = a + 1
-            return a
-
-        funcs = [
-            py_func_simple,
-            py_func_multiple_conds1,
-            py_func_multiple_conds2,
-            py_func_multiple_conds3,
-            py_func_multiple_conds4,
-            py_func_break_middle,
-            # py_func_nested_break,
-        ]
-
-        for py_func in funcs:
-            jit_func = njit(py_func)
-            assert_equal(py_func(1,66), jit_func(1,66))
-
 
     def test_omitted_args1(self):
         def py_func(a = 3, b = 7):
