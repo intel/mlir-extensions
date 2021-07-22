@@ -986,7 +986,9 @@ struct LowerParallel : public mlir::OpRewritePattern<plier::ParallelOp> {
     auto llvmIndexType = converter.getIndexType();
     auto toLLVMIndex = [&](mlir::Value val) -> mlir::Value {
       if (val.getType() != llvmIndexType) {
-        return rewriter.create<mlir::LLVM::BitcastOp>(loc, llvmIndexType, val);
+        return rewriter
+            .create<mlir::UnrealizedConversionCastOp>(loc, llvmIndexType, val)
+            .getResult(0);
       }
       return val;
     };
