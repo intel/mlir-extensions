@@ -779,6 +779,28 @@ void ReduceRankOp::getCanonicalizationPatterns(
                  ReduceRankLoadPropagate, ReduceRankStorePropagate>(context);
 }
 
+void ExtractMemrefMetadataOp::build(::mlir::OpBuilder &odsBuilder,
+                                    ::mlir::OperationState &odsState,
+                                    ::mlir::Value src, int64_t dim) {
+  assert(dim >= 0 && dim < src.getType().cast<mlir::MemRefType>().getRank());
+  ExtractMemrefMetadataOp::build(odsBuilder, odsState,
+                                 odsBuilder.getIndexType(), src,
+                                 odsBuilder.getIndexAttr(dim));
+}
+
+void ExtractMemrefMetadataOp::build(::mlir::OpBuilder &odsBuilder,
+                                    ::mlir::OperationState &odsState,
+                                    ::mlir::Value src) {
+  ExtractMemrefMetadataOp::build(odsBuilder, odsState,
+                                 odsBuilder.getIndexType(), src,
+                                 odsBuilder.getIndexAttr(-1));
+}
+
+mlir::OpFoldResult
+ExtractMemrefMetadataOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
+  return nullptr;
+}
+
 } // namespace plier
 
 #include "plier/PlierOpsDialect.cpp.inc"

@@ -297,4 +297,20 @@ def ReduceRankOp
   // clang-format on
 }
 
+def ExtractMemrefMetadataOp
+    : Plier_Op<"extract_memref_metadata", [NoSideEffect]> {
+  let arguments = (ins AnyMemRef : $source, IndexAttr : $dimIndex);
+
+  let results = (outs Index : $result);
+  let hasFolder = 1;
+
+  let builders = [
+    OpBuilder<(ins "::mlir::Value"
+               : $src, "int64_t"
+               : $dim)>,
+    OpBuilder<(ins "::mlir::Value"
+               : $src)>
+  ];
+}
+
 #endif // PLIER_OPS
