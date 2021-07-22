@@ -44,8 +44,8 @@ def test_ret(val):
     'lambda a, b: a - b',
     'lambda a, b: a * b',
     'lambda a, b: a / b',
+    'lambda a, b: a // b',
     'lambda a, b: a % b',
-    # TODO: floordiv
     ])
 @pytest.mark.parametrize("a, b", itertools.product(_test_values, _test_values))
 def test_ops(py_func, a, b):
