@@ -87,6 +87,8 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     MLIRSCFToStandard
     MLIRSCFToGPU
     MLIRGPUToSPIRV
+    MLIRGPUToGPURuntimeTransforms
+    MLIRSPIRVTransforms
     MLIRTensorTransforms
     )
 

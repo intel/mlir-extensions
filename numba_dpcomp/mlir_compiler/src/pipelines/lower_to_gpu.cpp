@@ -16,6 +16,7 @@
 
 #include <mlir/Conversion/AffineToStandard/AffineToStandard.h>
 #include <mlir/Conversion/GPUToSPIRV/GPUToSPIRVPass.h>
+#include <mlir/Conversion/GPUCommon/GPUCommonPass.h>
 #include <mlir/Conversion/SCFToGPU/SCFToGPUPass.h>
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
 #include <mlir/Dialect/GPU/ParallelLoopMapper.h>
@@ -23,6 +24,9 @@
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Dialect/SPIRV/IR/TargetAndABI.h>
+#include <mlir/Dialect/SPIRV/IR/SPIRVOps.h>
+#include <mlir/Dialect/SPIRV/IR/SPIRVDialect.h>
+#include <mlir/Dialect/SPIRV/Transforms/Passes.h>
 #include <mlir/Pass/PassManager.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 #include <mlir/Transforms/Passes.h>
@@ -223,6 +227,11 @@ static void populateLowerToGPUPipeline(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::gpu::GPUModuleOp>(std::make_unique<AbiAttrsPass>());
   pm.addPass(std::make_unique<SetSPIRVCapabilitiesPass>());
   pm.addPass(mlir::createConvertGPUToSPIRVPass());
+  pm.addPass(mlir::createCanonicalizerPass());
+  auto &modulePM = pm.nest<mlir::spirv::ModuleOp>();
+  modulePM.addPass(mlir::spirv::createLowerABIAttributesPass());
+  modulePM.addPass(mlir::spirv::createUpdateVersionCapabilityExtensionPass());
+//  pm.addPass(mlir::createGpuToLLVMConversionPass());
   pm.addPass(mlir::createCanonicalizerPass());
 }
 } // namespace
