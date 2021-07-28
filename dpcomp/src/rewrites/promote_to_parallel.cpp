@@ -45,103 +45,107 @@ bool canParallelizeLoop(mlir::Operation *op, bool hasParallelAttr) {
   return hasParallelAttr || !hasSideEffects(op);
 }
 
+static mlir::Operation *getSingleUser(mlir::Value val) {
+  if (!val.hasOneUse())
+    return nullptr;
+
+  return *val.user_begin();
+}
+
 } // namespace
 
 mlir::LogicalResult plier::PromoteToParallel::matchAndRewrite(
     mlir::scf::ForOp op, mlir::PatternRewriter &rewriter) const {
   auto hasParallelAttr = op->hasAttr(plier::attributes::getParallelName());
-  if (!canParallelizeLoop(op, hasParallelAttr)) {
+  if (!canParallelizeLoop(op, hasParallelAttr))
     return mlir::failure();
-  }
 
-  auto &old_body = op.getLoopBody().front();
-  auto old_yield = mlir::cast<mlir::scf::YieldOp>(old_body.getTerminator());
-  auto reduce_args = old_body.getArguments().drop_front();
+  auto &oldBody = op.getLoopBody().front();
+  auto oldYield = mlir::cast<mlir::scf::YieldOp>(oldBody.getTerminator());
+  auto reduceArgs = oldBody.getArguments().drop_front();
   llvm::SmallVector<llvm::SmallVector<mlir::Operation *, 1>> reduce_bodies(
-      reduce_args.size());
-  llvm::DenseSet<mlir::Operation *> reduce_ops;
-  for (auto it : llvm::enumerate(reduce_args)) {
-    auto reduce_arg = it.value();
-    auto reduce_index = it.index();
-    if (!reduce_arg.hasOneUse()) {
+      reduceArgs.size());
+  llvm::DenseSet<mlir::Operation *> reduceOps;
+  for (auto it : llvm::enumerate(reduceArgs)) {
+    auto reduceArg = it.value();
+    auto reduceIndex = it.index();
+
+    auto reduceOp = getSingleUser(reduceArg);
+    if (!reduceOp)
       return mlir::failure();
-    }
-    auto reduce_op = *reduce_arg.user_begin();
-    if (reduce_op->getNumOperands() != 2) {
+
+    if (reduceOp->getNumOperands() != 2 || reduceOp->getNumResults() != 1)
       return mlir::failure();
-    }
-    auto &reduce_body = reduce_bodies[reduce_index];
+
+    auto &reduceBody = reduce_bodies[reduceIndex];
     while (true) {
-      if (!reduce_op->hasOneUse()) {
+      auto nextOp = getSingleUser(reduceOp->getResult(0));
+      if (!nextOp)
         return mlir::failure();
-      }
-      reduce_body.push_back(reduce_op);
-      reduce_ops.insert(reduce_op);
-      auto next_op = *reduce_op->user_begin();
-      if (next_op == old_yield) {
-        auto yield_operand =
-            old_yield.getOperand(static_cast<unsigned>(reduce_index));
-        if (yield_operand != reduce_op->getResult(0)) {
+
+      reduceBody.push_back(reduceOp);
+      reduceOps.insert(reduceOp);
+      if (nextOp == oldYield) {
+        auto yieldOperand =
+            oldYield.getOperand(static_cast<unsigned>(reduceIndex));
+        if (yieldOperand != reduceOp->getResult(0))
           return mlir::failure();
-        }
+
         break;
       }
-      for (auto operand : next_op->getOperands()) {
-        if (operand.getDefiningOp() != reduce_op &&
-            operand.getParentBlock() == &old_body) {
+      for (auto operand : nextOp->getOperands()) {
+        if (operand.getDefiningOp() != reduceOp &&
+            operand.getParentBlock() == &oldBody)
           return mlir::failure();
-        }
       }
-      reduce_op = next_op;
+      reduceOp = nextOp;
     }
   }
 
-  auto body_builder = [&](mlir::OpBuilder &builder, mlir::Location loc,
-                          mlir::ValueRange iter_vals, mlir::ValueRange temp) {
-    assert(1 == iter_vals.size());
+  auto bodyBuilder = [&](mlir::OpBuilder &builder, mlir::Location loc,
+                         mlir::ValueRange iterVals, mlir::ValueRange temp) {
+    assert(1 == iterVals.size());
     assert(temp.empty());
     mlir::BlockAndValueMapping mapping;
-    mapping.map(old_body.getArguments().front(), iter_vals.front());
-    for (auto &old_op : old_body.without_terminator()) {
-      if (0 == reduce_ops.count(&old_op)) {
+    mapping.map(oldBody.getArguments().front(), iterVals.front());
+    for (auto &old_op : oldBody.without_terminator()) {
+      if (0 == reduceOps.count(&old_op))
         builder.clone(old_op, mapping);
-      }
     }
-    mlir::BlockAndValueMapping reduce_mapping;
+    mlir::BlockAndValueMapping reduceNapping;
     for (auto it : llvm::enumerate(reduce_bodies)) {
-      auto &reduce_body = it.value();
-      assert(!reduce_body.empty());
-      reduce_mapping = mapping;
-      auto first_op = reduce_body.front();
-      assert(first_op->getNumOperands() == 2);
-      auto reduce_body_builder = [&](mlir::OpBuilder &builder,
-                                     mlir::Location loc, mlir::Value val0,
-                                     mlir::Value val1) {
-        reduce_mapping.map(first_op->getOperand(0), val0);
-        reduce_mapping.map(first_op->getOperand(1), val1);
+      auto &reduceBody = it.value();
+      assert(!reduceBody.empty());
+      reduceNapping = mapping;
+      auto firstOp = reduceBody.front();
+      assert(firstOp->getNumOperands() == 2);
+      auto reduceBodyBuilder = [&](mlir::OpBuilder &builder, mlir::Location loc,
+                                   mlir::Value val0, mlir::Value val1) {
+        reduceNapping.map(firstOp->getOperand(0), val0);
+        reduceNapping.map(firstOp->getOperand(1), val1);
         mlir::Operation *last_op = nullptr;
-        for (auto reduce_op : reduce_body) {
-          last_op = builder.clone(*reduce_op, reduce_mapping);
+        for (auto reduceOp : reduceBody) {
+          last_op = builder.clone(*reduceOp, reduceNapping);
           assert(1 == last_op->getNumResults());
         }
         builder.create<mlir::scf::ReduceReturnOp>(loc, last_op->getResult(0));
       };
-      auto reduce_arg = reduce_args[it.index()];
-      auto first_op_operands = first_op->getOperands();
-      auto reduce_operand =
-          (first_op_operands[0] == reduce_arg ? first_op_operands[1]
-                                              : first_op_operands[0]);
-      assert(reduce_operand != reduce_arg);
-      reduce_operand = mapping.lookupOrDefault(reduce_operand);
-      assert(reduce_operand);
-      builder.create<mlir::scf::ReduceOp>(loc, reduce_operand,
-                                          reduce_body_builder);
+      auto reduceArg = reduceArgs[it.index()];
+      auto firstOpOperands = firstOp->getOperands();
+      auto reduceOperand =
+          (firstOpOperands[0] == reduceArg ? firstOpOperands[1]
+                                           : firstOpOperands[0]);
+      assert(reduceOperand != reduceArg);
+      reduceOperand = mapping.lookupOrDefault(reduceOperand);
+      assert(reduceOperand);
+      builder.create<mlir::scf::ReduceOp>(loc, reduceOperand,
+                                          reduceBodyBuilder);
     }
   };
 
   auto parallelOp = rewriter.replaceOpWithNewOp<mlir::scf::ParallelOp>(
       op, op.lowerBound(), op.upperBound(), op.step(), op.initArgs(),
-      body_builder);
+      bodyBuilder);
   if (hasParallelAttr) {
     parallelOp->setAttr(plier::attributes::getParallelName(),
                         rewriter.getUnitAttr());

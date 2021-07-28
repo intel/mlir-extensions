@@ -34,6 +34,11 @@ def is_int(t, b):
 def is_float(t, b):
     return t == b.float16 or t == b.float32 or t == b.float64
 
+def promote_int(t, b):
+    if is_int(t, b):
+        return b.int64
+    return t
+
 @register_func('array.sum')
 @register_func('numpy.sum', numpy.sum)
 def sum_impl(builder, arg, axis=None):
@@ -45,7 +50,7 @@ def sum_impl(builder, arg, axis=None):
         expr1 = f'({dims}) -> ({dims})'
         expr2 = f'({dims}) -> (0)'
         maps = [expr1,expr2]
-        init = builder.from_elements(0, arg.dtype)
+        init = builder.from_elements(0, promote_int(arg.dtype, builder))
 
         def body(a, b):
             return a + b
