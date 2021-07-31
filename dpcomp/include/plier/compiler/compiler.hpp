@@ -43,6 +43,7 @@ public:
     bool passStatistics = false;
     bool passTimings = false;
     bool irDumpStderr = false;
+    bool diagDumpStderr = false;
 
     llvm::Optional<IRPrintingSettings> irPrinting;
   };

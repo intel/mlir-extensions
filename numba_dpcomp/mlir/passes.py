@@ -17,7 +17,7 @@ from numba.core import (types)
 import numba.core.types.functions
 from contextlib import contextmanager
 
-from .settings import DUMP_IR, DEBUG_TYPE, OPT_LEVEL
+from .settings import DUMP_IR, DEBUG_TYPE, OPT_LEVEL, DUMP_DIAGNOSTICS
 from . import func_registry
 from .. import mlir_compiler
 
@@ -113,6 +113,7 @@ class MlirBackendBase(FunctionPass):
             'pass_statistics': False,
             'pass_timings': False,
             'ir_printing': DUMP_IR,
+            'diag_printing': DUMP_DIAGNOSTICS,
             'print_before' : _print_before,
             'print_after' : _print_after,
             'print_callback' : write_print_buffer}

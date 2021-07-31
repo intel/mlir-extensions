@@ -30,6 +30,7 @@ def _readenv(name, ctor, default):
 USE_MLIR = _readenv('DPCOMP_ENABLE', int, 1)
 DUMP_PLIER = _readenv('DPCOMP_DUMP_PLIER', int, 0)
 DUMP_IR = _readenv('DPCOMP_DUMP_IR', int, 0)
+DUMP_DIAGNOSTICS = _readenv('DPCOMP_DUMP_DIAGNOSTICS', int, 0)
 DEBUG_TYPE = list(filter(None, _readenv('DPCOMP_DEBUG_TYPE', str, '').split(',')))
 DPNP_AVAILABLE = is_dpnp_supported() # TODO: check if dpnp library is available at runtime
 OPT_LEVEL = _readenv('DPCOMP_OPT_LEVEL', int, 3)
