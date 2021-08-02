@@ -14,7 +14,13 @@
 
 #include "pipelines/lower_to_llvm.hpp"
 
+#include <mlir/Conversion/LLVMCommon/ConversionTarget.h>
+#include <mlir/Conversion/LLVMCommon/LoweringOptions.h>
+#include <mlir/Conversion/LLVMCommon/TypeConverter.h>
 #include <mlir/Conversion/LinalgToLLVM/LinalgToLLVM.h>
+#include <mlir/Conversion/MathToLLVM/MathToLLVM.h>
+#include <mlir/Conversion/MemRefToLLVM/AllocLikeConversion.h>
+#include <mlir/Conversion/MemRefToLLVM/MemRefToLLVM.h>
 #include <mlir/Conversion/SCFToStandard/SCFToStandard.h>
 #include <mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h>
 #include <mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h>
@@ -75,7 +81,8 @@ mlir::Value doCast(mlir::OpBuilder &builder, mlir::Location loc,
   if (src.getType() == dstType)
     return src;
 
-  return builder.createOrFold<mlir::LLVM::DialectCastOp>(loc, dstType, src);
+  return builder.create<mlir::UnrealizedConversionCastOp>(loc, dstType, src)
+      .getResult(0);
 }
 
 mlir::Type convertTupleTypes(mlir::MLIRContext &context,
@@ -979,7 +986,9 @@ struct LowerParallel : public mlir::OpRewritePattern<plier::ParallelOp> {
     auto llvmIndexType = converter.getIndexType();
     auto toLLVMIndex = [&](mlir::Value val) -> mlir::Value {
       if (val.getType() != llvmIndexType) {
-        return rewriter.create<mlir::LLVM::BitcastOp>(loc, llvmIndexType, val);
+        return rewriter
+            .create<mlir::UnrealizedConversionCastOp>(loc, llvmIndexType, val)
+            .getResult(0);
       }
       return val;
     };
@@ -1414,6 +1423,8 @@ struct LLVMLoweringPass
     populateToLLVMAdditionalTypeConversion(typeConverter);
     OwningRewritePatternList patterns(&context);
     populateStdToLLVMConversionPatterns(typeConverter, patterns);
+    populateMathToLLVMConversionPatterns(typeConverter, patterns);
+    populateMemRefToLLVMConversionPatterns(typeConverter, patterns);
     populateLinalgToLLVMConversionPatterns(typeConverter, patterns);
 
     patterns.insert<

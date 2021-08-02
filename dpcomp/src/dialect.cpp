@@ -575,11 +575,28 @@ struct SignCastDimPropagate : public mlir::OpRewritePattern<Op> {
   matchAndRewrite(Op op, mlir::PatternRewriter &rewriter) const override {
     auto castOp =
         mlir::dyn_cast_or_null<plier::SignCastOp>(op.source().getDefiningOp());
-    if (!castOp) {
+    if (!castOp)
       return mlir::failure();
-    }
+
     auto val = castOp.value();
     rewriter.replaceOpWithNewOp<Op>(op, val, op.index());
+    return mlir::success();
+  }
+};
+
+struct SignCastUndefPropagate
+    : public mlir::OpRewritePattern<plier::SignCastOp> {
+  using mlir::OpRewritePattern<plier::SignCastOp>::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::SignCastOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto undefOp =
+        mlir::dyn_cast_or_null<plier::UndefOp>(op.value().getDefiningOp());
+    if (!undefOp)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<plier::UndefOp>(op, op.getType());
     return mlir::success();
   }
 };
@@ -588,7 +605,8 @@ struct SignCastDimPropagate : public mlir::OpRewritePattern<Op> {
 void SignCastOp::getCanonicalizationPatterns(
     ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context) {
   results.insert<SignCastDimPropagate<mlir::tensor::DimOp>,
-                 SignCastDimPropagate<mlir::memref::DimOp>>(context);
+                 SignCastDimPropagate<mlir::memref::DimOp>,
+                 SignCastUndefPropagate>(context);
 }
 
 void ReduceRankOp::build(::mlir::OpBuilder &odsBuilder,
