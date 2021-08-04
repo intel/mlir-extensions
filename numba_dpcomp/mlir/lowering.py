@@ -29,6 +29,7 @@ from numba.core.typed_passes import NoPythonBackend as orig_NoPythonBackend
 
 from .runtime import *
 from .math_runtime import *
+from .gpu_runtime import *
 
 class mlir_lower(orig_Lower):
     def lower(self):
