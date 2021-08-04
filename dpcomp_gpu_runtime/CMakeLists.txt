@@ -16,6 +16,10 @@ project(dpcomp-gpu-runtime LANGUAGES CXX C)
 
 include(GenerateExportHeader)
 
+if(NOT LEVEL_ZERO_DIR)
+    message(FATAL_ERROR "LEVEL_ZERO_DIR is not set")
+endif()
+
 set(SOURCES_LIST
     src/gpu_runtime.cpp
     )
@@ -27,5 +31,11 @@ generate_export_header(${PROJECT_NAME})
 
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${PROJECT_BINARY_DIR}
+    ${LEVEL_ZERO_DIR}/include
     )
 
+target_link_directories(${PROJECT_NAME} PRIVATE
+    ${LEVEL_ZERO_DIR}/lib
+    )
+
+target_link_libraries(${PROJECT_NAME} PRIVATE ze_loader)
