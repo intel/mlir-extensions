@@ -46,6 +46,19 @@ private:
 #endif
 
 namespace {
+template <typename F> auto catchAll(F &&func) {
+  try {
+    return func();
+  } catch (const std::exception &e) {
+    fprintf(stdout, "An exception was thrown: %s\n", e.what());
+    fflush(stdout);
+    abort();
+  } catch (...) {
+    fprintf(stdout, "An unknown exception was thrown\n");
+    fflush(stdout);
+    abort();
+  }
+}
 
 template <typename CheckFunc>
 std::pair<ze_driver_handle_t, ze_device_handle_t>
@@ -137,7 +150,7 @@ struct L0State {
     // Nothing To do, modules always owned by context
   }
 
-  ze_kernel_handle_t getKernel(ze_module_handle_t module, const char* name) {
+  ze_kernel_handle_t getKernel(ze_module_handle_t module, const char *name) {
     assert(module);
     assert(name);
     auto key = std::make_pair(module, name);
@@ -164,35 +177,55 @@ private:
 
   std::unordered_map<const void *, ze::Module> modules;
 
-  using KernelKey = std::pair<ze_module_handle_t, const char*>;
-  struct KernelHasher
-  {
+  using KernelKey = std::pair<ze_module_handle_t, const char *>;
+  struct KernelHasher {
     size_t operator()(const KernelKey val) const {
-      return std::hash<decltype (val.first)>()(val.first) |
-             std::hash<decltype (val.second)>()(val.second);
+      return std::hash<decltype(val.first)>()(val.first) |
+             std::hash<decltype(val.second)>()(val.second);
     }
   };
 
   std::unordered_map<KernelKey, ze::Kernel, KernelHasher> kernels;
 };
+
+static std::unique_ptr<L0State> GlobalState;
+
+L0State &getState() {
+  if (!GlobalState) {
+    fprintf(stdout, "L0 state wasn't initilized\n");
+    fflush(stdout);
+    abort();
+  }
+  return *GlobalState;
+}
 } // namespace
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *mgpuModuleLoad(const void *ptr) {
   LOG_FUNC();
-  auto data = static_cast<const uint32_t *>(ptr);
-  auto size = data[0] * sizeof(uint32_t);
-  ++data;
-  return nullptr;
+  return catchAll([&]() {
+    auto data = static_cast<const uint32_t *>(ptr);
+    auto size = data[0] * sizeof(uint32_t);
+    ++data;
+    auto &state = getState();
+    return state.getModule(data, size);
+  });
 }
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void mgpuModuleUnload(void *module) {
   LOG_FUNC();
+  return catchAll([&]() {
+    auto &state = getState();
+    state.returnModule(static_cast<ze_module_handle_t>(module));
+  });
 }
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *
 mgpuModuleGetFunction(void *module, const char *name) {
   LOG_FUNC();
-  return nullptr;
+  return catchAll([&]() {
+    auto &state = getState();
+    return state.getKernel(static_cast<ze_module_handle_t>(module), name);
+  });
 }
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void
@@ -200,6 +233,7 @@ mgpuLaunchKernel(void *function, intptr_t gridX, intptr_t gridY, intptr_t gridZ,
                  intptr_t blockX, intptr_t blockY, intptr_t blockZ,
                  int32_t smem, void *stream, void **params, void **extra) {
   LOG_FUNC();
+  // TODO
 }
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *mgpuStreamCreate() {
