@@ -24,6 +24,7 @@ set(SOURCES_LIST
     src/gpu_runtime.cpp
     )
 set(HEADERS_LIST
+    src/level_zero_wrapper.hpp
     )
 
 add_library(${PROJECT_NAME} SHARED ${SOURCES_LIST} ${HEADERS_LIST})
