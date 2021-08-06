@@ -279,8 +279,6 @@ struct SerializeSPIRVPass
       signalPassFailure();
       return;
     }
-    spvBinary.insert(spvBinary.begin(),
-                     static_cast<uint32_t>(spvBinary.size())); // size
 
     auto spvData =
         llvm::StringRef(reinterpret_cast<const char *>(spvBinary.data()),
