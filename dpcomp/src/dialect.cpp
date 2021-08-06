@@ -137,7 +137,8 @@ void PlierDialect::initialize() {
 #define GET_OP_LIST
 #include "plier/PlierOps.cpp.inc"
       >();
-  addTypes<plier::PyType, plier::LiteralType, SliceType, plier::TypeVar>();
+  addTypes<plier::PyType, plier::LiteralType, SliceType, plier::TypeVar,
+           OpaqueType>();
   addInterfaces<PlierInlinerInterface>();
 }
 
@@ -170,6 +171,7 @@ void PlierDialect::printType(mlir::Type type,
         os.printType(t.getType());
         os << ">";
       })
+      .Case<plier::OpaqueType>([&](auto) { os << "OpaqueType"; })
       .Default([](auto) { llvm_unreachable("unexpected type"); });
 }
 
@@ -213,6 +215,11 @@ std::array<mlir::Type, 3> SliceType::getTypes() const {
 TypeVar TypeVar::get(mlir::Type type) {
   assert(type);
   return Base::get(type.getContext(), type);
+}
+
+OpaqueType OpaqueType::get(mlir::MLIRContext *context) {
+  assert(context);
+  return Base::get(context);
 }
 
 mlir::Type TypeVar::getType() const { return getImpl()->type; }
@@ -617,8 +624,9 @@ void ReduceRankOp::build(::mlir::OpBuilder &odsBuilder,
   assert(srcType.hasRank());
   auto srcRank = static_cast<unsigned>(srcType.getRank());
   assert(!mapping.empty());
-  assert(llvm::all_of(mapping,
-                      [&](int32_t val) { return val >= 0 && val < static_cast<int32_t>(srcRank); }));
+  assert(llvm::all_of(mapping, [&](int32_t val) {
+    return val >= 0 && val < static_cast<int32_t>(srcRank);
+  }));
   auto mapAttr = odsBuilder.getI32ArrayAttr(mapping);
   auto srcShape = srcType.getShape();
   llvm::SmallVector<int64_t> shape(mapping.size());

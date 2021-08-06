@@ -113,4 +113,12 @@ public:
   mlir::Type getType() const;
 };
 
+class OpaqueType : public ::mlir::Type::TypeBase<OpaqueType, ::mlir::Type,
+                                                 ::mlir::TypeStorage> {
+public:
+  using Base::Base;
+
+  static OpaqueType get(mlir::MLIRContext *context);
+};
+
 } // namespace plier
