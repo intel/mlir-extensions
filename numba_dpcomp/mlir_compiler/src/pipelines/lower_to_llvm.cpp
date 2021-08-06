@@ -1337,6 +1337,34 @@ struct LowerReduceRankOp
   }
 };
 
+struct LowerExtractMemrefMetadataOp
+    : public mlir::ConvertOpToLLVMPattern<plier::ExtractMemrefMetadataOp> {
+  using mlir::ConvertOpToLLVMPattern<
+      plier::ExtractMemrefMetadataOp>::ConvertOpToLLVMPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::ExtractMemrefMetadataOp op,
+                  llvm::ArrayRef<mlir::Value> operands,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    plier::ExtractMemrefMetadataOp::Adaptor transformed(operands);
+    auto arg = transformed.source();
+    if (!arg.getType().isa<mlir::LLVM::LLVMStructType>())
+      return mlir::failure();
+
+    auto loc = op.getLoc();
+    mlir::MemRefDescriptor src(arg);
+    auto val = [&]() -> mlir::Value {
+      auto index = op.dimIndex().getSExtValue();
+      if (index == -1)
+        return src.offset(rewriter, loc);
+      return src.stride(rewriter, loc, static_cast<unsigned>(index));
+    }();
+
+    rewriter.replaceOp(op, static_cast<mlir::Value>(val));
+    return mlir::success();
+  }
+};
+
 struct LowerBuildTuple
     : public mlir::ConvertOpToLLVMPattern<plier::BuildTupleOp> {
   using mlir::ConvertOpToLLVMPattern<
@@ -1435,7 +1463,8 @@ struct LLVMLoweringPass
         AllocOpLowering,
         DeallocOpLowering,
         ReshapeLowering,
-        LowerReduceRankOp
+        LowerReduceRankOp,
+        LowerExtractMemrefMetadataOp
         // clang-format on
         >(typeConverter);
 
