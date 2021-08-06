@@ -404,9 +404,8 @@ template <typename OpTy>
 class ConvertOpToGpuRuntimeCallPattern
     : public mlir::ConvertOpToLLVMPattern<OpTy> {
 public:
-  explicit ConvertOpToGpuRuntimeCallPattern(
-      mlir::LLVMTypeConverter &typeConverter)
-      : mlir::ConvertOpToLLVMPattern<OpTy>(typeConverter) {}
+  explicit ConvertOpToGpuRuntimeCallPattern(mlir::LLVMTypeConverter &converter)
+      : mlir::ConvertOpToLLVMPattern<OpTy>(converter) {}
 
 protected:
   mlir::MLIRContext *context = &this->getTypeConverter()->getContext();
@@ -586,9 +585,9 @@ private:
     plier::GetGpuKernelOp::Adaptor adaptor(operands);
     auto loc = op.getLoc();
     llvm::SmallString<64> name = op.name();
-    name.push_back('\0');
 
     auto varName = llvm::formatv("{0}_kernel_name", name).str();
+    name.push_back('\0');
     auto data = mlir::LLVM::createGlobalString(loc, rewriter, varName, name,
                                                mlir::LLVM::Linkage::Internal);
     auto res =
