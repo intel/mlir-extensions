@@ -21,13 +21,14 @@ runtime_lib = load_lib('dpcomp-gpu-runtime')
 assert not runtime_lib is None
 
 _funcs = [
-    'mgpuModuleLoad',
-    'mgpuModuleGetFunction',
-    'mgpuStreamCreate',
-    'mgpuLaunchKernel',
-    'mgpuStreamSynchronize',
-    'mgpuStreamDestroy',
-    'mgpuModuleUnload',
+    'dpcompGpuStreamCreate',
+    'dpcompGpuStreamDestroy',
+    'dpcompGpuModuleLoad',
+    'dpcompGpuModuleDestroy',
+    'dpcompGpuKernelGet',
+    'dpcompGpuKernelDestroy',
+    'dpcompGpuLaunchKernel',
+    'dpcompGpuWait',
 ]
 
 for name in _funcs:

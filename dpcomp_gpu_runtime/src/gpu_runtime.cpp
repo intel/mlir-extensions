@@ -12,15 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
-#include <mutex>
-#include <unordered_map>
 #include <vector>
 
 #include "dpcomp-gpu-runtime_export.h"
 
+#include "level_zero_printing.hpp"
 #include "level_zero_wrapper.hpp"
 
 #if 1 // Log functions
@@ -60,9 +61,33 @@ template <typename F> auto catchAll(F &&func) {
   }
 }
 
+struct DeviceDesc {
+  ze_driver_handle_t driver = nullptr;
+  ze_device_handle_t device = nullptr;
+};
+
+struct ParamDesc {
+  const void *data;
+  size_t size;
+
+  bool operator==(const ParamDesc &rhs) const {
+    return data == rhs.data && size == rhs.size;
+  }
+
+  bool operator!=(const ParamDesc &rhs) const { return !(*this == rhs); }
+};
+
+template <typename T> size_t countUntil(T *ptr, T &&elem) {
+  assert(ptr);
+  auto curr = ptr;
+  while (*curr != elem) {
+    ++curr;
+  }
+  return static_cast<size_t>(curr - ptr);
+}
+
 template <typename CheckFunc>
-std::pair<ze_driver_handle_t, ze_device_handle_t>
-getDevice(CheckFunc &&checkFunc) {
+static DeviceDesc getDevice(CheckFunc &&checkFunc) {
   uint32_t driverCount = 0;
   CHECK_ZE_RESULT(zeDriverGet(&driverCount, nullptr));
 
@@ -88,201 +113,227 @@ getDevice(CheckFunc &&checkFunc) {
   throw std::runtime_error("getDevice failed");
 }
 
-struct L0State {
-  static std::unique_ptr<L0State> get() {
-    CHECK_ZE_RESULT(zeInit(0));
+static DeviceDesc getDevice() {
+  CHECK_ZE_RESULT(zeInit(0));
+  return getDevice([](ze_device_handle_t device) {
+    ze_device_properties_t props = {};
+    CHECK_ZE_RESULT(zeDeviceGetProperties(device, &props));
+    return props.type == ZE_DEVICE_TYPE_GPU;
+  });
+}
 
-    auto driverAndDev = getDevice([](ze_device_handle_t device) {
-      ze_device_properties_t props = {};
-      CHECK_ZE_RESULT(zeDeviceGetProperties(device, &props));
-      return props.type == ZE_DEVICE_TYPE_GPU;
-    });
-    auto driver = std::get<0>(driverAndDev);
-    auto device = std::get<1>(driverAndDev);
+struct Printer {
+  void operator()(const char *str) const { fprintf(stdout, "%s", str); }
 
-    ze_context_desc_t contextDesc = {};
-    auto context = ze::Context::create(driver, contextDesc);
-
-    return std::unique_ptr<L0State>(new L0State(device, std::move(context)));
+  void operator()(const std::string &str) const {
+    this->operator()(str.c_str());
   }
 
-  ze_command_list_handle_t getCommandList() {
-    std::lock_guard<std::mutex> lock(mutex);
-    if (!commandLists.empty()) {
-      auto ret = std::move(commandLists.back());
-      commandLists.pop_back();
-      return ret.release();
+  void operator()(int64_t val) const { this->operator()(std::to_string(val)); }
+};
+
+static void printDriverProps(ze_driver_handle_t driver) {
+  assert(driver);
+  ze_api_version_t version = {};
+  CHECK_ZE_RESULT(zeDriverGetApiVersion(driver, &version));
+  auto major = static_cast<int>(ZE_MAJOR_VERSION(version));
+  auto minor = static_cast<int>(ZE_MINOR_VERSION(version));
+  fprintf(stdout, "Driver API version: %d.%d\n", major, minor);
+}
+
+static void printDeviceProps(ze_device_handle_t device) {
+  assert(device);
+  Printer printer;
+  ze_device_properties_t deviceProperties = {};
+  deviceProperties.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
+  CHECK_ZE_RESULT(zeDeviceGetProperties(device, &deviceProperties));
+  printer("\nDevice properties:\n");
+  print(deviceProperties, printer);
+
+  ze_device_compute_properties_t computeProperties = {};
+  computeProperties.stype = ZE_STRUCTURE_TYPE_DEVICE_COMPUTE_PROPERTIES;
+  CHECK_ZE_RESULT(zeDeviceGetComputeProperties(device, &computeProperties));
+  printer("\nDevice compute properties:\n");
+  print(computeProperties, printer);
+
+  ze_device_module_properties_t moduleProperties = {};
+  moduleProperties.stype = ZE_STRUCTURE_TYPE_DEVICE_MODULE_PROPERTIES;
+  CHECK_ZE_RESULT(zeDeviceGetModuleProperties(device, &moduleProperties));
+  printer("\nDevice module properties:\n");
+  print(moduleProperties, printer);
+}
+
+struct Stream {
+  Stream(size_t eventsCount) {
+    auto driverAndDevice = getDevice();
+    driver = driverAndDevice.driver;
+    device = driverAndDevice.device;
+
+    if (1) {
+      printDriverProps(driver);
+      printDeviceProps(device);
     }
+
+    ze_context_desc_t contextDesc = {};
+    context = ze::Context::create(driver, contextDesc);
 
     ze_command_queue_desc_t desc = {};
     desc.mode = ZE_COMMAND_QUEUE_MODE_ASYNCHRONOUS;
-    return ze::CommandList::createImmediate(context, device, desc).release();
+    commandList = ze::CommandList::createImmediate(context, device, desc);
+
+    if (eventsCount > 0) {
+      ze_event_pool_desc_t poolDesc = {};
+      poolDesc.count = static_cast<uint32_t>(eventsCount);
+      eventPool = ze::EventPool::create(context, poolDesc, 0, nullptr);
+      events = std::make_unique<ze::Event[]>(eventsCount);
+    }
   }
 
-  void returnCommandList(ze_command_list_handle_t handle) {
-    assert(handle);
-    std::lock_guard<std::mutex> lock(mutex);
-    commandLists.push_back(ze::CommandList(handle));
-  }
-
-  ze_module_handle_t getModule(const void *data, size_t dataSize) {
-    // We assume data is statically allocated and didn't change, so we can use
-    // ptr value as key.
+  ze_module_handle_t loadModule(const void *data, size_t dataSize) {
     assert(data);
-    std::lock_guard<std::mutex> lock(mutex);
-    auto it = modules.find(data);
-    if (it != modules.end())
-      return it->second.get();
-
     ze_module_desc_t desc = {};
     desc.format = ZE_MODULE_FORMAT_IL_SPIRV;
     desc.pInputModule = static_cast<const uint8_t *>(data);
     desc.inputSize = dataSize;
-    auto mod = ze::Module::create(context, device, desc).first;
-    auto modPtr = mod.get();
-    modules[data] = std::move(mod);
-    return modPtr;
+    auto module = ze::Module::create(context, device, desc).first;
+    return module.release();
   }
 
-  void returnModule(ze_module_handle_t mod) {
-    assert(mod);
-    (void)mod;
-    // Nothing To do, modules always owned by context
+  static auto destroyModule(ze_module_handle_t module) {
+    assert(module);
+    ze::Module temp(module);
   }
 
-  ze_kernel_handle_t getKernel(ze_module_handle_t module, const char *name) {
+  static ze_kernel_handle_t getKernel(ze_module_handle_t module,
+                                      const char *name) {
     assert(module);
     assert(name);
-    auto key = std::make_pair(module, name);
-    auto it = kernels.find(key);
-    if (it != kernels.end())
-      return it->second.get();
-
     ze_kernel_desc_t desc = {};
+    desc.pKernelName = name;
     auto kernel = ze::Kernel::create(module, desc);
-    auto ret = kernel.get();
-    kernels[key] = std::move(kernel);
-    return ret;
+    return kernel.release();
+  }
+
+  static void destroyKernel(ze_kernel_handle_t kernel) {
+    assert(kernel);
+    ze::Kernel temp(kernel);
+  }
+
+  ze_event_handle_t launchKernel(ze_kernel_handle_t kernel, size_t gridX,
+                                 size_t gridY, size_t gridZ, size_t blockX,
+                                 size_t blockY, size_t blockZ,
+                                 ze_event_handle_t *events, ParamDesc *params,
+                                 size_t eventIndex) {
+    assert(kernel);
+    auto eventsCount = static_cast<uint32_t>(
+        countUntil(events, static_cast<ze_event_handle_t>(nullptr)));
+    auto paramsCount = countUntil(params, ParamDesc{nullptr, 0});
+
+    CHECK_ZE_RESULT(zeKernelSetGroupSize(kernel, static_cast<uint32_t>(blockX),
+                                         static_cast<uint32_t>(blockY),
+                                         static_cast<uint32_t>(blockZ)));
+    for (size_t i = 0; i < paramsCount; ++i) {
+      auto param = params[i];
+      CHECK_ZE_RESULT(zeKernelSetArgumentValue(kernel, static_cast<uint32_t>(i),
+                                               param.size, param.data));
+    }
+
+    auto event = getEvent(eventIndex);
+    ze_group_count_t launchArgs = {static_cast<uint32_t>(gridX),
+                                   static_cast<uint32_t>(gridY),
+                                   static_cast<uint32_t>(gridZ)};
+    CHECK_ZE_RESULT(zeCommandListAppendLaunchKernel(
+        commandList.get(), kernel, &launchArgs, event, eventsCount, events));
+    return event;
+  }
+
+  static void waitEvent(ze_event_handle_t event) {
+    assert(event);
+    CHECK_ZE_RESULT(zeEventHostSynchronize(event, UINT64_MAX));
   }
 
 private:
-  L0State(ze_device_handle_t dev, ze::Context ctx)
-      : device(dev), context(std::move(ctx)) {}
-
-  std::mutex mutex;
-  ze_device_handle_t device;
+  ze_driver_handle_t driver = nullptr;
+  ze_device_handle_t device = nullptr;
   ze::Context context;
+  ze::CommandList commandList;
 
-  std::vector<ze::CommandList> commandLists;
+  ze::EventPool eventPool;
+  std::unique_ptr<ze::Event[]> events;
 
-  std::unordered_map<const void *, ze::Module> modules;
-
-  using KernelKey = std::pair<ze_module_handle_t, const char *>;
-  struct KernelHasher {
-    size_t operator()(const KernelKey val) const {
-      return std::hash<decltype(val.first)>()(val.first) |
-             std::hash<decltype(val.second)>()(val.second);
+  ze_event_handle_t getEvent(size_t index) {
+    assert(eventPool);
+    if (events[index] != nullptr) {
+      auto ev = events[index].get();
+      CHECK_ZE_RESULT(zeEventHostReset(ev));
+      return ev;
     }
-  };
 
-  std::unordered_map<KernelKey, ze::Kernel, KernelHasher> kernels;
-};
-
-static std::unique_ptr<L0State> GlobalState;
-
-L0State &getState() {
-  if (!GlobalState) {
-    fprintf(stdout, "L0 state wasn't initilized\n");
-    fflush(stdout);
-    abort();
+    ze_event_desc_t desc = {};
+    desc.index = static_cast<uint32_t>(index);
+    auto event = ze::Event::create(eventPool, desc);
+    auto ev = event.get();
+    events[index] = std::move(event);
+    return ev;
   }
-  return *GlobalState;
-}
+};
 } // namespace
 
-extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *mgpuModuleLoad(const void *ptr) {
+extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *
+dpcompGpuStreamCreate(size_t eventsCount) {
+  LOG_FUNC();
+  return catchAll([&]() { return new Stream(eventsCount); });
+}
+
+extern "C" DPCOMP_GPU_RUNTIME_EXPORT void dpcompGpuStreamDestroy(void *stream) {
+  LOG_FUNC();
+  catchAll([&]() { delete static_cast<Stream *>(stream); });
+}
+
+extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *
+dpcompGpuModuleLoad(void *stream, const void *data, size_t dataSize) {
   LOG_FUNC();
   return catchAll([&]() {
-    auto data = static_cast<const uint32_t *>(ptr);
-    auto size = data[0] * sizeof(uint32_t);
-    ++data;
-    auto &state = getState();
-    return state.getModule(data, size);
+    return static_cast<Stream *>(stream)->loadModule(data, dataSize);
   });
 }
 
-extern "C" DPCOMP_GPU_RUNTIME_EXPORT void mgpuModuleUnload(void *module) {
+extern "C" DPCOMP_GPU_RUNTIME_EXPORT void dpcompGpuModuleDestroy(void *module) {
   LOG_FUNC();
-  return catchAll([&]() {
-    auto &state = getState();
-    state.returnModule(static_cast<ze_module_handle_t>(module));
+  catchAll([&]() {
+    Stream::destroyModule(static_cast<ze_module_handle_t>(module));
   });
 }
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *
-mgpuModuleGetFunction(void *module, const char *name) {
+dpcompGpuKernelGet(void *module, const char *name) {
   LOG_FUNC();
   return catchAll([&]() {
-    auto &state = getState();
-    return state.getKernel(static_cast<ze_module_handle_t>(module), name);
+    return Stream::getKernel(static_cast<ze_module_handle_t>(module), name);
   });
 }
 
-extern "C" DPCOMP_GPU_RUNTIME_EXPORT void
-mgpuLaunchKernel(void *function, intptr_t gridX, intptr_t gridY, intptr_t gridZ,
-                 intptr_t blockX, intptr_t blockY, intptr_t blockZ,
-                 int32_t smem, void *stream, void **params, void **extra) {
+extern "C" DPCOMP_GPU_RUNTIME_EXPORT void dpcompGpuKernelDestroy(void *kernel) {
   LOG_FUNC();
-  // TODO
+  catchAll([&]() {
+    Stream::destroyKernel(static_cast<ze_kernel_handle_t>(kernel));
+  });
 }
 
-extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *mgpuStreamCreate() {
+extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *
+dpcompGpuLaunchKernel(void *stream, void *kernel, size_t gridX, size_t gridY,
+                      size_t gridZ, size_t blockX, size_t blockY, size_t blockZ,
+                      void *events, void *params, size_t eventIndex) {
   LOG_FUNC();
-  return nullptr;
+  return catchAll([&]() {
+    return static_cast<Stream *>(stream)->launchKernel(
+        static_cast<ze_kernel_handle_t>(kernel), gridX, gridY, gridZ, blockX,
+        blockY, blockZ, static_cast<ze_event_handle_t *>(events),
+        static_cast<ParamDesc *>(params), eventIndex);
+  });
 }
 
-extern "C" DPCOMP_GPU_RUNTIME_EXPORT void mgpuStreamDestroy(void *stream) {
+extern "C" DPCOMP_GPU_RUNTIME_EXPORT void dpcompGpuWait(void *event) {
   LOG_FUNC();
-}
-
-extern "C" DPCOMP_GPU_RUNTIME_EXPORT void mgpuStreamSynchronize(void *stream) {
-  LOG_FUNC();
-}
-
-extern "C" DPCOMP_GPU_RUNTIME_EXPORT void mgpuStreamWaitEvent(void *stream,
-                                                              void *event) {
-  LOG_FUNC();
-}
-
-extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *mgpuEventCreate() {
-  LOG_FUNC();
-  return nullptr;
-}
-
-extern "C" DPCOMP_GPU_RUNTIME_EXPORT void mgpuEventDestroy(void *event) {
-  LOG_FUNC();
-}
-
-extern "C" DPCOMP_GPU_RUNTIME_EXPORT void mgpuEventSynchronize(void *event) {
-  LOG_FUNC();
-}
-
-extern "C" DPCOMP_GPU_RUNTIME_EXPORT void mgpuEventRecord(void *event,
-                                                          void *stream) {
-  LOG_FUNC();
-}
-
-extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *mgpuMemAlloc(uint64_t sizeBytes,
-                                                        void *stream) {
-  LOG_FUNC();
-  return nullptr;
-}
-
-extern "C" DPCOMP_GPU_RUNTIME_EXPORT void mgpuMemFree(void *ptr, void *stream) {
-  LOG_FUNC();
-}
-
-extern "C" DPCOMP_GPU_RUNTIME_EXPORT void
-mgpuMemcpy(void *dst, void *src, uint64_t sizeBytes, void *stream) {
-  LOG_FUNC();
+  catchAll([&]() { Stream::waitEvent(static_cast<ze_event_handle_t>(event)); });
 }

@@ -87,6 +87,10 @@ auto wrapZeType(ze_device_handle_t src) { return src; }
 
 auto wrapZeType(ze_module_handle_t src) { return src; }
 
+auto wrapZeType(int32_t src) { return src; }
+auto wrapZeType(uint32_t src) { return src; }
+auto wrapZeType(std::nullptr_t src) { return src; }
+
 auto wrapZeType(const ze_device_properties_t &src) {
   return detail::makeDescWrapper<ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES>(src);
 }
@@ -105,6 +109,14 @@ auto wrapZeType(const ze_module_desc_t &src) {
 
 auto wrapZeType(const ze_kernel_desc_t &src) {
   return detail::makeDescWrapper<ZE_STRUCTURE_TYPE_KERNEL_DESC>(src);
+}
+
+auto wrapZeType(const ze_event_pool_desc_t &src) {
+  return detail::makeDescWrapper<ZE_STRUCTURE_TYPE_EVENT_POOL_DESC>(src);
+}
+
+auto wrapZeType(const ze_event_desc_t &src) {
+  return detail::makeDescWrapper<ZE_STRUCTURE_TYPE_EVENT_DESC>(src);
 }
 
 struct Context : public detail::Type<ze_context_handle_t, zeContextDestroy> {
@@ -132,6 +144,8 @@ struct CommandList
             std::forward<Args>(args)...));
   }
 };
+
+CommandList::pointer wrapZeType(const CommandList &src) { return src.get(); }
 
 struct BuildLog : public detail::Type<ze_module_build_log_handle_t,
                                       zeModuleBuildLogDestroy> {
@@ -179,6 +193,32 @@ struct Kernel : public detail::Type<ze_kernel_handle_t, zeKernelDestroy> {
             std::forward<Args>(args)...));
   }
 };
+
+struct EventPool
+    : public detail::Type<ze_event_pool_handle_t, zeEventPoolDestroy> {
+  using detail::Type<ze_event_pool_handle_t, zeEventPoolDestroy>::Type;
+
+  template <typename... Args> static auto create(Args &&...args) {
+    return EventPool(
+        detail::createImpl<ze_event_pool_handle_t, decltype(zeEventPoolCreate),
+                           zeEventPoolCreate, Args...>(
+            std::forward<Args>(args)...));
+  }
+};
+
+EventPool::pointer wrapZeType(const EventPool &src) { return src.get(); }
+
+struct Event : public detail::Type<ze_event_handle_t, zeEventDestroy> {
+  using detail::Type<ze_event_handle_t, zeEventDestroy>::Type;
+
+  template <typename... Args> static auto create(Args &&...args) {
+    return Event(detail::createImpl<ze_event_handle_t, decltype(zeEventCreate),
+                                    zeEventCreate, Args...>(
+        std::forward<Args>(args)...));
+  }
+};
+
+Event::pointer wrapZeType(const Event &src) { return src.get(); }
 
 namespace detail {
 template <typename T> auto wrapZeTypeHelper(T &&arg) {
