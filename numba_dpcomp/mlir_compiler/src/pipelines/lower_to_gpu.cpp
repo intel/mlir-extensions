@@ -425,9 +425,12 @@ protected:
   mlir::Type llvmRangePointerType =
       mlir::LLVM::LLVMPointerType::get(llvmRangeType);
 
-  FunctionCallBuilder streamCreateCallBuilder = {"dpcompGpuStreamCreate",
-                                                 llvmPointerType, // stream
-                                                 {}};
+  FunctionCallBuilder streamCreateCallBuilder = {
+      "dpcompGpuStreamCreate",
+      llvmPointerType, // stream
+      {
+          llvmIndexType // events count
+      }};
 
   FunctionCallBuilder streamDestroyCallBuilder = {"dpcompGpuStreamDestroy",
                                                   llvmVoidType,
@@ -466,8 +469,8 @@ protected:
       "dpcompGpuLaunchKernel",
       llvmPointerType, // dep
       {
-          llvmPointerType,        // void stream
-          llvmPointerType,        // void kernel
+          llvmPointerType,        // stream
+          llvmPointerType,        // kernel
           llvmIndexType,          // gridXDim
           llvmIndexType,          // gridyDim
           llvmIndexType,          // gridZDim
@@ -475,7 +478,8 @@ protected:
           llvmIndexType,          // blockYDim
           llvmIndexType,          // blockZDim
           llvmPointerPointerType, // deps (null-term)
-          llvmRangePointerType    // params (null-term)
+          llvmRangePointerType,   // params (null-term)
+          llvmIndexType,          // eventIndex
       }};
 
   FunctionCallBuilder waitEventCallBuilder = {"dpcompGpuWait",
@@ -484,6 +488,9 @@ protected:
                                                   llvmPointerType // dep
                                               }};
 };
+
+static const char *kEventCountAttrName = "gpu.event_count";
+static const char *kEventIndexAttrName = "gpu.event_index";
 
 class ConvertGpuStreamCreatePattern
     : public ConvertOpToGpuRuntimeCallPattern<plier::CreateGpuStreamOp> {
@@ -496,8 +503,23 @@ private:
   matchAndRewrite(plier::CreateGpuStreamOp op,
                   mlir::ArrayRef<mlir::Value> /*operands*/,
                   mlir::ConversionPatternRewriter &rewriter) const override {
+    auto mod = op->getParentOfType<mlir::ModuleOp>();
+    if (!mod)
+      return mlir::failure();
+
+    auto eventsCount =
+        mlir::getConstantIntValue(mod->getAttr(kEventCountAttrName));
+    if (!eventsCount)
+      return mlir::failure();
+
     auto loc = op.getLoc();
-    auto res = streamCreateCallBuilder.create(loc, rewriter, llvm::None);
+    auto eventsCountVar =
+        rewriter
+            .create<mlir::LLVM::ConstantOp>(
+                loc, llvmIndexType,
+                rewriter.getIntegerAttr(llvmIndexType, *eventsCount))
+            .getResult();
+    auto res = streamCreateCallBuilder.create(loc, rewriter, eventsCountVar);
     rewriter.replaceOp(op, res.getResults());
     return mlir::success();
   }
@@ -630,6 +652,11 @@ private:
                   mlir::ConversionPatternRewriter &rewriter) const override {
     plier::LaunchGpuKernelOp::Adaptor adaptor(operands,
                                               op->getAttrDictionary());
+    auto eventIndex =
+        mlir::getConstantIntValue(op->getAttr(kEventIndexAttrName));
+    if (!eventIndex)
+      return mlir::failure();
+
     auto loc = op.getLoc();
     auto deps = adaptor.asyncDependencies();
 
@@ -724,6 +751,10 @@ private:
         loc, paramsArray, nullRange, rewriter.getI64ArrayAttr(paramsCount));
     rewriter.create<mlir::LLVM::StoreOp>(loc, paramsArray, paramsArrayPtr);
 
+    auto eventsIndexVar = rewriter.create<mlir::LLVM::ConstantOp>(
+        loc, llvmIndexType,
+        rewriter.getIntegerAttr(llvmIndexType, *eventIndex));
+
     mlir::Value params[] = {
         // clang-format off
         adaptor.stream(),
@@ -736,6 +767,7 @@ private:
         adaptor.blockSizeZ(),
         rewriter.create<mlir::LLVM::BitcastOp>(loc, llvmPointerPointerType, depsArrayPtr),
         rewriter.create<mlir::LLVM::BitcastOp>(loc, llvmRangePointerType, paramsArrayPtr),
+        eventsIndexVar,
         // clang-format on
     };
     auto res = launchKernelCallBuilder.create(loc, rewriter, params);
@@ -746,6 +778,25 @@ private:
       rewriter.replaceOp(op, res.getResults());
     }
     return mlir::success();
+  }
+};
+
+struct EnumerateEventsPass
+    : public mlir::PassWrapper<EnumerateEventsPass,
+                               mlir::OperationPass<mlir::ModuleOp>> {
+  void runOnOperation() override {
+    auto mod = getOperation();
+    int64_t eventCount = 0;
+    auto intType = mlir::IntegerType::get(&getContext(), 64);
+    mod.walk([&](mlir::Operation *op) {
+      if (mlir::isa<plier::LaunchGpuKernelOp>(op)) {
+        op->setAttr(kEventIndexAttrName,
+                    mlir::IntegerAttr::get(intType, eventCount));
+        ++eventCount;
+      }
+    });
+    mod->setAttr(kEventCountAttrName,
+                 mlir::IntegerAttr::get(intType, eventCount));
   }
 };
 
@@ -809,6 +860,7 @@ static void populateLowerToGPUPipeline(mlir::OpPassManager &pm) {
   modulePM.addPass(mlir::spirv::createUpdateVersionCapabilityExtensionPass());
   pm.addPass(std::make_unique<SerializeSPIRVPass>());
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<GPUExPass>());
+  pm.addPass(std::make_unique<EnumerateEventsPass>());
   pm.addPass(std::make_unique<GPUToLLVMPass>());
   pm.addPass(mlir::createCanonicalizerPass());
 }
