@@ -64,7 +64,7 @@ struct Type : public std::unique_ptr<std::remove_pointer_t<T>,
   using std::unique_ptr<std::remove_pointer_t<T>,
                         DeleterImpl<T, Deleter>>::unique_ptr;
 
-  explicit operator T() const { return get(); }
+  explicit operator T() const { return this->get(); }
 };
 
 template <typename SrcT, ze_structure_type_t Type> struct DescWrapper {
@@ -124,7 +124,7 @@ struct Context : public detail::Type<ze_context_handle_t, zeContextDestroy> {
 
   template <typename... Args> static auto create(Args &&...args) {
     return Context(
-        detail::createImpl<ze_context_handle_t, decltype(zeContextCreate),
+        detail::createImpl<ze_context_handle_t, decltype(&zeContextCreate),
                            zeContextCreate, Args...>(
             std::forward<Args>(args)...));
   }
@@ -139,7 +139,7 @@ struct CommandList
   template <typename... Args> static auto createImmediate(Args &&...args) {
     return CommandList(
         detail::createImpl<ze_command_list_handle_t,
-                           decltype(zeCommandListCreateImmediate),
+                           decltype(&zeCommandListCreateImmediate),
                            zeCommandListCreateImmediate, Args...>(
             std::forward<Args>(args)...));
   }
@@ -188,7 +188,7 @@ struct Kernel : public detail::Type<ze_kernel_handle_t, zeKernelDestroy> {
 
   template <typename... Args> static auto create(Args &&...args) {
     return Kernel(
-        detail::createImpl<ze_kernel_handle_t, decltype(zeKernelCreate),
+        detail::createImpl<ze_kernel_handle_t, decltype(&zeKernelCreate),
                            zeKernelCreate, Args...>(
             std::forward<Args>(args)...));
   }
@@ -200,7 +200,7 @@ struct EventPool
 
   template <typename... Args> static auto create(Args &&...args) {
     return EventPool(
-        detail::createImpl<ze_event_pool_handle_t, decltype(zeEventPoolCreate),
+        detail::createImpl<ze_event_pool_handle_t, decltype(&zeEventPoolCreate),
                            zeEventPoolCreate, Args...>(
             std::forward<Args>(args)...));
   }
@@ -212,7 +212,7 @@ struct Event : public detail::Type<ze_event_handle_t, zeEventDestroy> {
   using detail::Type<ze_event_handle_t, zeEventDestroy>::Type;
 
   template <typename... Args> static auto create(Args &&...args) {
-    return Event(detail::createImpl<ze_event_handle_t, decltype(zeEventCreate),
+    return Event(detail::createImpl<ze_event_handle_t, decltype(&zeEventCreate),
                                     zeEventCreate, Args...>(
         std::forward<Args>(args)...));
   }
