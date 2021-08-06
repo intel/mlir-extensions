@@ -23,8 +23,10 @@
 #include <mlir/Interfaces/SideEffectInterfaces.h>
 #include <mlir/Interfaces/ViewLikeInterface.h>
 
+#include <mlir/Dialect/GPU/GPUDialect.h>
+
 #include "plier/PlierOpsDialect.h.inc"
-#include "plier/PlierOpsEnums.h.inc"
+//#include "plier/PlierOpsEnums.h.inc"
 #define GET_OP_CLASSES
 #include "plier/PlierOps.h.inc"
 

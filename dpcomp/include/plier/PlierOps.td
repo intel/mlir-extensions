@@ -16,6 +16,7 @@
 #define PLIER_OPS
 
 include "mlir/IR/OpBase.td"
+include "mlir/Dialect/GPU/GPUBase.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/LoopLikeInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
@@ -30,6 +31,11 @@ def Plier_PyType
     : DialectType<Plier_Dialect, CPred<"$_self.isa<::plier::PyType>()">,
                   "pytype">,
       BuildableType<"$_builder.getType<::plier::PyType>()"> {}
+
+def Plier_OpaqueType
+    : DialectType<Plier_Dialect, CPred<"$_self.isa<::plier::OpaqueType>()">,
+                  "opaque_type">,
+      BuildableType<"$_builder.getType<::plier::OpaqueType>()"> {}
 
 class Plier_Op<string mnemonic, list<OpTrait> traits = []>
     : Op<Plier_Dialect, mnemonic, traits>;
@@ -313,6 +319,68 @@ def ExtractMemrefMetadataOp
     OpBuilder<(ins "::mlir::Value"
                : $src)>
   ];
+}
+
+def CreateGpuStreamOp : Plier_Op<"create_gpu_stream", [NoSideEffect]> {
+  let results = (outs Plier_OpaqueType : $result);
+
+  let hasCanonicalizer = 1;
+
+  let builders = [OpBuilder<(ins)>];
+}
+
+def DestroyGpuStreamOp : Plier_Op<"destroy_gpu_stream"> {
+  let arguments = (ins Plier_OpaqueType : $source);
+}
+
+def LoadGpuModuleOp : Plier_Op<"load_gpu_module", [NoSideEffect]> {
+  let arguments = (ins Plier_OpaqueType : $stream, StrAttr : $blob);
+  let results = (outs Plier_OpaqueType : $result);
+
+  let hasCanonicalizer = 1;
+
+  let builders = [OpBuilder<(ins "::mlir::Value"
+                             : $stream, "::mlir::StringRef"
+                             : $blob)>];
+}
+
+def DestroyGpuModuleOp : Plier_Op<"destroy_gpu_module"> {
+  let arguments = (ins Plier_OpaqueType : $source);
+}
+
+def GetGpuKernelOp : Plier_Op<"get_gpu_kernel", [NoSideEffect]> {
+  let arguments = (ins Plier_OpaqueType : $module, StrAttr : $name);
+  let results = (outs Plier_OpaqueType : $result);
+
+  let hasCanonicalizer = 1;
+
+  let builders = [OpBuilder<(ins "::mlir::Value"
+                             : $module, "::mlir::StringRef"
+                             : $name)>];
+}
+
+def LaunchGpuKernelOp
+    : Plier_Op<"launch_gpu_kernel",
+               [GPU_AsyncOpInterface, AttrSizedOperandSegments]> {
+  let arguments = (ins Variadic<GPU_AsyncToken>:$asyncDependencies,
+                     Plier_OpaqueType:$stream,
+                     Plier_OpaqueType:$kernel,
+                     Index:$gridSizeX, Index:$gridSizeY, Index:$gridSizeZ,
+                     Index:$blockSizeX, Index:$blockSizeY, Index:$blockSizeZ,
+                     Variadic<AnyType>:$operands);
+  let results = (outs Optional<GPU_AsyncToken> : $asyncToken);
+
+  let skipDefaultBuilders = 1;
+  let builders = [OpBuilder<(ins "::mlir::Value"
+                             : $stream, "::mlir::Value"
+                             : $kernel, "::mlir::gpu::KernelDim3"
+                             : $gridSize, "::mlir::gpu::KernelDim3"
+                             : $blockSize, "::mlir::ValueRange"
+                             : $kernelOperands)>];
+}
+
+def DestroyGpuKernelOp : Plier_Op<"destroy_gpu_kernel"> {
+  let arguments = (ins Plier_OpaqueType : $source);
 }
 
 #endif // PLIER_OPS
