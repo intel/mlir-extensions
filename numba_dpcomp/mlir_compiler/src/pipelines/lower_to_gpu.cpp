@@ -14,11 +14,13 @@
 
 #include "pipelines/lower_to_gpu.hpp"
 
+#include <llvm/Support/FormatVariadic.h>
 #include <mlir/Conversion/AffineToStandard/AffineToStandard.h>
 #include <mlir/Conversion/AsyncToLLVM/AsyncToLLVM.h>
 #include <mlir/Conversion/GPUCommon/GPUCommonPass.h>
 #include <mlir/Conversion/GPUToSPIRV/GPUToSPIRVPass.h>
 #include <mlir/Conversion/LLVMCommon/ConversionTarget.h>
+#include <mlir/Conversion/LLVMCommon/Pattern.h>
 #include <mlir/Conversion/LLVMCommon/TypeConverter.h>
 #include <mlir/Conversion/SCFToGPU/SCFToGPUPass.h>
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
@@ -42,6 +44,7 @@
 
 #include "plier/compiler/pipeline_registry.hpp"
 #include "plier/dialect.hpp"
+#include "plier/transforms/func_utils.hpp"
 
 namespace {
 struct ParallelLoopGPUMappingPass
@@ -288,6 +291,465 @@ struct SerializeSPIRVPass
   }
 };
 
+static llvm::Optional<mlir::StringAttr> getGpuBinary(mlir::Operation *op) {
+  assert(op);
+  auto mod = op->getParentOfType<mlir::ModuleOp>();
+  if (!mod)
+    return {};
+
+  auto ops = mod.getOps<mlir::gpu::GPUModuleOp>();
+  if (!llvm::hasSingleElement(ops))
+    return {};
+
+  auto gpuMod = *ops.begin();
+  auto attr = gpuMod->getAttrOfType<mlir::StringAttr>(
+      mlir::gpu::getDefaultGpuBinaryAnnotation());
+  if (!attr)
+    return {};
+
+  return attr;
+}
+
+static llvm::Optional<mlir::Value> getGpuStream(mlir::OpBuilder &builder,
+                                                mlir::Operation *op) {
+  assert(op);
+  auto func = op->getParentOfType<mlir::FuncOp>();
+  if (!func)
+    return {};
+
+  if (!llvm::hasSingleElement(func.getBody()))
+    return {};
+
+  auto &block = func.getBody().front();
+  auto ops = block.getOps<plier::CreateGpuStreamOp>();
+  if (!ops.empty())
+    return (*ops.begin()).getResult();
+
+  mlir::OpBuilder::InsertionGuard g(builder);
+  builder.setInsertionPointToStart(&block);
+  auto loc = builder.getUnknownLoc();
+  auto stream = builder.create<plier::CreateGpuStreamOp>(loc).getResult();
+  builder.setInsertionPoint(block.getTerminator());
+  builder.create<plier::DestroyGpuStreamOp>(loc, stream);
+  return stream;
+}
+
+struct ExpandLaunchOp : public mlir::OpRewritePattern<mlir::gpu::LaunchFuncOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::gpu::LaunchFuncOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto bin = getGpuBinary(op);
+    if (!bin)
+      return mlir::failure();
+
+    auto stream = getGpuStream(rewriter, op);
+    if (!stream)
+      return mlir::failure();
+
+    auto data = bin->getValue();
+    auto loc = op.getLoc();
+    auto module = rewriter.create<plier::LoadGpuModuleOp>(loc, *stream, data);
+    auto kernel =
+        rewriter.create<plier::GetGpuKernelOp>(loc, module, op.getKernelName());
+    auto launch = rewriter.create<plier::LaunchGpuKernelOp>(
+        loc, *stream, kernel, op.getGridSizeOperandValues(),
+        op.getBlockSizeOperandValues(), op.operands());
+    rewriter.create<plier::DestroyGpuKernelOp>(loc, kernel);
+    rewriter.create<plier::DestroyGpuModuleOp>(loc, module);
+    rewriter.replaceOp(op, launch.getResults());
+    return mlir::success();
+  }
+};
+
+struct GPUExPass : public mlir::PassWrapper<GPUExPass, mlir::FunctionPass> {
+
+  void runOnFunction() override {
+    mlir::OwningRewritePatternList patterns(&getContext());
+
+    patterns.insert<ExpandLaunchOp>(&getContext());
+
+    (void)mlir::applyPatternsAndFoldGreedily(getFunction(),
+                                             std::move(patterns));
+  }
+};
+
+struct FunctionCallBuilder {
+  FunctionCallBuilder(mlir::StringRef functionName, mlir::Type returnType,
+                      mlir::ArrayRef<mlir::Type> argumentTypes)
+      : functionName(functionName),
+        functionType(
+            mlir::LLVM::LLVMFunctionType::get(returnType, argumentTypes)) {}
+  mlir::LLVM::CallOp create(mlir::Location loc, mlir::OpBuilder &builder,
+                            mlir::ArrayRef<mlir::Value> arguments) const {
+    auto module =
+        builder.getBlock()->getParent()->getParentOfType<mlir::ModuleOp>();
+    auto function = [&] {
+      if (auto function =
+              module.lookupSymbol<mlir::LLVM::LLVMFuncOp>(functionName))
+        return function;
+      return mlir::OpBuilder::atBlockEnd(module.getBody())
+          .create<mlir::LLVM::LLVMFuncOp>(loc, functionName, functionType);
+    }();
+    return builder.create<mlir::LLVM::CallOp>(loc, function, arguments);
+  }
+
+private:
+  mlir::StringRef functionName;
+  mlir::LLVM::LLVMFunctionType functionType;
+};
+
+template <typename OpTy>
+class ConvertOpToGpuRuntimeCallPattern
+    : public mlir::ConvertOpToLLVMPattern<OpTy> {
+public:
+  explicit ConvertOpToGpuRuntimeCallPattern(
+      mlir::LLVMTypeConverter &typeConverter)
+      : mlir::ConvertOpToLLVMPattern<OpTy>(typeConverter) {}
+
+protected:
+  mlir::MLIRContext *context = &this->getTypeConverter()->getContext();
+
+  mlir::Type llvmVoidType = mlir::LLVM::LLVMVoidType::get(context);
+  mlir::Type llvmPointerType =
+      mlir::LLVM::LLVMPointerType::get(mlir::IntegerType::get(context, 8));
+  mlir::Type llvmPointerPointerType =
+      mlir::LLVM::LLVMPointerType::get(llvmPointerType);
+  mlir::Type llvmInt8Type = mlir::IntegerType::get(context, 8);
+  mlir::Type llvmInt32Type = mlir::IntegerType::get(context, 32);
+  mlir::Type llvmInt64Type = mlir::IntegerType::get(context, 64);
+  mlir::Type llvmIndexType = mlir::IntegerType::get(
+      context, this->getTypeConverter()->getPointerBitwidth(0));
+  mlir::Type llvmRangeType = mlir::LLVM::LLVMStructType::getLiteral(
+      context, {llvmPointerType, llvmIndexType});
+  mlir::Type llvmRangePointerType =
+      mlir::LLVM::LLVMPointerType::get(llvmRangeType);
+
+  FunctionCallBuilder streamCreateCallBuilder = {"dpcompGpuStreamCreate",
+                                                 llvmPointerType, // stream
+                                                 {}};
+
+  FunctionCallBuilder streamDestroyCallBuilder = {"dpcompGpuStreamDestroy",
+                                                  llvmVoidType,
+                                                  {
+                                                      llvmPointerType // stream
+                                                  }};
+
+  FunctionCallBuilder moduleLoadCallBuilder = {"dpcompGpuModuleLoad",
+                                               llvmPointerType, // module
+                                               {
+                                                   llvmPointerType, // stream
+                                                   llvmPointerType, // data ptr
+                                                   llvmIndexType,   // data size
+                                               }};
+
+  FunctionCallBuilder moduleDestroyCallBuilder = {"dpcompGpuModuleDestroy",
+                                                  llvmVoidType,
+                                                  {
+                                                      llvmPointerType // module
+                                                  }};
+
+  FunctionCallBuilder kernelGetCallBuilder = {"dpcompGpuKernelGet",
+                                              llvmPointerType, // kernel
+                                              {
+                                                  llvmPointerType, // module
+                                                  llvmPointerType, // name
+                                              }};
+
+  FunctionCallBuilder kernelDestroyCallBuilder = {"dpcompGpuKernelDestroy",
+                                                  llvmVoidType,
+                                                  {
+                                                      llvmPointerType // kernel
+                                                  }};
+
+  FunctionCallBuilder launchKernelCallBuilder = {
+      "dpcompGpuLaunchKernel",
+      llvmPointerType, // dep
+      {
+          llvmPointerType,        // void stream
+          llvmPointerType,        // void kernel
+          llvmIndexType,          // gridXDim
+          llvmIndexType,          // gridyDim
+          llvmIndexType,          // gridZDim
+          llvmIndexType,          // blockXDim
+          llvmIndexType,          // blockYDim
+          llvmIndexType,          // blockZDim
+          llvmPointerPointerType, // deps (null-term)
+          llvmRangePointerType    // params (null-term)
+      }};
+
+  FunctionCallBuilder waitEventCallBuilder = {"dpcompGpuWait",
+                                              llvmVoidType,
+                                              {
+                                                  llvmPointerType // dep
+                                              }};
+};
+
+class ConvertGpuStreamCreatePattern
+    : public ConvertOpToGpuRuntimeCallPattern<plier::CreateGpuStreamOp> {
+public:
+  ConvertGpuStreamCreatePattern(mlir::LLVMTypeConverter &converter)
+      : ConvertOpToGpuRuntimeCallPattern<plier::CreateGpuStreamOp>(converter) {}
+
+private:
+  mlir::LogicalResult
+  matchAndRewrite(plier::CreateGpuStreamOp op,
+                  mlir::ArrayRef<mlir::Value> /*operands*/,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    auto res = streamCreateCallBuilder.create(loc, rewriter, llvm::None);
+    rewriter.replaceOp(op, res.getResults());
+    return mlir::success();
+  }
+};
+
+class ConvertGpuStreamDestroyPattern
+    : public ConvertOpToGpuRuntimeCallPattern<plier::DestroyGpuStreamOp> {
+public:
+  ConvertGpuStreamDestroyPattern(mlir::LLVMTypeConverter &converter)
+      : ConvertOpToGpuRuntimeCallPattern<plier::DestroyGpuStreamOp>(converter) {
+  }
+
+private:
+  mlir::LogicalResult
+  matchAndRewrite(plier::DestroyGpuStreamOp op,
+                  mlir::ArrayRef<mlir::Value> operands,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    plier::DestroyGpuStreamOp::Adaptor adaptor(operands);
+    auto loc = op.getLoc();
+    auto res = streamDestroyCallBuilder.create(loc, rewriter, adaptor.source());
+    rewriter.replaceOp(op, res.getResults());
+    return mlir::success();
+  }
+};
+
+class ConvertGpuModuleLoadPattern
+    : public ConvertOpToGpuRuntimeCallPattern<plier::LoadGpuModuleOp> {
+public:
+  ConvertGpuModuleLoadPattern(mlir::LLVMTypeConverter &converter)
+      : ConvertOpToGpuRuntimeCallPattern<plier::LoadGpuModuleOp>(converter) {}
+
+private:
+  mlir::LogicalResult
+  matchAndRewrite(plier::LoadGpuModuleOp op,
+                  mlir::ArrayRef<mlir::Value> operands,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    plier::LoadGpuModuleOp::Adaptor adaptor(operands);
+    auto loc = op.getLoc();
+    auto blob = op.blob();
+
+    auto data = mlir::LLVM::createGlobalString(loc, rewriter, "gpu_blob", blob,
+                                               mlir::LLVM::Linkage::Internal);
+    auto size = rewriter.create<mlir::LLVM::ConstantOp>(
+        loc, llvmIndexType,
+        mlir::IntegerAttr::get(llvmIndexType,
+                               static_cast<int64_t>(blob.size())));
+    auto res = moduleLoadCallBuilder.create(loc, rewriter,
+                                            {adaptor.stream(), data, size});
+    rewriter.replaceOp(op, res.getResults());
+    return mlir::success();
+  }
+};
+
+class ConvertGpuModuleDestroyPattern
+    : public ConvertOpToGpuRuntimeCallPattern<plier::DestroyGpuModuleOp> {
+public:
+  ConvertGpuModuleDestroyPattern(mlir::LLVMTypeConverter &converter)
+      : ConvertOpToGpuRuntimeCallPattern<plier::DestroyGpuModuleOp>(converter) {
+  }
+
+private:
+  mlir::LogicalResult
+  matchAndRewrite(plier::DestroyGpuModuleOp op,
+                  mlir::ArrayRef<mlir::Value> operands,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    plier::DestroyGpuModuleOp::Adaptor adaptor(operands);
+    auto loc = op.getLoc();
+    auto res = moduleDestroyCallBuilder.create(loc, rewriter, adaptor.source());
+    rewriter.replaceOp(op, res.getResults());
+    return mlir::success();
+  }
+};
+
+class ConvertGpuKernelGetPattern
+    : public ConvertOpToGpuRuntimeCallPattern<plier::GetGpuKernelOp> {
+public:
+  ConvertGpuKernelGetPattern(mlir::LLVMTypeConverter &converter)
+      : ConvertOpToGpuRuntimeCallPattern<plier::GetGpuKernelOp>(converter) {}
+
+private:
+  mlir::LogicalResult
+  matchAndRewrite(plier::GetGpuKernelOp op,
+                  mlir::ArrayRef<mlir::Value> operands,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    plier::GetGpuKernelOp::Adaptor adaptor(operands);
+    auto loc = op.getLoc();
+    llvm::SmallString<64> name = op.name();
+    name.push_back('\0');
+
+    auto varName = llvm::formatv("{0}_kernel_name", name).str();
+    auto data = mlir::LLVM::createGlobalString(loc, rewriter, varName, name,
+                                               mlir::LLVM::Linkage::Internal);
+    auto res =
+        kernelGetCallBuilder.create(loc, rewriter, {adaptor.module(), data});
+    rewriter.replaceOp(op, res.getResults());
+    return mlir::success();
+  }
+};
+
+class ConvertGpuKernelDestroyPattern
+    : public ConvertOpToGpuRuntimeCallPattern<plier::DestroyGpuKernelOp> {
+public:
+  ConvertGpuKernelDestroyPattern(mlir::LLVMTypeConverter &converter)
+      : ConvertOpToGpuRuntimeCallPattern<plier::DestroyGpuKernelOp>(converter) {
+  }
+
+private:
+  mlir::LogicalResult
+  matchAndRewrite(plier::DestroyGpuKernelOp op,
+                  mlir::ArrayRef<mlir::Value> operands,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    plier::DestroyGpuKernelOp::Adaptor adaptor(operands);
+    auto loc = op.getLoc();
+    auto res = kernelDestroyCallBuilder.create(loc, rewriter, adaptor.source());
+    rewriter.replaceOp(op, res.getResults());
+    return mlir::success();
+  }
+};
+
+class ConvertGpuKernelLaunchPattern
+    : public ConvertOpToGpuRuntimeCallPattern<plier::LaunchGpuKernelOp> {
+public:
+  ConvertGpuKernelLaunchPattern(mlir::LLVMTypeConverter &converter)
+      : ConvertOpToGpuRuntimeCallPattern<plier::LaunchGpuKernelOp>(converter) {}
+
+private:
+  mlir::LogicalResult
+  matchAndRewrite(plier::LaunchGpuKernelOp op,
+                  mlir::ArrayRef<mlir::Value> operands,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    plier::LaunchGpuKernelOp::Adaptor adaptor(operands,
+                                              op->getAttrDictionary());
+    auto loc = op.getLoc();
+    auto deps = adaptor.asyncDependencies();
+
+    auto depsArraySize = static_cast<unsigned>(deps.size());
+    auto depsArrayType =
+        mlir::LLVM::LLVMArrayType::get(llvmPointerType, depsArraySize + 1);
+    mlir::Value depsArray =
+        rewriter.create<mlir::LLVM::UndefOp>(loc, depsArrayType);
+    for (auto i : llvm::seq(0u, depsArraySize)) {
+      auto index = rewriter.getI64ArrayAttr(i);
+      depsArray = rewriter.create<mlir::LLVM::InsertValueOp>(loc, depsArray,
+                                                             deps[i], index);
+    }
+    auto nullPtr = rewriter.create<mlir::LLVM::NullOp>(loc, llvmPointerType);
+    depsArray = rewriter.create<mlir::LLVM::InsertValueOp>(
+        loc, depsArray, nullPtr, rewriter.getI64ArrayAttr(depsArraySize));
+
+    auto depsArrayPtrType = mlir::LLVM::LLVMPointerType::get(depsArrayType);
+    plier::AllocaInsertionPoint allocaHelper(op);
+    auto depsArrayPtr = allocaHelper.insert(rewriter, [&]() {
+      auto size = rewriter.create<mlir::LLVM::ConstantOp>(
+          loc, llvmInt64Type, rewriter.getI64IntegerAttr(1));
+      return rewriter.create<mlir::LLVM::AllocaOp>(loc, depsArrayPtrType, size,
+                                                   0);
+    });
+
+    rewriter.create<mlir::LLVM::StoreOp>(loc, depsArray, depsArrayPtr);
+
+    auto kernelParams = adaptor.operands();
+    auto paramsCount = static_cast<unsigned>(kernelParams.size());
+    auto paramsArrayType =
+        mlir::LLVM::LLVMArrayType::get(llvmRangeType, paramsCount + 1);
+    auto paramsArrayPtrType = mlir::LLVM::LLVMPointerType::get(paramsArrayType);
+
+    llvm::SmallVector<mlir::Value> paramsStorage(paramsCount);
+    auto paramsArrayPtr = allocaHelper.insert(rewriter, [&]() {
+      auto size = rewriter.create<mlir::LLVM::ConstantOp>(
+          loc, llvmInt64Type, rewriter.getI64IntegerAttr(1));
+      for (auto i : llvm::seq(0u, paramsCount)) {
+        auto ptrType =
+            mlir::LLVM::LLVMPointerType::get(kernelParams[i].getType());
+        paramsStorage[i] =
+            rewriter.create<mlir::LLVM::AllocaOp>(loc, ptrType, size, 0);
+      }
+      return rewriter.create<mlir::LLVM::AllocaOp>(loc, paramsArrayPtrType,
+                                                   size, 0);
+    });
+
+    mlir::Value paramsArray =
+        rewriter.create<mlir::LLVM::UndefOp>(loc, paramsArrayType);
+    auto one = rewriter
+                   .create<mlir::LLVM::ConstantOp>(
+                       loc, llvmInt32Type, rewriter.getI32IntegerAttr(1))
+                   .getResult();
+    for (auto i : llvm::seq(0u, paramsCount)) {
+      rewriter.create<mlir::LLVM::StoreOp>(loc, kernelParams[i],
+                                           paramsStorage[i]);
+      auto ptr = rewriter.create<mlir::LLVM::BitcastOp>(loc, llvmPointerType,
+                                                        paramsStorage[i]);
+      // %Size = getelementptr %T* null, int 1
+      // %SizeI = ptrtoint %T* %Size to i32
+      auto paramPtrType = paramsStorage[i].getType();
+      auto nullPtr = rewriter.create<mlir::LLVM::NullOp>(loc, paramPtrType);
+      auto gep =
+          rewriter.create<mlir::LLVM::GEPOp>(loc, paramPtrType, nullPtr, one);
+      auto typeSize =
+          rewriter.create<mlir::LLVM::PtrToIntOp>(loc, llvmIndexType, gep);
+
+      mlir::Value range =
+          rewriter.create<mlir::LLVM::UndefOp>(loc, llvmRangeType);
+      range = rewriter.create<mlir::LLVM::InsertValueOp>(
+          loc, range, ptr, rewriter.getI64ArrayAttr(0));
+      range = rewriter.create<mlir::LLVM::InsertValueOp>(
+          loc, range, typeSize, rewriter.getI64ArrayAttr(1));
+
+      paramsArray = rewriter.create<mlir::LLVM::InsertValueOp>(
+          loc, paramsArray, range, rewriter.getI64ArrayAttr(i));
+    }
+
+    auto nullRange = [&]() {
+      auto zero = rewriter.create<mlir::LLVM::ConstantOp>(
+          loc, llvmIndexType, rewriter.getIntegerAttr(llvmIndexType, 0));
+      mlir::Value range =
+          rewriter.create<mlir::LLVM::UndefOp>(loc, llvmRangeType);
+      range = rewriter.create<mlir::LLVM::InsertValueOp>(
+          loc, range, nullPtr, rewriter.getI64ArrayAttr(0));
+      range = rewriter.create<mlir::LLVM::InsertValueOp>(
+          loc, range, zero, rewriter.getI64ArrayAttr(1));
+      return range;
+    }();
+    paramsArray = rewriter.create<mlir::LLVM::InsertValueOp>(
+        loc, paramsArray, nullRange, rewriter.getI64ArrayAttr(paramsCount));
+    rewriter.create<mlir::LLVM::StoreOp>(loc, paramsArray, paramsArrayPtr);
+
+    mlir::Value params[] = {
+        // clang-format off
+        adaptor.stream(),
+        adaptor.kernel(),
+        adaptor.gridSizeX(),
+        adaptor.gridSizeY(),
+        adaptor.gridSizeZ(),
+        adaptor.blockSizeX(),
+        adaptor.blockSizeY(),
+        adaptor.blockSizeZ(),
+        rewriter.create<mlir::LLVM::BitcastOp>(loc, llvmPointerPointerType, depsArrayPtr),
+        rewriter.create<mlir::LLVM::BitcastOp>(loc, llvmRangePointerType, paramsArrayPtr),
+        // clang-format on
+    };
+    auto res = launchKernelCallBuilder.create(loc, rewriter, params);
+    if (op.getNumResults() == 0) {
+      waitEventCallBuilder.create(loc, rewriter, res.getResult(0));
+      rewriter.eraseOp(op);
+    } else {
+      rewriter.replaceOp(op, res.getResults());
+    }
+    return mlir::success();
+  }
+};
+
 struct GPUToLLVMPass
     : public mlir::PassWrapper<GPUToLLVMPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
@@ -296,6 +758,12 @@ struct GPUToLLVMPass
     mlir::RewritePatternSet patterns(&getContext());
     mlir::LLVMConversionTarget target(getContext());
 
+    auto llvmPointerType = mlir::LLVM::LLVMPointerType::get(
+        mlir::IntegerType::get(&getContext(), 8));
+    converter.addConversion([llvmPointerType](plier::OpaqueType) -> mlir::Type {
+      return llvmPointerType;
+    });
+
     target.addIllegalDialect<mlir::gpu::GPUDialect>();
 
     mlir::populateAsyncStructuralTypeConversionsAndLegality(converter, patterns,
@@ -303,61 +771,21 @@ struct GPUToLLVMPass
     mlir::populateGpuToLLVMConversionPatterns(
         converter, patterns, mlir::gpu::getDefaultGpuBinaryAnnotation());
 
+    patterns.insert<
+        // clang-format off
+        ConvertGpuStreamCreatePattern,
+        ConvertGpuStreamDestroyPattern,
+        ConvertGpuModuleLoadPattern,
+        ConvertGpuModuleDestroyPattern,
+        ConvertGpuKernelGetPattern,
+        ConvertGpuKernelDestroyPattern,
+        ConvertGpuKernelLaunchPattern
+        // clang-format on
+        >(converter);
+
     auto mod = getOperation();
     if (mlir::failed(
             mlir::applyPartialConversion(mod, target, std::move(patterns))))
-      signalPassFailure();
-
-    // TODO: populateGpuToLLVMConversionPatterns can generate call with invalid
-    // types, fix upstream.
-    mlir::OpBuilder builder(&getContext());
-    llvm::SmallVector<mlir::Value> args;
-    if (mod.walk([&](mlir::LLVM::CallOp call) {
-             auto funcName = call.callee();
-             if (!funcName) {
-               mod.emitError() << "Failed to get llvm function";
-               return mlir::WalkResult::interrupt();
-             }
-
-             auto func = mod.lookupSymbol<mlir::LLVM::LLVMFuncOp>(*funcName);
-             if (!func) {
-               mod.emitError() << "Failed to get llvm function";
-               return mlir::WalkResult::interrupt();
-             }
-
-             auto funcType = func.getType();
-
-             if (call.getNumOperands() != funcType.getNumParams()) {
-               mod.emitError() << "Invalid LLVM::CallOp operands count";
-               return mlir::WalkResult::interrupt();
-             }
-
-             bool needFix = false;
-             args.resize(funcType.getNumParams());
-             builder.setInsertionPoint(call);
-
-             for (auto it : llvm::enumerate(
-                      llvm::zip(call.getOperands(), funcType.getParams()))) {
-               auto i = it.index();
-               auto operand = std::get<0>(it.value());
-               auto type = std::get<1>(it.value());
-               if (operand.getType() != type) {
-                 args[i] = builder
-                               .create<mlir::UnrealizedConversionCastOp>(
-                                   call.getLoc(), type, operand)
-                               .getResult(0);
-                 needFix = true;
-               } else {
-                 args[i] = operand;
-               }
-             }
-
-             if (needFix)
-               call->setOperands(args);
-
-             return mlir::WalkResult::advance();
-           })
-            .wasInterrupted())
       signalPassFailure();
   }
 };
@@ -381,6 +809,7 @@ static void populateLowerToGPUPipeline(mlir::OpPassManager &pm) {
   modulePM.addPass(mlir::spirv::createLowerABIAttributesPass());
   modulePM.addPass(mlir::spirv::createUpdateVersionCapabilityExtensionPass());
   pm.addPass(std::make_unique<SerializeSPIRVPass>());
+  pm.addNestedPass<mlir::FuncOp>(std::make_unique<GPUExPass>());
   pm.addPass(std::make_unique<GPUToLLVMPass>());
   pm.addPass(mlir::createCanonicalizerPass());
 }
