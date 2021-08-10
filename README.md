@@ -1,6 +1,6 @@
-# dpcomp - the MLIR based compiler backend
+# Intel Extension for MLIR
 
-# numba_dpcomp - Python package with custom jit decorators that are provide a compilation with dpcomp
+# numba_dpcomp - MLIR-based python compiler
 
 ## Usage
 
@@ -85,7 +85,7 @@ cd dpcomp
 python setup.py develop
 ```
 
-## Run tests
+## Run python tests
 
 Use Pytest from root of repository to run tests.
 
@@ -99,4 +99,10 @@ To run tests in parallel and to prevent segfaults from terminating your test run
 ```bash
 conda install pytest-xdist
 pytest -n4
+```
+
+## Run lit/FileCheck tests
+
+```bash
+ctest -C Release
 ```
