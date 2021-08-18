@@ -18,13 +18,13 @@
 #include <mlir/Conversion/AffineToStandard/AffineToStandard.h>
 #include <mlir/Conversion/AsyncToLLVM/AsyncToLLVM.h>
 #include <mlir/Conversion/GPUCommon/GPUCommonPass.h>
-#include <mlir/Conversion/GPUToSPIRV/GPUToSPIRVPass.h>
 #include <mlir/Conversion/GPUToSPIRV/GPUToSPIRV.h>
-#include <mlir/Conversion/StandardToSPIRV/StandardToSPIRV.h>
+#include <mlir/Conversion/GPUToSPIRV/GPUToSPIRVPass.h>
 #include <mlir/Conversion/LLVMCommon/ConversionTarget.h>
 #include <mlir/Conversion/LLVMCommon/Pattern.h>
 #include <mlir/Conversion/LLVMCommon/TypeConverter.h>
 #include <mlir/Conversion/SCFToGPU/SCFToGPUPass.h>
+#include <mlir/Conversion/StandardToSPIRV/StandardToSPIRV.h>
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
 #include <mlir/Dialect/GPU/ParallelLoopMapper.h>
 #include <mlir/Dialect/GPU/Passes.h>
@@ -245,10 +245,10 @@ struct SetSPIRVCapabilitiesPass
         spirv::Capability::GenericPointer,
         spirv::Capability::Groups,
         // clang-format on
-        };
-//    spirv::Extension exts[] = {};
-    auto triple =
-        spirv::VerCapExtAttr::get(spirv::Version::V_1_0, caps, /*exts*/{}, context);
+    };
+    //    spirv::Extension exts[] = {};
+    auto triple = spirv::VerCapExtAttr::get(spirv::Version::V_1_0, caps,
+                                            /*exts*/ {}, context);
     auto attr = spirv::TargetEnvAttr::get(
         triple, spirv::Vendor::Unknown, spirv::DeviceType::Unknown,
         spirv::TargetEnvAttr::kUnknownDeviceID,
@@ -361,11 +361,15 @@ public:
     mlir::memref::LoadOp::Adaptor adaptor(operands);
 
     auto loc = op.getLoc();
-    auto ptr = rewriter.create<mlir::spirv::InBoundsPtrAccessChainOp>(loc, adaptor.memref(), adaptor.indices().front(), llvm::None);
+    auto ptr = rewriter.create<mlir::spirv::InBoundsPtrAccessChainOp>(
+        loc, adaptor.memref(), adaptor.indices().front(), llvm::None);
 
-    auto memoryAccess = mlir::spirv::MemoryAccessAttr::get(op.getContext(), mlir::spirv::MemoryAccess::Aligned);
-    auto alignment = rewriter.getI32IntegerAttr(memrefType.getElementTypeBitWidth() / 8);
-    rewriter.replaceOpWithNewOp<mlir::spirv::LoadOp>(op, ptr, memoryAccess, alignment);
+    auto memoryAccess = mlir::spirv::MemoryAccessAttr::get(
+        op.getContext(), mlir::spirv::MemoryAccess::Aligned);
+    auto alignment =
+        rewriter.getI32IntegerAttr(memrefType.getElementTypeBitWidth() / 8);
+    rewriter.replaceOpWithNewOp<mlir::spirv::LoadOp>(op, ptr, memoryAccess,
+                                                     alignment);
 
     return mlir::success();
   }
@@ -375,7 +379,8 @@ class ConvertStoreOp : public mlir::OpConversionPattern<mlir::memref::StoreOp> {
 public:
   using mlir::OpConversionPattern<mlir::memref::StoreOp>::OpConversionPattern;
   mlir::LogicalResult
-  matchAndRewrite(mlir::memref::StoreOp op, llvm::ArrayRef<mlir::Value> operands,
+  matchAndRewrite(mlir::memref::StoreOp op,
+                  llvm::ArrayRef<mlir::Value> operands,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto memrefType = op.memref().getType().cast<mlir::MemRefType>();
     if (!memrefType.hasRank() || memrefType.getRank() != 1)
@@ -384,18 +389,23 @@ public:
     mlir::memref::StoreOp::Adaptor adaptor(operands);
 
     auto loc = op.getLoc();
-    auto ptr = rewriter.create<mlir::spirv::InBoundsPtrAccessChainOp>(loc, adaptor.memref(), adaptor.indices().front(), llvm::None);
+    auto ptr = rewriter.create<mlir::spirv::InBoundsPtrAccessChainOp>(
+        loc, adaptor.memref(), adaptor.indices().front(), llvm::None);
 
-    auto memoryAccess = mlir::spirv::MemoryAccessAttr::get(op.getContext(), mlir::spirv::MemoryAccess::Aligned);
-    auto alignment = rewriter.getI32IntegerAttr(memrefType.getElementTypeBitWidth() / 8);
-    rewriter.replaceOpWithNewOp<mlir::spirv::StoreOp>(op, ptr, adaptor.value(), memoryAccess, alignment);
+    auto memoryAccess = mlir::spirv::MemoryAccessAttr::get(
+        op.getContext(), mlir::spirv::MemoryAccess::Aligned);
+    auto alignment =
+        rewriter.getI32IntegerAttr(memrefType.getElementTypeBitWidth() / 8);
+    rewriter.replaceOpWithNewOp<mlir::spirv::StoreOp>(op, ptr, adaptor.value(),
+                                                      memoryAccess, alignment);
 
     return mlir::success();
   }
 };
 
-
-struct GPUToSpirvPass : public mlir::PassWrapper<GPUToSpirvPass, mlir::OperationPass<mlir::ModuleOp>> {
+struct GPUToSpirvPass
+    : public mlir::PassWrapper<GPUToSpirvPass,
+                               mlir::OperationPass<mlir::ModuleOp>> {
 
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
@@ -423,10 +433,12 @@ struct GPUToSpirvPass : public mlir::PassWrapper<GPUToSpirvPass, mlir::Operation
     mlir::RewritePatternSet patterns(context);
 
     typeConverter.addConversion(
-        [](mlir::MemRefType type)->llvm::Optional<mlir::Type>
-        {
-          if (type.hasRank() && type.getRank() == 1 && type.getElementType().isIntOrFloat())
-            return mlir::spirv::PointerType::get(type.getElementType(), mlir::spirv::StorageClass::CrossWorkgroup);
+        [](mlir::MemRefType type) -> llvm::Optional<mlir::Type> {
+          if (type.hasRank() && type.getRank() == 1 &&
+              type.getElementType().isIntOrFloat())
+            return mlir::spirv::PointerType::get(
+                type.getElementType(),
+                mlir::spirv::StorageClass::CrossWorkgroup);
           return mlir::Type(nullptr);
         });
 
@@ -435,7 +447,8 @@ struct GPUToSpirvPass : public mlir::PassWrapper<GPUToSpirvPass, mlir::Operation
 
     patterns.insert<ConvertLoadOp, ConvertStoreOp>(typeConverter, context);
 
-    if (failed(applyFullConversion(kernelModules, *target, std::move(patterns))))
+    if (failed(
+            applyFullConversion(kernelModules, *target, std::move(patterns))))
       return signalPassFailure();
   }
 };
@@ -797,19 +810,36 @@ private:
         mlir::LLVM::LLVMArrayType::get(llvmRangeType, paramsCount + 1);
     auto paramsArrayPtrType = mlir::LLVM::LLVMPointerType::get(paramsArrayType);
 
+    auto getKernelParamType = [&](unsigned i) -> mlir::Type {
+      if (op.operands()[i].getType().isa<mlir::MemRefType>()) {
+        mlir::MemRefDescriptor desc(kernelParams[i]);
+        return desc.getElementPtrType();
+      }
+
+      return kernelParams[i].getType();
+    };
+
     llvm::SmallVector<mlir::Value> paramsStorage(paramsCount);
     auto paramsArrayPtr = allocaHelper.insert(rewriter, [&]() {
       auto size = rewriter.create<mlir::LLVM::ConstantOp>(
           loc, llvmInt64Type, rewriter.getI64IntegerAttr(1));
       for (auto i : llvm::seq(0u, paramsCount)) {
-        auto ptrType =
-            mlir::LLVM::LLVMPointerType::get(kernelParams[i].getType());
+        auto ptrType = mlir::LLVM::LLVMPointerType::get(getKernelParamType(i));
         paramsStorage[i] =
             rewriter.create<mlir::LLVM::AllocaOp>(loc, ptrType, size, 0);
       }
       return rewriter.create<mlir::LLVM::AllocaOp>(loc, paramsArrayPtrType,
                                                    size, 0);
     });
+
+    auto getKernelParam = [&](unsigned i) -> mlir::Value {
+      if (op.operands()[i].getType().isa<mlir::MemRefType>()) {
+        mlir::MemRefDescriptor desc(kernelParams[i]);
+        return desc.alignedPtr(rewriter, loc);
+      }
+
+      return kernelParams[i];
+    };
 
     mlir::Value paramsArray =
         rewriter.create<mlir::LLVM::UndefOp>(loc, paramsArrayType);
@@ -818,7 +848,7 @@ private:
                        loc, llvmInt32Type, rewriter.getI32IntegerAttr(1))
                    .getResult();
     for (auto i : llvm::seq(0u, paramsCount)) {
-      rewriter.create<mlir::LLVM::StoreOp>(loc, kernelParams[i],
+      rewriter.create<mlir::LLVM::StoreOp>(loc, getKernelParam(i),
                                            paramsStorage[i]);
       auto ptr = rewriter.create<mlir::LLVM::BitcastOp>(loc, llvmPointerType,
                                                         paramsStorage[i]);
