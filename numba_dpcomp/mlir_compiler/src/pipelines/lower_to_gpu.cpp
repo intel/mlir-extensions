@@ -19,6 +19,8 @@
 #include <mlir/Conversion/AsyncToLLVM/AsyncToLLVM.h>
 #include <mlir/Conversion/GPUCommon/GPUCommonPass.h>
 #include <mlir/Conversion/GPUToSPIRV/GPUToSPIRVPass.h>
+#include <mlir/Conversion/GPUToSPIRV/GPUToSPIRV.h>
+#include <mlir/Conversion/StandardToSPIRV/StandardToSPIRV.h>
 #include <mlir/Conversion/LLVMCommon/ConversionTarget.h>
 #include <mlir/Conversion/LLVMCommon/Pattern.h>
 #include <mlir/Conversion/LLVMCommon/TypeConverter.h>
@@ -33,6 +35,7 @@
 #include <mlir/Dialect/SPIRV/IR/SPIRVOps.h>
 #include <mlir/Dialect/SPIRV/IR/TargetAndABI.h>
 #include <mlir/Dialect/SPIRV/Transforms/Passes.h>
+#include <mlir/Dialect/SPIRV/Transforms/SPIRVConversion.h>
 #include <mlir/Pass/PassManager.h>
 #include <mlir/Target/SPIRV/Serialization.h>
 #include <mlir/Transforms/DialectConversion.h>
@@ -229,10 +232,23 @@ struct SetSPIRVCapabilitiesPass
   void runOnOperation() override {
     namespace spirv = mlir::spirv;
     auto context = &getContext();
-    auto caps = {spirv::Capability::Shader};
-    auto exts = {spirv::Extension::SPV_KHR_storage_buffer_storage_class};
+    spirv::Capability caps[] = {
+        // clang-format off
+        spirv::Capability::Addresses,
+        spirv::Capability::Float16Buffer,
+        spirv::Capability::Int64,
+        spirv::Capability::Int16,
+        spirv::Capability::Int8,
+        spirv::Capability::Kernel,
+        spirv::Capability::Linkage,
+        spirv::Capability::Vector16,
+        spirv::Capability::GenericPointer,
+        spirv::Capability::Groups,
+        // clang-format on
+        };
+//    spirv::Extension exts[] = {};
     auto triple =
-        spirv::VerCapExtAttr::get(spirv::Version::V_1_0, caps, exts, context);
+        spirv::VerCapExtAttr::get(spirv::Version::V_1_0, caps, /*exts*/{}, context);
     auto attr = spirv::TargetEnvAttr::get(
         triple, spirv::Vendor::Unknown, spirv::DeviceType::Unknown,
         spirv::TargetEnvAttr::kUnknownDeviceID,
@@ -331,6 +347,98 @@ static llvm::Optional<mlir::Value> getGpuStream(mlir::OpBuilder &builder,
   builder.create<plier::DestroyGpuStreamOp>(loc, stream);
   return stream;
 }
+
+class ConvertLoadOp : public mlir::OpConversionPattern<mlir::memref::LoadOp> {
+public:
+  using mlir::OpConversionPattern<mlir::memref::LoadOp>::OpConversionPattern;
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::LoadOp op, llvm::ArrayRef<mlir::Value> operands,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto memrefType = op.memref().getType().cast<mlir::MemRefType>();
+    if (!memrefType.hasRank() || memrefType.getRank() != 1)
+      return mlir::failure();
+
+    mlir::memref::LoadOp::Adaptor adaptor(operands);
+
+    auto loc = op.getLoc();
+    auto ptr = rewriter.create<mlir::spirv::InBoundsPtrAccessChainOp>(loc, adaptor.memref(), adaptor.indices().front(), llvm::None);
+
+    auto memoryAccess = mlir::spirv::MemoryAccessAttr::get(op.getContext(), mlir::spirv::MemoryAccess::Aligned);
+    auto alignment = rewriter.getI32IntegerAttr(memrefType.getElementTypeBitWidth() / 8);
+    rewriter.replaceOpWithNewOp<mlir::spirv::LoadOp>(op, ptr, memoryAccess, alignment);
+
+    return mlir::success();
+  }
+};
+
+class ConvertStoreOp : public mlir::OpConversionPattern<mlir::memref::StoreOp> {
+public:
+  using mlir::OpConversionPattern<mlir::memref::StoreOp>::OpConversionPattern;
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::StoreOp op, llvm::ArrayRef<mlir::Value> operands,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto memrefType = op.memref().getType().cast<mlir::MemRefType>();
+    if (!memrefType.hasRank() || memrefType.getRank() != 1)
+      return mlir::failure();
+
+    mlir::memref::StoreOp::Adaptor adaptor(operands);
+
+    auto loc = op.getLoc();
+    auto ptr = rewriter.create<mlir::spirv::InBoundsPtrAccessChainOp>(loc, adaptor.memref(), adaptor.indices().front(), llvm::None);
+
+    auto memoryAccess = mlir::spirv::MemoryAccessAttr::get(op.getContext(), mlir::spirv::MemoryAccess::Aligned);
+    auto alignment = rewriter.getI32IntegerAttr(memrefType.getElementTypeBitWidth() / 8);
+    rewriter.replaceOpWithNewOp<mlir::spirv::StoreOp>(op, ptr, adaptor.value(), memoryAccess, alignment);
+
+    return mlir::success();
+  }
+};
+
+
+struct GPUToSpirvPass : public mlir::PassWrapper<GPUToSpirvPass, mlir::OperationPass<mlir::ModuleOp>> {
+
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::spirv::SPIRVDialect>();
+  }
+
+  void runOnOperation() override {
+    auto *context = &getContext();
+    auto module = getOperation();
+
+    llvm::SmallVector<mlir::Operation *, 1> kernelModules;
+    mlir::OpBuilder builder(context);
+    module.walk([&builder, &kernelModules](mlir::gpu::GPUModuleOp moduleOp) {
+      // For each kernel module (should be only 1 for now, but that is not a
+      // requirement here), clone the module for conversion because the
+      // gpu.launch function still needs the kernel module.
+      builder.setInsertionPoint(moduleOp.getOperation());
+      kernelModules.push_back(builder.clone(*moduleOp.getOperation()));
+    });
+
+    auto targetAttr = mlir::spirv::lookupTargetEnvOrDefault(module);
+    auto target = mlir::SPIRVConversionTarget::get(targetAttr);
+
+    mlir::SPIRVTypeConverter typeConverter(targetAttr);
+    mlir::RewritePatternSet patterns(context);
+
+    typeConverter.addConversion(
+        [](mlir::MemRefType type)->llvm::Optional<mlir::Type>
+        {
+          if (type.hasRank() && type.getRank() == 1 && type.getElementType().isIntOrFloat())
+            return mlir::spirv::PointerType::get(type.getElementType(), mlir::spirv::StorageClass::CrossWorkgroup);
+          return mlir::Type(nullptr);
+        });
+
+    mlir::populateGPUToSPIRVPatterns(typeConverter, patterns);
+    mlir::populateStandardToSPIRVPatterns(typeConverter, patterns);
+
+    patterns.insert<ConvertLoadOp, ConvertStoreOp>(typeConverter, context);
+
+    if (failed(applyFullConversion(kernelModules, *target, std::move(patterns))))
+      return signalPassFailure();
+  }
+};
 
 struct ExpandLaunchOp : public mlir::OpRewritePattern<mlir::gpu::LaunchFuncOp> {
   using OpRewritePattern::OpRewritePattern;
@@ -851,7 +959,7 @@ static void populateLowerToGPUPipeline(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addNestedPass<mlir::gpu::GPUModuleOp>(std::make_unique<AbiAttrsPass>());
   pm.addPass(std::make_unique<SetSPIRVCapabilitiesPass>());
-  pm.addPass(mlir::createConvertGPUToSPIRVPass());
+  pm.addPass(std::make_unique<GPUToSpirvPass>());
   pm.addPass(mlir::createCanonicalizerPass());
   auto &modulePM = pm.nest<mlir::spirv::ModuleOp>();
   modulePM.addPass(mlir::spirv::createLowerABIAttributesPass());
