@@ -383,4 +383,19 @@ def DestroyGpuKernelOp : Plier_Op<"destroy_gpu_kernel"> {
   let arguments = (ins Plier_OpaqueType : $source);
 }
 
+def GPUAllocOp
+    : Plier_Op<"gpu_alloc", [GPU_AsyncOpInterface, AttrSizedOperandSegments]> {
+
+  let arguments = (ins Variadic<GPU_AsyncToken>:$asyncDependencies,
+                     Plier_OpaqueType:$stream,
+                   Variadic<Index>:$dynamicSizes, Variadic<Index>:$symbolOperands);
+  let results = (outs Res<AnyMemRef, "", [MemAlloc]>:$memref,
+                 Optional<GPU_AsyncToken>:$asyncToken);
+
+  let extraClassDeclaration = [{
+    ::mlir::MemRefType getType() { return memref().getType().cast<::mlir::MemRefType>();
+}
+}];
+}
+
 #endif // PLIER_OPS

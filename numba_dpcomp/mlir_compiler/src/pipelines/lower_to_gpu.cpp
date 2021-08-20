@@ -655,12 +655,30 @@ struct ExpandLaunchOp : public mlir::OpRewritePattern<mlir::gpu::LaunchFuncOp> {
   }
 };
 
+struct ExpandAllocOp : public mlir::OpRewritePattern<mlir::gpu::AllocOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::gpu::AllocOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto stream = getGpuStream(rewriter, op);
+    if (!stream)
+      return mlir::failure();
+
+    mlir::Type token = op.asyncToken() ? op.asyncToken().getType() : nullptr;
+    rewriter.replaceOpWithNewOp<plier::GPUAllocOp>(
+        op, op.getType(), token, op.asyncDependencies(), *stream,
+        op.dynamicSizes(), op.symbolOperands());
+    return mlir::success();
+  }
+};
+
 struct GPUExPass : public mlir::PassWrapper<GPUExPass, mlir::FunctionPass> {
 
   void runOnFunction() override {
     mlir::OwningRewritePatternList patterns(&getContext());
 
-    patterns.insert<ExpandLaunchOp>(&getContext());
+    patterns.insert<ExpandLaunchOp, ExpandAllocOp>(&getContext());
 
     (void)mlir::applyPatternsAndFoldGreedily(getFunction(),
                                              std::move(patterns));
