@@ -84,11 +84,10 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     MLIRTensorTransforms
     )
 
-target_include_directories(${PROJECT_NAME} PRIVATE
-    ./src
-    ${LLVM_INCLUDE_DIRS}
+target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE
     ${MLIR_INCLUDE_DIRS}
-    )
+    PRIVATE
+    ./src)
 
 if(${DPNP_ENABLE})
     target_compile_definitions(${PROJECT_NAME} PRIVATE DPNP_ENABLE=1)
