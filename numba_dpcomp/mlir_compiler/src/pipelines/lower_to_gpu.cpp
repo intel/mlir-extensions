@@ -305,25 +305,6 @@ struct SerializeSPIRVPass
   }
 };
 
-static llvm::Optional<mlir::StringAttr> getGpuBinary(mlir::Operation *op) {
-  assert(op);
-  auto mod = op->getParentOfType<mlir::ModuleOp>();
-  if (!mod)
-    return {};
-
-  auto ops = mod.getOps<mlir::gpu::GPUModuleOp>();
-  if (!llvm::hasSingleElement(ops))
-    return {};
-
-  auto gpuMod = *ops.begin();
-  auto attr = gpuMod->getAttrOfType<mlir::StringAttr>(
-      mlir::gpu::getDefaultGpuBinaryAnnotation());
-  if (!attr)
-    return {};
-
-  return attr;
-}
-
 static llvm::Optional<mlir::Value> getGpuStream(mlir::OpBuilder &builder,
                                                 mlir::Operation *op) {
   assert(op);
@@ -459,19 +440,28 @@ struct ExpandLaunchOp : public mlir::OpRewritePattern<mlir::gpu::LaunchFuncOp> {
   mlir::LogicalResult
   matchAndRewrite(mlir::gpu::LaunchFuncOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto bin = getGpuBinary(op);
-    if (!bin)
+    auto mod = op->getParentOfType<mlir::ModuleOp>();
+    if (!mod)
+      return mlir::failure();
+
+    auto gpuMod =
+        mod.lookupSymbol<mlir::gpu::GPUModuleOp>(op.getKernelModuleName());
+    if (!gpuMod)
+      return mlir::failure();
+
+    auto gpuKernel =
+        gpuMod.lookupSymbol<mlir::gpu::GPUFuncOp>(op.getKernelName());
+    if (!gpuKernel)
       return mlir::failure();
 
     auto stream = getGpuStream(rewriter, op);
     if (!stream)
       return mlir::failure();
 
-    auto data = bin->getValue();
     auto loc = op.getLoc();
-    auto module = rewriter.create<plier::LoadGpuModuleOp>(loc, *stream, data);
+    auto module = rewriter.create<plier::LoadGpuModuleOp>(loc, *stream, gpuMod);
     auto kernel =
-        rewriter.create<plier::GetGpuKernelOp>(loc, module, op.getKernelName());
+        rewriter.create<plier::GetGpuKernelOp>(loc, module, gpuKernel);
     auto launch = rewriter.create<plier::LaunchGpuKernelOp>(
         loc, *stream, kernel, op.getGridSizeOperandValues(),
         op.getBlockSizeOperandValues(), op.operands());
@@ -676,9 +666,22 @@ private:
                   mlir::ArrayRef<mlir::Value> operands,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     plier::LoadGpuModuleOp::Adaptor adaptor(operands);
-    auto loc = op.getLoc();
-    auto blob = op.blob();
+    auto mod = op->getParentOfType<mlir::ModuleOp>();
+    if (!mod)
+      return mlir::failure();
 
+    auto gpuMod = mod.lookupSymbol<mlir::gpu::GPUModuleOp>(op.module());
+    if (!gpuMod)
+      return mlir::failure();
+
+    auto blobAttr = gpuMod->getAttrOfType<mlir::StringAttr>(
+        mlir::gpu::getDefaultGpuBinaryAnnotation());
+    if (!blobAttr)
+      return mlir::failure();
+
+    auto blob = blobAttr.getValue();
+
+    auto loc = op.getLoc();
     auto data = mlir::LLVM::createGlobalString(loc, rewriter, "gpu_blob", blob,
                                                mlir::LLVM::Linkage::Internal);
     auto size = rewriter.create<mlir::LLVM::ConstantOp>(
@@ -725,7 +728,7 @@ private:
                   mlir::ConversionPatternRewriter &rewriter) const override {
     plier::GetGpuKernelOp::Adaptor adaptor(operands);
     auto loc = op.getLoc();
-    llvm::SmallString<64> name = op.name();
+    llvm::SmallString<64> name = op.kernel().getLeafReference();
 
     auto varName = llvm::formatv("{0}_kernel_name", name).str();
     name.push_back('\0');
@@ -951,6 +954,17 @@ struct GPUToLLVMPass
     });
 
     target.addIllegalDialect<mlir::gpu::GPUDialect>();
+    target.addIllegalOp<
+        // clang-format off
+        plier::CreateGpuStreamOp,
+        plier::DestroyGpuStreamOp,
+        plier::LoadGpuModuleOp,
+        plier::DestroyGpuModuleOp,
+        plier::GetGpuKernelOp,
+        plier::DestroyGpuKernelOp,
+        plier::LaunchGpuKernelOp
+        // clang-format on
+        >();
 
     mlir::populateAsyncStructuralTypeConversionsAndLegality(converter, patterns,
                                                             target);

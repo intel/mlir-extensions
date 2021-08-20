@@ -334,14 +334,14 @@ def DestroyGpuStreamOp : Plier_Op<"destroy_gpu_stream"> {
 }
 
 def LoadGpuModuleOp : Plier_Op<"load_gpu_module", [NoSideEffect]> {
-  let arguments = (ins Plier_OpaqueType : $stream, StrAttr : $blob);
+  let arguments = (ins Plier_OpaqueType : $stream, SymbolRefAttr : $module);
   let results = (outs Plier_OpaqueType : $result);
 
   let hasCanonicalizer = 1;
 
   let builders = [OpBuilder<(ins "::mlir::Value"
-                             : $stream, "::mlir::StringRef"
-                             : $blob)>];
+                             : $stream, "::mlir::gpu::GPUModuleOp"
+                             : $module)>];
 }
 
 def DestroyGpuModuleOp : Plier_Op<"destroy_gpu_module"> {
@@ -349,14 +349,14 @@ def DestroyGpuModuleOp : Plier_Op<"destroy_gpu_module"> {
 }
 
 def GetGpuKernelOp : Plier_Op<"get_gpu_kernel", [NoSideEffect]> {
-  let arguments = (ins Plier_OpaqueType : $module, StrAttr : $name);
+  let arguments = (ins Plier_OpaqueType : $module, SymbolRefAttr : $kernel);
   let results = (outs Plier_OpaqueType : $result);
 
   let hasCanonicalizer = 1;
 
   let builders = [OpBuilder<(ins "::mlir::Value"
-                             : $module, "::mlir::StringRef"
-                             : $name)>];
+                             : $module, "::mlir::gpu::GPUFuncOp"
+                             : $kernel)>];
 }
 
 def LaunchGpuKernelOp

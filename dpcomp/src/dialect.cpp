@@ -845,11 +845,12 @@ void CreateGpuStreamOp::getCanonicalizationPatterns(
 
 void LoadGpuModuleOp::build(::mlir::OpBuilder &odsBuilder,
                             ::mlir::OperationState &odsState,
-                            ::mlir::Value stream, ::mlir::StringRef blob) {
-  assert(!blob.empty());
+                            ::mlir::Value stream,
+                            ::mlir::gpu::GPUModuleOp module) {
   auto ctx = odsBuilder.getContext();
   LoadGpuModuleOp::build(odsBuilder, odsState, plier::OpaqueType::get(ctx),
-                         stream, mlir::StringAttr::get(ctx, blob));
+                         stream,
+                         mlir::SymbolRefAttr::get(ctx, module.getName()));
 }
 
 void LoadGpuModuleOp::getCanonicalizationPatterns(
@@ -859,11 +860,12 @@ void LoadGpuModuleOp::getCanonicalizationPatterns(
 
 void GetGpuKernelOp::build(::mlir::OpBuilder &odsBuilder,
                            ::mlir::OperationState &odsState,
-                           ::mlir::Value module, ::mlir::StringRef name) {
-  assert(!name.empty());
+                           ::mlir::Value module,
+                           ::mlir::gpu::GPUFuncOp kernel) {
   auto ctx = odsBuilder.getContext();
   GetGpuKernelOp::build(odsBuilder, odsState, plier::OpaqueType::get(ctx),
-                        module, mlir::StringAttr::get(ctx, name));
+                        module,
+                        mlir::SymbolRefAttr::get(ctx, kernel.getName()));
 }
 
 void GetGpuKernelOp::getCanonicalizationPatterns(
