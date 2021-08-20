@@ -86,6 +86,17 @@ add_library(${PLIER_LIB} STATIC ${SOURCES_LIST} ${HEADERS_LIST})
 
 apply_llvm_compile_flags(${PLIER_LIB})
 
+include(CheckCXXCompilerFlag)
+CHECK_CXX_COMPILER_FLAG(-Winvalid-offsetof __offsetof_flag)
+if (__offsetof_flag)
+    set_source_files_properties(
+        src/analysis/memory_ssa.cpp
+        PROPERTIES
+        COMPILE_FLAGS "-Wno-invalid-offsetof"
+    )
+endif()
+unset(__offsetof_flag)
+
 target_link_libraries(${PLIER_LIB} PRIVATE
     MLIRIR
     MLIRLLVMIR
@@ -96,10 +107,10 @@ target_link_libraries(${PLIER_LIB} PRIVATE
     MLIRTensorTransforms
     )
 
-target_include_directories(${PLIER_LIB} PRIVATE
-    ./src
-    ${LLVM_INCLUDE_DIRS}
+target_include_directories(${PLIER_LIB} SYSTEM PRIVATE
     ${MLIR_INCLUDE_DIRS}
+    PRIVATE
+    ./src
     )
 
 target_include_directories(${PLIER_LIB} PUBLIC

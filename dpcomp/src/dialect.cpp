@@ -618,7 +618,7 @@ void ReduceRankOp::build(::mlir::OpBuilder &odsBuilder,
   auto srcRank = static_cast<unsigned>(srcType.getRank());
   assert(!mapping.empty());
   assert(llvm::all_of(mapping,
-                      [&](unsigned val) { return val >= 0 && val < srcRank; }));
+                      [&](int32_t val) { return val >= 0 && val < static_cast<int32_t>(srcRank); }));
   auto mapAttr = odsBuilder.getI32ArrayAttr(mapping);
   auto srcShape = srcType.getShape();
   llvm::SmallVector<int64_t> shape(mapping.size());
