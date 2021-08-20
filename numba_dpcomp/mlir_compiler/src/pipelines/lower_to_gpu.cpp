@@ -15,6 +15,7 @@
 #include "pipelines/lower_to_gpu.hpp"
 
 #include <llvm/Support/FormatVariadic.h>
+#include <mlir/Analysis/BufferViewFlowAnalysis.h>
 #include <mlir/Conversion/AffineToStandard/AffineToStandard.h>
 #include <mlir/Conversion/AsyncToLLVM/AsyncToLLVM.h>
 #include <mlir/Conversion/GPUCommon/GPUCommonPass.h>
@@ -59,6 +60,188 @@ struct ParallelLoopGPUMappingPass
 
   void runOnFunction() override {
     mlir::greedilyMapParallelSCFToGPU(getFunction().getBody());
+  }
+};
+
+static const char *kGpuAllocShared = "gpu.alloc_shared";
+
+struct InsertGPUAllocs
+    : public mlir::PassWrapper<InsertGPUAllocs, mlir::FunctionPass> {
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::memref::MemRefDialect>();
+    registry.insert<mlir::gpu::GPUDialect>();
+  }
+
+  void runOnFunction() override {
+    auto func = getFunction();
+    auto &funcBody = func.getBody();
+    if (funcBody.empty()) {
+      return;
+    } else if (!llvm::hasSingleElement(funcBody)) {
+      func.emitError("Function must have exactly one block");
+      signalPassFailure();
+      return;
+    }
+
+    llvm::SmallMapVector<mlir::Operation *, bool, 8> gpuBufferAllocs;
+    llvm::SmallMapVector<unsigned, bool, 8> gpuBufferParams;
+    auto &aliases = getAnalysis<mlir::BufferViewFlowAnalysis>();
+
+    auto getMemref = [](mlir::Operation *op) -> mlir::Value {
+      if (auto load = mlir::dyn_cast<mlir::memref::LoadOp>(op)) {
+        return load.memref();
+      } else if (auto store = mlir::dyn_cast<mlir::memref::StoreOp>(op)) {
+        return store.memref();
+      } else {
+        op->emitError("Uhhandled mem op in gpu region");
+        return nullptr;
+      }
+    };
+
+    auto scfDialect = getContext().getOrLoadDialect<mlir::scf::SCFDialect>();
+
+    if (func.walk([&](mlir::Operation *op) {
+              auto memInterface =
+                  mlir::dyn_cast<mlir::MemoryEffectOpInterface>(op);
+              if (!memInterface)
+                return mlir::WalkResult::advance();
+
+              if (!memInterface.hasEffect<mlir::MemoryEffects::Read>() &&
+                  !memInterface.hasEffect<mlir::MemoryEffects::Write>())
+                return mlir::WalkResult::advance();
+
+              if (!op->getParentOfType<mlir::gpu::LaunchOp>())
+                return mlir::WalkResult::advance();
+
+              auto memref = getMemref(op);
+              if (!memref)
+                return mlir::WalkResult::interrupt();
+
+              for (auto mem : aliases.resolve(memref)) {
+                auto op = mem.getDefiningOp();
+                if (op) {
+                  if (op->getDialect() == scfDialect ||
+                      mlir::isa<mlir::ViewLikeOpInterface>(op))
+                    continue;
+
+                  auto allocOp = mlir::dyn_cast<mlir::memref::AllocOp>(op);
+                  if (!allocOp) {
+                    op->emitError("Unhandled memref producer");
+                    return mlir::WalkResult::interrupt();
+                  }
+
+                  gpuBufferAllocs.insert({allocOp, false});
+                } else {
+                  auto block = mem.getParentBlock();
+                  auto blockArgs = block->getArguments();
+                  auto it = llvm::find(blockArgs, mem);
+                  assert(it != blockArgs.end());
+                  auto index = it - blockArgs.begin();
+                  gpuBufferParams.insert({static_cast<unsigned>(index), false});
+                }
+              }
+
+              return mlir::WalkResult::advance();
+            })
+            .wasInterrupted()) {
+      signalPassFailure();
+      return;
+    }
+
+    auto hasHostAccess = [&](mlir::Value memref) {
+      for (auto mem : aliases.resolve(memref)) {
+        for (auto user : mem.getUsers()) {
+          if (mlir::isa<mlir::ReturnOp>(user))
+            return true;
+
+          if (auto memInterface =
+                  mlir::dyn_cast<mlir::MemoryEffectOpInterface>(user)) {
+            if (memInterface.hasEffect<mlir::MemoryEffects::Read>() &&
+                memInterface.hasEffect<mlir::MemoryEffects::Write>())
+              return true;
+          }
+        }
+      }
+      return false;
+    };
+
+    for (auto &it : gpuBufferAllocs) {
+      auto alloc = mlir::cast<mlir::memref::AllocOp>(it.first);
+      if (!it.second && hasHostAccess(alloc))
+        it.second = true;
+    }
+
+    auto &block = funcBody.front();
+    for (auto &it : gpuBufferParams) {
+      // TODO: need a way to initial copy data from host to device-only memory.
+      // Until than, threat all input buffers as shared
+      it.second = true;
+      //      auto param = block.getArgument(it.first);
+      //      if (!it.second && hasHostAccess(param))
+      //        it.second = true;
+    }
+
+    mlir::OpBuilder builder(func);
+    for (auto it : gpuBufferAllocs) {
+      auto alloc = mlir::cast<mlir::memref::AllocOp>(it.first);
+      bool shared = it.second;
+      auto loc = alloc.getLoc();
+      builder.setInsertionPoint(alloc);
+      auto gpuAlloc = builder.create<mlir::gpu::AllocOp>(
+          loc, alloc.getType(), /*asyncToken*/ nullptr,
+          /*asyncDependencies*/ llvm::None, alloc.dynamicSizes(),
+          alloc.symbolOperands());
+      alloc->replaceAllUsesWith(gpuAlloc);
+      alloc.erase();
+      if (shared)
+        gpuAlloc->setAttr(kGpuAllocShared, builder.getUnitAttr());
+    }
+
+    auto term = block.getTerminator();
+    assert(term);
+
+    llvm::SmallVector<mlir::Value> dims;
+    llvm::SmallPtrSet<mlir::Operation *, 8> filter;
+    for (auto it : gpuBufferParams) {
+      auto param = block.getArgument(it.first);
+      bool shared = it.second;
+      auto loc = param.getLoc();
+      builder.setInsertionPointToStart(&block);
+      auto memrefType = param.getType().cast<mlir::MemRefType>();
+      auto rank = static_cast<unsigned>(memrefType.getRank());
+      dims.resize(rank);
+      filter.clear();
+      for (auto i : llvm::seq(0u, rank)) {
+        auto op = builder.create<mlir::memref::DimOp>(loc, param, i);
+        dims[i] = op;
+        filter.insert(op);
+      }
+      auto allocType = mlir::MemRefType::get(memrefType.getShape(),
+                                             memrefType.getElementType(), {},
+                                             memrefType.getMemorySpace());
+      auto gpuAlloc = builder.create<mlir::gpu::AllocOp>(
+          loc, allocType, /*asyncToken*/ nullptr,
+          /*asyncDependencies*/ llvm::None, dims,
+          /*symbolOperands*/ llvm::None);
+      auto allocResult = gpuAlloc.getResult(0);
+
+      if (shared) {
+        gpuAlloc->setAttr(kGpuAllocShared, builder.getUnitAttr());
+        auto copy =
+            builder.create<mlir::memref::CopyOp>(loc, param, allocResult);
+        filter.insert(copy);
+      }
+
+      if (allocType != memrefType) {
+        allocResult =
+            builder.create<mlir::memref::CastOp>(loc, allocResult, memrefType);
+      }
+
+      param.replaceAllUsesExcept(allocResult, filter);
+      builder.setInsertionPoint(term);
+      builder.create<mlir::memref::DeallocOp>(loc, allocResult);
+    }
   }
 };
 
@@ -994,6 +1177,8 @@ static void populateLowerToGPUPipeline(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::FuncOp>(
       std::make_unique<ParallelLoopGPUMappingPass>());
   pm.addNestedPass<mlir::FuncOp>(mlir::createParallelLoopToGpuPass());
+  pm.addNestedPass<mlir::FuncOp>(mlir::createCanonicalizerPass());
+  pm.addNestedPass<mlir::FuncOp>(std::make_unique<InsertGPUAllocs>());
   pm.addNestedPass<mlir::FuncOp>(mlir::createCanonicalizerPass());
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<UnstrideMemrefsPass>());
   pm.addNestedPass<mlir::FuncOp>(mlir::createLowerAffinePass());
