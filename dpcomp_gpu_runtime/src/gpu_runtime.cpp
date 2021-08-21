@@ -261,7 +261,12 @@ private:
   ze::EventPool eventPool;
   std::unique_ptr<ze::Event[]> events;
 
+  static const constexpr size_t NoEvent = static_cast<size_t>(-1);
+
   ze_event_handle_t getEvent(size_t index) {
+    if (index == NoEvent)
+      return nullptr;
+
     assert(eventPool);
     if (events[index] != nullptr) {
       auto ev = events[index].get();

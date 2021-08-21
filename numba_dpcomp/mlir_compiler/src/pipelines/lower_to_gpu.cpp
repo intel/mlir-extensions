@@ -975,10 +975,13 @@ private:
                   mlir::ConversionPatternRewriter &rewriter) const override {
     plier::LaunchGpuKernelOp::Adaptor adaptor(operands,
                                               op->getAttrDictionary());
-    auto eventIndex =
-        mlir::getConstantIntValue(op->getAttr(kEventIndexAttrName));
-    if (!eventIndex)
-      return mlir::failure();
+    auto eventIndex = [&]() -> int64_t {
+      auto value = mlir::getConstantIntValue(op->getAttr(kEventIndexAttrName));
+      if (!value)
+        return -1;
+
+      return *value;
+    }();
 
     auto loc = op.getLoc();
     auto deps = adaptor.asyncDependencies();
@@ -1092,9 +1095,12 @@ private:
     rewriter.create<mlir::LLVM::StoreOp>(loc, paramsArray, paramsArrayPtr);
 
     auto eventsIndexVar = rewriter.create<mlir::LLVM::ConstantOp>(
-        loc, llvmIndexType,
-        rewriter.getIntegerAttr(llvmIndexType, *eventIndex));
+        loc, llvmIndexType, rewriter.getIntegerAttr(llvmIndexType, eventIndex));
 
+    auto depsArrayVoidPtr = rewriter.create<mlir::LLVM::BitcastOp>(
+        loc, llvmPointerPointerType, depsArrayPtr);
+    auto paramsArrayVoidPtr = rewriter.create<mlir::LLVM::BitcastOp>(
+        loc, llvmRangePointerType, paramsArrayPtr);
     mlir::Value params[] = {
         // clang-format off
         adaptor.stream(),
@@ -1105,16 +1111,16 @@ private:
         adaptor.blockSizeX(),
         adaptor.blockSizeY(),
         adaptor.blockSizeZ(),
-        rewriter.create<mlir::LLVM::BitcastOp>(loc, llvmPointerPointerType, depsArrayPtr),
-        rewriter.create<mlir::LLVM::BitcastOp>(loc, llvmRangePointerType, paramsArrayPtr),
+        depsArrayVoidPtr,
+        paramsArrayVoidPtr,
         eventsIndexVar,
         // clang-format on
     };
     auto res = launchKernelCallBuilder.create(loc, rewriter, params);
     if (op.getNumResults() == 0) {
-      waitEventCallBuilder.create(loc, rewriter, res.getResult(0));
       rewriter.eraseOp(op);
     } else {
+      assert(res.getNumResults() == op.getNumResults());
       rewriter.replaceOp(op, res.getResults());
     }
     return mlir::success();
@@ -1128,8 +1134,8 @@ struct EnumerateEventsPass
     auto mod = getOperation();
     int64_t eventCount = 0;
     auto intType = mlir::IntegerType::get(&getContext(), 64);
-    mod.walk([&](mlir::Operation *op) {
-      if (mlir::isa<plier::LaunchGpuKernelOp>(op)) {
+    mod.walk([&](mlir::gpu::AsyncOpInterface op) {
+      if (op.getAsyncToken()) {
         op->setAttr(kEventIndexAttrName,
                     mlir::IntegerAttr::get(intType, eventCount));
         ++eventCount;
