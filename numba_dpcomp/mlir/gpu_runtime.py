@@ -17,6 +17,8 @@ import atexit
 import llvmlite.binding as ll
 from .utils import load_lib, mlir_func_name
 
+from numba.core.runtime import _nrt_python as _nrt
+
 runtime_lib = load_lib('dpcomp-gpu-runtime')
 assert not runtime_lib is None
 
@@ -29,8 +31,14 @@ _funcs = [
     'dpcompGpuKernelDestroy',
     'dpcompGpuLaunchKernel',
     'dpcompGpuWait',
+    'dpcompGpuAlloc',
 ]
 
 for name in _funcs:
     func = getattr(runtime_lib, name)
     ll.add_symbol(name, ctypes.cast(func, ctypes.c_void_p).value)
+
+
+_alloc_func = runtime_lib.dpcompGpuSetMemInfoAllocFunc
+_alloc_func.argtypes = [ctypes.c_void_p]
+_alloc_func(ctypes.cast(_nrt.c_helpers['Allocate'], ctypes.c_void_p))

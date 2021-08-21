@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
@@ -23,6 +24,17 @@
 
 #include "level_zero_printing.hpp"
 #include "level_zero_wrapper.hpp"
+
+typedef void (*MemInfoDtorFunction)(void *ptr, size_t size, void *info);
+struct MemInfo {
+  size_t refct;
+  MemInfoDtorFunction dtor;
+  void *dtor_info;
+  void *data;
+  size_t size;
+};
+
+using AllocFuncT = void *(*)(size_t);
 
 #if 1 // Log functions
 namespace {
@@ -59,6 +71,26 @@ template <typename F> auto catchAll(F &&func) {
     fflush(stdout);
     abort();
   }
+}
+
+// TODO: expose NRT_MemInfo_new from numba runtime
+static AllocFuncT AllocFunc = nullptr;
+
+static MemInfo *AllocMemInfo(void *data, size_t size, MemInfoDtorFunction dtor,
+                             void *dtorInfo) {
+  if (!AllocFunc)
+    return nullptr;
+
+  auto meminfo = static_cast<MemInfo *>(AllocFunc(sizeof(MemInfo)));
+  if (!meminfo)
+    return nullptr;
+
+  meminfo->refct = 1;
+  meminfo->dtor = dtor;
+  meminfo->dtor_info = dtorInfo;
+  meminfo->data = data;
+  meminfo->size = size;
+  return meminfo;
 }
 
 struct DeviceDesc {
@@ -189,6 +221,22 @@ struct Stream {
     }
   }
 
+  void retain() { ++refcout; }
+
+  void release() {
+    if (--refcout == 1)
+      delete this;
+  }
+
+  struct Releaser {
+    Releaser(Stream *s) : stream(s) { assert(stream); }
+
+    ~Releaser() { stream->release(); }
+
+  private:
+    Stream *stream;
+  };
+
   ze_module_handle_t loadModule(const void *data, size_t dataSize) {
     assert(data);
     ze_module_desc_t desc = {};
@@ -252,7 +300,49 @@ struct Stream {
     CHECK_ZE_RESULT(zeEventHostSynchronize(event, UINT64_MAX));
   }
 
+  std::tuple<MemInfo *, void *, ze_event_handle_t>
+  allocBuffer(size_t size, size_t alignment, bool shared,
+              ze_event_handle_t *events, size_t eventIndex) {
+    (void)events; // Alloc is always sync for now, ignore events
+    auto dtor = [](void *ptr, size_t /*size*/, void *info) {
+      assert(ptr);
+      assert(info);
+      auto *stream = static_cast<Stream *>(info);
+      Releaser r(stream);
+      CHECK_ZE_RESULT(zeMemFree(stream->context.get(), ptr));
+    };
+
+    auto event = getEvent(eventIndex);
+    CHECK_ZE_RESULT(zeEventHostSignal(event));
+
+    auto mem = [&]() -> void * {
+      void *ret = nullptr;
+      ze_device_mem_alloc_desc_t devDesc = {};
+      devDesc.stype = ZE_STRUCTURE_TYPE_DEVICE_MEM_ALLOC_DESC;
+      if (shared) {
+        ze_host_mem_alloc_desc_t hostDesc = {};
+        hostDesc.stype = ZE_STRUCTURE_TYPE_HOST_MEM_ALLOC_DESC;
+        CHECK_ZE_RESULT(zeMemAllocShared(context.get(), &devDesc, &hostDesc,
+                                         size, alignment, device, &ret));
+      } else {
+        devDesc.flags = ZE_DEVICE_MEM_ALLOC_FLAG_BIAS_INITIAL_PLACEMENT;
+        CHECK_ZE_RESULT(zeMemAllocDevice(context.get(), &devDesc, size,
+                                         alignment, device, &ret));
+      }
+      return ret;
+    }();
+    assert(mem);
+    auto info = AllocMemInfo(mem, size, dtor, this);
+    if (!info) {
+      zeMemFree(context.get(), mem);
+      throw std::runtime_error("Failed to allocate MemInfo");
+    }
+    retain();
+    return {info, mem, event};
+  }
+
 private:
+  std::atomic<size_t> refcout = {1};
   ze_driver_handle_t driver = nullptr;
   ze_device_handle_t device = nullptr;
   ze::Context context;
@@ -284,6 +374,12 @@ private:
 };
 } // namespace
 
+extern "C" DPCOMP_GPU_RUNTIME_EXPORT void
+dpcompGpuSetMemInfoAllocFunc(void *func) {
+  LOG_FUNC();
+  AllocFunc = reinterpret_cast<AllocFuncT>(func);
+}
+
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *
 dpcompGpuStreamCreate(size_t eventsCount) {
   LOG_FUNC();
@@ -292,7 +388,7 @@ dpcompGpuStreamCreate(size_t eventsCount) {
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void dpcompGpuStreamDestroy(void *stream) {
   LOG_FUNC();
-  catchAll([&]() { delete static_cast<Stream *>(stream); });
+  catchAll([&]() { static_cast<Stream *>(stream)->release(); });
 }
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *
@@ -341,4 +437,22 @@ dpcompGpuLaunchKernel(void *stream, void *kernel, size_t gridX, size_t gridY,
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void dpcompGpuWait(void *event) {
   LOG_FUNC();
   catchAll([&]() { Stream::waitEvent(static_cast<ze_event_handle_t>(event)); });
+}
+
+struct AllocResult {
+  void *info;
+  void *ptr;
+  void *event;
+};
+
+extern "C" DPCOMP_GPU_RUNTIME_EXPORT AllocResult
+dpcompGpuAlloc(void *stream, size_t size, size_t alignment, int shared,
+               void *events, size_t eventIndex) {
+  LOG_FUNC();
+  return catchAll([&]() {
+    auto res = static_cast<Stream *>(stream)->allocBuffer(
+        size, alignment, shared != 0, static_cast<ze_event_handle_t *>(events),
+        eventIndex);
+    return AllocResult{std::get<0>(res), std::get<1>(res), std::get<2>(res)};
+  });
 }
