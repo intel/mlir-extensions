@@ -27,8 +27,14 @@ _init_func(get_thread_count())
 
 _finalize_func = runtime_lib.dpcomp_parallel_finalize
 
-_parallel_for_func = runtime_lib.dpcomp_parallel_for
-ll.add_symbol('dpcomp_parallel_for', ctypes.cast(_parallel_for_func, ctypes.c_void_p).value)
+_funcs = [
+    'dpcomp_parallel_for',
+    'memrefCopy',
+]
+
+for name in _funcs:
+    func = getattr(runtime_lib, name)
+    ll.add_symbol(name, ctypes.cast(func, ctypes.c_void_p).value)
 
 @atexit.register
 def _cleanup():

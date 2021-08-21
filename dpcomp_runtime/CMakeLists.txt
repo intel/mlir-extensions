@@ -17,9 +17,11 @@ project(dpcomp-runtime LANGUAGES CXX C)
 include(GenerateExportHeader)
 
 find_package(TBB REQUIRED)
+find_package(MLIR REQUIRED CONFIG)
 
 set(SOURCES_LIST
     src/tbb_parallel.cpp
+    src/memory.cpp
     )
 set(HEADERS_LIST
     )
@@ -27,7 +29,9 @@ set(HEADERS_LIST
 add_library(${PROJECT_NAME} SHARED ${SOURCES_LIST} ${HEADERS_LIST})
 generate_export_header(${PROJECT_NAME})
 
-target_include_directories(${PROJECT_NAME} PRIVATE
+target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE
+    ${MLIR_INCLUDE_DIRS}
+    PRIVATE
     ${PROJECT_BINARY_DIR}
     )
 
