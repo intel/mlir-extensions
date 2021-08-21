@@ -76,7 +76,7 @@ template <typename F> auto catchAll(F &&func) {
 // TODO: expose NRT_MemInfo_new from numba runtime
 static AllocFuncT AllocFunc = nullptr;
 
-static MemInfo *AllocMemInfo(void *data, size_t size, MemInfoDtorFunction dtor,
+static MemInfo *allocMemInfo(void *data, size_t size, MemInfoDtorFunction dtor,
                              void *dtorInfo) {
   if (!AllocFunc)
     return nullptr;
@@ -224,7 +224,7 @@ struct Stream {
   void retain() { ++refcout; }
 
   void release() {
-    if (--refcout == 1)
+    if (--refcout == 0)
       delete this;
   }
 
@@ -313,7 +313,8 @@ struct Stream {
     };
 
     auto event = getEvent(eventIndex);
-    CHECK_ZE_RESULT(zeEventHostSignal(event));
+    if (event)
+      CHECK_ZE_RESULT(zeEventHostSignal(event));
 
     auto mem = [&]() -> void * {
       void *ret = nullptr;
@@ -332,11 +333,12 @@ struct Stream {
       return ret;
     }();
     assert(mem);
-    auto info = AllocMemInfo(mem, size, dtor, this);
+    auto info = allocMemInfo(mem, size, dtor, this);
     if (!info) {
       zeMemFree(context.get(), mem);
       throw std::runtime_error("Failed to allocate MemInfo");
     }
+
     retain();
     return {info, mem, event};
   }
@@ -445,14 +447,14 @@ struct AllocResult {
   void *event;
 };
 
-extern "C" DPCOMP_GPU_RUNTIME_EXPORT AllocResult
+extern "C" DPCOMP_GPU_RUNTIME_EXPORT void
 dpcompGpuAlloc(void *stream, size_t size, size_t alignment, int shared,
-               void *events, size_t eventIndex) {
+               void *events, size_t eventIndex, AllocResult *ret) {
   LOG_FUNC();
-  return catchAll([&]() {
+  catchAll([&]() {
     auto res = static_cast<Stream *>(stream)->allocBuffer(
         size, alignment, shared != 0, static_cast<ze_event_handle_t *>(events),
         eventIndex);
-    return AllocResult{std::get<0>(res), std::get<1>(res), std::get<2>(res)};
+    *ret = AllocResult{std::get<0>(res), std::get<1>(res), std::get<2>(res)};
   });
 }

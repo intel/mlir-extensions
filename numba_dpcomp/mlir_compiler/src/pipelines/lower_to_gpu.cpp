@@ -665,10 +665,16 @@ struct ExpandAllocOp : public mlir::OpRewritePattern<mlir::gpu::AllocOp> {
     if (!stream)
       return mlir::failure();
 
+    auto shared = op->hasAttr(kGpuAllocShared);
+
     mlir::Type token = op.asyncToken() ? op.asyncToken().getType() : nullptr;
-    rewriter.replaceOpWithNewOp<plier::GPUAllocOp>(
+    auto res = rewriter.replaceOpWithNewOp<plier::GPUAllocOp>(
         op, op.getType(), token, op.asyncDependencies(), *stream,
         op.dynamicSizes(), op.symbolOperands());
+
+    if (shared)
+      res->setAttr(kGpuAllocShared, rewriter.getUnitAttr());
+
     return mlir::success();
   }
 };
@@ -710,6 +716,9 @@ private:
   mlir::LLVM::LLVMFunctionType functionType;
 };
 
+static const char *kEventCountAttrName = "gpu.event_count";
+static const char *kEventIndexAttrName = "gpu.event_index";
+
 template <typename OpTy>
 class ConvertOpToGpuRuntimeCallPattern
     : public mlir::ConvertOpToLLVMPattern<OpTy> {
@@ -734,6 +743,10 @@ protected:
       context, {llvmPointerType, llvmIndexType});
   mlir::Type llvmRangePointerType =
       mlir::LLVM::LLVMPointerType::get(llvmRangeType);
+  mlir::Type llvmAllocResType = mlir::LLVM::LLVMStructType::getLiteral(
+      context, {llvmPointerType, llvmPointerType, llvmPointerType});
+  mlir::Type llvmAllocResPtrType =
+      mlir::LLVM::LLVMPointerType::get(llvmAllocResType);
 
   FunctionCallBuilder streamCreateCallBuilder = {
       "dpcompGpuStreamCreate",
@@ -797,10 +810,65 @@ protected:
                                               {
                                                   llvmPointerType // dep
                                               }};
-};
 
-static const char *kEventCountAttrName = "gpu.event_count";
-static const char *kEventIndexAttrName = "gpu.event_index";
+  FunctionCallBuilder allocCallBuilder = {
+      "dpcompGpuAlloc",
+      llvmVoidType,
+      {
+          llvmPointerType,        // stream
+          llvmIndexType,          // size
+          llvmIndexType,          // alignment
+          llvmInt32Type,          // shared
+          llvmPointerPointerType, // deps (null-term)
+          llvmIndexType,          // eventIndex
+          llvmAllocResPtrType,    // result
+      }};
+
+  mlir::Value createDepsArray(mlir::OpBuilder &rewriter, mlir::Location loc,
+                              mlir::Operation *op,
+                              mlir::ValueRange deps) const {
+    auto depsArraySize = static_cast<unsigned>(deps.size());
+    auto depsArrayType =
+        mlir::LLVM::LLVMArrayType::get(llvmPointerType, depsArraySize + 1);
+    mlir::Value depsArray =
+        rewriter.create<mlir::LLVM::UndefOp>(loc, depsArrayType);
+    for (auto i : llvm::seq(0u, depsArraySize)) {
+      auto index = rewriter.getI64ArrayAttr(i);
+      depsArray = rewriter.create<mlir::LLVM::InsertValueOp>(loc, depsArray,
+                                                             deps[i], index);
+    }
+    auto nullPtr = rewriter.create<mlir::LLVM::NullOp>(loc, llvmPointerType);
+    depsArray = rewriter.create<mlir::LLVM::InsertValueOp>(
+        loc, depsArray, nullPtr, rewriter.getI64ArrayAttr(depsArraySize));
+
+    auto depsArrayPtrType = mlir::LLVM::LLVMPointerType::get(depsArrayType);
+    plier::AllocaInsertionPoint allocaHelper(op);
+    auto depsArrayPtr = allocaHelper.insert(rewriter, [&]() {
+      auto size = rewriter.create<mlir::LLVM::ConstantOp>(
+          loc, llvmInt64Type, rewriter.getI64IntegerAttr(1));
+      return rewriter.create<mlir::LLVM::AllocaOp>(loc, depsArrayPtrType, size,
+                                                   0);
+    });
+
+    rewriter.create<mlir::LLVM::StoreOp>(loc, depsArray, depsArrayPtr);
+
+    return rewriter.create<mlir::LLVM::BitcastOp>(loc, llvmPointerPointerType,
+                                                  depsArrayPtr);
+  }
+
+  mlir::Value createEventIndexVar(mlir::OpBuilder &rewriter, mlir::Location loc,
+                                  mlir::Operation *op) const {
+    auto eventIndex = [&]() -> int64_t {
+      auto value = mlir::getConstantIntValue(op->getAttr(kEventIndexAttrName));
+      if (!value)
+        return -1;
+
+      return *value;
+    }();
+    return rewriter.create<mlir::LLVM::ConstantOp>(
+        loc, llvmIndexType, rewriter.getIntegerAttr(llvmIndexType, eventIndex));
+  }
+};
 
 class ConvertGpuStreamCreatePattern
     : public ConvertOpToGpuRuntimeCallPattern<plier::CreateGpuStreamOp> {
@@ -975,42 +1043,12 @@ private:
                   mlir::ConversionPatternRewriter &rewriter) const override {
     plier::LaunchGpuKernelOp::Adaptor adaptor(operands,
                                               op->getAttrDictionary());
-    auto eventIndex = [&]() -> int64_t {
-      auto value = mlir::getConstantIntValue(op->getAttr(kEventIndexAttrName));
-      if (!value)
-        return -1;
-
-      return *value;
-    }();
 
     auto loc = op.getLoc();
-    auto deps = adaptor.asyncDependencies();
+    auto depsArrayPtr =
+        createDepsArray(rewriter, loc, op, adaptor.asyncDependencies());
 
-    auto depsArraySize = static_cast<unsigned>(deps.size());
-    auto depsArrayType =
-        mlir::LLVM::LLVMArrayType::get(llvmPointerType, depsArraySize + 1);
-    mlir::Value depsArray =
-        rewriter.create<mlir::LLVM::UndefOp>(loc, depsArrayType);
-    for (auto i : llvm::seq(0u, depsArraySize)) {
-      auto index = rewriter.getI64ArrayAttr(i);
-      depsArray = rewriter.create<mlir::LLVM::InsertValueOp>(loc, depsArray,
-                                                             deps[i], index);
-    }
-    auto nullPtr = rewriter.create<mlir::LLVM::NullOp>(loc, llvmPointerType);
-    depsArray = rewriter.create<mlir::LLVM::InsertValueOp>(
-        loc, depsArray, nullPtr, rewriter.getI64ArrayAttr(depsArraySize));
-
-    auto depsArrayPtrType = mlir::LLVM::LLVMPointerType::get(depsArrayType);
     plier::AllocaInsertionPoint allocaHelper(op);
-    auto depsArrayPtr = allocaHelper.insert(rewriter, [&]() {
-      auto size = rewriter.create<mlir::LLVM::ConstantOp>(
-          loc, llvmInt64Type, rewriter.getI64IntegerAttr(1));
-      return rewriter.create<mlir::LLVM::AllocaOp>(loc, depsArrayPtrType, size,
-                                                   0);
-    });
-
-    rewriter.create<mlir::LLVM::StoreOp>(loc, depsArray, depsArrayPtr);
-
     auto kernelParams = adaptor.operands();
     auto paramsCount = static_cast<unsigned>(kernelParams.size());
     auto paramsArrayType =
@@ -1079,6 +1117,7 @@ private:
           loc, paramsArray, range, rewriter.getI64ArrayAttr(i));
     }
 
+    auto nullPtr = rewriter.create<mlir::LLVM::NullOp>(loc, llvmPointerType);
     auto nullRange = [&]() {
       auto zero = rewriter.create<mlir::LLVM::ConstantOp>(
           loc, llvmIndexType, rewriter.getIntegerAttr(llvmIndexType, 0));
@@ -1094,11 +1133,8 @@ private:
         loc, paramsArray, nullRange, rewriter.getI64ArrayAttr(paramsCount));
     rewriter.create<mlir::LLVM::StoreOp>(loc, paramsArray, paramsArrayPtr);
 
-    auto eventsIndexVar = rewriter.create<mlir::LLVM::ConstantOp>(
-        loc, llvmIndexType, rewriter.getIntegerAttr(llvmIndexType, eventIndex));
+    auto eventIndexVar = createEventIndexVar(rewriter, loc, op);
 
-    auto depsArrayVoidPtr = rewriter.create<mlir::LLVM::BitcastOp>(
-        loc, llvmPointerPointerType, depsArrayPtr);
     auto paramsArrayVoidPtr = rewriter.create<mlir::LLVM::BitcastOp>(
         loc, llvmRangePointerType, paramsArrayPtr);
     mlir::Value params[] = {
@@ -1111,9 +1147,9 @@ private:
         adaptor.blockSizeX(),
         adaptor.blockSizeY(),
         adaptor.blockSizeZ(),
-        depsArrayVoidPtr,
+        depsArrayPtr,
         paramsArrayVoidPtr,
-        eventsIndexVar,
+        eventIndexVar,
         // clang-format on
     };
     auto res = launchKernelCallBuilder.create(loc, rewriter, params);
@@ -1122,6 +1158,137 @@ private:
     } else {
       assert(res.getNumResults() == op.getNumResults());
       rewriter.replaceOp(op, res.getResults());
+    }
+    return mlir::success();
+  }
+};
+
+class ConvertGpuAllocPattern
+    : public ConvertOpToGpuRuntimeCallPattern<plier::GPUAllocOp> {
+public:
+  ConvertGpuAllocPattern(mlir::LLVMTypeConverter &converter)
+      : ConvertOpToGpuRuntimeCallPattern<plier::GPUAllocOp>(converter) {}
+
+private:
+  mlir::LogicalResult
+  matchAndRewrite(plier::GPUAllocOp op, mlir::ArrayRef<mlir::Value> operands,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    if (!op.symbolOperands().empty())
+      return mlir::failure();
+
+    auto memrefType = op.getType();
+    auto converter = getTypeConverter();
+    auto dstType = converter->convertType(memrefType);
+    if (!dstType)
+      return mlir::failure();
+
+    plier::GPUAllocOp::Adaptor adaptor(operands, op->getAttrDictionary());
+
+    auto loc = op.getLoc();
+
+    auto dynSizes = adaptor.dynamicSizes();
+    auto shape = memrefType.getShape();
+    auto rank = static_cast<unsigned>(shape.size());
+
+    auto elemSize = rewriter.getIntegerAttr(
+        llvmIndexType, memrefType.getElementTypeBitWidth() / 8);
+    mlir::Value sizeVar =
+        rewriter.create<mlir::LLVM::ConstantOp>(loc, llvmIndexType, elemSize);
+    llvm::SmallVector<mlir::Value> dims(rank);
+    for (auto i : llvm::seq(0u, rank)) {
+      auto dim = shape[i];
+      auto dimVal = [&]() -> mlir::Value {
+        if (mlir::ShapedType::isDynamic(dim)) {
+          assert(!dynSizes.empty());
+          auto val = dynSizes.front();
+          dynSizes = dynSizes.drop_front();
+          return val;
+        } else {
+          auto val = rewriter.getIntegerAttr(llvmIndexType, dim);
+          return rewriter.create<mlir::LLVM::ConstantOp>(loc, llvmIndexType,
+                                                         val);
+        }
+      }();
+      dims[i] = dimVal;
+      sizeVar = rewriter.create<mlir::LLVM::MulOp>(loc, llvmIndexType, sizeVar,
+                                                   dimVal);
+    }
+
+    auto alignment = rewriter.getIntegerAttr(llvmIndexType, 64);
+    auto alignmentVar =
+        rewriter.create<mlir::LLVM::ConstantOp>(loc, llvmIndexType, alignment);
+
+    bool shared = op->hasAttr(kGpuAllocShared);
+    auto sharedVar = rewriter.create<mlir::LLVM::ConstantOp>(
+        loc, llvmInt32Type,
+        rewriter.getI32IntegerAttr(static_cast<int>(shared)));
+
+    auto depsArrayPtr =
+        createDepsArray(rewriter, loc, op, adaptor.asyncDependencies());
+
+    auto eventIndexVar = createEventIndexVar(rewriter, loc, op);
+
+    plier::AllocaInsertionPoint allocaHelper(op);
+    auto resultPtr = allocaHelper.insert(rewriter, [&]() {
+      auto size = rewriter.create<mlir::LLVM::ConstantOp>(
+          loc, llvmInt64Type, rewriter.getI64IntegerAttr(1));
+      return rewriter.create<mlir::LLVM::AllocaOp>(loc, llvmAllocResPtrType,
+                                                   size, 0);
+    });
+
+    mlir::Value params[] = {
+        // clang-format off
+        adaptor.stream(),
+        sizeVar,
+        alignmentVar,
+        sharedVar,
+        depsArrayPtr,
+        eventIndexVar,
+        resultPtr,
+        // clang-format on
+    };
+    allocCallBuilder.create(loc, rewriter, params);
+    auto res = rewriter.create<mlir::LLVM::LoadOp>(loc, resultPtr);
+    auto meminfo = rewriter.create<mlir::LLVM::ExtractValueOp>(
+        loc, llvmPointerType, res, rewriter.getI64ArrayAttr(0));
+    auto dataPtr = rewriter.create<mlir::LLVM::ExtractValueOp>(
+        loc, llvmPointerType, res, rewriter.getI64ArrayAttr(1));
+
+    auto memrefDesc = mlir::MemRefDescriptor::undef(rewriter, loc, dstType);
+    auto elemPtrTye = memrefDesc.getElementPtrType();
+    memrefDesc.setAllocatedPtr(
+        rewriter, loc,
+        rewriter.create<mlir::LLVM::BitcastOp>(loc, elemPtrTye, meminfo));
+    memrefDesc.setAlignedPtr(
+        rewriter, loc,
+        rewriter.create<mlir::LLVM::BitcastOp>(loc, elemPtrTye, dataPtr));
+
+    auto zero = rewriter.create<mlir::LLVM::ConstantOp>(
+        loc, llvmIndexType, rewriter.getIntegerAttr(llvmIndexType, 0));
+    auto one = rewriter.create<mlir::LLVM::ConstantOp>(
+        loc, llvmIndexType, rewriter.getIntegerAttr(llvmIndexType, 1));
+
+    memrefDesc.setOffset(rewriter, loc, zero);
+    mlir::Value stride = one;
+    for (auto i : llvm::seq(0u, rank)) {
+      auto dim = dims[i];
+      memrefDesc.setSize(rewriter, loc, i, dim);
+      memrefDesc.setStride(rewriter, loc, i, stride);
+      if (i != (rank - 1))
+        stride = rewriter.create<mlir::LLVM::MulOp>(loc, stride, dim);
+    }
+
+    mlir::Value resMemref = memrefDesc;
+    if (op.getNumResults() == 1) {
+      rewriter.replaceOp(op, resMemref);
+    } else {
+      auto event = rewriter.create<mlir::LLVM::ExtractValueOp>(
+          loc, llvmPointerType, res, rewriter.getI64ArrayAttr(2));
+      mlir::Value vals[] = {
+          resMemref,
+          event,
+      };
+      rewriter.replaceOp(op, vals);
     }
     return mlir::success();
   }
@@ -1169,7 +1336,8 @@ struct GPUToLLVMPass
         plier::DestroyGpuModuleOp,
         plier::GetGpuKernelOp,
         plier::DestroyGpuKernelOp,
-        plier::LaunchGpuKernelOp
+        plier::LaunchGpuKernelOp,
+        plier::GPUAllocOp
         // clang-format on
         >();
 
@@ -1186,7 +1354,8 @@ struct GPUToLLVMPass
         ConvertGpuModuleDestroyPattern,
         ConvertGpuKernelGetPattern,
         ConvertGpuKernelDestroyPattern,
-        ConvertGpuKernelLaunchPattern
+        ConvertGpuKernelLaunchPattern,
+        ConvertGpuAllocPattern
         // clang-format on
         >(converter);
 
