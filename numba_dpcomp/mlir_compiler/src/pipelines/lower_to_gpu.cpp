@@ -593,7 +593,10 @@ struct GPUToSpirvPass
     auto targetAttr = mlir::spirv::lookupTargetEnvOrDefault(module);
     auto target = mlir::SPIRVConversionTarget::get(targetAttr);
 
-    mlir::SPIRVTypeConverter typeConverter(targetAttr);
+    mlir::SPIRVTypeConverter::Options options;
+    //    options.use64bitIndex = true;
+
+    mlir::SPIRVTypeConverter typeConverter(targetAttr, options);
     mlir::RewritePatternSet patterns(context);
 
     typeConverter.addConversion(
@@ -1366,23 +1369,31 @@ struct GPUToLLVMPass
   }
 };
 
-static void populateLowerToGPUPipeline(mlir::OpPassManager &pm) {
-  pm.addNestedPass<mlir::FuncOp>(
-      std::make_unique<ParallelLoopGPUMappingPass>());
-  pm.addNestedPass<mlir::FuncOp>(mlir::createParallelLoopToGpuPass());
-  pm.addNestedPass<mlir::FuncOp>(mlir::createCanonicalizerPass());
-  pm.addNestedPass<mlir::FuncOp>(std::make_unique<InsertGPUAllocs>());
-  pm.addNestedPass<mlir::FuncOp>(mlir::createCanonicalizerPass());
-  pm.addNestedPass<mlir::FuncOp>(std::make_unique<UnstrideMemrefsPass>());
-  pm.addNestedPass<mlir::FuncOp>(mlir::createLowerAffinePass());
-  pm.addNestedPass<mlir::FuncOp>(mlir::createCanonicalizerPass());
+static void commonOptPasses(mlir::OpPassManager &pm) {
+  pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(mlir::createCSEPass());
+  pm.addPass(mlir::createCanonicalizerPass());
+}
+
+static void populateLowerToGPUPipeline(mlir::OpPassManager &pm) {
+  auto &funcPM = pm.nest<mlir::FuncOp>();
+  funcPM.addPass(std::make_unique<ParallelLoopGPUMappingPass>());
+  funcPM.addPass(mlir::createParallelLoopToGpuPass());
+  funcPM.addPass(mlir::createCanonicalizerPass());
+  funcPM.addPass(std::make_unique<InsertGPUAllocs>());
+  funcPM.addPass(mlir::createCanonicalizerPass());
+  funcPM.addPass(std::make_unique<UnstrideMemrefsPass>());
+  funcPM.addPass(mlir::createLowerAffinePass());
+  funcPM.addPass(mlir::createCanonicalizerPass());
+  commonOptPasses(funcPM);
+
   pm.addPass(mlir::createGpuKernelOutliningPass());
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addNestedPass<mlir::gpu::GPUModuleOp>(std::make_unique<AbiAttrsPass>());
   pm.addPass(std::make_unique<SetSPIRVCapabilitiesPass>());
   pm.addPass(std::make_unique<GPUToSpirvPass>());
-  pm.addPass(mlir::createCanonicalizerPass());
+  commonOptPasses(pm);
+
   auto &modulePM = pm.nest<mlir::spirv::ModuleOp>();
   modulePM.addPass(mlir::spirv::createLowerABIAttributesPass());
   modulePM.addPass(mlir::spirv::createUpdateVersionCapabilityExtensionPass());

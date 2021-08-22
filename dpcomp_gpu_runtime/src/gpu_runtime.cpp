@@ -344,7 +344,7 @@ struct Stream {
   }
 
 private:
-  std::atomic<size_t> refcout = {1};
+  std::atomic<unsigned> refcout = {1};
   ze_driver_handle_t driver = nullptr;
   ze_device_handle_t device = nullptr;
   ze::Context context;
