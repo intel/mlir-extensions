@@ -265,13 +265,13 @@ static mlir::Value getFlatIndex(mlir::OpBuilder &builder, mlir::Location loc,
     auto expr =
         mlir::makeCanonicalStridedLayoutExpr(shape, builder.getContext());
     llvm::SmallVector<mlir::Value> applyOperands;
-    applyOperands.reserve(rank * 2);
-    applyOperands.assign(indices.begin(), indices.end());
     if (rank != 0) {
+      applyOperands.reserve(rank * 2);
+      applyOperands.assign(indices.begin(), indices.end());
       mlir::OpBuilder::InsertionGuard g(builder);
       setInsertionPointToStart(builder, memref);
       for (auto i : llvm::seq(0u, rank - 1)) {
-        if (shape[i] == mlir::ShapedType::kDynamicSize) {
+        if (mlir::ShapedType::isDynamic(shape[i])) {
           auto dim = builder.createOrFold<mlir::memref::DimOp>(loc, memref, i);
           applyOperands.emplace_back(dim);
         }
@@ -1276,7 +1276,7 @@ private:
     for (auto i : llvm::seq(0u, rank)) {
       auto dim = dims[i];
       memrefDesc.setSize(rewriter, loc, i, dim);
-      memrefDesc.setStride(rewriter, loc, i, stride);
+      memrefDesc.setStride(rewriter, loc, rank - i - 1, stride);
       if (i != (rank - 1))
         stride = rewriter.create<mlir::LLVM::MulOp>(loc, stride, dim);
     }
