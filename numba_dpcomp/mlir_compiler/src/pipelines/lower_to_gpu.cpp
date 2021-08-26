@@ -1384,7 +1384,6 @@ static void populateLowerToGPUPipeline(mlir::OpPassManager &pm) {
   funcPM.addPass(mlir::createCanonicalizerPass());
   funcPM.addPass(std::make_unique<UnstrideMemrefsPass>());
   funcPM.addPass(mlir::createLowerAffinePass());
-  funcPM.addPass(mlir::createCanonicalizerPass());
   commonOptPasses(funcPM);
 
   pm.addPass(mlir::createGpuKernelOutliningPass());
@@ -1401,7 +1400,7 @@ static void populateLowerToGPUPipeline(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<GPUExPass>());
   pm.addPass(std::make_unique<EnumerateEventsPass>());
   pm.addPass(std::make_unique<GPUToLLVMPass>());
-  pm.addPass(mlir::createCanonicalizerPass());
+  commonOptPasses(pm);
 }
 } // namespace
 
