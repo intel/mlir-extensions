@@ -457,11 +457,8 @@ struct SerializeSPIRVPass
 
     namespace gpu = mlir::gpu;
     auto gpuMod = getOp<gpu::GPUModuleOp>(mod.getRegion());
-    if (!gpuMod) {
-      mod.emitError() << "Invalid gpu module";
-      signalPassFailure();
+    if (!gpuMod)
       return;
-    }
 
     namespace spirv = mlir::spirv;
     auto spvMod = getOp<spirv::ModuleOp>(mod.getRegion());
