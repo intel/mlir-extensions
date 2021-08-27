@@ -594,7 +594,7 @@ struct GPUToSpirvPass
     auto target = mlir::SPIRVConversionTarget::get(targetAttr);
 
     mlir::SPIRVTypeConverter::Options options;
-    //    options.use64bitIndex = true;
+    options.use64bitIndex = true;
 
     mlir::SPIRVTypeConverter typeConverter(targetAttr, options);
     mlir::RewritePatternSet patterns(context);
