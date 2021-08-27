@@ -173,6 +173,19 @@ def test_while(py_func):
     jit_func = njit(py_func)
     assert_equal(py_func(1,66), jit_func(1,66))
 
+def test_indirect_call1():
+    def inner_func(a):
+        return a + 1
+
+    def func(func, arg):
+        return func(arg)
+
+    jit_inner_func = njit(inner_func)
+    jit_func = njit(func)
+
+    assert_equal(func(inner_func, 5), jit_func(jit_inner_func, 5))
+
+
 class TestMlirBasic(TestCase):
     def test_none_args(self):
         def py_func(a, b, c, d):

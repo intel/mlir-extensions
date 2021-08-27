@@ -225,9 +225,9 @@ mlir::Type map_dtype_type(mlir::MLIRContext &ctx, llvm::StringRef &name) {
 }
 
 mlir::Type map_none_type(mlir::MLIRContext &ctx, llvm::StringRef &name) {
-  if (name.consume_front("none")) {
+  if (name.consume_front("none"))
     return mlir::NoneType::get(&ctx);
-  }
+
   return nullptr;
 }
 
@@ -262,9 +262,9 @@ mlir::Type map_plier_type_name(mlir::MLIRContext &ctx, llvm::StringRef &name) {
 
 mlir::Type map_plier_type(mlir::Type type) {
   assert(type);
-  if (!type.isa<plier::PyType>()) {
+  if (!type.isa<plier::PyType>())
     return type;
-  }
+
   auto name = type.cast<plier::PyType>().getName();
   return map_plier_type_name(*type.getContext(), name);
 }
@@ -1583,6 +1583,46 @@ struct FoldSliceGetitem : public mlir::OpRewritePattern<plier::GetItemOp> {
   }
 };
 
+struct FixupFuncOpaqueTypes : public mlir::OpRewritePattern<mlir::FuncOp> {
+  FixupFuncOpaqueTypes(mlir::TypeConverter & /*typeConverter*/,
+                       mlir::MLIRContext *context)
+      : OpRewritePattern(context) {}
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::FuncOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    // TODO: This is a hack. Remove after moving to dialect conversion
+    auto funcType = op.getType();
+    auto numArgs = funcType.getNumInputs();
+    bool hasBody = !op.getBody().empty();
+
+    auto opaqueType = plier::OpaqueType::get(op.getContext());
+    bool changed = false;
+    llvm::SmallVector<mlir::Type> newArgs(numArgs);
+    for (auto i : llvm::seq(0u, numArgs)) {
+      auto origType = funcType.getInput(i);
+      auto type = origType.dyn_cast<plier::PyType>();
+      auto canChange = (hasBody ? op.getArgument(i).getUsers().empty() : true);
+      if (canChange && type &&
+          type.getName().startswith("type(CPUDispatcher")) {
+        newArgs[i] = opaqueType;
+        if (hasBody)
+          op.getArgument(i).setType(opaqueType);
+        changed = true;
+      } else {
+        newArgs[i] = origType;
+      }
+    }
+
+    if (changed) {
+      auto newFuncType = mlir::FunctionType::get(op.getContext(), newArgs,
+                                                 funcType.getResults());
+      rewriter.updateRootInPlace(op, [&]() { op.setType(newFuncType); });
+    }
+    return mlir::success(changed);
+  }
+};
+
 mlir::LogicalResult
 lowerRange(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands,
            llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs,
@@ -1857,7 +1897,8 @@ void PlierToStdPass::runOnOperation() {
       FixupWhileTypes,
       PropagateBuildTupleTypes,
       FoldTupleGetitem,
-      FoldSliceGetitem
+      FoldSliceGetitem,
+      FixupFuncOpaqueTypes
       // clang-format on
       >(typeConverter, context);
 
@@ -1872,9 +1913,8 @@ void PlierToStdPass::runOnOperation() {
 
   // range/prange lowering need dead branch pruning to properly
   // handle negative steps
-  for (auto *op : context->getRegisteredOperations()) {
+  for (auto *op : context->getRegisteredOperations())
     op->getCanonicalizationPatterns(patterns, context);
-  }
 
   (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
 }
