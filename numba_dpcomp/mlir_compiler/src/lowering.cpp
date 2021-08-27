@@ -386,34 +386,36 @@ private:
   }
 
   mlir::Value lower_call(py::handle expr) {
-    auto py_func = expr.attr("func");
-    auto func = loadvar(py_func);
+    auto pyPunc = expr.attr("func");
+    auto func = loadvar(pyPunc);
     auto args = expr.attr("args").cast<py::list>();
     auto kws = expr.attr("kws").cast<py::list>();
     auto vararg = expr.attr("vararg");
 
-    mlir::SmallVector<mlir::Value> args_list;
-    mlir::SmallVector<std::pair<std::string, mlir::Value>> kwargs_list;
-    for (auto a : args) {
-      args_list.push_back(loadvar(a));
-    }
+    auto varargVar = (vararg.is_none() ? mlir::Value() : loadvar(vararg));
+
+    mlir::SmallVector<mlir::Value> argsList;
+    argsList.reserve(args.size());
+    for (auto a : args)
+      argsList.push_back(loadvar(a));
+
+    mlir::SmallVector<std::pair<std::string, mlir::Value>> kwargsList;
     for (auto a : kws) {
       auto item = a.cast<py::tuple>();
       auto name = item[0];
-      auto val_name = item[1];
-      kwargs_list.push_back({name.cast<std::string>(), loadvar(val_name)});
+      auto valName = item[1];
+      kwargsList.push_back({name.cast<std::string>(), loadvar(valName)});
     }
 
-    auto py_func_name = func_name_resolver(typemap(py_func));
-    if (py_func_name.is_none()) {
+    auto pyFuncName = func_name_resolver(typemap(pyPunc));
+    if (pyFuncName.is_none())
       plier::report_error(llvm::Twine("Can't resolve function: ") +
-                          py::str(typemap(py_func)).cast<std::string>());
-    }
+                          py::str(typemap(pyPunc)).cast<std::string>());
 
-    auto func_name = py_func_name.cast<std::string>();
+    auto funcName = pyFuncName.cast<std::string>();
 
-    return builder.create<plier::PyCallOp>(get_current_loc(), func, func_name,
-                                           args_list, kwargs_list);
+    return builder.create<plier::PyCallOp>(get_current_loc(), func, funcName,
+                                           argsList, varargVar, kwargsList);
   }
 
   mlir::Value lower_binop(py::handle expr) {

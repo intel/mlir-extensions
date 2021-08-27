@@ -104,7 +104,8 @@ def PyCallOp : Plier_Op<"call", [AttrSizedOperandSegments]> {
       ins "::mlir::Value"
       : $func, "::mlir::StringRef"
       : $func_name, "::mlir::ValueRange"
-      : $args, "::mlir::ArrayRef<std::pair<std::string, ::mlir::Value>>"
+      : $args, "::mlir::Value"
+      : $varargs, "::mlir::ArrayRef<std::pair<std::string, ::mlir::Value>>"
       : $kwargs)>];
 }
 

@@ -277,7 +277,7 @@ mlir::OpFoldResult CastOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
 
 void PyCallOp::build(
     mlir::OpBuilder &builder, mlir::OperationState &state, mlir::Value func,
-    llvm::StringRef func_name, mlir::ValueRange args,
+    llvm::StringRef func_name, mlir::ValueRange args, mlir::Value varargs,
     mlir::ArrayRef<std::pair<std::string, mlir::Value>> kwargs) {
   auto ctx = builder.getContext();
 
@@ -290,7 +290,7 @@ void PyCallOp::build(
     kwNames.push_back(mlir::StringAttr::get(ctx, a.first));
 
   PyCallOp::build(builder, state, PyType::getUndefined(state.getContext()),
-                  func, args, mlir::Value(), kwArgsVals, func_name,
+                  func, args, varargs, kwArgsVals, func_name,
                   mlir::ArrayAttr::get(ctx, kwNames));
 }
 

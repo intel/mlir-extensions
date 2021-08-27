@@ -185,6 +185,17 @@ def test_indirect_call1():
 
     assert_equal(func(inner_func, 5), jit_func(jit_inner_func, 5))
 
+def test_indirect_call2():
+    def inner_func(a):
+        return a + 1
+
+    def func(func, *args):
+        return func(*args)
+
+    jit_inner_func = njit(inner_func)
+    jit_func = njit(func)
+
+    assert_equal(func(inner_func, 5), jit_func(jit_inner_func, 5))
 
 class TestMlirBasic(TestCase):
     def test_none_args(self):

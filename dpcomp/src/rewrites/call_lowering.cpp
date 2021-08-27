@@ -22,23 +22,20 @@ plier::CallOpLowering::CallOpLowering(mlir::TypeConverter &,
 mlir::LogicalResult
 plier::CallOpLowering::matchAndRewrite(plier::PyCallOp op,
                                        mlir::PatternRewriter &rewriter) const {
-  auto operands = op.getOperands();
-  if (operands.empty()) {
+  if (op.varargs())
     return mlir::failure();
-  }
-  auto func_type = operands[0].getType();
-  if (!func_type.isa<plier::PyType>()) {
+
+  auto func = op.func();
+  auto funcType = func.getType();
+  if (!funcType.isa<plier::PyType>())
     return mlir::failure();
-  }
 
   llvm::SmallVector<mlir::Value> args;
   llvm::SmallVector<std::pair<llvm::StringRef, mlir::Value>> kwargs;
-  auto getattr =
-      mlir::dyn_cast_or_null<plier::GetattrOp>(operands[0].getDefiningOp());
+  auto getattr = mlir::dyn_cast_or_null<plier::GetattrOp>(func.getDefiningOp());
   if (getattr)
     args.push_back(getattr.getOperand());
 
-  operands = operands.drop_front();
   llvm::copy(op.args(), std::back_inserter(args));
   for (auto it : llvm::zip(op.kwargs(), op.kw_names())) {
     auto arg = std::get<0>(it);
