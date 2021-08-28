@@ -89,12 +89,13 @@ def CastOp : Plier_Op<"cast", []> {
   let hasFolder = 1;
 }
 
-def PyCallOp : Plier_Op<"call", []> {
+def PyCallOp : Plier_Op<"call", [AttrSizedOperandSegments]> {
   let arguments = (ins
                      AnyType:$func,
                      Variadic<AnyType>:$args,
+                     Optional<AnyType>:$varargs,
+                     Variadic<AnyType>:$kwargs,
                      StrAttr:$func_name,
-                     UI32Attr:$kw_start,
                      ArrayAttr:$kw_names);
 
   let results = (outs AnyType);
@@ -103,7 +104,8 @@ def PyCallOp : Plier_Op<"call", []> {
       ins "::mlir::Value"
       : $func, "::mlir::StringRef"
       : $func_name, "::mlir::ValueRange"
-      : $args, "::mlir::ArrayRef<std::pair<std::string, ::mlir::Value>>"
+      : $args, "::mlir::Value"
+      : $varargs, "::mlir::ArrayRef<std::pair<std::string, ::mlir::Value>>"
       : $kwargs)>];
 }
 

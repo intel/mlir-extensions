@@ -137,7 +137,8 @@ void PlierDialect::initialize() {
 #define GET_OP_LIST
 #include "plier/PlierOps.cpp.inc"
       >();
-  addTypes<plier::PyType, plier::LiteralType, SliceType, plier::TypeVar>();
+  addTypes<plier::PyType, plier::LiteralType, SliceType, plier::TypeVar,
+           OpaqueType>();
   addInterfaces<PlierInlinerInterface>();
 }
 
@@ -170,6 +171,7 @@ void PlierDialect::printType(mlir::Type type,
         os.printType(t.getType());
         os << ">";
       })
+      .Case<plier::OpaqueType>([&](auto) { os << "OpaqueType"; })
       .Default([](auto) { llvm_unreachable("unexpected type"); });
 }
 
@@ -213,6 +215,11 @@ std::array<mlir::Type, 3> SliceType::getTypes() const {
 TypeVar TypeVar::get(mlir::Type type) {
   assert(type);
   return Base::get(type.getContext(), type);
+}
+
+OpaqueType OpaqueType::get(mlir::MLIRContext *context) {
+  assert(context);
+  return Base::get(context);
 }
 
 mlir::Type TypeVar::getType() const { return getImpl()->type; }
@@ -270,22 +277,21 @@ mlir::OpFoldResult CastOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
 
 void PyCallOp::build(
     mlir::OpBuilder &builder, mlir::OperationState &state, mlir::Value func,
-    llvm::StringRef func_name, mlir::ValueRange args,
+    llvm::StringRef func_name, mlir::ValueRange args, mlir::Value varargs,
     mlir::ArrayRef<std::pair<std::string, mlir::Value>> kwargs) {
   auto ctx = builder.getContext();
-  mlir::SmallVector<mlir::Value, 16> all_args;
-  all_args.reserve(args.size() + kwargs.size());
-  std::copy(args.begin(), args.end(), std::back_inserter(all_args));
-  auto kw_start = static_cast<uint32_t>(all_args.size());
-  mlir::SmallVector<mlir::Attribute> kw_names;
-  kw_names.reserve(kwargs.size());
-  for (auto &a : kwargs) {
-    kw_names.push_back(mlir::StringAttr::get(ctx, a.first));
-    all_args.push_back(a.second);
-  }
+
+  llvm::SmallVector<mlir::Value> kwArgsVals(kwargs.size());
+  llvm::copy(llvm::make_second_range(kwargs), kwArgsVals.begin());
+
+  llvm::SmallVector<mlir::Attribute> kwNames;
+  kwNames.reserve(kwargs.size());
+  for (auto &a : kwargs)
+    kwNames.push_back(mlir::StringAttr::get(ctx, a.first));
+
   PyCallOp::build(builder, state, PyType::getUndefined(state.getContext()),
-                  func, all_args, func_name, kw_start,
-                  mlir::ArrayAttr::get(ctx, kw_names));
+                  func, args, varargs, kwArgsVals, func_name,
+                  mlir::ArrayAttr::get(ctx, kwNames));
 }
 
 void BuildTupleOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
@@ -617,8 +623,9 @@ void ReduceRankOp::build(::mlir::OpBuilder &odsBuilder,
   assert(srcType.hasRank());
   auto srcRank = static_cast<unsigned>(srcType.getRank());
   assert(!mapping.empty());
-  assert(llvm::all_of(mapping,
-                      [&](int32_t val) { return val >= 0 && val < static_cast<int32_t>(srcRank); }));
+  assert(llvm::all_of(mapping, [&](int32_t val) {
+    return val >= 0 && val < static_cast<int32_t>(srcRank);
+  }));
   auto mapAttr = odsBuilder.getI32ArrayAttr(mapping);
   auto srcShape = srcType.getShape();
   llvm::SmallVector<int64_t> shape(mapping.size());
