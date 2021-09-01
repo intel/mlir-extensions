@@ -15,6 +15,7 @@
 #include "pipelines/plier_to_linalg.hpp"
 
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
+#include <mlir/Analysis/AffineAnalysis.h>
 
 #include <mlir/Conversion/SCFToStandard/SCFToStandard.h>
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
@@ -1662,7 +1663,100 @@ public:
 
   LogicalResult matchAndRewrite(scf::ParallelOp op,
                                 PatternRewriter &rewriter) const override {
+    // Temporary disable if contains induction variables
+    if (op.initVals().size() != 0)
+      return rewriter.notifyMatchFailure(op, "scf.parallel constains indcution variables");
+
+    // Let's disable ND loops for now
+    if (op.step().size() != 1)
+      return rewriter.notifyMatchFailure(op, "scf.parallel ND range");
+
+    op.dump();
+
+
+    AffineForOp outer_loop = rewriter.create<AffineForOp>(op.getLoc(),
+				       0, // lower bound
+				       42,// memRefType.getShape()[0], // upper bound on dim. 0
+				       1  // step
+				       ) ;
+
+    outer_loop.dump();
+    // auto loop = rewriter.create<mlir::AffineParallelOp>(op.getLoc(), op.lowerBound().getTypes(), op.lowerBound(),
+                                                                    //  op.upperBound().getTypes(), op.upperBound());
+
+    // loop.dump();
+
+    // op.step().front().dump();
+    // op.lowerBound().dump();
+    // op.upperBound().dump();
+    // op.getBody()->dump();
+
+
+    SmallVector<LoopReduction> parallelReductions;
+    // Fail early if there are iter arguments that are not reductions.
+    // unsigned numReductions = parallelReductions.size();
+    // if (numReductions != op.initVals() forOp.getNumIterOperands())
+    //   return failure();
+
+    // Location loc = forOp.getLoc();
+    // OpBuilder outsideBuilder(op);
+    AffineMap lowerBoundMap = AffineMap::getConstantMap(0, op.getContext());//forOp.getLowerBoundMap();
+    ValueRange lowerBoundOperands = {};//forOp.getLowerBoundOperands();
+    AffineMap upperBoundMap = AffineMap::getConstantMap(42, op.getContext());//forOp.getUpperBoundMap();
+    ValueRange upperBoundOperands = {};//forOp.getUpperBoundOperands();
+
+    ArrayRef<int64_t> steps;
+
+    // // Creating empty 1-D affine.parallel op.
+    auto reducedValues = llvm::to_vector<4>(llvm::map_range(
+        parallelReductions, [](const LoopReduction &red) { return red.value; }));
+
+    auto reductionKinds = llvm::to_vector<4>(llvm::map_range(
+        parallelReductions, [](const LoopReduction &red) { return red.kind; }));
+
+    AffineParallelOp newPloop = rewriter.create<AffineParallelOp>(
+        op.getLoc(), ValueRange(reducedValues).getTypes(), reductionKinds,
+        llvm::makeArrayRef(lowerBoundMap), lowerBoundOperands,
+        llvm::makeArrayRef(upperBoundMap), upperBoundOperands,steps
+        // llvm::makeArrayRef(op.step())
+        );
+
+    newPloop.dump();
+    // // Steal the body of the old affine for op.
+    // newPloop.region().takeBody(op.region());
+    // Operation *yieldOp = &newPloop.getBody()->back();
+
+    // // Handle the initial values of reductions because the parallel loop always
+    // // starts from the neutral value.
+    // SmallVector<Value> newResults;
+    // newResults.reserve(numReductions);
+    // for (unsigned i = 0; i < numReductions; ++i) {
+    //   Value init = forOp.getIterOperands()[i];
+    //   // This works because we are only handling single-op reductions at the
+    //   // moment. A switch on reduction kind or a mechanism to collect operations
+    //   // participating in the reduction will be necessary for multi-op reductions.
+    //   Operation *reductionOp = yieldOp->getOperand(i).getDefiningOp();
+    //   assert(reductionOp && "yielded value is expected to be produced by an op");
+    //   outsideBuilder.getInsertionBlock()->getOperations().splice(
+    //       outsideBuilder.getInsertionPoint(), newPloop.getBody()->getOperations(),
+    //       reductionOp);
+    //   reductionOp->setOperands({init, newPloop->getResult(i)});
+    //   forOp->getResult(i).replaceAllUsesWith(reductionOp->getResult(0));
+    // }
+
+    // // Update the loop terminator to yield reduced values bypassing the reduction
+    // // operation itself (now moved outside of the loop) and erase the block
+    // // arguments that correspond to reductions. Note that the loop always has one
+    // // "main" induction variable whenc coming from a non-parallel for.
+    // unsigned numIVs = 1;
+    // yieldOp->setOperands(reducedValues);
+    // newPloop.getBody()->eraseArguments(
+    //     llvm::to_vector<4>(llvm::seq<unsigned>(numIVs, numReductions + numIVs)));
+
+    // forOp.erase();
+    // return success();
     // Location loc = op.getLoc();
+    exit(-1);
     return rewriter.notifyMatchFailure(op, "not implemented");
     // return success();
   }
