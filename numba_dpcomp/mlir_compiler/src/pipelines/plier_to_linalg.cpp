@@ -577,6 +577,33 @@ struct GetitemOpLowering : public mlir::OpRewritePattern<plier::GetItemOp> {
   }
 };
 
+struct PropagateTupleGetitemType
+    : public mlir::OpRewritePattern<plier::GetItemOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::GetItemOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto tupleType = op.value().getType().dyn_cast<mlir::TupleType>();
+
+    if (!tupleType)
+      return mlir::failure();
+
+    if (auto val = plier::getConstVal<mlir::IntegerAttr>(op.index())) {
+      auto index = plier::getIntAttrValue(val);
+      if (index >= 0 && index < static_cast<int64_t>(tupleType.size())) {
+        auto newType = tupleType.getType(static_cast<size_t>(index));
+        if (newType != op.getType()) {
+          rewriter.replaceOpWithNewOp<plier::GetItemOp>(op, newType, op.value(),
+                                                        op.index());
+          return mlir::success();
+        }
+      }
+    }
+    return mlir::failure();
+  }
+};
+
 mlir::Value unstride(mlir::OpBuilder &builder, mlir::Location loc,
                      mlir::Value src, mlir::MemRefType newType) {
   auto srcType = src.getType().cast<mlir::MemRefType>();
@@ -1581,7 +1608,8 @@ void PlierToLinalgPass::runOnOperation() {
       SetitemOpLowering,
       SliceNoneLowering,
       CastToSignCastRewrite,
-      CheckForBuildTuple
+      CheckForBuildTuple,
+      PropagateTupleGetitemType
       // clang-format on
       >(&getContext());
 

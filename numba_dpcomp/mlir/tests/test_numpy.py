@@ -297,6 +297,20 @@ def test_np_reduce(dtype):
         assert ir.count('scf.parallel') == 1, ir
         assert ir.count('memref.load') == 1, ir
 
+def test_indirect_call_array():
+    def inner_func(a):
+        return a + 3
+
+    def func(func, *args):
+        return func(*args)
+
+    jit_inner_func = njit(inner_func)
+    jit_func = njit(func)
+
+    arr = np.array([[1,2,3],[4,5,6]])
+    # arr = 5
+    assert_equal(func(inner_func, arr), jit_func(jit_inner_func, arr))
+
 def test_loop_if():
     def py_func(arr):
         for i in range(len(arr)):
