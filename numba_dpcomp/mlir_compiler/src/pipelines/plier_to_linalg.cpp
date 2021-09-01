@@ -14,6 +14,8 @@
 
 #include "pipelines/plier_to_linalg.hpp"
 
+#include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
+
 #include <mlir/Conversion/SCFToStandard/SCFToStandard.h>
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
 #include <mlir/Dialect/Linalg/IR/LinalgOps.h>
@@ -1647,6 +1649,215 @@ void LowerLinalgPass::runOnOperation() {
   (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
 }
 
+///////////////////////////////////////////////////////////////////////
+
+// it should be something like allow unregistred dialects
+namespace {
+
+using namespace mlir;
+
+class SCFParallelLowering : public OpRewritePattern<scf::ParallelOp> {
+public:
+  using OpRewritePattern<scf::ParallelOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(scf::ParallelOp op,
+                                PatternRewriter &rewriter) const override {
+    // Location loc = op.getLoc();
+    return rewriter.notifyMatchFailure(op, "not implemented");
+    // return success();
+  }
+};
+
+struct SCFToAffinePass
+    : public mlir::PassWrapper<SCFToAffinePass,
+                               mlir::OperationPass<mlir::ModuleOp>> {
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::StandardOpsDialect>();
+    registry.insert<mlir::tensor::TensorDialect>();
+    registry.insert<mlir::linalg::LinalgDialect>();
+    registry.insert<mlir::scf::SCFDialect>();
+    registry.insert<mlir::AffineDialect>();
+  }
+
+  void runOnOperation() override {
+    llvm::errs() << this->getName() << "\n";
+    mlir::OwningRewritePatternList patterns(&getContext());
+    patterns.insert<SCFParallelLowering>(&getContext());
+    (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+  }
+};
+
+} // end of anonimous namespace
+
+namespace {
+
+using namespace llvm;
+using namespace mlir;
+/// Given a range of values, emit the code that reduces them with "min" or "max"
+/// depending on the provided comparison predicate.  The predicate defines which
+/// comparison to perform, "lt" for "min", "gt" for "max" and is used for the
+/// `cmpi` operation followed by the `select` operation:
+///
+///   %cond   = cmpi "predicate" %v0, %v1
+///   %result = select %cond, %v0, %v1
+///
+/// Multiple values are scanned in a linear sequence.  This creates a data
+/// dependences that wouldn't exist in a tree reduction, but is easier to
+/// recognize as a reduction by the subsequent passes.
+static Value buildMinMaxReductionSeq(Location loc, CmpIPredicate predicate,
+                                     ValueRange values, OpBuilder &builder) {
+  assert(!llvm::empty(values) && "empty min/max chain");
+
+  auto valueIt = values.begin();
+  Value value = *valueIt++;
+  for (; valueIt != values.end(); ++valueIt) {
+    auto cmpOp = builder.create<CmpIOp>(loc, predicate, value, *valueIt);
+    value = builder.create<SelectOp>(loc, cmpOp.getResult(), value, *valueIt);
+  }
+
+  return value;
+}
+/// Emit instructions that correspond to computing the maximum value among the
+/// values of a (potentially) multi-output affine map applied to `operands`.
+static Value lowerAffineMapMax(OpBuilder &builder, Location loc, AffineMap map,
+                               ValueRange operands) {
+  if (auto values = expandAffineMap(builder, loc, map, operands))
+    return buildMinMaxReductionSeq(loc, CmpIPredicate::sgt, *values, builder);
+  return nullptr;
+}
+
+/// Emit instructions that correspond to computing the minimum value among the
+/// values of a (potentially) multi-output affine map applied to `operands`.
+static Value lowerAffineMapMin(OpBuilder &builder, Location loc, AffineMap map,
+                               ValueRange operands) {
+  if (auto values = expandAffineMap(builder, loc, map, operands))
+    return buildMinMaxReductionSeq(loc, CmpIPredicate::slt, *values, builder);
+  return nullptr;
+}
+
+// Convert an `affine.parallel` (loop nest) operation into a `scf.parallel`
+/// operation.
+class AffineParallelLowering : public OpRewritePattern<AffineParallelOp> {
+public:
+  using OpRewritePattern<AffineParallelOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(AffineParallelOp op,
+                                PatternRewriter &rewriter) const override {
+    Location loc = op.getLoc();
+    SmallVector<Value, 8> steps;
+    SmallVector<Value, 8> upperBoundTuple;
+    SmallVector<Value, 8> lowerBoundTuple;
+    SmallVector<Value, 8> identityVals;
+    // Emit IR computing the lower and upper bound by expanding the map
+    // expression.
+    lowerBoundTuple.reserve(op.getNumDims());
+    upperBoundTuple.reserve(op.getNumDims());
+    for (unsigned i = 0, e = op.getNumDims(); i < e; ++i) {
+      Value lower = lowerAffineMapMax(rewriter, loc, op.getLowerBoundMap(i),
+                                      op.getLowerBoundsOperands());
+      if (!lower)
+        return rewriter.notifyMatchFailure(op, "couldn't convert lower bounds");
+      lowerBoundTuple.push_back(lower);
+
+      Value upper = lowerAffineMapMin(rewriter, loc, op.getUpperBoundMap(i),
+                                      op.getUpperBoundsOperands());
+      if (!upper)
+        return rewriter.notifyMatchFailure(op, "couldn't convert upper bounds");
+      upperBoundTuple.push_back(upper);
+    }
+    steps.reserve(op.steps().size());
+    for (Attribute step : op.steps())
+      steps.push_back(rewriter.create<ConstantIndexOp>(
+          loc, step.cast<IntegerAttr>().getInt()));
+
+    // Get the terminator op.
+    Operation *affineParOpTerminator = op.getBody()->getTerminator();
+    scf::ParallelOp parOp;
+    if (op.results().empty()) {
+      // Case with no reduction operations/return values.
+      parOp = rewriter.create<scf::ParallelOp>(loc, lowerBoundTuple,
+                                               upperBoundTuple, steps,
+                                               /*bodyBuilderFn=*/nullptr);
+      rewriter.eraseBlock(parOp.getBody());
+      rewriter.inlineRegionBefore(op.region(), parOp.region(),
+                                  parOp.region().end());
+      rewriter.replaceOp(op, parOp.results());
+      return success();
+    }
+    // Case with affine.parallel with reduction operations/return values.
+    // scf.parallel handles the reduction operation differently unlike
+    // affine.parallel.
+    ArrayRef<Attribute> reductions = op.reductions().getValue();
+    for (auto pair : llvm::zip(reductions, op.getResultTypes())) {
+      // For each of the reduction operations get the identity values for
+      // initialization of the result values.
+      Attribute reduction = std::get<0>(pair);
+      Type resultType = std::get<1>(pair);
+      Optional<AtomicRMWKind> reductionOp = symbolizeAtomicRMWKind(
+          static_cast<uint64_t>(reduction.cast<IntegerAttr>().getInt()));
+      assert(reductionOp.hasValue() &&
+             "Reduction operation cannot be of None Type");
+      AtomicRMWKind reductionOpValue = reductionOp.getValue();
+      identityVals.push_back(
+          getIdentityValue(reductionOpValue, resultType, rewriter, loc));
+    }
+    parOp = rewriter.create<scf::ParallelOp>(
+        loc, lowerBoundTuple, upperBoundTuple, steps, identityVals,
+        /*bodyBuilderFn=*/nullptr);
+
+    //  Copy the body of the affine.parallel op.
+    rewriter.eraseBlock(parOp.getBody());
+    rewriter.inlineRegionBefore(op.region(), parOp.region(),
+                                parOp.region().end());
+    assert(reductions.size() == affineParOpTerminator->getNumOperands() &&
+           "Unequal number of reductions and operands.");
+    for (unsigned i = 0, end = reductions.size(); i < end; i++) {
+      // For each of the reduction operations get the respective mlir::Value.
+      Optional<AtomicRMWKind> reductionOp =
+          symbolizeAtomicRMWKind(reductions[i].cast<IntegerAttr>().getInt());
+      assert(reductionOp.hasValue() &&
+             "Reduction Operation cannot be of None Type");
+      AtomicRMWKind reductionOpValue = reductionOp.getValue();
+      rewriter.setInsertionPoint(&parOp.getBody()->back());
+      auto reduceOp = rewriter.create<scf::ReduceOp>(
+          loc, affineParOpTerminator->getOperand(i));
+      rewriter.setInsertionPointToEnd(&reduceOp.reductionOperator().front());
+      Value reductionResult =
+          getReductionOp(reductionOpValue, rewriter, loc,
+                         reduceOp.reductionOperator().front().getArgument(0),
+                         reduceOp.reductionOperator().front().getArgument(1));
+      rewriter.create<scf::ReduceReturnOp>(loc, reductionResult);
+    }
+    rewriter.replaceOp(op, parOp.results());
+    return success();
+  }
+};
+
+struct AffineToSCFPass
+    : public mlir::PassWrapper<AffineToSCFPass,
+                               mlir::OperationPass<mlir::ModuleOp>> {
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::StandardOpsDialect>();
+    registry.insert<mlir::tensor::TensorDialect>();
+    registry.insert<mlir::linalg::LinalgDialect>();
+    registry.insert<mlir::scf::SCFDialect>();
+    registry.insert<mlir::AffineDialect>();
+  }
+
+  void runOnOperation() override {
+    llvm::errs() << this->getName() << "\n";
+    mlir::OwningRewritePatternList patterns(&getContext());
+    patterns.insert<AffineParallelLowering>(&getContext());
+    (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+  }
+};
+
+} // end of anonimous namespace
+
+///////////////////////////////////////////////////////////////////////
+
 struct OptimizeGlobalsConstsLoad
     : public mlir::OpRewritePattern<mlir::memref::LoadOp> {
   using mlir::OpRewritePattern<mlir::memref::LoadOp>::OpRewritePattern;
@@ -2092,11 +2303,14 @@ void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<ForceInlinePass>());
   pm.addPass(mlir::createSymbolDCEPass());
 
+  // ToDo: This pass also tries to do some simple fusion, whic should be split in separate pass
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<PostLinalgOptPass>());
 
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<FixDeallocPlacementPass>());
 
   pm.addPass(mlir::createSymbolDCEPass());
+  pm.addPass(std::make_unique<SCFToAffinePass>());
+  pm.addPass(std::make_unique<AffineToSCFPass>());
 }
 } // namespace
 
@@ -2112,6 +2326,7 @@ void populateArrayTypeConverter(mlir::MLIRContext & /*context*/,
       });
 }
 
+// ToDo: how does this sink stuff actually works?
 void registerPlierToLinalgPipeline(plier::PipelineRegistry &registry) {
   registry.register_pipeline([](auto sink) {
     auto stage = getHighLoweringStage();
