@@ -1711,51 +1711,20 @@ public:
         llvm::makeArrayRef(newSteps)
         );
 
-    op.dump();
-    newPloop.dump();
-
     // Steal the body of the old affine for op.
     newPloop.region().takeBody(op.region());
-    newPloop.dump();
 
+    Operation *yieldOp = &newPloop.getBody()->back();
+    rewriter.setInsertionPoint(&newPloop.getBody()->back());
+    rewriter.replaceOpWithNewOp<AffineYieldOp>(yieldOp, ValueRange({}));
 
-    // Operation *yieldOp = &newPloop.getBody()->back();
-    // yieldOp->dump();
-    // rewriter.eraseOp(yieldOp);
+    assert(newPloop.verify().succeeded() && "affine body is incorrectly constructed");
+
+    // TODO: handle reductions and induction variables
 
     op.replaceAllUsesWith(newPloop);
     rewriter.replaceOp(op, newPloop.getResults());
-
-    // Handle the initial values of reductions because the parallel loop always
-    // starts from the neutral value.
-    // SmallVector<Value> newResults;
-    // newResults.reserve(numReductions);
-    // for (unsigned i = 0; i < numReductions; ++i) {
-    //   Value init = forOp.getIterOperands()[i];
-    //   // This works because we are only handling single-op reductions at the
-    //   // moment. A switch on reduction kind or a mechanism to collect operations
-    //   // participating in the reduction will be necessary for multi-op reductions.
-    //   Operation *reductionOp = yieldOp->getOperand(i).getDefiningOp();
-    //   assert(reductionOp && "yielded value is expected to be produced by an op");
-    //   outsideBuilder.getInsertionBlock()->getOperations().splice(
-    //       outsideBuilder.getInsertionPoint(), newPloop.getBody()->getOperations(),
-    //       reductionOp);
-    //   reductionOp->setOperands({init, newPloop->getResult(i)});
-    //   forOp->getResult(i).replaceAllUsesWith(reductionOp->getResult(0));
-    // }
-
-    // Update the loop terminator to yield reduced values bypassing the reduction
-    // operation itself (now moved outside of the loop) and erase the block
-    // arguments that correspond to reductions. Note that the loop always has one
-    // "main" induction variable whenc coming from a non-parallel for.
-    // unsigned numIVs = 1;
-    // yieldOp->setOperands(reducedValues);
-    // newPloop.getBody()->eraseArguments(
-    //     llvm::to_vector<4>(llvm::seq<unsigned>(numIVs, numReductions + numIVs)));
-
     return success();
-    // exit(-1);
-    // return rewriter.notifyMatchFailure(op, "not implemented");
   }
 };
 
@@ -1826,6 +1795,24 @@ static Value lowerAffineMapMin(OpBuilder &builder, Location loc, AffineMap map,
     return buildMinMaxReductionSeq(loc, CmpIPredicate::slt, *values, builder);
   return nullptr;
 }
+
+/// Affine yields ops are removed.
+class AffineYieldOpLowering : public OpRewritePattern<AffineYieldOp> {
+public:
+  using OpRewritePattern<AffineYieldOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(AffineYieldOp op,
+                                PatternRewriter &rewriter) const override {
+    if (isa<scf::ParallelOp>(op->getParentOp())) {
+      // scf.parallel does not yield any values via its terminator scf.yield but
+      // models reductions differently using additional ops in its region.
+      rewriter.replaceOpWithNewOp<scf::YieldOp>(op);
+      return success();
+    }
+    rewriter.replaceOpWithNewOp<scf::YieldOp>(op, op.operands());
+    return success();
+  }
+};
 
 // Convert an `affine.parallel` (loop nest) operation into a `scf.parallel`
 /// operation.
@@ -1940,7 +1927,7 @@ struct AffineToSCFPass
   void runOnOperation() override {
     llvm::errs() << this->getName() << "\n";
     mlir::OwningRewritePatternList patterns(&getContext());
-    patterns.insert<AffineParallelLowering>(&getContext());
+    patterns.insert<AffineParallelLowering, AffineYieldOpLowering>(&getContext());
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
   }
 };
