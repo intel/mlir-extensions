@@ -1671,6 +1671,9 @@ public:
     if (op.step().size() != 1)
       return rewriter.notifyMatchFailure(op, "scf.parallel ND range");
 
+    if (op.upperBound().size() != op.lowerBound().size() || op.step().size() != op.upperBound().size())
+      return rewriter.notifyMatchFailure(op, "scf.parallel inconsistend upper/lower bounds and steps");
+
     // Check if steps are constants
     SmallVector<int64_t> newSteps;
     for (auto s : op.step()) {
@@ -1688,7 +1691,8 @@ public:
     }
 
     // just for the case if we reductions
-    SmallVector<LoopReduction> reductions; // fill them from found scf.reduce op
+    // TODO: fill them from found scf.reduce op
+    SmallVector<LoopReduction> reductions;
     auto reducedValueTypes = llvm::to_vector<4>(llvm::map_range(
         reductions, [](const LoopReduction &red) { return red.value.getType(); }));
 
@@ -1696,38 +1700,34 @@ public:
         reductions, [](const LoopReduction &red) { return red.kind; }));
 
     llvm::errs() << "debuging scf->affine pass\n";
-    op.dump();
 
-
-    AffineForOp outer_loop = rewriter.create<AffineForOp>(op.getLoc(),
-				       0, // lower bound
-				       42,// memRefType.getShape()[0], // upper bound on dim. 0
-				       1  // step
-				       ) ;
-
-    outer_loop.dump();
-
-    AffineMap lowerBoundMap = AffineMap::getConstantMap(0, op.getContext());//forOp.getLowerBoundMap();
-    ValueRange lowerBoundOperands = {};//forOp.getLowerBoundOperands();
-    AffineMap upperBoundMap = AffineMap::getConstantMap(42, op.getContext());//forOp.getUpperBoundMap();
-    ValueRange upperBoundOperands = {};//forOp.getUpperBoundOperands();
-
-    // Creating empty 1-D affine.parallel op.
+    auto dims = op.step().size();
+    // Creating empty affine.parallel op.
+    rewriter.setInsertionPoint(op);
     AffineParallelOp newPloop = rewriter.create<AffineParallelOp>(
         op.getLoc(), reducedValueTypes, reductionKinds,
-        llvm::makeArrayRef(lowerBoundMap), lowerBoundOperands,
-        llvm::makeArrayRef(upperBoundMap), upperBoundOperands,
+        llvm::makeArrayRef(AffineMap::getMultiDimIdentityMap(dims, op.getContext())), op.lowerBound(),
+        llvm::makeArrayRef(AffineMap::getMultiDimIdentityMap(dims, op.getContext())), op.upperBound(),
         llvm::makeArrayRef(newSteps)
         );
 
+    op.dump();
     newPloop.dump();
 
-    // // Steal the body of the old affine for op.
-    // newPloop.region().takeBody(op.region());
-    // Operation *yieldOp = &newPloop.getBody()->back();
+    // Steal the body of the old affine for op.
+    newPloop.region().takeBody(op.region());
+    newPloop.dump();
 
-    // // Handle the initial values of reductions because the parallel loop always
-    // // starts from the neutral value.
+
+    // Operation *yieldOp = &newPloop.getBody()->back();
+    // yieldOp->dump();
+    // rewriter.eraseOp(yieldOp);
+
+    op.replaceAllUsesWith(newPloop);
+    rewriter.replaceOp(op, newPloop.getResults());
+
+    // Handle the initial values of reductions because the parallel loop always
+    // starts from the neutral value.
     // SmallVector<Value> newResults;
     // newResults.reserve(numReductions);
     // for (unsigned i = 0; i < numReductions; ++i) {
@@ -1744,21 +1744,18 @@ public:
     //   forOp->getResult(i).replaceAllUsesWith(reductionOp->getResult(0));
     // }
 
-    // // Update the loop terminator to yield reduced values bypassing the reduction
-    // // operation itself (now moved outside of the loop) and erase the block
-    // // arguments that correspond to reductions. Note that the loop always has one
-    // // "main" induction variable whenc coming from a non-parallel for.
+    // Update the loop terminator to yield reduced values bypassing the reduction
+    // operation itself (now moved outside of the loop) and erase the block
+    // arguments that correspond to reductions. Note that the loop always has one
+    // "main" induction variable whenc coming from a non-parallel for.
     // unsigned numIVs = 1;
     // yieldOp->setOperands(reducedValues);
     // newPloop.getBody()->eraseArguments(
     //     llvm::to_vector<4>(llvm::seq<unsigned>(numIVs, numReductions + numIVs)));
 
-    // forOp.erase();
-    // return success();
-    // Location loc = op.getLoc();
-    exit(-1);
-    return rewriter.notifyMatchFailure(op, "not implemented");
-    // return success();
+    return success();
+    // exit(-1);
+    // return rewriter.notifyMatchFailure(op, "not implemented");
   }
 };
 
