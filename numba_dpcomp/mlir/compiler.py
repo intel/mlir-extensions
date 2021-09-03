@@ -26,14 +26,28 @@ from numba.core.compiler_machinery import PassManager
 from numba.core.compiler import CompilerBase as orig_CompilerBase
 from numba.core.compiler import DefaultPassBuilder as orig_DefaultPassBuilder
 from numba.core.typed_passes import NoPythonBackend as orig_NoPythonBackend
+from numba.core.typed_passes import (PreParforPass, ParforPass,
+                                     DumpParforDiagnostics, NopythonRewrites,
+                                     PreLowerStripPhis, InlineOverloads,
+                                     NopythonRewrites, IRLegalization)
 
 def _replace_pass(passes, old_pass, new_pass):
-    count = 0;
+    count = 0
     ret = []
     for p, n in passes:
         if p == old_pass:
             count += 1
             ret.append((new_pass, str(new_pass)))
+        else:
+            ret.append((p, n))
+    return ret, count
+
+def _remove_passes(passes, to_remove):
+    count = 0
+    ret = []
+    for p, n in passes:
+        if p in to_remove:
+            count += 1
         else:
             ret.append((p, n))
     return ret, count
@@ -50,7 +64,13 @@ class mlir_PassBuilder(orig_DefaultPassBuilder):
             else:
                 pm.add_pass_after(MlirBackend, AnnotateTypes)
             pm.passes, replaced = _replace_pass(pm.passes, orig_NoPythonBackend, mlir_NoPythonBackend)
-            assert replaced == 1
+            assert replaced == 1, replaced
+            print(pm.passes)
+            pm.passes, removed = _remove_passes(pm.passes, [
+                PreParforPass, ParforPass, DumpParforDiagnostics,
+                NopythonRewrites, PreLowerStripPhis, InlineOverloads,
+                NopythonRewrites, IRLegalization,
+            ])
 
         if numba_dpcomp.mlir.settings.DUMP_PLIER:
             pm.add_pass_after(MlirDumpPlier, AnnotateTypes)
