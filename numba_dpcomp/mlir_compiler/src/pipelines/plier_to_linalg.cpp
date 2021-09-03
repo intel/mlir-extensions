@@ -1513,29 +1513,29 @@ struct CastToSignCastRewrite : public mlir::OpRewritePattern<plier::CastOp> {
   matchAndRewrite(plier::CastOp op,
                   mlir::PatternRewriter &rewriter) const override {
     auto srcType = op.value().getType().dyn_cast<mlir::RankedTensorType>();
-    if (!srcType) {
+    if (!srcType)
       return mlir::failure();
-    }
+
     auto dstType = op.getType().dyn_cast<mlir::RankedTensorType>();
-    if (!dstType) {
+    if (!dstType)
       return mlir::failure();
-    }
+
     if (srcType.getShape() != dstType.getShape() ||
-        srcType.getEncoding() != dstType.getEncoding()) {
+        srcType.getEncoding() != dstType.getEncoding())
       return mlir::failure();
-    }
-    auto srcElemType = srcType.getElementType().cast<mlir::IntegerType>();
-    if (!srcElemType) {
+
+    auto srcElemType = srcType.getElementType().dyn_cast<mlir::IntegerType>();
+    if (!srcElemType)
       return mlir::failure();
-    }
-    auto dstElemType = dstType.getElementType().cast<mlir::IntegerType>();
-    if (!dstElemType) {
+
+    auto dstElemType = dstType.getElementType().dyn_cast<mlir::IntegerType>();
+    if (!dstElemType)
       return mlir::failure();
-    }
+
     if (srcElemType.getWidth() != dstElemType.getWidth() ||
-        srcElemType.getSignedness() == dstElemType.getSignedness()) {
+        srcElemType.getSignedness() == dstElemType.getSignedness())
       return mlir::failure();
-    }
+
     rewriter.replaceOpWithNewOp<plier::SignCastOp>(op, dstType, op.value());
     return mlir::success();
   }
