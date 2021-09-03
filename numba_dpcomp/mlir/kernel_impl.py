@@ -102,6 +102,10 @@ class Kernel:
         ret.local_size = local_size
         return ret
 
+    def check_call_args(self, args, kwargs):
+        if kwargs:
+            _raise_error('kwargs not supported')
+
     def __getitem__(self, args):
         nargs = len(args)
         if nargs < 1 or nargs > 2:
@@ -112,8 +116,7 @@ class Kernel:
         return self.configure(gs, ls)
 
     def __call__(self, *args, **kwargs):
-        if kwargs:
-            _raise_error('kwargs not supported')
+        self.check_call_args(args, kwargs)
 
         jit_func = njit(parallel=True, inline='always')(self.py_func)
         jit_kern = njit(parallel=True, enable_gpu_pipeline=True)(_kernel_body_selector[len(self.global_size)])
