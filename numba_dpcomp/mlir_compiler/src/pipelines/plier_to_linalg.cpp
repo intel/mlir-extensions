@@ -862,7 +862,9 @@ struct SetitemOpLowering : public mlir::OpConversionPattern<plier::SetItemOp> {
       for (auto it : llvm::enumerate(tupleType)) {
         auto i = it.index();
         auto getitemInd = rewriter.create<mlir::ConstantIndexOp>(loc, i);
-        auto ind = rewriter.create<plier::GetItemOp>(loc, index, getitemInd)
+        auto ind = rewriter
+                       .create<plier::GetItemOp>(loc, tupleType.getType(i),
+                                                 index, getitemInd)
                        .getResult();
         auto indType = tupleType.getType(i);
         auto signlessIndType = plier::makeSignlessType(indType);
