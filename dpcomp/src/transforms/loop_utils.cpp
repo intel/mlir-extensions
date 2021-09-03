@@ -129,19 +129,28 @@ llvm::SmallVector<mlir::scf::ForOp, 2> plier::lowerWhileToFor(
     auto getLoopBodyBuilder = [&](bool positive) {
       return [&, positive](mlir::OpBuilder &builder, mlir::Location loc,
                            mlir::Value iv, mlir::ValueRange iterargs) {
-        if (!positive) {
+        if (!positive)
           iv = getNeg(iv);
-        }
+
         mlir::BlockAndValueMapping mapper;
         assert(beforeBlock.getNumArguments() == iterargs.size());
         assert(afterBlock.getNumArguments() == beforeTerm.args().size());
         mapper.map(beforeBlock.getArguments(), iterargs);
+
+        auto skipCasts = [](mlir::Value op) {
+          while (auto cast = mlir::dyn_cast_or_null<plier::CastOp>(
+                     op.getDefiningOp())) {
+            op = cast.getOperand();
+          }
+          return op;
+        };
+
         for (auto it :
              llvm::zip(afterBlock.getArguments(), beforeTerm.args())) {
           auto blockArg = std::get<0>(it);
           auto termArg = std::get<1>(it);
-          if (pairfirst && termArg == pairfirst) // iter arg
-          {
+          if (pairfirst && skipCasts(termArg) == pairfirst) {
+            // iter arg
             auto iterVal = getIterVal(builder, loc, pairfirst.getType(), iv);
             mapper.map(blockArg, iterVal);
           } else {
@@ -150,9 +159,7 @@ llvm::SmallVector<mlir::scf::ForOp, 2> plier::lowerWhileToFor(
         }
 
         for (auto &op : afterBlock) // with terminator
-        {
           builder.clone(op, mapper);
-        }
       };
     };
 
