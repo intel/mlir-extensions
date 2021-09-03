@@ -19,25 +19,30 @@ from .utils import load_lib, mlir_func_name
 
 from numba.core.runtime import _nrt_python as _nrt
 
-runtime_lib = load_lib('dpcomp-gpu-runtime')
+try:
+    runtime_lib = load_lib('dpcomp-gpu-runtime')
+    IS_GPU_RUNTIME_AVAILABLE = True
+except:
+    IS_GPU_RUNTIME_AVAILABLE = False
 
-_funcs = [
-    'dpcompGpuStreamCreate',
-    'dpcompGpuStreamDestroy',
-    'dpcompGpuModuleLoad',
-    'dpcompGpuModuleDestroy',
-    'dpcompGpuKernelGet',
-    'dpcompGpuKernelDestroy',
-    'dpcompGpuLaunchKernel',
-    'dpcompGpuWait',
-    'dpcompGpuAlloc',
-]
+if IS_GPU_RUNTIME_AVAILABLE:
+    _funcs = [
+        'dpcompGpuStreamCreate',
+        'dpcompGpuStreamDestroy',
+        'dpcompGpuModuleLoad',
+        'dpcompGpuModuleDestroy',
+        'dpcompGpuKernelGet',
+        'dpcompGpuKernelDestroy',
+        'dpcompGpuLaunchKernel',
+        'dpcompGpuWait',
+        'dpcompGpuAlloc',
+    ]
 
-for name in _funcs:
-    func = getattr(runtime_lib, name)
-    ll.add_symbol(name, ctypes.cast(func, ctypes.c_void_p).value)
+    for name in _funcs:
+        func = getattr(runtime_lib, name)
+        ll.add_symbol(name, ctypes.cast(func, ctypes.c_void_p).value)
 
 
-_alloc_func = runtime_lib.dpcompGpuSetMemInfoAllocFunc
-_alloc_func.argtypes = [ctypes.c_void_p]
-_alloc_func(ctypes.cast(_nrt.c_helpers['Allocate'], ctypes.c_void_p))
+    _alloc_func = runtime_lib.dpcompGpuSetMemInfoAllocFunc
+    _alloc_func.argtypes = [ctypes.c_void_p]
+    _alloc_func(ctypes.cast(_nrt.c_helpers['Allocate'], ctypes.c_void_p))
