@@ -453,10 +453,71 @@ private:
   PyFuncResolver resolver;
 };
 
+struct UnrankedToElementCasts : public mlir::OpRewritePattern<plier::CastOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::CastOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto srcType = op.value().getType();
+    auto dstType = op.getType();
+    auto isCompatible = [](mlir::Type tensor, mlir::Type element) {
+      if (auto tensorType = tensor.dyn_cast<mlir::RankedTensorType>())
+        return tensorType.getRank() == 0 &&
+               tensorType.getElementType() == element;
+
+      return false;
+    };
+    if (isCompatible(srcType, dstType)) {
+      rewriter.replaceOpWithNewOp<mlir::tensor::ExtractOp>(op, op.value());
+      return mlir::success();
+    }
+    if (isCompatible(dstType, srcType)) {
+      auto singleElemTensor = rewriter.create<mlir::tensor::FromElementsOp>(
+          op.getLoc(), op.value());
+      rewriter.replaceOpWithNewOp<mlir::linalg::TensorCollapseShapeOp>(
+          op, dstType, singleElemTensor,
+          llvm::ArrayRef<mlir::ReassociationExprs>{});
+      return mlir::success();
+    }
+    return mlir::failure();
+  }
+};
+
+struct LegalizeTensorCastChain : public mlir::OpRewritePattern<plier::CastOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::CastOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto prevCast = op.value().getDefiningOp<plier::CastOp>();
+    if (!prevCast)
+      return mlir::failure();
+
+    auto prevValue = prevCast.value();
+
+    auto srcTensor = prevValue.getType().dyn_cast<mlir::TensorType>();
+    if (!srcTensor)
+      return mlir::failure();
+
+    auto dstTensor = op.getType().dyn_cast<mlir::TensorType>();
+    if (!dstTensor)
+      return mlir::failure();
+
+    if (srcTensor != dstTensor)
+      prevValue = rewriter.createOrFold<mlir::tensor::CastOp>(
+          op.getLoc(), dstTensor, prevValue);
+
+    rewriter.replaceOp(op, prevValue);
+    return mlir::success();
+  }
+};
+
 struct NumpyCallsLoweringPass
     : public plier::RewriteWrapperPass<
           NumpyCallsLoweringPass, void, void, NumpyCallsLowering,
-          NumpyAttrsLowering, NumpyBinOpLowering, ExternalCallsLowering> {};
+          NumpyAttrsLowering, NumpyBinOpLowering, ExternalCallsLowering,
+          UnrankedToElementCasts, LegalizeTensorCastChain> {};
 
 struct CallLowerer {
   CallLowerer()
@@ -1576,39 +1637,6 @@ struct RankedTypesCasts : public mlir::OpConversionPattern<plier::CastOp> {
         value = rewriter.createOrFold<plier::SignCastOp>(loc, dst, value);
 
       rewriter.replaceOp(op, value);
-      return mlir::success();
-    }
-    return mlir::failure();
-  }
-};
-
-struct UnrankedToElementCasts : public mlir::OpRewritePattern<plier::CastOp> {
-  UnrankedToElementCasts(mlir::TypeConverter & /*type_converter*/,
-                         mlir::MLIRContext *context)
-      : OpRewritePattern(context) {}
-
-  mlir::LogicalResult
-  matchAndRewrite(plier::CastOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto srcType = op.value().getType();
-    auto dstType = op.getType();
-    auto isCompatible = [](mlir::Type tensor, mlir::Type element) {
-      if (auto tensorType = tensor.dyn_cast<mlir::RankedTensorType>()) {
-        return tensorType.getRank() == 0 &&
-               tensorType.getElementType() == element;
-      }
-      return false;
-    };
-    if (isCompatible(srcType, dstType)) {
-      rewriter.replaceOpWithNewOp<mlir::tensor::ExtractOp>(op, op.value());
-      return mlir::success();
-    }
-    if (isCompatible(dstType, srcType)) {
-      auto singleElemTensor = rewriter.create<mlir::tensor::FromElementsOp>(
-          op.getLoc(), op.value());
-      rewriter.replaceOpWithNewOp<mlir::linalg::TensorCollapseShapeOp>(
-          op, dstType, singleElemTensor,
-          llvm::ArrayRef<mlir::ReassociationExprs>{});
       return mlir::success();
     }
     return mlir::failure();
