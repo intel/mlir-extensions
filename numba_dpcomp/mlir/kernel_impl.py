@@ -106,7 +106,7 @@ class Kernel:
         if kwargs:
             _raise_error('kwargs not supported')
 
-    def __getitem__(self, args):
+    def __getitem__(self, *args):
         nargs = len(args)
         if nargs < 1 or nargs > 2:
             _raise_error(f'Invalid kernel arguments count: {nargs}')
@@ -118,8 +118,8 @@ class Kernel:
     def __call__(self, *args, **kwargs):
         self.check_call_args(args, kwargs)
 
-        jit_func = njit(parallel=True, inline='always')(self.py_func)
-        jit_kern = njit(parallel=True, enable_gpu_pipeline=True)(_kernel_body_selector[len(self.global_size)])
+        jit_func = njit(inline='always')(self.py_func)
+        jit_kern = njit(enable_gpu_pipeline=True)(_kernel_body_selector[len(self.global_size)])
         jit_kern(self.global_size, self.local_size, jit_func, *args)
 
 
