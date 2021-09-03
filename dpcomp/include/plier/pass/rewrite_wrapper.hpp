@@ -45,12 +45,12 @@ public:
   }
 
   void runOnOperation() override {
-    auto *context = &getContext();
+    auto *context = &(this->getContext());
     mlir::OwningRewritePatternList patterns(context);
 
     patterns.insert<Rewrites...>(context);
 
-    (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
+    (void)mlir::applyPatternsAndFoldGreedily(this->getOperation(),
                                              std::move(patterns));
   }
 };
