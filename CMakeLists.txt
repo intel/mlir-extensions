@@ -44,6 +44,9 @@ endif()
 option(DPNP_ENABLE "Use DPNP for some math functions" OFF)
 option(GPU_ENABLE "Enable GPU codegen" OFF)
 
+message(STATUS "DPNP_ENABLE ${DPNP_ENABLE}")
+message(STATUS "GPU_ENABLE ${GPU_ENABLE}")
+
 include(CTest)
 
 macro(apply_llvm_compile_flags target)
