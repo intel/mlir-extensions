@@ -174,6 +174,11 @@ def dot_impl(builder, a, b):
 
         return builder.generic((a,b), init, iterators, maps, body)
 
+@register_attr('array.shape')
+def shape_impl(builder, arg):
+    shape = arg.shape
+    return tuple(builder.cast(shape[i], builder.int64) for i in range(len(shape)))
+
 @register_attr('array.size')
 def size_impl(builder, arg):
     shape = arg.shape
