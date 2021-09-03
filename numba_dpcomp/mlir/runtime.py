@@ -19,7 +19,6 @@ import llvmlite.binding as ll
 from .utils import load_lib
 
 runtime_lib = load_lib('dpcomp-runtime')
-assert not runtime_lib is None
 
 _init_func = runtime_lib.dpcomp_parallel_init
 _init_func.argtypes = [ctypes.c_int]

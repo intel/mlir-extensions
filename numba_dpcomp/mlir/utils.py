@@ -34,16 +34,17 @@ def load_lib(name):
     elif sys.platform.startswith('win'):
         lib_name = f'{name}.dll'
     else:
-        return None
+        assert False, 'unsupported platform'
 
+    saved_errors = []
     for path in runtime_search_paths:
         lib_path = lib_name if len(path) == 0 else os.path.join(path, lib_name)
         try:
             return ctypes.CDLL(lib_path)
-        except:
-            pass
+        except Exception as e:
+            saved_errors.append(f'CDLL(\"{lib_path}\"): {str(e)}')
 
-    return None
+    raise ValueError(f'load_lib(\"{name}\") failed:\n' + '\n'.join(saved_errors))
 
 def mlir_func_name(name):
     return '_mlir_ciface_' + name

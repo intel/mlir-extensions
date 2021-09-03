@@ -18,7 +18,6 @@ import llvmlite.binding as ll
 from .utils import load_lib, mlir_func_name
 
 runtime_lib = load_lib('dpcomp-math-runtime')
-assert not runtime_lib is None
 
 _init_func = runtime_lib.dpcomp_math_runtime_init
 _init_func()

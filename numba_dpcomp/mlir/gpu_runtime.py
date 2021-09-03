@@ -20,7 +20,6 @@ from .utils import load_lib, mlir_func_name
 from numba.core.runtime import _nrt_python as _nrt
 
 runtime_lib = load_lib('dpcomp-gpu-runtime')
-assert not runtime_lib is None
 
 _funcs = [
     'dpcompGpuStreamCreate',
