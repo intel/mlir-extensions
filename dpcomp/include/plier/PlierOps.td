@@ -88,7 +88,7 @@ def UnaryOp : Plier_Op<"unary", []> {
                              : $op)>];
 }
 
-def CastOp : Plier_Op<"cast", []> {
+def CastOp : Plier_Op<"cast", [NoSideEffect]> {
   let arguments = (ins AnyType : $value);
 
   let results = (outs AnyType);

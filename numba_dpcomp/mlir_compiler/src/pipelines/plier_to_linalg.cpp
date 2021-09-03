@@ -359,24 +359,24 @@ bool isValidGetitemIndex(mlir::Type type) {
   return type.isa<mlir::IntegerType, mlir::IndexType>();
 }
 
-struct GetitemOpLowering : public mlir::OpRewritePattern<plier::GetItemOp> {
-  using OpRewritePattern::OpRewritePattern;
+struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
+  using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::GetItemOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    assert(op.getNumOperands() == 2);
-    auto value = op.value();
-    auto index = op.index();
+  matchAndRewrite(plier::GetItemOp op, llvm::ArrayRef<mlir::Value> operands,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    plier::GetItemOp::Adaptor adaptor(operands);
+    auto value = adaptor.value();
+    auto index = adaptor.index();
     auto type = value.getType();
     bool isMemref = type.isa<mlir::MemRefType>();
     bool isTensor = type.isa<mlir::TensorType>();
-    if (!isMemref && !isTensor) {
+    if (!isMemref && !isTensor)
       return mlir::failure();
-    }
-    if (!isValidGetitemIndex(index.getType())) {
+
+    if (!isValidGetitemIndex(index.getType()))
       return mlir::failure();
-    }
+
     auto loc = op.getLoc();
     auto indexType = rewriter.getIndexType();
     auto getPos =
@@ -539,13 +539,13 @@ struct GetitemOpLowering : public mlir::OpRewritePattern<plier::GetItemOp> {
         llvm_unreachable("Invalid getitem");
       }
 
-      if (elemType != elemTypeSignless) {
+      if (elemType != elemTypeSignless)
         res = rewriter.create<plier::SignCastOp>(loc, elemType, res);
-      }
     }
 
     rerun_std_pipeline(op);
-    rewriter.replaceOpWithNewOp<plier::CastOp>(op, op.getType(), res);
+    //    rewriter.replaceOpWithNewOp<plier::CastOp>(op, op.getType(), res);
+    rewriter.replaceOp(op, res);
     return mlir::success();
   }
 };
@@ -1542,56 +1542,99 @@ struct CastToSignCastRewrite : public mlir::OpRewritePattern<plier::CastOp> {
 };
 
 void PlierToLinalgPass::runOnOperation() {
-  auto context = &getContext();
+  auto &context = getContext();
 
   mlir::TypeConverter typeConverter;
   // Convert unknown types to itself
   typeConverter.addConversion([](mlir::Type type) { return type; });
-  populateStdTypeConverter(*context, typeConverter);
-  populateTupleTypeConverter(*context, typeConverter);
-  populateArrayTypeConverter(*context, typeConverter);
+  populateStdTypeConverter(context, typeConverter);
+  populateTupleTypeConverter(context, typeConverter);
+  populateArrayTypeConverter(context, typeConverter);
 
-  mlir::OwningRewritePatternList patterns(context);
+  auto materializeCast = [](mlir::OpBuilder &builder, mlir::Type type,
+                            mlir::ValueRange inputs,
+                            mlir::Location loc) -> llvm::Optional<mlir::Value> {
+    // TODO: UnrealizedConversionCast
+    if (inputs.size() == 1)
+      return builder.create<plier::CastOp>(loc, type, inputs.front())
+          .getResult();
+
+    return llvm::None;
+  };
+  typeConverter.addArgumentMaterialization(materializeCast);
+  typeConverter.addSourceMaterialization(materializeCast);
+  typeConverter.addTargetMaterialization(materializeCast);
+
+  mlir::RewritePatternSet patterns(&context);
+  mlir::ConversionTarget target(context);
+  //  target.addLegalDialect<
+  //      // clang-format off
+  //      mlir::StandardOpsDialect,
+  //      mlir::math::MathDialect,
+  //      mlir::memref::MemRefDialect,
+  //      mlir::tensor::TensorDialect
+  //      // clang-format on
+  //      >();
+
+  target.addDynamicallyLegalOp<plier::GetItemOp>(
+      [&typeConverter](plier::GetItemOp op) -> bool {
+        return !typeConverter.convertType(op.value().getType())
+                    .dyn_cast_or_null<mlir::TensorType>();
+      });
+
+  plier::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
+                                                            patterns, target);
+
   patterns.insert<
       // clang-format off
-      plier::FuncOpSignatureConversion,
-      plier::FixupIfTypes,
-      plier::CastOpLowering,
-      plier::FixCallOmittedArgs,
-      RankedTypesCasts,
-      UnrankedToElementCasts,
-      ArrayShape
+        GetitemOpLowering
       // clang-format on
-      >(typeConverter, context);
+      >(typeConverter, &context);
 
-  CallLowerer callLowerer;
+  //  patterns.insert<
+  //      // clang-format off
+  //      plier::FuncOpSignatureConversion,
+  //      plier::FixupIfTypes,
+  //      plier::CastOpLowering,
+  //      plier::FixCallOmittedArgs,
+  //      RankedTypesCasts,
+  //      UnrankedToElementCasts,
+  //      ArrayShape
+  //      // clang-format on
+  //      >(typeConverter, context);
 
-  patterns.insert<
-      // clang-format off
-      plier::CallOpLowering,
-      GetattrRewriter,
-      BinopRewriter
-      // clang-format on
-      >(typeConverter, context, std::ref(callLowerer));
+  //  CallLowerer callLowerer;
 
-  patterns.insert<
-      // clang-format off
-      GetitemOpLowering,
-      SetitemOpLowering,
-      SliceNoneLowering,
-      CastToSignCastRewrite,
-      CheckForBuildTuple,
-      PropagateTupleGetitemType
-      // clang-format on
-      >(&getContext());
+  //  patterns.insert<
+  //      // clang-format off
+  //      plier::CallOpLowering,
+  //      GetattrRewriter,
+  //      BinopRewriter
+  //      // clang-format on
+  //      >(typeConverter, context, std::ref(callLowerer));
 
-  // range/prange lowering need dead branch pruning to properly
-  // handle negative steps
-  for (auto *op : context->getRegisteredOperations()) {
-    op->getCanonicalizationPatterns(patterns, context);
-  }
+  //  patterns.insert<
+  //      // clang-format off
+  //      GetitemOpLowering,
+  //      SetitemOpLowering,
+  //      SliceNoneLowering,
+  //      CastToSignCastRewrite,
+  //      CheckForBuildTuple,
+  //      PropagateTupleGetitemType
+  //      // clang-format on
+  //      >(&getContext());
 
-  (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+  //  // range/prange lowering need dead branch pruning to properly
+  //  // handle negative steps
+  //  for (auto *op : context->getRegisteredOperations()) {
+  //    op->getCanonicalizationPatterns(patterns, context);
+  //  }
+
+  //  (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
+  //  std::move(patterns));
+  if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
+                                                std::move(patterns))))
+    signalPassFailure();
 }
 
 struct LowerLinalgPass
@@ -2051,9 +2094,9 @@ void populateArrayTypeConverter(mlir::MLIRContext & /*context*/,
   converter.addConversion(
       [&](plier::PyType type) -> llvm::Optional<mlir::Type> {
         auto ret = map_plier_type(converter, type);
-        if (!ret) {
+        if (!ret)
           return llvm::None;
-        }
+
         return ret;
       });
 }

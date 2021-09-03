@@ -270,11 +270,17 @@ void UnaryOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
 }
 
 mlir::OpFoldResult CastOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
-  auto op_type = getOperand().getType();
-  auto ret_type = getType();
-  if (op_type == ret_type && op_type != PyType::getUndefined(getContext())) {
+  auto opType = getOperand().getType();
+  auto retType = getType();
+  if (opType == retType && opType != PyType::getUndefined(getContext()))
     return getOperand();
+
+  if (auto prevCast = getOperand().getDefiningOp<plier::CastOp>()) {
+    auto prevValue = prevCast.value();
+    if (prevValue.getType() == retType)
+      return prevValue;
   }
+
   return nullptr;
 }
 
