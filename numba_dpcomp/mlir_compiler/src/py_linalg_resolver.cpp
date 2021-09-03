@@ -77,27 +77,9 @@ std::string to_str(py::handle obj) { return py::str(obj).cast<std::string>(); }
 py::object mapTypesToNumbaChecked(py::handle typesMod,
                                   mlir::TypeRange typesRange) {
   auto funcTypes = map_types_to_numba(typesMod, typesRange);
-  if (funcTypes.is_none()) {
-    assert(!typesRange.empty());
-    auto context = typesRange.front().getContext();
-    mlir::TypeConverter converter;
-    populateStdTypeConverter(*context, converter);
-    populateArrayTypeConverter(*context, converter);
-    llvm::SmallVector<mlir::Type> convertedTypes(typesRange.size());
-    for (auto it : llvm::enumerate(typesRange)) {
-      auto oldType = it.value();
-      auto newType = converter.convertType(oldType);
-      if (!newType) {
-        newType = oldType;
-      }
-      convertedTypes[it.index()] = newType;
-    }
-    funcTypes = map_types_to_numba(typesMod, convertedTypes);
-    if (funcTypes.is_none()) {
-      plier::report_error(llvm::Twine("map_types_to_numba failed: ") +
-                          to_str(typesRange));
-    }
-  }
+  if (funcTypes.is_none())
+    plier::report_error(llvm::Twine("map_types_to_numba failed: ") +
+                        to_str(typesRange));
   return funcTypes;
 }
 
@@ -894,9 +876,9 @@ py::object generic_impl(py::capsule context, py::handle inputs,
     assert(vals.size() == types.size());
     llvm::SmallVector<mlir::Value> ret(vals.size());
     auto doCast = [&](mlir::Value val, mlir::Type type) {
-      if (val.getType() == type) {
+      if (val.getType() == type)
         return val;
-      }
+
       return builder.create<plier::CastOp>(loc, type, val).getResult();
     };
     for (auto it : llvm::enumerate(vals)) {
