@@ -227,6 +227,9 @@ lowerPrange(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands,
 }
 
 struct CallLowerer {
+  CallLowerer()
+      : linalg_resolver("numba_dpcomp.mlir.numpy.funcs", "registry") {}
+
   using args_t = llvm::ArrayRef<mlir::Value>;
   using kwargs_t = llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>>;
   mlir::LogicalResult operator()(plier::PyCallOp op, llvm::StringRef name,

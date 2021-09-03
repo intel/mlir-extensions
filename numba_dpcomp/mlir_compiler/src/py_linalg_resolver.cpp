@@ -284,13 +284,13 @@ void setup_py_var(py::handle var);
 } // namespace
 
 struct PyLinalgResolver::Context {
-  py::handle var;
-  py::handle type;
-  py::handle builder;
-  py::handle inspect;
-  py::handle types_mod;
-  py::handle compile_func;
-  py::handle lookup_func;
+  py::object var;
+  py::object type;
+  py::object builder;
+  py::object inspect;
+  py::object types_mod;
+  py::object compile_func;
+  py::object lookup_func;
 
   py::object create_var(py::capsule context, mlir::Value value) {
     assert(value);
@@ -1458,15 +1458,21 @@ PyLinalgResolver::Values unpack_results(PyBuilderContext &ctx,
 }
 } // namespace
 
-PyLinalgResolver::PyLinalgResolver() : context(std::make_unique<Context>()) {
-  auto builder_mod = py::module::import("numba_dpcomp.mlir.linalg_builder");
-  context->var = builder_mod.attr("Var");
-  context->type = builder_mod.attr("Type");
-  context->builder = builder_mod.attr("Builder");
+PyLinalgResolver::PyLinalgResolver(const char *modName, const char *regName)
+    : context(std::make_unique<Context>()) {
+  assert(modName != nullptr);
+  assert(regName != nullptr);
+  auto builderMod = py::module::import("numba_dpcomp.mlir.linalg_builder");
+  auto registryMod = py::module::import(modName);
+  auto registry = registryMod.attr(regName);
+
+  context->var = builderMod.attr("Var");
+  context->type = builderMod.attr("Type");
+  context->builder = builderMod.attr("Builder");
   context->inspect = py::module::import("inspect");
   context->types_mod = py::module::import("numba.core.types");
-  context->compile_func = builder_mod.attr("compile_func");
-  context->lookup_func = builder_mod.attr("lookup_func");
+  context->compile_func = builderMod.attr("compile_func");
+  context->lookup_func = registry.attr("lookup_func");
 }
 
 PyLinalgResolver::~PyLinalgResolver() {}
@@ -1490,14 +1496,12 @@ PyLinalgResolver::rewrite(llvm::StringRef name, mlir::Location loc,
                           KWArgs kwargs) {
   assert(!name.empty());
   if (!is_compatible_types(args) ||
-      !is_compatible_types(llvm::make_second_range(kwargs))) {
+      !is_compatible_types(llvm::make_second_range(kwargs)))
     return {};
-  }
 
   auto builder_func = context->lookup_func(py::str(name.data(), name.size()));
-  if (builder_func.is_none()) {
+  if (builder_func.is_none())
     return {};
-  }
 
   PyBuilderContext py_builder_context{loc, builder, {}, *context};
   auto &mlirContext = *builder.getContext();
@@ -1508,16 +1512,16 @@ PyLinalgResolver::rewrite(llvm::StringRef name, mlir::Location loc,
       context->inspect, builder_func,
       [&](auto val) { return context->create_var(py_context, val); }, args,
       kwargs);
-  if (py_args.is_none()) {
+  if (py_args.is_none())
     return {};
-  }
+
   auto py_builder = context->builder(py_context);
   setup_py_builder(py_builder, builder,
                    [&](auto type) { return context->create_type(type); });
 
   auto result = builder_func(py_builder, *py_args);
-  if (result.is_none()) {
+  if (result.is_none())
     return {};
-  }
+
   return unpack_results(py_builder_context, result);
 }

@@ -12,14 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..linalg_builder import register_func, register_attr, is_literal, broadcast_type, eltwise, convert_array, asarray, is_int
+from ..linalg_builder import FuncRegistry, is_literal, broadcast_type, eltwise, convert_array, asarray, is_int, is_float
 
 import numpy
 import math
 from numba import prange
 
-def is_float(t, b):
-    return t == b.float16 or t == b.float32 or t == b.float64
+registry = FuncRegistry()
+
+def register_func(name, orig_func=None):
+    global registry
+    return registry.register_func(name, orig_func)
+
+def register_attr(name):
+    global registry
+    return registry.register_attr(name)
 
 def promote_int(t, b):
     if is_int(t, b):

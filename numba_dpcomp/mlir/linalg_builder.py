@@ -97,30 +97,29 @@ def compile_func(*args, **kwargs):
     import numba_dpcomp.mlir.inner_compiler
     return numba_dpcomp.mlir.inner_compiler.compile_func(*args, **kwargs)
 
-_func_registry = {}
+class FuncRegistry:
+    def __init__(self):
+        self.funcs = {}
 
-def register_func(name, orig_func = None):
-    def _decorator(func):
-        global _func_registry
-        mangled_name = name + '()'
-        assert not mangled_name in _func_registry
-        _func_registry[mangled_name] = func
-        if not orig_func is None:
-            add_func(orig_func, name)
-        return func
-    return _decorator
+    def register_func(self, name, orig_func = None):
+        def _decorator(func):
+            mangled_name = name + '()'
+            assert not mangled_name in self.funcs
+            self.funcs[mangled_name] = func
+            if not orig_func is None:
+                add_func(orig_func, name)
+            return func
+        return _decorator
 
-def register_attr(name):
-    def _decorator(func):
-        global _func_registry
-        assert not name in _func_registry
-        _func_registry[name] = func
-        return func
-    return _decorator
+    def register_attr(self, name):
+        def _decorator(func):
+            assert not name in self.funcs
+            self.funcs[name] = func
+            return func
+        return _decorator
 
-def lookup_func(name):
-    global _func_registry
-    return _func_registry.get(name)
+    def lookup_func(self, name):
+        return self.funcs.get(name)
 
 def broadcast_type(builder, args):
     return args[0].dtype # TODO
@@ -199,3 +198,6 @@ def is_int(t, b):
         b.uint64,
     ]
     return t in types
+
+def is_float(t, b):
+    return t == b.float16 or t == b.float32 or t == b.float64
