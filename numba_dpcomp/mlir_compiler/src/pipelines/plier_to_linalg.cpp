@@ -209,6 +209,13 @@ void rerun_std_pipeline(mlir::Operation *op) {
   plier::add_pipeline_jump_marker(mod, marker);
 }
 
+static mlir::Value skipCast(mlir::Value val) {
+  if (auto cast = val.getDefiningOp<plier::CastOp>())
+    return cast.value();
+
+  return val;
+};
+
 mlir::LogicalResult
 lowerPrange(plier::PyCallOp op, mlir::ValueRange operands,
             llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs,
@@ -225,18 +232,33 @@ lowerPrange(plier::PyCallOp op, mlir::ValueRange operands,
   return mlir::failure();
 }
 
+mlir::LogicalResult
+lowerLen(plier::PyCallOp op, mlir::ValueRange operands,
+         llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs,
+         mlir::PatternRewriter &rewriter) {
+  if (operands.size() != 1 || !kwargs.empty())
+    return mlir::failure();
+
+  auto arg = skipCast(operands.front());
+  if (!arg.getType().isa<mlir::RankedTensorType>())
+    return mlir::failure();
+
+  rerun_std_pipeline(op);
+
+  auto loc = op.getLoc();
+  auto dim = rewriter.createOrFold<mlir::tensor::DimOp>(loc, arg, 0);
+  rewriter.replaceOpWithNewOp<plier::CastOp>(op, op.getType(), dim);
+  return mlir::success();
+}
+
 using kwargs_t = llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>>;
 using func_t = mlir::LogicalResult (*)(plier::PyCallOp, mlir::ValueRange,
                                        kwargs_t, mlir::PatternRewriter &);
 static const std::pair<llvm::StringRef, func_t> builtinFuncsHandlers[] = {
+    // clang-format off
     {"numba.prange", lowerPrange},
-};
-
-static mlir::Value skipCast(mlir::Value val) {
-  if (auto cast = val.getDefiningOp<plier::CastOp>())
-    return cast.value();
-
-  return val;
+    {"len", lowerLen},
+    // clang-format on
 };
 
 struct NumpyCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
