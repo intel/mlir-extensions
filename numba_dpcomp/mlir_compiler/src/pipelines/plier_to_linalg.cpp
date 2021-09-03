@@ -1451,52 +1451,50 @@ template <typename T> bool has_compatibale_shape(T &&a1, T &&a2) {
   return true;
 }
 
-struct RankedTypesCasts : public mlir::OpRewritePattern<plier::CastOp> {
-  RankedTypesCasts(mlir::TypeConverter &typeConverter,
-                   mlir::MLIRContext *context)
-      : OpRewritePattern(context), converter(typeConverter) {}
+struct RankedTypesCasts : public mlir::OpConversionPattern<plier::CastOp> {
+  using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::CastOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto srcType = op.value().getType();
+  matchAndRewrite(plier::CastOp op, llvm::ArrayRef<mlir::Value> operands,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    plier::CastOp::Adaptor adaptor(operands);
+
+    auto converter = *getTypeConverter();
+
+    auto value = adaptor.value();
+    auto srcType = value.getType();
     auto dstType = converter.convertType(op.getType());
-    if (!dstType) {
+    if (!dstType)
       return mlir::failure();
-    }
+
     if (srcType.isa<mlir::RankedTensorType>() &&
         dstType.isa<mlir::RankedTensorType>()) {
       auto src = srcType.cast<mlir::RankedTensorType>();
       auto dst = dstType.cast<mlir::RankedTensorType>();
       auto srcElem = src.getElementType();
       auto dstElem = dst.getElementType();
-      if (!has_compatibale_shape(src, dst)) {
+      if (!has_compatibale_shape(src, dst))
         return mlir::failure();
-      }
 
       auto signlessSrcType = mlir::RankedTensorType::get(
           src.getShape(), plier::makeSignlessType(srcElem), src.getEncoding());
       auto signlessDstType = mlir::RankedTensorType::get(
           dst.getShape(), plier::makeSignlessType(dstElem), dst.getEncoding());
       auto loc = op.getLoc();
-      auto value = op.value();
-      if (signlessSrcType != src) {
+      if (signlessSrcType != src)
         value = rewriter.createOrFold<plier::SignCastOp>(loc, signlessSrcType,
                                                          value);
-      }
+
       value = rewriter.createOrFold<mlir::tensor::CastOp>(loc, signlessDstType,
                                                           value);
-      if (signlessDstType != dst) {
+      if (signlessDstType != dst)
         value = rewriter.createOrFold<plier::SignCastOp>(loc, dst, value);
-      }
+
       rewriter.replaceOp(op, value);
       return mlir::success();
     }
     return mlir::failure();
   }
-
-private:
-  mlir::TypeConverter &converter;
 };
 
 struct UnrankedToElementCasts : public mlir::OpRewritePattern<plier::CastOp> {
@@ -1692,6 +1690,10 @@ struct CastToSignCastRewrite : public mlir::OpRewritePattern<plier::CastOp> {
   }
 };
 
+static bool isTensor(mlir::TypeConverter &converter, mlir::Type type) {
+  return !!converter.convertType(type).dyn_cast_or_null<mlir::TensorType>();
+}
+
 void PlierToLinalgPass::runOnOperation() {
   auto &context = getContext();
 
@@ -1729,14 +1731,17 @@ void PlierToLinalgPass::runOnOperation() {
 
   target.addDynamicallyLegalOp<plier::GetItemOp>(
       [&typeConverter](plier::GetItemOp op) -> bool {
-        return !typeConverter.convertType(op.value().getType())
-                    .dyn_cast_or_null<mlir::TensorType>();
+        return !isTensor(typeConverter, op.value().getType());
       });
   target.addDynamicallyLegalOp<plier::SetItemOp>(
       [&typeConverter](plier::SetItemOp op) -> bool {
-        return !typeConverter.convertType(op.target().getType())
-                    .dyn_cast_or_null<mlir::TensorType>();
+        return !isTensor(typeConverter, op.target().getType());
       });
+
+  target.addDynamicallyLegalOp<plier::CastOp>([](plier::CastOp op) -> bool {
+    return !op.value().getType().isa<mlir::TensorType>() ||
+           !op.getType().isa<mlir::TensorType>();
+  });
 
   //  target.addDynamicallyLegalOp<plier::PyCallOp>([](plier::PyCallOp op) ->
   //  bool {
@@ -1754,7 +1759,8 @@ void PlierToLinalgPass::runOnOperation() {
   patterns.insert<
       // clang-format off
       GetitemOpLowering,
-      SetitemOpLowering
+      SetitemOpLowering,
+      RankedTypesCasts
       // clang-format on
       >(typeConverter, &context);
 
