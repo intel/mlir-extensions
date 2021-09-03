@@ -1812,6 +1812,8 @@ void PlierToLinalgPass::runOnOperation() {
 
   plier::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
                                                             patterns, target);
+  plier::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
+                                                      target);
 
   patterns.insert<
       // clang-format off
