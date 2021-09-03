@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 from collections import namedtuple
 from itertools import product
 
@@ -49,15 +48,31 @@ def _destroy_execution_state():
     global _execution_state
     _execution_state = None
 
+_globals_to_replace = [
+    ('get_global_id', get_global_id_proxy)
+]
+
+def _replace_globals(src):
+    old_globals = [src.get(name, None) for name, _ in _globals_to_replace]
+    for name, new_val in _globals_to_replace:
+        src[name] = new_val
+    return old_globals
+
+def _restore_globals(src, old_globals):
+    for i, (name, _) in enumerate(_globals_to_replace):
+        old_val = old_globals[i]
+        if old_val is not None:
+            src[name] = old_val
+
 def _execute_kernel(global_size, local_size, func, *args):
-    func_copy = copy.copy(func)
-    func_copy.__globals__['get_global_id'] = get_global_id_proxy
+    saved_globals = _replace_globals(func.__globals__)
     state = _setup_execution_state(global_size, local_size)
     try:
         for indices in product(*(range(d) for d in global_size)):
             state.indices[:] = indices
-            func_copy(*args)
+            func(*args)
     finally:
+        _restore_globals(func.__globals__, saved_globals)
         _destroy_execution_state()
 
 
