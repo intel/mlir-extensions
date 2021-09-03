@@ -76,8 +76,8 @@ jobs:
       mkdir level_zero_install
       mkdir build
       cd build
-      cmake -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=../level_zero_install ..
-      ninja install
+      cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=../level_zero_install ..
+      make install
     displayName: 'Get L0'
 
   - script: |
