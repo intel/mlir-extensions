@@ -765,7 +765,8 @@ private:
       allocFuncOp = rewriter.create<LLVM::LLVMFuncOp>(rewriter.getUnknownLoc(),
                                                       name, allocFuncType);
     }
-    auto allocFuncSymbol = rewriter.getSymbolRefAttr(allocFuncOp);
+
+    auto allocFuncSymbol = mlir::SymbolRefAttr::get(allocFuncOp);
     auto allocatedPtr = rewriter
                             .create<LLVM::CallOp>(loc, getVoidPtrType(),
                                                   allocFuncSymbol, params)
@@ -802,7 +803,7 @@ struct DeallocOpLowering
         op.getLoc(), getVoidPtrType(),
         memref.allocatedPtr(rewriter, op.getLoc()));
     rewriter.replaceOpWithNewOp<mlir::LLVM::CallOp>(
-        op, mlir::TypeRange(), rewriter.getSymbolRefAttr(freeFunc), casted);
+        op, mlir::TypeRange(), mlir::SymbolRefAttr::get(freeFunc), casted);
     return mlir::success();
   }
 };
@@ -1152,7 +1153,7 @@ struct LowerParallel : public mlir::OpRewritePattern<plier::ParallelOp> {
       return plier::add_function(rewriter, mod, func_name, parallelFuncType);
     }();
     auto funcAddr = rewriter.create<mlir::ConstantOp>(
-        loc, funcType, rewriter.getSymbolRefAttr(outlinedFunc));
+        loc, funcType, mlir::SymbolRefAttr::get(outlinedFunc));
 
     auto inputRanges = allocaInsertionPoint.insert(rewriter, [&]() {
       auto numLoopsAttr = rewriter.getIntegerAttr(llvmIndexType, num_loops);
