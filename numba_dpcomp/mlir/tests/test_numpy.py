@@ -18,9 +18,8 @@ from numba_dpcomp import vectorize
 from numba_dpcomp.mlir.passes import print_pass_ir, get_print_buffer
 from numpy.testing import assert_equal, assert_allclose # for nans comparison
 import numpy as np
-from numba.tests.support import TestCase
-import unittest
 import itertools
+import math
 from functools import partial
 import pytest
 from sklearn.datasets import make_regression
@@ -337,255 +336,254 @@ def test_loop_if():
     arr2 = np.arange(100)
     assert_equal(py_func(arr1), jit_func(arr2))
 
-class TestMlirBasic(TestCase):
-    def test_static_setitem(self):
-        def py_func(a):
-            a[1] = 42
-            return a[1]
+def test_static_setitem():
+    def py_func(a):
+        a[1] = 42
+        return a[1]
 
-        jit_func = njit(py_func)
-        arr = np.asarray([1,2,3])
-        assert_equal(py_func(arr), jit_func(arr))
+    jit_func = njit(py_func)
+    arr = np.asarray([1,2,3])
+    assert_equal(py_func(arr), jit_func(arr))
 
-    def test_setitem1(self):
-        def py_func(a, b):
-            a[b] = 42
-            return a[b]
+def test_setitem1():
+    def py_func(a, b):
+        a[b] = 42
+        return a[b]
 
-        jit_func = njit(py_func)
-        arr = np.asarray([1,2,3])
-        assert_equal(py_func(arr, 1), jit_func(arr, 1))
+    jit_func = njit(py_func)
+    arr = np.asarray([1,2,3])
+    assert_equal(py_func(arr, 1), jit_func(arr, 1))
 
-    def test_setitem2(self):
-        def py_func(a, b, c):
-            a[b, c] = 42
-            return a[b, c]
+def test_setitem2():
+    def py_func(a, b, c):
+        a[b, c] = 42
+        return a[b, c]
 
-        jit_func = njit(py_func)
-        arr = np.asarray([[1,2,3],[4,5,6]])
-        assert_equal(py_func(arr, 1, 2), jit_func(arr, 1, 2))
+    jit_func = njit(py_func)
+    arr = np.asarray([[1,2,3],[4,5,6]])
+    assert_equal(py_func(arr, 1, 2), jit_func(arr, 1, 2))
 
-    def test_setitem_loop(self):
-        def py_func(a):
-            for i in range(len(a)):
-                a[i] = a[i] + i
-            return a.sum()
+def test_setitem_loop():
+    def py_func(a):
+        for i in range(len(a)):
+            a[i] = a[i] + i
+        return a.sum()
 
-        jit_func = njit(py_func)
-        arr = np.asarray([3,2,1])
-        assert_equal(py_func(arr.copy()), jit_func(arr.copy()))
+    jit_func = njit(py_func)
+    arr = np.asarray([3,2,1])
+    assert_equal(py_func(arr.copy()), jit_func(arr.copy()))
 
-    def test_array_bounds1(self):
-        def py_func(a):
-            res = 0
-            for i in range(len(a)):
-                if i >= len(a) or i < 0:
-                    res = res + 1
-                else:
-                    res = res + a[i]
-            return res
+def test_array_bounds1():
+    def py_func(a):
+        res = 0
+        for i in range(len(a)):
+            if i >= len(a) or i < 0:
+                res = res + 1
+            else:
+                res = res + a[i]
+        return res
 
-        jit_func = njit(py_func)
-        arr = np.asarray([3,2,1])
-        assert_equal(py_func(arr.copy()), jit_func(arr.copy()))
+    jit_func = njit(py_func)
+    arr = np.asarray([3,2,1])
+    assert_equal(py_func(arr.copy()), jit_func(arr.copy()))
 
-    def test_array_bounds2(self):
-        def py_func(a):
-            res = 0
-            for i in range(len(a)):
-                if i < len(a) and i >= 0:
-                    res = res + a[i]
-                else:
-                    res = res + 1
-            return res
+def test_array_bounds2():
+    def py_func(a):
+        res = 0
+        for i in range(len(a)):
+            if i < len(a) and i >= 0:
+                res = res + a[i]
+            else:
+                res = res + 1
+        return res
 
-        jit_func = njit(py_func)
-        arr = np.asarray([3,2,1])
-        assert_equal(py_func(arr.copy()), jit_func(arr.copy()))
+    jit_func = njit(py_func)
+    arr = np.asarray([3,2,1])
+    assert_equal(py_func(arr.copy()), jit_func(arr.copy()))
 
-    def test_array_bounds3(self):
-        def py_func(a):
-            res = 0
-            for i in range(len(a)):
-                if 0 <= i < len(a):
-                    res = res + a[i]
-                else:
-                    res = res + 1
-            return res
+def test_array_bounds3():
+    def py_func(a):
+        res = 0
+        for i in range(len(a)):
+            if 0 <= i < len(a):
+                res = res + a[i]
+            else:
+                res = res + 1
+        return res
 
-        jit_func = njit(py_func)
-        arr = np.asarray([3,2,1])
-        assert_equal(py_func(arr.copy()), jit_func(arr.copy()))
+    jit_func = njit(py_func)
+    arr = np.asarray([3,2,1])
+    assert_equal(py_func(arr.copy()), jit_func(arr.copy()))
 
-    def test_array_bounds4(self):
-        def py_func(a):
-            res = 0
-            for i in range(len(a) - 1):
-                if 0 <= i < (len(a) - 1):
-                    res = res + a[i]
-                else:
-                    res = res + 1
-            return res
+def test_array_bounds4():
+    def py_func(a):
+        res = 0
+        for i in range(len(a) - 1):
+            if 0 <= i < (len(a) - 1):
+                res = res + a[i]
+            else:
+                res = res + 1
+        return res
 
-        jit_func = njit(py_func)
-        arr = np.asarray([3,2,1])
-        assert_equal(py_func(arr.copy()), jit_func(arr.copy()))
+    jit_func = njit(py_func)
+    arr = np.asarray([3,2,1])
+    assert_equal(py_func(arr.copy()), jit_func(arr.copy()))
 
-    def test_array_shape(self):
-        def py_func(a):
-            shape = a.shape
-            return shape[0] + shape[1] * 10
+def test_array_shape():
+    def py_func(a):
+        shape = a.shape
+        return shape[0] + shape[1] * 10
 
-        jit_func = njit(py_func)
-        arr = np.array([[1,2,3],[4,5,6]])
-        assert_equal(py_func(arr), jit_func(arr))
+    jit_func = njit(py_func)
+    arr = np.array([[1,2,3],[4,5,6]])
+    assert_equal(py_func(arr), jit_func(arr))
 
-    def test_array_return(self):
-        def py_func(a):
-            return a
+def test_array_return():
+    def py_func(a):
+        return a
 
-        jit_func = njit(py_func)
-        arr = np.array([1,2,3])
-        assert_equal(py_func(arr), jit_func(arr))
+    jit_func = njit(py_func)
+    arr = np.array([1,2,3])
+    assert_equal(py_func(arr), jit_func(arr))
 
-    def test_array_prange_const(self):
-        def py_func(a, b):
-            a[0] = 42
-            for i in numba.prange(b):
-                a[0] = 1
-            return a[0]
+def test_array_prange_const():
+    def py_func(a, b):
+        a[0] = 42
+        for i in numba.prange(b):
+            a[0] = 1
+        return a[0]
 
-        jit_func = njit(py_func, parallel=True)
-        arr = np.array([0.0])
-        assert_equal(py_func(arr, 5), jit_func(arr, 5))
+    jit_func = njit(py_func, parallel=True)
+    arr = np.array([0.0])
+    assert_equal(py_func(arr, 5), jit_func(arr, 5))
 
-    def test_empty1(self):
-        def py_func(d):
-            a = np.empty(d)
-            for i in range(d):
-                a[i] = i
-            return a
+def test_empty1():
+    def py_func(d):
+        a = np.empty(d)
+        for i in range(d):
+            a[i] = i
+        return a
 
-        jit_func = njit(py_func)
-        assert_equal(py_func(5), jit_func(5))
+    jit_func = njit(py_func)
+    assert_equal(py_func(5), jit_func(5))
 
-    def test_empty2(self):
-        def py_func(d1, d2):
-            a = np.empty((d1, d2))
-            for i in range(d1):
-                for j in range(d2):
-                    a[i, j] = i + j * 10
-            return a
+def test_empty2():
+    def py_func(d1, d2):
+        a = np.empty((d1, d2))
+        for i in range(d1):
+            for j in range(d2):
+                a[i, j] = i + j * 10
+        return a
 
-        jit_func = njit(py_func)
-        assert_equal(py_func(5, 7), jit_func(5, 7))
+    jit_func = njit(py_func)
+    assert_equal(py_func(5, 7), jit_func(5, 7))
 
-    def test_empty3(self):
-        def py_func(a):
-            return np.empty(a.shape, a.dtype)
+@pytest.mark.parametrize("dtype", ['int32','int64','float32','float64'])
+def test_empty3(dtype):
+    def py_func(a):
+        return np.empty(a.shape, a.dtype)
 
-        jit_func = njit(py_func)
-        arr = np.array([1,2,3])
-        for t in ['int32','int64','float32','float64']:
-            a = arr.astype(t)
-            assert_equal(py_func(a).shape, jit_func(a).shape)
-            assert_equal(py_func(a).dtype, jit_func(a).dtype)
+    jit_func = njit(py_func)
+    arr = np.array([1,2,3], dtype=dtype)
+    assert_equal(py_func(arr).shape, jit_func(arr).shape)
+    assert_equal(py_func(arr).dtype, jit_func(arr).dtype)
 
-    def test_zeros1(self):
-        def py_func(d):
-            return np.zeros(d)
+def test_zeros1():
+    def py_func(d):
+        return np.zeros(d)
 
-        jit_func = njit(py_func)
-        assert_equal(py_func(5), jit_func(5))
+    jit_func = njit(py_func)
+    assert_equal(py_func(5), jit_func(5))
 
-    def test_zeros2(self):
-        def py_func(a):
-            return np.zeros(a.shape, a.dtype)
+@pytest.mark.parametrize("dtype", ['int32','int64','float32','float64'])
+def test_zeros2(dtype):
+    def py_func(a):
+        return np.zeros(a.shape, a.dtype)
 
-        jit_func = njit(py_func)
-        arr = np.array([1, 2, 3])
-        for t in ['int32', 'int64', 'float32', 'float64']:
-            a = arr.astype(t)
-            assert_equal(py_func(a).shape, jit_func(a).shape)
-            assert_equal(py_func(a).dtype, jit_func(a).dtype)
+    jit_func = njit(py_func)
+    arr = np.array([1, 2, 3], dtype=dtype)
+    assert_equal(py_func(arr).shape, jit_func(arr).shape)
+    assert_equal(py_func(arr).dtype, jit_func(arr).dtype)
 
-    @unittest.expectedFailure
-    def test_zeros3(self):
-        def py_func(d):
-            return np.zeros(d, dtype=np.dtype('int64'))
+@pytest.mark.xfail
+def test_zeros3():
+    def py_func(d):
+        return np.zeros(d, dtype=np.dtype('int64'))
 
-        jit_func = njit(py_func)
-        assert_equal(py_func(5), jit_func(5))
+    jit_func = njit(py_func)
+    assert_equal(py_func(5), jit_func(5))
 
-    def test_zeros4(self):
-        def py_func(d):
-            return np.zeros(d)
+def test_zeros4():
+    def py_func(d):
+        return np.zeros(d)
 
-        jit_func = njit(py_func)
-        assert_equal(py_func((2, 1)), jit_func((2, 1)))
+    jit_func = njit(py_func)
+    assert_equal(py_func((2, 1)), jit_func((2, 1)))
 
-    def test_parallel(self):
-        def py_func(a, b):
-            return np.add(a, b)
+def test_parallel():
+    def py_func(a, b):
+        return np.add(a, b)
 
-        jit_func = njit(py_func, parallel=True)
-        arr = np.asarray([[[1,2,3],[4,5,6]],
-                          [[1,2,3],[4,5,6]]])
-        assert_equal(py_func(arr,arr), jit_func(arr,arr))
+    jit_func = njit(py_func, parallel=True)
+    arr = np.asarray([[[1,2,3],[4,5,6]],
+                      [[1,2,3],[4,5,6]]])
+    assert_equal(py_func(arr,arr), jit_func(arr,arr))
 
-    def test_parallel_reduce(self):
-        def py_func(a):
-            shape = a.shape
-            res = 0
-            for i in range(shape[0]):
-                for j in numba.prange(shape[1]):
-                    for k in numba.prange(shape[2]):
-                        res = res + a[i,j,k]
-            return res
+def test_parallel_reduce():
+    def py_func(a):
+        shape = a.shape
+        res = 0
+        for i in range(shape[0]):
+            for j in numba.prange(shape[1]):
+                for k in numba.prange(shape[2]):
+                    res = res + a[i,j,k]
+        return res
 
-        jit_func = njit(py_func, parallel=True)
-        arr = np.asarray([[[1,2,3],[4,5,6]]]).repeat(10000,0)
-        assert_equal(py_func(arr), jit_func(arr))
+    jit_func = njit(py_func, parallel=True)
+    arr = np.asarray([[[1,2,3],[4,5,6]]]).repeat(10000,0)
+    assert_equal(py_func(arr), jit_func(arr))
 
-    def test_vectorize(self):
-        import math
-        funcs = [
-            lambda a : a + 1,
-            lambda a : math.erf(a),
-            # lambda a : 5 if a == 1 else a, # TODO: investigate
-        ]
+@parametrize_function_variants("func", [
+    'lambda a : a + 1',
+    'lambda a : math.erf(a)',
+    # 'lambda a : 5 if a == 1 else a', TODO: investigate
+])
+@pytest.mark.parametrize("arr",
+                         _test_arrays,
+                         ids=_test_arrays_ids)
+def test_vectorize(func, arr):
+    arr = np.array(arr)
+    vec_func = vectorize(func)
+    assert_equal(_vectorize_reference(func, arr), vec_func(arr))
 
-        for func in funcs:
-            vec_func = vectorize(func)
+@pytest.mark.parametrize("arr",
+                         _test_arrays,
+                         ids=_test_arrays_ids)
+def test_vectorize_indirect(arr):
+    def func(a):
+        return a + 1
 
-            for a in _test_arrays:
-                arr = np.array(a)
-                assert_equal(_vectorize_reference(func, arr), vec_func(arr))
+    vec_func = vectorize(func)
 
-    def test_vectorize_indirect(self):
-        def func(a):
-            return a + 1
+    def py_func(a):
+        return vec_func(a)
 
-        vec_func = vectorize(func)
+    jit_func = njit(py_func, parallel=True)
 
-        def py_func(a):
-            return vec_func(a)
+    arr = np.array(arr)
+    assert_equal(_vectorize_reference(func, arr), jit_func(arr))
 
-        jit_func = njit(py_func, parallel=True)
+@pytest.mark.parametrize("arr", [
+    np.array([[1,2],[3,4]]),
+    # np.array([[1,2],[3,4]]).T,
+])
+def test_fortran_layout(arr):
+    def py_func(a):
+        return a.T
 
-        for a in _test_arrays:
-            arr = np.array(a)
-            assert_equal(_vectorize_reference(func, arr), jit_func(arr))
+    jit_func = njit(py_func)
 
-    def test_fortran_layout(self):
-        def py_func(a):
-            return a.T
-
-        jit_func = njit(py_func)
-
-        arr = np.array([[1,2],[3,4]])
-        for a in [arr]: # TODO: arr.T
-            assert_equal(py_func(a), jit_func(a))
+    assert_equal(py_func(arr), jit_func(arr))
 
 @parametrize_function_variants("a", [
     # 'np.array(1)', TODO zero rank arrays
@@ -608,6 +606,7 @@ _test_reshape_test_arrays = [
     _test_reshape_test_array.reshape((2,6)),
     _test_reshape_test_array.reshape((2,3,2)),
 ]
+
 @parametrize_function_variants("py_func", [
     'lambda a: a.reshape(a.size)',
     'lambda a: a.reshape((a.size,))',
@@ -836,7 +835,3 @@ def test_mean_loop_cov(arr, parallel):
     c2, v2 = jit_func(arr)
     assert_allclose(c1, c2, rtol=1e-15, atol=1e-11)
     assert_allclose(v1, v2, rtol=1e-15, atol=1e-11)
-
-
-if __name__ == '__main__':
-    unittest.main()
