@@ -187,8 +187,7 @@ mlir::Type map_plier_type(mlir::TypeConverter &converter, mlir::Type type) {
   return nullptr;
 }
 
-bool check_numpy_args(llvm::ArrayRef<mlir::Value> args,
-                      unsigned expected_count) {
+bool check_numpy_args(mlir::ValueRange args, unsigned expected_count) {
   if (args.size() != expected_count) {
     return false;
   }
@@ -211,7 +210,7 @@ void rerun_std_pipeline(mlir::Operation *op) {
 }
 
 mlir::LogicalResult
-lowerPrange(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands,
+lowerPrange(plier::PyCallOp op, mlir::ValueRange operands,
             llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs,
             mlir::PatternRewriter &rewriter) {
   auto parent = op->getParentOp();
@@ -226,11 +225,46 @@ lowerPrange(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands,
   return mlir::failure();
 }
 
+using kwargs_t = llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>>;
+using func_t = mlir::LogicalResult (*)(plier::PyCallOp, mlir::ValueRange,
+                                       kwargs_t, mlir::PatternRewriter &);
+static const std::pair<llvm::StringRef, func_t> builtinFuncsHandlers[] = {
+    {"numba.prange", lowerPrange},
+};
+
+struct BuiltinCallsOpLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::PyCallOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto funcName = op.func_name();
+    auto args = op.args();
+    llvm::SmallVector<std::pair<llvm::StringRef, mlir::Value>> kwargs;
+    for (auto it : llvm::zip(op.kwargs(), op.kw_names())) {
+      auto arg = std::get<0>(it);
+      auto name = std::get<1>(it).cast<mlir::StringAttr>();
+      kwargs.emplace_back(name.getValue(), arg);
+    }
+
+    for (auto &handler : builtinFuncsHandlers) {
+      if (handler.first == funcName)
+        return handler.second(op, args, kwargs, rewriter);
+    }
+
+    return mlir::failure();
+  }
+};
+
+struct LinalgBuiltinCallsOpLoweringPass
+    : public plier::RewriteWrapperPass<LinalgBuiltinCallsOpLoweringPass, void,
+                                       void, BuiltinCallsOpLowering> {};
+
 struct CallLowerer {
   CallLowerer()
       : linalg_resolver("numba_dpcomp.mlir.numpy.funcs", "registry") {}
 
-  using args_t = llvm::ArrayRef<mlir::Value>;
+  using args_t = mlir::ValueRange;
   using kwargs_t = llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>>;
   mlir::LogicalResult operator()(plier::PyCallOp op, llvm::StringRef name,
                                  args_t args, kwargs_t kwargs,
@@ -1582,12 +1616,22 @@ void PlierToLinalgPass::runOnOperation() {
                     .dyn_cast_or_null<mlir::TensorType>();
       });
 
+  //  target.addDynamicallyLegalOp<plier::PyCallOp>([](plier::PyCallOp op) ->
+  //  bool {
+  //    auto name = op.func_name();
+  //    for (auto &it : builtinFuncsHandlers) {
+  //      if (it.first == name)
+  //        return false;
+  //    }
+  //    return true;
+  //  });
+
   plier::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
                                                             patterns, target);
 
   patterns.insert<
       // clang-format off
-        GetitemOpLowering
+      GetitemOpLowering
       // clang-format on
       >(typeConverter, &context);
 
@@ -2040,6 +2084,9 @@ struct FixDeallocPlacementPass
                                        void, FixDeallocPlacement> {};
 
 void populate_plier_to_linalg_gen_pipeline(mlir::OpPassManager &pm) {
+  pm.addNestedPass<mlir::FuncOp>(
+      std::make_unique<LinalgBuiltinCallsOpLoweringPass>());
+  pm.addNestedPass<mlir::FuncOp>(mlir::createCanonicalizerPass());
   pm.addPass(std::make_unique<PlierToLinalgPass>());
   pm.addPass(std::make_unique<ForceInlinePass>());
   pm.addPass(mlir::createSymbolDCEPass());
