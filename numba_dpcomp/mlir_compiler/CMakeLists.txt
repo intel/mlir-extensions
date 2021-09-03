@@ -101,3 +101,7 @@ target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE
 if(${DPNP_ENABLE})
     target_compile_definitions(${PROJECT_NAME} PRIVATE DPNP_ENABLE=1)
 endif()
+
+if(${GPU_ENABLE})
+    target_compile_definitions(${PROJECT_NAME} PRIVATE GPU_ENABLE=1)
+endif()

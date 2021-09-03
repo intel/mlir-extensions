@@ -683,8 +683,13 @@ void create_pipeline(plier::PipelineRegistry &registry,
   registerPreLowSimpleficationsPipeline(registry);
   registerParallelToTBBPipeline(registry);
 
-  if (settings.enableGpuPipeline)
+  if (settings.enableGpuPipeline) {
+#ifdef GPU_ENABLE
     registerLowerToGPUPipeline(registry);
+#else
+    plier::report_error("DPCOMP was compiled without GPU support");
+#endif
+  }
 }
 
 struct Module {
