@@ -23,7 +23,8 @@
 mlir::LogicalResult
 lowerRange(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands,
            llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs,
-           mlir::PatternRewriter &rewriter) {
+           mlir::PatternRewriter &rewriter,
+           llvm::function_ref<void(mlir::scf::ForOp)> results) {
   if (!kwargs.empty())
     return mlir::failure();
 
@@ -37,21 +38,21 @@ lowerRange(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands,
   if (!val.getUsers().empty()) {
     auto user = mlir::dyn_cast<plier::GetiterOp>(*val.getUsers().begin());
     auto get_bounds = [&](mlir::OpBuilder &builder, mlir::Location loc) {
-      auto lower_bound = (operands.size() >= 2
-                              ? operands[0]
-                              : builder.create<mlir::ConstantIndexOp>(loc, 0));
-      auto upper_bound = (operands.size() >= 2 ? operands[1] : operands[0]);
+      auto lowerBound = (operands.size() >= 2
+                             ? operands[0]
+                             : builder.create<mlir::ConstantIndexOp>(loc, 0));
+      auto upperBound = (operands.size() >= 2 ? operands[1] : operands[0]);
       auto step = (operands.size() == 3
                        ? operands[2]
                        : builder.create<mlir::ConstantIndexOp>(loc, 1));
-      return std::make_tuple(lower_bound, upper_bound, step);
+      return std::make_tuple(lowerBound, upperBound, step);
     };
-    auto get_index = [](mlir::OpBuilder &builder, mlir::Location loc,
-                        mlir::Type dst_type, mlir::Value index) {
+    auto getIndex = [](mlir::OpBuilder &builder, mlir::Location loc,
+                       mlir::Type dst_type, mlir::Value index) {
       return builder.create<plier::CastOp>(loc, dst_type, index);
     };
-    if (!user ||
-        mlir::failed(lowerWhileToFor(user, rewriter, get_bounds, get_index))) {
+    if (!user || mlir::failed(lowerWhileToFor(user, rewriter, get_bounds,
+                                              getIndex, results))) {
       return mlir::failure();
     }
   }

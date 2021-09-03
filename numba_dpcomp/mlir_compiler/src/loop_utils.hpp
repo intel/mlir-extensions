@@ -22,6 +22,9 @@ struct LogicalResult;
 class Value;
 class PatternRewriter;
 class Type;
+namespace scf {
+class ForOp;
+}
 } // namespace mlir
 
 namespace plier {
@@ -31,4 +34,5 @@ class PyCallOp;
 mlir::LogicalResult
 lowerRange(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands,
            llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs,
-           mlir::PatternRewriter &rewriter);
+           mlir::PatternRewriter &rewriter,
+           llvm::function_ref<void(mlir::scf::ForOp)> results = nullptr);

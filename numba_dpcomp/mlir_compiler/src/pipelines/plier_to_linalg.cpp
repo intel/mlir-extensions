@@ -215,7 +215,11 @@ lowerPrange(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands,
             llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs,
             mlir::PatternRewriter &rewriter) {
   auto parent = op->getParentOp();
-  if (mlir::succeeded(lowerRange(op, operands, kwargs, rewriter))) {
+  auto setAttr = [](mlir::scf::ForOp op) {
+    op->setAttr(plier::attributes::getParallelName(),
+                mlir::UnitAttr::get(op->getContext()));
+  };
+  if (mlir::succeeded(lowerRange(op, operands, kwargs, rewriter, setAttr))) {
     rerun_std_pipeline(parent);
     return mlir::success();
   }
