@@ -370,10 +370,67 @@ private:
   PyLinalgResolver resolver;
 };
 
+struct ExternalCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::PyCallOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto funcName = op.func_name();
+
+    llvm::SmallVector<mlir::Value> args;
+    args.reserve(op.args().size() + 1);
+    auto func = op.func();
+    auto getattr =
+        mlir::dyn_cast_or_null<plier::GetattrOp>(func.getDefiningOp());
+    if (getattr)
+      args.emplace_back(skipCast(getattr.getOperand()));
+
+    for (auto arg : op.args())
+      args.emplace_back(skipCast(arg));
+
+    llvm::SmallVector<std::pair<llvm::StringRef, mlir::Value>> kwargs;
+    for (auto it : llvm::zip(op.kwargs(), op.kw_names())) {
+      auto arg = skipCast(std::get<0>(it));
+      auto name = std::get<1>(it).cast<mlir::StringAttr>();
+      kwargs.emplace_back(name.getValue(), arg);
+    }
+
+    mlir::ValueRange r(args);
+    auto mangledName = mangle(funcName, r.getTypes());
+    if (mangledName.empty())
+      return mlir::failure();
+
+    auto mod = op->getParentOfType<mlir::ModuleOp>();
+    assert(mod);
+    auto externalFunc = mod.lookupSymbol<mlir::FuncOp>(mangledName);
+    if (!externalFunc) {
+      externalFunc = resolver.get_func(funcName, r.getTypes());
+      if (externalFunc) {
+        externalFunc.setPrivate();
+        externalFunc.setName(mangledName);
+      }
+    }
+    if (!externalFunc)
+      return mlir::failure();
+
+    assert(externalFunc.getType().getNumResults() == op->getNumResults());
+    auto newFuncCall =
+        rewriter.create<mlir::CallOp>(op.getLoc(), externalFunc, args);
+    rerun_std_pipeline(op);
+    rewriter.replaceOp(op, newFuncCall.getResults());
+
+    return mlir::success();
+  }
+
+private:
+  PyFuncResolver resolver;
+};
+
 struct NumpyCallsLoweringPass
-    : public plier::RewriteWrapperPass<NumpyCallsLoweringPass, void, void,
-                                       NumpyCallsLowering, NumpyAttrsLowering,
-                                       NumpyBinOpLowering> {};
+    : public plier::RewriteWrapperPass<
+          NumpyCallsLoweringPass, void, void, NumpyCallsLowering,
+          NumpyAttrsLowering, NumpyBinOpLowering, ExternalCallsLowering> {};
 
 struct CallLowerer {
   CallLowerer()
