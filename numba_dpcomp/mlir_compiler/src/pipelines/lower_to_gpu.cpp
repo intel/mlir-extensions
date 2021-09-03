@@ -57,6 +57,56 @@
 #include "plier/transforms/pipeline_utils.hpp"
 
 namespace {
+static void moveOpsIntoParallel(mlir::scf::ParallelOp outer, int depth = 0) {
+  auto &outerBody = outer.getLoopBody().front();
+  auto parallelIt = llvm::find_if(
+      outerBody, [](auto &op) { return mlir::isa<mlir::scf::ParallelOp>(op); });
+  if (outerBody.end() == parallelIt)
+    return;
+
+  auto parallelOp = mlir::cast<mlir::scf::ParallelOp>(*parallelIt);
+  auto &parallelOpBody = parallelOp.getLoopBody().front();
+  auto it = std::prev(parallelIt);
+  auto begin = outerBody.begin();
+  while (true) {
+    bool first = (it == begin);
+    auto &op = *it;
+    if (!mlir::MemoryEffectOpInterface::hasNoEffect(&op))
+      break;
+
+    if (first) {
+      op.moveBefore(&parallelOpBody.front());
+      break;
+    }
+
+    --it;
+    op.moveBefore(&parallelOpBody.front());
+  }
+  depth += outer.step().size();
+  if (depth >= 3)
+    return;
+
+  moveOpsIntoParallel(parallelOp, depth);
+}
+
+struct PrepareForGPUPass
+    : public mlir::PassWrapper<PrepareForGPUPass, mlir::FunctionPass> {
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::scf::SCFDialect>();
+  }
+
+  void runOnFunction() override {
+    for (auto &block : getFunction().getBody()) {
+      for (auto &op : block) {
+        if (auto parallel = mlir::dyn_cast<mlir::scf::ParallelOp>(op)) {
+          moveOpsIntoParallel(parallel);
+        }
+      }
+    }
+  }
+};
+
 struct ParallelLoopGPUMappingPass
     : public mlir::PassWrapper<ParallelLoopGPUMappingPass, mlir::FunctionPass> {
   virtual void
@@ -1517,6 +1567,8 @@ static void populateLowerToGPUPipelineHigh(mlir::OpPassManager &pm) {
 
 static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   auto &funcPM = pm.nest<mlir::FuncOp>();
+  funcPM.addPass(std::make_unique<PrepareForGPUPass>());
+  funcPM.addPass(mlir::createCanonicalizerPass());
   funcPM.addPass(std::make_unique<ParallelLoopGPUMappingPass>());
   funcPM.addPass(mlir::createParallelLoopToGpuPass());
   funcPM.addPass(mlir::createCanonicalizerPass());
