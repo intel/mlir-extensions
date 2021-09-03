@@ -73,7 +73,7 @@ except ImportError:
 
 
 # GPU/L0
-LEVEL_ZERO_DIR = os.environ.get('LEVEL_ZERO_DIR', None)
+LEVEL_ZERO_DIR = os.getenv('LEVEL_ZERO_DIR', None)
 if LEVEL_ZERO_DIR is None:
     print('LEVEL_ZERO_DIR is not set')
 else:
