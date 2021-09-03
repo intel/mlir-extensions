@@ -48,10 +48,13 @@
 namespace {
 mlir::Type map_int_type(mlir::MLIRContext &ctx, llvm::StringRef &name) {
   unsigned num_bits = 0;
-  if (name.consume_front("int") &&
-      !name.consumeInteger<unsigned>(10, num_bits)) {
+  if (name.consume_front("int") && !name.consumeInteger<unsigned>(10, num_bits))
     return mlir::IntegerType::get(&ctx, num_bits, mlir::IntegerType::Signed);
-  }
+
+  if (name.consume_front("uint") &&
+      !name.consumeInteger<unsigned>(10, num_bits))
+    return mlir::IntegerType::get(&ctx, num_bits, mlir::IntegerType::Unsigned);
+
   return nullptr;
 }
 
@@ -555,9 +558,8 @@ mlir::Value int_cast(mlir::PatternRewriter &rewriter, mlir::Location loc,
   auto srcBits = srcIntType.getWidth();
   auto dstBits = dstIntType.getWidth();
 
-  if (srcIntType != srcSignless) {
+  if (srcIntType != srcSignless)
     val = rewriter.createOrFold<plier::SignCastOp>(loc, srcSignless, val);
-  }
 
   if (dstBits > srcBits) {
     if (srcIntType.isSigned()) {
@@ -579,9 +581,9 @@ mlir::Value int_cast(mlir::PatternRewriter &rewriter, mlir::Location loc,
     }
   }
 
-  if (dstIntType != dstSignless) {
+  if (dstIntType != dstSignless)
     val = rewriter.createOrFold<plier::SignCastOp>(loc, dstIntType, val);
-  }
+
   return val;
 }
 
@@ -645,10 +647,9 @@ mlir::Value float_cast_impl(mlir::PatternRewriter &rewriter, mlir::Location loc,
 mlir::Value doCast(mlir::PatternRewriter &rewriter, mlir::Location loc,
                    mlir::Value val, mlir::Type dstType) {
   assert(dstType);
-  auto src_type = val.getType();
-  if (src_type == dstType) {
+  auto srcType = val.getType();
+  if (srcType == dstType)
     return val;
-  }
 
   struct Handler {
     using selector_t = bool (*)(mlir::Type);
@@ -669,9 +670,8 @@ mlir::Value doCast(mlir::PatternRewriter &rewriter, mlir::Location loc,
   };
 
   for (auto &h : handlers) {
-    if (h.src(src_type) && h.dst(dstType)) {
+    if (h.src(srcType) && h.dst(dstType))
       return h.cast_op(rewriter, loc, val, dstType);
-    }
   }
 
   return nullptr;
@@ -1998,8 +1998,6 @@ void PlierToStdPass::runOnOperation() {
 
   mlir::populateStdExpandOpsPatterns(patterns);
 
-  // range/prange lowering need dead branch pruning to properly
-  // handle negative steps
   for (auto *op : context->getRegisteredOperations())
     op->getCanonicalizationPatterns(patterns, context);
 
