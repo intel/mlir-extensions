@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import sys
 import pytest
 import numpy
 from numba_dpcomp import njit, DPNP_AVAILABLE
