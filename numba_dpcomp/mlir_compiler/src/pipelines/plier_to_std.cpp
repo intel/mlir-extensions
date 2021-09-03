@@ -440,26 +440,35 @@ struct ReturnOpLowering : public mlir::OpRewritePattern<mlir::ReturnOp> {
 };
 
 struct SelectOpLowering : public mlir::OpRewritePattern<mlir::SelectOp> {
-  SelectOpLowering(mlir::TypeConverter & /*typeConverter*/,
+  SelectOpLowering(mlir::TypeConverter &typeConverter,
                    mlir::MLIRContext *context)
-      : OpRewritePattern(context) {}
+      : OpRewritePattern(context), converter(typeConverter) {}
 
   mlir::LogicalResult
   matchAndRewrite(mlir::SelectOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto operands = op.getOperands();
-    assert(operands.size() == 3);
-    auto true_val = operands[1];
-    auto false_val = operands[2];
-    if (true_val.getType() == false_val.getType() &&
-        true_val.getType() != op.getType()) {
-      auto cond = operands[0];
-      rewriter.replaceOpWithNewOp<mlir::SelectOp>(op, cond, true_val,
-                                                  false_val);
-      return mlir::success();
-    }
-    return mlir::failure();
+    auto oldType = op.getType();
+    auto newType = converter.convertType(oldType);
+    if (!newType || oldType == newType)
+      return mlir::failure();
+
+    auto loc = op.getLoc();
+    auto getSrcArg = [&](mlir::Value arg) -> mlir::Value {
+      if (arg.getType() != newType)
+        return rewriter.create<plier::CastOp>(loc, newType, arg);
+
+      return arg;
+    };
+
+    auto trueArg = getSrcArg(op.getTrueValue());
+    auto falseArg = getSrcArg(op.getFalseValue());
+    rewriter.replaceOpWithNewOp<mlir::SelectOp>(op, op.condition(), trueArg,
+                                                falseArg);
+    return mlir::success();
   }
+
+private:
+  mlir::TypeConverter &converter;
 };
 
 struct CondBrOpLowering : public mlir::OpRewritePattern<mlir::CondBranchOp> {
