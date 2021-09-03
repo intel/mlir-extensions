@@ -415,10 +415,36 @@ struct ExternalCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
       return mlir::failure();
 
     assert(externalFunc.getType().getNumResults() == op->getNumResults());
-    auto newFuncCall =
-        rewriter.create<mlir::CallOp>(op.getLoc(), externalFunc, args);
+
+    auto funcTypes = externalFunc.getType().getInputs();
+
+    auto loc = op.getLoc();
+    for (auto it : llvm::enumerate(args)) {
+      auto arg = it.value();
+      auto i = it.index();
+      auto dstType = funcTypes[i];
+      if (arg.getType() != dstType)
+        args[i] = rewriter.createOrFold<plier::CastOp>(loc, dstType, arg);
+    }
+
+    auto newFuncCall = rewriter.create<mlir::CallOp>(loc, externalFunc, args);
+
+    auto results = newFuncCall.getResults();
+    llvm::SmallVector<mlir::Value> castedResults(results.size());
+
+    for (auto it : llvm::enumerate(results)) {
+      auto i = static_cast<unsigned>(it.index());
+      auto res = it.value();
+      auto oldResType = op->getResult(i).getType();
+      if (res.getType() != oldResType)
+        castedResults[i] =
+            rewriter.createOrFold<plier::CastOp>(loc, oldResType, res);
+      else
+        castedResults[i] = res;
+    }
+
     rerun_std_pipeline(op);
-    rewriter.replaceOp(op, newFuncCall.getResults());
+    rewriter.replaceOp(op, castedResults);
 
     return mlir::success();
   }
