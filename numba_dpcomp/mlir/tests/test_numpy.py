@@ -218,6 +218,20 @@ def test_dot(a, b, parallel):
     jit_func = njit(py_func, parallel=parallel)
     assert_equal(py_func(a, b), jit_func(a, b))
 
+def test_prange_lowering():
+    def py_func(arr):
+        res = 0
+        for i in numba.prange(len(arr)):
+            res += arr[i];
+
+        return res
+
+    with print_pass_ir([],['ParallelToTbbPass']):
+        jit_func = njit(py_func)
+        arr = np.arange(10000, dtype=np.float32)
+        assert_equal(py_func(arr), jit_func(arr))
+        ir = get_print_buffer()
+        assert ir.count('plier.parallel') == 1, ir
 
 def test_loop_fusion1():
     def py_func(arr):
