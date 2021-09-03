@@ -153,10 +153,14 @@ struct plier_lowerer final {
     auto typ = get_func_type(compilation_context["fnargs"],
                              compilation_context["restype"]);
     func = mlir::FuncOp::create(builder.getUnknownLoc(), name, typ);
-    if (compilation_context["fastmath"]().cast<bool>()) {
+    if (compilation_context["fastmath"]().cast<bool>())
       func->setAttr(plier::attributes::getFastmathName(),
                     mlir::UnitAttr::get(&ctx));
-    }
+
+    if (compilation_context["force_inline"]().cast<bool>())
+      func->setAttr(plier::attributes::getForceInlineName(),
+                    mlir::UnitAttr::get(&ctx));
+
     func->setAttr(plier::attributes::getOptLevelName(),
                   builder.getI64IntegerAttr(
                       compilation_context["opt_level"]().cast<int64_t>()));

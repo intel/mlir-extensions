@@ -32,11 +32,11 @@ def pop_active_funcs_stack():
     assert(len(_active_funcs_stack) > 0)
     _active_funcs_stack.pop()
 
-def add_active_funcs(name, func):
+def add_active_funcs(name, func, flags):
     global _active_funcs_stack
     assert(len(_active_funcs_stack) > 0)
     top = _active_funcs_stack[-1]
-    top[name] = func
+    top[name] = (func, flags)
 
 def find_active_func(name):
     global _active_funcs_stack

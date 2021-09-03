@@ -16,6 +16,7 @@ import numba
 #from numba_dpcomp import njit
 from math import nan, inf, isnan
 from numpy.testing import assert_equal # for nans comparison
+from numba_dpcomp.mlir.passes import print_pass_ir, get_print_buffer
 
 from numba.tests.support import TestCase
 import unittest
@@ -196,6 +197,21 @@ def test_indirect_call2():
     jit_func = njit(func)
 
     assert_equal(func(inner_func, 5), jit_func(jit_inner_func, 5))
+
+def test_indirect_call_inline():
+    def inner_func(a):
+        return a + 1
+
+    def func(func, *args):
+        return func(*args)
+
+    with print_pass_ir([],['PostLinalgOptPass']):
+        jit_inner_func = njit(inner_func, inline='always')
+        jit_func = njit(func)
+
+        assert_equal(func(inner_func, 5), jit_func(jit_inner_func, 5))
+        ir = get_print_buffer()
+        assert ir.count('call @') == 0, ir
 
 class TestMlirBasic(TestCase):
     def test_none_args(self):

@@ -46,6 +46,6 @@ def _compile_isolated(func, args, return_type=None, flags=DEFAULT_FLAGS,
         return compile_extra(typingctx, targetctx, func, args, return_type,
                              flags, locals, pipeline_class=MlirTempCompiler)
 
-def compile_func(func, args):
-    _compile_isolated(func, args)
+def compile_func(func, args, flags=DEFAULT_FLAGS):
+    _compile_isolated(func, args, flags=flags)
     return get_mlir_func()
