@@ -1032,7 +1032,7 @@ private:
                   mlir::ConversionPatternRewriter &rewriter) const override {
     plier::GetGpuKernelOp::Adaptor adaptor(operands);
     auto loc = op.getLoc();
-    llvm::SmallString<64> name = op.kernel().getLeafReference();
+    llvm::SmallString<64> name = op.kernel().getLeafReference().getValue();
 
     auto varName = llvm::formatv("{0}_kernel_name", name).str();
     name.push_back('\0');
