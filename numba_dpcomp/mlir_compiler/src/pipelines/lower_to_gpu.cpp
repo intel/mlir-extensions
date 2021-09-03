@@ -84,8 +84,15 @@ struct InsertGPUAllocs
       return;
     }
 
-    llvm::SmallMapVector<mlir::Operation *, bool, 8> gpuBufferAllocs;
-    llvm::SmallMapVector<unsigned, bool, 8> gpuBufferParams;
+    struct AccessType {
+      bool hostRead = false;
+      bool hostWrite = false;
+      bool deviceRead = false;
+      bool deviceWrite = false;
+    };
+
+    llvm::SmallMapVector<mlir::Operation *, AccessType, 8> gpuBufferAllocs;
+    llvm::SmallMapVector<unsigned, AccessType, 8> gpuBufferParams;
     auto &aliases = getAnalysis<mlir::BufferViewFlowAnalysis>();
 
     auto getMemref = [](mlir::Operation *op) -> mlir::Value {
@@ -131,14 +138,14 @@ struct InsertGPUAllocs
                     return mlir::WalkResult::interrupt();
                   }
 
-                  gpuBufferAllocs.insert({allocOp, false});
+                  gpuBufferAllocs.insert({allocOp, {}});
                 } else {
                   auto block = mem.getParentBlock();
                   auto blockArgs = block->getArguments();
                   auto it = llvm::find(blockArgs, mem);
                   assert(it != blockArgs.end());
                   auto index = it - blockArgs.begin();
-                  gpuBufferParams.insert({static_cast<unsigned>(index), false});
+                  gpuBufferParams.insert({static_cast<unsigned>(index), {}});
                 }
               }
 
@@ -149,43 +156,60 @@ struct InsertGPUAllocs
       return;
     }
 
-    auto hasHostAccess = [&](mlir::Value memref) {
+    auto getAccessType = [&](mlir::Value memref) {
+      AccessType ret;
       for (auto mem : aliases.resolve(memref)) {
         for (auto user : mem.getUsers()) {
-          if (mlir::isa<mlir::ReturnOp>(user))
-            return true;
+          if (mlir::isa<mlir::ReturnOp>(user)) {
+            ret.hostRead = true;
+            ret.hostWrite = true;
+            continue;
+          }
+
+          if (auto copy = mlir::dyn_cast<mlir::memref::CopyOp>(user)) {
+            if (copy.source() == mem)
+              ret.hostRead = true;
+
+            if (copy.target() == mem)
+              ret.hostWrite = true;
+
+            continue;
+          }
 
           if (auto memInterface =
                   mlir::dyn_cast<mlir::MemoryEffectOpInterface>(user)) {
-            if (memInterface.hasEffect<mlir::MemoryEffects::Read>() &&
-                memInterface.hasEffect<mlir::MemoryEffects::Write>())
-              return true;
+            bool onDevice = user->getParentOfType<mlir::gpu::LaunchOp>();
+            if (memInterface.hasEffect<mlir::MemoryEffects::Read>())
+              (onDevice ? ret.deviceRead : ret.hostRead) = true;
+
+            if (memInterface.hasEffect<mlir::MemoryEffects::Write>())
+              (onDevice ? ret.deviceWrite : ret.hostWrite) = true;
+
+            continue;
           }
         }
       }
-      return false;
+      return ret;
     };
 
     for (auto &it : gpuBufferAllocs) {
       auto alloc = mlir::cast<mlir::memref::AllocOp>(it.first);
-      if (!it.second && hasHostAccess(alloc))
-        it.second = true;
+      it.second = getAccessType(alloc);
     }
 
     auto &block = funcBody.front();
     for (auto &it : gpuBufferParams) {
-      // TODO: need a way to initial copy data from host to device-only memory.
-      // Until than, threat all input buffers as shared
-      it.second = true;
-      //      auto param = block.getArgument(it.first);
-      //      if (!it.second && hasHostAccess(param))
-      //        it.second = true;
+      auto param = block.getArgument(it.first);
+      it.second = getAccessType(param);
+
+      it.second.hostRead = true;
+      it.second.hostWrite = true;
     }
 
     mlir::OpBuilder builder(func);
     for (auto it : gpuBufferAllocs) {
       auto alloc = mlir::cast<mlir::memref::AllocOp>(it.first);
-      bool shared = it.second;
+      auto access = it.second;
       auto loc = alloc.getLoc();
       builder.setInsertionPoint(alloc);
       auto gpuAlloc = builder.create<mlir::gpu::AllocOp>(
@@ -194,7 +218,7 @@ struct InsertGPUAllocs
           alloc.symbolOperands());
       alloc->replaceAllUsesWith(gpuAlloc);
       alloc.erase();
-      if (shared)
+      if (access.hostRead || access.hostWrite)
         gpuAlloc->setAttr(kGpuAllocShared, builder.getUnitAttr());
     }
 
@@ -205,7 +229,7 @@ struct InsertGPUAllocs
     llvm::SmallPtrSet<mlir::Operation *, 8> filter;
     for (auto it : gpuBufferParams) {
       auto param = block.getArgument(it.first);
-      bool shared = it.second;
+      auto access = it.second;
       auto loc = param.getLoc();
       builder.setInsertionPointToStart(&block);
       auto memrefType = param.getType().cast<mlir::MemRefType>();
@@ -226,8 +250,10 @@ struct InsertGPUAllocs
           /*symbolOperands*/ llvm::None);
       auto allocResult = gpuAlloc.getResult(0);
 
-      if (shared) {
+      if (access.hostRead || access.hostWrite)
         gpuAlloc->setAttr(kGpuAllocShared, builder.getUnitAttr());
+
+      if (access.hostWrite && access.deviceRead) {
         auto copy =
             builder.create<mlir::memref::CopyOp>(loc, param, allocResult);
         filter.insert(copy);
@@ -240,6 +266,9 @@ struct InsertGPUAllocs
 
       param.replaceAllUsesExcept(allocResult, filter);
       builder.setInsertionPoint(term);
+      if (access.hostRead && access.deviceWrite)
+        builder.create<mlir::memref::CopyOp>(loc, allocResult, param);
+
       builder.create<mlir::memref::DeallocOp>(loc, allocResult);
     }
   }
