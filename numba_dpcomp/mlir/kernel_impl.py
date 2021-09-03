@@ -17,7 +17,9 @@ import copy
 from numba import prange
 from numba.core import types
 from numba.core.typing.templates import ConcreteTemplate, signature, infer_global
+
 from .linalg_builder import register_func, is_int
+from numba_dpcomp.mlir.func_registry import add_func
 
 from ..decorators import njit
 
@@ -35,22 +37,45 @@ def _process_dims(dims):
     else:
         _raise_error(f'Invalid dimentions type: {type(dims)}')
 
+class _gpu_range(object):
+    def __new__(cls, *args):
+        return range(*args)
+
+add_func(_gpu_range, '_gpu_range')
+
+@infer_global(_gpu_range, typing_key=_gpu_range)
+class Range(ConcreteTemplate):
+    cases = [
+        signature(types.range_state32_type, types.int32),
+        signature(types.range_state32_type, types.int32, types.int32),
+        signature(types.range_state32_type, types.int32, types.int32,
+                  types.int32),
+        signature(types.range_state64_type, types.int64),
+        signature(types.range_state64_type, types.int64, types.int64),
+        signature(types.range_state64_type, types.int64, types.int64,
+                  types.int64),
+        signature(types.unsigned_range_state64_type, types.uint64),
+        signature(types.unsigned_range_state64_type, types.uint64, types.uint64),
+        signature(types.unsigned_range_state64_type, types.uint64, types.uint64,
+                  types.uint64),
+    ]
+
 def _kernel_body0(global_size, local_size, body, *args):
     body(*args)
 
 def _kernel_body1(global_size, local_size, body, *args):
-    for i in prange(global_size[0]):
+    for i in _gpu_range(global_size[0]):
         body(*args)
 
 def _kernel_body2(global_size, local_size, body, *args):
-    for i in prange(global_size[0]):
-        for j in prange(global_size[1]):
+    for i in _gpu_range(global_size[0]):
+        for j in _gpu_range(global_size[1]):
             body(*args)
 
 def _kernel_body3(global_size, local_size, body, *args):
-    for i in prange(global_size[0]):
-        for j in prange(global_size[1]):
-            for k in prange(global_size[2]):
+    for i in _gpu_range(global_size[0]):
+        for j in _gpu_range(global_size[1]):
+            for k in _gpu_range(global_size[2]):
                 body(*args)
 
 _kernel_body_selector = [
