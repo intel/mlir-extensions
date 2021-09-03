@@ -1489,7 +1489,12 @@ struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::CallOp> {
       return mlir::failure();
 
     rerun_std_pipeline(op);
-    rewriter.replaceOp(op, loop.getLoopBody().front().getArgument(0));
+    mlir::Value arg = loop.getLoopBody().front().getArgument(0);
+    auto resType = op.getResult(0).getType();
+    if (arg.getType() != resType)
+      arg = rewriter.createOrFold<mlir::IndexCastOp>(op.getLoc(), resType, arg);
+
+    rewriter.replaceOp(op, arg);
     return mlir::success();
   }
 };
