@@ -186,3 +186,16 @@ def asarray(builder, src, dtype=None):
         arr = builder.reshape(arr, shape)
 
     return arr
+
+def is_int(t, b):
+    types = [
+        b.int8,
+        b.uint8,
+        b.int16,
+        b.uint16,
+        b.int32,
+        b.uint32,
+        b.int64,
+        b.uint64,
+    ]
+    return t in types
