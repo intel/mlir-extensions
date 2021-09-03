@@ -34,7 +34,7 @@ class GetiterOp;
 }
 
 namespace plier {
-mlir::LogicalResult lower_while_to_for(
+mlir::LogicalResult lowerWhileToFor(
     plier::GetiterOp getiter, mlir::PatternRewriter &builder,
     llvm::function_ref<std::tuple<mlir::Value, mlir::Value, mlir::Value>(
         mlir::OpBuilder &, mlir::Location)>

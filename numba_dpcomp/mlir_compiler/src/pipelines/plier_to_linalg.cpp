@@ -62,6 +62,7 @@
 #include "plier/transforms/pipeline_utils.hpp"
 
 #include "base_pipeline.hpp"
+#include "loop_utils.hpp"
 #include "mangle.hpp"
 #include "plier/compiler/pipeline_registry.hpp"
 #include "py_func_resolver.hpp"
@@ -209,55 +210,16 @@ void rerun_std_pipeline(mlir::Operation *op) {
   plier::add_pipeline_jump_marker(mod, marker);
 }
 
-bool is_int(mlir::Type type) {
-  assert(type);
-  return type.isa<mlir::IntegerType>();
-}
-
 mlir::LogicalResult
-lower_prange(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands,
-             llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs,
-             mlir::PatternRewriter &rewriter) {
-  if (!kwargs.empty()) {
-    return mlir::failure();
+lowerPrange(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands,
+            llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs,
+            mlir::PatternRewriter &rewriter) {
+  auto parent = op->getParentOp();
+  if (mlir::succeeded(lowerRange(op, operands, kwargs, rewriter))) {
+    rerun_std_pipeline(parent);
+    return mlir::success();
   }
-  if ((operands.size() < 1 || operands.size() > 3) ||
-      !llvm::all_of(operands,
-                    [](mlir::Value val) { return is_int(val.getType()); })) {
-    return mlir::failure();
-  }
-  mlir::Value val = op.getResult();
-  if (!val.getUsers().empty()) {
-    auto user = mlir::dyn_cast<plier::GetiterOp>(*val.getUsers().begin());
-    auto get_bounds = [&](mlir::OpBuilder &builder, mlir::Location loc) {
-      auto lower_bound = (operands.size() >= 2
-                              ? operands[0]
-                              : builder.create<mlir::ConstantIndexOp>(loc, 0));
-      auto upper_bound = (operands.size() >= 2 ? operands[1] : operands[0]);
-      auto step = (operands.size() == 3
-                       ? operands[2]
-                       : builder.create<mlir::ConstantIndexOp>(loc, 1));
-      return std::make_tuple(lower_bound, upper_bound, step);
-    };
-    auto get_index = [](mlir::OpBuilder &builder, mlir::Location loc,
-                        mlir::Type dst_type, mlir::Value index) {
-      return builder.create<plier::CastOp>(loc, dst_type, index);
-    };
-    auto set_attr = [](mlir::scf::ForOp op) {
-      op->setAttr(plier::attributes::getParallelName(),
-                  mlir::UnitAttr::get(op->getContext()));
-    };
-    if (!user || mlir::failed(lower_while_to_for(user, rewriter, get_bounds,
-                                                 get_index, set_attr))) {
-      return mlir::failure();
-    }
-  }
-
-  rerun_std_pipeline(op);
-  if (val.getUsers().empty()) {
-    rewriter.eraseOp(op);
-  }
-  return mlir::success();
+  return mlir::failure();
 }
 
 struct CallLowerer {
@@ -269,7 +231,7 @@ struct CallLowerer {
     using func_t = mlir::LogicalResult (*)(plier::PyCallOp, args_t, kwargs_t,
                                            mlir::PatternRewriter &);
     std::pair<llvm::StringRef, func_t> handlers[] = {
-        {"numba.prange", lower_prange},
+        {"numba.prange", lowerPrange},
     };
     for (auto &handler : handlers) {
       if (handler.first == name) {
@@ -2096,7 +2058,8 @@ void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<ForceInlinePass>());
   pm.addPass(mlir::createSymbolDCEPass());
 
-  // ToDo: This pass also tries to do some simple fusion, whic should be split in separate pass
+  // ToDo: This pass also tries to do some simple fusion, whic should be split
+  // in separate pass
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<PostLinalgOptPass>());
 
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<FixDeallocPlacementPass>());

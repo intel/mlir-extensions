@@ -38,9 +38,9 @@
 #include "plier/transforms/cast_utils.hpp"
 #include "plier/transforms/const_utils.hpp"
 #include "plier/transforms/func_utils.hpp"
-#include "plier/transforms/loop_utils.hpp"
 
 #include "base_pipeline.hpp"
+#include "loop_utils.hpp"
 #include "mangle.hpp"
 #include "plier/compiler/pipeline_registry.hpp"
 #include "py_func_resolver.hpp"
@@ -1665,47 +1665,6 @@ struct ExpandCallVarargs : public mlir::OpRewritePattern<plier::PyCallOp> {
 };
 
 mlir::LogicalResult
-lowerRange(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands,
-           llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs,
-           mlir::PatternRewriter &rewriter, mlir::Type /*dstType*/) {
-  if (!kwargs.empty()) {
-    return mlir::failure();
-  }
-  if ((operands.size() < 1 || operands.size() > 3) ||
-      !llvm::all_of(operands,
-                    [](mlir::Value val) { return is_int(val.getType()); })) {
-    return mlir::failure();
-  }
-  mlir::Value val = op.getResult();
-  if (!val.getUsers().empty()) {
-    auto user = mlir::dyn_cast<plier::GetiterOp>(*val.getUsers().begin());
-    auto get_bounds = [&](mlir::OpBuilder &builder, mlir::Location loc) {
-      auto lower_bound = (operands.size() >= 2
-                              ? operands[0]
-                              : builder.create<mlir::ConstantIndexOp>(loc, 0));
-      auto upper_bound = (operands.size() >= 2 ? operands[1] : operands[0]);
-      auto step = (operands.size() == 3
-                       ? operands[2]
-                       : builder.create<mlir::ConstantIndexOp>(loc, 1));
-      return std::make_tuple(lower_bound, upper_bound, step);
-    };
-    auto get_index = [](mlir::OpBuilder &builder, mlir::Location loc,
-                        mlir::Type dst_type, mlir::Value index) {
-      return builder.create<plier::CastOp>(loc, dst_type, index);
-    };
-    if (!user || mlir::failed(lower_while_to_for(user, rewriter, get_bounds,
-                                                 get_index))) {
-      return mlir::failure();
-    }
-  }
-
-  if (val.getUsers().empty()) {
-    rewriter.eraseOp(op);
-  }
-  return mlir::success();
-}
-
-mlir::LogicalResult
 lowerLen(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands,
          llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs,
          mlir::PatternRewriter &rewriter, mlir::Type /*dstType*/) {
@@ -1830,6 +1789,13 @@ lower_math_func(plier::PyCallOp op, llvm::StringRef name,
   return mlir::failure();
 }
 
+mlir::LogicalResult
+lowerRangeImpl(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands,
+               llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs,
+               mlir::PatternRewriter &rewriter, mlir::Type /*dstType*/) {
+  return lowerRange(op, operands, kwargs, rewriter);
+}
+
 struct CallLowerer {
   CallLowerer(mlir::TypeConverter &typeConverter) : converter(typeConverter) {}
 
@@ -1853,7 +1819,7 @@ struct CallLowerer {
         mlir::PatternRewriter &, mlir::Type);
     const std::pair<llvm::StringRef, func_t> handlers[] = {
         {"bool", lowerCastFunc},  {"int", lowerCastFunc},
-        {"float", lowerCastFunc}, {"range", lowerRange},
+        {"float", lowerCastFunc}, {"range", lowerRangeImpl},
         {"len", lowerLen},        {"slice", lowerSlice},
     };
     for (auto &handler : handlers) {
