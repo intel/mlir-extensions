@@ -53,6 +53,8 @@ class Type:
 def is_literal(val):
     return not isinstance(val, Var)
 
+DYNAMIC_DIM = -1
+
 class Builder:
     def __init__(self, context):
         self._context = context
@@ -84,14 +86,17 @@ class Builder:
     def insert(self, src, dst, offsets, sizes, strides):
         return self._insert(self._context, src, dst, offsets, sizes, strides)
 
-    def inline_func(self, func, *args): # TODO: kwargs
-        return self._inline_func(self._context, func, args)
+    def inline_func(self, func, res_type, *args): # TODO: kwargs
+        return self._inline_func(self._context, func, res_type, args)
 
     def cast(self, arg, dtype):
         return self._cast(self._context, arg, dtype)
 
     def undef(self, dtype):
         return self._undef(self._context, dtype)
+
+    def array_type(self, dims, dtype):
+        return self._array_type(self._context, dims, dtype)
 
 def compile_func(*args, **kwargs):
     import numba_dpcomp.mlir.inner_compiler
@@ -138,7 +143,7 @@ def eltwise(builder, args, body, res_type = None):
     num_dims = len(shape)
     if num_dims == 0:
         dummy = builder.cast(0, res_type)
-        return builder.inline_func(body, *(args + (dummy,)))
+        return builder.inline_func(body, res_type, *(args + (dummy,)))
     else:
         iterators = ['parallel' for _ in range(num_dims)]
         dims = ','.join(['d%s' % i for i in range(num_dims)])

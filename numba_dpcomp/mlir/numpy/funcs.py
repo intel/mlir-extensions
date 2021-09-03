@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..linalg_builder import FuncRegistry, is_literal, broadcast_type, eltwise, convert_array, asarray, is_int, is_float
+from ..linalg_builder import FuncRegistry, is_literal, broadcast_type, eltwise, convert_array, asarray, is_int, is_float, DYNAMIC_DIM
 
 import numpy
 import math
@@ -345,9 +345,10 @@ def _prepare_cov_input(builder, m, y, rowvar):
 
         return dtype, _prepare_cov_input_impl
     dtype, func = get_func()
+    array_type = builder.array_type([DYNAMIC_DIM, DYNAMIC_DIM], dtype)
     if is_int(dtype, builder):
         dtype = builder.float64
-    res = builder.inline_func(func, m, y, rowvar)
+    res = builder.inline_func(func, array_type, m, y, rowvar)
     return convert_array(builder, res, dtype)
 
 def _cov_scalar_result_expected(mandatory_input, optional_input):
@@ -364,8 +365,9 @@ def cov_impl(builder, m, y=None, rowvar=True, bias=False, ddof=None):
     if not y is None:
         y = asarray(builder, y)
     X = _prepare_cov_input(builder, m, y, rowvar)
-    ddof = builder.inline_func(_cov_get_ddof_func(ddof is None), bias, ddof)
-    res = builder.inline_func(_cov_impl_inner, X, ddof)
+    ddof = builder.inline_func(_cov_get_ddof_func(ddof is None), builder.int64, bias, ddof)
+    array_type = builder.array_type([DYNAMIC_DIM, DYNAMIC_DIM], X.dtype)
+    res = builder.inline_func(_cov_impl_inner, array_type, X, ddof)
     if _cov_scalar_result_expected(m, y):
         res = res[0, 0]
     return res
