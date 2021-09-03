@@ -42,15 +42,19 @@ mlir::FuncOp PyFuncResolver::get_func(llvm::StringRef name,
                                       mlir::TypeRange types) {
   assert(!name.empty());
   auto py_name = py::str(name.data(), name.size());
-  auto py_func = context->resolver(py_name);
-  if (py_func.is_none()) {
+  auto funcDesc = context->resolver(py_name);
+  if (funcDesc.is_none())
     return {};
-  }
+
+  auto funcDescTuple = funcDesc.cast<py::tuple>();
+
+  auto pyFunc = funcDescTuple[0];
+  auto flags = funcDescTuple[1];
   auto py_types = map_types_to_numba(context->types, types);
-  if (py_types.is_none()) {
+  if (py_types.is_none())
     return {};
-  }
+
   auto res = static_cast<mlir::Operation *>(
-      context->compiler(py_func, py_types).cast<py::capsule>());
+      context->compiler(pyFunc, py_types, flags).cast<py::capsule>());
   return mlir::cast_or_null<mlir::FuncOp>(res);
 }

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from numba.core.compiler import DEFAULT_FLAGS
 from numba.core.compiler_machinery import (FunctionPass, register_pass)
 from numba.core import (types)
 import numba.core.types.functions
@@ -80,21 +81,25 @@ class MlirBackendBase(FunctionPass):
             return self.run_pass_impl(state)
 
     def _resolve_func_name(self, obj):
-        name, func = self._resolve_func_name_impl(obj)
+        name, func, flags = self._resolve_func_impl(obj)
         if not (name is None or func is None):
-            func_registry.add_active_funcs(name, func)
+            func_registry.add_active_funcs(name, func, flags)
         return name
 
-    def _resolve_func_name_impl(self, obj):
+    def _resolve_func_impl(self, obj):
         if isinstance(obj, types.Function):
             func = obj.typing_key
-            return (self._get_func_name(func), None)
+            return (self._get_func_name(func), None, DEFAULT_FLAGS)
         if isinstance(obj, types.BoundFunction):
-            return (str(obj.typing_key), None)
+            return (str(obj.typing_key), None, DEFAULT_FLAGS)
         if isinstance(obj, numba.core.types.functions.Dispatcher):
+            flags = DEFAULT_FLAGS
             func = obj.dispatcher.py_func
-            return (func.__module__ + "." + func.__qualname__, func)
-        return (None, None)
+            inline_type = obj.dispatcher.targetoptions.get('inline', None)
+            if inline_type is not None:
+                flags.inline._inline = inline_type
+            return (func.__module__ + "." + func.__qualname__, func, flags)
+        return (None, None, None)
 
     def _get_func_context(self, state):
         mangler = state.targetctx.mangler
@@ -123,6 +128,7 @@ class MlirBackendBase(FunctionPass):
         ctx['fnname'] = lambda: fn_name
         ctx['resolve_func'] = self._resolve_func_name
         ctx['fastmath'] = lambda: state.targetctx.fastmath
+        ctx['force_inline'] = lambda: state.flags.inline.is_always_inline
         ctx['max_concurrency'] = lambda: get_thread_count() if state.flags.auto_parallel.enabled else 0
         ctx['opt_level'] = lambda: OPT_LEVEL
         return ctx
