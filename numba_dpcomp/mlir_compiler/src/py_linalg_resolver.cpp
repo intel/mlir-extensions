@@ -1143,6 +1143,9 @@ py::object external_call_impl(py::capsule context, py::str func_name,
   if (results.empty())
     return py::none();
 
+  if (results.size() == 1)
+    return ctx.context.create_var(context, results.front());
+
   py::tuple ret(results.size());
   for (auto it : llvm::enumerate(results)) {
     ret[it.index()] = ctx.context.create_var(context, it.value());
