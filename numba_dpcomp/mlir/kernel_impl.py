@@ -17,7 +17,7 @@ import copy
 from numba import prange
 from numba.core import types
 from numba.core.typing.templates import ConcreteTemplate, signature, infer_global
-from numba_dpcomp.mlir.func_registry import add_func
+from .linalg_builder import register_func, is_int
 
 from ..decorators import njit
 
@@ -107,4 +107,8 @@ def get_global_id(axis):
 class GetGlobalId(ConcreteTemplate):
     cases = [signature(types.uint64, types.uint64)]
 
-add_func(get_global_id, 'get_global_id')
+@register_func('get_global_id', get_global_id)
+def get_global_id_impl(builder, axis):
+    if isinstance(axis, int) or is_int(axis):
+        res = 0
+        return builder.external_call('get_global_id', axis, res)
