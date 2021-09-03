@@ -232,6 +232,13 @@ static const std::pair<llvm::StringRef, func_t> builtinFuncsHandlers[] = {
     {"numba.prange", lowerPrange},
 };
 
+static mlir::Value skipCast(mlir::Value val) {
+  if (auto cast = val.getDefiningOp<plier::CastOp>())
+    return cast.value();
+
+  return val;
+};
+
 struct NumpyCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
   NumpyCallsLowering(mlir::MLIRContext *context)
       : OpRewritePattern(context),
@@ -241,13 +248,6 @@ struct NumpyCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
   matchAndRewrite(plier::PyCallOp op,
                   mlir::PatternRewriter &rewriter) const override {
     auto funcName = op.func_name();
-
-    auto skipCast = [](mlir::Value val) {
-      if (auto cast = val.getDefiningOp<plier::CastOp>())
-        return cast.value();
-
-      return val;
-    };
 
     llvm::SmallVector<mlir::Value> args(op.args().size());
     for (auto it : llvm::enumerate(op.args()))
@@ -278,9 +278,37 @@ private:
   PyLinalgResolver resolver;
 };
 
+struct NumpyAttrsLowering : public mlir::OpRewritePattern<plier::GetattrOp> {
+  NumpyAttrsLowering(mlir::MLIRContext *context)
+      : OpRewritePattern(context),
+        resolver("numba_dpcomp.mlir.numpy.funcs", "registry") {}
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::GetattrOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto arg = skipCast(op.value());
+
+    if (!arg.getType().isa<mlir::ShapedType>())
+      return mlir::failure();
+
+    auto attrName = (llvm::Twine("array.") + op.name()).str();
+    auto res = resolver.rewrite_attr(attrName, op.getLoc(), rewriter, arg);
+    if (!res)
+      return mlir::failure();
+
+    rerun_std_pipeline(op);
+    rewriter.replaceOp(op, *res);
+    return mlir::success();
+  }
+
+private:
+  PyLinalgResolver resolver;
+};
+
 struct NumpyCallsLoweringPass
     : public plier::RewriteWrapperPass<NumpyCallsLoweringPass, void, void,
-                                       NumpyCallsLowering> {};
+                                       NumpyCallsLowering, NumpyAttrsLowering> {
+};
 
 struct CallLowerer {
   CallLowerer()
