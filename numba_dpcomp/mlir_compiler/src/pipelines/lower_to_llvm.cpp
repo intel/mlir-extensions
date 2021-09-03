@@ -1138,7 +1138,7 @@ struct LowerParallel : public mlir::OpRewritePattern<plier::ParallelOp> {
     }();
 
     auto parallelFor = [&]() {
-      auto func_name = "dpcomp_parallel_for";
+      auto func_name = "dpcompParallelFor";
       if (auto sym = mod.lookupSymbol<mlir::FuncOp>(func_name)) {
         return sym;
       }

@@ -20,8 +20,8 @@
 
 namespace {
 template <typename T>
-void eig_impl(Memref<2, const T> *input, Memref<1, T> *vals,
-              Memref<2, T> *vecs) {
+void eigImpl(Memref<2, const T> *input, Memref<1, T> *vals,
+             Memref<2, T> *vecs) {
 #ifdef DPNP_ENABLE
   dpnp_eig_c<T, T>(input->data, vals->data, vecs->data, input->dims[0]);
 #else
@@ -34,9 +34,9 @@ void eig_impl(Memref<2, const T> *input, Memref<1, T> *vals,
 extern "C" {
 
 #define EIG_VARIANT(T, Suff)                                                   \
-  DPCOMP_MATH_RUNTIME_EXPORT void dpcomp_linalg_eig_##Suff(                    \
+  DPCOMP_MATH_RUNTIME_EXPORT void dpcompLinalgEig_##Suff(                      \
       Memref<2, const T> *input, Memref<1, T> *vals, Memref<2, T> *vecs) {     \
-    eig_impl(input, vals, vecs);                                               \
+    eigImpl(input, vals, vecs);                                                \
   }
 
 EIG_VARIANT(float, float32)

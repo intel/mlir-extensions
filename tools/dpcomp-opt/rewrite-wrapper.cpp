@@ -57,10 +57,10 @@ using WrapperRegistration =
 static WrapperRegistration<mlir::FuncOp, plier::PromoteToParallel>
     promoteToParallelReg("dpcomp-promote-to-parallel", "");
 
-static mlir::PassPipelineRegistration<>
-    scfToAffineReg("scf-to-affine", "Converts SCF parallel struct into Affine parallel",
-           [](mlir::OpPassManager &pm) {
-             pm.addNestedPass<mlir::FuncOp>(mlir::createSCFToAffinePass());
-           });
+static mlir::PassPipelineRegistration<> scfToAffineReg(
+    "scf-to-affine", "Converts SCF parallel struct into Affine parallel",
+    [](mlir::OpPassManager &pm) {
+      pm.addNestedPass<mlir::FuncOp>(mlir::createSCFToAffinePass());
+    });
 
 } // namespace
