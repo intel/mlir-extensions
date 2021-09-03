@@ -48,6 +48,7 @@
 #include "pipelines/lower_to_llvm.hpp"
 #include "pipelines/plier_to_linalg.hpp"
 #include "pipelines/plier_to_std.hpp"
+#include "py_linalg_resolver.hpp"
 
 #include "plier/compiler/pipeline_registry.hpp"
 #include "plier/dialect.hpp"
@@ -1466,6 +1467,41 @@ struct LowerGpuRangePass
     : public plier::RewriteWrapperPass<LowerGpuRangePass, void, void,
                                        LowerGpuRange> {};
 
+struct LowerPlierCalls : public mlir::OpRewritePattern<plier::PyCallOp> {
+  LowerPlierCalls(mlir::MLIRContext *context)
+      : mlir::OpRewritePattern<plier::PyCallOp>(context),
+        resolver("numba_dpcomp.mlir.kernel_impl", "registry") {}
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::PyCallOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto funcName = op.func_name();
+    llvm::SmallVector<std::pair<llvm::StringRef, mlir::Value>> kwargs;
+    for (auto it : llvm::zip(op.kwargs(), op.kw_names())) {
+      auto arg = std::get<0>(it);
+      auto name = std::get<1>(it).cast<mlir::StringAttr>();
+      kwargs.emplace_back(name.getValue(), arg);
+    }
+    auto loc = op.getLoc();
+    auto result =
+        resolver.rewrite_func(funcName, loc, rewriter, op.args(), kwargs);
+    if (!result || result->size() != 1)
+      return mlir::failure();
+
+    auto resValue = (*result)[0];
+    auto opResultType = op.getResult().getType();
+    if (resValue.getType() != opResultType)
+      resValue = rewriter.create<plier::CastOp>(loc, opResultType, resValue);
+
+    rerun_std_pipeline(op);
+    rewriter.replaceOp(op, resValue);
+    return mlir::success();
+  }
+
+private:
+  PyLinalgResolver resolver;
+};
+
 struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::CallOp> {
   using OpRewritePattern::OpRewritePattern;
 
@@ -1525,7 +1561,7 @@ struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::CallOp> {
 
 struct LowerGpuBuiltinsPass
     : public plier::RewriteWrapperPass<LowerGpuBuiltinsPass, void, void,
-                                       LowerBuiltinCalls> {};
+                                       LowerPlierCalls, LowerBuiltinCalls> {};
 
 static void commonOptPasses(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createCanonicalizerPass());
