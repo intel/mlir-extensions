@@ -44,13 +44,17 @@
 #include <mlir/Transforms/Passes.h>
 
 #include "base_pipeline.hpp"
+#include "loop_utils.hpp"
 #include "pipelines/lower_to_llvm.hpp"
-#include "pipelines/plier_to_std.hpp"
 #include "pipelines/plier_to_linalg.hpp"
+#include "pipelines/plier_to_std.hpp"
 
 #include "plier/compiler/pipeline_registry.hpp"
 #include "plier/dialect.hpp"
+#include "plier/pass/rewrite_wrapper.hpp"
+#include "plier/transforms/const_utils.hpp"
 #include "plier/transforms/func_utils.hpp"
+#include "plier/transforms/pipeline_utils.hpp"
 
 namespace {
 struct ParallelLoopGPUMappingPass
@@ -1397,6 +1401,103 @@ struct GPUToLLVMPass
   }
 };
 
+void rerun_std_pipeline(mlir::Operation *op) {
+  assert(nullptr != op);
+  auto marker =
+      mlir::StringAttr::get(op->getContext(), plierToStdPipelineName());
+  auto mod = op->getParentOfType<mlir::ModuleOp>();
+  assert(nullptr != mod);
+  plier::add_pipeline_jump_marker(mod, marker);
+}
+
+struct LowerGpuRange : public mlir::OpRewritePattern<plier::PyCallOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::PyCallOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    llvm::SmallVector<std::pair<llvm::StringRef, mlir::Value>> kwargs;
+    for (auto it : llvm::zip(op.kwargs(), op.kw_names())) {
+      auto arg = std::get<0>(it);
+      auto name = std::get<1>(it).cast<mlir::StringAttr>();
+      kwargs.emplace_back(name.getValue(), arg);
+    }
+
+    auto parent = op->getParentOp();
+    auto setAttr = [](mlir::scf::ForOp op) {
+      auto unitAttr = mlir::UnitAttr::get(op->getContext());
+      op->setAttr(plier::attributes::getParallelName(), unitAttr);
+      op->setAttr(plier::attributes::getGpuRangeName(), unitAttr);
+    };
+
+    if (mlir::failed(lowerRange(op, op.args(), kwargs, rewriter, setAttr)))
+      return mlir::failure();
+
+    rerun_std_pipeline(parent);
+    return mlir::success();
+  }
+};
+
+struct LowerGpuRangePass
+    : public plier::RewriteWrapperPass<LowerGpuRangePass, void, void,
+                                       LowerGpuRange> {};
+
+struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::CallOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::CallOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto name = op.getCallee();
+    if (name != "get_global_id")
+      return mlir::failure();
+
+    if (op.getNumOperands() != 1 || op.getNumResults() != 1 ||
+        !op.getOperand(0).getType().isa<mlir::IntegerType>() ||
+        !op.getResult(0).getType().isa<mlir::IntegerType>())
+      return mlir::failure();
+
+    auto indAttr = plier::getConstVal<mlir::IntegerAttr>(op.operands()[0]);
+    if (!indAttr)
+      return mlir::failure();
+
+    auto ind = indAttr.getValue().getSExtValue();
+    if (ind < 0 || ind >= 3)
+      return mlir::failure();
+
+    auto loop = [&]() -> mlir::scf::ForOp {
+      auto skip = ind;
+      auto attrId = mlir::Identifier::get(plier::attributes::getGpuRangeName(),
+                                          op.getContext());
+      mlir::Operation *parent = op;
+      while (true) {
+        parent = parent->getParentOfType<mlir::scf::ForOp>();
+        if (!parent)
+          return {};
+
+        if (parent->hasAttr(attrId)) {
+          if (skip > 0) {
+            --skip;
+            continue;
+          }
+          return mlir::cast<mlir::scf::ForOp>(parent);
+        }
+      }
+    }();
+
+    if (!loop)
+      return mlir::failure();
+
+    rerun_std_pipeline(op);
+    rewriter.replaceOp(op, loop.getLoopBody().front().getArgument(0));
+    return mlir::success();
+  }
+};
+
+struct LowerGpuBuiltinsPass
+    : public plier::RewriteWrapperPass<LowerGpuBuiltinsPass, void, void,
+                                       LowerBuiltinCalls> {};
+
 static void commonOptPasses(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(mlir::createCSEPass());
@@ -1404,7 +1505,9 @@ static void commonOptPasses(mlir::OpPassManager &pm) {
 }
 
 static void populateLowerToGPUPipelineHigh(mlir::OpPassManager &pm) {
-
+  pm.addPass(std::make_unique<LowerGpuRangePass>());
+  pm.addPass(std::make_unique<LowerGpuBuiltinsPass>());
+  commonOptPasses(pm);
 }
 
 static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
@@ -1439,9 +1542,10 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
 void registerLowerToGPUPipeline(plier::PipelineRegistry &registry) {
   registry.register_pipeline([](auto sink) {
     auto highStage = getHighLoweringStage();
-    sink(lowerToGPUPipelineNameHigh(), {highStage.begin, plierToStdPipelineName()},
-         {highStage.end, plierToLinalgGenPipelineName()}, {plierToStdPipelineName()},
-         &populateLowerToGPUPipelineHigh);
+    sink(lowerToGPUPipelineNameHigh(),
+         {highStage.begin, plierToStdPipelineName()},
+         {highStage.end, plierToLinalgGenPipelineName()},
+         {plierToStdPipelineName()}, &populateLowerToGPUPipelineHigh);
 
     auto lowStage = getLowerLoweringStage();
     sink(lowerToGPUPipelineNameLow(), {lowStage.begin},

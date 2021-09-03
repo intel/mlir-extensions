@@ -458,3 +458,17 @@ dpcompGpuAlloc(void *stream, size_t size, size_t alignment, int shared,
     *ret = AllocResult{std::get<0>(res), std::get<1>(res), std::get<2>(res)};
   });
 }
+
+// Stubs for kernel interface
+[[noreturn]] static void stub(const char *funcName) {
+  fprintf(stderr, "This function should never be called: %s\n", funcName);
+  fflush(stderr);
+  abort();
+}
+
+#define STUB() stub(__func__)
+
+extern "C" DPCOMP_GPU_RUNTIME_EXPORT int64_t
+_mlir_ciface_get_global_id(int64_t) {
+  STUB();
+}

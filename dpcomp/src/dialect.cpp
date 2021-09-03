@@ -65,6 +65,8 @@ llvm::StringRef attributes::getForceInlineName() {
 
 llvm::StringRef attributes::getOptLevelName() { return "#plier.opt_level"; }
 
+llvm::StringRef attributes::getGpuRangeName() { return "#plier.gpu_range"; }
+
 namespace detail {
 struct PyTypeStorage : public mlir::TypeStorage {
   using KeyTy = mlir::StringRef;
