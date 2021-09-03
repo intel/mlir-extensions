@@ -14,6 +14,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <malloc.h>
 
 #define mlir_c_runner_utils_EXPORTS 1
 #include <mlir/ExecutionEngine/CRunnerUtils.h>
