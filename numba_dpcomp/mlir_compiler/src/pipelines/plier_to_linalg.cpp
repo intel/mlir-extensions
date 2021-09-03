@@ -312,10 +312,46 @@ private:
   PyLinalgResolver resolver;
 };
 
+struct NumpyBinOpLowering : public mlir::OpRewritePattern<plier::BinOp> {
+  NumpyBinOpLowering(mlir::MLIRContext *context)
+      : OpRewritePattern(context),
+        resolver("numba_dpcomp.mlir.numpy.funcs", "registry") {}
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::BinOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto lhs = skipCast(op.lhs());
+    auto rhs = skipCast(op.rhs());
+
+    if (!lhs.getType().isa<mlir::ShapedType>() &&
+        !rhs.getType().isa<mlir::ShapedType>())
+      return mlir::failure();
+
+    auto name = op.op();
+
+    for (auto it : plier::getOperators()) {
+      if (it.op == name) {
+        auto res = resolver.rewrite_func(llvm::Twine("operator.") + it.name,
+                                         op.getLoc(), rewriter, {lhs, rhs}, {});
+        if (!res)
+          return mlir::failure();
+
+        rerun_std_pipeline(op);
+        rewriter.replaceOp(op, *res);
+        return mlir::success();
+      }
+    }
+    return mlir::failure();
+  }
+
+private:
+  PyLinalgResolver resolver;
+};
+
 struct NumpyCallsLoweringPass
     : public plier::RewriteWrapperPass<NumpyCallsLoweringPass, void, void,
-                                       NumpyCallsLowering, NumpyAttrsLowering> {
-};
+                                       NumpyCallsLowering, NumpyAttrsLowering,
+                                       NumpyBinOpLowering> {};
 
 struct CallLowerer {
   CallLowerer()
