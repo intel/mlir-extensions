@@ -25,7 +25,7 @@ set(CMAKE_VISIBILITY_INLINES_HIDDEN 1)
 # SDL
 # set(CMAKE_VERBOSE_MAKEFILE on) # enable for debug
 if (CMAKE_SYSTEM_NAME STREQUAL Windows)
-    add_compile_options(-GS)
+    add_compile_options(-GS -D_CRT_SECURE_NO_WARNINGS)
     add_link_options(-DYNAMICBASE -NXCOMPAT -GUARD:CF)
     # add_link_options(-INTEGRITYCHECK) # require signatures of libs, only recommended
 endif()

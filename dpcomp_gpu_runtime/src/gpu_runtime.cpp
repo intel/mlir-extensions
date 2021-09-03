@@ -18,6 +18,7 @@
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <vector>
 
 #include "dpcomp-gpu-runtime_export.h"
@@ -36,7 +37,7 @@ struct MemInfo {
 
 using AllocFuncT = void *(*)(size_t);
 
-#if 1 // Log functions
+#if 0 // Log functions
 namespace {
 struct FuncScope {
   FuncScope(const char *funcName) : name(funcName) {
@@ -59,6 +60,14 @@ private:
 #endif
 
 namespace {
+static bool printGpuInfoEnabled() {
+  static bool value = []() {
+    auto env = std::getenv("DPCOMP_PRINT_GPU_INFO");
+    return env != nullptr && std::atoi(env) != 0;
+  }();
+  return value;
+}
+
 template <typename F> auto catchAll(F &&func) {
   try {
     return func();
@@ -201,7 +210,7 @@ struct Stream {
     driver = driverAndDevice.driver;
     device = driverAndDevice.device;
 
-    if (1) {
+    if (printGpuInfoEnabled()) {
       printDriverProps(driver);
       printDeviceProps(device);
     }
