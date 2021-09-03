@@ -46,7 +46,6 @@
 
 #include "plier/Conversion/SCFToAffine/SCFToAffine.h"
 #include "plier/pass/rewrite_wrapper.hpp"
-#include "plier/rewrites/arg_lowering.hpp"
 #include "plier/rewrites/call_lowering.hpp"
 #include "plier/rewrites/canonicalize_reductions.hpp"
 #include "plier/rewrites/cast_lowering.hpp"
@@ -1555,7 +1554,6 @@ void PlierToLinalgPass::runOnOperation() {
       plier::FuncOpSignatureConversion,
       plier::FixupIfTypes,
       plier::CastOpLowering,
-      plier::ArgOpLowering,
       plier::FixCallOmittedArgs,
       RankedTypesCasts,
       UnrankedToElementCasts,
