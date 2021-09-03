@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "mlir/Support/LLVM.h"
+#include <memory>
 
 namespace mlir {
 

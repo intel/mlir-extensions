@@ -60,6 +60,7 @@ set(HEADERS_LIST
     include/plier/compiler/pipeline_registry.hpp
     include/plier/dialect.hpp
     include/plier/PlierOps.td
+    include/plier/pass/rewrite_wrapper.hpp
     include/plier/rewrites/arg_lowering.hpp
     include/plier/rewrites/call_lowering.hpp
     include/plier/rewrites/canonicalize_reductions.hpp
