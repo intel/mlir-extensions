@@ -249,9 +249,16 @@ struct NumpyCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
                   mlir::PatternRewriter &rewriter) const override {
     auto funcName = op.func_name();
 
-    llvm::SmallVector<mlir::Value> args(op.args().size());
-    for (auto it : llvm::enumerate(op.args()))
-      args[it.index()] = skipCast(it.value());
+    llvm::SmallVector<mlir::Value> args;
+    args.reserve(op.args().size() + 1);
+    auto func = op.func();
+    auto getattr =
+        mlir::dyn_cast_or_null<plier::GetattrOp>(func.getDefiningOp());
+    if (getattr)
+      args.emplace_back(skipCast(getattr.getOperand()));
+
+    for (auto arg : op.args())
+      args.emplace_back(skipCast(arg));
 
     llvm::SmallVector<std::pair<llvm::StringRef, mlir::Value>> kwargs;
     for (auto it : llvm::zip(op.kwargs(), op.kw_names())) {
