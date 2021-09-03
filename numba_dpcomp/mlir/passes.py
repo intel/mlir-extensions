@@ -159,6 +159,7 @@ class MlirBackend(MlirBackendBase):
 
     def __init__(self):
         MlirBackendBase.__init__(self, push_func_stack=True)
+        self.enable_gpu_pipeline = False
 
     def run_pass_impl(self, state):
         import numba_dpcomp.mlir_compiler as mlir_compiler
@@ -166,7 +167,8 @@ class MlirBackend(MlirBackendBase):
         old_module = _mlir_active_module
 
         try:
-            module = mlir_compiler.create_module()
+            mod_settings = {'enable_gpu_pipeline': self.enable_gpu_pipeline}
+            module = mlir_compiler.create_module(mod_settings)
             _mlir_active_module = module
             global _mlir_last_compiled_func
             ctx = self._get_func_context(state)
@@ -176,6 +178,13 @@ class MlirBackend(MlirBackendBase):
             _mlir_active_module = old_module
         state.metadata['mlir_blob'] = mod_ir
         return True
+
+@register_pass(mutates_CFG=True, analysis_only=False)
+class MlirBackendGPU(MlirBackend):
+
+    def __init__(self):
+        MlirBackend.__init__(self)
+        self.enable_gpu_pipeline = True
 
 @register_pass(mutates_CFG=True, analysis_only=False)
 class MlirBackendInner(MlirBackendBase):

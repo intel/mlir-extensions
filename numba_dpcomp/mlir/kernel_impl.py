@@ -116,7 +116,7 @@ class Kernel:
             _raise_error('kwargs not supported')
 
         jit_func = njit(parallel=True, inline='always')(self.py_func)
-        jit_kern = njit(parallel=True)(_kernel_body_selector[len(self.global_size)])
+        jit_kern = njit(parallel=True, enable_gpu_pipeline=True)(_kernel_body_selector[len(self.global_size)])
         jit_kern(self.global_size, self.local_size, jit_func, *args)
 
 

@@ -24,7 +24,7 @@ class dict;
 
 void init_compiler(pybind11::dict settings);
 
-pybind11::capsule create_module();
+pybind11::capsule create_module(pybind11::dict settings);
 
 pybind11::capsule lower_function(const pybind11::object &compilation_context,
                                  const pybind11::capsule &py_mod,
