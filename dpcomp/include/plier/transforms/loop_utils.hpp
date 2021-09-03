@@ -38,10 +38,10 @@ mlir::LogicalResult lowerWhileToFor(
     plier::GetiterOp getiter, mlir::PatternRewriter &builder,
     llvm::function_ref<std::tuple<mlir::Value, mlir::Value, mlir::Value>(
         mlir::OpBuilder &, mlir::Location)>
-        get_bounds,
+        getBounds,
     llvm::function_ref<mlir::Value(mlir::OpBuilder &, mlir::Location,
                                    mlir::Type, mlir::Value)>
-        get_iter_val,
+        getIterVal,
     llvm::function_ref<void(mlir::scf::ForOp)> results = nullptr);
 
 mlir::LogicalResult naivelyFuseParallelOps(mlir::Region &region);
