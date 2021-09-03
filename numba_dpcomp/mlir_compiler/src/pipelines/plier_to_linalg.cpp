@@ -1788,6 +1788,19 @@ void PlierToLinalgPass::runOnOperation() {
 
   target.addDynamicallyLegalOp<plier::GetItemOp>(
       [&typeConverter](plier::GetItemOp op) -> bool {
+        if (auto tupleType = op.value().getType().dyn_cast<mlir::TupleType>()) {
+          // TODO: move to populateTupleTypeConversionRewritesAndTarget
+          if (auto attr = plier::getConstVal<mlir::IntegerAttr>(op.index())) {
+            auto index = plier::getIntAttrValue(attr);
+            if (index >= 0 && index < static_cast<int64_t>(tupleType.size())) {
+              auto srcType = tupleType.getType(static_cast<size_t>(index));
+              auto dstType = typeConverter.convertType(op.getType());
+              return srcType == dstType;
+            }
+          }
+          return false;
+        }
+
         return !isTensor(typeConverter, op.value().getType());
       });
   target.addDynamicallyLegalOp<plier::SetItemOp>(
