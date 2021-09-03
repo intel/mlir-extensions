@@ -45,6 +45,8 @@
 
 #include "base_pipeline.hpp"
 #include "pipelines/lower_to_llvm.hpp"
+#include "pipelines/plier_to_std.hpp"
+#include "pipelines/plier_to_linalg.hpp"
 
 #include "plier/compiler/pipeline_registry.hpp"
 #include "plier/dialect.hpp"
@@ -1401,7 +1403,11 @@ static void commonOptPasses(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createCanonicalizerPass());
 }
 
-static void populateLowerToGPUPipeline(mlir::OpPassManager &pm) {
+static void populateLowerToGPUPipelineHigh(mlir::OpPassManager &pm) {
+
+}
+
+static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   auto &funcPM = pm.nest<mlir::FuncOp>();
   funcPM.addPass(std::make_unique<ParallelLoopGPUMappingPass>());
   funcPM.addPass(mlir::createParallelLoopToGpuPass());
@@ -1432,11 +1438,17 @@ static void populateLowerToGPUPipeline(mlir::OpPassManager &pm) {
 
 void registerLowerToGPUPipeline(plier::PipelineRegistry &registry) {
   registry.register_pipeline([](auto sink) {
-    auto stage = getLowerLoweringStage();
-    sink(lowerToGPUPipelineName(), {stage.begin},
-         {stage.end, lowerToLLVMPipelineName()}, {},
-         &populateLowerToGPUPipeline);
+    auto highStage = getHighLoweringStage();
+    sink(lowerToGPUPipelineNameHigh(), {highStage.begin, plierToStdPipelineName()},
+         {highStage.end, plierToLinalgGenPipelineName()}, {plierToStdPipelineName()},
+         &populateLowerToGPUPipelineHigh);
+
+    auto lowStage = getLowerLoweringStage();
+    sink(lowerToGPUPipelineNameLow(), {lowStage.begin},
+         {lowStage.end, lowerToLLVMPipelineName()}, {},
+         &populateLowerToGPUPipelineLow);
   });
 }
 
-llvm::StringRef lowerToGPUPipelineName() { return "lower_to_gpu"; }
+llvm::StringRef lowerToGPUPipelineNameHigh() { return "lower_to_gpu_high"; }
+llvm::StringRef lowerToGPUPipelineNameLow() { return "lower_to_gpu_low"; }

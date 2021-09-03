@@ -24,4 +24,5 @@ class StringRef;
 
 void registerLowerToGPUPipeline(plier::PipelineRegistry &registry);
 
-llvm::StringRef lowerToGPUPipelineName();
+llvm::StringRef lowerToGPUPipelineNameHigh();
+llvm::StringRef lowerToGPUPipelineNameLow();
