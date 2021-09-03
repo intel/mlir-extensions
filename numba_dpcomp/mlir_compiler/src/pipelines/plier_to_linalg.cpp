@@ -1850,8 +1850,9 @@ void PlierToLinalgPass::runOnOperation() {
             auto index = plier::getIntAttrValue(attr);
             if (index >= 0 && index < static_cast<int64_t>(tupleType.size())) {
               auto srcType = tupleType.getType(static_cast<size_t>(index));
-              auto dstType = typeConverter.convertType(op.getType());
-              return srcType == dstType;
+              auto dstType = op.getType();
+              return srcType == dstType &&
+                     dstType == typeConverter.convertType(dstType);
             }
           }
           return false;
