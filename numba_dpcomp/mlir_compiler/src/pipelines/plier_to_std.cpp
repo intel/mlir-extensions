@@ -1461,8 +1461,9 @@ struct FixupWhileTypes : public mlir::OpRewritePattern<mlir::scf::WhileOp> {
       auto arg = std::get<1>(it);
       auto old_type = arg.getType();
       if (old_type != new_type) {
-        rewriter.create<plier::CastOp>(loc, old_type, arg);
+        auto cast = rewriter.create<plier::CastOp>(loc, old_type, arg);
         arg.setType(new_type);
+        arg.replaceAllUsesExcept(cast, cast);
         changed = true;
       }
     }
@@ -1479,8 +1480,9 @@ struct FixupWhileTypes : public mlir::OpRewritePattern<mlir::scf::WhileOp> {
       auto arg = std::get<1>(it);
       auto old_type = arg.getType();
       if (old_type != new_type) {
-        rewriter.create<plier::CastOp>(loc, old_type, arg);
+        auto cast = rewriter.create<plier::CastOp>(loc, old_type, arg);
         arg.setType(new_type);
+        arg.replaceAllUsesExcept(cast, cast);
         changed = true;
       }
     }
@@ -1492,8 +1494,9 @@ struct FixupWhileTypes : public mlir::OpRewritePattern<mlir::scf::WhileOp> {
       auto arg = std::get<1>(it);
       auto old_type = arg.getType();
       if (old_type != new_type) {
-        rewriter.create<plier::CastOp>(loc, old_type, arg);
+        auto cast = rewriter.create<plier::CastOp>(loc, old_type, arg);
         arg.setType(new_type);
+        arg.replaceAllUsesExcept(cast, cast);
         changed = true;
       }
     }
