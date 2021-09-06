@@ -12,24 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..linalg_builder import register_func, register_attr, is_literal, broadcast_type, eltwise, convert_array, asarray
+from ..linalg_builder import register_func, register_attr, is_literal, broadcast_type, eltwise, convert_array, asarray, is_int
 
 import numpy
 import math
 from numba import prange
-
-def is_int(t, b):
-    types = [
-        b.int8,
-        b.uint8,
-        b.int16,
-        b.uint16,
-        b.int32,
-        b.uint32,
-        b.int64,
-        b.uint64,
-    ]
-    return t in types
 
 def is_float(t, b):
     return t == b.float16 or t == b.float32 or t == b.float64

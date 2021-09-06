@@ -1085,22 +1085,25 @@ py::object external_call_impl(py::capsule context, py::str func_name,
   auto outputVals = to_values(outputs, unwrapVal);
 
   inputVals.reserve(inputVals.size() + outputVals.size());
+
+  llvm::SmallVector<mlir::Type, 1> retTypes;
   for (auto val : outputVals) {
-    if (auto tensorType = val.getType().dyn_cast<mlir::TensorType>()) {
+    auto type = val.getType();
+    if (auto tensorType = type.dyn_cast<mlir::TensorType>()) {
       auto memrefType = mlir::MemRefType::get(tensorType.getShape(),
                                               tensorType.getElementType());
       auto memref =
           builder.create<mlir::memref::BufferCastOp>(loc, memrefType, val);
       inputVals.emplace_back(memref);
     } else {
-      inputVals.emplace_back(val);
+      retTypes.emplace_back(type);
     }
   }
 
   auto func = [&]() {
     auto argTypes = getTypes(inputVals);
     auto funcType =
-        mlir::FunctionType::get(builder.getContext(), argTypes, llvm::None);
+        mlir::FunctionType::get(builder.getContext(), argTypes, retTypes);
     auto name = static_cast<std::string>(func_name);
     assert(!name.empty());
     auto mod =
@@ -1131,15 +1134,14 @@ py::object external_call_impl(py::capsule context, py::str func_name,
     auto val = it.value();
     if (outputVals[it.index()].getType().isa<mlir::TensorType>()) {
       val = builder.create<mlir::memref::TensorLoadOp>(loc, val);
+      results.emplace_back(val);
     }
-    results.emplace_back(val);
   }
 
   results.append(res.begin(), res.end());
 
-  if (results.empty()) {
+  if (results.empty())
     return py::none();
-  }
 
   py::tuple ret(results.size());
   for (auto it : llvm::enumerate(results)) {
