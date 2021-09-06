@@ -58,11 +58,11 @@ public:
       }
     }
 
-    // Awoid conversing reductions for now
-    // TODO: should be const here, but `getNumRegions` doesn't have `const`
-    // qualifier
+    // Awoid conversing scf.reduce, scf.if and nested scf.parallel
+    // and scf.for as well as non affine memory references
     if (llvm::any_of(op.region().getOps(), [&](Operation &each) {
-          return !!isa<scf::ReduceOp>(each) || each.getNumRegions();
+          return !MemoryEffectOpInterface::hasNoEffect(&each) ||
+                 0 != each.getNumRegions();
         })) {
       return rewriter.notifyMatchFailure(
           op, "scf.parallel->affine.parallel reduction is detected");
