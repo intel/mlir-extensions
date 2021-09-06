@@ -44,6 +44,7 @@
 #include "pipelines/plier_to_std.hpp"
 #include "pipelines/pre_low_simplifications.hpp"
 
+#include "plier/Conversion/SCFToAffine/SCFToAffine.h"
 #include "plier/rewrites/arg_lowering.hpp"
 #include "plier/rewrites/call_lowering.hpp"
 #include "plier/rewrites/canonicalize_reductions.hpp"
@@ -59,7 +60,6 @@
 #include "plier/transforms/const_utils.hpp"
 #include "plier/transforms/loop_utils.hpp"
 #include "plier/transforms/pipeline_utils.hpp"
-#include "plier/Conversion/SCFToAffine/SCFToAffine.h"
 
 #include "base_pipeline.hpp"
 #include "mangle.hpp"
