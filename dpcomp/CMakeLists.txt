@@ -51,6 +51,7 @@ set(SOURCES_LIST
     src/transforms/loop_utils.cpp
     src/transforms/pipeline_utils.cpp
     src/utils.cpp
+    src/Conversion/SCFToAffine/SCFToAffine.cpp
     )
 set(HEADERS_LIST
     include/plier/analysis/memory_ssa_analysis.hpp
@@ -78,6 +79,7 @@ set(HEADERS_LIST
     include/plier/transforms/loop_utils.hpp
     include/plier/transforms/pipeline_utils.hpp
     include/plier/utils.hpp
+    include/plier/Conversion/SCFToAffine/SCFToAffine.h
     )
 
 set(PLIER_LIB "plier")
