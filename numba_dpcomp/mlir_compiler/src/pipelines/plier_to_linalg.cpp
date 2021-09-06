@@ -14,6 +14,9 @@
 
 #include "pipelines/plier_to_linalg.hpp"
 
+#include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
+#include <mlir/Analysis/AffineAnalysis.h>
+
 #include <mlir/Conversion/SCFToStandard/SCFToStandard.h>
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
 #include <mlir/Dialect/Linalg/IR/LinalgOps.h>
@@ -41,6 +44,7 @@
 #include "pipelines/plier_to_std.hpp"
 #include "pipelines/pre_low_simplifications.hpp"
 
+#include "plier/Conversion/SCFToAffine/SCFToAffine.h"
 #include "plier/rewrites/arg_lowering.hpp"
 #include "plier/rewrites/call_lowering.hpp"
 #include "plier/rewrites/canonicalize_reductions.hpp"
@@ -2092,6 +2096,7 @@ void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<ForceInlinePass>());
   pm.addPass(mlir::createSymbolDCEPass());
 
+  // ToDo: This pass also tries to do some simple fusion, whic should be split in separate pass
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<PostLinalgOptPass>());
 
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<FixDeallocPlacementPass>());
@@ -2112,6 +2117,7 @@ void populateArrayTypeConverter(mlir::MLIRContext & /*context*/,
       });
 }
 
+// ToDo: how does this sink stuff actually works?
 void registerPlierToLinalgPipeline(plier::PipelineRegistry &registry) {
   registry.register_pipeline([](auto sink) {
     auto stage = getHighLoweringStage();
