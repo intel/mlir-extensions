@@ -2102,11 +2102,6 @@ void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<FixDeallocPlacementPass>());
 
   pm.addPass(mlir::createSymbolDCEPass());
-
-  // Round trip to affine and back to scf
-  // TODO: split scf passes before affine and after
-  pm.addNestedPass<mlir::FuncOp>(mlir::createSCFToAffinePass());
-  pm.addPass(mlir::createLowerAffinePass());
 }
 } // namespace
 
