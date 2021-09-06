@@ -59,8 +59,10 @@ public:
     }
 
     // Awoid conversing reductions for now
-    if (llvm::any_of(op.region().getOps(), [&](const Operation &each) {
-          return !!isa<scf::ReduceOp>(each);
+    // TODO: should be const here, but `getNumRegions` doesn't have `const`
+    // qualifier
+    if (llvm::any_of(op.region().getOps(), [&](Operation &each) {
+          return !!isa<scf::ReduceOp>(each) || each.getNumRegions();
         })) {
       return rewriter.notifyMatchFailure(
           op, "scf.parallel->affine.parallel reduction is detected");
