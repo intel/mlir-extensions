@@ -8,7 +8,6 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
-// it should be something like allow unregistred dialects
 namespace {
 
 using namespace mlir;
@@ -107,8 +106,6 @@ struct SCFToAffinePass
   }
 
   void runOnOperation() override {
-    llvm::errs() << this->getName() << "\n";
-
     mlir::OwningRewritePatternList patterns(&getContext());
     patterns.insert<SCFParallelLowering>(&getContext());
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
@@ -118,7 +115,7 @@ struct SCFToAffinePass
 
 } // namespace
 
-/// Uplisfts Parallel operations within a function into affine representation
+/// Uplifts scf operations within a function into affine representation
 std::unique_ptr<Pass> mlir::createSCFToAffinePass() {
   return std::make_unique<SCFToAffinePass>();
 }

@@ -6,7 +6,8 @@ namespace mlir {
 
 class Pass;
 
-/// Uplifts scf.parallel to affine.parallel.
+/// Uplifts scf to affine. Supports:
+/// 1. scf.parallel to affine.parallel.
 std::unique_ptr<Pass> createSCFToAffinePass();
 
 } // namespace mlir
