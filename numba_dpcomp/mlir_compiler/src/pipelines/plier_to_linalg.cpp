@@ -2105,7 +2105,7 @@ void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager &pm) {
 
   // Round trip to affine and back to scf
   // TODO: split scf passes before affine and after
-  pm.addPass(mlir::createSCFToAffinePass());
+  pm.addNestedPass<mlir::FuncOp>(mlir::createSCFToAffinePass());
   pm.addPass(mlir::createLowerAffinePass());
 }
 } // namespace

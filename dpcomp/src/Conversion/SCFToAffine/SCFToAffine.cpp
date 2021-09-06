@@ -32,40 +32,12 @@ public:
 
   LogicalResult matchAndRewrite(scf::ParallelOp op,
                                 PatternRewriter &rewriter) const override {
-    // Temporary disable if contains induction variables, it's not clear for now
-    // what is to do with those inductions
-    if (!op.initVals().empty())
-      return rewriter.notifyMatchFailure(
-          op, "scf.parallel constains indcution variables");
-
-    // Let's disable ND loops for now
-    if (op.step().size() != 1)
-      return rewriter.notifyMatchFailure(op, "scf.parallel ND range");
-
-    if (op.upperBound().size() != op.lowerBound().size() ||
-        op.step().size() != op.upperBound().size())
-      return rewriter.notifyMatchFailure(
-          op, "scf.parallel inconsistend upper/lower bounds and steps");
-
     // Check if steps are constants
     SmallVector<int64_t> newSteps;
     for (auto s : op.step()) {
       if (auto c = s.getDefiningOp<ConstantIndexOp>()) {
         newSteps.push_back(c.getValue());
-      } else {
-        return rewriter.notifyMatchFailure(
-            op, "scf.parallel->affine.parallel non constant step");
       }
-    }
-
-    // Awoid conversing scf.reduce, scf.if and nested scf.parallel
-    // and scf.for as well as non affine memory references
-    if (llvm::any_of(op.region().getOps(), [&](Operation &each) {
-          return !MemoryEffectOpInterface::hasNoEffect(&each) ||
-                 0 != each.getNumRegions();
-        })) {
-      return rewriter.notifyMatchFailure(
-          op, "scf.parallel->affine.parallel reduction is detected");
     }
 
     // just for the case if we reductions
@@ -109,8 +81,7 @@ public:
 };
 
 struct SCFToAffinePass
-    : public mlir::PassWrapper<SCFToAffinePass,
-                               mlir::OperationPass<mlir::ModuleOp>> {
+    : public mlir::PassWrapper<SCFToAffinePass, mlir::FunctionPass> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::StandardOpsDialect>();
@@ -118,11 +89,47 @@ struct SCFToAffinePass
     registry.insert<mlir::scf::SCFDialect>();
   }
 
-  void runOnOperation() override {
+  void runOnFunction() override {
+    auto func = getOperation();
+    SmallVector<Operation *, 8> parallelOps;
+    func.walk([&](Operation *op) -> void {
+      if (scf::ParallelOp pOp = mlir::dyn_cast_or_null<scf::ParallelOp>(op)) {
+        // Temporary disable if contains induction variables, it's not clear for
+        // now what is to do with those inductions
+        if (!pOp.initVals().empty())
+          return;
+
+        // Let's disable ND loops for now
+        if (pOp.step().size() != 1)
+          return;
+
+        for (auto s : pOp.step()) {
+          if (!s.getDefiningOp<ConstantIndexOp>()) {
+            return;
+          }
+        }
+
+        if (pOp.upperBound().size() != pOp.lowerBound().size() ||
+            pOp.step().size() != pOp.upperBound().size())
+          return;
+
+        // Awoid conversing scf.reduce, scf.if and nested scf.parallel
+        // and scf.for as well as non affine memory references
+        if (llvm::any_of(pOp.region().getOps(), [&](Operation &each) {
+              return !MemoryEffectOpInterface::hasNoEffect(&each) ||
+                     0 != each.getNumRegions();
+            })) {
+          return;
+        }
+        parallelOps.push_back(op);
+      }
+    });
+
     mlir::OwningRewritePatternList patterns(&getContext());
     patterns.insert<SCFParallelLowering>(&getContext());
-    (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
-                                             std::move(patterns));
+    FrozenRewritePatternSet frozenPatterns(std::move(patterns));
+    (void)mlir::applyOpPatternsAndFold(parallelOps, frozenPatterns,
+                                       /*strict=*/true);
   }
 };
 
