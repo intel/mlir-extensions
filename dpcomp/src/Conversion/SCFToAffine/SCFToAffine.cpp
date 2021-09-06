@@ -1,3 +1,17 @@
+// Copyright 2021 Intel Corporation
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include "plier/Conversion/SCFToAffine/SCFToAffine.h"
 
 #include "mlir/Analysis/AffineAnalysis.h"
@@ -20,7 +34,7 @@ public:
                                 PatternRewriter &rewriter) const override {
     // Temporary disable if contains induction variables, it's not clear for now
     // what is to do with those inductions
-    if (op.initVals().size() != 0)
+    if (!op.initVals().empty())
       return rewriter.notifyMatchFailure(
           op, "scf.parallel constains indcution variables");
 
@@ -63,8 +77,6 @@ public:
     auto reductionKinds = llvm::to_vector<4>(llvm::map_range(
         reductions, [](const LoopReduction &red) { return red.kind; }));
 
-    llvm::errs() << "debuging scf->affine pass\n";
-
     auto dims = op.step().size();
     // Creating empty affine.parallel op.
     rewriter.setInsertionPoint(op);
@@ -89,7 +101,6 @@ public:
 
     // TODO: handle reductions and induction variables
 
-    op.replaceAllUsesWith(newPloop);
     rewriter.replaceOp(op, newPloop.getResults());
     return success();
   }
