@@ -53,7 +53,7 @@ mlir::Value get_last_iter_value(mlir::PatternRewriter &builder,
 
 } // namespace
 
-mlir::LogicalResult plier::lower_while_to_for(
+mlir::LogicalResult plier::lowerWhileToFor(
     plier::GetiterOp getiter, mlir::PatternRewriter &builder,
     llvm::function_ref<std::tuple<mlir::Value, mlir::Value, mlir::Value>(
         mlir::OpBuilder &, mlir::Location)>

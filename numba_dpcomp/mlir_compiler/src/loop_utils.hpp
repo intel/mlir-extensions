@@ -14,36 +14,25 @@
 
 #pragma once
 
-#include <llvm/ADT/STLExtras.h>
+#include <llvm/ADT/ArrayRef.h>
+#include <llvm/ADT/StringRef.h>
 
 namespace mlir {
 struct LogicalResult;
-class PatternRewriter;
 class Value;
-class Location;
-class OpBuilder;
+class PatternRewriter;
 class Type;
-class Region;
 namespace scf {
 class ForOp;
 }
 } // namespace mlir
 
 namespace plier {
-class GetiterOp;
+class PyCallOp;
 }
 
-namespace plier {
-mlir::LogicalResult lowerWhileToFor(
-    plier::GetiterOp getiter, mlir::PatternRewriter &builder,
-    llvm::function_ref<std::tuple<mlir::Value, mlir::Value, mlir::Value>(
-        mlir::OpBuilder &, mlir::Location)>
-        get_bounds,
-    llvm::function_ref<mlir::Value(mlir::OpBuilder &, mlir::Location,
-                                   mlir::Type, mlir::Value)>
-        get_iter_val,
-    llvm::function_ref<void(mlir::scf::ForOp)> results = nullptr);
-
-mlir::LogicalResult naivelyFuseParallelOps(mlir::Region &region);
-mlir::LogicalResult prepareForFusion(mlir::Region &region);
-} // namespace plier
+mlir::LogicalResult
+lowerRange(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands,
+           llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs,
+           mlir::PatternRewriter &rewriter,
+           llvm::function_ref<void(mlir::scf::ForOp)> results = nullptr);
