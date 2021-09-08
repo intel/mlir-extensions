@@ -27,6 +27,7 @@
 #include "pipelines/base_pipeline.hpp"
 #include "pipelines/lower_to_llvm.hpp"
 #include "plier/compiler/pipeline_registry.hpp"
+#include "plier/pass/rewrite_wrapper.hpp"
 #include "plier/transforms/const_utils.hpp"
 #include "plier/transforms/func_utils.hpp"
 
@@ -224,25 +225,12 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
 };
 
 struct ParallelToTbbPass
-    : public mlir::PassWrapper<ParallelToTbbPass, mlir::FunctionPass> {
-  virtual void
-  getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<plier::PlierDialect>();
-    registry.insert<mlir::StandardOpsDialect>();
-    registry.insert<mlir::scf::SCFDialect>();
-  }
-
-  void runOnFunction() override;
-};
-
-void ParallelToTbbPass::runOnFunction() {
-  auto &context = getContext();
-  mlir::OwningRewritePatternList patterns(&context);
-
-  patterns.insert<ParallelToTbb>(&context);
-
-  (void)mlir::applyPatternsAndFoldGreedily(getFunction(), std::move(patterns));
-}
+    : public plier::RewriteWrapperPass<
+          ParallelToTbbPass, mlir::FuncOp,
+          plier::DependentDialectsList<plier::PlierDialect,
+                                       mlir::StandardOpsDialect,
+                                       mlir::scf::SCFDialect>,
+          ParallelToTbb> {};
 
 void populate_parallel_to_tbb_pipeline(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<ParallelToTbbPass>());

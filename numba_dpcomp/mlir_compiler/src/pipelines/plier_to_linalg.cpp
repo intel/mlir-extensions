@@ -45,6 +45,7 @@
 #include "pipelines/pre_low_simplifications.hpp"
 
 #include "plier/Conversion/SCFToAffine/SCFToAffine.h"
+#include "plier/pass/rewrite_wrapper.hpp"
 #include "plier/rewrites/arg_lowering.hpp"
 #include "plier/rewrites/call_lowering.hpp"
 #include "plier/rewrites/canonicalize_reductions.hpp"
@@ -1674,18 +1675,8 @@ struct OptimizeGlobalsConstsLoad
 };
 
 struct ForceInlinePass
-    : public mlir::PassWrapper<ForceInlinePass,
-                               mlir::OperationPass<mlir::ModuleOp>> {
-  void runOnOperation() override {
-    auto &context = getContext();
-    mlir::OwningRewritePatternList patterns(&context);
-
-    patterns.insert<plier::ForceInline>(&context);
-
-    (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
-                                             std::move(patterns));
-  }
-};
+    : public plier::RewriteWrapperPass<ForceInlinePass, void, void,
+                                       plier::ForceInline> {};
 
 struct PostPlierToLinalgPass
     : public mlir::PassWrapper<PostPlierToLinalgPass, mlir::FunctionPass> {
@@ -1955,11 +1946,6 @@ void CloneArgsPass::runOnFunction() {
   }
 }
 
-struct LowerCloneOpsPass
-    : public mlir::PassWrapper<LowerCloneOpsPass, mlir::FunctionPass> {
-  void runOnFunction() override;
-};
-
 struct ReplaceClones : public mlir::OpRewritePattern<mlir::memref::CloneOp> {
   using mlir::OpRewritePattern<mlir::memref::CloneOp>::OpRewritePattern;
 
@@ -1971,15 +1957,9 @@ struct ReplaceClones : public mlir::OpRewritePattern<mlir::memref::CloneOp> {
   }
 };
 
-void LowerCloneOpsPass::runOnFunction() {
-  auto &context = getContext();
-  mlir::OwningRewritePatternList patterns(&context);
-
-  patterns.insert<ReplaceClones, FixStridedReshape>(&context);
-
-  auto func = getFunction();
-  (void)mlir::applyPatternsAndFoldGreedily(func, std::move(patterns));
-}
+struct LowerCloneOpsPass
+    : public plier::RewriteWrapperPass<LowerCloneOpsPass, mlir::FuncOp, void,
+                                       ReplaceClones> {};
 
 struct PostLinalgOptPass
     : public mlir::PassWrapper<PostLinalgOptPass, mlir::FunctionPass> {
@@ -1989,9 +1969,8 @@ struct PostLinalgOptPass
 void PostLinalgOptPass::runOnFunction() {
   auto func = getFunction();
   auto optLevel = getOptLevel(func);
-  if (0 == optLevel) {
+  if (0 == optLevel)
     return;
-  }
 
   auto &context = getContext();
   mlir::OwningRewritePatternList patterns(&context);
@@ -2013,17 +1992,8 @@ void PostLinalgOptPass::runOnFunction() {
 }
 
 struct FixDeallocPlacementPass
-    : public mlir::PassWrapper<FixDeallocPlacementPass, mlir::FunctionPass> {
-  void runOnFunction() override {
-    auto &context = getContext();
-    mlir::OwningRewritePatternList patterns(&context);
-
-    patterns.insert<FixDeallocPlacement>(&context);
-
-    auto func = getFunction();
-    (void)mlir::applyPatternsAndFoldGreedily(func, std::move(patterns));
-  }
-};
+    : public plier::RewriteWrapperPass<FixDeallocPlacementPass, mlir::FuncOp,
+                                       void, FixDeallocPlacement> {};
 
 void populate_plier_to_linalg_gen_pipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<PlierToLinalgPass>());

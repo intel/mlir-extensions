@@ -19,29 +19,16 @@
 
 #include <mlir/Dialect/SCF/SCF.h>
 
+#include "plier/pass/rewrite_wrapper.hpp"
 #include "plier/rewrites/promote_to_parallel.hpp"
 
 namespace {
 template <typename Op, typename Rewrite>
-struct RewriteWrapperPass
-    : public mlir::PassWrapper<RewriteWrapperPass<Op, Rewrite>,
-                               mlir::OperationPass<Op>> {
-  void runOnOperation() override {
-    auto &context = this->getContext();
-    mlir::OwningRewritePatternList patterns(&context);
-
-    patterns.insert<Rewrite>(&context);
-
-    if (mlir::failed(mlir::applyPatternsAndFoldGreedily(this->getOperation(),
-                                                        std::move(patterns)))) {
-      this->signalPassFailure();
-    }
-  }
-};
+struct RewriteWrapper : plier::RewriteWrapperPass<RewriteWrapper<Op, Rewrite>,
+                                                  Op, void, Rewrite> {};
 
 template <typename Op, typename Rewrite>
-using WrapperRegistration =
-    mlir::PassRegistration<RewriteWrapperPass<Op, Rewrite>>;
+using WrapperRegistration = mlir::PassRegistration<RewriteWrapper<Op, Rewrite>>;
 
 static WrapperRegistration<mlir::FuncOp, plier::PromoteToParallel>
     promoteToParallelReg("dpcomp-promote-to-parallel", "");
