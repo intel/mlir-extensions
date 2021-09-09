@@ -27,8 +27,30 @@ template <typename Op, typename Rewrite>
 struct RewriteWrapper : plier::RewriteWrapperPass<RewriteWrapper<Op, Rewrite>,
                                                   Op, void, Rewrite> {};
 
+template <typename T> struct PassWrapper : public T {
+  PassWrapper(mlir::StringRef arg, mlir::StringRef desc)
+      : argument(arg), description(desc) {}
+
+  mlir::StringRef getArgument() const final { return argument; }
+  mlir::StringRef getDescription() const final { return description; }
+
+private:
+  mlir::StringRef argument;
+  mlir::StringRef description;
+};
+
+template <typename Pass>
+struct PassRegistrationWrapper
+    : public mlir::PassRegistration<PassWrapper<Pass>> {
+  PassRegistrationWrapper(mlir::StringRef arg, mlir::StringRef desc)
+      : mlir::PassRegistration<PassWrapper<Pass>>([arg, desc]() {
+          return std::make_unique<PassWrapper<Pass>>(arg, desc);
+        }) {}
+};
+
 template <typename Op, typename Rewrite>
-using WrapperRegistration = mlir::PassRegistration<RewriteWrapper<Op, Rewrite>>;
+using WrapperRegistration =
+    PassRegistrationWrapper<RewriteWrapper<Op, Rewrite>>;
 
 static WrapperRegistration<mlir::FuncOp, plier::PromoteToParallel>
     promoteToParallelReg("dpcomp-promote-to-parallel", "");
