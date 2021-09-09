@@ -37,12 +37,12 @@ mlir::Value plier::index_cast(mlir::OpBuilder &builder, mlir::Location loc,
   }
   auto newSrcType = makeSignless(srcType);
   if (newSrcType != srcType) {
-    val = builder.create<plier::SignCastOp>(loc, newSrcType, val);
+    val = builder.createOrFold<plier::SignCastOp>(loc, newSrcType, val);
   }
   auto newDstType = makeSignless(dstType);
-  val = builder.create<mlir::IndexCastOp>(loc, val, newDstType);
+  val = builder.createOrFold<mlir::IndexCastOp>(loc, val, newDstType);
   if (newDstType != dstType) {
-    val = builder.create<plier::SignCastOp>(loc, dstType, val);
+    val = builder.createOrFold<plier::SignCastOp>(loc, dstType, val);
   }
   return val;
 }
