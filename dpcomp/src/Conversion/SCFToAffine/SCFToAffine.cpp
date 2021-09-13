@@ -113,11 +113,17 @@ struct SCFToAffinePass
             pOp.step().size() != pOp.upperBound().size())
           return;
 
+        // check for non affine memory references
+        // if (llvm::any_of(pOp.region().getOps(), [&](Operation &each) {
+        //   return !MemoryEffectOpInterface::hasNoEffect(&each);
+        //     })) {
+        //   return;
+        // }
+
         // Awoid conversing scf.reduce, scf.if and nested scf.parallel
-        // and scf.for as well as non affine memory references
+        // and scf.for
         if (llvm::any_of(pOp.region().getOps(), [&](Operation &each) {
-              return !MemoryEffectOpInterface::hasNoEffect(&each) ||
-                     0 != each.getNumRegions();
+              return 0 != each.getNumRegions();
             })) {
           return;
         }
