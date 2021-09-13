@@ -14,11 +14,13 @@
 
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Pass/Pass.h>
+#include <mlir/Pass/PassManager.h>
 #include <mlir/Pass/PassRegistry.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 
 #include <mlir/Dialect/SCF/SCF.h>
 
+#include "plier/Conversion/SCFToAffine/SCFToAffine.h"
 #include "plier/pass/rewrite_wrapper.hpp"
 #include "plier/rewrites/promote_to_parallel.hpp"
 
@@ -54,4 +56,11 @@ using WrapperRegistration =
 
 static WrapperRegistration<mlir::FuncOp, plier::PromoteToParallel>
     promoteToParallelReg("dpcomp-promote-to-parallel", "");
+
+static mlir::PassPipelineRegistration<>
+    scfToAffineReg("scf-to-affine", "Converts SCF parallel struct into Affine parallel",
+           [](mlir::OpPassManager &pm) {
+             pm.addNestedPass<mlir::FuncOp>(mlir::createSCFToAffinePass());
+           });
+
 } // namespace
