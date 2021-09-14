@@ -194,6 +194,84 @@ mlir::LogicalResult plier::FuncOpSignatureConversion::matchAndRewrite(
   return mlir::success();
 }
 
+plier::FixupIfYieldTypes::FixupIfYieldTypes(mlir::TypeConverter &typeConverter,
+                                            mlir::MLIRContext *context)
+    : OpRewritePattern(context), converter(typeConverter) {}
+
+mlir::LogicalResult plier::FixupIfYieldTypes::matchAndRewrite(
+    mlir::scf::IfOp op, mlir::PatternRewriter &rewriter) const {
+  if (op->getNumResults() == 0) {
+    return mlir::failure();
+  }
+
+  llvm::SmallVector<mlir::Type> newTypes;
+  newTypes.reserve(op->getNumResults());
+  auto trueYield =
+      mlir::cast<mlir::scf::YieldOp>(op.thenBlock()->getTerminator());
+  auto falseYield =
+      mlir::cast<mlir::scf::YieldOp>(op.elseBlock()->getTerminator());
+  bool updateTrueYeild = false;
+  bool updateFalseYeild = false;
+
+  assert(trueYield->getNumOperands() == falseYield->getNumOperands());
+  llvm::SmallVector<mlir::Type> newTrueTypes(trueYield->getNumOperands());
+  llvm::SmallVector<mlir::Type> newFalseTypes(falseYield->getNumOperands());
+  for (auto it : llvm::enumerate((llvm::zip(trueYield->getOperandTypes(),
+                                            falseYield->getOperandTypes())))) {
+    auto index = it.index();
+    auto types = it.value();
+    auto trueType = std::get<0>(types);
+    auto falseType = std::get<1>(types);
+
+    if (trueType != falseType) {
+      assert((converter.convertType(trueType) != falseType) ||
+             (converter.convertType(falseType) != trueType));
+      if (converter.convertType(trueType) == falseType) {
+        trueType = falseType;
+        updateTrueYeild = true;
+      } else if (converter.convertType(falseType) == trueType) {
+        falseType = trueType;
+        updateFalseYeild = true;
+      } else {
+        return mlir::failure();
+      }
+    }
+
+    newTrueTypes[index] = trueType;
+    newFalseTypes[index] = falseType;
+  }
+
+  auto updateYield = [](mlir::PatternRewriter &rewriter, mlir::scf::YieldOp op,
+                        const llvm::SmallVector<mlir::Type> &newTypes) {
+    rewriter.setInsertionPoint(op);
+    llvm::SmallVector<mlir::Value> newValues(op->getNumOperands());
+    for (auto it : llvm::enumerate(llvm::zip(op.results(), newTypes))) {
+      auto index = it.index();
+      auto value = it.value();
+      auto result = std::get<0>(value);
+      auto newType = std::get<1>(value);
+
+      auto loc = rewriter.getUnknownLoc();
+
+      if (result.getType() != newType) {
+        result =
+            rewriter.create<plier::CastOp>(loc, newType, result).getResult();
+      }
+      newValues[index] = result;
+    }
+
+    rewriter.replaceOpWithNewOp<mlir::scf::YieldOp>(op, newValues);
+  };
+
+  if (updateTrueYeild)
+    updateYield(rewriter, trueYield, newTrueTypes);
+
+  if (updateFalseYeild)
+    updateYield(rewriter, falseYield, newFalseTypes);
+
+  return mlir::success(updateTrueYeild || updateFalseYeild);
+}
+
 plier::FixupIfTypes::FixupIfTypes(mlir::TypeConverter &typeConverter,
                                   mlir::MLIRContext *context)
     : OpRewritePattern(context), converter(typeConverter) {}

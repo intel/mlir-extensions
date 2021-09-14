@@ -51,6 +51,18 @@ private:
   mlir::TypeConverter &converter;
 };
 
+struct FixupIfYieldTypes : public mlir::OpRewritePattern<mlir::scf::IfOp> {
+  FixupIfYieldTypes(mlir::TypeConverter &typeConverter,
+                    mlir::MLIRContext *context);
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::scf::IfOp op,
+                  mlir::PatternRewriter &rewriter) const override;
+
+private:
+  mlir::TypeConverter &converter;
+};
+
 struct FixCallOmittedArgs : public mlir::OpRewritePattern<mlir::CallOp> {
   FixCallOmittedArgs(mlir::TypeConverter &typeConverter,
                      mlir::MLIRContext *context);

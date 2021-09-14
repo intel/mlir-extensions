@@ -1440,6 +1440,52 @@ struct BreakRewrite : public mlir::OpRewritePattern<mlir::CondBranchOp> {
   }
 };
 
+struct FixupWhileYieldTypes
+    : public mlir::OpRewritePattern<mlir::scf::YieldOp> {
+  FixupWhileYieldTypes(mlir::MLIRContext *context)
+      : OpRewritePattern(context) {}
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::scf::YieldOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto whileOp = mlir::dyn_cast<mlir::scf::WhileOp>(op->getParentOp());
+    if (whileOp == nullptr) {
+      return mlir::failure();
+    }
+
+    auto loc = rewriter.getUnknownLoc();
+    auto results = op.results();
+    bool changed = false;
+    assert(whileOp->getNumOperands() == op->getNumOperands());
+    llvm::SmallVector<mlir::Value> newResults(whileOp->getNumOperands());
+
+    rewriter.setInsertionPoint(op);
+    for (auto it :
+         llvm::enumerate(llvm::zip(whileOp->getOperandTypes(), results))) {
+      auto index = it.index();
+      auto value = it.value();
+      auto operand_type = std::get<0>(value);
+      auto result = std::get<1>(value);
+      auto result_type = result.getType();
+
+      if (result_type != operand_type) {
+        auto cast = rewriter.create<plier::CastOp>(loc, operand_type, result);
+        changed = true;
+        newResults[index] = cast.getResult();
+      } else {
+        newResults[index] = result;
+      }
+    }
+
+    if (changed) {
+      rewriter.replaceOpWithNewOp<mlir::scf::YieldOp>(op, newResults);
+      return mlir::success();
+    }
+
+    return mlir::failure();
+  }
+};
+
 struct FixupWhileTypes : public mlir::OpRewritePattern<mlir::scf::WhileOp> {
   FixupWhileTypes(mlir::TypeConverter & /*typeConverter*/,
                   mlir::MLIRContext *context)
@@ -1858,6 +1904,48 @@ private:
   PyFuncResolver pyResolver;
 };
 
+struct PlierToScfPass
+    : public mlir::PassWrapper<PlierToScfPass,
+                               mlir::OperationPass<mlir::ModuleOp>> {
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<plier::PlierDialect>();
+    registry.insert<mlir::StandardOpsDialect>();
+    registry.insert<mlir::scf::SCFDialect>();
+    registry.insert<mlir::math::MathDialect>();
+  }
+
+  void runOnOperation() override;
+};
+
+void PlierToScfPass::runOnOperation() {
+  mlir::TypeConverter typeConverter;
+  // Convert unknown types to itself
+  typeConverter.addConversion([](mlir::Type type) { return type; });
+
+  auto context = &getContext();
+
+  mlir::OwningRewritePatternList patterns(context);
+
+  patterns.insert<
+      // clang-format off
+      plier::ArgOpLowering,
+      CondBrOpLowering,
+      BreakRewrite,
+      ScfIfRewriteOneExit,
+      ScfIfRewriteTwoExits,
+      ScfWhileRewrite
+      // clang-format on
+      >(typeConverter, context);
+
+  // range/prange lowering need dead branch pruning to properly
+  // handle negative steps
+  for (auto *op : context->getRegisteredOperations())
+    op->getCanonicalizationPatterns(patterns, context);
+
+  (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+}
+
 struct PlierToStdPass
     : public mlir::PassWrapper<PlierToStdPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
@@ -1888,19 +1976,15 @@ void PlierToStdPass::runOnOperation() {
       plier::ArgOpLowering,
       plier::FixupIfTypes,
       plier::FixCallOmittedArgs,
+      plier::FixupIfYieldTypes,
       LiteralLowering<plier::ArgOp>,
       LiteralLowering<plier::GlobalOp>,
       UndefOpLowering,
       ReturnOpLowering,
       ConstOpLowering,
       SelectOpLowering,
-      CondBrOpLowering,
       BinOpLowering,
       UnaryOpLowering,
-      BreakRewrite,
-      ScfIfRewriteOneExit,
-      ScfIfRewriteTwoExits,
-      ScfWhileRewrite,
       FixupWhileTypes,
       PropagateBuildTupleTypes,
       FoldTupleGetitem,
@@ -1909,6 +1993,8 @@ void PlierToStdPass::runOnOperation() {
       ExpandCallVarargs
       // clang-format on
       >(typeConverter, context);
+
+  patterns.insert<FixupWhileYieldTypes>(context);
 
   patterns.insert<plier::CastOpLowering>(typeConverter, context, &doCast);
 
@@ -1929,6 +2015,7 @@ void PlierToStdPass::runOnOperation() {
 
 void populate_plier_to_std_pipeline(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createCanonicalizerPass());
+  pm.addPass(std::make_unique<PlierToScfPass>());
   pm.addPass(std::make_unique<PlierToStdPass>());
   pm.addPass(mlir::createCanonicalizerPass());
 }
