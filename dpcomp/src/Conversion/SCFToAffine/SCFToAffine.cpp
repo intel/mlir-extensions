@@ -16,6 +16,7 @@
 
 #include "mlir/Analysis/AffineAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/PatternMatch.h"
@@ -73,6 +74,19 @@ public:
     assert(newPloop.verify().succeeded() &&
            "affine body is incorrectly constructed");
 
+    for (auto &each : llvm::make_early_inc_range(*newPloop.getBody())) {
+      if (auto load = dyn_cast_or_null<memref::LoadOp>(&each)) {
+        rewriter.setInsertionPointAfter(load);
+        rewriter.replaceOpWithNewOp<AffineLoadOp>(load, load.getMemRef(),
+                                                  load.indices());
+      }
+      if (auto store = dyn_cast_or_null<memref::StoreOp>(&each)) {
+        rewriter.setInsertionPointAfter(store);
+        rewriter.replaceOpWithNewOp<AffineStoreOp>(
+            store, store.getValueToStore(), store.getMemRef(), store.indices());
+      }
+    }
+
     // TODO: handle reductions and induction variables
 
     rewriter.replaceOp(op, newPloop.getResults());
@@ -113,12 +127,14 @@ struct SCFToAffinePass
             pOp.step().size() != pOp.upperBound().size())
           return;
 
-        // check for non affine memory references
-        // if (llvm::any_of(pOp.region().getOps(), [&](Operation &each) {
-        //   return !MemoryEffectOpInterface::hasNoEffect(&each);
-        //     })) {
-        //   return;
-        // }
+        // check for supported memory operations
+        for (auto &each : pOp.region().getOps()) {
+          if (!MemoryEffectOpInterface::hasNoEffect(&each)) {
+            if (!isa<memref::LoadOp, memref::StoreOp>(&each)) {
+              return;
+            }
+          }
+        }
 
         // Awoid conversing scf.reduce, scf.if and nested scf.parallel
         // and scf.for
