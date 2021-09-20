@@ -16,7 +16,7 @@
 Define @jit and related decorators.
 """
 
-from .mlir.compiler import mlir_compiler_pipeline
+from .mlir.compiler import mlir_compiler_pipeline, mlir_compiler_gpu_pipeline
 from .mlir.vectorize import vectorize as mlir_vectorize
 from .mlir.settings import USE_MLIR
 
@@ -27,10 +27,12 @@ from numba.np.ufunc import vectorize as orig_vectorize
 if USE_MLIR:
     def jit(signature_or_function=None, locals={}, cache=False,
             pipeline_class=None, boundscheck=False, **options):
+        pipeline = mlir_compiler_gpu_pipeline if options.get('enable_gpu_pipeline') else mlir_compiler_pipeline
+        options.pop('enable_gpu_pipeline', None)
         return orig_jit(signature_or_function=signature_or_function,
                         locals=locals,
                         cache=cache,
-                        pipeline_class=mlir_compiler_pipeline,
+                        pipeline_class=pipeline,
                         boundscheck=boundscheck,
                         **options)
 

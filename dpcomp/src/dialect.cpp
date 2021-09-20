@@ -21,6 +21,7 @@
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Transforms/InliningUtils.h>
 
+#include <mlir/Dialect/GPU/GPUDialect.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
 
@@ -63,6 +64,8 @@ llvm::StringRef attributes::getForceInlineName() {
 }
 
 llvm::StringRef attributes::getOptLevelName() { return "#plier.opt_level"; }
+
+llvm::StringRef attributes::getGpuRangeName() { return "#plier.gpu_range"; }
 
 namespace detail {
 struct PyTypeStorage : public mlir::TypeStorage {
@@ -808,6 +811,88 @@ ExtractMemrefMetadataOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
   return nullptr;
 }
 
+namespace {
+template <typename Op, typename DelOp>
+struct RemoveUnusedOp : public mlir::OpRewritePattern<Op> {
+  using mlir::OpRewritePattern<Op>::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(Op op, mlir::PatternRewriter &rewriter) const override {
+    for (auto user : op->getUsers()) {
+      if (!mlir::isa<DelOp>(user))
+        return mlir::failure();
+    }
+
+    for (auto user : llvm::make_early_inc_range(op->getUsers())) {
+      assert(user->getNumResults() == 0);
+      rewriter.eraseOp(user);
+    }
+    rewriter.eraseOp(op);
+    return mlir::success();
+  }
+};
+} // namespace
+
+void CreateGpuStreamOp::build(::mlir::OpBuilder &odsBuilder,
+                              ::mlir::OperationState &odsState) {
+  auto ctx = odsBuilder.getContext();
+  CreateGpuStreamOp::build(odsBuilder, odsState, plier::OpaqueType::get(ctx));
+}
+
+void CreateGpuStreamOp::getCanonicalizationPatterns(
+    ::mlir::RewritePatternSet &results, ::mlir::MLIRContext *context) {
+  results.insert<RemoveUnusedOp<CreateGpuStreamOp, DestroyGpuStreamOp>>(
+      context);
+}
+
+void LoadGpuModuleOp::build(::mlir::OpBuilder &odsBuilder,
+                            ::mlir::OperationState &odsState,
+                            ::mlir::Value stream,
+                            ::mlir::gpu::GPUModuleOp module) {
+  auto ctx = odsBuilder.getContext();
+  LoadGpuModuleOp::build(odsBuilder, odsState, plier::OpaqueType::get(ctx),
+                         stream,
+                         mlir::SymbolRefAttr::get(ctx, module.getName()));
+}
+
+void LoadGpuModuleOp::getCanonicalizationPatterns(
+    ::mlir::RewritePatternSet &results, ::mlir::MLIRContext *context) {
+  results.insert<RemoveUnusedOp<LoadGpuModuleOp, DestroyGpuModuleOp>>(context);
+}
+
+void GetGpuKernelOp::build(::mlir::OpBuilder &odsBuilder,
+                           ::mlir::OperationState &odsState,
+                           ::mlir::Value module,
+                           ::mlir::gpu::GPUFuncOp kernel) {
+  auto ctx = odsBuilder.getContext();
+  GetGpuKernelOp::build(odsBuilder, odsState, plier::OpaqueType::get(ctx),
+                        module,
+                        mlir::SymbolRefAttr::get(ctx, kernel.getName()));
+}
+
+void GetGpuKernelOp::getCanonicalizationPatterns(
+    ::mlir::RewritePatternSet &results, ::mlir::MLIRContext *context) {
+  results.insert<RemoveUnusedOp<GetGpuKernelOp, DestroyGpuKernelOp>>(context);
+}
+
+void LaunchGpuKernelOp::build(::mlir::OpBuilder &builder,
+                              ::mlir::OperationState &result,
+                              ::mlir::Value stream, ::mlir::Value kernel,
+                              ::mlir::gpu::KernelDim3 gridSize,
+                              ::mlir::gpu::KernelDim3 blockSize,
+                              ::mlir::ValueRange kernelOperands) {
+  result.addOperands(stream);
+  result.addOperands(kernel);
+  result.addOperands({gridSize.x, gridSize.y, gridSize.z, blockSize.x,
+                      blockSize.y, blockSize.z});
+  result.addOperands(kernelOperands);
+  llvm::SmallVector<int32_t> segmentSizes(10, 1);
+  segmentSizes.front() = 0; // Initially no async dependencies.
+  segmentSizes.back() = static_cast<int32_t>(kernelOperands.size());
+  result.addAttribute(getOperandSegmentSizeAttr(),
+                      builder.getI32VectorAttr(segmentSizes));
+}
+
 } // namespace plier
 
 #include "plier/PlierOpsDialect.cpp.inc"
@@ -815,4 +900,4 @@ ExtractMemrefMetadataOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
 #define GET_OP_CLASSES
 #include "plier/PlierOps.cpp.inc"
 
-#include "plier/PlierOpsEnums.cpp.inc"
+//#include "plier/PlierOpsEnums.cpp.inc"

@@ -2032,6 +2032,9 @@ void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<ForceInlinePass>());
   pm.addPass(mlir::createSymbolDCEPass());
 
+  pm.addNestedPass<mlir::FuncOp>(mlir::createCanonicalizerPass());
+  pm.addNestedPass<mlir::FuncOp>(mlir::createLoopInvariantCodeMotionPass());
+
   // ToDo: This pass also tries to do some simple fusion, whic should be split
   // in separate pass
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<PostLinalgOptPass>());

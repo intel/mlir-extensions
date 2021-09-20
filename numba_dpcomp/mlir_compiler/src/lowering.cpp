@@ -39,6 +39,7 @@
 #include "plier/utils.hpp"
 
 #include "pipelines/base_pipeline.hpp"
+#include "pipelines/lower_to_gpu.hpp"
 #include "pipelines/lower_to_llvm.hpp"
 #include "pipelines/parallel_to_tbb.hpp"
 #include "pipelines/plier_to_linalg.hpp"
@@ -669,13 +670,26 @@ py::bytes gen_ll_module(mlir::ModuleOp mod) {
   return serialize_mod(*llMod);
 }
 
-void create_pipeline(plier::PipelineRegistry &registry) {
+struct ModuleSettings {
+  bool enableGpuPipeline = false;
+};
+
+void create_pipeline(plier::PipelineRegistry &registry,
+                     const ModuleSettings &settings) {
   registerBasePipeline(registry);
   registerLowerToLLVMPipeline(registry);
   registerPlierToStdPipeline(registry);
   registerPlierToLinalgPipeline(registry);
   registerPreLowSimpleficationsPipeline(registry);
   registerParallelToTBBPipeline(registry);
+
+  if (settings.enableGpuPipeline) {
+#ifdef GPU_ENABLE
+    registerLowerToGPUPipeline(registry);
+#else
+    plier::report_error("DPCOMP was compiled without GPU support");
+#endif
+  }
 }
 
 struct Module {
@@ -683,7 +697,9 @@ struct Module {
   plier::PipelineRegistry registry;
   mlir::ModuleOp module;
 
-  Module() { create_pipeline(registry); }
+  Module(const ModuleSettings &settings) {
+    create_pipeline(registry, settings);
+  }
 };
 
 void run_compiler(Module &mod, const py::object &compilation_context) {
@@ -699,7 +715,7 @@ void run_compiler(Module &mod, const py::object &compilation_context) {
 }
 } // namespace
 
-void init_compiler(pybind11::dict settings) {
+void init_compiler(py::dict settings) {
   auto debugType = settings["debug_type"].cast<py::list>();
   auto debugTypeSize = debugType.size();
   if (debugTypeSize != 0) {
@@ -714,8 +730,20 @@ void init_compiler(pybind11::dict settings) {
   }
 }
 
-py::capsule create_module() {
-  auto mod = std::make_unique<Module>();
+template <typename T>
+static bool getDictVal(py::dict &dict, const char *str, T &&def) {
+  auto key = py::str(str);
+  if (dict.contains(key))
+    return dict[key].cast<T>();
+  return def;
+}
+
+py::capsule create_module(py::dict settings) {
+  ModuleSettings modSettings;
+  modSettings.enableGpuPipeline =
+      getDictVal(settings, "enable_gpu_pipeline", false);
+
+  auto mod = std::make_unique<Module>(modSettings);
   {
     mlir::OpBuilder builder(&mod->context);
     mod->module = mlir::ModuleOp::create(builder.getUnknownLoc());

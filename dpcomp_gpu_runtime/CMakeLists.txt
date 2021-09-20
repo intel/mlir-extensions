@@ -12,27 +12,32 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-project(dpcomp-runtime LANGUAGES CXX C)
+project(dpcomp-gpu-runtime LANGUAGES CXX C)
 
 include(GenerateExportHeader)
 
-find_package(TBB REQUIRED)
-find_package(MLIR REQUIRED CONFIG)
+if(NOT LEVEL_ZERO_DIR)
+    message(FATAL_ERROR "LEVEL_ZERO_DIR is not set")
+endif()
 
 set(SOURCES_LIST
-    src/tbb_parallel.cpp
-    src/memory.cpp
+    src/gpu_runtime.cpp
     )
 set(HEADERS_LIST
+    src/level_zero_printing.hpp
+    src/level_zero_wrapper.hpp
     )
 
 add_library(${PROJECT_NAME} SHARED ${SOURCES_LIST} ${HEADERS_LIST})
 generate_export_header(${PROJECT_NAME})
 
-target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE
-    ${MLIR_INCLUDE_DIRS}
-    PRIVATE
+target_include_directories(${PROJECT_NAME} PRIVATE
     ${PROJECT_BINARY_DIR}
+    ${LEVEL_ZERO_DIR}/include
     )
 
-target_link_libraries(${PROJECT_NAME} TBB::tbb)
+target_link_directories(${PROJECT_NAME} PRIVATE
+    ${LEVEL_ZERO_DIR}/lib
+    )
+
+target_link_libraries(${PROJECT_NAME} PRIVATE ze_loader)

@@ -25,7 +25,7 @@ set(CMAKE_VISIBILITY_INLINES_HIDDEN 1)
 # SDL
 # set(CMAKE_VERBOSE_MAKEFILE on) # enable for debug
 if (CMAKE_SYSTEM_NAME STREQUAL Windows)
-    add_compile_options(-GS)
+    add_compile_options(-GS -D_CRT_SECURE_NO_WARNINGS)
     add_link_options(-DYNAMICBASE -NXCOMPAT -GUARD:CF)
     # add_link_options(-INTEGRITYCHECK) # require signatures of libs, only recommended
 endif()
@@ -42,6 +42,10 @@ if (CMAKE_SYSTEM_NAME STREQUAL Darwin)
 endif()
 
 option(DPNP_ENABLE "Use DPNP for some math functions" OFF)
+option(GPU_ENABLE "Enable GPU codegen" OFF)
+
+message(STATUS "DPNP_ENABLE ${DPNP_ENABLE}")
+message(STATUS "GPU_ENABLE ${GPU_ENABLE}")
 
 include(CTest)
 
@@ -59,6 +63,10 @@ add_subdirectory(dpcomp_runtime)
 add_subdirectory(tools)
 add_subdirectory(numba_dpcomp/mlir_compiler)
 
+if(${GPU_ENABLE})
+    add_subdirectory(dpcomp_gpu_runtime)
+endif()
+
 if(${BUILD_TESTING})
     add_subdirectory(test)
 endif()
@@ -71,3 +79,10 @@ install(TARGETS dpcomp-runtime dpcomp-math-runtime mlir_compiler
         PERMISSIONS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
         LIBRARY DESTINATION .
         )
+
+if(${GPU_ENABLE})
+    install(TARGETS dpcomp-gpu-runtime
+            PERMISSIONS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+            LIBRARY DESTINATION .
+            )
+endif()

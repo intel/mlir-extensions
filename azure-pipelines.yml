@@ -70,6 +70,17 @@ jobs:
     displayName: 'Get TBB'
 
   - script: |
+      git clone https://github.com/oneapi-src/level-zero.git
+      cd level-zero
+      git checkout v1.5.0
+      mkdir level_zero_install
+      mkdir build
+      cd build
+      cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=../level_zero_install ..
+      make install
+    displayName: 'Get L0'
+
+  - script: |
       source /usr/share/miniconda/bin/activate
       conda create -y -n build_env python=3.7 numpy=1.20 scikit-learn pytest-xdist ninja scipy pybind11 pytest lit dpnp=0.5.1 mkl=2021.1 -c conda-forge -c intel
       conda activate build_env
@@ -81,6 +92,7 @@ jobs:
       chmod -R 777 $(System.DefaultWorkingDirectory)/llvm_cache
       export LLVM_PATH=$(System.DefaultWorkingDirectory)/llvm_cache
       export TBB_PATH=$(System.DefaultWorkingDirectory)/tbb
+      export LEVEL_ZERO_DIR=$(System.DefaultWorkingDirectory)/level-zero/level_zero_install
       export OCL_ICD_FILENAMES_RESET=1
       export OCL_ICD_FILENAMES=libintelocl.so
       export SYCL_DEVICE_FILTER=opencl:cpu

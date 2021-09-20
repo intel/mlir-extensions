@@ -71,6 +71,19 @@ try:
 except ImportError:
     print("DPNP not found")
 
+
+# GPU/L0
+LEVEL_ZERO_DIR = os.getenv('LEVEL_ZERO_DIR', None)
+if LEVEL_ZERO_DIR is None:
+    print('LEVEL_ZERO_DIR is not set')
+else:
+    print('LEVEL_ZERO_DIR is', LEVEL_ZERO_DIR)
+    cmake_cmd += [
+                  '-DLEVEL_ZERO_DIR=' + LEVEL_ZERO_DIR,
+                  '-DGPU_ENABLE=1',
+                 ]
+
+
 try:
     os.mkdir(cmake_build_dir)
 except FileExistsError:
