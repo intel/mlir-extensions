@@ -357,22 +357,23 @@ struct LiteralLowering : public mlir::OpRewritePattern<Op> {
   matchAndRewrite(Op op, mlir::PatternRewriter &rewriter) const override {
     auto type = op.getType();
     auto convertedType = converter.convertType(type);
-    if (!convertedType) {
+    if (!convertedType)
       return mlir::failure();
-    }
+
     if (convertedType.template isa<mlir::NoneType>()) {
       rewriter.replaceOpWithNewOp<plier::UndefOp>(op, convertedType);
       return mlir::success();
     }
+
     if (auto literal = convertedType.template dyn_cast<plier::LiteralType>()) {
       auto loc = op.getLoc();
       auto attrVal = literal.getValue();
       auto dstType = attrVal.getType();
       auto val = makeSignlessAttr(attrVal);
       auto newVal = rewriter.create<mlir::ConstantOp>(loc, val).getResult();
-      if (dstType != val.getType()) {
+      if (dstType != val.getType())
         newVal = rewriter.create<plier::SignCastOp>(loc, dstType, newVal);
-      }
+
       rewriter.replaceOp(op, newVal);
       return mlir::success();
     }
@@ -439,32 +440,39 @@ struct ReturnOpLowering : public mlir::OpRewritePattern<mlir::ReturnOp> {
 };
 
 struct SelectOpLowering : public mlir::OpRewritePattern<mlir::SelectOp> {
-  SelectOpLowering(mlir::TypeConverter & /*typeConverter*/,
+  SelectOpLowering(mlir::TypeConverter &typeConverter,
                    mlir::MLIRContext *context)
-      : OpRewritePattern(context) {}
+      : OpRewritePattern(context), converter(typeConverter) {}
 
   mlir::LogicalResult
   matchAndRewrite(mlir::SelectOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto operands = op.getOperands();
-    assert(operands.size() == 3);
-    auto true_val = operands[1];
-    auto false_val = operands[2];
-    if (true_val.getType() == false_val.getType() &&
-        true_val.getType() != op.getType()) {
-      auto cond = operands[0];
-      rewriter.replaceOpWithNewOp<mlir::SelectOp>(op, cond, true_val,
-                                                  false_val);
-      return mlir::success();
-    }
-    return mlir::failure();
+    auto oldType = op.getType();
+    auto newType = converter.convertType(oldType);
+    if (!newType || oldType == newType)
+      return mlir::failure();
+
+    auto loc = op.getLoc();
+    auto getSrcArg = [&](mlir::Value arg) -> mlir::Value {
+      if (arg.getType() != newType)
+        return rewriter.create<plier::CastOp>(loc, newType, arg);
+
+      return arg;
+    };
+
+    auto trueArg = getSrcArg(op.getTrueValue());
+    auto falseArg = getSrcArg(op.getFalseValue());
+    rewriter.replaceOpWithNewOp<mlir::SelectOp>(op, op.condition(), trueArg,
+                                                falseArg);
+    return mlir::success();
   }
+
+private:
+  mlir::TypeConverter &converter;
 };
 
 struct CondBrOpLowering : public mlir::OpRewritePattern<mlir::CondBranchOp> {
-  CondBrOpLowering(mlir::TypeConverter & /*typeConverter*/,
-                   mlir::MLIRContext *context)
-      : OpRewritePattern(context) {}
+  CondBrOpLowering(mlir::MLIRContext *context) : OpRewritePattern(context) {}
 
   mlir::LogicalResult
   matchAndRewrite(mlir::CondBranchOp op,
@@ -957,9 +965,7 @@ bool is_blocks_different(llvm::ArrayRef<mlir::Block *> blocks) {
 }
 
 struct ScfIfRewriteOneExit : public mlir::OpRewritePattern<mlir::CondBranchOp> {
-  ScfIfRewriteOneExit(mlir::TypeConverter & /*typeConverter*/,
-                      mlir::MLIRContext *context)
-      : OpRewritePattern(context) {}
+  ScfIfRewriteOneExit(mlir::MLIRContext *context) : OpRewritePattern(context) {}
 
   mlir::LogicalResult
   matchAndRewrite(mlir::CondBranchOp op,
@@ -1090,8 +1096,7 @@ struct ScfIfRewriteOneExit : public mlir::OpRewritePattern<mlir::CondBranchOp> {
 
 struct ScfIfRewriteTwoExits
     : public mlir::OpRewritePattern<mlir::CondBranchOp> {
-  ScfIfRewriteTwoExits(mlir::TypeConverter & /*typeConverter*/,
-                       mlir::MLIRContext *context)
+  ScfIfRewriteTwoExits(mlir::MLIRContext *context)
       : OpRewritePattern(context) {}
 
   mlir::LogicalResult
@@ -1269,9 +1274,7 @@ bool is_inside_block(mlir::Operation *op, mlir::Block *block) {
 }
 
 struct ScfWhileRewrite : public mlir::OpRewritePattern<mlir::BranchOp> {
-  ScfWhileRewrite(mlir::TypeConverter & /*typeConverter*/,
-                  mlir::MLIRContext *context)
-      : OpRewritePattern(context) {}
+  ScfWhileRewrite(mlir::MLIRContext *context) : OpRewritePattern(context) {}
 
   mlir::LogicalResult
   matchAndRewrite(mlir::BranchOp op,
@@ -1374,9 +1377,7 @@ struct ScfWhileRewrite : public mlir::OpRewritePattern<mlir::BranchOp> {
 };
 
 struct BreakRewrite : public mlir::OpRewritePattern<mlir::CondBranchOp> {
-  BreakRewrite(mlir::TypeConverter & /*typeConverter*/,
-               mlir::MLIRContext *context)
-      : OpRewritePattern(context) {}
+  BreakRewrite(mlir::MLIRContext *context) : OpRewritePattern(context) {}
 
   mlir::LogicalResult
   matchAndRewrite(mlir::CondBranchOp op,
@@ -1912,17 +1913,12 @@ struct PlierToScfPass
     registry.insert<plier::PlierDialect>();
     registry.insert<mlir::StandardOpsDialect>();
     registry.insert<mlir::scf::SCFDialect>();
-    registry.insert<mlir::math::MathDialect>();
   }
 
   void runOnOperation() override;
 };
 
 void PlierToScfPass::runOnOperation() {
-  mlir::TypeConverter typeConverter;
-  // Convert unknown types to itself
-  typeConverter.addConversion([](mlir::Type type) { return type; });
-
   auto context = &getContext();
 
   mlir::OwningRewritePatternList patterns(context);
@@ -1936,10 +1932,8 @@ void PlierToScfPass::runOnOperation() {
       ScfIfRewriteTwoExits,
       ScfWhileRewrite
       // clang-format on
-      >(typeConverter, context);
+      >(context);
 
-  // range/prange lowering need dead branch pruning to properly
-  // handle negative steps
   for (auto *op : context->getRegisteredOperations())
     op->getCanonicalizationPatterns(patterns, context);
 
@@ -1973,11 +1967,10 @@ void PlierToStdPass::runOnOperation() {
   patterns.insert<
       // clang-format off
       plier::FuncOpSignatureConversion,
-      plier::ArgOpLowering,
       plier::FixupIfTypes,
       plier::FixCallOmittedArgs,
       plier::FixupIfYieldTypes,
-      LiteralLowering<plier::ArgOp>,
+      LiteralLowering<plier::CastOp>,
       LiteralLowering<plier::GlobalOp>,
       UndefOpLowering,
       ReturnOpLowering,
@@ -1994,7 +1987,7 @@ void PlierToStdPass::runOnOperation() {
       // clang-format on
       >(typeConverter, context);
 
-  patterns.insert<FixupWhileYieldTypes>(context);
+  patterns.insert<FixupWhileYieldTypes, plier::ArgOpLowering>(context);
 
   patterns.insert<plier::CastOpLowering>(typeConverter, context, &doCast);
 

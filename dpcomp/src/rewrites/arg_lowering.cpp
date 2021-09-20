@@ -20,27 +20,25 @@
 
 #include "plier/dialect.hpp"
 
-plier::ArgOpLowering::ArgOpLowering(mlir::TypeConverter &typeConverter,
-                                    mlir::MLIRContext *context)
-    : OpRewritePattern(context), converter(typeConverter) {}
+plier::ArgOpLowering::ArgOpLowering(mlir::MLIRContext *context)
+    : OpRewritePattern(context) {}
 
 mlir::LogicalResult
 plier::ArgOpLowering::matchAndRewrite(plier::ArgOp op,
                                       mlir::PatternRewriter &rewriter) const {
   auto func = op->getParentOfType<mlir::FuncOp>();
-  if (!func) {
+  if (!func)
     return mlir::failure();
-  }
 
   auto index = op.index();
-  if (index >= func.getNumArguments()) {
+  if (index >= func.getNumArguments())
     return mlir::failure();
-  }
 
-  auto arg = func.getArgument(index);
-  if (converter.convertType(op.getType()) != arg.getType()) {
-    return mlir::failure();
-  }
+  mlir::Value arg = func.getArgument(index);
+  auto opType = op.getType();
+  if (opType != arg.getType())
+    arg = rewriter.create<plier::CastOp>(op.getLoc(), opType, arg);
+
   rewriter.replaceOp(op, arg);
   return mlir::success();
 }
