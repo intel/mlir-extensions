@@ -19,7 +19,7 @@ from .utils import load_lib, mlir_func_name
 
 runtime_lib = load_lib('dpcomp-math-runtime')
 
-_init_func = runtime_lib.dpcomp_math_runtime_init
+_init_func = runtime_lib.dpcompMathRuntimeInit
 _init_func()
 
 
@@ -30,9 +30,9 @@ def load_function_variants(func_name, suffixes):
         func = getattr(runtime_lib, name)
         ll.add_symbol(mlir_name, ctypes.cast(func, ctypes.c_void_p).value)
 
-load_function_variants('dpcomp_linalg_eig_', ['float32','float64'])
+load_function_variants('dpcompLinalgEig_', ['float32','float64'])
 
-_finalize_func = runtime_lib.dpcomp_math_runtime_finalize
+_finalize_func = runtime_lib.dpcompMathRuntimeFinalize
 
 @atexit.register
 def _cleanup():

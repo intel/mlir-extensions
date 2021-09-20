@@ -203,10 +203,10 @@ static void parallel_for_nested(const InputRange *input_ranges, size_t depth,
 } // namespace
 
 extern "C" {
-DPCOMP_RUNTIME_EXPORT void dpcomp_parallel_for(const InputRange *input_ranges,
-                                               size_t num_loops,
-                                               parallel_for_fptr func,
-                                               void *ctx) {
+DPCOMP_RUNTIME_EXPORT void dpcompParallelFor(const InputRange *input_ranges,
+                                             size_t num_loops,
+                                             parallel_for_fptr func,
+                                             void *ctx) {
   auto &context = getContext();
   auto num_threads = static_cast<size_t>(context.numThreads);
   if (DEBUG) {
@@ -226,7 +226,7 @@ DPCOMP_RUNTIME_EXPORT void dpcomp_parallel_for(const InputRange *input_ranges,
   });
 }
 
-DPCOMP_RUNTIME_EXPORT void dpcomp_parallel_init(int numThreads) {
+DPCOMP_RUNTIME_EXPORT void dpcompParallelInit(int numThreads) {
   if (DEBUG) {
     fprintf(stderr, "dpcomp_parallel_init %d\n", numThreads);
   }
@@ -235,7 +235,7 @@ DPCOMP_RUNTIME_EXPORT void dpcomp_parallel_init(int numThreads) {
   }
 }
 
-DPCOMP_RUNTIME_EXPORT void dpcomp_parallel_finalize() {
+DPCOMP_RUNTIME_EXPORT void dpcompParallelFinalize() {
   if (DEBUG) {
     fprintf(stderr, "dpcomp_parallel_finalize\n");
   }

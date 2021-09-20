@@ -15,11 +15,11 @@
 #include "common.hpp"
 
 extern "C" {
-DPCOMP_MATH_RUNTIME_EXPORT void dpcomp_math_runtime_init() {
+DPCOMP_MATH_RUNTIME_EXPORT void dpcompMathRuntimeInit() {
   // Nothing
 }
 
-DPCOMP_MATH_RUNTIME_EXPORT void dpcomp_math_runtime_finalize() {
+DPCOMP_MATH_RUNTIME_EXPORT void dpcompMathRuntimeFinalize() {
   // Nothing
 }
 }

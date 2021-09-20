@@ -20,14 +20,14 @@ from .utils import load_lib
 
 runtime_lib = load_lib('dpcomp-runtime')
 
-_init_func = runtime_lib.dpcomp_parallel_init
+_init_func = runtime_lib.dpcompParallelInit
 _init_func.argtypes = [ctypes.c_int]
 _init_func(get_thread_count())
 
-_finalize_func = runtime_lib.dpcomp_parallel_finalize
+_finalize_func = runtime_lib.dpcompParallelFinalize
 
 _funcs = [
-    'dpcomp_parallel_for',
+    'dpcompParallelFor',
     'memrefCopy',
 ]
 
