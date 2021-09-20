@@ -14,7 +14,11 @@
 
 #include <cstdint>
 #include <cstring>
-#include <malloc.h>
+#if defined(__MACH__)
+# include <cstdlib>
+#else
+# include <malloc.h>
+#endif
 
 #define mlir_c_runner_utils_EXPORTS 1
 #include <mlir/ExecutionEngine/CRunnerUtils.h>
