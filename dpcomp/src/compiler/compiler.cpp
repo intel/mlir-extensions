@@ -57,6 +57,7 @@ struct PassManagerStage {
           auto name = pass->getName();
           name.consume_front("`anonymous-namespace'::");
           name.consume_front("{anonymous}::");
+          name.consume_front("(anonymous namespace)::");
           return llvm::is_contained(names, name);
         }
       };

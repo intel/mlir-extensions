@@ -222,12 +222,12 @@ def test_prange_lowering():
     def py_func(arr):
         res = 0
         for i in numba.prange(len(arr)):
-            res += arr[i];
+            res += arr[i]
 
         return res
 
     with print_pass_ir([],['ParallelToTbbPass']):
-        jit_func = njit(py_func)
+        jit_func = njit(py_func, parallel=True)
         arr = np.arange(10000, dtype=np.float32)
         assert_equal(py_func(arr), jit_func(arr))
         ir = get_print_buffer()
@@ -238,17 +238,17 @@ def test_loop_fusion1():
         l = len(arr)
         res1 = 0
         for i in numba.prange(l):
-            res1 += arr[i];
+            res1 += arr[i]
 
-        res2 = 0
+        res2 = 1.0
         for i in numba. prange(l):
-            res2 *= arr[i];
+            res2 *= arr[i]
 
         return res1, res2
 
     with print_pass_ir([],['PostLinalgOptPass']):
         jit_func = njit(py_func)
-        arr = np.arange(10000, dtype=np.float32)
+        arr = np.arange(1, 15, dtype=np.float32)
         assert_equal(py_func(arr), jit_func(arr))
         ir = get_print_buffer()
         assert ir.count('scf.parallel') == 1, ir
@@ -259,19 +259,19 @@ def test_loop_fusion2():
         l = len(arr)
         res1 = 0
         for i in numba.prange(l):
-            res1 += arr[i];
+            res1 += arr[i]
 
         res1 += 10
 
-        res2 = 0
+        res2 = 0.0
         for i in numba. prange(l):
-            res2 *= arr[i];
+            res2 *= arr[i]
 
         return res1, res2
 
     with print_pass_ir([],['PostLinalgOptPass']):
         jit_func = njit(py_func)
-        arr = np.arange(10000, dtype=np.float32)
+        arr = np.arange(1, 15, dtype=np.float32)
         assert_equal(py_func(arr), jit_func(arr))
         ir = get_print_buffer()
         assert ir.count('scf.parallel') == 1, ir
@@ -282,17 +282,17 @@ def test_loop_fusion3():
         l = len(arr)
         res1 = 0
         for i in numba.prange(l):
-            res1 += arr[i];
+            res1 += arr[i]
 
-        res2 = 0
+        res2 = 1.0
         for i in numba. prange(l):
-            res2 *= (arr[i] * res1);
+            res2 *= (arr[i] * res1)
 
         return res1, res2
 
     with print_pass_ir([],['PostLinalgOptPass']):
         jit_func = njit(py_func)
-        arr = np.arange(10000, dtype=np.float32)
+        arr = np.arange(1, 15, dtype=np.float32)
         assert_equal(py_func(arr), jit_func(arr))
         ir = get_print_buffer()
         assert ir.count('scf.parallel') == 2, ir
@@ -652,7 +652,7 @@ def test_tuple_ret(py_func, a, b):
                          [0,1,2]) # TODO: None
 def test_concat(arrays, axis):
     arr = tuple(np.array(a) for a in arrays)
-    num_dims = len(arr[0].shape);
+    num_dims = len(arr[0].shape)
     if axis >= num_dims:
         pytest.skip() # TODO: unselect
     num_arrays = len(arrays)
