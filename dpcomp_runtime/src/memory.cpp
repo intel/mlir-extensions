@@ -15,9 +15,9 @@
 #include <cstdint>
 #include <cstring>
 #if defined(__MACH__)
-# include <cstdlib>
+#include <cstdlib>
 #else
-# include <malloc.h>
+#include <malloc.h>
 #endif
 
 #define mlir_c_runner_utils_EXPORTS 1
