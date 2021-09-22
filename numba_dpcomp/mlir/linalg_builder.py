@@ -53,6 +53,8 @@ class Type:
 def is_literal(val):
     return not isinstance(val, Var)
 
+DYNAMIC_DIM = -1
+
 class Builder:
     def __init__(self, context):
         self._context = context
@@ -84,8 +86,8 @@ class Builder:
     def insert(self, src, dst, offsets, sizes, strides):
         return self._insert(self._context, src, dst, offsets, sizes, strides)
 
-    def inline_func(self, func, *args): # TODO: kwargs
-        return self._inline_func(self._context, func, args)
+    def inline_func(self, func, res_type, *args): # TODO: kwargs
+        return self._inline_func(self._context, func, res_type, args)
 
     def cast(self, arg, dtype):
         return self._cast(self._context, arg, dtype)
@@ -93,34 +95,36 @@ class Builder:
     def undef(self, dtype):
         return self._undef(self._context, dtype)
 
+    def array_type(self, dims, dtype):
+        return self._array_type(self._context, dims, dtype)
+
 def compile_func(*args, **kwargs):
     import numba_dpcomp.mlir.inner_compiler
     return numba_dpcomp.mlir.inner_compiler.compile_func(*args, **kwargs)
 
-_func_registry = {}
+class FuncRegistry:
+    def __init__(self):
+        self.funcs = {}
 
-def register_func(name, orig_func = None):
-    def _decorator(func):
-        global _func_registry
-        mangled_name = name + '()'
-        assert not mangled_name in _func_registry
-        _func_registry[mangled_name] = func
-        if not orig_func is None:
-            add_func(orig_func, name)
-        return func
-    return _decorator
+    def register_func(self, name, orig_func = None):
+        def _decorator(func):
+            mangled_name = name + '()'
+            assert not mangled_name in self.funcs
+            self.funcs[mangled_name] = func
+            if not orig_func is None:
+                add_func(orig_func, name)
+            return func
+        return _decorator
 
-def register_attr(name):
-    def _decorator(func):
-        global _func_registry
-        assert not name in _func_registry
-        _func_registry[name] = func
-        return func
-    return _decorator
+    def register_attr(self, name):
+        def _decorator(func):
+            assert not name in self.funcs
+            self.funcs[name] = func
+            return func
+        return _decorator
 
-def lookup_func(name):
-    global _func_registry
-    return _func_registry.get(name)
+    def lookup_func(self, name):
+        return self.funcs.get(name)
 
 def broadcast_type(builder, args):
     return args[0].dtype # TODO
@@ -139,7 +143,7 @@ def eltwise(builder, args, body, res_type = None):
     num_dims = len(shape)
     if num_dims == 0:
         dummy = builder.cast(0, res_type)
-        return builder.inline_func(body, *(args + (dummy,)))
+        return builder.inline_func(body, res_type, *(args + (dummy,)))
     else:
         iterators = ['parallel' for _ in range(num_dims)]
         dims = ','.join(['d%s' % i for i in range(num_dims)])
@@ -199,3 +203,6 @@ def is_int(t, b):
         b.uint64,
     ]
     return t in types
+
+def is_float(t, b):
+    return t == b.float16 or t == b.float32 or t == b.float64

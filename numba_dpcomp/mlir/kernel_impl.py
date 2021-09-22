@@ -18,7 +18,8 @@ from numba import prange
 from numba.core import types
 from numba.core.typing.templates import ConcreteTemplate, signature, infer_global
 
-from .linalg_builder import register_func, is_int
+from .linalg_builder import is_int
+from .numpy.funcs import register_func
 from numba_dpcomp.mlir.func_registry import add_func
 
 from ..decorators import njit

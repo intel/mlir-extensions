@@ -34,7 +34,7 @@ class Location;
 
 class PyLinalgResolver {
 public:
-  PyLinalgResolver();
+  PyLinalgResolver(const char *modName, const char *regName);
   ~PyLinalgResolver();
 
   using Values = llvm::SmallVector<mlir::Value, 8>;

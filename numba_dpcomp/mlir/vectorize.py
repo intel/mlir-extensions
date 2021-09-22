@@ -13,7 +13,8 @@
 # limitations under the License.
 
 import inspect
-from .linalg_builder import register_func, eltwise
+from .linalg_builder import eltwise
+from .numpy.funcs import register_func
 from numba.core.typing.templates import infer_global, CallableTemplate
 from numba.core import types
 import sys
