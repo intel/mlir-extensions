@@ -1468,20 +1468,21 @@ PyLinalgResolver::~PyLinalgResolver() {}
 llvm::Optional<PyLinalgResolver::Values>
 PyLinalgResolver::rewrite_func(llvm::Twine name, mlir::Location loc,
                                mlir::OpBuilder &builder, mlir::ValueRange args,
-                               KWArgs kwargs) {
+                               KWArgs kwargs) const {
   return rewrite((name + "()").str(), loc, builder, args, kwargs);
 }
 
 llvm::Optional<PyLinalgResolver::Values>
 PyLinalgResolver::rewrite_attr(llvm::Twine name, mlir::Location loc,
-                               mlir::OpBuilder &builder, mlir::Value arg) {
+                               mlir::OpBuilder &builder,
+                               mlir::Value arg) const {
   return rewrite(name.str(), loc, builder, arg, {});
 }
 
 llvm::Optional<PyLinalgResolver::Values>
 PyLinalgResolver::rewrite(llvm::StringRef name, mlir::Location loc,
                           mlir::OpBuilder &builder, mlir::ValueRange args,
-                          KWArgs kwargs) {
+                          KWArgs kwargs) const {
   assert(!name.empty());
   if (!is_compatible_types(args) ||
       !is_compatible_types(llvm::make_second_range(kwargs)))

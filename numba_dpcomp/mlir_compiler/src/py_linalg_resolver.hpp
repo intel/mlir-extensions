@@ -42,11 +42,12 @@ public:
 
   llvm::Optional<Values> rewrite_func(llvm::Twine name, mlir::Location loc,
                                       mlir::OpBuilder &builder,
-                                      mlir::ValueRange args, KWArgs kwargs);
+                                      mlir::ValueRange args,
+                                      KWArgs kwargs) const;
 
   llvm::Optional<Values> rewrite_attr(llvm::Twine name, mlir::Location loc,
                                       mlir::OpBuilder &builder,
-                                      mlir::Value arg);
+                                      mlir::Value arg) const;
 
 private:
   friend struct PyBuilderContext;
@@ -55,5 +56,5 @@ private:
 
   llvm::Optional<Values> rewrite(llvm::StringRef name, mlir::Location loc,
                                  mlir::OpBuilder &builder,
-                                 mlir::ValueRange args, KWArgs kwargs);
+                                 mlir::ValueRange args, KWArgs kwargs) const;
 };

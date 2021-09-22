@@ -18,11 +18,13 @@ from numba import prange
 from numba.core import types
 from numba.core.typing.templates import ConcreteTemplate, signature, infer_global
 
-from .linalg_builder import is_int
+from .linalg_builder import is_int, FuncRegistry
 from .numpy.funcs import register_func
 from numba_dpcomp.mlir.func_registry import add_func
 
 from ..decorators import njit
+
+registry = FuncRegistry()
 
 def _raise_error(desc):
     raise ValueError(desc)
@@ -119,7 +121,7 @@ class Kernel:
     def __call__(self, *args, **kwargs):
         self.check_call_args(args, kwargs)
 
-        jit_func = njit(inline='always')(self.py_func)
+        jit_func = njit(inline='always',enable_gpu_pipeline=True)(self.py_func)
         jit_kern = njit(enable_gpu_pipeline=True)(_kernel_body_selector[len(self.global_size)])
         jit_kern(self.global_size, self.local_size, jit_func, *args)
 
@@ -138,7 +140,7 @@ def get_global_id(axis):
 class GetGlobalId(ConcreteTemplate):
     cases = [signature(types.uint64, types.uint64)]
 
-@register_func('get_global_id', get_global_id)
+@registry.register_func('get_global_id', get_global_id)
 def get_global_id_impl(builder, axis):
     if isinstance(axis, int) or is_int(axis):
         res = 0
