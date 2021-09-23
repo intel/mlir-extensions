@@ -44,14 +44,19 @@ public:
     Reg()(registry);
   }
 
-  void runOnOperation() override {
-    auto *context = &(this->getContext());
-    mlir::OwningRewritePatternList patterns(context);
-
-    patterns.insert<Rewrites...>(context);
-
-    (void)mlir::applyPatternsAndFoldGreedily(this->getOperation(),
-                                             std::move(patterns));
+  virtual mlir::LogicalResult initialize(mlir::MLIRContext *context) override {
+    mlir::OwningRewritePatternList p(context);
+    p.insert<Rewrites...>(context);
+    patterns = std::move(p);
+    return mlir::success();
   }
+
+  void runOnOperation() override {
+    (void)mlir::applyPatternsAndFoldGreedily(this->getOperation(),
+                                             this->patterns);
+  }
+
+private:
+  mlir::FrozenRewritePatternSet patterns;
 };
 } // namespace plier
