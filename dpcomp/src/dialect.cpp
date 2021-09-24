@@ -270,11 +270,17 @@ void UnaryOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
 }
 
 mlir::OpFoldResult CastOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
-  auto op_type = getOperand().getType();
-  auto ret_type = getType();
-  if (op_type == ret_type && op_type != PyType::getUndefined(getContext())) {
+  auto opType = getOperand().getType();
+  auto retType = getType();
+  if (opType == retType && opType != PyType::getUndefined(getContext()))
     return getOperand();
+
+  if (auto prevCast = getOperand().getDefiningOp<plier::CastOp>()) {
+    auto prevValue = prevCast.value();
+    if (prevValue.getType() == retType)
+      return prevValue;
   }
+
   return nullptr;
 }
 
@@ -600,8 +606,7 @@ struct SignCastUndefPropagate
   mlir::LogicalResult
   matchAndRewrite(plier::SignCastOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto undefOp =
-        mlir::dyn_cast_or_null<plier::UndefOp>(op.value().getDefiningOp());
+    auto undefOp = op.value().getDefiningOp<plier::UndefOp>();
     if (!undefOp)
       return mlir::failure();
 
@@ -609,13 +614,48 @@ struct SignCastUndefPropagate
     return mlir::success();
   }
 };
+
+struct SignCastTensorCastPropagate
+    : public mlir::OpRewritePattern<plier::SignCastOp> {
+  using mlir::OpRewritePattern<plier::SignCastOp>::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::SignCastOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto tensorCast = op.value().getDefiningOp<mlir::tensor::CastOp>();
+    if (!tensorCast)
+      return mlir::failure();
+
+    auto srcType = tensorCast.source().getType().cast<mlir::TensorType>();
+    auto dstType = tensorCast.getType().cast<mlir::TensorType>();
+    if (srcType.getElementType() != dstType.getElementType() ||
+        !srcType.hasRank() || !dstType.hasRank())
+      return mlir::failure();
+
+    auto finalType = op.getType().cast<mlir::TensorType>();
+    auto finalElemType = finalType.getElementType();
+
+    auto newSrcType =
+        mlir::RankedTensorType::get(srcType.getShape(), finalElemType);
+    auto newDstType =
+        mlir::RankedTensorType::get(dstType.getShape(), finalElemType);
+
+    auto loc = op.getLoc();
+    auto casted = rewriter.createOrFold<plier::SignCastOp>(loc, newSrcType,
+                                                           tensorCast.source());
+    rewriter.replaceOpWithNewOp<mlir::tensor::CastOp>(op, newDstType, casted);
+
+    return mlir::success();
+  }
+};
+
 } // namespace
 
 void SignCastOp::getCanonicalizationPatterns(
     ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context) {
   results.insert<SignCastDimPropagate<mlir::tensor::DimOp>,
                  SignCastDimPropagate<mlir::memref::DimOp>,
-                 SignCastUndefPropagate>(context);
+                 SignCastUndefPropagate, SignCastTensorCastPropagate>(context);
 }
 
 void ReduceRankOp::build(::mlir::OpBuilder &odsBuilder,

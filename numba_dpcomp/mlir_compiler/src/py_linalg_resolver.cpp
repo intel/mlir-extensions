@@ -869,22 +869,16 @@ py::object generic_impl(py::capsule context, py::handle inputs,
   auto castValues = [&](mlir::ValueRange vals, mlir::TypeRange types) {
     assert(vals.size() == types.size());
     llvm::SmallVector<mlir::Value> ret(vals.size());
-    auto doCast = [&](mlir::Value val, mlir::Type type) {
-      if (val.getType() == type)
-        return val;
-
-      return builder.create<plier::CastOp>(loc, type, val).getResult();
-    };
     for (auto it : llvm::enumerate(vals)) {
       auto index = static_cast<unsigned>(it.index());
-      ret[index] = doCast(it.value(), types[index]);
+      ret[index] = doCast(builder, loc, it.value(), types[index]);
     }
     return ret;
   };
 
-  auto affine_maps = getAffineMaps(maps, mlirContext);
-  auto body_builder = [&](mlir::OpBuilder &builder, mlir::Location loc,
-                          mlir::ValueRange args) {
+  auto affineMaps = getAffineMaps(maps, mlirContext);
+  auto bodyBuilder = [&](mlir::OpBuilder &builder, mlir::Location loc,
+                         mlir::ValueRange args) {
     auto funcType = bodyFunc.getType();
     auto newArgs = castValues(doSignCast(builder, loc, args, bodyTypes),
                               funcType.getInputs());
@@ -900,8 +894,8 @@ py::object generic_impl(py::capsule context, py::handle inputs,
   auto retTypes = getTypes(outputArgsSignless);
 
   auto generic_op = builder.create<mlir::linalg::GenericOp>(
-      loc, retTypes, inputsArgsSignless, outputArgsSignless, affine_maps,
-      mlirIterators, body_builder);
+      loc, retTypes, inputsArgsSignless, outputArgsSignless, affineMaps,
+      mlirIterators, bodyBuilder);
   auto results =
       doSignCast(builder, loc, generic_op.getResults(), getTypes(outputArgs));
   return ctx.context.wrap_result(context, results);
@@ -1175,9 +1169,9 @@ py::object inline_func_impl(py::capsule context, py::handle func,
       return ctx.context.unwrap_val(loc, builder, obj);
     };
     llvm::SmallVector<mlir::Value> ret(args.size());
-    for (auto it : llvm::enumerate(args)) {
+    for (auto it : llvm::enumerate(args))
       ret[it.index()] = unwrapVal(it.value());
-    }
+
     return ret;
   }();
   auto funcTypes =
@@ -1185,19 +1179,30 @@ py::object inline_func_impl(py::capsule context, py::handle func,
   auto bodyFunc = ctx.context.compile_body(func, funcTypes);
   auto funcType = bodyFunc.getType();
   auto funcArgsTypes = funcType.getInputs();
-  if (funcArgsTypes.size() != argsValues.size()) {
+  if (funcArgsTypes.size() != argsValues.size())
     plier::report_error(
         llvm::Twine("Invalid function arguments count, expected ") +
         llvm::Twine(argsValues.size()) + ", got" +
         llvm::Twine(funcArgsTypes.size()));
-  }
-  if (funcType.getNumResults() != 1) {
+
+  if (funcType.getNumResults() != 1)
     plier::report_error(llvm::Twine("Invalid number of return values: ") +
                         llvm::Twine(funcType.getNumResults()));
-  }
+
+  auto castValues = [&](mlir::ValueRange vals, mlir::TypeRange types) {
+    assert(vals.size() == types.size());
+    llvm::SmallVector<mlir::Value> ret(vals.size());
+    for (auto it : llvm::enumerate(vals)) {
+      auto index = static_cast<unsigned>(it.index());
+      ret[index] = doCast(builder, loc, it.value(), types[index]);
+    }
+    return ret;
+  };
+
+  auto castedArgs = castValues(argsValues, funcArgsTypes);
 
   auto resValue =
-      builder.create<mlir::CallOp>(loc, bodyFunc, argsValues).getResult(0);
+      builder.create<mlir::CallOp>(loc, bodyFunc, castedArgs).getResult(0);
 
   auto mlirRetType = unwrap_type(retType);
   resValue = doCast(builder, loc, resValue, mlirRetType);

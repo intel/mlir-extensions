@@ -464,16 +464,42 @@ public:
     return mlir::success();
   }
 };
+
+class GetItemTupleConversionPattern
+    : public mlir::OpConversionPattern<plier::GetItemOp> {
+public:
+  using OpConversionPattern<plier::GetItemOp>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::GetItemOp op, llvm::ArrayRef<mlir::Value> operands,
+                  mlir::ConversionPatternRewriter &rewriter) const final {
+    plier::GetItemOp::Adaptor transformed(operands);
+    auto container = transformed.value();
+    if (!container.getType().isa<mlir::TupleType>())
+      return mlir::failure();
+
+    auto &converter = *getTypeConverter();
+
+    auto retType = converter.convertType(op.getType());
+    if (!retType)
+      return mlir::failure();
+
+    auto index = transformed.index();
+
+    rewriter.replaceOpWithNewOp<plier::GetItemOp>(op, retType, container,
+                                                  index);
+    return mlir::success();
+  }
+};
 } // namespace
 
 void plier::populateTupleTypeConversionRewritesAndTarget(
     mlir::TypeConverter &typeConverter, mlir::RewritePatternSet &patterns,
     mlir::ConversionTarget &target) {
-  patterns.insert<BuildTupleConversionPattern>(typeConverter,
-                                               patterns.getContext());
+  patterns.insert<BuildTupleConversionPattern, GetItemTupleConversionPattern>(
+      typeConverter, patterns.getContext());
   target.addDynamicallyLegalOp<plier::BuildTupleOp>(
-      [&typeConverter](mlir::Operation *op) {
-        return typeConverter.isLegal(
-            mlir::cast<plier::BuildTupleOp>(op).getResult().getType());
+      [&typeConverter](plier::BuildTupleOp op) {
+        return typeConverter.isLegal(op.getResult().getType());
       });
 }
