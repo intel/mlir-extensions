@@ -18,11 +18,7 @@ from math import nan, inf, isnan
 from numpy.testing import assert_equal # for nans comparison
 from numba_dpcomp.mlir.passes import print_pass_ir, get_print_buffer
 
-from numba.tests.support import TestCase
-import unittest
 import pytest
-import sys
-
 import itertools
 
 from .utils import parametrize_function_variants
@@ -213,333 +209,323 @@ def test_indirect_call_inline():
         ir = get_print_buffer()
         assert ir.count('call @') == 0, ir
 
-class TestMlirBasic(TestCase):
-    def test_none_args(self):
-        def py_func(a, b, c, d):
-            return b + d
+def test_none_args():
+    def py_func(a, b, c, d):
+        return b + d
 
-        jit_func = njit(py_func)
-        assert_equal(py_func(None, 7, None, 30), jit_func(None, 7, None, 30))
+    jit_func = njit(py_func)
+    assert_equal(py_func(None, 7, None, 30), jit_func(None, 7, None, 30))
 
-    def test_ret_none(self):
-        def py_func1():
-            return None
+def test_ret_none():
+    def py_func1():
+        return None
 
-        def py_func2():
-            pass
+    def py_func2():
+        pass
 
-        jit_func1 = njit(py_func1)
-        jit_func2 = njit(py_func2)
-        assert_equal(py_func1(), jit_func1())
-        assert_equal(py_func2(), jit_func2())
+    jit_func1 = njit(py_func1)
+    jit_func2 = njit(py_func2)
+    assert_equal(py_func1(), jit_func1())
+    assert_equal(py_func2(), jit_func2())
 
-    def test_if1(self):
-        def py_func(a, b):
-            c = 3
-            if a > 5:
-                c = c + a
-            c = c + b
-            return c
+@pytest.mark.parametrize("a, b", itertools.product(_test_values, _test_values))
+def test_if1(a, b):
+    def py_func(a, b):
+        c = 3
+        if a > 5:
+            c = c + a
+        c = c + b
+        return c
 
-        jit_func = njit(py_func)
-        for a, b in itertools.product(_test_values, _test_values):
-            assert_equal(py_func(a, b), jit_func(a, b))
+    jit_func = njit(py_func)
+    assert_equal(py_func(a, b), jit_func(a, b))
 
-    def test_if2(self):
-        def py_func(a, b):
-            if a > b:
-                return a + b
-            else:
-                return a - b
-
-        jit_func = njit(py_func)
-        for a, b in itertools.product(_test_values, _test_values):
-            assert_equal(py_func(a, b), jit_func(a, b))
-
-    def test_tuple1(self):
-        def py_func(a, b, c):
-            t = (a,b,c)
-            return t[0] + t[1] + t[2]
-
-        jit_func = njit(py_func)
-        for a, b, c in itertools.product(_test_values, _test_values, _test_values):
-            assert_equal(py_func(a, b, c), jit_func(a, b, c))
-
-    def test_tuple2(self):
-        def py_func(a, b, c):
-            t = (a,b,c)
-            x, y, z = t
-            return x + y + y
-
-        jit_func = njit(py_func)
-        for a, b, c in itertools.product(_test_values, _test_values, _test_values):
-            assert_equal(py_func(a, b, c), jit_func(a, b, c))
-
-    def test_tuple_len(self):
-        def py_func(a, b, c):
-            t = (a,b,c)
-            return len(t)
-
-        jit_func = njit(py_func)
-        for a, b, c in itertools.product(_test_values, _test_values, _test_values):
-            assert_equal(py_func(a, b, c), jit_func(a, b, c))
-
-    def test_range1(self):
-        def py_func(a):
-            res = 0
-            for i in range(a):
-                res = res + i
-            return res
-
-        jit_func = njit(py_func)
-        assert_equal(py_func(10), jit_func(10))
-
-    def test_range2(self):
-        def py_func(a, b):
-            res = 0
-            for i in range(a, b):
-                res = res + i
-            return res
-
-        jit_func = njit(py_func)
-        assert_equal(py_func(10, 20), jit_func(10, 20))
-
-    def test_range3(self):
-        def py_func(a, b, c):
-            res = 0
-            for i in range(a, b, c):
-                res = res + i
-            return res
-
-        jit_func = njit(py_func)
-        assert_equal(py_func(10, 20, 2), jit_func(10, 20, 2))
-
-    def test_range_negative_step(self):
-        def py_func(a, b, c):
-            res = 0
-            for i in range(a, b, c):
-                res = res + i
-            return res
-
-        jit_func = njit(py_func)
-        assert_equal(py_func(5, -8, -2), jit_func(5, -8, -2))
-
-    def test_range_const_step1(self):
-        def py_func(a, b):
-            res = 0
-            for i in range(a, b, -2):
-                res = res + i
-            return res
-
-        jit_func = njit(py_func)
-        assert_equal(py_func(5, -8), jit_func(5, -8))
-
-    def test_range_const_step2(self):
-        def py_func(a, b):
-            res = 0
-            for i in range(a, b, 2):
-                res = res + i
-            return res
-
-        jit_func = njit(py_func)
-        assert_equal(py_func(-5, 8), jit_func(-5, 8))
-
-    def test_range_use_index_after(self):
-        def py_func(n):
-            res = 0
-            for i in range(0, n, 2):
-                res = res + i
-            return res + i
-
-        jit_func = njit(py_func)
-        assert_equal(py_func(9), jit_func(9))
-
-    def test_range_if(self):
-        def py_func(n):
-            res = 0
-            res1 = 2
-            for i in range(n):
-                if i > 5:
-                    res = res + i
-                else:
-                    res1 = res1 + i * 2
-            return res + res1
-
-        jit_func = njit(py_func)
-        assert_equal(py_func(10), jit_func(10))
-
-    def test_range_ifs(self):
-        def py_func(n):
-            res = 0
-            for i in range(n):
-                if i == 2:
-                    res = res + 2
-                elif i == 7:
-                    res = res + 5
-                elif i == 99:
-                    res = res + 99
-                else:
-                    res = res + i
-            return res
-
-        jit_func = njit(py_func)
-        assert_equal(py_func(10), jit_func(10))
-
-    def test_range_continue(self):
-        def py_func(n):
-            res = 0
-            res1 = 2
-            for i in range(n):
-                res = res + i
-                if i < 5:
-                    continue
-                res1 = res1 + i * 2
-            return res + res1
-
-        jit_func = njit(py_func)
-        assert_equal(py_func(10), jit_func(10))
-
-    def test_range_nested1(self):
-        def py_func(a, b, c):
-            res = 0
-            for i in range(a):
-                for j in range(b):
-                    for k in range(c):
-                        res = res + i
-            return res
-
-        jit_func = njit(py_func)
-        assert_equal(py_func(10, 20, 2), jit_func(10, 20, 2))
-
-    def test_range_nested2(self):
-        def py_func(a, b, c):
-            res = 0
-            for i in range(a):
-                for j in range(b):
-                    for k in range(c):
-                        res = res + i + j * 10 + k * 100
-            return res
-
-        jit_func = njit(py_func)
-        assert_equal(py_func(10, 20, 2), jit_func(10, 20, 2))
-
-    def test_prange1(self):
-        def py_func(a):
-            res = 0
-            for i in numba.prange(a):
-                res = res + i
-            return res
-
-        jit_func = njit(py_func, parallel=True)
-        assert_equal(py_func(10), jit_func(10))
-
-    def test_prange2(self):
-        def py_func(a, b):
-            res = 0
-            for i in numba.prange(a, b):
-                res = res + i
-            return res
-
-        jit_func = njit(py_func, parallel=True)
-        assert_equal(py_func(10, 20), jit_func(10, 20))
-
-    def test_prange_reduce1(self):
-        def py_func(a):
-            res = 0
-            for i in numba.prange(1, a):
-                res = res + i
-            return res
-
-        jit_func = njit(py_func, parallel=True)
-        assert_equal(py_func(10), jit_func(10))
-
-    def test_prange_reduce2(self):
-        def py_func(a):
-            res = 1
-            for i in numba.prange(1, a):
-                res = res * i
-            return res
-
-        jit_func = njit(py_func, parallel=True)
-        assert_equal(py_func(10), jit_func(10))
-
-    def test_prange_reduce3(self):
-        def py_func(a):
-            res1 = 0
-            res2 = 1
-            for i in numba.prange(1, a):
-                res1 = res1 + i
-                res2 = res2 * i
-            return res1 + res2
-
-        jit_func = njit(py_func, parallel=True)
-        assert_equal(py_func(10), jit_func(10))
-
-
-    def test_func_call1(self):
-        def py_func1(b):
-            return b + 3
-
-        jit_func1 = njit(py_func1)
-
-        def py_func2(a):
-            return jit_func1(a) * 4
-
-        jit_func2 = njit(py_func2)
-
-        assert_equal(py_func2(10), jit_func2(10))
-
-    def test_func_call2(self):
-        def py_func1(b):
-            return b + 3
-
-        jit_func1 = njit(py_func1)
-
-        def py_func2(a):
-            return jit_func1(a) * jit_func1(a + 1)
-
-        jit_func2 = njit(py_func2)
-
-        assert_equal(py_func2(10), jit_func2(10))
-
-    def test_omitted_args1(self):
-        def py_func(a = 3, b = 7):
+@pytest.mark.parametrize("a, b", itertools.product(_test_values, _test_values))
+def test_if2(a, b):
+    def py_func(a, b):
+        if a > b:
             return a + b
+        else:
+            return a - b
 
-        jit_func = njit(py_func)
-        assert_equal(py_func(), jit_func())
+    jit_func = njit(py_func)
+    assert_equal(py_func(a, b), jit_func(a, b))
 
-    # DPNP is available only on Linux and changes versions of dependencies
-    # Looks like it makes effect and test fails:
-    # RuntimeError: Failed in nopython mode pipeline (step: <class 'numba_dpcomp.mlir.passes.MlirBackend'>)
-    # Cannot generate LLVM module
-    # cannot be converted to LLVM IR: missing `LLVMTranslationDialectInterface` registration for dialect for op: plier.arg
-    @pytest.mark.skipif(sys.platform in ['linux'], reason="Unexpected behaviour in DPNP/Linux environment")
-    def test_omitted_args2(self):
-        def py_func(a = True, b = False):
-            res = 1
-            if a:
-                res = res + 1
-            if b:
-                res = res * 2
-            return res
+_tuple_test_values = [True, 2, 3.5]
+@pytest.mark.parametrize("a, b, c", itertools.product(_tuple_test_values, _tuple_test_values, _tuple_test_values))
+def test_tuple1(a, b, c):
+    def py_func(a, b, c):
+        t = (a,b,c)
+        return t[0] + t[1] + t[2]
 
-        jit_func = njit(py_func)
-        assert_equal(py_func(), jit_func())
+    jit_func = njit(py_func)
+    assert_equal(py_func(a, b, c), jit_func(a, b, c))
 
-    def test_omitted_args3(self):
-        def py_func1(a = None):
-            return a
+@pytest.mark.parametrize("a, b, c", itertools.product(_tuple_test_values, _tuple_test_values, _tuple_test_values))
+def test_tuple2(a, b, c):
+    def py_func(a, b, c):
+        t = (a,b,c)
+        x, y, z = t
+        return x + y + z
 
-        jit_func1 = njit(py_func1)
+    jit_func = njit(py_func)
+    assert_equal(py_func(a, b, c), jit_func(a, b, c))
 
-        def py_func2(a = None):
-            return jit_func1(a)
+@pytest.mark.parametrize("a, b, c", itertools.product(_tuple_test_values, _tuple_test_values, _tuple_test_values))
+def test_tuple_len(a, b, c):
+    def py_func(a, b, c):
+        t = (a,b,c)
+        return len(t)
 
-        jit_func2 = njit(py_func2)
+    jit_func = njit(py_func)
+    assert_equal(py_func(a, b, c), jit_func(a, b, c))
 
-        assert_equal(py_func2(), jit_func2())
-        assert_equal(py_func2(1), jit_func2(1))
+def test_range1():
+    def py_func(a):
+        res = 0
+        for i in range(a):
+            res = res + i
+        return res
 
-if __name__ == '__main__':
-    unittest.main()
+    jit_func = njit(py_func)
+    assert_equal(py_func(10), jit_func(10))
+
+def test_range2():
+    def py_func(a, b):
+        res = 0
+        for i in range(a, b):
+            res = res + i
+        return res
+
+    jit_func = njit(py_func)
+    assert_equal(py_func(10, 20), jit_func(10, 20))
+
+def test_range3():
+    def py_func(a, b, c):
+        res = 0
+        for i in range(a, b, c):
+            res = res + i
+        return res
+
+    jit_func = njit(py_func)
+    assert_equal(py_func(10, 20, 2), jit_func(10, 20, 2))
+
+def test_range_negative_step():
+    def py_func(a, b, c):
+        res = 0
+        for i in range(a, b, c):
+            res = res + i
+        return res
+
+    jit_func = njit(py_func)
+    assert_equal(py_func(5, -8, -2), jit_func(5, -8, -2))
+
+def test_range_const_step1():
+    def py_func(a, b):
+        res = 0
+        for i in range(a, b, -2):
+            res = res + i
+        return res
+
+    jit_func = njit(py_func)
+    assert_equal(py_func(5, -8), jit_func(5, -8))
+
+def test_range_const_step2():
+    def py_func(a, b):
+        res = 0
+        for i in range(a, b, 2):
+            res = res + i
+        return res
+
+    jit_func = njit(py_func)
+    assert_equal(py_func(-5, 8), jit_func(-5, 8))
+
+def test_range_use_index_after():
+    def py_func(n):
+        res = 0
+        for i in range(0, n, 2):
+            res = res + i
+        return res + i
+
+    jit_func = njit(py_func)
+    assert_equal(py_func(9), jit_func(9))
+
+def test_range_if():
+    def py_func(n):
+        res = 0
+        res1 = 2
+        for i in range(n):
+            if i > 5:
+                res = res + i
+            else:
+                res1 = res1 + i * 2
+        return res + res1
+
+    jit_func = njit(py_func)
+    assert_equal(py_func(10), jit_func(10))
+
+def test_range_ifs():
+    def py_func(n):
+        res = 0
+        for i in range(n):
+            if i == 2:
+                res = res + 2
+            elif i == 7:
+                res = res + 5
+            elif i == 99:
+                res = res + 99
+            else:
+                res = res + i
+        return res
+
+    jit_func = njit(py_func)
+    assert_equal(py_func(10), jit_func(10))
+
+def test_range_continue():
+    def py_func(n):
+        res = 0
+        res1 = 2
+        for i in range(n):
+            res = res + i
+            if i < 5:
+                continue
+            res1 = res1 + i * 2
+        return res + res1
+
+    jit_func = njit(py_func)
+    assert_equal(py_func(10), jit_func(10))
+
+def test_range_nested1():
+    def py_func(a, b, c):
+        res = 0
+        for i in range(a):
+            for j in range(b):
+                for k in range(c):
+                    res = res + i
+        return res
+
+    jit_func = njit(py_func)
+    assert_equal(py_func(10, 20, 2), jit_func(10, 20, 2))
+
+def test_range_nested2():
+    def py_func(a, b, c):
+        res = 0
+        for i in range(a):
+            for j in range(b):
+                for k in range(c):
+                    res = res + i + j * 10 + k * 100
+        return res
+
+    jit_func = njit(py_func)
+    assert_equal(py_func(10, 20, 2), jit_func(10, 20, 2))
+
+def test_prange1():
+    def py_func(a):
+        res = 0
+        for i in numba.prange(a):
+            res = res + i
+        return res
+
+    jit_func = njit(py_func, parallel=True)
+    assert_equal(py_func(10), jit_func(10))
+
+def test_prange2():
+    def py_func(a, b):
+        res = 0
+        for i in numba.prange(a, b):
+            res = res + i
+        return res
+
+    jit_func = njit(py_func, parallel=True)
+    assert_equal(py_func(10, 20), jit_func(10, 20))
+
+def test_prange_reduce1():
+    def py_func(a):
+        res = 0
+        for i in numba.prange(1, a):
+            res = res + i
+        return res
+
+    jit_func = njit(py_func, parallel=True)
+    assert_equal(py_func(10), jit_func(10))
+
+def test_prange_reduce2():
+    def py_func(a):
+        res = 1
+        for i in numba.prange(1, a):
+            res = res * i
+        return res
+
+    jit_func = njit(py_func, parallel=True)
+    assert_equal(py_func(10), jit_func(10))
+
+def test_prange_reduce3():
+    def py_func(a):
+        res1 = 0
+        res2 = 1
+        for i in numba.prange(1, a):
+            res1 = res1 + i
+            res2 = res2 * i
+        return res1 + res2
+
+    jit_func = njit(py_func, parallel=True)
+    assert_equal(py_func(10), jit_func(10))
+
+def test_func_call1():
+    def py_func1(b):
+        return b + 3
+
+    jit_func1 = njit(py_func1)
+
+    def py_func2(a):
+        return jit_func1(a) * 4
+
+    jit_func2 = njit(py_func2)
+
+    assert_equal(py_func2(10), jit_func2(10))
+
+def test_func_call2():
+    def py_func1(b):
+        return b + 3
+
+    jit_func1 = njit(py_func1)
+
+    def py_func2(a):
+        return jit_func1(a) * jit_func1(a + 1)
+
+    jit_func2 = njit(py_func2)
+
+    assert_equal(py_func2(10), jit_func2(10))
+
+def test_omitted_args1():
+    def py_func(a = 3, b = 7):
+        return a + b
+
+    jit_func = njit(py_func)
+    assert_equal(py_func(), jit_func())
+
+def test_omitted_args2():
+    def py_func(a = True, b = False):
+        res = 1
+        if a:
+            res = res + 1
+        if b:
+            res = res * 2
+        return res
+
+    jit_func = njit(py_func)
+    assert_equal(py_func(), jit_func())
+
+def test_omitted_args3():
+    def py_func1(a = None):
+        return a
+
+    jit_func1 = njit(py_func1)
+
+    def py_func2(a = None):
+        return jit_func1(a)
+
+    jit_func2 = njit(py_func2)
+
+    assert_equal(py_func2(), jit_func2())
+    assert_equal(py_func2(1), jit_func2(1))
