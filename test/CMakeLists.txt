@@ -18,5 +18,5 @@ configure_file(lit.site.cfg.py.in lit.site.cfg.py)
 configure_file(runlit.py runlit.py COPYONLY)
 
 add_test(NAME lit-tests
-    COMMAND python runlit.py -v .
+    COMMAND python runlit.py -vv .
 )

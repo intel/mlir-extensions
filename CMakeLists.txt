@@ -46,6 +46,7 @@ option(GPU_ENABLE "Enable GPU codegen" OFF)
 
 message(STATUS "DPNP_ENABLE ${DPNP_ENABLE}")
 message(STATUS "GPU_ENABLE ${GPU_ENABLE}")
+message(STATUS "BUILD_TESTING ${BUILD_TESTING}")
 
 include(CTest)
 

@@ -43,10 +43,7 @@ cmake_cmd = [
 "cmake",
 ]
 
-if IS_WIN:
-    cmake_cmd += ["-A", "x64"]
-else:
-    cmake_cmd += ["-GNinja"]
+cmake_cmd += ["-GNinja"]
 
 cmake_cmd += [
 "..",
@@ -83,6 +80,9 @@ else:
                   '-DGPU_ENABLE=1',
                  ]
 
+ENABLE_CMAKE_TESTS = os.getenv('DPCOMP_ENABLE_CMAKE_TESTS', False)
+if ENABLE_CMAKE_TESTS:
+    cmake_cmd += ['-DBUILD_TESTING=1']
 
 try:
     os.mkdir(cmake_build_dir)
