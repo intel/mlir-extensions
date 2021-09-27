@@ -43,10 +43,7 @@ cmake_cmd = [
 "cmake",
 ]
 
-if IS_WIN:
-    cmake_cmd += ["-A", "x64"]
-else:
-    cmake_cmd += ["-GNinja"]
+cmake_cmd += ["-GNinja"]
 
 cmake_cmd += [
 "..",

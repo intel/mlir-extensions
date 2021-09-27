@@ -34,6 +34,7 @@ jobs:
       call set LLVM_PATH=$(System.DefaultWorkingDirectory)\llvm_cache
       call set TBB_PATH=$(System.DefaultWorkingDirectory)\tbb
       call set DPCOMP_ENABLE_CMAKE_TESTS=1
+      call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
       python setup.py develop
     displayName: 'Build'
 
