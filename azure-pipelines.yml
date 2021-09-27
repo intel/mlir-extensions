@@ -33,17 +33,18 @@ jobs:
       call cmake --version
       call set LLVM_PATH=$(System.DefaultWorkingDirectory)\llvm_cache
       call set TBB_PATH=$(System.DefaultWorkingDirectory)\tbb
+      call set DPCOMP_ENABLE_CMAKE_TESTS=1
       python setup.py develop
     displayName: 'Build'
 
   - script: |
       call "C:\Miniconda\Scripts\activate"
-      call set NUMBA_DISABLE_PERFORMANCE_WARNINGS=1
       pytest -n1 -vv --capture=tee-sys
     displayName: 'Tests'
 
   - script: |
       call "C:\Miniconda\Scripts\activate"
+      call cd cmake_build
       call ctest -C Release
     displayName: 'CTests'
 
@@ -96,6 +97,7 @@ jobs:
       export OCL_ICD_FILENAMES_RESET=1
       export OCL_ICD_FILENAMES=libintelocl.so
       export SYCL_DEVICE_FILTER=opencl:cpu
+      export DPCOMP_ENABLE_CMAKE_TESTS=1
       python setup.py develop
     displayName: 'Build'
 
@@ -114,6 +116,7 @@ jobs:
       source /usr/share/miniconda/bin/activate
       conda activate build_env
       source $(System.DefaultWorkingDirectory)/tbb/env/vars.sh
+      cd cmake_build
       ctest -C Release
     displayName: 'CTests'
 
@@ -152,6 +155,7 @@ jobs:
       chmod -R 777 $(System.DefaultWorkingDirectory)/llvm_cache
       export LLVM_PATH=$(System.DefaultWorkingDirectory)/llvm_cache
       export TBB_PATH=$(System.DefaultWorkingDirectory)/tbb
+      export DPCOMP_ENABLE_CMAKE_TESTS=1
       python setup.py develop
     displayName: 'Build'
 
@@ -164,5 +168,6 @@ jobs:
   - script: |
       source /usr/local/miniconda/bin/activate
       conda activate test_env
+      cd cmake_build
       ctest -C Release
     displayName: 'CTests'
