@@ -45,7 +45,7 @@ jobs:
   - script: |
       call "C:\Miniconda\Scripts\activate"
       call cd cmake_build
-      call ctest -C Release
+      call ctest -C Release --output-on-failure
     displayName: 'CTests'
 
 - job: Linux
@@ -117,7 +117,7 @@ jobs:
       conda activate build_env
       source $(System.DefaultWorkingDirectory)/tbb/env/vars.sh
       cd cmake_build
-      ctest -C Release
+      ctest -C Release --output-on-failure
     displayName: 'CTests'
 
 - job: MacOS
@@ -169,5 +169,5 @@ jobs:
       source /usr/local/miniconda/bin/activate
       conda activate test_env
       cd cmake_build
-      ctest -C Release
+      ctest -C Release --output-on-failure
     displayName: 'CTests'
