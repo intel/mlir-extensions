@@ -42,6 +42,7 @@
 #include "plier/dialect.hpp"
 
 #include "pipelines/plier_to_std.hpp"
+#include "pipelines/plier_to_scf.hpp"
 #include "pipelines/pre_low_simplifications.hpp"
 
 #include "plier/Conversion/SCFToAffine/SCFToAffine.h"
@@ -198,10 +199,10 @@ bool check_numpy_args(mlir::ValueRange args, unsigned expected_count) {
   return true;
 }
 
-void rerun_std_pipeline(mlir::Operation *op) {
+void rerun_scf_pipeline(mlir::Operation *op) {
   assert(nullptr != op);
   auto marker =
-      mlir::StringAttr::get(op->getContext(), plierToStdPipelineName());
+      mlir::StringAttr::get(op->getContext(), plierToScfPipelineName());
   auto mod = op->getParentOfType<mlir::ModuleOp>();
   assert(nullptr != mod);
   plier::add_pipeline_jump_marker(mod, marker);
@@ -224,7 +225,7 @@ lowerPrange(plier::PyCallOp op, mlir::ValueRange operands,
                 mlir::UnitAttr::get(op->getContext()));
   };
   if (mlir::succeeded(lowerRange(op, operands, kwargs, rewriter, setAttr))) {
-    rerun_std_pipeline(parent);
+    rerun_scf_pipeline(parent);
     return mlir::success();
   }
   return mlir::failure();
@@ -241,7 +242,7 @@ lowerLen(plier::PyCallOp op, mlir::ValueRange operands,
   if (!arg.getType().isa<mlir::RankedTensorType>())
     return mlir::failure();
 
-  rerun_std_pipeline(op);
+  rerun_scf_pipeline(op);
 
   auto loc = op.getLoc();
   auto dim = rewriter.createOrFold<mlir::tensor::DimOp>(loc, arg, 0);
@@ -296,7 +297,7 @@ struct NumpyCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
     if (!res)
       return mlir::failure();
 
-    rerun_std_pipeline(op);
+    rerun_scf_pipeline(op);
     rewriter.replaceOp(op, *res);
     return mlir::success();
   }
@@ -323,7 +324,7 @@ struct NumpyAttrsLowering : public mlir::OpRewritePattern<plier::GetattrOp> {
     if (!res)
       return mlir::failure();
 
-    rerun_std_pipeline(op);
+    rerun_scf_pipeline(op);
     rewriter.replaceOp(op, *res);
     return mlir::success();
   }
@@ -356,7 +357,7 @@ struct NumpyBinOpLowering : public mlir::OpRewritePattern<plier::BinOp> {
         if (!res)
           return mlir::failure();
 
-        rerun_std_pipeline(op);
+        rerun_scf_pipeline(op);
         rewriter.replaceOp(op, *res);
         return mlir::success();
       }
@@ -441,7 +442,7 @@ struct ExternalCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
         castedResults[i] = res;
     }
 
-    rerun_std_pipeline(op);
+    rerun_scf_pipeline(op);
     rewriter.replaceOp(op, castedResults);
 
     return mlir::success();
@@ -522,7 +523,7 @@ static mlir::Value index_cast(mlir::Value value, mlir::Location loc,
   if (!value.getType().isa<mlir::IndexType>()) {
     auto index_type = mlir::IndexType::get(value.getContext());
     auto res = builder.create<plier::CastOp>(loc, index_type, value);
-    rerun_std_pipeline(res);
+    rerun_scf_pipeline(res);
     return res;
   }
   return value;
@@ -722,7 +723,7 @@ struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
         res = rewriter.create<plier::SignCastOp>(loc, elemType, res);
     }
 
-    rerun_std_pipeline(op);
+    rerun_scf_pipeline(op);
     //    rewriter.replaceOpWithNewOp<plier::CastOp>(op, op.getType(), res);
     rewriter.replaceOp(op, res);
     return mlir::success();
@@ -800,7 +801,7 @@ struct SetitemOpLowering : public mlir::OpConversionPattern<plier::SetItemOp> {
     if (value.getType() != elemType) {
       // TODO
       value = rewriter.createOrFold<plier::CastOp>(loc, elemType, value);
-      rerun_std_pipeline(op);
+      rerun_scf_pipeline(op);
     }
 
     llvm::SmallVector<mlir::Value> indices;
@@ -820,7 +821,7 @@ struct SetitemOpLowering : public mlir::OpConversionPattern<plier::SetItemOp> {
         }
         indices[it.index()] = index_cast(ind, loc, rewriter);
       }
-      rerun_std_pipeline(op);
+      rerun_scf_pipeline(op);
     } else {
       indices.push_back(index_cast(index, loc, rewriter));
     }
@@ -1992,7 +1993,7 @@ void registerPlierToLinalgPipeline(plier::PipelineRegistry &registry) {
   registry.register_pipeline([](auto sink) {
     auto stage = getHighLoweringStage();
     sink(plierToLinalgGenPipelineName(), {plierToStdPipelineName()},
-         {plierToLinalgOptPipelineName()}, {plierToStdPipelineName()},
+         {plierToLinalgOptPipelineName()}, {plierToScfPipelineName()},
          &populate_plier_to_linalg_gen_pipeline);
     sink(plierToLinalgOptPipelineName(),
          {plierToLinalgGenPipelineName(), untuplePipelineName()},
