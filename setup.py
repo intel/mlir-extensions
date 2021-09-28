@@ -101,7 +101,7 @@ metadata = dict(
     name="numba-dpcomp",
     version="0.0.1",
     packages=packages,
-    # install_requires=['numba==0.53'],
+    # install_requires=['numba==0.54'],
     include_package_data=True,
 )
 
