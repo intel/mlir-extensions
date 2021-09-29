@@ -109,7 +109,7 @@ struct SliceTypeStorage : public mlir::TypeStorage {
 
   static SliceTypeStorage *construct(mlir::TypeStorageAllocator &allocator,
                                      const KeyTy &key) {
-    return new (allocator.allocate<TypeVarStorage>()) SliceTypeStorage(key);
+    return new (allocator.allocate<SliceTypeStorage>()) SliceTypeStorage(key);
   }
 
   KeyTy types;
