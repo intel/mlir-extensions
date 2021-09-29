@@ -16,7 +16,7 @@ import ctypes
 import atexit
 from numba.np.ufunc.parallel import get_thread_count
 import llvmlite.binding as ll
-from .utils import load_lib
+from .utils import load_lib, register_cfunc
 
 runtime_lib = load_lib('dpcomp-runtime')
 
@@ -33,7 +33,7 @@ _funcs = [
 
 for name in _funcs:
     func = getattr(runtime_lib, name)
-    ll.add_symbol(name, ctypes.cast(func, ctypes.c_void_p).value)
+    register_cfunc(ll, name, func)
 
 @atexit.register
 def _cleanup():

@@ -15,7 +15,7 @@
 import ctypes
 import atexit
 import llvmlite.binding as ll
-from .utils import load_lib, mlir_func_name
+from .utils import load_lib, mlir_func_name, register_cfunc
 
 runtime_lib = load_lib('dpcomp-math-runtime')
 
@@ -28,7 +28,7 @@ def load_function_variants(func_name, suffixes):
         name = func_name + s
         mlir_name = mlir_func_name(name)
         func = getattr(runtime_lib, name)
-        ll.add_symbol(mlir_name, ctypes.cast(func, ctypes.c_void_p).value)
+        register_cfunc(ll, mlir_name, func)
 
 load_function_variants('dpcompLinalgEig_', ['float32','float64'])
 
