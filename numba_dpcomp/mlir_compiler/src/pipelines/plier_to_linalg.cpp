@@ -41,8 +41,8 @@
 
 #include "plier/dialect.hpp"
 
-#include "pipelines/plier_to_std.hpp"
 #include "pipelines/plier_to_scf.hpp"
+#include "pipelines/plier_to_std.hpp"
 #include "pipelines/pre_low_simplifications.hpp"
 
 #include "plier/Conversion/SCFToAffine/SCFToAffine.h"
