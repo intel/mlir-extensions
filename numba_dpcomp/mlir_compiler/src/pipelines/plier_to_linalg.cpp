@@ -186,19 +186,6 @@ mlir::Type map_plier_type(mlir::TypeConverter &converter, mlir::Type type) {
   return nullptr;
 }
 
-bool check_numpy_args(mlir::ValueRange args, unsigned expected_count) {
-  if (args.size() != expected_count) {
-    return false;
-  }
-  for (auto arg : args) {
-    auto type = arg.getType();
-    if (!type.isa<mlir::MemRefType>() && !type.isa<mlir::TensorType>()) {
-      return false;
-    }
-  }
-  return true;
-}
-
 void rerun_scf_pipeline(mlir::Operation *op) {
   assert(nullptr != op);
   auto marker =
