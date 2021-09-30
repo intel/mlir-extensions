@@ -41,8 +41,8 @@
 
 #include "plier/dialect.hpp"
 
-#include "pipelines/plier_to_std.hpp"
 #include "pipelines/plier_to_scf.hpp"
+#include "pipelines/plier_to_std.hpp"
 #include "pipelines/pre_low_simplifications.hpp"
 
 #include "plier/Conversion/SCFToAffine/SCFToAffine.h"
@@ -184,19 +184,6 @@ mlir::Type map_plier_type(mlir::TypeConverter &converter, mlir::Type type) {
     return map_array_type(*type.getContext(), converter, name);
   }
   return nullptr;
-}
-
-bool check_numpy_args(mlir::ValueRange args, unsigned expected_count) {
-  if (args.size() != expected_count) {
-    return false;
-  }
-  for (auto arg : args) {
-    auto type = arg.getType();
-    if (!type.isa<mlir::MemRefType>() && !type.isa<mlir::TensorType>()) {
-      return false;
-    }
-  }
-  return true;
 }
 
 void rerun_scf_pipeline(mlir::Operation *op) {

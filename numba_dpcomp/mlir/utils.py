@@ -48,3 +48,12 @@ def load_lib(name):
 
 def mlir_func_name(name):
     return '_mlir_ciface_' + name
+
+
+_registered_cfuncs = []
+
+def register_cfunc(ll, name, cfunc):
+    global _registered_cfuncs
+    ptr = ctypes.cast(cfunc, ctypes.c_void_p)
+    _registered_cfuncs.append(ptr)
+    ll.add_symbol(name, ptr.value)

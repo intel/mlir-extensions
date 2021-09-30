@@ -16,7 +16,7 @@
 Define compiler pipelines.
 """
 
-from .lowering import mlir_NoPythonBackend
+from .lowering import mlir_NativeLowering
 
 
 from numba.core.typed_passes import (AnnotateTypes, IRLegalization)
@@ -25,7 +25,7 @@ from numba_dpcomp.mlir.passes import MlirDumpPlier, MlirBackend, MlirBackendGPU
 from numba.core.compiler_machinery import PassManager
 from numba.core.compiler import CompilerBase as orig_CompilerBase
 from numba.core.compiler import DefaultPassBuilder as orig_DefaultPassBuilder
-from numba.core.typed_passes import NoPythonBackend as orig_NoPythonBackend
+from numba.core.typed_passes import NativeLowering as orig_NativeLowering
 from numba.core.typed_passes import (PreParforPass, ParforPass,
                                      DumpParforDiagnostics, NopythonRewrites,
                                      PreLowerStripPhis, InlineOverloads,
@@ -63,9 +63,9 @@ class mlir_PassBuilder(orig_DefaultPassBuilder):
                 pm.add_pass_after(MlirBackendGPU, AnnotateTypes)
             else:
                 pm.add_pass_after(MlirBackend, AnnotateTypes)
-            pm.passes, replaced = _replace_pass(pm.passes, orig_NoPythonBackend, mlir_NoPythonBackend)
+            pm.passes, replaced = _replace_pass(pm.passes, orig_NativeLowering, mlir_NativeLowering)
             assert replaced == 1, replaced
-            print(pm.passes)
+
             pm.passes, removed = _remove_passes(pm.passes, [
                 PreParforPass, ParforPass, DumpParforDiagnostics,
                 NopythonRewrites, PreLowerStripPhis, InlineOverloads,

@@ -15,7 +15,7 @@
 import ctypes
 import atexit
 import llvmlite.binding as ll
-from .utils import load_lib, mlir_func_name
+from .utils import load_lib, mlir_func_name, register_cfunc
 
 from numba.core.runtime import _nrt_python as _nrt
 
@@ -40,9 +40,10 @@ if IS_GPU_RUNTIME_AVAILABLE:
 
     for name in _funcs:
         func = getattr(runtime_lib, name)
-        ll.add_symbol(name, ctypes.cast(func, ctypes.c_void_p).value)
+        register_cfunc(ll, name, func)
 
 
     _alloc_func = runtime_lib.dpcompGpuSetMemInfoAllocFunc
     _alloc_func.argtypes = [ctypes.c_void_p]
-    _alloc_func(ctypes.cast(_nrt.c_helpers['Allocate'], ctypes.c_void_p))
+    _numba_alloc_ptr = ctypes.cast(_nrt.c_helpers['Allocate'], ctypes.c_void_p)
+    _alloc_func(_numba_alloc_ptr.value)

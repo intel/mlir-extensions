@@ -43,8 +43,8 @@
 #include "pipelines/lower_to_llvm.hpp"
 #include "pipelines/parallel_to_tbb.hpp"
 #include "pipelines/plier_to_linalg.hpp"
-#include "pipelines/plier_to_std.hpp"
 #include "pipelines/plier_to_scf.hpp"
+#include "pipelines/plier_to_std.hpp"
 #include "pipelines/pre_low_simplifications.hpp"
 
 namespace py = pybind11;

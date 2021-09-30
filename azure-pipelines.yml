@@ -29,7 +29,7 @@ jobs:
 
   - script: |
       call "C:\Miniconda\Scripts\activate"
-      call conda install python=3.7 numba=0.53 numpy=1.20 scikit-learn pytest-xdist ninja scipy pybind11 tbb=2021.1 pytest lit -c conda-forge
+      call conda install python=3.7 numba=0.54 numpy=1.20 scikit-learn pytest-xdist ninja scipy pybind11 tbb=2021.1 pytest lit -c conda-forge
       call cmake --version
       call set LLVM_PATH=$(System.DefaultWorkingDirectory)\llvm_cache
       call set TBB_PATH=$(System.DefaultWorkingDirectory)\tbb
@@ -84,9 +84,8 @@ jobs:
 
   - script: |
       source /usr/share/miniconda/bin/activate
-      conda create -y -n build_env python=3.7 numpy=1.20 scikit-learn pytest-xdist ninja scipy pybind11 pytest lit dpnp=0.5.1 mkl=2021.1 -c conda-forge -c intel
+      conda create -y -n build_env python=3.7 numba=0.54 numpy=1.20 scikit-learn pytest-xdist ninja scipy pybind11 pytest lit dpnp=0.5.1 mkl=2021.1 -c conda-forge -c intel
       conda activate build_env
-      pip install numba==0.53
       conda install -y tbb=2021 -c conda-forge -c intel --force
       conda list
       python -c "import numba; print('numba', numba.__version__)"
@@ -150,7 +149,7 @@ jobs:
 
   - script: |
       source /usr/local/miniconda/bin/activate
-      conda create -y -n test_env python=3.9 numba=0.53 scikit-learn ninja scipy pybind11 tbb=2021.1 pytest lit -c conda-forge
+      conda create -y -n test_env python=3.9 numba=0.54 scikit-learn ninja scipy pybind11 tbb=2021.1 pytest lit -c conda-forge
       conda activate test_env
       cmake --version
       chmod -R 777 $(System.DefaultWorkingDirectory)/llvm_cache

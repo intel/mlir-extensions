@@ -22,7 +22,7 @@ from .settings import USE_MLIR
 from numba.core.compiler_machinery import register_pass
 
 from numba.core.lowering import Lower as orig_Lower
-from numba.core.typed_passes import NoPythonBackend as orig_NoPythonBackend
+from numba.core.typed_passes import NativeLowering as orig_NativeLowering
 
 # looks like that we don't need it but it is inherited from BaseLower too
 # from numba.core.pylowering import PyLower as orig_PyLower
@@ -52,15 +52,15 @@ class mlir_lower(orig_Lower):
             orig_Lower.lower_normal_function(self, desc)
 
 @register_pass(mutates_CFG=True, analysis_only=False)
-class mlir_NoPythonBackend(orig_NoPythonBackend):
+class mlir_NativeLowering(orig_NativeLowering):
     def __init__(self):
-        orig_NoPythonBackend.__init__(self)
+        orig_NativeLowering.__init__(self)
 
     def run_pass(self, state):
         import numba.core.lowering
         numba.core.lowering.Lower = mlir_lower
         try:
-            res = orig_NoPythonBackend.run_pass(self, state)
+            res = orig_NativeLowering.run_pass(self, state)
         finally:
             numba.core.lowering.Lower = orig_Lower
         return res
