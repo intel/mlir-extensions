@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from .func_registry import add_func
+from .inner_compiler import compile_func
 
 class Var:
     def __init__(self, context, ssa_val):
@@ -97,10 +98,6 @@ class Builder:
 
     def array_type(self, dims, dtype):
         return self._array_type(self._context, dims, dtype)
-
-def compile_func(*args, **kwargs):
-    import numba_dpcomp.mlir.inner_compiler
-    return numba_dpcomp.mlir.inner_compiler.compile_func(*args, **kwargs)
 
 class FuncRegistry:
     def __init__(self):

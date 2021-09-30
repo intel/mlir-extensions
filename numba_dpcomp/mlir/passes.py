@@ -12,15 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from numba.core.compiler import DEFAULT_FLAGS
+from numba.core import types
+from numba.core.compiler import DEFAULT_FLAGS, compile_result
 from numba.core.compiler_machinery import (FunctionPass, register_pass)
-from numba.core import (types)
+from numba.core.funcdesc import qualifying_prefix
+from numba.np.ufunc.parallel import get_thread_count
 import numba.core.types.functions
 from contextlib import contextmanager
 
 from .settings import DUMP_IR, DEBUG_TYPE, OPT_LEVEL, DUMP_DIAGNOSTICS
 from . import func_registry
 from .. import mlir_compiler
+
 
 _print_before = []
 _print_after = []
@@ -106,11 +109,8 @@ class MlirBackendBase(FunctionPass):
         mangler = default_mangler if mangler is None else mangler
         unique_name = state.func_ir.func_id.unique_name
         modname = state.func_ir.func_id.func.__module__
-        from numba.core.funcdesc import qualifying_prefix
         qualprefix = qualifying_prefix(modname, unique_name)
         fn_name = mangler(qualprefix, state.args)
-
-        from numba.np.ufunc.parallel import get_thread_count
 
         ctx = {}
         ctx['compiler_settings'] = {
@@ -162,7 +162,6 @@ class MlirBackend(MlirBackendBase):
         self.enable_gpu_pipeline = False
 
     def run_pass_impl(self, state):
-        import numba_dpcomp.mlir_compiler as mlir_compiler
         global _mlir_active_module
         old_module = _mlir_active_module
 
@@ -201,6 +200,5 @@ class MlirBackendInner(MlirBackendBase):
         global _mlir_last_compiled_func
         ctx = self._get_func_context(state)
         _mlir_last_compiled_func = mlir_compiler.lower_function(ctx, module, state.func_ir)
-        from numba.core.compiler import compile_result
         state.cr = compile_result()
         return True
