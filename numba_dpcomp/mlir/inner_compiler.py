@@ -39,12 +39,13 @@ class MlirTempCompiler(CompilerBase): # custom compiler extends from CompilerBas
 def _compile_isolated(func, args, return_type=None, flags=DEFAULT_FLAGS,
                      locals={}):
     from numba.core.registry import cpu_target
-    typingctx = typing.Context()
-    targetctx = cpu.CPUContext(typingctx)
-    # Register the contexts in case for nested @jit or @overload calls
-    with cpu_target.nested_context(typingctx, targetctx):
-        return compile_extra(typingctx, targetctx, func, args, return_type,
-                             flags, locals, pipeline_class=MlirTempCompiler)
+    typingctx = cpu_target.typing_context
+    targetctx = cpu_target.target_context
+    # typingctx = typing.Context()
+    # targetctx = cpu.CPUContext(typingctx)
+    # with cpu_target.nested_context(typingctx, targetctx):
+    return compile_extra(typingctx, targetctx, func, args, return_type,
+                         flags, locals, pipeline_class=MlirTempCompiler)
 
 def compile_func(func, args, flags=DEFAULT_FLAGS):
     _compile_isolated(func, args, flags=flags)
