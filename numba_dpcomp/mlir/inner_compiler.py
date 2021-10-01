@@ -16,6 +16,7 @@ from numba.core.untyped_passes import ReconstructSSA
 from numba.core.typed_passes import NopythonTypeInference, AnnotateTypes
 from numba.core.compiler import CompilerBase, DefaultPassBuilder, DEFAULT_FLAGS, compile_extra
 from numba.core.compiler_machinery import PassManager
+from numba.core.registry import cpu_target
 from numba.core import typing, cpu
 
 from numba_dpcomp.mlir.passes import MlirBackendInner, get_mlir_func
@@ -38,7 +39,6 @@ class MlirTempCompiler(CompilerBase): # custom compiler extends from CompilerBas
 
 def _compile_isolated(func, args, return_type=None, flags=DEFAULT_FLAGS,
                      locals={}):
-    from numba.core.registry import cpu_target
     typingctx = cpu_target.typing_context
     targetctx = cpu_target.target_context
     # typingctx = typing.Context()
