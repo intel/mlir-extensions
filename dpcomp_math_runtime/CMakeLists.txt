@@ -31,7 +31,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${PROJECT_BINARY_DIR}
     )
 
-if(${DPNP_ENABLE})
+if(DPNP_ENABLE)
     target_include_directories(${PROJECT_NAME} PRIVATE
         ${DPNP_INCLUDE_DIR}
         )
