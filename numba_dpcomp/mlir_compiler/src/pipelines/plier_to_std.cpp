@@ -1327,7 +1327,7 @@ struct CallLowerer {
       assert(mod);
       auto func = mod.lookupSymbol<mlir::FuncOp>(mangled_name);
       if (!func) {
-        func = pyResolver.get_func(name, r.getTypes());
+        func = pyResolver.getFunc(name, r.getTypes());
         if (func) {
           func.setPrivate();
           func.setName(mangled_name);

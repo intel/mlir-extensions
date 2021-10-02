@@ -30,7 +30,7 @@ public:
   PyFuncResolver();
   ~PyFuncResolver();
 
-  mlir::FuncOp get_func(llvm::StringRef name, mlir::TypeRange types) const;
+  mlir::FuncOp getFunc(llvm::StringRef name, mlir::TypeRange types) const;
 
 private:
   struct Context;
