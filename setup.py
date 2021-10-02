@@ -62,7 +62,7 @@ try:
     cmake_cmd += [
                   '-DDPNP_LIBRARY_DIR=' + DPNP_LIBRARY_DIR,
                   '-DDPNP_INCLUDE_DIR=' + DPNP_INCLUDE_DIR,
-                  '-DDPNP_ENABLE=1',
+                  '-DDPNP_ENABLE=ON',
                  ]
     print("Found DPNP at", DPNP_LIBRARY_DIR)
 except ImportError:
@@ -77,12 +77,8 @@ else:
     print('LEVEL_ZERO_DIR is', LEVEL_ZERO_DIR)
     cmake_cmd += [
                   '-DLEVEL_ZERO_DIR=' + LEVEL_ZERO_DIR,
-                  '-DGPU_ENABLE=1',
+                  '-DGPU_ENABLE=ON',
                  ]
-
-ENABLE_CMAKE_TESTS = os.getenv('DPCOMP_ENABLE_CMAKE_TESTS', False)
-if ENABLE_CMAKE_TESTS:
-    cmake_cmd += ['-DBUILD_TESTING=1']
 
 try:
     os.mkdir(cmake_build_dir)

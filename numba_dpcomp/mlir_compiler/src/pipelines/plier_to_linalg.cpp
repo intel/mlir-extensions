@@ -280,7 +280,7 @@ struct NumpyCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
         return handler.second(op, args, kwargs, rewriter);
 
     auto res =
-        resolver.rewrite_func(funcName, op.getLoc(), rewriter, args, kwargs);
+        resolver.rewriteFunc(funcName, op.getLoc(), rewriter, args, kwargs);
     if (!res)
       return mlir::failure();
 
@@ -307,7 +307,7 @@ struct NumpyAttrsLowering : public mlir::OpRewritePattern<plier::GetattrOp> {
       return mlir::failure();
 
     auto attrName = (llvm::Twine("array.") + op.name()).str();
-    auto res = resolver.rewrite_attr(attrName, op.getLoc(), rewriter, arg);
+    auto res = resolver.rewriteAttr(attrName, op.getLoc(), rewriter, arg);
     if (!res)
       return mlir::failure();
 
@@ -339,8 +339,8 @@ struct NumpyBinOpLowering : public mlir::OpRewritePattern<plier::BinOp> {
 
     for (auto it : plier::getOperators()) {
       if (it.op == name) {
-        auto res = resolver.rewrite_func(llvm::Twine("operator.") + it.name,
-                                         op.getLoc(), rewriter, {lhs, rhs}, {});
+        auto res = resolver.rewriteFunc(llvm::Twine("operator.") + it.name,
+                                        op.getLoc(), rewriter, {lhs, rhs}, {});
         if (!res)
           return mlir::failure();
 
@@ -391,7 +391,7 @@ struct ExternalCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
     assert(mod);
     auto externalFunc = mod.lookupSymbol<mlir::FuncOp>(mangledName);
     if (!externalFunc) {
-      externalFunc = resolver.get_func(funcName, r.getTypes());
+      externalFunc = resolver.getFunc(funcName, r.getTypes());
       if (externalFunc) {
         externalFunc.setPrivate();
         externalFunc.setName(mangledName);

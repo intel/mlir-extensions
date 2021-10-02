@@ -1484,7 +1484,7 @@ struct LowerPlierCalls : public mlir::OpRewritePattern<plier::PyCallOp> {
     }
     auto loc = op.getLoc();
     auto result =
-        resolver.rewrite_func(funcName, loc, rewriter, op.args(), kwargs);
+        resolver.rewriteFunc(funcName, loc, rewriter, op.args(), kwargs);
     if (!result || result->size() != 1)
       return mlir::failure();
 
