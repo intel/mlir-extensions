@@ -530,9 +530,8 @@ struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
   using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::GetItemOp op, llvm::ArrayRef<mlir::Value> operands,
+  matchAndRewrite(plier::GetItemOp op, plier::GetItemOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    plier::GetItemOp::Adaptor adaptor(operands);
     auto value = adaptor.value();
     auto index = adaptor.index();
     auto type = value.getType();
@@ -562,8 +561,7 @@ struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
             } else if (i == 1) {
               return rewriter.createOrFold<mlir::tensor::DimOp>(loc, value,
                                                                 dim);
-            } else // i == 2
-            {
+            } else { // i == 2
               return createInd(1);
             }
           }
@@ -599,9 +597,8 @@ struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
     llvm::SmallVector<unsigned> dimsIndices;
     if (auto tupleType = index.getType().dyn_cast<mlir::TupleType>()) {
       auto count = static_cast<unsigned>(tupleType.size());
-      if (count > rank) {
+      if (count > rank)
         return mlir::failure();
-      }
 
       for (auto it : llvm::enumerate(tupleType)) {
         auto i = it.index();
@@ -658,9 +655,9 @@ struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
       auto numDims = static_cast<unsigned>(dimsIndices.size());
       auto needReshape = (numDims != type.cast<mlir::ShapedType>().getRank());
       if (isMemref) {
-        if (needReshape) {
+        if (needReshape)
           return mlir::failure(); // TODO: not implemented
-        }
+
         res = rewriter.create<mlir::memref::SubViewOp>(loc, value, offsets,
                                                        sizes, strides);
       } else if (isTensor) {
@@ -691,9 +688,9 @@ struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
     } else {
       auto toValues = [](auto vals) {
         llvm::SmallVector<mlir::Value> ret(vals.size());
-        for (auto it : llvm::enumerate(vals)) {
+        for (auto it : llvm::enumerate(vals))
           ret[it.index()] = it.value().template get<mlir::Value>();
-        }
+
         return ret;
       };
       if (isMemref) {
@@ -721,19 +718,16 @@ struct SetitemOpLowering : public mlir::OpConversionPattern<plier::SetItemOp> {
   using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::SetItemOp op, llvm::ArrayRef<mlir::Value> operands,
+  matchAndRewrite(plier::SetItemOp op, plier::SetItemOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    plier::SetItemOp::Adaptor adaptor(operands);
-
     auto target = adaptor.target();
     auto targetType = target.getType().dyn_cast<mlir::ShapedType>();
-    if (!targetType) {
+    if (!targetType)
       return mlir::failure();
-    }
+
     auto index = adaptor.index();
-    if (!isValidGetitemIndex(index.getType())) {
+    if (!isValidGetitemIndex(index.getType()))
       return mlir::failure();
-    }
 
     auto elemType = targetType.getElementType();
     auto signlessElemType = plier::makeSignlessType(elemType);
@@ -813,9 +807,8 @@ struct SetitemOpLowering : public mlir::OpConversionPattern<plier::SetItemOp> {
       indices.push_back(index_cast(index, loc, rewriter));
     }
 
-    if (elemType != signlessElemType) {
+    if (elemType != signlessElemType)
       value = rewriter.create<plier::SignCastOp>(loc, signlessElemType, value);
-    }
 
     rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(op, value, target,
                                                        indices);
@@ -826,26 +819,25 @@ struct SetitemOpLowering : public mlir::OpConversionPattern<plier::SetItemOp> {
 mlir::Value unstride(mlir::OpBuilder &builder, mlir::Location loc,
                      mlir::Value src, mlir::MemRefType newType) {
   auto srcType = src.getType().cast<mlir::MemRefType>();
-  if (newType == srcType) {
+  if (newType == srcType)
     return src;
-  }
-  if (srcType.getAffineMaps().empty()) {
+
+  if (srcType.getAffineMaps().empty())
     return builder.createOrFold<mlir::memref::CastOp>(loc, src, newType);
-  }
+
   auto rank = static_cast<unsigned>(srcType.getRank());
   llvm::SmallVector<mlir::Value> sizes(rank);
-  for (unsigned i = 0; i < rank; ++i) {
+  for (unsigned i = 0; i < rank; ++i)
     sizes[i] = builder.createOrFold<mlir::memref::DimOp>(loc, src, i);
-  }
 
   auto allocType = mlir::MemRefType::get(
       llvm::SmallVector<int64_t>(rank, mlir::ShapedType::kDynamicSize),
       srcType.getElementType());
   auto result =
       builder.create<mlir::memref::AllocOp>(loc, allocType, sizes).getResult();
-  if (result.getType() != newType) {
+  if (result.getType() != newType)
     result = builder.createOrFold<mlir::memref::CastOp>(loc, result, newType);
-  }
+
   builder.create<mlir::linalg::CopyOp>(loc, src, result);
   return result;
 }
@@ -1307,10 +1299,8 @@ struct RankedTypesCasts : public mlir::OpConversionPattern<plier::CastOp> {
   using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::CastOp op, llvm::ArrayRef<mlir::Value> operands,
+  matchAndRewrite(plier::CastOp op, plier::CastOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    plier::CastOp::Adaptor adaptor(operands);
-
     auto converter = *getTypeConverter();
 
     auto value = adaptor.value();
@@ -1703,16 +1693,15 @@ struct BufferizeReshape
 
   mlir::LogicalResult
   matchAndRewrite(mlir::tensor::ReshapeOp op,
-                  llvm::ArrayRef<mlir::Value> operands,
+                  mlir::tensor::ReshapeOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    mlir::memref::ReshapeOp::Adaptor transformed(operands);
     auto getType = [&](mlir::Type type) {
       auto shapedType = type.cast<mlir::ShapedType>();
       return mlir::MemRefType::get(shapedType.getShape(),
                                    shapedType.getElementType());
     };
-    auto source = transformed.source();
-    auto shape = transformed.shape();
+    auto source = adaptor.source();
+    auto shape = adaptor.shape();
     auto resType = getType(op.getType());
     rewriter.replaceOpWithNewOp<mlir::memref::ReshapeOp>(op, resType, source,
                                                          shape);

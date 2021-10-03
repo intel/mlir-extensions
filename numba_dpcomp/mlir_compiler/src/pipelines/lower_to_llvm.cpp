@@ -781,11 +781,8 @@ struct DeallocOpLowering
 
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::DeallocOp op,
-                  mlir::ArrayRef<mlir::Value> operands,
+                  mlir::memref::DeallocOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    assert(operands.size() == 1 && "dealloc takes one operand");
-    mlir::memref::DeallocOp::Adaptor transformed(operands);
-
     // Insert the `free` declaration if it is not already present.
     auto freeFunc = op->getParentOfType<mlir::ModuleOp>()
                         .lookupSymbol<mlir::LLVM::LLVMFuncOp>("NRT_decref");
@@ -798,7 +795,7 @@ struct DeallocOpLowering
           mlir::LLVM::LLVMFunctionType::get(getVoidType(), getVoidPtrType()));
     }
 
-    mlir::MemRefDescriptor memref(transformed.memref());
+    mlir::MemRefDescriptor memref(adaptor.memref());
     mlir::Value casted = rewriter.create<mlir::LLVM::BitcastOp>(
         op.getLoc(), getVoidPtrType(),
         memref.allocatedPtr(rewriter, op.getLoc()));
@@ -817,19 +814,15 @@ struct ReshapeLowering
 
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::ReshapeOp op,
-                  mlir::ArrayRef<mlir::Value> operands,
+                  mlir::memref::ReshapeOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    assert(operands.size() == 2);
-    mlir::memref::ReshapeOp::Adaptor transformed(operands);
-
     auto converter = getTypeConverter();
     auto dstType = converter->convertType(op.getType());
-    if (!dstType) {
+    if (!dstType)
       return mlir::failure();
-    }
 
-    mlir::MemRefDescriptor source(transformed.source());
-    mlir::MemRefDescriptor shape(transformed.shape());
+    mlir::MemRefDescriptor source(adaptor.source());
+    mlir::MemRefDescriptor shape(adaptor.shape());
 
     auto loc = op.getLoc();
     auto result = mlir::MemRefDescriptor::undef(rewriter, loc, dstType);
@@ -846,9 +839,9 @@ struct ReshapeLowering
       mlir::Value dataPtr =
           getStridedElementPtr(loc, memRefType, shape, ind, rewriter);
       auto size = rewriter.create<mlir::LLVM::LoadOp>(loc, dataPtr).getResult();
-      if (size.getType() != indexType) {
+      if (size.getType() != indexType)
         size = rewriter.create<mlir::LLVM::ZExtOp>(loc, indexType, size);
-      }
+
       result.setSize(rewriter, loc, i, size);
       sizes[i] = size;
     }
@@ -1264,14 +1257,11 @@ struct LowerRetainOp : public mlir::ConvertOpToLLVMPattern<plier::RetainOp> {
   using mlir::ConvertOpToLLVMPattern<plier::RetainOp>::ConvertOpToLLVMPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::RetainOp op, llvm::ArrayRef<mlir::Value> operands,
+  matchAndRewrite(plier::RetainOp op, plier::RetainOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    assert(operands.size() == 1);
-    plier::RetainOp::Adaptor transformed(operands);
-    auto arg = transformed.source();
-    if (!arg.getType().isa<mlir::LLVM::LLVMStructType>()) {
+    auto arg = adaptor.source();
+    if (!arg.getType().isa<mlir::LLVM::LLVMStructType>())
       return mlir::failure();
-    }
 
     auto llvmVoidPointerType = getVoidPtrType();
     auto incref_func = [&]() {
@@ -1308,10 +1298,9 @@ struct LowerReduceRankOp
       plier::ReduceRankOp>::ConvertOpToLLVMPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::ReduceRankOp op, llvm::ArrayRef<mlir::Value> operands,
+  matchAndRewrite(plier::ReduceRankOp op, plier::ReduceRankOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    plier::ReduceRankOp::Adaptor transformed(operands);
-    auto arg = transformed.source();
+    auto arg = adaptor.source();
     if (!arg.getType().isa<mlir::LLVM::LLVMStructType>())
       return mlir::failure();
 
@@ -1349,10 +1338,9 @@ struct LowerExtractMemrefMetadataOp
 
   mlir::LogicalResult
   matchAndRewrite(plier::ExtractMemrefMetadataOp op,
-                  llvm::ArrayRef<mlir::Value> operands,
+                  plier::ExtractMemrefMetadataOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    plier::ExtractMemrefMetadataOp::Adaptor transformed(operands);
-    auto arg = transformed.source();
+    auto arg = adaptor.source();
     if (!arg.getType().isa<mlir::LLVM::LLVMStructType>())
       return mlir::failure();
 
@@ -1362,6 +1350,7 @@ struct LowerExtractMemrefMetadataOp
       auto index = op.dimIndex().getSExtValue();
       if (index == -1)
         return src.offset(rewriter, loc);
+
       return src.stride(rewriter, loc, static_cast<unsigned>(index));
     }();
 
@@ -1376,25 +1365,18 @@ struct LowerBuildTuple
       plier::BuildTupleOp>::ConvertOpToLLVMPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::BuildTupleOp op,
-                  llvm::ArrayRef<mlir::Value> /*operands*/,
+  matchAndRewrite(plier::BuildTupleOp op, plier::BuildTupleOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto converter = getTypeConverter();
     auto type = converter->convertType(op.getType());
-    if (!type) {
+    if (!type)
       return mlir::failure();
-    }
-    for (auto arg : op.args()) {
-      if (!converter->convertType(arg.getType())) {
-        return mlir::failure();
-      }
-    }
 
     auto loc = op.getLoc();
     mlir::Value init = rewriter.create<mlir::LLVM::UndefOp>(loc, type);
-    for (auto it : llvm::enumerate(op.args())) {
+    for (auto it : llvm::enumerate(adaptor.args())) {
       auto arg = it.value();
-      auto newType = converter->convertType(arg.getType());
+      auto newType = arg.getType();
       assert(newType);
       auto casted = doCast(rewriter, loc, arg, newType);
       auto index = rewriter.getI64ArrayAttr(static_cast<int64_t>(it.index()));
@@ -1411,13 +1393,12 @@ struct LowerUndef : public mlir::ConvertOpToLLVMPattern<plier::UndefOp> {
   using mlir::ConvertOpToLLVMPattern<plier::UndefOp>::ConvertOpToLLVMPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::UndefOp op, llvm::ArrayRef<mlir::Value> /*operands*/,
+  matchAndRewrite(plier::UndefOp op, plier::UndefOp::Adaptor /*adaptor*/,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto converter = getTypeConverter();
     auto type = converter->convertType(op.getType());
-    if (!type) {
+    if (!type)
       return mlir::failure();
-    }
 
     rewriter.replaceOpWithNewOp<mlir::LLVM::UndefOp>(op, type);
     return mlir::success();

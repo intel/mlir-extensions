@@ -599,13 +599,12 @@ class ConvertLoadOp : public mlir::OpConversionPattern<mlir::memref::LoadOp> {
 public:
   using mlir::OpConversionPattern<mlir::memref::LoadOp>::OpConversionPattern;
   mlir::LogicalResult
-  matchAndRewrite(mlir::memref::LoadOp op, llvm::ArrayRef<mlir::Value> operands,
+  matchAndRewrite(mlir::memref::LoadOp op,
+                  mlir::memref::LoadOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto memrefType = op.memref().getType().cast<mlir::MemRefType>();
     if (!memrefType.hasRank() || memrefType.getRank() != 1)
       return mlir::failure();
-
-    mlir::memref::LoadOp::Adaptor adaptor(operands);
 
     auto loc = op.getLoc();
     auto ptr = rewriter.create<mlir::spirv::InBoundsPtrAccessChainOp>(
@@ -627,13 +626,11 @@ public:
   using mlir::OpConversionPattern<mlir::memref::StoreOp>::OpConversionPattern;
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::StoreOp op,
-                  llvm::ArrayRef<mlir::Value> operands,
+                  mlir::memref::StoreOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto memrefType = op.memref().getType().cast<mlir::MemRefType>();
     if (!memrefType.hasRank() || memrefType.getRank() != 1)
       return mlir::failure();
-
-    mlir::memref::StoreOp::Adaptor adaptor(operands);
 
     auto loc = op.getLoc();
     auto ptr = rewriter.create<mlir::spirv::InBoundsPtrAccessChainOp>(
@@ -999,9 +996,8 @@ public:
 private:
   mlir::LogicalResult
   matchAndRewrite(plier::DestroyGpuStreamOp op,
-                  mlir::ArrayRef<mlir::Value> operands,
+                  plier::DestroyGpuStreamOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    plier::DestroyGpuStreamOp::Adaptor adaptor(operands);
     auto loc = op.getLoc();
     auto res = streamDestroyCallBuilder.create(loc, rewriter, adaptor.source());
     rewriter.replaceOp(op, res.getResults());
@@ -1018,9 +1014,8 @@ public:
 private:
   mlir::LogicalResult
   matchAndRewrite(plier::LoadGpuModuleOp op,
-                  mlir::ArrayRef<mlir::Value> operands,
+                  plier::LoadGpuModuleOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    plier::LoadGpuModuleOp::Adaptor adaptor(operands);
     auto mod = op->getParentOfType<mlir::ModuleOp>();
     if (!mod)
       return mlir::failure();
@@ -1060,9 +1055,8 @@ public:
 private:
   mlir::LogicalResult
   matchAndRewrite(plier::DestroyGpuModuleOp op,
-                  mlir::ArrayRef<mlir::Value> operands,
+                  plier::DestroyGpuModuleOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    plier::DestroyGpuModuleOp::Adaptor adaptor(operands);
     auto loc = op.getLoc();
     auto res = moduleDestroyCallBuilder.create(loc, rewriter, adaptor.source());
     rewriter.replaceOp(op, res.getResults());
@@ -1079,9 +1073,8 @@ public:
 private:
   mlir::LogicalResult
   matchAndRewrite(plier::GetGpuKernelOp op,
-                  mlir::ArrayRef<mlir::Value> operands,
+                  plier::GetGpuKernelOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    plier::GetGpuKernelOp::Adaptor adaptor(operands);
     auto loc = op.getLoc();
     llvm::SmallString<64> name = op.kernel().getLeafReference().getValue();
 
@@ -1106,9 +1099,8 @@ public:
 private:
   mlir::LogicalResult
   matchAndRewrite(plier::DestroyGpuKernelOp op,
-                  mlir::ArrayRef<mlir::Value> operands,
+                  plier::DestroyGpuKernelOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    plier::DestroyGpuKernelOp::Adaptor adaptor(operands);
     auto loc = op.getLoc();
     auto res = kernelDestroyCallBuilder.create(loc, rewriter, adaptor.source());
     rewriter.replaceOp(op, res.getResults());
@@ -1125,11 +1117,8 @@ public:
 private:
   mlir::LogicalResult
   matchAndRewrite(plier::LaunchGpuKernelOp op,
-                  mlir::ArrayRef<mlir::Value> operands,
+                  plier::LaunchGpuKernelOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    plier::LaunchGpuKernelOp::Adaptor adaptor(operands,
-                                              op->getAttrDictionary());
-
     auto loc = op.getLoc();
     auto depsArrayPtr =
         createDepsArray(rewriter, loc, op, adaptor.asyncDependencies());
@@ -1257,7 +1246,7 @@ public:
 
 private:
   mlir::LogicalResult
-  matchAndRewrite(plier::GPUAllocOp op, mlir::ArrayRef<mlir::Value> operands,
+  matchAndRewrite(plier::GPUAllocOp op, plier::GPUAllocOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     if (!op.symbolOperands().empty())
       return mlir::failure();
@@ -1267,8 +1256,6 @@ private:
     auto dstType = converter->convertType(memrefType);
     if (!dstType)
       return mlir::failure();
-
-    plier::GPUAllocOp::Adaptor adaptor(operands, op->getAttrDictionary());
 
     auto loc = op.getLoc();
 

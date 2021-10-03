@@ -406,9 +406,8 @@ class ConvertSelectOp : public mlir::OpConversionPattern<mlir::SelectOp> {
 public:
   using mlir::OpConversionPattern<mlir::SelectOp>::OpConversionPattern;
   mlir::LogicalResult
-  matchAndRewrite(mlir::SelectOp op, llvm::ArrayRef<mlir::Value> operands,
+  matchAndRewrite(mlir::SelectOp op, mlir::SelectOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    mlir::SelectOp::Adaptor adaptor(operands);
     rewriter.replaceOpWithNewOp<mlir::SelectOp>(
         op, adaptor.condition(), adaptor.true_value(), adaptor.false_value());
     return mlir::success();
@@ -454,13 +453,12 @@ public:
   using OpConversionPattern<plier::BuildTupleOp>::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::BuildTupleOp op, llvm::ArrayRef<mlir::Value> operands,
+  matchAndRewrite(plier::BuildTupleOp op, plier::BuildTupleOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const final {
-    plier::BuildTupleOp::Adaptor transformed(operands);
     auto retType =
-        mlir::TupleType::get(op.getContext(), transformed.args().getTypes());
+        mlir::TupleType::get(op.getContext(), adaptor.args().getTypes());
     rewriter.replaceOpWithNewOp<plier::BuildTupleOp>(op, retType,
-                                                     transformed.args());
+                                                     adaptor.args());
     return mlir::success();
   }
 };
@@ -471,10 +469,9 @@ public:
   using OpConversionPattern<plier::GetItemOp>::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::GetItemOp op, llvm::ArrayRef<mlir::Value> operands,
+  matchAndRewrite(plier::GetItemOp op, plier::GetItemOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const final {
-    plier::GetItemOp::Adaptor transformed(operands);
-    auto container = transformed.value();
+    auto container = adaptor.value();
     if (!container.getType().isa<mlir::TupleType>())
       return mlir::failure();
 
@@ -484,7 +481,7 @@ public:
     if (!retType)
       return mlir::failure();
 
-    auto index = transformed.index();
+    auto index = adaptor.index();
 
     rewriter.replaceOpWithNewOp<plier::GetItemOp>(op, retType, container,
                                                   index);
