@@ -41,6 +41,7 @@
 #include "plier/transforms/cast_utils.hpp"
 #include "plier/transforms/const_utils.hpp"
 #include "plier/transforms/func_utils.hpp"
+#include "plier/transforms/pipeline_utils.hpp"
 
 #include "base_pipeline.hpp"
 #include "loop_utils.hpp"
@@ -1399,6 +1400,15 @@ static mlir::Value skipCast(mlir::Value val) {
   return val;
 };
 
+static void rerun_scf_pipeline(mlir::Operation *op) {
+  assert(nullptr != op);
+  auto marker =
+      mlir::StringAttr::get(op->getContext(), plierToScfPipelineName());
+  auto mod = op->getParentOfType<mlir::ModuleOp>();
+  assert(nullptr != mod);
+  plier::add_pipeline_jump_marker(mod, marker);
+}
+
 struct BuiltinCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
   BuiltinCallsLowering(mlir::MLIRContext *context)
       : OpRewritePattern(context),
@@ -1436,7 +1446,7 @@ struct BuiltinCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
     if (!res)
       return mlir::failure();
 
-    //    rerun_scf_pipeline(op);
+    rerun_scf_pipeline(op);
     rewriter.replaceOp(op, *res);
     return mlir::success();
   }
@@ -1627,8 +1637,8 @@ void populateTupleTypeConverter(mlir::MLIRContext & /*context*/,
 void registerPlierToStdPipeline(plier::PipelineRegistry &registry) {
   registry.register_pipeline([](auto sink) {
     auto stage = getHighLoweringStage();
-    sink(plierToStdPipelineName(), {plierToScfPipelineName()}, {stage.end}, {},
-         &populate_plier_to_std_pipeline);
+    sink(plierToStdPipelineName(), {plierToScfPipelineName()}, {stage.end},
+         {plierToScfPipelineName()}, &populate_plier_to_std_pipeline);
   });
 }
 

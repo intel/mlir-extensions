@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..linalg_builder import FuncRegistry, is_int
+from ..linalg_builder import FuncRegistry
 
 registry = FuncRegistry()
 
@@ -21,9 +21,16 @@ def register_func(name, orig_func=None):
     return registry.register_func(name, orig_func)
 
 @register_func('bool', bool)
-def bool_impl(builder, arg):
-    if is_int(arg.dtype, builder):
-        return builder.cast(arg, builder.bool)
+def bool_cast_impl(builder, arg):
+    return builder.cast(arg, builder.bool)
+
+@register_func('int', int)
+def int_cast_impl(builder, arg):
+    return builder.cast(arg, builder.int64)
+
+@register_func('float', float)
+def float_cast_impl(builder, arg):
+    return builder.cast(arg, builder.float64)
 
 @register_func('len', len)
 def len_impl(builder, arg):
