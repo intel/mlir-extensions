@@ -190,6 +190,7 @@ def asarray(builder, src, dtype=None):
 
 def is_int(t, b):
     types = [
+        b.bool,
         b.int8,
         b.uint8,
         b.int16,
