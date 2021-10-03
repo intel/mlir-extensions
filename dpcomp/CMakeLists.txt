@@ -24,6 +24,19 @@ include(AddLLVM)
 include(AddMLIR)
 include(HandleLLVMOptions)
 
+file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/../llvm-sha.txt EXPECTED_LLVM_SHA)
+message(STATUS "Expected llvm sha: \"${EXPECTED_LLVM_SHA}\"")
+
+file(STRINGS ${LLVM_INCLUDE_DIR}/llvm/Support/VCSRevision.h REVISION_FILE_DATA)
+message(DEBUG "VCSRevision: ${REVISION_FILE_DATA}")
+string(REGEX MATCH "\"([^\"]*)\"" LLVM_SHA ${REVISION_FILE_DATA})
+string(REPLACE "\"" "" LLVM_SHA ${LLVM_SHA})
+message(STATUS "llvm sha: \"${LLVM_SHA}\"")
+
+if (NOT EXPECTED_LLVM_SHA STREQUAL LLVM_SHA)
+    message(FATAL_ERROR "Invalid llvm version")
+endif()
+
 add_subdirectory(include/plier)
 
 set(SOURCES_LIST
