@@ -383,9 +383,13 @@ def test_array_bounds1():
                 res = res + a[i]
         return res
 
-    jit_func = njit(py_func)
     arr = np.asarray([3,2,1])
-    assert_equal(py_func(arr.copy()), jit_func(arr.copy()))
+
+    with print_pass_ir([],['PostLinalgOptPass']):
+        jit_func = njit(py_func)
+        assert_equal(py_func(arr.copy()), jit_func(arr.copy()))
+        ir = get_print_buffer()
+        assert ir.count('cmpi') == 0, ir
 
 def test_array_bounds2():
     def py_func(a):
@@ -397,9 +401,13 @@ def test_array_bounds2():
                 res = res + 1
         return res
 
-    jit_func = njit(py_func)
     arr = np.asarray([3,2,1])
-    assert_equal(py_func(arr.copy()), jit_func(arr.copy()))
+
+    with print_pass_ir([],['PostLinalgOptPass']):
+        jit_func = njit(py_func)
+        assert_equal(py_func(arr.copy()), jit_func(arr.copy()))
+        ir = get_print_buffer()
+        assert ir.count('cmpi') == 0, ir
 
 def test_array_bounds3():
     def py_func(a):
@@ -411,9 +419,13 @@ def test_array_bounds3():
                 res = res + 1
         return res
 
-    jit_func = njit(py_func)
     arr = np.asarray([3,2,1])
-    assert_equal(py_func(arr.copy()), jit_func(arr.copy()))
+
+    with print_pass_ir([],['PostLinalgOptPass']):
+        jit_func = njit(py_func)
+        assert_equal(py_func(arr.copy()), jit_func(arr.copy()))
+        ir = get_print_buffer()
+        assert ir.count('cmpi') == 0, ir
 
 def test_array_bounds4():
     def py_func(a):
@@ -425,9 +437,13 @@ def test_array_bounds4():
                 res = res + 1
         return res
 
-    jit_func = njit(py_func)
     arr = np.asarray([3,2,1])
-    assert_equal(py_func(arr.copy()), jit_func(arr.copy()))
+
+    with print_pass_ir([],['PostLinalgOptPass']):
+        jit_func = njit(py_func)
+        assert_equal(py_func(arr.copy()), jit_func(arr.copy()))
+        ir = get_print_buffer()
+        assert ir.count('cmpi') == 0, ir
 
 def test_array_shape():
     def py_func(a):
