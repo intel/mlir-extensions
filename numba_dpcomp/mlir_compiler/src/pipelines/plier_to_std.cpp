@@ -850,23 +850,22 @@ mlir::Value negate(mlir::PatternRewriter &rewriter, mlir::Location loc,
   llvm_unreachable("negate: unsupported type");
 }
 
-struct UnaryOpLowering : public mlir::OpRewritePattern<plier::UnaryOp> {
-  UnaryOpLowering(mlir::TypeConverter &typeConverter,
-                  mlir::MLIRContext *context)
-      : OpRewritePattern(context), converter(typeConverter) {}
+struct UnaryOpLowering : public mlir::OpConversionPattern<plier::UnaryOp> {
+  using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::UnaryOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto arg = op.value();
+  matchAndRewrite(plier::UnaryOp op, plier::UnaryOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto &converter = *getTypeConverter();
+    auto arg = adaptor.value();
     auto type = arg.getType();
-    if (!is_supported_type(type)) {
+    if (!is_supported_type(type))
       return mlir::failure();
-    }
+
     auto resType = converter.convertType(op.getType());
-    if (!resType) {
+    if (!resType)
       return mlir::failure();
-    }
+
     auto loc = op.getLoc();
     if (op.op() == "+") {
       arg = doCast(rewriter, loc, arg, resType);
@@ -878,9 +877,6 @@ struct UnaryOpLowering : public mlir::OpRewritePattern<plier::UnaryOp> {
     rewriter.replaceOp(op, new_val);
     return mlir::success();
   }
-
-private:
-  mlir::TypeConverter &converter;
 };
 
 struct FixupWhileYieldTypes
@@ -1386,18 +1382,23 @@ void PlierToStdPass::runOnOperation() {
   mlir::RewritePatternSet patterns(context);
   mlir::ConversionTarget target(*context);
 
+  auto isNum = [&](mlir::Type t) -> bool {
+    auto res = typeConverter.convertType(t);
+    return res && res.isIntOrFloat();
+  };
+
   target.addDynamicallyLegalOp<plier::BinOp>([&](plier::BinOp op) {
-    auto isNum = [&](mlir::Type t) -> bool {
-      auto res = typeConverter.convertType(t);
-      return res && res.isIntOrFloat();
-    };
     return !isNum(op.rhs().getType()) && !isNum(op.lhs().getType()) &&
            !isNum(op.getType());
+  });
+  target.addDynamicallyLegalOp<plier::UnaryOp>([&](plier::UnaryOp op) {
+    return !isNum(op.value().getType()) && !isNum(op.getType());
   });
 
   patterns.insert<
       // clang-format off
-      BinOpLowering
+      BinOpLowering,
+      UnaryOpLowering
       // clang-format on
       >(typeConverter, context);
 
