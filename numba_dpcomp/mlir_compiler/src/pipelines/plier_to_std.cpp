@@ -610,6 +610,16 @@ mlir::Value doCast(mlir::PatternRewriter &rewriter, mlir::Location loc,
                    mlir::Value val, mlir::Type dstType) {
   assert(dstType);
   auto srcType = val.getType();
+  if (auto literal = srcType.dyn_cast<plier::LiteralType>()) {
+    auto attr = literal.getValue();
+    auto signlessAttr = makeSignlessAttr(attr);
+    val = rewriter.create<mlir::ConstantOp>(loc, signlessAttr);
+    if (signlessAttr.getType() != attr.getType())
+      val = rewriter.create<plier::SignCastOp>(loc, attr.getType(), val);
+
+    srcType = val.getType();
+  }
+
   if (srcType == dstType)
     return val;
 
@@ -909,6 +919,9 @@ struct LowerCasts : public mlir::OpConversionPattern<plier::CastOp> {
       return mlir::failure();
 
     auto res = doCast(rewriter, op.getLoc(), src, dstType);
+    if (!res)
+      return mlir::failure();
+
     rewriter.replaceOp(op, res);
 
     return mlir::success();
@@ -1514,6 +1527,7 @@ void PlierToStdPass::runOnOperation() {
       UnaryOpLowering,
       LowerCasts,
       ConstOpLowering,
+      LiteralLowering<plier::CastOp>,
       LiteralLowering<plier::GlobalOp>
       // clang-format on
       >(typeConverter, context);
