@@ -356,12 +356,16 @@ private:
   PyLinalgResolver resolver;
 };
 
+// TODO: remove
 struct ExternalCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
   using OpRewritePattern::OpRewritePattern;
 
   mlir::LogicalResult
   matchAndRewrite(plier::PyCallOp op,
                   mlir::PatternRewriter &rewriter) const override {
+    if (op.varargs())
+      return mlir::failure();
+
     auto funcName = op.func_name();
 
     llvm::SmallVector<mlir::Value> args;
