@@ -1372,15 +1372,11 @@ struct LowerBuildTuple
     if (!type)
       return mlir::failure();
 
-    for (auto arg : op.args())
-      if (!converter->convertType(arg.getType()))
-        return mlir::failure();
-
     auto loc = op.getLoc();
     mlir::Value init = rewriter.create<mlir::LLVM::UndefOp>(loc, type);
-    for (auto it : llvm::enumerate(op.args())) {
+    for (auto it : llvm::enumerate(adaptor.args())) {
       auto arg = it.value();
-      auto newType = converter->convertType(arg.getType());
+      auto newType = arg.getType();
       assert(newType);
       auto casted = doCast(rewriter, loc, arg, newType);
       auto index = rewriter.getI64ArrayAttr(static_cast<int64_t>(it.index()));
