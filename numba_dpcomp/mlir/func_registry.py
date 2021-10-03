@@ -16,8 +16,9 @@ _mlir_func_names = {}
 _active_funcs_stack = []
 
 def add_func(func, name):
+    global _mlir_func_names
     key = id(func)
-    assert not key in _mlir_func_names
+    assert _mlir_func_names.get(key, name) == name
     _mlir_func_names[key] = name
 
 def get_func_name(func):
