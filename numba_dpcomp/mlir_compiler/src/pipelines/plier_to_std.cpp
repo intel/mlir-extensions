@@ -216,18 +216,17 @@ mlir::Type map_tuple_type(mlir::MLIRContext &ctx, llvm::StringRef &name) {
 mlir::Type map_func_type(mlir::MLIRContext &ctx, llvm::StringRef &name) {
   if (name.consume_front("Function(") &&
       name.consume_front("<class 'bool'>") && // TODO unhardcode;
-      name.consume_front(")")) {
+      name.consume_front(")"))
     return mlir::FunctionType::get(&ctx, {}, {});
-  }
+
   return nullptr;
 }
 
 mlir::Type map_dtype_type(mlir::MLIRContext &ctx, llvm::StringRef &name) {
   if (name.consume_front("dtype(") && name.consume_back(")")) {
     auto innerType = map_plier_type_name(ctx, name);
-    if (innerType) {
+    if (innerType)
       return plier::TypeVar::get(innerType);
-    }
   }
   return nullptr;
 }
@@ -235,6 +234,13 @@ mlir::Type map_dtype_type(mlir::MLIRContext &ctx, llvm::StringRef &name) {
 mlir::Type map_none_type(mlir::MLIRContext &ctx, llvm::StringRef &name) {
   if (name.consume_front("none"))
     return mlir::NoneType::get(&ctx);
+
+  return nullptr;
+}
+
+mlir::Type map_dispatcher_type(mlir::MLIRContext &ctx, llvm::StringRef &name) {
+  if (name.consume_front("type(CPUDispatcher(") && consume_until(name, "))"))
+    return plier::OpaqueType::get(&ctx);
 
   return nullptr;
 }
@@ -255,6 +261,7 @@ mlir::Type map_plier_type_name(mlir::MLIRContext &ctx, llvm::StringRef &name) {
       &map_func_type,
       &map_dtype_type,
       &map_none_type,
+      &map_dispatcher_type,
       // clang-format on
   };
   for (auto h : handlers) {
@@ -338,7 +345,7 @@ struct ConstOpLowering : public mlir::OpConversionPattern<plier::ConstOp> {
   }
 };
 
-bool isOmittedType(mlir::Type type) {
+static bool isOmittedType(mlir::Type type) {
   if (auto pytype = type.dyn_cast<plier::PyType>()) {
     auto name = pytype.getName();
     if (name.consume_front("omitted(") && name.consume_back(")")) {
@@ -1609,13 +1616,13 @@ void populateStdTypeConverter(mlir::MLIRContext & /*context*/,
   converter.addConversion(
       [](mlir::Type type, llvm::SmallVectorImpl<mlir::Type> &ret_types)
           -> llvm::Optional<mlir::LogicalResult> {
-        if (isOmittedType(type)) {
+        if (isOmittedType(type))
           return mlir::success();
-        }
+
         auto ret = map_plier_type(type);
-        if (!ret) {
+        if (!ret)
           return llvm::None;
-        }
+
         ret_types.push_back(ret);
         return mlir::success();
       });
