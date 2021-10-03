@@ -882,6 +882,29 @@ struct UnaryOpLowering : public mlir::OpConversionPattern<plier::UnaryOp> {
   }
 };
 
+struct LowerCasts : public mlir::OpConversionPattern<plier::CastOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::CastOp op, plier::CastOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto &converter = *getTypeConverter();
+    auto src = adaptor.value();
+    auto dstType = converter.convertType(op.getType());
+    if (!dstType)
+      return mlir::failure();
+
+    auto srcType = src.getType();
+    if (srcType == dstType)
+      return mlir::failure();
+
+    auto res = doCast(rewriter, op.getLoc(), src, dstType);
+    rewriter.replaceOp(op, res);
+
+    return mlir::success();
+  }
+};
+
 struct FixupWhileYieldTypes
     : public mlir::OpRewritePattern<mlir::scf::YieldOp> {
   FixupWhileYieldTypes(mlir::MLIRContext *context)
@@ -1458,11 +1481,17 @@ void PlierToStdPass::runOnOperation() {
   target.addDynamicallyLegalOp<plier::UnaryOp>([&](plier::UnaryOp op) {
     return !isNum(op.value().getType()) && !isNum(op.getType());
   });
+  target.addDynamicallyLegalOp<plier::CastOp>([&](plier::CastOp op) {
+    auto srcType = typeConverter.convertType(op.value().getType());
+    auto dstType = typeConverter.convertType(op.getType());
+    return srcType == dstType;
+  });
 
   patterns.insert<
       // clang-format off
       BinOpLowering,
-      UnaryOpLowering
+      UnaryOpLowering,
+      LowerCasts
       // clang-format on
       >(typeConverter, context);
 
@@ -1517,6 +1546,7 @@ void PlierToStdPass::runOnOperation() {
 void populate_plier_to_std_pipeline(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(std::make_unique<PlierToStdPass>());
+  pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(std::make_unique<BuiltinCallsLoweringPass>());
   pm.addPass(std::make_unique<ForceInlinePass>());
   pm.addPass(mlir::createSymbolDCEPass());
