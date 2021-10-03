@@ -1260,6 +1260,8 @@ void setupPyBuilder(py::handle builder, mlir::OpBuilder &b,
     py::setattr(builder, name, createType(type));
   };
 
+  addType("bool", b.getIntegerType(1));
+
   addType("int8", b.getIntegerType(8, true));
   addType("uint8", b.getIntegerType(8, false));
   addType("int16", b.getIntegerType(16, true));
