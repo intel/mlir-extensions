@@ -304,15 +304,13 @@ bool is_index(mlir::Type type) {
   return type.isa<mlir::IndexType>();
 }
 
-struct ConstOpLowering : public mlir::OpRewritePattern<plier::ConstOp> {
-  ConstOpLowering(mlir::TypeConverter &typeConverter,
-                  mlir::MLIRContext *context)
-      : OpRewritePattern(context), converter(typeConverter) {}
+struct ConstOpLowering : public mlir::OpConversionPattern<plier::ConstOp> {
+  using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::ConstOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto value = op.val();
+  matchAndRewrite(plier::ConstOp op, plier::ConstOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto value = adaptor.val();
     if (is_supported_type(value.getType())) {
       if (auto intAttr = value.dyn_cast<mlir::IntegerAttr>()) {
         auto type = intAttr.getType().cast<mlir::IntegerType>();
@@ -327,6 +325,8 @@ struct ConstOpLowering : public mlir::OpRewritePattern<plier::ConstOp> {
       rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, value);
       return mlir::success();
     }
+
+    auto &converter = *getTypeConverter();
     if (auto type = converter.convertType(op.getType())) {
       if (type.isa<mlir::NoneType>()) {
         rewriter.replaceOpWithNewOp<plier::UndefOp>(op, type);
@@ -335,9 +335,6 @@ struct ConstOpLowering : public mlir::OpRewritePattern<plier::ConstOp> {
     }
     return mlir::failure();
   }
-
-private:
-  mlir::TypeConverter &converter;
 };
 
 bool isOmittedType(mlir::Type type) {
@@ -1516,7 +1513,7 @@ void PlierToStdPass::runOnOperation() {
       BinOpLowering,
       UnaryOpLowering,
       LowerCasts,
-      LiteralLowering<plier::ConstOp>,
+      ConstOpLowering,
       LiteralLowering<plier::GlobalOp>
       // clang-format on
       >(typeConverter, context);
