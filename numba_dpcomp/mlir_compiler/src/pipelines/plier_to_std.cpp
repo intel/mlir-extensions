@@ -276,7 +276,15 @@ mlir::Type map_plier_type(mlir::Type type) {
   return map_plier_type_name(*type.getContext(), name);
 }
 
-bool is_supported_type(mlir::Type type) {
+static mlir::Type dropLiteralType(mlir::Type t) {
+  assert(t);
+  if (auto literal = t.dyn_cast<plier::LiteralType>())
+    return dropLiteralType(literal.getValue().getType());
+
+  return t;
+}
+
+static bool is_supported_type(mlir::Type type) {
   assert(type);
   return type.isIntOrFloat();
 }
@@ -355,14 +363,14 @@ mlir::Attribute makeSignlessAttr(mlir::Attribute val) {
 }
 
 template <typename Op>
-struct LiteralLowering : public mlir::OpRewritePattern<Op> {
-  LiteralLowering(mlir::TypeConverter &typeConverter,
-                  mlir::MLIRContext *context)
-      : mlir::OpRewritePattern<Op>(context), converter(typeConverter) {}
+struct LiteralLowering : public mlir::OpConversionPattern<Op> {
+  using mlir::OpConversionPattern<Op>::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(Op op, mlir::PatternRewriter &rewriter) const override {
+  matchAndRewrite(Op op, typename Op::Adaptor /*adaptor*/,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
     auto type = op.getType();
+    auto &converter = *(this->getTypeConverter());
     auto convertedType = converter.convertType(type);
     if (!convertedType)
       return mlir::failure();
@@ -372,23 +380,21 @@ struct LiteralLowering : public mlir::OpRewritePattern<Op> {
       return mlir::success();
     }
 
-    if (auto literal = convertedType.template dyn_cast<plier::LiteralType>()) {
-      auto loc = op.getLoc();
-      auto attrVal = literal.getValue();
-      auto dstType = attrVal.getType();
-      auto val = makeSignlessAttr(attrVal);
-      auto newVal = rewriter.create<mlir::ConstantOp>(loc, val).getResult();
-      if (dstType != val.getType())
-        newVal = rewriter.create<plier::SignCastOp>(loc, dstType, newVal);
+    auto literal = convertedType.template dyn_cast<plier::LiteralType>();
+    if (!literal)
+      return mlir::failure();
 
-      rewriter.replaceOp(op, newVal);
-      return mlir::success();
-    }
-    return mlir::failure();
+    auto loc = op.getLoc();
+    auto attrVal = literal.getValue();
+    auto dstType = attrVal.getType();
+    auto val = makeSignlessAttr(attrVal);
+    auto newVal = rewriter.create<mlir::ConstantOp>(loc, val).getResult();
+    if (dstType != val.getType())
+      newVal = rewriter.create<plier::SignCastOp>(loc, dstType, newVal);
+
+    rewriter.replaceOp(op, newVal);
+    return mlir::success();
   }
-
-private:
-  mlir::TypeConverter &converter;
 };
 
 struct UndefOpLowering : public mlir::OpRewritePattern<plier::UndefOp> {
@@ -478,7 +484,7 @@ private:
   mlir::TypeConverter &converter;
 };
 
-mlir::Type coerce(mlir::Type type0, mlir::Type type1) {
+static mlir::Type coerce(mlir::Type type0, mlir::Type type1) {
   // TODO: proper rules
   assert(type0 != type1);
   auto get_bits_count = [](mlir::Type type) -> unsigned {
@@ -499,12 +505,12 @@ mlir::Type coerce(mlir::Type type0, mlir::Type type1) {
   };
   auto f0 = is_float(type0);
   auto f1 = is_float(type1);
-  if (f0 && !f1) {
+  if (f0 && !f1)
     return type0;
-  }
-  if (!f0 && f1) {
+
+  if (!f0 && f1)
     return type1;
-  }
+
   return get_bits_count(type0) < get_bits_count(type1) ? type1 : type0;
 }
 
@@ -641,9 +647,9 @@ mlir::Value replace_op(mlir::PatternRewriter &rewriter, mlir::Location loc,
                        mlir::ValueRange operands, mlir::Type newType) {
   auto signlessType = plier::makeSignlessType(newType);
   llvm::SmallVector<mlir::Value> newOperands(operands.size());
-  for (auto it : llvm::enumerate(operands)) {
+  for (auto it : llvm::enumerate(operands))
     newOperands[it.index()] = doCast(rewriter, loc, it.value(), signlessType);
-  }
+
   auto res = rewriter.createOrFold<T>(loc, newOperands);
   return doCast(rewriter, loc, res, newType);
 }
@@ -747,8 +753,8 @@ struct BinOpLowering : public mlir::OpConversionPattern<plier::BinOp> {
     auto &converter = *getTypeConverter();
     auto operands = adaptor.getOperands();
     assert(operands.size() == 2);
-    auto type0 = operands[0].getType();
-    auto type1 = operands[1].getType();
+    auto type0 = dropLiteralType(operands[0].getType());
+    auto type1 = dropLiteralType(operands[1].getType());
     if (!is_supported_type(type0) || !is_supported_type(type1))
       return mlir::failure();
 
@@ -756,19 +762,28 @@ struct BinOpLowering : public mlir::OpConversionPattern<plier::BinOp> {
     if (!resType || !is_supported_type(resType))
       return mlir::failure();
 
-    mlir::Type finalType;
-    std::array<mlir::Value, 2> convertedOperands;
-
     auto loc = op.getLoc();
+    auto literalCast = [&](mlir::Value val, mlir::Type dstType) -> mlir::Value {
+      if (dstType != val.getType())
+        return rewriter.createOrFold<plier::CastOp>(loc, dstType, val);
+
+      return val;
+    };
+
+    std::array<mlir::Value, 2> convertedOperands = {
+        literalCast(operands[0], type0), literalCast(operands[1], type1)};
+    mlir::Type finalType;
     if (type0 != type1) {
       finalType = coerce(type0, type1);
-      convertedOperands = {doCast(rewriter, loc, operands[0], finalType),
-                           doCast(rewriter, loc, operands[1], finalType)};
+      convertedOperands = {
+          doCast(rewriter, loc, convertedOperands[0], finalType),
+          doCast(rewriter, loc, convertedOperands[1], finalType)};
     } else {
       finalType = type0;
-      convertedOperands = {operands[0], operands[1]};
     }
     assert(finalType);
+    assert(convertedOperands[0]);
+    assert(convertedOperands[1]);
 
     using func_t = mlir::Value (*)(mlir::PatternRewriter &, mlir::Location,
                                    mlir::ValueRange, mlir::Type);
@@ -811,9 +826,7 @@ struct BinOpLowering : public mlir::OpConversionPattern<plier::BinOp> {
         if (h.type == op.op()) {
           auto res = (h.*mem)(rewriter, loc, convertedOperands, resType);
           if (res.getType() != resType)
-            res = rewriter.createOrFold<plier::SignCastOp>(op.getLoc(), resType,
-                                                           res);
-
+            res = rewriter.createOrFold<plier::SignCastOp>(loc, resType, res);
           rewriter.replaceOp(op, res);
           return mlir::success();
         }
@@ -1486,12 +1499,25 @@ void PlierToStdPass::runOnOperation() {
     auto dstType = typeConverter.convertType(op.getType());
     return srcType == dstType;
   });
+  target.addDynamicallyLegalOp<plier::ConstOp, plier::GlobalOp>(
+      [&](mlir::Operation *op) {
+        auto type = typeConverter.convertType(op->getResult(0).getType());
+        if (!type)
+          return true;
+
+        if (auto literal = type.dyn_cast<plier::LiteralType>())
+          type = literal.getValue().getType();
+
+        return !type.isIntOrFloat();
+      });
 
   patterns.insert<
       // clang-format off
       BinOpLowering,
       UnaryOpLowering,
-      LowerCasts
+      LowerCasts,
+      LiteralLowering<plier::ConstOp>,
+      LiteralLowering<plier::GlobalOp>
       // clang-format on
       >(typeConverter, context);
 
