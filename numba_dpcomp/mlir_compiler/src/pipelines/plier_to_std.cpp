@@ -395,25 +395,21 @@ struct LiteralLowering : public mlir::OpConversionPattern<Op> {
   }
 };
 
-struct UndefOpLowering : public mlir::OpRewritePattern<plier::UndefOp> {
-  UndefOpLowering(mlir::TypeConverter &typeConverter,
-                  mlir::MLIRContext *context)
-      : OpRewritePattern(context), converter(typeConverter) {}
+struct UndefOpLowering : public mlir::OpConversionPattern<plier::UndefOp> {
+  using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::UndefOp op,
-                  mlir::PatternRewriter &rewriter) const override {
+  matchAndRewrite(plier::UndefOp op, plier::UndefOp::Adaptor /*adapator*/,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
     auto oldType = op.getType();
+    auto &converter = *getTypeConverter();
     auto type = converter.convertType(oldType);
-    if (!type || oldType == type) {
+    if (!type || oldType == type)
       return mlir::failure();
-    }
+
     rewriter.replaceOpWithNewOp<plier::UndefOp>(op, type);
     return mlir::success();
   }
-
-private:
-  mlir::TypeConverter &converter;
 };
 
 struct ReturnOpLowering : public mlir::OpRewritePattern<mlir::ReturnOp> {
@@ -1530,6 +1526,11 @@ void PlierToStdPass::runOnOperation() {
 
         return !type.isIntOrFloat();
       });
+  target.addDynamicallyLegalOp<plier::UndefOp>([&](plier::UndefOp op) {
+    auto srcType = op.getType();
+    auto dstType = typeConverter.convertType(srcType);
+    return srcType == dstType;
+  });
 
   patterns.insert<
       // clang-format off
@@ -1538,7 +1539,8 @@ void PlierToStdPass::runOnOperation() {
       LowerCasts,
       ConstOpLowering,
       LiteralLowering<plier::CastOp>,
-      LiteralLowering<plier::GlobalOp>
+      LiteralLowering<plier::GlobalOp>,
+      UndefOpLowering
       // clang-format on
       >(typeConverter, context);
 
