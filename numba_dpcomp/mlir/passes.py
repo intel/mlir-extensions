@@ -35,6 +35,9 @@ def write_print_buffer(text):
 
 def get_print_buffer():
     global _print_buffer
+    if len(_print_buffer) == 0:
+        raise ValueError('Pass print buffer is empty')
+
     return _print_buffer
 
 @contextmanager
