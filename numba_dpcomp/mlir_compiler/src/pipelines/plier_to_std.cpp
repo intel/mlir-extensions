@@ -32,9 +32,11 @@
 
 #include "plier/dialect.hpp"
 
+#include "plier/pass/rewrite_wrapper.hpp"
 #include "plier/rewrites/arg_lowering.hpp"
 #include "plier/rewrites/call_lowering.hpp"
 #include "plier/rewrites/cast_lowering.hpp"
+#include "plier/rewrites/force_inline.hpp"
 #include "plier/rewrites/type_conversion.hpp"
 #include "plier/transforms/cast_utils.hpp"
 #include "plier/transforms/const_utils.hpp"
@@ -45,6 +47,7 @@
 #include "mangle.hpp"
 #include "plier/compiler/pipeline_registry.hpp"
 #include "py_func_resolver.hpp"
+#include "py_linalg_resolver.hpp"
 
 namespace {
 mlir::Type map_int_type(mlir::MLIRContext &ctx, llvm::StringRef &name) {
@@ -1343,6 +1346,67 @@ private:
   PyFuncResolver pyResolver;
 };
 
+static mlir::Value skipCast(mlir::Value val) {
+  if (auto cast = val.getDefiningOp<plier::CastOp>())
+    return cast.value();
+
+  return val;
+};
+
+struct BuiltinCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
+  BuiltinCallsLowering(mlir::MLIRContext *context)
+      : OpRewritePattern(context),
+        resolver("numba_dpcomp.mlir.builtin.funcs", "registry") {}
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::PyCallOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto funcName = op.func_name();
+
+    llvm::SmallVector<mlir::Value> args;
+    args.reserve(op.args().size() + 1);
+    auto func = op.func();
+    auto getattr =
+        mlir::dyn_cast_or_null<plier::GetattrOp>(func.getDefiningOp());
+    if (getattr)
+      args.emplace_back(skipCast(getattr.getOperand()));
+
+    for (auto arg : op.args())
+      args.emplace_back(skipCast(arg));
+
+    llvm::SmallVector<std::pair<llvm::StringRef, mlir::Value>> kwargs;
+    for (auto it : llvm::zip(op.kwargs(), op.kw_names())) {
+      auto arg = skipCast(std::get<0>(it));
+      auto name = std::get<1>(it).cast<mlir::StringAttr>();
+      kwargs.emplace_back(name.getValue(), arg);
+    }
+
+    //    for (auto &handler : builtinFuncsHandlers)
+    //      if (handler.first == funcName)
+    //        return handler.second(op, args, kwargs, rewriter);
+
+    auto res =
+        resolver.rewriteFunc(funcName, op.getLoc(), rewriter, args, kwargs);
+    if (!res)
+      return mlir::failure();
+
+    //    rerun_scf_pipeline(op);
+    rewriter.replaceOp(op, *res);
+    return mlir::success();
+  }
+
+private:
+  PyLinalgResolver resolver;
+};
+
+struct BuiltinCallsLoweringPass
+    : public plier::RewriteWrapperPass<BuiltinCallsLoweringPass, void, void,
+                                       BuiltinCallsLowering> {};
+
+struct ForceInlinePass
+    : public plier::RewriteWrapperPass<ForceInlinePass, void, void,
+                                       plier::ForceInline> {};
+
 struct PlierToStdPass
     : public mlir::PassWrapper<PlierToStdPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
@@ -1453,6 +1517,9 @@ void PlierToStdPass::runOnOperation() {
 void populate_plier_to_std_pipeline(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(std::make_unique<PlierToStdPass>());
+  pm.addPass(std::make_unique<BuiltinCallsLoweringPass>());
+  pm.addPass(std::make_unique<ForceInlinePass>());
+  pm.addPass(mlir::createSymbolDCEPass());
   pm.addNestedPass<mlir::FuncOp>(mlir::createStdExpandOpsPass());
   pm.addPass(mlir::createCanonicalizerPass());
 }
