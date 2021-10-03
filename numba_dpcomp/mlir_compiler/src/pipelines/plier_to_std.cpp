@@ -735,24 +735,24 @@ mlir::Value replace_cmpf_op(mlir::PatternRewriter &rewriter, mlir::Location loc,
   return rewriter.createOrFold<mlir::CmpFOp>(loc, Pred, a, b);
 }
 
-struct BinOpLowering : public mlir::OpRewritePattern<plier::BinOp> {
-  BinOpLowering(mlir::TypeConverter &typeConverter, mlir::MLIRContext *context)
-      : OpRewritePattern(context), converter(typeConverter) {}
+struct BinOpLowering : public mlir::OpConversionPattern<plier::BinOp> {
+  using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::BinOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto operands = op.getOperands();
+  matchAndRewrite(plier::BinOp op, plier::BinOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto &converter = *getTypeConverter();
+    auto operands = adaptor.getOperands();
     assert(operands.size() == 2);
     auto type0 = operands[0].getType();
     auto type1 = operands[1].getType();
-    if (!is_supported_type(type0) || !is_supported_type(type1)) {
+    if (!is_supported_type(type0) || !is_supported_type(type1))
       return mlir::failure();
-    }
+
     auto resType = converter.convertType(op.getType());
-    if (!resType || !is_supported_type(resType)) {
+    if (!resType || !is_supported_type(resType))
       return mlir::failure();
-    }
+
     mlir::Type finalType;
     std::array<mlir::Value, 2> convertedOperands;
 
@@ -807,10 +807,10 @@ struct BinOpLowering : public mlir::OpRewritePattern<plier::BinOp> {
       for (auto &h : handlers) {
         if (h.type == op.op()) {
           auto res = (h.*mem)(rewriter, loc, convertedOperands, resType);
-          if (res.getType() != resType) {
+          if (res.getType() != resType)
             res = rewriter.createOrFold<plier::SignCastOp>(op.getLoc(), resType,
                                                            res);
-          }
+
           rewriter.replaceOp(op, res);
           return mlir::success();
         }
@@ -825,9 +825,6 @@ struct BinOpLowering : public mlir::OpRewritePattern<plier::BinOp> {
     }
     return mlir::failure();
   }
-
-private:
-  mlir::TypeConverter &converter;
 };
 
 mlir::Value negate(mlir::PatternRewriter &rewriter, mlir::Location loc,
@@ -1372,46 +1369,84 @@ void PlierToStdPass::runOnOperation() {
   auto context = &getContext();
   populateStdTypeConverter(*context, typeConverter);
 
-  mlir::OwningRewritePatternList patterns(context);
+  auto materializeCast = [](mlir::OpBuilder &builder, mlir::Type type,
+                            mlir::ValueRange inputs,
+                            mlir::Location loc) -> llvm::Optional<mlir::Value> {
+    // TODO: UnrealizedConversionCast
+    if (inputs.size() == 1)
+      return builder.create<plier::CastOp>(loc, type, inputs.front())
+          .getResult();
+
+    return llvm::None;
+  };
+  typeConverter.addArgumentMaterialization(materializeCast);
+  typeConverter.addSourceMaterialization(materializeCast);
+  typeConverter.addTargetMaterialization(materializeCast);
+
+  mlir::RewritePatternSet patterns(context);
+  mlir::ConversionTarget target(*context);
+
+  target.addDynamicallyLegalOp<plier::BinOp>([&](plier::BinOp op) {
+    auto isNum = [&](mlir::Type t) -> bool {
+      auto res = typeConverter.convertType(t);
+      return res && res.isIntOrFloat();
+    };
+    return !isNum(op.rhs().getType()) && !isNum(op.lhs().getType()) &&
+           !isNum(op.getType());
+  });
 
   patterns.insert<
       // clang-format off
-      plier::FuncOpSignatureConversion,
-      plier::FixupIfTypes,
-      plier::FixCallOmittedArgs,
-      plier::FixupIfYieldTypes,
-      LiteralLowering<plier::CastOp>,
-      LiteralLowering<plier::GlobalOp>,
-      UndefOpLowering,
-      ReturnOpLowering,
-      ConstOpLowering,
-      SelectOpLowering,
-      BinOpLowering,
-      UnaryOpLowering,
-      FixupWhileTypes,
-      PropagateBuildTupleTypes,
-      FoldTupleGetitem,
-      FoldSliceGetitem,
-      FixupFuncOpaqueTypes,
-      ExpandCallVarargs
+      BinOpLowering
       // clang-format on
       >(typeConverter, context);
 
-  patterns.insert<FixupWhileYieldTypes, plier::ArgOpLowering>(context);
+  plier::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
+                                                            patterns, target);
 
-  patterns.insert<plier::CastOpLowering>(typeConverter, context, &doCast);
+  if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
+                                                std::move(patterns))))
+    signalPassFailure();
 
-  CallLowerer callLowerer(typeConverter);
+  //  patterns.insert<
+  //      // clang-format off
+  //      plier::FuncOpSignatureConversion,
+  //      plier::FixupIfTypes,
+  //      plier::FixCallOmittedArgs,
+  //      plier::FixupIfYieldTypes,
+  //      LiteralLowering<plier::CastOp>,
+  //      LiteralLowering<plier::GlobalOp>,
+  //      UndefOpLowering,
+  //      ReturnOpLowering,
+  //      ConstOpLowering,
+  //      SelectOpLowering,
+  //      BinOpLowering,
+  //      UnaryOpLowering,
+  //      FixupWhileTypes,
+  //      PropagateBuildTupleTypes,
+  //      FoldTupleGetitem,
+  //      FoldSliceGetitem,
+  //      FixupFuncOpaqueTypes,
+  //      ExpandCallVarargs
+  //      // clang-format on
+  //      >(typeConverter, context);
 
-  patterns.insert<plier::CallOpLowering>(typeConverter, context,
-                                         std::ref(callLowerer));
+  //  patterns.insert<FixupWhileYieldTypes, plier::ArgOpLowering>(context);
 
-  mlir::populateStdExpandOpsPatterns(patterns);
+  //  patterns.insert<plier::CastOpLowering>(typeConverter, context, &doCast);
 
-  for (auto *op : context->getRegisteredOperations())
-    op->getCanonicalizationPatterns(patterns, context);
+  //  CallLowerer callLowerer(typeConverter);
 
-  (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+  //  patterns.insert<plier::CallOpLowering>(typeConverter, context,
+  //                                         std::ref(callLowerer));
+
+  //  mlir::populateStdExpandOpsPatterns(patterns);
+
+  //  for (auto *op : context->getRegisteredOperations())
+  //    op->getCanonicalizationPatterns(patterns, context);
+
+  //  (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
+  //  std::move(patterns));
 }
 
 void populate_plier_to_std_pipeline(mlir::OpPassManager &pm) {
