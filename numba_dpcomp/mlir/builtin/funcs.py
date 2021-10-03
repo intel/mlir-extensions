@@ -34,5 +34,6 @@ def float_cast_impl(builder, arg):
 
 @register_func('len', len)
 def len_impl(builder, arg):
-    if isinstance(arg, tuple):
-        return builder.cast(len(arg), builder.int64)
+    l = len(arg)
+    if l is not None:
+        return builder.cast(l, builder.int64)

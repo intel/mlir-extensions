@@ -360,31 +360,30 @@ getArgs(py::handle inspect, py::handle func,
         llvm::function_ref<py::object(mlir::Value)> createVar,
         mlir::ValueRange args,
         llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs) {
-  auto sig_func = inspect.attr("signature");
-  auto sig = sig_func(func);
+  auto sigFunc = inspect.attr("signature");
+  auto sig = sigFunc(func);
   auto params = sig.attr("parameters");
-  auto params_list = py::list(params);
-  params_list = params_list[py::slice(
-      1, static_cast<int64_t>(params_list.size()), 1)]; // skip builder param
+  auto paramsList = py::list(params);
+  paramsList = paramsList[py::slice(1, static_cast<int64_t>(paramsList.size()),
+                                    1)]; // skip builder param
   auto empty = inspect.attr("Parameter").attr("empty");
 
-  py::list ret(py::len(params_list));
-  for (auto it : llvm::enumerate(params_list)) {
+  py::list ret(py::len(paramsList));
+  for (auto it : llvm::enumerate(paramsList)) {
     auto index = it.index();
-    auto param_name = it.value();
-    auto param = params[param_name];
+    auto paramName = it.value();
+    auto param = params[paramName];
     if (!args.empty()) {
       ret[index] = createVar(args.front());
       args = args.drop_front();
       continue;
     }
     if (!kwargs.empty()) {
-      auto name = param_name.cast<std::string>();
+      auto name = paramName.cast<std::string>();
       auto val = [&]() -> mlir::Value {
         for (auto kwarg : kwargs) {
-          if (kwarg.first == name) {
+          if (kwarg.first == name)
             return kwarg.second;
-          }
         }
         return {};
       }();
@@ -393,9 +392,9 @@ getArgs(py::handle inspect, py::handle func,
         continue;
       }
     }
-    auto def_val = param.attr("default");
-    if (!def_val.is(empty)) {
-      ret[index] = def_val;
+    auto defVal = param.attr("default");
+    if (!defVal.is(empty)) {
+      ret[index] = defVal;
     } else {
       return py::none();
     }
@@ -1305,7 +1304,7 @@ py::object dtypeImpl(py::capsule context, py::capsule ssaVal) {
   auto &ctx = getPyContext(context);
   auto value = unwrapMlir<mlir::Value>(ssaVal);
   auto type = value.getType();
-  if (auto tensorType = type.dyn_cast<mlir::RankedTensorType>())
+  if (auto tensorType = type.dyn_cast<mlir::ShapedType>())
     type = tensorType.getElementType();
 
   return ctx.context.createType(type);
@@ -1317,7 +1316,7 @@ py::object lenImpl(py::capsule /*context*/, py::capsule ssaVal) {
   if (auto tupleType = type.dyn_cast<mlir::TupleType>())
     return py::int_(tupleType.size());
 
-  return py::int_(0);
+  return py::none();
 }
 
 py::object getitemImpl(py::capsule context, py::capsule ssaVal,

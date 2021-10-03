@@ -419,6 +419,25 @@ struct UndefOpLowering : public mlir::OpConversionPattern<plier::UndefOp> {
   }
 };
 
+struct BuildTupleLowering
+    : public mlir::OpConversionPattern<plier::BuildTupleOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::BuildTupleOp op, plier::BuildTupleOp::Adaptor adapator,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto &converter = *getTypeConverter();
+    auto retType = op.getType();
+    auto newRetType = converter.convertType(retType);
+    if (!newRetType || newRetType == retType)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<plier::BuildTupleOp>(op, newRetType,
+                                                     adapator.args());
+    return mlir::success();
+  }
+};
+
 struct ReturnOpLowering : public mlir::OpRewritePattern<mlir::ReturnOp> {
   ReturnOpLowering(mlir::TypeConverter & /*typeConverter*/,
                    mlir::MLIRContext *context)
@@ -1488,6 +1507,7 @@ struct ExternalCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
     }
 
     mlir::ValueRange r(args);
+
     auto mangledName = mangle(funcName, r.getTypes());
     if (mangledName.empty())
       return mlir::failure();
@@ -1574,6 +1594,7 @@ void PlierToStdPass::runOnOperation() {
 
   auto context = &getContext();
   populateStdTypeConverter(*context, typeConverter);
+  populateTupleTypeConverter(*context, typeConverter);
 
   auto materializeCast = [](mlir::OpBuilder &builder, mlir::Type type,
                             mlir::ValueRange inputs,
@@ -1625,6 +1646,12 @@ void PlierToStdPass::runOnOperation() {
     auto dstType = typeConverter.convertType(srcType);
     return srcType == dstType;
   });
+  target.addDynamicallyLegalOp<plier::BuildTupleOp>(
+      [&](plier::BuildTupleOp op) {
+        auto args = op.args();
+        auto srcType = mlir::TupleType::get(op.getContext(), args.getTypes());
+        return srcType == op.getType();
+      });
 
   patterns.insert<
       // clang-format off
@@ -1634,7 +1661,8 @@ void PlierToStdPass::runOnOperation() {
       ConstOpLowering,
       LiteralLowering<plier::CastOp>,
       LiteralLowering<plier::GlobalOp>,
-      UndefOpLowering
+      UndefOpLowering,
+      BuildTupleLowering
       // clang-format on
       >(typeConverter, context);
 
