@@ -18,7 +18,6 @@
 #include <llvm/Support/Allocator.h>
 #include <llvm/Support/RecyclingAllocator.h>
 
-#include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/IR/Operation.h>
 
 namespace {

@@ -510,9 +510,9 @@ private:
     auto func_type = func.getType();
     auto ret_type = func_type.getResult(0);
     auto var_type = var.getType();
-    if (ret_type != var_type) {
+    if (ret_type != var_type)
       var = builder.create<plier::CastOp>(get_current_loc(), ret_type, var);
-    }
+
     builder.create<mlir::ReturnOp>(get_current_loc(), var);
   }
 
@@ -541,12 +541,12 @@ private:
       auto attr = builder.getIntegerAttr(type, val.cast<int64_t>());
       return get_val(attr);
     }
-    if (py::isinstance<py::float_>(val)) {
+    if (py::isinstance<py::float_>(val))
       return get_val(builder.getF64FloatAttr(val.cast<double>()));
-    }
-    if (py::isinstance<py::none>(val)) {
+
+    if (py::isinstance<py::none>(val))
       return get_val(builder.getUnitAttr());
-    }
+
     plier::report_error(llvm::Twine("get_const unhandled type \"") +
                         py::str(val.get_type()).cast<std::string>() + "\"");
   }

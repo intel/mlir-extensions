@@ -28,7 +28,6 @@
 #include <mlir/Dialect/SCF/Passes.h>
 #include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Dialect/SCF/Transforms.h>
-#include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/Dialect/StandardOps/Transforms/FuncConversions.h>
 #include <mlir/Dialect/StandardOps/Transforms/Passes.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>

@@ -15,7 +15,6 @@
 #include "plier/rewrites/promote_to_parallel.hpp"
 
 #include <mlir/Dialect/SCF/SCF.h>
-#include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 
 #include "plier/dialect.hpp"

@@ -15,7 +15,6 @@
 #include "plier/rewrites/call_lowering.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
-#include <mlir/Dialect/StandardOps/IR/Ops.h>
 
 static mlir::Value skipCasts(mlir::Value val) {
   auto getArg = [](mlir::Value arg) -> mlir::Value {

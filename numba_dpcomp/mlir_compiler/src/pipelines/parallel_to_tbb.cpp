@@ -17,7 +17,6 @@
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/SCF.h>
-#include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 #include <mlir/Pass/Pass.h>
 #include <mlir/Pass/PassManager.h>
@@ -226,7 +225,7 @@ struct ParallelToTbbPass
     : public plier::RewriteWrapperPass<
           ParallelToTbbPass, mlir::FuncOp,
           plier::DependentDialectsList<plier::PlierDialect,
-                                       mlir::StandardOpsDialect,
+                                       mlir::arith::ArithmeticDialect,
                                        mlir::scf::SCFDialect>,
           ParallelToTbb> {};
 

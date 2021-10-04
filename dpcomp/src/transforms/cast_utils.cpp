@@ -16,7 +16,6 @@
 #include "plier/dialect.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
-#include <mlir/Dialect/StandardOps/IR/Ops.h>
 
 namespace {
 mlir::Type makeSignless(mlir::Type type) {
