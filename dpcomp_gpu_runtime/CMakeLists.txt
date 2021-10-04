@@ -22,6 +22,7 @@ endif()
 
 set(SOURCES_LIST
     src/gpu_runtime.cpp
+    src/kernel_api_stubs.cpp
     )
 set(HEADERS_LIST
     src/level_zero_printing.hpp
