@@ -196,8 +196,8 @@ void rerun_scf_pipeline(mlir::Operation *op) {
 }
 
 static mlir::Value skipCast(mlir::Value val) {
-  if (auto cast = val.getDefiningOp<plier::CastOp>())
-    return cast.value();
+  if (auto cast = val.getDefiningOp<mlir::UnrealizedConversionCastOp>())
+    return cast.inputs()[0];
 
   return val;
 };
@@ -1439,10 +1439,10 @@ void PlierToLinalgPass::runOnOperation() {
   auto materializeCast = [](mlir::OpBuilder &builder, mlir::Type type,
                             mlir::ValueRange inputs,
                             mlir::Location loc) -> llvm::Optional<mlir::Value> {
-    // TODO: UnrealizedConversionCast
     if (inputs.size() == 1)
-      return builder.create<plier::CastOp>(loc, type, inputs.front())
-          .getResult();
+      return builder
+          .create<mlir::UnrealizedConversionCastOp>(loc, type, inputs.front())
+          .getResult(0);
 
     return llvm::None;
   };
