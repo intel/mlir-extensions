@@ -196,9 +196,20 @@ void rerun_scf_pipeline(mlir::Operation *op) {
   plier::add_pipeline_jump_marker(mod, marker);
 }
 
-static mlir::Value skipCast(mlir::Value val) {
-  if (auto cast = val.getDefiningOp<mlir::UnrealizedConversionCastOp>())
-    return cast.inputs()[0];
+static mlir::Value skipCasts(mlir::Value val) {
+  auto getArg = [](mlir::Value arg) -> mlir::Value {
+    auto cast = arg.getDefiningOp<mlir::UnrealizedConversionCastOp>();
+    if (!cast)
+      return {};
+
+    auto inputs = cast.inputs();
+    if (inputs.size() != 1)
+      return {};
+
+    return inputs.front();
+  };
+  while (auto arg = getArg(val))
+    val = arg;
 
   return val;
 };
@@ -226,7 +237,7 @@ lowerLen(plier::PyCallOp op, mlir::ValueRange operands,
   if (operands.size() != 1 || !kwargs.empty())
     return mlir::failure();
 
-  auto arg = skipCast(operands.front());
+  auto arg = skipCasts(operands.front());
   if (!arg.getType().isa<mlir::RankedTensorType>())
     return mlir::failure();
 
@@ -264,14 +275,14 @@ struct NumpyCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
     auto getattr =
         mlir::dyn_cast_or_null<plier::GetattrOp>(func.getDefiningOp());
     if (getattr)
-      args.emplace_back(skipCast(getattr.getOperand()));
+      args.emplace_back(skipCasts(getattr.getOperand()));
 
     for (auto arg : op.args())
-      args.emplace_back(skipCast(arg));
+      args.emplace_back(skipCasts(arg));
 
     llvm::SmallVector<std::pair<llvm::StringRef, mlir::Value>> kwargs;
     for (auto it : llvm::zip(op.kwargs(), op.kw_names())) {
-      auto arg = skipCast(std::get<0>(it));
+      auto arg = skipCasts(std::get<0>(it));
       auto name = std::get<1>(it).cast<mlir::StringAttr>();
       kwargs.emplace_back(name.getValue(), arg);
     }
@@ -312,7 +323,7 @@ struct NumpyAttrsLowering : public mlir::OpRewritePattern<plier::GetattrOp> {
   mlir::LogicalResult
   matchAndRewrite(plier::GetattrOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto arg = skipCast(op.value());
+    auto arg = skipCasts(op.value());
 
     if (!arg.getType().isa<mlir::ShapedType>())
       return mlir::failure();
@@ -351,8 +362,8 @@ struct NumpyBinOpLowering : public mlir::OpRewritePattern<plier::BinOp> {
   mlir::LogicalResult
   matchAndRewrite(plier::BinOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto lhs = skipCast(op.lhs());
-    auto rhs = skipCast(op.rhs());
+    auto lhs = skipCasts(op.lhs());
+    auto rhs = skipCasts(op.rhs());
 
     if (!lhs.getType().isa<mlir::ShapedType>() &&
         !rhs.getType().isa<mlir::ShapedType>())
@@ -397,14 +408,14 @@ struct ExternalCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
     auto getattr =
         mlir::dyn_cast_or_null<plier::GetattrOp>(func.getDefiningOp());
     if (getattr)
-      args.emplace_back(skipCast(getattr.getOperand()));
+      args.emplace_back(skipCasts(getattr.getOperand()));
 
     for (auto arg : op.args())
-      args.emplace_back(skipCast(arg));
+      args.emplace_back(skipCasts(arg));
 
     llvm::SmallVector<std::pair<llvm::StringRef, mlir::Value>> kwargs;
     for (auto it : llvm::zip(op.kwargs(), op.kw_names())) {
-      auto arg = skipCast(std::get<0>(it));
+      auto arg = skipCasts(std::get<0>(it));
       auto name = std::get<1>(it).cast<mlir::StringAttr>();
       kwargs.emplace_back(name.getValue(), arg);
     }

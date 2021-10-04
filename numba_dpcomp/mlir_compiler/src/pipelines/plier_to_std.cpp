@@ -882,9 +882,20 @@ struct LowerCasts : public mlir::OpConversionPattern<plier::CastOp> {
   }
 };
 
-static mlir::Value skipCast(mlir::Value val) {
-  if (auto cast = val.getDefiningOp<mlir::UnrealizedConversionCastOp>())
-    return cast.inputs()[0];
+static mlir::Value skipCasts(mlir::Value val) {
+  auto getArg = [](mlir::Value arg) -> mlir::Value {
+    auto cast = arg.getDefiningOp<mlir::UnrealizedConversionCastOp>();
+    if (!cast)
+      return {};
+
+    auto inputs = cast.inputs();
+    if (inputs.size() != 1)
+      return {};
+
+    return inputs.front();
+  };
+  while (auto arg = getArg(val))
+    val = arg;
 
   return val;
 };
@@ -899,7 +910,7 @@ struct ExpandCallVarargs : public mlir::OpRewritePattern<plier::PyCallOp> {
     if (!vararg)
       return mlir::failure();
 
-    vararg = skipCast(vararg);
+    vararg = skipCasts(vararg);
 
     auto varargType = vararg.getType().dyn_cast<mlir::TupleType>();
     if (!varargType)
@@ -1004,14 +1015,14 @@ struct BuiltinCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
     auto getattr =
         mlir::dyn_cast_or_null<plier::GetattrOp>(func.getDefiningOp());
     if (getattr)
-      args.emplace_back(skipCast(getattr.getOperand()));
+      args.emplace_back(skipCasts(getattr.getOperand()));
 
     for (auto arg : op.args())
-      args.emplace_back(skipCast(arg));
+      args.emplace_back(skipCasts(arg));
 
     llvm::SmallVector<std::pair<llvm::StringRef, mlir::Value>> kwargs;
     for (auto it : llvm::zip(op.kwargs(), op.kw_names())) {
-      auto arg = skipCast(std::get<0>(it));
+      auto arg = skipCasts(std::get<0>(it));
       auto name = std::get<1>(it).cast<mlir::StringAttr>();
       kwargs.emplace_back(name.getValue(), arg);
     }
@@ -1061,14 +1072,14 @@ struct ExternalCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
     auto getattr =
         mlir::dyn_cast_or_null<plier::GetattrOp>(func.getDefiningOp());
     if (getattr)
-      args.emplace_back(skipCast(getattr.getOperand()));
+      args.emplace_back(skipCasts(getattr.getOperand()));
 
     for (auto arg : op.args())
-      args.emplace_back(skipCast(arg));
+      args.emplace_back(skipCasts(arg));
 
     llvm::SmallVector<std::pair<llvm::StringRef, mlir::Value>> kwargs;
     for (auto it : llvm::zip(op.kwargs(), op.kw_names())) {
-      auto arg = skipCast(std::get<0>(it));
+      auto arg = skipCasts(std::get<0>(it));
       auto name = std::get<1>(it).cast<mlir::StringAttr>();
       kwargs.emplace_back(name.getValue(), arg);
     }
