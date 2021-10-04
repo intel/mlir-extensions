@@ -14,7 +14,7 @@
 
 import numba
 #from numba_dpcomp import njit
-from math import nan, inf, isnan
+import math
 from numpy.testing import assert_equal # for nans comparison
 from numba_dpcomp.mlir.passes import print_pass_ir, get_print_buffer
 
@@ -114,6 +114,25 @@ def test_var(val):
 def test_cast(py_func, val):
     jit_func = njit(py_func)
     assert_equal(py_func(val), jit_func(val))
+
+@pytest.mark.parametrize('val', [5,5.5])
+@pytest.mark.parametrize('name', [
+    'sqrt',
+    'log',
+    'exp',
+    'sin',
+    'cos',
+])
+def test_math_uplifting(val, name):
+    py_func = lambda a: math.sqrt(a)
+    py_func = eval(f'lambda a: math.{name}(a)')
+
+    with print_pass_ir([],['UpliftMathCallsPass']):
+        jit_func = njit(py_func)
+
+        assert_equal(py_func(val), jit_func(val))
+        ir = get_print_buffer()
+        assert ir.count(f'math.{name}') == 1, ir
 
 def _while_py_func_simple(a, b):
     while a < b:
