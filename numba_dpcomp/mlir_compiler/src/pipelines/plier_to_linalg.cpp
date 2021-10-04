@@ -486,8 +486,8 @@ struct NumpyCallsLoweringPass
 static mlir::Value index_cast(mlir::Value value, mlir::Location loc,
                               mlir::OpBuilder &builder) {
   if (!value.getType().isa<mlir::IndexType>()) {
-    auto index_type = mlir::IndexType::get(value.getContext());
-    auto res = builder.create<plier::CastOp>(loc, index_type, value);
+    auto indexType = mlir::IndexType::get(value.getContext());
+    auto res = builder.create<plier::CastOp>(loc, indexType, value);
     rerun_scf_pipeline(res);
     return res;
   }
@@ -682,7 +682,6 @@ struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
     }
 
     rerun_scf_pipeline(op);
-    //    rewriter.replaceOpWithNewOp<plier::CastOp>(op, op.getType(), res);
     rewriter.replaceOp(op, res);
     return mlir::success();
   }
@@ -737,10 +736,10 @@ struct SetitemOpLowering : public mlir::OpConversionPattern<plier::SetItemOp> {
           } else {
             mlir::OpBuilder::InsertionGuard g(rewriter);
             rewriter.setInsertionPoint(useOp);
-            auto new_val = rewriter.create<mlir::memref::TensorLoadOp>(
+            auto newVal = rewriter.create<mlir::memref::TensorLoadOp>(
                 useOp->getLoc(), memref);
             rewriter.updateRootInPlace(useOp, [&]() {
-              useOp->setOperand(use.getOperandNumber(), new_val);
+              useOp->setOperand(use.getOperandNumber(), newVal);
             });
           }
         }
@@ -1375,11 +1374,11 @@ struct SimplifyExpandDims
     }
 
     if (changed) {
-      const mlir::Attribute new_maps[] = {
+      const mlir::Attribute newMaps[] = {
           mlir::AffineMapAttr::get(
               mlir::AffineMap::get(numDims, 0, exprs, context)),
           maps[1]};
-      auto newMapsAttr = mlir::ArrayAttr::get(context, new_maps);
+      auto newMapsAttr = mlir::ArrayAttr::get(context, newMaps);
       rewriter.updateRootInPlace(op,
                                  [&]() { op.indexing_mapsAttr(newMapsAttr); });
     }
