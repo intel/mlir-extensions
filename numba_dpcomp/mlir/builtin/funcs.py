@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..linalg_builder import FuncRegistry
+from ..linalg_builder import FuncRegistry, is_int, is_float
+
+import math
 
 registry = FuncRegistry()
 
@@ -37,3 +39,32 @@ def len_impl(builder, arg):
     l = len(arg)
     if l is not None:
         return builder.cast(l, builder.int64)
+
+def _gen_math_funcs():
+    def get_func(name):
+        def func(builder, arg):
+            t = arg.type
+            if not is_int(t, builder) and not is_float(t, builder):
+                return None
+
+            fname = name
+            if t == builder.float32:
+                fname = 'f' + fname
+            elif t != builder.float64:
+                t = builder.float64
+                arg = builder.cast(arg, builder.float64)
+
+            res = builder.cast(0, t)
+            return builder.external_call(fname, arg, res, decorate=False)
+
+        return func
+
+    math_funcs = ['log', 'sqrt', 'exp', 'erf', 'sin', 'cos']
+
+    for func in math_funcs:
+        fname = 'math.' + func
+        py_func = eval(fname)
+        register_func(fname, py_func)(get_func(func))
+
+_gen_math_funcs()
+del _gen_math_funcs
