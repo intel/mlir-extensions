@@ -1318,7 +1318,7 @@ template <typename T> bool hasCompatibleShape(T &&a1, T &&a2) {
   return true;
 }
 
-struct RankedTypesCasts : public mlir::OpConversionPattern<plier::CastOp> {
+struct LowerTensorCasts : public mlir::OpConversionPattern<plier::CastOp> {
   using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
@@ -1331,6 +1331,12 @@ struct RankedTypesCasts : public mlir::OpConversionPattern<plier::CastOp> {
     auto dstType = converter.convertType(op.getType());
     if (!dstType)
       return mlir::failure();
+
+    if (srcType == dstType) {
+      rewriter.replaceOpWithNewOp<mlir::UnrealizedConversionCastOp>(op, dstType,
+                                                                    value);
+      return mlir::success();
+    }
 
     if (srcType.isa<mlir::RankedTensorType>() &&
         dstType.isa<mlir::RankedTensorType>()) {
@@ -1500,10 +1506,14 @@ void PlierToLinalgPass::runOnOperation() {
       });
 
   target.addDynamicallyLegalOp<plier::CastOp>([&](plier::CastOp op) -> bool {
-    auto srcType = typeConverter.convertType(op.value().getType());
+    auto inputType = op.value().getType();
+    auto srcType = typeConverter.convertType(inputType);
     auto dstType = typeConverter.convertType(op.getType());
     if (!srcType || !dstType)
       return true;
+
+    if (srcType == dstType && inputType != op.getType())
+      return false;
 
     return srcType == dstType || !(srcType.isa<mlir::ShapedType>() &&
                                    dstType.isa<mlir::ShapedType>());
@@ -1518,7 +1528,7 @@ void PlierToLinalgPass::runOnOperation() {
       // clang-format off
       GetitemOpLowering,
       SetitemOpLowering,
-      RankedTypesCasts
+      LowerTensorCasts
       // clang-format on
       >(typeConverter, &context);
 
