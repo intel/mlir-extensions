@@ -26,6 +26,7 @@ static mlir::Value skipCasts(mlir::Value val) {
 
     return inputs.front();
   };
+
   while (auto arg = getArg(val))
     val = arg;
 
@@ -43,7 +44,7 @@ plier::CallOpLowering::matchAndRewrite(plier::PyCallOp op,
   llvm::SmallVector<mlir::Value> args;
   args.reserve(op.args().size() + 1);
   auto func = op.func();
-  auto getattr = mlir::dyn_cast_or_null<plier::GetattrOp>(func.getDefiningOp());
+  auto getattr = func.getDefiningOp<plier::GetattrOp>();
   if (getattr)
     args.emplace_back(skipCasts(getattr.getOperand()));
 
