@@ -1423,18 +1423,16 @@ void rerun_std_pipeline(mlir::Operation *op) {
   plier::add_pipeline_jump_marker(mod, marker);
 }
 
-struct LowerGpuRange : public mlir::OpRewritePattern<plier::PyCallOp> {
-  using OpRewritePattern::OpRewritePattern;
+struct LowerGpuRange final : public plier::CallOpLowering {
+  using CallOpLowering::CallOpLowering;
 
-  mlir::LogicalResult
-  matchAndRewrite(plier::PyCallOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    llvm::SmallVector<std::pair<llvm::StringRef, mlir::Value>> kwargs;
-    for (auto it : llvm::zip(op.kwargs(), op.kw_names())) {
-      auto arg = std::get<0>(it);
-      auto name = std::get<1>(it).cast<mlir::StringAttr>();
-      kwargs.emplace_back(name.getValue(), arg);
-    }
+protected:
+  virtual mlir::LogicalResult
+  resolveCall(plier::PyCallOp op, mlir::StringRef name, mlir::Location /*loc*/,
+              mlir::PatternRewriter &rewriter, mlir::ValueRange args,
+              KWargs kwargs) const override {
+    if (name != "_gpu_range")
+      return mlir::failure();
 
     auto parent = op->getParentOp();
     auto setAttr = [](mlir::scf::ForOp op) {
@@ -1442,8 +1440,7 @@ struct LowerGpuRange : public mlir::OpRewritePattern<plier::PyCallOp> {
       op->setAttr(plier::attributes::getParallelName(), unitAttr);
       op->setAttr(plier::attributes::getGpuRangeName(), unitAttr);
     };
-
-    if (mlir::failed(lowerRange(op, op.args(), kwargs, rewriter, setAttr)))
+    if (mlir::failed(lowerRange(op, args, kwargs, rewriter, setAttr)))
       return mlir::failure();
 
     rerun_std_pipeline(parent);
