@@ -1626,7 +1626,8 @@ void PlierToStdPass::runOnOperation() {
 
   auto isNum = [&](mlir::Type t) -> bool {
     auto res = typeConverter.convertType(t);
-    return res && res.isIntOrFloat();
+    return res && res.isa<mlir::IntegerType, mlir::FloatType, mlir::IndexType,
+                          plier::LiteralType>();
   };
 
   target.addDynamicallyLegalOp<plier::BinOp>(
@@ -1637,7 +1638,7 @@ void PlierToStdPass::runOnOperation() {
   target.addDynamicallyLegalOp<plier::CastOp>([&](plier::CastOp op) {
     auto srcType = typeConverter.convertType(op.value().getType());
     auto dstType = typeConverter.convertType(op.getType());
-    return srcType == dstType;
+    return srcType == dstType || !isNum(srcType) || !isNum(dstType);
   });
   target.addDynamicallyLegalOp<plier::ConstOp, plier::GlobalOp>(
       [&](mlir::Operation *op) {
