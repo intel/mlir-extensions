@@ -1484,14 +1484,17 @@ void PlierToLinalgPass::runOnOperation() {
 
   target.addDynamicallyLegalOp<plier::GetItemOp>(
       [&typeConverter](plier::GetItemOp op) -> bool {
-        if (auto tupleType = op.value().getType().dyn_cast<mlir::TupleType>()) {
+        auto inputType = op.value().getType();
+        if (auto tupleType = typeConverter.convertType(inputType)
+                                 .dyn_cast_or_null<mlir::TupleType>()) {
           // TODO: move to populateTupleTypeConversionRewritesAndTarget
-          if (auto attr = plier::getConstVal<mlir::IntegerAttr>(op.index())) {
-            auto index = plier::getIntAttrValue(attr);
-            if (index >= 0 && index < static_cast<int64_t>(tupleType.size())) {
-              auto srcType = tupleType.getType(static_cast<size_t>(index));
+          if (auto index = mlir::getConstantIntValue(op.index())) {
+            auto i = *index;
+            auto size = static_cast<unsigned>(tupleType.size());
+            if (i >= 0 && i < size) {
+              auto srcType = tupleType.getType(static_cast<size_t>(i));
               auto dstType = op.getType();
-              return srcType == dstType &&
+              return srcType == dstType ||
                      dstType == typeConverter.convertType(dstType);
             }
           }
@@ -1950,6 +1953,8 @@ void populate_plier_to_linalg_gen_pipeline(mlir::OpPassManager &pm) {
 
 void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<MakeTensorsSignlessPass>());
+
+  pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(mlir::createReconcileUnrealizedCastsPass());
 
   pm.addPass(mlir::createCanonicalizerPass());

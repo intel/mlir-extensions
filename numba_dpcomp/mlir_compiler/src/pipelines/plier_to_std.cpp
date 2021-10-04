@@ -421,25 +421,6 @@ struct UndefOpLowering : public mlir::OpConversionPattern<plier::UndefOp> {
   }
 };
 
-struct BuildTupleLowering
-    : public mlir::OpConversionPattern<plier::BuildTupleOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(plier::BuildTupleOp op, plier::BuildTupleOp::Adaptor adapator,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
-    auto retType = op.getType();
-    auto args = adapator.args();
-    auto newRetType = mlir::TupleType::get(op.getContext(), args.getTypes());
-    if (!newRetType || newRetType == retType)
-      return mlir::failure();
-
-    rewriter.replaceOpWithNewOp<plier::BuildTupleOp>(op, newRetType,
-                                                     adapator.args());
-    return mlir::success();
-  }
-};
-
 static mlir::Type coerce(mlir::Type type0, mlir::Type type1) {
   // TODO: proper rules
   assert(type0 != type1);
@@ -1244,11 +1225,26 @@ void PlierToStdPass::runOnOperation() {
     auto dstType = typeConverter.convertType(srcType);
     return srcType == dstType;
   });
-  target.addDynamicallyLegalOp<plier::BuildTupleOp>(
-      [&](plier::BuildTupleOp op) {
-        auto args = op.args();
-        auto srcType = mlir::TupleType::get(op.getContext(), args.getTypes());
-        return srcType == op.getType();
+  target.addDynamicallyLegalOp<plier::GetItemOp>(
+      [&typeConverter](plier::GetItemOp op) {
+        auto inputType = op.value().getType();
+        if (auto tupleType = typeConverter.convertType(inputType)
+                                 .dyn_cast_or_null<mlir::TupleType>()) {
+          // TODO: move to populateTupleTypeConversionRewritesAndTarget
+          if (auto index = mlir::getConstantIntValue(op.index())) {
+            auto i = *index;
+            auto size = static_cast<unsigned>(tupleType.size());
+            if (i >= 0 && i < size) {
+              auto srcType = tupleType.getType(static_cast<size_t>(i));
+              auto dstType = op.getType();
+              return srcType == dstType ||
+                     dstType == typeConverter.convertType(dstType);
+            }
+          }
+          return false;
+        }
+
+        return true;
       });
 
   patterns.insert<
@@ -1259,13 +1255,14 @@ void PlierToStdPass::runOnOperation() {
       ConstOpLowering,
       LiteralLowering<plier::CastOp>,
       LiteralLowering<plier::GlobalOp>,
-      UndefOpLowering,
-      BuildTupleLowering
+      UndefOpLowering
       // clang-format on
       >(typeConverter, context);
 
   plier::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
                                                             patterns, target);
+  plier::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
+                                                      target);
 
   if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
                                                 std::move(patterns))))
