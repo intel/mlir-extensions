@@ -1040,7 +1040,8 @@ py::object reshapeImpl(py::capsule context, py::handle src,
 }
 
 py::object externalCallImpl(py::capsule context, py::str funcName,
-                            py::handle inputs, py::handle outputs) {
+                            py::handle inputs, py::handle outputs,
+                            py::bool_ decorate) {
   auto &ctx = getPyContext(context);
   auto &builder = ctx.builder;
   auto loc = ctx.loc;
@@ -1084,8 +1085,9 @@ py::object externalCallImpl(py::capsule context, py::str funcName,
       }
     } else {
       f = plier::add_function(builder, mod, name, funcType);
-      f->setAttr("llvm.emit_c_interface",
-                 mlir::UnitAttr::get(builder.getContext()));
+      if (decorate)
+        f->setAttr("llvm.emit_c_interface",
+                   mlir::UnitAttr::get(builder.getContext()));
     }
     return f;
   }();
