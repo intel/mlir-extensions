@@ -798,7 +798,7 @@ struct BinOpLowering : public mlir::OpConversionPattern<plier::BinOp> {
     };
 
     using membptr_t = func_t OpDesc::*;
-    auto call_handler = [&](membptr_t mem) {
+    auto callHandler = [&](membptr_t mem) {
       for (auto &h : handlers) {
         if (h.type == op.op()) {
           auto res = (h.*mem)(rewriter, loc, convertedOperands, resType);
@@ -812,9 +812,9 @@ struct BinOpLowering : public mlir::OpConversionPattern<plier::BinOp> {
     };
 
     if (is_int(finalType)) {
-      return call_handler(&OpDesc::iop);
+      return callHandler(&OpDesc::iop);
     } else if (is_float(finalType)) {
-      return call_handler(&OpDesc::fop);
+      return callHandler(&OpDesc::fop);
     }
     return mlir::failure();
   }
@@ -885,8 +885,11 @@ struct LowerCasts : public mlir::OpConversionPattern<plier::CastOp> {
       return mlir::failure();
 
     auto srcType = src.getType();
-    if (srcType == dstType)
-      return mlir::failure();
+    if (srcType == dstType) {
+      rewriter.replaceOpWithNewOp<mlir::UnrealizedConversionCastOp>(op, dstType,
+                                                                    src);
+      return mlir::success();
+    }
 
     auto res = doCast(rewriter, op.getLoc(), src, dstType);
     if (!res)
@@ -1207,6 +1210,9 @@ void PlierToStdPass::runOnOperation() {
 
     auto srcType = typeConverter.convertType(inputType);
     auto dstType = typeConverter.convertType(op.getType());
+    if (srcType == dstType && inputType != op.getType())
+      return false;
+
     return srcType == dstType || !isNum(srcType) || !isNum(dstType);
   });
   target.addDynamicallyLegalOp<plier::ConstOp, plier::GlobalOp>(
