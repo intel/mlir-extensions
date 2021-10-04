@@ -138,14 +138,6 @@ llvm::SmallVector<mlir::scf::ForOp, 2> plier::lowerWhileToFor(
         assert(afterBlock.getNumArguments() == beforeTerm.args().size());
         mapper.map(beforeBlock.getArguments(), iterargs);
 
-        auto skipCasts = [](mlir::Value op) {
-          while (auto cast = mlir::dyn_cast_or_null<plier::CastOp>(
-                     op.getDefiningOp())) {
-            op = cast.getOperand();
-          }
-          return op;
-        };
-
         for (auto it :
              llvm::zip(afterBlock.getArguments(), beforeTerm.args())) {
           auto blockArg = std::get<0>(it);
@@ -153,6 +145,8 @@ llvm::SmallVector<mlir::scf::ForOp, 2> plier::lowerWhileToFor(
           if (pairfirst && skipCasts(termArg) == pairfirst) {
             // iter arg
             auto iterVal = getIterVal(builder, loc, pairfirst.getType(), iv);
+            iterVal = builder.createOrFold<plier::CastOp>(
+                loc, blockArg.getType(), iterVal);
             mapper.map(blockArg, iterVal);
           } else {
             mapper.map(blockArg, mapper.lookupOrDefault(termArg));
@@ -220,6 +214,8 @@ llvm::SmallVector<mlir::scf::ForOp, 2> plier::lowerWhileToFor(
         if (arg == operand) {
           assert(it2.index() < loopResults.size());
           auto newRes = loopResults[static_cast<unsigned>(it2.index())];
+          newRes = builder.createOrFold<plier::CastOp>(loc, oldRes.getType(),
+                                                       newRes);
           oldRes.replaceAllUsesWith(newRes);
           break;
         }

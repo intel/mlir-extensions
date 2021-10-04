@@ -426,9 +426,9 @@ struct BuildTupleLowering
   mlir::LogicalResult
   matchAndRewrite(plier::BuildTupleOp op, plier::BuildTupleOp::Adaptor adapator,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    auto &converter = *getTypeConverter();
     auto retType = op.getType();
-    auto newRetType = converter.convertType(retType);
+    auto args = adapator.args();
+    auto newRetType = mlir::TupleType::get(op.getContext(), args.getTypes());
     if (!newRetType || newRetType == retType)
       return mlir::failure();
 
@@ -1650,7 +1650,7 @@ void PlierToStdPass::runOnOperation() {
 
     auto srcType = typeConverter.convertType(inputType);
     auto dstType = typeConverter.convertType(op.getType());
-    return srcType == dstType || (!isNum(srcType) && !isNum(dstType));
+    return srcType == dstType || !isNum(srcType) || !isNum(dstType);
   });
   target.addDynamicallyLegalOp<plier::ConstOp, plier::GlobalOp>(
       [&](mlir::Operation *op) {
@@ -1671,11 +1671,6 @@ void PlierToStdPass::runOnOperation() {
   target.addDynamicallyLegalOp<plier::BuildTupleOp>(
       [&](plier::BuildTupleOp op) {
         auto args = op.args();
-        llvm::SmallVector<mlir::Type> types;
-        if (mlir::succeeded(typeConverter.convertTypes(args.getTypes(), types))) {
-          auto srcType = mlir::TupleType::get(op.getContext(), types);
-          return srcType == op.getType();
-        }
         auto srcType = mlir::TupleType::get(op.getContext(), args.getTypes());
         return srcType == op.getType();
       });
