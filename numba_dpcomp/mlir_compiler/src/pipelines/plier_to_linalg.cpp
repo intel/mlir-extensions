@@ -1579,7 +1579,7 @@ struct OptimizeGlobalsConstsLoad
       return mlir::failure();
 
     auto val = elements.getValue(indices);
-    rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, val);
+    rewriter.replaceOpWithNewOp<mlir::arith::ConstantOp>(op, val);
     return mlir::success();
   }
 };

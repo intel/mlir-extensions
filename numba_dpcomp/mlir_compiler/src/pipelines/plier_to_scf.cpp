@@ -151,7 +151,7 @@ struct ScfIfRewriteOneExit : public mlir::OpRewritePattern<mlir::CondBranchOp> {
       mlir::Value cond = op.condition();
       if (reverse) {
         auto i1 = mlir::IntegerType::get(op.getContext(), 1);
-        auto one = rewriter.create<mlir::ConstantOp>(
+        auto one = rewriter.create<mlir::arith::ConstantOp>(
             loc, mlir::IntegerAttr::get(i1, 1));
         cond = rewriter.create<mlir::arith::XOrIOp>(loc, cond, one);
       }
@@ -550,7 +550,7 @@ struct BreakRewrite : public mlir::OpRewritePattern<mlir::CondBranchOp> {
     for (auto user : llvm::make_early_inc_range(conditionBlock->getUsers())) {
       if (user != op) {
         rewriter.setInsertionPoint(user);
-        auto condConst = rewriter.create<mlir::ConstantOp>(loc, condVal);
+        auto condConst = rewriter.create<mlir::arith::ConstantOp>(loc, condVal);
         if (auto br = mlir::dyn_cast<mlir::BranchOp>(user)) {
           llvm::SmallVector<mlir::Value> params(br.destOperands());
           params.emplace_back(condConst);
@@ -566,7 +566,7 @@ struct BreakRewrite : public mlir::OpRewritePattern<mlir::CondBranchOp> {
 
     rewriter.setInsertionPoint(op);
     llvm::SmallVector<mlir::Value> params(op.getFalseOperands());
-    auto one = rewriter.create<mlir::ConstantOp>(loc, condVal);
+    auto one = rewriter.create<mlir::arith::ConstantOp>(loc, condVal);
     auto invertedCond =
         rewriter.create<mlir::arith::SubIOp>(loc, one, op.condition());
     params.push_back(invertedCond);
@@ -576,7 +576,7 @@ struct BreakRewrite : public mlir::OpRewritePattern<mlir::CondBranchOp> {
     rewriter.setInsertionPoint(conditionBr);
     auto oldCond = conditionBr.getCondition();
     mlir::Value newCond = conditionBlock->getArguments().back();
-    one = rewriter.create<mlir::ConstantOp>(loc, condVal);
+    one = rewriter.create<mlir::arith::ConstantOp>(loc, condVal);
     newCond = rewriter.create<mlir::arith::AndIOp>(loc, newCond, oldCond);
     rewriter.create<mlir::CondBranchOp>(
         conditionBr.getLoc(), newCond, conditionBr.getTrueDest(),

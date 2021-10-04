@@ -334,7 +334,7 @@ struct ConstOpLowering : public mlir::OpConversionPattern<plier::ConstOp> {
           return mlir::success();
         }
       }
-      rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, value);
+      rewriter.replaceOpWithNewOp<mlir::arith::ConstantOp>(op, value);
       return mlir::success();
     }
 
@@ -397,7 +397,8 @@ struct LiteralLowering : public mlir::OpConversionPattern<Op> {
     auto attrVal = literal.getValue();
     auto dstType = attrVal.getType();
     auto val = makeSignlessAttr(attrVal);
-    auto newVal = rewriter.create<mlir::ConstantOp>(loc, val).getResult();
+    auto newVal =
+        rewriter.create<mlir::arith::ConstantOp>(loc, val).getResult();
     if (dstType != val.getType())
       newVal = rewriter.create<plier::SignCastOp>(loc, dstType, newVal);
 
@@ -564,7 +565,7 @@ mlir::Value doCast(mlir::PatternRewriter &rewriter, mlir::Location loc,
   if (auto literal = srcType.dyn_cast<plier::LiteralType>()) {
     auto attr = literal.getValue();
     auto signlessAttr = makeSignlessAttr(attr);
-    val = rewriter.create<mlir::ConstantOp>(loc, signlessAttr);
+    val = rewriter.create<mlir::arith::ConstantOp>(loc, signlessAttr);
     if (signlessAttr.getType() != attr.getType())
       val = rewriter.create<plier::SignCastOp>(loc, attr.getType(), val);
 
@@ -815,11 +816,11 @@ static mlir::Value negate(mlir::PatternRewriter &rewriter, mlir::Location loc,
   val = doCast(rewriter, loc, val, resType);
   if (auto itype = resType.dyn_cast<mlir::IntegerType>()) {
     auto signless = plier::makeSignlessType(resType);
-    if (signless != itype) {
+    if (signless != itype)
       val = rewriter.create<plier::SignCastOp>(loc, signless, val);
-    }
+
     // TODO: no int negation?
-    auto zero = rewriter.create<mlir::ConstantOp>(
+    auto zero = rewriter.create<mlir::arith::ConstantOp>(
         loc, mlir::IntegerAttr::get(signless, 0));
     auto res = rewriter.create<mlir::arith::SubIOp>(loc, zero, val).getResult();
     if (signless != itype) {

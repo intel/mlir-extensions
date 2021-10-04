@@ -107,7 +107,8 @@ mlir::LogicalResult plier::CmpLoopBoundsSimplify::matchAndRewrite(
                        op.upperBound())) {
           auto type = rewriter.getI1Type();
           auto val = rewriter.getIntegerAttr(type, *c);
-          auto const_val = rewriter.create<mlir::ConstantOp>(cmp.getLoc(), val);
+          auto const_val =
+              rewriter.create<mlir::arith::ConstantOp>(cmp.getLoc(), val);
           rewriter.replaceOp(cmp, const_val.getResult());
           matched = true;
           break;

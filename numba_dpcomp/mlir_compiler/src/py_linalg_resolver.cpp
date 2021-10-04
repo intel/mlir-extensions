@@ -337,17 +337,17 @@ struct PyLinalgResolver::Context {
     if (py::isinstance<py::bool_>(obj)) {
       auto type = builder.getI1Type();
       auto attr = builder.getIntegerAttr(type, (obj.cast<bool>() ? 1 : 0));
-      return builder.create<mlir::ConstantOp>(loc, attr);
+      return builder.create<mlir::arith::ConstantOp>(loc, attr);
     }
 
     if (py::isinstance<py::int_>(obj)) {
       auto attr = builder.getI64IntegerAttr(obj.cast<int64_t>());
-      return builder.create<mlir::ConstantOp>(loc, attr);
+      return builder.create<mlir::arith::ConstantOp>(loc, attr);
     }
 
     if (py::isinstance<py::float_>(obj)) {
       auto attr = builder.getF64FloatAttr(obj.cast<double>());
-      return builder.create<mlir::ConstantOp>(loc, attr);
+      return builder.create<mlir::arith::ConstantOp>(loc, attr);
     }
 
     plier::report_error(llvm::Twine("Invalid element type: ") +
@@ -923,7 +923,7 @@ py::object fromElementsImpl(py::capsule context, py::handle values,
         }
         plier::report_error("Invalid dtype");
       }();
-      auto res = builder.create<mlir::ConstantOp>(loc, attr);
+      auto res = builder.create<mlir::arith::ConstantOp>(loc, attr);
       vals[index] = doSignCast(builder, loc, res, type);
     } else {
       plier::report_error("Invalid element type");

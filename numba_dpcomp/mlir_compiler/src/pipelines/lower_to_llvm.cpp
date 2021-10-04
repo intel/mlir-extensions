@@ -925,7 +925,7 @@ struct LowerParallel : public mlir::OpRewritePattern<plier::ParallelOp> {
       }
       context_vars_set.insert(value);
       if (auto op = value.getDefiningOp()) {
-        mlir::ConstantOp a;
+        mlir::arith::ConstantOp a;
         if (op->hasTrait<mlir::OpTrait::ConstantLike>()) {
           contextConstants.emplace_back(op);
           return;
@@ -1147,7 +1147,7 @@ struct LowerParallel : public mlir::OpRewritePattern<plier::ParallelOp> {
           mlir::FunctionType::get(op.getContext(), args, {});
       return plier::add_function(rewriter, mod, func_name, parallelFuncType);
     }();
-    auto funcAddr = rewriter.create<mlir::ConstantOp>(
+    auto funcAddr = rewriter.create<mlir::arith::ConstantOp>(
         loc, funcType, mlir::SymbolRefAttr::get(outlinedFunc));
 
     auto inputRanges = allocaInsertionPoint.insert(rewriter, [&]() {

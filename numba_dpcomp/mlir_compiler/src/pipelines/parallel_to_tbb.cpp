@@ -133,7 +133,7 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
       for (auto it : llvm::enumerate(reduceVars)) {
         auto reduce = it.value();
         auto initVal = initVals[it.index()];
-        auto init = builder.create<mlir::ConstantOp>(loc, initVal);
+        auto init = builder.create<mlir::arith::ConstantOp>(loc, initVal);
         builder.create<mlir::memref::StoreOp>(loc, init, reduce, index);
       }
       builder.create<mlir::scf::YieldOp>(loc);
