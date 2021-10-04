@@ -1353,11 +1353,25 @@ lower_math_func(plier::PyCallOp op, llvm::StringRef name,
   return mlir::failure();
 }
 
+static void rerun_scf_pipeline(mlir::Operation *op) {
+  assert(nullptr != op);
+  auto marker =
+      mlir::StringAttr::get(op->getContext(), plierToScfPipelineName());
+  auto mod = op->getParentOfType<mlir::ModuleOp>();
+  assert(nullptr != mod);
+  plier::add_pipeline_jump_marker(mod, marker);
+}
+
 mlir::LogicalResult
 lowerRangeImpl(plier::PyCallOp op, mlir::ValueRange operands,
                llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs,
                mlir::PatternRewriter &rewriter) {
-  return lowerRange(op, operands, kwargs, rewriter);
+  auto parent = op->getParentOp();
+  auto res = lowerRange(op, operands, kwargs, rewriter);
+  if (mlir::succeeded(res))
+    rerun_scf_pipeline(parent);
+
+  return res;
 }
 
 struct CallLowerer {
@@ -1423,15 +1437,6 @@ private:
   mlir::TypeConverter &converter;
   PyFuncResolver pyResolver;
 };
-
-static void rerun_scf_pipeline(mlir::Operation *op) {
-  assert(nullptr != op);
-  auto marker =
-      mlir::StringAttr::get(op->getContext(), plierToScfPipelineName());
-  auto mod = op->getParentOfType<mlir::ModuleOp>();
-  assert(nullptr != mod);
-  plier::add_pipeline_jump_marker(mod, marker);
-}
 
 using kwargs_t = llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>>;
 using func_t = mlir::LogicalResult (*)(plier::PyCallOp, mlir::ValueRange,
@@ -1645,7 +1650,7 @@ void PlierToStdPass::runOnOperation() {
 
     auto srcType = typeConverter.convertType(inputType);
     auto dstType = typeConverter.convertType(op.getType());
-    return srcType == dstType || !isNum(srcType) || !isNum(dstType);
+    return srcType == dstType || (!isNum(srcType) && !isNum(dstType));
   });
   target.addDynamicallyLegalOp<plier::ConstOp, plier::GlobalOp>(
       [&](mlir::Operation *op) {
