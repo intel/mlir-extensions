@@ -96,14 +96,14 @@ def _kernel_body1(global_size, local_size, body, *args):
         body(*args)
 
 def _kernel_body2(global_size, local_size, body, *args):
-    _set_local_size(local_size[0], local_size[1])
+    _set_local_size(local_size[1], local_size[0])
     x, y = global_size
     for i in _gpu_range(y):
         for j in _gpu_range(x):
             body(*args)
 
 def _kernel_body3(global_size, local_size, body, *args):
-    _set_local_size(local_size[0], local_size[1], local_size[2])
+    _set_local_size(local_size[2], local_size[1], local_size[0])
     x, y, z = global_size
     for i in _gpu_range(z):
         for j in _gpu_range(y):

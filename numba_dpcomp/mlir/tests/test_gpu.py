@@ -141,12 +141,12 @@ def test_get_global_id(shape):
     dtype = np.int32
 
     sim_res = np.zeros(shape, dtype)
-    sim_func[shape](sim_res)
+    sim_func[shape, ()](sim_res)
 
     gpu_res = np.zeros(shape, dtype)
 
     with print_pass_ir([],['ConvertParallelLoopToGpu']):
-        gpu_func[shape](gpu_res)
+        gpu_func[shape, ()](gpu_res)
         ir = get_print_buffer()
         assert ir.count('gpu.launch blocks') == 1, ir
 
@@ -197,8 +197,22 @@ def test_get_global_size(shape):
     assert_equal(gpu_res, sim_res)
 
 @require_gpu
-def test_get_local_size():
-    def func(c, a):
+@pytest.mark.parametrize("shape", _test_shapes)
+@pytest.mark.parametrize("lsize", [(), (1,1,1), (2,4,8)])
+def test_get_local_size(shape, lsize):
+    def func1(c):
+        i = get_global_id(0)
+        w = get_local_size(0)
+        c[i] = w
+
+    def func2(c):
+        i = get_global_id(0)
+        j = get_global_id(1)
+        w = get_local_size(0)
+        h = get_local_size(1)
+        c[i, j] = w + h * 100
+
+    def func3(c):
         i = get_global_id(0)
         j = get_global_id(1)
         k = get_global_id(2)
@@ -206,29 +220,25 @@ def test_get_local_size():
         h = get_local_size(1)
         d = get_local_size(2)
         c[i, j, k] = w + h * 100 + d * 10000
-        a[i, j, k] = i + j * 100 + k * 10000
+
+    func = [func1, func2, func3][len(shape) - 1]
 
     sim_func = kernel_sim(func)
     gpu_func = kernel(func)
 
     dtype = np.int32
-    shape = (2,4,8)
-    lsize = (1,2,4)
+
+    if (len(lsize) > len(shape)):
+        lsize =tuple(lsize[:len(shape)])
 
     sim_res = np.zeros(shape, dtype)
-    sim_res1 = np.zeros(shape, dtype)
-    sim_func[shape, lsize](sim_res, sim_res1)
+    sim_func[shape, lsize](sim_res)
 
     gpu_res = np.zeros(shape, dtype)
-    gpu_res1 = np.zeros(shape, dtype)
 
     with print_pass_ir([],['ConvertParallelLoopToGpu']):
-        gpu_func[shape, lsize](gpu_res, gpu_res1)
+        gpu_func[shape, lsize](gpu_res)
         ir = get_print_buffer()
         assert ir.count('gpu.launch blocks') == 1, ir
 
-    print(gpu_res)
-    print(sim_res)
-    print(gpu_res1)
-    print(sim_res1)
     assert_equal(gpu_res, sim_res)
