@@ -146,33 +146,21 @@ def _define_api_funcs():
                 return builder.external_call(func_name, axis, res)
         return api_func_impl
 
+    def get_stub_func(func_name):
+        exec(f'def {func_name}(axis): _stub_error()')
+        return eval(func_name)
+
     class ApiFuncId(ConcreteTemplate):
         cases = [signature(types.uint64, types.uint64)]
 
     this_module = sys.modules[__name__]
 
     for func_name in kernel_api_funcs:
-        exec(f'def {func_name}(axis): _stub_error()')
-        func = eval(func_name)
+        func = get_stub_func(func_name)
         setattr(this_module, func_name, func)
-        print(func_name, func, id(func))
 
         infer_global(func)(ApiFuncId)
         registry.register_func(func_name, func)(get_func(func_name))
 
 _define_api_funcs()
 del _define_api_funcs
-
-# def get_global_id(axis):
-#     _stub_error()
-
-# @infer_global(get_global_id)
-# class GetGlobalId(ConcreteTemplate):
-#     cases = [signature(types.uint64, types.uint64)]
-
-# @registry.register_func('get_global_id', get_global_id)
-# def get_global_id_impl(builder, axis):
-#     if isinstance(axis, int) or is_int(axis):
-#         res = 0
-#         return builder.external_call('get_global_id', axis, res)
-
