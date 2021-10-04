@@ -16,6 +16,7 @@
 
 #include <pybind11/pybind11.h>
 
+#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/Linalg/IR/LinalgOps.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/SCF.h>
@@ -525,9 +526,9 @@ mlir::Value broadcastDim(mlir::OpBuilder &builder, mlir::Location loc,
                          mlir::Value val1, mlir::Value val2) {
   assert(val1.getType().isa<mlir::IndexType>());
   assert(val2.getType().isa<mlir::IndexType>());
-  auto one = builder.create<mlir::ConstantIndexOp>(loc, 1);
-  auto cond =
-      builder.create<mlir::CmpIOp>(loc, mlir::CmpIPredicate::eq, val1, one);
+  auto one = builder.create<mlir::arith::ConstantIndexOp>(loc, 1);
+  auto cond = builder.create<mlir::arith::CmpIOp>(
+      loc, mlir::arith::CmpIPredicate::eq, val1, one);
   return builder.create<mlir::SelectOp>(loc, cond, val2, val1);
 }
 
@@ -542,9 +543,9 @@ mlir::Value expandDim(mlir::OpBuilder &builder, mlir::Location loc,
   mlir::Type targetType =
       mlir::RankedTensorType::get(shape, srcType.getElementType());
   auto dimVal = builder.create<mlir::tensor::DimOp>(loc, initial, dim);
-  auto one = builder.create<mlir::ConstantIndexOp>(loc, 1);
-  mlir::Value cond =
-      builder.create<mlir::CmpIOp>(loc, mlir::CmpIPredicate::eq, one, dimVal);
+  auto one = builder.create<mlir::arith::ConstantIndexOp>(loc, 1);
+  mlir::Value cond = builder.create<mlir::arith::CmpIOp>(
+      loc, mlir::arith::CmpIPredicate::eq, one, dimVal);
   llvm::SmallVector<mlir::Value> newShape(numDims);
   for (unsigned i = 0; i < numDims; ++i) {
     if (i == dim) {
@@ -959,8 +960,8 @@ py::object extractImpl(py::capsule context, py::handle value,
     if (py::isinstance(obj, ctx.context.var)) {
       ind[index] = doSignCast(builder, loc, unwrapSsaVal(obj));
     } else if (py::isinstance<py::int_>(obj)) {
-      ind[index] =
-          builder.create<mlir::ConstantIndexOp>(loc, obj.cast<int64_t>());
+      ind[index] = builder.create<mlir::arith::ConstantIndexOp>(
+          loc, obj.cast<int64_t>());
     } else {
       plier::report_error("Invalid element type");
     }
@@ -1004,7 +1005,7 @@ py::object reshapeImpl(py::capsule context, py::handle src,
       auto dimsCount = tupleType.size();
       ret.resize(dimsCount);
       for (size_t i = 0; i < dimsCount; ++i) {
-        auto ind = builder.create<mlir::ConstantIndexOp>(loc, i);
+        auto ind = builder.create<mlir::arith::ConstantIndexOp>(loc, i);
         auto elemType = tupleType.getType(i);
         auto item = builder.create<plier::GetItemOp>(loc, elemType, dims, ind)
                         .getResult();
@@ -1355,7 +1356,7 @@ py::object getitemImpl(py::capsule context, py::capsule ssaVal,
           context, parentOp.getOperand(static_cast<unsigned>(indexVal)));
 
     auto elemType = tupleType.getType(static_cast<size_t>(indexVal));
-    auto ind = builder.create<mlir::ConstantIndexOp>(loc, indexVal);
+    auto ind = builder.create<mlir::arith::ConstantIndexOp>(loc, indexVal);
     auto item = builder.create<plier::GetItemOp>(loc, elemType, value, ind);
     return ctx.context.createVar(context, item.getResult());
   } else {
@@ -1373,7 +1374,7 @@ mlir::Value binopFuncIdiv(mlir::Location loc, mlir::OpBuilder &builder,
                           mlir::Value lhs, mlir::Value rhs) {
   auto lhs_var = doCast(builder, loc, lhs, builder.getF64Type());
   auto rhs_var = doCast(builder, loc, rhs, builder.getF64Type());
-  return builder.create<mlir::DivFOp>(loc, lhs_var, rhs_var);
+  return builder.create<mlir::arith::DivFOp>(loc, lhs_var, rhs_var);
 }
 
 py::object binopImpl(py::capsule context, py::capsule ssa_val, py::handle rhs,
@@ -1399,9 +1400,9 @@ py::object binopImpl(py::capsule context, py::capsule ssa_val, py::handle rhs,
       mlir::Value (*)(mlir::Location loc, mlir::OpBuilder & builder,
                       mlir::Value lhs, mlir::Value rhs);
   const std::tuple<llvm::StringRef, binop_func_t, binop_func_t> funcs[] = {
-      {"+", &binopFunc<mlir::AddIOp>, &binopFunc<mlir::AddFOp>},
-      {"*", &binopFunc<mlir::MulIOp>, &binopFunc<mlir::MulFOp>},
-      {"/", &binopFuncIdiv, &binopFunc<mlir::DivFOp>},
+      {"+", &binopFunc<mlir::arith::AddIOp>, &binopFunc<mlir::arith::AddFOp>},
+      {"*", &binopFunc<mlir::arith::MulIOp>, &binopFunc<mlir::arith::MulFOp>},
+      {"/", &binopFuncIdiv, &binopFunc<mlir::arith::DivFOp>},
   };
 
   auto op_name = static_cast<std::string>(op);

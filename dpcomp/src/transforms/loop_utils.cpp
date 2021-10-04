@@ -16,6 +16,7 @@
 
 #include <llvm/ADT/SmallVector.h>
 
+#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
@@ -46,10 +47,11 @@ static Op getNextOp(llvm::iterator_range<mlir::Block::iterator> &iters) {
 static mlir::Value getLastIterValue(mlir::PatternRewriter &builder,
                                     mlir::Location loc, mlir::Value lower_bound,
                                     mlir::Value upper_bound, mlir::Value step) {
-  auto len = builder.createOrFold<mlir::SubIOp>(loc, upper_bound, lower_bound);
-  auto count = builder.createOrFold<mlir::SignedDivIOp>(loc, len, step);
-  auto inc = builder.createOrFold<mlir::MulIOp>(loc, count, step);
-  return builder.createOrFold<mlir::AddIOp>(loc, lower_bound, inc);
+  auto len =
+      builder.createOrFold<mlir::arith::SubIOp>(loc, upper_bound, lower_bound);
+  auto count = builder.createOrFold<mlir::arith::DivSIOp>(loc, len, step);
+  auto inc = builder.createOrFold<mlir::arith::MulIOp>(loc, count, step);
+  return builder.createOrFold<mlir::arith::AddIOp>(loc, lower_bound, inc);
 }
 
 static mlir::Value getCastArg(mlir::Value val) {
@@ -109,13 +111,14 @@ llvm::SmallVector<mlir::scf::ForOp, 2> plier::lowerWhileToFor(
     if (!zeroVal) {
       mlir::OpBuilder::InsertionGuard guard(builder);
       builder.setInsertionPoint(whileOp);
-      zeroVal = builder.create<mlir::ConstantIndexOp>(loc, 0);
+      zeroVal = builder.create<mlir::arith::ConstantIndexOp>(loc, 0);
     }
     return zeroVal;
   };
 
   auto getNeg = [&](mlir::Value value) {
-    return builder.createOrFold<mlir::SubIOp>(loc, getZeroIndex(), value);
+    return builder.createOrFold<mlir::arith::SubIOp>(loc, getZeroIndex(),
+                                                     value);
   };
 
   auto &beforeBlock = whileOp.before().front();
@@ -194,8 +197,8 @@ llvm::SmallVector<mlir::scf::ForOp, 2> plier::lowerWhileToFor(
   };
 
   builder.setInsertionPoint(whileOp);
-  auto stepSign = builder.createOrFold<mlir::CmpIOp>(
-      loc, mlir::CmpIPredicate::sge, origStep, getZeroIndex());
+  auto stepSign = builder.createOrFold<mlir::arith::CmpIOp>(
+      loc, mlir::arith::CmpIPredicate::sge, origStep, getZeroIndex());
 
   auto loopResults = [&]() -> mlir::ValueRange {
     auto ind = getConstVal<mlir::IntegerAttr>(stepSign);

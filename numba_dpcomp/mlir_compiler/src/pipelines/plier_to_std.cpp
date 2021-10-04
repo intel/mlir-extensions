@@ -16,6 +16,7 @@
 #include "pipelines/plier_to_scf.hpp"
 #include "pipelines/pre_low_simplifications.hpp"
 
+#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/Math/IR/Math.h>
 #include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
@@ -327,7 +328,7 @@ struct ConstOpLowering : public mlir::OpConversionPattern<plier::ConstOp> {
         auto type = intAttr.getType().cast<mlir::IntegerType>();
         if (!type.isSignless()) {
           auto intVal = intAttr.getValue().getSExtValue();
-          auto constVal = rewriter.create<mlir::ConstantIntOp>(
+          auto constVal = rewriter.create<mlir::arith::ConstantIntOp>(
               op.getLoc(), intVal, type.getWidth());
           rewriter.replaceOpWithNewOp<plier::SignCastOp>(op, type, constVal);
           return mlir::success();
@@ -466,21 +467,21 @@ mlir::Value int_cast(mlir::PatternRewriter &rewriter, mlir::Location loc,
 
   if (dstBits > srcBits) {
     if (srcIntType.isSigned()) {
-      val = rewriter.createOrFold<mlir::SignExtendIOp>(loc, val, dstSignless);
+      val = rewriter.createOrFold<mlir::arith::ExtSIOp>(loc, val, dstSignless);
     } else {
-      val = rewriter.createOrFold<mlir::ZeroExtendIOp>(loc, val, dstSignless);
+      val = rewriter.createOrFold<mlir::arith::ExtUIOp>(loc, val, dstSignless);
     }
   } else if (dstBits < srcBits) {
     if (dstBits == 1) {
       // Special handling for bool
-      auto zero = rewriter.create<mlir::ConstantIntOp>(loc, 0, srcBits);
-      auto cmp = rewriter.createOrFold<mlir::CmpIOp>(
-          loc, mlir::CmpIPredicate::eq, val, zero);
-      auto trueVal = rewriter.create<mlir::ConstantIntOp>(loc, 1, 1);
-      auto falseVal = rewriter.create<mlir::ConstantIntOp>(loc, 0, 1);
+      auto zero = rewriter.create<mlir::arith::ConstantIntOp>(loc, 0, srcBits);
+      auto cmp = rewriter.createOrFold<mlir::arith::CmpIOp>(
+          loc, mlir::arith::CmpIPredicate::eq, val, zero);
+      auto trueVal = rewriter.create<mlir::arith::ConstantIntOp>(loc, 1, 1);
+      auto falseVal = rewriter.create<mlir::arith::ConstantIntOp>(loc, 0, 1);
       val = rewriter.createOrFold<mlir::SelectOp>(loc, cmp, falseVal, trueVal);
     } else {
-      val = rewriter.createOrFold<mlir::TruncateIOp>(loc, val, dstSignless);
+      val = rewriter.createOrFold<mlir::arith::TruncIOp>(loc, val, dstSignless);
     }
   }
 
@@ -499,9 +500,9 @@ mlir::Value int_float_cast(mlir::PatternRewriter &rewriter, mlir::Location loc,
   }
 
   if (srcIntType.isSigned()) {
-    return rewriter.createOrFold<mlir::SIToFPOp>(loc, val, dstType);
+    return rewriter.createOrFold<mlir::arith::SIToFPOp>(loc, val, dstType);
   } else {
-    return rewriter.createOrFold<mlir::UIToFPOp>(loc, val, dstType);
+    return rewriter.createOrFold<mlir::arith::UIToFPOp>(loc, val, dstType);
   }
 }
 
@@ -512,17 +513,17 @@ mlir::Value float_int_cast(mlir::PatternRewriter &rewriter, mlir::Location loc,
   auto dstSignlessType = plier::makeSignlessType(dstIntType);
   if (dstIntType.getWidth() == 1) {
     // Special handling for bool
-    auto zero = rewriter.create<mlir::ConstantFloatOp>(
+    auto zero = rewriter.create<mlir::arith::ConstantFloatOp>(
         loc, llvm::APFloat(0.0), val.getType().cast<mlir::FloatType>());
-    auto cmp = rewriter.createOrFold<mlir::CmpFOp>(
-        loc, mlir::CmpFPredicate::OEQ, val, zero);
-    auto trueVal = rewriter.create<mlir::ConstantIntOp>(loc, 1, 1);
-    auto falseVal = rewriter.create<mlir::ConstantIntOp>(loc, 0, 1);
+    auto cmp = rewriter.createOrFold<mlir::arith::CmpFOp>(
+        loc, mlir::arith::CmpFPredicate::OEQ, val, zero);
+    auto trueVal = rewriter.create<mlir::arith::ConstantIntOp>(loc, 1, 1);
+    auto falseVal = rewriter.create<mlir::arith::ConstantIntOp>(loc, 0, 1);
     res = rewriter.createOrFold<mlir::SelectOp>(loc, cmp, falseVal, trueVal);
   } else if (dstIntType.isSigned()) {
-    res = rewriter.create<mlir::FPToSIOp>(loc, val, dstSignlessType);
+    res = rewriter.create<mlir::arith::FPToSIOp>(loc, val, dstSignlessType);
   } else {
-    res = rewriter.create<mlir::FPToUIOp>(loc, val, dstSignlessType);
+    res = rewriter.create<mlir::arith::FPToUIOp>(loc, val, dstSignlessType);
   }
   if (dstSignlessType != dstIntType) {
     return rewriter.createOrFold<plier::SignCastOp>(loc, dstIntType, res);
@@ -534,12 +535,12 @@ mlir::Value index_cast_impl(mlir::PatternRewriter &rewriter, mlir::Location loc,
                             mlir::Value val, mlir::Type dstType) {
   if (val.getType().isa<mlir::FloatType>()) {
     auto intType = rewriter.getI64Type();
-    val = rewriter.createOrFold<mlir::FPToSIOp>(loc, val, intType);
+    val = rewriter.createOrFold<mlir::arith::FPToSIOp>(loc, val, intType);
   }
   if (dstType.isa<mlir::FloatType>()) {
     auto intType = rewriter.getI64Type();
     val = plier::index_cast(rewriter, loc, val, intType);
-    return rewriter.createOrFold<mlir::SIToFPOp>(loc, val, dstType);
+    return rewriter.createOrFold<mlir::arith::SIToFPOp>(loc, val, dstType);
   }
   return plier::index_cast(rewriter, loc, val, dstType);
 }
@@ -550,9 +551,9 @@ mlir::Value float_cast_impl(mlir::PatternRewriter &rewriter, mlir::Location loc,
   auto dstFloatType = dstType.cast<mlir::FloatType>();
   assert(srcFloatType != dstFloatType);
   if (dstFloatType.getWidth() > srcFloatType.getWidth()) {
-    return rewriter.createOrFold<mlir::FPExtOp>(loc, val, dstFloatType);
+    return rewriter.createOrFold<mlir::arith::ExtFOp>(loc, val, dstFloatType);
   } else {
-    return rewriter.createOrFold<mlir::FPTruncOp>(loc, val, dstFloatType);
+    return rewriter.createOrFold<mlir::arith::TruncFOp>(loc, val, dstFloatType);
   }
 }
 
@@ -628,7 +629,7 @@ mlir::Value replace_itruediv_op(mlir::PatternRewriter &rewriter,
   assert(newType.isa<mlir::FloatType>());
   auto lhs = doCast(rewriter, loc, operands[0], newType);
   auto rhs = doCast(rewriter, loc, operands[1], newType);
-  return rewriter.createOrFold<mlir::DivFOp>(loc, lhs, rhs);
+  return rewriter.createOrFold<mlir::arith::DivFOp>(loc, lhs, rhs);
 }
 
 mlir::Value replace_ifloordiv_op(mlir::PatternRewriter &rewriter,
@@ -640,9 +641,9 @@ mlir::Value replace_ifloordiv_op(mlir::PatternRewriter &rewriter,
   auto rhs = doCast(rewriter, loc, operands[1], signlessType);
   mlir::Value res;
   if (newIntType.isSigned()) {
-    res = rewriter.createOrFold<mlir::SignedFloorDivIOp>(loc, lhs, rhs);
+    res = rewriter.createOrFold<mlir::arith::FloorDivSIOp>(loc, lhs, rhs);
   } else {
-    res = rewriter.createOrFold<mlir::UnsignedDivIOp>(loc, lhs, rhs);
+    res = rewriter.createOrFold<mlir::arith::DivUIOp>(loc, lhs, rhs);
   }
   return doCast(rewriter, loc, res, newType);
 }
@@ -653,8 +654,8 @@ mlir::Value replace_ffloordiv_op(mlir::PatternRewriter &rewriter,
   assert(newType.isa<mlir::FloatType>());
   auto lhs = doCast(rewriter, loc, operands[0], newType);
   auto rhs = doCast(rewriter, loc, operands[1], newType);
-  auto res = rewriter.createOrFold<mlir::DivFOp>(loc, lhs, rhs);
-  return rewriter.createOrFold<mlir::FloorFOp>(loc, res);
+  auto res = rewriter.createOrFold<mlir::arith::DivFOp>(loc, lhs, rhs);
+  return rewriter.createOrFold<mlir::math::FloorOp>(loc, res);
 }
 
 mlir::Value replace_imod_op(mlir::PatternRewriter &rewriter, mlir::Location loc,
@@ -662,9 +663,9 @@ mlir::Value replace_imod_op(mlir::PatternRewriter &rewriter, mlir::Location loc,
   auto signlessType = plier::makeSignlessType(operands[0].getType());
   auto a = doCast(rewriter, loc, operands[0], signlessType);
   auto b = doCast(rewriter, loc, operands[1], signlessType);
-  auto v1 = rewriter.create<mlir::SignedRemIOp>(loc, a, b).getResult();
-  auto v2 = rewriter.create<mlir::AddIOp>(loc, v1, b).getResult();
-  auto res = rewriter.create<mlir::SignedRemIOp>(loc, v2, b).getResult();
+  auto v1 = rewriter.create<mlir::arith::RemSIOp>(loc, a, b).getResult();
+  auto v2 = rewriter.create<mlir::arith::AddIOp>(loc, v1, b).getResult();
+  auto res = rewriter.create<mlir::arith::RemSIOp>(loc, v2, b).getResult();
   return doCast(rewriter, loc, res, newType);
 }
 
@@ -672,13 +673,13 @@ mlir::Value replace_fmod_op(mlir::PatternRewriter &rewriter, mlir::Location loc,
                             mlir::ValueRange operands, mlir::Type /*newType*/) {
   auto a = operands[0];
   auto b = operands[1];
-  auto v1 = rewriter.create<mlir::RemFOp>(loc, a, b).getResult();
-  auto v2 = rewriter.create<mlir::AddFOp>(loc, v1, b).getResult();
-  return rewriter.create<mlir::RemFOp>(loc, v2, b).getResult();
+  auto v1 = rewriter.create<mlir::arith::RemFOp>(loc, a, b).getResult();
+  auto v2 = rewriter.create<mlir::arith::AddFOp>(loc, v1, b).getResult();
+  return rewriter.create<mlir::arith::RemFOp>(loc, v2, b).getResult();
 }
 
-template <mlir::CmpIPredicate SignedPred,
-          mlir::CmpIPredicate UnsignedPred = SignedPred>
+template <mlir::arith::CmpIPredicate SignedPred,
+          mlir::arith::CmpIPredicate UnsignedPred = SignedPred>
 mlir::Value replace_cmpi_op(mlir::PatternRewriter &rewriter, mlir::Location loc,
                             mlir::ValueRange operands, mlir::Type /*newType*/) {
   assert(operands.size() == 2);
@@ -688,19 +689,19 @@ mlir::Value replace_cmpi_op(mlir::PatternRewriter &rewriter, mlir::Location loc,
   auto a = doCast(rewriter, loc, operands[0], signlessType);
   auto b = doCast(rewriter, loc, operands[1], signlessType);
   if (SignedPred == UnsignedPred || type.isSigned()) {
-    return rewriter.createOrFold<mlir::CmpIOp>(loc, SignedPred, a, b);
+    return rewriter.createOrFold<mlir::arith::CmpIOp>(loc, SignedPred, a, b);
   } else {
-    return rewriter.createOrFold<mlir::CmpIOp>(loc, UnsignedPred, a, b);
+    return rewriter.createOrFold<mlir::arith::CmpIOp>(loc, UnsignedPred, a, b);
   }
 }
 
-template <mlir::CmpFPredicate Pred>
+template <mlir::arith::CmpFPredicate Pred>
 mlir::Value replace_cmpf_op(mlir::PatternRewriter &rewriter, mlir::Location loc,
                             mlir::ValueRange operands, mlir::Type /*newType*/) {
   auto signlessType = plier::makeSignlessType(operands[0].getType());
   auto a = doCast(rewriter, loc, operands[0], signlessType);
   auto b = doCast(rewriter, loc, operands[1], signlessType);
-  return rewriter.createOrFold<mlir::CmpFOp>(loc, Pred, a, b);
+  return rewriter.createOrFold<mlir::arith::CmpFOp>(loc, Pred, a, b);
 }
 
 struct BinOpLowering : public mlir::OpConversionPattern<plier::BinOp> {
@@ -753,30 +754,37 @@ struct BinOpLowering : public mlir::OpConversionPattern<plier::BinOp> {
     };
 
     const OpDesc handlers[] = {
-        {"+", &replace_op<mlir::AddIOp>, &replace_op<mlir::AddFOp>},
-        {"-", &replace_op<mlir::SubIOp>, &replace_op<mlir::SubFOp>},
-        {"*", &replace_op<mlir::MulIOp>, &replace_op<mlir::MulFOp>},
+        {"+", &replace_op<mlir::arith::AddIOp>,
+         &replace_op<mlir::arith::AddFOp>},
+        {"-", &replace_op<mlir::arith::SubIOp>,
+         &replace_op<mlir::arith::SubFOp>},
+        {"*", &replace_op<mlir::arith::MulIOp>,
+         &replace_op<mlir::arith::MulFOp>},
         {"**", &replace_ipow_op, &replace_op<mlir::math::PowFOp>},
-        {"/", &replace_itruediv_op, &replace_op<mlir::DivFOp>},
+        {"/", &replace_itruediv_op, &replace_op<mlir::arith::DivFOp>},
         {"//", &replace_ifloordiv_op, &replace_ffloordiv_op},
         {"%", &replace_imod_op, &replace_fmod_op},
 
         {">",
-         &replace_cmpi_op<mlir::CmpIPredicate::sgt, mlir::CmpIPredicate::ugt>,
-         &replace_cmpf_op<mlir::CmpFPredicate::OGT>},
+         &replace_cmpi_op<mlir::arith::CmpIPredicate::sgt,
+                          mlir::arith::CmpIPredicate::ugt>,
+         &replace_cmpf_op<mlir::arith::CmpFPredicate::OGT>},
         {">=",
-         &replace_cmpi_op<mlir::CmpIPredicate::sge, mlir::CmpIPredicate::uge>,
-         &replace_cmpf_op<mlir::CmpFPredicate::OGE>},
+         &replace_cmpi_op<mlir::arith::CmpIPredicate::sge,
+                          mlir::arith::CmpIPredicate::uge>,
+         &replace_cmpf_op<mlir::arith::CmpFPredicate::OGE>},
         {"<",
-         &replace_cmpi_op<mlir::CmpIPredicate::slt, mlir::CmpIPredicate::ult>,
-         &replace_cmpf_op<mlir::CmpFPredicate::OLT>},
+         &replace_cmpi_op<mlir::arith::CmpIPredicate::slt,
+                          mlir::arith::CmpIPredicate::ult>,
+         &replace_cmpf_op<mlir::arith::CmpFPredicate::OLT>},
         {"<=",
-         &replace_cmpi_op<mlir::CmpIPredicate::sle, mlir::CmpIPredicate::ule>,
-         &replace_cmpf_op<mlir::CmpFPredicate::OLE>},
-        {"!=", &replace_cmpi_op<mlir::CmpIPredicate::ne>,
-         &replace_cmpf_op<mlir::CmpFPredicate::ONE>},
-        {"==", &replace_cmpi_op<mlir::CmpIPredicate::eq>,
-         &replace_cmpf_op<mlir::CmpFPredicate::OEQ>},
+         &replace_cmpi_op<mlir::arith::CmpIPredicate::sle,
+                          mlir::arith::CmpIPredicate::ule>,
+         &replace_cmpf_op<mlir::arith::CmpFPredicate::OLE>},
+        {"!=", &replace_cmpi_op<mlir::arith::CmpIPredicate::ne>,
+         &replace_cmpf_op<mlir::arith::CmpFPredicate::ONE>},
+        {"==", &replace_cmpi_op<mlir::arith::CmpIPredicate::eq>,
+         &replace_cmpf_op<mlir::arith::CmpFPredicate::OEQ>},
     };
 
     using membptr_t = func_t OpDesc::*;
@@ -813,14 +821,14 @@ static mlir::Value negate(mlir::PatternRewriter &rewriter, mlir::Location loc,
     // TODO: no int negation?
     auto zero = rewriter.create<mlir::ConstantOp>(
         loc, mlir::IntegerAttr::get(signless, 0));
-    auto res = rewriter.create<mlir::SubIOp>(loc, zero, val).getResult();
+    auto res = rewriter.create<mlir::arith::SubIOp>(loc, zero, val).getResult();
     if (signless != itype) {
       res = rewriter.create<plier::SignCastOp>(loc, itype, res);
     }
     return res;
   }
   if (resType.isa<mlir::FloatType>()) {
-    return rewriter.create<mlir::NegFOp>(loc, val);
+    return rewriter.create<mlir::arith::NegFOp>(loc, val);
   }
   llvm_unreachable("negate: unsupported type");
 }
@@ -914,7 +922,7 @@ lowerSlice(plier::PyCallOp op, mlir::ValueRange operands,
     if (operands.size() == 3)
       return operands[2];
 
-    return rewriter.create<mlir::ConstantIndexOp>(op.getLoc(), 1);
+    return rewriter.create<mlir::arith::ConstantIndexOp>(op.getLoc(), 1);
   }();
 
   rerun_scf_pipeline(op);

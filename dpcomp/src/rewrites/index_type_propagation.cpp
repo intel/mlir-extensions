@@ -14,6 +14,7 @@
 
 #include "plier/rewrites/index_type_propagation.hpp"
 
+#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/IR/PatternMatch.h>
 
@@ -42,8 +43,8 @@ struct ArithIndexCastSimplify : public mlir::OpRewritePattern<Op> {
     }
 
     auto get_cast = [](mlir::Value val) -> mlir::Value {
-      if (auto op =
-              mlir::dyn_cast_or_null<mlir::IndexCastOp>(val.getDefiningOp())) {
+      if (auto op = mlir::dyn_cast_or_null<mlir::arith::IndexCastOp>(
+              val.getDefiningOp())) {
         return op.getOperand();
       }
       return {};
@@ -63,25 +64,25 @@ struct ArithIndexCastSimplify : public mlir::OpRewritePattern<Op> {
     auto rhs_const = get_const(op.rhs());
     if (lhs && rhs) {
       auto new_op = rewriter.create<Op>(op.getLoc(), lhs, rhs);
-      auto result = rewriter.create<mlir::IndexCastOp>(
+      auto result = rewriter.create<mlir::arith::IndexCastOp>(
           op.getLoc(), new_op.getResult(), lhs_type);
       rewriter.replaceOp(op, result.getResult());
       return mlir::success();
     }
     if (lhs && rhs_const) {
-      auto new_const = rewriter.create<mlir::ConstantIndexOp>(
+      auto new_const = rewriter.create<mlir::arith::ConstantIndexOp>(
           op.getLoc(), rhs_const.getInt());
       auto new_op = rewriter.create<Op>(op.getLoc(), lhs, new_const);
-      auto result = rewriter.create<mlir::IndexCastOp>(
+      auto result = rewriter.create<mlir::arith::IndexCastOp>(
           op.getLoc(), new_op.getResult(), lhs_type);
       rewriter.replaceOp(op, result.getResult());
       return mlir::success();
     }
     if (lhs_const && rhs) {
-      auto new_const = rewriter.create<mlir::ConstantIndexOp>(
+      auto new_const = rewriter.create<mlir::arith::ConstantIndexOp>(
           op.getLoc(), lhs_const.getInt());
       auto new_op = rewriter.create<Op>(op.getLoc(), new_const, rhs);
-      auto result = rewriter.create<mlir::IndexCastOp>(
+      auto result = rewriter.create<mlir::arith::IndexCastOp>(
           op.getLoc(), new_op.getResult(), lhs_type);
       rewriter.replaceOp(op, result.getResult());
       return mlir::success();
@@ -91,11 +92,12 @@ struct ArithIndexCastSimplify : public mlir::OpRewritePattern<Op> {
   }
 };
 
-struct CmpIndexCastSimplify : public mlir::OpRewritePattern<mlir::CmpIOp> {
-  using mlir::OpRewritePattern<mlir::CmpIOp>::OpRewritePattern;
+struct CmpIndexCastSimplify
+    : public mlir::OpRewritePattern<mlir::arith::CmpIOp> {
+  using OpRewritePattern::OpRewritePattern;
 
   mlir::LogicalResult
-  matchAndRewrite(mlir::CmpIOp op,
+  matchAndRewrite(mlir::arith::CmpIOp op,
                   mlir::PatternRewriter &rewriter) const override {
     auto lhs_type = op.lhs().getType();
     auto rhs_type = op.rhs().getType();
@@ -104,8 +106,8 @@ struct CmpIndexCastSimplify : public mlir::OpRewritePattern<mlir::CmpIOp> {
     }
 
     auto get_cast = [](mlir::Value val) -> mlir::Value {
-      if (auto op =
-              mlir::dyn_cast_or_null<mlir::IndexCastOp>(val.getDefiningOp())) {
+      if (auto op = mlir::dyn_cast_or_null<mlir::arith::IndexCastOp>(
+              val.getDefiningOp())) {
         return op.getOperand();
       }
       return {};
@@ -124,24 +126,24 @@ struct CmpIndexCastSimplify : public mlir::OpRewritePattern<mlir::CmpIOp> {
     auto lhs_const = get_const(op.lhs());
     auto rhs_const = get_const(op.rhs());
     if (lhs && rhs) {
-      auto new_cmp =
-          rewriter.create<mlir::CmpIOp>(op.getLoc(), op.predicate(), lhs, rhs);
+      auto new_cmp = rewriter.create<mlir::arith::CmpIOp>(
+          op.getLoc(), op.predicate(), lhs, rhs);
       rewriter.replaceOp(op, new_cmp.getResult());
       return mlir::success();
     }
     if (lhs && rhs_const) {
-      auto new_const = rewriter.create<mlir::ConstantIndexOp>(
+      auto new_const = rewriter.create<mlir::arith::ConstantIndexOp>(
           op.getLoc(), rhs_const.getInt());
-      auto new_cmp = rewriter.create<mlir::CmpIOp>(op.getLoc(), op.predicate(),
-                                                   lhs, new_const);
+      auto new_cmp = rewriter.create<mlir::arith::CmpIOp>(
+          op.getLoc(), op.predicate(), lhs, new_const);
       rewriter.replaceOp(op, new_cmp.getResult());
       return mlir::success();
     }
     if (lhs_const && rhs) {
-      auto new_const = rewriter.create<mlir::ConstantIndexOp>(
+      auto new_const = rewriter.create<mlir::arith::ConstantIndexOp>(
           op.getLoc(), lhs_const.getInt());
-      auto new_cmp = rewriter.create<mlir::CmpIOp>(op.getLoc(), op.predicate(),
-                                                   new_const, rhs);
+      auto new_cmp = rewriter.create<mlir::arith::CmpIOp>(
+          op.getLoc(), op.predicate(), new_const, rhs);
       rewriter.replaceOp(op, new_cmp.getResult());
       return mlir::success();
     }
@@ -153,11 +155,12 @@ struct CmpIndexCastSimplify : public mlir::OpRewritePattern<mlir::CmpIOp> {
 
 void plier::populate_index_propagate_patterns(
     mlir::MLIRContext &context, mlir::RewritePatternSet &patterns) {
-  patterns.insert<CmpIndexCastSimplify, ArithIndexCastSimplify<mlir::SubIOp>,
-                  ArithIndexCastSimplify<mlir::AddIOp>,
-                  ArithIndexCastSimplify<mlir::MulIOp>,
-                  ArithIndexCastSimplify<mlir::SignedDivIOp>,
-                  ArithIndexCastSimplify<mlir::UnsignedDivIOp>,
-                  ArithIndexCastSimplify<mlir::SignedRemIOp>,
-                  ArithIndexCastSimplify<mlir::UnsignedRemIOp>>(&context);
+  patterns
+      .insert<CmpIndexCastSimplify, ArithIndexCastSimplify<mlir::arith::SubIOp>,
+              ArithIndexCastSimplify<mlir::arith::AddIOp>,
+              ArithIndexCastSimplify<mlir::arith::MulIOp>,
+              ArithIndexCastSimplify<mlir::arith::DivSIOp>,
+              ArithIndexCastSimplify<mlir::arith::DivUIOp>,
+              ArithIndexCastSimplify<mlir::arith::RemSIOp>,
+              ArithIndexCastSimplify<mlir::arith::RemUIOp>>(&context);
 }

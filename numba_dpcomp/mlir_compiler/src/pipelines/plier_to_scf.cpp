@@ -14,6 +14,7 @@
 
 #include "pipelines/plier_to_scf.hpp"
 
+#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/IR/BlockAndValueMapping.h>
@@ -152,7 +153,7 @@ struct ScfIfRewriteOneExit : public mlir::OpRewritePattern<mlir::CondBranchOp> {
         auto i1 = mlir::IntegerType::get(op.getContext(), 1);
         auto one = rewriter.create<mlir::ConstantOp>(
             loc, mlir::IntegerAttr::get(i1, 1));
-        cond = rewriter.create<mlir::XOrOp>(loc, cond, one);
+        cond = rewriter.create<mlir::arith::XOrIOp>(loc, cond, one);
       }
 
       mlir::BlockAndValueMapping mapper;
@@ -301,9 +302,10 @@ struct ScfIfRewriteTwoExits
 
         auto cond = mapper.lookupOrDefault(thenBr.condition());
         if (reverseExitCond) {
-          auto one = builder.create<mlir::ConstantIntOp>(loc, /*value*/ 1,
+          auto one =
+              builder.create<mlir::arith::ConstantIntOp>(loc, /*value*/ 1,
                                                          /*width*/ 1);
-          cond = builder.create<mlir::SubIOp>(loc, one, cond);
+          cond = builder.create<mlir::arith::SubIOp>(loc, one, cond);
         }
 
         llvm::SmallVector<mlir::Value> ret;
@@ -320,8 +322,8 @@ struct ScfIfRewriteTwoExits
       };
 
       auto falseBuilder = [&](mlir::OpBuilder &builder, mlir::Location loc) {
-        mlir::Value cond =
-            rewriter.create<mlir::ConstantIntOp>(loc, /*value*/ 0, /*width*/ 1);
+        mlir::Value cond = rewriter.create<mlir::arith::ConstantIntOp>(
+            loc, /*value*/ 0, /*width*/ 1);
         llvm::SmallVector<mlir::Value> ret;
         ret.emplace_back(cond);
         llvm::copy(exitOps, std::back_inserter(ret));
@@ -335,9 +337,9 @@ struct ScfIfRewriteTwoExits
       auto cond = op.getCondition();
       auto loc = op->getLoc();
       if (reverse) {
-        auto one =
-            rewriter.create<mlir::ConstantIntOp>(loc, /*value*/ 1, /*width*/ 1);
-        cond = rewriter.create<mlir::SubIOp>(loc, one, cond);
+        auto one = rewriter.create<mlir::arith::ConstantIntOp>(loc, /*value*/ 1,
+                                                               /*width*/ 1);
+        cond = rewriter.create<mlir::arith::SubIOp>(loc, one, cond);
       }
 
       auto ifRetType = rewriter.getIntegerType(1);
@@ -353,7 +355,7 @@ struct ScfIfRewriteTwoExits
                            .create<mlir::scf::IfOp>(loc, retTypes, cond,
                                                     trueBuilder, falseBuilder)
                            .getResults();
-      cond = rewriter.create<mlir::AndOp>(loc, cond, ifResults[0]);
+      cond = rewriter.create<mlir::arith::AndIOp>(loc, cond, ifResults[0]);
       ifResults = ifResults.drop_front();
       rewriter.replaceOpWithNewOp<mlir::CondBranchOp>(
           op, cond, exitBlock1, ops1, exitBlock2,
@@ -565,7 +567,8 @@ struct BreakRewrite : public mlir::OpRewritePattern<mlir::CondBranchOp> {
     rewriter.setInsertionPoint(op);
     llvm::SmallVector<mlir::Value> params(op.getFalseOperands());
     auto one = rewriter.create<mlir::ConstantOp>(loc, condVal);
-    auto invertedCond = rewriter.create<mlir::SubIOp>(loc, one, op.condition());
+    auto invertedCond =
+        rewriter.create<mlir::arith::SubIOp>(loc, one, op.condition());
     params.push_back(invertedCond);
     rewriter.create<mlir::BranchOp>(op.getLoc(), conditionBlock, params);
     rewriter.eraseOp(op);
@@ -574,7 +577,7 @@ struct BreakRewrite : public mlir::OpRewritePattern<mlir::CondBranchOp> {
     auto oldCond = conditionBr.getCondition();
     mlir::Value newCond = conditionBlock->getArguments().back();
     one = rewriter.create<mlir::ConstantOp>(loc, condVal);
-    newCond = rewriter.create<mlir::AndOp>(loc, newCond, oldCond);
+    newCond = rewriter.create<mlir::arith::AndIOp>(loc, newCond, oldCond);
     rewriter.create<mlir::CondBranchOp>(
         conditionBr.getLoc(), newCond, conditionBr.getTrueDest(),
         conditionBr.getTrueOperands(), conditionBr.getFalseDest(),

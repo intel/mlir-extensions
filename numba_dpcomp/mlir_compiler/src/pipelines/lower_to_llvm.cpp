@@ -14,6 +14,7 @@
 
 #include "pipelines/lower_to_llvm.hpp"
 
+#include <mlir/Conversion/ArithmeticToLLVM/ArithmeticToLLVM.h>
 #include <mlir/Conversion/LLVMCommon/ConversionTarget.h>
 #include <mlir/Conversion/LLVMCommon/LoweringOptions.h>
 #include <mlir/Conversion/LLVMCommon/TypeConverter.h>
@@ -24,6 +25,7 @@
 #include <mlir/Conversion/SCFToStandard/SCFToStandard.h>
 #include <mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h>
 #include <mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h>
+#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/LLVMIR/LLVMDialect.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/SCF.h>
@@ -1172,7 +1174,8 @@ struct LowerParallel : public mlir::OpRewritePattern<plier::ParallelOp> {
       rewriter.create<mlir::LLVM::StoreOp>(loc, inputRange, ptr);
     }
 
-    auto numLoopsVar = rewriter.create<mlir::ConstantIndexOp>(loc, num_loops);
+    auto numLoopsVar =
+        rewriter.create<mlir::arith::ConstantIndexOp>(loc, num_loops);
     const mlir::Value pfArgs[] = {inputRanges, numLoopsVar, funcAddr,
                                   contextAbstract};
     rewriter.replaceOpWithNewOp<mlir::CallOp>(op, parallelFor, pfArgs);
@@ -1440,6 +1443,7 @@ struct LLVMLoweringPass
     populateMathToLLVMConversionPatterns(typeConverter, patterns);
     populateMemRefToLLVMConversionPatterns(typeConverter, patterns);
     populateLinalgToLLVMConversionPatterns(typeConverter, patterns);
+    arith::populateArithmeticToLLVMConversionPatterns(typeConverter, patterns);
 
     patterns.insert<
         // clang-format off

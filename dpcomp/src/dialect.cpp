@@ -21,6 +21,7 @@
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Transforms/InliningUtils.h>
 
+#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/GPU/GPUDialect.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
@@ -606,7 +607,7 @@ struct SliceGetitemPropagate
 
     auto loc = op.getLoc();
     auto getInd = [&](int64_t val) -> mlir::Value {
-      return rewriter.create<mlir::ConstantIndexOp>(loc, val);
+      return rewriter.create<mlir::arith::ConstantIndexOp>(loc, val);
     };
 
     auto src = buildSlice.getOperand(static_cast<unsigned>(i));
@@ -629,7 +630,7 @@ struct SliceGetitemPropagate
           src = rewriter.create<plier::SignCastOp>(loc, signless, src);
         }
         auto indexType = rewriter.getIndexType();
-        src = rewriter.create<mlir::IndexCastOp>(loc, src, indexType);
+        src = rewriter.create<mlir::arith::IndexCastOp>(loc, src, indexType);
       } else if (srcType.isa<mlir::IndexType>()) {
         // Nothing
       } else {
@@ -857,7 +858,7 @@ static auto mapReduceRankIndices(mlir::OpBuilder &builder, mlir::Location loc,
   auto srcMemref = src.getViewSource();
   auto srcMemrefType = srcMemref.getType().cast<mlir::MemRefType>();
   auto rank = static_cast<unsigned>(srcMemrefType.getRank());
-  auto zero = builder.createOrFold<mlir::ConstantIndexOp>(loc, 0);
+  auto zero = builder.createOrFold<mlir::arith::ConstantIndexOp>(loc, 0);
   auto mapping = src.getMapping();
   llvm::SmallVector<mlir::Value> indices(rank);
   for (auto i : llvm::seq(0u, rank)) {

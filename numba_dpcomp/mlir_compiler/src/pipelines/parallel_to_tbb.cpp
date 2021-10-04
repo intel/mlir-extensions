@@ -14,6 +14,7 @@
 
 #include "pipelines/parallel_to_tbb.hpp"
 
+#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
@@ -33,22 +34,22 @@
 
 namespace {
 mlir::MemRefType getReduceType(mlir::Type type, int64_t count) {
-  if (type.isIntOrFloat()) {
+  if (type.isIntOrFloat())
     return mlir::MemRefType::get(count, type);
-  }
+
   return {};
 }
 
 mlir::Attribute getReduceInitVal(mlir::Type type, mlir::Block &reduceBlock) {
-  if (!llvm::hasSingleElement(reduceBlock.without_terminator())) {
+  if (!llvm::hasSingleElement(reduceBlock.without_terminator()))
     return {};
-  }
+
   auto &reduceOp = reduceBlock.front();
   double reduceInit;
-  if (mlir::isa<mlir::AddFOp, mlir::AddIOp, mlir::SubFOp, mlir::SubIOp>(
-          reduceOp)) {
+  if (mlir::isa<mlir::arith::AddFOp, mlir::arith::AddIOp, mlir::arith::SubFOp,
+                mlir::arith::SubIOp>(reduceOp)) {
     reduceInit = 0.0;
-  } else if (mlir::isa<mlir::MulFOp, mlir::MulIOp>(reduceOp)) {
+  } else if (mlir::isa<mlir::arith::MulFOp, mlir::arith::MulIOp>(reduceOp)) {
     reduceInit = 1.0;
   } else {
     return {};
@@ -62,30 +63,26 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
   mlir::LogicalResult
   matchAndRewrite(mlir::scf::ParallelOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    if (mlir::isa<plier::ParallelOp>(op->getParentOp())) {
+    if (mlir::isa<plier::ParallelOp>(op->getParentOp()))
       return mlir::failure();
-    }
-    bool need_parallel = op->hasAttr(plier::attributes::getParallelName()) ||
-                         !op->getParentOfType<mlir::scf::ParallelOp>();
-    if (!need_parallel) {
-      return mlir::failure();
-    }
 
-    int64_t max_concurrency = 0;
+    bool needParallel = op->hasAttr(plier::attributes::getParallelName()) ||
+                        !op->getParentOfType<mlir::scf::ParallelOp>();
+    if (!needParallel)
+      return mlir::failure();
+
+    int64_t maxConcurrency = 0;
     auto mod = op->getParentOfType<mlir::ModuleOp>();
     if (auto mc = mod->getAttrOfType<mlir::IntegerAttr>(
-            plier::attributes::getMaxConcurrencyName())) {
-      max_concurrency = mc.getInt();
-    }
+            plier::attributes::getMaxConcurrencyName()))
+      maxConcurrency = mc.getInt();
 
-    if (max_concurrency <= 1) {
+    if (maxConcurrency <= 1)
       return mlir::failure();
-    }
 
     for (auto type : op.getResultTypes()) {
-      if (!getReduceType(type, max_concurrency)) {
+      if (!getReduceType(type, maxConcurrency))
         return mlir::failure();
-      }
     }
 
     llvm::SmallVector<mlir::Attribute> initVals;
@@ -93,47 +90,47 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
     for (auto &nestedOp : op.getLoopBody().front().without_terminator()) {
       if (auto reduce = mlir::dyn_cast<mlir::scf::ReduceOp>(nestedOp)) {
         auto ind = static_cast<unsigned>(initVals.size());
-        if (ind >= op.getNumResults()) {
+        if (ind >= op.getNumResults())
           return mlir::failure();
-        }
+
         auto &region = reduce.reductionOperator();
-        if (!llvm::hasSingleElement(region)) {
+        if (!llvm::hasSingleElement(region))
           return mlir::failure();
-        }
+
         auto reduceInitVal =
             getReduceInitVal(op.getResult(ind).getType(), region.front());
-        if (!reduceInitVal) {
+        if (!reduceInitVal)
           return mlir::failure();
-        }
+
         initVals.emplace_back(reduceInitVal);
       }
     }
-    if (initVals.size() != op.getNumResults()) {
+
+    if (initVals.size() != op.getNumResults())
       return mlir::failure();
-    }
 
     plier::AllocaInsertionPoint allocaIP(op);
 
     auto loc = op.getLoc();
     mlir::BlockAndValueMapping mapping;
-    llvm::SmallVector<mlir::Value> reduce_vars(op.getNumResults());
+    llvm::SmallVector<mlir::Value> reduceVars(op.getNumResults());
     for (auto it : llvm::enumerate(op.getResultTypes())) {
       auto type = it.value();
-      auto reduce_type = getReduceType(type, max_concurrency);
-      assert(reduce_type);
+      auto reduceType = getReduceType(type, maxConcurrency);
+      assert(reduceType);
       auto reduce = allocaIP.insert(rewriter, [&]() {
-        return rewriter.create<mlir::memref::AllocaOp>(loc, reduce_type);
+        return rewriter.create<mlir::memref::AllocaOp>(loc, reduceType);
       });
       auto index = static_cast<unsigned>(it.index());
-      reduce_vars[index] = reduce;
+      reduceVars[index] = reduce;
     }
 
-    auto reduce_init_body_builder = [&](mlir::OpBuilder &builder,
-                                        mlir::Location loc, mlir::Value index,
-                                        mlir::ValueRange args) {
+    auto reduceInitBodyBuilder = [&](mlir::OpBuilder &builder,
+                                     mlir::Location loc, mlir::Value index,
+                                     mlir::ValueRange args) {
       assert(args.empty());
       (void)args;
-      for (auto it : llvm::enumerate(reduce_vars)) {
+      for (auto it : llvm::enumerate(reduceVars)) {
         auto reduce = it.value();
         auto initVal = initVals[it.index()];
         auto init = builder.create<mlir::ConstantOp>(loc, initVal);
@@ -142,83 +139,84 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
       builder.create<mlir::scf::YieldOp>(loc);
     };
 
-    auto reduce_lower_bound = rewriter.create<mlir::ConstantIndexOp>(loc, 0);
-    auto reduce_upper_bound =
-        rewriter.create<mlir::ConstantIndexOp>(loc, max_concurrency);
-    auto reduce_step = rewriter.create<mlir::ConstantIndexOp>(loc, 1);
-    rewriter.create<mlir::scf::ForOp>(loc, reduce_lower_bound,
-                                      reduce_upper_bound, reduce_step,
-                                      llvm::None, reduce_init_body_builder);
+    auto reduceLowerBound =
+        rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
+    auto reduceUpperBound =
+        rewriter.create<mlir::arith::ConstantIndexOp>(loc, maxConcurrency);
+    auto reduceStep = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
+    rewriter.create<mlir::scf::ForOp>(loc, reduceLowerBound, reduceUpperBound,
+                                      reduceStep, llvm::None,
+                                      reduceInitBodyBuilder);
 
-    auto &old_body = op.getLoopBody().front();
-    auto orig_lower_bound = op.lowerBound();
-    auto orig_upper_bound = op.upperBound();
-    auto orig_step = op.step();
-    auto body_builder = [&](mlir::OpBuilder &builder, ::mlir::Location loc,
-                            mlir::ValueRange lower_bound,
-                            mlir::ValueRange upper_bound,
-                            mlir::Value thread_index) {
+    auto &oldBody = op.getLoopBody().front();
+    auto origLowerBound = op.lowerBound();
+    auto origUpperBound = op.upperBound();
+    auto origStep = op.step();
+    auto bodyBuilder = [&](mlir::OpBuilder &builder, ::mlir::Location loc,
+                           mlir::ValueRange lower_bound,
+                           mlir::ValueRange upper_bound,
+                           mlir::Value thread_index) {
       llvm::SmallVector<mlir::Value> initVals(op.initVals().size());
       for (auto it : llvm::enumerate(op.initVals())) {
-        auto reduce_var = reduce_vars[it.index()];
+        auto reduceVar = reduceVars[it.index()];
         auto val =
-            builder.create<mlir::memref::LoadOp>(loc, reduce_var, thread_index);
+            builder.create<mlir::memref::LoadOp>(loc, reduceVar, thread_index);
         initVals[it.index()] = val;
       }
-      auto new_op =
+      auto newOp =
           mlir::cast<mlir::scf::ParallelOp>(builder.clone(*op, mapping));
-      new_op->removeAttr(plier::attributes::getParallelName());
-      assert(new_op->getNumResults() == reduce_vars.size());
-      new_op.lowerBoundMutable().assign(lower_bound);
-      new_op.upperBoundMutable().assign(upper_bound);
-      new_op.initValsMutable().assign(initVals);
-      for (auto it : llvm::enumerate(new_op->getResults())) {
-        auto reduce_var = reduce_vars[it.index()];
+      newOp->removeAttr(plier::attributes::getParallelName());
+      assert(newOp->getNumResults() == reduceVars.size());
+      newOp.lowerBoundMutable().assign(lower_bound);
+      newOp.upperBoundMutable().assign(upper_bound);
+      newOp.initValsMutable().assign(initVals);
+      for (auto it : llvm::enumerate(newOp->getResults())) {
+        auto reduce_var = reduceVars[it.index()];
         builder.create<mlir::memref::StoreOp>(loc, it.value(), reduce_var,
                                               thread_index);
       }
     };
 
-    rewriter.create<plier::ParallelOp>(loc, orig_lower_bound, orig_upper_bound,
-                                       orig_step, body_builder);
+    rewriter.create<plier::ParallelOp>(loc, origLowerBound, origUpperBound,
+                                       origStep, bodyBuilder);
 
-    auto reduce_body_builder = [&](mlir::OpBuilder &builder, mlir::Location loc,
-                                   mlir::Value index, mlir::ValueRange args) {
-      assert(args.size() == reduce_vars.size());
+    auto reduceBodyBuilder = [&](mlir::OpBuilder &builder, mlir::Location loc,
+                                 mlir::Value index, mlir::ValueRange args) {
+      assert(args.size() == reduceVars.size());
       mapping.clear();
-      auto reduce_ops =
-          llvm::make_filter_range(old_body.without_terminator(), [](auto &op) {
+      auto reduceOps =
+          llvm::make_filter_range(oldBody.without_terminator(), [](auto &op) {
             return mlir::isa<mlir::scf::ReduceOp>(op);
           });
-      llvm::SmallVector<mlir::Value> yield_args;
-      yield_args.reserve(args.size());
-      for (auto it : llvm::enumerate(reduce_ops)) {
-        auto &reduce_var = reduce_vars[it.index()];
+      llvm::SmallVector<mlir::Value> yieldArgs;
+      yieldArgs.reserve(args.size());
+      for (auto it : llvm::enumerate(reduceOps)) {
+        auto &reduceVar = reduceVars[it.index()];
         auto arg = args[static_cast<unsigned>(it.index())];
-        auto reduce_op = mlir::cast<mlir::scf::ReduceOp>(it.value());
-        auto &reduce_op_body = reduce_op.reductionOperator().front();
-        assert(reduce_op_body.getNumArguments() == 2);
+        auto reduceOp = mlir::cast<mlir::scf::ReduceOp>(it.value());
+        auto &reduceOpBody = reduceOp.reductionOperator().front();
+        assert(reduceOpBody.getNumArguments() == 2);
         auto prev_val =
-            builder.create<mlir::memref::LoadOp>(loc, reduce_var, index);
-        mapping.map(reduce_op_body.getArgument(0), arg);
-        mapping.map(reduce_op_body.getArgument(1), prev_val);
-        for (auto &old_reduce_op : reduce_op_body.without_terminator()) {
+            builder.create<mlir::memref::LoadOp>(loc, reduceVar, index);
+        mapping.map(reduceOpBody.getArgument(0), arg);
+        mapping.map(reduceOpBody.getArgument(1), prev_val);
+        for (auto &old_reduce_op : reduceOpBody.without_terminator()) {
           builder.clone(old_reduce_op, mapping);
         }
-        auto result = mlir::cast<mlir::scf::ReduceReturnOp>(
-                          reduce_op_body.getTerminator())
-                          .result();
+        auto result =
+            mlir::cast<mlir::scf::ReduceReturnOp>(reduceOpBody.getTerminator())
+                .result();
         result = mapping.lookupOrNull(result);
         assert(result);
-        yield_args.emplace_back(result);
+        yieldArgs.emplace_back(result);
       }
-      builder.create<mlir::scf::YieldOp>(loc, yield_args);
+      builder.create<mlir::scf::YieldOp>(loc, yieldArgs);
     };
 
-    auto reduce_loop = rewriter.create<mlir::scf::ForOp>(
-        loc, reduce_lower_bound, reduce_upper_bound, reduce_step, op.initVals(),
-        reduce_body_builder);
-    rewriter.replaceOp(op, reduce_loop.getResults());
+    auto reduceLoop = rewriter.create<mlir::scf::ForOp>(
+        loc, reduceLowerBound, reduceUpperBound, reduceStep, op.initVals(),
+        reduceBodyBuilder);
+    rewriter.replaceOp(op, reduceLoop.getResults());
 
     return mlir::success();
   }

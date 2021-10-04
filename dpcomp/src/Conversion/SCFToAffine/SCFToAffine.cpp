@@ -16,6 +16,7 @@
 
 #include "mlir/Analysis/AffineAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
@@ -36,9 +37,8 @@ public:
     // Check if steps are constants
     SmallVector<int64_t> newSteps;
     for (auto s : op.step()) {
-      if (auto c = s.getDefiningOp<ConstantIndexOp>()) {
-        newSteps.push_back(c.getValue());
-      }
+      if (auto c = s.getDefiningOp<arith::ConstantIndexOp>())
+        newSteps.push_back(c.value());
     }
 
     // just for the case if we reductions
@@ -118,9 +118,8 @@ struct SCFToAffinePass
           return;
 
         for (auto s : pOp.step()) {
-          if (!s.getDefiningOp<ConstantIndexOp>()) {
+          if (!s.getDefiningOp<arith::ConstantIndexOp>())
             return;
-          }
         }
 
         if (pOp.upperBound().size() != pOp.lowerBound().size() ||
@@ -130,9 +129,8 @@ struct SCFToAffinePass
         // check for supported memory operations
         for (auto &each : pOp.region().getOps()) {
           if (!MemoryEffectOpInterface::hasNoEffect(&each)) {
-            if (!isa<memref::LoadOp, memref::StoreOp>(&each)) {
+            if (!isa<memref::LoadOp, memref::StoreOp>(&each))
               return;
-            }
           }
         }
 
@@ -140,9 +138,9 @@ struct SCFToAffinePass
         // and scf.for
         if (llvm::any_of(pOp.region().getOps(), [&](Operation &each) {
               return 0 != each.getNumRegions();
-            })) {
+            }))
           return;
-        }
+
         parallelOps.push_back(op);
       }
     });

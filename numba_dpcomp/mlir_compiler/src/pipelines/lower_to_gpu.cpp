@@ -1620,7 +1620,8 @@ struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::CallOp> {
     mlir::Value arg = loop.getLoopBody().front().getArgument(0);
     auto resType = op.getResult(0).getType();
     if (arg.getType() != resType)
-      arg = rewriter.createOrFold<mlir::IndexCastOp>(op.getLoc(), resType, arg);
+      arg = rewriter.createOrFold<mlir::arith::IndexCastOp>(op.getLoc(),
+                                                            resType, arg);
 
     rewriter.replaceOp(op, arg);
     return mlir::success();

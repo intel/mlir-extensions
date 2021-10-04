@@ -14,6 +14,7 @@
 
 #include "plier/rewrites/call_lowering.hpp"
 
+#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
 
 static mlir::Value skipCasts(mlir::Value val) {
@@ -55,8 +56,8 @@ mlir::LogicalResult plier::ExpandCallVarargs::matchAndRewrite(
   auto loc = op.getLoc();
   for (auto i : llvm::seq<size_t>(0, varargsCount)) {
     auto type = varargType.getType(i);
-    auto index =
-        rewriter.create<mlir::ConstantIndexOp>(loc, static_cast<int64_t>(i));
+    auto index = rewriter.create<mlir::arith::ConstantIndexOp>(
+        loc, static_cast<int64_t>(i));
     args[argsCount + i] =
         rewriter.create<plier::GetItemOp>(loc, type, vararg, index);
   }

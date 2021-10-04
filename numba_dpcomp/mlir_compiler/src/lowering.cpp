@@ -21,6 +21,7 @@
 
 #include <pybind11/pybind11.h>
 
+#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/BuiltinOps.h>
@@ -333,7 +334,7 @@ private:
     }
     if (py::isinstance<py::int_>(obj)) {
       auto index = obj.cast<int64_t>();
-      return builder.create<mlir::ConstantIndexOp>(loc, index);
+      return builder.create<mlir::arith::ConstantIndexOp>(loc, index);
     }
     if (py::isinstance<py::slice>(obj)) {
       auto start = lower_static_index(loc, obj.attr("start"));
@@ -343,9 +344,9 @@ private:
     }
     if (py::isinstance<py::iterable>(obj)) {
       llvm::SmallVector<mlir::Value> args(py::len(obj));
-      for (auto it : llvm::enumerate(obj)) {
+      for (auto it : llvm::enumerate(obj))
         args[it.index()] = lower_static_index(loc, it.value());
-      }
+
       return builder.create<plier::BuildTupleOp>(loc, args);
     }
     plier::report_error(llvm::Twine("Unhandled index type: ") +
@@ -478,10 +479,10 @@ private:
 
   void setitem(py::handle target, py::handle index, py::handle value) {
     auto ind = [&]() -> mlir::Value {
-      if (py::isinstance<py::int_>(index)) {
-        return builder.create<mlir::ConstantIndexOp>(get_current_loc(),
-                                                     index.cast<int64_t>());
-      }
+      if (py::isinstance<py::int_>(index))
+        return builder.create<mlir::arith::ConstantIndexOp>(
+            get_current_loc(), index.cast<int64_t>());
+
       return loadvar(index);
     }();
     builder.create<plier::SetItemOp>(get_current_loc(), loadvar(target), ind,

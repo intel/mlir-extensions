@@ -15,13 +15,15 @@
 #include "plier/rewrites/loop_rewrites.hpp"
 #include "plier/transforms/const_utils.hpp"
 
+#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
 
 namespace {
-template <mlir::CmpIPredicate SrcPred, mlir::CmpIPredicate DstPred>
-bool norm_impl2(mlir::CmpIPredicate &pred, mlir::Value index, mlir::Value &lhs,
-                mlir::Value &rhs) {
+template <mlir::arith::CmpIPredicate SrcPred,
+          mlir::arith::CmpIPredicate DstPred>
+bool norm_impl2(mlir::arith::CmpIPredicate &pred, mlir::Value index,
+                mlir::Value &lhs, mlir::Value &rhs) {
   if (pred != SrcPred) {
     return false;
   }
@@ -32,9 +34,10 @@ bool norm_impl2(mlir::CmpIPredicate &pred, mlir::Value index, mlir::Value &lhs,
   return true;
 }
 
-template <mlir::CmpIPredicate SrcPred, mlir::CmpIPredicate DstPred>
-bool norm_impl(mlir::CmpIPredicate &pred, mlir::Value index, mlir::Value &lhs,
-               mlir::Value &rhs) {
+template <mlir::arith::CmpIPredicate SrcPred,
+          mlir::arith::CmpIPredicate DstPred>
+bool norm_impl(mlir::arith::CmpIPredicate &pred, mlir::Value index,
+               mlir::Value &lhs, mlir::Value &rhs) {
   return norm_impl2<SrcPred, DstPred>(pred, index, lhs, rhs) ||
          norm_impl2<DstPred, SrcPred>(pred, index, lhs, rhs);
 }
@@ -43,10 +46,10 @@ enum EBound {
   LowerBound,
   UpperBound,
 };
-template <mlir::CmpIPredicate Pred, EBound Bound, int64_t Value>
-llvm::Optional<int64_t> handler_impl(mlir::CmpIPredicate pred, mlir::Value lhs,
-                                     mlir::Value rhs, mlir::Value index,
-                                     mlir::Value lowerBound,
+template <mlir::arith::CmpIPredicate Pred, EBound Bound, int64_t Value>
+llvm::Optional<int64_t> handler_impl(mlir::arith::CmpIPredicate pred,
+                                     mlir::Value lhs, mlir::Value rhs,
+                                     mlir::Value index, mlir::Value lowerBound,
                                      mlir::Value upperBound) {
   if (pred != Pred) {
     return {};
@@ -64,16 +67,16 @@ mlir::LogicalResult plier::CmpLoopBoundsSimplify::matchAndRewrite(
   auto index_var = op.getLoopBody().front().getArgument(0);
   bool matched = false;
   for (auto user : llvm::make_early_inc_range(index_var.getUsers())) {
-    auto cmp = mlir::dyn_cast<mlir::CmpIOp>(user);
+    auto cmp = mlir::dyn_cast<mlir::arith::CmpIOp>(user);
     if (cmp) {
       auto pred = cmp.predicate();
       auto lhs = cmp.lhs();
       auto rhs = cmp.rhs();
       // Normalize index and predicate (index always on the left)
       using norm_fptr_t =
-          bool (*)(mlir::CmpIPredicate & pred, mlir::Value index,
+          bool (*)(mlir::arith::CmpIPredicate & pred, mlir::Value index,
                    mlir::Value & lhs, mlir::Value & rhs);
-      using Predicate = mlir::CmpIPredicate;
+      using Predicate = mlir::arith::CmpIPredicate;
       const norm_fptr_t norm_handlers[] = {
           &norm_impl<Predicate::sle, Predicate::sge>,
           &norm_impl<Predicate::slt, Predicate::sgt>,
