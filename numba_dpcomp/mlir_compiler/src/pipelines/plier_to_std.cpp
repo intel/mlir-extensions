@@ -246,10 +246,8 @@ mlir::Type map_dispatcher_type(mlir::MLIRContext &ctx, llvm::StringRef &name) {
 }
 
 mlir::Type map_slice_type(mlir::MLIRContext &ctx, llvm::StringRef &name) {
-  if (name.consume_front("slice<") && consume_until(name, ">")) {
-    auto indexType = mlir::IndexType::get(&ctx);
-    return plier::SliceType::get(indexType, indexType, indexType);
-  }
+  if (name.consume_front("slice<") && consume_until(name, ">"))
+    return plier::SliceType::get(&ctx);
 
   return nullptr;
 }

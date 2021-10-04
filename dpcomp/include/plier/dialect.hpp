@@ -44,7 +44,6 @@ llvm::StringRef getGpuRangeName();
 namespace detail {
 struct PyTypeStorage;
 struct LiteralTypeStorage;
-struct SliceTypeStorage;
 struct TypeVarStorage;
 
 struct OperatorNamePair {
@@ -91,19 +90,12 @@ public:
   mlir::Attribute getValue() const;
 };
 
-class SliceType
-    : public mlir::Type::TypeBase<::plier::SliceType, mlir::Type,
-                                  ::plier::detail::SliceTypeStorage> {
+class SliceType : public ::mlir::Type::TypeBase<SliceType, ::mlir::Type,
+                                                ::mlir::TypeStorage> {
 public:
   using Base::Base;
 
-  static SliceType get(mlir::Type begin, mlir::Type end, mlir::Type stride);
-
-  mlir::Type getBegin() const;
-  mlir::Type getEnd() const;
-  mlir::Type getStride() const;
-
-  std::array<mlir::Type, 3> getTypes() const;
+  static SliceType get(mlir::MLIRContext *context);
 };
 
 class TypeVar : public mlir::Type::TypeBase<::plier::TypeVar, mlir::Type,

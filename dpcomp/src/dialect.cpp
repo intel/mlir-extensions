@@ -100,21 +100,6 @@ struct LiteralTypeStorage : public mlir::TypeStorage {
   mlir::Attribute value;
 };
 
-struct SliceTypeStorage : public mlir::TypeStorage {
-  using KeyTy = std::tuple<mlir::Type, mlir::Type, mlir::Type>;
-
-  SliceTypeStorage(const KeyTy &t) : types(t) {}
-
-  bool operator==(const KeyTy &key) const { return key == types; }
-
-  static SliceTypeStorage *construct(mlir::TypeStorageAllocator &allocator,
-                                     const KeyTy &key) {
-    return new (allocator.allocate<SliceTypeStorage>()) SliceTypeStorage(key);
-  }
-
-  KeyTy types;
-};
-
 struct TypeVarStorage : public mlir::TypeStorage {
   using KeyTy = mlir::Type;
 
@@ -160,15 +145,7 @@ void PlierDialect::printType(mlir::Type type,
         os.printAttribute(t.getValue());
         os << ">";
       })
-      .Case<plier::SliceType>([&](auto t) {
-        os << "SliceType<";
-        os.printType(t.getBegin());
-        os << ", ";
-        os.printType(t.getEnd());
-        os << ", ";
-        os.printType(t.getStride());
-        os << ">";
-      })
+      .Case<plier::SliceType>([&](auto t) { os << "SliceType"; })
       .Case<plier::TypeVar>([&](auto t) {
         os << "TypeVar<";
         os.printType(t.getType());
@@ -196,25 +173,9 @@ LiteralType LiteralType::get(mlir::Attribute value) {
 
 mlir::Attribute LiteralType::getValue() const { return getImpl()->value; }
 
-SliceType SliceType::get(mlir::Type begin, mlir::Type end, mlir::Type stride) {
-  assert(begin);
-  assert(end);
-  assert(stride);
-  auto indexType = mlir::IndexType::get(begin.getContext());
-  return Base::get(begin.getContext(),
-                   std::make_tuple(indexType, indexType, indexType));
-}
-
-mlir::Type SliceType::getBegin() const { return std::get<0>(getImpl()->types); }
-
-mlir::Type SliceType::getEnd() const { return std::get<1>(getImpl()->types); }
-
-mlir::Type SliceType::getStride() const {
-  return std::get<2>(getImpl()->types);
-}
-
-std::array<mlir::Type, 3> SliceType::getTypes() const {
-  return {getBegin(), getEnd(), getStride()};
+SliceType SliceType::get(mlir::MLIRContext *context) {
+  assert(context);
+  return Base::get(context);
 }
 
 TypeVar TypeVar::get(mlir::Type type) {
@@ -569,7 +530,7 @@ void ParallelOp::build(
 void BuildSliceOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                          mlir::Value begin, mlir::Value end,
                          mlir::Value stride) {
-  auto type = SliceType::get(begin.getType(), end.getType(), stride.getType());
+  auto type = SliceType::get(builder.getContext());
   BuildSliceOp::build(builder, state, type, begin, end, stride);
 }
 
