@@ -1625,6 +1625,9 @@ void PlierToStdPass::runOnOperation() {
   mlir::ConversionTarget target(*context);
 
   auto isNum = [&](mlir::Type t) -> bool {
+    if (!t)
+      return false;
+
     auto res = typeConverter.convertType(t);
     return res && res.isa<mlir::IntegerType, mlir::FloatType, mlir::IndexType,
                           plier::LiteralType>();
@@ -1636,7 +1639,11 @@ void PlierToStdPass::runOnOperation() {
     return !isNum(op.value().getType()) && !isNum(op.getType());
   });
   target.addDynamicallyLegalOp<plier::CastOp>([&](plier::CastOp op) {
-    auto srcType = typeConverter.convertType(op.value().getType());
+    auto inputType = op.value().getType();
+    if (isOmittedType(inputType))
+      return false;
+
+    auto srcType = typeConverter.convertType(inputType);
     auto dstType = typeConverter.convertType(op.getType());
     return srcType == dstType || !isNum(srcType) || !isNum(dstType);
   });
@@ -1739,7 +1746,7 @@ void populate_plier_to_std_pipeline(mlir::OpPassManager &pm) {
 void populateStdTypeConverter(mlir::MLIRContext & /*context*/,
                               mlir::TypeConverter &converter) {
   converter.addConversion(
-      [](mlir::Type type, llvm::SmallVectorImpl<mlir::Type> &ret_types)
+      [](mlir::Type type, llvm::SmallVectorImpl<mlir::Type> &retTypes)
           -> llvm::Optional<mlir::LogicalResult> {
         if (isOmittedType(type))
           return mlir::success();
@@ -1748,7 +1755,7 @@ void populateStdTypeConverter(mlir::MLIRContext & /*context*/,
         if (!ret)
           return llvm::None;
 
-        ret_types.push_back(ret);
+        retTypes.push_back(ret);
         return mlir::success();
       });
 }
