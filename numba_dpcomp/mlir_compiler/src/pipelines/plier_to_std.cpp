@@ -28,19 +28,13 @@
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 #include <mlir/Transforms/Passes.h>
 
-#include <llvm/ADT/TypeSwitch.h>
-
 #include "plier/dialect.hpp"
 
 #include "plier/pass/rewrite_wrapper.hpp"
-#include "plier/rewrites/arg_lowering.hpp"
-#include "plier/rewrites/call_lowering.hpp"
-#include "plier/rewrites/cast_lowering.hpp"
 #include "plier/rewrites/force_inline.hpp"
 #include "plier/rewrites/type_conversion.hpp"
 #include "plier/transforms/cast_utils.hpp"
 #include "plier/transforms/const_utils.hpp"
-#include "plier/transforms/func_utils.hpp"
 #include "plier/transforms/pipeline_utils.hpp"
 
 #include "base_pipeline.hpp"
