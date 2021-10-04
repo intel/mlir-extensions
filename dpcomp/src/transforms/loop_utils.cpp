@@ -52,14 +52,25 @@ static mlir::Value getLastIterValue(mlir::PatternRewriter &builder,
   return builder.createOrFold<mlir::AddIOp>(loc, lower_bound, inc);
 }
 
-static mlir::Value skipCasts(mlir::Value op) {
-  while (auto cast =
-             mlir::dyn_cast_or_null<plier::CastOp>(op.getDefiningOp())) {
-    op = cast.getOperand();
-  }
-  return op;
-};
+static mlir::Value getCastArg(mlir::Value val) {
+  if (auto cast = val.getDefiningOp<plier::CastOp>())
+    return cast.value();
 
+  if (auto cast = val.getDefiningOp<mlir::UnrealizedConversionCastOp>()) {
+    auto inputs = cast.inputs();
+    if (inputs.size() == 1)
+      return inputs.front();
+  }
+
+  return {};
+}
+
+static mlir::Value skipCasts(mlir::Value val) {
+  while (auto castArg = getCastArg(val))
+    val = castArg;
+
+  return val;
+};
 } // namespace
 
 bool plier::canLowerWhileToFor(mlir::scf::WhileOp whileOp) {
@@ -68,7 +79,8 @@ bool plier::canLowerWhileToFor(mlir::scf::WhileOp whileOp) {
   auto iternext = getNextOp<plier::IternextOp>(iters);
   /*auto pairfirst =*/getNextOp<plier::PairfirstOp>(iters);
   auto pairsecond = getNextOp<plier::PairsecondOp>(iters);
-  while (getNextOp<plier::CastOp>(iters)) {
+  while (getNextOp<mlir::UnrealizedConversionCastOp>(iters) ||
+         getNextOp<plier::CastOp>(iters)) {
   } // skip casts
   auto beforeTerm = getNextOp<mlir::scf::ConditionOp>(iters);
 
