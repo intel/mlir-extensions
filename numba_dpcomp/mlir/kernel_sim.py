@@ -42,8 +42,8 @@ def _setup_execution_state(global_size, local_size):
     global _execution_state
     assert _execution_state is None
     _execution_state =_ExecutionState(
-        global_size=tuple(reversed(global_size)),
-        local_size=tuple(reversed(local_size)),
+        global_size=global_size,
+        local_size=local_size,
         indices=[0]*len(global_size))
     return _execution_state
 

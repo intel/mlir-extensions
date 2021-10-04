@@ -106,9 +106,69 @@ def test_math_funcs(op):
 
     assert_allclose(gpu_res, sim_res, rtol=1e-5)
 
+_test_shapes = [
+    (1,),
+    (7,),
+    (1,1),
+    (7,13),
+    (1,1,1),
+    (7,13,23),
+]
+
 @require_gpu
-def test_get_global_size():
-    def func(c):
+@pytest.mark.parametrize("shape", _test_shapes)
+def test_get_global_id(shape):
+    def func1(c):
+        i = get_global_id(0)
+        c[i] = i
+
+    def func2(c):
+        i = get_global_id(0)
+        j = get_global_id(1)
+        c[i, j] = i + j * 100
+
+    def func3(c):
+        i = get_global_id(0)
+        j = get_global_id(1)
+        k = get_global_id(2)
+        c[i, j, k] = i + j * 100 + k * 10000
+
+    func = [func1, func2, func3][len(shape) - 1]
+
+    sim_func = kernel_sim(func)
+    gpu_func = kernel(func)
+
+    dtype = np.int32
+
+    sim_res = np.zeros(shape, dtype)
+    sim_func[shape](sim_res)
+
+    gpu_res = np.zeros(shape, dtype)
+
+    with print_pass_ir([],['ConvertParallelLoopToGpu']):
+        gpu_func[shape](gpu_res)
+        ir = get_print_buffer()
+        assert ir.count('gpu.launch blocks') == 1, ir
+
+    assert_equal(gpu_res, sim_res)
+
+
+@require_gpu
+@pytest.mark.parametrize("shape", _test_shapes)
+def test_get_global_size(shape):
+    def func1(c):
+        i = get_global_id(0)
+        w = get_global_size(0)
+        c[i] = w
+
+    def func2(c):
+        i = get_global_id(0)
+        j = get_global_id(1)
+        w = get_global_size(0)
+        h = get_global_size(1)
+        c[i, j] = w + h * 100
+
+    def func3(c):
         i = get_global_id(0)
         j = get_global_id(1)
         k = get_global_id(2)
@@ -117,11 +177,12 @@ def test_get_global_size():
         d = get_global_size(2)
         c[i, j, k] = w + h * 100 + d * 10000
 
+    func = [func1, func2, func3][len(shape) - 1]
+
     sim_func = kernel_sim(func)
     gpu_func = kernel(func)
 
     dtype = np.int32
-    shape = (1,2,3)
 
     sim_res = np.zeros(shape, dtype)
     sim_func[shape](sim_res)

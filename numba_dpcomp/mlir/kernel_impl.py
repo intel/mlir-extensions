@@ -73,15 +73,15 @@ def _kernel_body1(global_size, local_size, body, *args):
 
 def _kernel_body2(global_size, local_size, body, *args):
     x, y = global_size
-    for i in _gpu_range(x):
-        for j in _gpu_range(y):
+    for i in _gpu_range(y):
+        for j in _gpu_range(x):
             body(*args)
 
 def _kernel_body3(global_size, local_size, body, *args):
     x, y, z = global_size
-    for i in _gpu_range(x):
+    for i in _gpu_range(z):
         for j in _gpu_range(y):
-            for k in _gpu_range(z):
+            for k in _gpu_range(x):
                 body(*args)
 
 _kernel_body_selector = [
