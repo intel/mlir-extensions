@@ -21,7 +21,7 @@ from numba.core.typing.templates import ConcreteTemplate, signature, infer_globa
 
 from .linalg_builder import is_int, FuncRegistry
 from .numpy.funcs import register_func
-from numba_dpcomp.mlir.func_registry import add_func
+from .func_registry import add_func
 
 from ..decorators import njit
 
@@ -29,6 +29,9 @@ registry = FuncRegistry()
 
 def _raise_error(desc):
     raise ValueError(desc)
+
+def _stub_error():
+    raise NotImplementedError('This is a stub')
 
 def _process_dims(dims):
     if isinstance(dims, int):
@@ -48,7 +51,7 @@ class _gpu_range(object):
 add_func(_gpu_range, '_gpu_range')
 
 @infer_global(_gpu_range, typing_key=_gpu_range)
-class Range(ConcreteTemplate):
+class _RangeId(ConcreteTemplate):
     cases = [
         signature(types.range_state32_type, types.int32),
         signature(types.range_state32_type, types.int32, types.int32),
@@ -64,20 +67,42 @@ class Range(ConcreteTemplate):
                   types.uint64),
     ]
 
+def _set_local_size(*args):
+    _stub_error()
+
+@registry.register_func('_set_local_size', _set_local_size)
+def _set_local_size_impl(builder, *args):
+    nargs = len(args)
+    if nargs > 0 and nargs <= 3:
+        res = 0 # TODO: dummy ret, remove
+        return builder.external_call('set_local_size', inputs=args, outputs=res)
+
+@infer_global(_set_local_size)
+class _SetLocalSizeId(ConcreteTemplate):
+    cases = [
+        signature(types.void, types.int64),
+        signature(types.void, types.int64, types.int64),
+        signature(types.void, types.int64, types.int64, types.int64),
+    ]
+
+
 def _kernel_body0(global_size, local_size, body, *args):
     body(*args)
 
 def _kernel_body1(global_size, local_size, body, *args):
+    _set_local_size(local_size[0])
     for i in _gpu_range(global_size[0]):
         body(*args)
 
 def _kernel_body2(global_size, local_size, body, *args):
+    _set_local_size(local_size[0], local_size[1])
     x, y = global_size
     for i in _gpu_range(y):
         for j in _gpu_range(x):
             body(*args)
 
 def _kernel_body3(global_size, local_size, body, *args):
+    _set_local_size(local_size[0], local_size[1], local_size[2])
     x, y, z = global_size
     for i in _gpu_range(z):
         for j in _gpu_range(y):
@@ -101,6 +126,11 @@ class Kernel:
         return copy.copy(self)
 
     def configure(self, global_size, local_size):
+        global_dim_count = len(global_size)
+        local_dim_count = len(local_size)
+        assert(local_dim_count <= global_dim_count)
+        if local_dim_count < global_dim_count:
+            local_size = tuple(local_size[i] if i < local_dim_count else 1 for i in range(global_dim_count))
         ret = self.copy()
         ret.global_size = global_size
         ret.local_size = local_size
@@ -130,13 +160,11 @@ class Kernel:
 def kernel(func):
     return Kernel(func)
 
-def _stub_error():
-    raise NotImplementedError('This is a stub')
-
 def _define_api_funcs():
     kernel_api_funcs = [
         'get_global_id',
         'get_global_size',
+        'get_local_size',
     ]
 
     def get_func(func_name):

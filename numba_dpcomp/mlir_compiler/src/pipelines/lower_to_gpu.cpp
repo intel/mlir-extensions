@@ -58,6 +58,7 @@
 #include "plier/dialect.hpp"
 #include "plier/pass/rewrite_wrapper.hpp"
 #include "plier/rewrites/call_lowering.hpp"
+#include "plier/transforms/cast_utils.hpp"
 #include "plier/transforms/const_utils.hpp"
 #include "plier/transforms/func_utils.hpp"
 #include "plier/transforms/pipeline_utils.hpp"
@@ -201,6 +202,58 @@ struct ParallelLoopGPUMappingPass
 
   void runOnFunction() override {
     mlir::greedilyMapParallelSCFToGPU(getFunction().getBody());
+  }
+};
+
+struct SetLocalSize
+    : public mlir::PassWrapper<SetLocalSize, mlir::FunctionPass> {
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::gpu::GPUDialect>();
+  }
+
+  void runOnFunction() override {
+    auto func = getFunction();
+    auto &region = func.getBody();
+    if (region.empty())
+      return;
+
+    if (!llvm::hasSingleElement(region)) {
+      func.emitError("Only strucutred constrol flow is supported");
+      signalPassFailure();
+      return;
+    }
+
+    mlir::OpBuilder builder(&getContext());
+    auto funcName = mlir::StringAttr::get(&getContext(), "set_local_size");
+    llvm::SmallVector<mlir::Value, 3> localSize;
+    for (auto &op : llvm::make_early_inc_range(region.front())) {
+      if (auto call = mlir::dyn_cast<mlir::CallOp>(op)) {
+        if (call.getCalleeAttr() == funcName) {
+          auto args = call.operands();
+          localSize.assign(args.begin(), args.end());
+          op.erase();
+        }
+        continue;
+      }
+
+      op.walk([&](mlir::gpu::LaunchOp launch) {
+        auto numSizes = localSize.size();
+        mlir::MutableOperandRange launchSizes[] = {
+            launch.blockSizeXMutable(),
+            launch.blockSizeYMutable(),
+            launch.blockSizeZMutable(),
+        };
+        builder.setInsertionPoint(launch);
+        auto loc = launch.getLoc();
+        for (auto i : llvm::seq(0u, 3u)) {
+          if (numSizes > i) {
+            auto val = plier::index_cast(builder, loc, localSize[i]);
+            launchSizes[i].assign(val);
+          }
+        }
+      });
+    }
   }
 };
 
@@ -1727,6 +1780,7 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   funcPM.addPass(std::make_unique<RemoveNestedParallelPass>());
   funcPM.addPass(std::make_unique<ParallelLoopGPUMappingPass>());
   funcPM.addPass(mlir::createParallelLoopToGpuPass());
+  funcPM.addPass(std::make_unique<SetLocalSize>());
   funcPM.addPass(mlir::createCanonicalizerPass());
   funcPM.addPass(std::make_unique<InsertGPUAllocs>());
   funcPM.addPass(mlir::createCanonicalizerPass());
@@ -1734,6 +1788,7 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   funcPM.addPass(mlir::createLowerAffinePass());
   commonOptPasses(funcPM);
 
+  pm.addPass(mlir::createSymbolDCEPass());
   pm.addPass(mlir::createGpuKernelOutliningPass());
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addNestedPass<mlir::gpu::GPUModuleOp>(std::make_unique<AbiAttrsPass>());
