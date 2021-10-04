@@ -614,6 +614,15 @@ mlir::Value float_int_cast(mlir::PatternRewriter &rewriter, mlir::Location loc,
 
 mlir::Value index_cast_impl(mlir::PatternRewriter &rewriter, mlir::Location loc,
                             mlir::Value val, mlir::Type dstType) {
+  if (val.getType().isa<mlir::FloatType>()) {
+    auto intType = rewriter.getI64Type();
+    val = rewriter.createOrFold<mlir::FPToSIOp>(loc, val, intType);
+  }
+  if (dstType.isa<mlir::FloatType>()) {
+    auto intType = rewriter.getI64Type();
+    val = plier::index_cast(rewriter, loc, val, intType);
+    return rewriter.createOrFold<mlir::SIToFPOp>(loc, val, dstType);
+  }
   return plier::index_cast(rewriter, loc, val, dstType);
 }
 
@@ -662,6 +671,8 @@ mlir::Value doCast(mlir::PatternRewriter &rewriter, mlir::Location loc,
       {&is_index, &is_int, &index_cast_impl},
       {&is_int, &is_index, &index_cast_impl},
       {&is_float, &is_float, &float_cast_impl},
+      {&is_index, &is_float, &index_cast_impl},
+      {&is_float, &is_index, &index_cast_impl},
   };
 
   for (auto &h : handlers) {
