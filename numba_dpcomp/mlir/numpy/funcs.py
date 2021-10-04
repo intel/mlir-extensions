@@ -98,6 +98,7 @@ def _gen_unary_ops():
         reg(make_func(f64, body))
 
 _gen_unary_ops()
+del _gen_unary_ops
 
 def _gen_binary_ops():
     binary_ops = [
@@ -122,12 +123,15 @@ def _gen_binary_ops():
         reg(make_func(f64, body))
 
 _gen_binary_ops()
+del _gen_binary_ops
 
 def _init_impl(builder, shape, dtype, init=None):
     if dtype is None:
         dtype = builder.float64
 
-    if len(shape) == 0:
+    try:
+        len(shape) # will raise if not available
+    except:
         shape = (shape,)
 
     if init is None:

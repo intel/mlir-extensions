@@ -100,21 +100,6 @@ struct LiteralTypeStorage : public mlir::TypeStorage {
   mlir::Attribute value;
 };
 
-struct SliceTypeStorage : public mlir::TypeStorage {
-  using KeyTy = std::tuple<mlir::Type, mlir::Type, mlir::Type>;
-
-  SliceTypeStorage(const KeyTy &t) : types(t) {}
-
-  bool operator==(const KeyTy &key) const { return key == types; }
-
-  static SliceTypeStorage *construct(mlir::TypeStorageAllocator &allocator,
-                                     const KeyTy &key) {
-    return new (allocator.allocate<SliceTypeStorage>()) SliceTypeStorage(key);
-  }
-
-  KeyTy types;
-};
-
 struct TypeVarStorage : public mlir::TypeStorage {
   using KeyTy = mlir::Type;
 
@@ -160,15 +145,7 @@ void PlierDialect::printType(mlir::Type type,
         os.printAttribute(t.getValue());
         os << ">";
       })
-      .Case<plier::SliceType>([&](auto t) {
-        os << "SliceType<";
-        os.printType(t.getBegin());
-        os << ", ";
-        os.printType(t.getEnd());
-        os << ", ";
-        os.printType(t.getStride());
-        os << ">";
-      })
+      .Case<plier::SliceType>([&](auto t) { os << "SliceType"; })
       .Case<plier::TypeVar>([&](auto t) {
         os << "TypeVar<";
         os.printType(t.getType());
@@ -196,23 +173,9 @@ LiteralType LiteralType::get(mlir::Attribute value) {
 
 mlir::Attribute LiteralType::getValue() const { return getImpl()->value; }
 
-SliceType SliceType::get(mlir::Type begin, mlir::Type end, mlir::Type stride) {
-  assert(begin);
-  assert(end);
-  assert(stride);
-  return Base::get(begin.getContext(), std::make_tuple(begin, end, stride));
-}
-
-mlir::Type SliceType::getBegin() const { return std::get<0>(getImpl()->types); }
-
-mlir::Type SliceType::getEnd() const { return std::get<1>(getImpl()->types); }
-
-mlir::Type SliceType::getStride() const {
-  return std::get<2>(getImpl()->types);
-}
-
-std::array<mlir::Type, 3> SliceType::getTypes() const {
-  return {getBegin(), getEnd(), getStride()};
+SliceType SliceType::get(mlir::MLIRContext *context) {
+  assert(context);
+  return Base::get(context);
 }
 
 TypeVar TypeVar::get(mlir::Type type) {
@@ -281,6 +244,19 @@ mlir::OpFoldResult CastOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
       return prevValue;
   }
 
+  mlir::Value prevCast = value();
+  while (true) {
+    auto cast = prevCast.getDefiningOp<plier::CastOp>();
+    if (!cast)
+      break;
+    prevCast = cast.value();
+  }
+
+  if (prevCast != value()) {
+    setOperand(prevCast);
+    return getResult();
+  }
+
   return nullptr;
 }
 
@@ -325,6 +301,9 @@ void BuildTupleOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
 
 mlir::Value foldBuildTupleGetitem(mlir::Value val, mlir::Type type,
                                   llvm::ArrayRef<mlir::Attribute> operands) {
+  while (auto cast = val.getDefiningOp<plier::CastOp>())
+    val = cast.value();
+
   auto buildTuple = val.getDefiningOp<plier::BuildTupleOp>();
   if (buildTuple) {
     if (auto val = operands[1].dyn_cast_or_null<mlir::IntegerAttr>()) {
@@ -551,13 +530,113 @@ void ParallelOp::build(
 void BuildSliceOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                          mlir::Value begin, mlir::Value end,
                          mlir::Value stride) {
-  auto type = SliceType::get(begin.getType(), end.getType(), stride.getType());
+  auto type = SliceType::get(builder.getContext());
   BuildSliceOp::build(builder, state, type, begin, end, stride);
+}
+
+namespace {
+struct SliceGetitemPropagate
+    : public mlir::OpRewritePattern<plier::SliceGetItemOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::SliceGetItemOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    if (!op.array().getType().isa<mlir::TensorType>())
+      return mlir::failure();
+
+    auto index = mlir::getConstantIntValue(op.index());
+    if (!index)
+      return mlir::failure();
+
+    auto i = *index;
+    if (i < 0 || i >= 3)
+      return mlir::failure();
+
+    auto buildSlice = op.slice().getDefiningOp<plier::BuildSliceOp>();
+    if (!buildSlice)
+      return mlir::failure();
+
+    auto loc = op.getLoc();
+    auto getInd = [&](int64_t val) -> mlir::Value {
+      return rewriter.create<mlir::ConstantIndexOp>(loc, val);
+    };
+
+    auto src = buildSlice.getOperand(static_cast<unsigned>(i));
+    auto srcType = src.getType();
+    if (srcType.isa<mlir::NoneType>()) {
+      if (i == 0) {
+        rewriter.replaceOp(op, getInd(0));
+      } else if (i == 1) {
+        auto size =
+            rewriter.create<mlir::tensor::DimOp>(loc, op.array(), op.dim());
+        rewriter.replaceOp(op, size.getResult());
+      } else { // i == 2
+        rewriter.replaceOp(op, getInd(1));
+      }
+    } else {
+      if (auto intType = srcType.dyn_cast<mlir::IntegerType>()) {
+        if (!intType.isSignless()) {
+          auto signless =
+              mlir::IntegerType::get(intType.getContext(), intType.getWidth());
+          src = rewriter.create<plier::SignCastOp>(loc, signless, src);
+        }
+        auto indexType = rewriter.getIndexType();
+        src = rewriter.create<mlir::IndexCastOp>(loc, src, indexType);
+      } else if (srcType.isa<mlir::IndexType>()) {
+        // Nothing
+      } else {
+        return mlir::failure();
+      }
+      rewriter.replaceOp(op, src);
+    }
+
+    return mlir::success();
+  }
+};
+} // namespace
+
+void SliceGetItemOp::getCanonicalizationPatterns(
+    ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context) {
+  results.insert<SliceGetitemPropagate>(context);
 }
 
 void RetainOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                      mlir::Value value) {
   RetainOp::build(builder, state, value.getType(), value);
+}
+
+static mlir::Value propagateCasts(mlir::Value val, mlir::Type thisType);
+
+template <typename T>
+static mlir::Value foldPrevCast(mlir::Value val, mlir::Type thisType) {
+  if (auto prevOp = val.getDefiningOp<T>()) {
+    auto prevArg = prevOp->getOperand(0);
+    if (prevArg.getType() == thisType)
+      return prevArg;
+
+    auto res = propagateCasts(prevArg, thisType);
+    if (res)
+      return res;
+  }
+  return {};
+}
+
+static mlir::Value propagateCasts(mlir::Value val, mlir::Type thisType) {
+  using fptr = mlir::Value (*)(mlir::Value, mlir::Type);
+  const fptr handlers[] = {
+      &foldPrevCast<SignCastOp>,
+      &foldPrevCast<CastOp>,
+      &foldPrevCast<mlir::UnrealizedConversionCastOp>,
+  };
+
+  for (auto h : handlers) {
+    auto res = h(val, thisType);
+    if (res)
+      return res;
+  }
+
+  return {};
 }
 
 mlir::OpFoldResult SignCastOp::fold(llvm::ArrayRef<mlir::Attribute> operands) {
@@ -569,15 +648,12 @@ mlir::OpFoldResult SignCastOp::fold(llvm::ArrayRef<mlir::Attribute> operands) {
   }
 
   auto arg = getOperand();
-  if (arg.getType() == thisType) {
+  if (arg.getType() == thisType)
     return arg;
-  }
-  if (auto prevOp = arg.getDefiningOp<SignCastOp>()) {
-    auto prevArg = prevOp.getOperand();
-    if (prevArg.getType() == thisType) {
-      return prevArg;
-    }
-  }
+
+  if (auto res = propagateCasts(arg, thisType))
+    return res;
+
   return nullptr;
 }
 

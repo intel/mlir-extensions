@@ -287,8 +287,11 @@ def test_range1():
             res = res + i
         return res
 
-    jit_func = njit(py_func)
-    assert_equal(py_func(10), jit_func(10))
+    with print_pass_ir([],['BuiltinCallsLoweringPass']):
+        jit_func = njit(py_func)
+        assert_equal(py_func(10), jit_func(10))
+        ir = get_print_buffer()
+        assert ir.count('scf.for') > 0, ir
 
 def test_range2():
     def py_func(a, b):
@@ -297,8 +300,11 @@ def test_range2():
             res = res + i
         return res
 
-    jit_func = njit(py_func)
-    assert_equal(py_func(10, 20), jit_func(10, 20))
+    with print_pass_ir([],['BuiltinCallsLoweringPass']):
+        jit_func = njit(py_func)
+        assert_equal(py_func(10, 20), jit_func(10, 20))
+        ir = get_print_buffer()
+        assert ir.count('scf.for') > 0, ir
 
 def test_range3():
     def py_func(a, b, c):
@@ -307,8 +313,11 @@ def test_range3():
             res = res + i
         return res
 
-    jit_func = njit(py_func)
-    assert_equal(py_func(10, 20, 2), jit_func(10, 20, 2))
+    with print_pass_ir([],['BuiltinCallsLoweringPass']):
+        jit_func = njit(py_func)
+        assert_equal(py_func(10, 20, 2), jit_func(10, 20, 2))
+        ir = get_print_buffer()
+        assert ir.count('scf.for') > 0, ir
 
 def test_range_negative_step():
     def py_func(a, b, c):
@@ -317,8 +326,11 @@ def test_range_negative_step():
             res = res + i
         return res
 
-    jit_func = njit(py_func)
-    assert_equal(py_func(5, -8, -2), jit_func(5, -8, -2))
+    with print_pass_ir([],['BuiltinCallsLoweringPass']):
+        jit_func = njit(py_func)
+        assert_equal(py_func(5, -8, -2), jit_func(5, -8, -2))
+        ir = get_print_buffer()
+        assert ir.count('scf.for') > 0, ir
 
 def test_range_const_step1():
     def py_func(a, b):
@@ -327,8 +339,11 @@ def test_range_const_step1():
             res = res + i
         return res
 
-    jit_func = njit(py_func)
-    assert_equal(py_func(5, -8), jit_func(5, -8))
+    with print_pass_ir([],['BuiltinCallsLoweringPass']):
+        jit_func = njit(py_func)
+        assert_equal(py_func(5, -8), jit_func(5, -8))
+        ir = get_print_buffer()
+        assert ir.count('scf.for') > 0, ir
 
 def test_range_const_step2():
     def py_func(a, b):
@@ -337,8 +352,11 @@ def test_range_const_step2():
             res = res + i
         return res
 
-    jit_func = njit(py_func)
-    assert_equal(py_func(-5, 8), jit_func(-5, 8))
+    with print_pass_ir([],['BuiltinCallsLoweringPass']):
+        jit_func = njit(py_func)
+        assert_equal(py_func(-5, 8), jit_func(-5, 8))
+        ir = get_print_buffer()
+        assert ir.count('scf.for') > 0, ir
 
 def test_range_use_index_after():
     def py_func(n):
@@ -347,8 +365,11 @@ def test_range_use_index_after():
             res = res + i
         return res + i
 
-    jit_func = njit(py_func)
-    assert_equal(py_func(9), jit_func(9))
+    with print_pass_ir([],['BuiltinCallsLoweringPass']):
+        jit_func = njit(py_func)
+        assert_equal(py_func(9), jit_func(9))
+        ir = get_print_buffer()
+        assert ir.count('scf.for') > 0, ir
 
 def test_range_if():
     def py_func(n):
@@ -361,8 +382,11 @@ def test_range_if():
                 res1 = res1 + i * 2
         return res + res1
 
-    jit_func = njit(py_func)
-    assert_equal(py_func(10), jit_func(10))
+    with print_pass_ir([],['BuiltinCallsLoweringPass']):
+        jit_func = njit(py_func)
+        assert_equal(py_func(10), jit_func(10))
+        ir = get_print_buffer()
+        assert ir.count('scf.for') > 0, ir
 
 def test_range_ifs():
     def py_func(n):
@@ -378,8 +402,11 @@ def test_range_ifs():
                 res = res + i
         return res
 
-    jit_func = njit(py_func)
-    assert_equal(py_func(10), jit_func(10))
+    with print_pass_ir([],['BuiltinCallsLoweringPass']):
+        jit_func = njit(py_func)
+        assert_equal(py_func(10), jit_func(10))
+        ir = get_print_buffer()
+        assert ir.count('scf.for') > 0, ir
 
 def test_range_continue():
     def py_func(n):
@@ -392,8 +419,11 @@ def test_range_continue():
             res1 = res1 + i * 2
         return res + res1
 
-    jit_func = njit(py_func)
-    assert_equal(py_func(10), jit_func(10))
+    with print_pass_ir([],['BuiltinCallsLoweringPass']):
+        jit_func = njit(py_func)
+        assert_equal(py_func(10), jit_func(10))
+        ir = get_print_buffer()
+        assert ir.count('scf.for') > 0, ir
 
 def test_range_nested1():
     def py_func(a, b, c):
@@ -404,8 +434,11 @@ def test_range_nested1():
                     res = res + i
         return res
 
-    jit_func = njit(py_func)
-    assert_equal(py_func(10, 20, 2), jit_func(10, 20, 2))
+    with print_pass_ir([],['BuiltinCallsLoweringPass']):
+        jit_func = njit(py_func)
+        assert_equal(py_func(10, 20, 2), jit_func(10, 20, 2))
+        ir = get_print_buffer()
+        assert ir.count('scf.for') > 0, ir
 
 def test_range_nested2():
     def py_func(a, b, c):
@@ -416,8 +449,11 @@ def test_range_nested2():
                     res = res + i + j * 10 + k * 100
         return res
 
-    jit_func = njit(py_func)
-    assert_equal(py_func(10, 20, 2), jit_func(10, 20, 2))
+    with print_pass_ir([],['BuiltinCallsLoweringPass']):
+        jit_func = njit(py_func)
+        assert_equal(py_func(10, 20, 2), jit_func(10, 20, 2))
+        ir = get_print_buffer()
+        assert ir.count('scf.for') > 0, ir
 
 def test_prange1():
     def py_func(a):

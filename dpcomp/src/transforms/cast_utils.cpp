@@ -32,18 +32,18 @@ mlir::Value plier::index_cast(mlir::OpBuilder &builder, mlir::Location loc,
                               mlir::Value val, mlir::Type dstType) {
   auto srcType = val.getType();
   assert(srcType.isa<mlir::IndexType>() || dstType.isa<mlir::IndexType>());
-  if (srcType == dstType) {
+  if (srcType == dstType)
     return val;
-  }
+
   auto newSrcType = makeSignless(srcType);
-  if (newSrcType != srcType) {
+  if (newSrcType != srcType)
     val = builder.createOrFold<plier::SignCastOp>(loc, newSrcType, val);
-  }
+
   auto newDstType = makeSignless(dstType);
   val = builder.createOrFold<mlir::IndexCastOp>(loc, val, newDstType);
-  if (newDstType != dstType) {
+  if (newDstType != dstType)
     val = builder.createOrFold<plier::SignCastOp>(loc, dstType, val);
-  }
+
   return val;
 }
 

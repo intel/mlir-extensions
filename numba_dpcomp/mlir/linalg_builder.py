@@ -28,8 +28,16 @@ class Var:
     def dtype(self):
         return self._dtype(self._context, self._ssa_val)
 
+    @property
+    def type(self):
+        return self._type(self._context, self._ssa_val)
+
     def __len__(self):
-        return self._len(self._context, self._ssa_val)
+        res = self._len(self._context, self._ssa_val)
+        if res is None:
+            raise ValueError('No len')
+
+        return res
 
     def __getitem__(self, index):
         return self._getitem(self._context, self._ssa_val, index)
@@ -81,8 +89,8 @@ class Builder:
     def reshape(self, src, dims):
         return self._reshape(self._context, src, dims)
 
-    def external_call(self, name, inputs, outputs):
-        return self._external_call(self._context, name, inputs, outputs)
+    def external_call(self, name, inputs, outputs, decorate=True):
+        return self._external_call(self._context, name, inputs, outputs, decorate)
 
     def insert(self, src, dst, offsets, sizes, strides):
         return self._insert(self._context, src, dst, offsets, sizes, strides)
@@ -137,7 +145,11 @@ def eltwise(builder, args, body, res_type = None):
 
     shape = args[0].shape
 
-    num_dims = len(shape)
+    try:
+        num_dims = len(shape)
+    except:
+        num_dims = 0
+
     if num_dims == 0:
         dummy = builder.cast(0, res_type)
         return builder.inline_func(body, res_type, *(args + (dummy,)))
@@ -157,8 +169,12 @@ def convert_array(builder, arr, dtype):
     return eltwise(builder, arr, lambda a, b: a, dtype)
 
 def _flatten_tuple(src):
-    l = len(src)
-    if isinstance(l, int) and l != 0:
+    try:
+        l = len(src)
+    except:
+        l = 0
+
+    if l != 0:
         shape, elements = _flatten_tuple(src[0])
         for i in range(1, l):
             shape1, elements1 = _flatten_tuple(src[i])
@@ -190,6 +206,7 @@ def asarray(builder, src, dtype=None):
 
 def is_int(t, b):
     types = [
+        b.bool,
         b.int8,
         b.uint8,
         b.int16,

@@ -360,31 +360,30 @@ getArgs(py::handle inspect, py::handle func,
         llvm::function_ref<py::object(mlir::Value)> createVar,
         mlir::ValueRange args,
         llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs) {
-  auto sig_func = inspect.attr("signature");
-  auto sig = sig_func(func);
+  auto sigFunc = inspect.attr("signature");
+  auto sig = sigFunc(func);
   auto params = sig.attr("parameters");
-  auto params_list = py::list(params);
-  params_list = params_list[py::slice(
-      1, static_cast<int64_t>(params_list.size()), 1)]; // skip builder param
+  auto paramsList = py::list(params);
+  paramsList = paramsList[py::slice(1, static_cast<int64_t>(paramsList.size()),
+                                    1)]; // skip builder param
   auto empty = inspect.attr("Parameter").attr("empty");
 
-  py::list ret(py::len(params_list));
-  for (auto it : llvm::enumerate(params_list)) {
+  py::list ret(py::len(paramsList));
+  for (auto it : llvm::enumerate(paramsList)) {
     auto index = it.index();
-    auto param_name = it.value();
-    auto param = params[param_name];
+    auto paramName = it.value();
+    auto param = params[paramName];
     if (!args.empty()) {
       ret[index] = createVar(args.front());
       args = args.drop_front();
       continue;
     }
     if (!kwargs.empty()) {
-      auto name = param_name.cast<std::string>();
+      auto name = paramName.cast<std::string>();
       auto val = [&]() -> mlir::Value {
         for (auto kwarg : kwargs) {
-          if (kwarg.first == name) {
+          if (kwarg.first == name)
             return kwarg.second;
-          }
         }
         return {};
       }();
@@ -393,9 +392,9 @@ getArgs(py::handle inspect, py::handle func,
         continue;
       }
     }
-    auto def_val = param.attr("default");
-    if (!def_val.is(empty)) {
-      ret[index] = def_val;
+    auto defVal = param.attr("default");
+    if (!defVal.is(empty)) {
+      ret[index] = defVal;
     } else {
       return py::none();
     }
@@ -1041,7 +1040,8 @@ py::object reshapeImpl(py::capsule context, py::handle src,
 }
 
 py::object externalCallImpl(py::capsule context, py::str funcName,
-                            py::handle inputs, py::handle outputs) {
+                            py::handle inputs, py::handle outputs,
+                            py::bool_ decorate) {
   auto &ctx = getPyContext(context);
   auto &builder = ctx.builder;
   auto loc = ctx.loc;
@@ -1085,8 +1085,9 @@ py::object externalCallImpl(py::capsule context, py::str funcName,
       }
     } else {
       f = plier::add_function(builder, mod, name, funcType);
-      f->setAttr("llvm.emit_c_interface",
-                 mlir::UnitAttr::get(builder.getContext()));
+      if (decorate)
+        f->setAttr("llvm.emit_c_interface",
+                   mlir::UnitAttr::get(builder.getContext()));
     }
     return f;
   }();
@@ -1260,6 +1261,8 @@ void setupPyBuilder(py::handle builder, mlir::OpBuilder &b,
     py::setattr(builder, name, createType(type));
   };
 
+  addType("bool", b.getIntegerType(1));
+
   addType("int8", b.getIntegerType(8, true));
   addType("uint8", b.getIntegerType(8, false));
   addType("int16", b.getIntegerType(16, true));
@@ -1303,9 +1306,16 @@ py::object dtypeImpl(py::capsule context, py::capsule ssaVal) {
   auto &ctx = getPyContext(context);
   auto value = unwrapMlir<mlir::Value>(ssaVal);
   auto type = value.getType();
-  if (auto tensorType = type.dyn_cast<mlir::RankedTensorType>())
+  if (auto tensorType = type.dyn_cast<mlir::ShapedType>())
     type = tensorType.getElementType();
 
+  return ctx.context.createType(type);
+}
+
+py::object typeImpl(py::capsule context, py::capsule ssaVal) {
+  auto &ctx = getPyContext(context);
+  auto value = unwrapMlir<mlir::Value>(ssaVal);
+  auto type = value.getType();
   return ctx.context.createType(type);
 }
 
@@ -1315,7 +1325,7 @@ py::object lenImpl(py::capsule /*context*/, py::capsule ssaVal) {
   if (auto tupleType = type.dyn_cast<mlir::TupleType>())
     return py::int_(tupleType.size());
 
-  return py::int_(0);
+  return py::none();
 }
 
 py::object getitemImpl(py::capsule context, py::capsule ssaVal,
@@ -1415,6 +1425,7 @@ py::object strImpl(py::capsule /*context*/, py::capsule ssaVal) {
 void setupPyVar(pybind11::handle var) {
   py::setattr(var, "_shape", py::cpp_function(&shapeImpl));
   py::setattr(var, "_dtype", py::cpp_function(&dtypeImpl));
+  py::setattr(var, "_type", py::cpp_function(&typeImpl));
   py::setattr(var, "_len", py::cpp_function(&lenImpl));
   py::setattr(var, "_getitem", py::cpp_function(&getitemImpl));
   py::setattr(var, "_binop", py::cpp_function(&binopImpl));
@@ -1435,10 +1446,13 @@ PyLinalgResolver::Values unpackResults(PyBuilderContext &ctx,
   if (py::isinstance<py::tuple>(object)) {
     auto tuple = object.cast<py::tuple>();
     llvm::SmallVector<mlir::Value> vals(tuple.size());
-    for (auto it : llvm::enumerate(tuple)) {
+    for (auto it : llvm::enumerate(tuple))
       vals[it.index()] = unwrapVal(it.value());
-    }
-    ret.emplace_back(builder.create<plier::BuildTupleOp>(loc, vals));
+
+    mlir::ValueRange vr(vals);
+
+    auto tupleType = mlir::TupleType::get(builder.getContext(), vr.getTypes());
+    ret.emplace_back(builder.create<plier::BuildTupleOp>(loc, tupleType, vr));
   } else {
     ret.emplace_back(unwrapVal(object));
   }
