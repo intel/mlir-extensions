@@ -17,6 +17,7 @@
 #include <llvm/Support/FormatVariadic.h>
 #include <mlir/Analysis/BufferViewFlowAnalysis.h>
 #include <mlir/Conversion/AffineToStandard/AffineToStandard.h>
+#include <mlir/Conversion/ArithmeticToSPIRV/ArithmeticToSPIRV.h>
 #include <mlir/Conversion/AsyncToLLVM/AsyncToLLVM.h>
 #include <mlir/Conversion/GPUCommon/GPUCommonPass.h>
 #include <mlir/Conversion/GPUToSPIRV/GPUToSPIRV.h>
@@ -777,6 +778,7 @@ struct GPUToSpirvPass
     mlir::populateSCFToSPIRVPatterns(typeConverter, scfToSpirvCtx, patterns);
     mlir::populateGPUToSPIRVPatterns(typeConverter, patterns);
     mlir::populateStandardToSPIRVPatterns(typeConverter, patterns);
+    mlir::arith::populateArithmeticToSPIRVPatterns(typeConverter, patterns);
 
     patterns.insert<ConvertLoadOp, ConvertStoreOp>(typeConverter, context);
 
