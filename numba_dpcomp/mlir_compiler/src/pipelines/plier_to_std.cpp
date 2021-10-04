@@ -1671,6 +1671,11 @@ void PlierToStdPass::runOnOperation() {
   target.addDynamicallyLegalOp<plier::BuildTupleOp>(
       [&](plier::BuildTupleOp op) {
         auto args = op.args();
+        llvm::SmallVector<mlir::Type> types;
+        if (mlir::succeeded(typeConverter.convertTypes(args.getTypes(), types))) {
+          auto srcType = mlir::TupleType::get(op.getContext(), types);
+          return srcType == op.getType();
+        }
         auto srcType = mlir::TupleType::get(op.getContext(), args.getTypes());
         return srcType == op.getType();
       });
