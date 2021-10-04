@@ -1310,6 +1310,13 @@ py::object dtypeImpl(py::capsule context, py::capsule ssaVal) {
   return ctx.context.createType(type);
 }
 
+py::object typeImpl(py::capsule context, py::capsule ssaVal) {
+  auto &ctx = getPyContext(context);
+  auto value = unwrapMlir<mlir::Value>(ssaVal);
+  auto type = value.getType();
+  return ctx.context.createType(type);
+}
+
 py::object lenImpl(py::capsule /*context*/, py::capsule ssaVal) {
   auto value = unwrapMlir<mlir::Value>(ssaVal);
   auto type = value.getType();
@@ -1416,6 +1423,7 @@ py::object strImpl(py::capsule /*context*/, py::capsule ssaVal) {
 void setupPyVar(pybind11::handle var) {
   py::setattr(var, "_shape", py::cpp_function(&shapeImpl));
   py::setattr(var, "_dtype", py::cpp_function(&dtypeImpl));
+  py::setattr(var, "_type", py::cpp_function(&typeImpl));
   py::setattr(var, "_len", py::cpp_function(&lenImpl));
   py::setattr(var, "_getitem", py::cpp_function(&getitemImpl));
   py::setattr(var, "_binop", py::cpp_function(&binopImpl));

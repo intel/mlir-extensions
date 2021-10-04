@@ -28,6 +28,10 @@ class Var:
     def dtype(self):
         return self._dtype(self._context, self._ssa_val)
 
+    @property
+    def type(self):
+        return self._type(self._context, self._ssa_val)
+
     def __len__(self):
         return self._len(self._context, self._ssa_val)
 
