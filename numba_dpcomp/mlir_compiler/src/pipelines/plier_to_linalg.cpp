@@ -17,6 +17,7 @@
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
 #include <mlir/Analysis/AffineAnalysis.h>
 
+#include <mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h>
 #include <mlir/Conversion/SCFToStandard/SCFToStandard.h>
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
 #include <mlir/Dialect/Linalg/IR/LinalgOps.h>
@@ -1912,6 +1913,8 @@ void populate_plier_to_linalg_gen_pipeline(mlir::OpPassManager &pm) {
 
 void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<MakeTensorsSignlessPass>());
+  pm.addPass(mlir::createReconcileUnrealizedCastsPass());
+
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(std::make_unique<TensorFusionPass>());
 
