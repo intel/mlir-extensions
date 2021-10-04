@@ -14,8 +14,9 @@
 
 import pytest
 
-from numpy.testing import assert_equal
+from numpy.testing import assert_equal, assert_allclose
 import numpy as np
+import math
 
 from numba_dpcomp.mlir.settings import _readenv
 from numba_dpcomp.mlir.kernel_impl import kernel, get_global_id
@@ -79,3 +80,28 @@ def test_inner_loop():
         assert ir.count('gpu.launch blocks') == 1, ir
 
     assert_equal(gpu_res, sim_res)
+
+@require_gpu
+@pytest.mark.parametrize("op", ['sqrt', 'log', 'sin', 'cos'])
+def test_math_funcs(op):
+    f = eval(f'math.{op}')
+    def func(a, b):
+        i = get_global_id(0)
+        b[i] = f(a[i])
+
+    sim_func = kernel_sim(func)
+    gpu_func = kernel(func)
+
+    a = np.array([1,2,3,4,5,6,7,8,9], np.float32)
+
+    sim_res = np.zeros(a.shape, a.dtype)
+    sim_func[a.shape](a, sim_res)
+
+    gpu_res = np.zeros(a.shape, a.dtype)
+
+    with print_pass_ir([],['GPUToSpirvPass']):
+        gpu_func[a.shape](a, gpu_res)
+        ir = get_print_buffer()
+        assert ir.count(f'OCL.{op}') == 1, ir
+
+    assert_allclose(gpu_res, sim_res, rtol=1e-5)
