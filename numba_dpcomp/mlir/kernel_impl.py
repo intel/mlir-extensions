@@ -44,6 +44,7 @@ def _process_dims(dims):
     else:
         _raise_error(f'Invalid dimentions type: {type(dims)}')
 
+
 class _gpu_range(object):
     def __new__(cls, *args):
         return range(*args)
@@ -140,7 +141,7 @@ class Kernel:
         if kwargs:
             _raise_error('kwargs not supported')
 
-    def __getitem__(self, *args):
+    def __getitem__(self, args):
         nargs = len(args)
         if nargs < 1 or nargs > 2:
             _raise_error(f'Invalid kernel arguments count: {nargs}')
