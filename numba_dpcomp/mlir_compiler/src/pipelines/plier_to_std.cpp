@@ -1629,10 +1629,8 @@ void PlierToStdPass::runOnOperation() {
     return res && res.isIntOrFloat();
   };
 
-  target.addDynamicallyLegalOp<plier::BinOp>([&](plier::BinOp op) {
-    return !isNum(op.rhs().getType()) && !isNum(op.lhs().getType()) &&
-           !isNum(op.getType());
-  });
+  target.addDynamicallyLegalOp<plier::BinOp>(
+      [&](plier::BinOp op) { return !isNum(op.getType()); });
   target.addDynamicallyLegalOp<plier::UnaryOp>([&](plier::UnaryOp op) {
     return !isNum(op.value().getType()) && !isNum(op.getType());
   });
