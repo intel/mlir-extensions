@@ -93,6 +93,7 @@ def CastOp : Plier_Op<"cast", [NoSideEffect]> {
 
   let results = (outs AnyType);
   let hasFolder = 1;
+  let hasCanonicalizer = 1;
 }
 
 def PyCallOp : Plier_Op<"call", [AttrSizedOperandSegments]> {
