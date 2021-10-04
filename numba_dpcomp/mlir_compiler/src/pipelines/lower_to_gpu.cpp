@@ -25,6 +25,7 @@
 #include <mlir/Conversion/LLVMCommon/Pattern.h>
 #include <mlir/Conversion/LLVMCommon/TypeConverter.h>
 #include <mlir/Conversion/SCFToGPU/SCFToGPUPass.h>
+#include <mlir/Conversion/SCFToSPIRV/SCFToSPIRV.h>
 #include <mlir/Conversion/StandardToSPIRV/StandardToSPIRV.h>
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
 #include <mlir/Dialect/GPU/ParallelLoopMapper.h>
@@ -770,6 +771,8 @@ struct GPUToSpirvPass
           return mlir::Type(nullptr);
         });
 
+    mlir::ScfToSPIRVContext scfToSpirvCtx;
+    mlir::populateSCFToSPIRVPatterns(typeConverter, scfToSpirvCtx, patterns);
     mlir::populateGPUToSPIRVPatterns(typeConverter, patterns);
     mlir::populateStandardToSPIRVPatterns(typeConverter, patterns);
 
