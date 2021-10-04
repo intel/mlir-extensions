@@ -602,7 +602,8 @@ struct SliceGetitemPropagate
     };
 
     auto src = buildSlice.getOperand(static_cast<unsigned>(i));
-    if (src.getType().isa<mlir::NoneType>()) {
+    auto srcType = src.getType();
+    if (srcType.isa<mlir::NoneType>()) {
       if (i == 0) {
         rewriter.replaceOp(op, getInd(0));
       } else if (i == 1) {
@@ -613,6 +614,19 @@ struct SliceGetitemPropagate
         rewriter.replaceOp(op, getInd(1));
       }
     } else {
+      if (auto intType = srcType.dyn_cast<mlir::IntegerType>()) {
+        if (!intType.isSignless()) {
+          auto signless =
+              mlir::IntegerType::get(intType.getContext(), intType.getWidth());
+          src = rewriter.create<plier::SignCastOp>(loc, signless, src);
+        }
+        auto indexType = rewriter.getIndexType();
+        src = rewriter.create<mlir::IndexCastOp>(loc, src, indexType);
+      } else if (srcType.isa<mlir::IndexType>()) {
+        // Nothing
+      } else {
+        return mlir::failure();
+      }
       rewriter.replaceOp(op, src);
     }
 
