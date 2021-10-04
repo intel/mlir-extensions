@@ -477,14 +477,20 @@ private:
   PyFuncResolver resolver;
 };
 
-struct UnrankedToElementCasts : public mlir::OpRewritePattern<plier::CastOp> {
-  using OpRewritePattern::OpRewritePattern;
+struct UnrankedToElementCasts
+    : public mlir::OpConversionPattern<plier::CastOp> {
+  using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::CastOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto srcType = op.value().getType();
-    auto dstType = op.getType();
+  matchAndRewrite(plier::CastOp op, plier::CastOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto value = adaptor.value();
+    auto srcType = value.getType();
+    auto converter = *getTypeConverter();
+    auto dstType = converter.convertType(op.getType());
+    if (!dstType)
+      return mlir::failure();
+
     auto isCompatible = [](mlir::Type tensor, mlir::Type element) {
       if (auto tensorType = tensor.dyn_cast<mlir::RankedTensorType>())
         return tensorType.getRank() == 0 &&
@@ -493,7 +499,7 @@ struct UnrankedToElementCasts : public mlir::OpRewritePattern<plier::CastOp> {
       return false;
     };
     if (isCompatible(srcType, dstType)) {
-      rewriter.replaceOpWithNewOp<mlir::tensor::ExtractOp>(op, op.value());
+      rewriter.replaceOpWithNewOp<mlir::tensor::ExtractOp>(op, value);
       return mlir::success();
     }
     if (isCompatible(dstType, srcType)) {
@@ -541,7 +547,7 @@ struct NumpyCallsLoweringPass
     : public plier::RewriteWrapperPass<
           NumpyCallsLoweringPass, void, void, NumpyCallsLowering,
           NumpyAttrsLowering, NumpyBinOpLowering, ExternalCallsLowering,
-          UnrankedToElementCasts, LegalizeTensorCastChain> {};
+          LegalizeTensorCastChain> {};
 
 static mlir::Value index_cast(mlir::Value value, mlir::Location loc,
                               mlir::OpBuilder &builder) {
@@ -1526,6 +1532,15 @@ void PlierToLinalgPass::runOnOperation() {
     if (!srcType || !dstType)
       return true;
 
+    auto isZeroRankTensor = [](mlir::Type t) -> bool {
+      auto tensor = t.dyn_cast<mlir::RankedTensorType>();
+      return tensor && tensor.getRank() == 0;
+    };
+
+    if ((isZeroRankTensor(srcType) && dstType.isIntOrIndexOrFloat()) ||
+        (isZeroRankTensor(dstType) && srcType.isIntOrIndexOrFloat()))
+      return false;
+
     if (srcType == dstType && inputType != op.getType())
       return false;
 
@@ -1542,7 +1557,8 @@ void PlierToLinalgPass::runOnOperation() {
       // clang-format off
       GetitemOpLowering,
       SetitemOpLowering,
-      LowerTensorCasts
+      LowerTensorCasts,
+      UnrankedToElementCasts
       // clang-format on
       >(typeConverter, &context);
 
