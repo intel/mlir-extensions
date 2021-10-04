@@ -1039,13 +1039,23 @@ struct BuiltinCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
       if (handler.first == funcName)
         return handler.second(op, args, kwargs, rewriter);
 
-    auto res =
-        resolver.rewriteFunc(funcName, op.getLoc(), rewriter, args, kwargs);
+    auto loc = op.getLoc();
+    auto res = resolver.rewriteFunc(funcName, loc, rewriter, args, kwargs);
     if (!res)
       return mlir::failure();
 
+    auto results = *res;
+    assert(results.size() == op->getNumResults());
+    for (auto it : llvm::enumerate(results)) {
+      auto i = it.index();
+      auto r = it.value();
+      auto dstType = op->getResultTypes()[i];
+      if (dstType != r.getType())
+        results[i] = rewriter.create<plier::CastOp>(loc, dstType, r);
+    }
+
     rerun_scf_pipeline(op);
-    rewriter.replaceOp(op, *res);
+    rewriter.replaceOp(op, results);
     return mlir::success();
   }
 

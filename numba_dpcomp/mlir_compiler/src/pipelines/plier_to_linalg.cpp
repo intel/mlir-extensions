@@ -280,13 +280,23 @@ struct NumpyCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
       if (handler.first == funcName)
         return handler.second(op, args, kwargs, rewriter);
 
-    auto res =
-        resolver.rewriteFunc(funcName, op.getLoc(), rewriter, args, kwargs);
+    auto loc = op.getLoc();
+    auto res = resolver.rewriteFunc(funcName, loc, rewriter, args, kwargs);
     if (!res)
       return mlir::failure();
 
+    auto results = *res;
+    assert(results.size() == op->getNumResults());
+    for (auto it : llvm::enumerate(results)) {
+      auto i = it.index();
+      auto r = it.value();
+      auto dstType = op->getResultTypes()[i];
+      if (dstType != r.getType())
+        results[i] = rewriter.create<plier::CastOp>(loc, dstType, r);
+    }
+
     rerun_scf_pipeline(op);
-    rewriter.replaceOp(op, *res);
+    rewriter.replaceOp(op, results);
     return mlir::success();
   }
 
@@ -308,12 +318,24 @@ struct NumpyAttrsLowering : public mlir::OpRewritePattern<plier::GetattrOp> {
       return mlir::failure();
 
     auto attrName = (llvm::Twine("array.") + op.name()).str();
-    auto res = resolver.rewriteAttr(attrName, op.getLoc(), rewriter, arg);
+
+    auto loc = op.getLoc();
+    auto res = resolver.rewriteAttr(attrName, loc, rewriter, arg);
     if (!res)
       return mlir::failure();
 
+    auto results = *res;
+    assert(results.size() == op->getNumResults());
+    for (auto it : llvm::enumerate(results)) {
+      auto i = it.index();
+      auto r = it.value();
+      auto dstType = op->getResultTypes()[i];
+      if (dstType != r.getType())
+        results[i] = rewriter.create<plier::CastOp>(loc, dstType, r);
+    }
+
     rerun_scf_pipeline(op);
-    rewriter.replaceOp(op, *res);
+    rewriter.replaceOp(op, results);
     return mlir::success();
   }
 
@@ -1477,9 +1499,14 @@ void PlierToLinalgPass::runOnOperation() {
         return !isTensor(typeConverter, op.target().getType());
       });
 
-  target.addDynamicallyLegalOp<plier::CastOp>([](plier::CastOp op) -> bool {
-    return !op.value().getType().isa<mlir::TensorType>() ||
-           !op.getType().isa<mlir::TensorType>();
+  target.addDynamicallyLegalOp<plier::CastOp>([&](plier::CastOp op) -> bool {
+    auto srcType = typeConverter.convertType(op.value().getType());
+    auto dstType = typeConverter.convertType(op.getType());
+    if (!srcType || !dstType)
+      return true;
+
+    return srcType == dstType || !(srcType.isa<mlir::ShapedType>() &&
+                                   dstType.isa<mlir::ShapedType>());
   });
 
   plier::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
