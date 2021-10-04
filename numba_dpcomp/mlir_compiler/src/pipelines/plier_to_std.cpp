@@ -1114,9 +1114,7 @@ struct FoldTupleGetitem : public mlir::OpRewritePattern<plier::GetItemOp> {
 };
 
 struct FoldSliceGetitem : public mlir::OpRewritePattern<plier::GetItemOp> {
-  FoldSliceGetitem(mlir::TypeConverter & /*typeConverter*/,
-                   mlir::MLIRContext *context)
-      : OpRewritePattern(context) {}
+  using OpRewritePattern::OpRewritePattern;
 
   mlir::LogicalResult
   matchAndRewrite(plier::GetItemOp op,
@@ -1251,33 +1249,41 @@ lowerLen(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands,
   return mlir::success();
 }
 
+static void rerun_scf_pipeline(mlir::Operation *op) {
+  assert(nullptr != op);
+  auto marker =
+      mlir::StringAttr::get(op->getContext(), plierToScfPipelineName());
+  auto mod = op->getParentOfType<mlir::ModuleOp>();
+  assert(nullptr != mod);
+  plier::add_pipeline_jump_marker(mod, marker);
+}
+
 mlir::LogicalResult
-lowerSlice(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands,
+lowerSlice(plier::PyCallOp op, mlir::ValueRange operands,
            llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs,
-           mlir::PatternRewriter &rewriter, mlir::Type /*dstType*/) {
-  if (!kwargs.empty()) {
+           mlir::PatternRewriter &rewriter) {
+  if (!kwargs.empty())
     return mlir::failure();
-  }
-  if (operands.size() != 2 && operands.size() != 3) {
+
+  if (operands.size() != 2 && operands.size() != 3)
     return mlir::failure();
-  }
 
   if (llvm::any_of(operands, [](mlir::Value op) {
         return !op.getType()
                     .isa<mlir::IntegerType, mlir::IndexType, mlir::NoneType>();
-      })) {
+      }))
     return mlir::failure();
-  }
 
   auto begin = operands[0];
   auto end = operands[1];
   auto stride = [&]() -> mlir::Value {
-    if (operands.size() == 3) {
+    if (operands.size() == 3)
       return operands[2];
-    }
+
     return rewriter.create<mlir::ConstantIndexOp>(op.getLoc(), 1);
   }();
 
+  rerun_scf_pipeline(op);
   rewriter.replaceOpWithNewOp<plier::BuildSliceOp>(op, begin, end, stride);
   return mlir::success();
 }
@@ -1353,15 +1359,6 @@ lower_math_func(plier::PyCallOp op, llvm::StringRef name,
   return mlir::failure();
 }
 
-static void rerun_scf_pipeline(mlir::Operation *op) {
-  assert(nullptr != op);
-  auto marker =
-      mlir::StringAttr::get(op->getContext(), plierToScfPipelineName());
-  auto mod = op->getParentOfType<mlir::ModuleOp>();
-  assert(nullptr != mod);
-  plier::add_pipeline_jump_marker(mod, marker);
-}
-
 mlir::LogicalResult
 lowerRangeImpl(plier::PyCallOp op, mlir::ValueRange operands,
                llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs,
@@ -1400,7 +1397,7 @@ struct CallLowerer {
         {"int", lowerCastFunc},
         //        {"float", lowerCastFunc}, {"range", lowerRangeImpl},
         {"len", lowerLen},
-        {"slice", lowerSlice},
+        //        {"slice", lowerSlice},
     };
     for (auto &handler : handlers) {
       if (handler.first == name) {
@@ -1444,6 +1441,7 @@ using func_t = mlir::LogicalResult (*)(plier::PyCallOp, mlir::ValueRange,
 static const std::pair<llvm::StringRef, func_t> builtinFuncsHandlers[] = {
     // clang-format off
     {"range", &lowerRangeImpl},
+    {"slice", &lowerSlice},
     // clang-format on
 };
 
@@ -1581,9 +1579,9 @@ private:
 };
 
 struct BuiltinCallsLoweringPass
-    : public plier::RewriteWrapperPass<BuiltinCallsLoweringPass, void, void,
-                                       BuiltinCallsLowering, ExpandCallVarargs,
-                                       ExternalCallsLowering> {};
+    : public plier::RewriteWrapperPass<
+          BuiltinCallsLoweringPass, void, void, BuiltinCallsLowering,
+          ExpandCallVarargs, ExternalCallsLowering, FoldSliceGetitem> {};
 
 struct ForceInlinePass
     : public plier::RewriteWrapperPass<ForceInlinePass, void, void,
