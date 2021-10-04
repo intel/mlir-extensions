@@ -26,6 +26,7 @@
 #include "level_zero_printing.hpp"
 #include "level_zero_wrapper.hpp"
 
+// TODO: get rid of this definition
 typedef void (*MemInfoDtorFunction)(void *ptr, size_t size, void *info);
 struct MemInfo {
   size_t refct;
@@ -33,6 +34,7 @@ struct MemInfo {
   void *dtor_info;
   void *data;
   size_t size;
+  void *external_allocator;
 };
 
 using AllocFuncT = void *(*)(size_t);
