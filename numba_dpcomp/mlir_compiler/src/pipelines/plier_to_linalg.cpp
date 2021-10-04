@@ -48,6 +48,7 @@
 
 #include "plier/Conversion/SCFToAffine/SCFToAffine.h"
 #include "plier/pass/rewrite_wrapper.hpp"
+#include "plier/rewrites/call_lowering.hpp"
 #include "plier/rewrites/canonicalize_reductions.hpp"
 #include "plier/rewrites/common_opts.hpp"
 #include "plier/rewrites/cse.hpp"
@@ -259,44 +260,25 @@ static const std::pair<llvm::StringRef, func_t> builtinFuncsHandlers[] = {
     // clang-format on
 };
 
-struct NumpyCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
+struct NumpyCallsLowering final : public plier::CallOpLowering {
   NumpyCallsLowering(mlir::MLIRContext *context)
-      : OpRewritePattern(context),
+      : CallOpLowering(context),
         resolver("numba_dpcomp.mlir.numpy.funcs", "registry") {}
 
-  mlir::LogicalResult
-  matchAndRewrite(plier::PyCallOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto funcName = op.func_name();
-
-    llvm::SmallVector<mlir::Value> args;
-    args.reserve(op.args().size() + 1);
-    auto func = op.func();
-    auto getattr =
-        mlir::dyn_cast_or_null<plier::GetattrOp>(func.getDefiningOp());
-    if (getattr)
-      args.emplace_back(skipCasts(getattr.getOperand()));
-
-    for (auto arg : op.args())
-      args.emplace_back(skipCasts(arg));
-
-    llvm::SmallVector<std::pair<llvm::StringRef, mlir::Value>> kwargs;
-    for (auto it : llvm::zip(op.kwargs(), op.kw_names())) {
-      auto arg = skipCasts(std::get<0>(it));
-      auto name = std::get<1>(it).cast<mlir::StringAttr>();
-      kwargs.emplace_back(name.getValue(), arg);
-    }
-
+protected:
+  virtual mlir::LogicalResult
+  resolveCall(plier::PyCallOp op, mlir::StringRef name, mlir::Location loc,
+              mlir::PatternRewriter &rewriter, mlir::ValueRange args,
+              KWargs kwargs) const override {
     for (auto &handler : builtinFuncsHandlers)
-      if (handler.first == funcName)
+      if (handler.first == name)
         return handler.second(op, args, kwargs, rewriter);
 
-    auto loc = op.getLoc();
-    auto res = resolver.rewriteFunc(funcName, loc, rewriter, args, kwargs);
+    auto res = resolver.rewriteFunc(name, loc, rewriter, args, kwargs);
     if (!res)
       return mlir::failure();
 
-    auto results = *res;
+    auto results = std::move(res).getValue();
     assert(results.size() == op->getNumResults());
     for (auto it : llvm::enumerate(results)) {
       auto i = it.index();
