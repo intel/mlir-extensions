@@ -1511,7 +1511,7 @@ void PlierToLinalgPass::runOnOperation() {
             if (i >= 0 && i < size) {
               auto srcType = tupleType.getType(static_cast<size_t>(i));
               auto dstType = op.getType();
-              return srcType == dstType ||
+              return srcType == dstType &&
                      dstType == typeConverter.convertType(dstType);
             }
           }
