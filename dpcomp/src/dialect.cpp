@@ -560,6 +560,39 @@ void RetainOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
   RetainOp::build(builder, state, value.getType(), value);
 }
 
+static mlir::Value propagateCasts(mlir::Value val, mlir::Type thisType);
+
+template <typename T>
+static mlir::Value foldPrevCast(mlir::Value val, mlir::Type thisType) {
+  if (auto prevOp = val.getDefiningOp<T>()) {
+    auto prevArg = prevOp->getOperand(0);
+    if (prevArg.getType() == thisType)
+      return prevArg;
+
+    auto res = propagateCasts(prevArg, thisType);
+    if (res)
+      return res;
+  }
+  return {};
+}
+
+static mlir::Value propagateCasts(mlir::Value val, mlir::Type thisType) {
+  using fptr = mlir::Value (*)(mlir::Value, mlir::Type);
+  const fptr handlers[] = {
+      &foldPrevCast<SignCastOp>,
+      &foldPrevCast<CastOp>,
+      &foldPrevCast<mlir::UnrealizedConversionCastOp>,
+  };
+
+  for (auto h : handlers) {
+    auto res = h(val, thisType);
+    if (res)
+      return res;
+  }
+
+  return {};
+}
+
 mlir::OpFoldResult SignCastOp::fold(llvm::ArrayRef<mlir::Attribute> operands) {
   assert(operands.size() == 1);
   auto thisType = getType();
@@ -569,15 +602,12 @@ mlir::OpFoldResult SignCastOp::fold(llvm::ArrayRef<mlir::Attribute> operands) {
   }
 
   auto arg = getOperand();
-  if (arg.getType() == thisType) {
+  if (arg.getType() == thisType)
     return arg;
-  }
-  if (auto prevOp = arg.getDefiningOp<SignCastOp>()) {
-    auto prevArg = prevOp.getOperand();
-    if (prevArg.getType() == thisType) {
-      return prevArg;
-    }
-  }
+
+  if (auto res = propagateCasts(arg, thisType))
+    return res;
+
   return nullptr;
 }
 
