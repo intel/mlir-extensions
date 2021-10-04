@@ -96,6 +96,8 @@ static MemInfo *allocMemInfo(void *data, size_t size, MemInfoDtorFunction dtor,
   if (!meminfo)
     return nullptr;
 
+  *meminfo = {};
+
   meminfo->refct = 1;
   meminfo->dtor = dtor;
   meminfo->dtor_info = dtorInfo;
