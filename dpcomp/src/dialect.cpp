@@ -281,6 +281,19 @@ mlir::OpFoldResult CastOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
       return prevValue;
   }
 
+  mlir::Value prevCast = value();
+  while (true) {
+    auto cast = prevCast.getDefiningOp<plier::CastOp>();
+    if (!cast)
+      break;
+    prevCast = cast.value();
+  }
+
+  if (prevCast != value()) {
+    setOperand(prevCast);
+    return getResult();
+  }
+
   return nullptr;
 }
 
