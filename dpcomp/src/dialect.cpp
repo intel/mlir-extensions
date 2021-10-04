@@ -200,7 +200,9 @@ SliceType SliceType::get(mlir::Type begin, mlir::Type end, mlir::Type stride) {
   assert(begin);
   assert(end);
   assert(stride);
-  return Base::get(begin.getContext(), std::make_tuple(begin, end, stride));
+  auto indexType = mlir::IndexType::get(begin.getContext());
+  return Base::get(begin.getContext(),
+                   std::make_tuple(indexType, indexType, indexType));
 }
 
 mlir::Type SliceType::getBegin() const { return std::get<0>(getImpl()->types); }
@@ -569,6 +571,59 @@ void BuildSliceOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                          mlir::Value stride) {
   auto type = SliceType::get(begin.getType(), end.getType(), stride.getType());
   BuildSliceOp::build(builder, state, type, begin, end, stride);
+}
+
+namespace {
+struct SliceGetitemPropagate
+    : public mlir::OpRewritePattern<plier::SliceGetItemOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::SliceGetItemOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    if (!op.array().getType().isa<mlir::TensorType>())
+      return mlir::failure();
+
+    auto index = mlir::getConstantIntValue(op.index());
+    if (!index)
+      return mlir::failure();
+
+    auto i = *index;
+    if (i < 0 || i >= 3)
+      return mlir::failure();
+
+    auto buildSlice = op.slice().getDefiningOp<plier::BuildSliceOp>();
+    if (!buildSlice)
+      return mlir::failure();
+
+    auto loc = op.getLoc();
+    auto getInd = [&](int64_t val) -> mlir::Value {
+      return rewriter.create<mlir::ConstantIndexOp>(loc, val);
+    };
+
+    auto src = buildSlice.getOperand(static_cast<unsigned>(i));
+    if (src.getType().isa<mlir::NoneType>()) {
+      if (i == 0) {
+        rewriter.replaceOp(op, getInd(0));
+      } else if (i == 1) {
+        auto size =
+            rewriter.create<mlir::tensor::DimOp>(loc, op.array(), op.dim());
+        rewriter.replaceOp(op, size.getResult());
+      } else { // i == 2
+        rewriter.replaceOp(op, getInd(1));
+      }
+    } else {
+      rewriter.replaceOp(op, src);
+    }
+
+    return mlir::success();
+  }
+};
+} // namespace
+
+void SliceGetItemOp::getCanonicalizationPatterns(
+    ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context) {
+  results.insert<SliceGetitemPropagate>(context);
 }
 
 void RetainOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,

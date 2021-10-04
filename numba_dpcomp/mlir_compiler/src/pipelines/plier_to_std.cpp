@@ -245,6 +245,15 @@ mlir::Type map_dispatcher_type(mlir::MLIRContext &ctx, llvm::StringRef &name) {
   return nullptr;
 }
 
+mlir::Type map_slice_type(mlir::MLIRContext &ctx, llvm::StringRef &name) {
+  if (name.consume_front("slice<") && consume_until(name, ">")) {
+    auto indexType = mlir::IndexType::get(&ctx);
+    return plier::SliceType::get(indexType, indexType, indexType);
+  }
+
+  return nullptr;
+}
+
 mlir::Type map_plier_type_name(mlir::MLIRContext &ctx, llvm::StringRef &name) {
   using func_t =
       mlir::Type (*)(mlir::MLIRContext & ctx, llvm::StringRef & name);
@@ -262,6 +271,7 @@ mlir::Type map_plier_type_name(mlir::MLIRContext &ctx, llvm::StringRef &name) {
       &map_dtype_type,
       &map_none_type,
       &map_dispatcher_type,
+      &map_slice_type,
       // clang-format on
   };
   for (auto h : handlers) {
@@ -1666,6 +1676,9 @@ void PlierToStdPass::runOnOperation() {
         auto type = typeConverter.convertType(op->getResult(0).getType());
         if (!type)
           return true;
+
+        if (type.isa<mlir::NoneType>())
+          return false;
 
         if (auto literal = type.dyn_cast<plier::LiteralType>())
           type = literal.getValue().getType();

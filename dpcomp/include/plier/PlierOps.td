@@ -262,6 +262,15 @@ def BuildSliceOp : Plier_Op<"build_slice", [NoSideEffect]> {
                              : $stride)>];
 }
 
+def SliceGetItemOp : Plier_Op<"slice_getitem", [NoSideEffect]> {
+  let arguments = (ins AnyType : $slice, AnyType : $array, AnyType : $index,
+                   I64Attr : $dim);
+
+  let results = (outs AnyType);
+
+  let hasCanonicalizer = 1;
+}
+
 def RetainOp : Plier_Op<"retain", [ViewLikeOpInterface]> {
   let arguments = (ins AnyMemRef : $source);
 

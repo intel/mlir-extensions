@@ -551,28 +551,18 @@ struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
     auto loc = op.getLoc();
     auto indexType = rewriter.getIndexType();
     auto getPos =
-        [&](mlir::Value val,
+        [&](mlir::Value indexVal,
             unsigned dim) -> std::tuple<mlir::OpFoldResult, mlir::OpFoldResult,
                                         mlir::OpFoldResult, bool> {
-      auto valType = val.getType();
+      auto valType = indexVal.getType();
       if (auto sliceType = valType.dyn_cast<plier::SliceType>()) {
         auto getItemOrConst = [&](unsigned i) -> mlir::Value {
           assert(i < 3);
           auto createInd = [&](int64_t i) {
             return rewriter.create<mlir::ConstantIndexOp>(loc, i);
           };
-          if (sliceType.getTypes()[i].isa<mlir::NoneType>()) {
-            if (i == 0) {
-              return createInd(0);
-            } else if (i == 1) {
-              return rewriter.createOrFold<mlir::tensor::DimOp>(loc, value,
-                                                                dim);
-            } else { // i == 2
-              return createInd(1);
-            }
-          }
-          return rewriter.create<plier::GetItemOp>(loc, indexType, val,
-                                                   createInd(i));
+          return rewriter.create<plier::SliceGetItemOp>(
+              loc, indexType, indexVal, value, createInd(i), dim);
         };
         auto offset = getItemOrConst(0);
         auto end = getItemOrConst(1);
@@ -584,7 +574,7 @@ struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
         return {offset, rewriter.getIndexAttr(1), rewriter.getIndexAttr(1),
                 false};
       } else {
-        auto offset = index_cast(val, loc, rewriter);
+        auto offset = index_cast(indexVal, loc, rewriter);
         return {offset, rewriter.getIndexAttr(1), rewriter.getIndexAttr(1),
                 false};
       }
