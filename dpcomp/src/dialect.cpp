@@ -338,6 +338,9 @@ void BuildTupleOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
 
 mlir::Value foldBuildTupleGetitem(mlir::Value val, mlir::Type type,
                                   llvm::ArrayRef<mlir::Attribute> operands) {
+  while (auto cast = val.getDefiningOp<plier::CastOp>())
+    val = cast.value();
+
   auto buildTuple = val.getDefiningOp<plier::BuildTupleOp>();
   if (buildTuple) {
     if (auto val = operands[1].dyn_cast_or_null<mlir::IntegerAttr>()) {
