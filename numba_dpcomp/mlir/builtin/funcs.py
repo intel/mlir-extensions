@@ -36,9 +36,7 @@ def float_cast_impl(builder, arg):
 
 @register_func('len', len)
 def len_impl(builder, arg):
-    l = len(arg)
-    if l is not None:
-        return builder.cast(l, builder.int64)
+    return builder.cast(len(arg), builder.int64)
 
 def _gen_math_funcs():
     def get_func(name):

@@ -33,7 +33,11 @@ class Var:
         return self._type(self._context, self._ssa_val)
 
     def __len__(self):
-        return self._len(self._context, self._ssa_val)
+        res = self._len(self._context, self._ssa_val)
+        if res is None:
+            raise ValueError('No len')
+
+        return res
 
     def __getitem__(self, index):
         return self._getitem(self._context, self._ssa_val, index)

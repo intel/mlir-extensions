@@ -1446,10 +1446,13 @@ PyLinalgResolver::Values unpackResults(PyBuilderContext &ctx,
   if (py::isinstance<py::tuple>(object)) {
     auto tuple = object.cast<py::tuple>();
     llvm::SmallVector<mlir::Value> vals(tuple.size());
-    for (auto it : llvm::enumerate(tuple)) {
+    for (auto it : llvm::enumerate(tuple))
       vals[it.index()] = unwrapVal(it.value());
-    }
-    ret.emplace_back(builder.create<plier::BuildTupleOp>(loc, vals));
+
+    mlir::ValueRange vr(vals);
+
+    auto tupleType = mlir::TupleType::get(builder.getContext(), vr.getTypes());
+    ret.emplace_back(builder.create<plier::BuildTupleOp>(loc, tupleType, vr));
   } else {
     ret.emplace_back(unwrapVal(object));
   }
