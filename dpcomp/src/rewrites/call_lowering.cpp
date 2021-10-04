@@ -14,10 +14,23 @@
 
 #include "plier/rewrites/call_lowering.hpp"
 
-plier::CallOpLowering::CallOpLowering(mlir::TypeConverter &,
-                                      mlir::MLIRContext *context,
-                                      CallOpLowering::resolver_t resolver)
-    : OpRewritePattern(context), resolver(resolver) {}
+static mlir::Value skipCasts(mlir::Value val) {
+  auto getArg = [](mlir::Value arg) -> mlir::Value {
+    auto cast = arg.getDefiningOp<mlir::UnrealizedConversionCastOp>();
+    if (!cast)
+      return {};
+
+    auto inputs = cast.inputs();
+    if (inputs.size() != 1)
+      return {};
+
+    return inputs.front();
+  };
+  while (auto arg = getArg(val))
+    val = arg;
+
+  return val;
+};
 
 mlir::LogicalResult
 plier::CallOpLowering::matchAndRewrite(plier::PyCallOp op,
@@ -25,23 +38,25 @@ plier::CallOpLowering::matchAndRewrite(plier::PyCallOp op,
   if (op.varargs())
     return mlir::failure();
 
-  auto func = op.func();
-  auto funcType = func.getType();
-  if (!funcType.isa<plier::PyType>())
-    return mlir::failure();
+  auto funcName = op.func_name();
 
   llvm::SmallVector<mlir::Value> args;
-  llvm::SmallVector<std::pair<llvm::StringRef, mlir::Value>> kwargs;
+  args.reserve(op.args().size() + 1);
+  auto func = op.func();
   auto getattr = mlir::dyn_cast_or_null<plier::GetattrOp>(func.getDefiningOp());
   if (getattr)
-    args.push_back(getattr.getOperand());
+    args.emplace_back(skipCasts(getattr.getOperand()));
 
-  llvm::copy(op.args(), std::back_inserter(args));
+  for (auto arg : op.args())
+    args.emplace_back(skipCasts(arg));
+
+  llvm::SmallVector<std::pair<llvm::StringRef, mlir::Value>> kwargs;
   for (auto it : llvm::zip(op.kwargs(), op.kw_names())) {
-    auto arg = std::get<0>(it);
+    auto arg = skipCasts(std::get<0>(it));
     auto name = std::get<1>(it).cast<mlir::StringAttr>();
     kwargs.emplace_back(name.getValue(), arg);
   }
 
-  return resolver(op, op.func_name(), args, kwargs, rewriter);
+  auto loc = op.getLoc();
+  return resolveCall(op, funcName, loc, rewriter, args, kwargs);
 }
