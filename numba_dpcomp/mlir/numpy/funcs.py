@@ -13,10 +13,13 @@
 # limitations under the License.
 
 from ..linalg_builder import FuncRegistry, is_literal, broadcast_type, eltwise, convert_array, asarray, is_int, is_float, DYNAMIC_DIM
+from ..func_registry import add_func
 
 import numpy
 import math
 from numba import prange
+
+add_func(prange, 'numba.prange')
 
 registry = FuncRegistry()
 
