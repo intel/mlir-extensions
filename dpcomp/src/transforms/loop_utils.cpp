@@ -52,6 +52,14 @@ static mlir::Value getLastIterValue(mlir::PatternRewriter &builder,
   return builder.createOrFold<mlir::AddIOp>(loc, lower_bound, inc);
 }
 
+static mlir::Value skipCasts(mlir::Value op) {
+  while (auto cast =
+             mlir::dyn_cast_or_null<plier::CastOp>(op.getDefiningOp())) {
+    op = cast.getOperand();
+  }
+  return op;
+};
+
 } // namespace
 
 bool plier::canLowerWhileToFor(mlir::scf::WhileOp whileOp) {
@@ -64,13 +72,6 @@ bool plier::canLowerWhileToFor(mlir::scf::WhileOp whileOp) {
   } // skip casts
   auto beforeTerm = getNextOp<mlir::scf::ConditionOp>(iters);
 
-  auto skipCasts = [](mlir::Value op) {
-    while (auto cast =
-               mlir::dyn_cast_or_null<plier::CastOp>(op.getDefiningOp())) {
-      op = cast.getOperand();
-    }
-    return op;
-  };
   if (!iternext || !pairsecond || !beforeTerm ||
       skipCasts(beforeTerm.condition()) != pairsecond)
     return false;
@@ -223,7 +224,8 @@ llvm::SmallVector<mlir::scf::ForOp, 2> plier::lowerWhileToFor(
           break;
         }
       }
-      if (pairfirst && operand == pairfirst && !oldRes.getUsers().empty()) {
+      if (pairfirst && skipCasts(operand) == pairfirst &&
+          !oldRes.getUsers().empty()) {
         auto val = getLastIterValue(builder, loc, origLowerBound,
                                     origUpperBound, origStep);
         auto newRes =

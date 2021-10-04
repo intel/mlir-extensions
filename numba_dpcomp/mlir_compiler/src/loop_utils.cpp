@@ -37,7 +37,7 @@ lowerRange(plier::PyCallOp op, mlir::ValueRange operands,
   mlir::Value val = op.getResult();
   if (!val.getUsers().empty()) {
     auto user = mlir::dyn_cast<plier::GetiterOp>(*val.getUsers().begin());
-    auto get_bounds = [&](mlir::OpBuilder &builder, mlir::Location loc) {
+    auto getBounds = [&](mlir::OpBuilder &builder, mlir::Location loc) {
       auto lowerBound = (operands.size() >= 2
                              ? operands[0]
                              : builder.create<mlir::ConstantIndexOp>(loc, 0));
@@ -51,7 +51,7 @@ lowerRange(plier::PyCallOp op, mlir::ValueRange operands,
                        mlir::Type dst_type, mlir::Value index) {
       return builder.create<plier::CastOp>(loc, dst_type, index);
     };
-    if (!user || mlir::failed(lowerWhileToFor(user, rewriter, get_bounds,
+    if (!user || mlir::failed(lowerWhileToFor(user, rewriter, getBounds,
                                               getIndex, results))) {
       return mlir::failure();
     }

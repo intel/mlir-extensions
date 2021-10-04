@@ -1354,9 +1354,9 @@ lower_math_func(plier::PyCallOp op, llvm::StringRef name,
 }
 
 mlir::LogicalResult
-lowerRangeImpl(plier::PyCallOp op, llvm::ArrayRef<mlir::Value> operands,
+lowerRangeImpl(plier::PyCallOp op, mlir::ValueRange operands,
                llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs,
-               mlir::PatternRewriter &rewriter, mlir::Type /*dstType*/) {
+               mlir::PatternRewriter &rewriter) {
   return lowerRange(op, operands, kwargs, rewriter);
 }
 
@@ -1382,9 +1382,11 @@ struct CallLowerer {
         llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>>,
         mlir::PatternRewriter &, mlir::Type);
     const std::pair<llvm::StringRef, func_t> handlers[] = {
-        {"bool", lowerCastFunc},  {"int", lowerCastFunc},
-        {"float", lowerCastFunc}, {"range", lowerRangeImpl},
-        {"len", lowerLen},        {"slice", lowerSlice},
+        {"bool", lowerCastFunc},
+        {"int", lowerCastFunc},
+        //        {"float", lowerCastFunc}, {"range", lowerRangeImpl},
+        {"len", lowerLen},
+        {"slice", lowerSlice},
     };
     for (auto &handler : handlers) {
       if (handler.first == name) {
@@ -1431,6 +1433,15 @@ static void rerun_scf_pipeline(mlir::Operation *op) {
   plier::add_pipeline_jump_marker(mod, marker);
 }
 
+using kwargs_t = llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>>;
+using func_t = mlir::LogicalResult (*)(plier::PyCallOp, mlir::ValueRange,
+                                       kwargs_t, mlir::PatternRewriter &);
+static const std::pair<llvm::StringRef, func_t> builtinFuncsHandlers[] = {
+    // clang-format off
+    {"range", &lowerRangeImpl},
+    // clang-format on
+};
+
 struct BuiltinCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
   BuiltinCallsLowering(mlir::MLIRContext *context)
       : OpRewritePattern(context),
@@ -1459,9 +1470,9 @@ struct BuiltinCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
       kwargs.emplace_back(name.getValue(), arg);
     }
 
-    //    for (auto &handler : builtinFuncsHandlers)
-    //      if (handler.first == funcName)
-    //        return handler.second(op, args, kwargs, rewriter);
+    for (auto &handler : builtinFuncsHandlers)
+      if (handler.first == funcName)
+        return handler.second(op, args, kwargs, rewriter);
 
     auto res =
         resolver.rewriteFunc(funcName, op.getLoc(), rewriter, args, kwargs);
