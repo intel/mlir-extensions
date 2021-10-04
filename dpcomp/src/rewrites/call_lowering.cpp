@@ -14,6 +14,8 @@
 
 #include "plier/rewrites/call_lowering.hpp"
 
+#include <mlir/Dialect/StandardOps/IR/Ops.h>
+
 static mlir::Value skipCasts(mlir::Value val) {
   auto getArg = [](mlir::Value arg) -> mlir::Value {
     auto cast = arg.getDefiningOp<mlir::UnrealizedConversionCastOp>();
@@ -32,6 +34,39 @@ static mlir::Value skipCasts(mlir::Value val) {
 
   return val;
 };
+
+mlir::LogicalResult plier::ExpandCallVarargs::matchAndRewrite(
+    plier::PyCallOp op, mlir::PatternRewriter &rewriter) const {
+  auto vararg = op.varargs();
+  if (!vararg)
+    return mlir::failure();
+
+  vararg = skipCasts(vararg);
+
+  auto varargType = vararg.getType().dyn_cast<mlir::TupleType>();
+  if (!varargType)
+    return mlir::failure();
+
+  auto argsCount = op.args().size();
+  auto varargsCount = varargType.size();
+  llvm::SmallVector<mlir::Value> args(argsCount + varargsCount);
+  llvm::copy(op.args(), args.begin());
+
+  auto loc = op.getLoc();
+  for (auto i : llvm::seq<size_t>(0, varargsCount)) {
+    auto type = varargType.getType(i);
+    auto index =
+        rewriter.create<mlir::ConstantIndexOp>(loc, static_cast<int64_t>(i));
+    args[argsCount + i] =
+        rewriter.create<plier::GetItemOp>(loc, type, vararg, index);
+  }
+
+  auto resType = op.getType();
+  rewriter.replaceOpWithNewOp<plier::PyCallOp>(op, resType, op.func(), args,
+                                               mlir::Value(), op.kwargs(),
+                                               op.func_name(), op.kw_names());
+  return mlir::success();
+}
 
 mlir::LogicalResult
 plier::CallOpLowering::matchAndRewrite(plier::PyCallOp op,

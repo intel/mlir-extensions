@@ -883,62 +883,6 @@ struct LowerCasts : public mlir::OpConversionPattern<plier::CastOp> {
   }
 };
 
-static mlir::Value skipCasts(mlir::Value val) {
-  auto getArg = [](mlir::Value arg) -> mlir::Value {
-    auto cast = arg.getDefiningOp<mlir::UnrealizedConversionCastOp>();
-    if (!cast)
-      return {};
-
-    auto inputs = cast.inputs();
-    if (inputs.size() != 1)
-      return {};
-
-    return inputs.front();
-  };
-  while (auto arg = getArg(val))
-    val = arg;
-
-  return val;
-};
-
-struct ExpandCallVarargs : public mlir::OpRewritePattern<plier::PyCallOp> {
-  using OpRewritePattern::OpRewritePattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(plier::PyCallOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto vararg = op.varargs();
-    if (!vararg)
-      return mlir::failure();
-
-    vararg = skipCasts(vararg);
-
-    auto varargType = vararg.getType().dyn_cast<mlir::TupleType>();
-    if (!varargType)
-      return mlir::failure();
-
-    auto argsCount = op.args().size();
-    auto varargsCount = varargType.size();
-    llvm::SmallVector<mlir::Value> args(argsCount + varargsCount);
-    llvm::copy(op.args(), args.begin());
-
-    auto loc = op.getLoc();
-    for (auto i : llvm::seq<size_t>(0, varargsCount)) {
-      auto type = varargType.getType(i);
-      auto index =
-          rewriter.create<mlir::ConstantIndexOp>(loc, static_cast<int64_t>(i));
-      args[argsCount + i] =
-          rewriter.create<plier::GetItemOp>(loc, type, vararg, index);
-    }
-
-    auto resType = op.getType();
-    rewriter.replaceOpWithNewOp<plier::PyCallOp>(op, resType, op.func(), args,
-                                                 mlir::Value(), op.kwargs(),
-                                                 op.func_name(), op.kw_names());
-    return mlir::success();
-  }
-};
-
 static void rerun_scf_pipeline(mlir::Operation *op) {
   assert(nullptr != op);
   auto marker =
@@ -1107,9 +1051,9 @@ private:
 };
 
 struct BuiltinCallsLoweringPass
-    : public plier::RewriteWrapperPass<BuiltinCallsLoweringPass, void, void,
-                                       BuiltinCallsLowering, ExpandCallVarargs,
-                                       ExternalCallsLowering> {};
+    : public plier::RewriteWrapperPass<
+          BuiltinCallsLoweringPass, void, void, BuiltinCallsLowering,
+          plier::ExpandCallVarargs, ExternalCallsLowering> {};
 
 struct ForceInlinePass
     : public plier::RewriteWrapperPass<ForceInlinePass, void, void,

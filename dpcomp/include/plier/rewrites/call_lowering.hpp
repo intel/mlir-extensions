@@ -19,6 +19,14 @@
 #include <mlir/IR/PatternMatch.h>
 
 namespace plier {
+struct ExpandCallVarargs : public mlir::OpRewritePattern<plier::PyCallOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::PyCallOp op,
+                  mlir::PatternRewriter &rewriter) const override;
+};
+
 struct CallOpLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
   using OpRewritePattern::OpRewritePattern;
 
