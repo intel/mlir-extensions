@@ -37,6 +37,7 @@
 #include <mlir/Dialect/SPIRV/IR/TargetAndABI.h>
 #include <mlir/Dialect/SPIRV/Transforms/Passes.h>
 #include <mlir/Dialect/SPIRV/Transforms/SPIRVConversion.h>
+#include <mlir/IR/BlockAndValueMapping.h>
 #include <mlir/Pass/PassManager.h>
 #include <mlir/Target/SPIRV/Serialization.h>
 #include <mlir/Transforms/DialectConversion.h>
@@ -118,6 +119,75 @@ struct PrepareForGPUPass
     }
   }
 };
+
+static mlir::LogicalResult
+convertParallelToFor(mlir::scf::ParallelOp op,
+                     mlir::PatternRewriter &rewriter) {
+  auto lowerBounds = op.lowerBound();
+  auto upperBound = op.upperBound();
+  auto steps = op.step();
+  auto initVals = op.initVals();
+  assert(!steps.empty());
+  if (steps.size() > 1)
+    return mlir::failure();
+
+  auto &srcBlock = op.getLoopBody().front();
+  assert(srcBlock.getNumArguments() == steps.size());
+
+  auto buildFunc = [&](mlir::OpBuilder &builder, mlir::Location loc,
+                       mlir::Value index, mlir::ValueRange args) {
+    llvm::SmallVector<mlir::Value> yieldArgs(initVals.size());
+    mlir::BlockAndValueMapping mapping;
+    mapping.map(srcBlock.getArgument(0), index);
+    unsigned reduceIndex = 0;
+    for (auto &bodyOp : srcBlock.without_terminator()) {
+      if (auto reduce = mlir::dyn_cast<mlir::scf::ReduceOp>(bodyOp)) {
+        auto &reduceBlock = reduce.getRegion().front();
+        assert(reduceBlock.getNumArguments() == 2);
+        mapping.map(reduceBlock.getArgument(0), args[reduceIndex]);
+        mapping.map(reduceBlock.getArgument(1),
+                    mapping.lookupOrDefault(reduce.operand()));
+        for (auto &reduceOp : reduceBlock.without_terminator())
+          builder.clone(reduceOp, mapping);
+
+        auto yieldResult =
+            mlir::cast<mlir::scf::ReduceReturnOp>(reduceBlock.getTerminator())
+                .result();
+        yieldArgs[reduceIndex] = mapping.lookupOrDefault(yieldResult);
+        ++reduceIndex;
+      } else {
+        builder.clone(bodyOp, mapping);
+      }
+    }
+    builder.create<mlir::scf::YieldOp>(loc, yieldArgs);
+  };
+
+  auto loc = op.getLoc();
+  auto res = rewriter.create<mlir::scf::ForOp>(
+      loc, lowerBounds.front(), upperBound.front(), steps.front(), initVals,
+      buildFunc);
+  rewriter.replaceOp(op, res.getResults());
+  return mlir::success();
+}
+
+struct RemoveNestedParallel
+    : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::scf::ParallelOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    if (!op->getParentOfType<mlir::scf::ParallelOp>())
+      return mlir::failure();
+
+    return convertParallelToFor(op, rewriter);
+  }
+};
+
+// TODO: fix ParallelLoopToGpuPass
+struct RemoveNestedParallelPass
+    : public plier::RewriteWrapperPass<RemoveNestedParallelPass, void, void,
+                                       RemoveNestedParallel> {};
 
 struct ParallelLoopGPUMappingPass
     : public mlir::PassWrapper<ParallelLoopGPUMappingPass, mlir::FunctionPass> {
@@ -1572,6 +1642,7 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   auto &funcPM = pm.nest<mlir::FuncOp>();
   funcPM.addPass(std::make_unique<PrepareForGPUPass>());
   funcPM.addPass(mlir::createCanonicalizerPass());
+  funcPM.addPass(std::make_unique<RemoveNestedParallelPass>());
   funcPM.addPass(std::make_unique<ParallelLoopGPUMappingPass>());
   funcPM.addPass(mlir::createParallelLoopToGpuPass());
   funcPM.addPass(mlir::createCanonicalizerPass());
