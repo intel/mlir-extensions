@@ -595,6 +595,8 @@ struct SetSPIRVCapabilitiesPass
         spirv::Capability::Vector16,
         spirv::Capability::GenericPointer,
         spirv::Capability::Groups,
+        spirv::Capability::Float16,
+        spirv::Capability::Float64,
         // clang-format on
     };
     //    spirv::Extension exts[] = {};
