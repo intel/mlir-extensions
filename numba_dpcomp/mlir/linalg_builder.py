@@ -145,7 +145,11 @@ def eltwise(builder, args, body, res_type = None):
 
     shape = args[0].shape
 
-    num_dims = len(shape)
+    try:
+        num_dims = len(shape)
+    except:
+        num_dims = 0
+
     if num_dims == 0:
         dummy = builder.cast(0, res_type)
         return builder.inline_func(body, res_type, *(args + (dummy,)))
@@ -165,8 +169,12 @@ def convert_array(builder, arr, dtype):
     return eltwise(builder, arr, lambda a, b: a, dtype)
 
 def _flatten_tuple(src):
-    l = len(src)
-    if isinstance(l, int) and l != 0:
+    try:
+        l = len(src)
+    except:
+        l = 0
+
+    if l != 0:
         shape, elements = _flatten_tuple(src[0])
         for i in range(1, l):
             shape1, elements1 = _flatten_tuple(src[i])
