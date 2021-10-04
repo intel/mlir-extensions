@@ -478,40 +478,10 @@ struct UnrankedToElementCasts
   }
 };
 
-struct LegalizeTensorCastChain : public mlir::OpRewritePattern<plier::CastOp> {
-  using OpRewritePattern::OpRewritePattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(plier::CastOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto prevCast = op.value().getDefiningOp<plier::CastOp>();
-    if (!prevCast)
-      return mlir::failure();
-
-    auto prevValue = prevCast.value();
-
-    auto srcTensor = prevValue.getType().dyn_cast<mlir::TensorType>();
-    if (!srcTensor)
-      return mlir::failure();
-
-    auto dstTensor = op.getType().dyn_cast<mlir::TensorType>();
-    if (!dstTensor)
-      return mlir::failure();
-
-    if (srcTensor != dstTensor)
-      prevValue = rewriter.createOrFold<mlir::tensor::CastOp>(
-          op.getLoc(), dstTensor, prevValue);
-
-    rewriter.replaceOp(op, prevValue);
-    return mlir::success();
-  }
-};
-
 struct NumpyCallsLoweringPass
     : public plier::RewriteWrapperPass<
           NumpyCallsLoweringPass, void, void, NumpyCallsLowering,
-          NumpyAttrsLowering, NumpyBinOpLowering, ExternalCallsLowering,
-          LegalizeTensorCastChain> {};
+          NumpyAttrsLowering, NumpyBinOpLowering, ExternalCallsLowering> {};
 
 static mlir::Value index_cast(mlir::Value value, mlir::Location loc,
                               mlir::OpBuilder &builder) {
