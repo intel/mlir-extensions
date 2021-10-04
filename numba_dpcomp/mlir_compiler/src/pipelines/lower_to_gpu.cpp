@@ -73,7 +73,17 @@ static void moveOpsIntoParallel(mlir::scf::ParallelOp outer, int depth = 0) {
   while (true) {
     bool first = (it == begin);
     auto &op = *it;
-    if (!mlir::MemoryEffectOpInterface::hasNoEffect(&op))
+    auto isParallelOpOperand = [&](mlir::Operation &op) {
+      auto operands = parallelOp->getOperands();
+      for (auto r : op.getResults())
+        if (llvm::is_contained(operands, r))
+          return true;
+
+      return false;
+    };
+
+    if (!mlir::MemoryEffectOpInterface::hasNoEffect(&op) ||
+        isParallelOpOperand(op))
       break;
 
     if (first) {
