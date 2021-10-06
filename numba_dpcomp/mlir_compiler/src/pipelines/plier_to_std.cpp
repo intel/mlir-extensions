@@ -31,6 +31,7 @@
 #include "plier/dialect.hpp"
 
 #include "plier/pass/rewrite_wrapper.hpp"
+#include "plier/rewrites/call_lowering.hpp"
 #include "plier/rewrites/force_inline.hpp"
 #include "plier/rewrites/type_conversion.hpp"
 #include "plier/transforms/cast_utils.hpp"
@@ -882,62 +883,6 @@ struct LowerCasts : public mlir::OpConversionPattern<plier::CastOp> {
   }
 };
 
-static mlir::Value skipCasts(mlir::Value val) {
-  auto getArg = [](mlir::Value arg) -> mlir::Value {
-    auto cast = arg.getDefiningOp<mlir::UnrealizedConversionCastOp>();
-    if (!cast)
-      return {};
-
-    auto inputs = cast.inputs();
-    if (inputs.size() != 1)
-      return {};
-
-    return inputs.front();
-  };
-  while (auto arg = getArg(val))
-    val = arg;
-
-  return val;
-};
-
-struct ExpandCallVarargs : public mlir::OpRewritePattern<plier::PyCallOp> {
-  using OpRewritePattern::OpRewritePattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(plier::PyCallOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto vararg = op.varargs();
-    if (!vararg)
-      return mlir::failure();
-
-    vararg = skipCasts(vararg);
-
-    auto varargType = vararg.getType().dyn_cast<mlir::TupleType>();
-    if (!varargType)
-      return mlir::failure();
-
-    auto argsCount = op.args().size();
-    auto varargsCount = varargType.size();
-    llvm::SmallVector<mlir::Value> args(argsCount + varargsCount);
-    llvm::copy(op.args(), args.begin());
-
-    auto loc = op.getLoc();
-    for (auto i : llvm::seq<size_t>(0, varargsCount)) {
-      auto type = varargType.getType(i);
-      auto index =
-          rewriter.create<mlir::ConstantIndexOp>(loc, static_cast<int64_t>(i));
-      args[argsCount + i] =
-          rewriter.create<plier::GetItemOp>(loc, type, vararg, index);
-    }
-
-    auto resType = op.getType();
-    rewriter.replaceOpWithNewOp<plier::PyCallOp>(op, resType, op.func(), args,
-                                                 mlir::Value(), op.kwargs(),
-                                                 op.func_name(), op.kw_names());
-    return mlir::success();
-  }
-};
-
 static void rerun_scf_pipeline(mlir::Operation *op) {
   assert(nullptr != op);
   auto marker =
@@ -999,44 +944,25 @@ static const std::pair<llvm::StringRef, func_t> builtinFuncsHandlers[] = {
     // clang-format on
 };
 
-struct BuiltinCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
+struct BuiltinCallsLowering final : public plier::CallOpLowering {
   BuiltinCallsLowering(mlir::MLIRContext *context)
-      : OpRewritePattern(context),
+      : CallOpLowering(context),
         resolver("numba_dpcomp.mlir.builtin.funcs", "registry") {}
 
-  mlir::LogicalResult
-  matchAndRewrite(plier::PyCallOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto funcName = op.func_name();
-
-    llvm::SmallVector<mlir::Value> args;
-    args.reserve(op.args().size() + 1);
-    auto func = op.func();
-    auto getattr =
-        mlir::dyn_cast_or_null<plier::GetattrOp>(func.getDefiningOp());
-    if (getattr)
-      args.emplace_back(skipCasts(getattr.getOperand()));
-
-    for (auto arg : op.args())
-      args.emplace_back(skipCasts(arg));
-
-    llvm::SmallVector<std::pair<llvm::StringRef, mlir::Value>> kwargs;
-    for (auto it : llvm::zip(op.kwargs(), op.kw_names())) {
-      auto arg = skipCasts(std::get<0>(it));
-      auto name = std::get<1>(it).cast<mlir::StringAttr>();
-      kwargs.emplace_back(name.getValue(), arg);
-    }
-
+protected:
+  virtual mlir::LogicalResult
+  resolveCall(plier::PyCallOp op, mlir::StringRef name, mlir::Location loc,
+              mlir::PatternRewriter &rewriter, mlir::ValueRange args,
+              KWargs kwargs) const override {
     for (auto &handler : builtinFuncsHandlers)
-      if (handler.first == funcName)
+      if (handler.first == name)
         return handler.second(op, args, kwargs, rewriter);
 
-    auto loc = op.getLoc();
-    auto res = resolver.rewriteFunc(funcName, loc, rewriter, args, kwargs);
+    auto res = resolver.rewriteFunc(name, loc, rewriter, args, kwargs);
     if (!res)
       return mlir::failure();
 
-    auto results = *res;
+    auto results = std::move(res).getValue();
     assert(results.size() == op->getNumResults());
     for (auto it : llvm::enumerate(results)) {
       auto i = it.index();
@@ -1055,38 +981,19 @@ private:
   PyLinalgResolver resolver;
 };
 
-struct ExternalCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
-  using OpRewritePattern::OpRewritePattern;
+struct ExternalCallsLowering final : public plier::CallOpLowering {
+  using CallOpLowering::CallOpLowering;
 
-  mlir::LogicalResult
-  matchAndRewrite(plier::PyCallOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    if (op.varargs())
-      return mlir::failure();
+protected:
+  virtual mlir::LogicalResult
+  resolveCall(plier::PyCallOp op, mlir::StringRef name, mlir::Location loc,
+              mlir::PatternRewriter &rewriter, mlir::ValueRange args,
+              KWargs kwargs) const override {
+    if (!kwargs.empty())
+      return mlir::failure(); // TODO: kwargs support
 
-    auto funcName = op.func_name();
-
-    llvm::SmallVector<mlir::Value> args;
-    args.reserve(op.args().size() + 1);
-    auto func = op.func();
-    auto getattr =
-        mlir::dyn_cast_or_null<plier::GetattrOp>(func.getDefiningOp());
-    if (getattr)
-      args.emplace_back(skipCasts(getattr.getOperand()));
-
-    for (auto arg : op.args())
-      args.emplace_back(skipCasts(arg));
-
-    llvm::SmallVector<std::pair<llvm::StringRef, mlir::Value>> kwargs;
-    for (auto it : llvm::zip(op.kwargs(), op.kw_names())) {
-      auto arg = skipCasts(std::get<0>(it));
-      auto name = std::get<1>(it).cast<mlir::StringAttr>();
-      kwargs.emplace_back(name.getValue(), arg);
-    }
-
-    mlir::ValueRange r(args);
-
-    auto mangledName = mangle(funcName, r.getTypes());
+    auto types = args.getTypes();
+    auto mangledName = mangle(name, types);
     if (mangledName.empty())
       return mlir::failure();
 
@@ -1094,7 +1001,7 @@ struct ExternalCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
     assert(mod);
     auto externalFunc = mod.lookupSymbol<mlir::FuncOp>(mangledName);
     if (!externalFunc) {
-      externalFunc = resolver.getFunc(funcName, r.getTypes());
+      externalFunc = resolver.getFunc(name, types);
       if (externalFunc) {
         externalFunc.setPrivate();
         externalFunc.setName(mangledName);
@@ -1105,18 +1012,20 @@ struct ExternalCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
 
     assert(externalFunc.getType().getNumResults() == op->getNumResults());
 
+    llvm::SmallVector<mlir::Value> castedArgs(args.size());
     auto funcTypes = externalFunc.getType().getInputs();
-
-    auto loc = op.getLoc();
     for (auto it : llvm::enumerate(args)) {
       auto arg = it.value();
       auto i = it.index();
       auto dstType = funcTypes[i];
       if (arg.getType() != dstType)
-        args[i] = rewriter.createOrFold<plier::CastOp>(loc, dstType, arg);
+        castedArgs[i] = rewriter.createOrFold<plier::CastOp>(loc, dstType, arg);
+      else
+        castedArgs[i] = arg;
     }
 
-    auto newFuncCall = rewriter.create<mlir::CallOp>(loc, externalFunc, args);
+    auto newFuncCall =
+        rewriter.create<mlir::CallOp>(loc, externalFunc, castedArgs);
 
     auto results = newFuncCall.getResults();
     llvm::SmallVector<mlir::Value> castedResults(results.size());
@@ -1134,7 +1043,6 @@ struct ExternalCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
 
     rerun_scf_pipeline(op);
     rewriter.replaceOp(op, castedResults);
-
     return mlir::success();
   }
 
@@ -1143,9 +1051,9 @@ private:
 };
 
 struct BuiltinCallsLoweringPass
-    : public plier::RewriteWrapperPass<BuiltinCallsLoweringPass, void, void,
-                                       BuiltinCallsLowering, ExpandCallVarargs,
-                                       ExternalCallsLowering> {};
+    : public plier::RewriteWrapperPass<
+          BuiltinCallsLoweringPass, void, void, BuiltinCallsLowering,
+          plier::ExpandCallVarargs, ExternalCallsLowering> {};
 
 struct ForceInlinePass
     : public plier::RewriteWrapperPass<ForceInlinePass, void, void,

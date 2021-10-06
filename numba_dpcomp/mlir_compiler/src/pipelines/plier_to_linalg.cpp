@@ -48,6 +48,7 @@
 
 #include "plier/Conversion/SCFToAffine/SCFToAffine.h"
 #include "plier/pass/rewrite_wrapper.hpp"
+#include "plier/rewrites/call_lowering.hpp"
 #include "plier/rewrites/canonicalize_reductions.hpp"
 #include "plier/rewrites/common_opts.hpp"
 #include "plier/rewrites/cse.hpp"
@@ -259,44 +260,25 @@ static const std::pair<llvm::StringRef, func_t> builtinFuncsHandlers[] = {
     // clang-format on
 };
 
-struct NumpyCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
+struct NumpyCallsLowering final : public plier::CallOpLowering {
   NumpyCallsLowering(mlir::MLIRContext *context)
-      : OpRewritePattern(context),
+      : CallOpLowering(context),
         resolver("numba_dpcomp.mlir.numpy.funcs", "registry") {}
 
-  mlir::LogicalResult
-  matchAndRewrite(plier::PyCallOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto funcName = op.func_name();
-
-    llvm::SmallVector<mlir::Value> args;
-    args.reserve(op.args().size() + 1);
-    auto func = op.func();
-    auto getattr =
-        mlir::dyn_cast_or_null<plier::GetattrOp>(func.getDefiningOp());
-    if (getattr)
-      args.emplace_back(skipCasts(getattr.getOperand()));
-
-    for (auto arg : op.args())
-      args.emplace_back(skipCasts(arg));
-
-    llvm::SmallVector<std::pair<llvm::StringRef, mlir::Value>> kwargs;
-    for (auto it : llvm::zip(op.kwargs(), op.kw_names())) {
-      auto arg = skipCasts(std::get<0>(it));
-      auto name = std::get<1>(it).cast<mlir::StringAttr>();
-      kwargs.emplace_back(name.getValue(), arg);
-    }
-
+protected:
+  virtual mlir::LogicalResult
+  resolveCall(plier::PyCallOp op, mlir::StringRef name, mlir::Location loc,
+              mlir::PatternRewriter &rewriter, mlir::ValueRange args,
+              KWargs kwargs) const override {
     for (auto &handler : builtinFuncsHandlers)
-      if (handler.first == funcName)
+      if (handler.first == name)
         return handler.second(op, args, kwargs, rewriter);
 
-    auto loc = op.getLoc();
-    auto res = resolver.rewriteFunc(funcName, loc, rewriter, args, kwargs);
+    auto res = resolver.rewriteFunc(name, loc, rewriter, args, kwargs);
     if (!res)
       return mlir::failure();
 
-    auto results = *res;
+    auto results = std::move(res).getValue();
     assert(results.size() == op->getNumResults());
     for (auto it : llvm::enumerate(results)) {
       auto i = it.index();
@@ -328,10 +310,9 @@ struct NumpyAttrsLowering : public mlir::OpRewritePattern<plier::GetattrOp> {
     if (!arg.getType().isa<mlir::ShapedType>())
       return mlir::failure();
 
-    auto attrName = (llvm::Twine("array.") + op.name()).str();
-
     auto loc = op.getLoc();
-    auto res = resolver.rewriteAttr(attrName, loc, rewriter, arg);
+    auto res = resolver.rewriteAttr(llvm::Twine("array.") + op.name(), loc,
+                                    rewriter, arg);
     if (!res)
       return mlir::failure();
 
@@ -391,37 +372,19 @@ private:
 };
 
 // TODO: remove
-struct ExternalCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
-  using OpRewritePattern::OpRewritePattern;
+struct ExternalCallsLowering final : public plier::CallOpLowering {
+  using CallOpLowering::CallOpLowering;
 
-  mlir::LogicalResult
-  matchAndRewrite(plier::PyCallOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    if (op.varargs())
-      return mlir::failure();
+protected:
+  virtual mlir::LogicalResult
+  resolveCall(plier::PyCallOp op, mlir::StringRef name, mlir::Location loc,
+              mlir::PatternRewriter &rewriter, mlir::ValueRange args,
+              KWargs kwargs) const override {
+    if (!kwargs.empty())
+      return mlir::failure(); // TODO: kwargs support
 
-    auto funcName = op.func_name();
-
-    llvm::SmallVector<mlir::Value> args;
-    args.reserve(op.args().size() + 1);
-    auto func = op.func();
-    auto getattr =
-        mlir::dyn_cast_or_null<plier::GetattrOp>(func.getDefiningOp());
-    if (getattr)
-      args.emplace_back(skipCasts(getattr.getOperand()));
-
-    for (auto arg : op.args())
-      args.emplace_back(skipCasts(arg));
-
-    llvm::SmallVector<std::pair<llvm::StringRef, mlir::Value>> kwargs;
-    for (auto it : llvm::zip(op.kwargs(), op.kw_names())) {
-      auto arg = skipCasts(std::get<0>(it));
-      auto name = std::get<1>(it).cast<mlir::StringAttr>();
-      kwargs.emplace_back(name.getValue(), arg);
-    }
-
-    mlir::ValueRange r(args);
-    auto mangledName = mangle(funcName, r.getTypes());
+    auto types = args.getTypes();
+    auto mangledName = mangle(name, types);
     if (mangledName.empty())
       return mlir::failure();
 
@@ -429,7 +392,7 @@ struct ExternalCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
     assert(mod);
     auto externalFunc = mod.lookupSymbol<mlir::FuncOp>(mangledName);
     if (!externalFunc) {
-      externalFunc = resolver.getFunc(funcName, r.getTypes());
+      externalFunc = resolver.getFunc(name, types);
       if (externalFunc) {
         externalFunc.setPrivate();
         externalFunc.setName(mangledName);
@@ -440,18 +403,20 @@ struct ExternalCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
 
     assert(externalFunc.getType().getNumResults() == op->getNumResults());
 
+    llvm::SmallVector<mlir::Value> castedArgs(args.size());
     auto funcTypes = externalFunc.getType().getInputs();
-
-    auto loc = op.getLoc();
     for (auto it : llvm::enumerate(args)) {
       auto arg = it.value();
       auto i = it.index();
       auto dstType = funcTypes[i];
       if (arg.getType() != dstType)
-        args[i] = rewriter.createOrFold<plier::CastOp>(loc, dstType, arg);
+        castedArgs[i] = rewriter.createOrFold<plier::CastOp>(loc, dstType, arg);
+      else
+        castedArgs[i] = arg;
     }
 
-    auto newFuncCall = rewriter.create<mlir::CallOp>(loc, externalFunc, args);
+    auto newFuncCall =
+        rewriter.create<mlir::CallOp>(loc, externalFunc, castedArgs);
 
     auto results = newFuncCall.getResults();
     llvm::SmallVector<mlir::Value> castedResults(results.size());
@@ -469,7 +434,6 @@ struct ExternalCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
 
     rerun_scf_pipeline(op);
     rewriter.replaceOp(op, castedResults);
-
     return mlir::success();
   }
 
@@ -514,46 +478,16 @@ struct UnrankedToElementCasts
   }
 };
 
-struct LegalizeTensorCastChain : public mlir::OpRewritePattern<plier::CastOp> {
-  using OpRewritePattern::OpRewritePattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(plier::CastOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto prevCast = op.value().getDefiningOp<plier::CastOp>();
-    if (!prevCast)
-      return mlir::failure();
-
-    auto prevValue = prevCast.value();
-
-    auto srcTensor = prevValue.getType().dyn_cast<mlir::TensorType>();
-    if (!srcTensor)
-      return mlir::failure();
-
-    auto dstTensor = op.getType().dyn_cast<mlir::TensorType>();
-    if (!dstTensor)
-      return mlir::failure();
-
-    if (srcTensor != dstTensor)
-      prevValue = rewriter.createOrFold<mlir::tensor::CastOp>(
-          op.getLoc(), dstTensor, prevValue);
-
-    rewriter.replaceOp(op, prevValue);
-    return mlir::success();
-  }
-};
-
 struct NumpyCallsLoweringPass
     : public plier::RewriteWrapperPass<
           NumpyCallsLoweringPass, void, void, NumpyCallsLowering,
-          NumpyAttrsLowering, NumpyBinOpLowering, ExternalCallsLowering,
-          LegalizeTensorCastChain> {};
+          NumpyAttrsLowering, NumpyBinOpLowering, ExternalCallsLowering> {};
 
 static mlir::Value index_cast(mlir::Value value, mlir::Location loc,
                               mlir::OpBuilder &builder) {
   if (!value.getType().isa<mlir::IndexType>()) {
-    auto index_type = mlir::IndexType::get(value.getContext());
-    auto res = builder.create<plier::CastOp>(loc, index_type, value);
+    auto indexType = mlir::IndexType::get(value.getContext());
+    auto res = builder.create<plier::CastOp>(loc, indexType, value);
     rerun_scf_pipeline(res);
     return res;
   }
@@ -748,7 +682,6 @@ struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
     }
 
     rerun_scf_pipeline(op);
-    //    rewriter.replaceOpWithNewOp<plier::CastOp>(op, op.getType(), res);
     rewriter.replaceOp(op, res);
     return mlir::success();
   }
@@ -803,10 +736,10 @@ struct SetitemOpLowering : public mlir::OpConversionPattern<plier::SetItemOp> {
           } else {
             mlir::OpBuilder::InsertionGuard g(rewriter);
             rewriter.setInsertionPoint(useOp);
-            auto new_val = rewriter.create<mlir::memref::TensorLoadOp>(
+            auto newVal = rewriter.create<mlir::memref::TensorLoadOp>(
                 useOp->getLoc(), memref);
             rewriter.updateRootInPlace(useOp, [&]() {
-              useOp->setOperand(use.getOperandNumber(), new_val);
+              useOp->setOperand(use.getOperandNumber(), newVal);
             });
           }
         }
@@ -1441,11 +1374,11 @@ struct SimplifyExpandDims
     }
 
     if (changed) {
-      const mlir::Attribute new_maps[] = {
+      const mlir::Attribute newMaps[] = {
           mlir::AffineMapAttr::get(
               mlir::AffineMap::get(numDims, 0, exprs, context)),
           maps[1]};
-      auto newMapsAttr = mlir::ArrayAttr::get(context, new_maps);
+      auto newMapsAttr = mlir::ArrayAttr::get(context, newMaps);
       rewriter.updateRootInPlace(op,
                                  [&]() { op.indexing_mapsAttr(newMapsAttr); });
     }

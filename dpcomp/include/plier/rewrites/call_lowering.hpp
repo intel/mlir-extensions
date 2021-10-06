@@ -14,31 +14,31 @@
 
 #pragma once
 
-#include <functional>
-
 #include "plier/dialect.hpp"
 
 #include <mlir/IR/PatternMatch.h>
 
-namespace mlir {
-class TypeConverter;
-}
-
 namespace plier {
-struct CallOpLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
-  using resolver_t = std::function<mlir::LogicalResult(
-      plier::PyCallOp, llvm::StringRef, llvm::ArrayRef<mlir::Value>,
-      llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>>,
-      mlir::PatternRewriter &)>;
+struct ExpandCallVarargs : public mlir::OpRewritePattern<plier::PyCallOp> {
+  using OpRewritePattern::OpRewritePattern;
 
-  CallOpLowering(mlir::TypeConverter &typeConverter, mlir::MLIRContext *context,
-                 resolver_t resolver);
+  mlir::LogicalResult
+  matchAndRewrite(plier::PyCallOp op,
+                  mlir::PatternRewriter &rewriter) const override;
+};
+
+struct CallOpLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
+  using OpRewritePattern::OpRewritePattern;
 
   mlir::LogicalResult
   matchAndRewrite(plier::PyCallOp op,
                   mlir::PatternRewriter &rewriter) const override;
 
-private:
-  resolver_t resolver;
+protected:
+  using KWargs = llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>>;
+  virtual mlir::LogicalResult
+  resolveCall(plier::PyCallOp op, mlir::StringRef name, mlir::Location loc,
+              mlir::PatternRewriter &rewriter, mlir::ValueRange args,
+              KWargs kwargs) const = 0;
 };
 } // namespace plier

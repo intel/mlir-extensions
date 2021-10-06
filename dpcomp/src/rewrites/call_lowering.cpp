@@ -14,10 +14,59 @@
 
 #include "plier/rewrites/call_lowering.hpp"
 
-plier::CallOpLowering::CallOpLowering(mlir::TypeConverter &,
-                                      mlir::MLIRContext *context,
-                                      CallOpLowering::resolver_t resolver)
-    : OpRewritePattern(context), resolver(resolver) {}
+#include <mlir/Dialect/StandardOps/IR/Ops.h>
+
+static mlir::Value skipCasts(mlir::Value val) {
+  auto getArg = [](mlir::Value arg) -> mlir::Value {
+    auto cast = arg.getDefiningOp<mlir::UnrealizedConversionCastOp>();
+    if (!cast)
+      return {};
+
+    auto inputs = cast.inputs();
+    if (inputs.size() != 1)
+      return {};
+
+    return inputs.front();
+  };
+
+  while (auto arg = getArg(val))
+    val = arg;
+
+  return val;
+};
+
+mlir::LogicalResult plier::ExpandCallVarargs::matchAndRewrite(
+    plier::PyCallOp op, mlir::PatternRewriter &rewriter) const {
+  auto vararg = op.varargs();
+  if (!vararg)
+    return mlir::failure();
+
+  vararg = skipCasts(vararg);
+
+  auto varargType = vararg.getType().dyn_cast<mlir::TupleType>();
+  if (!varargType)
+    return mlir::failure();
+
+  auto argsCount = op.args().size();
+  auto varargsCount = varargType.size();
+  llvm::SmallVector<mlir::Value> args(argsCount + varargsCount);
+  llvm::copy(op.args(), args.begin());
+
+  auto loc = op.getLoc();
+  for (auto i : llvm::seq<size_t>(0, varargsCount)) {
+    auto type = varargType.getType(i);
+    auto index =
+        rewriter.create<mlir::ConstantIndexOp>(loc, static_cast<int64_t>(i));
+    args[argsCount + i] =
+        rewriter.create<plier::GetItemOp>(loc, type, vararg, index);
+  }
+
+  auto resType = op.getType();
+  rewriter.replaceOpWithNewOp<plier::PyCallOp>(op, resType, op.func(), args,
+                                               mlir::Value(), op.kwargs(),
+                                               op.func_name(), op.kw_names());
+  return mlir::success();
+}
 
 mlir::LogicalResult
 plier::CallOpLowering::matchAndRewrite(plier::PyCallOp op,
@@ -25,23 +74,25 @@ plier::CallOpLowering::matchAndRewrite(plier::PyCallOp op,
   if (op.varargs())
     return mlir::failure();
 
-  auto func = op.func();
-  auto funcType = func.getType();
-  if (!funcType.isa<plier::PyType>())
-    return mlir::failure();
+  auto funcName = op.func_name();
 
   llvm::SmallVector<mlir::Value> args;
-  llvm::SmallVector<std::pair<llvm::StringRef, mlir::Value>> kwargs;
-  auto getattr = mlir::dyn_cast_or_null<plier::GetattrOp>(func.getDefiningOp());
+  args.reserve(op.args().size() + 1);
+  auto func = op.func();
+  auto getattr = func.getDefiningOp<plier::GetattrOp>();
   if (getattr)
-    args.push_back(getattr.getOperand());
+    args.emplace_back(skipCasts(getattr.getOperand()));
 
-  llvm::copy(op.args(), std::back_inserter(args));
+  for (auto arg : op.args())
+    args.emplace_back(skipCasts(arg));
+
+  llvm::SmallVector<std::pair<llvm::StringRef, mlir::Value>> kwargs;
   for (auto it : llvm::zip(op.kwargs(), op.kw_names())) {
-    auto arg = std::get<0>(it);
+    auto arg = skipCasts(std::get<0>(it));
     auto name = std::get<1>(it).cast<mlir::StringAttr>();
     kwargs.emplace_back(name.getValue(), arg);
   }
 
-  return resolver(op, op.func_name(), args, kwargs, rewriter);
+  auto loc = op.getLoc();
+  return resolveCall(op, funcName, loc, rewriter, args, kwargs);
 }
