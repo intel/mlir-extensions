@@ -232,32 +232,79 @@ void UnaryOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                  value, op);
 }
 
+static mlir::Value propagateCasts(mlir::Value val, mlir::Type thisType);
+
+template <typename T>
+static mlir::Value foldPrevCast(mlir::Value val, mlir::Type thisType) {
+  if (auto prevOp = val.getDefiningOp<T>()) {
+    auto prevArg = prevOp->getOperand(0);
+    if (prevArg.getType() == thisType)
+      return prevArg;
+
+    auto res = propagateCasts(prevArg, thisType);
+    if (res)
+      return res;
+  }
+  return {};
+}
+
+static mlir::Value propagateCasts(mlir::Value val, mlir::Type thisType) {
+  using fptr = mlir::Value (*)(mlir::Value, mlir::Type);
+  const fptr handlers[] = {
+      &foldPrevCast<SignCastOp>,
+      &foldPrevCast<CastOp>,
+      &foldPrevCast<mlir::UnrealizedConversionCastOp>,
+  };
+
+  for (auto h : handlers) {
+    auto res = h(val, thisType);
+    if (res)
+      return res;
+  }
+
+  return {};
+}
+
 mlir::OpFoldResult CastOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
-  auto opType = getOperand().getType();
+  auto arg = value();
+  auto opType = arg.getType();
   auto retType = getType();
   if (opType == retType && opType != PyType::getUndefined(getContext()))
-    return getOperand();
+    return arg;
 
-  if (auto prevCast = getOperand().getDefiningOp<plier::CastOp>()) {
-    auto prevValue = prevCast.value();
-    if (prevValue.getType() == retType)
-      return prevValue;
-  }
-
-  mlir::Value prevCast = value();
-  while (true) {
-    auto cast = prevCast.getDefiningOp<plier::CastOp>();
-    if (!cast)
-      break;
-    prevCast = cast.value();
-  }
-
-  if (prevCast != value()) {
-    setOperand(prevCast);
-    return getResult();
-  }
+  if (auto res = propagateCasts(arg, retType))
+    return res;
 
   return nullptr;
+}
+
+namespace {
+struct PropagateCasts
+    : public mlir::OpRewritePattern<mlir::UnrealizedConversionCastOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::UnrealizedConversionCastOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto inputs = op.inputs();
+    if (inputs.size() != 1 || op->getNumResults() != 1)
+      return mlir::failure();
+
+    auto thisType = op.getType(0);
+    auto arg = inputs[0];
+    auto res = propagateCasts(arg, thisType);
+    if (!res)
+      return mlir::failure();
+
+    rewriter.replaceOp(op, res);
+    return mlir::success();
+  }
+};
+} // namespace
+
+void CastOp::getCanonicalizationPatterns(::mlir::RewritePatternSet &results,
+                                         ::mlir::MLIRContext *context) {
+  results.insert<PropagateCasts>(context);
 }
 
 void PyCallOp::build(
@@ -285,34 +332,34 @@ void BuildTupleOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                       args);
 }
 
-// mlir::LogicalResult BuildTupleOp::fold(
-//    llvm::ArrayRef<mlir::Attribute> /*operands*/,
-//    llvm::SmallVectorImpl<mlir::OpFoldResult> &results)
-//{
-//    auto res_types = getResultTypes();
-//    auto args = getOperands();
-//    if (res_types.size() == args.size())
-//    {
-//        std::copy(args.begin(), args.end(), std::back_inserter(results));
-//        return mlir::success();
-//    }
-//    return mlir::failure();
-//}
+static mlir::Value
+foldBuildTupleGetitem(mlir::Value val, mlir::Type type,
+                      llvm::ArrayRef<mlir::Attribute> operands) {
+  auto getCastArg = [](mlir::Value arg) -> mlir::Value {
+    if (auto cast = arg.getDefiningOp<plier::CastOp>())
+      return cast.value();
 
-mlir::Value foldBuildTupleGetitem(mlir::Value val, mlir::Type type,
-                                  llvm::ArrayRef<mlir::Attribute> operands) {
-  while (auto cast = val.getDefiningOp<plier::CastOp>())
-    val = cast.value();
+    if (auto cast = arg.getDefiningOp<mlir::UnrealizedConversionCastOp>()) {
+      auto inputs = cast.inputs();
+      if (inputs.size() == 1)
+        return inputs.front();
+    }
+
+    return {};
+  };
+
+  while (auto arg = getCastArg(val))
+    val = arg;
 
   auto buildTuple = val.getDefiningOp<plier::BuildTupleOp>();
   if (buildTuple) {
     if (auto val = operands[1].dyn_cast_or_null<mlir::IntegerAttr>()) {
       auto index = val.getInt();
-      if (index >= 0 && index < buildTuple.getNumOperands()) {
-        auto op = buildTuple.getOperand(static_cast<unsigned>(index));
-        if (op.getType() == type) {
+      auto numArgs = static_cast<unsigned>(buildTuple.args().size());
+      if (index >= 0 && index < numArgs) {
+        auto op = buildTuple.args()[static_cast<unsigned>(index)];
+        if (op.getType() == type)
           return op;
-        }
       }
     }
   }
@@ -606,48 +653,14 @@ void RetainOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
   RetainOp::build(builder, state, value.getType(), value);
 }
 
-static mlir::Value propagateCasts(mlir::Value val, mlir::Type thisType);
-
-template <typename T>
-static mlir::Value foldPrevCast(mlir::Value val, mlir::Type thisType) {
-  if (auto prevOp = val.getDefiningOp<T>()) {
-    auto prevArg = prevOp->getOperand(0);
-    if (prevArg.getType() == thisType)
-      return prevArg;
-
-    auto res = propagateCasts(prevArg, thisType);
-    if (res)
-      return res;
-  }
-  return {};
-}
-
-static mlir::Value propagateCasts(mlir::Value val, mlir::Type thisType) {
-  using fptr = mlir::Value (*)(mlir::Value, mlir::Type);
-  const fptr handlers[] = {
-      &foldPrevCast<SignCastOp>,
-      &foldPrevCast<CastOp>,
-      &foldPrevCast<mlir::UnrealizedConversionCastOp>,
-  };
-
-  for (auto h : handlers) {
-    auto res = h(val, thisType);
-    if (res)
-      return res;
-  }
-
-  return {};
-}
-
 mlir::OpFoldResult SignCastOp::fold(llvm::ArrayRef<mlir::Attribute> operands) {
   assert(operands.size() == 1);
   auto thisType = getType();
   auto attrOperand = operands.front();
-  if (attrOperand && attrOperand.getType() == thisType) {
+  if (attrOperand && attrOperand.getType() == thisType)
     return attrOperand;
-  }
 
-  auto arg = getOperand();
+  auto arg = value();
   if (arg.getType() == thisType)
     return arg;
 

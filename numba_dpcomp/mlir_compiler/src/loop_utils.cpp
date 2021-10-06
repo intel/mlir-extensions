@@ -52,9 +52,8 @@ lowerRange(plier::PyCallOp op, mlir::ValueRange operands,
       return builder.create<plier::CastOp>(loc, dst_type, index);
     };
     if (!user || mlir::failed(lowerWhileToFor(user, rewriter, getBounds,
-                                              getIndex, results))) {
+                                              getIndex, results)))
       return mlir::failure();
-    }
   }
 
   if (val.getUsers().empty())

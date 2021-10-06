@@ -239,8 +239,8 @@ llvm::Optional<py::object> makePyLiteral(mlir::Value val) {
   return {};
 }
 
-mlir::Value doCast(mlir::OpBuilder &builder, mlir::Location loc,
-                   mlir::Value val, mlir::Type type) {
+static mlir::Value doCast(mlir::OpBuilder &builder, mlir::Location loc,
+                          mlir::Value val, mlir::Type type) {
   if (val.getType() != type)
     return builder.create<plier::CastOp>(loc, type, val);
 
@@ -471,8 +471,8 @@ auto genericOpBodyResultTypes(mlir::ValueRange outputs) {
   llvm::SmallVector<mlir::Type> ret;
   ret.reserve(outputs.size());
   for (auto type : outputs.getTypes()) {
-    auto elem_type = type.cast<mlir::RankedTensorType>().getElementType();
-    ret.emplace_back(elem_type);
+    auto elemType = type.cast<mlir::RankedTensorType>().getElementType();
+    ret.emplace_back(elemType);
   }
   return ret;
 }
@@ -665,9 +665,9 @@ py::object broadcastImpl(py::capsule context, py::tuple args) {
     auto newShapeVals = shapeAndType->first;
     for (auto it :
          llvm::zip(llvm::reverse(shapeVals), llvm::reverse(newShapeVals))) {
-      auto &old_val = std::get<0>(it);
-      auto new_val = std::get<1>(it);
-      old_val = broadcastDim(builder, loc, old_val, new_val);
+      auto &oldVal = std::get<0>(it);
+      auto newVal = std::get<1>(it);
+      oldVal = broadcastDim(builder, loc, oldVal, newVal);
     }
     if (newShapeVals.size() > shapeVals.size()) {
       auto front = llvm::makeArrayRef(newShapeVals).drop_back(shapeVals.size());
@@ -704,21 +704,21 @@ py::object broadcastImpl(py::capsule context, py::tuple args) {
       auto type = val.getType();
       if (auto srcType = type.dyn_cast<mlir::ShapedType>()) {
         assert(srcType.hasRank());
-        auto src_num_dims = static_cast<unsigned>(srcType.getRank());
-        auto num_dims = static_cast<unsigned>(signlessTensorType.getRank());
+        auto srcNumDims = static_cast<unsigned>(srcType.getRank());
+        auto numDims = static_cast<unsigned>(signlessTensorType.getRank());
         auto init = builder
                         .create<mlir::linalg::InitTensorOp>(
                             loc, shapeVals, signlessTensorType.getElementType())
                         .getResult();
         mlir::AffineMap maps[] = {
-            mlir::AffineMap::getMinorIdentityMap(num_dims, src_num_dims,
+            mlir::AffineMap::getMinorIdentityMap(numDims, srcNumDims,
                                                  builder.getContext()),
             //                    mlir::AffineMap::getMultiDimIdentityMap(num_dims,
             //                    builder.getContext()).getMajorSubMap(src_num_dims),
-            mlir::AffineMap::getMultiDimIdentityMap(num_dims,
+            mlir::AffineMap::getMultiDimIdentityMap(numDims,
                                                     builder.getContext()),
         };
-        llvm::SmallVector<llvm::StringRef> iterators(num_dims, "parallel");
+        llvm::SmallVector<llvm::StringRef> iterators(numDims, "parallel");
         auto body = [&](mlir::OpBuilder &builder, mlir::Location loc,
                         mlir::ValueRange values) {
           assert(values.size() == 2);

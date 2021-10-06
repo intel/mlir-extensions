@@ -93,6 +93,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     MLIRSPIRVTransforms
     MLIRSPIRVSerialization
     MLIRTensorTransforms
+    MLIRReconcileUnrealizedCasts
     )
 
 target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE

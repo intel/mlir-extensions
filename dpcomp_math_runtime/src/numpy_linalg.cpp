@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <stdio.h>
+
 #include "common.hpp"
 
 #ifdef DPNP_ENABLE
@@ -25,7 +27,12 @@ void eigImpl(Memref<2, const T> *input, Memref<1, T> *vals,
 #ifdef DPNP_ENABLE
   dpnp_eig_c<T, T>(input->data, vals->data, vecs->data, input->dims[0]);
 #else
+  (void)input;
+  (void)vals;
+  (void)vecs;
   // direct MKL call or another implementation?
+  fprintf(stderr, "Math runtime was compiled without DPNP support\n");
+  fflush(stderr);
   abort();
 #endif
 }
