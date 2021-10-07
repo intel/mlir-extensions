@@ -13,8 +13,12 @@
 # limitations under the License.
 
 from ..linalg_builder import FuncRegistry, is_int, is_float
+from ..func_registry import add_func
 
 import math
+
+add_func(slice, 'slice')
+add_func(range, 'range')
 
 registry = FuncRegistry()
 
