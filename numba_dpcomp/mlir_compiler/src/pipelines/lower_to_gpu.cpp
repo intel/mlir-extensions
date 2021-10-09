@@ -53,6 +53,7 @@
 #include "plier/compiler/pipeline_registry.hpp"
 #include "plier/dialect.hpp"
 #include "plier/pass/rewrite_wrapper.hpp"
+#include "plier/rewrites/call_lowering.hpp"
 #include "plier/transforms/const_utils.hpp"
 #include "plier/transforms/func_utils.hpp"
 #include "plier/transforms/pipeline_utils.hpp"
@@ -1422,18 +1423,16 @@ void rerun_std_pipeline(mlir::Operation *op) {
   plier::add_pipeline_jump_marker(mod, marker);
 }
 
-struct LowerGpuRange : public mlir::OpRewritePattern<plier::PyCallOp> {
-  using OpRewritePattern::OpRewritePattern;
+struct LowerGpuRange final : public plier::CallOpLowering {
+  using CallOpLowering::CallOpLowering;
 
-  mlir::LogicalResult
-  matchAndRewrite(plier::PyCallOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    llvm::SmallVector<std::pair<llvm::StringRef, mlir::Value>> kwargs;
-    for (auto it : llvm::zip(op.kwargs(), op.kw_names())) {
-      auto arg = std::get<0>(it);
-      auto name = std::get<1>(it).cast<mlir::StringAttr>();
-      kwargs.emplace_back(name.getValue(), arg);
-    }
+protected:
+  virtual mlir::LogicalResult
+  resolveCall(plier::PyCallOp op, mlir::StringRef name, mlir::Location /*loc*/,
+              mlir::PatternRewriter &rewriter, mlir::ValueRange args,
+              KWargs kwargs) const override {
+    if (name != "_gpu_range")
+      return mlir::failure();
 
     auto parent = op->getParentOp();
     auto setAttr = [](mlir::scf::ForOp op) {
@@ -1441,8 +1440,7 @@ struct LowerGpuRange : public mlir::OpRewritePattern<plier::PyCallOp> {
       op->setAttr(plier::attributes::getParallelName(), unitAttr);
       op->setAttr(plier::attributes::getGpuRangeName(), unitAttr);
     };
-
-    if (mlir::failed(lowerRange(op, op.args(), kwargs, rewriter, setAttr)))
+    if (mlir::failed(lowerRange(op, args, kwargs, rewriter, setAttr)))
       return mlir::failure();
 
     rerun_std_pipeline(parent);
@@ -1454,34 +1452,32 @@ struct LowerGpuRangePass
     : public plier::RewriteWrapperPass<LowerGpuRangePass, void, void,
                                        LowerGpuRange> {};
 
-struct LowerPlierCalls : public mlir::OpRewritePattern<plier::PyCallOp> {
+struct LowerPlierCalls final : public plier::CallOpLowering {
   LowerPlierCalls(mlir::MLIRContext *context)
-      : mlir::OpRewritePattern<plier::PyCallOp>(context),
+      : CallOpLowering(context),
         resolver("numba_dpcomp.mlir.kernel_impl", "registry") {}
 
-  mlir::LogicalResult
-  matchAndRewrite(plier::PyCallOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto funcName = op.func_name();
-    llvm::SmallVector<std::pair<llvm::StringRef, mlir::Value>> kwargs;
-    for (auto it : llvm::zip(op.kwargs(), op.kw_names())) {
-      auto arg = std::get<0>(it);
-      auto name = std::get<1>(it).cast<mlir::StringAttr>();
-      kwargs.emplace_back(name.getValue(), arg);
-    }
-    auto loc = op.getLoc();
-    auto result =
-        resolver.rewriteFunc(funcName, loc, rewriter, op.args(), kwargs);
-    if (!result || result->size() != 1)
+protected:
+  virtual mlir::LogicalResult
+  resolveCall(plier::PyCallOp op, mlir::StringRef name, mlir::Location loc,
+              mlir::PatternRewriter &rewriter, mlir::ValueRange args,
+              KWargs kwargs) const override {
+    auto res = resolver.rewriteFunc(name, loc, rewriter, args, kwargs);
+    if (!res)
       return mlir::failure();
 
-    auto resValue = (*result)[0];
-    auto opResultType = op.getResult().getType();
-    if (resValue.getType() != opResultType)
-      resValue = rewriter.create<plier::CastOp>(loc, opResultType, resValue);
+    auto results = std::move(res).getValue();
+    assert(results.size() == op->getNumResults());
+    for (auto it : llvm::enumerate(results)) {
+      auto i = it.index();
+      auto r = it.value();
+      auto dstType = op->getResultTypes()[i];
+      if (dstType != r.getType())
+        results[i] = rewriter.create<plier::CastOp>(loc, dstType, r);
+    }
 
     rerun_std_pipeline(op);
-    rewriter.replaceOp(op, resValue);
+    rewriter.replaceOp(op, results);
     return mlir::success();
   }
 
