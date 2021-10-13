@@ -58,6 +58,7 @@ set(SOURCES_LIST
     src/rewrites/memory_rewrites.cpp
     src/rewrites/promote_to_parallel.cpp
     src/rewrites/type_conversion.cpp
+    src/rewrites/uplift_math_calls.cpp
     src/transforms/cast_utils.cpp
     src/transforms/const_utils.cpp
     src/transforms/func_utils.cpp
@@ -87,6 +88,7 @@ set(HEADERS_LIST
     include/plier/rewrites/memory_rewrites.hpp
     include/plier/rewrites/promote_to_parallel.hpp
     include/plier/rewrites/type_conversion.hpp
+    include/plier/rewrites/uplift_math_calls.hpp
     include/plier/transforms/cast_utils.hpp
     include/plier/transforms/const_utils.hpp
     include/plier/transforms/func_utils.hpp
