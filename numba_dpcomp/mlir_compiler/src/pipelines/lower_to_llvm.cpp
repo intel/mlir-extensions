@@ -40,7 +40,7 @@
 #include <llvm/ADT/Triple.h>
 #include <llvm/ADT/TypeSwitch.h>
 #include <llvm/Support/Host.h>
-#include <llvm/Support/TargetRegistry.h>
+#include <llvm/MC/TargetRegistry.h>
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Target/TargetMachine.h>
 
