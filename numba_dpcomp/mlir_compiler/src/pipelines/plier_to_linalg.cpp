@@ -20,6 +20,7 @@
 #include <mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h>
 #include <mlir/Conversion/SCFToStandard/SCFToStandard.h>
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
+#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/Linalg/IR/LinalgOps.h>
 #include <mlir/Dialect/Linalg/Passes.h>
 #include <mlir/Dialect/Linalg/Transforms/Transforms.h>
@@ -27,7 +28,6 @@
 #include <mlir/Dialect/SCF/Passes.h>
 #include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Dialect/SCF/Transforms.h>
-#include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/Dialect/StandardOps/Transforms/FuncConversions.h>
 #include <mlir/Dialect/StandardOps/Transforms/Passes.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
@@ -534,7 +534,7 @@ struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
         auto getItemOrConst = [&](unsigned i) -> mlir::Value {
           assert(i < 3);
           auto createInd = [&](int64_t i) {
-            return rewriter.create<mlir::ConstantIndexOp>(loc, i);
+            return rewriter.create<mlir::arith::ConstantIndexOp>(loc, i);
           };
           return rewriter.create<plier::SliceGetItemOp>(
               loc, indexType, indexVal, value, createInd(i), dim);
@@ -542,7 +542,8 @@ struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
         auto offset = getItemOrConst(0);
         auto end = getItemOrConst(1);
         auto stride = getItemOrConst(2);
-        auto size = rewriter.create<mlir::SubIOp>(loc, end, offset).getResult();
+        auto size =
+            rewriter.create<mlir::arith::SubIOp>(loc, end, offset).getResult();
         return {offset, size, stride, true};
       } else if (auto literal = valType.dyn_cast<plier::LiteralType>()) {
         auto offset = literal.getValue();
@@ -578,15 +579,14 @@ struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
       for (auto it : llvm::enumerate(tupleType)) {
         auto i = it.index();
         auto getitem_ind =
-            rewriter.create<mlir::ConstantIndexOp>(loc, it.index());
+            rewriter.create<mlir::arith::ConstantIndexOp>(loc, it.index());
         auto ind = rewriter.create<plier::GetItemOp>(loc, it.value(), index,
                                                      getitem_ind);
         bool isSlice = false;
         std::tie(offsets[i], sizes[i], strides[i], isSlice) =
             getPos(ind.getResult(), static_cast<unsigned>(i));
-        if (isSlice) {
+        if (isSlice)
           dimsIndices.emplace_back(i);
-        }
       }
 
       for (auto i : llvm::seq(count, rank)) {
@@ -596,9 +596,8 @@ struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
     } else {
       bool isSlice = false;
       std::tie(offsets[0], sizes[0], strides[0], isSlice) = getPos(index, 0);
-      if (isSlice) {
+      if (isSlice)
         dimsIndices.emplace_back(0);
-      }
 
       for (auto i : llvm::seq(1u, rank)) {
         std::tie(offsets[i], sizes[i], strides[i]) = makeFullSlice(i);
@@ -764,7 +763,7 @@ struct SetitemOpLowering : public mlir::OpConversionPattern<plier::SetItemOp> {
       indices.resize(tupleType.size());
       for (auto it : llvm::enumerate(tupleType)) {
         auto i = it.index();
-        auto getitemInd = rewriter.create<mlir::ConstantIndexOp>(loc, i);
+        auto getitemInd = rewriter.create<mlir::arith::ConstantIndexOp>(loc, i);
         auto ind = rewriter
                        .create<plier::GetItemOp>(loc, tupleType.getType(i),
                                                  index, getitemInd)
@@ -870,7 +869,8 @@ struct FixStridedReshape
         auto srcRank = static_cast<unsigned>(srcType.getRank());
         assert(*srcDimIndex < srcRank);
         auto loc = op.getLoc();
-        auto zero = rewriter.create<mlir::ConstantIndexOp>(loc, 0).getResult();
+        auto zero =
+            rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0).getResult();
         llvm::SmallVector<mlir::OpFoldResult> offsets(srcRank,
                                                       rewriter.getIndexAttr(0));
         llvm::SmallVector<mlir::OpFoldResult> sizes(srcRank,
@@ -1543,41 +1543,42 @@ struct OptimizeGlobalsConstsLoad
 
     llvm::SmallVector<uint64_t> indices(op.indices().size());
     for (auto it : llvm::enumerate(op.indices())) {
-      auto constIndex = it.value().getDefiningOp<mlir::ConstantIndexOp>();
-      if (!constIndex) {
+      auto constIndex =
+          it.value().getDefiningOp<mlir::arith::ConstantIndexOp>();
+      if (!constIndex)
         return mlir::failure();
-      }
-      auto val = constIndex.getValue();
-      if (val < 0) {
+
+      auto val = constIndex.value();
+      if (val < 0)
         return mlir::failure();
-      }
+
       indices[it.index()] = static_cast<uint64_t>(val);
     }
     auto getGlobal = op.memref().getDefiningOp<mlir::memref::GetGlobalOp>();
-    if (!getGlobal) {
+    if (!getGlobal)
       return mlir::failure();
-    }
+
     auto sym = symbolTable.lookup<mlir::memref::GlobalOp>(getGlobal.name());
-    if (!sym) {
+    if (!sym)
       return mlir::failure();
-    }
-    if (!sym.constant()) {
+
+    if (!sym.constant())
       return mlir::failure();
-    }
+
     auto initAttr = sym.initial_value();
-    if (!initAttr) {
+    if (!initAttr)
       return mlir::failure();
-    }
+
     auto elements = initAttr->dyn_cast<mlir::ElementsAttr>();
-    if (!elements) {
+    if (!elements)
       return mlir::failure();
-    }
+
     if (elements.getType().getElementType() != op.getType() ||
-        !elements.isValidIndex(indices)) {
+        !elements.isValidIndex(indices))
       return mlir::failure();
-    }
+
     auto val = elements.getValue(indices);
-    rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, val);
+    rewriter.replaceOpWithNewOp<mlir::arith::ConstantOp>(op, val);
     return mlir::success();
   }
 };

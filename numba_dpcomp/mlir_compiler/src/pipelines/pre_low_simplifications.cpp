@@ -21,6 +21,7 @@
 #include "plier/dialect.hpp"
 #include "plier/rewrites/type_conversion.hpp"
 
+#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/Pass/PassManager.h>
@@ -37,7 +38,7 @@ static void flattenTuple(mlir::OpBuilder &builder, mlir::Location loc,
       for (auto it : llvm::enumerate(tupleType.getTypes())) {
         auto i = it.index();
         auto argType = it.value();
-        auto ind = builder.createOrFold<mlir::ConstantIndexOp>(loc, i);
+        auto ind = builder.createOrFold<mlir::arith::ConstantIndexOp>(loc, i);
         auto res =
             builder.createOrFold<plier::GetItemOp>(loc, argType, arg, ind);
         flattenTuple(builder, loc, res, ret);

@@ -1,11 +1,11 @@
 // RUN: dpcomp-opt %s -lower-affine -allow-unregistered-dialect -split-input-file| FileCheck %s
 
-// CHECK_LABLEL: copy_affine
+// CHECK-LABLEL: copy_affine
 // CHECK: scf.parallel
 // CHECK-NEXT: memref.load
 // CHECK-NEXT: memref.store
 func @copy_affine(%arg0: memref<?xf64>, %arg1: memref<?xf64>) {
-  %c0 = constant 0 : index
+  %c0 = arith.constant 0 : index
   %0 = memref.dim %arg0, %c0 : memref<?xf64>
   affine.parallel (%arg3) = (0) to (symbol(%0)) {
     %1 = affine.load %arg0[%arg3] : memref<?xf64>
@@ -16,13 +16,13 @@ func @copy_affine(%arg0: memref<?xf64>, %arg1: memref<?xf64>) {
 
 // -----
 
-// CHECK_LABLEL: copy_affine_with_strides
+// CHECK-LABLEL: copy_affine_with_strides
 // CHECK: scf.parallel
 // CHECK-NEXT: memref.load
 // CHECK-NEXT: memref.store
 #map = affine_map<(d0)[s0, s1] -> (d0 * s1 + s0)>
 func @copy_affine_with_strides(%arg0: memref<?xf64, #map>, %arg1: memref<?xf64, #map>) {
-  %c0 = constant 0 : index
+  %c0 = arith.constant 0 : index
   %0 = memref.dim %arg0, %c0 : memref<?xf64, #map>
   affine.parallel (%arg2) = (0) to (symbol(%0)) {
     %1 = affine.load %arg0[%arg2] : memref<?xf64, #map>

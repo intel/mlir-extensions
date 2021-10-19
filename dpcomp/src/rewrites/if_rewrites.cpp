@@ -14,21 +14,21 @@
 
 #include "plier/rewrites/if_rewrites.hpp"
 
+#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/SCF/SCF.h>
-#include <mlir/Dialect/StandardOps/IR/Ops.h>
 
 mlir::LogicalResult
 plier::IfOpConstCond::matchAndRewrite(mlir::scf::IfOp op,
                                       mlir::PatternRewriter &rewriter) const {
-  auto cond =
-      mlir::dyn_cast_or_null<mlir::CmpIOp>(op.condition().getDefiningOp());
-  if (!cond) {
+  auto cond = mlir::dyn_cast_or_null<mlir::arith::CmpIOp>(
+      op.condition().getDefiningOp());
+  if (!cond)
     return mlir::failure();
-  }
-  auto is_const = [](mlir::Value val) {
-    if (auto parent = val.getDefiningOp()) {
+
+  auto isConst = [](mlir::Value val) {
+    if (auto parent = val.getDefiningOp())
       return parent->hasTrait<mlir::OpTrait::ConstantLike>();
-    }
+
     return false;
   };
 
@@ -42,22 +42,22 @@ plier::IfOpConstCond::matchAndRewrite(mlir::scf::IfOp op,
     }
   };
 
-  mlir::Value const_val;
-  mlir::Value to_replace;
-  if (is_const(cond.lhs())) {
-    const_val = cond.lhs();
-    to_replace = cond.rhs();
-  } else if (is_const(cond.rhs())) {
-    const_val = cond.rhs();
-    to_replace = cond.lhs();
+  mlir::Value constVal;
+  mlir::Value toReplace;
+  if (isConst(cond.lhs())) {
+    constVal = cond.lhs();
+    toReplace = cond.rhs();
+  } else if (isConst(cond.rhs())) {
+    constVal = cond.rhs();
+    toReplace = cond.lhs();
   } else {
     return mlir::failure();
   }
 
-  if (cond.predicate() == mlir::CmpIPredicate::eq) {
-    replace(op.thenRegion().front(), to_replace, const_val);
-  } else if (cond.predicate() == mlir::CmpIPredicate::ne) {
-    replace(op.elseRegion().front(), to_replace, const_val);
+  if (cond.predicate() == mlir::arith::CmpIPredicate::eq) {
+    replace(op.thenRegion().front(), toReplace, constVal);
+  } else if (cond.predicate() == mlir::arith::CmpIPredicate::ne) {
+    replace(op.elseRegion().front(), toReplace, constVal);
   } else {
     return mlir::failure();
   }

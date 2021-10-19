@@ -15,7 +15,7 @@
 #include "plier/transforms/cast_utils.hpp"
 #include "plier/dialect.hpp"
 
-#include <mlir/Dialect/StandardOps/IR/Ops.h>
+#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 
 namespace {
 mlir::Type makeSignless(mlir::Type type) {
@@ -40,7 +40,7 @@ mlir::Value plier::index_cast(mlir::OpBuilder &builder, mlir::Location loc,
     val = builder.createOrFold<plier::SignCastOp>(loc, newSrcType, val);
 
   auto newDstType = makeSignless(dstType);
-  val = builder.createOrFold<mlir::IndexCastOp>(loc, val, newDstType);
+  val = builder.createOrFold<mlir::arith::IndexCastOp>(loc, val, newDstType);
   if (newDstType != dstType)
     val = builder.createOrFold<plier::SignCastOp>(loc, dstType, val);
 

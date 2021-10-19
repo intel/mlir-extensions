@@ -14,7 +14,7 @@
 
 #include "loop_utils.hpp"
 
-#include <mlir/Dialect/StandardOps/IR/Ops.h>
+#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/IR/PatternMatch.h>
 
 #include "plier/dialect.hpp"
@@ -38,13 +38,14 @@ lowerRange(plier::PyCallOp op, mlir::ValueRange operands,
   if (!val.getUsers().empty()) {
     auto user = mlir::dyn_cast<plier::GetiterOp>(*val.getUsers().begin());
     auto getBounds = [&](mlir::OpBuilder &builder, mlir::Location loc) {
-      auto lowerBound = (operands.size() >= 2
-                             ? operands[0]
-                             : builder.create<mlir::ConstantIndexOp>(loc, 0));
+      auto lowerBound =
+          (operands.size() >= 2
+               ? operands[0]
+               : builder.create<mlir::arith::ConstantIndexOp>(loc, 0));
       auto upperBound = (operands.size() >= 2 ? operands[1] : operands[0]);
       auto step = (operands.size() == 3
                        ? operands[2]
-                       : builder.create<mlir::ConstantIndexOp>(loc, 1));
+                       : builder.create<mlir::arith::ConstantIndexOp>(loc, 1));
       return std::make_tuple(lowerBound, upperBound, step);
     };
     auto getIndex = [](mlir::OpBuilder &builder, mlir::Location loc,
