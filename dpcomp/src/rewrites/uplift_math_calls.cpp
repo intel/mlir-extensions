@@ -41,7 +41,7 @@ plier::UpliftMathCalls::matchAndRewrite(mlir::CallOp op,
     return mlir::failure();
 
   llvm::StringRef funcNameF =
-      (funcName.back() == 'f' ? funcName.drop_back() : llvm::StringRef{});
+      (funcName.front() == 'f' ? funcName.drop_front() : llvm::StringRef{});
 
   using func_t =
       mlir::Operation *(*)(mlir::OpBuilder &, mlir::Location, mlir::ValueRange);
