@@ -17,20 +17,24 @@ from itertools import product
 
 from .kernel_impl import Kernel as OrigKernel
 
-_execution_state = None
-
-
 _ExecutionState = namedtuple('_ExecutionState', [
     'global_size',
     'local_size',
     'indices',
     ])
 
+_execution_state = None
 
-def get_global_id_proxy(index):
+def get_exec_state():
     global _execution_state
     assert _execution_state is not None
-    return _execution_state.indices[index]
+    return _execution_state
+
+def get_global_id_proxy(index):
+    return get_exec_state().indices[index]
+
+def get_global_size_proxy(index):
+    return get_exec_state().global_size[index]
 
 
 def _setup_execution_state(global_size, local_size):
@@ -38,8 +42,8 @@ def _setup_execution_state(global_size, local_size):
     global _execution_state
     assert _execution_state is None
     _execution_state =_ExecutionState(
-        global_size=global_size,
-        local_size=local_size,
+        global_size=tuple(reversed(global_size)),
+        local_size=tuple(reversed(local_size)),
         indices=[0]*len(global_size))
     return _execution_state
 
@@ -49,7 +53,8 @@ def _destroy_execution_state():
     _execution_state = None
 
 _globals_to_replace = [
-    ('get_global_id', get_global_id_proxy)
+    ('get_global_id', get_global_id_proxy),
+    ('get_global_size', get_global_size_proxy),
 ]
 
 def _replace_globals(src):
