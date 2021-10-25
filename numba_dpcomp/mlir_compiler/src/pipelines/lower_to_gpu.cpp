@@ -440,11 +440,18 @@ static mlir::Value getFlatIndex(mlir::OpBuilder &builder, mlir::Location loc,
       applyOperands.assign(indices.begin(), indices.end());
       mlir::OpBuilder::InsertionGuard g(builder);
       setInsertionPointToStart(builder, memref);
+      mlir::Value size;
       for (auto i : llvm::seq(0u, rank - 1)) {
-        if (mlir::ShapedType::isDynamic(shape[i])) {
-          auto dim = builder.createOrFold<mlir::memref::DimOp>(loc, memref, i);
-          applyOperands.emplace_back(dim);
+        auto dimInd = rank - i - 1;
+        auto dim =
+            builder.createOrFold<mlir::memref::DimOp>(loc, memref, dimInd);
+        if (i != 0) {
+          size = builder.createOrFold<mlir::arith::MulIOp>(loc, size, dim);
+        } else {
+          size = dim;
         }
+
+        applyOperands.emplace_back(size);
       }
     }
     auto affineMap = mlir::AffineMap::get(
