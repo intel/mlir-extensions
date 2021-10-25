@@ -36,6 +36,8 @@ def get_global_id_proxy(index):
 def get_global_size_proxy(index):
     return get_exec_state().global_size[index]
 
+def get_local_size_proxy(index):
+    return get_exec_state().local_size[index]
 
 def _setup_execution_state(global_size, local_size):
     import numba_dpcomp.mlir.kernel_impl
@@ -55,6 +57,7 @@ def _destroy_execution_state():
 _globals_to_replace = [
     ('get_global_id', get_global_id_proxy),
     ('get_global_size', get_global_size_proxy),
+    ('get_local_size', get_local_size_proxy),
 ]
 
 def _replace_globals(src):

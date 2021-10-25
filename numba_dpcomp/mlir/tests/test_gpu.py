@@ -19,7 +19,7 @@ import numpy as np
 import math
 
 from numba_dpcomp.mlir.settings import _readenv
-from numba_dpcomp.mlir.kernel_impl import kernel, get_global_id, get_global_size
+from numba_dpcomp.mlir.kernel_impl import kernel, get_global_id, get_global_size, get_local_size
 from numba_dpcomp.mlir.kernel_sim import kernel as kernel_sim
 from numba_dpcomp.mlir.passes import print_pass_ir, get_print_buffer
 
@@ -43,12 +43,12 @@ def test_simple():
     b = np.array([[[7,8,9],[10,11,12]]], np.float32)
 
     sim_res = np.zeros(a.shape, a.dtype)
-    sim_func[a.shape](a, b, sim_res)
+    sim_func[a.shape, ()](a, b, sim_res)
 
     gpu_res = np.zeros(a.shape, a.dtype)
 
     with print_pass_ir([],['ConvertParallelLoopToGpu']):
-        gpu_func[a.shape](a, b, gpu_res)
+        gpu_func[a.shape, ()](a, b, gpu_res)
         ir = get_print_buffer()
         assert ir.count('gpu.launch blocks') == 1, ir
 
@@ -70,12 +70,12 @@ def test_inner_loop():
     b = np.array([5,6,7,8,9], np.float32)
 
     sim_res = np.zeros(a.shape, b.dtype)
-    sim_func[a.shape](a, b, sim_res)
+    sim_func[a.shape, ()](a, b, sim_res)
 
     gpu_res = np.zeros(a.shape, b.dtype)
 
     with print_pass_ir([],['ConvertParallelLoopToGpu']):
-        gpu_func[a.shape](a, b, gpu_res)
+        gpu_func[a.shape, ()](a, b, gpu_res)
         ir = get_print_buffer()
         assert ir.count('gpu.launch blocks') == 1, ir
 
@@ -95,12 +95,12 @@ def test_math_funcs(op):
     a = np.array([1,2,3,4,5,6,7,8,9], np.float32)
 
     sim_res = np.zeros(a.shape, a.dtype)
-    sim_func[a.shape](a, sim_res)
+    sim_func[a.shape, ()](a, sim_res)
 
     gpu_res = np.zeros(a.shape, a.dtype)
 
     with print_pass_ir([],['GPUToSpirvPass']):
-        gpu_func[a.shape](a, gpu_res)
+        gpu_func[a.shape, ()](a, gpu_res)
         ir = get_print_buffer()
         assert ir.count(f'OCL.{op}') == 1, ir
 
@@ -141,12 +141,12 @@ def test_get_global_id(shape):
     dtype = np.int32
 
     sim_res = np.zeros(shape, dtype)
-    sim_func[shape](sim_res)
+    sim_func[shape, ()](sim_res)
 
     gpu_res = np.zeros(shape, dtype)
 
     with print_pass_ir([],['ConvertParallelLoopToGpu']):
-        gpu_func[shape](gpu_res)
+        gpu_func[shape, ()](gpu_res)
         ir = get_print_buffer()
         assert ir.count('gpu.launch blocks') == 1, ir
 
@@ -185,12 +185,59 @@ def test_get_global_size(shape):
     dtype = np.int32
 
     sim_res = np.zeros(shape, dtype)
-    sim_func[shape](sim_res)
+    sim_func[shape, ()](sim_res)
 
     gpu_res = np.zeros(shape, dtype)
 
     with print_pass_ir([],['ConvertParallelLoopToGpu']):
-        gpu_func[shape](gpu_res)
+        gpu_func[shape, ()](gpu_res)
+        ir = get_print_buffer()
+        assert ir.count('gpu.launch blocks') == 1, ir
+
+    assert_equal(gpu_res, sim_res)
+
+@require_gpu
+@pytest.mark.parametrize("shape", _test_shapes)
+@pytest.mark.parametrize("lsize", [(), (1,1,1), (2,4,8)])
+def test_get_local_size(shape, lsize):
+    def func1(c):
+        i = get_global_id(0)
+        w = get_local_size(0)
+        c[i] = w
+
+    def func2(c):
+        i = get_global_id(0)
+        j = get_global_id(1)
+        w = get_local_size(0)
+        h = get_local_size(1)
+        c[i, j] = w + h * 100
+
+    def func3(c):
+        i = get_global_id(0)
+        j = get_global_id(1)
+        k = get_global_id(2)
+        w = get_local_size(0)
+        h = get_local_size(1)
+        d = get_local_size(2)
+        c[i, j, k] = w + h * 100 + d * 10000
+
+    func = [func1, func2, func3][len(shape) - 1]
+
+    sim_func = kernel_sim(func)
+    gpu_func = kernel(func)
+
+    dtype = np.int32
+
+    if (len(lsize) > len(shape)):
+        lsize =tuple(lsize[:len(shape)])
+
+    sim_res = np.zeros(shape, dtype)
+    sim_func[shape, lsize](sim_res)
+
+    gpu_res = np.zeros(shape, dtype)
+
+    with print_pass_ir([],['ConvertParallelLoopToGpu']):
+        gpu_func[shape, lsize](gpu_res)
         ir = get_print_buffer()
         assert ir.count('gpu.launch blocks') == 1, ir
 

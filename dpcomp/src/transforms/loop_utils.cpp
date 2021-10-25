@@ -445,6 +445,9 @@ bool hasNoEffect(mlir::Operation *op) {
   if (op->getNumRegions() != 0)
     return false;
 
+  if (mlir::isa<mlir::CallOpInterface>(op))
+    return false;
+
   if (auto interface = dyn_cast<MemoryEffectOpInterface>(op))
     return !interface.hasEffect<mlir::MemoryEffects::Read>() &&
            !interface.hasEffect<mlir::MemoryEffects::Write>();

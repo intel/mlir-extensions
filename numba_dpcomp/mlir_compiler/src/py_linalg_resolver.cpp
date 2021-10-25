@@ -364,37 +364,47 @@ getArgs(py::handle inspect, py::handle func,
   auto sig = sigFunc(func);
   auto params = sig.attr("parameters");
   auto paramsList = py::list(params);
-  paramsList = paramsList[py::slice(1, static_cast<int64_t>(paramsList.size()),
-                                    1)]; // skip builder param
-  auto empty = inspect.attr("Parameter").attr("empty");
+  auto paramsListSize = static_cast<unsigned>(paramsList.size());
+  paramsList =
+      paramsList[py::slice(1, paramsListSize, 1)]; // skip builder param
+  auto paramAttr = inspect.attr("Parameter");
+  auto empty = paramAttr.attr("empty");
+  auto vararg = paramAttr.attr("VAR_POSITIONAL");
 
-  py::list ret(py::len(paramsList));
-  for (auto it : llvm::enumerate(paramsList)) {
-    auto index = it.index();
-    auto paramName = it.value();
+  llvm::SmallVector<py::object> retArgs;
+  retArgs.reserve(paramsListSize);
+  for (auto paramName : paramsList) {
     auto param = params[paramName];
-    if (!args.empty()) {
-      ret[index] = createVar(args.front());
-      args = args.drop_front();
+    if (param.attr("kind").is(vararg)) {
+      while (!args.empty()) {
+        retArgs.emplace_back(createVar(args.front()));
+        args = args.drop_front();
+      }
       continue;
-    }
-    if (!kwargs.empty()) {
-      auto name = paramName.cast<std::string>();
-      auto val = [&]() -> mlir::Value {
-        for (auto kwarg : kwargs) {
-          if (kwarg.first == name)
-            return kwarg.second;
-        }
-        return {};
-      }();
-      if (val) {
-        ret[index] = createVar(val);
+    } else {
+      if (!args.empty()) {
+        retArgs.emplace_back(createVar(args.front()));
+        args = args.drop_front();
         continue;
+      }
+      if (!kwargs.empty()) {
+        auto name = paramName.cast<std::string>();
+        auto val = [&]() -> mlir::Value {
+          for (auto kwarg : kwargs) {
+            if (kwarg.first == name)
+              return kwarg.second;
+          }
+          return {};
+        }();
+        if (val) {
+          retArgs.emplace_back(createVar(val));
+          continue;
+        }
       }
     }
     auto defVal = param.attr("default");
     if (!defVal.is(empty)) {
-      ret[index] = defVal;
+      retArgs.emplace_back(defVal);
     } else {
       return py::none();
     }
@@ -402,6 +412,10 @@ getArgs(py::handle inspect, py::handle func,
 
   if (!args.empty())
     return py::none();
+
+  py::tuple ret(retArgs.size());
+  for (auto it : llvm::enumerate(retArgs))
+    ret[it.index()] = std::move(it.value());
 
   return std::move(ret);
 }
