@@ -1152,27 +1152,10 @@ void PlierToStdPass::runOnOperation() {
     auto dstType = typeConverter.convertType(srcType);
     return srcType == dstType;
   });
-  target.addDynamicallyLegalOp<plier::GetItemOp>(
-      [&typeConverter](plier::GetItemOp op) {
-        auto inputType = op.value().getType();
-        if (auto tupleType = typeConverter.convertType(inputType)
-                                 .dyn_cast_or_null<mlir::TupleType>()) {
-          // TODO: move to populateTupleTypeConversionRewritesAndTarget
-          if (auto index = mlir::getConstantIntValue(op.index())) {
-            auto i = *index;
-            auto size = static_cast<unsigned>(tupleType.size());
-            if (i >= 0 && i < size) {
-              auto srcType = tupleType.getType(static_cast<size_t>(i));
-              auto dstType = op.getType();
-              return srcType == dstType &&
-                     dstType == typeConverter.convertType(dstType);
-            }
-          }
-          return false;
-        }
 
-        return true;
-      });
+  target.addDynamicallyLegalOp<plier::GetItemOp>([](plier::GetItemOp) -> bool {
+    return true; // TODO: HACK
+  });
 
   patterns.insert<
       // clang-format off

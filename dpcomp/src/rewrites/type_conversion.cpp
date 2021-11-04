@@ -120,4 +120,25 @@ void plier::populateTupleTypeConversionRewritesAndTarget(
       [&typeConverter](plier::BuildTupleOp op) {
         return typeConverter.isLegal(op.getResult().getType());
       });
+
+  target.addDynamicallyLegalOp<plier::GetItemOp>(
+      [&typeConverter](plier::GetItemOp op) -> llvm::Optional<bool> {
+        auto inputType = op.value().getType();
+        if (auto tupleType = typeConverter.convertType(inputType)
+                                 .dyn_cast_or_null<mlir::TupleType>()) {
+          if (auto index = mlir::getConstantIntValue(op.index())) {
+            auto i = *index;
+            auto size = static_cast<unsigned>(tupleType.size());
+            if (i >= 0 && i < size) {
+              auto srcType = tupleType.getType(static_cast<size_t>(i));
+              auto dstType = op.getType();
+              return srcType == dstType &&
+                     dstType == typeConverter.convertType(dstType);
+            }
+          }
+          return false;
+        }
+
+        return llvm::None;
+      });
 }

@@ -1434,26 +1434,13 @@ void PlierToLinalgPass::runOnOperation() {
   mlir::ConversionTarget target(context);
 
   target.addDynamicallyLegalOp<plier::GetItemOp>(
-      [&typeConverter](plier::GetItemOp op) -> bool {
-        auto inputType = op.value().getType();
-        if (auto tupleType = typeConverter.convertType(inputType)
-                                 .dyn_cast_or_null<mlir::TupleType>()) {
-          // TODO: move to populateTupleTypeConversionRewritesAndTarget
-          if (auto index = mlir::getConstantIntValue(op.index())) {
-            auto i = *index;
-            auto size = static_cast<unsigned>(tupleType.size());
-            if (i >= 0 && i < size) {
-              auto srcType = tupleType.getType(static_cast<size_t>(i));
-              auto dstType = op.getType();
-              return srcType == dstType &&
-                     dstType == typeConverter.convertType(dstType);
-            }
-          }
+      [&typeConverter](plier::GetItemOp op) -> llvm::Optional<bool> {
+        if (isTensor(typeConverter, op.value().getType()))
           return false;
-        }
 
-        return !isTensor(typeConverter, op.value().getType());
+        return llvm::None;
       });
+
   target.addDynamicallyLegalOp<plier::SetItemOp>(
       [&typeConverter](plier::SetItemOp op) -> bool {
         return !isTensor(typeConverter, op.target().getType());
@@ -1907,7 +1894,7 @@ struct FixDeallocPlacementPass
     : public plier::RewriteWrapperPass<FixDeallocPlacementPass, mlir::FuncOp,
                                        void, FixDeallocPlacement> {};
 
-void populate_plier_to_linalg_gen_pipeline(mlir::OpPassManager &pm) {
+void populatePlierToLinalgGenPipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<PlierToLinalgPass>());
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(std::make_unique<NumpyCallsLoweringPass>());
@@ -1917,7 +1904,7 @@ void populate_plier_to_linalg_gen_pipeline(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::FuncOp>(mlir::createCSEPass());
 }
 
-void populate_plier_to_linalg_opt_pipeline(mlir::OpPassManager &pm) {
+void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<MakeTensorsSignlessPass>());
 
   pm.addPass(mlir::createCanonicalizerPass());
@@ -1982,11 +1969,11 @@ void registerPlierToLinalgPipeline(plier::PipelineRegistry &registry) {
     auto stage = getHighLoweringStage();
     sink(plierToLinalgGenPipelineName(), {plierToStdPipelineName()},
          {plierToLinalgOptPipelineName()}, {plierToScfPipelineName()},
-         &populate_plier_to_linalg_gen_pipeline);
+         &populatePlierToLinalgGenPipeline);
     sink(plierToLinalgOptPipelineName(),
          {plierToLinalgGenPipelineName(), untuplePipelineName()},
          {removeSignPipelineName(), stage.end}, {},
-         &populate_plier_to_linalg_opt_pipeline);
+         &populatePlierToLinalgOptPipeline);
   });
 }
 
