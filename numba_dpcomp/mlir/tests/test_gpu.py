@@ -19,7 +19,7 @@ import numpy as np
 import math
 
 from numba_dpcomp.mlir.settings import _readenv
-from numba_dpcomp.mlir.kernel_impl import kernel, get_global_id, get_global_size, get_local_size
+from numba_dpcomp.mlir.kernel_impl import kernel, get_global_id, get_global_size, get_local_size, atomic
 from numba_dpcomp.mlir.kernel_sim import kernel as kernel_sim
 from numba_dpcomp.mlir.passes import print_pass_ir, get_print_buffer
 
@@ -265,6 +265,31 @@ def test_get_local_size(shape, lsize):
 
     with print_pass_ir([],['ConvertParallelLoopToGpu']):
         gpu_func[shape, lsize](gpu_res)
+        ir = get_print_buffer()
+        assert ir.count('gpu.launch blocks') == 1, ir
+
+    assert_equal(gpu_res, sim_res)
+
+@require_gpu
+@pytest.mark.parametrize("dtype", ['int32', 'int64']) # TODO: float
+@pytest.mark.parametrize("atomic_op", [atomic.add])
+def test_atomics(dtype, atomic_op):
+    def func(a, b):
+        i = get_global_id(0)
+        atomic_op(b, 0, a[i])
+
+    sim_func = kernel_sim(func)
+    gpu_func = kernel(func)
+
+    a = np.array([1,2,3,4,5,6,7,8,9], dtype)
+
+    sim_res = np.zeros([1], dtype)
+    sim_func[a.shape, ()](a, sim_res)
+
+    gpu_res = np.zeros([1], dtype)
+
+    with print_pass_ir([],['ConvertParallelLoopToGpu']):
+        gpu_func[a.shape, ()](a, gpu_res)
         ir = get_print_buffer()
         assert ir.count('gpu.launch blocks') == 1, ir
 

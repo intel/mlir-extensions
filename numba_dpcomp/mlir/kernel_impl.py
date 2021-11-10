@@ -17,7 +17,7 @@ import sys
 
 from numba import prange
 from numba.core import types
-from numba.core.typing.templates import ConcreteTemplate, signature, infer_global
+from numba.core.typing.templates import AbstractTemplate, ConcreteTemplate, signature, infer_global
 
 from .linalg_builder import is_int, FuncRegistry
 from .numpy.funcs import register_func
@@ -193,3 +193,37 @@ def _define_api_funcs():
 
 _define_api_funcs()
 del _define_api_funcs
+
+class Stub(object):
+    """A stub object to represent special objects which is meaningless
+    outside the context of DPPY compilation context.
+    """
+
+    __slots__ = ()  # don't allocate __dict__
+
+    def __new__(cls):
+        raise NotImplementedError("%s is not instantiable" % cls)
+
+
+class _AtomicId(AbstractTemplate):
+    def generic(self, args, kws):
+        assert not kws
+        ary, idx, val = args
+
+        if ary.ndim == 1:
+            return signature(ary.dtype, ary, types.intp, ary.dtype)
+        elif ary.ndim > 1:
+            return signature(ary.dtype, ary, idx, ary.dtype)
+
+
+class atomic(Stub):
+    pass
+
+
+def atomic_add(arr, ind, val):
+    _stub_error()
+
+infer_global(atomic_add)(_AtomicId)
+
+
+setattr(atomic, 'add', atomic_add)
