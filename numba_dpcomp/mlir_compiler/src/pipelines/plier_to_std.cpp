@@ -1153,10 +1153,6 @@ void PlierToStdPass::runOnOperation() {
     return srcType == dstType;
   });
 
-  target.addDynamicallyLegalOp<plier::GetItemOp>([](plier::GetItemOp) -> bool {
-    return true; // TODO: HACK
-  });
-
   patterns.insert<
       // clang-format off
       BinOpLowering,
