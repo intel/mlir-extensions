@@ -611,9 +611,8 @@ struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
     if (elemType != elemTypeSignless) {
       if (isMemref) {
         auto memrefType = type.cast<mlir::MemRefType>();
-        auto signlessType =
-            mlir::MemRefType::get(memrefType.getShape(), elemTypeSignless,
-                                  memrefType.getAffineMaps());
+        auto signlessType = mlir::MemRefType::get(
+            memrefType.getShape(), elemTypeSignless, memrefType.getLayout());
         value = rewriter.create<plier::SignCastOp>(loc, signlessType, value);
       } else if (isTensor) {
         auto tensorType = type.cast<mlir::RankedTensorType>();
@@ -795,7 +794,7 @@ mlir::Value unstride(mlir::OpBuilder &builder, mlir::Location loc,
   if (newType == srcType)
     return src;
 
-  if (srcType.getAffineMaps().empty())
+  if (srcType.getLayout().isIdentity())
     return builder.createOrFold<mlir::memref::CastOp>(loc, src, newType);
 
   auto rank = static_cast<unsigned>(srcType.getRank());
@@ -936,8 +935,7 @@ struct FixStridedIf : public mlir::OpRewritePattern<mlir::scf::YieldOp> {
         changed = true;
         auto trueMemref = trueType.cast<mlir::MemRefType>();
         auto falseMemref = falseType.cast<mlir::MemRefType>();
-        bool isTrueIdentity = llvm::all_of(
-            trueMemref.getAffineMaps(), [](auto m) { return m.isIdentity(); });
+        bool isTrueIdentity = trueMemref.getLayout().isIdentity();
         auto resultType = (isTrueIdentity ? falseMemref : trueMemref);
 
         for (auto yield : {trueYield, falseYield}) {
@@ -1029,10 +1027,10 @@ struct FixStridedReturn : public mlir::OpRewritePattern<mlir::ReturnOp> {
         auto dstMemrefType = retType.dyn_cast<mlir::MemRefType>();
         if (srcMemrefType && dstMemrefType) {
           auto newMemrefType = dstMemrefType;
-          if (!dstMemrefType.getAffineMaps().empty()) {
+          if (!dstMemrefType.getLayout().isIdentity())
             newMemrefType = mlir::MemRefType::get(
                 dstMemrefType.getShape(), dstMemrefType.getElementType());
-          }
+
           if (newMemrefType != dstMemrefType) {
             arg =
                 rewriter.create<mlir::memref::CastOp>(loc, arg, dstMemrefType);
@@ -1057,18 +1055,16 @@ struct FixStridedCall : public mlir::OpRewritePattern<mlir::CallOp> {
   matchAndRewrite(mlir::CallOp op,
                   mlir::PatternRewriter &rewriter) const override {
     auto mod = op->getParentOfType<mlir::ModuleOp>();
-    if (!mod) {
+    if (!mod)
       return mlir::failure();
-    }
+
     auto func = mod.lookupSymbol<mlir::FuncOp>(op.callee());
-    if (!func) {
+    if (!func)
       return mlir::failure();
-    }
 
     auto funcType = func.getType();
-    if (funcType.getNumInputs() != op.operands().size()) {
+    if (funcType.getNumInputs() != op.operands().size())
       return mlir::failure();
-    }
 
     auto loc = op.getLoc();
     bool changed = false;
@@ -1082,7 +1078,7 @@ struct FixStridedCall : public mlir::OpRewritePattern<mlir::CallOp> {
                 funcType.getInput(i).dyn_cast<mlir::MemRefType>()) {
           if (srcMemref.getShape() == dstMemref.getShape() &&
               srcMemref.getElementType() == dstMemref.getElementType() &&
-              srcMemref.getAffineMaps() != dstMemref.getAffineMaps()) {
+              srcMemref.getLayout() != dstMemref.getLayout()) {
             changed = true;
             newArgs[i] =
                 rewriter.create<mlir::memref::CastOp>(loc, arg, dstMemref);
@@ -1564,8 +1560,11 @@ struct OptimizeGlobalsConstsLoad
         !elements.isValidIndex(indices))
       return mlir::failure();
 
-    auto val = elements.getValue(indices);
-    rewriter.replaceOpWithNewOp<mlir::arith::ConstantOp>(op, val);
+    auto vals = elements.tryGetValues<mlir::Attribute>();
+    if (!vals)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::arith::ConstantOp>(op, (*vals)[indices]);
     return mlir::success();
   }
 };

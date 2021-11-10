@@ -53,11 +53,11 @@ struct UntupleReturn : public mlir::OpConversionPattern<mlir::ReturnOp> {
   using mlir::OpConversionPattern<mlir::ReturnOp>::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(mlir::ReturnOp op, llvm::ArrayRef<mlir::Value> operands,
+  matchAndRewrite(mlir::ReturnOp op, mlir::ReturnOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     llvm::SmallVector<mlir::Value> newOperands;
     auto loc = op.getLoc();
-    flattenTuple(rewriter, loc, operands, newOperands);
+    flattenTuple(rewriter, loc, adaptor.operands(), newOperands);
     auto *operation = op.getOperation();
     rewriter.updateRootInPlace(op,
                                [&]() { operation->setOperands(newOperands); });

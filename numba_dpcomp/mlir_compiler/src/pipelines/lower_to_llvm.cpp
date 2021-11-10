@@ -26,6 +26,7 @@
 #include <mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h>
 #include <mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h>
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Arithmetic/Transforms/Passes.h>
 #include <mlir/Dialect/LLVMIR/LLVMDialect.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/SCF.h>
@@ -1472,6 +1473,7 @@ void populate_lower_to_llvm_pipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<LowerParallelToCFGPass>());
   pm.addPass(mlir::createLowerToCFGPass());
   pm.addPass(mlir::createCanonicalizerPass());
+  pm.addNestedPass<mlir::FuncOp>(mlir::arith::createArithmeticExpandOpsPass());
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<PreLLVMLowering>());
   pm.addPass(std::make_unique<LLVMLoweringPass>());
   pm.addNestedPass<mlir::LLVM::LLVMFuncOp>(
