@@ -16,6 +16,7 @@ from collections import namedtuple
 from itertools import product
 
 from .kernel_impl import Kernel as OrigKernel
+from .kernel_impl import get_global_id, get_global_size, get_local_size
 
 _ExecutionState = namedtuple('_ExecutionState', [
     'global_size',
@@ -55,31 +56,53 @@ def _destroy_execution_state():
     _execution_state = None
 
 _globals_to_replace = [
-    ('get_global_id', get_global_id_proxy),
-    ('get_global_size', get_global_size_proxy),
-    ('get_local_size', get_local_size_proxy),
+    ('get_global_id', get_global_id, get_global_id_proxy),
+    ('get_global_size', get_global_size, get_global_size_proxy),
+    ('get_local_size', get_local_size, get_local_size_proxy),
 ]
 
 def _replace_globals(src):
-    old_globals = [src.get(name, None) for name, _ in _globals_to_replace]
-    for name, new_val in _globals_to_replace:
+    old_globals = [src.get(name, None) for name, _, _ in _globals_to_replace]
+    for name, _, new_val in _globals_to_replace:
         src[name] = new_val
     return old_globals
 
 def _restore_globals(src, old_globals):
-    for i, (name, _) in enumerate(_globals_to_replace):
+    for i, (name, _, _) in enumerate(_globals_to_replace):
         old_val = old_globals[i]
         if old_val is not None:
             src[name] = old_val
 
+def _replace_closure(src):
+    if src is None:
+        return None
+
+    old_vals = [e.cell_contents for e in src]
+    for e in src:
+        old_val = e.cell_contents
+        for _, obj, new_val in _globals_to_replace:
+            if old_val is obj:
+                e.cell_contents = new_val
+                break
+    return old_vals
+
+def _restore_closure(src, old_closure):
+    if old_closure is None:
+        return
+
+    for i in range(len(src)):
+        src[i].cell_contents = old_closure[i]
+
 def _execute_kernel(global_size, local_size, func, *args):
     saved_globals = _replace_globals(func.__globals__)
+    saved_closure = _replace_closure(func.__closure__)
     state = _setup_execution_state(global_size, local_size)
     try:
         for indices in product(*(range(d) for d in global_size)):
             state.indices[:] = indices
             func(*args)
     finally:
+        _restore_closure(func.__closure__, saved_closure)
         _restore_globals(func.__globals__, saved_globals)
         _destroy_execution_state()
 

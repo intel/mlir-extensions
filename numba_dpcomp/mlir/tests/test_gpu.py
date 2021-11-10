@@ -29,11 +29,38 @@ def require_gpu(func):
     return pytest.mark.skipif(not GPU_TESTS_ENABLED, reason='GPU tests disabled')(func)
 
 @require_gpu
-def test_simple():
+def test_simple1():
     def func(a, b, c):
         i = get_global_id(0)
         j = get_global_id(1)
         k = get_global_id(2)
+        c[i, j, k] = a[i, j, k] + b[i, j, k]
+
+    sim_func = kernel_sim(func)
+    gpu_func = kernel(func)
+
+    a = np.array([[[1,2,3],[4,5,6]]], np.float32)
+    b = np.array([[[7,8,9],[10,11,12]]], np.float32)
+
+    sim_res = np.zeros(a.shape, a.dtype)
+    sim_func[a.shape, ()](a, b, sim_res)
+
+    gpu_res = np.zeros(a.shape, a.dtype)
+
+    with print_pass_ir([],['ConvertParallelLoopToGpu']):
+        gpu_func[a.shape, ()](a, b, gpu_res)
+        ir = get_print_buffer()
+        assert ir.count('gpu.launch blocks') == 1, ir
+
+    assert_equal(gpu_res, sim_res)
+
+@require_gpu
+def test_simple2():
+    get_id = get_global_id
+    def func(a, b, c):
+        i = get_id(0)
+        j = get_id(1)
+        k = get_id(2)
         c[i, j, k] = a[i, j, k] + b[i, j, k]
 
     sim_func = kernel_sim(func)
