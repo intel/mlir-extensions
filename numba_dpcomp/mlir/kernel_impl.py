@@ -205,25 +205,42 @@ class Stub(object):
         raise NotImplementedError("%s is not instantiable" % cls)
 
 
-class _AtomicId(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        ary, idx, val = args
-
-        if ary.ndim == 1:
-            return signature(ary.dtype, ary, types.intp, ary.dtype)
-        elif ary.ndim > 1:
-            return signature(ary.dtype, ary, idx, ary.dtype)
-
-
 class atomic(Stub):
     pass
 
+def _define_atomic_funcs():
+    funcs = ['add', 'sub']
 
-def atomic_add(arr, ind, val):
-    _stub_error()
+    def get_func(func_name):
+        def api_func_impl(builder, arr, idx, val):
+            # TODO: idx
+            return builder.external_call('atomic_add', (arr, val), val)
+        return api_func_impl
 
-infer_global(atomic_add)(_AtomicId)
+    def get_stub_func(func_name):
+        exec(f'def {func_name}(arr, idx, val): _stub_error()')
+        return eval(func_name)
 
+    class _AtomicId(AbstractTemplate):
+        def generic(self, args, kws):
+            assert not kws
+            ary, idx, val = args
 
-setattr(atomic, 'add', atomic_add)
+            if ary.ndim == 1:
+                return signature(ary.dtype, ary, types.intp, ary.dtype)
+            elif ary.ndim > 1:
+                return signature(ary.dtype, ary, idx, ary.dtype)
+
+    this_module = sys.modules[__name__]
+
+    for name in funcs:
+        func_name = f'atomic_{name}'
+        func = get_stub_func(func_name)
+        setattr(this_module, func_name, func)
+
+        infer_global(func)(_AtomicId)
+        registry.register_func(func_name, func)(get_func(func_name))
+        setattr(atomic, name, func)
+
+_define_atomic_funcs()
+del _define_atomic_funcs

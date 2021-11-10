@@ -16,7 +16,7 @@ from collections import namedtuple
 from itertools import product
 
 from .kernel_impl import Kernel as OrigKernel
-from .kernel_impl import get_global_id, get_global_size, get_local_size, atomic, atomic_add
+from .kernel_impl import get_global_id, get_global_size, get_local_size, atomic, atomic_add, atomic_sub
 
 _ExecutionState = namedtuple('_ExecutionState', [
     'global_size',
@@ -48,7 +48,7 @@ class atomic_proxy:
         return new_val
 
     @staticmethod
-    def add(arr, ind, val):
+    def sub(arr, ind, val):
         new_val = arr[ind] - val
         arr[ind] = new_val
         return new_val
@@ -75,6 +75,7 @@ _globals_to_replace = [
     ('get_local_size', get_local_size, get_local_size_proxy),
     ('atomic', atomic, atomic_proxy),
     ('atomic_add', atomic_add, atomic_proxy.add),
+    ('atomic_sub', atomic_sub, atomic_proxy.sub),
 ]
 
 def _replace_globals(src):

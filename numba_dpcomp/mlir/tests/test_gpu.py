@@ -272,7 +272,7 @@ def test_get_local_size(shape, lsize):
 
 @require_gpu
 @pytest.mark.parametrize("dtype", ['int32', 'int64']) # TODO: float
-@pytest.mark.parametrize("atomic_op", [atomic.add])
+@pytest.mark.parametrize("atomic_op", [atomic.add, atomic.sub])
 def test_atomics(dtype, atomic_op):
     def func(a, b):
         i = get_global_id(0)
