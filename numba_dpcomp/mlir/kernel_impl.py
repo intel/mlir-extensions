@@ -213,7 +213,8 @@ def _define_atomic_funcs():
 
     def get_func(func_name):
         def api_func_impl(builder, arr, idx, val):
-            # TODO: idx
+            if not (isinstance(idx, int) and idx == 0):
+                arr = builder.subview(arr, idx)
             return builder.external_call(f'{func_name}_{dtype_str(builder, arr.dtype)}', (arr, val), val)
         return api_func_impl
 
