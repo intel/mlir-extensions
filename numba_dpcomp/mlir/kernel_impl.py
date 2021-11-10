@@ -214,7 +214,7 @@ def _define_atomic_funcs():
     def get_func(func_name):
         def api_func_impl(builder, arr, idx, val):
             # TODO: idx
-            return builder.external_call(f'atomic_add_{dtype_str(builder, arr.dtype)}', (arr, val), val)
+            return builder.external_call(f'{func_name}_{dtype_str(builder, arr.dtype)}', (arr, val), val)
         return api_func_impl
 
     def get_stub_func(func_name):

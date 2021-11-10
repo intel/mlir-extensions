@@ -288,9 +288,9 @@ def test_atomics(dtype, atomic_op):
 
     gpu_res = np.zeros([1], dtype)
 
-    with print_pass_ir([],['ConvertParallelLoopToGpu']):
+    with print_pass_ir([],['GPUToSpirvPass']):
         gpu_func[a.shape, ()](a, gpu_res)
         ir = get_print_buffer()
-        assert ir.count('gpu.launch blocks') == 1, ir
+        assert ir.count('spv.AtomicIAdd') == 1 or ir.count('spv.AtomicISub') == 1, ir
 
     assert_equal(gpu_res, sim_res)
