@@ -684,11 +684,13 @@ struct SetSPIRVCapabilitiesPass
         spirv::Capability::Groups,
         spirv::Capability::Float16,
         spirv::Capability::Float64,
+        spirv::Capability::AtomicFloat32AddEXT,
         // clang-format on
     };
-    //    spirv::Extension exts[] = {};
-    auto triple = spirv::VerCapExtAttr::get(spirv::Version::V_1_0, caps,
-                                            /*exts*/ {}, context);
+    spirv::Extension exts[] = {
+        spirv::Extension::SPV_EXT_shader_atomic_float_add};
+    auto triple =
+        spirv::VerCapExtAttr::get(spirv::Version::V_1_0, caps, exts, context);
     auto attr = spirv::TargetEnvAttr::get(
         triple, spirv::Vendor::Unknown, spirv::DeviceType::Unknown,
         spirv::TargetEnvAttr::kUnknownDeviceID,
@@ -827,6 +829,23 @@ static mlir::Value lowerIntAtomic(mlir::OpBuilder &builder, mlir::Location loc,
                             mlir::spirv::MemorySemantics::None, val);
 }
 
+static mlir::Value lowerFloatAddAtomic(mlir::OpBuilder &builder,
+                                       mlir::Location loc, mlir::Value ptr,
+                                       mlir::Value val) {
+  return builder.create<mlir::spirv::AtomicFAddEXTOp>(
+      loc, val.getType(), ptr, mlir::spirv::Scope::Device,
+      mlir::spirv::MemorySemantics::None, val);
+}
+
+static mlir::Value lowerFloatSubAtomic(mlir::OpBuilder &builder,
+                                       mlir::Location loc, mlir::Value ptr,
+                                       mlir::Value val) {
+  auto neg = builder.create<mlir::spirv::FNegateOp>(loc, val).getResult();
+  return builder.create<mlir::spirv::AtomicFAddEXTOp>(
+      loc, neg.getType(), ptr, mlir::spirv::Scope::Device,
+      mlir::spirv::MemorySemantics::None, neg);
+}
+
 class ConvertAtomicOps : public mlir::OpConversionPattern<mlir::CallOp> {
 public:
   using mlir::OpConversionPattern<mlir::CallOp>::OpConversionPattern;
@@ -871,8 +890,10 @@ public:
     };
 
     const Desc handlers[] = {
-        {"atomic_add", &lowerIntAtomic<mlir::spirv::AtomicIAddOp>, nullptr},
-        {"atomic_sub", &lowerIntAtomic<mlir::spirv::AtomicISubOp>, nullptr},
+        {"atomic_add", &lowerIntAtomic<mlir::spirv::AtomicIAddOp>,
+         &lowerFloatAddAtomic},
+        {"atomic_sub", &lowerIntAtomic<mlir::spirv::AtomicISubOp>,
+         &lowerFloatSubAtomic},
     };
 
     auto handler = [&]() -> func_t {
