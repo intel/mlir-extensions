@@ -1250,6 +1250,11 @@ py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
   auto loc = ctx.loc;
   auto origSrcVal = ctx.context.unwrapVal(loc, builder, src);
   auto srcVal = doSignCast(builder, loc, origSrcVal);
+  auto srcType = srcVal.getType().cast<mlir::TensorType>();
+  auto memrefType =
+      mlir::MemRefType::get(srcType.getShape(), srcType.getElementType());
+  auto memref =
+      builder.create<mlir::memref::BufferCastOp>(loc, memrefType, srcVal);
 
   auto indexType = builder.getIndexType();
   auto unwrapVal = [&](py::handle obj) {
@@ -1276,16 +1281,17 @@ py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
   }();
   auto strideVals = [&]() -> ValsArray {
     if (strides.is_none()) {
-      auto one = builder.create<mlir::arith::ConstantIndexOp>(loc, 1);
-      return ValsArray(offsetVals.size(), one.getResult());
+      return ValsArray(offsetVals.size(), builder.getIndexAttr(1));
     } else {
       return toValues<ValsArray>(strides, unwrapVal);
     }
   }();
-  auto view = builder.createOrFold<mlir::tensor::ExtractSliceOp>(
-      loc, srcVal, offsetVals, sizeVals, strideVals);
-  return ctx.context.createVar(
-      context, doSignCast(builder, loc, view, origSrcVal.getType()));
+  auto view = builder.createOrFold<mlir::memref::SubViewOp>(
+      loc, memref, offsetVals, sizeVals, strideVals);
+  //  auto ret = builder.create<mlir::memref::TensorLoadOp>(loc, view);
+  //  return ctx.context.createVar(
+  //      context, doSignCast(builder, loc, ret, origSrcVal.getType()));
+  return ctx.context.createVar(context, view);
 }
 
 py::object arrayTypeImpl(py::capsule context, py::iterable dims,
