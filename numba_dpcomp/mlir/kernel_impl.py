@@ -19,7 +19,7 @@ from numba import prange
 from numba.core import types
 from numba.core.typing.templates import AbstractTemplate, ConcreteTemplate, signature, infer_global
 
-from .linalg_builder import is_int, FuncRegistry
+from .linalg_builder import is_int, dtype_str, FuncRegistry
 from .numpy.funcs import register_func
 from .func_registry import add_func
 
@@ -214,7 +214,7 @@ def _define_atomic_funcs():
     def get_func(func_name):
         def api_func_impl(builder, arr, idx, val):
             # TODO: idx
-            return builder.external_call('atomic_add', (arr, val), val)
+            return builder.external_call(f'atomic_add_{dtype_str(builder, arr.dtype)}', (arr, val), val)
         return api_func_impl
 
     def get_stub_func(func_name):

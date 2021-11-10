@@ -744,6 +744,7 @@ static llvm::Optional<mlir::Value> getGpuStream(mlir::OpBuilder &builder,
 class ConvertLoadOp : public mlir::OpConversionPattern<mlir::memref::LoadOp> {
 public:
   using mlir::OpConversionPattern<mlir::memref::LoadOp>::OpConversionPattern;
+
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::LoadOp op,
                   mlir::memref::LoadOp::Adaptor adaptor,
@@ -770,6 +771,7 @@ public:
 class ConvertStoreOp : public mlir::OpConversionPattern<mlir::memref::StoreOp> {
 public:
   using mlir::OpConversionPattern<mlir::memref::StoreOp>::OpConversionPattern;
+
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::StoreOp op,
                   mlir::memref::StoreOp::Adaptor adaptor,
@@ -789,6 +791,97 @@ public:
     rewriter.replaceOpWithNewOp<mlir::spirv::StoreOp>(op, ptr, adaptor.value(),
                                                       memoryAccess, alignment);
 
+    return mlir::success();
+  }
+};
+
+template <typename Op>
+static mlir::Value lowerIntAtomic(mlir::OpBuilder &builder, mlir::Location loc,
+                                  mlir::Value ptr, mlir::Value val) {
+  return builder.create<Op>(loc, ptr, mlir::spirv::Scope::Device,
+                            mlir::spirv::MemorySemantics::None, val);
+}
+
+class ConvertAtomicOps : public mlir::OpConversionPattern<mlir::CallOp> {
+public:
+  using mlir::OpConversionPattern<mlir::CallOp>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::CallOp op, mlir::CallOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto operands = adaptor.operands();
+    if (operands.size() != 2)
+      return mlir::failure();
+
+    if (op.getNumResults() != 1)
+      return mlir::failure();
+
+    auto ptr = operands[0];
+    auto ptrType = ptr.getType().dyn_cast<mlir::spirv::PointerType>();
+    if (!ptrType)
+      return mlir::failure();
+
+    auto val = operands[1];
+    auto valType = val.getType();
+    if (ptrType.getPointeeType() != valType)
+      return mlir::failure();
+
+    bool isInt;
+    if (valType.isSignlessInteger())
+      isInt = true;
+    else if (valType.isa<mlir::FloatType>())
+      isInt = false;
+    else
+      return mlir::failure();
+
+    auto funcName = op.getCallee();
+
+    using func_t = mlir::Value (*)(mlir::OpBuilder &, mlir::Location,
+                                   mlir::Value, mlir::Value);
+
+    struct Desc {
+      mlir::StringRef name;
+      func_t intOp;
+      func_t floatOp;
+    };
+
+    const Desc handlers[] = {
+        {"atomic_add", &lowerIntAtomic<mlir::spirv::AtomicIAddOp>, nullptr},
+        {"atomic_sub", &lowerIntAtomic<mlir::spirv::AtomicISubOp>, nullptr},
+    };
+
+    auto handler = [&]() -> func_t {
+      for (auto &h : handlers) {
+        if (funcName.consume_front(h.name))
+          return (isInt ? h.intOp : h.floatOp);
+      }
+      return nullptr;
+    }();
+
+    if (handler) {
+      auto res = handler(rewriter, op.getLoc(), ptr, val);
+      if (res) {
+        rewriter.replaceOp(op, res);
+        return mlir::success();
+      }
+    }
+
+    return mlir::failure();
+  }
+};
+
+// TODO: something better
+class ConvertFunc : public mlir::OpConversionPattern<mlir::FuncOp> {
+public:
+  using mlir::OpConversionPattern<mlir::FuncOp>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::FuncOp op, mlir::FuncOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    if (!op.body().empty())
+      return mlir::failure();
+
+    rewriter.eraseOp(op);
     return mlir::success();
   }
 };
@@ -871,7 +964,9 @@ struct GPUToSpirvPass
         UnaryAndBinaryOpPattern<mlir::math::CosOp, mlir::spirv::OCLCosOp>>(
         typeConverter, context);
 
-    patterns.insert<ConvertLoadOp, ConvertStoreOp>(typeConverter, context);
+    patterns
+        .insert<ConvertLoadOp, ConvertStoreOp, ConvertAtomicOps, ConvertFunc>(
+            typeConverter, context);
 
     if (failed(
             applyFullConversion(kernelModules, *target, std::move(patterns))))

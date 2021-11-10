@@ -220,3 +220,17 @@ def is_int(t, b):
 
 def is_float(t, b):
     return t == b.float16 or t == b.float32 or t == b.float64
+
+def dtype_str(builder, dtype):
+    names = [
+        (builder.int8,  'int8'),
+        (builder.int16, 'int16'),
+        (builder.int32, 'int32'),
+        (builder.int64, 'int64'),
+        (builder.float32, 'float32'),
+        (builder.float64, 'float64'),
+    ]
+    for t, name in names:
+        if t == dtype:
+            return name
+    assert(False)
