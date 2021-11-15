@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..linalg_builder import FuncRegistry, is_literal, broadcast_type, eltwise, convert_array, asarray, is_int, is_float, DYNAMIC_DIM
+from ..linalg_builder import FuncRegistry, is_literal, broadcast_type, eltwise, convert_array, asarray, is_int, is_float, dtype_str, DYNAMIC_DIM
 from ..func_registry import add_func
 
 import numpy
@@ -226,20 +226,6 @@ def reshape_impl(builder, arg, new_shape):
 def flatten_impl(builder, arg):
     size = size_impl(builder, arg)
     return builder.reshape(arg, size)
-
-def dtype_str(builder, dtype):
-    names = [
-        (builder.int8,  'int8'),
-        (builder.int16, 'int16'),
-        (builder.int32, 'int32'),
-        (builder.int64, 'int64'),
-        (builder.float32, 'float32'),
-        (builder.float64, 'float64'),
-    ]
-    for t, name in names:
-        if t == dtype:
-            return name
-    assert(False)
 
 @register_func('numpy.linalg.eig', numpy.linalg.eig)
 def eig_impl(builder, arg):

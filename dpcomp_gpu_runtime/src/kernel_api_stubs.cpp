@@ -41,3 +41,21 @@ extern "C" DPCOMP_GPU_RUNTIME_EXPORT int64_t
 _mlir_ciface_get_local_size(int64_t) {
   STUB();
 }
+
+#define ATOMIC_FUNC_DECL(op, suff, dt)                                         \
+  extern "C" DPCOMP_GPU_RUNTIME_EXPORT dt _mlir_ciface_atomic_##op##_##suff(   \
+      void *, dt) {                                                            \
+    STUB();                                                                    \
+  }
+
+#define ATOMIC_FUNC_DECL2(op)                                                  \
+  ATOMIC_FUNC_DECL(op, int32, int32_t)                                         \
+  ATOMIC_FUNC_DECL(op, int64, int64_t)                                         \
+  ATOMIC_FUNC_DECL(op, float32, float)                                         \
+  ATOMIC_FUNC_DECL(op, float64, double)
+
+ATOMIC_FUNC_DECL2(add)
+ATOMIC_FUNC_DECL2(sub)
+
+#undef ATOMIC_FUNC_DECL2
+#undef ATOMIC_FUNC_DECL

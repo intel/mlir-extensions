@@ -16,7 +16,7 @@ from collections import namedtuple
 from itertools import product
 
 from .kernel_impl import Kernel as OrigKernel
-from .kernel_impl import get_global_id, get_global_size, get_local_size
+from .kernel_impl import get_global_id, get_global_size, get_local_size, atomic, atomic_add, atomic_sub
 
 _ExecutionState = namedtuple('_ExecutionState', [
     'global_size',
@@ -40,6 +40,20 @@ def get_global_size_proxy(index):
 def get_local_size_proxy(index):
     return get_exec_state().local_size[index]
 
+class atomic_proxy:
+    @staticmethod
+    def add(arr, ind, val):
+        new_val = arr[ind] + val
+        arr[ind] = new_val
+        return new_val
+
+    @staticmethod
+    def sub(arr, ind, val):
+        new_val = arr[ind] - val
+        arr[ind] = new_val
+        return new_val
+
+
 def _setup_execution_state(global_size, local_size):
     import numba_dpcomp.mlir.kernel_impl
     global _execution_state
@@ -59,6 +73,9 @@ _globals_to_replace = [
     ('get_global_id', get_global_id, get_global_id_proxy),
     ('get_global_size', get_global_size, get_global_size_proxy),
     ('get_local_size', get_local_size, get_local_size_proxy),
+    ('atomic', atomic, atomic_proxy),
+    ('atomic_add', atomic_add, atomic_proxy.add),
+    ('atomic_sub', atomic_sub, atomic_proxy.sub),
 ]
 
 def _replace_globals(src):

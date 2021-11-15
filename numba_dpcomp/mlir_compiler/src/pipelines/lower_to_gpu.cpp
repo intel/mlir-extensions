@@ -289,57 +289,77 @@ struct InsertGPUAllocs
     llvm::SmallMapVector<unsigned, AccessType, 8> gpuBufferParams;
     auto &aliases = getAnalysis<mlir::BufferViewFlowAnalysis>();
 
-    auto getMemref = [](mlir::Operation *op) -> mlir::Value {
+    auto getMemref = [](mlir::Operation *op)
+        -> llvm::Optional<mlir::SmallVector<mlir::Value, 4>> {
       if (auto load = mlir::dyn_cast<mlir::memref::LoadOp>(op)) {
-        return load.memref();
+        return {{load.memref()}};
       } else if (auto store = mlir::dyn_cast<mlir::memref::StoreOp>(op)) {
-        return store.memref();
+        return {{store.memref()}};
+      } else if (auto call = mlir::dyn_cast<mlir::CallOp>(op)) {
+        mlir::SmallVector<mlir::Value, 4> ret;
+        for (auto arg : call.operands()) {
+          if (arg.getType().isa<mlir::MemRefType>())
+            ret.emplace_back(arg);
+        }
+        return std::move(ret);
       } else {
         op->emitError("Uhhandled mem op in gpu region");
-        return nullptr;
+        return llvm::None;
       }
     };
 
     auto scfDialect = getContext().getOrLoadDialect<mlir::scf::SCFDialect>();
 
+    auto hasMemAccess = [](mlir::Operation *op) -> bool {
+      if (auto memInterface =
+              mlir::dyn_cast<mlir::MemoryEffectOpInterface>(op)) {
+        if (memInterface.hasEffect<mlir::MemoryEffects::Read>() ||
+            memInterface.hasEffect<mlir::MemoryEffects::Write>())
+          return true;
+      }
+      if (auto call = mlir::dyn_cast<mlir::CallOp>(op)) {
+        for (auto arg : call.operands()) {
+          if (arg.getType().isa<mlir::MemRefType>())
+            return true;
+        }
+      }
+      return false;
+    };
+
     if (func.walk([&](mlir::Operation *op) {
-              auto memInterface =
-                  mlir::dyn_cast<mlir::MemoryEffectOpInterface>(op);
-              if (!memInterface)
-                return mlir::WalkResult::advance();
-
-              if (!memInterface.hasEffect<mlir::MemoryEffects::Read>() &&
-                  !memInterface.hasEffect<mlir::MemoryEffects::Write>())
-                return mlir::WalkResult::advance();
-
               if (!op->getParentOfType<mlir::gpu::LaunchOp>())
+                return mlir::WalkResult::advance();
+
+              if (!hasMemAccess(op))
                 return mlir::WalkResult::advance();
 
               auto memref = getMemref(op);
               if (!memref)
                 return mlir::WalkResult::interrupt();
 
-              for (auto mem : aliases.resolve(memref)) {
-                auto op = mem.getDefiningOp();
-                if (op) {
-                  if (op->getDialect() == scfDialect ||
-                      mlir::isa<mlir::ViewLikeOpInterface>(op))
-                    continue;
+              for (auto mem : *memref) {
+                for (auto alias : aliases.resolve(mem)) {
+                  auto op = alias.getDefiningOp();
+                  if (op) {
+                    if (op->getDialect() == scfDialect ||
+                        mlir::isa<mlir::ViewLikeOpInterface>(op))
+                      continue;
 
-                  auto allocOp = mlir::dyn_cast<mlir::memref::AllocOp>(op);
-                  if (!allocOp) {
-                    op->emitError("Unhandled memref producer");
-                    return mlir::WalkResult::interrupt();
+                    auto allocOp = mlir::dyn_cast<mlir::memref::AllocOp>(op);
+                    if (!allocOp) {
+                      op->emitError("Unhandled memref producer");
+                      return mlir::WalkResult::interrupt();
+                    }
+
+                    gpuBufferAllocs.insert({allocOp, {}});
+                  } else {
+                    auto block = alias.getParentBlock();
+                    auto blockArgs = block->getArguments();
+                    auto it = llvm::find(blockArgs, alias);
+                    assert(it != blockArgs.end());
+                    auto index = it - blockArgs.begin();
+                    gpuBufferParams.insert({static_cast<unsigned>(index), {}});
                   }
-
-                  gpuBufferAllocs.insert({allocOp, {}});
-                } else {
-                  auto block = mem.getParentBlock();
-                  auto blockArgs = block->getArguments();
-                  auto it = llvm::find(blockArgs, mem);
-                  assert(it != blockArgs.end());
-                  auto index = it - blockArgs.begin();
-                  gpuBufferParams.insert({static_cast<unsigned>(index), {}});
                 }
               }
 
@@ -379,6 +399,12 @@ struct InsertGPUAllocs
             if (memInterface.hasEffect<mlir::MemoryEffects::Write>())
               (onDevice ? ret.deviceWrite : ret.hostWrite) = true;
 
+            continue;
+          }
+          if (mlir::isa<mlir::CallOp>(user)) {
+            bool onDevice = user->getParentOfType<mlir::gpu::LaunchOp>();
+            (onDevice ? ret.deviceRead : ret.hostRead) = true;
+            (onDevice ? ret.deviceWrite : ret.hostWrite) = true;
             continue;
           }
         }
@@ -744,6 +770,7 @@ static llvm::Optional<mlir::Value> getGpuStream(mlir::OpBuilder &builder,
 class ConvertLoadOp : public mlir::OpConversionPattern<mlir::memref::LoadOp> {
 public:
   using mlir::OpConversionPattern<mlir::memref::LoadOp>::OpConversionPattern;
+
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::LoadOp op,
                   mlir::memref::LoadOp::Adaptor adaptor,
@@ -770,6 +797,7 @@ public:
 class ConvertStoreOp : public mlir::OpConversionPattern<mlir::memref::StoreOp> {
 public:
   using mlir::OpConversionPattern<mlir::memref::StoreOp>::OpConversionPattern;
+
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::StoreOp op,
                   mlir::memref::StoreOp::Adaptor adaptor,
@@ -789,6 +817,97 @@ public:
     rewriter.replaceOpWithNewOp<mlir::spirv::StoreOp>(op, ptr, adaptor.value(),
                                                       memoryAccess, alignment);
 
+    return mlir::success();
+  }
+};
+
+template <typename Op>
+static mlir::Value lowerIntAtomic(mlir::OpBuilder &builder, mlir::Location loc,
+                                  mlir::Value ptr, mlir::Value val) {
+  return builder.create<Op>(loc, ptr, mlir::spirv::Scope::Device,
+                            mlir::spirv::MemorySemantics::None, val);
+}
+
+class ConvertAtomicOps : public mlir::OpConversionPattern<mlir::CallOp> {
+public:
+  using mlir::OpConversionPattern<mlir::CallOp>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::CallOp op, mlir::CallOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto operands = adaptor.operands();
+    if (operands.size() != 2)
+      return mlir::failure();
+
+    if (op.getNumResults() != 1)
+      return mlir::failure();
+
+    auto ptr = operands[0];
+    auto ptrType = ptr.getType().dyn_cast<mlir::spirv::PointerType>();
+    if (!ptrType)
+      return mlir::failure();
+
+    auto val = operands[1];
+    auto valType = val.getType();
+    if (ptrType.getPointeeType() != valType)
+      return mlir::failure();
+
+    bool isInt;
+    if (valType.isSignlessInteger())
+      isInt = true;
+    else if (valType.isa<mlir::FloatType>())
+      isInt = false;
+    else
+      return mlir::failure();
+
+    auto funcName = op.getCallee();
+
+    using func_t = mlir::Value (*)(mlir::OpBuilder &, mlir::Location,
+                                   mlir::Value, mlir::Value);
+
+    struct Desc {
+      mlir::StringRef name;
+      func_t intOp;
+      func_t floatOp;
+    };
+
+    const Desc handlers[] = {
+        {"atomic_add", &lowerIntAtomic<mlir::spirv::AtomicIAddOp>, nullptr},
+        {"atomic_sub", &lowerIntAtomic<mlir::spirv::AtomicISubOp>, nullptr},
+    };
+
+    auto handler = [&]() -> func_t {
+      for (auto &h : handlers) {
+        if (funcName.consume_front(h.name))
+          return (isInt ? h.intOp : h.floatOp);
+      }
+      return nullptr;
+    }();
+
+    if (handler) {
+      auto res = handler(rewriter, op.getLoc(), ptr, val);
+      if (res) {
+        rewriter.replaceOp(op, res);
+        return mlir::success();
+      }
+    }
+
+    return mlir::failure();
+  }
+};
+
+// TODO: something better
+class ConvertFunc : public mlir::OpConversionPattern<mlir::FuncOp> {
+public:
+  using mlir::OpConversionPattern<mlir::FuncOp>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::FuncOp op, mlir::FuncOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    if (!op.body().empty())
+      return mlir::failure();
+
+    rewriter.eraseOp(op);
     return mlir::success();
   }
 };
@@ -871,7 +990,9 @@ struct GPUToSpirvPass
         UnaryAndBinaryOpPattern<mlir::math::CosOp, mlir::spirv::OCLCosOp>>(
         typeConverter, context);
 
-    patterns.insert<ConvertLoadOp, ConvertStoreOp>(typeConverter, context);
+    patterns
+        .insert<ConvertLoadOp, ConvertStoreOp, ConvertAtomicOps, ConvertFunc>(
+            typeConverter, context);
 
     if (failed(
             applyFullConversion(kernelModules, *target, std::move(patterns))))

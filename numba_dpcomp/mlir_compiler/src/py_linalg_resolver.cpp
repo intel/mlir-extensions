@@ -201,9 +201,10 @@ template <typename F> void containerIterate(py::handle obj, F &&func) {
   }
 }
 
-template <typename UnwrapFunc>
+template <typename RetType = llvm::SmallVector<mlir::Value>,
+          typename UnwrapFunc>
 auto toValues(py::handle obj, UnwrapFunc &&unwrapFunc) {
-  llvm::SmallVector<mlir::Value> ret(containerSize(obj));
+  RetType ret(containerSize(obj));
   containerIterate(
       obj, [&](auto index, py::handle elem) { ret[index] = unwrapFunc(elem); });
   return ret;
@@ -1242,6 +1243,57 @@ py::object undefImpl(py::capsule context, py::handle dtype) {
   return ctx.context.createVar(context, ret);
 }
 
+py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
+                       py::handle sizes, py::handle strides) {
+  auto &ctx = getPyContext(context);
+  auto &builder = ctx.builder;
+  auto loc = ctx.loc;
+  auto origSrcVal = ctx.context.unwrapVal(loc, builder, src);
+  auto srcVal = doSignCast(builder, loc, origSrcVal);
+  auto srcType = srcVal.getType().cast<mlir::TensorType>();
+  auto memrefType =
+      mlir::MemRefType::get(srcType.getShape(), srcType.getElementType());
+  auto memref =
+      builder.create<mlir::memref::BufferCastOp>(loc, memrefType, srcVal);
+
+  auto indexType = builder.getIndexType();
+  auto unwrapVal = [&](py::handle obj) {
+    return doCast(builder, loc, ctx.context.unwrapVal(loc, builder, obj),
+                  indexType);
+  };
+
+  using ValsArray = llvm::SmallVector<mlir::OpFoldResult>;
+  auto offsetVals = toValues<ValsArray>(offsets, unwrapVal);
+  auto sizeVals = [&]() -> ValsArray {
+    if (sizes.is_none()) {
+      ValsArray ret(offsetVals.size());
+      for (auto i : llvm::seq(size_t(0), ret.size())) {
+        auto dim = builder.createOrFold<mlir::tensor::DimOp>(
+            loc, origSrcVal, static_cast<int64_t>(i));
+        auto offset = offsetVals[i].get<mlir::Value>();
+        auto size = builder.createOrFold<mlir::arith::SubIOp>(loc, dim, offset);
+        ret[i] = size;
+      }
+      return ret;
+    } else {
+      return toValues<ValsArray>(sizes, unwrapVal);
+    }
+  }();
+  auto strideVals = [&]() -> ValsArray {
+    if (strides.is_none()) {
+      return ValsArray(offsetVals.size(), builder.getIndexAttr(1));
+    } else {
+      return toValues<ValsArray>(strides, unwrapVal);
+    }
+  }();
+  auto view = builder.createOrFold<mlir::memref::SubViewOp>(
+      loc, memref, offsetVals, sizeVals, strideVals);
+  //  auto ret = builder.create<mlir::memref::TensorLoadOp>(loc, view);
+  //  return ctx.context.createVar(
+  //      context, doSignCast(builder, loc, ret, origSrcVal.getType()));
+  return ctx.context.createVar(context, view);
+}
+
 py::object arrayTypeImpl(py::capsule context, py::iterable dims,
                          py::handle dtype) {
   auto &ctx = getPyContext(context);
@@ -1268,6 +1320,7 @@ void setupPyBuilder(py::handle builder, mlir::OpBuilder &b,
   py::setattr(builder, "_inline_func", py::cpp_function(&inlineFuncImpl));
   py::setattr(builder, "_cast", py::cpp_function(&castImpl));
   py::setattr(builder, "_undef", py::cpp_function(&undefImpl));
+  py::setattr(builder, "_subview", py::cpp_function(&subviewImpl));
 
   py::setattr(builder, "_array_type", py::cpp_function(&arrayTypeImpl));
 

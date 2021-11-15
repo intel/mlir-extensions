@@ -17,9 +17,9 @@ import sys
 
 from numba import prange
 from numba.core import types
-from numba.core.typing.templates import ConcreteTemplate, signature, infer_global
+from numba.core.typing.templates import AbstractTemplate, ConcreteTemplate, signature, infer_global
 
-from .linalg_builder import is_int, FuncRegistry
+from .linalg_builder import is_int, dtype_str, FuncRegistry
 from .numpy.funcs import register_func
 from .func_registry import add_func
 
@@ -193,3 +193,55 @@ def _define_api_funcs():
 
 _define_api_funcs()
 del _define_api_funcs
+
+class Stub(object):
+    """A stub object to represent special objects which is meaningless
+    outside the context of DPPY compilation context.
+    """
+
+    __slots__ = ()  # don't allocate __dict__
+
+    def __new__(cls):
+        raise NotImplementedError("%s is not instantiable" % cls)
+
+
+class atomic(Stub):
+    pass
+
+def _define_atomic_funcs():
+    funcs = ['add', 'sub']
+
+    def get_func(func_name):
+        def api_func_impl(builder, arr, idx, val):
+            if not (isinstance(idx, int) and idx == 0):
+                arr = builder.subview(arr, idx)
+            return builder.external_call(f'{func_name}_{dtype_str(builder, arr.dtype)}', (arr, val), val)
+        return api_func_impl
+
+    def get_stub_func(func_name):
+        exec(f'def {func_name}(arr, idx, val): _stub_error()')
+        return eval(func_name)
+
+    class _AtomicId(AbstractTemplate):
+        def generic(self, args, kws):
+            assert not kws
+            ary, idx, val = args
+
+            if ary.ndim == 1:
+                return signature(ary.dtype, ary, types.intp, ary.dtype)
+            elif ary.ndim > 1:
+                return signature(ary.dtype, ary, idx, ary.dtype)
+
+    this_module = sys.modules[__name__]
+
+    for name in funcs:
+        func_name = f'atomic_{name}'
+        func = get_stub_func(func_name)
+        setattr(this_module, func_name, func)
+
+        infer_global(func)(_AtomicId)
+        registry.register_func(func_name, func)(get_func(func_name))
+        setattr(atomic, name, func)
+
+_define_atomic_funcs()
+del _define_atomic_funcs
