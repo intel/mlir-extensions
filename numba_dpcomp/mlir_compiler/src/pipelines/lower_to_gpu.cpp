@@ -225,11 +225,11 @@ struct SetLocalSizePass
     }
 
     mlir::OpBuilder builder(&getContext());
-    auto funcName = mlir::StringAttr::get(&getContext(), "set_local_size");
+    mlir::StringRef funcName("set_local_size");
     llvm::SmallVector<mlir::Value, 3> localSize;
     for (auto &op : llvm::make_early_inc_range(region.front())) {
       if (auto call = mlir::dyn_cast<mlir::CallOp>(op)) {
-        if (call.getCalleeAttr() == funcName) {
+        if (call.getCallee() == funcName) {
           auto args = call.operands();
           localSize.assign(args.begin(), args.end());
           op.erase();
@@ -461,9 +461,9 @@ struct InsertGPUAllocs
         dims[i] = op;
         filter.insert(op);
       }
-      auto allocType = mlir::MemRefType::get(memrefType.getShape(),
-                                             memrefType.getElementType(), {},
-                                             memrefType.getMemorySpace());
+      auto allocType = mlir::MemRefType::get(
+          memrefType.getShape(), memrefType.getElementType(),
+          mlir::MemRefLayoutAttrInterface{}, memrefType.getMemorySpace());
       auto gpuAlloc = builder.create<mlir::gpu::AllocOp>(
           loc, allocType, /*asyncToken*/ nullptr,
           /*asyncDependencies*/ llvm::None, dims,
@@ -508,8 +508,7 @@ static mlir::Value getFlatIndex(mlir::OpBuilder &builder, mlir::Location loc,
   auto memrefType = memref.getType().cast<mlir::MemRefType>();
   auto rank = static_cast<unsigned>(memrefType.getRank());
   assert(indices.size() == rank);
-  assert(memrefType.getAffineMaps().size() <= 1);
-  if (memrefType.getAffineMaps().empty()) {
+  if (memrefType.getLayout().isIdentity()) {
     auto shape = memrefType.getShape();
     auto expr =
         mlir::makeCanonicalStridedLayoutExpr(shape, builder.getContext());
@@ -552,7 +551,7 @@ static mlir::Value getFlatIndex(mlir::OpBuilder &builder, mlir::Location loc,
             loc, memref, i);
       }
     }
-    auto affineMap = memrefType.getAffineMaps()[0];
+    auto affineMap = memrefType.getLayout().getAffineMap();
     return builder.createOrFold<mlir::AffineApplyOp>(loc, affineMap,
                                                      applyOperands);
   }
@@ -575,7 +574,7 @@ static mlir::Value getFlatMemref(mlir::OpBuilder &builder, mlir::Location loc,
 
 static bool needFlatten(mlir::Value val) {
   auto type = val.getType().cast<mlir::MemRefType>();
-  return !type.getAffineMaps().empty() ||
+  return !type.getLayout().isIdentity() ||
          (type.getRank() > 1 && !type.hasStaticShape());
 }
 
@@ -1262,7 +1261,7 @@ public:
 private:
   mlir::LogicalResult
   matchAndRewrite(plier::CreateGpuStreamOp op,
-                  mlir::ArrayRef<mlir::Value> /*operands*/,
+                  plier::CreateGpuStreamOp::Adaptor /*adaptor*/,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto mod = op->getParentOfType<mlir::ModuleOp>();
     if (!mod)

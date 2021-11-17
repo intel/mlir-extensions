@@ -31,9 +31,26 @@
 
 namespace {
 template <typename Op>
+static Op getNextOpInner(llvm::iterator_range<mlir::Block::iterator> &iters) {
+  if (iters.empty())
+    return nullptr;
+
+  auto res = mlir::dyn_cast<Op>(iters.begin());
+  if (res) {
+    auto next = std::next(iters.begin());
+    iters = {next, iters.end()};
+  }
+  return res;
+}
+
+template <typename Op>
 static Op getNextOp(llvm::iterator_range<mlir::Block::iterator> &iters) {
   if (iters.empty())
     return nullptr;
+
+  while (getNextOpInner<mlir::UnrealizedConversionCastOp>(iters) ||
+         getNextOpInner<plier::CastOp>(iters)) {
+  } // skip casts
 
   auto res = mlir::dyn_cast<Op>(iters.begin());
   if (res) {
@@ -80,9 +97,6 @@ bool plier::canLowerWhileToFor(mlir::scf::WhileOp whileOp) {
   auto iternext = getNextOp<plier::IternextOp>(iters);
   /*auto pairfirst =*/getNextOp<plier::PairfirstOp>(iters);
   auto pairsecond = getNextOp<plier::PairsecondOp>(iters);
-  while (getNextOp<mlir::UnrealizedConversionCastOp>(iters) ||
-         getNextOp<plier::CastOp>(iters)) {
-  } // skip casts
   auto beforeTerm = getNextOp<mlir::scf::ConditionOp>(iters);
 
   if (!iternext || !pairsecond || !beforeTerm ||

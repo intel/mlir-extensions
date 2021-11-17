@@ -770,11 +770,10 @@ void ReduceRankOp::build(::mlir::OpBuilder &odsBuilder,
         shape, tensorType.getElementType(), tensorType.getEncoding());
     build(odsBuilder, odsState, retType, src, mapAttr);
   } else if (auto memrefType = srcType.dyn_cast<mlir::MemRefType>()) {
-    auto affineMaps = [&]() {
-      llvm::SmallVector<mlir::AffineMap, 1> ret;
-      auto affineMaps = memrefType.getAffineMaps();
-      assert(affineMaps.size() < 2);
-      if (!affineMaps.empty() && !affineMaps[0].isIdentity()) {
+    auto affineMap = [&]() {
+      mlir::AffineMap ret;
+      auto affineMap = memrefType.getLayout().getAffineMap();
+      if (affineMap && !affineMap.isIdentity()) {
         auto context = odsBuilder.getContext();
         llvm::SmallVector<mlir::AffineExpr> dimReplacements(srcRank);
         llvm::SmallVector<mlir::AffineExpr> symReplacements(srcRank + 1);
@@ -791,17 +790,16 @@ void ReduceRankOp::build(::mlir::OpBuilder &odsBuilder,
             symReplacements[i + 1] = mlir::getAffineConstantExpr(0, context);
           }
         }
-        auto srcMap = memrefType.getAffineMaps().front();
         auto dstRank = static_cast<unsigned>(mapping.size());
-        auto resMap = srcMap.replaceDimsAndSymbols(
+        auto resMap = affineMap.replaceDimsAndSymbols(
             dimReplacements, symReplacements, dstRank, dstRank + 1);
-        ret.emplace_back(mlir::simplifyAffineMap(resMap));
+        ret = mlir::simplifyAffineMap(resMap);
       }
       return ret;
     }();
 
     auto retType =
-        mlir::MemRefType::get(shape, memrefType.getElementType(), affineMaps,
+        mlir::MemRefType::get(shape, memrefType.getElementType(), affineMap,
                               memrefType.getMemorySpace());
     build(odsBuilder, odsState, retType, src, mapAttr);
   } else {
