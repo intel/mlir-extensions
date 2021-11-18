@@ -271,7 +271,7 @@ def test_get_local_size(shape, lsize):
     assert_equal(gpu_res, sim_res)
 
 @require_gpu
-@pytest.mark.parametrize("dtype", ['int32', 'int64']) # TODO: float
+@pytest.mark.parametrize("dtype", ['int32', 'int64', 'float32'])
 @pytest.mark.parametrize("atomic_op", [atomic.add, atomic.sub])
 def test_atomics(dtype, atomic_op):
     def func(a, b):
@@ -291,12 +291,12 @@ def test_atomics(dtype, atomic_op):
     with print_pass_ir([],['GPUToSpirvPass']):
         gpu_func[a.shape, ()](a, gpu_res)
         ir = get_print_buffer()
-        assert ir.count('spv.AtomicIAdd') == 1 or ir.count('spv.AtomicISub') == 1, ir
+        assert ir.count('spv.AtomicIAdd') == 1 or ir.count('spv.AtomicISub') == 1 or ir.count('spv.AtomicFAddEXT') == 1, ir
 
     assert_equal(gpu_res, sim_res)
 
 @require_gpu
-@pytest.mark.parametrize("dtype", ['int32', 'int64']) # TODO: float
+@pytest.mark.parametrize("dtype", ['int32', 'int64', 'float32'])
 @pytest.mark.parametrize("atomic_op", [atomic.add, atomic.sub])
 @pytest.mark.xfail(reason="Non zero offsets are not supported yet")
 def test_atomics_offset(dtype, atomic_op):
@@ -317,6 +317,6 @@ def test_atomics_offset(dtype, atomic_op):
     with print_pass_ir([],['GPUToSpirvPass']):
         gpu_func[a.shape, ()](a, gpu_res)
         ir = get_print_buffer()
-        assert ir.count('spv.AtomicIAdd') == 1 or ir.count('spv.AtomicISub') == 1, ir
+        assert ir.count('spv.AtomicIAdd') == 1 or ir.count('spv.AtomicISub') == 1 or ir.count('spv.AtomicFAddEXT') == 1, ir
 
     assert_equal(gpu_res, sim_res)
