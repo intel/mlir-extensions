@@ -321,15 +321,26 @@ struct ConstOpLowering : public mlir::OpConversionPattern<plier::ConstOp> {
   mlir::LogicalResult
   matchAndRewrite(plier::ConstOp op, plier::ConstOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
+    auto &converter = *getTypeConverter();
+    auto expectedType = converter.convertType(op.getType());
+    if (!expectedType)
+      return mlir::failure();
+
     auto value = adaptor.val();
     if (is_supported_type(value.getType())) {
       if (auto intAttr = value.dyn_cast<mlir::IntegerAttr>()) {
         auto type = intAttr.getType().cast<mlir::IntegerType>();
         if (!type.isSignless()) {
+          auto loc = op.getLoc();
           auto intVal = intAttr.getValue().getSExtValue();
           auto constVal = rewriter.create<mlir::arith::ConstantIntOp>(
-              op.getLoc(), intVal, type.getWidth());
-          rewriter.replaceOpWithNewOp<plier::SignCastOp>(op, type, constVal);
+              loc, intVal, type.getWidth());
+          mlir::Value res =
+              rewriter.create<plier::SignCastOp>(loc, type, constVal);
+          if (res.getType() != expectedType)
+            res = rewriter.create<plier::CastOp>(loc, expectedType, res);
+
+          rewriter.replaceOp(op, res);
           return mlir::success();
         }
       }
@@ -337,12 +348,9 @@ struct ConstOpLowering : public mlir::OpConversionPattern<plier::ConstOp> {
       return mlir::success();
     }
 
-    auto &converter = *getTypeConverter();
-    if (auto type = converter.convertType(op.getType())) {
-      if (type.isa<mlir::NoneType>()) {
-        rewriter.replaceOpWithNewOp<plier::UndefOp>(op, type);
-        return mlir::success();
-      }
+    if (expectedType.isa<mlir::NoneType>()) {
+      rewriter.replaceOpWithNewOp<plier::UndefOp>(op, expectedType);
+      return mlir::success();
     }
     return mlir::failure();
   }
