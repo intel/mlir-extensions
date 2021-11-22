@@ -338,6 +338,10 @@ struct InsertGPUAllocs
                 return mlir::WalkResult::interrupt();
 
               for (auto mem : *memref) {
+                while (auto parentView =
+                           mem.getDefiningOp<mlir::memref::SubViewOp>())
+                  mem = parentView.source();
+
                 for (auto alias : aliases.resolve(mem)) {
                   auto op = alias.getDefiningOp();
                   if (op) {
@@ -622,6 +626,61 @@ struct FlattenStore : public mlir::OpRewritePattern<mlir::memref::StoreOp> {
   }
 };
 
+struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::SubViewOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    if (!op->getParentOfType<mlir::gpu::LaunchOp>())
+      return mlir::failure();
+
+    auto memref = op.source();
+    if (!needFlatten(memref))
+      return mlir::failure();
+
+    auto loc = op.getLoc();
+    mlir::OpFoldResult flatIndex =
+        getFlatIndex(rewriter, loc, memref, op.offsets());
+    mlir::OpFoldResult flatSize =
+        rewriter.create<plier::UndefOp>(loc, rewriter.getIndexType())
+            .getResult();
+    mlir::OpFoldResult flatStride = rewriter.getIndexAttr(1);
+    auto flatMemref = getFlatMemref(rewriter, loc, memref);
+    auto flatMemrefType = flatMemref.getType().cast<mlir::MemRefType>();
+    assert(flatMemrefType.getLayout().isIdentity());
+    auto flatSubview = rewriter.createOrFold<mlir::memref::SubViewOp>(
+        loc, flatMemrefType, flatMemref, flatIndex, flatSize, flatStride);
+    auto dstFlatType = mlir::memref::SubViewOp::inferResultType(
+        flatMemrefType, flatIndex, flatSize, flatStride);
+    if (dstFlatType != flatMemrefType)
+      flatSubview = rewriter.createOrFold<mlir::memref::CastOp>(
+          loc, flatSubview, dstFlatType);
+
+    auto dstType = op.getType().cast<mlir::MemRefType>();
+
+    //    auto offset = rewriter.getIndexAttr(0); TODO: bug in
+    //    ReinterpretCastOp::verify
+    auto offset =
+        rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0).getResult();
+    auto sizes = op.getMixedSizes();
+    auto strides = op.getMixedStrides();
+    for (auto i : llvm::seq(size_t(0), strides.size())) {
+      // TODO: bug in ReinterpretCastOp::verify
+      if (auto c = strides[i].dyn_cast<mlir::Attribute>()) {
+        auto val = c.dyn_cast<mlir::IntegerAttr>().getValue().getSExtValue();
+        strides[i] =
+            rewriter.create<mlir::arith::ConstantIndexOp>(loc, val).getResult();
+      }
+    }
+
+    auto result = rewriter.createOrFold<mlir::memref::ReinterpretCastOp>(
+        loc, dstType, flatSubview, offset, sizes, strides);
+    rewriter.replaceOp(op, result);
+    return mlir::success();
+  }
+};
+
 struct UnstrideMemrefsPass
     : public mlir::PassWrapper<UnstrideMemrefsPass, mlir::FunctionPass> {
   virtual void
@@ -633,7 +692,7 @@ struct UnstrideMemrefsPass
   void runOnFunction() override {
     mlir::OwningRewritePatternList patterns(&getContext());
 
-    patterns.insert<FlattenLoad, FlattenStore>(&getContext());
+    patterns.insert<FlattenLoad, FlattenStore, FlattenSubview>(&getContext());
 
     (void)mlir::applyPatternsAndFoldGreedily(getFunction(),
                                              std::move(patterns));
@@ -767,6 +826,66 @@ static llvm::Optional<mlir::Value> getGpuStream(mlir::OpBuilder &builder,
   builder.create<plier::DestroyGpuStreamOp>(loc, stream);
   return stream;
 }
+
+class ConvertSubviewOp
+    : public mlir::OpConversionPattern<mlir::memref::SubViewOp> {
+public:
+  using mlir::OpConversionPattern<mlir::memref::SubViewOp>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::SubViewOp op,
+                  mlir::memref::SubViewOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto dstType = op.getType().cast<mlir::MemRefType>();
+    if (!dstType.hasRank() || dstType.getRank() != 1)
+      return mlir::failure();
+
+    auto intType = getTypeConverter()->convertType(rewriter.getIndexType());
+    if (!intType)
+      return mlir::failure();
+
+    auto loc = op.getLoc();
+    auto getValue = [&](mlir::OpFoldResult src) -> mlir::Value {
+      if (auto val = src.dyn_cast<mlir::Value>())
+        return val;
+
+      auto attr = src.get<mlir::Attribute>();
+      return rewriter.create<mlir::spirv::ConstantOp>(loc, intType, attr);
+    };
+
+    auto offset =
+        getValue(op.isDynamicOffset(0)
+                     ? mlir::OpFoldResult(adaptor.offsets()[0])
+                     : mlir::OpFoldResult(adaptor.static_offsets()[0]));
+    auto stride =
+        getValue(op.isDynamicStride(0)
+                     ? mlir::OpFoldResult(adaptor.strides()[0])
+                     : mlir::OpFoldResult(adaptor.static_strides()[0]));
+    auto finalOffset = rewriter.createOrFold<mlir::spirv::IMulOp>(
+        loc, intType, offset, stride);
+
+    auto ptr = rewriter
+                   .create<mlir::spirv::InBoundsPtrAccessChainOp>(
+                       loc, adaptor.source(), finalOffset, llvm::None)
+                   .getResult();
+
+    rewriter.replaceOp(op, ptr);
+    return mlir::success();
+  }
+};
+
+template <typename T>
+class ConvertCastOp : public mlir::OpConversionPattern<T> {
+public:
+  using mlir::OpConversionPattern<T>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(T op, typename T::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOp(op, adaptor.source());
+    return mlir::success();
+  }
+};
 
 class ConvertLoadOp : public mlir::OpConversionPattern<mlir::memref::LoadOp> {
 public:
@@ -922,7 +1041,7 @@ public:
   using mlir::OpConversionPattern<mlir::FuncOp>::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(mlir::FuncOp op, mlir::FuncOp::Adaptor adaptor,
+  matchAndRewrite(mlir::FuncOp op, mlir::FuncOp::Adaptor /*adaptor*/,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     if (!op.body().empty())
       return mlir::failure();
@@ -1011,8 +1130,10 @@ struct GPUToSpirvPass
         typeConverter, context);
 
     patterns
-        .insert<ConvertLoadOp, ConvertStoreOp, ConvertAtomicOps, ConvertFunc>(
-            typeConverter, context);
+        .insert<ConvertSubviewOp, ConvertCastOp<mlir::memref::CastOp>,
+                ConvertCastOp<mlir::memref::ReinterpretCastOp>, ConvertLoadOp,
+                ConvertStoreOp, ConvertAtomicOps, ConvertFunc>(typeConverter,
+                                                               context);
 
     if (failed(
             applyFullConversion(kernelModules, *target, std::move(patterns))))

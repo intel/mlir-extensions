@@ -252,6 +252,11 @@ bool cmpCapsule(py::capsule a1, py::capsule a2) {
   return static_cast<void *>(a1) == static_cast<void *>(a2);
 }
 
+py::object printTypeCapsule(py::capsule t) {
+  auto type = unwrapMlir<mlir::Type>(t);
+  return py::str("Type: \"" + toStr(type) + "\"");
+}
+
 void setupPyVar(py::handle var);
 } // namespace
 
@@ -282,7 +287,8 @@ struct PyLinalgResolver::Context {
   }
 
   py::object createType(mlir::Type t) {
-    return type(wrapMlir(t), py::cpp_function(&cmpCapsule));
+    return type(wrapMlir(t), py::cpp_function(&cmpCapsule),
+                py::cpp_function(&printTypeCapsule));
   }
 
   mlir::FuncOp compileBody(py::handle body, py::list arg_types) {
@@ -1331,13 +1337,19 @@ void setupPyBuilder(py::handle builder, mlir::OpBuilder &b,
   addType("bool", b.getIntegerType(1));
 
   addType("int8", b.getIntegerType(8, true));
-  addType("uint8", b.getIntegerType(8, false));
   addType("int16", b.getIntegerType(16, true));
-  addType("uint16", b.getIntegerType(16, false));
   addType("int32", b.getIntegerType(32, true));
-  addType("uint32", b.getIntegerType(32, false));
   addType("int64", b.getIntegerType(64, true));
+
+  addType("uint8", b.getIntegerType(8, false));
+  addType("uint16", b.getIntegerType(16, false));
+  addType("uint32", b.getIntegerType(32, false));
   addType("uint64", b.getIntegerType(64, false));
+
+  addType("int8_signless", b.getIntegerType(8));
+  addType("int16_signless", b.getIntegerType(16));
+  addType("int32_signless", b.getIntegerType(32));
+  addType("int64_signless", b.getIntegerType(64));
 
   addType("index", b.getIndexType());
 

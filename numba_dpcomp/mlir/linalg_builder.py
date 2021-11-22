@@ -52,12 +52,16 @@ class Var:
     def __repr__(self): return self._str(self._context, self._ssa_val)
 
 class Type:
-    def __init__(self, mlir_type, eq):
+    def __init__(self, mlir_type, eq, printer):
         self._mlir_type = mlir_type
         self._eq = eq
+        self._str = printer
 
     def __eq__(self, other):
         return self._eq(self._mlir_type, other._mlir_type)
+
+    def __str__(self): return self._str(self._mlir_type)
+    def __repr__(self): return self._str(self._mlir_type)
 
 def is_literal(val):
     return not isinstance(val, Var)
@@ -230,10 +234,18 @@ def dtype_str(builder, dtype):
         (builder.int16, 'int16'),
         (builder.int32, 'int32'),
         (builder.int64, 'int64'),
+        (builder.uint8,  'uint8'),
+        (builder.uint16, 'uint16'),
+        (builder.uint32, 'uint32'),
+        (builder.uint64, 'uint64'),
+        (builder.int8_signless,  'int8'),
+        (builder.int16_signless, 'int16'),
+        (builder.int32_signless, 'int32'),
+        (builder.int64_signless, 'int64'),
         (builder.float32, 'float32'),
         (builder.float64, 'float64'),
     ]
     for t, name in names:
         if t == dtype:
             return name
-    assert(False)
+    assert False, f'dtype_str unhandled type: {dtype}'

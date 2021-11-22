@@ -298,11 +298,12 @@ def test_atomics(dtype, atomic_op):
 @require_gpu
 @pytest.mark.parametrize("dtype", ['int32', 'int64', 'float32'])
 @pytest.mark.parametrize("atomic_op", [atomic.add, atomic.sub])
-@pytest.mark.xfail(reason="Non zero offsets are not supported yet")
 def test_atomics_offset(dtype, atomic_op):
     def func(a, b):
         i = get_global_id(0)
-        atomic_op(b, i % 2, a[i])
+        # TODO: issues with modulo and issues with index comparison, need to fix upstream
+        n = 0 if float(i) < 5 else 1
+        atomic_op(b, n, a[i])
 
     sim_func = kernel_sim(func)
     gpu_func = kernel(func)
