@@ -270,6 +270,24 @@ def test_get_local_size(shape, lsize):
 
     assert_equal(gpu_res, sim_res)
 
+def _test_atomic(func, dtype, ret_size):
+    sim_func = kernel_sim(func)
+    gpu_func = kernel(func)
+
+    a = np.array([1,2,3,4,5,6,7,8,9], dtype)
+
+    sim_res = np.zeros([ret_size], dtype)
+    sim_func[a.shape, ()](a, sim_res)
+
+    gpu_res = np.zeros([ret_size], dtype)
+
+    with print_pass_ir([],['GPUToSpirvPass']):
+        gpu_func[a.shape, ()](a, gpu_res)
+        ir = get_print_buffer()
+        assert ir.count('spv.AtomicIAdd') == 1 or ir.count('spv.AtomicISub') == 1 or ir.count('spv.AtomicFAddEXT') == 1, ir
+
+    assert_equal(gpu_res, sim_res)
+
 @require_gpu
 @pytest.mark.parametrize("dtype", ['int32', 'int64', 'float32'])
 @pytest.mark.parametrize("atomic_op", [atomic.add, atomic.sub])
@@ -278,22 +296,16 @@ def test_atomics(dtype, atomic_op):
         i = get_global_id(0)
         atomic_op(b, 0, a[i])
 
-    sim_func = kernel_sim(func)
-    gpu_func = kernel(func)
+    _test_atomic(func, dtype, 1)
 
-    a = np.array([1,2,3,4,5,6,7,8,9], dtype)
+@require_gpu
+@pytest.mark.xfail(reason='Only direct func calls work for now')
+def test_atomics_modname():
+    def func(a, b):
+        i = get_global_id(0)
+        atomic.add(b, 0, a[i])
 
-    sim_res = np.zeros([1], dtype)
-    sim_func[a.shape, ()](a, sim_res)
-
-    gpu_res = np.zeros([1], dtype)
-
-    with print_pass_ir([],['GPUToSpirvPass']):
-        gpu_func[a.shape, ()](a, gpu_res)
-        ir = get_print_buffer()
-        assert ir.count('spv.AtomicIAdd') == 1 or ir.count('spv.AtomicISub') == 1 or ir.count('spv.AtomicFAddEXT') == 1, ir
-
-    assert_equal(gpu_res, sim_res)
+    _test_atomic(func, 'int32', 1)
 
 @require_gpu
 @pytest.mark.parametrize("dtype", ['int32', 'int64', 'float32'])
@@ -305,19 +317,4 @@ def test_atomics_offset(dtype, atomic_op):
         n = 0 if float(i) < 5 else 1
         atomic_op(b, n, a[i])
 
-    sim_func = kernel_sim(func)
-    gpu_func = kernel(func)
-
-    a = np.array([1,2,3,4,5,6,7,8,9], dtype)
-
-    sim_res = np.zeros([2], dtype)
-    sim_func[a.shape, ()](a, sim_res)
-
-    gpu_res = np.zeros([2], dtype)
-
-    with print_pass_ir([],['GPUToSpirvPass']):
-        gpu_func[a.shape, ()](a, gpu_res)
-        ir = get_print_buffer()
-        assert ir.count('spv.AtomicIAdd') == 1 or ir.count('spv.AtomicISub') == 1 or ir.count('spv.AtomicFAddEXT') == 1, ir
-
-    assert_equal(gpu_res, sim_res)
+    _test_atomic(func, dtype, 2)
