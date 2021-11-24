@@ -25,6 +25,7 @@
 #include <mlir/Conversion/LLVMCommon/ConversionTarget.h>
 #include <mlir/Conversion/LLVMCommon/Pattern.h>
 #include <mlir/Conversion/LLVMCommon/TypeConverter.h>
+#include <mlir/Conversion/MathToSPIRV/MathToSPIRV.h>
 #include <mlir/Conversion/SCFToGPU/SCFToGPUPass.h>
 #include <mlir/Conversion/SCFToSPIRV/SCFToSPIRV.h>
 #include <mlir/Conversion/StandardToSPIRV/StandardToSPIRV.h>
@@ -1084,29 +1085,6 @@ public:
   }
 };
 
-template <typename Op, typename SPIRVOp>
-class UnaryAndBinaryOpPattern final : public mlir::OpConversionPattern<Op> {
-public:
-  using mlir::OpConversionPattern<Op>::OpConversionPattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(Op op, typename Op::Adaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
-    assert(adaptor.getOperands().size() <= 2);
-    auto dstType = this->getTypeConverter()->convertType(op.getType());
-    if (!dstType)
-      return mlir::failure();
-    if (SPIRVOp::template hasTrait<mlir::OpTrait::spirv::UnsignedOp>() &&
-        dstType != op.getType()) {
-      return op.emitError(
-          "bitwidth emulation is not implemented yet on unsigned op");
-    }
-    rewriter.template replaceOpWithNewOp<SPIRVOp>(op, dstType,
-                                                  adaptor.getOperands());
-    return mlir::success();
-  }
-};
-
 struct GPUToSpirvPass
     : public mlir::PassWrapper<GPUToSpirvPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
@@ -1153,14 +1131,7 @@ struct GPUToSpirvPass
     mlir::populateGPUToSPIRVPatterns(typeConverter, patterns);
     mlir::populateStandardToSPIRVPatterns(typeConverter, patterns);
     mlir::arith::populateArithmeticToSPIRVPatterns(typeConverter, patterns);
-
-    patterns.add<
-        UnaryAndBinaryOpPattern<mlir::math::SqrtOp, mlir::spirv::OCLSqrtOp>,
-        UnaryAndBinaryOpPattern<mlir::math::LogOp, mlir::spirv::OCLLogOp>,
-        UnaryAndBinaryOpPattern<mlir::math::SinOp, mlir::spirv::OCLSinOp>,
-        UnaryAndBinaryOpPattern<mlir::math::CosOp, mlir::spirv::OCLCosOp>,
-        UnaryAndBinaryOpPattern<mlir::math::PowFOp, mlir::spirv::OCLPowOp>>(
-        typeConverter, context);
+    mlir::populateMathToSPIRVPatterns(typeConverter, patterns);
 
     patterns
         .insert<ConvertSubviewOp, ConvertCastOp<mlir::memref::CastOp>,
