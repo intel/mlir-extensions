@@ -261,7 +261,7 @@ struct ScfIfRewriteTwoExits
           auto one =
               builder.create<mlir::arith::ConstantIntOp>(loc, /*value*/ 1,
                                                          /*width*/ 1);
-          cond = builder.create<mlir::arith::SubIOp>(loc, one, cond);
+          cond = builder.create<mlir::arith::XOrIOp>(loc, one, cond);
         }
 
         llvm::SmallVector<mlir::Value> ret;
@@ -293,7 +293,7 @@ struct ScfIfRewriteTwoExits
       if (reverse) {
         auto one = rewriter.create<mlir::arith::ConstantIntOp>(loc, /*value*/ 1,
                                                                /*width*/ 1);
-        cond = rewriter.create<mlir::arith::SubIOp>(loc, one, cond);
+        cond = rewriter.create<mlir::arith::XOrIOp>(loc, one, cond);
       }
 
       auto ifRetType = rewriter.getIntegerType(1);
@@ -514,7 +514,7 @@ struct BreakRewrite : public mlir::OpRewritePattern<mlir::CondBranchOp> {
     llvm::SmallVector<mlir::Value> params(op.getFalseOperands());
     auto one = rewriter.create<mlir::arith::ConstantOp>(loc, condVal);
     auto invertedCond =
-        rewriter.create<mlir::arith::SubIOp>(loc, one, op.condition());
+        rewriter.create<mlir::arith::XOrIOp>(loc, one, op.condition());
     params.push_back(invertedCond);
     rewriter.replaceOpWithNewOp<mlir::BranchOp>(op, conditionBlock, params);
 
