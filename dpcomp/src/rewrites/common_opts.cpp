@@ -102,11 +102,17 @@ struct SubviewStorePropagate
 };
 } // namespace
 
-void plier::populate_common_opts_patterns(mlir::MLIRContext &context,
-                                          mlir::RewritePatternSet &patterns) {
-  for (auto *op : context.getRegisteredOperations()) {
-    op->getCanonicalizationPatterns(patterns, &context);
-  }
+void plier::populateCanonicalizationPatterns(
+    mlir::MLIRContext &context, mlir::RewritePatternSet &patterns) {
+  for (auto *dialect : context.getLoadedDialects())
+    dialect->getCanonicalizationPatterns(patterns);
+  for (auto op : context.getRegisteredOperations())
+    op.getCanonicalizationPatterns(patterns, &context);
+}
+
+void plier::populateCommonOptsPatterns(mlir::MLIRContext &context,
+                                       mlir::RewritePatternSet &patterns) {
+  populateCanonicalizationPatterns(context, patterns);
 
   patterns.insert<
       // clang-format off

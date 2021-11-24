@@ -20,6 +20,9 @@ class MLIRContext;
 } // namespace mlir
 
 namespace plier {
-void populate_common_opts_patterns(mlir::MLIRContext &context,
-                                   mlir::RewritePatternSet &patterns);
-}
+void populateCanonicalizationPatterns(mlir::MLIRContext &context,
+                                      mlir::RewritePatternSet &patterns);
+
+void populateCommonOptsPatterns(mlir::MLIRContext &context,
+                                mlir::RewritePatternSet &patterns);
+} // namespace plier
