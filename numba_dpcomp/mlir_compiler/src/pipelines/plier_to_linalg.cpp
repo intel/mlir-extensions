@@ -1219,7 +1219,7 @@ void MakeStridedLayout::runOnOperation() {
   if (changed) {
     mlir::OwningRewritePatternList patterns(context);
 
-    plier::populate_common_opts_patterns(*context, patterns);
+    plier::populateCommonOptsPatterns(*context, patterns);
 
     patterns.insert<
         // clang-format off
@@ -1582,7 +1582,7 @@ void PostPlierToLinalgPass::runOnFunction() {
   auto &context = getContext();
   mlir::OwningRewritePatternList patterns(&context);
 
-  plier::populate_common_opts_patterns(context, patterns);
+  plier::populateCommonOptsPatterns(context, patterns);
 
   patterns.insert<SimplifyExpandDims>(&context);
 
@@ -1648,7 +1648,7 @@ void TensorFusionPass::runOnOperation() {
   auto &context = getContext();
   mlir::OwningRewritePatternList patterns(&context);
 
-  plier::populate_common_opts_patterns(context, patterns);
+  plier::populateCommonOptsPatterns(context, patterns);
 
   patterns.insert<SimplifyExpandDims, LowerEnforceShape>(&context);
 
@@ -1873,7 +1873,7 @@ void PostLinalgOptPass::runOnFunction() {
   auto &context = getContext();
   mlir::OwningRewritePatternList patterns(&context);
 
-  plier::populate_common_opts_patterns(context, patterns);
+  plier::populateCommonOptsPatterns(context, patterns);
 
   patterns.insert<OptimizeGlobalsConstsLoad, plier::CanonicalizeReduction,
                   plier::PromoteToParallel, plier::MergeNestedForIntoParallel>(
