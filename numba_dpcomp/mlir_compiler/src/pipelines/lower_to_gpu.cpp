@@ -1126,7 +1126,8 @@ struct GPUToSpirvPass
         UnaryAndBinaryOpPattern<mlir::math::SqrtOp, mlir::spirv::OCLSqrtOp>,
         UnaryAndBinaryOpPattern<mlir::math::LogOp, mlir::spirv::OCLLogOp>,
         UnaryAndBinaryOpPattern<mlir::math::SinOp, mlir::spirv::OCLSinOp>,
-        UnaryAndBinaryOpPattern<mlir::math::CosOp, mlir::spirv::OCLCosOp>>(
+        UnaryAndBinaryOpPattern<mlir::math::CosOp, mlir::spirv::OCLCosOp>,
+        UnaryAndBinaryOpPattern<mlir::math::PowFOp, mlir::spirv::OCLPowOp>>(
         typeConverter, context);
 
     patterns
