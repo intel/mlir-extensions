@@ -377,3 +377,42 @@ def test_atomics_offset(dtype, atomic_op):
         atomic_op(b, n, a[i])
 
     _test_atomic(func, dtype, 2)
+
+@require_gpu
+@pytest.mark.parametrize("funci", [1,2])
+def test_atomics_multidim(funci):
+    atomic_op = atomic.add
+    dtype = 'int32'
+    def func1(a, b):
+        # TODO: issues with modulo and issues with index comparison, need to fix upstream
+        i = get_global_id(0)
+        n = 0 if float(i) < 2 else 1
+        j = get_global_id(1)
+        atomic_op(b, (n,0), a[i, j])
+
+    def func2(a, b):
+        # TODO: issues with modulo and issues with index comparison, need to fix upstream
+        i = get_global_id(0)
+        n = 0 if float(i) < 2 else 1
+        j = get_global_id(1)
+        m = 0 if float(j) < 2 else 1
+        atomic_op(b, (n,m), a[i, j])
+
+    func = func1 if funci == 1 else func2
+
+    sim_func = kernel_sim(func)
+    gpu_func = kernel(func)
+
+    a = np.array([[1,2,3],[4,5,6],[7,8,9]], dtype)
+
+    sim_res = np.zeros((2,2), dtype)
+    sim_func[a.shape, ()](a, sim_res)
+
+    gpu_res = np.zeros((2,2), dtype)
+
+    with print_pass_ir([],['GPUToSpirvPass']):
+        gpu_func[a.shape, ()](a, gpu_res)
+        ir = get_print_buffer()
+        assert ir.count('spv.AtomicIAdd') == 1 or ir.count('spv.AtomicISub') == 1 or ir.count('spv.AtomicFAddEXT') == 1, ir
+
+    assert_equal(gpu_res, sim_res)

@@ -1263,13 +1263,42 @@ py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
       builder.create<mlir::memref::BufferCastOp>(loc, memrefType, srcVal);
 
   auto indexType = builder.getIndexType();
+  auto indexCast = [&](mlir::Value val) {
+    return doCast(builder, loc, val, indexType);
+  };
+
   auto unwrapVal = [&](py::handle obj) {
-    return doCast(builder, loc, ctx.context.unwrapVal(loc, builder, obj),
-                  indexType);
+    return ctx.context.unwrapVal(loc, builder, obj);
   };
 
   using ValsArray = llvm::SmallVector<mlir::OpFoldResult>;
-  auto offsetVals = toValues<ValsArray>(offsets, unwrapVal);
+  auto unpackValues = [&](py::handle obj) -> ValsArray {
+    auto input = toValues<ValsArray>(obj, unwrapVal);
+    assert(!input.empty());
+    if (input.size() > 1) {
+      for (auto i : llvm::seq(size_t(0), input.size()))
+        input[i] = indexCast(input[i].get<mlir::Value>());
+
+      return input;
+    }
+
+    auto val = input.front().get<mlir::Value>();
+    ValsArray ret;
+    if (auto tupleType = val.getType().dyn_cast<mlir::TupleType>()) {
+      ret.resize(tupleType.size());
+      for (auto i : llvm::seq(size_t(0), tupleType.size())) {
+        auto ind = builder.create<mlir::arith::ConstantIndexOp>(loc, i);
+        ret[i] = indexCast(builder.createOrFold<plier::GetItemOp>(
+            loc, tupleType.getType(i), val, ind));
+      }
+    } else {
+      ret.emplace_back(indexCast(val));
+    }
+
+    return ret;
+  };
+
+  auto offsetVals = unpackValues(offsets);
   auto sizeVals = [&]() -> ValsArray {
     if (sizes.is_none()) {
       ValsArray ret(offsetVals.size());
@@ -1282,14 +1311,14 @@ py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
       }
       return ret;
     } else {
-      return toValues<ValsArray>(sizes, unwrapVal);
+      return unpackValues(sizes);
     }
   }();
   auto strideVals = [&]() -> ValsArray {
     if (strides.is_none()) {
       return ValsArray(offsetVals.size(), builder.getIndexAttr(1));
     } else {
-      return toValues<ValsArray>(strides, unwrapVal);
+      return unpackValues(strides);
     }
   }();
   auto view = builder.createOrFold<mlir::memref::SubViewOp>(
