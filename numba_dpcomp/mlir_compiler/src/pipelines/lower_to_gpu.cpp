@@ -2154,8 +2154,7 @@ void registerLowerToGPUPipeline(plier::PipelineRegistry &registry) {
   registry.register_pipeline([](auto sink) {
     auto highStage = getHighLoweringStage();
     sink(lowerToGPUPipelineNameHigh(),
-         {highStage.begin, plierToStdPipelineName()},
-         {highStage.end, plierToLinalgGenPipelineName()},
+         {highStage.begin, plierToLinalgGenPipelineName()}, {highStage.end},
          {plierToStdPipelineName()}, &populateLowerToGPUPipelineHigh);
 
     auto lowStage = getLowerLoweringStage();

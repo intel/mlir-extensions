@@ -215,7 +215,10 @@ def _define_atomic_funcs():
         def api_func_impl(builder, arr, idx, val):
             if not (isinstance(idx, int) and idx == 0):
                 arr = builder.subview(arr, idx)
-            return builder.external_call(f'{func_name}_{dtype_str(builder, arr.dtype)}', (arr, val), val)
+
+            dtype = arr.dtype
+            val = builder.cast(val, dtype)
+            return builder.external_call(f'{func_name}_{dtype_str(builder, dtype)}', (arr, val), val)
         return api_func_impl
 
     def get_stub_func(func_name):
