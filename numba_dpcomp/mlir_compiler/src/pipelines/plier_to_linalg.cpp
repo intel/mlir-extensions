@@ -578,10 +578,10 @@ struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
 
       for (auto it : llvm::enumerate(tupleType)) {
         auto i = it.index();
-        auto getitem_ind =
+        auto getitemInd =
             rewriter.create<mlir::arith::ConstantIndexOp>(loc, it.index());
         auto ind = rewriter.create<plier::GetItemOp>(loc, it.value(), index,
-                                                     getitem_ind);
+                                                     getitemInd);
         bool isSlice = false;
         std::tie(offsets[i], sizes[i], strides[i], isSlice) =
             getPos(ind.getResult(), static_cast<unsigned>(i));
@@ -659,10 +659,22 @@ struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
         llvm_unreachable("Invalid getitem");
       }
     } else {
-      auto toValues = [](auto vals) {
+      auto toValues = [&](auto vals) {
         llvm::SmallVector<mlir::Value> ret(vals.size());
-        for (auto it : llvm::enumerate(vals))
-          ret[it.index()] = it.value().template get<mlir::Value>();
+        for (auto it : llvm::enumerate(vals)) {
+          auto i = it.index();
+          auto val = it.value();
+          if (auto v = val.template dyn_cast<mlir::Value>()) {
+            ret[i] = v;
+          } else {
+            auto attr = val.template get<mlir::Attribute>();
+            auto attrVal = attr.template cast<mlir::IntegerAttr>()
+                               .getValue()
+                               .getSExtValue();
+            ret[i] =
+                rewriter.create<mlir::arith::ConstantIndexOp>(loc, attrVal);
+          }
+        }
 
         return ret;
       };

@@ -84,6 +84,30 @@ def test_simple2():
     assert_equal(gpu_res, sim_res)
 
 @require_gpu
+def test_simple3():
+    def func(a, b):
+        i = get_global_id(0)
+        b[i, 0] = a[i, 0]
+        b[i, 1] = a[i, 1]
+
+    sim_func = kernel_sim(func)
+    gpu_func = kernel(func)
+
+    a = np.array([[1,2],[3,4],[5,6]], np.float32)
+
+    sim_res = np.zeros(a.shape, a.dtype)
+    sim_func[a.shape[0], ()](a, sim_res)
+
+    gpu_res = np.zeros(a.shape, a.dtype)
+
+    with print_pass_ir([],['ConvertParallelLoopToGpu']):
+        gpu_func[a.shape[0], ()](a, gpu_res)
+        ir = get_print_buffer()
+        assert ir.count('gpu.launch blocks') == 1, ir
+
+    assert_equal(gpu_res, sim_res)
+
+@require_gpu
 def test_inner_loop():
     def func(a, b, c):
         i = get_global_id(0)
