@@ -217,8 +217,7 @@ def _define_atomic_funcs():
                 arr = builder.subview(arr, idx)
 
             dtype = arr.dtype
-            if dtype != val.type:
-                val = builder.cast(val, dtype)
+            val = builder.cast(val, dtype)
             return builder.external_call(f'{func_name}_{dtype_str(builder, dtype)}', (arr, val), val)
         return api_func_impl
 
