@@ -379,6 +379,16 @@ def test_atomics_offset(dtype, atomic_op):
     _test_atomic(func, dtype, 2)
 
 @require_gpu
+@pytest.mark.parametrize("atomic_op", [atomic.add, atomic.sub])
+def test_atomics_different_types(atomic_op):
+    dtype = 'int32'
+    def func(a, b):
+        i = get_global_id(0)
+        atomic_op(b, 0, a[i] + 1)
+
+    _test_atomic(func, dtype, 1)
+
+@require_gpu
 @pytest.mark.parametrize("funci", [1,2])
 def test_atomics_multidim(funci):
     atomic_op = atomic.add
