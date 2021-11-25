@@ -561,6 +561,23 @@ static mlir::Value getFlatIndex(mlir::OpBuilder &builder, mlir::Location loc,
   }
 }
 
+static mlir::Value getFlatIndex(mlir::OpBuilder &builder, mlir::Location loc,
+                                mlir::Value memref,
+                                llvm::ArrayRef<mlir::OpFoldResult> indices) {
+  llvm::SmallVector<mlir::Value> vals(indices.size());
+  for (auto it : llvm::enumerate(indices)) {
+    auto i = it.index();
+    auto val = it.value();
+    if (auto attr = val.dyn_cast<mlir::Attribute>()) {
+      auto ind = attr.cast<mlir::IntegerAttr>().getValue().getSExtValue();
+      vals[i] = builder.create<mlir::arith::ConstantIndexOp>(loc, ind);
+    } else {
+      vals[i] = val.get<mlir::Value>();
+    }
+  }
+  return getFlatIndex(builder, loc, memref, vals);
+}
+
 static mlir::Value getFlatMemref(mlir::OpBuilder &builder, mlir::Location loc,
                                  mlir::Value memref) {
   auto memrefType = memref.getType().cast<mlir::MemRefType>();
@@ -639,9 +656,16 @@ struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
     if (!needFlatten(memref))
       return mlir::failure();
 
+    auto dstType = op.getType().cast<mlir::MemRefType>();
+    int64_t resultOffset; // TODO: remove
+    llvm::SmallVector<int64_t, 4> resultStrides;
+    if (mlir::failed(
+            mlir::getStridesAndOffset(dstType, resultStrides, resultOffset)))
+      return mlir::failure();
+
     auto loc = op.getLoc();
     mlir::OpFoldResult flatIndex =
-        getFlatIndex(rewriter, loc, memref, op.offsets());
+        getFlatIndex(rewriter, loc, memref, op.getMixedOffsets());
     mlir::OpFoldResult flatSize =
         rewriter.create<plier::UndefOp>(loc, rewriter.getIndexType())
             .getResult();
@@ -657,20 +681,23 @@ struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
       flatSubview = rewriter.createOrFold<mlir::memref::CastOp>(
           loc, flatSubview, dstFlatType);
 
-    auto dstType = op.getType().cast<mlir::MemRefType>();
-
-    //    auto offset = rewriter.getIndexAttr(0); TODO: bug in
-    //    ReinterpretCastOp::verify
+    // TODO: bug in ReinterpretCastOp::verify
     auto offset =
-        rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0).getResult();
+        (mlir::ShapedType::isDynamicStrideOrOffset(resultOffset)
+             ? mlir::OpFoldResult(
+                   rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0)
+                       .getResult())
+             : mlir::OpFoldResult(rewriter.getIndexAttr(0)));
     auto sizes = op.getMixedSizes();
     auto strides = op.getMixedStrides();
     for (auto i : llvm::seq(size_t(0), strides.size())) {
       // TODO: bug in ReinterpretCastOp::verify
-      if (auto c = strides[i].dyn_cast<mlir::Attribute>()) {
-        auto val = c.dyn_cast<mlir::IntegerAttr>().getValue().getSExtValue();
-        strides[i] =
-            rewriter.create<mlir::arith::ConstantIndexOp>(loc, val).getResult();
+      if (mlir::ShapedType::isDynamicStrideOrOffset(resultStrides[i])) {
+        if (auto c = strides[i].dyn_cast<mlir::Attribute>()) {
+          auto val = c.dyn_cast<mlir::IntegerAttr>().getValue().getSExtValue();
+          strides[i] = rewriter.create<mlir::arith::ConstantIndexOp>(loc, val)
+                           .getResult();
+        }
       }
     }
 
@@ -1108,8 +1135,7 @@ struct GPUToSpirvPass
 
     typeConverter.addConversion(
         [](mlir::MemRefType type) -> llvm::Optional<mlir::Type> {
-          if (type.hasRank() && type.getRank() == 1 &&
-              type.getElementType().isIntOrFloat())
+          if (type.hasRank() && type.getElementType().isIntOrFloat())
             return mlir::spirv::PointerType::get(
                 type.getElementType(),
                 mlir::spirv::StorageClass::CrossWorkgroup);
