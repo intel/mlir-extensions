@@ -23,6 +23,8 @@ from numba_dpcomp.mlir.kernel_impl import kernel, get_global_id, get_global_size
 from numba_dpcomp.mlir.kernel_sim import kernel as kernel_sim
 from numba_dpcomp.mlir.passes import print_pass_ir, get_print_buffer
 
+from .utils import njit_cached as njit
+
 GPU_TESTS_ENABLED = _readenv('DPCOMP_ENABLE_GPU_TESTS', int, 0)
 
 def require_gpu(func):
@@ -108,30 +110,63 @@ def test_inner_loop():
 
     assert_equal(gpu_res, sim_res)
 
+def _test_unary(func, dtype, ir_pass, ir_check):
+    sim_func = kernel_sim(func)
+    gpu_func = kernel(func)
+
+    a = np.array([1,2,3,4,5,6,7,8,9], dtype)
+
+    sim_res = np.zeros(a.shape, dtype)
+    sim_func[a.shape, ()](a, sim_res)
+
+    gpu_res = np.zeros(a.shape, dtype)
+
+    with print_pass_ir([],[ir_pass]):
+        gpu_func[a.shape, ()](a, gpu_res)
+        ir = get_print_buffer()
+        assert ir_check(ir), ir
+
+    assert_allclose(gpu_res, sim_res, rtol=1e-5)
+
+def _test_binary(func, dtype, ir_pass, ir_check):
+    sim_func = kernel_sim(func)
+    gpu_func = kernel(func)
+
+    a = np.array([1,2,3,4,5,6,7,8,9], dtype)
+    b = np.array([11,12,13,14,15,16,17,18,19], dtype)
+
+    sim_res = np.zeros(a.shape, dtype)
+    sim_func[a.shape, ()](a, b, sim_res)
+
+    gpu_res = np.zeros(a.shape, dtype)
+
+    with print_pass_ir([],[ir_pass]):
+        gpu_func[a.shape, ()](a, b, gpu_res)
+        ir = get_print_buffer()
+        assert ir_check(ir), ir
+
+    assert_allclose(gpu_res, sim_res, rtol=1e-5)
+
 @require_gpu
 @pytest.mark.parametrize("op", ['sqrt', 'log', 'sin', 'cos'])
-def test_math_funcs(op):
+def test_math_funcs_unary(op):
     f = eval(f'math.{op}')
     def func(a, b):
         i = get_global_id(0)
         b[i] = f(a[i])
 
-    sim_func = kernel_sim(func)
-    gpu_func = kernel(func)
+    _test_unary(func, np.float32, 'GPUToSpirvPass', lambda ir: ir.count(f'OCL.{op}') == 1)
 
-    a = np.array([1,2,3,4,5,6,7,8,9], np.float32)
+@require_gpu
+@pytest.mark.parametrize("op", ['+', '-', '*', '/', '**'])
+def test_gpu_ops_binary(op):
+    f = eval(f'lambda a, b: a {op} b')
+    inner = njit(f, inline='always')
+    def func(a, b, c):
+        i = get_global_id(0)
+        c[i] = inner(a[i], b[i])
 
-    sim_res = np.zeros(a.shape, a.dtype)
-    sim_func[a.shape, ()](a, sim_res)
-
-    gpu_res = np.zeros(a.shape, a.dtype)
-
-    with print_pass_ir([],['GPUToSpirvPass']):
-        gpu_func[a.shape, ()](a, gpu_res)
-        ir = get_print_buffer()
-        assert ir.count(f'OCL.{op}') == 1, ir
-
-    assert_allclose(gpu_res, sim_res, rtol=1e-5)
+    _test_binary(func, np.float32, 'ConvertParallelLoopToGpu', lambda ir: ir.count(f'gpu.launch blocks') == 1)
 
 _test_shapes = [
     (1,),
