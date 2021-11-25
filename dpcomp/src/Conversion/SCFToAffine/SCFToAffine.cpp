@@ -51,17 +51,15 @@ public:
     auto reductionKinds = llvm::to_vector<4>(llvm::map_range(
         reductions, [](const LoopReduction &red) { return red.kind; }));
 
-    auto dims = op.step().size();
+    auto dims = static_cast<unsigned>(op.step().size());
     // Creating empty affine.parallel op.
     rewriter.setInsertionPoint(op);
+    auto affineMap = AffineMap::getMultiDimIdentityMap(dims, op.getContext());
     AffineParallelOp newPloop = rewriter.create<AffineParallelOp>(
         op.getLoc(), reducedValueTypes, reductionKinds,
-        llvm::makeArrayRef(
-            AffineMap::getMultiDimIdentityMap(dims, op.getContext())),
-        op.lowerBound(),
-        llvm::makeArrayRef(
-            AffineMap::getMultiDimIdentityMap(dims, op.getContext())),
-        op.upperBound(), llvm::makeArrayRef(newSteps));
+        llvm::makeArrayRef(affineMap), op.lowerBound(),
+        llvm::makeArrayRef(affineMap), op.upperBound(),
+        llvm::makeArrayRef(newSteps));
 
     // Steal the body of the old affine for op.
     newPloop.region().takeBody(op.region());
