@@ -64,20 +64,20 @@ public:
     // Steal the body of the old affine for op.
     newPloop.region().takeBody(op.region());
 
-    Operation *yieldOp = &newPloop.getBody()->back();
-    rewriter.setInsertionPoint(&newPloop.getBody()->back());
+    Operation *yieldOp = newPloop.getBody()->getTerminator();
+    assert(yieldOp);
+    rewriter.setInsertionPoint(yieldOp);
     rewriter.replaceOpWithNewOp<AffineYieldOp>(yieldOp, ValueRange({}));
 
     assert(newPloop.verify().succeeded() &&
            "affine body is incorrectly constructed");
 
     for (auto &each : llvm::make_early_inc_range(*newPloop.getBody())) {
-      if (auto load = dyn_cast_or_null<memref::LoadOp>(&each)) {
+      if (auto load = dyn_cast<memref::LoadOp>(each)) {
         rewriter.setInsertionPointAfter(load);
         rewriter.replaceOpWithNewOp<AffineLoadOp>(load, load.getMemRef(),
                                                   load.indices());
-      }
-      if (auto store = dyn_cast_or_null<memref::StoreOp>(&each)) {
+      } else if (auto store = dyn_cast<memref::StoreOp>(each)) {
         rewriter.setInsertionPointAfter(store);
         rewriter.replaceOpWithNewOp<AffineStoreOp>(
             store, store.getValueToStore(), store.getMemRef(), store.indices());
