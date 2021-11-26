@@ -1254,12 +1254,34 @@ struct ExpandAllocOp : public mlir::OpRewritePattern<mlir::gpu::AllocOp> {
   }
 };
 
+struct ExpandSuggestBlockSizeOp
+    : public mlir::OpRewritePattern<plier::GPUSuggestBlockSizeOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::GPUSuggestBlockSizeOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    if (op.kernel())
+      return mlir::failure();
+
+    assert(op.kernelRef());
+    return createGpuKernelLoad(
+        rewriter, op,
+        [&](mlir::OpBuilder &builder, mlir::Location loc, mlir::Value stream,
+            mlir::Value kernel) {
+          return builder.create<plier::GPUSuggestBlockSizeOp>(
+              loc, stream, kernel, op.gridSize());
+        });
+  }
+};
+
 struct GPUExPass : public mlir::PassWrapper<GPUExPass, mlir::FunctionPass> {
 
   void runOnFunction() override {
     mlir::OwningRewritePatternList patterns(&getContext());
 
-    patterns.insert<ExpandLaunchOp, ExpandAllocOp>(&getContext());
+    patterns.insert<ExpandLaunchOp, ExpandAllocOp, ExpandSuggestBlockSizeOp>(
+        &getContext());
 
     (void)mlir::applyPatternsAndFoldGreedily(getFunction(),
                                              std::move(patterns));
