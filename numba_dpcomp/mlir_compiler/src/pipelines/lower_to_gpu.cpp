@@ -30,6 +30,7 @@
 #include <mlir/Conversion/SCFToSPIRV/SCFToSPIRV.h>
 #include <mlir/Conversion/StandardToSPIRV/StandardToSPIRV.h>
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
+#include <mlir/Dialect/Arithmetic/Transforms/Passes.h>
 #include <mlir/Dialect/GPU/ParallelLoopMapper.h>
 #include <mlir/Dialect/GPU/Passes.h>
 #include <mlir/Dialect/LLVMIR/LLVMDialect.h>
@@ -2457,11 +2458,15 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   commonOptPasses(funcPM);
 
   pm.addPass(mlir::createSymbolDCEPass());
+
+  // TODO: mlir::gpu::GPUModuleOp pass
+  pm.addNestedPass<mlir::FuncOp>(mlir::arith::createArithmeticExpandOpsPass());
+
   pm.addPass(mlir::createGpuKernelOutliningPass());
-  pm.addPass(mlir::createCanonicalizerPass());
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<GPULowerDefaultLocalSize>());
   pm.addNestedPass<mlir::FuncOp>(mlir::createCanonicalizerPass());
   pm.addPass(mlir::createSymbolDCEPass());
+  pm.addNestedPass<mlir::gpu::GPUModuleOp>(mlir::createCanonicalizerPass());
   pm.addNestedPass<mlir::gpu::GPUModuleOp>(std::make_unique<AbiAttrsPass>());
   pm.addPass(std::make_unique<SetSPIRVCapabilitiesPass>());
   pm.addPass(std::make_unique<GPUToSpirvPass>());
