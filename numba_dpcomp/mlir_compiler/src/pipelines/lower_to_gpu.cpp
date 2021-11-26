@@ -220,7 +220,7 @@ struct ParallelLoopGPUMappingPass
           mlir::gpu::Processor::BlockZ,  mlir::gpu::Processor::ThreadX,
           mlir::gpu::Processor::ThreadY, mlir::gpu::Processor::ThreadZ,
       };
-      if (val >= std::size(mapping))
+      if (val >= llvm::array_lengthof(mapping))
         return mlir::gpu::Processor::Sequential;
 
       return mapping[val];
