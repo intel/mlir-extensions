@@ -2045,7 +2045,8 @@ private:
 
 static mlir::LogicalResult lowerGetGlobalId(mlir::CallOp op,
                                             mlir::scf::ForOp loop,
-                                            mlir::PatternRewriter &builder) {
+                                            mlir::PatternRewriter &builder,
+                                            int64_t /*index*/) {
   rerun_std_pipeline(op);
   mlir::Value arg = loop.getLoopBody().front().getArgument(0);
   auto resType = op.getResult(0).getType();
@@ -2060,7 +2061,8 @@ static mlir::LogicalResult lowerGetGlobalId(mlir::CallOp op,
 
 static mlir::LogicalResult lowerGetGlobalSize(mlir::CallOp op,
                                               mlir::scf::ForOp loop,
-                                              mlir::PatternRewriter &builder) {
+                                              mlir::PatternRewriter &builder,
+                                              int64_t /*index*/) {
   rerun_std_pipeline(op);
   mlir::Value arg = loop.upperBound();
   auto resType = op.getResult(0).getType();
@@ -2087,7 +2089,8 @@ static mlir::Operation *getPreParent(mlir::Operation *op) {
 
 static mlir::LogicalResult lowerGetLocalSize(mlir::CallOp op,
                                              mlir::scf::ForOp loop,
-                                             mlir::PatternRewriter &builder) {
+                                             mlir::PatternRewriter &builder,
+                                             int64_t index) {
   auto p = getPreParent(loop);
   assert(p);
   auto block = p->getBlock();
@@ -2101,16 +2104,15 @@ static mlir::LogicalResult lowerGetLocalSize(mlir::CallOp op,
   while (true) {
     if (auto call = mlir::dyn_cast<mlir::CallOp>(*it)) {
       if (call.calleeAttr() == funcName) {
-        auto ind = *mlir::getConstantIntValue(op.operands()[0]);
         auto numArgs = call.getNumOperands();
-        if (ind < 0 || ind >= numArgs)
+        if (index < 0 || index >= numArgs)
           return mlir::failure();
 
-        ind = numArgs - ind - 1;
+        index = numArgs - index - 1;
 
         rerun_std_pipeline(op);
         auto resType = op.getResultTypes()[0];
-        auto arg = call.operands()[static_cast<unsigned>(ind)];
+        auto arg = call.operands()[static_cast<unsigned>(index)];
         if (arg.getType() != resType)
           arg = builder.createOrFold<plier::CastOp>(op.getLoc(), resType, arg);
         builder.replaceOp(op, arg);
@@ -2133,7 +2135,7 @@ struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::CallOp> {
   matchAndRewrite(mlir::CallOp op,
                   mlir::PatternRewriter &rewriter) const override {
     using handler_func_t = mlir::LogicalResult (*)(
-        mlir::CallOp, mlir::scf::ForOp, mlir::PatternRewriter &);
+        mlir::CallOp, mlir::scf::ForOp, mlir::PatternRewriter &, int64_t);
 
     auto handler = [&]() -> handler_func_t {
       static const std::pair<mlir::StringRef, handler_func_t> handlers[] = {
@@ -2209,7 +2211,7 @@ struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::CallOp> {
     if (!loop)
       return mlir::failure();
 
-    return handler(op, loop, rewriter);
+    return handler(op, loop, rewriter, ind);
   }
 };
 
