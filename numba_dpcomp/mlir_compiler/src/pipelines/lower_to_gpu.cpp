@@ -794,14 +794,6 @@ struct SetSPIRVCapabilitiesPass
   }
 };
 
-template <typename Op> static Op getOp(mlir::Region &reg) {
-  auto ops = reg.getOps<Op>();
-  if (llvm::hasSingleElement(ops))
-    return *std::begin(ops);
-
-  return {};
-}
-
 struct SerializeSPIRVPass
     : public mlir::PassWrapper<SerializeSPIRVPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
@@ -809,32 +801,38 @@ struct SerializeSPIRVPass
     auto mod = getOperation();
 
     namespace gpu = mlir::gpu;
-    auto gpuMod = getOp<gpu::GPUModuleOp>(mod.getRegion());
-    if (!gpuMod)
-      return;
-
     namespace spirv = mlir::spirv;
-    auto spvMod = getOp<spirv::ModuleOp>(mod.getRegion());
-    if (!spvMod) {
-      mod.emitError() << "Invalid spir-v module";
-      signalPassFailure();
-      return;
-    }
-
     llvm::SmallVector<uint32_t, 0> spvBinary;
-    if (mlir::failed(
-            spirv::serialize(spvMod, spvBinary, /*emitDebugInfo*/ false))) {
-      mod.emitError() << "Failed to serialize spir-v module";
-      signalPassFailure();
-      return;
-    }
+    for (auto gpuMod : mod.getOps<gpu::GPUModuleOp>()) {
+      auto name = gpuMod.getName();
+      auto isSameMod = [&](spirv::ModuleOp spvMod) -> bool {
+        auto spvModName = spvMod.getName();
+        return spvModName->consume_front("__spv__") && spvModName == name;
+      };
+      auto spvMods = mod.getOps<spirv::ModuleOp>();
+      auto it = llvm::find_if(spvMods, isSameMod);
+      if (it == spvMods.end()) {
+        gpuMod.emitError() << "Unable to find corresponding SPIR-V module";
+        signalPassFailure();
+        return;
+      }
+      auto spvMod = *it;
 
-    auto spvData =
-        llvm::StringRef(reinterpret_cast<const char *>(spvBinary.data()),
-                        spvBinary.size() * sizeof(uint32_t));
-    auto spvAttr = mlir::StringAttr::get(&getContext(), spvData);
-    gpuMod->setAttr(gpu::getDefaultGpuBinaryAnnotation(), spvAttr);
-    spvMod->erase();
+      spvBinary.clear();
+      if (mlir::failed(
+              spirv::serialize(spvMod, spvBinary, /*emitDebugInfo*/ false))) {
+        spvMod.emitError() << "Failed to serialize SPIR-V module";
+        signalPassFailure();
+        return;
+      }
+
+      auto spvData =
+          llvm::StringRef(reinterpret_cast<const char *>(spvBinary.data()),
+                          spvBinary.size() * sizeof(uint32_t));
+      auto spvAttr = mlir::StringAttr::get(&getContext(), spvData);
+      gpuMod->setAttr(gpu::getDefaultGpuBinaryAnnotation(), spvAttr);
+      spvMod->erase();
+    }
   }
 };
 
@@ -1481,6 +1479,20 @@ private:
   }
 };
 
+static std::string getUniqueLLVMGlobalName(mlir::ModuleOp mod,
+                                           mlir::StringRef srcName) {
+  auto globals = mod.getOps<mlir::LLVM::GlobalOp>();
+  for (int i = 0;; ++i) {
+    auto name =
+        (i == 0 ? std::string(srcName) : (srcName + llvm::Twine(i)).str());
+    auto isSameName = [&](mlir::LLVM::GlobalOp global) {
+      return global.getName() == name;
+    };
+    if (llvm::find_if(globals, isSameName) == globals.end())
+      return name;
+  }
+}
+
 class ConvertGpuModuleLoadPattern
     : public ConvertOpToGpuRuntimeCallPattern<plier::LoadGpuModuleOp> {
 public:
@@ -1508,7 +1520,8 @@ private:
     auto blob = blobAttr.getValue();
 
     auto loc = op.getLoc();
-    auto data = mlir::LLVM::createGlobalString(loc, rewriter, "gpu_blob", blob,
+    auto name = getUniqueLLVMGlobalName(mod, "gpu_blob");
+    auto data = mlir::LLVM::createGlobalString(loc, rewriter, name, blob,
                                                mlir::LLVM::Linkage::Internal);
     auto size = rewriter.create<mlir::LLVM::ConstantOp>(
         loc, llvmIndexType,
@@ -1551,10 +1564,14 @@ private:
   matchAndRewrite(plier::GetGpuKernelOp op,
                   plier::GetGpuKernelOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
+    auto mod = op->getParentOfType<mlir::ModuleOp>();
+    if (!mod)
+      return mlir::failure();
+
     auto loc = op.getLoc();
     llvm::SmallString<64> name = op.kernel().getLeafReference().getValue();
 
-    auto varName = llvm::formatv("{0}_kernel_name", name).str();
+    auto varName = getUniqueLLVMGlobalName(mod, "kernel_name");
     name.push_back('\0');
     auto data = mlir::LLVM::createGlobalString(loc, rewriter, varName, name,
                                                mlir::LLVM::Linkage::Internal);
