@@ -19,11 +19,10 @@ import numpy as np
 import math
 
 from numba_dpcomp.mlir.settings import _readenv
-from numba_dpcomp.mlir.kernel_impl import kernel, get_global_id, get_global_size, get_local_size, atomic
+from numba_dpcomp.mlir.kernel_impl import kernel, get_global_id, get_global_size, get_local_size, atomic, kernel_func
 from numba_dpcomp.mlir.kernel_sim import kernel as kernel_sim
 from numba_dpcomp.mlir.passes import print_pass_ir, get_print_buffer
 
-from .utils import njit_cached as njit
 from .utils import JitfuncCache
 
 kernel_cache = JitfuncCache(kernel)
@@ -189,7 +188,7 @@ def test_math_funcs_unary(op):
 @pytest.mark.parametrize("op", ['+', '-', '*', '/', '**'])
 def test_gpu_ops_binary(op):
     f = eval(f'lambda a, b: a {op} b')
-    inner = njit(f, inline='always')
+    inner = kernel_func(f)
     def func(a, b, c):
         i = get_global_id(0)
         c[i] = inner(a[i], b[i])
