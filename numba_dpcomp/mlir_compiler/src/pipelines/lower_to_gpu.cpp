@@ -250,6 +250,30 @@ struct ParallelLoopGPUMappingPass
   }
 };
 
+struct RemoveKernelMarkerPass
+    : public mlir::PassWrapper<RemoveKernelMarkerPass, mlir::FunctionPass> {
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::StandardOpsDialect>();
+  }
+
+  void runOnFunction() override {
+    auto func = getFunction();
+    func.walk([&](mlir::CallOp op) {
+      if (op.getCallee() != "kernel_marker")
+        return;
+
+      if (!op.use_empty()) {
+        op.emitError("Cannot erase kernel_marker with uses");
+        signalPassFailure();
+        return;
+      }
+
+      op.erase();
+    });
+  }
+};
+
 struct SetLocalSizePass
     : public mlir::PassWrapper<SetLocalSizePass, mlir::FunctionPass> {
   virtual void
@@ -2313,6 +2337,7 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   funcPM.addPass(std::make_unique<RemoveNestedParallelPass>());
   funcPM.addPass(std::make_unique<ParallelLoopGPUMappingPass>());
   funcPM.addPass(mlir::createParallelLoopToGpuPass());
+  funcPM.addPass(std::make_unique<RemoveKernelMarkerPass>());
   funcPM.addPass(std::make_unique<SetLocalSizePass>());
   funcPM.addPass(mlir::createCanonicalizerPass());
   funcPM.addPass(std::make_unique<InsertGPUAllocs>());
