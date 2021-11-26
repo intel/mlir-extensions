@@ -703,10 +703,20 @@ def test_concat(arrays, axis):
     'lambda a, b, c, d: a[b:c:2]',
     'lambda a, b, c, d: a[3:4:2]',
     ])
-def test_slice(py_func):
+def test_slice1(py_func):
     arr = np.array([1,2,3,4,5,6,7,8])
     jit_func = njit(py_func)
     assert_equal(py_func(arr, 3, 4, 2), jit_func(arr, 3, 4, 2))
+
+def test_slice2():
+    def py_func(a, i, j, k):
+        a1 = a[1]
+        a2 = a1[2]
+        return a2[3]
+
+    arr = np.arange(3*4*5).reshape((3,4,5))
+    jit_func = njit(py_func)
+    assert_equal(py_func(arr, 1,2,3), jit_func(arr, 1,2,3))
 
 def test_multidim_slice():
     def py_func(a, b):
