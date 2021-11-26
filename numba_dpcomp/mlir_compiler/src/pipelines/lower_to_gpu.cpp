@@ -2252,7 +2252,7 @@ struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::CallOp> {
     if (indexArgs.size() != 6)
       return mlir::failure();
 
-    llvm::reverse(indexArgs);
+    std::reverse(indexArgs.begin(), indexArgs.end());
     auto gridArgs = llvm::makeArrayRef(indexArgs).take_front(3);
     auto blockArgs = llvm::makeArrayRef(indexArgs).drop_front(3);
 
