@@ -106,7 +106,7 @@ def _kernel_body(global_size, local_size, body, *args):
 def _extend_dims(dims):
     l = len(dims)
     if (l < 3):
-        return tuple(dims + (1,) * (l - 3))
+        return tuple(dims + (1,) * (3 - l))
     return dims
 
 class Kernel:
