@@ -699,9 +699,8 @@ struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
     auto flatMemrefType = flatMemref.getType().cast<mlir::MemRefType>();
     assert(flatMemrefType.getLayout().isIdentity());
     auto flatSubview = rewriter.createOrFold<mlir::memref::SubViewOp>(
-        loc, flatMemrefType, flatMemref, flatIndex, flatSize, flatStride);
-    auto dstFlatType = mlir::memref::SubViewOp::inferResultType(
-        flatMemrefType, flatIndex, flatSize, flatStride);
+        loc, flatMemref, flatIndex, flatSize, flatStride);
+    auto dstFlatType = flatSubview.getType();
     if (dstFlatType != flatMemrefType)
       flatSubview = rewriter.createOrFold<mlir::memref::CastOp>(
           loc, flatSubview, dstFlatType);
@@ -847,8 +846,7 @@ struct SerializeSPIRVPass
       auto spvMod = *it;
 
       spvBinary.clear();
-      if (mlir::failed(
-              spirv::serialize(spvMod, spvBinary, /*emitDebugInfo*/ false))) {
+      if (mlir::failed(spirv::serialize(spvMod, spvBinary))) {
         spvMod.emitError() << "Failed to serialize SPIR-V module";
         signalPassFailure();
         return;
@@ -1207,7 +1205,7 @@ struct GPULowerDefaultLocalSize
 
     auto skipCast = [](mlir::Value val) -> mlir::Value {
       if (auto parent = val.getDefiningOp<mlir::arith::IndexCastOp>())
-        return parent.in();
+        return parent.getIn();
       return val;
     };
 

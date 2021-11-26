@@ -587,9 +587,9 @@ private:
       if (block_infos.end() != it) {
         auto &info = it->second;
         auto term = bb.getTerminator();
-        if (nullptr == term) {
+        if (nullptr == term)
           plier::report_error("broken ir: block without terminator");
-        }
+
         builder.setInsertionPointToEnd(&bb);
 
         if (auto op = mlir::dyn_cast<mlir::BranchOp>(term)) {
@@ -599,16 +599,16 @@ private:
           op.erase();
           builder.create<mlir::BranchOp>(builder.getUnknownLoc(), dest, args);
         } else if (auto op = mlir::dyn_cast<mlir::CondBranchOp>(term)) {
-          auto true_dest = op.trueDest();
-          auto false_dest = op.falseDest();
+          auto trueDest = op.getTrueDest();
+          auto falseDest = op.getFalseDest();
           auto cond = op.getCondition();
           mlir::SmallVector<mlir::Value> true_args;
           mlir::SmallVector<mlir::Value> false_args;
-          build_arg_list(true_dest, info.outgoing_phi_nodes, true_args);
-          build_arg_list(false_dest, info.outgoing_phi_nodes, false_args);
+          build_arg_list(trueDest, info.outgoing_phi_nodes, true_args);
+          build_arg_list(falseDest, info.outgoing_phi_nodes, false_args);
           op.erase();
           builder.create<mlir::CondBranchOp>(builder.getUnknownLoc(), cond,
-                                             true_dest, true_args, false_dest,
+                                             trueDest, true_args, falseDest,
                                              false_args);
         } else {
           plier::report_error(llvm::Twine("Unhandled terminator: ") +

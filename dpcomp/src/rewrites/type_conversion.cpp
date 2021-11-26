@@ -29,8 +29,9 @@ public:
   mlir::LogicalResult
   matchAndRewrite(mlir::SelectOp op, mlir::SelectOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<mlir::SelectOp>(
-        op, adaptor.condition(), adaptor.true_value(), adaptor.false_value());
+    rewriter.replaceOpWithNewOp<mlir::SelectOp>(op, adaptor.getCondition(),
+                                                adaptor.getTrueValue(),
+                                                adaptor.getFalseValue());
     return mlir::success();
   }
 };

@@ -39,7 +39,7 @@ struct ForceInline : public mlir::OpRewritePattern<mlir::CallOp> {
     auto mod = op->getParentOfType<mlir::ModuleOp>();
     assert(mod);
 
-    auto func = mod.lookupSymbol<mlir::FuncOp>(op.callee());
+    auto func = mod.lookupSymbol<mlir::FuncOp>(op.getCallee());
     if (!func)
       return mlir::failure();
 
@@ -97,7 +97,7 @@ struct ForceInlinePass
     (void)mlir::applyPatternsAndFoldGreedily(mod, patterns);
 
     mod->walk([&](mlir::CallOp call) {
-      auto func = mod.lookupSymbol<mlir::FuncOp>(call.callee());
+      auto func = mod.lookupSymbol<mlir::FuncOp>(call.getCallee());
       if (func && mustInline(call, func)) {
         call.emitError("Couldn't inline force-inline call");
         signalPassFailure();

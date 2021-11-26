@@ -68,9 +68,9 @@ mlir::LogicalResult plier::CmpLoopBoundsSimplify::matchAndRewrite(
   for (auto user : llvm::make_early_inc_range(index_var.getUsers())) {
     auto cmp = mlir::dyn_cast<mlir::arith::CmpIOp>(user);
     if (cmp) {
-      auto pred = cmp.predicate();
-      auto lhs = cmp.lhs();
-      auto rhs = cmp.rhs();
+      auto pred = cmp.getPredicate();
+      auto lhs = cmp.getLhs();
+      auto rhs = cmp.getRhs();
       // Normalize index and predicate (index always on the left)
       using norm_fptr_t =
           bool (*)(mlir::arith::CmpIPredicate & pred, mlir::Value index,

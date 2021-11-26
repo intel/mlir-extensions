@@ -473,7 +473,7 @@ struct UnrankedToElementCasts
     if (isCompatible(dstType, srcType)) {
       auto singleElemTensor = rewriter.create<mlir::tensor::FromElementsOp>(
           op.getLoc(), op.value());
-      rewriter.replaceOpWithNewOp<mlir::linalg::TensorCollapseShapeOp>(
+      rewriter.replaceOpWithNewOp<mlir::tensor::CollapseShapeOp>(
           op, dstType, singleElemTensor,
           llvm::ArrayRef<mlir::ReassociationExprs>{});
       return mlir::success();

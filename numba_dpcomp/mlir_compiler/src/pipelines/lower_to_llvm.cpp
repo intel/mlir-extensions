@@ -681,7 +681,7 @@ struct ApplyFastmathFlags : public mlir::OpRewritePattern<Op> {
     bool changed = false;
 
     rewriter.startRootUpdate(op);
-    auto fmf = op.fastmathFlags();
+    auto fmf = op.getFastmathFlags();
     getFastmathFlags(parent, [&](auto flag) {
       if (!mlir::LLVM::bitEnumContains(fmf, flag)) {
         fmf = fmf | flag;
@@ -689,7 +689,7 @@ struct ApplyFastmathFlags : public mlir::OpRewritePattern<Op> {
       }
     });
     if (changed) {
-      op.fastmathFlagsAttr(mlir::LLVM::FMFAttr::get(op.getContext(), fmf));
+      op.setFastmathFlagsAttr(mlir::LLVM::FMFAttr::get(op.getContext(), fmf));
       rewriter.finalizeRootUpdate(op);
     } else {
       rewriter.cancelRootUpdate(op);
