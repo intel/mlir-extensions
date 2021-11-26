@@ -42,6 +42,7 @@
 #include <mlir/Dialect/SPIRV/Transforms/Passes.h>
 #include <mlir/Dialect/SPIRV/Transforms/SPIRVConversion.h>
 #include <mlir/IR/BlockAndValueMapping.h>
+#include <mlir/IR/Dominance.h>
 #include <mlir/Pass/PassManager.h>
 #include <mlir/Target/SPIRV/Serialization.h>
 #include <mlir/Transforms/DialectConversion.h>
@@ -1168,41 +1169,49 @@ struct GPUToSpirvPass
   }
 };
 
+template <typename Op, typename F>
+static mlir::LogicalResult createGpuKernelLoad(mlir::PatternRewriter &builder,
+                                               Op &&op, F &&func) {
+  auto mod = op->template getParentOfType<mlir::ModuleOp>();
+  if (!mod)
+    return mlir::failure();
+
+  auto gpuMod = mod.template lookupSymbol<mlir::gpu::GPUModuleOp>(
+      op.getKernelModuleName());
+  if (!gpuMod)
+    return mlir::failure();
+
+  auto gpuKernel =
+      gpuMod.template lookupSymbol<mlir::gpu::GPUFuncOp>(op.getKernelName());
+  if (!gpuKernel)
+    return mlir::failure();
+
+  auto stream = getGpuStream(builder, op);
+  if (!stream)
+    return mlir::failure();
+
+  auto loc = op.getLoc();
+  auto module = builder.create<plier::LoadGpuModuleOp>(loc, *stream, gpuMod);
+  auto kernel = builder.create<plier::GetGpuKernelOp>(loc, module, gpuKernel);
+  auto newOp = func(builder, loc, *stream, kernel);
+  builder.replaceOp(op, newOp.getResults());
+  return mlir::success();
+}
+
 struct ExpandLaunchOp : public mlir::OpRewritePattern<mlir::gpu::LaunchFuncOp> {
   using OpRewritePattern::OpRewritePattern;
 
   mlir::LogicalResult
   matchAndRewrite(mlir::gpu::LaunchFuncOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto mod = op->getParentOfType<mlir::ModuleOp>();
-    if (!mod)
-      return mlir::failure();
-
-    auto gpuMod =
-        mod.lookupSymbol<mlir::gpu::GPUModuleOp>(op.getKernelModuleName());
-    if (!gpuMod)
-      return mlir::failure();
-
-    auto gpuKernel =
-        gpuMod.lookupSymbol<mlir::gpu::GPUFuncOp>(op.getKernelName());
-    if (!gpuKernel)
-      return mlir::failure();
-
-    auto stream = getGpuStream(rewriter, op);
-    if (!stream)
-      return mlir::failure();
-
-    auto loc = op.getLoc();
-    auto module = rewriter.create<plier::LoadGpuModuleOp>(loc, *stream, gpuMod);
-    auto kernel =
-        rewriter.create<plier::GetGpuKernelOp>(loc, module, gpuKernel);
-    auto launch = rewriter.create<plier::LaunchGpuKernelOp>(
-        loc, *stream, kernel, op.getGridSizeOperandValues(),
-        op.getBlockSizeOperandValues(), op.operands());
-    rewriter.create<plier::DestroyGpuKernelOp>(loc, kernel);
-    rewriter.create<plier::DestroyGpuModuleOp>(loc, module);
-    rewriter.replaceOp(op, launch.getResults());
-    return mlir::success();
+    return createGpuKernelLoad(
+        rewriter, op,
+        [&](mlir::OpBuilder &builder, mlir::Location loc, mlir::Value stream,
+            mlir::Value kernel) {
+          return builder.create<plier::LaunchGpuKernelOp>(
+              loc, stream, kernel, op.getGridSizeOperandValues(),
+              op.getBlockSizeOperandValues(), op.operands());
+        });
   }
 };
 
@@ -1236,6 +1245,69 @@ struct GPUExPass : public mlir::PassWrapper<GPUExPass, mlir::FunctionPass> {
     mlir::OwningRewritePatternList patterns(&getContext());
 
     patterns.insert<ExpandLaunchOp, ExpandAllocOp>(&getContext());
+
+    (void)mlir::applyPatternsAndFoldGreedily(getFunction(),
+                                             std::move(patterns));
+  }
+};
+
+static mlir::LogicalResult processAllocUser(mlir::Operation *user,
+                                            mlir::Operation *allocParent,
+                                            mlir::DominanceInfo &dom,
+                                            mlir::Operation *&lastUser) {
+  auto origUser = user;
+  if (user->hasTrait<mlir::OpTrait::IsTerminator>())
+    return mlir::failure();
+
+  auto parent = user->getParentOp();
+  while (parent != allocParent) {
+    user = parent;
+    parent = user->getParentOp();
+    if (parent == nullptr)
+      return mlir::failure();
+  }
+
+  if (dom.properlyDominates(lastUser, user))
+    lastUser = user;
+
+  for (auto resUser : origUser->getUsers())
+    if (mlir::failed(processAllocUser(resUser, allocParent, dom, lastUser)))
+      return mlir::failure();
+
+  return mlir::success();
+}
+
+template <typename AllocOp, typename DeallocOp>
+struct CreateDeallocOp : public mlir::OpRewritePattern<AllocOp> {
+  using mlir::OpRewritePattern<AllocOp>::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(AllocOp op, mlir::PatternRewriter &rewriter) const override {
+    auto allocParent = op->getParentOp();
+    mlir::Operation *lastUser = op;
+    mlir::DominanceInfo dom;
+    for (auto user : op->getUsers())
+      if (mlir::isa<DeallocOp>(user) ||
+          mlir::failed(processAllocUser(user, allocParent, dom, lastUser)))
+        return mlir::failure();
+
+    mlir::OpBuilder::InsertionGuard g(rewriter);
+    rewriter.setInsertionPointAfter(lastUser);
+    rewriter.create<DeallocOp>(lastUser->getLoc(), op);
+    return mlir::success();
+  }
+};
+
+struct GPUExDeallocPass
+    : public mlir::PassWrapper<GPUExDeallocPass, mlir::FunctionPass> {
+
+  void runOnFunction() override {
+    mlir::OwningRewritePatternList patterns(&getContext());
+
+    patterns.insert<
+        CreateDeallocOp<plier::LoadGpuModuleOp, plier::DestroyGpuModuleOp>,
+        CreateDeallocOp<plier::GetGpuKernelOp, plier::DestroyGpuKernelOp>>(
+        &getContext());
 
     (void)mlir::applyPatternsAndFoldGreedily(getFunction(),
                                              std::move(patterns));
@@ -2162,6 +2234,8 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   modulePM.addPass(mlir::spirv::createUpdateVersionCapabilityExtensionPass());
   pm.addPass(std::make_unique<SerializeSPIRVPass>());
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<GPUExPass>());
+  commonOptPasses(pm);
+  pm.addNestedPass<mlir::FuncOp>(std::make_unique<GPUExDeallocPass>());
   pm.addPass(std::make_unique<EnumerateEventsPass>());
   pm.addPass(std::make_unique<GPUToLLVMPass>());
   commonOptPasses(pm);
