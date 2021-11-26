@@ -23,14 +23,21 @@ def parametrize_function_variants(name, strings):
     funcs = [eval(f, g) for f in strings]
     return pytest.mark.parametrize(name, funcs, ids=strings)
 
-_cached_funcs = {}
+class JitfuncCache:
+    def __init__(self, decorator):
+        self._cached_funcs = {}
+        self._decorator = decorator
 
-def njit_cached(func, *args, **kwargs):
-    if args or kwargs:
-        return njit(func, *args, **kwargs)
-    global _cached_funcs
-    if func in _cached_funcs:
-        return _cached_funcs[func]
-    jitted = njit(func)
-    _cached_funcs[func] = jitted
-    return jitted
+    def cached_decorator(self, func, *args, **kwargs):
+        if args or kwargs:
+            return self._decorator(func, *args, **kwargs)
+        cached = self._cached_funcs.get(func)
+        if cached is not None:
+            return cached
+
+        jitted = self._decorator(func)
+        self._cached_funcs[func] = jitted
+        return jitted
+
+njit_cache = JitfuncCache(njit)
+njit_cached = njit_cache.cached_decorator
