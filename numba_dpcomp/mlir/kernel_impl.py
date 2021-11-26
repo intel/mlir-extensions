@@ -83,6 +83,20 @@ class _KernelMarkerId(ConcreteTemplate):
         signature(types.void, types.int64, types.int64, types.int64, types.int64, types.int64, types.int64),
     ]
 
+def _get_default_local_size():
+    _stub_error()
+
+@registry.register_func('_get_default_local_size', _get_default_local_size)
+def _get_default_local_size_impl(builder):
+    res = (0,0,0)
+    return builder.external_call('get_default_local_size', inputs=(), outputs=res)
+
+@infer_global(_get_default_local_size)
+class _GetDefaultLocalSizeId(ConcreteTemplate):
+    cases = [
+        signature(types.UniTuple(types.int64, 3)),
+    ]
+
 @njit(enable_gpu_pipeline=True)
 def _kernel_body(global_size, local_size, body, *args):
     x, y, z = global_size
@@ -107,7 +121,7 @@ def _kernel_body(global_size, local_size, body, *args):
 @njit(enable_gpu_pipeline=True)
 def _kernel_body_def_size(global_size, body, *args):
     x, y, z = global_size
-    lx, ly, lz = local_size
+    lx, ly, lz = _get_default_local_size()
     _kernel_marker(x, y, z, lx, ly, lz)
     gx = (x + lx - 1) // lx
     gy = (y + ly - 1) // ly
@@ -130,6 +144,7 @@ def _extend_dims(dims):
     if (l < 3):
         return tuple(dims + (1,) * (3 - l))
     return dims
+
 
 class Kernel:
     def __init__(self, func):
