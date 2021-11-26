@@ -2086,72 +2086,49 @@ lowerGetGlobalId(mlir::CallOp op, mlir::ValueRange /*globalSizes*/,
 }
 
 static mlir::LogicalResult lowerGetGlobalSize(mlir::CallOp op,
-                                              mlir::scf::ForOp loop,
+                                              mlir::ValueRange globalSizes,
+                                              mlir::ValueRange /*localSizes*/,
+                                              mlir::ValueRange /*gridArgs*/,
+                                              mlir::ValueRange /*blockArgs*/,
                                               mlir::PatternRewriter &builder,
-                                              int64_t /*index*/) {
+                                              unsigned index) {
   rerun_std_pipeline(op);
-  mlir::Value arg = loop.upperBound();
+  auto loc = op.getLoc();
+  auto indexType = builder.getIndexType();
+  auto indexCast = [&](mlir::Value val) -> mlir::Value {
+    if (val.getType() != indexType)
+      return builder.createOrFold<plier::CastOp>(loc, indexType, val);
+    return val;
+  };
+  mlir::Value res = indexCast(globalSizes[index]);
   auto resType = op.getResult(0).getType();
-  if (arg.getType() != resType) {
-    rerun_std_pipeline(op);
-    arg = builder.createOrFold<plier::CastOp>(op.getLoc(), resType, arg);
-  }
+  if (res.getType() != resType)
+    res = builder.createOrFold<plier::CastOp>(loc, resType, res);
 
-  builder.replaceOp(op, arg);
+  builder.replaceOp(op, res);
   return mlir::success();
 }
 
-static mlir::Operation *getPreParent(mlir::Operation *op) {
-  assert(op);
-  while (true) {
-    auto parent = op->getParentOp();
-    assert(parent);
-    if (mlir::isa<mlir::FuncOp>(parent))
-      return op;
+static mlir::LogicalResult
+lowerGetLocalSize(mlir::CallOp op, mlir::ValueRange /*globalSizes*/,
+                  mlir::ValueRange localSizes, mlir::ValueRange /*gridArgs*/,
+                  mlir::ValueRange /*blockArgs*/,
+                  mlir::PatternRewriter &builder, unsigned index) {
+  rerun_std_pipeline(op);
+  auto loc = op.getLoc();
+  auto indexType = builder.getIndexType();
+  auto indexCast = [&](mlir::Value val) -> mlir::Value {
+    if (val.getType() != indexType)
+      return builder.createOrFold<plier::CastOp>(loc, indexType, val);
+    return val;
+  };
+  mlir::Value res = indexCast(localSizes[index]);
+  auto resType = op.getResult(0).getType();
+  if (res.getType() != resType)
+    res = builder.createOrFold<plier::CastOp>(loc, resType, res);
 
-    op = parent;
-  }
-}
-
-static mlir::LogicalResult lowerGetLocalSize(mlir::CallOp op,
-                                             mlir::scf::ForOp loop,
-                                             mlir::PatternRewriter &builder,
-                                             int64_t index) {
-  auto p = getPreParent(loop);
-  assert(p);
-  auto block = p->getBlock();
-  auto it = p->getIterator();
-  auto begin = block->begin();
-  if (it == begin)
-    return mlir::failure();
-  --it;
-  auto funcName =
-      mlir::FlatSymbolRefAttr::get(builder.getStringAttr("set_local_size"));
-  while (true) {
-    if (auto call = mlir::dyn_cast<mlir::CallOp>(*it)) {
-      if (call.calleeAttr() == funcName) {
-        auto numArgs = call.getNumOperands();
-        if (index < 0 || index >= numArgs)
-          return mlir::failure();
-
-        index = numArgs - index - 1;
-
-        rerun_std_pipeline(op);
-        auto resType = op.getResultTypes()[0];
-        auto arg = call.operands()[static_cast<unsigned>(index)];
-        if (arg.getType() != resType)
-          arg = builder.createOrFold<plier::CastOp>(op.getLoc(), resType, arg);
-        builder.replaceOp(op, arg);
-        return mlir::success();
-      }
-    }
-    if (it == begin)
-      break;
-
-    --it;
-  }
-
-  return mlir::failure();
+  builder.replaceOp(op, res);
+  return mlir::success();
 }
 
 struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::CallOp> {
@@ -2185,8 +2162,8 @@ struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::CallOp> {
     auto handler = [&]() -> handler_func_t {
       static const std::pair<mlir::StringRef, handler_func_t> handlers[] = {
           {"get_global_id", &lowerGetGlobalId},
-          //          {"get_global_size", &lowerGetGlobalSize},
-          //          {"get_local_size", &lowerGetLocalSize},
+          {"get_global_size", &lowerGetGlobalSize},
+          {"get_local_size", &lowerGetLocalSize},
       };
       auto name = op.getCallee();
       for (auto h : handlers)
