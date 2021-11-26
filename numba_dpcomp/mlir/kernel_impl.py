@@ -161,6 +161,9 @@ class Kernel:
 def kernel(func):
     return Kernel(func)
 
+
+kernel_func = njit(inline='always')
+
 def _define_api_funcs():
     kernel_api_funcs = [
         'get_global_id',
