@@ -161,6 +161,7 @@ class Kernel:
 def kernel(func):
     return Kernel(func)
 
+DEFAULT_LOCAL_SIZE = ()
 
 kernel_func = njit(inline='always')
 

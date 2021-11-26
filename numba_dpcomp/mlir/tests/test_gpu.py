@@ -19,7 +19,7 @@ import numpy as np
 import math
 
 from numba_dpcomp.mlir.settings import _readenv
-from numba_dpcomp.mlir.kernel_impl import kernel, get_global_id, get_global_size, get_local_size, atomic, kernel_func
+from numba_dpcomp.mlir.kernel_impl import kernel, get_global_id, get_global_size, get_local_size, atomic, kernel_func, DEFAULT_LOCAL_SIZE
 from numba_dpcomp.mlir.kernel_sim import kernel as kernel_sim
 from numba_dpcomp.mlir.passes import print_pass_ir, get_print_buffer
 
@@ -48,12 +48,12 @@ def test_simple1():
     b = np.array([[[7,8,9],[10,11,12]]], np.float32)
 
     sim_res = np.zeros(a.shape, a.dtype)
-    sim_func[a.shape, ()](a, b, sim_res)
+    sim_func[a.shape, DEFAULT_LOCAL_SIZE](a, b, sim_res)
 
     gpu_res = np.zeros(a.shape, a.dtype)
 
     with print_pass_ir([],['ConvertParallelLoopToGpu']):
-        gpu_func[a.shape, ()](a, b, gpu_res)
+        gpu_func[a.shape, DEFAULT_LOCAL_SIZE](a, b, gpu_res)
         ir = get_print_buffer()
         assert ir.count('gpu.launch blocks') == 1, ir
 
@@ -75,12 +75,12 @@ def test_simple2():
     b = np.array([[[7,8,9],[10,11,12]]], np.float32)
 
     sim_res = np.zeros(a.shape, a.dtype)
-    sim_func[a.shape, ()](a, b, sim_res)
+    sim_func[a.shape, DEFAULT_LOCAL_SIZE](a, b, sim_res)
 
     gpu_res = np.zeros(a.shape, a.dtype)
 
     with print_pass_ir([],['ConvertParallelLoopToGpu']):
-        gpu_func[a.shape, ()](a, b, gpu_res)
+        gpu_func[a.shape, DEFAULT_LOCAL_SIZE](a, b, gpu_res)
         ir = get_print_buffer()
         assert ir.count('gpu.launch blocks') == 1, ir
 
@@ -99,12 +99,12 @@ def test_simple3():
     a = np.array([[1,2],[3,4],[5,6]], np.float32)
 
     sim_res = np.zeros(a.shape, a.dtype)
-    sim_func[a.shape[0], ()](a, sim_res)
+    sim_func[a.shape[0], DEFAULT_LOCAL_SIZE](a, sim_res)
 
     gpu_res = np.zeros(a.shape, a.dtype)
 
     with print_pass_ir([],['ConvertParallelLoopToGpu']):
-        gpu_func[a.shape[0], ()](a, gpu_res)
+        gpu_func[a.shape[0], DEFAULT_LOCAL_SIZE](a, gpu_res)
         ir = get_print_buffer()
         assert ir.count('gpu.launch blocks') == 1, ir
 
@@ -126,12 +126,12 @@ def test_slice():
     a = np.arange(3*4*5).reshape((3,4,5))
 
     sim_res = np.zeros(a.shape, a.dtype)
-    sim_func[a.shape, ()](a, sim_res)
+    sim_func[a.shape, DEFAULT_LOCAL_SIZE](a, sim_res)
 
     gpu_res = np.zeros(a.shape, a.dtype)
 
     with print_pass_ir([],['ConvertParallelLoopToGpu']):
-        gpu_func[a.shape, ()](a, gpu_res)
+        gpu_func[a.shape, DEFAULT_LOCAL_SIZE](a, gpu_res)
         ir = get_print_buffer()
         assert ir.count('gpu.launch blocks') == 1, ir
 
@@ -153,12 +153,12 @@ def test_inner_loop():
     b = np.array([5,6,7,8,9], np.float32)
 
     sim_res = np.zeros(a.shape, b.dtype)
-    sim_func[a.shape, ()](a, b, sim_res)
+    sim_func[a.shape, DEFAULT_LOCAL_SIZE](a, b, sim_res)
 
     gpu_res = np.zeros(a.shape, b.dtype)
 
     with print_pass_ir([],['ConvertParallelLoopToGpu']):
-        gpu_func[a.shape, ()](a, b, gpu_res)
+        gpu_func[a.shape, DEFAULT_LOCAL_SIZE](a, b, gpu_res)
         ir = get_print_buffer()
         assert ir.count('gpu.launch blocks') == 1, ir
 
@@ -171,12 +171,12 @@ def _test_unary(func, dtype, ir_pass, ir_check):
     a = np.array([1,2,3,4,5,6,7,8,9], dtype)
 
     sim_res = np.zeros(a.shape, dtype)
-    sim_func[a.shape, ()](a, sim_res)
+    sim_func[a.shape, DEFAULT_LOCAL_SIZE](a, sim_res)
 
     gpu_res = np.zeros(a.shape, dtype)
 
     with print_pass_ir([],[ir_pass]):
-        gpu_func[a.shape, ()](a, gpu_res)
+        gpu_func[a.shape, DEFAULT_LOCAL_SIZE](a, gpu_res)
         ir = get_print_buffer()
         assert ir_check(ir), ir
 
@@ -190,12 +190,12 @@ def _test_binary(func, dtype, ir_pass, ir_check):
     b = np.array([11,12,13,14,15,16,17,18,19], dtype)
 
     sim_res = np.zeros(a.shape, dtype)
-    sim_func[a.shape, ()](a, b, sim_res)
+    sim_func[a.shape, DEFAULT_LOCAL_SIZE](a, b, sim_res)
 
     gpu_res = np.zeros(a.shape, dtype)
 
     with print_pass_ir([],[ir_pass]):
-        gpu_func[a.shape, ()](a, b, gpu_res)
+        gpu_func[a.shape, DEFAULT_LOCAL_SIZE](a, b, gpu_res)
         ir = get_print_buffer()
         assert ir_check(ir), ir
 
@@ -257,12 +257,12 @@ def test_get_global_id(shape):
     dtype = np.int32
 
     sim_res = np.zeros(shape, dtype)
-    sim_func[shape, ()](sim_res)
+    sim_func[shape, DEFAULT_LOCAL_SIZE](sim_res)
 
     gpu_res = np.zeros(shape, dtype)
 
     with print_pass_ir([],['ConvertParallelLoopToGpu']):
-        gpu_func[shape, ()](gpu_res)
+        gpu_func[shape, DEFAULT_LOCAL_SIZE](gpu_res)
         ir = get_print_buffer()
         assert ir.count('gpu.launch blocks') == 1, ir
 
@@ -301,12 +301,12 @@ def test_get_global_size(shape):
     dtype = np.int32
 
     sim_res = np.zeros(shape, dtype)
-    sim_func[shape, ()](sim_res)
+    sim_func[shape, DEFAULT_LOCAL_SIZE](sim_res)
 
     gpu_res = np.zeros(shape, dtype)
 
     with print_pass_ir([],['ConvertParallelLoopToGpu']):
-        gpu_func[shape, ()](gpu_res)
+        gpu_func[shape, DEFAULT_LOCAL_SIZE](gpu_res)
         ir = get_print_buffer()
         assert ir.count('gpu.launch blocks') == 1, ir
 
@@ -372,12 +372,12 @@ def _test_atomic(func, dtype, ret_size):
     a = np.array([1,2,3,4,5,6,7,8,9], dtype)
 
     sim_res = np.zeros([ret_size], dtype)
-    sim_func[a.shape, ()](a, sim_res)
+    sim_func[a.shape, DEFAULT_LOCAL_SIZE](a, sim_res)
 
     gpu_res = np.zeros([ret_size], dtype)
 
     with print_pass_ir([],['GPUToSpirvPass']):
-        gpu_func[a.shape, ()](a, gpu_res)
+        gpu_func[a.shape, DEFAULT_LOCAL_SIZE](a, gpu_res)
         ir = get_print_buffer()
         assert _check_atomic_ir(ir), ir
 
@@ -455,12 +455,12 @@ def test_atomics_multidim(funci):
     a = np.array([[1,2,3],[4,5,6],[7,8,9]], dtype)
 
     sim_res = np.zeros((2,2), dtype)
-    sim_func[a.shape, ()](a, sim_res)
+    sim_func[a.shape, DEFAULT_LOCAL_SIZE](a, sim_res)
 
     gpu_res = np.zeros((2,2), dtype)
 
     with print_pass_ir([],['GPUToSpirvPass']):
-        gpu_func[a.shape, ()](a, gpu_res)
+        gpu_func[a.shape, DEFAULT_LOCAL_SIZE](a, gpu_res)
         ir = get_print_buffer()
         assert _check_atomic_ir(ir), ir
 
