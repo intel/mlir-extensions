@@ -26,17 +26,16 @@ plier::ForceInline::matchAndRewrite(mlir::CallOp op,
   auto attrName = plier::attributes::getForceInlineName();
   auto mod = op->getParentOfType<mlir::ModuleOp>();
   assert(mod);
-  auto func = mod.lookupSymbol<mlir::FuncOp>(op.callee());
-  if (!func) {
-    return mlir::failure();
-  }
-  if (!op->hasAttr(attrName) && !func->hasAttr(attrName)) {
-    return mlir::failure();
-  }
 
-  if (!llvm::hasNItems(func.getRegion(), 1)) {
+  auto func = mod.lookupSymbol<mlir::FuncOp>(op.callee());
+  if (!func)
     return mlir::failure();
-  }
+
+  if (!op->hasAttr(attrName) && !func->hasAttr(attrName))
+    return mlir::failure();
+
+  if (!llvm::hasNItems(func.getRegion(), 1))
+    return mlir::failure();
 
   auto loc = op.getLoc();
   auto reg =

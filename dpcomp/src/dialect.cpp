@@ -22,6 +22,7 @@
 #include <mlir/Transforms/InliningUtils.h>
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Bufferization/IR/Bufferization.h>
 #include <mlir/Dialect/GPU/GPUDialect.h>
 #include <mlir/Dialect/Linalg/IR/LinalgOps.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
@@ -766,11 +767,11 @@ struct ChangeLayoutExtractMetadata
 };
 
 struct ChangeLayoutClone
-    : public mlir::OpRewritePattern<mlir::memref::CloneOp> {
+    : public mlir::OpRewritePattern<mlir::bufferization::CloneOp> {
   using OpRewritePattern::OpRewritePattern;
 
   mlir::LogicalResult
-  matchAndRewrite(mlir::memref::CloneOp op,
+  matchAndRewrite(mlir::bufferization::CloneOp op,
                   mlir::PatternRewriter &rewriter) const override {
     auto cl = op.input().getDefiningOp<plier::ChangeLayoutOp>();
     if (!cl)
@@ -780,18 +781,18 @@ struct ChangeLayoutClone
     auto dstType = op.getType();
 
     auto loc = op.getLoc();
-    auto res = rewriter.createOrFold<mlir::memref::CloneOp>(loc, src);
+    auto res = rewriter.createOrFold<mlir::bufferization::CloneOp>(loc, src);
     rewriter.replaceOpWithNewOp<plier::ChangeLayoutOp>(op, dstType, res);
     return mlir::success();
   }
 };
 
 struct PropagateCloneType
-    : public mlir::OpRewritePattern<mlir::memref::CloneOp> {
+    : public mlir::OpRewritePattern<mlir::bufferization::CloneOp> {
   using OpRewritePattern::OpRewritePattern;
 
   mlir::LogicalResult
-  matchAndRewrite(mlir::memref::CloneOp op,
+  matchAndRewrite(mlir::bufferization::CloneOp op,
                   mlir::PatternRewriter &rewriter) const override {
     auto src = op.input();
     auto srcType = src.getType();
@@ -800,7 +801,7 @@ struct PropagateCloneType
       return mlir::failure();
 
     auto loc = op.getLoc();
-    auto res = rewriter.createOrFold<mlir::memref::CloneOp>(loc, src);
+    auto res = rewriter.createOrFold<mlir::bufferization::CloneOp>(loc, src);
     rewriter.replaceOpWithNewOp<plier::ChangeLayoutOp>(op, dstType, res);
     return mlir::success();
   }

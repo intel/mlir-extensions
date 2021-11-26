@@ -16,11 +16,14 @@
 
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
 #include <mlir/Analysis/AffineAnalysis.h>
-
+#include <mlir/Analysis/BufferViewFlowAnalysis.h>
 #include <mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h>
 #include <mlir/Conversion/SCFToStandard/SCFToStandard.h>
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Bufferization/IR/Bufferization.h>
+#include <mlir/Dialect/Bufferization/Transforms/Bufferize.h>
+#include <mlir/Dialect/Bufferization/Transforms/Passes.h>
 #include <mlir/Dialect/Linalg/IR/LinalgOps.h>
 #include <mlir/Dialect/Linalg/Passes.h>
 #include <mlir/Dialect/Linalg/Transforms/Transforms.h>
@@ -518,7 +521,7 @@ static mlir::Value makeSubview(mlir::OpBuilder &builder, mlir::Location loc,
     auto tensorType = srcType.cast<mlir::RankedTensorType>();
     memrefType = mlir::MemRefType::get(tensorType.getShape(),
                                        tensorType.getElementType());
-    src = builder.create<mlir::memref::BufferCastOp>(loc, memrefType, src);
+    src = builder.create<mlir::bufferization::ToMemrefOp>(loc, memrefType, src);
   } else {
     memrefType = srcType.cast<mlir::MemRefType>();
   }
@@ -540,7 +543,7 @@ static mlir::Value makeSubview(mlir::OpBuilder &builder, mlir::Location loc,
 
   view = builder.createOrFold<plier::ChangeLayoutOp>(loc, memrefType, view);
   if (isTensor)
-    view = builder.create<mlir::memref::TensorLoadOp>(loc, view);
+    view = builder.create<mlir::bufferization::ToTensorOp>(loc, view);
 
   return view;
 }
@@ -758,8 +761,8 @@ struct SetitemOpLowering : public mlir::OpConversionPattern<plier::SetItemOp> {
       }
       auto memrefType =
           mlir::MemRefType::get(targetTensorType.getShape(), signlessElemType);
-      auto memref =
-          rewriter.create<mlir::memref::BufferCastOp>(loc, memrefType, target);
+      auto memref = rewriter.create<mlir::bufferization::ToMemrefOp>(
+          loc, memrefType, target);
       target = memref;
       for (auto &use : llvm::make_early_inc_range(target.getUses())) {
         auto useOp = use.getOwner();
@@ -772,7 +775,7 @@ struct SetitemOpLowering : public mlir::OpConversionPattern<plier::SetItemOp> {
           } else {
             mlir::OpBuilder::InsertionGuard g(rewriter);
             rewriter.setInsertionPoint(useOp);
-            auto newVal = rewriter.create<mlir::memref::TensorLoadOp>(
+            auto newVal = rewriter.create<mlir::bufferization::ToTensorOp>(
                 useOp->getLoc(), memref);
             rewriter.updateRootInPlace(useOp, [&]() {
               useOp->setOperand(use.getOperandNumber(), newVal);
@@ -1130,22 +1133,24 @@ struct PlierToLinalgPass
     registry.insert<plier::PlierDialect>();
     registry.insert<mlir::StandardOpsDialect>();
     registry.insert<mlir::linalg::LinalgDialect>();
+    registry.insert<mlir::memref::MemRefDialect>();
+    registry.insert<mlir::tensor::TensorDialect>();
+    registry.insert<mlir::bufferization::BufferizationDialect>();
   }
 
   void runOnOperation() override;
 };
 
-template <typename T> bool hasCompatibleShape(T &&a1, T &&a2) {
-  if (a1.getRank() != a2.getRank()) {
+template <typename T> static bool hasCompatibleShape(T &&a1, T &&a2) {
+  if (a1.getRank() != a2.getRank())
     return false;
-  }
+
   for (auto it : llvm::zip(a1.getShape(), a2.getShape())) {
     auto s1 = std::get<0>(it);
     auto s2 = std::get<1>(it);
     if (s1 != mlir::ShapedType::kDynamicSize &&
-        s2 != mlir::ShapedType::kDynamicSize && s1 != s2) {
+        s2 != mlir::ShapedType::kDynamicSize && s1 != s2)
       return false;
-    }
   }
   return true;
 }
@@ -1636,7 +1641,7 @@ void AdditionalBufferize::runOnFunction() {
   auto module = getOperation();
   auto *context = &getContext();
 
-  mlir::BufferizeTypeConverter typeConverter;
+  mlir::bufferization::BufferizeTypeConverter typeConverter;
   populateTupleTypeConverter(*context, typeConverter);
 
   auto materializeTupleCast =
@@ -1711,7 +1716,7 @@ void CloneArgsPass::runOnFunction() {
       auto i = it.index();
       auto arg = it.value();
       if (arg.getType().isa<mlir::MemRefType>()) {
-        newArgs[i] = builder.create<mlir::memref::CloneOp>(loc, arg);
+        newArgs[i] = builder.create<mlir::bufferization::CloneOp>(loc, arg);
         needReplace = true;
       } else {
         newArgs[i] = arg;
@@ -1725,11 +1730,12 @@ void CloneArgsPass::runOnFunction() {
   }
 }
 
-struct ReplaceClones : public mlir::OpRewritePattern<mlir::memref::CloneOp> {
-  using mlir::OpRewritePattern<mlir::memref::CloneOp>::OpRewritePattern;
+struct ReplaceClones
+    : public mlir::OpRewritePattern<mlir::bufferization::CloneOp> {
+  using mlir::OpRewritePattern<mlir::bufferization::CloneOp>::OpRewritePattern;
 
   mlir::LogicalResult
-  matchAndRewrite(mlir::memref::CloneOp op,
+  matchAndRewrite(mlir::bufferization::CloneOp op,
                   mlir::PatternRewriter &rewriter) const override {
     rewriter.replaceOpWithNewOp<plier::RetainOp>(op, op.getType(),
                                                  op.getSource());
@@ -1805,7 +1811,8 @@ void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::FuncOp>(mlir::createTensorBufferizePass());
   pm.addPass(mlir::createFuncBufferizePass());
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<AdditionalBufferize>());
-  pm.addNestedPass<mlir::FuncOp>(mlir::createFinalizingBufferizePass());
+  pm.addNestedPass<mlir::FuncOp>(
+      mlir::bufferization::createFinalizingBufferizePass());
 
   pm.addNestedPass<mlir::FuncOp>(mlir::createBufferHoistingPass());
   pm.addNestedPass<mlir::FuncOp>(mlir::createBufferLoopHoistingPass());
@@ -1815,7 +1822,8 @@ void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<MakeStridedLayoutPass>());
   pm.addNestedPass<mlir::FuncOp>(mlir::createCanonicalizerPass());
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<FinalizeStridedLayoutPass>());
-  pm.addNestedPass<mlir::FuncOp>(mlir::createBufferDeallocationPass());
+  pm.addNestedPass<mlir::FuncOp>(
+      mlir::bufferization::createBufferDeallocationPass());
   pm.addPass(mlir::createCanonicalizerPass());
 
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<LowerCloneOpsPass>());
