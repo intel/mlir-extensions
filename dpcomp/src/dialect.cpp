@@ -1610,6 +1610,37 @@ void LaunchGpuKernelOp::build(::mlir::OpBuilder &builder,
                       builder.getI32VectorAttr(segmentSizes));
 }
 
+void GPUSuggestBlockSizeOp::build(::mlir::OpBuilder &odsBuilder,
+                                  ::mlir::OperationState &odsState,
+                                  ::llvm::Optional<::mlir::Value> stream,
+                                  ::mlir::OpFoldResult kernel,
+                                  ::mlir::ValueRange gridSize) {
+  auto dimCount = gridSize.size();
+  assert(dimCount > 0 && dimCount <= 3);
+  llvm::SmallVector<mlir::Type, 3> resTypes(dimCount,
+                                            odsBuilder.getIndexType());
+  mlir::Value kernVal;
+  mlir::SymbolRefAttr kernRef;
+  if (kernel.is<mlir::Value>())
+    kernVal = kernel.get<mlir::Value>();
+  else
+    kernRef = kernel.get<mlir::Attribute>().cast<mlir::SymbolRefAttr>();
+
+  GPUSuggestBlockSizeOp::build(odsBuilder, odsState, resTypes,
+                               stream.getValueOr(mlir::Value{}), kernVal,
+                               kernRef, gridSize);
+}
+
+mlir::StringAttr GPUSuggestBlockSizeOp::getKernelModuleName() {
+  assert(kernelRef());
+  return kernelRef()->getRootReference();
+}
+
+mlir::StringAttr GPUSuggestBlockSizeOp::getKernelName() {
+  assert(kernelRef());
+  return kernelRef()->getLeafReference();
+}
+
 } // namespace plier
 
 #include "plier/PlierOpsDialect.cpp.inc"
