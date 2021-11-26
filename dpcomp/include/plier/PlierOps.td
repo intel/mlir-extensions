@@ -333,11 +333,9 @@ def ExtractMemrefMetadataOp
   let hasFolder = 1;
 
   let builders = [
-    OpBuilder<(ins "::mlir::Value"
-               : $src, "int64_t"
-               : $dim)>,
-    OpBuilder<(ins "::mlir::Value"
-               : $src)>
+    OpBuilder<(ins "::mlir::Value" : $src,
+                 "int64_t" : $dim)>,
+    OpBuilder<(ins "::mlir::Value" : $src)>
   ];
 }
 

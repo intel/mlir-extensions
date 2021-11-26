@@ -1443,6 +1443,58 @@ void ExtractMemrefMetadataOp::build(::mlir::OpBuilder &odsBuilder,
 
 mlir::OpFoldResult
 ExtractMemrefMetadataOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
+  auto idx = dimIndex().getSExtValue();
+  assert(idx >= -1);
+  auto src = source();
+  if (auto reintr = src.getDefiningOp<mlir::memref::ReinterpretCastOp>()) {
+    if (idx == -1) {
+      auto offsets = reintr.getMixedOffsets();
+      if (offsets.size() == 1)
+        return offsets.front();
+
+      return nullptr;
+    }
+
+    auto strides = reintr.getMixedStrides();
+    if (static_cast<unsigned>(idx) < strides.size())
+      return strides[static_cast<unsigned>(idx)];
+
+    return nullptr;
+  }
+
+  if (auto reduceRank = src.getDefiningOp<plier::ReduceRankOp>()) {
+    auto newSrc = reduceRank.source();
+    if (idx == -1) {
+      sourceMutable().assign(newSrc);
+      return getResult();
+    }
+
+    auto mapping = reduceRank.getMapping();
+    if (static_cast<unsigned>(idx) < mapping.size()) {
+      auto newIdx = mapping[static_cast<unsigned>(idx)];
+      assert(newIdx >= 0);
+      sourceMutable().assign(newSrc);
+      auto type = dimIndexAttr().getType();
+      dimIndexAttr(mlir::IntegerAttr::get(type, newIdx));
+      return getResult();
+    }
+
+    return nullptr;
+  }
+
+  if (auto cast = src.getDefiningOp<mlir::memref::CastOp>()) {
+    auto castSrc = cast.source();
+    auto castSrcType = castSrc.getType().cast<mlir::ShapedType>();
+    auto srcType = src.getType().cast<mlir::ShapedType>();
+    if (castSrcType.hasRank() && srcType.hasRank() &&
+        castSrcType.getRank() == srcType.getRank()) {
+      sourceMutable().assign(castSrc);
+      return getResult();
+    }
+
+    return nullptr;
+  }
+
   return nullptr;
 }
 
