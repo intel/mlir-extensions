@@ -1445,6 +1445,21 @@ ExtractMemrefMetadataOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
   auto idx = dimIndex().getSExtValue();
   assert(idx >= -1);
   auto src = source();
+
+  int64_t offset;
+  llvm::SmallVector<int64_t> strides;
+  if (mlir::succeeded(mlir::getStridesAndOffset(
+          src.getType().cast<mlir::MemRefType>(), strides, offset))) {
+    mlir::Builder builder(getContext());
+    if (idx == -1 && !mlir::ShapedType::isDynamicStrideOrOffset(offset)) {
+      return builder.getIndexAttr(offset);
+    } else if (idx >= 0 && idx < static_cast<int64_t>(strides.size()) &&
+               !mlir::ShapedType::isDynamicStrideOrOffset(
+                   strides[static_cast<unsigned>(idx)])) {
+      return builder.getIndexAttr(strides[static_cast<unsigned>(idx)]);
+    }
+  }
+
   if (auto reintr = src.getDefiningOp<mlir::memref::ReinterpretCastOp>()) {
     if (idx == -1) {
       auto offsets = reintr.getMixedOffsets();
@@ -1459,6 +1474,12 @@ ExtractMemrefMetadataOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
       return strides[static_cast<unsigned>(idx)];
 
     return nullptr;
+  }
+
+  if (auto cast = src.getDefiningOp<mlir::memref::CastOp>()) {
+    auto newSrc = cast.source();
+    sourceMutable().assign(newSrc);
+    return getResult();
   }
 
   if (auto reduceRank = src.getDefiningOp<plier::ReduceRankOp>()) {
