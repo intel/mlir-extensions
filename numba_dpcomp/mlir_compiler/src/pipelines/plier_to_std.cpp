@@ -33,10 +33,10 @@
 
 #include "plier/pass/rewrite_wrapper.hpp"
 #include "plier/rewrites/call_lowering.hpp"
-#include "plier/rewrites/force_inline.hpp"
 #include "plier/rewrites/type_conversion.hpp"
 #include "plier/transforms/cast_utils.hpp"
 #include "plier/transforms/const_utils.hpp"
+#include "plier/transforms/inline_utils.hpp"
 #include "plier/transforms/pipeline_utils.hpp"
 
 #include "base_pipeline.hpp"
@@ -1072,10 +1072,6 @@ struct BuiltinCallsLoweringPass
           BuiltinCallsLoweringPass, void, void, BuiltinCallsLowering,
           plier::ExpandCallVarargs, ExternalCallsLowering> {};
 
-struct ForceInlinePass
-    : public plier::RewriteWrapperPass<ForceInlinePass, void, void,
-                                       plier::ForceInline> {};
-
 struct PlierToStdPass
     : public mlir::PassWrapper<PlierToStdPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
@@ -1189,7 +1185,7 @@ void populate_plier_to_std_pipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<PlierToStdPass>());
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(std::make_unique<BuiltinCallsLoweringPass>());
-  pm.addPass(std::make_unique<ForceInlinePass>());
+  pm.addPass(plier::createForceInlinePass());
   pm.addPass(mlir::createSymbolDCEPass());
   pm.addNestedPass<mlir::FuncOp>(mlir::createStdExpandOpsPass());
   pm.addPass(mlir::createCanonicalizerPass());

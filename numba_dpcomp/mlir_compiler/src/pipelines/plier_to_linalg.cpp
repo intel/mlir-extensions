@@ -55,7 +55,6 @@
 #include "plier/rewrites/canonicalize_reductions.hpp"
 #include "plier/rewrites/common_opts.hpp"
 #include "plier/rewrites/cse.hpp"
-#include "plier/rewrites/force_inline.hpp"
 #include "plier/rewrites/loop_rewrites.hpp"
 #include "plier/rewrites/memory_rewrites.hpp"
 #include "plier/rewrites/promote_to_parallel.hpp"
@@ -63,6 +62,7 @@
 #include "plier/rewrites/uplift_math_calls.hpp"
 #include "plier/transforms/cast_utils.hpp"
 #include "plier/transforms/const_utils.hpp"
+#include "plier/transforms/inline_utils.hpp"
 #include "plier/transforms/loop_utils.hpp"
 #include "plier/transforms/pipeline_utils.hpp"
 
@@ -1459,10 +1459,6 @@ struct OptimizeGlobalsConstsLoad
   }
 };
 
-struct ForceInlinePass
-    : public plier::RewriteWrapperPass<ForceInlinePass, void, void,
-                                       plier::ForceInline> {};
-
 struct PostPlierToLinalgPass
     : public mlir::PassWrapper<PostPlierToLinalgPass, mlir::FunctionPass> {
   void runOnFunction() override;
@@ -1789,7 +1785,7 @@ void populatePlierToLinalgGenPipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<PlierToLinalgPass>());
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(std::make_unique<NumpyCallsLoweringPass>());
-  pm.addPass(std::make_unique<ForceInlinePass>());
+  pm.addPass(plier::createForceInlinePass());
   pm.addPass(mlir::createSymbolDCEPass());
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<PostPlierToLinalgPass>());
   pm.addNestedPass<mlir::FuncOp>(mlir::createCSEPass());
@@ -1829,7 +1825,7 @@ void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<LowerCloneOpsPass>());
 
   pm.addPass(std::make_unique<LowerLinalgPass>());
-  pm.addPass(std::make_unique<ForceInlinePass>());
+  pm.addPass(plier::createForceInlinePass());
   pm.addPass(mlir::createSymbolDCEPass());
 
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<UpliftMathCallsPass>());
