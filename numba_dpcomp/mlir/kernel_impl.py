@@ -83,6 +83,7 @@ class _KernelMarkerId(ConcreteTemplate):
         signature(types.void, types.int64, types.int64, types.int64, types.int64, types.int64, types.int64),
     ]
 
+@njit(enable_gpu_pipeline=True)
 def _kernel_body(global_size, local_size, body, *args):
     x, y, z = global_size
     lx, ly, lz = local_size
@@ -146,8 +147,7 @@ class Kernel:
         self.check_call_args(args, kwargs)
 
         jit_func = njit(inline='always',enable_gpu_pipeline=True)(self.py_func)
-        jit_kern = njit(enable_gpu_pipeline=True)(_kernel_body)
-        jit_kern(_extend_dims(self.global_size), _extend_dims(self.local_size), jit_func, *args)
+        _kernel_body(_extend_dims(self.global_size), _extend_dims(self.local_size), jit_func, *args)
 
 
 def kernel(func):
