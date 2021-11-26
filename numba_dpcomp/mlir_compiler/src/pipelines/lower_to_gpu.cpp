@@ -102,7 +102,7 @@ static void moveOpsIntoParallel(mlir::scf::ParallelOp outer, int depth = 0) {
     op.moveBefore(&parallelOpBody.front());
   }
   depth += outer.step().size();
-  if (depth >= 3)
+  if (depth >= 6)
     return;
 
   moveOpsIntoParallel(parallelOp, depth);
@@ -203,7 +203,50 @@ struct ParallelLoopGPUMappingPass
   }
 
   void runOnFunction() override {
-    mlir::greedilyMapParallelSCFToGPU(getFunction().getBody());
+    auto func = getFunction();
+    auto &region = func.getBody();
+    if (region.empty())
+      return;
+
+    if (!llvm::hasSingleElement(region)) {
+      func.emitError("Only strucutred constrol flow is supported");
+      signalPassFailure();
+      return;
+    }
+
+    auto getProcessor = [](unsigned val) -> mlir::gpu::Processor {
+      const mlir::gpu::Processor mapping[] = {
+          mlir::gpu::Processor::BlockX,  mlir::gpu::Processor::BlockY,
+          mlir::gpu::Processor::BlockZ,  mlir::gpu::Processor::ThreadX,
+          mlir::gpu::Processor::ThreadY, mlir::gpu::Processor::ThreadZ,
+      };
+      if (val >= std::size(mapping))
+        return mlir::gpu::Processor::Sequential;
+
+      return mapping[val];
+    };
+
+    mlir::OpBuilder builder(&getContext());
+    auto identityMap = builder.getDimIdentityMap();
+    llvm::SmallVector<mlir::gpu::ParallelLoopDimMapping> mapping;
+    for (auto &op : llvm::make_early_inc_range(region.front())) {
+      auto parallel = mlir::dyn_cast<mlir::scf::ParallelOp>(op);
+      if (!parallel)
+        continue;
+
+      auto numLoops = parallel.getNumLoops();
+      mapping.resize(numLoops);
+      for (auto i : llvm::seq(0u, numLoops))
+        mapping[i] = mlir::gpu::getParallelLoopDimMappingAttr(
+            getProcessor(i), identityMap, identityMap);
+
+      if (mlir::failed(mlir::gpu::setMappingAttr(parallel, mapping))) {
+        signalPassFailure();
+        return;
+      }
+    }
+
+    //    mlir::greedilyMapParallelSCFToGPU(region);
   }
 };
 
@@ -2043,19 +2086,30 @@ private:
   PyLinalgResolver resolver;
 };
 
-static mlir::LogicalResult lowerGetGlobalId(mlir::CallOp op,
-                                            mlir::scf::ForOp loop,
-                                            mlir::PatternRewriter &builder,
-                                            int64_t /*index*/) {
+static mlir::LogicalResult
+lowerGetGlobalId(mlir::CallOp op, mlir::ValueRange /*globalSizes*/,
+                 mlir::ValueRange localSizes, mlir::ValueRange gridArgs,
+                 mlir::ValueRange blockArgs, mlir::PatternRewriter &builder,
+                 unsigned index) {
   rerun_std_pipeline(op);
-  mlir::Value arg = loop.getLoopBody().front().getArgument(0);
+  auto loc = op.getLoc();
+  auto indexType = builder.getIndexType();
+  auto indexCast = [&](mlir::Value val) -> mlir::Value {
+    if (val.getType() != indexType)
+      return builder.createOrFold<plier::CastOp>(loc, indexType, val);
+    return val;
+  };
+  auto localSize = indexCast(localSizes[index]);
+  auto gridArg = indexCast(gridArgs[index]);
+  auto blockArg = indexCast(blockArgs[index]);
+  mlir::Value res =
+      builder.create<mlir::arith::MulIOp>(loc, gridArg, localSize);
+  res = builder.create<mlir::arith::AddIOp>(loc, res, blockArg);
   auto resType = op.getResult(0).getType();
-  if (arg.getType() != resType) {
-    rerun_std_pipeline(op);
-    arg = builder.createOrFold<plier::CastOp>(op.getLoc(), resType, arg);
-  }
+  if (res.getType() != resType)
+    res = builder.createOrFold<plier::CastOp>(loc, resType, res);
 
-  builder.replaceOp(op, arg);
+  builder.replaceOp(op, res);
   return mlir::success();
 }
 
@@ -2135,13 +2189,32 @@ struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::CallOp> {
   matchAndRewrite(mlir::CallOp op,
                   mlir::PatternRewriter &rewriter) const override {
     using handler_func_t = mlir::LogicalResult (*)(
-        mlir::CallOp, mlir::scf::ForOp, mlir::PatternRewriter &, int64_t);
+        mlir::CallOp, mlir::ValueRange, mlir::ValueRange, mlir::ValueRange,
+        mlir::ValueRange, mlir::PatternRewriter &, unsigned);
+    auto func = op->getParentOfType<mlir::FuncOp>();
+    if (!func || !llvm::hasSingleElement(func.getBody()))
+      return mlir::failure();
+
+    auto kernelMarker = [&]() -> mlir::CallOp {
+      for (auto &funcOp : func.getBody().front()) {
+        auto call = mlir::dyn_cast<mlir::CallOp>(funcOp);
+        if (call && call.getCallee() == "kernel_marker")
+          return call;
+      }
+      return {};
+    }();
+
+    if (!kernelMarker || kernelMarker.getNumOperands() != 6)
+      return mlir::failure();
+
+    auto globalSize = kernelMarker.operands().take_front(3);
+    auto localSize = kernelMarker.operands().drop_front(3);
 
     auto handler = [&]() -> handler_func_t {
       static const std::pair<mlir::StringRef, handler_func_t> handlers[] = {
           {"get_global_id", &lowerGetGlobalId},
-          {"get_global_size", &lowerGetGlobalSize},
-          {"get_local_size", &lowerGetLocalSize},
+          //          {"get_global_size", &lowerGetGlobalSize},
+          //          {"get_local_size", &lowerGetLocalSize},
       };
       auto name = op.getCallee();
       for (auto h : handlers)
@@ -2188,30 +2261,32 @@ struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::CallOp> {
     if (ind < 0 || ind >= 3)
       return mlir::failure();
 
-    auto loop = [&]() -> mlir::scf::ForOp {
-      auto skip = ind;
-      auto attrId = mlir::Identifier::get(plier::attributes::getGpuRangeName(),
-                                          op.getContext());
-      mlir::Operation *parent = op;
-      while (true) {
-        parent = parent->getParentOfType<mlir::scf::ForOp>();
-        if (!parent)
-          return {};
+    llvm::SmallVector<mlir::Value, 6> indexArgs;
+    auto attrId = mlir::Identifier::get(plier::attributes::getGpuRangeName(),
+                                        op.getContext());
+    mlir::Operation *parent = op;
+    while (true) {
+      parent = parent->getParentOfType<mlir::scf::ForOp>();
+      if (!parent)
+        break;
 
-        if (parent->hasAttr(attrId)) {
-          if (skip > 0) {
-            --skip;
-            continue;
-          }
-          return mlir::cast<mlir::scf::ForOp>(parent);
-        }
+      if (parent->hasAttr(attrId)) {
+        auto arg =
+            mlir::cast<mlir::scf::ForOp>(parent).getBody()->getArgument(0);
+        indexArgs.emplace_back(arg);
       }
-    }();
+    }
 
-    if (!loop)
+    if (indexArgs.size() != 6)
       return mlir::failure();
 
-    return handler(op, loop, rewriter, ind);
+    llvm::reverse(indexArgs);
+    auto gridArgs = llvm::makeArrayRef(indexArgs).take_front(3);
+    auto blockArgs = llvm::makeArrayRef(indexArgs).drop_front(3);
+
+    auto uind = static_cast<unsigned>(ind);
+    return handler(op, globalSize, localSize, gridArgs, blockArgs, rewriter,
+                   uind);
   }
 };
 
