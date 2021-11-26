@@ -675,6 +675,24 @@ ChangeLayoutOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
 }
 
 namespace {
+struct ChangeLayoutIdentity
+    : public mlir::OpRewritePattern<plier::ChangeLayoutOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::ChangeLayoutOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto src = op.source();
+    auto srcType = src.getType().cast<mlir::MemRefType>();
+    auto dstType = op.getType();
+    if (!mlir::memref::CastOp::areCastCompatible(srcType, dstType))
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::memref::CastOp>(op, src, dstType);
+    return mlir::success();
+  }
+};
+
 struct ChangeLayoutDim : public mlir::OpRewritePattern<mlir::memref::DimOp> {
   using OpRewritePattern::OpRewritePattern;
 
@@ -1045,12 +1063,12 @@ struct ChangeLayout1DReshape
 
 void ChangeLayoutOp::getCanonicalizationPatterns(
     ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context) {
-  results
-      .insert<ChangeLayoutDim, ChangeLayoutExtractMetadata, ChangeLayoutClone,
-              ChangeLayoutCast, ChangeLayoutLoad, ChangeLayoutStore,
-              ChangeLayoutSubview, ChangeLayoutLinalgGeneric,
-              ChangeLayoutLinalgCopy, ChangeLayoutIf, ChangeLayout1DReshape>(
-          context);
+  results.insert<ChangeLayoutIdentity, ChangeLayoutDim,
+                 ChangeLayoutExtractMetadata, ChangeLayoutClone,
+                 ChangeLayoutCast, ChangeLayoutLoad, ChangeLayoutStore,
+                 ChangeLayoutSubview, ChangeLayoutLinalgGeneric,
+                 ChangeLayoutLinalgCopy, ChangeLayoutIf, ChangeLayout1DReshape>(
+      context);
 }
 
 mlir::OpFoldResult SignCastOp::fold(llvm::ArrayRef<mlir::Attribute> operands) {
