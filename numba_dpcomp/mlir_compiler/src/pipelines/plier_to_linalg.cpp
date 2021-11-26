@@ -637,10 +637,11 @@ struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
         res = rewriter.create<mlir::tensor::ExtractSliceOp>(loc, value, offsets,
                                                             sizes, strides);
         if (needReshape) {
-          auto resultType = mlir::RankedTensorType::get(
-              llvm::SmallVector<int64_t>(numDims, -1), elemType);
-          auto resultTypeSignless = mlir::RankedTensorType::get(
-              llvm::SmallVector<int64_t>(numDims, -1), elemTypeSignless);
+          llvm::SmallVector<int64_t> tensorShape(
+              numDims, mlir::ShapedType::kDynamicSize);
+          auto resultType = mlir::RankedTensorType::get(tensorShape, elemType);
+          auto resultTypeSignless =
+              mlir::RankedTensorType::get(tensorShape, elemTypeSignless);
           llvm::SmallVector<mlir::Value> elements(numDims);
           for (auto it : llvm::enumerate(dimsIndices)) {
             auto dim =
