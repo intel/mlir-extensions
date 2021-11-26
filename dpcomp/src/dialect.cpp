@@ -1269,9 +1269,8 @@ void ReduceRankOp::build(::mlir::OpBuilder &odsBuilder,
   auto mapAttr = odsBuilder.getI32ArrayAttr(mapping);
   auto srcShape = srcType.getShape();
   llvm::SmallVector<int64_t> shape(mapping.size());
-  for (auto it : llvm::enumerate(mapping)) {
+  for (auto it : llvm::enumerate(mapping))
     shape[it.index()] = srcShape[static_cast<size_t>(it.value())];
-  }
 
   if (auto tensorType = srcType.dyn_cast<mlir::RankedTensorType>()) {
     auto retType = mlir::RankedTensorType::get(
@@ -1280,8 +1279,8 @@ void ReduceRankOp::build(::mlir::OpBuilder &odsBuilder,
   } else if (auto memrefType = srcType.dyn_cast<mlir::MemRefType>()) {
     auto affineMap = [&]() {
       mlir::AffineMap ret;
-      auto affineMap = memrefType.getLayout().getAffineMap();
-      if (affineMap && !affineMap.isIdentity()) {
+      if (!memrefType.getLayout().isIdentity()) {
+        auto affineMap = memrefType.getLayout().getAffineMap();
         auto context = odsBuilder.getContext();
         llvm::SmallVector<mlir::AffineExpr> dimReplacements(srcRank);
         llvm::SmallVector<mlir::AffineExpr> symReplacements(srcRank + 1);
@@ -1292,7 +1291,7 @@ void ReduceRankOp::build(::mlir::OpBuilder &odsBuilder,
             auto srcIndex = static_cast<unsigned>(it - mapping.begin());
             dimReplacements[i] = mlir::getAffineDimExpr(srcIndex, context);
             symReplacements[i + 1] =
-                mlir::getAffineSymbolExpr(srcIndex, context);
+                mlir::getAffineSymbolExpr(srcIndex + 1, context);
           } else {
             dimReplacements[i] = mlir::getAffineConstantExpr(0, context);
             symReplacements[i + 1] = mlir::getAffineConstantExpr(0, context);
