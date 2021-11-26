@@ -972,7 +972,6 @@ void MakeStridedLayoutPass::runOnOperation() {
   auto context = &getContext();
   auto mod = getOperation();
 
-  bool changed = false;
   llvm::SmallVector<mlir::Type> newArgTypes;
   llvm::SmallVector<mlir::Type> newResTypes;
   llvm::SmallVector<mlir::Value> newOperands;
@@ -1038,7 +1037,6 @@ void MakeStridedLayoutPass::runOnOperation() {
     auto newFuncType =
         mlir::FunctionType::get(&getContext(), newArgTypes, newResTypes);
     if (newFuncType != funcType) {
-      changed = true;
       func.setType(newFuncType);
       func.walk([&](mlir::ReturnOp ret) {
         builder.setInsertionPoint(ret);
