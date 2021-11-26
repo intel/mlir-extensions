@@ -116,8 +116,10 @@ struct ScfIfRewriteOneExit : public mlir::OpRewritePattern<mlir::CondBranchOp> {
       mlir::BlockAndValueMapping mapper;
       llvm::SmallVector<mlir::Value> yieldVals;
       auto copyBlock = [&](mlir::OpBuilder &builder, mlir::Location loc,
-                           mlir::Block &block) {
+                           mlir::Block &block, mlir::ValueRange args) {
+        assert(args.size() == block.getNumArguments());
         mapper.clear();
+        mapper.map(block.getArguments(), args);
         for (auto &op : block.without_terminator())
           builder.clone(op, mapper);
 
@@ -138,7 +140,7 @@ struct ScfIfRewriteOneExit : public mlir::OpRewritePattern<mlir::CondBranchOp> {
       };
 
       auto trueBody = [&](mlir::OpBuilder &builder, mlir::Location loc) {
-        copyBlock(builder, loc, *trueBlock);
+        copyBlock(builder, loc, *trueBlock, getOperands(!reverse));
       };
 
       bool hasElse = (falseBlock != postBlock);
@@ -153,7 +155,7 @@ struct ScfIfRewriteOneExit : public mlir::OpRewritePattern<mlir::CondBranchOp> {
       mlir::scf::IfOp ifOp;
       if (hasElse) {
         auto falseBody = [&](mlir::OpBuilder &builder, mlir::Location loc) {
-          copyBlock(builder, loc, *falseBlock);
+          copyBlock(builder, loc, *falseBlock, getOperands(reverse));
         };
         ifOp = rewriter.create<mlir::scf::IfOp>(loc, resTypes, cond, trueBody,
                                                 falseBody);
@@ -533,7 +535,9 @@ struct BreakRewrite : public mlir::OpRewritePattern<mlir::CondBranchOp> {
 
 struct CondBranchSameTargetRewrite
     : public mlir::OpRewritePattern<mlir::CondBranchOp> {
-  using OpRewritePattern::OpRewritePattern;
+  // Set higher benefit than if rewrites
+  CondBranchSameTargetRewrite(mlir::MLIRContext *context)
+      : mlir::OpRewritePattern<mlir::CondBranchOp>(context, /*benefit*/ 10) {}
 
   mlir::LogicalResult
   matchAndRewrite(mlir::CondBranchOp op,
@@ -574,8 +578,7 @@ struct PlierToScfPass
                                mlir::OperationPass<mlir::ModuleOp>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
-    // registry.insert<plier::PlierDialect>();
-    // registry.insert<mlir::StandardOpsDialect>();
+    registry.insert<mlir::StandardOpsDialect>();
     registry.insert<mlir::scf::SCFDialect>();
   }
 
