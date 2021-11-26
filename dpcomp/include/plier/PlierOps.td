@@ -279,10 +279,21 @@ def RetainOp : Plier_Op<"retain", [ViewLikeOpInterface]> {
 
   let builders = [OpBuilder<(ins "::mlir::Value" : $value)>];
 
-    let extraClassDeclaration = [{
-        ::mlir::Value getViewSource() { return source();
+  let extraClassDeclaration = [{
+      ::mlir::Value getViewSource() { return source(); }
+  }];
 }
-}];
+
+def ChangeLayoutOp : Plier_Op<"change_layout", [ViewLikeOpInterface, NoSideEffect]> {
+  let arguments = (ins AnyMemRef : $source);
+
+  let results = (outs AnyMemRef);
+  let hasFolder = 1;
+  let hasCanonicalizer = 1;
+
+  let extraClassDeclaration = [{
+      ::mlir::Value getViewSource() { return source(); }
+  }];
 }
 
 def SignCastOp : Plier_Op<"sign_cast", [NoSideEffect]> {

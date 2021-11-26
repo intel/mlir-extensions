@@ -23,7 +23,9 @@
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/GPU/GPUDialect.h>
+#include <mlir/Dialect/Linalg/IR/LinalgOps.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
+#include <mlir/Dialect/SCF/SCF.h>
 
 #include <llvm/ADT/TypeSwitch.h>
 
@@ -651,6 +653,336 @@ void SliceGetItemOp::getCanonicalizationPatterns(
 void RetainOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                      mlir::Value value) {
   RetainOp::build(builder, state, value.getType(), value);
+}
+
+static mlir::Value getChangeLayoutParent(mlir::Value val) {
+  if (auto parent = val.getDefiningOp<plier::ChangeLayoutOp>())
+    return parent.source();
+
+  return {};
+}
+
+mlir::OpFoldResult
+ChangeLayoutOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
+  auto src = source();
+  auto thisType = getType();
+  do {
+    if (thisType == src.getType())
+      return src;
+  } while ((src = getChangeLayoutParent(src)));
+
+  return nullptr;
+}
+
+namespace {
+struct ChangeLayoutDim : public mlir::OpRewritePattern<mlir::memref::DimOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::DimOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto cl = op.source().getDefiningOp<plier::ChangeLayoutOp>();
+    if (!cl)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::memref::DimOp>(op, cl.source(),
+                                                     op.index());
+    return mlir::success();
+  }
+};
+
+struct ChangeLayoutExtractMetadata
+    : public mlir::OpRewritePattern<plier::ExtractMemrefMetadataOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::ExtractMemrefMetadataOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto cl = op.source().getDefiningOp<plier::ChangeLayoutOp>();
+    if (!cl)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<plier::ExtractMemrefMetadataOp>(
+        op, cl.source(), op.dimIndex().getSExtValue());
+    return mlir::success();
+  }
+};
+
+struct ChangeLayoutClone
+    : public mlir::OpRewritePattern<mlir::memref::CloneOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::CloneOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto cl = op.input().getDefiningOp<plier::ChangeLayoutOp>();
+    if (!cl)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::memref::CloneOp>(op, cl.source());
+    return mlir::success();
+  }
+};
+
+struct ChangeLayoutCast : public mlir::OpRewritePattern<mlir::memref::CastOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::CastOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto cl = op.source().getDefiningOp<plier::ChangeLayoutOp>();
+    if (!cl)
+      return mlir::failure();
+
+    auto src = cl.source();
+    auto srcType = src.getType();
+    auto dstType = op.getType();
+    if (srcType == dstType) {
+      rewriter.replaceOp(op, src);
+      return mlir::success();
+    }
+
+    if (mlir::memref::CastOp::areCastCompatible(srcType, dstType)) {
+      rewriter.replaceOpWithNewOp<mlir::memref::CastOp>(op, src, dstType);
+      return mlir::success();
+    }
+
+    return mlir::failure();
+  }
+};
+
+struct ChangeLayoutLoad : public mlir::OpRewritePattern<mlir::memref::LoadOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::LoadOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto cl = op.memref().getDefiningOp<plier::ChangeLayoutOp>();
+    if (!cl)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::memref::LoadOp>(op, cl.source(),
+                                                      op.indices());
+    return mlir::success();
+  }
+};
+
+struct ChangeLayoutStore
+    : public mlir::OpRewritePattern<mlir::memref::StoreOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::StoreOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto cl = op.memref().getDefiningOp<plier::ChangeLayoutOp>();
+    if (!cl)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(
+        op, op.value(), cl.source(), op.indices());
+    return mlir::success();
+  }
+};
+
+struct ChangeLayoutSubview
+    : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::SubViewOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto cl = op.source().getDefiningOp<plier::ChangeLayoutOp>();
+    if (!cl)
+      return mlir::failure();
+
+    auto loc = op.getLoc();
+    auto newSubview = rewriter.createOrFold<mlir::memref::SubViewOp>(
+        loc, cl.source(), op.getMixedOffsets(), op.getMixedSizes(),
+        op.getMixedStrides());
+    auto oldType = op.getType();
+    auto newType = newSubview.getType();
+    if (newType != oldType)
+      newSubview = rewriter.createOrFold<plier::ChangeLayoutOp>(loc, oldType,
+                                                                newSubview);
+
+    rewriter.replaceOp(op, newSubview);
+    return mlir::success();
+  }
+};
+
+struct ChangeLayoutLinalgGeneric
+    : public mlir::OpRewritePattern<mlir::linalg::GenericOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::linalg::GenericOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    bool changed = false;
+    llvm::SmallVector<mlir::Value> newOperands;
+
+    for (bool isInputs : {true, false}) {
+      mlir::ValueRange args = (isInputs ? op.inputs() : op.outputs());
+      auto count = static_cast<unsigned>(args.size());
+      newOperands.resize(count);
+      bool needUpdate = false;
+      for (auto i : llvm::seq(0u, count)) {
+        auto arg = args[i];
+        auto cl = arg.getDefiningOp<plier::ChangeLayoutOp>();
+        if (cl) {
+          assert(arg.getType().isa<mlir::MemRefType>());
+          assert(cl.source().getType().isa<mlir::MemRefType>());
+          newOperands[i] = cl.source();
+          needUpdate = true;
+          changed = true;
+        } else {
+          newOperands[i] = arg;
+        }
+      }
+
+      if (needUpdate) {
+        rewriter.updateRootInPlace(op, [&]() {
+          (isInputs ? op.inputsMutable() : op.outputsMutable())
+              .assign(newOperands);
+          if (!isInputs) {
+            for (auto i : llvm::seq(0u, count)) {
+              auto newType = newOperands[i].getType();
+              auto res = op.getResult(i);
+              if (newType != res.getType()) {
+                assert(newType.isa<mlir::MemRefType>());
+                assert(res.use_empty());
+                res.setType(newType);
+              }
+            }
+          }
+        });
+      }
+    }
+
+    return mlir::success(changed);
+  }
+};
+
+struct ChangeLayoutLinalgCopy
+    : public mlir::OpRewritePattern<mlir::linalg::CopyOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::linalg::CopyOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto input = op.input();
+    auto output = op.output();
+    auto clInput = input.getDefiningOp<plier::ChangeLayoutOp>();
+    auto clOutput = output.getDefiningOp<plier::ChangeLayoutOp>();
+    if (!clInput && !clOutput)
+      return mlir::failure();
+
+    if (clInput)
+      input = clInput.source();
+
+    if (clOutput)
+      output = clOutput.source();
+
+    rewriter.replaceOpWithNewOp<mlir::linalg::CopyOp>(
+        op, input, output, op.inputPermutation().getValueOr(mlir::AffineMap{}),
+        op.outputPermutation().getValueOr(mlir::AffineMap{}));
+    return mlir::success();
+  }
+};
+
+struct ChangeLayoutIf : public mlir::OpRewritePattern<mlir::scf::YieldOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::scf::YieldOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    if (op.results().empty())
+      return mlir::failure();
+
+    auto ifOp = mlir::dyn_cast<mlir::scf::IfOp>(op->getParentOp());
+    if (!ifOp)
+      return mlir::failure();
+
+    auto trueYield = mlir::cast<mlir::scf::YieldOp>(
+        ifOp.thenRegion().front().getTerminator());
+    auto falseYield = mlir::cast<mlir::scf::YieldOp>(
+        ifOp.elseRegion().front().getTerminator());
+    mlir::OpBuilder::InsertionGuard g(rewriter);
+    auto count = static_cast<unsigned>(trueYield.results().size());
+    llvm::SmallVector<mlir::Type> newResultTypes(count);
+    bool changed = false;
+    for (auto i : llvm::seq(0u, count)) {
+      auto origType = ifOp.getResult(i).getType();
+
+      mlir::Type newType;
+      for (bool reverse : {true, false}) {
+        auto clYield = (reverse ? falseYield : trueYield);
+        auto otherYield = (reverse ? trueYield : falseYield);
+
+        auto arg = clYield.results()[i];
+        if (!arg.getType().isa<mlir::MemRefType>())
+          continue;
+
+        auto cl = arg.getDefiningOp<plier::ChangeLayoutOp>();
+        if (!cl)
+          continue;
+
+        auto src = cl.source();
+        auto srcType = src.getType();
+
+        if (!mlir::memref::CastOp::areCastCompatible(origType, srcType))
+          continue;
+
+        rewriter.updateRootInPlace(clYield,
+                                   [&]() { clYield.setOperand(i, src); });
+
+        auto otherArg = otherYield.results()[i];
+        rewriter.setInsertionPoint(otherYield);
+        auto otherRes = rewriter.createOrFold<mlir::memref::CastOp>(
+            otherYield.getLoc(), otherArg, srcType);
+
+        rewriter.updateRootInPlace(
+            otherYield, [&]() { otherYield.setOperand(i, otherRes); });
+
+        newType = srcType;
+      }
+
+      if (!newType) {
+        newResultTypes[i] = origType;
+      } else {
+        newResultTypes[i] = newType;
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      rewriter.setInsertionPointAfter(ifOp);
+      rewriter.updateRootInPlace(ifOp, [&]() {
+        auto loc = ifOp.getLoc();
+        for (auto i : llvm::seq(0u, count)) {
+          auto res = ifOp.getResult(i);
+          auto origType = res.getType();
+          auto newType = newResultTypes[i];
+          if (origType != newType) {
+            res.setType(newType);
+            auto cl =
+                rewriter.create<plier::ChangeLayoutOp>(loc, origType, res);
+            res.replaceAllUsesExcept(cl, cl);
+          }
+        }
+      });
+    }
+    return mlir::success(changed);
+  }
+};
+} // namespace
+
+void ChangeLayoutOp::getCanonicalizationPatterns(
+    ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context) {
+  results
+      .insert<ChangeLayoutDim, ChangeLayoutExtractMetadata, ChangeLayoutClone,
+              ChangeLayoutCast, ChangeLayoutLoad, ChangeLayoutStore,
+              ChangeLayoutSubview, ChangeLayoutLinalgGeneric,
+              ChangeLayoutLinalgCopy, ChangeLayoutIf>(context);
 }
 
 mlir::OpFoldResult SignCastOp::fold(llvm::ArrayRef<mlir::Attribute> operands) {
