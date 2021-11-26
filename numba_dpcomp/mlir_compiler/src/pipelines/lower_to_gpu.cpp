@@ -274,58 +274,6 @@ struct RemoveKernelMarkerPass
   }
 };
 
-struct SetLocalSizePass
-    : public mlir::PassWrapper<SetLocalSizePass, mlir::FunctionPass> {
-  virtual void
-  getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<mlir::gpu::GPUDialect>();
-  }
-
-  void runOnFunction() override {
-    auto func = getFunction();
-    auto &region = func.getBody();
-    if (region.empty())
-      return;
-
-    if (!llvm::hasSingleElement(region)) {
-      func.emitError("Only strucutred constrol flow is supported");
-      signalPassFailure();
-      return;
-    }
-
-    mlir::OpBuilder builder(&getContext());
-    mlir::StringRef funcName("set_local_size");
-    llvm::SmallVector<mlir::Value, 3> localSize;
-    for (auto &op : llvm::make_early_inc_range(region.front())) {
-      if (auto call = mlir::dyn_cast<mlir::CallOp>(op)) {
-        if (call.getCallee() == funcName) {
-          auto args = call.operands();
-          localSize.assign(args.begin(), args.end());
-          op.erase();
-        }
-        continue;
-      }
-
-      op.walk([&](mlir::gpu::LaunchOp launch) {
-        auto numSizes = localSize.size();
-        mlir::MutableOperandRange launchSizes[] = {
-            launch.blockSizeXMutable(),
-            launch.blockSizeYMutable(),
-            launch.blockSizeZMutable(),
-        };
-        builder.setInsertionPoint(launch);
-        auto loc = launch.getLoc();
-        for (auto i : llvm::seq(0u, 3u)) {
-          if (numSizes > i) {
-            auto val = plier::index_cast(builder, loc, localSize[i]);
-            launchSizes[i].assign(val);
-          }
-        }
-      });
-    }
-  }
-};
-
 static const char *kGpuAllocShared = "gpu.alloc_shared";
 
 struct InsertGPUAllocs
@@ -2338,7 +2286,6 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   funcPM.addPass(std::make_unique<ParallelLoopGPUMappingPass>());
   funcPM.addPass(mlir::createParallelLoopToGpuPass());
   funcPM.addPass(std::make_unique<RemoveKernelMarkerPass>());
-  funcPM.addPass(std::make_unique<SetLocalSizePass>());
   funcPM.addPass(mlir::createCanonicalizerPass());
   funcPM.addPass(std::make_unique<InsertGPUAllocs>());
   funcPM.addPass(mlir::createCanonicalizerPass());
