@@ -147,7 +147,7 @@ void PlierDialect::printType(mlir::Type type,
         os.printAttribute(t.getValue());
         os << ">";
       })
-      .Case<plier::SliceType>([&](auto t) { os << "SliceType"; })
+      .Case<plier::SliceType>([&](auto) { os << "SliceType"; })
       .Case<plier::TypeVar>([&](auto t) {
         os << "TypeVar<";
         os.printType(t.getType());
