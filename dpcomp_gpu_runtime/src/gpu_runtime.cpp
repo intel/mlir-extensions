@@ -286,7 +286,9 @@ struct Stream {
                                  ze_event_handle_t *events, ParamDesc *params,
                                  size_t eventIndex) {
     assert(kernel);
-    fprintf(stdout, "launchKernel 1 %d %d %d\n", (int)blockX, (int)blockY,
+    fprintf(stdout, "launchKernel 1 %d %d %d\n", (int)gridX, (int)gridY,
+            (int)gridZ);
+    fprintf(stdout, "launchKernel 2 %d %d %d\n", (int)blockX, (int)blockY,
             (int)blockZ);
     fflush(stdout);
     auto eventsCount = static_cast<uint32_t>(
@@ -299,14 +301,18 @@ struct Stream {
                                          fixSz(blockZ)));
     for (size_t i = 0; i < paramsCount; ++i) {
       auto param = params[i];
-      fprintf(stdout, "launchKernel param %d %d %p\n", (int)i, (int)param.size,
-              param.data);
       CHECK_ZE_RESULT(zeKernelSetArgumentValue(kernel, static_cast<uint32_t>(i),
                                                param.size, param.data));
     }
 
     auto event = getEvent(eventIndex);
-    ze_group_count_t launchArgs = {fixSz(gridX), fixSz(gridY), fixSz(gridZ)};
+    auto divUp = [](size_t val, size_t div) {
+      return static_cast<uint32_t>((val + div - 1) / div);
+    };
+    ze_group_count_t launchArgs = {divUp(gridX, blockX), divUp(gridY, blockY),
+                                   divUp(gridZ, blockZ)};
+    fprintf(stdout, "launchKernel 3 %d %d %d\n", (int)launchArgs.groupCountX,
+            (int)launchArgs.groupCountY, (int)launchArgs.groupCountZ);
     CHECK_ZE_RESULT(zeCommandListAppendLaunchKernel(
         commandList.get(), kernel, &launchArgs, event, eventsCount, events));
     return event;
