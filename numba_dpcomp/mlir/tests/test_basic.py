@@ -122,6 +122,7 @@ def test_cast(py_func, val):
     'exp',
     'sin',
     'cos',
+    'erf',
 ])
 def test_math_uplifting(val, name):
     py_func = lambda a: math.sqrt(a)

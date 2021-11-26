@@ -51,6 +51,7 @@ plier::UpliftMathCalls::matchAndRewrite(mlir::CallOp op,
       {"exp", &replaceOp1<mlir::math::ExpOp>},
       {"sin", &replaceOp1<mlir::math::SinOp>},
       {"cos", &replaceOp1<mlir::math::CosOp>},
+      {"erf", &replaceOp1<mlir::math::ErfOp>},
   };
 
   for (auto &handler : handlers) {
