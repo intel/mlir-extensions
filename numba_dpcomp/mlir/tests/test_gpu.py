@@ -314,7 +314,7 @@ def test_get_global_size(shape):
 
 @require_gpu
 @pytest.mark.parametrize("shape", _test_shapes)
-@pytest.mark.parametrize("lsize", [(), (1,1,1), (2,4,8)])
+@pytest.mark.parametrize("lsize", [(1,1,1), (2,4,8)])
 def test_get_local_size(shape, lsize):
     def func1(c):
         i = get_global_id(0)
