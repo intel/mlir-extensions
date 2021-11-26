@@ -538,24 +538,32 @@ static mlir::Value getFlatIndex(mlir::OpBuilder &builder, mlir::Location loc,
     }
     auto affineMap = mlir::AffineMap::get(
         rank, static_cast<unsigned>(applyOperands.size()) - rank, expr);
+    assert(affineMap.getNumDims() == indices.size());
     return builder.createOrFold<mlir::AffineApplyOp>(loc, affineMap,
                                                      applyOperands);
   } else {
-    llvm::SmallVector<mlir::Value> applyOperands(rank * 2 + 1);
-    {
+    auto affineMap = memrefType.getLayout().getAffineMap();
+    assert(affineMap.getNumDims() == indices.size());
+    llvm::SmallVector<mlir::Value> applyOperands;
+    if (rank != 0) {
       mlir::OpBuilder::InsertionGuard g(builder);
       setInsertionPointToStart(builder, memref);
-      llvm::copy(indices, applyOperands.begin());
-      applyOperands[rank] =
-          builder.createOrFold<plier::ExtractMemrefMetadataOp>(loc, memref);
-      auto strides = llvm::MutableArrayRef<mlir::Value>(applyOperands)
-                         .drop_front(rank + 1);
-      for (auto i : llvm::seq(0u, rank)) {
-        strides[i] = builder.createOrFold<plier::ExtractMemrefMetadataOp>(
-            loc, memref, i);
+      applyOperands.reserve(rank * 2 + 1);
+      applyOperands.assign(indices.begin(), indices.end());
+
+      auto numSymbols = affineMap.getNumSymbols();
+      if (numSymbols > 0) {
+        applyOperands.emplace_back(
+            builder.createOrFold<plier::ExtractMemrefMetadataOp>(loc, memref));
+        --numSymbols;
+        assert(numSymbols <= rank);
+        for (auto i : llvm::seq(0u, numSymbols)) {
+          applyOperands.emplace_back(
+              builder.createOrFold<plier::ExtractMemrefMetadataOp>(loc, memref,
+                                                                   i));
+        }
       }
     }
-    auto affineMap = memrefType.getLayout().getAffineMap();
     return builder.createOrFold<mlir::AffineApplyOp>(loc, affineMap,
                                                      applyOperands);
   }
@@ -2154,8 +2162,10 @@ void registerLowerToGPUPipeline(plier::PipelineRegistry &registry) {
   registry.register_pipeline([](auto sink) {
     auto highStage = getHighLoweringStage();
     sink(lowerToGPUPipelineNameHigh(),
-         {highStage.begin, plierToLinalgGenPipelineName()}, {highStage.end},
-         {plierToStdPipelineName()}, &populateLowerToGPUPipelineHigh);
+         {highStage.begin, plierToStdPipelineName(),
+          plierToLinalgGenPipelineName()},
+         {highStage.end}, {plierToStdPipelineName()},
+         &populateLowerToGPUPipelineHigh);
 
     auto lowStage = getLowerLoweringStage();
     sink(lowerToGPUPipelineNameLow(), {lowStage.begin},
