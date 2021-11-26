@@ -24,6 +24,10 @@ from numba_dpcomp.mlir.kernel_sim import kernel as kernel_sim
 from numba_dpcomp.mlir.passes import print_pass_ir, get_print_buffer
 
 from .utils import njit_cached as njit
+from .utils import JitfuncCache
+
+kernel_cache = JitfuncCache(kernel)
+kernel_cached = kernel_cache.cached_decorator
 
 GPU_TESTS_ENABLED = _readenv('DPCOMP_ENABLE_GPU_TESTS', int, 0)
 
@@ -39,7 +43,7 @@ def test_simple1():
         c[i, j, k] = a[i, j, k] + b[i, j, k]
 
     sim_func = kernel_sim(func)
-    gpu_func = kernel(func)
+    gpu_func = kernel_cached(func)
 
     a = np.array([[[1,2,3],[4,5,6]]], np.float32)
     b = np.array([[[7,8,9],[10,11,12]]], np.float32)
@@ -66,7 +70,7 @@ def test_simple2():
         c[i, j, k] = a[i, j, k] + b[i, j, k]
 
     sim_func = kernel_sim(func)
-    gpu_func = kernel(func)
+    gpu_func = kernel_cached(func)
 
     a = np.array([[[1,2,3],[4,5,6]]], np.float32)
     b = np.array([[[7,8,9],[10,11,12]]], np.float32)
@@ -91,7 +95,7 @@ def test_simple3():
         b[i, 1] = a[i, 1]
 
     sim_func = kernel_sim(func)
-    gpu_func = kernel(func)
+    gpu_func = kernel_cached(func)
 
     a = np.array([[1,2],[3,4],[5,6]], np.float32)
 
@@ -117,7 +121,7 @@ def test_inner_loop():
         c[i] = res
 
     sim_func = kernel_sim(func)
-    gpu_func = kernel(func)
+    gpu_func = kernel_cached(func)
 
     a = np.array([1,2,3,4], np.int32)
     b = np.array([5,6,7,8,9], np.float32)
@@ -136,7 +140,7 @@ def test_inner_loop():
 
 def _test_unary(func, dtype, ir_pass, ir_check):
     sim_func = kernel_sim(func)
-    gpu_func = kernel(func)
+    gpu_func = kernel_cached(func)
 
     a = np.array([1,2,3,4,5,6,7,8,9], dtype)
 
@@ -154,7 +158,7 @@ def _test_unary(func, dtype, ir_pass, ir_check):
 
 def _test_binary(func, dtype, ir_pass, ir_check):
     sim_func = kernel_sim(func)
-    gpu_func = kernel(func)
+    gpu_func = kernel_cached(func)
 
     a = np.array([1,2,3,4,5,6,7,8,9], dtype)
     b = np.array([11,12,13,14,15,16,17,18,19], dtype)
@@ -222,7 +226,7 @@ def test_get_global_id(shape):
     func = [func1, func2, func3][len(shape) - 1]
 
     sim_func = kernel_sim(func)
-    gpu_func = kernel(func)
+    gpu_func = kernel_cached(func)
 
     dtype = np.int32
 
@@ -266,7 +270,7 @@ def test_get_global_size(shape):
     func = [func1, func2, func3][len(shape) - 1]
 
     sim_func = kernel_sim(func)
-    gpu_func = kernel(func)
+    gpu_func = kernel_cached(func)
 
     dtype = np.int32
 
@@ -310,7 +314,7 @@ def test_get_local_size(shape, lsize):
     func = [func1, func2, func3][len(shape) - 1]
 
     sim_func = kernel_sim(func)
-    gpu_func = kernel(func)
+    gpu_func = kernel_cached(func)
 
     dtype = np.int32
 
@@ -329,9 +333,15 @@ def test_get_local_size(shape, lsize):
 
     assert_equal(gpu_res, sim_res)
 
+_atomic_dtypes = ['int32', 'int64', 'float32']
+_atomic_funcs = [atomic.add, atomic.sub]
+
+def _check_atomic_ir(ir):
+    return ir.count('spv.AtomicIAdd') == 1 or ir.count('spv.AtomicISub') == 1 or ir.count('spv.AtomicFAddEXT') == 1
+
 def _test_atomic(func, dtype, ret_size):
     sim_func = kernel_sim(func)
-    gpu_func = kernel(func)
+    gpu_func = kernel_cached(func)
 
     a = np.array([1,2,3,4,5,6,7,8,9], dtype)
 
@@ -343,13 +353,13 @@ def _test_atomic(func, dtype, ret_size):
     with print_pass_ir([],['GPUToSpirvPass']):
         gpu_func[a.shape, ()](a, gpu_res)
         ir = get_print_buffer()
-        assert ir.count('spv.AtomicIAdd') == 1 or ir.count('spv.AtomicISub') == 1 or ir.count('spv.AtomicFAddEXT') == 1, ir
+        assert _check_atomic_ir(ir), ir
 
     assert_equal(gpu_res, sim_res)
 
 @require_gpu
-@pytest.mark.parametrize("dtype", ['int32', 'int64', 'float32'])
-@pytest.mark.parametrize("atomic_op", [atomic.add, atomic.sub])
+@pytest.mark.parametrize("dtype", _atomic_dtypes)
+@pytest.mark.parametrize("atomic_op", _atomic_funcs)
 def test_atomics(dtype, atomic_op):
     def func(a, b):
         i = get_global_id(0)
@@ -367,8 +377,8 @@ def test_atomics_modname():
     _test_atomic(func, 'int32', 1)
 
 @require_gpu
-@pytest.mark.parametrize("dtype", ['int32', 'int64', 'float32'])
-@pytest.mark.parametrize("atomic_op", [atomic.add, atomic.sub])
+@pytest.mark.parametrize("dtype", _atomic_dtypes)
+@pytest.mark.parametrize("atomic_op", _atomic_funcs)
 def test_atomics_offset(dtype, atomic_op):
     def func(a, b):
         i = get_global_id(0)
@@ -379,7 +389,7 @@ def test_atomics_offset(dtype, atomic_op):
     _test_atomic(func, dtype, 2)
 
 @require_gpu
-@pytest.mark.parametrize("atomic_op", [atomic.add, atomic.sub])
+@pytest.mark.parametrize("atomic_op", _atomic_funcs)
 def test_atomics_different_types1(atomic_op):
     dtype = 'int32'
     def func(a, b):
@@ -389,7 +399,7 @@ def test_atomics_different_types1(atomic_op):
     _test_atomic(func, dtype, 1)
 
 @require_gpu
-@pytest.mark.parametrize("atomic_op", [atomic.add, atomic.sub])
+@pytest.mark.parametrize("atomic_op", _atomic_funcs)
 def test_atomics_different_types2(atomic_op):
     dtype = 'int32'
     def func(a, b):
@@ -421,7 +431,7 @@ def test_atomics_multidim(funci):
     func = func1 if funci == 1 else func2
 
     sim_func = kernel_sim(func)
-    gpu_func = kernel(func)
+    gpu_func = kernel_cached(func)
 
     a = np.array([[1,2,3],[4,5,6],[7,8,9]], dtype)
 
@@ -433,6 +443,6 @@ def test_atomics_multidim(funci):
     with print_pass_ir([],['GPUToSpirvPass']):
         gpu_func[a.shape, ()](a, gpu_res)
         ir = get_print_buffer()
-        assert ir.count('spv.AtomicIAdd') == 1 or ir.count('spv.AtomicISub') == 1 or ir.count('spv.AtomicFAddEXT') == 1, ir
+        assert _check_atomic_ir(ir), ir
 
     assert_equal(gpu_res, sim_res)
