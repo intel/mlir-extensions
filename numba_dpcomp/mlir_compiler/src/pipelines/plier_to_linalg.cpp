@@ -505,6 +505,46 @@ static bool isValidGetitemIndex(mlir::Type type) {
   return type.isa<mlir::IntegerType, mlir::IndexType, plier::LiteralType>();
 }
 
+static mlir::Value makeSubview(mlir::OpBuilder &builder, mlir::Location loc,
+                               mlir::Value src,
+                               llvm::ArrayRef<mlir::OpFoldResult> offsets,
+                               llvm::ArrayRef<mlir::OpFoldResult> sizes,
+                               llvm::ArrayRef<mlir::OpFoldResult> strides,
+                               llvm::ArrayRef<unsigned> dimIndices) {
+  auto srcType = src.getType();
+  bool isTensor = srcType.isa<mlir::RankedTensorType>();
+  mlir::MemRefType memrefType;
+  if (isTensor) {
+    auto tensorType = srcType.cast<mlir::RankedTensorType>();
+    memrefType = mlir::MemRefType::get(tensorType.getShape(),
+                                       tensorType.getElementType());
+    src = builder.create<mlir::memref::BufferCastOp>(loc, memrefType, src);
+  } else {
+    memrefType = srcType.cast<mlir::MemRefType>();
+  }
+  auto view = builder.createOrFold<mlir::memref::SubViewOp>(loc, src, offsets,
+                                                            sizes, strides);
+
+  if (dimIndices.size() != static_cast<size_t>(memrefType.getRank())) {
+    // TODO: rank-reducing subview
+    llvm::SmallVector<int32_t> mapping;
+    mapping.assign(dimIndices.begin(), dimIndices.end());
+    view = builder.createOrFold<plier::ReduceRankOp>(loc, view, mapping);
+    auto oldShape = memrefType.getShape();
+    llvm::SmallVector<int64_t> newShape(dimIndices.size());
+    for (auto it : llvm::enumerate(dimIndices))
+      newShape[it.index()] = oldShape[it.value()];
+
+    memrefType = mlir::MemRefType::get(newShape, memrefType.getElementType());
+  }
+
+  view = builder.createOrFold<plier::ChangeLayoutOp>(loc, memrefType, view);
+  if (isTensor)
+    view = builder.create<mlir::memref::TensorLoadOp>(loc, view);
+
+  return view;
+}
+
 struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -625,40 +665,24 @@ struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
     }
 
     if (!dimsIndices.empty()) {
-      auto numDims = static_cast<unsigned>(dimsIndices.size());
-      auto needReshape = (numDims != type.cast<mlir::ShapedType>().getRank());
-      if (isMemref) {
-        if (needReshape)
-          return mlir::failure(); // TODO: not implemented
+      res = makeSubview(rewriter, loc, value, offsets, sizes, strides,
+                        dimsIndices);
 
-        res = rewriter.create<mlir::memref::SubViewOp>(loc, value, offsets,
-                                                       sizes, strides);
+      mlir::ShapedType resultTypeSignless =
+          res.getType().cast<mlir::ShapedType>();
+      mlir::Type resultType;
+      if (isMemref) {
+        resultType =
+            mlir::MemRefType::get(resultTypeSignless.getShape(), elemType);
       } else if (isTensor) {
-        res = rewriter.create<mlir::tensor::ExtractSliceOp>(loc, value, offsets,
-                                                            sizes, strides);
-        if (needReshape) {
-          llvm::SmallVector<int64_t> tensorShape(
-              numDims, mlir::ShapedType::kDynamicSize);
-          auto resultType = mlir::RankedTensorType::get(tensorShape, elemType);
-          auto resultTypeSignless =
-              mlir::RankedTensorType::get(tensorShape, elemTypeSignless);
-          llvm::SmallVector<mlir::Value> elements(numDims);
-          for (auto it : llvm::enumerate(dimsIndices)) {
-            auto dim =
-                rewriter.create<mlir::tensor::DimOp>(loc, value, it.value());
-            elements[it.index()] = dim;
-          }
-          auto shape =
-              rewriter.create<mlir::tensor::FromElementsOp>(loc, elements);
-          res = rewriter.create<mlir::tensor::ReshapeOp>(
-              loc, resultTypeSignless, res, shape);
-          if (resultType != resultTypeSignless) {
-            res = rewriter.create<plier::SignCastOp>(loc, resultType, res);
-          }
-        }
+        resultType = mlir::RankedTensorType::get(resultTypeSignless.getShape(),
+                                                 elemType);
       } else {
         llvm_unreachable("Invalid getitem");
       }
+
+      if (resultType != resultTypeSignless)
+        res = rewriter.create<plier::SignCastOp>(loc, resultType, res);
     } else {
       auto toValues = [&](auto vals) {
         llvm::SmallVector<mlir::Value> ret(vals.size());
@@ -1707,7 +1731,8 @@ struct ReplaceClones : public mlir::OpRewritePattern<mlir::memref::CloneOp> {
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::CloneOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<plier::RetainOp>(op, op.getSource());
+    rewriter.replaceOpWithNewOp<plier::RetainOp>(op, op.getType(),
+                                                 op.getSource());
     return mlir::success();
   }
 };
