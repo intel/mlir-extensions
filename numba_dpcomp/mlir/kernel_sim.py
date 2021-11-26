@@ -58,6 +58,9 @@ def _setup_execution_state(global_size, local_size):
     import numba_dpcomp.mlir.kernel_impl
     global _execution_state
     assert _execution_state is None
+    if (len(local_size) == 0):
+        local_size = (1,) * len(global_size)
+
     _execution_state =_ExecutionState(
         global_size=global_size,
         local_size=local_size,
