@@ -349,7 +349,9 @@ struct PyLinalgResolver::Context {
 
     if (py::isinstance<py::int_>(obj)) {
       auto attr = builder.getI64IntegerAttr(obj.cast<int64_t>());
-      return builder.create<mlir::arith::ConstantOp>(loc, attr);
+      auto res = builder.create<mlir::arith::ConstantOp>(loc, attr);
+      auto intType = builder.getIntegerType(64, true);
+      return builder.create<plier::SignCastOp>(loc, intType, res);
     }
 
     if (py::isinstance<py::float_>(obj)) {
