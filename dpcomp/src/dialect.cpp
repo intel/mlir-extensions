@@ -675,6 +675,45 @@ ChangeLayoutOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
 }
 
 namespace {
+static bool canTransformLayoutCast(mlir::MemRefType srcType,
+                                   mlir::MemRefType dstType) {
+  if (!mlir::memref::CastOp::areCastCompatible(srcType, dstType))
+    return false;
+
+  int64_t srcOffset, dstOffset;
+  llvm::SmallVector<int64_t> srcStrides, dstStrides;
+  if (mlir::failed(mlir::getStridesAndOffset(srcType, srcStrides, srcOffset)) ||
+      mlir::failed(mlir::getStridesAndOffset(dstType, dstStrides, dstOffset)))
+    return false;
+
+  auto isStrideCompatible = [](int64_t src, int64_t dst) {
+    auto isStatic = [](int64_t v) {
+      return !mlir::ShapedType::isDynamicStrideOrOffset(v);
+    };
+    if (isStatic(src) && isStatic(dst)) {
+      return src == dst;
+    } else if (isStatic(src)) {
+      return true;
+    } else if (isStatic(dst)) {
+      return false;
+    } else {
+      // Both dynamic
+      return true;
+    }
+  };
+
+  assert(srcStrides.size() == dstStrides.size());
+  if (!isStrideCompatible(srcOffset, dstOffset))
+    return false;
+
+  auto rank = static_cast<unsigned>(srcStrides.size());
+  for (auto i : llvm::seq(0u, rank)) {
+    if (!isStrideCompatible(srcStrides[i], dstStrides[i]))
+      return false;
+  }
+  return true;
+}
+
 struct ChangeLayoutIdentity
     : public mlir::OpRewritePattern<plier::ChangeLayoutOp> {
   using OpRewritePattern::OpRewritePattern;
@@ -685,7 +724,7 @@ struct ChangeLayoutIdentity
     auto src = op.source();
     auto srcType = src.getType().cast<mlir::MemRefType>();
     auto dstType = op.getType();
-    if (!mlir::memref::CastOp::areCastCompatible(srcType, dstType))
+    if (!canTransformLayoutCast(srcType, dstType))
       return mlir::failure();
 
     rewriter.replaceOpWithNewOp<mlir::memref::CastOp>(op, src, dstType);
