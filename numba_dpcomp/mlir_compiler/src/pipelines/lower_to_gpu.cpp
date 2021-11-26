@@ -2049,9 +2049,10 @@ static mlir::LogicalResult lowerGetGlobalId(mlir::CallOp op,
   rerun_std_pipeline(op);
   mlir::Value arg = loop.getLoopBody().front().getArgument(0);
   auto resType = op.getResult(0).getType();
-  if (arg.getType() != resType)
-    arg = builder.createOrFold<mlir::arith::IndexCastOp>(op.getLoc(), resType,
-                                                         arg);
+  if (arg.getType() != resType) {
+    rerun_std_pipeline(op);
+    arg = builder.createOrFold<plier::CastOp>(op.getLoc(), resType, arg);
+  }
 
   builder.replaceOp(op, arg);
   return mlir::success();
@@ -2063,9 +2064,10 @@ static mlir::LogicalResult lowerGetGlobalSize(mlir::CallOp op,
   rerun_std_pipeline(op);
   mlir::Value arg = loop.upperBound();
   auto resType = op.getResult(0).getType();
-  if (arg.getType() != resType)
-    arg = builder.createOrFold<mlir::arith::IndexCastOp>(op.getLoc(), resType,
-                                                         arg);
+  if (arg.getType() != resType) {
+    rerun_std_pipeline(op);
+    arg = builder.createOrFold<plier::CastOp>(op.getLoc(), resType, arg);
+  }
 
   builder.replaceOp(op, arg);
   return mlir::success();
@@ -2155,7 +2157,28 @@ struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::CallOp> {
         !op.getResult(0).getType().isa<mlir::IntegerType>())
       return mlir::failure();
 
-    auto indAttr = mlir::getConstantIntValue(op.operands()[0]);
+    auto skipCasts = [](mlir::Value val) -> mlir::Value {
+      auto getParent = [](mlir::Value v) -> mlir::Value {
+        auto op = v.getDefiningOp();
+        if (!op)
+          return {};
+
+        if (auto cast = mlir::dyn_cast<plier::SignCastOp>(op))
+          return cast.value();
+        if (auto cast = mlir::dyn_cast<plier::CastOp>(op))
+          return cast.value();
+        if (auto cast = mlir::dyn_cast<mlir::UnrealizedConversionCastOp>(op))
+          return cast.inputs()[0];
+
+        return {};
+      };
+      while (auto parent = getParent(val))
+        val = parent;
+
+      return val;
+    };
+
+    auto indAttr = mlir::getConstantIntValue(skipCasts(op.operands()[0]));
     if (!indAttr)
       return mlir::failure();
 
