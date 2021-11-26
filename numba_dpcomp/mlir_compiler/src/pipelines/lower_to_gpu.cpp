@@ -1752,7 +1752,7 @@ private:
     llvm::SmallVector<mlir::Value> paramsStorage(paramsCount);
     auto paramsArrayPtr = allocaHelper.insert(rewriter, [&]() {
       auto size = rewriter.create<mlir::LLVM::ConstantOp>(
-          loc, llvmInt64Type, rewriter.getI64IntegerAttr(1));
+          loc, llvmInt64Type, rewriter.getI64IntegerAttr(paramsCount));
       for (auto i : llvm::seq(0u, paramsCount)) {
         auto ptrType = mlir::LLVM::LLVMPointerType::get(getKernelParamType(i));
         paramsStorage[i] =
@@ -1955,7 +1955,8 @@ class ConvertGpuSuggestBlockSizePattern
     : public ConvertOpToGpuRuntimeCallPattern<plier::GPUSuggestBlockSizeOp> {
 public:
   ConvertGpuSuggestBlockSizePattern(mlir::LLVMTypeConverter &converter)
-      : ConvertOpToGpuRuntimeCallPattern<plier::GPUSuggestBlockSizeOp>(converter) {}
+      : ConvertOpToGpuRuntimeCallPattern<plier::GPUSuggestBlockSizeOp>(
+            converter) {}
 
 private:
   mlir::LogicalResult
@@ -1968,31 +1969,36 @@ private:
     auto gridArrayPtr = allocaHelper.insert(rewriter, [&]() {
       auto size = rewriter.create<mlir::LLVM::ConstantOp>(
           loc, llvmInt64Type, rewriter.getI64IntegerAttr(numDims));
-      return rewriter.create<mlir::LLVM::AllocaOp>(loc, llvmI32PtrType, size, 0);
+      return rewriter.create<mlir::LLVM::AllocaOp>(loc, llvmI32PtrType, size,
+                                                   0);
     });
     auto blockArrayPtr = allocaHelper.insert(rewriter, [&]() {
       auto size = rewriter.create<mlir::LLVM::ConstantOp>(
           loc, llvmInt64Type, rewriter.getI64IntegerAttr(numDims));
-      return rewriter.create<mlir::LLVM::AllocaOp>(loc, llvmI32PtrType, size, 0);
+      return rewriter.create<mlir::LLVM::AllocaOp>(loc, llvmI32PtrType, size,
+                                                   0);
     });
 
-    auto sizesType =
-        mlir::LLVM::LLVMArrayType::get(llvmInt32Type, numDims);
+    auto sizesType = mlir::LLVM::LLVMArrayType::get(llvmInt32Type, numDims);
     auto sizesPtrType = mlir::LLVM::LLVMPointerType::get((sizesType));
     auto castToSizesPtrType = [&](mlir::Value val) {
       return rewriter.create<mlir::LLVM::BitcastOp>(loc, sizesPtrType, val);
     };
 
-    mlir::Value gridArray = rewriter.create<mlir::LLVM::UndefOp>(loc, sizesType);
+    mlir::Value gridArray =
+        rewriter.create<mlir::LLVM::UndefOp>(loc, sizesType);
     for (auto i : llvm::seq(0u, numDims)) {
       auto index = rewriter.getI64ArrayAttr(i);
-      auto gridSize = rewriter.create<mlir::LLVM::TruncOp>(loc, llvmInt32Type, adaptor.gridSize()[i]);
+      auto gridSize = rewriter.create<mlir::LLVM::TruncOp>(
+          loc, llvmInt32Type, adaptor.gridSize()[i]);
       gridArray = rewriter.create<mlir::LLVM::InsertValueOp>(loc, gridArray,
                                                              gridSize, index);
     }
 
-    rewriter.create<mlir::LLVM::StoreOp>(loc, gridArray, castToSizesPtrType(gridArrayPtr));
-    mlir::Value numDimsVal = rewriter.create<mlir::LLVM::ConstantOp>(loc, llvmIndexType, rewriter.getIntegerAttr(llvmIndexType, numDims));
+    rewriter.create<mlir::LLVM::StoreOp>(loc, gridArray,
+                                         castToSizesPtrType(gridArrayPtr));
+    mlir::Value numDimsVal = rewriter.create<mlir::LLVM::ConstantOp>(
+        loc, llvmIndexType, rewriter.getIntegerAttr(llvmIndexType, numDims));
 
     mlir::Value params[] = {
         // clang-format off
@@ -2006,13 +2012,15 @@ private:
 
     suggestBlockSizeBuilder.create(loc, rewriter, params);
 
-    mlir::Value blockSizeArray = rewriter.create<mlir::LLVM::LoadOp>(loc, castToSizesPtrType(blockArrayPtr));
+    mlir::Value blockSizeArray = rewriter.create<mlir::LLVM::LoadOp>(
+        loc, castToSizesPtrType(blockArrayPtr));
     llvm::SmallVector<mlir::Value, 3> result(numDims);
     for (auto i : llvm::seq(0u, numDims)) {
       auto ind = rewriter.getI64ArrayAttr(i);
       auto blockSize = rewriter.create<mlir::LLVM::ExtractValueOp>(
           loc, llvmInt32Type, blockSizeArray, ind);
-      result[i] = rewriter.create<mlir::LLVM::ZExtOp>(loc, llvmIndexType, blockSize);
+      result[i] =
+          rewriter.create<mlir::LLVM::ZExtOp>(loc, llvmIndexType, blockSize);
     }
 
     rewriter.replaceOp(op, result);

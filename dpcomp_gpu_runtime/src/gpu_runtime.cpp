@@ -177,17 +177,6 @@ struct Printer {
   void operator()(int64_t val) const { this->operator()(std::to_string(val)); }
 };
 
-static uint32_t nextPow2(uint32_t v) {
-  v--;
-  v |= v >> 1;
-  v |= v >> 2;
-  v |= v >> 4;
-  v |= v >> 8;
-  v |= v >> 16;
-  v++;
-  return v;
-}
-
 static void printDriverProps(ze_driver_handle_t driver) {
   assert(driver);
   ze_api_version_t version = {};
@@ -297,31 +286,27 @@ struct Stream {
                                  ze_event_handle_t *events, ParamDesc *params,
                                  size_t eventIndex) {
     assert(kernel);
-    fprintf(stdout, "launchKernel 1 %d %d %d\n", (int)blockX, (int)blockY, (int)blockZ);
+    fprintf(stdout, "launchKernel 1 %d %d %d\n", (int)blockX, (int)blockY,
+            (int)blockZ);
     fflush(stdout);
     auto eventsCount = static_cast<uint32_t>(
         countUntil(events, static_cast<ze_event_handle_t>(nullptr)));
     auto paramsCount = countUntil(params, ParamDesc{nullptr, 0});
 
-    auto fixSz = [](size_t val) {
-//      return std::max(nextPow2(static_cast<uint32_t>(val)) / 2, 1u);
-      return static_cast<uint32_t>(val);
-    };
+    auto fixSz = [](size_t val) { return static_cast<uint32_t>(val); };
 
-    CHECK_ZE_RESULT(zeKernelSetGroupSize(kernel, fixSz(blockX),
-                                         fixSz(blockY),
+    CHECK_ZE_RESULT(zeKernelSetGroupSize(kernel, fixSz(blockX), fixSz(blockY),
                                          fixSz(blockZ)));
     for (size_t i = 0; i < paramsCount; ++i) {
       auto param = params[i];
-      fprintf(stdout, "launchKernel param %d %d %p\n", (int)i, (int)param.size, param.data);
+      fprintf(stdout, "launchKernel param %d %d %p\n", (int)i, (int)param.size,
+              param.data);
       CHECK_ZE_RESULT(zeKernelSetArgumentValue(kernel, static_cast<uint32_t>(i),
                                                param.size, param.data));
     }
 
     auto event = getEvent(eventIndex);
-    ze_group_count_t launchArgs = {static_cast<uint32_t>(gridX),
-                                   static_cast<uint32_t>(gridY),
-                                   static_cast<uint32_t>(gridZ)};
+    ze_group_count_t launchArgs = {fixSz(gridX), fixSz(gridY), fixSz(gridZ)};
     CHECK_ZE_RESULT(zeCommandListAppendLaunchKernel(
         commandList.get(), kernel, &launchArgs, event, eventsCount, events));
     return event;
@@ -375,7 +360,8 @@ struct Stream {
     return {info, mem, event};
   }
 
-  void suggestBlockSize(ze_kernel_handle_t kernel, const uint32_t* gridSize, uint32_t *blockSize, size_t numDims) {
+  void suggestBlockSize(ze_kernel_handle_t kernel, const uint32_t *gridSize,
+                        uint32_t *blockSize, size_t numDims) {
     assert(kernel);
     assert(numDims > 0 && numDims <= 3);
     uint32_t gSize[3] = {};
@@ -385,10 +371,14 @@ struct Stream {
       bSize[i] = &blockSize[i];
     }
 
-    fprintf(stdout, "suggestBlockSize 1 %d %d %d\n", gridSize[0], gridSize[1], gridSize[2]);
-    fprintf(stdout, "suggestBlockSize 2 %d %d %d\n", *bSize[0], *bSize[1], *bSize[2]);
-    CHECK_ZE_RESULT(zeKernelSuggestGroupSize(kernel, gSize[0], gSize[1], gSize[2], bSize[0], bSize[1], bSize[2]));
-    fprintf(stdout, "suggestBlockSize 3 %d %d %d\n", *bSize[0], *bSize[1], *bSize[2]);
+    fprintf(stdout, "suggestBlockSize 1 %d %d %d\n", gridSize[0], gridSize[1],
+            gridSize[2]);
+    fprintf(stdout, "suggestBlockSize 2 %d %d %d\n", *bSize[0], *bSize[1],
+            *bSize[2]);
+    CHECK_ZE_RESULT(zeKernelSuggestGroupSize(
+        kernel, gSize[0], gSize[1], gSize[2], bSize[0], bSize[1], bSize[2]));
+    fprintf(stdout, "suggestBlockSize 3 %d %d %d\n", *bSize[0], *bSize[1],
+            *bSize[2]);
     fflush(stdout);
   }
 
@@ -509,9 +499,11 @@ dpcompGpuAlloc(void *stream, size_t size, size_t alignment, int shared,
 }
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void
-dpcompGpuSuggestBlockSize(void *stream, void* kernel, const uint32_t* gridSize, uint32_t* blockSize, size_t numDims) {
+dpcompGpuSuggestBlockSize(void *stream, void *kernel, const uint32_t *gridSize,
+                          uint32_t *blockSize, size_t numDims) {
   LOG_FUNC();
   catchAll([&]() {
-    static_cast<Stream *>(stream)->suggestBlockSize(static_cast<ze_kernel_handle_t>(kernel), gridSize, blockSize, numDims);
+    static_cast<Stream *>(stream)->suggestBlockSize(
+        static_cast<ze_kernel_handle_t>(kernel), gridSize, blockSize, numDims);
   });
 }
