@@ -950,9 +950,6 @@ void MakeStridedLayoutPass::runOnOperation() {
   llvm::SmallVector<mlir::Type> newResTypes;
   llvm::SmallVector<mlir::Value> newOperands;
   for (auto func : mod.getOps<mlir::FuncOp>()) {
-    if (!func.isPublic() && !func.getBody().empty())
-      continue;
-
     mlir::OpBuilder builder(func.body());
     auto loc = builder.getUnknownLoc();
     auto funcType = func.getType();
@@ -964,47 +961,51 @@ void MakeStridedLayoutPass::runOnOperation() {
     for (auto it : llvm::enumerate(argTypes)) {
       auto i = static_cast<unsigned>(it.index());
       auto type = it.value();
-      if (auto memrefType = type.dyn_cast<mlir::MemRefType>()) {
-        auto rank = static_cast<unsigned>(memrefType.getRank());
-        auto makeShape = [&](int64_t val) {
-          return llvm::SmallVector<int64_t>(rank, val);
-        };
-        auto strideVal = mlir::ShapedType::kDynamicStrideOrOffset;
-        auto affineMap = mlir::makeStridedLinearLayoutMap(makeShape(strideVal),
-                                                          strideVal, context);
-        auto newMemrefType =
-            mlir::MemRefType::get(makeShape(mlir::ShapedType::kDynamicSize),
-                                  memrefType.getElementType(), affineMap);
+      auto memrefType = type.dyn_cast<mlir::MemRefType>();
+      if (!memrefType || !memrefType.getLayout().isIdentity())
+        continue;
 
-        if (newMemrefType != memrefType) {
-          newArgTypes[i] = newMemrefType;
+      auto rank = static_cast<unsigned>(memrefType.getRank());
+      auto makeShape = [&](int64_t val) {
+        return llvm::SmallVector<int64_t>(rank, val);
+      };
+      auto strideVal = mlir::ShapedType::kDynamicStrideOrOffset;
+      auto affineMap = mlir::makeStridedLinearLayoutMap(makeShape(strideVal),
+                                                        strideVal, context);
+      auto newMemrefType =
+          mlir::MemRefType::get(makeShape(mlir::ShapedType::kDynamicSize),
+                                memrefType.getElementType(), affineMap);
 
-          if (hasBody) {
-            auto arg = func.getBody().front().getArgument(i);
-            arg.setType(newMemrefType);
-            auto dst =
-                builder.create<plier::ChangeLayoutOp>(loc, memrefType, arg);
-            arg.replaceAllUsesExcept(dst, dst);
-          }
+      if (newMemrefType != memrefType) {
+        newArgTypes[i] = newMemrefType;
+
+        if (hasBody) {
+          auto arg = func.getBody().front().getArgument(i);
+          arg.setType(newMemrefType);
+          auto dst =
+              builder.create<plier::ChangeLayoutOp>(loc, memrefType, arg);
+          arg.replaceAllUsesExcept(dst, dst);
         }
       }
     }
 
     for (auto it : llvm::enumerate(resTypes)) {
       auto type = it.value();
-      if (auto memrefType = type.dyn_cast<mlir::MemRefType>()) {
-        auto rank = static_cast<unsigned>(memrefType.getRank());
-        auto makeShape = [&](int64_t val) {
-          return llvm::SmallVector<int64_t>(rank, val);
-        };
-        auto strideVal = mlir::ShapedType::kDynamicStrideOrOffset;
-        auto affineMap = mlir::makeStridedLinearLayoutMap(
-            makeShape(strideVal), strideVal, builder.getContext());
-        auto newmemrefType =
-            mlir::MemRefType::get(makeShape(mlir::ShapedType::kDynamicSize),
-                                  memrefType.getElementType(), affineMap);
-        newResTypes[it.index()] = newmemrefType;
-      }
+      auto memrefType = type.dyn_cast<mlir::MemRefType>();
+      if (!memrefType || !memrefType.getLayout().isIdentity())
+        continue;
+
+      auto rank = static_cast<unsigned>(memrefType.getRank());
+      auto makeShape = [&](int64_t val) {
+        return llvm::SmallVector<int64_t>(rank, val);
+      };
+      auto strideVal = mlir::ShapedType::kDynamicStrideOrOffset;
+      auto affineMap = mlir::makeStridedLinearLayoutMap(
+          makeShape(strideVal), strideVal, builder.getContext());
+      auto newmemrefType =
+          mlir::MemRefType::get(makeShape(mlir::ShapedType::kDynamicSize),
+                                memrefType.getElementType(), affineMap);
+      newResTypes[it.index()] = newmemrefType;
     }
 
     auto newFuncType =
@@ -1055,15 +1056,16 @@ void MakeStridedLayoutPass::runOnOperation() {
           call.operandsMutable().assign(newOperands);
 
           builder.setInsertionPointAfter(call);
-          assert(resTypes.size() == call.getNumResults());
+          assert(newResTypes.size() == call.getNumResults());
           auto numResults = call.getNumResults();
           for (auto i : llvm::seq(0u, numResults)) {
             auto res = call.getResult(i);
             auto oldType = res.getType();
-            auto newType = resTypes[i];
+            auto newType = newResTypes[i];
             if (oldType != newType) {
               assert(oldType.isa<mlir::MemRefType>());
               assert(newType.isa<mlir::MemRefType>());
+              res.setType(newType);
               auto newRes =
                   builder.create<plier::ChangeLayoutOp>(loc, oldType, res);
               res.replaceAllUsesExcept(newRes, newRes);
