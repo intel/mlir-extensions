@@ -1270,31 +1270,44 @@ void MakeStridedLayoutPass::runOnOperation() {
     }
   }
 
-  if (changed) {
-    mlir::OwningRewritePatternList patterns(context);
+  //  if (changed) {
+  //    mlir::OwningRewritePatternList patterns(context);
 
-    plier::ChangeLayoutOp::getCanonicalizationPatterns(patterns, context);
+  ////    plier::ChangeLayoutOp::getCanonicalizationPatterns(patterns, context);
 
-    //    plier::populateCommonOptsPatterns(*context, patterns);
-    //    patterns.insert<
-    //        // clang-format off
-    //        FixStridedIf,
-    //        FixStridedClone,
-    //        FixStridedReshape,
-    //        FixStridedSubview,
-    //        FixStridedReturn,
-    //        FixStridedCall,
-    //        CleanupLoads
-    //        // clang-format on
-    //        >(context);
+  //    //    plier::populateCommonOptsPatterns(*context, patterns);
+  //    //    patterns.insert<
+  //    //        // clang-format off
+  //    //        FixStridedIf,
+  //    //        FixStridedClone,
+  //    //        FixStridedReshape,
+  //    //        FixStridedSubview,
+  //    //        FixStridedReturn,
+  //    //        FixStridedCall,
+  //    //        CleanupLoads
+  //    //        // clang-format on
+  //    //        >(context);
 
-    (void)mlir::applyPatternsAndFoldGreedily(mod, std::move(patterns));
+  //    (void)mlir::applyPatternsAndFoldGreedily(mod, std::move(patterns));
 
-    mod.walk([&](plier::ChangeLayoutOp op) {
-      op.emitError("Layout change failed");
-      signalPassFailure();
-    });
-  }
+  //    mod.walk([&](plier::ChangeLayoutOp op) {
+  //      op.emitError("Layout change failed");
+  //      signalPassFailure();
+  //    });
+  //  }
+}
+
+struct CheckStridedLayoutPass
+    : public mlir::PassWrapper<CheckStridedLayoutPass, mlir::OperationPass<>> {
+  void runOnOperation() override;
+};
+
+void CheckStridedLayoutPass::runOnOperation() {
+  auto op = getOperation();
+  op->walk([&](plier::ChangeLayoutOp cl) {
+    cl.emitError("Layout change failed");
+    signalPassFailure();
+  });
 }
 
 struct PlierToLinalgPass
@@ -1987,6 +2000,8 @@ void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
 
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<CloneArgsPass>());
   pm.addPass(std::make_unique<MakeStridedLayoutPass>());
+  pm.addNestedPass<mlir::FuncOp>(mlir::createCanonicalizerPass());
+  pm.addNestedPass<mlir::FuncOp>(std::make_unique<CheckStridedLayoutPass>());
   pm.addNestedPass<mlir::FuncOp>(mlir::createBufferDeallocationPass());
   pm.addPass(mlir::createCanonicalizerPass());
 

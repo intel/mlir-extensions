@@ -974,6 +974,37 @@ struct ChangeLayoutIf : public mlir::OpRewritePattern<mlir::scf::YieldOp> {
     return mlir::success(changed);
   }
 };
+
+struct ChangeLayout1DReshape
+    : public mlir::OpRewritePattern<mlir::memref::ReshapeOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::ReshapeOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto src = op.source();
+    auto srcType = src.getType().cast<mlir::MemRefType>();
+    auto dstType = op.getType().cast<mlir::MemRefType>();
+    if (!srcType.hasRank() || !dstType.hasRank() || srcType.getRank() != 1 ||
+        dstType.getRank() != 1)
+      return mlir::failure();
+
+    auto loc = op.getLoc();
+    auto shape = op.shape();
+    auto idx =
+        rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0).getResult();
+    auto size =
+        rewriter.create<mlir::memref::LoadOp>(loc, shape, idx).getResult();
+
+    mlir::OpFoldResult offsets[1] = {rewriter.getIndexAttr(0)};
+    mlir::OpFoldResult sizes[1] = {size};
+    mlir::OpFoldResult strides[1] = {rewriter.getIndexAttr(1)};
+    auto res = rewriter.create<mlir::memref::SubViewOp>(loc, src, offsets,
+                                                        sizes, strides);
+    rewriter.replaceOpWithNewOp<plier::ChangeLayoutOp>(op, dstType, res);
+    return mlir::success();
+  }
+};
 } // namespace
 
 void ChangeLayoutOp::getCanonicalizationPatterns(
@@ -982,7 +1013,8 @@ void ChangeLayoutOp::getCanonicalizationPatterns(
       .insert<ChangeLayoutDim, ChangeLayoutExtractMetadata, ChangeLayoutClone,
               ChangeLayoutCast, ChangeLayoutLoad, ChangeLayoutStore,
               ChangeLayoutSubview, ChangeLayoutLinalgGeneric,
-              ChangeLayoutLinalgCopy, ChangeLayoutIf>(context);
+              ChangeLayoutLinalgCopy, ChangeLayoutIf, ChangeLayout1DReshape>(
+          context);
 }
 
 mlir::OpFoldResult SignCastOp::fold(llvm::ArrayRef<mlir::Attribute> operands) {
