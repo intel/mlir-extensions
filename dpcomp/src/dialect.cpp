@@ -158,6 +158,16 @@ void PlierDialect::printType(mlir::Type type,
       .Default([](auto) { llvm_unreachable("unexpected type"); });
 }
 
+mlir::Operation *PlierDialect::materializeConstant(mlir::OpBuilder &builder,
+                                                   mlir::Attribute value,
+                                                   mlir::Type type,
+                                                   mlir::Location loc) {
+  if (mlir::arith::ConstantOp::isBuildableWith(value, type))
+    return builder.create<mlir::arith::ConstantOp>(loc, type, value);
+
+  return builder.create<mlir::ConstantOp>(loc, type, value);
+}
+
 PyType PyType::get(mlir::MLIRContext *context, llvm::StringRef name) {
   assert(!name.empty());
   return Base::get(context, name);

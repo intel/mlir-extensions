@@ -25,6 +25,8 @@ include "mlir/Interfaces/ViewLikeInterface.td"
 def Plier_Dialect : Dialect {
   let name = "plier";
   let cppNamespace = "plier";
+
+  let hasConstantMaterializer = 1;
 }
 
 def Plier_PyType
