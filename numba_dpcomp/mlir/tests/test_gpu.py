@@ -185,7 +185,7 @@ def test_math_funcs_unary(op):
     _test_unary(func, np.float32, 'GPUToSpirvPass', lambda ir: ir.count(f'OCL.{op}') == 1)
 
 @require_gpu
-@pytest.mark.parametrize("op", ['+', '-', '*', '/', '**'])
+@pytest.mark.parametrize("op", ['+', '-', '*', '/', '%', '**'])
 def test_gpu_ops_binary(op):
     f = eval(f'lambda a, b: a {op} b')
     inner = kernel_func(f)
@@ -381,9 +381,7 @@ def test_atomics_modname():
 def test_atomics_offset(dtype, atomic_op):
     def func(a, b):
         i = get_global_id(0)
-        # TODO: issues with modulo and issues with index comparison, need to fix upstream
-        n = 0 if float(i) < 5 else 1
-        atomic_op(b, n, a[i])
+        atomic_op(b, i % 2, a[i])
 
     _test_atomic(func, dtype, 2)
 
@@ -413,19 +411,14 @@ def test_atomics_multidim(funci):
     atomic_op = atomic.add
     dtype = 'int32'
     def func1(a, b):
-        # TODO: issues with modulo and issues with index comparison, need to fix upstream
         i = get_global_id(0)
-        n = 0 if float(i) < 2 else 1
         j = get_global_id(1)
-        atomic_op(b, (n,0), a[i, j])
+        atomic_op(b, (i % 2,0), a[i, j])
 
     def func2(a, b):
-        # TODO: issues with modulo and issues with index comparison, need to fix upstream
         i = get_global_id(0)
-        n = 0 if float(i) < 2 else 1
         j = get_global_id(1)
-        m = 0 if float(j) < 2 else 1
-        atomic_op(b, (n,m), a[i, j])
+        atomic_op(b, (i % 2,j % 2), a[i, j])
 
     func = func1 if funci == 1 else func2
 
