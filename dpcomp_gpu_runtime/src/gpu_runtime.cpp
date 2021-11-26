@@ -286,19 +286,14 @@ struct Stream {
                                  ze_event_handle_t *events, ParamDesc *params,
                                  size_t eventIndex) {
     assert(kernel);
-    fprintf(stdout, "launchKernel 1 %d %d %d\n", (int)gridX, (int)gridY,
-            (int)gridZ);
-    fprintf(stdout, "launchKernel 2 %d %d %d\n", (int)blockX, (int)blockY,
-            (int)blockZ);
-    fflush(stdout);
     auto eventsCount = static_cast<uint32_t>(
         countUntil(events, static_cast<ze_event_handle_t>(nullptr)));
     auto paramsCount = countUntil(params, ParamDesc{nullptr, 0});
 
-    auto fixSz = [](size_t val) { return static_cast<uint32_t>(val); };
+    auto castSz = [](size_t val) { return static_cast<uint32_t>(val); };
 
-    CHECK_ZE_RESULT(zeKernelSetGroupSize(kernel, fixSz(blockX), fixSz(blockY),
-                                         fixSz(blockZ)));
+    CHECK_ZE_RESULT(zeKernelSetGroupSize(kernel, castSz(blockX), castSz(blockY),
+                                         castSz(blockZ)));
     for (size_t i = 0; i < paramsCount; ++i) {
       auto param = params[i];
       CHECK_ZE_RESULT(zeKernelSetArgumentValue(kernel, static_cast<uint32_t>(i),
@@ -306,13 +301,7 @@ struct Stream {
     }
 
     auto event = getEvent(eventIndex);
-    auto divUp = [](size_t val, size_t div) {
-      return static_cast<uint32_t>((val + div - 1) / div);
-    };
-    ze_group_count_t launchArgs = {divUp(gridX, blockX), divUp(gridY, blockY),
-                                   divUp(gridZ, blockZ)};
-    fprintf(stdout, "launchKernel 3 %d %d %d\n", (int)launchArgs.groupCountX,
-            (int)launchArgs.groupCountY, (int)launchArgs.groupCountZ);
+    ze_group_count_t launchArgs = {castSz(gridX), castSz(gridY), castSz(gridZ)};
     CHECK_ZE_RESULT(zeCommandListAppendLaunchKernel(
         commandList.get(), kernel, &launchArgs, event, eventsCount, events));
     return event;
@@ -377,15 +366,8 @@ struct Stream {
       bSize[i] = &blockSize[i];
     }
 
-    fprintf(stdout, "suggestBlockSize 1 %d %d %d\n", gridSize[0], gridSize[1],
-            gridSize[2]);
-    fprintf(stdout, "suggestBlockSize 2 %d %d %d\n", *bSize[0], *bSize[1],
-            *bSize[2]);
     CHECK_ZE_RESULT(zeKernelSuggestGroupSize(
         kernel, gSize[0], gSize[1], gSize[2], bSize[0], bSize[1], bSize[2]));
-    fprintf(stdout, "suggestBlockSize 3 %d %d %d\n", *bSize[0], *bSize[1],
-            *bSize[2]);
-    fflush(stdout);
   }
 
 private:
