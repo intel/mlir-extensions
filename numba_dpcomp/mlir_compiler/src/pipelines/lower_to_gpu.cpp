@@ -1399,6 +1399,9 @@ protected:
   mlir::Type llvmInt64Type = mlir::IntegerType::get(context, 64);
   mlir::Type llvmIndexType = mlir::IntegerType::get(
       context, this->getTypeConverter()->getPointerBitwidth(0));
+
+  mlir::Type llvmI32PtrType = mlir::LLVM::LLVMPointerType::get(llvmIndexType);
+
   mlir::Type llvmRangeType = mlir::LLVM::LLVMStructType::getLiteral(
       context, {llvmPointerType, llvmIndexType});
   mlir::Type llvmRangePointerType =
@@ -1482,6 +1485,17 @@ protected:
           llvmPointerPointerType, // deps (null-term)
           llvmIndexType,          // eventIndex
           llvmAllocResPtrType,    // result
+      }};
+
+  FunctionCallBuilder suggestBlockSizeBuilder = {
+      "dpcompGpuSuggestBlockSize",
+      llvmVoidType,
+      {
+          llvmPointerType, // stream
+          llvmPointerType, // kernel
+          llvmI32PtrType,  // grid sizes
+          llvmI32PtrType,  // ret block sizes
+          llvmIndexType,   // dim count
       }};
 
   mlir::Value createDepsArray(mlir::OpBuilder &rewriter, mlir::Location loc,
@@ -1937,6 +1951,75 @@ private:
   }
 };
 
+class ConvertGpuSuggestBlockSizePattern
+    : public ConvertOpToGpuRuntimeCallPattern<plier::GPUSuggestBlockSizeOp> {
+public:
+  ConvertGpuSuggestBlockSizePattern(mlir::LLVMTypeConverter &converter)
+      : ConvertOpToGpuRuntimeCallPattern<plier::GPUSuggestBlockSizeOp>(converter) {}
+
+private:
+  mlir::LogicalResult
+  matchAndRewrite(plier::GPUSuggestBlockSizeOp op,
+                  plier::GPUSuggestBlockSizeOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto numDims = op.getNumResults();
+    auto loc = op.getLoc();
+    plier::AllocaInsertionPoint allocaHelper(op);
+    auto gridArrayPtr = allocaHelper.insert(rewriter, [&]() {
+      auto size = rewriter.create<mlir::LLVM::ConstantOp>(
+          loc, llvmInt64Type, rewriter.getI64IntegerAttr(numDims));
+      return rewriter.create<mlir::LLVM::AllocaOp>(loc, llvmI32PtrType, size, 0);
+    });
+    auto blockArrayPtr = allocaHelper.insert(rewriter, [&]() {
+      auto size = rewriter.create<mlir::LLVM::ConstantOp>(
+          loc, llvmInt64Type, rewriter.getI64IntegerAttr(numDims));
+      return rewriter.create<mlir::LLVM::AllocaOp>(loc, llvmI32PtrType, size, 0);
+    });
+
+    auto sizesType =
+        mlir::LLVM::LLVMArrayType::get(llvmInt32Type, numDims);
+    auto sizesPtrType = mlir::LLVM::LLVMPointerType::get((sizesType));
+    auto castToSizesPtrType = [&](mlir::Value val) {
+      return rewriter.create<mlir::LLVM::BitcastOp>(loc, sizesPtrType, val);
+    };
+
+    mlir::Value gridArray = rewriter.create<mlir::LLVM::UndefOp>(loc, sizesType);
+    for (auto i : llvm::seq(0u, numDims)) {
+      auto index = rewriter.getI64ArrayAttr(i);
+      auto gridSize = rewriter.create<mlir::LLVM::TruncOp>(loc, llvmInt32Type, adaptor.gridSize()[i]);
+      gridArray = rewriter.create<mlir::LLVM::InsertValueOp>(loc, gridArray,
+                                                             gridSize, index);
+    }
+
+    rewriter.create<mlir::LLVM::StoreOp>(loc, gridArray, castToSizesPtrType(gridArrayPtr));
+    mlir::Value numDimsVal = rewriter.create<mlir::LLVM::ConstantOp>(loc, llvmIndexType, rewriter.getIntegerAttr(llvmIndexType, numDims));
+
+    mlir::Value params[] = {
+        // clang-format off
+        adaptor.stream(),
+        adaptor.kernel(),
+        gridArrayPtr,
+        blockArrayPtr,
+        numDimsVal,
+        // clang-format on
+    };
+
+    suggestBlockSizeBuilder.create(loc, rewriter, params);
+
+    mlir::Value blockSizeArray = rewriter.create<mlir::LLVM::LoadOp>(loc, castToSizesPtrType(blockArrayPtr));
+    llvm::SmallVector<mlir::Value, 3> result(numDims);
+    for (auto i : llvm::seq(0u, numDims)) {
+      auto ind = rewriter.getI64ArrayAttr(i);
+      auto blockSize = rewriter.create<mlir::LLVM::ExtractValueOp>(
+          loc, llvmInt32Type, blockSizeArray, ind);
+      result[i] = rewriter.create<mlir::LLVM::ZExtOp>(loc, llvmIndexType, blockSize);
+    }
+
+    rewriter.replaceOp(op, result);
+    return mlir::success();
+  }
+};
+
 struct EnumerateEventsPass
     : public mlir::PassWrapper<EnumerateEventsPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
@@ -1980,7 +2063,8 @@ struct GPUToLLVMPass
         plier::GetGpuKernelOp,
         plier::DestroyGpuKernelOp,
         plier::LaunchGpuKernelOp,
-        plier::GPUAllocOp
+        plier::GPUAllocOp,
+        plier::GPUSuggestBlockSizeOp
         // clang-format on
         >();
 
@@ -1998,7 +2082,8 @@ struct GPUToLLVMPass
         ConvertGpuKernelGetPattern,
         ConvertGpuKernelDestroyPattern,
         ConvertGpuKernelLaunchPattern,
-        ConvertGpuAllocPattern
+        ConvertGpuAllocPattern,
+        ConvertGpuSuggestBlockSizePattern
         // clang-format on
         >(converter);
 
