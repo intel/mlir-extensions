@@ -531,6 +531,44 @@ struct BreakRewrite : public mlir::OpRewritePattern<mlir::CondBranchOp> {
   }
 };
 
+struct CondBranchSameTargetRewrite
+    : public mlir::OpRewritePattern<mlir::CondBranchOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::CondBranchOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto trueDest = op.getTrueDest();
+    assert(trueDest);
+    auto falseDest = op.getFalseDest();
+    assert(falseDest);
+    if (trueDest != falseDest)
+      return mlir::failure();
+
+    assert(op.getTrueOperands().size() == op.getFalseOperands().size());
+
+    auto loc = op.getLoc();
+    auto condition = op.condition();
+    auto count = static_cast<unsigned>(op.getTrueOperands().size());
+    llvm::SmallVector<mlir::Value> newOperands(count);
+    for (auto i : llvm::seq(0u, count)) {
+      auto trueArg = op.getTrueOperand(i);
+      assert(trueArg);
+      auto falseArg = op.getFalseOperand(i);
+      assert(falseArg);
+      if (trueArg == falseArg) {
+        newOperands[i] = trueArg;
+      } else {
+        newOperands[i] =
+            rewriter.create<mlir::SelectOp>(loc, condition, trueArg, falseArg);
+      }
+    }
+
+    rewriter.replaceOpWithNewOp<mlir::BranchOp>(op, trueDest, newOperands);
+    return mlir::success();
+  }
+};
+
 struct PlierToScfPass
     : public mlir::PassWrapper<PlierToScfPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
@@ -555,13 +593,24 @@ void PlierToScfPass::runOnOperation() {
       BreakRewrite,
       ScfIfRewriteOneExit,
       ScfIfRewriteTwoExits,
-      ScfWhileRewrite
+      ScfWhileRewrite,
+      CondBranchSameTargetRewrite
       // clang-format on
       >(context);
 
   plier::populateCanonicalizationPatterns(*context, patterns);
 
-  (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+  auto op = getOperation();
+  (void)mlir::applyPatternsAndFoldGreedily(op, std::move(patterns));
+
+  op.walk([&](mlir::Operation *o) -> mlir::WalkResult {
+    if (mlir::isa<mlir::BranchOp, mlir::CondBranchOp>(o)) {
+      o->emitError("Unable to convert CFG to SCF");
+      signalPassFailure();
+      return mlir::WalkResult::interrupt();
+    }
+    return mlir::WalkResult::advance();
+  });
 }
 
 void populatePlierToScfPipeline(mlir::OpPassManager &pm) {
