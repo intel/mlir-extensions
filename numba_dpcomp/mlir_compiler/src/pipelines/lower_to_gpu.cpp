@@ -339,8 +339,8 @@ struct InsertGPUAllocs
 
               for (auto mem : *memref) {
                 while (auto parentView =
-                           mem.getDefiningOp<mlir::memref::SubViewOp>())
-                  mem = parentView.source();
+                           mem.getDefiningOp<mlir::ViewLikeOpInterface>())
+                  mem = parentView.getViewSource();
 
                 for (auto alias : aliases.resolve(mem)) {
                   auto op = alias.getDefiningOp();

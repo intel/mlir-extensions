@@ -635,6 +635,14 @@ def test_reshape(py_func, array):
     jit_func = njit(py_func)
     assert_equal(py_func(array), jit_func(array))
 
+@pytest.mark.xfail(reason="numba: reshape() supports contiguous array only")
+def test_reshape_non_contiguous():
+    def py_func(a):
+        return a.reshape(4)
+    jit_func = njit(py_func)
+    array = np.arange(16).reshape((4,4))[1:3,1:3]
+    assert_equal(py_func(array), jit_func(array))
+
 @parametrize_function_variants("py_func", [
     # 'lambda a: a.flat', TODO: flat support
     'lambda a: a.flatten()',

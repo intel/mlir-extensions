@@ -1323,10 +1323,10 @@ py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
   }();
   auto view = builder.createOrFold<mlir::memref::SubViewOp>(
       loc, memref, offsetVals, sizeVals, strideVals);
-  //  auto ret = builder.create<mlir::memref::TensorLoadOp>(loc, view);
-  //  return ctx.context.createVar(
-  //      context, doSignCast(builder, loc, ret, origSrcVal.getType()));
-  return ctx.context.createVar(context, view);
+  view = builder.createOrFold<plier::ChangeLayoutOp>(loc, memrefType, view);
+  auto ret = builder.create<mlir::memref::TensorLoadOp>(loc, view);
+  return ctx.context.createVar(
+      context, doSignCast(builder, loc, ret, origSrcVal.getType()));
 }
 
 py::object arrayTypeImpl(py::capsule context, py::iterable dims,
