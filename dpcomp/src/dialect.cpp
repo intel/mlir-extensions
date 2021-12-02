@@ -776,7 +776,32 @@ struct ChangeLayoutClone
     if (!cl)
       return mlir::failure();
 
-    rewriter.replaceOpWithNewOp<mlir::memref::CloneOp>(op, cl.source());
+    auto src = cl.source();
+    auto dstType = op.getType();
+
+    auto loc = op.getLoc();
+    auto res = rewriter.createOrFold<mlir::memref::CloneOp>(loc, src);
+    rewriter.replaceOpWithNewOp<plier::ChangeLayoutOp>(op, dstType, res);
+    return mlir::success();
+  }
+};
+
+struct PropagateCloneType
+    : public mlir::OpRewritePattern<mlir::memref::CloneOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::CloneOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto src = op.input();
+    auto srcType = src.getType();
+    auto dstType = op.getType();
+    if (srcType == dstType)
+      return mlir::failure();
+
+    auto loc = op.getLoc();
+    auto res = rewriter.createOrFold<mlir::memref::CloneOp>(loc, src);
+    rewriter.replaceOpWithNewOp<plier::ChangeLayoutOp>(op, dstType, res);
     return mlir::success();
   }
 };
@@ -805,6 +830,30 @@ struct ChangeLayoutCast : public mlir::OpRewritePattern<mlir::memref::CastOp> {
     }
 
     return mlir::failure();
+  }
+};
+
+struct ChangeLayoutReduceRank
+    : public mlir::OpRewritePattern<plier::ReduceRankOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::ReduceRankOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto cl = op.source().getDefiningOp<plier::ChangeLayoutOp>();
+    if (!cl)
+      return mlir::failure();
+
+    auto loc = op.getLoc();
+    auto newOp = rewriter.createOrFold<plier::ReduceRankOp>(loc, cl.source(),
+                                                            op.getMapping());
+    auto oldType = op.getType();
+    auto newType = newOp.getType();
+    if (oldType != newType)
+      newOp = rewriter.createOrFold<plier::ChangeLayoutOp>(loc, oldType, newOp);
+
+    rewriter.replaceOp(op, newOp);
+    return mlir::success();
   }
 };
 
@@ -1102,12 +1151,13 @@ struct ChangeLayout1DReshape
 
 void ChangeLayoutOp::getCanonicalizationPatterns(
     ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context) {
-  results.insert<ChangeLayoutIdentity, ChangeLayoutDim,
-                 ChangeLayoutExtractMetadata, ChangeLayoutClone,
-                 ChangeLayoutCast, ChangeLayoutLoad, ChangeLayoutStore,
-                 ChangeLayoutSubview, ChangeLayoutLinalgGeneric,
-                 ChangeLayoutLinalgCopy, ChangeLayoutIf, ChangeLayout1DReshape>(
-      context);
+  results
+      .insert<ChangeLayoutIdentity, ChangeLayoutReduceRank, ChangeLayoutDim,
+              ChangeLayoutExtractMetadata, ChangeLayoutClone,
+              PropagateCloneType, ChangeLayoutCast, ChangeLayoutLoad,
+              ChangeLayoutStore, ChangeLayoutSubview, ChangeLayoutLinalgGeneric,
+              ChangeLayoutLinalgCopy, ChangeLayoutIf, ChangeLayout1DReshape>(
+          context);
 }
 
 mlir::OpFoldResult SignCastOp::fold(llvm::ArrayRef<mlir::Attribute> operands) {

@@ -314,16 +314,15 @@ def ReduceRankOp
   let hasFolder = 1;
   let hasCanonicalizer = 1;
 
-  let builders = [OpBuilder<(ins "::mlir::Value"
-                             : $src, "::mlir::ArrayRef<int32_t>"
-                             : $mapping)>];
+  let builders = [
+    OpBuilder<(ins "::mlir::Value" : $src,
+                   "::mlir::ArrayRef<int32_t>" : $mapping)>
+  ];
 
-  // clang-format off
   let extraClassDeclaration = [{
       ::mlir::Value getViewSource() { return source(); }
       ::llvm::SmallVector<int32_t> getMapping();
   }];
-  // clang-format on
 }
 
 def ExtractMemrefMetadataOp
