@@ -51,7 +51,6 @@ set(SOURCES_LIST
     src/rewrites/cast_lowering.cpp
     src/rewrites/common_opts.cpp
     src/rewrites/cse.cpp
-    src/rewrites/force_inline.cpp
     src/rewrites/index_type_propagation.cpp
     src/rewrites/if_rewrites.cpp
     src/rewrites/loop_rewrites.cpp
@@ -62,6 +61,7 @@ set(SOURCES_LIST
     src/transforms/cast_utils.cpp
     src/transforms/const_utils.cpp
     src/transforms/func_utils.cpp
+    src/transforms/inline_utils.cpp
     src/transforms/loop_utils.cpp
     src/transforms/pipeline_utils.cpp
     src/utils.cpp
@@ -81,7 +81,6 @@ set(HEADERS_LIST
     include/plier/rewrites/cast_lowering.hpp
     include/plier/rewrites/common_opts.hpp
     include/plier/rewrites/cse.hpp
-    include/plier/rewrites/force_inline.hpp
     include/plier/rewrites/index_type_propagation.hpp
     include/plier/rewrites/if_rewrites.hpp
     include/plier/rewrites/loop_rewrites.hpp
@@ -92,6 +91,7 @@ set(HEADERS_LIST
     include/plier/transforms/cast_utils.hpp
     include/plier/transforms/const_utils.hpp
     include/plier/transforms/func_utils.hpp
+    include/plier/transforms/inline_utils.hpp
     include/plier/transforms/loop_utils.hpp
     include/plier/transforms/pipeline_utils.hpp
     include/plier/utils.hpp

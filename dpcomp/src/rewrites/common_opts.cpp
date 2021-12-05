@@ -15,7 +15,6 @@
 #include "plier/rewrites/common_opts.hpp"
 
 #include "plier/rewrites/cse.hpp"
-#include "plier/rewrites/force_inline.hpp"
 #include "plier/rewrites/if_rewrites.hpp"
 #include "plier/rewrites/index_type_propagation.hpp"
 #include "plier/rewrites/loop_rewrites.hpp"

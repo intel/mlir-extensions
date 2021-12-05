@@ -14,18 +14,13 @@
 
 #pragma once
 
-#include <mlir/IR/PatternMatch.h>
+#include <memory>
 
 namespace mlir {
-class CallOp;
+class Pass;
 }
 
 namespace plier {
-struct ForceInline : public mlir::OpRewritePattern<mlir::CallOp> {
-  using mlir::OpRewritePattern<mlir::CallOp>::OpRewritePattern;
+std::unique_ptr<mlir::Pass> createForceInlinePass();
 
-  mlir::LogicalResult
-  matchAndRewrite(mlir::CallOp op,
-                  mlir::PatternRewriter &rewriter) const override;
-};
-} // namespace plier
+}

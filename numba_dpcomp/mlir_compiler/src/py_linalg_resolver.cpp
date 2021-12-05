@@ -17,6 +17,7 @@
 #include <pybind11/pybind11.h>
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Bufferization/IR/Bufferization.h>
 #include <mlir/Dialect/Linalg/IR/LinalgOps.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/SCF.h>
@@ -1081,7 +1082,7 @@ py::object externalCallImpl(py::capsule context, py::str funcName,
       auto memrefType = mlir::MemRefType::get(tensorType.getShape(),
                                               tensorType.getElementType());
       auto memref =
-          builder.create<mlir::memref::BufferCastOp>(loc, memrefType, val);
+          builder.create<mlir::bufferization::ToMemrefOp>(loc, memrefType, val);
       inputVals.emplace_back(memref);
     } else {
       retTypes.emplace_back(type);
@@ -1122,7 +1123,7 @@ py::object externalCallImpl(py::capsule context, py::str funcName,
            llvm::makeArrayRef(inputVals).take_back(outputVals.size()))) {
     auto val = it.value();
     if (outputVals[it.index()].getType().isa<mlir::TensorType>()) {
-      val = builder.create<mlir::memref::TensorLoadOp>(loc, val);
+      val = builder.create<mlir::bufferization::ToTensorOp>(loc, val);
       results.emplace_back(val);
     }
   }
@@ -1260,7 +1261,7 @@ py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
   auto memrefType =
       mlir::MemRefType::get(srcType.getShape(), srcType.getElementType());
   auto memref =
-      builder.create<mlir::memref::BufferCastOp>(loc, memrefType, srcVal);
+      builder.create<mlir::bufferization::ToMemrefOp>(loc, memrefType, srcVal);
 
   auto indexType = builder.getIndexType();
   auto indexCast = [&](mlir::Value val) {
@@ -1324,7 +1325,7 @@ py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
   auto view = builder.createOrFold<mlir::memref::SubViewOp>(
       loc, memref, offsetVals, sizeVals, strideVals);
   view = builder.createOrFold<plier::ChangeLayoutOp>(loc, memrefType, view);
-  auto ret = builder.create<mlir::memref::TensorLoadOp>(loc, view);
+  auto ret = builder.create<mlir::bufferization::ToTensorOp>(loc, view);
   return ctx.context.createVar(
       context, doSignCast(builder, loc, ret, origSrcVal.getType()));
 }

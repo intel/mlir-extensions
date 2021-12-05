@@ -2064,7 +2064,6 @@ struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::CallOp> {
   mlir::LogicalResult
   matchAndRewrite(mlir::CallOp op,
                   mlir::PatternRewriter &rewriter) const override {
-
     using handler_func_t = mlir::LogicalResult (*)(
         mlir::CallOp, mlir::scf::ForOp, mlir::PatternRewriter &);
 
