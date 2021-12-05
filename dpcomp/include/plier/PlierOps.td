@@ -25,6 +25,8 @@ include "mlir/Interfaces/ViewLikeInterface.td"
 def Plier_Dialect : Dialect {
   let name = "plier";
   let cppNamespace = "plier";
+
+  let hasConstantMaterializer = 1;
 }
 
 def Plier_PyType
@@ -333,11 +335,9 @@ def ExtractMemrefMetadataOp
   let hasFolder = 1;
 
   let builders = [
-    OpBuilder<(ins "::mlir::Value"
-               : $src, "int64_t"
-               : $dim)>,
-    OpBuilder<(ins "::mlir::Value"
-               : $src)>
+    OpBuilder<(ins "::mlir::Value" : $src,
+                 "int64_t" : $dim)>,
+    OpBuilder<(ins "::mlir::Value" : $src)>
   ];
 }
 

@@ -158,6 +158,16 @@ void PlierDialect::printType(mlir::Type type,
       .Default([](auto) { llvm_unreachable("unexpected type"); });
 }
 
+mlir::Operation *PlierDialect::materializeConstant(mlir::OpBuilder &builder,
+                                                   mlir::Attribute value,
+                                                   mlir::Type type,
+                                                   mlir::Location loc) {
+  if (mlir::arith::ConstantOp::isBuildableWith(value, type))
+    return builder.create<mlir::arith::ConstantOp>(loc, type, value);
+
+  return builder.create<mlir::ConstantOp>(loc, type, value);
+}
+
 PyType PyType::get(mlir::MLIRContext *context, llvm::StringRef name) {
   assert(!name.empty());
   return Base::get(context, name);
@@ -1269,9 +1279,8 @@ void ReduceRankOp::build(::mlir::OpBuilder &odsBuilder,
   auto mapAttr = odsBuilder.getI32ArrayAttr(mapping);
   auto srcShape = srcType.getShape();
   llvm::SmallVector<int64_t> shape(mapping.size());
-  for (auto it : llvm::enumerate(mapping)) {
+  for (auto it : llvm::enumerate(mapping))
     shape[it.index()] = srcShape[static_cast<size_t>(it.value())];
-  }
 
   if (auto tensorType = srcType.dyn_cast<mlir::RankedTensorType>()) {
     auto retType = mlir::RankedTensorType::get(
@@ -1280,8 +1289,8 @@ void ReduceRankOp::build(::mlir::OpBuilder &odsBuilder,
   } else if (auto memrefType = srcType.dyn_cast<mlir::MemRefType>()) {
     auto affineMap = [&]() {
       mlir::AffineMap ret;
-      auto affineMap = memrefType.getLayout().getAffineMap();
-      if (affineMap && !affineMap.isIdentity()) {
+      if (!memrefType.getLayout().isIdentity()) {
+        auto affineMap = memrefType.getLayout().getAffineMap();
         auto context = odsBuilder.getContext();
         llvm::SmallVector<mlir::AffineExpr> dimReplacements(srcRank);
         llvm::SmallVector<mlir::AffineExpr> symReplacements(srcRank + 1);
@@ -1292,7 +1301,7 @@ void ReduceRankOp::build(::mlir::OpBuilder &odsBuilder,
             auto srcIndex = static_cast<unsigned>(it - mapping.begin());
             dimReplacements[i] = mlir::getAffineDimExpr(srcIndex, context);
             symReplacements[i + 1] =
-                mlir::getAffineSymbolExpr(srcIndex, context);
+                mlir::getAffineSymbolExpr(srcIndex + 1, context);
           } else {
             dimReplacements[i] = mlir::getAffineConstantExpr(0, context);
             symReplacements[i + 1] = mlir::getAffineConstantExpr(0, context);
@@ -1443,6 +1452,79 @@ void ExtractMemrefMetadataOp::build(::mlir::OpBuilder &odsBuilder,
 
 mlir::OpFoldResult
 ExtractMemrefMetadataOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
+  auto idx = dimIndex().getSExtValue();
+  assert(idx >= -1);
+  auto src = source();
+
+  int64_t offset;
+  llvm::SmallVector<int64_t> strides;
+  if (mlir::succeeded(mlir::getStridesAndOffset(
+          src.getType().cast<mlir::MemRefType>(), strides, offset))) {
+    mlir::Builder builder(getContext());
+    if (idx == -1 && !mlir::ShapedType::isDynamicStrideOrOffset(offset)) {
+      return builder.getIndexAttr(offset);
+    } else if (idx >= 0 && idx < static_cast<int64_t>(strides.size()) &&
+               !mlir::ShapedType::isDynamicStrideOrOffset(
+                   strides[static_cast<unsigned>(idx)])) {
+      return builder.getIndexAttr(strides[static_cast<unsigned>(idx)]);
+    }
+  }
+
+  if (auto reintr = src.getDefiningOp<mlir::memref::ReinterpretCastOp>()) {
+    if (idx == -1) {
+      auto offsets = reintr.getMixedOffsets();
+      if (offsets.size() == 1)
+        return offsets.front();
+
+      return nullptr;
+    }
+
+    auto strides = reintr.getMixedStrides();
+    if (static_cast<unsigned>(idx) < strides.size())
+      return strides[static_cast<unsigned>(idx)];
+
+    return nullptr;
+  }
+
+  if (auto cast = src.getDefiningOp<mlir::memref::CastOp>()) {
+    auto newSrc = cast.source();
+    sourceMutable().assign(newSrc);
+    return getResult();
+  }
+
+  if (auto reduceRank = src.getDefiningOp<plier::ReduceRankOp>()) {
+    auto newSrc = reduceRank.source();
+    if (idx == -1) {
+      sourceMutable().assign(newSrc);
+      return getResult();
+    }
+
+    auto mapping = reduceRank.getMapping();
+    if (static_cast<unsigned>(idx) < mapping.size()) {
+      auto newIdx = mapping[static_cast<unsigned>(idx)];
+      assert(newIdx >= 0);
+      sourceMutable().assign(newSrc);
+      auto type = dimIndexAttr().getType();
+      dimIndexAttr(mlir::IntegerAttr::get(type, newIdx));
+      return getResult();
+    }
+
+    return nullptr;
+  }
+
+  if (auto cast = src.getDefiningOp<mlir::memref::CastOp>()) {
+    auto castSrc = cast.source();
+    auto castSrcType = castSrc.getType().cast<mlir::ShapedType>();
+    auto srcType = src.getType().cast<mlir::ShapedType>();
+    if (castSrcType.hasRank() && srcType.hasRank() &&
+        castSrcType.getRank() == srcType.getRank()) {
+      sourceMutable().assign(castSrc);
+      return getResult();
+    }
+
+    return nullptr;
+  }
+
   return nullptr;
 }
 

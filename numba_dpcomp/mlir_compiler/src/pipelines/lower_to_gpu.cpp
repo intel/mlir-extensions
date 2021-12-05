@@ -699,14 +699,25 @@ struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
              : mlir::OpFoldResult(rewriter.getIndexAttr(0)));
     auto sizes = op.getMixedSizes();
     auto strides = op.getMixedStrides();
+
     for (auto i : llvm::seq(size_t(0), strides.size())) {
-      // TODO: bug in ReinterpretCastOp::verify
       if (mlir::ShapedType::isDynamicStrideOrOffset(resultStrides[i])) {
-        if (auto c = strides[i].dyn_cast<mlir::Attribute>()) {
+        auto stride = strides[i];
+        if (auto c = stride.dyn_cast<mlir::Attribute>()) {
           auto val = c.dyn_cast<mlir::IntegerAttr>().getValue().getSExtValue();
-          strides[i] = rewriter.create<mlir::arith::ConstantIndexOp>(loc, val)
-                           .getResult();
+          stride = rewriter.create<mlir::arith::ConstantIndexOp>(loc, val)
+                       .getResult();
         }
+
+        auto origStride = [&]() {
+          mlir::OpBuilder::InsertionGuard g(rewriter);
+          setInsertionPointToStart(rewriter, memref);
+          return rewriter.createOrFold<plier::ExtractMemrefMetadataOp>(
+              loc, memref, i);
+        }();
+        auto newStride = rewriter.createOrFold<mlir::arith::MulIOp>(
+            loc, stride.get<mlir::Value>(), origStride);
+        strides[i] = newStride;
       }
     }
 
@@ -975,6 +986,19 @@ public:
   }
 };
 
+class ConvertReduceRank
+    : public mlir::OpConversionPattern<plier::ReduceRankOp> {
+public:
+  using mlir::OpConversionPattern<plier::ReduceRankOp>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::ReduceRankOp op, plier::ReduceRankOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOp(op, adaptor.source());
+    return mlir::success();
+  }
+};
+
 template <typename Op>
 static mlir::Value lowerIntAtomic(mlir::OpBuilder &builder, mlir::Location loc,
                                   mlir::Value ptr, mlir::Value val) {
@@ -1133,11 +1157,10 @@ struct GPUToSpirvPass
     mlir::arith::populateArithmeticToSPIRVPatterns(typeConverter, patterns);
     mlir::populateMathToSPIRVPatterns(typeConverter, patterns);
 
-    patterns
-        .insert<ConvertSubviewOp, ConvertCastOp<mlir::memref::CastOp>,
-                ConvertCastOp<mlir::memref::ReinterpretCastOp>, ConvertLoadOp,
-                ConvertStoreOp, ConvertAtomicOps, ConvertFunc>(typeConverter,
-                                                               context);
+    patterns.insert<ConvertSubviewOp, ConvertCastOp<mlir::memref::CastOp>,
+                    ConvertCastOp<mlir::memref::ReinterpretCastOp>,
+                    ConvertLoadOp, ConvertStoreOp, ConvertReduceRank,
+                    ConvertAtomicOps, ConvertFunc>(typeConverter, context);
 
     if (failed(
             applyFullConversion(kernelModules, *target, std::move(patterns))))
