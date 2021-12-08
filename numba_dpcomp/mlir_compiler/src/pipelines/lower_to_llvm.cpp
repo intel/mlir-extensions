@@ -20,6 +20,7 @@
 #include <mlir/Conversion/LLVMCommon/TypeConverter.h>
 #include <mlir/Conversion/LinalgToLLVM/LinalgToLLVM.h>
 #include <mlir/Conversion/MathToLLVM/MathToLLVM.h>
+#include <mlir/Conversion/MathToLibm/MathToLibm.h>
 #include <mlir/Conversion/MemRefToLLVM/AllocLikeConversion.h>
 #include <mlir/Conversion/MemRefToLLVM/MemRefToLLVM.h>
 #include <mlir/Conversion/SCFToStandard/SCFToStandard.h>
@@ -1440,7 +1441,6 @@ struct LLVMLoweringPass
     populateToLLVMAdditionalTypeConversion(typeConverter);
     OwningRewritePatternList patterns(&context);
     populateStdToLLVMConversionPatterns(typeConverter, patterns);
-    populateMathToLLVMConversionPatterns(typeConverter, patterns);
     populateMemRefToLLVMConversionPatterns(typeConverter, patterns);
     populateLinalgToLLVMConversionPatterns(typeConverter, patterns);
     arith::populateArithmeticToLLVMConversionPatterns(typeConverter, patterns);
@@ -1475,6 +1475,8 @@ void populate_lower_to_llvm_pipeline(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addNestedPass<mlir::FuncOp>(mlir::arith::createArithmeticExpandOpsPass());
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<PreLLVMLowering>());
+  pm.addNestedPass<mlir::FuncOp>(mlir::createConvertMathToLLVMPass());
+  pm.addPass(mlir::createConvertMathToLibmPass());
   pm.addPass(std::make_unique<LLVMLoweringPass>());
   pm.addNestedPass<mlir::LLVM::LLVMFuncOp>(
       std::make_unique<PostLLVMLowering>());
