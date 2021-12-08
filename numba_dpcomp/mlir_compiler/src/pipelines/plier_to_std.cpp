@@ -12,8 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "pipelines/plier_to_std.hpp"
+#define _USE_MATH_DEFINES
+#include <cmath>
+
 #include "pipelines/plier_to_scf.hpp"
+#include "pipelines/plier_to_std.hpp"
 #include "pipelines/pre_low_simplifications.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
@@ -411,6 +414,54 @@ struct LiteralLowering : public mlir::OpConversionPattern<Op> {
       newVal = rewriter.create<plier::SignCastOp>(loc, dstType, newVal);
 
     rewriter.replaceOp(op, newVal);
+    return mlir::success();
+  }
+};
+
+static mlir::Value lowerConst(mlir::Location loc, mlir::OpBuilder &builder,
+                              double value) {
+  auto type = builder.getF64Type();
+  return builder.create<mlir::arith::ConstantFloatOp>(loc, llvm::APFloat(value),
+                                                      type);
+}
+
+static mlir::Value lowerPi(mlir::Location loc, mlir::OpBuilder &builder) {
+  return lowerConst(loc, builder, M_PI);
+}
+
+static mlir::Value lowerE(mlir::Location loc, mlir::OpBuilder &builder) {
+  return lowerConst(loc, builder, M_E);
+}
+
+// TODO: unhardcode
+struct LowerGlobals : public mlir::OpConversionPattern<plier::GlobalOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::GlobalOp op, plier::GlobalOp::Adaptor /*adaptor*/,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    using lower_f = mlir::Value (*)(mlir::Location, mlir::OpBuilder &);
+    const std::pair<llvm::StringRef, lower_f> handlers[] = {
+        // clang-format off
+        {"math.pi", &lowerPi},
+        {"math.e", &lowerE},
+        // clang-format on
+    };
+
+    mlir::Value res;
+    auto name = op.name();
+    auto loc = op.getLoc();
+    for (auto h : handlers) {
+      if (h.first == name) {
+        res = h.second(loc, rewriter);
+        break;
+      }
+    }
+
+    if (!res)
+      return mlir::failure();
+
+    rewriter.replaceOp(op, res);
     return mlir::success();
   }
 };
@@ -1166,6 +1217,7 @@ void PlierToStdPass::runOnOperation() {
       ConstOpLowering,
       LiteralLowering<plier::CastOp>,
       LiteralLowering<plier::GlobalOp>,
+      LowerGlobals,
       UndefOpLowering
       // clang-format on
       >(typeConverter, context);

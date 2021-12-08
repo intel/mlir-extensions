@@ -135,6 +135,14 @@ def test_math_uplifting(val, name):
         ir = get_print_buffer()
         assert ir.count(f'math.{name}') == 1, ir
 
+@parametrize_function_variants("py_func", [
+    'lambda: math.pi',
+    'lambda: math.e',
+    ])
+def test_math_const(py_func):
+    jit_func = njit(py_func)
+    assert_equal(py_func(), jit_func())
+
 def _while_py_func_simple(a, b):
     while a < b:
         a = a * 2
