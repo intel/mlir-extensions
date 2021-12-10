@@ -74,15 +74,13 @@ def _set_local_size(*args):
 @registry.register_func('_set_local_size', _set_local_size)
 def _set_local_size_impl(builder, *args):
     nargs = len(args)
-    if nargs > 0 and nargs <= 3:
+    if nargs == 3:
         res = 0 # TODO: dummy ret, remove
         return builder.external_call('set_local_size', inputs=args, outputs=res)
 
 @infer_global(_set_local_size)
 class _SetLocalSizeId(ConcreteTemplate):
     cases = [
-        signature(types.void, types.int64),
-        signature(types.void, types.int64, types.int64),
         signature(types.void, types.int64, types.int64, types.int64),
     ]
 
@@ -91,12 +89,12 @@ def _kernel_body0(global_size, local_size, body, *args):
     body(*args)
 
 def _kernel_body1(global_size, local_size, body, *args):
-    _set_local_size(local_size[0])
+    _set_local_size(1, 1, local_size[0])
     for i in _gpu_range(global_size[0]):
         body(*args)
 
 def _kernel_body2(global_size, local_size, body, *args):
-    _set_local_size(local_size[1], local_size[0])
+    _set_local_size(1, local_size[1], local_size[0])
     x, y = global_size
     for i in _gpu_range(y):
         for j in _gpu_range(x):
