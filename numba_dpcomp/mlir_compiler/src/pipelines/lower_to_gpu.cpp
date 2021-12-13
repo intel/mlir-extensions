@@ -209,7 +209,7 @@ struct ParallelLoopGPUMappingPass
       return;
 
     if (!llvm::hasSingleElement(region)) {
-      func.emitError("Only strucutred constrol flow is supported");
+      func.emitError("Only strucutred control flow is supported");
       signalPassFailure();
       return;
     }
@@ -1184,6 +1184,78 @@ struct GPUToSpirvPass
   }
 };
 
+struct GPULowerDefaultLocalSize
+    : public mlir::PassWrapper<GPULowerDefaultLocalSize, mlir::FunctionPass> {
+
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::StandardOpsDialect>();
+    registry.insert<plier::PlierDialect>();
+  }
+
+  void runOnFunction() override {
+    auto func = getFunction();
+    auto &region = func.getBody();
+    if (region.empty())
+      return;
+
+    if (!llvm::hasSingleElement(region)) {
+      func.emitError("Only strucutred control flow is supported");
+      signalPassFailure();
+      return;
+    }
+
+    auto skipCast = [](mlir::Value val) -> mlir::Value {
+      if (auto parent = val.getDefiningOp<mlir::arith::IndexCastOp>())
+        return parent.in();
+      return val;
+    };
+
+    llvm::StringRef funcName("get_default_local_size");
+    mlir::OpBuilder builder(&getContext());
+    func.walk([&](mlir::gpu::LaunchFuncOp op) {
+      if (auto call = skipCast(op.blockSizeX()).getDefiningOp<mlir::CallOp>()) {
+        if (call.getCallee() != funcName || call.operands().size() != 3)
+          return;
+
+        assert(skipCast(op.blockSizeY()).getDefiningOp<mlir::CallOp>() == call);
+        assert(skipCast(op.blockSizeZ()).getDefiningOp<mlir::CallOp>() == call);
+
+        auto loc = call.getLoc();
+        auto kernel = op.kernel();
+        builder.setInsertionPoint(call);
+
+        auto operands = call.operands();
+        auto count = static_cast<unsigned>(operands.size());
+        llvm::SmallVector<mlir::Value, 3> globalSize(count);
+        for (auto i : llvm::seq(0u, count))
+          globalSize[i] = plier::index_cast(builder, loc, operands[i]);
+
+        auto res = builder
+                       .create<plier::GPUSuggestBlockSizeOp>(
+                           loc, /*stream*/ llvm::None, kernel, globalSize)
+                       .getResults();
+
+        for (auto i : llvm::seq(0u, count)) {
+          auto castedRes = plier::index_cast(builder, loc, res[i],
+                                             call.getResult(i).getType());
+          call.getResult(i).replaceAllUsesWith(castedRes);
+        }
+
+        assert(call.use_empty());
+        call->erase();
+      }
+    });
+
+    func.walk([&](mlir::CallOp op) {
+      if (op.getCallee() == funcName) {
+        op.emitError() << funcName << " call wasn't removed";
+        signalPassFailure();
+      }
+    });
+  }
+};
+
 template <typename Op, typename F>
 static mlir::LogicalResult createGpuKernelLoad(mlir::PatternRewriter &builder,
                                                Op &&op, F &&func) {
@@ -1254,12 +1326,34 @@ struct ExpandAllocOp : public mlir::OpRewritePattern<mlir::gpu::AllocOp> {
   }
 };
 
+struct ExpandSuggestBlockSizeOp
+    : public mlir::OpRewritePattern<plier::GPUSuggestBlockSizeOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::GPUSuggestBlockSizeOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    if (op.kernel())
+      return mlir::failure();
+
+    assert(op.kernelRef());
+    return createGpuKernelLoad(
+        rewriter, op,
+        [&](mlir::OpBuilder &builder, mlir::Location loc, mlir::Value stream,
+            mlir::Value kernel) {
+          return builder.create<plier::GPUSuggestBlockSizeOp>(
+              loc, stream, kernel, op.gridSize());
+        });
+  }
+};
+
 struct GPUExPass : public mlir::PassWrapper<GPUExPass, mlir::FunctionPass> {
 
   void runOnFunction() override {
     mlir::OwningRewritePatternList patterns(&getContext());
 
-    patterns.insert<ExpandLaunchOp, ExpandAllocOp>(&getContext());
+    patterns.insert<ExpandLaunchOp, ExpandAllocOp, ExpandSuggestBlockSizeOp>(
+        &getContext());
 
     (void)mlir::applyPatternsAndFoldGreedily(getFunction(),
                                              std::move(patterns));
@@ -1377,6 +1471,9 @@ protected:
   mlir::Type llvmInt64Type = mlir::IntegerType::get(context, 64);
   mlir::Type llvmIndexType = mlir::IntegerType::get(
       context, this->getTypeConverter()->getPointerBitwidth(0));
+
+  mlir::Type llvmI32PtrType = mlir::LLVM::LLVMPointerType::get(llvmIndexType);
+
   mlir::Type llvmRangeType = mlir::LLVM::LLVMStructType::getLiteral(
       context, {llvmPointerType, llvmIndexType});
   mlir::Type llvmRangePointerType =
@@ -1460,6 +1557,17 @@ protected:
           llvmPointerPointerType, // deps (null-term)
           llvmIndexType,          // eventIndex
           llvmAllocResPtrType,    // result
+      }};
+
+  FunctionCallBuilder suggestBlockSizeBuilder = {
+      "dpcompGpuSuggestBlockSize",
+      llvmVoidType,
+      {
+          llvmPointerType, // stream
+          llvmPointerType, // kernel
+          llvmI32PtrType,  // grid sizes
+          llvmI32PtrType,  // ret block sizes
+          llvmIndexType,   // dim count
       }};
 
   mlir::Value createDepsArray(mlir::OpBuilder &rewriter, mlir::Location loc,
@@ -1716,7 +1824,7 @@ private:
     llvm::SmallVector<mlir::Value> paramsStorage(paramsCount);
     auto paramsArrayPtr = allocaHelper.insert(rewriter, [&]() {
       auto size = rewriter.create<mlir::LLVM::ConstantOp>(
-          loc, llvmInt64Type, rewriter.getI64IntegerAttr(1));
+          loc, llvmInt64Type, rewriter.getI64IntegerAttr(paramsCount));
       for (auto i : llvm::seq(0u, paramsCount)) {
         auto ptrType = mlir::LLVM::LLVMPointerType::get(getKernelParamType(i));
         paramsStorage[i] =
@@ -1915,6 +2023,83 @@ private:
   }
 };
 
+class ConvertGpuSuggestBlockSizePattern
+    : public ConvertOpToGpuRuntimeCallPattern<plier::GPUSuggestBlockSizeOp> {
+public:
+  ConvertGpuSuggestBlockSizePattern(mlir::LLVMTypeConverter &converter)
+      : ConvertOpToGpuRuntimeCallPattern<plier::GPUSuggestBlockSizeOp>(
+            converter) {}
+
+private:
+  mlir::LogicalResult
+  matchAndRewrite(plier::GPUSuggestBlockSizeOp op,
+                  plier::GPUSuggestBlockSizeOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto numDims = op.getNumResults();
+    auto loc = op.getLoc();
+    plier::AllocaInsertionPoint allocaHelper(op);
+    auto gridArrayPtr = allocaHelper.insert(rewriter, [&]() {
+      auto size = rewriter.create<mlir::LLVM::ConstantOp>(
+          loc, llvmInt64Type, rewriter.getI64IntegerAttr(numDims));
+      return rewriter.create<mlir::LLVM::AllocaOp>(loc, llvmI32PtrType, size,
+                                                   0);
+    });
+    auto blockArrayPtr = allocaHelper.insert(rewriter, [&]() {
+      auto size = rewriter.create<mlir::LLVM::ConstantOp>(
+          loc, llvmInt64Type, rewriter.getI64IntegerAttr(numDims));
+      return rewriter.create<mlir::LLVM::AllocaOp>(loc, llvmI32PtrType, size,
+                                                   0);
+    });
+
+    auto sizesType = mlir::LLVM::LLVMArrayType::get(llvmInt32Type, numDims);
+    auto sizesPtrType = mlir::LLVM::LLVMPointerType::get((sizesType));
+    auto castToSizesPtrType = [&](mlir::Value val) {
+      return rewriter.create<mlir::LLVM::BitcastOp>(loc, sizesPtrType, val);
+    };
+
+    mlir::Value gridArray =
+        rewriter.create<mlir::LLVM::UndefOp>(loc, sizesType);
+    for (auto i : llvm::seq(0u, numDims)) {
+      auto index = rewriter.getI64ArrayAttr(i);
+      auto gridSize = rewriter.create<mlir::LLVM::TruncOp>(
+          loc, llvmInt32Type, adaptor.gridSize()[i]);
+      gridArray = rewriter.create<mlir::LLVM::InsertValueOp>(loc, gridArray,
+                                                             gridSize, index);
+    }
+
+    rewriter.create<mlir::LLVM::StoreOp>(loc, gridArray,
+                                         castToSizesPtrType(gridArrayPtr));
+    mlir::Value numDimsVal = rewriter.create<mlir::LLVM::ConstantOp>(
+        loc, llvmIndexType, rewriter.getIntegerAttr(llvmIndexType, numDims));
+
+    mlir::Value params[] = {
+        // clang-format off
+        adaptor.stream(),
+        adaptor.kernel(),
+        gridArrayPtr,
+        blockArrayPtr,
+        numDimsVal,
+        // clang-format on
+    };
+
+    suggestBlockSizeBuilder.create(loc, rewriter, params);
+
+    mlir::Value blockSizeArray = rewriter.create<mlir::LLVM::LoadOp>(
+        loc, castToSizesPtrType(blockArrayPtr));
+    llvm::SmallVector<mlir::Value, 3> result(numDims);
+    for (auto i : llvm::seq(0u, numDims)) {
+      auto ind = rewriter.getI64ArrayAttr(i);
+      auto blockSize = rewriter.create<mlir::LLVM::ExtractValueOp>(
+          loc, llvmInt32Type, blockSizeArray, ind);
+      result[i] =
+          rewriter.create<mlir::LLVM::ZExtOp>(loc, llvmIndexType, blockSize);
+    }
+
+    rewriter.replaceOp(op, result);
+    return mlir::success();
+  }
+};
+
 struct EnumerateEventsPass
     : public mlir::PassWrapper<EnumerateEventsPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
@@ -1958,7 +2143,8 @@ struct GPUToLLVMPass
         plier::GetGpuKernelOp,
         plier::DestroyGpuKernelOp,
         plier::LaunchGpuKernelOp,
-        plier::GPUAllocOp
+        plier::GPUAllocOp,
+        plier::GPUSuggestBlockSizeOp
         // clang-format on
         >();
 
@@ -1976,7 +2162,8 @@ struct GPUToLLVMPass
         ConvertGpuKernelGetPattern,
         ConvertGpuKernelDestroyPattern,
         ConvertGpuKernelLaunchPattern,
-        ConvertGpuAllocPattern
+        ConvertGpuAllocPattern,
+        ConvertGpuSuggestBlockSizePattern
         // clang-format on
         >(converter);
 
@@ -2253,6 +2440,7 @@ static void populateLowerToGPUPipelineHigh(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<LowerGpuRangePass>());
   pm.addPass(std::make_unique<LowerGpuBuiltinsPass>());
   commonOptPasses(pm);
+  pm.addPass(mlir::createSymbolDCEPass());
 }
 
 static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
@@ -2273,6 +2461,9 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createSymbolDCEPass());
   pm.addPass(mlir::createGpuKernelOutliningPass());
   pm.addPass(mlir::createCanonicalizerPass());
+  pm.addNestedPass<mlir::FuncOp>(std::make_unique<GPULowerDefaultLocalSize>());
+  pm.addNestedPass<mlir::FuncOp>(mlir::createCanonicalizerPass());
+  pm.addPass(mlir::createSymbolDCEPass());
   pm.addNestedPass<mlir::gpu::GPUModuleOp>(std::make_unique<AbiAttrsPass>());
   pm.addPass(std::make_unique<SetSPIRVCapabilitiesPass>());
   pm.addPass(std::make_unique<GPUToSpirvPass>());

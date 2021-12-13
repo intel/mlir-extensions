@@ -83,10 +83,45 @@ class _KernelMarkerId(ConcreteTemplate):
         signature(types.void, types.int64, types.int64, types.int64, types.int64, types.int64, types.int64),
     ]
 
+def _get_default_local_size():
+    _stub_error()
+
+@registry.register_func('_get_default_local_size', _get_default_local_size)
+def _get_default_local_size_impl(builder, *args):
+    res = (0,0,0)
+    return builder.external_call('get_default_local_size', inputs=args, outputs=res)
+
+@infer_global(_get_default_local_size)
+class _GetDefaultLocalSizeId(ConcreteTemplate):
+    cases = [
+        signature(types.UniTuple(types.int64, 3), types.int64, types.int64, types.int64),
+    ]
+
 @njit(enable_gpu_pipeline=True)
 def _kernel_body(global_size, local_size, body, *args):
     x, y, z = global_size
     lx, ly, lz = local_size
+    _kernel_marker(x, y, z, lx, ly, lz)
+    gx = (x + lx - 1) // lx
+    gy = (y + ly - 1) // ly
+    gz = (z + lz - 1) // lz
+    for gi in _gpu_range(gx):
+        for gj in _gpu_range(gy):
+            for gk in _gpu_range(gz):
+                for li in _gpu_range(lx):
+                    for lj in _gpu_range(ly):
+                        for lk in _gpu_range(lz):
+                            ibx = (gi * lx + li) < x
+                            iby = (gj * ly + lj) < y
+                            ibz = (gk * lz + lk) < z
+                            # in_bounds = ibx and iby and ibz # TODO: bug in plier-to-scf
+                            if (ibx and iby and ibz):
+                                body(*args)
+
+@njit(enable_gpu_pipeline=True)
+def _kernel_body_def_size(global_size, body, *args):
+    x, y, z = global_size
+    lx, ly, lz = _get_default_local_size(x, y, z)
     _kernel_marker(x, y, z, lx, ly, lz)
     gx = (x + lx - 1) // lx
     gy = (y + ly - 1) // ly
@@ -110,6 +145,7 @@ def _extend_dims(dims):
         return tuple(dims + (1,) * (3 - l))
     return dims
 
+
 class Kernel:
     def __init__(self, func):
         self.global_size = ()
@@ -123,7 +159,7 @@ class Kernel:
         global_dim_count = len(global_size)
         local_dim_count = len(local_size)
         assert(local_dim_count <= global_dim_count)
-        if local_dim_count < global_dim_count:
+        if local_dim_count != 0 and local_dim_count < global_dim_count:
             local_size = tuple(local_size[i] if i < local_dim_count else 1 for i in range(global_dim_count))
         ret = self.copy()
         ret.global_size = global_size
@@ -147,7 +183,11 @@ class Kernel:
         self.check_call_args(args, kwargs)
 
         jit_func = njit(inline='always',enable_gpu_pipeline=True)(self.py_func)
-        _kernel_body(_extend_dims(self.global_size), _extend_dims(self.local_size), jit_func, *args)
+        local_size = self.local_size
+        if (len(local_size) != 0):
+            _kernel_body(_extend_dims(self.global_size), _extend_dims(self.local_size), jit_func, *args)
+        else:
+            _kernel_body_def_size(_extend_dims(self.global_size), jit_func, *args)
 
 
 def kernel(func):

@@ -290,9 +290,10 @@ struct Stream {
         countUntil(events, static_cast<ze_event_handle_t>(nullptr)));
     auto paramsCount = countUntil(params, ParamDesc{nullptr, 0});
 
-    CHECK_ZE_RESULT(zeKernelSetGroupSize(kernel, static_cast<uint32_t>(blockX),
-                                         static_cast<uint32_t>(blockY),
-                                         static_cast<uint32_t>(blockZ)));
+    auto castSz = [](size_t val) { return static_cast<uint32_t>(val); };
+
+    CHECK_ZE_RESULT(zeKernelSetGroupSize(kernel, castSz(blockX), castSz(blockY),
+                                         castSz(blockZ)));
     for (size_t i = 0; i < paramsCount; ++i) {
       auto param = params[i];
       CHECK_ZE_RESULT(zeKernelSetArgumentValue(kernel, static_cast<uint32_t>(i),
@@ -300,9 +301,7 @@ struct Stream {
     }
 
     auto event = getEvent(eventIndex);
-    ze_group_count_t launchArgs = {static_cast<uint32_t>(gridX),
-                                   static_cast<uint32_t>(gridY),
-                                   static_cast<uint32_t>(gridZ)};
+    ze_group_count_t launchArgs = {castSz(gridX), castSz(gridY), castSz(gridZ)};
     CHECK_ZE_RESULT(zeCommandListAppendLaunchKernel(
         commandList.get(), kernel, &launchArgs, event, eventsCount, events));
     return event;
@@ -354,6 +353,21 @@ struct Stream {
 
     retain();
     return {info, mem, event};
+  }
+
+  void suggestBlockSize(ze_kernel_handle_t kernel, const uint32_t *gridSize,
+                        uint32_t *blockSize, size_t numDims) {
+    assert(kernel);
+    assert(numDims > 0 && numDims <= 3);
+    uint32_t gSize[3] = {};
+    uint32_t *bSize[3] = {};
+    for (size_t i = 0; i < numDims; ++i) {
+      gSize[i] = gridSize[i];
+      bSize[i] = &blockSize[i];
+    }
+
+    CHECK_ZE_RESULT(zeKernelSuggestGroupSize(
+        kernel, gSize[0], gSize[1], gSize[2], bSize[0], bSize[1], bSize[2]));
   }
 
 private:
@@ -469,5 +483,15 @@ dpcompGpuAlloc(void *stream, size_t size, size_t alignment, int shared,
         size, alignment, shared != 0, static_cast<ze_event_handle_t *>(events),
         eventIndex);
     *ret = AllocResult{std::get<0>(res), std::get<1>(res), std::get<2>(res)};
+  });
+}
+
+extern "C" DPCOMP_GPU_RUNTIME_EXPORT void
+dpcompGpuSuggestBlockSize(void *stream, void *kernel, const uint32_t *gridSize,
+                          uint32_t *blockSize, size_t numDims) {
+  LOG_FUNC();
+  catchAll([&]() {
+    static_cast<Stream *>(stream)->suggestBlockSize(
+        static_cast<ze_kernel_handle_t>(kernel), gridSize, blockSize, numDims);
   });
 }

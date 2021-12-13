@@ -391,12 +391,11 @@ def LaunchGpuKernelOp
   let results = (outs Optional<GPU_AsyncToken> : $asyncToken);
 
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins "::mlir::Value"
-                             : $stream, "::mlir::Value"
-                             : $kernel, "::mlir::gpu::KernelDim3"
-                             : $gridSize, "::mlir::gpu::KernelDim3"
-                             : $blockSize, "::mlir::ValueRange"
-                             : $kernelOperands)>];
+  let builders = [OpBuilder<(ins "::mlir::Value" : $stream,
+                                 "::mlir::Value" : $kernel,
+                                 "::mlir::gpu::KernelDim3" : $gridSize,
+                                 "::mlir::gpu::KernelDim3" : $blockSize,
+                                 "::mlir::ValueRange" : $kernelOperands)>];
 }
 
 def DestroyGpuKernelOp : Plier_Op<"destroy_gpu_kernel"> {
@@ -407,15 +406,37 @@ def GPUAllocOp
     : Plier_Op<"gpu_alloc", [GPU_AsyncOpInterface, AttrSizedOperandSegments]> {
 
   let arguments = (ins Variadic<GPU_AsyncToken>:$asyncDependencies,
-                     Plier_OpaqueType:$stream,
-                   Variadic<Index>:$dynamicSizes, Variadic<Index>:$symbolOperands);
+                       Plier_OpaqueType:$stream,
+                       Variadic<Index>:$dynamicSizes,
+                       Variadic<Index>:$symbolOperands);
   let results = (outs Res<AnyMemRef, "", [MemAlloc]>:$memref,
-                 Optional<GPU_AsyncToken>:$asyncToken);
+                      Optional<GPU_AsyncToken>:$asyncToken);
 
   let extraClassDeclaration = [{
-    ::mlir::MemRefType getType() { return memref().getType().cast<::mlir::MemRefType>();
+    ::mlir::MemRefType getType() { return memref().getType().cast<::mlir::MemRefType>(); }
+  }];
 }
-}];
+
+def GPUSuggestBlockSizeOp : Plier_Op<"suggest_block_size",
+                                     [AttrSizedOperandSegments, NoSideEffect]> {
+  let arguments = (ins Optional<Plier_OpaqueType>:$stream,
+                       Optional<Plier_OpaqueType>:$kernel,
+                       OptionalAttr<SymbolRefAttr>:$kernelRef,
+                       Variadic<Index>:$gridSize);
+
+  let results = (outs Variadic<Index>);
+
+  let builders = [OpBuilder<(ins "::llvm::Optional<::mlir::Value>" : $stream,
+                                 "::mlir::OpFoldResult" : $kernel,
+                                 "::mlir::ValueRange" : $gridSize)>];
+
+  let extraClassDeclaration = [{
+      /// The name of the kernel's containing module.
+      ::mlir::StringAttr getKernelModuleName();
+
+      /// The name of the kernel.
+      ::mlir::StringAttr getKernelName();
+  }];
 }
 
 #endif // PLIER_OPS
