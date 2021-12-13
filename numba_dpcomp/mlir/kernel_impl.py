@@ -68,52 +68,47 @@ class _RangeId(ConcreteTemplate):
                   types.uint64),
     ]
 
-def _set_local_size(*args):
+def _kernel_marker(*args):
     _stub_error()
 
-@registry.register_func('_set_local_size', _set_local_size)
-def _set_local_size_impl(builder, *args):
-    nargs = len(args)
-    if nargs == 3:
-        res = 0 # TODO: dummy ret, remove
-        return builder.external_call('set_local_size', inputs=args, outputs=res)
+@registry.register_func('_kernel_marker', _kernel_marker)
+def _kernel_marker_impl(builder, *args):
+    if (len(args) == 6):
+        res = 0 #TODO: remove
+        return builder.external_call('kernel_marker', inputs=args, outputs=res)
 
-@infer_global(_set_local_size)
-class _SetLocalSizeId(ConcreteTemplate):
+@infer_global(_kernel_marker)
+class _KernelMarkerId(ConcreteTemplate):
     cases = [
-        signature(types.void, types.int64, types.int64, types.int64),
+        signature(types.void, types.int64, types.int64, types.int64, types.int64, types.int64, types.int64),
     ]
 
-
-def _kernel_body0(global_size, local_size, body, *args):
-    body(*args)
-
-def _kernel_body1(global_size, local_size, body, *args):
-    _set_local_size(1, 1, local_size[0])
-    for i in _gpu_range(global_size[0]):
-        body(*args)
-
-def _kernel_body2(global_size, local_size, body, *args):
-    _set_local_size(1, local_size[1], local_size[0])
-    x, y = global_size
-    for i in _gpu_range(y):
-        for j in _gpu_range(x):
-            body(*args)
-
-def _kernel_body3(global_size, local_size, body, *args):
-    _set_local_size(local_size[2], local_size[1], local_size[0])
+@njit(enable_gpu_pipeline=True)
+def _kernel_body(global_size, local_size, body, *args):
     x, y, z = global_size
-    for i in _gpu_range(z):
-        for j in _gpu_range(y):
-            for k in _gpu_range(x):
-                body(*args)
+    lx, ly, lz = local_size
+    _kernel_marker(x, y, z, lx, ly, lz)
+    gx = (x + lx - 1) // lx
+    gy = (y + ly - 1) // ly
+    gz = (z + lz - 1) // lz
+    for gi in _gpu_range(gx):
+        for gj in _gpu_range(gy):
+            for gk in _gpu_range(gz):
+                for li in _gpu_range(lx):
+                    for lj in _gpu_range(ly):
+                        for lk in _gpu_range(lz):
+                            ibx = (gi * lx + li) < x
+                            iby = (gj * ly + lj) < y
+                            ibz = (gk * lz + lk) < z
+                            # in_bounds = ibx and iby and ibz # TODO: bug in plier-to-scf
+                            if (ibx and iby and ibz):
+                                body(*args)
 
-_kernel_body_selector = [
-    _kernel_body0,
-    _kernel_body1,
-    _kernel_body2,
-    _kernel_body3,
-]
+def _extend_dims(dims):
+    l = len(dims)
+    if (l < 3):
+        return tuple(dims + (1,) * (3 - l))
+    return dims
 
 class Kernel:
     def __init__(self, func):
@@ -152,8 +147,7 @@ class Kernel:
         self.check_call_args(args, kwargs)
 
         jit_func = njit(inline='always',enable_gpu_pipeline=True)(self.py_func)
-        jit_kern = njit(enable_gpu_pipeline=True)(_kernel_body_selector[len(self.global_size)])
-        jit_kern(self.global_size, self.local_size, jit_func, *args)
+        _kernel_body(_extend_dims(self.global_size), _extend_dims(self.local_size), jit_func, *args)
 
 
 def kernel(func):

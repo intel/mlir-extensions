@@ -102,7 +102,7 @@ static void moveOpsIntoParallel(mlir::scf::ParallelOp outer, int depth = 0) {
     op.moveBefore(&parallelOpBody.front());
   }
   depth += outer.step().size();
-  if (depth >= 3)
+  if (depth >= 6)
     return;
 
   moveOpsIntoParallel(parallelOp, depth);
@@ -203,18 +203,6 @@ struct ParallelLoopGPUMappingPass
   }
 
   void runOnFunction() override {
-    mlir::greedilyMapParallelSCFToGPU(getFunction().getBody());
-  }
-};
-
-struct SetLocalSizePass
-    : public mlir::PassWrapper<SetLocalSizePass, mlir::FunctionPass> {
-  virtual void
-  getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<mlir::gpu::GPUDialect>();
-  }
-
-  void runOnFunction() override {
     auto func = getFunction();
     auto &region = func.getBody();
     if (region.empty())
@@ -226,36 +214,63 @@ struct SetLocalSizePass
       return;
     }
 
+    auto getProcessor = [](unsigned val) -> mlir::gpu::Processor {
+      const mlir::gpu::Processor mapping[] = {
+          mlir::gpu::Processor::BlockX,  mlir::gpu::Processor::BlockY,
+          mlir::gpu::Processor::BlockZ,  mlir::gpu::Processor::ThreadX,
+          mlir::gpu::Processor::ThreadY, mlir::gpu::Processor::ThreadZ,
+      };
+      if (val >= llvm::array_lengthof(mapping))
+        return mlir::gpu::Processor::Sequential;
+
+      return mapping[val];
+    };
+
     mlir::OpBuilder builder(&getContext());
-    mlir::StringRef funcName("set_local_size");
-    llvm::SmallVector<mlir::Value, 3> localSize;
+    auto identityMap = builder.getDimIdentityMap();
+    llvm::SmallVector<mlir::gpu::ParallelLoopDimMapping> mapping;
     for (auto &op : llvm::make_early_inc_range(region.front())) {
-      if (auto call = mlir::dyn_cast<mlir::CallOp>(op)) {
-        if (call.getCallee() == funcName) {
-          auto args = call.operands();
-          localSize.assign(args.begin(), args.end());
-          op.erase();
-        }
+      auto parallel = mlir::dyn_cast<mlir::scf::ParallelOp>(op);
+      if (!parallel)
         continue;
+
+      auto numLoops = parallel.getNumLoops();
+      mapping.resize(numLoops);
+      for (auto i : llvm::seq(0u, numLoops))
+        mapping[i] = mlir::gpu::getParallelLoopDimMappingAttr(
+            getProcessor(i), identityMap, identityMap);
+
+      if (mlir::failed(mlir::gpu::setMappingAttr(parallel, mapping))) {
+        signalPassFailure();
+        return;
+      }
+    }
+
+    //    mlir::greedilyMapParallelSCFToGPU(region);
+  }
+};
+
+struct RemoveKernelMarkerPass
+    : public mlir::PassWrapper<RemoveKernelMarkerPass, mlir::FunctionPass> {
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::StandardOpsDialect>();
+  }
+
+  void runOnFunction() override {
+    auto func = getFunction();
+    func.walk([&](mlir::CallOp op) {
+      if (op.getCallee() != "kernel_marker")
+        return;
+
+      if (!op.use_empty()) {
+        op.emitError("Cannot erase kernel_marker with uses");
+        signalPassFailure();
+        return;
       }
 
-      op.walk([&](mlir::gpu::LaunchOp launch) {
-        auto numSizes = localSize.size();
-        mlir::MutableOperandRange launchSizes[] = {
-            launch.blockSizeXMutable(),
-            launch.blockSizeYMutable(),
-            launch.blockSizeZMutable(),
-        };
-        builder.setInsertionPoint(launch);
-        auto loc = launch.getLoc();
-        for (auto i : llvm::seq(0u, 3u)) {
-          if (numSizes > i) {
-            auto val = plier::index_cast(builder, loc, localSize[i]);
-            launchSizes[i].assign(val);
-          }
-        }
-      });
-    }
+      op.erase();
+    });
   }
 };
 
@@ -2043,89 +2058,77 @@ private:
   PyLinalgResolver resolver;
 };
 
-static mlir::LogicalResult lowerGetGlobalId(mlir::CallOp op,
-                                            mlir::scf::ForOp loop,
-                                            mlir::PatternRewriter &builder,
-                                            int64_t /*index*/) {
+static mlir::LogicalResult
+lowerGetGlobalId(mlir::CallOp op, mlir::ValueRange /*globalSizes*/,
+                 mlir::ValueRange localSizes, mlir::ValueRange gridArgs,
+                 mlir::ValueRange blockArgs, mlir::PatternRewriter &builder,
+                 unsigned index) {
   rerun_std_pipeline(op);
-  mlir::Value arg = loop.getLoopBody().front().getArgument(0);
+  auto loc = op.getLoc();
+  auto indexType = builder.getIndexType();
+  auto indexCast = [&](mlir::Value val) -> mlir::Value {
+    if (val.getType() != indexType)
+      return builder.createOrFold<plier::CastOp>(loc, indexType, val);
+    return val;
+  };
+  auto localSize = indexCast(localSizes[index]);
+  auto gridArg = indexCast(gridArgs[index]);
+  auto blockArg = indexCast(blockArgs[index]);
+  mlir::Value res =
+      builder.create<mlir::arith::MulIOp>(loc, gridArg, localSize);
+  res = builder.create<mlir::arith::AddIOp>(loc, res, blockArg);
   auto resType = op.getResult(0).getType();
-  if (arg.getType() != resType) {
-    rerun_std_pipeline(op);
-    arg = builder.createOrFold<plier::CastOp>(op.getLoc(), resType, arg);
-  }
+  if (res.getType() != resType)
+    res = builder.createOrFold<plier::CastOp>(loc, resType, res);
 
-  builder.replaceOp(op, arg);
+  builder.replaceOp(op, res);
   return mlir::success();
 }
 
 static mlir::LogicalResult lowerGetGlobalSize(mlir::CallOp op,
-                                              mlir::scf::ForOp loop,
+                                              mlir::ValueRange globalSizes,
+                                              mlir::ValueRange /*localSizes*/,
+                                              mlir::ValueRange /*gridArgs*/,
+                                              mlir::ValueRange /*blockArgs*/,
                                               mlir::PatternRewriter &builder,
-                                              int64_t /*index*/) {
+                                              unsigned index) {
   rerun_std_pipeline(op);
-  mlir::Value arg = loop.upperBound();
+  auto loc = op.getLoc();
+  auto indexType = builder.getIndexType();
+  auto indexCast = [&](mlir::Value val) -> mlir::Value {
+    if (val.getType() != indexType)
+      return builder.createOrFold<plier::CastOp>(loc, indexType, val);
+    return val;
+  };
+  mlir::Value res = indexCast(globalSizes[index]);
   auto resType = op.getResult(0).getType();
-  if (arg.getType() != resType) {
-    rerun_std_pipeline(op);
-    arg = builder.createOrFold<plier::CastOp>(op.getLoc(), resType, arg);
-  }
+  if (res.getType() != resType)
+    res = builder.createOrFold<plier::CastOp>(loc, resType, res);
 
-  builder.replaceOp(op, arg);
+  builder.replaceOp(op, res);
   return mlir::success();
 }
 
-static mlir::Operation *getPreParent(mlir::Operation *op) {
-  assert(op);
-  while (true) {
-    auto parent = op->getParentOp();
-    assert(parent);
-    if (mlir::isa<mlir::FuncOp>(parent))
-      return op;
+static mlir::LogicalResult
+lowerGetLocalSize(mlir::CallOp op, mlir::ValueRange /*globalSizes*/,
+                  mlir::ValueRange localSizes, mlir::ValueRange /*gridArgs*/,
+                  mlir::ValueRange /*blockArgs*/,
+                  mlir::PatternRewriter &builder, unsigned index) {
+  rerun_std_pipeline(op);
+  auto loc = op.getLoc();
+  auto indexType = builder.getIndexType();
+  auto indexCast = [&](mlir::Value val) -> mlir::Value {
+    if (val.getType() != indexType)
+      return builder.createOrFold<plier::CastOp>(loc, indexType, val);
+    return val;
+  };
+  mlir::Value res = indexCast(localSizes[index]);
+  auto resType = op.getResult(0).getType();
+  if (res.getType() != resType)
+    res = builder.createOrFold<plier::CastOp>(loc, resType, res);
 
-    op = parent;
-  }
-}
-
-static mlir::LogicalResult lowerGetLocalSize(mlir::CallOp op,
-                                             mlir::scf::ForOp loop,
-                                             mlir::PatternRewriter &builder,
-                                             int64_t index) {
-  auto p = getPreParent(loop);
-  assert(p);
-  auto block = p->getBlock();
-  auto it = p->getIterator();
-  auto begin = block->begin();
-  if (it == begin)
-    return mlir::failure();
-  --it;
-  auto funcName =
-      mlir::FlatSymbolRefAttr::get(builder.getStringAttr("set_local_size"));
-  while (true) {
-    if (auto call = mlir::dyn_cast<mlir::CallOp>(*it)) {
-      if (call.calleeAttr() == funcName) {
-        auto numArgs = call.getNumOperands();
-        if (index < 0 || index >= numArgs)
-          return mlir::failure();
-
-        index = numArgs - index - 1;
-
-        rerun_std_pipeline(op);
-        auto resType = op.getResultTypes()[0];
-        auto arg = call.operands()[static_cast<unsigned>(index)];
-        if (arg.getType() != resType)
-          arg = builder.createOrFold<plier::CastOp>(op.getLoc(), resType, arg);
-        builder.replaceOp(op, arg);
-        return mlir::success();
-      }
-    }
-    if (it == begin)
-      break;
-
-    --it;
-  }
-
-  return mlir::failure();
+  builder.replaceOp(op, res);
+  return mlir::success();
 }
 
 struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::CallOp> {
@@ -2135,7 +2138,26 @@ struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::CallOp> {
   matchAndRewrite(mlir::CallOp op,
                   mlir::PatternRewriter &rewriter) const override {
     using handler_func_t = mlir::LogicalResult (*)(
-        mlir::CallOp, mlir::scf::ForOp, mlir::PatternRewriter &, int64_t);
+        mlir::CallOp, mlir::ValueRange, mlir::ValueRange, mlir::ValueRange,
+        mlir::ValueRange, mlir::PatternRewriter &, unsigned);
+    auto func = op->getParentOfType<mlir::FuncOp>();
+    if (!func || !llvm::hasSingleElement(func.getBody()))
+      return mlir::failure();
+
+    auto kernelMarker = [&]() -> mlir::CallOp {
+      for (auto &funcOp : func.getBody().front()) {
+        auto call = mlir::dyn_cast<mlir::CallOp>(funcOp);
+        if (call && call.getCallee() == "kernel_marker")
+          return call;
+      }
+      return {};
+    }();
+
+    if (!kernelMarker || kernelMarker.getNumOperands() != 6)
+      return mlir::failure();
+
+    auto globalSize = kernelMarker.operands().take_front(3);
+    auto localSize = kernelMarker.operands().drop_front(3);
 
     auto handler = [&]() -> handler_func_t {
       static const std::pair<mlir::StringRef, handler_func_t> handlers[] = {
@@ -2188,30 +2210,32 @@ struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::CallOp> {
     if (ind < 0 || ind >= 3)
       return mlir::failure();
 
-    auto loop = [&]() -> mlir::scf::ForOp {
-      auto skip = ind;
-      auto attrId = mlir::Identifier::get(plier::attributes::getGpuRangeName(),
-                                          op.getContext());
-      mlir::Operation *parent = op;
-      while (true) {
-        parent = parent->getParentOfType<mlir::scf::ForOp>();
-        if (!parent)
-          return {};
+    llvm::SmallVector<mlir::Value, 6> indexArgs;
+    auto attrId = mlir::Identifier::get(plier::attributes::getGpuRangeName(),
+                                        op.getContext());
+    mlir::Operation *parent = op;
+    while (true) {
+      parent = parent->getParentOfType<mlir::scf::ForOp>();
+      if (!parent)
+        break;
 
-        if (parent->hasAttr(attrId)) {
-          if (skip > 0) {
-            --skip;
-            continue;
-          }
-          return mlir::cast<mlir::scf::ForOp>(parent);
-        }
+      if (parent->hasAttr(attrId)) {
+        auto arg =
+            mlir::cast<mlir::scf::ForOp>(parent).getBody()->getArgument(0);
+        indexArgs.emplace_back(arg);
       }
-    }();
+    }
 
-    if (!loop)
+    if (indexArgs.size() != 6)
       return mlir::failure();
 
-    return handler(op, loop, rewriter, ind);
+    std::reverse(indexArgs.begin(), indexArgs.end());
+    auto gridArgs = llvm::makeArrayRef(indexArgs).take_front(3);
+    auto blockArgs = llvm::makeArrayRef(indexArgs).drop_front(3);
+
+    auto uind = static_cast<unsigned>(ind);
+    return handler(op, globalSize, localSize, gridArgs, blockArgs, rewriter,
+                   uind);
   }
 };
 
@@ -2238,7 +2262,7 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   funcPM.addPass(std::make_unique<RemoveNestedParallelPass>());
   funcPM.addPass(std::make_unique<ParallelLoopGPUMappingPass>());
   funcPM.addPass(mlir::createParallelLoopToGpuPass());
-  funcPM.addPass(std::make_unique<SetLocalSizePass>());
+  funcPM.addPass(std::make_unique<RemoveKernelMarkerPass>());
   funcPM.addPass(mlir::createCanonicalizerPass());
   funcPM.addPass(std::make_unique<InsertGPUAllocs>());
   funcPM.addPass(mlir::createCanonicalizerPass());
