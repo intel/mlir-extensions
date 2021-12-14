@@ -42,21 +42,24 @@ plier::IfOpConstCond::matchAndRewrite(mlir::scf::IfOp op,
     }
   };
 
+  auto lhs = cond.getLhs();
+  auto rhs = cond.getRhs();
+  auto pred = cond.getPredicate();
   mlir::Value constVal;
   mlir::Value toReplace;
-  if (isConst(cond.lhs())) {
-    constVal = cond.lhs();
-    toReplace = cond.rhs();
-  } else if (isConst(cond.rhs())) {
-    constVal = cond.rhs();
-    toReplace = cond.lhs();
+  if (isConst(lhs)) {
+    constVal = lhs;
+    toReplace = rhs;
+  } else if (isConst(rhs)) {
+    constVal = rhs;
+    toReplace = lhs;
   } else {
     return mlir::failure();
   }
 
-  if (cond.predicate() == mlir::arith::CmpIPredicate::eq) {
+  if (pred == mlir::arith::CmpIPredicate::eq) {
     replace(op.thenRegion().front(), toReplace, constVal);
-  } else if (cond.predicate() == mlir::arith::CmpIPredicate::ne) {
+  } else if (pred == mlir::arith::CmpIPredicate::ne) {
     replace(op.elseRegion().front(), toReplace, constVal);
   } else {
     return mlir::failure();
