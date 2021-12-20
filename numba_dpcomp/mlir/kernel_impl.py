@@ -114,8 +114,8 @@ def _kernel_body(global_size, local_size, body, *args):
                             ibx = (gi * lx + li) < x
                             iby = (gj * ly + lj) < y
                             ibz = (gk * lz + lk) < z
-                            # in_bounds = ibx and iby and ibz # TODO: bug in plier-to-scf
-                            if (ibx and iby and ibz):
+                            in_bounds = ibx and iby and ibz
+                            if (in_bounds):
                                 body(*args)
 
 @njit(enable_gpu_pipeline=True)
@@ -135,8 +135,8 @@ def _kernel_body_def_size(global_size, body, *args):
                             ibx = (gi * lx + li) < x
                             iby = (gj * ly + lj) < y
                             ibz = (gk * lz + lk) < z
-                            # in_bounds = ibx and iby and ibz # TODO: bug in plier-to-scf
-                            if (ibx and iby and ibz):
+                            in_bounds = ibx and iby and ibz
+                            if (in_bounds):
                                 body(*args)
 
 def _extend_dims(dims):
