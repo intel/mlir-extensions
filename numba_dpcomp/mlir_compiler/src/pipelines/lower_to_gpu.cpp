@@ -774,7 +774,8 @@ struct AbiAttrsPass
     auto gpuModule = getOperation();
     auto *context = &getContext();
     auto attrName = mlir::spirv::getEntryPointABIAttrName();
-    const int32_t sizes[] = {1, 1, 1};
+    // TODO: Check if block size is const and set appropriate.
+    const int32_t sizes[] = {0, 0, 0};
     auto abi = mlir::spirv::getEntryPointABIAttr(sizes, context);
     for (auto gpuFunc : gpuModule.getOps<mlir::gpu::GPUFuncOp>()) {
       if (!mlir::gpu::GPUDialect::isKernel(gpuFunc) ||
