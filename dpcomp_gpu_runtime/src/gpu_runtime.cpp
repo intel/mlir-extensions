@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <tuple>
 #include <vector>
 
 #include "dpcomp-gpu-runtime_export.h"
@@ -184,6 +185,12 @@ static void printDriverProps(ze_driver_handle_t driver) {
   auto major = static_cast<int>(ZE_MAJOR_VERSION(version));
   auto minor = static_cast<int>(ZE_MINOR_VERSION(version));
   fprintf(stdout, "Driver API version: %d.%d\n", major, minor);
+
+  ze_driver_properties_t props = {};
+  props.stype = ZE_STRUCTURE_TYPE_DRIVER_PROPERTIES;
+  CHECK_ZE_RESULT(zeDriverGetProperties(driver, &props));
+  fprintf(stdout, "Driver version: %d\n",
+          static_cast<int>(props.driverVersion));
 }
 
 static void printDeviceProps(ze_device_handle_t device) {

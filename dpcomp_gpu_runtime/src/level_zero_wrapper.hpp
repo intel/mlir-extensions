@@ -28,10 +28,9 @@ namespace ze {
 namespace detail {
 
 inline void checkResult(ze_result_t res, const char *func) {
-  if (res != ZE_RESULT_SUCCESS) {
+  if (res != ZE_RESULT_SUCCESS)
     throw std::runtime_error(std::string(func) +
                              " failed: " + std::to_string(res));
-  }
 }
 
 #define CHECK_ZE_RESULT(expr) ze::detail::checkResult((expr), #expr)
