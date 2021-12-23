@@ -175,3 +175,6 @@ CMakeLists.txt.user
 
 # Build dir
 /cmake_build
+
+# pip wheels
+*.whl

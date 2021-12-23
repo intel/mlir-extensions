@@ -48,6 +48,16 @@ jobs:
       call ctest -C Release --output-on-failure
     displayName: 'CTests'
 
+  - script: |
+      mkdir wheels
+      cd wheels
+      pip wheel ..
+    displayName: 'Build wheels'
+
+  - publish: $(System.DefaultWorkingDirectory)/wheels
+    artifact: 'numba-dpcomp-wheels'
+    displayName: 'Publish wheels'
+
 - job: Linux
 
   pool:
