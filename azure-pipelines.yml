@@ -58,7 +58,7 @@ jobs:
     displayName: 'Build wheels'
 
   - publish: $(System.DefaultWorkingDirectory)/wheels
-    artifact: 'numba-dpcomp-wheels'
+    artifact: 'numba-dpcomp-wheels-win'
     displayName: 'Publish wheels'
 
 - job: Linux
@@ -131,6 +131,21 @@ jobs:
       ctest -C Release --output-on-failure
     displayName: 'CTests'
 
+  - script: |
+      source /usr/share/miniconda/bin/activate
+      conda activate build_env
+      export LLVM_PATH=$(System.DefaultWorkingDirectory)/llvm_cache
+      export TBB_PATH=$(System.DefaultWorkingDirectory)/tbb
+      export LEVEL_ZERO_DIR=$(System.DefaultWorkingDirectory)/level-zero/level_zero_install
+      mkdir wheels
+      cd wheels
+      pip wheel ..
+    displayName: 'Build wheels'
+
+  - publish: $(System.DefaultWorkingDirectory)/wheels
+    artifact: 'numba-dpcomp-wheels-lin'
+    displayName: 'Publish wheels'
+
 - job: MacOS
 
   pool:
@@ -181,3 +196,17 @@ jobs:
       cd cmake_build
       ctest -C Release --output-on-failure
     displayName: 'CTests'
+
+  - script: |
+      source /usr/local/miniconda/bin/activate
+      conda activate test_env
+      export LLVM_PATH=$(System.DefaultWorkingDirectory)/llvm_cache
+      export TBB_PATH=$(System.DefaultWorkingDirectory)/tbb
+      mkdir wheels
+      cd wheels
+      pip wheel ..
+    displayName: 'Build wheels'
+
+  - publish: $(System.DefaultWorkingDirectory)/wheels
+    artifact: 'numba-dpcomp-wheels-mac'
+    displayName: 'Publish wheels'
