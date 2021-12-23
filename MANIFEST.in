@@ -1,0 +1,2 @@
+include versioneer.py
+include numba_dpcomp/_version.py

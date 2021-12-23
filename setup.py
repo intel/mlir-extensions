@@ -16,6 +16,7 @@ import os
 import sys
 import subprocess
 from setuptools import find_packages, setup
+import versioneer
 
 IS_WIN = False
 IS_LIN = False
@@ -95,9 +96,10 @@ packages = find_packages(include=["numba_dpcomp"])
 
 metadata = dict(
     name="numba-dpcomp",
-    version="0.0.1",
+    version=versioneer.get_version(),
+    cmdclass=versioneer.get_cmdclass(),
     packages=packages,
-    # install_requires=['numba==0.54'],
+    install_requires=['numba==0.54'],
     include_package_data=True,
 )
 
