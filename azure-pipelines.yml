@@ -49,6 +49,9 @@ jobs:
     displayName: 'CTests'
 
   - script: |
+      call "C:\Miniconda\Scripts\activate"
+      set LLVM_PATH=$(System.DefaultWorkingDirectory)\llvm_cache
+      set TBB_PATH=$(System.DefaultWorkingDirectory)\tbb
       mkdir wheels
       cd wheels
       pip wheel ..
