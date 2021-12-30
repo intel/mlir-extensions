@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "plier/rewrites/promote_to_parallel.hpp"
+#include "plier/transforms/promote_to_parallel.hpp"
 
 #include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/IR/BlockAndValueMapping.h>

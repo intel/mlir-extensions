@@ -27,9 +27,9 @@
 #include "pipelines/base_pipeline.hpp"
 #include "pipelines/lower_to_llvm.hpp"
 #include "plier/compiler/pipeline_registry.hpp"
-#include "plier/pass/rewrite_wrapper.hpp"
 #include "plier/transforms/const_utils.hpp"
 #include "plier/transforms/func_utils.hpp"
+#include "plier/transforms/rewrite_wrapper.hpp"
 
 namespace {
 mlir::MemRefType getReduceType(mlir::Type type, int64_t count) {

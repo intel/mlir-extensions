@@ -12,20 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "plier/rewrites/index_type_propagation.hpp"
+#include "plier/transforms/index_type_propagation.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/IR/PatternMatch.h>
 
 namespace {
-bool is_index_compatible(mlir::Type lhs_type, mlir::Type rhs_type) {
-  if (!lhs_type.isa<mlir::IntegerType>() || lhs_type != rhs_type) {
+bool is_index_compatible(mlir::Type lhsType, mlir::Type rhsType) {
+  if (!lhsType.isa<mlir::IntegerType>() || lhsType != rhsType)
     return false;
-  }
 
-  if (lhs_type.cast<mlir::IntegerType>().getWidth() < 64) {
+  if (lhsType.cast<mlir::IntegerType>().getWidth() < 64)
     return false;
-  }
+
   return true;
 }
 

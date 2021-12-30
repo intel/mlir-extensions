@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "plier/rewrites/call_lowering.hpp"
+#include "plier/transforms/call_lowering.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 

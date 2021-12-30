@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "plier/rewrites/arg_lowering.hpp"
+#include "plier/transforms/arg_lowering.hpp"
 
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/IR/TypeSupport.h>

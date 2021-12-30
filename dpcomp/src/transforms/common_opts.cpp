@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "plier/rewrites/common_opts.hpp"
+#include "plier/transforms/common_opts.hpp"
 
-#include "plier/rewrites/cse.hpp"
-#include "plier/rewrites/if_rewrites.hpp"
-#include "plier/rewrites/index_type_propagation.hpp"
-#include "plier/rewrites/loop_rewrites.hpp"
-#include "plier/rewrites/memory_rewrites.hpp"
+#include "plier/transforms/cse.hpp"
+#include "plier/transforms/if_rewrites.hpp"
+#include "plier/transforms/index_type_propagation.hpp"
+#include "plier/transforms/loop_rewrites.hpp"
+#include "plier/transforms/memory_rewrites.hpp"
 
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/SCF.h>

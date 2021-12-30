@@ -19,7 +19,7 @@
 
 #include "plier/compiler/pipeline_registry.hpp"
 #include "plier/dialect.hpp"
-#include "plier/rewrites/type_conversion.hpp"
+#include "plier/transforms/type_conversion.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/SCF/SCF.h>
