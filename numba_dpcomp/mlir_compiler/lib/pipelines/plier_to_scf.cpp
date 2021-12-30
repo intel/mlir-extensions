@@ -23,8 +23,8 @@
 #include <mlir/Transforms/Passes.h>
 
 #include "plier/dialect.hpp"
-#include "plier/rewrites/arg_lowering.hpp"
-#include "plier/rewrites/common_opts.hpp"
+#include "plier/transforms/arg_lowering.hpp"
+#include "plier/transforms/common_opts.hpp"
 
 #include "base_pipeline.hpp"
 #include "plier/compiler/pipeline_registry.hpp"

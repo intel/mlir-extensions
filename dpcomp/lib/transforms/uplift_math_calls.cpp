@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "plier/rewrites/uplift_math_calls.hpp"
+#include "plier/transforms/uplift_math_calls.hpp"
 
 #include <mlir/Dialect/Math/IR/Math.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>

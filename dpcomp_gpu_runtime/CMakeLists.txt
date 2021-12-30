@@ -21,12 +21,12 @@ if(NOT LEVEL_ZERO_DIR)
 endif()
 
 set(SOURCES_LIST
-    src/gpu_runtime.cpp
-    src/kernel_api_stubs.cpp
+    lib/gpu_runtime.cpp
+    lib/kernel_api_stubs.cpp
     )
 set(HEADERS_LIST
-    src/level_zero_printing.hpp
-    src/level_zero_wrapper.hpp
+    lib/level_zero_printing.hpp
+    lib/level_zero_wrapper.hpp
     )
 
 add_library(${PROJECT_NAME} SHARED ${SOURCES_LIST} ${HEADERS_LIST})

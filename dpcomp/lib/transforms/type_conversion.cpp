@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "plier/rewrites/type_conversion.hpp"
+#include "plier/transforms/type_conversion.hpp"
 
 #include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Dialect/SCF/Transforms.h>

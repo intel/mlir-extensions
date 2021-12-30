@@ -53,8 +53,8 @@
 
 #include "plier/compiler/pipeline_registry.hpp"
 #include "plier/dialect.hpp"
-#include "plier/rewrites/type_conversion.hpp"
 #include "plier/transforms/func_utils.hpp"
+#include "plier/transforms/type_conversion.hpp"
 #include "plier/utils.hpp"
 
 namespace {

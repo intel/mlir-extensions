@@ -34,13 +34,13 @@
 
 #include "plier/dialect.hpp"
 
-#include "plier/pass/rewrite_wrapper.hpp"
-#include "plier/rewrites/call_lowering.hpp"
-#include "plier/rewrites/type_conversion.hpp"
+#include "plier/transforms/call_lowering.hpp"
 #include "plier/transforms/cast_utils.hpp"
 #include "plier/transforms/const_utils.hpp"
 #include "plier/transforms/inline_utils.hpp"
 #include "plier/transforms/pipeline_utils.hpp"
+#include "plier/transforms/rewrite_wrapper.hpp"
+#include "plier/transforms/type_conversion.hpp"
 
 #include "base_pipeline.hpp"
 #include "loop_utils.hpp"

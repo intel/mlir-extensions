@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "plier/rewrites/memory_rewrites.hpp"
+#include "plier/transforms/memory_rewrites.hpp"
 
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/IR/BuiltinOps.h>

@@ -21,8 +21,8 @@
 #include <mlir/Dialect/SCF/SCF.h>
 
 #include "plier/Conversion/SCFToAffine/SCFToAffine.h"
-#include "plier/pass/rewrite_wrapper.hpp"
-#include "plier/rewrites/promote_to_parallel.hpp"
+#include "plier/transforms/promote_to_parallel.hpp"
+#include "plier/transforms/rewrite_wrapper.hpp"
 
 namespace {
 template <typename Op, typename Rewrite>
