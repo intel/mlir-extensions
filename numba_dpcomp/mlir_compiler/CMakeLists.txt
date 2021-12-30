@@ -27,38 +27,38 @@ include(AddMLIR)
 include(HandleLLVMOptions)
 
 set(SOURCES_LIST
-    src/pipelines/base_pipeline.cpp
-    src/pipelines/lower_to_gpu.cpp
-    src/pipelines/lower_to_llvm.cpp
-    src/pipelines/parallel_to_tbb.cpp
-    src/pipelines/plier_to_linalg.cpp
-    src/pipelines/plier_to_std.cpp
-    src/pipelines/plier_to_scf.cpp
-    src/pipelines/pre_low_simplifications.cpp
-    src/loop_utils.cpp
-    src/lowering.cpp
-    src/mangle.cpp
-    src/py_func_resolver.cpp
-    src/py_linalg_resolver.cpp
-    src/py_map_types.cpp
-    src/py_module.cpp
+    lib/pipelines/base_pipeline.cpp
+    lib/pipelines/lower_to_gpu.cpp
+    lib/pipelines/lower_to_llvm.cpp
+    lib/pipelines/parallel_to_tbb.cpp
+    lib/pipelines/plier_to_linalg.cpp
+    lib/pipelines/plier_to_std.cpp
+    lib/pipelines/plier_to_scf.cpp
+    lib/pipelines/pre_low_simplifications.cpp
+    lib/loop_utils.cpp
+    lib/lowering.cpp
+    lib/mangle.cpp
+    lib/py_func_resolver.cpp
+    lib/py_linalg_resolver.cpp
+    lib/py_map_types.cpp
+    lib/py_module.cpp
     )
 set(HEADERS_LIST
-    src/pipelines/base_pipeline.hpp
-    src/pipelines/lower_to_gpu.hpp
-    src/pipelines/lower_to_llvm.hpp
-    src/pipelines/parallel_to_tbb.hpp
-    src/pipelines/plier_to_linalg.hpp
-    src/pipelines/plier_to_std.hpp
-    src/pipelines/plier_to_scf.hpp
-    src/pipelines/pre_low_simplifications.hpp
-    src/loop_utils.hpp
-    src/lowering.hpp
-    src/mangle.hpp
-    src/py_func_resolver.hpp
-    src/py_linalg_resolver.hpp
-    src/py_map_types.hpp
-    src/py_module.hpp
+    lib/pipelines/base_pipeline.hpp
+    lib/pipelines/lower_to_gpu.hpp
+    lib/pipelines/lower_to_llvm.hpp
+    lib/pipelines/parallel_to_tbb.hpp
+    lib/pipelines/plier_to_linalg.hpp
+    lib/pipelines/plier_to_std.hpp
+    lib/pipelines/plier_to_scf.hpp
+    lib/pipelines/pre_low_simplifications.hpp
+    lib/loop_utils.hpp
+    lib/lowering.hpp
+    lib/mangle.hpp
+    lib/py_func_resolver.hpp
+    lib/py_linalg_resolver.hpp
+    lib/py_map_types.hpp
+    lib/py_module.hpp
     )
 
 pybind11_add_module(${PROJECT_NAME} ${SOURCES_LIST} ${HEADERS_LIST})
@@ -100,7 +100,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE
     ${MLIR_INCLUDE_DIRS}
     PRIVATE
-    ./src)
+    ./lib)
 
 if(DPNP_ENABLE)
     target_compile_definitions(${PROJECT_NAME} PRIVATE DPNP_ENABLE=1)

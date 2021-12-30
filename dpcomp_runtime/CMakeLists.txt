@@ -20,8 +20,8 @@ find_package(TBB REQUIRED)
 find_package(MLIR REQUIRED CONFIG)
 
 set(SOURCES_LIST
-    src/tbb_parallel.cpp
-    src/memory.cpp
+    lib/tbb_parallel.cpp
+    lib/memory.cpp
     )
 set(HEADERS_LIST
     )

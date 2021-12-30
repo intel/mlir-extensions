@@ -40,32 +40,32 @@ endif()
 add_subdirectory(include/plier)
 
 set(SOURCES_LIST
-    src/Conversion/SCFToAffine/SCFToAffine.cpp
-    src/analysis/memory_ssa.cpp
-    src/analysis/memory_ssa_analysis.cpp
-    src/compiler/compiler.cpp
-    src/compiler/pipeline_registry.cpp
-    src/dialect.cpp
-    src/transforms/arg_lowering.cpp
-    src/transforms/call_lowering.cpp
-    src/transforms/canonicalize_reductions.cpp
-    src/transforms/cast_lowering.cpp
-    src/transforms/cast_utils.cpp
-    src/transforms/common_opts.cpp
-    src/transforms/const_utils.cpp
-    src/transforms/cse.cpp
-    src/transforms/func_utils.cpp
-    src/transforms/if_rewrites.cpp
-    src/transforms/index_type_propagation.cpp
-    src/transforms/inline_utils.cpp
-    src/transforms/loop_rewrites.cpp
-    src/transforms/loop_utils.cpp
-    src/transforms/memory_rewrites.cpp
-    src/transforms/pipeline_utils.cpp
-    src/transforms/promote_to_parallel.cpp
-    src/transforms/type_conversion.cpp
-    src/transforms/uplift_math_calls.cpp
-    src/utils.cpp
+    lib/Conversion/SCFToAffine/SCFToAffine.cpp
+    lib/analysis/memory_ssa.cpp
+    lib/analysis/memory_ssa_analysis.cpp
+    lib/compiler/compiler.cpp
+    lib/compiler/pipeline_registry.cpp
+    lib/dialect.cpp
+    lib/transforms/arg_lowering.cpp
+    lib/transforms/call_lowering.cpp
+    lib/transforms/canonicalize_reductions.cpp
+    lib/transforms/cast_lowering.cpp
+    lib/transforms/cast_utils.cpp
+    lib/transforms/common_opts.cpp
+    lib/transforms/const_utils.cpp
+    lib/transforms/cse.cpp
+    lib/transforms/func_utils.cpp
+    lib/transforms/if_rewrites.cpp
+    lib/transforms/index_type_propagation.cpp
+    lib/transforms/inline_utils.cpp
+    lib/transforms/loop_rewrites.cpp
+    lib/transforms/loop_utils.cpp
+    lib/transforms/memory_rewrites.cpp
+    lib/transforms/pipeline_utils.cpp
+    lib/transforms/promote_to_parallel.cpp
+    lib/transforms/type_conversion.cpp
+    lib/transforms/uplift_math_calls.cpp
+    lib/utils.cpp
     )
 set(HEADERS_LIST
     include/plier/Conversion/SCFToAffine/SCFToAffine.h
@@ -108,7 +108,7 @@ include(CheckCXXCompilerFlag)
 CHECK_CXX_COMPILER_FLAG(-Winvalid-offsetof __offsetof_flag)
 if (__offsetof_flag)
     set_source_files_properties(
-        src/analysis/memory_ssa.cpp
+        lib/analysis/memory_ssa.cpp
         PROPERTIES
         COMPILE_FLAGS "-Wno-invalid-offsetof"
     )
@@ -128,7 +128,7 @@ target_link_libraries(${PLIER_LIB} PRIVATE
 target_include_directories(${PLIER_LIB} SYSTEM PRIVATE
     ${MLIR_INCLUDE_DIRS}
     PRIVATE
-    ./src
+    ./lib
     )
 
 target_include_directories(${PLIER_LIB} PUBLIC
