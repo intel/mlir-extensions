@@ -490,7 +490,7 @@ struct NumpyCallsLoweringPass
 static mlir::Value index_cast(mlir::Value value, mlir::Location loc,
                               mlir::OpBuilder &builder) {
   if (!value.getType().isa<mlir::IndexType>()) {
-    auto indexType = mlir::IndexType::get(value.getContext());
+    auto indexType = builder.getIndexType();
     auto res = builder.create<plier::CastOp>(loc, indexType, value);
     rerun_scf_pipeline(res);
     return res;
