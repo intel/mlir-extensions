@@ -140,7 +140,7 @@ def test_staticgetitem():
     assert_equal(py_func(arr), jit_func(arr))
 
 @pytest.mark.parametrize("i",
-                         list(range(3)))
+                         list(range(-2,3)))
 def test_getitem1(i):
     def py_func(a, b):
         return a[b]
