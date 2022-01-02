@@ -151,6 +151,22 @@ def empty_impl(builder, shape, dtype=None):
 def zeros_impl(builder, shape, dtype=None):
     return _init_impl(builder, shape, dtype, 0)
 
+@register_func('numpy.eye', numpy.eye)
+def eye_impl(builder, N, M=None, k=0, dtype=None):
+    if M is None:
+        M = N
+
+    if dtype is None:
+        dtype = builder.float64
+
+    init = builder.init_tensor((N, M), dtype)
+    idx = builder.from_elements(k, builder.index)
+
+    iterators = ['parallel']*2
+    maps = ['(d0, d1) -> (0)', '(d0, d1) -> (d0, d1)']
+    def body(a, b):
+
+
 @register_func('numpy.dot', numpy.dot)
 def dot_impl(builder, a, b):
     shape1 = a.shape
@@ -369,3 +385,4 @@ def cov_impl(builder, m, y=None, rowvar=True, bias=False, ddof=None):
     if _cov_scalar_result_expected(m, y):
         res = res[0, 0]
     return res
+

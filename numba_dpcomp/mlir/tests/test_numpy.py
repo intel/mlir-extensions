@@ -869,3 +869,22 @@ def test_mean_loop_cov(arr, parallel):
     c2, v2 = jit_func(arr)
     assert_allclose(c1, c2, rtol=1e-15, atol=1e-11)
     assert_allclose(v1, v2, rtol=1e-15, atol=1e-11)
+
+@pytest.mark.parametrize("N,k", [
+    (1, 0),
+    (2, -1),
+    (2, 0),
+    (2, 1),
+    (3, -2),
+    (3, -1),
+    (3, 0),
+    (3, 1),
+    (3, 2),
+    ])
+@pytest.mark.parametrize("dtype", [np.int32,np.int64,np.float32,np.float64])
+def test_eye1(N, k, dtype):
+    def py_func(N, k):
+        return np.eye(N, k, dtype=dtype)
+
+    jit_func = njit(py_func)
+    assert_equal(py_func(N, k), jit_func(N, k))
