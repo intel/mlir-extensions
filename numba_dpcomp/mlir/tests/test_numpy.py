@@ -345,14 +345,16 @@ def test_static_setitem():
     arr = np.asarray([1,2,3])
     assert_equal(py_func(arr), jit_func(arr))
 
-def test_setitem1():
+@pytest.mark.parametrize("i",
+                         list(range(-2,3)))
+def test_setitem1(i):
     def py_func(a, b):
         a[b] = 42
         return a[b]
 
     jit_func = njit(py_func)
     arr = np.asarray([1,2,3])
-    assert_equal(py_func(arr, 1), jit_func(arr, 1))
+    assert_equal(py_func(arr, i), jit_func(arr, i))
 
 def test_setitem2():
     def py_func(a, b, c):
