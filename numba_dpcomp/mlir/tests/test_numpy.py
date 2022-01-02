@@ -884,7 +884,22 @@ def test_mean_loop_cov(arr, parallel):
 @pytest.mark.parametrize("dtype", [np.int32,np.int64,np.float32,np.float64])
 def test_eye1(N, k, dtype):
     def py_func(N, k):
-        return np.eye(N, k, dtype=dtype)
+        return np.eye(N=N, k=k, dtype=dtype)
 
     jit_func = njit(py_func)
     assert_equal(py_func(N, k), jit_func(N, k))
+
+@pytest.mark.parametrize("N,M,k", [
+    (2, 3, -1),
+    (2, 3, 0),
+    (2, 3, 1),
+    (3, 2, -1),
+    (3, 2, 0),
+    (3, 2, 1),
+    ])
+def test_eye2(N, M, k):
+    def py_func(N, M, k):
+        return np.eye(N, M, k)
+
+    jit_func = njit(py_func)
+    assert_equal(py_func(N, M, k), jit_func(N, M, k))

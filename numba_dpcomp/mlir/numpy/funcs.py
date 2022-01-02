@@ -19,6 +19,9 @@ import numpy
 import math
 from numba import prange
 
+from numba.core import types
+from numba.core.typing.templates import ConcreteTemplate, signature, infer_global
+
 add_func(prange, 'numba.prange')
 
 registry = FuncRegistry()
@@ -35,6 +38,20 @@ def promote_int(t, b):
     if is_int(t, b):
         return b.int64
     return t
+
+
+def _linalg_index(dim):
+    pass
+
+@infer_global(_linalg_index)
+class _LinalgIndexId(ConcreteTemplate):
+    cases = [signature(types.int64, types.int64)]
+
+@register_func('_linalg_index', _linalg_index)
+def linalg_index_impl(builder, dim):
+    if isinstance(dim, int):
+        return builder.linalg_index(dim)
+
 
 @register_func('array.sum')
 @register_func('numpy.sum', numpy.sum)
@@ -160,12 +177,16 @@ def eye_impl(builder, N, M=None, k=0, dtype=None):
         dtype = builder.float64
 
     init = builder.init_tensor((N, M), dtype)
-    idx = builder.from_elements(k, builder.index)
+    idx = builder.from_elements(k, builder.int64)
 
     iterators = ['parallel']*2
     maps = ['(d0, d1) -> (0)', '(d0, d1) -> (d0, d1)']
     def body(a, b):
+        i = _linalg_index(0)
+        j = _linalg_index(1)
+        return 1 if (j - i) == a else 0
 
+    return builder.linalg_generic(idx, init, iterators, maps, body)
 
 @register_func('numpy.dot', numpy.dot)
 def dot_impl(builder, a, b):

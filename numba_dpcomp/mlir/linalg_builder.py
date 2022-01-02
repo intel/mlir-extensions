@@ -84,6 +84,9 @@ class Builder:
     def linalg_generic(self, inputs, outputs, iterators, maps, body):
         return self._linalg_generic(self._context, inputs, outputs, iterators, maps, body)
 
+    def linalg_index(self, dim):
+        return self._linalg_index(self._context, dim)
+
     def from_elements(self, values, dtype):
         return self._from_elements(self._context, values, dtype)
 

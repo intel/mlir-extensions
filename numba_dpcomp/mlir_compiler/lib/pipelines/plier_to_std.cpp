@@ -226,6 +226,10 @@ mlir::Type map_dtype_type(mlir::MLIRContext &ctx, llvm::StringRef &name) {
     auto innerType = map_plier_type_name(ctx, name);
     if (innerType)
       return plier::TypeVar::get(innerType);
+  } else if (name.consume_front("class(") && name.consume_back(")")) {
+    auto innerType = map_plier_type_name(ctx, name);
+    if (innerType)
+      return plier::TypeVar::get(innerType);
   }
   return nullptr;
 }
@@ -400,21 +404,25 @@ struct LiteralLowering : public mlir::OpConversionPattern<Op> {
       return mlir::success();
     }
 
-    auto literal = convertedType.template dyn_cast<plier::LiteralType>();
-    if (!literal)
-      return mlir::failure();
+    if (auto literal = convertedType.template dyn_cast<plier::LiteralType>()) {
+      auto loc = op.getLoc();
+      auto attrVal = literal.getValue();
+      auto dstType = attrVal.getType();
+      auto val = makeSignlessAttr(attrVal);
+      auto newVal =
+          rewriter.create<mlir::arith::ConstantOp>(loc, val).getResult();
+      if (dstType != val.getType())
+        newVal = rewriter.create<plier::SignCastOp>(loc, dstType, newVal);
 
-    auto loc = op.getLoc();
-    auto attrVal = literal.getValue();
-    auto dstType = attrVal.getType();
-    auto val = makeSignlessAttr(attrVal);
-    auto newVal =
-        rewriter.create<mlir::arith::ConstantOp>(loc, val).getResult();
-    if (dstType != val.getType())
-      newVal = rewriter.create<plier::SignCastOp>(loc, dstType, newVal);
+      rewriter.replaceOp(op, newVal);
+      return mlir::success();
+    }
 
-    rewriter.replaceOp(op, newVal);
-    return mlir::success();
+    if (auto typevar = convertedType.template dyn_cast<plier::TypeVar>()) {
+      rewriter.replaceOpWithNewOp<plier::UndefOp>(op, typevar);
+      return mlir::success();
+    }
+    return mlir::failure();
   }
 };
 
@@ -1195,7 +1203,7 @@ void PlierToStdPass::runOnOperation() {
         if (!type)
           return true;
 
-        if (type.isa<mlir::NoneType>())
+        if (type.isa<mlir::NoneType, plier::TypeVar>())
           return false;
 
         if (auto literal = type.dyn_cast<plier::LiteralType>())
