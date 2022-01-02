@@ -81,8 +81,8 @@ class Builder:
     def fill_tensor(self, tensor, value):
         return self._fill_tensor(self._context, tensor, value)
 
-    def generic(self, inputs, outputs, iterators, maps, body):
-        return self._generic(self._context, inputs, outputs, iterators, maps, body)
+    def linalg_generic(self, inputs, outputs, iterators, maps, body):
+        return self._linalg_generic(self._context, inputs, outputs, iterators, maps, body)
 
     def from_elements(self, values, dtype):
         return self._from_elements(self._context, values, dtype)
@@ -167,7 +167,7 @@ def eltwise(builder, args, body, res_type = None):
         maps = [expr for _ in range(len(args) + 1)]
         init = builder.init_tensor(shape, res_type)
 
-        return builder.generic(args, init, iterators, maps, body)
+        return builder.linalg_generic(args, init, iterators, maps, body)
 
 def convert_array(builder, arr, dtype):
     if arr.dtype == dtype:
