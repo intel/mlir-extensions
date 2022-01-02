@@ -490,7 +490,7 @@ struct NumpyCallsLoweringPass
 static mlir::Value index_cast(mlir::Value value, mlir::Location loc,
                               mlir::OpBuilder &builder) {
   if (!value.getType().isa<mlir::IndexType>()) {
-    auto indexType = mlir::IndexType::get(value.getContext());
+    auto indexType = builder.getIndexType();
     auto res = builder.create<plier::CastOp>(loc, indexType, value);
     rerun_scf_pipeline(res);
     return res;
@@ -687,21 +687,42 @@ struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
       if (resultType != resultTypeSignless)
         res = rewriter.create<plier::SignCastOp>(loc, resultType, res);
     } else {
+      mlir::Value zero;
       auto toValues = [&](auto vals) {
+        auto getZero = [&]() {
+          if (!zero)
+            zero = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
+          return zero;
+        };
         llvm::SmallVector<mlir::Value> ret(vals.size());
         for (auto it : llvm::enumerate(vals)) {
           auto i = it.index();
           auto val = it.value();
+          auto getDim = [&]() -> mlir::Value {
+            if (isMemref) {
+              return rewriter.create<mlir::memref::DimOp>(loc, value, i);
+            } else if (isTensor) {
+              return rewriter.create<mlir::tensor::DimOp>(loc, value, i);
+            } else {
+              llvm_unreachable("Invalid getitem");
+            }
+          };
+          mlir::Value idx;
           if (auto v = val.template dyn_cast<mlir::Value>()) {
-            ret[i] = v;
+            idx = v;
           } else {
             auto attr = val.template get<mlir::Attribute>();
             auto attrVal = attr.template cast<mlir::IntegerAttr>()
                                .getValue()
                                .getSExtValue();
-            ret[i] =
-                rewriter.create<mlir::arith::ConstantIndexOp>(loc, attrVal);
+            idx = rewriter.create<mlir::arith::ConstantIndexOp>(loc, attrVal);
           }
+
+          auto isNeg = rewriter.create<mlir::arith::CmpIOp>(
+              loc, mlir::arith::CmpIPredicate::slt, idx, getZero());
+          auto negIndex =
+              rewriter.create<mlir::arith::AddIOp>(loc, getDim(), idx);
+          ret[i] = rewriter.create<mlir::SelectOp>(loc, isNeg, negIndex, idx);
         }
 
         return ret;
@@ -797,6 +818,23 @@ struct SetitemOpLowering : public mlir::OpConversionPattern<plier::SetItemOp> {
       rerun_scf_pipeline(op);
     }
 
+    mlir::Value zero;
+    auto getZero = [&]() {
+      if (!zero)
+        zero = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
+
+      return zero;
+    };
+
+    auto getIndex = [&](mlir::Value idx, int64_t i) -> mlir::Value {
+      idx = index_cast(idx, loc, rewriter);
+      auto dim = rewriter.create<mlir::memref::DimOp>(loc, target, i);
+      auto isNeg = rewriter.create<mlir::arith::CmpIOp>(
+          loc, mlir::arith::CmpIPredicate::slt, idx, getZero());
+      auto negIndex = rewriter.create<mlir::arith::AddIOp>(loc, dim, idx);
+      return rewriter.create<mlir::SelectOp>(loc, isNeg, negIndex, idx);
+    };
+
     llvm::SmallVector<mlir::Value> indices;
     if (auto tupleType = index.getType().template dyn_cast<mlir::TupleType>()) {
       indices.resize(tupleType.size());
@@ -809,14 +847,14 @@ struct SetitemOpLowering : public mlir::OpConversionPattern<plier::SetItemOp> {
                        .getResult();
         auto indType = tupleType.getType(i);
         auto signlessIndType = plier::makeSignlessType(indType);
-        if (signlessIndType != indType) {
+        if (signlessIndType != indType)
           ind = rewriter.create<plier::SignCastOp>(loc, signlessIndType, ind);
-        }
-        indices[it.index()] = index_cast(ind, loc, rewriter);
+
+        indices[i] = getIndex(ind, i);
       }
       rerun_scf_pipeline(op);
     } else {
-      indices.push_back(index_cast(index, loc, rewriter));
+      indices.push_back(getIndex(index, 0));
     }
 
     if (elemType != signlessElemType)
