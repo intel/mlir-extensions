@@ -52,15 +52,25 @@ struct OperatorNamePair {
 };
 
 static const constexpr OperatorNamePair OperatorNames[] = {
+    // clang-format off
     {"+", "add"}, // binary
     {"+", "pos"}, // unary
     {"-", "sub"}, // binary
     {"-", "neg"}, // unary
-    {"*", "mul"},       {"**", "pow"}, {"/", "truediv"},
-    {"//", "floordiv"}, {"%", "mod"},
+    {"*", "mul"},
+    {"**", "pow"},
+    {"/", "truediv"},
+    {"//", "floordiv"},
+    {"%", "mod"},
+    {"@", "matmul"},
 
-    {">", "gt"},        {">=", "ge"},  {"<", "lt"},
-    {"<=", "le"},       {"!=", "ne"},  {"==", "eq"},
+    {">", "gt"},
+    {">=", "ge"},
+    {"<", "lt"},
+    {"<=", "le"},
+    {"!=", "ne"},
+    {"==", "eq"},
+    // clang-format on
 };
 } // namespace detail
 
