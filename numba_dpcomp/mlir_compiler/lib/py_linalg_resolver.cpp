@@ -1349,7 +1349,7 @@ void setupPyBuilder(py::handle builder, mlir::OpBuilder &b,
   py::setattr(builder, "_broadcast", py::cpp_function(&broadcastImpl));
   py::setattr(builder, "_init_tensor", py::cpp_function(&initTensorImpl));
   py::setattr(builder, "_fill_tensor", py::cpp_function(&fillTensorImpl));
-  py::setattr(builder, "_generic", py::cpp_function(&genericImpl));
+  py::setattr(builder, "_linalg_generic", py::cpp_function(&genericImpl));
   py::setattr(builder, "_from_elements", py::cpp_function(&fromElementsImpl));
   py::setattr(builder, "_extract", py::cpp_function(&extractImpl));
   py::setattr(builder, "_reshape", py::cpp_function(&reshapeImpl));

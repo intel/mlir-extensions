@@ -52,7 +52,7 @@ def sum_impl(builder, arg, axis=None):
         def body(a, b):
             return a + b
 
-        res = builder.generic(arg, init, iterators, maps, body)
+        res = builder.linalg_generic(arg, init, iterators, maps, body)
         return builder.extract(res, 0)
     elif isinstance(axis, int):
         shape = arg.shape
@@ -75,7 +75,7 @@ def sum_impl(builder, arg, axis=None):
         def body(a, b):
             return a + b
 
-        return builder.generic(arg, init, iterators, maps, body)
+        return builder.linalg_generic(arg, init, iterators, maps, body)
 
 
 @register_func('numpy.mean', numpy.mean)
@@ -165,7 +165,7 @@ def dot_impl(builder, a, b):
         def body(a, b, c):
             return a * b + c
 
-        res = builder.generic((a,b), init, iterators, maps, body)
+        res = builder.linalg_generic((a,b), init, iterators, maps, body)
         return builder.extract(res, 0)
     if len(shape1) == 2 and len(shape2) == 2:
         iterators = ['parallel','parallel','reduction']
@@ -179,7 +179,7 @@ def dot_impl(builder, a, b):
         def body(a, b, c):
             return a * b + c
 
-        return builder.generic((a,b), init, iterators, maps, body)
+        return builder.linalg_generic((a,b), init, iterators, maps, body)
 
 @register_attr('array.shape')
 def shape_impl(builder, arg):
@@ -211,7 +211,7 @@ def transpose_impl(builder, arg):
         def body(a, b):
             return a
 
-        return builder.generic(arg, init, iterators, maps, body)
+        return builder.linalg_generic(arg, init, iterators, maps, body)
 
 @register_attr('array.dtype')
 def dtype_impl(builder, arg):
@@ -250,7 +250,7 @@ def atleast2d_impl(builder, arr):
         expr1 = '(d0,d1) -> (d1)'
         expr2 = '(d0,d1) -> (d0,d1)'
         maps = [expr1,expr2]
-        return builder.generic(arr, init, iterators, maps, lambda a, b: a)
+        return builder.linalg_generic(arr, init, iterators, maps, lambda a, b: a)
     else:
         return arr
 
