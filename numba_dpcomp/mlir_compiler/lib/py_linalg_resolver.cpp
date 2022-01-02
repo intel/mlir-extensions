@@ -141,9 +141,9 @@ auto getTypes(mlir::ValueRange values) {
 }
 
 bool isCompatibleType(mlir::Type type) {
-  if (auto tuple_type = type.dyn_cast<mlir::TupleType>()) {
+  if (auto tuple_type = type.dyn_cast<mlir::TupleType>())
     return llvm::all_of(tuple_type, &isCompatibleType);
-  }
+
   return type.isa<mlir::IntegerType, mlir::IndexType, mlir::FloatType,
                   mlir::RankedTensorType, mlir::NoneType, plier::LiteralType,
                   plier::TypeVar>();
@@ -923,6 +923,21 @@ py::object genericImpl(py::capsule context, py::handle inputs,
   return ctx.context.wrapResult(context, results);
 }
 
+py::object indexImpl(py::capsule context, py::int_ dimObj) {
+  auto &ctx = getPyContext(context);
+  auto loc = ctx.loc;
+  auto &builder = ctx.builder;
+  auto val = static_cast<int64_t>(dimObj);
+  if (val < 0)
+    plier::report_error("Index cannot be negative");
+
+  auto dimVal =
+      builder.create<mlir::linalg::IndexOp>(loc, static_cast<uint64_t>(val));
+  auto resType = builder.getIntegerType(64, /*signed*/ true);
+  auto res = doCast(builder, loc, dimVal, resType);
+  return ctx.context.wrapResult(context, res);
+}
+
 py::object fromElementsImpl(py::capsule context, py::handle values,
                             py::handle dtype) {
   auto &ctx = getPyContext(context);
@@ -941,9 +956,9 @@ py::object fromElementsImpl(py::capsule context, py::handle values,
           auto signless = makeSignlessType(type);
           return mlir::IntegerAttr::get(signless, obj.cast<int64_t>());
         }
-        if (type.isa<mlir::FloatType>()) {
+        if (type.isa<mlir::FloatType>())
           return mlir::FloatAttr::get(type, obj.cast<double>());
-        }
+
         plier::report_error("Invalid dtype");
       }();
       auto res = builder.create<mlir::arith::ConstantOp>(loc, attr);
@@ -1350,6 +1365,7 @@ void setupPyBuilder(py::handle builder, mlir::OpBuilder &b,
   py::setattr(builder, "_init_tensor", py::cpp_function(&initTensorImpl));
   py::setattr(builder, "_fill_tensor", py::cpp_function(&fillTensorImpl));
   py::setattr(builder, "_linalg_generic", py::cpp_function(&genericImpl));
+  py::setattr(builder, "_linalg_index", py::cpp_function(&indexImpl));
   py::setattr(builder, "_from_elements", py::cpp_function(&fromElementsImpl));
   py::setattr(builder, "_extract", py::cpp_function(&extractImpl));
   py::setattr(builder, "_reshape", py::cpp_function(&reshapeImpl));
