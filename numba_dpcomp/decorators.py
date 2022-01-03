@@ -27,6 +27,13 @@ from numba.np.ufunc import vectorize as orig_vectorize
 if USE_MLIR:
     def jit(signature_or_function=None, locals={}, cache=False,
             pipeline_class=None, boundscheck=False, **options):
+        if not options.get('nopython', False):
+            return orig_jit(signature_or_function=signature_or_function,
+                            locals=locals,
+                            cache=cache,
+                            boundscheck=boundscheck,
+                            **options)
+
         pipeline = mlir_compiler_gpu_pipeline if options.get('enable_gpu_pipeline') else mlir_compiler_pipeline
         options.pop('enable_gpu_pipeline', None)
         return orig_jit(signature_or_function=signature_or_function,
@@ -52,7 +59,17 @@ if USE_MLIR:
         return jit(*args, **kws)
 
     vectorize = mlir_vectorize
+
+
 else:
     jit = orig_jit
     njit = orig_njit
     vectorize = orig_vectorize
+
+
+def override_numba_decorators():
+    if USE_MLIR:
+        import numba
+        numba.jit = jit
+        numba.njit = njit
+        numba.vectorize = vectorize
