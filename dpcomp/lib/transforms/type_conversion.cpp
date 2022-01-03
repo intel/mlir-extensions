@@ -110,6 +110,19 @@ public:
     return mlir::success();
   }
 };
+
+static bool isUniTuple(mlir::TupleType type) {
+  auto count = type.size();
+  if (count == 0)
+    return false;
+
+  auto elemType = type.getType(0);
+  for (auto i : llvm::seq<size_t>(1, count)) {
+    if (type.getType(i) != elemType)
+      return false;
+  }
+  return true;
+}
 } // namespace
 
 void plier::populateTupleTypeConversionRewritesAndTarget(
@@ -127,17 +140,23 @@ void plier::populateTupleTypeConversionRewritesAndTarget(
         auto inputType = op.value().getType();
         if (auto tupleType = typeConverter.convertType(inputType)
                                  .dyn_cast_or_null<mlir::TupleType>()) {
-          if (auto index = mlir::getConstantIntValue(op.index())) {
-            auto i = *index;
-            auto size = static_cast<unsigned>(tupleType.size());
-            if (i >= 0 && i < size) {
-              auto srcType = tupleType.getType(static_cast<size_t>(i));
-              auto dstType = op.getType();
-              return srcType == dstType &&
-                     dstType == typeConverter.convertType(dstType);
+          auto srcType = [&]() -> mlir::Type {
+            if (auto index = mlir::getConstantIntValue(op.index())) {
+              auto i = *index;
+              auto size = static_cast<unsigned>(tupleType.size());
+              if (i >= 0 && i < size)
+                return tupleType.getType(static_cast<size_t>(i));
+            } else if (isUniTuple(tupleType)) {
+              return tupleType.getType(0);
             }
-          }
-          return false;
+            return {};
+          }();
+          if (!srcType)
+            return false;
+
+          auto dstType = op.getType();
+          return srcType == dstType &&
+                 dstType == typeConverter.convertType(dstType);
         }
 
         return llvm::None;

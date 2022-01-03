@@ -165,6 +165,22 @@ def test_getitem3():
     arr = np.asarray([[[1,2,3],[5,6,7]]])
     assert_equal(py_func(arr, 0, 0), jit_func(arr, 0, 0))
 
+def test_unituple_getitem1():
+    def py_func(a, b, c, i):
+        t = (a,b,c)
+        return t[i]
+
+    jit_func = njit(py_func)
+    assert_equal(py_func(1,2,3,1), jit_func(1,2,3,1))
+
+def test_unituple_getitem2():
+    def py_func(t, i):
+        return t[i]
+
+    jit_func = njit(py_func)
+    t = (1,2,3)
+    assert_equal(py_func(t,1), jit_func(t,1))
+
 def test_array_len():
     def py_func(a):
         return len(a)
