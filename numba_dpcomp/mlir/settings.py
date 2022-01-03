@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from os import environ
+import warnings
 
 from ..mlir_compiler import is_dpnp_supported
 
