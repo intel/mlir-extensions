@@ -482,6 +482,57 @@ struct UnrankedToElementCasts
   }
 };
 
+static bool isUniTuple(mlir::TupleType type) {
+  auto count = type.size();
+  if (count == 0)
+    return false;
+
+  auto elemType = type.getType(0);
+  for (auto i : llvm::seq<size_t>(1, count)) {
+    if (type.getType(i) != elemType)
+      return false;
+  }
+  return true;
+}
+
+static bool isUniTuple(mlir::Type type) {
+  auto tupleType = type.dyn_cast<mlir::TupleType>();
+  return tupleType && isUniTuple(tupleType);
+}
+
+class GetItemUniTupleConversionPattern
+    : public mlir::OpConversionPattern<plier::GetItemOp> {
+public:
+  using OpConversionPattern<plier::GetItemOp>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::GetItemOp op, plier::GetItemOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const final {
+    auto container = adaptor.value();
+    auto tupleType = container.getType().dyn_cast<mlir::TupleType>();
+    if (!tupleType || !isUniTuple(tupleType))
+      return mlir::failure();
+
+    auto index = adaptor.index();
+    if (mlir::getConstantIntValue(index))
+      return mlir::failure();
+
+    auto loc = op->getLoc();
+    auto elemType = tupleType.getType(0);
+    auto count = static_cast<unsigned>(tupleType.size());
+    llvm::SmallVector<mlir::Value> elems(count);
+    for (auto i : llvm::seq(0u, count)) {
+      auto idx = rewriter.create<mlir::arith::ConstantIndexOp>(loc, i);
+      elems[i] =
+          rewriter.create<plier::GetItemOp>(loc, elemType, container, idx);
+    }
+
+    auto tensor = rewriter.create<mlir::tensor::FromElementsOp>(loc, elems);
+    rewriter.replaceOpWithNewOp<plier::GetItemOp>(op, elemType, tensor, index);
+    return mlir::success();
+  }
+};
+
 struct NumpyCallsLoweringPass
     : public plier::RewriteWrapperPass<
           NumpyCallsLoweringPass, void, void, NumpyCallsLowering,
@@ -1355,9 +1406,16 @@ void PlierToLinalgPass::runOnOperation() {
   mlir::RewritePatternSet patterns(&context);
   mlir::ConversionTarget target(context);
 
+  plier::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
+                                                      target);
+
   target.addDynamicallyLegalOp<plier::GetItemOp>(
       [&typeConverter](plier::GetItemOp op) -> llvm::Optional<bool> {
-        if (isTensor(typeConverter, op.value().getType()))
+        auto containerType = op.value().getType();
+        if (isTensor(typeConverter, containerType))
+          return false;
+
+        if (isUniTuple(containerType) && !mlir::getConstantIntValue(op.index()))
           return false;
 
         return llvm::None;
@@ -1393,15 +1451,14 @@ void PlierToLinalgPass::runOnOperation() {
 
   plier::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
                                                             patterns, target);
-  plier::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
-                                                      target);
 
   patterns.insert<
       // clang-format off
       GetitemOpLowering,
       SetitemOpLowering,
       LowerTensorCasts,
-      UnrankedToElementCasts
+      UnrankedToElementCasts,
+      GetItemUniTupleConversionPattern
       // clang-format on
       >(typeConverter, &context);
 

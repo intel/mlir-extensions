@@ -1256,13 +1256,42 @@ struct SignCastTensorCastPropagate
   }
 };
 
+struct SignCastTensorFromElementsPropagate
+    : public mlir::OpRewritePattern<plier::SignCastOp> {
+  using mlir::OpRewritePattern<plier::SignCastOp>::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::SignCastOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto fromElements =
+        op.value().getDefiningOp<mlir::tensor::FromElementsOp>();
+    if (!fromElements)
+      return mlir::failure();
+
+    auto loc = fromElements->getLoc();
+    auto dstType = op.getType().cast<mlir::TensorType>();
+    auto elemType = dstType.getElementType();
+    auto elements = fromElements.elements();
+    auto count = static_cast<unsigned>(elements.size());
+    llvm::SmallVector<mlir::Value> castedVals(count);
+    for (auto i : llvm::seq(0u, count))
+      castedVals[i] =
+          rewriter.create<plier::SignCastOp>(loc, elemType, elements[i]);
+
+    rewriter.replaceOpWithNewOp<mlir::tensor::FromElementsOp>(op, castedVals);
+    return mlir::success();
+  }
+};
+
 } // namespace
 
 void SignCastOp::getCanonicalizationPatterns(
     ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context) {
-  results.insert<SignCastDimPropagate<mlir::tensor::DimOp>,
-                 SignCastDimPropagate<mlir::memref::DimOp>,
-                 SignCastUndefPropagate, SignCastTensorCastPropagate>(context);
+  results
+      .insert<SignCastDimPropagate<mlir::tensor::DimOp>,
+              SignCastDimPropagate<mlir::memref::DimOp>, SignCastUndefPropagate,
+              SignCastTensorCastPropagate, SignCastTensorFromElementsPropagate>(
+          context);
 }
 
 void ReduceRankOp::build(::mlir::OpBuilder &odsBuilder,
