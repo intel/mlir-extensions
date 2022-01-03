@@ -168,6 +168,10 @@ def empty_impl(builder, shape, dtype=None):
 def zeros_impl(builder, shape, dtype=None):
     return _init_impl(builder, shape, dtype, 0)
 
+@register_func('numpy.ones', numpy.ones)
+def ones_impl(builder, shape, dtype=None):
+    return _init_impl(builder, shape, dtype, 1)
+
 @register_func('numpy.eye', numpy.eye)
 def eye_impl(builder, N, M=None, k=0, dtype=None):
     if M is None:

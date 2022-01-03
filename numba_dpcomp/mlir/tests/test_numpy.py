@@ -522,34 +522,38 @@ def test_empty3(dtype):
     assert_equal(py_func(arr).shape, jit_func(arr).shape)
     assert_equal(py_func(arr).dtype, jit_func(arr).dtype)
 
-def test_zeros1():
+@pytest.mark.parametrize("func", [np.zeros, np.ones], ids=['zeros','ones'])
+def test_init1(func):
     def py_func(d):
-        return np.zeros(d)
+        return func(d)
 
     jit_func = njit(py_func)
     assert_equal(py_func(5), jit_func(5))
 
+@pytest.mark.parametrize("func", [np.zeros, np.ones], ids=['zeros','ones'])
 @pytest.mark.parametrize("dtype", ['int32','int64','float32','float64'])
-def test_zeros2(dtype):
+def test_init2(func, dtype):
     def py_func(a):
-        return np.zeros(a.shape, a.dtype)
+        return func(a.shape, a.dtype)
 
     jit_func = njit(py_func)
     arr = np.array([1, 2, 3], dtype=dtype)
     assert_equal(py_func(arr).shape, jit_func(arr).shape)
     assert_equal(py_func(arr).dtype, jit_func(arr).dtype)
 
+@pytest.mark.parametrize("func", [np.zeros, np.ones], ids=['zeros','ones'])
 @pytest.mark.xfail
-def test_zeros3():
+def test_init3(func):
     def py_func(d):
-        return np.zeros(d, dtype=np.dtype('int64'))
+        return func(d, dtype=np.dtype('int64'))
 
     jit_func = njit(py_func)
     assert_equal(py_func(5), jit_func(5))
 
-def test_zeros4():
+@pytest.mark.parametrize("func", [np.zeros, np.ones], ids=['zeros','ones'])
+def test_init4(func):
     def py_func(d):
-        return np.zeros(d)
+        return func(d)
 
     jit_func = njit(py_func)
     assert_equal(py_func((2, 1)), jit_func((2, 1)))
