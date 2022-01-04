@@ -229,7 +229,7 @@ struct ParallelToTbbPass
                                        mlir::scf::SCFDialect>,
           ParallelToTbb> {};
 
-void populate_parallel_to_tbb_pipeline(mlir::OpPassManager &pm) {
+static void populateParallelToTbbPipeline(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<ParallelToTbbPass>());
 }
 } // namespace
@@ -239,7 +239,7 @@ void registerParallelToTBBPipeline(plier::PipelineRegistry &registry) {
     auto stage = getLowerLoweringStage();
     auto llvm_pipeline = lowerToLLVMPipelineName();
     sink(parallelToTBBPipelineName(), {stage.begin}, {llvm_pipeline}, {},
-         &populate_parallel_to_tbb_pipeline);
+         &populateParallelToTbbPipeline);
   });
 }
 

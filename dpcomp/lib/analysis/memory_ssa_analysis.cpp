@@ -23,23 +23,23 @@ struct Meminfo {
   mlir::ValueRange indices;
 };
 
-llvm::Optional<Meminfo> getMeminfo(mlir::Operation *op) {
+static llvm::Optional<Meminfo> getMeminfo(mlir::Operation *op) {
   assert(nullptr != op);
-  if (auto load = mlir::dyn_cast<mlir::memref::LoadOp>(op)) {
+  if (auto load = mlir::dyn_cast<mlir::memref::LoadOp>(op))
     return Meminfo{load.memref(), load.indices()};
-  }
-  if (auto store = mlir::dyn_cast<mlir::memref::StoreOp>(op)) {
+
+  if (auto store = mlir::dyn_cast<mlir::memref::StoreOp>(op))
     return Meminfo{store.memref(), store.indices()};
-  }
+
   return {};
 }
 } // namespace
 
 plier::MemorySSAAnalysis::MemorySSAAnalysis(mlir::Operation *op,
                                             mlir::AnalysisManager &am) {
-  if (op->getNumRegions() != 1) {
+  if (op->getNumRegions() != 1)
     return;
-  }
+
   memssa = buildMemorySSA(op->getRegion(0));
   if (memssa) {
     aliasAnalysis = &am.getAnalysis<mlir::AliasAnalysis>();
@@ -52,13 +52,13 @@ mlir::LogicalResult plier::MemorySSAAnalysis::optimizeUses() {
     assert(nullptr != aliasAnalysis);
     auto mayAlias = [&](mlir::Operation *op1, mlir::Operation *op2) {
       auto info1 = getMeminfo(op1);
-      if (!info1) {
+      if (!info1)
         return true;
-      }
+
       auto info2 = getMeminfo(op2);
-      if (!info2) {
+      if (!info2)
         return true;
-      }
+
       auto memref1 = info1->memref;
       auto memref2 = info2->memref;
       assert(memref1);

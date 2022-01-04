@@ -616,7 +616,7 @@ void PlierToScfPass::runOnOperation() {
   });
 }
 
-void populatePlierToScfPipeline(mlir::OpPassManager &pm) {
+static void populatePlierToScfPipeline(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(std::make_unique<PlierToScfPass>());
   pm.addPass(mlir::createCanonicalizerPass());

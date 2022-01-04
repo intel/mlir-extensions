@@ -1469,7 +1469,7 @@ struct LLVMLoweringPass
 private:
 };
 
-void populate_lower_to_llvm_pipeline(mlir::OpPassManager &pm) {
+static void populateLowerToLlvmPipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<LowerParallelToCFGPass>());
   pm.addPass(mlir::createLowerToCFGPass());
   pm.addPass(mlir::createCanonicalizerPass());
@@ -1489,7 +1489,7 @@ void registerLowerToLLVMPipeline(plier::PipelineRegistry &registry) {
   registry.registerPipeline([](auto sink) {
     auto stage = getLowerLoweringStage();
     sink(lowerToLLVMPipelineName(), {stage.begin}, {stage.end}, {},
-         &populate_lower_to_llvm_pipeline);
+         &populateLowerToLlvmPipeline);
   });
 }
 

@@ -1240,7 +1240,7 @@ void PlierToStdPass::runOnOperation() {
     signalPassFailure();
 }
 
-void populate_plier_to_std_pipeline(mlir::OpPassManager &pm) {
+static void populatePlierToStdPipeline(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(std::make_unique<PlierToStdPass>());
   pm.addPass(mlir::createCanonicalizerPass());
@@ -1288,7 +1288,7 @@ void registerPlierToStdPipeline(plier::PipelineRegistry &registry) {
   registry.registerPipeline([](auto sink) {
     auto stage = getHighLoweringStage();
     sink(plierToStdPipelineName(), {plierToScfPipelineName()}, {stage.end},
-         {plierToScfPipelineName()}, &populate_plier_to_std_pipeline);
+         {plierToScfPipelineName()}, &populatePlierToStdPipeline);
   });
 }
 
