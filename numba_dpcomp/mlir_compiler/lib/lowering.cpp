@@ -250,8 +250,8 @@ private:
     } else if (py::isinstance(inst, insts.Jump)) {
       jump(inst.attr("target"));
     } else {
-      plier::report_error(llvm::Twine("lower_inst not handled: \"") +
-                          py::str(inst.get_type()).cast<std::string>() + "\"");
+      plier::reportError(llvm::Twine("lower_inst not handled: \"") +
+                         py::str(inst.get_type()).cast<std::string>() + "\"");
     }
   }
 
@@ -277,8 +277,8 @@ private:
       return builder.create<plier::GlobalOp>(getCurrentLoc(), name);
     }
 
-    plier::report_error(llvm::Twine("lower_assign not handled: \"") +
-                        py::str(value.get_type()).cast<std::string>() + "\"");
+    plier::reportError(llvm::Twine("lower_assign not handled: \"") +
+                       py::str(value.get_type()).cast<std::string>() + "\"");
   }
 
   mlir::Value lowerExpr(py::handle expr) {
@@ -305,7 +305,7 @@ private:
       if (h.first == op)
         return (this->*h.second)(expr);
 
-    plier::report_error(llvm::Twine("lower_expr not handled: \"") + op + "\"");
+    plier::reportError(llvm::Twine("lower_expr not handled: \"") + op + "\"");
   }
 
   template <typename T> mlir::Value lowerSimple(py::handle inst) {
@@ -347,8 +347,8 @@ private:
 
       return builder.create<plier::BuildTupleOp>(loc, args);
     }
-    plier::report_error(llvm::Twine("Unhandled index type: ") +
-                        py::str(obj.get_type()).cast<std::string>());
+    plier::reportError(llvm::Twine("Unhandled index type: ") +
+                       py::str(obj.get_type()).cast<std::string>());
   }
 
   mlir::Value lowerStaticGetitem(py::handle inst) {
@@ -412,8 +412,8 @@ private:
 
     auto pyFuncName = funcNameResolver(typemap(pyPunc));
     if (pyFuncName.is_none())
-      plier::report_error(llvm::Twine("Can't resolve function: ") +
-                          py::str(typemap(pyPunc)).cast<std::string>());
+      plier::reportError(llvm::Twine("Can't resolve function: ") +
+                         py::str(typemap(pyPunc)).cast<std::string>());
 
     auto funcName = pyFuncName.cast<std::string>();
 
@@ -454,8 +454,8 @@ private:
       if (op.is(std::get<1>(elem)))
         return std::get<0>(elem).op;
 
-    plier::report_error(llvm::Twine("resolve_op not handled: \"") +
-                        py::str(op).cast<std::string>() + "\"");
+    plier::reportError(llvm::Twine("resolve_op not handled: \"") +
+                       py::str(op).cast<std::string>() + "\"");
   }
 
   mlir::Value lowerGetattr(py::handle inst) {
@@ -540,8 +540,8 @@ private:
     if (py::isinstance<py::none>(val))
       return getVal(builder.getUnitAttr());
 
-    plier::report_error(llvm::Twine("get_const unhandled type \"") +
-                        py::str(val.get_type()).cast<std::string>() + "\"");
+    plier::reportError(llvm::Twine("get_const unhandled type \"") +
+                       py::str(val.get_type()).cast<std::string>() + "\"");
   }
 
   mlir::FunctionType getFuncType(py::handle fnargs, py::handle restype) {
@@ -581,7 +581,7 @@ private:
         auto &info = it->second;
         auto term = bb.getTerminator();
         if (nullptr == term)
-          plier::report_error("broken ir: block without terminator");
+          plier::reportError("broken ir: block without terminator");
 
         builder.setInsertionPointToEnd(&bb);
 
@@ -604,8 +604,8 @@ private:
                                              trueDest, trueArgs, falseDest,
                                              falseArgs);
         } else {
-          plier::report_error(llvm::Twine("Unhandled terminator: ") +
-                              term->getName().getStringRef());
+          plier::reportError(llvm::Twine("Unhandled terminator: ") +
+                             term->getName().getStringRef());
         }
       }
     }
@@ -650,14 +650,14 @@ static py::bytes genLlModule(mlir::ModuleOp mod) {
   };
   llvm::LLVMContext llCtx;
   std::unique_ptr<llvm::Module> llMod;
-  plier::scoped_diag_handler(*mod.getContext(), diagHandler, [&]() {
+  plier::scopedDiagHandler(*mod.getContext(), diagHandler, [&]() {
     mlir::registerLLVMDialectTranslation(*mod.getContext());
     llMod = mlir::translateModuleToLLVMIR(mod, llCtx);
     if (nullptr == llMod) {
       errStream << "\n";
       mod.print(errStream);
       errStream.flush();
-      plier::report_error(llvm::Twine("Cannot generate LLVM module\n") + err);
+      plier::reportError(llvm::Twine("Cannot generate LLVM module\n") + err);
     }
   });
   assert(nullptr != llMod);
@@ -682,7 +682,7 @@ static void createPipeline(plier::PipelineRegistry &registry,
 #ifdef GPU_ENABLE
     registerLowerToGPUPipeline(registry);
 #else
-    plier::report_error("DPCOMP was compiled without GPU support");
+    plier::reportError("DPCOMP was compiled without GPU support");
 #endif
   }
 }

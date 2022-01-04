@@ -75,8 +75,8 @@ py::object mapTypesToNumbaChecked(py::handle typesMod,
                                   mlir::TypeRange typesRange) {
   auto funcTypes = map_types_to_numba(typesMod, typesRange);
   if (funcTypes.is_none())
-    plier::report_error(llvm::Twine("map_types_to_numba failed: ") +
-                        toStr(typesRange));
+    plier::reportError(llvm::Twine("map_types_to_numba failed: ") +
+                       toStr(typesRange));
   return funcTypes;
 }
 
@@ -174,8 +174,8 @@ auto unwrapType(py::handle obj) {
   } else if (py::hasattr(obj, "_mlir_type")) {
     return unwrapMlir<mlir::Type>(obj.attr("_mlir_type").cast<py::capsule>());
   }
-  plier::report_error(llvm::Twine("Invalid type object: ") +
-                      toStr(obj.get_type()));
+  plier::reportError(llvm::Twine("Invalid type object: ") +
+                     toStr(obj.get_type()));
 }
 
 size_t containerSize(py::handle obj) {
@@ -359,8 +359,8 @@ struct PyLinalgResolver::Context {
       return builder.create<mlir::arith::ConstantOp>(loc, attr);
     }
 
-    plier::report_error(llvm::Twine("Invalid element type: ") +
-                        toStr(obj.get_type()));
+    plier::reportError(llvm::Twine("Invalid element type: ") +
+                       toStr(obj.get_type()));
   }
 };
 
@@ -929,7 +929,7 @@ py::object indexImpl(py::capsule context, py::int_ dimObj) {
   auto &builder = ctx.builder;
   auto val = static_cast<int64_t>(dimObj);
   if (val < 0)
-    plier::report_error("Index cannot be negative");
+    plier::reportError("Index cannot be negative");
 
   auto dimVal =
       builder.create<mlir::linalg::IndexOp>(loc, static_cast<uint64_t>(val));
@@ -959,17 +959,17 @@ py::object fromElementsImpl(py::capsule context, py::handle values,
         if (type.isa<mlir::FloatType>())
           return mlir::FloatAttr::get(type, obj.cast<double>());
 
-        plier::report_error("Invalid dtype");
+        plier::reportError("Invalid dtype");
       }();
       auto res = builder.create<mlir::arith::ConstantOp>(loc, attr);
       vals[index] = doSignCast(builder, loc, res, type);
     } else {
-      plier::report_error("Invalid element type");
+      plier::reportError("Invalid element type");
     }
   });
 
   if (vals.empty())
-    plier::report_error("Invalid from_elemets size");
+    plier::reportError("Invalid from_elemets size");
 
   auto resTensorType =
       mlir::RankedTensorType::get(mlir::ShapedType::kDynamicSize, type);
@@ -1001,14 +1001,14 @@ py::object extractImpl(py::capsule context, py::handle value,
       ind[index] = builder.create<mlir::arith::ConstantIndexOp>(
           loc, obj.cast<int64_t>());
     } else {
-      plier::report_error("Invalid element type");
+      plier::reportError("Invalid element type");
     }
   });
   auto tensor = ctx.context.unwrapVal(loc, builder, value);
   auto tensorType = tensor.getType().dyn_cast<mlir::RankedTensorType>();
   if (!tensorType)
-    plier::report_error(llvm::Twine("extract: invalid source type ") +
-                        toStr(tensor.getType()));
+    plier::reportError(llvm::Twine("extract: invalid source type ") +
+                       toStr(tensor.getType()));
 
   auto origElement = tensorType.getElementType();
   auto res = builder
@@ -1032,8 +1032,8 @@ py::object reshapeImpl(py::capsule context, py::handle src,
   auto srcVal = unwrapVal(src);
   auto srcType = srcVal.getType().dyn_cast<mlir::RankedTensorType>();
   if (!srcType)
-    plier::report_error(llvm::Twine("invalid reshape argument: ") +
-                        toStr(srcVal.getType()));
+    plier::reportError(llvm::Twine("invalid reshape argument: ") +
+                       toStr(srcVal.getType()));
 
   auto newDimsVals = [&]() {
     auto dimType = builder.getIndexType();
@@ -1118,9 +1118,9 @@ py::object externalCallImpl(py::capsule context, py::str funcName,
     auto f = mod.lookupSymbol<mlir::FuncOp>(name);
     if (f) {
       if (f.getType() != funcType) {
-        plier::report_error(llvm::Twine("linalg_builder::external_call: "
-                                        "invalid function redefinition: ") +
-                            name);
+        plier::reportError(llvm::Twine("linalg_builder::external_call: "
+                                       "invalid function redefinition: ") +
+                           name);
       }
     } else {
       f = plier::add_function(builder, mod, name, funcType);
@@ -1216,14 +1216,14 @@ py::object inlineFuncImpl(py::capsule context, py::handle func,
   auto funcType = bodyFunc.getType();
   auto funcArgsTypes = funcType.getInputs();
   if (funcArgsTypes.size() != argsValues.size())
-    plier::report_error(
+    plier::reportError(
         llvm::Twine("Invalid function arguments count, expected ") +
         llvm::Twine(argsValues.size()) + ", got" +
         llvm::Twine(funcArgsTypes.size()));
 
   if (funcType.getNumResults() != 1)
-    plier::report_error(llvm::Twine("Invalid number of return values: ") +
-                        llvm::Twine(funcType.getNumResults()));
+    plier::reportError(llvm::Twine("Invalid number of return values: ") +
+                       llvm::Twine(funcType.getNumResults()));
 
   auto castValues = [&](mlir::ValueRange vals, mlir::TypeRange types) {
     assert(vals.size() == types.size());
@@ -1551,7 +1551,7 @@ py::object binopImpl(py::capsule context, py::capsule ssaVal, py::handle rhs,
   auto type = lhs.getType();
   if (!type.isa<mlir::IntegerType, mlir::IndexType, mlir::FloatType,
                 mlir::ShapedType>())
-    plier::report_error("Invalid binop arg type");
+    plier::reportError("Invalid binop arg type");
 
   auto isFloat = [&]() -> bool {
     if (auto shapedType = type.dyn_cast<mlir::ShapedType>())
@@ -1583,7 +1583,7 @@ py::object binopImpl(py::capsule context, py::capsule ssaVal, py::handle rhs,
       return ctx.context.createVar(context, res);
     }
   }
-  plier::report_error("Unhandled binop type");
+  plier::reportError("Unhandled binop type");
 }
 
 py::object strImpl(py::capsule /*context*/, py::capsule ssaVal) {

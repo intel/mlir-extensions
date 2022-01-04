@@ -60,7 +60,7 @@ void plier::PipelineRegistry::populate_pass_manager(
 
   auto get_pipeline = [&](llvm::StringRef name) -> llvm::StringRef {
     if (name.empty()) {
-      report_error("Empty pipeline name");
+      reportError("Empty pipeline name");
     }
     auto str = string_set.save(name);
     pipelines_ordered.insert(str);
@@ -103,7 +103,7 @@ void plier::PipelineRegistry::populate_pass_manager(
     auto i = get_pipeline(pipeline_name);
     auto it = pipelines_map.insert({get_id(i), {}});
     if (!it.second) {
-      report_error("Duplicated pipeline name");
+      reportError("Duplicated pipeline name");
     }
     auto &info = it.first->second;
     info.name = i;
@@ -131,7 +131,7 @@ void plier::PipelineRegistry::populate_pass_manager(
     auto id = get_id(name);
     auto it = pipelines_map.find(id);
     if (it == pipelines_map.end()) {
-      report_error(llvm::Twine("Pipeline not found") + name);
+      reportError(llvm::Twine("Pipeline not found") + name);
     }
     return it->second;
   };
@@ -158,7 +158,7 @@ void plier::PipelineRegistry::populate_pass_manager(
       for (auto it : elem.prev_pipelines) {
         auto &info = get_pipeline_info(it);
         if (info.iterating) {
-          report_error(llvm::Twine("Pipeline depends on itself: ") + elem.name);
+          reportError(llvm::Twine("Pipeline depends on itself: ") + elem.name);
         }
         func(info);
       }

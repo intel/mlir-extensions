@@ -214,12 +214,12 @@ public:
         printDiag(errStream, diag);
     };
 
-    plier::scoped_diag_handler(*module.getContext(), diagHandler, [&]() {
+    plier::scopedDiagHandler(*module.getContext(), diagHandler, [&]() {
       if (mlir::failed(schedule.run(module))) {
         errStream << "\n";
         module.print(errStream);
         errStream.flush();
-        plier::report_error(llvm::Twine("MLIR pipeline failed\n") + err);
+        plier::reportError(llvm::Twine("MLIR pipeline failed\n") + err);
       }
     });
   }

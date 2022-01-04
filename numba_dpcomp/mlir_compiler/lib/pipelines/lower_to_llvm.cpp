@@ -65,7 +65,7 @@ mlir::LowerToLLVMOptions getLLVMOptions(mlir::MLIRContext &context) {
     std::string err_str;
     auto target = llvm::TargetRegistry::lookupTarget(triple, err_str);
     if (nullptr == target) {
-      plier::report_error(llvm::Twine("Unable to get target: ") + err_str);
+      plier::reportError(llvm::Twine("Unable to get target: ") + err_str);
     }
     llvm::TargetOptions target_opts;
     std::unique_ptr<llvm::TargetMachine> machine(target->createTargetMachine(
