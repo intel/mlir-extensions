@@ -1523,33 +1523,39 @@ py::object getitemImpl(py::capsule context, py::capsule ssaVal,
 }
 
 template <typename Op>
-mlir::Value binopFunc(mlir::Location loc, mlir::OpBuilder &builder,
-                      mlir::Value lhs, mlir::Value rhs) {
+static mlir::Value binopFunc(mlir::Location loc, mlir::OpBuilder &builder,
+                             mlir::Value lhs, mlir::Value rhs) {
   return builder.create<Op>(loc, lhs, rhs);
 }
 
-mlir::Value binopFuncIdiv(mlir::Location loc, mlir::OpBuilder &builder,
-                          mlir::Value lhs, mlir::Value rhs) {
-  auto lhs_var = doCast(builder, loc, lhs, builder.getF64Type());
-  auto rhs_var = doCast(builder, loc, rhs, builder.getF64Type());
-  return builder.create<mlir::arith::DivFOp>(loc, lhs_var, rhs_var);
+template <typename Op>
+static mlir::Value rbinopFunc(mlir::Location loc, mlir::OpBuilder &builder,
+                              mlir::Value lhs, mlir::Value rhs) {
+  return builder.create<Op>(loc, rhs, lhs);
 }
 
-py::object binopImpl(py::capsule context, py::capsule ssa_val, py::handle rhs,
+static mlir::Value binopFuncIdiv(mlir::Location loc, mlir::OpBuilder &builder,
+                                 mlir::Value lhs, mlir::Value rhs) {
+  auto lhsVar = doCast(builder, loc, lhs, builder.getF64Type());
+  auto rhsVar = doCast(builder, loc, rhs, builder.getF64Type());
+  return builder.create<mlir::arith::DivFOp>(loc, lhsVar, rhsVar);
+}
+
+py::object binopImpl(py::capsule context, py::capsule ssaVal, py::handle rhs,
                      py::str op) {
   auto &ctx = getPyContext(context);
   auto &builder = ctx.builder;
   auto loc = ctx.loc;
-  auto lhs = unwrapMlir<mlir::Value>(ssa_val);
+  auto lhs = unwrapMlir<mlir::Value>(ssaVal);
 
   auto type = lhs.getType();
   if (!type.isa<mlir::IntegerType, mlir::IndexType, mlir::FloatType,
                 mlir::ShapedType>())
     plier::report_error("Invalid binop arg type");
 
-  auto is_float = [&]() -> bool {
-    if (auto shaped_type = type.dyn_cast<mlir::ShapedType>())
-      return shaped_type.getElementType().isa<mlir::FloatType>();
+  auto isFloat = [&]() -> bool {
+    if (auto shapedType = type.dyn_cast<mlir::ShapedType>())
+      return shapedType.getElementType().isa<mlir::FloatType>();
 
     return type.isa<mlir::FloatType>();
   }();
@@ -1559,18 +1565,21 @@ py::object binopImpl(py::capsule context, py::capsule ssa_val, py::handle rhs,
                       mlir::Value lhs, mlir::Value rhs);
   const std::tuple<llvm::StringRef, binop_func_t, binop_func_t> funcs[] = {
       {"+", &binopFunc<mlir::arith::AddIOp>, &binopFunc<mlir::arith::AddFOp>},
+      {"-", &binopFunc<mlir::arith::SubIOp>, &binopFunc<mlir::arith::SubFOp>},
+      {"r-", &rbinopFunc<mlir::arith::SubIOp>,
+       &rbinopFunc<mlir::arith::SubFOp>},
       {"*", &binopFunc<mlir::arith::MulIOp>, &binopFunc<mlir::arith::MulFOp>},
       {"/", &binopFuncIdiv, &binopFunc<mlir::arith::DivFOp>},
   };
 
-  auto op_name = static_cast<std::string>(op);
+  auto opName = static_cast<std::string>(op);
   for (auto f : funcs) {
     auto name = std::get<0>(f);
-    auto func = (is_float ? std::get<2>(f) : std::get<1>(f));
-    if (name == op_name) {
-      auto rhs_var =
+    auto func = (isFloat ? std::get<2>(f) : std::get<1>(f));
+    if (name == opName) {
+      auto rhsVar =
           doCast(builder, loc, ctx.context.unwrapVal(loc, builder, rhs), type);
-      auto res = func(loc, builder, lhs, rhs_var);
+      auto res = func(loc, builder, lhs, rhsVar);
       return ctx.context.createVar(context, res);
     }
   }

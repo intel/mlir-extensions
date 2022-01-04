@@ -44,6 +44,8 @@ class Var:
 
     def __add__(self, o): return self._binop(self._context, self._ssa_val, o, '+')
     def __radd__(self, o): return self._binop(self._context, self._ssa_val, o, '+')
+    def __sub__(self, o): return self._binop(self._context, self._ssa_val, o, '-')
+    def __rsub__(self, o): return self._binop(self._context, self._ssa_val, o, 'r-')
     def __mul__(self, o): return self._binop(self._context, self._ssa_val, o, '*')
     def __rmul__(self, o): return self._binop(self._context, self._ssa_val, o, '*')
     def __truediv__(self, o): return self._binop(self._context, self._ssa_val, o, '/')
