@@ -99,7 +99,7 @@ mlir::Value doSignCast(mlir::OpBuilder &builder, mlir::Location &loc,
   auto origType = val.getType();
   auto signlessType = makeSignlessType(origType);
   if (signlessType != origType) {
-    val = builder.create<plier::SignCastOp>(loc, signlessType, val);
+    val = builder.createOrFold<plier::SignCastOp>(loc, signlessType, val);
   }
   return val;
 }
@@ -108,7 +108,7 @@ mlir::Value doSignCast(mlir::OpBuilder &builder, mlir::Location &loc,
                        mlir::Value val, mlir::Type dstType) {
   auto origType = val.getType();
   if (dstType != origType) {
-    val = builder.create<plier::SignCastOp>(loc, dstType, val);
+    val = builder.createOrFold<plier::SignCastOp>(loc, dstType, val);
   }
   return val;
 }
@@ -244,7 +244,7 @@ llvm::Optional<py::object> makePyLiteral(mlir::Value val) {
 static mlir::Value doCast(mlir::OpBuilder &builder, mlir::Location loc,
                           mlir::Value val, mlir::Type type) {
   if (val.getType() != type)
-    return builder.create<plier::CastOp>(loc, type, val);
+    return builder.createOrFold<plier::CastOp>(loc, type, val);
 
   return val;
 }
@@ -1268,11 +1268,12 @@ py::object undefImpl(py::capsule context, py::handle dtype) {
 }
 
 py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
-                       py::handle sizes, py::handle strides) {
+                       py::handle sizes, py::handle strides, py::handle rank) {
   auto &ctx = getPyContext(context);
   auto &builder = ctx.builder;
   auto loc = ctx.loc;
   auto origSrcVal = ctx.context.unwrapVal(loc, builder, src);
+  auto origSrcType = origSrcVal.getType().cast<mlir::ShapedType>();
   auto srcVal = doSignCast(builder, loc, origSrcVal);
   auto srcType = srcVal.getType().cast<mlir::TensorType>();
   auto memrefType =
@@ -1281,7 +1282,13 @@ py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
       builder.create<mlir::bufferization::ToMemrefOp>(loc, memrefType, srcVal);
 
   auto indexType = builder.getIndexType();
-  auto indexCast = [&](mlir::Value val) {
+  auto indexCast = [&](mlir::Value val) -> mlir::OpFoldResult {
+    while (auto parent = val.getDefiningOp<plier::SignCastOp>())
+      val = parent.value();
+
+    if (auto constVal = mlir::getConstantIntValue(val))
+      return builder.getIndexAttr(*constVal);
+
     return doCast(builder, loc, val, indexType);
   };
 
@@ -1339,12 +1346,37 @@ py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
       return unpackValues(strides);
     }
   }();
+  auto viewMemrefType = [&]() -> mlir::MemRefType {
+    if (rank.is_none()) {
+      return mlir::memref::SubViewOp::inferResultType(memrefType, offsetVals,
+                                                      sizeVals, strideVals)
+          .cast<mlir::MemRefType>();
+    } else {
+      auto rankVal = rank.cast<unsigned>();
+      return mlir::memref::SubViewOp::inferRankReducedResultType(
+                 rankVal, memrefType, offsetVals, sizeVals, strideVals)
+          .cast<mlir::MemRefType>();
+    }
+  }();
   auto view = builder.createOrFold<mlir::memref::SubViewOp>(
-      loc, memref, offsetVals, sizeVals, strideVals);
-  view = builder.createOrFold<plier::ChangeLayoutOp>(loc, memrefType, view);
-  auto ret = builder.create<mlir::bufferization::ToTensorOp>(loc, view);
-  return ctx.context.createVar(
-      context, doSignCast(builder, loc, ret, origSrcVal.getType()));
+      loc, viewMemrefType, memref, offsetVals, sizeVals, strideVals);
+
+  auto getDynShape = [](int64_t r) {
+    return llvm::SmallVector<int64_t>(r, mlir::ShapedType::kDynamicSize);
+  };
+
+  auto flatViewType = mlir::MemRefType::get(
+      getDynShape(viewMemrefType.getRank()), viewMemrefType.getElementType());
+  view = builder.createOrFold<plier::ChangeLayoutOp>(loc, flatViewType, view);
+  auto ret =
+      builder.create<mlir::bufferization::ToTensorOp>(loc, view).getResult();
+  auto resType = ret.getType().cast<mlir::ShapedType>();
+  auto resSignlessType = resType.clone(getDynShape(resType.getRank()));
+  if (resSignlessType != resType)
+    ret = builder.create<mlir::tensor::CastOp>(loc, resSignlessType, ret);
+  auto resSignedType = resSignlessType.clone(origSrcType.getElementType());
+  return ctx.context.createVar(context,
+                               doSignCast(builder, loc, ret, resSignedType));
 }
 
 py::object arrayTypeImpl(py::capsule context, py::iterable dims,

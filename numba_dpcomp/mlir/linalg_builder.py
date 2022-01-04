@@ -111,8 +111,8 @@ class Builder:
     def undef(self, dtype):
         return self._undef(self._context, dtype)
 
-    def subview(self, src, offset, size=None, strides=None):
-        return self._subview(self._context, src, offset, size, strides)
+    def subview(self, src, offset, size=None, strides=None, result_rank=None):
+        return self._subview(self._context, src, offset, size, strides, result_rank)
 
     def array_type(self, dims, dtype):
         return self._array_type(self._context, dims, dtype)
