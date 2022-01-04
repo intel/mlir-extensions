@@ -75,7 +75,7 @@ private:
   uint64_t pos;
 };
 
-std::string serializeMod(const llvm::Module &mod) {
+static std::string serializeMod(const llvm::Module &mod) {
   std::string ret;
   llvm::raw_string_ostream stream(ret);
   llvm::WriteBitcodeToFile(mod, stream);
@@ -83,7 +83,8 @@ std::string serializeMod(const llvm::Module &mod) {
   return ret;
 }
 
-std::vector<std::pair<int, py::handle>> getBlocks(const py::object &func) {
+static std::vector<std::pair<int, py::handle>>
+getBlocks(const py::object &func) {
   std::vector<std::pair<int, py::handle>> ret;
   auto blocks = func.attr("blocks").cast<py::dict>();
   ret.reserve(blocks.size());
@@ -93,7 +94,7 @@ std::vector<std::pair<int, py::handle>> getBlocks(const py::object &func) {
   return ret;
 }
 
-py::list getBody(py::handle block) {
+static py::list getBody(py::handle block) {
   return block.attr("body").cast<py::list>();
 }
 
@@ -641,7 +642,7 @@ plier::CompilerContext::Settings getSettings(py::handle settings,
   return ret;
 }
 
-static py::bytes genLlModule(mlir::ModuleOp mod) {
+static py::bytes genLLModule(mlir::ModuleOp mod) {
   std::string err;
   llvm::raw_string_ostream errStream(err);
   auto diagHandler = [&](mlir::Diagnostic &diag) {
@@ -708,7 +709,7 @@ static void runCompiler(Module &mod, const py::object &compilationContext) {
 }
 } // namespace
 
-void init_compiler(py::dict settings) {
+void initCompiler(py::dict settings) {
   auto debugType = settings["debug_type"].cast<py::list>();
   auto debugTypeSize = debugType.size();
   if (debugTypeSize != 0) {
@@ -731,7 +732,7 @@ static bool getDictVal(py::dict &dict, const char *str, T &&def) {
   return def;
 }
 
-py::capsule create_module(py::dict settings) {
+py::capsule createModule(py::dict settings) {
   ModuleSettings modSettings;
   modSettings.enableGpuPipeline =
       getDictVal(settings, "enable_gpu_pipeline", false);
@@ -747,25 +748,24 @@ py::capsule create_module(py::dict settings) {
   return capsule;
 }
 
-py::capsule lower_function(const py::object &compilation_context,
-                           const py::capsule &py_mod,
-                           const py::object &func_ir) {
-  auto mod = static_cast<Module *>(py_mod);
+py::capsule lowerFunction(const py::object &compilationContext,
+                          const py::capsule &pyMod, const py::object &funcIr) {
+  auto mod = static_cast<Module *>(pyMod);
   auto &context = mod->context;
   auto &module = mod->module;
-  auto func = PlierLowerer(context).lower(compilation_context, module, func_ir);
+  auto func = PlierLowerer(context).lower(compilationContext, module, funcIr);
   return py::capsule(func.getOperation()); // no dtor, func owned by module
 }
 
-py::bytes compile_module(const py::object &compilation_context,
-                         const py::capsule &py_mod) {
-  auto mod = static_cast<Module *>(py_mod);
-  runCompiler(*mod, compilation_context);
-  return genLlModule(mod->module);
+py::bytes compileModule(const py::object &compilationContext,
+                        const py::capsule &pyMod) {
+  auto mod = static_cast<Module *>(pyMod);
+  runCompiler(*mod, compilationContext);
+  return genLLModule(mod->module);
 }
 
-py::str module_str(const py::capsule &py_mod) {
-  auto mod = static_cast<Module *>(py_mod);
+py::str moduleStr(const py::capsule &pyMod) {
+  auto mod = static_cast<Module *>(pyMod);
   std::string ret;
   llvm::raw_string_ostream ss(ret);
   mod->module.print(ss);
