@@ -192,6 +192,21 @@ def eye_impl(builder, N, M=None, k=0, dtype=None):
 
     return builder.linalg_generic(idx, init, iterators, maps, body)
 
+def _matmul2d(builder, a, b, shape1, shape2):
+    iterators = ['parallel','parallel','reduction']
+    expr1 = '(d0,d1,d2) -> (d0,d2)'
+    expr2 = '(d0,d1,d2) -> (d2,d1)'
+    expr3 = '(d0,d1,d2) -> (d0,d1)'
+    maps = [expr1,expr2,expr3]
+    res_shape = (shape1[0], shape2[1])
+    dtype = broadcast_type(builder, (a, b))
+    init = builder.init_tensor(res_shape, dtype, 0)
+
+    def body(a, b, c):
+        return a * b + c
+
+    return builder.linalg_generic((a,b), init, iterators, maps, body)
+
 @register_func('numpy.dot', numpy.dot)
 def dot_impl(builder, a, b):
     shape1 = a.shape
@@ -209,18 +224,42 @@ def dot_impl(builder, a, b):
         res = builder.linalg_generic((a,b), init, iterators, maps, body)
         return builder.extract(res, 0)
     if len(shape1) == 2 and len(shape2) == 2:
-        iterators = ['parallel','parallel','reduction']
-        expr1 = '(d0,d1,d2) -> (d0,d2)'
-        expr2 = '(d0,d1,d2) -> (d2,d1)'
-        expr3 = '(d0,d1,d2) -> (d0,d1)'
-        maps = [expr1,expr2,expr3]
-        res_shape = (shape1[0], shape2[1])
-        init = builder.init_tensor(res_shape, a.dtype, 0)
+        return _matmul2d(builder, a, b, shape1, shape2)
 
-        def body(a, b, c):
-            return a * b + c
+@register_func('operator.matmul')
+def matmul_impl(builder, a, b):
+    shape1 = a.shape
+    shape2 = b.shape
+    dim1 = len(shape1)
+    dim2 = len(shape2)
+    if dim1 > 2 or dim2 > 2:
+        return
 
-        return builder.linalg_generic((a,b), init, iterators, maps, body)
+    if dim1 == 1:
+        x = shape2[0]
+        y = shape1[0]
+        dst_shape = (x, y)
+        tmp = builder.init_tensor(dst_shape, a.dtype, 1)
+        tmp_a = builder.reshape(a, (1, y))
+        tmp = builder.insert(tmp_a, tmp, (x - 1, 0), dst_shape, (1, 1))
+        a = tmp
+    elif dim2 == 1:
+        x = shape2[0]
+        y = shape1[0]
+        dst_shape = (x, y)
+        tmp = builder.init_tensor(dst_shape, b.dtype, 1)
+        tmp_b = builder.reshape(b, (x, 1))
+        tmp = builder.insert(tmp_b, tmp, (0, 0), dst_shape, (1, 1))
+        b = tmp
+
+    res = _matmul2d(builder, a, b, a.shape, b.shape)
+
+    if dim1 == 1:
+        res = builder.subview(res, (shape2[0] - 1, 0), (1, shape1[0]), result_rank=1)
+    elif dim2 == 1:
+        res = builder.subview(res, (0, 0), (shape2[0], 1), result_rank=1)
+
+    return res
 
 @register_attr('array.shape')
 def shape_impl(builder, arg):
