@@ -43,30 +43,45 @@ def len_impl(builder, arg):
     return builder.cast(len(arg), builder.int64)
 
 def _gen_math_funcs():
-    def get_func(name):
-        def func(builder, arg):
-            t = arg.type
+    def get_func(name, N):
+        def func(builder, *args):
+            if len(args) != N:
+                return None
+
+            t = args[0].type
             if not is_int(t, builder) and not is_float(t, builder):
                 return None
+
+            for a in args[1:]:
+                if a.type != t:
+                    return None
 
             fname = name
             if t == builder.float32:
                 fname = 'f' + fname
             elif t != builder.float64:
                 t = builder.float64
-                arg = builder.cast(arg, builder.float64)
+                args = tuple(builder.cast(arg, builder.float64) for arg in args)
 
             res = builder.cast(0, t)
-            return builder.external_call(fname, arg, res, decorate=False)
+            return builder.external_call(fname, args, res, decorate=False)
 
         return func
 
-    math_funcs = ['log', 'sqrt', 'exp', 'erf', 'sin', 'cos']
+    math_funcs = [
+        ('log', 1),
+        ('sqrt', 1),
+        ('exp', 1),
+        ('erf', 1),
+        ('sin', 1),
+        ('cos', 1),
+        ('atan2', 2),
+    ]
 
-    for func in math_funcs:
+    for func, N in math_funcs:
         fname = 'math.' + func
         py_func = eval(fname)
-        register_func(fname, py_func)(get_func(func))
+        register_func(fname, py_func)(get_func(func, N))
 
 _gen_math_funcs()
 del _gen_math_funcs

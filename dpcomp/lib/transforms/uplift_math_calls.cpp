@@ -26,6 +26,15 @@ static mlir::Operation *replaceOp1(mlir::OpBuilder &builder, mlir::Location loc,
   return builder.create<Op>(loc, args.front());
 }
 
+template <typename Op>
+static mlir::Operation *replaceOp2(mlir::OpBuilder &builder, mlir::Location loc,
+                                   mlir::ValueRange args) {
+  if (args.size() != 2)
+    return nullptr;
+
+  return builder.create<Op>(loc, args[0], args[1]);
+}
+
 mlir::LogicalResult
 plier::UpliftMathCalls::matchAndRewrite(mlir::CallOp op,
                                         mlir::PatternRewriter &rewriter) const {
@@ -52,6 +61,7 @@ plier::UpliftMathCalls::matchAndRewrite(mlir::CallOp op,
       {"sin", &replaceOp1<mlir::math::SinOp>},
       {"cos", &replaceOp1<mlir::math::CosOp>},
       {"erf", &replaceOp1<mlir::math::ErfOp>},
+      {"atan2", &replaceOp2<mlir::math::Atan2Op>},
   };
 
   for (auto &handler : handlers) {

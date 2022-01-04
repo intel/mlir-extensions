@@ -124,14 +124,27 @@ def test_cast(py_func, val):
     'cos',
     'erf',
 ])
-def test_math_uplifting(val, name):
-    py_func = lambda a: math.sqrt(a)
+def test_math_uplifting1(val, name):
     py_func = eval(f'lambda a: math.{name}(a)')
 
     with print_pass_ir([],['UpliftMathCallsPass']):
         jit_func = njit(py_func)
 
         assert_equal(py_func(val), jit_func(val))
+        ir = get_print_buffer()
+        assert ir.count(f'math.{name}') == 1, ir
+
+@pytest.mark.parametrize('val', [5,5.5])
+@pytest.mark.parametrize('name', [
+    'atan2',
+])
+def test_math_uplifting2(val, name):
+    py_func = eval(f'lambda a, b: math.{name}(a, b)')
+
+    with print_pass_ir([],['UpliftMathCallsPass']):
+        jit_func = njit(py_func)
+
+        assert_equal(py_func(val, val), jit_func(val, val))
         ir = get_print_buffer()
         assert ir.count(f'math.{name}') == 1, ir
 
