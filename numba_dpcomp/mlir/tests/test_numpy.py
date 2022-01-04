@@ -89,6 +89,7 @@ _test_binary_test_arrays_ids = ['1', '2.5', 'np.array([1,2,3])', 'np.array([4.4,
     'lambda a, b: a ** b',
     'lambda a, b: np.true_divide(a, b)',
     'lambda a, b: a / b',
+    'lambda a, b: np.arctan2(a, b)',
 ])
 @pytest.mark.parametrize("a",
                          _test_binary_test_arrays,
