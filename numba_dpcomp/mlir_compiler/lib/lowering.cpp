@@ -75,7 +75,7 @@ private:
   uint64_t pos;
 };
 
-std::string serialize_mod(const llvm::Module &mod) {
+std::string serializeMod(const llvm::Module &mod) {
   std::string ret;
   llvm::raw_string_ostream stream(ret);
   llvm::WriteBitcodeToFile(mod, stream);
@@ -83,22 +83,22 @@ std::string serialize_mod(const llvm::Module &mod) {
   return ret;
 }
 
-std::vector<std::pair<int, py::handle>> get_blocks(const py::object &func) {
+std::vector<std::pair<int, py::handle>> getBlocks(const py::object &func) {
   std::vector<std::pair<int, py::handle>> ret;
   auto blocks = func.attr("blocks").cast<py::dict>();
   ret.reserve(blocks.size());
-  for (auto it : blocks) {
+  for (auto it : blocks)
     ret.push_back({it.first.cast<int>(), it.second});
-  }
+
   return ret;
 }
 
-py::list get_body(py::handle block) {
+py::list getBody(py::handle block) {
   return block.attr("body").cast<py::list>();
 }
 
-struct inst_handles {
-  inst_handles() {
+struct InstHandles {
+  InstHandles() {
     auto mod = py::module::import("numba.core.ir");
     Assign = mod.attr("Assign");
     Del = mod.attr("Del");
@@ -117,7 +117,7 @@ struct inst_handles {
 
     auto ops = py::module::import("operator");
 
-    for (auto elem : llvm::zip(plier::getOperators(), ops_handles)) {
+    for (auto elem : llvm::zip(plier::getOperators(), opsHandles)) {
       auto name = std::get<0>(elem).name;
       std::get<1>(elem) = ops.attr(name.data());
     }
@@ -138,41 +138,40 @@ struct inst_handles {
   py::handle Global;
   py::handle FreeVar;
 
-  std::array<py::handle, plier::OperatorsCount> ops_handles;
+  std::array<py::handle, plier::OperatorsCount> opsHandles;
 };
 
-struct plier_lowerer final {
-  plier_lowerer(mlir::MLIRContext &context) : ctx(context), builder(&ctx) {
+struct PlierLowerer final {
+  PlierLowerer(mlir::MLIRContext &context) : ctx(context), builder(&ctx) {
     ctx.loadDialect<mlir::StandardOpsDialect>();
     ctx.loadDialect<plier::PlierDialect>();
   }
 
-  mlir::FuncOp lower(const py::object &compilation_context, mlir::ModuleOp mod,
-                     const py::object &func_ir) {
-
-    typemap = compilation_context["typemap"];
-    func_name_resolver = compilation_context["resolve_func"];
-    auto name = compilation_context["fnname"]().cast<std::string>();
-    auto typ = get_func_type(compilation_context["fnargs"],
-                             compilation_context["restype"]);
+  mlir::FuncOp lower(const py::object &compilationContext, mlir::ModuleOp mod,
+                     const py::object &funcIr) {
+    typemap = compilationContext["typemap"];
+    funcNameResolver = compilationContext["resolve_func"];
+    auto name = compilationContext["fnname"]().cast<std::string>();
+    auto typ = getFuncType(compilationContext["fnargs"],
+                           compilationContext["restype"]);
     func = mlir::FuncOp::create(builder.getUnknownLoc(), name, typ);
-    if (compilation_context["fastmath"]().cast<bool>())
+    if (compilationContext["fastmath"]().cast<bool>())
       func->setAttr(plier::attributes::getFastmathName(),
                     mlir::UnitAttr::get(&ctx));
 
-    if (compilation_context["force_inline"]().cast<bool>())
+    if (compilationContext["force_inline"]().cast<bool>())
       func->setAttr(plier::attributes::getForceInlineName(),
                     mlir::UnitAttr::get(&ctx));
 
     func->setAttr(plier::attributes::getOptLevelName(),
                   builder.getI64IntegerAttr(
-                      compilation_context["opt_level"]().cast<int64_t>()));
-    auto max_concurrency = compilation_context["max_concurrency"]().cast<int>();
-    if (max_concurrency > 0) {
+                      compilationContext["opt_level"]().cast<int64_t>()));
+    auto maxConcurrency = compilationContext["max_concurrency"]().cast<int>();
+    if (maxConcurrency > 0)
       mod->setAttr(plier::attributes::getMaxConcurrencyName(),
-                   builder.getI64IntegerAttr(max_concurrency));
-    }
-    lower_func_body(func_ir);
+                   builder.getI64IntegerAttr(maxConcurrency));
+
+    lowerFuncBody(funcIr);
     mod.push_back(func);
     return func;
   }
@@ -181,63 +180,63 @@ private:
   mlir::MLIRContext &ctx;
   mlir::OpBuilder builder;
   std::vector<mlir::Block *> blocks;
-  std::unordered_map<int, mlir::Block *> blocks_map;
-  inst_handles insts;
+  std::unordered_map<int, mlir::Block *> blocksMap;
+  InstHandles insts;
   mlir::FuncOp func;
-  std::unordered_map<std::string, mlir::Value> vars_map;
+  std::unordered_map<std::string, mlir::Value> varsMap;
   struct BlockInfo {
     struct PhiDesc {
-      mlir::Block *dest_block = nullptr;
-      std::string var_name;
-      unsigned arg_index = 0;
+      mlir::Block *destBlock = nullptr;
+      std::string varName;
+      unsigned argIndex = 0;
     };
-    llvm::SmallVector<PhiDesc, 2> outgoing_phi_nodes;
+    llvm::SmallVector<PhiDesc, 2> outgoingPhiNodes;
   };
-  py::handle current_instr;
+  py::handle currentInstr;
   py::handle typemap;
-  py::handle func_name_resolver;
+  py::handle funcNameResolver;
 
-  std::unordered_map<mlir::Block *, BlockInfo> block_infos;
+  std::unordered_map<mlir::Block *, BlockInfo> blockInfos;
 
-  plier::PyType get_obj_type(py::handle obj) const {
+  plier::PyType getObjType(py::handle obj) const {
     return plier::PyType::get(&ctx, py::str(obj).cast<std::string>());
   }
 
-  plier::PyType get_type(py::handle inst) const {
+  plier::PyType getType(py::handle inst) const {
     auto type = typemap(inst);
-    return get_obj_type(type);
+    return getObjType(type);
   }
 
-  void lower_func_body(const py::object &func_ir) {
-    auto ir_blocks = get_blocks(func_ir);
-    assert(!ir_blocks.empty());
-    blocks.reserve(ir_blocks.size());
-    for (std::size_t i = 0; i < ir_blocks.size(); ++i) {
+  void lowerFuncBody(const py::object &funcIr) {
+    auto irBlocks = getBlocks(funcIr);
+    assert(!irBlocks.empty());
+    blocks.reserve(irBlocks.size());
+    for (auto i : llvm::seq<size_t>(0, irBlocks.size())) {
       auto block = (0 == i ? func.addEntryBlock() : func.addBlock());
       blocks.push_back(block);
-      blocks_map[ir_blocks[i].first] = block;
+      blocksMap[irBlocks[i].first] = block;
     }
 
-    for (std::size_t i = 0; i < ir_blocks.size(); ++i) {
-      lower_block(blocks[i], ir_blocks[i].second);
-    }
-    fixup_phis();
+    for (auto i : llvm::seq<size_t>(0, irBlocks.size()))
+      lowerBlock(blocks[i], irBlocks[i].second);
+
+    fixupPhis();
   }
 
-  void lower_block(mlir::Block *bb, py::handle ir_block) {
+  void lowerBlock(mlir::Block *bb, py::handle irBlock) {
     assert(nullptr != bb);
     builder.setInsertionPointToEnd(bb);
-    for (auto it : get_body(ir_block)) {
-      current_instr = it;
-      lower_inst(it);
-      current_instr = nullptr;
+    for (auto it : getBody(irBlock)) {
+      currentInstr = it;
+      lowerInst(it);
+      currentInstr = nullptr;
     }
   }
 
-  void lower_inst(py::handle inst) {
+  void lowerInst(py::handle inst) {
     if (py::isinstance(inst, insts.Assign)) {
       auto target = inst.attr("target");
-      auto val = lower_assign(inst, target);
+      auto val = lowerAssign(inst, target);
       storevar(val, target);
     } else if (py::isinstance(inst, insts.SetItem) ||
                py::isinstance(inst, insts.StaticSetItem)) {
@@ -256,78 +255,77 @@ private:
     }
   }
 
-  mlir::Value lower_assign(py::handle inst, py::handle target) {
+  mlir::Value lowerAssign(py::handle inst, py::handle target) {
     auto value = inst.attr("value");
     if (py::isinstance(value, insts.Arg)) {
       auto index = value.attr("index").cast<std::size_t>();
       return builder.create<plier::ArgOp>(
-          get_current_loc(), index, target.attr("name").cast<std::string>());
+          getCurrentLoc(), index, target.attr("name").cast<std::string>());
     }
     if (py::isinstance(value, insts.Expr)) {
-      return lower_expr(value);
+      return lowerExpr(value);
     }
     if (py::isinstance(value, insts.Var)) {
       return loadvar(value);
     }
     if (py::isinstance(value, insts.Const)) {
-      return get_const(value.attr("value"));
+      return getConst(value.attr("value"));
     }
     if (py::isinstance(value, insts.Global) ||
         py::isinstance(value, insts.FreeVar)) {
       auto name = value.attr("name").cast<std::string>();
-      return builder.create<plier::GlobalOp>(get_current_loc(), name);
+      return builder.create<plier::GlobalOp>(getCurrentLoc(), name);
     }
 
     plier::report_error(llvm::Twine("lower_assign not handled: \"") +
                         py::str(value.get_type()).cast<std::string>() + "\"");
   }
 
-  mlir::Value lower_expr(py::handle expr) {
+  mlir::Value lowerExpr(py::handle expr) {
     auto op = expr.attr("op").cast<std::string>();
-    using func_t = mlir::Value (plier_lowerer::*)(py::handle);
+    using func_t = mlir::Value (PlierLowerer::*)(py::handle);
     const std::pair<mlir::StringRef, func_t> handlers[] = {
-        {"binop", &plier_lowerer::lower_binop},
-        {"inplace_binop", &plier_lowerer::lower_inplce_binop},
-        {"unary", &plier_lowerer::lower_unary},
-        {"cast", &plier_lowerer::lower_cast},
-        {"call", &plier_lowerer::lower_call},
-        {"phi", &plier_lowerer::lower_phi},
-        {"build_tuple", &plier_lowerer::lower_build_tuple},
-        {"getitem", &plier_lowerer::lower_getitem},
-        {"static_getitem", &plier_lowerer::lower_static_getitem},
-        {"getiter", &plier_lowerer::lower_simple<plier::GetiterOp>},
-        {"iternext", &plier_lowerer::lower_simple<plier::IternextOp>},
-        {"pair_first", &plier_lowerer::lower_simple<plier::PairfirstOp>},
-        {"pair_second", &plier_lowerer::lower_simple<plier::PairsecondOp>},
-        {"getattr", &plier_lowerer::lower_getattr},
-        {"exhaust_iter", &plier_lowerer::lower_exhaust_iter},
+        {"binop", &PlierLowerer::lowerBinop},
+        {"inplace_binop", &PlierLowerer::lowerInplceBinop},
+        {"unary", &PlierLowerer::lowerUnary},
+        {"cast", &PlierLowerer::lowerCast},
+        {"call", &PlierLowerer::lowerCall},
+        {"phi", &PlierLowerer::lowerPhi},
+        {"build_tuple", &PlierLowerer::lowerBuildTuple},
+        {"getitem", &PlierLowerer::lowerGetitem},
+        {"static_getitem", &PlierLowerer::lowerStaticGetitem},
+        {"getiter", &PlierLowerer::lowerSimple<plier::GetiterOp>},
+        {"iternext", &PlierLowerer::lowerSimple<plier::IternextOp>},
+        {"pair_first", &PlierLowerer::lowerSimple<plier::PairfirstOp>},
+        {"pair_second", &PlierLowerer::lowerSimple<plier::PairsecondOp>},
+        {"getattr", &PlierLowerer::lowerGetattr},
+        {"exhaust_iter", &PlierLowerer::lowerExhaustIter},
     };
-    for (auto &h : handlers) {
-      if (h.first == op) {
+    for (auto &h : handlers)
+      if (h.first == op)
         return (this->*h.second)(expr);
-      }
-    }
+
     plier::report_error(llvm::Twine("lower_expr not handled: \"") + op + "\"");
   }
 
-  template <typename T> mlir::Value lower_simple(py::handle inst) {
+  template <typename T> mlir::Value lowerSimple(py::handle inst) {
     auto value = loadvar(inst.attr("value"));
-    return builder.create<T>(get_current_loc(), value);
+    return builder.create<T>(getCurrentLoc(), value);
   }
 
-  mlir::Value lower_cast(py::handle inst) {
+  mlir::Value lowerCast(py::handle inst) {
     auto value = loadvar(inst.attr("value"));
-    auto res_type = get_type(current_instr.attr("target"));
-    return builder.create<plier::CastOp>(get_current_loc(), res_type, value);
+    auto resType = getType(currentInstr.attr("target"));
+    return builder.create<plier::CastOp>(getCurrentLoc(), resType, value);
   }
 
-  mlir::Value lower_getitem(py::handle inst) {
+  mlir::Value lowerGetitem(py::handle inst) {
     auto value = loadvar(inst.attr("value"));
     auto index = loadvar(inst.attr("index"));
-    return builder.create<plier::GetItemOp>(get_current_loc(), value, index);
+    return builder.create<plier::GetItemOp>(getCurrentLoc(), value, index);
   }
 
-  mlir::Value lower_static_index(mlir::Location loc, py::handle obj) {
+  mlir::Value lowerStaticIndex(mlir::Location loc, py::handle obj) {
     if (obj.is_none()) {
       auto type = mlir::NoneType::get(builder.getContext());
       return builder.create<plier::UndefOp>(loc, type);
@@ -337,15 +335,15 @@ private:
       return builder.create<mlir::arith::ConstantIndexOp>(loc, index);
     }
     if (py::isinstance<py::slice>(obj)) {
-      auto start = lower_static_index(loc, obj.attr("start"));
-      auto stop = lower_static_index(loc, obj.attr("stop"));
-      auto step = lower_static_index(loc, obj.attr("step"));
+      auto start = lowerStaticIndex(loc, obj.attr("start"));
+      auto stop = lowerStaticIndex(loc, obj.attr("stop"));
+      auto step = lowerStaticIndex(loc, obj.attr("step"));
       return builder.create<plier::BuildSliceOp>(loc, start, stop, step);
     }
     if (py::isinstance<py::iterable>(obj)) {
       llvm::SmallVector<mlir::Value> args(py::len(obj));
       for (auto it : llvm::enumerate(obj))
-        args[it.index()] = lower_static_index(loc, it.value());
+        args[it.index()] = lowerStaticIndex(loc, it.value());
 
       return builder.create<plier::BuildTupleOp>(loc, args);
     }
@@ -353,46 +351,44 @@ private:
                         py::str(obj.get_type()).cast<std::string>());
   }
 
-  mlir::Value lower_static_getitem(py::handle inst) {
+  mlir::Value lowerStaticGetitem(py::handle inst) {
     auto value = loadvar(inst.attr("value"));
-    auto loc = get_current_loc();
-    auto index_var = lower_static_index(loc, inst.attr("index"));
-    return builder.create<plier::GetItemOp>(loc, value, index_var);
+    auto loc = getCurrentLoc();
+    auto indexVar = lowerStaticIndex(loc, inst.attr("index"));
+    return builder.create<plier::GetItemOp>(loc, value, indexVar);
   }
 
-  mlir::Value lower_build_tuple(py::handle inst) {
+  mlir::Value lowerBuildTuple(py::handle inst) {
     auto items = inst.attr("items").cast<py::list>();
     mlir::SmallVector<mlir::Value> args;
     for (auto item : items) {
       args.push_back(loadvar(item));
     }
-    return builder.create<plier::BuildTupleOp>(get_current_loc(), args);
+    return builder.create<plier::BuildTupleOp>(getCurrentLoc(), args);
   }
 
-  mlir::Value lower_phi(py::handle expr) {
-    auto incoming_vals = expr.attr("incoming_values").cast<py::list>();
-    auto incoming_blocks = expr.attr("incoming_blocks").cast<py::list>();
-    assert(incoming_vals.size() == incoming_blocks.size());
+  mlir::Value lowerPhi(py::handle expr) {
+    auto incomingVals = expr.attr("incoming_values").cast<py::list>();
+    auto incomingBlocks = expr.attr("incoming_blocks").cast<py::list>();
+    assert(incomingVals.size() == incomingBlocks.size());
 
-    auto current_block = builder.getBlock();
-    assert(nullptr != current_block);
+    auto currentBlock = builder.getBlock();
+    assert(nullptr != currentBlock);
 
-    auto arg_index = current_block->getNumArguments();
-    auto arg =
-        current_block->addArgument(get_type(current_instr.attr("target")));
+    auto argIndex = currentBlock->getNumArguments();
+    auto arg = currentBlock->addArgument(getType(currentInstr.attr("target")));
 
-    auto count = incoming_vals.size();
-    for (std::size_t i = 0; i < count; ++i) {
-      auto var = incoming_vals[i].attr("name").cast<std::string>();
-      auto block = blocks_map.find(incoming_blocks[i].cast<int>())->second;
-      block_infos[block].outgoing_phi_nodes.push_back(
-          {current_block, std::move(var), arg_index});
+    for (auto i : llvm::seq<size_t>(0, incomingVals.size())) {
+      auto var = incomingVals[i].attr("name").cast<std::string>();
+      auto block = blocksMap.find(incomingBlocks[i].cast<int>())->second;
+      blockInfos[block].outgoingPhiNodes.push_back(
+          {currentBlock, std::move(var), argIndex});
     }
 
     return arg;
   }
 
-  mlir::Value lower_call(py::handle expr) {
+  mlir::Value lowerCall(py::handle expr) {
     auto pyPunc = expr.attr("func");
     auto func = loadvar(pyPunc);
     auto args = expr.attr("args").cast<py::list>();
@@ -414,177 +410,174 @@ private:
       kwargsList.push_back({name.cast<std::string>(), loadvar(valName)});
     }
 
-    auto pyFuncName = func_name_resolver(typemap(pyPunc));
+    auto pyFuncName = funcNameResolver(typemap(pyPunc));
     if (pyFuncName.is_none())
       plier::report_error(llvm::Twine("Can't resolve function: ") +
                           py::str(typemap(pyPunc)).cast<std::string>());
 
     auto funcName = pyFuncName.cast<std::string>();
 
-    return builder.create<plier::PyCallOp>(get_current_loc(), func, funcName,
+    return builder.create<plier::PyCallOp>(getCurrentLoc(), func, funcName,
                                            argsList, varargVar, kwargsList);
   }
 
-  mlir::Value lower_binop(py::handle expr) {
+  mlir::Value lowerBinop(py::handle expr) {
     auto op = expr.attr("fn");
-    auto lhs_name = expr.attr("lhs");
-    auto rhs_name = expr.attr("rhs");
-    auto lhs = loadvar(lhs_name);
-    auto rhs = loadvar(rhs_name);
-    auto op_name = resolve_op(op);
-    return builder.create<plier::BinOp>(get_current_loc(), lhs, rhs, op_name);
+    auto lhsName = expr.attr("lhs");
+    auto rhsName = expr.attr("rhs");
+    auto lhs = loadvar(lhsName);
+    auto rhs = loadvar(rhsName);
+    auto opName = resolveOp(op);
+    return builder.create<plier::BinOp>(getCurrentLoc(), lhs, rhs, opName);
   }
 
-  mlir::Value lower_inplce_binop(py::handle expr) {
+  mlir::Value lowerInplceBinop(py::handle expr) {
     auto op = expr.attr("immutable_fn");
-    auto lhs_name = expr.attr("lhs");
-    auto rhs_name = expr.attr("rhs");
-    auto lhs = loadvar(lhs_name);
-    auto rhs = loadvar(rhs_name);
-    auto op_name = resolve_op(op);
-    return builder.create<plier::BinOp>(get_current_loc(), lhs, rhs, op_name);
+    auto lhsName = expr.attr("lhs");
+    auto rhsName = expr.attr("rhs");
+    auto lhs = loadvar(lhsName);
+    auto rhs = loadvar(rhsName);
+    auto opName = resolveOp(op);
+    return builder.create<plier::BinOp>(getCurrentLoc(), lhs, rhs, opName);
   }
 
-  mlir::Value lower_unary(py::handle expr) {
+  mlir::Value lowerUnary(py::handle expr) {
     auto op = expr.attr("fn");
-    auto val_name = expr.attr("value");
-    auto val = loadvar(val_name);
-    auto op_name = resolve_op(op);
-    return builder.create<plier::UnaryOp>(get_current_loc(), val, op_name);
+    auto valName = expr.attr("value");
+    auto val = loadvar(valName);
+    auto opName = resolveOp(op);
+    return builder.create<plier::UnaryOp>(getCurrentLoc(), val, opName);
   }
 
-  llvm::StringRef resolve_op(py::handle op) {
-    for (auto elem : llvm::zip(plier::getOperators(), insts.ops_handles)) {
-      if (op.is(std::get<1>(elem))) {
+  llvm::StringRef resolveOp(py::handle op) {
+    for (auto elem : llvm::zip(plier::getOperators(), insts.opsHandles))
+      if (op.is(std::get<1>(elem)))
         return std::get<0>(elem).op;
-      }
-    }
 
     plier::report_error(llvm::Twine("resolve_op not handled: \"") +
                         py::str(op).cast<std::string>() + "\"");
   }
 
-  mlir::Value lower_getattr(py::handle inst) {
+  mlir::Value lowerGetattr(py::handle inst) {
     auto value = loadvar(inst.attr("value"));
     auto name = inst.attr("attr").cast<std::string>();
-    return builder.create<plier::GetattrOp>(get_current_loc(), value, name);
+    return builder.create<plier::GetattrOp>(getCurrentLoc(), value, name);
   }
 
-  mlir::Value lower_exhaust_iter(py::handle inst) {
+  mlir::Value lowerExhaustIter(py::handle inst) {
     auto value = loadvar(inst.attr("value"));
     auto count = inst.attr("count").cast<int64_t>();
-    return builder.create<plier::ExhaustIterOp>(get_current_loc(), value,
-                                                count);
+    return builder.create<plier::ExhaustIterOp>(getCurrentLoc(), value, count);
   }
 
   void setitem(py::handle target, py::handle index, py::handle value) {
     auto ind = [&]() -> mlir::Value {
       if (py::isinstance<py::int_>(index))
         return builder.create<mlir::arith::ConstantIndexOp>(
-            get_current_loc(), index.cast<int64_t>());
+            getCurrentLoc(), index.cast<int64_t>());
 
       return loadvar(index);
     }();
-    builder.create<plier::SetItemOp>(get_current_loc(), loadvar(target), ind,
+    builder.create<plier::SetItemOp>(getCurrentLoc(), loadvar(target), ind,
                                      loadvar(value));
   }
 
   void storevar(mlir::Value val, py::handle inst) {
-    vars_map[inst.attr("name").cast<std::string>()] = val;
-    val.setType(get_type(inst));
+    varsMap[inst.attr("name").cast<std::string>()] = val;
+    val.setType(getType(inst));
   }
 
   mlir::Value loadvar(py::handle inst) {
-    auto it = vars_map.find(inst.attr("name").cast<std::string>());
-    assert(vars_map.end() != it);
+    auto it = varsMap.find(inst.attr("name").cast<std::string>());
+    assert(varsMap.end() != it);
     return it->second;
   }
 
   void delvar(py::handle inst) {
     auto var = loadvar(inst);
-    builder.create<plier::DelOp>(get_current_loc(), var);
+    builder.create<plier::DelOp>(getCurrentLoc(), var);
   }
 
   void retvar(py::handle inst) {
     auto var = loadvar(inst);
-    auto func_type = func.getType();
-    auto ret_type = func_type.getResult(0);
-    auto var_type = var.getType();
-    if (ret_type != var_type)
-      var = builder.create<plier::CastOp>(get_current_loc(), ret_type, var);
+    auto funcType = func.getType();
+    auto retType = funcType.getResult(0);
+    auto varType = var.getType();
+    if (retType != varType)
+      var = builder.create<plier::CastOp>(getCurrentLoc(), retType, var);
 
-    builder.create<mlir::ReturnOp>(get_current_loc(), var);
+    builder.create<mlir::ReturnOp>(getCurrentLoc(), var);
   }
 
   void branch(py::handle cond, py::handle tr, py::handle fl) {
     auto c = loadvar(cond);
-    auto tr_block = blocks_map.find(tr.cast<int>())->second;
-    auto fl_block = blocks_map.find(fl.cast<int>())->second;
-    auto cond_val = builder.create<plier::CastOp>(
-        get_current_loc(), mlir::IntegerType::get(&ctx, 1), c);
-    builder.create<mlir::CondBranchOp>(get_current_loc(), cond_val, tr_block,
-                                       fl_block);
+    auto trBlock = blocksMap.find(tr.cast<int>())->second;
+    auto flBlock = blocksMap.find(fl.cast<int>())->second;
+    auto condVal = builder.create<plier::CastOp>(
+        getCurrentLoc(), mlir::IntegerType::get(&ctx, 1), c);
+    builder.create<mlir::CondBranchOp>(getCurrentLoc(), condVal, trBlock,
+                                       flBlock);
   }
 
   void jump(py::handle target) {
-    auto block = blocks_map.find(target.cast<int>())->second;
-    builder.create<mlir::BranchOp>(get_current_loc(), mlir::None, block);
+    auto block = blocksMap.find(target.cast<int>())->second;
+    builder.create<mlir::BranchOp>(getCurrentLoc(), mlir::None, block);
   }
 
-  mlir::Value get_const(py::handle val) {
-    auto get_val = [&](mlir::Attribute attr) {
-      return builder.create<plier::ConstOp>(get_current_loc(), attr);
+  mlir::Value getConst(py::handle val) {
+    auto getVal = [&](mlir::Attribute attr) {
+      return builder.create<plier::ConstOp>(getCurrentLoc(), attr);
     };
     if (py::isinstance<py::int_>(val)) {
       auto type = mlir::IntegerType::get(builder.getContext(), 64,
                                          mlir::IntegerType::Signed);
       auto attr = builder.getIntegerAttr(type, val.cast<int64_t>());
-      return get_val(attr);
+      return getVal(attr);
     }
     if (py::isinstance<py::float_>(val))
-      return get_val(builder.getF64FloatAttr(val.cast<double>()));
+      return getVal(builder.getF64FloatAttr(val.cast<double>()));
 
     if (py::isinstance<py::none>(val))
-      return get_val(builder.getUnitAttr());
+      return getVal(builder.getUnitAttr());
 
     plier::report_error(llvm::Twine("get_const unhandled type \"") +
                         py::str(val.get_type()).cast<std::string>() + "\"");
   }
 
-  mlir::FunctionType get_func_type(py::handle fnargs, py::handle restype) {
-    auto ret = get_obj_type(restype());
+  mlir::FunctionType getFuncType(py::handle fnargs, py::handle restype) {
+    auto ret = getObjType(restype());
     llvm::SmallVector<mlir::Type> args;
-    for (auto arg : fnargs()) {
-      args.push_back(get_obj_type(arg));
-    }
+    for (auto arg : fnargs())
+      args.push_back(getObjType(arg));
+
     return mlir::FunctionType::get(&ctx, args, {ret});
   }
 
-  mlir::Location get_current_loc() {
+  mlir::Location getCurrentLoc() {
     return builder.getUnknownLoc(); // TODO
   }
 
-  void fixup_phis() {
-    auto build_arg_list = [&](mlir::Block *block, auto &outgoing_phi_nodes,
-                              auto &list) {
-      for (auto &o : outgoing_phi_nodes) {
-        if (o.dest_block == block) {
-          auto arg_index = o.arg_index;
-          if (list.size() <= arg_index) {
-            list.resize(arg_index + 1);
-          }
-          auto it = vars_map.find(o.var_name);
-          assert(vars_map.end() != it);
-          auto arg_type = block->getArgument(arg_index).getType();
+  void fixupPhis() {
+    auto buildArgList = [&](mlir::Block *block, auto &outgoingPhiNodes,
+                            auto &list) {
+      for (auto &o : outgoingPhiNodes) {
+        if (o.destBlock == block) {
+          auto argIndex = o.argIndex;
+          if (list.size() <= argIndex)
+            list.resize(argIndex + 1);
+
+          auto it = varsMap.find(o.varName);
+          assert(varsMap.end() != it);
+          auto argType = block->getArgument(argIndex).getType();
           auto val = builder.create<plier::CastOp>(builder.getUnknownLoc(),
-                                                   arg_type, it->second);
-          list[arg_index] = val;
+                                                   argType, it->second);
+          list[argIndex] = val;
         }
       }
     };
     for (auto &bb : func) {
-      auto it = block_infos.find(&bb);
-      if (block_infos.end() != it) {
+      auto it = blockInfos.find(&bb);
+      if (blockInfos.end() != it) {
         auto &info = it->second;
         auto term = bb.getTerminator();
         if (nullptr == term)
@@ -595,21 +588,21 @@ private:
         if (auto op = mlir::dyn_cast<mlir::BranchOp>(term)) {
           auto dest = op.getDest();
           mlir::SmallVector<mlir::Value> args;
-          build_arg_list(dest, info.outgoing_phi_nodes, args);
+          buildArgList(dest, info.outgoingPhiNodes, args);
           op.erase();
           builder.create<mlir::BranchOp>(builder.getUnknownLoc(), dest, args);
         } else if (auto op = mlir::dyn_cast<mlir::CondBranchOp>(term)) {
           auto trueDest = op.getTrueDest();
           auto falseDest = op.getFalseDest();
           auto cond = op.getCondition();
-          mlir::SmallVector<mlir::Value> true_args;
-          mlir::SmallVector<mlir::Value> false_args;
-          build_arg_list(trueDest, info.outgoing_phi_nodes, true_args);
-          build_arg_list(falseDest, info.outgoing_phi_nodes, false_args);
+          mlir::SmallVector<mlir::Value> trueArgs;
+          mlir::SmallVector<mlir::Value> falseArgs;
+          buildArgList(trueDest, info.outgoingPhiNodes, trueArgs);
+          buildArgList(falseDest, info.outgoingPhiNodes, falseArgs);
           op.erase();
           builder.create<mlir::CondBranchOp>(builder.getUnknownLoc(), cond,
-                                             trueDest, true_args, falseDest,
-                                             false_args);
+                                             trueDest, trueArgs, falseDest,
+                                             falseArgs);
         } else {
           plier::report_error(llvm::Twine("Unhandled terminator: ") +
                               term->getName().getStringRef());
@@ -648,17 +641,16 @@ plier::CompilerContext::Settings getSettings(py::handle settings,
   return ret;
 }
 
-py::bytes gen_ll_module(mlir::ModuleOp mod) {
+static py::bytes genLlModule(mlir::ModuleOp mod) {
   std::string err;
   llvm::raw_string_ostream errStream(err);
-  auto diag_handler = [&](mlir::Diagnostic &diag) {
-    if (diag.getSeverity() == mlir::DiagnosticSeverity::Error) {
+  auto diagHandler = [&](mlir::Diagnostic &diag) {
+    if (diag.getSeverity() == mlir::DiagnosticSeverity::Error)
       errStream << diag;
-    }
   };
   llvm::LLVMContext llCtx;
   std::unique_ptr<llvm::Module> llMod;
-  plier::scoped_diag_handler(*mod.getContext(), diag_handler, [&]() {
+  plier::scoped_diag_handler(*mod.getContext(), diagHandler, [&]() {
     mlir::registerLLVMDialectTranslation(*mod.getContext());
     llMod = mlir::translateModuleToLLVMIR(mod, llCtx);
     if (nullptr == llMod) {
@@ -669,15 +661,15 @@ py::bytes gen_ll_module(mlir::ModuleOp mod) {
     }
   });
   assert(nullptr != llMod);
-  return serialize_mod(*llMod);
+  return serializeMod(*llMod);
 }
 
 struct ModuleSettings {
   bool enableGpuPipeline = false;
 };
 
-void create_pipeline(plier::PipelineRegistry &registry,
-                     const ModuleSettings &settings) {
+static void createPipeline(plier::PipelineRegistry &registry,
+                           const ModuleSettings &settings) {
   registerBasePipeline(registry);
   registerLowerToLLVMPipeline(registry);
   registerPlierToScfPipeline(registry);
@@ -700,19 +692,17 @@ struct Module {
   plier::PipelineRegistry registry;
   mlir::ModuleOp module;
 
-  Module(const ModuleSettings &settings) {
-    create_pipeline(registry, settings);
-  }
+  Module(const ModuleSettings &settings) { createPipeline(registry, settings); }
 };
 
-void run_compiler(Module &mod, const py::object &compilation_context) {
+static void runCompiler(Module &mod, const py::object &compilationContext) {
   auto &context = mod.context;
   auto &module = mod.module;
   auto &registry = mod.registry;
 
   CallbackOstream printStream;
   auto settings =
-      getSettings(compilation_context["compiler_settings"], printStream);
+      getSettings(compilationContext["compiler_settings"], printStream);
   plier::CompilerContext compiler(context, settings, registry);
   compiler.run(module);
 }
@@ -763,16 +753,15 @@ py::capsule lower_function(const py::object &compilation_context,
   auto mod = static_cast<Module *>(py_mod);
   auto &context = mod->context;
   auto &module = mod->module;
-  auto func =
-      plier_lowerer(context).lower(compilation_context, module, func_ir);
+  auto func = PlierLowerer(context).lower(compilation_context, module, func_ir);
   return py::capsule(func.getOperation()); // no dtor, func owned by module
 }
 
 py::bytes compile_module(const py::object &compilation_context,
                          const py::capsule &py_mod) {
   auto mod = static_cast<Module *>(py_mod);
-  run_compiler(*mod, compilation_context);
-  return gen_ll_module(mod->module);
+  runCompiler(*mod, compilation_context);
+  return genLlModule(mod->module);
 }
 
 py::str module_str(const py::capsule &py_mod) {
