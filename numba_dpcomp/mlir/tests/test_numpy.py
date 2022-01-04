@@ -925,3 +925,23 @@ def test_eye2(N, M, k):
 
     jit_func = njit(py_func)
     assert_equal(py_func(N, M, k), jit_func(N, M, k))
+
+_matmul_inputs_vars = [
+    ([2,3], [[2,3],[4,5]]),
+    ([1,2,3], [[1,2,3],[4,5,6],[7,8,9]]),
+    ([[2,3],[4,5]], [2,3]),
+    ([[1,2,3],[4,5,6],[7,8,9]],[1,2,3]),
+    ([[2,3],[4,5]], [[2,3],[4,5]]),
+]
+
+@parametrize_function_variants("py_func", [
+    # 'lambda a, b: np.matmul(a, b)',
+    'lambda a, b: a @ b',
+    ])
+@pytest.mark.parametrize("a,b", _matmul_inputs_vars, ids=list(map(str, _matmul_inputs_vars)))
+@pytest.mark.parametrize("dtype", [np.float32,np.float64])
+def test_matmul(py_func, a, b, dtype):
+    a = np.array(a, dtype=dtype)
+    b = np.array(b, dtype=dtype)
+    jit_func = njit(py_func)
+    assert_equal(py_func(a, b), jit_func(a, b))

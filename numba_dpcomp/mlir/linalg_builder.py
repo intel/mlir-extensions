@@ -44,6 +44,8 @@ class Var:
 
     def __add__(self, o): return self._binop(self._context, self._ssa_val, o, '+')
     def __radd__(self, o): return self._binop(self._context, self._ssa_val, o, '+')
+    def __sub__(self, o): return self._binop(self._context, self._ssa_val, o, '-')
+    def __rsub__(self, o): return self._binop(self._context, self._ssa_val, o, 'r-')
     def __mul__(self, o): return self._binop(self._context, self._ssa_val, o, '*')
     def __rmul__(self, o): return self._binop(self._context, self._ssa_val, o, '*')
     def __truediv__(self, o): return self._binop(self._context, self._ssa_val, o, '/')
@@ -111,8 +113,8 @@ class Builder:
     def undef(self, dtype):
         return self._undef(self._context, dtype)
 
-    def subview(self, src, offset, size=None, strides=None):
-        return self._subview(self._context, src, offset, size, strides)
+    def subview(self, src, offset, size=None, strides=None, result_rank=None):
+        return self._subview(self._context, src, offset, size, strides, result_rank)
 
     def array_type(self, dims, dtype):
         return self._array_type(self._context, dims, dtype)

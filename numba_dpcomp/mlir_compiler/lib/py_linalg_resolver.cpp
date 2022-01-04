@@ -99,7 +99,7 @@ mlir::Value doSignCast(mlir::OpBuilder &builder, mlir::Location &loc,
   auto origType = val.getType();
   auto signlessType = makeSignlessType(origType);
   if (signlessType != origType) {
-    val = builder.create<plier::SignCastOp>(loc, signlessType, val);
+    val = builder.createOrFold<plier::SignCastOp>(loc, signlessType, val);
   }
   return val;
 }
@@ -108,7 +108,7 @@ mlir::Value doSignCast(mlir::OpBuilder &builder, mlir::Location &loc,
                        mlir::Value val, mlir::Type dstType) {
   auto origType = val.getType();
   if (dstType != origType) {
-    val = builder.create<plier::SignCastOp>(loc, dstType, val);
+    val = builder.createOrFold<plier::SignCastOp>(loc, dstType, val);
   }
   return val;
 }
@@ -244,7 +244,7 @@ llvm::Optional<py::object> makePyLiteral(mlir::Value val) {
 static mlir::Value doCast(mlir::OpBuilder &builder, mlir::Location loc,
                           mlir::Value val, mlir::Type type) {
   if (val.getType() != type)
-    return builder.create<plier::CastOp>(loc, type, val);
+    return builder.createOrFold<plier::CastOp>(loc, type, val);
 
   return val;
 }
@@ -1268,11 +1268,12 @@ py::object undefImpl(py::capsule context, py::handle dtype) {
 }
 
 py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
-                       py::handle sizes, py::handle strides) {
+                       py::handle sizes, py::handle strides, py::handle rank) {
   auto &ctx = getPyContext(context);
   auto &builder = ctx.builder;
   auto loc = ctx.loc;
   auto origSrcVal = ctx.context.unwrapVal(loc, builder, src);
+  auto origSrcType = origSrcVal.getType().cast<mlir::ShapedType>();
   auto srcVal = doSignCast(builder, loc, origSrcVal);
   auto srcType = srcVal.getType().cast<mlir::TensorType>();
   auto memrefType =
@@ -1281,7 +1282,13 @@ py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
       builder.create<mlir::bufferization::ToMemrefOp>(loc, memrefType, srcVal);
 
   auto indexType = builder.getIndexType();
-  auto indexCast = [&](mlir::Value val) {
+  auto indexCast = [&](mlir::Value val) -> mlir::OpFoldResult {
+    while (auto parent = val.getDefiningOp<plier::SignCastOp>())
+      val = parent.value();
+
+    if (auto constVal = mlir::getConstantIntValue(val))
+      return builder.getIndexAttr(*constVal);
+
     return doCast(builder, loc, val, indexType);
   };
 
@@ -1339,12 +1346,37 @@ py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
       return unpackValues(strides);
     }
   }();
+  auto viewMemrefType = [&]() -> mlir::MemRefType {
+    if (rank.is_none()) {
+      return mlir::memref::SubViewOp::inferResultType(memrefType, offsetVals,
+                                                      sizeVals, strideVals)
+          .cast<mlir::MemRefType>();
+    } else {
+      auto rankVal = rank.cast<unsigned>();
+      return mlir::memref::SubViewOp::inferRankReducedResultType(
+                 rankVal, memrefType, offsetVals, sizeVals, strideVals)
+          .cast<mlir::MemRefType>();
+    }
+  }();
   auto view = builder.createOrFold<mlir::memref::SubViewOp>(
-      loc, memref, offsetVals, sizeVals, strideVals);
-  view = builder.createOrFold<plier::ChangeLayoutOp>(loc, memrefType, view);
-  auto ret = builder.create<mlir::bufferization::ToTensorOp>(loc, view);
-  return ctx.context.createVar(
-      context, doSignCast(builder, loc, ret, origSrcVal.getType()));
+      loc, viewMemrefType, memref, offsetVals, sizeVals, strideVals);
+
+  auto getDynShape = [](int64_t r) {
+    return llvm::SmallVector<int64_t>(r, mlir::ShapedType::kDynamicSize);
+  };
+
+  auto flatViewType = mlir::MemRefType::get(
+      getDynShape(viewMemrefType.getRank()), viewMemrefType.getElementType());
+  view = builder.createOrFold<plier::ChangeLayoutOp>(loc, flatViewType, view);
+  auto ret =
+      builder.create<mlir::bufferization::ToTensorOp>(loc, view).getResult();
+  auto resType = ret.getType().cast<mlir::ShapedType>();
+  auto resSignlessType = resType.clone(getDynShape(resType.getRank()));
+  if (resSignlessType != resType)
+    ret = builder.create<mlir::tensor::CastOp>(loc, resSignlessType, ret);
+  auto resSignedType = resSignlessType.clone(origSrcType.getElementType());
+  return ctx.context.createVar(context,
+                               doSignCast(builder, loc, ret, resSignedType));
 }
 
 py::object arrayTypeImpl(py::capsule context, py::iterable dims,
@@ -1491,33 +1523,39 @@ py::object getitemImpl(py::capsule context, py::capsule ssaVal,
 }
 
 template <typename Op>
-mlir::Value binopFunc(mlir::Location loc, mlir::OpBuilder &builder,
-                      mlir::Value lhs, mlir::Value rhs) {
+static mlir::Value binopFunc(mlir::Location loc, mlir::OpBuilder &builder,
+                             mlir::Value lhs, mlir::Value rhs) {
   return builder.create<Op>(loc, lhs, rhs);
 }
 
-mlir::Value binopFuncIdiv(mlir::Location loc, mlir::OpBuilder &builder,
-                          mlir::Value lhs, mlir::Value rhs) {
-  auto lhs_var = doCast(builder, loc, lhs, builder.getF64Type());
-  auto rhs_var = doCast(builder, loc, rhs, builder.getF64Type());
-  return builder.create<mlir::arith::DivFOp>(loc, lhs_var, rhs_var);
+template <typename Op>
+static mlir::Value rbinopFunc(mlir::Location loc, mlir::OpBuilder &builder,
+                              mlir::Value lhs, mlir::Value rhs) {
+  return builder.create<Op>(loc, rhs, lhs);
 }
 
-py::object binopImpl(py::capsule context, py::capsule ssa_val, py::handle rhs,
+static mlir::Value binopFuncIdiv(mlir::Location loc, mlir::OpBuilder &builder,
+                                 mlir::Value lhs, mlir::Value rhs) {
+  auto lhsVar = doCast(builder, loc, lhs, builder.getF64Type());
+  auto rhsVar = doCast(builder, loc, rhs, builder.getF64Type());
+  return builder.create<mlir::arith::DivFOp>(loc, lhsVar, rhsVar);
+}
+
+py::object binopImpl(py::capsule context, py::capsule ssaVal, py::handle rhs,
                      py::str op) {
   auto &ctx = getPyContext(context);
   auto &builder = ctx.builder;
   auto loc = ctx.loc;
-  auto lhs = unwrapMlir<mlir::Value>(ssa_val);
+  auto lhs = unwrapMlir<mlir::Value>(ssaVal);
 
   auto type = lhs.getType();
   if (!type.isa<mlir::IntegerType, mlir::IndexType, mlir::FloatType,
                 mlir::ShapedType>())
     plier::report_error("Invalid binop arg type");
 
-  auto is_float = [&]() -> bool {
-    if (auto shaped_type = type.dyn_cast<mlir::ShapedType>())
-      return shaped_type.getElementType().isa<mlir::FloatType>();
+  auto isFloat = [&]() -> bool {
+    if (auto shapedType = type.dyn_cast<mlir::ShapedType>())
+      return shapedType.getElementType().isa<mlir::FloatType>();
 
     return type.isa<mlir::FloatType>();
   }();
@@ -1527,18 +1565,21 @@ py::object binopImpl(py::capsule context, py::capsule ssa_val, py::handle rhs,
                       mlir::Value lhs, mlir::Value rhs);
   const std::tuple<llvm::StringRef, binop_func_t, binop_func_t> funcs[] = {
       {"+", &binopFunc<mlir::arith::AddIOp>, &binopFunc<mlir::arith::AddFOp>},
+      {"-", &binopFunc<mlir::arith::SubIOp>, &binopFunc<mlir::arith::SubFOp>},
+      {"r-", &rbinopFunc<mlir::arith::SubIOp>,
+       &rbinopFunc<mlir::arith::SubFOp>},
       {"*", &binopFunc<mlir::arith::MulIOp>, &binopFunc<mlir::arith::MulFOp>},
       {"/", &binopFuncIdiv, &binopFunc<mlir::arith::DivFOp>},
   };
 
-  auto op_name = static_cast<std::string>(op);
+  auto opName = static_cast<std::string>(op);
   for (auto f : funcs) {
     auto name = std::get<0>(f);
-    auto func = (is_float ? std::get<2>(f) : std::get<1>(f));
-    if (name == op_name) {
-      auto rhs_var =
+    auto func = (isFloat ? std::get<2>(f) : std::get<1>(f));
+    if (name == opName) {
+      auto rhsVar =
           doCast(builder, loc, ctx.context.unwrapVal(loc, builder, rhs), type);
-      auto res = func(loc, builder, lhs, rhs_var);
+      auto res = func(loc, builder, lhs, rhsVar);
       return ctx.context.createVar(context, res);
     }
   }
