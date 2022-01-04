@@ -51,12 +51,12 @@ struct plier::MemorySSA::Node : public llvm::ilist_node<Node> {
   void setDominator(Node *node) { dominator = node; }
 
   Node *getDominator() const {
-    if (nullptr != dominator) {
+    if (nullptr != dominator)
       return dominator;
-    }
-    if (getType() == Type::Root) {
+
+    if (getType() == Type::Root)
       return nullptr;
-    }
+
     assert(getNumArguments() == 1);
     return getArgument(0);
   }
@@ -64,20 +64,19 @@ struct plier::MemorySSA::Node : public llvm::ilist_node<Node> {
   void setPostDominator(Node *node) { postDominator = node; }
 
   Node *getPostDominator() {
-    if (nullptr != postDominator) {
+    if (nullptr != postDominator)
       return postDominator;
-    }
-    if (getType() == Type::Term || getType() == Type::Use) {
+
+    if (getType() == Type::Term || getType() == Type::Use)
       return nullptr;
-    }
+
     auto isNotUse = [](Node *n) { return n->getType() != Type::Use; };
     // TODO: cache?
     assert(llvm::count_if(getUsers(), isNotUse) == 1);
-    for (auto user : getUsers()) {
-      if (isNotUse(user)) {
+    for (auto user : getUsers())
+      if (isNotUse(user))
         return user;
-      }
-    }
+
     llvm_unreachable("");
   }
 
@@ -88,13 +87,12 @@ struct plier::MemorySSA::Node : public llvm::ilist_node<Node> {
 
   void setArgument(unsigned i, Node *node) {
     assert(i < argCount);
-    if (nullptr != args[i].arg) {
+    if (nullptr != args[i].arg)
       args[i].arg->users.erase(args[i].getIterator());
-    }
+
     args[i].arg = node;
-    if (nullptr != node) {
+    if (nullptr != node)
       node->users.push_back(args[i]);
-    }
   }
 
 private:
@@ -107,9 +105,9 @@ private:
     type = t;
     for (auto it : llvm::enumerate(a)) {
       auto i = it.index();
-      if (i >= 1) {
+      if (i >= 1)
         new (&args[i]) Arg();
-      }
+
       auto arg = it.value();
       args[i].index = static_cast<unsigned>(i);
       if (nullptr != arg) {
@@ -120,12 +118,11 @@ private:
   }
   ~Node() {
     for (unsigned i = 0; i < argCount; ++i) {
-      if (args[i].arg != nullptr) {
+      if (args[i].arg != nullptr)
         args[i].arg->users.erase(args[i].getIterator());
-      }
-      if (i >= 1) {
+
+      if (i >= 1)
         args[i].~Arg();
-      }
     }
   }
   friend class MemorySSA;
@@ -188,24 +185,22 @@ void plier::MemorySSA::eraseNode(plier::MemorySSA::Node *node) {
     assert(node->getNumArguments() == 1);
     auto prev = node->getArgument(0);
     assert(nullptr != prev);
-    for (auto use : llvm::make_early_inc_range(node->getUses())) {
+    for (auto use : llvm::make_early_inc_range(node->getUses()))
       use.user->setArgument(use.index, prev);
-    }
 
     auto postDom = node->postDominator;
     if (nullptr != postDom) {
       assert(postDom->dominator == node);
       postDom->setDominator(prev);
-      if (nullptr == prev->postDominator) {
+      if (nullptr == prev->postDominator)
         prev->setPostDominator(postDom);
-      }
     }
   }
   assert(node->getUsers().empty());
   auto op = node->getOperation();
-  if (op != nullptr) {
+  if (op != nullptr)
     nodesMap.erase(op);
-  }
+
   nodes.erase(node->getIterator());
   node->~Node();
 }
@@ -338,21 +333,18 @@ bool checkPhisAlias(C &phiCache, plier::MemorySSA::Node *phi,
         auto type = node->getType();
         if (type == NodeType::Def) {
           assert(nullptr != node->getOperation());
-          if (mayAlias(node->getOperation(), useOp)) {
+          if (mayAlias(node->getOperation(), useOp))
             return false;
-          }
         } else if (type == NodeType::Phi) {
           if (!checkPhisAlias(phiCache, node, stop, useOp,
-                              std::forward<F>(mayAlias))) {
+                              std::forward<F>(mayAlias)))
             return false;
-          }
         } else {
           llvm_unreachable("");
         }
         node = node->getDominator();
-        if (nullptr == node) {
+        if (nullptr == node)
           break;
-        }
       }
     }
   }
@@ -365,22 +357,18 @@ plier::MemorySSA::Node *getDef(plier::MemorySSA::Node *def,
   while (true) {
     assert(nullptr != def);
     auto dom = def->getDominator();
-    if (nullptr == dom) {
+    if (nullptr == dom)
       return def;
-    }
 
     auto type = def->getType();
     if (type == plier::MemorySSA::Node::Type::Phi) {
       llvm::SmallDenseSet<plier::MemorySSA::Node *> phiCache;
-      if (!checkPhisAlias(phiCache, def, dom, useOp,
-                          std::forward<F>(mayAlias))) {
+      if (!checkPhisAlias(phiCache, def, dom, useOp, std::forward<F>(mayAlias)))
         return def;
-      }
     } else if (type == plier::MemorySSA::Node::Type::Def) {
       assert(nullptr != def->getOperation());
-      if (mayAlias(def->getOperation(), useOp)) {
+      if (mayAlias(def->getOperation(), useOp))
         return def;
-      }
     } else {
       llvm_unreachable("");
     }
@@ -420,12 +408,11 @@ auto hasMemEffect(mlir::Operation &op) {
 
   Result ret;
   if (auto effects = mlir::dyn_cast<mlir::MemoryEffectOpInterface>(op)) {
-    if (effects.hasEffect<mlir::MemoryEffects::Write>()) {
+    if (effects.hasEffect<mlir::MemoryEffects::Write>())
       ret.write = true;
-    }
-    if (effects.hasEffect<mlir::MemoryEffects::Read>()) {
+
+    if (effects.hasEffect<mlir::MemoryEffects::Read>())
       ret.read = true;
-    }
   } else if (op.hasTrait<mlir::OpTrait::HasRecursiveSideEffects>()) {
     ret.write = true;
   }
@@ -436,10 +423,9 @@ plier::MemorySSA::Node *memSSAProcessRegion(mlir::Region &region,
                                             plier::MemorySSA::Node *entryNode,
                                             plier::MemorySSA &memSSA) {
   assert(nullptr != entryNode);
-  if (!llvm::hasSingleElement(region)) {
-    // Only structured control flow is supported for now
+  // Only structured control flow is supported for now
+  if (!llvm::hasSingleElement(region))
     return nullptr;
-  }
 
   auto &block = region.front();
   plier::MemorySSA::Node *currentNode = entryNode;
@@ -450,9 +436,8 @@ plier::MemorySSA::Node *memSSAProcessRegion(mlir::Region &region,
                                                            currentNode};
         auto phi = memSSA.createPhi(&op, phiArgs);
         auto result = memSSAProcessRegion(loop.getLoopBody(), phi, memSSA);
-        if (nullptr == result) {
+        if (nullptr == result)
           return nullptr;
-        }
 
         if (result != phi) {
           phi->setArgument(0, result);
@@ -500,6 +485,7 @@ plier::MemorySSA::Node *memSSAProcessRegion(mlir::Region &region,
         for (auto i : llvm::seq(0u, numRegions)) {
           if (op.getRegion(i).empty())
             continue;
+
           successorsTemp.clear();
           branchReg.getSuccessorRegions(i, successorsTemp);
           for (auto &successor : successorsTemp) {
@@ -522,9 +508,9 @@ plier::MemorySSA::Node *memSSAProcessRegion(mlir::Region &region,
           decltype(predecessors) &_predecessors;
 
           plier::MemorySSA::Node *visit(llvm::Optional<unsigned> ii) {
-            if (!ii) {
+            if (!ii)
               return _currentNode;
-            }
+
             auto i = *ii;
             if (_regResults[i] != nullptr)
               return _regResults[i];
@@ -553,9 +539,9 @@ plier::MemorySSA::Node *memSSAProcessRegion(mlir::Region &region,
               phi->setDominator(_currentNode); // TODO: not very robust
               _currentNode->setPostDominator(phi);
               auto res = memSSAProcessRegion(_op->getRegion(i), phi, _memSSA);
-              if (res == nullptr) {
+              if (res == nullptr)
                 return nullptr;
-              }
+
               _regResults[i] = res;
               for (auto it : llvm::enumerate(pred)) {
                 auto ind = it.value();
@@ -598,9 +584,9 @@ plier::MemorySSA::Node *memSSAProcessRegion(mlir::Region &region,
         // Unsupported op, check if it has any mem effects
         if (op.walk([](mlir::Operation *nestedOp) {
                 auto res = hasMemEffect(*nestedOp);
-                if (res.read || res.write) {
+                if (res.read || res.write)
                   return mlir::WalkResult::interrupt();
-                }
+
                 return mlir::WalkResult::advance();
               }).wasInterrupted()) {
           return nullptr;
@@ -614,9 +600,8 @@ plier::MemorySSA::Node *memSSAProcessRegion(mlir::Region &region,
         currentNode->setPostDominator(newNode);
         currentNode = newNode;
       }
-      if (res.read) {
+      if (res.read)
         memSSA.createUse(&op, currentNode);
-      }
     }
   }
 
