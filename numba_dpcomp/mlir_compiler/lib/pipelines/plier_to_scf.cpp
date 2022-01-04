@@ -624,7 +624,7 @@ void populatePlierToScfPipeline(mlir::OpPassManager &pm) {
 } // namespace
 
 void registerPlierToScfPipeline(plier::PipelineRegistry &registry) {
-  registry.register_pipeline([](auto sink) {
+  registry.registerPipeline([](auto sink) {
     auto stage = getHighLoweringStage();
     sink(plierToScfPipelineName(), {stage.begin}, {stage.end}, {},
          &populatePlierToScfPipeline);

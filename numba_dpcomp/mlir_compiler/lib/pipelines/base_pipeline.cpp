@@ -28,7 +28,7 @@ void dummy_pass_func(mlir::OpPassManager &) {}
 
 void registerBasePipeline(plier::PipelineRegistry &registry) {
   for (std::size_t i = 0; i < llvm::array_lengthof(passes); ++i) {
-    registry.register_pipeline([i](auto sink) {
+    registry.registerPipeline([i](auto sink) {
       if (0 == i) {
         sink(passes[i], {}, {}, {}, dummy_pass_func);
       } else {

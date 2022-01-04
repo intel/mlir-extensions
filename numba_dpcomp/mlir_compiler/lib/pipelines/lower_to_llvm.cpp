@@ -1486,7 +1486,7 @@ void populate_lower_to_llvm_pipeline(mlir::OpPassManager &pm) {
 } // namespace
 
 void registerLowerToLLVMPipeline(plier::PipelineRegistry &registry) {
-  registry.register_pipeline([](auto sink) {
+  registry.registerPipeline([](auto sink) {
     auto stage = getLowerLoweringStage();
     sink(lowerToLLVMPipelineName(), {stage.begin}, {stage.end}, {},
          &populate_lower_to_llvm_pipeline);

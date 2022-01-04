@@ -235,7 +235,7 @@ void populate_parallel_to_tbb_pipeline(mlir::OpPassManager &pm) {
 } // namespace
 
 void registerParallelToTBBPipeline(plier::PipelineRegistry &registry) {
-  registry.register_pipeline([](auto sink) {
+  registry.registerPipeline([](auto sink) {
     auto stage = getLowerLoweringStage();
     auto llvm_pipeline = lowerToLLVMPipelineName();
     sink(parallelToTBBPipelineName(), {stage.begin}, {llvm_pipeline}, {},

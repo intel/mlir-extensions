@@ -161,7 +161,7 @@ struct PassManagerSchedule {
         stages[it.index()] = std::move(it.value().stage);
       }
     };
-    registry.populate_pass_manager(func);
+    registry.populatePassManager(func);
   }
 
   mlir::LogicalResult run(mlir::ModuleOp module) {

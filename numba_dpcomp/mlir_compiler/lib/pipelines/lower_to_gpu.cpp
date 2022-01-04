@@ -2487,7 +2487,7 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
 } // namespace
 
 void registerLowerToGPUPipeline(plier::PipelineRegistry &registry) {
-  registry.register_pipeline([](auto sink) {
+  registry.registerPipeline([](auto sink) {
     auto highStage = getHighLoweringStage();
     sink(lowerToGPUPipelineNameHigh(),
          {highStage.begin, plierToStdPipelineName(),

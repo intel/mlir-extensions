@@ -1285,7 +1285,7 @@ void populateTupleTypeConverter(mlir::MLIRContext & /*context*/,
 }
 
 void registerPlierToStdPipeline(plier::PipelineRegistry &registry) {
-  registry.register_pipeline([](auto sink) {
+  registry.registerPipeline([](auto sink) {
     auto stage = getHighLoweringStage();
     sink(plierToStdPipelineName(), {plierToScfPipelineName()}, {stage.end},
          {plierToScfPipelineName()}, &populate_plier_to_std_pipeline);

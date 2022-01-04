@@ -1949,7 +1949,7 @@ void populateArrayTypeConverter(mlir::MLIRContext & /*context*/,
 
 // ToDo: how does this sink stuff actually works?
 void registerPlierToLinalgPipeline(plier::PipelineRegistry &registry) {
-  registry.register_pipeline([](auto sink) {
+  registry.registerPipeline([](auto sink) {
     auto stage = getHighLoweringStage();
     sink(plierToLinalgGenPipelineName(), {plierToStdPipelineName()},
          {plierToLinalgOptPipelineName()}, {plierToScfPipelineName()},
