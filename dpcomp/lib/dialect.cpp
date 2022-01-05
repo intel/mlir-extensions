@@ -1011,6 +1011,24 @@ struct ChangeLayoutLinalgCopy
   }
 };
 
+struct ChangeLayoutLinalgFill
+    : public mlir::OpRewritePattern<mlir::linalg::FillOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::linalg::FillOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto output = op.output();
+    auto clOutput = output.getDefiningOp<plier::ChangeLayoutOp>();
+    if (!clOutput)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::linalg::FillOp>(op, op.value(),
+                                                      clOutput.source());
+    return mlir::success();
+  }
+};
+
 struct ChangeLayoutIf : public mlir::OpRewritePattern<mlir::scf::YieldOp> {
   using OpRewritePattern::OpRewritePattern;
 
@@ -1184,12 +1202,13 @@ struct ChangeLayoutSliceGetItem
 
 void ChangeLayoutOp::getCanonicalizationPatterns(
     ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context) {
-  results.insert<
-      ChangeLayoutIdentity, ChangeLayoutReduceRank, ChangeLayoutDim,
-      ChangeLayoutExtractMetadata, ChangeLayoutClone, PropagateCloneType,
-      ChangeLayoutCast, ChangeLayoutLoad, ChangeLayoutStore,
-      ChangeLayoutSubview, ChangeLayoutLinalgGeneric, ChangeLayoutLinalgCopy,
-      ChangeLayoutIf, ChangeLayout1DReshape, ChangeLayoutSliceGetItem>(context);
+  results
+      .insert<ChangeLayoutIdentity, ChangeLayoutReduceRank, ChangeLayoutDim,
+              ChangeLayoutExtractMetadata, ChangeLayoutClone,
+              PropagateCloneType, ChangeLayoutCast, ChangeLayoutLoad,
+              ChangeLayoutStore, ChangeLayoutSubview, ChangeLayoutLinalgGeneric,
+              ChangeLayoutLinalgCopy, ChangeLayoutLinalgFill, ChangeLayoutIf,
+              ChangeLayout1DReshape, ChangeLayoutSliceGetItem>(context);
 }
 
 mlir::OpFoldResult SignCastOp::fold(llvm::ArrayRef<mlir::Attribute> operands) {

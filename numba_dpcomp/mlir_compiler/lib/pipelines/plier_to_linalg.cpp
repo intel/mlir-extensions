@@ -1533,11 +1533,11 @@ struct LowerLinalgPass
                                mlir::OperationPass<mlir::ModuleOp>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::AffineDialect>();
     registry.insert<mlir::StandardOpsDialect>();
-    registry.insert<mlir::tensor::TensorDialect>();
     registry.insert<mlir::linalg::LinalgDialect>();
     registry.insert<mlir::scf::SCFDialect>();
-    registry.insert<mlir::AffineDialect>();
+    registry.insert<mlir::tensor::TensorDialect>();
   }
 
   void runOnOperation() override;
@@ -1547,7 +1547,8 @@ void LowerLinalgPass::runOnOperation() {
   mlir::OwningRewritePatternList patterns(&getContext());
 
   patterns.insert<mlir::linalg::LinalgLoweringPattern<mlir::linalg::GenericOp>,
-                  mlir::linalg::LinalgLoweringPattern<mlir::linalg::CopyOp>>(
+                  mlir::linalg::LinalgLoweringPattern<mlir::linalg::CopyOp>,
+                  mlir::linalg::LinalgLoweringPattern<mlir::linalg::FillOp>>(
       &getContext(), mlir::linalg::LinalgLoweringType::ParallelLoops);
 
   (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
