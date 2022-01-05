@@ -749,10 +749,9 @@ struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
 
     auto loc = op.getLoc();
     auto shapedType = type.cast<mlir::ShapedType>();
-    auto rank = static_cast<unsigned>(shapedType.getRank());
-    llvm::SmallVector<mlir::OpFoldResult> offsets(rank);
-    llvm::SmallVector<mlir::OpFoldResult> sizes(rank);
-    llvm::SmallVector<mlir::OpFoldResult> strides(rank);
+    llvm::SmallVector<mlir::OpFoldResult> offsets;
+    llvm::SmallVector<mlir::OpFoldResult> sizes;
+    llvm::SmallVector<mlir::OpFoldResult> strides;
     llvm::SmallVector<unsigned> dimsIndices;
     if (mlir::failed(computeIndices(rewriter, loc, value, index, offsets, sizes,
                                     strides, dimsIndices)))
@@ -907,50 +906,37 @@ struct SetitemOpLowering : public mlir::OpConversionPattern<plier::SetItemOp> {
       rerun_scf_pipeline(op);
     }
 
-    mlir::Value zero;
-    auto getZero = [&]() {
-      if (!zero)
-        zero = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
-
-      return zero;
-    };
-
-    auto getIndex = [&](mlir::Value idx, int64_t i) -> mlir::Value {
-      idx = index_cast(idx, loc, rewriter);
-      auto dim = rewriter.create<mlir::memref::DimOp>(loc, target, i);
-      auto isNeg = rewriter.create<mlir::arith::CmpIOp>(
-          loc, mlir::arith::CmpIPredicate::slt, idx, getZero());
-      auto negIndex = rewriter.create<mlir::arith::AddIOp>(loc, dim, idx);
-      return rewriter.create<mlir::SelectOp>(loc, isNeg, negIndex, idx);
-    };
-
-    llvm::SmallVector<mlir::Value> indices;
-    if (auto tupleType = index.getType().template dyn_cast<mlir::TupleType>()) {
-      indices.resize(tupleType.size());
-      for (auto it : llvm::enumerate(tupleType)) {
-        auto i = it.index();
-        auto getitemInd = rewriter.create<mlir::arith::ConstantIndexOp>(loc, i);
-        auto ind = rewriter
-                       .create<plier::GetItemOp>(loc, tupleType.getType(i),
-                                                 index, getitemInd)
-                       .getResult();
-        auto indType = tupleType.getType(i);
-        auto signlessIndType = plier::makeSignlessType(indType);
-        if (signlessIndType != indType)
-          ind = rewriter.create<plier::SignCastOp>(loc, signlessIndType, ind);
-
-        indices[i] = getIndex(ind, i);
-      }
-      rerun_scf_pipeline(op);
-    } else {
-      indices.push_back(getIndex(index, 0));
-    }
+    llvm::SmallVector<mlir::OpFoldResult> offsets;
+    llvm::SmallVector<mlir::OpFoldResult> sizes;
+    llvm::SmallVector<mlir::OpFoldResult> strides;
+    llvm::SmallVector<unsigned> dimsIndices;
+    if (mlir::failed(computeIndices(rewriter, loc, target, index, offsets,
+                                    sizes, strides, dimsIndices)))
+      return mlir::failure();
 
     if (elemType != signlessElemType)
       value = rewriter.create<plier::SignCastOp>(loc, signlessElemType, value);
 
+    auto toValues = [&](auto &vals) {
+      llvm::SmallVector<mlir::Value> ret(vals.size());
+      for (auto it : llvm::enumerate(vals)) {
+        auto i = it.index();
+        auto val = it.value();
+        if (auto attr = val.template dyn_cast<mlir::Attribute>()) {
+          ret[i] = rewriter.create<mlir::arith::ConstantIndexOp>(
+              loc, attr.template cast<mlir::IntegerAttr>()
+                       .getValue()
+                       .getSExtValue());
+        } else {
+          ret[i] = val.template get<mlir::Value>();
+        }
+      }
+
+      return ret;
+    };
+
     rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(op, value, target,
-                                                       indices);
+                                                       toValues(offsets));
     return mlir::success();
   }
 };
