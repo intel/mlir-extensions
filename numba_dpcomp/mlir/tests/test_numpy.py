@@ -58,7 +58,11 @@ _test_arrays_ids = [
 
 @parametrize_function_variants("py_func", [
     'lambda a: a.sum()',
+    'lambda a: a.min()',
+    'lambda a: a.max()',
     'lambda a: np.sum(a)',
+    'lambda a: np.amax(a)',
+    'lambda a: np.amin(a)',
     'lambda a: np.mean(a)',
     'lambda a: np.sqrt(a)',
     'lambda a: np.square(a)',
@@ -193,12 +197,16 @@ def test_array_len():
 @parametrize_function_variants("py_func", [
     'lambda a: np.sum(a, axis=0)',
     'lambda a: np.sum(a, axis=1)',
+    # 'lambda a: np.amax(a, axis=0)', # Not supported by numba
+    # 'lambda a: np.amax(a, axis=1)',
+    # 'lambda a: np.amin(a, axis=0)',
+    # 'lambda a: np.amin(a, axis=1)',
     ])
 @pytest.mark.parametrize("arr", [
     np.array([[1,2,3],[4,5,6]], dtype=np.int32),
     np.array([[1,2,3],[4,5,6]], dtype=np.float32),
     ])
-def test_sum_axis(py_func, arr):
+def test_reduce_axis(py_func, arr):
     jit_func = njit(py_func)
     assert_equal(py_func(arr), jit_func(arr))
 
