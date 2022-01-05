@@ -602,7 +602,7 @@ struct SliceGetitemPropagate
   mlir::LogicalResult
   matchAndRewrite(plier::SliceGetItemOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    if (!op.array().getType().isa<mlir::TensorType>())
+    if (!op.array().getType().isa<mlir::ShapedType>())
       return mlir::failure();
 
     auto index = mlir::getConstantIntValue(op.index());
@@ -628,9 +628,14 @@ struct SliceGetitemPropagate
       if (i == 0) {
         rewriter.replaceOp(op, getInd(0));
       } else if (i == 1) {
-        auto size =
-            rewriter.create<mlir::tensor::DimOp>(loc, op.array(), op.dim());
-        rewriter.replaceOp(op, size.getResult());
+        auto size = [&]() -> mlir::Value {
+          if (op.array().getType().isa<mlir::TensorType>())
+            return rewriter.create<mlir::tensor::DimOp>(loc, op.array(),
+                                                        op.dim());
+          return rewriter.create<mlir::memref::DimOp>(loc, op.array(),
+                                                      op.dim());
+        }();
+        rewriter.replaceOp(op, size);
       } else { // i == 2
         rewriter.replaceOp(op, getInd(1));
       }
@@ -718,10 +723,10 @@ static bool canTransformLayoutCast(mlir::MemRefType srcType,
     return false;
 
   auto rank = static_cast<unsigned>(srcStrides.size());
-  for (auto i : llvm::seq(0u, rank)) {
+  for (auto i : llvm::seq(0u, rank))
     if (!isStrideCompatible(srcStrides[i], dstStrides[i]))
       return false;
-  }
+
   return true;
 }
 
@@ -1158,17 +1163,33 @@ struct ChangeLayout1DReshape
   }
 };
 
+struct ChangeLayoutSliceGetItem
+    : public mlir::OpRewritePattern<plier::SliceGetItemOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::SliceGetItemOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto cl = op.array().getDefiningOp<plier::ChangeLayoutOp>();
+    if (!cl)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<plier::SliceGetItemOp>(
+        op, op.getType(), op.slice(), cl.source(), op.index(), op.dim());
+    return mlir::success();
+  }
+};
+
 } // namespace
 
 void ChangeLayoutOp::getCanonicalizationPatterns(
     ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context) {
-  results
-      .insert<ChangeLayoutIdentity, ChangeLayoutReduceRank, ChangeLayoutDim,
-              ChangeLayoutExtractMetadata, ChangeLayoutClone,
-              PropagateCloneType, ChangeLayoutCast, ChangeLayoutLoad,
-              ChangeLayoutStore, ChangeLayoutSubview, ChangeLayoutLinalgGeneric,
-              ChangeLayoutLinalgCopy, ChangeLayoutIf, ChangeLayout1DReshape>(
-          context);
+  results.insert<
+      ChangeLayoutIdentity, ChangeLayoutReduceRank, ChangeLayoutDim,
+      ChangeLayoutExtractMetadata, ChangeLayoutClone, PropagateCloneType,
+      ChangeLayoutCast, ChangeLayoutLoad, ChangeLayoutStore,
+      ChangeLayoutSubview, ChangeLayoutLinalgGeneric, ChangeLayoutLinalgCopy,
+      ChangeLayoutIf, ChangeLayout1DReshape, ChangeLayoutSliceGetItem>(context);
 }
 
 mlir::OpFoldResult SignCastOp::fold(llvm::ArrayRef<mlir::Attribute> operands) {
@@ -1283,6 +1304,32 @@ struct SignCastTensorFromElementsPropagate
   }
 };
 
+struct SignCastTensorToMemrefPropagate
+    : public mlir::OpRewritePattern<plier::SignCastOp> {
+  using mlir::OpRewritePattern<plier::SignCastOp>::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::SignCastOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto toMemref = op.value().getDefiningOp<mlir::bufferization::ToMemrefOp>();
+    if (!toMemref)
+      return mlir::failure();
+
+    auto tensor = toMemref.tensor();
+    auto tensorType = tensor.getType().cast<mlir::TensorType>();
+    auto dstType = op.getType().cast<mlir::MemRefType>();
+
+    auto newTensorType = tensorType.clone(dstType.getElementType());
+
+    auto loc = toMemref->getLoc();
+    auto newTensor =
+        rewriter.create<plier::SignCastOp>(loc, newTensorType, tensor);
+    rewriter.replaceOpWithNewOp<mlir::bufferization::ToMemrefOp>(op, dstType,
+                                                                 newTensor);
+    return mlir::success();
+  }
+};
+
 } // namespace
 
 void SignCastOp::getCanonicalizationPatterns(
@@ -1290,8 +1337,8 @@ void SignCastOp::getCanonicalizationPatterns(
   results
       .insert<SignCastDimPropagate<mlir::tensor::DimOp>,
               SignCastDimPropagate<mlir::memref::DimOp>, SignCastUndefPropagate,
-              SignCastTensorCastPropagate, SignCastTensorFromElementsPropagate>(
-          context);
+              SignCastTensorCastPropagate, SignCastTensorFromElementsPropagate,
+              SignCastTensorToMemrefPropagate>(context);
 }
 
 void ReduceRankOp::build(::mlir::OpBuilder &odsBuilder,

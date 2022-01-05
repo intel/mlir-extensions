@@ -390,6 +390,19 @@ def test_setitem2():
     arr = np.asarray([[1,2,3],[4,5,6]])
     assert_equal(py_func(arr, 1, 2), jit_func(arr, 1, 2))
 
+@pytest.mark.parametrize("d", [
+    np.array([5,6]),
+    7
+    ])
+def test_setitem_slice1(d):
+    def py_func(a, b, c, d):
+        a[b:c] = d
+        return a
+
+    jit_func = njit(py_func)
+    arr = np.asarray([1,2,3,4])
+    assert_equal(py_func(arr, 1, 3, d), jit_func(arr, 1, 3, d))
+
 def test_setitem_loop():
     def py_func(a):
         for i in range(len(a)):

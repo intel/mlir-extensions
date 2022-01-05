@@ -900,12 +900,6 @@ struct SetitemOpLowering : public mlir::OpConversionPattern<plier::SetItemOp> {
 
     auto value = adaptor.value();
     auto loc = op.getLoc();
-    if (value.getType() != elemType) {
-      // TODO
-      value = rewriter.createOrFold<plier::CastOp>(loc, elemType, value);
-      rerun_scf_pipeline(op);
-    }
-
     llvm::SmallVector<mlir::OpFoldResult> offsets;
     llvm::SmallVector<mlir::OpFoldResult> sizes;
     llvm::SmallVector<mlir::OpFoldResult> strides;
@@ -914,29 +908,72 @@ struct SetitemOpLowering : public mlir::OpConversionPattern<plier::SetItemOp> {
                                     sizes, strides, dimsIndices)))
       return mlir::failure();
 
-    if (elemType != signlessElemType)
-      value = rewriter.create<plier::SignCastOp>(loc, signlessElemType, value);
-
-    auto toValues = [&](auto &vals) {
-      llvm::SmallVector<mlir::Value> ret(vals.size());
-      for (auto it : llvm::enumerate(vals)) {
-        auto i = it.index();
-        auto val = it.value();
-        if (auto attr = val.template dyn_cast<mlir::Attribute>()) {
-          ret[i] = rewriter.create<mlir::arith::ConstantIndexOp>(
-              loc, attr.template cast<mlir::IntegerAttr>()
-                       .getValue()
-                       .getSExtValue());
-        } else {
-          ret[i] = val.template get<mlir::Value>();
-        }
+    auto castElem = [&](mlir::Value val) -> mlir::Value {
+      if (val.getType() != elemType) {
+        // TODO
+        val = rewriter.createOrFold<plier::CastOp>(loc, elemType, val);
+        rerun_scf_pipeline(op);
       }
-
-      return ret;
+      if (elemType != signlessElemType)
+        val = rewriter.create<plier::SignCastOp>(loc, signlessElemType, val);
+      return val;
     };
 
-    rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(op, value, target,
-                                                       toValues(offsets));
+    if (!dimsIndices.empty()) {
+      // Is slice
+      auto dst = makeSubview(rewriter, loc, target, offsets, sizes, strides,
+                             dimsIndices);
+
+      auto castView = [&](mlir::Value val) -> mlir::Value {
+        auto viewType = val.getType().cast<mlir::MemRefType>();
+        if (viewType.getElementType() != signlessElemType) {
+          auto signlessMemref = viewType.clone(signlessElemType);
+          val = rewriter.create<plier::SignCastOp>(loc, signlessMemref, val);
+        }
+        return val;
+      };
+
+      auto valType = value.getType();
+      if (auto tensType = valType.dyn_cast<mlir::TensorType>()) {
+        auto memrefType = mlir::MemRefType::get(tensType.getShape(),
+                                                tensType.getElementType());
+        auto src =
+            rewriter
+                .create<mlir::bufferization::ToMemrefOp>(loc, memrefType, value)
+                .getResult();
+        rewriter.replaceOpWithNewOp<mlir::linalg::CopyOp>(op, castView(src),
+                                                          dst);
+      } else if (valType.isa<mlir::MemRefType>()) {
+        rewriter.replaceOpWithNewOp<mlir::linalg::CopyOp>(op, castView(value),
+                                                          dst);
+      } else {
+        rewriter.replaceOpWithNewOp<mlir::linalg::FillOp>(op, castElem(value),
+                                                          dst);
+      }
+    } else {
+      // Is single element
+      auto toValues = [&](auto &vals) {
+        llvm::SmallVector<mlir::Value> ret(vals.size());
+        for (auto it : llvm::enumerate(vals)) {
+          auto i = it.index();
+          auto val = it.value();
+          if (auto attr = val.template dyn_cast<mlir::Attribute>()) {
+            ret[i] = rewriter.create<mlir::arith::ConstantIndexOp>(
+                loc, attr.template cast<mlir::IntegerAttr>()
+                         .getValue()
+                         .getSExtValue());
+          } else {
+            ret[i] = val.template get<mlir::Value>();
+          }
+        }
+
+        return ret;
+      };
+
+      rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(
+          op, castElem(value), target, toValues(offsets));
+    }
+
     return mlir::success();
   }
 };
