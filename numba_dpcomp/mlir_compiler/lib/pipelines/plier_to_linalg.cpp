@@ -1874,7 +1874,7 @@ struct FixDeallocPlacementPass
     : public plier::RewriteWrapperPass<FixDeallocPlacementPass, mlir::FuncOp,
                                        void, FixDeallocPlacement> {};
 
-void populatePlierToLinalgGenPipeline(mlir::OpPassManager &pm) {
+static void populatePlierToLinalgGenPipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<PlierToLinalgPass>());
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(std::make_unique<NumpyCallsLoweringPass>());
@@ -1884,7 +1884,7 @@ void populatePlierToLinalgGenPipeline(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::FuncOp>(mlir::createCSEPass());
 }
 
-void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
+static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<MakeTensorsSignlessPass>());
 
   pm.addPass(mlir::createCanonicalizerPass());
@@ -1949,7 +1949,7 @@ void populateArrayTypeConverter(mlir::MLIRContext & /*context*/,
 
 // ToDo: how does this sink stuff actually works?
 void registerPlierToLinalgPipeline(plier::PipelineRegistry &registry) {
-  registry.register_pipeline([](auto sink) {
+  registry.registerPipeline([](auto sink) {
     auto stage = getHighLoweringStage();
     sink(plierToLinalgGenPipelineName(), {plierToStdPipelineName()},
          {plierToLinalgOptPipelineName()}, {plierToScfPipelineName()},

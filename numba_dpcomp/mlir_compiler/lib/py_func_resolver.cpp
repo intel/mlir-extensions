@@ -29,10 +29,10 @@ struct PyFuncResolver::Context {
 };
 
 PyFuncResolver::PyFuncResolver() : context(std::make_unique<Context>()) {
-  auto registry_mod = py::module::import("numba_dpcomp.mlir.func_registry");
-  auto compiler_mod = py::module::import("numba_dpcomp.mlir.inner_compiler");
-  context->resolver = registry_mod.attr("find_active_func");
-  context->compiler = compiler_mod.attr("compile_func");
+  auto registryMod = py::module::import("numba_dpcomp.mlir.func_registry");
+  auto compilerMod = py::module::import("numba_dpcomp.mlir.inner_compiler");
+  context->resolver = registryMod.attr("find_active_func");
+  context->compiler = compilerMod.attr("compile_func");
   context->types = py::module::import("numba.core.types");
 }
 

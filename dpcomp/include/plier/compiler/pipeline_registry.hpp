@@ -33,14 +33,14 @@ public:
 
   using pipeline_funt_t = void (*)(mlir::OpPassManager &);
   using registry_entry_sink_t =
-      void(llvm::StringRef pipeline_name,
-           llvm::ArrayRef<llvm::StringRef> prev_pipelines,
-           llvm::ArrayRef<llvm::StringRef> next_pipelines,
+      void(llvm::StringRef pipelineName,
+           llvm::ArrayRef<llvm::StringRef> prevPipelines,
+           llvm::ArrayRef<llvm::StringRef> nextPipelines,
            llvm::ArrayRef<llvm::StringRef> jumps, pipeline_funt_t func);
   using registry_entry_t =
       std::function<void(llvm::function_ref<registry_entry_sink_t>)>;
 
-  void register_pipeline(registry_entry_t func);
+  void registerPipeline(registry_entry_t func);
 
   using fill_stage_sink_t = llvm::function_ref<void(
       llvm::StringRef name, llvm::ArrayRef<llvm::StringRef> jumps,
@@ -49,7 +49,7 @@ public:
       llvm::function_ref<void(fill_stage_sink_t)>;
   using populate_pass_manager_t =
       llvm::function_ref<void(populate_pass_manager_sink_t)>;
-  void populate_pass_manager(populate_pass_manager_t result_sink) const;
+  void populatePassManager(populate_pass_manager_t resultSink) const;
 
 private:
   std::vector<registry_entry_t> pipelines;

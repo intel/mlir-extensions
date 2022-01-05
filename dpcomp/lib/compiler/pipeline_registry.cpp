@@ -24,7 +24,7 @@
 #include <unordered_map>
 #include <utility>
 
-void plier::PipelineRegistry::register_pipeline(
+void plier::PipelineRegistry::registerPipeline(
     PipelineRegistry::registry_entry_t func) {
   assert(nullptr != func);
   pipelines.push_back(std::move(func));
@@ -32,38 +32,37 @@ void plier::PipelineRegistry::register_pipeline(
 
 namespace {
 template <typename T, typename IterF, typename VisitF>
-void topo_visit(T &elem, IterF &&iter_func, VisitF &&func) {
-  if (elem.visited) {
+static void topoVisit(T &elem, IterF &&iterFunc, VisitF &&func) {
+  if (elem.visited)
     return;
-  }
+
   elem.visited = true;
-  iter_func(elem, [&](T &next) {
-    topo_visit(next, std::forward<IterF>(iter_func),
-               std::forward<VisitF>(func));
+  iterFunc(elem, [&](T &next) {
+    topoVisit(next, std::forward<IterF>(iterFunc), std::forward<VisitF>(func));
   });
   func(elem);
 }
 } // namespace
 
-void plier::PipelineRegistry::populate_pass_manager(
-    populate_pass_manager_t result_sink) const {
+void plier::PipelineRegistry::populatePassManager(
+    populate_pass_manager_t resultSink) const {
   llvm::BumpPtrAllocator allocator;
-  llvm::UniqueStringSaver string_set(allocator);
+  llvm::UniqueStringSaver stringSet(allocator);
 
   using name_id = const void *;
-  auto get_id = [](llvm::StringRef name) -> name_id {
+  auto getId = [](llvm::StringRef name) -> name_id {
     assert(!name.empty());
     return name.data();
   };
   std::set<llvm::StringRef>
-      pipelines_ordered; // sorted set to make order consistent
+      pipelinesOrdered; // sorted set to make order consistent
 
-  auto get_pipeline = [&](llvm::StringRef name) -> llvm::StringRef {
-    if (name.empty()) {
-      report_error("Empty pipeline name");
-    }
-    auto str = string_set.save(name);
-    pipelines_ordered.insert(str);
+  auto getPipeline = [&](llvm::StringRef name) -> llvm::StringRef {
+    if (name.empty())
+      reportError("Empty pipeline name");
+
+    auto str = stringSet.save(name);
+    pipelinesOrdered.insert(str);
     return str;
   };
 
@@ -74,49 +73,48 @@ void plier::PipelineRegistry::populate_pass_manager(
     using Base::value_type;
     void push_back(llvm::StringRef id) {
       auto it = std::equal_range(begin(), end(), id);
-      if (it.first == it.second) {
+      if (it.first == it.second)
         insert(it.first, id);
-      }
     }
   };
 
   struct PipelineInfo {
     llvm::StringRef name;
-    PipelineSet prev_pipelines;
-    PipelineSet next_pipelines;
+    PipelineSet prevPipelines;
+    PipelineSet nextPipelines;
     pipeline_funt_t func = nullptr;
     PipelineInfo *next = nullptr;
     llvm::ArrayRef<llvm::StringRef> jumps;
     bool visited = false;
     bool iterating = false;
-    bool jump_target = false;
+    bool jumpTarget = false;
   };
 
-  std::unordered_map<name_id, PipelineInfo> pipelines_map;
+  std::unordered_map<name_id, PipelineInfo> pipelinesMap;
 
-  auto sink = [&](llvm::StringRef pipeline_name,
-                  llvm::ArrayRef<llvm::StringRef> prev_pipelines,
-                  llvm::ArrayRef<llvm::StringRef> next_pipelines,
+  auto sink = [&](llvm::StringRef pipelineName,
+                  llvm::ArrayRef<llvm::StringRef> prevPipelines,
+                  llvm::ArrayRef<llvm::StringRef> nextPipelines,
                   llvm::ArrayRef<llvm::StringRef> jumps, pipeline_funt_t func) {
-    assert(!pipeline_name.empty());
+    assert(!pipelineName.empty());
     assert(nullptr != func);
-    auto i = get_pipeline(pipeline_name);
-    auto it = pipelines_map.insert({get_id(i), {}});
-    if (!it.second) {
-      report_error("Duplicated pipeline name");
-    }
+    auto i = getPipeline(pipelineName);
+    auto it = pipelinesMap.insert({getId(i), {}});
+    if (!it.second)
+      reportError("Duplicated pipeline name");
+
     auto &info = it.first->second;
     info.name = i;
     info.func = func;
-    llvm::transform(prev_pipelines, std::back_inserter(info.prev_pipelines),
-                    get_pipeline);
-    llvm::transform(next_pipelines, std::back_inserter(info.next_pipelines),
-                    get_pipeline);
+    llvm::transform(prevPipelines, std::back_inserter(info.prevPipelines),
+                    getPipeline);
+    llvm::transform(nextPipelines, std::back_inserter(info.nextPipelines),
+                    getPipeline);
     if (!jumps.empty()) {
       auto data = allocator.Allocate<llvm::StringRef>(jumps.size());
       llvm::transform(jumps, data, [&](llvm::StringRef str) {
         assert(!str.empty());
-        return string_set.save(str);
+        return stringSet.save(str);
       });
       info.jumps = {data, jumps.size()};
     }
@@ -127,105 +125,102 @@ void plier::PipelineRegistry::populate_pass_manager(
     p(sink);
   }
 
-  auto get_pipeline_info = [&](llvm::StringRef name) -> PipelineInfo & {
-    auto id = get_id(name);
-    auto it = pipelines_map.find(id);
-    if (it == pipelines_map.end()) {
-      report_error(llvm::Twine("Pipeline not found") + name);
-    }
+  auto getPipelineInfo = [&](llvm::StringRef name) -> PipelineInfo & {
+    auto id = getId(name);
+    auto it = pipelinesMap.find(id);
+    if (it == pipelinesMap.end())
+      reportError(llvm::Twine("Pipeline not found") + name);
+
     return it->second;
   };
 
   // Make all deps bidirectional
-  for (auto name : pipelines_ordered) {
-    auto &info = get_pipeline_info(name);
-    for (auto prev : info.prev_pipelines) {
-      auto &prev_info = get_pipeline_info(prev);
-      prev_info.next_pipelines.push_back(name);
+  for (auto name : pipelinesOrdered) {
+    auto &info = getPipelineInfo(name);
+    for (auto prev : info.prevPipelines) {
+      auto &prevInfo = getPipelineInfo(prev);
+      prevInfo.nextPipelines.push_back(name);
     }
-    for (auto next : info.next_pipelines) {
-      auto &next_info = get_pipeline_info(next);
-      next_info.prev_pipelines.push_back(name);
+    for (auto next : info.nextPipelines) {
+      auto &nextInfo = getPipelineInfo(next);
+      nextInfo.prevPipelines.push_back(name);
     }
   }
 
   // toposort
-  PipelineInfo *first_pipeline = nullptr;
-  PipelineInfo *current_pipeline = nullptr;
-  for (auto name : pipelines_ordered) {
-    auto iter_func = [&](PipelineInfo &elem, auto func) {
+  PipelineInfo *firstPipeline = nullptr;
+  PipelineInfo *currentPipeline = nullptr;
+  for (auto name : pipelinesOrdered) {
+    auto iterFunc = [&](PipelineInfo &elem, auto func) {
       elem.iterating = true;
-      for (auto it : elem.prev_pipelines) {
-        auto &info = get_pipeline_info(it);
-        if (info.iterating) {
-          report_error(llvm::Twine("Pipeline depends on itself: ") + elem.name);
-        }
+      for (auto it : elem.prevPipelines) {
+        auto &info = getPipelineInfo(it);
+        if (info.iterating)
+          reportError(llvm::Twine("Pipeline depends on itself: ") + elem.name);
+
         func(info);
       }
       elem.iterating = false;
     };
-    auto visit_func = [&](PipelineInfo &elem) {
+    auto visitFunc = [&](PipelineInfo &elem) {
       assert(nullptr == elem.next);
       auto current = &elem;
-      if (nullptr == first_pipeline) {
-        first_pipeline = current;
+      if (nullptr == firstPipeline) {
+        firstPipeline = current;
       } else {
-        assert(nullptr != current_pipeline);
-        current_pipeline->next = current;
+        assert(nullptr != currentPipeline);
+        currentPipeline->next = current;
       }
-      current_pipeline = current;
+      currentPipeline = current;
     };
-    topo_visit(get_pipeline_info(name), iter_func, visit_func);
+    topoVisit(getPipelineInfo(name), iterFunc, visitFunc);
   }
 
-  assert(nullptr != first_pipeline);
+  assert(nullptr != firstPipeline);
 
-  auto iterate_pipelines = [&](auto func) {
-    for (auto current = first_pipeline; nullptr != current;
-         current = current->next) {
+  auto iteratePipelines = [&](auto func) {
+    for (auto current = firstPipeline; nullptr != current;
+         current = current->next)
       func(*current);
-    }
   };
 
-  iterate_pipelines([&](PipelineInfo &pipeline) {
+  iteratePipelines([&](PipelineInfo &pipeline) {
     if (!pipeline.jumps.empty()) {
-      for (auto jump : pipeline.jumps) {
-        get_pipeline_info(jump).jump_target = true;
-      }
-      if (nullptr != pipeline.next) {
-        pipeline.next->jump_target = true;
-      }
+      for (auto jump : pipeline.jumps)
+        getPipelineInfo(jump).jumpTarget = true;
+
+      if (nullptr != pipeline.next)
+        pipeline.next->jumpTarget = true;
     }
   });
 
   llvm::SmallVector<pipeline_funt_t, 32> funcs;
-  llvm::StringRef current_name = first_pipeline->name;
-  llvm::ArrayRef<llvm::StringRef> current_jumps;
-  result_sink([&](auto add_stage) {
-    auto flush_stages = [&]() {
+  llvm::StringRef currentName = firstPipeline->name;
+  llvm::ArrayRef<llvm::StringRef> currentJumps;
+  resultSink([&](auto addStage) {
+    auto flushStages = [&]() {
       if (!funcs.empty()) {
-        assert(!current_name.empty());
+        assert(!currentName.empty());
         auto flusher = [&](mlir::OpPassManager &pm) {
-          for (auto f : funcs) {
+          for (auto f : funcs)
             f(pm);
-          }
         };
-        add_stage(current_name, current_jumps, flusher);
+        addStage(currentName, currentJumps, flusher);
         funcs.clear();
-        current_name = {};
-        current_jumps = {};
+        currentName = {};
+        currentJumps = {};
       }
-      assert(current_name.empty());
-      assert(current_jumps.empty());
+      assert(currentName.empty());
+      assert(currentJumps.empty());
     };
-    iterate_pipelines([&](PipelineInfo &pipeline) {
-      if (pipeline.jump_target) {
-        flush_stages();
-        current_name = pipeline.name;
+    iteratePipelines([&](PipelineInfo &pipeline) {
+      if (pipeline.jumpTarget) {
+        flushStages();
+        currentName = pipeline.name;
       }
       funcs.emplace_back(pipeline.func);
-      current_jumps = pipeline.jumps;
+      currentJumps = pipeline.jumps;
     });
-    flush_stages();
+    flushStages();
   });
 }

@@ -22,15 +22,15 @@ class str;
 class dict;
 } // namespace pybind11
 
-void init_compiler(pybind11::dict settings);
+void initCompiler(pybind11::dict settings);
 
-pybind11::capsule create_module(pybind11::dict settings);
+pybind11::capsule createModule(pybind11::dict settings);
 
-pybind11::capsule lower_function(const pybind11::object &compilation_context,
-                                 const pybind11::capsule &py_mod,
-                                 const pybind11::object &func_ir);
+pybind11::capsule lowerFunction(const pybind11::object &compilationContext,
+                                const pybind11::capsule &pyMod,
+                                const pybind11::object &funcIr);
 
-pybind11::bytes compile_module(const pybind11::object &compilation_context,
-                               const pybind11::capsule &py_mod);
+pybind11::bytes compileModule(const pybind11::object &compilationContext,
+                              const pybind11::capsule &pyMod);
 
-pybind11::str module_str(const pybind11::capsule &py_mod);
+pybind11::str moduleStr(const pybind11::capsule &pyMod);

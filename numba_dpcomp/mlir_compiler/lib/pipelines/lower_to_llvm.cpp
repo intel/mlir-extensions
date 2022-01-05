@@ -65,7 +65,7 @@ mlir::LowerToLLVMOptions getLLVMOptions(mlir::MLIRContext &context) {
     std::string err_str;
     auto target = llvm::TargetRegistry::lookupTarget(triple, err_str);
     if (nullptr == target) {
-      plier::report_error(llvm::Twine("Unable to get target: ") + err_str);
+      plier::reportError(llvm::Twine("Unable to get target: ") + err_str);
     }
     llvm::TargetOptions target_opts;
     std::unique_ptr<llvm::TargetMachine> machine(target->createTargetMachine(
@@ -1469,7 +1469,7 @@ struct LLVMLoweringPass
 private:
 };
 
-void populate_lower_to_llvm_pipeline(mlir::OpPassManager &pm) {
+static void populateLowerToLlvmPipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<LowerParallelToCFGPass>());
   pm.addPass(mlir::createLowerToCFGPass());
   pm.addPass(mlir::createCanonicalizerPass());
@@ -1486,10 +1486,10 @@ void populate_lower_to_llvm_pipeline(mlir::OpPassManager &pm) {
 } // namespace
 
 void registerLowerToLLVMPipeline(plier::PipelineRegistry &registry) {
-  registry.register_pipeline([](auto sink) {
+  registry.registerPipeline([](auto sink) {
     auto stage = getLowerLoweringStage();
     sink(lowerToLLVMPipelineName(), {stage.begin}, {stage.end}, {},
-         &populate_lower_to_llvm_pipeline);
+         &populateLowerToLlvmPipeline);
   });
 }
 

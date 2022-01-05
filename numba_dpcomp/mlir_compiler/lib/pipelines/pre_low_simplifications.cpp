@@ -189,12 +189,12 @@ void populateRemoveSignPipeline(mlir::OpPassManager &pm) {
 } // namespace
 
 void registerPreLowSimpleficationsPipeline(plier::PipelineRegistry &registry) {
-  registry.register_pipeline([](auto sink) {
+  registry.registerPipeline([](auto sink) {
     auto stage = getHighLoweringStage();
     sink(untuplePipelineName(), {stage.begin}, {stage.end}, {},
          &populateUntuplePipeline);
   });
-  registry.register_pipeline([](auto sink) {
+  registry.registerPipeline([](auto sink) {
     auto stage = getHighLoweringStage();
     sink(removeSignPipelineName(), {untuplePipelineName(), stage.begin},
          {stage.end}, {}, &populateRemoveSignPipeline);

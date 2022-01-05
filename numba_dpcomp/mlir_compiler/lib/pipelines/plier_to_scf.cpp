@@ -616,7 +616,7 @@ void PlierToScfPass::runOnOperation() {
   });
 }
 
-void populatePlierToScfPipeline(mlir::OpPassManager &pm) {
+static void populatePlierToScfPipeline(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(std::make_unique<PlierToScfPass>());
   pm.addPass(mlir::createCanonicalizerPass());
@@ -624,7 +624,7 @@ void populatePlierToScfPipeline(mlir::OpPassManager &pm) {
 } // namespace
 
 void registerPlierToScfPipeline(plier::PipelineRegistry &registry) {
-  registry.register_pipeline([](auto sink) {
+  registry.registerPipeline([](auto sink) {
     auto stage = getHighLoweringStage();
     sink(plierToScfPipelineName(), {stage.begin}, {stage.end}, {},
          &populatePlierToScfPipeline);
