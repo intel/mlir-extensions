@@ -559,6 +559,95 @@ static bool isValidGetitemIndex(mlir::Type type) {
   return type.isa<mlir::IntegerType, mlir::IndexType, plier::LiteralType>();
 }
 
+static mlir::LogicalResult
+computeIndices(mlir::OpBuilder &builder, mlir::Location loc, mlir::Value value,
+               mlir::Value index,
+               llvm::SmallVectorImpl<mlir::OpFoldResult> &offsets,
+               llvm::SmallVectorImpl<mlir::OpFoldResult> &sizes,
+               llvm::SmallVectorImpl<mlir::OpFoldResult> &strides,
+               llvm::SmallVectorImpl<unsigned> &dimsIndices) {
+  auto shapedType = value.getType().cast<mlir::ShapedType>();
+  auto indexType = builder.getIndexType();
+  auto getPos =
+      [&](mlir::Value indexVal,
+          unsigned dim) -> std::tuple<mlir::OpFoldResult, mlir::OpFoldResult,
+                                      mlir::OpFoldResult, bool> {
+    auto valType = indexVal.getType();
+    if (auto sliceType = valType.dyn_cast<plier::SliceType>()) {
+      auto getItemOrConst = [&](unsigned i) -> mlir::Value {
+        assert(i < 3);
+        auto createInd = [&](int64_t i) {
+          return builder.create<mlir::arith::ConstantIndexOp>(loc, i);
+        };
+        return builder.create<plier::SliceGetItemOp>(loc, indexType, indexVal,
+                                                     value, createInd(i), dim);
+      };
+      auto offset = getItemOrConst(0);
+      auto end = getItemOrConst(1);
+      auto stride = getItemOrConst(2);
+      auto size =
+          builder.create<mlir::arith::SubIOp>(loc, end, offset).getResult();
+      return {offset, size, stride, true};
+    } else if (auto literal = valType.dyn_cast<plier::LiteralType>()) {
+      auto offset = literal.getValue();
+      return {offset, builder.getIndexAttr(1), builder.getIndexAttr(1), false};
+    } else {
+      auto offset = index_cast(indexVal, loc, builder);
+      return {offset, builder.getIndexAttr(1), builder.getIndexAttr(1), false};
+    }
+  };
+
+  auto makeFullSlice =
+      [&](unsigned dim) -> std::tuple<mlir::OpFoldResult, mlir::OpFoldResult,
+                                      mlir::OpFoldResult> {
+    auto begin = builder.getIndexAttr(0);
+    auto end = builder.createOrFold<mlir::tensor::DimOp>(loc, value, dim);
+    auto step = builder.getIndexAttr(1);
+    return {begin, end, step};
+  };
+
+  auto rank = static_cast<unsigned>(shapedType.getRank());
+  offsets.resize(rank);
+  sizes.resize(rank);
+  strides.resize(rank);
+
+  if (auto tupleType = index.getType().dyn_cast<mlir::TupleType>()) {
+    auto count = static_cast<unsigned>(tupleType.size());
+    if (count > rank)
+      return mlir::failure();
+
+    for (auto it : llvm::enumerate(tupleType)) {
+      auto i = it.index();
+      auto getitemInd =
+          builder.create<mlir::arith::ConstantIndexOp>(loc, it.index());
+      auto ind =
+          builder.create<plier::GetItemOp>(loc, it.value(), index, getitemInd);
+      bool isSlice = false;
+      std::tie(offsets[i], sizes[i], strides[i], isSlice) =
+          getPos(ind.getResult(), static_cast<unsigned>(i));
+      if (isSlice)
+        dimsIndices.emplace_back(i);
+    }
+
+    for (auto i : llvm::seq(count, rank)) {
+      std::tie(offsets[i], sizes[i], strides[i]) = makeFullSlice(i);
+      dimsIndices.emplace_back(i);
+    }
+  } else {
+    bool isSlice = false;
+    std::tie(offsets[0], sizes[0], strides[0], isSlice) = getPos(index, 0);
+    if (isSlice)
+      dimsIndices.emplace_back(0);
+
+    for (auto i : llvm::seq(1u, rank)) {
+      std::tie(offsets[i], sizes[i], strides[i]) = makeFullSlice(i);
+      dimsIndices.emplace_back(i);
+    }
+  }
+
+  return mlir::success();
+}
+
 static mlir::Value makeSubview(mlir::OpBuilder &builder, mlir::Location loc,
                                mlir::Value src,
                                llvm::ArrayRef<mlir::OpFoldResult> offsets,
@@ -618,86 +707,15 @@ struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
       return mlir::failure();
 
     auto loc = op.getLoc();
-    auto indexType = rewriter.getIndexType();
-    auto getPos =
-        [&](mlir::Value indexVal,
-            unsigned dim) -> std::tuple<mlir::OpFoldResult, mlir::OpFoldResult,
-                                        mlir::OpFoldResult, bool> {
-      auto valType = indexVal.getType();
-      if (auto sliceType = valType.dyn_cast<plier::SliceType>()) {
-        auto getItemOrConst = [&](unsigned i) -> mlir::Value {
-          assert(i < 3);
-          auto createInd = [&](int64_t i) {
-            return rewriter.create<mlir::arith::ConstantIndexOp>(loc, i);
-          };
-          return rewriter.create<plier::SliceGetItemOp>(
-              loc, indexType, indexVal, value, createInd(i), dim);
-        };
-        auto offset = getItemOrConst(0);
-        auto end = getItemOrConst(1);
-        auto stride = getItemOrConst(2);
-        auto size =
-            rewriter.create<mlir::arith::SubIOp>(loc, end, offset).getResult();
-        return {offset, size, stride, true};
-      } else if (auto literal = valType.dyn_cast<plier::LiteralType>()) {
-        auto offset = literal.getValue();
-        return {offset, rewriter.getIndexAttr(1), rewriter.getIndexAttr(1),
-                false};
-      } else {
-        auto offset = index_cast(indexVal, loc, rewriter);
-        return {offset, rewriter.getIndexAttr(1), rewriter.getIndexAttr(1),
-                false};
-      }
-    };
-
-    auto makeFullSlice =
-        [&](unsigned dim) -> std::tuple<mlir::OpFoldResult, mlir::OpFoldResult,
-                                        mlir::OpFoldResult> {
-      auto begin = rewriter.getIndexAttr(0);
-      auto end = rewriter.createOrFold<mlir::tensor::DimOp>(loc, value, dim);
-      auto step = rewriter.getIndexAttr(1);
-      return {begin, end, step};
-    };
-
     auto shapedType = type.cast<mlir::ShapedType>();
     auto rank = static_cast<unsigned>(shapedType.getRank());
     llvm::SmallVector<mlir::OpFoldResult> offsets(rank);
     llvm::SmallVector<mlir::OpFoldResult> sizes(rank);
     llvm::SmallVector<mlir::OpFoldResult> strides(rank);
     llvm::SmallVector<unsigned> dimsIndices;
-    if (auto tupleType = index.getType().dyn_cast<mlir::TupleType>()) {
-      auto count = static_cast<unsigned>(tupleType.size());
-      if (count > rank)
-        return mlir::failure();
-
-      for (auto it : llvm::enumerate(tupleType)) {
-        auto i = it.index();
-        auto getitemInd =
-            rewriter.create<mlir::arith::ConstantIndexOp>(loc, it.index());
-        auto ind = rewriter.create<plier::GetItemOp>(loc, it.value(), index,
-                                                     getitemInd);
-        bool isSlice = false;
-        std::tie(offsets[i], sizes[i], strides[i], isSlice) =
-            getPos(ind.getResult(), static_cast<unsigned>(i));
-        if (isSlice)
-          dimsIndices.emplace_back(i);
-      }
-
-      for (auto i : llvm::seq(count, rank)) {
-        std::tie(offsets[i], sizes[i], strides[i]) = makeFullSlice(i);
-        dimsIndices.emplace_back(i);
-      }
-    } else {
-      bool isSlice = false;
-      std::tie(offsets[0], sizes[0], strides[0], isSlice) = getPos(index, 0);
-      if (isSlice)
-        dimsIndices.emplace_back(0);
-
-      for (auto i : llvm::seq(1u, rank)) {
-        std::tie(offsets[i], sizes[i], strides[i]) = makeFullSlice(i);
-        dimsIndices.emplace_back(i);
-      }
-    }
+    if (mlir::failed(computeIndices(rewriter, loc, value, index, offsets, sizes,
+                                    strides, dimsIndices)))
+      return mlir::failure();
 
     mlir::Value res;
     auto elemType = shapedType.getElementType();
@@ -719,6 +737,7 @@ struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
     }
 
     if (!dimsIndices.empty()) {
+      // Is slice
       res = makeSubview(rewriter, loc, value, offsets, sizes, strides,
                         dimsIndices);
 
@@ -738,6 +757,7 @@ struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
       if (resultType != resultTypeSignless)
         res = rewriter.create<plier::SignCastOp>(loc, resultType, res);
     } else {
+      // Is single element
       mlir::Value zero;
       auto toValues = [&](auto vals) {
         auto getZero = [&]() {
