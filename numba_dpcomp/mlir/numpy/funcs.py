@@ -52,10 +52,7 @@ def linalg_index_impl(builder, dim):
     if isinstance(dim, int):
         return builder.linalg_index(dim)
 
-
-@register_func('array.sum')
-@register_func('numpy.sum', numpy.sum)
-def sum_impl(builder, arg, axis=None):
+def _array_reduce(builder, arg, axis, body, get_init_value):
     if axis is None:
         shape = arg.shape
         num_dims = len(shape)
@@ -64,11 +61,8 @@ def sum_impl(builder, arg, axis=None):
         expr1 = f'({dims}) -> ({dims})'
         expr2 = f'({dims}) -> (0)'
         maps = [expr1,expr2]
-        init = builder.from_elements(0, promote_int(arg.dtype, builder))
-
-        def body(a, b):
-            return a + b
-
+        res_type = promote_int(arg.dtype, builder)
+        init = builder.from_elements(get_init_value(builder, res_type), res_type)
         res = builder.linalg_generic(arg, init, iterators, maps, body)
         return builder.extract(res, 0)
     elif isinstance(axis, int):
@@ -81,18 +75,55 @@ def sum_impl(builder, arg, axis=None):
         expr2 = f'({dims1}) -> ({dims2})'
         maps = [expr1,expr2]
         res_shape = tuple(shape[i] for i in range(len(shape)) if i != axis)
-
-        orig_type = arg.dtype
-        if is_int(orig_type, builder):
-            res_type = builder.int64
-        else:
-            res_type = orig_type
-        init = builder.init_tensor(res_shape, res_type, 0)
-
-        def body(a, b):
-            return a + b
-
+        res_type = promote_int(arg.dtype, builder)
+        init = builder.init_tensor(res_shape, res_type, get_init_value(builder, res_type))
         return builder.linalg_generic(arg, init, iterators, maps, body)
+
+@register_func('array.sum')
+@register_func('numpy.sum', numpy.sum)
+def sum_impl(builder, arg, axis=None):
+    return _array_reduce(builder, arg, axis, lambda a, b: a + b, lambda b, t: 0)
+
+
+def _get_numpy_type(builder, dtype):
+    types = [
+        (builder.int8,  numpy.int8),
+        (builder.int16, numpy.int16),
+        (builder.int32, numpy.int32),
+        (builder.int64, numpy.int64),
+        (builder.uint8,  numpy.uint8),
+        (builder.uint16, numpy.uint16),
+        (builder.uint32, numpy.uint32),
+        (builder.uint64, numpy.uint64),
+        (builder.float32, numpy.float32),
+        (builder.float64, numpy.float64),
+    ]
+    for t, nt in types:
+        if t == dtype:
+            return nt
+    raise ValueError(f'Cannot convert type to numpy: {str(dtype)}')
+
+
+def _get_max_init_value(builder, dtype):
+    if (dtype == builder.float32) or (dtype == builder.float64):
+        return -math.inf
+    return numpy.iinfo(_get_numpy_type(builder, dtype)).min
+
+@register_func('array.max')
+@register_func('numpy.amax', numpy.amax)
+def min_impl(builder, arg, axis=None):
+    return _array_reduce(builder, arg, axis, lambda a, b: a if a > b else b, _get_max_init_value)
+
+
+def _get_min_init_value(builder, dtype):
+    if (dtype == builder.float32) or (dtype == builder.float64):
+        return math.inf
+    return numpy.iinfo(_get_numpy_type(builder, dtype)).max
+
+@register_func('array.min')
+@register_func('numpy.amin', numpy.amin)
+def min_impl(builder, arg, axis=None):
+    return _array_reduce(builder, arg, axis, lambda a, b: a if a < b else b, _get_min_init_value)
 
 
 @register_func('numpy.mean', numpy.mean)
