@@ -196,6 +196,10 @@ def _init_impl(builder, shape, dtype, init=None):
 def empty_impl(builder, shape, dtype=None):
     return _init_impl(builder, shape, dtype)
 
+@register_func('numpy.empty_like', numpy.empty_like)
+def empty_like_impl(builder, arr):
+    return _init_impl(builder, arr.shape, arr.dtype)
+
 @register_func('numpy.zeros', numpy.zeros)
 def zeros_impl(builder, shape, dtype=None):
     return _init_impl(builder, shape, dtype, 0)
