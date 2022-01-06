@@ -196,13 +196,25 @@ def _init_impl(builder, shape, dtype, init=None):
 def empty_impl(builder, shape, dtype=None):
     return _init_impl(builder, shape, dtype)
 
+@register_func('numpy.empty_like', numpy.empty_like)
+def empty_like_impl(builder, arr):
+    return _init_impl(builder, arr.shape, arr.dtype)
+
 @register_func('numpy.zeros', numpy.zeros)
 def zeros_impl(builder, shape, dtype=None):
     return _init_impl(builder, shape, dtype, 0)
 
+@register_func('numpy.zeros_like', numpy.zeros_like)
+def zeros_like_impl(builder, arr):
+    return _init_impl(builder, arr.shape, arr.dtype, 0)
+
 @register_func('numpy.ones', numpy.ones)
 def ones_impl(builder, shape, dtype=None):
     return _init_impl(builder, shape, dtype, 1)
+
+@register_func('numpy.ones_like', numpy.ones_like)
+def ones_like_impl(builder, arr):
+    return _init_impl(builder, arr.shape, arr.dtype, 1)
 
 @register_func('numpy.eye', numpy.eye)
 def eye_impl(builder, N, M=None, k=0, dtype=None):
