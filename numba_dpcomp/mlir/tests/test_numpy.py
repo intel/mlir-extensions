@@ -617,6 +617,17 @@ def test_init4(func):
     jit_func = njit(py_func)
     assert_equal(py_func((2, 1)), jit_func((2, 1)))
 
+@pytest.mark.parametrize("shape", [2,(3,4),(5,6,7)])
+@pytest.mark.parametrize("dtype", ['int32','int64','float32','float64'])
+@pytest.mark.parametrize("func", [np.zeros_like, np.ones_like], ids=['zeros_like','ones_like'])
+def test_init_like(shape, dtype, func):
+    def py_func(d):
+        return func(d)
+
+    a = np.empty(shape=shape, dtype=dtype)
+    jit_func = njit(py_func)
+    assert_equal(py_func(a), jit_func(a))
+
 def test_parallel():
     def py_func(a, b):
         return np.add(a, b)
