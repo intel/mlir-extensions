@@ -287,7 +287,7 @@ def matmul_impl(builder, a, b):
         tmp_a = builder.reshape(a, (1, y))
         tmp = builder.insert(tmp_a, tmp, (x - 1, 0), dst_shape, (1, 1))
         a = tmp
-    elif dim2 == 1:
+    if dim2 == 1:
         x = shape2[0]
         y = shape1[0]
         dst_shape = (x, y)
@@ -298,7 +298,9 @@ def matmul_impl(builder, a, b):
 
     res = _matmul2d(builder, a, b, a.shape, b.shape)
 
-    if dim1 == 1:
+    if dim1 == 1 and dim2 == 1:
+        res = builder.extract(res, (shape2[0] - 1, 0))
+    elif dim1 == 1:
         res = builder.subview(res, (shape2[0] - 1, 0), (1, shape1[0]), result_rank=1)
     elif dim2 == 1:
         res = builder.subview(res, (0, 0), (shape2[0], 1), result_rank=1)

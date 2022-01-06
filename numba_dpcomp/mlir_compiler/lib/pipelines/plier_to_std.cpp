@@ -1136,10 +1136,10 @@ struct PlierToStdPass
                                mlir::OperationPass<mlir::ModuleOp>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<plier::PlierDialect>();
     registry.insert<mlir::StandardOpsDialect>();
-    registry.insert<mlir::scf::SCFDialect>();
     registry.insert<mlir::math::MathDialect>();
+    registry.insert<mlir::scf::SCFDialect>();
+    registry.insert<plier::PlierDialect>();
   }
 
   void runOnOperation() override;
@@ -1180,8 +1180,10 @@ void PlierToStdPass::runOnOperation() {
                           plier::LiteralType>();
   };
 
-  target.addDynamicallyLegalOp<plier::BinOp>(
-      [&](plier::BinOp op) { return !isNum(op.getType()); });
+  target.addDynamicallyLegalOp<plier::BinOp>([&](plier::BinOp op) {
+    return !isNum(op.lhs().getType()) || !isNum(op.rhs().getType()) ||
+           !isNum(op.getType());
+  });
   target.addDynamicallyLegalOp<plier::UnaryOp>([&](plier::UnaryOp op) {
     return !isNum(op.value().getType()) && !isNum(op.getType());
   });
