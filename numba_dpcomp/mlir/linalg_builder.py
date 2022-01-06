@@ -50,6 +50,13 @@ class Var:
     def __rmul__(self, o): return self._binop(self._context, self._ssa_val, o, '*')
     def __truediv__(self, o): return self._binop(self._context, self._ssa_val, o, '/')
 
+    def __lt__(self, o): return self._binop(self._context, self._ssa_val, o, 'lt')
+    def __le__(self, o): return self._binop(self._context, self._ssa_val, o, 'le')
+    def __gt__(self, o): return self._binop(self._context, self._ssa_val, o, 'gt')
+    def __ge__(self, o): return self._binop(self._context, self._ssa_val, o, 'ge')
+    def __eq__(self, o): return self._binop(self._context, self._ssa_val, o, 'eq')
+    def __ne__(self, o): return self._binop(self._context, self._ssa_val, o, 'ne')
+
     def __str__(self): return self._str(self._context, self._ssa_val)
     def __repr__(self): return self._str(self._context, self._ssa_val)
 
@@ -116,6 +123,9 @@ class Builder:
     def subview(self, src, offset, size=None, strides=None, result_rank=None):
         return self._subview(self._context, src, offset, size, strides, result_rank)
 
+    def select(self, cond, true_val, false_val):
+        return self._select(self._context, cond, true_val, false_val)
+
     def array_type(self, dims, dtype):
         return self._array_type(self._context, dims, dtype)
 
@@ -144,7 +154,41 @@ class FuncRegistry:
         return self.funcs.get(name)
 
 def broadcast_type(builder, args):
-    return args[0].dtype # TODO
+    l = len(args)
+    assert(l > 0)
+    lhs = args[0]
+    if l == 1:
+        return lhs
+    elif l == 2:
+        rhs = args[1]
+    else:
+        rhs = broadcast_type(builder, args[1:])
+
+    types = [
+        builder.bool,
+        builder.int8,
+        builder.uint8,
+        builder.int16,
+        builder.uint16,
+        builder.int32,
+        builder.uint32,
+        builder.int64,
+        builder.uint64,
+        builder.float32,
+        builder.float64,
+    ]
+
+    res = None
+    for t in types:
+        if lhs == t or rhs == t:
+            res = t
+
+    assert not res is  None, f'Cannot broadcast types: {str(lhs)}, {str(rhs)}'
+    return res
+
+
+def broadcast_type_arrays(builder, args):
+    return broadcast_type(builder, tuple(a.dtype for a in args))
 
 def eltwise(builder, args, body, res_type = None):
     if isinstance(args, tuple):
@@ -207,7 +251,7 @@ def asarray(builder, src, dtype=None):
         return src
 
     if dtype is None:
-        dtype = broadcast_type(builder, elements)
+        dtype = broadcast_type_arrays(builder, elements)
 
     arr = builder.from_elements(elements, dtype)
 

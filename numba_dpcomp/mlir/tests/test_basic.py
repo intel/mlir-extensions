@@ -606,3 +606,29 @@ def test_omitted_args3():
 
     assert_equal(py_func2(), jit_func2())
     assert_equal(py_func2(1), jit_func2(1))
+
+@pytest.mark.parametrize("func", [min, max])
+@pytest.mark.parametrize("a, b", itertools.product(_test_values, _test_values))
+def test_builtin_funcs2(func, a, b):
+    if isinstance(a, bool) or isinstance(b, bool):
+        pytest.xfail()
+
+    def py_func(a, b):
+        return func(a, b)
+
+    jit_func = njit(py_func)
+
+    assert_equal(py_func(a, b), jit_func(a, b))
+
+@pytest.mark.parametrize("func", [min, max])
+@pytest.mark.parametrize("a, b, c", itertools.product(_tuple_test_values, _tuple_test_values, _tuple_test_values))
+def test_builtin_funcs3(func, a, b, c):
+    if isinstance(a, bool) or isinstance(b, bool) or isinstance(c, bool):
+        pytest.xfail()
+
+    def py_func(a, b, c):
+        return func(a, b, c)
+
+    jit_func = njit(py_func)
+
+    assert_equal(py_func(a, b, c), jit_func(a, b, c))
