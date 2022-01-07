@@ -598,11 +598,20 @@ computeIndices(mlir::OpBuilder &builder, mlir::Location loc, mlir::Value value,
     }
   };
 
+  bool isMemref = shapedType.isa<mlir::MemRefType>();
+  auto getDim = [&](mlir::Value val, unsigned dim) -> mlir::Value {
+    if (isMemref) {
+      return builder.createOrFold<mlir::memref::DimOp>(loc, val, dim);
+    } else {
+      return builder.createOrFold<mlir::tensor::DimOp>(loc, val, dim);
+    }
+  };
+
   auto makeFullSlice =
       [&](unsigned dim) -> std::tuple<mlir::OpFoldResult, mlir::OpFoldResult,
                                       mlir::OpFoldResult> {
     auto begin = builder.getIndexAttr(0);
-    auto end = builder.createOrFold<mlir::tensor::DimOp>(loc, value, dim);
+    auto end = getDim(value, dim);
     auto step = builder.getIndexAttr(1);
     return {begin, end, step};
   };
@@ -660,16 +669,8 @@ computeIndices(mlir::OpBuilder &builder, mlir::Location loc, mlir::Value value,
     return val;
   };
 
-  bool isMemref = shapedType.isa<mlir::MemRefType>();
   for (auto i : llvm::seq(0u, rank)) {
     auto val = offsets[i];
-    auto getDim = [&]() -> mlir::Value {
-      if (isMemref) {
-        return builder.createOrFold<mlir::memref::DimOp>(loc, value, i);
-      } else {
-        return builder.createOrFold<mlir::tensor::DimOp>(loc, value, i);
-      }
-    };
     mlir::Value idx;
     if (auto v = val.dyn_cast<mlir::Value>()) {
       idx = v;
@@ -682,7 +683,7 @@ computeIndices(mlir::OpBuilder &builder, mlir::Location loc, mlir::Value value,
     auto isNeg = builder.createOrFold<mlir::arith::CmpIOp>(
         loc, mlir::arith::CmpIPredicate::slt, idx, getZero());
     auto negIndex =
-        builder.createOrFold<mlir::arith::AddIOp>(loc, getDim(), idx);
+        builder.createOrFold<mlir::arith::AddIOp>(loc, getDim(value, i), idx);
     offsets[i] = foldConst(
         builder.createOrFold<mlir::SelectOp>(loc, isNeg, negIndex, idx));
   }
