@@ -15,7 +15,6 @@
 from ..linalg_builder import FuncRegistry, is_literal, broadcast_type_arrays, eltwise, convert_array, asarray, is_int, is_float, dtype_str, DYNAMIC_DIM
 from ..func_registry import add_func
 
-import operator
 import numpy
 import math
 from numba import prange
@@ -145,6 +144,8 @@ def _gen_unary_ops():
         (register_func('numpy.log', numpy.log), f64_type, lambda a, b: math.log(a)),
         (register_func('numpy.sin', numpy.sin), f64_type, lambda a, b: math.sin(a)),
         (register_func('numpy.cos', numpy.cos), f64_type, lambda a, b: math.cos(a)),
+        (register_func('numpy.exp', numpy.exp), f64_type, lambda a, b: math.exp(a)),
+        (register_func('numpy.tanh', numpy.tanh), f64_type, lambda a, b: math.tanh(a)),
 
         (register_func('numpy.logical_not', numpy.logical_not), bool_type, lambda a, b: not bool(a)),
     ]
@@ -188,6 +189,7 @@ def _gen_binary_ops():
         (register_func('numpy.logical_or', numpy.logical_or), bool_type, lambda a, b, c: a or b),
         (register_func('operator.or'), bool_type, lambda a, b, c: a or b),
         (register_func('numpy.logical_xor', numpy.logical_xor), bool_type, lambda a, b, c: bool(a) != bool(b)),
+        (register_func('operator.xor'), bool_type, lambda a, b, c: bool(a) != bool(b)),
 
         (register_func('operator.lt'), bool_type, lambda a, b, c: a < b),
         (register_func('operator.le'), bool_type, lambda a, b, c: a <= b),

@@ -43,6 +43,9 @@ def test_ret(val):
     'lambda a, b: a / b',
     'lambda a, b: a // b',
     'lambda a, b: a % b',
+    'lambda a, b: a & b',
+    'lambda a, b: a | b',
+    'lambda a, b: a ^ b',
     ])
 @pytest.mark.parametrize("a, b", itertools.product(_test_values, _test_values))
 def test_ops(py_func, a, b):
@@ -50,6 +53,8 @@ def test_ops(py_func, a, b):
     try:
         assert_equal(py_func(a, b), jit_func(a, b))
     except ZeroDivisionError:
+        pass
+    except TypeError:
         pass
 
 @pytest.mark.parametrize("a, b", itertools.product(_test_values, _test_values))
@@ -115,7 +120,7 @@ def test_cast(py_func, val):
     jit_func = njit(py_func)
     assert_equal(py_func(val), jit_func(val))
 
-@pytest.mark.parametrize('val', [5,5.5])
+@pytest.mark.parametrize('val', [1,5,5.5])
 @pytest.mark.parametrize('name', [
     'sqrt',
     'log',
@@ -123,6 +128,7 @@ def test_cast(py_func, val):
     'sin',
     'cos',
     'erf',
+    'tanh',
 ])
 def test_math_uplifting1(val, name):
     py_func = eval(f'lambda a: math.{name}(a)')

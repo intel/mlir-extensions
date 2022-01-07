@@ -61,6 +61,7 @@ plier::UpliftMathCalls::matchAndRewrite(mlir::CallOp op,
       {"sin", &replaceOp1<mlir::math::SinOp>},
       {"cos", &replaceOp1<mlir::math::CosOp>},
       {"erf", &replaceOp1<mlir::math::ErfOp>},
+      {"tanh", &replaceOp1<mlir::math::TanhOp>},
       {"atan2", &replaceOp2<mlir::math::Atan2Op>},
   };
 
