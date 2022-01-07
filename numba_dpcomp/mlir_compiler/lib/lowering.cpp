@@ -245,9 +245,11 @@ private:
       auto target = inst.attr("target");
       auto val = lowerAssign(inst, target);
       storevar(val, target);
-    } else if (py::isinstance(inst, insts.SetItem) ||
-               py::isinstance(inst, insts.StaticSetItem)) {
+    } else if (py::isinstance(inst, insts.SetItem)) {
       setitem(inst.attr("target"), inst.attr("index"), inst.attr("value"));
+    } else if (py::isinstance(inst, insts.StaticSetItem)) {
+      staticSetitem(inst.attr("target"), inst.attr("index"),
+                    inst.attr("value"));
     } else if (py::isinstance(inst, insts.Del)) {
       delvar(inst.attr("value"));
     } else if (py::isinstance(inst, insts.Return)) {
@@ -348,11 +350,18 @@ private:
       return builder.create<plier::BuildSliceOp>(loc, start, stop, step);
     }
     if (py::isinstance<py::iterable>(obj)) {
-      llvm::SmallVector<mlir::Value> args(py::len(obj));
-      for (auto it : llvm::enumerate(obj))
-        args[it.index()] = lowerStaticIndex(loc, it.value());
+      auto len = py::len(obj);
+      llvm::SmallVector<mlir::Value> args(len);
+      llvm::SmallVector<mlir::Type> types(len);
+      for (auto it : llvm::enumerate(obj)) {
+        auto i = it.index();
+        auto arg = lowerStaticIndex(loc, it.value());
+        args[i] = arg;
+        types[i] = arg.getType();
+      }
 
-      return builder.create<plier::BuildTupleOp>(loc, args);
+      auto tupleType = builder.getTupleType(types);
+      return builder.create<plier::BuildTupleOp>(loc, tupleType, args);
     }
     plier::reportError(llvm::Twine("Unhandled index type: ") +
                        py::str(obj.get_type()).cast<std::string>());
@@ -478,15 +487,14 @@ private:
   }
 
   void setitem(py::handle target, py::handle index, py::handle value) {
-    auto ind = [&]() -> mlir::Value {
-      if (py::isinstance<py::int_>(index))
-        return builder.create<mlir::arith::ConstantIndexOp>(
-            getCurrentLoc(), index.cast<int64_t>());
+    builder.create<plier::SetItemOp>(getCurrentLoc(), loadvar(target),
+                                     loadvar(index), loadvar(value));
+  }
 
-      return loadvar(index);
-    }();
-    builder.create<plier::SetItemOp>(getCurrentLoc(), loadvar(target), ind,
-                                     loadvar(value));
+  void staticSetitem(py::handle target, py::handle index, py::handle value) {
+    auto loc = getCurrentLoc();
+    builder.create<plier::SetItemOp>(
+        loc, loadvar(target), lowerStaticIndex(loc, index), loadvar(value));
   }
 
   void storevar(mlir::Value val, py::handle inst) {

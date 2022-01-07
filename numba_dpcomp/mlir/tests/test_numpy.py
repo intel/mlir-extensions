@@ -401,14 +401,33 @@ def test_loop_if():
     arr2 = np.arange(100)
     assert_equal(py_func(arr1), jit_func(arr2))
 
-def test_static_setitem():
+def test_static_setitem1():
     def py_func(a):
         a[1] = 42
-        return a[1]
+        return a
 
     jit_func = njit(py_func)
     arr = np.asarray([1,2,3])
-    assert_equal(py_func(arr), jit_func(arr))
+    assert_equal(py_func(arr.copy()), jit_func(arr.copy()))
+
+def test_static_setitem2():
+    def py_func(a):
+        a[:] = 42
+        return a
+
+    jit_func = njit(py_func)
+    arr = np.asarray([1,2,3])
+    assert_equal(py_func(arr.copy()), jit_func(arr.copy()))
+
+
+def test_static_setitem3():
+    def py_func(a):
+        a[(0,1)] = 42
+        return a
+
+    jit_func = njit(py_func)
+    arr = np.asarray([[1,2],[3,4]])
+    assert_equal(py_func(arr.copy()), jit_func(arr.copy()))
 
 @pytest.mark.parametrize("i",
                          list(range(-2,3)))
