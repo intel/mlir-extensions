@@ -1323,9 +1323,35 @@ struct SignCastTensorFromElementsPropagate
   }
 };
 
+struct SignCastTensorCollapseShapePropagate
+    : public mlir::OpRewritePattern<plier::SignCastOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::SignCastOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto prevOp = op.value().getDefiningOp<mlir::tensor::CollapseShapeOp>();
+    if (!prevOp)
+      return mlir::failure();
+
+    auto src = prevOp.src();
+    auto srcType = src.getType().cast<mlir::TensorType>();
+    auto dstType = op.getType().cast<mlir::TensorType>();
+
+    auto newSrcType = srcType.clone(dstType.getElementType());
+    auto newDstType = dstType.clone(dstType.getElementType());
+
+    auto loc = prevOp->getLoc();
+    auto newSrc = rewriter.create<plier::SignCastOp>(loc, newSrcType, src);
+    rewriter.replaceOpWithNewOp<mlir::tensor::CollapseShapeOp>(
+        op, newDstType, newSrc, prevOp.reassociation());
+    return mlir::success();
+  }
+};
+
 struct SignCastTensorToMemrefPropagate
     : public mlir::OpRewritePattern<plier::SignCastOp> {
-  using mlir::OpRewritePattern<plier::SignCastOp>::OpRewritePattern;
+  using OpRewritePattern::OpRewritePattern;
 
   mlir::LogicalResult
   matchAndRewrite(plier::SignCastOp op,
@@ -1349,6 +1375,32 @@ struct SignCastTensorToMemrefPropagate
   }
 };
 
+struct SignCastMemrefToTensorPropagate
+    : public mlir::OpRewritePattern<plier::SignCastOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::SignCastOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto toTensor = op.value().getDefiningOp<mlir::bufferization::ToTensorOp>();
+    if (!toTensor)
+      return mlir::failure();
+
+    auto memref = toTensor.memref();
+    auto memrefType = memref.getType().cast<mlir::MemRefType>();
+    auto dstType = op.getType().cast<mlir::TensorType>();
+
+    auto newMemrefType = memrefType.clone(dstType.getElementType());
+
+    auto loc = toTensor->getLoc();
+    auto newMemref =
+        rewriter.create<plier::SignCastOp>(loc, newMemrefType, memref);
+    rewriter.replaceOpWithNewOp<mlir::bufferization::ToTensorOp>(op, dstType,
+                                                                 newMemref);
+    return mlir::success();
+  }
+};
+
 } // namespace
 
 void SignCastOp::getCanonicalizationPatterns(
@@ -1357,7 +1409,9 @@ void SignCastOp::getCanonicalizationPatterns(
       .insert<SignCastDimPropagate<mlir::tensor::DimOp>,
               SignCastDimPropagate<mlir::memref::DimOp>, SignCastUndefPropagate,
               SignCastTensorCastPropagate, SignCastTensorFromElementsPropagate,
-              SignCastTensorToMemrefPropagate>(context);
+              SignCastTensorCollapseShapePropagate,
+              SignCastTensorToMemrefPropagate, SignCastMemrefToTensorPropagate>(
+          context);
 }
 
 void ReduceRankOp::build(::mlir::OpBuilder &odsBuilder,

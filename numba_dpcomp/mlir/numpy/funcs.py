@@ -339,6 +339,16 @@ def matmul_impl(builder, a, b):
 
     return res
 
+@register_func('numpy.where', numpy.where)
+def where_impl(builder, cond, x, y):
+    cond, x, y = builder.broadcast(cond, x, y, broadcast_types=False)
+    x, y = builder.broadcast(x, y)
+
+    def body(c, x, y, r):
+        return x if c else y
+
+    return eltwise(builder, (cond, x, y), body)
+
 @register_attr('array.shape')
 def shape_impl(builder, arg):
     shape = arg.shape
