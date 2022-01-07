@@ -110,6 +110,7 @@ def _gen_math_funcs():
         ('erf', 1),
         ('sin', 1),
         ('cos', 1),
+        ('tanh', 1),
         ('atan2', 2),
     ]
 

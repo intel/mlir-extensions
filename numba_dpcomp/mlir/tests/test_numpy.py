@@ -69,6 +69,8 @@ _test_arrays_ids = [
     'lambda a: np.log(a)',
     'lambda a: np.sin(a)',
     'lambda a: np.cos(a)',
+    'lambda a: np.exp(a)',
+    'lambda a: np.tanh(a)',
     'lambda a: a.size',
     'lambda a: a.T',
     'lambda a: a.T.T',
@@ -135,6 +137,7 @@ def test_logical1(py_func, a):
     'lambda a, b: np.logical_or(a, b)',
     'lambda a, b: a | b',
     'lambda a, b: np.logical_xor(a, b)',
+    'lambda a, b: a ^ b',
 ])
 @pytest.mark.parametrize("a", _test_logical_arrays)
 @pytest.mark.parametrize("b", _test_logical_arrays)
