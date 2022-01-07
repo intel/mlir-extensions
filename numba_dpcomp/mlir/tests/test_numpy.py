@@ -793,6 +793,11 @@ def test_concat(arrays, axis):
     jit_func = njit(py_func)
     assert_equal(py_func(*arr), jit_func(*arr))
 
+@pytest.mark.parametrize("arr", [
+    np.array([1,2,3,4,5,6,7,8], dtype=np.int32),
+    np.array([1,2,3,4,5,6,7,8], dtype=np.float32),
+    np.array([True,False,True,True,False,True,True,True])
+    ])
 @parametrize_function_variants("py_func", [
     'lambda a, b, c, d: a[b:c]',
     'lambda a, b, c, d: a[3:c]',
@@ -803,8 +808,7 @@ def test_concat(arrays, axis):
     'lambda a, b, c, d: a[b:c:2]',
     'lambda a, b, c, d: a[3:4:2]',
     ])
-def test_slice1(py_func):
-    arr = np.array([1,2,3,4,5,6,7,8])
+def test_slice1(arr, py_func):
     jit_func = njit(py_func)
     assert_equal(py_func(arr, 3, 4, 2), jit_func(arr, 3, 4, 2))
 

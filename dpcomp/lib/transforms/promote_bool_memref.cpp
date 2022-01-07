@@ -14,6 +14,7 @@
 
 #include "plier/transforms/promote_bool_memref.hpp"
 
+#include "plier/dialect.hpp"
 #include "plier/transforms/type_conversion.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
@@ -140,6 +141,64 @@ public:
     return mlir::success();
   }
 };
+
+class ConvertSubviewOp
+    : public mlir::OpConversionPattern<mlir::memref::SubViewOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::SubViewOp op,
+                  mlir::memref::SubViewOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto *converter = getTypeConverter();
+    auto resType = converter->convertType(op.getType())
+                       .dyn_cast_or_null<mlir::MemRefType>();
+    if (!resType)
+      return mlir::failure();
+    rewriter.replaceOpWithNewOp<mlir::memref::SubViewOp>(
+        op, resType, adaptor.source(), adaptor.offsets(), adaptor.sizes(),
+        adaptor.strides(), adaptor.static_offsets(), adaptor.static_sizes(),
+        adaptor.static_strides());
+    return mlir::success();
+  }
+};
+
+class ConvertRetainOp : public mlir::OpConversionPattern<plier::RetainOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::RetainOp op, plier::RetainOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto *converter = getTypeConverter();
+    auto resType = converter->convertType(op.getType())
+                       .dyn_cast_or_null<mlir::MemRefType>();
+    if (!resType)
+      return mlir::failure();
+    rewriter.replaceOpWithNewOp<plier::RetainOp>(op, resType, adaptor.source());
+    return mlir::success();
+  }
+};
+
+class ConvertReduceRankOp
+    : public mlir::OpConversionPattern<plier::ReduceRankOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::ReduceRankOp op, plier::ReduceRankOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto *converter = getTypeConverter();
+    auto resType = converter->convertType(op.getType())
+                       .dyn_cast_or_null<mlir::MemRefType>();
+    if (!resType)
+      return mlir::failure();
+    rewriter.replaceOpWithNewOp<plier::ReduceRankOp>(
+        op, resType, adaptor.source(), adaptor.mapping());
+    return mlir::success();
+  }
+};
 } // namespace
 
 void plier::populatePromoteBoolMemrefConversionRewritesAndTarget(
@@ -156,10 +215,12 @@ void plier::populatePromoteBoolMemrefConversionRewritesAndTarget(
         return llvm::None;
       });
 
-  target.addDynamicallyLegalDialect<mlir::memref::MemRefDialect>(checkOp);
+  target.addDynamicallyLegalDialect<mlir::memref::MemRefDialect>(&checkOp);
+  target.addDynamicallyLegalOp<plier::RetainOp, plier::ReduceRankOp>(&checkOp);
 
   patterns.insert<ConvertDimOp, ConvertLoadOp, ConvertStoreOp, ConvertAllocOp,
-                  ConvertDeallocOp, ConvertCastOp>(typeConverter, context);
+                  ConvertDeallocOp, ConvertCastOp, ConvertSubviewOp,
+                  ConvertRetainOp, ConvertReduceRankOp>(typeConverter, context);
 }
 
 namespace {
