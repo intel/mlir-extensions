@@ -81,8 +81,8 @@ class Builder:
     def __init__(self, context):
         self._context = context
 
-    def broadcast(self, *args):
-        return self._broadcast(self._context, args)
+    def broadcast(self, *args, broadcast_types=True):
+        return self._broadcast(self._context, args, broadcast_types)
 
     def init_tensor(self, shape, dtype, init_val=None):
         return self._init_tensor(self._context, shape, dtype, init_val)
