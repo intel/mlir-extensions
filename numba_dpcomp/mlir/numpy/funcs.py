@@ -152,29 +152,43 @@ _gen_unary_ops()
 del _gen_unary_ops
 
 def _gen_binary_ops():
+    def f64_type(builder):
+        return builder.float64
+
+    def bool_type(builder):
+        return builder.bool
+
     binary_ops = [
-        (register_func('numpy.add', numpy.add), False, lambda a, b, c: a + b),
-        (register_func('operator.add'), False, lambda a, b, c: a + b),
-        (register_func('numpy.subtract', numpy.subtract), False, lambda a, b, c: a - b),
-        (register_func('operator.sub'), False, lambda a, b, c: a - b),
-        (register_func('numpy.multiply', numpy.multiply), False, lambda a, b, c: a * b),
-        (register_func('operator.mul'), False, lambda a, b, c: a * b),
-        (register_func('numpy.true_divide', numpy.true_divide), True, lambda a, b, c: a / b),
-        (register_func('operator.truediv'), True, lambda a, b, c: a / b),
-        (register_func('numpy.power', numpy.power), False, lambda a, b, c: a ** b),
-        (register_func('operator.pow'), False, lambda a, b, c: a ** b),
-        (register_func('numpy.arctan2', numpy.arctan2), True, lambda a, b, c: math.atan2(a, b)),
-        (register_func('numpy.minimum', numpy.minimum), False, lambda a, b, c: min(a, b)),
-        (register_func('numpy.maximum', numpy.maximum), False, lambda a, b, c: max(a, b)),
+        (register_func('numpy.add', numpy.add), None, lambda a, b, c: a + b),
+        (register_func('operator.add'), None, lambda a, b, c: a + b),
+        (register_func('numpy.subtract', numpy.subtract), None, lambda a, b, c: a - b),
+        (register_func('operator.sub'), None, lambda a, b, c: a - b),
+        (register_func('numpy.multiply', numpy.multiply), None, lambda a, b, c: a * b),
+        (register_func('operator.mul'), None, lambda a, b, c: a * b),
+        (register_func('numpy.true_divide', numpy.true_divide), f64_type, lambda a, b, c: a / b),
+        (register_func('operator.truediv'), f64_type, lambda a, b, c: a / b),
+        (register_func('numpy.power', numpy.power), None, lambda a, b, c: a ** b),
+        (register_func('operator.pow'), None, lambda a, b, c: a ** b),
+        (register_func('numpy.arctan2', numpy.arctan2), f64_type, lambda a, b, c: math.atan2(a, b)),
+        (register_func('numpy.minimum', numpy.minimum), None, lambda a, b, c: min(a, b)),
+        (register_func('numpy.maximum', numpy.maximum), None, lambda a, b, c: max(a, b)),
+
+        (register_func('operator.lt'), bool_type, lambda a, b, c: a < b),
+        (register_func('operator.le'), bool_type, lambda a, b, c: a <= b),
+        (register_func('operator.gt'), bool_type, lambda a, b, c: a > b),
+        (register_func('operator.ge'), bool_type, lambda a, b, c: a >= b),
+        (register_func('operator.eq'), bool_type, lambda a, b, c: a == b),
+        (register_func('operator.ne'), bool_type, lambda a, b, c: a != b),
     ]
 
-    def make_func(f64, body):
+    def make_func(init, body):
         def func(builder, arg1, arg2):
-            return eltwise(builder, (arg1, arg2), body, builder.float64 if f64 else None)
+            init_type = None if init is None else init(builder)
+            return eltwise(builder, (arg1, arg2), body, init_type)
         return func
 
-    for reg, f64, body in binary_ops:
-        reg(make_func(f64, body))
+    for reg, init, body in binary_ops:
+        reg(make_func(init, body))
 
 _gen_binary_ops()
 del _gen_binary_ops

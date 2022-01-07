@@ -62,6 +62,7 @@ set(SOURCES_LIST
     lib/transforms/loop_utils.cpp
     lib/transforms/memory_rewrites.cpp
     lib/transforms/pipeline_utils.cpp
+    lib/transforms/promote_bool_memref.cpp
     lib/transforms/promote_to_parallel.cpp
     lib/transforms/type_conversion.cpp
     lib/transforms/uplift_math_calls.cpp
@@ -91,6 +92,7 @@ set(HEADERS_LIST
     include/plier/transforms/loop_utils.hpp
     include/plier/transforms/memory_rewrites.hpp
     include/plier/transforms/pipeline_utils.hpp
+    include/plier/transforms/promote_bool_memref.hpp
     include/plier/transforms/promote_to_parallel.hpp
     include/plier/transforms/rewrite_wrapper.hpp
     include/plier/transforms/type_conversion.hpp
