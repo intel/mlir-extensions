@@ -75,7 +75,7 @@ static std::string toStr(py::handle obj) {
 
 static py::object mapTypesToNumbaChecked(py::handle typesMod,
                                          mlir::TypeRange typesRange) {
-  auto funcTypes = map_types_to_numba(typesMod, typesRange);
+  auto funcTypes = mapTypesToNumba(typesMod, typesRange);
   if (funcTypes.is_none())
     plier::reportError(llvm::Twine("map_types_to_numba failed: ") +
                        toStr(typesRange));

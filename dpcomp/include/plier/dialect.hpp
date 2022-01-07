@@ -63,6 +63,9 @@ static const constexpr OperatorNamePair OperatorNames[] = {
     {"//", "floordiv"},
     {"%", "mod"},
     {"@", "matmul"},
+    {"&", "and"},
+    {"|", "or"},
+    {"not", "not"},
 
     {">", "gt"},
     {">=", "ge"},

@@ -109,6 +109,28 @@ public:
   }
 };
 
+class ConvertAllocaOp
+    : public mlir::OpConversionPattern<mlir::memref::AllocaOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::AllocaOp op,
+                  mlir::memref::AllocaOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto *converter = getTypeConverter();
+    auto resType = converter->convertType(op.getType())
+                       .dyn_cast_or_null<mlir::MemRefType>();
+    if (!resType)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::memref::AllocaOp>(
+        op, resType, adaptor.dynamicSizes(), adaptor.symbolOperands(),
+        adaptor.alignment());
+    return mlir::success();
+  }
+};
+
 class ConvertDeallocOp
     : public mlir::OpConversionPattern<mlir::memref::DeallocOp> {
 public:
@@ -219,8 +241,9 @@ void plier::populatePromoteBoolMemrefConversionRewritesAndTarget(
   target.addDynamicallyLegalOp<plier::RetainOp, plier::ReduceRankOp>(&checkOp);
 
   patterns.insert<ConvertDimOp, ConvertLoadOp, ConvertStoreOp, ConvertAllocOp,
-                  ConvertDeallocOp, ConvertCastOp, ConvertSubviewOp,
-                  ConvertRetainOp, ConvertReduceRankOp>(typeConverter, context);
+                  ConvertAllocaOp, ConvertDeallocOp, ConvertCastOp,
+                  ConvertSubviewOp, ConvertRetainOp, ConvertReduceRankOp>(
+      typeConverter, context);
 }
 
 namespace {

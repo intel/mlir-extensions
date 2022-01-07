@@ -25,53 +25,51 @@ namespace py = pybind11;
 
 namespace {
 template <unsigned Width, mlir::IntegerType::SignednessSemantics Signed>
-bool is_int(mlir::Type type) {
-  if (auto t = type.dyn_cast<mlir::IntegerType>()) {
-    if (t.getWidth() == Width && t.getSignedness() == Signed) {
+bool isInt(mlir::Type type) {
+  if (auto t = type.dyn_cast<mlir::IntegerType>())
+    if (t.getWidth() == Width && t.getSignedness() == Signed)
       return true;
-    }
-  }
+
   return false;
 }
 
-template <unsigned Width> bool is_float(mlir::Type type) {
-  if (auto f = type.dyn_cast<mlir::FloatType>()) {
-    if (f.getWidth() == Width) {
+template <unsigned Width> bool isFloat(mlir::Type type) {
+  if (auto f = type.dyn_cast<mlir::FloatType>())
+    if (f.getWidth() == Width)
       return true;
-    }
-  }
+
   return false;
 }
 
-bool is_none(mlir::Type type) { return type.isa<mlir::NoneType>(); }
+bool isNone(mlir::Type type) { return type.isa<mlir::NoneType>(); }
 
-py::object map_type(const py::handle &types_mod, mlir::Type type) {
+py::object mapType(const py::handle &types_mod, mlir::Type type) {
   using fptr_t = bool (*)(mlir::Type);
   const std::pair<fptr_t, llvm::StringRef> primitive_types[] = {
-      {&is_int<1, mlir::IntegerType::Signed>, "boolean"},
-      {&is_int<1, mlir::IntegerType::Signless>, "boolean"},
-      {&is_int<1, mlir::IntegerType::Unsigned>, "boolean"},
+      {&isInt<1, mlir::IntegerType::Signed>, "boolean"},
+      {&isInt<1, mlir::IntegerType::Signless>, "boolean"},
+      {&isInt<1, mlir::IntegerType::Unsigned>, "boolean"},
 
-      {&is_int<8, mlir::IntegerType::Signed>, "int8"},
-      {&is_int<8, mlir::IntegerType::Signless>, "int8"},
-      {&is_int<8, mlir::IntegerType::Unsigned>, "uint8"},
+      {&isInt<8, mlir::IntegerType::Signed>, "int8"},
+      {&isInt<8, mlir::IntegerType::Signless>, "int8"},
+      {&isInt<8, mlir::IntegerType::Unsigned>, "uint8"},
 
-      {&is_int<16, mlir::IntegerType::Signed>, "int16"},
-      {&is_int<16, mlir::IntegerType::Signless>, "int16"},
-      {&is_int<16, mlir::IntegerType::Unsigned>, "uint16"},
+      {&isInt<16, mlir::IntegerType::Signed>, "int16"},
+      {&isInt<16, mlir::IntegerType::Signless>, "int16"},
+      {&isInt<16, mlir::IntegerType::Unsigned>, "uint16"},
 
-      {&is_int<32, mlir::IntegerType::Signed>, "int32"},
-      {&is_int<32, mlir::IntegerType::Signless>, "int32"},
-      {&is_int<32, mlir::IntegerType::Unsigned>, "uint32"},
+      {&isInt<32, mlir::IntegerType::Signed>, "int32"},
+      {&isInt<32, mlir::IntegerType::Signless>, "int32"},
+      {&isInt<32, mlir::IntegerType::Unsigned>, "uint32"},
 
-      {&is_int<64, mlir::IntegerType::Signed>, "int64"},
-      {&is_int<64, mlir::IntegerType::Signless>, "int64"},
-      {&is_int<64, mlir::IntegerType::Unsigned>, "uint64"},
+      {&isInt<64, mlir::IntegerType::Signed>, "int64"},
+      {&isInt<64, mlir::IntegerType::Signless>, "int64"},
+      {&isInt<64, mlir::IntegerType::Unsigned>, "uint64"},
 
-      {&is_float<32>, "float32"},
-      {&is_float<64>, "float64"},
+      {&isFloat<32>, "float32"},
+      {&isFloat<64>, "float64"},
 
-      {&is_none, "none"},
+      {&isNone, "none"},
   };
 
   for (auto h : primitive_types) {
@@ -82,10 +80,10 @@ py::object map_type(const py::handle &types_mod, mlir::Type type) {
   }
 
   if (auto m = type.dyn_cast<mlir::ShapedType>()) {
-    auto elem_type = map_type(types_mod, m.getElementType());
-    if (!elem_type) {
+    auto elem_type = mapType(types_mod, m.getElementType());
+    if (!elem_type)
       return {};
-    }
+
     auto ndims = py::int_(m.getRank());
     auto array_type = types_mod.attr("Array");
     return array_type(elem_type, ndims, py::str("C"));
@@ -94,7 +92,7 @@ py::object map_type(const py::handle &types_mod, mlir::Type type) {
   if (auto t = type.dyn_cast<mlir::TupleType>()) {
     py::tuple ret(t.size());
     for (auto it : llvm::enumerate(t.getTypes())) {
-      auto inner = map_type(types_mod, it.value());
+      auto inner = mapType(types_mod, it.value());
       if (!inner)
         return {};
       ret[it.index()] = std::move(inner);
@@ -105,21 +103,21 @@ py::object map_type(const py::handle &types_mod, mlir::Type type) {
 }
 } // namespace
 
-py::object map_type_to_numba(py::handle types_mod, mlir::Type type) {
-  auto elem = map_type(types_mod, type);
-  if (!elem) {
+py::object mapTypeToNumba(py::handle types_mod, mlir::Type type) {
+  auto elem = mapType(types_mod, type);
+  if (!elem)
     return py::none();
-  }
+
   return elem;
 }
 
-py::object map_types_to_numba(py::handle types_mod, mlir::TypeRange types) {
+py::object mapTypesToNumba(py::handle types_mod, mlir::TypeRange types) {
   py::list ret(types.size());
   for (auto it : llvm::enumerate(types)) {
-    auto type = map_type_to_numba(types_mod, it.value());
-    if (type.is_none()) {
+    auto type = mapTypeToNumba(types_mod, it.value());
+    if (type.is_none())
       return py::none();
-    }
+
     ret[it.index()] = std::move(type);
   }
   return std::move(ret);

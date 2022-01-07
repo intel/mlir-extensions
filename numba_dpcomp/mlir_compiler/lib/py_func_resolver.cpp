@@ -49,7 +49,7 @@ mlir::FuncOp PyFuncResolver::getFunc(llvm::StringRef name,
 
   auto pyFunc = funcDescTuple[0];
   auto flags = funcDescTuple[1];
-  auto pyTypes = map_types_to_numba(context->types, types);
+  auto pyTypes = mapTypesToNumba(context->types, types);
   if (pyTypes.is_none())
     return {};
 

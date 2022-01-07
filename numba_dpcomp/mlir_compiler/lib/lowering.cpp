@@ -120,7 +120,13 @@ struct InstHandles {
 
     for (auto elem : llvm::zip(plier::getOperators(), opsHandles)) {
       auto name = std::get<0>(elem).name;
-      std::get<1>(elem) = ops.attr(name.data());
+      if (py::hasattr(ops, name.data())) {
+        std::get<1>(elem) = ops.attr(name.data());
+      } else {
+        llvm::SmallVector<char> storage;
+        auto str = (name + "_").toNullTerminatedStringRef(storage);
+        std::get<1>(elem) = ops.attr(str.data());
+      }
     }
   }
 

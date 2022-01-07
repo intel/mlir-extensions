@@ -113,6 +113,34 @@ def test_binary(py_func, a, b):
     jit_func = njit(py_func)
     assert_equal(py_func(a,b), jit_func(a,b))
 
+_test_logical_arrays = [
+    True,
+    False,
+    np.array([True, False]),
+    np.array([[False, True],[True, False]])
+]
+
+@parametrize_function_variants("py_func", [
+    'lambda a: np.logical_not(a)',
+])
+@pytest.mark.parametrize("a", _test_logical_arrays)
+def test_logical1(py_func, a):
+    jit_func = njit(py_func)
+    assert_equal(py_func(a), jit_func(a))
+
+@parametrize_function_variants("py_func", [
+    'lambda a, b: np.logical_and(a, b)',
+    'lambda a, b: a & b',
+    'lambda a, b: np.logical_or(a, b)',
+    'lambda a, b: a | b',
+    'lambda a, b: np.logical_xor(a, b)',
+])
+@pytest.mark.parametrize("a", _test_logical_arrays)
+@pytest.mark.parametrize("b", _test_logical_arrays)
+def test_logical2(py_func, a, b):
+    jit_func = njit(py_func)
+    assert_equal(py_func(a,b), jit_func(a,b))
+
 _test_broadcast_test_arrays = [
     1,
     np.array([1]),
