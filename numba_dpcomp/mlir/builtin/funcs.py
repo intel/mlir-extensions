@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..linalg_builder import FuncRegistry, is_int, is_float
+from ..linalg_builder import FuncRegistry, is_int, is_float, broadcast_type
 from ..func_registry import add_func
 
 import math
@@ -41,6 +41,41 @@ def float_cast_impl(builder, arg):
 @register_func('len', len)
 def len_impl(builder, arg):
     return builder.cast(len(arg), builder.int64)
+
+def _get_type(builder, v):
+    if isinstance(v, float):
+        return builder.float64
+    elif isinstance(v, int):
+        return builder.int64
+    return v.type
+
+@register_func('min', min)
+def min_impl(builder, *args):
+    if (len(args) > 2):
+        rhs = min_impl(builder, *args[1:])
+    else:
+        rhs = args[1]
+
+    lhs = args[0]
+    res_type = broadcast_type(builder, (_get_type(builder, lhs), _get_type(builder, rhs)))
+    lhs = builder.cast(lhs, res_type)
+    rhs = builder.cast(rhs, res_type)
+    cond = lhs < rhs
+    return builder.select(cond, lhs, rhs)
+
+@register_func('max', max)
+def max_impl(builder, *args):
+    if (len(args) > 2):
+        rhs = max_impl(builder, *args[1:])
+    else:
+        rhs = args[1]
+
+    lhs = args[0]
+    res_type = broadcast_type(builder, (_get_type(builder, lhs), _get_type(builder, rhs)))
+    lhs = builder.cast(lhs, res_type)
+    rhs = builder.cast(rhs, res_type)
+    cond = lhs > rhs
+    return builder.select(cond, lhs, rhs)
 
 def _gen_math_funcs():
     def get_func(name, N):

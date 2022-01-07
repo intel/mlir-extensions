@@ -100,27 +100,27 @@ static mlir::Value doSignCast(mlir::OpBuilder &builder, mlir::Location &loc,
                               mlir::Value val) {
   auto origType = val.getType();
   auto signlessType = makeSignlessType(origType);
-  if (signlessType != origType) {
+  if (signlessType != origType)
     val = builder.createOrFold<plier::SignCastOp>(loc, signlessType, val);
-  }
+
   return val;
 }
 
 static mlir::Value doSignCast(mlir::OpBuilder &builder, mlir::Location &loc,
                               mlir::Value val, mlir::Type dstType) {
   auto origType = val.getType();
-  if (dstType != origType) {
+  if (dstType != origType)
     val = builder.createOrFold<plier::SignCastOp>(loc, dstType, val);
-  }
+
   return val;
 }
 
 static auto doSignCast(mlir::OpBuilder &builder, mlir::Location &loc,
                        mlir::ValueRange vals) {
   llvm::SmallVector<mlir::Value> ret(vals.size());
-  for (auto it : llvm::enumerate(vals)) {
+  for (auto it : llvm::enumerate(vals))
     ret[it.index()] = doSignCast(builder, loc, it.value());
-  }
+
   return ret;
 }
 
@@ -1385,6 +1385,18 @@ py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
                                doSignCast(builder, loc, ret, resSignedType));
 }
 
+py::object selectImpl(py::capsule context, py::handle cond, py::handle trueV,
+                      py::handle falseV) {
+  auto &ctx = getPyContext(context);
+  auto &builder = ctx.builder;
+  auto loc = ctx.loc;
+  auto condVal = ctx.context.unwrapVal(loc, builder, cond);
+  auto trueVal = ctx.context.unwrapVal(loc, builder, trueV);
+  auto falseVal = ctx.context.unwrapVal(loc, builder, falseV);
+  auto res = builder.create<mlir::SelectOp>(loc, condVal, trueVal, falseVal);
+  return ctx.context.createVar(context, res);
+}
+
 static py::object arrayTypeImpl(py::capsule context, py::iterable dims,
                                 py::handle dtype) {
   auto &ctx = getPyContext(context);
@@ -1414,6 +1426,7 @@ setupPyBuilder(py::handle builder, mlir::OpBuilder &b,
   py::setattr(builder, "_cast", py::cpp_function(&castImpl));
   py::setattr(builder, "_undef", py::cpp_function(&undefImpl));
   py::setattr(builder, "_subview", py::cpp_function(&subviewImpl));
+  py::setattr(builder, "_select", py::cpp_function(&selectImpl));
 
   py::setattr(builder, "_array_type", py::cpp_function(&arrayTypeImpl));
 
@@ -1548,6 +1561,21 @@ static mlir::Value binopFuncIdiv(mlir::Location loc, mlir::OpBuilder &builder,
   return builder.create<mlir::arith::DivFOp>(loc, lhsVar, rhsVar);
 }
 
+template <mlir::arith::CmpIPredicate Pred>
+static mlir::Value binopCmpI(mlir::Location loc, mlir::OpBuilder &builder,
+                             mlir::Value lhs, mlir::Value rhs) {
+  assert(lhs.getType() == rhs.getType());
+  lhs = doSignCast(builder, loc, lhs);
+  rhs = doSignCast(builder, loc, rhs);
+  return builder.create<mlir::arith::CmpIOp>(loc, Pred, lhs, rhs);
+}
+
+template <mlir::arith::CmpFPredicate Pred>
+static mlir::Value binopCmpF(mlir::Location loc, mlir::OpBuilder &builder,
+                             mlir::Value lhs, mlir::Value rhs) {
+  return builder.create<mlir::arith::CmpFOp>(loc, Pred, lhs, rhs);
+}
+
 static py::object binopImpl(py::capsule context, py::capsule ssaVal,
                             py::handle rhs, py::str op) {
   auto &ctx = getPyContext(context);
@@ -1577,6 +1605,19 @@ static py::object binopImpl(py::capsule context, py::capsule ssaVal,
        &rbinopFunc<mlir::arith::SubFOp>},
       {"*", &binopFunc<mlir::arith::MulIOp>, &binopFunc<mlir::arith::MulFOp>},
       {"/", &binopFuncIdiv, &binopFunc<mlir::arith::DivFOp>},
+
+      {"lt", &binopCmpI<mlir::arith::CmpIPredicate::slt>,
+       &binopCmpF<mlir::arith::CmpFPredicate::OLT>},
+      {"le", &binopCmpI<mlir::arith::CmpIPredicate::sle>,
+       &binopCmpF<mlir::arith::CmpFPredicate::OLE>},
+      {"gt", &binopCmpI<mlir::arith::CmpIPredicate::sgt>,
+       &binopCmpF<mlir::arith::CmpFPredicate::OGT>},
+      {"ge", &binopCmpI<mlir::arith::CmpIPredicate::sge>,
+       &binopCmpF<mlir::arith::CmpFPredicate::OGE>},
+      {"eq", &binopCmpI<mlir::arith::CmpIPredicate::eq>,
+       &binopCmpF<mlir::arith::CmpFPredicate::OEQ>},
+      {"ne", &binopCmpI<mlir::arith::CmpIPredicate::ne>,
+       &binopCmpF<mlir::arith::CmpFPredicate::ONE>},
   };
 
   auto opName = static_cast<std::string>(op);

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..linalg_builder import FuncRegistry, is_literal, broadcast_type, eltwise, convert_array, asarray, is_int, is_float, dtype_str, DYNAMIC_DIM
+from ..linalg_builder import FuncRegistry, is_literal, broadcast_type_arrays, eltwise, convert_array, asarray, is_int, is_float, dtype_str, DYNAMIC_DIM
 from ..func_registry import add_func
 
 import numpy
@@ -164,6 +164,8 @@ def _gen_binary_ops():
         (register_func('numpy.power', numpy.power), False, lambda a, b, c: a ** b),
         (register_func('operator.pow'), False, lambda a, b, c: a ** b),
         (register_func('numpy.arctan2', numpy.arctan2), True, lambda a, b, c: math.atan2(a, b)),
+        (register_func('numpy.minimum', numpy.minimum), False, lambda a, b, c: min(a, b)),
+        (register_func('numpy.maximum', numpy.maximum), False, lambda a, b, c: max(a, b)),
     ]
 
     def make_func(f64, body):
@@ -243,7 +245,7 @@ def _matmul2d(builder, a, b, shape1, shape2):
     expr3 = '(d0,d1,d2) -> (d0,d1)'
     maps = [expr1,expr2,expr3]
     res_shape = (shape1[0], shape2[1])
-    dtype = broadcast_type(builder, (a, b))
+    dtype = broadcast_type_arrays(builder, (a, b))
     init = builder.init_tensor(res_shape, dtype, 0)
 
     def body(a, b, c):
@@ -385,7 +387,7 @@ def concat_impl(builder, arrays, axis=0):
     if isinstance(axis, int):
         shapes = [a.shape for a in arrays]
         num_dims = len(shapes[0])
-        dtype = broadcast_type(builder, arrays)
+        dtype = broadcast_type_arrays(builder, arrays)
         new_len = sum((s[axis] for s in shapes), 0)
         new_shape = [new_len if i == axis else shapes[0][i] for i in range(len(shapes[0]))]
         res = builder.init_tensor(new_shape, dtype)
@@ -414,8 +416,7 @@ def _cov_impl_inner(X, ddof):
     fact = X.shape[1] - ddof
 
     # numpy warns if less than 0 and floors at 0
-    # fact = max(fact, 0.0)
-    fact = fact if fact > 0.0 else 0.0
+    fact = max(fact, 0.0)
 
     # _row_wise_average
     m, n = X.shape
@@ -444,7 +445,7 @@ def _prepare_cov_input(builder, m, y, rowvar):
 
                 return m_arr
         else:
-            dtype = broadcast_type(builder, (m, y))
+            dtype = broadcast_type_arrays(builder, (m, y))
             def _prepare_cov_input_impl(m, y, rowvar):
                 m_arr = numpy.atleast_2d(m)
                 y_arr = numpy.atleast_2d(y)
