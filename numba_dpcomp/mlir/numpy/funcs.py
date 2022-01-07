@@ -155,6 +155,9 @@ def _gen_binary_ops():
     def f64_type(builder):
         return builder.float64
 
+    def bool_type(builder):
+        return builder.bool
+
     binary_ops = [
         (register_func('numpy.add', numpy.add), None, lambda a, b, c: a + b),
         (register_func('operator.add'), None, lambda a, b, c: a + b),
@@ -169,6 +172,13 @@ def _gen_binary_ops():
         (register_func('numpy.arctan2', numpy.arctan2), f64_type, lambda a, b, c: math.atan2(a, b)),
         (register_func('numpy.minimum', numpy.minimum), None, lambda a, b, c: min(a, b)),
         (register_func('numpy.maximum', numpy.maximum), None, lambda a, b, c: max(a, b)),
+
+        (register_func('operator.lt'), bool_type, lambda a, b, c: a < b),
+        (register_func('operator.le'), bool_type, lambda a, b, c: a <= b),
+        (register_func('operator.gt'), bool_type, lambda a, b, c: a > b),
+        (register_func('operator.ge'), bool_type, lambda a, b, c: a >= b),
+        (register_func('operator.eq'), bool_type, lambda a, b, c: a == b),
+        (register_func('operator.ne'), bool_type, lambda a, b, c: a != b),
     ]
 
     def make_func(init, body):

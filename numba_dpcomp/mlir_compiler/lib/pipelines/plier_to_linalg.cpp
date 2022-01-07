@@ -61,6 +61,7 @@
 #include "plier/transforms/loop_utils.hpp"
 #include "plier/transforms/memory_rewrites.hpp"
 #include "plier/transforms/pipeline_utils.hpp"
+#include "plier/transforms/promote_bool_memref.hpp"
 #include "plier/transforms/promote_to_parallel.hpp"
 #include "plier/transforms/rewrite_wrapper.hpp"
 #include "plier/transforms/type_conversion.hpp"
@@ -1278,12 +1279,12 @@ struct PlierToLinalgPass
                                mlir::OperationPass<mlir::ModuleOp>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<plier::PlierDialect>();
     registry.insert<mlir::StandardOpsDialect>();
+    registry.insert<mlir::bufferization::BufferizationDialect>();
     registry.insert<mlir::linalg::LinalgDialect>();
     registry.insert<mlir::memref::MemRefDialect>();
     registry.insert<mlir::tensor::TensorDialect>();
-    registry.insert<mlir::bufferization::BufferizationDialect>();
+    registry.insert<plier::PlierDialect>();
   }
 
   void runOnOperation() override;
@@ -1983,6 +1984,7 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
   pm.addPass(plier::createForceInlinePass());
   pm.addPass(mlir::createSymbolDCEPass());
 
+  pm.addPass(plier::createPromoteBoolMemrefPass());
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<UpliftMathCallsPass>());
   pm.addNestedPass<mlir::FuncOp>(mlir::createCanonicalizerPass());
   pm.addNestedPass<mlir::FuncOp>(mlir::createLoopInvariantCodeMotionPass());
