@@ -780,6 +780,11 @@ _test_reshape_test_arrays = [
     'lambda a: a.reshape((a.size,1))',
     'lambda a: a.reshape((1, a.size))',
     'lambda a: a.reshape((1, a.size, 1))',
+    'lambda a: np.reshape(a, a.size)',
+    'lambda a: np.reshape(a, (a.size,))',
+    'lambda a: np.reshape(a, (a.size,1))',
+    'lambda a: np.reshape(a, (1, a.size))',
+    'lambda a: np.reshape(a, (1, a.size, 1))',
     ])
 @pytest.mark.parametrize("array", _test_reshape_test_arrays)
 def test_reshape(py_func, array):

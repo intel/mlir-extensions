@@ -388,6 +388,7 @@ def dtype_impl(builder, arg):
     return arg.dtype
 
 @register_func('array.reshape')
+@register_func('numpy.reshape', numpy.reshape)
 def reshape_impl(builder, arg, new_shape):
     return builder.reshape(arg, new_shape)
 
