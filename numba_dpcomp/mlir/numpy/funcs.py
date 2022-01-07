@@ -15,6 +15,7 @@
 from ..linalg_builder import FuncRegistry, is_literal, broadcast_type_arrays, eltwise, convert_array, asarray, is_int, is_float, dtype_str, DYNAMIC_DIM
 from ..func_registry import add_func
 
+import operator
 import numpy
 import math
 from numba import prange
@@ -132,17 +133,26 @@ def mean_impl(builder, arg, axis=None):
 
 
 def _gen_unary_ops():
+    def f64_type(builder):
+        return builder.float64
+
+    def bool_type(builder):
+        return builder.bool
+
     unary_ops = [
-        (register_func('numpy.sqrt', numpy.sqrt), True, lambda a, b: math.sqrt(a)),
-        (register_func('numpy.square', numpy.square), False, lambda a, b: a * a),
-        (register_func('numpy.log', numpy.log), True, lambda a, b: math.log(a)),
-        (register_func('numpy.sin', numpy.sin), True, lambda a, b: math.sin(a)),
-        (register_func('numpy.cos', numpy.cos), True, lambda a, b: math.cos(a)),
+        (register_func('numpy.sqrt', numpy.sqrt), f64_type, lambda a, b: math.sqrt(a)),
+        (register_func('numpy.square', numpy.square), None, lambda a, b: a * a),
+        (register_func('numpy.log', numpy.log), f64_type, lambda a, b: math.log(a)),
+        (register_func('numpy.sin', numpy.sin), f64_type, lambda a, b: math.sin(a)),
+        (register_func('numpy.cos', numpy.cos), f64_type, lambda a, b: math.cos(a)),
+
+        (register_func('numpy.logical_not', numpy.logical_not), bool_type, lambda a, b: not bool(a)),
     ]
 
-    def make_func(f64, body):
+    def make_func(init, body):
         def func(builder, arg):
-            return eltwise(builder, arg, body, builder.float64 if f64 else None)
+            init_type = None if init is None else init(builder)
+            return eltwise(builder, arg, body, init_type)
         return func
 
     for reg, f64, body in unary_ops:
@@ -172,6 +182,12 @@ def _gen_binary_ops():
         (register_func('numpy.arctan2', numpy.arctan2), f64_type, lambda a, b, c: math.atan2(a, b)),
         (register_func('numpy.minimum', numpy.minimum), None, lambda a, b, c: min(a, b)),
         (register_func('numpy.maximum', numpy.maximum), None, lambda a, b, c: max(a, b)),
+
+        (register_func('numpy.logical_and', numpy.logical_and), bool_type, lambda a, b, c: a and b),
+        (register_func('operator.and'), bool_type, lambda a, b, c: a and b),
+        (register_func('numpy.logical_or', numpy.logical_or), bool_type, lambda a, b, c: a or b),
+        (register_func('operator.or'), bool_type, lambda a, b, c: a or b),
+        (register_func('numpy.logical_xor', numpy.logical_xor), bool_type, lambda a, b, c: bool(a) != bool(b)),
 
         (register_func('operator.lt'), bool_type, lambda a, b, c: a < b),
         (register_func('operator.le'), bool_type, lambda a, b, c: a <= b),

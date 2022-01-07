@@ -308,12 +308,12 @@ static bool is_supported_type(mlir::Type type) {
   return type.isIntOrFloat();
 }
 
-bool is_int(mlir::Type type) {
+bool isInt(mlir::Type type) {
   assert(type);
   return type.isa<mlir::IntegerType>();
 }
 
-bool is_float(mlir::Type type) {
+bool isFloat(mlir::Type type) {
   assert(type);
   return type.isa<mlir::FloatType>();
 }
@@ -510,8 +510,8 @@ static mlir::Type coerce(mlir::Type type0, mlir::Type type1) {
 
     llvm_unreachable("Unhandled type");
   };
-  auto f0 = is_float(type0);
-  auto f1 = is_float(type1);
+  auto f0 = isFloat(type0);
+  auto f1 = isFloat(type1);
   if (f0 && !f1)
     return type0;
 
@@ -521,8 +521,8 @@ static mlir::Type coerce(mlir::Type type0, mlir::Type type1) {
   return get_bits_count(type0) < get_bits_count(type1) ? type1 : type0;
 }
 
-mlir::Value int_cast(mlir::PatternRewriter &rewriter, mlir::Location loc,
-                     mlir::Value val, mlir::Type dstType) {
+mlir::Value intCast(mlir::PatternRewriter &rewriter, mlir::Location loc,
+                    mlir::Value val, mlir::Type dstType) {
   auto srcIntType = val.getType().cast<mlir::IntegerType>();
   auto dstIntType = dstType.cast<mlir::IntegerType>();
   auto srcSignless = plier::makeSignlessType(srcIntType);
@@ -559,13 +559,12 @@ mlir::Value int_cast(mlir::PatternRewriter &rewriter, mlir::Location loc,
   return val;
 }
 
-mlir::Value int_float_cast(mlir::PatternRewriter &rewriter, mlir::Location loc,
-                           mlir::Value val, mlir::Type dstType) {
+mlir::Value intFloatCast(mlir::PatternRewriter &rewriter, mlir::Location loc,
+                         mlir::Value val, mlir::Type dstType) {
   auto srcIntType = val.getType().cast<mlir::IntegerType>();
   auto signlessType = plier::makeSignlessType(srcIntType);
-  if (val.getType() != signlessType) {
+  if (val.getType() != signlessType)
     val = rewriter.createOrFold<plier::SignCastOp>(loc, signlessType, val);
-  }
 
   if (srcIntType.isSigned()) {
     return rewriter.createOrFold<mlir::arith::SIToFPOp>(loc, val, dstType);
@@ -574,8 +573,8 @@ mlir::Value int_float_cast(mlir::PatternRewriter &rewriter, mlir::Location loc,
   }
 }
 
-mlir::Value float_int_cast(mlir::PatternRewriter &rewriter, mlir::Location loc,
-                           mlir::Value val, mlir::Type dstType) {
+mlir::Value floatIntCast(mlir::PatternRewriter &rewriter, mlir::Location loc,
+                         mlir::Value val, mlir::Type dstType) {
   auto dstIntType = dstType.cast<mlir::IntegerType>();
   mlir::Value res;
   auto dstSignlessType = plier::makeSignlessType(dstIntType);
@@ -599,8 +598,8 @@ mlir::Value float_int_cast(mlir::PatternRewriter &rewriter, mlir::Location loc,
   return res;
 }
 
-mlir::Value index_cast_impl(mlir::PatternRewriter &rewriter, mlir::Location loc,
-                            mlir::Value val, mlir::Type dstType) {
+mlir::Value indexCastImpl(mlir::PatternRewriter &rewriter, mlir::Location loc,
+                          mlir::Value val, mlir::Type dstType) {
   if (val.getType().isa<mlir::FloatType>()) {
     auto intType = rewriter.getI64Type();
     val = rewriter.createOrFold<mlir::arith::FPToSIOp>(loc, val, intType);
@@ -613,8 +612,8 @@ mlir::Value index_cast_impl(mlir::PatternRewriter &rewriter, mlir::Location loc,
   return plier::index_cast(rewriter, loc, val, dstType);
 }
 
-mlir::Value float_cast_impl(mlir::PatternRewriter &rewriter, mlir::Location loc,
-                            mlir::Value val, mlir::Type dstType) {
+mlir::Value floatCastImpl(mlir::PatternRewriter &rewriter, mlir::Location loc,
+                          mlir::Value val, mlir::Type dstType) {
   auto srcFloatType = val.getType().cast<mlir::FloatType>();
   auto dstFloatType = dstType.cast<mlir::FloatType>();
   assert(srcFloatType != dstFloatType);
@@ -652,27 +651,33 @@ mlir::Value doCast(mlir::PatternRewriter &rewriter, mlir::Location loc,
   };
 
   const Handler handlers[] = {
-      {&is_int, &is_int, &int_cast},
-      {&is_int, &is_float, &int_float_cast},
-      {&is_float, &is_int, &float_int_cast},
-      {&is_index, &is_int, &index_cast_impl},
-      {&is_int, &is_index, &index_cast_impl},
-      {&is_float, &is_float, &float_cast_impl},
-      {&is_index, &is_float, &index_cast_impl},
-      {&is_float, &is_index, &index_cast_impl},
+      {&isInt, &isInt, &intCast},
+      {&isInt, &isFloat, &intFloatCast},
+      {&isFloat, &isInt, &floatIntCast},
+      {&is_index, &isInt, &indexCastImpl},
+      {&isInt, &is_index, &indexCastImpl},
+      {&isFloat, &isFloat, &floatCastImpl},
+      {&is_index, &isFloat, &indexCastImpl},
+      {&isFloat, &is_index, &indexCastImpl},
   };
 
-  for (auto &h : handlers) {
+  for (auto &h : handlers)
     if (h.src(srcType) && h.dst(dstType))
       return h.cast_op(rewriter, loc, val, dstType);
-  }
 
   return nullptr;
 }
 
+mlir::Value invalidReplaceOp(mlir::PatternRewriter & /*rewriter*/,
+                             mlir::Location /*loc*/,
+                             mlir::ValueRange /*operands*/,
+                             mlir::Type /*newType*/) {
+  llvm_unreachable("invalidReplaceOp");
+}
+
 template <typename T>
-mlir::Value replace_op(mlir::PatternRewriter &rewriter, mlir::Location loc,
-                       mlir::ValueRange operands, mlir::Type newType) {
+mlir::Value replaceOp(mlir::PatternRewriter &rewriter, mlir::Location loc,
+                      mlir::ValueRange operands, mlir::Type newType) {
   auto signlessType = plier::makeSignlessType(newType);
   llvm::SmallVector<mlir::Value> newOperands(operands.size());
   for (auto it : llvm::enumerate(operands))
@@ -682,8 +687,8 @@ mlir::Value replace_op(mlir::PatternRewriter &rewriter, mlir::Location loc,
   return doCast(rewriter, loc, res, newType);
 }
 
-mlir::Value replace_ipow_op(mlir::PatternRewriter &rewriter, mlir::Location loc,
-                            mlir::ValueRange operands, mlir::Type newType) {
+mlir::Value replaceIpowOp(mlir::PatternRewriter &rewriter, mlir::Location loc,
+                          mlir::ValueRange operands, mlir::Type newType) {
   auto f64Type = rewriter.getF64Type();
   auto a = doCast(rewriter, loc, operands[0], f64Type);
   auto b = doCast(rewriter, loc, operands[1], f64Type);
@@ -691,18 +696,18 @@ mlir::Value replace_ipow_op(mlir::PatternRewriter &rewriter, mlir::Location loc,
   return doCast(rewriter, loc, fres, newType);
 }
 
-mlir::Value replace_itruediv_op(mlir::PatternRewriter &rewriter,
-                                mlir::Location loc, mlir::ValueRange operands,
-                                mlir::Type newType) {
+mlir::Value replaceItruedivOp(mlir::PatternRewriter &rewriter,
+                              mlir::Location loc, mlir::ValueRange operands,
+                              mlir::Type newType) {
   assert(newType.isa<mlir::FloatType>());
   auto lhs = doCast(rewriter, loc, operands[0], newType);
   auto rhs = doCast(rewriter, loc, operands[1], newType);
   return rewriter.createOrFold<mlir::arith::DivFOp>(loc, lhs, rhs);
 }
 
-mlir::Value replace_ifloordiv_op(mlir::PatternRewriter &rewriter,
-                                 mlir::Location loc, mlir::ValueRange operands,
-                                 mlir::Type newType) {
+mlir::Value replaceIfloordivOp(mlir::PatternRewriter &rewriter,
+                               mlir::Location loc, mlir::ValueRange operands,
+                               mlir::Type newType) {
   auto newIntType = newType.cast<mlir::IntegerType>();
   auto signlessType = plier::makeSignlessType(newIntType);
   auto lhs = doCast(rewriter, loc, operands[0], signlessType);
@@ -716,9 +721,9 @@ mlir::Value replace_ifloordiv_op(mlir::PatternRewriter &rewriter,
   return doCast(rewriter, loc, res, newType);
 }
 
-mlir::Value replace_ffloordiv_op(mlir::PatternRewriter &rewriter,
-                                 mlir::Location loc, mlir::ValueRange operands,
-                                 mlir::Type newType) {
+mlir::Value replaceFfloordivOp(mlir::PatternRewriter &rewriter,
+                               mlir::Location loc, mlir::ValueRange operands,
+                               mlir::Type newType) {
   assert(newType.isa<mlir::FloatType>());
   auto lhs = doCast(rewriter, loc, operands[0], newType);
   auto rhs = doCast(rewriter, loc, operands[1], newType);
@@ -726,8 +731,8 @@ mlir::Value replace_ffloordiv_op(mlir::PatternRewriter &rewriter,
   return rewriter.createOrFold<mlir::math::FloorOp>(loc, res);
 }
 
-mlir::Value replace_imod_op(mlir::PatternRewriter &rewriter, mlir::Location loc,
-                            mlir::ValueRange operands, mlir::Type newType) {
+mlir::Value replaceImodOp(mlir::PatternRewriter &rewriter, mlir::Location loc,
+                          mlir::ValueRange operands, mlir::Type newType) {
   auto signlessType = plier::makeSignlessType(operands[0].getType());
   auto a = doCast(rewriter, loc, operands[0], signlessType);
   auto b = doCast(rewriter, loc, operands[1], signlessType);
@@ -737,8 +742,8 @@ mlir::Value replace_imod_op(mlir::PatternRewriter &rewriter, mlir::Location loc,
   return doCast(rewriter, loc, res, newType);
 }
 
-mlir::Value replace_fmod_op(mlir::PatternRewriter &rewriter, mlir::Location loc,
-                            mlir::ValueRange operands, mlir::Type /*newType*/) {
+mlir::Value replaceFmodOp(mlir::PatternRewriter &rewriter, mlir::Location loc,
+                          mlir::ValueRange operands, mlir::Type /*newType*/) {
   auto a = operands[0];
   auto b = operands[1];
   auto v1 = rewriter.create<mlir::arith::RemFOp>(loc, a, b).getResult();
@@ -748,8 +753,8 @@ mlir::Value replace_fmod_op(mlir::PatternRewriter &rewriter, mlir::Location loc,
 
 template <mlir::arith::CmpIPredicate SignedPred,
           mlir::arith::CmpIPredicate UnsignedPred = SignedPred>
-mlir::Value replace_cmpi_op(mlir::PatternRewriter &rewriter, mlir::Location loc,
-                            mlir::ValueRange operands, mlir::Type /*newType*/) {
+mlir::Value replaceCmpiOp(mlir::PatternRewriter &rewriter, mlir::Location loc,
+                          mlir::ValueRange operands, mlir::Type /*newType*/) {
   assert(operands.size() == 2);
   assert(operands[0].getType() == operands[1].getType());
   auto type = operands[0].getType().cast<mlir::IntegerType>();
@@ -764,8 +769,8 @@ mlir::Value replace_cmpi_op(mlir::PatternRewriter &rewriter, mlir::Location loc,
 }
 
 template <mlir::arith::CmpFPredicate Pred>
-mlir::Value replace_cmpf_op(mlir::PatternRewriter &rewriter, mlir::Location loc,
-                            mlir::ValueRange operands, mlir::Type /*newType*/) {
+mlir::Value replaceCmpfOp(mlir::PatternRewriter &rewriter, mlir::Location loc,
+                          mlir::ValueRange operands, mlir::Type /*newType*/) {
   auto signlessType = plier::makeSignlessType(operands[0].getType());
   auto a = doCast(rewriter, loc, operands[0], signlessType);
   auto b = doCast(rewriter, loc, operands[1], signlessType);
@@ -822,37 +827,36 @@ struct BinOpLowering : public mlir::OpConversionPattern<plier::BinOp> {
     };
 
     const OpDesc handlers[] = {
-        {"+", &replace_op<mlir::arith::AddIOp>,
-         &replace_op<mlir::arith::AddFOp>},
-        {"-", &replace_op<mlir::arith::SubIOp>,
-         &replace_op<mlir::arith::SubFOp>},
-        {"*", &replace_op<mlir::arith::MulIOp>,
-         &replace_op<mlir::arith::MulFOp>},
-        {"**", &replace_ipow_op, &replace_op<mlir::math::PowFOp>},
-        {"/", &replace_itruediv_op, &replace_op<mlir::arith::DivFOp>},
-        {"//", &replace_ifloordiv_op, &replace_ffloordiv_op},
-        {"%", &replace_imod_op, &replace_fmod_op},
+        {"+", &replaceOp<mlir::arith::AddIOp>, &replaceOp<mlir::arith::AddFOp>},
+        {"-", &replaceOp<mlir::arith::SubIOp>, &replaceOp<mlir::arith::SubFOp>},
+        {"*", &replaceOp<mlir::arith::MulIOp>, &replaceOp<mlir::arith::MulFOp>},
+        {"**", &replaceIpowOp, &replaceOp<mlir::math::PowFOp>},
+        {"/", &replaceItruedivOp, &replaceOp<mlir::arith::DivFOp>},
+        {"//", &replaceIfloordivOp, &replaceFfloordivOp},
+        {"%", &replaceImodOp, &replaceFmodOp},
+        {"&", &replaceOp<mlir::arith::AndIOp>, &invalidReplaceOp},
+        {"|", &replaceOp<mlir::arith::OrIOp>, &invalidReplaceOp},
 
         {">",
-         &replace_cmpi_op<mlir::arith::CmpIPredicate::sgt,
-                          mlir::arith::CmpIPredicate::ugt>,
-         &replace_cmpf_op<mlir::arith::CmpFPredicate::OGT>},
+         &replaceCmpiOp<mlir::arith::CmpIPredicate::sgt,
+                        mlir::arith::CmpIPredicate::ugt>,
+         &replaceCmpfOp<mlir::arith::CmpFPredicate::OGT>},
         {">=",
-         &replace_cmpi_op<mlir::arith::CmpIPredicate::sge,
-                          mlir::arith::CmpIPredicate::uge>,
-         &replace_cmpf_op<mlir::arith::CmpFPredicate::OGE>},
+         &replaceCmpiOp<mlir::arith::CmpIPredicate::sge,
+                        mlir::arith::CmpIPredicate::uge>,
+         &replaceCmpfOp<mlir::arith::CmpFPredicate::OGE>},
         {"<",
-         &replace_cmpi_op<mlir::arith::CmpIPredicate::slt,
-                          mlir::arith::CmpIPredicate::ult>,
-         &replace_cmpf_op<mlir::arith::CmpFPredicate::OLT>},
+         &replaceCmpiOp<mlir::arith::CmpIPredicate::slt,
+                        mlir::arith::CmpIPredicate::ult>,
+         &replaceCmpfOp<mlir::arith::CmpFPredicate::OLT>},
         {"<=",
-         &replace_cmpi_op<mlir::arith::CmpIPredicate::sle,
-                          mlir::arith::CmpIPredicate::ule>,
-         &replace_cmpf_op<mlir::arith::CmpFPredicate::OLE>},
-        {"!=", &replace_cmpi_op<mlir::arith::CmpIPredicate::ne>,
-         &replace_cmpf_op<mlir::arith::CmpFPredicate::ONE>},
-        {"==", &replace_cmpi_op<mlir::arith::CmpIPredicate::eq>,
-         &replace_cmpf_op<mlir::arith::CmpFPredicate::OEQ>},
+         &replaceCmpiOp<mlir::arith::CmpIPredicate::sle,
+                        mlir::arith::CmpIPredicate::ule>,
+         &replaceCmpfOp<mlir::arith::CmpFPredicate::OLE>},
+        {"!=", &replaceCmpiOp<mlir::arith::CmpIPredicate::ne>,
+         &replaceCmpfOp<mlir::arith::CmpFPredicate::ONE>},
+        {"==", &replaceCmpiOp<mlir::arith::CmpIPredicate::eq>,
+         &replaceCmpfOp<mlir::arith::CmpFPredicate::OEQ>},
     };
 
     using membptr_t = func_t OpDesc::*;
@@ -869,9 +873,9 @@ struct BinOpLowering : public mlir::OpConversionPattern<plier::BinOp> {
       return mlir::failure();
     };
 
-    if (is_int(finalType)) {
+    if (isInt(finalType)) {
       return callHandler(&OpDesc::iop);
-    } else if (is_float(finalType)) {
+    } else if (isFloat(finalType)) {
       return callHandler(&OpDesc::fop);
     }
     return mlir::failure();
@@ -890,14 +894,14 @@ static mlir::Value negate(mlir::PatternRewriter &rewriter, mlir::Location loc,
     auto zero = rewriter.create<mlir::arith::ConstantOp>(
         loc, mlir::IntegerAttr::get(signless, 0));
     auto res = rewriter.create<mlir::arith::SubIOp>(loc, zero, val).getResult();
-    if (signless != itype) {
+    if (signless != itype)
       res = rewriter.create<plier::SignCastOp>(loc, itype, res);
-    }
+
     return res;
   }
-  if (resType.isa<mlir::FloatType>()) {
+  if (resType.isa<mlir::FloatType>())
     return rewriter.create<mlir::arith::NegFOp>(loc, val);
-  }
+
   llvm_unreachable("negate: unsupported type");
 }
 
@@ -923,10 +927,20 @@ struct UnaryOpLowering : public mlir::OpConversionPattern<plier::UnaryOp> {
       rewriter.replaceOp(op, arg);
       return mlir::success();
     }
-    assert(op.op() == "-");
-    auto new_val = negate(rewriter, loc, arg, resType);
-    rewriter.replaceOp(op, new_val);
-    return mlir::success();
+    if (op.op() == "-") {
+      auto newVal = negate(rewriter, loc, arg, resType);
+      rewriter.replaceOp(op, newVal);
+      return mlir::success();
+    }
+    if (op.op() == "not") {
+      auto i1 = rewriter.getIntegerType(1);
+      auto casted = doCast(rewriter, loc, arg, i1);
+      auto one = rewriter.create<mlir::arith::ConstantIntOp>(loc, 1, i1);
+      auto newVal = rewriter.create<mlir::arith::SubIOp>(loc, one, casted);
+      rewriter.replaceOp(op, newVal.getResult());
+      return mlir::success();
+    }
+    return mlir::failure();
   }
 };
 
