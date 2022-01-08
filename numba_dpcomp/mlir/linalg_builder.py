@@ -196,7 +196,14 @@ def broadcast_type(builder, args):
     rhs = type_to_numpy(builder, rhs)
     return type_from_numpy(builder, numpy.promote_types(lhs, rhs))
 
-def _get_array_type(builder, a):
+def get_val_type(builder, a):
+    if isinstance(a, float):
+        return builder.float64
+    elif isinstance(a, int):
+        return builder.int64
+    return a.type
+
+def get_array_type(builder, a):
     if isinstance(a, float):
         return builder.float64
     elif isinstance(a, int):
@@ -204,7 +211,7 @@ def _get_array_type(builder, a):
     return a.dtype
 
 def broadcast_type_arrays(builder, args):
-    return broadcast_type(builder, tuple(_get_array_type(builder, a) for a in args))
+    return broadcast_type(builder, tuple(get_array_type(builder, a) for a in args))
 
 def eltwise(builder, args, body, res_type = None):
     if isinstance(args, tuple):

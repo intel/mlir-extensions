@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..linalg_builder import FuncRegistry, is_literal, broadcast_type_arrays, eltwise, convert_array, asarray, is_int, is_float, dtype_str, DYNAMIC_DIM
+from ..linalg_builder import FuncRegistry, is_literal, broadcast_type_arrays, get_array_type, get_val_type, eltwise, convert_array, asarray, is_int, is_float, dtype_str, DYNAMIC_DIM
 from ..func_registry import add_func
 
 import numpy
@@ -164,23 +164,28 @@ def _gen_unary_ops():
 _gen_unary_ops()
 del _gen_unary_ops
 
+def _select_float_type(builder, a, b):
+    # TODO: hack for numba
+    da = get_array_type(builder, a)
+    db = get_array_type(builder, b)
+    if da == db:
+        return da
+    if is_float(da, builder) and not is_float(db, builder):
+        return da
+    if is_float(db, builder) and not is_float(da, builder):
+        return db
+    return broadcast_type_arrays(builder, (a,b))
+
+
+
 def _gen_binary_ops():
-    def select_float_type(builder, a, b):
-        # hack for numba
-        da = broadcast_type_arrays(builder, (a,))
-        db = broadcast_type_arrays(builder, (b,))
-        if da == db:
-            return da
-        if is_float(da, builder) and not is_float(db, builder):
-            return da
-        if is_float(db, builder) and not is_float(da, builder):
-            return db
-        return broadcast_type_arrays(builder, (a,b))
+    def bool_type(builder, a, b):
+        return builder.bool
 
     def select_float_type_f64(builder, a, b):
-        # hack for numba
-        da = broadcast_type_arrays(builder, (a,))
-        db = broadcast_type_arrays(builder, (b,))
+        # TODO: hack for numba
+        da = get_array_type(builder, a)
+        db = get_array_type(builder, b)
         if da == db and is_float(da, builder):
             return da
         if is_float(da, builder) and not is_float(db, builder):
@@ -189,23 +194,20 @@ def _gen_binary_ops():
             return db
         return builder.float64
 
-    def bool_type(builder, a, b):
-        return builder.bool
-
     binary_ops = [
-        (register_func('numpy.add', numpy.add), select_float_type, lambda a, b, c: a + b),
-        (register_func('operator.add'), select_float_type, lambda a, b, c: a + b),
-        (register_func('numpy.subtract', numpy.subtract), select_float_type, lambda a, b, c: a - b),
-        (register_func('operator.sub'), select_float_type, lambda a, b, c: a - b),
-        (register_func('numpy.multiply', numpy.multiply), select_float_type, lambda a, b, c: a * b),
-        (register_func('operator.mul'), select_float_type, lambda a, b, c: a * b),
+        (register_func('numpy.add', numpy.add), _select_float_type, lambda a, b, c: a + b),
+        (register_func('operator.add'), _select_float_type, lambda a, b, c: a + b),
+        (register_func('numpy.subtract', numpy.subtract), _select_float_type, lambda a, b, c: a - b),
+        (register_func('operator.sub'), _select_float_type, lambda a, b, c: a - b),
+        (register_func('numpy.multiply', numpy.multiply), _select_float_type, lambda a, b, c: a * b),
+        (register_func('operator.mul'), _select_float_type, lambda a, b, c: a * b),
         (register_func('numpy.true_divide', numpy.true_divide), select_float_type_f64, lambda a, b, c: a / b),
         (register_func('operator.truediv'), select_float_type_f64, lambda a, b, c: a / b),
-        (register_func('numpy.power', numpy.power), select_float_type, lambda a, b, c: a ** b),
-        (register_func('operator.pow'), select_float_type, lambda a, b, c: a ** b),
+        (register_func('numpy.power', numpy.power), _select_float_type, lambda a, b, c: a ** b),
+        (register_func('operator.pow'), _select_float_type, lambda a, b, c: a ** b),
         (register_func('numpy.arctan2', numpy.arctan2), select_float_type_f64, lambda a, b, c: math.atan2(a, b)),
-        (register_func('numpy.minimum', numpy.minimum), select_float_type, lambda a, b, c: min(a, b)),
-        (register_func('numpy.maximum', numpy.maximum), select_float_type, lambda a, b, c: max(a, b)),
+        (register_func('numpy.minimum', numpy.minimum), _select_float_type, lambda a, b, c: min(a, b)),
+        (register_func('numpy.maximum', numpy.maximum), _select_float_type, lambda a, b, c: max(a, b)),
 
         (register_func('numpy.logical_and', numpy.logical_and), bool_type, lambda a, b, c: a and b),
         (register_func('operator.and'), bool_type, lambda a, b, c: a and b),
@@ -374,6 +376,37 @@ def where_impl(builder, cond, x, y):
 
     return eltwise(builder, (cond, x, y), body)
 
+def _is_scalar(a):
+    try:
+        return len(a.shape) == 0
+    except:
+        return True
+
+@register_func('numpy.outer', numpy.outer)
+def outer_impl(builder, x, y):
+    def flatten(a):
+        if _is_scalar(a):
+            return builder.from_elements([a], get_val_type(builder, a))
+
+        return flatten_impl(builder, a)
+
+    x = flatten(x)
+    y = flatten(y)
+
+    res_type = _select_float_type(builder, x, y)
+    init = builder.init_tensor((x.shape[0], y.shape[0]), res_type)
+
+    iterators = ['parallel','parallel']
+    expr1 = '(d0,d1) -> (d0)'
+    expr2 = '(d0,d1) -> (d1)'
+    expr3 = '(d0,d1) -> (d0,d1)'
+    maps = [expr1,expr2,expr3]
+
+    def body(a, b, c):
+        return a * b
+
+    return builder.linalg_generic((x,y), init, iterators, maps, body)
+
 @register_attr('array.shape')
 def shape_impl(builder, arg):
     shape = arg.shape
@@ -419,7 +452,7 @@ def reshape_impl(builder, arg, new_shape):
 @register_func('array.flatten')
 def flatten_impl(builder, arg):
     size = size_impl(builder, arg)
-    return builder.reshape(arg, size)
+    return builder.reshape(arg, [size])
 
 @register_func('numpy.linalg.eig', numpy.linalg.eig)
 def eig_impl(builder, arg):
