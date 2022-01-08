@@ -1240,7 +1240,8 @@ static py::object undefImpl(py::capsule context, py::handle dtype) {
 }
 
 py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
-                       py::handle sizes, py::handle strides, py::handle rank) {
+                       py::handle sizes, py::handle strides, py::handle rank,
+                       py::bool_ forceView) {
   auto &ctx = getPyContext(context);
   auto &builder = ctx.builder;
   auto loc = ctx.loc;
@@ -1326,8 +1327,14 @@ py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
           .cast<mlir::RankedTensorType>();
     }
   }();
-  auto view = builder.createOrFold<plier::ForceViewOp>(
-      loc, viewType, srcVal, offsetVals, sizeVals, strideVals);
+  mlir::Value view;
+  if (forceView) {
+    view = builder.createOrFold<plier::ForceViewOp>(
+        loc, viewType, srcVal, offsetVals, sizeVals, strideVals);
+  } else {
+    view = builder.createOrFold<mlir::tensor::ExtractSliceOp>(
+        loc, viewType, srcVal, offsetVals, sizeVals, strideVals);
+  }
 
   auto getDynShape = [](int64_t r) {
     return llvm::SmallVector<int64_t>(r, mlir::ShapedType::kDynamicSize);
