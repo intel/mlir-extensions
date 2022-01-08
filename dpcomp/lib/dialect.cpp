@@ -1199,17 +1199,41 @@ struct ChangeLayoutSliceGetItem
   }
 };
 
+struct ChangeLayoutCopy : public mlir::OpRewritePattern<mlir::memref::CopyOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::CopyOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto input = op.source();
+    auto output = op.target();
+    auto clInput = input.getDefiningOp<plier::ChangeLayoutOp>();
+    auto clOutput = output.getDefiningOp<plier::ChangeLayoutOp>();
+    if (!clInput && !clOutput)
+      return mlir::failure();
+
+    if (clInput)
+      input = clInput.source();
+
+    if (clOutput)
+      output = clOutput.source();
+
+    rewriter.replaceOpWithNewOp<mlir::memref::CopyOp>(op, input, output);
+    return mlir::success();
+  }
+};
+
 } // namespace
 
 void ChangeLayoutOp::getCanonicalizationPatterns(
     ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context) {
-  results
-      .insert<ChangeLayoutIdentity, ChangeLayoutReduceRank, ChangeLayoutDim,
-              ChangeLayoutExtractMetadata, ChangeLayoutClone,
-              PropagateCloneType, ChangeLayoutCast, ChangeLayoutLoad,
-              ChangeLayoutStore, ChangeLayoutSubview, ChangeLayoutLinalgGeneric,
-              ChangeLayoutLinalgCopy, ChangeLayoutLinalgFill, ChangeLayoutIf,
-              ChangeLayout1DReshape, ChangeLayoutSliceGetItem>(context);
+  results.insert<ChangeLayoutIdentity, ChangeLayoutReduceRank, ChangeLayoutDim,
+                 ChangeLayoutExtractMetadata, ChangeLayoutClone,
+                 PropagateCloneType, ChangeLayoutCast, ChangeLayoutLoad,
+                 ChangeLayoutStore, ChangeLayoutSubview,
+                 ChangeLayoutLinalgGeneric, ChangeLayoutLinalgCopy,
+                 ChangeLayoutLinalgFill, ChangeLayoutIf, ChangeLayout1DReshape,
+                 ChangeLayoutSliceGetItem, ChangeLayoutCopy>(context);
 }
 
 mlir::OpFoldResult SignCastOp::fold(llvm::ArrayRef<mlir::Attribute> operands) {
@@ -2026,6 +2050,11 @@ llvm::SmallDenseSet<unsigned> plier::ForceViewOp::getDroppedDims() {
     droppedDims.insert(size.index());
   }
   return droppedDims;
+}
+
+void plier::ForceCopyOp::build(OpBuilder &b, OperationState &result,
+                               Value source) {
+  build(b, result, source.getType(), source);
 }
 
 #include "plier/PlierOpsDialect.cpp.inc"

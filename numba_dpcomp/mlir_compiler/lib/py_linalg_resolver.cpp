@@ -1342,6 +1342,18 @@ py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
                                doSignCast(builder, loc, view, resSignedType));
 }
 
+py::object forceCopyImpl(py::capsule context, py::handle src) {
+  auto &ctx = getPyContext(context);
+  auto &builder = ctx.builder;
+  auto loc = ctx.loc;
+  auto origSrcVal = ctx.context.unwrapVal(loc, builder, src);
+  auto origSrcType = origSrcVal.getType();
+  auto srcVal = doSignCast(builder, loc, origSrcVal);
+  auto res = builder.create<plier::ForceCopyOp>(loc, srcVal);
+  return ctx.context.createVar(context,
+                               doSignCast(builder, loc, res, origSrcType));
+}
+
 py::object selectImpl(py::capsule context, py::handle cond, py::handle trueV,
                       py::handle falseV) {
   auto &ctx = getPyContext(context);
@@ -1383,6 +1395,7 @@ setupPyBuilder(py::handle builder, mlir::OpBuilder &b,
   py::setattr(builder, "_cast", py::cpp_function(&castImpl));
   py::setattr(builder, "_undef", py::cpp_function(&undefImpl));
   py::setattr(builder, "_subview", py::cpp_function(&subviewImpl));
+  py::setattr(builder, "_force_copy", py::cpp_function(&forceCopyImpl));
   py::setattr(builder, "_select", py::cpp_function(&selectImpl));
 
   py::setattr(builder, "_array_type", py::cpp_function(&arrayTypeImpl));

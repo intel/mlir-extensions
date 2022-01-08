@@ -83,6 +83,7 @@ _test_arrays_ids = [
     'lambda a: a.size',
     'lambda a: a.T',
     'lambda a: a.T.T',
+    'lambda a: a.copy()',
 ])
 @pytest.mark.parametrize("arr",
                          _test_arrays,

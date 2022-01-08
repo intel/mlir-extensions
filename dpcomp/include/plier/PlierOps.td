@@ -545,5 +545,17 @@ def ForceViewOp : BaseOpWithOffsetSizesAndStrides<
   let hasFolder = 1;
 }
 
+def ForceCopyOp : Plier_Op<"force_copy", [ViewLikeOpInterface]> {
+  let arguments = (ins AnyRankedTensor : $source);
+
+  let results = (outs AnyRankedTensor);
+
+  let builders = [OpBuilder<(ins "::mlir::Value" : $value)>];
+
+  let extraClassDeclaration = [{
+      ::mlir::Value getViewSource() { return source(); }
+  }];
+}
+
 
 #endif // PLIER_OPS

@@ -1837,6 +1837,37 @@ struct BufferizeForceView
   }
 };
 
+struct BufferizeForceCopy
+    : public mlir::OpConversionPattern<plier::ForceCopyOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::ForceCopyOp op, plier::ForceCopyOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto converter = getTypeConverter();
+    assert(converter);
+    auto dstType = converter->convertType(op.getType())
+                       .dyn_cast_or_null<mlir::MemRefType>();
+
+    if (!dstType)
+      return mlir::failure();
+
+    auto src = adaptor.source();
+    auto srcType = src.getType().cast<mlir::MemRefType>();
+    auto rank = static_cast<unsigned>(srcType.getRank());
+
+    auto loc = op->getLoc();
+    llvm::SmallVector<mlir::Value> sizes(rank);
+    for (auto i : llvm::seq(0u, rank))
+      sizes[i] = rewriter.create<mlir::memref::DimOp>(loc, src, i);
+
+    auto dst = rewriter.create<mlir::memref::AllocOp>(loc, dstType, sizes);
+    rewriter.create<mlir::memref::CopyOp>(loc, src, dst);
+    rewriter.replaceOp(op, dst.getResult());
+    return mlir::success();
+  }
+};
+
 struct FixDeallocPlacement
     : public mlir::OpRewritePattern<mlir::memref::DeallocOp> {
   using mlir::OpRewritePattern<mlir::memref::DeallocOp>::OpRewritePattern;
@@ -1917,10 +1948,11 @@ void AdditionalBufferize::runOnFunction() {
   plier::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
                                                       target);
   target.addIllegalOp<mlir::tensor::ReshapeOp>();
-  target.addIllegalOp<plier::ForceViewOp>();
+  target.addIllegalOp<plier::ForceViewOp, plier::ForceCopyOp>();
   target.addLegalOp<mlir::memref::ReshapeOp>();
 
-  patterns.insert<BufferizeReshape, BufferizeForceView>(typeConverter, context);
+  patterns.insert<BufferizeReshape, BufferizeForceView, BufferizeForceCopy>(
+      typeConverter, context);
 
   if (failed(applyPartialConversion(module, target, std::move(patterns))))
     signalPassFailure();
