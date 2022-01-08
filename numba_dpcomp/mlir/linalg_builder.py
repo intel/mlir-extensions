@@ -121,8 +121,8 @@ class Builder:
     def undef(self, dtype):
         return self._undef(self._context, dtype)
 
-    def subview(self, src, offset, size=None, strides=None, result_rank=None, force_view=True):
-        return self._subview(self._context, src, offset, size, strides, result_rank, force_view)
+    def subview(self, src, offset, size=None, strides=None, result_rank=None):
+        return self._subview(self._context, src, offset, size, strides, result_rank)
 
     def select(self, cond, true_val, false_val):
         return self._select(self._context, cond, true_val, false_val)
