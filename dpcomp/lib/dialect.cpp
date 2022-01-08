@@ -27,6 +27,7 @@
 #include <mlir/Dialect/Linalg/IR/LinalgOps.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/SCF.h>
+#include <mlir/Dialect/StandardOps/Utils/Utils.h>
 
 #include <llvm/ADT/TypeSwitch.h>
 
@@ -1198,17 +1199,41 @@ struct ChangeLayoutSliceGetItem
   }
 };
 
+struct ChangeLayoutCopy : public mlir::OpRewritePattern<mlir::memref::CopyOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::CopyOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto input = op.source();
+    auto output = op.target();
+    auto clInput = input.getDefiningOp<plier::ChangeLayoutOp>();
+    auto clOutput = output.getDefiningOp<plier::ChangeLayoutOp>();
+    if (!clInput && !clOutput)
+      return mlir::failure();
+
+    if (clInput)
+      input = clInput.source();
+
+    if (clOutput)
+      output = clOutput.source();
+
+    rewriter.replaceOpWithNewOp<mlir::memref::CopyOp>(op, input, output);
+    return mlir::success();
+  }
+};
+
 } // namespace
 
 void ChangeLayoutOp::getCanonicalizationPatterns(
     ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context) {
-  results
-      .insert<ChangeLayoutIdentity, ChangeLayoutReduceRank, ChangeLayoutDim,
-              ChangeLayoutExtractMetadata, ChangeLayoutClone,
-              PropagateCloneType, ChangeLayoutCast, ChangeLayoutLoad,
-              ChangeLayoutStore, ChangeLayoutSubview, ChangeLayoutLinalgGeneric,
-              ChangeLayoutLinalgCopy, ChangeLayoutLinalgFill, ChangeLayoutIf,
-              ChangeLayout1DReshape, ChangeLayoutSliceGetItem>(context);
+  results.insert<ChangeLayoutIdentity, ChangeLayoutReduceRank, ChangeLayoutDim,
+                 ChangeLayoutExtractMetadata, ChangeLayoutClone,
+                 PropagateCloneType, ChangeLayoutCast, ChangeLayoutLoad,
+                 ChangeLayoutStore, ChangeLayoutSubview,
+                 ChangeLayoutLinalgGeneric, ChangeLayoutLinalgCopy,
+                 ChangeLayoutLinalgFill, ChangeLayoutIf, ChangeLayout1DReshape,
+                 ChangeLayoutSliceGetItem, ChangeLayoutCopy>(context);
 }
 
 mlir::OpFoldResult SignCastOp::fold(llvm::ArrayRef<mlir::Attribute> operands) {
@@ -1791,6 +1816,246 @@ mlir::StringAttr GPUSuggestBlockSizeOp::getKernelName() {
 }
 
 } // namespace plier
+
+//===----------------------------------------------------------------------===//
+// ForceViewOp
+//===----------------------------------------------------------------------===//
+
+/// An extract_slice op result type can be fully inferred from the source type
+/// and the static representation of offsets, sizes and strides. Special
+/// sentinels encode the dynamic case.
+mlir::RankedTensorType plier::ForceViewOp::inferResultType(
+    mlir::RankedTensorType sourceRankedTensorType,
+    mlir::ArrayRef<int64_t> leadingStaticOffsets,
+    mlir::ArrayRef<int64_t> leadingStaticSizes,
+    mlir::ArrayRef<int64_t> leadingStaticStrides) {
+  // An extract_slice op may specify only a leading subset of offset/sizes/
+  // strides in which case we complete with offset=0, sizes from memref type and
+  // strides=1.
+  unsigned rank = sourceRankedTensorType.getRank();
+  assert(leadingStaticSizes.size() <= rank &&
+         "unexpected leadingStaticSizes overflow");
+  auto staticSizes = llvm::to_vector<4>(leadingStaticSizes);
+  unsigned numTrailingSizes = rank - staticSizes.size();
+  llvm::append_range(staticSizes, sourceRankedTensorType.getShape().take_back(
+                                      numTrailingSizes));
+  return RankedTensorType::get(staticSizes,
+                               sourceRankedTensorType.getElementType());
+}
+
+mlir::RankedTensorType plier::ForceViewOp::inferResultType(
+    mlir::RankedTensorType sourceRankedTensorType,
+    mlir::ArrayRef<mlir::OpFoldResult> leadingStaticOffsets,
+    mlir::ArrayRef<mlir::OpFoldResult> leadingStaticSizes,
+    mlir::ArrayRef<mlir::OpFoldResult> leadingStaticStrides) {
+  SmallVector<int64_t> staticOffsets, staticSizes, staticStrides;
+  SmallVector<Value> dynamicOffsets, dynamicSizes, dynamicStrides;
+  dispatchIndexOpFoldResults(leadingStaticOffsets, dynamicOffsets,
+                             staticOffsets, ShapedType::kDynamicStrideOrOffset);
+  dispatchIndexOpFoldResults(leadingStaticSizes, dynamicSizes, staticSizes,
+                             ShapedType::kDynamicSize);
+  dispatchIndexOpFoldResults(leadingStaticStrides, dynamicStrides,
+                             staticStrides, ShapedType::kDynamicStrideOrOffset);
+  return ForceViewOp::inferResultType(sourceRankedTensorType, staticOffsets,
+                                      staticSizes, staticStrides);
+}
+
+/// An extract_slice op result type can be fully inferred from the source type
+/// and the static representation of offsets, sizes and strides. Special
+/// sentinels encode the dynamic case.
+mlir::RankedTensorType plier::ForceViewOp::inferRankReducedResultType(
+    unsigned resultRank, RankedTensorType sourceRankedTensorType,
+    mlir::ArrayRef<int64_t> leadingStaticOffsets,
+    mlir::ArrayRef<int64_t> leadingStaticSizes,
+    mlir::ArrayRef<int64_t> leadingStaticStrides) {
+  auto inferredType =
+      inferResultType(sourceRankedTensorType, leadingStaticOffsets,
+                      leadingStaticSizes, leadingStaticStrides)
+          .cast<RankedTensorType>();
+  int rankDiff = inferredType.getRank() - resultRank;
+  if (rankDiff > 0) {
+    auto shape = inferredType.getShape();
+    llvm::SmallDenseSet<unsigned> dimsToProject;
+    mlir::getPositionsOfShapeOne(rankDiff, shape, dimsToProject);
+    SmallVector<int64_t> projectedShape;
+    for (unsigned pos = 0, e = shape.size(); pos < e; ++pos)
+      if (!dimsToProject.contains(pos))
+        projectedShape.push_back(shape[pos]);
+    inferredType =
+        RankedTensorType::get(projectedShape, inferredType.getElementType());
+  }
+  return inferredType;
+}
+
+mlir::RankedTensorType plier::ForceViewOp::inferRankReducedResultType(
+    unsigned resultRank, RankedTensorType sourceRankedTensorType,
+    mlir::ArrayRef<mlir::OpFoldResult> leadingStaticOffsets,
+    mlir::ArrayRef<mlir::OpFoldResult> leadingStaticSizes,
+    mlir::ArrayRef<mlir::OpFoldResult> leadingStaticStrides) {
+  SmallVector<int64_t> staticOffsets, staticSizes, staticStrides;
+  SmallVector<Value> dynamicOffsets, dynamicSizes, dynamicStrides;
+  dispatchIndexOpFoldResults(leadingStaticOffsets, dynamicOffsets,
+                             staticOffsets, ShapedType::kDynamicStrideOrOffset);
+  dispatchIndexOpFoldResults(leadingStaticSizes, dynamicSizes, staticSizes,
+                             ShapedType::kDynamicSize);
+  dispatchIndexOpFoldResults(leadingStaticStrides, dynamicStrides,
+                             staticStrides, ShapedType::kDynamicStrideOrOffset);
+  return ForceViewOp::inferRankReducedResultType(
+      resultRank, sourceRankedTensorType, staticOffsets, staticSizes,
+      staticStrides);
+}
+
+/// Build an ForceViewOp with mixed static and dynamic entries and custom
+/// result type. If the type passed is nullptr, it is inferred.
+void plier::ForceViewOp::build(mlir::OpBuilder &b, mlir::OperationState &result,
+                               mlir::RankedTensorType resultType,
+                               mlir::Value source,
+                               mlir::ArrayRef<mlir::OpFoldResult> offsets,
+                               mlir::ArrayRef<mlir::OpFoldResult> sizes,
+                               mlir::ArrayRef<mlir::OpFoldResult> strides,
+                               mlir::ArrayRef<mlir::NamedAttribute> attrs) {
+  SmallVector<int64_t> staticOffsets, staticSizes, staticStrides;
+  SmallVector<Value> dynamicOffsets, dynamicSizes, dynamicStrides;
+  dispatchIndexOpFoldResults(offsets, dynamicOffsets, staticOffsets,
+
+                             ShapedType::kDynamicStrideOrOffset);
+  dispatchIndexOpFoldResults(sizes, dynamicSizes, staticSizes,
+                             ShapedType::kDynamicSize);
+  dispatchIndexOpFoldResults(strides, dynamicStrides, staticStrides,
+
+                             ShapedType::kDynamicStrideOrOffset);
+  auto sourceRankedTensorType = source.getType().cast<RankedTensorType>();
+  // Structuring implementation this way avoids duplication between builders.
+  if (!resultType) {
+    resultType =
+        ForceViewOp::inferResultType(sourceRankedTensorType, staticOffsets,
+                                     staticSizes, staticStrides)
+            .cast<RankedTensorType>();
+  }
+  build(b, result, resultType, source, dynamicOffsets, dynamicSizes,
+        dynamicStrides, b.getI64ArrayAttr(staticOffsets),
+        b.getI64ArrayAttr(staticSizes), b.getI64ArrayAttr(staticStrides));
+  result.addAttributes(attrs);
+}
+
+/// Build an ForceViewOp with mixed static and dynamic entries and inferred
+/// result type.
+void plier::ForceViewOp::build(mlir::OpBuilder &b, mlir::OperationState &result,
+                               mlir::Value source,
+                               mlir::ArrayRef<mlir::OpFoldResult> offsets,
+                               mlir::ArrayRef<mlir::OpFoldResult> sizes,
+                               mlir::ArrayRef<mlir::OpFoldResult> strides,
+                               mlir::ArrayRef<mlir::NamedAttribute> attrs) {
+  build(b, result, RankedTensorType(), source, offsets, sizes, strides, attrs);
+}
+
+/// Build an ForceViewOp with dynamic entries and custom result type. If the
+/// type passed is nullptr, it is inferred.
+void plier::ForceViewOp::build(OpBuilder &b, OperationState &result,
+                               RankedTensorType resultType, Value source,
+                               ValueRange offsets, ValueRange sizes,
+                               ValueRange strides,
+                               ArrayRef<NamedAttribute> attrs) {
+  SmallVector<OpFoldResult> offsetValues = llvm::to_vector<4>(
+      llvm::map_range(offsets, [](Value v) -> OpFoldResult { return v; }));
+  SmallVector<OpFoldResult> sizeValues = llvm::to_vector<4>(
+      llvm::map_range(sizes, [](Value v) -> OpFoldResult { return v; }));
+  SmallVector<OpFoldResult> strideValues = llvm::to_vector<4>(
+      llvm::map_range(strides, [](Value v) -> OpFoldResult { return v; }));
+  build(b, result, resultType, source, offsetValues, sizeValues, strideValues);
+}
+
+/// Build an ForceViewOp with dynamic entries and inferred result type.
+void plier::ForceViewOp::build(OpBuilder &b, OperationState &result,
+                               Value source, ValueRange offsets,
+                               ValueRange sizes, ValueRange strides,
+                               ArrayRef<NamedAttribute> attrs) {
+  build(b, result, RankedTensorType(), source, offsets, sizes, strides, attrs);
+}
+
+template <typename OpTy>
+static mlir::LogicalResult
+produceSliceErrorMsg(mlir::SliceVerificationResult result, OpTy op,
+                     mlir::Type expectedType) {
+  auto memrefType = expectedType.cast<mlir::ShapedType>();
+  switch (result) {
+  case mlir::SliceVerificationResult::Success:
+    return mlir::success();
+  case mlir::SliceVerificationResult::RankTooLarge:
+    return op.emitError("expected rank to be smaller or equal to ")
+           << "the other rank. ";
+  case mlir::SliceVerificationResult::SizeMismatch:
+    return op.emitError("expected type to be ")
+           << expectedType << " or a rank-reduced version. (size mismatch) ";
+  case mlir::SliceVerificationResult::ElemTypeMismatch:
+    return op.emitError("expected element type to be ")
+           << memrefType.getElementType();
+  default:
+    llvm_unreachable("unexpected extract_slice op verification result");
+  }
+}
+
+static mlir::LogicalResult verify(plier::ForceViewOp op) {
+  // Verify result type against inferred type.
+  auto expectedType = plier::ForceViewOp::inferResultType(
+      op.getSourceType(), op.getMixedOffsets(), op.getMixedSizes(),
+      op.getMixedStrides());
+  auto result =
+      isRankReducedType(expectedType.cast<mlir::ShapedType>(), op.getType());
+  return produceSliceErrorMsg(result, op, expectedType);
+}
+
+mlir::LogicalResult plier::ForceViewOp::reifyResultShapes(
+    OpBuilder &builder, ReifiedRankedShapedTypeDims &reifiedReturnShapes) {
+  reifiedReturnShapes.resize(1);
+  reifiedReturnShapes[0].reserve(getType().getRank());
+  SmallVector<OpFoldResult> mixedSizes = getMixedSizes();
+  llvm::SmallDenseSet<unsigned> droppedDims = getDroppedDims();
+  Location loc = getLoc();
+  for (auto size : enumerate(mixedSizes)) {
+    if (droppedDims.count(size.index()))
+      continue;
+    if (auto attr = size.value().dyn_cast<Attribute>()) {
+      reifiedReturnShapes[0].push_back(builder.create<arith::ConstantIndexOp>(
+          loc, attr.cast<IntegerAttr>().getInt()));
+      continue;
+    }
+    reifiedReturnShapes[0].push_back(size.value().get<Value>());
+  }
+  return success();
+}
+
+mlir::OpFoldResult plier::ForceViewOp::fold(ArrayRef<Attribute>) {
+  return OpFoldResult();
+}
+
+void plier::ForceViewOp::getCanonicalizationPatterns(RewritePatternSet &,
+                                                     MLIRContext *) {}
+
+llvm::SmallDenseSet<unsigned> plier::ForceViewOp::getDroppedDims() {
+  llvm::SmallDenseSet<unsigned> droppedDims;
+  ArrayRef<int64_t> resultShape = getType().getShape();
+  SmallVector<OpFoldResult> mixedSizes = getMixedSizes();
+  unsigned shapePos = 0;
+  for (auto size : enumerate(mixedSizes)) {
+    Optional<int64_t> sizeVal = getConstantIntValue(size.value());
+    // If the size is not 1, or if the current matched dimension of the result
+    // is the same static shape as the size value (which is 1), then the
+    // dimension is preserved.
+    if (!sizeVal || sizeVal.getValue() != 1 ||
+        (shapePos < resultShape.size() && resultShape[shapePos] == 1)) {
+      shapePos++;
+      continue;
+    }
+    droppedDims.insert(size.index());
+  }
+  return droppedDims;
+}
+
+void plier::ForceCopyOp::build(OpBuilder &b, OperationState &result,
+                               Value source) {
+  build(b, result, source.getType(), source);
+}
 
 #include "plier/PlierOpsDialect.cpp.inc"
 

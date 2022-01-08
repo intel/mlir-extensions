@@ -127,6 +127,9 @@ class Builder:
     def select(self, cond, true_val, false_val):
         return self._select(self._context, cond, true_val, false_val)
 
+    def force_copy(self, arr):
+        return self._force_copy(self._context, arr)
+
     def array_type(self, dims, dtype):
         return self._array_type(self._context, dims, dtype)
 

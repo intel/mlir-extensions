@@ -18,6 +18,7 @@
 include "mlir/IR/OpBase.td"
 include "mlir/Dialect/GPU/GPUBase.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/LoopLikeInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/ViewLikeInterface.td"
@@ -438,5 +439,123 @@ def GPUSuggestBlockSizeOp : Plier_Op<"suggest_block_size",
       ::mlir::StringAttr getKernelName();
   }];
 }
+
+def ForceViewOp : BaseOpWithOffsetSizesAndStrides<
+    Plier_Dialect, "force_view",
+    [NoSideEffect, AttrSizedOperandSegments,
+     DeclareOpInterfaceMethods<ReifyRankedShapedTypeOpInterface>,
+     OffsetSizeAndStrideOpInterface]> {
+  let arguments = (ins
+    AnyRankedTensor:$source,
+    Variadic<Index>:$offsets,
+    Variadic<Index>:$sizes,
+    Variadic<Index>:$strides,
+    I64ArrayAttr:$static_offsets,
+    I64ArrayAttr:$static_sizes,
+    I64ArrayAttr:$static_strides
+  );
+  let results = (outs AnyRankedTensor:$result);
+
+  let assemblyFormat = [{
+    $source ``
+    custom<OperandsOrIntegersOffsetsOrStridesList>($offsets, $static_offsets)
+    custom<OperandsOrIntegersSizesList>($sizes, $static_sizes)
+    custom<OperandsOrIntegersOffsetsOrStridesList>($strides, $static_strides)
+    attr-dict `:` type($source) `to` type($result)
+  }];
+
+  let builders = [
+    // Build an ExtractSliceOp with mixed static and dynamic entries and
+    // inferred result type.
+    OpBuilder<(ins "::mlir::Value":$source, "::mlir::ArrayRef<::mlir::OpFoldResult>":$offsets,
+      "::mlir::ArrayRef<::mlir::OpFoldResult>":$sizes, "::mlir::ArrayRef<::mlir::OpFoldResult>":$strides,
+      CArg<"::mlir::ArrayRef<::mlir::NamedAttribute>", "{}">:$attrs)>,
+    // Build an ExtractSliceOp with mixed static and dynamic entries and custom
+    // result type. If the type passed is nullptr, it is inferred.
+    OpBuilder<(ins "::mlir::RankedTensorType":$resultType, "::mlir::Value":$source,
+      "::mlir::ArrayRef<::mlir::OpFoldResult>":$offsets, "::mlir::ArrayRef<::mlir::OpFoldResult>":$sizes,
+      "::mlir::ArrayRef<::mlir::OpFoldResult>":$strides,
+      CArg<"::mlir::ArrayRef<::mlir::NamedAttribute>", "{}">:$attrs)>,
+    // Build an ExtractSliceOp with dynamic entries and custom result type. If
+    // the type passed is nullptr, it is inferred.
+    OpBuilder<(ins "::mlir::Value":$source, "::mlir::ValueRange":$offsets,
+      "::mlir::ValueRange":$sizes, "::mlir::ValueRange":$strides,
+      CArg<"::mlir::ArrayRef<::mlir::NamedAttribute>", "{}">:$attrs)>,
+    // Build an ExtractSliceOp with dynamic entries and inferred result type.
+    OpBuilder<(ins "::mlir::RankedTensorType":$resultType, "::mlir::Value":$source,
+      "::mlir::ValueRange":$offsets, "::mlir::ValueRange":$sizes, "::mlir::ValueRange":$strides,
+      CArg<"::mlir::ArrayRef<::mlir::NamedAttribute>", "{}">:$attrs)>
+  ];
+
+  let extraClassDeclaration = extraBaseClassDeclaration # [{
+    /// Returns the type of the base tensor operand.
+    ::mlir::RankedTensorType getSourceType() {
+      return source().getType().cast<::mlir::RankedTensorType>();
+    }
+
+    /// The result of an extract_slice is always a tensor.
+    ::mlir::RankedTensorType getType() {
+      return getResult().getType().cast<::mlir::RankedTensorType>();
+    }
+
+    /// An extract_slice result type can be fully inferred from the source type
+    /// and the static representation of offsets, sizes and strides. Special
+    /// sentinels encode the dynamic case.
+    static ::mlir::RankedTensorType inferResultType(
+      ::mlir::RankedTensorType sourceRankedTensorType,
+      ::mlir::ArrayRef<int64_t> staticOffsets,
+      ::mlir::ArrayRef<int64_t> staticSizes,
+      ::mlir::ArrayRef<int64_t> staticStrides);
+    static ::mlir::RankedTensorType inferResultType(
+      ::mlir::RankedTensorType sourceRankedTensorType,
+      ::mlir::ArrayRef<::mlir::OpFoldResult> staticOffsets,
+      ::mlir::ArrayRef<::mlir::OpFoldResult> staticSizes,
+      ::mlir::ArrayRef<::mlir::OpFoldResult> staticStrides);
+    static ::mlir::RankedTensorType inferRankReducedResultType(
+      unsigned resultRank,
+      ::mlir::RankedTensorType sourceRankedTensorType,
+      ::mlir::ArrayRef<int64_t> staticOffsets,
+      ::mlir::ArrayRef<int64_t> staticSizes,
+      ::mlir::ArrayRef<int64_t> staticStrides);
+    static ::mlir::RankedTensorType inferRankReducedResultType(
+      unsigned resultRank,
+      ::mlir::RankedTensorType sourceRankedTensorType,
+      ::mlir::ArrayRef<::mlir::OpFoldResult> staticOffsets,
+      ::mlir::ArrayRef<::mlir::OpFoldResult> staticSizes,
+      ::mlir::ArrayRef<::mlir::OpFoldResult> staticStrides);
+
+    /// Return the expected rank of each of the`static_offsets`, `static_sizes`
+    /// and `static_strides` attributes.
+    std::array<unsigned, 3> getArrayAttrMaxRanks() {
+      unsigned rank = getSourceType().getRank();
+      return {rank, rank, rank};
+    }
+
+    /// Return the number of leading operands before the `offsets`, `sizes` and
+    /// and `strides` operands.
+    static unsigned getOffsetSizeAndStrideStartOperandIndex() { return 1; }
+
+    /// Return the dimensions of the source that are dropped in the
+    /// result when the result is rank-reduced.
+    llvm::SmallDenseSet<unsigned> getDroppedDims();
+
+  }];
+
+  let hasCanonicalizer = 1;
+  let hasFolder = 1;
+}
+
+def ForceCopyOp : Plier_Op<"force_copy", [ViewLikeOpInterface]> {
+  let arguments = (ins AnyRankedTensor : $source);
+
+  let results = (outs AnyRankedTensor);
+
+  let builders = [OpBuilder<(ins "::mlir::Value" : $value)>];
+
+  let extraClassDeclaration = [{
+      ::mlir::Value getViewSource() { return source(); }
+  }];
+}
+
 
 #endif // PLIER_OPS

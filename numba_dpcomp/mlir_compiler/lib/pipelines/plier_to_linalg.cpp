@@ -1721,7 +1721,7 @@ struct LoopInvariantCodeMotion
 
 struct BufferizeReshape
     : public mlir::OpConversionPattern<mlir::tensor::ReshapeOp> {
-  using mlir::OpConversionPattern<mlir::tensor::ReshapeOp>::OpConversionPattern;
+  using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
   matchAndRewrite(mlir::tensor::ReshapeOp op,
@@ -1737,6 +1737,133 @@ struct BufferizeReshape
     auto resType = getType(op.getType());
     rewriter.replaceOpWithNewOp<mlir::memref::ReshapeOp>(op, resType, source,
                                                          shape);
+    return mlir::success();
+  }
+};
+
+// TODO: upstream
+template <typename Op>
+static ::mlir::SmallVector<::mlir::OpFoldResult, 4>
+getMixedOffsets(Op op, ::mlir::ValueRange offsets,
+                ::mlir::ArrayAttr staticOffsets) {
+  ::mlir::SmallVector<::mlir::OpFoldResult, 4> res;
+  unsigned numDynamic = 0;
+  unsigned count = staticOffsets.size();
+  for (unsigned idx = 0; idx < count; ++idx) {
+    if (op.isDynamicOffset(idx))
+      res.push_back(offsets[numDynamic++]);
+    else
+      res.push_back(staticOffsets[idx]);
+  }
+  return res;
+}
+
+// TODO: upstream
+template <typename Op>
+static ::mlir::SmallVector<::mlir::OpFoldResult, 4>
+getMixedSizes(Op op, ::mlir::ValueRange sizes, ::mlir::ArrayAttr staticSizes) {
+  ::mlir::SmallVector<::mlir::OpFoldResult, 4> res;
+  unsigned numDynamic = 0;
+  unsigned count = staticSizes.size();
+  for (unsigned idx = 0; idx < count; ++idx) {
+    if (op.isDynamicSize(idx))
+      res.push_back(sizes[numDynamic++]);
+    else
+      res.push_back(staticSizes[idx]);
+  }
+  return res;
+}
+
+// TODO: upstream
+template <typename Op>
+static ::mlir::SmallVector<::mlir::OpFoldResult, 4>
+getMixedStrides(Op op, ::mlir::ValueRange strides,
+                ::mlir::ArrayAttr staticStrides) {
+  ::mlir::SmallVector<::mlir::OpFoldResult, 4> res;
+  unsigned numDynamic = 0;
+  unsigned count = staticStrides.size();
+  for (unsigned idx = 0; idx < count; ++idx) {
+    if (op.isDynamicStride(idx))
+      res.push_back(strides[numDynamic++]);
+    else
+      res.push_back(staticStrides[idx]);
+  }
+  return res;
+}
+
+struct BufferizeForceView
+    : public mlir::OpConversionPattern<plier::ForceViewOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::ForceViewOp op, plier::ForceViewOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto converter = getTypeConverter();
+    assert(converter);
+    auto dstType = converter->convertType(op.getType())
+                       .dyn_cast_or_null<mlir::MemRefType>();
+    if (!dstType)
+      return mlir::failure();
+
+    auto src = adaptor.source();
+    auto srcType = src.getType().cast<mlir::MemRefType>();
+
+    auto dstRank = dstType.getRank();
+    auto offsets =
+        getMixedOffsets(op, adaptor.offsets(), adaptor.static_offsets());
+    auto sizes = getMixedSizes(op, adaptor.sizes(), adaptor.static_sizes());
+    auto strides =
+        getMixedStrides(op, adaptor.strides(), adaptor.static_strides());
+
+    auto viewType = [&]() {
+      if (srcType.getRank() == dstRank)
+        return mlir::memref::SubViewOp::inferResultType(srcType, offsets, sizes,
+                                                        strides)
+            .cast<mlir::MemRefType>();
+
+      return mlir::memref::SubViewOp::inferRankReducedResultType(
+                 dstRank, srcType, offsets, sizes, strides)
+          .cast<mlir::MemRefType>();
+    }();
+    auto loc = op->getLoc();
+    mlir::Value view = rewriter.create<mlir::memref::SubViewOp>(
+        loc, viewType, src, offsets, sizes, strides);
+
+    if (viewType != dstType)
+      view = rewriter.create<plier::ChangeLayoutOp>(loc, dstType, view);
+
+    rewriter.replaceOp(op, view);
+    return mlir::success();
+  }
+};
+
+struct BufferizeForceCopy
+    : public mlir::OpConversionPattern<plier::ForceCopyOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::ForceCopyOp op, plier::ForceCopyOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto converter = getTypeConverter();
+    assert(converter);
+    auto dstType = converter->convertType(op.getType())
+                       .dyn_cast_or_null<mlir::MemRefType>();
+
+    if (!dstType)
+      return mlir::failure();
+
+    auto src = adaptor.source();
+    auto srcType = src.getType().cast<mlir::MemRefType>();
+    auto rank = static_cast<unsigned>(srcType.getRank());
+
+    auto loc = op->getLoc();
+    llvm::SmallVector<mlir::Value> sizes(rank);
+    for (auto i : llvm::seq(0u, rank))
+      sizes[i] = rewriter.create<mlir::memref::DimOp>(loc, src, i);
+
+    auto dst = rewriter.create<mlir::memref::AllocOp>(loc, dstType, sizes);
+    rewriter.create<mlir::memref::CopyOp>(loc, src, dst);
+    rewriter.replaceOp(op, dst.getResult());
     return mlir::success();
   }
 };
@@ -1821,9 +1948,11 @@ void AdditionalBufferize::runOnFunction() {
   plier::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
                                                       target);
   target.addIllegalOp<mlir::tensor::ReshapeOp>();
+  target.addIllegalOp<plier::ForceViewOp, plier::ForceCopyOp>();
   target.addLegalOp<mlir::memref::ReshapeOp>();
 
-  patterns.insert<BufferizeReshape>(typeConverter, context);
+  patterns.insert<BufferizeReshape, BufferizeForceView, BufferizeForceCopy>(
+      typeConverter, context);
 
   if (failed(applyPartialConversion(module, target, std::move(patterns))))
     signalPassFailure();

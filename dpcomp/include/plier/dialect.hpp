@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/IR/BuiltinTypes.h>
 #include <mlir/IR/Dialect.h>
 #include <mlir/IR/OpDefinition.h>
@@ -24,6 +25,10 @@
 #include <mlir/Interfaces/ViewLikeInterface.h>
 
 #include <mlir/Dialect/GPU/GPUDialect.h>
+
+namespace plier {
+using namespace mlir; // TODO: Remove
+}
 
 #include "plier/PlierOpsDialect.h.inc"
 //#include "plier/PlierOpsEnums.h.inc"

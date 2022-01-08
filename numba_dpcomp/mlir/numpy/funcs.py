@@ -420,6 +420,10 @@ def size_impl(builder, arg):
         res = res * shape[i]
     return builder.cast(res, builder.int64)
 
+@register_func('array.copy')
+def shape_impl(builder, arg):
+    return builder.force_copy(arg)
+
 @register_attr('array.T')
 def transpose_impl(builder, arg):
     shape = arg.shape

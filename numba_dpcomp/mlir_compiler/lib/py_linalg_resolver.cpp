@@ -1247,11 +1247,7 @@ py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
   auto origSrcVal = ctx.context.unwrapVal(loc, builder, src);
   auto origSrcType = origSrcVal.getType().cast<mlir::ShapedType>();
   auto srcVal = doSignCast(builder, loc, origSrcVal);
-  auto srcType = srcVal.getType().cast<mlir::TensorType>();
-  auto memrefType =
-      mlir::MemRefType::get(srcType.getShape(), srcType.getElementType());
-  auto memref =
-      builder.create<mlir::bufferization::ToMemrefOp>(loc, memrefType, srcVal);
+  auto srcType = srcVal.getType().cast<mlir::RankedTensorType>();
 
   auto indexType = builder.getIndexType();
   auto indexCast = [&](mlir::Value val) -> mlir::OpFoldResult {
@@ -1318,37 +1314,44 @@ py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
       return unpackValues(strides);
     }
   }();
-  auto viewMemrefType = [&]() -> mlir::MemRefType {
+  auto viewType = [&]() -> mlir::RankedTensorType {
     if (rank.is_none()) {
-      return mlir::memref::SubViewOp::inferResultType(memrefType, offsetVals,
-                                                      sizeVals, strideVals)
-          .cast<mlir::MemRefType>();
+      return plier::ForceViewOp::inferResultType(srcType, offsetVals, sizeVals,
+                                                 strideVals)
+          .cast<mlir::RankedTensorType>();
     } else {
       auto rankVal = rank.cast<unsigned>();
-      return mlir::memref::SubViewOp::inferRankReducedResultType(
-                 rankVal, memrefType, offsetVals, sizeVals, strideVals)
-          .cast<mlir::MemRefType>();
+      return plier::ForceViewOp::inferRankReducedResultType(
+                 rankVal, srcType, offsetVals, sizeVals, strideVals)
+          .cast<mlir::RankedTensorType>();
     }
   }();
-  auto view = builder.createOrFold<mlir::memref::SubViewOp>(
-      loc, viewMemrefType, memref, offsetVals, sizeVals, strideVals);
+  auto view = builder.createOrFold<plier::ForceViewOp>(
+      loc, viewType, srcVal, offsetVals, sizeVals, strideVals);
 
   auto getDynShape = [](int64_t r) {
     return llvm::SmallVector<int64_t>(r, mlir::ShapedType::kDynamicSize);
   };
 
-  auto flatViewType = mlir::MemRefType::get(
-      getDynShape(viewMemrefType.getRank()), viewMemrefType.getElementType());
-  view = builder.createOrFold<plier::ChangeLayoutOp>(loc, flatViewType, view);
-  auto ret =
-      builder.create<mlir::bufferization::ToTensorOp>(loc, view).getResult();
-  auto resType = ret.getType().cast<mlir::ShapedType>();
+  auto resType = view.getType().cast<mlir::ShapedType>();
   auto resSignlessType = resType.clone(getDynShape(resType.getRank()));
   if (resSignlessType != resType)
-    ret = builder.create<mlir::tensor::CastOp>(loc, resSignlessType, ret);
+    view = builder.create<mlir::tensor::CastOp>(loc, resSignlessType, view);
   auto resSignedType = resSignlessType.clone(origSrcType.getElementType());
   return ctx.context.createVar(context,
-                               doSignCast(builder, loc, ret, resSignedType));
+                               doSignCast(builder, loc, view, resSignedType));
+}
+
+py::object forceCopyImpl(py::capsule context, py::handle src) {
+  auto &ctx = getPyContext(context);
+  auto &builder = ctx.builder;
+  auto loc = ctx.loc;
+  auto origSrcVal = ctx.context.unwrapVal(loc, builder, src);
+  auto origSrcType = origSrcVal.getType();
+  auto srcVal = doSignCast(builder, loc, origSrcVal);
+  auto res = builder.create<plier::ForceCopyOp>(loc, srcVal);
+  return ctx.context.createVar(context,
+                               doSignCast(builder, loc, res, origSrcType));
 }
 
 py::object selectImpl(py::capsule context, py::handle cond, py::handle trueV,
@@ -1392,6 +1395,7 @@ setupPyBuilder(py::handle builder, mlir::OpBuilder &b,
   py::setattr(builder, "_cast", py::cpp_function(&castImpl));
   py::setattr(builder, "_undef", py::cpp_function(&undefImpl));
   py::setattr(builder, "_subview", py::cpp_function(&subviewImpl));
+  py::setattr(builder, "_force_copy", py::cpp_function(&forceCopyImpl));
   py::setattr(builder, "_select", py::cpp_function(&selectImpl));
 
   py::setattr(builder, "_array_type", py::cpp_function(&arrayTypeImpl));
