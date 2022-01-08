@@ -35,25 +35,34 @@ def _vectorize_reference(func, arg1):
         ret[ind] = func(val)
     return ret
 
-_arr_1d_int = np.array([1,2,3,4,5,6,7,8])
-_arr_1d_float = np.array([1.0,2.1,3.2,4.3,5.4,6.5,7.6,8.7])
+_arr_1d_bool = np.array([True,False,True,True,False,True,True,True])
+_arr_1d_int32 = np.array([1,2,3,4,5,6,7,8], dtype=np.int32)
+_arr_1d_int64 = np.array([1,2,3,4,5,6,7,8], dtype=np.int64)
+_arr_1d_float32 = np.array([1.0,2.1,3.2,4.3,5.4,6.5,7.6,8.7], dtype=np.float32)
+_arr_1d_float64 = np.array([1.0,2.1,3.2,4.3,5.4,6.5,7.6,8.7], dtype=np.float64)
 _arr_2d_int = np.array([[1,2,3,4],[5,6,7,8]])
 _arr_2d_float = np.array([[1.0,2.1,3.2,4.3],[5.4,6.5,7.6,8.7]])
 _test_arrays = [
-    _arr_1d_int,
-    _arr_1d_float,
+    # _arr_1d_bool,
+    _arr_1d_int32,
+    _arr_1d_int64,
+    _arr_1d_float32,
+    _arr_1d_float64,
     _arr_2d_int,
     _arr_2d_float,
     _arr_2d_int.T,
     _arr_2d_float.T,
 ]
 _test_arrays_ids = [
-    '1d_int',
-    '1d_float',
-    '2d_int',
-    '2d_float',
-    '2d_int.T',
-    '2d_float.T',
+    # '_arr_1d_bool',
+    '_arr_1d_int32',
+    '_arr_1d_int64',
+    '_arr_1d_float32',
+    '_arr_1d_float64',
+    '_arr_2d_int',
+    '_arr_2d_float',
+    '_arr_2d_int.T',
+    '_arr_2d_float.T',
 ]
 
 @parametrize_function_variants("py_func", [
@@ -80,10 +89,29 @@ _test_arrays_ids = [
                          ids=_test_arrays_ids)
 def test_unary(py_func, arr, request):
     jit_func = njit(py_func)
-    assert_allclose(py_func(arr), jit_func(arr), rtol=1e-15, atol=1e-15)
+    assert_allclose(py_func(arr), jit_func(arr), rtol=1e-4, atol=1e-7)
 
-_test_binary_test_arrays = [1, 2.5, np.array([1,2,3]), np.array([4.4,5.5,6.6])]
-_test_binary_test_arrays_ids = ['1', '2.5', 'np.array([1,2,3])', 'np.array([4.4,5.5,6.6])']
+_test_binary_test_arrays = [
+    # True,
+    1,
+    2.5,
+    # np.array([True, False, True]),
+    np.array([1,2,3], dtype=np.int32),
+    np.array([1,2,3], dtype=np.int64),
+    np.array([4.4,5.5,6.6], dtype=np.float32),
+    np.array([4.4,5.5,6.6], dtype=np.float64),
+]
+_test_binary_test_arrays_ids = [
+    # 'True',
+    '1',
+    '2.5',
+    # 'np.array([True, False, True])',
+    'np.array([1,2,3], dtype=np.int32)',
+    'np.array([1,2,3], dtype=np.int64)',
+    'np.array([4.4,5.5,6.6], dtype=np.float32)',
+    'np.array([4.4,5.5,6.6], dtype=np.float64)',
+]
+
 @parametrize_function_variants("py_func", [
     'lambda a, b: np.add(a, b)',
     'lambda a, b: a + b',
@@ -114,7 +142,8 @@ _test_binary_test_arrays_ids = ['1', '2.5', 'np.array([1,2,3])', 'np.array([4.4,
                          ids=_test_binary_test_arrays_ids)
 def test_binary(py_func, a, b):
     jit_func = njit(py_func)
-    assert_equal(py_func(a,b), jit_func(a,b))
+    # assert_equal(py_func(a,b), jit_func(a,b))
+    assert_allclose(py_func(a,b), jit_func(a,b), rtol=1e-7, atol=1e-7)
 
 _test_logical_arrays = [
     True,
@@ -721,7 +750,8 @@ def test_parallel_reduce():
 def test_vectorize(func, arr):
     arr = np.array(arr)
     vec_func = vectorize(func)
-    assert_equal(_vectorize_reference(func, arr), vec_func(arr))
+    # assert_equal(_vectorize_reference(func, arr), vec_func(arr))
+    assert_allclose(_vectorize_reference(func, arr), vec_func(arr), rtol=1e-7, atol=1e-7)
 
 @pytest.mark.parametrize("arr",
                          _test_arrays,
