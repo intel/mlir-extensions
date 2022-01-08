@@ -843,6 +843,8 @@ struct BinOpLowering : public mlir::OpConversionPattern<plier::BinOp> {
         {"&", &replaceOp<mlir::arith::AndIOp>, &invalidReplaceOp},
         {"|", &replaceOp<mlir::arith::OrIOp>, &invalidReplaceOp},
         {"^", &replaceOp<mlir::arith::XOrIOp>, &invalidReplaceOp},
+        {">>", &replaceOp<mlir::arith::ShRSIOp>, &invalidReplaceOp},
+        {"<<", &replaceOp<mlir::arith::ShLIOp>, &invalidReplaceOp},
 
         {">",
          &replaceCmpiOp<mlir::arith::CmpIPredicate::sgt,

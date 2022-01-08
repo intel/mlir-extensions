@@ -58,6 +58,8 @@ def test_ops(py_func, a, b):
         pass
     except TypeError:
         pass
+    except ValueError:
+        pass
 
 @pytest.mark.parametrize("a, b", itertools.product(_test_values, _test_values))
 def test_inplace_op(a, b):
