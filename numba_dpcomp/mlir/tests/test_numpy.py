@@ -133,6 +133,7 @@ _test_binary_test_arrays_ids = [
     'lambda a, b: a == b',
     'lambda a, b: a != b',
     'lambda a, b: np.where(a < b, a, b)',
+    'lambda a, b: np.outer(a, b)',
 ])
 @pytest.mark.parametrize("a",
                          _test_binary_test_arrays,
