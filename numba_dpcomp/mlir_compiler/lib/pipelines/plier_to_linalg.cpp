@@ -2087,12 +2087,12 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<TensorFusionPass>());
 
   pm.addPass(mlir::createTensorConstantBufferizePass());
+  pm.addNestedPass<mlir::FuncOp>(std::make_unique<AdditionalBufferize>());
   pm.addNestedPass<mlir::FuncOp>(mlir::createSCFBufferizePass());
   pm.addNestedPass<mlir::FuncOp>(mlir::createLinalgBufferizePass());
   pm.addNestedPass<mlir::FuncOp>(mlir::createStdBufferizePass());
   pm.addNestedPass<mlir::FuncOp>(mlir::createTensorBufferizePass());
   pm.addPass(mlir::createFuncBufferizePass());
-  pm.addNestedPass<mlir::FuncOp>(std::make_unique<AdditionalBufferize>());
   pm.addNestedPass<mlir::FuncOp>(
       mlir::bufferization::createFinalizingBufferizePass());
 
