@@ -26,10 +26,6 @@
 
 #include <mlir/Dialect/GPU/GPUDialect.h>
 
-namespace plier {
-using namespace mlir; // TODO: Remove
-}
-
 #include "plier/PlierOpsDialect.h.inc"
 //#include "plier/PlierOpsEnums.h.inc"
 #define GET_OP_CLASSES

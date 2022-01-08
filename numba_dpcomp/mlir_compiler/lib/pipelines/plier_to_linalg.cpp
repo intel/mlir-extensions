@@ -1791,12 +1791,13 @@ getMixedStrides(Op op, ::mlir::ValueRange strides,
   return res;
 }
 
-struct BufferizeForceView
-    : public mlir::OpConversionPattern<plier::ForceViewOp> {
+struct BufferizeExtractSlice
+    : public mlir::OpConversionPattern<mlir::tensor::ExtractSliceOp> {
   using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::ForceViewOp op, plier::ForceViewOp::Adaptor adaptor,
+  matchAndRewrite(mlir::tensor::ExtractSliceOp op,
+                  mlir::tensor::ExtractSliceOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto converter = getTypeConverter();
     assert(converter);
@@ -1947,11 +1948,11 @@ void AdditionalBufferize::runOnFunction() {
                                                             patterns, target);
   plier::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
                                                       target);
-  target.addIllegalOp<mlir::tensor::ReshapeOp>();
-  target.addIllegalOp<plier::ForceViewOp, plier::ForceCopyOp>();
+  target.addIllegalOp<mlir::tensor::ReshapeOp, mlir::tensor::ExtractSliceOp>();
+  target.addIllegalOp<plier::ForceCopyOp>();
   target.addLegalOp<mlir::memref::ReshapeOp>();
 
-  patterns.insert<BufferizeReshape, BufferizeForceView, BufferizeForceCopy>(
+  patterns.insert<BufferizeReshape, BufferizeExtractSlice, BufferizeForceCopy>(
       typeConverter, context);
 
   if (failed(applyPartialConversion(module, target, std::move(patterns))))

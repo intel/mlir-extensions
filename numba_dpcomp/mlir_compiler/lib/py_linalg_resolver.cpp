@@ -1316,17 +1316,17 @@ py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
   }();
   auto viewType = [&]() -> mlir::RankedTensorType {
     if (rank.is_none()) {
-      return plier::ForceViewOp::inferResultType(srcType, offsetVals, sizeVals,
-                                                 strideVals)
+      return mlir::tensor::ExtractSliceOp::inferResultType(srcType, offsetVals,
+                                                           sizeVals, strideVals)
           .cast<mlir::RankedTensorType>();
     } else {
       auto rankVal = rank.cast<unsigned>();
-      return plier::ForceViewOp::inferRankReducedResultType(
+      return mlir::tensor::ExtractSliceOp::inferRankReducedResultType(
                  rankVal, srcType, offsetVals, sizeVals, strideVals)
           .cast<mlir::RankedTensorType>();
     }
   }();
-  auto view = builder.createOrFold<plier::ForceViewOp>(
+  auto view = builder.createOrFold<mlir::tensor::ExtractSliceOp>(
       loc, viewType, srcVal, offsetVals, sizeVals, strideVals);
 
   auto getDynShape = [](int64_t r) {
