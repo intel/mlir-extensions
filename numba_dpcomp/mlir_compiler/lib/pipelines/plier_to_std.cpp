@@ -947,6 +947,36 @@ struct UnaryOpLowering : public mlir::OpConversionPattern<plier::UnaryOp> {
       rewriter.replaceOp(op, newVal.getResult());
       return mlir::success();
     }
+    if (op.op() == "~") {
+      auto intType = type.dyn_cast<mlir::IntegerType>();
+      if (!intType)
+        return mlir::failure();
+
+      mlir::Type signlessType;
+      if (intType.getWidth() == 1) {
+        intType = rewriter.getIntegerType(64);
+        signlessType = intType;
+        arg = rewriter.create<mlir::arith::ExtUIOp>(loc, arg, intType);
+      } else {
+        signlessType = plier::makeSignlessType(intType);
+        if (intType != signlessType)
+          arg = rewriter.create<plier::SignCastOp>(loc, signlessType, arg);
+      }
+
+      auto all =
+          rewriter.create<mlir::arith::ConstantIntOp>(loc, -1, signlessType);
+
+      arg = rewriter.create<mlir::arith::XOrIOp>(loc, all, arg);
+
+      if (intType != signlessType)
+        arg = rewriter.create<plier::SignCastOp>(loc, intType, arg);
+
+      if (resType != arg.getType())
+        arg = doCast(rewriter, loc, arg, resType);
+
+      rewriter.replaceOp(op, arg);
+      return mlir::success();
+    }
     return mlir::failure();
   }
 };
