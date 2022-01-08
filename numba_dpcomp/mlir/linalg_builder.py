@@ -14,6 +14,7 @@
 
 from .func_registry import add_func
 from .inner_compiler import compile_func
+import numpy
 
 class Var:
     def __init__(self, context, ssa_val):
@@ -81,8 +82,8 @@ class Builder:
     def __init__(self, context):
         self._context = context
 
-    def broadcast(self, *args, broadcast_types=True):
-        return self._broadcast(self._context, args, broadcast_types)
+    def broadcast(self, *args, result_type):
+        return self._broadcast(self._context, args, result_type)
 
     def init_tensor(self, shape, dtype, init_val=None):
         return self._init_tensor(self._context, shape, dtype, init_val)
@@ -153,6 +154,33 @@ class FuncRegistry:
     def lookup_func(self, name):
         return self.funcs.get(name)
 
+def _get_numpy_types(builder):
+    return [
+        (builder.bool, numpy.bool_),
+        (builder.int8, numpy.int8),
+        (builder.uint8, numpy.uint8),
+        (builder.int16, numpy.int16),
+        (builder.uint16, numpy.uint16),
+        (builder.int32, numpy.int32),
+        (builder.uint32, numpy.uint32),
+        (builder.int64, numpy.int64),
+        (builder.uint64, numpy.uint64),
+        (builder.float32, numpy.float32),
+        (builder.float64, numpy.float64),
+    ]
+
+def type_to_numpy(builder, t):
+    for src, dst in _get_numpy_types(builder):
+        if t == src: return dst
+
+    assert False, f'Cannot convert type: {str(t)}'
+
+def type_from_numpy(builder, t):
+    for dst, src in _get_numpy_types(builder):
+        if t == src: return dst
+
+    assert False, f'Cannot convert type: {str(t)}'
+
 def broadcast_type(builder, args):
     l = len(args)
     assert(l > 0)
@@ -164,35 +192,23 @@ def broadcast_type(builder, args):
     else:
         rhs = broadcast_type(builder, args[1:])
 
-    types = [
-        builder.bool,
-        builder.int8,
-        builder.uint8,
-        builder.int16,
-        builder.uint16,
-        builder.int32,
-        builder.uint32,
-        builder.int64,
-        builder.uint64,
-        builder.float32,
-        builder.float64,
-    ]
+    lhs = type_to_numpy(builder, lhs)
+    rhs = type_to_numpy(builder, rhs)
+    return type_from_numpy(builder, numpy.promote_types(lhs, rhs))
 
-    res = None
-    for t in types:
-        if lhs == t or rhs == t:
-            res = t
-
-    assert not res is  None, f'Cannot broadcast types: {str(lhs)}, {str(rhs)}'
-    return res
-
+def _get_array_type(builder, a):
+    if isinstance(a, float):
+        return builder.float64
+    elif isinstance(a, int):
+        return builder.int64
+    return a.dtype
 
 def broadcast_type_arrays(builder, args):
-    return broadcast_type(builder, tuple(a.dtype for a in args))
+    return broadcast_type(builder, tuple(_get_array_type(builder, a) for a in args))
 
 def eltwise(builder, args, body, res_type = None):
     if isinstance(args, tuple):
-        args = builder.broadcast(*args)
+        args = builder.broadcast(*args, result_type=broadcast_type_arrays(builder, args))
     else:
         args = (args,)
 

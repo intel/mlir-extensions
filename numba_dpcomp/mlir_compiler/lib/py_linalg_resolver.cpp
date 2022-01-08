@@ -143,17 +143,20 @@ static auto getTypes(mlir::ValueRange values) {
 }
 
 static bool isCompatibleType(mlir::Type type) {
-  if (auto tuple_type = type.dyn_cast<mlir::TupleType>())
-    return llvm::all_of(tuple_type, &isCompatibleType);
+  if (auto tupleType = type.dyn_cast<mlir::TupleType>())
+    return llvm::all_of(tupleType, &isCompatibleType);
 
   return type.isa<mlir::IntegerType, mlir::IndexType, mlir::FloatType,
                   mlir::RankedTensorType, mlir::NoneType, plier::LiteralType,
                   plier::TypeVar>();
 }
 
+static bool isCompatibleTypeVal(mlir::Value val) {
+  return isCompatibleType(val.getType());
+}
+
 template <typename R> static bool isCompatibleTypes(R &&vals) {
-  return llvm::all_of(vals,
-                      [](auto val) { return isCompatibleType(val.getType()); });
+  return llvm::all_of(vals, &isCompatibleTypeVal);
 }
 
 template <typename T> static py::capsule wrapMlir(T val) {
@@ -506,50 +509,6 @@ static auto genericOpBodyResultTypes(mlir::ValueRange outputs) {
   return ret;
 }
 
-static bool isInt(mlir::Type type) {
-  return type.isa<mlir::IntegerType, mlir::IndexType>();
-}
-
-static bool isFloat(mlir::Type type) { return type.isa<mlir::FloatType>(); }
-
-static unsigned getIntBitWidth(mlir::Type type) {
-  if (type.isa<mlir::IntegerType>())
-    return type.cast<mlir::IntegerType>().getWidth();
-
-  if (type.isa<mlir::IndexType>())
-    return 64; // TODO
-
-  llvm_unreachable("No an integer type");
-}
-
-static unsigned getFloatBitWidth(mlir::Type type) {
-  return type.cast<mlir::FloatType>().getWidth();
-}
-
-static mlir::Type broadcastType(mlir::Type type1, mlir::Type type2) {
-  if (type1 == type2)
-    return type1;
-
-  // TODO
-  if (isInt(type1) && isInt(type2)) {
-    bool isSigned = type1.isSignedInteger() || type2.isSignedInteger();
-    auto signess =
-        (isSigned ? mlir::IntegerType::Signed : mlir::IntegerType::Unsigned);
-    auto width = std::max(getIntBitWidth(type1), getIntBitWidth(type2));
-    return mlir::IntegerType::get(type1.getContext(), width, signess);
-  }
-  if (isFloat(type1) && isFloat(type2))
-    return (getFloatBitWidth(type1) > getFloatBitWidth(type2) ? type1 : type2);
-
-  if (isFloat(type1) && isInt(type2))
-    return type1;
-
-  if (isInt(type1) && isFloat(type2))
-    return type2;
-
-  llvm_unreachable("Unable to broadcast type");
-}
-
 static mlir::Value broadcastDim(mlir::OpBuilder &builder, mlir::Location loc,
                                 mlir::Value val1, mlir::Value val2) {
   assert(val1.getType().isa<mlir::IndexType>());
@@ -582,7 +541,7 @@ static mlir::Value expandDim(mlir::OpBuilder &builder, mlir::Location loc,
       newShape[i] = builder.create<mlir::tensor::DimOp>(loc, src, i);
     }
   }
-  auto true_body = [&](mlir::OpBuilder &builder, mlir::Location loc) {
+  auto trueBody = [&](mlir::OpBuilder &builder, mlir::Location loc) {
     assert(dim < shape.size());
     shape[dim] = 1;
     //        mlir::Type casted_type = mlir::RankedTensorType::get(shape,
@@ -620,12 +579,12 @@ static mlir::Value expandDim(mlir::OpBuilder &builder, mlir::Location loc,
         loc, targetType, expanded.getResult(0));
     builder.create<mlir::scf::YieldOp>(loc, res);
   };
-  auto false_body = [&](mlir::OpBuilder &builder, mlir::Location loc) {
+  auto falseBody = [&](mlir::OpBuilder &builder, mlir::Location loc) {
     auto res = builder.create<mlir::tensor::CastOp>(loc, targetType, src);
     builder.create<mlir::scf::YieldOp>(loc, res.getResult());
   };
   return builder
-      .create<mlir::scf::IfOp>(loc, targetType, cond, true_body, false_body)
+      .create<mlir::scf::IfOp>(loc, targetType, cond, trueBody, falseBody)
       .getResult(0);
 }
 
@@ -645,7 +604,7 @@ static mlir::Value expandDims(mlir::OpBuilder &builder, mlir::Location loc,
 }
 
 static py::object broadcastImpl(py::capsule context, py::tuple args,
-                                py::bool_ broadcastTypes) {
+                                py::handle resultType) {
   if (1 == args.size())
     return args[0];
 
@@ -678,10 +637,8 @@ static py::object broadcastImpl(py::capsule context, py::tuple args,
 
     return {};
   };
-  mlir::Type resType;
   mlir::SmallVector<mlir::Value> shapeVals;
   if (auto shapeAndType = getShape(mlirArgs.front())) {
-    resType = shapeAndType->second;
     shapeVals = shapeAndType->first;
   } else {
     return py::none();
@@ -692,7 +649,6 @@ static py::object broadcastImpl(py::capsule context, py::tuple args,
     if (!shapeAndType)
       return py::none();
 
-    resType = broadcastType(resType, shapeAndType->second);
     auto newShapeVals = shapeAndType->first;
     for (auto it :
          llvm::zip(llvm::reverse(shapeVals), llvm::reverse(newShapeVals))) {
@@ -707,12 +663,16 @@ static py::object broadcastImpl(py::capsule context, py::tuple args,
     }
   }
 
-  auto needBroadcastTypes = static_cast<bool>(broadcastTypes);
+  mlir::Type resType;
+  auto haveResultType = !resultType.is_none();
+  if (haveResultType)
+    resType = unwrapType(resultType);
+
   py::tuple ret(mlirArgs.size());
   if (shapeVals.empty()) {
     for (auto it : llvm::enumerate(mlirArgs)) {
       mlir::Value val = it.value();
-      if (needBroadcastTypes && val.getType() != resType)
+      if (haveResultType && val.getType() != resType)
         val = builder.create<plier::CastOp>(loc, resType, val);
 
       ret[it.index()] = ctx.context.createVar(context, val);
@@ -726,7 +686,7 @@ static py::object broadcastImpl(py::capsule context, py::tuple args,
     mlir::Value val = it.value();
     auto i = it.index();
     auto tensorElemType =
-        needBroadcastTypes ? resType : getShape(mlirArgs[i])->second;
+        haveResultType ? resType : getShape(mlirArgs[i])->second;
     auto tensorType = mlir::RankedTensorType::get(shape, tensorElemType);
     auto signlessResType = makeSignlessType(tensorElemType);
     auto signlessTensorType =

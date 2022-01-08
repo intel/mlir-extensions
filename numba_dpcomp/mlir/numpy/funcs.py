@@ -132,10 +132,12 @@ def mean_impl(builder, arg, axis=None):
 
 
 def _gen_unary_ops():
-    def f64_type(builder):
+    def f64_type(builder, t):
+        if is_float(t, builder):
+            return t
         return builder.float64
 
-    def bool_type(builder):
+    def bool_type(builder, t):
         return builder.bool
 
     unary_ops = [
@@ -152,7 +154,7 @@ def _gen_unary_ops():
 
     def make_func(init, body):
         def func(builder, arg):
-            init_type = None if init is None else init(builder)
+            init_type = None if init is None else init(builder, arg.dtype)
             return eltwise(builder, arg, body, init_type)
         return func
 
@@ -163,26 +165,47 @@ _gen_unary_ops()
 del _gen_unary_ops
 
 def _gen_binary_ops():
-    def f64_type(builder):
+    def select_float_type(builder, a, b):
+        # hack for numba
+        da = broadcast_type_arrays(builder, (a,))
+        db = broadcast_type_arrays(builder, (b,))
+        if da == db:
+            return da
+        if is_float(da, builder) and not is_float(db, builder):
+            return da
+        if is_float(db, builder) and not is_float(da, builder):
+            return db
+        return broadcast_type_arrays(builder, (a,b))
+
+    def select_float_type_f64(builder, a, b):
+        # hack for numba
+        da = broadcast_type_arrays(builder, (a,))
+        db = broadcast_type_arrays(builder, (b,))
+        if da == db and is_float(da, builder):
+            return da
+        if is_float(da, builder) and not is_float(db, builder):
+            return da
+        if is_float(db, builder) and not is_float(da, builder):
+            return db
         return builder.float64
 
-    def bool_type(builder):
+    def bool_type(builder, a, b):
         return builder.bool
 
     binary_ops = [
-        (register_func('numpy.add', numpy.add), None, lambda a, b, c: a + b),
-        (register_func('operator.add'), None, lambda a, b, c: a + b),
-        (register_func('numpy.subtract', numpy.subtract), None, lambda a, b, c: a - b),
-        (register_func('operator.sub'), None, lambda a, b, c: a - b),
-        (register_func('numpy.multiply', numpy.multiply), None, lambda a, b, c: a * b),
-        (register_func('operator.mul'), None, lambda a, b, c: a * b),
-        (register_func('numpy.true_divide', numpy.true_divide), f64_type, lambda a, b, c: a / b),
-        (register_func('operator.truediv'), f64_type, lambda a, b, c: a / b),
-        (register_func('numpy.power', numpy.power), None, lambda a, b, c: a ** b),
-        (register_func('operator.pow'), None, lambda a, b, c: a ** b),
-        (register_func('numpy.arctan2', numpy.arctan2), f64_type, lambda a, b, c: math.atan2(a, b)),
-        (register_func('numpy.minimum', numpy.minimum), None, lambda a, b, c: min(a, b)),
-        (register_func('numpy.maximum', numpy.maximum), None, lambda a, b, c: max(a, b)),
+        (register_func('numpy.add', numpy.add), select_float_type, lambda a, b, c: a + b),
+        (register_func('operator.add'), select_float_type, lambda a, b, c: a + b),
+        (register_func('numpy.subtract', numpy.subtract), select_float_type, lambda a, b, c: a - b),
+        (register_func('operator.sub'), select_float_type, lambda a, b, c: a - b),
+        (register_func('numpy.multiply', numpy.multiply), select_float_type, lambda a, b, c: a * b),
+        (register_func('operator.mul'), select_float_type, lambda a, b, c: a * b),
+        (register_func('numpy.true_divide', numpy.true_divide), select_float_type_f64, lambda a, b, c: a / b),
+        (register_func('operator.truediv'), select_float_type_f64, lambda a, b, c: a / b),
+        (register_func('numpy.power', numpy.power), select_float_type, lambda a, b, c: a ** b),
+        (register_func('operator.pow'), select_float_type, lambda a, b, c: a ** b),
+        (register_func('numpy.arctan2', numpy.arctan2), select_float_type_f64, lambda a, b, c: math.atan2(a, b)),
+        (register_func('numpy.minimum', numpy.minimum), select_float_type, lambda a, b, c: min(a, b)),
+        (register_func('numpy.maximum', numpy.maximum), select_float_type, lambda a, b, c: max(a, b)),
 
         (register_func('numpy.logical_and', numpy.logical_and), bool_type, lambda a, b, c: a and b),
         (register_func('operator.and'), bool_type, lambda a, b, c: a and b),
@@ -201,7 +224,7 @@ def _gen_binary_ops():
 
     def make_func(init, body):
         def func(builder, arg1, arg2):
-            init_type = None if init is None else init(builder)
+            init_type = None if init is None else init(builder, arg1, arg2)
             return eltwise(builder, (arg1, arg2), body, init_type)
         return func
 
@@ -343,8 +366,8 @@ def matmul_impl(builder, a, b):
 
 @register_func('numpy.where', numpy.where)
 def where_impl(builder, cond, x, y):
-    cond, x, y = builder.broadcast(cond, x, y, broadcast_types=False)
-    x, y = builder.broadcast(x, y)
+    cond, x, y = builder.broadcast(cond, x, y, result_type=None)
+    x, y = builder.broadcast(x, y, result_type=broadcast_type_arrays(builder, (x, y)))
 
     def body(c, x, y, r):
         return x if c else y

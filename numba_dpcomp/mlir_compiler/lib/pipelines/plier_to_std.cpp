@@ -316,7 +316,7 @@ static bool isFloat(mlir::Type type) {
   return type.isa<mlir::FloatType>();
 }
 
-static bool is_index(mlir::Type type) {
+static bool isIndex(mlir::Type type) {
   assert(type);
   return type.isa<mlir::IndexType>();
 }
@@ -578,8 +578,16 @@ mlir::Value floatIntCast(mlir::PatternRewriter &rewriter, mlir::Location loc,
   auto dstSignlessType = plier::makeSignlessType(dstIntType);
   if (dstIntType.getWidth() == 1) {
     // Special handling for bool
+    auto floatType = val.getType().cast<mlir::FloatType>();
+    auto getZeroFloat = [&]() -> llvm::APFloat {
+      if (floatType.isF64())
+        return llvm::APFloat(0.0);
+      if (floatType.isF32())
+        return llvm::APFloat(0.0f);
+      llvm_unreachable("Umhandled float type");
+    };
     auto zero = rewriter.create<mlir::arith::ConstantFloatOp>(
-        loc, llvm::APFloat(0.0), val.getType().cast<mlir::FloatType>());
+        loc, getZeroFloat(), floatType);
     auto cmp = rewriter.createOrFold<mlir::arith::CmpFOp>(
         loc, mlir::arith::CmpFPredicate::OEQ, val, zero);
     auto trueVal = rewriter.create<mlir::arith::ConstantIntOp>(loc, 1, 1);
@@ -652,11 +660,11 @@ mlir::Value doCast(mlir::PatternRewriter &rewriter, mlir::Location loc,
       {&isInt, &isInt, &intCast},
       {&isInt, &isFloat, &intFloatCast},
       {&isFloat, &isInt, &floatIntCast},
-      {&is_index, &isInt, &indexCastImpl},
-      {&isInt, &is_index, &indexCastImpl},
+      {&isIndex, &isInt, &indexCastImpl},
+      {&isInt, &isIndex, &indexCastImpl},
       {&isFloat, &isFloat, &floatCastImpl},
-      {&is_index, &isFloat, &indexCastImpl},
-      {&isFloat, &is_index, &indexCastImpl},
+      {&isIndex, &isFloat, &indexCastImpl},
+      {&isFloat, &isIndex, &indexCastImpl},
   };
 
   for (auto &h : handlers)
