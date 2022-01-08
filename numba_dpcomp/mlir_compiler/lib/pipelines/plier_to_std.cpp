@@ -843,6 +843,8 @@ struct BinOpLowering : public mlir::OpConversionPattern<plier::BinOp> {
         {"&", &replaceOp<mlir::arith::AndIOp>, &invalidReplaceOp},
         {"|", &replaceOp<mlir::arith::OrIOp>, &invalidReplaceOp},
         {"^", &replaceOp<mlir::arith::XOrIOp>, &invalidReplaceOp},
+        {">>", &replaceOp<mlir::arith::ShRSIOp>, &invalidReplaceOp},
+        {"<<", &replaceOp<mlir::arith::ShLIOp>, &invalidReplaceOp},
 
         {">",
          &replaceCmpiOp<mlir::arith::CmpIPredicate::sgt,
@@ -912,6 +914,57 @@ static mlir::Value negate(mlir::PatternRewriter &rewriter, mlir::Location loc,
   llvm_unreachable("negate: unsupported type");
 }
 
+static mlir::Value unaryPlus(mlir::PatternRewriter &rewriter,
+                             mlir::Location loc, mlir::Value arg,
+                             mlir::Type resType) {
+  return doCast(rewriter, loc, arg, resType);
+}
+
+static mlir::Value unaryMinus(mlir::PatternRewriter &rewriter,
+                              mlir::Location loc, mlir::Value arg,
+                              mlir::Type resType) {
+  return negate(rewriter, loc, arg, resType);
+}
+
+static mlir::Value unaryNot(mlir::PatternRewriter &rewriter, mlir::Location loc,
+                            mlir::Value arg, mlir::Type resType) {
+  auto i1 = rewriter.getIntegerType(1);
+  auto casted = doCast(rewriter, loc, arg, i1);
+  auto one = rewriter.create<mlir::arith::ConstantIntOp>(loc, 1, i1);
+  return rewriter.create<mlir::arith::SubIOp>(loc, one, casted);
+}
+
+static mlir::Value unaryInvert(mlir::PatternRewriter &rewriter,
+                               mlir::Location loc, mlir::Value arg,
+                               mlir::Type resType) {
+  auto intType = arg.getType().dyn_cast<mlir::IntegerType>();
+  if (!intType)
+    return {};
+
+  mlir::Type signlessType;
+  if (intType.getWidth() == 1) {
+    intType = rewriter.getIntegerType(64);
+    signlessType = intType;
+    arg = rewriter.create<mlir::arith::ExtUIOp>(loc, arg, intType);
+  } else {
+    signlessType = plier::makeSignlessType(intType);
+    if (intType != signlessType)
+      arg = rewriter.create<plier::SignCastOp>(loc, signlessType, arg);
+  }
+
+  auto all = rewriter.create<mlir::arith::ConstantIntOp>(loc, -1, signlessType);
+
+  arg = rewriter.create<mlir::arith::XOrIOp>(loc, all, arg);
+
+  if (intType != signlessType)
+    arg = rewriter.create<plier::SignCastOp>(loc, intType, arg);
+
+  if (resType != arg.getType())
+    arg = doCast(rewriter, loc, arg, resType);
+
+  return arg;
+}
+
 struct UnaryOpLowering : public mlir::OpConversionPattern<plier::UnaryOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -928,25 +981,30 @@ struct UnaryOpLowering : public mlir::OpConversionPattern<plier::UnaryOp> {
     if (!resType)
       return mlir::failure();
 
-    auto loc = op.getLoc();
-    if (op.op() == "+") {
-      arg = doCast(rewriter, loc, arg, resType);
-      rewriter.replaceOp(op, arg);
-      return mlir::success();
+    using func_t = mlir::Value (*)(mlir::PatternRewriter &, mlir::Location,
+                                   mlir::Value, mlir::Type);
+
+    using Handler = std::pair<llvm::StringRef, func_t>;
+    const Handler handlers[] = {
+        {"+", &unaryPlus},
+        {"-", &unaryMinus},
+        {"not", &unaryNot},
+        {"~", &unaryInvert},
+    };
+
+    auto opname = op.op();
+    for (auto &h : handlers) {
+      if (h.first == opname) {
+        auto loc = op.getLoc();
+        auto res = h.second(rewriter, loc, arg, resType);
+        if (!res)
+          return mlir::failure();
+
+        rewriter.replaceOp(op, res);
+        return mlir::success();
+      }
     }
-    if (op.op() == "-") {
-      auto newVal = negate(rewriter, loc, arg, resType);
-      rewriter.replaceOp(op, newVal);
-      return mlir::success();
-    }
-    if (op.op() == "not") {
-      auto i1 = rewriter.getIntegerType(1);
-      auto casted = doCast(rewriter, loc, arg, i1);
-      auto one = rewriter.create<mlir::arith::ConstantIntOp>(loc, 1, i1);
-      auto newVal = rewriter.create<mlir::arith::SubIOp>(loc, one, casted);
-      rewriter.replaceOp(op, newVal.getResult());
-      return mlir::success();
-    }
+
     return mlir::failure();
   }
 };
