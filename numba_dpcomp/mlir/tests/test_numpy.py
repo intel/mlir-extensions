@@ -89,7 +89,7 @@ _test_arrays_ids = [
                          ids=_test_arrays_ids)
 def test_unary(py_func, arr, request):
     jit_func = njit(py_func)
-    assert_allclose(py_func(arr), jit_func(arr), rtol=1e-15, atol=1e-15)
+    assert_allclose(py_func(arr), jit_func(arr), rtol=1e-4, atol=1e-7)
 
 _test_binary_test_arrays = [
     # True,
