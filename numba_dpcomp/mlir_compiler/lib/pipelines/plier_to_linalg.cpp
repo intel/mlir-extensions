@@ -704,11 +704,15 @@ static mlir::Value makeSubview(mlir::OpBuilder &builder, mlir::Location loc,
   assert(srcRank > 0);
   assert(dstRank > 0);
   assert(dstRank <= srcRank);
+
+  bool useReduceRank = true;
+
+  mlir::Value view;
   if (isTensor) {
     auto resType =
         [&]() {
           auto tensorType = srcType.cast<mlir::RankedTensorType>();
-          if (srcRank == dstRank)
+          if (srcRank == dstRank || useReduceRank)
             return mlir::tensor::ExtractSliceOp::inferResultType(
                 tensorType, offsets, sizes, strides);
 
@@ -717,13 +721,13 @@ static mlir::Value makeSubview(mlir::OpBuilder &builder, mlir::Location loc,
         }()
             .cast<mlir::RankedTensorType>();
 
-    return builder.create<mlir::tensor::ExtractSliceOp>(
+    view = builder.create<mlir::tensor::ExtractSliceOp>(
         loc, resType, src, offsets, sizes, strides);
   } else {
     auto resType =
         [&]() {
           auto memrefType = srcType.cast<mlir::MemRefType>();
-          if (srcRank == dstRank)
+          if (srcRank == dstRank || useReduceRank)
             return mlir::memref::SubViewOp::inferResultType(memrefType, offsets,
                                                             sizes, strides);
 
@@ -732,16 +736,21 @@ static mlir::Value makeSubview(mlir::OpBuilder &builder, mlir::Location loc,
         }()
             .cast<mlir::MemRefType>();
 
-    mlir::Value view = builder.create<mlir::memref::SubViewOp>(
-        loc, resType, src, offsets, sizes, strides);
+    view = builder.create<mlir::memref::SubViewOp>(loc, resType, src, offsets,
+                                                   sizes, strides);
 
     auto flatMemrefType =
         mlir::MemRefType::get(resType.getShape(), resType.getElementType());
     if (resType != flatMemrefType)
       view = builder.create<plier::ChangeLayoutOp>(loc, flatMemrefType, view);
-
-    return view;
   }
+
+  if (srcRank != dstRank && useReduceRank) {
+    llvm::SmallVector<int32_t> mapping(dimIndices.begin(), dimIndices.end());
+    view = builder.createOrFold<plier::ReduceRankOp>(loc, view, mapping);
+  }
+
+  return view;
 }
 
 struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
@@ -1882,6 +1891,22 @@ struct BufferizeForceCopy
   }
 };
 
+struct BufferizeReduceRank
+    : public mlir::OpConversionPattern<plier::ReduceRankOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::ReduceRankOp op, plier::ReduceRankOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    if (!op.getType().isa<mlir::RankedTensorType>())
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<plier::ReduceRankOp>(op, adaptor.source(),
+                                                     op.getMapping());
+    return mlir::success();
+  }
+};
+
 struct FixDeallocPlacement
     : public mlir::OpRewritePattern<mlir::memref::DeallocOp> {
   using mlir::OpRewritePattern<mlir::memref::DeallocOp>::OpRewritePattern;
@@ -1964,9 +1989,12 @@ void AdditionalBufferize::runOnFunction() {
   target.addIllegalOp<mlir::tensor::ReshapeOp, mlir::tensor::ExtractSliceOp>();
   target.addIllegalOp<plier::ForceCopyOp>();
   target.addLegalOp<mlir::memref::ReshapeOp>();
+  target.addDynamicallyLegalOp<plier::ReduceRankOp>([](plier::ReduceRankOp op) {
+    return !op.getType().isa<mlir::RankedTensorType>();
+  });
 
-  patterns.insert<BufferizeReshape, BufferizeExtractSlice, BufferizeForceCopy>(
-      typeConverter, context);
+  patterns.insert<BufferizeReshape, BufferizeExtractSlice, BufferizeForceCopy,
+                  BufferizeReduceRank>(typeConverter, context);
 
   if (failed(applyPartialConversion(module, target, std::move(patterns))))
     signalPassFailure();
