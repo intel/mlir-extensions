@@ -1011,14 +1011,18 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
     auto dimCast = [&](mlir::Value val) {
       return doCast(builder, loc, val, dimType);
     };
-    llvm::SmallVector<mlir::Value> ret;
+    llvm::SmallVector<mlir::OpFoldResult> ret;
     if (py::isinstance<py::tuple>(newDims)) {
       auto t = newDims.cast<py::tuple>();
       ret.resize(t.size());
       for (auto it : llvm::enumerate(t)) {
         auto i = it.index();
         auto val = it.value();
-        ret[i] = dimCast(unwrapVal(val));
+        if (py::isinstance<py::int_>(val)) {
+          ret[i] = builder.getIndexAttr(val.cast<int64_t>());
+        } else {
+          ret[i] = dimCast(unwrapVal(val));
+        }
       }
       return ret;
     }
@@ -1041,8 +1045,26 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
     return ret;
   }();
 
+  auto toValues = [&](mlir::ArrayRef<mlir::OpFoldResult> src) {
+    auto size = src.size();
+    llvm::SmallVector<mlir::Value> values(size);
+    for (auto i : llvm::seq<size_t>(0, size)) {
+      auto v = src[i];
+      if (auto val = v.dyn_cast<mlir::Value>()) {
+        values[i] = val;
+      } else {
+        auto constVal = v.get<mlir::Attribute>()
+                            .cast<mlir::IntegerAttr>()
+                            .getValue()
+                            .getSExtValue();
+        values[i] = builder.create<mlir::arith::ConstantIndexOp>(loc, constVal);
+      }
+    }
+    return values;
+  };
+
   auto shapeTensor =
-      builder.create<mlir::tensor::FromElementsOp>(loc, newDimsVals);
+      builder.create<mlir::tensor::FromElementsOp>(loc, toValues(newDimsVals));
 
   auto elemType = srcType.getElementType();
   auto signlessElemType = makeSignlessType(elemType);
