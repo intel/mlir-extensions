@@ -991,7 +991,7 @@ static py::object extractImpl(py::capsule context, py::handle value,
 }
 
 static py::object reshapeImpl(py::capsule context, py::handle src,
-                              py::iterable newDims) {
+                              py::handle newDims) {
   auto &ctx = getPyContext(context);
   auto &builder = ctx.builder;
   auto loc = ctx.loc;
@@ -1008,8 +1008,21 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
 
   auto newDimsVals = [&]() {
     auto dimType = builder.getIndexType();
-    auto dims = unwrapVal(newDims);
+    auto dimCast = [&](mlir::Value val) {
+      return doCast(builder, loc, val, dimType);
+    };
     llvm::SmallVector<mlir::Value> ret;
+    if (py::isinstance<py::tuple>(newDims)) {
+      auto t = newDims.cast<py::tuple>();
+      ret.resize(t.size());
+      for (auto it : llvm::enumerate(t)) {
+        auto i = it.index();
+        auto val = it.value();
+        ret[i] = dimCast(unwrapVal(val));
+      }
+      return ret;
+    }
+    auto dims = unwrapVal(newDims);
     if (auto tupleType = dims.getType().dyn_cast<mlir::TupleType>()) {
       auto dimsCount = tupleType.size();
       ret.resize(dimsCount);
@@ -1019,11 +1032,11 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
         auto item = builder.create<plier::GetItemOp>(loc, elemType, dims, ind)
                         .getResult();
         item = doSignCast(builder, loc, item);
-        ret[i] = doCast(builder, loc, item, dimType);
+        ret[i] = dimCast(item);
       }
     } else {
       dims = doSignCast(builder, loc, dims);
-      ret.emplace_back(doCast(builder, loc, dims, dimType));
+      ret.emplace_back(dimCast(dims));
     }
     return ret;
   }();
