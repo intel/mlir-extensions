@@ -991,7 +991,7 @@ static py::object extractImpl(py::capsule context, py::handle value,
 }
 
 static py::object reshapeImpl(py::capsule context, py::handle src,
-                              py::iterable newDims) {
+                              py::handle newDims) {
   auto &ctx = getPyContext(context);
   auto &builder = ctx.builder;
   auto loc = ctx.loc;
@@ -1008,8 +1008,25 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
 
   auto newDimsVals = [&]() {
     auto dimType = builder.getIndexType();
+    auto dimCast = [&](mlir::Value val) {
+      return doCast(builder, loc, val, dimType);
+    };
+    llvm::SmallVector<mlir::OpFoldResult> ret;
+    if (py::isinstance<py::tuple>(newDims)) {
+      auto t = newDims.cast<py::tuple>();
+      ret.resize(t.size());
+      for (auto it : llvm::enumerate(t)) {
+        auto i = it.index();
+        auto val = it.value();
+        if (py::isinstance<py::int_>(val)) {
+          ret[i] = builder.getIndexAttr(val.cast<int64_t>());
+        } else {
+          ret[i] = dimCast(unwrapVal(val));
+        }
+      }
+      return ret;
+    }
     auto dims = unwrapVal(newDims);
-    llvm::SmallVector<mlir::Value> ret;
     if (auto tupleType = dims.getType().dyn_cast<mlir::TupleType>()) {
       auto dimsCount = tupleType.size();
       ret.resize(dimsCount);
@@ -1019,17 +1036,35 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
         auto item = builder.create<plier::GetItemOp>(loc, elemType, dims, ind)
                         .getResult();
         item = doSignCast(builder, loc, item);
-        ret[i] = doCast(builder, loc, item, dimType);
+        ret[i] = dimCast(item);
       }
     } else {
       dims = doSignCast(builder, loc, dims);
-      ret.emplace_back(doCast(builder, loc, dims, dimType));
+      ret.emplace_back(dimCast(dims));
     }
     return ret;
   }();
 
+  auto toValues = [&](mlir::ArrayRef<mlir::OpFoldResult> src) {
+    auto size = src.size();
+    llvm::SmallVector<mlir::Value> values(size);
+    for (auto i : llvm::seq<size_t>(0, size)) {
+      auto v = src[i];
+      if (auto val = v.dyn_cast<mlir::Value>()) {
+        values[i] = val;
+      } else {
+        auto constVal = v.get<mlir::Attribute>()
+                            .cast<mlir::IntegerAttr>()
+                            .getValue()
+                            .getSExtValue();
+        values[i] = builder.create<mlir::arith::ConstantIndexOp>(loc, constVal);
+      }
+    }
+    return values;
+  };
+
   auto shapeTensor =
-      builder.create<mlir::tensor::FromElementsOp>(loc, newDimsVals);
+      builder.create<mlir::tensor::FromElementsOp>(loc, toValues(newDimsVals));
 
   auto elemType = srcType.getElementType();
   auto signlessElemType = makeSignlessType(elemType);
@@ -1144,8 +1179,16 @@ static py::object insertImpl(py::capsule context, py::handle src,
   auto unwrapList = [&](py::handle obj) {
     auto len = py::len(obj);
     llvm::SmallVector<mlir::Value> res(len);
-    for (auto it : llvm::enumerate(obj))
-      res[it.index()] = doCast(builder, loc, unwrapVal(it.value()), indexType);
+    for (auto it : llvm::enumerate(obj)) {
+      auto i = it.index();
+      auto val = it.value();
+      if (py::isinstance<py::int_>(val)) {
+        res[i] = builder.create<mlir::arith::ConstantIndexOp>(
+            loc, val.cast<int64_t>());
+      } else {
+        res[i] = doCast(builder, loc, unwrapVal(val), indexType);
+      }
+    }
 
     return res;
   };
@@ -1316,17 +1359,17 @@ py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
   }();
   auto viewType = [&]() -> mlir::RankedTensorType {
     if (rank.is_none()) {
-      return plier::ForceViewOp::inferResultType(srcType, offsetVals, sizeVals,
-                                                 strideVals)
+      return mlir::tensor::ExtractSliceOp::inferResultType(srcType, offsetVals,
+                                                           sizeVals, strideVals)
           .cast<mlir::RankedTensorType>();
     } else {
       auto rankVal = rank.cast<unsigned>();
-      return plier::ForceViewOp::inferRankReducedResultType(
+      return mlir::tensor::ExtractSliceOp::inferRankReducedResultType(
                  rankVal, srcType, offsetVals, sizeVals, strideVals)
           .cast<mlir::RankedTensorType>();
     }
   }();
-  auto view = builder.createOrFold<plier::ForceViewOp>(
+  auto view = builder.createOrFold<mlir::tensor::ExtractSliceOp>(
       loc, viewType, srcVal, offsetVals, sizeVals, strideVals);
 
   auto getDynShape = [](int64_t r) {

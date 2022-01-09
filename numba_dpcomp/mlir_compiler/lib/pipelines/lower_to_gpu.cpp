@@ -682,7 +682,15 @@ struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
     if (!needFlatten(memref))
       return mlir::failure();
 
-    auto dstType = op.getType().cast<mlir::MemRefType>();
+    auto offsets = op.getMixedOffsets();
+    auto sizes = op.getMixedSizes();
+    auto strides = op.getMixedStrides();
+
+    auto srcType = memref.getType().cast<mlir::MemRefType>();
+    auto dstType = mlir::memref::SubViewOp::inferResultType(srcType, offsets,
+                                                            sizes, strides)
+                       .cast<mlir::MemRefType>();
+
     int64_t resultOffset; // TODO: remove
     llvm::SmallVector<int64_t, 4> resultStrides;
     if (mlir::failed(
@@ -690,8 +698,7 @@ struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
       return mlir::failure();
 
     auto loc = op.getLoc();
-    mlir::OpFoldResult flatIndex =
-        getFlatIndex(rewriter, loc, memref, op.getMixedOffsets());
+    mlir::OpFoldResult flatIndex = getFlatIndex(rewriter, loc, memref, offsets);
     mlir::OpFoldResult flatSize =
         rewriter.create<plier::UndefOp>(loc, rewriter.getIndexType())
             .getResult();
@@ -713,10 +720,8 @@ struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
                    rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0)
                        .getResult())
              : mlir::OpFoldResult(rewriter.getIndexAttr(0)));
-    auto sizes = op.getMixedSizes();
-    auto strides = op.getMixedStrides();
 
-    for (auto i : llvm::seq(size_t(0), strides.size())) {
+    for (auto i : llvm::seq<size_t>(0, strides.size())) {
       if (mlir::ShapedType::isDynamicStrideOrOffset(resultStrides[i])) {
         auto stride = strides[i];
         if (auto c = stride.dyn_cast<mlir::Attribute>()) {
@@ -737,8 +742,31 @@ struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
       }
     }
 
-    auto result = rewriter.createOrFold<mlir::memref::ReinterpretCastOp>(
-        loc, dstType, flatSubview, offset, sizes, strides);
+    auto resultType = op.getType().cast<mlir::MemRefType>();
+    auto srcRank = static_cast<unsigned>(srcType.getRank());
+    auto resultRank = static_cast<unsigned>(resultType.getRank());
+    mlir::Value result;
+    if (srcRank == resultRank) {
+      result = rewriter.createOrFold<mlir::memref::ReinterpretCastOp>(
+          loc, resultType, flatSubview, offset, sizes, strides);
+    } else {
+      assert(resultRank < srcRank);
+      llvm::SmallVector<mlir::OpFoldResult> filteredSizes;
+      llvm::SmallVector<mlir::OpFoldResult> filteredStrides;
+      filteredSizes.reserve(resultRank);
+      filteredStrides.reserve(resultRank);
+
+      auto droppedDims = op.getDroppedDims();
+      for (auto i : llvm::seq(0u, srcRank)) {
+        if (!droppedDims.contains(i)) {
+          filteredSizes.emplace_back(sizes[i]);
+          filteredStrides.emplace_back(strides[i]);
+        }
+      }
+      result = rewriter.createOrFold<mlir::memref::ReinterpretCastOp>(
+          loc, resultType, flatSubview, offset, filteredSizes, filteredStrides);
+    }
+
     rewriter.replaceOp(op, result);
     return mlir::success();
   }

@@ -697,38 +697,51 @@ static mlir::Value makeSubview(mlir::OpBuilder &builder, mlir::Location loc,
                                llvm::ArrayRef<mlir::OpFoldResult> sizes,
                                llvm::ArrayRef<mlir::OpFoldResult> strides,
                                llvm::ArrayRef<unsigned> dimIndices) {
-  auto srcType = src.getType();
+  auto srcType = src.getType().cast<mlir::ShapedType>();
   bool isTensor = srcType.isa<mlir::RankedTensorType>();
-  mlir::MemRefType memrefType;
+  auto srcRank = static_cast<unsigned>(srcType.getRank());
+  auto dstRank = dimIndices.size();
+  assert(srcRank > 0);
+  assert(dstRank > 0);
+  assert(dstRank <= srcRank);
   if (isTensor) {
-    auto tensorType = srcType.cast<mlir::RankedTensorType>();
-    memrefType = mlir::MemRefType::get(tensorType.getShape(),
-                                       tensorType.getElementType());
-    src = builder.create<mlir::bufferization::ToMemrefOp>(loc, memrefType, src);
+    auto resType =
+        [&]() {
+          auto tensorType = srcType.cast<mlir::RankedTensorType>();
+          if (srcRank == dstRank)
+            return mlir::tensor::ExtractSliceOp::inferResultType(
+                tensorType, offsets, sizes, strides);
+
+          return mlir::tensor::ExtractSliceOp::inferRankReducedResultType(
+              dstRank, tensorType, offsets, sizes, strides);
+        }()
+            .cast<mlir::RankedTensorType>();
+
+    return builder.create<mlir::tensor::ExtractSliceOp>(
+        loc, resType, src, offsets, sizes, strides);
   } else {
-    memrefType = srcType.cast<mlir::MemRefType>();
-  }
-  auto view = builder.createOrFold<mlir::memref::SubViewOp>(loc, src, offsets,
+    auto resType =
+        [&]() {
+          auto memrefType = srcType.cast<mlir::MemRefType>();
+          if (srcRank == dstRank)
+            return mlir::memref::SubViewOp::inferResultType(memrefType, offsets,
                                                             sizes, strides);
 
-  if (dimIndices.size() != static_cast<size_t>(memrefType.getRank())) {
-    // TODO: rank-reducing subview
-    llvm::SmallVector<int32_t> mapping;
-    mapping.assign(dimIndices.begin(), dimIndices.end());
-    view = builder.createOrFold<plier::ReduceRankOp>(loc, view, mapping);
-    auto oldShape = memrefType.getShape();
-    llvm::SmallVector<int64_t> newShape(dimIndices.size());
-    for (auto it : llvm::enumerate(dimIndices))
-      newShape[it.index()] = oldShape[it.value()];
+          return mlir::memref::SubViewOp::inferRankReducedResultType(
+              dstRank, memrefType, offsets, sizes, strides);
+        }()
+            .cast<mlir::MemRefType>();
 
-    memrefType = mlir::MemRefType::get(newShape, memrefType.getElementType());
+    mlir::Value view = builder.create<mlir::memref::SubViewOp>(
+        loc, resType, src, offsets, sizes, strides);
+
+    auto flatMemrefType =
+        mlir::MemRefType::get(resType.getShape(), resType.getElementType());
+    if (resType != flatMemrefType)
+      view = builder.create<plier::ChangeLayoutOp>(loc, flatMemrefType, view);
+
+    return view;
   }
-
-  view = builder.createOrFold<plier::ChangeLayoutOp>(loc, memrefType, view);
-  if (isTensor)
-    view = builder.create<mlir::bufferization::ToTensorOp>(loc, view);
-
-  return view;
 }
 
 struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
@@ -1791,12 +1804,13 @@ getMixedStrides(Op op, ::mlir::ValueRange strides,
   return res;
 }
 
-struct BufferizeForceView
-    : public mlir::OpConversionPattern<plier::ForceViewOp> {
+struct BufferizeExtractSlice
+    : public mlir::OpConversionPattern<mlir::tensor::ExtractSliceOp> {
   using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::ForceViewOp op, plier::ForceViewOp::Adaptor adaptor,
+  matchAndRewrite(mlir::tensor::ExtractSliceOp op,
+                  mlir::tensor::ExtractSliceOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto converter = getTypeConverter();
     assert(converter);
@@ -1947,11 +1961,11 @@ void AdditionalBufferize::runOnFunction() {
                                                             patterns, target);
   plier::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
                                                       target);
-  target.addIllegalOp<mlir::tensor::ReshapeOp>();
-  target.addIllegalOp<plier::ForceViewOp, plier::ForceCopyOp>();
+  target.addIllegalOp<mlir::tensor::ReshapeOp, mlir::tensor::ExtractSliceOp>();
+  target.addIllegalOp<plier::ForceCopyOp>();
   target.addLegalOp<mlir::memref::ReshapeOp>();
 
-  patterns.insert<BufferizeReshape, BufferizeForceView, BufferizeForceCopy>(
+  patterns.insert<BufferizeReshape, BufferizeExtractSlice, BufferizeForceCopy>(
       typeConverter, context);
 
   if (failed(applyPartialConversion(module, target, std::move(patterns))))
@@ -2087,12 +2101,12 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<TensorFusionPass>());
 
   pm.addPass(mlir::createTensorConstantBufferizePass());
+  pm.addNestedPass<mlir::FuncOp>(std::make_unique<AdditionalBufferize>());
   pm.addNestedPass<mlir::FuncOp>(mlir::createSCFBufferizePass());
   pm.addNestedPass<mlir::FuncOp>(mlir::createLinalgBufferizePass());
   pm.addNestedPass<mlir::FuncOp>(mlir::createStdBufferizePass());
   pm.addNestedPass<mlir::FuncOp>(mlir::createTensorBufferizePass());
   pm.addPass(mlir::createFuncBufferizePass());
-  pm.addNestedPass<mlir::FuncOp>(std::make_unique<AdditionalBufferize>());
   pm.addNestedPass<mlir::FuncOp>(
       mlir::bufferization::createFinalizingBufferizePass());
 
