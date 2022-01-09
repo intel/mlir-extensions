@@ -788,7 +788,7 @@ static py::object broadcastImpl(py::capsule context, py::tuple args,
   return std::move(ret);
 }
 
-static py::object initTensorImpl(py::capsule context, py::handle shape,
+static py::object initTensorImpl(py::capsule context, py::iterable shape,
                                  py::handle dtype, py::handle initVal) {
   auto &ctx = getPyContext(context);
   auto loc = ctx.loc;
@@ -799,15 +799,15 @@ static py::object initTensorImpl(py::capsule context, py::handle shape,
   auto indexType = builder.getIndexType();
   auto count = py::len(shape);
   llvm::SmallVector<mlir::Value> shapeVal(count);
-  llvm::SmallVector<int64_t> staticShape(count, -1);
-  for (size_t i = 0; i < count; ++i) {
-    auto elem = shape[py::int_(i)];
+  llvm::SmallVector<int64_t> staticShape(count, mlir::ShapedType::kDynamicSize);
+  for (auto it : llvm::enumerate(shape)) {
+    auto i = it.index();
+    auto elem = it.value();
     if (py::isinstance<py::int_>(elem))
       staticShape[i] = elem.cast<int64_t>();
 
-    auto elemVal = ctx.context.unwrapVal(loc, builder, elem);
-    elemVal = doSignCast(builder, loc, elemVal);
-    shapeVal[i] = doCast(builder, loc, elemVal, indexType);
+    auto elemVal = ctx.context.unwrapVal(loc, builder, elem, indexType);
+    shapeVal[i] = elemVal;
   }
 
   if (initVal.is_none()) {
