@@ -376,8 +376,14 @@ struct PyLinalgResolver::Context {
                                                           obj.cast<int64_t>());
     } else if (resultType.isa<mlir::IntegerType>() &&
                py::isinstance<py::int_>(obj)) {
-      return builder.create<mlir::arith::ConstantIntOp>(
-          loc, obj.cast<int64_t>(), resultType);
+      auto intType = resultType.cast<mlir::IntegerType>();
+      auto intSignlessType = makeSignlessType(intType);
+      mlir::Value res = builder.create<mlir::arith::ConstantIntOp>(
+          loc, obj.cast<int64_t>(), intSignlessType);
+      if (intSignlessType != intType)
+        res = builder.create<plier::SignCastOp>(loc, intType, res);
+
+      return res;
     } else if (resultType.isa<mlir::FloatType>() &&
                py::isinstance<py::float_>(obj)) {
       auto floatVal = [&]() {
@@ -945,25 +951,7 @@ static py::object fromElementsImpl(py::capsule context, py::handle values,
 
   llvm::SmallVector<mlir::Value> vals(containerSize(values));
   containerIterate(values, [&](auto index, py::handle obj) {
-    if (py::isinstance(obj, ctx.context.var)) {
-      vals[index] = unwrapSsaVal(obj);
-    } else if (py::isinstance<py::int_>(obj) ||
-               py::isinstance<py::float_>(obj)) {
-      auto attr = [&]() -> mlir::Attribute {
-        if (type.isa<mlir::IntegerType>()) {
-          auto signless = makeSignlessType(type);
-          return mlir::IntegerAttr::get(signless, obj.cast<int64_t>());
-        }
-        if (type.isa<mlir::FloatType>())
-          return mlir::FloatAttr::get(type, obj.cast<double>());
-
-        plier::reportError("Invalid dtype");
-      }();
-      auto res = builder.create<mlir::arith::ConstantOp>(loc, attr);
-      vals[index] = doSignCast(builder, loc, res, type);
-    } else {
-      plier::reportError("Invalid element type");
-    }
+    vals[index] = ctx.context.unwrapVal(loc, builder, obj, type);
   });
 
   if (vals.empty())
