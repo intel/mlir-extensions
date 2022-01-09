@@ -1179,8 +1179,16 @@ static py::object insertImpl(py::capsule context, py::handle src,
   auto unwrapList = [&](py::handle obj) {
     auto len = py::len(obj);
     llvm::SmallVector<mlir::Value> res(len);
-    for (auto it : llvm::enumerate(obj))
-      res[it.index()] = doCast(builder, loc, unwrapVal(it.value()), indexType);
+    for (auto it : llvm::enumerate(obj)) {
+      auto i = it.index();
+      auto val = it.value();
+      if (py::isinstance<py::int_>(val)) {
+        res[i] = builder.create<mlir::arith::ConstantIndexOp>(
+            loc, val.cast<int64_t>());
+      } else {
+        res[i] = doCast(builder, loc, unwrapVal(val), indexType);
+      }
+    }
 
     return res;
   };
