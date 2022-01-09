@@ -918,14 +918,31 @@ struct ChangeLayoutSubview
     if (!cl)
       return mlir::failure();
 
+    auto offsets = op.getMixedOffsets();
+    auto sizes = op.getMixedSizes();
+    auto strides = op.getMixedStrides();
+
+    auto src = cl.source();
+    auto srcType = src.getType().cast<mlir::MemRefType>();
+    auto dstType = op.getType().cast<mlir::MemRefType>();
+    auto newDstType =
+        [&]() {
+          auto srcRank = srcType.getRank();
+          auto dstRank = dstType.getRank();
+          if (srcRank == dstRank)
+            return mlir::memref::SubViewOp::inferResultType(srcType, offsets,
+                                                            sizes, strides);
+
+          return mlir::memref::SubViewOp::inferRankReducedResultType(
+              dstRank, srcType, offsets, sizes, strides);
+        }()
+            .cast<mlir::MemRefType>();
+
     auto loc = op.getLoc();
     auto newSubview = rewriter.createOrFold<mlir::memref::SubViewOp>(
-        loc, cl.source(), op.getMixedOffsets(), op.getMixedSizes(),
-        op.getMixedStrides());
-    auto oldType = op.getType();
-    auto newType = newSubview.getType();
-    if (newType != oldType)
-      newSubview = rewriter.createOrFold<plier::ChangeLayoutOp>(loc, oldType,
+        loc, newDstType, src, offsets, sizes, strides);
+    if (newDstType != dstType)
+      newSubview = rewriter.createOrFold<plier::ChangeLayoutOp>(loc, dstType,
                                                                 newSubview);
 
     rewriter.replaceOp(op, newSubview);
