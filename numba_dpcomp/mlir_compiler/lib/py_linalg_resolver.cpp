@@ -991,16 +991,10 @@ static py::object extractImpl(py::capsule context, py::handle value,
   auto &builder = ctx.builder;
   auto loc = ctx.loc;
 
+  auto indexType = builder.getIndexType();
   llvm::SmallVector<mlir::Value> ind(containerSize(indices));
   containerIterate(indices, [&](auto index, py::handle obj) {
-    if (py::isinstance(obj, ctx.context.var)) {
-      ind[index] = doSignCast(builder, loc, unwrapSsaVal(obj));
-    } else if (py::isinstance<py::int_>(obj)) {
-      ind[index] = builder.create<mlir::arith::ConstantIndexOp>(
-          loc, obj.cast<int64_t>());
-    } else {
-      plier::reportError("Invalid element type");
-    }
+    ind[index] = ctx.context.unwrapVal(loc, builder, obj, indexType);
   });
   auto tensor = ctx.context.unwrapVal(loc, builder, value);
   auto tensorType = tensor.getType().dyn_cast<mlir::RankedTensorType>();
