@@ -367,6 +367,39 @@ struct PyLinalgResolver::Context {
     plier::reportError(llvm::Twine("Invalid element type: ") +
                        toStr(obj.get_type()));
   }
+
+  mlir::Value unwrapVal(mlir::Location loc, mlir::OpBuilder &builder,
+                        py::handle obj, mlir::Type resultType) {
+    assert(resultType);
+    if (resultType.isa<mlir::IndexType>() && py::isinstance<py::int_>(obj)) {
+      return builder.create<mlir::arith::ConstantIndexOp>(loc,
+                                                          obj.cast<int64_t>());
+    } else if (resultType.isa<mlir::IntegerType>() &&
+               py::isinstance<py::int_>(obj)) {
+      auto intType = resultType.cast<mlir::IntegerType>();
+      auto intSignlessType = makeSignlessType(intType);
+      mlir::Value res = builder.create<mlir::arith::ConstantIntOp>(
+          loc, obj.cast<int64_t>(), intSignlessType);
+      if (intSignlessType != intType)
+        res = builder.create<plier::SignCastOp>(loc, intType, res);
+
+      return res;
+    } else if (resultType.isa<mlir::FloatType>() &&
+               py::isinstance<py::float_>(obj)) {
+      auto floatVal = [&]() {
+        auto v = obj.cast<double>();
+        if (resultType.isF32())
+          return llvm::APFloat(static_cast<float>(v));
+        if (resultType.isF64())
+          return llvm::APFloat(static_cast<double>(v));
+        llvm_unreachable("Unhandled float type");
+      }();
+      return builder.create<mlir::arith::ConstantFloatOp>(
+          loc, floatVal, resultType.cast<mlir::FloatType>());
+    }
+
+    return doCast(builder, loc, unwrapVal(loc, builder, obj), resultType);
+  }
 };
 
 namespace {
@@ -761,7 +794,7 @@ static py::object broadcastImpl(py::capsule context, py::tuple args,
   return std::move(ret);
 }
 
-static py::object initTensorImpl(py::capsule context, py::handle shape,
+static py::object initTensorImpl(py::capsule context, py::iterable shape,
                                  py::handle dtype, py::handle initVal) {
   auto &ctx = getPyContext(context);
   auto loc = ctx.loc;
@@ -772,15 +805,15 @@ static py::object initTensorImpl(py::capsule context, py::handle shape,
   auto indexType = builder.getIndexType();
   auto count = py::len(shape);
   llvm::SmallVector<mlir::Value> shapeVal(count);
-  llvm::SmallVector<int64_t> staticShape(count, -1);
-  for (size_t i = 0; i < count; ++i) {
-    auto elem = shape[py::int_(i)];
-    if (py::isinstance<py::int_>(elem))
-      staticShape[i] = elem.cast<int64_t>();
+  llvm::SmallVector<int64_t> staticShape(count, mlir::ShapedType::kDynamicSize);
+  for (auto it : llvm::enumerate(shape)) {
+    auto i = it.index();
+    auto elem = it.value();
+    auto elemVal = ctx.context.unwrapVal(loc, builder, elem, indexType);
+    if (auto constVal = mlir::getConstantIntValue(elemVal))
+      staticShape[i] = *constVal;
 
-    auto elemVal = ctx.context.unwrapVal(loc, builder, elem);
-    elemVal = doSignCast(builder, loc, elemVal);
-    shapeVal[i] = doCast(builder, loc, elemVal, indexType);
+    shapeVal[i] = elemVal;
   }
 
   if (initVal.is_none()) {
@@ -918,25 +951,7 @@ static py::object fromElementsImpl(py::capsule context, py::handle values,
 
   llvm::SmallVector<mlir::Value> vals(containerSize(values));
   containerIterate(values, [&](auto index, py::handle obj) {
-    if (py::isinstance(obj, ctx.context.var)) {
-      vals[index] = unwrapSsaVal(obj);
-    } else if (py::isinstance<py::int_>(obj) ||
-               py::isinstance<py::float_>(obj)) {
-      auto attr = [&]() -> mlir::Attribute {
-        if (type.isa<mlir::IntegerType>()) {
-          auto signless = makeSignlessType(type);
-          return mlir::IntegerAttr::get(signless, obj.cast<int64_t>());
-        }
-        if (type.isa<mlir::FloatType>())
-          return mlir::FloatAttr::get(type, obj.cast<double>());
-
-        plier::reportError("Invalid dtype");
-      }();
-      auto res = builder.create<mlir::arith::ConstantOp>(loc, attr);
-      vals[index] = doSignCast(builder, loc, res, type);
-    } else {
-      plier::reportError("Invalid element type");
-    }
+    vals[index] = ctx.context.unwrapVal(loc, builder, obj, type);
   });
 
   if (vals.empty())
@@ -964,16 +979,10 @@ static py::object extractImpl(py::capsule context, py::handle value,
   auto &builder = ctx.builder;
   auto loc = ctx.loc;
 
+  auto indexType = builder.getIndexType();
   llvm::SmallVector<mlir::Value> ind(containerSize(indices));
   containerIterate(indices, [&](auto index, py::handle obj) {
-    if (py::isinstance(obj, ctx.context.var)) {
-      ind[index] = doSignCast(builder, loc, unwrapSsaVal(obj));
-    } else if (py::isinstance<py::int_>(obj)) {
-      ind[index] = builder.create<mlir::arith::ConstantIndexOp>(
-          loc, obj.cast<int64_t>());
-    } else {
-      plier::reportError("Invalid element type");
-    }
+    ind[index] = ctx.context.unwrapVal(loc, builder, obj, indexType);
   });
   auto tensor = ctx.context.unwrapVal(loc, builder, value);
   auto tensorType = tensor.getType().dyn_cast<mlir::RankedTensorType>();
@@ -999,6 +1008,10 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
   auto unwrapVal = [&](py::handle obj) {
     return ctx.context.unwrapVal(loc, builder, obj);
   };
+  auto dimType = builder.getIndexType();
+  auto unwrapDim = [&](py::handle obj) {
+    return ctx.context.unwrapVal(loc, builder, obj, dimType);
+  };
 
   auto srcVal = unwrapVal(src);
   auto srcType = srcVal.getType().dyn_cast<mlir::RankedTensorType>();
@@ -1007,7 +1020,6 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
                        toStr(srcVal.getType()));
 
   auto newDimsVals = [&]() {
-    auto dimType = builder.getIndexType();
     auto dimCast = [&](mlir::Value val) {
       return doCast(builder, loc, val, dimType);
     };
@@ -1018,11 +1030,7 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
       for (auto it : llvm::enumerate(t)) {
         auto i = it.index();
         auto val = it.value();
-        if (py::isinstance<py::int_>(val)) {
-          ret[i] = builder.getIndexAttr(val.cast<int64_t>());
-        } else {
-          ret[i] = dimCast(unwrapVal(val));
-        }
+        ret[i] = unwrapDim(val);
       }
       return ret;
     }
@@ -1176,18 +1184,16 @@ static py::object insertImpl(py::capsule context, py::handle src,
     return ctx.context.unwrapVal(loc, builder, obj);
   };
   auto indexType = builder.getIndexType();
+  auto unwrapIndex = [&](py::handle obj) {
+    return ctx.context.unwrapVal(loc, builder, obj, indexType);
+  };
   auto unwrapList = [&](py::handle obj) {
     auto len = py::len(obj);
     llvm::SmallVector<mlir::Value> res(len);
     for (auto it : llvm::enumerate(obj)) {
       auto i = it.index();
       auto val = it.value();
-      if (py::isinstance<py::int_>(val)) {
-        res[i] = builder.create<mlir::arith::ConstantIndexOp>(
-            loc, val.cast<int64_t>());
-      } else {
-        res[i] = doCast(builder, loc, unwrapVal(val), indexType);
-      }
+      res[i] = unwrapIndex(val);
     }
 
     return res;
