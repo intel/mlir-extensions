@@ -803,10 +803,10 @@ static py::object initTensorImpl(py::capsule context, py::iterable shape,
   for (auto it : llvm::enumerate(shape)) {
     auto i = it.index();
     auto elem = it.value();
-    if (py::isinstance<py::int_>(elem))
-      staticShape[i] = elem.cast<int64_t>();
-
     auto elemVal = ctx.context.unwrapVal(loc, builder, elem, indexType);
+    if (auto constVal = mlir::getConstantIntValue(elemVal))
+      staticShape[i] = *constVal;
+
     shapeVal[i] = elemVal;
   }
 
