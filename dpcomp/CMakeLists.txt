@@ -38,6 +38,7 @@ if (NOT EXPECTED_LLVM_SHA STREQUAL LLVM_SHA)
 endif()
 
 add_subdirectory(include/plier/dialect/plier)
+add_subdirectory(include/plier/dialect/plier_util)
 
 set(SOURCES_LIST
     lib/Conversion/SCFToAffine/SCFToAffine.cpp
@@ -46,6 +47,7 @@ set(SOURCES_LIST
     lib/compiler/compiler.cpp
     lib/compiler/pipeline_registry.cpp
     lib/dialect/plier/dialect.cpp
+    lib/dialect/plier_util/dialect.cpp
     lib/transforms/arg_lowering.cpp
     lib/transforms/call_lowering.cpp
     lib/transforms/canonicalize_reductions.cpp
@@ -74,8 +76,8 @@ set(HEADERS_LIST
     include/plier/analysis/memory_ssa_analysis.hpp
     include/plier/compiler/compiler.hpp
     include/plier/compiler/pipeline_registry.hpp
-    include/plier/dialect/plier/PlierOps.td
     include/plier/dialect/plier/dialect.hpp
+    include/plier/dialect/plier_util/dialect.hpp
     include/plier/transforms/arg_lowering.hpp
     include/plier/transforms/call_lowering.hpp
     include/plier/transforms/canonicalize_reductions.hpp
@@ -139,4 +141,4 @@ target_include_directories(${PLIER_LIB} PUBLIC
     ${PROJECT_BINARY_DIR}/plier/include
     )
 
-add_dependencies(${PLIER_LIB} MLIRPlierOpsIncGen)
+add_dependencies(${PLIER_LIB} MLIRPlierOpsIncGen MLIRPlierUtilOpsIncGen)

@@ -14,7 +14,7 @@
 
 #include "plier/transforms/promote_bool_memref.hpp"
 
-#include "plier/dialect/plier/dialect.hpp"
+#include "plier/dialect/plier_util/dialect.hpp"
 #include "plier/transforms/type_conversion.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>

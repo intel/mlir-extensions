@@ -33,6 +33,7 @@
 #include <mlir/Transforms/Passes.h>
 
 #include "plier/dialect/plier/dialect.hpp"
+#include "plier/dialect/plier_util/dialect.hpp"
 
 #include "plier/transforms/call_lowering.hpp"
 #include "plier/transforms/cast_utils.hpp"
@@ -1219,6 +1220,7 @@ struct PlierToStdPass
     registry.insert<mlir::math::MathDialect>();
     registry.insert<mlir::scf::SCFDialect>();
     registry.insert<plier::PlierDialect>();
+    registry.insert<plier::PlierUtilDialect>();
   }
 
   void runOnOperation() override;
