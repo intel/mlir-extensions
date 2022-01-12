@@ -28,7 +28,7 @@
 #include <mlir/IR/BuiltinTypes.h>
 #include <mlir/Parser.h>
 
-#include "plier/dialect.hpp"
+#include "plier/dialect/plier/dialect.hpp"
 #include "plier/transforms/const_utils.hpp"
 #include "plier/transforms/func_utils.hpp"
 #include "plier/utils.hpp"

@@ -17,7 +17,7 @@
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/IR/PatternMatch.h>
 
-#include "plier/dialect.hpp"
+#include "plier/dialect/plier/dialect.hpp"
 #include "plier/transforms/loop_utils.hpp"
 
 mlir::LogicalResult

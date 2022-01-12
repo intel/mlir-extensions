@@ -14,7 +14,7 @@
 
 #include "plier/transforms/inline_utils.hpp"
 
-#include "plier/dialect.hpp"
+#include "plier/dialect/plier/dialect.hpp"
 
 #include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>

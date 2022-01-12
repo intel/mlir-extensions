@@ -22,7 +22,7 @@
 #include <mlir/Pass/PassManager.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 
-#include "plier/dialect.hpp"
+#include "plier/dialect/plier/dialect.hpp"
 
 #include "pipelines/base_pipeline.hpp"
 #include "pipelines/lower_to_llvm.hpp"

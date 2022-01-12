@@ -43,7 +43,7 @@
 #include <mlir/Transforms/LoopUtils.h>
 #include <mlir/Transforms/Passes.h>
 
-#include "plier/dialect.hpp"
+#include "plier/dialect/plier/dialect.hpp"
 
 #include "pipelines/plier_to_scf.hpp"
 #include "pipelines/plier_to_std.hpp"

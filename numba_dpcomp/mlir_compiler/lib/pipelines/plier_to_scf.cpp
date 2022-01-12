@@ -22,7 +22,7 @@
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 #include <mlir/Transforms/Passes.h>
 
-#include "plier/dialect.hpp"
+#include "plier/dialect/plier/dialect.hpp"
 #include "plier/transforms/arg_lowering.hpp"
 #include "plier/transforms/common_opts.hpp"
 

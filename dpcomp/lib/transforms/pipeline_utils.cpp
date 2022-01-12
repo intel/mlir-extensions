@@ -17,7 +17,7 @@
 #include <mlir/IR/Attributes.h>
 #include <mlir/IR/BuiltinOps.h>
 
-#include "plier/dialect.hpp"
+#include "plier/dialect/plier/dialect.hpp"
 
 mlir::ArrayAttr plier::get_pipeline_jump_markers(mlir::ModuleOp module) {
   return module->getAttrOfType<mlir::ArrayAttr>(

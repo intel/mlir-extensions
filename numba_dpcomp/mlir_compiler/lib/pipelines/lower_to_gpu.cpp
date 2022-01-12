@@ -58,7 +58,7 @@
 #include "py_linalg_resolver.hpp"
 
 #include "plier/compiler/pipeline_registry.hpp"
-#include "plier/dialect.hpp"
+#include "plier/dialect/plier/dialect.hpp"
 #include "plier/transforms/call_lowering.hpp"
 #include "plier/transforms/cast_utils.hpp"
 #include "plier/transforms/const_utils.hpp"

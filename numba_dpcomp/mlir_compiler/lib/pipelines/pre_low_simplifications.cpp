@@ -18,7 +18,7 @@
 #include "pipelines/plier_to_std.hpp"
 
 #include "plier/compiler/pipeline_registry.hpp"
-#include "plier/dialect.hpp"
+#include "plier/dialect/plier/dialect.hpp"
 #include "plier/transforms/type_conversion.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>

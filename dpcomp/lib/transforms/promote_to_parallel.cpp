@@ -17,7 +17,7 @@
 #include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 
-#include "plier/dialect.hpp"
+#include "plier/dialect/plier/dialect.hpp"
 
 namespace {
 bool hasSideEffects(mlir::Operation *op) {

@@ -52,7 +52,7 @@
 #include "pipelines/plier_to_std.hpp"
 
 #include "plier/compiler/pipeline_registry.hpp"
-#include "plier/dialect.hpp"
+#include "plier/dialect/plier/dialect.hpp"
 #include "plier/transforms/func_utils.hpp"
 #include "plier/transforms/type_conversion.hpp"
 #include "plier/utils.hpp"
