@@ -1765,56 +1765,6 @@ struct BufferizeReshape
   }
 };
 
-// TODO: upstream
-template <typename Op>
-static ::mlir::SmallVector<::mlir::OpFoldResult, 4>
-getMixedOffsets(Op op, ::mlir::ValueRange offsets,
-                ::mlir::ArrayAttr staticOffsets) {
-  ::mlir::SmallVector<::mlir::OpFoldResult, 4> res;
-  unsigned numDynamic = 0;
-  unsigned count = staticOffsets.size();
-  for (unsigned idx = 0; idx < count; ++idx) {
-    if (op.isDynamicOffset(idx))
-      res.push_back(offsets[numDynamic++]);
-    else
-      res.push_back(staticOffsets[idx]);
-  }
-  return res;
-}
-
-// TODO: upstream
-template <typename Op>
-static ::mlir::SmallVector<::mlir::OpFoldResult, 4>
-getMixedSizes(Op op, ::mlir::ValueRange sizes, ::mlir::ArrayAttr staticSizes) {
-  ::mlir::SmallVector<::mlir::OpFoldResult, 4> res;
-  unsigned numDynamic = 0;
-  unsigned count = staticSizes.size();
-  for (unsigned idx = 0; idx < count; ++idx) {
-    if (op.isDynamicSize(idx))
-      res.push_back(sizes[numDynamic++]);
-    else
-      res.push_back(staticSizes[idx]);
-  }
-  return res;
-}
-
-// TODO: upstream
-template <typename Op>
-static ::mlir::SmallVector<::mlir::OpFoldResult, 4>
-getMixedStrides(Op op, ::mlir::ValueRange strides,
-                ::mlir::ArrayAttr staticStrides) {
-  ::mlir::SmallVector<::mlir::OpFoldResult, 4> res;
-  unsigned numDynamic = 0;
-  unsigned count = staticStrides.size();
-  for (unsigned idx = 0; idx < count; ++idx) {
-    if (op.isDynamicStride(idx))
-      res.push_back(strides[numDynamic++]);
-    else
-      res.push_back(staticStrides[idx]);
-  }
-  return res;
-}
-
 struct BufferizeExtractSlice
     : public mlir::OpConversionPattern<mlir::tensor::ExtractSliceOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -1835,10 +1785,11 @@ struct BufferizeExtractSlice
 
     auto dstRank = dstType.getRank();
     auto offsets =
-        getMixedOffsets(op, adaptor.offsets(), adaptor.static_offsets());
-    auto sizes = getMixedSizes(op, adaptor.sizes(), adaptor.static_sizes());
+        mlir::getMixedOffsets(op, adaptor.static_offsets(), adaptor.offsets());
+    auto sizes =
+        mlir::getMixedSizes(op, adaptor.static_sizes(), adaptor.sizes());
     auto strides =
-        getMixedStrides(op, adaptor.strides(), adaptor.static_strides());
+        mlir::getMixedStrides(op, adaptor.static_strides(), adaptor.strides());
 
     auto viewType = [&]() {
       if (srcType.getRank() == dstRank)

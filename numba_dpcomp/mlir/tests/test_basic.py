@@ -24,6 +24,14 @@ import itertools
 from .utils import parametrize_function_variants
 from .utils import njit_cached as njit
 
+def _skip_python_errors(func):
+    def _wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except (ZeroDivisionError, TypeError, ValueError):
+            pytest.skip()
+    return _wrapper
+
 # TODO: nans and infs not tested yet, we are not sure if want exactly follow
 # interpreted python rules
 _test_values = [True,False,-3,-2,-1,0,1,2,3,-2.5,-1.0,-0.5 -0.0, 0.0, 0.5, 1.0, 2.5]
@@ -52,14 +60,7 @@ def test_ret(val):
 @pytest.mark.parametrize("a, b", itertools.product(_test_values, _test_values))
 def test_ops(py_func, a, b):
     jit_func = njit(py_func)
-    try:
-        assert_equal(py_func(a, b), jit_func(a, b))
-    except ZeroDivisionError:
-        pass
-    except TypeError:
-        pass
-    except ValueError:
-        pass
+    assert_equal(_skip_python_errors(py_func)(a, b), jit_func(a, b))
 
 @pytest.mark.parametrize("a, b", itertools.product(_test_values, _test_values))
 def test_inplace_op(a, b):
@@ -82,10 +83,7 @@ def test_unary_ops(py_func, val, request):
         pytest.xfail()
 
     jit_func = njit(py_func)
-    try:
-        assert_equal(py_func(val), jit_func(val))
-    except TypeError:
-        pass
+    assert_equal(_skip_python_errors(py_func)(val), jit_func(val))
 
 @parametrize_function_variants("py_func", [
     'lambda a, b: a if a > b else b',
