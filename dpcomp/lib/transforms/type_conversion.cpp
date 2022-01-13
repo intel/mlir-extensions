@@ -20,7 +20,7 @@
 #include <mlir/Dialect/StandardOps/Transforms/FuncConversions.h>
 #include <mlir/Transforms/DialectConversion.h>
 
-#include "plier/dialect.hpp"
+#include "plier/dialect/plier/dialect.hpp"
 
 namespace {
 class ConvertSelectOp : public mlir::OpConversionPattern<mlir::SelectOp> {

@@ -24,12 +24,10 @@
 #include <mlir/Interfaces/SideEffectInterfaces.h>
 #include <mlir/Interfaces/ViewLikeInterface.h>
 
-#include <mlir/Dialect/GPU/GPUDialect.h>
-
-#include "plier/PlierOpsDialect.h.inc"
-//#include "plier/PlierOpsEnums.h.inc"
+#include "plier/dialect/plier/PlierOpsDialect.h.inc"
+//#include "plier/dialect/plier/PlierOpsEnums.h.inc"
 #define GET_OP_CLASSES
-#include "plier/PlierOps.h.inc"
+#include "plier/dialect/plier/PlierOps.h.inc"
 
 namespace plier {
 namespace attributes {
@@ -124,14 +122,6 @@ public:
   static TypeVar get(mlir::Type type);
 
   mlir::Type getType() const;
-};
-
-class OpaqueType : public ::mlir::Type::TypeBase<OpaqueType, ::mlir::Type,
-                                                 ::mlir::TypeStorage> {
-public:
-  using Base::Base;
-
-  static OpaqueType get(mlir::MLIRContext *context);
 };
 
 } // namespace plier

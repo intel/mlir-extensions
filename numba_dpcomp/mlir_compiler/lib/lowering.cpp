@@ -33,7 +33,7 @@
 #include <llvm/Bitcode/BitcodeWriter.h>
 #include <llvm/Support/Debug.h>
 
-#include "plier/dialect.hpp"
+#include "plier/dialect/plier/dialect.hpp"
 
 #include "plier/compiler/compiler.hpp"
 #include "plier/compiler/pipeline_registry.hpp"

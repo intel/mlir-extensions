@@ -16,7 +16,7 @@
 
 #include <functional>
 
-#include "plier/dialect.hpp"
+#include "plier/dialect/plier/dialect.hpp"
 
 #include <mlir/IR/PatternMatch.h>
 

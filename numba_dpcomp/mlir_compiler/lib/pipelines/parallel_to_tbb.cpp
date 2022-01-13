@@ -22,7 +22,8 @@
 #include <mlir/Pass/PassManager.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 
-#include "plier/dialect.hpp"
+#include "plier/dialect/plier/dialect.hpp"
+#include "plier/dialect/plier_util/dialect.hpp"
 
 #include "pipelines/base_pipeline.hpp"
 #include "pipelines/lower_to_llvm.hpp"
@@ -224,9 +225,9 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
 struct ParallelToTbbPass
     : public plier::RewriteWrapperPass<
           ParallelToTbbPass, mlir::FuncOp,
-          plier::DependentDialectsList<plier::PlierDialect,
-                                       mlir::arith::ArithmeticDialect,
-                                       mlir::scf::SCFDialect>,
+          plier::DependentDialectsList<
+              plier::PlierDialect, plier::PlierUtilDialect,
+              mlir::arith::ArithmeticDialect, mlir::scf::SCFDialect>,
           ParallelToTbb> {};
 
 static void populateParallelToTbbPipeline(mlir::OpPassManager &pm) {

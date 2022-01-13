@@ -24,7 +24,7 @@
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Support/LogicalResult.h>
 
-#include "plier/dialect.hpp"
+#include "plier/dialect/plier/dialect.hpp"
 
 #include "plier/transforms/cast_utils.hpp"
 #include "plier/transforms/const_utils.hpp"

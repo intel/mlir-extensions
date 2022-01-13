@@ -326,7 +326,7 @@ def test_prange_lowering():
         arr = np.arange(10000, dtype=np.float32)
         assert_equal(py_func(arr), jit_func(arr))
         ir = get_print_buffer()
-        assert ir.count('plier.parallel') == 1, ir
+        assert ir.count('plier_util.parallel') == 1, ir
 
 def test_loop_fusion1():
     def py_func(arr):

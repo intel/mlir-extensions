@@ -58,7 +58,8 @@
 #include "py_linalg_resolver.hpp"
 
 #include "plier/compiler/pipeline_registry.hpp"
-#include "plier/dialect.hpp"
+#include "plier/dialect/plier/dialect.hpp"
+#include "plier/dialect/plier_util/dialect.hpp"
 #include "plier/transforms/call_lowering.hpp"
 #include "plier/transforms/cast_utils.hpp"
 #include "plier/transforms/const_utils.hpp"
@@ -1218,7 +1219,7 @@ struct GPULowerDefaultLocalSize
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::StandardOpsDialect>();
-    registry.insert<plier::PlierDialect>();
+    registry.insert<plier::PlierUtilDialect>();
   }
 
   void runOnFunction() override {

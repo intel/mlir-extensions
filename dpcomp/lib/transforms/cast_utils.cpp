@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #include "plier/transforms/cast_utils.hpp"
-#include "plier/dialect.hpp"
+#include "plier/dialect/plier_util/dialect.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 

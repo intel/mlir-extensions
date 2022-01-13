@@ -43,7 +43,8 @@
 #include <mlir/Transforms/LoopUtils.h>
 #include <mlir/Transforms/Passes.h>
 
-#include "plier/dialect.hpp"
+#include "plier/dialect/plier/dialect.hpp"
+#include "plier/dialect/plier_util/dialect.hpp"
 
 #include "pipelines/plier_to_scf.hpp"
 #include "pipelines/plier_to_std.hpp"
@@ -1308,6 +1309,7 @@ struct PlierToLinalgPass
     registry.insert<mlir::memref::MemRefDialect>();
     registry.insert<mlir::tensor::TensorDialect>();
     registry.insert<plier::PlierDialect>();
+    registry.insert<plier::PlierUtilDialect>();
   }
 
   void runOnOperation() override;
@@ -1950,7 +1952,7 @@ struct AdditionalBufferize
     : public mlir::PassWrapper<AdditionalBufferize, mlir::FunctionPass> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<plier::PlierDialect>();
+    registry.insert<plier::PlierUtilDialect>();
   }
 
   void runOnFunction() override;
@@ -2004,7 +2006,7 @@ struct CloneArgsPass
     : public mlir::PassWrapper<CloneArgsPass, mlir::FunctionPass> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<plier::PlierDialect>();
+    registry.insert<plier::PlierUtilDialect>();
   }
 
   void runOnFunction() override;
