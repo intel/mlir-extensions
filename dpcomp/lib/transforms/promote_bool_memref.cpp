@@ -104,7 +104,7 @@ public:
 
     rewriter.replaceOpWithNewOp<mlir::memref::AllocOp>(
         op, resType, adaptor.dynamicSizes(), adaptor.symbolOperands(),
-        adaptor.alignment());
+        adaptor.alignmentAttr());
     return mlir::success();
   }
 };
@@ -126,7 +126,7 @@ public:
 
     rewriter.replaceOpWithNewOp<mlir::memref::AllocaOp>(
         op, resType, adaptor.dynamicSizes(), adaptor.symbolOperands(),
-        adaptor.alignment());
+        adaptor.alignmentAttr());
     return mlir::success();
   }
 };

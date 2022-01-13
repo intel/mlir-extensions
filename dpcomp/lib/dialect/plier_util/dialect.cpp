@@ -25,7 +25,7 @@
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/Bufferization/IR/Bufferization.h>
 #include <mlir/Dialect/GPU/GPUDialect.h>
-#include <mlir/Dialect/Linalg/IR/LinalgOps.h>
+#include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Dialect/StandardOps/Utils/Utils.h>
@@ -597,7 +597,7 @@ struct ChangeLayoutIf : public mlir::OpRewritePattern<mlir::scf::YieldOp> {
   mlir::LogicalResult
   matchAndRewrite(mlir::scf::YieldOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    if (op.results().empty())
+    if (op.getResults().empty())
       return mlir::failure();
 
     auto ifOp = mlir::dyn_cast<mlir::scf::IfOp>(op->getParentOp());
@@ -605,11 +605,11 @@ struct ChangeLayoutIf : public mlir::OpRewritePattern<mlir::scf::YieldOp> {
       return mlir::failure();
 
     auto trueYield = mlir::cast<mlir::scf::YieldOp>(
-        ifOp.thenRegion().front().getTerminator());
+        ifOp.getThenRegion().front().getTerminator());
     auto falseYield = mlir::cast<mlir::scf::YieldOp>(
-        ifOp.elseRegion().front().getTerminator());
+        ifOp.getElseRegion().front().getTerminator());
     mlir::OpBuilder::InsertionGuard g(rewriter);
-    auto count = static_cast<unsigned>(trueYield.results().size());
+    auto count = static_cast<unsigned>(trueYield.getResults().size());
     llvm::SmallVector<mlir::Type> newResultTypes(count);
     bool changed = false;
     for (auto i : llvm::seq(0u, count)) {
@@ -620,7 +620,7 @@ struct ChangeLayoutIf : public mlir::OpRewritePattern<mlir::scf::YieldOp> {
         auto clYield = (reverse ? falseYield : trueYield);
         auto otherYield = (reverse ? trueYield : falseYield);
 
-        auto arg = clYield.results()[i];
+        auto arg = clYield.getResults()[i];
         if (!arg.getType().isa<mlir::MemRefType>())
           continue;
 
@@ -637,7 +637,7 @@ struct ChangeLayoutIf : public mlir::OpRewritePattern<mlir::scf::YieldOp> {
         rewriter.updateRootInPlace(clYield,
                                    [&]() { clYield.setOperand(i, src); });
 
-        auto otherArg = otherYield.results()[i];
+        auto otherArg = otherYield.getResults()[i];
         rewriter.setInsertionPoint(otherYield);
         auto otherRes = rewriter.createOrFold<mlir::memref::CastOp>(
             otherYield.getLoc(), otherArg, srcType);

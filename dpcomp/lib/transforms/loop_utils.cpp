@@ -92,7 +92,7 @@ static mlir::Value skipCasts(mlir::Value val) {
 } // namespace
 
 bool plier::canLowerWhileToFor(mlir::scf::WhileOp whileOp) {
-  auto &beforeBlock = whileOp.before().front();
+  auto &beforeBlock = whileOp.getBefore().front();
   auto iters = llvm::iterator_range<mlir::Block::iterator>(beforeBlock);
   auto iternext = getNextOp<plier::IternextOp>(iters);
   /*auto pairfirst =*/getNextOp<plier::PairfirstOp>(iters);
@@ -100,7 +100,7 @@ bool plier::canLowerWhileToFor(mlir::scf::WhileOp whileOp) {
   auto beforeTerm = getNextOp<mlir::scf::ConditionOp>(iters);
 
   if (!iternext || !pairsecond || !beforeTerm ||
-      skipCasts(beforeTerm.condition()) != pairsecond)
+      skipCasts(beforeTerm.getCondition()) != pairsecond)
     return false;
 
   return true;
@@ -134,13 +134,13 @@ llvm::SmallVector<mlir::scf::ForOp, 2> plier::lowerWhileToFor(
                                                      value);
   };
 
-  auto &beforeBlock = whileOp.before().front();
+  auto &beforeBlock = whileOp.getBefore().front();
   auto iters = llvm::iterator_range<mlir::Block::iterator>(beforeBlock);
   /*auto iternext =*/getNextOp<plier::IternextOp>(iters);
   auto pairfirst = getNextOp<plier::PairfirstOp>(iters);
   auto beforeTerm =
       mlir::cast<mlir::scf::ConditionOp>(beforeBlock.getTerminator());
-  auto &afterBlock = whileOp.after().front();
+  auto &afterBlock = whileOp.getAfter().front();
 
   auto indexCast = [&](mlir::Value val) -> mlir::Value {
     return ::plier::index_cast(builder, loc, val);
@@ -163,11 +163,11 @@ llvm::SmallVector<mlir::scf::ForOp, 2> plier::lowerWhileToFor(
 
         mlir::BlockAndValueMapping mapper;
         assert(beforeBlock.getNumArguments() == iterargs.size());
-        assert(afterBlock.getNumArguments() == beforeTerm.args().size());
+        assert(afterBlock.getNumArguments() == beforeTerm.getArgs().size());
         mapper.map(beforeBlock.getArguments(), iterargs);
 
         for (auto it :
-             llvm::zip(afterBlock.getArguments(), beforeTerm.args())) {
+             llvm::zip(afterBlock.getArguments(), beforeTerm.getArgs())) {
           auto blockArg = std::get<0>(it);
           auto termArg = std::get<1>(it);
           if (pairfirst && skipCasts(termArg) == pairfirst) {
@@ -224,7 +224,7 @@ llvm::SmallVector<mlir::scf::ForOp, 2> plier::lowerWhileToFor(
           .getResults();
 
     auto reg = builder.create<mlir::scf::ExecuteRegionOp>(loc, resTypes);
-    auto &regBlock = reg.region().emplaceBlock();
+    auto &regBlock = reg.getRegion().emplaceBlock();
     mlir::OpBuilder::InsertionGuard g(builder);
     builder.setInsertionPointToStart(&regBlock);
     getIfBodyBuilder(ind.getValue() != 0)(builder, loc);
@@ -233,8 +233,8 @@ llvm::SmallVector<mlir::scf::ForOp, 2> plier::lowerWhileToFor(
 
   assert(whileOp.getNumResults() >= loopResults.size());
   builder.updateRootInPlace(whileOp, [&]() {
-    assert(whileOp.getNumResults() == beforeTerm.args().size());
-    for (auto it : llvm::zip(whileOp.getResults(), beforeTerm.args())) {
+    assert(whileOp.getNumResults() == beforeTerm.getArgs().size());
+    for (auto it : llvm::zip(whileOp.getResults(), beforeTerm.getArgs())) {
       auto oldRes = std::get<0>(it);
       auto operand = std::get<1>(it);
       for (auto it2 : llvm::enumerate(beforeBlock.getArguments())) {
@@ -323,9 +323,11 @@ static bool equalIterationSpaces(scf::ParallelOp firstPloop,
     // TODO: Extend this to support aliases and equal constants.
     return std::equal(lhs.begin(), lhs.end(), rhs.begin());
   };
-  return matchOperands(firstPloop.lowerBound(), secondPloop.lowerBound()) &&
-         matchOperands(firstPloop.upperBound(), secondPloop.upperBound()) &&
-         matchOperands(firstPloop.step(), secondPloop.step());
+  return matchOperands(firstPloop.getLowerBound(),
+                       secondPloop.getLowerBound()) &&
+         matchOperands(firstPloop.getUpperBound(),
+                       secondPloop.getUpperBound()) &&
+         matchOperands(firstPloop.getStep(), secondPloop.getStep());
 }
 
 /// Checks if the parallel loops have mixed access to the same buffers. Returns
@@ -412,9 +414,9 @@ static bool fuseIfLegal(scf::ParallelOp firstPloop,
   if (!isFusionLegal(firstPloop, secondPloop, firstToSecondPloopIndices))
     return false;
 
-  auto init1 = firstPloop.initVals();
+  auto init1 = firstPloop.getInitVals();
   auto numResults1 = init1.size();
-  auto init2 = secondPloop.initVals();
+  auto init2 = secondPloop.getInitVals();
   auto numResults2 = init2.size();
 
   SmallVector<mlir::Value> newInitVars;
@@ -424,8 +426,8 @@ static bool fuseIfLegal(scf::ParallelOp firstPloop,
 
   b.setInsertionPoint(secondPloop);
   auto newSecondPloop = b.create<mlir::scf::ParallelOp>(
-      secondPloop.getLoc(), secondPloop.lowerBound(), secondPloop.upperBound(),
-      secondPloop.step(), newInitVars);
+      secondPloop.getLoc(), secondPloop.getLowerBound(),
+      secondPloop.getUpperBound(), secondPloop.getStep(), newInitVars);
   if (secondPloop->hasAttr(plier::attributes::getParallelName()))
     newSecondPloop->setAttr(plier::attributes::getParallelName(),
                             mlir::UnitAttr::get(b.getContext()));

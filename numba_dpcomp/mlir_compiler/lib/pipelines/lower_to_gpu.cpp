@@ -103,7 +103,7 @@ static void moveOpsIntoParallel(mlir::scf::ParallelOp outer, int depth = 0) {
     --it;
     op.moveBefore(&parallelOpBody.front());
   }
-  depth += outer.step().size();
+  depth += outer.getStep().size();
   if (depth >= 6)
     return;
 
@@ -131,10 +131,10 @@ struct PrepareForGPUPass
 static mlir::LogicalResult
 convertParallelToFor(mlir::scf::ParallelOp op,
                      mlir::PatternRewriter &rewriter) {
-  auto lowerBounds = op.lowerBound();
-  auto upperBound = op.upperBound();
-  auto steps = op.step();
-  auto initVals = op.initVals();
+  auto lowerBounds = op.getLowerBound();
+  auto upperBound = op.getUpperBound();
+  auto steps = op.getStep();
+  auto initVals = op.getInitVals();
   assert(!steps.empty());
   if (steps.size() > 1)
     return mlir::failure();
@@ -154,13 +154,13 @@ convertParallelToFor(mlir::scf::ParallelOp op,
         assert(reduceBlock.getNumArguments() == 2);
         mapping.map(reduceBlock.getArgument(0), args[reduceIndex]);
         mapping.map(reduceBlock.getArgument(1),
-                    mapping.lookupOrDefault(reduce.operand()));
+                    mapping.lookupOrDefault(reduce.getOperand()));
         for (auto &reduceOp : reduceBlock.without_terminator())
           builder.clone(reduceOp, mapping);
 
         auto yieldResult =
             mlir::cast<mlir::scf::ReduceReturnOp>(reduceBlock.getTerminator())
-                .result();
+                .getResult();
         yieldArgs[reduceIndex] = mapping.lookupOrDefault(yieldResult);
         ++reduceIndex;
       } else {
@@ -2427,8 +2427,8 @@ struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::CallOp> {
       return mlir::failure();
 
     llvm::SmallVector<mlir::Value, 6> indexArgs;
-    auto attrId = mlir::Identifier::get(plier::attributes::getGpuRangeName(),
-                                        op.getContext());
+    auto attrId = mlir::StringAttr::get(op.getContext(),
+                                        plier::attributes::getGpuRangeName());
     mlir::Operation *parent = op;
     while (true) {
       parent = parent->getParentOfType<mlir::scf::ForOp>();
