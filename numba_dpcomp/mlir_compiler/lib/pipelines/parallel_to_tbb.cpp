@@ -80,10 +80,9 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
     if (maxConcurrency <= 1)
       return mlir::failure();
 
-    for (auto type : op.getResultTypes()) {
+    for (auto type : op.getResultTypes())
       if (!getReduceType(type, maxConcurrency))
         return mlir::failure();
-    }
 
     llvm::SmallVector<mlir::Attribute> initVals;
     initVals.reserve(op.getNumResults());
@@ -93,7 +92,7 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
         if (ind >= op.getNumResults())
           return mlir::failure();
 
-        auto &region = reduce.reductionOperator();
+        auto &region = reduce.getReductionOperator();
         if (!llvm::hasSingleElement(region))
           return mlir::failure();
 
@@ -149,31 +148,31 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
                                       reduceInitBodyBuilder);
 
     auto &oldBody = op.getLoopBody().front();
-    auto origLowerBound = op.lowerBound();
-    auto origUpperBound = op.upperBound();
-    auto origStep = op.step();
+    auto origLowerBound = op.getLowerBound();
+    auto origUpperBound = op.getUpperBound();
+    auto origStep = op.getStep();
     auto bodyBuilder = [&](mlir::OpBuilder &builder, ::mlir::Location loc,
-                           mlir::ValueRange lower_bound,
-                           mlir::ValueRange upper_bound,
-                           mlir::Value thread_index) {
-      llvm::SmallVector<mlir::Value> initVals(op.initVals().size());
-      for (auto it : llvm::enumerate(op.initVals())) {
+                           mlir::ValueRange lowerBound,
+                           mlir::ValueRange upperBound,
+                           mlir::Value threadIndex) {
+      llvm::SmallVector<mlir::Value> initVals(op.getInitVals().size());
+      for (auto it : llvm::enumerate(op.getInitVals())) {
         auto reduceVar = reduceVars[it.index()];
         auto val =
-            builder.create<mlir::memref::LoadOp>(loc, reduceVar, thread_index);
+            builder.create<mlir::memref::LoadOp>(loc, reduceVar, threadIndex);
         initVals[it.index()] = val;
       }
       auto newOp =
           mlir::cast<mlir::scf::ParallelOp>(builder.clone(*op, mapping));
       newOp->removeAttr(plier::attributes::getParallelName());
       assert(newOp->getNumResults() == reduceVars.size());
-      newOp.lowerBoundMutable().assign(lower_bound);
-      newOp.upperBoundMutable().assign(upper_bound);
-      newOp.initValsMutable().assign(initVals);
+      newOp.getLowerBoundMutable().assign(lowerBound);
+      newOp.getUpperBoundMutable().assign(upperBound);
+      newOp.getInitValsMutable().assign(initVals);
       for (auto it : llvm::enumerate(newOp->getResults())) {
         auto reduce_var = reduceVars[it.index()];
         builder.create<mlir::memref::StoreOp>(loc, it.value(), reduce_var,
-                                              thread_index);
+                                              threadIndex);
       }
     };
 
@@ -194,18 +193,18 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
         auto &reduceVar = reduceVars[it.index()];
         auto arg = args[static_cast<unsigned>(it.index())];
         auto reduceOp = mlir::cast<mlir::scf::ReduceOp>(it.value());
-        auto &reduceOpBody = reduceOp.reductionOperator().front();
+        auto &reduceOpBody = reduceOp.getReductionOperator().front();
         assert(reduceOpBody.getNumArguments() == 2);
         auto prev_val =
             builder.create<mlir::memref::LoadOp>(loc, reduceVar, index);
         mapping.map(reduceOpBody.getArgument(0), arg);
         mapping.map(reduceOpBody.getArgument(1), prev_val);
-        for (auto &old_reduce_op : reduceOpBody.without_terminator()) {
+        for (auto &old_reduce_op : reduceOpBody.without_terminator())
           builder.clone(old_reduce_op, mapping);
-        }
+
         auto result =
             mlir::cast<mlir::scf::ReduceReturnOp>(reduceOpBody.getTerminator())
-                .result();
+                .getResult();
         result = mapping.lookupOrNull(result);
         assert(result);
         yieldArgs.emplace_back(result);
@@ -214,7 +213,7 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
     };
 
     auto reduceLoop = rewriter.create<mlir::scf::ForOp>(
-        loc, reduceLowerBound, reduceUpperBound, reduceStep, op.initVals(),
+        loc, reduceLowerBound, reduceUpperBound, reduceStep, op.getInitVals(),
         reduceBodyBuilder);
     rewriter.replaceOp(op, reduceLoop.getResults());
 

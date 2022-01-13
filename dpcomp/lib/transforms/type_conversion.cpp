@@ -40,7 +40,8 @@ public:
 void plier::populateControlFlowTypeConversionRewritesAndTarget(
     mlir::TypeConverter &typeConverter, mlir::RewritePatternSet &patterns,
     mlir::ConversionTarget &target) {
-  mlir::populateFuncOpTypeConversionPattern(patterns, typeConverter);
+  mlir::populateFunctionLikeTypeConversionPattern<mlir::FuncOp>(patterns,
+                                                                typeConverter);
   target.addDynamicallyLegalOp<mlir::FuncOp>([&](mlir::FuncOp op) {
     return typeConverter.isSignatureLegal(op.getType()) &&
            typeConverter.isLegal(&op.getBody());

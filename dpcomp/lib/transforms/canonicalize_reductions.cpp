@@ -128,26 +128,26 @@ mlir::LogicalResult plier::CanonicalizeReduction::matchAndRewrite(
 
   if (!to_process.empty()) {
     auto loc = op.getLoc();
-    auto initArgs = llvm::to_vector<8>(op.initArgs());
+    auto initArgs = llvm::to_vector<8>(op.getInitArgs());
     for (auto it : to_process) {
       initArgs.emplace_back(
           createScalarLoad(rewriter, loc, it.first, it.second));
     }
-    auto prev_args_offset = op.initArgs().size();
+    auto prevArgsOffset = op.getInitArgs().size();
     auto body = [&](mlir::OpBuilder &builder, mlir::Location loc,
-                    mlir::Value iter, mlir::ValueRange iter_vals) {
+                    mlir::Value iter, mlir::ValueRange iterVals) {
       auto &oldBody = op.getLoopBody().front();
       mlir::BlockAndValueMapping mapping;
       mapping.map(oldBody.getArguments().front(), iter);
-      mapping.map(oldBody.getArguments().drop_front(), iter_vals);
-      auto yield_args = llvm::to_vector<8>(iter_vals);
+      mapping.map(oldBody.getArguments().drop_front(), iterVals);
+      auto yield_args = llvm::to_vector<8>(iterVals);
       for (auto &body_op : oldBody.without_terminator()) {
         auto invalid_index = static_cast<unsigned>(-1);
         auto get_iter_index = [&](auto op) -> unsigned {
           auto arg = op.memref();
           for (auto it : llvm::enumerate(llvm::make_first_range(to_process))) {
             if (arg == it.value()) {
-              return static_cast<unsigned>(it.index() + prev_args_offset);
+              return static_cast<unsigned>(it.index() + prevArgsOffset);
             }
           }
           return invalid_index;
@@ -172,21 +172,21 @@ mlir::LogicalResult plier::CanonicalizeReduction::matchAndRewrite(
         }
       }
       auto yield = mlir::cast<mlir::scf::YieldOp>(oldBody.getTerminator());
-      llvm::copy(yield.results(), yield_args.begin());
+      llvm::copy(yield.getResults(), yield_args.begin());
       builder.create<mlir::scf::YieldOp>(loc, yield_args);
     };
-    auto results =
-        rewriter
-            .create<mlir::scf::ForOp>(loc, op.lowerBound(), op.upperBound(),
-                                      op.step(), initArgs, body)
-            .results();
+    auto results = rewriter
+                       .create<mlir::scf::ForOp>(loc, op.getLowerBound(),
+                                                 op.getUpperBound(),
+                                                 op.getStep(), initArgs, body)
+                       .getResults();
     for (auto it : llvm::enumerate(to_process)) {
-      auto index = prev_args_offset + it.index();
+      auto index = prevArgsOffset + it.index();
       auto result = results[static_cast<unsigned>(index)];
       createScalarStore(rewriter, loc, result, it.value().first,
                         it.value().second);
     }
-    rewriter.replaceOp(op, results.take_front(prev_args_offset));
+    rewriter.replaceOp(op, results.take_front(prevArgsOffset));
     return mlir::success();
   }
 

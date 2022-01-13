@@ -354,9 +354,9 @@ createWhile(mlir::OpBuilder &builder, mlir::Location loc,
     beforeBuilder(builder, state.location, beforeBlock->getArguments());
     auto cond =
         mlir::cast<mlir::scf::ConditionOp>(beforeBlock->getTerminator());
-    state.addTypes(cond.args().getTypes());
+    state.addTypes(cond.getArgs().getTypes());
 
-    auto afterblock = addRegion(cond.args());
+    auto afterblock = addRegion(cond.getArgs());
     afterBuilder(builder, state.location, afterblock->getArguments());
   }
   return mlir::cast<mlir::scf::WhileOp>(builder.createOperation(state));

@@ -143,12 +143,11 @@ mlir::LogicalResult plier::PromoteToParallel::matchAndRewrite(
   };
 
   auto parallelOp = rewriter.replaceOpWithNewOp<mlir::scf::ParallelOp>(
-      op, op.lowerBound(), op.upperBound(), op.step(), op.initArgs(),
-      bodyBuilder);
-  if (hasParallelAttr) {
+      op, op.getLowerBound(), op.getUpperBound(), op.getStep(),
+      op.getInitArgs(), bodyBuilder);
+  if (hasParallelAttr)
     parallelOp->setAttr(plier::attributes::getParallelName(),
                         rewriter.getUnitAttr());
-  }
 
   return mlir::success();
 }
@@ -156,19 +155,19 @@ mlir::LogicalResult plier::PromoteToParallel::matchAndRewrite(
 mlir::LogicalResult plier::MergeNestedForIntoParallel::matchAndRewrite(
     mlir::scf::ParallelOp op, mlir::PatternRewriter &rewriter) const {
   auto parent = mlir::dyn_cast<mlir::scf::ForOp>(op->getParentOp());
-  if (!parent) {
+  if (!parent)
     return mlir::failure();
-  }
+
   auto &block = parent.getLoopBody().front();
-  if (!llvm::hasSingleElement(block.without_terminator())) {
+  if (!llvm::hasSingleElement(block.without_terminator()))
     return mlir::failure();
-  }
-  if (parent.initArgs().size() != op.initVals().size()) {
+
+  if (parent.getInitArgs().size() != op.getInitVals().size())
     return mlir::failure();
-  }
+
   auto yield = mlir::cast<mlir::scf::YieldOp>(block.getTerminator());
   assert(yield.getNumOperands() == op.getNumResults());
-  for (auto it : llvm::zip(block.getArguments().drop_front(), op.initVals(),
+  for (auto it : llvm::zip(block.getArguments().drop_front(), op.getInitVals(),
                            op.getResults(), yield.getOperands())) {
     auto arg = std::get<0>(it);
     auto initVal = std::get<1>(it);
@@ -179,21 +178,19 @@ mlir::LogicalResult plier::MergeNestedForIntoParallel::matchAndRewrite(
     }
   }
   auto checkVals = [&](auto vals) {
-    for (auto val : vals) {
-      if (val.getParentBlock() == &block) {
+    for (auto val : vals)
+      if (val.getParentBlock() == &block)
         return true;
-      }
-    }
+
     return false;
   };
-  if (checkVals(op.lowerBound()) || checkVals(op.upperBound()) ||
-      checkVals(op.step())) {
+  if (checkVals(op.getLowerBound()) || checkVals(op.getUpperBound()) ||
+      checkVals(op.getStep()))
     return mlir::failure();
-  }
+
   auto hasParallelAttr = op->hasAttr(plier::attributes::getParallelName());
-  if (!canParallelizeLoop(op, hasParallelAttr)) {
+  if (!canParallelizeLoop(op, hasParallelAttr))
     return mlir::failure();
-  }
 
   auto makeValueList = [](auto op, auto ops) {
     llvm::SmallVector<mlir::Value> ret;
@@ -203,9 +200,9 @@ mlir::LogicalResult plier::MergeNestedForIntoParallel::matchAndRewrite(
     return ret;
   };
 
-  auto lowerBounds = makeValueList(parent.lowerBound(), op.lowerBound());
-  auto upperBounds = makeValueList(parent.upperBound(), op.upperBound());
-  auto steps = makeValueList(parent.step(), op.step());
+  auto lowerBounds = makeValueList(parent.getLowerBound(), op.getLowerBound());
+  auto upperBounds = makeValueList(parent.getUpperBound(), op.getUpperBound());
+  auto steps = makeValueList(parent.getStep(), op.getStep());
 
   auto &oldBody = op.getLoopBody().front();
   auto bodyBuilder = [&](mlir::OpBuilder &builder, mlir::Location /*loc*/,
@@ -216,17 +213,17 @@ mlir::LogicalResult plier::MergeNestedForIntoParallel::matchAndRewrite(
     assert((oldBody.getNumArguments() + 1) == iter_vals.size());
     mapping.map(block.getArgument(0), iter_vals.front());
     mapping.map(oldBody.getArguments(), iter_vals.drop_front());
-    for (auto &op : oldBody.without_terminator()) {
+    for (auto &op : oldBody.without_terminator())
       builder.clone(op, mapping);
-    }
   };
 
   rewriter.setInsertionPoint(parent);
   auto newOp = rewriter.replaceOpWithNewOp<mlir::scf::ParallelOp>(
-      parent, lowerBounds, upperBounds, steps, parent.initArgs(), bodyBuilder);
-  if (hasParallelAttr) {
+      parent, lowerBounds, upperBounds, steps, parent.getInitArgs(),
+      bodyBuilder);
+  if (hasParallelAttr)
     newOp->setAttr(plier::attributes::getParallelName(),
                    rewriter.getUnitAttr());
-  }
+
   return mlir::success();
 }

@@ -35,10 +35,9 @@ public:
                                 PatternRewriter &rewriter) const override {
     // Check if steps are constants
     SmallVector<int64_t> newSteps;
-    for (auto s : op.step()) {
+    for (auto s : op.getStep())
       if (auto c = s.getDefiningOp<arith::ConstantIndexOp>())
         newSteps.push_back(c.value());
-    }
 
     // just for the case if we reductions
     // TODO: fill them from found scf.reduce op
@@ -51,18 +50,18 @@ public:
     auto reductionKinds = llvm::to_vector<4>(llvm::map_range(
         reductions, [](const LoopReduction &red) { return red.kind; }));
 
-    auto dims = static_cast<unsigned>(op.step().size());
+    auto dims = static_cast<unsigned>(op.getStep().size());
     // Creating empty affine.parallel op.
     rewriter.setInsertionPoint(op);
     auto affineMap = AffineMap::getMultiDimIdentityMap(dims, op.getContext());
     AffineParallelOp newPloop = rewriter.create<AffineParallelOp>(
         op.getLoc(), reducedValueTypes, reductionKinds,
-        llvm::makeArrayRef(affineMap), op.lowerBound(),
-        llvm::makeArrayRef(affineMap), op.upperBound(),
+        llvm::makeArrayRef(affineMap), op.getLowerBound(),
+        llvm::makeArrayRef(affineMap), op.getUpperBound(),
         llvm::makeArrayRef(newSteps));
 
     // Steal the body of the old affine for op.
-    newPloop.region().takeBody(op.region());
+    newPloop.region().takeBody(op.getRegion());
 
     Operation *yieldOp = newPloop.getBody()->getTerminator();
     assert(yieldOp);
@@ -107,33 +106,31 @@ struct SCFToAffinePass
       if (scf::ParallelOp pOp = mlir::dyn_cast_or_null<scf::ParallelOp>(op)) {
         // Temporary disable if contains induction variables, it's not clear for
         // now what is to do with those inductions
-        if (!pOp.initVals().empty())
+        if (!pOp.getInitVals().empty())
           return;
 
         // Let's disable ND loops for now
-        if (pOp.step().size() != 1)
+        if (pOp.getStep().size() != 1)
           return;
 
-        for (auto s : pOp.step()) {
+        for (auto s : pOp.getStep()) {
           if (!s.getDefiningOp<arith::ConstantIndexOp>())
             return;
         }
 
-        if (pOp.upperBound().size() != pOp.lowerBound().size() ||
-            pOp.step().size() != pOp.upperBound().size())
+        if (pOp.getUpperBound().size() != pOp.getLowerBound().size() ||
+            pOp.getStep().size() != pOp.getUpperBound().size())
           return;
 
         // check for supported memory operations
-        for (auto &each : pOp.region().getOps()) {
-          if (!MemoryEffectOpInterface::hasNoEffect(&each)) {
+        for (auto &each : pOp.getRegion().getOps())
+          if (!MemoryEffectOpInterface::hasNoEffect(&each))
             if (!isa<memref::LoadOp, memref::StoreOp>(&each))
               return;
-          }
-        }
 
         // Awoid conversing scf.reduce, scf.if and nested scf.parallel
         // and scf.for
-        if (llvm::any_of(pOp.region().getOps(), [&](Operation &each) {
+        if (llvm::any_of(pOp.getRegion().getOps(), [&](Operation &each) {
               return 0 != each.getNumRegions();
             }))
           return;

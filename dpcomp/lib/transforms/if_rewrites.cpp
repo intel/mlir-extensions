@@ -21,7 +21,7 @@ mlir::LogicalResult
 plier::IfOpConstCond::matchAndRewrite(mlir::scf::IfOp op,
                                       mlir::PatternRewriter &rewriter) const {
   auto cond = mlir::dyn_cast_or_null<mlir::arith::CmpIOp>(
-      op.condition().getDefiningOp());
+      op.getCondition().getDefiningOp());
   if (!cond)
     return mlir::failure();
 
@@ -58,9 +58,9 @@ plier::IfOpConstCond::matchAndRewrite(mlir::scf::IfOp op,
   }
 
   if (pred == mlir::arith::CmpIPredicate::eq) {
-    replace(op.thenRegion().front(), toReplace, constVal);
+    replace(op.getThenRegion().front(), toReplace, constVal);
   } else if (pred == mlir::arith::CmpIPredicate::ne) {
-    replace(op.elseRegion().front(), toReplace, constVal);
+    replace(op.getElseRegion().front(), toReplace, constVal);
   } else {
     return mlir::failure();
   }

@@ -25,8 +25,8 @@
 
 namespace {
 static bool mustInline(mlir::CallOp call, mlir::FuncOp func) {
-  auto attr = mlir::StringAttr::get(plier::attributes::getForceInlineName(),
-                                    call.getContext());
+  auto attr = mlir::StringAttr::get(call.getContext(),
+                                    plier::attributes::getForceInlineName());
   return call->hasAttr(attr) || func->hasAttr(attr);
 }
 
@@ -50,7 +50,7 @@ struct ForceInline : public mlir::OpRewritePattern<mlir::CallOp> {
     auto reg =
         rewriter.create<mlir::scf::ExecuteRegionOp>(loc, op.getResultTypes());
     auto newCall = [&]() -> mlir::Operation * {
-      auto &regBlock = reg.region().emplaceBlock();
+      auto &regBlock = reg.getRegion().emplaceBlock();
       mlir::OpBuilder::InsertionGuard g(rewriter);
       rewriter.setInsertionPointToStart(&regBlock);
       auto call = rewriter.clone(*op);

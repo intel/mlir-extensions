@@ -21,11 +21,11 @@
 namespace {
 template <mlir::arith::CmpIPredicate SrcPred,
           mlir::arith::CmpIPredicate DstPred>
-bool norm_impl2(mlir::arith::CmpIPredicate &pred, mlir::Value index,
-                mlir::Value &lhs, mlir::Value &rhs) {
-  if (pred != SrcPred) {
+static bool normImpl2(mlir::arith::CmpIPredicate &pred, mlir::Value index,
+                      mlir::Value &lhs, mlir::Value &rhs) {
+  if (pred != SrcPred)
     return false;
-  }
+
   if (index != lhs) {
     std::swap(lhs, rhs);
     pred = DstPred;
@@ -35,10 +35,10 @@ bool norm_impl2(mlir::arith::CmpIPredicate &pred, mlir::Value index,
 
 template <mlir::arith::CmpIPredicate SrcPred,
           mlir::arith::CmpIPredicate DstPred>
-bool norm_impl(mlir::arith::CmpIPredicate &pred, mlir::Value index,
-               mlir::Value &lhs, mlir::Value &rhs) {
-  return norm_impl2<SrcPred, DstPred>(pred, index, lhs, rhs) ||
-         norm_impl2<DstPred, SrcPred>(pred, index, lhs, rhs);
+static bool normImpl(mlir::arith::CmpIPredicate &pred, mlir::Value index,
+                     mlir::Value &lhs, mlir::Value &rhs) {
+  return normImpl2<SrcPred, DstPred>(pred, index, lhs, rhs) ||
+         normImpl2<DstPred, SrcPred>(pred, index, lhs, rhs);
 }
 
 enum EBound {
@@ -46,26 +46,25 @@ enum EBound {
   UpperBound,
 };
 template <mlir::arith::CmpIPredicate Pred, EBound Bound, int64_t Value>
-llvm::Optional<int64_t> handler_impl(mlir::arith::CmpIPredicate pred,
-                                     mlir::Value lhs, mlir::Value rhs,
-                                     mlir::Value index, mlir::Value lowerBound,
-                                     mlir::Value upperBound) {
-  if (pred != Pred) {
+static llvm::Optional<int64_t>
+handlerImpl(mlir::arith::CmpIPredicate pred, mlir::Value lhs, mlir::Value rhs,
+            mlir::Value index, mlir::Value lowerBound, mlir::Value upperBound) {
+  if (pred != Pred)
     return {};
-  }
+
   auto bound = (Bound == LowerBound ? lowerBound : upperBound);
-  if (rhs == bound && lhs == index) {
+  if (rhs == bound && lhs == index)
     return Value;
-  }
+
   return {};
 }
 } // namespace
 
 mlir::LogicalResult plier::CmpLoopBoundsSimplify::matchAndRewrite(
     mlir::scf::ForOp op, mlir::PatternRewriter &rewriter) const {
-  auto index_var = op.getLoopBody().front().getArgument(0);
+  auto indexVar = op.getLoopBody().front().getArgument(0);
   bool matched = false;
-  for (auto user : llvm::make_early_inc_range(index_var.getUsers())) {
+  for (auto user : llvm::make_early_inc_range(indexVar.getUsers())) {
     auto cmp = mlir::dyn_cast<mlir::arith::CmpIOp>(user);
     if (cmp) {
       auto pred = cmp.getPredicate();
@@ -77,38 +76,36 @@ mlir::LogicalResult plier::CmpLoopBoundsSimplify::matchAndRewrite(
                    mlir::Value & lhs, mlir::Value & rhs);
       using Predicate = mlir::arith::CmpIPredicate;
       const norm_fptr_t norm_handlers[] = {
-          &norm_impl<Predicate::sle, Predicate::sge>,
-          &norm_impl<Predicate::slt, Predicate::sgt>,
-          &norm_impl<Predicate::ule, Predicate::uge>,
-          &norm_impl<Predicate::ult, Predicate::ugt>,
-          &norm_impl<Predicate::eq, Predicate::eq>,
-          &norm_impl<Predicate::ne, Predicate::ne>,
+          &normImpl<Predicate::sle, Predicate::sge>,
+          &normImpl<Predicate::slt, Predicate::sgt>,
+          &normImpl<Predicate::ule, Predicate::uge>,
+          &normImpl<Predicate::ult, Predicate::ugt>,
+          &normImpl<Predicate::eq, Predicate::eq>,
+          &normImpl<Predicate::ne, Predicate::ne>,
       };
 
-      for (auto h : norm_handlers) {
-        if (h(pred, index_var, lhs, rhs)) {
+      for (auto h : norm_handlers)
+        if (h(pred, indexVar, lhs, rhs))
           break;
-        }
-      }
 
       using fptr_t = llvm::Optional<int64_t> (*)(
           Predicate pred, mlir::Value lhs, mlir::Value rhs, mlir::Value index,
           mlir::Value lowerBound, mlir::Value upperBound);
       const fptr_t handlers[] = {
-          &handler_impl<Predicate::sge, UpperBound, 0>,
-          &handler_impl<Predicate::slt, LowerBound, 0>,
-          &handler_impl<Predicate::sge, LowerBound, 1>,
-          &handler_impl<Predicate::slt, UpperBound, 1>,
+          &handlerImpl<Predicate::sge, UpperBound, 0>,
+          &handlerImpl<Predicate::slt, LowerBound, 0>,
+          &handlerImpl<Predicate::sge, LowerBound, 1>,
+          &handlerImpl<Predicate::slt, UpperBound, 1>,
       };
 
       for (auto h : handlers) {
-        if (auto c = h(pred, lhs, rhs, index_var, op.lowerBound(),
-                       op.upperBound())) {
+        if (auto c = h(pred, lhs, rhs, indexVar, op.getLowerBound(),
+                       op.getUpperBound())) {
           auto type = rewriter.getI1Type();
           auto val = rewriter.getIntegerAttr(type, *c);
-          auto const_val =
+          auto constVal =
               rewriter.create<mlir::arith::ConstantOp>(cmp.getLoc(), val);
-          rewriter.replaceOp(cmp, const_val.getResult());
+          rewriter.replaceOp(cmp, constVal.getResult());
           matched = true;
           break;
         }
