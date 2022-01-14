@@ -101,7 +101,7 @@ def CastOp : Plier_Op<"cast", [NoSideEffect]> {
 
 def PyCallOp : Plier_Op<"call", [AttrSizedOperandSegments]> {
   let arguments = (ins
-                     AnyType:$func,
+                     Optional<AnyType>:$func,
                      Variadic<AnyType>:$args,
                      Optional<AnyType>:$varargs,
                      Variadic<AnyType>:$kwargs,
@@ -110,13 +110,16 @@ def PyCallOp : Plier_Op<"call", [AttrSizedOperandSegments]> {
 
   let results = (outs AnyType);
 
-  let builders = [OpBuilder<(
-      ins "::mlir::Value"
-      : $func, "::mlir::StringRef"
-      : $func_name, "::mlir::ValueRange"
-      : $args, "::mlir::Value"
-      : $varargs, "::mlir::ArrayRef<std::pair<std::string, ::mlir::Value>>"
-      : $kwargs)>];
+  let builders = [
+    OpBuilder<(ins
+      "::mlir::Value":$func, "::mlir::StringRef":$func_name,
+      "::mlir::ValueRange":$args, "::mlir::Value":$varargs,
+      "::mlir::ArrayRef<std::pair<std::string, ::mlir::Value>>":$kwargs)>,
+     OpBuilder<(ins
+      "::mlir::Type":$type, "::mlir::Value":$func, "::mlir::StringRef":$func_name,
+      "::mlir::ValueRange":$args, "::mlir::Value":$varargs,
+      "::mlir::ArrayRef<std::pair<std::string, ::mlir::Value>>":$kwargs)>
+   ];
 }
 
 def BuildTupleOp : Plier_Op<"build_tuple", [NoSideEffect]> {

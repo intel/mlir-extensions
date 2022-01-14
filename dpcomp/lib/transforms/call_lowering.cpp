@@ -79,9 +79,11 @@ plier::CallOpLowering::matchAndRewrite(plier::PyCallOp op,
   llvm::SmallVector<mlir::Value> args;
   args.reserve(op.args().size() + 1);
   auto func = op.func();
-  auto getattr = func.getDefiningOp<plier::GetattrOp>();
-  if (getattr)
-    args.emplace_back(skipCasts(getattr.getOperand()));
+  if (func) {
+    auto getattr = func.getDefiningOp<plier::GetattrOp>();
+    if (getattr)
+      args.emplace_back(skipCasts(getattr.getOperand()));
+  }
 
   for (auto arg : op.args())
     args.emplace_back(skipCasts(arg));
