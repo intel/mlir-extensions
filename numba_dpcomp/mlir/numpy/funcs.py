@@ -458,6 +458,27 @@ def flatten_impl(builder, arg):
     size = size_impl(builder, arg)
     return builder.reshape(arg, [size])
 
+@register_func('array.__getitem__')
+def getitem_impl(builder, arr, index):
+    print('getitem_impl')
+    if index.dtype != builder.bool:
+        return
+
+    arr = flatten_impl(builder, arr)
+    index = flatten_impl(builder, index)
+
+    def func(a, ind):
+        s = a.size
+        res = numpy.empty((s,), a.dtype)
+        curr = 0
+        for i in range(s):
+            if ind[i]:
+                res[curr] = a[i]
+                curr += 1
+        return res[0:curr]
+
+    return builder.inline_func(func, arr.type, arr, index)
+
 @register_func('numpy.linalg.eig', numpy.linalg.eig)
 def eig_impl(builder, arg):
     shape = arg.shape

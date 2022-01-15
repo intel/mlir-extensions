@@ -257,6 +257,19 @@ def test_unituple_getitem2():
     t = (1,2,3)
     assert_equal(py_func(t,1), jit_func(t,1))
 
+@pytest.mark.parametrize("arr",
+                         _test_arrays,
+                         ids=_test_arrays_ids)
+@pytest.mark.parametrize("mask", [[True], [False], [True, False], [False, True]])
+def test_getitem_mask(arr, mask):
+    def py_func(a, m):
+        return a[m]
+
+    mask = np.resize(mask, arr.size).reshape(arr.shape)
+
+    jit_func = njit(py_func)
+    assert_equal(py_func(arr, mask), jit_func(arr, mask))
+
 def test_array_len():
     def py_func(a):
         return len(a)
