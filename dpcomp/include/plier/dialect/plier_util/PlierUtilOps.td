@@ -252,6 +252,18 @@ def GPUSuggestBlockSizeOp : PlierUtil_Op<"suggest_block_size",
   }];
 }
 
+def PseudoCopyOp : PlierUtil_Op<"pseudo_copy", [ViewLikeOpInterface]> {
+  let arguments = (ins AnyRankedTensor : $source);
+
+  let results = (outs AnyRankedTensor);
+
+  let builders = [OpBuilder<(ins "::mlir::Value" : $value)>];
+
+  let extraClassDeclaration = [{
+      ::mlir::Value getViewSource() { return source(); }
+  }];
+}
+
 def ForceCopyOp : PlierUtil_Op<"force_copy", [ViewLikeOpInterface]> {
   let arguments = (ins AnyRankedTensor : $source);
 
