@@ -860,6 +860,66 @@ struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
   }
 };
 
+struct GetitemOpArrLowering
+    : public mlir::OpConversionPattern<plier::GetItemOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::GetItemOp op, plier::GetItemOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto value = adaptor.value();
+    auto index = adaptor.index();
+    auto type = value.getType().dyn_cast<mlir::ShapedType>();
+    if (!type || !type.hasRank())
+      return mlir::failure();
+
+    auto indexType = index.getType().dyn_cast<mlir::ShapedType>();
+    if (!indexType || !indexType.hasRank())
+      return mlir::failure();
+
+    auto *converter = getTypeConverter();
+    assert(converter);
+    auto resType = converter->convertType(op.getType())
+                       .dyn_cast_or_null<mlir::RankedTensorType>();
+    if (!resType)
+      return mlir::failure();
+
+    auto loc = op->getLoc();
+    auto getTesnor = [&](mlir::Value val) -> mlir::Value {
+      auto valType = val.getType();
+      if (valType.isa<mlir::RankedTensorType>())
+        return val;
+
+      auto memrefType = valType.cast<mlir::MemRefType>();
+      auto tensorType = mlir::RankedTensorType::get(
+          memrefType.getShape(), memrefType.getElementType());
+      return rewriter.create<mlir::bufferization::ToTensorOp>(loc, tensorType,
+                                                              val);
+    };
+
+    value = getTesnor(value);
+    index = getTesnor(index);
+
+    mlir::StringRef funcName = "array.__getitem__";
+    const mlir::Value args[] = {value, index};
+
+    rewriter.replaceOpWithNewOp<plier::PyCallOp>(op, op.getType(),
+                                                 mlir::Value{}, funcName, args,
+                                                 mlir::Value{}, llvm::None);
+
+    //    auto mod = op->getParentOfType<mlir::ModuleOp>();
+    //    assert(mod);
+
+    //    auto funcType = mlir::FunctionType::get(rewriter.getContext(),
+    //    {value.getType(), index.getType()}, resType);
+
+    //    auto func = plier::add_function(rewriter, mod, funcName, funcType);
+
+    //    rewriter.replaceOpWithNewOp<mlir::CallOp>(op, func, args);
+    return mlir::success();
+  }
+};
+
 struct SetitemOpLowering : public mlir::OpConversionPattern<plier::SetItemOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -886,34 +946,50 @@ struct SetitemOpLowering : public mlir::OpConversionPattern<plier::SetItemOp> {
         rewriter.setInsertionPointToStart(target.getParentBlock());
       }
 
+      llvm::SmallVector<mlir::OpOperand *> uses;
+      // TODO: this doesnt work properly
+      //      for (auto &use : target.getUses())
+      //        uses.emplace_back(&use);
+
+      //      for (auto &use : op.target().getUses())
+      //        uses.emplace_back(&use);
+
       auto loc = target.getLoc();
       if (elemType != signlessElemType) {
-        auto tensorType = mlir::RankedTensorType::get(
-            targetTensorType.getShape(), signlessElemType,
-            targetTensorType.getEncoding());
+        auto tensorType = targetTensorType.clone(signlessElemType);
         target = rewriter.create<plier::SignCastOp>(loc, tensorType, target);
       }
       auto memrefType =
           mlir::MemRefType::get(targetTensorType.getShape(), signlessElemType);
+      target =
+          rewriter.create<plier::PseudoCopyOp>(loc, target.getType(), target);
+      //      target = rewriter.create<plier::ForceCopyOp>(loc,
+      //      target.getType(), target);
       auto memref = rewriter.create<mlir::bufferization::ToMemrefOp>(
           loc, memrefType, target);
       target = memref;
-      for (auto &use : llvm::make_early_inc_range(target.getUses())) {
-        auto useOp = use.getOwner();
+      for (auto *use : uses) {
+        auto useOp = use->getOwner();
+        if (op.target().getDefiningOp() == useOp ||
+            target.getDefiningOp() == useOp)
+          continue;
+
         assert(nullptr != useOp);
         if (useOp != memref) {
           if (mlir::isa<plier::SetItemOp>(useOp)) {
-            rewriter.updateRootInPlace(useOp, [&]() {
-              useOp->setOperand(use.getOperandNumber(), memref);
-            });
+            rewriter.updateRootInPlace(useOp, [&]() { use->set(memref); });
           } else {
             mlir::OpBuilder::InsertionGuard g(rewriter);
             rewriter.setInsertionPoint(useOp);
-            auto newVal = rewriter.create<mlir::bufferization::ToTensorOp>(
-                useOp->getLoc(), memref);
-            rewriter.updateRootInPlace(useOp, [&]() {
-              useOp->setOperand(use.getOperandNumber(), newVal);
-            });
+            mlir::Value newVal =
+                rewriter.create<mlir::bufferization::ToTensorOp>(
+                    useOp->getLoc(), memref);
+            if (elemType != signlessElemType) {
+              auto tensorType = targetTensorType.clone(elemType);
+              newVal =
+                  rewriter.create<plier::SignCastOp>(loc, tensorType, newVal);
+            }
+            rewriter.updateRootInPlace(useOp, [&]() { use->set(newVal); });
           }
         }
       }
@@ -1542,6 +1618,7 @@ void PlierToLinalgPass::runOnOperation() {
   patterns.insert<
       // clang-format off
       GetitemOpLowering,
+      GetitemOpArrLowering,
       SetitemOpLowering,
       LowerTensorCasts,
       UnrankedToElementCasts,
@@ -1844,6 +1921,27 @@ struct BufferizeForceCopy
   }
 };
 
+struct BufferizePseudoCopy
+    : public mlir::OpConversionPattern<plier::PseudoCopyOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::PseudoCopyOp op, plier::PseudoCopyOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto converter = getTypeConverter();
+    assert(converter);
+    auto dstType = converter->convertType(op.getType())
+                       .dyn_cast_or_null<mlir::MemRefType>();
+
+    if (!dstType)
+      return mlir::failure();
+
+    auto arg = adaptor.source();
+    rewriter.replaceOpWithNewOp<plier::PseudoCopyOp>(op, dstType, arg);
+    return mlir::success();
+  }
+};
+
 struct BufferizeReduceRank
     : public mlir::OpConversionPattern<plier::ReduceRankOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -1942,16 +2040,37 @@ void AdditionalBufferize::runOnFunction() {
   target.addIllegalOp<mlir::tensor::ReshapeOp, mlir::tensor::ExtractSliceOp>();
   target.addIllegalOp<plier::ForceCopyOp>();
   target.addLegalOp<mlir::memref::ReshapeOp>();
-  target.addDynamicallyLegalOp<plier::ReduceRankOp>([](plier::ReduceRankOp op) {
-    return !op.getType().isa<mlir::RankedTensorType>();
-  });
+  target.addDynamicallyLegalOp<plier::ReduceRankOp, plier::PseudoCopyOp>(
+      [](mlir::Operation *op) {
+        return !op->getResultTypes().front().isa<mlir::RankedTensorType>();
+      });
 
   patterns.insert<BufferizeReshape, BufferizeExtractSlice, BufferizeForceCopy,
-                  BufferizeReduceRank>(typeConverter, context);
+                  BufferizePseudoCopy, BufferizeReduceRank>(typeConverter,
+                                                            context);
 
   if (failed(applyPartialConversion(module, target, std::move(patterns))))
     signalPassFailure();
 }
+
+struct RemovePseudoCopy : public mlir::OpRewritePattern<plier::PseudoCopyOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::PseudoCopyOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto arg = op.source();
+    if (arg.getType() != op.getType())
+      return mlir::failure();
+
+    rewriter.replaceOp(op, arg);
+    return mlir::success();
+  }
+};
+
+struct RemovePseudoCopyPass
+    : public plier::RewriteWrapperPass<RemovePseudoCopyPass, mlir::FuncOp, void,
+                                       RemovePseudoCopy> {};
 
 struct CloneArgsPass
     : public mlir::PassWrapper<CloneArgsPass, mlir::FunctionPass> {
@@ -2090,6 +2209,9 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createFuncBufferizePass());
   pm.addNestedPass<mlir::FuncOp>(
       mlir::bufferization::createFinalizingBufferizePass());
+
+  pm.addNestedPass<mlir::FuncOp>(std::make_unique<RemovePseudoCopyPass>());
+  pm.addPass(mlir::createCanonicalizerPass());
 
   pm.addNestedPass<mlir::FuncOp>(mlir::createBufferHoistingPass());
   pm.addNestedPass<mlir::FuncOp>(mlir::createBufferLoopHoistingPass());
