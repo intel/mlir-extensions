@@ -262,6 +262,9 @@ def test_unituple_getitem2():
                          ids=_test_arrays_ids)
 @pytest.mark.parametrize("mask", [[True], [False], [True, False], [False, True]])
 def test_getitem_mask(arr, mask):
+    if arr.ndim > 1:
+        pytest.xfail() # TODO: not supprted by numba
+
     def py_func(a, m):
         return a[m]
 
