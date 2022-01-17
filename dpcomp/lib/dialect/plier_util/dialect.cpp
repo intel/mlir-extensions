@@ -910,7 +910,7 @@ struct SignCastUndefPropagate
 
 struct SignCastTensorCastPropagate
     : public mlir::OpRewritePattern<plier::SignCastOp> {
-  using mlir::OpRewritePattern<plier::SignCastOp>::OpRewritePattern;
+  using OpRewritePattern::OpRewritePattern;
 
   mlir::LogicalResult
   matchAndRewrite(plier::SignCastOp op,
@@ -928,15 +928,45 @@ struct SignCastTensorCastPropagate
     auto finalType = op.getType().cast<mlir::TensorType>();
     auto finalElemType = finalType.getElementType();
 
-    auto newSrcType =
-        mlir::RankedTensorType::get(srcType.getShape(), finalElemType);
-    auto newDstType =
-        mlir::RankedTensorType::get(dstType.getShape(), finalElemType);
+    auto newSrcType = srcType.clone(finalElemType);
+    auto newDstType = dstType.clone(finalElemType);
 
     auto loc = op.getLoc();
     auto casted = rewriter.createOrFold<plier::SignCastOp>(loc, newSrcType,
                                                            tensorCast.source());
     rewriter.replaceOpWithNewOp<mlir::tensor::CastOp>(op, newDstType, casted);
+
+    return mlir::success();
+  }
+};
+
+struct SignCastMemrefCastPropagate
+    : public mlir::OpRewritePattern<plier::SignCastOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::SignCastOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto memrefCast = op.value().getDefiningOp<mlir::memref::CastOp>();
+    if (!memrefCast)
+      return mlir::failure();
+
+    auto srcType = memrefCast.source().getType().cast<mlir::MemRefType>();
+    auto dstType = memrefCast.getType().cast<mlir::MemRefType>();
+    if (srcType.getElementType() != dstType.getElementType() ||
+        !srcType.hasRank() || !dstType.hasRank())
+      return mlir::failure();
+
+    auto finalType = op.getType().cast<mlir::MemRefType>();
+    auto finalElemType = finalType.getElementType();
+
+    auto newSrcType = srcType.clone(finalElemType);
+    auto newDstType = dstType.clone(finalElemType);
+
+    auto loc = op.getLoc();
+    auto casted = rewriter.createOrFold<plier::SignCastOp>(loc, newSrcType,
+                                                           memrefCast.source());
+    rewriter.replaceOpWithNewOp<mlir::memref::CastOp>(op, newDstType, casted);
 
     return mlir::success();
   }
@@ -1051,13 +1081,13 @@ struct SignCastMemrefToTensorPropagate
 
 void SignCastOp::getCanonicalizationPatterns(
     ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context) {
-  results
-      .insert<SignCastDimPropagate<mlir::tensor::DimOp>,
-              SignCastDimPropagate<mlir::memref::DimOp>, SignCastUndefPropagate,
-              SignCastTensorCastPropagate, SignCastTensorFromElementsPropagate,
-              SignCastTensorCollapseShapePropagate,
-              SignCastTensorToMemrefPropagate, SignCastMemrefToTensorPropagate>(
-          context);
+  results.insert<
+      SignCastDimPropagate<mlir::tensor::DimOp>,
+      SignCastDimPropagate<mlir::memref::DimOp>, SignCastUndefPropagate,
+      SignCastTensorCastPropagate, SignCastMemrefCastPropagate,
+      SignCastTensorFromElementsPropagate, SignCastTensorCollapseShapePropagate,
+      SignCastTensorToMemrefPropagate, SignCastMemrefToTensorPropagate>(
+      context);
 }
 
 void ReduceRankOp::build(::mlir::OpBuilder &odsBuilder,
