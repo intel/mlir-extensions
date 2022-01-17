@@ -84,12 +84,10 @@ static py::object mapTypesToNumbaChecked(py::handle typesMod,
 }
 
 static mlir::Type makeSignlessType(mlir::Type type) {
-  if (auto tensor = type.dyn_cast<mlir::RankedTensorType>()) {
-    auto origElemType = tensor.getElementType();
+  if (auto shaped = type.dyn_cast<mlir::ShapedType>()) {
+    auto origElemType = shaped.getElementType();
     auto signlessElemType = makeSignlessType(origElemType);
-    if (origElemType != signlessElemType)
-      return mlir::RankedTensorType::get(tensor.getShape(), signlessElemType,
-                                         tensor.getEncoding());
+    return shaped.clone(signlessElemType);
   } else if (auto intType = type.dyn_cast<mlir::IntegerType>()) {
     if (!intType.isSignless())
       return mlir::IntegerType::get(intType.getContext(), intType.getWidth());
@@ -530,8 +528,8 @@ static auto getGenericOpBodyTypes(mlir::ValueRange inputs,
   for (auto r : {inputs, outputs}) {
     for (auto type : r.getTypes()) {
       auto elemType = [&]() {
-        if (auto tensor = type.dyn_cast<mlir::RankedTensorType>())
-          return tensor.getElementType();
+        if (auto shaped = type.dyn_cast<mlir::ShapedType>())
+          return shaped.getElementType();
 
         return type;
       }();
@@ -545,7 +543,7 @@ static auto genericOpBodyResultTypes(mlir::ValueRange outputs) {
   llvm::SmallVector<mlir::Type> ret;
   ret.reserve(outputs.size());
   for (auto type : outputs.getTypes()) {
-    auto elemType = type.cast<mlir::RankedTensorType>().getElementType();
+    auto elemType = type.cast<mlir::ShapedType>().getElementType();
     ret.emplace_back(elemType);
   }
   return ret;
@@ -835,7 +833,7 @@ static py::object initTensorImpl(py::capsule context, py::iterable shape,
     auto val =
         doCast(builder, loc, ctx.context.unwrapVal(loc, builder, initVal),
                signlessElemType);
-    llvm::SmallVector<int64_t> shape(count, -1);
+    llvm::SmallVector<int64_t> shape(count, mlir::ShapedType::kDynamicSize);
     auto type = mlir::RankedTensorType::get(shape, signlessElemType);
     auto body = [&](mlir::OpBuilder &builder, mlir::Location loc,
                     mlir::ValueRange /*indices*/) {
@@ -1090,7 +1088,8 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
   auto elemType = srcType.getElementType();
   auto signlessElemType = makeSignlessType(elemType);
 
-  llvm::SmallVector<int64_t> shape(newDimsVals.size(), -1);
+  llvm::SmallVector<int64_t> shape(newDimsVals.size(),
+                                   mlir::ShapedType::kDynamicSize);
   auto resultType =
       mlir::RankedTensorType::get(shape, elemType, srcType.getEncoding());
   auto resultTypeSignless = mlir::RankedTensorType::get(shape, signlessElemType,
@@ -1554,7 +1553,7 @@ static py::object getitemImpl(py::capsule context, py::capsule ssaVal,
   auto &builder = ctx.builder;
   auto loc = ctx.loc;
   auto type = value.getType();
-  if (auto tensor = type.dyn_cast<mlir::TensorType>()) {
+  if (auto tensor = type.dyn_cast<mlir::ShapedType>()) {
     auto indexVal = ctx.context.unwrapVal(loc, builder, index);
     auto elemType = tensor.getElementType();
     auto res = builder.create<plier::GetItemOp>(loc, elemType, value, indexVal);
