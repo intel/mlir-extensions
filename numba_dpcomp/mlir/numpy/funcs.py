@@ -469,7 +469,6 @@ def getitem_impl(builder, arr, index):
     def func(a, ind):
         s = a.size
         res = numpy.empty((s,), a.dtype)
-        res = res.copy() # TODO: remove
         curr = 0
         for i in range(s):
             if ind[i]:
