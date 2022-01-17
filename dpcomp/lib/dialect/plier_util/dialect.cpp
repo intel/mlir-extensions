@@ -394,6 +394,33 @@ struct ChangeLayoutCast : public mlir::OpRewritePattern<mlir::memref::CastOp> {
   }
 };
 
+struct ChangeLayoutSignCast : public mlir::OpRewritePattern<plier::SignCastOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::SignCastOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto cl = op.value().getDefiningOp<plier::ChangeLayoutOp>();
+    if (!cl)
+      return mlir::failure();
+
+    auto src = cl.source();
+    auto srcType = src.getType().cast<mlir::MemRefType>();
+    auto oldType = op.getType().cast<mlir::MemRefType>();
+    auto newType = mlir::MemRefType::get(
+        srcType.getShape(), oldType.getElementType(), srcType.getLayout());
+
+    auto loc = op.getLoc();
+    auto newOp = rewriter.createOrFold<plier::SignCastOp>(loc, newType, src);
+
+    if (oldType != newType)
+      newOp = rewriter.createOrFold<plier::ChangeLayoutOp>(loc, oldType, newOp);
+
+    rewriter.replaceOp(op, newOp);
+    return mlir::success();
+  }
+};
+
 struct ChangeLayoutReduceRank
     : public mlir::OpRewritePattern<plier::ReduceRankOp> {
   using OpRewritePattern::OpRewritePattern;
@@ -790,8 +817,8 @@ void ChangeLayoutOp::getCanonicalizationPatterns(
     ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context) {
   results.insert<ChangeLayoutIdentity, ChangeLayoutReduceRank, ChangeLayoutDim,
                  ChangeLayoutExtractMetadata, ChangeLayoutClone,
-                 PropagateCloneType, ChangeLayoutCast, ChangeLayoutLoad,
-                 ChangeLayoutStore, ChangeLayoutSubview,
+                 PropagateCloneType, ChangeLayoutCast, ChangeLayoutSignCast,
+                 ChangeLayoutLoad, ChangeLayoutStore, ChangeLayoutSubview,
                  ChangeLayoutLinalgGeneric, ChangeLayoutLinalgCopy,
                  ChangeLayoutLinalgFill, ChangeLayoutIf, ChangeLayout1DReshape,
                  ChangeLayoutSliceGetItem, ChangeLayoutCopy>(context);
