@@ -54,15 +54,15 @@ mlir::Value plier::index_cast(mlir::OpBuilder &builder, mlir::Location loc,
 }
 
 mlir::Type plier::makeSignlessType(mlir::Type type) {
-  if (auto intType = type.dyn_cast<mlir::IntegerType>()) {
+  if (auto intType = type.dyn_cast<mlir::IntegerType>())
     return makeSignlessType(intType);
-  }
+
   return type;
 }
 
 mlir::IntegerType plier::makeSignlessType(mlir::IntegerType type) {
-  if (!type.isSignless()) {
+  if (!type.isSignless())
     return mlir::IntegerType::get(type.getContext(), type.getWidth());
-  }
+
   return type;
 }

@@ -455,8 +455,9 @@ def reshape_impl(builder, arg, new_shape):
 # @register_attr('array.flat')
 @register_func('array.flatten')
 def flatten_impl(builder, arg):
+    # TODO: fast path for 1D
     size = size_impl(builder, arg)
-    return builder.reshape(arg, [size])
+    return builder.reshape(arg, (size))
 
 @register_func('array.__getitem__')
 def getitem_impl(builder, arr, index):
