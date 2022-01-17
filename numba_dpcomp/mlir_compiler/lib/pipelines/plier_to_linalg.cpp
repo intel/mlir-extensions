@@ -1027,8 +1027,9 @@ struct SetitemOpLowering : public mlir::OpConversionPattern<plier::SetItemOp> {
         rewriter.replaceOpWithNewOp<mlir::linalg::CopyOp>(op, castView(src),
                                                           dst);
       } else if (valType.isa<mlir::MemRefType>()) {
-        rewriter.replaceOpWithNewOp<mlir::linalg::CopyOp>(op, castView(value),
-                                                          dst);
+        auto srcView = castView(value);
+        auto dstView = castView(dst);
+        rewriter.replaceOpWithNewOp<mlir::linalg::CopyOp>(op, srcView, dstView);
       } else {
         auto elem = castElem(value);
         auto view = castView(dst);
