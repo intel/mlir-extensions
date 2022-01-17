@@ -1734,7 +1734,7 @@ struct ConvertAlloc : public mlir::OpConversionPattern<Op> {
   mlir::LogicalResult
   matchAndRewrite(Op op, typename Op::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    auto converter = getTypeConverter();
+    auto converter = this->getTypeConverter();
     assert(converter);
     auto oldResType = op.getType();
     auto newResType = converter->convertType(oldResType)
