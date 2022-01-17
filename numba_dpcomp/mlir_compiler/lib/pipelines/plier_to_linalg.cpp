@@ -267,6 +267,28 @@ static const std::pair<llvm::StringRef, func_t> builtinFuncsHandlers[] = {
     // clang-format on
 };
 
+static PyLinalgResolver::Values
+castRetTypes(mlir::Location loc, mlir::PatternRewriter &rewriter,
+             mlir::Operation *op,
+             llvm::Optional<PyLinalgResolver::Values> vals) {
+  auto results = std::move(vals).getValue();
+  assert(results.size() == op->getNumResults());
+  for (auto it : llvm::enumerate(results)) {
+    auto i = it.index();
+    auto r = it.value();
+    auto dstType = op->getResultTypes()[i];
+    if (auto tensorType = r.getType().dyn_cast<mlir::TensorType>()) {
+      auto memrefType = mlir::MemRefType::get(tensorType.getShape(),
+                                              tensorType.getElementType());
+      r = rewriter.create<mlir::bufferization::ToMemrefOp>(loc, memrefType, r);
+    }
+
+    if (dstType != r.getType())
+      results[i] = rewriter.create<plier::CastOp>(loc, dstType, r);
+  }
+  return results;
+}
+
 struct NumpyCallsLowering final : public plier::CallOpLowering {
   NumpyCallsLowering(mlir::MLIRContext *context)
       : CallOpLowering(context),
@@ -285,21 +307,7 @@ protected:
     if (!res)
       return mlir::failure();
 
-    auto results = std::move(res).getValue();
-    assert(results.size() == op->getNumResults());
-    for (auto it : llvm::enumerate(results)) {
-      auto i = it.index();
-      auto r = it.value();
-      auto dstType = op->getResultTypes()[i];
-      if (auto tensorType = dstType.dyn_cast<mlir::TensorType>()) {
-        dstType = mlir::MemRefType::get(tensorType.getShape(),
-                                        tensorType.getElementType());
-        r = rewriter.create<mlir::bufferization::ToMemrefOp>(loc, dstType, r);
-      }
-
-      if (dstType != r.getType())
-        results[i] = rewriter.create<plier::CastOp>(loc, dstType, r);
-    }
+    auto results = castRetTypes(loc, rewriter, op, res);
 
     rerun_scf_pipeline(op);
     rewriter.replaceOp(op, results);
@@ -329,15 +337,7 @@ struct NumpyAttrsLowering : public mlir::OpRewritePattern<plier::GetattrOp> {
     if (!res)
       return mlir::failure();
 
-    auto results = *res;
-    assert(results.size() == op->getNumResults());
-    for (auto it : llvm::enumerate(results)) {
-      auto i = it.index();
-      auto r = it.value();
-      auto dstType = op->getResultTypes()[i];
-      if (dstType != r.getType())
-        results[i] = rewriter.create<plier::CastOp>(loc, dstType, r);
-    }
+    auto results = castRetTypes(loc, rewriter, op, res);
 
     rerun_scf_pipeline(op);
     rewriter.replaceOp(op, results);
