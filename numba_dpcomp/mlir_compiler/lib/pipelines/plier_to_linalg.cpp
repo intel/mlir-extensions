@@ -477,23 +477,35 @@ struct UnrankedToElementCasts
     if (!dstType)
       return mlir::failure();
 
-    auto isCompatible = [](mlir::Type tensor, mlir::Type element) {
-      if (auto tensorType = tensor.dyn_cast<mlir::RankedTensorType>())
-        return tensorType.getRank() == 0 &&
-               tensorType.getElementType() == element;
+    auto isCompatible = [](mlir::Type type, mlir::Type element) {
+      if (auto shaped = type.dyn_cast<mlir::ShapedType>())
+        return shaped.hasRank() && shaped.getRank() == 0 &&
+               shaped.getElementType() == element;
 
       return false;
     };
     if (isCompatible(srcType, dstType)) {
-      rewriter.replaceOpWithNewOp<mlir::tensor::ExtractOp>(op, value);
+      if (srcType.isa<mlir::TensorType>()) {
+        rewriter.replaceOpWithNewOp<mlir::tensor::ExtractOp>(op, value);
+      } else {
+        rewriter.replaceOpWithNewOp<mlir::memref::LoadOp>(op, value);
+      }
       return mlir::success();
     }
     if (isCompatible(dstType, srcType)) {
-      auto singleElemTensor = rewriter.create<mlir::tensor::FromElementsOp>(
-          op.getLoc(), op.value());
-      rewriter.replaceOpWithNewOp<mlir::tensor::CollapseShapeOp>(
-          op, dstType, singleElemTensor,
-          llvm::ArrayRef<mlir::ReassociationExprs>{});
+      auto loc = op->getLoc();
+      if (dstType.isa<mlir::TensorType>()) {
+        auto singleElemTensor =
+            rewriter.create<mlir::tensor::FromElementsOp>(loc, value);
+        rewriter.replaceOpWithNewOp<mlir::tensor::CollapseShapeOp>(
+            op, dstType, singleElemTensor,
+            llvm::ArrayRef<mlir::ReassociationExprs>{});
+      } else {
+        mlir::Value memref = rewriter.create<mlir::memref::AllocOp>(
+            loc, dstType.cast<mlir::MemRefType>());
+        rewriter.create<mlir::memref::StoreOp>(loc, value, memref);
+        rewriter.replaceOp(op, memref);
+      }
       return mlir::success();
     }
     return mlir::failure();
