@@ -972,6 +972,27 @@ struct SignCastMemrefCastPropagate
   }
 };
 
+template <typename Op>
+struct SignCastAllocPropagate
+    : public mlir::OpRewritePattern<plier::SignCastOp> {
+  using mlir::OpRewritePattern<plier::SignCastOp>::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::SignCastOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto alloc = op.value().getDefiningOp<Op>();
+    if (!alloc || !alloc->hasOneUse())
+      return mlir::failure();
+
+    auto dstType = op.getType().cast<mlir::MemRefType>();
+    rewriter.replaceOpWithNewOp<Op>(op, dstType, alloc.dynamicSizes(),
+                                    alloc.symbolOperands(),
+                                    alloc.alignmentAttr());
+    rewriter.eraseOp(alloc);
+    return mlir::success();
+  }
+};
+
 struct SignCastTensorFromElementsPropagate
     : public mlir::OpRewritePattern<plier::SignCastOp> {
   using mlir::OpRewritePattern<plier::SignCastOp>::OpRewritePattern;
@@ -1085,6 +1106,8 @@ void SignCastOp::getCanonicalizationPatterns(
       SignCastDimPropagate<mlir::tensor::DimOp>,
       SignCastDimPropagate<mlir::memref::DimOp>, SignCastUndefPropagate,
       SignCastTensorCastPropagate, SignCastMemrefCastPropagate,
+      SignCastAllocPropagate<mlir::memref::AllocOp>,
+      SignCastAllocPropagate<mlir::memref::AllocaOp>,
       SignCastTensorFromElementsPropagate, SignCastTensorCollapseShapePropagate,
       SignCastTensorToMemrefPropagate, SignCastMemrefToTensorPropagate>(
       context);

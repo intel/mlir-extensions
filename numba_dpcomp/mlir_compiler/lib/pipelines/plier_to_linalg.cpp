@@ -507,8 +507,16 @@ struct UnrankedToElementCasts
             op, dstType, singleElemTensor,
             llvm::ArrayRef<mlir::ReassociationExprs>{});
       } else {
-        mlir::Value memref = rewriter.create<mlir::memref::AllocOp>(
-            loc, dstType.cast<mlir::MemRefType>());
+        auto memrefType = dstType.cast<mlir::MemRefType>();
+        auto signlessElemType =
+            plier::makeSignlessType(memrefType.getElementType());
+        auto signlessMemrefType =
+            memrefType.clone(signlessElemType).cast<mlir::MemRefType>();
+        mlir::Value memref =
+            rewriter.create<mlir::memref::AllocOp>(loc, signlessMemrefType);
+        if (memrefType != signlessMemrefType)
+          memref = rewriter.create<plier::SignCastOp>(loc, memrefType, memref);
+
         rewriter.create<mlir::memref::StoreOp>(loc, value, memref);
         rewriter.replaceOp(op, memref);
       }
@@ -1713,6 +1721,28 @@ void PostPlierToLinalgPass::runOnFunction() {
   (void)mlir::applyPatternsAndFoldGreedily(getFunction(), std::move(patterns));
 }
 
+template <typename Op>
+struct ConvertAlloc : public mlir::OpConversionPattern<Op> {
+  using mlir::OpConversionPattern<Op>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(Op op, typename Op::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto converter = getTypeConverter();
+    assert(converter);
+    auto oldResType = op.getType();
+    auto newResType = converter->convertType(oldResType)
+                          .template dyn_cast_or_null<mlir::MemRefType>();
+    if (!newResType)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<Op>(op, newResType, adaptor.dynamicSizes(),
+                                    adaptor.symbolOperands(),
+                                    adaptor.alignmentAttr());
+    return mlir::success();
+  }
+};
+
 struct MakeTensorsSignlessPass
     : public mlir::PassWrapper<MakeTensorsSignlessPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
@@ -1755,6 +1785,12 @@ void MakeTensorsSignlessPass::runOnOperation() {
                                                       target);
 
   target.addLegalOp<mlir::ModuleOp, plier::SignCastOp>();
+
+  patterns.insert<ConvertAlloc<mlir::memref::AllocOp>,
+                  ConvertAlloc<mlir::memref::AllocaOp>>(typeConverter, context);
+
+  target.addDynamicallyLegalOp<mlir::memref::AllocOp, mlir::memref::AllocaOp>(
+      [&](mlir::Operation *op) { return typeConverter.isLegal(op); });
 
   if (failed(applyFullConversion(module, target, std::move(patterns))))
     signalPassFailure();
