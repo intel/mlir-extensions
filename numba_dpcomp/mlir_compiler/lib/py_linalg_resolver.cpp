@@ -1045,7 +1045,7 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
       }
       return ret;
     }
-    auto dims = unwrapDim(newDims);
+    auto dims = unwrapVal(newDims);
     if (auto tupleType = dims.getType().dyn_cast<mlir::TupleType>()) {
       auto dimsCount = tupleType.size();
       ret.resize(dimsCount);
