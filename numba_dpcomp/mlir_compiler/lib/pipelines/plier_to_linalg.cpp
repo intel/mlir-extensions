@@ -1762,14 +1762,12 @@ void MakeTensorsSignlessPass::runOnOperation() {
   mlir::TypeConverter typeConverter;
   typeConverter.addConversion([](mlir::Type type) { return type; });
   typeConverter.addConversion(
-      [](mlir::RankedTensorType type) -> llvm::Optional<mlir::Type> {
-        auto elemType = type.getElementType().dyn_cast<mlir::IntegerType>();
-        if (elemType && !elemType.isSignless()) {
-          auto signless =
-              mlir::IntegerType::get(type.getContext(), elemType.getWidth());
-          return mlir::RankedTensorType::get(type.getShape(), signless,
-                                             type.getEncoding());
-        }
+      [](mlir::ShapedType type) -> llvm::Optional<mlir::Type> {
+        auto elemType = type.getElementType();
+        auto signless = plier::makeSignlessType(elemType);
+        if (signless != elemType)
+          return type.clone(signless);
+
         return llvm::None;
       });
   populateTupleTypeConverter(*context, typeConverter);
