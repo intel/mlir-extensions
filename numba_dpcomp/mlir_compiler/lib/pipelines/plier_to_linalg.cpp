@@ -246,13 +246,19 @@ lowerLen(plier::PyCallOp op, mlir::ValueRange operands,
     return mlir::failure();
 
   auto arg = skipCasts(operands.front());
-  if (!arg.getType().isa<mlir::RankedTensorType>())
+  auto argType = arg.getType().dyn_cast<mlir::ShapedType>();
+  if (!argType || !argType.hasRank())
     return mlir::failure();
 
   rerun_scf_pipeline(op);
 
   auto loc = op.getLoc();
-  auto dim = rewriter.createOrFold<mlir::tensor::DimOp>(loc, arg, 0);
+  mlir::Value dim;
+  if (argType.isa<mlir::TensorType>()) {
+    dim = rewriter.createOrFold<mlir::tensor::DimOp>(loc, arg, 0);
+  } else {
+    dim = rewriter.createOrFold<mlir::memref::DimOp>(loc, arg, 0);
+  }
   rewriter.replaceOpWithNewOp<plier::CastOp>(op, op.getType(), dim);
   return mlir::success();
 }
