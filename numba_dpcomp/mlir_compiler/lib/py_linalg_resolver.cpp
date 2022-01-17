@@ -564,6 +564,8 @@ static mlir::Value broadcastDim(mlir::OpBuilder &builder, mlir::Location loc,
 static mlir::Value expandDim(mlir::OpBuilder &builder, mlir::Location loc,
                              mlir::Value initial, mlir::Value src, unsigned dim,
                              mlir::ValueRange targetShape) {
+  assert(initial.getType().isa<mlir::RankedTensorType>());
+  assert(src.getType().isa<mlir::RankedTensorType>());
   auto context = builder.getContext();
   auto srcType = src.getType().cast<mlir::ShapedType>();
   auto numDims = static_cast<unsigned>(srcType.getRank());
@@ -656,7 +658,8 @@ static py::object broadcastImpl(py::capsule context, py::tuple args,
 
   llvm::SmallVector<mlir::Value> mlirArgs(args.size());
   for (auto it : llvm::enumerate(args)) {
-    auto val = ctx.context.unwrapVal(loc, builder, it.value());
+    auto val =
+        toTensor(loc, builder, ctx.context.unwrapVal(loc, builder, it.value()));
     mlirArgs[it.index()] = val;
   }
   using shape_t = llvm::SmallVector<mlir::Value>;
