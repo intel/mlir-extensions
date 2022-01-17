@@ -1554,8 +1554,8 @@ struct LowerEnforceShape
   }
 };
 
-static bool isTensor(mlir::TypeConverter &converter, mlir::Type type) {
-  return !!converter.convertType(type).dyn_cast_or_null<mlir::TensorType>();
+static bool isShaped(mlir::TypeConverter &converter, mlir::Type type) {
+  return !!converter.convertType(type).dyn_cast_or_null<mlir::ShapedType>();
 }
 
 void PlierToLinalgPass::runOnOperation() {
@@ -1591,7 +1591,7 @@ void PlierToLinalgPass::runOnOperation() {
   target.addDynamicallyLegalOp<plier::GetItemOp>(
       [&typeConverter](plier::GetItemOp op) -> llvm::Optional<bool> {
         auto containerType = op.value().getType();
-        if (isTensor(typeConverter, containerType))
+        if (isShaped(typeConverter, containerType))
           return false;
 
         if (isUniTuple(containerType) && !mlir::getConstantIntValue(op.index()))
@@ -1602,7 +1602,7 @@ void PlierToLinalgPass::runOnOperation() {
 
   target.addDynamicallyLegalOp<plier::SetItemOp>(
       [&typeConverter](plier::SetItemOp op) -> bool {
-        return !isTensor(typeConverter, op.target().getType());
+        return !isShaped(typeConverter, op.target().getType());
       });
 
   target.addDynamicallyLegalOp<plier::CastOp>([&](plier::CastOp op) -> bool {
@@ -1612,13 +1612,13 @@ void PlierToLinalgPass::runOnOperation() {
     if (!srcType || !dstType)
       return true;
 
-    auto isZeroRankTensor = [](mlir::Type t) -> bool {
-      auto tensor = t.dyn_cast<mlir::RankedTensorType>();
-      return tensor && tensor.getRank() == 0;
+    auto isZeroRank = [](mlir::Type t) -> bool {
+      auto shaped = t.dyn_cast<mlir::ShapedType>();
+      return shaped && shaped.getRank() == 0;
     };
 
-    if ((isZeroRankTensor(srcType) && dstType.isIntOrIndexOrFloat()) ||
-        (isZeroRankTensor(dstType) && srcType.isIntOrIndexOrFloat()))
+    if ((isZeroRank(srcType) && dstType.isIntOrIndexOrFloat()) ||
+        (isZeroRank(dstType) && srcType.isIntOrIndexOrFloat()))
       return false;
 
     if (srcType == dstType && inputType != op.getType())
