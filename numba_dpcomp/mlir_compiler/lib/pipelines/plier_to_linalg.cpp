@@ -267,6 +267,17 @@ static const std::pair<llvm::StringRef, func_t> builtinFuncsHandlers[] = {
     // clang-format on
 };
 
+static mlir::Value toTensor(mlir::Location loc, mlir::PatternRewriter &rewriter,
+                            mlir::Value val) {
+  if (auto tensorType = val.getType().dyn_cast<mlir::RankedTensorType>()) {
+    auto memrefType = mlir::MemRefType::get(tensorType.getShape(),
+                                            tensorType.getElementType());
+    return rewriter.create<mlir::bufferization::ToMemrefOp>(loc, memrefType,
+                                                            val);
+  }
+  return val;
+}
+
 static PyLinalgResolver::Values
 castRetTypes(mlir::Location loc, mlir::PatternRewriter &rewriter,
              mlir::Operation *op,
@@ -275,13 +286,8 @@ castRetTypes(mlir::Location loc, mlir::PatternRewriter &rewriter,
   assert(results.size() == op->getNumResults());
   for (auto it : llvm::enumerate(results)) {
     auto i = it.index();
-    auto r = it.value();
+    auto r = toTensor(loc, rewriter, it.value());
     auto dstType = op->getResultTypes()[i];
-    if (auto tensorType = r.getType().dyn_cast<mlir::TensorType>()) {
-      auto memrefType = mlir::MemRefType::get(tensorType.getShape(),
-                                              tensorType.getElementType());
-      r = rewriter.create<mlir::bufferization::ToMemrefOp>(loc, memrefType, r);
-    }
 
     if (dstType != r.getType())
       results[i] = rewriter.create<plier::CastOp>(loc, dstType, r);
@@ -367,13 +373,16 @@ struct NumpyBinOpLowering : public mlir::OpRewritePattern<plier::BinOp> {
 
     for (auto it : plier::getOperators()) {
       if (it.op == name) {
-        auto res = resolver.rewriteFunc(llvm::Twine("operator.") + it.name,
-                                        op.getLoc(), rewriter, {lhs, rhs}, {});
+        auto loc = op->getLoc();
+        auto res = resolver.rewriteFunc(llvm::Twine("operator.") + it.name, loc,
+                                        rewriter, {lhs, rhs}, {});
         if (!res)
           return mlir::failure();
 
+        auto results = castRetTypes(loc, rewriter, op, res);
+
         rerun_scf_pipeline(op);
-        rewriter.replaceOp(op, *res);
+        rewriter.replaceOp(op, results);
         return mlir::success();
       }
     }
