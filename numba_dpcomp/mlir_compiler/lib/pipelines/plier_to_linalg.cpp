@@ -1030,8 +1030,9 @@ struct SetitemOpLowering : public mlir::OpConversionPattern<plier::SetItemOp> {
         rewriter.replaceOpWithNewOp<mlir::linalg::CopyOp>(op, castView(value),
                                                           dst);
       } else {
-        rewriter.replaceOpWithNewOp<mlir::linalg::FillOp>(op, castElem(value),
-                                                          castView(dst));
+        auto elem = castElem(value);
+        auto view = castView(dst);
+        rewriter.replaceOpWithNewOp<mlir::linalg::FillOp>(op, elem, view);
       }
     } else {
       // Is single element
