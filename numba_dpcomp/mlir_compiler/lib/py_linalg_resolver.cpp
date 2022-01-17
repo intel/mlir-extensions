@@ -1121,12 +1121,14 @@ static py::object externalCallImpl(py::capsule context, py::str funcName,
   llvm::SmallVector<mlir::Type, 1> retTypes;
   for (auto val : outputVals) {
     auto type = val.getType();
-    if (auto tensorType = type.dyn_cast<mlir::TensorType>()) {
-      auto memrefType = mlir::MemRefType::get(tensorType.getShape(),
-                                              tensorType.getElementType());
-      auto memref =
-          builder.create<mlir::bufferization::ToMemrefOp>(loc, memrefType, val);
-      inputVals.emplace_back(memref);
+    if (auto shapedType = type.dyn_cast<mlir::ShapedType>()) {
+      if (!shapedType.isa<mlir::MemRefType>()) {
+        auto memrefType = mlir::MemRefType::get(shapedType.getShape(),
+                                                shapedType.getElementType());
+        val = builder.create<mlir::bufferization::ToMemrefOp>(loc, memrefType,
+                                                              val);
+      }
+      inputVals.emplace_back(val);
     } else {
       retTypes.emplace_back(type);
     }
@@ -1165,8 +1167,12 @@ static py::object externalCallImpl(py::capsule context, py::str funcName,
   for (auto it : llvm::enumerate(
            llvm::makeArrayRef(inputVals).take_back(outputVals.size()))) {
     auto val = it.value();
-    if (outputVals[it.index()].getType().isa<mlir::TensorType>()) {
-      val = builder.create<mlir::bufferization::ToTensorOp>(loc, val);
+    auto i = it.index();
+    if (outputVals[i].getType().isa<mlir::ShapedType>()) {
+      if (val.getType().isa<mlir::MemRefType>())
+        val = builder.create<mlir::bufferization::ToTensorOp>(loc, val);
+
+      assert(val.getType().isa<mlir::TensorType>());
       results.emplace_back(val);
     }
   }
@@ -1305,7 +1311,12 @@ py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
   auto &ctx = getPyContext(context);
   auto &builder = ctx.builder;
   auto loc = ctx.loc;
-  auto origSrcVal = ctx.context.unwrapVal(loc, builder, src);
+
+  auto unwrapVal = [&](py::handle obj) {
+    return toTensor(loc, builder, ctx.context.unwrapVal(loc, builder, obj));
+  };
+
+  auto origSrcVal = unwrapVal(src);
   auto origSrcType = origSrcVal.getType().cast<mlir::ShapedType>();
   auto srcVal = doSignCast(builder, loc, origSrcVal);
   auto srcType = srcVal.getType().cast<mlir::RankedTensorType>();
@@ -1319,10 +1330,6 @@ py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
       return builder.getIndexAttr(*constVal);
 
     return doCast(builder, loc, val, indexType);
-  };
-
-  auto unwrapVal = [&](py::handle obj) {
-    return toTensor(loc, builder, ctx.context.unwrapVal(loc, builder, obj));
   };
 
   using ValsArray = llvm::SmallVector<mlir::OpFoldResult>;
