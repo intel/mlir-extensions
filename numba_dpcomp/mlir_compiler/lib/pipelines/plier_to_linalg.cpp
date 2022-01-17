@@ -955,7 +955,7 @@ struct SetitemOpLowering : public mlir::OpConversionPattern<plier::SetItemOp> {
   matchAndRewrite(plier::SetItemOp op, plier::SetItemOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto target = adaptor.target();
-    auto targetType = target.getType().dyn_cast<mlir::ShapedType>();
+    auto targetType = target.getType().dyn_cast<mlir::MemRefType>();
     if (!targetType)
       return mlir::failure();
 
@@ -965,67 +965,6 @@ struct SetitemOpLowering : public mlir::OpConversionPattern<plier::SetItemOp> {
 
     auto elemType = targetType.getElementType();
     auto signlessElemType = plier::makeSignlessType(elemType);
-    if (auto targetTensorType =
-            targetType.template dyn_cast<mlir::RankedTensorType>()) {
-      mlir::OpBuilder::InsertionGuard g(rewriter);
-      if (auto parentOp = target.getDefiningOp()) {
-        rewriter.setInsertionPointAfter(parentOp);
-      } else {
-        rewriter.setInsertionPointToStart(target.getParentBlock());
-      }
-
-      llvm::SmallVector<mlir::OpOperand *> uses;
-      // TODO: this doesnt work properly
-      //      for (auto &use : target.getUses())
-      //        uses.emplace_back(&use);
-
-      //      for (auto &use : op.target().getUses())
-      //        uses.emplace_back(&use);
-
-      auto loc = target.getLoc();
-      if (elemType != signlessElemType) {
-        auto tensorType = targetTensorType.clone(signlessElemType);
-        target = rewriter.create<plier::SignCastOp>(loc, tensorType, target);
-      }
-      auto memrefType =
-          mlir::MemRefType::get(targetTensorType.getShape(), signlessElemType);
-      target =
-          rewriter.create<plier::PseudoCopyOp>(loc, target.getType(), target);
-      //      target = rewriter.create<plier::ForceCopyOp>(loc,
-      //      target.getType(), target);
-      auto memref = rewriter.create<mlir::bufferization::ToMemrefOp>(
-          loc, memrefType, target);
-      target = memref;
-      for (auto *use : uses) {
-        auto useOp = use->getOwner();
-        if (op.target().getDefiningOp() == useOp ||
-            target.getDefiningOp() == useOp)
-          continue;
-
-        assert(nullptr != useOp);
-        if (useOp != memref) {
-          if (mlir::isa<plier::SetItemOp>(useOp)) {
-            rewriter.updateRootInPlace(useOp, [&]() { use->set(memref); });
-          } else {
-            mlir::OpBuilder::InsertionGuard g(rewriter);
-            rewriter.setInsertionPoint(useOp);
-            mlir::Value newVal =
-                rewriter.create<mlir::bufferization::ToTensorOp>(
-                    useOp->getLoc(), memref);
-            if (elemType != signlessElemType) {
-              auto tensorType = targetTensorType.clone(elemType);
-              newVal =
-                  rewriter.create<plier::SignCastOp>(loc, tensorType, newVal);
-            }
-            rewriter.updateRootInPlace(useOp, [&]() { use->set(newVal); });
-          }
-        }
-      }
-    } else if (targetType.isa<mlir::MemRefType>()) {
-      // nothing
-    } else {
-      return mlir::failure();
-    }
 
     auto value = adaptor.value();
     auto loc = op.getLoc();
@@ -1045,6 +984,7 @@ struct SetitemOpLowering : public mlir::OpConversionPattern<plier::SetItemOp> {
       }
       if (elemType != signlessElemType)
         val = rewriter.create<plier::SignCastOp>(loc, signlessElemType, val);
+
       return val;
     };
 
@@ -1098,6 +1038,12 @@ struct SetitemOpLowering : public mlir::OpConversionPattern<plier::SetItemOp> {
 
         return ret;
       };
+
+      if (signlessElemType != elemType) {
+        auto signlessMemref = targetType.clone(signlessElemType);
+        target =
+            rewriter.create<plier::SignCastOp>(loc, signlessMemref, target);
+      }
 
       rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(
           op, castElem(value), target, toValues(offsets));
