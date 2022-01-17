@@ -178,8 +178,9 @@ mlir::Type map_array_type(mlir::MLIRContext &ctx, mlir::TypeConverter &conveter,
         desc->layout == ArrayLayout::A) {
       if (auto type =
               conveter.convertType(plier::PyType::get(&ctx, desc->name))) {
-        llvm::SmallVector<int64_t> shape(desc->dims, -1);
-        return mlir::RankedTensorType::get(shape, type);
+        llvm::SmallVector<int64_t> shape(desc->dims,
+                                         mlir::ShapedType::kDynamicSize);
+        return mlir::MemRefType::get(shape, type);
       }
     }
   }
@@ -290,6 +291,12 @@ protected:
       auto i = it.index();
       auto r = it.value();
       auto dstType = op->getResultTypes()[i];
+      if (auto tensorType = dstType.dyn_cast<mlir::TensorType>()) {
+        dstType = mlir::MemRefType::get(tensorType.getShape(),
+                                        tensorType.getElementType());
+        r = rewriter.create<mlir::bufferization::ToMemrefOp>(loc, dstType, r);
+      }
+
       if (dstType != r.getType())
         results[i] = rewriter.create<plier::CastOp>(loc, dstType, r);
     }
