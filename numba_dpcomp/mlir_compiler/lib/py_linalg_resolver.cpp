@@ -1064,6 +1064,21 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
     return ret;
   }();
 
+  auto elemType = srcType.getElementType();
+  auto signlessElemType = makeSignlessType(elemType);
+  srcVal = doSignCast(builder, loc, srcVal);
+  if (srcType.getRank() == 1 && newDimsVals.size() == 1) {
+    mlir::OpFoldResult offset = builder.getIndexAttr(0);
+    mlir::OpFoldResult size = newDimsVals.front();
+    mlir::OpFoldResult stride = builder.getIndexAttr(1);
+
+    mlir::Value slice = builder.create<mlir::tensor::ExtractSliceOp>(
+        loc, srcVal, offset, size, stride);
+    auto dstType = slice.getType().cast<mlir::ShapedType>().clone(elemType);
+    slice = doSignCast(builder, loc, slice, dstType);
+    return ctx.context.createVar(context, slice);
+  }
+
   auto toValues = [&](mlir::ArrayRef<mlir::OpFoldResult> src) {
     auto size = src.size();
     llvm::SmallVector<mlir::Value> values(size);
@@ -1085,20 +1100,14 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
   auto shapeTensor =
       builder.create<mlir::tensor::FromElementsOp>(loc, toValues(newDimsVals));
 
-  auto elemType = srcType.getElementType();
-  auto signlessElemType = makeSignlessType(elemType);
-
   llvm::SmallVector<int64_t> shape(newDimsVals.size(),
                                    mlir::ShapedType::kDynamicSize);
   auto resultType =
       mlir::RankedTensorType::get(shape, elemType, srcType.getEncoding());
-  auto resultTypeSignless = mlir::RankedTensorType::get(shape, signlessElemType,
-                                                        srcType.getEncoding());
-  srcVal = doSignCast(builder, loc, srcVal);
-  auto reshaped = builder
-                      .create<mlir::tensor::ReshapeOp>(loc, resultTypeSignless,
-                                                       srcVal, shapeTensor)
-                      .getResult();
+  auto resultTypeSignless = srcType.clone(shape, signlessElemType);
+
+  mlir::Value reshaped = builder.create<mlir::tensor::ReshapeOp>(
+      loc, resultTypeSignless, srcVal, shapeTensor);
   reshaped = doSignCast(builder, loc, reshaped, resultType);
 
   return ctx.context.createVar(context, reshaped);

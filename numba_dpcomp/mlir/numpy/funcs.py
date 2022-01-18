@@ -455,7 +455,6 @@ def reshape_impl(builder, arg, new_shape):
 # @register_attr('array.flat')
 @register_func('array.flatten')
 def flatten_impl(builder, arg):
-    # TODO: fast path for 1D
     size = size_impl(builder, arg)
     return builder.reshape(arg, (size))
 
@@ -470,7 +469,6 @@ def getitem_impl(builder, arr, index):
     def func(a, ind):
         s = a.size
         res = numpy.empty((s,), a.dtype)
-        res = res.copy() # TODO: remove
         curr = 0
         for i in range(s):
             if ind[i]:
