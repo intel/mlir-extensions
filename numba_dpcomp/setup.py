@@ -33,15 +33,19 @@ else:
 
 # CMAKE =======================================================================
 
+cwd = os.getcwd()
+root_dir = os.path.dirname(cwd)
+
 LLVM_PATH = os.environ['LLVM_PATH']
 LLVM_DIR = os.path.join(LLVM_PATH, "lib", "cmake", "llvm")
 MLIR_DIR = os.path.join(LLVM_PATH, "lib", "cmake", "mlir")
 TBB_DIR = os.path.join(os.environ['TBB_PATH'], "lib", "cmake", "tbb")
-CMAKE_INSTALL_PREFIX = os.path.join(os.getcwd(), "numba_dpcomp")
+CMAKE_INSTALL_PREFIX = os.path.join(cwd, "numba_dpcomp")
 
-cmake_build_dir = os.path.join(os.getcwd(), "cmake_build")
+cmake_build_dir = os.path.join(root_dir, "cmake_build")
 cmake_cmd = [
 "cmake",
+root_dir,
 ]
 
 cmake_cmd += ["-GNinja"]

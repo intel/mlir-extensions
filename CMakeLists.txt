@@ -70,28 +70,13 @@ add_subdirectory(mlir)
 add_subdirectory(dpcomp_math_runtime)
 add_subdirectory(dpcomp_runtime)
 add_subdirectory(tools)
-add_subdirectory(numba_dpcomp/mlir_compiler)
 
 if(GPU_ENABLE)
     add_subdirectory(dpcomp_gpu_runtime)
 endif()
 
+add_subdirectory(numba_dpcomp/numba_dpcomp/mlir_compiler)
+
 if(BUILD_TESTING)
     add_subdirectory(test)
-endif()
-
-set(CMAKE_INSTALL_BINDIR .)
-set(CMAKE_INSTALL_LIBDIR .)
-set(CMAKE_INSTALL_INCLUDEDIR .)
-
-install(TARGETS dpcomp-runtime dpcomp-math-runtime mlir_compiler
-        PERMISSIONS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
-        LIBRARY DESTINATION .
-        )
-
-if(GPU_ENABLE)
-    install(TARGETS dpcomp-gpu-runtime
-            PERMISSIONS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
-            LIBRARY DESTINATION .
-            )
 endif()
