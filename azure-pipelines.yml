@@ -52,6 +52,7 @@ jobs:
 
   - script: |
       call "C:\Miniconda\Scripts\activate"
+      call cd numba_dpcomp
       set LLVM_PATH=$(System.DefaultWorkingDirectory)\llvm_cache
       set TBB_PATH=$(System.DefaultWorkingDirectory)\tbb
       mkdir wheels
