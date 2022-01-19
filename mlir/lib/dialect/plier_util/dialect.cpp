@@ -54,7 +54,7 @@ namespace plier {
 void PlierUtilDialect::initialize() {
   addOperations<
 #define GET_OP_LIST
-#include "plier/dialect/plier_util/PlierUtilOps.cpp.inc"
+#include "mlir-extensions/dialect/plier_util/PlierUtilOps.cpp.inc"
       >();
   addTypes<OpaqueType>();
   addInterfaces<PlierUtilInlinerInterface>();
@@ -1496,9 +1496,9 @@ void ForceCopyOp::build(mlir::OpBuilder &b, mlir::OperationState &result,
 
 } // namespace plier
 
-#include "plier/dialect/plier_util/PlierUtilOpsDialect.cpp.inc"
+#include "mlir-extensions/dialect/plier_util/PlierUtilOpsDialect.cpp.inc"
 
 #define GET_OP_CLASSES
-#include "plier/dialect/plier_util/PlierUtilOps.cpp.inc"
+#include "mlir-extensions/dialect/plier_util/PlierUtilOps.cpp.inc"
 
-//#include "plier/dialect/plier_util/PlierUtilOpsEnums.cpp.inc"
+//#include "mlir-extensions/dialect/plier_util/PlierUtilOpsEnums.cpp.inc"

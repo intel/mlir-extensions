@@ -128,7 +128,7 @@ mlir::ArrayRef<detail::OperatorNamePair> getOperators() {
 void PlierDialect::initialize() {
   addOperations<
 #define GET_OP_LIST
-#include "plier/dialect/plier/PlierOps.cpp.inc"
+#include "mlir-extensions/dialect/plier/PlierOps.cpp.inc"
       >();
   addTypes<plier::PyType, plier::LiteralType, SliceType, plier::TypeVar>();
   addInterfaces<PlierInlinerInterface>();
@@ -547,9 +547,9 @@ void SliceGetItemOp::getCanonicalizationPatterns(
 }
 } // namespace plier
 
-#include "plier/dialect/plier/PlierOpsDialect.cpp.inc"
+#include "mlir-extensions/dialect/plier/PlierOpsDialect.cpp.inc"
 
 #define GET_OP_CLASSES
-#include "plier/dialect/plier/PlierOps.cpp.inc"
+#include "mlir-extensions/dialect/plier/PlierOps.cpp.inc"
 
-//#include "plier/dialect/plier/PlierOpsEnums.cpp.inc"
+//#include "mlir-extensions/dialect/plier/PlierOpsEnums.cpp.inc"

@@ -26,10 +26,10 @@
 
 #include <mlir/Dialect/GPU/GPUDialect.h>
 
-#include "plier/dialect/plier_util/PlierUtilOpsDialect.h.inc"
-//#include "plier/dialect/plier_util/PlierUtilOpsEnums.h.inc"
+#include "mlir-extensions/dialect/plier_util/PlierUtilOpsDialect.h.inc"
+//#include "mlir-extensions/dialect/plier_util/PlierUtilOpsEnums.h.inc"
 #define GET_OP_CLASSES
-#include "plier/dialect/plier_util/PlierUtilOps.h.inc"
+#include "mlir-extensions/dialect/plier_util/PlierUtilOps.h.inc"
 
 namespace plier {
 class OpaqueType : public ::mlir::Type::TypeBase<OpaqueType, ::mlir::Type,
