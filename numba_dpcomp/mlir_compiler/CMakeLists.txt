@@ -74,7 +74,7 @@ endif()
 apply_llvm_compile_flags(${PROJECT_NAME})
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
-    plier
+    mlir-extensions
     LLVM${LLVM_NATIVE_ARCH}CodeGen
     LLVM${LLVM_NATIVE_ARCH}Desc
     LLVMTarget

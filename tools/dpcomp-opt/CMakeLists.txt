@@ -38,7 +38,7 @@ add_executable(${PROJECT_NAME} ${SOURCES_LIST} ${HEADERS_LIST})
 apply_llvm_compile_flags(${PROJECT_NAME})
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
-    plier
+    mlir-extensions
     ${dialect_libs}
     ${conversion_libs}
     MLIROptLib

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-project(dpcomp LANGUAGES CXX C)
+project(mlir-extensions LANGUAGES CXX C)
 
 find_package(LLVM REQUIRED CONFIG)
 find_package(MLIR REQUIRED CONFIG)
@@ -102,11 +102,11 @@ set(HEADERS_LIST
     include/mlir-extensions/utils.hpp
     )
 
-set(PLIER_LIB "plier")
+set(MLIR_EXTENSIONS_LIB "mlir-extensions")
 
-add_library(${PLIER_LIB} STATIC ${SOURCES_LIST} ${HEADERS_LIST})
+add_library(${MLIR_EXTENSIONS_LIB} STATIC ${SOURCES_LIST} ${HEADERS_LIST})
 
-apply_llvm_compile_flags(${PLIER_LIB})
+apply_llvm_compile_flags(${MLIR_EXTENSIONS_LIB})
 
 include(CheckCXXCompilerFlag)
 CHECK_CXX_COMPILER_FLAG(-Winvalid-offsetof __offsetof_flag)
@@ -119,7 +119,7 @@ if (__offsetof_flag)
 endif()
 unset(__offsetof_flag)
 
-target_link_libraries(${PLIER_LIB} PRIVATE
+target_link_libraries(${MLIR_EXTENSIONS_LIB} PRIVATE
     MLIRIR
     MLIRLLVMIR
     MLIRTransforms
@@ -129,16 +129,16 @@ target_link_libraries(${PLIER_LIB} PRIVATE
     MLIRTensorTransforms
     )
 
-target_include_directories(${PLIER_LIB} SYSTEM PRIVATE
+target_include_directories(${MLIR_EXTENSIONS_LIB} SYSTEM PRIVATE
     ${MLIR_INCLUDE_DIRS}
     PRIVATE
     ./lib
     )
 
-target_include_directories(${PLIER_LIB} PUBLIC
+target_include_directories(${MLIR_EXTENSIONS_LIB} PUBLIC
     ./include
     ${PROJECT_BINARY_DIR}/include
-    ${PROJECT_BINARY_DIR}/plier/include
+    ${PROJECT_BINARY_DIR}/mlir-extensions/include
     )
 
-add_dependencies(${PLIER_LIB} MLIRPlierOpsIncGen MLIRPlierUtilOpsIncGen)
+add_dependencies(${MLIR_EXTENSIONS_LIB} MLIRPlierOpsIncGen MLIRPlierUtilOpsIncGen)
