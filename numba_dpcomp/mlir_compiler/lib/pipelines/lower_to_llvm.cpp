@@ -51,12 +51,12 @@
 #include "base_pipeline.hpp"
 #include "pipelines/plier_to_std.hpp"
 
-#include "plier/compiler/pipeline_registry.hpp"
-#include "plier/dialect/plier/dialect.hpp"
-#include "plier/dialect/plier_util/dialect.hpp"
-#include "plier/transforms/func_utils.hpp"
-#include "plier/transforms/type_conversion.hpp"
-#include "plier/utils.hpp"
+#include "mlir-extensions/compiler/pipeline_registry.hpp"
+#include "mlir-extensions/dialect/plier/dialect.hpp"
+#include "mlir-extensions/dialect/plier_util/dialect.hpp"
+#include "mlir-extensions/transforms/func_utils.hpp"
+#include "mlir-extensions/transforms/type_conversion.hpp"
+#include "mlir-extensions/utils.hpp"
 
 namespace {
 mlir::LowerToLLVMOptions getLLVMOptions(mlir::MLIRContext &context) {

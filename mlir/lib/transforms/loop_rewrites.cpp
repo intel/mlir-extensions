@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "plier/transforms/loop_rewrites.hpp"
-#include "plier/transforms/const_utils.hpp"
+#include "mlir-extensions/transforms/loop_rewrites.hpp"
+#include "mlir-extensions/transforms/const_utils.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/SCF/SCF.h>

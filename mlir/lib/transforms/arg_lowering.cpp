@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "plier/transforms/arg_lowering.hpp"
+#include "mlir-extensions/transforms/arg_lowering.hpp"
 
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/IR/TypeSupport.h>
 #include <mlir/Transforms/DialectConversion.h>
 
-#include "plier/dialect/plier/dialect.hpp"
+#include "mlir-extensions/dialect/plier/dialect.hpp"
 
 plier::ArgOpLowering::ArgOpLowering(mlir::MLIRContext *context)
     : OpRewritePattern(context) {}

@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "plier/dialect/plier/dialect.hpp"
+#include "mlir-extensions/dialect/plier/dialect.hpp"
 
 #include <mlir/IR/PatternMatch.h>
 

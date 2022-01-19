@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "plier/dialect/plier/dialect.hpp"
-#include "plier/dialect/plier_util/dialect.hpp"
+#include "mlir-extensions/dialect/plier/dialect.hpp"
+#include "mlir-extensions/dialect/plier_util/dialect.hpp"
 
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/BuiltinOps.h>
@@ -32,7 +32,7 @@
 
 #include <llvm/ADT/TypeSwitch.h>
 
-#include "plier/transforms/const_utils.hpp"
+#include "mlir-extensions/transforms/const_utils.hpp"
 
 namespace MemoryEffects = ::mlir::MemoryEffects;
 

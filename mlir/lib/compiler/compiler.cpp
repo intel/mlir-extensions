@@ -12,23 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "plier/compiler/compiler.hpp"
+#include "mlir-extensions/compiler/compiler.hpp"
 
 #include <mlir/IR/BuiltinOps.h>
+#include <mlir/IR/Diagnostics.h>
 #include <mlir/Pass/Pass.h>
 #include <mlir/Pass/PassManager.h>
-
-#include <mlir/IR/Diagnostics.h>
 
 #include <llvm/Support/raw_ostream.h>
 
 #include <unordered_map>
 
-#include "plier/utils.hpp"
-
-#include "plier/compiler/pipeline_registry.hpp"
-
-#include "plier/transforms/pipeline_utils.hpp"
+#include "mlir-extensions/compiler/pipeline_registry.hpp"
+#include "mlir-extensions/transforms/pipeline_utils.hpp"
+#include "mlir-extensions/utils.hpp"
 
 namespace {
 struct PassManagerStage {

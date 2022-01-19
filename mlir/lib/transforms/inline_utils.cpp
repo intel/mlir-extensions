@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "plier/transforms/inline_utils.hpp"
+#include "mlir-extensions/transforms/inline_utils.hpp"
 
-#include "plier/dialect/plier/dialect.hpp"
+#include "mlir-extensions/dialect/plier/dialect.hpp"
 
 #include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "plier/transforms/type_conversion.hpp"
+#include "mlir-extensions/transforms/type_conversion.hpp"
 
 #include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Dialect/SCF/Transforms.h>
@@ -20,7 +20,7 @@
 #include <mlir/Dialect/StandardOps/Transforms/FuncConversions.h>
 #include <mlir/Transforms/DialectConversion.h>
 
-#include "plier/dialect/plier/dialect.hpp"
+#include "mlir-extensions/dialect/plier/dialect.hpp"
 
 namespace {
 class ConvertSelectOp : public mlir::OpConversionPattern<mlir::SelectOp> {

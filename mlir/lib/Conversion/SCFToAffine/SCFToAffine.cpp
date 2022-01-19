@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "plier/Conversion/SCFToAffine/SCFToAffine.h"
+#include "mlir-extensions/Conversion/SCFToAffine/SCFToAffine.h"
 
 #include "mlir/Analysis/AffineAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"

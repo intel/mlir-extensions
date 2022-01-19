@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "plier/transforms/loop_utils.hpp"
+#include "mlir-extensions/transforms/loop_utils.hpp"
 
 #include <llvm/ADT/SmallVector.h>
 
@@ -24,10 +24,9 @@
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Support/LogicalResult.h>
 
-#include "plier/dialect/plier/dialect.hpp"
-
-#include "plier/transforms/cast_utils.hpp"
-#include "plier/transforms/const_utils.hpp"
+#include "mlir-extensions/dialect/plier/dialect.hpp"
+#include "mlir-extensions/transforms/cast_utils.hpp"
+#include "mlir-extensions/transforms/const_utils.hpp"
 
 namespace {
 template <typename Op>

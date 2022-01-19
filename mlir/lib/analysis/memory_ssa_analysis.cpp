@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "plier/analysis/memory_ssa_analysis.hpp"
+#include "mlir-extensions/analysis/memory_ssa_analysis.hpp"
 
 #include <mlir/Analysis/AliasAnalysis.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>

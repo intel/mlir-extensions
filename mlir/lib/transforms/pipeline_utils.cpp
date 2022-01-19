@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "plier/transforms/pipeline_utils.hpp"
+#include "mlir-extensions/transforms/pipeline_utils.hpp"
 
 #include <mlir/IR/Attributes.h>
 #include <mlir/IR/BuiltinOps.h>
 
-#include "plier/dialect/plier/dialect.hpp"
+#include "mlir-extensions/dialect/plier/dialect.hpp"
 
 mlir::ArrayAttr plier::get_pipeline_jump_markers(mlir::ModuleOp module) {
   return module->getAttrOfType<mlir::ArrayAttr>(

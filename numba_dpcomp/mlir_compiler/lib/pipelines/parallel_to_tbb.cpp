@@ -22,15 +22,15 @@
 #include <mlir/Pass/PassManager.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 
-#include "plier/dialect/plier/dialect.hpp"
-#include "plier/dialect/plier_util/dialect.hpp"
-
 #include "pipelines/base_pipeline.hpp"
 #include "pipelines/lower_to_llvm.hpp"
-#include "plier/compiler/pipeline_registry.hpp"
-#include "plier/transforms/const_utils.hpp"
-#include "plier/transforms/func_utils.hpp"
-#include "plier/transforms/rewrite_wrapper.hpp"
+
+#include "mlir-extensions/compiler/pipeline_registry.hpp"
+#include "mlir-extensions/dialect/plier/dialect.hpp"
+#include "mlir-extensions/dialect/plier_util/dialect.hpp"
+#include "mlir-extensions/transforms/const_utils.hpp"
+#include "mlir-extensions/transforms/func_utils.hpp"
+#include "mlir-extensions/transforms/rewrite_wrapper.hpp"
 
 namespace {
 mlir::MemRefType getReduceType(mlir::Type type, int64_t count) {

@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "plier/compiler/pipeline_registry.hpp"
+#include "mlir-extensions/compiler/pipeline_registry.hpp"
 
 #include <llvm/ADT/STLExtras.h>
 #include <llvm/Support/Allocator.h>
 #include <llvm/Support/StringSaver.h>
 
-#include "plier/utils.hpp"
+#include "mlir-extensions/utils.hpp"
 
 #include <set>
 #include <unordered_map>

@@ -17,10 +17,10 @@
 #include "pipelines/base_pipeline.hpp"
 #include "pipelines/plier_to_std.hpp"
 
-#include "plier/compiler/pipeline_registry.hpp"
-#include "plier/dialect/plier/dialect.hpp"
-#include "plier/dialect/plier_util/dialect.hpp"
-#include "plier/transforms/type_conversion.hpp"
+#include "mlir-extensions/compiler/pipeline_registry.hpp"
+#include "mlir-extensions/dialect/plier/dialect.hpp"
+#include "mlir-extensions/dialect/plier_util/dialect.hpp"
+#include "mlir-extensions/transforms/type_conversion.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/SCF/SCF.h>

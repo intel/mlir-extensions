@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "plier/transforms/cast_lowering.hpp"
+#include "mlir-extensions/transforms/cast_lowering.hpp"
 
 #include <mlir/Transforms/DialectConversion.h>
 

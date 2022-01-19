@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "plier/transforms/cast_utils.hpp"
-#include "plier/dialect/plier_util/dialect.hpp"
+#include "mlir-extensions/transforms/cast_utils.hpp"
+#include "mlir-extensions/dialect/plier_util/dialect.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 

@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "plier/transforms/memory_rewrites.hpp"
+#include "mlir-extensions/transforms/memory_rewrites.hpp"
 
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/IR/Dominance.h>
 
-#include "plier/analysis/memory_ssa_analysis.hpp"
+#include "mlir-extensions/analysis/memory_ssa_analysis.hpp"
 
 namespace {
 struct Meminfo {

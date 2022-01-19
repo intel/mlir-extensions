@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "plier/analysis/memory_ssa.hpp"
+#include "mlir-extensions/analysis/memory_ssa.hpp"
 
 #include <mlir/Interfaces/ControlFlowInterfaces.h>
 #include <mlir/Interfaces/LoopLikeInterface.h>

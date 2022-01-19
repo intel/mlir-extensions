@@ -32,21 +32,21 @@
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 #include <mlir/Transforms/Passes.h>
 
-#include "plier/dialect/plier/dialect.hpp"
-#include "plier/dialect/plier_util/dialect.hpp"
+#include "mlir-extensions/dialect/plier/dialect.hpp"
+#include "mlir-extensions/dialect/plier_util/dialect.hpp"
 
-#include "plier/transforms/call_lowering.hpp"
-#include "plier/transforms/cast_utils.hpp"
-#include "plier/transforms/const_utils.hpp"
-#include "plier/transforms/inline_utils.hpp"
-#include "plier/transforms/pipeline_utils.hpp"
-#include "plier/transforms/rewrite_wrapper.hpp"
-#include "plier/transforms/type_conversion.hpp"
+#include "mlir-extensions/transforms/call_lowering.hpp"
+#include "mlir-extensions/transforms/cast_utils.hpp"
+#include "mlir-extensions/transforms/const_utils.hpp"
+#include "mlir-extensions/transforms/inline_utils.hpp"
+#include "mlir-extensions/transforms/pipeline_utils.hpp"
+#include "mlir-extensions/transforms/rewrite_wrapper.hpp"
+#include "mlir-extensions/transforms/type_conversion.hpp"
 
 #include "base_pipeline.hpp"
 #include "loop_utils.hpp"
 #include "mangle.hpp"
-#include "plier/compiler/pipeline_registry.hpp"
+#include "mlir-extensions/compiler/pipeline_registry.hpp"
 #include "py_func_resolver.hpp"
 #include "py_linalg_resolver.hpp"
 

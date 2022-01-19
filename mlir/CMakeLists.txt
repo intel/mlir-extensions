@@ -37,8 +37,8 @@ if (NOT EXPECTED_LLVM_SHA STREQUAL LLVM_SHA)
     message(FATAL_ERROR "Invalid llvm version")
 endif()
 
-add_subdirectory(include/plier/dialect/plier)
-add_subdirectory(include/plier/dialect/plier_util)
+add_subdirectory(include/mlir-extensions/dialect/plier)
+add_subdirectory(include/mlir-extensions/dialect/plier_util)
 
 set(SOURCES_LIST
     lib/Conversion/SCFToAffine/SCFToAffine.cpp
@@ -71,35 +71,35 @@ set(SOURCES_LIST
     lib/utils.cpp
     )
 set(HEADERS_LIST
-    include/plier/Conversion/SCFToAffine/SCFToAffine.h
-    include/plier/analysis/memory_ssa.hpp
-    include/plier/analysis/memory_ssa_analysis.hpp
-    include/plier/compiler/compiler.hpp
-    include/plier/compiler/pipeline_registry.hpp
-    include/plier/dialect/plier/dialect.hpp
-    include/plier/dialect/plier_util/dialect.hpp
-    include/plier/transforms/arg_lowering.hpp
-    include/plier/transforms/call_lowering.hpp
-    include/plier/transforms/canonicalize_reductions.hpp
-    include/plier/transforms/cast_lowering.hpp
-    include/plier/transforms/cast_utils.hpp
-    include/plier/transforms/common_opts.hpp
-    include/plier/transforms/const_utils.hpp
-    include/plier/transforms/cse.hpp
-    include/plier/transforms/func_utils.hpp
-    include/plier/transforms/if_rewrites.hpp
-    include/plier/transforms/index_type_propagation.hpp
-    include/plier/transforms/inline_utils.hpp
-    include/plier/transforms/loop_rewrites.hpp
-    include/plier/transforms/loop_utils.hpp
-    include/plier/transforms/memory_rewrites.hpp
-    include/plier/transforms/pipeline_utils.hpp
-    include/plier/transforms/promote_bool_memref.hpp
-    include/plier/transforms/promote_to_parallel.hpp
-    include/plier/transforms/rewrite_wrapper.hpp
-    include/plier/transforms/type_conversion.hpp
-    include/plier/transforms/uplift_math_calls.hpp
-    include/plier/utils.hpp
+    include/mlir-extensions/Conversion/SCFToAffine/SCFToAffine.h
+    include/mlir-extensions/analysis/memory_ssa.hpp
+    include/mlir-extensions/analysis/memory_ssa_analysis.hpp
+    include/mlir-extensions/compiler/compiler.hpp
+    include/mlir-extensions/compiler/pipeline_registry.hpp
+    include/mlir-extensions/dialect/plier/dialect.hpp
+    include/mlir-extensions/dialect/plier_util/dialect.hpp
+    include/mlir-extensions/transforms/arg_lowering.hpp
+    include/mlir-extensions/transforms/call_lowering.hpp
+    include/mlir-extensions/transforms/canonicalize_reductions.hpp
+    include/mlir-extensions/transforms/cast_lowering.hpp
+    include/mlir-extensions/transforms/cast_utils.hpp
+    include/mlir-extensions/transforms/common_opts.hpp
+    include/mlir-extensions/transforms/const_utils.hpp
+    include/mlir-extensions/transforms/cse.hpp
+    include/mlir-extensions/transforms/func_utils.hpp
+    include/mlir-extensions/transforms/if_rewrites.hpp
+    include/mlir-extensions/transforms/index_type_propagation.hpp
+    include/mlir-extensions/transforms/inline_utils.hpp
+    include/mlir-extensions/transforms/loop_rewrites.hpp
+    include/mlir-extensions/transforms/loop_utils.hpp
+    include/mlir-extensions/transforms/memory_rewrites.hpp
+    include/mlir-extensions/transforms/pipeline_utils.hpp
+    include/mlir-extensions/transforms/promote_bool_memref.hpp
+    include/mlir-extensions/transforms/promote_to_parallel.hpp
+    include/mlir-extensions/transforms/rewrite_wrapper.hpp
+    include/mlir-extensions/transforms/type_conversion.hpp
+    include/mlir-extensions/transforms/uplift_math_calls.hpp
+    include/mlir-extensions/utils.hpp
     )
 
 set(PLIER_LIB "plier")

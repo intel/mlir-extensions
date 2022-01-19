@@ -33,11 +33,11 @@
 #include <llvm/Bitcode/BitcodeWriter.h>
 #include <llvm/Support/Debug.h>
 
-#include "plier/dialect/plier/dialect.hpp"
+#include "mlir-extensions/dialect/plier/dialect.hpp"
 
-#include "plier/compiler/compiler.hpp"
-#include "plier/compiler/pipeline_registry.hpp"
-#include "plier/utils.hpp"
+#include "mlir-extensions/compiler/compiler.hpp"
+#include "mlir-extensions/compiler/pipeline_registry.hpp"
+#include "mlir-extensions/utils.hpp"
 
 #include "pipelines/base_pipeline.hpp"
 #include "pipelines/lower_to_gpu.hpp"
