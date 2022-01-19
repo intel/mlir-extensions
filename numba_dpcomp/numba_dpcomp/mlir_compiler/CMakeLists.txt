@@ -110,9 +110,9 @@ if(GPU_ENABLE)
     target_compile_definitions(${PROJECT_NAME} PRIVATE GPU_ENABLE=1)
 endif()
 
-set(CMAKE_INSTALL_BINDIR ${CMAKE_SOURCE_DIR}/numba_dpcomp/numba_dpcomp)
-set(CMAKE_INSTALL_LIBDIR ${CMAKE_SOURCE_DIR}/numba_dpcomp/numba_dpcomp)
-set(CMAKE_INSTALL_INCLUDEDIR ${CMAKE_SOURCE_DIR}/numba_dpcomp/numba_dpcomp)
+set(CMAKE_INSTALL_BINDIR ./numba_dpcomp/numba_dpcomp)
+set(CMAKE_INSTALL_LIBDIR ./numba_dpcomp/numba_dpcomp)
+set(CMAKE_INSTALL_INCLUDEDIR ./numba_dpcomp/numba_dpcomp)
 
 install(TARGETS dpcomp-runtime dpcomp-math-runtime mlir_compiler
         PERMISSIONS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
