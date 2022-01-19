@@ -66,7 +66,7 @@ macro(apply_llvm_compile_flags target)
     target_compile_definitions(${target} PRIVATE ${LLVM_DEFINITIONS})
 endmacro()
 
-add_subdirectory(dpcomp)
+add_subdirectory(mlir)
 add_subdirectory(dpcomp_math_runtime)
 add_subdirectory(dpcomp_runtime)
 add_subdirectory(tools)
