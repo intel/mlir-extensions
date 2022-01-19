@@ -29,6 +29,7 @@ jobs:
 
   - script: |
       call "C:\Miniconda\Scripts\activate"
+      call cd numba_dpcomp
       call conda install python=3.7 numba=0.54 numpy=1.20 scikit-learn pytest-xdist ninja scipy pybind11 tbb=2021.1 pytest lit -c conda-forge
       call cmake --version
       call set LLVM_PATH=$(System.DefaultWorkingDirectory)\llvm_cache
@@ -39,6 +40,7 @@ jobs:
 
   - script: |
       call "C:\Miniconda\Scripts\activate"
+      call cd numba_dpcomp
       pytest -n1 -vv --capture=tee-sys
     displayName: 'Tests'
 
@@ -57,7 +59,7 @@ jobs:
       pip wheel ..
     displayName: 'Build wheels'
 
-  - publish: $(System.DefaultWorkingDirectory)/wheels
+  - publish: $(System.DefaultWorkingDirectory)/numba_dpcomp/wheels
     artifact: 'numba-dpcomp-wheels-win'
     displayName: 'Publish wheels'
 
@@ -96,6 +98,7 @@ jobs:
 
   - script: |
       source /usr/share/miniconda/bin/activate
+      cd numba_dpcomp
       conda create -y -n build_env python=3.7 numba=0.54 numpy=1.20 scikit-learn pytest-xdist ninja scipy pybind11 pytest lit dpnp=0.5.1 mkl=2021.1 -c conda-forge -c intel
       conda activate build_env
       conda install -y tbb=2021 -c conda-forge -c intel --force
@@ -114,6 +117,7 @@ jobs:
 
   - script: |
       source /usr/share/miniconda/bin/activate
+      cd numba_dpcomp
       conda activate build_env
       source $(System.DefaultWorkingDirectory)/tbb/env/vars.sh
       export OCL_ICD_FILENAMES_RESET=1
@@ -133,6 +137,7 @@ jobs:
 
   - script: |
       source /usr/share/miniconda/bin/activate
+      cd numba_dpcomp
       conda activate build_env
       export LLVM_PATH=$(System.DefaultWorkingDirectory)/llvm_cache
       export TBB_PATH=$(System.DefaultWorkingDirectory)/tbb
@@ -142,7 +147,7 @@ jobs:
       pip wheel ..
     displayName: 'Build wheels'
 
-  - publish: $(System.DefaultWorkingDirectory)/wheels
+  - publish: $(System.DefaultWorkingDirectory)/numba_dpcomp/wheels
     artifact: 'numba-dpcomp-wheels-lin'
     displayName: 'Publish wheels'
 
@@ -175,6 +180,7 @@ jobs:
 
   - script: |
       source /usr/local/miniconda/bin/activate
+      cd numba_dpcomp
       conda create -y -n test_env python=3.9 numba=0.54 scikit-learn ninja scipy pybind11 tbb=2021.1 pytest lit -c conda-forge
       conda activate test_env
       cmake --version
@@ -186,6 +192,7 @@ jobs:
 
   - script: |
       source /usr/local/miniconda/bin/activate
+      cd numba_dpcomp
       conda activate test_env
       pytest -vv --capture=tee-sys
     displayName: 'Tests'
@@ -199,6 +206,7 @@ jobs:
 
   - script: |
       source /usr/local/miniconda/bin/activate
+      cd numba_dpcomp
       conda activate test_env
       export LLVM_PATH=$(System.DefaultWorkingDirectory)/llvm_cache
       export TBB_PATH=$(System.DefaultWorkingDirectory)/tbb
@@ -207,6 +215,6 @@ jobs:
       pip wheel ..
     displayName: 'Build wheels'
 
-  - publish: $(System.DefaultWorkingDirectory)/wheels
+  - publish: $(System.DefaultWorkingDirectory)/numba_dpcomp/wheels
     artifact: 'numba-dpcomp-wheels-mac'
     displayName: 'Publish wheels'
