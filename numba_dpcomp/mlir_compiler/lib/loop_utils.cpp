@@ -17,8 +17,8 @@
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/IR/PatternMatch.h>
 
-#include "plier/dialect/plier/dialect.hpp"
-#include "plier/transforms/loop_utils.hpp"
+#include "mlir-extensions/dialect/plier/dialect.hpp"
+#include "mlir-extensions/transforms/loop_utils.hpp"
 
 mlir::LogicalResult
 lowerRange(plier::PyCallOp op, mlir::ValueRange operands,

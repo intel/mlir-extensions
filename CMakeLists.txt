@@ -14,7 +14,7 @@
 
 cmake_minimum_required(VERSION 3.5)
 
-project(dpcomp)
+project(mlir-extensions)
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -66,7 +66,7 @@ macro(apply_llvm_compile_flags target)
     target_compile_definitions(${target} PRIVATE ${LLVM_DEFINITIONS})
 endmacro()
 
-add_subdirectory(dpcomp)
+add_subdirectory(mlir)
 add_subdirectory(dpcomp_math_runtime)
 add_subdirectory(dpcomp_runtime)
 add_subdirectory(tools)

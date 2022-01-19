@@ -14,7 +14,7 @@
 
 #include "pipelines/base_pipeline.hpp"
 
-#include "plier/compiler/pipeline_registry.hpp"
+#include "mlir-extensions/compiler/pipeline_registry.hpp"
 
 namespace {
 const constexpr llvm::StringRef passes[] = {

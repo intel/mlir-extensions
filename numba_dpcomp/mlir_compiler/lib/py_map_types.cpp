@@ -19,7 +19,7 @@
 #include <mlir/IR/BuiltinTypes.h>
 #include <mlir/IR/TypeRange.h>
 
-#include "plier/dialect/plier/dialect.hpp"
+#include "mlir-extensions/dialect/plier/dialect.hpp"
 
 namespace py = pybind11;
 

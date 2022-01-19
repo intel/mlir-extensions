@@ -22,12 +22,12 @@
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 #include <mlir/Transforms/Passes.h>
 
-#include "plier/dialect/plier/dialect.hpp"
-#include "plier/transforms/arg_lowering.hpp"
-#include "plier/transforms/common_opts.hpp"
+#include "mlir-extensions/dialect/plier/dialect.hpp"
+#include "mlir-extensions/transforms/arg_lowering.hpp"
+#include "mlir-extensions/transforms/common_opts.hpp"
 
 #include "base_pipeline.hpp"
-#include "plier/compiler/pipeline_registry.hpp"
+#include "mlir-extensions/compiler/pipeline_registry.hpp"
 
 namespace {
 mlir::Block *getNextBlock(mlir::Block *block) {
