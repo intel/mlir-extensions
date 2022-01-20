@@ -125,12 +125,17 @@ if(GPU_ENABLE)
             )
 endif()
 
-install(
-    DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../../
-    DESTINATION ./numba_dpcomp
-    FILES_MATCHING
-    PATTERN "__pycache__" EXCLUDE
-    PATTERN "*.py"
-    PATTERN "*.cfg"
-    PATTERN "*.in"
-    )
+get_filename_component(_tmp_path1 ${CMAKE_SOURCE_DIR} REALPATH)
+get_filename_component(_tmp_path2 ${CMAKE_INSTALL_PREFIX} REALPATH)
+
+if (NOT _tmp_path1 STREQUAL _tmp_path2)
+    install(
+        DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../../
+        DESTINATION ./numba_dpcomp
+        FILES_MATCHING
+        PATTERN "__pycache__" EXCLUDE
+        PATTERN "*.py"
+        PATTERN "*.cfg"
+        PATTERN "*.in"
+        )
+endif()
