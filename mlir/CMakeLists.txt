@@ -42,10 +42,13 @@ add_subdirectory(include/mlir-extensions/dialect/plier_util)
 
 set(SOURCES_LIST
     lib/Conversion/SCFToAffine/SCFToAffine.cpp
+    lib/Conversion/gpu_to_gpu_runtime.cpp
+    lib/Conversion/gpu_runtime_to_llvm.cpp
     lib/analysis/memory_ssa.cpp
     lib/analysis/memory_ssa_analysis.cpp
     lib/compiler/compiler.cpp
     lib/compiler/pipeline_registry.cpp
+    lib/dialect/gpu_runtime/IR/gpu_runtime_ops.cpp
     lib/dialect/plier/dialect.cpp
     lib/dialect/plier_util/dialect.cpp
     lib/transforms/arg_lowering.cpp
@@ -72,10 +75,13 @@ set(SOURCES_LIST
     )
 set(HEADERS_LIST
     include/mlir-extensions/Conversion/SCFToAffine/SCFToAffine.h
+    include/mlir-extensions/Conversion/gpu_to_gpu_runtime.hpp
+    include/mlir-extensions/Conversion/gpu_runtime_to_llvm.hpp
     include/mlir-extensions/analysis/memory_ssa.hpp
     include/mlir-extensions/analysis/memory_ssa_analysis.hpp
     include/mlir-extensions/compiler/compiler.hpp
     include/mlir-extensions/compiler/pipeline_registry.hpp
+    include/mlir-extensions/dialect/gpu_runtime/IR/gpu_runtime_ops.hpp
     include/mlir-extensions/dialect/plier/dialect.hpp
     include/mlir-extensions/dialect/plier_util/dialect.hpp
     include/mlir-extensions/transforms/arg_lowering.hpp
@@ -141,4 +147,4 @@ target_include_directories(${MLIR_EXTENSIONS_LIB} PUBLIC
     ${PROJECT_BINARY_DIR}/mlir-extensions/include
     )
 
-add_dependencies(${MLIR_EXTENSIONS_LIB} MLIRPlierOpsIncGen MLIRPlierUtilOpsIncGen)
+add_dependencies(${MLIR_EXTENSIONS_LIB} MLIRPlierOpsIncGen MLIRPlierUtilOpsIncGen MLIRGpuRuntimeOpsIncGen)
