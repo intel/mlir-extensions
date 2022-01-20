@@ -126,7 +126,7 @@ if(GPU_ENABLE)
 endif()
 
 get_filename_component(_tmp_path1 ${CMAKE_SOURCE_DIR} REALPATH)
-get_filename_component(_tmp_path2 ${CMAKE_INSTALL_PREFIX} REALPATH)
+get_filename_component(_tmp_path2 ${CMAKE_BINARY_DIR} REALPATH)
 
 if (NOT _tmp_path1 STREQUAL _tmp_path2)
     install(
