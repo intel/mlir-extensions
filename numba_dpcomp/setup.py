@@ -41,7 +41,7 @@ if int(os.environ.get('DPCOMP_SETUP_RUN_CMAKE', 1)):
     LLVM_DIR = os.path.join(LLVM_PATH, "lib", "cmake", "llvm")
     MLIR_DIR = os.path.join(LLVM_PATH, "lib", "cmake", "mlir")
     TBB_DIR = os.path.join(os.environ['TBB_PATH'], "lib", "cmake", "tbb")
-    CMAKE_INSTALL_PREFIX = os.path.join(cwd, "numba_dpcomp")
+    CMAKE_INSTALL_PREFIX = root_dir
 
     cmake_build_dir = os.path.join(root_dir, "cmake_build")
     cmake_cmd = [
