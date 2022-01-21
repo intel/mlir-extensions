@@ -666,8 +666,7 @@ computeIndices(mlir::OpBuilder &builder, mlir::Location loc, mlir::Value value,
       auto offset = handleNegativeVal(getItemOrConst(0));
       auto end = handleNegativeVal(getItemOrConst(1));
       auto stride = getItemOrConst(2);
-      auto size =
-          builder.create<mlir::arith::SubIOp>(loc, end, offset).getResult();
+      auto size = builder.createOrFold<mlir::arith::SubIOp>(loc, end, offset);
       return {foldConst(offset), foldConst(size), stride, true};
     } else if (auto literal = valType.dyn_cast<plier::LiteralType>()) {
       auto offset = foldConst(handleNegativeVal(literal.getValue()));
@@ -699,14 +698,12 @@ computeIndices(mlir::OpBuilder &builder, mlir::Location loc, mlir::Value value,
       return mlir::failure();
 
     for (auto it : llvm::enumerate(tupleType)) {
-      auto i = it.index();
-      auto getitemInd =
-          builder.create<mlir::arith::ConstantIndexOp>(loc, it.index());
-      auto ind =
-          builder.create<plier::GetItemOp>(loc, it.value(), index, getitemInd);
+      auto i = static_cast<unsigned>(it.index());
+      auto getitemInd = builder.create<mlir::arith::ConstantIndexOp>(loc, i);
+      auto ind = builder.createOrFold<plier::GetItemOp>(loc, it.value(), index,
+                                                        getitemInd);
       bool isSlice = false;
-      std::tie(offsets[i], sizes[i], strides[i], isSlice) =
-          getPos(ind.getResult(), static_cast<unsigned>(i));
+      std::tie(offsets[i], sizes[i], strides[i], isSlice) = getPos(ind, i);
       if (isSlice)
         dimsIndices.emplace_back(i);
     }
