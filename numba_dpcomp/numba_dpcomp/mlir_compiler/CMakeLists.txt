@@ -127,9 +127,6 @@ endif()
 
 get_filename_component(_tmp_path1 "${CMAKE_SOURCE_DIR}" REALPATH)
 get_filename_component(_tmp_path2 "${CMAKE_INSTALL_PREFIX}" REALPATH)
-message ("-=-=-=-=- Test -=-=-=-=-")
-message(${_tmp_path1})
-message(${_tmp_path2})
 
 if (NOT _tmp_path1 STREQUAL _tmp_path2)
     install(
