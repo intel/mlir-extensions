@@ -590,14 +590,21 @@ def test_func_call2():
 
     assert_equal(py_func2(10), jit_func2(10))
 
-def test_omitted_args1():
+def test_omitted_args_int():
     def py_func(a = 3, b = 7):
         return a + b
 
     jit_func = njit(py_func)
     assert_equal(py_func(), jit_func())
 
-def test_omitted_args2():
+def test_omitted_args_float():
+    def py_func(a = 3.5, b = 7.7):
+        return a + b
+
+    jit_func = njit(py_func)
+    assert_equal(py_func(), jit_func())
+
+def test_omitted_args_bool():
     def py_func(a = True, b = False):
         res = 1
         if a:
@@ -609,7 +616,7 @@ def test_omitted_args2():
     jit_func = njit(py_func)
     assert_equal(py_func(), jit_func())
 
-def test_omitted_args3():
+def test_omitted_args_none():
     def py_func1(a = None):
         return a
 
