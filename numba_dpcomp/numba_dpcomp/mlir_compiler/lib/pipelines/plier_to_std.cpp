@@ -390,7 +390,7 @@ struct LiteralLowering : public mlir::OpConversionPattern<Op> {
   using mlir::OpConversionPattern<Op>::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(Op op, typename Op::Adaptor /*adaptor*/,
+  matchAndRewrite(Op op, typename Op::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto type = op.getType();
     auto &converter = *(this->getTypeConverter());
@@ -419,6 +419,60 @@ struct LiteralLowering : public mlir::OpConversionPattern<Op> {
 
     if (auto typevar = convertedType.template dyn_cast<plier::TypeVar>()) {
       rewriter.replaceOpWithNewOp<plier::UndefOp>(op, typevar);
+      return mlir::success();
+    }
+
+    return mlir::failure();
+  }
+};
+
+struct OmittedLowering : public mlir::OpConversionPattern<plier::CastOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::CastOp op, plier::CastOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto type = op.getType();
+    auto &converter = *(this->getTypeConverter());
+    auto convertedType = converter.convertType(type);
+    if (!convertedType)
+      return mlir::failure();
+
+    auto getOmittedValue = [&](mlir::Type type,
+                               mlir::Type dstType) -> mlir::Attribute {
+      if (!isOmittedType(type))
+        return {};
+
+      auto name = type.cast<plier::PyType>().getName();
+      if (!name.consume_front("omitted(default=") || !name.consume_back(")"))
+        return {};
+
+      int64_t intVal;
+      if (dstType.isa<mlir::IntegerType>() && !name.getAsInteger(10, intVal)) {
+        return rewriter.getIntegerAttr(dstType, intVal);
+      }
+
+      double dblVal;
+      if (dstType.isF32() && !name.getAsDouble(dblVal))
+        return rewriter.getF32FloatAttr(static_cast<float>(dblVal));
+
+      if (dstType.isF64() && !name.getAsDouble(dblVal))
+        return rewriter.getF64FloatAttr(dblVal);
+
+      return {};
+    };
+
+    if (auto omittedAttr =
+            getOmittedValue(adaptor.value().getType(), convertedType)) {
+      auto loc = op.getLoc();
+      auto dstType = omittedAttr.getType();
+      auto val = makeSignlessAttr(omittedAttr);
+      auto newVal =
+          rewriter.create<mlir::arith::ConstantOp>(loc, val).getResult();
+      if (dstType != val.getType())
+        newVal = rewriter.create<plier::SignCastOp>(loc, dstType, newVal);
+
+      rewriter.replaceOp(op, newVal);
       return mlir::success();
     }
     return mlir::failure();
@@ -1308,6 +1362,7 @@ void PlierToStdPass::runOnOperation() {
       ConstOpLowering,
       LiteralLowering<plier::CastOp>,
       LiteralLowering<plier::GlobalOp>,
+      OmittedLowering,
       LowerGlobals,
       UndefOpLowering
       // clang-format on
