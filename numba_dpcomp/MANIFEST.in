@@ -1,2 +1,7 @@
 include versioneer.py
 include numba_dpcomp/_version.py
+
+recursive-include numba_dpcomp *.pyd
+recursive-include numba_dpcomp *.dll
+recursive-include numba_dpcomp *.so
+recursive-include numba_dpcomp *.dylib
