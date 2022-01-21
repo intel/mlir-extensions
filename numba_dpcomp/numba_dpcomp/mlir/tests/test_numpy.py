@@ -908,6 +908,7 @@ def test_concat(arrays, axis):
     'lambda a, b, c, d: a[3:c]',
     'lambda a, b, c, d: a[b:4]',
     'lambda a, b, c, d: a[3:4]',
+    'lambda a, b, c, d: a[1:-2]',
     'lambda a, b, c, d: a[b:c:d]',
     'lambda a, b, c, d: a[b:c:1]',
     'lambda a, b, c, d: a[b:c:2]',
