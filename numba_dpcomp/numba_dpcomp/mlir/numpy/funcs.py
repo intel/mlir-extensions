@@ -126,6 +126,7 @@ def min_impl(builder, arg, axis=None):
     return _array_reduce(builder, arg, axis, lambda a, b: a if a < b else b, _get_min_init_value)
 
 
+@register_func('array.mean')
 @register_func('numpy.mean', numpy.mean)
 def mean_impl(builder, arg, axis=None):
     return sum_impl(builder, arg, axis) / size_impl(builder, arg)
