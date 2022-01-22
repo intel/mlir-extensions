@@ -1053,8 +1053,8 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
       for (size_t i = 0; i < dimsCount; ++i) {
         auto ind = builder.create<mlir::arith::ConstantIndexOp>(loc, i);
         auto elemType = tupleType.getType(i);
-        auto item = builder.create<plier::GetItemOp>(loc, elemType, dims, ind)
-                        .getResult();
+        auto item =
+            builder.createOrFold<plier::GetItemOp>(loc, elemType, dims, ind);
         item = doSignCast(builder, loc, item);
         ret[i] = dimCast(item);
       }
@@ -1085,8 +1085,9 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
   }
 
   auto isUnitDim = [](mlir::OpFoldResult v) {
-    if (auto val = v.dyn_cast<mlir::Attribute>())
-      return val.cast<mlir::IntegerAttr>().getValue().getSExtValue() == 1;
+    if (auto intVal = mlir::getConstantIntValue(v))
+      return *intVal == 1;
+
     return false;
   };
 
