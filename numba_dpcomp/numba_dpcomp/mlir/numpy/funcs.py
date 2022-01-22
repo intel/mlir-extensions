@@ -361,9 +361,9 @@ def matmul_impl(builder, a, b):
     if dim1 == 1 and dim2 == 1:
         res = builder.extract(res, (shape2[0] - 1, 0))
     elif dim1 == 1:
-        res = builder.subview(res, (shape2[0] - 1, 0), (1, shape1[0]), result_rank=1)
+        res = builder.subview(res, (shape2[0] - 1, 0), (1, shape2[1]), result_rank=1)
     elif dim2 == 1:
-        res = builder.subview(res, (0, 0), (shape2[0], 1), result_rank=1)
+        res = builder.subview(res, (0, 0), (shape1[0], 1), result_rank=1)
 
     return res
 
