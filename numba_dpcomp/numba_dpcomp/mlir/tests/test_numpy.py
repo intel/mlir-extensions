@@ -1136,7 +1136,7 @@ def test_matmul1(py_func, a, b, dtype):
     a = np.array(a, dtype=dtype)
     b = np.array(b, dtype=dtype)
     jit_func = njit(py_func)
-    assert_equal(py_func(a, b), jit_func(a, b))
+    assert_allclose(py_func(a, b), jit_func(a, b), rtol=1e-4, atol=1e-7)
 
 @parametrize_function_variants("py_func", [
     'lambda a, b: (a @ b) @ a',
@@ -1151,4 +1151,4 @@ def test_matmul2(py_func, a, b, dtype):
     a = np.array(a, dtype=dtype)
     b = np.array(b, dtype=dtype)
     jit_func = njit(py_func)
-    assert_equal(py_func(a, b), jit_func(a, b))
+    assert_allclose(py_func(a, b), jit_func(a, b), rtol=1e-4, atol=1e-7)
