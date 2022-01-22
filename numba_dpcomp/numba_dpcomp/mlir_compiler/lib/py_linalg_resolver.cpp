@@ -1104,7 +1104,9 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
       mlir::RankedTensorType::get(shape, elemType, srcType.getEncoding());
   auto resultTypeSignless = srcType.clone(shape, signlessElemType);
 
-  if (dstRank == (srcRank + unitDimsCount) && (unitDimsCount != 0)) {
+  // TODO: Limit to 1D case for now
+  if ((srcRank == 1) && (dstRank == (srcRank + unitDimsCount)) &&
+      (unitDimsCount != 0)) {
     llvm::SmallVector<mlir::ReassociationIndices> reassoc(srcRank);
     llvm::SmallVector<int64_t> expandShape(dstRank,
                                            mlir::ShapedType::kDynamicSize);
