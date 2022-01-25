@@ -50,15 +50,6 @@
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 #include <mlir/Transforms/Passes.h>
 
-/*
-#include "lib/pipelines/base_pipeline.hpp"
-#include "lib/pipelines/loop_utils.hpp"
-#include "lib/pipelines/lower_to_llvm.hpp"
-#include "lib/pipelines/plier_to_linalg.hpp"
-#include "lib/pipelines/plier_to_std.hpp"
-#include "lib/py_linalg_resolver.hpp"
-*/
-
 #include "mlir-extensions/compiler/pipeline_registry.hpp"
 #include "mlir-extensions/dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
 #include "mlir-extensions/transforms/call_lowering.hpp"
@@ -226,13 +217,13 @@ static void populateLowerToGPURuntimePipelineLow(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<GPUExPass>());
   commonOptPasses(pm);
 }
-} // namespace
 
 // TODO(nbpatel): Check if lowerToLLVMPipelineName is required for this pass
 // since we are not lowering all the way down to llvm in this pass.
-void registerLowerToGPURuntimePipeline(
-    gpu_runtime::PipelineRegistry &registry) {
-  registry.register_pipeline([](auto sink) {
+// TODO(nbpatel) : Check if a new pipeline registry is required for
+// GpuRuntimeDialect
+void registerLowerToGPURuntimePipeline(plier::PipelineRegistry &registry) {
+  registry.registerPipeline([](auto sink) {
     auto lowStage = getLowerLoweringStage();
     sink(lowerToGPURuntimePipelineNameLow(), {lowStage.begin},
          {lowStage.end, lowerToLLVMPipelineName()}, {},

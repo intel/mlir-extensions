@@ -14,7 +14,10 @@
 
 #pragma once
 
-namespace gpu_runtime {
+#include "../../numba_dpcomp/numba_dpcomp/mlir_compiler/lib/pipelines/base_pipeline.hpp"
+#include "../../numba_dpcomp/numba_dpcomp/mlir_compiler/lib/pipelines/lower_to_llvm.hpp"
+
+namespace plier {
 class PipelineRegistry;
 }
 
@@ -22,7 +25,7 @@ namespace llvm {
 class StringRef;
 }
 
-void registerLowerToGPURuntimePipeline(gpu_runtime::PipelineRegistry &registry);
+void registerLowerToGPURuntimePipeline(plier::PipelineRegistry &registry);
 
 llvm::StringRef lowerToGPURuntimePipelineNameHigh();
 llvm::StringRef lowerToGPURuntimePipelineNameLow();

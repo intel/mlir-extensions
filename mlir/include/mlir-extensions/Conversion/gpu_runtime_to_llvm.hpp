@@ -14,7 +14,7 @@
 
 #pragma once
 
-namespace gpu_runtime {
+namespace plier {
 class PipelineRegistry;
 }
 
@@ -22,7 +22,7 @@ namespace llvm {
 class StringRef;
 }
 
-void registerLowerToGPUPipeline(gpu_runtime::PipelineRegistry &registry);
+void registerLowerToGPUPipeline(plier::PipelineRegistry &registry);
 
 llvm::StringRef lowerToGPUPipelineNameHigh();
 llvm::StringRef lowerToGPUPipelineNameLow();
