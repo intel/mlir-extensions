@@ -26,9 +26,9 @@
 
 #include <mlir/Dialect/GPU/GPUDialect.h>
 
-#include "mlir/Dialect/gpu_runtime/GpuRuntimeOpsDialect.h.inc"
+#include "mlir-extensions/dialect/gpu_runtime/IR/GpuRuntimeOpsDialect.h.inc"
 #define GET_OP_CLASSES
-#include "mlir/Dialect/gpu_runtime/GpuRuntimeOps.h.inc"
+#include "mlir-extensions/dialect/gpu_runtime/IR/GpuRuntimeOps.h.inc"
 
 namespace gpu_runtime {
 class OpaqueType : public ::mlir::Type::TypeBase<OpaqueType, ::mlir::Type,

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 #include "mlir-extensions/Conversion/gpu_to_gpu_runtime.hpp"
 
 #include <llvm/Support/FormatVariadic.h>
@@ -51,12 +50,14 @@
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 #include <mlir/Transforms/Passes.h>
 
-#include "base_pipeline.hpp"
-#include "loop_utils.hpp"
-#include "pipelines/lower_to_llvm.hpp"
-#include "pipelines/plier_to_linalg.hpp"
-#include "pipelines/plier_to_std.hpp"
-#include "py_linalg_resolver.hpp"
+/*
+#include "lib/pipelines/base_pipeline.hpp"
+#include "lib/pipelines/loop_utils.hpp"
+#include "lib/pipelines/lower_to_llvm.hpp"
+#include "lib/pipelines/plier_to_linalg.hpp"
+#include "lib/pipelines/plier_to_std.hpp"
+#include "lib/py_linalg_resolver.hpp"
+*/
 
 #include "mlir-extensions/compiler/pipeline_registry.hpp"
 #include "mlir-extensions/dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
@@ -130,8 +131,10 @@ static mlir::LogicalResult createGpuKernelLoad(mlir::PatternRewriter &builder,
     return mlir::failure();
 
   auto loc = op.getLoc();
-  auto module = builder.create<gpu_runtime::LoadGpuModuleOp>(loc, *stream, gpuMod);
-  auto kernel = builder.create<gpu_runtime::GetGpuKernelOp>(loc, module, gpuKernel);
+  auto module =
+      builder.create<gpu_runtime::LoadGpuModuleOp>(loc, *stream, gpuMod);
+  auto kernel =
+      builder.create<gpu_runtime::GetGpuKernelOp>(loc, module, gpuKernel);
   auto newOp = func(builder, loc, *stream, kernel);
   builder.replaceOp(op, newOp.getResults());
   return mlir::success();
@@ -225,8 +228,10 @@ static void populateLowerToGPURuntimePipelineLow(mlir::OpPassManager &pm) {
 }
 } // namespace
 
-// TODO(nbpatel): Check if lowerToLLVMPipelineName is required for this pass since we are not lowering all the way down to llvm in this pass.
-void registerLowerToGPURuntimePipeline(gpu_runtime::PipelineRegistry &registry) {
+// TODO(nbpatel): Check if lowerToLLVMPipelineName is required for this pass
+// since we are not lowering all the way down to llvm in this pass.
+void registerLowerToGPURuntimePipeline(
+    gpu_runtime::PipelineRegistry &registry) {
   registry.register_pipeline([](auto sink) {
     auto lowStage = getLowerLoweringStage();
     sink(lowerToGPURuntimePipelineNameLow(), {lowStage.begin},
@@ -235,4 +240,6 @@ void registerLowerToGPURuntimePipeline(gpu_runtime::PipelineRegistry &registry) 
   });
 }
 
-llvm::StringRef lowerToGPURuntimePipelineNameLow() { return "lower_to_gpu_runtime_low"; }
+llvm::StringRef lowerToGPURuntimePipelineNameLow() {
+  return "lower_to_gpu_runtime_low";
+}

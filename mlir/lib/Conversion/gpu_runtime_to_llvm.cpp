@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 #include "mlir-extensions/Conversion/gpu_to_gpu_runtime.hpp"
 
 #include <llvm/Support/FormatVariadic.h>
@@ -51,12 +50,14 @@
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 #include <mlir/Transforms/Passes.h>
 
-#include "base_pipeline.hpp"
-#include "loop_utils.hpp"
-#include "pipelines/lower_to_llvm.hpp"
-#include "pipelines/plier_to_linalg.hpp"
-#include "pipelines/plier_to_std.hpp"
-#include "py_linalg_resolver.hpp"
+/*
+#include "lib/pipelines/base_pipeline.hpp"
+#include "lib/pipelines/loop_utils.hpp"
+#include "lib/pipelines/lower_to_llvm.hpp"
+#include "lib/pipelines/plier_to_linalg.hpp"
+#include "lib/pipelines/plier_to_std.hpp"
+#include "lib/py_linalg_resolver.hpp"
+*/
 
 #include "mlir-extensions/compiler/pipeline_registry.hpp"
 #include "mlir-extensions/dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
@@ -66,7 +67,6 @@
 #include "mlir-extensions/transforms/func_utils.hpp"
 #include "mlir-extensions/transforms/pipeline_utils.hpp"
 #include "mlir-extensions/transforms/rewrite_wrapper.hpp"
-
 
 static const char *kGpuAllocShared = "gpu.alloc_shared";
 
@@ -156,9 +156,10 @@ struct GPUExDeallocPass
   void runOnFunction() override {
     mlir::OwningRewritePatternList patterns(&getContext());
 
-    patterns.insert<
-        CreateDeallocOp<gpu_runtime::LoadGpuModuleOp, gpu_runtime::DestroyGpuModuleOp>,
-        CreateDeallocOp<gpu_runtime::GetGpuKernelOp, gpu_runtime::DestroyGpuKernelOp>>(
+    patterns.insert<CreateDeallocOp<gpu_runtime::LoadGpuModuleOp,
+                                    gpu_runtime::DestroyGpuModuleOp>,
+                    CreateDeallocOp<gpu_runtime::GetGpuKernelOp,
+                                    gpu_runtime::DestroyGpuKernelOp>>(
         &getContext());
 
     (void)mlir::applyPatternsAndFoldGreedily(getFunction(),
@@ -363,7 +364,8 @@ class ConvertGpuStreamCreatePattern
     : public ConvertOpToGpuRuntimeCallPattern<gpu_runtime::CreateGpuStreamOp> {
 public:
   ConvertGpuStreamCreatePattern(mlir::LLVMTypeConverter &converter)
-      : ConvertOpToGpuRuntimeCallPattern<gpu_runtime::CreateGpuStreamOp>(converter) {}
+      : ConvertOpToGpuRuntimeCallPattern<gpu_runtime::CreateGpuStreamOp>(
+            converter) {}
 
 private:
   mlir::LogicalResult
@@ -396,8 +398,8 @@ class ConvertGpuStreamDestroyPattern
     : public ConvertOpToGpuRuntimeCallPattern<gpu_runtime::DestroyGpuStreamOp> {
 public:
   ConvertGpuStreamDestroyPattern(mlir::LLVMTypeConverter &converter)
-      : ConvertOpToGpuRuntimeCallPattern<gpu_runtime::DestroyGpuStreamOp>(converter) {
-  }
+      : ConvertOpToGpuRuntimeCallPattern<gpu_runtime::DestroyGpuStreamOp>(
+            converter) {}
 
 private:
   mlir::LogicalResult
@@ -429,7 +431,8 @@ class ConvertGpuModuleLoadPattern
     : public ConvertOpToGpuRuntimeCallPattern<gpu_runtime::LoadGpuModuleOp> {
 public:
   ConvertGpuModuleLoadPattern(mlir::LLVMTypeConverter &converter)
-      : ConvertOpToGpuRuntimeCallPattern<gpu_runtime::LoadGpuModuleOp>(converter) {}
+      : ConvertOpToGpuRuntimeCallPattern<gpu_runtime::LoadGpuModuleOp>(
+            converter) {}
 
 private:
   mlir::LogicalResult
@@ -470,8 +473,8 @@ class ConvertGpuModuleDestroyPattern
     : public ConvertOpToGpuRuntimeCallPattern<gpu_runtime::DestroyGpuModuleOp> {
 public:
   ConvertGpuModuleDestroyPattern(mlir::LLVMTypeConverter &converter)
-      : ConvertOpToGpuRuntimeCallPattern<gpu_runtime::DestroyGpuModuleOp>(converter) {
-  }
+      : ConvertOpToGpuRuntimeCallPattern<gpu_runtime::DestroyGpuModuleOp>(
+            converter) {}
 
 private:
   mlir::LogicalResult
@@ -489,7 +492,8 @@ class ConvertGpuKernelGetPattern
     : public ConvertOpToGpuRuntimeCallPattern<gpu_runtime::GetGpuKernelOp> {
 public:
   ConvertGpuKernelGetPattern(mlir::LLVMTypeConverter &converter)
-      : ConvertOpToGpuRuntimeCallPattern<gpu_runtime::GetGpuKernelOp>(converter) {}
+      : ConvertOpToGpuRuntimeCallPattern<gpu_runtime::GetGpuKernelOp>(
+            converter) {}
 
 private:
   mlir::LogicalResult
@@ -518,8 +522,8 @@ class ConvertGpuKernelDestroyPattern
     : public ConvertOpToGpuRuntimeCallPattern<gpu_runtime::DestroyGpuKernelOp> {
 public:
   ConvertGpuKernelDestroyPattern(mlir::LLVMTypeConverter &converter)
-      : ConvertOpToGpuRuntimeCallPattern<gpu_runtime::DestroyGpuKernelOp>(converter) {
-  }
+      : ConvertOpToGpuRuntimeCallPattern<gpu_runtime::DestroyGpuKernelOp>(
+            converter) {}
 
 private:
   mlir::LogicalResult
@@ -537,7 +541,8 @@ class ConvertGpuKernelLaunchPattern
     : public ConvertOpToGpuRuntimeCallPattern<gpu_runtime::LaunchGpuKernelOp> {
 public:
   ConvertGpuKernelLaunchPattern(mlir::LLVMTypeConverter &converter)
-      : ConvertOpToGpuRuntimeCallPattern<gpu_runtime::LaunchGpuKernelOp>(converter) {}
+      : ConvertOpToGpuRuntimeCallPattern<gpu_runtime::LaunchGpuKernelOp>(
+            converter) {}
 
 private:
   mlir::LogicalResult
@@ -671,7 +676,8 @@ public:
 
 private:
   mlir::LogicalResult
-  matchAndRewrite(gpu_runtime::GPUAllocOp op, gpu_runtime::GPUAllocOp::Adaptor adaptor,
+  matchAndRewrite(gpu_runtime::GPUAllocOp op,
+                  gpu_runtime::GPUAllocOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     if (!op.symbolOperands().empty())
       return mlir::failure();
@@ -767,7 +773,8 @@ private:
 };
 
 class ConvertGpuSuggestBlockSizePattern
-    : public ConvertOpToGpuRuntimeCallPattern<gpu_runtime::GPUSuggestBlockSizeOp> {
+    : public ConvertOpToGpuRuntimeCallPattern<
+          gpu_runtime::GPUSuggestBlockSizeOp> {
 public:
   ConvertGpuSuggestBlockSizePattern(mlir::LLVMTypeConverter &converter)
       : ConvertOpToGpuRuntimeCallPattern<gpu_runtime::GPUSuggestBlockSizeOp>(
@@ -872,9 +879,10 @@ struct GPUToLLVMPass
 
     auto llvmPointerType = mlir::LLVM::LLVMPointerType::get(
         mlir::IntegerType::get(&getContext(), 8));
-    converter.addConversion([llvmPointerType](gpu_runtime::OpaqueType) -> mlir::Type {
-      return llvmPointerType;
-    });
+    converter.addConversion(
+        [llvmPointerType](gpu_runtime::OpaqueType) -> mlir::Type {
+          return llvmPointerType;
+        });
 
     target.addIllegalDialect<mlir::gpu::GPUDialect>();
     target.addIllegalOp<
@@ -1043,8 +1051,8 @@ struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::CallOp> {
       return mlir::failure();
 
     llvm::SmallVector<mlir::Value, 6> indexArgs;
-    auto attrId = mlir::Identifier::get(gpu_runtime::attributes::getGpuRangeName(),
-                                        op.getContext());
+    auto attrId = mlir::Identifier::get(
+        gpu_runtime::attributes::getGpuRangeName(), op.getContext());
     mlir::Operation *parent = op;
     while (true) {
       parent = parent->getParentOfType<mlir::scf::ForOp>();
@@ -1073,7 +1081,8 @@ struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::CallOp> {
 
 struct LowerGpuBuiltinsPass
     : public gpu_runtime::RewriteWrapperPass<LowerGpuBuiltinsPass, void, void,
-                                       LowerPlierCalls, LowerBuiltinCalls> {};
+                                             LowerPlierCalls,
+                                             LowerBuiltinCalls> {};
 
 static void commonOptPasses(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createCanonicalizerPass());

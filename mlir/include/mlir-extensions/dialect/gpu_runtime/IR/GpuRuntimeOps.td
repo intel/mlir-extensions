@@ -15,9 +15,25 @@
 #ifndef GPURUNTIME_OPS
 #define GPURUNTIME_OPS
 
-include "mlir/Dialect/gpu_runtime/IR/gpu_runtime_base.td"
+include "mlir/IR/OpBase.td"
 include "mlir/Dialect/GPU/GPUBase.td"
+include "mlir/Interfaces/ControlFlowInterfaces.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
+include "mlir/Interfaces/LoopLikeInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/Interfaces/ViewLikeInterface.td"
+
+def GpuRuntime_Dialect : Dialect {
+  let name = "gpu_runtime";
+  let description = [{
+      GpuRuntime Dialect for representing Gpu runtime ops for level zero runtime
+    }];
+  let cppNamespace = "gpu_runtime";
+  let hasConstantMaterializer = 1;
+}
+
+class GpuRuntime_Op<string mnemonic, list<OpTrait> traits = []> :
+      Op<GpuRuntime_Dialect, mnemonic, traits>;
 
 def GpuRuntime_OpaqueType
     : DialectType<GpuRuntime_Dialect, CPred<"$_self.isa<::gpu_runtime::OpaqueType>()">,

@@ -44,19 +44,19 @@ CMAKE_INSTALL_PREFIX = os.path.join(cwd, "numba_dpcomp")
 
 cmake_build_dir = os.path.join(root_dir, "cmake_build")
 cmake_cmd = [
-"cmake",
-root_dir,
+    "cmake",
+    root_dir,
 ]
 
 cmake_cmd += ["-GNinja"]
 
 cmake_cmd += [
-"..",
-'-DCMAKE_BUILD_TYPE=Release',
-"-DLLVM_DIR=" + LLVM_DIR,
-"-DMLIR_DIR=" + MLIR_DIR,
-"-DTBB_DIR=" + TBB_DIR,
-"-DCMAKE_INSTALL_PREFIX=" + CMAKE_INSTALL_PREFIX,
+    "..",
+    '-DCMAKE_BUILD_TYPE=Release',
+    "-DLLVM_DIR=" + LLVM_DIR,
+    "-DMLIR_DIR=" + MLIR_DIR,
+    "-DTBB_DIR=" + TBB_DIR,
+    "-DCMAKE_INSTALL_PREFIX=" + CMAKE_INSTALL_PREFIX,
 ]
 
 # DPNP
@@ -65,10 +65,10 @@ try:
     DPNP_LIBRARY_DIR = os.path.join(dpnp_get_include(), '..', '..')
     DPNP_INCLUDE_DIR = dpnp_get_include()
     cmake_cmd += [
-                  '-DDPNP_LIBRARY_DIR=' + DPNP_LIBRARY_DIR,
-                  '-DDPNP_INCLUDE_DIR=' + DPNP_INCLUDE_DIR,
-                  '-DDPNP_ENABLE=ON',
-                 ]
+        '-DDPNP_LIBRARY_DIR=' + DPNP_LIBRARY_DIR,
+        '-DDPNP_INCLUDE_DIR=' + DPNP_INCLUDE_DIR,
+        '-DDPNP_ENABLE=ON',
+    ]
     print("Found DPNP at", DPNP_LIBRARY_DIR)
 except ImportError:
     print("DPNP not found")
@@ -81,18 +81,21 @@ if LEVEL_ZERO_DIR is None:
 else:
     print('LEVEL_ZERO_DIR is', LEVEL_ZERO_DIR)
     cmake_cmd += [
-                  '-DLEVEL_ZERO_DIR=' + LEVEL_ZERO_DIR,
-                  '-DGPU_ENABLE=ON',
-                 ]
+        '-DLEVEL_ZERO_DIR=' + LEVEL_ZERO_DIR,
+        '-DGPU_ENABLE=ON',
+    ]
 
 try:
     os.mkdir(cmake_build_dir)
 except FileExistsError:
     pass
 
-subprocess.check_call(cmake_cmd, stderr=subprocess.STDOUT, shell=False, cwd=cmake_build_dir)
-subprocess.check_call(["cmake", "--build", ".", "--config", "Release"], cwd=cmake_build_dir)
-subprocess.check_call(["cmake", "--install", ".", "--config", "Release"], cwd=cmake_build_dir)
+subprocess.check_call(cmake_cmd, stderr=subprocess.STDOUT,
+                      shell=False, cwd=cmake_build_dir)
+subprocess.check_call(
+    ["cmake", "--build", ".", "--config", "Release"], cwd=cmake_build_dir)
+subprocess.check_call(
+    ["cmake", "--install", ".", "--config", "Release"], cwd=cmake_build_dir)
 
 # =============================================================================
 
