@@ -1270,16 +1270,17 @@ struct GPULowerDefaultLocalSize
                                              call.getResult(i).getType());
           call.getResult(i).replaceAllUsesWith(castedRes);
         }
-
-        assert(call.use_empty());
-        call->erase();
       }
     });
 
     func.walk([&](mlir::CallOp op) {
       if (op.getCallee() == funcName) {
-        op.emitError() << funcName << " call wasn't removed";
-        signalPassFailure();
+        if (!op->use_empty()) {
+          op.emitError() << funcName << " call wasn't removed";
+          signalPassFailure();
+          return;
+        }
+        op->erase();
       }
     });
   }
