@@ -56,8 +56,8 @@ def _gen_vectorize(func):
         setattr(mod, func_name, vec_func_inner)
         infer_global(vec_func_inner)(_VecFuncTyper)
 
-        from ..decorators import njit
-        jit_func = njit(func, inline='always')
+        from ..decorators import mlir_njit
+        jit_func = mlir_njit(func, inline='always')
 
         @register_func(func_name, vec_func_inner)
         def impl(builder, arg):
@@ -66,6 +66,6 @@ def _gen_vectorize(func):
         def vec_func(arg):
             return vec_func_inner(arg)
 
-        return njit(vec_func, inline='always')
+        return mlir_njit(vec_func, inline='always')
     else:
         assert(False)
