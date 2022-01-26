@@ -23,7 +23,7 @@ from .linalg_builder import is_int, dtype_str, FuncRegistry
 from .numpy.funcs import register_func
 from .func_registry import add_func
 
-from ..decorators import njit
+from ..decorators import mlir_njit
 
 registry = FuncRegistry()
 
@@ -97,7 +97,7 @@ class _GetDefaultLocalSizeId(ConcreteTemplate):
         signature(types.UniTuple(types.int64, 3), types.int64, types.int64, types.int64),
     ]
 
-@njit(enable_gpu_pipeline=True)
+@mlir_njit(enable_gpu_pipeline=True)
 def _kernel_body(global_size, local_size, body, *args):
     x, y, z = global_size
     lx, ly, lz = local_size
@@ -118,7 +118,7 @@ def _kernel_body(global_size, local_size, body, *args):
                             if (in_bounds):
                                 body(*args)
 
-@njit(enable_gpu_pipeline=True)
+@mlir_njit(enable_gpu_pipeline=True)
 def _kernel_body_def_size(global_size, body, *args):
     x, y, z = global_size
     lx, ly, lz = _get_default_local_size(x, y, z)
@@ -182,7 +182,7 @@ class Kernel:
     def __call__(self, *args, **kwargs):
         self.check_call_args(args, kwargs)
 
-        jit_func = njit(inline='always',enable_gpu_pipeline=True)(self.py_func)
+        jit_func = mlir_njit(inline='always',enable_gpu_pipeline=True)(self.py_func)
         local_size = self.local_size
         if (len(local_size) != 0):
             _kernel_body(_extend_dims(self.global_size), _extend_dims(self.local_size), jit_func, *args)
@@ -195,7 +195,7 @@ def kernel(func):
 
 DEFAULT_LOCAL_SIZE = ()
 
-kernel_func = njit(inline='always')
+kernel_func = mlir_njit(inline='always')
 
 def _define_api_funcs():
     kernel_api_funcs = [
