@@ -40,6 +40,10 @@ def get_print_buffer():
 
     return _print_buffer
 
+def is_print_buffer_empty():
+    global _print_buffer
+    return len(_print_buffer) == 0
+
 @contextmanager
 def print_pass_ir(print_before, print_after):
     global _print_before
