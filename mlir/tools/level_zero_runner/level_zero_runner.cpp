@@ -45,7 +45,8 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
   applyPassManagerCLOptions(passManager);
 
   // TODO(nbpatel) : Add your lowering passes here
-
+  // passManager.addPass(std::make_unique<EnumerateEventsPass>());
+  // passManager.addPass(std::make_unique<GPUToLLVMPass>());
   return passManager.run(module);
 }
 

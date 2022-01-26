@@ -14,51 +14,6 @@
 
 #include "mlir-extensions/Conversion/gpu_to_gpu_runtime.hpp"
 
-#include <llvm/Support/FormatVariadic.h>
-#include <mlir/Analysis/BufferViewFlowAnalysis.h>
-#include <mlir/Conversion/AffineToStandard/AffineToStandard.h>
-#include <mlir/Conversion/ArithmeticToSPIRV/ArithmeticToSPIRV.h>
-#include <mlir/Conversion/AsyncToLLVM/AsyncToLLVM.h>
-#include <mlir/Conversion/GPUCommon/GPUCommonPass.h>
-#include <mlir/Conversion/GPUToSPIRV/GPUToSPIRV.h>
-#include <mlir/Conversion/GPUToSPIRV/GPUToSPIRVPass.h>
-#include <mlir/Conversion/LLVMCommon/ConversionTarget.h>
-#include <mlir/Conversion/LLVMCommon/Pattern.h>
-#include <mlir/Conversion/LLVMCommon/TypeConverter.h>
-#include <mlir/Conversion/MathToSPIRV/MathToSPIRV.h>
-#include <mlir/Conversion/SCFToGPU/SCFToGPUPass.h>
-#include <mlir/Conversion/SCFToSPIRV/SCFToSPIRV.h>
-#include <mlir/Conversion/StandardToSPIRV/StandardToSPIRV.h>
-#include <mlir/Dialect/Affine/IR/AffineOps.h>
-#include <mlir/Dialect/Arithmetic/Transforms/Passes.h>
-#include <mlir/Dialect/GPU/ParallelLoopMapper.h>
-#include <mlir/Dialect/GPU/Passes.h>
-#include <mlir/Dialect/LLVMIR/LLVMDialect.h>
-#include <mlir/Dialect/Math/IR/Math.h>
-#include <mlir/Dialect/MemRef/IR/MemRef.h>
-#include <mlir/Dialect/SCF/SCF.h>
-#include <mlir/Dialect/SPIRV/IR/SPIRVDialect.h>
-#include <mlir/Dialect/SPIRV/IR/SPIRVOps.h>
-#include <mlir/Dialect/SPIRV/IR/TargetAndABI.h>
-#include <mlir/Dialect/SPIRV/Transforms/Passes.h>
-#include <mlir/Dialect/SPIRV/Transforms/SPIRVConversion.h>
-#include <mlir/IR/BlockAndValueMapping.h>
-#include <mlir/IR/Dominance.h>
-#include <mlir/Pass/PassManager.h>
-#include <mlir/Target/SPIRV/Serialization.h>
-#include <mlir/Transforms/DialectConversion.h>
-#include <mlir/Transforms/GreedyPatternRewriteDriver.h>
-#include <mlir/Transforms/Passes.h>
-
-#include "mlir-extensions/compiler/pipeline_registry.hpp"
-#include "mlir-extensions/dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
-#include "mlir-extensions/transforms/call_lowering.hpp"
-#include "mlir-extensions/transforms/cast_utils.hpp"
-#include "mlir-extensions/transforms/const_utils.hpp"
-#include "mlir-extensions/transforms/func_utils.hpp"
-#include "mlir-extensions/transforms/pipeline_utils.hpp"
-#include "mlir-extensions/transforms/rewrite_wrapper.hpp"
-
 static const char *kGpuAllocShared = "gpu.alloc_shared";
 
 class ConvertFunc : public mlir::OpConversionPattern<mlir::FuncOp> {
@@ -213,7 +168,6 @@ static void commonOptPasses(mlir::OpPassManager &pm) {
 }
 
 static void populateLowerToGPURuntimePipelineLow(mlir::OpPassManager &pm) {
-  auto &funcPM = pm.nest<mlir::FuncOp>();
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<GPUExPass>());
   commonOptPasses(pm);
 }

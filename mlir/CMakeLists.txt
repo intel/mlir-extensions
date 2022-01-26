@@ -40,11 +40,12 @@ endif()
 add_subdirectory(include/mlir-extensions/dialect/plier)
 add_subdirectory(include/mlir-extensions/dialect/plier_util)
 add_subdirectory(include/mlir-extensions/dialect/gpu_runtime/IR)
+add_subdirectory(tools)
 
 set(SOURCES_LIST
     lib/Conversion/SCFToAffine/SCFToAffine.cpp
     lib/Conversion/gpu_to_gpu_runtime.cpp
-    #lib/Conversion/gpu_runtime_to_llvm.cpp
+    lib/Conversion/gpu_runtime_to_llvm.cpp
     lib/analysis/memory_ssa.cpp
     lib/analysis/memory_ssa_analysis.cpp
     lib/compiler/compiler.cpp
@@ -77,7 +78,7 @@ set(SOURCES_LIST
 set(HEADERS_LIST
     include/mlir-extensions/Conversion/SCFToAffine/SCFToAffine.h
     include/mlir-extensions/Conversion/gpu_to_gpu_runtime.hpp
-    #include/mlir-extensions/Conversion/gpu_runtime_to_llvm.hpp
+    include/mlir-extensions/Conversion/gpu_runtime_to_llvm.hpp
     include/mlir-extensions/analysis/memory_ssa.hpp
     include/mlir-extensions/analysis/memory_ssa_analysis.hpp
     include/mlir-extensions/compiler/compiler.hpp

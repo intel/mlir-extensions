@@ -12,61 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "mlir-extensions/Conversion/gpu_to_gpu_runtime.hpp"
-
-#include <llvm/Support/FormatVariadic.h>
-#include <mlir/Analysis/BufferViewFlowAnalysis.h>
-#include <mlir/Conversion/AffineToStandard/AffineToStandard.h>
-#include <mlir/Conversion/ArithmeticToSPIRV/ArithmeticToSPIRV.h>
-#include <mlir/Conversion/AsyncToLLVM/AsyncToLLVM.h>
-#include <mlir/Conversion/GPUCommon/GPUCommonPass.h>
-#include <mlir/Conversion/GPUToSPIRV/GPUToSPIRV.h>
-#include <mlir/Conversion/GPUToSPIRV/GPUToSPIRVPass.h>
-#include <mlir/Conversion/LLVMCommon/ConversionTarget.h>
-#include <mlir/Conversion/LLVMCommon/Pattern.h>
-#include <mlir/Conversion/LLVMCommon/TypeConverter.h>
-#include <mlir/Conversion/MathToSPIRV/MathToSPIRV.h>
-#include <mlir/Conversion/SCFToGPU/SCFToGPUPass.h>
-#include <mlir/Conversion/SCFToSPIRV/SCFToSPIRV.h>
-#include <mlir/Conversion/StandardToSPIRV/StandardToSPIRV.h>
-#include <mlir/Dialect/Affine/IR/AffineOps.h>
-#include <mlir/Dialect/Arithmetic/Transforms/Passes.h>
-#include <mlir/Dialect/GPU/ParallelLoopMapper.h>
-#include <mlir/Dialect/GPU/Passes.h>
-#include <mlir/Dialect/LLVMIR/LLVMDialect.h>
-#include <mlir/Dialect/Math/IR/Math.h>
-#include <mlir/Dialect/MemRef/IR/MemRef.h>
-#include <mlir/Dialect/SCF/SCF.h>
-#include <mlir/Dialect/SPIRV/IR/SPIRVDialect.h>
-#include <mlir/Dialect/SPIRV/IR/SPIRVOps.h>
-#include <mlir/Dialect/SPIRV/IR/TargetAndABI.h>
-#include <mlir/Dialect/SPIRV/Transforms/Passes.h>
-#include <mlir/Dialect/SPIRV/Transforms/SPIRVConversion.h>
-#include <mlir/IR/BlockAndValueMapping.h>
-#include <mlir/IR/Dominance.h>
-#include <mlir/Pass/PassManager.h>
-#include <mlir/Target/SPIRV/Serialization.h>
-#include <mlir/Transforms/DialectConversion.h>
-#include <mlir/Transforms/GreedyPatternRewriteDriver.h>
-#include <mlir/Transforms/Passes.h>
-
-/*
-#include "lib/pipelines/base_pipeline.hpp"
-#include "lib/pipelines/loop_utils.hpp"
-#include "lib/pipelines/lower_to_llvm.hpp"
-#include "lib/pipelines/plier_to_linalg.hpp"
-#include "lib/pipelines/plier_to_std.hpp"
-#include "lib/py_linalg_resolver.hpp"
-*/
-
-#include "mlir-extensions/compiler/pipeline_registry.hpp"
-#include "mlir-extensions/dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
-#include "mlir-extensions/transforms/call_lowering.hpp"
-#include "mlir-extensions/transforms/cast_utils.hpp"
-#include "mlir-extensions/transforms/const_utils.hpp"
-#include "mlir-extensions/transforms/func_utils.hpp"
-#include "mlir-extensions/transforms/pipeline_utils.hpp"
-#include "mlir-extensions/transforms/rewrite_wrapper.hpp"
+#include "mlir-extensions/Conversion/gpu_runtime_to_llvm.hpp"
 
 static const char *kGpuAllocShared = "gpu.alloc_shared";
 
@@ -77,30 +23,6 @@ static void setInsertionPointToStart(mlir::OpBuilder &builder,
   } else {
     builder.setInsertionPointToStart(val.getParentBlock());
   }
-}
-
-static llvm::Optional<mlir::Value> getGpuStream(mlir::OpBuilder &builder,
-                                                mlir::Operation *op) {
-  assert(op);
-  auto func = op->getParentOfType<mlir::FuncOp>();
-  if (!func)
-    return {};
-
-  if (!llvm::hasSingleElement(func.getBody()))
-    return {};
-
-  auto &block = func.getBody().front();
-  auto ops = block.getOps<gpu_runtime::CreateGpuStreamOp>();
-  if (!ops.empty())
-    return (*ops.begin()).getResult();
-
-  mlir::OpBuilder::InsertionGuard g(builder);
-  builder.setInsertionPointToStart(&block);
-  auto loc = builder.getUnknownLoc();
-  auto stream = builder.create<gpu_runtime::CreateGpuStreamOp>(loc).getResult();
-  builder.setInsertionPoint(block.getTerminator());
-  builder.create<gpu_runtime::DestroyGpuStreamOp>(loc, stream);
-  return stream;
 }
 
 static mlir::LogicalResult processAllocUser(mlir::Operation *user,
@@ -332,7 +254,7 @@ protected:
         loc, depsArray, nullPtr, rewriter.getI64ArrayAttr(depsArraySize));
 
     auto depsArrayPtrType = mlir::LLVM::LLVMPointerType::get(depsArrayType);
-    gpu_runtime::AllocaInsertionPoint allocaHelper(op);
+    plier::AllocaInsertionPoint allocaHelper(op);
     auto depsArrayPtr = allocaHelper.insert(rewriter, [&]() {
       auto size = rewriter.create<mlir::LLVM::ConstantOp>(
           loc, llvmInt64Type, rewriter.getI64IntegerAttr(1));
@@ -553,7 +475,7 @@ private:
     auto depsArrayPtr =
         createDepsArray(rewriter, loc, op, adaptor.asyncDependencies());
 
-    gpu_runtime::AllocaInsertionPoint allocaHelper(op);
+    plier::AllocaInsertionPoint allocaHelper(op);
     auto kernelParams = adaptor.operands();
     auto paramsCount = static_cast<unsigned>(kernelParams.size());
     auto paramsArrayType =
@@ -712,7 +634,7 @@ private:
 
     auto eventIndexVar = createEventIndexVar(rewriter, loc, op);
 
-    gpu_runtime::AllocaInsertionPoint allocaHelper(op);
+    plier::AllocaInsertionPoint allocaHelper(op);
     auto resultPtr = allocaHelper.insert(rewriter, [&]() {
       auto size = rewriter.create<mlir::LLVM::ConstantOp>(
           loc, llvmInt64Type, rewriter.getI64IntegerAttr(1));
@@ -787,7 +709,7 @@ private:
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto numDims = op.getNumResults();
     auto loc = op.getLoc();
-    gpu_runtime::AllocaInsertionPoint allocaHelper(op);
+    plier::AllocaInsertionPoint allocaHelper(op);
     auto gridArrayPtr = allocaHelper.insert(rewriter, [&]() {
       auto size = rewriter.create<mlir::LLVM::ConstantOp>(
           loc, llvmInt64Type, rewriter.getI64IntegerAttr(numDims));
@@ -925,11 +847,12 @@ struct GPUToLLVMPass
   }
 };
 
+#if 0
 static mlir::LogicalResult lowerGetGlobalSize(mlir::CallOp op,
                                               mlir::ValueRange globalSizes,
-                                              mlir::ValueRange /*localSizes*/,
-                                              mlir::ValueRange /*gridArgs*/,
-                                              mlir::ValueRange /*blockArgs*/,
+                                              mlir::ValueRange // localSizes,
+                                              mlir::ValueRange // gridArgs,
+                                              mlir::ValueRange // blockArgs,
                                               mlir::PatternRewriter &builder,
                                               unsigned index) {
   rerun_std_pipeline(op);
@@ -1079,10 +1002,12 @@ struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::CallOp> {
   }
 };
 
-struct LowerGpuBuiltinsPass
-    : public gpu_runtime::RewriteWrapperPass<LowerGpuBuiltinsPass, void, void,
-                                             LowerPlierCalls,
-                                             LowerBuiltinCalls> {};
+// struct LowerGpuBuiltinsPass
+//   : public gpu_runtime::RewriteWrapperPass<LowerGpuBuiltinsPass, void, void,
+//                                            LowerPlierCalls,
+//                                            LowerBuiltinCalls> {};
+
+#endif
 
 static void commonOptPasses(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createCanonicalizerPass());
@@ -1090,37 +1015,38 @@ static void commonOptPasses(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createCanonicalizerPass());
 }
 
-static void populateLowerToGPUPipelineHigh(mlir::OpPassManager &pm) {
-  pm.addPass(std::make_unique<LowerGpuRangePass>());
-  pm.addPass(std::make_unique<LowerGpuBuiltinsPass>());
-  commonOptPasses(pm);
-  pm.addPass(mlir::createSymbolDCEPass());
+static void populateLowerGPURuntimeToLlvmPipelineHigh(mlir::OpPassManager &pm) {
+  // pm.addPass(std::make_unique<LowerGpuRangePass>());
+  // pm.addPass(std::make_unique<LowerGpuBuiltinsPass>());
+  // commonOptPasses(pm);
+  // pm.addPass(mlir::createSymbolDCEPass());
 }
 
-static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
-  auto &funcPM = pm.nest<mlir::FuncOp>();
-  auto &modulePM = pm.nest<mlir::spirv::ModuleOp>();
+static void populateLowerGPURuntimeToLlvmPipelineLow(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<EnumerateEventsPass>());
   pm.addPass(std::make_unique<GPUToLLVMPass>());
   commonOptPasses(pm);
 }
-} // namespace
 
-void registerLowerToGPUPipeline(gpu_runtime::PipelineRegistry &registry) {
-  registry.register_pipeline([](auto sink) {
-    auto highStage = getHighLoweringStage();
-    sink(lowerToGPUPipelineNameHigh(),
-         {highStage.begin, plierToStdPipelineName(),
-          plierToLinalgGenPipelineName()},
-         {highStage.end}, {plierToStdPipelineName()},
-         &populateLowerToGPUPipelineHigh);
+void registerLowerGPURuntimeToLlvmPipeline(plier::PipelineRegistry &registry) {
+  registry.registerPipeline([](auto sink) {
+    // auto highStage = getHighLoweringStage();
+    // sink(lowerGPURuntimeToLlvmPipelineNameHigh(),
+    //     {highStage.begin, plierToStdPipelineName(),
+    //      plierToLinalgGenPipelineName()},
+    //     {highStage.end}, {plierToStdPipelineName()},
+    //     &populateLowerGPURuntimeToLlvmPipelineHigh);
 
     auto lowStage = getLowerLoweringStage();
-    sink(lowerToGPUPipelineNameLow(), {lowStage.begin},
+    sink(lowerGPURuntimeToLlvmPipelineNameLow(), {lowStage.begin},
          {lowStage.end, lowerToLLVMPipelineName()}, {},
-         &populateLowerToGPUPipelineLow);
+         &populateLowerGPURuntimeToLlvmPipelineLow);
   });
 }
 
-llvm::StringRef lowerToGPUPipelineNameHigh() { return "lower_to_gpu_high"; }
-llvm::StringRef lowerToGPUPipelineNameLow() { return "lower_to_gpu_low"; }
+llvm::StringRef lowerGPURuntimeToLlvmPipelineNameHigh() {
+  return "lower_gpu_runtime_to_llvm_high";
+}
+llvm::StringRef lowerGPURuntimeToLlvmPipelineNameLow() {
+  return "lower_gpu_runtime_to_llvm_low";
+}
