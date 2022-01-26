@@ -16,6 +16,70 @@
 
 static const char *kGpuAllocShared = "gpu.alloc_shared";
 
+static mlir::LogicalResult processAllocUser(mlir::Operation *user,
+                                            mlir::Operation *allocParent,
+                                            mlir::DominanceInfo &dom,
+                                            mlir::Operation *&lastUser) {
+  auto origUser = user;
+  if (user->hasTrait<mlir::OpTrait::IsTerminator>())
+    return mlir::failure();
+
+  auto parent = user->getParentOp();
+  while (parent != allocParent) {
+    user = parent;
+    parent = user->getParentOp();
+    if (parent == nullptr)
+      return mlir::failure();
+  }
+
+  if (dom.properlyDominates(lastUser, user))
+    lastUser = user;
+
+  for (auto resUser : origUser->getUsers())
+    if (mlir::failed(processAllocUser(resUser, allocParent, dom, lastUser)))
+      return mlir::failure();
+
+  return mlir::success();
+}
+
+template <typename AllocOp, typename DeallocOp>
+struct CreateDeallocOp : public mlir::OpRewritePattern<AllocOp> {
+  using mlir::OpRewritePattern<AllocOp>::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(AllocOp op, mlir::PatternRewriter &rewriter) const override {
+    auto allocParent = op->getParentOp();
+    mlir::Operation *lastUser = op;
+    mlir::DominanceInfo dom;
+    for (auto user : op->getUsers())
+      if (mlir::isa<DeallocOp>(user) ||
+          mlir::failed(processAllocUser(user, allocParent, dom, lastUser)))
+        return mlir::failure();
+
+    mlir::OpBuilder::InsertionGuard g(rewriter);
+    rewriter.setInsertionPointAfter(lastUser);
+    rewriter.create<DeallocOp>(lastUser->getLoc(), op);
+    return mlir::success();
+  }
+};
+
+struct GPUExDeallocPass
+    : public mlir::PassWrapper<GPUExDeallocPass, mlir::FunctionPass> {
+
+  void runOnFunction() override {
+    mlir::OwningRewritePatternList patterns(&getContext());
+
+    patterns.insert<CreateDeallocOp<gpu_runtime::LoadGpuModuleOp,
+                                    gpu_runtime::DestroyGpuModuleOp>,
+                    CreateDeallocOp<gpu_runtime::GetGpuKernelOp,
+                                    gpu_runtime::DestroyGpuKernelOp>>(
+        &getContext());
+
+    (void)mlir::applyPatternsAndFoldGreedily(getFunction(),
+                                             std::move(patterns));
+  }
+};
+
 class ConvertFunc : public mlir::OpConversionPattern<mlir::FuncOp> {
 public:
   using mlir::OpConversionPattern<mlir::FuncOp>::OpConversionPattern;
@@ -148,6 +212,47 @@ struct ExpandSuggestBlockSizeOp
   }
 };
 
+struct SerializeSPIRVPass
+    : public mlir::PassWrapper<SerializeSPIRVPass,
+                               mlir::OperationPass<mlir::ModuleOp>> {
+  void runOnOperation() override {
+    auto mod = getOperation();
+
+    namespace gpu = mlir::gpu;
+    namespace spirv = mlir::spirv;
+    llvm::SmallVector<uint32_t, 0> spvBinary;
+    for (auto gpuMod : mod.getOps<gpu::GPUModuleOp>()) {
+      auto name = gpuMod.getName();
+      auto isSameMod = [&](spirv::ModuleOp spvMod) -> bool {
+        auto spvModName = spvMod.getName();
+        return spvModName->consume_front("__spv__") && spvModName == name;
+      };
+      auto spvMods = mod.getOps<spirv::ModuleOp>();
+      auto it = llvm::find_if(spvMods, isSameMod);
+      if (it == spvMods.end()) {
+        gpuMod.emitError() << "Unable to find corresponding SPIR-V module";
+        signalPassFailure();
+        return;
+      }
+      auto spvMod = *it;
+
+      spvBinary.clear();
+      if (mlir::failed(spirv::serialize(spvMod, spvBinary))) {
+        spvMod.emitError() << "Failed to serialize SPIR-V module";
+        signalPassFailure();
+        return;
+      }
+
+      auto spvData =
+          llvm::StringRef(reinterpret_cast<const char *>(spvBinary.data()),
+                          spvBinary.size() * sizeof(uint32_t));
+      auto spvAttr = mlir::StringAttr::get(&getContext(), spvData);
+      gpuMod->setAttr(gpu::getDefaultGpuBinaryAnnotation(), spvAttr);
+      spvMod->erase();
+    }
+  }
+};
+
 struct GPUExPass : public mlir::PassWrapper<GPUExPass, mlir::FunctionPass> {
 
   void runOnFunction() override {
@@ -161,30 +266,15 @@ struct GPUExPass : public mlir::PassWrapper<GPUExPass, mlir::FunctionPass> {
   }
 };
 
-static void commonOptPasses(mlir::OpPassManager &pm) {
-  pm.addPass(mlir::createCanonicalizerPass());
-  pm.addPass(mlir::createCSEPass());
-  pm.addPass(mlir::createCanonicalizerPass());
+// Expose the passes to the outside world
+std::unique_ptr<mlir::Pass> gpu_runtime::runSerializeSPIRVPass() {
+  return std::make_unique<SerializeSPIRVPass>();
 }
 
-static void populateLowerToGPURuntimePipelineLow(mlir::OpPassManager &pm) {
-  pm.addNestedPass<mlir::FuncOp>(std::make_unique<GPUExPass>());
-  commonOptPasses(pm);
+std::unique_ptr<mlir::Pass> gpu_runtime::runGPUExPass() {
+  return std::make_unique<GPUExPass>();
 }
 
-// TODO(nbpatel): Check if lowerToLLVMPipelineName is required for this pass
-// since we are not lowering all the way down to llvm in this pass.
-// TODO(nbpatel) : Check if a new pipeline registry is required for
-// GpuRuntimeDialect
-void registerLowerToGPURuntimePipeline(plier::PipelineRegistry &registry) {
-  registry.registerPipeline([](auto sink) {
-    auto lowStage = getLowerLoweringStage();
-    sink(lowerToGPURuntimePipelineNameLow(), {lowStage.begin},
-         {lowStage.end, lowerToLLVMPipelineName()}, {},
-         &populateLowerToGPURuntimePipelineLow);
-  });
-}
-
-llvm::StringRef lowerToGPURuntimePipelineNameLow() {
-  return "lower_to_gpu_runtime_low";
+std::unique_ptr<mlir::Pass> gpu_runtime::runGPUExDeallocPass() {
+  return std::make_unique<GPUExDeallocPass>();
 }

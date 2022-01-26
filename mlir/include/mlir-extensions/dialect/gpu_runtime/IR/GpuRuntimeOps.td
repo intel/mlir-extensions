@@ -40,17 +40,6 @@ def GpuRuntime_OpaqueType
                   "opaque_type">,
       BuildableType<"$_builder.getType<::gpu_runtime::OpaqueType>()"> {}
 
-def ArgOp : GpuRuntime_Op<"arg", [NoSideEffect]> {
-  let arguments = (ins UI32Attr : $index, StrAttr : $name);
-
-  let results = (outs AnyType);
-  let hasFolder = 1;
-
-  let builders = [OpBuilder<(ins "unsigned"
-                             : $index, "::mlir::StringRef"
-                             : $name)>];
-}
-
 def DelOp : GpuRuntime_Op<"del", []> { let arguments = (ins AnyType : $value); }
 
 def CreateGpuStreamOp : GpuRuntime_Op<"create_gpu_stream", [NoSideEffect]> {

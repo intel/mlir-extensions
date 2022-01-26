@@ -59,18 +59,9 @@
 #include "mlir-extensions/transforms/pipeline_utils.hpp"
 #include "mlir-extensions/transforms/rewrite_wrapper.hpp"
 
-#include "../../numba_dpcomp/numba_dpcomp/mlir_compiler/lib/pipelines/base_pipeline.hpp"
-#include "../../numba_dpcomp/numba_dpcomp/mlir_compiler/lib/pipelines/lower_to_llvm.hpp"
+namespace gpu_runtime {
 
-namespace plier {
-class PipelineRegistry;
-}
+std::unique_ptr<mlir::Pass> runEnumerateEventsPass();
+std::unique_ptr<mlir::Pass> runGPUToLLVMPass();
 
-namespace llvm {
-class StringRef;
-}
-
-void registerLowerGPURuntimeToLlvmPipeline(plier::PipelineRegistry &registry);
-
-llvm::StringRef lowerGPURuntimeToLlvmPipelineNameHigh();
-llvm::StringRef lowerGPURuntimeToLlvmPipelineNameLow();
+} // namespace gpu_runtime

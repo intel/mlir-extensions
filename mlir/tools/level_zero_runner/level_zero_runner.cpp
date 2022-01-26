@@ -38,15 +38,35 @@
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/TargetSelect.h"
 
+#include "mlir-extensions/Conversion/gpu_runtime_to_llvm.hpp"
+#include "mlir-extensions/Conversion/gpu_to_gpu_runtime.hpp"
+
 using namespace mlir;
 
 static LogicalResult runMLIRPasses(ModuleOp module) {
   PassManager passManager(module.getContext());
   applyPassManagerCLOptions(passManager);
 
-  // TODO(nbpatel) : Add your lowering passes here
-  // passManager.addPass(std::make_unique<EnumerateEventsPass>());
-  // passManager.addPass(std::make_unique<GPUToLLVMPass>());
+  OpPassManager &nestedPM = passManager.nest<spirv::ModuleOp>();
+
+  nestedPM.addPass(spirv::createLowerABIAttributesPass());
+  nestedPM.addPass(spirv::createUpdateVersionCapabilityExtensionPass());
+
+  // Gpu -> GpuRuntime
+  passManager.addPass(gpu_runtime::runSerializeSPIRVPass());
+  passManager.addNestedPass<mlir::FuncOp>(gpu_runtime::runGPUExPass());
+  passManager.addPass(createCanonicalizerPass());
+  passManager.addPass(createCSEPass());
+  passManager.addPass(createCanonicalizerPass());
+  passManager.addNestedPass<mlir::FuncOp>(gpu_runtime::runGPUExDeallocPass());
+
+  // GpuRuntime -> LLVM
+  passManager.addPass(gpu_runtime::runEnumerateEventsPass());
+  passManager.addPass(gpu_runtime::runGPUToLLVMPass());
+
+  passManager.addPass(createCanonicalizerPass());
+  passManager.addPass(createCSEPass());
+  passManager.addPass(createCanonicalizerPass());
   return passManager.run(module);
 }
 
