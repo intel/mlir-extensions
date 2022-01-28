@@ -22,6 +22,7 @@ struct InsertGPUAllocs
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::memref::MemRefDialect>();
     registry.insert<mlir::gpu::GPUDialect>();
+    registry.insert<mlir::scf::SCFDialect>();
   }
 
   void runOnFunction() override {
@@ -493,6 +494,11 @@ struct SerializeSPIRVPass
 };
 
 struct GPUExPass : public mlir::PassWrapper<GPUExPass, mlir::FunctionPass> {
+
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<gpu_runtime::GpuRuntimeDialect>();
+  }
 
   void runOnFunction() override {
     mlir::OwningRewritePatternList patterns(&getContext());

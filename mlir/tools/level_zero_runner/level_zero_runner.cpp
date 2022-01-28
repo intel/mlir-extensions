@@ -37,6 +37,8 @@
 #include "mlir/Target/LLVMIR/Export.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/TargetSelect.h"
+#include <mlir/InitAllDialects.h>
+#include <mlir/InitAllPasses.h>
 
 #include "mlir-extensions/Conversion/gpu_runtime_to_llvm.hpp"
 #include "mlir-extensions/Conversion/gpu_to_gpu_runtime.hpp"
@@ -47,30 +49,30 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
   PassManager passManager(module.getContext());
   applyPassManagerCLOptions(passManager);
 
-  OpPassManager &nestedPM = passManager.nest<spirv::ModuleOp>();
   auto &funcPM = passManager.nest<mlir::FuncOp>();
-
   funcPM.addPass(gpu_runtime::runInsertGPUAllocsPass());
 
-  nestedPM.addPass(spirv::createLowerABIAttributesPass());
-  nestedPM.addPass(spirv::createUpdateVersionCapabilityExtensionPass());
-  passManager.addPass(createMemRefToLLVMPass());
+  passManager.addPass(createGpuKernelOutliningPass());
+  passManager.addPass(memref::createFoldSubViewOpsPass());
+  passManager.addPass(createConvertGPUToSPIRVPass());
+  OpPassManager &modulePM = passManager.nest<spirv::ModuleOp>();
+  modulePM.addPass(spirv::createLowerABIAttributesPass());
+  modulePM.addPass(spirv::createUpdateVersionCapabilityExtensionPass());
+  LowerToLLVMOptions llvmOptions(module.getContext(), DataLayout(module));
+  llvmOptions.emitCWrappers = true;
 
   // Gpu -> GpuRuntime
   passManager.addPass(gpu_runtime::runSerializeSPIRVPass());
   passManager.addNestedPass<mlir::FuncOp>(gpu_runtime::runGPUExPass());
-  passManager.addPass(createCanonicalizerPass());
-  passManager.addPass(createCSEPass());
-  passManager.addPass(createCanonicalizerPass());
   passManager.addNestedPass<mlir::FuncOp>(gpu_runtime::runGPUExDeallocPass());
 
   // GpuRuntime -> LLVM
+  passManager.addPass(createMemRefToLLVMPass());
+  passManager.addPass(createLowerToLLVMPass(llvmOptions));
   passManager.addPass(gpu_runtime::runEnumerateEventsPass());
   passManager.addPass(gpu_runtime::runGPUToLLVMPass());
+  passManager.addPass(createReconcileUnrealizedCastsPass());
 
-  passManager.addPass(createCanonicalizerPass());
-  passManager.addPass(createCSEPass());
-  passManager.addPass(createCanonicalizerPass());
   return passManager.run(module);
 }
 
