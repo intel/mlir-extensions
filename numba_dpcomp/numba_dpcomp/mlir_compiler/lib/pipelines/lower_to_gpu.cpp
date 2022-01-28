@@ -1453,6 +1453,117 @@ struct GPUExDeallocPass
   }
 };
 
+template <typename Op, typename ReleaseOp>
+static bool outlineOp(mlir::Operation &op,
+                      llvm::SmallVectorImpl<mlir::Operation *> &deinit) {
+  if (!mlir::isa<Op>(op))
+    return false;
+
+  auto opParent = op.getParentOp();
+  auto origSize = deinit.size();
+  for (auto user : op.getUsers()) {
+    if (!mlir::isa<ReleaseOp>(user) || llvm::is_contained(deinit, user))
+      continue;
+
+    if (user->getParentOp() != opParent) {
+      deinit.resize(origSize);
+      return false;
+    }
+    deinit.emplace_back(user);
+  }
+  return true;
+}
+
+const llvm::StringLiteral kOutlinedInitAttr("plier.outlined_init");
+
+struct OutlineInitPass
+    : public mlir::PassWrapper<OutlineInitPass,
+                               mlir::OperationPass<mlir::ModuleOp>> {
+
+  void runOnOperation() override {
+    auto mod = getOperation();
+
+    using outline_func_t =
+        bool (*)(mlir::Operation &, llvm::SmallVectorImpl<mlir::Operation *> &);
+    const outline_func_t outlineHandlers[] = {
+        &outlineOp<plier::CreateGpuStreamOp, plier::DestroyGpuStreamOp>,
+        &outlineOp<plier::LoadGpuModuleOp, plier::DestroyGpuModuleOp>,
+        &outlineOp<plier::GetGpuKernelOp, plier::DestroyGpuKernelOp>,
+    };
+
+    llvm::SmallVector<mlir::Operation *> initOps;
+    llvm::SmallVector<mlir::Operation *> deinitOps;
+    llvm::SmallVector<mlir::Type> types;
+    llvm::SmallVector<mlir::Value> values;
+    mlir::BlockAndValueMapping mapper;
+    auto tryOutlineOp = [&](mlir::Operation &op) {
+      for (auto arg : op.getOperands()) {
+        auto argOp = arg.getDefiningOp();
+        if (!argOp || !llvm::is_contained(initOps, argOp))
+          return;
+      }
+
+      for (auto handler : outlineHandlers) {
+        if (handler(op, deinitOps)) {
+          initOps.emplace_back(&op);
+          return;
+        }
+      }
+    };
+
+    mlir::OpBuilder builder(&getContext());
+    auto unknownLoc = builder.getUnknownLoc();
+    for (auto func : mod.getOps<mlir::FuncOp>()) {
+      auto &body = func.getBody();
+      if (!llvm::hasSingleElement(body))
+        continue;
+
+      auto funcName = func.getName();
+      initOps.clear();
+      deinitOps.clear();
+      for (auto &op : body.front())
+        tryOutlineOp(op);
+
+      if (!initOps.empty()) {
+        builder.setInsertionPointToStart(&mod.body().front());
+        types.clear();
+        for (auto *op : initOps)
+          for (auto type : op->getResultTypes())
+            types.emplace_back(type);
+
+        auto funcType = builder.getFunctionType(llvm::None, types);
+        auto func = builder.create<mlir::FuncOp>(
+            builder.getUnknownLoc(), (funcName + "outlined_init").str(),
+            funcType);
+        func.setPrivate();
+        func->setAttr(kOutlinedInitAttr, builder.getUnitAttr());
+
+        auto block = builder.createBlock(&func.getBody());
+        builder.setInsertionPointToStart(block);
+        mapper.clear();
+        values.clear();
+        for (auto *op : initOps) {
+          auto *newOp = builder.clone(*op, mapper);
+          for (auto res : newOp->getResults())
+            values.emplace_back(res);
+        }
+        builder.create<mlir::ReturnOp>(unknownLoc, values);
+
+        builder.setInsertionPoint(initOps.front());
+        auto results =
+            builder.create<mlir::CallOp>(unknownLoc, func).getResults();
+        for (auto *op : llvm::reverse(initOps)) {
+          auto numRes = op->getNumResults();
+          assert(results.size() >= numRes);
+          op->replaceAllUsesWith(results.take_back(numRes));
+          results = results.drop_back(numRes);
+          op->erase();
+        }
+      }
+    }
+  }
+};
+
 struct FunctionCallBuilder {
   FunctionCallBuilder(mlir::StringRef functionName, mlir::Type returnType,
                       mlir::ArrayRef<mlir::Type> argumentTypes)
@@ -2527,6 +2638,7 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<GPUExPass>());
   commonOptPasses(pm);
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<GPUExDeallocPass>());
+  pm.addPass(std::make_unique<OutlineInitPass>());
   pm.addPass(std::make_unique<EnumerateEventsPass>());
   pm.addPass(std::make_unique<GPUToLLVMPass>());
   commonOptPasses(pm);
