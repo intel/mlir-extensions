@@ -2309,12 +2309,6 @@ lowerGetLocallId(mlir::CallOp op, mlir::ValueRange /*globalSizes*/,
                  unsigned index) {
   rerun_std_pipeline(op);
   auto loc = op.getLoc();
-  auto indexType = builder.getIndexType();
-  auto indexCast = [&](mlir::Value val) -> mlir::Value {
-    if (val.getType() != indexType)
-      return builder.createOrFold<plier::CastOp>(loc, indexType, val);
-    return val;
-  };
   auto res = blockArgs[index];
   auto resType = op.getResult(0).getType();
   if (res.getType() != resType)
