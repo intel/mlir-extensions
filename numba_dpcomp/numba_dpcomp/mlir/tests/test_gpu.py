@@ -126,6 +126,32 @@ def test_empty_kernel():
         assert is_print_buffer_empty()
 
 @require_gpu
+def test_list_args():
+    def func(a, b, c):
+        i = get_global_id(0)
+        c[i] = a[i] + b[i]
+
+    sim_func = kernel_sim(func)
+    gpu_func = kernel_cached(func)
+
+    a = np.array([1,2,3,4,5,6], np.float32)
+    b = np.array([7,8,9,10,11,12], np.float32)
+
+    sim_res = np.zeros(a.shape, a.dtype)
+
+    dims = [a.shape[0]]
+    sim_func[dims, []](a, b, sim_res)
+
+    gpu_res = np.zeros(a.shape, a.dtype)
+
+    with print_pass_ir([],['ConvertParallelLoopToGpu']):
+        gpu_func[dims, []](a, b, gpu_res)
+        ir = get_print_buffer()
+        assert ir.count('gpu.launch blocks') == 1, ir
+
+    assert_equal(gpu_res, sim_res)
+
+@require_gpu
 def test_slice():
     def func(a, b):
         i = get_global_id(0)

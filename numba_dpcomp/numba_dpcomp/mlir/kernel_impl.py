@@ -162,8 +162,8 @@ class Kernel:
         if local_dim_count != 0 and local_dim_count < global_dim_count:
             local_size = tuple(local_size[i] if i < local_dim_count else 1 for i in range(global_dim_count))
         ret = self.copy()
-        ret.global_size = global_size
-        ret.local_size = local_size
+        ret.global_size = tuple(global_size)
+        ret.local_size = tuple(local_size)
         return ret
 
     def check_call_args(self, args, kwargs):
