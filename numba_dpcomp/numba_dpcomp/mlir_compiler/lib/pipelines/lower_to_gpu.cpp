@@ -1550,8 +1550,9 @@ struct OutlineInitPass
         builder.create<mlir::ReturnOp>(unknownLoc, values);
 
         builder.setInsertionPoint(initOps.front());
-        auto results =
-            builder.create<mlir::CallOp>(unknownLoc, func).getResults();
+        auto call = builder.create<mlir::CallOp>(unknownLoc, func);
+        call->setAttr(kOutlinedInitAttr, builder.getUnitAttr());
+        auto results = call.getResults();
         values.assign(results.begin(), results.end());
         for (auto *op : llvm::reverse(initOps)) {
           auto numRes = op->getNumResults();
@@ -1584,7 +1585,8 @@ struct OutlineInitPass
         builder.create<mlir::ReturnOp>(unknownLoc);
 
         builder.setInsertionPoint(deinitOps.front());
-        builder.create<mlir::CallOp>(unknownLoc, func, values);
+        auto call = builder.create<mlir::CallOp>(unknownLoc, func, values);
+        call->setAttr(kOutlinedDeinitAttr, builder.getUnitAttr());
         for (auto *op : deinitOps)
           op->erase();
       }
