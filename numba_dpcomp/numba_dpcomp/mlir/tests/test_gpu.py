@@ -19,7 +19,7 @@ import numpy as np
 import math
 
 from numba_dpcomp.mlir.settings import _readenv
-from numba_dpcomp.mlir.kernel_impl import kernel, get_global_id, get_global_size, get_local_size, atomic, kernel_func, DEFAULT_LOCAL_SIZE
+from numba_dpcomp.mlir.kernel_impl import kernel, get_global_id, get_local_id, get_global_size, get_local_size, atomic, kernel_func, DEFAULT_LOCAL_SIZE
 from numba_dpcomp.mlir.kernel_sim import kernel as kernel_sim
 from numba_dpcomp.mlir.passes import print_pass_ir, get_print_buffer, is_print_buffer_empty
 
@@ -283,6 +283,52 @@ def test_get_global_id(shape):
 
     assert_equal(gpu_res, sim_res)
 
+@require_gpu
+@pytest.mark.parametrize("shape", _test_shapes)
+@pytest.mark.parametrize("lsize", [(1,1,1), (2,4,8)])
+def test_get_local_id(shape, lsize):
+    def func1(c):
+        i = get_global_id(0)
+        li = get_local_id(0)
+        c[i] = li
+
+    def func2(c):
+        i = get_global_id(0)
+        j = get_global_id(1)
+        li = get_local_id(0)
+        lj = get_local_id(1)
+        c[i, j] = li + lj * 100
+
+    def func3(c):
+        i = get_global_id(0)
+        j = get_global_id(1)
+        k = get_global_id(2)
+        li = get_local_id(0)
+        lj = get_local_id(1)
+        lk = get_local_id(2)
+        c[i, j, k] = li + lj * 100 + lk * 10000
+
+    func = [func1, func2, func3][len(shape) - 1]
+
+    sim_func = kernel_sim(func)
+    gpu_func = kernel_cached(func)
+
+    dtype = np.int32
+
+    if (len(lsize) > len(shape)):
+        lsize = tuple(lsize[:len(shape)])
+
+    sim_res = np.zeros(shape, dtype)
+    sim_func[shape, lsize](sim_res)
+
+    gpu_res = np.zeros(shape, dtype)
+
+    with print_pass_ir([],['ConvertParallelLoopToGpu']):
+        gpu_func[shape, lsize](gpu_res)
+        ir = get_print_buffer()
+        assert ir.count('gpu.launch blocks') == 1, ir
+
+    assert_equal(gpu_res, sim_res)
 
 @require_gpu
 @pytest.mark.parametrize("shape", _test_shapes)
@@ -360,7 +406,7 @@ def test_get_local_size(shape, lsize):
     dtype = np.int32
 
     if (len(lsize) > len(shape)):
-        lsize =tuple(lsize[:len(shape)])
+        lsize = tuple(lsize[:len(shape)])
 
     sim_res = np.zeros(shape, dtype)
     sim_func[shape, lsize](sim_res)
