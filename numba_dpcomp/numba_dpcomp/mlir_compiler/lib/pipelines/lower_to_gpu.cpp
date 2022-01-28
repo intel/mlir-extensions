@@ -1465,7 +1465,7 @@ static bool outlineOp(mlir::Operation &op,
     if (!mlir::isa<ReleaseOp>(user) || llvm::is_contained(deinit, user))
       continue;
 
-    if (user->getParentOp() != opParent) {
+    if (user->getParentOp() != opParent || user->getNumResults() != 0) {
       deinit.resize(origSize);
       return false;
     }
@@ -1475,6 +1475,7 @@ static bool outlineOp(mlir::Operation &op,
 }
 
 const llvm::StringLiteral kOutlinedInitAttr("plier.outlined_init");
+const llvm::StringLiteral kOutlinedDeinitAttr("plier.outlined_deinit");
 
 struct OutlineInitPass
     : public mlir::PassWrapper<OutlineInitPass,
@@ -1537,8 +1538,7 @@ struct OutlineInitPass
             funcType);
         func.setPrivate();
         func->setAttr(kOutlinedInitAttr, builder.getUnitAttr());
-
-        auto block = builder.createBlock(&func.getBody());
+        auto block = func.addEntryBlock();
         builder.setInsertionPointToStart(block);
         mapper.clear();
         values.clear();
@@ -1552,13 +1552,41 @@ struct OutlineInitPass
         builder.setInsertionPoint(initOps.front());
         auto results =
             builder.create<mlir::CallOp>(unknownLoc, func).getResults();
+        values.assign(results.begin(), results.end());
         for (auto *op : llvm::reverse(initOps)) {
           auto numRes = op->getNumResults();
           assert(results.size() >= numRes);
-          op->replaceAllUsesWith(results.take_back(numRes));
+          auto newRes = results.take_back(numRes);
+          op->replaceAllUsesWith(newRes);
           results = results.drop_back(numRes);
           op->erase();
         }
+      }
+
+      if (!deinitOps.empty()) {
+        assert(!initOps.empty());
+        builder.setInsertionPointToStart(&mod.body().front());
+        assert(!types.empty());
+        auto funcType = builder.getFunctionType(types, llvm::None);
+        auto func = builder.create<mlir::FuncOp>(
+            builder.getUnknownLoc(), (funcName + "outlined_deinit").str(),
+            funcType);
+        func.setPrivate();
+        func->setAttr(kOutlinedDeinitAttr, builder.getUnitAttr());
+
+        auto block = func.addEntryBlock();
+        builder.setInsertionPointToStart(block);
+        mapper.clear();
+        mapper.map(values, block->getArguments());
+        for (auto *op : llvm::reverse(deinitOps))
+          builder.clone(*op, mapper);
+
+        builder.create<mlir::ReturnOp>(unknownLoc);
+
+        builder.setInsertionPoint(deinitOps.front());
+        builder.create<mlir::CallOp>(unknownLoc, func, values);
+        for (auto *op : deinitOps)
+          op->erase();
       }
     }
   }
