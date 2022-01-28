@@ -22,7 +22,11 @@ from numba.core.runtime import _nrt_python as _nrt
 try:
     runtime_lib = load_lib('dpcomp-gpu-runtime')
     IS_GPU_RUNTIME_AVAILABLE = True
+except:
+    IS_GPU_RUNTIME_AVAILABLE = False
 
+
+if IS_GPU_RUNTIME_AVAILABLE:
     def _register_funcs():
         _funcs = [
             'dpcompGpuStreamCreate',
@@ -36,6 +40,7 @@ try:
             'dpcompGpuWait',
             'dpcompGpuAlloc',
             mlir_func_name('get_global_id'),
+            mlir_func_name('get_local_id'),
             mlir_func_name('get_global_size'),
             mlir_func_name('get_local_size'),
         ]
@@ -59,5 +64,3 @@ try:
 
     _register_funcs()
     del _register_funcs
-except:
-    IS_GPU_RUNTIME_AVAILABLE = False

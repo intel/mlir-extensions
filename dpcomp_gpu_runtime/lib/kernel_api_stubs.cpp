@@ -33,6 +33,11 @@ _mlir_ciface_get_global_id(int64_t) {
 }
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT int64_t
+_mlir_ciface_get_local_id(int64_t) {
+  STUB();
+}
+
+extern "C" DPCOMP_GPU_RUNTIME_EXPORT int64_t
 _mlir_ciface_get_global_size(int64_t) {
   STUB();
 }
