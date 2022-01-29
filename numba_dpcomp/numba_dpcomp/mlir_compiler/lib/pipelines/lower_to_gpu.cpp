@@ -1474,8 +1474,9 @@ static bool outlineOp(mlir::Operation &op,
   return true;
 }
 
-const llvm::StringLiteral kOutlinedInitAttr("plier.outlined_init");
-const llvm::StringLiteral kOutlinedDeinitAttr("plier.outlined_deinit");
+constexpr static llvm::StringLiteral kOutlinedInitAttr("plier.outlined_init");
+constexpr static llvm::StringLiteral
+    kOutlinedDeinitAttr("plier.outlined_deinit");
 
 struct OutlineInitPass
     : public mlir::PassWrapper<OutlineInitPass,
@@ -1590,6 +1591,80 @@ struct OutlineInitPass
         for (auto *op : deinitOps)
           op->erase();
       }
+    }
+  }
+};
+
+struct GenerateOutlineContextPass
+    : public mlir::PassWrapper<GenerateOutlineContextPass, mlir::FunctionPass> {
+
+  void runOnFunction() override {
+    auto func = getFunction();
+    auto &body = func.getBody();
+    if (body.empty())
+      return;
+
+    if (!llvm::hasSingleElement(body)) {
+      func.emitError("Only strucutred control flow is supported");
+      signalPassFailure();
+      return;
+    }
+
+    mlir::OpBuilder builder(&getContext());
+    auto initAttr = builder.getStringAttr(kOutlinedInitAttr);
+    auto deinitAttr = builder.getStringAttr(kOutlinedDeinitAttr);
+
+    mlir::CallOp init;
+    mlir::CallOp deinit;
+    for (auto &op : body.front()) {
+      auto call = mlir::dyn_cast<mlir::CallOp>(op);
+      if (!call)
+        continue;
+
+      if (call->hasAttr(initAttr)) {
+        if (init) {
+          call.emitError("More than one init function");
+          signalPassFailure();
+          return;
+        }
+        init = call;
+      }
+
+      if (call->hasAttr(deinitAttr)) {
+        if (deinit) {
+          call.emitError("More than one deinit function");
+          signalPassFailure();
+          return;
+        }
+        deinit = call;
+      }
+    }
+
+    if (!init)
+      return;
+
+    mlir::SymbolRefAttr initSym = init.getCalleeAttr();
+    mlir::SymbolRefAttr deinitSym = (deinit ? deinit.getCalleeAttr() : nullptr);
+
+    builder.setInsertionPoint(init);
+    auto res =
+        builder
+            .create<plier::TakeContextOp>(init->getLoc(), initSym, deinitSym,
+                                          init->getResultTypes())
+            .getResults();
+    assert(res.size() > 1);
+    auto ctx = res.front();
+    auto resValues = res.drop_front(1);
+    init->replaceAllUsesWith(resValues);
+    init->erase();
+
+    if (deinit) {
+      builder.setInsertionPoint(deinit);
+      builder.create<plier::ReleaseContextOp>(deinit->getLoc(), ctx);
+      deinit->erase();
+    } else {
+      builder.setInsertionPoint(body.front().getTerminator());
+      builder.create<plier::ReleaseContextOp>(builder.getUnknownLoc(), ctx);
     }
   }
 };
@@ -2669,6 +2744,8 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   commonOptPasses(pm);
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<GPUExDeallocPass>());
   pm.addPass(std::make_unique<OutlineInitPass>());
+  pm.addNestedPass<mlir::FuncOp>(
+      std::make_unique<GenerateOutlineContextPass>());
   pm.addPass(std::make_unique<EnumerateEventsPass>());
   pm.addPass(std::make_unique<GPUToLLVMPass>());
   commonOptPasses(pm);
