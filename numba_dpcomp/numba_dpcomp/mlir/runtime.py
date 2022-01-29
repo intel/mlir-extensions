@@ -29,6 +29,9 @@ _finalize_func = runtime_lib.dpcompParallelFinalize
 _funcs = [
     'dpcompParallelFor',
     'memrefCopy',
+    'dpcompTakeContext',
+    'dpcompReleaseContext',
+    'dpcompPurgeContext',
 ]
 
 for name in _funcs:
