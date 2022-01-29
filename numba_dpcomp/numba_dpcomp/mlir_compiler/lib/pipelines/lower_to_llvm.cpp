@@ -1455,6 +1455,17 @@ struct LowerTakeContextOp
                                                      linkage);
     };
 
+    auto lookupFunc = [&](mlir::StringRef name, mlir::Type type) {
+      // TODO: fix and use lookupOrCreateFn
+      if (auto func = mod.lookupSymbol<mlir::LLVM::LLVMFuncOp>(name))
+        return func;
+
+      mlir::OpBuilder::InsertionGuard g(rewriter);
+      rewriter.setInsertionPointToStart(&(mod.body().front()));
+      return rewriter.create<mlir::LLVM::LLVMFuncOp>(
+          unknownLoc, name, type, mlir::LLVM::Linkage::External);
+    };
+
     if (auto initFuncSym = adaptor.initFuncAttr()) {
       auto funcName = initFuncSym.getLeafReference().getValue();
       auto wrapperName = (funcName + "_wrapper").str();
@@ -1546,7 +1557,7 @@ struct LowerTakeContextOp
           wrapperPtrType,
       };
       auto funcType = mlir::LLVM::LLVMFunctionType::get(retType, argTypes);
-      return insertFunc(name, funcType, mlir::LLVM::Linkage::External);
+      return lookupFunc(name, funcType);
     }();
 
     auto ctxHandle = [&]() {
@@ -1606,19 +1617,22 @@ struct LowerReleaseContextOp
     auto unknownLoc = rewriter.getUnknownLoc();
     auto loc = op->getLoc();
 
-    auto insertFunc = [&](mlir::StringRef name, mlir::Type type,
-                          mlir::LLVM::Linkage linkage) {
+    auto lookupFunc = [&](mlir::StringRef name, mlir::Type type) {
+      // TODO: fix and use lookupOrCreateFn
+      if (auto func = mod.lookupSymbol<mlir::LLVM::LLVMFuncOp>(name))
+        return func;
+
       mlir::OpBuilder::InsertionGuard g(rewriter);
       rewriter.setInsertionPointToStart(&(mod.body().front()));
-      return rewriter.create<mlir::LLVM::LLVMFuncOp>(unknownLoc, name, type,
-                                                     linkage);
+      return rewriter.create<mlir::LLVM::LLVMFuncOp>(
+          unknownLoc, name, type, mlir::LLVM::Linkage::External);
     };
 
     auto releaseCtxFunc = [&]() -> mlir::LLVM::LLVMFuncOp {
       llvm::StringRef name("dpcompReleaseContext");
       auto voidPtr = getVoidPtrType();
       auto funcType = mlir::LLVM::LLVMFunctionType::get(voidPtr, voidPtr);
-      return insertFunc(name, funcType, mlir::LLVM::Linkage::External);
+      return lookupFunc(name, funcType);
     }();
 
     rewriter.create<mlir::LLVM::CallOp>(loc, releaseCtxFunc, adaptor.context());
