@@ -151,6 +151,7 @@ class Kernel:
         self.global_size = ()
         self.local_size = ()
         self.py_func = func
+        self.jit_func = mlir_njit(inline='always',enable_gpu_pipeline=True)(func)
 
     def copy(self):
         return copy.copy(self)
@@ -182,12 +183,11 @@ class Kernel:
     def __call__(self, *args, **kwargs):
         self.check_call_args(args, kwargs)
 
-        jit_func = mlir_njit(inline='always',enable_gpu_pipeline=True)(self.py_func)
         local_size = self.local_size
         if (len(local_size) != 0):
-            _kernel_body(_extend_dims(self.global_size), _extend_dims(self.local_size), jit_func, *args)
+            _kernel_body(_extend_dims(self.global_size), _extend_dims(self.local_size), self.jit_func, *args)
         else:
-            _kernel_body_def_size(_extend_dims(self.global_size), jit_func, *args)
+            _kernel_body_def_size(_extend_dims(self.global_size), self.jit_func, *args)
 
 
 def kernel(func):
