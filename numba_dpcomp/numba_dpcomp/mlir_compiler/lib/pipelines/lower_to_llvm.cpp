@@ -1560,13 +1560,42 @@ struct LowerTakeContextOp
       return lookupFunc(name, funcType);
     }();
 
+    auto purgeCtxFunc = [&]() -> mlir::LLVM::LLVMFuncOp {
+      llvm::StringRef name("dpcompPurgeContext");
+      auto retType = getVoidType();
+      auto argType = mlir::LLVM::LLVMPointerType::get(getVoidPtrType());
+      auto funcType = mlir::LLVM::LLVMFunctionType::get(retType, argType);
+      return lookupFunc(name, funcType);
+    }();
+
     auto ctxHandle = [&]() {
       mlir::OpBuilder::InsertionGuard g(rewriter);
       rewriter.setInsertionPointToStart(&(mod.body().front()));
       llvm::StringRef name("context_handle"); // TODO: unique name
-      return rewriter.create<mlir::LLVM::GlobalOp>(
+      auto handle = rewriter.create<mlir::LLVM::GlobalOp>(
           unknownLoc, ctxType, /*isConstant*/ false,
           mlir::LLVM::Linkage::Internal, name, mlir::Attribute());
+
+      llvm::StringRef cleanupFuncName(".dpcomp_context_cleanup");
+      auto cleanupFunc =
+          mod.lookupSymbol<mlir::LLVM::LLVMFuncOp>(cleanupFuncName);
+      if (!cleanupFunc) {
+        auto cleanupFuncType =
+            mlir::LLVM::LLVMFunctionType::get(getVoidType(), llvm::None);
+        cleanupFunc = rewriter.create<mlir::LLVM::LLVMFuncOp>(
+            unknownLoc, cleanupFuncName, cleanupFuncType);
+        auto block = rewriter.createBlock(&cleanupFunc.getBody());
+        rewriter.setInsertionPointToStart(block);
+        rewriter.create<mlir::LLVM::ReturnOp>(unknownLoc, llvm::None);
+      }
+
+      assert(llvm::hasSingleElement(cleanupFunc.getBody()));
+      rewriter.setInsertionPointToStart(&cleanupFunc.getBody().front());
+      mlir::Value addr =
+          rewriter.create<mlir::LLVM::AddressOfOp>(unknownLoc, handle);
+      rewriter.create<mlir::LLVM::CallOp>(unknownLoc, purgeCtxFunc, addr);
+
+      return handle;
     }();
 
     auto ctxHandlePtr =
