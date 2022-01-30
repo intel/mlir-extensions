@@ -15,7 +15,7 @@
 from collections import namedtuple
 from itertools import product
 
-from .kernel_impl import Kernel as OrigKernel
+from .kernel_base import KernelBase
 from .kernel_impl import get_global_id, get_local_id, get_global_size, get_local_size, atomic, atomic_add, atomic_sub
 
 _ExecutionState = namedtuple('_ExecutionState', [
@@ -132,7 +132,7 @@ def _execute_kernel(global_size, local_size, func, *args):
         _destroy_execution_state()
 
 
-class Kernel(OrigKernel):
+class Kernel(KernelBase):
     def __init__(self, func):
         super().__init__(func)
 
