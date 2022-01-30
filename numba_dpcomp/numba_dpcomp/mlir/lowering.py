@@ -45,9 +45,8 @@ class mlir_lower(orig_Lower):
 
     def lower_normal_function(self, fndesc):
         if USE_MLIR:
-            mod_ir = self.metadata['mlir_blob']
+            mod_ir = self.metadata.pop('mlir_blob')
             mod = llvm.parse_bitcode(mod_ir)
-            self.metadata.pop('mlir_blob')
             self.setup_function(fndesc)
             self.library.add_llvm_module(mod);
         else:
