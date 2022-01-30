@@ -1407,6 +1407,37 @@ struct LowerUndef : public mlir::ConvertOpToLLVMPattern<plier::UndefOp> {
   }
 };
 
+static void addToGlobalDtors(mlir::ConversionPatternRewriter &rewriter,
+                             mlir::ModuleOp mod, mlir::SymbolRefAttr attr,
+                             int32_t priority) {
+  auto loc = mod->getLoc();
+  auto dtorOps = mod.getOps<mlir::LLVM::GlobalDtorsOp>();
+  auto prioAttr = rewriter.getI32IntegerAttr(priority);
+  mlir::OpBuilder::InsertionGuard g(rewriter);
+  if (dtorOps.empty()) {
+    rewriter.setInsertionPoint(mod.getBody(), std::prev(mod.getBody()->end()));
+    auto syms = rewriter.getArrayAttr(attr);
+    auto priorities = rewriter.getArrayAttr(prioAttr);
+    rewriter.create<mlir::LLVM::GlobalDtorsOp>(loc, syms, priorities);
+    return;
+  }
+  assert(llvm::hasSingleElement(dtorOps));
+  auto dtorOp = *dtorOps.begin();
+
+  auto addpendArray = [&](mlir::ArrayAttr arr,
+                          mlir::Attribute attr) -> mlir::ArrayAttr {
+    auto vals = arr.getValue();
+    llvm::SmallVector<mlir::Attribute> ret(vals.begin(), vals.end());
+    ret.emplace_back(attr);
+    return rewriter.getArrayAttr(ret);
+  };
+  auto newDtors = addpendArray(dtorOp.getDtors(), attr);
+  auto newPrioritiess = addpendArray(dtorOp.getPriorities(), prioAttr);
+  rewriter.setInsertionPoint(dtorOp);
+  rewriter.create<mlir::LLVM::GlobalDtorsOp>(loc, newDtors, newPrioritiess);
+  rewriter.eraseOp(dtorOp);
+}
+
 struct LowerTakeContextOp
     : public mlir::ConvertOpToLLVMPattern<plier::TakeContextOp> {
   using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
@@ -1587,6 +1618,9 @@ struct LowerTakeContextOp
         auto block = rewriter.createBlock(&cleanupFunc.getBody());
         rewriter.setInsertionPointToStart(block);
         rewriter.create<mlir::LLVM::ReturnOp>(unknownLoc, llvm::None);
+
+        addToGlobalDtors(rewriter, mod, mlir::SymbolRefAttr::get(cleanupFunc),
+                         0);
       }
 
       assert(llvm::hasSingleElement(cleanupFunc.getBody()));
