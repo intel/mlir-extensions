@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <cassert>
+#include <cstddef>
 #include <type_traits>
 
 #include "dpcomp-runtime_export.h"
