@@ -1453,6 +1453,222 @@ struct GPUExDeallocPass
   }
 };
 
+template <typename Op, typename ReleaseOp>
+static bool outlineOp(mlir::Operation &op,
+                      llvm::SmallVectorImpl<mlir::Operation *> &deinit) {
+  if (!mlir::isa<Op>(op))
+    return false;
+
+  auto opParent = op.getParentOp();
+  auto origSize = deinit.size();
+  for (auto user : op.getUsers()) {
+    if (!mlir::isa<ReleaseOp>(user) || llvm::is_contained(deinit, user))
+      continue;
+
+    if (user->getParentOp() != opParent || user->getNumResults() != 0) {
+      deinit.resize(origSize);
+      return false;
+    }
+    deinit.emplace_back(user);
+  }
+  return true;
+}
+
+constexpr static llvm::StringLiteral kOutlinedInitAttr("plier.outlined_init");
+constexpr static llvm::StringLiteral
+    kOutlinedDeinitAttr("plier.outlined_deinit");
+
+struct OutlineInitPass
+    : public mlir::PassWrapper<OutlineInitPass,
+                               mlir::OperationPass<mlir::ModuleOp>> {
+
+  void runOnOperation() override {
+    auto mod = getOperation();
+
+    using outline_func_t =
+        bool (*)(mlir::Operation &, llvm::SmallVectorImpl<mlir::Operation *> &);
+    const outline_func_t outlineHandlers[] = {
+        &outlineOp<plier::CreateGpuStreamOp, plier::DestroyGpuStreamOp>,
+        &outlineOp<plier::LoadGpuModuleOp, plier::DestroyGpuModuleOp>,
+        &outlineOp<plier::GetGpuKernelOp, plier::DestroyGpuKernelOp>,
+    };
+
+    llvm::SmallVector<mlir::Operation *> initOps;
+    llvm::SmallVector<mlir::Operation *> deinitOps;
+    llvm::SmallVector<mlir::Type> types;
+    llvm::SmallVector<mlir::Value> values;
+    mlir::BlockAndValueMapping mapper;
+    auto tryOutlineOp = [&](mlir::Operation &op) {
+      for (auto arg : op.getOperands()) {
+        auto argOp = arg.getDefiningOp();
+        if (!argOp || !llvm::is_contained(initOps, argOp))
+          return;
+      }
+
+      for (auto handler : outlineHandlers) {
+        if (handler(op, deinitOps)) {
+          initOps.emplace_back(&op);
+          return;
+        }
+      }
+    };
+
+    mlir::OpBuilder builder(&getContext());
+    auto unknownLoc = builder.getUnknownLoc();
+    for (auto func : mod.getOps<mlir::FuncOp>()) {
+      auto &body = func.getBody();
+      if (!llvm::hasSingleElement(body))
+        continue;
+
+      auto funcName = func.getName();
+      initOps.clear();
+      deinitOps.clear();
+      for (auto &op : body.front())
+        tryOutlineOp(op);
+
+      if (!initOps.empty()) {
+        builder.setInsertionPointToStart(&mod.body().front());
+        types.clear();
+        for (auto *op : initOps)
+          for (auto type : op->getResultTypes())
+            types.emplace_back(type);
+
+        auto funcType = builder.getFunctionType(llvm::None, types);
+        auto func = builder.create<mlir::FuncOp>(
+            builder.getUnknownLoc(), (funcName + "outlined_init").str(),
+            funcType);
+        func.setPrivate();
+        func->setAttr(kOutlinedInitAttr, builder.getUnitAttr());
+        auto block = func.addEntryBlock();
+        builder.setInsertionPointToStart(block);
+        mapper.clear();
+        values.clear();
+        for (auto *op : initOps) {
+          auto *newOp = builder.clone(*op, mapper);
+          for (auto res : newOp->getResults())
+            values.emplace_back(res);
+        }
+        builder.create<mlir::ReturnOp>(unknownLoc, values);
+
+        builder.setInsertionPoint(initOps.front());
+        auto call = builder.create<mlir::CallOp>(unknownLoc, func);
+        call->setAttr(kOutlinedInitAttr, builder.getUnitAttr());
+        auto results = call.getResults();
+        values.assign(results.begin(), results.end());
+        for (auto *op : llvm::reverse(initOps)) {
+          auto numRes = op->getNumResults();
+          assert(results.size() >= numRes);
+          auto newRes = results.take_back(numRes);
+          op->replaceAllUsesWith(newRes);
+          results = results.drop_back(numRes);
+          op->erase();
+        }
+      }
+
+      if (!deinitOps.empty()) {
+        assert(!initOps.empty());
+        builder.setInsertionPointToStart(&mod.body().front());
+        assert(!types.empty());
+        auto funcType = builder.getFunctionType(types, llvm::None);
+        auto func = builder.create<mlir::FuncOp>(
+            builder.getUnknownLoc(), (funcName + "outlined_deinit").str(),
+            funcType);
+        func.setPrivate();
+        func->setAttr(kOutlinedDeinitAttr, builder.getUnitAttr());
+
+        auto block = func.addEntryBlock();
+        builder.setInsertionPointToStart(block);
+        mapper.clear();
+        mapper.map(values, block->getArguments());
+        for (auto *op : llvm::reverse(deinitOps))
+          builder.clone(*op, mapper);
+
+        builder.create<mlir::ReturnOp>(unknownLoc);
+
+        builder.setInsertionPoint(deinitOps.front());
+        auto call = builder.create<mlir::CallOp>(unknownLoc, func, values);
+        call->setAttr(kOutlinedDeinitAttr, builder.getUnitAttr());
+        for (auto *op : deinitOps)
+          op->erase();
+      }
+    }
+  }
+};
+
+struct GenerateOutlineContextPass
+    : public mlir::PassWrapper<GenerateOutlineContextPass, mlir::FunctionPass> {
+
+  void runOnFunction() override {
+    auto func = getFunction();
+    auto &body = func.getBody();
+    if (body.empty())
+      return;
+
+    if (!llvm::hasSingleElement(body)) {
+      func.emitError("Only strucutred control flow is supported");
+      signalPassFailure();
+      return;
+    }
+
+    mlir::OpBuilder builder(&getContext());
+    auto initAttr = builder.getStringAttr(kOutlinedInitAttr);
+    auto deinitAttr = builder.getStringAttr(kOutlinedDeinitAttr);
+
+    mlir::CallOp init;
+    mlir::CallOp deinit;
+    for (auto &op : body.front()) {
+      auto call = mlir::dyn_cast<mlir::CallOp>(op);
+      if (!call)
+        continue;
+
+      if (call->hasAttr(initAttr)) {
+        if (init) {
+          call.emitError("More than one init function");
+          signalPassFailure();
+          return;
+        }
+        init = call;
+      }
+
+      if (call->hasAttr(deinitAttr)) {
+        if (deinit) {
+          call.emitError("More than one deinit function");
+          signalPassFailure();
+          return;
+        }
+        deinit = call;
+      }
+    }
+
+    if (!init)
+      return;
+
+    mlir::SymbolRefAttr initSym = init.getCalleeAttr();
+    mlir::SymbolRefAttr deinitSym = (deinit ? deinit.getCalleeAttr() : nullptr);
+
+    builder.setInsertionPoint(init);
+    auto res =
+        builder
+            .create<plier::TakeContextOp>(init->getLoc(), initSym, deinitSym,
+                                          init->getResultTypes())
+            .getResults();
+    assert(res.size() > 1);
+    auto ctx = res.front();
+    auto resValues = res.drop_front(1);
+    init->replaceAllUsesWith(resValues);
+    init->erase();
+
+    if (deinit) {
+      builder.setInsertionPoint(deinit);
+      builder.create<plier::ReleaseContextOp>(deinit->getLoc(), ctx);
+      deinit->erase();
+    } else {
+      builder.setInsertionPoint(body.front().getTerminator());
+      builder.create<plier::ReleaseContextOp>(builder.getUnknownLoc(), ctx);
+    }
+  }
+};
+
 struct FunctionCallBuilder {
   FunctionCallBuilder(mlir::StringRef functionName, mlir::Type returnType,
                       mlir::ArrayRef<mlir::Type> argumentTypes)
@@ -2527,6 +2743,9 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<GPUExPass>());
   commonOptPasses(pm);
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<GPUExDeallocPass>());
+  pm.addPass(std::make_unique<OutlineInitPass>());
+  pm.addNestedPass<mlir::FuncOp>(
+      std::make_unique<GenerateOutlineContextPass>());
   pm.addPass(std::make_unique<EnumerateEventsPass>());
   pm.addPass(std::make_unique<GPUToLLVMPass>());
   commonOptPasses(pm);

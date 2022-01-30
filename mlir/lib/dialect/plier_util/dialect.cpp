@@ -1494,6 +1494,16 @@ void ForceCopyOp::build(mlir::OpBuilder &b, mlir::OperationState &result,
   build(b, result, source.getType(), source);
 }
 
+void TakeContextOp::build(mlir::OpBuilder &b, mlir::OperationState &result,
+                          mlir::SymbolRefAttr initFunc,
+                          mlir::SymbolRefAttr releaseFunc,
+                          mlir::TypeRange resultTypes) {
+  llvm::SmallVector<mlir::Type> allTypes;
+  allTypes.emplace_back(plier::OpaqueType::get(b.getContext()));
+  allTypes.append(resultTypes.begin(), resultTypes.end());
+  build(b, result, allTypes, initFunc, releaseFunc);
+}
+
 } // namespace plier
 
 #include "mlir-extensions/dialect/plier_util/PlierUtilOpsDialect.cpp.inc"

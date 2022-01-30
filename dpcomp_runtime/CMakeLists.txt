@@ -20,6 +20,7 @@ find_package(TBB REQUIRED)
 find_package(MLIR REQUIRED CONFIG)
 
 set(SOURCES_LIST
+    lib/context.cpp
     lib/tbb_parallel.cpp
     lib/memory.cpp
     )
