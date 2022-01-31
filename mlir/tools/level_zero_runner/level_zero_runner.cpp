@@ -50,7 +50,7 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
   applyPassManagerCLOptions(passManager);
 
   auto &funcPM = passManager.nest<mlir::FuncOp>();
-  funcPM.addPass(gpu_runtime::runInsertGPUAllocsPass());
+  // funcPM.addPass(gpu_runtime::runInsertGPUAllocsPass());
 
   passManager.addPass(createGpuKernelOutliningPass());
   passManager.addPass(memref::createFoldSubViewOpsPass());
@@ -64,7 +64,6 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
   // Gpu -> GpuRuntime
   passManager.addPass(gpu_runtime::runSerializeSPIRVPass());
   passManager.addNestedPass<mlir::FuncOp>(gpu_runtime::runGPUExPass());
-  passManager.addNestedPass<mlir::FuncOp>(gpu_runtime::runGPUExDeallocPass());
 
   // GpuRuntime -> LLVM
   passManager.addPass(createMemRefToLLVMPass());

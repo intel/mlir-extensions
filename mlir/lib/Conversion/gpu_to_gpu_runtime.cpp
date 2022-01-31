@@ -303,23 +303,6 @@ struct CreateDeallocOp : public mlir::OpRewritePattern<AllocOp> {
   }
 };
 
-struct GPUExDeallocPass
-    : public mlir::PassWrapper<GPUExDeallocPass, mlir::FunctionPass> {
-
-  void runOnFunction() override {
-    mlir::OwningRewritePatternList patterns(&getContext());
-
-    patterns.insert<CreateDeallocOp<gpu_runtime::LoadGpuModuleOp,
-                                    gpu_runtime::DestroyGpuModuleOp>,
-                    CreateDeallocOp<gpu_runtime::GetGpuKernelOp,
-                                    gpu_runtime::DestroyGpuKernelOp>>(
-        &getContext());
-
-    (void)mlir::applyPatternsAndFoldGreedily(getFunction(),
-                                             std::move(patterns));
-  }
-};
-
 class ConvertFunc : public mlir::OpConversionPattern<mlir::FuncOp> {
 public:
   using mlir::OpConversionPattern<mlir::FuncOp>::OpConversionPattern;
@@ -514,10 +497,6 @@ struct GPUExPass : public mlir::PassWrapper<GPUExPass, mlir::FunctionPass> {
 // Expose the passes to the outside world
 std::unique_ptr<mlir::Pass> gpu_runtime::runInsertGPUAllocsPass() {
   return std::make_unique<InsertGPUAllocs>();
-}
-
-std::unique_ptr<mlir::Pass> gpu_runtime::runGPUExDeallocPass() {
-  return std::make_unique<GPUExDeallocPass>();
 }
 
 std::unique_ptr<mlir::Pass> gpu_runtime::runSerializeSPIRVPass() {
