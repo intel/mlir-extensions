@@ -69,6 +69,7 @@ _test_arrays_ids = [
     'lambda a: a.sum()',
     'lambda a: a.min()',
     'lambda a: a.max()',
+    'lambda a: a.mean()',
     'lambda a: np.sum(a)',
     'lambda a: np.amax(a)',
     'lambda a: np.amin(a)',
@@ -907,6 +908,7 @@ def test_concat(arrays, axis):
     'lambda a, b, c, d: a[3:c]',
     'lambda a, b, c, d: a[b:4]',
     'lambda a, b, c, d: a[3:4]',
+    'lambda a, b, c, d: a[1:-2]',
     'lambda a, b, c, d: a[b:c:d]',
     'lambda a, b, c, d: a[b:c:1]',
     'lambda a, b, c, d: a[b:c:2]',
@@ -1120,16 +1122,33 @@ _matmul_inputs_vars = [
     ([[2,3],[4,5]], [2,3]),
     ([[1,2,3],[4,5,6],[7,8,9]],[1,2,3]),
     ([[2,3],[4,5]], [[2,3],[4,5]]),
+    (np.arange(4*5).reshape(4,5), np.arange(5)),
+    (np.arange(40*50).reshape(40,50), np.arange(50)),
 ]
 
 @parametrize_function_variants("py_func", [
     # 'lambda a, b: np.matmul(a, b)',
     'lambda a, b: a @ b',
     ])
-@pytest.mark.parametrize("a,b", _matmul_inputs_vars, ids=list(map(str, _matmul_inputs_vars)))
+@pytest.mark.parametrize("a,b", _matmul_inputs_vars) # ids=list(map(str, _matmul_inputs_vars))
 @pytest.mark.parametrize("dtype", [np.float32,np.float64])
-def test_matmul(py_func, a, b, dtype):
+def test_matmul1(py_func, a, b, dtype):
     a = np.array(a, dtype=dtype)
     b = np.array(b, dtype=dtype)
     jit_func = njit(py_func)
-    assert_equal(py_func(a, b), jit_func(a, b))
+    assert_allclose(py_func(a, b), jit_func(a, b), rtol=1e-4, atol=1e-7)
+
+@parametrize_function_variants("py_func", [
+    'lambda a, b: (a @ b) @ a',
+    ])
+@pytest.mark.parametrize("a,b", [
+    (np.arange(4*5).reshape(4,5), np.arange(5)),
+    (np.arange(20*25).reshape(20,25), np.arange(25)),
+    # (np.arange(4000*5000).reshape(4000,5000), np.arange(5000)), TODO: too long
+    ])
+@pytest.mark.parametrize("dtype", [np.float32,np.float64])
+def test_matmul2(py_func, a, b, dtype):
+    a = np.array(a, dtype=dtype)
+    b = np.array(b, dtype=dtype)
+    jit_func = njit(py_func)
+    assert_allclose(py_func(a, b), jit_func(a, b), rtol=1e-4, atol=1e-7)

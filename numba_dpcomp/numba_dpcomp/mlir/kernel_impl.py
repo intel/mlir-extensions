@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import sys
 
 from numba import prange
@@ -23,27 +22,13 @@ from .linalg_builder import is_int, dtype_str, FuncRegistry
 from .numpy.funcs import register_func
 from .func_registry import add_func
 
-from ..decorators import njit
+from ..decorators import mlir_njit
+from .kernel_base import KernelBase
 
 registry = FuncRegistry()
 
-def _raise_error(desc):
-    raise ValueError(desc)
-
 def _stub_error():
     raise NotImplementedError('This is a stub')
-
-def _process_dims(dims):
-    if isinstance(dims, int):
-        return (dims,)
-    elif isinstance(dims, (list, tuple)):
-        n = len(dims)
-        if n > 3:
-            _raise_error(f'Invalid dimentions count: {n}')
-        return tuple(dims)
-    else:
-        _raise_error(f'Invalid dimentions type: {type(dims)}')
-
 
 class _gpu_range(object):
     def __new__(cls, *args):
@@ -97,7 +82,7 @@ class _GetDefaultLocalSizeId(ConcreteTemplate):
         signature(types.UniTuple(types.int64, 3), types.int64, types.int64, types.int64),
     ]
 
-@njit(enable_gpu_pipeline=True)
+@mlir_njit(enable_gpu_pipeline=True)
 def _kernel_body(global_size, local_size, body, *args):
     x, y, z = global_size
     lx, ly, lz = local_size
@@ -118,7 +103,7 @@ def _kernel_body(global_size, local_size, body, *args):
                             if (in_bounds):
                                 body(*args)
 
-@njit(enable_gpu_pipeline=True)
+@mlir_njit(enable_gpu_pipeline=True)
 def _kernel_body_def_size(global_size, body, *args):
     x, y, z = global_size
     lx, ly, lz = _get_default_local_size(x, y, z)
@@ -146,48 +131,19 @@ def _extend_dims(dims):
     return dims
 
 
-class Kernel:
+class Kernel(KernelBase):
     def __init__(self, func):
-        self.global_size = ()
-        self.local_size = ()
-        self.py_func = func
-
-    def copy(self):
-        return copy.copy(self)
-
-    def configure(self, global_size, local_size):
-        global_dim_count = len(global_size)
-        local_dim_count = len(local_size)
-        assert(local_dim_count <= global_dim_count)
-        if local_dim_count != 0 and local_dim_count < global_dim_count:
-            local_size = tuple(local_size[i] if i < local_dim_count else 1 for i in range(global_dim_count))
-        ret = self.copy()
-        ret.global_size = global_size
-        ret.local_size = local_size
-        return ret
-
-    def check_call_args(self, args, kwargs):
-        if kwargs:
-            _raise_error('kwargs not supported')
-
-    def __getitem__(self, args):
-        nargs = len(args)
-        if nargs < 1 or nargs > 2:
-            _raise_error(f'Invalid kernel arguments count: {nargs}')
-
-        gs = _process_dims(args[0])
-        ls = _process_dims(args[1]) if nargs > 1 else ()
-        return self.configure(gs, ls)
+        super().__init__(func)
+        self.jit_func = mlir_njit(inline='always',enable_gpu_pipeline=True)(func)
 
     def __call__(self, *args, **kwargs):
         self.check_call_args(args, kwargs)
 
-        jit_func = njit(inline='always',enable_gpu_pipeline=True)(self.py_func)
         local_size = self.local_size
         if (len(local_size) != 0):
-            _kernel_body(_extend_dims(self.global_size), _extend_dims(self.local_size), jit_func, *args)
+            _kernel_body(_extend_dims(self.global_size), _extend_dims(self.local_size), self.jit_func, *args)
         else:
-            _kernel_body_def_size(_extend_dims(self.global_size), jit_func, *args)
+            _kernel_body_def_size(_extend_dims(self.global_size), self.jit_func, *args)
 
 
 def kernel(func):
@@ -195,11 +151,12 @@ def kernel(func):
 
 DEFAULT_LOCAL_SIZE = ()
 
-kernel_func = njit(inline='always')
+kernel_func = mlir_njit(inline='always')
 
 def _define_api_funcs():
     kernel_api_funcs = [
         'get_global_id',
+        'get_local_id',
         'get_global_size',
         'get_local_size',
     ]

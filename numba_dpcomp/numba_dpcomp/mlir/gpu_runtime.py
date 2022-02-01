@@ -25,25 +25,42 @@ try:
 except:
     IS_GPU_RUNTIME_AVAILABLE = False
 
+
 if IS_GPU_RUNTIME_AVAILABLE:
-    _funcs = [
-        'dpcompGpuStreamCreate',
-        'dpcompGpuStreamDestroy',
-        'dpcompGpuModuleLoad',
-        'dpcompGpuModuleDestroy',
-        'dpcompGpuKernelGet',
-        'dpcompGpuKernelDestroy',
-        'dpcompGpuLaunchKernel',
-        'dpcompGpuWait',
-        'dpcompGpuAlloc',
-    ]
+    def _register_funcs():
+        _funcs = [
+            'dpcompGpuStreamCreate',
+            'dpcompGpuStreamDestroy',
+            'dpcompGpuModuleLoad',
+            'dpcompGpuModuleDestroy',
+            'dpcompGpuKernelGet',
+            'dpcompGpuKernelDestroy',
+            'dpcompGpuLaunchKernel',
+            'dpcompGpuSuggestBlockSize',
+            'dpcompGpuWait',
+            'dpcompGpuAlloc',
+            mlir_func_name('get_global_id'),
+            mlir_func_name('get_local_id'),
+            mlir_func_name('get_global_size'),
+            mlir_func_name('get_local_size'),
+        ]
 
-    for name in _funcs:
-        func = getattr(runtime_lib, name)
-        register_cfunc(ll, name, func)
+        _atomic_ops = ['add','sub']
+        _atomic_ops_types = ['int32','int64','float32','float64']
+
+        from itertools import product
+        for o, t in product(_atomic_ops, _atomic_ops_types):
+            _funcs.append(mlir_func_name('atomic_' + o + '_' + t))
+
+        for name in _funcs:
+            func = getattr(runtime_lib, name)
+            register_cfunc(ll, name, func)
 
 
-    _alloc_func = runtime_lib.dpcompGpuSetMemInfoAllocFunc
-    _alloc_func.argtypes = [ctypes.c_void_p]
-    _numba_alloc_ptr = ctypes.cast(_nrt.c_helpers['Allocate'], ctypes.c_void_p)
-    _alloc_func(_numba_alloc_ptr.value)
+        _alloc_func = runtime_lib.dpcompGpuSetMemInfoAllocFunc
+        _alloc_func.argtypes = [ctypes.c_void_p]
+        _numba_alloc_ptr = ctypes.cast(_nrt.c_helpers['Allocate'], ctypes.c_void_p)
+        _alloc_func(_numba_alloc_ptr.value)
+
+    _register_funcs()
+    del _register_funcs

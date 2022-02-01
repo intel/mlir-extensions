@@ -126,6 +126,7 @@ def min_impl(builder, arg, axis=None):
     return _array_reduce(builder, arg, axis, lambda a, b: a if a < b else b, _get_min_init_value)
 
 
+@register_func('array.mean')
 @register_func('numpy.mean', numpy.mean)
 def mean_impl(builder, arg, axis=None):
     return sum_impl(builder, arg, axis) / size_impl(builder, arg)
@@ -360,9 +361,9 @@ def matmul_impl(builder, a, b):
     if dim1 == 1 and dim2 == 1:
         res = builder.extract(res, (shape2[0] - 1, 0))
     elif dim1 == 1:
-        res = builder.subview(res, (shape2[0] - 1, 0), (1, shape1[0]), result_rank=1)
+        res = builder.subview(res, (shape2[0] - 1, 0), (1, shape2[1]), result_rank=1)
     elif dim2 == 1:
-        res = builder.subview(res, (0, 0), (shape2[0], 1), result_rank=1)
+        res = builder.subview(res, (0, 0), (shape1[0], 1), result_rank=1)
 
     return res
 

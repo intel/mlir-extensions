@@ -276,5 +276,22 @@ def ForceCopyOp : PlierUtil_Op<"force_copy", [ViewLikeOpInterface]> {
   }];
 }
 
+def TakeContextOp : PlierUtil_Op<"take_context"> {
+  let arguments = (ins OptionalAttr<SymbolRefAttr>:$initFunc,
+                       OptionalAttr<SymbolRefAttr>:$releaseFunc);
+
+  let results = (outs PlierUtil_OpaqueType:$context,
+                      Variadic<AnyType>:$results);
+
+    let builders = [
+      OpBuilder<(ins "::mlir::SymbolRefAttr":$initFunc,
+                     "::mlir::SymbolRefAttr":$releaseFunc,
+                     "::mlir::TypeRange":$resultTypes)>
+   ];
+}
+
+def ReleaseContextOp : PlierUtil_Op<"release_context"> {
+  let arguments = (ins PlierUtil_OpaqueType:$context);
+}
 
 #endif // PLIER_UTIL_OPS

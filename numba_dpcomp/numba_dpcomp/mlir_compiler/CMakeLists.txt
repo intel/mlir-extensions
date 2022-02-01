@@ -110,18 +110,32 @@ if(GPU_ENABLE)
     target_compile_definitions(${PROJECT_NAME} PRIVATE GPU_ENABLE=1)
 endif()
 
-set(CMAKE_INSTALL_BINDIR ${CMAKE_SOURCE_DIR}/numba_dpcomp/numba_dpcomp)
-set(CMAKE_INSTALL_LIBDIR ${CMAKE_SOURCE_DIR}/numba_dpcomp/numba_dpcomp)
-set(CMAKE_INSTALL_INCLUDEDIR ${CMAKE_SOURCE_DIR}/numba_dpcomp/numba_dpcomp)
+set(CMAKE_INSTALL_BINDIR ./numba_dpcomp/numba_dpcomp)
+set(CMAKE_INSTALL_LIBDIR ./numba_dpcomp/numba_dpcomp)
+set(CMAKE_INSTALL_INCLUDEDIR ./numba_dpcomp/numba_dpcomp)
 
 install(TARGETS dpcomp-runtime dpcomp-math-runtime mlir_compiler
-        PERMISSIONS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
-        LIBRARY DESTINATION .
+        LIBRARY DESTINATION numba_dpcomp/numba_dpcomp
         )
+
 
 if(GPU_ENABLE)
     install(TARGETS dpcomp-gpu-runtime
-            PERMISSIONS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
-            LIBRARY DESTINATION .
+            LIBRARY DESTINATION numba_dpcomp/numba_dpcomp
             )
+endif()
+
+get_filename_component(_tmp_path1 "${CMAKE_SOURCE_DIR}" REALPATH)
+get_filename_component(_tmp_path2 "${CMAKE_INSTALL_PREFIX}" REALPATH)
+
+if (NOT _tmp_path1 STREQUAL _tmp_path2)
+    install(
+        DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../../
+        DESTINATION ./numba_dpcomp
+        FILES_MATCHING
+        PATTERN "__pycache__" EXCLUDE
+        PATTERN "*.py"
+        PATTERN "*.cfg"
+        PATTERN "*.in"
+        )
 endif()

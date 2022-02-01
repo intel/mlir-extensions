@@ -1259,7 +1259,7 @@ struct PostLLVMLowering
 };
 
 struct LowerRetainOp : public mlir::ConvertOpToLLVMPattern<plier::RetainOp> {
-  using mlir::ConvertOpToLLVMPattern<plier::RetainOp>::ConvertOpToLLVMPattern;
+  using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
 
   mlir::LogicalResult
   matchAndRewrite(plier::RetainOp op, plier::RetainOp::Adaptor adaptor,
@@ -1299,8 +1299,7 @@ struct LowerRetainOp : public mlir::ConvertOpToLLVMPattern<plier::RetainOp> {
 
 struct LowerReduceRankOp
     : public mlir::ConvertOpToLLVMPattern<plier::ReduceRankOp> {
-  using mlir::ConvertOpToLLVMPattern<
-      plier::ReduceRankOp>::ConvertOpToLLVMPattern;
+  using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
 
   mlir::LogicalResult
   matchAndRewrite(plier::ReduceRankOp op, plier::ReduceRankOp::Adaptor adaptor,
@@ -1338,8 +1337,7 @@ struct LowerReduceRankOp
 
 struct LowerExtractMemrefMetadataOp
     : public mlir::ConvertOpToLLVMPattern<plier::ExtractMemrefMetadataOp> {
-  using mlir::ConvertOpToLLVMPattern<
-      plier::ExtractMemrefMetadataOp>::ConvertOpToLLVMPattern;
+  using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
 
   mlir::LogicalResult
   matchAndRewrite(plier::ExtractMemrefMetadataOp op,
@@ -1366,8 +1364,7 @@ struct LowerExtractMemrefMetadataOp
 
 struct LowerBuildTuple
     : public mlir::ConvertOpToLLVMPattern<plier::BuildTupleOp> {
-  using mlir::ConvertOpToLLVMPattern<
-      plier::BuildTupleOp>::ConvertOpToLLVMPattern;
+  using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
 
   mlir::LogicalResult
   matchAndRewrite(plier::BuildTupleOp op, plier::BuildTupleOp::Adaptor adaptor,
@@ -1395,7 +1392,7 @@ struct LowerBuildTuple
 };
 
 struct LowerUndef : public mlir::ConvertOpToLLVMPattern<plier::UndefOp> {
-  using mlir::ConvertOpToLLVMPattern<plier::UndefOp>::ConvertOpToLLVMPattern;
+  using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
 
   mlir::LogicalResult
   matchAndRewrite(plier::UndefOp op, plier::UndefOp::Adaptor /*adaptor*/,
@@ -1406,6 +1403,303 @@ struct LowerUndef : public mlir::ConvertOpToLLVMPattern<plier::UndefOp> {
       return mlir::failure();
 
     rewriter.replaceOpWithNewOp<mlir::LLVM::UndefOp>(op, type);
+    return mlir::success();
+  }
+};
+
+static void addToGlobalDtors(mlir::ConversionPatternRewriter &rewriter,
+                             mlir::ModuleOp mod, mlir::SymbolRefAttr attr,
+                             int32_t priority) {
+  auto loc = mod->getLoc();
+  auto dtorOps = mod.getOps<mlir::LLVM::GlobalDtorsOp>();
+  auto prioAttr = rewriter.getI32IntegerAttr(priority);
+  mlir::OpBuilder::InsertionGuard g(rewriter);
+  if (dtorOps.empty()) {
+    rewriter.setInsertionPoint(mod.getBody(), std::prev(mod.getBody()->end()));
+    auto syms = rewriter.getArrayAttr(attr);
+    auto priorities = rewriter.getArrayAttr(prioAttr);
+    rewriter.create<mlir::LLVM::GlobalDtorsOp>(loc, syms, priorities);
+    return;
+  }
+  assert(llvm::hasSingleElement(dtorOps));
+  auto dtorOp = *dtorOps.begin();
+
+  auto addpendArray = [&](mlir::ArrayAttr arr,
+                          mlir::Attribute attr) -> mlir::ArrayAttr {
+    auto vals = arr.getValue();
+    llvm::SmallVector<mlir::Attribute> ret(vals.begin(), vals.end());
+    ret.emplace_back(attr);
+    return rewriter.getArrayAttr(ret);
+  };
+  auto newDtors = addpendArray(dtorOp.getDtors(), attr);
+  auto newPrioritiess = addpendArray(dtorOp.getPriorities(), prioAttr);
+  rewriter.setInsertionPoint(dtorOp);
+  rewriter.create<mlir::LLVM::GlobalDtorsOp>(loc, newDtors, newPrioritiess);
+  rewriter.eraseOp(dtorOp);
+}
+
+struct LowerTakeContextOp
+    : public mlir::ConvertOpToLLVMPattern<plier::TakeContextOp> {
+  using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::TakeContextOp op,
+                  plier::TakeContextOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto converter = getTypeConverter();
+    assert(converter);
+    auto ctx = op.context();
+    auto ctxType = converter->convertType(ctx.getType());
+    if (!ctxType)
+      return mlir::failure();
+
+    mlir::ValueRange results = op.results();
+    auto resultsCount = static_cast<unsigned>(results.size());
+    llvm::SmallVector<mlir::Type> resultTypes(resultsCount);
+    for (auto i : llvm::seq(0u, resultsCount)) {
+      auto type = converter->convertType(results[i].getType());
+      if (!type)
+        return mlir::failure();
+
+      resultTypes[i] = type;
+    }
+
+    auto ctxStructType =
+        mlir::LLVM::LLVMStructType::getLiteral(getContext(), resultTypes);
+    auto ctxStructPtrType = mlir::LLVM::LLVMPointerType::get(ctxStructType);
+
+    auto mod = op->getParentOfType<mlir::ModuleOp>();
+    assert(mod);
+
+    auto unknownLoc = rewriter.getUnknownLoc();
+    auto loc = op->getLoc();
+    auto wrapperType =
+        mlir::LLVM::LLVMFunctionType::get(getVoidType(), ctxType);
+    auto wrapperPtrType = mlir::LLVM::LLVMPointerType::get(wrapperType);
+    mlir::Value initFuncPtr;
+
+    auto insertFunc = [&](mlir::StringRef name, mlir::Type type,
+                          mlir::LLVM::Linkage linkage) {
+      mlir::OpBuilder::InsertionGuard g(rewriter);
+      rewriter.setInsertionPointToStart(&(mod.body().front()));
+      return rewriter.create<mlir::LLVM::LLVMFuncOp>(unknownLoc, name, type,
+                                                     linkage);
+    };
+
+    auto lookupFunc = [&](mlir::StringRef name, mlir::Type type) {
+      // TODO: fix and use lookupOrCreateFn
+      if (auto func = mod.lookupSymbol<mlir::LLVM::LLVMFuncOp>(name))
+        return func;
+
+      mlir::OpBuilder::InsertionGuard g(rewriter);
+      rewriter.setInsertionPointToStart(&(mod.body().front()));
+      return rewriter.create<mlir::LLVM::LLVMFuncOp>(
+          unknownLoc, name, type, mlir::LLVM::Linkage::External);
+    };
+
+    if (auto initFuncSym = adaptor.initFuncAttr()) {
+      auto funcName = initFuncSym.getLeafReference().getValue();
+      auto wrapperName = (funcName + "_wrapper").str();
+
+      auto initFunc = [&]() {
+        mlir::OpBuilder::InsertionGuard g(rewriter);
+        auto func =
+            insertFunc(wrapperName, wrapperType, mlir::LLVM::Linkage::Private);
+        auto block = rewriter.createBlock(&func.getBody(),
+                                          mlir::Region::iterator{}, ctxType);
+        rewriter.setInsertionPointToStart(block);
+
+        auto innerResults = rewriter
+                                .create<mlir::CallOp>(unknownLoc, initFuncSym,
+                                                      results.getTypes())
+                                ->getResults();
+
+        mlir::Value ctxStruct =
+            rewriter.create<mlir::LLVM::UndefOp>(unknownLoc, ctxStructType);
+        for (auto i : llvm::seq(0u, resultsCount)) {
+          auto pos = rewriter.getI64ArrayAttr(i);
+          auto val = rewriter.getRemappedValue(innerResults[i]);
+          ctxStruct = rewriter.create<mlir::LLVM::InsertValueOp>(
+              unknownLoc, ctxStruct, val, pos);
+        }
+        auto ptr = rewriter.create<mlir::LLVM::BitcastOp>(
+            unknownLoc, ctxStructPtrType, block->getArgument(0));
+        rewriter.create<mlir::LLVM::StoreOp>(unknownLoc, ctxStruct, ptr);
+        rewriter.create<mlir::LLVM::ReturnOp>(unknownLoc, llvm::None);
+        return func;
+      }();
+
+      initFuncPtr = rewriter.create<mlir::LLVM::AddressOfOp>(loc, initFunc);
+    } else {
+      initFuncPtr = rewriter.create<mlir::LLVM::NullOp>(loc, wrapperPtrType);
+    }
+
+    mlir::Value deinitFuncPtr;
+    if (auto deinitFuncSym = adaptor.releaseFuncAttr()) {
+      auto funcName = deinitFuncSym.getLeafReference().getValue();
+      auto wrapperName = (funcName + "_wrapper").str();
+
+      auto deinitFunc = [&]() {
+        mlir::OpBuilder::InsertionGuard g(rewriter);
+        auto func =
+            insertFunc(wrapperName, wrapperType, mlir::LLVM::Linkage::Private);
+        auto block = rewriter.createBlock(&func.getBody(),
+                                          mlir::Region::iterator{}, ctxType);
+        rewriter.setInsertionPointToStart(block);
+
+        auto ptr = rewriter.create<mlir::LLVM::BitcastOp>(
+            unknownLoc, ctxStructPtrType, block->getArgument(0));
+        auto ctxStruct =
+            rewriter.create<mlir::LLVM::LoadOp>(unknownLoc, ctxStructType, ptr);
+
+        llvm::SmallVector<mlir::Value> args(resultsCount);
+        for (auto i : llvm::seq(0u, resultsCount)) {
+          auto pos = rewriter.getI64ArrayAttr(i);
+          mlir::Value val = rewriter.create<mlir::LLVM::ExtractValueOp>(
+              unknownLoc, resultTypes[i], ctxStruct, pos);
+          auto resType = results[i].getType();
+          if (val.getType() != resType)
+            val = rewriter
+                      .create<mlir::UnrealizedConversionCastOp>(unknownLoc,
+                                                                resType, val)
+                      .getResult(0);
+
+          args[i] = val;
+        }
+
+        rewriter.create<mlir::CallOp>(unknownLoc, deinitFuncSym, llvm::None,
+                                      args);
+        rewriter.create<mlir::LLVM::ReturnOp>(unknownLoc, llvm::None);
+        return func;
+      }();
+
+      deinitFuncPtr = rewriter.create<mlir::LLVM::AddressOfOp>(loc, deinitFunc);
+    } else {
+      deinitFuncPtr = rewriter.create<mlir::LLVM::NullOp>(loc, wrapperPtrType);
+    }
+
+    auto takeCtxFunc = [&]() -> mlir::LLVM::LLVMFuncOp {
+      llvm::StringRef name("dpcompTakeContext");
+      auto retType = getVoidPtrType();
+      const mlir::Type argTypes[] = {
+          mlir::LLVM::LLVMPointerType::get(getVoidPtrType()),
+          getIndexType(),
+          wrapperPtrType,
+          wrapperPtrType,
+      };
+      auto funcType = mlir::LLVM::LLVMFunctionType::get(retType, argTypes);
+      return lookupFunc(name, funcType);
+    }();
+
+    auto purgeCtxFunc = [&]() -> mlir::LLVM::LLVMFuncOp {
+      llvm::StringRef name("dpcompPurgeContext");
+      auto retType = getVoidType();
+      auto argType = mlir::LLVM::LLVMPointerType::get(getVoidPtrType());
+      auto funcType = mlir::LLVM::LLVMFunctionType::get(retType, argType);
+      return lookupFunc(name, funcType);
+    }();
+
+    auto ctxHandle = [&]() {
+      mlir::OpBuilder::InsertionGuard g(rewriter);
+      rewriter.setInsertionPointToStart(&(mod.body().front()));
+      llvm::StringRef name("context_handle"); // TODO: unique name
+      auto handle = rewriter.create<mlir::LLVM::GlobalOp>(
+          unknownLoc, ctxType, /*isConstant*/ false,
+          mlir::LLVM::Linkage::Internal, name, mlir::Attribute());
+
+      llvm::StringRef cleanupFuncName(".dpcomp_context_cleanup");
+      auto cleanupFunc =
+          mod.lookupSymbol<mlir::LLVM::LLVMFuncOp>(cleanupFuncName);
+      if (!cleanupFunc) {
+        auto cleanupFuncType =
+            mlir::LLVM::LLVMFunctionType::get(getVoidType(), llvm::None);
+        cleanupFunc = rewriter.create<mlir::LLVM::LLVMFuncOp>(
+            unknownLoc, cleanupFuncName, cleanupFuncType);
+        auto block = rewriter.createBlock(&cleanupFunc.getBody());
+        rewriter.setInsertionPointToStart(block);
+        rewriter.create<mlir::LLVM::ReturnOp>(unknownLoc, llvm::None);
+
+        addToGlobalDtors(rewriter, mod, mlir::SymbolRefAttr::get(cleanupFunc),
+                         0);
+      }
+
+      assert(llvm::hasSingleElement(cleanupFunc.getBody()));
+      rewriter.setInsertionPointToStart(&cleanupFunc.getBody().front());
+      mlir::Value addr =
+          rewriter.create<mlir::LLVM::AddressOfOp>(unknownLoc, handle);
+      rewriter.create<mlir::LLVM::CallOp>(unknownLoc, purgeCtxFunc, addr);
+
+      return handle;
+    }();
+
+    auto ctxHandlePtr =
+        rewriter.create<mlir::LLVM::AddressOfOp>(loc, ctxHandle);
+    auto contextSize = getSizeInBytes(loc, ctxStructType, rewriter);
+
+    const mlir::Value takeCtxArgs[] = {
+        ctxHandlePtr,
+        contextSize,
+        initFuncPtr,
+        deinitFuncPtr,
+    };
+    auto ctxPtr =
+        rewriter.create<mlir::LLVM::CallOp>(loc, takeCtxFunc, takeCtxArgs)
+            .getResult(0);
+
+    llvm::SmallVector<mlir::Value> takeCtxResults;
+    takeCtxResults.emplace_back(ctxPtr);
+
+    auto ctxStructPtr =
+        rewriter.create<mlir::LLVM::BitcastOp>(loc, ctxStructPtrType, ctxPtr);
+    auto ctxStruct =
+        rewriter.create<mlir::LLVM::LoadOp>(loc, ctxStructType, ctxStructPtr);
+
+    for (auto i : llvm::seq(0u, resultsCount)) {
+      auto pos = rewriter.getI64ArrayAttr(i);
+      auto res = rewriter.create<mlir::LLVM::ExtractValueOp>(
+          loc, resultTypes[i], ctxStruct, pos);
+      takeCtxResults.emplace_back(res);
+    }
+
+    rewriter.replaceOp(op, takeCtxResults);
+    return mlir::success();
+  }
+};
+
+struct LowerReleaseContextOp
+    : public mlir::ConvertOpToLLVMPattern<plier::ReleaseContextOp> {
+  using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::ReleaseContextOp op,
+                  plier::ReleaseContextOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto mod = op->getParentOfType<mlir::ModuleOp>();
+    assert(mod);
+
+    auto unknownLoc = rewriter.getUnknownLoc();
+    auto loc = op->getLoc();
+
+    auto lookupFunc = [&](mlir::StringRef name, mlir::Type type) {
+      // TODO: fix and use lookupOrCreateFn
+      if (auto func = mod.lookupSymbol<mlir::LLVM::LLVMFuncOp>(name))
+        return func;
+
+      mlir::OpBuilder::InsertionGuard g(rewriter);
+      rewriter.setInsertionPointToStart(&(mod.body().front()));
+      return rewriter.create<mlir::LLVM::LLVMFuncOp>(
+          unknownLoc, name, type, mlir::LLVM::Linkage::External);
+    };
+
+    auto releaseCtxFunc = [&]() -> mlir::LLVM::LLVMFuncOp {
+      llvm::StringRef name("dpcompReleaseContext");
+      auto voidPtr = getVoidPtrType();
+      auto funcType = mlir::LLVM::LLVMFunctionType::get(voidPtr, voidPtr);
+      return lookupFunc(name, funcType);
+    }();
+
+    rewriter.create<mlir::LLVM::CallOp>(loc, releaseCtxFunc, adaptor.context());
+    rewriter.eraseOp(op);
     return mlir::success();
   }
 };
@@ -1455,11 +1749,15 @@ struct LLVMLoweringPass
         DeallocOpLowering,
         ReshapeLowering,
         LowerReduceRankOp,
-        LowerExtractMemrefMetadataOp
+        LowerExtractMemrefMetadataOp,
+        LowerTakeContextOp,
+        LowerReleaseContextOp
         // clang-format on
         >(typeConverter);
 
     LLVMConversionTarget target(context);
+    target.addIllegalOp<plier::TakeContextOp, plier::ReleaseContextOp>();
+
     if (failed(applyPartialConversion(m, target, std::move(patterns))))
       signalPassFailure();
     m->setAttr(LLVM::LLVMDialect::getDataLayoutAttrName(),

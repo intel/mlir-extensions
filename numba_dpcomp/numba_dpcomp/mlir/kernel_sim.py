@@ -15,8 +15,8 @@
 from collections import namedtuple
 from itertools import product
 
-from .kernel_impl import Kernel as OrigKernel
-from .kernel_impl import get_global_id, get_global_size, get_local_size, atomic, atomic_add, atomic_sub
+from .kernel_base import KernelBase
+from .kernel_impl import get_global_id, get_local_id, get_global_size, get_local_size, atomic, atomic_add, atomic_sub
 
 _ExecutionState = namedtuple('_ExecutionState', [
     'global_size',
@@ -33,6 +33,10 @@ def get_exec_state():
 
 def get_global_id_proxy(index):
     return get_exec_state().indices[index]
+
+def get_local_id_proxy(index):
+    state = get_exec_state()
+    return state.indices[index] % state.local_size[index]
 
 def get_global_size_proxy(index):
     return get_exec_state().global_size[index]
@@ -74,6 +78,7 @@ def _destroy_execution_state():
 
 _globals_to_replace = [
     ('get_global_id', get_global_id, get_global_id_proxy),
+    ('get_local_id', get_local_id, get_local_id_proxy),
     ('get_global_size', get_global_size, get_global_size_proxy),
     ('get_local_size', get_local_size, get_local_size_proxy),
     ('atomic', atomic, atomic_proxy),
@@ -127,7 +132,7 @@ def _execute_kernel(global_size, local_size, func, *args):
         _destroy_execution_state()
 
 
-class Kernel(OrigKernel):
+class Kernel(KernelBase):
     def __init__(self, func):
         super().__init__(func)
 
