@@ -61,6 +61,7 @@
 
 namespace gpu_runtime {
 
+std::unique_ptr<mlir::Pass> runAbiAttrsPass();
 std::unique_ptr<mlir::Pass> runSetSPIRVCapabilitiesPass();
 std::unique_ptr<mlir::Pass> runGPUToSpirvPass();
 std::unique_ptr<mlir::Pass> runInsertGPUAllocsPass();

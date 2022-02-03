@@ -6,18 +6,7 @@ module attributes {
   spv.target_env = #spv.target_env<
     #spv.vce<v1.0, [Shader], [SPV_KHR_storage_buffer_storage_class]>, {}>
 } {
-  gpu.module @kernels {
-    gpu.func @kernel_add(%arg0 : memref<8xf32>, %arg1 : memref<8xf32>, %arg2 : memref<8xf32>)
-      kernel attributes { spv.entry_point_abi = {local_size = dense<[1, 1, 1]>: vector<3xi32> }} {
-      %0 = "gpu.block_id"() {dimension = "x"} : () -> index
-      %1 = memref.load %arg0[%0] : memref<8xf32>
-      %2 = memref.load %arg1[%0] : memref<8xf32>
-      %3 = arith.addf %1, %2 : f32
-      memref.store %3, %arg2[%0] : memref<8xf32>
-      gpu.return
-    }
-  }
-
+  
   func @main() {
     %arg0 = memref.alloc() : memref<8xf32>
     %arg1 = memref.alloc() : memref<8xf32>
@@ -37,9 +26,14 @@ module attributes {
 
     %cst1 = arith.constant 1 : index
     %cst8 = arith.constant 8 : index
-    gpu.launch_func @kernels::@kernel_add
-        blocks in (%cst8, %cst1, %cst1) threads in (%cst1, %cst1, %cst1)
-        args(%arg0 : memref<8xf32>, %arg1 : memref<8xf32>, %arg2 : memref<8xf32>)
+    gpu.launch blocks(%arg7, %arg8, %arg9) in (%arg10 = %cst8, %arg11 = %cst1, %arg12 = %cst1) threads(%arg13, %arg14, %arg15) in (%arg16 = %cst1, %arg17 = %cst1, %arg18 = %cst1) {
+       %5 = "gpu.block_id"() {dimension = "x"} : () -> index
+       %6 = memref.load %arg0[%5] : memref<8xf32>
+       %7 = memref.load %arg1[%5] : memref<8xf32>
+       %8 = arith.addf %6, %7 : f32
+      memref.store %8, %arg2[%5] : memref<8xf32>
+      gpu.terminator
+    }
     %arg6 = memref.cast %arg5 : memref<?xf32> to memref<*xf32>
     call @print_memref_f32(%arg6) : (memref<*xf32>) -> ()
     return

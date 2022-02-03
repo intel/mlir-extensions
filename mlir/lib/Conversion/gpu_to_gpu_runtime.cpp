@@ -718,6 +718,31 @@ struct ExpandSuggestBlockSizeOp
   }
 };
 
+struct AbiAttrsPass
+    : public mlir::PassWrapper<AbiAttrsPass,
+                               mlir::OperationPass<mlir::gpu::GPUModuleOp>> {
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::gpu::GPUDialect>();
+  }
+
+  void runOnOperation() override {
+    auto gpuModule = getOperation();
+    auto *context = &getContext();
+    auto attrName = mlir::spirv::getEntryPointABIAttrName();
+    // TODO: Check if block size is const and set appropriate.
+    const int32_t sizes[] = {0, 0, 0};
+    auto abi = mlir::spirv::getEntryPointABIAttr(sizes, context);
+    for (auto gpuFunc : gpuModule.getOps<mlir::gpu::GPUFuncOp>()) {
+      if (!mlir::gpu::GPUDialect::isKernel(gpuFunc) ||
+          gpuFunc->getAttr(attrName))
+        continue;
+
+      gpuFunc->setAttr(attrName, abi);
+    }
+  }
+};
+
 struct SetSPIRVCapabilitiesPass
     : public mlir::PassWrapper<SetSPIRVCapabilitiesPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
@@ -814,6 +839,10 @@ struct GPUExPass : public mlir::PassWrapper<GPUExPass, mlir::FunctionPass> {
 };
 
 // Expose the passes to the outside world
+std::unique_ptr<mlir::Pass> gpu_runtime::runAbiAttrsPass() {
+  return std::make_unique<AbiAttrsPass>();
+}
+
 std::unique_ptr<mlir::Pass> gpu_runtime::runSetSPIRVCapabilitiesPass() {
   return std::make_unique<SetSPIRVCapabilitiesPass>();
 }
