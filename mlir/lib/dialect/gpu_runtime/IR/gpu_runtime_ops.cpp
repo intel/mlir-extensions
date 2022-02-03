@@ -108,6 +108,174 @@ struct RemoveUnusedOp : public mlir::OpRewritePattern<Op> {
 };
 } // namespace
 
+void ReduceRankOp::build(::mlir::OpBuilder &odsBuilder,
+                         ::mlir::OperationState &odsState, ::mlir::Value src,
+                         ::mlir::ArrayRef<int32_t> mapping) {
+  assert(src.getType().isa<mlir::ShapedType>());
+  auto srcType = src.getType().cast<mlir::ShapedType>();
+  assert(srcType.hasRank());
+  auto srcRank = static_cast<unsigned>(srcType.getRank());
+  assert(!mapping.empty());
+  assert(llvm::all_of(mapping, [&](int32_t val) {
+    return val >= 0 && val < static_cast<int32_t>(srcRank);
+  }));
+  auto mapAttr = odsBuilder.getI32ArrayAttr(mapping);
+  auto srcShape = srcType.getShape();
+  llvm::SmallVector<int64_t> shape(mapping.size());
+  for (auto it : llvm::enumerate(mapping))
+    shape[it.index()] = srcShape[static_cast<size_t>(it.value())];
+
+  if (auto tensorType = srcType.dyn_cast<mlir::RankedTensorType>()) {
+    auto retType = mlir::RankedTensorType::get(
+        shape, tensorType.getElementType(), tensorType.getEncoding());
+    build(odsBuilder, odsState, retType, src, mapAttr);
+  } else if (auto memrefType = srcType.dyn_cast<mlir::MemRefType>()) {
+    auto affineMap = [&]() {
+      mlir::AffineMap ret;
+      if (!memrefType.getLayout().isIdentity()) {
+        auto affineMap = memrefType.getLayout().getAffineMap();
+        auto context = odsBuilder.getContext();
+        llvm::SmallVector<mlir::AffineExpr> dimReplacements(srcRank);
+        llvm::SmallVector<mlir::AffineExpr> symReplacements(srcRank + 1);
+        symReplacements[0] = mlir::getAffineSymbolExpr(0, context);
+        for (auto i : llvm::seq(0u, srcRank)) {
+          auto it = llvm::find(mapping, i);
+          if (it != mapping.end()) {
+            auto srcIndex = static_cast<unsigned>(it - mapping.begin());
+            dimReplacements[i] = mlir::getAffineDimExpr(srcIndex, context);
+            symReplacements[i + 1] =
+                mlir::getAffineSymbolExpr(srcIndex + 1, context);
+          } else {
+            dimReplacements[i] = mlir::getAffineConstantExpr(0, context);
+            symReplacements[i + 1] = mlir::getAffineConstantExpr(0, context);
+          }
+        }
+        auto dstRank = static_cast<unsigned>(mapping.size());
+        auto resMap = affineMap.replaceDimsAndSymbols(
+            dimReplacements, symReplacements, dstRank, dstRank + 1);
+        ret = mlir::simplifyAffineMap(resMap);
+      }
+      return ret;
+    }();
+
+    auto retType =
+        mlir::MemRefType::get(shape, memrefType.getElementType(), affineMap,
+                              memrefType.getMemorySpace());
+    build(odsBuilder, odsState, retType, src, mapAttr);
+  } else {
+    llvm_unreachable("ReduceRankOp: Invalid src type");
+  }
+}
+
+mlir::OpFoldResult
+ReduceRankOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
+  auto src = source();
+  if (src.getType() == getType()) {
+    return src;
+  }
+  return nullptr;
+}
+
+llvm::SmallVector<int32_t> ReduceRankOp::getMapping() {
+  auto m = mapping();
+  llvm::SmallVector<int32_t> ret(m.size());
+  llvm::transform(m, ret.begin(), [](mlir::Attribute a) {
+    return a.cast<mlir::IntegerAttr>().getValue().getSExtValue();
+  });
+  return ret;
+}
+
+namespace {
+template <typename Op>
+struct ReduceRankDimPropagate : public mlir::OpRewritePattern<Op> {
+  using mlir::OpRewritePattern<Op>::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(Op op, mlir::PatternRewriter &rewriter) const override {
+    auto index = mlir::getConstantIntValue(op.index());
+    if (!index)
+      return mlir::failure();
+
+    auto prev = op.source().template getDefiningOp<gpu_runtime::ReduceRankOp>();
+    if (!prev)
+      return mlir::failure();
+
+    auto mappedArg = prev.mapping()[*index]
+                         .template cast<mlir::IntegerAttr>()
+                         .getValue()
+                         .getSExtValue();
+    rewriter.replaceOpWithNewOp<Op>(op, prev.source(), mappedArg);
+    return mlir::success();
+  }
+};
+
+static auto mapReduceRankIndices(mlir::OpBuilder &builder, mlir::Location loc,
+                                 gpu_runtime::ReduceRankOp src,
+                                 mlir::ValueRange srcIndices) {
+  auto srcMemref = src.getViewSource();
+  auto srcMemrefType = srcMemref.getType().cast<mlir::MemRefType>();
+  auto rank = static_cast<unsigned>(srcMemrefType.getRank());
+  auto zero = builder.createOrFold<mlir::arith::ConstantIndexOp>(loc, 0);
+  auto mapping = src.getMapping();
+  llvm::SmallVector<mlir::Value> indices(rank);
+  for (auto i : llvm::seq(0u, rank)) {
+    auto it = llvm::find(mapping, static_cast<int32_t>(i));
+    if (mapping.end() == it) {
+      indices[i] = zero;
+    } else {
+      auto dstIndex = static_cast<size_t>(it - mapping.begin());
+      indices[i] = srcIndices[dstIndex];
+    }
+  }
+  return indices;
+}
+
+struct ReduceRankLoadPropagate
+    : public mlir::OpRewritePattern<mlir::memref::LoadOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::LoadOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto src = op.memref().getDefiningOp<gpu_runtime::ReduceRankOp>();
+    if (!src)
+      return mlir::failure();
+
+    auto indices =
+        mapReduceRankIndices(rewriter, op.getLoc(), src, op.indices());
+    rewriter.replaceOpWithNewOp<mlir::memref::LoadOp>(op, src.getViewSource(),
+                                                      indices);
+    return mlir::success();
+  }
+};
+
+struct ReduceRankStorePropagate
+    : public mlir::OpRewritePattern<mlir::memref::StoreOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::StoreOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto src = op.memref().getDefiningOp<gpu_runtime::ReduceRankOp>();
+    if (!src)
+      return mlir::failure();
+
+    auto indices =
+        mapReduceRankIndices(rewriter, op.getLoc(), src, op.indices());
+    rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(
+        op, op.value(), src.getViewSource(), indices);
+    return mlir::success();
+  }
+};
+} // namespace
+
+void ReduceRankOp::getCanonicalizationPatterns(
+    ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context) {
+  results.insert<ReduceRankDimPropagate<mlir::tensor::DimOp>,
+                 ReduceRankDimPropagate<mlir::memref::DimOp>,
+                 ReduceRankLoadPropagate, ReduceRankStorePropagate>(context);
+}
+
 void CreateGpuStreamOp::build(::mlir::OpBuilder &odsBuilder,
                               ::mlir::OperationState &odsState) {
   auto ctx = odsBuilder.getContext();

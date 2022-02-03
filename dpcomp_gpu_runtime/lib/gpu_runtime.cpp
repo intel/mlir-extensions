@@ -319,6 +319,8 @@ struct Stream {
     CHECK_ZE_RESULT(zeEventHostSynchronize(event, UINT64_MAX));
   }
 
+  // Change the allocbuffer function since upstream pass does not have MemInfo
+  // struct
   std::tuple<MemInfo *, void *, ze_event_handle_t>
   allocBuffer(size_t size, size_t alignment, bool shared,
               ze_event_handle_t *events, size_t eventIndex) {

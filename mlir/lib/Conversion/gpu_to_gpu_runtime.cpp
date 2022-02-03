@@ -303,21 +303,6 @@ struct CreateDeallocOp : public mlir::OpRewritePattern<AllocOp> {
   }
 };
 
-class ConvertFunc : public mlir::OpConversionPattern<mlir::FuncOp> {
-public:
-  using mlir::OpConversionPattern<mlir::FuncOp>::OpConversionPattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(mlir::FuncOp op, mlir::FuncOp::Adaptor /*adaptor*/,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
-    if (!op.body().empty())
-      return mlir::failure();
-
-    rewriter.eraseOp(op);
-    return mlir::success();
-  }
-};
-
 static llvm::Optional<mlir::Value> getGpuStream(mlir::OpBuilder &builder,
                                                 mlir::Operation *op) {
   assert(op);
@@ -341,6 +326,304 @@ static llvm::Optional<mlir::Value> getGpuStream(mlir::OpBuilder &builder,
   builder.create<gpu_runtime::DestroyGpuStreamOp>(loc, stream);
   return stream;
 }
+
+class ConvertSubviewOp
+    : public mlir::OpConversionPattern<mlir::memref::SubViewOp> {
+public:
+  using mlir::OpConversionPattern<mlir::memref::SubViewOp>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::SubViewOp op,
+                  mlir::memref::SubViewOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto dstType = op.getType().cast<mlir::MemRefType>();
+    if (!dstType.hasRank() || dstType.getRank() != 1)
+      return mlir::failure();
+
+    auto intType = getTypeConverter()->convertType(rewriter.getIndexType());
+    if (!intType)
+      return mlir::failure();
+
+    auto loc = op.getLoc();
+    auto getValue = [&](mlir::OpFoldResult src) -> mlir::Value {
+      if (auto val = src.dyn_cast<mlir::Value>())
+        return val;
+
+      auto attr = src.get<mlir::Attribute>();
+      return rewriter.create<mlir::spirv::ConstantOp>(loc, intType, attr);
+    };
+
+    auto offset =
+        getValue(op.isDynamicOffset(0)
+                     ? mlir::OpFoldResult(adaptor.offsets()[0])
+                     : mlir::OpFoldResult(adaptor.static_offsets()[0]));
+    auto stride =
+        getValue(op.isDynamicStride(0)
+                     ? mlir::OpFoldResult(adaptor.strides()[0])
+                     : mlir::OpFoldResult(adaptor.static_strides()[0]));
+    auto finalOffset = rewriter.createOrFold<mlir::spirv::IMulOp>(
+        loc, intType, offset, stride);
+
+    auto ptr = rewriter
+                   .create<mlir::spirv::InBoundsPtrAccessChainOp>(
+                       loc, adaptor.source(), finalOffset, llvm::None)
+                   .getResult();
+
+    rewriter.replaceOp(op, ptr);
+    return mlir::success();
+  }
+};
+
+template <typename T>
+class ConvertCastOp : public mlir::OpConversionPattern<T> {
+public:
+  using mlir::OpConversionPattern<T>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(T op, typename T::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOp(op, adaptor.source());
+    return mlir::success();
+  }
+};
+
+class ConvertLoadOp : public mlir::OpConversionPattern<mlir::memref::LoadOp> {
+public:
+  using mlir::OpConversionPattern<mlir::memref::LoadOp>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::LoadOp op,
+                  mlir::memref::LoadOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto memrefType = op.memref().getType().cast<mlir::MemRefType>();
+    if (!memrefType.hasRank() || memrefType.getRank() != 1)
+      return mlir::failure();
+
+    auto loc = op.getLoc();
+    auto ptr = rewriter.create<mlir::spirv::InBoundsPtrAccessChainOp>(
+        loc, adaptor.memref(), adaptor.indices().front(), llvm::None);
+
+    auto memoryAccess = mlir::spirv::MemoryAccessAttr::get(
+        op.getContext(), mlir::spirv::MemoryAccess::Aligned);
+    auto alignment =
+        rewriter.getI32IntegerAttr(memrefType.getElementTypeBitWidth() / 8);
+    rewriter.replaceOpWithNewOp<mlir::spirv::LoadOp>(op, ptr, memoryAccess,
+                                                     alignment);
+
+    return mlir::success();
+  }
+};
+
+class ConvertStoreOp : public mlir::OpConversionPattern<mlir::memref::StoreOp> {
+public:
+  using mlir::OpConversionPattern<mlir::memref::StoreOp>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::StoreOp op,
+                  mlir::memref::StoreOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto memrefType = op.memref().getType().cast<mlir::MemRefType>();
+    if (!memrefType.hasRank() || memrefType.getRank() != 1)
+      return mlir::failure();
+
+    auto loc = op.getLoc();
+    auto ptr = rewriter.create<mlir::spirv::InBoundsPtrAccessChainOp>(
+        loc, adaptor.memref(), adaptor.indices().front(), llvm::None);
+
+    auto memoryAccess = mlir::spirv::MemoryAccessAttr::get(
+        op.getContext(), mlir::spirv::MemoryAccess::Aligned);
+    auto alignment =
+        rewriter.getI32IntegerAttr(memrefType.getElementTypeBitWidth() / 8);
+    rewriter.replaceOpWithNewOp<mlir::spirv::StoreOp>(op, ptr, adaptor.value(),
+                                                      memoryAccess, alignment);
+
+    return mlir::success();
+  }
+};
+
+class ConvertReduceRank
+    : public mlir::OpConversionPattern<gpu_runtime::ReduceRankOp> {
+public:
+  using mlir::OpConversionPattern<
+      gpu_runtime::ReduceRankOp>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(gpu_runtime::ReduceRankOp op,
+                  gpu_runtime::ReduceRankOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOp(op, adaptor.source());
+    return mlir::success();
+  }
+};
+
+template <typename Op>
+static mlir::Value lowerIntAtomic(mlir::OpBuilder &builder, mlir::Location loc,
+                                  mlir::Value ptr, mlir::Value val) {
+  return builder.create<Op>(loc, ptr, mlir::spirv::Scope::Device,
+                            mlir::spirv::MemorySemantics::None, val);
+}
+
+static mlir::Value lowerFloatAddAtomic(mlir::OpBuilder &builder,
+                                       mlir::Location loc, mlir::Value ptr,
+                                       mlir::Value val) {
+  return builder.create<mlir::spirv::AtomicFAddEXTOp>(
+      loc, val.getType(), ptr, mlir::spirv::Scope::Device,
+      mlir::spirv::MemorySemantics::None, val);
+}
+
+static mlir::Value lowerFloatSubAtomic(mlir::OpBuilder &builder,
+                                       mlir::Location loc, mlir::Value ptr,
+                                       mlir::Value val) {
+  auto neg = builder.create<mlir::spirv::FNegateOp>(loc, val).getResult();
+  return builder.create<mlir::spirv::AtomicFAddEXTOp>(
+      loc, neg.getType(), ptr, mlir::spirv::Scope::Device,
+      mlir::spirv::MemorySemantics::None, neg);
+}
+
+class ConvertAtomicOps : public mlir::OpConversionPattern<mlir::CallOp> {
+public:
+  using mlir::OpConversionPattern<mlir::CallOp>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::CallOp op, mlir::CallOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto operands = adaptor.operands();
+    if (operands.size() != 2)
+      return mlir::failure();
+
+    if (op.getNumResults() != 1)
+      return mlir::failure();
+
+    auto ptr = operands[0];
+    auto ptrType = ptr.getType().dyn_cast<mlir::spirv::PointerType>();
+    if (!ptrType)
+      return mlir::failure();
+
+    auto val = operands[1];
+    auto valType = val.getType();
+    if (ptrType.getPointeeType() != valType)
+      return mlir::failure();
+
+    bool isInt;
+    if (valType.isSignlessInteger())
+      isInt = true;
+    else if (valType.isa<mlir::FloatType>())
+      isInt = false;
+    else
+      return mlir::failure();
+
+    auto funcName = op.getCallee();
+
+    using func_t = mlir::Value (*)(mlir::OpBuilder &, mlir::Location,
+                                   mlir::Value, mlir::Value);
+
+    struct Desc {
+      mlir::StringRef name;
+      func_t intOp;
+      func_t floatOp;
+    };
+
+    const Desc handlers[] = {
+        {"atomic_add", &lowerIntAtomic<mlir::spirv::AtomicIAddOp>,
+         &lowerFloatAddAtomic},
+        {"atomic_sub", &lowerIntAtomic<mlir::spirv::AtomicISubOp>,
+         &lowerFloatSubAtomic},
+    };
+
+    auto handler = [&]() -> func_t {
+      for (auto &h : handlers) {
+        if (funcName.consume_front(h.name))
+          return (isInt ? h.intOp : h.floatOp);
+      }
+      return nullptr;
+    }();
+
+    if (handler) {
+      auto res = handler(rewriter, op.getLoc(), ptr, val);
+      if (res) {
+        rewriter.replaceOp(op, res);
+        return mlir::success();
+      }
+    }
+
+    return mlir::failure();
+  }
+};
+
+// TODO: something better
+class ConvertFunc : public mlir::OpConversionPattern<mlir::FuncOp> {
+public:
+  using mlir::OpConversionPattern<mlir::FuncOp>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::FuncOp op, mlir::FuncOp::Adaptor /*adaptor*/,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    if (!op.body().empty())
+      return mlir::failure();
+
+    rewriter.eraseOp(op);
+    return mlir::success();
+  }
+};
+
+struct GPUToSpirvPass
+    : public mlir::PassWrapper<GPUToSpirvPass,
+                               mlir::OperationPass<mlir::ModuleOp>> {
+
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::spirv::SPIRVDialect>();
+  }
+
+  void runOnOperation() override {
+    auto *context = &getContext();
+    auto module = getOperation();
+
+    llvm::SmallVector<mlir::Operation *, 1> kernelModules;
+    mlir::OpBuilder builder(context);
+    module.walk([&builder, &kernelModules](mlir::gpu::GPUModuleOp moduleOp) {
+      // For each kernel module (should be only 1 for now, but that is not a
+      // requirement here), clone the module for conversion because the
+      // gpu.launch function still needs the kernel module.
+      builder.setInsertionPoint(moduleOp.getOperation());
+      kernelModules.push_back(builder.clone(*moduleOp.getOperation()));
+    });
+
+    auto targetAttr = mlir::spirv::lookupTargetEnvOrDefault(module);
+    auto target = mlir::SPIRVConversionTarget::get(targetAttr);
+
+    mlir::SPIRVTypeConverter::Options options;
+    options.use64bitIndex = true;
+
+    mlir::SPIRVTypeConverter typeConverter(targetAttr, options);
+    mlir::RewritePatternSet patterns(context);
+
+    typeConverter.addConversion(
+        [](mlir::MemRefType type) -> llvm::Optional<mlir::Type> {
+          if (type.hasRank() && type.getElementType().isIntOrFloat())
+            return mlir::spirv::PointerType::get(
+                type.getElementType(),
+                mlir::spirv::StorageClass::CrossWorkgroup);
+          return mlir::Type(nullptr);
+        });
+
+    mlir::ScfToSPIRVContext scfToSpirvCtx;
+    mlir::populateSCFToSPIRVPatterns(typeConverter, scfToSpirvCtx, patterns);
+    mlir::populateGPUToSPIRVPatterns(typeConverter, patterns);
+    mlir::populateStandardToSPIRVPatterns(typeConverter, patterns);
+    mlir::arith::populateArithmeticToSPIRVPatterns(typeConverter, patterns);
+    mlir::populateMathToSPIRVPatterns(typeConverter, patterns);
+
+    patterns.insert<ConvertSubviewOp, ConvertCastOp<mlir::memref::CastOp>,
+                    ConvertCastOp<mlir::memref::ReinterpretCastOp>,
+                    ConvertLoadOp, ConvertStoreOp, ConvertReduceRank,
+                    ConvertAtomicOps, ConvertFunc>(typeConverter, context);
+
+    if (failed(
+            applyFullConversion(kernelModules, *target, std::move(patterns))))
+      return signalPassFailure();
+  }
+};
 
 template <typename Op, typename F>
 static mlir::LogicalResult createGpuKernelLoad(mlir::PatternRewriter &builder,
@@ -435,6 +718,42 @@ struct ExpandSuggestBlockSizeOp
   }
 };
 
+struct SetSPIRVCapabilitiesPass
+    : public mlir::PassWrapper<SetSPIRVCapabilitiesPass,
+                               mlir::OperationPass<mlir::ModuleOp>> {
+  void runOnOperation() override {
+    namespace spirv = mlir::spirv;
+    auto context = &getContext();
+    spirv::Capability caps[] = {
+        // clang-format off
+        spirv::Capability::Addresses,
+        spirv::Capability::Float16Buffer,
+        spirv::Capability::Int64,
+        spirv::Capability::Int16,
+        spirv::Capability::Int8,
+        spirv::Capability::Kernel,
+        spirv::Capability::Linkage,
+        spirv::Capability::Vector16,
+        spirv::Capability::GenericPointer,
+        spirv::Capability::Groups,
+        spirv::Capability::Float16,
+        spirv::Capability::Float64,
+        spirv::Capability::AtomicFloat32AddEXT,
+        // clang-format on
+    };
+    spirv::Extension exts[] = {
+        spirv::Extension::SPV_EXT_shader_atomic_float_add};
+    auto triple =
+        spirv::VerCapExtAttr::get(spirv::Version::V_1_0, caps, exts, context);
+    auto attr = spirv::TargetEnvAttr::get(
+        triple, spirv::Vendor::Unknown, spirv::DeviceType::Unknown,
+        spirv::TargetEnvAttr::kUnknownDeviceID,
+        spirv::getDefaultResourceLimits(context));
+    auto module = getOperation();
+    module->setAttr(spirv::getTargetEnvAttrName(), attr);
+  }
+};
+
 struct SerializeSPIRVPass
     : public mlir::PassWrapper<SerializeSPIRVPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
@@ -495,6 +814,14 @@ struct GPUExPass : public mlir::PassWrapper<GPUExPass, mlir::FunctionPass> {
 };
 
 // Expose the passes to the outside world
+std::unique_ptr<mlir::Pass> gpu_runtime::runSetSPIRVCapabilitiesPass() {
+  return std::make_unique<SetSPIRVCapabilitiesPass>();
+}
+
+std::unique_ptr<mlir::Pass> gpu_runtime::runGPUToSpirvPass() {
+  return std::make_unique<GPUToSpirvPass>();
+}
+
 std::unique_ptr<mlir::Pass> gpu_runtime::runInsertGPUAllocsPass() {
   return std::make_unique<InsertGPUAllocs>();
 }

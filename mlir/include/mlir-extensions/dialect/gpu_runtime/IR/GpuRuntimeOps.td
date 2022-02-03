@@ -42,6 +42,27 @@ def GpuRuntime_OpaqueType
 
 def DelOp : GpuRuntime_Op<"del", []> { let arguments = (ins AnyType : $value); }
 
+def ReduceRankOp
+    : GpuRuntime_Op<"reduce_rank", [ViewLikeOpInterface, NoSideEffect]> {
+  let arguments = (ins
+                   AnyTypeOf<[AnyMemRef, AnyRankedTensor]>:$source,
+                   I32ArrayAttr:$mapping);
+
+  let results = (outs AnyTypeOf<[AnyMemRef, AnyRankedTensor]>);
+  let hasFolder = 1;
+  let hasCanonicalizer = 1;
+
+  let builders = [
+    OpBuilder<(ins "::mlir::Value" : $src,
+                   "::mlir::ArrayRef<int32_t>" : $mapping)>
+  ];
+
+  let extraClassDeclaration = [{
+      ::mlir::Value getViewSource() { return source(); }
+      ::llvm::SmallVector<int32_t> getMapping();
+  }];
+}
+
 def CreateGpuStreamOp : GpuRuntime_Op<"create_gpu_stream", [NoSideEffect]> {
   let results = (outs GpuRuntime_OpaqueType : $result);
 

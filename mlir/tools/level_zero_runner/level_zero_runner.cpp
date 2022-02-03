@@ -49,12 +49,12 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
   PassManager passManager(module.getContext());
   applyPassManagerCLOptions(passManager);
 
-  auto &funcPM = passManager.nest<mlir::FuncOp>();
-  // funcPM.addPass(gpu_runtime::runInsertGPUAllocsPass());
-
+  passManager.addNestedPass<mlir::FuncOp>(
+      gpu_runtime::runInsertGPUAllocsPass());
   passManager.addPass(createGpuKernelOutliningPass());
   passManager.addPass(memref::createFoldSubViewOpsPass());
-  passManager.addPass(createConvertGPUToSPIRVPass());
+  passManager.addPass(gpu_runtime::runSetSPIRVCapabilitiesPass());
+  passManager.addPass(gpu_runtime::runGPUToSpirvPass());
   OpPassManager &modulePM = passManager.nest<spirv::ModuleOp>();
   modulePM.addPass(spirv::createLowerABIAttributesPass());
   modulePM.addPass(spirv::createUpdateVersionCapabilityExtensionPass());
