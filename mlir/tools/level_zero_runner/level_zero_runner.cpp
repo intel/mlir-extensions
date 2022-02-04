@@ -72,10 +72,10 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
   passManager.addNestedPass<mlir::FuncOp>(gpu_runtime::runGPUExPass());
 
   // GpuRuntime -> LLVM
-  passManager.addPass(createMemRefToLLVMPass());
   passManager.addPass(createLowerToLLVMPass(llvmOptions));
   passManager.addPass(gpu_runtime::runEnumerateEventsPass());
   passManager.addPass(gpu_runtime::runGPUToLLVMPass());
+  passManager.addPass(createMemRefToLLVMPass());
   passManager.addPass(createReconcileUnrealizedCastsPass());
 
   return passManager.run(module);
