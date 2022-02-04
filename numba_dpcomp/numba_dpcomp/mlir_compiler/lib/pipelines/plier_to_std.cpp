@@ -51,7 +51,7 @@
 #include "py_linalg_resolver.hpp"
 
 namespace {
-mlir::Type mapIntType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
+static mlir::Type mapIntType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
   unsigned numBits = 0;
   if (name.consume_front("int") && !name.consumeInteger<unsigned>(10, numBits))
     return mlir::IntegerType::get(&ctx, numBits, mlir::IntegerType::Signed);
@@ -62,7 +62,8 @@ mlir::Type mapIntType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
   return nullptr;
 }
 
-mlir::Type mapIntLiteralType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
+static mlir::Type mapIntLiteralType(mlir::MLIRContext &ctx,
+                                    llvm::StringRef &name) {
   int64_t value = 0;
   if (name.consume_front("Literal[int](") &&
       !name.consumeInteger<int64_t>(10, value) && name.consume_front(")")) {
@@ -73,7 +74,8 @@ mlir::Type mapIntLiteralType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
   return nullptr;
 }
 
-mlir::Type mapBoolLiteralType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
+static mlir::Type mapBoolLiteralType(mlir::MLIRContext &ctx,
+                                     llvm::StringRef &name) {
   if (name.consume_front("Literal[bool](")) {
     auto type = mlir::IntegerType::get(&ctx, 1);
     mlir::IntegerAttr attr;
@@ -89,14 +91,14 @@ mlir::Type mapBoolLiteralType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
   return nullptr;
 }
 
-mlir::Type mapBoolType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
+static mlir::Type mapBoolType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
   if (name.consume_front("bool"))
     return mlir::IntegerType::get(&ctx, 1);
 
   return nullptr;
 }
 
-mlir::Type mapFloatType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
+static mlir::Type mapFloatType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
   unsigned numBits = 0;
   if (name.consume_front("float") &&
       !name.consumeInteger<unsigned>(10, numBits)) {
@@ -112,7 +114,7 @@ mlir::Type mapFloatType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
   return nullptr;
 }
 
-bool consumeUntil(llvm::StringRef &name, llvm::StringRef end) {
+static bool consumeUntil(llvm::StringRef &name, llvm::StringRef end) {
   while (!name.empty()) {
     if (name.consume_front(end))
       return true;
@@ -141,9 +143,10 @@ bool consumeUntil(llvm::StringRef &name, llvm::StringRef end) {
   return false;
 }
 
-mlir::Type mapPlierTypeName(mlir::MLIRContext &ctx, llvm::StringRef &name);
-bool mapTypeHelper(mlir::MLIRContext &ctx, llvm::StringRef &name,
-                   mlir::Type &ret, llvm::StringRef end) {
+static mlir::Type mapPlierTypeName(mlir::MLIRContext &ctx,
+                                   llvm::StringRef &name);
+static bool mapTypeHelper(mlir::MLIRContext &ctx, llvm::StringRef &name,
+                          mlir::Type &ret, llvm::StringRef end) {
   auto nameCopy = name;
   auto type = mapPlierTypeName(ctx, nameCopy);
   if (type && nameCopy.consume_front(end)) {
@@ -161,7 +164,7 @@ bool mapTypeHelper(mlir::MLIRContext &ctx, llvm::StringRef &name,
   return false;
 }
 
-mlir::Type mapPairType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
+static mlir::Type mapPairType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
   mlir::Type first;
   mlir::Type second;
   if (name.consume_front("pair<") && mapTypeHelper(ctx, name, first, ", ") &&
@@ -171,7 +174,8 @@ mlir::Type mapPairType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
   return nullptr;
 }
 
-mlir::Type mapUnitupleType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
+static mlir::Type mapUnitupleType(mlir::MLIRContext &ctx,
+                                  llvm::StringRef &name) {
   mlir::Type type;
   unsigned count = 0;
   if (name.consume_front("UniTuple(") &&
@@ -183,7 +187,7 @@ mlir::Type mapUnitupleType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
   return nullptr;
 }
 
-mlir::Type mapTupleType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
+static mlir::Type mapTupleType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
   if (!name.consume_front("Tuple("))
     return nullptr;
 
@@ -211,7 +215,7 @@ mlir::Type mapTupleType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
   return mlir::TupleType::get(&ctx, types);
 }
 
-mlir::Type mapFuncType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
+static mlir::Type mapFuncType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
   if (name.consume_front("Function(") &&
       name.consume_front("<class 'bool'>") && // TODO unhardcode;
       name.consume_front(")"))
@@ -220,7 +224,7 @@ mlir::Type mapFuncType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
   return nullptr;
 }
 
-mlir::Type mapDtypeType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
+static mlir::Type mapDtypeType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
   if (name.consume_front("dtype(") && name.consume_back(")")) {
     auto innerType = mapPlierTypeName(ctx, name);
     if (innerType)
@@ -233,28 +237,30 @@ mlir::Type mapDtypeType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
   return nullptr;
 }
 
-mlir::Type mapNoneType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
+static mlir::Type mapNoneType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
   if (name.consume_front("none"))
     return mlir::NoneType::get(&ctx);
 
   return nullptr;
 }
 
-mlir::Type mapDispatcherType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
+static mlir::Type mapDispatcherType(mlir::MLIRContext &ctx,
+                                    llvm::StringRef &name) {
   if (name.consume_front("type(CPUDispatcher(") && consumeUntil(name, "))"))
     return plier::OpaqueType::get(&ctx);
 
   return nullptr;
 }
 
-mlir::Type mapSliceType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
+static mlir::Type mapSliceType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
   if (name.consume_front("slice<") && consumeUntil(name, ">"))
     return plier::SliceType::get(&ctx);
 
   return nullptr;
 }
 
-mlir::Type mapPlierTypeName(mlir::MLIRContext &ctx, llvm::StringRef &name) {
+static mlir::Type mapPlierTypeName(mlir::MLIRContext &ctx,
+                                   llvm::StringRef &name) {
   using func_t =
       mlir::Type (*)(mlir::MLIRContext & ctx, llvm::StringRef & name);
   const func_t handlers[] = {
@@ -285,7 +291,7 @@ mlir::Type mapPlierTypeName(mlir::MLIRContext &ctx, llvm::StringRef &name) {
   return nullptr;
 }
 
-mlir::Type mapPlierType(mlir::Type type) {
+static mlir::Type mapPlierType(mlir::Type type) {
   assert(type);
   if (!type.isa<plier::PyType>())
     return type;
@@ -373,7 +379,7 @@ static bool isOmittedType(mlir::Type type) {
   return false;
 }
 
-mlir::Attribute makeSignlessAttr(mlir::Attribute val) {
+static mlir::Attribute makeSignlessAttr(mlir::Attribute val) {
   auto type = val.getType();
   if (auto intType = type.dyn_cast<mlir::IntegerType>()) {
     if (!intType.isSignless()) {
@@ -1093,7 +1099,7 @@ struct LowerCasts : public mlir::OpConversionPattern<plier::CastOp> {
   }
 };
 
-static void rerun_scf_pipeline(mlir::Operation *op) {
+static void rerunScfPipeline(mlir::Operation *op) {
   assert(nullptr != op);
   auto marker =
       mlir::StringAttr::get(op->getContext(), plierToScfPipelineName());
@@ -1127,7 +1133,7 @@ lowerSlice(plier::PyCallOp op, mlir::ValueRange operands,
     return rewriter.create<mlir::arith::ConstantIndexOp>(op.getLoc(), 1);
   }();
 
-  rerun_scf_pipeline(op);
+  rerunScfPipeline(op);
   rewriter.replaceOpWithNewOp<plier::BuildSliceOp>(op, begin, end, stride);
   return mlir::success();
 }
@@ -1139,7 +1145,7 @@ lowerRangeImpl(plier::PyCallOp op, mlir::ValueRange operands,
   auto parent = op->getParentOp();
   auto res = lowerRange(op, operands, kwargs, rewriter);
   if (mlir::succeeded(res))
-    rerun_scf_pipeline(parent);
+    rerunScfPipeline(parent);
 
   return res;
 }
@@ -1182,7 +1188,7 @@ protected:
         results[i] = rewriter.create<plier::CastOp>(loc, dstType, r);
     }
 
-    rerun_scf_pipeline(op);
+    rerunScfPipeline(op);
     rewriter.replaceOp(op, results);
     return mlir::success();
   }
@@ -1251,7 +1257,7 @@ protected:
         castedResults[i] = res;
     }
 
-    rerun_scf_pipeline(op);
+    rerunScfPipeline(op);
     rewriter.replaceOp(op, castedResults);
     return mlir::success();
   }
