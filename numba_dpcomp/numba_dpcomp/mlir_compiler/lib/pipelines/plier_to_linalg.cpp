@@ -78,7 +78,7 @@
 #include <cctype>
 
 namespace {
-int64_t getOptLevel(mlir::Operation *op) {
+static int64_t getOptLevel(mlir::Operation *op) {
   assert(op);
   auto attr = op->getAttr(plier::attributes::getOptLevelName())
                   .dyn_cast_or_null<mlir::IntegerAttr>();
@@ -88,7 +88,7 @@ int64_t getOptLevel(mlir::Operation *op) {
   return std::max(static_cast<int64_t>(0), attr.getInt());
 }
 
-mlir::LogicalResult applyOptimizations(
+static mlir::LogicalResult applyOptimizations(
     mlir::FuncOp op, const mlir::FrozenRewritePatternSet &patterns,
     mlir::AnalysisManager am,
     llvm::function_ref<mlir::LogicalResult(mlir::FuncOp)> additionalOpts =
@@ -122,7 +122,7 @@ mlir::LogicalResult applyOptimizations(
 
 enum class ArrayLayout { C, F, A };
 
-bool parse_layout(llvm::StringRef &name, ArrayLayout &layout) {
+static bool parseLayout(llvm::StringRef &name, ArrayLayout &layout) {
   if (name.consume_back("C")) {
     layout = ArrayLayout::C;
     return true;
@@ -138,7 +138,8 @@ bool parse_layout(llvm::StringRef &name, ArrayLayout &layout) {
   return false;
 }
 
-template <typename T> bool consume_int_back(llvm::StringRef &name, T &result) {
+template <typename T>
+static bool consumeIntBack(llvm::StringRef &name, T &result) {
   unsigned len = 0;
   auto tmp_name = name;
   while (!tmp_name.empty() && std::isdigit(tmp_name.back())) {
@@ -159,21 +160,22 @@ struct ArrayDesc {
   llvm::StringRef name;
 };
 
-llvm::Optional<ArrayDesc> parse_array_desc(llvm::StringRef &name) {
+static llvm::Optional<ArrayDesc> parseArrayDesc(llvm::StringRef &name) {
   unsigned num_dims = 0;
   ArrayLayout layout = {};
   if (name.consume_front("array(") && name.consume_back(")") &&
-      parse_layout(name, layout) && name.consume_back(", ") &&
-      name.consume_back("d") && consume_int_back(name, num_dims) &&
+      parseLayout(name, layout) && name.consume_back(", ") &&
+      name.consume_back("d") && consumeIntBack(name, num_dims) &&
       name.consume_back(", ") && !name.empty()) {
     return ArrayDesc{num_dims, layout, name};
   }
   return {};
 }
 
-mlir::Type map_array_type(mlir::MLIRContext &ctx, mlir::TypeConverter &conveter,
-                          llvm::StringRef &name) {
-  if (auto desc = parse_array_desc(name)) {
+static mlir::Type mapArrayType(mlir::MLIRContext &ctx,
+                               mlir::TypeConverter &conveter,
+                               llvm::StringRef &name) {
+  if (auto desc = parseArrayDesc(name)) {
     if (desc->layout == ArrayLayout::C || desc->layout == ArrayLayout::F ||
         desc->layout == ArrayLayout::A) {
       if (auto type =
@@ -187,15 +189,16 @@ mlir::Type map_array_type(mlir::MLIRContext &ctx, mlir::TypeConverter &conveter,
   return nullptr;
 }
 
-mlir::Type map_plier_type(mlir::TypeConverter &converter, mlir::Type type) {
+static mlir::Type mapPlierType(mlir::TypeConverter &converter,
+                               mlir::Type type) {
   if (auto pyType = type.dyn_cast<plier::PyType>()) {
     auto name = pyType.getName();
-    return map_array_type(*type.getContext(), converter, name);
+    return mapArrayType(*type.getContext(), converter, name);
   }
   return nullptr;
 }
 
-void rerun_scf_pipeline(mlir::Operation *op) {
+static void rerunScfPipeline(mlir::Operation *op) {
   assert(nullptr != op);
   auto marker =
       mlir::StringAttr::get(op->getContext(), plierToScfPipelineName());
@@ -222,7 +225,7 @@ static mlir::Value skipCasts(mlir::Value val) {
   return val;
 };
 
-mlir::LogicalResult
+static mlir::LogicalResult
 lowerPrange(plier::PyCallOp op, mlir::ValueRange operands,
             llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs,
             mlir::PatternRewriter &rewriter) {
@@ -232,13 +235,13 @@ lowerPrange(plier::PyCallOp op, mlir::ValueRange operands,
                 mlir::UnitAttr::get(op->getContext()));
   };
   if (mlir::succeeded(lowerRange(op, operands, kwargs, rewriter, setAttr))) {
-    rerun_scf_pipeline(parent);
+    rerunScfPipeline(parent);
     return mlir::success();
   }
   return mlir::failure();
 }
 
-mlir::LogicalResult
+static mlir::LogicalResult
 lowerLen(plier::PyCallOp op, mlir::ValueRange operands,
          llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs,
          mlir::PatternRewriter &rewriter) {
@@ -250,7 +253,7 @@ lowerLen(plier::PyCallOp op, mlir::ValueRange operands,
   if (!argType || !argType.hasRank())
     return mlir::failure();
 
-  rerun_scf_pipeline(op);
+  rerunScfPipeline(op);
 
   auto loc = op.getLoc();
   mlir::Value dim;
@@ -321,7 +324,7 @@ protected:
 
     auto results = castRetTypes(loc, rewriter, op, res);
 
-    rerun_scf_pipeline(op);
+    rerunScfPipeline(op);
     rewriter.replaceOp(op, results);
     return mlir::success();
   }
@@ -351,7 +354,7 @@ struct NumpyAttrsLowering : public mlir::OpRewritePattern<plier::GetattrOp> {
 
     auto results = castRetTypes(loc, rewriter, op, res);
 
-    rerun_scf_pipeline(op);
+    rerunScfPipeline(op);
     rewriter.replaceOp(op, results);
     return mlir::success();
   }
@@ -387,7 +390,7 @@ struct NumpyBinOpLowering : public mlir::OpRewritePattern<plier::BinOp> {
 
         auto results = castRetTypes(loc, rewriter, op, res);
 
-        rerun_scf_pipeline(op);
+        rerunScfPipeline(op);
         rewriter.replaceOp(op, results);
         return mlir::success();
       }
@@ -460,7 +463,7 @@ protected:
         castedResults[i] = res;
     }
 
-    rerun_scf_pipeline(op);
+    rerunScfPipeline(op);
     rewriter.replaceOp(op, castedResults);
     return mlir::success();
   }
@@ -587,7 +590,7 @@ static mlir::Value index_cast(mlir::Value value, mlir::Location loc,
   if (!value.getType().isa<mlir::IndexType>()) {
     auto indexType = builder.getIndexType();
     auto res = builder.create<plier::CastOp>(loc, indexType, value);
-    rerun_scf_pipeline(res);
+    rerunScfPipeline(res);
     return res;
   }
   return value;
@@ -889,7 +892,7 @@ struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
         res = rewriter.create<plier::SignCastOp>(loc, elemType, res);
     }
 
-    rerun_scf_pipeline(op);
+    rerunScfPipeline(op);
     rewriter.replaceOp(op, res);
     return mlir::success();
   }
@@ -961,7 +964,7 @@ struct SetitemOpLowering : public mlir::OpConversionPattern<plier::SetItemOp> {
       if (val.getType() != elemType) {
         // TODO
         val = rewriter.createOrFold<plier::CastOp>(loc, elemType, val);
-        rerun_scf_pipeline(op);
+        rerunScfPipeline(op);
       }
       if (elemType != signlessElemType)
         val = rewriter.create<plier::SignCastOp>(loc, signlessElemType, val);
@@ -2263,7 +2266,7 @@ void populateArrayTypeConverter(mlir::MLIRContext & /*context*/,
                                 mlir::TypeConverter &converter) {
   converter.addConversion(
       [&](plier::PyType type) -> llvm::Optional<mlir::Type> {
-        auto ret = map_plier_type(converter, type);
+        auto ret = mapPlierType(converter, type);
         if (!ret)
           return llvm::None;
 
