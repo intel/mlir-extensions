@@ -106,6 +106,11 @@ metadata = dict(
     packages=packages,
     install_requires=['numba>=0.54,<0.55'],
     include_package_data=True,
+    entry_points={
+        "numba_extensions": [
+            "init = numba_dpcomp.mlir.dpctl_interop:numba_register",
+        ]
+    },
 )
 
 setup(**metadata)
