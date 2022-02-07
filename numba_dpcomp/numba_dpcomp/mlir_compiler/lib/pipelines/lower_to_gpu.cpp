@@ -65,6 +65,7 @@
 #include "mlir-extensions/transforms/const_utils.hpp"
 #include "mlir-extensions/transforms/func_utils.hpp"
 #include "mlir-extensions/transforms/pipeline_utils.hpp"
+#include "mlir-extensions/transforms/type_conversion.hpp"
 #include "mlir-extensions/transforms/rewrite_wrapper.hpp"
 
 namespace {
@@ -2454,6 +2455,103 @@ protected:
   }
 };
 
+template<typename Op>
+struct ConvertOp : public mlir::OpConversionPattern<Op> {
+  using mlir::OpConversionPattern<Op>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(Op op, typename Op::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto origResTypes = op->getResultTypes();
+    llvm::SmallVector<mlir::Type, 2> newResTypes;
+
+    auto typeConverter = getTypeConverter();
+    assert(typeConverter);
+    if (mlir::failed(typeConverter->convertTypes(origResTypes, newResTypes)))
+      return mlir::failure();
+
+    auto attrs = adaptor.getAttributes();
+    llvm::SmallVector<mlir::NamedAttribute> attrsList;
+    attrsList.reserve(attrs.size());
+    for (auto it : attrs)
+      attrsList.emplace_back(it.getName(), it.getValue());
+
+    rewriter.replaceOpWithNewOp<Op>(op, newResTypes, adaptor.getOperands(), attrsList);
+    return mlir::success();
+  }
+};
+
+struct ConvertUsmArrays
+    : public mlir::PassWrapper<ConvertUsmArrays,
+                               mlir::OperationPass<mlir::ModuleOp>> {
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::StandardOpsDialect>();
+  }
+
+  void runOnOperation() override;
+};
+
+
+void ConvertUsmArrays::runOnOperation() {
+  auto &context = getContext();
+
+  mlir::TypeConverter typeConverter;
+  // Convert unknown types to itself
+  typeConverter.addConversion([](mlir::Type type) { return type; });
+  populateStdTypeConverter(context, typeConverter);
+  populateTupleTypeConverter(context, typeConverter);
+  typeConverter.addConversion(
+      [&](plier::PyType type) -> llvm::Optional<mlir::Type> {
+        auto name = type.getName();
+        if (name.consume_front("USM:ndarray(") && name.consume_back(")")) {
+          auto newTypename = ("array(" + name + ")").str();
+          return plier::PyType::get(type.getContext(), newTypename);
+        }
+
+        return llvm::None;
+      });
+
+  auto materializeCast = [](mlir::OpBuilder &builder, mlir::Type type,
+                            mlir::ValueRange inputs,
+                            mlir::Location loc) -> llvm::Optional<mlir::Value> {
+    if (inputs.size() == 1)
+      return builder
+          .create<mlir::UnrealizedConversionCastOp>(loc, type, inputs.front())
+          .getResult(0);
+
+    return llvm::None;
+  };
+  typeConverter.addArgumentMaterialization(materializeCast);
+  typeConverter.addSourceMaterialization(materializeCast);
+  typeConverter.addTargetMaterialization(materializeCast);
+
+  mlir::RewritePatternSet patterns(&context);
+  mlir::ConversionTarget target(context);
+
+  plier::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
+                                                      target);
+
+  plier::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
+                                                            patterns, target);
+
+  target.addDynamicallyLegalOp<plier::GetItemOp, plier::SetItemOp>([&](mlir::Operation *op) {
+    return typeConverter.isLegal(op);
+  });
+
+  patterns.insert<
+      // clang-format off
+      ConvertOp<plier::GetItemOp>,
+      ConvertOp<plier::SetItemOp>
+      // clang-format on
+      >(typeConverter, &context);
+
+  if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
+                                                std::move(patterns))))
+    signalPassFailure();
+}
+
+
 struct LowerGpuRangePass
     : public plier::RewriteWrapperPass<LowerGpuRangePass, void, void,
                                        LowerGpuRange> {};
@@ -2700,6 +2798,7 @@ static void commonOptPasses(mlir::OpPassManager &pm) {
 }
 
 static void populateLowerToGPUPipelineHigh(mlir::OpPassManager &pm) {
+  pm.addPass(std::make_unique<ConvertUsmArrays>());
   pm.addPass(std::make_unique<LowerGpuRangePass>());
   pm.addPass(std::make_unique<LowerGpuBuiltinsPass>());
   commonOptPasses(pm);
