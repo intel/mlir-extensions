@@ -114,7 +114,7 @@ set(CMAKE_INSTALL_BINDIR ./numba_dpcomp/numba_dpcomp)
 set(CMAKE_INSTALL_LIBDIR ./numba_dpcomp/numba_dpcomp)
 set(CMAKE_INSTALL_INCLUDEDIR ./numba_dpcomp/numba_dpcomp)
 
-install(TARGETS dpcomp-runtime dpcomp-math-runtime mlir_compiler
+install(TARGETS dpcomp-runtime dpcomp-math-runtime dpcomp-python-runtime mlir_compiler
         LIBRARY DESTINATION numba_dpcomp/numba_dpcomp
         )
 
