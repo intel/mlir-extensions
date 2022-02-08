@@ -16,10 +16,6 @@ project(dpcomp-python-runtime LANGUAGES CXX C)
 
 include(GenerateExportHeader)
 
-if(NOT LEVEL_ZERO_DIR)
-    message(FATAL_ERROR "LEVEL_ZERO_DIR is not set")
-endif()
-
 set(SOURCES_LIST
     lib/python-rt.cpp
     )
