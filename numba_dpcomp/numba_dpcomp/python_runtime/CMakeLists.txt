@@ -12,5 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_subdirectory(numba_dpcomp/python_runtime)
-add_subdirectory(numba_dpcomp/mlir_compiler)
+project(dpcomp-python-runtime LANGUAGES CXX C)
+
+include(GenerateExportHeader)
+
+if(NOT LEVEL_ZERO_DIR)
+    message(FATAL_ERROR "LEVEL_ZERO_DIR is not set")
+endif()
+
+set(SOURCES_LIST
+    lib/python-rt.cpp
+    )
+set(HEADERS_LIST
+    )
+
+add_library(${PROJECT_NAME} SHARED ${SOURCES_LIST} ${HEADERS_LIST})
+generate_export_header(${PROJECT_NAME})
+
+target_include_directories(${PROJECT_NAME} PRIVATE
+    ${PROJECT_BINARY_DIR}
+    ${LEVEL_ZERO_DIR}/include
+    )
