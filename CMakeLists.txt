@@ -75,7 +75,7 @@ if(GPU_ENABLE)
     add_subdirectory(dpcomp_gpu_runtime)
 endif()
 
-add_subdirectory(numba_dpcomp/numba_dpcomp/mlir_compiler)
+add_subdirectory(numba_dpcomp)
 
 if(BUILD_TESTING)
     add_subdirectory(test)
