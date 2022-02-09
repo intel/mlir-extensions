@@ -65,8 +65,8 @@
 #include "mlir-extensions/transforms/const_utils.hpp"
 #include "mlir-extensions/transforms/func_utils.hpp"
 #include "mlir-extensions/transforms/pipeline_utils.hpp"
-#include "mlir-extensions/transforms/type_conversion.hpp"
 #include "mlir-extensions/transforms/rewrite_wrapper.hpp"
+#include "mlir-extensions/transforms/type_conversion.hpp"
 
 namespace {
 static void moveOpsIntoParallel(mlir::scf::ParallelOp outer, int depth = 0) {
@@ -2455,8 +2455,7 @@ protected:
   }
 };
 
-template<typename Op>
-struct ConvertOp : public mlir::OpConversionPattern<Op> {
+template <typename Op> struct ConvertOp : public mlir::OpConversionPattern<Op> {
   using mlir::OpConversionPattern<Op>::OpConversionPattern;
 
   mlir::LogicalResult
@@ -2476,13 +2475,49 @@ struct ConvertOp : public mlir::OpConversionPattern<Op> {
     for (auto it : attrs)
       attrsList.emplace_back(it.getName(), it.getValue());
 
-    rewriter.replaceOpWithNewOp<Op>(op, newResTypes, adaptor.getOperands(), attrsList);
+    rewriter.replaceOpWithNewOp<Op>(op, newResTypes, adaptor.getOperands(),
+                                    attrsList);
     return mlir::success();
   }
 };
 
-struct ConvertUsmArrays
-    : public mlir::PassWrapper<ConvertUsmArrays,
+static bool isGpuArray(llvm::StringRef &name) {
+  return name.consume_front("USM:ndarray(") && name.consume_back(")");
+}
+
+struct MarkGpuArraysInputs
+    : public mlir::PassWrapper<MarkGpuArraysInputs, mlir::FunctionPass> {
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::StandardOpsDialect>();
+  }
+
+  void runOnFunction() override;
+};
+
+constexpr llvm::StringLiteral kGpuArgAttr("plier.gpu_accessible");
+
+void MarkGpuArraysInputs::runOnFunction() {
+  auto func = getFunction();
+
+  auto unitAttr = mlir::UnitAttr::get(&getContext());
+  auto attrName = mlir::StringAttr::get(&getContext(), kGpuArgAttr);
+  for (auto it : llvm::enumerate(func.getType().getInputs())) {
+    auto type = it.value().dyn_cast<plier::PyType>();
+    if (!type)
+      continue;
+
+    auto name = type.getName();
+    if (!isGpuArray(name))
+      continue;
+
+    func.setArgAttr(it.index(), attrName, unitAttr);
+  }
+  markAllAnalysesPreserved();
+}
+
+struct ConvertGpuArrays
+    : public mlir::PassWrapper<ConvertGpuArrays,
                                mlir::OperationPass<mlir::ModuleOp>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
@@ -2492,8 +2527,7 @@ struct ConvertUsmArrays
   void runOnOperation() override;
 };
 
-
-void ConvertUsmArrays::runOnOperation() {
+void ConvertGpuArrays::runOnOperation() {
   auto &context = getContext();
 
   mlir::TypeConverter typeConverter;
@@ -2504,7 +2538,7 @@ void ConvertUsmArrays::runOnOperation() {
   typeConverter.addConversion(
       [&](plier::PyType type) -> llvm::Optional<mlir::Type> {
         auto name = type.getName();
-        if (name.consume_front("USM:ndarray(") && name.consume_back(")")) {
+        if (isGpuArray(name)) {
           auto newTypename = ("array(" + name + ")").str();
           return plier::PyType::get(type.getContext(), newTypename);
         }
@@ -2535,9 +2569,8 @@ void ConvertUsmArrays::runOnOperation() {
   plier::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
                                                             patterns, target);
 
-  target.addDynamicallyLegalOp<plier::GetItemOp, plier::SetItemOp>([&](mlir::Operation *op) {
-    return typeConverter.isLegal(op);
-  });
+  target.addDynamicallyLegalOp<plier::GetItemOp, plier::SetItemOp>(
+      [&](mlir::Operation *op) { return typeConverter.isLegal(op); });
 
   patterns.insert<
       // clang-format off
@@ -2550,7 +2583,6 @@ void ConvertUsmArrays::runOnOperation() {
                                                 std::move(patterns))))
     signalPassFailure();
 }
-
 
 struct LowerGpuRangePass
     : public plier::RewriteWrapperPass<LowerGpuRangePass, void, void,
@@ -2798,7 +2830,8 @@ static void commonOptPasses(mlir::OpPassManager &pm) {
 }
 
 static void populateLowerToGPUPipelineHigh(mlir::OpPassManager &pm) {
-  pm.addPass(std::make_unique<ConvertUsmArrays>());
+  pm.addNestedPass<mlir::FuncOp>(std::make_unique<MarkGpuArraysInputs>());
+  pm.addPass(std::make_unique<ConvertGpuArrays>());
   pm.addPass(std::make_unique<LowerGpuRangePass>());
   pm.addPass(std::make_unique<LowerGpuBuiltinsPass>());
   commonOptPasses(pm);
