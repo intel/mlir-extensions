@@ -24,60 +24,20 @@ except ImportError:
     _is_dpctl_available = False
 
 if _is_dpctl_available:
-    import builtins
-    import functools
-    import importlib
-    import inspect
-    import sys
-    from ctypes.util import find_library
-    from inspect import getmembers, isbuiltin, isclass, isfunction
-    from numbers import Number
-    from types import BuiltinFunctionType as bftype
-    from types import FunctionType as ftype
-
-    import llvmlite.binding as llb
     import llvmlite.llvmpy.core as lc
     import numba
     import numpy as np
     from llvmlite import ir
     from numba import types
     from numba.core import cgutils, config, types, typing
-    from numba.core.datamodel.registry import (
-        register_default as register_model_default,
-    )
-    from numba.core.imputils import builtin_registry as lower_registry
-    from numba.core.overload_glue import _overload_glue
+
     from numba.core.pythonapi import box, unbox, NativeValue
-    from numba.core.typing.arraydecl import normalize_shape
-    from numba.core.typing.npydecl import registry as typing_registry
-    from numba.core.typing.templates import (
-        AttributeTemplate,
-        CallableTemplate,
-        bound_function,
-    )
-    from numba.core.typing.templates import builtin_registry as templates_registry
-    from numba.core.typing.templates import signature
-    from numba.extending import (
-        intrinsic,
-        lower_builtin,
-        overload_classmethod,
-        register_model,
-        type_callable,
-        typeof_impl,
-    )
+
+    from numba.extending import (register_model,typeof_impl)
     from numba.np import numpy_support
-    from numba.np.arrayobj import _array_copy
 
     from numba.core.datamodel.models import StructModel
     from numba.core.types.npytypes import Array
-
-    debug = config.DEBUG
-
-
-    def dprint(*args):
-        if debug:
-            print(*args)
-            sys.stdout.flush()
 
     class USMNdArrayBaseType(Array):
         """
