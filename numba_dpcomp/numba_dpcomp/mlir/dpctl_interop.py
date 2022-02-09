@@ -14,11 +14,7 @@
 
 
 try:
-    import dpctl.tensor.numpy_usm_shared as nus
-    from dpctl.tensor.numpy_usm_shared import class_list, functions_list, ndarray
     from dpctl.tensor import usm_ndarray
-    import dpctl
-    from dpctl.memory import MemoryUSMShared
     _is_dpctl_available = True
 except ImportError:
     _is_dpctl_available = False
@@ -185,18 +181,6 @@ if _is_dpctl_available:
             # addrspace=address_space.GLOBAL,
             addrspace=None,
         )
-
-    # This tells Numba how to create a UsmSharedArrayType when a usmarray is passed
-    # into a njit function.
-    @typeof_impl.register(ndarray)
-    def typeof_ta_ndarray(val, c):
-        try:
-            dtype = numpy_support.from_dtype(val.dtype)
-        except NotImplementedError:
-            raise ValueError("Unsupported array dtype: %s" % (val.dtype,))
-        layout = numpy_support.map_layout(val)
-        readonly = not val.flags.writeable
-        return UsmSharedArrayType(dtype, val.ndim, layout, readonly=readonly)
 
     def adapt_sycl_array_from_python(pyapi, ary, ptr):
         assert pyapi.context.enable_nrt
