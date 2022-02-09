@@ -35,8 +35,6 @@ if _is_dpctl_available:
     from types import BuiltinFunctionType as bftype
     from types import FunctionType as ftype
 
-
-
     import llvmlite.binding as llb
     import llvmlite.llvmpy.core as lc
     import numba
@@ -49,7 +47,7 @@ if _is_dpctl_available:
     )
     from numba.core.imputils import builtin_registry as lower_registry
     from numba.core.overload_glue import _overload_glue
-    from numba.core.pythonapi import box, unbox
+    from numba.core.pythonapi import box, unbox, NativeValue
     from numba.core.typing.arraydecl import normalize_shape
     from numba.core.typing.npydecl import registry as typing_registry
     from numba.core.typing.templates import (
@@ -327,16 +325,33 @@ if _is_dpctl_available:
             c.pyapi.incref(parent)
             return parent
 
+    def adapt_sycl_array_from_python(pyapi, ary, ptr):
+        assert pyapi.context.enable_nrt
+        fnty = lc.Type.function(lc.Type.int(), [pyapi.pyobj, pyapi.voidptr])
+        fn = pyapi._get_function(fnty, name="dpcompUnboxSyclInterface")
+        fn.args[0].add_attribute(lc.ATTR_NO_CAPTURE)
+        fn.args[1].add_attribute(lc.ATTR_NO_CAPTURE)
+        return pyapi.builder.call(fn, (ary, ptr))
 
     @unbox(UsmSharedArrayType)
-    def unbox_array1(typ, obj, c):
-        print('unbox_array UsmSharedArrayType',flush=True)
-        assert False
-
     @unbox(USMNdArrayType)
-    def unbox_array2(typ, obj, c):
+    def unbox_array(typ, obj, c):
         print('unbox_array USMNdArrayType',flush=True)
-        assert False
+        nativearycls = c.context.make_array(typ)
+        nativeary = nativearycls(c.context, c.builder)
+        aryptr = nativeary._getpointer()
+
+        ptr = c.builder.bitcast(aryptr, c.pyapi.voidptr)
+        errcode = adapt_sycl_array_from_python(c.pyapi, obj, ptr)
+        failed = cgutils.is_not_null(c.builder, errcode)
+
+        # Handle error
+        with c.builder.if_then(failed, likely=False):
+            c.pyapi.err_set_string("PyExc_TypeError",
+                                   "can't unbox array from PyObject into "
+                                   "native value.  The object maybe of a "
+                                   "different type")
+        return NativeValue(c.builder.load(aryptr), is_error=failed)
 
     _registered = False
 
