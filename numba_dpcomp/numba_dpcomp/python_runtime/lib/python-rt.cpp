@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "python-rt.hpp"
+
 #include <cstdlib>
-
-#include "dpcomp-python-runtime_export.h"
-
-typedef void (*MemInfoDtorFunction)(void *ptr, size_t size, void *info);
 
 // TODO: get rid of this definition
 struct MemInfo {
