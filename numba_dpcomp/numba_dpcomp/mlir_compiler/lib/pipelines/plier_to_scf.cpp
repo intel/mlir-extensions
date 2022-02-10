@@ -30,7 +30,7 @@
 #include "mlir-extensions/compiler/pipeline_registry.hpp"
 
 namespace {
-mlir::Block *getNextBlock(mlir::Block *block) {
+static mlir::Block *getNextBlock(mlir::Block *block) {
   assert(nullptr != block);
   if (auto br =
           mlir::dyn_cast_or_null<mlir::BranchOp>(block->getTerminator())) {
@@ -39,8 +39,8 @@ mlir::Block *getNextBlock(mlir::Block *block) {
   return nullptr;
 };
 
-void eraseBlocks(mlir::PatternRewriter &rewriter,
-                 llvm::ArrayRef<mlir::Block *> blocks) {
+static void eraseBlocks(mlir::PatternRewriter &rewriter,
+                        llvm::ArrayRef<mlir::Block *> blocks) {
   for (auto block : blocks) {
     assert(nullptr != block);
     block->dropAllDefinedValueUses();
@@ -50,7 +50,7 @@ void eraseBlocks(mlir::PatternRewriter &rewriter,
   }
 }
 
-bool isBlocksDifferent(llvm::ArrayRef<mlir::Block *> blocks) {
+static bool isBlocksDifferent(llvm::ArrayRef<mlir::Block *> blocks) {
   for (auto it : llvm::enumerate(blocks)) {
     auto block1 = it.value();
     assert(nullptr != block1);

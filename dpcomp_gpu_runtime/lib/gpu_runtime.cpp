@@ -27,18 +27,8 @@
 #include "level_zero_printing.hpp"
 #include "level_zero_wrapper.hpp"
 
-// TODO: get rid of this definition
 typedef void (*MemInfoDtorFunction)(void *ptr, size_t size, void *info);
-struct MemInfo {
-  size_t refct;
-  MemInfoDtorFunction dtor;
-  void *dtor_info;
-  void *data;
-  size_t size;
-  void *external_allocator;
-};
-
-using AllocFuncT = void *(*)(size_t);
+using AllocFuncT = void *(*)(void *, size_t, MemInfoDtorFunction, void *);
 
 #if 0 // Log functions
 namespace {
@@ -85,27 +75,7 @@ template <typename F> auto catchAll(F &&func) {
   }
 }
 
-// TODO: expose NRT_MemInfo_new from numba runtime
 static AllocFuncT AllocFunc = nullptr;
-
-static MemInfo *allocMemInfo(void *data, size_t size, MemInfoDtorFunction dtor,
-                             void *dtorInfo) {
-  if (!AllocFunc)
-    return nullptr;
-
-  auto meminfo = static_cast<MemInfo *>(AllocFunc(sizeof(MemInfo)));
-  if (!meminfo)
-    return nullptr;
-
-  *meminfo = {};
-
-  meminfo->refct = 1;
-  meminfo->dtor = dtor;
-  meminfo->dtor_info = dtorInfo;
-  meminfo->data = data;
-  meminfo->size = size;
-  return meminfo;
-}
 
 struct DeviceDesc {
   ze_driver_handle_t driver = nullptr;
@@ -319,11 +289,10 @@ struct Stream {
     CHECK_ZE_RESULT(zeEventHostSynchronize(event, UINT64_MAX));
   }
 
-  // Change the allocbuffer function since upstream pass does not have MemInfo
-  // struct
-  std::tuple<MemInfo *, void *, ze_event_handle_t>
+  std::tuple<void *, void *, ze_event_handle_t>
   allocBuffer(size_t size, size_t alignment, bool shared,
-              ze_event_handle_t *events, size_t eventIndex) {
+              ze_event_handle_t *events, size_t eventIndex,
+              AllocFuncT allocFunc) {
     (void)events; // Alloc is always sync for now, ignore events
     auto dtor = [](void *ptr, size_t /*size*/, void *info) {
       assert(ptr);
@@ -354,7 +323,14 @@ struct Stream {
       return ret;
     }();
     assert(mem);
-    auto info = allocMemInfo(mem, size, dtor, this);
+
+    auto info = [&]() -> void * {
+      if (allocFunc)
+        return allocFunc(mem, size, dtor, this);
+
+      return mem;
+    }();
+
     if (!info) {
       zeMemFree(context.get(), mem);
       throw std::runtime_error("Failed to allocate MemInfo");
@@ -490,7 +466,7 @@ dpcompGpuAlloc(void *stream, size_t size, size_t alignment, int shared,
   catchAll([&]() {
     auto res = static_cast<Stream *>(stream)->allocBuffer(
         size, alignment, shared != 0, static_cast<ze_event_handle_t *>(events),
-        eventIndex);
+        eventIndex, AllocFunc);
     *ret = AllocResult{std::get<0>(res), std::get<1>(res), std::get<2>(res)};
   });
 }

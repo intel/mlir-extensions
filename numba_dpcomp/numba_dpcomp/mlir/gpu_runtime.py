@@ -27,6 +27,8 @@ except:
 
 
 if IS_GPU_RUNTIME_AVAILABLE:
+    from .python_rt import get_alloc_func
+
     def _register_funcs():
         _funcs = [
             'dpcompGpuStreamCreate',
@@ -59,8 +61,7 @@ if IS_GPU_RUNTIME_AVAILABLE:
 
         _alloc_func = runtime_lib.dpcompGpuSetMemInfoAllocFunc
         _alloc_func.argtypes = [ctypes.c_void_p]
-        _numba_alloc_ptr = ctypes.cast(_nrt.c_helpers['Allocate'], ctypes.c_void_p)
-        _alloc_func(_numba_alloc_ptr.value)
+        _alloc_func(get_alloc_func())
 
     _register_funcs()
     del _register_funcs
