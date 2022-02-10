@@ -55,6 +55,7 @@
 #include "pipelines/lower_to_llvm.hpp"
 #include "pipelines/plier_to_linalg.hpp"
 #include "pipelines/plier_to_std.hpp"
+#include "pipelines/pre_low_simplifications.hpp"
 #include "py_linalg_resolver.hpp"
 
 #include "mlir-extensions/compiler/pipeline_registry.hpp"
@@ -2485,6 +2486,15 @@ static bool isGpuArray(llvm::StringRef &name) {
   return name.consume_front("USM:ndarray(") && name.consume_back(")");
 }
 
+static bool isGpuArray(mlir::Type type) {
+  auto pyType = type.dyn_cast<plier::PyType>();
+  if (!pyType)
+    return false;
+
+  auto name = pyType.getName();
+  return isGpuArray(name);
+}
+
 struct MarkGpuArraysInputs
     : public mlir::PassWrapper<MarkGpuArraysInputs, mlir::FunctionPass> {
   virtual void
@@ -2497,22 +2507,38 @@ struct MarkGpuArraysInputs
 
 constexpr llvm::StringLiteral kGpuArgAttr("plier.gpu_accessible");
 
+template <typename F>
+static void visitTypeRecursive(mlir::Type type, F &&visitor) {
+  if (auto tupleType = type.dyn_cast<mlir::TupleType>()) {
+    for (auto t : tupleType.getTypes())
+      visitTypeRecursive(t, std::forward<F>(visitor));
+  } else {
+    visitor(type);
+  }
+}
+
 void MarkGpuArraysInputs::runOnFunction() {
   auto func = getFunction();
+  auto funcType = func.getType();
 
-  auto unitAttr = mlir::UnitAttr::get(&getContext());
-  auto attrName = mlir::StringAttr::get(&getContext(), kGpuArgAttr);
-  for (auto it : llvm::enumerate(func.getType().getInputs())) {
-    auto type = it.value().dyn_cast<plier::PyType>();
-    if (!type)
-      continue;
+  bool needAttr = false;
+  llvm::SmallVector<bool> result;
+  result.reserve(funcType.getNumInputs());
 
-    auto name = type.getName();
-    if (!isGpuArray(name))
-      continue;
+  auto visitor = [&](mlir::Type type) {
+    auto res = isGpuArray(type);
+    result.emplace_back(res);
+    needAttr = needAttr || res;
+  };
 
-    func.setArgAttr(it.index(), attrName, unitAttr);
+  for (auto type : (func.getType().getInputs()))
+    visitTypeRecursive(type, visitor);
+
+  if (needAttr) {
+    mlir::OpBuilder builder(&getContext());
+    func->setAttr(kGpuArgAttr, builder.getBoolArrayAttr(result));
   }
+
   markAllAnalysesPreserved();
 }
 
@@ -2890,11 +2916,11 @@ void registerLowerToGPUPipeline(plier::PipelineRegistry &registry) {
     sink(lowerToGPUPipelineNameHigh(),
          {highStage.begin, plierToStdPipelineName(),
           plierToLinalgGenPipelineName()},
-         {highStage.end}, {plierToStdPipelineName()},
+         {highStage.end, untuplePipelineName()}, {plierToStdPipelineName()},
          &populateLowerToGPUPipelineHigh);
 
     auto lowStage = getLowerLoweringStage();
-    sink(lowerToGPUPipelineNameLow(), {lowStage.begin},
+    sink(lowerToGPUPipelineNameLow(), {lowStage.begin, untuplePipelineName()},
          {lowStage.end, lowerToLLVMPipelineName()}, {},
          &populateLowerToGPUPipelineLow);
   });
