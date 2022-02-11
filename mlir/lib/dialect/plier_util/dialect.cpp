@@ -199,7 +199,8 @@ void ParallelOp::build(
   mlir::OpBuilder::InsertionGuard guard(odsBuilder);
   llvm::SmallVector<mlir::Type> argTypes(count * 2 + 1,
                                          odsBuilder.getIndexType());
-  auto *bodyBlock = odsBuilder.createBlock(bodyRegion, {}, argTypes);
+  llvm::SmallVector<mlir::Location> locs(argTypes.size(), odsBuilder.getUnknownLoc());
+  auto *bodyBlock = odsBuilder.createBlock(bodyRegion, {}, argTypes, locs);
 
   if (bodyBuilder) {
     odsBuilder.setInsertionPointToStart(bodyBlock);

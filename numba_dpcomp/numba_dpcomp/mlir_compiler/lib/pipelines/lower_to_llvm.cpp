@@ -1511,7 +1511,8 @@ struct LowerTakeContextOp
         auto func =
             insertFunc(wrapperName, wrapperType, mlir::LLVM::Linkage::Private);
         auto block = rewriter.createBlock(&func.getBody(),
-                                          mlir::Region::iterator{}, ctxType);
+                                          mlir::Region::iterator{}, ctxType,
+                                          unknownLoc);
         rewriter.setInsertionPointToStart(block);
 
         auto innerResults = rewriter
@@ -1549,7 +1550,8 @@ struct LowerTakeContextOp
         auto func =
             insertFunc(wrapperName, wrapperType, mlir::LLVM::Linkage::Private);
         auto block = rewriter.createBlock(&func.getBody(),
-                                          mlir::Region::iterator{}, ctxType);
+                                          mlir::Region::iterator{}, ctxType,
+                                          unknownLoc);
         rewriter.setInsertionPointToStart(block);
 
         auto ptr = rewriter.create<mlir::LLVM::BitcastOp>(
