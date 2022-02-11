@@ -185,6 +185,12 @@ static void printDeviceProps(ze_device_handle_t device) {
   print(moduleProperties, printer);
 }
 
+static auto countEvents(ze_event_handle_t *events) {
+  assert(events);
+  return static_cast<uint32_t>(
+      countUntil(events, static_cast<ze_event_handle_t>(nullptr)));
+}
+
 struct Stream {
   Stream(size_t eventsCount) {
     auto driverAndDevice = getDevice();
@@ -263,8 +269,7 @@ struct Stream {
                                  ze_event_handle_t *events, ParamDesc *params,
                                  size_t eventIndex) {
     assert(kernel);
-    auto eventsCount = static_cast<uint32_t>(
-        countUntil(events, static_cast<ze_event_handle_t>(nullptr)));
+    auto eventsCount = countEvents(events);
     auto paramsCount = countUntil(params, ParamDesc{nullptr, 0});
 
     auto castSz = [](size_t val) { return static_cast<uint32_t>(val); };
@@ -293,7 +298,12 @@ struct Stream {
   allocBuffer(size_t size, size_t alignment, bool shared,
               ze_event_handle_t *events, size_t eventIndex,
               AllocFuncT allocFunc) {
-    (void)events; // Alloc is always sync for now, ignore events
+    // Alloc is always sync for now, synchronize
+    auto eventsCount = countEvents(events);
+    for (decltype(eventsCount) i = 0; i < eventsCount; ++i) {
+      CHECK_ZE_RESULT(zeEventHostSynchronize(events[i], UINT64_MAX));
+    }
+
     auto dtor = [](void *ptr, size_t /*size*/, void *info) {
       assert(ptr);
       assert(info);
@@ -380,6 +390,8 @@ private:
 
     ze_event_desc_t desc = {};
     desc.index = static_cast<uint32_t>(index);
+    desc.signal = ZE_EVENT_SCOPE_FLAG_DEVICE | ZE_EVENT_SCOPE_FLAG_HOST;
+    desc.wait = ZE_EVENT_SCOPE_FLAG_DEVICE | ZE_EVENT_SCOPE_FLAG_HOST;
     auto event = ze::Event::create(eventPool, desc);
     auto ev = event.get();
     events[index] = std::move(event);
