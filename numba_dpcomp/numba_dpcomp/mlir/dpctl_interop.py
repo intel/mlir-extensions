@@ -105,14 +105,8 @@ if _is_dpctl_available:
         def __init__(self, dmm, fe_type):
             ndim = fe_type.ndim
             members = [
-                (
-                    "meminfo",
-                    types.CPointer(fe_type.dtype, addrspace=fe_type.addrspace),
-                ),
-                (
-                    "parent",
-                    types.CPointer(fe_type.dtype, addrspace=fe_type.addrspace),
-                ),
+                ('meminfo', types.MemInfoPointer(fe_type.dtype)),
+                ('parent', types.pyobject),
                 ("nitems", types.intp),
                 ("itemsize", types.intp),
                 (
