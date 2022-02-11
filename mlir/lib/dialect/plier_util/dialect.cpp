@@ -573,33 +573,6 @@ struct ChangeLayoutLinalgGeneric
   }
 };
 
-//struct ChangeLayoutLinalgCopy
-//    : public mlir::OpRewritePattern<mlir::linalg::CopyOp> {
-//  using OpRewritePattern::OpRewritePattern;
-
-//  mlir::LogicalResult
-//  matchAndRewrite(mlir::linalg::CopyOp op,
-//                  mlir::PatternRewriter &rewriter) const override {
-//    auto input = op.input();
-//    auto output = op.output();
-//    auto clInput = input.getDefiningOp<plier::ChangeLayoutOp>();
-//    auto clOutput = output.getDefiningOp<plier::ChangeLayoutOp>();
-//    if (!clInput && !clOutput)
-//      return mlir::failure();
-
-//    if (clInput)
-//      input = clInput.source();
-
-//    if (clOutput)
-//      output = clOutput.source();
-
-//    rewriter.replaceOpWithNewOp<mlir::linalg::CopyOp>(
-//        op, input, output, op.inputPermutation().getValueOr(mlir::AffineMap{}),
-//        op.outputPermutation().getValueOr(mlir::AffineMap{}));
-//    return mlir::success();
-//  }
-//};
-
 struct ChangeLayoutLinalgFill
     : public mlir::OpRewritePattern<mlir::linalg::FillOp> {
   using OpRewritePattern::OpRewritePattern;

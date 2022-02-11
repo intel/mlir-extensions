@@ -931,6 +931,28 @@ struct GetitemOpArrLowering
   }
 };
 
+static void genCopy(mlir::OpBuilder &builder, mlir::Location loc, mlir::Value src, mlir::Value dst) {
+  auto srcType = src.getType().cast<mlir::ShapedType>();
+  auto dstType = dst.getType().cast<mlir::ShapedType>();
+  assert(srcType.getRank() == dstType.getRank());
+  assert(srcType.getElementType() == dstType.getElementType());
+  auto rank = srcType.getRank();
+
+  auto affineMap = mlir::AffineMap::getMultiDimIdentityMap(rank, builder.getContext());
+  const mlir::AffineMap maps[] = {
+    affineMap,
+    affineMap,
+      };
+
+  llvm::SmallVector<mlir::StringRef> iterators(rank, "parallel");
+
+  auto bodyBuilder = [](mlir::OpBuilder &b, mlir::Location l, mlir::ValueRange args) {
+    assert(args.size() == 1);
+    b.create<mlir::linalg::YieldOp>(l, args.front());
+  };
+  builder.create<mlir::linalg::GenericOp>(loc, src, dst, maps, iterators, bodyBuilder);
+}
+
 struct SetitemOpLowering : public mlir::OpConversionPattern<plier::SetItemOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -993,12 +1015,13 @@ struct SetitemOpLowering : public mlir::OpConversionPattern<plier::SetItemOp> {
             rewriter
                 .create<mlir::bufferization::ToMemrefOp>(loc, memrefType, value)
                 .getResult();
-        rewriter.replaceOpWithNewOp<mlir::memref::CopyOp>(op, castView(src),
-                                                          dst);
+        genCopy(rewriter, loc, castView(src), dst);
+        rewriter.eraseOp(op);
       } else if (valType.isa<mlir::MemRefType>()) {
         auto srcView = castView(value);
         auto dstView = castView(dst);
-        rewriter.replaceOpWithNewOp<mlir::memref::CopyOp>(op, srcView, dstView);
+        genCopy(rewriter, loc, srcView, dstView);
+        rewriter.eraseOp(op);
       } else {
         auto elem = castElem(value);
         auto view = castView(dst);
@@ -1159,7 +1182,7 @@ struct ReshapeChangeLayout
 
       auto res = builder.create<mlir::memref::AllocOp>(loc, dstType, sizes)
                      .getResult();
-      builder.create<mlir::memref::CopyOp>(loc, src, res);
+      genCopy(rewriter, loc, src, res);
       builder.create<mlir::scf::YieldOp>(loc, res);
     };
 
@@ -1639,7 +1662,6 @@ void LowerLinalgPass::runOnOperation() {
   mlir::RewritePatternSet patterns(&getContext());
 
   patterns.insert<mlir::linalg::LinalgLoweringPattern<mlir::linalg::GenericOp>,
-//                  mlir::linalg::LinalgLoweringPattern<mlir::linalg::CopyOp>,
                   mlir::linalg::LinalgLoweringPattern<mlir::linalg::FillOp>>(
       &getContext(), mlir::linalg::LinalgLoweringType::ParallelLoops);
 
@@ -1930,7 +1952,7 @@ struct BufferizeForceCopy
       sizes[i] = rewriter.create<mlir::memref::DimOp>(loc, src, i);
 
     auto dst = rewriter.create<mlir::memref::AllocOp>(loc, dstType, sizes);
-    rewriter.create<mlir::memref::CopyOp>(loc, src, dst);
+    genCopy(rewriter, loc, src, dst);
     rewriter.replaceOp(op, dst.getResult());
     return mlir::success();
   }
