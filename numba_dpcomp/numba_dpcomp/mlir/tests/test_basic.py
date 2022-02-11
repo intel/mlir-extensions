@@ -109,6 +109,21 @@ def test_const_ops(py_func, val):
     jit_func = njit(py_func)
     assert_equal(py_func(val), jit_func(val))
 
+@parametrize_function_variants("py_func", [
+    'lambda a: a ** 1',
+    'lambda a: a ** 2',
+    ])
+@pytest.mark.parametrize("val", [1, 2.5])
+def test_pow_folding(py_func, val):
+    jit_func = njit(py_func)
+
+    with print_pass_ir([],['PostLinalgOptPass']):
+        jit_func = njit(py_func)
+
+        assert_equal(py_func(val), jit_func(val))
+        ir = get_print_buffer()
+        assert ir.count(f'powf') == 0, ir
+
 @pytest.mark.parametrize("val", _test_values)
 def test_var(val):
     def py_func(a):

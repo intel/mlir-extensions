@@ -131,7 +131,8 @@ def test_empty_kernel():
 
     with print_pass_ir([],['ConvertParallelLoopToGpu']):
         gpu_func[a.shape, DEFAULT_LOCAL_SIZE](a)
-        assert is_print_buffer_empty()
+        ir = get_print_buffer()
+        assert ir.count('gpu.launch blocks') == 0, ir
 
 @require_gpu
 def test_list_args():

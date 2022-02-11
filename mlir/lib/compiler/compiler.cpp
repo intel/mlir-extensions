@@ -63,7 +63,7 @@ struct PassManagerStage {
       pm.enableIRPrinting(Checker{settings.irPrinting->printBefore},
                           Checker{settings.irPrinting->printAfter},
                           /*printModuleScope*/ true,
-                          /*printAfterOnlyOnChange*/ true,
+                          /*printAfterOnlyOnChange*/ false,
                           /*printAfterOnlyOnFailure*/ false,
                           *(settings.irPrinting->out));
     }
