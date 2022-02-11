@@ -20,10 +20,12 @@
 #include "mlir-extensions/transforms/loop_rewrites.hpp"
 #include "mlir-extensions/transforms/memory_rewrites.hpp"
 
+#include <mlir/Dialect/Math/IR/Math.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/IR/BuiltinOps.h>
+#include <mlir/IR/Matchers.h>
 #include <mlir/IR/PatternMatch.h>
 
 namespace {
@@ -99,6 +101,34 @@ struct SubviewStorePropagate
     return mlir::success();
   }
 };
+
+struct PowSimplify : public mlir::OpRewritePattern<mlir::math::PowFOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::math::PowFOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto lhs = op.getLhs();
+    auto rhs = op.getRhs();
+
+    mlir::FloatAttr constValue;
+    if (!mlir::matchPattern(rhs, mlir::m_Constant(&constValue)))
+      return mlir::failure();
+
+    assert(constValue);
+    auto val = constValue.getValueAsDouble();
+    if (val == 1.0) {
+      rewriter.replaceOp(op, lhs);
+      return mlir::success();
+    }
+    if (val == 2.0) {
+      rewriter.replaceOpWithNewOp<mlir::arith::MulFOp>(op, lhs, lhs);
+      return mlir::success();
+    }
+
+    return mlir::failure();
+  }
+};
 } // namespace
 
 void plier::populateCanonicalizationPatterns(
@@ -120,7 +150,8 @@ void plier::populateCommonOptsPatterns(mlir::MLIRContext &context,
       plier::IfOpConstCond,
       plier::CSERewrite<mlir::FuncOp, /*recusive*/ false>,
       SubviewLoadPropagate,
-      SubviewStorePropagate
+      SubviewStorePropagate,
+      PowSimplify
       // clang-format on
       >(&context);
 
