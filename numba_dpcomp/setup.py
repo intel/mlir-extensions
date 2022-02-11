@@ -62,6 +62,7 @@ if int(os.environ.get('DPCOMP_SETUP_RUN_CMAKE', 1)):
     "-DTBB_DIR=" + TBB_DIR,
     "-DCMAKE_INSTALL_PREFIX=" + CMAKE_INSTALL_PREFIX,
     "-DPython3_NumPy_INCLUDE_DIRS=" + NUMPY_INCLUDE_DIR
+    "-DPython3_FIND_STRATEGY=LOCATION"
     ]
 
     # DPNP
