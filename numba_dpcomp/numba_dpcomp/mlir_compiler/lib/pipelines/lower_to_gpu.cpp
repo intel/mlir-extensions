@@ -813,6 +813,47 @@ struct UnstrideMemrefsPass
   }
 };
 
+struct KernelMemrefOpsMovementPass
+    : public mlir::PassWrapper<KernelMemrefOpsMovementPass,
+                               mlir::FunctionPass> {
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::memref::MemRefDialect>();
+    registry.insert<mlir::gpu::GPUDialect>();
+  }
+
+  void runOnFunction() override {
+    auto func = getFunction();
+    auto &body = func.getBody();
+    if (body.empty())
+      return;
+
+    mlir::DominanceInfo dom(func);
+    body.walk([&](mlir::gpu::LaunchOp launch) {
+      launch.body().walk([&](mlir::Operation *op) {
+        if (!mlir::isa<mlir::memref::DimOp, plier::ExtractMemrefMetadataOp>(op))
+          return;
+
+        for (auto &arg : op->getOpOperands()) {
+          auto argOp = [&]() -> mlir::Operation * {
+            auto val = arg.get();
+            auto defOp = val.getDefiningOp();
+            if (defOp)
+              return defOp;
+
+            return val.getParentBlock()->getParentOp();
+          }();
+
+          if (!dom.dominates(argOp, launch))
+            return;
+        }
+
+        op->moveBefore(launch);
+      });
+    });
+  }
+};
+
 struct AbiAttrsPass
     : public mlir::PassWrapper<AbiAttrsPass,
                                mlir::OperationPass<mlir::gpu::GPUModuleOp>> {
@@ -2896,6 +2937,7 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   funcPM.addPass(std::make_unique<UnstrideMemrefsPass>());
   funcPM.addPass(mlir::createLowerAffinePass());
   commonOptPasses(funcPM);
+  funcPM.addPass(std::make_unique<KernelMemrefOpsMovementPass>());
 
   pm.addPass(mlir::createSymbolDCEPass());
 
