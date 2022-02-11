@@ -2526,7 +2526,7 @@ template <typename Op> struct ConvertOp : public mlir::OpConversionPattern<Op> {
     auto origResTypes = op->getResultTypes();
     llvm::SmallVector<mlir::Type, 2> newResTypes;
 
-    auto typeConverter = getTypeConverter();
+    auto typeConverter = this->getTypeConverter();
     assert(typeConverter);
     if (mlir::failed(typeConverter->convertTypes(origResTypes, newResTypes)))
       return mlir::failure();
