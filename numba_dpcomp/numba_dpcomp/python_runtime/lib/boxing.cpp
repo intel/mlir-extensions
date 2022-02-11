@@ -90,16 +90,16 @@ dpcompUnboxSyclInterface(PyObject *obj, arystruct_t *arystruct) {
 
   arystruct->data = data;
   arystruct->parent = obj;
-  auto *dims = arystruct->shape_and_strides;
+  auto *dims = &arystruct->shape_and_strides[0];
   auto *strides = dims + ndim;
 
   npy_intp nitems = 1;
   for (decltype(ndim) i = 0; i < ndim; i++) {
-    auto elem = makeRef(PyTuple_GetItem(shapeObj, i));
-    if (!elem || !PyLong_Check(elem.get()))
+    auto elem = PyTuple_GetItem(shapeObj, i);
+    if (!elem || !PyLong_Check(elem))
       return -1;
 
-    auto val = PyLong_AsLong(elem.get());
+    auto val = PyLong_AsLong(elem);
     nitems *= val;
     dims[i] = val;
   }
