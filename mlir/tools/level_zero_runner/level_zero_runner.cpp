@@ -51,12 +51,7 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
 
   passManager.addNestedPass<mlir::FuncOp>(
       gpu_runtime::runInsertGPUAllocsPass());
-  passManager.addPass(mlir::createCanonicalizerPass());
   passManager.addPass(createGpuKernelOutliningPass());
-  passManager.addNestedPass<mlir::FuncOp>(mlir::createCanonicalizerPass());
-  passManager.addPass(memref::createFoldSubViewOpsPass());
-  passManager.addNestedPass<mlir::gpu::GPUModuleOp>(
-      mlir::createCanonicalizerPass());
   passManager.addNestedPass<mlir::gpu::GPUModuleOp>(
       gpu_runtime::runAbiAttrsPass());
   passManager.addPass(gpu_runtime::runSetSPIRVCapabilitiesPass());
