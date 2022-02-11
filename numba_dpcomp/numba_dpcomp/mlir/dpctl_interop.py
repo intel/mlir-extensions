@@ -201,11 +201,3 @@ if _is_dpctl_available:
                                    "native value.  The object maybe of a "
                                    "different type")
         return NativeValue(c.builder.load(aryptr), is_error=failed)
-
-    def numba_register():
-        return
-
-
-else: # _is_dpctl_available
-    def numba_register():
-        pass
