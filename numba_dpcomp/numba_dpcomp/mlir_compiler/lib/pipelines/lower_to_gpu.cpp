@@ -278,7 +278,8 @@ struct RemoveKernelMarkerPass
   }
 };
 
-static const char *kGpuAllocShared = "gpu.alloc_shared";
+static constexpr llvm::StringLiteral kGpuArgAttr("plier.gpu_accessible");
+static constexpr llvm::StringLiteral kGpuAllocShared("gpu.alloc_shared");
 
 struct InsertGPUAllocs
     : public mlir::PassWrapper<InsertGPUAllocs, mlir::FunctionPass> {
@@ -347,6 +348,24 @@ struct InsertGPUAllocs
       return false;
     };
 
+    auto gpuAccessibleArg = [&]() -> llvm::SmallVector<bool> {
+      auto gpuAttr =
+          func->getAttr(kGpuArgAttr).dyn_cast_or_null<mlir::ArrayAttr>();
+      if (!gpuAttr)
+        return {};
+
+      auto range = gpuAttr.getAsValueRange<mlir::BoolAttr>();
+      return {range.begin(), range.end()};
+    }();
+
+    auto isGpuAccessibleArg = [&](unsigned i) {
+      if (gpuAccessibleArg.empty())
+        return false;
+
+      assert(i < gpuAccessibleArg.size());
+      return gpuAccessibleArg[i];
+    };
+
     if (func.walk([&](mlir::Operation *op) {
               if (!op->getParentOfType<mlir::gpu::LaunchOp>())
                 return mlir::WalkResult::advance();
@@ -382,8 +401,9 @@ struct InsertGPUAllocs
                     auto blockArgs = block->getArguments();
                     auto it = llvm::find(blockArgs, alias);
                     assert(it != blockArgs.end());
-                    auto index = it - blockArgs.begin();
-                    gpuBufferParams.insert({static_cast<unsigned>(index), {}});
+                    auto index = static_cast<unsigned>(it - blockArgs.begin());
+                    if (!isGpuAccessibleArg(index))
+                      gpuBufferParams.insert({index, {}});
                   }
                 }
               }
@@ -2504,8 +2524,6 @@ struct MarkGpuArraysInputs
 
   void runOnFunction() override;
 };
-
-constexpr llvm::StringLiteral kGpuArgAttr("plier.gpu_accessible");
 
 template <typename F>
 static void visitTypeRecursive(mlir::Type type, F &&visitor) {
