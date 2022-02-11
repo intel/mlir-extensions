@@ -14,7 +14,7 @@
 
 #include "mlir-extensions/Conversion/SCFToAffine/SCFToAffine.h"
 
-#include "mlir/Analysis/AffineAnalysis.h"
+#include "mlir/Dialect/Affine/Analysis/AffineAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -68,7 +68,7 @@ public:
     rewriter.setInsertionPoint(yieldOp);
     rewriter.replaceOpWithNewOp<AffineYieldOp>(yieldOp, ValueRange({}));
 
-    assert(newPloop.verify().succeeded() &&
+    assert(newPloop.verifyInvariants().succeeded() &&
            "affine body is incorrectly constructed");
 
     for (auto &each : llvm::make_early_inc_range(*newPloop.getBody())) {
@@ -91,7 +91,7 @@ public:
 };
 
 struct SCFToAffinePass
-    : public mlir::PassWrapper<SCFToAffinePass, mlir::FunctionPass> {
+    : public mlir::PassWrapper<SCFToAffinePass, mlir::OperationPass<void>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::StandardOpsDialect>();
@@ -99,10 +99,10 @@ struct SCFToAffinePass
     registry.insert<mlir::scf::SCFDialect>();
   }
 
-  void runOnFunction() override {
+  void runOnOperation() override {
     auto func = getOperation();
     SmallVector<Operation *, 8> parallelOps;
-    func.walk([&](Operation *op) -> void {
+    func->walk([&](Operation *op) -> void {
       if (scf::ParallelOp pOp = mlir::dyn_cast_or_null<scf::ParallelOp>(op)) {
         // Temporary disable if contains induction variables, it's not clear for
         // now what is to do with those inductions
@@ -139,7 +139,7 @@ struct SCFToAffinePass
       }
     });
 
-    mlir::OwningRewritePatternList patterns(&getContext());
+    mlir::RewritePatternSet patterns(&getContext());
     patterns.insert<SCFParallelLowering>(&getContext());
     FrozenRewritePatternSet frozenPatterns(std::move(patterns));
     (void)mlir::applyOpPatternsAndFold(parallelOps, frozenPatterns,

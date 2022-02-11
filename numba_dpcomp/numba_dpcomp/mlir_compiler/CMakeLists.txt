@@ -87,7 +87,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     MLIRLinalgToLLVM
     MLIRMathToLLVM
     MLIRMathToLibm
-    MLIRSCFToStandard
     MLIRSCFToGPU
     MLIRGPUToSPIRV
     MLIRGPUToGPURuntimeTransforms

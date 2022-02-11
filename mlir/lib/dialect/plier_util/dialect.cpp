@@ -28,7 +28,6 @@
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/SCF.h>
-#include <mlir/Dialect/StandardOps/Utils/Utils.h>
 
 #include <llvm/ADT/TypeSwitch.h>
 
@@ -79,7 +78,7 @@ mlir::Operation *PlierUtilDialect::materializeConstant(mlir::OpBuilder &builder,
   if (mlir::arith::ConstantOp::isBuildableWith(value, type))
     return builder.create<mlir::arith::ConstantOp>(loc, type, value);
 
-  return builder.create<mlir::ConstantOp>(loc, type, value);
+  return nullptr;
 }
 
 OpaqueType OpaqueType::get(mlir::MLIRContext *context) {
@@ -160,7 +159,7 @@ struct EnforceShapeDim : public mlir::OpRewritePattern<mlir::memref::DimOp> {
 } // namespace
 
 void EnforceShapeOp::getCanonicalizationPatterns(
-    ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context) {
+    ::mlir::RewritePatternSet &results, ::mlir::MLIRContext *context) {
   results.insert<EnforceShapeDim>(context);
 }
 
@@ -288,7 +287,7 @@ struct ChangeLayoutIdentity
     if (!canTransformLayoutCast(srcType, dstType))
       return mlir::failure();
 
-    rewriter.replaceOpWithNewOp<mlir::memref::CastOp>(op, src, dstType);
+    rewriter.replaceOpWithNewOp<mlir::memref::CastOp>(op, dstType, src);
     return mlir::success();
   }
 };
@@ -386,7 +385,7 @@ struct ChangeLayoutCast : public mlir::OpRewritePattern<mlir::memref::CastOp> {
     }
 
     if (mlir::memref::CastOp::areCastCompatible(srcType, dstType)) {
-      rewriter.replaceOpWithNewOp<mlir::memref::CastOp>(op, src, dstType);
+      rewriter.replaceOpWithNewOp<mlir::memref::CastOp>(op, dstType, src);
       return mlir::success();
     }
 
@@ -573,32 +572,32 @@ struct ChangeLayoutLinalgGeneric
   }
 };
 
-struct ChangeLayoutLinalgCopy
-    : public mlir::OpRewritePattern<mlir::linalg::CopyOp> {
-  using OpRewritePattern::OpRewritePattern;
+//struct ChangeLayoutLinalgCopy
+//    : public mlir::OpRewritePattern<mlir::linalg::CopyOp> {
+//  using OpRewritePattern::OpRewritePattern;
 
-  mlir::LogicalResult
-  matchAndRewrite(mlir::linalg::CopyOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto input = op.input();
-    auto output = op.output();
-    auto clInput = input.getDefiningOp<plier::ChangeLayoutOp>();
-    auto clOutput = output.getDefiningOp<plier::ChangeLayoutOp>();
-    if (!clInput && !clOutput)
-      return mlir::failure();
+//  mlir::LogicalResult
+//  matchAndRewrite(mlir::linalg::CopyOp op,
+//                  mlir::PatternRewriter &rewriter) const override {
+//    auto input = op.input();
+//    auto output = op.output();
+//    auto clInput = input.getDefiningOp<plier::ChangeLayoutOp>();
+//    auto clOutput = output.getDefiningOp<plier::ChangeLayoutOp>();
+//    if (!clInput && !clOutput)
+//      return mlir::failure();
 
-    if (clInput)
-      input = clInput.source();
+//    if (clInput)
+//      input = clInput.source();
 
-    if (clOutput)
-      output = clOutput.source();
+//    if (clOutput)
+//      output = clOutput.source();
 
-    rewriter.replaceOpWithNewOp<mlir::linalg::CopyOp>(
-        op, input, output, op.inputPermutation().getValueOr(mlir::AffineMap{}),
-        op.outputPermutation().getValueOr(mlir::AffineMap{}));
-    return mlir::success();
-  }
-};
+//    rewriter.replaceOpWithNewOp<mlir::linalg::CopyOp>(
+//        op, input, output, op.inputPermutation().getValueOr(mlir::AffineMap{}),
+//        op.outputPermutation().getValueOr(mlir::AffineMap{}));
+//    return mlir::success();
+//  }
+//};
 
 struct ChangeLayoutLinalgFill
     : public mlir::OpRewritePattern<mlir::linalg::FillOp> {
@@ -667,7 +666,7 @@ struct ChangeLayoutIf : public mlir::OpRewritePattern<mlir::scf::YieldOp> {
         auto otherArg = otherYield.getResults()[i];
         rewriter.setInsertionPoint(otherYield);
         auto otherRes = rewriter.createOrFold<mlir::memref::CastOp>(
-            otherYield.getLoc(), otherArg, srcType);
+            otherYield.getLoc(), srcType, otherArg);
 
         rewriter.updateRootInPlace(
             otherYield, [&]() { otherYield.setOperand(i, otherRes); });
@@ -814,12 +813,12 @@ struct ChangeLayoutCopy : public mlir::OpRewritePattern<mlir::memref::CopyOp> {
 } // namespace
 
 void ChangeLayoutOp::getCanonicalizationPatterns(
-    ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context) {
+    ::mlir::RewritePatternSet &results, ::mlir::MLIRContext *context) {
   results.insert<ChangeLayoutIdentity, ChangeLayoutReduceRank, ChangeLayoutDim,
                  ChangeLayoutExtractMetadata, ChangeLayoutClone,
                  PropagateCloneType, ChangeLayoutCast, ChangeLayoutSignCast,
                  ChangeLayoutLoad, ChangeLayoutStore, ChangeLayoutSubview,
-                 ChangeLayoutLinalgGeneric, ChangeLayoutLinalgCopy,
+                 ChangeLayoutLinalgGeneric,
                  ChangeLayoutLinalgFill, ChangeLayoutIf, ChangeLayout1DReshape,
                  ChangeLayoutSliceGetItem, ChangeLayoutCopy>(context);
 }
@@ -1101,7 +1100,7 @@ struct SignCastMemrefToTensorPropagate
 } // namespace
 
 void SignCastOp::getCanonicalizationPatterns(
-    ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context) {
+    ::mlir::RewritePatternSet &results, ::mlir::MLIRContext *context) {
   results.insert<
       SignCastDimPropagate<mlir::tensor::DimOp>,
       SignCastDimPropagate<mlir::memref::DimOp>, SignCastUndefPropagate,
@@ -1275,7 +1274,7 @@ struct ReduceRankStorePropagate
 } // namespace
 
 void ReduceRankOp::getCanonicalizationPatterns(
-    ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context) {
+    ::mlir::RewritePatternSet &results, ::mlir::MLIRContext *context) {
   results.insert<ReduceRankDimPropagate<mlir::tensor::DimOp>,
                  ReduceRankDimPropagate<mlir::memref::DimOp>,
                  ReduceRankLoadPropagate, ReduceRankStorePropagate>(context);

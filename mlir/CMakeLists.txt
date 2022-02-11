@@ -125,7 +125,6 @@ target_link_libraries(${MLIR_EXTENSIONS_LIB} PRIVATE
     MLIRTransforms
     MLIRStandardOpsTransforms
     MLIRLinalgTransforms
-    MLIRSCFToStandard
     MLIRTensorTransforms
     )
 

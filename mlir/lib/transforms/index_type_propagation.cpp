@@ -41,7 +41,7 @@ struct ArithIndexCastSimplify : public mlir::OpRewritePattern<Op> {
 
     auto getCast = [](mlir::Value val) -> mlir::Value {
       if (auto op = val.getDefiningOp<mlir::arith::IndexCastOp>())
-        return op.getOperand();
+        return op.getIn();
 
       return {};
     };
@@ -57,28 +57,29 @@ struct ArithIndexCastSimplify : public mlir::OpRewritePattern<Op> {
     auto rhs = getCast(op.getRhs());
     auto lhsConst = getConst(op.getLhs());
     auto rhsConst = getConst(op.getRhs());
+    auto loc = op.getLoc();
     if (lhs && rhs) {
       auto newOp = rewriter.create<Op>(op.getLoc(), lhs, rhs);
       auto result = rewriter.create<mlir::arith::IndexCastOp>(
-          op.getLoc(), newOp.getResult(), lhsType);
+          loc, lhsType, newOp.getResult());
       rewriter.replaceOp(op, result.getResult());
       return mlir::success();
     }
     if (lhs && rhsConst) {
       auto newConst = rewriter.create<mlir::arith::ConstantIndexOp>(
-          op.getLoc(), rhsConst.getInt());
+          loc, rhsConst.getInt());
       auto newOp = rewriter.create<Op>(op.getLoc(), lhs, newConst);
       auto result = rewriter.create<mlir::arith::IndexCastOp>(
-          op.getLoc(), newOp.getResult(), lhsType);
+          loc, lhsType, newOp.getResult());
       rewriter.replaceOp(op, result.getResult());
       return mlir::success();
     }
     if (lhsConst && rhs) {
       auto newConst = rewriter.create<mlir::arith::ConstantIndexOp>(
-          op.getLoc(), lhsConst.getInt());
+          loc, lhsConst.getInt());
       auto newOp = rewriter.create<Op>(op.getLoc(), newConst, rhs);
       auto result = rewriter.create<mlir::arith::IndexCastOp>(
-          op.getLoc(), newOp.getResult(), lhsType);
+          loc, lhsType, newOp.getResult());
       rewriter.replaceOp(op, result.getResult());
       return mlir::success();
     }

@@ -17,6 +17,7 @@
 #include <pybind11/pybind11.h>
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/Dialect/Bufferization/IR/Bufferization.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
@@ -556,7 +557,7 @@ static mlir::Value broadcastDim(mlir::OpBuilder &builder, mlir::Location loc,
   auto one = builder.create<mlir::arith::ConstantIndexOp>(loc, 1);
   auto cond = builder.create<mlir::arith::CmpIOp>(
       loc, mlir::arith::CmpIPredicate::eq, val1, one);
-  return builder.create<mlir::SelectOp>(loc, cond, val2, val1);
+  return builder.create<mlir::arith::SelectOp>(loc, cond, val2, val1);
 }
 
 static mlir::Value expandDim(mlir::OpBuilder &builder, mlir::Location loc,
@@ -1440,7 +1441,7 @@ py::object selectImpl(py::capsule context, py::handle cond, py::handle trueV,
   auto condVal = ctx.context.unwrapVal(loc, builder, cond);
   auto trueVal = ctx.context.unwrapVal(loc, builder, trueV);
   auto falseVal = ctx.context.unwrapVal(loc, builder, falseV);
-  auto res = builder.create<mlir::SelectOp>(loc, condVal, trueVal, falseVal);
+  auto res = builder.create<mlir::arith::SelectOp>(loc, condVal, trueVal, falseVal);
   return ctx.context.createVar(context, res);
 }
 

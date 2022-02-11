@@ -41,6 +41,7 @@
 #include <mlir/Dialect/SPIRV/IR/SPIRVOps.h>
 #include <mlir/Dialect/SPIRV/IR/TargetAndABI.h>
 #include <mlir/Dialect/SPIRV/Transforms/Passes.h>
+#include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/Dialect/SPIRV/Transforms/SPIRVConversion.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 #include <mlir/IR/Dominance.h>
@@ -49,6 +50,8 @@
 #include <mlir/Transforms/DialectConversion.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 #include <mlir/Transforms/Passes.h>
+
+#include <llvm/ADT/SmallBitVector.h>
 
 #include "base_pipeline.hpp"
 #include "loop_utils.hpp"
@@ -113,14 +116,14 @@ static void moveOpsIntoParallel(mlir::scf::ParallelOp outer, int depth = 0) {
 }
 
 struct PrepareForGPUPass
-    : public mlir::PassWrapper<PrepareForGPUPass, mlir::FunctionPass> {
+    : public mlir::PassWrapper<PrepareForGPUPass, mlir::OperationPass<mlir::FuncOp>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::scf::SCFDialect>();
   }
 
-  void runOnFunction() override {
-    for (auto &block : getFunction().getBody()) {
+  void runOnOperation() override {
+    for (auto &block : getOperation().getBody()) {
       for (auto &op : block) {
         if (auto parallel = mlir::dyn_cast<mlir::scf::ParallelOp>(op)) {
           moveOpsIntoParallel(parallel);
@@ -200,14 +203,14 @@ struct RemoveNestedParallelPass
                                        RemoveNestedParallel> {};
 
 struct ParallelLoopGPUMappingPass
-    : public mlir::PassWrapper<ParallelLoopGPUMappingPass, mlir::FunctionPass> {
+    : public mlir::PassWrapper<ParallelLoopGPUMappingPass, mlir::OperationPass<mlir::FuncOp>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::scf::SCFDialect>();
   }
 
-  void runOnFunction() override {
-    auto func = getFunction();
+  void runOnOperation() override {
+    auto func = getOperation();
     auto &region = func.getBody();
     if (region.empty())
       return;
@@ -255,15 +258,15 @@ struct ParallelLoopGPUMappingPass
 };
 
 struct RemoveKernelMarkerPass
-    : public mlir::PassWrapper<RemoveKernelMarkerPass, mlir::FunctionPass> {
+    : public mlir::PassWrapper<RemoveKernelMarkerPass, mlir::OperationPass<void>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::StandardOpsDialect>();
   }
 
-  void runOnFunction() override {
-    auto func = getFunction();
-    func.walk([&](mlir::CallOp op) {
+  void runOnOperation() override {
+    auto func = getOperation();
+    func->walk([&](mlir::CallOp op) {
       if (op.getCallee() != "kernel_marker")
         return;
 
@@ -282,15 +285,15 @@ static constexpr llvm::StringLiteral kGpuArgAttr("plier.gpu_accessible");
 static constexpr llvm::StringLiteral kGpuAllocShared("gpu.alloc_shared");
 
 struct InsertGPUAllocs
-    : public mlir::PassWrapper<InsertGPUAllocs, mlir::FunctionPass> {
+    : public mlir::PassWrapper<InsertGPUAllocs, mlir::OperationPass<mlir::FuncOp>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::memref::MemRefDialect>();
     registry.insert<mlir::gpu::GPUDialect>();
   }
 
-  void runOnFunction() override {
-    auto func = getFunction();
+  void runOnOperation() override {
+    auto func = getOperation();
     auto &funcBody = func.getBody();
     if (funcBody.empty()) {
       return;
@@ -526,7 +529,7 @@ struct InsertGPUAllocs
 
       if (allocType != memrefType) {
         allocResult =
-            builder.create<mlir::memref::CastOp>(loc, allocResult, memrefType);
+            builder.create<mlir::memref::CastOp>(loc, memrefType, allocResult);
       }
 
       param.replaceAllUsesExcept(allocResult, filter);
@@ -734,7 +737,7 @@ struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
     auto dstFlatType = flatSubview.getType();
     if (dstFlatType != flatMemrefType)
       flatSubview = rewriter.createOrFold<mlir::memref::CastOp>(
-          loc, flatSubview, dstFlatType);
+          loc, dstFlatType, flatSubview);
 
     // TODO: bug in ReinterpretCastOp::verify
     auto offset =
@@ -781,7 +784,7 @@ struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
 
       auto droppedDims = op.getDroppedDims();
       for (auto i : llvm::seq(0u, srcRank)) {
-        if (!droppedDims.contains(i)) {
+        if (droppedDims[i]) {
           filteredSizes.emplace_back(sizes[i]);
           filteredStrides.emplace_back(strides[i]);
         }
@@ -796,34 +799,35 @@ struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
 };
 
 struct UnstrideMemrefsPass
-    : public mlir::PassWrapper<UnstrideMemrefsPass, mlir::FunctionPass> {
+    : public mlir::PassWrapper<UnstrideMemrefsPass, mlir::OperationPass<void>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::memref::MemRefDialect>();
     registry.insert<mlir::gpu::GPUDialect>();
   }
 
-  void runOnFunction() override {
-    mlir::OwningRewritePatternList patterns(&getContext());
+  void runOnOperation() override {
+    auto *ctx = &getContext();
+    mlir::RewritePatternSet patterns(ctx);
 
-    patterns.insert<FlattenLoad, FlattenStore, FlattenSubview>(&getContext());
+    patterns.insert<FlattenLoad, FlattenStore, FlattenSubview>(ctx);
 
-    (void)mlir::applyPatternsAndFoldGreedily(getFunction(),
+    (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
                                              std::move(patterns));
   }
 };
 
 struct KernelMemrefOpsMovementPass
     : public mlir::PassWrapper<KernelMemrefOpsMovementPass,
-                               mlir::FunctionPass> {
+                               mlir::OperationPass<mlir::FuncOp>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::memref::MemRefDialect>();
     registry.insert<mlir::gpu::GPUDialect>();
   }
 
-  void runOnFunction() override {
-    auto func = getFunction();
+  void runOnOperation() override {
+    auto func = getOperation();
     auto &body = func.getBody();
     if (body.empty())
       return;
@@ -1277,7 +1281,7 @@ struct GPUToSpirvPass
 };
 
 struct GPULowerDefaultLocalSize
-    : public mlir::PassWrapper<GPULowerDefaultLocalSize, mlir::FunctionPass> {
+    : public mlir::PassWrapper<GPULowerDefaultLocalSize, mlir::OperationPass<mlir::FuncOp>> {
 
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
@@ -1285,8 +1289,8 @@ struct GPULowerDefaultLocalSize
     registry.insert<plier::PlierUtilDialect>();
   }
 
-  void runOnFunction() override {
-    auto func = getFunction();
+  void runOnOperation() override {
+    auto func = getOperation();
     auto &region = func.getBody();
     if (region.empty())
       return;
@@ -1440,15 +1444,16 @@ struct ExpandSuggestBlockSizeOp
   }
 };
 
-struct GPUExPass : public mlir::PassWrapper<GPUExPass, mlir::FunctionPass> {
+struct GPUExPass : public mlir::PassWrapper<GPUExPass, mlir::OperationPass<void>> {
 
-  void runOnFunction() override {
-    mlir::OwningRewritePatternList patterns(&getContext());
+  void runOnOperation() override {
+    auto *ctx = &getContext();
+    mlir::RewritePatternSet patterns(ctx);
 
     patterns.insert<ExpandLaunchOp, ExpandAllocOp, ExpandSuggestBlockSizeOp>(
-        &getContext());
+        ctx);
 
-    (void)mlir::applyPatternsAndFoldGreedily(getFunction(),
+    (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
                                              std::move(patterns));
   }
 };
@@ -1501,17 +1506,18 @@ struct CreateDeallocOp : public mlir::OpRewritePattern<AllocOp> {
 };
 
 struct GPUExDeallocPass
-    : public mlir::PassWrapper<GPUExDeallocPass, mlir::FunctionPass> {
+    : public mlir::PassWrapper<GPUExDeallocPass, mlir::OperationPass<void>> {
 
-  void runOnFunction() override {
-    mlir::OwningRewritePatternList patterns(&getContext());
+  void runOnOperation() override {
+    auto *ctx = &getContext();
+    mlir::RewritePatternSet patterns(ctx);
 
     patterns.insert<
         CreateDeallocOp<plier::LoadGpuModuleOp, plier::DestroyGpuModuleOp>,
         CreateDeallocOp<plier::GetGpuKernelOp, plier::DestroyGpuKernelOp>>(
-        &getContext());
+        ctx);
 
-    (void)mlir::applyPatternsAndFoldGreedily(getFunction(),
+    (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
                                              std::move(patterns));
   }
 };
@@ -1659,10 +1665,10 @@ struct OutlineInitPass
 };
 
 struct GenerateOutlineContextPass
-    : public mlir::PassWrapper<GenerateOutlineContextPass, mlir::FunctionPass> {
+    : public mlir::PassWrapper<GenerateOutlineContextPass, mlir::OperationPass<mlir::FuncOp>> {
 
-  void runOnFunction() override {
-    auto func = getFunction();
+  void runOnOperation() override {
+    auto func = getOperation();
     auto &body = func.getBody();
     if (body.empty())
       return;
@@ -2557,13 +2563,13 @@ static bool isGpuArray(mlir::Type type) {
 }
 
 struct MarkGpuArraysInputs
-    : public mlir::PassWrapper<MarkGpuArraysInputs, mlir::FunctionPass> {
+    : public mlir::PassWrapper<MarkGpuArraysInputs, mlir::OperationPass<mlir::FuncOp>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::StandardOpsDialect>();
   }
 
-  void runOnFunction() override;
+  void runOnOperation() override;
 };
 
 template <typename F>
@@ -2576,8 +2582,8 @@ static void visitTypeRecursive(mlir::Type type, F &&visitor) {
   }
 }
 
-void MarkGpuArraysInputs::runOnFunction() {
-  auto func = getFunction();
+void MarkGpuArraysInputs::runOnOperation() {
+  auto func = getOperation();
   auto funcType = func.getType();
 
   bool needAttr = false;
