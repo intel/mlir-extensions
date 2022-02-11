@@ -29,9 +29,17 @@ kernel_cache = JitfuncCache(kernel)
 kernel_cached = kernel_cache.cached_decorator
 
 GPU_TESTS_ENABLED = _readenv('DPCOMP_ENABLE_GPU_TESTS', int, 0)
+DPCTL_TESTS_ENABLED = _readenv('DPCOMP_ENABLE_DPCTL_TESTS', int, 0)
+
+if DPCTL_TESTS_ENABLED:
+    import dpctl
+    import dpctl.tensor as dpt
 
 def require_gpu(func):
     return pytest.mark.skipif(not GPU_TESTS_ENABLED, reason='GPU tests disabled')(func)
+
+def require_dpctl(func):
+    return pytest.mark.skipif(not DPCTL_TESTS_ENABLED, reason='DPCTL interop tests disabled')(func)
 
 @require_gpu
 def test_simple1():
@@ -551,4 +559,38 @@ def test_atomics_multidim(funci):
         ir = get_print_buffer()
         assert _check_atomic_ir(ir), ir
 
+    assert_equal(gpu_res, sim_res)
+
+@require_dpctl
+def test_dpctl_simple1():
+    def func(a, b, c):
+        i = get_global_id(0)
+        c[i] = a[i] + b[i]
+
+    sim_func = kernel_sim(func)
+    gpu_func = kernel_cached(func)
+
+
+    a = np.arange(1024, dtype=np.float32)
+    b = np.arange(1024, dtype=np.float32) * 3
+
+    sim_res = np.zeros(a.shape, a.dtype)
+    sim_func[a.shape, DEFAULT_LOCAL_SIZE](a, b, sim_res)
+
+    da = dpt.usm_ndarray(a.shape, dtype=a.dtype, buffer="device")
+    da.usm_data.copy_from_host(a.reshape((-1)).view("|u1"))
+
+    db = dpt.usm_ndarray(b.shape, dtype=b.dtype, buffer="shared")
+    db.usm_data.copy_from_host(b.reshape((-1)).view("|u1"))
+
+    gpu_res = np.zeros(a.shape, a.dtype)
+    dgpu_res = dpt.usm_ndarray(gpu_res.shape, dtype=gpu_res.dtype, buffer="device")
+    dgpu_res.usm_data.copy_from_host(gpu_res.reshape((-1)).view("|u1"))
+
+    with print_pass_ir([],['ConvertParallelLoopToGpu']):
+        gpu_func[a.shape, DEFAULT_LOCAL_SIZE](da, db, dgpu_res)
+        ir = get_print_buffer()
+        assert ir.count('gpu.launch blocks') == 1, ir
+
+    dgpu_res.usm_data.copy_to_host(gpu_res.reshape((-1)).view("|u1"))
     assert_equal(gpu_res, sim_res)

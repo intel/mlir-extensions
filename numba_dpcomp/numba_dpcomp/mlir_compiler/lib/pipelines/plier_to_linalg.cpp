@@ -2279,8 +2279,8 @@ void registerPlierToLinalgPipeline(plier::PipelineRegistry &registry) {
   registry.registerPipeline([](auto sink) {
     auto stage = getHighLoweringStage();
     sink(plierToLinalgGenPipelineName(), {plierToStdPipelineName()},
-         {plierToLinalgOptPipelineName()}, {plierToScfPipelineName()},
-         &populatePlierToLinalgGenPipeline);
+         {plierToLinalgOptPipelineName(), untuplePipelineName()},
+         {plierToScfPipelineName()}, &populatePlierToLinalgGenPipeline);
     sink(plierToLinalgOptPipelineName(),
          {plierToLinalgGenPipelineName(), untuplePipelineName()},
          {removeSignPipelineName(), stage.end}, {},

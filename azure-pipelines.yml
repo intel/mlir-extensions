@@ -105,6 +105,7 @@ jobs:
       conda install -y tbb=2021 -c conda-forge -c intel --force
       conda list
       python -c "import numba; print('numba', numba.__version__)"
+      python -c "import numpy; print(numpy.get_include())"
       cmake --version
       chmod -R 777 $(System.DefaultWorkingDirectory)/llvm_cache
       export LLVM_PATH=$(System.DefaultWorkingDirectory)/llvm_cache

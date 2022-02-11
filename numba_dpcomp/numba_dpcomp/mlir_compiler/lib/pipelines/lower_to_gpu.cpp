@@ -55,6 +55,7 @@
 #include "pipelines/lower_to_llvm.hpp"
 #include "pipelines/plier_to_linalg.hpp"
 #include "pipelines/plier_to_std.hpp"
+#include "pipelines/pre_low_simplifications.hpp"
 #include "py_linalg_resolver.hpp"
 
 #include "mlir-extensions/compiler/pipeline_registry.hpp"
@@ -66,6 +67,7 @@
 #include "mlir-extensions/transforms/func_utils.hpp"
 #include "mlir-extensions/transforms/pipeline_utils.hpp"
 #include "mlir-extensions/transforms/rewrite_wrapper.hpp"
+#include "mlir-extensions/transforms/type_conversion.hpp"
 
 namespace {
 static void moveOpsIntoParallel(mlir::scf::ParallelOp outer, int depth = 0) {
@@ -276,7 +278,8 @@ struct RemoveKernelMarkerPass
   }
 };
 
-static const char *kGpuAllocShared = "gpu.alloc_shared";
+static constexpr llvm::StringLiteral kGpuArgAttr("plier.gpu_accessible");
+static constexpr llvm::StringLiteral kGpuAllocShared("gpu.alloc_shared");
 
 struct InsertGPUAllocs
     : public mlir::PassWrapper<InsertGPUAllocs, mlir::FunctionPass> {
@@ -345,6 +348,24 @@ struct InsertGPUAllocs
       return false;
     };
 
+    auto gpuAccessibleArg = [&]() -> llvm::SmallVector<bool> {
+      auto gpuAttr =
+          func->getAttr(kGpuArgAttr).dyn_cast_or_null<mlir::ArrayAttr>();
+      if (!gpuAttr)
+        return {};
+
+      auto range = gpuAttr.getAsValueRange<mlir::BoolAttr>();
+      return {range.begin(), range.end()};
+    }();
+
+    auto isGpuAccessibleArg = [&](unsigned i) {
+      if (gpuAccessibleArg.empty())
+        return false;
+
+      assert(i < gpuAccessibleArg.size());
+      return gpuAccessibleArg[i];
+    };
+
     if (func.walk([&](mlir::Operation *op) {
               if (!op->getParentOfType<mlir::gpu::LaunchOp>())
                 return mlir::WalkResult::advance();
@@ -380,8 +401,9 @@ struct InsertGPUAllocs
                     auto blockArgs = block->getArguments();
                     auto it = llvm::find(blockArgs, alias);
                     assert(it != blockArgs.end());
-                    auto index = it - blockArgs.begin();
-                    gpuBufferParams.insert({static_cast<unsigned>(index), {}});
+                    auto index = static_cast<unsigned>(it - blockArgs.begin());
+                    if (!isGpuAccessibleArg(index))
+                      gpuBufferParams.insert({index, {}});
                   }
                 }
               }
@@ -788,6 +810,47 @@ struct UnstrideMemrefsPass
 
     (void)mlir::applyPatternsAndFoldGreedily(getFunction(),
                                              std::move(patterns));
+  }
+};
+
+struct KernelMemrefOpsMovementPass
+    : public mlir::PassWrapper<KernelMemrefOpsMovementPass,
+                               mlir::FunctionPass> {
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::memref::MemRefDialect>();
+    registry.insert<mlir::gpu::GPUDialect>();
+  }
+
+  void runOnFunction() override {
+    auto func = getFunction();
+    auto &body = func.getBody();
+    if (body.empty())
+      return;
+
+    mlir::DominanceInfo dom(func);
+    body.walk([&](mlir::gpu::LaunchOp launch) {
+      launch.body().walk([&](mlir::Operation *op) {
+        if (!mlir::isa<mlir::memref::DimOp, plier::ExtractMemrefMetadataOp>(op))
+          return;
+
+        for (auto &arg : op->getOpOperands()) {
+          auto argOp = [&]() -> mlir::Operation * {
+            auto val = arg.get();
+            auto defOp = val.getDefiningOp();
+            if (defOp)
+              return defOp;
+
+            return val.getParentBlock()->getParentOp();
+          }();
+
+          if (!dom.dominates(argOp, launch))
+            return;
+        }
+
+        op->moveBefore(launch);
+      });
+    });
   }
 };
 
@@ -2454,6 +2517,158 @@ protected:
   }
 };
 
+template <typename Op> struct ConvertOp : public mlir::OpConversionPattern<Op> {
+  using mlir::OpConversionPattern<Op>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(Op op, typename Op::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto origResTypes = op->getResultTypes();
+    llvm::SmallVector<mlir::Type, 2> newResTypes;
+
+    auto typeConverter = this->getTypeConverter();
+    assert(typeConverter);
+    if (mlir::failed(typeConverter->convertTypes(origResTypes, newResTypes)))
+      return mlir::failure();
+
+    auto attrs = adaptor.getAttributes();
+    llvm::SmallVector<mlir::NamedAttribute> attrsList;
+    attrsList.reserve(attrs.size());
+    for (auto it : attrs)
+      attrsList.emplace_back(it.getName(), it.getValue());
+
+    rewriter.replaceOpWithNewOp<Op>(op, newResTypes, adaptor.getOperands(),
+                                    attrsList);
+    return mlir::success();
+  }
+};
+
+static bool isGpuArray(llvm::StringRef &name) {
+  return name.consume_front("USM:ndarray(") && name.consume_back(")");
+}
+
+static bool isGpuArray(mlir::Type type) {
+  auto pyType = type.dyn_cast<plier::PyType>();
+  if (!pyType)
+    return false;
+
+  auto name = pyType.getName();
+  return isGpuArray(name);
+}
+
+struct MarkGpuArraysInputs
+    : public mlir::PassWrapper<MarkGpuArraysInputs, mlir::FunctionPass> {
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::StandardOpsDialect>();
+  }
+
+  void runOnFunction() override;
+};
+
+template <typename F>
+static void visitTypeRecursive(mlir::Type type, F &&visitor) {
+  if (auto tupleType = type.dyn_cast<mlir::TupleType>()) {
+    for (auto t : tupleType.getTypes())
+      visitTypeRecursive(t, std::forward<F>(visitor));
+  } else {
+    visitor(type);
+  }
+}
+
+void MarkGpuArraysInputs::runOnFunction() {
+  auto func = getFunction();
+  auto funcType = func.getType();
+
+  bool needAttr = false;
+  llvm::SmallVector<bool> result;
+  result.reserve(funcType.getNumInputs());
+
+  auto visitor = [&](mlir::Type type) {
+    auto res = isGpuArray(type);
+    result.emplace_back(res);
+    needAttr = needAttr || res;
+  };
+
+  for (auto type : (func.getType().getInputs()))
+    visitTypeRecursive(type, visitor);
+
+  if (needAttr) {
+    mlir::OpBuilder builder(&getContext());
+    func->setAttr(kGpuArgAttr, builder.getBoolArrayAttr(result));
+  }
+
+  markAllAnalysesPreserved();
+}
+
+struct ConvertGpuArrays
+    : public mlir::PassWrapper<ConvertGpuArrays,
+                               mlir::OperationPass<mlir::ModuleOp>> {
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::StandardOpsDialect>();
+  }
+
+  void runOnOperation() override;
+};
+
+void ConvertGpuArrays::runOnOperation() {
+  auto &context = getContext();
+
+  mlir::TypeConverter typeConverter;
+  // Convert unknown types to itself
+  typeConverter.addConversion([](mlir::Type type) { return type; });
+  populateStdTypeConverter(context, typeConverter);
+  populateTupleTypeConverter(context, typeConverter);
+  typeConverter.addConversion(
+      [&](plier::PyType type) -> llvm::Optional<mlir::Type> {
+        auto name = type.getName();
+        if (isGpuArray(name)) {
+          auto newTypename = ("array(" + name + ")").str();
+          return plier::PyType::get(type.getContext(), newTypename);
+        }
+
+        return llvm::None;
+      });
+
+  auto materializeCast = [](mlir::OpBuilder &builder, mlir::Type type,
+                            mlir::ValueRange inputs,
+                            mlir::Location loc) -> llvm::Optional<mlir::Value> {
+    if (inputs.size() == 1)
+      return builder
+          .create<mlir::UnrealizedConversionCastOp>(loc, type, inputs.front())
+          .getResult(0);
+
+    return llvm::None;
+  };
+  typeConverter.addArgumentMaterialization(materializeCast);
+  typeConverter.addSourceMaterialization(materializeCast);
+  typeConverter.addTargetMaterialization(materializeCast);
+
+  mlir::RewritePatternSet patterns(&context);
+  mlir::ConversionTarget target(context);
+
+  plier::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
+                                                      target);
+
+  plier::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
+                                                            patterns, target);
+
+  target.addDynamicallyLegalOp<plier::GetItemOp, plier::SetItemOp>(
+      [&](mlir::Operation *op) { return typeConverter.isLegal(op); });
+
+  patterns.insert<
+      // clang-format off
+      ConvertOp<plier::GetItemOp>,
+      ConvertOp<plier::SetItemOp>
+      // clang-format on
+      >(typeConverter, &context);
+
+  if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
+                                                std::move(patterns))))
+    signalPassFailure();
+}
+
 struct LowerGpuRangePass
     : public plier::RewriteWrapperPass<LowerGpuRangePass, void, void,
                                        LowerGpuRange> {};
@@ -2700,6 +2915,8 @@ static void commonOptPasses(mlir::OpPassManager &pm) {
 }
 
 static void populateLowerToGPUPipelineHigh(mlir::OpPassManager &pm) {
+  pm.addNestedPass<mlir::FuncOp>(std::make_unique<MarkGpuArraysInputs>());
+  pm.addPass(std::make_unique<ConvertGpuArrays>());
   pm.addPass(std::make_unique<LowerGpuRangePass>());
   pm.addPass(std::make_unique<LowerGpuBuiltinsPass>());
   commonOptPasses(pm);
@@ -2720,6 +2937,7 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   funcPM.addPass(std::make_unique<UnstrideMemrefsPass>());
   funcPM.addPass(mlir::createLowerAffinePass());
   commonOptPasses(funcPM);
+  funcPM.addPass(std::make_unique<KernelMemrefOpsMovementPass>());
 
   pm.addPass(mlir::createSymbolDCEPass());
 
@@ -2758,11 +2976,11 @@ void registerLowerToGPUPipeline(plier::PipelineRegistry &registry) {
     sink(lowerToGPUPipelineNameHigh(),
          {highStage.begin, plierToStdPipelineName(),
           plierToLinalgGenPipelineName()},
-         {highStage.end}, {plierToStdPipelineName()},
+         {highStage.end, untuplePipelineName()}, {plierToStdPipelineName()},
          &populateLowerToGPUPipelineHigh);
 
     auto lowStage = getLowerLoweringStage();
-    sink(lowerToGPUPipelineNameLow(), {lowStage.begin},
+    sink(lowerToGPUPipelineNameLow(), {lowStage.begin, untuplePipelineName()},
          {lowStage.end, lowerToLLVMPipelineName()}, {},
          &populateLowerToGPUPipelineLow);
   });
