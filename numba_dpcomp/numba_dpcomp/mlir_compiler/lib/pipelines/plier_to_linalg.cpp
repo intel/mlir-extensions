@@ -947,7 +947,7 @@ static void genCopy(mlir::OpBuilder &builder, mlir::Location loc, mlir::Value sr
   llvm::SmallVector<mlir::StringRef> iterators(rank, "parallel");
 
   auto bodyBuilder = [](mlir::OpBuilder &b, mlir::Location l, mlir::ValueRange args) {
-    assert(args.size() == 1);
+    assert(args.size() == 2);
     b.create<mlir::linalg::YieldOp>(l, args.front());
   };
   builder.create<mlir::linalg::GenericOp>(loc, src, dst, maps, iterators, bodyBuilder);
@@ -2104,9 +2104,21 @@ struct RemovePseudoCopy : public mlir::OpRewritePattern<plier::PseudoCopyOp> {
   }
 };
 
+struct ReplaceMemrefCopy : public mlir::OpRewritePattern<mlir::memref::CopyOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::CopyOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    genCopy(rewriter, op->getLoc(), op.getSource(), op.getTarget());
+    rewriter.eraseOp(op);
+    return mlir::success();
+  }
+};
+
 struct RemovePseudoCopyPass
     : public plier::RewriteWrapperPass<RemovePseudoCopyPass, mlir::FuncOp, void,
-                                       RemovePseudoCopy> {};
+                                       RemovePseudoCopy, ReplaceMemrefCopy> {};
 
 struct CloneArgsPass
     : public mlir::PassWrapper<CloneArgsPass, mlir::OperationPass<mlir::FuncOp>> {
