@@ -43,8 +43,20 @@ template <typename T> static std::unique_ptr<T, RefDeleter> makeRef(T *ref) {
   return std::unique_ptr<T, RefDeleter>(ref);
 }
 
+static bool initNumpy() {
+  static bool init = []() -> bool {
+    import_array();
+    return true;
+  }();
+
+  return init;
+}
+
 extern "C" DPCOMP_PYTHON_RUNTIME_EXPORT int
 dpcompUnboxSyclInterface(PyObject *obj, arystruct_t *arystruct) {
+  if (!initNumpy())
+    return -1;
+
   auto iface = makeRef(PyObject_GetAttrString(obj, SYCL_USM_ARRAY_INTERFACE));
   if (!iface)
     return -1;
@@ -92,12 +104,12 @@ dpcompUnboxSyclInterface(PyObject *obj, arystruct_t *arystruct) {
     dims[i] = val;
   }
   auto itemsize = [&]() -> npy_intp {
-    auto typestr = makeRef(PyDict_GetItemString(iface.get(), "typestr"));
+    auto typestr = PyDict_GetItemString(iface.get(), "typestr");
     if (!typestr)
       return -1;
 
-    PyArray_Descr *descr;
-    if (!PyArray_DescrConverter(typestr.get(), &descr))
+    PyArray_Descr *descr = nullptr;
+    if (!PyArray_DescrConverter(typestr, &descr))
       return -1;
 
     auto descrRef = makeRef(descr);
