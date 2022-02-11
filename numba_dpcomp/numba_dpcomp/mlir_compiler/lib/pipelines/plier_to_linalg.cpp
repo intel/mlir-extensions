@@ -20,6 +20,7 @@
 #include <mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h>
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Arithmetic/Transforms/Passes.h>
 #include <mlir/Dialect/Bufferization/IR/Bufferization.h>
 #include <mlir/Dialect/Bufferization/Transforms/Bufferize.h>
 #include <mlir/Dialect/Bufferization/Transforms/Passes.h>
@@ -2205,7 +2206,7 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(std::make_unique<TensorFusionPass>());
 
-//  pm.addPass(mlir::createTensorConstantBufferizePass());
+  pm.addPass(mlir::arith::createConstantBufferizePass());
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<AdditionalBufferize>());
   pm.addNestedPass<mlir::FuncOp>(mlir::createSCFBufferizePass());
   pm.addNestedPass<mlir::FuncOp>(mlir::createLinalgBufferizePass());
