@@ -565,15 +565,14 @@ def test_atomics_multidim(funci):
 def test_dpctl_simple1():
     def func(a, b, c):
         i = get_global_id(0)
-        j = get_global_id(1)
-        k = get_global_id(2)
-        c[i, j, k] = a[i, j, k] + b[i, j, k]
+        c[i] = a[i] + b[i]
 
     sim_func = kernel_sim(func)
     gpu_func = kernel_cached(func)
 
-    a = np.array([[[1,2,3],[4,5,6]]], np.float32)
-    b = np.array([[[7,8,9],[10,11,12]]], np.float32)
+
+    a = np.arange(1024, dtype=np.float32)
+    b = np.arange(1024, dtype=np.float32) * 3
 
     sim_res = np.zeros(a.shape, a.dtype)
     sim_func[a.shape, DEFAULT_LOCAL_SIZE](a, b, sim_res)
@@ -581,11 +580,11 @@ def test_dpctl_simple1():
     da = dpt.usm_ndarray(a.shape, dtype=a.dtype, buffer="device")
     da.usm_data.copy_from_host(a.reshape((-1)).view("|u1"))
 
-    db = dpt.usm_ndarray(b.shape, dtype=b.dtype, buffer="device")
+    db = dpt.usm_ndarray(b.shape, dtype=b.dtype, buffer="shared")
     db.usm_data.copy_from_host(b.reshape((-1)).view("|u1"))
 
     gpu_res = np.zeros(a.shape, a.dtype)
-    dgpu_res = dpt.usm_ndarray(gpu_res.shape, dtype=gpu_res.dtype, buffer="shared")
+    dgpu_res = dpt.usm_ndarray(gpu_res.shape, dtype=gpu_res.dtype, buffer="device")
     dgpu_res.usm_data.copy_from_host(gpu_res.reshape((-1)).view("|u1"))
 
     with print_pass_ir([],['ConvertParallelLoopToGpu']):
@@ -593,4 +592,5 @@ def test_dpctl_simple1():
         ir = get_print_buffer()
         assert ir.count('gpu.launch blocks') == 1, ir
 
-    assert_equal(dgpu_res, sim_res)
+    dgpu_res.usm_data.copy_to_host(gpu_res.reshape((-1)).view("|u1"))
+    assert_equal(gpu_res, sim_res)
