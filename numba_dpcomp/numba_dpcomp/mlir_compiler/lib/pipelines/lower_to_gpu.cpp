@@ -2593,6 +2593,13 @@ void MarkGpuArraysInputs::runOnOperation() {
   auto func = getOperation();
   auto funcType = func.getType();
 
+  mlir::OpBuilder builder(&getContext());
+  auto attrStr = builder.getStringAttr(kGpuArgAttr);
+  if (func->hasAttr(attrStr)) {
+    markAllAnalysesPreserved();
+    return;
+  }
+
   bool needAttr = false;
   llvm::SmallVector<bool> result;
   result.reserve(funcType.getNumInputs());
@@ -2606,10 +2613,8 @@ void MarkGpuArraysInputs::runOnOperation() {
   for (auto type : (func.getType().getInputs()))
     visitTypeRecursive(type, visitor);
 
-  if (needAttr) {
-    mlir::OpBuilder builder(&getContext());
-    func->setAttr(kGpuArgAttr, builder.getBoolArrayAttr(result));
-  }
+  if (needAttr)
+    func->setAttr(attrStr, builder.getBoolArrayAttr(result));
 
   markAllAnalysesPreserved();
 }
@@ -2949,6 +2954,9 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   funcPM.addPass(mlir::createCanonicalizerPass());
   funcPM.addPass(std::make_unique<UnstrideMemrefsPass>());
   funcPM.addPass(mlir::createLowerAffinePass());
+
+  // TODO: mlir::gpu::GPUModuleOp pass
+  pm.addNestedPass<mlir::FuncOp>(mlir::arith::createArithmeticExpandOpsPass());
   commonOptPasses(funcPM);
   funcPM.addPass(std::make_unique<KernelMemrefOpsMovementPass>());
 
