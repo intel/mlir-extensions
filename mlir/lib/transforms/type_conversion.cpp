@@ -14,6 +14,7 @@
 
 #include "mlir-extensions/transforms/type_conversion.hpp"
 
+#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Dialect/SCF/Transforms.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
@@ -23,15 +24,17 @@
 #include "mlir-extensions/dialect/plier/dialect.hpp"
 
 namespace {
-class ConvertSelectOp : public mlir::OpConversionPattern<mlir::SelectOp> {
+class ConvertSelectOp
+    : public mlir::OpConversionPattern<mlir::arith::SelectOp> {
 public:
-  using mlir::OpConversionPattern<mlir::SelectOp>::OpConversionPattern;
+  using mlir::OpConversionPattern<mlir::arith::SelectOp>::OpConversionPattern;
   mlir::LogicalResult
-  matchAndRewrite(mlir::SelectOp op, mlir::SelectOp::Adaptor adaptor,
+  matchAndRewrite(mlir::arith::SelectOp op,
+                  mlir::arith::SelectOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<mlir::SelectOp>(op, adaptor.getCondition(),
-                                                adaptor.getTrueValue(),
-                                                adaptor.getFalseValue());
+    rewriter.replaceOpWithNewOp<mlir::arith::SelectOp>(
+        op, adaptor.getCondition(), adaptor.getTrueValue(),
+        adaptor.getFalseValue());
     return mlir::success();
   }
 };
@@ -40,8 +43,8 @@ public:
 void plier::populateControlFlowTypeConversionRewritesAndTarget(
     mlir::TypeConverter &typeConverter, mlir::RewritePatternSet &patterns,
     mlir::ConversionTarget &target) {
-  mlir::populateFunctionLikeTypeConversionPattern<mlir::FuncOp>(patterns,
-                                                                typeConverter);
+  mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::FuncOp>(
+      patterns, typeConverter);
   target.addDynamicallyLegalOp<mlir::FuncOp>([&](mlir::FuncOp op) {
     return typeConverter.isSignatureLegal(op.getType()) &&
            typeConverter.isLegal(&op.getBody());
@@ -56,8 +59,8 @@ void plier::populateControlFlowTypeConversionRewritesAndTarget(
                                                              patterns, target);
 
   patterns.insert<ConvertSelectOp>(typeConverter, patterns.getContext());
-  target.addDynamicallyLegalOp<mlir::SelectOp>(
-      [&typeConverter](mlir::SelectOp op) {
+  target.addDynamicallyLegalOp<mlir::arith::SelectOp>(
+      [&typeConverter](mlir::arith::SelectOp op) {
         return typeConverter.isLegal(op);
       });
 

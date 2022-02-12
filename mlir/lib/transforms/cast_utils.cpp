@@ -40,7 +40,7 @@ mlir::Value plier::index_cast(mlir::OpBuilder &builder, mlir::Location loc,
     val = builder.createOrFold<plier::SignCastOp>(loc, newSrcType, val);
 
   auto newDstType = makeSignless(dstType);
-  val = builder.createOrFold<mlir::arith::IndexCastOp>(loc, val, newDstType);
+  val = builder.createOrFold<mlir::arith::IndexCastOp>(loc, newDstType, val);
   if (newDstType != dstType)
     val = builder.createOrFold<plier::SignCastOp>(loc, dstType, val);
 

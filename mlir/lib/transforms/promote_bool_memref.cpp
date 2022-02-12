@@ -66,7 +66,7 @@ public:
     auto res = rewriter.create<mlir::memref::LoadOp>(loc, adaptor.memref(),
                                                      adaptor.indices());
     rewriter.replaceOpWithNewOp<mlir::arith::TruncIOp>(
-        op, res, rewriter.getIntegerType(1));
+        op, rewriter.getIntegerType(1), res);
     return mlir::success();
   }
 };
@@ -81,7 +81,7 @@ public:
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto loc = op->getLoc();
     auto val = rewriter.create<mlir::arith::ExtUIOp>(
-        loc, adaptor.value(), rewriter.getIntegerType(8));
+        loc, rewriter.getIntegerType(8), adaptor.value());
     rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(
         op, val, adaptor.memref(), adaptor.indices());
     return mlir::success();

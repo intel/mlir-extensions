@@ -35,7 +35,7 @@ def PlierUtil_OpaqueType
                   "opaque_type">,
       BuildableType<"$_builder.getType<::plier::OpaqueType>()"> {}
 
-class PlierUtil_Op<string mnemonic, list<OpTrait> traits = []>
+class PlierUtil_Op<string mnemonic, list<Trait> traits = []>
     : Op<PlierUtil_Dialect, mnemonic, traits>;
 
 def EnforceShapeOp : PlierUtil_Op<"enforce_shape"> {
