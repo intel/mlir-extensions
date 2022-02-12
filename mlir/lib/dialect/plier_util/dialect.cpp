@@ -554,17 +554,6 @@ struct ChangeLayoutLinalgGeneric
         rewriter.updateRootInPlace(op, [&]() {
           (isInputs ? op.inputsMutable() : op.outputsMutable())
               .assign(newOperands);
-          if (!isInputs) {
-            for (auto i : llvm::seq(0u, count)) {
-              auto newType = newOperands[i].getType();
-              auto res = op.getResult(i);
-              if (newType != res.getType()) {
-                assert(newType.isa<mlir::MemRefType>());
-                assert(res.use_empty());
-                res.setType(newType);
-              }
-            }
-          }
         });
       }
     }
