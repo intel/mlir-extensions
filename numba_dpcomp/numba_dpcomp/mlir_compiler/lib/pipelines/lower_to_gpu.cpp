@@ -41,8 +41,8 @@
 #include <mlir/Dialect/SPIRV/IR/SPIRVOps.h>
 #include <mlir/Dialect/SPIRV/IR/TargetAndABI.h>
 #include <mlir/Dialect/SPIRV/Transforms/Passes.h>
-#include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/Dialect/SPIRV/Transforms/SPIRVConversion.h>
+#include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 #include <mlir/IR/Dominance.h>
 #include <mlir/Pass/PassManager.h>
@@ -116,7 +116,8 @@ static void moveOpsIntoParallel(mlir::scf::ParallelOp outer, int depth = 0) {
 }
 
 struct PrepareForGPUPass
-    : public mlir::PassWrapper<PrepareForGPUPass, mlir::OperationPass<mlir::FuncOp>> {
+    : public mlir::PassWrapper<PrepareForGPUPass,
+                               mlir::OperationPass<mlir::FuncOp>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::scf::SCFDialect>();
@@ -203,7 +204,8 @@ struct RemoveNestedParallelPass
                                        RemoveNestedParallel> {};
 
 struct ParallelLoopGPUMappingPass
-    : public mlir::PassWrapper<ParallelLoopGPUMappingPass, mlir::OperationPass<mlir::FuncOp>> {
+    : public mlir::PassWrapper<ParallelLoopGPUMappingPass,
+                               mlir::OperationPass<mlir::FuncOp>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::scf::SCFDialect>();
@@ -258,7 +260,8 @@ struct ParallelLoopGPUMappingPass
 };
 
 struct RemoveKernelMarkerPass
-    : public mlir::PassWrapper<RemoveKernelMarkerPass, mlir::OperationPass<void>> {
+    : public mlir::PassWrapper<RemoveKernelMarkerPass,
+                               mlir::OperationPass<void>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::StandardOpsDialect>();
@@ -285,7 +288,8 @@ static constexpr llvm::StringLiteral kGpuArgAttr("plier.gpu_accessible");
 static constexpr llvm::StringLiteral kGpuAllocShared("gpu.alloc_shared");
 
 struct InsertGPUAllocs
-    : public mlir::PassWrapper<InsertGPUAllocs, mlir::OperationPass<mlir::FuncOp>> {
+    : public mlir::PassWrapper<InsertGPUAllocs,
+                               mlir::OperationPass<mlir::FuncOp>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::memref::MemRefDialect>();
@@ -1281,7 +1285,8 @@ struct GPUToSpirvPass
 };
 
 struct GPULowerDefaultLocalSize
-    : public mlir::PassWrapper<GPULowerDefaultLocalSize, mlir::OperationPass<mlir::FuncOp>> {
+    : public mlir::PassWrapper<GPULowerDefaultLocalSize,
+                               mlir::OperationPass<mlir::FuncOp>> {
 
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
@@ -1444,7 +1449,8 @@ struct ExpandSuggestBlockSizeOp
   }
 };
 
-struct GPUExPass : public mlir::PassWrapper<GPUExPass, mlir::OperationPass<void>> {
+struct GPUExPass
+    : public mlir::PassWrapper<GPUExPass, mlir::OperationPass<void>> {
 
   void runOnOperation() override {
     auto *ctx = &getContext();
@@ -1514,8 +1520,7 @@ struct GPUExDeallocPass
 
     patterns.insert<
         CreateDeallocOp<plier::LoadGpuModuleOp, plier::DestroyGpuModuleOp>,
-        CreateDeallocOp<plier::GetGpuKernelOp, plier::DestroyGpuKernelOp>>(
-        ctx);
+        CreateDeallocOp<plier::GetGpuKernelOp, plier::DestroyGpuKernelOp>>(ctx);
 
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
                                              std::move(patterns));
@@ -1665,7 +1670,8 @@ struct OutlineInitPass
 };
 
 struct GenerateOutlineContextPass
-    : public mlir::PassWrapper<GenerateOutlineContextPass, mlir::OperationPass<mlir::FuncOp>> {
+    : public mlir::PassWrapper<GenerateOutlineContextPass,
+                               mlir::OperationPass<mlir::FuncOp>> {
 
   void runOnOperation() override {
     auto func = getOperation();
@@ -2563,7 +2569,8 @@ static bool isGpuArray(mlir::Type type) {
 }
 
 struct MarkGpuArraysInputs
-    : public mlir::PassWrapper<MarkGpuArraysInputs, mlir::OperationPass<mlir::FuncOp>> {
+    : public mlir::PassWrapper<MarkGpuArraysInputs,
+                               mlir::OperationPass<mlir::FuncOp>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::StandardOpsDialect>();

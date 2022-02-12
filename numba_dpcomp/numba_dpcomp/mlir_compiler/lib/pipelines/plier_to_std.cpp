@@ -606,7 +606,8 @@ mlir::Value intCast(mlir::PatternRewriter &rewriter, mlir::Location loc,
           loc, mlir::arith::CmpIPredicate::eq, val, zero);
       auto trueVal = rewriter.create<mlir::arith::ConstantIntOp>(loc, 1, 1);
       auto falseVal = rewriter.create<mlir::arith::ConstantIntOp>(loc, 0, 1);
-      val = rewriter.createOrFold<mlir::arith::SelectOp>(loc, cmp, falseVal, trueVal);
+      val = rewriter.createOrFold<mlir::arith::SelectOp>(loc, cmp, falseVal,
+                                                         trueVal);
     } else {
       val = rewriter.createOrFold<mlir::arith::TruncIOp>(loc, dstSignless, val);
     }
@@ -653,7 +654,8 @@ mlir::Value floatIntCast(mlir::PatternRewriter &rewriter, mlir::Location loc,
         loc, mlir::arith::CmpFPredicate::OEQ, val, zero);
     auto trueVal = rewriter.create<mlir::arith::ConstantIntOp>(loc, 1, 1);
     auto falseVal = rewriter.create<mlir::arith::ConstantIntOp>(loc, 0, 1);
-    res = rewriter.createOrFold<mlir::arith::SelectOp>(loc, cmp, falseVal, trueVal);
+    res = rewriter.createOrFold<mlir::arith::SelectOp>(loc, cmp, falseVal,
+                                                       trueVal);
   } else if (dstIntType.isSigned()) {
     res = rewriter.create<mlir::arith::FPToSIOp>(loc, dstSignlessType, val);
   } else {
@@ -1391,7 +1393,6 @@ static void populatePlierToStdPipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<BuiltinCallsLoweringPass>());
   pm.addPass(plier::createForceInlinePass());
   pm.addPass(mlir::createSymbolDCEPass());
-//  pm.addNestedPass<mlir::FuncOp>(mlir::createStdExpandOpsPass());
   pm.addPass(mlir::createCanonicalizerPass());
 }
 } // namespace

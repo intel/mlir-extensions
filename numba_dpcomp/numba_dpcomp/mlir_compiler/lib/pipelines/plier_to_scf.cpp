@@ -15,8 +15,8 @@
 #include "pipelines/plier_to_scf.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
-#include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Dialect/ControlFlow/IR/ControlFlowOps.h>
+#include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 #include <mlir/Pass/PassManager.h>
@@ -34,7 +34,7 @@ namespace {
 static mlir::Block *getNextBlock(mlir::Block *block) {
   assert(nullptr != block);
   if (auto br =
-      mlir::dyn_cast_or_null<mlir::cf::BranchOp>(block->getTerminator())) {
+          mlir::dyn_cast_or_null<mlir::cf::BranchOp>(block->getTerminator())) {
     return br.getDest();
   }
   return nullptr;
@@ -64,7 +64,8 @@ static bool isBlocksDifferent(llvm::ArrayRef<mlir::Block *> blocks) {
   return true;
 }
 
-struct ScfIfRewriteOneExit : public mlir::OpRewritePattern<mlir::cf::CondBranchOp> {
+struct ScfIfRewriteOneExit
+    : public mlir::OpRewritePattern<mlir::cf::CondBranchOp> {
   using OpRewritePattern::OpRewritePattern;
 
   mlir::LogicalResult
@@ -150,7 +151,9 @@ struct ScfIfRewriteOneExit : public mlir::OpRewritePattern<mlir::cf::CondBranchO
         if (postBlock == returnBlock) {
           return mlir::cast<mlir::ReturnOp>(term).operands().getTypes();
         } else {
-          return mlir::cast<mlir::cf::BranchOp>(term).getDestOperands().getTypes();
+          return mlir::cast<mlir::cf::BranchOp>(term)
+              .getDestOperands()
+              .getTypes();
         }
       }();
       mlir::scf::IfOp ifOp;
@@ -183,7 +186,7 @@ struct ScfIfRewriteOneExit : public mlir::OpRewritePattern<mlir::cf::CondBranchO
         rewriter.replaceOpWithNewOp<mlir::ReturnOp>(op, ifOp.getResults());
       } else {
         rewriter.replaceOpWithNewOp<mlir::cf::BranchOp>(op, postBlock,
-                                                    ifOp.getResults());
+                                                        ifOp.getResults());
       }
 
       if (trueBlock->use_empty())
@@ -432,7 +435,8 @@ struct ScfWhileRewrite : public mlir::OpRewritePattern<mlir::cf::BranchOp> {
           beforeBlock->getArguments(), yieldVars.begin(),
           [&](mlir::Value val) { return mapper.lookupOrDefault(val); });
 
-      auto term = mlir::cast<mlir::cf::CondBranchOp>(beforeBlock->getTerminator());
+      auto term =
+          mlir::cast<mlir::cf::CondBranchOp>(beforeBlock->getTerminator());
       for (auto arg : term.getFalseDestOperands()) {
         origVars.emplace_back(arg);
         yieldVars.emplace_back(mapper.lookupOrDefault(arg));
@@ -495,7 +499,8 @@ struct BreakRewrite : public mlir::OpRewritePattern<mlir::cf::CondBranchOp> {
     auto type = rewriter.getIntegerType(1);
     auto condVal = rewriter.getIntegerAttr(type, 1);
 
-    conditionBlock->addArgument(op.getCondition().getType(), rewriter.getUnknownLoc());
+    conditionBlock->addArgument(op.getCondition().getType(),
+                                rewriter.getUnknownLoc());
     mlir::OpBuilder::InsertionGuard g(rewriter);
     for (auto user : llvm::make_early_inc_range(conditionBlock->getUsers())) {
       if (user != op) {
@@ -505,7 +510,7 @@ struct BreakRewrite : public mlir::OpRewritePattern<mlir::cf::CondBranchOp> {
           llvm::SmallVector<mlir::Value> params(br.getDestOperands());
           params.emplace_back(condConst);
           rewriter.replaceOpWithNewOp<mlir::cf::BranchOp>(br, conditionBlock,
-                                                      params);
+                                                          params);
         } else if (auto condBr = mlir::dyn_cast<mlir::cf::CondBranchOp>(user)) {
           llvm_unreachable("not implemented");
         } else {
@@ -539,7 +544,8 @@ struct CondBranchSameTargetRewrite
     : public mlir::OpRewritePattern<mlir::cf::CondBranchOp> {
   // Set higher benefit than if rewrites
   CondBranchSameTargetRewrite(mlir::MLIRContext *context)
-      : mlir::OpRewritePattern<mlir::cf::CondBranchOp>(context, /*benefit*/ 10) {}
+      : mlir::OpRewritePattern<mlir::cf::CondBranchOp>(context,
+                                                       /*benefit*/ 10) {}
 
   mlir::LogicalResult
   matchAndRewrite(mlir::cf::CondBranchOp op,
@@ -565,8 +571,8 @@ struct CondBranchSameTargetRewrite
       if (trueArg == falseArg) {
         newOperands[i] = trueArg;
       } else {
-        newOperands[i] =
-            rewriter.create<mlir::arith::SelectOp>(loc, condition, trueArg, falseArg);
+        newOperands[i] = rewriter.create<mlir::arith::SelectOp>(
+            loc, condition, trueArg, falseArg);
       }
     }
 

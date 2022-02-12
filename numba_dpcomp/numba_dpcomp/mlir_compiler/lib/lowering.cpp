@@ -22,8 +22,8 @@
 #include <pybind11/pybind11.h>
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
-#include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/Dialect/ControlFlow/IR/ControlFlowOps.h>
+#include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/IR/BuiltinTypes.h>
@@ -394,7 +394,8 @@ private:
 
     auto argIndex = currentBlock->getNumArguments();
     auto loc = builder.getUnknownLoc();
-    auto arg = currentBlock->addArgument(getType(currentInstr.attr("target")), loc);
+    auto arg =
+        currentBlock->addArgument(getType(currentInstr.attr("target")), loc);
 
     for (auto i : llvm::seq<size_t>(0, incomingVals.size())) {
       auto var = incomingVals[i].attr("name").cast<std::string>();
@@ -533,7 +534,7 @@ private:
     auto condVal = builder.create<plier::CastOp>(
         getCurrentLoc(), mlir::IntegerType::get(&ctx, 1), c);
     builder.create<mlir::cf::CondBranchOp>(getCurrentLoc(), condVal, trBlock,
-                                       flBlock);
+                                           flBlock);
   }
 
   void jump(py::handle target) {
@@ -607,7 +608,8 @@ private:
           mlir::SmallVector<mlir::Value> args;
           buildArgList(dest, info.outgoingPhiNodes, args);
           op.erase();
-          builder.create<mlir::cf::BranchOp>(builder.getUnknownLoc(), dest, args);
+          builder.create<mlir::cf::BranchOp>(builder.getUnknownLoc(), dest,
+                                             args);
         } else if (auto op = mlir::dyn_cast<mlir::cf::CondBranchOp>(term)) {
           auto trueDest = op.getTrueDest();
           auto falseDest = op.getFalseDest();
@@ -618,8 +620,8 @@ private:
           buildArgList(falseDest, info.outgoingPhiNodes, falseArgs);
           op.erase();
           builder.create<mlir::cf::CondBranchOp>(builder.getUnknownLoc(), cond,
-                                             trueDest, trueArgs, falseDest,
-                                             falseArgs);
+                                                 trueDest, trueArgs, falseDest,
+                                                 falseArgs);
         } else {
           plier::reportError(llvm::Twine("Unhandled terminator: ") +
                              term->getName().getStringRef());

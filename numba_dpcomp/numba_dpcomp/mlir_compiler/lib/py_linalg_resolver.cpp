@@ -17,11 +17,11 @@
 #include <pybind11/pybind11.h>
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
-#include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/Dialect/Bufferization/IR/Bufferization.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/SCF.h>
+#include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/BuiltinAttributes.h>
@@ -1441,7 +1441,8 @@ py::object selectImpl(py::capsule context, py::handle cond, py::handle trueV,
   auto condVal = ctx.context.unwrapVal(loc, builder, cond);
   auto trueVal = ctx.context.unwrapVal(loc, builder, trueV);
   auto falseVal = ctx.context.unwrapVal(loc, builder, falseV);
-  auto res = builder.create<mlir::arith::SelectOp>(loc, condVal, trueVal, falseVal);
+  auto res =
+      builder.create<mlir::arith::SelectOp>(loc, condVal, trueVal, falseVal);
   return ctx.context.createVar(context, res);
 }
 

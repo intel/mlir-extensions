@@ -14,25 +14,27 @@
 
 #include "mlir-extensions/transforms/type_conversion.hpp"
 
+#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Dialect/SCF/Transforms.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
-#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/StandardOps/Transforms/FuncConversions.h>
 #include <mlir/Transforms/DialectConversion.h>
 
 #include "mlir-extensions/dialect/plier/dialect.hpp"
 
 namespace {
-class ConvertSelectOp : public mlir::OpConversionPattern<mlir::arith::SelectOp> {
+class ConvertSelectOp
+    : public mlir::OpConversionPattern<mlir::arith::SelectOp> {
 public:
   using mlir::OpConversionPattern<mlir::arith::SelectOp>::OpConversionPattern;
   mlir::LogicalResult
-  matchAndRewrite(mlir::arith::SelectOp op, mlir::arith::SelectOp::Adaptor adaptor,
+  matchAndRewrite(mlir::arith::SelectOp op,
+                  mlir::arith::SelectOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<mlir::arith::SelectOp>(op, adaptor.getCondition(),
-                                                adaptor.getTrueValue(),
-                                                adaptor.getFalseValue());
+    rewriter.replaceOpWithNewOp<mlir::arith::SelectOp>(
+        op, adaptor.getCondition(), adaptor.getTrueValue(),
+        adaptor.getFalseValue());
     return mlir::success();
   }
 };
@@ -41,8 +43,8 @@ public:
 void plier::populateControlFlowTypeConversionRewritesAndTarget(
     mlir::TypeConverter &typeConverter, mlir::RewritePatternSet &patterns,
     mlir::ConversionTarget &target) {
-  mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::FuncOp>(patterns,
-                                                                typeConverter);
+  mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::FuncOp>(
+      patterns, typeConverter);
   target.addDynamicallyLegalOp<mlir::FuncOp>([&](mlir::FuncOp op) {
     return typeConverter.isSignatureLegal(op.getType()) &&
            typeConverter.isLegal(&op.getBody());

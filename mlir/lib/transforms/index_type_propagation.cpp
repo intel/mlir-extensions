@@ -66,8 +66,8 @@ struct ArithIndexCastSimplify : public mlir::OpRewritePattern<Op> {
       return mlir::success();
     }
     if (lhs && rhsConst) {
-      auto newConst = rewriter.create<mlir::arith::ConstantIndexOp>(
-          loc, rhsConst.getInt());
+      auto newConst =
+          rewriter.create<mlir::arith::ConstantIndexOp>(loc, rhsConst.getInt());
       auto newOp = rewriter.create<Op>(op.getLoc(), lhs, newConst);
       auto result = rewriter.create<mlir::arith::IndexCastOp>(
           loc, lhsType, newOp.getResult());
@@ -75,8 +75,8 @@ struct ArithIndexCastSimplify : public mlir::OpRewritePattern<Op> {
       return mlir::success();
     }
     if (lhsConst && rhs) {
-      auto newConst = rewriter.create<mlir::arith::ConstantIndexOp>(
-          loc, lhsConst.getInt());
+      auto newConst =
+          rewriter.create<mlir::arith::ConstantIndexOp>(loc, lhsConst.getInt());
       auto newOp = rewriter.create<Op>(op.getLoc(), newConst, rhs);
       auto result = rewriter.create<mlir::arith::IndexCastOp>(
           loc, lhsType, newOp.getResult());

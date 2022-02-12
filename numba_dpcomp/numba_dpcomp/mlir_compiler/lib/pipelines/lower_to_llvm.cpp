@@ -15,23 +15,22 @@
 #include "pipelines/lower_to_llvm.hpp"
 
 #include <mlir/Conversion/ArithmeticToLLVM/ArithmeticToLLVM.h>
+#include <mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h>
 #include <mlir/Conversion/LLVMCommon/ConversionTarget.h>
 #include <mlir/Conversion/LLVMCommon/LoweringOptions.h>
 #include <mlir/Conversion/LLVMCommon/TypeConverter.h>
-#include <mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h>
 #include <mlir/Conversion/LinalgToLLVM/LinalgToLLVM.h>
 #include <mlir/Conversion/MathToLLVM/MathToLLVM.h>
 #include <mlir/Conversion/MathToLibm/MathToLibm.h>
 #include <mlir/Conversion/MemRefToLLVM/AllocLikeConversion.h>
 #include <mlir/Conversion/MemRefToLLVM/MemRefToLLVM.h>
 #include <mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h>
-#include <mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h>
 #include <mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h>
 #include <mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h>
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/Arithmetic/Transforms/Passes.h>
-#include <mlir/Dialect/LLVMIR/LLVMDialect.h>
 #include <mlir/Dialect/ControlFlow/IR/ControlFlowOps.h>
+#include <mlir/Dialect/LLVMIR/LLVMDialect.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
@@ -553,7 +552,6 @@ mlir::LogicalResult fixFuncSig(LLVMTypeHelper &typeHelper, mlir::FuncOp func) {
         << origRetType;
     return mlir::failure();
   }
-
 
   builder.setInsertionPointToStart(&func.getBody().front());
 
@@ -1213,7 +1211,8 @@ struct LowerParallelToCFGPass
 };
 
 struct PreLLVMLowering
-    : public mlir::PassWrapper<PreLLVMLowering, mlir::OperationPass<mlir::FuncOp>> {
+    : public mlir::PassWrapper<PreLLVMLowering,
+                               mlir::OperationPass<mlir::FuncOp>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::StandardOpsDialect>();
@@ -1510,9 +1509,8 @@ struct LowerTakeContextOp
         mlir::OpBuilder::InsertionGuard g(rewriter);
         auto func =
             insertFunc(wrapperName, wrapperType, mlir::LLVM::Linkage::Private);
-        auto block = rewriter.createBlock(&func.getBody(),
-                                          mlir::Region::iterator{}, ctxType,
-                                          unknownLoc);
+        auto block = rewriter.createBlock(
+            &func.getBody(), mlir::Region::iterator{}, ctxType, unknownLoc);
         rewriter.setInsertionPointToStart(block);
 
         auto innerResults = rewriter
@@ -1549,9 +1547,8 @@ struct LowerTakeContextOp
         mlir::OpBuilder::InsertionGuard g(rewriter);
         auto func =
             insertFunc(wrapperName, wrapperType, mlir::LLVM::Linkage::Private);
-        auto block = rewriter.createBlock(&func.getBody(),
-                                          mlir::Region::iterator{}, ctxType,
-                                          unknownLoc);
+        auto block = rewriter.createBlock(
+            &func.getBody(), mlir::Region::iterator{}, ctxType, unknownLoc);
         rewriter.setInsertionPointToStart(block);
 
         auto ptr = rewriter.create<mlir::LLVM::BitcastOp>(

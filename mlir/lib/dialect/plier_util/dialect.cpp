@@ -199,7 +199,8 @@ void ParallelOp::build(
   mlir::OpBuilder::InsertionGuard guard(odsBuilder);
   llvm::SmallVector<mlir::Type> argTypes(count * 2 + 1,
                                          odsBuilder.getIndexType());
-  llvm::SmallVector<mlir::Location> locs(argTypes.size(), odsBuilder.getUnknownLoc());
+  llvm::SmallVector<mlir::Location> locs(argTypes.size(),
+                                         odsBuilder.getUnknownLoc());
   auto *bodyBlock = odsBuilder.createBlock(bodyRegion, {}, argTypes, locs);
 
   if (bodyBuilder) {
@@ -781,8 +782,8 @@ void ChangeLayoutOp::getCanonicalizationPatterns(
                  ChangeLayoutExtractMetadata, ChangeLayoutClone,
                  PropagateCloneType, ChangeLayoutCast, ChangeLayoutSignCast,
                  ChangeLayoutLoad, ChangeLayoutStore, ChangeLayoutSubview,
-                 ChangeLayoutLinalgGeneric,
-                 ChangeLayoutLinalgFill, ChangeLayoutIf, ChangeLayout1DReshape,
+                 ChangeLayoutLinalgGeneric, ChangeLayoutLinalgFill,
+                 ChangeLayoutIf, ChangeLayout1DReshape,
                  ChangeLayoutSliceGetItem, ChangeLayoutCopy>(context);
 }
 
@@ -1062,8 +1063,8 @@ struct SignCastMemrefToTensorPropagate
 
 } // namespace
 
-void SignCastOp::getCanonicalizationPatterns(
-    ::mlir::RewritePatternSet &results, ::mlir::MLIRContext *context) {
+void SignCastOp::getCanonicalizationPatterns(::mlir::RewritePatternSet &results,
+                                             ::mlir::MLIRContext *context) {
   results.insert<
       SignCastDimPropagate<mlir::tensor::DimOp>,
       SignCastDimPropagate<mlir::memref::DimOp>, SignCastUndefPropagate,

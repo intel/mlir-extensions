@@ -461,8 +461,8 @@ struct GetattrGlobalRewrite : public mlir::OpRewritePattern<GetattrOp> {
 };
 } // namespace
 
-void GetattrOp::getCanonicalizationPatterns(
-    ::mlir::RewritePatternSet &results, ::mlir::MLIRContext *context) {
+void GetattrOp::getCanonicalizationPatterns(::mlir::RewritePatternSet &results,
+                                            ::mlir::MLIRContext *context) {
   results.insert<GetattrGlobalRewrite>(context);
 }
 
