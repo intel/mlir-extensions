@@ -23,6 +23,7 @@ struct InsertGPUAllocs
     registry.insert<mlir::memref::MemRefDialect>();
     registry.insert<mlir::gpu::GPUDialect>();
     registry.insert<mlir::scf::SCFDialect>();
+    registry.insert<mlir::arith::ArithmeticDialect>();
   }
 
   void runOnFunction() override {
@@ -253,6 +254,281 @@ struct InsertGPUAllocs
 
       builder.create<mlir::memref::DeallocOp>(loc, allocResult);
     }
+  }
+};
+
+static void setInsertionPointToStart(mlir::OpBuilder &builder,
+                                     mlir::Value val) {
+  if (auto parentOp = val.getDefiningOp()) {
+    builder.setInsertionPointAfter(parentOp);
+  } else {
+    builder.setInsertionPointToStart(val.getParentBlock());
+  }
+}
+
+static mlir::Value getFlatIndex(mlir::OpBuilder &builder, mlir::Location loc,
+                                mlir::Value memref, mlir::ValueRange indices) {
+  auto memrefType = memref.getType().cast<mlir::MemRefType>();
+  auto rank = static_cast<unsigned>(memrefType.getRank());
+  assert(indices.size() == rank);
+  if (memrefType.getLayout().isIdentity()) {
+    auto shape = memrefType.getShape();
+    auto expr =
+        mlir::makeCanonicalStridedLayoutExpr(shape, builder.getContext());
+    llvm::SmallVector<mlir::Value> applyOperands;
+    if (rank != 0) {
+      applyOperands.reserve(rank * 2);
+      applyOperands.assign(indices.begin(), indices.end());
+      mlir::OpBuilder::InsertionGuard g(builder);
+      setInsertionPointToStart(builder, memref);
+      mlir::Value size;
+      for (auto i : llvm::seq(0u, rank - 1)) {
+        auto dimInd = rank - i - 1;
+        auto dim =
+            builder.createOrFold<mlir::memref::DimOp>(loc, memref, dimInd);
+        if (i != 0) {
+          size = builder.createOrFold<mlir::arith::MulIOp>(loc, size, dim);
+        } else {
+          size = dim;
+        }
+
+        applyOperands.emplace_back(size);
+      }
+    }
+    auto affineMap = mlir::AffineMap::get(
+        rank, static_cast<unsigned>(applyOperands.size()) - rank, expr);
+    assert(affineMap.getNumDims() == indices.size());
+    return builder.createOrFold<mlir::AffineApplyOp>(loc, affineMap,
+                                                     applyOperands);
+  } else {
+    auto affineMap = memrefType.getLayout().getAffineMap();
+    assert(affineMap.getNumDims() == indices.size());
+    llvm::SmallVector<mlir::Value> applyOperands;
+    if (rank != 0) {
+      mlir::OpBuilder::InsertionGuard g(builder);
+      setInsertionPointToStart(builder, memref);
+      applyOperands.reserve(rank * 2 + 1);
+      applyOperands.assign(indices.begin(), indices.end());
+
+      auto numSymbols = affineMap.getNumSymbols();
+      if (numSymbols > 0) {
+        applyOperands.emplace_back(
+            builder.createOrFold<gpu_runtime::ExtractMemrefMetadataOp>(loc,
+                                                                       memref));
+        --numSymbols;
+        assert(numSymbols <= rank);
+        for (auto i : llvm::seq(0u, numSymbols)) {
+          applyOperands.emplace_back(
+              builder.createOrFold<gpu_runtime::ExtractMemrefMetadataOp>(
+                  loc, memref, i));
+        }
+      }
+    }
+    return builder.createOrFold<mlir::AffineApplyOp>(loc, affineMap,
+                                                     applyOperands);
+  }
+}
+
+static mlir::Value getFlatIndex(mlir::OpBuilder &builder, mlir::Location loc,
+                                mlir::Value memref,
+                                llvm::ArrayRef<mlir::OpFoldResult> indices) {
+  llvm::SmallVector<mlir::Value> vals(indices.size());
+  for (auto it : llvm::enumerate(indices)) {
+    auto i = it.index();
+    auto val = it.value();
+    if (auto attr = val.dyn_cast<mlir::Attribute>()) {
+      auto ind = attr.cast<mlir::IntegerAttr>().getValue().getSExtValue();
+      vals[i] = builder.create<mlir::arith::ConstantIndexOp>(loc, ind);
+    } else {
+      vals[i] = val.get<mlir::Value>();
+    }
+  }
+  return getFlatIndex(builder, loc, memref, vals);
+}
+
+static mlir::Value getFlatMemref(mlir::OpBuilder &builder, mlir::Location loc,
+                                 mlir::Value memref) {
+  auto memrefType = memref.getType().cast<mlir::MemRefType>();
+  auto resultType = mlir::MemRefType::get(mlir::ShapedType::kDynamicSize,
+                                          memrefType.getElementType());
+  mlir::OpBuilder::InsertionGuard g(builder);
+  setInsertionPointToStart(builder, memref);
+  mlir::OpFoldResult offset = builder.getIndexAttr(0);
+  mlir::OpFoldResult size =
+      builder.createOrFold<gpu_runtime::UndefOp>(loc, builder.getIndexType());
+  mlir::OpFoldResult stride = builder.getIndexAttr(1);
+  return builder.createOrFold<mlir::memref::ReinterpretCastOp>(
+      loc, resultType, memref, offset, size, stride);
+}
+
+static bool needFlatten(mlir::Value val) {
+  auto type = val.getType().cast<mlir::MemRefType>();
+  return !type.getLayout().isIdentity() || (type.getRank() > 1);
+}
+
+struct FlattenLoad : public mlir::OpRewritePattern<mlir::memref::LoadOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::LoadOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    if (!op->getParentOfType<mlir::gpu::LaunchOp>())
+      return mlir::failure();
+
+    auto memref = op.memref();
+    if (!needFlatten(memref))
+      return mlir::failure();
+
+    auto loc = op.getLoc();
+    auto flatIndex = getFlatIndex(rewriter, loc, memref, op.indices());
+    auto flatMemref = getFlatMemref(rewriter, loc, memref);
+    rewriter.replaceOpWithNewOp<mlir::memref::LoadOp>(op, flatMemref,
+                                                      flatIndex);
+    return mlir::success();
+  }
+};
+
+struct FlattenStore : public mlir::OpRewritePattern<mlir::memref::StoreOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::StoreOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    if (!op->getParentOfType<mlir::gpu::LaunchOp>())
+      return mlir::failure();
+
+    auto memref = op.memref();
+    if (!needFlatten(memref))
+      return mlir::failure();
+
+    auto loc = op.getLoc();
+    auto flatIndex = getFlatIndex(rewriter, loc, memref, op.indices());
+    auto flatMemref = getFlatMemref(rewriter, loc, memref);
+    rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(op, op.value(),
+                                                       flatMemref, flatIndex);
+    return mlir::success();
+  }
+};
+
+struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::SubViewOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    if (!op->getParentOfType<mlir::gpu::LaunchOp>())
+      return mlir::failure();
+
+    auto memref = op.source();
+    if (!needFlatten(memref))
+      return mlir::failure();
+
+    auto offsets = op.getMixedOffsets();
+    auto sizes = op.getMixedSizes();
+    auto strides = op.getMixedStrides();
+
+    auto srcType = memref.getType().cast<mlir::MemRefType>();
+    auto dstType = mlir::memref::SubViewOp::inferResultType(srcType, offsets,
+                                                            sizes, strides)
+                       .cast<mlir::MemRefType>();
+
+    int64_t resultOffset; // TODO: remove
+    llvm::SmallVector<int64_t, 4> resultStrides;
+    if (mlir::failed(
+            mlir::getStridesAndOffset(dstType, resultStrides, resultOffset)))
+      return mlir::failure();
+
+    auto loc = op.getLoc();
+    mlir::OpFoldResult flatIndex = getFlatIndex(rewriter, loc, memref, offsets);
+    mlir::OpFoldResult flatSize =
+        rewriter.create<gpu_runtime::UndefOp>(loc, rewriter.getIndexType())
+            .getResult();
+    mlir::OpFoldResult flatStride = rewriter.getIndexAttr(1);
+    auto flatMemref = getFlatMemref(rewriter, loc, memref);
+    auto flatMemrefType = flatMemref.getType().cast<mlir::MemRefType>();
+    assert(flatMemrefType.getLayout().isIdentity());
+    auto flatSubview = rewriter.createOrFold<mlir::memref::SubViewOp>(
+        loc, flatMemref, flatIndex, flatSize, flatStride);
+    auto dstFlatType = flatSubview.getType();
+    if (dstFlatType != flatMemrefType)
+      flatSubview = rewriter.createOrFold<mlir::memref::CastOp>(
+          loc, flatSubview, dstFlatType);
+
+    // TODO: bug in ReinterpretCastOp::verify
+    auto offset =
+        (mlir::ShapedType::isDynamicStrideOrOffset(resultOffset)
+             ? mlir::OpFoldResult(
+                   rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0)
+                       .getResult())
+             : mlir::OpFoldResult(rewriter.getIndexAttr(0)));
+
+    for (auto i : llvm::seq<size_t>(0, strides.size())) {
+      if (mlir::ShapedType::isDynamicStrideOrOffset(resultStrides[i])) {
+        auto stride = strides[i];
+        if (auto c = stride.dyn_cast<mlir::Attribute>()) {
+          auto val = c.dyn_cast<mlir::IntegerAttr>().getValue().getSExtValue();
+          stride = rewriter.create<mlir::arith::ConstantIndexOp>(loc, val)
+                       .getResult();
+        }
+
+        auto origStride = [&]() {
+          mlir::OpBuilder::InsertionGuard g(rewriter);
+          setInsertionPointToStart(rewriter, memref);
+          return rewriter.createOrFold<gpu_runtime::ExtractMemrefMetadataOp>(
+              loc, memref, i);
+        }();
+        auto newStride = rewriter.createOrFold<mlir::arith::MulIOp>(
+            loc, stride.get<mlir::Value>(), origStride);
+        strides[i] = newStride;
+      }
+    }
+
+    auto resultType = op.getType().cast<mlir::MemRefType>();
+    auto srcRank = static_cast<unsigned>(srcType.getRank());
+    auto resultRank = static_cast<unsigned>(resultType.getRank());
+    mlir::Value result;
+    if (srcRank == resultRank) {
+      result = rewriter.createOrFold<mlir::memref::ReinterpretCastOp>(
+          loc, resultType, flatSubview, offset, sizes, strides);
+    } else {
+      assert(resultRank < srcRank);
+      llvm::SmallVector<mlir::OpFoldResult> filteredSizes;
+      llvm::SmallVector<mlir::OpFoldResult> filteredStrides;
+      filteredSizes.reserve(resultRank);
+      filteredStrides.reserve(resultRank);
+
+      auto droppedDims = op.getDroppedDims();
+      for (auto i : llvm::seq(0u, srcRank)) {
+        if (!droppedDims.contains(i)) {
+          filteredSizes.emplace_back(sizes[i]);
+          filteredStrides.emplace_back(strides[i]);
+        }
+      }
+      result = rewriter.createOrFold<mlir::memref::ReinterpretCastOp>(
+          loc, resultType, flatSubview, offset, filteredSizes, filteredStrides);
+    }
+
+    rewriter.replaceOp(op, result);
+    return mlir::success();
+  }
+};
+
+struct UnstrideMemrefsPass
+    : public mlir::PassWrapper<UnstrideMemrefsPass, mlir::FunctionPass> {
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::memref::MemRefDialect>();
+    registry.insert<mlir::gpu::GPUDialect>();
+    registry.insert<mlir::AffineDialect>();
+  }
+
+  void runOnFunction() override {
+    mlir::OwningRewritePatternList patterns(&getContext());
+
+    patterns.insert<FlattenLoad, FlattenStore, FlattenSubview>(&getContext());
+
+    (void)mlir::applyPatternsAndFoldGreedily(getFunction(),
+                                             std::move(patterns));
   }
 };
 
@@ -573,6 +849,7 @@ struct GPUToSpirvPass
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::spirv::SPIRVDialect>();
+    registry.insert<mlir::AffineDialect>();
   }
 
   void runOnOperation() override {
@@ -853,6 +1130,10 @@ std::unique_ptr<mlir::Pass> gpu_runtime::runGPUToSpirvPass() {
 
 std::unique_ptr<mlir::Pass> gpu_runtime::runInsertGPUAllocsPass() {
   return std::make_unique<InsertGPUAllocs>();
+}
+
+std::unique_ptr<mlir::Pass> gpu_runtime::runUnstrideMemrefsPass() {
+  return std::make_unique<UnstrideMemrefsPass>();
 }
 
 std::unique_ptr<mlir::Pass> gpu_runtime::runSerializeSPIRVPass() {

@@ -65,6 +65,7 @@ std::unique_ptr<mlir::Pass> runAbiAttrsPass();
 std::unique_ptr<mlir::Pass> runSetSPIRVCapabilitiesPass();
 std::unique_ptr<mlir::Pass> runGPUToSpirvPass();
 std::unique_ptr<mlir::Pass> runInsertGPUAllocsPass();
+std::unique_ptr<mlir::Pass> runUnstrideMemrefsPass();
 std::unique_ptr<mlir::Pass> runSerializeSPIRVPass();
 std::unique_ptr<mlir::Pass> runGPUExPass();
 

@@ -21,6 +21,7 @@
 #include "mlir/Conversion/StandardToSPIRV/StandardToSPIRVPass.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/GPU/GPUDialect.h"
+#include "mlir/Dialect/GPU/ParallelLoopMapper.h"
 #include "mlir/Dialect/GPU/Passes.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -49,12 +50,35 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
   PassManager passManager(module.getContext());
   applyPassManagerCLOptions(passManager);
 
+  /*
+    passManager.addNestedPass<mlir::FuncOp>(
+        arith::createArithmeticBufferizePass());
+    passManager.addNestedPass<mlir::FuncOp>(createLinalgBufferizePass());
+    passManager.addNestedPass<mlir::FuncOp>(createSCFBufferizePass());
+    passManager.addNestedPass<mlir::FuncOp>(createTensorBufferizePass());
+    passManager.addPass(createFuncBufferizePass());
+    passManager.addNestedPass<mlir::FuncOp>(
+        bufferization::createFinalizingBufferizePass());
+    passManager.addNestedPass<mlir::FuncOp>(
+        bufferization::createBufferDeallocationPass());
+    passManager.addNestedPass<mlir::FuncOp>(
+        createConvertLinalgToParallelLoopsPass());
+
+    // passManager.addPass(greedilyMapParallelSCFToGPU());
+    passManager.addNestedPass<mlir::FuncOp>(createParallelLoopToGpuPass());
+    passManager.addNestedPass<mlir::FuncOp>(createLowerAffinePass());
+  */
   passManager.addNestedPass<mlir::FuncOp>(
       gpu_runtime::runInsertGPUAllocsPass());
+  passManager.addPass(mlir::createCanonicalizerPass());
+  passManager.addNestedPass<mlir::FuncOp>(
+      gpu_runtime::runUnstrideMemrefsPass());
+  passManager.addNestedPass<mlir::FuncOp>(mlir::createLowerAffinePass());
   passManager.addPass(createGpuKernelOutliningPass());
   passManager.addNestedPass<mlir::gpu::GPUModuleOp>(
       gpu_runtime::runAbiAttrsPass());
   passManager.addPass(gpu_runtime::runSetSPIRVCapabilitiesPass());
+  // passManager.addPass(createConvertMemRefToSPIRVPass());
   passManager.addPass(gpu_runtime::runGPUToSpirvPass());
   OpPassManager &modulePM = passManager.nest<spirv::ModuleOp>();
   modulePM.addPass(spirv::createLowerABIAttributesPass());
@@ -91,7 +115,8 @@ int main(int argc, char **argv) {
   mlir::DialectRegistry registry;
   registry.insert<mlir::arith::ArithmeticDialect, mlir::LLVM::LLVMDialect,
                   mlir::gpu::GPUDialect, mlir::spirv::SPIRVDialect,
-                  mlir::StandardOpsDialect, mlir::memref::MemRefDialect>();
+                  mlir::StandardOpsDialect, mlir::memref::MemRefDialect,
+                  mlir::linalg::LinalgDialect>();
   mlir::registerLLVMDialectTranslation(registry);
 
   return mlir::JitRunnerMain(argc, argv, registry, jitRunnerConfig);
