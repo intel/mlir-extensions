@@ -192,6 +192,8 @@ jobs:
       export LLVM_PATH=$(System.DefaultWorkingDirectory)/llvm_cache
       export TBB_PATH=$(System.DefaultWorkingDirectory)/tbb
       export LEVEL_ZERO_DIR=$(System.DefaultWorkingDirectory)/level-zero/level_zero_install
+      export OCL_ICD_FILENAMES_RESET=1
+      export OCL_ICD_FILENAMES=libintelocl.so
       export SYCL_DEVICE_FILTER=opencl:cpu
       python setup.py develop
     displayName: 'Build'
