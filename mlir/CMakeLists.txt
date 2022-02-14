@@ -67,7 +67,7 @@ set(SOURCES_LIST
     lib/transforms/promote_bool_memref.cpp
     lib/transforms/promote_to_parallel.cpp
     lib/transforms/type_conversion.cpp
-    lib/transforms/uplift_math_calls.cpp
+    lib/transforms/uplift_math.cpp
     lib/utils.cpp
     )
 set(HEADERS_LIST
@@ -98,7 +98,7 @@ set(HEADERS_LIST
     include/mlir-extensions/transforms/promote_to_parallel.hpp
     include/mlir-extensions/transforms/rewrite_wrapper.hpp
     include/mlir-extensions/transforms/type_conversion.hpp
-    include/mlir-extensions/transforms/uplift_math_calls.hpp
+    include/mlir-extensions/transforms/uplift_math.hpp
     include/mlir-extensions/utils.hpp
     )
 

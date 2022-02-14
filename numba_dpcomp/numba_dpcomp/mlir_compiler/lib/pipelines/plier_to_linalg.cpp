@@ -65,7 +65,7 @@
 #include "mlir-extensions/transforms/promote_to_parallel.hpp"
 #include "mlir-extensions/transforms/rewrite_wrapper.hpp"
 #include "mlir-extensions/transforms/type_conversion.hpp"
-#include "mlir-extensions/transforms/uplift_math_calls.hpp"
+#include "mlir-extensions/transforms/uplift_math.hpp"
 
 #include "base_pipeline.hpp"
 #include "loop_utils.hpp"
@@ -2190,10 +2190,6 @@ struct LowerCloneOpsPass
     : public plier::RewriteWrapperPass<LowerCloneOpsPass, mlir::FuncOp, void,
                                        ReplaceClones> {};
 
-struct UpliftMathCallsPass
-    : public plier::RewriteWrapperPass<UpliftMathCallsPass, void, void,
-                                       plier::UpliftMathCalls> {};
-
 struct PostLinalgOptPass
     : public mlir::PassWrapper<PostLinalgOptPass,
                                mlir::OperationPass<mlir::FuncOp>> {
@@ -2283,7 +2279,7 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createSymbolDCEPass());
 
   pm.addPass(plier::createPromoteBoolMemrefPass());
-  pm.addNestedPass<mlir::FuncOp>(std::make_unique<UpliftMathCallsPass>());
+  pm.addNestedPass<mlir::FuncOp>(plier::createUpliftMathPass());
   pm.addNestedPass<mlir::FuncOp>(mlir::createCanonicalizerPass());
   pm.addNestedPass<mlir::FuncOp>(mlir::createLoopInvariantCodeMotionPass());
 

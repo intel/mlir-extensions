@@ -100,7 +100,7 @@ jobs:
   - script: |
       source /usr/share/miniconda/bin/activate
       cd numba_dpcomp
-      conda create -y -n build_env python=3.7 numba=0.54 numpy=1.20 scikit-learn pytest-xdist ninja scipy pybind11 pytest lit dpnp=0.5.1 mkl=2021.1 -c conda-forge -c intel
+      conda create -y -n build_env python=3.7 numba=0.54 numpy=1.20 scikit-learn pytest-xdist ninja scipy pybind11 pytest lit -c conda-forge -c intel
       conda activate build_env
       conda install -y tbb=2021 -c conda-forge -c intel --force
       conda list

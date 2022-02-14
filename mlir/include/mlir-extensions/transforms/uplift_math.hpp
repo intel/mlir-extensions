@@ -14,18 +14,17 @@
 
 #pragma once
 
-#include <mlir/IR/PatternMatch.h>
+#include <memory>
 
 namespace mlir {
-class CallOp;
-}
+class MLIRContext;
+class RewritePatternSet;
+class Pass;
+} // namespace mlir
 
 namespace plier {
-struct UpliftMathCalls : public mlir::OpRewritePattern<mlir::CallOp> {
-  using OpRewritePattern::OpRewritePattern;
+void populateUpliftmathPatterns(mlir::MLIRContext &context,
+                                mlir::RewritePatternSet &patterns);
 
-  mlir::LogicalResult
-  matchAndRewrite(mlir::CallOp op,
-                  mlir::PatternRewriter &rewriter) const override;
-};
+std::unique_ptr<mlir::Pass> createUpliftMathPass();
 } // namespace plier

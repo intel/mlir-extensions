@@ -158,7 +158,7 @@ def test_cast(py_func, val):
 def test_math_uplifting1(val, name):
     py_func = eval(f'lambda a: math.{name}(a)')
 
-    with print_pass_ir([],['UpliftMathCallsPass']):
+    with print_pass_ir([],['UpliftMathPass']):
         jit_func = njit(py_func)
 
         assert_equal(py_func(val), jit_func(val))
@@ -172,12 +172,35 @@ def test_math_uplifting1(val, name):
 def test_math_uplifting2(val, name):
     py_func = eval(f'lambda a, b: math.{name}(a, b)')
 
-    with print_pass_ir([],['UpliftMathCallsPass']):
+    with print_pass_ir([],['UpliftMathPass']):
         jit_func = njit(py_func)
 
         assert_equal(py_func(val, val), jit_func(val, val))
         ir = get_print_buffer()
         assert ir.count(f'math.{name}') == 1, ir
+
+@parametrize_function_variants("py_func", [
+    'lambda x, y, z: x * y + z',
+    'lambda x, y, z: z + x * y',
+    ])
+def test_math_uplifting_fma(py_func):
+    x = 2.0
+    y = 3.0
+    z = 4.0
+
+    with print_pass_ir([],['UpliftMathPass']):
+        jit_func = njit(py_func, fastmath=False)
+
+        assert_equal(py_func(x, y, z), jit_func(x, y, z))
+        ir = get_print_buffer()
+        assert ir.count(f'math.fma') == 0, ir
+
+    with print_pass_ir([],['UpliftMathPass']):
+        jit_func = njit(py_func, fastmath=True)
+
+        assert_equal(py_func(x, y, z), jit_func(x, y, z))
+        ir = get_print_buffer()
+        assert ir.count(f'math.fma') == 1, ir
 
 @parametrize_function_variants("py_func", [
     'lambda: math.pi',
