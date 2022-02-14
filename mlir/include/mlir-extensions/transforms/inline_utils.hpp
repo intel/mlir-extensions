@@ -22,5 +22,4 @@ class Pass;
 
 namespace plier {
 std::unique_ptr<mlir::Pass> createForceInlinePass();
-
 }

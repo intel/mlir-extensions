@@ -14,8 +14,11 @@
 
 #include "mlir-extensions/transforms/uplift_math_calls.hpp"
 
+#include "mlir-extensions/transforms/rewrite_wrapper.hpp"
+
 #include <mlir/Dialect/Math/IR/Math.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
+#include <mlir/IR/PatternMatch.h>
 
 template <typename Op>
 static mlir::Operation *replaceOp1(mlir::OpBuilder &builder, mlir::Location loc,
@@ -35,47 +38,68 @@ static mlir::Operation *replaceOp2(mlir::OpBuilder &builder, mlir::Location loc,
   return builder.create<Op>(loc, args[0], args[1]);
 }
 
-mlir::LogicalResult
-plier::UpliftMathCalls::matchAndRewrite(mlir::CallOp op,
-                                        mlir::PatternRewriter &rewriter) const {
-  auto funcName = op.getCallee();
-  if (funcName.empty())
-    return mlir::failure();
+namespace {
+struct UpliftMathCalls : public mlir::OpRewritePattern<mlir::CallOp> {
+  using OpRewritePattern::OpRewritePattern;
 
-  auto isNotValidType = [](mlir::Type t) { return !t.isIntOrFloat(); };
+  mlir::LogicalResult matchAndRewrite(mlir::CallOp op,
+                                      mlir::PatternRewriter &rewriter) const {
+    auto funcName = op.getCallee();
+    if (funcName.empty())
+      return mlir::failure();
 
-  if (llvm::any_of(op.getOperandTypes(), isNotValidType) ||
-      op.getNumResults() != 1 ||
-      llvm::any_of(op.getResultTypes(), isNotValidType))
-    return mlir::failure();
+    auto isNotValidType = [](mlir::Type t) { return !t.isIntOrFloat(); };
 
-  llvm::StringRef funcNameF =
-      (funcName.front() == 'f' ? funcName.drop_front() : llvm::StringRef{});
+    if (llvm::any_of(op.getOperandTypes(), isNotValidType) ||
+        op.getNumResults() != 1 ||
+        llvm::any_of(op.getResultTypes(), isNotValidType))
+      return mlir::failure();
 
-  using func_t =
-      mlir::Operation *(*)(mlir::OpBuilder &, mlir::Location, mlir::ValueRange);
-  const std::pair<llvm::StringRef, func_t> handlers[] = {
-      {"log", &replaceOp1<mlir::math::LogOp>},
-      {"sqrt", &replaceOp1<mlir::math::SqrtOp>},
-      {"exp", &replaceOp1<mlir::math::ExpOp>},
-      {"sin", &replaceOp1<mlir::math::SinOp>},
-      {"cos", &replaceOp1<mlir::math::CosOp>},
-      {"erf", &replaceOp1<mlir::math::ErfOp>},
-      {"tanh", &replaceOp1<mlir::math::TanhOp>},
-      {"atan2", &replaceOp2<mlir::math::Atan2Op>},
-  };
+    llvm::StringRef funcNameF =
+        (funcName.front() == 'f' ? funcName.drop_front() : llvm::StringRef{});
 
-  for (auto &handler : handlers) {
-    auto name = handler.first;
-    if (name == funcName || name == funcNameF) {
-      auto res = handler.second(rewriter, op.getLoc(), op.operands());
-      if (!res)
-        return mlir::failure();
+    using func_t = mlir::Operation *(*)(mlir::OpBuilder &, mlir::Location,
+                                        mlir::ValueRange);
+    const std::pair<llvm::StringRef, func_t> handlers[] = {
+        {"log", &replaceOp1<mlir::math::LogOp>},
+        {"sqrt", &replaceOp1<mlir::math::SqrtOp>},
+        {"exp", &replaceOp1<mlir::math::ExpOp>},
+        {"sin", &replaceOp1<mlir::math::SinOp>},
+        {"cos", &replaceOp1<mlir::math::CosOp>},
+        {"erf", &replaceOp1<mlir::math::ErfOp>},
+        {"tanh", &replaceOp1<mlir::math::TanhOp>},
+        {"atan2", &replaceOp2<mlir::math::Atan2Op>},
+    };
 
-      assert(res->getNumResults() == op->getNumResults());
-      rewriter.replaceOp(op, res->getResults());
-      return mlir::success();
+    for (auto &handler : handlers) {
+      auto name = handler.first;
+      if (name == funcName || name == funcNameF) {
+        auto res = handler.second(rewriter, op.getLoc(), op.operands());
+        if (!res)
+          return mlir::failure();
+
+        assert(res->getNumResults() == op->getNumResults());
+        rewriter.replaceOp(op, res->getResults());
+        return mlir::success();
+      }
     }
+    return mlir::failure();
   }
-  return mlir::failure();
+};
+
+struct UpliftMathPass
+    : public plier::RewriteWrapperPass<
+          UpliftMathPass, void,
+          plier::DependentDialectsList<mlir::StandardOpsDialect,
+                                       mlir::math::MathDialect>,
+          UpliftMathCalls> {};
+} // namespace
+
+void plier::populateUpliftmathPatterns(mlir::MLIRContext &context,
+                                       mlir::RewritePatternSet &patterns) {
+  patterns.insert<UpliftMathCalls>(&context);
+}
+
+std::unique_ptr<mlir::Pass> plier::createUpliftMathPass() {
+  return std::make_unique<UpliftMathPass>();
 }

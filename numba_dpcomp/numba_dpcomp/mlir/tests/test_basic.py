@@ -158,7 +158,7 @@ def test_cast(py_func, val):
 def test_math_uplifting1(val, name):
     py_func = eval(f'lambda a: math.{name}(a)')
 
-    with print_pass_ir([],['UpliftMathCallsPass']):
+    with print_pass_ir([],['UpliftMathPass']):
         jit_func = njit(py_func)
 
         assert_equal(py_func(val), jit_func(val))
@@ -172,7 +172,7 @@ def test_math_uplifting1(val, name):
 def test_math_uplifting2(val, name):
     py_func = eval(f'lambda a, b: math.{name}(a, b)')
 
-    with print_pass_ir([],['UpliftMathCallsPass']):
+    with print_pass_ir([],['UpliftMathPass']):
         jit_func = njit(py_func)
 
         assert_equal(py_func(val, val), jit_func(val, val))
