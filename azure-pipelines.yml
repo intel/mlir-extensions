@@ -100,9 +100,8 @@ jobs:
   - script: |
       source /usr/share/miniconda/bin/activate
       cd numba_dpcomp
-      conda create -y -n build_env python=3.7 numba=0.54 numpy=1.20 scikit-learn pytest-xdist ninja scipy pybind11 pytest lit -c conda-forge -c intel
+      conda create -y -n build_env python=3.7 numba=0.54.1 numpy=1.20 tbb>=2021 scikit-learn pytest-xdist ninja scipy pybind11 pytest lit -c conda-forge
       conda activate build_env
-      conda install -y tbb=2021 -c conda-forge -c intel --force
       conda list
       python -c "import numba; print('numba', numba.__version__)"
       python -c "import numpy; print(numpy.get_include())"
@@ -111,9 +110,6 @@ jobs:
       export LLVM_PATH=$(System.DefaultWorkingDirectory)/llvm_cache
       export TBB_PATH=$(System.DefaultWorkingDirectory)/tbb
       export LEVEL_ZERO_DIR=$(System.DefaultWorkingDirectory)/level-zero/level_zero_install
-      export OCL_ICD_FILENAMES_RESET=1
-      export OCL_ICD_FILENAMES=libintelocl.so
-      export SYCL_DEVICE_FILTER=opencl:cpu
       python setup.py develop
     displayName: 'Build'
 
@@ -122,9 +118,6 @@ jobs:
       cd numba_dpcomp
       conda activate build_env
       source $(System.DefaultWorkingDirectory)/tbb/env/vars.sh
-      export OCL_ICD_FILENAMES_RESET=1
-      export OCL_ICD_FILENAMES=libintelocl.so
-      export SYCL_DEVICE_FILTER=opencl:cpu
       export NUMBA_DISABLE_PERFORMANCE_WARNINGS=1
       pytest -n1 -vv --capture=tee-sys
     displayName: 'Tests'
@@ -152,6 +145,77 @@ jobs:
   - publish: $(System.DefaultWorkingDirectory)/numba_dpcomp/wheels
     artifact: 'numba-dpcomp-wheels-lin'
     displayName: 'Publish wheels'
+
+- job: Linux-intel
+
+  pool:
+    vmImage: ubuntu-20.04
+
+  steps:
+  - task: DownloadPipelineArtifact@2
+    displayName: "Get LLVM cache"
+    inputs:
+      source: 'specific'
+      project: 'mlir-llvm'
+      pipeline: 'IntelPython.mlir-llvm-recipe'
+      runVersion: 'latest'
+      artifact: 'mlir-llvm_latest_Linux'
+      path: '$(System.DefaultWorkingDirectory)/llvm_cache'
+
+  - script: |
+      wget -O tbb.tgz "https://github.com/oneapi-src/oneTBB/releases/download/v2021.1.1/oneapi-tbb-2021.1.1-lin.tgz"
+      mkdir tbb
+      tar -xf "tbb.tgz" -C tbb --strip-components=1
+    displayName: 'Get TBB'
+
+  - script: |
+      git clone https://github.com/oneapi-src/level-zero.git
+      cd level-zero
+      git checkout v1.5.0
+      mkdir level_zero_install
+      mkdir build
+      cd build
+      cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=../level_zero_install ..
+      make install
+    displayName: 'Get L0'
+
+  - script: |
+      source /usr/share/miniconda/bin/activate
+      cd numba_dpcomp
+      conda create -y -n build_env python=3.7 numba=0.54.1 numpy tbb>=2021 scikit-learn pytest-xdist ninja scipy pybind11 pytest lit dpctl=0.11.1 dpnp=0.9.0 dpcpp-cpp-rt=2022.0 -c intel
+      conda activate build_env
+      conda list
+      python -c "import numba; print('numba', numba.__version__)"
+      python -c "import numpy; print(numpy.get_include())"
+      cmake --version
+      chmod -R 777 $(System.DefaultWorkingDirectory)/llvm_cache
+      export LLVM_PATH=$(System.DefaultWorkingDirectory)/llvm_cache
+      export TBB_PATH=$(System.DefaultWorkingDirectory)/tbb
+      export LEVEL_ZERO_DIR=$(System.DefaultWorkingDirectory)/level-zero/level_zero_install
+      python setup.py develop
+    displayName: 'Build'
+
+  - script: |
+      source /usr/share/miniconda/bin/activate
+      cd numba_dpcomp
+      conda activate build_env
+      source $(System.DefaultWorkingDirectory)/tbb/env/vars.sh
+      export OCL_ICD_FILENAMES_RESET=1
+      export OCL_ICD_FILENAMES=libintelocl.so
+      export SYCL_DEVICE_FILTER=opencl:cpu
+      export NUMBA_DISABLE_PERFORMANCE_WARNINGS=1
+      export DPCOMP_ENABLE_DPNP_TESTS=1
+      pytest -n1 -vv --capture=tee-sys
+    displayName: 'Tests'
+
+  - script: |
+      source /usr/share/miniconda/bin/activate
+      conda activate build_env
+      source $(System.DefaultWorkingDirectory)/tbb/env/vars.sh
+      cd cmake_build
+      ctest -C Release --output-on-failure
+    displayName: 'CTests'
+
 
 - job: MacOS
 
