@@ -1566,7 +1566,7 @@ void PlierToLinalgPass::runOnOperation() {
   // Convert unknown types to itself
   typeConverter.addConversion([](mlir::Type type) { return type; });
   populateStdTypeConverter(context, typeConverter);
-  populateTupleTypeConverter(context, typeConverter);
+  plier::populateTupleTypeConverter(context, typeConverter);
   populateArrayTypeConverter(context, typeConverter);
 
   auto materializeCast = [](mlir::OpBuilder &builder, mlir::Type type,
@@ -1793,7 +1793,7 @@ void MakeTensorsSignlessPass::runOnOperation() {
 
         return llvm::None;
       });
-  populateTupleTypeConverter(*context, typeConverter);
+  plier::populateTupleTypeConverter(*context, typeConverter);
 
   auto materializeSignCast = [](mlir::OpBuilder &builder, mlir::Type type,
                                 mlir::ValueRange inputs,
@@ -2054,7 +2054,7 @@ void AdditionalBufferize::runOnOperation() {
   auto *context = &getContext();
 
   mlir::bufferization::BufferizeTypeConverter typeConverter;
-  populateTupleTypeConverter(*context, typeConverter);
+  plier::populateTupleTypeConverter(*context, typeConverter);
 
   auto materializeTupleCast =
       [](mlir::OpBuilder &builder, mlir::Type type, mlir::ValueRange inputs,

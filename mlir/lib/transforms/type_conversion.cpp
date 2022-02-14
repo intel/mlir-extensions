@@ -89,32 +89,6 @@ public:
   }
 };
 
-class GetItemTupleConversionPattern
-    : public mlir::OpConversionPattern<plier::GetItemOp> {
-public:
-  using OpConversionPattern<plier::GetItemOp>::OpConversionPattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(plier::GetItemOp op, plier::GetItemOp::Adaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const final {
-    auto container = adaptor.value();
-    if (!container.getType().isa<mlir::TupleType>())
-      return mlir::failure();
-
-    auto &converter = *getTypeConverter();
-
-    auto retType = converter.convertType(op.getType());
-    if (!retType)
-      return mlir::failure();
-
-    auto index = adaptor.index();
-
-    rewriter.replaceOpWithNewOp<plier::GetItemOp>(op, retType, container,
-                                                  index);
-    return mlir::success();
-  }
-};
-
 static bool isUniTuple(mlir::TupleType type) {
   auto count = type.size();
   if (count == 0)
@@ -127,13 +101,79 @@ static bool isUniTuple(mlir::TupleType type) {
   }
   return true;
 }
+
+class GetItemTupleConversionPattern
+    : public mlir::OpConversionPattern<plier::GetItemOp> {
+public:
+  using OpConversionPattern<plier::GetItemOp>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::GetItemOp op, plier::GetItemOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const final {
+    auto container = adaptor.value();
+    auto containerType = container.getType().dyn_cast<mlir::TupleType>();
+    if (!containerType || containerType.size() == 0)
+      return mlir::failure();
+
+    auto &converter = *getTypeConverter();
+
+    auto retType = converter.convertType(op.getType());
+    if (!retType)
+      return mlir::failure();
+
+    auto index = adaptor.index();
+    if (isUniTuple(containerType)) {
+      if (retType != containerType.getType(0))
+        return mlir::failure();
+    } else {
+      auto constIndex = mlir::getConstantIntValue(index);
+      if (!constIndex)
+        return mlir::failure();
+
+      auto i = *constIndex;
+      if (i < 0 || i >= static_cast<int64_t>(containerType.size()) ||
+          containerType.getType(i) != retType)
+        return mlir::failure();
+    }
+
+    rewriter.replaceOpWithNewOp<plier::GetItemOp>(op, retType, container,
+                                                  index);
+    return mlir::success();
+  }
+};
 } // namespace
+
+void plier::populateTupleTypeConverter(mlir::MLIRContext & /*context*/,
+                                       mlir::TypeConverter &typeConverter) {
+  typeConverter.addConversion(
+      [&typeConverter](mlir::TupleType type) -> llvm::Optional<mlir::Type> {
+        auto count = static_cast<unsigned>(type.size());
+        llvm::SmallVector<mlir::Type> newTypes(count);
+        bool changed = false;
+        for (auto i : llvm::seq(0u, count)) {
+          auto oldType = type.getType(i);
+          auto newType = typeConverter.convertType(oldType);
+          if (!newType)
+            return llvm::None;
+
+          changed = changed || (newType != oldType);
+          newTypes[i] = newType;
+        }
+        if (!changed)
+          return llvm::None;
+
+        auto ret = mlir::TupleType::get(type.getContext(), newTypes);
+        assert(ret != type);
+        return ret;
+      });
+}
 
 void plier::populateTupleTypeConversionRewritesAndTarget(
     mlir::TypeConverter &typeConverter, mlir::RewritePatternSet &patterns,
     mlir::ConversionTarget &target) {
   patterns.insert<BuildTupleConversionPattern, GetItemTupleConversionPattern>(
       typeConverter, patterns.getContext());
+
   target.addDynamicallyLegalOp<plier::BuildTupleOp>(
       [&typeConverter](plier::BuildTupleOp op) {
         return typeConverter.isLegal(op.getResult().getType());
@@ -142,27 +182,27 @@ void plier::populateTupleTypeConversionRewritesAndTarget(
   target.addDynamicallyLegalOp<plier::GetItemOp>(
       [&typeConverter](plier::GetItemOp op) -> llvm::Optional<bool> {
         auto inputType = op.value().getType();
-        if (auto tupleType = typeConverter.convertType(inputType)
-                                 .dyn_cast_or_null<mlir::TupleType>()) {
-          auto srcType = [&]() -> mlir::Type {
-            if (auto index = mlir::getConstantIntValue(op.index())) {
-              auto i = *index;
-              auto size = static_cast<unsigned>(tupleType.size());
-              if (i >= 0 && i < size)
-                return tupleType.getType(static_cast<size_t>(i));
-            } else if (isUniTuple(tupleType)) {
-              return tupleType.getType(0);
-            }
-            return {};
-          }();
-          if (!srcType)
-            return false;
+        auto tupleType = typeConverter.convertType(inputType)
+                             .dyn_cast_or_null<mlir::TupleType>();
+        if (!tupleType)
+          return llvm::None;
 
-          auto dstType = op.getType();
-          return srcType == dstType &&
-                 dstType == typeConverter.convertType(dstType);
-        }
+        auto srcType = [&]() -> mlir::Type {
+          if (auto index = mlir::getConstantIntValue(op.index())) {
+            auto i = *index;
+            auto size = static_cast<unsigned>(tupleType.size());
+            if (i >= 0 && i < size)
+              return tupleType.getType(static_cast<size_t>(i));
+          } else if (isUniTuple(tupleType)) {
+            return tupleType.getType(0);
+          }
+          return {};
+        }();
+        if (!srcType)
+          return llvm::None;
 
-        return llvm::None;
+        auto dstType = op.getType();
+        return inputType == tupleType && srcType == dstType &&
+               dstType == typeConverter.convertType(dstType);
       });
 }

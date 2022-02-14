@@ -30,9 +30,6 @@ class TypeConverter;
 void populateStdTypeConverter(mlir::MLIRContext &context,
                               mlir::TypeConverter &converter);
 
-void populateTupleTypeConverter(mlir::MLIRContext &context,
-                                mlir::TypeConverter &converter);
-
 void registerPlierToStdPipeline(plier::PipelineRegistry &registry);
 
 llvm::StringRef plierToStdPipelineName();

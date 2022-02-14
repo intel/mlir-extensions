@@ -15,7 +15,6 @@
 #include "pipelines/pre_low_simplifications.hpp"
 
 #include "pipelines/base_pipeline.hpp"
-#include "pipelines/plier_to_std.hpp"
 
 #include "mlir-extensions/compiler/pipeline_registry.hpp"
 #include "mlir-extensions/dialect/plier/dialect.hpp"
@@ -153,7 +152,7 @@ struct MakeSignlessPass
           }
           return llvm::None;
         });
-    populateTupleTypeConverter(*context, typeConverter);
+    plier::populateTupleTypeConverter(*context, typeConverter);
 
     auto materializeSignCast = [](mlir::OpBuilder &builder, mlir::Type type,
                                   mlir::ValueRange inputs,

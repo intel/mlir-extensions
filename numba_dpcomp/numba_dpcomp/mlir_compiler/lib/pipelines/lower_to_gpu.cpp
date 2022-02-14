@@ -2632,7 +2632,7 @@ void ConvertGpuArrays::runOnOperation() {
   // Convert unknown types to itself
   typeConverter.addConversion([](mlir::Type type) { return type; });
   populateStdTypeConverter(context, typeConverter);
-  populateTupleTypeConverter(context, typeConverter);
+  plier::populateTupleTypeConverter(context, typeConverter);
   typeConverter.addConversion(
       [&](plier::PyType type) -> llvm::Optional<mlir::Type> {
         auto name = type.getName();

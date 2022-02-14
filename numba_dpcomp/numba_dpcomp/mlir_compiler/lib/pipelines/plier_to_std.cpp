@@ -1295,7 +1295,7 @@ void PlierToStdPass::runOnOperation() {
 
   auto context = &getContext();
   populateStdTypeConverter(*context, typeConverter);
-  populateTupleTypeConverter(*context, typeConverter);
+  plier::populateTupleTypeConverter(*context, typeConverter);
 
   auto materializeCast = [](mlir::OpBuilder &builder, mlir::Type type,
                             mlir::ValueRange inputs,
@@ -1411,21 +1411,6 @@ void populateStdTypeConverter(mlir::MLIRContext & /*context*/,
 
         retTypes.push_back(ret);
         return mlir::success();
-      });
-}
-
-void populateTupleTypeConverter(mlir::MLIRContext & /*context*/,
-                                mlir::TypeConverter &converter) {
-  converter.addConversion(
-      [&converter](mlir::TupleType type) -> llvm::Optional<mlir::Type> {
-        llvm::SmallVector<mlir::Type> newTypes(type.size());
-        for (auto it : llvm::enumerate(type)) {
-          auto converted = converter.convertType(it.value());
-          if (!converted)
-            return mlir::Type{};
-          newTypes[it.index()] = converted;
-        }
-        return mlir::TupleType::get(type.getContext(), newTypes);
       });
 }
 
