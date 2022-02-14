@@ -1392,6 +1392,47 @@ template <typename T> static bool hasCompatibleShape(T &&a1, T &&a2) {
   return true;
 }
 
+struct LowerTupleCasts : public mlir::OpConversionPattern<plier::CastOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::CastOp op, plier::CastOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto src = adaptor.value();
+    auto srcType = src.getType().dyn_cast<mlir::TupleType>();
+    if (!srcType)
+      return mlir::failure();
+
+    auto converter = *getTypeConverter();
+    auto dstType =
+        converter.convertType(op.getType()).dyn_cast_or_null<mlir::TupleType>();
+    if (!dstType)
+      return mlir::failure();
+
+    if (srcType.size() != dstType.size())
+      return mlir::failure();
+
+    auto count = static_cast<unsigned>(srcType.size());
+
+    auto loc = op->getLoc();
+    llvm::SmallVector<mlir::Value> newArgs(count);
+    for (auto i : llvm::seq(0u, count)) {
+      auto srcElemType = srcType.getType(i);
+      auto dstElemType = dstType.getType(i);
+      auto ind = rewriter.create<mlir::arith::ConstantIndexOp>(loc, i);
+      mlir::Value val =
+          rewriter.create<plier::GetItemOp>(loc, srcElemType, src, ind);
+      if (srcElemType != dstElemType)
+        val = rewriter.create<plier::CastOp>(loc, dstElemType, val);
+
+      newArgs[i] = val;
+    }
+
+    rewriter.replaceOpWithNewOp<plier::BuildTupleOp>(op, dstType, newArgs);
+    return mlir::success();
+  }
+};
+
 struct LowerTensorCasts : public mlir::OpConversionPattern<plier::CastOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -1566,7 +1607,7 @@ void PlierToLinalgPass::runOnOperation() {
   // Convert unknown types to itself
   typeConverter.addConversion([](mlir::Type type) { return type; });
   populateStdTypeConverter(context, typeConverter);
-  populateTupleTypeConverter(context, typeConverter);
+  plier::populateTupleTypeConverter(context, typeConverter);
   populateArrayTypeConverter(context, typeConverter);
 
   auto materializeCast = [](mlir::OpBuilder &builder, mlir::Type type,
@@ -1613,6 +1654,20 @@ void PlierToLinalgPass::runOnOperation() {
     if (!srcType || !dstType)
       return true;
 
+    if (srcType.isa<mlir::TupleType>() && dstType.isa<mlir::TupleType>()) {
+      auto srcTuple = srcType.cast<mlir::TupleType>();
+      auto dstTuple = dstType.cast<mlir::TupleType>();
+      for (auto it : llvm::zip(srcTuple.getTypes(), dstTuple.getTypes())) {
+        auto src = typeConverter.convertType(std::get<0>(it));
+        auto dst = typeConverter.convertType(std::get<1>(it));
+        if (src && dst && src != dst &&
+            src.isa<mlir::TensorType, mlir::MemRefType>() &&
+            dst.isa<mlir::TensorType, mlir::MemRefType>())
+          return false;
+      }
+      return true;
+    }
+
     auto isZeroRank = [](mlir::Type t) -> bool {
       auto shaped = t.dyn_cast<mlir::ShapedType>();
       return shaped && shaped.getRank() == 0;
@@ -1637,6 +1692,7 @@ void PlierToLinalgPass::runOnOperation() {
       GetitemOpLowering,
       GetitemOpArrLowering,
       SetitemOpLowering,
+      LowerTupleCasts,
       LowerTensorCasts,
       UnrankedToElementCasts,
       GetItemUniTupleConversionPattern
@@ -1793,7 +1849,7 @@ void MakeTensorsSignlessPass::runOnOperation() {
 
         return llvm::None;
       });
-  populateTupleTypeConverter(*context, typeConverter);
+  plier::populateTupleTypeConverter(*context, typeConverter);
 
   auto materializeSignCast = [](mlir::OpBuilder &builder, mlir::Type type,
                                 mlir::ValueRange inputs,
@@ -2054,7 +2110,7 @@ void AdditionalBufferize::runOnOperation() {
   auto *context = &getContext();
 
   mlir::bufferization::BufferizeTypeConverter typeConverter;
-  populateTupleTypeConverter(*context, typeConverter);
+  plier::populateTupleTypeConverter(*context, typeConverter);
 
   auto materializeTupleCast =
       [](mlir::OpBuilder &builder, mlir::Type type, mlir::ValueRange inputs,

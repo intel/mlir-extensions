@@ -15,6 +15,7 @@
 #pragma once
 
 namespace mlir {
+class MLIRContext;
 class TypeConverter;
 class RewritePatternSet;
 class ConversionTarget;
@@ -24,6 +25,9 @@ namespace plier {
 void populateControlFlowTypeConversionRewritesAndTarget(
     mlir::TypeConverter &typeConverter, mlir::RewritePatternSet &patterns,
     mlir::ConversionTarget &target);
+
+void populateTupleTypeConverter(mlir::MLIRContext &context,
+                                mlir::TypeConverter &typeConverter);
 
 void populateTupleTypeConversionRewritesAndTarget(
     mlir::TypeConverter &typeConverter, mlir::RewritePatternSet &patterns,
