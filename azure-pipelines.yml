@@ -146,7 +146,7 @@ jobs:
     artifact: 'numba-dpcomp-wheels-lin'
     displayName: 'Publish wheels'
 
-- job: Linux-intel
+- job: Linux_intel
 
   pool:
     vmImage: ubuntu-20.04
@@ -215,7 +215,6 @@ jobs:
       cd cmake_build
       ctest -C Release --output-on-failure
     displayName: 'CTests'
-
 
 - job: MacOS
 
