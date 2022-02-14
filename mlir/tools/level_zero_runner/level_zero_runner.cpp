@@ -92,10 +92,10 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
 
   // GpuRuntime -> LLVM
   passManager.addPass(createLowerToLLVMPass(llvmOptions));
-  passManager.addPass(gpu_runtime::runEnumerateEventsPass());
-  passManager.addPass(gpu_runtime::runGPUToLLVMPass());
   passManager.addPass(createMemRefToLLVMPass());
   passManager.addPass(createReconcileUnrealizedCastsPass());
+  passManager.addPass(gpu_runtime::runEnumerateEventsPass());
+  passManager.addPass(gpu_runtime::runGPUToLLVMPass());
 
   return passManager.run(module);
 }
