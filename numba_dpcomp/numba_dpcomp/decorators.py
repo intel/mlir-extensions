@@ -61,8 +61,6 @@ if USE_MLIR:
     jit = mlir_jit
     njit = mlir_njit
     vectorize = mlir_vectorize
-
-
 else:
     jit = orig_jit
     njit = orig_njit

@@ -14,8 +14,10 @@
 
 #include "mlir-extensions/transforms/uplift_math_calls.hpp"
 
+#include "mlir-extensions/dialect/plier/dialect.hpp"
 #include "mlir-extensions/transforms/rewrite_wrapper.hpp"
 
+#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/Math/IR/Math.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/IR/PatternMatch.h>
@@ -87,12 +89,39 @@ struct UpliftMathCalls : public mlir::OpRewritePattern<mlir::CallOp> {
   }
 };
 
+struct UpliftFma : public mlir::OpRewritePattern<mlir::arith::AddFOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult matchAndRewrite(mlir::arith::AddFOp op,
+                                      mlir::PatternRewriter &rewriter) const {
+    auto func = op->getParentOfType<mlir::FuncOp>();
+    if (!func || !func->hasAttr(plier::attributes::getFastmathName()))
+      return mlir::failure();
+
+    mlir::Value c;
+    mlir::arith::MulFOp ab;
+    if ((ab = op.getLhs().getDefiningOp<mlir::arith::MulFOp>())) {
+      c = op.getRhs();
+    } else if ((ab = op.getRhs().getDefiningOp<mlir::arith::MulFOp>())) {
+      c = op.getLhs();
+    } else {
+      return mlir::failure();
+    }
+
+    auto a = ab.getLhs();
+    auto b = ab.getRhs();
+    rewriter.replaceOpWithNewOp<mlir::math::FmaOp>(op, a, b, c);
+    return mlir::success();
+  }
+};
+
 struct UpliftMathPass
     : public plier::RewriteWrapperPass<
           UpliftMathPass, void,
           plier::DependentDialectsList<mlir::StandardOpsDialect,
+                                       mlir::arith::ArithmeticDialect,
                                        mlir::math::MathDialect>,
-          UpliftMathCalls> {};
+          UpliftMathCalls, UpliftFma> {};
 } // namespace
 
 void plier::populateUpliftmathPatterns(mlir::MLIRContext &context,
