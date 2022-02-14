@@ -44,8 +44,9 @@ namespace {
 struct UpliftMathCalls : public mlir::OpRewritePattern<mlir::CallOp> {
   using OpRewritePattern::OpRewritePattern;
 
-  mlir::LogicalResult matchAndRewrite(mlir::CallOp op,
-                                      mlir::PatternRewriter &rewriter) const {
+  mlir::LogicalResult
+  matchAndRewrite(mlir::CallOp op,
+                  mlir::PatternRewriter &rewriter) const override {
     auto funcName = op.getCallee();
     if (funcName.empty())
       return mlir::failure();
@@ -92,8 +93,9 @@ struct UpliftMathCalls : public mlir::OpRewritePattern<mlir::CallOp> {
 struct UpliftFma : public mlir::OpRewritePattern<mlir::arith::AddFOp> {
   using OpRewritePattern::OpRewritePattern;
 
-  mlir::LogicalResult matchAndRewrite(mlir::arith::AddFOp op,
-                                      mlir::PatternRewriter &rewriter) const {
+  mlir::LogicalResult
+  matchAndRewrite(mlir::arith::AddFOp op,
+                  mlir::PatternRewriter &rewriter) const override {
     auto func = op->getParentOfType<mlir::FuncOp>();
     if (!func || !func->hasAttr(plier::attributes::getFastmathName()))
       return mlir::failure();
