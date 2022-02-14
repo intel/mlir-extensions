@@ -65,7 +65,7 @@
 #include "mlir-extensions/transforms/promote_to_parallel.hpp"
 #include "mlir-extensions/transforms/rewrite_wrapper.hpp"
 #include "mlir-extensions/transforms/type_conversion.hpp"
-#include "mlir-extensions/transforms/uplift_math_calls.hpp"
+#include "mlir-extensions/transforms/uplift_math.hpp"
 
 #include "base_pipeline.hpp"
 #include "loop_utils.hpp"
