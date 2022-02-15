@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "mlir-extensions/Conversion/gpu_to_gpu_runtime.hpp"
+#include <iostream>
 
 static const char *kGpuAllocShared = "gpu.alloc_shared";
 
@@ -104,10 +105,10 @@ struct InsertGPUAllocs
                 for (auto alias : aliases.resolve(mem)) {
                   auto op = alias.getDefiningOp();
                   if (op) {
+                    std::cout << "INSIDE IF " << std::endl;
                     if (op->getDialect() == scfDialect ||
                         mlir::isa<mlir::ViewLikeOpInterface>(op))
                       continue;
-
                     auto allocOp = mlir::dyn_cast<mlir::memref::AllocOp>(op);
                     if (!allocOp) {
                       op->emitError("Unhandled memref producer");
@@ -195,6 +196,12 @@ struct InsertGPUAllocs
       auto access = it.second;
       auto loc = alloc.getLoc();
       builder.setInsertionPoint(alloc);
+      std::cout << "Alloc.dynamic sizes "
+                << static_cast<ssize_t>(alloc.dynamicSizes().size())
+                << std::endl;
+      std::cout << "Alloc.Symbol operands sizes "
+                << static_cast<ssize_t>(alloc.symbolOperands().size())
+                << std::endl;
       auto gpuAlloc = builder.create<mlir::gpu::AllocOp>(
           loc, alloc.getType(), /*asyncToken*/ nullptr,
           /*asyncDependencies*/ llvm::None, alloc.dynamicSizes(),
@@ -217,12 +224,14 @@ struct InsertGPUAllocs
       builder.setInsertionPointToStart(&block);
       auto memrefType = param.getType().cast<mlir::MemRefType>();
       auto rank = static_cast<unsigned>(memrefType.getRank());
-      dims.resize(rank);
+      // dims.resize(rank);
       filter.clear();
       for (auto i : llvm::seq(0u, rank)) {
-        auto op = builder.create<mlir::memref::DimOp>(loc, param, i);
-        dims[i] = op;
-        filter.insert(op);
+        if (memrefType.isDynamicDim(i)) {
+          auto op = builder.create<mlir::memref::DimOp>(loc, param, i);
+          dims.push_back(op);
+          filter.insert(op);
+        }
       }
       auto allocType = mlir::MemRefType::get(
           memrefType.getShape(), memrefType.getElementType(),
@@ -576,6 +585,23 @@ struct CreateDeallocOp : public mlir::OpRewritePattern<AllocOp> {
     rewriter.setInsertionPointAfter(lastUser);
     rewriter.create<DeallocOp>(lastUser->getLoc(), op);
     return mlir::success();
+  }
+};
+
+struct GPUExDeallocPass
+    : public mlir::PassWrapper<GPUExDeallocPass, mlir::FunctionPass> {
+
+  void runOnFunction() override {
+    mlir::OwningRewritePatternList patterns(&getContext());
+
+    patterns.insert<CreateDeallocOp<gpu_runtime::LoadGpuModuleOp,
+                                    gpu_runtime::DestroyGpuModuleOp>,
+                    CreateDeallocOp<gpu_runtime::GetGpuKernelOp,
+                                    gpu_runtime::DestroyGpuKernelOp>>(
+        &getContext());
+
+    (void)mlir::applyPatternsAndFoldGreedily(getFunction(),
+                                             std::move(patterns));
   }
 };
 
@@ -1142,4 +1168,8 @@ std::unique_ptr<mlir::Pass> gpu_runtime::runSerializeSPIRVPass() {
 
 std::unique_ptr<mlir::Pass> gpu_runtime::runGPUExPass() {
   return std::make_unique<GPUExPass>();
+}
+
+std::unique_ptr<mlir::Pass> gpu_runtime::runGPUExDeallocPass() {
+  return std::make_unique<GPUExDeallocPass>();
 }

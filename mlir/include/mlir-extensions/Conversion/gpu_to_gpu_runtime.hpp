@@ -68,5 +68,6 @@ std::unique_ptr<mlir::Pass> runInsertGPUAllocsPass();
 std::unique_ptr<mlir::Pass> runUnstrideMemrefsPass();
 std::unique_ptr<mlir::Pass> runSerializeSPIRVPass();
 std::unique_ptr<mlir::Pass> runGPUExPass();
+std::unique_ptr<mlir::Pass> runGPUExDeallocPass();
 
 } // namespace gpu_runtime
