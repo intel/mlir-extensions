@@ -563,6 +563,7 @@ def test_atomics_multidim(funci):
 
     assert_equal(gpu_res, sim_res)
 
+@require_gpu
 def test_fastmath():
     def func(a,b,c,res):
         i = get_global_id(0)
