@@ -82,7 +82,6 @@ class _GetDefaultLocalSizeId(ConcreteTemplate):
         signature(types.UniTuple(types.int64, 3), types.int64, types.int64, types.int64),
     ]
 
-@mlir_njit(enable_gpu_pipeline=True)
 def _kernel_body(global_size, local_size, body, *args):
     x, y, z = global_size
     lx, ly, lz = local_size
@@ -103,7 +102,6 @@ def _kernel_body(global_size, local_size, body, *args):
                             if (in_bounds):
                                 body(*args)
 
-@mlir_njit(enable_gpu_pipeline=True)
 def _kernel_body_def_size(global_size, body, *args):
     x, y, z = global_size
     lx, ly, lz = _get_default_local_size(x, y, z)
@@ -132,22 +130,24 @@ def _extend_dims(dims):
 
 
 class Kernel(KernelBase):
-    def __init__(self, func):
+    def __init__(self, func, kwargs):
         super().__init__(func)
-        self.jit_func = mlir_njit(inline='always',enable_gpu_pipeline=True)(func)
+        self._jit_func = mlir_njit(inline='always',enable_gpu_pipeline=True)(func)
+        self._kern_body = mlir_njit(enable_gpu_pipeline=True, **kwargs)(_kernel_body)
+        self._kern_body_def_size = mlir_njit(enable_gpu_pipeline=True, **kwargs)(_kernel_body_def_size)
 
     def __call__(self, *args, **kwargs):
         self.check_call_args(args, kwargs)
 
         local_size = self.local_size
         if (len(local_size) != 0):
-            _kernel_body(_extend_dims(self.global_size), _extend_dims(self.local_size), self.jit_func, *args)
+            self._kern_body(_extend_dims(self.global_size), _extend_dims(self.local_size), self._jit_func, *args)
         else:
-            _kernel_body_def_size(_extend_dims(self.global_size), self.jit_func, *args)
+            self._kern_body_def_size(_extend_dims(self.global_size), self._jit_func, *args)
 
 
-def kernel(func):
-    return Kernel(func)
+def kernel(func, **kwargs):
+    return Kernel(func, kwargs)
 
 DEFAULT_LOCAL_SIZE = ()
 
