@@ -16,6 +16,23 @@
 
 static const char *kGpuAllocShared = "gpu.alloc_shared";
 
+struct LowerUndef : public mlir::ConvertOpToLLVMPattern<gpu_runtime::UndefOp> {
+  using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(gpu_runtime::UndefOp op,
+                  gpu_runtime::UndefOp::Adaptor /*adaptor*/,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto converter = getTypeConverter();
+    auto type = converter->convertType(op.getType());
+    if (!type)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::LLVM::UndefOp>(op, type);
+    return mlir::success();
+  }
+};
+
 struct FunctionCallBuilder {
   FunctionCallBuilder(mlir::StringRef functionName, mlir::Type returnType,
                       mlir::ArrayRef<mlir::Type> argumentTypes)
@@ -763,7 +780,8 @@ struct GPUToLLVMPass
         ConvertGpuKernelDestroyPattern,
         ConvertGpuKernelLaunchPattern,
         ConvertGpuAllocPattern,
-        ConvertGpuSuggestBlockSizePattern
+        ConvertGpuSuggestBlockSizePattern,
+        LowerUndef
         // clang-format on
         >(converter);
 
