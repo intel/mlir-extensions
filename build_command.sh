@@ -1,3 +1,0 @@
-cmake /localdisk/nbpatel/mlir-extensions -GNinja .. -DCMAKE_BUILD_TYPE=Debug -DLLVM_DIR=/localdisk/nbpatel/mlir-llvm/lib/cmake/llvm -DMLIR_DIR=/localdisk/nbpatel/mlir-llvm/lib/cmake/mlir -DTBB_DIR=/localdisk/nbpatel/mlir-extensions/tbb/lib/cmake/tbb -DCMAKE_INSTALL_PREFIX=/localdisk/nbpatel/mlir-extensions/numba_dpcomp/numba_dpcomp -DLEVEL_ZERO_DIR=/localdisk/nbpatel/mlir-extensions/level-zero/level_zero_install -DGPU_ENABLE=ON
-cmake --build .
-cmake --install .

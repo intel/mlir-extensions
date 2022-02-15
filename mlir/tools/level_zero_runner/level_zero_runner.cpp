@@ -50,36 +50,18 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
   PassManager passManager(module.getContext());
   applyPassManagerCLOptions(passManager);
 
-  /*
-    passManager.addNestedPass<mlir::FuncOp>(
-        arith::createArithmeticBufferizePass());
-    passManager.addNestedPass<mlir::FuncOp>(createLinalgBufferizePass());
-    passManager.addNestedPass<mlir::FuncOp>(createSCFBufferizePass());
-    passManager.addNestedPass<mlir::FuncOp>(createTensorBufferizePass());
-    passManager.addPass(createFuncBufferizePass());
-    passManager.addNestedPass<mlir::FuncOp>(
-        bufferization::createFinalizingBufferizePass());
-    passManager.addNestedPass<mlir::FuncOp>(
-        bufferization::createBufferDeallocationPass());
-    passManager.addNestedPass<mlir::FuncOp>(
-        createConvertLinalgToParallelLoopsPass());
-
-    // passManager.addPass(greedilyMapParallelSCFToGPU());
-    passManager.addNestedPass<mlir::FuncOp>(createParallelLoopToGpuPass());
-    passManager.addNestedPass<mlir::FuncOp>(createLowerAffinePass());
-  */
   passManager.addNestedPass<mlir::FuncOp>(
-      gpu_runtime::runInsertGPUAllocsPass());
+      gpu_runtime::createInsertGPUAllocsPass());
   passManager.addPass(mlir::createCanonicalizerPass());
   // passManager.addNestedPass<mlir::FuncOp>(
-  //    gpu_runtime::runUnstrideMemrefsPass());
+  //    gpu_runtime::createUnstrideMemrefsPass());
   // passManager.addNestedPass<mlir::FuncOp>(mlir::createLowerAffinePass());
   passManager.addPass(createGpuKernelOutliningPass());
   passManager.addPass(memref::createFoldSubViewOpsPass());
   passManager.addNestedPass<mlir::gpu::GPUModuleOp>(
-      gpu_runtime::runAbiAttrsPass());
-  passManager.addPass(gpu_runtime::runSetSPIRVCapabilitiesPass());
-  passManager.addPass(gpu_runtime::runGPUToSpirvPass());
+      gpu_runtime::createAbiAttrsPass());
+  passManager.addPass(gpu_runtime::createSetSPIRVCapabilitiesPass());
+  passManager.addPass(gpu_runtime::createGPUToSpirvPass());
   OpPassManager &modulePM = passManager.nest<spirv::ModuleOp>();
   modulePM.addPass(spirv::createLowerABIAttributesPass());
   modulePM.addPass(spirv::createUpdateVersionCapabilityExtensionPass());
@@ -87,14 +69,14 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
   llvmOptions.emitCWrappers = true;
 
   // Gpu -> GpuRuntime
-  passManager.addPass(gpu_runtime::runSerializeSPIRVPass());
-  passManager.addNestedPass<mlir::FuncOp>(gpu_runtime::runGPUExPass());
-  // passManager.addNestedPass<mlir::FuncOp>(gpu_runtime::runGPUExDeallocPass());
+  passManager.addPass(gpu_runtime::createSerializeSPIRVPass());
+  passManager.addNestedPass<mlir::FuncOp>(gpu_runtime::createGPUExPass());
+  // passManager.addNestedPass<mlir::FuncOp>(gpu_runtime::createGPUExDeallocPass());
 
   // GpuRuntime -> LLVM
 
-  passManager.addPass(gpu_runtime::runEnumerateEventsPass());
-  passManager.addPass(gpu_runtime::runGPUToLLVMPass());
+  passManager.addPass(gpu_runtime::createEnumerateEventsPass());
+  passManager.addPass(gpu_runtime::createGPUToLLVMPass());
   passManager.addPass(createLowerToLLVMPass(llvmOptions));
   passManager.addPass(createMemRefToLLVMPass());
   passManager.addPass(createReconcileUnrealizedCastsPass());

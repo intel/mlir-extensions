@@ -13,7 +13,6 @@
 // limitations under the License.
 
 #include "mlir-extensions/Conversion/gpu_to_gpu_runtime.hpp"
-#include <iostream>
 
 static const char *kGpuAllocShared = "gpu.alloc_shared";
 
@@ -105,7 +104,6 @@ struct InsertGPUAllocs
                 for (auto alias : aliases.resolve(mem)) {
                   auto op = alias.getDefiningOp();
                   if (op) {
-                    std::cout << "INSIDE IF " << std::endl;
                     if (op->getDialect() == scfDialect ||
                         mlir::isa<mlir::ViewLikeOpInterface>(op))
                       continue;
@@ -196,12 +194,6 @@ struct InsertGPUAllocs
       auto access = it.second;
       auto loc = alloc.getLoc();
       builder.setInsertionPoint(alloc);
-      std::cout << "Alloc.dynamic sizes "
-                << static_cast<ssize_t>(alloc.dynamicSizes().size())
-                << std::endl;
-      std::cout << "Alloc.Symbol operands sizes "
-                << static_cast<ssize_t>(alloc.symbolOperands().size())
-                << std::endl;
       auto gpuAlloc = builder.create<mlir::gpu::AllocOp>(
           loc, alloc.getType(), /*asyncToken*/ nullptr,
           /*asyncDependencies*/ llvm::None, alloc.dynamicSizes(),
@@ -1142,34 +1134,34 @@ struct GPUExPass : public mlir::PassWrapper<GPUExPass, mlir::FunctionPass> {
 };
 
 // Expose the passes to the outside world
-std::unique_ptr<mlir::Pass> gpu_runtime::runAbiAttrsPass() {
+std::unique_ptr<mlir::Pass> gpu_runtime::createAbiAttrsPass() {
   return std::make_unique<AbiAttrsPass>();
 }
 
-std::unique_ptr<mlir::Pass> gpu_runtime::runSetSPIRVCapabilitiesPass() {
+std::unique_ptr<mlir::Pass> gpu_runtime::createSetSPIRVCapabilitiesPass() {
   return std::make_unique<SetSPIRVCapabilitiesPass>();
 }
 
-std::unique_ptr<mlir::Pass> gpu_runtime::runGPUToSpirvPass() {
+std::unique_ptr<mlir::Pass> gpu_runtime::createGPUToSpirvPass() {
   return std::make_unique<GPUToSpirvPass>();
 }
 
-std::unique_ptr<mlir::Pass> gpu_runtime::runInsertGPUAllocsPass() {
+std::unique_ptr<mlir::Pass> gpu_runtime::createInsertGPUAllocsPass() {
   return std::make_unique<InsertGPUAllocs>();
 }
 
-std::unique_ptr<mlir::Pass> gpu_runtime::runUnstrideMemrefsPass() {
+std::unique_ptr<mlir::Pass> gpu_runtime::createUnstrideMemrefsPass() {
   return std::make_unique<UnstrideMemrefsPass>();
 }
 
-std::unique_ptr<mlir::Pass> gpu_runtime::runSerializeSPIRVPass() {
+std::unique_ptr<mlir::Pass> gpu_runtime::createSerializeSPIRVPass() {
   return std::make_unique<SerializeSPIRVPass>();
 }
 
-std::unique_ptr<mlir::Pass> gpu_runtime::runGPUExPass() {
+std::unique_ptr<mlir::Pass> gpu_runtime::createGPUExPass() {
   return std::make_unique<GPUExPass>();
 }
 
-std::unique_ptr<mlir::Pass> gpu_runtime::runGPUExDeallocPass() {
+std::unique_ptr<mlir::Pass> gpu_runtime::createGPUExDeallocPass() {
   return std::make_unique<GPUExDeallocPass>();
 }

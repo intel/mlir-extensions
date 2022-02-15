@@ -61,7 +61,7 @@
 
 namespace gpu_runtime {
 
-std::unique_ptr<mlir::Pass> runEnumerateEventsPass();
-std::unique_ptr<mlir::Pass> runGPUToLLVMPass();
+std::unique_ptr<mlir::Pass> createEnumerateEventsPass();
+std::unique_ptr<mlir::Pass> createGPUToLLVMPass();
 
 } // namespace gpu_runtime

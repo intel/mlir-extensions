@@ -775,10 +775,10 @@ struct GPUToLLVMPass
 };
 
 // Expose the passes to the outside world
-std::unique_ptr<mlir::Pass> gpu_runtime::runEnumerateEventsPass() {
+std::unique_ptr<mlir::Pass> gpu_runtime::createEnumerateEventsPass() {
   return std::make_unique<EnumerateEventsPass>();
 }
 
-std::unique_ptr<mlir::Pass> gpu_runtime::runGPUToLLVMPass() {
+std::unique_ptr<mlir::Pass> gpu_runtime::createGPUToLLVMPass() {
   return std::make_unique<GPUToLLVMPass>();
 }

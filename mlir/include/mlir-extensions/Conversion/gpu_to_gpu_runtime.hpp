@@ -61,13 +61,13 @@
 
 namespace gpu_runtime {
 
-std::unique_ptr<mlir::Pass> runAbiAttrsPass();
-std::unique_ptr<mlir::Pass> runSetSPIRVCapabilitiesPass();
-std::unique_ptr<mlir::Pass> runGPUToSpirvPass();
-std::unique_ptr<mlir::Pass> runInsertGPUAllocsPass();
-std::unique_ptr<mlir::Pass> runUnstrideMemrefsPass();
-std::unique_ptr<mlir::Pass> runSerializeSPIRVPass();
-std::unique_ptr<mlir::Pass> runGPUExPass();
-std::unique_ptr<mlir::Pass> runGPUExDeallocPass();
+std::unique_ptr<mlir::Pass> createAbiAttrsPass();
+std::unique_ptr<mlir::Pass> createSetSPIRVCapabilitiesPass();
+std::unique_ptr<mlir::Pass> createGPUToSpirvPass();
+std::unique_ptr<mlir::Pass> createInsertGPUAllocsPass();
+std::unique_ptr<mlir::Pass> createUnstrideMemrefsPass();
+std::unique_ptr<mlir::Pass> createSerializeSPIRVPass();
+std::unique_ptr<mlir::Pass> createGPUExPass();
+std::unique_ptr<mlir::Pass> createGPUExDeallocPass();
 
 } // namespace gpu_runtime
