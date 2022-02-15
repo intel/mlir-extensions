@@ -592,6 +592,7 @@ def test_fastmath():
         assert ir.count('spv.OCL.fma') == 1, ir
         assert_equal(gpu_res, sim_res)
 
+
 @require_dpctl
 def test_dpctl_simple1():
     def func(a, b, c):
