@@ -236,8 +236,8 @@ def _test_binary(func, dtype, ir_pass, ir_check):
     sim_func = kernel_sim(func)
     gpu_func = kernel_cached(func)
 
-    a = np.array([1,2,3,4,5,6,7,8,9], dtype)
-    b = np.array([11,12,13,14,15,16,17,18,19], dtype)
+    a = np.array([11,12,13,14,15], dtype)
+    b = np.array([1,2,3,4,5], dtype)
 
     sim_res = np.zeros(a.shape, dtype)
     sim_func[a.shape, DEFAULT_LOCAL_SIZE](a, b, sim_res)
@@ -262,15 +262,16 @@ def test_math_funcs_unary(op):
     _test_unary(func, np.float32, 'GPUToSpirvPass', lambda ir: ir.count(f'OCL.{op}') == 1)
 
 @require_gpu
-@pytest.mark.parametrize("op", ['+', '-', '*', '/', '%', '**'])
-def test_gpu_ops_binary(op):
+@pytest.mark.parametrize("op", ['+', '-', '*', '/', '//', '%', '**'])
+@pytest.mark.parametrize("dtype", [np.int32, np.float32])
+def test_gpu_ops_binary(op, dtype):
     f = eval(f'lambda a, b: a {op} b')
     inner = kernel_func(f)
     def func(a, b, c):
         i = get_global_id(0)
         c[i] = inner(a[i], b[i])
 
-    _test_binary(func, np.float32, 'ConvertParallelLoopToGpu', lambda ir: ir.count(f'gpu.launch blocks') == 1)
+    _test_binary(func, dtype, 'ConvertParallelLoopToGpu', lambda ir: ir.count(f'gpu.launch blocks') == 1)
 
 _test_shapes = [
     (1,),
