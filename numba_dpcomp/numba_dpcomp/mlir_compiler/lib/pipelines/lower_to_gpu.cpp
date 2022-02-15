@@ -2954,11 +2954,10 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
 
   pm.addPass(mlir::createSymbolDCEPass());
 
-  // TODO: mlir::gpu::GPUModuleOp pass
-  pm.addNestedPass<mlir::FuncOp>(mlir::arith::createArithmeticExpandOpsPass());
-
   pm.addPass(mlir::createGpuKernelOutliningPass());
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<GPULowerDefaultLocalSize>());
+  pm.nest<mlir::gpu::GPUModuleOp>().addNestedPass<mlir::gpu::GPUFuncOp>(
+      mlir::arith::createArithmeticExpandOpsPass());
   pm.addNestedPass<mlir::FuncOp>(mlir::createCanonicalizerPass());
   pm.addPass(mlir::createSymbolDCEPass());
   pm.addNestedPass<mlir::gpu::GPUModuleOp>(mlir::createCanonicalizerPass());
