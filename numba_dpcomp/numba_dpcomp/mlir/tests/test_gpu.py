@@ -563,6 +563,35 @@ def test_atomics_multidim(funci):
 
     assert_equal(gpu_res, sim_res)
 
+def test_fastmath():
+    def func(a,b,c,res):
+        i = get_global_id(0)
+        res[i] = a[i] * b[i] + c[i]
+
+    sim_func = kernel_sim(func)
+    a = np.array([1,2,3,4], np.float32)
+    b = np.array([5,6,7,8], np.float32)
+    c = np.array([9,10,11,12], np.float32)
+
+    sim_res = np.zeros(a.shape, a.dtype)
+    sim_func[a.shape, DEFAULT_LOCAL_SIZE](a, b, c, sim_res)
+
+    with print_pass_ir([],['GPUToSpirvPass']):
+        gpu_res = np.zeros(a.shape, a.dtype)
+        gpu_func = kernel_cached(func, fastmath=False)
+        gpu_func[a.shape, DEFAULT_LOCAL_SIZE](a, b, c, gpu_res)
+        ir = get_print_buffer()
+        assert ir.count('spv.OCL.fma') == 0, ir
+        assert_equal(gpu_res, sim_res)
+
+    with print_pass_ir([],['GPUToSpirvPass']):
+        gpu_res = np.zeros(a.shape, a.dtype)
+        gpu_func = kernel_cached(func, fastmath=True)
+        gpu_func[a.shape, DEFAULT_LOCAL_SIZE](a, b, c, gpu_res)
+        ir = get_print_buffer()
+        assert ir.count('spv.OCL.fma') == 1, ir
+        assert_equal(gpu_res, sim_res)
+
 @require_dpctl
 def test_dpctl_simple1():
     def func(a, b, c):
