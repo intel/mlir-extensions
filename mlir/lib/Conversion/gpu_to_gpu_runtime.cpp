@@ -261,7 +261,7 @@ struct InsertGPUAllocs
       if (access.hostRead && access.deviceWrite)
         builder.create<mlir::memref::CopyOp>(loc, allocResult, param);
 
-      builder.create<mlir::memref::DeallocOp>(loc, allocResult);
+      // builder.create<mlir::memref::DeallocOp>(loc, allocResult);
     }
   }
 };
