@@ -774,17 +774,56 @@ struct ChangeLayoutCopy : public mlir::OpRewritePattern<mlir::memref::CopyOp> {
   }
 };
 
+struct ChangeLayoutExpandShape
+    : public mlir::OpRewritePattern<mlir::memref::ExpandShapeOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::ExpandShapeOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto cl = op.src().getDefiningOp<plier::ChangeLayoutOp>();
+    if (!cl)
+      return mlir::failure();
+
+    auto dstType = op.getType().cast<mlir::MemRefType>();
+    if (!dstType.getLayout().isIdentity())
+      return mlir::failure();
+
+    auto src = cl.source();
+    auto srcType = src.getType().cast<mlir::MemRefType>();
+    if (!mlir::isStrided(srcType))
+      return mlir::failure();
+
+    llvm::SmallVector<int64_t> strides(
+        dstType.getRank(), mlir::ShapedType::kDynamicStrideOrOffset);
+    auto newDstMap = mlir::makeStridedLinearLayoutMap(
+        strides, mlir::ShapedType::kDynamicStrideOrOffset, op->getContext());
+    if (!newDstMap)
+      return mlir::failure();
+
+    auto newDstType = mlir::MemRefType::get(
+        dstType.getShape(), dstType.getElementType(), newDstMap);
+
+    auto loc = op->getLoc();
+    mlir::Value newOp = rewriter.create<mlir::memref::ExpandShapeOp>(
+        loc, newDstType, src, op.getReassociationIndices());
+    rewriter.replaceOpWithNewOp<plier::ChangeLayoutOp>(op, dstType, newOp);
+    return mlir::success();
+  }
+};
+
 } // namespace
 
 void ChangeLayoutOp::getCanonicalizationPatterns(
     ::mlir::RewritePatternSet &results, ::mlir::MLIRContext *context) {
-  results.insert<ChangeLayoutIdentity, ChangeLayoutReduceRank, ChangeLayoutDim,
-                 ChangeLayoutExtractMetadata, ChangeLayoutClone,
-                 PropagateCloneType, ChangeLayoutCast, ChangeLayoutSignCast,
-                 ChangeLayoutLoad, ChangeLayoutStore, ChangeLayoutSubview,
-                 ChangeLayoutLinalgGeneric, ChangeLayoutLinalgFill,
-                 ChangeLayoutIf, ChangeLayout1DReshape,
-                 ChangeLayoutSliceGetItem, ChangeLayoutCopy>(context);
+  results
+      .insert<ChangeLayoutIdentity, ChangeLayoutReduceRank, ChangeLayoutDim,
+              ChangeLayoutExtractMetadata, ChangeLayoutClone,
+              PropagateCloneType, ChangeLayoutCast, ChangeLayoutSignCast,
+              ChangeLayoutLoad, ChangeLayoutStore, ChangeLayoutSubview,
+              ChangeLayoutLinalgGeneric, ChangeLayoutLinalgFill, ChangeLayoutIf,
+              ChangeLayout1DReshape, ChangeLayoutSliceGetItem, ChangeLayoutCopy,
+              ChangeLayoutExpandShape>(context);
 }
 
 static mlir::Value propagateCasts(mlir::Value val, mlir::Type thisType);
