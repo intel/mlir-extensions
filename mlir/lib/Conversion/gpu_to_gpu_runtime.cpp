@@ -16,6 +16,62 @@
 
 static const char *kGpuAllocShared = "gpu.alloc_shared";
 
+struct ParallelLoopGPUMappingPass
+    : public mlir::PassWrapper<ParallelLoopGPUMappingPass, mlir::FunctionPass> {
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::scf::SCFDialect>();
+    registry.insert<mlir::arith::ArithmeticDialect>();
+  }
+
+  void runOnFunction() override {
+    auto func = getFunction();
+    auto &region = func.getBody();
+    if (region.empty())
+      return;
+
+    if (!llvm::hasSingleElement(region)) {
+      func.emitError("Only strucutred control flow is supported");
+      signalPassFailure();
+      return;
+    }
+
+    auto getProcessor = [](unsigned val) -> mlir::gpu::Processor {
+      const mlir::gpu::Processor mapping[] = {
+          mlir::gpu::Processor::BlockX,  mlir::gpu::Processor::BlockY,
+          mlir::gpu::Processor::BlockZ,  mlir::gpu::Processor::ThreadX,
+          mlir::gpu::Processor::ThreadY, mlir::gpu::Processor::ThreadZ,
+      };
+      if (val >= llvm::array_lengthof(mapping))
+        return mlir::gpu::Processor::Sequential;
+
+      return mapping[val];
+    };
+
+    mlir::OpBuilder builder(&getContext());
+    auto identityMap = builder.getDimIdentityMap();
+    llvm::SmallVector<mlir::gpu::ParallelLoopDimMapping> mapping;
+    for (auto &op : llvm::make_early_inc_range(region.front())) {
+      auto parallel = mlir::dyn_cast<mlir::scf::ParallelOp>(op);
+      if (!parallel)
+        continue;
+
+      auto numLoops = parallel.getNumLoops();
+      mapping.resize(numLoops);
+      for (auto i : llvm::seq(0u, numLoops))
+        mapping[i] = mlir::gpu::getParallelLoopDimMappingAttr(
+            getProcessor(i), identityMap, identityMap);
+
+      if (mlir::failed(mlir::gpu::setMappingAttr(parallel, mapping))) {
+        signalPassFailure();
+        return;
+      }
+    }
+
+    //    mlir::greedilyMapParallelSCFToGPU(region);
+  }
+};
+
 struct InsertGPUAllocs
     : public mlir::PassWrapper<InsertGPUAllocs, mlir::FunctionPass> {
   virtual void
@@ -1164,4 +1220,8 @@ std::unique_ptr<mlir::Pass> gpu_runtime::createGPUExPass() {
 
 std::unique_ptr<mlir::Pass> gpu_runtime::createGPUExDeallocPass() {
   return std::make_unique<GPUExDeallocPass>();
+}
+
+std::unique_ptr<mlir::Pass> gpu_runtime::createParallelLoopGPUMappingPass() {
+  return std::make_unique<ParallelLoopGPUMappingPass>();
 }

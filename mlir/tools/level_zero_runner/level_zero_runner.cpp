@@ -50,6 +50,28 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
   PassManager passManager(module.getContext());
   applyPassManagerCLOptions(passManager);
 
+  // Linalg to GPU start
+  passManager.addNestedPass<mlir::FuncOp>(
+      arith::createArithmeticBufferizePass());
+  passManager.addPass(createTensorConstantBufferizePass());
+  passManager.addNestedPass<mlir::FuncOp>(createSCFBufferizePass());
+  passManager.addNestedPass<mlir::FuncOp>(createLinalgBufferizePass());
+  passManager.addNestedPass<mlir::FuncOp>(createStdBufferizePass());
+  passManager.addNestedPass<mlir::FuncOp>(createTensorBufferizePass());
+  passManager.addPass(createFuncBufferizePass());
+  passManager.addNestedPass<mlir::FuncOp>(
+      bufferization::createFinalizingBufferizePass());
+  passManager.addNestedPass<mlir::FuncOp>(
+      bufferization::createBufferDeallocationPass());
+  passManager.addNestedPass<mlir::FuncOp>(
+      createConvertLinalgToParallelLoopsPass());
+  passManager.addNestedPass<mlir::FuncOp>(
+      gpu_runtime::createParallelLoopGPUMappingPass());
+  passManager.addNestedPass<mlir::FuncOp>(createParallelLoopToGpuPass());
+  passManager.addNestedPass<mlir::FuncOp>(createLowerAffinePass());
+
+  // Linalg to GPU end
+
   passManager.addNestedPass<mlir::FuncOp>(
       gpu_runtime::createInsertGPUAllocsPass());
   passManager.addPass(mlir::createCanonicalizerPass());
