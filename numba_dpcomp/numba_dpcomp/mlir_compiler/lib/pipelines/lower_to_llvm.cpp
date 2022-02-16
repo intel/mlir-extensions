@@ -884,6 +884,81 @@ struct ReshapeLowering
   }
 };
 
+struct ExpandShapeLowering
+    : public mlir::ConvertOpToLLVMPattern<mlir::memref::ExpandShapeOp> {
+  using ConvertOpToLLVMPattern<
+      mlir::memref::ExpandShapeOp>::ConvertOpToLLVMPattern;
+
+  explicit ExpandShapeLowering(mlir::LLVMTypeConverter &converter)
+      : ConvertOpToLLVMPattern<mlir::memref::ExpandShapeOp>(converter) {}
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::ExpandShapeOp op,
+                  mlir::memref::ExpandShapeOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto dstType = op.getType().cast<mlir::MemRefType>();
+    auto converter = getTypeConverter();
+    auto dstLlvmType = converter->convertType(dstType);
+    if (!dstLlvmType)
+      return mlir::failure();
+
+    auto inds = op.getReassociationIndices();
+
+    int64_t currentDstInd = 0;
+    auto dstShape = dstType.getShape();
+    for (auto &ind : inds) {
+      int64_t reassocInd = -1;
+      for (auto i : ind) {
+        assert(i >= 0);
+        if (dstShape[currentDstInd] != 1) {
+          if (reassocInd != -1)
+            return mlir::failure();
+          reassocInd = i;
+        }
+        ++currentDstInd;
+      }
+    }
+
+    mlir::MemRefDescriptor src(adaptor.src());
+
+    auto loc = op->getLoc();
+    auto result = mlir::MemRefDescriptor::undef(rewriter, loc, dstLlvmType);
+    result.setAllocatedPtr(rewriter, loc, src.allocatedPtr(rewriter, loc));
+    result.setAlignedPtr(rewriter, loc, src.alignedPtr(rewriter, loc));
+    result.setOffset(rewriter, loc, src.offset(rewriter, loc));
+
+    auto indexType = getIndexType();
+    auto zero = rewriter.create<mlir::LLVM::ConstantOp>(
+        loc, indexType, rewriter.getIntegerAttr(indexType, 0));
+    auto one = rewriter.create<mlir::LLVM::ConstantOp>(
+        loc, indexType, rewriter.getIntegerAttr(indexType, 1));
+
+    currentDstInd = 0;
+    for (auto it : llvm::enumerate(inds)) {
+      auto &ind = it.value();
+      auto srcInd = it.index();
+      for (auto i : ind) {
+        assert(i >= 0);
+        mlir::Value dim;
+        mlir::Value stride;
+        if (dstShape[currentDstInd] != 1) {
+          dim = src.size(rewriter, loc, srcInd);
+          stride = src.stride(rewriter, loc, srcInd);
+        } else {
+          dim = one;
+          stride = zero;
+        }
+        result.setSize(rewriter, loc, currentDstInd, dim);
+        result.setStride(rewriter, loc, currentDstInd, stride);
+        ++currentDstInd;
+      }
+    }
+
+    rewriter.replaceOp(op, static_cast<mlir::Value>(result));
+    return mlir::success();
+  }
+};
+
 class LLVMFunctionPass : public mlir::OperationPass<mlir::LLVM::LLVMFuncOp> {
 public:
   using OperationPass<mlir::LLVM::LLVMFuncOp>::OperationPass;
@@ -1753,6 +1828,7 @@ struct LLVMLoweringPass
         AllocOpLowering,
         DeallocOpLowering,
         ReshapeLowering,
+        ExpandShapeLowering,
         LowerReduceRankOp,
         LowerExtractMemrefMetadataOp,
         LowerTakeContextOp,
