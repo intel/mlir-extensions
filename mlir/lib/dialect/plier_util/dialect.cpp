@@ -125,13 +125,48 @@ struct DimExpandShape : public mlir::OpRewritePattern<DimOp> {
     return mlir::success();
   }
 };
+
+struct DimInsertSlice : public mlir::OpRewritePattern<mlir::tensor::DimOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::tensor::DimOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto insertSlice = op.source().getDefiningOp<mlir::tensor::InsertSliceOp>();
+    if (!insertSlice)
+      return mlir::failure();
+
+    auto indexAttr = mlir::getConstantIntValue(op.index());
+    if (!indexAttr)
+      return mlir::failure();
+
+    auto index = *indexAttr;
+
+    auto sizes = insertSlice.getMixedSizes();
+    if (index < 0 || static_cast<size_t>(index) >= sizes.size())
+      return mlir::failure();
+
+    auto val = [&]() -> mlir::Value {
+      auto v = sizes[index];
+      if (v.is<mlir::Value>())
+        return v.get<mlir::Value>();
+
+      auto attr = v.get<mlir::Attribute>().cast<mlir::IntegerAttr>();
+      return rewriter.create<mlir::arith::ConstantIndexOp>(
+          op->getLoc(), attr.getValue().getSExtValue());
+    }();
+
+    rewriter.replaceOp(op, val);
+    return mlir::success();
+  }
+};
 } // namespace
 
 void PlierUtilDialect::getCanonicalizationPatterns(
     mlir::RewritePatternSet &results) const {
   results.add<DimExpandShape<mlir::tensor::DimOp, mlir::tensor::ExpandShapeOp>,
-              DimExpandShape<mlir::memref::DimOp, mlir::memref::ExpandShapeOp>>(
-      getContext());
+              DimExpandShape<mlir::memref::DimOp, mlir::memref::ExpandShapeOp>,
+              DimInsertSlice>(getContext());
 }
 
 OpaqueType OpaqueType::get(mlir::MLIRContext *context) {
