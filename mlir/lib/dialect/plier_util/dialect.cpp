@@ -136,27 +136,8 @@ struct DimInsertSlice : public mlir::OpRewritePattern<mlir::tensor::DimOp> {
     if (!insertSlice)
       return mlir::failure();
 
-    auto indexAttr = mlir::getConstantIntValue(op.index());
-    if (!indexAttr)
-      return mlir::failure();
-
-    auto index = *indexAttr;
-
-    auto sizes = insertSlice.getMixedSizes();
-    if (index < 0 || static_cast<size_t>(index) >= sizes.size())
-      return mlir::failure();
-
-    auto val = [&]() -> mlir::Value {
-      auto v = sizes[index];
-      if (v.is<mlir::Value>())
-        return v.get<mlir::Value>();
-
-      auto attr = v.get<mlir::Attribute>().cast<mlir::IntegerAttr>();
-      return rewriter.create<mlir::arith::ConstantIndexOp>(
-          op->getLoc(), attr.getValue().getSExtValue());
-    }();
-
-    rewriter.replaceOp(op, val);
+    rewriter.replaceOpWithNewOp<mlir::tensor::DimOp>(op, insertSlice.dest(),
+                                                     op.index());
     return mlir::success();
   }
 };

@@ -1622,7 +1622,6 @@ struct InsertSliceToPad
     auto low = op.getMixedOffsets();
     llvm::SmallVector<mlir::OpFoldResult> high(rank);
 
-    auto size = op.getMixedSizes();
     auto loc = op->getLoc();
 
     auto toVal = [&](mlir::OpFoldResult val) -> mlir::Value {
@@ -1634,7 +1633,7 @@ struct InsertSliceToPad
     };
 
     for (auto i : llvm::seq(0u, rank)) {
-      auto dstDim = size[i];
+      auto dstDim = rewriter.createOrFold<mlir::tensor::DimOp>(loc, gen, i);
       auto srcDim = rewriter.createOrFold<mlir::tensor::DimOp>(loc, src, i);
       auto offset = rewriter.createOrFold<mlir::arith::AddIOp>(
           loc, toVal(srcDim), toVal(low[i]));
