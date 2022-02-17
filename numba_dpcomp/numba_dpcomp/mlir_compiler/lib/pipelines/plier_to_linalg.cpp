@@ -1651,6 +1651,175 @@ struct InsertSliceToPad
   }
 };
 
+struct SliceOfGeneric : public mlir::OpRewritePattern<mlir::linalg::GenericOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::linalg::GenericOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    if (!op.hasTensorSemantics())
+      return mlir::failure();
+
+    if (op->getNumResults() != 1)
+      return mlir::failure();
+
+    auto res = op->getResult(0);
+    if (!res.hasOneUse())
+      return mlir::failure();
+
+    mlir::Operation *user = *(res.getUsers().begin());
+
+    if (!mlir::isa<mlir::tensor::ExtractSliceOp, mlir::tensor::ExtractOp>(user))
+      return mlir::failure();
+
+    auto output = op.outputs().front();
+    if (auto extractOp = mlir::dyn_cast<mlir::tensor::ExtractOp>(user)) {
+      auto good = [&]() -> bool {
+        for (auto ind : extractOp.indices()) {
+          auto val = mlir::getConstantIntValue(ind);
+          if (!val || *val != 0)
+            return false;
+        }
+        auto type = output.getType().cast<mlir::RankedTensorType>();
+        for (auto s : type.getShape())
+          if (s != 1)
+            return false;
+
+        return true;
+      }();
+      if (good)
+        return mlir::failure();
+    }
+
+    auto resType = res.getType().cast<mlir::RankedTensorType>();
+    auto resRank = static_cast<unsigned>(resType.getRank());
+    auto maps = [&]() {
+      auto mapsList = op.indexing_maps().getAsValueRange<mlir::AffineMapAttr>();
+      return llvm::SmallVector<mlir::AffineMap>(mapsList.begin(),
+                                                mapsList.end());
+    }();
+    assert(!maps.empty());
+    for (auto m : maps)
+      if (!m.isProjectedPermutation())
+        return mlir::failure();
+
+    auto resMap = maps.back();
+
+    auto iters = op.iterator_types();
+    auto parallelIter =
+        rewriter.getStringAttr(mlir::getParallelIteratorTypeName());
+    for (auto i : llvm::seq(0u, resRank)) {
+      auto dim = resMap.getDimPosition(i);
+      assert(dim < iters.size());
+      if (iters[dim] != parallelIter)
+        return mlir::failure();
+    }
+
+    bool extractSlice = false;
+    llvm::SmallVector<mlir::OpFoldResult, 4> offsets;
+    llvm::SmallVector<mlir::OpFoldResult, 4> sizes;
+    llvm::SmallVector<mlir::OpFoldResult, 4> strides;
+
+    auto zero = rewriter.getIndexAttr(0);
+    auto one = rewriter.getIndexAttr(1);
+
+    auto assignArr = [](llvm::SmallVectorImpl<mlir::OpFoldResult> &arr,
+                        const auto &range) {
+      arr.assign(range.begin(), range.end());
+    };
+
+    if (auto sliceOp = mlir::dyn_cast<mlir::tensor::ExtractSliceOp>(user)) {
+      extractSlice = true;
+      assignArr(offsets, sliceOp.offsets());
+      assignArr(sizes, sliceOp.sizes());
+      assignArr(strides, sliceOp.strides());
+    } else if (auto extractOp = mlir::dyn_cast<mlir::tensor::ExtractOp>(user)) {
+      assignArr(offsets, extractOp.indices());
+      sizes.resize(offsets.size(), one);
+      strides.resize(offsets.size(), one);
+    } else {
+      llvm_unreachable("Invalid op");
+    }
+
+    auto oldInputs = op.inputs();
+    llvm::SmallVector<mlir::Value, 4> newInputs(oldInputs.size());
+
+    auto loc = op->getLoc();
+    llvm::SmallVector<mlir::OpFoldResult, 4> tempOffsets;
+    llvm::SmallVector<mlir::OpFoldResult, 4> tempSizes;
+    llvm::SmallVector<mlir::OpFoldResult, 4> tempStrides;
+    for (auto i : llvm::seq<size_t>(0, oldInputs.size())) {
+      assert(i < maps.size());
+      auto input = oldInputs[i];
+      auto inputType = input.getType().cast<mlir::RankedTensorType>();
+      auto inputRank = static_cast<unsigned>(inputType.getRank());
+      auto inputMap = maps[i];
+
+      auto findResDim = [&](unsigned r) -> llvm::Optional<unsigned> {
+        auto inputDim = inputMap.getDimPosition(r);
+        for (auto d : llvm::seq(0u, resRank)) {
+          if (resMap.getDimPosition(d) == inputDim)
+            return d;
+        }
+        return llvm::None;
+      };
+
+      bool needView = false;
+      tempOffsets.resize(inputRank);
+      tempSizes.resize(inputRank);
+      tempStrides.resize(inputRank);
+      for (auto r : llvm::seq(0u, inputRank)) {
+        if (auto indVal = findResDim(r)) {
+          auto ind = *indVal;
+          tempOffsets[r] = offsets[ind];
+          tempSizes[r] = sizes[ind];
+          tempStrides[r] = strides[ind];
+          needView = true;
+        } else {
+          tempOffsets[r] = zero;
+          tempSizes[r] =
+              rewriter.createOrFold<mlir::tensor::DimOp>(loc, input, r);
+          tempStrides[r] = one;
+        }
+      }
+
+      if (needView) {
+        newInputs[i] = rewriter.createOrFold<mlir::tensor::ExtractSliceOp>(
+            loc, input, tempOffsets, tempSizes, tempStrides);
+      } else {
+        newInputs[i] = input;
+      }
+    }
+
+    mlir::Value newInit = rewriter.create<mlir::tensor::ExtractSliceOp>(
+        loc, output, offsets, sizes, strides);
+
+    auto getIters = [&]() {
+      llvm::SmallVector<mlir::StringRef, 4> ret(iters.size());
+      for (auto i : llvm::seq<size_t>(0, iters.size())) {
+        ret[i] = iters[i].cast<mlir::StringAttr>().getValue();
+      }
+      return ret;
+    };
+    auto newOp = rewriter.create<mlir::linalg::GenericOp>(
+        loc, newInit.getType(), newInputs, newInit, maps, getIters());
+    auto &newRegion = newOp.region();
+
+    rewriter.inlineRegionBefore(op.region(), newRegion, newRegion.end());
+
+    mlir::Value result = newOp.getResult(0);
+    if (!extractSlice) {
+      auto z = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
+      llvm::SmallVector<mlir::Value> indices(resRank, z);
+      result = rewriter.create<mlir::tensor::ExtractOp>(loc, result, indices);
+    }
+
+    rewriter.replaceOp(user, result);
+    rewriter.eraseOp(op);
+    return mlir::success();
+  }
+};
+
 static bool isShaped(mlir::TypeConverter &converter, mlir::Type type) {
   return !!converter.convertType(type).dyn_cast_or_null<mlir::ShapedType>();
 }
@@ -1948,8 +2117,8 @@ void TensorFusionPass::runOnOperation() {
 
   plier::populateCommonOptsPatterns(context, patterns);
 
-  patterns.insert<SimplifyExpandDims, LowerEnforceShape, InsertSliceToPad>(
-      &context);
+  patterns.insert<SimplifyExpandDims, LowerEnforceShape, InsertSliceToPad,
+                  SliceOfGeneric>(&context);
 
   mlir::linalg::populateElementwiseOpsFusionPatterns(patterns);
 
