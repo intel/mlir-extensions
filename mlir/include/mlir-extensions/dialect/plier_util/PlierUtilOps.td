@@ -27,6 +27,7 @@ def PlierUtil_Dialect : Dialect {
   let name = "plier_util";
   let cppNamespace = "plier";
 
+  let hasCanonicalizer = 1;
   let hasConstantMaterializer = 1;
 }
 

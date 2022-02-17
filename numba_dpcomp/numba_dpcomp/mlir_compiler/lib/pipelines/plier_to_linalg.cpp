@@ -1584,7 +1584,7 @@ struct SimplifyExpandDims
 
 struct LowerEnforceShape
     : public mlir::OpRewritePattern<plier::EnforceShapeOp> {
-  using mlir::OpRewritePattern<plier::EnforceShapeOp>::OpRewritePattern;
+  using OpRewritePattern::OpRewritePattern;
 
   mlir::LogicalResult
   matchAndRewrite(plier::EnforceShapeOp op,
@@ -1592,6 +1592,61 @@ struct LowerEnforceShape
     auto type = op.getType();
     auto src = op.value();
     rewriter.replaceOpWithNewOp<mlir::tensor::CastOp>(op, type, src);
+    return mlir::success();
+  }
+};
+
+struct InsertSliceToPad
+    : public mlir::OpRewritePattern<mlir::tensor::InsertSliceOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::tensor::InsertSliceOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto gen = op.dest().getDefiningOp<mlir::tensor::GenerateOp>();
+    if (!gen)
+      return mlir::failure();
+
+    for (auto stride : op.getMixedStrides()) {
+      auto val = mlir::getConstantIntValue(stride);
+      if (!val || *val != 1)
+        return mlir::failure();
+    }
+
+    auto src = op.source();
+    auto srcType = src.getType().cast<mlir::RankedTensorType>();
+    auto dstType = gen.getType().cast<mlir::RankedTensorType>();
+
+    auto rank = static_cast<unsigned>(srcType.getRank());
+
+    auto low = op.getMixedOffsets();
+    llvm::SmallVector<mlir::OpFoldResult> high(rank);
+
+    auto loc = op->getLoc();
+
+    auto toVal = [&](mlir::OpFoldResult val) -> mlir::Value {
+      if (val.is<mlir::Value>())
+        return val.get<mlir::Value>();
+
+      return rewriter.create<mlir::arith::ConstantOp>(
+          loc, val.get<mlir::Attribute>());
+    };
+
+    for (auto i : llvm::seq(0u, rank)) {
+      auto dstDim = rewriter.createOrFold<mlir::tensor::DimOp>(loc, gen, i);
+      auto srcDim = rewriter.createOrFold<mlir::tensor::DimOp>(loc, src, i);
+      auto offset = rewriter.createOrFold<mlir::arith::AddIOp>(
+          loc, toVal(srcDim), toVal(low[i]));
+      offset = rewriter.createOrFold<mlir::arith::SubIOp>(loc, toVal(dstDim),
+                                                          offset);
+      high[i] = mlir::getAsOpFoldResult(offset);
+    }
+
+    auto pad =
+        rewriter.create<mlir::tensor::PadOp>(loc, dstType, src, low, high);
+    rewriter.cloneRegionBefore(gen.getRegion(), pad.region(),
+                               pad.region().end());
+    rewriter.replaceOp(op, pad.getResult());
     return mlir::success();
   }
 };
@@ -1893,7 +1948,8 @@ void TensorFusionPass::runOnOperation() {
 
   plier::populateCommonOptsPatterns(context, patterns);
 
-  patterns.insert<SimplifyExpandDims, LowerEnforceShape>(&context);
+  patterns.insert<SimplifyExpandDims, LowerEnforceShape, InsertSliceToPad>(
+      &context);
 
   mlir::linalg::populateElementwiseOpsFusionPatterns(patterns);
 
