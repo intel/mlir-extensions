@@ -345,7 +345,7 @@ def matmul_impl(builder, a, b):
         dst_shape = (x, y)
         tmp = builder.init_tensor(dst_shape, a.dtype, 1)
         tmp_a = builder.reshape(a, (1, y))
-        tmp = builder.insert(tmp_a, tmp, (x - 1, 0), dst_shape, (1, 1))
+        tmp = builder.insert(tmp_a, tmp, (x - 1, 0), (1, 1))
         a = tmp
     if dim2 == 1:
         x = shape2[0]
@@ -353,7 +353,7 @@ def matmul_impl(builder, a, b):
         dst_shape = (x, y)
         tmp = builder.init_tensor(dst_shape, b.dtype, 1)
         tmp_b = builder.reshape(b, (x, 1))
-        tmp = builder.insert(tmp_b, tmp, (0, 0), dst_shape, (1, 1))
+        tmp = builder.insert(tmp_b, tmp, (0, 0), (1, 1))
         b = tmp
 
     res = _matmul2d(builder, a, b, a.shape, b.shape)
@@ -518,7 +518,7 @@ def concat_impl(builder, arrays, axis=0):
         offsets = [0]*num_dims
         strides = [1]*num_dims
         for sizes, array in zip(shapes, arrays):
-            res = builder.insert(array, res, offsets, sizes, strides)
+            res = builder.insert(array, res, offsets, strides)
             offsets[axis] += sizes[axis]
         return res
 

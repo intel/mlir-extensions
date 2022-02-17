@@ -109,8 +109,8 @@ class Builder:
     def external_call(self, name, inputs, outputs, decorate=True):
         return self._external_call(self._context, name, inputs, outputs, decorate)
 
-    def insert(self, src, dst, offsets, sizes, strides):
-        return self._insert(self._context, src, dst, offsets, sizes, strides)
+    def insert(self, src, dst, offsets, strides):
+        return self._insert(self._context, src, dst, offsets, strides)
 
     def inline_func(self, func, res_type, *args): # TODO: kwargs
         return self._inline_func(self._context, func, res_type, args)
