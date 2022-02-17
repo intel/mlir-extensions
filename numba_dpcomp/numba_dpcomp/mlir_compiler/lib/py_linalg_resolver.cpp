@@ -1250,7 +1250,7 @@ static py::object externalCallImpl(py::capsule context, py::str funcName,
 
 static py::object insertImpl(py::capsule context, py::handle src,
                              py::handle dst, py::handle offsets,
-                             py::handle sizes, py::handle strides) {
+                             py::handle strides) {
   auto &ctx = getPyContext(context);
   auto &builder = ctx.builder;
   auto loc = ctx.loc;
@@ -1277,8 +1277,12 @@ static py::object insertImpl(py::capsule context, py::handle src,
   auto signlessSrc = doSignCast(builder, loc, srcTensor);
   auto signlessDst = doSignCast(builder, loc, dstTensor);
   auto offsetsVec = unwrapList(offsets);
-  auto sizesVec = unwrapList(sizes);
   auto stridesVec = unwrapList(strides);
+
+  llvm::SmallVector<mlir::Value> sizesVec(offsetsVec.size());
+  for (auto i : llvm::seq<size_t>(0, sizesVec.size()))
+    sizesVec[i] = builder.createOrFold<mlir::tensor::DimOp>(loc, srcTensor, i);
+
   auto res =
       builder
           .create<mlir::tensor::InsertSliceOp>(loc, signlessSrc, signlessDst,
