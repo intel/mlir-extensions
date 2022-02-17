@@ -81,6 +81,59 @@ mlir::Operation *PlierUtilDialect::materializeConstant(mlir::OpBuilder &builder,
   return nullptr;
 }
 
+namespace {
+template <typename DimOp, typename ExpandOp>
+struct DimExpandShape : public mlir::OpRewritePattern<DimOp> {
+  using mlir::OpRewritePattern<DimOp>::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(DimOp op, mlir::PatternRewriter &rewriter) const override {
+    auto es = op.source().template getDefiningOp<ExpandOp>();
+    if (!es)
+      return mlir::failure();
+
+    auto indexAttr = mlir::getConstantIntValue(op.index());
+    if (!indexAttr)
+      return mlir::failure();
+
+    auto dstIndex = *indexAttr;
+    auto type = es.getType().template cast<mlir::ShapedType>();
+    if (!type.isDynamicDim(dstIndex))
+      return mlir::failure();
+
+    auto reassoc = es.getReassociationIndices();
+    auto srcIndexAttr = [&]() -> llvm::Optional<unsigned> {
+      for (auto &it : llvm::enumerate(reassoc))
+        for (auto i : it.value())
+          if (i == dstIndex)
+            return it.index();
+
+      return llvm::None;
+    }();
+
+    if (!srcIndexAttr)
+      return mlir::failure();
+
+    auto shape = type.getShape();
+    auto srcIndex = *srcIndexAttr;
+    for (auto i : reassoc[srcIndex])
+      if (i != dstIndex && shape[i] != 1)
+        return mlir::failure();
+
+    auto src = es.src();
+    rewriter.replaceOpWithNewOp<DimOp>(op, src, srcIndex);
+    return mlir::success();
+  }
+};
+} // namespace
+
+void PlierUtilDialect::getCanonicalizationPatterns(
+    mlir::RewritePatternSet &results) const {
+  results.add<DimExpandShape<mlir::tensor::DimOp, mlir::tensor::ExpandShapeOp>,
+              DimExpandShape<mlir::memref::DimOp, mlir::memref::ExpandShapeOp>>(
+      getContext());
+}
+
 OpaqueType OpaqueType::get(mlir::MLIRContext *context) {
   assert(context);
   return Base::get(context);
