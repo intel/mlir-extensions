@@ -1668,28 +1668,10 @@ struct SliceOfGeneric : public mlir::OpRewritePattern<mlir::linalg::GenericOp> {
       return mlir::failure();
 
     mlir::Operation *user = *(res.getUsers().begin());
-
     if (!mlir::isa<mlir::tensor::ExtractSliceOp, mlir::tensor::ExtractOp>(user))
       return mlir::failure();
 
     auto output = op.outputs().front();
-    if (auto extractOp = mlir::dyn_cast<mlir::tensor::ExtractOp>(user)) {
-      auto good = [&]() -> bool {
-        for (auto ind : extractOp.indices()) {
-          auto val = mlir::getConstantIntValue(ind);
-          if (!val || *val != 0)
-            return false;
-        }
-        auto type = output.getType().cast<mlir::RankedTensorType>();
-        for (auto s : type.getShape())
-          if (s != 1)
-            return false;
-
-        return true;
-      }();
-      if (good)
-        return mlir::failure();
-    }
 
     auto resType = res.getType().cast<mlir::RankedTensorType>();
     auto resRank = static_cast<unsigned>(resType.getRank());
@@ -1715,7 +1697,7 @@ struct SliceOfGeneric : public mlir::OpRewritePattern<mlir::linalg::GenericOp> {
         return mlir::failure();
     }
 
-    bool extractSlice = false;
+    bool extractElem = false;
     llvm::SmallVector<mlir::OpFoldResult, 4> offsets;
     llvm::SmallVector<mlir::OpFoldResult, 4> sizes;
     llvm::SmallVector<mlir::OpFoldResult, 4> strides;
@@ -1725,15 +1707,32 @@ struct SliceOfGeneric : public mlir::OpRewritePattern<mlir::linalg::GenericOp> {
 
     auto assignArr = [](llvm::SmallVectorImpl<mlir::OpFoldResult> &arr,
                         const auto &range) {
+      arr.reserve(range.size());
       arr.assign(range.begin(), range.end());
     };
 
     if (auto sliceOp = mlir::dyn_cast<mlir::tensor::ExtractSliceOp>(user)) {
-      extractSlice = true;
-      assignArr(offsets, sliceOp.offsets());
-      assignArr(sizes, sliceOp.sizes());
-      assignArr(strides, sliceOp.strides());
+      offsets = sliceOp.getMixedOffsets();
+      sizes = sliceOp.getMixedSizes();
+      strides = sliceOp.getMixedStrides();
     } else if (auto extractOp = mlir::dyn_cast<mlir::tensor::ExtractOp>(user)) {
+      extractElem = true;
+      auto good = [&]() -> bool {
+        for (auto ind : extractOp.indices()) {
+          auto val = mlir::getConstantIntValue(ind);
+          if (!val || *val != 0)
+            return false;
+        }
+        auto type = output.getType().cast<mlir::RankedTensorType>();
+        for (auto s : type.getShape())
+          if (s != 1)
+            return false;
+
+        return true;
+      }();
+      if (good)
+        return mlir::failure();
+
       assignArr(offsets, extractOp.indices());
       sizes.resize(offsets.size(), one);
       strides.resize(offsets.size(), one);
@@ -1808,7 +1807,7 @@ struct SliceOfGeneric : public mlir::OpRewritePattern<mlir::linalg::GenericOp> {
     rewriter.inlineRegionBefore(op.region(), newRegion, newRegion.end());
 
     mlir::Value result = newOp.getResult(0);
-    if (!extractSlice) {
+    if (extractElem) {
       auto z = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
       llvm::SmallVector<mlir::Value> indices(resRank, z);
       result = rewriter.create<mlir::tensor::ExtractOp>(loc, result, indices);
