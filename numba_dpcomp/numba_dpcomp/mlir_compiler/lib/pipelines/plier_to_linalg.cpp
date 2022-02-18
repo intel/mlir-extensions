@@ -2191,13 +2191,13 @@ void MakeTensorsSignlessPass::runOnOperation() {
     signalPassFailure();
 }
 
-struct TensorFusionPass
-    : public mlir::PassWrapper<TensorFusionPass,
+struct LinalgOptPass
+    : public mlir::PassWrapper<LinalgOptPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
   void runOnOperation() override;
 };
 
-void TensorFusionPass::runOnOperation() {
+void LinalgOptPass::runOnOperation() {
   auto &context = getContext();
   mlir::RewritePatternSet patterns(&context);
 
@@ -2617,7 +2617,7 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createReconcileUnrealizedCastsPass());
 
   pm.addPass(mlir::createCanonicalizerPass());
-  pm.addPass(std::make_unique<TensorFusionPass>());
+  pm.addPass(std::make_unique<LinalgOptPass>());
 
   pm.addPass(mlir::arith::createConstantBufferizePass());
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<AdditionalBufferize>());
