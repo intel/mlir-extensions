@@ -1657,7 +1657,7 @@ struct SliceOfGeneric : public mlir::OpRewritePattern<mlir::linalg::GenericOp> {
   mlir::LogicalResult
   matchAndRewrite(mlir::linalg::GenericOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    if (!op.hasTensorSemantics())
+    if (!op.hasTensorSemantics() || op.hasIndexSemantics())
       return mlir::failure();
 
     if (op->getNumResults() != 1)
@@ -1698,6 +1698,7 @@ struct SliceOfGeneric : public mlir::OpRewritePattern<mlir::linalg::GenericOp> {
     }
 
     bool extractElem = false;
+    llvm::SmallBitVector droppedDims;
     llvm::SmallVector<mlir::OpFoldResult, 4> offsets;
     llvm::SmallVector<mlir::OpFoldResult, 4> sizes;
     llvm::SmallVector<mlir::OpFoldResult, 4> strides;
@@ -1715,33 +1716,83 @@ struct SliceOfGeneric : public mlir::OpRewritePattern<mlir::linalg::GenericOp> {
       offsets = sliceOp.getMixedOffsets();
       sizes = sliceOp.getMixedSizes();
       strides = sliceOp.getMixedStrides();
+      droppedDims = sliceOp.getDroppedDims();
     } else if (auto extractOp = mlir::dyn_cast<mlir::tensor::ExtractOp>(user)) {
-      extractElem = true;
-      auto good = [&]() -> bool {
-        for (auto ind : extractOp.indices()) {
-          auto val = mlir::getConstantIntValue(ind);
-          if (!val || *val != 0)
-            return false;
-        }
-        auto type = output.getType().cast<mlir::RankedTensorType>();
-        for (auto s : type.getShape())
-          if (s != 1)
-            return false;
-
-        return true;
-      }();
-      if (good)
+      if (extractOp.indices().empty())
         return mlir::failure();
 
+      extractElem = true;
       assignArr(offsets, extractOp.indices());
       sizes.resize(offsets.size(), one);
       strides.resize(offsets.size(), one);
+      droppedDims.resize(offsets.size(), true);
     } else {
       llvm_unreachable("Invalid op");
     }
 
     auto oldInputs = op.inputs();
     llvm::SmallVector<mlir::Value, 4> newInputs(oldInputs.size());
+
+    auto ctx = getContext();
+    auto replaceAffineDim = [&](mlir::AffineExpr expr, unsigned srcDim,
+                                unsigned dstDim) {
+      auto src = mlir::getAffineDimExpr(srcDim, ctx);
+      auto dst = mlir::getAffineDimExpr(dstDim, ctx);
+      return expr.replace(src, dst);
+    };
+    auto findResDim = [&](unsigned inputDim) -> llvm::Optional<unsigned> {
+      for (auto d : llvm::seq(0u, resRank)) {
+        if (resMap.getDimPosition(d) == inputDim)
+          return d;
+      }
+      return llvm::None;
+    };
+    auto isDroppedDim = [&](unsigned d) -> bool {
+      if (auto indVal = findResDim(d)) {
+        auto ind = *indVal;
+        assert(ind < droppedDims.size());
+        return droppedDims[ind];
+      }
+      return false;
+    };
+
+    auto numLoops = static_cast<unsigned>(iters.size());
+    auto ErasedLoop = static_cast<unsigned>(-1);
+    llvm::SmallVector<unsigned, 4> loopsMapping(numLoops, ErasedLoop);
+    llvm::SmallVector<mlir::StringRef, 4> newIters;
+    newIters.reserve(numLoops);
+    for (auto d : llvm::seq(0u, numLoops)) {
+      if (!isDroppedDim(d)) {
+        auto i = newIters.size();
+        assert(i != ErasedLoop);
+        newIters.emplace_back(iters[d].cast<mlir::StringAttr>().getValue());
+        loopsMapping[d] = i;
+      }
+    }
+    auto finalNumLoops = static_cast<unsigned>(newIters.size());
+
+    llvm::SmallVector<mlir::AffineExpr, 4> tempExprs;
+    tempExprs.reserve(numLoops);
+
+    auto updateMap = [&](mlir::AffineMap srcMap) -> mlir::AffineMap {
+      if (finalNumLoops == numLoops)
+        return srcMap;
+
+      tempExprs.clear();
+      auto mapResults = srcMap.getResults();
+      for (auto i : llvm::seq<size_t>(0, mapResults.size())) {
+        auto origLoop = srcMap.getDimPosition(i);
+        assert(origLoop < loopsMapping.size());
+        auto newLoop = loopsMapping[origLoop];
+        if (newLoop != ErasedLoop) {
+          auto expr = mapResults[i];
+          tempExprs.emplace_back(replaceAffineDim(expr, origLoop, newLoop));
+        }
+      }
+      return mlir::AffineMap::get(finalNumLoops, 0, tempExprs, ctx);
+    };
+
+    maps.back() = updateMap(resMap);
 
     auto loc = op->getLoc();
     llvm::SmallVector<mlir::OpFoldResult, 4> tempOffsets;
@@ -1754,64 +1805,73 @@ struct SliceOfGeneric : public mlir::OpRewritePattern<mlir::linalg::GenericOp> {
       auto inputRank = static_cast<unsigned>(inputType.getRank());
       auto inputMap = maps[i];
 
-      auto findResDim = [&](unsigned r) -> llvm::Optional<unsigned> {
-        auto inputDim = inputMap.getDimPosition(r);
-        for (auto d : llvm::seq(0u, resRank)) {
-          if (resMap.getDimPosition(d) == inputDim)
-            return d;
-        }
-        return llvm::None;
-      };
-
       bool needView = false;
       tempOffsets.resize(inputRank);
       tempSizes.resize(inputRank);
       tempStrides.resize(inputRank);
+
+      unsigned inputResultRank = 0;
       for (auto r : llvm::seq(0u, inputRank)) {
-        if (auto indVal = findResDim(r)) {
+        auto inputDim = inputMap.getDimPosition(r);
+        if (auto indVal = findResDim(inputDim)) {
           auto ind = *indVal;
           tempOffsets[r] = offsets[ind];
           tempSizes[r] = sizes[ind];
           tempStrides[r] = strides[ind];
           needView = true;
+          assert(ind < droppedDims.size());
+          if (!droppedDims[ind])
+            ++inputResultRank;
         } else {
           tempOffsets[r] = zero;
           tempSizes[r] =
               rewriter.createOrFold<mlir::tensor::DimOp>(loc, input, r);
           tempStrides[r] = one;
+          ++inputResultRank;
         }
       }
 
       if (needView) {
+        mlir::RankedTensorType viewType;
+        if (inputResultRank < inputRank) {
+          viewType = mlir::tensor::ExtractSliceOp::inferRankReducedResultType(
+              inputResultRank, inputType, tempOffsets, tempSizes, tempStrides);
+        } else {
+          viewType = mlir::tensor::ExtractSliceOp::inferResultType(
+              inputType, tempOffsets, tempSizes, tempStrides);
+        }
         newInputs[i] = rewriter.createOrFold<mlir::tensor::ExtractSliceOp>(
-            loc, input, tempOffsets, tempSizes, tempStrides);
+            loc, viewType, input, tempOffsets, tempSizes, tempStrides);
       } else {
         newInputs[i] = input;
       }
+
+      maps[i] = updateMap(inputMap);
+    }
+
+    auto outputType = output.getType().cast<mlir::RankedTensorType>();
+    mlir::RankedTensorType newInitType;
+    if (droppedDims.any()) {
+      auto initRank = droppedDims.size() - droppedDims.count();
+      newInitType = mlir::tensor::ExtractSliceOp::inferRankReducedResultType(
+          initRank, outputType, offsets, sizes, strides);
+    } else {
+      newInitType = mlir::tensor::ExtractSliceOp::inferResultType(
+          outputType, offsets, sizes, strides);
     }
 
     mlir::Value newInit = rewriter.create<mlir::tensor::ExtractSliceOp>(
-        loc, output, offsets, sizes, strides);
+        loc, newInitType, output, offsets, sizes, strides);
 
-    auto getIters = [&]() {
-      llvm::SmallVector<mlir::StringRef, 4> ret(iters.size());
-      for (auto i : llvm::seq<size_t>(0, iters.size())) {
-        ret[i] = iters[i].cast<mlir::StringAttr>().getValue();
-      }
-      return ret;
-    };
     auto newOp = rewriter.create<mlir::linalg::GenericOp>(
-        loc, newInit.getType(), newInputs, newInit, maps, getIters());
+        loc, newInit.getType(), newInputs, newInit, maps, newIters);
     auto &newRegion = newOp.region();
 
     rewriter.inlineRegionBefore(op.region(), newRegion, newRegion.end());
 
     mlir::Value result = newOp.getResult(0);
-    if (extractElem) {
-      auto z = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
-      llvm::SmallVector<mlir::Value> indices(resRank, z);
-      result = rewriter.create<mlir::tensor::ExtractOp>(loc, result, indices);
-    }
+    if (extractElem)
+      result = rewriter.create<mlir::tensor::ExtractOp>(loc, result);
 
     rewriter.replaceOp(user, result);
     rewriter.eraseOp(op);
