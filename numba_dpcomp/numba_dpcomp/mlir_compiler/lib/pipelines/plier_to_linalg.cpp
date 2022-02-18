@@ -1651,6 +1651,33 @@ struct InsertSliceToPad
   }
 };
 
+struct GenerateToFill
+    : public mlir::OpRewritePattern<mlir::tensor::GenerateOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::tensor::GenerateOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto &body = op.body();
+    if (!llvm::hasSingleElement(body))
+      return mlir::failure();
+
+    auto &block = body.getBlocks().front();
+    if (!llvm::hasSingleElement(block))
+      return mlir::failure();
+
+    auto term = mlir::cast<mlir::tensor::YieldOp>(block.getTerminator());
+    auto resType = op.getType().cast<mlir::ShapedType>();
+
+    auto loc = op->getLoc();
+    mlir::Value init = rewriter.create<mlir::linalg::InitTensorOp>(
+        loc, op.dynamicExtents(), resType.getShape(), resType.getElementType());
+
+    rewriter.replaceOpWithNewOp<mlir::linalg::FillOp>(op, term.value(), init);
+    return mlir::success();
+  }
+};
+
 struct SliceOfGeneric : public mlir::OpRewritePattern<mlir::linalg::GenericOp> {
   using OpRewritePattern::OpRewritePattern;
 
@@ -2180,6 +2207,7 @@ void TensorFusionPass::runOnOperation() {
       // clang-format off
       SimplifyExpandDims,
       LowerEnforceShape,
+      GenerateToFill,
 //      InsertSliceToPad,
       SliceOfGeneric
       // clang-format on
