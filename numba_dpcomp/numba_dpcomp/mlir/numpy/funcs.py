@@ -68,6 +68,9 @@ def _array_reduce(builder, arg, axis, body, get_init_value):
     elif isinstance(axis, int):
         shape = arg.shape
         num_dims = len(shape)
+        if axis < 0:
+            axis += num_dims
+        assert axis >= 0 and axis < num_dims
         iterators = [('reduction' if i == axis else 'parallel') for i in range(num_dims)]
         dims1 = ','.join(['d%s' % i for i in range(num_dims)])
         dims2 = ','.join(['d%s' % i for i in range(num_dims) if i != axis])

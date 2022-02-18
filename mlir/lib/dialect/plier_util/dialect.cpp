@@ -1203,6 +1203,59 @@ struct SignCastMemrefToTensorPropagate
   }
 };
 
+struct SignCastReduceRankPropagate
+    : public mlir::OpRewritePattern<plier::SignCastOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::SignCastOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto prevOp = op.value().getDefiningOp<plier::ReduceRankOp>();
+    if (!prevOp)
+      return mlir::failure();
+
+    auto src = prevOp.source();
+    auto srcType = src.getType().cast<mlir::ShapedType>();
+    auto dstType = op.getType().cast<mlir::ShapedType>();
+
+    auto newSrcType = srcType.clone(dstType.getElementType());
+
+    auto loc = prevOp->getLoc();
+    auto newSrc = rewriter.create<plier::SignCastOp>(loc, newSrcType, src);
+    rewriter.replaceOpWithNewOp<plier::ReduceRankOp>(op, newSrc,
+                                                     prevOp.getMapping());
+    return mlir::success();
+  }
+};
+
+struct SignCastMemrefSubviewPropagate
+    : public mlir::OpRewritePattern<plier::SignCastOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::SignCastOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto prevOp = op.value().getDefiningOp<mlir::memref::SubViewOp>();
+    if (!prevOp)
+      return mlir::failure();
+
+    auto src = prevOp.source();
+    auto srcType = src.getType().cast<mlir::ShapedType>();
+    auto dstType = op.getType().cast<mlir::ShapedType>();
+
+    auto newSrcType = srcType.clone(dstType.getElementType());
+    auto newDstType =
+        dstType.clone(dstType.getElementType()).cast<mlir::MemRefType>();
+
+    auto loc = prevOp->getLoc();
+    auto newSrc = rewriter.create<plier::SignCastOp>(loc, newSrcType, src);
+    rewriter.replaceOpWithNewOp<mlir::memref::SubViewOp>(
+        op, newDstType, newSrc, prevOp.getMixedOffsets(),
+        prevOp.getMixedSizes(), prevOp.getMixedStrides());
+    return mlir::success();
+  }
+};
+
 } // namespace
 
 void SignCastOp::getCanonicalizationPatterns(::mlir::RewritePatternSet &results,
@@ -1214,8 +1267,8 @@ void SignCastOp::getCanonicalizationPatterns(::mlir::RewritePatternSet &results,
       SignCastAllocPropagate<mlir::memref::AllocOp>,
       SignCastAllocPropagate<mlir::memref::AllocaOp>,
       SignCastTensorFromElementsPropagate, SignCastTensorCollapseShapePropagate,
-      SignCastTensorToMemrefPropagate, SignCastMemrefToTensorPropagate>(
-      context);
+      SignCastTensorToMemrefPropagate, SignCastMemrefToTensorPropagate,
+      SignCastReduceRankPropagate, SignCastMemrefSubviewPropagate>(context);
 }
 
 void ReduceRankOp::build(::mlir::OpBuilder &odsBuilder,

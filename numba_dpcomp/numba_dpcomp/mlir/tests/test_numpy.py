@@ -285,7 +285,9 @@ def test_array_len():
 @parametrize_function_variants("py_func", [
     'lambda a: np.sum(a, axis=0)',
     'lambda a: np.sum(a, axis=1)',
-    # 'lambda a: np.amax(a, axis=0)', # Not supported by numba
+    'lambda a: np.sum(a, axis=-1)',
+    'lambda a: np.sum(a, axis=-2)',
+    # 'lambda a: np.amax(a, axis=0)', # TODO: Not supported by numba
     # 'lambda a: np.amax(a, axis=1)',
     # 'lambda a: np.amin(a, axis=0)',
     # 'lambda a: np.amin(a, axis=1)',
