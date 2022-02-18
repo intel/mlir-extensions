@@ -579,7 +579,7 @@ def test_fastmath():
 
     with print_pass_ir([],['GPUToSpirvPass']):
         gpu_res = np.zeros(a.shape, a.dtype)
-        gpu_func = kernel_cached(func, fastmath=False)
+        gpu_func = kernel(fastmath=False)(func)
         gpu_func[a.shape, DEFAULT_LOCAL_SIZE](a, b, c, gpu_res)
         ir = get_print_buffer()
         assert ir.count('spv.OCL.fma') == 0, ir
@@ -587,7 +587,7 @@ def test_fastmath():
 
     with print_pass_ir([],['GPUToSpirvPass']):
         gpu_res = np.zeros(a.shape, a.dtype)
-        gpu_func = kernel_cached(func, fastmath=True)
+        gpu_func = kernel(fastmath=True)(func)
         gpu_func[a.shape, DEFAULT_LOCAL_SIZE](a, b, c, gpu_res)
         ir = get_print_buffer()
         assert ir.count('spv.OCL.fma') == 1, ir
