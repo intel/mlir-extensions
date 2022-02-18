@@ -45,7 +45,7 @@ template <typename T> static std::unique_ptr<T, RefDeleter> makeRef(T *ref) {
 
 static bool initNumpy() {
   static bool init = []() -> bool {
-    import_array();
+    import_array1(false);
     return true;
   }();
 

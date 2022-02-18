@@ -146,7 +146,11 @@ class Kernel(KernelBase):
             self._kern_body_def_size(_extend_dims(self.global_size), self._jit_func, *args)
 
 
-def kernel(func, **kwargs):
+def kernel(func=None, **kwargs):
+    if func is None:
+        def wrapper(f):
+            return Kernel(f, kwargs)
+        return wrapper
     return Kernel(func, kwargs)
 
 DEFAULT_LOCAL_SIZE = ()
