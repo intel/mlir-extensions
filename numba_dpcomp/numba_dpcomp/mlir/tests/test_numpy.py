@@ -737,6 +737,17 @@ def test_init_like(shape, dtype, func):
     jit_func = njit(py_func)
     assert_equal(py_func(a), jit_func(a))
 
+@pytest.mark.parametrize("dtype", [np.int32, np.int64, np.float32, np.float64])
+def test_dtype_param(dtype):
+    def py_func(dt):
+        return np.zeros((1,), dtype=dt)
+
+    jit_func = njit(py_func)
+
+    jit_func = njit(py_func)
+    assert_equal(py_func(dtype).shape, jit_func(dtype).shape)
+    assert_equal(py_func(dtype).dtype, jit_func(dtype).dtype)
+
 def test_parallel():
     def py_func(a, b):
         return np.add(a, b)

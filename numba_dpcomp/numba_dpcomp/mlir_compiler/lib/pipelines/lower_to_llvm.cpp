@@ -150,6 +150,10 @@ void populateToLLVMAdditionalTypeConversion(
       [voidPtrType](plier::OpaqueType) -> llvm::Optional<mlir::Type> {
         return voidPtrType;
       });
+  converter.addConversion(
+      [voidPtrType](plier::TypeVar) -> llvm::Optional<mlir::Type> {
+        return voidPtrType;
+      });
 }
 
 struct LLVMTypeHelper {
