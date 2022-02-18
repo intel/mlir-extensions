@@ -29,6 +29,7 @@
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/SCF.h>
 
+#include <llvm/ADT/SmallBitVector.h>
 #include <llvm/ADT/TypeSwitch.h>
 
 #include "mlir-extensions/transforms/const_utils.hpp"
@@ -141,13 +142,46 @@ struct DimInsertSlice : public mlir::OpRewritePattern<mlir::tensor::DimOp> {
     return mlir::success();
   }
 };
+
+struct FillExtractSlice
+    : public mlir::OpRewritePattern<mlir::tensor::ExtractSliceOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::tensor::ExtractSliceOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto fill = op.source().getDefiningOp<mlir::linalg::FillOp>();
+    if (!fill)
+      return mlir::failure();
+
+    auto sizes = op.getMixedSizes();
+    llvm::SmallVector<mlir::OpFoldResult> newSizes;
+    newSizes.reserve(sizes.size());
+    auto droppedDims = op.getDroppedDims();
+    for (auto it : llvm::enumerate(sizes))
+      if (!droppedDims[it.index()])
+        newSizes.emplace_back(it.value());
+
+    auto fillType = fill.result().getType().cast<mlir::ShapedType>();
+
+    auto loc = op->getLoc();
+    mlir::Value init = rewriter.create<mlir::linalg::InitTensorOp>(
+        loc, newSizes, fillType.getElementType());
+
+    auto fillVal = fill.value();
+    auto newFill =
+        rewriter.create<mlir::linalg::FillOp>(loc, fillVal, init).result();
+    rewriter.replaceOp(op, newFill);
+    return mlir::success();
+  }
+};
 } // namespace
 
 void PlierUtilDialect::getCanonicalizationPatterns(
     mlir::RewritePatternSet &results) const {
   results.add<DimExpandShape<mlir::tensor::DimOp, mlir::tensor::ExpandShapeOp>,
               DimExpandShape<mlir::memref::DimOp, mlir::memref::ExpandShapeOp>,
-              DimInsertSlice>(getContext());
+              DimInsertSlice, FillExtractSlice>(getContext());
 }
 
 OpaqueType OpaqueType::get(mlir::MLIRContext *context) {
