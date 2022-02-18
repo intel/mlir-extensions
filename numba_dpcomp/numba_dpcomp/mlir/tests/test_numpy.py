@@ -1144,7 +1144,7 @@ def test_matmul1(py_func, a, b, dtype):
 @pytest.mark.parametrize("a,b", [
     (np.arange(4*5).reshape(4,5), np.arange(5)),
     (np.arange(20*25).reshape(20,25), np.arange(25)),
-    # (np.arange(4000*5000).reshape(4000,5000), np.arange(5000)), TODO: too long
+    (np.arange(4000*5000).reshape(4000,5000), np.arange(5000))
     ])
 @pytest.mark.parametrize("dtype", [np.float32,np.float64])
 def test_matmul2(py_func, a, b, dtype):
