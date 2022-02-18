@@ -2176,8 +2176,14 @@ void TensorFusionPass::runOnOperation() {
 
   plier::populateCommonOptsPatterns(context, patterns);
 
-  patterns.insert<SimplifyExpandDims, LowerEnforceShape, InsertSliceToPad,
-                  SliceOfGeneric>(&context);
+  patterns.insert<
+      // clang-format off
+      SimplifyExpandDims,
+      LowerEnforceShape,
+//      InsertSliceToPad,
+      SliceOfGeneric
+      // clang-format on
+      >(&context);
 
   mlir::linalg::populateElementwiseOpsFusionPatterns(patterns);
 
