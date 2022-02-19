@@ -744,13 +744,7 @@ struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
       flatSubview = rewriter.createOrFold<mlir::memref::CastOp>(
           loc, dstFlatType, flatSubview);
 
-    // TODO: bug in ReinterpretCastOp::verify
-    auto offset =
-        (mlir::ShapedType::isDynamicStrideOrOffset(resultOffset)
-             ? mlir::OpFoldResult(
-                   rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0)
-                       .getResult())
-             : mlir::OpFoldResult(rewriter.getIndexAttr(0)));
+    auto offset = rewriter.getIndexAttr(0);
 
     for (auto i : llvm::seq<size_t>(0, strides.size())) {
       if (mlir::ShapedType::isDynamicStrideOrOffset(resultStrides[i])) {
