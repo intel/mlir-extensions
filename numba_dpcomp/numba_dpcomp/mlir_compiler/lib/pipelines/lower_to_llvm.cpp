@@ -1380,44 +1380,6 @@ struct LowerRetainOp : public mlir::ConvertOpToLLVMPattern<plier::RetainOp> {
   }
 };
 
-struct LowerReduceRankOp
-    : public mlir::ConvertOpToLLVMPattern<plier::ReduceRankOp> {
-  using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(plier::ReduceRankOp op, plier::ReduceRankOp::Adaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
-    auto arg = adaptor.source();
-    if (!arg.getType().isa<mlir::LLVM::LLVMStructType>())
-      return mlir::failure();
-
-    auto dstType = getTypeConverter()->convertType(op.getType());
-    if (!dstType)
-      return mlir::failure();
-
-    auto loc = op.getLoc();
-    mlir::MemRefDescriptor src(arg);
-    mlir::MemRefDescriptor dst =
-        mlir::MemRefDescriptor::undef(rewriter, loc, dstType);
-
-    dst.setAllocatedPtr(rewriter, loc, src.allocatedPtr(rewriter, loc));
-    dst.setAlignedPtr(rewriter, loc, src.alignedPtr(rewriter, loc));
-    dst.setOffset(rewriter, loc, src.offset(rewriter, loc));
-
-    auto mapping = op.mapping();
-    for (auto it : llvm::enumerate(mapping)) {
-      auto index = static_cast<unsigned>(it.index());
-      auto originalIndex = static_cast<unsigned>(
-          it.value().cast<mlir::IntegerAttr>().getValue().getSExtValue());
-      dst.setSize(rewriter, loc, index, src.size(rewriter, loc, originalIndex));
-      dst.setStride(rewriter, loc, index,
-                    src.stride(rewriter, loc, originalIndex));
-    }
-    rewriter.replaceOp(op, static_cast<mlir::Value>(dst));
-    return mlir::success();
-  }
-};
-
 struct LowerExtractMemrefMetadataOp
     : public mlir::ConvertOpToLLVMPattern<plier::ExtractMemrefMetadataOp> {
   using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
@@ -1833,7 +1795,6 @@ struct LLVMLoweringPass
         DeallocOpLowering,
         ReshapeLowering,
         ExpandShapeLowering,
-        LowerReduceRankOp,
         LowerExtractMemrefMetadataOp,
         LowerTakeContextOp,
         LowerReleaseContextOp
