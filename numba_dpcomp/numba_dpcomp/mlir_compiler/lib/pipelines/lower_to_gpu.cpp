@@ -789,7 +789,7 @@ struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
 
       auto droppedDims = op.getDroppedDims();
       for (auto i : llvm::seq(0u, srcRank)) {
-        if (droppedDims[i]) {
+        if (!droppedDims[i]) {
           filteredSizes.emplace_back(sizes[i]);
           filteredStrides.emplace_back(strides[i]);
         }
