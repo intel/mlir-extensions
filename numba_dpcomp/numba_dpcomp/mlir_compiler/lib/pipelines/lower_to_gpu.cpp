@@ -33,6 +33,7 @@
 #include <mlir/Dialect/Arithmetic/Transforms/Passes.h>
 #include <mlir/Dialect/GPU/ParallelLoopMapper.h>
 #include <mlir/Dialect/GPU/Passes.h>
+#include <mlir/Dialect/GPU/Utils.h>
 #include <mlir/Dialect/LLVMIR/LLVMDialect.h>
 #include <mlir/Dialect/Math/IR/Math.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
@@ -2926,6 +2927,31 @@ struct LowerGpuBuiltinsPass
     : public plier::RewriteWrapperPass<LowerGpuBuiltinsPass, void, void,
                                        LowerPlierCalls, LowerBuiltinCalls> {};
 
+class GpuLaunchSinkOpsPass
+    : public mlir::PassWrapper<GpuLaunchSinkOpsPass,
+                               mlir::OperationPass<void>> {
+public:
+  void runOnOperation() override {
+    using namespace mlir;
+
+    Operation *op = getOperation();
+    if (op->walk([](gpu::LaunchOp launch) {
+            auto isSinkingBeneficiary = [](mlir::Operation *op) -> bool {
+              return isa<arith::ConstantOp, ConstantOp, arith::SelectOp,
+                         arith::CmpIOp>(op);
+            };
+
+            // Pull in instructions that can be sunk
+            if (failed(
+                    sinkOperationsIntoLaunchOp(launch, isSinkingBeneficiary)))
+              return WalkResult::interrupt();
+
+            return WalkResult::advance();
+          }).wasInterrupted())
+      signalPassFailure();
+  }
+};
+
 static void commonOptPasses(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(mlir::createCSEPass());
@@ -2959,10 +2985,10 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::FuncOp>(mlir::arith::createArithmeticExpandOpsPass());
   commonOptPasses(funcPM);
   funcPM.addPass(std::make_unique<KernelMemrefOpsMovementPass>());
-
+  funcPM.addPass(std::make_unique<GpuLaunchSinkOpsPass>());
+  pm.addPass(mlir::createGpuKernelOutliningPass());
   pm.addPass(mlir::createSymbolDCEPass());
 
-  pm.addPass(mlir::createGpuKernelOutliningPass());
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<GPULowerDefaultLocalSize>());
   pm.nest<mlir::gpu::GPUModuleOp>().addNestedPass<mlir::gpu::GPUFuncOp>(
       mlir::arith::createArithmeticExpandOpsPass());
