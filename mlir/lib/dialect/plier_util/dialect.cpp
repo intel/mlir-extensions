@@ -79,6 +79,10 @@ mlir::Operation *PlierUtilDialect::materializeConstant(mlir::OpBuilder &builder,
   if (mlir::arith::ConstantOp::isBuildableWith(value, type))
     return builder.create<mlir::arith::ConstantOp>(loc, type, value);
 
+  if (type.isa<mlir::IndexType>())
+    if (auto val = mlir::getConstantIntValue(value))
+      return builder.create<mlir::arith::ConstantIndexOp>(loc, *val);
+
   return nullptr;
 }
 

@@ -744,49 +744,57 @@ static mlir::Value makeSubview(mlir::OpBuilder &builder, mlir::Location loc,
   assert(dstRank > 0);
   assert(dstRank <= srcRank);
 
-  bool useReduceRank = true;
-
   mlir::Value view;
   if (isTensor) {
-    auto resType =
-        [&]() {
-          auto tensorType = srcType.cast<mlir::RankedTensorType>();
-          if (srcRank == dstRank || useReduceRank)
-            return mlir::tensor::ExtractSliceOp::inferResultType(
-                tensorType, offsets, sizes, strides);
-
-          return mlir::tensor::ExtractSliceOp::inferRankReducedResultType(
-              dstRank, tensorType, offsets, sizes, strides);
-        }()
-            .cast<mlir::RankedTensorType>();
+    auto tensorType = srcType.cast<mlir::RankedTensorType>();
+    auto resType = mlir::tensor::ExtractSliceOp::inferResultType(
+                       tensorType, offsets, sizes, strides)
+                       .cast<mlir::RankedTensorType>();
 
     view = builder.create<mlir::tensor::ExtractSliceOp>(
         loc, resType, src, offsets, sizes, strides);
-  } else {
-    auto resType =
-        [&]() {
-          auto memrefType = srcType.cast<mlir::MemRefType>();
-          if (srcRank == dstRank || useReduceRank)
-            return mlir::memref::SubViewOp::inferResultType(memrefType, offsets,
-                                                            sizes, strides);
 
-          return mlir::memref::SubViewOp::inferRankReducedResultType(
-              dstRank, memrefType, offsets, sizes, strides);
-        }()
-            .cast<mlir::MemRefType>();
+    if (srcRank != dstRank) {
+      llvm::SmallVector<mlir::OpFoldResult> newOfsets(srcRank,
+                                                      builder.getIndexAttr(0));
+      llvm::SmallVector<mlir::OpFoldResult> newStrides(srcRank,
+                                                       builder.getIndexAttr(1));
+      auto viewType = view.getType().cast<mlir::RankedTensorType>();
+      auto reducedType =
+          mlir::tensor::ExtractSliceOp::inferRankReducedResultType(
+              dstRank, viewType, newOfsets, sizes, newStrides)
+              .cast<mlir::RankedTensorType>();
+      view = builder.create<mlir::tensor::ExtractSliceOp>(
+          loc, reducedType, view, newOfsets, sizes, newStrides);
+    }
+  } else {
+    auto memrefType = srcType.cast<mlir::MemRefType>();
+    auto resType = mlir::memref::SubViewOp::inferResultType(memrefType, offsets,
+                                                            sizes, strides)
+                       .cast<mlir::MemRefType>();
 
     view = builder.create<mlir::memref::SubViewOp>(loc, resType, src, offsets,
                                                    sizes, strides);
 
+    if (srcRank != dstRank) {
+      llvm::SmallVector<mlir::OpFoldResult> newOfsets(srcRank,
+                                                      builder.getIndexAttr(0));
+      llvm::SmallVector<mlir::OpFoldResult> newStrides(srcRank,
+                                                       builder.getIndexAttr(1));
+      auto viewType = view.getType().cast<mlir::MemRefType>();
+      auto reducedType = mlir::memref::SubViewOp::inferRankReducedResultType(
+                             dstRank, viewType, newOfsets, sizes, newStrides)
+                             .cast<mlir::MemRefType>();
+      view = builder.create<mlir::memref::SubViewOp>(
+          loc, reducedType, view, newOfsets, sizes, newStrides);
+      resType = reducedType;
+    }
+
     auto flatMemrefType =
         mlir::MemRefType::get(resType.getShape(), resType.getElementType());
+
     if (resType != flatMemrefType)
       view = builder.create<plier::ChangeLayoutOp>(loc, flatMemrefType, view);
-  }
-
-  if (srcRank != dstRank && useReduceRank) {
-    llvm::SmallVector<int32_t> mapping(dimIndices.begin(), dimIndices.end());
-    view = builder.createOrFold<plier::ReduceRankOp>(loc, view, mapping);
   }
 
   return view;
