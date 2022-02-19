@@ -120,27 +120,6 @@ def SignCastOp : PlierUtil_Op<"sign_cast", [NoSideEffect]> {
   let hasCanonicalizer = 1;
 }
 
-def ReduceRankOp
-    : PlierUtil_Op<"reduce_rank", [ViewLikeOpInterface, NoSideEffect]> {
-  let arguments = (ins
-                   AnyTypeOf<[AnyMemRef, AnyRankedTensor]>:$source,
-                   I32ArrayAttr:$mapping);
-
-  let results = (outs AnyTypeOf<[AnyMemRef, AnyRankedTensor]>);
-  let hasFolder = 1;
-  let hasCanonicalizer = 1;
-
-  let builders = [
-    OpBuilder<(ins "::mlir::Value" : $src,
-                   "::mlir::ArrayRef<int32_t>" : $mapping)>
-  ];
-
-  let extraClassDeclaration = [{
-      ::mlir::Value getViewSource() { return source(); }
-      ::llvm::SmallVector<int32_t> getMapping();
-  }];
-}
-
 def ExtractMemrefMetadataOp
     : PlierUtil_Op<"extract_memref_metadata", [NoSideEffect]> {
   let arguments = (ins AnyMemRef : $source, IndexAttr : $dimIndex);

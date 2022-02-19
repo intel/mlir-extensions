@@ -2452,22 +2452,6 @@ struct BufferizePseudoCopy
   }
 };
 
-struct BufferizeReduceRank
-    : public mlir::OpConversionPattern<plier::ReduceRankOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(plier::ReduceRankOp op, plier::ReduceRankOp::Adaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
-    if (!op.getType().isa<mlir::RankedTensorType>())
-      return mlir::failure();
-
-    rewriter.replaceOpWithNewOp<plier::ReduceRankOp>(op, adaptor.source(),
-                                                     op.getMapping());
-    return mlir::success();
-  }
-};
-
 struct FixDeallocPlacement
     : public mlir::OpRewritePattern<mlir::memref::DeallocOp> {
   using mlir::OpRewritePattern<mlir::memref::DeallocOp>::OpRewritePattern;
@@ -2549,14 +2533,12 @@ void AdditionalBufferize::runOnOperation() {
   target.addIllegalOp<mlir::tensor::ReshapeOp, mlir::tensor::ExtractSliceOp>();
   target.addIllegalOp<plier::ForceCopyOp>();
   target.addLegalOp<mlir::memref::ReshapeOp>();
-  target.addDynamicallyLegalOp<plier::ReduceRankOp, plier::PseudoCopyOp>(
-      [](mlir::Operation *op) {
-        return !op->getResultTypes().front().isa<mlir::RankedTensorType>();
-      });
+  target.addDynamicallyLegalOp<plier::PseudoCopyOp>([](mlir::Operation *op) {
+    return !op->getResultTypes().front().isa<mlir::RankedTensorType>();
+  });
 
   patterns.insert<BufferizeReshape, BufferizeExtractSlice, BufferizeForceCopy,
-                  BufferizePseudoCopy, BufferizeReduceRank>(typeConverter,
-                                                            context);
+                  BufferizePseudoCopy>(typeConverter, context);
 
   if (failed(
           applyPartialConversion(getOperation(), target, std::move(patterns))))

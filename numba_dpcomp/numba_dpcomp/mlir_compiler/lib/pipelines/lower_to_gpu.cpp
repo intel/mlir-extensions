@@ -1097,19 +1097,6 @@ public:
   }
 };
 
-class ConvertReduceRank
-    : public mlir::OpConversionPattern<plier::ReduceRankOp> {
-public:
-  using mlir::OpConversionPattern<plier::ReduceRankOp>::OpConversionPattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(plier::ReduceRankOp op, plier::ReduceRankOp::Adaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOp(op, adaptor.source());
-    return mlir::success();
-  }
-};
-
 template <typename Op>
 static mlir::Value lowerIntAtomic(mlir::OpBuilder &builder, mlir::Location loc,
                                   mlir::Value ptr, mlir::Value val) {
@@ -1268,10 +1255,11 @@ struct GPUToSpirvPass
     mlir::arith::populateArithmeticToSPIRVPatterns(typeConverter, patterns);
     mlir::populateMathToSPIRVPatterns(typeConverter, patterns);
 
-    patterns.insert<ConvertSubviewOp, ConvertCastOp<mlir::memref::CastOp>,
-                    ConvertCastOp<mlir::memref::ReinterpretCastOp>,
-                    ConvertLoadOp, ConvertStoreOp, ConvertReduceRank,
-                    ConvertAtomicOps, ConvertFunc>(typeConverter, context);
+    patterns
+        .insert<ConvertSubviewOp, ConvertCastOp<mlir::memref::CastOp>,
+                ConvertCastOp<mlir::memref::ReinterpretCastOp>, ConvertLoadOp,
+                ConvertStoreOp, ConvertAtomicOps, ConvertFunc>(typeConverter,
+                                                               context);
 
     if (failed(
             applyFullConversion(kernelModules, *target, std::move(patterns))))
