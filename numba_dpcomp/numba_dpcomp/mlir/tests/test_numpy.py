@@ -814,6 +814,26 @@ def test_fortran_layout(arr):
 
     assert_equal(py_func(arr), jit_func(arr))
 
+def test_contigious_layout_opt():
+    def py_func(a):
+        return a[0,1]
+
+    jit_func = njit(py_func)
+
+    a = np.array([[1,2],[3,4]])
+    b = a.T
+
+    with print_pass_ir([],['MakeStridedLayoutPass']):
+        assert_equal(py_func(a), jit_func(a))
+        ir = get_print_buffer()
+        assert ir.count('affine_map<(d0, d1)[s0, s1, s2] -> (d0 * s1 + s0 + d1 * s2)>') == 0, ir
+
+    with print_pass_ir([],['MakeStridedLayoutPass']):
+        assert_equal(py_func(b), jit_func(b))
+        ir = get_print_buffer()
+        assert ir.count('affine_map<(d0, d1)[s0, s1, s2] -> (d0 * s1 + s0 + d1 * s2)>') == 1, ir
+
+
 @parametrize_function_variants("a", [
     # 'np.array(1)', TODO zero rank arrays
     # 'np.array(2.5)',
