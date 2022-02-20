@@ -833,6 +833,24 @@ def test_contigious_layout_opt():
         ir = get_print_buffer()
         assert ir.count('affine_map<(d0, d1)[s0, s1, s2] -> (d0 * s1 + s0 + d1 * s2)>') == 1, ir
 
+def test_contigious_layout_return():
+    def py_func1():
+        return np.ones((2,3), np.float32).T
+
+    jit_func1 = njit(py_func1)
+
+    def py_func2(a):
+        return a
+
+    jit_func2 = njit(py_func2)
+
+    def py_func3():
+        a = jit_func1()
+        return jit_func2(a)
+
+    jit_func3 = njit(py_func3)
+
+    assert_equal(py_func3(), jit_func3())
 
 @parametrize_function_variants("a", [
     # 'np.array(1)', TODO zero rank arrays
