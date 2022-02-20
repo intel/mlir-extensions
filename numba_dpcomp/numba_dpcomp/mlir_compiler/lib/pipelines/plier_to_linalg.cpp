@@ -1376,6 +1376,136 @@ void MakeStridedLayoutPass::runOnOperation() {
   }
 }
 
+struct ChangeLayoutReturn : public mlir::OpRewritePattern<mlir::ReturnOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::ReturnOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    if (op.operands().empty())
+      return mlir::failure();
+
+    auto func = op->getParentOfType<mlir::FuncOp>();
+    if (!func || !func.isPrivate() || !llvm::hasSingleElement(func.getBody()))
+      return mlir::failure();
+
+    auto mod = func->getParentOfType<mlir::ModuleOp>();
+    assert(mod);
+
+    auto funcUses = mlir::SymbolTable::getSymbolUses(func, mod);
+    if (!funcUses)
+      return mlir::failure();
+
+    for (auto use : *funcUses)
+      if (!mlir::isa<mlir::CallOp>(use.getUser()))
+        return mlir::failure();
+
+    auto loc = op->getLoc();
+    auto args = op.operands();
+    auto count = static_cast<unsigned>(args.size());
+    llvm::SmallVector<mlir::Value> newArgs(args.begin(), args.end());
+    llvm::SmallVector<int64_t> shape;
+
+    bool changed = false;
+    for (auto i : llvm::seq(0u, count)) {
+      auto arg = args[i];
+      auto retType = arg.getType().dyn_cast<mlir::MemRefType>();
+      if (!retType)
+        continue;
+
+      auto cast = arg.getDefiningOp<mlir::memref::CastOp>();
+      if (!cast)
+        continue;
+
+      auto src = cast.source();
+      auto srcType = src.getType().cast<mlir::MemRefType>();
+      assert(srcType.getElementType() == retType.getElementType());
+
+      auto srcLayout = srcType.getLayout();
+      auto srcShape = srcType.getShape();
+      auto dstShape = retType.getShape();
+      assert(srcShape.size() == dstShape.size());
+      auto rank = static_cast<unsigned>(srcShape.size());
+      shape.resize(rank);
+      for (auto j : llvm::seq(0u, rank)) {
+        if (!mlir::ShapedType::isDynamic(dstShape[j])) {
+          shape[j] = dstShape[j];
+        } else if (!mlir::ShapedType::isDynamic(srcShape[j])) {
+          shape[j] = srcShape[j];
+        } else {
+          shape[j] = mlir::ShapedType::kDynamicSize;
+        }
+      }
+
+      auto newType = mlir::MemRefType::get(shape, srcType.getElementType(),
+                                           srcLayout, srcType.getMemorySpace());
+      if (newType == retType)
+        continue;
+
+      auto newArg = rewriter.create<mlir::memref::CastOp>(loc, newType, src);
+      newArgs[i] = newArg;
+      changed = true;
+    }
+
+    if (!changed)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::ReturnOp>(op, newArgs);
+
+    auto newFuncType = [&]() {
+      auto origType = func.getType();
+      mlir::ValueRange r(newArgs);
+      return mlir::FunctionType::get(getContext(), origType.getInputs(),
+                                     r.getTypes());
+    }();
+
+    rewriter.updateRootInPlace(
+        func, [&]() { func.typeAttr(mlir::TypeAttr::get(newFuncType)); });
+
+    llvm::SmallVector<mlir::CallOp> calls;
+    for (auto use : *funcUses) {
+      auto call = mlir::cast<mlir::CallOp>(use.getUser());
+      calls.emplace_back(call);
+    }
+
+    for (auto call : calls) {
+      rewriter.setInsertionPoint(call);
+      auto callLoc = call->getLoc();
+      auto oldResults = call.getResults();
+      auto newResults =
+          rewriter.create<mlir::CallOp>(callLoc, func, call.operands())
+              .getResults();
+      newArgs.assign(newResults.begin(), newResults.end());
+      for (auto i : llvm::seq(0u, count)) {
+        auto oldType = oldResults[i].getType();
+        auto newType = newArgs[i].getType();
+        if (oldType != newType)
+          newArgs[i] = rewriter.create<mlir::memref::CastOp>(callLoc, oldType,
+                                                             newArgs[i]);
+      }
+      rewriter.replaceOp(call, newArgs);
+    }
+
+    return mlir::success();
+  }
+};
+
+struct OptimizeStridedLayoutPass
+    : public mlir::PassWrapper<OptimizeStridedLayoutPass,
+                               mlir::OperationPass<mlir::ModuleOp>> {
+  void runOnOperation() override {
+    auto *context = &getContext();
+    mlir::RewritePatternSet patterns(context);
+
+    plier::populateCanonicalizationPatterns(*context, patterns);
+
+    patterns.insert<ChangeLayoutReturn>(context);
+
+    (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
+                                             std::move(patterns));
+  }
+};
+
 struct FinalizeStridedLayoutPass
     : public mlir::PassWrapper<FinalizeStridedLayoutPass,
                                mlir::OperationPass<>> {
@@ -2716,7 +2846,7 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
 
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<CloneArgsPass>());
   pm.addPass(std::make_unique<MakeStridedLayoutPass>());
-  pm.addNestedPass<mlir::FuncOp>(mlir::createCanonicalizerPass());
+  pm.addPass(std::make_unique<OptimizeStridedLayoutPass>());
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<FinalizeStridedLayoutPass>());
   pm.addNestedPass<mlir::FuncOp>(
       mlir::bufferization::createBufferDeallocationPass());
