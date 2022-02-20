@@ -1341,6 +1341,57 @@ struct GPULowerDefaultLocalSize
   }
 };
 
+struct FlattenScfIf : public mlir::OpRewritePattern<mlir::scf::IfOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::scf::IfOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    if (op->getNumResults() == 0)
+      return mlir::failure();
+
+    auto arithDialect =
+        getContext()->getOrLoadDialect<mlir::arith::ArithmeticDialect>();
+    auto canFlatten = [&](mlir::Operation *op) {
+      return op->getDialect() == arithDialect;
+    };
+
+    auto &trueBody = op.getThenRegion().front();
+    auto &falseBody = op.getElseRegion().front();
+    for (auto *block : {&trueBody, &falseBody})
+      for (auto &op : block->without_terminator())
+        if (!canFlatten(&op))
+          return mlir::failure();
+
+    mlir::BlockAndValueMapping mapper;
+    for (auto *block : {&trueBody, &falseBody})
+      for (auto &op : block->without_terminator())
+        rewriter.clone(op, mapper);
+
+    auto trueYield = mlir::cast<mlir::scf::YieldOp>(trueBody.getTerminator());
+    auto falseYield = mlir::cast<mlir::scf::YieldOp>(falseBody.getTerminator());
+
+    llvm::SmallVector<mlir::Value> results;
+    results.reserve(op->getNumResults());
+
+    auto loc = op->getLoc();
+    auto cond = op.getCondition();
+    for (auto it : llvm::zip(trueYield.getResults(), falseYield.getResults())) {
+      auto trueVal = mapper.lookupOrDefault(std::get<0>(it));
+      auto falseVal = mapper.lookupOrDefault(std::get<1>(it));
+      auto res =
+          rewriter.create<mlir::arith::SelectOp>(loc, cond, trueVal, falseVal);
+      results.emplace_back(res);
+    }
+
+    rewriter.replaceOp(op, results);
+    return mlir::success();
+  }
+};
+
+struct FlattenScfPass : public plier::RewriteWrapperPass<FlattenScfPass, void,
+                                                         void, FlattenScfIf> {};
+
 template <typename Op, typename F>
 static mlir::LogicalResult createGpuKernelLoad(mlir::PatternRewriter &builder,
                                                Op &&op, F &&func) {
@@ -2972,11 +3023,15 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createSymbolDCEPass());
 
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<GPULowerDefaultLocalSize>());
-  pm.nest<mlir::gpu::GPUModuleOp>().addNestedPass<mlir::gpu::GPUFuncOp>(
-      mlir::arith::createArithmeticExpandOpsPass());
   pm.addNestedPass<mlir::FuncOp>(mlir::createCanonicalizerPass());
   pm.addPass(mlir::createSymbolDCEPass());
-  pm.addNestedPass<mlir::gpu::GPUModuleOp>(mlir::createCanonicalizerPass());
+
+  auto &gpuFuncPM =
+      pm.nest<mlir::gpu::GPUModuleOp>().nest<mlir::gpu::GPUFuncOp>();
+  gpuFuncPM.addPass(mlir::arith::createArithmeticExpandOpsPass());
+  gpuFuncPM.addPass(std::make_unique<FlattenScfPass>());
+  commonOptPasses(gpuFuncPM);
+
   pm.addNestedPass<mlir::gpu::GPUModuleOp>(std::make_unique<AbiAttrsPass>());
   pm.addPass(std::make_unique<SetSPIRVCapabilitiesPass>());
   pm.addPass(std::make_unique<GPUToSpirvPass>());
