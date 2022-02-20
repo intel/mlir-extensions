@@ -179,13 +179,56 @@ struct FillExtractSlice
     return mlir::success();
   }
 };
+
+struct ReinterpretOfReinterpret
+    : public mlir::OpRewritePattern<mlir::memref::ReinterpretCastOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::ReinterpretCastOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    mlir::OpFoldResult zero = rewriter.getI64IntegerAttr(0);
+    auto getCastSrc = [&](mlir::Value src) -> mlir::Value {
+      if (auto prev = src.getDefiningOp<mlir::memref::ReinterpretCastOp>()) {
+        return prev.source();
+      } else if (auto prev = src.getDefiningOp<mlir::memref::CastOp>()) {
+        return prev.source();
+      } else if (auto prev = src.getDefiningOp<mlir::memref::SubViewOp>()) {
+        if (llvm::all_of(prev.getMixedOffsets(),
+                         [&](auto val) { return val == zero; }))
+          return prev.source();
+      }
+
+      return nullptr;
+    };
+
+    mlir::Value src = op.source();
+    while (auto prev = getCastSrc(src))
+      src = prev;
+
+    if (src == op.source())
+      return mlir::failure();
+
+    auto offsets = op.getMixedOffsets();
+    if (offsets.size() != 1)
+      return mlir::failure();
+
+    auto sizes = op.getMixedSizes();
+    auto strides = op.getMixedStrides();
+
+    rewriter.replaceOpWithNewOp<mlir::memref::ReinterpretCastOp>(
+        op, op.getType(), src, offsets.front(), sizes, strides);
+    return mlir::success();
+  }
+};
 } // namespace
 
 void PlierUtilDialect::getCanonicalizationPatterns(
     mlir::RewritePatternSet &results) const {
   results.add<DimExpandShape<mlir::tensor::DimOp, mlir::tensor::ExpandShapeOp>,
               DimExpandShape<mlir::memref::DimOp, mlir::memref::ExpandShapeOp>,
-              DimInsertSlice, FillExtractSlice>(getContext());
+              DimInsertSlice, FillExtractSlice, ReinterpretOfReinterpret>(
+      getContext());
 }
 
 OpaqueType OpaqueType::get(mlir::MLIRContext *context) {
