@@ -300,6 +300,33 @@ def test_reduce_axis(py_func, arr):
     jit_func = njit(py_func)
     assert_equal(py_func(arr), jit_func(arr))
 
+@parametrize_function_variants("py_func", [
+    'lambda a: np.flip(a)',
+    ])
+@pytest.mark.parametrize("arr", [
+    np.array([1,2,3,4,5,6], dtype=np.int32),
+    np.array([[1,2,3],[4,5,6]], dtype=np.int32),
+    np.array([[[1,2,3],[4,5,6]]], dtype=np.int32),
+    ])
+def test_flip1(py_func, arr):
+    jit_func = njit(py_func)
+    assert_equal(py_func(arr), jit_func(arr))
+
+@parametrize_function_variants("py_func", [
+    'lambda a: np.flip(a, axis=0)',
+    'lambda a: np.flip(a, axis=1)',
+    'lambda a: np.flip(a, axis=-1)',
+    'lambda a: np.flip(a, axis=-2)',
+    ])
+@pytest.mark.parametrize("arr", [
+    np.array([[[1,2,3],[4,5,6]]], dtype=np.int32),
+    np.array([[[1,2,3],[4,5,6]]], dtype=np.float32),
+    ])
+@pytest.mark.xfail
+def test_flip2(py_func, arr):
+    jit_func = njit(py_func)
+    assert_equal(py_func(arr), jit_func(arr))
+
 def test_sum_add():
     def py_func(a, b):
         return np.add(a, b).sum()
