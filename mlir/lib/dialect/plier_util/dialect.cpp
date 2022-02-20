@@ -545,6 +545,34 @@ struct ChangeLayoutCast : public mlir::OpRewritePattern<mlir::memref::CastOp> {
   }
 };
 
+struct ChangeLayoutFromCast
+    : public mlir::OpRewritePattern<plier::ChangeLayoutOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::ChangeLayoutOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto cast = op.source().getDefiningOp<mlir::memref::CastOp>();
+    if (!cast)
+      return mlir::failure();
+
+    auto src = cast.source();
+    auto srcType = src.getType();
+    auto dstType = op.getType();
+    if (srcType == dstType) {
+      rewriter.replaceOp(op, src);
+      return mlir::success();
+    }
+
+    if (mlir::memref::CastOp::areCastCompatible(srcType, dstType)) {
+      rewriter.replaceOpWithNewOp<mlir::memref::CastOp>(op, dstType, src);
+      return mlir::success();
+    }
+
+    return mlir::failure();
+  }
+};
+
 struct ChangeLayoutSignCast : public mlir::OpRewritePattern<plier::SignCastOp> {
   using OpRewritePattern::OpRewritePattern;
 
@@ -953,10 +981,11 @@ void ChangeLayoutOp::getCanonicalizationPatterns(
   results.insert<
       ChangeLayoutIdentity, ChangeLayoutDim, ChangeLayoutExtractMetadata,
       ChangeLayoutClone, PropagateCloneType, ChangeLayoutCast,
-      ChangeLayoutSignCast, ChangeLayoutLoad, ChangeLayoutStore,
-      ChangeLayoutSubview, ChangeLayoutLinalgGeneric, ChangeLayoutLinalgFill,
-      ChangeLayoutIf, ChangeLayout1DReshape, ChangeLayoutSliceGetItem,
-      ChangeLayoutCopy, ChangeLayoutExpandShape>(context);
+      ChangeLayoutFromCast, ChangeLayoutSignCast, ChangeLayoutLoad,
+      ChangeLayoutStore, ChangeLayoutSubview, ChangeLayoutLinalgGeneric,
+      ChangeLayoutLinalgFill, ChangeLayoutIf, ChangeLayout1DReshape,
+      ChangeLayoutSliceGetItem, ChangeLayoutCopy, ChangeLayoutExpandShape>(
+      context);
 }
 
 static mlir::Value propagateCasts(mlir::Value val, mlir::Type thisType);
