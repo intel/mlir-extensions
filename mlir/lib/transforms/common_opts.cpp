@@ -19,6 +19,8 @@
 #include "mlir-extensions/transforms/index_type_propagation.hpp"
 #include "mlir-extensions/transforms/loop_rewrites.hpp"
 #include "mlir-extensions/transforms/memory_rewrites.hpp"
+#include "mlir/Pass/Pass.h"
+#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 #include <mlir/Dialect/Math/IR/Math.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
@@ -129,6 +131,20 @@ struct PowSimplify : public mlir::OpRewritePattern<mlir::math::PowFOp> {
     return mlir::failure();
   }
 };
+
+struct CommonOptsPass
+    : public mlir::PassWrapper<CommonOptsPass, mlir::OperationPass<void>> {
+
+  void runOnOperation() override {
+    auto *ctx = &getContext();
+    mlir::RewritePatternSet patterns(ctx);
+
+    plier::populateCommonOptsPatterns(*ctx, patterns);
+
+    (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
+                                             std::move(patterns));
+  }
+};
 } // namespace
 
 void plier::populateCanonicalizationPatterns(
@@ -155,5 +171,9 @@ void plier::populateCommonOptsPatterns(mlir::MLIRContext &context,
       // clang-format on
       >(&context);
 
-  plier::populate_index_propagate_patterns(context, patterns);
+  plier::populateIndexPropagatePatterns(context, patterns);
+}
+
+std::unique_ptr<mlir::Pass> plier::createCommonOptsPass() {
+  return std::make_unique<CommonOptsPass>();
 }

@@ -14,9 +14,12 @@
 
 #pragma once
 
+#include <memory>
+
 namespace mlir {
 class RewritePatternSet;
 class MLIRContext;
+class Pass;
 } // namespace mlir
 
 namespace plier {
@@ -25,4 +28,6 @@ void populateCanonicalizationPatterns(mlir::MLIRContext &context,
 
 void populateCommonOptsPatterns(mlir::MLIRContext &context,
                                 mlir::RewritePatternSet &patterns);
+
+std::unique_ptr<mlir::Pass> createCommonOptsPass();
 } // namespace plier

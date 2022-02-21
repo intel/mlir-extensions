@@ -642,6 +642,7 @@ computeIndices(mlir::OpBuilder &builder, mlir::Location loc, mlir::Value value,
     auto valType = indexVal.getType();
 
     auto len = getDim(dim);
+    bool ignoreNegativeInd = false;
     auto handleNegativeVal = [&](mlir::OpFoldResult val) -> mlir::Value {
       mlir::Value idx;
       if (auto v = val.dyn_cast<mlir::Value>()) {
@@ -651,11 +652,16 @@ computeIndices(mlir::OpBuilder &builder, mlir::Location loc, mlir::Value value,
         auto attrVal = attr.cast<mlir::IntegerAttr>().getValue().getSExtValue();
         idx = builder.create<mlir::arith::ConstantIndexOp>(loc, attrVal);
       }
-      auto isNeg = builder.createOrFold<mlir::arith::CmpIOp>(
-          loc, mlir::arith::CmpIPredicate::slt, idx, zero);
-      auto negIndex = builder.createOrFold<mlir::arith::AddIOp>(loc, len, idx);
-      return builder.createOrFold<mlir::arith::SelectOp>(loc, isNeg, negIndex,
-                                                         idx);
+      if (ignoreNegativeInd) {
+        return idx;
+      } else {
+        auto isNeg = builder.createOrFold<mlir::arith::CmpIOp>(
+            loc, mlir::arith::CmpIPredicate::slt, idx, zero);
+        auto negIndex =
+            builder.createOrFold<mlir::arith::AddIOp>(loc, len, idx);
+        return builder.createOrFold<mlir::arith::SelectOp>(loc, isNeg, negIndex,
+                                                           idx);
+      }
     };
 
     if (auto sliceType = valType.dyn_cast<plier::SliceType>()) {

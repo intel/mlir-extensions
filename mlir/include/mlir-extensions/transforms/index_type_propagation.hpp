@@ -20,6 +20,6 @@ class MLIRContext;
 } // namespace mlir
 
 namespace plier {
-void populate_index_propagate_patterns(mlir::MLIRContext &context,
-                                       mlir::RewritePatternSet &patterns);
+void populateIndexPropagatePatterns(mlir::MLIRContext &context,
+                                    mlir::RewritePatternSet &patterns);
 }
