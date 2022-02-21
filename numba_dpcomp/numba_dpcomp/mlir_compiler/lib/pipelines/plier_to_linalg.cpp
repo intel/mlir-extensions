@@ -179,9 +179,11 @@ static mlir::Type mapArrayType(mlir::MLIRContext &ctx,
         desc->layout == ArrayLayout::A) {
       if (auto type =
               conveter.convertType(plier::PyType::get(&ctx, desc->name))) {
-        llvm::SmallVector<int64_t> shape(desc->dims,
-                                         mlir::ShapedType::kDynamicSize);
-        return mlir::MemRefType::get(shape, type);
+        if (mlir::BaseMemRefType::isValidElementType(type)) {
+          llvm::SmallVector<int64_t> shape(desc->dims,
+                                           mlir::ShapedType::kDynamicSize);
+          return mlir::MemRefType::get(shape, type);
+        }
       }
     }
   }
