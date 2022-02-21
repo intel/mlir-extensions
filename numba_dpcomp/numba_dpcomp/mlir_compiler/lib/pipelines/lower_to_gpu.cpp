@@ -1208,6 +1208,37 @@ public:
   }
 };
 
+template <typename SourceOp, mlir::spirv::BuiltIn builtin>
+class LaunchConfigConversion : public mlir::OpConversionPattern<SourceOp> {
+public:
+  LaunchConfigConversion(mlir::TypeConverter &typeConverter,
+                         mlir::MLIRContext *context)
+      : mlir::OpConversionPattern<SourceOp>(typeConverter, context,
+                                            /*benefit*/ 100) {}
+  //  using mlir::OpConversionPattern<SourceOp>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(SourceOp op, typename SourceOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override;
+};
+
+template <typename SourceOp, mlir::spirv::BuiltIn builtin>
+mlir::LogicalResult LaunchConfigConversion<SourceOp, builtin>::matchAndRewrite(
+    SourceOp op, typename SourceOp::Adaptor adaptor,
+    mlir::ConversionPatternRewriter &rewriter) const {
+  auto *typeConverter =
+      this->template getTypeConverter<mlir::SPIRVTypeConverter>();
+  auto indexType = typeConverter->getIndexType();
+
+  // SPIR-V invocation builtin variables are a vector of type <3xi32>
+  auto spirvBuiltin =
+      mlir::spirv::getBuiltinVariableValue(op, builtin, indexType, rewriter);
+  rewriter.replaceOpWithNewOp<mlir::spirv::CompositeExtractOp>(
+      op, indexType, spirvBuiltin,
+      rewriter.getI32ArrayAttr({static_cast<int32_t>(op.dimension())}));
+  return mlir::success();
+}
+
 struct GPUToSpirvPass
     : public mlir::PassWrapper<GPUToSpirvPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
@@ -1261,6 +1292,10 @@ struct GPUToSpirvPass
                 ConvertCastOp<mlir::memref::ReinterpretCastOp>, ConvertLoadOp,
                 ConvertStoreOp, ConvertAtomicOps, ConvertFunc>(typeConverter,
                                                                context);
+
+    patterns.insert<LaunchConfigConversion<
+        mlir::gpu::BlockDimOp, mlir::spirv::BuiltIn::WorkgroupSize>>(
+        typeConverter, context);
 
     if (failed(
             applyFullConversion(kernelModules, *target, std::move(patterns))))
@@ -2986,6 +3021,76 @@ public:
   }
 };
 
+struct SinkGpuDims : public mlir::OpRewritePattern<mlir::gpu::LaunchOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::gpu::LaunchOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    const mlir::Value dimArgs[] = {op.gridSizeX(),  op.gridSizeY(),
+                                   op.gridSizeZ(),  op.blockSizeX(),
+                                   op.blockSizeY(), op.blockSizeZ()};
+    llvm::SmallVector<std::pair<mlir::OpOperand *, unsigned>> uses;
+    for (auto it : llvm::enumerate(dimArgs)) {
+      auto i = static_cast<unsigned>(it.index());
+      auto addUse = [&](mlir::OpOperand &use) {
+        if (op->isProperAncestor(use.getOwner()))
+          uses.emplace_back(&use, i);
+      };
+      auto val = it.value();
+      for (auto &use : val.getUses())
+        addUse(use);
+
+      if (auto cast = val.getDefiningOp<mlir::arith::IndexCastOp>())
+        for (auto &use : cast.getIn().getUses())
+          addUse(use);
+    }
+
+    if (uses.empty())
+      return mlir::failure();
+
+    std::array<mlir::Value, 6> dims = {}; // TODO: static vector
+
+    auto loc = op->getLoc();
+    rewriter.setInsertionPointToStart(&op.body().front());
+    auto getDim = [&](unsigned i, mlir::Type type) -> mlir::Value {
+      assert(i < dims.size());
+      auto dim = dims[i];
+      if (!dim) {
+        if (i < 3) {
+          dim = rewriter.create<mlir::gpu::GridDimOp>(
+              loc, static_cast<mlir::gpu::Dimension>(i));
+        } else {
+          dim = rewriter.create<mlir::gpu::BlockDimOp>(
+              loc, static_cast<mlir::gpu::Dimension>(i - 3));
+        }
+        dims[i] = dim;
+      }
+
+      if (type != dim.getType())
+        dim = rewriter.create<mlir::arith::IndexCastOp>(loc, type, dim);
+
+      return dim;
+    };
+
+    for (auto it : uses) {
+      auto *use = it.first;
+      auto dim = it.second;
+      auto owner = use->getOwner();
+      rewriter.updateRootInPlace(owner, [&]() {
+        auto type = use->get().getType();
+        auto newVal = getDim(dim, type);
+        use->set(newVal);
+      });
+    }
+
+    return mlir::success();
+  }
+};
+
+struct SinkGpuDimsPass : public plier::RewriteWrapperPass<SinkGpuDimsPass, void,
+                                                          void, SinkGpuDims> {};
+
 static void commonOptPasses(mlir::OpPassManager &pm) {
   pm.addPass(plier::createCommonOptsPass());
   pm.addPass(mlir::createCSEPass());
@@ -3018,6 +3123,7 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   commonOptPasses(funcPM);
   funcPM.addPass(std::make_unique<KernelMemrefOpsMovementPass>());
   funcPM.addPass(std::make_unique<GpuLaunchSinkOpsPass>());
+  funcPM.addPass(std::make_unique<SinkGpuDimsPass>());
   pm.addPass(mlir::createGpuKernelOutliningPass());
   pm.addPass(mlir::createSymbolDCEPass());
 
