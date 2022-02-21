@@ -67,6 +67,7 @@
 #include "mlir-extensions/dialect/plier_util/dialect.hpp"
 #include "mlir-extensions/transforms/call_lowering.hpp"
 #include "mlir-extensions/transforms/cast_utils.hpp"
+#include "mlir-extensions/transforms/common_opts.hpp"
 #include "mlir-extensions/transforms/const_utils.hpp"
 #include "mlir-extensions/transforms/func_utils.hpp"
 #include "mlir-extensions/transforms/pipeline_utils.hpp"
@@ -2986,9 +2987,9 @@ public:
 };
 
 static void commonOptPasses(mlir::OpPassManager &pm) {
-  pm.addPass(mlir::createCanonicalizerPass());
+  pm.addPass(plier::createCommonOptsPass());
   pm.addPass(mlir::createCSEPass());
-  pm.addPass(mlir::createCanonicalizerPass());
+  pm.addPass(plier::createCommonOptsPass());
 }
 
 static void populateLowerToGPUPipelineHigh(mlir::OpPassManager &pm) {
