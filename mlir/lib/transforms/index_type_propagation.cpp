@@ -147,8 +147,8 @@ struct CmpIndexCastSimplify
 };
 } // namespace
 
-void plier::populate_index_propagate_patterns(
-    mlir::MLIRContext &context, mlir::RewritePatternSet &patterns) {
+void plier::populateIndexPropagatePatterns(mlir::MLIRContext &context,
+                                           mlir::RewritePatternSet &patterns) {
   patterns
       .insert<CmpIndexCastSimplify, ArithIndexCastSimplify<mlir::arith::SubIOp>,
               ArithIndexCastSimplify<mlir::arith::AddIOp>,

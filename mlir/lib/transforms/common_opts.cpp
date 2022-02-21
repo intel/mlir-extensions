@@ -155,5 +155,5 @@ void plier::populateCommonOptsPatterns(mlir::MLIRContext &context,
       // clang-format on
       >(&context);
 
-  plier::populate_index_propagate_patterns(context, patterns);
+  plier::populateIndexPropagatePatterns(context, patterns);
 }
