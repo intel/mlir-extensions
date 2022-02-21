@@ -73,8 +73,12 @@ def _get_default_local_size():
 
 @registry.register_func('_get_default_local_size', _get_default_local_size)
 def _get_default_local_size_impl(builder, *args):
-    res = (0,0,0)
-    return builder.external_call('get_default_local_size', inputs=args, outputs=res)
+    index_type = builder.index
+    i64 = builder.int64
+    zero = builder.cast(0, index_type)
+    res = (zero,zero,zero)
+    res = builder.external_call('get_default_local_size', inputs=args, outputs=res)
+    return tuple(builder.cast(r, i64) for r in res)
 
 @infer_global(_get_default_local_size)
 class _GetDefaultLocalSizeId(ConcreteTemplate):
