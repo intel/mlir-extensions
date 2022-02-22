@@ -1508,6 +1508,9 @@ void TakeContextOp::build(mlir::OpBuilder &b, mlir::OperationState &result,
   build(b, result, allTypes, initFunc, releaseFunc);
 }
 
+void GlobalIdOp::getCanonicalizationPatterns(::mlir::RewritePatternSet &results,
+                                             ::mlir::MLIRContext *context) {}
+
 } // namespace plier
 
 #include "mlir-extensions/dialect/plier_util/PlierUtilOpsDialect.cpp.inc"
@@ -1515,4 +1518,7 @@ void TakeContextOp::build(mlir::OpBuilder &b, mlir::OperationState &result,
 #define GET_OP_CLASSES
 #include "mlir-extensions/dialect/plier_util/PlierUtilOps.cpp.inc"
 
-//#include "mlir-extensions/dialect/plier_util/PlierUtilOpsEnums.cpp.inc"
+#define GET_ATTRDEF_CLASSES
+#include "mlir-extensions/dialect/plier_util/PlierUtilOpsAttributes.cpp.inc"
+
+#include "mlir-extensions/dialect/plier_util/PlierUtilOpsEnums.cpp.inc"
