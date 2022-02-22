@@ -3007,7 +3007,8 @@ public:
     if (op->walk([](gpu::LaunchOp launch) {
             auto isSinkingBeneficiary = [](mlir::Operation *op) -> bool {
               return isa<arith::ConstantOp, ConstantOp, arith::SelectOp,
-                         arith::CmpIOp>(op);
+                         arith::CmpIOp, arith::IndexCastOp, arith::MulIOp,
+                         arith::SubIOp, arith::AddIOp>(op);
             };
 
             // Pull in instructions that can be sunk
@@ -3123,7 +3124,7 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   commonOptPasses(funcPM);
   funcPM.addPass(std::make_unique<KernelMemrefOpsMovementPass>());
   funcPM.addPass(std::make_unique<GpuLaunchSinkOpsPass>());
-  funcPM.addPass(std::make_unique<SinkGpuDimsPass>());
+  //  funcPM.addPass(std::make_unique<SinkGpuDimsPass>());
   pm.addPass(mlir::createGpuKernelOutliningPass());
   pm.addPass(mlir::createSymbolDCEPass());
 
