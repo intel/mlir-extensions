@@ -3007,7 +3007,8 @@ public:
     if (op->walk([](gpu::LaunchOp launch) {
             auto isSinkingBeneficiary = [](mlir::Operation *op) -> bool {
               return isa<arith::ConstantOp, ConstantOp, arith::SelectOp,
-                         arith::CmpIOp>(op);
+                         arith::CmpIOp, arith::IndexCastOp, arith::MulIOp,
+                         arith::SubIOp, arith::AddIOp>(op);
             };
 
             // Pull in instructions that can be sunk
