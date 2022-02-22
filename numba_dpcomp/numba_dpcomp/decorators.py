@@ -35,6 +35,7 @@ def mlir_jit(signature_or_function=None, locals={}, cache=False,
 
     pipeline = mlir_compiler_gpu_pipeline if options.get('enable_gpu_pipeline') else mlir_compiler_pipeline
     options.pop('enable_gpu_pipeline', None)
+    options.pop('access_types', None) # pop them to ignore since they are not a part of numba but dppy.
     return orig_jit(signature_or_function=signature_or_function,
                     locals=locals,
                     cache=cache,
