@@ -1294,8 +1294,11 @@ struct GPUToSpirvPass
                 ConvertStoreOp, ConvertAtomicOps, ConvertFunc>(typeConverter,
                                                                context);
 
-    patterns.insert<LaunchConfigConversion<
-        mlir::gpu::BlockDimOp, mlir::spirv::BuiltIn::WorkgroupSize>>(
+    patterns.insert<
+        LaunchConfigConversion<mlir::gpu::BlockDimOp,
+                               mlir::spirv::BuiltIn::WorkgroupSize>,
+        LaunchConfigConversion<plier::GlobalIdOp,
+                               mlir::spirv::BuiltIn::GlobalInvocationId>>(
         typeConverter, context);
 
     if (failed(
