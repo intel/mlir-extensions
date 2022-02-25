@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "mlir-extensions/Conversion/gpu_to_gpu_runtime.hpp"
+#include <iostream>
 
 static const char *kGpuAllocShared = "gpu.alloc_shared";
 
@@ -163,13 +164,15 @@ struct InsertGPUAllocs
                     if (op->getDialect() == scfDialect ||
                         mlir::isa<mlir::ViewLikeOpInterface>(op))
                       continue;
-                    auto allocOp = mlir::dyn_cast<mlir::memref::AllocOp>(op);
-                    if (!allocOp) {
+                    if (mlir::dyn_cast<mlir::memref::AllocOp>(op)) {
+                      gpuBufferAllocs.insert({op, {}});
+                    } else if (mlir::dyn_cast<mlir::memref::GetGlobalOp>(op)) {
+                      gpuBufferAllocs.insert({op, {}});
+                    } else {
                       op->emitError("Unhandled memref producer");
                       return mlir::WalkResult::interrupt();
                     }
 
-                    gpuBufferAllocs.insert({allocOp, {}});
                   } else {
                     auto block = alias.getParentBlock();
                     auto blockArgs = block->getArguments();
@@ -232,7 +235,12 @@ struct InsertGPUAllocs
 
     for (auto &it : gpuBufferAllocs) {
       auto alloc = mlir::cast<mlir::memref::AllocOp>(it.first);
-      it.second = getAccessType(alloc);
+      if (alloc)
+        it.second = getAccessType(alloc);
+      else {
+        auto memref_global = mlir::cast<mlir::memref::GetGlobalOp>(it.first);
+        it.second = getAccessType(memref_global);
+      }
     }
 
     auto &block = funcBody.front();
@@ -746,21 +754,30 @@ public:
                   mlir::memref::LoadOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto memrefType = op.memref().getType().cast<mlir::MemRefType>();
-    if (!memrefType.hasRank() || memrefType.getRank() != 1)
+    if (memrefType.getRank() == 0) {
+      auto memoryAccess = mlir::spirv::MemoryAccessAttr::get(
+          op.getContext(), mlir::spirv::MemoryAccess::Aligned);
+      auto alignment =
+          rewriter.getI32IntegerAttr(memrefType.getElementTypeBitWidth() / 8);
+      rewriter.replaceOpWithNewOp<mlir::spirv::LoadOp>(op, adaptor.memref(),
+                                                       memoryAccess, alignment);
+      return mlir::success();
+    } else if (memrefType.hasRank() && memrefType.getRank() == 1) {
+      auto loc = op.getLoc();
+      auto ptr = rewriter.create<mlir::spirv::InBoundsPtrAccessChainOp>(
+          loc, adaptor.memref(), adaptor.indices().front(), llvm::None);
+
+      auto memoryAccess = mlir::spirv::MemoryAccessAttr::get(
+          op.getContext(), mlir::spirv::MemoryAccess::Aligned);
+      auto alignment =
+          rewriter.getI32IntegerAttr(memrefType.getElementTypeBitWidth() / 8);
+      rewriter.replaceOpWithNewOp<mlir::spirv::LoadOp>(op, ptr, memoryAccess,
+                                                       alignment);
+
+      return mlir::success();
+    } else {
       return mlir::failure();
-
-    auto loc = op.getLoc();
-    auto ptr = rewriter.create<mlir::spirv::InBoundsPtrAccessChainOp>(
-        loc, adaptor.memref(), adaptor.indices().front(), llvm::None);
-
-    auto memoryAccess = mlir::spirv::MemoryAccessAttr::get(
-        op.getContext(), mlir::spirv::MemoryAccess::Aligned);
-    auto alignment =
-        rewriter.getI32IntegerAttr(memrefType.getElementTypeBitWidth() / 8);
-    rewriter.replaceOpWithNewOp<mlir::spirv::LoadOp>(op, ptr, memoryAccess,
-                                                     alignment);
-
-    return mlir::success();
+    }
   }
 };
 

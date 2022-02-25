@@ -78,11 +78,17 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
   passManager.addNestedPass<mlir::FuncOp>(
       gpu_runtime::createUnstrideMemrefsPass());
   passManager.addNestedPass<mlir::FuncOp>(mlir::createLowerAffinePass());
+
+  passManager.addPass(createSymbolDCEPass());
+  passManager.addPass(mlir::createCanonicalizerPass());
+  passManager.addNestedPass<mlir::FuncOp>(mlir::createCSEPass());
+
   passManager.addPass(createGpuKernelOutliningPass());
   passManager.addPass(memref::createFoldSubViewOpsPass());
   passManager.addNestedPass<mlir::gpu::GPUModuleOp>(
       gpu_runtime::createAbiAttrsPass());
   passManager.addPass(gpu_runtime::createSetSPIRVCapabilitiesPass());
+
   passManager.addPass(gpu_runtime::createGPUToSpirvPass());
   OpPassManager &modulePM = passManager.nest<spirv::ModuleOp>();
   modulePM.addPass(spirv::createLowerABIAttributesPass());
@@ -122,7 +128,7 @@ int main(int argc, char **argv) {
   registry.insert<mlir::arith::ArithmeticDialect, mlir::LLVM::LLVMDialect,
                   mlir::gpu::GPUDialect, mlir::spirv::SPIRVDialect,
                   mlir::StandardOpsDialect, mlir::memref::MemRefDialect,
-                  mlir::linalg::LinalgDialect>();
+                  mlir::linalg::LinalgDialect, mlir::tensor::TensorDialect>();
   mlir::registerLLVMDialectTranslation(registry);
 
   return mlir::JitRunnerMain(argc, argv, registry, jitRunnerConfig);
