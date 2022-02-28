@@ -33,36 +33,6 @@ struct LowerUndef : public mlir::ConvertOpToLLVMPattern<gpu_runtime::UndefOp> {
   }
 };
 
-struct DeallocOpLowering
-    : public mlir::ConvertOpToLLVMPattern<mlir::memref::DeallocOp> {
-  using ConvertOpToLLVMPattern<mlir::memref::DeallocOp>::ConvertOpToLLVMPattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(mlir::memref::DeallocOp op,
-                  mlir::memref::DeallocOp::Adaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
-    // Insert the `free` declaration if it is not already present.
-    auto freeFunc = op->getParentOfType<mlir::ModuleOp>()
-                        .lookupSymbol<mlir::LLVM::LLVMFuncOp>("NRT_decref");
-    if (!freeFunc) {
-      mlir::OpBuilder::InsertionGuard guard(rewriter);
-      rewriter.setInsertionPointToStart(
-          op->getParentOfType<mlir::ModuleOp>().getBody());
-      freeFunc = rewriter.create<mlir::LLVM::LLVMFuncOp>(
-          rewriter.getUnknownLoc(), "NRT_decref",
-          mlir::LLVM::LLVMFunctionType::get(getVoidType(), getVoidPtrType()));
-    }
-
-    mlir::MemRefDescriptor memref(adaptor.memref());
-    mlir::Value casted = rewriter.create<mlir::LLVM::BitcastOp>(
-        op.getLoc(), getVoidPtrType(),
-        memref.allocatedPtr(rewriter, op.getLoc()));
-    rewriter.replaceOpWithNewOp<mlir::LLVM::CallOp>(
-        op, mlir::TypeRange(), mlir::SymbolRefAttr::get(freeFunc), casted);
-    return mlir::success();
-  }
-};
-
 struct FunctionCallBuilder {
   FunctionCallBuilder(mlir::StringRef functionName, mlir::Type returnType,
                       mlir::ArrayRef<mlir::Type> argumentTypes)
@@ -811,8 +781,7 @@ struct GPUToLLVMPass
         ConvertGpuKernelLaunchPattern,
         ConvertGpuAllocPattern,
         ConvertGpuSuggestBlockSizePattern,
-        LowerUndef,
-        DeallocOpLowering
+        LowerUndef
         // clang-format on
         >(converter);
 
