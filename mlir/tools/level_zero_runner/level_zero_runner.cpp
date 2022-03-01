@@ -61,8 +61,8 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
   passManager.addPass(createFuncBufferizePass());
   passManager.addNestedPass<mlir::FuncOp>(
       bufferization::createFinalizingBufferizePass());
-  passManager.addNestedPass<mlir::FuncOp>(
-      bufferization::createBufferDeallocationPass());
+  // passManager.addNestedPass<mlir::FuncOp>(
+  //     bufferization::createBufferDeallocationPass());
   passManager.addNestedPass<mlir::FuncOp>(
       createConvertLinalgToParallelLoopsPass());
   passManager.addNestedPass<mlir::FuncOp>(
