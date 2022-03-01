@@ -18,15 +18,15 @@
 static const char *kGpuAllocShared = "gpu.alloc_shared";
 
 struct ParallelLoopGPUMappingPass
-    : public mlir::PassWrapper<ParallelLoopGPUMappingPass, mlir::FunctionPass> {
+    : public mlir::PassWrapper<ParallelLoopGPUMappingPass,
+                               mlir::OperationPass<mlir::FuncOp>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::scf::SCFDialect>();
-    registry.insert<mlir::arith::ArithmeticDialect>();
   }
 
-  void runOnFunction() override {
-    auto func = getFunction();
+  void runOnOperation() override {
+    auto func = getOperation();
     auto &region = func.getBody();
     if (region.empty())
       return;
@@ -74,7 +74,8 @@ struct ParallelLoopGPUMappingPass
 };
 
 struct InsertGPUAllocs
-    : public mlir::PassWrapper<InsertGPUAllocs, mlir::FunctionPass> {
+    : public mlir::PassWrapper<InsertGPUAllocs,
+                               mlir::OperationPass<mlir::FuncOp>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::memref::MemRefDialect>();
@@ -83,8 +84,8 @@ struct InsertGPUAllocs
     registry.insert<mlir::arith::ArithmeticDialect>();
   }
 
-  void runOnFunction() override {
-    auto func = getFunction();
+  void runOnOperation() override {
+    auto func = getOperation();
     auto &funcBody = func.getBody();
     if (funcBody.empty()) {
       return;
@@ -309,7 +310,7 @@ struct InsertGPUAllocs
 
       if (allocType != memrefType) {
         allocResult =
-            builder.create<mlir::memref::CastOp>(loc, allocResult, memrefType);
+            builder.create<mlir::memref::CastOp>(loc, memrefType, allocResult);
       }
 
       param.replaceAllUsesExcept(allocResult, filter);
@@ -517,7 +518,7 @@ struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
     auto dstFlatType = flatSubview.getType();
     if (dstFlatType != flatMemrefType)
       flatSubview = rewriter.createOrFold<mlir::memref::CastOp>(
-          loc, flatSubview, dstFlatType);
+          loc, dstFlatType, flatSubview);
 
     // TODO: bug in ReinterpretCastOp::verify
     auto offset =
@@ -564,7 +565,7 @@ struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
 
       auto droppedDims = op.getDroppedDims();
       for (auto i : llvm::seq(0u, srcRank)) {
-        if (!droppedDims.contains(i)) {
+        if (!droppedDims[i]) {
           filteredSizes.emplace_back(sizes[i]);
           filteredStrides.emplace_back(strides[i]);
         }
@@ -579,7 +580,7 @@ struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
 };
 
 struct UnstrideMemrefsPass
-    : public mlir::PassWrapper<UnstrideMemrefsPass, mlir::FunctionPass> {
+    : public mlir::PassWrapper<UnstrideMemrefsPass, mlir::OperationPass<void>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::memref::MemRefDialect>();
@@ -587,76 +588,13 @@ struct UnstrideMemrefsPass
     registry.insert<mlir::AffineDialect>();
   }
 
-  void runOnFunction() override {
-    mlir::OwningRewritePatternList patterns(&getContext());
+  void runOnOperation() override {
+    auto *ctx = &getContext();
+    mlir::RewritePatternSet patterns(ctx);
 
-    patterns.insert<FlattenLoad, FlattenStore, FlattenSubview>(&getContext());
+    patterns.insert<FlattenLoad, FlattenStore, FlattenSubview>(ctx);
 
-    (void)mlir::applyPatternsAndFoldGreedily(getFunction(),
-                                             std::move(patterns));
-  }
-};
-
-static mlir::LogicalResult processAllocUser(mlir::Operation *user,
-                                            mlir::Operation *allocParent,
-                                            mlir::DominanceInfo &dom,
-                                            mlir::Operation *&lastUser) {
-  auto origUser = user;
-  if (user->hasTrait<mlir::OpTrait::IsTerminator>())
-    return mlir::failure();
-
-  auto parent = user->getParentOp();
-  while (parent != allocParent) {
-    user = parent;
-    parent = user->getParentOp();
-    if (parent == nullptr)
-      return mlir::failure();
-  }
-
-  if (dom.properlyDominates(lastUser, user))
-    lastUser = user;
-
-  for (auto resUser : origUser->getUsers())
-    if (mlir::failed(processAllocUser(resUser, allocParent, dom, lastUser)))
-      return mlir::failure();
-
-  return mlir::success();
-}
-
-template <typename AllocOp, typename DeallocOp>
-struct CreateDeallocOp : public mlir::OpRewritePattern<AllocOp> {
-  using mlir::OpRewritePattern<AllocOp>::OpRewritePattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(AllocOp op, mlir::PatternRewriter &rewriter) const override {
-    auto allocParent = op->getParentOp();
-    mlir::Operation *lastUser = op;
-    mlir::DominanceInfo dom;
-    for (auto user : op->getUsers())
-      if (mlir::isa<DeallocOp>(user) ||
-          mlir::failed(processAllocUser(user, allocParent, dom, lastUser)))
-        return mlir::failure();
-
-    mlir::OpBuilder::InsertionGuard g(rewriter);
-    rewriter.setInsertionPointAfter(lastUser);
-    rewriter.create<DeallocOp>(lastUser->getLoc(), op);
-    return mlir::success();
-  }
-};
-
-struct GPUExDeallocPass
-    : public mlir::PassWrapper<GPUExDeallocPass, mlir::FunctionPass> {
-
-  void runOnFunction() override {
-    mlir::OwningRewritePatternList patterns(&getContext());
-
-    patterns.insert<CreateDeallocOp<gpu_runtime::LoadGpuModuleOp,
-                                    gpu_runtime::DestroyGpuModuleOp>,
-                    CreateDeallocOp<gpu_runtime::GetGpuKernelOp,
-                                    gpu_runtime::DestroyGpuKernelOp>>(
-        &getContext());
-
-    (void)mlir::applyPatternsAndFoldGreedily(getFunction(),
+    (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
                                              std::move(patterns));
   }
 };
@@ -804,21 +742,6 @@ public:
     rewriter.replaceOpWithNewOp<mlir::spirv::StoreOp>(op, ptr, adaptor.value(),
                                                       memoryAccess, alignment);
 
-    return mlir::success();
-  }
-};
-
-class ConvertReduceRank
-    : public mlir::OpConversionPattern<gpu_runtime::ReduceRankOp> {
-public:
-  using mlir::OpConversionPattern<
-      gpu_runtime::ReduceRankOp>::OpConversionPattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(gpu_runtime::ReduceRankOp op,
-                  gpu_runtime::ReduceRankOp::Adaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOp(op, adaptor.source());
     return mlir::success();
   }
 };
@@ -982,10 +905,11 @@ struct GPUToSpirvPass
     mlir::arith::populateArithmeticToSPIRVPatterns(typeConverter, patterns);
     mlir::populateMathToSPIRVPatterns(typeConverter, patterns);
 
-    patterns.insert<ConvertSubviewOp, ConvertCastOp<mlir::memref::CastOp>,
-                    ConvertCastOp<mlir::memref::ReinterpretCastOp>,
-                    ConvertLoadOp, ConvertStoreOp, ConvertReduceRank,
-                    ConvertAtomicOps, ConvertFunc>(typeConverter, context);
+    patterns
+        .insert<ConvertSubviewOp, ConvertCastOp<mlir::memref::CastOp>,
+                ConvertCastOp<mlir::memref::ReinterpretCastOp>, ConvertLoadOp,
+                ConvertStoreOp, ConvertAtomicOps, ConvertFunc>(typeConverter,
+                                                               context);
 
     if (failed(
             applyFullConversion(kernelModules, *target, std::move(patterns))))
@@ -1188,20 +1112,22 @@ struct SerializeSPIRVPass
   }
 };
 
-struct GPUExPass : public mlir::PassWrapper<GPUExPass, mlir::FunctionPass> {
+struct GPUExPass
+    : public mlir::PassWrapper<GPUExPass, mlir::OperationPass<void>> {
 
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<gpu_runtime::GpuRuntimeDialect>();
   }
 
-  void runOnFunction() override {
-    mlir::OwningRewritePatternList patterns(&getContext());
+  void runOnOperation() override {
+    auto *ctx = &getContext();
+    mlir::RewritePatternSet patterns(ctx);
 
     patterns.insert<ExpandLaunchOp, ExpandAllocOp, ExpandSuggestBlockSizeOp>(
-        &getContext());
+        ctx);
 
-    (void)mlir::applyPatternsAndFoldGreedily(getFunction(),
+    (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
                                              std::move(patterns));
   }
 };
@@ -1233,10 +1159,6 @@ std::unique_ptr<mlir::Pass> gpu_runtime::createSerializeSPIRVPass() {
 
 std::unique_ptr<mlir::Pass> gpu_runtime::createGPUExPass() {
   return std::make_unique<GPUExPass>();
-}
-
-std::unique_ptr<mlir::Pass> gpu_runtime::createGPUExDeallocPass() {
-  return std::make_unique<GPUExDeallocPass>();
 }
 
 std::unique_ptr<mlir::Pass> gpu_runtime::createParallelLoopGPUMappingPass() {

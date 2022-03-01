@@ -33,6 +33,7 @@
 #include <mlir/Dialect/Arithmetic/Transforms/Passes.h>
 #include <mlir/Dialect/GPU/ParallelLoopMapper.h>
 #include <mlir/Dialect/GPU/Passes.h>
+#include <mlir/Dialect/GPU/Utils.h>
 #include <mlir/Dialect/LLVMIR/LLVMDialect.h>
 #include <mlir/Dialect/Math/IR/Math.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
@@ -42,6 +43,7 @@
 #include <mlir/Dialect/SPIRV/IR/TargetAndABI.h>
 #include <mlir/Dialect/SPIRV/Transforms/Passes.h>
 #include <mlir/Dialect/SPIRV/Transforms/SPIRVConversion.h>
+#include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 #include <mlir/IR/Dominance.h>
 #include <mlir/Pass/PassManager.h>
@@ -50,14 +52,18 @@
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 #include <mlir/Transforms/Passes.h>
 
+#include <llvm/ADT/SmallBitVector.h>
+
 #include "mlir-extensions/compiler/pipeline_registry.hpp"
 #include "mlir-extensions/dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
 #include "mlir-extensions/transforms/call_lowering.hpp"
 #include "mlir-extensions/transforms/cast_utils.hpp"
+#include "mlir-extensions/transforms/common_opts.hpp"
 #include "mlir-extensions/transforms/const_utils.hpp"
 #include "mlir-extensions/transforms/func_utils.hpp"
 #include "mlir-extensions/transforms/pipeline_utils.hpp"
 #include "mlir-extensions/transforms/rewrite_wrapper.hpp"
+#include "mlir-extensions/transforms/type_conversion.hpp"
 
 namespace gpu_runtime {
 
@@ -68,7 +74,6 @@ std::unique_ptr<mlir::Pass> createInsertGPUAllocsPass();
 std::unique_ptr<mlir::Pass> createUnstrideMemrefsPass();
 std::unique_ptr<mlir::Pass> createSerializeSPIRVPass();
 std::unique_ptr<mlir::Pass> createGPUExPass();
-std::unique_ptr<mlir::Pass> createGPUExDeallocPass();
 std::unique_ptr<mlir::Pass> createParallelLoopGPUMappingPass();
 
 } // namespace gpu_runtime

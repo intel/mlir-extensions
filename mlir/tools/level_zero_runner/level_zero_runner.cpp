@@ -53,10 +53,10 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
   // Linalg to GPU start
   passManager.addNestedPass<mlir::FuncOp>(
       arith::createArithmeticBufferizePass());
-  passManager.addPass(createTensorConstantBufferizePass());
+  passManager.addPass(arith::createConstantBufferizePass());
   passManager.addNestedPass<mlir::FuncOp>(createSCFBufferizePass());
   passManager.addNestedPass<mlir::FuncOp>(createLinalgBufferizePass());
-  passManager.addNestedPass<mlir::FuncOp>(createStdBufferizePass());
+  // passManager.addNestedPass<mlir::FuncOp>(createStdBufferizePass());
   passManager.addNestedPass<mlir::FuncOp>(createTensorBufferizePass());
   passManager.addPass(createFuncBufferizePass());
   passManager.addNestedPass<mlir::FuncOp>(
@@ -99,7 +99,6 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
   // Gpu -> GpuRuntime
   passManager.addPass(gpu_runtime::createSerializeSPIRVPass());
   passManager.addNestedPass<mlir::FuncOp>(gpu_runtime::createGPUExPass());
-  // passManager.addNestedPass<mlir::FuncOp>(gpu_runtime::createGPUExDeallocPass());
 
   // GpuRuntime -> LLVM
 

@@ -27,7 +27,7 @@ module attributes {
     %cst1 = arith.constant 1 : index
     %cst8 = arith.constant 8 : index
     gpu.launch blocks(%arg7, %arg8, %arg9) in (%arg10 = %cst8, %arg11 = %cst1, %arg12 = %cst1) threads(%arg13, %arg14, %arg15) in (%arg16 = %cst1, %arg17 = %cst1, %arg18 = %cst1) {
-       %5 = "gpu.block_id"() {dimension = "x"} : () -> index
+       %5 = gpu.block_id x
        %6 = memref.load %arg0[%5] : memref<8xf32>
        %7 = memref.load %arg1[%5] : memref<8xf32>
        %8 = arith.addf %6, %7 : f32
