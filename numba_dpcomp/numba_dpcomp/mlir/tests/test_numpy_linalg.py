@@ -14,7 +14,13 @@
 
 import pytest
 import numpy
-from numba_dpcomp import njit, DPNP_AVAILABLE
+from numba_dpcomp import njit
+from numba_dpcomp.mlir.settings import _readenv
+
+DPNP_TESTS_ENABLED = _readenv('DPCOMP_ENABLE_DPNP_TESTS', int, 0)
+
+def require_dpnp(func):
+    return pytest.mark.skipif(not DPNP_TESTS_ENABLED, reason='DPNP tests disabled')(func)
 
 def vvsort(val, vec, size):
     for i in range(size):
@@ -32,7 +38,7 @@ def vvsort(val, vec, size):
             vec[k, i] = vec[k, imax]
             vec[k, imax] = temp
 
-@pytest.mark.skipif(not DPNP_AVAILABLE, reason="DPNP is not available")
+@require_dpnp
 @pytest.mark.parametrize("type",
                          [numpy.float64, numpy.float32],
                          ids=['float64', 'float32'])

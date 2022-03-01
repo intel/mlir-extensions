@@ -285,7 +285,9 @@ def test_array_len():
 @parametrize_function_variants("py_func", [
     'lambda a: np.sum(a, axis=0)',
     'lambda a: np.sum(a, axis=1)',
-    # 'lambda a: np.amax(a, axis=0)', # Not supported by numba
+    'lambda a: np.sum(a, axis=-1)',
+    'lambda a: np.sum(a, axis=-2)',
+    # 'lambda a: np.amax(a, axis=0)', # TODO: Not supported by numba
     # 'lambda a: np.amax(a, axis=1)',
     # 'lambda a: np.amin(a, axis=0)',
     # 'lambda a: np.amin(a, axis=1)',
@@ -295,6 +297,33 @@ def test_array_len():
     np.array([[1,2,3],[4,5,6]], dtype=np.float32),
     ])
 def test_reduce_axis(py_func, arr):
+    jit_func = njit(py_func)
+    assert_equal(py_func(arr), jit_func(arr))
+
+@parametrize_function_variants("py_func", [
+    'lambda a: np.flip(a)',
+    ])
+@pytest.mark.parametrize("arr", [
+    np.array([1,2,3,4,5,6], dtype=np.int32),
+    np.array([[1,2,3],[4,5,6]], dtype=np.int32),
+    np.array([[[1,2,3],[4,5,6]]], dtype=np.int32),
+    ])
+def test_flip1(py_func, arr):
+    jit_func = njit(py_func)
+    assert_equal(py_func(arr), jit_func(arr))
+
+@parametrize_function_variants("py_func", [
+    'lambda a: np.flip(a, axis=0)',
+    'lambda a: np.flip(a, axis=1)',
+    'lambda a: np.flip(a, axis=-1)',
+    'lambda a: np.flip(a, axis=-2)',
+    ])
+@pytest.mark.parametrize("arr", [
+    np.array([[[1,2,3],[4,5,6]]], dtype=np.int32),
+    np.array([[[1,2,3],[4,5,6]]], dtype=np.float32),
+    ])
+@pytest.mark.xfail
+def test_flip2(py_func, arr):
     jit_func = njit(py_func)
     assert_equal(py_func(arr), jit_func(arr))
 
@@ -735,6 +764,17 @@ def test_init_like(shape, dtype, func):
     jit_func = njit(py_func)
     assert_equal(py_func(a), jit_func(a))
 
+@pytest.mark.parametrize("dtype", [np.int32, np.int64, np.float32, np.float64])
+def test_dtype_param(dtype):
+    def py_func(dt):
+        return np.zeros((1,), dtype=dt)
+
+    jit_func = njit(py_func)
+
+    jit_func = njit(py_func)
+    assert_equal(py_func(dtype).shape, jit_func(dtype).shape)
+    assert_equal(py_func(dtype).dtype, jit_func(dtype).dtype)
+
 def test_parallel():
     def py_func(a, b):
         return np.add(a, b)
@@ -800,6 +840,44 @@ def test_fortran_layout(arr):
     jit_func = njit(py_func)
 
     assert_equal(py_func(arr), jit_func(arr))
+
+def test_contigious_layout_opt():
+    def py_func(a):
+        return a[0,1]
+
+    jit_func = njit(py_func)
+
+    a = np.array([[1,2],[3,4]])
+    b = a.T
+
+    with print_pass_ir([],['MakeStridedLayoutPass']):
+        assert_equal(py_func(a), jit_func(a))
+        ir = get_print_buffer()
+        assert ir.count('affine_map<(d0, d1)[s0, s1, s2] -> (d0 * s1 + s0 + d1 * s2)>') == 0, ir
+
+    with print_pass_ir([],['MakeStridedLayoutPass']):
+        assert_equal(py_func(b), jit_func(b))
+        ir = get_print_buffer()
+        assert ir.count('affine_map<(d0, d1)[s0, s1, s2] -> (d0 * s1 + s0 + d1 * s2)>') == 1, ir
+
+def test_contigious_layout_return():
+    def py_func1():
+        return np.ones((2,3), np.float32).T
+
+    jit_func1 = njit(py_func1)
+
+    def py_func2(a):
+        return a
+
+    jit_func2 = njit(py_func2)
+
+    def py_func3():
+        a = jit_func1()
+        return jit_func2(a)
+
+    jit_func3 = njit(py_func3)
+
+    assert_equal(py_func3(), jit_func3())
 
 @parametrize_function_variants("a", [
     # 'np.array(1)', TODO zero rank arrays
@@ -1144,7 +1222,7 @@ def test_matmul1(py_func, a, b, dtype):
 @pytest.mark.parametrize("a,b", [
     (np.arange(4*5).reshape(4,5), np.arange(5)),
     (np.arange(20*25).reshape(20,25), np.arange(25)),
-    # (np.arange(4000*5000).reshape(4000,5000), np.arange(5000)), TODO: too long
+    (np.arange(4000*5000).reshape(4000,5000), np.arange(5000))
     ])
 @pytest.mark.parametrize("dtype", [np.float32,np.float64])
 def test_matmul2(py_func, a, b, dtype):

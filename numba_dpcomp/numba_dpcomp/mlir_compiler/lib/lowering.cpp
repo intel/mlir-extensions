@@ -22,6 +22,7 @@
 #include <pybind11/pybind11.h>
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/ControlFlow/IR/ControlFlowOps.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/BuiltinOps.h>
@@ -392,7 +393,9 @@ private:
     assert(nullptr != currentBlock);
 
     auto argIndex = currentBlock->getNumArguments();
-    auto arg = currentBlock->addArgument(getType(currentInstr.attr("target")));
+    auto loc = builder.getUnknownLoc();
+    auto arg =
+        currentBlock->addArgument(getType(currentInstr.attr("target")), loc);
 
     for (auto i : llvm::seq<size_t>(0, incomingVals.size())) {
       auto var = incomingVals[i].attr("name").cast<std::string>();
@@ -530,13 +533,13 @@ private:
     auto flBlock = blocksMap.find(fl.cast<int>())->second;
     auto condVal = builder.create<plier::CastOp>(
         getCurrentLoc(), mlir::IntegerType::get(&ctx, 1), c);
-    builder.create<mlir::CondBranchOp>(getCurrentLoc(), condVal, trBlock,
-                                       flBlock);
+    builder.create<mlir::cf::CondBranchOp>(getCurrentLoc(), condVal, trBlock,
+                                           flBlock);
   }
 
   void jump(py::handle target) {
     auto block = blocksMap.find(target.cast<int>())->second;
-    builder.create<mlir::BranchOp>(getCurrentLoc(), mlir::None, block);
+    builder.create<mlir::cf::BranchOp>(getCurrentLoc(), mlir::None, block);
   }
 
   mlir::Value getConst(py::handle val) {
@@ -600,13 +603,14 @@ private:
 
         builder.setInsertionPointToEnd(&bb);
 
-        if (auto op = mlir::dyn_cast<mlir::BranchOp>(term)) {
+        if (auto op = mlir::dyn_cast<mlir::cf::BranchOp>(term)) {
           auto dest = op.getDest();
           mlir::SmallVector<mlir::Value> args;
           buildArgList(dest, info.outgoingPhiNodes, args);
           op.erase();
-          builder.create<mlir::BranchOp>(builder.getUnknownLoc(), dest, args);
-        } else if (auto op = mlir::dyn_cast<mlir::CondBranchOp>(term)) {
+          builder.create<mlir::cf::BranchOp>(builder.getUnknownLoc(), dest,
+                                             args);
+        } else if (auto op = mlir::dyn_cast<mlir::cf::CondBranchOp>(term)) {
           auto trueDest = op.getTrueDest();
           auto falseDest = op.getFalseDest();
           auto cond = op.getCondition();
@@ -615,9 +619,9 @@ private:
           buildArgList(trueDest, info.outgoingPhiNodes, trueArgs);
           buildArgList(falseDest, info.outgoingPhiNodes, falseArgs);
           op.erase();
-          builder.create<mlir::CondBranchOp>(builder.getUnknownLoc(), cond,
-                                             trueDest, trueArgs, falseDest,
-                                             falseArgs);
+          builder.create<mlir::cf::CondBranchOp>(builder.getUnknownLoc(), cond,
+                                                 trueDest, trueArgs, falseDest,
+                                                 falseArgs);
         } else {
           plier::reportError(llvm::Twine("Unhandled terminator: ") +
                              term->getName().getStringRef());

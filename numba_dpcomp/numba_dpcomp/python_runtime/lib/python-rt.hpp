@@ -14,18 +14,12 @@
 
 #pragma once
 
-#include <mlir/IR/PatternMatch.h>
+#include <cstdlib>
 
-namespace mlir {
-class CallOp;
-}
+#include "dpcomp-python-runtime_export.h"
 
-namespace plier {
-struct UpliftMathCalls : public mlir::OpRewritePattern<mlir::CallOp> {
-  using OpRewritePattern::OpRewritePattern;
+using MemInfoDtorFunction = void (*)(void *ptr, size_t size, void *info);
 
-  mlir::LogicalResult
-  matchAndRewrite(mlir::CallOp op,
-                  mlir::PatternRewriter &rewriter) const override;
-};
-} // namespace plier
+extern "C" DPCOMP_PYTHON_RUNTIME_EXPORT void *
+dpcompAllocMemInfo(void *data, size_t size, MemInfoDtorFunction dtor,
+                   void *dtorInfo);

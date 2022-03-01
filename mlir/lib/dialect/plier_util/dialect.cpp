@@ -28,8 +28,8 @@
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/SCF.h>
-#include <mlir/Dialect/StandardOps/Utils/Utils.h>
 
+#include <llvm/ADT/SmallBitVector.h>
 #include <llvm/ADT/TypeSwitch.h>
 
 #include "mlir-extensions/transforms/const_utils.hpp"
@@ -79,7 +79,156 @@ mlir::Operation *PlierUtilDialect::materializeConstant(mlir::OpBuilder &builder,
   if (mlir::arith::ConstantOp::isBuildableWith(value, type))
     return builder.create<mlir::arith::ConstantOp>(loc, type, value);
 
-  return builder.create<mlir::ConstantOp>(loc, type, value);
+  if (type.isa<mlir::IndexType>())
+    if (auto val = mlir::getConstantIntValue(value))
+      return builder.create<mlir::arith::ConstantIndexOp>(loc, *val);
+
+  return nullptr;
+}
+
+namespace {
+template <typename DimOp, typename ExpandOp>
+struct DimExpandShape : public mlir::OpRewritePattern<DimOp> {
+  using mlir::OpRewritePattern<DimOp>::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(DimOp op, mlir::PatternRewriter &rewriter) const override {
+    auto es = op.source().template getDefiningOp<ExpandOp>();
+    if (!es)
+      return mlir::failure();
+
+    auto indexAttr = mlir::getConstantIntValue(op.index());
+    if (!indexAttr)
+      return mlir::failure();
+
+    auto dstIndex = *indexAttr;
+    auto type = es.getType().template cast<mlir::ShapedType>();
+    if (!type.isDynamicDim(dstIndex))
+      return mlir::failure();
+
+    auto reassoc = es.getReassociationIndices();
+    auto srcIndexAttr = [&]() -> llvm::Optional<unsigned> {
+      for (auto &it : llvm::enumerate(reassoc))
+        for (auto i : it.value())
+          if (i == dstIndex)
+            return it.index();
+
+      return llvm::None;
+    }();
+
+    if (!srcIndexAttr)
+      return mlir::failure();
+
+    auto shape = type.getShape();
+    auto srcIndex = *srcIndexAttr;
+    for (auto i : reassoc[srcIndex])
+      if (i != dstIndex && shape[i] != 1)
+        return mlir::failure();
+
+    auto src = es.src();
+    rewriter.replaceOpWithNewOp<DimOp>(op, src, srcIndex);
+    return mlir::success();
+  }
+};
+
+struct DimInsertSlice : public mlir::OpRewritePattern<mlir::tensor::DimOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::tensor::DimOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto insertSlice = op.source().getDefiningOp<mlir::tensor::InsertSliceOp>();
+    if (!insertSlice)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::tensor::DimOp>(op, insertSlice.dest(),
+                                                     op.index());
+    return mlir::success();
+  }
+};
+
+struct FillExtractSlice
+    : public mlir::OpRewritePattern<mlir::tensor::ExtractSliceOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::tensor::ExtractSliceOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto fill = op.source().getDefiningOp<mlir::linalg::FillOp>();
+    if (!fill)
+      return mlir::failure();
+
+    auto sizes = op.getMixedSizes();
+    llvm::SmallVector<mlir::OpFoldResult> newSizes;
+    newSizes.reserve(sizes.size());
+    auto droppedDims = op.getDroppedDims();
+    for (auto it : llvm::enumerate(sizes))
+      if (!droppedDims[it.index()])
+        newSizes.emplace_back(it.value());
+
+    auto fillType = fill.result().getType().cast<mlir::ShapedType>();
+
+    auto loc = op->getLoc();
+    mlir::Value init = rewriter.create<mlir::linalg::InitTensorOp>(
+        loc, newSizes, fillType.getElementType());
+
+    auto fillVal = fill.value();
+    auto newFill =
+        rewriter.create<mlir::linalg::FillOp>(loc, fillVal, init).result();
+    rewriter.replaceOp(op, newFill);
+    return mlir::success();
+  }
+};
+
+struct ReinterpretOfReinterpret
+    : public mlir::OpRewritePattern<mlir::memref::ReinterpretCastOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::ReinterpretCastOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    mlir::OpFoldResult zero = rewriter.getI64IntegerAttr(0);
+    auto getCastSrc = [&](mlir::Value src) -> mlir::Value {
+      if (auto prev = src.getDefiningOp<mlir::memref::ReinterpretCastOp>()) {
+        return prev.source();
+      } else if (auto prev = src.getDefiningOp<mlir::memref::CastOp>()) {
+        return prev.source();
+      } else if (auto prev = src.getDefiningOp<mlir::memref::SubViewOp>()) {
+        if (llvm::all_of(prev.getMixedOffsets(),
+                         [&](auto val) { return val == zero; }))
+          return prev.source();
+      }
+
+      return nullptr;
+    };
+
+    mlir::Value src = op.source();
+    while (auto prev = getCastSrc(src))
+      src = prev;
+
+    if (src == op.source())
+      return mlir::failure();
+
+    auto offsets = op.getMixedOffsets();
+    if (offsets.size() != 1)
+      return mlir::failure();
+
+    auto sizes = op.getMixedSizes();
+    auto strides = op.getMixedStrides();
+
+    rewriter.replaceOpWithNewOp<mlir::memref::ReinterpretCastOp>(
+        op, op.getType(), src, offsets.front(), sizes, strides);
+    return mlir::success();
+  }
+};
+} // namespace
+
+void PlierUtilDialect::getCanonicalizationPatterns(
+    mlir::RewritePatternSet &results) const {
+  results.add<DimExpandShape<mlir::tensor::DimOp, mlir::tensor::ExpandShapeOp>,
+              DimExpandShape<mlir::memref::DimOp, mlir::memref::ExpandShapeOp>,
+              DimInsertSlice, FillExtractSlice, ReinterpretOfReinterpret>(
+      getContext());
 }
 
 OpaqueType OpaqueType::get(mlir::MLIRContext *context) {
@@ -160,7 +309,7 @@ struct EnforceShapeDim : public mlir::OpRewritePattern<mlir::memref::DimOp> {
 } // namespace
 
 void EnforceShapeOp::getCanonicalizationPatterns(
-    ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context) {
+    ::mlir::RewritePatternSet &results, ::mlir::MLIRContext *context) {
   results.insert<EnforceShapeDim>(context);
 }
 
@@ -200,7 +349,9 @@ void ParallelOp::build(
   mlir::OpBuilder::InsertionGuard guard(odsBuilder);
   llvm::SmallVector<mlir::Type> argTypes(count * 2 + 1,
                                          odsBuilder.getIndexType());
-  auto *bodyBlock = odsBuilder.createBlock(bodyRegion, {}, argTypes);
+  llvm::SmallVector<mlir::Location> locs(argTypes.size(),
+                                         odsBuilder.getUnknownLoc());
+  auto *bodyBlock = odsBuilder.createBlock(bodyRegion, {}, argTypes, locs);
 
   if (bodyBuilder) {
     odsBuilder.setInsertionPointToStart(bodyBlock);
@@ -288,7 +439,7 @@ struct ChangeLayoutIdentity
     if (!canTransformLayoutCast(srcType, dstType))
       return mlir::failure();
 
-    rewriter.replaceOpWithNewOp<mlir::memref::CastOp>(op, src, dstType);
+    rewriter.replaceOpWithNewOp<mlir::memref::CastOp>(op, dstType, src);
     return mlir::success();
   }
 };
@@ -386,7 +537,35 @@ struct ChangeLayoutCast : public mlir::OpRewritePattern<mlir::memref::CastOp> {
     }
 
     if (mlir::memref::CastOp::areCastCompatible(srcType, dstType)) {
-      rewriter.replaceOpWithNewOp<mlir::memref::CastOp>(op, src, dstType);
+      rewriter.replaceOpWithNewOp<mlir::memref::CastOp>(op, dstType, src);
+      return mlir::success();
+    }
+
+    return mlir::failure();
+  }
+};
+
+struct ChangeLayoutFromCast
+    : public mlir::OpRewritePattern<plier::ChangeLayoutOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::ChangeLayoutOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto cast = op.source().getDefiningOp<mlir::memref::CastOp>();
+    if (!cast)
+      return mlir::failure();
+
+    auto src = cast.source();
+    auto srcType = src.getType();
+    auto dstType = op.getType();
+    if (srcType == dstType) {
+      rewriter.replaceOp(op, src);
+      return mlir::success();
+    }
+
+    if (mlir::memref::CastOp::areCastCompatible(srcType, dstType)) {
+      rewriter.replaceOpWithNewOp<mlir::memref::CastOp>(op, dstType, src);
       return mlir::success();
     }
 
@@ -413,30 +592,6 @@ struct ChangeLayoutSignCast : public mlir::OpRewritePattern<plier::SignCastOp> {
     auto loc = op.getLoc();
     auto newOp = rewriter.createOrFold<plier::SignCastOp>(loc, newType, src);
 
-    if (oldType != newType)
-      newOp = rewriter.createOrFold<plier::ChangeLayoutOp>(loc, oldType, newOp);
-
-    rewriter.replaceOp(op, newOp);
-    return mlir::success();
-  }
-};
-
-struct ChangeLayoutReduceRank
-    : public mlir::OpRewritePattern<plier::ReduceRankOp> {
-  using OpRewritePattern::OpRewritePattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(plier::ReduceRankOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto cl = op.source().getDefiningOp<plier::ChangeLayoutOp>();
-    if (!cl)
-      return mlir::failure();
-
-    auto loc = op.getLoc();
-    auto newOp = rewriter.createOrFold<plier::ReduceRankOp>(loc, cl.source(),
-                                                            op.getMapping());
-    auto oldType = op.getType();
-    auto newType = newOp.getType();
     if (oldType != newType)
       newOp = rewriter.createOrFold<plier::ChangeLayoutOp>(loc, oldType, newOp);
 
@@ -554,49 +709,11 @@ struct ChangeLayoutLinalgGeneric
         rewriter.updateRootInPlace(op, [&]() {
           (isInputs ? op.inputsMutable() : op.outputsMutable())
               .assign(newOperands);
-          if (!isInputs) {
-            for (auto i : llvm::seq(0u, count)) {
-              auto newType = newOperands[i].getType();
-              auto res = op.getResult(i);
-              if (newType != res.getType()) {
-                assert(newType.isa<mlir::MemRefType>());
-                assert(res.use_empty());
-                res.setType(newType);
-              }
-            }
-          }
         });
       }
     }
 
     return mlir::success(changed);
-  }
-};
-
-struct ChangeLayoutLinalgCopy
-    : public mlir::OpRewritePattern<mlir::linalg::CopyOp> {
-  using OpRewritePattern::OpRewritePattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(mlir::linalg::CopyOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto input = op.input();
-    auto output = op.output();
-    auto clInput = input.getDefiningOp<plier::ChangeLayoutOp>();
-    auto clOutput = output.getDefiningOp<plier::ChangeLayoutOp>();
-    if (!clInput && !clOutput)
-      return mlir::failure();
-
-    if (clInput)
-      input = clInput.source();
-
-    if (clOutput)
-      output = clOutput.source();
-
-    rewriter.replaceOpWithNewOp<mlir::linalg::CopyOp>(
-        op, input, output, op.inputPermutation().getValueOr(mlir::AffineMap{}),
-        op.outputPermutation().getValueOr(mlir::AffineMap{}));
-    return mlir::success();
   }
 };
 
@@ -667,7 +784,7 @@ struct ChangeLayoutIf : public mlir::OpRewritePattern<mlir::scf::YieldOp> {
         auto otherArg = otherYield.getResults()[i];
         rewriter.setInsertionPoint(otherYield);
         auto otherRes = rewriter.createOrFold<mlir::memref::CastOp>(
-            otherYield.getLoc(), otherArg, srcType);
+            otherYield.getLoc(), srcType, otherArg);
 
         rewriter.updateRootInPlace(
             otherYield, [&]() { otherYield.setOperand(i, otherRes); });
@@ -759,11 +876,19 @@ struct ChangeLayout1DReshape
     ArrayType strides(srcRank, rewriter.getIndexAttr(1));
     auto view = rewriter.createOrFold<mlir::memref::SubViewOp>(
         loc, source, offsets, sizes, strides);
-    auto resType = view.getType().cast<mlir::MemRefType>();
-    if (resType.getRank() > dstType.getRank()) {
-      // TODO: Rank-reducing subview
-      const int32_t mapping[1] = {static_cast<int32_t>(*srcDimIndex)};
-      view = rewriter.createOrFold<plier::ReduceRankOp>(loc, view, mapping);
+    auto dstRank = dstType.getRank();
+    if (srcRank != dstRank) {
+      assert(dstRank < srcRank);
+      llvm::SmallVector<mlir::OpFoldResult> newOfsets(srcRank,
+                                                      rewriter.getIndexAttr(0));
+      llvm::SmallVector<mlir::OpFoldResult> newStrides(
+          srcRank, rewriter.getIndexAttr(1));
+      auto viewType = view.getType().cast<mlir::MemRefType>();
+      auto reducedType = mlir::memref::SubViewOp::inferRankReducedResultType(
+                             dstRank, viewType, newOfsets, sizes, newStrides)
+                             .cast<mlir::MemRefType>();
+      view = rewriter.create<mlir::memref::SubViewOp>(
+          loc, reducedType, view, newOfsets, sizes, newStrides);
     }
     rewriter.replaceOpWithNewOp<plier::ChangeLayoutOp>(op, dstType, view);
     return mlir::success();
@@ -811,17 +936,56 @@ struct ChangeLayoutCopy : public mlir::OpRewritePattern<mlir::memref::CopyOp> {
   }
 };
 
+struct ChangeLayoutExpandShape
+    : public mlir::OpRewritePattern<mlir::memref::ExpandShapeOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::ExpandShapeOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto cl = op.src().getDefiningOp<plier::ChangeLayoutOp>();
+    if (!cl)
+      return mlir::failure();
+
+    auto dstType = op.getType().cast<mlir::MemRefType>();
+    if (!dstType.getLayout().isIdentity())
+      return mlir::failure();
+
+    auto src = cl.source();
+    auto srcType = src.getType().cast<mlir::MemRefType>();
+    if (!mlir::isStrided(srcType))
+      return mlir::failure();
+
+    llvm::SmallVector<int64_t> strides(
+        dstType.getRank(), mlir::ShapedType::kDynamicStrideOrOffset);
+    auto newDstMap = mlir::makeStridedLinearLayoutMap(
+        strides, mlir::ShapedType::kDynamicStrideOrOffset, op->getContext());
+    if (!newDstMap)
+      return mlir::failure();
+
+    auto newDstType = mlir::MemRefType::get(
+        dstType.getShape(), dstType.getElementType(), newDstMap);
+
+    auto loc = op->getLoc();
+    mlir::Value newOp = rewriter.create<mlir::memref::ExpandShapeOp>(
+        loc, newDstType, src, op.getReassociationIndices());
+    rewriter.replaceOpWithNewOp<plier::ChangeLayoutOp>(op, dstType, newOp);
+    return mlir::success();
+  }
+};
+
 } // namespace
 
 void ChangeLayoutOp::getCanonicalizationPatterns(
-    ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context) {
-  results.insert<ChangeLayoutIdentity, ChangeLayoutReduceRank, ChangeLayoutDim,
-                 ChangeLayoutExtractMetadata, ChangeLayoutClone,
-                 PropagateCloneType, ChangeLayoutCast, ChangeLayoutSignCast,
-                 ChangeLayoutLoad, ChangeLayoutStore, ChangeLayoutSubview,
-                 ChangeLayoutLinalgGeneric, ChangeLayoutLinalgCopy,
-                 ChangeLayoutLinalgFill, ChangeLayoutIf, ChangeLayout1DReshape,
-                 ChangeLayoutSliceGetItem, ChangeLayoutCopy>(context);
+    ::mlir::RewritePatternSet &results, ::mlir::MLIRContext *context) {
+  results.insert<
+      ChangeLayoutIdentity, ChangeLayoutDim, ChangeLayoutExtractMetadata,
+      ChangeLayoutClone, PropagateCloneType, ChangeLayoutCast,
+      ChangeLayoutFromCast, ChangeLayoutSignCast, ChangeLayoutLoad,
+      ChangeLayoutStore, ChangeLayoutSubview, ChangeLayoutLinalgGeneric,
+      ChangeLayoutLinalgFill, ChangeLayoutIf, ChangeLayout1DReshape,
+      ChangeLayoutSliceGetItem, ChangeLayoutCopy, ChangeLayoutExpandShape>(
+      context);
 }
 
 static mlir::Value propagateCasts(mlir::Value val, mlir::Type thisType);
@@ -1098,10 +1262,38 @@ struct SignCastMemrefToTensorPropagate
   }
 };
 
+struct SignCastMemrefSubviewPropagate
+    : public mlir::OpRewritePattern<plier::SignCastOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::SignCastOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto prevOp = op.value().getDefiningOp<mlir::memref::SubViewOp>();
+    if (!prevOp)
+      return mlir::failure();
+
+    auto src = prevOp.source();
+    auto srcType = src.getType().cast<mlir::ShapedType>();
+    auto dstType = op.getType().cast<mlir::ShapedType>();
+
+    auto newSrcType = srcType.clone(dstType.getElementType());
+    auto newDstType =
+        dstType.clone(dstType.getElementType()).cast<mlir::MemRefType>();
+
+    auto loc = prevOp->getLoc();
+    auto newSrc = rewriter.create<plier::SignCastOp>(loc, newSrcType, src);
+    rewriter.replaceOpWithNewOp<mlir::memref::SubViewOp>(
+        op, newDstType, newSrc, prevOp.getMixedOffsets(),
+        prevOp.getMixedSizes(), prevOp.getMixedStrides());
+    return mlir::success();
+  }
+};
+
 } // namespace
 
-void SignCastOp::getCanonicalizationPatterns(
-    ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context) {
+void SignCastOp::getCanonicalizationPatterns(::mlir::RewritePatternSet &results,
+                                             ::mlir::MLIRContext *context) {
   results.insert<
       SignCastDimPropagate<mlir::tensor::DimOp>,
       SignCastDimPropagate<mlir::memref::DimOp>, SignCastUndefPropagate,
@@ -1109,176 +1301,8 @@ void SignCastOp::getCanonicalizationPatterns(
       SignCastAllocPropagate<mlir::memref::AllocOp>,
       SignCastAllocPropagate<mlir::memref::AllocaOp>,
       SignCastTensorFromElementsPropagate, SignCastTensorCollapseShapePropagate,
-      SignCastTensorToMemrefPropagate, SignCastMemrefToTensorPropagate>(
-      context);
-}
-
-void ReduceRankOp::build(::mlir::OpBuilder &odsBuilder,
-                         ::mlir::OperationState &odsState, ::mlir::Value src,
-                         ::mlir::ArrayRef<int32_t> mapping) {
-  assert(src.getType().isa<mlir::ShapedType>());
-  auto srcType = src.getType().cast<mlir::ShapedType>();
-  assert(srcType.hasRank());
-  auto srcRank = static_cast<unsigned>(srcType.getRank());
-  assert(!mapping.empty());
-  assert(llvm::all_of(mapping, [&](int32_t val) {
-    return val >= 0 && val < static_cast<int32_t>(srcRank);
-  }));
-  auto mapAttr = odsBuilder.getI32ArrayAttr(mapping);
-  auto srcShape = srcType.getShape();
-  llvm::SmallVector<int64_t> shape(mapping.size());
-  for (auto it : llvm::enumerate(mapping))
-    shape[it.index()] = srcShape[static_cast<size_t>(it.value())];
-
-  if (auto tensorType = srcType.dyn_cast<mlir::RankedTensorType>()) {
-    auto retType = mlir::RankedTensorType::get(
-        shape, tensorType.getElementType(), tensorType.getEncoding());
-    build(odsBuilder, odsState, retType, src, mapAttr);
-  } else if (auto memrefType = srcType.dyn_cast<mlir::MemRefType>()) {
-    auto affineMap = [&]() {
-      mlir::AffineMap ret;
-      if (!memrefType.getLayout().isIdentity()) {
-        auto affineMap = memrefType.getLayout().getAffineMap();
-        auto context = odsBuilder.getContext();
-        llvm::SmallVector<mlir::AffineExpr> dimReplacements(srcRank);
-        llvm::SmallVector<mlir::AffineExpr> symReplacements(srcRank + 1);
-        symReplacements[0] = mlir::getAffineSymbolExpr(0, context);
-        for (auto i : llvm::seq(0u, srcRank)) {
-          auto it = llvm::find(mapping, i);
-          if (it != mapping.end()) {
-            auto srcIndex = static_cast<unsigned>(it - mapping.begin());
-            dimReplacements[i] = mlir::getAffineDimExpr(srcIndex, context);
-            symReplacements[i + 1] =
-                mlir::getAffineSymbolExpr(srcIndex + 1, context);
-          } else {
-            dimReplacements[i] = mlir::getAffineConstantExpr(0, context);
-            symReplacements[i + 1] = mlir::getAffineConstantExpr(0, context);
-          }
-        }
-        auto dstRank = static_cast<unsigned>(mapping.size());
-        auto resMap = affineMap.replaceDimsAndSymbols(
-            dimReplacements, symReplacements, dstRank, dstRank + 1);
-        ret = mlir::simplifyAffineMap(resMap);
-      }
-      return ret;
-    }();
-
-    auto retType =
-        mlir::MemRefType::get(shape, memrefType.getElementType(), affineMap,
-                              memrefType.getMemorySpace());
-    build(odsBuilder, odsState, retType, src, mapAttr);
-  } else {
-    llvm_unreachable("ReduceRankOp: Invalid src type");
-  }
-}
-
-mlir::OpFoldResult
-ReduceRankOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
-  auto src = source();
-  if (src.getType() == getType()) {
-    return src;
-  }
-  return nullptr;
-}
-
-llvm::SmallVector<int32_t> ReduceRankOp::getMapping() {
-  auto m = mapping();
-  llvm::SmallVector<int32_t> ret(m.size());
-  llvm::transform(m, ret.begin(), [](mlir::Attribute a) {
-    return a.cast<mlir::IntegerAttr>().getValue().getSExtValue();
-  });
-  return ret;
-}
-
-namespace {
-template <typename Op>
-struct ReduceRankDimPropagate : public mlir::OpRewritePattern<Op> {
-  using mlir::OpRewritePattern<Op>::OpRewritePattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(Op op, mlir::PatternRewriter &rewriter) const override {
-    auto index = mlir::getConstantIntValue(op.index());
-    if (!index)
-      return mlir::failure();
-
-    auto prev = op.source().template getDefiningOp<plier::ReduceRankOp>();
-    if (!prev)
-      return mlir::failure();
-
-    auto mappedArg = prev.mapping()[*index]
-                         .template cast<mlir::IntegerAttr>()
-                         .getValue()
-                         .getSExtValue();
-    rewriter.replaceOpWithNewOp<Op>(op, prev.source(), mappedArg);
-    return mlir::success();
-  }
-};
-
-static auto mapReduceRankIndices(mlir::OpBuilder &builder, mlir::Location loc,
-                                 plier::ReduceRankOp src,
-                                 mlir::ValueRange srcIndices) {
-  auto srcMemref = src.getViewSource();
-  auto srcMemrefType = srcMemref.getType().cast<mlir::MemRefType>();
-  auto rank = static_cast<unsigned>(srcMemrefType.getRank());
-  auto zero = builder.createOrFold<mlir::arith::ConstantIndexOp>(loc, 0);
-  auto mapping = src.getMapping();
-  llvm::SmallVector<mlir::Value> indices(rank);
-  for (auto i : llvm::seq(0u, rank)) {
-    auto it = llvm::find(mapping, static_cast<int32_t>(i));
-    if (mapping.end() == it) {
-      indices[i] = zero;
-    } else {
-      auto dstIndex = static_cast<size_t>(it - mapping.begin());
-      indices[i] = srcIndices[dstIndex];
-    }
-  }
-  return indices;
-}
-
-struct ReduceRankLoadPropagate
-    : public mlir::OpRewritePattern<mlir::memref::LoadOp> {
-  using OpRewritePattern::OpRewritePattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(mlir::memref::LoadOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto src = op.memref().getDefiningOp<plier::ReduceRankOp>();
-    if (!src)
-      return mlir::failure();
-
-    auto indices =
-        mapReduceRankIndices(rewriter, op.getLoc(), src, op.indices());
-    rewriter.replaceOpWithNewOp<mlir::memref::LoadOp>(op, src.getViewSource(),
-                                                      indices);
-    return mlir::success();
-  }
-};
-
-struct ReduceRankStorePropagate
-    : public mlir::OpRewritePattern<mlir::memref::StoreOp> {
-  using OpRewritePattern::OpRewritePattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(mlir::memref::StoreOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto src = op.memref().getDefiningOp<plier::ReduceRankOp>();
-    if (!src)
-      return mlir::failure();
-
-    auto indices =
-        mapReduceRankIndices(rewriter, op.getLoc(), src, op.indices());
-    rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(
-        op, op.value(), src.getViewSource(), indices);
-    return mlir::success();
-  }
-};
-} // namespace
-
-void ReduceRankOp::getCanonicalizationPatterns(
-    ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context) {
-  results.insert<ReduceRankDimPropagate<mlir::tensor::DimOp>,
-                 ReduceRankDimPropagate<mlir::memref::DimOp>,
-                 ReduceRankLoadPropagate, ReduceRankStorePropagate>(context);
+      SignCastTensorToMemrefPropagate, SignCastMemrefToTensorPropagate,
+      SignCastMemrefSubviewPropagate>(context);
 }
 
 void ExtractMemrefMetadataOp::build(::mlir::OpBuilder &odsBuilder,
@@ -1338,26 +1362,6 @@ ExtractMemrefMetadataOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
     auto newSrc = cast.source();
     sourceMutable().assign(newSrc);
     return getResult();
-  }
-
-  if (auto reduceRank = src.getDefiningOp<plier::ReduceRankOp>()) {
-    auto newSrc = reduceRank.source();
-    if (idx == -1) {
-      sourceMutable().assign(newSrc);
-      return getResult();
-    }
-
-    auto mapping = reduceRank.getMapping();
-    if (static_cast<unsigned>(idx) < mapping.size()) {
-      auto newIdx = mapping[static_cast<unsigned>(idx)];
-      assert(newIdx >= 0);
-      sourceMutable().assign(newSrc);
-      auto type = dimIndexAttr().getType();
-      dimIndexAttr(mlir::IntegerAttr::get(type, newIdx));
-      return getResult();
-    }
-
-    return nullptr;
   }
 
   if (auto cast = src.getDefiningOp<mlir::memref::CastOp>()) {

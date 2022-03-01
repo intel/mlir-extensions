@@ -14,22 +14,17 @@
 
 #pragma once
 
+#include <memory>
+
 namespace mlir {
 class MLIRContext;
-class TypeConverter;
 class RewritePatternSet;
-class ConversionTarget;
+class Pass;
 } // namespace mlir
 
 namespace plier {
-void populateControlFlowTypeConversionRewritesAndTarget(
-    mlir::TypeConverter &typeConverter, mlir::RewritePatternSet &patterns,
-    mlir::ConversionTarget &target);
+void populateUpliftmathPatterns(mlir::MLIRContext &context,
+                                mlir::RewritePatternSet &patterns);
 
-void populateTupleTypeConverter(mlir::MLIRContext &context,
-                                mlir::TypeConverter &typeConverter);
-
-void populateTupleTypeConversionRewritesAndTarget(
-    mlir::TypeConverter &typeConverter, mlir::RewritePatternSet &patterns,
-    mlir::ConversionTarget &target);
+std::unique_ptr<mlir::Pass> createUpliftMathPass();
 } // namespace plier

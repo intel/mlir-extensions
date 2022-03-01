@@ -17,6 +17,7 @@ import sys
 import subprocess
 from setuptools import find_packages, setup
 import versioneer
+import numpy
 
 IS_WIN = False
 IS_LIN = False
@@ -51,13 +52,17 @@ if int(os.environ.get('DPCOMP_SETUP_RUN_CMAKE', 1)):
 
     cmake_cmd += ["-GNinja"]
 
+    NUMPY_INCLUDE_DIR = numpy.get_include()
+
     cmake_cmd += [
-        "..",
-        '-DCMAKE_BUILD_TYPE=Release',
-        "-DLLVM_DIR=" + LLVM_DIR,
-        "-DMLIR_DIR=" + MLIR_DIR,
-        "-DTBB_DIR=" + TBB_DIR,
-        "-DCMAKE_INSTALL_PREFIX=" + CMAKE_INSTALL_PREFIX,
+    "..",
+    '-DCMAKE_BUILD_TYPE=Release',
+    "-DLLVM_DIR=" + LLVM_DIR,
+    "-DMLIR_DIR=" + MLIR_DIR,
+    "-DTBB_DIR=" + TBB_DIR,
+    "-DCMAKE_INSTALL_PREFIX=" + CMAKE_INSTALL_PREFIX,
+    "-DPython3_NumPy_INCLUDE_DIRS=" + NUMPY_INCLUDE_DIR,
+    "-DPython3_FIND_STRATEGY=LOCATION",
     ]
 
     # DPNP

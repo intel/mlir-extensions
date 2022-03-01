@@ -29,9 +29,17 @@ kernel_cache = JitfuncCache(kernel)
 kernel_cached = kernel_cache.cached_decorator
 
 GPU_TESTS_ENABLED = _readenv('DPCOMP_ENABLE_GPU_TESTS', int, 0)
+DPCTL_TESTS_ENABLED = _readenv('DPCOMP_ENABLE_DPCTL_TESTS', int, 0)
+
+if DPCTL_TESTS_ENABLED:
+    import dpctl
+    import dpctl.tensor as dpt
 
 def require_gpu(func):
     return pytest.mark.skipif(not GPU_TESTS_ENABLED, reason='GPU tests disabled')(func)
+
+def require_dpctl(func):
+    return pytest.mark.skipif(not DPCTL_TESTS_ENABLED, reason='DPCTL interop tests disabled')(func)
 
 @require_gpu
 def test_simple1():
@@ -123,7 +131,8 @@ def test_empty_kernel():
 
     with print_pass_ir([],['ConvertParallelLoopToGpu']):
         gpu_func[a.shape, DEFAULT_LOCAL_SIZE](a)
-        assert is_print_buffer_empty()
+        ir = get_print_buffer()
+        assert ir.count('gpu.launch blocks') == 0, ir
 
 @require_gpu
 def test_list_args():
@@ -227,8 +236,8 @@ def _test_binary(func, dtype, ir_pass, ir_check):
     sim_func = kernel_sim(func)
     gpu_func = kernel_cached(func)
 
-    a = np.array([1,2,3,4,5,6,7,8,9], dtype)
-    b = np.array([11,12,13,14,15,16,17,18,19], dtype)
+    a = np.array([11,12,13,14,15], dtype)
+    b = np.array([1,2,3,4,5], dtype)
 
     sim_res = np.zeros(a.shape, dtype)
     sim_func[a.shape, DEFAULT_LOCAL_SIZE](a, b, sim_res)
@@ -253,15 +262,16 @@ def test_math_funcs_unary(op):
     _test_unary(func, np.float32, 'GPUToSpirvPass', lambda ir: ir.count(f'OCL.{op}') == 1)
 
 @require_gpu
-@pytest.mark.parametrize("op", ['+', '-', '*', '/', '%', '**'])
-def test_gpu_ops_binary(op):
+@pytest.mark.parametrize("op", ['+', '-', '*', '/', '//', '%', '**'])
+@pytest.mark.parametrize("dtype", [np.int32, np.float32])
+def test_gpu_ops_binary(op, dtype):
     f = eval(f'lambda a, b: a {op} b')
     inner = kernel_func(f)
     def func(a, b, c):
         i = get_global_id(0)
         c[i] = inner(a[i], b[i])
 
-    _test_binary(func, np.float32, 'ConvertParallelLoopToGpu', lambda ir: ir.count(f'gpu.launch blocks') == 1)
+    _test_binary(func, dtype, 'ConvertParallelLoopToGpu', lambda ir: ir.count(f'gpu.launch blocks') == 1)
 
 _test_shapes = [
     (1,),
@@ -551,4 +561,68 @@ def test_atomics_multidim(funci):
         ir = get_print_buffer()
         assert _check_atomic_ir(ir), ir
 
+    assert_equal(gpu_res, sim_res)
+
+@require_gpu
+def test_fastmath():
+    def func(a,b,c,res):
+        i = get_global_id(0)
+        res[i] = a[i] * b[i] + c[i]
+
+    sim_func = kernel_sim(func)
+    a = np.array([1,2,3,4], np.float32)
+    b = np.array([5,6,7,8], np.float32)
+    c = np.array([9,10,11,12], np.float32)
+
+    sim_res = np.zeros(a.shape, a.dtype)
+    sim_func[a.shape, DEFAULT_LOCAL_SIZE](a, b, c, sim_res)
+
+    with print_pass_ir([],['GPUToSpirvPass']):
+        gpu_res = np.zeros(a.shape, a.dtype)
+        gpu_func = kernel(fastmath=False)(func)
+        gpu_func[a.shape, DEFAULT_LOCAL_SIZE](a, b, c, gpu_res)
+        ir = get_print_buffer()
+        assert ir.count('spv.OCL.fma') == 0, ir
+        assert_equal(gpu_res, sim_res)
+
+    with print_pass_ir([],['GPUToSpirvPass']):
+        gpu_res = np.zeros(a.shape, a.dtype)
+        gpu_func = kernel(fastmath=True)(func)
+        gpu_func[a.shape, DEFAULT_LOCAL_SIZE](a, b, c, gpu_res)
+        ir = get_print_buffer()
+        assert ir.count('spv.OCL.fma') == 1, ir
+        assert_equal(gpu_res, sim_res)
+
+@require_dpctl
+def test_dpctl_simple1():
+    def func(a, b, c):
+        i = get_global_id(0)
+        c[i] = a[i] + b[i]
+
+    sim_func = kernel_sim(func)
+    gpu_func = kernel_cached(func)
+
+
+    a = np.arange(1024, dtype=np.float32)
+    b = np.arange(1024, dtype=np.float32) * 3
+
+    sim_res = np.zeros(a.shape, a.dtype)
+    sim_func[a.shape, DEFAULT_LOCAL_SIZE](a, b, sim_res)
+
+    da = dpt.usm_ndarray(a.shape, dtype=a.dtype, buffer="device")
+    da.usm_data.copy_from_host(a.reshape((-1)).view("|u1"))
+
+    db = dpt.usm_ndarray(b.shape, dtype=b.dtype, buffer="shared")
+    db.usm_data.copy_from_host(b.reshape((-1)).view("|u1"))
+
+    gpu_res = np.zeros(a.shape, a.dtype)
+    dgpu_res = dpt.usm_ndarray(gpu_res.shape, dtype=gpu_res.dtype, buffer="device")
+    dgpu_res.usm_data.copy_from_host(gpu_res.reshape((-1)).view("|u1"))
+
+    with print_pass_ir([],['ConvertParallelLoopToGpu']):
+        gpu_func[a.shape, DEFAULT_LOCAL_SIZE](da, db, dgpu_res)
+        ir = get_print_buffer()
+        assert ir.count('gpu.launch blocks') == 1, ir
+
+    dgpu_res.usm_data.copy_to_host(gpu_res.reshape((-1)).view("|u1"))
     assert_equal(gpu_res, sim_res)

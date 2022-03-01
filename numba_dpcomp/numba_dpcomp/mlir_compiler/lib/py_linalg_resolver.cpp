@@ -21,6 +21,7 @@
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/SCF.h>
+#include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/BuiltinAttributes.h>
@@ -556,7 +557,7 @@ static mlir::Value broadcastDim(mlir::OpBuilder &builder, mlir::Location loc,
   auto one = builder.create<mlir::arith::ConstantIndexOp>(loc, 1);
   auto cond = builder.create<mlir::arith::CmpIOp>(
       loc, mlir::arith::CmpIPredicate::eq, val1, one);
-  return builder.create<mlir::SelectOp>(loc, cond, val2, val1);
+  return builder.create<mlir::arith::SelectOp>(loc, cond, val2, val1);
 }
 
 static mlir::Value expandDim(mlir::OpBuilder &builder, mlir::Location loc,
@@ -1052,8 +1053,8 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
       for (size_t i = 0; i < dimsCount; ++i) {
         auto ind = builder.create<mlir::arith::ConstantIndexOp>(loc, i);
         auto elemType = tupleType.getType(i);
-        auto item = builder.create<plier::GetItemOp>(loc, elemType, dims, ind)
-                        .getResult();
+        auto item =
+            builder.createOrFold<plier::GetItemOp>(loc, elemType, dims, ind);
         item = doSignCast(builder, loc, item);
         ret[i] = dimCast(item);
       }
@@ -1067,7 +1068,11 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
   auto elemType = srcType.getElementType();
   auto signlessElemType = makeSignlessType(elemType);
   srcVal = doSignCast(builder, loc, srcVal);
-  if (srcType.getRank() == 1 && newDimsVals.size() == 1) {
+
+  auto srcRank = static_cast<unsigned>(srcType.getRank());
+  auto dstRank = static_cast<unsigned>(newDimsVals.size());
+
+  if (srcRank == 1 && dstRank == 1) {
     mlir::OpFoldResult offset = builder.getIndexAttr(0);
     mlir::OpFoldResult size = newDimsVals.front();
     mlir::OpFoldResult stride = builder.getIndexAttr(1);
@@ -1077,6 +1082,54 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
     auto dstType = slice.getType().cast<mlir::ShapedType>().clone(elemType);
     slice = doSignCast(builder, loc, slice, dstType);
     return ctx.context.createVar(context, slice);
+  }
+
+  auto isUnitDim = [](mlir::OpFoldResult v) {
+    if (auto intVal = mlir::getConstantIntValue(v))
+      return *intVal == 1;
+
+    return false;
+  };
+
+  auto unitDimsCount = [&]() {
+    unsigned ret = 0;
+    for (auto v : newDimsVals)
+      if (isUnitDim(v))
+        ++ret;
+    return ret;
+  }();
+
+  llvm::SmallVector<int64_t> shape(dstRank, mlir::ShapedType::kDynamicSize);
+
+  auto resultType =
+      mlir::RankedTensorType::get(shape, elemType, srcType.getEncoding());
+  auto resultTypeSignless = srcType.clone(shape, signlessElemType);
+
+  // TODO: Limit to 1D case for now
+  if ((srcRank == 1) && (dstRank == (srcRank + unitDimsCount)) &&
+      (unitDimsCount != 0)) {
+    llvm::SmallVector<mlir::ReassociationIndices> reassoc(srcRank);
+    llvm::SmallVector<int64_t> expandShape(dstRank,
+                                           mlir::ShapedType::kDynamicSize);
+    int currInd = -1;
+    for (auto i : llvm::seq(0u, dstRank)) {
+      if (!isUnitDim(newDimsVals[i])) {
+        ++currInd;
+      } else {
+        expandShape[i] = 1;
+      }
+
+      reassoc[std::max(0, currInd)].emplace_back(i);
+    }
+
+    auto expandType = resultTypeSignless.clone(expandShape);
+    mlir::Value res = builder.create<mlir::tensor::ExpandShapeOp>(
+        loc, expandType, srcVal, reassoc);
+    if (expandType != resultTypeSignless)
+      res = builder.create<mlir::tensor::CastOp>(loc, resultTypeSignless, res);
+
+    return ctx.context.createVar(context,
+                                 doSignCast(builder, loc, res, resultType));
   }
 
   auto toValues = [&](mlir::ArrayRef<mlir::OpFoldResult> src) {
@@ -1099,12 +1152,6 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
 
   auto shapeTensor =
       builder.create<mlir::tensor::FromElementsOp>(loc, toValues(newDimsVals));
-
-  llvm::SmallVector<int64_t> shape(newDimsVals.size(),
-                                   mlir::ShapedType::kDynamicSize);
-  auto resultType =
-      mlir::RankedTensorType::get(shape, elemType, srcType.getEncoding());
-  auto resultTypeSignless = srcType.clone(shape, signlessElemType);
 
   mlir::Value reshaped = builder.create<mlir::tensor::ReshapeOp>(
       loc, resultTypeSignless, srcVal, shapeTensor);
@@ -1203,7 +1250,7 @@ static py::object externalCallImpl(py::capsule context, py::str funcName,
 
 static py::object insertImpl(py::capsule context, py::handle src,
                              py::handle dst, py::handle offsets,
-                             py::handle sizes, py::handle strides) {
+                             py::handle strides) {
   auto &ctx = getPyContext(context);
   auto &builder = ctx.builder;
   auto loc = ctx.loc;
@@ -1230,8 +1277,12 @@ static py::object insertImpl(py::capsule context, py::handle src,
   auto signlessSrc = doSignCast(builder, loc, srcTensor);
   auto signlessDst = doSignCast(builder, loc, dstTensor);
   auto offsetsVec = unwrapList(offsets);
-  auto sizesVec = unwrapList(sizes);
   auto stridesVec = unwrapList(strides);
+
+  llvm::SmallVector<mlir::Value> sizesVec(offsetsVec.size());
+  for (auto i : llvm::seq<size_t>(0, sizesVec.size()))
+    sizesVec[i] = builder.createOrFold<mlir::tensor::DimOp>(loc, srcTensor, i);
+
   auto res =
       builder
           .create<mlir::tensor::InsertSliceOp>(loc, signlessSrc, signlessDst,
@@ -1440,7 +1491,8 @@ py::object selectImpl(py::capsule context, py::handle cond, py::handle trueV,
   auto condVal = ctx.context.unwrapVal(loc, builder, cond);
   auto trueVal = ctx.context.unwrapVal(loc, builder, trueV);
   auto falseVal = ctx.context.unwrapVal(loc, builder, falseV);
-  auto res = builder.create<mlir::SelectOp>(loc, condVal, trueVal, falseVal);
+  auto res =
+      builder.create<mlir::arith::SelectOp>(loc, condVal, trueVal, falseVal);
   return ctx.context.createVar(context, res);
 }
 

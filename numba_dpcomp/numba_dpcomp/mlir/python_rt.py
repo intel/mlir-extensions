@@ -22,6 +22,7 @@ runtime_lib = load_lib('dpcomp-python-runtime')
 def _register_funcs():
     _funcs = [
         'dpcompAllocMemInfo',
+        'dpcompUnboxSyclInterface'
     ]
 
     for name in _funcs:

@@ -52,6 +52,12 @@ def linalg_index_impl(builder, dim):
     if isinstance(dim, int):
         return builder.linalg_index(dim)
 
+def _fix_axis(axis, num_dims):
+    if axis < 0:
+        axis = axis + num_dims
+    assert axis >= 0 and axis < num_dims
+    return axis
+
 def _array_reduce(builder, arg, axis, body, get_init_value):
     if axis is None:
         shape = arg.shape
@@ -68,6 +74,7 @@ def _array_reduce(builder, arg, axis, body, get_init_value):
     elif isinstance(axis, int):
         shape = arg.shape
         num_dims = len(shape)
+        axis = _fix_axis(axis, num_dims)
         iterators = [('reduction' if i == axis else 'parallel') for i in range(num_dims)]
         dims1 = ','.join(['d%s' % i for i in range(num_dims)])
         dims2 = ','.join(['d%s' % i for i in range(num_dims) if i != axis])
@@ -84,6 +91,24 @@ def _array_reduce(builder, arg, axis, body, get_init_value):
 def sum_impl(builder, arg, axis=None):
     return _array_reduce(builder, arg, axis, lambda a, b: a + b, lambda b, t: 0)
 
+
+@register_func('numpy.flip', numpy.flip)
+def flip_impl(builder, arg, axis=None):
+    shape = arg.shape
+    num_dims = len(shape)
+    if axis is None:
+        axis = (True,) * num_dims
+    elif isinstance(axis, int):
+        axis = _fix_axis(axis, num_dims)
+        l = [False] * num_dims
+        l[axis] = True
+        axis = tuple(l)
+    else:
+        return
+
+    offsets = [0 if not axis[i] else shape[i] - 1 for i in range(num_dims)]
+    strides = [1 if not axis[i] else - 1 for i in range(num_dims)]
+    return builder.subview(arg, offsets, shape, strides)
 
 def _get_numpy_type(builder, dtype):
     types = [
@@ -345,7 +370,7 @@ def matmul_impl(builder, a, b):
         dst_shape = (x, y)
         tmp = builder.init_tensor(dst_shape, a.dtype, 1)
         tmp_a = builder.reshape(a, (1, y))
-        tmp = builder.insert(tmp_a, tmp, (x - 1, 0), dst_shape, (1, 1))
+        tmp = builder.insert(tmp_a, tmp, (x - 1, 0), (1, 1))
         a = tmp
     if dim2 == 1:
         x = shape2[0]
@@ -353,7 +378,7 @@ def matmul_impl(builder, a, b):
         dst_shape = (x, y)
         tmp = builder.init_tensor(dst_shape, b.dtype, 1)
         tmp_b = builder.reshape(b, (x, 1))
-        tmp = builder.insert(tmp_b, tmp, (0, 0), dst_shape, (1, 1))
+        tmp = builder.insert(tmp_b, tmp, (0, 0), (1, 1))
         b = tmp
 
     res = _matmul2d(builder, a, b, a.shape, b.shape)
@@ -518,7 +543,7 @@ def concat_impl(builder, arrays, axis=0):
         offsets = [0]*num_dims
         strides = [1]*num_dims
         for sizes, array in zip(shapes, arrays):
-            res = builder.insert(array, res, offsets, sizes, strides)
+            res = builder.insert(array, res, offsets, strides)
             offsets[axis] += sizes[axis]
         return res
 

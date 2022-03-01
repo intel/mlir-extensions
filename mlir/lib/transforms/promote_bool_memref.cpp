@@ -66,7 +66,7 @@ public:
     auto res = rewriter.create<mlir::memref::LoadOp>(loc, adaptor.memref(),
                                                      adaptor.indices());
     rewriter.replaceOpWithNewOp<mlir::arith::TruncIOp>(
-        op, res, rewriter.getIntegerType(1));
+        op, rewriter.getIntegerType(1), res);
     return mlir::success();
   }
 };
@@ -81,7 +81,7 @@ public:
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto loc = op->getLoc();
     auto val = rewriter.create<mlir::arith::ExtUIOp>(
-        loc, adaptor.value(), rewriter.getIntegerType(8));
+        loc, rewriter.getIntegerType(8), adaptor.value());
     rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(
         op, val, adaptor.memref(), adaptor.indices());
     return mlir::success();
@@ -202,25 +202,6 @@ public:
     return mlir::success();
   }
 };
-
-class ConvertReduceRankOp
-    : public mlir::OpConversionPattern<plier::ReduceRankOp> {
-public:
-  using OpConversionPattern::OpConversionPattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(plier::ReduceRankOp op, plier::ReduceRankOp::Adaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
-    auto *converter = getTypeConverter();
-    auto resType = converter->convertType(op.getType())
-                       .dyn_cast_or_null<mlir::MemRefType>();
-    if (!resType)
-      return mlir::failure();
-    rewriter.replaceOpWithNewOp<plier::ReduceRankOp>(
-        op, resType, adaptor.source(), adaptor.mapping());
-    return mlir::success();
-  }
-};
 } // namespace
 
 void plier::populatePromoteBoolMemrefConversionRewritesAndTarget(
@@ -238,12 +219,11 @@ void plier::populatePromoteBoolMemrefConversionRewritesAndTarget(
       });
 
   target.addDynamicallyLegalDialect<mlir::memref::MemRefDialect>(&checkOp);
-  target.addDynamicallyLegalOp<plier::RetainOp, plier::ReduceRankOp>(&checkOp);
+  target.addDynamicallyLegalOp<plier::RetainOp>(&checkOp);
 
   patterns.insert<ConvertDimOp, ConvertLoadOp, ConvertStoreOp, ConvertAllocOp,
                   ConvertAllocaOp, ConvertDeallocOp, ConvertCastOp,
-                  ConvertSubviewOp, ConvertRetainOp, ConvertReduceRankOp>(
-      typeConverter, context);
+                  ConvertSubviewOp, ConvertRetainOp>(typeConverter, context);
 }
 
 namespace {

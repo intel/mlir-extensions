@@ -28,7 +28,6 @@
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/SCF.h>
-#include <mlir/Dialect/StandardOps/Utils/Utils.h>
 
 #include <llvm/ADT/TypeSwitch.h>
 
@@ -165,7 +164,7 @@ mlir::Operation *PlierDialect::materializeConstant(mlir::OpBuilder &builder,
   if (mlir::arith::ConstantOp::isBuildableWith(value, type))
     return builder.create<mlir::arith::ConstantOp>(loc, type, value);
 
-  return builder.create<mlir::ConstantOp>(loc, type, value);
+  return nullptr;
 }
 
 PyType PyType::get(mlir::MLIRContext *context, llvm::StringRef name) {
@@ -462,8 +461,8 @@ struct GetattrGlobalRewrite : public mlir::OpRewritePattern<GetattrOp> {
 };
 } // namespace
 
-void GetattrOp::getCanonicalizationPatterns(
-    ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context) {
+void GetattrOp::getCanonicalizationPatterns(::mlir::RewritePatternSet &results,
+                                            ::mlir::MLIRContext *context) {
   results.insert<GetattrGlobalRewrite>(context);
 }
 
@@ -527,7 +526,7 @@ struct SliceGetitemPropagate
           src = rewriter.create<plier::SignCastOp>(loc, signless, src);
         }
         auto indexType = rewriter.getIndexType();
-        src = rewriter.create<mlir::arith::IndexCastOp>(loc, src, indexType);
+        src = rewriter.create<mlir::arith::IndexCastOp>(loc, indexType, src);
       } else if (srcType.isa<mlir::IndexType>()) {
         // Nothing
       } else {
@@ -542,7 +541,7 @@ struct SliceGetitemPropagate
 } // namespace
 
 void SliceGetItemOp::getCanonicalizationPatterns(
-    ::mlir::OwningRewritePatternList &results, ::mlir::MLIRContext *context) {
+    ::mlir::RewritePatternSet &results, ::mlir::MLIRContext *context) {
   results.insert<SliceGetitemPropagate>(context);
 }
 } // namespace plier

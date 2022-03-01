@@ -15,6 +15,7 @@
 #include "pipelines/lower_to_llvm.hpp"
 
 #include <mlir/Conversion/ArithmeticToLLVM/ArithmeticToLLVM.h>
+#include <mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h>
 #include <mlir/Conversion/LLVMCommon/ConversionTarget.h>
 #include <mlir/Conversion/LLVMCommon/LoweringOptions.h>
 #include <mlir/Conversion/LLVMCommon/TypeConverter.h>
@@ -23,11 +24,12 @@
 #include <mlir/Conversion/MathToLibm/MathToLibm.h>
 #include <mlir/Conversion/MemRefToLLVM/AllocLikeConversion.h>
 #include <mlir/Conversion/MemRefToLLVM/MemRefToLLVM.h>
-#include <mlir/Conversion/SCFToStandard/SCFToStandard.h>
+#include <mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h>
 #include <mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h>
 #include <mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h>
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/Arithmetic/Transforms/Passes.h>
+#include <mlir/Dialect/ControlFlow/IR/ControlFlowOps.h>
 #include <mlir/Dialect/LLVMIR/LLVMDialect.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/SCF.h>
@@ -146,6 +148,10 @@ void populateToLLVMAdditionalTypeConversion(
       });
   converter.addConversion(
       [voidPtrType](plier::OpaqueType) -> llvm::Optional<mlir::Type> {
+        return voidPtrType;
+      });
+  converter.addConversion(
+      [voidPtrType](plier::TypeVar) -> llvm::Optional<mlir::Type> {
         return voidPtrType;
       });
 }
@@ -528,10 +534,12 @@ mlir::LogicalResult fixFuncSig(LLVMTypeHelper &typeHelper, mlir::FuncOp func) {
 
   auto ptr = [&](auto arg) { return typeHelper.ptr(arg); };
 
+  mlir::OpBuilder builder(&ctx);
+  auto uloc = builder.getUnknownLoc();
   unsigned index = 0;
   auto addArg = [&](mlir::Type type) {
     args.push_back(type);
-    auto ret = func.getBody().insertArgument(index, type);
+    auto ret = func.getBody().insertArgument(index, type, uloc);
     ++index;
     return ret;
   };
@@ -549,7 +557,6 @@ mlir::LogicalResult fixFuncSig(LLVMTypeHelper &typeHelper, mlir::FuncOp func) {
     return mlir::failure();
   }
 
-  mlir::OpBuilder builder(&ctx);
   builder.setInsertionPointToStart(&func.getBody().front());
 
   auto loc = builder.getUnknownLoc();
@@ -881,6 +888,81 @@ struct ReshapeLowering
   }
 };
 
+struct ExpandShapeLowering
+    : public mlir::ConvertOpToLLVMPattern<mlir::memref::ExpandShapeOp> {
+  using ConvertOpToLLVMPattern<
+      mlir::memref::ExpandShapeOp>::ConvertOpToLLVMPattern;
+
+  explicit ExpandShapeLowering(mlir::LLVMTypeConverter &converter)
+      : ConvertOpToLLVMPattern<mlir::memref::ExpandShapeOp>(converter) {}
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::ExpandShapeOp op,
+                  mlir::memref::ExpandShapeOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto dstType = op.getType().cast<mlir::MemRefType>();
+    auto converter = getTypeConverter();
+    auto dstLlvmType = converter->convertType(dstType);
+    if (!dstLlvmType)
+      return mlir::failure();
+
+    auto inds = op.getReassociationIndices();
+
+    int64_t currentDstInd = 0;
+    auto dstShape = dstType.getShape();
+    for (auto &ind : inds) {
+      int64_t reassocInd = -1;
+      for (auto i : ind) {
+        assert(i >= 0);
+        if (dstShape[currentDstInd] != 1) {
+          if (reassocInd != -1)
+            return mlir::failure();
+          reassocInd = i;
+        }
+        ++currentDstInd;
+      }
+    }
+
+    mlir::MemRefDescriptor src(adaptor.src());
+
+    auto loc = op->getLoc();
+    auto result = mlir::MemRefDescriptor::undef(rewriter, loc, dstLlvmType);
+    result.setAllocatedPtr(rewriter, loc, src.allocatedPtr(rewriter, loc));
+    result.setAlignedPtr(rewriter, loc, src.alignedPtr(rewriter, loc));
+    result.setOffset(rewriter, loc, src.offset(rewriter, loc));
+
+    auto indexType = getIndexType();
+    auto zero = rewriter.create<mlir::LLVM::ConstantOp>(
+        loc, indexType, rewriter.getIntegerAttr(indexType, 0));
+    auto one = rewriter.create<mlir::LLVM::ConstantOp>(
+        loc, indexType, rewriter.getIntegerAttr(indexType, 1));
+
+    currentDstInd = 0;
+    for (auto it : llvm::enumerate(inds)) {
+      auto &ind = it.value();
+      auto srcInd = it.index();
+      for (auto i : ind) {
+        assert(i >= 0);
+        mlir::Value dim;
+        mlir::Value stride;
+        if (dstShape[currentDstInd] != 1) {
+          dim = src.size(rewriter, loc, srcInd);
+          stride = src.stride(rewriter, loc, srcInd);
+        } else {
+          dim = one;
+          stride = zero;
+        }
+        result.setSize(rewriter, loc, currentDstInd, dim);
+        result.setStride(rewriter, loc, currentDstInd, stride);
+        ++currentDstInd;
+      }
+    }
+
+    rewriter.replaceOp(op, static_cast<mlir::Value>(result));
+    return mlir::success();
+  }
+};
+
 class LLVMFunctionPass : public mlir::OperationPass<mlir::LLVM::LLVMFuncOp> {
 public:
   using OperationPass<mlir::LLVM::LLVMFuncOp>::OperationPass;
@@ -1123,7 +1205,7 @@ struct LowerParallel : public mlir::OpRewritePattern<plier::ParallelOp> {
       }
       op.getLoopBody().cloneInto(&func.getBody(), mapping);
       auto &orig_entry = *std::next(func.getBody().begin());
-      rewriter.create<mlir::BranchOp>(loc, &orig_entry);
+      rewriter.create<mlir::cf::BranchOp>(loc, &orig_entry);
       for (auto &block : func.getBody()) {
         if (auto term = mlir::dyn_cast<plier::YieldOp>(block.getTerminator())) {
           rewriter.eraseOp(term);
@@ -1199,7 +1281,7 @@ struct LowerParallelToCFGPass
 
   void runOnOperation() override final {
     auto &context = getContext();
-    mlir::OwningRewritePatternList patterns(&context);
+    mlir::RewritePatternSet patterns(&context);
     patterns.insert<LowerParallel>(&getContext());
 
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
@@ -1208,19 +1290,20 @@ struct LowerParallelToCFGPass
 };
 
 struct PreLLVMLowering
-    : public mlir::PassWrapper<PreLLVMLowering, mlir::FunctionPass> {
+    : public mlir::PassWrapper<PreLLVMLowering,
+                               mlir::OperationPass<mlir::FuncOp>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::StandardOpsDialect>();
     registry.insert<mlir::LLVM::LLVMDialect>();
   }
 
-  void runOnFunction() override final {
+  void runOnOperation() override final {
     auto &context = getContext();
     LLVMTypeHelper type_helper(context);
 
-    mlir::OwningRewritePatternList patterns(&context);
-    auto func = getFunction();
+    mlir::RewritePatternSet patterns(&context);
+    auto func = getOperation();
     if (mlir::failed(fixFuncSig(type_helper, func))) {
       signalPassFailure();
       return;
@@ -1243,7 +1326,7 @@ struct PostLLVMLowering
 
   void runOnFunction() override final {
     auto &context = getContext();
-    mlir::OwningRewritePatternList patterns(&context);
+    mlir::RewritePatternSet patterns(&context);
 
     patterns.insert<ApplyFastmathFlags<mlir::LLVM::FAddOp>,
                     ApplyFastmathFlags<mlir::LLVM::FSubOp>,
@@ -1293,44 +1376,6 @@ struct LowerRetainOp : public mlir::ConvertOpToLLVMPattern<plier::RetainOp> {
     rewriter.create<mlir::LLVM::CallOp>(loc, incref_func, ptr);
     rewriter.replaceOp(op, arg);
 
-    return mlir::success();
-  }
-};
-
-struct LowerReduceRankOp
-    : public mlir::ConvertOpToLLVMPattern<plier::ReduceRankOp> {
-  using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(plier::ReduceRankOp op, plier::ReduceRankOp::Adaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
-    auto arg = adaptor.source();
-    if (!arg.getType().isa<mlir::LLVM::LLVMStructType>())
-      return mlir::failure();
-
-    auto dstType = getTypeConverter()->convertType(op.getType());
-    if (!dstType)
-      return mlir::failure();
-
-    auto loc = op.getLoc();
-    mlir::MemRefDescriptor src(arg);
-    mlir::MemRefDescriptor dst =
-        mlir::MemRefDescriptor::undef(rewriter, loc, dstType);
-
-    dst.setAllocatedPtr(rewriter, loc, src.allocatedPtr(rewriter, loc));
-    dst.setAlignedPtr(rewriter, loc, src.alignedPtr(rewriter, loc));
-    dst.setOffset(rewriter, loc, src.offset(rewriter, loc));
-
-    auto mapping = op.mapping();
-    for (auto it : llvm::enumerate(mapping)) {
-      auto index = static_cast<unsigned>(it.index());
-      auto originalIndex = static_cast<unsigned>(
-          it.value().cast<mlir::IntegerAttr>().getValue().getSExtValue());
-      dst.setSize(rewriter, loc, index, src.size(rewriter, loc, originalIndex));
-      dst.setStride(rewriter, loc, index,
-                    src.stride(rewriter, loc, originalIndex));
-    }
-    rewriter.replaceOp(op, static_cast<mlir::Value>(dst));
     return mlir::success();
   }
 };
@@ -1505,8 +1550,8 @@ struct LowerTakeContextOp
         mlir::OpBuilder::InsertionGuard g(rewriter);
         auto func =
             insertFunc(wrapperName, wrapperType, mlir::LLVM::Linkage::Private);
-        auto block = rewriter.createBlock(&func.getBody(),
-                                          mlir::Region::iterator{}, ctxType);
+        auto block = rewriter.createBlock(
+            &func.getBody(), mlir::Region::iterator{}, ctxType, unknownLoc);
         rewriter.setInsertionPointToStart(block);
 
         auto innerResults = rewriter
@@ -1543,8 +1588,8 @@ struct LowerTakeContextOp
         mlir::OpBuilder::InsertionGuard g(rewriter);
         auto func =
             insertFunc(wrapperName, wrapperType, mlir::LLVM::Linkage::Private);
-        auto block = rewriter.createBlock(&func.getBody(),
-                                          mlir::Region::iterator{}, ctxType);
+        auto block = rewriter.createBlock(
+            &func.getBody(), mlir::Region::iterator{}, ctxType, unknownLoc);
         rewriter.setInsertionPointToStart(block);
 
         auto ptr = rewriter.create<mlir::LLVM::BitcastOp>(
@@ -1734,10 +1779,11 @@ struct LLVMLoweringPass
 
     LLVMTypeConverter typeConverter(&context, options);
     populateToLLVMAdditionalTypeConversion(typeConverter);
-    OwningRewritePatternList patterns(&context);
+    RewritePatternSet patterns(&context);
     populateStdToLLVMConversionPatterns(typeConverter, patterns);
     populateMemRefToLLVMConversionPatterns(typeConverter, patterns);
     populateLinalgToLLVMConversionPatterns(typeConverter, patterns);
+    cf::populateControlFlowToLLVMConversionPatterns(typeConverter, patterns);
     arith::populateArithmeticToLLVMConversionPatterns(typeConverter, patterns);
 
     patterns.insert<
@@ -1748,7 +1794,7 @@ struct LLVMLoweringPass
         AllocOpLowering,
         DeallocOpLowering,
         ReshapeLowering,
-        LowerReduceRankOp,
+        ExpandShapeLowering,
         LowerExtractMemrefMetadataOp,
         LowerTakeContextOp,
         LowerReleaseContextOp
@@ -1770,7 +1816,7 @@ private:
 
 static void populateLowerToLlvmPipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<LowerParallelToCFGPass>());
-  pm.addPass(mlir::createLowerToCFGPass());
+  pm.addPass(mlir::createConvertSCFToCFPass());
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addNestedPass<mlir::FuncOp>(mlir::arith::createArithmeticExpandOpsPass());
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<PreLLVMLowering>());

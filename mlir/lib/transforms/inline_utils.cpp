@@ -86,7 +86,7 @@ struct ForceInlinePass
   }
 
   virtual mlir::LogicalResult initialize(mlir::MLIRContext *context) override {
-    mlir::OwningRewritePatternList p(context);
+    mlir::RewritePatternSet p(context);
     p.insert<ForceInline>(context);
     patterns = std::move(p);
     return mlir::success();

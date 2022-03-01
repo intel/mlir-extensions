@@ -12,5 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from . import dpctl_interop
 from .builtin import funcs
 from .numpy import funcs

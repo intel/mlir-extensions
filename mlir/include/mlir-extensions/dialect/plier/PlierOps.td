@@ -40,7 +40,7 @@ def Plier_OpaqueType
                   "opaque_type">,
       BuildableType<"$_builder.getType<::plier::OpaqueType>()"> {}
 
-class Plier_Op<string mnemonic, list<OpTrait> traits = []>
+class Plier_Op<string mnemonic, list<Trait> traits = []>
     : Op<Plier_Dialect, mnemonic, traits>;
 
 def ArgOp : Plier_Op<"arg", [NoSideEffect]> {

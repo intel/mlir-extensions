@@ -594,9 +594,9 @@ mlir::Value intCast(mlir::PatternRewriter &rewriter, mlir::Location loc,
 
   if (dstBits > srcBits) {
     if (srcIntType.isSigned()) {
-      val = rewriter.createOrFold<mlir::arith::ExtSIOp>(loc, val, dstSignless);
+      val = rewriter.createOrFold<mlir::arith::ExtSIOp>(loc, dstSignless, val);
     } else {
-      val = rewriter.createOrFold<mlir::arith::ExtUIOp>(loc, val, dstSignless);
+      val = rewriter.createOrFold<mlir::arith::ExtUIOp>(loc, dstSignless, val);
     }
   } else if (dstBits < srcBits) {
     if (dstBits == 1) {
@@ -606,9 +606,10 @@ mlir::Value intCast(mlir::PatternRewriter &rewriter, mlir::Location loc,
           loc, mlir::arith::CmpIPredicate::eq, val, zero);
       auto trueVal = rewriter.create<mlir::arith::ConstantIntOp>(loc, 1, 1);
       auto falseVal = rewriter.create<mlir::arith::ConstantIntOp>(loc, 0, 1);
-      val = rewriter.createOrFold<mlir::SelectOp>(loc, cmp, falseVal, trueVal);
+      val = rewriter.createOrFold<mlir::arith::SelectOp>(loc, cmp, falseVal,
+                                                         trueVal);
     } else {
-      val = rewriter.createOrFold<mlir::arith::TruncIOp>(loc, val, dstSignless);
+      val = rewriter.createOrFold<mlir::arith::TruncIOp>(loc, dstSignless, val);
     }
   }
 
@@ -626,9 +627,9 @@ mlir::Value intFloatCast(mlir::PatternRewriter &rewriter, mlir::Location loc,
     val = rewriter.createOrFold<plier::SignCastOp>(loc, signlessType, val);
 
   if (srcIntType.isSigned()) {
-    return rewriter.createOrFold<mlir::arith::SIToFPOp>(loc, val, dstType);
+    return rewriter.createOrFold<mlir::arith::SIToFPOp>(loc, dstType, val);
   } else {
-    return rewriter.createOrFold<mlir::arith::UIToFPOp>(loc, val, dstType);
+    return rewriter.createOrFold<mlir::arith::UIToFPOp>(loc, dstType, val);
   }
 }
 
@@ -653,11 +654,12 @@ mlir::Value floatIntCast(mlir::PatternRewriter &rewriter, mlir::Location loc,
         loc, mlir::arith::CmpFPredicate::OEQ, val, zero);
     auto trueVal = rewriter.create<mlir::arith::ConstantIntOp>(loc, 1, 1);
     auto falseVal = rewriter.create<mlir::arith::ConstantIntOp>(loc, 0, 1);
-    res = rewriter.createOrFold<mlir::SelectOp>(loc, cmp, falseVal, trueVal);
+    res = rewriter.createOrFold<mlir::arith::SelectOp>(loc, cmp, falseVal,
+                                                       trueVal);
   } else if (dstIntType.isSigned()) {
-    res = rewriter.create<mlir::arith::FPToSIOp>(loc, val, dstSignlessType);
+    res = rewriter.create<mlir::arith::FPToSIOp>(loc, dstSignlessType, val);
   } else {
-    res = rewriter.create<mlir::arith::FPToUIOp>(loc, val, dstSignlessType);
+    res = rewriter.create<mlir::arith::FPToUIOp>(loc, dstSignlessType, val);
   }
   if (dstSignlessType != dstIntType) {
     return rewriter.createOrFold<plier::SignCastOp>(loc, dstIntType, res);
@@ -669,12 +671,12 @@ mlir::Value indexCastImpl(mlir::PatternRewriter &rewriter, mlir::Location loc,
                           mlir::Value val, mlir::Type dstType) {
   if (val.getType().isa<mlir::FloatType>()) {
     auto intType = rewriter.getI64Type();
-    val = rewriter.createOrFold<mlir::arith::FPToSIOp>(loc, val, intType);
+    val = rewriter.createOrFold<mlir::arith::FPToSIOp>(loc, intType, val);
   }
   if (dstType.isa<mlir::FloatType>()) {
     auto intType = rewriter.getI64Type();
     val = plier::index_cast(rewriter, loc, val, intType);
-    return rewriter.createOrFold<mlir::arith::SIToFPOp>(loc, val, dstType);
+    return rewriter.createOrFold<mlir::arith::SIToFPOp>(loc, dstType, val);
   }
   return plier::index_cast(rewriter, loc, val, dstType);
 }
@@ -685,9 +687,9 @@ mlir::Value floatCastImpl(mlir::PatternRewriter &rewriter, mlir::Location loc,
   auto dstFloatType = dstType.cast<mlir::FloatType>();
   assert(srcFloatType != dstFloatType);
   if (dstFloatType.getWidth() > srcFloatType.getWidth()) {
-    return rewriter.createOrFold<mlir::arith::ExtFOp>(loc, val, dstFloatType);
+    return rewriter.createOrFold<mlir::arith::ExtFOp>(loc, dstFloatType, val);
   } else {
-    return rewriter.createOrFold<mlir::arith::TruncFOp>(loc, val, dstFloatType);
+    return rewriter.createOrFold<mlir::arith::TruncFOp>(loc, dstFloatType, val);
   }
 }
 
@@ -1006,7 +1008,7 @@ static mlir::Value unaryInvert(mlir::PatternRewriter &rewriter,
   if (intType.getWidth() == 1) {
     intType = rewriter.getIntegerType(64);
     signlessType = intType;
-    arg = rewriter.create<mlir::arith::ExtUIOp>(loc, arg, intType);
+    arg = rewriter.create<mlir::arith::ExtUIOp>(loc, intType, arg);
   } else {
     signlessType = plier::makeSignlessType(intType);
     if (intType != signlessType)
@@ -1293,7 +1295,7 @@ void PlierToStdPass::runOnOperation() {
 
   auto context = &getContext();
   populateStdTypeConverter(*context, typeConverter);
-  populateTupleTypeConverter(*context, typeConverter);
+  plier::populateTupleTypeConverter(*context, typeConverter);
 
   auto materializeCast = [](mlir::OpBuilder &builder, mlir::Type type,
                             mlir::ValueRange inputs,
@@ -1391,7 +1393,6 @@ static void populatePlierToStdPipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<BuiltinCallsLoweringPass>());
   pm.addPass(plier::createForceInlinePass());
   pm.addPass(mlir::createSymbolDCEPass());
-  pm.addNestedPass<mlir::FuncOp>(mlir::createStdExpandOpsPass());
   pm.addPass(mlir::createCanonicalizerPass());
 }
 } // namespace
@@ -1410,21 +1411,6 @@ void populateStdTypeConverter(mlir::MLIRContext & /*context*/,
 
         retTypes.push_back(ret);
         return mlir::success();
-      });
-}
-
-void populateTupleTypeConverter(mlir::MLIRContext & /*context*/,
-                                mlir::TypeConverter &converter) {
-  converter.addConversion(
-      [&converter](mlir::TupleType type) -> llvm::Optional<mlir::Type> {
-        llvm::SmallVector<mlir::Type> newTypes(type.size());
-        for (auto it : llvm::enumerate(type)) {
-          auto converted = converter.convertType(it.value());
-          if (!converted)
-            return mlir::Type{};
-          newTypes[it.index()] = converted;
-        }
-        return mlir::TupleType::get(type.getContext(), newTypes);
       });
 }
 
