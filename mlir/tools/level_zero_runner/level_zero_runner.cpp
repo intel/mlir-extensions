@@ -50,7 +50,6 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
   PassManager passManager(module.getContext());
   applyPassManagerCLOptions(passManager);
 
-  // Linalg to GPU start
   passManager.addPass(arith::createConstantBufferizePass());
   passManager.addNestedPass<mlir::FuncOp>(createSCFBufferizePass());
   passManager.addNestedPass<mlir::FuncOp>(createLinalgBufferizePass());
@@ -65,9 +64,6 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
   passManager.addNestedPass<mlir::FuncOp>(
       gpu_runtime::createParallelLoopGPUMappingPass());
   passManager.addNestedPass<mlir::FuncOp>(createParallelLoopToGpuPass());
-  passManager.addNestedPass<mlir::FuncOp>(createLowerAffinePass());
-
-  // Linalg to GPU end
 
   passManager.addNestedPass<mlir::FuncOp>(
       gpu_runtime::createInsertGPUAllocsPass());

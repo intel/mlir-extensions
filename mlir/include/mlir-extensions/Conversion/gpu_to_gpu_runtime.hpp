@@ -56,16 +56,7 @@
 
 #include <llvm/ADT/SmallBitVector.h>
 
-#include "mlir-extensions/compiler/pipeline_registry.hpp"
 #include "mlir-extensions/dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
-#include "mlir-extensions/transforms/call_lowering.hpp"
-#include "mlir-extensions/transforms/cast_utils.hpp"
-#include "mlir-extensions/transforms/common_opts.hpp"
-#include "mlir-extensions/transforms/const_utils.hpp"
-#include "mlir-extensions/transforms/func_utils.hpp"
-#include "mlir-extensions/transforms/pipeline_utils.hpp"
-#include "mlir-extensions/transforms/rewrite_wrapper.hpp"
-#include "mlir-extensions/transforms/type_conversion.hpp"
 
 namespace gpu_runtime {
 

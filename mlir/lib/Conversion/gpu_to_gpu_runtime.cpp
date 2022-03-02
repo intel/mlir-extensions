@@ -13,7 +13,6 @@
 // limitations under the License.
 
 #include "mlir-extensions/Conversion/gpu_to_gpu_runtime.hpp"
-#include <iostream>
 
 static const char *kGpuAllocShared = "gpu.alloc_shared";
 
@@ -68,8 +67,6 @@ struct ParallelLoopGPUMappingPass
         return;
       }
     }
-
-    //    mlir::greedilyMapParallelSCFToGPU(region);
   }
 };
 
