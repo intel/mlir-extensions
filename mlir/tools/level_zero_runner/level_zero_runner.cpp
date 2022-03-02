@@ -51,12 +51,9 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
   applyPassManagerCLOptions(passManager);
 
   // Linalg to GPU start
-  // passManager.addNestedPass<mlir::FuncOp>(
-  //    arith::createArithmeticBufferizePass());
   passManager.addPass(arith::createConstantBufferizePass());
   passManager.addNestedPass<mlir::FuncOp>(createSCFBufferizePass());
   passManager.addNestedPass<mlir::FuncOp>(createLinalgBufferizePass());
-  // passManager.addNestedPass<mlir::FuncOp>(createStdBufferizePass());
   passManager.addNestedPass<mlir::FuncOp>(createTensorBufferizePass());
   passManager.addPass(createFuncBufferizePass());
   passManager.addNestedPass<mlir::FuncOp>(
@@ -78,10 +75,6 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
   passManager.addNestedPass<mlir::FuncOp>(
       gpu_runtime::createUnstrideMemrefsPass());
   passManager.addNestedPass<mlir::FuncOp>(mlir::createLowerAffinePass());
-
-  passManager.addPass(createSymbolDCEPass());
-  passManager.addPass(mlir::createCanonicalizerPass());
-  passManager.addNestedPass<mlir::FuncOp>(mlir::createCSEPass());
 
   passManager.addPass(createGpuKernelOutliningPass());
   passManager.addPass(memref::createFoldSubViewOpsPass());
