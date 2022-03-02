@@ -902,6 +902,7 @@ struct GPUToSpirvPass
     mlir::populateSCFToSPIRVPatterns(typeConverter, scfToSpirvCtx, patterns);
     mlir::populateGPUToSPIRVPatterns(typeConverter, patterns);
     mlir::populateStandardToSPIRVPatterns(typeConverter, patterns);
+    mlir::cf::populateControlFlowToSPIRVPatterns(typeConverter, patterns);
     mlir::arith::populateArithmeticToSPIRVPatterns(typeConverter, patterns);
     mlir::populateMathToSPIRVPatterns(typeConverter, patterns);
 

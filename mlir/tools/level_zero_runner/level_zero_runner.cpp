@@ -51,8 +51,8 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
   applyPassManagerCLOptions(passManager);
 
   // Linalg to GPU start
-  passManager.addNestedPass<mlir::FuncOp>(
-      arith::createArithmeticBufferizePass());
+  // passManager.addNestedPass<mlir::FuncOp>(
+  //    arith::createArithmeticBufferizePass());
   passManager.addPass(arith::createConstantBufferizePass());
   passManager.addNestedPass<mlir::FuncOp>(createSCFBufferizePass());
   passManager.addNestedPass<mlir::FuncOp>(createLinalgBufferizePass());

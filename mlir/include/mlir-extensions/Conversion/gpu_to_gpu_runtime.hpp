@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "mlir/Conversion/ControlFlowToSPIRV/ControlFlowToSPIRV.h"
 #include <llvm/Support/FormatVariadic.h>
 #include <mlir/Analysis/BufferViewFlowAnalysis.h>
 #include <mlir/Conversion/AffineToStandard/AffineToStandard.h>
@@ -31,6 +32,7 @@
 #include <mlir/Conversion/StandardToSPIRV/StandardToSPIRV.h>
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
 #include <mlir/Dialect/Arithmetic/Transforms/Passes.h>
+#include <mlir/Dialect/ControlFlow/IR/ControlFlowOps.h>
 #include <mlir/Dialect/GPU/ParallelLoopMapper.h>
 #include <mlir/Dialect/GPU/Passes.h>
 #include <mlir/Dialect/GPU/Utils.h>
