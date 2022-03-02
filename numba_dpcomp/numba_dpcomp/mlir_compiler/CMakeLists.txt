@@ -113,17 +113,9 @@ set(CMAKE_INSTALL_BINDIR ./numba_dpcomp/numba_dpcomp)
 set(CMAKE_INSTALL_LIBDIR ./numba_dpcomp/numba_dpcomp)
 set(CMAKE_INSTALL_INCLUDEDIR ./numba_dpcomp/numba_dpcomp)
 
-if(PYTHON_RUNTIME)
-    install(TARGETS dpcomp-runtime dpcomp-math-runtime dpcomp-python-runtime mlir_compiler
-            LIBRARY DESTINATION numba_dpcomp/numba_dpcomp
-            )
-else()
-    install(TARGETS dpcomp-runtime dpcomp-math-runtime mlir_compiler
-            LIBRARY DESTINATION numba_dpcomp/numba_dpcomp
-            )
-endif()
-
-
+install(TARGETS dpcomp-runtime dpcomp-math-runtime dpcomp-python-runtime mlir_compiler
+        LIBRARY DESTINATION numba_dpcomp/numba_dpcomp
+        )
 
 if(GPU_ENABLE)
     install(TARGETS dpcomp-gpu-runtime

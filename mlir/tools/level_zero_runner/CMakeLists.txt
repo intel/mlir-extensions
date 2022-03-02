@@ -38,6 +38,7 @@ apply_llvm_compile_flags(${PROJECT_NAME})
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
     mlir-extensions
+    dpcomp-gpu-runtime
     ${dialect_libs}
     ${conversion_libs}
     MLIROptLib
@@ -69,7 +70,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${MLIR_INCLUDE_DIRS}
     )
 
-set(CMAKE_INSTALL_BINDIR ${CMAKE_SOURCE_DIR}/mlir/tools/level_zero_runner)
+set(CMAKE_INSTALL_BINDIR ${CMAKE_SOURCE_DIR}/build/level_zero_runner)
 
 install(TARGETS level_zero_runner
         PERMISSIONS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE

@@ -51,7 +51,7 @@ endif()
 
 option(DPNP_ENABLE "Use DPNP for some math functions" OFF)
 option(GPU_ENABLE "Enable GPU codegen" OFF)
-option(PYTHON_RUNTIME "Enable Python Runtime" ON)
+option(NUMBA_ENABLE "Enable Numba" ON)
 
 message(STATUS "DPNP_ENABLE ${DPNP_ENABLE}")
 message(STATUS "GPU_ENABLE ${GPU_ENABLE}")
@@ -67,19 +67,17 @@ macro(apply_llvm_compile_flags target)
     target_compile_definitions(${target} PRIVATE ${LLVM_DEFINITIONS})
 endmacro()
 
-add_subdirectory(mlir)
-add_subdirectory(dpcomp_math_runtime)
-add_subdirectory(dpcomp_runtime)
-add_subdirectory(tools)
-
 if(GPU_ENABLE)
     add_subdirectory(dpcomp_gpu_runtime)
 endif()
 
-if(PYTHON_RUNTIME)
+add_subdirectory(mlir)
+
+if(NUMBA_ENABLE)
     add_subdirectory(numba_dpcomp)
-else()
-    add_subdirectory(numba_dpcomp/numba_dpcomp/mlir_compiler)
+    add_subdirectory(dpcomp_math_runtime)
+    add_subdirectory(dpcomp_runtime)
+    add_subdirectory(tools)
 endif()
 
 if(BUILD_TESTING)
