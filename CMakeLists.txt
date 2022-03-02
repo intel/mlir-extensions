@@ -51,6 +51,7 @@ endif()
 
 option(DPNP_ENABLE "Use DPNP for some math functions" OFF)
 option(GPU_ENABLE "Enable GPU codegen" OFF)
+option(PYTHON_RUNTIME "Enable Python Runtime" ON)
 
 message(STATUS "DPNP_ENABLE ${DPNP_ENABLE}")
 message(STATUS "GPU_ENABLE ${GPU_ENABLE}")
@@ -75,7 +76,11 @@ if(GPU_ENABLE)
     add_subdirectory(dpcomp_gpu_runtime)
 endif()
 
-add_subdirectory(numba_dpcomp)
+if(PYTHON_RUNTIME)
+    add_subdirectory(numba_dpcomp)
+else()
+    add_subdirectory(numba_dpcomp/numba_dpcomp/mlir_compiler)
+endif()
 
 if(BUILD_TESTING)
     add_subdirectory(test)
