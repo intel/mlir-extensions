@@ -16,16 +16,27 @@ project(dpcomp-runtime LANGUAGES CXX C)
 
 include(GenerateExportHeader)
 
-find_package(TBB REQUIRED)
+if(NUMBA_ENABLE)
+    find_package(TBB REQUIRED)
+endif()
+
 find_package(MLIR REQUIRED CONFIG)
 
-set(SOURCES_LIST
-    lib/context.cpp
-    lib/tbb_parallel.cpp
-    lib/memory.cpp
-    )
-set(HEADERS_LIST
-    )
+if(NUMBA_ENABLE)
+    set(SOURCES_LIST
+        lib/context.cpp
+        lib/tbb_parallel.cpp
+        lib/memory.cpp
+        )
+    set(HEADERS_LIST
+        )
+else()
+    set(SOURCES_LIST
+        lib/memory.cpp
+        )   
+    set(HEADERS_LIST
+        )        
+endif()
 
 add_library(${PROJECT_NAME} SHARED ${SOURCES_LIST} ${HEADERS_LIST})
 generate_export_header(${PROJECT_NAME})
@@ -35,5 +46,6 @@ target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE
     PRIVATE
     ${PROJECT_BINARY_DIR}
     )
-
-target_link_libraries(${PROJECT_NAME} TBB::tbb)
+if(NUMBA_ENABLE)
+    target_link_libraries(${PROJECT_NAME} TBB::tbb)
+endif()

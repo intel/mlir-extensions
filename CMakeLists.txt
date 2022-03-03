@@ -72,11 +72,11 @@ if(GPU_ENABLE)
 endif()
 
 add_subdirectory(mlir)
+add_subdirectory(dpcomp_runtime)
 
 if(NUMBA_ENABLE)
     add_subdirectory(numba_dpcomp)
     add_subdirectory(dpcomp_math_runtime)
-    add_subdirectory(dpcomp_runtime)
     add_subdirectory(tools)
 endif()
 

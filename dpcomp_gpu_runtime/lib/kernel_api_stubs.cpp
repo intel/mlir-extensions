@@ -27,22 +27,7 @@
   abort();
 }
 
-template <typename T, int N> struct MemRefDescriptor {
-  T *allocated;
-  T *aligned;
-  int64_t offset;
-  int64_t sizes[N];
-  int64_t strides[N];
-};
-
 #define STUB() stub(__func__)
-
-/// Fills the given 1D float memref with the given float value.
-extern "C" DPCOMP_GPU_RUNTIME_EXPORT void
-_mlir_ciface_fillResource1DFloat(MemRefDescriptor<float, 1> *ptr, // NOLINT
-                                 float value) {
-  std::fill_n(ptr->allocated, ptr->sizes[0], value);
-}
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT int64_t
 _mlir_ciface_get_global_id(int64_t) {

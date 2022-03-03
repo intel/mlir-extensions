@@ -25,6 +25,21 @@
 
 #include "dpcomp-runtime_export.h"
 
+template <typename T, int N> struct MemRefDescriptor {
+  T *allocated;
+  T *aligned;
+  int64_t offset;
+  int64_t sizes[N];
+  int64_t strides[N];
+};
+
+/// Fills the given 1D float memref with the given float value.
+extern "C" DPCOMP_RUNTIME_EXPORT void
+_mlir_ciface_fillResource1DFloat(MemRefDescriptor<float, 1> *ptr, // NOLINT
+                                 float value) {
+  std::fill_n(ptr->allocated, ptr->sizes[0], value);
+}
+
 extern "C" DPCOMP_RUNTIME_EXPORT void
 memrefCopy(int64_t elemSize, UnrankedMemRefType<char> *srcArg,
            UnrankedMemRefType<char> *dstArg) {
