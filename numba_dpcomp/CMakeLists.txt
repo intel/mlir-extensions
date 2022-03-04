@@ -13,4 +13,5 @@
 # limitations under the License.
 
 add_subdirectory(numba_dpcomp/python_runtime)
+add_subdirectory(numba_dpcomp/math_runtime)
 add_subdirectory(numba_dpcomp/mlir_compiler)
