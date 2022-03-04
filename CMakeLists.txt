@@ -51,12 +51,12 @@ endif()
 
 option(DPNP_ENABLE "Use DPNP for some math functions" OFF)
 option(GPU_ENABLE "Enable GPU codegen" OFF)
-option(PYTHON_ENABLE "Enable python frontend" ON)
+option(NUMBA_ENABLE "Enable numba-based python frontend" ON)
 
 message(STATUS "DPNP_ENABLE ${DPNP_ENABLE}")
 message(STATUS "GPU_ENABLE ${GPU_ENABLE}")
 message(STATUS "BUILD_TESTING ${BUILD_TESTING}")
-message(STATUS "PYTHON_ENABLE ${PYTHON_ENABLE}")
+message(STATUS "NUMBA_ENABLE ${NUMBA_ENABLE}")
 
 include(CTest)
 
@@ -74,7 +74,7 @@ endif()
 
 add_subdirectory(mlir)
 
-if(PYTHON_ENABLE)
+if(NUMBA_ENABLE)
     add_subdirectory(dpcomp_runtime)
     add_subdirectory(tools)
     add_subdirectory(numba_dpcomp)
