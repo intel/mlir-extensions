@@ -30,6 +30,8 @@
 #define GET_OP_CLASSES
 #include "mlir-extensions/dialect/gpu_runtime/IR/GpuRuntimeOps.h.inc"
 
+// TODO: OpaqueType is not tied to gpu dialect. Move this or create separate
+// types
 namespace gpu_runtime {
 class OpaqueType : public ::mlir::Type::TypeBase<OpaqueType, ::mlir::Type,
                                                  ::mlir::TypeStorage> {

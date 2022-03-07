@@ -159,3 +159,4 @@ def GPUSuggestBlockSizeOp : GpuRuntime_Op<"suggest_block_size",
 }
 
 #endif // GPURUNTIME_OPS
+

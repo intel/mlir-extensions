@@ -315,6 +315,7 @@ struct InsertGPUAllocs
       if (access.hostRead && access.deviceWrite)
         builder.create<mlir::memref::CopyOp>(loc, allocResult, param);
 
+      // TODO: Add a memref dealloc or gpu dealloc
       // builder.create<mlir::memref::DeallocOp>(loc, allocResult);
     }
   }

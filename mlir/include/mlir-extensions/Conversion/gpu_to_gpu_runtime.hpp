@@ -14,25 +14,20 @@
 
 #pragma once
 
+#include "mlir-extensions/dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
+
 #include "mlir/Conversion/ControlFlowToSPIRV/ControlFlowToSPIRV.h"
-#include <llvm/Support/FormatVariadic.h>
 #include <mlir/Analysis/BufferViewFlowAnalysis.h>
 #include <mlir/Conversion/AffineToStandard/AffineToStandard.h>
 #include <mlir/Conversion/ArithmeticToSPIRV/ArithmeticToSPIRV.h>
-#include <mlir/Conversion/AsyncToLLVM/AsyncToLLVM.h>
 #include <mlir/Conversion/GPUCommon/GPUCommonPass.h>
 #include <mlir/Conversion/GPUToSPIRV/GPUToSPIRV.h>
 #include <mlir/Conversion/GPUToSPIRV/GPUToSPIRVPass.h>
-#include <mlir/Conversion/LLVMCommon/ConversionTarget.h>
-#include <mlir/Conversion/LLVMCommon/Pattern.h>
-#include <mlir/Conversion/LLVMCommon/TypeConverter.h>
 #include <mlir/Conversion/MathToSPIRV/MathToSPIRV.h>
-#include <mlir/Conversion/SCFToGPU/SCFToGPUPass.h>
 #include <mlir/Conversion/SCFToSPIRV/SCFToSPIRV.h>
 #include <mlir/Conversion/StandardToSPIRV/StandardToSPIRV.h>
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
 #include <mlir/Dialect/Arithmetic/Transforms/Passes.h>
-#include <mlir/Dialect/ControlFlow/IR/ControlFlowOps.h>
 #include <mlir/Dialect/GPU/ParallelLoopMapper.h>
 #include <mlir/Dialect/GPU/Passes.h>
 #include <mlir/Dialect/GPU/Utils.h>
@@ -46,17 +41,13 @@
 #include <mlir/Dialect/SPIRV/Transforms/Passes.h>
 #include <mlir/Dialect/SPIRV/Transforms/SPIRVConversion.h>
 #include <mlir/Dialect/StandardOps/IR/Ops.h>
-#include <mlir/IR/BlockAndValueMapping.h>
-#include <mlir/IR/Dominance.h>
 #include <mlir/Pass/PassManager.h>
 #include <mlir/Target/SPIRV/Serialization.h>
 #include <mlir/Transforms/DialectConversion.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 #include <mlir/Transforms/Passes.h>
-
 #include <llvm/ADT/SmallBitVector.h>
 
-#include "mlir-extensions/dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
 
 namespace gpu_runtime {
 
