@@ -40,7 +40,10 @@ endif()
 add_subdirectory(include/mlir-extensions/dialect/plier)
 add_subdirectory(include/mlir-extensions/dialect/plier_util)
 add_subdirectory(include/mlir-extensions/dialect/gpu_runtime/IR)
-add_subdirectory(tools)
+
+if (GPU_ENABLE)
+    add_subdirectory(tools)
+endif()
 
 set(SOURCES_LIST
     lib/Conversion/SCFToAffine/SCFToAffine.cpp
