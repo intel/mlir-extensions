@@ -52,11 +52,13 @@ endif()
 option(DPNP_ENABLE "Use DPNP for some math functions" OFF)
 option(GPU_ENABLE "Enable GPU codegen" OFF)
 option(NUMBA_ENABLE "Enable numba-based python frontend" ON)
+option(TBB_ENABLE "Enable TBB" ON)
 
 message(STATUS "DPNP_ENABLE ${DPNP_ENABLE}")
 message(STATUS "GPU_ENABLE ${GPU_ENABLE}")
 message(STATUS "BUILD_TESTING ${BUILD_TESTING}")
 message(STATUS "NUMBA_ENABLE ${NUMBA_ENABLE}")
+message(STATUS "TBB_ENABLE ${TBB_ENABLE}")
 
 include(CTest)
 

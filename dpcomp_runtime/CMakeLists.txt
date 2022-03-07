@@ -16,13 +16,13 @@ project(dpcomp-runtime LANGUAGES CXX C)
 
 include(GenerateExportHeader)
 
-if(NUMBA_ENABLE)
+if(TBB_ENABLE)
     find_package(TBB REQUIRED)
 endif()
 
 find_package(MLIR REQUIRED CONFIG)
 
-if(NUMBA_ENABLE)
+if(TBB_ENABLE)
     set(SOURCES_LIST
         lib/context.cpp
         lib/tbb_parallel.cpp
@@ -46,6 +46,6 @@ target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE
     PRIVATE
     ${PROJECT_BINARY_DIR}
     )
-if(NUMBA_ENABLE)
+if(TBB_ENABLE)
     target_link_libraries(${PROJECT_NAME} TBB::tbb)
 endif()
