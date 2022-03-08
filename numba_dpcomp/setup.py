@@ -46,8 +46,8 @@ if int(os.environ.get('DPCOMP_SETUP_RUN_CMAKE', 1)):
 
     cmake_build_dir = os.path.join(root_dir, "cmake_build")
     cmake_cmd = [
-    "cmake",
-    root_dir,
+        "cmake",
+        root_dir,
     ]
 
     cmake_cmd += ["-GNinja"]
@@ -71,14 +71,15 @@ if int(os.environ.get('DPCOMP_SETUP_RUN_CMAKE', 1)):
         DPNP_LIBRARY_DIR = os.path.join(dpnp_get_include(), '..', '..')
         DPNP_INCLUDE_DIR = dpnp_get_include()
         cmake_cmd += [
-                      '-DDPNP_LIBRARY_DIR=' + DPNP_LIBRARY_DIR,
-                      '-DDPNP_INCLUDE_DIR=' + DPNP_INCLUDE_DIR,
-                      '-DDPNP_ENABLE=ON',
-                     ]
+            '-DDPNP_LIBRARY_DIR=' + DPNP_LIBRARY_DIR,
+            '-DDPNP_INCLUDE_DIR=' + DPNP_INCLUDE_DIR,
+            '-DDPNP_ENABLE=ON',
+            '-DNUMBA_ENABLE=ON',
+            '-DTBB_ENABLE=ON'
+        ]
         print("Found DPNP at", DPNP_LIBRARY_DIR)
     except ImportError:
         print("DPNP not found")
-
 
     # GPU/L0
     LEVEL_ZERO_DIR = os.getenv('LEVEL_ZERO_DIR', None)
@@ -87,22 +88,25 @@ if int(os.environ.get('DPCOMP_SETUP_RUN_CMAKE', 1)):
     else:
         print('LEVEL_ZERO_DIR is', LEVEL_ZERO_DIR)
         cmake_cmd += [
-                      '-DLEVEL_ZERO_DIR=' + LEVEL_ZERO_DIR,
-                      '-DGPU_ENABLE=ON',
-                     ]
+            '-DLEVEL_ZERO_DIR=' + LEVEL_ZERO_DIR,
+            '-DGPU_ENABLE=ON',
+        ]
 
     try:
         os.mkdir(cmake_build_dir)
     except FileExistsError:
         pass
 
-    subprocess.check_call(cmake_cmd, stderr=subprocess.STDOUT, shell=False, cwd=cmake_build_dir)
-    subprocess.check_call(["cmake", "--build", ".", "--config", "Release"], cwd=cmake_build_dir)
-    subprocess.check_call(["cmake", "--install", ".", "--config", "Release"], cwd=cmake_build_dir)
+    subprocess.check_call(cmake_cmd, stderr=subprocess.STDOUT,
+                          shell=False, cwd=cmake_build_dir)
+    subprocess.check_call(
+        ["cmake", "--build", ".", "--config", "Release"], cwd=cmake_build_dir)
+    subprocess.check_call(
+        ["cmake", "--install", ".", "--config", "Release"], cwd=cmake_build_dir)
 
 # =============================================================================
 
-packages = find_packages(include=["numba_dpcomp","numba_dpcomp.*"])
+packages = find_packages(include=["numba_dpcomp", "numba_dpcomp.*"])
 
 metadata = dict(
     name="numba-dpcomp",

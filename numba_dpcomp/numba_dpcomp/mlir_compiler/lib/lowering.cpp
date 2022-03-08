@@ -700,6 +700,7 @@ static void createPipeline(plier::PipelineRegistry &registry,
   if (settings.enableGpuPipeline) {
 #ifdef GPU_ENABLE
     registerLowerToGPUPipeline(registry);
+    // TODO(nbpatel): Add Gpu->GpuRuntime & GpuRuntimetoLlvm Transformation
 #else
     plier::reportError("DPCOMP was compiled without GPU support");
 #endif

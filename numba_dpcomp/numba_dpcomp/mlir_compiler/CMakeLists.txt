@@ -117,7 +117,6 @@ install(TARGETS dpcomp-runtime dpcomp-math-runtime dpcomp-python-runtime mlir_co
         LIBRARY DESTINATION numba_dpcomp/numba_dpcomp
         )
 
-
 if(GPU_ENABLE)
     install(TARGETS dpcomp-gpu-runtime
             LIBRARY DESTINATION numba_dpcomp/numba_dpcomp

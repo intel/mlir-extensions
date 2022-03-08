@@ -37,7 +37,7 @@ llvm_config.with_system_environment(
 # excludes: A list of directories to exclude from the testsuite. The 'Inputs'
 # subdirectories contain auxiliary inputs for various tests in their parent
 # directories.
-config.excludes = ['runlit.py', 'lit.cfg.py', 'CMakeLists.txt']
+config.excludes = ['runlit.py', 'lit.cfg.py', 'CMakeLists.txt', 'addf.mlir', 'linalg_addf.mlir', 'linalg_test.mlir']
 
 # test_source_root: The root path where tests are located.
 config.test_source_root = os.path.dirname(__file__)
