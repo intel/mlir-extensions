@@ -285,4 +285,3 @@ mlir::StringAttr GPUSuggestBlockSizeOp::getKernelName() {
 
 #define GET_OP_CLASSES
 #include "mlir-extensions/dialect/gpu_runtime/IR/GpuRuntimeOps.cpp.inc"
-
