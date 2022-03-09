@@ -15,8 +15,6 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <mutex>
-#include <numeric>
 
 #include "dpcomp-gpu-runtime_export.h"
 
