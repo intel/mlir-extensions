@@ -63,6 +63,8 @@ if int(os.environ.get('DPCOMP_SETUP_RUN_CMAKE', 1)):
     "-DCMAKE_INSTALL_PREFIX=" + CMAKE_INSTALL_PREFIX,
     "-DPython3_NumPy_INCLUDE_DIRS=" + NUMPY_INCLUDE_DIR,
     "-DPython3_FIND_STRATEGY=LOCATION",
+    "-DNUMBA_ENABLE=ON",
+    "-DTBB_ENABLE=ON",
     ]
 
     # DPNP
@@ -74,8 +76,6 @@ if int(os.environ.get('DPCOMP_SETUP_RUN_CMAKE', 1)):
             '-DDPNP_LIBRARY_DIR=' + DPNP_LIBRARY_DIR,
             '-DDPNP_INCLUDE_DIR=' + DPNP_INCLUDE_DIR,
             '-DDPNP_ENABLE=ON',
-            '-DNUMBA_ENABLE=ON',
-            '-DTBB_ENABLE=ON'
         ]
         print("Found DPNP at", DPNP_LIBRARY_DIR)
     except ImportError:

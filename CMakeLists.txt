@@ -51,8 +51,8 @@ endif()
 
 option(DPNP_ENABLE "Use DPNP for some math functions" OFF)
 option(GPU_ENABLE "Enable GPU codegen" OFF)
-option(NUMBA_ENABLE "Enable numba-based python frontend" ON)
-option(TBB_ENABLE "Enable TBB" ON)
+option(NUMBA_ENABLE "Enable numba-based python frontend" OFF)
+option(TBB_ENABLE "Enable TBB" OFF)
 
 message(STATUS "DPNP_ENABLE ${DPNP_ENABLE}")
 message(STATUS "GPU_ENABLE ${GPU_ENABLE}")
