@@ -1,3 +1,6 @@
+// XFAIL: *
+// RUN:
+
 #map0 = affine_map<() -> ()>
 #map1 = affine_map<(d0) -> ()>
 #map2 = affine_map<(d0) -> (d0)>

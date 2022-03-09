@@ -1,3 +1,6 @@
+// XFAIL: *
+// RUN:
+
 #map = affine_map<(d0, d1) -> (d0, d1)>
 module {
 func @addt(%arg0: tensor<2x5xf32>, %arg1: tensor<2x5xf32>) -> tensor<2x5xf32> {

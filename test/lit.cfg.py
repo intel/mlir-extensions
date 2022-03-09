@@ -37,7 +37,7 @@ llvm_config.with_system_environment(
 # excludes: A list of directories to exclude from the testsuite. The 'Inputs'
 # subdirectories contain auxiliary inputs for various tests in their parent
 # directories.
-config.excludes = ['runlit.py', 'lit.cfg.py', 'CMakeLists.txt', 'addf.mlir', 'linalg_addf.mlir', 'linalg_test.mlir']
+config.excludes = ['runlit.py', 'lit.cfg.py', 'CMakeLists.txt']
 
 # test_source_root: The root path where tests are located.
 config.test_source_root = os.path.dirname(__file__)
@@ -55,5 +55,8 @@ tools = [
     'FileCheck',
     'dpcomp-opt',
 ]
+
+if os.environ.get('RUN_LIT_GPU_TESTS', None):
+    config.available_features.add('run-gpu-tests')
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)
