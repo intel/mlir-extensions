@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#ifdef TBB_ENABLE
+
 #include <array>
 #include <cassert>
 #include <cstdio>
@@ -227,18 +229,18 @@ DPCOMP_RUNTIME_EXPORT void dpcompParallelFor(const InputRange *input_ranges,
 }
 
 DPCOMP_RUNTIME_EXPORT void dpcompParallelInit(int numThreads) {
-  if (DEBUG) {
+  if (DEBUG)
     fprintf(stderr, "dpcomp_parallel_init %d\n", numThreads);
-  }
-  if (nullptr == globalContext) {
+
+  if (nullptr == globalContext)
     globalContext = std::make_unique<TBBContext>(numThreads);
-  }
 }
 
 DPCOMP_RUNTIME_EXPORT void dpcompParallelFinalize() {
-  if (DEBUG) {
+  if (DEBUG)
     fprintf(stderr, "dpcomp_parallel_finalize\n");
-  }
+
   globalContext.reset();
 }
 }
+#endif // TBB_ENABLE
