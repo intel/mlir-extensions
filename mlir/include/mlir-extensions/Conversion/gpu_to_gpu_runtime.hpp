@@ -17,6 +17,7 @@
 #include "mlir-extensions/dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
 
 #include "mlir/Conversion/ControlFlowToSPIRV/ControlFlowToSPIRV.h"
+#include <llvm/ADT/SmallBitVector.h>
 #include <mlir/Analysis/BufferViewFlowAnalysis.h>
 #include <mlir/Conversion/AffineToStandard/AffineToStandard.h>
 #include <mlir/Conversion/ArithmeticToSPIRV/ArithmeticToSPIRV.h>
@@ -46,8 +47,6 @@
 #include <mlir/Transforms/DialectConversion.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 #include <mlir/Transforms/Passes.h>
-#include <llvm/ADT/SmallBitVector.h>
-
 
 namespace gpu_runtime {
 
