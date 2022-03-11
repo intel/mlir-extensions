@@ -33,6 +33,7 @@ from .gpu_runtime import *
 
 import llvmlite.binding as llvm
 
+
 class mlir_lower(orig_Lower):
     def lower(self):
         if USE_MLIR:
@@ -45,12 +46,13 @@ class mlir_lower(orig_Lower):
 
     def lower_normal_function(self, fndesc):
         if USE_MLIR:
-            mod_ir = self.metadata.pop('mlir_blob')
+            mod_ir = self.metadata.pop("mlir_blob")
             mod = llvm.parse_bitcode(mod_ir)
             self.setup_function(fndesc)
-            self.library.add_llvm_module(mod);
+            self.library.add_llvm_module(mod)
         else:
             orig_Lower.lower_normal_function(self, desc)
+
 
 @register_pass(mutates_CFG=True, analysis_only=False)
 class mlir_NativeLowering(orig_NativeLowering):
@@ -59,6 +61,7 @@ class mlir_NativeLowering(orig_NativeLowering):
 
     def run_pass(self, state):
         import numba.core.lowering
+
         numba.core.lowering.Lower = mlir_lower
         try:
             res = orig_NativeLowering.run_pass(self, state)

@@ -24,24 +24,41 @@ from numba.core.decorators import jit as orig_jit
 from numba.core.decorators import njit as orig_njit
 from numba.np.ufunc import vectorize as orig_vectorize
 
-def mlir_jit(signature_or_function=None, locals={}, cache=False,
-             pipeline_class=None, boundscheck=False, **options):
-    if not options.get('nopython', False):
-        return orig_jit(signature_or_function=signature_or_function,
-                        locals=locals,
-                        cache=cache,
-                        boundscheck=boundscheck,
-                        **options)
 
-    pipeline = mlir_compiler_gpu_pipeline if options.get('enable_gpu_pipeline') else mlir_compiler_pipeline
-    options.pop('enable_gpu_pipeline', None)
-    options.pop('access_types', None) # pop them to ignore since they are not a part of numba but dppy.
-    return orig_jit(signature_or_function=signature_or_function,
-                    locals=locals,
-                    cache=cache,
-                    pipeline_class=pipeline,
-                    boundscheck=boundscheck,
-                    **options)
+def mlir_jit(
+    signature_or_function=None,
+    locals={},
+    cache=False,
+    pipeline_class=None,
+    boundscheck=False,
+    **options
+):
+    if not options.get("nopython", False):
+        return orig_jit(
+            signature_or_function=signature_or_function,
+            locals=locals,
+            cache=cache,
+            boundscheck=boundscheck,
+            **options
+        )
+
+    pipeline = (
+        mlir_compiler_gpu_pipeline
+        if options.get("enable_gpu_pipeline")
+        else mlir_compiler_pipeline
+    )
+    options.pop("enable_gpu_pipeline", None)
+    options.pop(
+        "access_types", None
+    )  # pop them to ignore since they are not a part of numba but dppy.
+    return orig_jit(
+        signature_or_function=signature_or_function,
+        locals=locals,
+        cache=cache,
+        pipeline_class=pipeline,
+        boundscheck=boundscheck,
+        **options
+    )
 
 
 def mlir_njit(*args, **kws):
@@ -50,13 +67,14 @@ def mlir_njit(*args, **kws):
 
     See documentation for jit function/decorator for full description.
     """
-    if 'nopython' in kws:
-        warnings.warn('nopython is set for njit and is ignored', RuntimeWarning)
-    if 'forceobj' in kws:
-        warnings.warn('forceobj is set for njit and is ignored', RuntimeWarning)
-        del kws['forceobj']
-    kws.update({'nopython': True})
+    if "nopython" in kws:
+        warnings.warn("nopython is set for njit and is ignored", RuntimeWarning)
+    if "forceobj" in kws:
+        warnings.warn("forceobj is set for njit and is ignored", RuntimeWarning)
+        del kws["forceobj"]
+    kws.update({"nopython": True})
     return jit(*args, **kws)
+
 
 if USE_MLIR:
     jit = mlir_jit
@@ -71,6 +89,7 @@ else:
 def override_numba_decorators():
     if USE_MLIR:
         import numba
+
         numba.jit = jit
         numba.njit = njit
         numba.vectorize = vectorize

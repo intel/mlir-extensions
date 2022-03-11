@@ -19,22 +19,23 @@ import atexit
 import sys
 import numba_dpcomp
 
+
 def load_lib(name):
     runtime_search_paths = [os.path.dirname(numba_dpcomp.__file__)]
 
     try:
-        runtime_search_paths += os.environ['PYTHONPATH'].split(os.pathsep)
+        runtime_search_paths += os.environ["PYTHONPATH"].split(os.pathsep)
     except KeyError:
         pass
 
-    if sys.platform.startswith('linux'):
-        lib_name = f'lib{name}.so'
-    elif sys.platform.startswith('darwin'):
-        lib_name = f'lib{name}.dylib'
-    elif sys.platform.startswith('win'):
-        lib_name = f'{name}.dll'
+    if sys.platform.startswith("linux"):
+        lib_name = f"lib{name}.so"
+    elif sys.platform.startswith("darwin"):
+        lib_name = f"lib{name}.dylib"
+    elif sys.platform.startswith("win"):
+        lib_name = f"{name}.dll"
     else:
-        assert False, 'unsupported platform'
+        assert False, "unsupported platform"
 
     saved_errors = []
     for path in runtime_search_paths:
@@ -42,15 +43,17 @@ def load_lib(name):
         try:
             return ctypes.CDLL(lib_path)
         except Exception as e:
-            saved_errors.append(f'CDLL(\"{lib_path}\"): {str(e)}')
+            saved_errors.append(f'CDLL("{lib_path}"): {str(e)}')
 
-    raise ValueError(f'load_lib(\"{name}\") failed:\n' + '\n'.join(saved_errors))
+    raise ValueError(f'load_lib("{name}") failed:\n' + "\n".join(saved_errors))
+
 
 def mlir_func_name(name):
-    return '_mlir_ciface_' + name
+    return "_mlir_ciface_" + name
 
 
 _registered_cfuncs = []
+
 
 def register_cfunc(ll, name, cfunc):
     global _registered_cfuncs

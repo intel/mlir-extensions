@@ -16,6 +16,7 @@ from .func_registry import add_func
 from .inner_compiler import compile_func
 import numpy
 
+
 class Var:
     def __init__(self, context, ssa_val):
         self._context = context
@@ -36,30 +37,58 @@ class Var:
     def __len__(self):
         res = self._len(self._context, self._ssa_val)
         if res is None:
-            raise ValueError('No len')
+            raise ValueError("No len")
 
         return res
 
     def __getitem__(self, index):
         return self._getitem(self._context, self._ssa_val, index)
 
-    def __add__(self, o): return self._binop(self._context, self._ssa_val, o, '+')
-    def __radd__(self, o): return self._binop(self._context, self._ssa_val, o, '+')
-    def __sub__(self, o): return self._binop(self._context, self._ssa_val, o, '-')
-    def __rsub__(self, o): return self._binop(self._context, self._ssa_val, o, 'r-')
-    def __mul__(self, o): return self._binop(self._context, self._ssa_val, o, '*')
-    def __rmul__(self, o): return self._binop(self._context, self._ssa_val, o, '*')
-    def __truediv__(self, o): return self._binop(self._context, self._ssa_val, o, '/')
+    def __add__(self, o):
+        return self._binop(self._context, self._ssa_val, o, "+")
 
-    def __lt__(self, o): return self._binop(self._context, self._ssa_val, o, 'lt')
-    def __le__(self, o): return self._binop(self._context, self._ssa_val, o, 'le')
-    def __gt__(self, o): return self._binop(self._context, self._ssa_val, o, 'gt')
-    def __ge__(self, o): return self._binop(self._context, self._ssa_val, o, 'ge')
-    def __eq__(self, o): return self._binop(self._context, self._ssa_val, o, 'eq')
-    def __ne__(self, o): return self._binop(self._context, self._ssa_val, o, 'ne')
+    def __radd__(self, o):
+        return self._binop(self._context, self._ssa_val, o, "+")
 
-    def __str__(self): return self._str(self._context, self._ssa_val)
-    def __repr__(self): return self._str(self._context, self._ssa_val)
+    def __sub__(self, o):
+        return self._binop(self._context, self._ssa_val, o, "-")
+
+    def __rsub__(self, o):
+        return self._binop(self._context, self._ssa_val, o, "r-")
+
+    def __mul__(self, o):
+        return self._binop(self._context, self._ssa_val, o, "*")
+
+    def __rmul__(self, o):
+        return self._binop(self._context, self._ssa_val, o, "*")
+
+    def __truediv__(self, o):
+        return self._binop(self._context, self._ssa_val, o, "/")
+
+    def __lt__(self, o):
+        return self._binop(self._context, self._ssa_val, o, "lt")
+
+    def __le__(self, o):
+        return self._binop(self._context, self._ssa_val, o, "le")
+
+    def __gt__(self, o):
+        return self._binop(self._context, self._ssa_val, o, "gt")
+
+    def __ge__(self, o):
+        return self._binop(self._context, self._ssa_val, o, "ge")
+
+    def __eq__(self, o):
+        return self._binop(self._context, self._ssa_val, o, "eq")
+
+    def __ne__(self, o):
+        return self._binop(self._context, self._ssa_val, o, "ne")
+
+    def __str__(self):
+        return self._str(self._context, self._ssa_val)
+
+    def __repr__(self):
+        return self._str(self._context, self._ssa_val)
+
 
 class Type:
     def __init__(self, mlir_type, eq, printer):
@@ -70,13 +99,19 @@ class Type:
     def __eq__(self, other):
         return self._eq(self._mlir_type, other._mlir_type)
 
-    def __str__(self): return self._str(self._mlir_type)
-    def __repr__(self): return self._str(self._mlir_type)
+    def __str__(self):
+        return self._str(self._mlir_type)
+
+    def __repr__(self):
+        return self._str(self._mlir_type)
+
 
 def is_literal(val):
     return not isinstance(val, Var)
 
+
 DYNAMIC_DIM = -1
+
 
 class Builder:
     def __init__(self, context):
@@ -92,7 +127,9 @@ class Builder:
         return self._fill_tensor(self._context, tensor, value)
 
     def linalg_generic(self, inputs, outputs, iterators, maps, body):
-        return self._linalg_generic(self._context, inputs, outputs, iterators, maps, body)
+        return self._linalg_generic(
+            self._context, inputs, outputs, iterators, maps, body
+        )
 
     def linalg_index(self, dim):
         return self._linalg_index(self._context, dim)
@@ -112,7 +149,7 @@ class Builder:
     def insert(self, src, dst, offsets, strides):
         return self._insert(self._context, src, dst, offsets, strides)
 
-    def inline_func(self, func, res_type, *args): # TODO: kwargs
+    def inline_func(self, func, res_type, *args):  # TODO: kwargs
         return self._inline_func(self._context, func, res_type, args)
 
     def cast(self, arg, dtype):
@@ -133,18 +170,20 @@ class Builder:
     def array_type(self, dims, dtype):
         return self._array_type(self._context, dims, dtype)
 
+
 class FuncRegistry:
     def __init__(self):
         self.funcs = {}
 
-    def register_func(self, name, orig_func = None):
+    def register_func(self, name, orig_func=None):
         def _decorator(func):
-            mangled_name = name + '()'
+            mangled_name = name + "()"
             assert not mangled_name in self.funcs
             self.funcs[mangled_name] = func
             if not orig_func is None:
                 add_func(orig_func, name)
             return func
+
         return _decorator
 
     def register_attr(self, name):
@@ -152,10 +191,12 @@ class FuncRegistry:
             assert not name in self.funcs
             self.funcs[name] = func
             return func
+
         return _decorator
 
     def lookup_func(self, name):
         return self.funcs.get(name)
+
 
 def _get_numpy_types(builder):
     return [
@@ -172,21 +213,26 @@ def _get_numpy_types(builder):
         (builder.float64, numpy.float64),
     ]
 
+
 def type_to_numpy(builder, t):
     for src, dst in _get_numpy_types(builder):
-        if t == src: return dst
+        if t == src:
+            return dst
 
-    assert False, f'Cannot convert type: {str(t)}'
+    assert False, f"Cannot convert type: {str(t)}"
+
 
 def type_from_numpy(builder, t):
     for dst, src in _get_numpy_types(builder):
-        if t == src: return dst
+        if t == src:
+            return dst
 
-    assert False, f'Cannot convert type: {str(t)}'
+    assert False, f"Cannot convert type: {str(t)}"
+
 
 def broadcast_type(builder, args):
     l = len(args)
-    assert(l > 0)
+    assert l > 0
     lhs = args[0]
     if l == 1:
         return lhs
@@ -199,12 +245,14 @@ def broadcast_type(builder, args):
     rhs = type_to_numpy(builder, rhs)
     return type_from_numpy(builder, numpy.promote_types(lhs, rhs))
 
+
 def get_val_type(builder, a):
     if isinstance(a, float):
         return builder.float64
     elif isinstance(a, int):
         return builder.int64
     return a.type
+
 
 def get_array_type(builder, a):
     if isinstance(a, float):
@@ -213,12 +261,16 @@ def get_array_type(builder, a):
         return builder.int64
     return a.dtype
 
+
 def broadcast_type_arrays(builder, args):
     return broadcast_type(builder, tuple(get_array_type(builder, a) for a in args))
 
-def eltwise(builder, args, body, res_type = None):
+
+def eltwise(builder, args, body, res_type=None):
     if isinstance(args, tuple):
-        args = builder.broadcast(*args, result_type=broadcast_type_arrays(builder, args))
+        args = builder.broadcast(
+            *args, result_type=broadcast_type_arrays(builder, args)
+        )
     else:
         args = (args,)
 
@@ -236,19 +288,21 @@ def eltwise(builder, args, body, res_type = None):
         dummy = builder.cast(0, res_type)
         return builder.inline_func(body, res_type, *(args + (dummy,)))
     else:
-        iterators = ['parallel' for _ in range(num_dims)]
-        dims = ','.join(['d%s' % i for i in range(num_dims)])
-        expr = f'({dims}) -> ({dims})'
+        iterators = ["parallel" for _ in range(num_dims)]
+        dims = ",".join(["d%s" % i for i in range(num_dims)])
+        expr = f"({dims}) -> ({dims})"
         maps = [expr for _ in range(len(args) + 1)]
         init = builder.init_tensor(shape, res_type)
 
         return builder.linalg_generic(args, init, iterators, maps, body)
+
 
 def convert_array(builder, arr, dtype):
     if arr.dtype == dtype:
         return arr
 
     return eltwise(builder, arr, lambda a, b: a, dtype)
+
 
 def _flatten_tuple(src):
     try:
@@ -260,7 +314,7 @@ def _flatten_tuple(src):
         shape, elements = _flatten_tuple(src[0])
         for i in range(1, l):
             shape1, elements1 = _flatten_tuple(src[i])
-            assert(shape == shape1)
+            assert shape == shape1
             elements += elements1
 
         if shape is None:
@@ -269,6 +323,7 @@ def _flatten_tuple(src):
             shape = [l] + shape
         return (shape, elements)
     return (None, [src])
+
 
 def asarray(builder, src, dtype=None):
     shape, elements = _flatten_tuple(src)
@@ -286,6 +341,7 @@ def asarray(builder, src, dtype=None):
 
     return arr
 
+
 def is_int(t, b):
     types = [
         b.bool,
@@ -300,27 +356,29 @@ def is_int(t, b):
     ]
     return t in types
 
+
 def is_float(t, b):
     return t == b.float16 or t == b.float32 or t == b.float64
 
+
 def dtype_str(builder, dtype):
     names = [
-        (builder.int8,  'int8'),
-        (builder.int16, 'int16'),
-        (builder.int32, 'int32'),
-        (builder.int64, 'int64'),
-        (builder.uint8,  'uint8'),
-        (builder.uint16, 'uint16'),
-        (builder.uint32, 'uint32'),
-        (builder.uint64, 'uint64'),
-        (builder.int8_signless,  'int8'),
-        (builder.int16_signless, 'int16'),
-        (builder.int32_signless, 'int32'),
-        (builder.int64_signless, 'int64'),
-        (builder.float32, 'float32'),
-        (builder.float64, 'float64'),
+        (builder.int8, "int8"),
+        (builder.int16, "int16"),
+        (builder.int32, "int32"),
+        (builder.int64, "int64"),
+        (builder.uint8, "uint8"),
+        (builder.uint16, "uint16"),
+        (builder.uint32, "uint32"),
+        (builder.uint64, "uint64"),
+        (builder.int8_signless, "int8"),
+        (builder.int16_signless, "int16"),
+        (builder.int32_signless, "int32"),
+        (builder.int64_signless, "int64"),
+        (builder.float32, "float32"),
+        (builder.float64, "float64"),
     ]
     for t, name in names:
         if t == dtype:
             return name
-    assert False, f'dtype_str unhandled type: {dtype}'
+    assert False, f"dtype_str unhandled type: {dtype}"

@@ -16,12 +16,14 @@ from numba_dpcomp import njit
 import inspect
 import pytest
 
+
 def parametrize_function_variants(name, strings):
     caller_frame = inspect.stack()[1]
     caller_module = inspect.getmodule(caller_frame[0])
     g = vars(caller_module)
     funcs = [eval(f, g) for f in strings]
     return pytest.mark.parametrize(name, funcs, ids=strings)
+
 
 class JitfuncCache:
     def __init__(self, decorator):
@@ -38,6 +40,7 @@ class JitfuncCache:
         jitted = self._decorator(func)
         self._cached_funcs[func] = jitted
         return jitted
+
 
 njit_cache = JitfuncCache(njit)
 njit_cached = njit_cache.cached_decorator

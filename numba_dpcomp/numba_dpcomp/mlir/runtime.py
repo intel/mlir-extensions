@@ -18,7 +18,7 @@ from numba.np.ufunc.parallel import get_thread_count
 import llvmlite.binding as ll
 from .utils import load_lib, register_cfunc
 
-runtime_lib = load_lib('dpcomp-runtime')
+runtime_lib = load_lib("dpcomp-runtime")
 
 _init_func = runtime_lib.dpcompParallelInit
 _init_func.argtypes = [ctypes.c_int]
@@ -27,16 +27,17 @@ _init_func(get_thread_count())
 _finalize_func = runtime_lib.dpcompParallelFinalize
 
 _funcs = [
-    'dpcompParallelFor',
-    'memrefCopy',
-    'dpcompTakeContext',
-    'dpcompReleaseContext',
-    'dpcompPurgeContext',
+    "dpcompParallelFor",
+    "memrefCopy",
+    "dpcompTakeContext",
+    "dpcompReleaseContext",
+    "dpcompPurgeContext",
 ]
 
 for name in _funcs:
     func = getattr(runtime_lib, name)
     register_cfunc(ll, name, func)
+
 
 @atexit.register
 def _cleanup():

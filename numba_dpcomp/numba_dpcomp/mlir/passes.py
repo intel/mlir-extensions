@@ -14,7 +14,7 @@
 
 from numba.core import types
 from numba.core.compiler import DEFAULT_FLAGS, compile_result
-from numba.core.compiler_machinery import (FunctionPass, register_pass)
+from numba.core.compiler_machinery import FunctionPass, register_pass
 from numba.core.funcdesc import qualifying_prefix
 from numba.np.ufunc.parallel import get_thread_count
 import numba.core.types.functions
@@ -27,22 +27,26 @@ from .. import mlir_compiler
 
 _print_before = []
 _print_after = []
-_print_buffer = ''
+_print_buffer = ""
+
 
 def write_print_buffer(text):
     global _print_buffer
     _print_buffer += text
 
+
 def get_print_buffer():
     global _print_buffer
     if len(_print_buffer) == 0:
-        raise ValueError('Pass print buffer is empty')
+        raise ValueError("Pass print buffer is empty")
 
     return _print_buffer
+
 
 def is_print_buffer_empty():
     global _print_buffer
     return len(_print_buffer) == 0
+
 
 @contextmanager
 def print_pass_ir(print_before, print_after):
@@ -54,7 +58,7 @@ def print_pass_ir(print_before, print_after):
     old_buffer = _print_buffer
     _print_before = print_before
     _print_after = print_after
-    _print_buffer = ''
+    _print_buffer = ""
     try:
         yield (print_before, print_after)
     finally:
@@ -62,18 +66,21 @@ def print_pass_ir(print_before, print_after):
         _print_after = old_after
         _print_buffer = old_buffer
 
+
 _mlir_last_compiled_func = None
 _mlir_active_module = None
 
+
 def _init_compiler():
     settings = {}
-    settings['debug_type'] = DEBUG_TYPE
+    settings["debug_type"] = DEBUG_TYPE
     mlir_compiler.init_compiler(settings)
+
 
 _init_compiler()
 
-class MlirBackendBase(FunctionPass):
 
+class MlirBackendBase(FunctionPass):
     def __init__(self, push_func_stack):
         self._push_func_stack = push_func_stack
         self._get_func_name = func_registry.get_func_name
@@ -105,7 +112,7 @@ class MlirBackendBase(FunctionPass):
         if isinstance(obj, numba.core.types.functions.Dispatcher):
             flags = DEFAULT_FLAGS
             func = obj.dispatcher.py_func
-            inline_type = obj.dispatcher.targetoptions.get('inline', None)
+            inline_type = obj.dispatcher.targetoptions.get("inline", None)
             if inline_type is not None:
                 flags.inline._inline = inline_type
             return (func.__module__ + "." + func.__qualname__, func, flags)
@@ -120,25 +127,29 @@ class MlirBackendBase(FunctionPass):
         fn_name = mangler(qualprefix, state.args)
 
         ctx = {}
-        ctx['compiler_settings'] = {
-            'verify': True,
-            'pass_statistics': False,
-            'pass_timings': False,
-            'ir_printing': DUMP_IR,
-            'diag_printing': DUMP_DIAGNOSTICS,
-            'print_before' : _print_before,
-            'print_after' : _print_after,
-            'print_callback' : write_print_buffer}
-        ctx['typemap'] = lambda op: state.typemap[op.name]
-        ctx['fnargs'] = lambda: state.args
-        ctx['restype'] = lambda: state.return_type
-        ctx['fnname'] = lambda: fn_name
-        ctx['resolve_func'] = self._resolve_func_name
-        ctx['fastmath'] = lambda: state.targetctx.fastmath
-        ctx['force_inline'] = lambda: state.flags.inline.is_always_inline
-        ctx['max_concurrency'] = lambda: get_thread_count() if state.flags.auto_parallel.enabled else 0
-        ctx['opt_level'] = lambda: OPT_LEVEL
+        ctx["compiler_settings"] = {
+            "verify": True,
+            "pass_statistics": False,
+            "pass_timings": False,
+            "ir_printing": DUMP_IR,
+            "diag_printing": DUMP_DIAGNOSTICS,
+            "print_before": _print_before,
+            "print_after": _print_after,
+            "print_callback": write_print_buffer,
+        }
+        ctx["typemap"] = lambda op: state.typemap[op.name]
+        ctx["fnargs"] = lambda: state.args
+        ctx["restype"] = lambda: state.return_type
+        ctx["fnname"] = lambda: fn_name
+        ctx["resolve_func"] = self._resolve_func_name
+        ctx["fastmath"] = lambda: state.targetctx.fastmath
+        ctx["force_inline"] = lambda: state.flags.inline.is_always_inline
+        ctx["max_concurrency"] = (
+            lambda: get_thread_count() if state.flags.auto_parallel.enabled else 0
+        )
+        ctx["opt_level"] = lambda: OPT_LEVEL
         return ctx
+
 
 @register_pass(mutates_CFG=True, analysis_only=False)
 class MlirDumpPlier(MlirBackendBase):
@@ -155,9 +166,11 @@ class MlirDumpPlier(MlirBackendBase):
         print(mlir_compiler.module_str(module))
         return True
 
+
 def get_mlir_func():
     global _mlir_last_compiled_func
     return _mlir_last_compiled_func
+
 
 @register_pass(mutates_CFG=True, analysis_only=False)
 class MlirBackend(MlirBackendBase):
@@ -173,24 +186,27 @@ class MlirBackend(MlirBackendBase):
         old_module = _mlir_active_module
 
         try:
-            mod_settings = {'enable_gpu_pipeline': self.enable_gpu_pipeline}
+            mod_settings = {"enable_gpu_pipeline": self.enable_gpu_pipeline}
             module = mlir_compiler.create_module(mod_settings)
             _mlir_active_module = module
             global _mlir_last_compiled_func
             ctx = self._get_func_context(state)
-            _mlir_last_compiled_func = mlir_compiler.lower_function(ctx, module, state.func_ir)
+            _mlir_last_compiled_func = mlir_compiler.lower_function(
+                ctx, module, state.func_ir
+            )
             mod_ir = mlir_compiler.compile_module(ctx, module)
         finally:
             _mlir_active_module = old_module
-        state.metadata['mlir_blob'] = mod_ir
+        state.metadata["mlir_blob"] = mod_ir
         return True
+
 
 @register_pass(mutates_CFG=True, analysis_only=False)
 class MlirBackendGPU(MlirBackend):
-
     def __init__(self):
         MlirBackend.__init__(self)
         self.enable_gpu_pipeline = True
+
 
 @register_pass(mutates_CFG=True, analysis_only=False)
 class MlirBackendInner(MlirBackendBase):
@@ -206,6 +222,8 @@ class MlirBackendInner(MlirBackendBase):
         assert not module is None
         global _mlir_last_compiled_func
         ctx = self._get_func_context(state)
-        _mlir_last_compiled_func = mlir_compiler.lower_function(ctx, module, state.func_ir)
+        _mlir_last_compiled_func = mlir_compiler.lower_function(
+            ctx, module, state.func_ir
+        )
         state.cr = compile_result()
         return True

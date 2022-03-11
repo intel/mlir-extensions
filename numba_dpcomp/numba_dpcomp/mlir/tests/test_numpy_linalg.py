@@ -17,10 +17,14 @@ import numpy
 from numba_dpcomp import njit
 from numba_dpcomp.mlir.settings import _readenv
 
-DPNP_TESTS_ENABLED = _readenv('DPCOMP_ENABLE_DPNP_TESTS', int, 0)
+DPNP_TESTS_ENABLED = _readenv("DPCOMP_ENABLE_DPNP_TESTS", int, 0)
+
 
 def require_dpnp(func):
-    return pytest.mark.skipif(not DPNP_TESTS_ENABLED, reason='DPNP tests disabled')(func)
+    return pytest.mark.skipif(not DPNP_TESTS_ENABLED, reason="DPNP tests disabled")(
+        func
+    )
+
 
 def vvsort(val, vec, size):
     for i in range(size):
@@ -38,15 +42,19 @@ def vvsort(val, vec, size):
             vec[k, i] = vec[k, imax]
             vec[k, imax] = temp
 
+
 @require_dpnp
-@pytest.mark.parametrize("type",
-                         [numpy.float64, numpy.float32],
-                         ids=['float64', 'float32'])
-@pytest.mark.parametrize("size",
-                         [2, 4, 8, 16, 300])
+@pytest.mark.parametrize(
+    "type", [numpy.float64, numpy.float32], ids=["float64", "float32"]
+)
+@pytest.mark.parametrize("size", [2, 4, 8, 16, 300])
 def test_eig_arange(type, size):
     a = numpy.arange(size * size, dtype=type).reshape((size, size))
-    symm_orig = numpy.tril(a) + numpy.tril(a, -1).T + numpy.diag(numpy.full((size,), size * size, dtype=type))
+    symm_orig = (
+        numpy.tril(a)
+        + numpy.tril(a, -1).T
+        + numpy.diag(numpy.full((size,), size * size, dtype=type))
+    )
     symm = symm_orig.copy()
     dpnp_symm_orig = symm_orig.copy()
     dpnp_symm = symm_orig.copy()
@@ -77,11 +85,10 @@ def test_eig_arange(type, size):
     numpy.testing.assert_array_equal(symm_orig, symm)
     numpy.testing.assert_array_equal(dpnp_symm_orig, dpnp_symm)
 
-    assert (dpnp_val.dtype == np_val.dtype)
-    assert (dpnp_vec.dtype == np_vec.dtype)
-    assert (dpnp_val.shape == np_val.shape)
-    assert (dpnp_vec.shape == np_vec.shape)
+    assert dpnp_val.dtype == np_val.dtype
+    assert dpnp_vec.dtype == np_vec.dtype
+    assert dpnp_val.shape == np_val.shape
+    assert dpnp_vec.shape == np_vec.shape
 
     numpy.testing.assert_allclose(dpnp_val, np_val, rtol=1e-05, atol=1e-05)
     numpy.testing.assert_allclose(dpnp_vec, np_vec, rtol=1e-05, atol=1e-05)
-

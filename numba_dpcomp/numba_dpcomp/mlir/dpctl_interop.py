@@ -15,6 +15,7 @@
 
 try:
     from dpctl.tensor import usm_ndarray
+
     _is_dpctl_available = True
 except ImportError:
     _is_dpctl_available = False
@@ -29,7 +30,7 @@ if _is_dpctl_available:
 
     from numba.core.pythonapi import box, unbox, NativeValue
 
-    from numba.extending import (register_model,typeof_impl)
+    from numba.extending import register_model, typeof_impl
     from numba.np import numpy_support
 
     from numba.core.datamodel.models import StructModel
@@ -52,12 +53,7 @@ if _is_dpctl_available:
         ):
             self.addrspace = addrspace
             super(USMNdArrayBaseType, self).__init__(
-                dtype,
-                ndim,
-                layout,
-                readonly=readonly,
-                name=name,
-                aligned=aligned,
+                dtype, ndim, layout, readonly=readonly, name=name, aligned=aligned,
             )
 
         def copy(
@@ -100,19 +96,15 @@ if _is_dpctl_available:
         def is_precise(self):
             return self.dtype.is_precise()
 
-
     class USMNdArrayModel(StructModel):
         def __init__(self, dmm, fe_type):
             ndim = fe_type.ndim
             members = [
-                ('meminfo', types.MemInfoPointer(fe_type.dtype)),
-                ('parent', types.pyobject),
+                ("meminfo", types.MemInfoPointer(fe_type.dtype)),
+                ("parent", types.pyobject),
                 ("nitems", types.intp),
                 ("itemsize", types.intp),
-                (
-                    "data",
-                    types.CPointer(fe_type.dtype, addrspace=fe_type.addrspace),
-                ),
+                ("data", types.CPointer(fe_type.dtype, addrspace=fe_type.addrspace),),
                 ("shape", types.UniTuple(types.intp, ndim)),
                 ("strides", types.UniTuple(types.intp, ndim)),
             ]
@@ -141,19 +133,13 @@ if _is_dpctl_available:
             # This name defines how this type will be shown in Numba's type dumps.
             name = "USM:ndarray(%s, %sd, %s)" % (dtype, ndim, layout)
             super(USMNdArrayType, self).__init__(
-                dtype,
-                ndim,
-                layout,
-                readonly=readonly,
-                name=name,
-                addrspace=addrspace,
+                dtype, ndim, layout, readonly=readonly, name=name, addrspace=addrspace,
             )
 
         def copy(self, *args, **kwargs):
             return super(USMNdArrayType, self).copy(*args, **kwargs)
 
     register_model(USMNdArrayType)(USMNdArrayModel)
-
 
     @typeof_impl.register(usm_ndarray)
     def typeof_usm_ndarray(val, c):
@@ -196,8 +182,10 @@ if _is_dpctl_available:
 
         # Handle error
         with c.builder.if_then(failed, likely=False):
-            c.pyapi.err_set_string("PyExc_TypeError",
-                                   "can't unbox array from PyObject into "
-                                   "native value.  The object maybe of a "
-                                   "different type")
+            c.pyapi.err_set_string(
+                "PyExc_TypeError",
+                "can't unbox array from PyObject into "
+                "native value.  The object maybe of a "
+                "different type",
+            )
         return NativeValue(c.builder.load(aryptr), is_error=failed)

@@ -17,7 +17,7 @@ import atexit
 import llvmlite.binding as ll
 from .utils import load_lib, mlir_func_name, register_cfunc
 
-runtime_lib = load_lib('dpcomp-math-runtime')
+runtime_lib = load_lib("dpcomp-math-runtime")
 
 _init_func = runtime_lib.dpcompMathRuntimeInit
 _init_func()
@@ -30,9 +30,11 @@ def load_function_variants(func_name, suffixes):
         func = getattr(runtime_lib, name)
         register_cfunc(ll, mlir_name, func)
 
-load_function_variants('dpcompLinalgEig_', ['float32','float64'])
+
+load_function_variants("dpcompLinalgEig_", ["float32", "float64"])
 
 _finalize_func = runtime_lib.dpcompMathRuntimeFinalize
+
 
 @atexit.register
 def _cleanup():
