@@ -23,25 +23,25 @@ IS_WIN = False
 IS_LIN = False
 IS_MAC = False
 
-if 'linux' in sys.platform:
+if "linux" in sys.platform:
     IS_LIN = True
-elif sys.platform == 'darwin':
+elif sys.platform == "darwin":
     IS_MAC = True
-elif sys.platform in ['win32', 'cygwin']:
+elif sys.platform in ["win32", "cygwin"]:
     IS_WIN = True
 else:
-    assert False, sys.platform + ' not supported'
+    assert False, sys.platform + " not supported"
 
 # CMAKE =======================================================================
 
-if int(os.environ.get('DPCOMP_SETUP_RUN_CMAKE', 1)):
+if int(os.environ.get("DPCOMP_SETUP_RUN_CMAKE", 1)):
     cwd = os.getcwd()
     root_dir = os.path.dirname(cwd)
 
-    LLVM_PATH = os.environ['LLVM_PATH']
+    LLVM_PATH = os.environ["LLVM_PATH"]
     LLVM_DIR = os.path.join(LLVM_PATH, "lib", "cmake", "llvm")
     MLIR_DIR = os.path.join(LLVM_PATH, "lib", "cmake", "mlir")
-    TBB_DIR = os.path.join(os.environ['TBB_PATH'], "lib", "cmake", "tbb")
+    TBB_DIR = os.path.join(os.environ["TBB_PATH"], "lib", "cmake", "tbb")
     CMAKE_INSTALL_PREFIX = root_dir
 
     cmake_build_dir = os.path.join(root_dir, "cmake_build")
@@ -55,41 +55,42 @@ if int(os.environ.get('DPCOMP_SETUP_RUN_CMAKE', 1)):
     NUMPY_INCLUDE_DIR = numpy.get_include()
 
     cmake_cmd += [
-    "..",
-    '-DCMAKE_BUILD_TYPE=Release',
-    "-DLLVM_DIR=" + LLVM_DIR,
-    "-DMLIR_DIR=" + MLIR_DIR,
-    "-DTBB_DIR=" + TBB_DIR,
-    "-DCMAKE_INSTALL_PREFIX=" + CMAKE_INSTALL_PREFIX,
-    "-DPython3_NumPy_INCLUDE_DIRS=" + NUMPY_INCLUDE_DIR,
-    "-DPython3_FIND_STRATEGY=LOCATION",
-    "-DNUMBA_ENABLE=ON",
-    "-DTBB_ENABLE=ON",
+        "..",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DLLVM_DIR=" + LLVM_DIR,
+        "-DMLIR_DIR=" + MLIR_DIR,
+        "-DTBB_DIR=" + TBB_DIR,
+        "-DCMAKE_INSTALL_PREFIX=" + CMAKE_INSTALL_PREFIX,
+        "-DPython3_NumPy_INCLUDE_DIRS=" + NUMPY_INCLUDE_DIR,
+        "-DPython3_FIND_STRATEGY=LOCATION",
+        "-DNUMBA_ENABLE=ON",
+        "-DTBB_ENABLE=ON",
     ]
 
     # DPNP
     try:
         from dpnp import get_include as dpnp_get_include
-        DPNP_LIBRARY_DIR = os.path.join(dpnp_get_include(), '..', '..')
+
+        DPNP_LIBRARY_DIR = os.path.join(dpnp_get_include(), "..", "..")
         DPNP_INCLUDE_DIR = dpnp_get_include()
         cmake_cmd += [
-            '-DDPNP_LIBRARY_DIR=' + DPNP_LIBRARY_DIR,
-            '-DDPNP_INCLUDE_DIR=' + DPNP_INCLUDE_DIR,
-            '-DDPNP_ENABLE=ON',
+            "-DDPNP_LIBRARY_DIR=" + DPNP_LIBRARY_DIR,
+            "-DDPNP_INCLUDE_DIR=" + DPNP_INCLUDE_DIR,
+            "-DDPNP_ENABLE=ON",
         ]
         print("Found DPNP at", DPNP_LIBRARY_DIR)
     except ImportError:
         print("DPNP not found")
 
     # GPU/L0
-    LEVEL_ZERO_DIR = os.getenv('LEVEL_ZERO_DIR', None)
+    LEVEL_ZERO_DIR = os.getenv("LEVEL_ZERO_DIR", None)
     if LEVEL_ZERO_DIR is None:
-        print('LEVEL_ZERO_DIR is not set')
+        print("LEVEL_ZERO_DIR is not set")
     else:
-        print('LEVEL_ZERO_DIR is', LEVEL_ZERO_DIR)
+        print("LEVEL_ZERO_DIR is", LEVEL_ZERO_DIR)
         cmake_cmd += [
-            '-DLEVEL_ZERO_DIR=' + LEVEL_ZERO_DIR,
-            '-DGPU_ENABLE=ON',
+            "-DLEVEL_ZERO_DIR=" + LEVEL_ZERO_DIR,
+            "-DGPU_ENABLE=ON",
         ]
 
     try:
@@ -97,12 +98,15 @@ if int(os.environ.get('DPCOMP_SETUP_RUN_CMAKE', 1)):
     except FileExistsError:
         pass
 
-    subprocess.check_call(cmake_cmd, stderr=subprocess.STDOUT,
-                          shell=False, cwd=cmake_build_dir)
     subprocess.check_call(
-        ["cmake", "--build", ".", "--config", "Release"], cwd=cmake_build_dir)
+        cmake_cmd, stderr=subprocess.STDOUT, shell=False, cwd=cmake_build_dir
+    )
     subprocess.check_call(
-        ["cmake", "--install", ".", "--config", "Release"], cwd=cmake_build_dir)
+        ["cmake", "--build", ".", "--config", "Release"], cwd=cmake_build_dir
+    )
+    subprocess.check_call(
+        ["cmake", "--install", ".", "--config", "Release"], cwd=cmake_build_dir
+    )
 
 # =============================================================================
 
@@ -113,7 +117,7 @@ metadata = dict(
     version=versioneer.get_version(),
     cmdclass=versioneer.get_cmdclass(),
     packages=packages,
-    install_requires=['numba>=0.54,<0.55'],
+    install_requires=["numba>=0.54,<0.55"],
     include_package_data=True,
 )
 

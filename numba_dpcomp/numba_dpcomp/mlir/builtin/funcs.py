@@ -17,30 +17,36 @@ from ..func_registry import add_func
 
 import math
 
-add_func(slice, 'slice')
-add_func(range, 'range')
+add_func(slice, "slice")
+add_func(range, "range")
 
 registry = FuncRegistry()
+
 
 def register_func(name, orig_func=None):
     global registry
     return registry.register_func(name, orig_func)
 
-@register_func('bool', bool)
+
+@register_func("bool", bool)
 def bool_cast_impl(builder, arg):
     return builder.cast(arg, builder.bool)
 
-@register_func('int', int)
+
+@register_func("int", int)
 def int_cast_impl(builder, arg):
     return builder.cast(arg, builder.int64)
 
-@register_func('float', float)
+
+@register_func("float", float)
 def float_cast_impl(builder, arg):
     return builder.cast(arg, builder.float64)
 
-@register_func('len', len)
+
+@register_func("len", len)
 def len_impl(builder, arg):
     return builder.cast(len(arg), builder.int64)
+
 
 def _get_type(builder, v):
     if isinstance(v, float):
@@ -49,33 +55,40 @@ def _get_type(builder, v):
         return builder.int64
     return v.type
 
-@register_func('min', min)
+
+@register_func("min", min)
 def min_impl(builder, *args):
-    if (len(args) > 2):
+    if len(args) > 2:
         rhs = min_impl(builder, *args[1:])
     else:
         rhs = args[1]
 
     lhs = args[0]
-    res_type = broadcast_type(builder, (_get_type(builder, lhs), _get_type(builder, rhs)))
+    res_type = broadcast_type(
+        builder, (_get_type(builder, lhs), _get_type(builder, rhs))
+    )
     lhs = builder.cast(lhs, res_type)
     rhs = builder.cast(rhs, res_type)
     cond = lhs < rhs
     return builder.select(cond, lhs, rhs)
 
-@register_func('max', max)
+
+@register_func("max", max)
 def max_impl(builder, *args):
-    if (len(args) > 2):
+    if len(args) > 2:
         rhs = max_impl(builder, *args[1:])
     else:
         rhs = args[1]
 
     lhs = args[0]
-    res_type = broadcast_type(builder, (_get_type(builder, lhs), _get_type(builder, rhs)))
+    res_type = broadcast_type(
+        builder, (_get_type(builder, lhs), _get_type(builder, rhs))
+    )
     lhs = builder.cast(lhs, res_type)
     rhs = builder.cast(rhs, res_type)
     cond = lhs > rhs
     return builder.select(cond, lhs, rhs)
+
 
 def _gen_math_funcs():
     def get_func(name, N):
@@ -93,7 +106,7 @@ def _gen_math_funcs():
 
             fname = name
             if t == builder.float32:
-                fname = 'f' + fname
+                fname = "f" + fname
             elif t != builder.float64:
                 t = builder.float64
                 args = tuple(builder.cast(arg, builder.float64) for arg in args)
@@ -104,20 +117,21 @@ def _gen_math_funcs():
         return func
 
     math_funcs = [
-        ('log', 1),
-        ('sqrt', 1),
-        ('exp', 1),
-        ('erf', 1),
-        ('sin', 1),
-        ('cos', 1),
-        ('tanh', 1),
-        ('atan2', 2),
+        ("log", 1),
+        ("sqrt", 1),
+        ("exp", 1),
+        ("erf", 1),
+        ("sin", 1),
+        ("cos", 1),
+        ("tanh", 1),
+        ("atan2", 2),
     ]
 
     for func, N in math_funcs:
-        fname = 'math.' + func
+        fname = "math." + func
         py_func = eval(fname)
         register_func(fname, py_func)(get_func(func, N))
+
 
 _gen_math_funcs()
 del _gen_math_funcs

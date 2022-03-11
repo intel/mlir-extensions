@@ -16,7 +16,12 @@ import sys
 
 from numba import prange
 from numba.core import types
-from numba.core.typing.templates import AbstractTemplate, ConcreteTemplate, signature, infer_global
+from numba.core.typing.templates import (
+    AbstractTemplate,
+    ConcreteTemplate,
+    signature,
+    infer_global,
+)
 
 from .linalg_builder import is_int, dtype_str, FuncRegistry
 from .numpy.funcs import register_func
@@ -27,64 +32,84 @@ from .kernel_base import KernelBase
 
 registry = FuncRegistry()
 
+
 def _stub_error():
-    raise NotImplementedError('This is a stub')
+    raise NotImplementedError("This is a stub")
+
 
 class _gpu_range(object):
     def __new__(cls, *args):
         return range(*args)
 
-add_func(_gpu_range, '_gpu_range')
+
+add_func(_gpu_range, "_gpu_range")
+
 
 @infer_global(_gpu_range, typing_key=_gpu_range)
 class _RangeId(ConcreteTemplate):
     cases = [
         signature(types.range_state32_type, types.int32),
         signature(types.range_state32_type, types.int32, types.int32),
-        signature(types.range_state32_type, types.int32, types.int32,
-                  types.int32),
+        signature(types.range_state32_type, types.int32, types.int32, types.int32),
         signature(types.range_state64_type, types.int64),
         signature(types.range_state64_type, types.int64, types.int64),
-        signature(types.range_state64_type, types.int64, types.int64,
-                  types.int64),
+        signature(types.range_state64_type, types.int64, types.int64, types.int64),
         signature(types.unsigned_range_state64_type, types.uint64),
         signature(types.unsigned_range_state64_type, types.uint64, types.uint64),
-        signature(types.unsigned_range_state64_type, types.uint64, types.uint64,
-                  types.uint64),
+        signature(
+            types.unsigned_range_state64_type, types.uint64, types.uint64, types.uint64
+        ),
     ]
+
 
 def _kernel_marker(*args):
     _stub_error()
 
-@registry.register_func('_kernel_marker', _kernel_marker)
+
+@registry.register_func("_kernel_marker", _kernel_marker)
 def _kernel_marker_impl(builder, *args):
-    if (len(args) == 6):
-        res = 0 #TODO: remove
-        return builder.external_call('kernel_marker', inputs=args, outputs=res)
+    if len(args) == 6:
+        res = 0  # TODO: remove
+        return builder.external_call("kernel_marker", inputs=args, outputs=res)
+
 
 @infer_global(_kernel_marker)
 class _KernelMarkerId(ConcreteTemplate):
     cases = [
-        signature(types.void, types.int64, types.int64, types.int64, types.int64, types.int64, types.int64),
+        signature(
+            types.void,
+            types.int64,
+            types.int64,
+            types.int64,
+            types.int64,
+            types.int64,
+            types.int64,
+        ),
     ]
+
 
 def _get_default_local_size():
     _stub_error()
 
-@registry.register_func('_get_default_local_size', _get_default_local_size)
+
+@registry.register_func("_get_default_local_size", _get_default_local_size)
 def _get_default_local_size_impl(builder, *args):
     index_type = builder.index
     i64 = builder.int64
     zero = builder.cast(0, index_type)
-    res = (zero,zero,zero)
-    res = builder.external_call('get_default_local_size', inputs=args, outputs=res)
+    res = (zero, zero, zero)
+    res = builder.external_call("get_default_local_size", inputs=args, outputs=res)
     return tuple(builder.cast(r, i64) for r in res)
+
 
 @infer_global(_get_default_local_size)
 class _GetDefaultLocalSizeId(ConcreteTemplate):
     cases = [
-        signature(types.UniTuple(types.int64, 3), types.int64, types.int64, types.int64),
+        signature(
+            types.UniTuple(types.int64, 3), types.int64, types.int64, types.int64
+        ),
     ]
+
 
 def _kernel_body(global_size, local_size, body, *args):
     x, y, z = global_size
@@ -103,8 +128,9 @@ def _kernel_body(global_size, local_size, body, *args):
                             iby = (gj * ly + lj) < y
                             ibz = (gk * lz + lk) < z
                             in_bounds = ibx and iby and ibz
-                            if (in_bounds):
+                            if in_bounds:
                                 body(*args)
+
 
 def _kernel_body_def_size(global_size, body, *args):
     x, y, z = global_size
@@ -123,12 +149,13 @@ def _kernel_body_def_size(global_size, body, *args):
                             iby = (gj * ly + lj) < y
                             ibz = (gk * lz + lk) < z
                             in_bounds = ibx and iby and ibz
-                            if (in_bounds):
+                            if in_bounds:
                                 body(*args)
+
 
 def _extend_dims(dims):
     l = len(dims)
-    if (l < 3):
+    if l < 3:
         return tuple(dims + (1,) * (3 - l))
     return dims
 
@@ -136,37 +163,50 @@ def _extend_dims(dims):
 class Kernel(KernelBase):
     def __init__(self, func, kwargs):
         super().__init__(func)
-        self._jit_func = mlir_njit(inline='always',enable_gpu_pipeline=True)(func)
+        self._jit_func = mlir_njit(inline="always", enable_gpu_pipeline=True)(func)
         self._kern_body = mlir_njit(enable_gpu_pipeline=True, **kwargs)(_kernel_body)
-        self._kern_body_def_size = mlir_njit(enable_gpu_pipeline=True, **kwargs)(_kernel_body_def_size)
+        self._kern_body_def_size = mlir_njit(enable_gpu_pipeline=True, **kwargs)(
+            _kernel_body_def_size
+        )
 
     def __call__(self, *args, **kwargs):
         self.check_call_args(args, kwargs)
 
         local_size = self.local_size
-        if (len(local_size) != 0):
-            self._kern_body(_extend_dims(self.global_size), _extend_dims(self.local_size), self._jit_func, *args)
+        if len(local_size) != 0:
+            self._kern_body(
+                _extend_dims(self.global_size),
+                _extend_dims(self.local_size),
+                self._jit_func,
+                *args,
+            )
         else:
-            self._kern_body_def_size(_extend_dims(self.global_size), self._jit_func, *args)
+            self._kern_body_def_size(
+                _extend_dims(self.global_size), self._jit_func, *args
+            )
 
 
 def kernel(func=None, **kwargs):
     if func is None:
+
         def wrapper(f):
             return Kernel(f, kwargs)
+
         return wrapper
     return Kernel(func, kwargs)
 
+
 DEFAULT_LOCAL_SIZE = ()
 
-kernel_func = mlir_njit(inline='always')
+kernel_func = mlir_njit(inline="always")
+
 
 def _define_api_funcs():
     kernel_api_funcs = [
-        'get_global_id',
-        'get_local_id',
-        'get_global_size',
-        'get_local_size',
+        "get_global_id",
+        "get_local_id",
+        "get_global_size",
+        "get_local_size",
     ]
 
     def get_func(func_name):
@@ -174,10 +214,11 @@ def _define_api_funcs():
             if isinstance(axis, int) or is_int(axis):
                 res = 0
                 return builder.external_call(func_name, axis, res)
+
         return api_func_impl
 
     def get_stub_func(func_name):
-        exec(f'def {func_name}(axis): _stub_error()')
+        exec(f"def {func_name}(axis): _stub_error()")
         return eval(func_name)
 
     class ApiFuncId(ConcreteTemplate):
@@ -192,8 +233,10 @@ def _define_api_funcs():
         infer_global(func)(ApiFuncId)
         registry.register_func(func_name, func)(get_func(func_name))
 
+
 _define_api_funcs()
 del _define_api_funcs
+
 
 class Stub(object):
     """A stub object to represent special objects which is meaningless
@@ -209,8 +252,9 @@ class Stub(object):
 class atomic(Stub):
     pass
 
+
 def _define_atomic_funcs():
-    funcs = ['add', 'sub']
+    funcs = ["add", "sub"]
 
     def get_func(func_name):
         def api_func_impl(builder, arr, idx, val):
@@ -219,11 +263,14 @@ def _define_atomic_funcs():
 
             dtype = arr.dtype
             val = builder.cast(val, dtype)
-            return builder.external_call(f'{func_name}_{dtype_str(builder, dtype)}', (arr, val), val)
+            return builder.external_call(
+                f"{func_name}_{dtype_str(builder, dtype)}", (arr, val), val
+            )
+
         return api_func_impl
 
     def get_stub_func(func_name):
-        exec(f'def {func_name}(arr, idx, val): _stub_error()')
+        exec(f"def {func_name}(arr, idx, val): _stub_error()")
         return eval(func_name)
 
     class _AtomicId(AbstractTemplate):
@@ -239,13 +286,14 @@ def _define_atomic_funcs():
     this_module = sys.modules[__name__]
 
     for name in funcs:
-        func_name = f'atomic_{name}'
+        func_name = f"atomic_{name}"
         func = get_stub_func(func_name)
         setattr(this_module, func_name, func)
 
         infer_global(func)(_AtomicId)
         registry.register_func(func_name, func)(get_func(func_name))
         setattr(atomic, name, func)
+
 
 _define_atomic_funcs()
 del _define_atomic_funcs
