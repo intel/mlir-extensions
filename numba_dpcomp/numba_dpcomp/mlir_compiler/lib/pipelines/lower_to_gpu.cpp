@@ -870,10 +870,9 @@ struct AbiAttrsPass
   void runOnOperation() override {
     auto gpuModule = getOperation();
     auto *context = &getContext();
-    auto attrName = mlir::spirv::getEntryPointABIAttrName();
-    // TODO: Check if block size is const and set appropriate.
-    const int32_t sizes[] = {0, 0, 0};
-    auto abi = mlir::spirv::getEntryPointABIAttr(sizes, context);
+    auto attrName =
+        mlir::StringAttr::get(context, mlir::spirv::getEntryPointABIAttrName());
+    auto abi = mlir::spirv::getEntryPointABIAttr(llvm::None, context);
     for (auto gpuFunc : gpuModule.getOps<mlir::gpu::GPUFuncOp>()) {
       if (!mlir::gpu::GPUDialect::isKernel(gpuFunc) ||
           gpuFunc->getAttr(attrName))
@@ -1295,7 +1294,7 @@ struct GPUToSpirvPass
                                                                context);
 
     patterns.insert<LaunchConfigConversion<
-        mlir::gpu::BlockDimOp, mlir::spirv::BuiltIn::WorkgroupSize>>(
+        plier::GlobalIdOp, mlir::spirv::BuiltIn::GlobalInvocationId>>(
         typeConverter, context);
 
     if (failed(
@@ -3129,7 +3128,7 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   commonOptPasses(funcPM);
   funcPM.addPass(std::make_unique<KernelMemrefOpsMovementPass>());
   funcPM.addPass(std::make_unique<GpuLaunchSinkOpsPass>());
-  //  funcPM.addPass(std::make_unique<SinkGpuDimsPass>());
+  funcPM.addPass(std::make_unique<SinkGpuDimsPass>());
   pm.addPass(mlir::createGpuKernelOutliningPass());
   pm.addPass(mlir::createSymbolDCEPass());
 
