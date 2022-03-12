@@ -16,8 +16,8 @@
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/ControlFlow/IR/ControlFlowOps.h>
+#include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/SCF/SCF.h>
-#include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 #include <mlir/Pass/PassManager.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
@@ -90,7 +90,7 @@ struct ScfIfRewriteOneExit
         if (auto br = mlir::dyn_cast_or_null<mlir::cf::BranchOp>(term))
           return br.getDest();
 
-        if (auto ret = mlir::dyn_cast_or_null<mlir::ReturnOp>(term))
+        if (auto ret = mlir::dyn_cast_or_null<mlir::func::ReturnOp>(term))
           return returnBlock;
 
         return nullptr;
@@ -128,7 +128,7 @@ struct ScfIfRewriteOneExit
         auto operands = [&]() {
           auto term = block.getTerminator();
           if (postBlock == returnBlock) {
-            return mlir::cast<mlir::ReturnOp>(term).operands();
+            return mlir::cast<mlir::func::ReturnOp>(term).operands();
           } else {
             return mlir::cast<mlir::cf::BranchOp>(term).getDestOperands();
           }
@@ -149,7 +149,7 @@ struct ScfIfRewriteOneExit
       auto resTypes = [&]() {
         auto term = trueBlock->getTerminator();
         if (postBlock == returnBlock) {
-          return mlir::cast<mlir::ReturnOp>(term).operands().getTypes();
+          return mlir::cast<mlir::func::ReturnOp>(term).operands().getTypes();
         } else {
           return mlir::cast<mlir::cf::BranchOp>(term)
               .getDestOperands()
@@ -183,7 +183,8 @@ struct ScfIfRewriteOneExit
       }
 
       if (postBlock == returnBlock) {
-        rewriter.replaceOpWithNewOp<mlir::ReturnOp>(op, ifOp.getResults());
+        rewriter.replaceOpWithNewOp<mlir::func::ReturnOp>(op,
+                                                          ifOp.getResults());
       } else {
         rewriter.replaceOpWithNewOp<mlir::cf::BranchOp>(op, postBlock,
                                                         ifOp.getResults());

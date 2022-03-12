@@ -20,10 +20,9 @@
 #include "pipelines/pre_low_simplifications.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/Math/IR/Math.h>
 #include <mlir/Dialect/SCF/SCF.h>
-#include <mlir/Dialect/StandardOps/IR/Ops.h>
-#include <mlir/Dialect/StandardOps/Transforms/Passes.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 #include <mlir/IR/Dialect.h>
 #include <mlir/Pass/Pass.h>
@@ -1243,7 +1242,7 @@ protected:
     }
 
     auto newFuncCall =
-        rewriter.create<mlir::CallOp>(loc, externalFunc, castedArgs);
+        rewriter.create<mlir::func::CallOp>(loc, externalFunc, castedArgs);
 
     auto results = newFuncCall.getResults();
     llvm::SmallVector<mlir::Value> castedResults(results.size());
@@ -1278,7 +1277,7 @@ struct PlierToStdPass
                                mlir::OperationPass<mlir::ModuleOp>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<mlir::StandardOpsDialect>();
+    registry.insert<mlir::func::FuncDialect>();
     registry.insert<mlir::math::MathDialect>();
     registry.insert<mlir::scf::SCFDialect>();
     registry.insert<plier::PlierDialect>();

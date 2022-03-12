@@ -17,8 +17,6 @@
 #include "mlir/Conversion/LLVMCommon/LoweringOptions.h"
 #include "mlir/Conversion/MemRefToLLVM/MemRefToLLVM.h"
 #include "mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h"
-#include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
-#include "mlir/Conversion/StandardToSPIRV/StandardToSPIRVPass.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/GPU/GPUDialect.h"
 #include "mlir/Dialect/GPU/ParallelLoopMapper.h"
@@ -29,7 +27,6 @@
 #include "mlir/Dialect/SPIRV/IR/SPIRVDialect.h"
 #include "mlir/Dialect/SPIRV/IR/SPIRVOps.h"
 #include "mlir/Dialect/SPIRV/Transforms/Passes.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/ExecutionEngine/JitRunner.h"
 #include "mlir/ExecutionEngine/OptUtils.h"
 #include "mlir/Pass/Pass.h"
@@ -54,7 +51,7 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
   passManager.addNestedPass<mlir::FuncOp>(createSCFBufferizePass());
   passManager.addNestedPass<mlir::FuncOp>(createLinalgBufferizePass());
   passManager.addNestedPass<mlir::FuncOp>(createTensorBufferizePass());
-  passManager.addPass(createFuncBufferizePass());
+  passManager.addPass(func::createFuncBufferizePass());
   passManager.addNestedPass<mlir::FuncOp>(
       bufferization::createFinalizingBufferizePass());
   // passManager.addNestedPass<mlir::FuncOp>(
@@ -93,7 +90,7 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
 
   passManager.addPass(gpu_runtime::createEnumerateEventsPass());
   passManager.addPass(gpu_runtime::createGPUToLLVMPass());
-  passManager.addPass(createLowerToLLVMPass(llvmOptions));
+  passManager.addPass(createConvertFuncToLLVMPass(llvmOptions));
   passManager.addPass(createMemRefToLLVMPass());
   passManager.addPass(createReconcileUnrealizedCastsPass());
 
@@ -115,7 +112,7 @@ int main(int argc, char **argv) {
   mlir::DialectRegistry registry;
   registry.insert<mlir::arith::ArithmeticDialect, mlir::LLVM::LLVMDialect,
                   mlir::gpu::GPUDialect, mlir::spirv::SPIRVDialect,
-                  mlir::StandardOpsDialect, mlir::memref::MemRefDialect,
+                  mlir::func::FuncDialect, mlir::memref::MemRefDialect,
                   mlir::linalg::LinalgDialect, mlir::tensor::TensorDialect>();
   mlir::registerLLVMDialectTranslation(registry);
 

@@ -24,6 +24,8 @@
 #include <mlir/Dialect/Bufferization/IR/Bufferization.h>
 #include <mlir/Dialect/Bufferization/Transforms/Bufferize.h>
 #include <mlir/Dialect/Bufferization/Transforms/Passes.h>
+#include <mlir/Dialect/Func/IR/FuncOps.h>
+#include <mlir/Dialect/Func/Transforms/Passes.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/Linalg/Passes.h>
 #include <mlir/Dialect/Linalg/Transforms/Transforms.h>
@@ -31,8 +33,6 @@
 #include <mlir/Dialect/SCF/Passes.h>
 #include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Dialect/SCF/Transforms.h>
-#include <mlir/Dialect/StandardOps/Transforms/FuncConversions.h>
-#include <mlir/Dialect/StandardOps/Transforms/Passes.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/Dialect/Tensor/Transforms/Passes.h>
 #include <mlir/IR/Dialect.h>
@@ -448,7 +448,7 @@ protected:
     }
 
     auto newFuncCall =
-        rewriter.create<mlir::CallOp>(loc, externalFunc, castedArgs);
+        rewriter.create<mlir::func::CallOp>(loc, externalFunc, castedArgs);
 
     auto results = newFuncCall.getResults();
     llvm::SmallVector<mlir::Value> castedResults(results.size());
@@ -1320,7 +1320,7 @@ void MakeStridedLayoutPass::runOnOperation() {
         mlir::FunctionType::get(&getContext(), newArgTypes, newResTypes);
     if (newFuncType != funcType) {
       func.setType(newFuncType);
-      func.walk([&](mlir::ReturnOp ret) {
+      func.walk([&](mlir::func::ReturnOp ret) {
         builder.setInsertionPoint(ret);
         auto count = static_cast<unsigned>(newResTypes.size());
         for (auto i : llvm::seq(0u, count)) {
@@ -1338,7 +1338,7 @@ void MakeStridedLayoutPass::runOnOperation() {
       auto funcUses = mlir::SymbolTable::getSymbolUses(func, mod);
       if (funcUses) {
         for (auto use : *funcUses) {
-          auto call = mlir::cast<mlir::CallOp>(use.getUser());
+          auto call = mlir::cast<mlir::func::CallOp>(use.getUser());
           auto loc = call.getLoc();
 
           builder.setInsertionPoint(call);
@@ -1384,11 +1384,12 @@ void MakeStridedLayoutPass::runOnOperation() {
   }
 }
 
-struct ChangeLayoutReturn : public mlir::OpRewritePattern<mlir::ReturnOp> {
+struct ChangeLayoutReturn
+    : public mlir::OpRewritePattern<mlir::func::ReturnOp> {
   using OpRewritePattern::OpRewritePattern;
 
   mlir::LogicalResult
-  matchAndRewrite(mlir::ReturnOp op,
+  matchAndRewrite(mlir::func::ReturnOp op,
                   mlir::PatternRewriter &rewriter) const override {
     if (op.operands().empty())
       return mlir::failure();
@@ -1405,7 +1406,7 @@ struct ChangeLayoutReturn : public mlir::OpRewritePattern<mlir::ReturnOp> {
       return mlir::failure();
 
     for (auto use : *funcUses)
-      if (!mlir::isa<mlir::CallOp>(use.getUser()))
+      if (!mlir::isa<mlir::func::CallOp>(use.getUser()))
         return mlir::failure();
 
     auto loc = op->getLoc();
@@ -1458,7 +1459,7 @@ struct ChangeLayoutReturn : public mlir::OpRewritePattern<mlir::ReturnOp> {
     if (!changed)
       return mlir::failure();
 
-    rewriter.replaceOpWithNewOp<mlir::ReturnOp>(op, newArgs);
+    rewriter.replaceOpWithNewOp<mlir::func::ReturnOp>(op, newArgs);
 
     auto newFuncType = [&]() {
       auto origType = func.getType();
@@ -1470,9 +1471,9 @@ struct ChangeLayoutReturn : public mlir::OpRewritePattern<mlir::ReturnOp> {
     rewriter.updateRootInPlace(
         func, [&]() { func.typeAttr(mlir::TypeAttr::get(newFuncType)); });
 
-    llvm::SmallVector<mlir::CallOp> calls;
+    llvm::SmallVector<mlir::func::CallOp> calls;
     for (auto use : *funcUses) {
-      auto call = mlir::cast<mlir::CallOp>(use.getUser());
+      auto call = mlir::cast<mlir::func::CallOp>(use.getUser());
       calls.emplace_back(call);
     }
 
@@ -1481,7 +1482,7 @@ struct ChangeLayoutReturn : public mlir::OpRewritePattern<mlir::ReturnOp> {
       auto callLoc = call->getLoc();
       auto oldResults = call.getResults();
       auto newResults =
-          rewriter.create<mlir::CallOp>(callLoc, func, call.operands())
+          rewriter.create<mlir::func::CallOp>(callLoc, func, call.operands())
               .getResults();
       newArgs.assign(newResults.begin(), newResults.end());
       for (auto i : llvm::seq(0u, count)) {
@@ -1540,8 +1541,8 @@ struct PlierToLinalgPass
                                mlir::OperationPass<mlir::ModuleOp>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<mlir::StandardOpsDialect>();
     registry.insert<mlir::bufferization::BufferizationDialect>();
+    registry.insert<mlir::func::FuncDialect>();
     registry.insert<mlir::linalg::LinalgDialect>();
     registry.insert<mlir::memref::MemRefDialect>();
     registry.insert<mlir::tensor::TensorDialect>();
@@ -2194,7 +2195,7 @@ struct LowerLinalgPass
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::AffineDialect>();
-    registry.insert<mlir::StandardOpsDialect>();
+    registry.insert<mlir::func::FuncDialect>();
     registry.insert<mlir::linalg::LinalgDialect>();
     registry.insert<mlir::scf::SCFDialect>();
     registry.insert<mlir::tensor::TensorDialect>();
@@ -2734,7 +2735,8 @@ void CloneArgsPass::runOnOperation() {
   mlir::OpBuilder builder(&getContext());
 
   for (auto &block : func.getBody()) {
-    auto ret = mlir::dyn_cast_or_null<mlir::ReturnOp>(block.getTerminator());
+    auto ret =
+        mlir::dyn_cast_or_null<mlir::func::ReturnOp>(block.getTerminator());
     if (!ret)
       continue;
 
@@ -2754,7 +2756,7 @@ void CloneArgsPass::runOnOperation() {
     }
 
     if (needReplace) {
-      builder.create<mlir::ReturnOp>(loc, newArgs);
+      builder.create<mlir::func::ReturnOp>(loc, newArgs);
       ret.erase();
     }
   }
@@ -2838,7 +2840,7 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::FuncOp>(mlir::createSCFBufferizePass());
   pm.addNestedPass<mlir::FuncOp>(mlir::createLinalgBufferizePass());
   pm.addNestedPass<mlir::FuncOp>(mlir::createTensorBufferizePass());
-  pm.addPass(mlir::createFuncBufferizePass());
+  pm.addPass(mlir::func::createFuncBufferizePass());
   pm.addNestedPass<mlir::FuncOp>(
       mlir::bufferization::createFinalizingBufferizePass());
 

@@ -19,6 +19,7 @@
 #include <mlir/Conversion/AffineToStandard/AffineToStandard.h>
 #include <mlir/Conversion/ArithmeticToSPIRV/ArithmeticToSPIRV.h>
 #include <mlir/Conversion/AsyncToLLVM/AsyncToLLVM.h>
+#include <mlir/Conversion/FuncToSPIRV/FuncToSPIRV.h>
 #include <mlir/Conversion/GPUCommon/GPUCommonPass.h>
 #include <mlir/Conversion/GPUToSPIRV/GPUToSPIRV.h>
 #include <mlir/Conversion/GPUToSPIRV/GPUToSPIRVPass.h>
@@ -28,9 +29,10 @@
 #include <mlir/Conversion/MathToSPIRV/MathToSPIRV.h>
 #include <mlir/Conversion/SCFToGPU/SCFToGPUPass.h>
 #include <mlir/Conversion/SCFToSPIRV/SCFToSPIRV.h>
-#include <mlir/Conversion/StandardToSPIRV/StandardToSPIRV.h>
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
 #include <mlir/Dialect/Arithmetic/Transforms/Passes.h>
+#include <mlir/Dialect/Func/IR/FuncOps.h>
+#include <mlir/Dialect/Func/Transforms/FuncConversions.h>
 #include <mlir/Dialect/GPU/ParallelLoopMapper.h>
 #include <mlir/Dialect/GPU/Passes.h>
 #include <mlir/Dialect/GPU/Utils.h>
@@ -43,7 +45,6 @@
 #include <mlir/Dialect/SPIRV/IR/TargetAndABI.h>
 #include <mlir/Dialect/SPIRV/Transforms/Passes.h>
 #include <mlir/Dialect/SPIRV/Transforms/SPIRVConversion.h>
-#include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 #include <mlir/IR/Dominance.h>
 #include <mlir/Pass/PassManager.h>
@@ -266,12 +267,12 @@ struct RemoveKernelMarkerPass
                                mlir::OperationPass<void>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<mlir::StandardOpsDialect>();
+    registry.insert<mlir::func::FuncDialect>();
   }
 
   void runOnOperation() override {
     auto func = getOperation();
-    func->walk([&](mlir::CallOp op) {
+    func->walk([&](mlir::func::CallOp op) {
       if (op.getCallee() != "kernel_marker")
         return;
 
@@ -326,7 +327,7 @@ struct InsertGPUAllocs
         return {{load.memref()}};
       } else if (auto store = mlir::dyn_cast<mlir::memref::StoreOp>(op)) {
         return {{store.memref()}};
-      } else if (auto call = mlir::dyn_cast<mlir::CallOp>(op)) {
+      } else if (auto call = mlir::dyn_cast<mlir::func::CallOp>(op)) {
         mlir::SmallVector<mlir::Value, 4> ret;
         for (auto arg : call.operands()) {
           if (arg.getType().isa<mlir::MemRefType>())
@@ -348,7 +349,7 @@ struct InsertGPUAllocs
             memInterface.hasEffect<mlir::MemoryEffects::Write>())
           return true;
       }
-      if (auto call = mlir::dyn_cast<mlir::CallOp>(op)) {
+      if (auto call = mlir::dyn_cast<mlir::func::CallOp>(op)) {
         for (auto arg : call.operands()) {
           if (arg.getType().isa<mlir::MemRefType>())
             return true;
@@ -428,7 +429,7 @@ struct InsertGPUAllocs
       AccessType ret;
       for (auto mem : aliases.resolve(memref)) {
         for (auto user : mem.getUsers()) {
-          if (mlir::isa<mlir::ReturnOp>(user)) {
+          if (mlir::isa<mlir::func::ReturnOp>(user)) {
             ret.hostRead = true;
             ret.hostWrite = true;
             continue;
@@ -455,7 +456,7 @@ struct InsertGPUAllocs
 
             continue;
           }
-          if (mlir::isa<mlir::CallOp>(user)) {
+          if (mlir::isa<mlir::func::CallOp>(user)) {
             bool onDevice = user->getParentOfType<mlir::gpu::LaunchOp>();
             (onDevice ? ret.deviceRead : ret.hostRead) = true;
             (onDevice ? ret.deviceWrite : ret.hostWrite) = true;
@@ -1122,12 +1123,12 @@ static mlir::Value lowerFloatSubAtomic(mlir::OpBuilder &builder,
       mlir::spirv::MemorySemantics::None, neg);
 }
 
-class ConvertAtomicOps : public mlir::OpConversionPattern<mlir::CallOp> {
+class ConvertAtomicOps : public mlir::OpConversionPattern<mlir::func::CallOp> {
 public:
-  using mlir::OpConversionPattern<mlir::CallOp>::OpConversionPattern;
+  using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(mlir::CallOp op, mlir::CallOp::Adaptor adaptor,
+  matchAndRewrite(mlir::func::CallOp op, mlir::func::CallOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto operands = adaptor.operands();
     if (operands.size() != 2)
@@ -1283,7 +1284,7 @@ struct GPUToSpirvPass
     mlir::ScfToSPIRVContext scfToSpirvCtx;
     mlir::populateSCFToSPIRVPatterns(typeConverter, scfToSpirvCtx, patterns);
     mlir::populateGPUToSPIRVPatterns(typeConverter, patterns);
-    mlir::populateStandardToSPIRVPatterns(typeConverter, patterns);
+    mlir::populateFuncToSPIRVPatterns(typeConverter, patterns);
     mlir::arith::populateArithmeticToSPIRVPatterns(typeConverter, patterns);
     mlir::populateMathToSPIRVPatterns(typeConverter, patterns);
 
@@ -1309,7 +1310,7 @@ struct GPULowerDefaultLocalSize
 
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<mlir::StandardOpsDialect>();
+    registry.insert<mlir::func::FuncDialect>();
     registry.insert<plier::PlierUtilDialect>();
   }
 
@@ -1334,12 +1335,15 @@ struct GPULowerDefaultLocalSize
     llvm::StringRef funcName("get_default_local_size");
     mlir::OpBuilder builder(&getContext());
     func.walk([&](mlir::gpu::LaunchFuncOp op) {
-      if (auto call = skipCast(op.blockSizeX()).getDefiningOp<mlir::CallOp>()) {
+      if (auto call =
+              skipCast(op.blockSizeX()).getDefiningOp<mlir::func::CallOp>()) {
         if (call.getCallee() != funcName || call.operands().size() != 3)
           return;
 
-        assert(skipCast(op.blockSizeY()).getDefiningOp<mlir::CallOp>() == call);
-        assert(skipCast(op.blockSizeZ()).getDefiningOp<mlir::CallOp>() == call);
+        assert(skipCast(op.blockSizeY()).getDefiningOp<mlir::func::CallOp>() ==
+               call);
+        assert(skipCast(op.blockSizeZ()).getDefiningOp<mlir::func::CallOp>() ==
+               call);
 
         auto loc = call.getLoc();
         auto kernel = op.kernel();
@@ -1364,7 +1368,7 @@ struct GPULowerDefaultLocalSize
       }
     });
 
-    func.walk([&](mlir::CallOp op) {
+    func.walk([&](mlir::func::CallOp op) {
       if (op.getCallee() == funcName) {
         if (!op->use_empty()) {
           op.emitError() << funcName << " call wasn't removed";
@@ -1671,7 +1675,7 @@ struct OutlineInitPass
         tryOutlineOp(op);
 
       if (!initOps.empty()) {
-        builder.setInsertionPointToStart(&mod.body().front());
+        builder.setInsertionPointToStart(mod.getBody());
         types.clear();
         for (auto *op : initOps)
           for (auto type : op->getResultTypes())
@@ -1692,10 +1696,10 @@ struct OutlineInitPass
           for (auto res : newOp->getResults())
             values.emplace_back(res);
         }
-        builder.create<mlir::ReturnOp>(unknownLoc, values);
+        builder.create<mlir::func::ReturnOp>(unknownLoc, values);
 
         builder.setInsertionPoint(initOps.front());
-        auto call = builder.create<mlir::CallOp>(unknownLoc, func);
+        auto call = builder.create<mlir::func::CallOp>(unknownLoc, func);
         call->setAttr(kOutlinedInitAttr, builder.getUnitAttr());
         auto results = call.getResults();
         values.assign(results.begin(), results.end());
@@ -1711,7 +1715,7 @@ struct OutlineInitPass
 
       if (!deinitOps.empty()) {
         assert(!initOps.empty());
-        builder.setInsertionPointToStart(&mod.body().front());
+        builder.setInsertionPointToStart(mod.getBody());
         assert(!types.empty());
         auto funcType = builder.getFunctionType(types, llvm::None);
         auto func = builder.create<mlir::FuncOp>(
@@ -1727,10 +1731,11 @@ struct OutlineInitPass
         for (auto *op : llvm::reverse(deinitOps))
           builder.clone(*op, mapper);
 
-        builder.create<mlir::ReturnOp>(unknownLoc);
+        builder.create<mlir::func::ReturnOp>(unknownLoc);
 
         builder.setInsertionPoint(deinitOps.front());
-        auto call = builder.create<mlir::CallOp>(unknownLoc, func, values);
+        auto call =
+            builder.create<mlir::func::CallOp>(unknownLoc, func, values);
         call->setAttr(kOutlinedDeinitAttr, builder.getUnitAttr());
         for (auto *op : deinitOps)
           op->erase();
@@ -1759,10 +1764,10 @@ struct GenerateOutlineContextPass
     auto initAttr = builder.getStringAttr(kOutlinedInitAttr);
     auto deinitAttr = builder.getStringAttr(kOutlinedDeinitAttr);
 
-    mlir::CallOp init;
-    mlir::CallOp deinit;
+    mlir::func::CallOp init;
+    mlir::func::CallOp deinit;
     for (auto &op : body.front()) {
-      auto call = mlir::dyn_cast<mlir::CallOp>(op);
+      auto call = mlir::dyn_cast<mlir::func::CallOp>(op);
       if (!call)
         continue;
 
@@ -2643,7 +2648,7 @@ struct MarkGpuArraysInputs
                                mlir::OperationPass<mlir::FuncOp>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<mlir::StandardOpsDialect>();
+    registry.insert<mlir::func::FuncDialect>();
   }
 
   void runOnOperation() override;
@@ -2694,7 +2699,7 @@ struct ConvertGpuArrays
                                mlir::OperationPass<mlir::ModuleOp>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<mlir::StandardOpsDialect>();
+    registry.insert<mlir::func::FuncDialect>();
   }
 
   void runOnOperation() override;
@@ -2795,7 +2800,7 @@ private:
 };
 
 static mlir::LogicalResult
-lowerGetGlobalId(mlir::CallOp op, mlir::ValueRange /*globalSizes*/,
+lowerGetGlobalId(mlir::func::CallOp op, mlir::ValueRange /*globalSizes*/,
                  mlir::ValueRange localSizes, mlir::ValueRange gridArgs,
                  mlir::ValueRange blockArgs, mlir::PatternRewriter &builder,
                  unsigned index) {
@@ -2822,7 +2827,7 @@ lowerGetGlobalId(mlir::CallOp op, mlir::ValueRange /*globalSizes*/,
 }
 
 static mlir::LogicalResult
-lowerGetLocallId(mlir::CallOp op, mlir::ValueRange /*globalSizes*/,
+lowerGetLocallId(mlir::func::CallOp op, mlir::ValueRange /*globalSizes*/,
                  mlir::ValueRange /*localSizes*/, mlir::ValueRange /*gridArgs*/,
                  mlir::ValueRange blockArgs, mlir::PatternRewriter &builder,
                  unsigned index) {
@@ -2837,7 +2842,7 @@ lowerGetLocallId(mlir::CallOp op, mlir::ValueRange /*globalSizes*/,
   return mlir::success();
 }
 
-static mlir::LogicalResult lowerGetGlobalSize(mlir::CallOp op,
+static mlir::LogicalResult lowerGetGlobalSize(mlir::func::CallOp op,
                                               mlir::ValueRange globalSizes,
                                               mlir::ValueRange /*localSizes*/,
                                               mlir::ValueRange /*gridArgs*/,
@@ -2862,7 +2867,7 @@ static mlir::LogicalResult lowerGetGlobalSize(mlir::CallOp op,
 }
 
 static mlir::LogicalResult
-lowerGetLocalSize(mlir::CallOp op, mlir::ValueRange /*globalSizes*/,
+lowerGetLocalSize(mlir::func::CallOp op, mlir::ValueRange /*globalSizes*/,
                   mlir::ValueRange localSizes, mlir::ValueRange /*gridArgs*/,
                   mlir::ValueRange /*blockArgs*/,
                   mlir::PatternRewriter &builder, unsigned index) {
@@ -2883,22 +2888,22 @@ lowerGetLocalSize(mlir::CallOp op, mlir::ValueRange /*globalSizes*/,
   return mlir::success();
 }
 
-struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::CallOp> {
+struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::func::CallOp> {
   using OpRewritePattern::OpRewritePattern;
 
   mlir::LogicalResult
-  matchAndRewrite(mlir::CallOp op,
+  matchAndRewrite(mlir::func::CallOp op,
                   mlir::PatternRewriter &rewriter) const override {
     using handler_func_t = mlir::LogicalResult (*)(
-        mlir::CallOp, mlir::ValueRange, mlir::ValueRange, mlir::ValueRange,
-        mlir::ValueRange, mlir::PatternRewriter &, unsigned);
+        mlir::func::CallOp, mlir::ValueRange, mlir::ValueRange,
+        mlir::ValueRange, mlir::ValueRange, mlir::PatternRewriter &, unsigned);
     auto func = op->getParentOfType<mlir::FuncOp>();
     if (!func || !llvm::hasSingleElement(func.getBody()))
       return mlir::failure();
 
-    auto kernelMarker = [&]() -> mlir::CallOp {
+    auto kernelMarker = [&]() -> mlir::func::CallOp {
       for (auto &funcOp : func.getBody().front()) {
-        auto call = mlir::dyn_cast<mlir::CallOp>(funcOp);
+        auto call = mlir::dyn_cast<mlir::func::CallOp>(funcOp);
         if (call && call.getCallee() == "kernel_marker")
           return call;
       }
@@ -3006,7 +3011,7 @@ public:
     Operation *op = getOperation();
     if (op->walk([](gpu::LaunchOp launch) {
             auto isSinkingBeneficiary = [](mlir::Operation *op) -> bool {
-              return isa<arith::ConstantOp, ConstantOp, arith::SelectOp,
+              return isa<arith::ConstantOp, func::ConstantOp, arith::SelectOp,
                          arith::CmpIOp, arith::IndexCastOp, arith::MulIOp,
                          arith::SubIOp, arith::AddIOp>(op);
             };

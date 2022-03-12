@@ -18,8 +18,8 @@
 #include "mlir-extensions/transforms/rewrite_wrapper.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/Math/IR/Math.h>
-#include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/IR/PatternMatch.h>
 
 template <typename Op>
@@ -41,11 +41,11 @@ static mlir::Operation *replaceOp2(mlir::OpBuilder &builder, mlir::Location loc,
 }
 
 namespace {
-struct UpliftMathCalls : public mlir::OpRewritePattern<mlir::CallOp> {
+struct UpliftMathCalls : public mlir::OpRewritePattern<mlir::func::CallOp> {
   using OpRewritePattern::OpRewritePattern;
 
   mlir::LogicalResult
-  matchAndRewrite(mlir::CallOp op,
+  matchAndRewrite(mlir::func::CallOp op,
                   mlir::PatternRewriter &rewriter) const override {
     auto funcName = op.getCallee();
     if (funcName.empty())
@@ -120,7 +120,7 @@ struct UpliftFma : public mlir::OpRewritePattern<mlir::arith::AddFOp> {
 struct UpliftMathPass
     : public plier::RewriteWrapperPass<
           UpliftMathPass, void,
-          plier::DependentDialectsList<mlir::StandardOpsDialect,
+          plier::DependentDialectsList<mlir::func::FuncDialect,
                                        mlir::arith::ArithmeticDialect,
                                        mlir::math::MathDialect>,
           UpliftMathCalls, UpliftFma> {};
