@@ -15,10 +15,10 @@
 #include "mlir-extensions/transforms/type_conversion.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Func/IR/FuncOps.h>
+#include <mlir/Dialect/Func/Transforms/FuncConversions.h>
 #include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Dialect/SCF/Transforms.h>
-#include <mlir/Dialect/StandardOps/IR/Ops.h>
-#include <mlir/Dialect/StandardOps/Transforms/FuncConversions.h>
 #include <mlir/Transforms/DialectConversion.h>
 
 #include "mlir-extensions/dialect/plier/dialect.hpp"
@@ -50,8 +50,8 @@ void plier::populateControlFlowTypeConversionRewritesAndTarget(
            typeConverter.isLegal(&op.getBody());
   });
   mlir::populateCallOpTypeConversionPattern(patterns, typeConverter);
-  target.addDynamicallyLegalOp<mlir::CallOp>(
-      [&](mlir::CallOp op) { return typeConverter.isLegal(op); });
+  target.addDynamicallyLegalOp<mlir::func::CallOp>(
+      [&](mlir::func::CallOp op) { return typeConverter.isLegal(op); });
 
   mlir::populateBranchOpInterfaceTypeConversionPattern(patterns, typeConverter);
   mlir::populateReturnOpTypeConversionPattern(patterns, typeConverter);

@@ -16,6 +16,7 @@
 
 #include <mlir/Conversion/ArithmeticToLLVM/ArithmeticToLLVM.h>
 #include <mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h>
+#include <mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h>
 #include <mlir/Conversion/LLVMCommon/ConversionTarget.h>
 #include <mlir/Conversion/LLVMCommon/LoweringOptions.h>
 #include <mlir/Conversion/LLVMCommon/TypeConverter.h>
@@ -25,15 +26,13 @@
 #include <mlir/Conversion/MemRefToLLVM/AllocLikeConversion.h>
 #include <mlir/Conversion/MemRefToLLVM/MemRefToLLVM.h>
 #include <mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h>
-#include <mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h>
-#include <mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h>
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/Arithmetic/Transforms/Passes.h>
 #include <mlir/Dialect/ControlFlow/IR/ControlFlowOps.h>
+#include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/LLVMIR/LLVMDialect.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/SCF.h>
-#include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/PatternMatch.h>
@@ -522,12 +521,12 @@ mlir::Type getFunctionResType(mlir::MLIRContext &context,
 }
 
 mlir::LogicalResult fixFuncSig(LLVMTypeHelper &typeHelper, mlir::FuncOp func) {
-  if (func.isPrivate()) {
+  if (func.isPrivate())
     return mlir::success();
-  }
-  if (func->getAttr(plier::attributes::getFastmathName())) {
+
+  if (func->getAttr(plier::attributes::getFastmathName()))
     func->setAttr("passthrough", get_fastmath_attrs(*func.getContext()));
-  }
+
   auto oldType = func.getType();
   auto &ctx = *oldType.getContext();
   llvm::SmallVector<mlir::Type> args;
@@ -582,7 +581,7 @@ mlir::LogicalResult fixFuncSig(LLVMTypeHelper &typeHelper, mlir::FuncOp func) {
           mod, builder, memrefType, arrType,
           dstType.cast<mlir::LLVM::LLVMStructType>());
       auto converted =
-          builder.create<mlir::CallOp>(loc, convFunc, desc).getResult(0);
+          builder.create<mlir::func::CallOp>(loc, convFunc, desc).getResult(0);
       auto casted = doCast(builder, loc, converted, memrefType);
       func.getBody().getArgument(index).replaceAllUsesWith(casted);
       func.getBody().eraseArgument(index);
@@ -604,12 +603,12 @@ mlir::LogicalResult fixFuncSig(LLVMTypeHelper &typeHelper, mlir::FuncOp func) {
   return mlir::success();
 }
 
-struct ReturnOpLowering : public mlir::OpRewritePattern<mlir::ReturnOp> {
+struct ReturnOpLowering : public mlir::OpRewritePattern<mlir::func::ReturnOp> {
   ReturnOpLowering(mlir::MLIRContext *ctx, mlir::TypeConverter &converter)
       : OpRewritePattern(ctx), typeConverter(converter) {}
 
   mlir::LogicalResult
-  matchAndRewrite(mlir::ReturnOp op,
+  matchAndRewrite(mlir::func::ReturnOp op,
                   mlir::PatternRewriter &rewriter) const override {
     auto parent = op->getParentOfType<mlir::FuncOp>();
     if (nullptr == parent || parent.isPrivate())
@@ -637,7 +636,7 @@ struct ReturnOpLowering : public mlir::OpRewritePattern<mlir::ReturnOp> {
         auto func = get_from_memref_conversion_func(
             mod, rewriter, memrefType,
             llRetType.cast<mlir::LLVM::LLVMStructType>(), dstType);
-        val = rewriter.create<mlir::CallOp>(loc, func, val).getResult(0);
+        val = rewriter.create<mlir::func::CallOp>(loc, func, val).getResult(0);
       }
       return val;
     };
@@ -1210,7 +1209,7 @@ struct LowerParallel : public mlir::OpRewritePattern<plier::ParallelOp> {
         if (auto term = mlir::dyn_cast<plier::YieldOp>(block.getTerminator())) {
           rewriter.eraseOp(term);
           rewriter.setInsertionPointToEnd(&block);
-          rewriter.create<mlir::ReturnOp>(loc);
+          rewriter.create<mlir::func::ReturnOp>(loc);
         }
       }
       return func;
@@ -1231,7 +1230,7 @@ struct LowerParallel : public mlir::OpRewritePattern<plier::ParallelOp> {
           mlir::FunctionType::get(op.getContext(), args, {});
       return plier::add_function(rewriter, mod, func_name, parallelFuncType);
     }();
-    auto funcAddr = rewriter.create<mlir::ConstantOp>(
+    auto funcAddr = rewriter.create<mlir::func::ConstantOp>(
         loc, funcType, mlir::SymbolRefAttr::get(outlinedFunc));
 
     auto inputRanges = allocaInsertionPoint.insert(rewriter, [&]() {
@@ -1262,7 +1261,7 @@ struct LowerParallel : public mlir::OpRewritePattern<plier::ParallelOp> {
         rewriter.create<mlir::arith::ConstantIndexOp>(loc, num_loops);
     const mlir::Value pfArgs[] = {inputRanges, numLoopsVar, funcAddr,
                                   contextAbstract};
-    rewriter.replaceOpWithNewOp<mlir::CallOp>(op, parallelFor, pfArgs);
+    rewriter.replaceOpWithNewOp<mlir::func::CallOp>(op, parallelFor, pfArgs);
     return mlir::success();
   }
 
@@ -1275,8 +1274,8 @@ struct LowerParallelToCFGPass
                                mlir::OperationPass<void>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<mlir::StandardOpsDialect>();
     registry.insert<mlir::LLVM::LLVMDialect>();
+    registry.insert<mlir::func::FuncDialect>();
   }
 
   void runOnOperation() override final {
@@ -1294,8 +1293,8 @@ struct PreLLVMLowering
                                mlir::OperationPass<mlir::FuncOp>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<mlir::StandardOpsDialect>();
     registry.insert<mlir::LLVM::LLVMDialect>();
+    registry.insert<mlir::func::FuncDialect>();
   }
 
   void runOnOperation() override final {
@@ -1526,7 +1525,7 @@ struct LowerTakeContextOp
     auto insertFunc = [&](mlir::StringRef name, mlir::Type type,
                           mlir::LLVM::Linkage linkage) {
       mlir::OpBuilder::InsertionGuard g(rewriter);
-      rewriter.setInsertionPointToStart(&(mod.body().front()));
+      rewriter.setInsertionPointToStart(mod.getBody());
       return rewriter.create<mlir::LLVM::LLVMFuncOp>(unknownLoc, name, type,
                                                      linkage);
     };
@@ -1537,7 +1536,7 @@ struct LowerTakeContextOp
         return func;
 
       mlir::OpBuilder::InsertionGuard g(rewriter);
-      rewriter.setInsertionPointToStart(&(mod.body().front()));
+      rewriter.setInsertionPointToStart(mod.getBody());
       return rewriter.create<mlir::LLVM::LLVMFuncOp>(
           unknownLoc, name, type, mlir::LLVM::Linkage::External);
     };
@@ -1555,8 +1554,8 @@ struct LowerTakeContextOp
         rewriter.setInsertionPointToStart(block);
 
         auto innerResults = rewriter
-                                .create<mlir::CallOp>(unknownLoc, initFuncSym,
-                                                      results.getTypes())
+                                .create<mlir::func::CallOp>(
+                                    unknownLoc, initFuncSym, results.getTypes())
                                 ->getResults();
 
         mlir::Value ctxStruct =
@@ -1612,8 +1611,8 @@ struct LowerTakeContextOp
           args[i] = val;
         }
 
-        rewriter.create<mlir::CallOp>(unknownLoc, deinitFuncSym, llvm::None,
-                                      args);
+        rewriter.create<mlir::func::CallOp>(unknownLoc, deinitFuncSym,
+                                            llvm::None, args);
         rewriter.create<mlir::LLVM::ReturnOp>(unknownLoc, llvm::None);
         return func;
       }();
@@ -1646,7 +1645,7 @@ struct LowerTakeContextOp
 
     auto ctxHandle = [&]() {
       mlir::OpBuilder::InsertionGuard g(rewriter);
-      rewriter.setInsertionPointToStart(&(mod.body().front()));
+      rewriter.setInsertionPointToStart(mod.getBody());
       llvm::StringRef name("context_handle"); // TODO: unique name
       auto handle = rewriter.create<mlir::LLVM::GlobalOp>(
           unknownLoc, ctxType, /*isConstant*/ false,
@@ -1731,7 +1730,7 @@ struct LowerReleaseContextOp
         return func;
 
       mlir::OpBuilder::InsertionGuard g(rewriter);
-      rewriter.setInsertionPointToStart(&(mod.body().front()));
+      rewriter.setInsertionPointToStart(mod.getBody());
       return rewriter.create<mlir::LLVM::LLVMFuncOp>(
           unknownLoc, name, type, mlir::LLVM::Linkage::External);
     };
@@ -1780,7 +1779,8 @@ struct LLVMLoweringPass
     LLVMTypeConverter typeConverter(&context, options);
     populateToLLVMAdditionalTypeConversion(typeConverter);
     RewritePatternSet patterns(&context);
-    populateStdToLLVMConversionPatterns(typeConverter, patterns);
+    populateFuncToLLVMFuncOpConversionPattern(typeConverter, patterns);
+    populateFuncToLLVMConversionPatterns(typeConverter, patterns);
     populateMemRefToLLVMConversionPatterns(typeConverter, patterns);
     populateLinalgToLLVMConversionPatterns(typeConverter, patterns);
     cf::populateControlFlowToLLVMConversionPatterns(typeConverter, patterns);
@@ -1803,9 +1803,11 @@ struct LLVMLoweringPass
 
     LLVMConversionTarget target(context);
     target.addIllegalOp<plier::TakeContextOp, plier::ReleaseContextOp>();
+    target.addIllegalDialect<mlir::func::FuncDialect>();
 
     if (failed(applyPartialConversion(m, target, std::move(patterns))))
       signalPassFailure();
+
     m->setAttr(LLVM::LLVMDialect::getDataLayoutAttrName(),
                StringAttr::get(m.getContext(),
                                options.dataLayout.getStringRepresentation()));

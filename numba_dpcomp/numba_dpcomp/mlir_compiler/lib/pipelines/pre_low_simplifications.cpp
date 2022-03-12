@@ -22,8 +22,8 @@
 #include "mlir-extensions/transforms/type_conversion.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/SCF/SCF.h>
-#include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/Pass/PassManager.h>
 #include <mlir/Transforms/DialectConversion.h>
 #include <mlir/Transforms/Passes.h>
@@ -49,11 +49,12 @@ static void flattenTuple(mlir::OpBuilder &builder, mlir::Location loc,
   }
 }
 
-struct UntupleReturn : public mlir::OpConversionPattern<mlir::ReturnOp> {
-  using mlir::OpConversionPattern<mlir::ReturnOp>::OpConversionPattern;
+struct UntupleReturn : public mlir::OpConversionPattern<mlir::func::ReturnOp> {
+  using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(mlir::ReturnOp op, mlir::ReturnOp::Adaptor adaptor,
+  matchAndRewrite(mlir::func::ReturnOp op,
+                  mlir::func::ReturnOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     llvm::SmallVector<mlir::Value> newOperands;
     auto loc = op.getLoc();
@@ -135,7 +136,7 @@ struct MakeSignlessPass
     : public mlir::PassWrapper<MakeSignlessPass, mlir::OperationPass<void>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<mlir::StandardOpsDialect>();
+    registry.insert<mlir::func::FuncDialect>();
     registry.insert<plier::PlierDialect>();
   }
 

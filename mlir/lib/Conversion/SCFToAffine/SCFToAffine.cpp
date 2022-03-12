@@ -94,7 +94,6 @@ struct SCFToAffinePass
     : public mlir::PassWrapper<SCFToAffinePass, mlir::OperationPass<void>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<mlir::StandardOpsDialect>();
     registry.insert<mlir::AffineDialect>();
     registry.insert<mlir::scf::SCFDialect>();
   }

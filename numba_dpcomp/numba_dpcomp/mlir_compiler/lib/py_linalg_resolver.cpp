@@ -18,16 +18,16 @@
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/Bufferization/IR/Bufferization.h>
+#include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/SCF.h>
-#include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/BuiltinAttributes.h>
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/IR/BuiltinTypes.h>
-#include <mlir/Parser.h>
+#include <mlir/Parser/Parser.h>
 
 #include "mlir-extensions/dialect/plier/dialect.hpp"
 #include "mlir-extensions/dialect/plier_util/dialect.hpp"
@@ -919,7 +919,7 @@ static py::object genericImpl(py::capsule context, py::handle inputs,
     auto funcType = bodyFunc.getType();
     auto newArgs = castValues(doSignCast(builder, loc, args, bodyTypes),
                               funcType.getInputs());
-    auto call = builder.create<mlir::CallOp>(loc, bodyFunc, newArgs);
+    auto call = builder.create<mlir::func::CallOp>(loc, bodyFunc, newArgs);
     auto newResults = doSignCast(
         builder, loc,
         castValues(call.getResults(), genericOpBodyResultTypes(outputArgs)));
@@ -1215,7 +1215,8 @@ static py::object externalCallImpl(py::capsule context, py::str funcName,
     return f;
   }();
 
-  auto res = builder.create<mlir::CallOp>(loc, func, inputVals).getResults();
+  auto res =
+      builder.create<mlir::func::CallOp>(loc, func, inputVals).getResults();
 
   llvm::SmallVector<mlir::Value> results;
   results.reserve(outputVals.size() + res.size());
@@ -1335,8 +1336,8 @@ static py::object inlineFuncImpl(py::capsule context, py::handle func,
 
   auto castedArgs = castValues(argsValues, funcArgsTypes);
 
-  auto resValue =
-      builder.create<mlir::CallOp>(loc, bodyFunc, castedArgs).getResult(0);
+  auto resValue = builder.create<mlir::func::CallOp>(loc, bodyFunc, castedArgs)
+                      .getResult(0);
 
   auto mlirRetType = unwrapType(retType);
   resValue = doCast(builder, loc, resValue, mlirRetType);

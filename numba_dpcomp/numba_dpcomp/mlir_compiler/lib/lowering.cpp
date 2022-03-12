@@ -23,7 +23,7 @@
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/ControlFlow/IR/ControlFlowOps.h>
-#include <mlir/Dialect/StandardOps/IR/Ops.h>
+#include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/IR/BuiltinTypes.h>
@@ -151,7 +151,7 @@ struct InstHandles {
 
 struct PlierLowerer final {
   PlierLowerer(mlir::MLIRContext &context) : ctx(context), builder(&ctx) {
-    ctx.loadDialect<mlir::StandardOpsDialect>();
+    ctx.loadDialect<mlir::func::FuncDialect>();
     ctx.loadDialect<plier::PlierDialect>();
   }
 
@@ -524,7 +524,7 @@ private:
     if (retType != varType)
       var = builder.create<plier::CastOp>(getCurrentLoc(), retType, var);
 
-    builder.create<mlir::ReturnOp>(getCurrentLoc(), var);
+    builder.create<mlir::func::ReturnOp>(getCurrentLoc(), var);
   }
 
   void branch(py::handle cond, py::handle tr, py::handle fl) {

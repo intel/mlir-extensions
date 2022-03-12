@@ -14,6 +14,41 @@
 
 #include "mlir-extensions/Conversion/gpu_to_gpu_runtime.hpp"
 
+#include "mlir-extensions/dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
+
+#include <mlir/Analysis/BufferViewFlowAnalysis.h>
+#include <mlir/Conversion/AffineToStandard/AffineToStandard.h>
+#include <mlir/Conversion/ArithmeticToSPIRV/ArithmeticToSPIRV.h>
+#include <mlir/Conversion/ControlFlowToSPIRV/ControlFlowToSPIRV.h>
+#include <mlir/Conversion/FuncToSPIRV/FuncToSPIRV.h>
+#include <mlir/Conversion/GPUCommon/GPUCommonPass.h>
+#include <mlir/Conversion/GPUToSPIRV/GPUToSPIRV.h>
+#include <mlir/Conversion/GPUToSPIRV/GPUToSPIRVPass.h>
+#include <mlir/Conversion/MathToSPIRV/MathToSPIRV.h>
+#include <mlir/Conversion/SCFToSPIRV/SCFToSPIRV.h>
+#include <mlir/Dialect/Affine/IR/AffineOps.h>
+#include <mlir/Dialect/Arithmetic/Transforms/Passes.h>
+#include <mlir/Dialect/Func/IR/FuncOps.h>
+#include <mlir/Dialect/GPU/ParallelLoopMapper.h>
+#include <mlir/Dialect/GPU/Passes.h>
+#include <mlir/Dialect/GPU/Utils.h>
+#include <mlir/Dialect/LLVMIR/LLVMDialect.h>
+#include <mlir/Dialect/Math/IR/Math.h>
+#include <mlir/Dialect/MemRef/IR/MemRef.h>
+#include <mlir/Dialect/SCF/SCF.h>
+#include <mlir/Dialect/SPIRV/IR/SPIRVDialect.h>
+#include <mlir/Dialect/SPIRV/IR/SPIRVOps.h>
+#include <mlir/Dialect/SPIRV/IR/TargetAndABI.h>
+#include <mlir/Dialect/SPIRV/Transforms/Passes.h>
+#include <mlir/Dialect/SPIRV/Transforms/SPIRVConversion.h>
+#include <mlir/Pass/PassManager.h>
+#include <mlir/Target/SPIRV/Serialization.h>
+#include <mlir/Transforms/DialectConversion.h>
+#include <mlir/Transforms/GreedyPatternRewriteDriver.h>
+#include <mlir/Transforms/Passes.h>
+
+#include <llvm/ADT/SmallBitVector.h>
+
 static const char *kGpuAllocShared = "gpu.alloc_shared";
 
 struct ParallelLoopGPUMappingPass
@@ -109,7 +144,7 @@ struct InsertGPUAllocs
         return {{load.memref()}};
       } else if (auto store = mlir::dyn_cast<mlir::memref::StoreOp>(op)) {
         return {{store.memref()}};
-      } else if (auto call = mlir::dyn_cast<mlir::CallOp>(op)) {
+      } else if (auto call = mlir::dyn_cast<mlir::func::CallOp>(op)) {
         mlir::SmallVector<mlir::Value, 4> ret;
         for (auto arg : call.operands()) {
           if (arg.getType().isa<mlir::MemRefType>())
@@ -131,7 +166,7 @@ struct InsertGPUAllocs
             memInterface.hasEffect<mlir::MemoryEffects::Write>())
           return true;
       }
-      if (auto call = mlir::dyn_cast<mlir::CallOp>(op)) {
+      if (auto call = mlir::dyn_cast<mlir::func::CallOp>(op)) {
         for (auto arg : call.operands()) {
           if (arg.getType().isa<mlir::MemRefType>())
             return true;
@@ -193,7 +228,7 @@ struct InsertGPUAllocs
       AccessType ret;
       for (auto mem : aliases.resolve(memref)) {
         for (auto user : mem.getUsers()) {
-          if (mlir::isa<mlir::ReturnOp>(user)) {
+          if (mlir::isa<mlir::func::ReturnOp>(user)) {
             ret.hostRead = true;
             ret.hostWrite = true;
             continue;
@@ -220,7 +255,7 @@ struct InsertGPUAllocs
 
             continue;
           }
-          if (mlir::isa<mlir::CallOp>(user)) {
+          if (mlir::isa<mlir::func::CallOp>(user)) {
             bool onDevice = user->getParentOfType<mlir::gpu::LaunchOp>();
             (onDevice ? ret.deviceRead : ret.hostRead) = true;
             (onDevice ? ret.deviceWrite : ret.hostWrite) = true;
@@ -768,12 +803,12 @@ static mlir::Value lowerFloatSubAtomic(mlir::OpBuilder &builder,
       mlir::spirv::MemorySemantics::None, neg);
 }
 
-class ConvertAtomicOps : public mlir::OpConversionPattern<mlir::CallOp> {
+class ConvertAtomicOps : public mlir::OpConversionPattern<mlir::func::CallOp> {
 public:
-  using mlir::OpConversionPattern<mlir::CallOp>::OpConversionPattern;
+  using mlir::OpConversionPattern<mlir::func::CallOp>::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(mlir::CallOp op, mlir::CallOp::Adaptor adaptor,
+  matchAndRewrite(mlir::func::CallOp op, mlir::func::CallOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto operands = adaptor.operands();
     if (operands.size() != 2)
@@ -899,7 +934,7 @@ struct GPUToSpirvPass
     mlir::ScfToSPIRVContext scfToSpirvCtx;
     mlir::populateSCFToSPIRVPatterns(typeConverter, scfToSpirvCtx, patterns);
     mlir::populateGPUToSPIRVPatterns(typeConverter, patterns);
-    mlir::populateStandardToSPIRVPatterns(typeConverter, patterns);
+    mlir::populateFuncToSPIRVPatterns(typeConverter, patterns);
     mlir::cf::populateControlFlowToSPIRVPatterns(typeConverter, patterns);
     mlir::arith::populateArithmeticToSPIRVPatterns(typeConverter, patterns);
     mlir::populateMathToSPIRVPatterns(typeConverter, patterns);

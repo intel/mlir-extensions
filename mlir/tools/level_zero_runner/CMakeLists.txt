@@ -59,11 +59,9 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     MLIRParser
     MLIRSPIRV
     MLIRSPIRVTransforms
-    MLIRStandard
     MLIRSupport
     MLIRTargetLLVMIRExport
     MLIRTransforms
-    MLIRTranslation
     )
 
 target_include_directories(${PROJECT_NAME} PRIVATE

@@ -16,25 +16,25 @@
 
 #include "mlir-extensions/dialect/plier/dialect.hpp"
 
+#include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/SCF/SCF.h>
-#include <mlir/Dialect/StandardOps/IR/Ops.h>
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Pass/Pass.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 #include <mlir/Transforms/InliningUtils.h>
 
 namespace {
-static bool mustInline(mlir::CallOp call, mlir::FuncOp func) {
+static bool mustInline(mlir::func::CallOp call, mlir::FuncOp func) {
   auto attr = mlir::StringAttr::get(call.getContext(),
                                     plier::attributes::getForceInlineName());
   return call->hasAttr(attr) || func->hasAttr(attr);
 }
 
-struct ForceInline : public mlir::OpRewritePattern<mlir::CallOp> {
-  using mlir::OpRewritePattern<mlir::CallOp>::OpRewritePattern;
+struct ForceInline : public mlir::OpRewritePattern<mlir::func::CallOp> {
+  using OpRewritePattern::OpRewritePattern;
 
   mlir::LogicalResult
-  matchAndRewrite(mlir::CallOp op,
+  matchAndRewrite(mlir::func::CallOp op,
                   mlir::PatternRewriter &rewriter) const override {
     auto mod = op->getParentOfType<mlir::ModuleOp>();
     assert(mod);
@@ -81,7 +81,7 @@ struct ForceInlinePass
                                mlir::OperationPass<mlir::ModuleOp>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<mlir::StandardOpsDialect>();
+    registry.insert<mlir::func::FuncDialect>();
     registry.insert<mlir::scf::SCFDialect>();
   }
 
@@ -96,7 +96,7 @@ struct ForceInlinePass
     auto mod = getOperation();
     (void)mlir::applyPatternsAndFoldGreedily(mod, patterns);
 
-    mod->walk([&](mlir::CallOp call) {
+    mod->walk([&](mlir::func::CallOp call) {
       auto func = mod.lookupSymbol<mlir::FuncOp>(call.getCallee());
       if (func && mustInline(call, func)) {
         call.emitError("Couldn't inline force-inline call");

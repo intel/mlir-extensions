@@ -134,9 +134,10 @@ target_link_libraries(${MLIR_EXTENSIONS_LIB} PRIVATE
     MLIRIR
     MLIRLLVMIR
     MLIRTransforms
-    MLIRStandardOpsTransforms
+    MLIRFuncTransforms
     MLIRLinalgTransforms
     MLIRTensorTransforms
+    MLIRMathToSPIRV
     )
 
 target_include_directories(${MLIR_EXTENSIONS_LIB} SYSTEM PRIVATE

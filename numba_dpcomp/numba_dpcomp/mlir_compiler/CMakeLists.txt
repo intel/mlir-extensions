@@ -82,7 +82,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     MLIRLLVMIR
     MLIRLLVMToLLVMIRTranslation
     MLIRTransforms
-    MLIRStandardOpsTransforms
+    MLIRFuncTransforms
     MLIRLinalgTransforms
     MLIRLinalgToLLVM
     MLIRMathToLLVM
