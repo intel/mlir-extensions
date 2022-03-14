@@ -654,6 +654,36 @@ def test_fastmath():
         assert_equal(gpu_res, sim_res)
 
 
+@require_gpu
+def test_input_load_cse():
+    def func(c):
+        i = get_global_id(0)
+        j = get_global_id(1)
+        k = get_global_id(2)
+        c[i, j, k] = i + 10 * j + 100 * k
+
+    sim_func = kernel_sim(func)
+    gpu_func = kernel_cached(func)
+
+    a = np.array([[[1, 2, 3], [4, 5, 6]]], np.float32)
+    sim_res = np.zeros(a.shape, a.dtype)
+    sim_func[a.shape, DEFAULT_LOCAL_SIZE](sim_res)
+
+    gpu_res = np.zeros(a.shape, a.dtype)
+
+    with print_pass_ir(["SerializeSPIRVPass"], []):
+        gpu_func[a.shape, DEFAULT_LOCAL_SIZE](gpu_res)
+        ir = get_print_buffer()
+        assert (
+            ir.count(
+                'spv.Load "Input" %__builtin_var_GlobalInvocationId___addr : vector<3xi64>'
+            )
+            == 1
+        ), ir
+
+    assert_equal(gpu_res, sim_res)
+
+
 @require_dpctl
 def test_dpctl_simple1():
     def func(a, b, c):
