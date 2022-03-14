@@ -19,6 +19,7 @@
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/IR/BuiltinTypes.h>
 #include <mlir/IR/DialectImplementation.h>
+#include <mlir/IR/Dominance.h>
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Transforms/InliningUtils.h>
 
@@ -28,6 +29,7 @@
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/SCF.h>
+#include <mlir/Dialect/SPIRV/IR/SPIRVOps.h>
 
 #include <llvm/ADT/SmallBitVector.h>
 #include <llvm/ADT/TypeSwitch.h>
@@ -185,13 +187,52 @@ struct FillExtractSlice
     return mlir::success();
   }
 };
+
+struct SpirvInputCSE : public mlir::OpRewritePattern<mlir::spirv::LoadOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::spirv::LoadOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto ptr = op.ptr();
+    if (ptr.getType().cast<mlir::spirv::PointerType>().getStorageClass() !=
+        mlir::spirv::StorageClass::Input)
+      return mlir::failure();
+
+    auto func = op->getParentOfType<mlir::spirv::FuncOp>();
+    if (!func)
+      return mlir::failure();
+
+    mlir::DominanceInfo dom;
+    mlir::spirv::LoadOp prevLoad;
+    func->walk([&](mlir::spirv::LoadOp load) -> mlir::WalkResult {
+      if (load == op)
+        return mlir::WalkResult::interrupt();
+
+      if (load->getOperands() == op->getOperands() &&
+          load->getResultTypes() == op->getResultTypes() &&
+          dom.properlyDominates(load.getOperation(), op)) {
+        prevLoad = load;
+        return mlir::WalkResult::interrupt();
+      }
+
+      return mlir::WalkResult::advance();
+    });
+
+    if (!prevLoad)
+      return mlir::failure();
+
+    rewriter.replaceOp(op, prevLoad.getResult());
+    return mlir::success();
+  }
+};
 } // namespace
 
 void PlierUtilDialect::getCanonicalizationPatterns(
     mlir::RewritePatternSet &results) const {
   results.add<DimExpandShape<mlir::tensor::DimOp, mlir::tensor::ExpandShapeOp>,
               DimExpandShape<mlir::memref::DimOp, mlir::memref::ExpandShapeOp>,
-              DimInsertSlice, FillExtractSlice>(getContext());
+              DimInsertSlice, FillExtractSlice, SpirvInputCSE>(getContext());
 }
 
 OpaqueType OpaqueType::get(mlir::MLIRContext *context) {
