@@ -17,7 +17,6 @@
 
 include "mlir/IR/OpBase.td"
 include "mlir/Dialect/GPU/GPUBase.td"
-include "mlir/IR/EnumAttr.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/LoopLikeInterface.td"
@@ -273,28 +272,6 @@ def TakeContextOp : PlierUtil_Op<"take_context"> {
 
 def ReleaseContextOp : PlierUtil_Op<"release_context"> {
   let arguments = (ins PlierUtil_OpaqueType:$context);
-}
-
-def GPUEx_Dimension : I32EnumAttr<"GpuDimension",
-    "a dimension, either 'x', 'y', or 'z'",
-    [
-      I32EnumAttrCase<"x", 0>,
-      I32EnumAttrCase<"y", 1>,
-      I32EnumAttrCase<"z", 2>
-    ]>{
-  let genSpecializedAttr = 0;
-  let cppNamespace = "::plier";
-}
-def GPUEx_DimensionAttr : EnumAttr<PlierUtil_Dialect, GPUEx_Dimension, "dim">;
-
-class GPU_IndexOp<string mnemonic, list<Trait> traits = []> :
-    PlierUtil_Op<mnemonic, !listconcat(traits, [NoSideEffect])>,
-    Arguments<(ins GPUEx_DimensionAttr:$dimension)>, Results<(outs Index)> {
-  let assemblyFormat = "$dimension attr-dict";
-}
-
-def GPU_GlobalIdOp : GPU_IndexOp<"gpu_global_id"> {
-  let hasCanonicalizer = 1;
 }
 
 #endif // PLIER_UTIL_OPS

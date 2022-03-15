@@ -226,13 +226,57 @@ struct SpirvInputCSE : public mlir::OpRewritePattern<mlir::spirv::LoadOp> {
     return mlir::success();
   }
 };
+
+// TODO: move to separate pass
+struct GenGlobalId : public mlir::OpRewritePattern<mlir::arith::AddIOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::arith::AddIOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+
+    auto getArg = [](auto op, bool rev) -> mlir::Value {
+      return rev ? op.getLhs() : op.getRhs();
+    };
+
+    mlir::gpu::Dimension dim;
+    mlir::arith::MulIOp other;
+    for (auto rev : {false, true}) {
+      auto arg1 = getArg(op, rev);
+      auto arg2 = getArg(op, !rev);
+      if (auto tid = arg1.getDefiningOp<mlir::gpu::ThreadIdOp>()) {
+        dim = tid.dimension();
+        other = arg2.getDefiningOp<mlir::arith::MulIOp>();
+        break;
+      }
+    }
+
+    if (!other)
+      return mlir::failure();
+
+    for (auto rev : {false, true}) {
+      auto arg1 = getArg(other, rev).getDefiningOp<mlir::gpu::BlockIdOp>();
+      auto arg2 = getArg(other, !rev).getDefiningOp<mlir::gpu::BlockDimOp>();
+      if (arg1 && arg2) {
+        if (arg1.dimension() != dim || arg2.dimension() != dim)
+          return mlir::failure();
+
+        rewriter.replaceOpWithNewOp<mlir::gpu::GlobalIdOp>(op, dim);
+        return mlir::success();
+      }
+    }
+
+    return mlir::failure();
+  }
+};
 } // namespace
 
 void PlierUtilDialect::getCanonicalizationPatterns(
     mlir::RewritePatternSet &results) const {
   results.add<DimExpandShape<mlir::tensor::DimOp, mlir::tensor::ExpandShapeOp>,
               DimExpandShape<mlir::memref::DimOp, mlir::memref::ExpandShapeOp>,
-              DimInsertSlice, FillExtractSlice, SpirvInputCSE>(getContext());
+              DimInsertSlice, FillExtractSlice, SpirvInputCSE, GenGlobalId>(
+      getContext());
 }
 
 OpaqueType OpaqueType::get(mlir::MLIRContext *context) {
@@ -1510,56 +1554,6 @@ void TakeContextOp::build(mlir::OpBuilder &b, mlir::OperationState &result,
   allTypes.emplace_back(plier::OpaqueType::get(b.getContext()));
   allTypes.append(resultTypes.begin(), resultTypes.end());
   build(b, result, allTypes, initFunc, releaseFunc);
-}
-
-namespace {
-struct GenGlobalId : public mlir::OpRewritePattern<mlir::arith::AddIOp> {
-  using OpRewritePattern::OpRewritePattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(mlir::arith::AddIOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-
-    auto getArg = [](auto op, bool rev) -> mlir::Value {
-      return rev ? op.getLhs() : op.getRhs();
-    };
-
-    mlir::gpu::Dimension dim;
-    mlir::arith::MulIOp other;
-    for (auto rev : {false, true}) {
-      auto arg1 = getArg(op, rev);
-      auto arg2 = getArg(op, !rev);
-      if (auto tid = arg1.getDefiningOp<mlir::gpu::ThreadIdOp>()) {
-        dim = tid.dimension();
-        other = arg2.getDefiningOp<mlir::arith::MulIOp>();
-        break;
-      }
-    }
-
-    if (!other)
-      return mlir::failure();
-
-    for (auto rev : {false, true}) {
-      auto arg1 = getArg(other, rev).getDefiningOp<mlir::gpu::BlockIdOp>();
-      auto arg2 = getArg(other, !rev).getDefiningOp<mlir::gpu::BlockDimOp>();
-      if (arg1 && arg2) {
-        if (arg1.dimension() != dim || arg2.dimension() != dim)
-          return mlir::failure();
-
-        rewriter.replaceOpWithNewOp<plier::GlobalIdOp>(
-            op, static_cast<plier::GpuDimension>(dim));
-        return mlir::success();
-      }
-    }
-
-    return mlir::failure();
-  }
-};
-} // namespace
-
-void GlobalIdOp::getCanonicalizationPatterns(::mlir::RewritePatternSet &results,
-                                             ::mlir::MLIRContext *context) {
-  results.insert<GenGlobalId>(context);
 }
 
 } // namespace plier

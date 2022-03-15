@@ -1208,37 +1208,6 @@ public:
   }
 };
 
-template <typename SourceOp, mlir::spirv::BuiltIn builtin>
-class LaunchConfigConversion : public mlir::OpConversionPattern<SourceOp> {
-public:
-  LaunchConfigConversion(mlir::TypeConverter &typeConverter,
-                         mlir::MLIRContext *context)
-      : mlir::OpConversionPattern<SourceOp>(typeConverter, context,
-                                            /*benefit*/ 100) {}
-  //  using mlir::OpConversionPattern<SourceOp>::OpConversionPattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(SourceOp op, typename SourceOp::Adaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override;
-};
-
-template <typename SourceOp, mlir::spirv::BuiltIn builtin>
-mlir::LogicalResult LaunchConfigConversion<SourceOp, builtin>::matchAndRewrite(
-    SourceOp op, typename SourceOp::Adaptor adaptor,
-    mlir::ConversionPatternRewriter &rewriter) const {
-  auto *typeConverter =
-      this->template getTypeConverter<mlir::SPIRVTypeConverter>();
-  auto indexType = typeConverter->getIndexType();
-
-  // SPIR-V invocation builtin variables are a vector of type <3xi32>
-  auto spirvBuiltin =
-      mlir::spirv::getBuiltinVariableValue(op, builtin, indexType, rewriter);
-  rewriter.replaceOpWithNewOp<mlir::spirv::CompositeExtractOp>(
-      op, indexType, spirvBuiltin,
-      rewriter.getI32ArrayAttr({static_cast<int32_t>(op.dimension())}));
-  return mlir::success();
-}
-
 struct GPUToSpirvPass
     : public mlir::PassWrapper<GPUToSpirvPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
@@ -1292,10 +1261,6 @@ struct GPUToSpirvPass
                 ConvertCastOp<mlir::memref::ReinterpretCastOp>, ConvertLoadOp,
                 ConvertStoreOp, ConvertAtomicOps, ConvertFunc>(typeConverter,
                                                                context);
-
-    patterns.insert<LaunchConfigConversion<
-        plier::GlobalIdOp, mlir::spirv::BuiltIn::GlobalInvocationId>>(
-        typeConverter, context);
 
     if (failed(
             applyFullConversion(kernelModules, *target, std::move(patterns))))
