@@ -86,7 +86,7 @@ def YieldOp : PlierUtil_Op<"yield", [
   let builders = [OpBuilder<(ins), [{/* nothing to do */}]>];
   // Override default verifier (defined in SCF_Op), no custom verification
   // needed.
-  let verifier = ? ;
+  let hasVerifier = 0;
 }
 
 def RetainOp : PlierUtil_Op<"retain", [ViewLikeOpInterface]> {
