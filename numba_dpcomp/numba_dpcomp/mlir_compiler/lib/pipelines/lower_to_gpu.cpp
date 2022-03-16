@@ -875,11 +875,12 @@ struct AssumeGpuIdRangePass
 
     mlir::OpBuilder builder(&getContext());
     builder.setInsertionPointToStart(&op->getRegion(0).front());
-    auto maxInt = builder
-                      .create<mlir::arith::ConstantIndexOp>(
-                          builder.getUnknownLoc(),
-                          std::numeric_limits<int32_t>::max() + 1)
-                      .getResult();
+    auto maxInt =
+        builder
+            .create<mlir::arith::ConstantIndexOp>(
+                builder.getUnknownLoc(),
+                static_cast<int64_t>(std::numeric_limits<int32_t>::max()) + 1)
+            .getResult();
 
     op->walk([&](mlir::Operation *nestedOp) {
       if (!mlir::isa<mlir::gpu::ThreadIdOp, mlir::gpu::BlockIdOp,
