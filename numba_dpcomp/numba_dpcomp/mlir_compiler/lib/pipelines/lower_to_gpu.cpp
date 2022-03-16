@@ -31,6 +31,7 @@
 #include <mlir/Conversion/SCFToSPIRV/SCFToSPIRV.h>
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
 #include <mlir/Dialect/Arithmetic/Transforms/Passes.h>
+#include <mlir/Dialect/ControlFlow/IR/ControlFlowOps.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/Func/Transforms/FuncConversions.h>
 #include <mlir/Dialect/GPU/ParallelLoopMapper.h>
@@ -859,6 +860,44 @@ struct KernelMemrefOpsMovementPass
   }
 };
 
+struct AssumeGpuIdRangePass
+    : public mlir::PassWrapper<AssumeGpuIdRangePass,
+                               mlir::OperationPass<void>> {
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::arith::ArithmeticDialect>();
+    registry.insert<mlir::cf::ControlFlowDialect>();
+    registry.insert<mlir::gpu::GPUDialect>();
+  }
+
+  void runOnOperation() override {
+    auto op = getOperation();
+
+    mlir::OpBuilder builder(&getContext());
+    builder.setInsertionPointToStart(&op->getRegion(0).front());
+    auto maxInt = builder
+                      .create<mlir::arith::ConstantIndexOp>(
+                          builder.getUnknownLoc(),
+                          std::numeric_limits<int32_t>::max() + 1)
+                      .getResult();
+
+    op->walk([&](mlir::Operation *nestedOp) {
+      if (!mlir::isa<mlir::gpu::ThreadIdOp, mlir::gpu::BlockIdOp,
+                     mlir::gpu::GlobalIdOp>(nestedOp))
+        return;
+
+      assert(nestedOp->getNumResults() == 1);
+      auto res = nestedOp->getResult(0);
+      assert(res.getType().isa<mlir::IndexType>());
+      builder.setInsertionPointAfter(nestedOp);
+      auto loc = op->getLoc();
+      auto cmp = builder.create<mlir::arith::CmpIOp>(
+          loc, mlir::arith::CmpIPredicate::slt, res, maxInt);
+      builder.create<mlir::cf::AssertOp>(loc, cmp, "Invalid gpu id range");
+    });
+  }
+};
+
 struct AbiAttrsPass
     : public mlir::PassWrapper<AbiAttrsPass,
                                mlir::OperationPass<mlir::gpu::GPUModuleOp>> {
@@ -904,10 +943,12 @@ struct SetSPIRVCapabilitiesPass
         spirv::Capability::Float16,
         spirv::Capability::Float64,
         spirv::Capability::AtomicFloat32AddEXT,
+        spirv::Capability::ExpectAssumeKHR,
         // clang-format on
     };
     spirv::Extension exts[] = {
-        spirv::Extension::SPV_EXT_shader_atomic_float_add};
+        spirv::Extension::SPV_EXT_shader_atomic_float_add,
+        spirv::Extension::SPV_KHR_expect_assume};
     auto triple =
         spirv::VerCapExtAttr::get(spirv::Version::V_1_0, caps, exts, context);
     auto attr = spirv::TargetEnvAttr::get(
@@ -987,7 +1028,7 @@ static llvm::Optional<mlir::Value> getGpuStream(mlir::OpBuilder &builder,
 class ConvertSubviewOp
     : public mlir::OpConversionPattern<mlir::memref::SubViewOp> {
 public:
-  using mlir::OpConversionPattern<mlir::memref::SubViewOp>::OpConversionPattern;
+  using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::SubViewOp op,
@@ -1046,7 +1087,7 @@ public:
 
 class ConvertLoadOp : public mlir::OpConversionPattern<mlir::memref::LoadOp> {
 public:
-  using mlir::OpConversionPattern<mlir::memref::LoadOp>::OpConversionPattern;
+  using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::LoadOp op,
@@ -1073,7 +1114,7 @@ public:
 
 class ConvertStoreOp : public mlir::OpConversionPattern<mlir::memref::StoreOp> {
 public:
-  using mlir::OpConversionPattern<mlir::memref::StoreOp>::OpConversionPattern;
+  using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::StoreOp op,
@@ -1195,7 +1236,7 @@ public:
 // TODO: something better
 class ConvertFunc : public mlir::OpConversionPattern<mlir::FuncOp> {
 public:
-  using mlir::OpConversionPattern<mlir::FuncOp>::OpConversionPattern;
+  using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
   matchAndRewrite(mlir::FuncOp op, mlir::FuncOp::Adaptor /*adaptor*/,
@@ -1204,6 +1245,19 @@ public:
       return mlir::failure();
 
     rewriter.eraseOp(op);
+    return mlir::success();
+  }
+};
+
+class ConvertAssert : public mlir::OpConversionPattern<mlir::cf::AssertOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::cf::AssertOp op, mlir::cf::AssertOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<mlir::spirv::AssumeTrueKHROp>(op,
+                                                              adaptor.getArg());
     return mlir::success();
   }
 };
@@ -1259,8 +1313,8 @@ struct GPUToSpirvPass
     patterns
         .insert<ConvertSubviewOp, ConvertCastOp<mlir::memref::CastOp>,
                 ConvertCastOp<mlir::memref::ReinterpretCastOp>, ConvertLoadOp,
-                ConvertStoreOp, ConvertAtomicOps, ConvertFunc>(typeConverter,
-                                                               context);
+                ConvertStoreOp, ConvertAtomicOps, ConvertFunc, ConvertAssert>(
+            typeConverter, context);
 
     if (failed(
             applyFullConversion(kernelModules, *target, std::move(patterns))))
@@ -3106,6 +3160,7 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   gpuFuncPM.addPass(mlir::arith::createArithmeticExpandOpsPass());
   gpuFuncPM.addPass(std::make_unique<FlattenScfPass>());
   commonOptPasses(gpuFuncPM);
+  gpuFuncPM.addPass(std::make_unique<AssumeGpuIdRangePass>());
 
   pm.addNestedPass<mlir::gpu::GPUModuleOp>(std::make_unique<AbiAttrsPass>());
   pm.addPass(std::make_unique<SetSPIRVCapabilitiesPass>());
