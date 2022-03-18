@@ -61,7 +61,6 @@ def _gen_tests():
         "test_list_comprehension_prange",
         "test_prange22",
         "test_prange_raises_invalid_step_size",
-        "test_kde_example",
         "test_issue7501",
         "test_parfor_race_1",
         "test_check_alias_analysis",
@@ -82,6 +81,7 @@ def _gen_tests():
     }
 
     skip_tests = {
+        "test_kde_example",
         "test_prange27",
         "test_copy_global_for_parfor",
     }
