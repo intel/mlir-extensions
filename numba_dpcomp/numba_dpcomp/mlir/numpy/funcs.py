@@ -206,6 +206,7 @@ def _gen_unary_ops():
         (register_func("numpy.cos", numpy.cos), f64_type, lambda a, b: math.cos(a)),
         (register_func("numpy.exp", numpy.exp), f64_type, lambda a, b: math.exp(a)),
         (register_func("numpy.tanh", numpy.tanh), f64_type, lambda a, b: math.tanh(a)),
+        (register_func("numpy.abs", numpy.abs), None, lambda a, b: abs(a)),
         (
             register_func("numpy.logical_not", numpy.logical_not),
             bool_type,
