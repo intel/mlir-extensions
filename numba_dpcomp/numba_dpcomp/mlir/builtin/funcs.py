@@ -135,3 +135,18 @@ def _gen_math_funcs():
 
 _gen_math_funcs()
 del _gen_math_funcs
+
+
+@register_func("abs", abs)
+def abs_impl(builder, arg):
+    t = arg.type
+    if is_int(t, builder):
+        c = arg < 0
+        return builder.select(c, -arg, arg)
+    if is_float(t, builder):
+        fname = "fabs"
+        if t == builder.float32:
+            fname = fname + "f"
+
+        res = builder.cast(0, t)
+        return builder.external_call(fname, arg, res, decorate=False)

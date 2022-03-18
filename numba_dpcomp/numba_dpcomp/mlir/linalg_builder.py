@@ -83,6 +83,12 @@ class Var:
     def __ne__(self, o):
         return self._binop(self._context, self._ssa_val, o, "ne")
 
+    def __neg__(self):
+        return self._unop(self._context, self._ssa_val, "-")
+
+    def __pos__(self):
+        return self._unop(self._context, self._ssa_val, "+")
+
     def __str__(self):
         return self._str(self._context, self._ssa_val)
 

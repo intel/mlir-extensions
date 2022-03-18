@@ -100,7 +100,7 @@ def test_inplace_op(a, b):
 
 
 @parametrize_function_variants(
-    "py_func", ["lambda a: +a", "lambda a: -a", "lambda a: ~a",]
+    "py_func", ["lambda a: +a", "lambda a: -a", "lambda a: ~a", "lambda a: abs(a)",]
 )
 @pytest.mark.parametrize("val", _test_values)
 def test_unary_ops(py_func, val, request):
@@ -184,7 +184,7 @@ def test_cast(py_func, val):
 
 
 @pytest.mark.parametrize("val", [1, 5, 5.5])
-@pytest.mark.parametrize("name", ["sqrt", "log", "exp", "sin", "cos", "erf", "tanh",])
+@pytest.mark.parametrize("name", ["sqrt", "log", "exp", "sin", "cos", "erf", "tanh"])
 def test_math_uplifting1(val, name):
     py_func = eval(f"lambda a: math.{name}(a)")
 
