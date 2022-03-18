@@ -44,7 +44,6 @@ def _gen_tests():
         "test_prange10",
         "test_prange03",
         "test_prange03div",
-        "test_prange27",
         "test_prange07",
         "test_prange06",
         "test_prange16",
@@ -83,6 +82,7 @@ def _gen_tests():
     }
 
     skip_tests = {
+        "test_prange27",
         "test_copy_global_for_parfor",
     }
 
