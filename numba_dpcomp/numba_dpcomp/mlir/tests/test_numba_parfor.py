@@ -77,6 +77,9 @@ def _gen_tests():
         "test_prange_two_conditional_reductions",
         "test_argument_alias_recarray_field",
         "test_mutable_list_param",
+        "test_signed_vs_unsigned_vec_asm",
+        "test_unsigned_refusal_to_vectorize",
+        "test_vectorizer_fastmath_asm",
     }
 
     skip_tests = {
