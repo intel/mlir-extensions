@@ -19,6 +19,7 @@ import pytest
 import numpy as np
 import types as pytypes
 
+from numba_dpcomp.mlir.settings import _readenv
 from numba_dpcomp import njit, jit, vectorize
 
 from numba_dpcomp.mlir.passes import (
@@ -31,10 +32,23 @@ import numba.tests.test_parfors
 
 
 def _gen_tests():
+    if not _readenv("DPCOMP_ENABLE_PARFOR_TESTS", int, 0):
+        return
+
     testcases = [
         numba.tests.test_parfors.TestPrangeBasic,
         numba.tests.test_parfors.TestPrangeSpecific,
         numba.tests.test_parfors.TestParforsVectorizer,
+        numba.tests.test_parfors.TestParforBasic,
+        numba.tests.test_parfors.TestParforNumericalMisc,
+        numba.tests.test_parfors.TestParforNumPy,
+        numba.tests.test_parfors.TestParfors,
+        numba.tests.test_parfors.TestParforsLeaks,
+        numba.tests.test_parfors.TestParforsSlice,
+        # numba.tests.test_parfors.TestParforsOptions,
+        numba.tests.test_parfors.TestParforsBitMask,
+        numba.tests.test_parfors.TestParforsMisc,
+        # numba.tests.test_parfors.TestParforsDiagnostics,
     ]
 
     xfail_tests = {
@@ -78,13 +92,117 @@ def _gen_tests():
         "test_signed_vs_unsigned_vec_asm",
         "test_unsigned_refusal_to_vectorize",
         "test_vectorizer_fastmath_asm",
+        "test_kde_example",
+        "test_prange27",
+        "test_simple09",
+        "test_simple01",
+        "test_simple10",
+        "test_kmeans",
+        "test_simple14",
+        "test_simple04",
+        "test_ndarray_fill",
+        "test_fuse_argmin_argmax_max_min",
+        "test_max",
+        "test_arange",
+        "test_min",
+        "test_pi",
+        "test_simple20",
+        "test_simple24",
+        "test_0d_array",
+        "test_argmin",
+        "test_simple07",
+        "test_ndarray_fill2d",
+        "test_argmax",
+        "test_simple02",
+        "test_simple18",
+        "test_linspace",
+        "test_std",
+        "test_reshape_with_neg_one",
+        "test_mvdot",
+        "test_array_tuple_concat",
+        "test_namedtuple1",
+        "test_0d_broadcast",
+        "test_var",
+        "test_reshape_with_too_many_neg_one",
+        "test_namedtuple2",
+        "test_simple19",
+        "test_no_hoisting_with_member_function_call",
+        "test_reduction_var_reuse",
+        "test_parfor_dtype_type",
+        "test_tuple3",
+        "test_parfor_array_access3",
+        "test_np_func_direct_import",
+        "test_preparfor_canonicalize_kws",
+        "test_parfor_array_access4",
+        "test_tuple_concat_with_reverse_slice",
+        "test_reduce",
+        "test_two_d_array_reduction",
+        "test_tuple_concat",
+        "test_two_d_array_reduction_with_float_sizes",
+        "test_reduction",
+        "test_multiple_reduction_vars",
+        "test_two_d_array_reduction_reuse",
+        "test_parfor_slice21",
+        "test_parfor_array_access_lower_slice",
+        "test_size_assertion",
+        "test_parfor_slice19",
+        "test_parfor_slice23",
+        "test_parfor_slice18",
+        "test_parfor_slice20",
+        "test_simple12",
+        "test_parfor_slice2",
+        "test_parfor_slice6",
+        "test_parfor_slice22",
+        "test_parfor_bitmask3",
+        "test_simple13",
+        "test_parfor_bitmask1",
+        "test_parfor_bitmask4",
+        "test_issue3169",
+        "test_parfor_bitmask5",
+        "test_issue3748",
+        "test_parfor_bitmask6",
+        "test_issue5001",
+        "test_issue6774",
+        "test_issue5167",
+        "test_issue6095_numpy_max",
+        "test_issue5065",
+        "test_no_state_change_in_gufunc_lowering_on_error",
+        "test_namedtuple3",
+        "test_issue6102",
+        "test_oversized_tuple_as_arg_to_kernel",
+        "test_issue5942_2",
+        "test_reshape_with_large_neg",
+        "test_parfor_ufunc_typing",
+        "test_issue_5098",
+        "test_parfor_slice27",
+        "test_ufunc_expr",
+        "test_parfor_generate_fuse",
+        "test_parfor_slice7",
+        "test_parfor_bitmask2",
+        "test_parfor_alias2",
+        "test_one_d_array_reduction",
     }
 
     skip_tests = {
-        "test_kde_example",
-        "test_prange27",
         "test_copy_global_for_parfor",
+        "test_high_dimension1",
+        "test_three_d_array_reduction",
     }
+
+    def countParfors(test_func, args, **kws):
+        pytest.xfail()
+
+    def countArrays(test_func, args, **kws):
+        pytest.xfail()
+
+    def countArrayAllocs(test_func, args, **kws):
+        pytest.xfail()
+
+    def countNonParforArrayAccesses(test_func, args, **kws):
+        pytest.xfail()
+
+    def get_optimized_numba_ir(test_func, args, **kws):
+        pytest.xfail()
 
     def _wrap_test_class(test_base):
         class _Wrapper(test_base):
@@ -125,14 +243,21 @@ def _gen_tests():
 
             def prange_tester(self, pyfunc, *args, **kwargs):
                 patch_instance = kwargs.pop("patch_instance", None)
+
+                pyfunc = self.generate_prange_func(pyfunc, patch_instance)
+                return self._check_impl(pyfunc, *args, **kwargs)
+
+
+            def check(self, pyfunc, *args, **kwargs):
+                return self._check_impl(pyfunc, *args, **kwargs)
+
+            def _check_impl(self, pyfunc, *args, **kwargs):
                 scheduler_type = kwargs.pop("scheduler_type", None)
                 check_fastmath = kwargs.pop("check_fastmath", False)
                 check_fastmath_result = kwargs.pop("check_fastmath_result", False)
                 check_scheduling = kwargs.pop("check_scheduling", True)
                 check_args_for_equality = kwargs.pop("check_arg_equality", None)
-                assert not kwargs, "Unhandled kwargs: " + str(kwargs)
-
-                pyfunc = self.generate_prange_func(pyfunc, patch_instance)
+                # assert not kwargs, "Unhandled kwargs: " + str(kwargs)
 
                 cfunc = self._gen_normal(pyfunc)
                 cpfunc = self._gen_parallel(pyfunc)
@@ -205,6 +330,12 @@ def _gen_tests():
         _replace_global(func, "jit", jit)
         _replace_global(func, "njit", njit)
         _replace_global(func, "vectorize", vectorize)
+
+        _replace_global(func, "countParfors", countParfors)
+        _replace_global(func, "countArrays", countArrays)
+        _replace_global(func, "countArrayAllocs", countArrayAllocs)
+        _replace_global(func, "countNonParforArrayAccesses", countNonParforArrayAccesses)
+        _replace_global(func, "get_optimized_numba_ir", get_optimized_numba_ir)
 
         def wrapper():
             return func()
