@@ -183,7 +183,7 @@ jobs:
   - script: |
       source /usr/local/miniconda/bin/activate
       cd numba_dpcomp
-      conda create -y -n test_env python=3.9 numba=0.54 scikit-learn ninja scipy pybind11 tbb=2021.1 pytest lit -c conda-forge
+      conda create -y -n test_env python=3.9 numba=0.54 scikit-learn pytest-xdist ninja scipy pybind11 tbb=2021.1 pytest lit -c conda-forge
       conda activate test_env
       cmake --version
       chmod -R 777 $(System.DefaultWorkingDirectory)/llvm_cache
