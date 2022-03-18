@@ -90,6 +90,33 @@ struct UpliftMathCalls : public mlir::OpRewritePattern<mlir::func::CallOp> {
   }
 };
 
+struct UpliftFabsCalls : public mlir::OpRewritePattern<mlir::func::CallOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::func::CallOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto funcName = op.getCallee();
+    if (funcName.empty())
+      return mlir::failure();
+
+    if (funcName != "fabs" && funcName != "fabsf")
+      return mlir::failure();
+
+    auto isNotValidType = [](mlir::Type t) {
+      return !t.isa<mlir::FloatType>();
+    };
+
+    if (op.getNumResults() != 1 || op.getNumOperands() != 1 ||
+        llvm::any_of(op.getOperandTypes(), isNotValidType) ||
+        llvm::any_of(op.getResultTypes(), isNotValidType))
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::math::AbsOp>(op, op.operands()[0]);
+    return mlir::success();
+  }
+};
+
 struct UpliftFma : public mlir::OpRewritePattern<mlir::arith::AddFOp> {
   using OpRewritePattern::OpRewritePattern;
 
@@ -123,7 +150,7 @@ struct UpliftMathPass
           plier::DependentDialectsList<mlir::func::FuncDialect,
                                        mlir::arith::ArithmeticDialect,
                                        mlir::math::MathDialect>,
-          UpliftMathCalls, UpliftFma> {};
+          UpliftMathCalls, UpliftFabsCalls, UpliftFma> {};
 } // namespace
 
 void plier::populateUpliftmathPatterns(mlir::MLIRContext &context,

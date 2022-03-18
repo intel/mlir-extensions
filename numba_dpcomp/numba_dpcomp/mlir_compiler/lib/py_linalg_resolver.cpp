@@ -1742,6 +1742,38 @@ static py::object binopImpl(py::capsule context, py::capsule ssaVal,
   plier::reportError("Unhandled binop type");
 }
 
+static py::object unopImpl(py::capsule context, py::capsule ssaVal,
+                           py::str op) {
+  auto &ctx = getPyContext(context);
+  auto &builder = ctx.builder;
+  auto loc = ctx.loc;
+  auto val = unwrapMlir<mlir::Value>(ssaVal);
+
+  auto type = val.getType();
+  if (!type.isa<mlir::IntegerType, mlir::IndexType, mlir::FloatType>())
+    plier::reportError("Invalid unop arg type");
+
+  auto opName = static_cast<std::string>(op);
+  mlir::Value res;
+  if (opName == "+") {
+    res = val;
+  } else if (opName == "-") {
+    if (type.isa<mlir::FloatType>()) {
+      res = builder.create<mlir::arith::NegFOp>(loc, val);
+    } else {
+      auto signlessType = makeSignlessType(type);
+      auto zero = builder.getIntegerAttr(signlessType, 0);
+      auto zeroVal = builder.create<mlir::arith::ConstantOp>(loc, zero);
+      val = doSignCast(builder, loc, val);
+      res = builder.create<mlir::arith::SubIOp>(loc, zeroVal, val);
+      res = doSignCast(builder, loc, res, type);
+    }
+  } else {
+    plier::reportError("Unhandled unop type");
+  }
+  return ctx.context.createVar(context, res);
+}
+
 static py::object strImpl(py::capsule /*context*/, py::capsule ssaVal) {
   return py::str("Var: \"" + toStr(unwrapMlir<mlir::Value>(ssaVal)) + "\"");
 }
@@ -1753,6 +1785,7 @@ static void setupPyVar(pybind11::handle var) {
   py::setattr(var, "_len", py::cpp_function(&lenImpl));
   py::setattr(var, "_getitem", py::cpp_function(&getitemImpl));
   py::setattr(var, "_binop", py::cpp_function(&binopImpl));
+  py::setattr(var, "_unop", py::cpp_function(&unopImpl));
   py::setattr(var, "_str", py::cpp_function(&strImpl));
 }
 
