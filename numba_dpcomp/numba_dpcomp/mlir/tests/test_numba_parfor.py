@@ -85,7 +85,6 @@ def _gen_tests():
         "test_prange_two_instances_same_reduction_var",
         "test_prange_conflicting_reduction_ops",
         "test_ssa_false_reduction",
-        "test_prange26",
         "test_prange_two_conditional_reductions",
         "test_argument_alias_recarray_field",
         "test_mutable_list_param",
@@ -187,6 +186,7 @@ def _gen_tests():
         "test_copy_global_for_parfor",
         "test_high_dimension1",
         "test_three_d_array_reduction",
+        "test_prange26",
     }
 
     def countParfors(test_func, args, **kws):
@@ -246,7 +246,6 @@ def _gen_tests():
 
                 pyfunc = self.generate_prange_func(pyfunc, patch_instance)
                 return self._check_impl(pyfunc, *args, **kwargs)
-
 
             def check(self, pyfunc, *args, **kwargs):
                 return self._check_impl(pyfunc, *args, **kwargs)
@@ -334,7 +333,9 @@ def _gen_tests():
         _replace_global(func, "countParfors", countParfors)
         _replace_global(func, "countArrays", countArrays)
         _replace_global(func, "countArrayAllocs", countArrayAllocs)
-        _replace_global(func, "countNonParforArrayAccesses", countNonParforArrayAccesses)
+        _replace_global(
+            func, "countNonParforArrayAccesses", countNonParforArrayAccesses
+        )
         _replace_global(func, "get_optimized_numba_ir", get_optimized_numba_ir)
 
         def wrapper():
