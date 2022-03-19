@@ -432,17 +432,17 @@ struct ScfWhileRewrite : public mlir::OpRewritePattern<mlir::cf::BranchOp> {
         }
       }
 
-      llvm::transform(
-          beforeBlock->getArguments(), yieldVars.begin(),
-          [&](mlir::Value val) { return mapper.lookupOrDefault(val); });
+      llvm::transform(beforeBlockArgs, yieldVars.begin(), [&](mlir::Value val) {
+        return mapper.lookupOrDefault(val);
+      });
 
-      auto term =
-          mlir::cast<mlir::cf::CondBranchOp>(beforeBlock->getTerminator());
-      for (auto arg : term.getFalseDestOperands()) {
+      auto falseArgs = beforeTerm.getFalseDestOperands();
+      for (auto arg : falseArgs) {
         origVars.emplace_back(arg);
         yieldVars.emplace_back(mapper.lookupOrDefault(arg));
       }
-      auto cond = mapper.lookupOrDefault(term.getCondition());
+
+      auto cond = mapper.lookupOrDefault(beforeTerm.getCondition());
       builder.create<mlir::scf::ConditionOp>(loc, cond, yieldVars);
     };
     auto afterBody = [&](mlir::OpBuilder &builder, mlir::Location loc,
@@ -465,11 +465,22 @@ struct ScfWhileRewrite : public mlir::OpRewritePattern<mlir::cf::BranchOp> {
                                beforeBody, afterBody);
 
     assert(origVars.size() == whileOp.getNumResults());
-    for (auto arg : llvm::zip(origVars, whileOp.getResults()))
-      std::get<0>(arg).replaceAllUsesWith(std::get<1>(arg));
+    for (auto arg : llvm::zip(origVars, whileOp.getResults())) {
+      auto origVal = std::get<0>(arg);
+      for (auto &use : llvm::make_early_inc_range(origVal.getUses())) {
+        auto *owner = use.getOwner();
+        auto *block = owner->getBlock();
+        if (block != &whileOp.getBefore().front() &&
+            block != &whileOp.getAfter().front()) {
+          auto newVal = std::get<1>(arg);
+          rewriter.updateRootInPlace(owner, [&]() { use.set(newVal); });
+        }
+      }
+    }
 
-    rewriter.replaceOpWithNewOp<mlir::cf::BranchOp>(
-        op, postBlock, beforeTerm.getFalseDestOperands());
+    auto results =
+        whileOp.getResults().take_back(beforeTerm.getNumFalseOperands());
+    rewriter.replaceOpWithNewOp<mlir::cf::BranchOp>(op, postBlock, results);
     return mlir::success();
   }
 };

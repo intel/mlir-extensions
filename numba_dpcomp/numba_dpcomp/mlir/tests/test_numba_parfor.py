@@ -52,6 +52,7 @@ def _gen_tests():
     ]
 
     xfail_tests = {
+        "test_prange26",
         "test_prange03mul",
         "test_prange09",
         "test_prange03sub",
@@ -182,12 +183,7 @@ def _gen_tests():
         "test_one_d_array_reduction",
     }
 
-    skip_tests = {
-        "test_copy_global_for_parfor",
-        "test_high_dimension1",
-        "test_three_d_array_reduction",
-        "test_prange26",
-    }
+    skip_tests = {}
 
     def countParfors(test_func, args, **kws):
         pytest.xfail()

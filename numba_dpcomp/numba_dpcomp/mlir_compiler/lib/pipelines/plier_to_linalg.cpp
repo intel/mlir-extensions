@@ -2851,8 +2851,6 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
       mlir::bufferization::createBufferHoistingPass());
   pm.addNestedPass<mlir::FuncOp>(
       mlir::bufferization::createBufferLoopHoistingPass());
-  pm.addNestedPass<mlir::FuncOp>(
-      mlir::bufferization::createPromoteBuffersToStackPass());
 
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<CloneArgsPass>());
   pm.addPass(std::make_unique<MakeStridedLayoutPass>());
@@ -2863,6 +2861,8 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createCanonicalizerPass());
 
   pm.addNestedPass<mlir::FuncOp>(std::make_unique<LowerCloneOpsPass>());
+  pm.addNestedPass<mlir::FuncOp>(
+      mlir::bufferization::createPromoteBuffersToStackPass());
 
   pm.addPass(std::make_unique<LowerLinalgPass>());
   pm.addPass(plier::createForceInlinePass());

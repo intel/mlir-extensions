@@ -20,6 +20,7 @@
 #include <mlir/IR/BuiltinTypes.h>
 #include <mlir/IR/DialectImplementation.h>
 #include <mlir/IR/Dominance.h>
+#include <mlir/IR/Matchers.h>
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Transforms/InliningUtils.h>
 
@@ -269,14 +270,91 @@ struct GenGlobalId : public mlir::OpRewritePattern<mlir::arith::AddIOp> {
     return mlir::failure();
   }
 };
+
+struct InvertCmpi : public mlir::OpRewritePattern<mlir::arith::CmpIOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::arith::CmpIOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+
+    if (!mlir::matchPattern(op.getLhs(), mlir::m_Constant()) ||
+        mlir::matchPattern(op.getRhs(), mlir::m_Constant()))
+      return mlir::failure();
+
+    using Pred = mlir::arith::CmpIPredicate;
+    const std::pair<Pred, Pred> inv[] = {
+        // clang-format off
+        {Pred::slt, Pred::sgt},
+        {Pred::sle, Pred::sge},
+        {Pred::ult, Pred::ugt},
+        {Pred::ule, Pred::uge},
+        {Pred::eq, Pred::eq},
+        {Pred::ne, Pred::ne},
+        // clang-format on
+    };
+
+    auto newPred = [&]() -> Pred {
+      auto oldPred = op.getPredicate();
+      for (auto it : inv) {
+        if (it.first == oldPred)
+          return it.second;
+        if (it.second == oldPred)
+          return it.first;
+      }
+
+      llvm_unreachable("Unknown predicate");
+    }();
+
+    rewriter.replaceOpWithNewOp<mlir::arith::CmpIOp>(op, newPred, op.getRhs(),
+                                                     op.getLhs());
+    ;
+    return mlir::success();
+  }
+};
+
+struct ReshapeAlloca : public mlir::OpRewritePattern<mlir::memref::ReshapeOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::ReshapeOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto shapeOp = op.shape().getDefiningOp<mlir::memref::AllocOp>();
+    if (!shapeOp)
+      return mlir::failure();
+
+    for (auto user : shapeOp->getUsers())
+      if (!mlir::isa<mlir::memref::StoreOp, mlir::memref::ReshapeOp>(user))
+        return mlir::failure();
+
+    if (!shapeOp.dynamicSizes().empty() || !shapeOp.symbolOperands().empty())
+      return mlir::failure();
+
+    auto func = op->getParentOfType<mlir::FuncOp>();
+    if (!func)
+      return mlir::failure();
+
+    if (shapeOp->getParentOp() != func) {
+      rewriter.setInsertionPointToStart(&func.getBody().front());
+    } else {
+      rewriter.setInsertionPoint(shapeOp);
+    }
+
+    auto type = shapeOp.getType().cast<mlir::MemRefType>();
+    auto alignment = shapeOp.alignmentAttr().cast<mlir::IntegerAttr>();
+    rewriter.replaceOpWithNewOp<mlir::memref::AllocaOp>(shapeOp, type,
+                                                        alignment);
+    return mlir::success();
+  }
+};
 } // namespace
 
 void PlierUtilDialect::getCanonicalizationPatterns(
     mlir::RewritePatternSet &results) const {
   results.add<DimExpandShape<mlir::tensor::DimOp, mlir::tensor::ExpandShapeOp>,
               DimExpandShape<mlir::memref::DimOp, mlir::memref::ExpandShapeOp>,
-              DimInsertSlice, FillExtractSlice, SpirvInputCSE, GenGlobalId>(
-      getContext());
+              DimInsertSlice, FillExtractSlice, SpirvInputCSE, GenGlobalId,
+              InvertCmpi, ReshapeAlloca>(getContext());
 }
 
 OpaqueType OpaqueType::get(mlir::MLIRContext *context) {
@@ -330,27 +408,26 @@ EnforceShapeOp::fold(llvm::ArrayRef<mlir::Attribute> operands) {
 }
 
 namespace {
-struct EnforceShapeDim : public mlir::OpRewritePattern<mlir::memref::DimOp> {
-  using mlir::OpRewritePattern<mlir::memref::DimOp>::OpRewritePattern;
+template <typename DimOp>
+struct EnforceShapeDim : public mlir::OpRewritePattern<DimOp> {
+  using mlir::OpRewritePattern<DimOp>::OpRewritePattern;
 
   mlir::LogicalResult
-  matchAndRewrite(mlir::memref::DimOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto enforce_op = mlir::dyn_cast_or_null<plier::EnforceShapeOp>(
-        op.source().getDefiningOp());
-    if (!enforce_op) {
+  matchAndRewrite(DimOp op, mlir::PatternRewriter &rewriter) const override {
+    auto enforceOp =
+        op.source().template getDefiningOp<plier::EnforceShapeOp>();
+    if (!enforceOp)
       return mlir::failure();
-    }
-    auto const_ind = plier::getConstVal<mlir::IntegerAttr>(op.index());
-    if (!const_ind) {
-      return mlir::failure();
-    }
-    auto index = const_ind.getInt();
-    if (index < 0 || index >= static_cast<int64_t>(enforce_op.sizes().size())) {
-      return mlir::failure();
-    }
 
-    rewriter.replaceOp(op, enforce_op.sizes()[static_cast<unsigned>(index)]);
+    auto constInd = mlir::getConstantIntValue(op.index());
+    if (!constInd)
+      return mlir::failure();
+
+    auto index = *constInd;
+    if (index < 0 || index >= static_cast<int64_t>(enforceOp.sizes().size()))
+      return mlir::failure();
+
+    rewriter.replaceOp(op, enforceOp.sizes()[static_cast<unsigned>(index)]);
     return mlir::success();
   }
 };
@@ -358,7 +435,8 @@ struct EnforceShapeDim : public mlir::OpRewritePattern<mlir::memref::DimOp> {
 
 void EnforceShapeOp::getCanonicalizationPatterns(
     ::mlir::RewritePatternSet &results, ::mlir::MLIRContext *context) {
-  results.insert<EnforceShapeDim>(context);
+  results.insert<EnforceShapeDim<mlir::tensor::DimOp>,
+                 EnforceShapeDim<mlir::memref::DimOp>>(context);
 }
 
 mlir::LogicalResult
