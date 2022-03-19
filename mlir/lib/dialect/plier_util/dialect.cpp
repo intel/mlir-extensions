@@ -373,27 +373,26 @@ EnforceShapeOp::fold(llvm::ArrayRef<mlir::Attribute> operands) {
 }
 
 namespace {
-struct EnforceShapeDim : public mlir::OpRewritePattern<mlir::memref::DimOp> {
-  using mlir::OpRewritePattern<mlir::memref::DimOp>::OpRewritePattern;
+template <typename DimOp>
+struct EnforceShapeDim : public mlir::OpRewritePattern<DimOp> {
+  using mlir::OpRewritePattern<DimOp>::OpRewritePattern;
 
   mlir::LogicalResult
-  matchAndRewrite(mlir::memref::DimOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto enforce_op = mlir::dyn_cast_or_null<plier::EnforceShapeOp>(
-        op.source().getDefiningOp());
-    if (!enforce_op) {
+  matchAndRewrite(DimOp op, mlir::PatternRewriter &rewriter) const override {
+    auto enforceOp =
+        op.source().template getDefiningOp<plier::EnforceShapeOp>();
+    if (!enforceOp)
       return mlir::failure();
-    }
-    auto const_ind = plier::getConstVal<mlir::IntegerAttr>(op.index());
-    if (!const_ind) {
-      return mlir::failure();
-    }
-    auto index = const_ind.getInt();
-    if (index < 0 || index >= static_cast<int64_t>(enforce_op.sizes().size())) {
-      return mlir::failure();
-    }
 
-    rewriter.replaceOp(op, enforce_op.sizes()[static_cast<unsigned>(index)]);
+    auto constInd = mlir::getConstantIntValue(op.index());
+    if (!constInd)
+      return mlir::failure();
+
+    auto index = *constInd;
+    if (index < 0 || index >= static_cast<int64_t>(enforceOp.sizes().size()))
+      return mlir::failure();
+
+    rewriter.replaceOp(op, enforceOp.sizes()[static_cast<unsigned>(index)]);
     return mlir::success();
   }
 };
@@ -401,7 +400,8 @@ struct EnforceShapeDim : public mlir::OpRewritePattern<mlir::memref::DimOp> {
 
 void EnforceShapeOp::getCanonicalizationPatterns(
     ::mlir::RewritePatternSet &results, ::mlir::MLIRContext *context) {
-  results.insert<EnforceShapeDim>(context);
+  results.insert<EnforceShapeDim<mlir::tensor::DimOp>,
+                 EnforceShapeDim<mlir::memref::DimOp>>(context);
 }
 
 mlir::LogicalResult
