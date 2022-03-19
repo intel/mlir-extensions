@@ -312,6 +312,41 @@ struct InvertCmpi : public mlir::OpRewritePattern<mlir::arith::CmpIOp> {
     return mlir::success();
   }
 };
+
+struct ReshapeAlloca : public mlir::OpRewritePattern<mlir::memref::ReshapeOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::ReshapeOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto shapeOp = op.shape().getDefiningOp<mlir::memref::AllocOp>();
+    if (!shapeOp)
+      return mlir::failure();
+
+    for (auto user : shapeOp->getUsers())
+      if (!mlir::isa<mlir::memref::StoreOp, mlir::memref::ReshapeOp>(user))
+        return mlir::failure();
+
+    if (!shapeOp.dynamicSizes().empty() || !shapeOp.symbolOperands().empty())
+      return mlir::failure();
+
+    auto func = op->getParentOfType<mlir::FuncOp>();
+    if (!func)
+      return mlir::failure();
+
+    if (shapeOp->getParentOp() != func) {
+      rewriter.setInsertionPointToStart(&func.getBody().front());
+    } else {
+      rewriter.setInsertionPoint(shapeOp);
+    }
+
+    auto type = shapeOp.getType().cast<mlir::MemRefType>();
+    auto alignment = shapeOp.alignmentAttr().cast<mlir::IntegerAttr>();
+    rewriter.replaceOpWithNewOp<mlir::memref::AllocaOp>(shapeOp, type,
+                                                        alignment);
+    return mlir::success();
+  }
+};
 } // namespace
 
 void PlierUtilDialect::getCanonicalizationPatterns(
@@ -319,7 +354,7 @@ void PlierUtilDialect::getCanonicalizationPatterns(
   results.add<DimExpandShape<mlir::tensor::DimOp, mlir::tensor::ExpandShapeOp>,
               DimExpandShape<mlir::memref::DimOp, mlir::memref::ExpandShapeOp>,
               DimInsertSlice, FillExtractSlice, SpirvInputCSE, GenGlobalId,
-              InvertCmpi>(getContext());
+              InvertCmpi, ReshapeAlloca>(getContext());
 }
 
 OpaqueType OpaqueType::get(mlir::MLIRContext *context) {
