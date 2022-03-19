@@ -20,6 +20,7 @@
 #include <mlir/IR/BuiltinTypes.h>
 #include <mlir/IR/DialectImplementation.h>
 #include <mlir/IR/Dominance.h>
+#include <mlir/IR/Matchers.h>
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Transforms/InliningUtils.h>
 
@@ -269,14 +270,56 @@ struct GenGlobalId : public mlir::OpRewritePattern<mlir::arith::AddIOp> {
     return mlir::failure();
   }
 };
+
+struct InvertCmpi : public mlir::OpRewritePattern<mlir::arith::CmpIOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::arith::CmpIOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+
+    if (!mlir::matchPattern(op.getLhs(), mlir::m_Constant()) ||
+        mlir::matchPattern(op.getRhs(), mlir::m_Constant()))
+      return mlir::failure();
+
+    using Pred = mlir::arith::CmpIPredicate;
+    const std::pair<Pred, Pred> inv[] = {
+        // clang-format off
+        {Pred::slt, Pred::sgt},
+        {Pred::sle, Pred::sge},
+        {Pred::ult, Pred::ugt},
+        {Pred::ule, Pred::uge},
+        {Pred::eq, Pred::eq},
+        {Pred::ne, Pred::ne},
+        // clang-format on
+    };
+
+    auto newPred = [&]() -> Pred {
+      auto oldPred = op.getPredicate();
+      for (auto it : inv) {
+        if (it.first == oldPred)
+          return it.second;
+        if (it.second == oldPred)
+          return it.first;
+      }
+
+      llvm_unreachable("Unknown predicate");
+    }();
+
+    rewriter.replaceOpWithNewOp<mlir::arith::CmpIOp>(op, newPred, op.getRhs(),
+                                                     op.getLhs());
+    ;
+    return mlir::success();
+  }
+};
 } // namespace
 
 void PlierUtilDialect::getCanonicalizationPatterns(
     mlir::RewritePatternSet &results) const {
   results.add<DimExpandShape<mlir::tensor::DimOp, mlir::tensor::ExpandShapeOp>,
               DimExpandShape<mlir::memref::DimOp, mlir::memref::ExpandShapeOp>,
-              DimInsertSlice, FillExtractSlice, SpirvInputCSE, GenGlobalId>(
-      getContext());
+              DimInsertSlice, FillExtractSlice, SpirvInputCSE, GenGlobalId,
+              InvertCmpi>(getContext());
 }
 
 OpaqueType OpaqueType::get(mlir::MLIRContext *context) {
