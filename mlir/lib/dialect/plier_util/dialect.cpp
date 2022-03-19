@@ -1416,6 +1416,95 @@ struct SignCastMemrefSubviewPropagate
   }
 };
 
+struct SignCastForPropagate : public mlir::OpRewritePattern<mlir::scf::ForOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::scf::ForOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto &body = op.getLoopBody().front();
+    auto term = mlir::cast<mlir::scf::YieldOp>(body.getTerminator());
+    auto termResults = term.getResults();
+    auto initArgs = op.getInitArgs();
+    auto count = static_cast<unsigned>(initArgs.size());
+
+    assert(termResults.size() == count);
+    llvm::SmallVector<mlir::Value> newInitArgs(count);
+    bool needUpdate = false;
+    for (auto i : llvm::seq(0u, count)) {
+      auto initArg = initArgs[i];
+      auto yieldArg = termResults[i];
+      assert(initArg.getType() == yieldArg.getType());
+      auto initCast = initArg.getDefiningOp<plier::SignCastOp>();
+      auto yieldCast = yieldArg.getDefiningOp<plier::SignCastOp>();
+      if (initCast && yieldCast &&
+          initCast.value().getType() == yieldCast.value().getType()) {
+        newInitArgs[i] = initCast.value();
+        needUpdate = true;
+      } else {
+        newInitArgs[i] = initArg;
+      }
+    }
+
+    if (!needUpdate)
+      return mlir::failure();
+
+    auto bodyBuilder = [&](mlir::OpBuilder &builder, mlir::Location loc,
+                           mlir::Value iter, mlir::ValueRange iterVals) {
+      assert(iterVals.size() == count);
+      mlir::BlockAndValueMapping mapping;
+      mapping.map(body.getArguments()[0], iter);
+      auto oldIterVals = body.getArguments().drop_front(1);
+      for (auto i : llvm::seq(0u, count)) {
+        auto iterVal = iterVals[i];
+        auto oldIterVal = oldIterVals[i];
+        auto oldType = oldIterVal.getType();
+        if (iterVal.getType() != oldType) {
+          auto newIterVal =
+              builder.create<plier::SignCastOp>(loc, oldType, iterVal);
+          mapping.map(oldIterVal, newIterVal.getResult());
+        } else {
+          mapping.map(oldIterVal, iterVal);
+        }
+      }
+
+      for (auto &bodyOp : body.without_terminator())
+        builder.clone(bodyOp, mapping);
+
+      llvm::SmallVector<mlir::Value> newYieldArgs(count);
+      for (auto i : llvm::seq(0u, count)) {
+        auto val = mapping.lookupOrDefault(termResults[i]);
+        auto newType = newInitArgs[i].getType();
+        if (val.getType() != newType)
+          val = builder.create<plier::SignCastOp>(loc, newType, val);
+
+        newYieldArgs[i] = val;
+      }
+      builder.create<mlir::scf::YieldOp>(loc, newYieldArgs);
+    };
+
+    auto loc = op->getLoc();
+    auto newResults = rewriter
+                          .create<mlir::scf::ForOp>(
+                              loc, op.getLowerBound(), op.getUpperBound(),
+                              op.getStep(), newInitArgs, bodyBuilder)
+                          ->getResults();
+
+    for (auto i : llvm::seq(0u, count)) {
+      auto oldRersultType = initArgs[i].getType();
+      mlir::Value newResult = newResults[i];
+      if (newResult.getType() != oldRersultType)
+        newResult =
+            rewriter.create<plier::SignCastOp>(loc, oldRersultType, newResult);
+
+      newInitArgs[i] = newResult;
+    }
+
+    rewriter.replaceOp(op, newInitArgs);
+    return mlir::success();
+  }
+};
+
 } // namespace
 
 void SignCastOp::getCanonicalizationPatterns(::mlir::RewritePatternSet &results,
@@ -1428,7 +1517,7 @@ void SignCastOp::getCanonicalizationPatterns(::mlir::RewritePatternSet &results,
       SignCastAllocPropagate<mlir::memref::AllocaOp>,
       SignCastTensorFromElementsPropagate, SignCastTensorCollapseShapePropagate,
       SignCastTensorToMemrefPropagate, SignCastMemrefToTensorPropagate,
-      SignCastMemrefSubviewPropagate>(context);
+      SignCastMemrefSubviewPropagate, SignCastForPropagate>(context);
 }
 
 void ExtractMemrefMetadataOp::build(::mlir::OpBuilder &odsBuilder,

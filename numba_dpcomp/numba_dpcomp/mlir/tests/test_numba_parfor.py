@@ -52,33 +52,20 @@ def _gen_tests():
     ]
 
     xfail_tests = {
-        "test_prange26",
-        "test_prange03mul",
         "test_prange09",
         "test_prange03sub",
-        "test_prange10",
-        "test_prange03",
         "test_prange03div",
         "test_prange07",
         "test_prange06",
-        "test_prange16",
         "test_prange12",
-        "test_prange04",
-        "test_prange13",
         "test_prange25",
-        "test_prange21",
-        "test_prange14",
         "test_prange18",
         "test_prange_nested_reduction1",
         "test_list_setitem_hoisting",
-        "test_prange23",
-        "test_prange24",
         "test_list_comprehension_prange",
-        "test_prange22",
         "test_prange_raises_invalid_step_size",
         "test_issue7501",
         "test_parfor_race_1",
-        "test_check_alias_analysis",
         "test_nested_parfor_push_call_vars",
         "test_record_array_setitem_yield_array",
         "test_record_array_setitem",
@@ -127,7 +114,6 @@ def _gen_tests():
         "test_namedtuple2",
         "test_simple19",
         "test_no_hoisting_with_member_function_call",
-        "test_reduction_var_reuse",
         "test_parfor_dtype_type",
         "test_tuple3",
         "test_parfor_array_access3",
@@ -179,7 +165,6 @@ def _gen_tests():
         "test_parfor_generate_fuse",
         "test_parfor_slice7",
         "test_parfor_bitmask2",
-        "test_parfor_alias2",
         "test_one_d_array_reduction",
     }
 
@@ -217,19 +202,31 @@ def _gen_tests():
                 return wrapper
 
             def _gen_parallel_fastmath(self, func):
+                ops = (
+                    "fadd",
+                    "fsub",
+                    "fmul",
+                    "fdiv",
+                    "frem",
+                    "fcmp",
+                )
+
                 def wrapper(*args, **kwargs):
                     with print_pass_ir([], ["PostLLVMLowering"]):
                         res = njit(parallel=True, fastmath=True)(func)(*args, **kwargs)
                         ir = get_print_buffer()
                         # Check some fastmath llvm flags were generated
-                        count = 0
+                        opCount = 0
+                        fastCount = 0
                         for line in ir.splitlines():
-                            for op in ("fadd", "fsub", "fmul", "fdiv", "frem", "fcmp"):
-                                if line.count("llvm." + op) and line.count(
-                                    "llvm.fastmath<fast>"
-                                ):
-                                    count += 1
-                        assert count > 0, ir
+                            for op in ops:
+                                if line.count("llvm." + op) > 0:
+                                    opCount += 1
+                                    if line.count("llvm.fastmath<fast>") > 0:
+                                        fastCount += 1
+                                    break
+                        if opCount > 0:
+                            assert fastCount > 0, it
                     return res
 
                 return wrapper

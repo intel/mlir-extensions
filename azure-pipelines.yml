@@ -41,7 +41,7 @@ jobs:
   - script: |
       call "C:\Miniconda\Scripts\activate"
       call cd numba_dpcomp
-      pytest -n1 -vv --capture=tee-sys
+      pytest -n1 -vv --capture=tee-sys -rX
     displayName: 'Tests'
 
   - script: |
@@ -127,7 +127,7 @@ jobs:
       export SYCL_DEVICE_FILTER=opencl:cpu
       export NUMBA_DISABLE_PERFORMANCE_WARNINGS=1
       export DPCOMP_ENABLE_PARFOR_TESTS=1
-      pytest -n1 -vv --capture=tee-sys
+      pytest -n1 -vv --capture=tee-sys -rX
     displayName: 'Tests'
 
   - script: |
@@ -197,7 +197,7 @@ jobs:
       source /usr/local/miniconda/bin/activate
       cd numba_dpcomp
       conda activate test_env
-      pytest -n1 -vv --capture=tee-sys
+      pytest -n1 -vv --capture=tee-sys -rX
     displayName: 'Tests'
 
   - script: |
