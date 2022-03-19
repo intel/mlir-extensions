@@ -126,20 +126,23 @@ static void run_parallel_for(const InputRange *input_ranges, size_t depth,
   auto runFunc = [&](Dim *current) {
     auto thread_index =
         static_cast<size_t>(tbb::this_task_arena::current_thread_index());
+    assert(thread_index >= 0);
     std::array<Range, 8> static_ranges;
     std::unique_ptr<Range[]> dyn_ranges;
     auto *range_ptr = [&]() -> Range * {
-      if (num_loops <= static_ranges.size()) {
+      if (num_loops <= static_ranges.size())
         return static_ranges.data();
-      }
+
       dyn_ranges.reset(new Range[num_loops]);
       return dyn_ranges.get();
     }();
 
     for (size_t i = 0; i < num_loops; ++i) {
+      assert(current);
       range_ptr[num_loops - i - 1] = current->val;
       current = current->prev;
     }
+
     if (DEBUG) {
       std::lock_guard<std::mutex> lock(getDebugMutext());
       fprintf(stderr, "parallel_for func: thread_index=%d",
@@ -174,7 +177,7 @@ static void run_parallel_for(const InputRange *input_ranges, size_t depth,
       runFunc(prev);
     } else {
       auto next = depth + N;
-      parallel_for_nested(input_ranges, next, num_threads, num_loops, prev_dim,
+      parallel_for_nested(input_ranges, next, num_threads, num_loops, prev,
                           func, ctx);
     }
   };

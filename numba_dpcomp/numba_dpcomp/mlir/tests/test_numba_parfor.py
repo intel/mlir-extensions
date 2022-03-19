@@ -183,7 +183,6 @@ def _gen_tests():
     }
 
     skip_tests = {
-        "test_high_dimension1",
         "test_three_d_array_reduction",
         "test_prange26",
     }
