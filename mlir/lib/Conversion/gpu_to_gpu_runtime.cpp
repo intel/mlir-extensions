@@ -315,8 +315,7 @@ struct InsertGPUAllocs
       if (access.hostRead && access.deviceWrite)
         builder.create<mlir::memref::CopyOp>(loc, allocResult, param);
 
-      // TODO: Add a memref dealloc or gpu dealloc
-      // builder.create<mlir::memref::DeallocOp>(loc, allocResult);
+      builder.create<mlir::gpu::DeallocOp>(loc, llvm::None, allocResult);
     }
   }
 };
@@ -988,6 +987,23 @@ struct ExpandAllocOp : public mlir::OpRewritePattern<mlir::gpu::AllocOp> {
   }
 };
 
+struct ExpandDeallocOp : public mlir::OpRewritePattern<mlir::gpu::DeallocOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::gpu::DeallocOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto stream = getGpuStream(rewriter, op);
+    if (!stream)
+      return mlir::failure();
+
+    auto res = rewriter.replaceOpWithNewOp<gpu_runtime::GPUDeallocOp>(
+        op, op.asyncDependencies(), op.memref(), *stream);
+
+    return mlir::success();
+  }
+};
+
 struct ExpandSuggestBlockSizeOp
     : public mlir::OpRewritePattern<gpu_runtime::GPUSuggestBlockSizeOp> {
   using OpRewritePattern::OpRewritePattern;
@@ -1123,8 +1139,8 @@ struct GPUExPass
     auto *ctx = &getContext();
     mlir::RewritePatternSet patterns(ctx);
 
-    patterns.insert<ExpandLaunchOp, ExpandAllocOp, ExpandSuggestBlockSizeOp>(
-        ctx);
+    patterns.insert<ExpandLaunchOp, ExpandAllocOp, ExpandDeallocOp,
+                    ExpandSuggestBlockSizeOp>(ctx);
 
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
                                              std::move(patterns));

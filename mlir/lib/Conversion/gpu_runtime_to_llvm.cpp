@@ -169,6 +169,14 @@ protected:
           llvmAllocResPtrType,    // result
       }};
 
+  FunctionCallBuilder deallocCallBuilder = {
+      "dpcompGpuDeAlloc",
+      llvmVoidType,
+      {
+          llvmPointerType, // stream
+          llvmPointerType, // memory pointer
+      }};
+
   FunctionCallBuilder suggestBlockSizeBuilder = {
       "dpcompGpuSuggestBlockSize",
       llvmVoidType,
@@ -638,6 +646,30 @@ private:
   }
 };
 
+class ConvertGpuDeAllocPattern
+    : public ConvertOpToGpuRuntimeCallPattern<gpu_runtime::GPUDeallocOp> {
+public:
+  ConvertGpuDeAllocPattern(mlir::LLVMTypeConverter &converter)
+      : ConvertOpToGpuRuntimeCallPattern<gpu_runtime::GPUDeallocOp>(converter) {
+  }
+
+private:
+  mlir::LogicalResult
+  matchAndRewrite(gpu_runtime::GPUDeallocOp op,
+                  gpu_runtime::GPUDeallocOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    mlir::Value pointer =
+        mlir::MemRefDescriptor(adaptor.memref()).allocatedPtr(rewriter, loc);
+    auto casted =
+        rewriter.create<mlir::LLVM::BitcastOp>(loc, llvmPointerType, pointer);
+    mlir::Value params[] = {adaptor.stream(), casted};
+    auto res = deallocCallBuilder.create(loc, rewriter, params);
+    rewriter.replaceOp(op, res.getResults());
+    return mlir::success();
+  }
+};
+
 class ConvertGpuSuggestBlockSizePattern
     : public ConvertOpToGpuRuntimeCallPattern<
           gpu_runtime::GPUSuggestBlockSizeOp> {
@@ -761,6 +793,7 @@ struct GPUToLLVMPass
         gpu_runtime::DestroyGpuKernelOp,
         gpu_runtime::LaunchGpuKernelOp,
         gpu_runtime::GPUAllocOp,
+        gpu_runtime::GPUDeallocOp,
         gpu_runtime::GPUSuggestBlockSizeOp
         // clang-format on
         >();
@@ -780,6 +813,7 @@ struct GPUToLLVMPass
         ConvertGpuKernelDestroyPattern,
         ConvertGpuKernelLaunchPattern,
         ConvertGpuAllocPattern,
+        ConvertGpuDeAllocPattern,
         ConvertGpuSuggestBlockSizePattern,
         LowerUndef
         // clang-format on
