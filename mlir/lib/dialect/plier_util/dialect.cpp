@@ -1333,19 +1333,20 @@ struct SignCastForPropagate : public mlir::OpRewritePattern<mlir::scf::ForOp> {
     auto termResults = term.getResults();
     auto initArgs = op.getInitArgs();
     auto count = static_cast<unsigned>(initArgs.size());
-
     assert(termResults.size() == count);
+
+    auto loc = op->getLoc();
     llvm::SmallVector<mlir::Value> newInitArgs(count);
     bool needUpdate = false;
     for (auto i : llvm::seq(0u, count)) {
       auto initArg = initArgs[i];
       auto yieldArg = termResults[i];
       assert(initArg.getType() == yieldArg.getType());
-      auto initCast = initArg.getDefiningOp<plier::SignCastOp>();
       auto yieldCast = yieldArg.getDefiningOp<plier::SignCastOp>();
-      if (initCast && yieldCast &&
-          initCast.value().getType() == yieldCast.value().getType()) {
-        newInitArgs[i] = initCast.value();
+      if (yieldCast) {
+        auto newType = yieldCast.value().getType();
+        newInitArgs[i] =
+            rewriter.create<plier::SignCastOp>(loc, newType, initArg);
         needUpdate = true;
       } else {
         newInitArgs[i] = initArg;
@@ -1382,14 +1383,14 @@ struct SignCastForPropagate : public mlir::OpRewritePattern<mlir::scf::ForOp> {
         auto val = mapping.lookupOrDefault(termResults[i]);
         auto newType = newInitArgs[i].getType();
         if (val.getType() != newType)
-          val = builder.create<plier::SignCastOp>(loc, newType, val);
+          val = val.getDefiningOp<plier::SignCastOp>().value();
 
+        assert(val.getType() == newType);
         newYieldArgs[i] = val;
       }
       builder.create<mlir::scf::YieldOp>(loc, newYieldArgs);
     };
 
-    auto loc = op->getLoc();
     auto newResults = rewriter
                           .create<mlir::scf::ForOp>(
                               loc, op.getLowerBound(), op.getUpperBound(),
