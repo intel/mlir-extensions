@@ -22,6 +22,7 @@ import types as pytypes
 from numba_dpcomp.mlir.settings import _readenv
 from numba_dpcomp import njit, jit, vectorize
 
+from numba.core.registry import CPUDispatcher
 from numba_dpcomp.mlir.passes import (
     print_pass_ir,
     get_print_buffer,
@@ -52,119 +53,103 @@ def _gen_tests():
     ]
 
     xfail_tests = {
-        "test_prange03sub",
-        "test_prange03div",
-        "test_prange07",
-        "test_prange06",
-        "test_prange12",
-        "test_prange25",
-        "test_prange18",
-        "test_prange_nested_reduction1",
-        "test_list_setitem_hoisting",
-        "test_list_comprehension_prange",
-        "test_prange_raises_invalid_step_size",
-        "test_issue7501",
-        "test_parfor_race_1",
-        "test_nested_parfor_push_call_vars",
-        "test_record_array_setitem_yield_array",
-        "test_record_array_setitem",
-        "test_multiple_call_getattr_object",
-        "test_prange_two_instances_same_reduction_var",
-        "test_prange_conflicting_reduction_ops",
-        "test_ssa_false_reduction",
-        "test_prange_two_conditional_reductions",
-        "test_argument_alias_recarray_field",
-        "test_mutable_list_param",
-        "test_signed_vs_unsigned_vec_asm",
-        "test_unsigned_refusal_to_vectorize",
-        "test_vectorizer_fastmath_asm",
-        "test_kde_example",
-        "test_prange27",
-        "test_simple09",
-        "test_simple01",
-        "test_simple10",
-        "test_kmeans",
-        "test_simple14",
-        "test_simple04",
-        "test_ndarray_fill",
-        "test_fuse_argmin_argmax_max_min",
-        "test_max",
-        "test_arange",
-        "test_min",
-        "test_pi",
-        "test_simple20",
-        "test_simple24",
-        "test_0d_array",
-        "test_argmin",
-        "test_simple07",
-        "test_ndarray_fill2d",
-        "test_argmax",
-        "test_simple02",
-        "test_simple18",
-        "test_linspace",
-        "test_std",
-        "test_reshape_with_neg_one",
-        "test_mvdot",
-        "test_array_tuple_concat",
-        "test_namedtuple1",
-        "test_0d_broadcast",
-        "test_var",
-        "test_reshape_with_too_many_neg_one",
-        "test_namedtuple2",
-        "test_simple19",
-        "test_no_hoisting_with_member_function_call",
-        "test_parfor_dtype_type",
-        "test_tuple3",
-        "test_parfor_array_access3",
-        "test_np_func_direct_import",
-        "test_preparfor_canonicalize_kws",
-        "test_parfor_array_access4",
-        "test_tuple_concat_with_reverse_slice",
-        "test_reduce",
-        "test_two_d_array_reduction",
-        "test_tuple_concat",
-        "test_two_d_array_reduction_with_float_sizes",
-        "test_reduction",
-        "test_multiple_reduction_vars",
-        "test_two_d_array_reduction_reuse",
-        "test_parfor_slice21",
-        "test_parfor_array_access_lower_slice",
-        "test_size_assertion",
-        "test_parfor_slice19",
-        "test_parfor_slice23",
-        "test_parfor_slice18",
-        "test_parfor_slice20",
-        "test_simple12",
-        "test_parfor_slice2",
-        "test_parfor_slice6",
-        "test_parfor_slice22",
-        "test_parfor_bitmask3",
-        "test_simple13",
-        "test_parfor_bitmask1",
-        "test_parfor_bitmask4",
-        "test_issue3169",
-        "test_parfor_bitmask5",
-        "test_issue3748",
-        "test_parfor_bitmask6",
-        "test_issue5001",
-        "test_issue6774",
-        "test_issue5167",
-        "test_issue6095_numpy_max",
-        "test_issue5065",
-        "test_no_state_change_in_gufunc_lowering_on_error",
-        "test_namedtuple3",
-        "test_issue6102",
-        "test_oversized_tuple_as_arg_to_kernel",
-        "test_issue5942_2",
-        "test_reshape_with_large_neg",
-        "test_parfor_ufunc_typing",
-        "test_issue_5098",
-        "test_parfor_slice27",
-        "test_ufunc_expr",
-        "test_parfor_generate_fuse",
-        "test_parfor_slice7",
-        "test_parfor_bitmask2",
-        "test_one_d_array_reduction",
+        "test_prange03sub", # sub reduction
+        "test_prange03div", # div reduction
+        "test_prange25", # list support
+        "test_prange18", # memssa failure
+        "test_list_setitem_hoisting", # list support
+        "test_list_comprehension_prange", # list comprehension support
+        "test_prange_raises_invalid_step_size", # we actually support arbirary step in prange
+        "test_issue7501", # invalid tensor<->memref canonicalization
+        "test_parfor_race_1", # cfg->scf conversion failure
+        "test_nested_parfor_push_call_vars", # Can't resolve function 'negative'
+        "test_record_array_setitem_yield_array", # Record and string support
+        "test_record_array_setitem", # Record and string support
+        "test_multiple_call_getattr_object", # Can't resolve function 'negative'
+        "test_prange_two_instances_same_reduction_var", # Non-trivial reduction
+        "test_prange_conflicting_reduction_ops",  # Conflicting reduction reduction check
+        "test_ssa_false_reduction", # Frontend: object has no attribute 'name'
+        "test_argument_alias_recarray_field", # Record support
+        "test_mutable_list_param", # List support
+        "test_signed_vs_unsigned_vec_asm", # Need to hook asm checks
+        "test_unsigned_refusal_to_vectorize", # Need to hook asm checks
+        "test_vectorizer_fastmath_asm", # Need to hook asm checks
+        "test_kde_example", # List suport
+        "test_prange27", # Literal return issue
+        "test_simple01", # Empty shape not failed
+        "test_kmeans", # List suport
+        "test_simple14", # Slice shape mismatch
+        "test_ndarray_fill", # array.fill
+        "test_fuse_argmin_argmax_max_min", # numpy argmin, argmax
+        "test_max", # max reduction
+        "test_min", # min reduction
+        "test_arange", # numpy.arange
+        "test_pi", # np.random.ranf
+        "test_simple20", # AssertionError not raised
+        "test_simple24", # numpy.arange
+        "test_0d_array", # numpy prod
+        "test_argmin", # numpy.argmin
+        "test_argmax", # numpy.argmax
+        "test_simple07", # complex128 support
+        "test_ndarray_fill2d", # array.fill
+        "test_simple18", # np.linalg.svd
+        "test_linspace", # np.linspace
+        "test_std", # array.std
+        "test_reshape_with_neg_one", # unsupported reshape
+        "test_mvdot", # np.dot unsupported args
+        "test_array_tuple_concat", # tuple concat
+        "test_namedtuple1", # namedtuple support
+        "test_0d_broadcast", # np.array
+        "test_var", # array.var
+        "test_reshape_with_too_many_neg_one", # unsupported reshape
+        "test_namedtuple2", # namedtuple support
+        "test_simple19", # np.dot unsupported args
+        "test_no_hoisting_with_member_function_call", # set support
+        "test_parfor_dtype_type", # dtype cast
+        "test_tuple3", # numpy.arange
+        "test_parfor_array_access3", # TypeError: unsupported operand type(s) for -: 'NoneType' and 'NoneType'
+        "test_preparfor_canonicalize_kws", # array.argsort
+        "test_parfor_array_access4", # np.dot unsupported args
+        "test_tuple_concat_with_reverse_slice", # enumerate
+        "test_reduce", # functools.reduce
+        "test_two_d_array_reduction", # np.arange
+        "test_tuple_concat", # tuple concat
+        "test_two_d_array_reduction_with_float_sizes", # np.array
+        "test_two_d_array_reduction_reuse", # np.arange
+        "test_parfor_slice21", # unsupported reshape
+        "test_parfor_array_access_lower_slice", # np.arange
+        "test_size_assertion", # AssertionError not raised
+        "test_parfor_slice18", # np.arange
+        "test_simple12", # complex128
+        "test_parfor_slice2", # AssertionError not raised
+        "test_parfor_slice6", # array.transpose
+        "test_parfor_slice22", # slice using array
+        "test_simple13", # complex128
+        "test_parfor_bitmask1", # setitem with mask
+        "test_parfor_bitmask2", # setitem with mask
+        "test_parfor_bitmask3", # setitem with mask
+        "test_parfor_bitmask4", # setitem with mask
+        "test_parfor_bitmask5", # setitem with mask
+        "test_parfor_bitmask6", # setitem with mask
+        "test_issue3169", # list support
+        "test_issue3748", # unituple of literal dynamic getitem
+        "test_issue5001", # list suport
+        "test_issue5167", # np.full
+        "test_issue6095_numpy_max", # operand #1 does not dominate this use
+        "test_issue5065", # tuple unpack
+        "test_no_state_change_in_gufunc_lowering_on_error", # custom pipeline
+        "test_namedtuple3", # namedtuple
+        "test_issue6102", # list support
+        "test_oversized_tuple_as_arg_to_kernel", # UnsupportedParforsError not raised
+        "test_issue5942_2", # invalid result
+        "test_reshape_with_large_neg", # unsupported reshape
+        "test_parfor_ufunc_typing", # np.isinf
+        "test_issue_5098", # list support and more
+        "test_parfor_slice27", # Literal return issue
+        "test_ufunc_expr", # np.bitwise_and(
+        "test_parfor_generate_fuse", # operand #0 does not dominate this use
+        "test_parfor_slice7", # array.transpose
+        "test_one_d_array_reduction", # np.array
     }
 
     skip_tests = {}
@@ -195,7 +180,11 @@ def _gen_tests():
                         res = njit(parallel=True)(func)(*args, **kwargs)
                         ir = get_print_buffer()
                         # Check some parallel loops were actually generated
-                        assert ir.count("plier_util.parallel") > 0, ir
+                        if ir.count("plier_util.parallel") == 0:
+                            # In some cases we can canonicalize all loops away
+                            # Make sure no loops are present
+                            assert ir.count("scf.for") == 0, ir
+                            assert ir.count("scf.parallel") == 0, ir
                     return res
 
                 return wrapper
@@ -240,6 +229,9 @@ def _gen_tests():
                 return self._check_impl(pyfunc, *args, **kwargs)
 
             def check(self, pyfunc, *args, **kwargs):
+                if isinstance(pyfunc, CPUDispatcher):
+                    pyfunc = pyfunc.py_func
+
                 return self._check_impl(pyfunc, *args, **kwargs)
 
             def _check_impl(self, pyfunc, *args, **kwargs):
