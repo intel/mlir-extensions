@@ -116,7 +116,6 @@ def _gen_tests():
         "test_tuple_concat",  # tuple concat
         "test_two_d_array_reduction_with_float_sizes",  # np.array
         "test_two_d_array_reduction_reuse",  # np.arange
-        "test_parfor_slice21",  # unsupported reshape
         "test_parfor_array_access_lower_slice",  # np.arange
         "test_size_assertion",  # AssertionError not raised
         "test_parfor_slice18",  # np.arange
