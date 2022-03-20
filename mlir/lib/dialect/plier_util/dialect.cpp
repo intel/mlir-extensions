@@ -1325,30 +1325,27 @@ struct SignCastBuferizationPropagate : public mlir::OpRewritePattern<BuffOp> {
   }
 };
 
-struct SignCastMemrefSubviewPropagate
-    : public mlir::OpRewritePattern<plier::SignCastOp> {
-  using OpRewritePattern::OpRewritePattern;
+template <typename ViewOp, typename ArrType>
+struct SignCastSubviewPropagate : public mlir::OpRewritePattern<ViewOp> {
+  using mlir::OpRewritePattern<ViewOp>::OpRewritePattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::SignCastOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto prevOp = op.value().getDefiningOp<mlir::memref::SubViewOp>();
-    if (!prevOp)
+  matchAndRewrite(ViewOp op, mlir::PatternRewriter &rewriter) const override {
+    auto signCast = op.source().template getDefiningOp<plier::SignCastOp>();
+    if (!signCast)
       return mlir::failure();
 
-    auto src = prevOp.source();
-    auto srcType = src.getType().cast<mlir::ShapedType>();
-    auto dstType = op.getType().cast<mlir::ShapedType>();
-
-    auto newSrcType = srcType.clone(dstType.getElementType());
+    auto src = signCast.value();
+    auto srcType = src.getType().template cast<ArrType>();
+    auto dstType = op.getType().template cast<ArrType>();
     auto newDstType =
-        dstType.clone(dstType.getElementType()).cast<mlir::MemRefType>();
+        dstType.clone(srcType.getElementType()).template cast<ArrType>();
 
-    auto loc = prevOp->getLoc();
-    auto newSrc = rewriter.create<plier::SignCastOp>(loc, newSrcType, src);
-    rewriter.replaceOpWithNewOp<mlir::memref::SubViewOp>(
-        op, newDstType, newSrc, prevOp.getMixedOffsets(),
-        prevOp.getMixedSizes(), prevOp.getMixedStrides());
+    auto loc = op->getLoc();
+    auto res =
+        rewriter.create<ViewOp>(loc, newDstType, src, op.getMixedOffsets(),
+                                op.getMixedSizes(), op.getMixedStrides());
+    rewriter.replaceOpWithNewOp<plier::SignCastOp>(op, dstType, res);
     return mlir::success();
   }
 };
@@ -1456,7 +1453,10 @@ void SignCastOp::getCanonicalizationPatterns(::mlir::RewritePatternSet &results,
       SignCastTensorFromElementsPropagate, SignCastTensorCollapseShapePropagate,
       SignCastBuferizationPropagate<mlir::bufferization::ToMemrefOp>,
       SignCastBuferizationPropagate<mlir::bufferization::ToTensorOp>,
-      SignCastMemrefSubviewPropagate, SignCastForPropagate>(context);
+      SignCastSubviewPropagate<mlir::tensor::ExtractSliceOp,
+                               mlir::RankedTensorType>,
+      SignCastSubviewPropagate<mlir::memref::SubViewOp, mlir::MemRefType>,
+      SignCastForPropagate>(context);
 }
 
 void ExtractMemrefMetadataOp::build(::mlir::OpBuilder &odsBuilder,
