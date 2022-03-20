@@ -89,6 +89,7 @@ _test_arrays_ids = [
         "lambda a: np.tanh(a)",
         "lambda a: np.abs(a)",
         "lambda a: np.absolute(a)",
+        "lambda a: np.negative(a)",
         "lambda a: a.size",
         "lambda a: a.T",
         "lambda a: a.T.T",
