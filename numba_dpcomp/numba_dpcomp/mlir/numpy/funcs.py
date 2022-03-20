@@ -583,7 +583,16 @@ def dtype_impl(builder, arg):
 
 @register_func("array.reshape")
 @register_func("numpy.reshape", numpy.reshape)
-def reshape_impl(builder, arg, new_shape):
+def reshape_impl(builder, arg, *new_shape):
+    if len(new_shape) == 1:
+        new_shape = new_shape[0]
+
+    # TODO: better check
+    if isinstance(new_shape, tuple):
+        for s in new_shape:
+            if isinstance(s, int) and s < 0:
+                return  # not supported for now
+
     return builder.reshape(arg, new_shape)
 
 
