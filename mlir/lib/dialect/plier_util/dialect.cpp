@@ -699,33 +699,6 @@ struct ChangeLayoutFromCast
   }
 };
 
-struct ChangeLayoutSignCast : public mlir::OpRewritePattern<plier::SignCastOp> {
-  using OpRewritePattern::OpRewritePattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(plier::SignCastOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto cl = op.value().getDefiningOp<plier::ChangeLayoutOp>();
-    if (!cl)
-      return mlir::failure();
-
-    auto src = cl.source();
-    auto srcType = src.getType().cast<mlir::MemRefType>();
-    auto oldType = op.getType().cast<mlir::MemRefType>();
-    auto newType = mlir::MemRefType::get(
-        srcType.getShape(), oldType.getElementType(), srcType.getLayout());
-
-    auto loc = op.getLoc();
-    auto newOp = rewriter.createOrFold<plier::SignCastOp>(loc, newType, src);
-
-    if (oldType != newType)
-      newOp = rewriter.createOrFold<plier::ChangeLayoutOp>(loc, oldType, newOp);
-
-    rewriter.replaceOp(op, newOp);
-    return mlir::success();
-  }
-};
-
 struct ChangeLayoutLoad : public mlir::OpRewritePattern<mlir::memref::LoadOp> {
   using OpRewritePattern::OpRewritePattern;
 
@@ -1107,11 +1080,10 @@ void ChangeLayoutOp::getCanonicalizationPatterns(
   results.insert<
       ChangeLayoutIdentity, ChangeLayoutDim, ChangeLayoutExtractMetadata,
       ChangeLayoutClone, PropagateCloneType, ChangeLayoutCast,
-      ChangeLayoutFromCast, ChangeLayoutSignCast, ChangeLayoutLoad,
-      ChangeLayoutStore, ChangeLayoutSubview, ChangeLayoutLinalgGeneric,
-      ChangeLayoutLinalgFill, ChangeLayoutIf, ChangeLayout1DReshape,
-      ChangeLayoutSliceGetItem, ChangeLayoutCopy, ChangeLayoutExpandShape>(
-      context);
+      ChangeLayoutFromCast, ChangeLayoutLoad, ChangeLayoutStore,
+      ChangeLayoutSubview, ChangeLayoutLinalgGeneric, ChangeLayoutLinalgFill,
+      ChangeLayoutIf, ChangeLayout1DReshape, ChangeLayoutSliceGetItem,
+      ChangeLayoutCopy, ChangeLayoutExpandShape>(context);
 }
 
 static mlir::Value propagateCasts(mlir::Value val, mlir::Type thisType);
@@ -1448,6 +1420,7 @@ void SignCastOp::getCanonicalizationPatterns(::mlir::RewritePatternSet &results,
       SignCastDimPropagate<mlir::memref::DimOp>, SignCastUndefPropagate,
       SignCastCastPropagate<mlir::tensor::CastOp>,
       SignCastCastPropagate<mlir::memref::CastOp>,
+      SignCastCastPropagate<plier::ChangeLayoutOp>,
       SignCastAllocPropagate<mlir::memref::AllocOp>,
       SignCastAllocPropagate<mlir::memref::AllocaOp>,
       SignCastTensorFromElementsPropagate, SignCastTensorCollapseShapePropagate,
