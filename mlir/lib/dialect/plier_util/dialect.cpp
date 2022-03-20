@@ -699,33 +699,6 @@ struct ChangeLayoutFromCast
   }
 };
 
-struct ChangeLayoutSignCast : public mlir::OpRewritePattern<plier::SignCastOp> {
-  using OpRewritePattern::OpRewritePattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(plier::SignCastOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto cl = op.value().getDefiningOp<plier::ChangeLayoutOp>();
-    if (!cl)
-      return mlir::failure();
-
-    auto src = cl.source();
-    auto srcType = src.getType().cast<mlir::MemRefType>();
-    auto oldType = op.getType().cast<mlir::MemRefType>();
-    auto newType = mlir::MemRefType::get(
-        srcType.getShape(), oldType.getElementType(), srcType.getLayout());
-
-    auto loc = op.getLoc();
-    auto newOp = rewriter.createOrFold<plier::SignCastOp>(loc, newType, src);
-
-    if (oldType != newType)
-      newOp = rewriter.createOrFold<plier::ChangeLayoutOp>(loc, oldType, newOp);
-
-    rewriter.replaceOp(op, newOp);
-    return mlir::success();
-  }
-};
-
 struct ChangeLayoutLoad : public mlir::OpRewritePattern<mlir::memref::LoadOp> {
   using OpRewritePattern::OpRewritePattern;
 
@@ -1107,11 +1080,10 @@ void ChangeLayoutOp::getCanonicalizationPatterns(
   results.insert<
       ChangeLayoutIdentity, ChangeLayoutDim, ChangeLayoutExtractMetadata,
       ChangeLayoutClone, PropagateCloneType, ChangeLayoutCast,
-      ChangeLayoutFromCast, ChangeLayoutSignCast, ChangeLayoutLoad,
-      ChangeLayoutStore, ChangeLayoutSubview, ChangeLayoutLinalgGeneric,
-      ChangeLayoutLinalgFill, ChangeLayoutIf, ChangeLayout1DReshape,
-      ChangeLayoutSliceGetItem, ChangeLayoutCopy, ChangeLayoutExpandShape>(
-      context);
+      ChangeLayoutFromCast, ChangeLayoutLoad, ChangeLayoutStore,
+      ChangeLayoutSubview, ChangeLayoutLinalgGeneric, ChangeLayoutLinalgFill,
+      ChangeLayoutIf, ChangeLayout1DReshape, ChangeLayoutSliceGetItem,
+      ChangeLayoutCopy, ChangeLayoutExpandShape>(context);
 }
 
 static mlir::Value propagateCasts(mlir::Value val, mlir::Type thisType);
@@ -1198,65 +1170,31 @@ struct SignCastUndefPropagate
   }
 };
 
-struct SignCastTensorCastPropagate
-    : public mlir::OpRewritePattern<plier::SignCastOp> {
-  using OpRewritePattern::OpRewritePattern;
+template <typename CastOp>
+struct SignCastCastPropagate : public mlir::OpRewritePattern<CastOp> {
+  using mlir::OpRewritePattern<CastOp>::OpRewritePattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::SignCastOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto tensorCast = op.value().getDefiningOp<mlir::tensor::CastOp>();
-    if (!tensorCast)
+  matchAndRewrite(CastOp op, mlir::PatternRewriter &rewriter) const override {
+    auto signCast = op.source().template getDefiningOp<plier::SignCastOp>();
+    if (!signCast)
       return mlir::failure();
 
-    auto srcType = tensorCast.source().getType().cast<mlir::TensorType>();
-    auto dstType = tensorCast.getType().cast<mlir::TensorType>();
+    auto srcType = op.source().getType().template cast<mlir::ShapedType>();
+    auto dstType = op.getType().template cast<mlir::ShapedType>();
     if (srcType.getElementType() != dstType.getElementType() ||
         !srcType.hasRank() || !dstType.hasRank())
       return mlir::failure();
 
-    auto finalType = op.getType().cast<mlir::TensorType>();
+    auto src = signCast.value();
+    auto finalType = src.getType().template cast<mlir::ShapedType>();
     auto finalElemType = finalType.getElementType();
 
-    auto newSrcType = srcType.clone(finalElemType);
     auto newDstType = dstType.clone(finalElemType);
 
     auto loc = op.getLoc();
-    auto casted = rewriter.createOrFold<plier::SignCastOp>(loc, newSrcType,
-                                                           tensorCast.source());
-    rewriter.replaceOpWithNewOp<mlir::tensor::CastOp>(op, newDstType, casted);
-
-    return mlir::success();
-  }
-};
-
-struct SignCastMemrefCastPropagate
-    : public mlir::OpRewritePattern<plier::SignCastOp> {
-  using OpRewritePattern::OpRewritePattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(plier::SignCastOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto memrefCast = op.value().getDefiningOp<mlir::memref::CastOp>();
-    if (!memrefCast)
-      return mlir::failure();
-
-    auto srcType = memrefCast.source().getType().cast<mlir::MemRefType>();
-    auto dstType = memrefCast.getType().cast<mlir::MemRefType>();
-    if (srcType.getElementType() != dstType.getElementType() ||
-        !srcType.hasRank() || !dstType.hasRank())
-      return mlir::failure();
-
-    auto finalType = op.getType().cast<mlir::MemRefType>();
-    auto finalElemType = finalType.getElementType();
-
-    auto newSrcType = srcType.clone(finalElemType);
-    auto newDstType = dstType.clone(finalElemType);
-
-    auto loc = op.getLoc();
-    auto casted = rewriter.createOrFold<plier::SignCastOp>(loc, newSrcType,
-                                                           memrefCast.source());
-    rewriter.replaceOpWithNewOp<mlir::memref::CastOp>(op, newDstType, casted);
+    auto cast = rewriter.createOrFold<CastOp>(loc, newDstType, src);
+    rewriter.replaceOpWithNewOp<plier::SignCastOp>(op, dstType, cast);
 
     return mlir::success();
   }
@@ -1336,82 +1274,50 @@ struct SignCastTensorCollapseShapePropagate
   }
 };
 
-struct SignCastTensorToMemrefPropagate
-    : public mlir::OpRewritePattern<plier::SignCastOp> {
-  using OpRewritePattern::OpRewritePattern;
+template <typename BuffOp>
+struct SignCastBuferizationPropagate : public mlir::OpRewritePattern<BuffOp> {
+  using mlir::OpRewritePattern<BuffOp>::OpRewritePattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::SignCastOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto toMemref = op.value().getDefiningOp<mlir::bufferization::ToMemrefOp>();
-    if (!toMemref)
+  matchAndRewrite(BuffOp op, mlir::PatternRewriter &rewriter) const override {
+    auto signCast =
+        op->getOperand(0).template getDefiningOp<plier::SignCastOp>();
+    if (!signCast)
       return mlir::failure();
 
-    auto tensor = toMemref.tensor();
-    auto tensorType = tensor.getType().cast<mlir::TensorType>();
-    auto dstType = op.getType().cast<mlir::MemRefType>();
+    auto src = signCast.value();
+    auto srcType = src.getType().template cast<mlir::ShapedType>();
+    auto dstType = op.getType().template cast<mlir::ShapedType>();
+    auto newDstType = dstType.clone(srcType.getElementType());
 
-    auto newTensorType = tensorType.clone(dstType.getElementType());
-
-    auto loc = toMemref->getLoc();
-    auto newTensor =
-        rewriter.create<plier::SignCastOp>(loc, newTensorType, tensor);
-    rewriter.replaceOpWithNewOp<mlir::bufferization::ToMemrefOp>(op, dstType,
-                                                                 newTensor);
+    auto loc = op->getLoc();
+    auto res = rewriter.create<BuffOp>(loc, newDstType, src);
+    rewriter.replaceOpWithNewOp<plier::SignCastOp>(op, dstType, res);
     return mlir::success();
   }
 };
 
-struct SignCastMemrefToTensorPropagate
-    : public mlir::OpRewritePattern<plier::SignCastOp> {
-  using OpRewritePattern::OpRewritePattern;
+template <typename ViewOp, typename ArrType>
+struct SignCastSubviewPropagate : public mlir::OpRewritePattern<ViewOp> {
+  using mlir::OpRewritePattern<ViewOp>::OpRewritePattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::SignCastOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto toTensor = op.value().getDefiningOp<mlir::bufferization::ToTensorOp>();
-    if (!toTensor)
+  matchAndRewrite(ViewOp op, mlir::PatternRewriter &rewriter) const override {
+    auto signCast = op.source().template getDefiningOp<plier::SignCastOp>();
+    if (!signCast)
       return mlir::failure();
 
-    auto memref = toTensor.memref();
-    auto memrefType = memref.getType().cast<mlir::MemRefType>();
-    auto dstType = op.getType().cast<mlir::TensorType>();
-
-    auto newMemrefType = memrefType.clone(dstType.getElementType());
-
-    auto loc = toTensor->getLoc();
-    auto newMemref =
-        rewriter.create<plier::SignCastOp>(loc, newMemrefType, memref);
-    rewriter.replaceOpWithNewOp<mlir::bufferization::ToTensorOp>(op, dstType,
-                                                                 newMemref);
-    return mlir::success();
-  }
-};
-
-struct SignCastMemrefSubviewPropagate
-    : public mlir::OpRewritePattern<plier::SignCastOp> {
-  using OpRewritePattern::OpRewritePattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(plier::SignCastOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto prevOp = op.value().getDefiningOp<mlir::memref::SubViewOp>();
-    if (!prevOp)
-      return mlir::failure();
-
-    auto src = prevOp.source();
-    auto srcType = src.getType().cast<mlir::ShapedType>();
-    auto dstType = op.getType().cast<mlir::ShapedType>();
-
-    auto newSrcType = srcType.clone(dstType.getElementType());
+    auto src = signCast.value();
+    auto srcType = src.getType().template cast<ArrType>();
+    auto dstType = op.getType().template cast<ArrType>();
     auto newDstType =
-        dstType.clone(dstType.getElementType()).cast<mlir::MemRefType>();
+        dstType.clone(srcType.getElementType()).template cast<ArrType>();
 
-    auto loc = prevOp->getLoc();
-    auto newSrc = rewriter.create<plier::SignCastOp>(loc, newSrcType, src);
-    rewriter.replaceOpWithNewOp<mlir::memref::SubViewOp>(
-        op, newDstType, newSrc, prevOp.getMixedOffsets(),
-        prevOp.getMixedSizes(), prevOp.getMixedStrides());
+    auto loc = op->getLoc();
+    auto res =
+        rewriter.create<ViewOp>(loc, newDstType, src, op.getMixedOffsets(),
+                                op.getMixedSizes(), op.getMixedStrides());
+    rewriter.replaceOpWithNewOp<plier::SignCastOp>(op, dstType, res);
     return mlir::success();
   }
 };
@@ -1427,19 +1333,20 @@ struct SignCastForPropagate : public mlir::OpRewritePattern<mlir::scf::ForOp> {
     auto termResults = term.getResults();
     auto initArgs = op.getInitArgs();
     auto count = static_cast<unsigned>(initArgs.size());
-
     assert(termResults.size() == count);
+
+    auto loc = op->getLoc();
     llvm::SmallVector<mlir::Value> newInitArgs(count);
     bool needUpdate = false;
     for (auto i : llvm::seq(0u, count)) {
       auto initArg = initArgs[i];
       auto yieldArg = termResults[i];
       assert(initArg.getType() == yieldArg.getType());
-      auto initCast = initArg.getDefiningOp<plier::SignCastOp>();
       auto yieldCast = yieldArg.getDefiningOp<plier::SignCastOp>();
-      if (initCast && yieldCast &&
-          initCast.value().getType() == yieldCast.value().getType()) {
-        newInitArgs[i] = initCast.value();
+      if (yieldCast) {
+        auto newType = yieldCast.value().getType();
+        newInitArgs[i] =
+            rewriter.create<plier::SignCastOp>(loc, newType, initArg);
         needUpdate = true;
       } else {
         newInitArgs[i] = initArg;
@@ -1476,14 +1383,14 @@ struct SignCastForPropagate : public mlir::OpRewritePattern<mlir::scf::ForOp> {
         auto val = mapping.lookupOrDefault(termResults[i]);
         auto newType = newInitArgs[i].getType();
         if (val.getType() != newType)
-          val = builder.create<plier::SignCastOp>(loc, newType, val);
+          val = val.getDefiningOp<plier::SignCastOp>().value();
 
+        assert(val.getType() == newType);
         newYieldArgs[i] = val;
       }
       builder.create<mlir::scf::YieldOp>(loc, newYieldArgs);
     };
 
-    auto loc = op->getLoc();
     auto newResults = rewriter
                           .create<mlir::scf::ForOp>(
                               loc, op.getLowerBound(), op.getUpperBound(),
@@ -1512,12 +1419,18 @@ void SignCastOp::getCanonicalizationPatterns(::mlir::RewritePatternSet &results,
   results.insert<
       SignCastDimPropagate<mlir::tensor::DimOp>,
       SignCastDimPropagate<mlir::memref::DimOp>, SignCastUndefPropagate,
-      SignCastTensorCastPropagate, SignCastMemrefCastPropagate,
+      SignCastCastPropagate<mlir::tensor::CastOp>,
+      SignCastCastPropagate<mlir::memref::CastOp>,
+      SignCastCastPropagate<plier::ChangeLayoutOp>,
       SignCastAllocPropagate<mlir::memref::AllocOp>,
       SignCastAllocPropagate<mlir::memref::AllocaOp>,
       SignCastTensorFromElementsPropagate, SignCastTensorCollapseShapePropagate,
-      SignCastTensorToMemrefPropagate, SignCastMemrefToTensorPropagate,
-      SignCastMemrefSubviewPropagate, SignCastForPropagate>(context);
+      SignCastBuferizationPropagate<mlir::bufferization::ToMemrefOp>,
+      SignCastBuferizationPropagate<mlir::bufferization::ToTensorOp>,
+      SignCastSubviewPropagate<mlir::tensor::ExtractSliceOp,
+                               mlir::RankedTensorType>,
+      SignCastSubviewPropagate<mlir::memref::SubViewOp, mlir::MemRefType>,
+      SignCastForPropagate>(context);
 }
 
 void ExtractMemrefMetadataOp::build(::mlir::OpBuilder &odsBuilder,

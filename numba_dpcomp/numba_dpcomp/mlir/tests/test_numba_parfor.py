@@ -52,7 +52,6 @@ def _gen_tests():
     ]
 
     xfail_tests = {
-        "test_prange09",
         "test_prange03sub",
         "test_prange03div",
         "test_prange07",
