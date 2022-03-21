@@ -232,20 +232,6 @@ static llvm::Optional<py::object> getPyLiteral(mlir::Attribute attr) {
   return {};
 }
 
-static llvm::Optional<py::object> makePyLiteral(mlir::Value val) {
-  assert(val);
-  if (auto literal = val.getType().dyn_cast<plier::LiteralType>())
-    return getPyLiteral(literal.getValue());
-
-  if (auto cast = val.getDefiningOp<plier::SignCastOp>())
-    val = cast.value();
-
-  if (auto attr = plier::getConstVal<mlir::Attribute>(val))
-    return getPyLiteral(attr);
-
-  return {};
-}
-
 static mlir::Value doCast(mlir::OpBuilder &builder, mlir::Location loc,
                           mlir::Value val, mlir::Type type) {
   if (val.getType() != type)
@@ -284,7 +270,7 @@ struct PyLinalgResolver::Context {
     if (auto typevar = type.dyn_cast<plier::TypeVar>())
       return createType(typevar.getType());
 
-    if (auto literal = makePyLiteral(value))
+    if (auto literal = makePyLiteral(context, value))
       return *literal;
 
     auto ret = var(context, wrapMlir(value));
@@ -399,6 +385,32 @@ struct PyLinalgResolver::Context {
     }
 
     return doCast(builder, loc, unwrapVal(loc, builder, obj), resultType);
+  }
+
+private:
+  llvm::Optional<py::object> makePyLiteral(py::capsule context,
+                                           mlir::Value val) {
+    assert(val);
+    if (auto literal = val.getType().dyn_cast<plier::LiteralType>())
+      return getPyLiteral(literal.getValue());
+
+    if (auto buildTuple = val.getDefiningOp<plier::BuildTupleOp>()) {
+      auto args = buildTuple.args();
+      auto count = static_cast<unsigned>(args.size());
+      py::tuple ret(count);
+      for (auto i : llvm::seq(0u, count))
+        ret[i] = createVar(context, args[i]);
+
+      return ret;
+    }
+
+    if (auto cast = val.getDefiningOp<plier::SignCastOp>())
+      val = cast.value();
+
+    if (auto attr = plier::getConstVal<mlir::Attribute>(val))
+      return getPyLiteral(attr);
+
+    return {};
   }
 };
 
@@ -1653,13 +1665,19 @@ static py::object getitemImpl(py::capsule context, py::capsule ssaVal,
 template <typename Op>
 static mlir::Value binopFunc(mlir::Location loc, mlir::OpBuilder &builder,
                              mlir::Value lhs, mlir::Value rhs) {
-  return builder.create<Op>(loc, lhs, rhs);
+  auto lhsVar = doSignCast(builder, loc, lhs);
+  auto rhsVar = doSignCast(builder, loc, rhs);
+  auto res = builder.create<Op>(loc, lhsVar, rhsVar);
+  return doSignCast(builder, loc, res, lhs.getType());
 }
 
 template <typename Op>
 static mlir::Value rbinopFunc(mlir::Location loc, mlir::OpBuilder &builder,
                               mlir::Value lhs, mlir::Value rhs) {
-  return builder.create<Op>(loc, rhs, lhs);
+  auto lhsVar = doSignCast(builder, loc, lhs);
+  auto rhsVar = doSignCast(builder, loc, rhs);
+  auto res = builder.create<Op>(loc, rhsVar, lhsVar);
+  return doSignCast(builder, loc, res, lhs.getType());
 }
 
 static mlir::Value binopFuncIdiv(mlir::Location loc, mlir::OpBuilder &builder,
@@ -1667,6 +1685,14 @@ static mlir::Value binopFuncIdiv(mlir::Location loc, mlir::OpBuilder &builder,
   auto lhsVar = doCast(builder, loc, lhs, builder.getF64Type());
   auto rhsVar = doCast(builder, loc, rhs, builder.getF64Type());
   return builder.create<mlir::arith::DivFOp>(loc, lhsVar, rhsVar);
+}
+
+static mlir::Value binopFFloorDiv(mlir::Location loc, mlir::OpBuilder &builder,
+                                  mlir::Value lhs, mlir::Value rhs) {
+  auto lhsVar = doCast(builder, loc, lhs, builder.getF64Type());
+  auto rhsVar = doCast(builder, loc, rhs, builder.getF64Type());
+  auto res = builder.create<mlir::arith::DivFOp>(loc, lhsVar, rhsVar);
+  return builder.create<mlir::math::FloorOp>(loc, res);
 }
 
 template <mlir::arith::CmpIPredicate Pred>
@@ -1713,6 +1739,7 @@ static py::object binopImpl(py::capsule context, py::capsule ssaVal,
        &rbinopFunc<mlir::arith::SubFOp>},
       {"*", &binopFunc<mlir::arith::MulIOp>, &binopFunc<mlir::arith::MulFOp>},
       {"/", &binopFuncIdiv, &binopFunc<mlir::arith::DivFOp>},
+      {"//", &binopFunc<mlir::arith::DivSIOp>, &binopFFloorDiv},
 
       {"lt", &binopCmpI<mlir::arith::CmpIPredicate::slt>,
        &binopCmpF<mlir::arith::CmpFPredicate::OLT>},
