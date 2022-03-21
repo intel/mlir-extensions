@@ -95,7 +95,6 @@ def _gen_tests():
         "test_simple18",  # np.linalg.svd
         "test_linspace",  # np.linspace
         "test_std",  # array.std
-        "test_reshape_with_neg_one",  # unsupported reshape
         "test_mvdot",  # np.dot unsupported args
         "test_array_tuple_concat",  # tuple concat
         "test_namedtuple1",  # namedtuple support
@@ -141,7 +140,6 @@ def _gen_tests():
         "test_issue6102",  # list support
         "test_oversized_tuple_as_arg_to_kernel",  # UnsupportedParforsError not raised
         "test_issue5942_2",  # invalid result
-        "test_reshape_with_large_neg",  # unsupported reshape
         "test_parfor_ufunc_typing",  # np.isinf
         "test_issue_5098",  # list support and more
         "test_parfor_slice27",  # Literal return issue

@@ -587,11 +587,22 @@ def reshape_impl(builder, arg, *new_shape):
     if len(new_shape) == 1:
         new_shape = new_shape[0]
 
-    # TODO: better check
     if isinstance(new_shape, tuple):
-        for s in new_shape:
+        neg_index = None
+        for i, s in enumerate(new_shape):
             if isinstance(s, int) and s < 0:
-                return  # not supported for now
+                assert neg_index is None
+                neg_index = i
+        if neg_index is not None:
+            size = 1
+            for i, s in enumerate(new_shape):
+                if i != neg_index:
+                    size = size * s
+
+            size = size_impl(builder, arg) // size
+            new_shape = list(new_shape)
+            new_shape[neg_index] = size
+            new_shape = tuple(new_shape)
 
     return builder.reshape(arg, new_shape)
 

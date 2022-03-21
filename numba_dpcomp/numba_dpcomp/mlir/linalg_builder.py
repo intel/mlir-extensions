@@ -65,6 +65,9 @@ class Var:
     def __truediv__(self, o):
         return self._binop(self._context, self._ssa_val, o, "/")
 
+    def __floordiv__(self, o):
+        return self._binop(self._context, self._ssa_val, o, "//")
+
     def __lt__(self, o):
         return self._binop(self._context, self._ssa_val, o, "lt")
 
