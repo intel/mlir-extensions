@@ -627,6 +627,7 @@ computeIndices(mlir::OpBuilder &builder, mlir::Location loc, mlir::Value value,
   };
 
   auto zero = builder.create<mlir::arith::ConstantIndexOp>(loc, 0);
+  auto one = builder.create<mlir::arith::ConstantIndexOp>(loc, 1);
 
   auto foldConst = [&](mlir::Value val) -> mlir::OpFoldResult {
     if (auto intVal = mlir::getConstantIntValue(val))
@@ -678,6 +679,13 @@ computeIndices(mlir::OpBuilder &builder, mlir::Location loc, mlir::Value value,
       auto end = handleNegativeVal(getItemOrConst(1));
       auto stride = getItemOrConst(2);
       auto size = builder.createOrFold<mlir::arith::SubIOp>(loc, end, offset);
+
+      auto constStride = mlir::getConstantIntValue(stride);
+      if (!constStride || *constStride > 1 || *constStride < -1) {
+        size = builder.createOrFold<mlir::arith::SubIOp>(loc, size, one);
+        size = builder.createOrFold<mlir::arith::AddIOp>(loc, size, stride);
+        size = builder.createOrFold<mlir::arith::DivUIOp>(loc, size, stride);
+      }
       return {foldConst(offset), foldConst(size), stride, true};
     } else if (auto literal = valType.dyn_cast<plier::LiteralType>()) {
       auto offset = foldConst(handleNegativeVal(literal.getValue()));

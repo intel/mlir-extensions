@@ -126,6 +126,7 @@ jobs:
       export OCL_ICD_FILENAMES=libintelocl.so
       export SYCL_DEVICE_FILTER=opencl:cpu
       export NUMBA_DISABLE_PERFORMANCE_WARNINGS=1
+      export DPCOMP_ENABLE_PARFOR_TESTS=1
       pytest -n1 -vv --capture=tee-sys -rXF
     displayName: 'Tests'
 
