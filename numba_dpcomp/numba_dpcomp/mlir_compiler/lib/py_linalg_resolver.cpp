@@ -1439,7 +1439,17 @@ py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
       for (auto i : llvm::seq(size_t(0), ret.size())) {
         auto dim = builder.createOrFold<mlir::tensor::DimOp>(
             loc, origSrcVal, static_cast<int64_t>(i));
-        auto offset = offsetVals[i].get<mlir::Value>();
+        auto offset = [&]() -> mlir::Value {
+          auto off = offsetVals[i];
+          if (off.is<mlir::Value>())
+            return off.get<mlir::Value>();
+
+          auto val = off.get<mlir::Attribute>()
+                         .cast<mlir::IntegerAttr>()
+                         .getValue()
+                         .getSExtValue();
+          return builder.create<mlir::arith::ConstantIndexOp>(loc, val);
+        }();
         auto size = builder.createOrFold<mlir::arith::SubIOp>(loc, dim, offset);
         ret[i] = size;
       }
