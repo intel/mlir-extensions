@@ -78,7 +78,6 @@ def _gen_tests():
         "test_prange27",  # Literal return issue
         "test_simple01",  # Empty shape not failed
         "test_kmeans",  # List suport
-        "test_simple14",  # Slice shape mismatch
         "test_ndarray_fill",  # array.fill
         "test_fuse_argmin_argmax_max_min",  # numpy argmin, argmax
         "test_max",  # max reduction
