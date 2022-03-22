@@ -82,10 +82,10 @@ def _gen_tests():
         "test_fuse_argmin_argmax_max_min",  # numpy argmin, argmax
         "test_max",  # max reduction
         "test_min",  # min reduction
-        "test_arange",  # numpy.arange
+        "test_arange",  # select issue, complex
         "test_pi",  # np.random.ranf
         "test_simple20",  # AssertionError not raised
-        "test_simple24",  # numpy.arange
+        "test_simple24",  # getitem with array
         "test_0d_array",  # numpy prod
         "test_argmin",  # numpy.argmin
         "test_argmax",  # numpy.argmax
@@ -104,19 +104,18 @@ def _gen_tests():
         "test_simple19",  # np.dot unsupported args
         "test_no_hoisting_with_member_function_call",  # set support
         "test_parfor_dtype_type",  # dtype cast
-        "test_tuple3",  # numpy.arange
         "test_parfor_array_access3",  # TypeError: unsupported operand type(s) for -: 'NoneType' and 'NoneType'
         "test_preparfor_canonicalize_kws",  # array.argsort
         "test_parfor_array_access4",  # np.dot unsupported args
         "test_tuple_concat_with_reverse_slice",  # enumerate
         "test_reduce",  # functools.reduce
-        "test_two_d_array_reduction",  # np.arange
+        "test_two_d_array_reduction",  # 'memref<?x?xi64>' and result type 'memref<?x?xi32>' are cast incompatible
         "test_tuple_concat",  # tuple concat
         "test_two_d_array_reduction_with_float_sizes",  # np.array
-        "test_two_d_array_reduction_reuse",  # np.arange
-        "test_parfor_array_access_lower_slice",  # np.arange
+        "test_two_d_array_reduction_reuse",  # 'memref<?x?xi64>' and result type 'memref<?x?xi32>' are cast incompatible
+        "test_parfor_array_access_lower_slice",  # plier.getitem
         "test_size_assertion",  # AssertionError not raised
-        "test_parfor_slice18",  # np.arange
+        "test_parfor_slice18",  # cast types mismatch
         "test_simple12",  # complex128
         "test_parfor_slice2",  # AssertionError not raised
         "test_parfor_slice6",  # array.transpose
