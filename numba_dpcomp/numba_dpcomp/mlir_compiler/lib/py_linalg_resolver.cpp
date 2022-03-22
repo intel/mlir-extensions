@@ -970,11 +970,21 @@ static py::object fromElementsImpl(py::capsule context, py::handle values,
   auto &ctx = getPyContext(context);
   auto &builder = ctx.builder;
   auto loc = ctx.loc;
-  auto type = unwrapType(dtype);
+  mlir::Type type;
+  if (!dtype.is_none())
+    type = unwrapType(dtype);
 
   llvm::SmallVector<mlir::Value> vals(containerSize(values));
   containerIterate(values, [&](auto index, py::handle obj) {
-    vals[index] = ctx.context.unwrapVal(loc, builder, obj, type);
+    auto val = [&]() -> mlir::Value {
+      if (type)
+        return ctx.context.unwrapVal(loc, builder, obj, type);
+
+      auto v = ctx.context.unwrapVal(loc, builder, obj);
+      type = v.getType();
+      return v;
+    }();
+    vals[index] = val;
   });
 
   if (vals.empty())

@@ -143,7 +143,7 @@ class Builder:
     def linalg_index(self, dim):
         return self._linalg_index(self._context, dim)
 
-    def from_elements(self, values, dtype):
+    def from_elements(self, values, dtype=None):
         return self._from_elements(self._context, values, dtype)
 
     def extract(self, value, indices):

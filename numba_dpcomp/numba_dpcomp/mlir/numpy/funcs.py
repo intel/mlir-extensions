@@ -396,6 +396,36 @@ def ones_like_impl(builder, arr):
     return _init_impl(builder, arr.shape, arr.dtype, 1)
 
 
+@register_func("numpy.arange", numpy.arange)
+def arange_impl(builder, start, stop=None, step=None, dtype=None):
+    if stop is None:
+        stop = start
+        start = 0
+
+    if step is None:
+        step = 1
+
+    if dtype is None:
+        dtype = builder.int64
+
+    inc = builder.select(step < 0, 1, -1)
+    count = (stop - start + step + inc) // step
+    count = builder.select(count < 0, 0, count)
+
+    start = builder.from_elements(start)
+    step = builder.from_elements(step)
+    init = builder.init_tensor([count], dtype)
+
+    iterators = ["parallel"]
+    maps = ["(d0) -> (0)", "(d0) -> (0)", "(d0) -> (d0)"]
+
+    def body(a, b, c):
+        i = _linalg_index(0)
+        return a + b * i
+
+    return builder.linalg_generic((start, step), init, iterators, maps, body)
+
+
 @register_func("numpy.eye", numpy.eye)
 def eye_impl(builder, N, M=None, k=0, dtype=None):
     if M is None:

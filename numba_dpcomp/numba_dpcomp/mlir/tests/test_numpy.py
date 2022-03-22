@@ -838,6 +838,29 @@ def test_init_like(shape, dtype, func):
     assert_equal(py_func(a), jit_func(a))
 
 
+@parametrize_function_variants(
+    "py_func",
+    [
+        "lambda : np.arange(0)",
+        "lambda : np.arange(1)",
+        "lambda : np.arange(7)",
+        "lambda : np.arange(-1)",
+        "lambda : np.arange(-1,6)",
+        "lambda : np.arange(-1,6,1)",
+        "lambda : np.arange(-1,6,2)",
+        "lambda : np.arange(-1,6,3)",
+        "lambda : np.arange(6,-1,-1)",
+        "lambda : np.arange(6,-1,-2)",
+        "lambda : np.arange(6,-1,-3)",
+        "lambda : np.arange(5,dtype=np.int32)",
+        "lambda : np.arange(5,dtype=np.float32)",
+    ],
+)
+def test_arange(py_func):
+    jit_func = njit(py_func)
+    assert_equal(py_func(), jit_func())
+
+
 @pytest.mark.parametrize("dtype", [np.int32, np.int64, np.float32, np.float64])
 def test_dtype_param(dtype):
     def py_func(dt):
