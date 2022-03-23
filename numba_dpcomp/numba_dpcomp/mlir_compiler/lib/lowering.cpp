@@ -272,17 +272,21 @@ private:
       return builder.create<plier::ArgOp>(
           getCurrentLoc(), index, target.attr("name").cast<std::string>());
     }
-    if (py::isinstance(value, insts.Expr)) {
+
+    if (py::isinstance(value, insts.Expr))
       return lowerExpr(value);
-    }
-    if (py::isinstance(value, insts.Var)) {
+
+    if (py::isinstance(value, insts.Var))
       return loadvar(value);
-    }
-    if (py::isinstance(value, insts.Const)) {
+
+    if (py::isinstance(value, insts.Const))
       return getConst(value.attr("value"));
-    }
+
     if (py::isinstance(value, insts.Global) ||
         py::isinstance(value, insts.FreeVar)) {
+      auto constVal = getConstOrNull(value.attr("value"));
+      if (constVal)
+        return constVal;
       auto name = value.attr("name").cast<std::string>();
       return builder.create<plier::GlobalOp>(getCurrentLoc(), name);
     }
@@ -542,7 +546,7 @@ private:
     builder.create<mlir::cf::BranchOp>(getCurrentLoc(), mlir::None, block);
   }
 
-  mlir::Value getConst(py::handle val) {
+  mlir::Value getConstOrNull(py::handle val) {
     auto getVal = [&](mlir::Attribute attr) {
       return builder.create<plier::ConstOp>(getCurrentLoc(), attr);
     };
@@ -558,8 +562,15 @@ private:
     if (py::isinstance<py::none>(val))
       return getVal(builder.getUnitAttr());
 
-    plier::reportError(llvm::Twine("get_const unhandled type \"") +
-                       py::str(val.get_type()).cast<std::string>() + "\"");
+    return {};
+  }
+
+  mlir::Value getConst(py::handle val) {
+    auto ret = getConstOrNull(val);
+    if (!ret)
+      plier::reportError(llvm::Twine("get_const unhandled type \"") +
+                         py::str(val.get_type()).cast<std::string>() + "\"");
+    return ret;
   }
 
   mlir::FunctionType getFuncType(py::handle fnargs, py::handle restype) {

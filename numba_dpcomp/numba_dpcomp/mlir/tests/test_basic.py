@@ -67,6 +67,15 @@ def test_ret(val):
     assert_equal(py_func(val), jit_func(val))
 
 
+@pytest.mark.parametrize("val", _test_values)
+def test_ret_literal(val):
+    def py_func():
+        return val
+
+    jit_func = njit(py_func)
+    assert_equal(py_func(), jit_func())
+
+
 @parametrize_function_variants(
     "py_func",
     [
