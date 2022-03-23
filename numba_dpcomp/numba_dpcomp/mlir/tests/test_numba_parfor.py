@@ -94,7 +94,6 @@ def _gen_tests():
         "test_linspace",  # np.linspace
         "test_std",  # array.std
         "test_mvdot",  # np.dot unsupported args
-        "test_array_tuple_concat",  # tuple concat
         "test_namedtuple1",  # namedtuple support
         "test_0d_broadcast",  # np.array
         "test_var",  # array.var
@@ -109,7 +108,7 @@ def _gen_tests():
         "test_tuple_concat_with_reverse_slice",  # enumerate
         "test_reduce",  # functools.reduce
         "test_two_d_array_reduction",  # 'memref<?x?xi64>' and result type 'memref<?x?xi32>' are cast incompatible
-        "test_tuple_concat",  # tuple concat
+        "test_tuple_concat",  # enumerate
         "test_two_d_array_reduction_with_float_sizes",  # np.array
         "test_two_d_array_reduction_reuse",  # 'memref<?x?xi64>' and result type 'memref<?x?xi32>' are cast incompatible
         "test_parfor_array_access_lower_slice",  # plier.getitem

@@ -953,6 +953,53 @@ struct BinOpLowering : public mlir::OpConversionPattern<plier::BinOp> {
   }
 };
 
+struct BinOpTupleLowering : public mlir::OpConversionPattern<plier::BinOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::BinOp op, plier::BinOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto lhs = adaptor.lhs();
+    auto rhs = adaptor.rhs();
+    auto lhsType = lhs.getType().dyn_cast<mlir::TupleType>();
+    if (!lhsType)
+      return mlir::failure();
+
+    auto loc = op->getLoc();
+    if (adaptor.op() == "+") {
+      auto rhsType = rhs.getType().dyn_cast<mlir::TupleType>();
+      if (!rhsType)
+        return mlir::failure();
+
+      auto count = lhsType.size() + rhsType.size();
+      llvm::SmallVector<mlir::Value> newArgs;
+      llvm::SmallVector<mlir::Type> newTypes;
+      newArgs.reserve(count);
+      newTypes.reserve(count);
+
+      for (auto &arg : {lhs, rhs}) {
+        auto type = arg.getType().cast<mlir::TupleType>();
+        for (auto i : llvm::seq<size_t>(0, type.size())) {
+          auto elemType = type.getType(i);
+          auto ind = rewriter.create<mlir::arith::ConstantIndexOp>(
+              loc, static_cast<int64_t>(i));
+          auto elem =
+              rewriter.create<plier::GetItemOp>(loc, elemType, arg, ind);
+          newArgs.emplace_back(elem);
+          newTypes.emplace_back(elemType);
+        }
+      }
+
+      auto newTupleType = mlir::TupleType::get(getContext(), newTypes);
+      rewriter.replaceOpWithNewOp<plier::BuildTupleOp>(op, newTupleType,
+                                                       newArgs);
+      return mlir::success();
+    }
+
+    return mlir::failure();
+  }
+};
+
 static mlir::Value negate(mlir::PatternRewriter &rewriter, mlir::Location loc,
                           mlir::Value val, mlir::Type resType) {
   val = doCast(rewriter, loc, val, resType);
@@ -1322,9 +1369,21 @@ void PlierToStdPass::runOnOperation() {
                           plier::LiteralType>();
   };
 
+  auto isTuple = [&](mlir::Type t) -> bool {
+    if (!t)
+      return false;
+
+    auto res = typeConverter.convertType(t);
+    return res && res.isa<mlir::TupleType>();
+  };
+
   target.addDynamicallyLegalOp<plier::BinOp>([&](plier::BinOp op) {
-    return !isNum(op.lhs().getType()) || !isNum(op.rhs().getType()) ||
-           !isNum(op.getType());
+    auto lhsType = op.lhs().getType();
+    auto rhsType = op.rhs().getType();
+    if (op.op() == "+" && isTuple(lhsType) && isTuple(rhsType))
+      return false;
+
+    return !isNum(lhsType) || !isNum(rhsType) || !isNum(op.getType());
   });
   target.addDynamicallyLegalOp<plier::UnaryOp>([&](plier::UnaryOp op) {
     return !isNum(op.value().getType()) && !isNum(op.getType());
@@ -1364,6 +1423,7 @@ void PlierToStdPass::runOnOperation() {
   patterns.insert<
       // clang-format off
       BinOpLowering,
+      BinOpTupleLowering,
       UnaryOpLowering,
       LowerCasts,
       ConstOpLowering,

@@ -432,6 +432,24 @@ def test_tuple2(a, b, c):
     assert_equal(py_func(a, b, c), jit_func(a, b, c))
 
 
+@parametrize_function_variants(
+    "py_func",
+    [
+        "lambda a, b, c: (a, b) + (c,)",
+        "lambda a, b, c: (a,) + (b, c)",
+        "lambda a, b, c: (a, b, c) + ()",
+        "lambda a, b, c: () + (a, b, c)",
+    ],
+)
+@pytest.mark.parametrize(
+    "a, b, c",
+    itertools.product(_tuple_test_values, _tuple_test_values, _tuple_test_values),
+)
+def test_tuple_concat(py_func, a, b, c):
+    jit_func = njit(py_func)
+    assert_equal(py_func(a, b, c), jit_func(a, b, c))
+
+
 @pytest.mark.parametrize(
     "a, b, c",
     itertools.product(_tuple_test_values, _tuple_test_values, _tuple_test_values),
