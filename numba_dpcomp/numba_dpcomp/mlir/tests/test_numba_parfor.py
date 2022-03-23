@@ -75,7 +75,6 @@ def _gen_tests():
         "test_unsigned_refusal_to_vectorize",  # Need to hook asm checks
         "test_vectorizer_fastmath_asm",  # Need to hook asm checks
         "test_kde_example",  # List suport
-        "test_prange27",  # Literal return issue
         "test_simple01",  # Empty shape not failed
         "test_kmeans",  # List suport
         "test_ndarray_fill",  # array.fill
@@ -140,7 +139,6 @@ def _gen_tests():
         "test_issue5942_2",  # invalid result
         "test_parfor_ufunc_typing",  # np.isinf
         "test_issue_5098",  # list support and more
-        "test_parfor_slice27",  # Literal return issue
         "test_ufunc_expr",  # np.bitwise_and(
         "test_parfor_generate_fuse",  # operand #0 does not dominate this use
         "test_parfor_slice7",  # array.transpose
