@@ -31,6 +31,8 @@
 
 static const char *kGpuAllocShared = "gpu.alloc_shared";
 
+namespace {
+
 struct LowerUndef : public mlir::ConvertOpToLLVMPattern<plier::UndefOp> {
   using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
 
@@ -839,6 +841,8 @@ struct GPUToLLVMPass
       signalPassFailure();
   }
 };
+
+} // namespace
 
 // Expose the passes to the outside world
 std::unique_ptr<mlir::Pass> gpu_runtime::createEnumerateEventsPass() {

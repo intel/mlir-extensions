@@ -29,6 +29,7 @@
 #include <mlir/Conversion/SCFToSPIRV/SCFToSPIRV.h>
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
 #include <mlir/Dialect/Arithmetic/Transforms/Passes.h>
+#include <mlir/Dialect/ControlFlow/IR/ControlFlowOps.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/GPU/ParallelLoopMapper.h>
 #include <mlir/Dialect/GPU/Passes.h>
@@ -50,7 +51,10 @@
 
 #include <llvm/ADT/SmallBitVector.h>
 
-static const char *kGpuAllocShared = "gpu.alloc_shared";
+static constexpr llvm::StringLiteral kGpuAllocShared("gpu.alloc_shared");
+static constexpr llvm::StringLiteral kGpuArgAttr("plier.gpu_accessible");
+
+namespace {
 
 struct ParallelLoopGPUMappingPass
     : public mlir::PassWrapper<ParallelLoopGPUMappingPass,
@@ -181,6 +185,24 @@ struct InsertGPUAllocs
       return false;
     };
 
+    auto gpuAccessibleArg = [&]() -> llvm::SmallVector<bool> {
+      auto gpuAttr =
+          func->getAttr(kGpuArgAttr).dyn_cast_or_null<mlir::ArrayAttr>();
+      if (!gpuAttr)
+        return {};
+
+      auto range = gpuAttr.getAsValueRange<mlir::BoolAttr>();
+      return {range.begin(), range.end()};
+    }();
+
+    auto isGpuAccessibleArg = [&](unsigned i) {
+      if (gpuAccessibleArg.empty())
+        return false;
+
+      assert(i < gpuAccessibleArg.size());
+      return gpuAccessibleArg[i];
+    };
+
     if (func.walk([&](mlir::Operation *op) {
               if (!op->getParentOfType<mlir::gpu::LaunchOp>())
                 return mlir::WalkResult::advance();
@@ -217,8 +239,9 @@ struct InsertGPUAllocs
                     auto blockArgs = block->getArguments();
                     auto it = llvm::find(blockArgs, alias);
                     assert(it != blockArgs.end());
-                    auto index = it - blockArgs.begin();
-                    gpuBufferParams.insert({static_cast<unsigned>(index), {}});
+                    auto index = static_cast<unsigned>(it - blockArgs.begin());
+                    if (!isGpuAccessibleArg(index))
+                      gpuBufferParams.insert({index, {}});
                   }
                 }
               }
@@ -277,8 +300,8 @@ struct InsertGPUAllocs
       if (alloc)
         it.second = getAccessType(alloc);
       else {
-        auto memref_global = mlir::cast<mlir::memref::GetGlobalOp>(it.first);
-        it.second = getAccessType(memref_global);
+        auto memrefGlobal = mlir::cast<mlir::memref::GetGlobalOp>(it.first);
+        it.second = getAccessType(memrefGlobal);
       }
     }
 
@@ -319,8 +342,8 @@ struct InsertGPUAllocs
       builder.setInsertionPointToStart(&block);
       auto memrefType = param.getType().cast<mlir::MemRefType>();
       auto rank = static_cast<unsigned>(memrefType.getRank());
-      // dims.resize(rank);
       filter.clear();
+      dims.clear();
       for (auto i : llvm::seq(0u, rank)) {
         if (memrefType.isDynamicDim(i)) {
           auto op = builder.create<mlir::memref::DimOp>(loc, param, i);
@@ -346,10 +369,9 @@ struct InsertGPUAllocs
         filter.insert(copy);
       }
 
-      if (allocType != memrefType) {
+      if (allocType != memrefType)
         allocResult =
             builder.create<mlir::memref::CastOp>(loc, memrefType, allocResult);
-      }
 
       param.replaceAllUsesExcept(allocResult, filter);
       builder.setInsertionPoint(term);
@@ -366,7 +388,7 @@ struct InsertGPUAllocs
   Option<bool> useGpuDealloc{
       *this, "use-gpu-dealloc",
       llvm::cl::desc("use gpu.dealloc for gpu allocated memrefs, "
-                     "memref.dealloc will be use otherwise"),
+                     "memref.dealloc will be used otherwise"),
       llvm::cl::init(true)};
 };
 
@@ -566,13 +588,7 @@ struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
       flatSubview = rewriter.createOrFold<mlir::memref::CastOp>(
           loc, dstFlatType, flatSubview);
 
-    // TODO: bug in ReinterpretCastOp::verify
-    auto offset =
-        (mlir::ShapedType::isDynamicStrideOrOffset(resultOffset)
-             ? mlir::OpFoldResult(
-                   rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0)
-                       .getResult())
-             : mlir::OpFoldResult(rewriter.getIndexAttr(0)));
+    auto offset = rewriter.getIndexAttr(0);
 
     for (auto i : llvm::seq<size_t>(0, strides.size())) {
       if (mlir::ShapedType::isDynamicStrideOrOffset(resultStrides[i])) {
@@ -631,7 +647,6 @@ struct UnstrideMemrefsPass
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::memref::MemRefDialect>();
     registry.insert<mlir::gpu::GPUDialect>();
-    registry.insert<mlir::AffineDialect>();
   }
 
   void runOnOperation() override {
@@ -902,14 +917,27 @@ public:
   }
 };
 
+class ConvertAssert : public mlir::OpConversionPattern<mlir::cf::AssertOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::cf::AssertOp op, mlir::cf::AssertOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<mlir::spirv::AssumeTrueKHROp>(op,
+                                                              adaptor.getArg());
+    return mlir::success();
+  }
+};
+
 struct GPUToSpirvPass
     : public mlir::PassWrapper<GPUToSpirvPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
 
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<mlir::spirv::SPIRVDialect>();
     registry.insert<mlir::AffineDialect>();
+    registry.insert<mlir::spirv::SPIRVDialect>();
   }
 
   void runOnOperation() override {
@@ -955,8 +983,8 @@ struct GPUToSpirvPass
     patterns
         .insert<ConvertSubviewOp, ConvertCastOp<mlir::memref::CastOp>,
                 ConvertCastOp<mlir::memref::ReinterpretCastOp>, ConvertLoadOp,
-                ConvertStoreOp, ConvertAtomicOps, ConvertFunc>(typeConverter,
-                                                               context);
+                ConvertStoreOp, ConvertAtomicOps, ConvertFunc, ConvertAssert>(
+            typeConverter, context);
 
     if (failed(
             applyFullConversion(kernelModules, *target, std::move(patterns))))
@@ -1085,10 +1113,9 @@ struct AbiAttrsPass
   void runOnOperation() override {
     auto gpuModule = getOperation();
     auto *context = &getContext();
-    auto attrName = mlir::spirv::getEntryPointABIAttrName();
-    // TODO: Check if block size is const and set appropriate.
-    const int32_t sizes[] = {0, 0, 0};
-    auto abi = mlir::spirv::getEntryPointABIAttr(sizes, context);
+    auto attrName =
+        mlir::StringAttr::get(context, mlir::spirv::getEntryPointABIAttrName());
+    auto abi = mlir::spirv::getEntryPointABIAttr(llvm::None, context);
     for (auto gpuFunc : gpuModule.getOps<mlir::gpu::GPUFuncOp>()) {
       if (!mlir::gpu::GPUDialect::isKernel(gpuFunc) ||
           gpuFunc->getAttr(attrName))
@@ -1120,10 +1147,12 @@ struct SetSPIRVCapabilitiesPass
         spirv::Capability::Float16,
         spirv::Capability::Float64,
         spirv::Capability::AtomicFloat32AddEXT,
+        spirv::Capability::ExpectAssumeKHR,
         // clang-format on
     };
     spirv::Extension exts[] = {
-        spirv::Extension::SPV_EXT_shader_atomic_float_add};
+        spirv::Extension::SPV_EXT_shader_atomic_float_add,
+        spirv::Extension::SPV_KHR_expect_assume};
     auto triple =
         spirv::VerCapExtAttr::get(spirv::Version::V_1_0, caps, exts, context);
     auto attr = spirv::TargetEnvAttr::get(
@@ -1195,6 +1224,8 @@ struct GPUExPass
                                              std::move(patterns));
   }
 };
+
+} // namespace
 
 // Expose the passes to the outside world
 std::unique_ptr<mlir::Pass> gpu_runtime::createAbiAttrsPass() {
