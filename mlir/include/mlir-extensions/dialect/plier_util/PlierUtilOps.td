@@ -73,9 +73,12 @@ def ParallelOp : PlierUtil_Op<"parallel", [
              "nullptr">)>];
 
     let extraClassDeclaration = [{
-        unsigned getNumLoops() { return steps().size();
+        unsigned getNumLoops() { return steps().size(); }
+    }];
 }
-}];
+
+def UndefOp : PlierUtil_Op<"undef", [NoSideEffect]> {
+  let results = (outs AnyType);
 }
 
 def YieldOp : PlierUtil_Op<"yield", [

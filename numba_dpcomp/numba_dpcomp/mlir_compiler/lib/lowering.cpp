@@ -35,6 +35,7 @@
 #include <llvm/Support/Debug.h>
 
 #include "mlir-extensions/dialect/plier/dialect.hpp"
+#include "mlir-extensions/dialect/plier_util/dialect.hpp"
 
 #include "mlir-extensions/compiler/compiler.hpp"
 #include "mlir-extensions/compiler/pipeline_registry.hpp"
@@ -153,6 +154,7 @@ struct PlierLowerer final {
   PlierLowerer(mlir::MLIRContext &context) : ctx(context), builder(&ctx) {
     ctx.loadDialect<mlir::func::FuncDialect>();
     ctx.loadDialect<plier::PlierDialect>();
+    ctx.loadDialect<plier::PlierUtilDialect>();
   }
 
   mlir::FuncOp lower(const py::object &compilationContext, mlir::ModuleOp mod,

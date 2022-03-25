@@ -40,26 +40,6 @@ def GpuRuntime_OpaqueType
                   "opaque_type">,
       BuildableType<"$_builder.getType<::gpu_runtime::OpaqueType>()"> {}
 
-def DelOp : GpuRuntime_Op<"del", []> { let arguments = (ins AnyType : $value); }
-
-def UndefOp : GpuRuntime_Op<"undef", [NoSideEffect]> {
-  let results = (outs AnyType);
-}
-
-def ExtractMemrefMetadataOp
-    : GpuRuntime_Op<"extract_memref_metadata", [NoSideEffect]> {
-  let arguments = (ins AnyMemRef : $source, IndexAttr : $dimIndex);
-
-  let results = (outs Index : $result);
-  let hasFolder = 1;
-
-  let builders = [
-    OpBuilder<(ins "::mlir::Value" : $src,
-                 "int64_t" : $dim)>,
-    OpBuilder<(ins "::mlir::Value" : $src)>
-  ];
-}
-
 def CreateGpuStreamOp : GpuRuntime_Op<"create_gpu_stream", [NoSideEffect]> {
   let results = (outs GpuRuntime_OpaqueType : $result);
 
