@@ -397,16 +397,16 @@ static llvm::Optional<mlir::Value> getGpuStream(mlir::OpBuilder &builder,
     return {};
 
   auto &block = func.getBody().front();
-  auto ops = block.getOps<plier::CreateGpuStreamOp>();
+  auto ops = block.getOps<gpu_runtime::CreateGpuStreamOp>();
   if (!ops.empty())
     return (*ops.begin()).getResult();
 
   mlir::OpBuilder::InsertionGuard g(builder);
   builder.setInsertionPointToStart(&block);
   auto loc = builder.getUnknownLoc();
-  auto stream = builder.create<plier::CreateGpuStreamOp>(loc).getResult();
+  auto stream = builder.create<gpu_runtime::CreateGpuStreamOp>(loc).getResult();
   builder.setInsertionPoint(block.getTerminator());
-  builder.create<plier::DestroyGpuStreamOp>(loc, stream);
+  builder.create<gpu_runtime::DestroyGpuStreamOp>(loc, stream);
   return stream;
 }
 
@@ -829,9 +829,10 @@ struct GPUExDeallocPass
     auto *ctx = &getContext();
     mlir::RewritePatternSet patterns(ctx);
 
-    patterns.insert<
-        CreateDeallocOp<plier::LoadGpuModuleOp, plier::DestroyGpuModuleOp>,
-        CreateDeallocOp<plier::GetGpuKernelOp, plier::DestroyGpuKernelOp>>(ctx);
+    patterns.insert<CreateDeallocOp<gpu_runtime::LoadGpuModuleOp,
+                                    gpu_runtime::DestroyGpuModuleOp>,
+                    CreateDeallocOp<gpu_runtime::GetGpuKernelOp,
+                                    gpu_runtime::DestroyGpuKernelOp>>(ctx);
 
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
                                              std::move(patterns));
@@ -873,9 +874,12 @@ struct OutlineInitPass
     using outline_func_t =
         bool (*)(mlir::Operation &, llvm::SmallVectorImpl<mlir::Operation *> &);
     const outline_func_t outlineHandlers[] = {
-        &outlineOp<plier::CreateGpuStreamOp, plier::DestroyGpuStreamOp>,
-        &outlineOp<plier::LoadGpuModuleOp, plier::DestroyGpuModuleOp>,
-        &outlineOp<plier::GetGpuKernelOp, plier::DestroyGpuKernelOp>,
+        &outlineOp<gpu_runtime::CreateGpuStreamOp,
+                   gpu_runtime::DestroyGpuStreamOp>,
+        &outlineOp<gpu_runtime::LoadGpuModuleOp,
+                   gpu_runtime::DestroyGpuModuleOp>,
+        &outlineOp<gpu_runtime::GetGpuKernelOp,
+                   gpu_runtime::DestroyGpuKernelOp>,
     };
 
     llvm::SmallVector<mlir::Operation *> initOps;
