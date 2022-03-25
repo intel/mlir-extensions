@@ -136,6 +136,12 @@ def GPUAllocOp
   }];
 }
 
+def GPUDeallocOp : GpuRuntime_Op<"gpu_dealloc"> {
+  let arguments = (ins Variadic<GPU_AsyncToken>:$asyncDependencies,
+                  Res<AnyMemRef, "", [MemAlloc]>:$memref,
+                  GpuRuntime_OpaqueType : $stream);
+}
+
 def GPUSuggestBlockSizeOp : GpuRuntime_Op<"suggest_block_size",
                                      [AttrSizedOperandSegments, NoSideEffect]> {
   let arguments = (ins Optional<GpuRuntime_OpaqueType>:$stream,

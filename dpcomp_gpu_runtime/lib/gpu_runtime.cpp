@@ -350,6 +350,8 @@ struct Stream {
     return {info, mem, event};
   }
 
+  void deallocBuffer(void *ptr) { zeMemFree(context.get(), ptr); }
+
   void suggestBlockSize(ze_kernel_handle_t kernel, const uint32_t *gridSize,
                         uint32_t *blockSize, size_t numDims) {
     assert(kernel);
@@ -481,6 +483,12 @@ dpcompGpuAlloc(void *stream, size_t size, size_t alignment, int shared,
         eventIndex, AllocFunc);
     *ret = AllocResult{std::get<0>(res), std::get<1>(res), std::get<2>(res)};
   });
+}
+
+extern "C" DPCOMP_GPU_RUNTIME_EXPORT void dpcompGpuDeAlloc(void *stream,
+                                                           void *ptr) {
+  LOG_FUNC();
+  catchAll([&]() { static_cast<Stream *>(stream)->deallocBuffer(ptr); });
 }
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void
