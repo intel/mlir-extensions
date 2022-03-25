@@ -109,6 +109,11 @@ struct ParallelLoopGPUMappingPass
 struct InsertGPUAllocs
     : public mlir::PassWrapper<InsertGPUAllocs,
                                mlir::OperationPass<mlir::FuncOp>> {
+
+  InsertGPUAllocs() = default;
+  InsertGPUAllocs(bool gpuDealloc) { useGpuDealloc = gpuDealloc; }
+  InsertGPUAllocs(const InsertGPUAllocs &pass) : PassWrapper(pass) {}
+
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::memref::MemRefDialect>();
@@ -351,9 +356,18 @@ struct InsertGPUAllocs
       if (access.hostRead && access.deviceWrite)
         builder.create<mlir::memref::CopyOp>(loc, allocResult, param);
 
-      builder.create<mlir::gpu::DeallocOp>(loc, llvm::None, allocResult);
+      if (useGpuDealloc)
+        builder.create<mlir::gpu::DeallocOp>(loc, llvm::None, allocResult);
+      else
+        builder.create<mlir::memref::DeallocOp>(loc, allocResult);
     }
   }
+
+  Option<bool> useGpuDealloc{
+      *this, "use-gpu-dealloc",
+      llvm::cl::desc("use gpu.dealloc for gpu allocated memrefs, "
+                     "memref.dealloc will be use otherwise"),
+      llvm::cl::init(true)};
 };
 
 static void setInsertionPointToStart(mlir::OpBuilder &builder,
@@ -1032,7 +1046,7 @@ struct ExpandDeallocOp : public mlir::OpRewritePattern<mlir::gpu::DeallocOp> {
     if (!stream)
       return mlir::failure();
 
-    auto res = rewriter.replaceOpWithNewOp<gpu_runtime::GPUDeallocOp>(
+    rewriter.replaceOpWithNewOp<gpu_runtime::GPUDeallocOp>(
         op, op.asyncDependencies(), op.memref(), *stream);
 
     return mlir::success();
@@ -1195,8 +1209,9 @@ std::unique_ptr<mlir::Pass> gpu_runtime::createGPUToSpirvPass() {
   return std::make_unique<GPUToSpirvPass>();
 }
 
-std::unique_ptr<mlir::Pass> gpu_runtime::createInsertGPUAllocsPass() {
-  return std::make_unique<InsertGPUAllocs>();
+std::unique_ptr<mlir::Pass>
+gpu_runtime::createInsertGPUAllocsPass(bool useGpuDealloc) {
+  return std::make_unique<InsertGPUAllocs>(useGpuDealloc);
 }
 
 std::unique_ptr<mlir::Pass> gpu_runtime::createUnstrideMemrefsPass() {
