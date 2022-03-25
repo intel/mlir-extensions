@@ -23,6 +23,8 @@
 #include <mlir/Conversion/LLVMCommon/ConversionTarget.h>
 #include <mlir/Conversion/LLVMCommon/Pattern.h>
 #include <mlir/Conversion/LLVMCommon/TypeConverter.h>
+#include <mlir/Dialect/Func/IR/FuncOps.h>
+#include <mlir/Dialect/Func/Transforms/FuncConversions.h>
 #include <mlir/Dialect/GPU/Passes.h>
 #include <mlir/Dialect/LLVMIR/LLVMDialect.h>
 #include <mlir/Pass/PassManager.h>
@@ -31,18 +33,30 @@
 
 static const char *kGpuAllocShared = "gpu.alloc_shared";
 
-struct LowerUndef : public mlir::ConvertOpToLLVMPattern<plier::UndefOp> {
+namespace {
+struct LowerTakeContext
+    : public mlir::ConvertOpToLLVMPattern<plier::TakeContextOp> {
   using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::UndefOp op, plier::UndefOp::Adaptor /*adaptor*/,
+  matchAndRewrite(plier::TakeContextOp op,
+                  plier::TakeContextOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
+    auto srcTypes = op.getResultTypes();
+    auto count = static_cast<unsigned>(srcTypes.size());
+    llvm::SmallVector<mlir::Type> newTypes(count);
     auto converter = getTypeConverter();
-    auto type = converter->convertType(op.getType());
-    if (!type)
-      return mlir::failure();
+    assert(converter);
+    for (auto i : llvm::seq(0u, count)) {
+      auto oldType = srcTypes[i];
+      auto newType = converter->convertType(oldType);
+      newTypes[i] = (newType ? newType : oldType);
+    }
 
-    rewriter.replaceOpWithNewOp<mlir::LLVM::UndefOp>(op, type);
+    auto initFunc = adaptor.initFunc().getValueOr(mlir::SymbolRefAttr());
+    auto releaseFunc = adaptor.releaseFunc().getValueOr(mlir::SymbolRefAttr());
+    rewriter.replaceOpWithNewOp<plier::TakeContextOp>(op, newTypes, initFunc,
+                                                      releaseFunc);
     return mlir::success();
   }
 };
@@ -816,6 +830,41 @@ struct GPUToLLVMPass
                                                             target);
     mlir::populateGpuToLLVMConversionPatterns(
         converter, patterns, mlir::gpu::getDefaultGpuBinaryAnnotation());
+    mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::FuncOp>(
+        patterns, converter);
+    mlir::populateReturnOpTypeConversionPattern(patterns, converter);
+    mlir::populateCallOpTypeConversionPattern(patterns, converter);
+
+    target.addDynamicallyLegalOp<mlir::FuncOp>(
+        [&](mlir::FuncOp op) -> llvm::Optional<bool> {
+          if (converter.isSignatureLegal(op.getType()) &&
+              converter.isLegal(&op.getBody()))
+            return true;
+
+          return llvm::None;
+        });
+
+    target.addDynamicallyLegalOp<mlir::func::ReturnOp, plier::TakeContextOp,
+                                 mlir::func::CallOp>(
+        [&](mlir::Operation *op) -> llvm::Optional<bool> {
+          for (auto range : {mlir::TypeRange(op->getOperandTypes()),
+                             mlir::TypeRange(op->getResultTypes())})
+            for (auto type : range)
+              if (converter.isLegal(type))
+                return true;
+
+          return llvm::None;
+        });
+    target.addDynamicallyLegalOp<mlir::FuncOp>(
+        [&](mlir::FuncOp op) -> llvm::Optional<bool> {
+          auto type = op.getType();
+          for (auto range : {type.getInputs(), type.getResults()})
+            for (auto type : range)
+              if (converter.isLegal(type))
+                return true;
+
+          return llvm::None;
+        });
 
     patterns.insert<
         // clang-format off
@@ -829,7 +878,7 @@ struct GPUToLLVMPass
         ConvertGpuAllocPattern,
         ConvertGpuDeAllocPattern,
         ConvertGpuSuggestBlockSizePattern,
-        LowerUndef
+        LowerTakeContext
         // clang-format on
         >(converter);
 
@@ -839,6 +888,8 @@ struct GPUToLLVMPass
       signalPassFailure();
   }
 };
+
+} // namespace
 
 // Expose the passes to the outside world
 std::unique_ptr<mlir::Pass> gpu_runtime::createEnumerateEventsPass() {
