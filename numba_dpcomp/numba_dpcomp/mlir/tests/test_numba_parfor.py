@@ -147,19 +147,19 @@ def _gen_tests():
     skip_tests = {}
 
     def countParfors(test_func, args, **kws):
-        pytest.skip()
+        pytest.xfail()
 
     def countArrays(test_func, args, **kws):
-        pytest.skip()
+        pytest.xfail()
 
     def countArrayAllocs(test_func, args, **kws):
-        pytest.skip()
+        pytest.xfail()
 
     def countNonParforArrayAccesses(test_func, args, **kws):
-        pytest.skip()
+        pytest.xfail()
 
     def get_optimized_numba_ir(test_func, args, **kws):
-        pytest.skip()
+        pytest.xfail()
 
     def _wrap_test_class(test_base):
         class _Wrapper(test_base):
