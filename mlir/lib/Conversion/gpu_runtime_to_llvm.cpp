@@ -86,8 +86,8 @@ private:
   mlir::LLVM::LLVMFunctionType functionType;
 };
 
-static const char *kEventCountAttrName = "gpu.event_count";
-static const char *kEventIndexAttrName = "gpu.event_index";
+static constexpr llvm::StringLiteral kEventCountAttrName("gpu.event_count");
+static constexpr llvm::StringLiteral kEventIndexAttrName("gpu.event_index");
 
 template <typename OpTy>
 class ConvertOpToGpuRuntimeCallPattern
@@ -559,12 +559,13 @@ private:
         eventIndexVar,
         // clang-format on
     };
-    auto res = launchKernelCallBuilder.create(loc, rewriter, params);
+    auto event =
+        launchKernelCallBuilder.create(loc, rewriter, params)->getResult(0);
     if (op.getNumResults() == 0) {
+      waitEventCallBuilder.create(loc, rewriter, event);
       rewriter.eraseOp(op);
     } else {
-      assert(res.getNumResults() == op.getNumResults());
-      rewriter.replaceOp(op, res.getResults());
+      rewriter.replaceOp(op, event);
     }
     return mlir::success();
   }
@@ -659,11 +660,12 @@ private:
     }
 
     mlir::Value resMemref = memrefDesc;
+    mlir::Value event = rewriter.create<mlir::LLVM::ExtractValueOp>(
+        loc, llvmPointerType, res, rewriter.getI64ArrayAttr(2));
     if (op.getNumResults() == 1) {
+      waitEventCallBuilder.create(loc, rewriter, event);
       rewriter.replaceOp(op, resMemref);
     } else {
-      auto event = rewriter.create<mlir::LLVM::ExtractValueOp>(
-          loc, llvmPointerType, res, rewriter.getI64ArrayAttr(2));
       mlir::Value vals[] = {
           resMemref,
           event,
@@ -782,16 +784,16 @@ struct EnumerateEventsPass
   void runOnOperation() override {
     auto mod = getOperation();
     int64_t eventCount = 0;
-    auto intType = mlir::IntegerType::get(&getContext(), 64);
+    auto *ctx = &getContext();
+    auto intType = mlir::IntegerType::get(ctx, 64);
+    auto indexAttrName = mlir::StringAttr::get(ctx, kEventIndexAttrName);
+    auto countAttrName = mlir::StringAttr::get(ctx, kEventCountAttrName);
     mod.walk([&](mlir::gpu::AsyncOpInterface op) {
-      if (op.getAsyncToken()) {
-        op->setAttr(kEventIndexAttrName,
-                    mlir::IntegerAttr::get(intType, eventCount));
-        ++eventCount;
-      }
+      //      if (op.getAsyncToken())
+      op->setAttr(indexAttrName, mlir::IntegerAttr::get(intType, eventCount));
+      ++eventCount;
     });
-    mod->setAttr(kEventCountAttrName,
-                 mlir::IntegerAttr::get(intType, eventCount));
+    mod->setAttr(countAttrName, mlir::IntegerAttr::get(intType, eventCount));
   }
 };
 
