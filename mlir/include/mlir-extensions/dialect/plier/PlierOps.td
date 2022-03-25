@@ -205,10 +205,6 @@ def ExhaustIterOp : Plier_Op<"exhaust_iter", [NoSideEffect]> {
                              : $count)>];
 }
 
-def UndefOp : Plier_Op<"undef", [NoSideEffect]> {
-  let results = (outs AnyType);
-}
-
 def BuildSliceOp : Plier_Op<"build_slice", [NoSideEffect]> {
   let arguments = (ins AnyType : $begin, AnyType : $end, AnyType : $step);
 

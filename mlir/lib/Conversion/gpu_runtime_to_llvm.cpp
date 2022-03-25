@@ -14,14 +14,28 @@
 
 #include "mlir-extensions/Conversion/gpu_runtime_to_llvm.hpp"
 
+#include "mlir-extensions/dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
+#include "mlir-extensions/dialect/plier_util/dialect.hpp"
+#include "mlir-extensions/transforms/func_utils.hpp"
+
+#include <mlir/Conversion/AsyncToLLVM/AsyncToLLVM.h>
+#include <mlir/Conversion/GPUCommon/GPUCommonPass.h>
+#include <mlir/Conversion/LLVMCommon/ConversionTarget.h>
+#include <mlir/Conversion/LLVMCommon/Pattern.h>
+#include <mlir/Conversion/LLVMCommon/TypeConverter.h>
+#include <mlir/Dialect/GPU/Passes.h>
+#include <mlir/Dialect/LLVMIR/LLVMDialect.h>
+#include <mlir/Pass/PassManager.h>
+#include <mlir/Transforms/DialectConversion.h>
+#include <mlir/Transforms/Passes.h>
+
 static const char *kGpuAllocShared = "gpu.alloc_shared";
 
-struct LowerUndef : public mlir::ConvertOpToLLVMPattern<gpu_runtime::UndefOp> {
+struct LowerUndef : public mlir::ConvertOpToLLVMPattern<plier::UndefOp> {
   using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(gpu_runtime::UndefOp op,
-                  gpu_runtime::UndefOp::Adaptor /*adaptor*/,
+  matchAndRewrite(plier::UndefOp op, plier::UndefOp::Adaptor /*adaptor*/,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto converter = getTypeConverter();
     auto type = converter->convertType(op.getType());

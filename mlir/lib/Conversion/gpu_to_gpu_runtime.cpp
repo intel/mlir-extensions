@@ -15,6 +15,7 @@
 #include "mlir-extensions/Conversion/gpu_to_gpu_runtime.hpp"
 
 #include "mlir-extensions/dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
+#include "mlir-extensions/dialect/plier_util/dialect.hpp"
 
 #include <mlir/Analysis/BufferViewFlowAnalysis.h>
 #include <mlir/Conversion/AffineToStandard/AffineToStandard.h>
@@ -411,14 +412,13 @@ static mlir::Value getFlatIndex(mlir::OpBuilder &builder, mlir::Location loc,
       auto numSymbols = affineMap.getNumSymbols();
       if (numSymbols > 0) {
         applyOperands.emplace_back(
-            builder.createOrFold<gpu_runtime::ExtractMemrefMetadataOp>(loc,
-                                                                       memref));
+            builder.createOrFold<plier::ExtractMemrefMetadataOp>(loc, memref));
         --numSymbols;
         assert(numSymbols <= rank);
         for (auto i : llvm::seq(0u, numSymbols)) {
           applyOperands.emplace_back(
-              builder.createOrFold<gpu_runtime::ExtractMemrefMetadataOp>(
-                  loc, memref, i));
+              builder.createOrFold<plier::ExtractMemrefMetadataOp>(loc, memref,
+                                                                   i));
         }
       }
     }
@@ -453,7 +453,7 @@ static mlir::Value getFlatMemref(mlir::OpBuilder &builder, mlir::Location loc,
   setInsertionPointToStart(builder, memref);
   mlir::OpFoldResult offset = builder.getIndexAttr(0);
   mlir::OpFoldResult size =
-      builder.createOrFold<gpu_runtime::UndefOp>(loc, builder.getIndexType());
+      builder.createOrFold<plier::UndefOp>(loc, builder.getIndexType());
   mlir::OpFoldResult stride = builder.getIndexAttr(1);
   return builder.createOrFold<mlir::memref::ReinterpretCastOp>(
       loc, resultType, memref, offset, size, stride);
@@ -539,7 +539,7 @@ struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
     auto loc = op.getLoc();
     mlir::OpFoldResult flatIndex = getFlatIndex(rewriter, loc, memref, offsets);
     mlir::OpFoldResult flatSize =
-        rewriter.create<gpu_runtime::UndefOp>(loc, rewriter.getIndexType())
+        rewriter.create<plier::UndefOp>(loc, rewriter.getIndexType())
             .getResult();
     mlir::OpFoldResult flatStride = rewriter.getIndexAttr(1);
     auto flatMemref = getFlatMemref(rewriter, loc, memref);
@@ -572,7 +572,7 @@ struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
         auto origStride = [&]() {
           mlir::OpBuilder::InsertionGuard g(rewriter);
           setInsertionPointToStart(rewriter, memref);
-          return rewriter.createOrFold<gpu_runtime::ExtractMemrefMetadataOp>(
+          return rewriter.createOrFold<plier::ExtractMemrefMetadataOp>(
               loc, memref, i);
         }();
         auto newStride = rewriter.createOrFold<mlir::arith::MulIOp>(

@@ -14,19 +14,11 @@
 
 #pragma once
 
-#include "mlir-extensions/dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
-#include "mlir-extensions/transforms/func_utils.hpp"
+#include <memory>
 
-#include <mlir/Conversion/AsyncToLLVM/AsyncToLLVM.h>
-#include <mlir/Conversion/GPUCommon/GPUCommonPass.h>
-#include <mlir/Conversion/LLVMCommon/ConversionTarget.h>
-#include <mlir/Conversion/LLVMCommon/Pattern.h>
-#include <mlir/Conversion/LLVMCommon/TypeConverter.h>
-#include <mlir/Dialect/GPU/Passes.h>
-#include <mlir/Dialect/LLVMIR/LLVMDialect.h>
-#include <mlir/Pass/PassManager.h>
-#include <mlir/Transforms/DialectConversion.h>
-#include <mlir/Transforms/Passes.h>
+namespace mlir {
+class Pass;
+}
 
 namespace gpu_runtime {
 

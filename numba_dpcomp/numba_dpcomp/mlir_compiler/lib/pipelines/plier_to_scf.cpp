@@ -24,6 +24,7 @@
 #include <mlir/Transforms/Passes.h>
 
 #include "mlir-extensions/dialect/plier/dialect.hpp"
+#include "mlir-extensions/dialect/plier_util/dialect.hpp"
 #include "mlir-extensions/transforms/arg_lowering.hpp"
 #include "mlir-extensions/transforms/common_opts.hpp"
 
@@ -599,6 +600,8 @@ struct PlierToScfPass
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::scf::SCFDialect>();
+    registry.insert<plier::PlierDialect>();
+    registry.insert<plier::PlierUtilDialect>();
   }
 
   void runOnOperation() override;
