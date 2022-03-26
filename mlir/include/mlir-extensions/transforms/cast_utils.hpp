@@ -23,10 +23,10 @@ class IntegerType;
 } // namespace mlir
 
 namespace plier {
-mlir::Value index_cast(mlir::OpBuilder &builder, mlir::Location loc,
-                       mlir::Value src, mlir::Type dst_type);
-mlir::Value index_cast(mlir::OpBuilder &builder, mlir::Location loc,
-                       mlir::Value src);
+mlir::Value indexCast(mlir::OpBuilder &builder, mlir::Location loc,
+                      mlir::Value src, mlir::Type dst_type);
+mlir::Value indexCast(mlir::OpBuilder &builder, mlir::Location loc,
+                      mlir::Value src);
 
 mlir::Type makeSignlessType(mlir::Type type);
 mlir::IntegerType makeSignlessType(mlir::IntegerType type);

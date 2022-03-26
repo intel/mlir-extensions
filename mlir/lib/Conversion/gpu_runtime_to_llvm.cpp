@@ -22,16 +22,10 @@
 #include <mlir/Conversion/GPUCommon/GPUCommonPass.h>
 #include <mlir/Conversion/LLVMCommon/ConversionTarget.h>
 #include <mlir/Conversion/LLVMCommon/Pattern.h>
-#include <mlir/Conversion/LLVMCommon/TypeConverter.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/Func/Transforms/FuncConversions.h>
 #include <mlir/Dialect/GPU/Passes.h>
 #include <mlir/Dialect/LLVMIR/LLVMDialect.h>
-#include <mlir/Pass/PassManager.h>
-#include <mlir/Transforms/DialectConversion.h>
-#include <mlir/Transforms/Passes.h>
-
-static const char *kGpuAllocShared = "gpu.alloc_shared";
 
 namespace {
 struct LowerTakeContext
@@ -605,7 +599,7 @@ private:
     auto alignmentVar =
         rewriter.create<mlir::LLVM::ConstantOp>(loc, llvmIndexType, alignment);
 
-    bool shared = op->hasAttr(kGpuAllocShared);
+    bool shared = op->hasAttr(gpu_runtime::getAllocSharedAttrName());
     auto sharedVar = rewriter.create<mlir::LLVM::ConstantOp>(
         loc, llvmInt32Type,
         rewriter.getI32IntegerAttr(static_cast<int>(shared)));

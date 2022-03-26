@@ -28,8 +28,8 @@ mlir::Type makeSignless(mlir::Type type) {
 }
 } // namespace
 
-mlir::Value plier::index_cast(mlir::OpBuilder &builder, mlir::Location loc,
-                              mlir::Value val, mlir::Type dstType) {
+mlir::Value plier::indexCast(mlir::OpBuilder &builder, mlir::Location loc,
+                             mlir::Value val, mlir::Type dstType) {
   auto srcType = val.getType();
   assert(srcType.isa<mlir::IndexType>() || dstType.isa<mlir::IndexType>());
   if (srcType == dstType)
@@ -47,10 +47,10 @@ mlir::Value plier::index_cast(mlir::OpBuilder &builder, mlir::Location loc,
   return val;
 }
 
-mlir::Value plier::index_cast(mlir::OpBuilder &builder, mlir::Location loc,
-                              mlir::Value src) {
-  return index_cast(builder, loc, src,
-                    mlir::IndexType::get(builder.getContext()));
+mlir::Value plier::indexCast(mlir::OpBuilder &builder, mlir::Location loc,
+                             mlir::Value src) {
+  return indexCast(builder, loc, src,
+                   mlir::IndexType::get(builder.getContext()));
 }
 
 mlir::Type plier::makeSignlessType(mlir::Type type) {

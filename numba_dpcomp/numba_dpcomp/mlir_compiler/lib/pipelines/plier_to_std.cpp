@@ -674,10 +674,10 @@ mlir::Value indexCastImpl(mlir::PatternRewriter &rewriter, mlir::Location loc,
   }
   if (dstType.isa<mlir::FloatType>()) {
     auto intType = rewriter.getI64Type();
-    val = plier::index_cast(rewriter, loc, val, intType);
+    val = plier::indexCast(rewriter, loc, val, intType);
     return rewriter.createOrFold<mlir::arith::SIToFPOp>(loc, dstType, val);
   }
-  return plier::index_cast(rewriter, loc, val, dstType);
+  return plier::indexCast(rewriter, loc, val, dstType);
 }
 
 mlir::Value floatCastImpl(mlir::PatternRewriter &rewriter, mlir::Location loc,
@@ -1153,7 +1153,7 @@ static void rerunScfPipeline(mlir::Operation *op) {
       mlir::StringAttr::get(op->getContext(), plierToScfPipelineName());
   auto mod = op->getParentOfType<mlir::ModuleOp>();
   assert(nullptr != mod);
-  plier::add_pipeline_jump_marker(mod, marker);
+  plier::addPipelineJumpMarker(mod, marker);
 }
 
 mlir::LogicalResult

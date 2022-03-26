@@ -169,10 +169,10 @@ struct PassManagerSchedule {
       if (mlir::failed(current->run(module))) {
         return mlir::failure();
       }
-      auto markers = plier::get_pipeline_jump_markers(module);
+      auto markers = plier::getPipelineJumpMarkers(module);
       auto jumpTarget = current->get_jump(markers);
       if (nullptr != jumpTarget.first) {
-        plier::remove_pipeline_jump_marker(module, jumpTarget.second);
+        plier::removePipelineJumpMarker(module, jumpTarget.second);
         current = jumpTarget.first;
       } else {
         current = current->get_next_stage();

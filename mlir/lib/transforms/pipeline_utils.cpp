@@ -19,13 +19,13 @@
 
 #include "mlir-extensions/dialect/plier/dialect.hpp"
 
-mlir::ArrayAttr plier::get_pipeline_jump_markers(mlir::ModuleOp module) {
+mlir::ArrayAttr plier::getPipelineJumpMarkers(mlir::ModuleOp module) {
   return module->getAttrOfType<mlir::ArrayAttr>(
       plier::attributes::getJumpMarkersName());
 }
 
-void plier::add_pipeline_jump_marker(mlir::ModuleOp module,
-                                     mlir::StringAttr name) {
+void plier::addPipelineJumpMarker(mlir::ModuleOp module,
+                                  mlir::StringAttr name) {
   assert(name);
   assert(!name.getValue().empty());
 
@@ -47,8 +47,8 @@ void plier::add_pipeline_jump_marker(mlir::ModuleOp module,
                   mlir::ArrayAttr::get(module.getContext(), name_list));
 }
 
-void plier::remove_pipeline_jump_marker(mlir::ModuleOp module,
-                                        mlir::StringAttr name) {
+void plier::removePipelineJumpMarker(mlir::ModuleOp module,
+                                     mlir::StringAttr name) {
   assert(name);
   assert(!name.getValue().empty());
 
