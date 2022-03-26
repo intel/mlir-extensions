@@ -85,6 +85,7 @@ def barrier_proxy(flags):
     global _greenlet_found
     assert _greenlet_found, "greenlet package not installed"
     state = get_exec_state()
+    assert len(state.tasks) > 0
     wg_size = state.wg_size[0]
     assert wg_size > 0
     if wg_size > 1:
@@ -175,6 +176,9 @@ def _capture_func(func, indices, args):
     return wrapper
 
 
+_barrier_ops = ["barrier"]
+
+
 def _execute_kernel(global_size, local_size, func, *args):
     if len(local_size) == 0:
         local_size = (1,) * len(global_size)
@@ -184,6 +188,7 @@ def _execute_kernel(global_size, local_size, func, *args):
     state = _setup_execution_state(global_size, local_size)
     try:
         groups = tuple((g + l - 1) // l for g, l in zip(global_size, local_size))
+        need_barrier = any(n in func.__globals__ for n in _barrier_ops)
         for gid in product(*(range(g) for g in groups)):
             offset = tuple(g * l for g, l in zip(gid, local_size))
             size = tuple(
@@ -195,8 +200,9 @@ def _execute_kernel(global_size, local_size, func, *args):
 
             indices_range = (range(o, o + s) for o, s in zip(offset, size))
 
-            global _greenlet_found
-            if _greenlet_found:
+            if need_barrier:
+                global _greenlet_found
+                assert _greenlet_found
                 tasks = state.tasks
                 assert len(tasks) == 0
                 for indices in product(*indices_range):
