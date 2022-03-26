@@ -14,6 +14,7 @@
 
 from collections import namedtuple
 from itertools import product
+from functools import reduce
 
 from .kernel_base import KernelBase
 from .kernel_impl import (
@@ -28,7 +29,7 @@ from .kernel_impl import (
 )
 
 _ExecutionState = namedtuple(
-    "_ExecutionState", ["global_size", "local_size", "indices",]
+    "_ExecutionState", ["global_size", "local_size", "indices", "wg_size"]
 )
 
 _execution_state = None
@@ -80,11 +81,12 @@ def _setup_execution_state(global_size, local_size):
 
     global _execution_state
     assert _execution_state is None
-    if len(local_size) == 0:
-        local_size = (1,) * len(global_size)
 
     _execution_state = _ExecutionState(
-        global_size=global_size, local_size=local_size, indices=[0] * len(global_size)
+        global_size=global_size,
+        local_size=local_size,
+        indices=[0] * len(global_size),
+        wg_size=[None],
     )
     return _execution_state
 
@@ -143,13 +145,23 @@ def _restore_closure(src, old_closure):
 
 
 def _execute_kernel(global_size, local_size, func, *args):
+    if len(local_size) == 0:
+        local_size = (1,) * len(global_size)
+
     saved_globals = _replace_globals(func.__globals__)
     saved_closure = _replace_closure(func.__closure__)
     state = _setup_execution_state(global_size, local_size)
     try:
-        for indices in product(*(range(d) for d in global_size)):
-            state.indices[:] = indices
-            func(*args)
+        groups = tuple((g + l - 1) // l for g, l in zip(global_size, local_size))
+        for gid in product(*(range(g) for g in groups)):
+            offset = tuple(g * l for g, l in zip(gid, local_size))
+            size = tuple(
+                min(g - o, l) for o, g, l in zip(offset, global_size, local_size)
+            )
+            state.wg_size[0] = reduce(lambda a, b: a * b, size)
+            for indices in product(*(range(o, o + s) for o, s in zip(offset, size))):
+                state.indices[:] = indices
+                func(*args)
     finally:
         _restore_closure(func.__closure__, saved_closure)
         _restore_globals(func.__globals__, saved_globals)
