@@ -691,18 +691,21 @@ def test_input_load_cse():
 def test_barrier1():
     atomic_add = atomic.add
 
+    global_size = 27
+    local_size = 7
+
     def func(a, b):
         i = get_global_id(0)
-        atomic_add(a, 0, i)
+        off = i // local_size
+        atomic_add(a, off, i)
         barrier(CLK_GLOBAL_MEM_FENCE)
-        b[i] = a[0]
+        b[i] = a[off]
 
     sim_func = kernel_sim(func)
     gpu_func = kernel_cached(func)
 
-    a = np.array([0], np.int64)
-    global_size = 251
-    local_size = 77
+    count = (global_size + local_size - 1) // local_size
+    a = np.array([0] * count, np.int64)
 
     sim_res = np.zeros(global_size, a.dtype)
     sim_func[global_size, local_size](a, sim_res)
