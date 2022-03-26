@@ -142,7 +142,7 @@ llvm::SmallVector<mlir::scf::ForOp, 2> plier::lowerWhileToFor(
   auto &afterBlock = whileOp.getAfter().front();
 
   auto indexCast = [&](mlir::Value val) -> mlir::Value {
-    return ::plier::index_cast(builder, loc, val);
+    return ::plier::indexCast(builder, loc, val);
   };
 
   auto bounds = getBounds(builder, loc);

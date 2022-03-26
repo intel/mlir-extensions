@@ -205,7 +205,7 @@ static void rerunScfPipeline(mlir::Operation *op) {
       mlir::StringAttr::get(op->getContext(), plierToScfPipelineName());
   auto mod = op->getParentOfType<mlir::ModuleOp>();
   assert(nullptr != mod);
-  plier::add_pipeline_jump_marker(mod, marker);
+  plier::addPipelineJumpMarker(mod, marker);
 }
 
 static mlir::Value skipCasts(mlir::Value val) {

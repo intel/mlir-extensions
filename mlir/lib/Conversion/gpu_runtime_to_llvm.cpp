@@ -22,14 +22,10 @@
 #include <mlir/Conversion/GPUCommon/GPUCommonPass.h>
 #include <mlir/Conversion/LLVMCommon/ConversionTarget.h>
 #include <mlir/Conversion/LLVMCommon/Pattern.h>
-#include <mlir/Conversion/LLVMCommon/TypeConverter.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/Func/Transforms/FuncConversions.h>
 #include <mlir/Dialect/GPU/Passes.h>
 #include <mlir/Dialect/LLVMIR/LLVMDialect.h>
-#include <mlir/Pass/PassManager.h>
-#include <mlir/Transforms/DialectConversion.h>
-#include <mlir/Transforms/Passes.h>
 
 static const char *kGpuAllocShared = "gpu.alloc_shared";
 

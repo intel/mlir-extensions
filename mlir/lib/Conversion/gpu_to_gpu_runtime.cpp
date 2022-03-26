@@ -18,36 +18,27 @@
 #include "mlir-extensions/dialect/plier_util/dialect.hpp"
 
 #include <mlir/Analysis/BufferViewFlowAnalysis.h>
-#include <mlir/Conversion/AffineToStandard/AffineToStandard.h>
 #include <mlir/Conversion/ArithmeticToSPIRV/ArithmeticToSPIRV.h>
 #include <mlir/Conversion/ControlFlowToSPIRV/ControlFlowToSPIRV.h>
 #include <mlir/Conversion/FuncToSPIRV/FuncToSPIRV.h>
-#include <mlir/Conversion/GPUCommon/GPUCommonPass.h>
 #include <mlir/Conversion/GPUToSPIRV/GPUToSPIRV.h>
-#include <mlir/Conversion/GPUToSPIRV/GPUToSPIRVPass.h>
 #include <mlir/Conversion/MathToSPIRV/MathToSPIRV.h>
 #include <mlir/Conversion/SCFToSPIRV/SCFToSPIRV.h>
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
-#include <mlir/Dialect/Arithmetic/Transforms/Passes.h>
 #include <mlir/Dialect/ControlFlow/IR/ControlFlowOps.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/GPU/ParallelLoopMapper.h>
 #include <mlir/Dialect/GPU/Passes.h>
-#include <mlir/Dialect/GPU/Utils.h>
-#include <mlir/Dialect/LLVMIR/LLVMDialect.h>
-#include <mlir/Dialect/Math/IR/Math.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Dialect/SPIRV/IR/SPIRVDialect.h>
 #include <mlir/Dialect/SPIRV/IR/SPIRVOps.h>
 #include <mlir/Dialect/SPIRV/IR/TargetAndABI.h>
-#include <mlir/Dialect/SPIRV/Transforms/Passes.h>
 #include <mlir/Dialect/SPIRV/Transforms/SPIRVConversion.h>
-#include <mlir/Pass/PassManager.h>
+#include <mlir/Pass/Pass.h>
 #include <mlir/Target/SPIRV/Serialization.h>
 #include <mlir/Transforms/DialectConversion.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
-#include <mlir/Transforms/Passes.h>
 
 #include <llvm/ADT/SmallBitVector.h>
 

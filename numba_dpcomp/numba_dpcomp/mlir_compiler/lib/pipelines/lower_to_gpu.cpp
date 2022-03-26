@@ -44,13 +44,10 @@
 #include "mlir-extensions/Conversion/gpu_to_gpu_runtime.hpp"
 #include "mlir-extensions/compiler/pipeline_registry.hpp"
 #include "mlir-extensions/dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
-#include "mlir-extensions/dialect/plier/dialect.hpp"
 #include "mlir-extensions/dialect/plier_util/dialect.hpp"
 #include "mlir-extensions/transforms/call_lowering.hpp"
 #include "mlir-extensions/transforms/cast_utils.hpp"
 #include "mlir-extensions/transforms/common_opts.hpp"
-#include "mlir-extensions/transforms/const_utils.hpp"
-#include "mlir-extensions/transforms/func_utils.hpp"
 #include "mlir-extensions/transforms/pipeline_utils.hpp"
 #include "mlir-extensions/transforms/rewrite_wrapper.hpp"
 #include "mlir-extensions/transforms/type_conversion.hpp"
@@ -340,7 +337,7 @@ struct GPULowerDefaultLocalSize
         auto count = static_cast<unsigned>(operands.size());
         llvm::SmallVector<mlir::Value, 3> globalSize(count);
         for (auto i : llvm::seq(0u, count))
-          globalSize[i] = plier::index_cast(builder, loc, operands[i]);
+          globalSize[i] = plier::indexCast(builder, loc, operands[i]);
 
         auto res = builder
                        .create<gpu_runtime::GPUSuggestBlockSizeOp>(
@@ -348,8 +345,8 @@ struct GPULowerDefaultLocalSize
                        .getResults();
 
         for (auto i : llvm::seq(0u, count)) {
-          auto castedRes = plier::index_cast(builder, loc, res[i],
-                                             call.getResult(i).getType());
+          auto castedRes = plier::indexCast(builder, loc, res[i],
+                                            call.getResult(i).getType());
           call.getResult(i).replaceAllUsesWith(castedRes);
         }
       }
@@ -712,7 +709,7 @@ void rerun_std_pipeline(mlir::Operation *op) {
       mlir::StringAttr::get(op->getContext(), plierToStdPipelineName());
   auto mod = op->getParentOfType<mlir::ModuleOp>();
   assert(nullptr != mod);
-  plier::add_pipeline_jump_marker(mod, marker);
+  plier::addPipelineJumpMarker(mod, marker);
 }
 
 struct LowerGpuRange final : public plier::CallOpLowering {
