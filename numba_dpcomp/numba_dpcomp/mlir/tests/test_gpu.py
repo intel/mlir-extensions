@@ -28,6 +28,9 @@ from numba_dpcomp.mlir.kernel_impl import (
     atomic,
     kernel_func,
     DEFAULT_LOCAL_SIZE,
+    barrier,
+    CLK_LOCAL_MEM_FENCE,
+    CLK_GLOBAL_MEM_FENCE,
 )
 from numba_dpcomp.mlir.kernel_sim import kernel as kernel_sim
 from numba_dpcomp.mlir.passes import (
@@ -680,6 +683,36 @@ def test_input_load_cse():
             )
             == 1
         ), ir
+
+    assert_equal(gpu_res, sim_res)
+
+
+@require_gpu
+def test_barrier1():
+    atomic_add = atomic.add
+
+    def func(a, b):
+        i = get_global_id(0)
+        atomic_add(a, 0, i)
+        barrier(CLK_GLOBAL_MEM_FENCE)
+        b[i] = a[0]
+
+    sim_func = kernel_sim(func)
+    gpu_func = kernel_cached(func)
+
+    a = np.array([0], np.int64)
+    global_size = 251
+    local_size = 77
+
+    sim_res = np.zeros(global_size, a.dtype)
+    sim_func[global_size, local_size](a, sim_res)
+
+    gpu_res = np.zeros(global_size, a.dtype)
+
+    with print_pass_ir([], ["ConvertParallelLoopToGpu"]):
+        gpu_func[global_size, local_size](a, gpu_res)
+        ir = get_print_buffer()
+        assert ir.count("gpu.launch blocks") == 1, ir
 
     assert_equal(gpu_res, sim_res)
 
