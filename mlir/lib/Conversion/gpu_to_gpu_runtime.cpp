@@ -927,6 +927,32 @@ public:
   }
 };
 
+class ConvertMemFenceOp
+    : public mlir::OpConversionPattern<gpu_runtime::GPUMemFenceOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(gpu_runtime::GPUMemFenceOp op,
+                  gpu_runtime::GPUMemFenceOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto scope = mlir::spirv::Scope::Workgroup;
+    mlir::spirv::MemorySemantics semantics;
+    if (adaptor.flags() == gpu_runtime::FenceFlags::global) {
+      semantics = mlir::spirv::MemorySemantics::SequentiallyConsistent |
+                  mlir::spirv::MemorySemantics::CrossWorkgroupMemory;
+    } else if (adaptor.flags() == gpu_runtime::FenceFlags::local) {
+      semantics = mlir::spirv::MemorySemantics::SequentiallyConsistent |
+                  mlir::spirv::MemorySemantics::WorkgroupMemory;
+    } else {
+      return mlir::failure();
+    }
+    rewriter.replaceOpWithNewOp<mlir::spirv::MemoryBarrierOp>(op, scope,
+                                                              semantics);
+    return mlir::success();
+  }
+};
+
 // TODO: something better
 class ConvertFunc : public mlir::OpConversionPattern<mlir::FuncOp> {
 public:
@@ -1006,11 +1032,11 @@ struct GPUToSpirvPass
     mlir::arith::populateArithmeticToSPIRVPatterns(typeConverter, patterns);
     mlir::populateMathToSPIRVPatterns(typeConverter, patterns);
 
-    patterns.insert<ConvertSubviewOp, ConvertCastOp<mlir::memref::CastOp>,
-                    ConvertCastOp<mlir::memref::ReinterpretCastOp>,
-                    ConvertLoadOp, ConvertStoreOp, ConvertAtomicOps,
-                    ConvertFunc, ConvertAssert, ConvertBarrierOp>(typeConverter,
-                                                                  context);
+    patterns
+        .insert<ConvertSubviewOp, ConvertCastOp<mlir::memref::CastOp>,
+                ConvertCastOp<mlir::memref::ReinterpretCastOp>, ConvertLoadOp,
+                ConvertStoreOp, ConvertAtomicOps, ConvertFunc, ConvertAssert,
+                ConvertBarrierOp, ConvertMemFenceOp>(typeConverter, context);
 
     if (failed(
             applyFullConversion(kernelModules, *target, std::move(patterns))))

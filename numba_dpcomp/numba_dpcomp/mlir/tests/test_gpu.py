@@ -29,6 +29,7 @@ from numba_dpcomp.mlir.kernel_impl import (
     kernel_func,
     DEFAULT_LOCAL_SIZE,
     barrier,
+    mem_fence,
     CLK_LOCAL_MEM_FENCE,
     CLK_GLOBAL_MEM_FENCE,
 )
@@ -688,7 +689,7 @@ def test_input_load_cse():
 
 
 @require_gpu
-@pytest.mark.parametrize("op", [barrier])
+@pytest.mark.parametrize("op", [barrier, mem_fence])
 @pytest.mark.parametrize("flags", [CLK_LOCAL_MEM_FENCE, CLK_GLOBAL_MEM_FENCE])
 @pytest.mark.parametrize("global_size", [1, 2, 27])
 @pytest.mark.parametrize("local_size", [1, 2, 7])

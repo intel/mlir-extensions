@@ -34,6 +34,7 @@ from .kernel_impl import (
     atomic_add,
     atomic_sub,
     barrier,
+    mem_fence,
 )
 
 _ExecutionState = namedtuple(
@@ -96,6 +97,10 @@ def barrier_proxy(flags):
         state.indices[:] = indices
 
 
+def mem_fence_proxy(flags):
+    pass  # Nothing
+
+
 def _setup_execution_state(global_size, local_size):
     import numba_dpcomp.mlir.kernel_impl
 
@@ -127,6 +132,7 @@ _globals_to_replace = [
     ("atomic_add", atomic_add, atomic_proxy.add),
     ("atomic_sub", atomic_sub, atomic_proxy.sub),
     ("barrier", barrier, barrier_proxy),
+    ("mem_fence", mem_fence, mem_fence_proxy),
 ]
 
 

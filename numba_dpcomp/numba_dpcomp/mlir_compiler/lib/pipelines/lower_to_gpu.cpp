@@ -1186,7 +1186,9 @@ public:
     using funcptr_t = void (*)(mlir::Operation *, mlir::PatternRewriter &,
                                gpu_runtime::FenceFlags);
     const std::pair<llvm::StringRef, funcptr_t> handlers[] = {
-        {"kernel_barrier", &genBarrierOp<gpu_runtime::GPUBarrierOp>}};
+        {"kernel_barrier", &genBarrierOp<gpu_runtime::GPUBarrierOp>},
+        {"kernel_mem_fence", &genBarrierOp<gpu_runtime::GPUMemFenceOp>},
+    };
 
     auto funcName = op.getCallee();
     for (auto &h : handlers) {
