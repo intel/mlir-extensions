@@ -1137,6 +1137,73 @@ struct LowerGpuBuiltinsPass
     : public plier::RewriteWrapperPass<LowerGpuBuiltinsPass, void, void,
                                        LowerPlierCalls, LowerBuiltinCalls> {};
 
+static llvm::Optional<gpu_runtime::FenceFlags>
+getFenceFlags(mlir::OpFoldResult arg) {
+  auto val = mlir::getConstantIntValue(arg);
+  if (!val)
+    return llvm::None;
+
+  auto v = *val;
+  if (v == 1)
+    return gpu_runtime::FenceFlags::local;
+
+  if (v == 2)
+    return gpu_runtime::FenceFlags::global;
+
+  return llvm::None;
+}
+
+template <typename Op>
+static void genBarrierOp(mlir::Operation *srcOp,
+                         mlir::PatternRewriter &rewriter,
+                         gpu_runtime::FenceFlags flags) {
+  rewriter.create<Op>(srcOp->getLoc(), flags);
+
+  // TODO: remove
+  assert(srcOp->getNumResults() == 1);
+  auto retType = srcOp->getResult(0).getType();
+  rewriter.replaceOpWithNewOp<plier::UndefOp>(srcOp, retType);
+}
+
+class ConvertBarrierOps : public mlir::OpRewritePattern<mlir::func::CallOp> {
+public:
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::func::CallOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto operands = op.operands();
+    if (operands.size() != 1)
+      return mlir::failure();
+
+    if (op.getNumResults() != 1)
+      return mlir::failure();
+
+    auto fenceFlags = getFenceFlags(operands[0]);
+    if (!fenceFlags)
+      return mlir::failure();
+
+    using funcptr_t = void (*)(mlir::Operation *, mlir::PatternRewriter &,
+                               gpu_runtime::FenceFlags);
+    const std::pair<llvm::StringRef, funcptr_t> handlers[] = {
+        {"kernel_barrier", &genBarrierOp<gpu_runtime::GPUBarrierOp>}};
+
+    auto funcName = op.getCallee();
+    for (auto &h : handlers) {
+      if (h.first == funcName) {
+        h.second(op, rewriter, *fenceFlags);
+        return mlir::success();
+      }
+    }
+
+    return mlir::failure();
+  }
+};
+
+struct LowerGpuBuiltins2Pass
+    : public plier::RewriteWrapperPass<LowerGpuBuiltins2Pass, void, void,
+                                       ConvertBarrierOps> {};
+
 class GpuLaunchSinkOpsPass
     : public mlir::PassWrapper<GpuLaunchSinkOpsPass,
                                mlir::OperationPass<void>> {
@@ -1265,8 +1332,8 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
 
   commonOptPasses(funcPM);
   funcPM.addPass(std::make_unique<KernelMemrefOpsMovementPass>());
-  funcPM.addPass(std::make_unique<GpuLaunchSinkOpsPass>());
   funcPM.addPass(std::make_unique<SinkGpuDimsPass>());
+  funcPM.addPass(std::make_unique<GpuLaunchSinkOpsPass>());
   pm.addPass(mlir::createGpuKernelOutliningPass());
   pm.addPass(mlir::createSymbolDCEPass());
 
@@ -1278,6 +1345,7 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
       pm.nest<mlir::gpu::GPUModuleOp>().nest<mlir::gpu::GPUFuncOp>();
   gpuFuncPM.addPass(mlir::arith::createArithmeticExpandOpsPass());
   gpuFuncPM.addPass(std::make_unique<FlattenScfPass>());
+  gpuFuncPM.addPass(std::make_unique<LowerGpuBuiltins2Pass>());
   commonOptPasses(gpuFuncPM);
   gpuFuncPM.addPass(std::make_unique<AssumeGpuIdRangePass>());
 

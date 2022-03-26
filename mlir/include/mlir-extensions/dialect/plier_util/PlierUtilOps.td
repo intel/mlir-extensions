@@ -16,7 +16,6 @@
 #define PLIER_UTIL_OPS
 
 include "mlir/IR/OpBase.td"
-include "mlir/Dialect/GPU/GPUBase.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/LoopLikeInterface.td"

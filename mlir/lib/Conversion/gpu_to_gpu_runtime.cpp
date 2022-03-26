@@ -833,7 +833,7 @@ static mlir::Value lowerFloatSubAtomic(mlir::OpBuilder &builder,
 
 class ConvertAtomicOps : public mlir::OpConversionPattern<mlir::func::CallOp> {
 public:
-  using mlir::OpConversionPattern<mlir::func::CallOp>::OpConversionPattern;
+  using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
   matchAndRewrite(mlir::func::CallOp op, mlir::func::CallOp::Adaptor adaptor,
@@ -898,6 +898,32 @@ public:
     }
 
     return mlir::failure();
+  }
+};
+
+class ConvertBarrierOp
+    : public mlir::OpConversionPattern<gpu_runtime::GPUBarrierOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(gpu_runtime::GPUBarrierOp op,
+                  gpu_runtime::GPUBarrierOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto scope = mlir::spirv::Scope::Workgroup;
+    mlir::spirv::MemorySemantics semantics;
+    if (adaptor.flags() == gpu_runtime::FenceFlags::global) {
+      semantics = mlir::spirv::MemorySemantics::SequentiallyConsistent |
+                  mlir::spirv::MemorySemantics::CrossWorkgroupMemory;
+    } else if (adaptor.flags() == gpu_runtime::FenceFlags::local) {
+      semantics = mlir::spirv::MemorySemantics::SequentiallyConsistent |
+                  mlir::spirv::MemorySemantics::WorkgroupMemory;
+    } else {
+      return mlir::failure();
+    }
+    rewriter.replaceOpWithNewOp<mlir::spirv::ControlBarrierOp>(op, scope, scope,
+                                                               semantics);
+    return mlir::success();
   }
 };
 
@@ -980,11 +1006,11 @@ struct GPUToSpirvPass
     mlir::arith::populateArithmeticToSPIRVPatterns(typeConverter, patterns);
     mlir::populateMathToSPIRVPatterns(typeConverter, patterns);
 
-    patterns
-        .insert<ConvertSubviewOp, ConvertCastOp<mlir::memref::CastOp>,
-                ConvertCastOp<mlir::memref::ReinterpretCastOp>, ConvertLoadOp,
-                ConvertStoreOp, ConvertAtomicOps, ConvertFunc, ConvertAssert>(
-            typeConverter, context);
+    patterns.insert<ConvertSubviewOp, ConvertCastOp<mlir::memref::CastOp>,
+                    ConvertCastOp<mlir::memref::ReinterpretCastOp>,
+                    ConvertLoadOp, ConvertStoreOp, ConvertAtomicOps,
+                    ConvertFunc, ConvertAssert, ConvertBarrierOp>(typeConverter,
+                                                                  context);
 
     if (failed(
             applyFullConversion(kernelModules, *target, std::move(patterns))))

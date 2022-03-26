@@ -24,8 +24,6 @@
 #include <mlir/Interfaces/SideEffectInterfaces.h>
 #include <mlir/Interfaces/ViewLikeInterface.h>
 
-#include <mlir/Dialect/GPU/GPUDialect.h>
-
 #include "mlir-extensions/dialect/plier_util/PlierUtilOpsDialect.h.inc"
 #include "mlir-extensions/dialect/plier_util/PlierUtilOpsEnums.h.inc"
 

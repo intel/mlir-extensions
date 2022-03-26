@@ -55,6 +55,10 @@ void GpuRuntimeDialect::initialize() {
 #define GET_OP_LIST
 #include "mlir-extensions/dialect/gpu_runtime/IR/GpuRuntimeOps.cpp.inc"
       >();
+  addAttributes<
+#define GET_ATTRDEF_LIST
+#include "mlir-extensions/dialect/gpu_runtime/IR/GpuRuntimeOpsAttributes.cpp.inc"
+      >();
   addTypes<OpaqueType>();
   addInterfaces<GpuRuntimeInlinerInterface>();
 }
@@ -208,5 +212,10 @@ mlir::StringAttr GPUSuggestBlockSizeOp::getKernelName() {
 
 #include "mlir-extensions/dialect/gpu_runtime/IR/GpuRuntimeOpsDialect.cpp.inc"
 
+#define GET_ATTRDEF_CLASSES
+#include "mlir-extensions/dialect/gpu_runtime/IR/GpuRuntimeOpsAttributes.cpp.inc"
+
 #define GET_OP_CLASSES
 #include "mlir-extensions/dialect/gpu_runtime/IR/GpuRuntimeOps.cpp.inc"
+
+#include "mlir-extensions/dialect/gpu_runtime/IR/GpuRuntimeOpsEnums.cpp.inc"
