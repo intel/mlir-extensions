@@ -708,12 +708,12 @@ def test_barrier1():
     a = np.array([0] * count, np.int64)
 
     sim_res = np.zeros(global_size, a.dtype)
-    sim_func[global_size, local_size](a, sim_res)
+    sim_func[global_size, local_size](a.copy(), sim_res)
 
     gpu_res = np.zeros(global_size, a.dtype)
 
     with print_pass_ir([], ["ConvertParallelLoopToGpu"]):
-        gpu_func[global_size, local_size](a, gpu_res)
+        gpu_func[global_size, local_size](a.copy(), gpu_res)
         ir = get_print_buffer()
         assert ir.count("gpu.launch blocks") == 1, ir
 
