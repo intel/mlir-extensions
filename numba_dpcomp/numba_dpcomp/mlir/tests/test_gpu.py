@@ -688,11 +688,10 @@ def test_input_load_cse():
 
 
 @require_gpu
-def test_barrier1():
+@pytest.mark.parametrize("global_size", [1, 2, 27])
+@pytest.mark.parametrize("local_size", [1, 2, 7])
+def test_barrier1(global_size, local_size):
     atomic_add = atomic.add
-
-    global_size = 27
-    local_size = 7
 
     def func(a, b):
         i = get_global_id(0)
