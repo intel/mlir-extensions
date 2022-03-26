@@ -22,6 +22,7 @@ include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/LoopLikeInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/ViewLikeInterface.td"
+include "mlir/IR/EnumAttr.td"
 
 def GpuRuntime_Dialect : Dialect {
   let name = "gpu_runtime";
@@ -39,6 +40,17 @@ def GpuRuntime_OpaqueType
     : DialectType<GpuRuntime_Dialect, CPred<"$_self.isa<::gpu_runtime::OpaqueType>()">,
                   "opaque_type">,
       BuildableType<"$_builder.getType<::gpu_runtime::OpaqueType>()"> {}
+
+def GpuRuntime_FenceFlags : I32EnumAttr<"FenceFlags",
+    "Kernel barrier and fence flags",
+    [
+      I32EnumAttrCase<"local", 1>,
+      I32EnumAttrCase<"global", 2>
+    ]>{
+  let genSpecializedAttr = 0;
+  let cppNamespace = "::gpu_runtime";
+}
+def GpuRuntime_FenceFlagsAttr : EnumAttr<GpuRuntime_Dialect, GpuRuntime_FenceFlags, "fenceFlags">;
 
 def CreateGpuStreamOp : GpuRuntime_Op<"create_gpu_stream", [NoSideEffect]> {
   let results = (outs GpuRuntime_OpaqueType : $result);
@@ -142,6 +154,14 @@ def GPUSuggestBlockSizeOp : GpuRuntime_Op<"suggest_block_size",
       /// The name of the kernel.
       ::mlir::StringAttr getKernelName();
   }];
+}
+
+def GPUBarrierOp : GpuRuntime_Op<"barrier"> {
+  let summary = "Synchronizes all work items of a workgroup.";
+
+  let arguments = (ins GpuRuntime_FenceFlagsAttr:$flags);
+
+  let assemblyFormat = "$flags attr-dict";
 }
 
 #endif // GPURUNTIME_OPS

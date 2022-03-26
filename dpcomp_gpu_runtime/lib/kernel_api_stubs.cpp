@@ -47,6 +47,10 @@ _mlir_ciface_get_local_size(int64_t) {
   STUB();
 }
 
+extern "C" DPCOMP_GPU_RUNTIME_EXPORT void _mlir_ciface_kernel_barrier(int64_t) {
+  STUB();
+}
+
 #define ATOMIC_FUNC_DECL(op, suff, dt)                                         \
   extern "C" DPCOMP_GPU_RUNTIME_EXPORT dt _mlir_ciface_atomic_##op##_##suff(   \
       void *, dt) {                                                            \
