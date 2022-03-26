@@ -47,4 +47,7 @@ public:
   static OpaqueType get(mlir::MLIRContext *context);
 };
 
+mlir::StringRef getAllocSharedAttrName();
+mlir::StringRef getGpuAccessibleAttrName();
+
 } // namespace gpu_runtime

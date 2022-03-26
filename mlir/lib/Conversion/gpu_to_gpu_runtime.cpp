@@ -42,11 +42,7 @@
 
 #include <llvm/ADT/SmallBitVector.h>
 
-static constexpr llvm::StringLiteral kGpuAllocShared("gpu.alloc_shared");
-static constexpr llvm::StringLiteral kGpuArgAttr("plier.gpu_accessible");
-
 namespace {
-
 struct ParallelLoopGPUMappingPass
     : public mlir::PassWrapper<ParallelLoopGPUMappingPass,
                                mlir::OperationPass<mlir::FuncOp>> {
@@ -177,8 +173,8 @@ struct InsertGPUAllocs
     };
 
     auto gpuAccessibleArg = [&]() -> llvm::SmallVector<bool> {
-      auto gpuAttr =
-          func->getAttr(kGpuArgAttr).dyn_cast_or_null<mlir::ArrayAttr>();
+      auto gpuAttr = func->getAttr(gpu_runtime::getGpuAccessibleAttrName())
+                         .dyn_cast_or_null<mlir::ArrayAttr>();
       if (!gpuAttr)
         return {};
 
@@ -318,7 +314,8 @@ struct InsertGPUAllocs
       alloc->replaceAllUsesWith(gpuAlloc);
       alloc.erase();
       if (access.hostRead || access.hostWrite)
-        gpuAlloc->setAttr(kGpuAllocShared, builder.getUnitAttr());
+        gpuAlloc->setAttr(gpu_runtime::getAllocSharedAttrName(),
+                          builder.getUnitAttr());
     }
 
     auto term = block.getTerminator();
@@ -352,7 +349,8 @@ struct InsertGPUAllocs
       auto allocResult = gpuAlloc.getResult(0);
 
       if (access.hostRead || access.hostWrite)
-        gpuAlloc->setAttr(kGpuAllocShared, builder.getUnitAttr());
+        gpuAlloc->setAttr(gpu_runtime::getAllocSharedAttrName(),
+                          builder.getUnitAttr());
 
       if (access.hostWrite && access.deviceRead) {
         auto copy =
@@ -1093,7 +1091,9 @@ struct ExpandAllocOp : public mlir::OpRewritePattern<mlir::gpu::AllocOp> {
     if (!stream)
       return mlir::failure();
 
-    auto shared = op->hasAttr(kGpuAllocShared);
+    auto sharedAttrName =
+        rewriter.getStringAttr(gpu_runtime::getAllocSharedAttrName());
+    auto shared = op->hasAttr(sharedAttrName);
 
     mlir::Type token = op.asyncToken() ? op.asyncToken().getType() : nullptr;
     auto res = rewriter.replaceOpWithNewOp<gpu_runtime::GPUAllocOp>(
@@ -1101,7 +1101,7 @@ struct ExpandAllocOp : public mlir::OpRewritePattern<mlir::gpu::AllocOp> {
         op.dynamicSizes(), op.symbolOperands());
 
     if (shared)
-      res->setAttr(kGpuAllocShared, rewriter.getUnitAttr());
+      res->setAttr(sharedAttrName, rewriter.getUnitAttr());
 
     return mlir::success();
   }

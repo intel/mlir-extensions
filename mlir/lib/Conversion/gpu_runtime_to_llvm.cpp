@@ -27,8 +27,6 @@
 #include <mlir/Dialect/GPU/Passes.h>
 #include <mlir/Dialect/LLVMIR/LLVMDialect.h>
 
-static const char *kGpuAllocShared = "gpu.alloc_shared";
-
 namespace {
 struct LowerTakeContext
     : public mlir::ConvertOpToLLVMPattern<plier::TakeContextOp> {
@@ -601,7 +599,7 @@ private:
     auto alignmentVar =
         rewriter.create<mlir::LLVM::ConstantOp>(loc, llvmIndexType, alignment);
 
-    bool shared = op->hasAttr(kGpuAllocShared);
+    bool shared = op->hasAttr(gpu_runtime::getAllocSharedAttrName());
     auto sharedVar = rewriter.create<mlir::LLVM::ConstantOp>(
         loc, llvmInt32Type,
         rewriter.getI32IntegerAttr(static_cast<int>(shared)));

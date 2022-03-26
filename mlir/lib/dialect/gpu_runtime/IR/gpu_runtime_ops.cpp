@@ -208,6 +208,10 @@ mlir::StringAttr GPUSuggestBlockSizeOp::getKernelName() {
   return kernelRef()->getLeafReference();
 }
 
+mlir::StringRef getAllocSharedAttrName() { return "gpu.alloc_shared"; }
+
+mlir::StringRef getGpuAccessibleAttrName() { return "gpu.gpu_accessible"; }
+
 } // namespace gpu_runtime
 
 #include "mlir-extensions/dialect/gpu_runtime/IR/GpuRuntimeOpsDialect.cpp.inc"

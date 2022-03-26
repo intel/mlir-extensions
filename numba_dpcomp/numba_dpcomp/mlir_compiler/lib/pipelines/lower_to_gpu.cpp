@@ -701,8 +701,6 @@ struct GenerateOutlineContextPass
   }
 };
 
-static constexpr llvm::StringLiteral kGpuArgAttr("plier.gpu_accessible");
-
 void rerun_std_pipeline(mlir::Operation *op) {
   assert(nullptr != op);
   auto marker =
@@ -802,7 +800,7 @@ void MarkGpuArraysInputs::runOnOperation() {
   auto funcType = func.getType();
 
   mlir::OpBuilder builder(&getContext());
-  auto attrStr = builder.getStringAttr(kGpuArgAttr);
+  auto attrStr = builder.getStringAttr(gpu_runtime::getGpuAccessibleAttrName());
   if (func->hasAttr(attrStr)) {
     markAllAnalysesPreserved();
     return;
