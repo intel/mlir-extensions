@@ -320,3 +320,21 @@ def _barrier_impl(builder, flags=None):
 @infer_global(barrier)
 class _BarrierId(ConcreteTemplate):
     cases = [signature(types.void, types.int64), signature(types.void)]
+
+
+def mem_fence(flags=None):
+    _stub_error()
+
+
+@registry.register_func("mem_fence", mem_fence)
+def _memf_fence_impl(builder, flags=None):
+    if flags is None:
+        flags = CLK_GLOBAL_MEM_FENCE
+
+    res = 0  # TODO: remove
+    return builder.external_call("kernel_mem_fence", inputs=flags, outputs=res)
+
+
+@infer_global(mem_fence)
+class _MemFenceId(ConcreteTemplate):
+    cases = [signature(types.void, types.int64), signature(types.void)]

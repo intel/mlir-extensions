@@ -164,5 +164,13 @@ def GPUBarrierOp : GpuRuntime_Op<"barrier"> {
   let assemblyFormat = "$flags attr-dict";
 }
 
+def GPUMemFenceOp : GpuRuntime_Op<"mem_fence"> {
+  let summary = "Orders loads and stores of a work-item executing a kernel.";
+
+  let arguments = (ins GpuRuntime_FenceFlagsAttr:$flags);
+
+  let assemblyFormat = "$flags attr-dict";
+}
+
 #endif // GPURUNTIME_OPS
 

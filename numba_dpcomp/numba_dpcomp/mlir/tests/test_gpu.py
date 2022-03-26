@@ -29,6 +29,7 @@ from numba_dpcomp.mlir.kernel_impl import (
     kernel_func,
     DEFAULT_LOCAL_SIZE,
     barrier,
+    mem_fence,
     CLK_LOCAL_MEM_FENCE,
     CLK_GLOBAL_MEM_FENCE,
 )
@@ -683,6 +684,38 @@ def test_input_load_cse():
             )
             == 1
         ), ir
+
+    assert_equal(gpu_res, sim_res)
+
+
+@require_gpu
+@pytest.mark.parametrize("op", [barrier, mem_fence])
+@pytest.mark.parametrize("flags", [CLK_LOCAL_MEM_FENCE, CLK_GLOBAL_MEM_FENCE])
+@pytest.mark.parametrize("global_size", [1, 2, 27])
+@pytest.mark.parametrize("local_size", [1, 2, 7])
+def test_barrier_ops(op, flags, global_size, local_size):
+    atomic_add = atomic.add
+
+    def func(a, b):
+        i = get_global_id(0)
+        v = a[i]
+        op(flags)
+        b[i] = a[i]
+
+    sim_func = kernel_sim(func)
+    gpu_func = kernel_cached(func)
+
+    a = np.arange(global_size, dtype=np.int64)
+
+    sim_res = np.zeros(global_size, a.dtype)
+    sim_func[global_size, local_size](a, sim_res)
+
+    gpu_res = np.zeros(global_size, a.dtype)
+
+    with print_pass_ir([], ["ConvertParallelLoopToGpu"]):
+        gpu_func[global_size, local_size](a, gpu_res)
+        ir = get_print_buffer()
+        assert ir.count("gpu.launch blocks") == 1, ir
 
     assert_equal(gpu_res, sim_res)
 

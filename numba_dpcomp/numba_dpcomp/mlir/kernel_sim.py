@@ -34,6 +34,7 @@ from .kernel_impl import (
     atomic_add,
     atomic_sub,
     barrier,
+    mem_fence,
 )
 
 _ExecutionState = namedtuple(
@@ -82,13 +83,11 @@ class atomic_proxy:
 
 
 def barrier_proxy(flags):
-    global _greenlet_found
-    assert _greenlet_found, "greenlet package not installed"
     state = get_exec_state()
-    assert len(state.tasks) > 0
     wg_size = state.wg_size[0]
     assert wg_size > 0
     if wg_size > 1:
+        assert len(state.tasks) > 0
         indices = copy.deepcopy(state.indices)
         next_task = state.current_task[0] + 1
         if next_task >= wg_size:
@@ -96,6 +95,10 @@ def barrier_proxy(flags):
         state.current_task[0] = next_task
         state.tasks[next_task].switch()
         state.indices[:] = indices
+
+
+def mem_fence_proxy(flags):
+    pass  # Nothing
 
 
 def _setup_execution_state(global_size, local_size):
@@ -129,6 +132,7 @@ _globals_to_replace = [
     ("atomic_add", atomic_add, atomic_proxy.add),
     ("atomic_sub", atomic_sub, atomic_proxy.sub),
     ("barrier", barrier, barrier_proxy),
+    ("mem_fence", mem_fence, mem_fence_proxy),
 ]
 
 
@@ -179,6 +183,11 @@ def _capture_func(func, indices, args):
 _barrier_ops = ["barrier"]
 
 
+def _have_barrier_ops(func):
+    g = func.__globals__
+    return any(n in g for n in _barrier_ops)
+
+
 def _execute_kernel(global_size, local_size, func, *args):
     if len(local_size) == 0:
         local_size = (1,) * len(global_size)
@@ -188,7 +197,7 @@ def _execute_kernel(global_size, local_size, func, *args):
     state = _setup_execution_state(global_size, local_size)
     try:
         groups = tuple((g + l - 1) // l for g, l in zip(global_size, local_size))
-        need_barrier = any(n in func.__globals__ for n in _barrier_ops)
+        need_barrier = max(local_size) > 1 and _have_barrier_ops(func)
         for gid in product(*(range(g) for g in groups)):
             offset = tuple(g * l for g, l in zip(gid, local_size))
             size = tuple(
@@ -202,7 +211,7 @@ def _execute_kernel(global_size, local_size, func, *args):
 
             if need_barrier:
                 global _greenlet_found
-                assert _greenlet_found
+                assert _greenlet_found, "greenlet package not installed"
                 tasks = state.tasks
                 assert len(tasks) == 0
                 for indices in product(*indices_range):
