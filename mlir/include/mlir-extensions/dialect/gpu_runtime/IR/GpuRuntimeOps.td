@@ -50,7 +50,17 @@ def GpuRuntime_FenceFlags : I32EnumAttr<"FenceFlags",
   let genSpecializedAttr = 0;
   let cppNamespace = "::gpu_runtime";
 }
-def GpuRuntime_FenceFlagsAttr : EnumAttr<GpuRuntime_Dialect, GpuRuntime_FenceFlags, "fenceFlags">;
+def GpuRuntime_FenceFlagsAttr : EnumAttr<GpuRuntime_Dialect, GpuRuntime_FenceFlags, "fence_flags">;
+
+def GpuRuntime_StorageClass : I32EnumAttr<"StorageClass",
+    "Kernel barrier and fence flags",
+    [
+      I32EnumAttrCase<"local", 1>,
+    ]>{
+  let genSpecializedAttr = 0;
+  let cppNamespace = "::gpu_runtime";
+}
+def GpuRuntime_StorageClassAttr : EnumAttr<GpuRuntime_Dialect, GpuRuntime_StorageClass, "storage_class">;
 
 def CreateGpuStreamOp : GpuRuntime_Op<"create_gpu_stream", [NoSideEffect]> {
   let results = (outs GpuRuntime_OpaqueType : $result);
