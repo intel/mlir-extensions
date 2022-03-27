@@ -1235,6 +1235,53 @@ struct SignCastReinterpretPropagate
   }
 };
 
+struct SignCastLoadPropagate
+    : public mlir::OpRewritePattern<mlir::memref::LoadOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::LoadOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto signCast = op.memref().getDefiningOp<plier::SignCastOp>();
+    if (!signCast)
+      return mlir::failure();
+
+    auto loc = op.getLoc();
+    auto src = signCast.value();
+    auto newOp =
+        rewriter.createOrFold<mlir::memref::LoadOp>(loc, src, op.indices());
+
+    if (newOp.getType() != op.getType())
+      newOp = rewriter.create<plier::SignCastOp>(loc, op.getType(), newOp);
+
+    rewriter.replaceOp(op, newOp);
+    return mlir::success();
+  }
+};
+
+struct SignCastStorePropagate
+    : public mlir::OpRewritePattern<mlir::memref::StoreOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::StoreOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto signCast = op.memref().getDefiningOp<plier::SignCastOp>();
+    if (!signCast)
+      return mlir::failure();
+
+    auto src = signCast.value();
+    auto srcElemType = src.getType().cast<mlir::MemRefType>().getElementType();
+    auto val = op.value();
+    if (val.getType() != srcElemType)
+      val = rewriter.create<plier::SignCastOp>(op.getLoc(), srcElemType, val);
+
+    rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(op, val, src,
+                                                       op.indices());
+    return mlir::success();
+  }
+};
+
 template <typename Op>
 struct SignCastAllocPropagate
     : public mlir::OpRewritePattern<plier::SignCastOp> {
@@ -1457,8 +1504,8 @@ void SignCastOp::getCanonicalizationPatterns(::mlir::RewritePatternSet &results,
       SignCastCastPropagate<mlir::tensor::CastOp>,
       SignCastCastPropagate<mlir::memref::CastOp>,
       SignCastCastPropagate<plier::ChangeLayoutOp>,
-      SignCastReinterpretPropagate,
-      SignCastAllocPropagate<mlir::memref::AllocOp>,
+      SignCastReinterpretPropagate, SignCastLoadPropagate,
+      SignCastStorePropagate, SignCastAllocPropagate<mlir::memref::AllocOp>,
       SignCastAllocPropagate<mlir::memref::AllocaOp>,
       SignCastTensorFromElementsPropagate, SignCastTensorCollapseShapePropagate,
       SignCastBuferizationPropagate<mlir::bufferization::ToMemrefOp>,
