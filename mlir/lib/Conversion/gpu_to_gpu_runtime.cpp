@@ -212,10 +212,11 @@ struct InsertGPUAllocs
                     if (op->getDialect() == scfDialect ||
                         mlir::isa<mlir::ViewLikeOpInterface>(op))
                       continue;
-                    if (mlir::dyn_cast<mlir::memref::AllocOp>(op)) {
+                    if (mlir::isa<mlir::memref::AllocOp,
+                                  mlir::memref::GetGlobalOp>(op)) {
                       gpuBufferAllocs.insert({op, {}});
-                    } else if (mlir::dyn_cast<mlir::memref::GetGlobalOp>(op)) {
-                      gpuBufferAllocs.insert({op, {}});
+                    } else if (mlir::isa<mlir::func::CallOp>(op)) {
+                      // Ignore
                     } else {
                       op->emitError("Unhandled memref producer");
                       return mlir::WalkResult::interrupt();
