@@ -971,6 +971,25 @@ public:
   }
 };
 
+class ConvertUndef : public mlir::OpConversionPattern<plier::UndefOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::UndefOp op, plier::UndefOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto converter = getTypeConverter();
+    assert(converter);
+
+    auto resType = converter->convertType(op.getType());
+    if (!resType)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::spirv::UndefOp>(op, resType);
+    return mlir::success();
+  }
+};
+
 struct GPUToSpirvPass
     : public mlir::PassWrapper<GPUToSpirvPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
@@ -1025,7 +1044,8 @@ struct GPUToSpirvPass
         .insert<ConvertSubviewOp, ConvertCastOp<mlir::memref::CastOp>,
                 ConvertCastOp<mlir::memref::ReinterpretCastOp>, ConvertLoadOp,
                 ConvertStoreOp, ConvertAtomicOps, ConvertFunc, ConvertAssert,
-                ConvertBarrierOp, ConvertMemFenceOp>(typeConverter, context);
+                ConvertBarrierOp, ConvertMemFenceOp, ConvertUndef>(
+            typeConverter, context);
 
     if (failed(
             applyFullConversion(kernelModules, *target, std::move(patterns))))
