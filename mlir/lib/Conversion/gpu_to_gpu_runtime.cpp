@@ -943,6 +943,28 @@ public:
   }
 };
 
+static llvm::Optional<mlir::spirv::StorageClass>
+convertStorageClass(mlir::Attribute src) {
+  auto attr = src.dyn_cast_or_null<gpu_runtime::StorageClassAttr>();
+  if (!attr)
+    return llvm::None;
+
+  auto sc = attr.getValue();
+  if (sc == gpu_runtime::StorageClass::local)
+    return mlir::spirv::StorageClass::Workgroup;
+
+  return llvm::None;
+}
+
+static mlir::spirv::StorageClass
+convertStorageClass(mlir::Attribute src, mlir::spirv::StorageClass def) {
+  auto ret = convertStorageClass(src);
+  if (ret)
+    return *ret;
+
+  return def;
+}
+
 class ConvertGlobalOp
     : public mlir::OpConversionPattern<mlir::memref::GlobalOp> {
 public:
@@ -956,6 +978,10 @@ public:
     if (!memrefType.hasStaticShape())
       return mlir::failure();
 
+    auto storageClass = convertStorageClass(memrefType.getMemorySpace());
+    if (!storageClass)
+      return mlir::failure();
+
     auto converter = getTypeConverter();
     assert(converter);
 
@@ -965,9 +991,10 @@ public:
 
     auto elemCount = memrefType.getNumElements();
     auto newType = mlir::spirv::ArrayType::get(elemType, elemCount);
+    auto ptrType = mlir::spirv::PointerType::get(newType, *storageClass);
 
     rewriter.replaceOpWithNewOp<mlir::spirv::GlobalVariableOp>(
-        op, newType, adaptor.sym_name());
+        op, ptrType, adaptor.sym_name());
     return mlir::success();
   }
 };
@@ -981,14 +1008,35 @@ public:
   matchAndRewrite(mlir::memref::GetGlobalOp op,
                   mlir::memref::GetGlobalOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    auto converter = getTypeConverter();
-    assert(converter);
-    auto newType = converter->convertType(op.getType());
-    if (!newType)
+    auto memrefType = op.getType().dyn_cast<mlir::MemRefType>();
+    if (!memrefType)
       return mlir::failure();
 
-    rewriter.replaceOpWithNewOp<mlir::spirv::AddressOfOp>(op, newType,
-                                                          adaptor.name());
+    auto storageClass = convertStorageClass(memrefType.getMemorySpace());
+    if (!storageClass)
+      return mlir::failure();
+
+    auto converter = getTypeConverter();
+    assert(converter);
+    auto resType = converter->convertType(memrefType);
+    if (!resType)
+      return mlir::failure();
+
+    auto elemType = converter->convertType(memrefType.getElementType());
+    if (!elemType)
+      return mlir::failure();
+
+    auto elemCount = memrefType.getNumElements();
+    auto newType = mlir::spirv::ArrayType::get(elemType, elemCount);
+    auto ptrType = mlir::spirv::PointerType::get(newType, *storageClass);
+
+    auto loc = op->getLoc();
+    mlir::Value res =
+        rewriter.create<mlir::spirv::AddressOfOp>(loc, ptrType, adaptor.name());
+    if (res.getType() != resType)
+      res = rewriter.create<mlir::spirv::BitcastOp>(loc, resType, res);
+
+    rewriter.replaceOp(op, res);
     return mlir::success();
   }
 };
@@ -1075,12 +1123,18 @@ struct GPUToSpirvPass
     mlir::RewritePatternSet patterns(context);
 
     typeConverter.addConversion(
-        [](mlir::MemRefType type) -> llvm::Optional<mlir::Type> {
-          if (type.hasRank() && type.getElementType().isIntOrFloat())
-            return mlir::spirv::PointerType::get(
-                type.getElementType(),
-                mlir::spirv::StorageClass::CrossWorkgroup);
-          return mlir::Type(nullptr);
+        [&typeConverter](mlir::MemRefType type) -> llvm::Optional<mlir::Type> {
+          if (!type.hasRank() || !type.getElementType().isIntOrFloat())
+            return mlir::Type(nullptr);
+
+          auto elemType = typeConverter.convertType(type.getElementType());
+          if (!elemType)
+            return mlir::Type(nullptr);
+
+          auto sc = convertStorageClass(
+              type.getMemorySpace(), mlir::spirv::StorageClass::CrossWorkgroup);
+
+          return mlir::spirv::PointerType::get(elemType, sc);
         });
 
     mlir::ScfToSPIRVContext scfToSpirvCtx;
