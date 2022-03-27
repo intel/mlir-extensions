@@ -135,7 +135,6 @@ def _gen_tests():
         "test_namedtuple3",  # namedtuple
         "test_issue6102",  # list support
         "test_oversized_tuple_as_arg_to_kernel",  # UnsupportedParforsError not raised
-        "test_issue5942_2",  # invalid result
         "test_parfor_ufunc_typing",  # np.isinf
         "test_issue_5098",  # list support and more
         "test_ufunc_expr",  # np.bitwise_and(
