@@ -1197,9 +1197,92 @@ public:
   }
 };
 
+class ConvertArrayAllocOps : public mlir::OpRewritePattern<mlir::func::CallOp> {
+public:
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::func::CallOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto name = op.getCallee();
+    if (!name.startswith("local_array_"))
+      return mlir::failure();
+
+    if (op->getNumResults() != 1)
+      return mlir::failure();
+
+    auto mod = op->getParentOfType<mlir::gpu::GPUModuleOp>();
+    if (!mod)
+      return mlir::failure();
+
+    auto oldType = op->getResult(0).getType().dyn_cast<mlir::MemRefType>();
+    if (!oldType)
+      return mlir::failure();
+
+    auto operands = op.operands();
+    auto operandsCount = static_cast<unsigned>(operands.size());
+    if (operandsCount != static_cast<unsigned>(oldType.getRank()))
+      return mlir::failure();
+
+    llvm::SmallVector<int64_t> shape(operandsCount);
+    for (auto i : llvm::seq(0u, operandsCount)) {
+      auto val = mlir::getConstantIntValue(operands[i]);
+      if (!val)
+        return mlir::failure();
+
+      shape[i] = *val;
+    }
+
+    auto type = mlir::MemRefType::get(shape, oldType.getElementType());
+    auto storageClass = gpu_runtime::StorageClassAttr::get(
+        getContext(), gpu_runtime::StorageClass::local);
+    auto typeLocal = mlir::MemRefType::get(shape, type.getElementType(),
+                                           nullptr, storageClass);
+
+    auto global = [&]() -> mlir::StringRef {
+      auto *block = &mod.body().front();
+      llvm::SmallString<64> name;
+      for (unsigned i = 0;; ++i) {
+        if (i == 0) {
+          name = "__local_array";
+        } else {
+          name.clear();
+          (llvm::Twine("__local_array") + llvm::Twine(i)).toVector(name);
+        }
+        if (!mod.lookupSymbol(name))
+          break;
+      }
+      mlir::OpBuilder::InsertionGuard g(rewriter);
+      rewriter.setInsertionPointToStart(block);
+      auto loc = rewriter.getUnknownLoc();
+      auto global = rewriter.create<mlir::memref::GlobalOp>(
+          loc, name,
+          /*sym_visibility=*/rewriter.getStringAttr("private"),
+          /*type=*/typeLocal,
+          /*initial_value=*/nullptr,
+          /*constant=*/false,
+          /*alignment=*/nullptr);
+      return global.sym_name();
+    }();
+
+    auto loc = op->getLoc();
+    mlir::Value newArray =
+        rewriter.create<mlir::memref::GetGlobalOp>(loc, typeLocal, global);
+
+    newArray = rewriter.create<plier::SignCastOp>(loc, type, newArray);
+
+    if (type != oldType)
+      newArray = rewriter.create<mlir::memref::CastOp>(loc, oldType, newArray);
+
+    rewriter.replaceOp(op, newArray);
+    return mlir::success();
+  }
+};
+
 struct LowerGpuBuiltins2Pass
     : public plier::RewriteWrapperPass<LowerGpuBuiltins2Pass, void, void,
-                                       ConvertBarrierOps> {};
+                                       ConvertBarrierOps,
+                                       ConvertArrayAllocOps> {};
 
 class GpuLaunchSinkOpsPass
     : public mlir::PassWrapper<GpuLaunchSinkOpsPass,

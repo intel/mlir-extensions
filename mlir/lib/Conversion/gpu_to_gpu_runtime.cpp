@@ -212,10 +212,11 @@ struct InsertGPUAllocs
                     if (op->getDialect() == scfDialect ||
                         mlir::isa<mlir::ViewLikeOpInterface>(op))
                       continue;
-                    if (mlir::dyn_cast<mlir::memref::AllocOp>(op)) {
+                    if (mlir::isa<mlir::memref::AllocOp,
+                                  mlir::memref::GetGlobalOp>(op)) {
                       gpuBufferAllocs.insert({op, {}});
-                    } else if (mlir::dyn_cast<mlir::memref::GetGlobalOp>(op)) {
-                      gpuBufferAllocs.insert({op, {}});
+                    } else if (mlir::isa<mlir::func::CallOp>(op)) {
+                      // Ignore
                     } else {
                       op->emitError("Unhandled memref producer");
                       return mlir::WalkResult::interrupt();
@@ -942,6 +943,104 @@ public:
   }
 };
 
+static llvm::Optional<mlir::spirv::StorageClass>
+convertStorageClass(mlir::Attribute src) {
+  auto attr = src.dyn_cast_or_null<gpu_runtime::StorageClassAttr>();
+  if (!attr)
+    return llvm::None;
+
+  auto sc = attr.getValue();
+  if (sc == gpu_runtime::StorageClass::local)
+    return mlir::spirv::StorageClass::Workgroup;
+
+  return llvm::None;
+}
+
+static mlir::spirv::StorageClass
+convertStorageClass(mlir::Attribute src, mlir::spirv::StorageClass def) {
+  auto ret = convertStorageClass(src);
+  if (ret)
+    return *ret;
+
+  return def;
+}
+
+class ConvertGlobalOp
+    : public mlir::OpConversionPattern<mlir::memref::GlobalOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::GlobalOp op,
+                  mlir::memref::GlobalOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto memrefType = op.type();
+    if (!memrefType.hasStaticShape())
+      return mlir::failure();
+
+    auto storageClass = convertStorageClass(memrefType.getMemorySpace());
+    if (!storageClass)
+      return mlir::failure();
+
+    auto converter = getTypeConverter();
+    assert(converter);
+
+    auto elemType = converter->convertType(memrefType.getElementType());
+    if (!elemType)
+      return mlir::failure();
+
+    auto elemCount = memrefType.getNumElements();
+    auto newType = mlir::spirv::ArrayType::get(elemType, elemCount);
+    auto ptrType = mlir::spirv::PointerType::get(newType, *storageClass);
+
+    rewriter.replaceOpWithNewOp<mlir::spirv::GlobalVariableOp>(
+        op, ptrType, adaptor.sym_name());
+    return mlir::success();
+  }
+};
+
+class ConvertGetGlobalOp
+    : public mlir::OpConversionPattern<mlir::memref::GetGlobalOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::GetGlobalOp op,
+                  mlir::memref::GetGlobalOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto memrefType = op.getType().dyn_cast<mlir::MemRefType>();
+    if (!memrefType)
+      return mlir::failure();
+
+    auto storageClass = convertStorageClass(memrefType.getMemorySpace());
+    if (!storageClass)
+      return mlir::failure();
+
+    auto converter = getTypeConverter();
+    assert(converter);
+    auto resType = converter->convertType(memrefType);
+    if (!resType)
+      return mlir::failure();
+
+    auto elemType = converter->convertType(memrefType.getElementType());
+    if (!elemType)
+      return mlir::failure();
+
+    auto elemCount = memrefType.getNumElements();
+    auto newType = mlir::spirv::ArrayType::get(elemType, elemCount);
+    auto ptrType = mlir::spirv::PointerType::get(newType, *storageClass);
+
+    auto loc = op->getLoc();
+    mlir::Value res =
+        rewriter.create<mlir::spirv::AddressOfOp>(loc, ptrType, adaptor.name());
+    if (res.getType() != resType)
+      res = rewriter.create<mlir::spirv::BitcastOp>(loc, resType, res);
+
+    rewriter.replaceOp(op, res);
+    return mlir::success();
+  }
+};
+
 // TODO: something better
 class ConvertFunc : public mlir::OpConversionPattern<mlir::FuncOp> {
 public:
@@ -1024,12 +1123,18 @@ struct GPUToSpirvPass
     mlir::RewritePatternSet patterns(context);
 
     typeConverter.addConversion(
-        [](mlir::MemRefType type) -> llvm::Optional<mlir::Type> {
-          if (type.hasRank() && type.getElementType().isIntOrFloat())
-            return mlir::spirv::PointerType::get(
-                type.getElementType(),
-                mlir::spirv::StorageClass::CrossWorkgroup);
-          return mlir::Type(nullptr);
+        [&typeConverter](mlir::MemRefType type) -> llvm::Optional<mlir::Type> {
+          if (!type.hasRank() || !type.getElementType().isIntOrFloat())
+            return mlir::Type(nullptr);
+
+          auto elemType = typeConverter.convertType(type.getElementType());
+          if (!elemType)
+            return mlir::Type(nullptr);
+
+          auto sc = convertStorageClass(
+              type.getMemorySpace(), mlir::spirv::StorageClass::CrossWorkgroup);
+
+          return mlir::spirv::PointerType::get(elemType, sc);
         });
 
     mlir::ScfToSPIRVContext scfToSpirvCtx;
@@ -1044,8 +1149,8 @@ struct GPUToSpirvPass
         .insert<ConvertSubviewOp, ConvertCastOp<mlir::memref::CastOp>,
                 ConvertCastOp<mlir::memref::ReinterpretCastOp>, ConvertLoadOp,
                 ConvertStoreOp, ConvertAtomicOps, ConvertFunc, ConvertAssert,
-                ConvertBarrierOp, ConvertMemFenceOp, ConvertUndef>(
-            typeConverter, context);
+                ConvertBarrierOp, ConvertMemFenceOp, ConvertUndef,
+                ConvertGlobalOp, ConvertGetGlobalOp>(typeConverter, context);
 
     if (failed(
             applyFullConversion(kernelModules, *target, std::move(patterns))))

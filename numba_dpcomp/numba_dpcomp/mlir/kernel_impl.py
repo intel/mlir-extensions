@@ -16,6 +16,8 @@ import sys
 
 from numba import prange
 from numba.core import types
+from numba.core.typing.npydecl import parse_dtype, parse_shape
+from numba.core.types.npytypes import Array
 from numba.core.typing.templates import (
     AbstractTemplate,
     ConcreteTemplate,
@@ -338,3 +340,40 @@ def _memf_fence_impl(builder, flags=None):
 @infer_global(mem_fence)
 class _MemFenceId(ConcreteTemplate):
     cases = [signature(types.void, types.int64), signature(types.void)]
+
+
+class local(Stub):
+    pass
+
+
+def local_array(shape, dtype):
+    _stub_error()
+
+
+setattr(local, "array", local_array)
+
+
+@infer_global(local_array)
+class _LocalId(AbstractTemplate):
+    def generic(self, args, kws):
+        shape = kws["shape"] if "shape" in kws else args[0]
+        dtype = kws["dtype"] if "dtype" in kws else args[1]
+
+        ndim = parse_shape(shape)
+        dtype = parse_dtype(dtype)
+        arr_type = Array(dtype=dtype, ndim=ndim, layout="C")
+        return signature(arr_type, shape, dtype)
+
+
+@registry.register_func("local_array", local_array)
+def _local_array_impl(builder, shape, dtype):
+    try:
+        len(shape)  # will raise if not available
+    except:
+        shape = (shape,)
+
+    func_name = f"local_array_{dtype_str(builder, dtype)}_{len(shape)}"
+    res = builder.init_tensor(shape, dtype)
+    return builder.external_call(
+        func_name, inputs=shape, outputs=res, return_tensor=True
+    )

@@ -32,6 +32,7 @@ from numba_dpcomp.mlir.kernel_impl import (
     mem_fence,
     CLK_LOCAL_MEM_FENCE,
     CLK_GLOBAL_MEM_FENCE,
+    local,
 )
 from numba_dpcomp.mlir.kernel_sim import kernel as kernel_sim
 from numba_dpcomp.mlir.passes import (
@@ -750,6 +751,39 @@ def test_barrier1(global_size, local_size):
         assert ir.count("gpu.launch blocks") == 1, ir
 
     assert_equal(gpu_res, sim_res)
+
+
+@require_gpu
+@pytest.mark.parametrize("blocksize", [1, 10, 64])
+def test_local_memory(blocksize):
+    local_array = local.array
+
+    def func(A):
+        lm = local_array(shape=blocksize, dtype=np.float32)
+        i = get_global_id(0)
+
+        # preload
+        lm[i] = A[i]
+        # barrier local or global will both work as we only have one work group
+        barrier(CLK_LOCAL_MEM_FENCE)  # local mem fence
+        # write
+        A[i] += lm[blocksize - 1 - i]
+
+    sim_func = kernel_sim(func)
+    gpu_func = kernel_cached(func)
+
+    arr = np.arange(blocksize).astype(np.float32)
+
+    sim_res = arr.copy()
+    sim_func[blocksize, blocksize](sim_res)
+
+    with print_pass_ir([], ["ConvertParallelLoopToGpu"]):
+        gpu_res = arr.copy()
+        gpu_func[blocksize, blocksize](gpu_res)
+        ir = get_print_buffer()
+        assert ir.count("gpu.launch blocks") == 1, ir
+
+    assert_allclose(sim_res, gpu_res)
 
 
 @require_dpctl

@@ -1184,7 +1184,7 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
 
 static py::object externalCallImpl(py::capsule context, py::str funcName,
                                    py::handle inputs, py::handle outputs,
-                                   py::bool_ decorate) {
+                                   py::bool_ decorate, py::bool_ returnTensor) {
   auto &ctx = getPyContext(context);
   auto &builder = ctx.builder;
   auto loc = ctx.loc;
@@ -1199,7 +1199,8 @@ static py::object externalCallImpl(py::capsule context, py::str funcName,
   llvm::SmallVector<mlir::Type, 1> retTypes;
   for (auto val : outputVals) {
     auto type = val.getType();
-    if (auto shapedType = type.dyn_cast<mlir::ShapedType>()) {
+    auto shapedType = type.dyn_cast<mlir::ShapedType>();
+    if (!returnTensor && shapedType) {
       if (!shapedType.isa<mlir::MemRefType>()) {
         auto memrefType = mlir::MemRefType::get(shapedType.getShape(),
                                                 shapedType.getElementType());
@@ -1247,7 +1248,7 @@ static py::object externalCallImpl(py::capsule context, py::str funcName,
            llvm::makeArrayRef(inputVals).take_back(outputVals.size()))) {
     auto val = it.value();
     auto i = it.index();
-    if (outputVals[i].getType().isa<mlir::ShapedType>()) {
+    if (!returnTensor && outputVals[i].getType().isa<mlir::ShapedType>()) {
       if (val.getType().isa<mlir::MemRefType>())
         val = builder.create<mlir::bufferization::ToTensorOp>(loc, val);
 
