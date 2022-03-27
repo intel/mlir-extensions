@@ -42,7 +42,16 @@ from .kernel_impl import (
 
 _ExecutionState = namedtuple(
     "_ExecutionState",
-    ["global_size", "local_size", "indices", "wg_size", "tasks", "current_task"],
+    [
+        "global_size",
+        "local_size",
+        "indices",
+        "wg_size",
+        "tasks",
+        "current_task",
+        "local_arrays",
+        "current_local_array",
+    ],
 )
 
 _execution_state = None
@@ -85,19 +94,38 @@ class atomic_proxy:
         return new_val
 
 
+def _save_local_state(state):
+    indices = copy.deepcopy(state.indices)
+    current_local_array = state.current_local_array[0]
+    state.current_local_array[0] = 0
+    return (indices, current_local_array)
+
+
+def _restore_local_state(state, saved_state):
+    state.indices[:] = saved_state[0]
+    state.current_local_array[0] = saved_state[1]
+
+
+def _reset_local_state(state, wg_size):
+    state.wg_size[0] = wg_size
+    state.current_task[0] = 0
+    state.local_arrays.clear()
+    state.current_local_array[0] = 0
+
+
 def barrier_proxy(flags):
     state = get_exec_state()
     wg_size = state.wg_size[0]
     assert wg_size > 0
     if wg_size > 1:
         assert len(state.tasks) > 0
-        indices = copy.deepcopy(state.indices)
+        saved_state = _save_local_state(state)
         next_task = state.current_task[0] + 1
         if next_task >= wg_size:
             next_task = 0
         state.current_task[0] = next_task
         state.tasks[next_task].switch()
-        state.indices[:] = indices
+        _restore_local_state(state, saved_state)
 
 
 def mem_fence_proxy(flags):
@@ -107,7 +135,14 @@ def mem_fence_proxy(flags):
 class local_proxy:
     @staticmethod
     def array(shape, dtype):
-        arr = np.zeros(shape, dtype)
+        state = get_exec_state()
+        current = state.current_local_array[0]
+        if state.current_task[0] == 0:
+            arr = np.zeros(shape, dtype)
+            state.local_arrays.append(arr)
+        else:
+            arr = state.local_arrays[current]
+        state.current_local_array[0] = current + 1
         return arr
 
 
@@ -124,6 +159,8 @@ def _setup_execution_state(global_size, local_size):
         wg_size=[None],
         tasks=[],
         current_task=[None],
+        local_arrays=[],
+        current_local_array=[0],
     )
     return _execution_state
 
@@ -216,8 +253,7 @@ def _execute_kernel(global_size, local_size, func, *args):
                 min(g - o, l) for o, g, l in zip(offset, global_size, local_size)
             )
             count = reduce(lambda a, b: a * b, size)
-            state.wg_size[0] = count
-            state.current_task[0] = 0
+            _reset_local_state(state, count)
 
             indices_range = (range(o, o + s) for o, s in zip(offset, size))
 
