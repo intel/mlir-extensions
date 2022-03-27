@@ -16,6 +16,7 @@ from collections import namedtuple
 from itertools import product
 from functools import reduce
 import copy
+import numpy as np
 
 try:
     from greenlet import greenlet
@@ -35,6 +36,8 @@ from .kernel_impl import (
     atomic_sub,
     barrier,
     mem_fence,
+    local,
+    local_array,
 )
 
 _ExecutionState = namedtuple(
@@ -101,6 +104,13 @@ def mem_fence_proxy(flags):
     pass  # Nothing
 
 
+class local_proxy:
+    @staticmethod
+    def array(shape, dtype):
+        arr = np.zeros(shape, dtype)
+        return arr
+
+
 def _setup_execution_state(global_size, local_size):
     import numba_dpcomp.mlir.kernel_impl
 
@@ -133,6 +143,8 @@ _globals_to_replace = [
     ("atomic_sub", atomic_sub, atomic_proxy.sub),
     ("barrier", barrier, barrier_proxy),
     ("mem_fence", mem_fence, mem_fence_proxy),
+    ("local", local, local_proxy),
+    ("local_array", local_array, local_proxy.array),
 ]
 
 
