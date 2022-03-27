@@ -2849,6 +2849,7 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::FuncOp>(mlir::createLinalgBufferizePass());
   pm.addNestedPass<mlir::FuncOp>(mlir::createTensorBufferizePass());
   pm.addPass(mlir::func::createFuncBufferizePass());
+  pm.addNestedPass<mlir::FuncOp>(mlir::createCanonicalizerPass());
   pm.addNestedPass<mlir::FuncOp>(
       mlir::bufferization::createFinalizingBufferizePass());
 
