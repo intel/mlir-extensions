@@ -73,3 +73,24 @@ ATOMIC_FUNC_DECL2(sub)
 
 #undef ATOMIC_FUNC_DECL2
 #undef ATOMIC_FUNC_DECL
+
+#define LOCAL_ARRAY_FUNC_DECL(type, cnt)                                       \
+  extern "C" DPCOMP_GPU_RUNTIME_EXPORT void                                    \
+      _mlir_ciface_local_array_##type##_##cnt() {                              \
+    STUB();                                                                    \
+  }
+
+#define LOCAL_ARRAY_FUNC_DECL2(cnt)                                            \
+  LOCAL_ARRAY_FUNC_DECL(int32, cnt)                                            \
+  LOCAL_ARRAY_FUNC_DECL(int64, cnt)                                            \
+  LOCAL_ARRAY_FUNC_DECL(float32, cnt)                                          \
+  LOCAL_ARRAY_FUNC_DECL(float64, cnt)
+
+LOCAL_ARRAY_FUNC_DECL2(1)
+LOCAL_ARRAY_FUNC_DECL2(2)
+LOCAL_ARRAY_FUNC_DECL2(3)
+LOCAL_ARRAY_FUNC_DECL2(4)
+LOCAL_ARRAY_FUNC_DECL2(5)
+
+#undef LOCAL_ARRAY_FUNC_DECL2
+#undef LOCAL_ARRAY_FUNC_DECL
