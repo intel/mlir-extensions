@@ -943,6 +943,56 @@ public:
   }
 };
 
+class ConvertGlobalOp
+    : public mlir::OpConversionPattern<mlir::memref::GlobalOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::GlobalOp op,
+                  mlir::memref::GlobalOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto memrefType = op.type();
+    if (!memrefType.hasStaticShape())
+      return mlir::failure();
+
+    auto converter = getTypeConverter();
+    assert(converter);
+
+    auto elemType = converter->convertType(memrefType.getElementType());
+    if (!elemType)
+      return mlir::failure();
+
+    auto elemCount = memrefType.getNumElements();
+    auto newType = mlir::spirv::ArrayType::get(elemType, elemCount);
+
+    rewriter.replaceOpWithNewOp<mlir::spirv::GlobalVariableOp>(
+        op, newType, adaptor.sym_name());
+    return mlir::success();
+  }
+};
+
+class ConvertGetGlobalOp
+    : public mlir::OpConversionPattern<mlir::memref::GetGlobalOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::GetGlobalOp op,
+                  mlir::memref::GetGlobalOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto converter = getTypeConverter();
+    assert(converter);
+    auto newType = converter->convertType(op.getType());
+    if (!newType)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::spirv::AddressOfOp>(op, newType,
+                                                          adaptor.name());
+    return mlir::success();
+  }
+};
+
 // TODO: something better
 class ConvertFunc : public mlir::OpConversionPattern<mlir::FuncOp> {
 public:
@@ -1045,8 +1095,8 @@ struct GPUToSpirvPass
         .insert<ConvertSubviewOp, ConvertCastOp<mlir::memref::CastOp>,
                 ConvertCastOp<mlir::memref::ReinterpretCastOp>, ConvertLoadOp,
                 ConvertStoreOp, ConvertAtomicOps, ConvertFunc, ConvertAssert,
-                ConvertBarrierOp, ConvertMemFenceOp, ConvertUndef>(
-            typeConverter, context);
+                ConvertBarrierOp, ConvertMemFenceOp, ConvertUndef,
+                ConvertGlobalOp, ConvertGetGlobalOp>(typeConverter, context);
 
     if (failed(
             applyFullConversion(kernelModules, *target, std::move(patterns))))
