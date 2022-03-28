@@ -107,10 +107,8 @@ def _gen_tests():
         "test_parfor_array_access4",  # np.dot unsupported args
         "test_tuple_concat_with_reverse_slice",  # enumerate
         "test_reduce",  # functools.reduce
-        "test_two_d_array_reduction",  # 'memref<?x?xi64>' and result type 'memref<?x?xi32>' are cast incompatible
         "test_tuple_concat",  # enumerate
         "test_two_d_array_reduction_with_float_sizes",  # np.array
-        "test_two_d_array_reduction_reuse",  # 'memref<?x?xi64>' and result type 'memref<?x?xi32>' are cast incompatible
         "test_parfor_array_access_lower_slice",  # plier.getitem
         "test_size_assertion",  # AssertionError not raised
         "test_parfor_slice18",  # cast types mismatch

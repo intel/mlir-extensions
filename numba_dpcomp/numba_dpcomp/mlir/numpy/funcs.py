@@ -396,6 +396,16 @@ def ones_like_impl(builder, arr):
     return _init_impl(builder, arr.shape, arr.dtype, 1)
 
 
+_is_np_long64 = numpy.int_ == numpy.int64
+
+
+def _get_numpy_long(builder):
+    if _is_np_long64:
+        return builder.int64
+    else:
+        return builder.int32
+
+
 @register_func("numpy.arange", numpy.arange)
 def arange_impl(builder, start, stop=None, step=None, dtype=None):
     if stop is None:
@@ -406,7 +416,7 @@ def arange_impl(builder, start, stop=None, step=None, dtype=None):
         step = 1
 
     if dtype is None:
-        dtype = builder.int64
+        dtype = _get_numpy_long(builder)
 
     inc = builder.select(step < 0, 1, -1)
     count = (stop - start + step + inc) // step

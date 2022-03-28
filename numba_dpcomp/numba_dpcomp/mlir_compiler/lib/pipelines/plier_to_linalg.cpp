@@ -1616,6 +1616,67 @@ struct LowerTupleCasts : public mlir::OpConversionPattern<plier::CastOp> {
   }
 };
 
+static mlir::Value convertTensorElements(mlir::OpBuilder &builder,
+                                         mlir::Location loc, mlir::Value src,
+                                         mlir::ShapedType dstType,
+                                         mlir::Type origSrcElemType,
+                                         mlir::Type origDstElemType) {
+  assert(src.getType().isa<mlir::ShapedType>());
+  auto srcType = src.getType().cast<mlir::ShapedType>();
+  assert(srcType.getRank() == dstType.getRank());
+  if (srcType.getElementType() == dstType.getElementType())
+    return src;
+
+  if (srcType.isa<mlir::MemRefType>())
+    src = builder.create<mlir::bufferization::ToTensorOp>(loc, src);
+
+  auto rank = static_cast<unsigned>(srcType.getRank());
+  llvm::SmallVector<mlir::Value> shape(rank);
+  for (auto i : llvm::seq(0u, rank))
+    shape[i] = builder.create<mlir::tensor::DimOp>(loc, src, i);
+
+  mlir::Value init = builder.create<mlir::linalg::InitTensorOp>(
+      loc, shape, dstType.getElementType());
+
+  auto affineMap =
+      mlir::AffineMap::getMultiDimIdentityMap(rank, builder.getContext());
+  const mlir::AffineMap maps[] = {
+      affineMap,
+      affineMap,
+  };
+
+  llvm::SmallVector<mlir::StringRef> iterators(rank, "parallel");
+
+  auto bodyBuilder = [&](mlir::OpBuilder &b, mlir::Location l,
+                         mlir::ValueRange args) {
+    assert(args.size() == 2);
+    auto doSignCast = [&](mlir::Value src, mlir::Type dstType) -> mlir::Value {
+      if (src.getType() != dstType)
+        return b.create<plier::SignCastOp>(l, dstType, src);
+
+      return src;
+    };
+    auto arg = doSignCast(args.front(), origSrcElemType);
+    arg = b.create<plier::CastOp>(l, origDstElemType, arg);
+    arg = doSignCast(arg, dstType.getElementType());
+    b.create<mlir::linalg::YieldOp>(l, arg);
+  };
+  mlir::Value res =
+      builder
+          .create<mlir::linalg::GenericOp>(loc, init.getType(), src, init, maps,
+                                           iterators, bodyBuilder)
+          .getResult(0);
+
+  if (dstType.isa<mlir::MemRefType>()) {
+    auto memrefType =
+        mlir::MemRefType::get(dstType.getShape(), dstType.getElementType());
+    res = builder.create<mlir::bufferization::ToMemrefOp>(loc, memrefType, res);
+  }
+
+  rerunScfPipeline(res.getDefiningOp());
+  return res;
+}
+
 struct LowerTensorCasts : public mlir::OpConversionPattern<plier::CastOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -1652,6 +1713,9 @@ struct LowerTensorCasts : public mlir::OpConversionPattern<plier::CastOp> {
     if (signlessSrcType != srcType)
       value =
           rewriter.createOrFold<plier::SignCastOp>(loc, signlessSrcType, value);
+
+    value = convertTensorElements(rewriter, loc, value, signlessDstType,
+                                  srcElem, dstElem);
 
     bool isSrcMemref = srcType.isa<mlir::MemRefType>();
     bool isDstMemref = dstType.isa<mlir::MemRefType>();
