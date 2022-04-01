@@ -1292,9 +1292,58 @@ public:
   }
 };
 
+template <mlir::gpu::AllReduceOperation ReduceType>
+static void genGroupOp(mlir::Operation *srcOp, mlir::PatternRewriter &rewriter,
+                       mlir::Value arg) {
+  auto ctx = srcOp->getContext();
+  auto reduceAttr = mlir::gpu::AllReduceOperationAttr::get(ctx, ReduceType);
+  rewriter.replaceOpWithNewOp<mlir::gpu::AllReduceOp>(srcOp, arg, reduceAttr);
+}
+
+class ConvertGroupOps : public mlir::OpRewritePattern<mlir::func::CallOp> {
+public:
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::func::CallOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto operands = op.operands();
+    if (operands.size() != 1)
+      return mlir::failure();
+
+    if (op.getNumResults() != 1)
+      return mlir::failure();
+
+    auto src = operands[0];
+    auto srcType = src.getType();
+
+    if (srcType != op.getResult(0).getType())
+      return mlir::failure();
+
+    auto funcName = op.getCallee();
+    if (!funcName.consume_front("group_"))
+      return mlir::failure();
+
+    using funcptr_t =
+        void (*)(mlir::Operation *, mlir::PatternRewriter &, mlir::Value);
+    const std::pair<llvm::StringRef, funcptr_t> handlers[] = {
+        {"reduce_add", &genGroupOp<mlir::gpu::AllReduceOperation::ADD>},
+    };
+
+    for (auto &h : handlers) {
+      if (funcName.startswith(h.first)) {
+        h.second(op, rewriter, src);
+        return mlir::success();
+      }
+    }
+
+    return mlir::failure();
+  }
+};
+
 struct LowerGpuBuiltins2Pass
     : public imex::RewriteWrapperPass<LowerGpuBuiltins2Pass, void, void,
-                                      ConvertBarrierOps> {};
+                                      ConvertBarrierOps, ConvertGroupOps> {};
 
 class ConvertArrayAllocOps : public mlir::OpRewritePattern<mlir::func::CallOp> {
 public:
