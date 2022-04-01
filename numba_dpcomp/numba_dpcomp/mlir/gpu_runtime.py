@@ -51,12 +51,17 @@ if IS_GPU_RUNTIME_AVAILABLE:
         from itertools import product
 
         _types = ["int32", "int64", "float32", "float64"]
+
         _atomic_ops = ["add", "sub"]
         for o, t in product(_atomic_ops, _types):
             _funcs.append(mlir_func_name(f"atomic_{o}_{t}"))
 
         for n, t in product(range(8), _types):
             _funcs.append(mlir_func_name(f"local_array_{t}_{n}"))
+
+        _group_ops = ["reduce_add"]
+        for o, t in product(_group_ops, _types):
+            _funcs.append(mlir_func_name(f"group_{o}_{t}"))
 
         for name in _funcs:
             if hasattr(runtime_lib, name):
