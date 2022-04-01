@@ -377,3 +377,32 @@ def _local_array_impl(builder, shape, dtype):
     return builder.external_call(
         func_name, inputs=shape, outputs=res, return_tensor=True
     )
+
+
+class group(Stub):
+    pass
+
+
+def group_reduce_add(shape, dtype):
+    _stub_error()
+
+
+setattr(group, "reduce_add", group_reduce_add)
+
+
+@infer_global(group_reduce_add)
+class _GroupId(AbstractTemplate):
+    def generic(self, args, kws):
+        assert not kws
+        assert len(args) == 1
+        elem_type = args[0]
+
+        return signature(elem_type, elem_type)
+
+
+@registry.register_func("group_reduce_add", group_reduce_add)
+def _group_add_impl(builder, value):
+    elem_type = value.type
+    func_name = f"group_reduce_add_{dtype_str(builder, elem_type)}"
+    res = builder.cast(0, elem_type)
+    return builder.external_call(func_name, inputs=value, outputs=res)
