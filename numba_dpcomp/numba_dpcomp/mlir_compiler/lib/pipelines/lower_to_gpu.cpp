@@ -1597,6 +1597,7 @@ static mlir::spirv::TargetEnvAttr deviceCapsMapper(mlir::gpu::GPUModuleOp op) {
       spirv::Capability::AtomicFloat32AddEXT,
       spirv::Capability::ExpectAssumeKHR,
       spirv::Capability::GenericPointer,
+      spirv::Capability::GroupNonUniformArithmetic,
       spirv::Capability::Groups,
       spirv::Capability::Int16,
       spirv::Capability::Int64,
