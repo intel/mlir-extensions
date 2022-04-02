@@ -1075,7 +1075,8 @@ static void genReduceOp(mlir::Operation *srcOp, mlir::PatternRewriter &rewriter,
   auto scope = mlir::spirv::ScopeAttr::get(ctx, mlir::spirv::Scope::Workgroup);
   auto groupOp = mlir::spirv::GroupOperationAttr::get(
       ctx, mlir::spirv::GroupOperation::Reduce);
-  rewriter.replaceOpWithNewOp<SpirvOp>(srcOp, type, scope, groupOp, arg);
+  rewriter.replaceOpWithNewOp<SpirvOp>(srcOp, type, scope, groupOp, arg,
+                                       mlir::Value{});
 }
 
 class ConvertAllReduceOp
