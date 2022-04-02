@@ -478,34 +478,55 @@ private:
                                                    size, 0);
     });
 
-    auto getKernelParam = [&](unsigned i) -> mlir::Value {
-      if (op.operands()[i].getType().isa<mlir::MemRefType>()) {
+    mlir::Value one = rewriter.create<mlir::LLVM::ConstantOp>(
+        loc, llvmInt32Type, rewriter.getI32IntegerAttr(1));
+    auto localMemStorageClass = gpu_runtime::StorageClassAttr::get(
+        getContext(), gpu_runtime::StorageClass::local);
+    auto computeTypeSize = [&](mlir::Type type) -> mlir::Value {
+      // %Size = getelementptr %T* null, int 1
+      // %SizeI = ptrtoint %T* %Size to i32
+      auto nullPtr = rewriter.create<mlir::LLVM::NullOp>(loc, type);
+      auto gep = rewriter.create<mlir::LLVM::GEPOp>(loc, type, nullPtr, one);
+      return rewriter.create<mlir::LLVM::PtrToIntOp>(loc, llvmIndexType, gep);
+    };
+
+    auto getKernelParam =
+        [&](unsigned i) -> std::pair<mlir::Value, mlir::Value> {
+      auto memrefType = op.operands()[i].getType().dyn_cast<mlir::MemRefType>();
+      auto paramType = paramsStorage[i].getType();
+      if (memrefType) {
         mlir::MemRefDescriptor desc(kernelParams[i]);
-        return desc.alignedPtr(rewriter, loc);
+        if (memrefType.getMemorySpace() == localMemStorageClass) {
+          auto rank = static_cast<unsigned>(memrefType.getRank());
+          mlir::Value size = rewriter.create<mlir::LLVM::ConstantOp>(
+              loc, llvmIndexType, rewriter.getIntegerAttr(llvmIndexType, 0));
+          for (auto i : llvm::seq(0u, rank)) {
+            auto dim = desc.size(rewriter, loc, i);
+            size = rewriter.create<mlir::LLVM::MulOp>(loc, llvmIndexType, size,
+                                                      dim);
+          }
+          auto null = rewriter.create<mlir::LLVM::NullOp>(
+              loc, desc.getElementPtrType());
+          return {size, null};
+        }
+        auto size = computeTypeSize(paramType);
+        return {size, desc.alignedPtr(rewriter, loc)};
       }
 
-      return kernelParams[i];
+      auto size = computeTypeSize(paramType);
+      return {size, kernelParams[i]};
     };
 
     mlir::Value paramsArray =
         rewriter.create<mlir::LLVM::UndefOp>(loc, paramsArrayType);
-    auto one = rewriter
-                   .create<mlir::LLVM::ConstantOp>(
-                       loc, llvmInt32Type, rewriter.getI32IntegerAttr(1))
-                   .getResult();
+
     for (auto i : llvm::seq(0u, paramsCount)) {
-      rewriter.create<mlir::LLVM::StoreOp>(loc, getKernelParam(i),
-                                           paramsStorage[i]);
+      auto param = getKernelParam(i);
+      rewriter.create<mlir::LLVM::StoreOp>(loc, param.second, paramsStorage[i]);
       auto ptr = rewriter.create<mlir::LLVM::BitcastOp>(loc, llvmPointerType,
                                                         paramsStorage[i]);
-      // %Size = getelementptr %T* null, int 1
-      // %SizeI = ptrtoint %T* %Size to i32
-      auto paramPtrType = paramsStorage[i].getType();
-      auto nullPtr = rewriter.create<mlir::LLVM::NullOp>(loc, paramPtrType);
-      auto gep =
-          rewriter.create<mlir::LLVM::GEPOp>(loc, paramPtrType, nullPtr, one);
-      auto typeSize =
-          rewriter.create<mlir::LLVM::PtrToIntOp>(loc, llvmIndexType, gep);
+
+      auto typeSize = param.first;
 
       mlir::Value range =
           rewriter.create<mlir::LLVM::UndefOp>(loc, llvmRangeType);
