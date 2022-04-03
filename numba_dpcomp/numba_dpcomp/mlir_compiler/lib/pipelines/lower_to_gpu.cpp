@@ -1167,6 +1167,9 @@ public:
   mlir::LogicalResult
   matchAndRewrite(mlir::func::CallOp op,
                   mlir::PatternRewriter &rewriter) const override {
+    if (!op->getParentOfType<mlir::gpu::LaunchOp>())
+      return mlir::failure();
+
     auto operands = op.operands();
     if (operands.size() != 1)
       return mlir::failure();
@@ -1281,7 +1284,10 @@ public:
 
 struct LowerGpuBuiltins2Pass
     : public plier::RewriteWrapperPass<LowerGpuBuiltins2Pass, void, void,
-                                       ConvertBarrierOps,
+                                       ConvertBarrierOps> {};
+
+struct LowerGpuBuiltins3Pass
+    : public plier::RewriteWrapperPass<LowerGpuBuiltins3Pass, void, void,
                                        ConvertArrayAllocOps> {};
 
 class GpuLaunchSinkOpsPass
@@ -1412,6 +1418,7 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
 
   commonOptPasses(funcPM);
   funcPM.addPass(std::make_unique<KernelMemrefOpsMovementPass>());
+  funcPM.addPass(std::make_unique<LowerGpuBuiltins2Pass>());
   funcPM.addPass(std::make_unique<SinkGpuDimsPass>());
   funcPM.addPass(std::make_unique<GpuLaunchSinkOpsPass>());
   pm.addPass(mlir::createGpuKernelOutliningPass());
@@ -1425,7 +1432,7 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
       pm.nest<mlir::gpu::GPUModuleOp>().nest<mlir::gpu::GPUFuncOp>();
   gpuFuncPM.addPass(mlir::arith::createArithmeticExpandOpsPass());
   gpuFuncPM.addPass(std::make_unique<FlattenScfPass>());
-  gpuFuncPM.addPass(std::make_unique<LowerGpuBuiltins2Pass>());
+  gpuFuncPM.addPass(std::make_unique<LowerGpuBuiltins3Pass>());
   commonOptPasses(gpuFuncPM);
   gpuFuncPM.addPass(std::make_unique<AssumeGpuIdRangePass>());
 
