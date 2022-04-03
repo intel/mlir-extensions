@@ -1307,6 +1307,9 @@ public:
   mlir::LogicalResult
   matchAndRewrite(mlir::func::CallOp op,
                   mlir::PatternRewriter &rewriter) const override {
+    if (!op->getParentOfType<mlir::gpu::LaunchOp>())
+      return mlir::failure();
+
     auto operands = op.operands();
     if (operands.size() != 1)
       return mlir::failure();
