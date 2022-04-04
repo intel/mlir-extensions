@@ -1,5 +1,6 @@
-// REQUIRES: run-gpu-tests
-// RUN: mlir-vulkan-runner %s --shared-libs=%vulkan_wrapper_library_dir/libvulkan-runtime-wrappers%shlibext,%linalg_test_lib_dir/libmlir_runner_utils%shlibext --entry-point-result=void | FileCheck %s
+// RUN:
+// Command to run the test
+// /localdisk/nbpatel/mlir-extensions/mlir/tools/level_zero_runner/level_zero_runner /localdisk/nbpatel/mlir-extensions/test/Conversion/LowerToLevelZero/addf.mlir --entry-point-result=void --shared-libs=/localdisk/nbpatel/mlir-llvm/lib/libmlir_runner_utils.so,/localdisk/nbpatel/mlir-extensions/level-zero/level_zero_install/lib/libze_loader.so.1,/localdisk/nbpatel/mlir-extensions/build/dpcomp_gpu_runtime/libdpcomp-gpu-runtime.so,/localdisk/nbpatel/mlir-extensions/build/dpcomp_runtime/libdpcomp-runtime.so
 
 // CHECK: [3.3,  3.3,  3.3,  3.3,  3.3,  3.3,  3.3,  3.3]
 module attributes {

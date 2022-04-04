@@ -1,5 +1,8 @@
 // XFAIL: *
 // RUN:
+// Command to run the test
+// /localdisk/nbpatel/mlir-extensions/mlir/tools/level_zero_runner/level_zero_runner /localdisk/nbpatel/mlir-extensions/test/Conversion/LowerToLevelZero/linalg_addf.mlir --entry-point-result=void --shared-libs=/localdisk/nbpatel/mlir-llvm/lib/libmlir_runner_utils.so,/localdisk/nbpatel/mlir-extensions/level-zero/level_zero_install/lib/libze_loader.so.1,/localdisk/nbpatel/mlir-extensions/build/dpcomp_gpu_runtime/libdpcomp-gpu-runtime.so,/localdisk/nbpatel/mlir-extensions/build/dpcomp_runtime/libdpcomp-runtime.so
+
 
 #map = affine_map<(d0, d1) -> (d0, d1)>
 module {
