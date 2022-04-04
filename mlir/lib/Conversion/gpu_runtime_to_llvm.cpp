@@ -498,8 +498,10 @@ private:
         mlir::MemRefDescriptor desc(kernelParams[i]);
         if (memrefType.getMemorySpace() == localMemStorageClass) {
           auto rank = static_cast<unsigned>(memrefType.getRank());
+          auto typeSize = std::max(memrefType.getElementTypeBitWidth(), 8u) / 8;
           mlir::Value size = rewriter.create<mlir::LLVM::ConstantOp>(
-              loc, llvmIndexType, rewriter.getIntegerAttr(llvmIndexType, 0));
+              loc, llvmIndexType,
+              rewriter.getIntegerAttr(llvmIndexType, typeSize));
           for (auto i : llvm::seq(0u, rank)) {
             auto dim = desc.size(rewriter, loc, i);
             size = rewriter.create<mlir::LLVM::MulOp>(loc, llvmIndexType, size,
