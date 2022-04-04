@@ -1200,6 +1200,10 @@ public:
   }
 };
 
+struct LowerGpuBuiltins2Pass
+    : public plier::RewriteWrapperPass<LowerGpuBuiltins2Pass, void, void,
+                                       ConvertBarrierOps> {};
+
 class ConvertArrayAllocOps : public mlir::OpRewritePattern<mlir::func::CallOp> {
 public:
   using OpRewritePattern::OpRewritePattern;
@@ -1281,10 +1285,6 @@ public:
     return mlir::success();
   }
 };
-
-struct LowerGpuBuiltins2Pass
-    : public plier::RewriteWrapperPass<LowerGpuBuiltins2Pass, void, void,
-                                       ConvertBarrierOps> {};
 
 struct LowerGpuBuiltins3Pass
     : public plier::RewriteWrapperPass<LowerGpuBuiltins3Pass, void, void,
