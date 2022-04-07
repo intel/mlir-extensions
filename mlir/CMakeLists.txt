@@ -40,6 +40,7 @@ endif()
 add_subdirectory(include/mlir-extensions/dialect/plier)
 add_subdirectory(include/mlir-extensions/dialect/plier_util)
 add_subdirectory(include/mlir-extensions/dialect/gpu_runtime/IR)
+add_subdirectory(include/mlir-extensions/dialect/intel_gpu/IR)
 
 if (GPU_ENABLE)
     add_subdirectory(tools)
@@ -54,6 +55,7 @@ set(SOURCES_LIST
     lib/compiler/compiler.cpp
     lib/compiler/pipeline_registry.cpp
     lib/dialect/gpu_runtime/IR/gpu_runtime_ops.cpp
+    lib/dialect/intel_gpu/IR/intel_gpu_ops.cpp
     lib/dialect/plier/dialect.cpp
     lib/dialect/plier_util/dialect.cpp
     lib/transforms/arg_lowering.cpp
@@ -87,6 +89,7 @@ set(HEADERS_LIST
     include/mlir-extensions/compiler/compiler.hpp
     include/mlir-extensions/compiler/pipeline_registry.hpp
     include/mlir-extensions/dialect/gpu_runtime/IR/gpu_runtime_ops.hpp
+    include/mlir-extensions/dialect/intel_gpu/IR/intel_gpu_ops.hpp
     include/mlir-extensions/dialect/plier/dialect.hpp
     include/mlir-extensions/dialect/plier_util/dialect.hpp
     include/mlir-extensions/transforms/arg_lowering.hpp
@@ -153,4 +156,4 @@ target_include_directories(${MLIR_EXTENSIONS_LIB} PUBLIC
     ${PROJECT_BINARY_DIR}/mlir-extensions/include
     )
 
-add_dependencies(${MLIR_EXTENSIONS_LIB} MLIRPlierOpsIncGen MLIRPlierUtilOpsIncGen MLIRGpuRuntimeOpsIncGen)
+add_dependencies(${MLIR_EXTENSIONS_LIB} MLIRPlierOpsIncGen MLIRPlierUtilOpsIncGen MLIRGpuRuntimeOpsIncGen MLIRIntelGpuOpsIncGen)
