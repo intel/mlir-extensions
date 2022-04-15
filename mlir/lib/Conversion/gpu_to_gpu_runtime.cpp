@@ -15,6 +15,7 @@
 #include "mlir-extensions/Conversion/gpu_to_gpu_runtime.hpp"
 
 #include "mlir-extensions/dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
+#include "mlir-extensions/dialect/intel_gpu/IR/intel_gpu_ops.hpp"
 #include "mlir-extensions/dialect/plier_util/dialect.hpp"
 
 #include <mlir/Analysis/BufferViewFlowAnalysis.h>
@@ -1387,6 +1388,46 @@ struct GPUExPass
 
     patterns.insert<ExpandLaunchOp, ExpandAllocOp, ExpandDeallocOp,
                     ExpandSuggestBlockSizeOp>(ctx);
+
+    (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
+                                             std::move(patterns));
+  }
+};
+
+struct AddIntelGpuOps : public mlir::OpRewritePattern<intel_gpu::GetDeviceOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(intel_gpu::GetDeviceOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+
+    assert(op.platform());
+    assert(op.ordinal());
+
+    auto device = rewriter.create<intel_gpu::GetDeviceOp>(
+        op.getLoc(), op.platform(), op.ordinal());
+
+    auto context =
+        rewriter.create<intel_gpu::CreateContextOp>(op.getLoc(), device);
+
+    auto stream =
+        rewriter.create<intel_gpu::CreateStreamOp>(op.getLoc(), context);
+  }
+};
+
+struct IntelGPUPass
+    : public mlir::PassWrapper<IntelGPUPass, mlir::OperationPass<void>> {
+
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<intel_gpu::IntelGpuDialect>();
+  }
+
+  void runOnOperation() override {
+    auto *ctx = &getContext();
+    mlir::RewritePatternSet patterns(ctx);
+
+    patterns.insert<AddIntelGpuOps>(ctx);
 
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
                                              std::move(patterns));

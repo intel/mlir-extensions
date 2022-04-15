@@ -50,6 +50,7 @@ set(SOURCES_LIST
     lib/Conversion/SCFToAffine/SCFToAffine.cpp
     lib/Conversion/gpu_to_gpu_runtime.cpp
     lib/Conversion/gpu_runtime_to_llvm.cpp
+    lib/Conversion/intel_gpu_to_llvm.cpp
     lib/analysis/memory_ssa.cpp
     lib/analysis/memory_ssa_analysis.cpp
     lib/compiler/compiler.cpp

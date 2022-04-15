@@ -52,7 +52,6 @@ def GetDeviceOp : IntelGpu_Op<"get_device", [NoSideEffect]> {
   }];
   let arguments = (ins IntelGpu_OpaqueType:$platform, I32:$ordinal);
   let results = (outs IntelGpu_OpaqueType : $device);
-  //let assemblyFormat = "custom<Enum>($platform)`,` operands attr-dict";
   let builders = [OpBuilder<(ins "::mlir::Value"
                              : $platform, "::mlir::Value"
                              : $ordinal)>];
