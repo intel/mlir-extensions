@@ -40,6 +40,7 @@
 
 #include "mlir-extensions/Conversion/gpu_runtime_to_llvm.hpp"
 #include "mlir-extensions/Conversion/gpu_to_gpu_runtime.hpp"
+#include "mlir-extensions/Conversion/intel_gpu_to_llvm.hpp"
 
 using namespace mlir;
 
@@ -84,12 +85,13 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
 
   // Gpu -> GpuRuntime
   passManager.addPass(gpu_runtime::createSerializeSPIRVPass());
-  passManager.addNestedPass<mlir::FuncOp>(gpu_runtime::createGPUExPass());
+  // passManager.addNestedPass<mlir::FuncOp>(gpu_runtime::createGPUExPass());
 
   // GpuRuntime -> LLVM
 
-  passManager.addPass(gpu_runtime::createEnumerateEventsPass());
-  passManager.addPass(gpu_runtime::createGPUToLLVMPass());
+  passManager.addPass(intel_gpu::createIntelGPUToLLVMPass());
+  // passManager.addPass(gpu_runtime::createEnumerateEventsPass());
+  // passManager.addPass(gpu_runtime::createGPUToLLVMPass());
   passManager.addPass(createConvertFuncToLLVMPass(llvmOptions));
   passManager.addPass(createMemRefToLLVMPass());
   passManager.addPass(createReconcileUnrealizedCastsPass());

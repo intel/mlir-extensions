@@ -20,16 +20,8 @@ namespace mlir {
 class Pass;
 }
 
-namespace gpu_runtime {
+namespace intel_gpu {
 
-std::unique_ptr<mlir::Pass> createAbiAttrsPass();
-std::unique_ptr<mlir::Pass> createSetSPIRVCapabilitiesPass();
-std::unique_ptr<mlir::Pass> createGPUToSpirvPass();
-std::unique_ptr<mlir::Pass>
-createInsertGPUAllocsPass(bool useGpuDealloc = true);
-std::unique_ptr<mlir::Pass> createUnstrideMemrefsPass();
-std::unique_ptr<mlir::Pass> createSerializeSPIRVPass();
-std::unique_ptr<mlir::Pass> createGPUExPass();
-std::unique_ptr<mlir::Pass> createParallelLoopGPUMappingPass();
+std::unique_ptr<mlir::Pass> createIntelGPUToLLVMPass();
 
-} // namespace gpu_runtime
+} // namespace intel_gpu

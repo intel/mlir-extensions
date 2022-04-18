@@ -12,11 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "mlir-extensions/Conversion/gpu_runtime_to_llvm.hpp"
+#include "mlir-extensions/Conversion/intel_gpu_to_llvm.hpp"
 
-#include "mlir-extensions/dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
 #include "mlir-extensions/dialect/intel_gpu/IR/intel_gpu_ops.hpp"
-#include "mlir-extensions/dialect/plier_util/dialect.hpp"
+
 #include "mlir-extensions/transforms/func_utils.hpp"
 
 #include <mlir/Conversion/AsyncToLLVM/AsyncToLLVM.h>
@@ -51,6 +50,8 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/FormatVariadic.h"
+
+#include <iostream>
 
 using namespace mlir;
 
@@ -151,35 +152,13 @@ protected:
       "mgpuStreamSynchronize",
       llvmVoidType,
       {llvmPointerType /* void *stream */}};
-  FunctionCallBuilder streamWaitEventCallBuilder = {
-      "mgpuStreamWaitEvent",
-      llvmVoidType,
-      {llvmPointerType /* void *stream */, llvmPointerType /* void *event */}};
-  FunctionCallBuilder eventCreateCallBuilder = {
-      "mgpuEventCreate", llvmPointerType /* void *event */, {}};
-  FunctionCallBuilder eventDestroyCallBuilder = {
-      "mgpuEventDestroy", llvmVoidType, {llvmPointerType /* void *event */}};
-  FunctionCallBuilder eventSynchronizeCallBuilder = {
-      "mgpuEventSynchronize",
-      llvmVoidType,
-      {llvmPointerType /* void *event */}};
-  FunctionCallBuilder eventRecordCallBuilder = {
-      "mgpuEventRecord",
-      llvmVoidType,
-      {llvmPointerType /* void *event */, llvmPointerType /* void *stream */}};
-  FunctionCallBuilder hostRegisterCallBuilder = {
-      "mgpuMemHostRegisterMemRef",
-      llvmVoidType,
-      {llvmIntPtrType /* intptr_t rank */,
-       llvmPointerType /* void *memrefDesc */,
-       llvmIntPtrType /* intptr_t elementSizeBytes */}};
   FunctionCallBuilder allocCallBuilder = {
       "gpuMemAlloc",
       llvmPointerType /* void * */,
       {llvmIntPtrType /* intptr_t sizeBytes */,
        llvmPointerType /* void *stream */}};
   FunctionCallBuilder deallocCallBuilder = {
-      "mgpuMemFree",
+      "gpuMemFree",
       llvmVoidType,
       {llvmPointerType /* void *ptr */, llvmPointerType /* void *stream */}};
   FunctionCallBuilder memcpyCallBuilder = {
@@ -197,7 +176,7 @@ protected:
   FunctionCallBuilder deviceCallBuilder = {
       "gpuGetDevice",
       llvmPointerType /* void * */,
-      {llvmPointerType /* void* platform */, llvmPointerType /* oridinal */}};
+      {llvmPointerType /* void* platform */, llvmInt8Type /* oridinal */}};
   FunctionCallBuilder contextCallBuilder = {
       "gpuCreateContext",
       llvmPointerType /* void * */,
@@ -251,6 +230,7 @@ private:
                   ConversionPatternRewriter &rewriter) const override {
     MemRefType memRefType = allocOp.getType();
 
+    std::cout << " IN ConvertAllocOpToGpuRuntimeCallPattern " << std::endl;
     if (failed(areAllLLVMTypes(allocOp, adaptor.getOperands(), rewriter)) ||
         !isConvertibleAndHasIdentityMaps(memRefType) ||
         failed(isAsyncWithOneDependency(rewriter, allocOp)))
@@ -423,6 +403,21 @@ private:
                                           binaryAttr.getValue(),
                                           LLVM::Linkage::Internal);
 
+    // Code for Intel GPU ops
+    StringRef platform_name = "IntelGPU";
+    auto name = mlir::LLVM::createGlobalString(loc, rewriter, platform_name,
+                                               platform_name,
+                                               mlir::LLVM::Linkage::Internal);
+    Value ordinal = rewriter.create<mlir::LLVM::ConstantOp>(
+        loc, llvmInt8Type,
+        mlir::IntegerAttr::get(llvmInt8Type, static_cast<int8_t>(0)));
+    auto device = deviceCallBuilder.create(loc, rewriter, {name, ordinal});
+    auto context =
+        contextCallBuilder.create(loc, rewriter, device.getResult(0));
+    auto intel_stream =
+        streamCallBuilder.create(loc, rewriter, context.getResult(0));
+
+    // End Code for Intel GPU ops
     auto module = moduleLoadCallBuilder.create(loc, rewriter, data);
     // Get the function from the module. The name corresponds to the name of
     // the kernel function.
@@ -468,73 +463,8 @@ private:
   }
 }; // namespace
 
-class ConvertGetDeviceOp
-    : public ConvertOpToGpuRuntimeCallPattern<intel_gpu::GetDeviceOp> {
-public:
-  ConvertGetDeviceOp(LLVMTypeConverter &typeConverter)
-      : ConvertOpToGpuRuntimeCallPattern<intel_gpu::GetDeviceOp>(
-            typeConverter) {}
-
-private:
-  LogicalResult
-  matchAndRewrite(intel_gpu::GetDeviceOp deviceOp, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-
-    Location loc = deviceOp.getLoc();
-
-    auto device = deviceCallBuilder.create(
-        loc, rewriter, {adaptor.platform(), adaptor.ordinal()});
-
-    rewriter.replaceOp(deviceOp, device.getResults());
-    return success();
-  }
-};
-
-class ConvertCreateContextOp
-    : public ConvertOpToGpuRuntimeCallPattern<intel_gpu::CreateContextOp> {
-public:
-  ConvertCreateContextOp(LLVMTypeConverter &typeConverter)
-      : ConvertOpToGpuRuntimeCallPattern<intel_gpu::CreateContextOp>(
-            typeConverter) {}
-
-private:
-  LogicalResult
-  matchAndRewrite(intel_gpu::CreateContextOp contextOp, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-
-    Location loc = contextOp.getLoc();
-
-    auto context =
-        contextCallBuilder.create(loc, rewriter, {adaptor.device_type()});
-
-    rewriter.replaceOp(contextOp, context.getResults());
-    return success();
-  }
-};
-
-class ConvertCreateStreamOp
-    : public ConvertOpToGpuRuntimeCallPattern<intel_gpu::CreateStreamOp> {
-public:
-  ConvertCreateStreamOp(LLVMTypeConverter &typeConverter)
-      : ConvertOpToGpuRuntimeCallPattern<intel_gpu::CreateStreamOp>(
-            typeConverter) {}
-
-private:
-  LogicalResult
-  matchAndRewrite(intel_gpu::CreateStreamOp streamOp, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-
-    Location loc = streamOp.getLoc();
-
-    auto stream = streamCallBuilder.create(loc, rewriter, {adaptor.context()});
-
-    rewriter.replaceOp(streamOp, stream.getResults());
-    return success();
-  }
-};
-
-struct GPUToLLVMPass
-    : public mlir::PassWrapper<GPUToLLVMPass,
+struct IntelGPUToLLVMPass
+    : public mlir::PassWrapper<IntelGPUToLLVMPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
   void runOnOperation() override {
     mlir::LLVMTypeConverter converter(&getContext());
@@ -544,11 +474,11 @@ struct GPUToLLVMPass
     auto llvmPointerType = mlir::LLVM::LLVMPointerType::get(
         mlir::IntegerType::get(&getContext(), 8));
     converter.addConversion(
-        [llvmPointerType](gpu_runtime::OpaqueType) -> mlir::Type {
+        [llvmPointerType](intel_gpu::OpaqueType) -> mlir::Type {
           return llvmPointerType;
         });
 
-    target.addIllegalDialect<mlir::gpu::GPUDialect>();
+    // target.addIllegalDialect<mlir::gpu::GPUDialect>();
     target.addIllegalOp<
         // clang-format off
         intel_gpu::GetDeviceOp,
@@ -557,37 +487,25 @@ struct GPUToLLVMPass
         // clang-format on
         >();
 
-    patterns.insert<
-        // clang-format off
-        ConvertAllocOpToGpuRuntimeCallPattern,
-        ConvertDeallocOpToGpuRuntimeCallPattern,
-        ConvertGetDeviceOp,
-        ConvertCreateContextOp,
-        ConvertCreateStreamOp
-        // clang-format on
-        >(converter);
-
-    patterns.add<ConvertLaunchFuncOpToGpuRuntimeCallPattern>(
-        converter, mlir::gpu::getDefaultGpuBinaryAnnotation());
-
     mlir::populateAsyncStructuralTypeConversionsAndLegality(converter, patterns,
                                                             target);
     mlir::populateGpuToLLVMConversionPatterns(
         converter, patterns, mlir::gpu::getDefaultGpuBinaryAnnotation());
-    mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::FuncOp>(
-        patterns, converter);
-    mlir::populateReturnOpTypeConversionPattern(patterns, converter);
-    mlir::populateCallOpTypeConversionPattern(patterns, converter);
 
-    auto mod = getOperation();
-    if (mlir::failed(
-            mlir::applyPartialConversion(mod, target, std::move(patterns))))
+    patterns.add<ConvertAllocOpToGpuRuntimeCallPattern,
+                 ConvertDeallocOpToGpuRuntimeCallPattern>(converter);
+
+    patterns.add<ConvertLaunchFuncOpToGpuRuntimeCallPattern>(
+        converter, mlir::gpu::getDefaultGpuBinaryAnnotation());
+
+    if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
+                                                  std::move(patterns))))
       signalPassFailure();
   }
 };
 
 } // namespace
 
-std::unique_ptr<mlir::Pass> gpu_runtime::createGPUToLLVMPass() {
-  return std::make_unique<GPUToLLVMPass>();
+std::unique_ptr<mlir::Pass> intel_gpu::createIntelGPUToLLVMPass() {
+  return std::make_unique<IntelGPUToLLVMPass>();
 }
