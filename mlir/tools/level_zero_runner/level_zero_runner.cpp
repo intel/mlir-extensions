@@ -64,7 +64,7 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
   passManager.addNestedPass<mlir::FuncOp>(createParallelLoopToGpuPass());
 
   passManager.addNestedPass<mlir::FuncOp>(
-      gpu_runtime::createInsertGPUAllocsPass());
+      gpu_runtime::createInsertGPUAllocsPass(1));
   passManager.addPass(mlir::createCanonicalizerPass());
   passManager.addNestedPass<mlir::FuncOp>(
       gpu_runtime::createUnstrideMemrefsPass());
@@ -88,7 +88,7 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
   // passManager.addNestedPass<mlir::FuncOp>(gpu_runtime::createGPUExPass());
 
   // GpuRuntime -> LLVM
-
+  passManager.addNestedPass<mlir::FuncOp>(mlir::createGpuAsyncRegionPass());
   passManager.addPass(intel_gpu::createIntelGPUToLLVMPass());
   // passManager.addPass(gpu_runtime::createEnumerateEventsPass());
   // passManager.addPass(gpu_runtime::createGPUToLLVMPass());

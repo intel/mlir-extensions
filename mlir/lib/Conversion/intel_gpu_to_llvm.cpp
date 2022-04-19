@@ -230,7 +230,6 @@ private:
                   ConversionPatternRewriter &rewriter) const override {
     MemRefType memRefType = allocOp.getType();
 
-    std::cout << " IN ConvertAllocOpToGpuRuntimeCallPattern " << std::endl;
     if (failed(areAllLLVMTypes(allocOp, adaptor.getOperands(), rewriter)) ||
         !isConvertibleAndHasIdentityMaps(memRefType) ||
         failed(isAsyncWithOneDependency(rewriter, allocOp)))
