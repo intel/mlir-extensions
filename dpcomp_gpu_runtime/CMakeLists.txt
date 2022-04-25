@@ -20,8 +20,13 @@ if(NOT LEVEL_ZERO_DIR)
     message(FATAL_ERROR "LEVEL_ZERO_DIR is not set")
 endif()
 
+if(NOT SYCL_DIR)
+    message(FATAL_ERROR "SYCL_DIR is not set")
+endif()
+
 set(SOURCES_LIST
     lib/gpu_runtime.cpp
+    lib/sycl_runtime.cpp
     )
 set(HEADERS_LIST
     lib/level_zero_printing.hpp
@@ -34,10 +39,13 @@ generate_export_header(${PROJECT_NAME})
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${PROJECT_BINARY_DIR}
     ${LEVEL_ZERO_DIR}/include
+    ${SYCL_DIR}/include/
+    ${SYCL_DIR}/include/sycl
     )
 
 target_link_directories(${PROJECT_NAME} PRIVATE
     ${LEVEL_ZERO_DIR}/lib
+    ${SYCL_DIR}/lib
     )
 
-target_link_libraries(${PROJECT_NAME} PRIVATE ze_loader)
+target_link_libraries(${PROJECT_NAME} PRIVATE ze_loader sycl)
