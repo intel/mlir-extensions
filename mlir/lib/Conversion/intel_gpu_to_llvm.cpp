@@ -46,6 +46,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Error.h"
@@ -79,7 +80,6 @@ struct FunctionCallBuilder {
     return builder.create<mlir::LLVM::CallOp>(loc, function, arguments);
   }
 
-private:
   mlir::StringRef functionName;
   mlir::LLVM::LLVMFunctionType functionType;
 };
@@ -116,20 +116,22 @@ protected:
       context, this->getTypeConverter()->getPointerBitwidth(0));
 
   FunctionCallBuilder moduleLoadCallBuilder = {
-      "mgpuModuleLoad",
+      "sycl_gpuModuleLoad",
       llvmPointerType /* void *module */,
       {llvmPointerType /* void *cubin */}};
   FunctionCallBuilder moduleUnloadCallBuilder = {
-      "mgpuModuleUnload", llvmVoidType, {llvmPointerType /* void *module */}};
+      "sycl_gpuModuleUnload",
+      llvmVoidType,
+      {llvmPointerType /* void *module */}};
   FunctionCallBuilder moduleGetFunctionCallBuilder = {
-      "mgpuModuleGetFunction",
+      "sycl_gpuModuleGetFunction",
       llvmPointerType /* void *function */,
       {
           llvmPointerType, /* void *module */
           llvmPointerType  /* char *name   */
       }};
   FunctionCallBuilder launchKernelCallBuilder = {
-      "mgpuLaunchKernel",
+      "sycl_gpuLaunchKernel",
       llvmVoidType,
       {
           llvmPointerType,        /* void* f */
@@ -144,47 +146,53 @@ protected:
           llvmPointerPointerType, /* void **kernelParams */
           llvmPointerPointerType  /* void **extra */
       }};
-  FunctionCallBuilder streamCreateCallBuilder = {
-      "mgpuStreamCreate", llvmPointerType /* void *stream */, {}};
   FunctionCallBuilder streamDestroyCallBuilder = {
-      "mgpuStreamDestroy", llvmVoidType, {llvmPointerType /* void *stream */}};
+      "sycl_gpuStreamDestroy",
+      llvmVoidType,
+      {llvmPointerType /* void *stream */}};
   FunctionCallBuilder streamSynchronizeCallBuilder = {
-      "mgpuStreamSynchronize",
+      "sycl_gpuStreamSynchronize",
       llvmVoidType,
       {llvmPointerType /* void *stream */}};
   FunctionCallBuilder allocCallBuilder = {
-      "gpuMemAlloc",
+      "sycl_gpuMemAlloc",
       llvmPointerType /* void * */,
       {llvmIntPtrType /* intptr_t sizeBytes */,
        llvmPointerType /* void *stream */}};
   FunctionCallBuilder deallocCallBuilder = {
-      "gpuMemFree",
+      "sycl_gpuMemFree",
       llvmVoidType,
       {llvmPointerType /* void *ptr */, llvmPointerType /* void *stream */}};
-  FunctionCallBuilder memcpyCallBuilder = {
-      "mgpuMemcpy",
-      llvmVoidType,
-      {llvmPointerType /* void *dst */, llvmPointerType /* void *src */,
-       llvmIntPtrType /* intptr_t sizeBytes */,
-       llvmPointerType /* void *stream */}};
-  FunctionCallBuilder memsetCallBuilder = {
-      "mgpuMemset32",
-      llvmVoidType,
-      {llvmPointerType /* void *dst */, llvmInt32Type /* unsigned int value */,
-       llvmIntPtrType /* intptr_t sizeBytes */,
-       llvmPointerType /* void *stream */}};
   FunctionCallBuilder deviceCallBuilder = {
-      "gpuGetDevice",
-      llvmPointerType /* void * */,
-      {llvmPointerType /* void* platform */, llvmInt8Type /* oridinal */}};
-  FunctionCallBuilder contextCallBuilder = {
-      "gpuCreateContext",
+      "sycl_gpuGetDevice", llvmPointerType /* void * */, {}};
+  FunctionCallBuilder contextCreateCallBuilder = {
+      "sycl_gpuCreateContext",
       llvmPointerType /* void * */,
       {llvmPointerType /* void* device */}};
   FunctionCallBuilder streamCallBuilder = {
-      "gpuCreateStream",
+      "sycl_gpuCreateStream",
       llvmPointerType /* void * */,
       {llvmPointerType /* void* context */}};
+  FunctionCallBuilder streamCreateCallBuilder = {
+      "temp_gpuStreamCreate", llvmPointerType /* void *stream */, {}};
+  FunctionCallBuilder eventDestroyCallBuilder = {
+      "sycl_gpuEventDestroy",
+      llvmVoidType,
+      {llvmPointerType /* void *event */}};
+  FunctionCallBuilder eventSynchronizeCallBuilder = {
+      "sycl_gpuEventSynchronize",
+      llvmVoidType,
+      {llvmPointerType /* void *event */}};
+  FunctionCallBuilder eventCreateCallBuilder = {
+      "sycl_gpuEventCreate", llvmPointerType /* void *event */, {}};
+  FunctionCallBuilder eventRecordCallBuilder = {
+      "sycl_gpuEventRecord",
+      llvmVoidType,
+      {llvmPointerType /* void *event */, llvmPointerType /* void *stream */}};
+  FunctionCallBuilder streamWaitEventCallBuilder = {
+      "sycl_gpuStreamWaitEvent",
+      llvmVoidType,
+      {llvmPointerType /* void *stream */, llvmPointerType /* void *event */}};
 };
 
 /// Checks if all the operands of the op being lowered are of LLVM Types. The
@@ -216,6 +224,114 @@ isAsyncWithOneDependency(ConversionPatternRewriter &rewriter,
   return success();
 }
 
+// Returns whether `value` is the result of an LLVM::CallOp to `functionName`.
+static bool isDefinedByCallTo(Value value, StringRef functionName) {
+  assert(value.getType().isa<LLVM::LLVMPointerType>());
+  if (auto defOp = value.getDefiningOp<LLVM::CallOp>())
+    return defOp.getCallee()->equals(functionName);
+  return false;
+}
+
+static llvm::Optional<mlir::Value> getGpuStream(mlir::OpBuilder &builder,
+                                                mlir::Operation *op) {
+  assert(op);
+  auto func = op->getParentOfType<mlir::FuncOp>();
+  if (!func)
+    return {};
+
+  if (!llvm::hasSingleElement(func.getBody()))
+    return {};
+
+  auto &block = func.getBody().front();
+  auto ops = block.getOps<intel_gpu::CreateStreamOp>();
+  if (!ops.empty())
+    return (*ops.begin()).getResult();
+
+  mlir::OpBuilder::InsertionGuard g(builder);
+  builder.setInsertionPointToStart(&block);
+  auto loc = builder.getUnknownLoc();
+
+  auto device = builder.create<intel_gpu::GetDeviceOp>(loc).getResult();
+  auto context =
+      builder.create<intel_gpu::CreateContextOp>(loc, device).getResult();
+
+  auto sycl_stream =
+      builder.create<intel_gpu::CreateStreamOp>(loc, context).getResult();
+  builder.setInsertionPoint(block.getTerminator());
+  return sycl_stream;
+}
+
+class ConvertGetDeviceOpPattern
+    : public ConvertOpToGpuRuntimeCallPattern<intel_gpu::GetDeviceOp> {
+public:
+  ConvertGetDeviceOpPattern(mlir::LLVMTypeConverter &converter)
+      : ConvertOpToGpuRuntimeCallPattern<intel_gpu::GetDeviceOp>(converter) {}
+
+private:
+  mlir::LogicalResult
+  matchAndRewrite(intel_gpu::GetDeviceOp op,
+                  intel_gpu::GetDeviceOp::Adaptor /*adaptor*/,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto mod = op->getParentOfType<mlir::ModuleOp>();
+    if (!mod)
+      return mlir::failure();
+    std::cout << "IN ConvertGetDeviceOpPattern " << std::endl;
+    auto loc = op.getLoc();
+    auto res = deviceCallBuilder.create(loc, rewriter, {});
+    rewriter.replaceOp(op, res.getResults());
+    return mlir::success();
+  }
+};
+
+class ConvertCreateContextOpPattern
+    : public ConvertOpToGpuRuntimeCallPattern<intel_gpu::CreateContextOp> {
+public:
+  ConvertCreateContextOpPattern(mlir::LLVMTypeConverter &converter)
+      : ConvertOpToGpuRuntimeCallPattern<intel_gpu::CreateContextOp>(
+            converter) {}
+
+private:
+  mlir::LogicalResult
+  matchAndRewrite(intel_gpu::CreateContextOp op,
+                  intel_gpu::CreateContextOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    std::cout << "IN ConvertCreateContextOpPattern " << std::endl;
+    auto mod = op->getParentOfType<mlir::ModuleOp>();
+    if (!mod)
+      return mlir::failure();
+
+    auto loc = op.getLoc();
+    auto res =
+        contextCreateCallBuilder.create(loc, rewriter, {adaptor.device()});
+    rewriter.replaceOp(op, res.getResults());
+    return mlir::success();
+  }
+};
+
+class ConvertCreateStreamOpPattern
+    : public ConvertOpToGpuRuntimeCallPattern<intel_gpu::CreateStreamOp> {
+public:
+  ConvertCreateStreamOpPattern(mlir::LLVMTypeConverter &converter)
+      : ConvertOpToGpuRuntimeCallPattern<intel_gpu::CreateStreamOp>(converter) {
+  }
+
+private:
+  mlir::LogicalResult
+  matchAndRewrite(intel_gpu::CreateStreamOp op,
+                  intel_gpu::CreateStreamOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    std::cout << "IN ConvertCreateStreamOpPattern " << std::endl;
+    auto mod = op->getParentOfType<mlir::ModuleOp>();
+    if (!mod)
+      return mlir::failure();
+
+    auto loc = op.getLoc();
+    auto res = streamCallBuilder.create(loc, rewriter, {adaptor.context()});
+    rewriter.replaceOp(op, res.getResults());
+    return mlir::success();
+  }
+};
+
 /// A rewrite pattern to convert gpu.alloc operations into a GPU runtime
 /// call.
 class ConvertAllocOpToGpuRuntimeCallPattern
@@ -228,13 +344,14 @@ private:
   LogicalResult
   matchAndRewrite(gpu::AllocOp allocOp, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+
     MemRefType memRefType = allocOp.getType();
 
-    if (failed(areAllLLVMTypes(allocOp, adaptor.getOperands(), rewriter)) ||
-        !isConvertibleAndHasIdentityMaps(memRefType) ||
-        failed(isAsyncWithOneDependency(rewriter, allocOp)))
-      return failure();
-
+    // if (failed(areAllLLVMTypes(allocOp, adaptor.getOperands(), rewriter)) ||
+    //    !isConvertibleAndHasIdentityMaps(memRefType) ||
+    //    failed(isAsyncWithOneDependency(rewriter, allocOp)))
+    //  return failure();
+    std::cout << "IN ConvertAllocOpToGpuRuntimeCallPattern " << std::endl;
     auto loc = allocOp.getLoc();
 
     // Get shape of the memref as values: static sizes are constant
@@ -248,9 +365,21 @@ private:
     // Allocate the underlying buffer and store a pointer to it in the MemRef
     // descriptor.
     Type elementPtrType = this->getElementPtrType(memRefType);
-    auto stream = adaptor.asyncDependencies().front();
+
+    auto stream = getGpuStream(rewriter, allocOp);
+    mlir::Value params[] = {*stream};
+    streamCallBuilder.create(loc, rewriter, {params});
+    // streamPtr =
+    //     rewriter.create<LLVM::BitcastOp>(loc, elementPtrType, streamPtr);
+    // Value stream_ptr =
+    // rewriter.create<LLVM::BitcastOp>(loc, elementPtrType, stream);
+    // if (!stream)
+    //  return mlir::failure();
+
+    auto stream_temp = adaptor.asyncDependencies().front();
+
     Value allocatedPtr =
-        allocCallBuilder.create(loc, rewriter, {sizeBytes, stream})
+        allocCallBuilder.create(loc, rewriter, {sizeBytes, stream_temp})
             .getResult(0);
     allocatedPtr =
         rewriter.create<LLVM::BitcastOp>(loc, elementPtrType, allocatedPtr);
@@ -262,7 +391,8 @@ private:
     auto memRefDescriptor = this->createMemRefDescriptor(
         loc, memRefType, allocatedPtr, alignedPtr, shape, strides, rewriter);
 
-    rewriter.replaceOp(allocOp, {memRefDescriptor, stream});
+    std::cout << "OUT ConvertAllocOpToGpuRuntimeCallPattern " << std::endl;
+    rewriter.replaceOp(allocOp, {memRefDescriptor, stream_temp});
 
     return success();
   }
@@ -294,6 +424,102 @@ private:
     deallocCallBuilder.create(loc, rewriter, {casted, stream});
 
     rewriter.replaceOp(deallocOp, {stream});
+    return success();
+  }
+};
+
+/// A rewrite pattern to convert gpu.wait operations into a GPU runtime
+/// call.
+// Converts `gpu.wait` to runtime calls. The converted op synchronizes the
+// host with the stream/event operands. The operands are destroyed. That is,
+// it assumes that it is not used afterwards or elsewhere. Otherwise we will
+// get a runtime error. Eventually, we should guarantee this property.
+class ConvertWaitOpToGpuRuntimeCallPattern
+    : public ConvertOpToGpuRuntimeCallPattern<gpu::WaitOp> {
+public:
+  ConvertWaitOpToGpuRuntimeCallPattern(LLVMTypeConverter &typeConverter)
+      : ConvertOpToGpuRuntimeCallPattern<gpu::WaitOp>(typeConverter) {}
+
+private:
+  LogicalResult
+  matchAndRewrite(gpu::WaitOp waitOp, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (waitOp.asyncToken())
+      return rewriter.notifyMatchFailure(waitOp, "Cannot convert async op.");
+
+    std::cout << "IN ConvertWaitOpToGpuRuntimeCallPattern " << std::endl;
+    Location loc = waitOp.getLoc();
+
+    for (auto operand : adaptor.getOperands()) {
+      if (isDefinedByCallTo(operand, streamCreateCallBuilder.functionName)) {
+        // The converted operand's definition created a stream.
+        streamSynchronizeCallBuilder.create(loc, rewriter, {operand});
+        streamDestroyCallBuilder.create(loc, rewriter, {operand});
+      } else {
+        // Otherwise the converted operand is an event. This assumes that we
+        // use events in control flow code as well.
+        eventSynchronizeCallBuilder.create(loc, rewriter, {operand});
+        eventDestroyCallBuilder.create(loc, rewriter, {operand});
+      }
+    }
+
+    rewriter.eraseOp(waitOp);
+    return success();
+  }
+};
+
+// Converts `gpu.wait async` to runtime calls. The converted op creates a new
+// stream that is synchronized with stream/event operands. The operands are
+// destroyed. That is, it assumes that it is not used afterwards or elsewhere.
+// Otherwise we will get a runtime error. Eventually, we should guarantee this
+// property.
+class ConvertWaitAsyncOpToGpuRuntimeCallPattern
+    : public ConvertOpToGpuRuntimeCallPattern<gpu::WaitOp> {
+public:
+  ConvertWaitAsyncOpToGpuRuntimeCallPattern(LLVMTypeConverter &typeConverter)
+      : ConvertOpToGpuRuntimeCallPattern<gpu::WaitOp>(typeConverter) {}
+
+private:
+  LogicalResult
+  matchAndRewrite(gpu::WaitOp waitOp, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (!waitOp.asyncToken())
+      return rewriter.notifyMatchFailure(waitOp, "Can only convert async op.");
+
+    std::cout << "IN ConvertWaitAsyncOpToGpuRuntimeCallPattern " << std::endl;
+    Location loc = waitOp.getLoc();
+
+    auto insertionPoint = rewriter.saveInsertionPoint();
+    SmallVector<Value, 1> events;
+    for (auto pair :
+         llvm::zip(waitOp.asyncDependencies(), adaptor.getOperands())) {
+      auto operand = std::get<1>(pair);
+      if (isDefinedByCallTo(operand, streamCreateCallBuilder.functionName)) {
+        // The converted operand's definition created a stream. Insert an
+        // event into the stream just after the last use of the original token
+        // operand.
+        auto *defOp = std::get<0>(pair).getDefiningOp();
+        rewriter.setInsertionPointAfter(defOp);
+        auto event =
+            eventCreateCallBuilder.create(loc, rewriter, {}).getResult(0);
+        eventRecordCallBuilder.create(loc, rewriter, {event, operand});
+        events.push_back(event);
+      } else {
+        // Otherwise the converted operand is an event. This assumes that we
+        // use events in control flow code as well.
+        events.push_back(operand);
+      }
+    }
+    rewriter.restoreInsertionPoint(insertionPoint);
+
+    auto stream =
+        streamCreateCallBuilder.create(loc, rewriter, {}).getResult(0);
+    for (auto event : events)
+      streamWaitEventCallBuilder.create(loc, rewriter, {stream, event});
+    for (auto event : events)
+      eventDestroyCallBuilder.create(loc, rewriter, {event});
+    rewriter.replaceOp(waitOp, {stream});
+
     return success();
   }
 };
@@ -366,6 +592,7 @@ private:
   LogicalResult
   matchAndRewrite(gpu::LaunchFuncOp launchOp, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+
     if (failed(areAllLLVMTypes(launchOp, adaptor.getOperands(), rewriter)))
       return failure();
 
@@ -402,21 +629,6 @@ private:
                                           binaryAttr.getValue(),
                                           LLVM::Linkage::Internal);
 
-    // Code for Intel GPU ops
-    StringRef platform_name = "IntelGPU";
-    auto name = mlir::LLVM::createGlobalString(loc, rewriter, platform_name,
-                                               platform_name,
-                                               mlir::LLVM::Linkage::Internal);
-    Value ordinal = rewriter.create<mlir::LLVM::ConstantOp>(
-        loc, llvmInt8Type,
-        mlir::IntegerAttr::get(llvmInt8Type, static_cast<int8_t>(0)));
-    auto device = deviceCallBuilder.create(loc, rewriter, {name, ordinal});
-    auto context =
-        contextCallBuilder.create(loc, rewriter, device.getResult(0));
-    auto intel_stream =
-        streamCallBuilder.create(loc, rewriter, context.getResult(0));
-
-    // End Code for Intel GPU ops
     auto module = moduleLoadCallBuilder.create(loc, rewriter, data);
     // Get the function from the module. The name corresponds to the name of
     // the kernel function.
@@ -462,16 +674,62 @@ private:
   }
 }; // namespace
 
+// TODO(nbpatel) :Fix this. Entry point is gpu::AllocOp
+struct AddIntelGpuOps : public mlir::OpRewritePattern<gpu::AllocOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(gpu::AllocOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+
+    auto stream = getGpuStream(rewriter, op);
+    if (!stream)
+      return mlir::failure();
+
+    return mlir::success();
+  }
+};
+
+struct IntelGpuOpsPass
+    : public mlir::PassWrapper<IntelGpuOpsPass, mlir::OperationPass<void>> {
+
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<intel_gpu::IntelGpuDialect>();
+  }
+
+  void runOnOperation() override {
+    auto *ctx = &getContext();
+    mlir::RewritePatternSet patterns(ctx);
+
+    patterns.insert<AddIntelGpuOps>(ctx);
+
+    (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
+                                             std::move(patterns));
+  }
+};
+
 struct IntelGPUToLLVMPass
     : public mlir::PassWrapper<IntelGPUToLLVMPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<intel_gpu::IntelGpuDialect>();
+  }
+
   void runOnOperation() override {
     mlir::LLVMTypeConverter converter(&getContext());
     mlir::RewritePatternSet patterns(&getContext());
     mlir::LLVMConversionTarget target(getContext());
 
+    converter.addConversion(
+        [context = &converter.getContext()](gpu::AsyncTokenType type) -> Type {
+          return LLVM::LLVMPointerType::get(IntegerType::get(context, 8));
+        });
+
     auto llvmPointerType = mlir::LLVM::LLVMPointerType::get(
         mlir::IntegerType::get(&getContext(), 8));
+
     converter.addConversion(
         [llvmPointerType](intel_gpu::OpaqueType) -> mlir::Type {
           return llvmPointerType;
@@ -488,11 +746,16 @@ struct IntelGPUToLLVMPass
 
     mlir::populateAsyncStructuralTypeConversionsAndLegality(converter, patterns,
                                                             target);
-    mlir::populateGpuToLLVMConversionPatterns(
-        converter, patterns, mlir::gpu::getDefaultGpuBinaryAnnotation());
+    // mlir::populateGpuToLLVMConversionPatterns(
+    //    converter, patterns, mlir::gpu::getDefaultGpuBinaryAnnotation());
+
+    patterns.add<ConvertGetDeviceOpPattern, ConvertCreateContextOpPattern,
+                 ConvertCreateStreamOpPattern>(converter);
 
     patterns.add<ConvertAllocOpToGpuRuntimeCallPattern,
-                 ConvertDeallocOpToGpuRuntimeCallPattern>(converter);
+                 ConvertDeallocOpToGpuRuntimeCallPattern,
+                 ConvertWaitAsyncOpToGpuRuntimeCallPattern,
+                 ConvertWaitOpToGpuRuntimeCallPattern>(converter);
 
     patterns.add<ConvertLaunchFuncOpToGpuRuntimeCallPattern>(
         converter, mlir::gpu::getDefaultGpuBinaryAnnotation());
@@ -504,6 +767,10 @@ struct IntelGPUToLLVMPass
 };
 
 } // namespace
+
+std::unique_ptr<mlir::Pass> intel_gpu::createIntelGpuOpsPass() {
+  return std::make_unique<IntelGpuOpsPass>();
+}
 
 std::unique_ptr<mlir::Pass> intel_gpu::createIntelGPUToLLVMPass() {
   return std::make_unique<IntelGPUToLLVMPass>();

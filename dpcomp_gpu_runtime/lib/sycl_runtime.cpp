@@ -44,8 +44,24 @@ template <typename F> auto catchAll(F &&func) {
 
 } // namespace
 
+struct Sycl_Struct {
+  Sycl_Struct(){};
+
+  // Get the SYCL device
+  sycl::device *get_device(const char *platform = "", size_t ordinal = 0) {
+    sycl::device gpu_device;
+    gpu_device = sycl::device(sycl::gpu_selector());
+    return &gpu_device;
+  }
+
+private:
+};
+
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *sycl_gpuGetDevice() {
-  return catchAll([&]() { return nullptr; });
+  return catchAll([&]() {
+    Sycl_Struct sycl_struct;
+    return sycl_struct.get_device();
+  });
 }
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *sycl_gpuCreateContext(void *device) {

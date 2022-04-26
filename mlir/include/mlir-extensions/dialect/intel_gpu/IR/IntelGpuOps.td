@@ -50,11 +50,11 @@ def GetDeviceOp : IntelGpu_Op<"get_device", [NoSideEffect]> {
       %ordinal = constant.i32 0
       %device = device.get INTELGPU, %ordinal
   }];
-  let arguments = (ins IntelGpu_OpaqueType:$platform, I32:$ordinal);
+
+  // Start with some default ordinal and device type
+ // let arguments = (ins IntelGpu_OpaqueType:$platform, I32:$ordinal);
   let results = (outs IntelGpu_OpaqueType : $device);
-  let builders = [OpBuilder<(ins "::mlir::Value"
-                             : $platform, "::mlir::Value"
-                             : $ordinal)>];
+  let builders = [OpBuilder<(ins)>];
 }
 
 def CreateContextOp : IntelGpu_Op<"create_context"> {
@@ -65,10 +65,10 @@ def CreateContextOp : IntelGpu_Op<"create_context"> {
       %ctx = context.create %device
   }];
 
-  let arguments = (ins IntelGpu_OpaqueType : $device_type);
+  let arguments = (ins IntelGpu_OpaqueType : $device);
   let results = (outs IntelGpu_OpaqueType : $context);
   let builders = [OpBuilder<(ins "::mlir::Value"
-                             : $device_type)>];
+                             : $device)>];
 }
 
 def CreateStreamOp : IntelGpu_Op<"create_stream"> {

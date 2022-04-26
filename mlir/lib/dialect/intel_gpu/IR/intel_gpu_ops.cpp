@@ -117,11 +117,9 @@ struct RemoveUnusedOp : public mlir::OpRewritePattern<Op> {
 } // namespace
 
 void GetDeviceOp::build(::mlir::OpBuilder &odsBuilder,
-                        ::mlir::OperationState &odsState,
-                        ::mlir::Value platform, ::mlir::Value ordinal) {
+                        ::mlir::OperationState &odsState) {
   auto ctx = odsBuilder.getContext();
-  GetDeviceOp::build(odsBuilder, odsState, intel_gpu::OpaqueType::get(ctx),
-                     platform, ordinal);
+  GetDeviceOp::build(odsBuilder, odsState, intel_gpu::OpaqueType::get(ctx));
 }
 
 void CreateContextOp::build(::mlir::OpBuilder &odsBuilder,
