@@ -14,7 +14,7 @@
 # limitations under the License.
 #===============================================================================
 
-if (MLIR_EXT_USE_EXT_LEVEL_ZERO)
+if ((NOT GPU_ENABLE) OR MLIR_EXT_USE_EXT_LEVEL_ZERO)
     return()
 endif()
 

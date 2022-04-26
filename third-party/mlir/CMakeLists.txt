@@ -15,6 +15,7 @@
 #===============================================================================
 
 if (MLIR_EXT_USE_LLVM_INSTALL_TREE)
+    message(STATUS "Using LLVM install tree.")
     return()
 endif()
 

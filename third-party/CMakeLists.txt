@@ -15,4 +15,6 @@
 #===============================================================================
 
 # third party projects
+message(STATUS "Configure third-party projects.")
 add_subdirectory(mlir)
+add_subdirectory(level-zero)
