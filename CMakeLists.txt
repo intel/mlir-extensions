@@ -81,8 +81,10 @@ elseif (DEFINED LLVM_DIR)
     message(FATAL_ERROR "Need to define both LLVM_DIR and MLIR_DIR or none.")
 endif()
 
-# Check if using external level-zero
-set(MLIR_EXT_USE_EXT_LEVEL_ZERO (DEFINED LEVEL_ZERO_DIR))
+if(GPU_ENABLE)
+    # Check if using external level-zero
+    set(MLIR_EXT_USE_EXT_LEVEL_ZERO (DEFINED LEVEL_ZERO_DIR))
+endif()
 
 add_subdirectory(third-party)
 
@@ -93,9 +95,11 @@ if(NOT MLIR_EXT_USE_LLVM_INSTALL_TREE)
     message(STATUS "MLIR_DIR set to: ${PROJECT_BINARY_DIR}/lib/cmake/mlir")
 endif()
 
-if(NOT MLIR_EXT_USE_EXT_LEVEL_ZERO)
-    set(LEVEL_ZERO_DIR ${PROJECT_BINARY_DIR})
-    message(STATUS "LEVEL_ZERO_DIR set to: ${PROJECT_BINARY_DIR}")
+if(GPU_ENABLE)
+    if(NOT MLIR_EXT_USE_EXT_LEVEL_ZERO)
+        set(LEVEL_ZERO_DIR ${PROJECT_BINARY_DIR})
+        message(STATUS "LEVEL_ZERO_DIR set to: ${PROJECT_BINARY_DIR}")
+    endif()
 endif()
 
 if(GPU_ENABLE)
