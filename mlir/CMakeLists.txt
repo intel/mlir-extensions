@@ -145,6 +145,7 @@ target_link_libraries(${MLIR_EXTENSIONS_LIB} PRIVATE
 
 target_include_directories(${MLIR_EXTENSIONS_LIB} SYSTEM PRIVATE
     ${MLIR_INCLUDE_DIRS}
+    ${LLVM_INCLUDE_DIRS}
     PRIVATE
     ./lib
     )

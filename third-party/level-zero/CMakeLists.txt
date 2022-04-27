@@ -22,5 +22,7 @@ endif()
 include(update_level_zero)
 include(ExternalProject)
 ExternalProject_Add(level-zero
-    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/level-zero)
+    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/level-zero
+    CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${PROJECT_BINARY_DIR}
+    )
 

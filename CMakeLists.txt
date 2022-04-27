@@ -87,7 +87,12 @@ endif()
 
 if(GPU_ENABLE)
     # Check if using external level-zero
-    set(MLIR_EXT_USE_EXT_LEVEL_ZERO (DEFINED LEVEL_ZERO_DIR))
+    if(DEFINED LEVEL_ZERO_DIR)
+        set(MLIR_EXT_USE_EXT_LEVEL_ZERO ON)
+    else()
+        set(MLIR_EXT_USE_EXT_LEVEL_ZERO OFF)
+    endif()
+    message(STATUS "MLIR_EXT_USE_EXT_LEVEL_ZERO: ${MLIR_EXT_USE_EXT_LEVEL_ZERO}")
 endif()
 
 add_subdirectory(third-party)
