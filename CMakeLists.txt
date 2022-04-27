@@ -12,9 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-cmake_minimum_required(VERSION 3.5)
+# Match requirement from LLVM/MLIR
+cmake_minimum_required(VERSION 3.13.4)
 
 project(mlir-extensions)
+list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/modules/")
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -69,6 +71,43 @@ macro(apply_llvm_compile_flags target)
 
     target_compile_definitions(${target} PRIVATE ${LLVM_DEFINITIONS})
 endmacro()
+
+# Check if using external LLVM/MLIR install tree
+if (DEFINED MLIR_DIR)
+    if (DEFINED MLIR_DIR)
+        set(MLIR_EXT_USE_LLVM_INSTALL_TREE ON)
+    else()
+        message(FATAL_ERROR "Need to define both LLVM_DIR and MLIR_DIR or none.")
+    endif()
+elseif (DEFINED LLVM_DIR)
+    message(FATAL_ERROR "Need to define both LLVM_DIR and MLIR_DIR or none.")
+else()
+    set(MLIR_EXT_USE_LLVM_INSTALL_TREE OFF)
+endif()
+
+if(GPU_ENABLE)
+    # Check if using external level-zero
+    if(DEFINED LEVEL_ZERO_DIR)
+        set(MLIR_EXT_USE_EXT_LEVEL_ZERO ON)
+    else()
+        set(MLIR_EXT_USE_EXT_LEVEL_ZERO OFF)
+    endif()
+    message(STATUS "MLIR_EXT_USE_EXT_LEVEL_ZERO: ${MLIR_EXT_USE_EXT_LEVEL_ZERO}")
+endif()
+
+add_subdirectory(third-party)
+
+if(NOT MLIR_EXT_USE_LLVM_INSTALL_TREE)
+    set(LLVM_DIR ${PROJECT_BINARY_DIR}/third-party/mlir/llvm-project/llvm/lib/cmake/llvm)
+    set(MLIR_DIR ${PROJECT_BINARY_DIR}/lib/cmake/mlir)
+endif()
+
+if(GPU_ENABLE)
+    if(NOT MLIR_EXT_USE_EXT_LEVEL_ZERO)
+        set(LEVEL_ZERO_DIR ${PROJECT_BINARY_DIR})
+        message(STATUS "LEVEL_ZERO_DIR set to: ${PROJECT_BINARY_DIR}")
+    endif()
+endif()
 
 if(GPU_ENABLE)
     add_subdirectory(dpcomp_gpu_runtime)
