@@ -25,7 +25,7 @@ if(NOT SYCL_DIR)
 endif()
 
 set(SOURCES_LIST
-    lib/gpu_runtime.cpp
+    #lib/gpu_runtime.cpp
     lib/sycl_runtime.cpp
     )
 set(HEADERS_LIST
