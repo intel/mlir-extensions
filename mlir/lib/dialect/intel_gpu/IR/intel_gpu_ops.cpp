@@ -130,17 +130,10 @@ void CreateContextOp::build(::mlir::OpBuilder &odsBuilder,
                          device);
 }
 
-void CreateStreamOp::build(::mlir::OpBuilder &odsBuilder,
-                           ::mlir::OperationState &odsState,
-                           ::mlir::Value context) {
+void GetStreamOp::build(::mlir::OpBuilder &odsBuilder,
+                        ::mlir::OperationState &odsState) {
   auto ctx = odsBuilder.getContext();
-  CreateStreamOp::build(odsBuilder, odsState, intel_gpu::OpaqueType::get(ctx),
-                        context);
-}
-
-void CreateStreamOp::getCanonicalizationPatterns(
-    ::mlir::RewritePatternSet &results, ::mlir::MLIRContext *context) {
-  results.insert<RemoveUnusedOp<CreateStreamOp, DestroyStreamOp>>(context);
+  GetStreamOp::build(odsBuilder, odsState, intel_gpu::OpaqueType::get(ctx));
 }
 
 mlir::StringRef getGpuAccessibleAttrName() { return "gpu.gpu_accessible"; }

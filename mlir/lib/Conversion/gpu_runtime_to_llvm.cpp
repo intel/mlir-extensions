@@ -55,6 +55,22 @@ struct LowerTakeContext
   }
 };
 
+struct LowerUndef : public mlir::ConvertOpToLLVMPattern<plier::UndefOp> {
+  using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::UndefOp op, plier::UndefOp::Adaptor /*adaptor*/,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto converter = getTypeConverter();
+    auto type = converter->convertType(op.getType());
+    if (!type)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::LLVM::UndefOp>(op, type);
+    return mlir::success();
+  }
+};
+
 struct FunctionCallBuilder {
   FunctionCallBuilder(mlir::StringRef functionName, mlir::Type returnType,
                       mlir::ArrayRef<mlir::Type> argumentTypes)
@@ -897,7 +913,8 @@ struct GPUToLLVMPass
         ConvertGpuAllocPattern,
         ConvertGpuDeAllocPattern,
         ConvertGpuSuggestBlockSizePattern,
-        LowerTakeContext
+        LowerTakeContext,
+        LowerUndef
         // clang-format on
         >(converter);
 

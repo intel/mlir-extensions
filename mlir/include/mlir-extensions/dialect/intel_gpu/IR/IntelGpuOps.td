@@ -71,19 +71,12 @@ def CreateContextOp : IntelGpu_Op<"create_context"> {
                              : $device)>];
 }
 
-def CreateStreamOp : IntelGpu_Op<"create_stream"> {
-  let description = [{
-    Creates a gpu stream in the given context. (Queue in SYCL terms)
-
-    Example:
-      %stream = stream.create %context
-  }];
-  let arguments = (ins IntelGpu_OpaqueType : $context);
+def GetStreamOp : IntelGpu_Op<"get_stream"> {
   let results = (outs IntelGpu_OpaqueType : $stream);
-  let hasCanonicalizer = 1;
-  let builders = [OpBuilder<(ins "::mlir::Value"
-                             : $context)>];
+
+  let builders = [OpBuilder<(ins)>];
 }
+
 
 def DestroyStreamOp : IntelGpu_Op<"stream.destroy"> {
   let arguments = (ins IntelGpu_OpaqueType : $stream);
