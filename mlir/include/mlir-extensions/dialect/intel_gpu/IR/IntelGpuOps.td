@@ -73,10 +73,9 @@ def CreateContextOp : IntelGpu_Op<"create_context"> {
 
 def GetStreamOp : IntelGpu_Op<"get_stream"> {
   let results = (outs IntelGpu_OpaqueType : $stream);
-
+  let hasCanonicalizer = 1;
   let builders = [OpBuilder<(ins)>];
 }
-
 
 def DestroyStreamOp : IntelGpu_Op<"stream.destroy"> {
   let arguments = (ins IntelGpu_OpaqueType : $stream);

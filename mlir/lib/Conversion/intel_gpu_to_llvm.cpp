@@ -266,6 +266,7 @@ mlir::Value getGpuStream(mlir::OpBuilder &builder, mlir::Operation *op) {
 
   auto sycl_stream = builder.create<intel_gpu::GetStreamOp>(loc).getResult();
   builder.setInsertionPoint(block.getTerminator());
+  builder.create<intel_gpu::DestroyStreamOp>(loc, sycl_stream);
   return sycl_stream;
 }
 
@@ -338,6 +339,25 @@ private:
   }
 };
 
+class ConvertDestroyStreamOpPattern
+    : public ConvertOpToGpuRuntimeCallPattern<intel_gpu::DestroyStreamOp> {
+public:
+  ConvertDestroyStreamOpPattern(mlir::LLVMTypeConverter &converter)
+      : ConvertOpToGpuRuntimeCallPattern<intel_gpu::DestroyStreamOp>(
+            converter) {}
+
+private:
+  mlir::LogicalResult
+  matchAndRewrite(intel_gpu::DestroyStreamOp op,
+                  intel_gpu::DestroyStreamOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    auto res = streamDestroyCallBuilder.create(loc, rewriter, adaptor.stream());
+    rewriter.replaceOp(op, res.getResults());
+    return mlir::success();
+  }
+};
+
 /// A rewrite pattern to convert gpu.alloc operations into a GPU runtime
 /// call.
 class ConvertAllocOpToGpuRuntimeCallPattern
@@ -354,8 +374,7 @@ private:
     MemRefType memRefType = allocOp.getType();
 
     if (failed(areAllLLVMTypes(allocOp, adaptor.getOperands(), rewriter)) ||
-        !isConvertibleAndHasIdentityMaps(memRefType) ||
-        failed(isAsyncWithOneDependency(rewriter, allocOp)))
+        !isConvertibleAndHasIdentityMaps(memRefType))
       return failure();
     auto loc = allocOp.getLoc();
 
@@ -402,8 +421,7 @@ private:
   LogicalResult
   matchAndRewrite(gpu::DeallocOp deallocOp, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    if (failed(areAllLLVMTypes(deallocOp, adaptor.getOperands(), rewriter)) ||
-        failed(isAsyncWithOneDependency(rewriter, deallocOp)))
+    if (failed(areAllLLVMTypes(deallocOp, adaptor.getOperands(), rewriter)))
       return failure();
 
     Location loc = deallocOp.getLoc();
@@ -445,7 +463,7 @@ private:
       if (isDefinedByCallTo(operand, streamCallBuilder.functionName)) {
         // The converted operand's definition created a stream.
         streamSynchronizeCallBuilder.create(loc, rewriter, {operand});
-        streamDestroyCallBuilder.create(loc, rewriter, {operand});
+        // streamDestroyCallBuilder.create(loc, rewriter, {operand});
       } else {
         // Otherwise the converted operand is an event. This assumes that we
         // use events in control flow code as well.
@@ -624,7 +642,6 @@ private:
         mlir::IntegerAttr::get(llvmIntPtrType,
                                static_cast<int64_t>(blob.size())));
 
-    // TODO(nbpatel): Need to pass Stream here as well
     Value stream = getStream(rewriter);
 
     auto module =
@@ -661,7 +678,7 @@ private:
       // created above (with no other uses) because we check that the
       // synchronous version does not have any async dependencies.
       streamSynchronizeCallBuilder.create(loc, rewriter, stream);
-      streamDestroyCallBuilder.create(loc, rewriter, stream);
+      // streamDestroyCallBuilder.create(loc, rewriter, stream);
       rewriter.eraseOp(launchOp);
     }
     moduleUnloadCallBuilder.create(loc, rewriter, module.getResult(0));
@@ -728,14 +745,16 @@ struct IntelStreamToLLVMPass
 
     target.addIllegalOp<
         // clang-format off
-        intel_gpu::GetStreamOp
+        intel_gpu::GetStreamOp,
+        intel_gpu::DestroyStreamOp
         // clang-format on
         >();
 
     mlir::populateAsyncStructuralTypeConversionsAndLegality(converter, patterns,
                                                             target);
 
-    patterns.add<ConvertGetStreamOpPattern>(converter);
+    patterns.add<ConvertGetStreamOpPattern, ConvertDestroyStreamOpPattern>(
+        converter);
     if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
                                                   std::move(patterns))))
       signalPassFailure();
@@ -767,6 +786,8 @@ struct IntelGPUToLLVMPass
         [llvmPointerType](intel_gpu::OpaqueType) -> mlir::Type {
           return llvmPointerType;
         });
+
+    // target.addIllegalDialect<gpu::GPUDialect>();
 
     mlir::populateAsyncStructuralTypeConversionsAndLegality(converter, patterns,
                                                             target);

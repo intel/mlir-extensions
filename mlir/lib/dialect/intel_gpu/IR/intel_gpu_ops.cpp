@@ -136,6 +136,11 @@ void GetStreamOp::build(::mlir::OpBuilder &odsBuilder,
   GetStreamOp::build(odsBuilder, odsState, intel_gpu::OpaqueType::get(ctx));
 }
 
+void GetStreamOp::getCanonicalizationPatterns(
+    ::mlir::RewritePatternSet &results, ::mlir::MLIRContext *context) {
+  results.insert<RemoveUnusedOp<GetStreamOp, DestroyStreamOp>>(context);
+}
+
 mlir::StringRef getGpuAccessibleAttrName() { return "gpu.gpu_accessible"; }
 
 } // namespace intel_gpu

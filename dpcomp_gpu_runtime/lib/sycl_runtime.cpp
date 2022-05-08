@@ -138,6 +138,11 @@ struct Queue {
     });
   }
 
+  static auto destroyModule(ze_module_handle_t module) {
+    assert(module);
+    L0_SAFE_CALL(zeModuleDestroy(module));
+  }
+
 private:
 };
 
@@ -198,7 +203,8 @@ iGpuModuleLoad(void *queue, const void *data, size_t dataSize) {
 }
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void iGpuModuleDestroy(void *module) {
-  catchAll([&]() {});
+  catchAll(
+      [&]() { Queue::destroyModule(static_cast<ze_module_handle_t>(module)); });
 }
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *
@@ -232,13 +238,12 @@ extern "C" DPCOMP_GPU_RUNTIME_EXPORT void iGpuStreamSynchronize(void *queue) {
   catchAll([&]() { static_cast<Queue *>(queue)->sycl_queue.wait(); });
 }
 
+/*
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT sycl::event *iGpuEventCreate() {
 
-  catchAll([&]() {
-    sycl::event event();
-    return event;
-  });
+  catchAll([&]() { return sycl::event event(); });
 }
+
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void iGpuEventRecord(void *event,
                                                           void *queue) {
@@ -253,10 +258,11 @@ extern "C" DPCOMP_GPU_RUNTIME_EXPORT void iGpuStreamWaitEvent(void *queue,
                                                               void *event) {
 
   catchAll([&]() {
-    // static_cast<Queue *>(queue)->sycl_queue.submit_barrier(
-    //    {reinterpret_cast<sycl::event *>(event)});
+    static_cast<Queue *>(queue)->sycl_queue.submit_barrier(
+        {reinterpret_cast<sycl::event *>(event)});
   });
 }
+*/
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void iGpuDeAlloc(void *queue, void *ptr) {
   catchAll([&]() {});
