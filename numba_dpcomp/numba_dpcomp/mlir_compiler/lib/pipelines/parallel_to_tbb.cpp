@@ -223,14 +223,14 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
 
 struct ParallelToTbbPass
     : public plier::RewriteWrapperPass<
-          ParallelToTbbPass, mlir::FuncOp,
+          ParallelToTbbPass, mlir::func::FuncOp,
           plier::DependentDialectsList<
               plier::PlierDialect, plier::PlierUtilDialect,
               mlir::arith::ArithmeticDialect, mlir::scf::SCFDialect>,
           ParallelToTbb> {};
 
 static void populateParallelToTbbPipeline(mlir::OpPassManager &pm) {
-  pm.addNestedPass<mlir::FuncOp>(std::make_unique<ParallelToTbbPass>());
+  pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<ParallelToTbbPass>());
 }
 } // namespace
 

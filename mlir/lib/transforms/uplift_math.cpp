@@ -123,7 +123,7 @@ struct UpliftFma : public mlir::OpRewritePattern<mlir::arith::AddFOp> {
   mlir::LogicalResult
   matchAndRewrite(mlir::arith::AddFOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto func = op->getParentOfType<mlir::FuncOp>();
+    auto func = op->getParentOfType<mlir::func::FuncOp>();
     if (!func || !func->hasAttr(plier::attributes::getFastmathName()))
       return mlir::failure();
 

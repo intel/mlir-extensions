@@ -88,9 +88,9 @@ static int64_t getOptLevel(mlir::Operation *op) {
 }
 
 static mlir::LogicalResult applyOptimizations(
-    mlir::FuncOp op, const mlir::FrozenRewritePatternSet &patterns,
+    mlir::func::FuncOp op, const mlir::FrozenRewritePatternSet &patterns,
     mlir::AnalysisManager am,
-    llvm::function_ref<mlir::LogicalResult(mlir::FuncOp)> additionalOpts =
+    llvm::function_ref<mlir::LogicalResult(mlir::func::FuncOp)> additionalOpts =
         nullptr) {
   bool repeat = false;
   do {
@@ -422,7 +422,7 @@ protected:
 
     auto mod = op->getParentOfType<mlir::ModuleOp>();
     assert(mod);
-    auto externalFunc = mod.lookupSymbol<mlir::FuncOp>(mangledName);
+    auto externalFunc = mod.lookupSymbol<mlir::func::FuncOp>(mangledName);
     if (!externalFunc) {
       externalFunc = resolver.getFunc(name, types);
       if (externalFunc) {
@@ -1254,7 +1254,7 @@ void MakeStridedLayoutPass::runOnOperation() {
   llvm::SmallVector<mlir::Type> newArgTypes;
   llvm::SmallVector<mlir::Type> newResTypes;
   llvm::SmallVector<mlir::Value> newOperands;
-  for (auto func : mod.getOps<mlir::FuncOp>()) {
+  for (auto func : mod.getOps<mlir::func::FuncOp>()) {
     auto contAttr = func->getAttr(attrStr).dyn_cast_or_null<mlir::ArrayAttr>();
     if (contAttr) {
       auto contAttrRange = contAttr.getAsValueRange<mlir::BoolAttr>();
@@ -1402,7 +1402,7 @@ struct ChangeLayoutReturn
     if (op.operands().empty())
       return mlir::failure();
 
-    auto func = op->getParentOfType<mlir::FuncOp>();
+    auto func = op->getParentOfType<mlir::func::FuncOp>();
     if (!func || !func.isPrivate() || !llvm::hasSingleElement(func.getBody()))
       return mlir::failure();
 
@@ -2388,7 +2388,7 @@ static bool isContigiousArray(mlir::Type type) {
 
 struct MarkContigiousArraysPass
     : public mlir::PassWrapper<MarkContigiousArraysPass,
-                               mlir::OperationPass<mlir::FuncOp>> {
+                               mlir::OperationPass<mlir::func::FuncOp>> {
   void runOnOperation() override {
     auto func = getOperation();
     auto funcType = func.getType();
@@ -2675,7 +2675,8 @@ struct FixDeallocPlacement
     mlir::Operation *newPos = op;
     ++blockIt;
     auto memref = op.memref();
-    mlir::BufferViewFlowAnalysis analysis(op->getParentOfType<mlir::FuncOp>());
+    mlir::BufferViewFlowAnalysis analysis(
+        op->getParentOfType<mlir::func::FuncOp>());
     auto aliases = analysis.resolve(memref);
     auto blockEnd = block->without_terminator().end();
     for (auto &it : llvm::make_range(blockIt, blockEnd)) {
@@ -2784,12 +2785,13 @@ struct ReplaceMemrefCopy : public mlir::OpRewritePattern<mlir::memref::CopyOp> {
 };
 
 struct RemovePseudoCopyPass
-    : public plier::RewriteWrapperPass<RemovePseudoCopyPass, mlir::FuncOp, void,
-                                       RemovePseudoCopy, ReplaceMemrefCopy> {};
+    : public plier::RewriteWrapperPass<RemovePseudoCopyPass, mlir::func::FuncOp,
+                                       void, RemovePseudoCopy,
+                                       ReplaceMemrefCopy> {};
 
 struct CloneArgsPass
     : public mlir::PassWrapper<CloneArgsPass,
-                               mlir::OperationPass<mlir::FuncOp>> {
+                               mlir::OperationPass<mlir::func::FuncOp>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<plier::PlierUtilDialect>();
@@ -2848,12 +2850,12 @@ struct ReplaceClones
 };
 
 struct LowerCloneOpsPass
-    : public plier::RewriteWrapperPass<LowerCloneOpsPass, mlir::FuncOp, void,
-                                       ReplaceClones> {};
+    : public plier::RewriteWrapperPass<LowerCloneOpsPass, mlir::func::FuncOp,
+                                       void, ReplaceClones> {};
 
 struct PostLinalgOptPass
     : public mlir::PassWrapper<PostLinalgOptPass,
-                               mlir::OperationPass<mlir::FuncOp>> {
+                               mlir::OperationPass<mlir::func::FuncOp>> {
 
   void runOnOperation() override;
 };
@@ -2873,7 +2875,7 @@ void PostLinalgOptPass::runOnOperation() {
                   plier::PromoteToParallel, plier::MergeNestedForIntoParallel>(
       &context);
 
-  auto additionalOpt = [](mlir::FuncOp op) {
+  auto additionalOpt = [](mlir::func::FuncOp op) {
     (void)plier::prepareForFusion(op.getRegion());
     return plier::naivelyFuseParallelOps(op.getRegion());
   };
@@ -2884,18 +2886,21 @@ void PostLinalgOptPass::runOnOperation() {
 }
 
 struct FixDeallocPlacementPass
-    : public plier::RewriteWrapperPass<FixDeallocPlacementPass, mlir::FuncOp,
-                                       void, FixDeallocPlacement> {};
+    : public plier::RewriteWrapperPass<FixDeallocPlacementPass,
+                                       mlir::func::FuncOp, void,
+                                       FixDeallocPlacement> {};
 
 static void populatePlierToLinalgGenPipeline(mlir::OpPassManager &pm) {
-  pm.addNestedPass<mlir::FuncOp>(std::make_unique<MarkContigiousArraysPass>());
+  pm.addNestedPass<mlir::func::FuncOp>(
+      std::make_unique<MarkContigiousArraysPass>());
   pm.addPass(std::make_unique<PlierToLinalgPass>());
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(std::make_unique<NumpyCallsLoweringPass>());
   pm.addPass(plier::createForceInlinePass());
   pm.addPass(mlir::createSymbolDCEPass());
-  pm.addNestedPass<mlir::FuncOp>(std::make_unique<PostPlierToLinalgPass>());
-  pm.addNestedPass<mlir::FuncOp>(mlir::createCSEPass());
+  pm.addNestedPass<mlir::func::FuncOp>(
+      std::make_unique<PostPlierToLinalgPass>());
+  pm.addNestedPass<mlir::func::FuncOp>(mlir::createCSEPass());
 }
 
 static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
@@ -2908,33 +2913,35 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<LinalgOptPass>());
 
   pm.addPass(mlir::arith::createConstantBufferizePass());
-  pm.addNestedPass<mlir::FuncOp>(std::make_unique<AdditionalBufferize>());
-  pm.addNestedPass<mlir::FuncOp>(mlir::createSCFBufferizePass());
-  pm.addNestedPass<mlir::FuncOp>(mlir::createLinalgBufferizePass());
-  pm.addNestedPass<mlir::FuncOp>(mlir::createTensorBufferizePass());
+  pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<AdditionalBufferize>());
+  pm.addNestedPass<mlir::func::FuncOp>(mlir::createSCFBufferizePass());
+  pm.addNestedPass<mlir::func::FuncOp>(mlir::createLinalgBufferizePass());
+  pm.addNestedPass<mlir::func::FuncOp>(mlir::createTensorBufferizePass());
   pm.addPass(mlir::func::createFuncBufferizePass());
-  pm.addNestedPass<mlir::FuncOp>(mlir::createCanonicalizerPass());
-  pm.addNestedPass<mlir::FuncOp>(
+  pm.addNestedPass<mlir::func::FuncOp>(mlir::createCanonicalizerPass());
+  pm.addNestedPass<mlir::func::FuncOp>(
       mlir::bufferization::createFinalizingBufferizePass());
 
-  pm.addNestedPass<mlir::FuncOp>(std::make_unique<RemovePseudoCopyPass>());
+  pm.addNestedPass<mlir::func::FuncOp>(
+      std::make_unique<RemovePseudoCopyPass>());
   pm.addPass(mlir::createCanonicalizerPass());
 
-  pm.addNestedPass<mlir::FuncOp>(
+  pm.addNestedPass<mlir::func::FuncOp>(
       mlir::bufferization::createBufferHoistingPass());
-  pm.addNestedPass<mlir::FuncOp>(
+  pm.addNestedPass<mlir::func::FuncOp>(
       mlir::bufferization::createBufferLoopHoistingPass());
 
-  pm.addNestedPass<mlir::FuncOp>(std::make_unique<CloneArgsPass>());
+  pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<CloneArgsPass>());
   pm.addPass(std::make_unique<MakeStridedLayoutPass>());
   pm.addPass(std::make_unique<OptimizeStridedLayoutPass>());
-  pm.addNestedPass<mlir::FuncOp>(std::make_unique<FinalizeStridedLayoutPass>());
-  pm.addNestedPass<mlir::FuncOp>(
+  pm.addNestedPass<mlir::func::FuncOp>(
+      std::make_unique<FinalizeStridedLayoutPass>());
+  pm.addNestedPass<mlir::func::FuncOp>(
       mlir::bufferization::createBufferDeallocationPass());
   pm.addPass(mlir::createCanonicalizerPass());
 
-  pm.addNestedPass<mlir::FuncOp>(std::make_unique<LowerCloneOpsPass>());
-  pm.addNestedPass<mlir::FuncOp>(
+  pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<LowerCloneOpsPass>());
+  pm.addNestedPass<mlir::func::FuncOp>(
       mlir::bufferization::createPromoteBuffersToStackPass());
 
   pm.addPass(std::make_unique<LowerLinalgPass>());
@@ -2942,15 +2949,17 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createSymbolDCEPass());
 
   pm.addPass(plier::createPromoteBoolMemrefPass());
-  pm.addNestedPass<mlir::FuncOp>(plier::createUpliftMathPass());
-  pm.addNestedPass<mlir::FuncOp>(mlir::createCanonicalizerPass());
-  pm.addNestedPass<mlir::FuncOp>(mlir::createLoopInvariantCodeMotionPass());
+  pm.addNestedPass<mlir::func::FuncOp>(plier::createUpliftMathPass());
+  pm.addNestedPass<mlir::func::FuncOp>(mlir::createCanonicalizerPass());
+  pm.addNestedPass<mlir::func::FuncOp>(
+      mlir::createLoopInvariantCodeMotionPass());
 
   // ToDo: This pass also tries to do some simple fusion, whic should be split
   // in separate pass
-  pm.addNestedPass<mlir::FuncOp>(std::make_unique<PostLinalgOptPass>());
+  pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<PostLinalgOptPass>());
 
-  pm.addNestedPass<mlir::FuncOp>(std::make_unique<FixDeallocPlacementPass>());
+  pm.addNestedPass<mlir::func::FuncOp>(
+      std::make_unique<FixDeallocPlacementPass>());
 
   pm.addPass(mlir::createSymbolDCEPass());
 }

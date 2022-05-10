@@ -163,7 +163,7 @@ void plier::populateCommonOptsPatterns(mlir::MLIRContext &context,
 //      LoopInvariantCodeMotion, TODO
       plier::CmpLoopBoundsSimplify,
       plier::IfOpConstCond,
-      plier::CSERewrite<mlir::FuncOp, /*recusive*/ false>,
+      plier::CSERewrite<mlir::func::FuncOp, /*recusive*/ false>,
       SubviewLoadPropagate,
       SubviewStorePropagate,
       PowSimplify

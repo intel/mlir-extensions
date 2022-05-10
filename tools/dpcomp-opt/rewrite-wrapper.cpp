@@ -54,13 +54,13 @@ template <typename Op, typename Rewrite>
 using WrapperRegistration =
     PassRegistrationWrapper<RewriteWrapper<Op, Rewrite>>;
 
-static WrapperRegistration<mlir::FuncOp, plier::PromoteToParallel>
+static WrapperRegistration<mlir::func::FuncOp, plier::PromoteToParallel>
     promoteToParallelReg("dpcomp-promote-to-parallel", "");
 
 static mlir::PassPipelineRegistration<> scfToAffineReg(
     "scf-to-affine", "Converts SCF parallel struct into Affine parallel",
     [](mlir::OpPassManager &pm) {
-      pm.addNestedPass<mlir::FuncOp>(mlir::createSCFToAffinePass());
+      pm.addNestedPass<mlir::func::FuncOp>(mlir::createSCFToAffinePass());
     });
 
 } // namespace

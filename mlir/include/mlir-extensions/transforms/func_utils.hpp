@@ -29,8 +29,8 @@ class StringRef;
 }
 
 namespace plier {
-mlir::FuncOp add_function(mlir::OpBuilder &builder, mlir::ModuleOp module,
-                          llvm::StringRef name, mlir::FunctionType type);
+mlir::func::FuncOp add_function(mlir::OpBuilder &builder, mlir::ModuleOp module,
+                                llvm::StringRef name, mlir::FunctionType type);
 
 struct AllocaInsertionPoint {
   AllocaInsertionPoint(mlir::Operation *inst);

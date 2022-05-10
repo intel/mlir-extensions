@@ -330,7 +330,7 @@ struct ReshapeAlloca : public mlir::OpRewritePattern<mlir::memref::ReshapeOp> {
     if (!shapeOp.dynamicSizes().empty() || !shapeOp.symbolOperands().empty())
       return mlir::failure();
 
-    auto func = op->getParentOfType<mlir::FuncOp>();
+    auto func = op->getParentOfType<mlir::func::FuncOp>();
     if (!func)
       return mlir::failure();
 

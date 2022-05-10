@@ -26,7 +26,7 @@ plier::ArgOpLowering::ArgOpLowering(mlir::MLIRContext *context)
 mlir::LogicalResult
 plier::ArgOpLowering::matchAndRewrite(plier::ArgOp op,
                                       mlir::PatternRewriter &rewriter) const {
-  auto func = op->getParentOfType<mlir::FuncOp>();
+  auto func = op->getParentOfType<mlir::func::FuncOp>();
   if (!func)
     return mlir::failure();
 

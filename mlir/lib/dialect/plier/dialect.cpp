@@ -204,7 +204,7 @@ void ArgOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
 }
 
 mlir::OpFoldResult ArgOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
-  auto func = getOperation()->getParentOfType<mlir::FuncOp>();
+  auto func = getOperation()->getParentOfType<mlir::func::FuncOp>();
   if (func) {
     auto ind = index();
     if (ind < func.getNumArguments() &&

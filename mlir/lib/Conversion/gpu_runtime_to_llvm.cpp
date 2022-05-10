@@ -849,13 +849,13 @@ struct GPUToLLVMPass
                                                             target);
     mlir::populateGpuToLLVMConversionPatterns(
         converter, patterns, mlir::gpu::getDefaultGpuBinaryAnnotation());
-    mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::FuncOp>(
+    mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::func::FuncOp>(
         patterns, converter);
     mlir::populateReturnOpTypeConversionPattern(patterns, converter);
     mlir::populateCallOpTypeConversionPattern(patterns, converter);
 
-    target.addDynamicallyLegalOp<mlir::FuncOp>(
-        [&](mlir::FuncOp op) -> llvm::Optional<bool> {
+    target.addDynamicallyLegalOp<mlir::func::FuncOp>(
+        [&](mlir::func::FuncOp op) -> llvm::Optional<bool> {
           if (converter.isSignatureLegal(op.getType()) &&
               converter.isLegal(&op.getBody()))
             return true;
@@ -874,8 +874,8 @@ struct GPUToLLVMPass
 
           return llvm::None;
         });
-    target.addDynamicallyLegalOp<mlir::FuncOp>(
-        [&](mlir::FuncOp op) -> llvm::Optional<bool> {
+    target.addDynamicallyLegalOp<mlir::func::FuncOp>(
+        [&](mlir::func::FuncOp op) -> llvm::Optional<bool> {
           auto type = op.getType();
           for (auto range : {type.getInputs(), type.getResults()})
             for (auto type : range)
