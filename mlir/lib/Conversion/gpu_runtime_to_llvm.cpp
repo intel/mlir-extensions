@@ -856,7 +856,7 @@ struct GPUToLLVMPass
 
     target.addDynamicallyLegalOp<mlir::func::FuncOp>(
         [&](mlir::func::FuncOp op) -> llvm::Optional<bool> {
-          if (converter.isSignatureLegal(op.getType()) &&
+          if (converter.isSignatureLegal(op.getFunctionType()) &&
               converter.isLegal(&op.getBody()))
             return true;
 
@@ -876,7 +876,7 @@ struct GPUToLLVMPass
         });
     target.addDynamicallyLegalOp<mlir::func::FuncOp>(
         [&](mlir::func::FuncOp op) -> llvm::Optional<bool> {
-          auto type = op.getType();
+          auto type = op.getFunctionType();
           for (auto range : {type.getInputs(), type.getResults()})
             for (auto type : range)
               if (converter.isLegal(type))

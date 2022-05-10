@@ -1050,7 +1050,7 @@ public:
   matchAndRewrite(mlir::func::FuncOp op,
                   mlir::func::FuncOp::Adaptor /*adaptor*/,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    if (!op.body().empty())
+    if (!op.getBody().empty())
       return mlir::failure();
 
     rewriter.eraseOp(op);
