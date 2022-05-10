@@ -38,8 +38,8 @@ PyFuncResolver::PyFuncResolver() : context(std::make_unique<Context>()) {
 
 PyFuncResolver::~PyFuncResolver() {}
 
-mlir::FuncOp PyFuncResolver::getFunc(llvm::StringRef name,
-                                     mlir::TypeRange types) const {
+mlir::func::FuncOp PyFuncResolver::getFunc(llvm::StringRef name,
+                                           mlir::TypeRange types) const {
   assert(!name.empty());
   auto funcDesc = context->resolver(py::str(name.data(), name.size()));
   if (funcDesc.is_none())
@@ -55,5 +55,5 @@ mlir::FuncOp PyFuncResolver::getFunc(llvm::StringRef name,
 
   auto res = static_cast<mlir::Operation *>(
       context->compiler(pyFunc, pyTypes, flags).cast<py::capsule>());
-  return mlir::cast_or_null<mlir::FuncOp>(res);
+  return mlir::cast_or_null<mlir::func::FuncOp>(res);
 }

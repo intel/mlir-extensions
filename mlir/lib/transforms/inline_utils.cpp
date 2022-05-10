@@ -24,7 +24,7 @@
 #include <mlir/Transforms/InliningUtils.h>
 
 namespace {
-static bool mustInline(mlir::func::CallOp call, mlir::FuncOp func) {
+static bool mustInline(mlir::func::CallOp call, mlir::func::FuncOp func) {
   auto attr = mlir::StringAttr::get(call.getContext(),
                                     plier::attributes::getForceInlineName());
   return call->hasAttr(attr) || func->hasAttr(attr);
@@ -39,7 +39,7 @@ struct ForceInline : public mlir::OpRewritePattern<mlir::func::CallOp> {
     auto mod = op->getParentOfType<mlir::ModuleOp>();
     assert(mod);
 
-    auto func = mod.lookupSymbol<mlir::FuncOp>(op.getCallee());
+    auto func = mod.lookupSymbol<mlir::func::FuncOp>(op.getCallee());
     if (!func)
       return mlir::failure();
 
@@ -97,7 +97,7 @@ struct ForceInlinePass
     (void)mlir::applyPatternsAndFoldGreedily(mod, patterns);
 
     mod->walk([&](mlir::func::CallOp call) {
-      auto func = mod.lookupSymbol<mlir::FuncOp>(call.getCallee());
+      auto func = mod.lookupSymbol<mlir::func::FuncOp>(call.getCallee());
       if (func && mustInline(call, func)) {
         call.emitError("Couldn't inline force-inline call");
         signalPassFailure();

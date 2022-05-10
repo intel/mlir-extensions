@@ -18,7 +18,6 @@
 
 namespace mlir {
 class ModuleOp;
-class FuncOp;
 class OpBuilder;
 class FunctionType;
 class Operation;
@@ -28,9 +27,15 @@ namespace llvm {
 class StringRef;
 }
 
+namespace mlir {
+namespace func {
+class FuncOp;
+}
+} // namespace mlir
+
 namespace plier {
-mlir::FuncOp add_function(mlir::OpBuilder &builder, mlir::ModuleOp module,
-                          llvm::StringRef name, mlir::FunctionType type);
+mlir::func::FuncOp add_function(mlir::OpBuilder &builder, mlir::ModuleOp module,
+                                llvm::StringRef name, mlir::FunctionType type);
 
 struct AllocaInsertionPoint {
   AllocaInsertionPoint(mlir::Operation *inst);

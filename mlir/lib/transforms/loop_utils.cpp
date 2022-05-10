@@ -74,7 +74,7 @@ static mlir::Value getCastArg(mlir::Value val) {
     return cast.value();
 
   if (auto cast = val.getDefiningOp<mlir::UnrealizedConversionCastOp>()) {
-    auto inputs = cast.inputs();
+    auto inputs = cast.getInputs();
     if (inputs.size() == 1)
       return inputs.front();
   }

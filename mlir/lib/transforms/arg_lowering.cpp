@@ -14,6 +14,7 @@
 
 #include "mlir-extensions/transforms/arg_lowering.hpp"
 
+#include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/IR/TypeSupport.h>
 #include <mlir/Transforms/DialectConversion.h>
@@ -26,7 +27,7 @@ plier::ArgOpLowering::ArgOpLowering(mlir::MLIRContext *context)
 mlir::LogicalResult
 plier::ArgOpLowering::matchAndRewrite(plier::ArgOp op,
                                       mlir::PatternRewriter &rewriter) const {
-  auto func = op->getParentOfType<mlir::FuncOp>();
+  auto func = op->getParentOfType<mlir::func::FuncOp>();
   if (!func)
     return mlir::failure();
 

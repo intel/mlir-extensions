@@ -45,7 +45,7 @@
 namespace {
 struct ParallelLoopGPUMappingPass
     : public mlir::PassWrapper<ParallelLoopGPUMappingPass,
-                               mlir::OperationPass<mlir::FuncOp>> {
+                               mlir::OperationPass<mlir::func::FuncOp>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::scf::SCFDialect>();
@@ -99,7 +99,7 @@ struct ParallelLoopGPUMappingPass
 
 struct InsertGPUAllocs
     : public mlir::PassWrapper<InsertGPUAllocs,
-                               mlir::OperationPass<mlir::FuncOp>> {
+                               mlir::OperationPass<mlir::func::FuncOp>> {
 
   InsertGPUAllocs() = default;
   InsertGPUAllocs(bool gpuDealloc) { useGpuDealloc = gpuDealloc; }
@@ -653,7 +653,7 @@ struct UnstrideMemrefsPass
 static llvm::Optional<mlir::Value> getGpuStream(mlir::OpBuilder &builder,
                                                 mlir::Operation *op) {
   assert(op);
-  auto func = op->getParentOfType<mlir::FuncOp>();
+  auto func = op->getParentOfType<mlir::func::FuncOp>();
   if (!func)
     return {};
 
@@ -1042,14 +1042,15 @@ public:
 };
 
 // TODO: something better
-class ConvertFunc : public mlir::OpConversionPattern<mlir::FuncOp> {
+class ConvertFunc : public mlir::OpConversionPattern<mlir::func::FuncOp> {
 public:
-  using mlir::OpConversionPattern<mlir::FuncOp>::OpConversionPattern;
+  using mlir::OpConversionPattern<mlir::func::FuncOp>::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(mlir::FuncOp op, mlir::FuncOp::Adaptor /*adaptor*/,
+  matchAndRewrite(mlir::func::FuncOp op,
+                  mlir::func::FuncOp::Adaptor /*adaptor*/,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    if (!op.body().empty())
+    if (!op.getBody().empty())
       return mlir::failure();
 
     rewriter.eraseOp(op);

@@ -26,10 +26,15 @@ class StringRef;
 
 namespace mlir {
 class Value;
-class FuncOp;
 class ValueRange;
 class OpBuilder;
 class Location;
+} // namespace mlir
+
+namespace mlir {
+namespace func {
+class FuncOp;
+}
 } // namespace mlir
 
 class PyLinalgResolver {
