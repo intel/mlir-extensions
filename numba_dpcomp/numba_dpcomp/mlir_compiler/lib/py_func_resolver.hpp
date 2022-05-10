@@ -21,7 +21,12 @@ class StringRef;
 }
 
 namespace mlir {
+namespace func {
 class FuncOp;
+}
+} // namespace mlir
+
+namespace mlir {
 class TypeRange;
 } // namespace mlir
 
