@@ -18,6 +18,7 @@
 #include <mlir/Pass/PassRegistry.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 
+#include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/SCF/SCF.h>
 
 #include "mlir-extensions/Conversion/SCFToAffine/SCFToAffine.h"

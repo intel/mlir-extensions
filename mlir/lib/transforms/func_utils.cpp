@@ -14,10 +14,10 @@
 
 #include "mlir-extensions/transforms/func_utils.hpp"
 
+#include <llvm/ADT/StringRef.h>
+#include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/BuiltinOps.h>
-
-#include <llvm/ADT/StringRef.h>
 
 mlir::func::FuncOp plier::add_function(mlir::OpBuilder &builder,
                                        mlir::ModuleOp module,

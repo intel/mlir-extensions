@@ -14,6 +14,7 @@
 
 #include "mlir-extensions/transforms/arg_lowering.hpp"
 
+#include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/IR/TypeSupport.h>
 #include <mlir/Transforms/DialectConversion.h>
