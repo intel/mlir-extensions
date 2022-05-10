@@ -84,6 +84,12 @@ struct Queue {
 
   sycl::queue sycl_queue;
 
+  void *alloc_device_memory(size_t size) {
+    void *mem_ptr;
+    mem_ptr = sycl::malloc_device(size, this->sycl_queue);
+    return reinterpret_cast<void *>(mem_ptr);
+  }
+
   ze_module_handle_t loadModule(const void *data, size_t dataSize) {
     assert(data);
     ze_module_handle_t ze_module;
@@ -187,12 +193,8 @@ extern "C" DPCOMP_GPU_RUNTIME_EXPORT void iGpuStreamDestroy(void *queue) {
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *
 iGpuMemAlloc(size_t size, void *queue, int shared) {
-  catchAll([&]() {
-    void *mem_ptr;
-    mem_ptr =
-        sycl::malloc_device(size, static_cast<Queue *>(queue)->sycl_queue);
-    return reinterpret_cast<void *>(mem_ptr);
-  });
+  catchAll(
+      [&]() { return static_cast<Queue *>(queue)->alloc_device_memory(size); });
 }
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *

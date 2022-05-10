@@ -56,7 +56,7 @@
 
 using namespace mlir;
 
-static constexpr const char *kGpuBinaryStorageSuffix = "_gpubin_cst";
+static constexpr const char *kGpuBinaryStorageSuffix = "_spirv_binary";
 
 namespace {
 
@@ -374,7 +374,8 @@ private:
     MemRefType memRefType = allocOp.getType();
 
     if (failed(areAllLLVMTypes(allocOp, adaptor.getOperands(), rewriter)) ||
-        !isConvertibleAndHasIdentityMaps(memRefType))
+        !isConvertibleAndHasIdentityMaps(memRefType) ||
+        failed(isAsyncWithOneDependency(rewriter, allocOp)))
       return failure();
     auto loc = allocOp.getLoc();
 
