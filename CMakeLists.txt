@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.20)
 
 project(mlir-extensions)
 
@@ -29,6 +29,8 @@ endif()
 if(POLICY CMP0116)
     cmake_policy(SET CMP0116 OLD)
 endif()
+
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules/")
 
 # SDL
 # set(CMAKE_VERBOSE_MAKEFILE on) # enable for debug
@@ -66,11 +68,15 @@ macro(apply_llvm_compile_flags target)
     if (MSVC)
         target_compile_options(${target} PRIVATE /EHsc)
     endif ()
-
     target_compile_definitions(${target} PRIVATE ${LLVM_DEFINITIONS})
 endmacro()
 
 if(GPU_ENABLE)
+    if(DEFINED ENV{LEVEL_ZERO_VERSION_CHECK_OFF})
+        find_package(LevelZero REQUIRED)
+    else()
+        find_package(LevelZero 1.6 REQUIRED)
+    endif()
     add_subdirectory(dpcomp_gpu_runtime)
 endif()
 

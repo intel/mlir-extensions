@@ -89,7 +89,6 @@ if int(os.environ.get("DPCOMP_SETUP_RUN_CMAKE", 1)):
     else:
         print("LEVEL_ZERO_DIR is", LEVEL_ZERO_DIR)
         cmake_cmd += [
-            "-DLEVEL_ZERO_DIR=" + LEVEL_ZERO_DIR,
             "-DGPU_ENABLE=ON",
         ]
 
