@@ -89,7 +89,7 @@ jobs:
   - script: |
       git clone https://github.com/oneapi-src/level-zero.git
       cd level-zero
-      git checkout v1.5.0
+      git checkout v1.6.2
       mkdir level_zero_install
       mkdir build
       cd build
@@ -111,6 +111,7 @@ jobs:
       export LLVM_PATH=$(System.DefaultWorkingDirectory)/llvm_cache
       export TBB_PATH=$(System.DefaultWorkingDirectory)/tbb
       export LEVEL_ZERO_DIR=$(System.DefaultWorkingDirectory)/level-zero/level_zero_install
+      export LEVEL_ZERO_VERSION_CHECK_OFF=1
       export OCL_ICD_FILENAMES_RESET=1
       export OCL_ICD_FILENAMES=libintelocl.so
       export SYCL_DEVICE_FILTER=opencl:cpu
