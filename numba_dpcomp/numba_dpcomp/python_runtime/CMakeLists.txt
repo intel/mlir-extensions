@@ -14,7 +14,7 @@
 
 project(dpcomp-python-runtime LANGUAGES CXX C)
 
-find_package (Python3 COMPONENTS Development REQUIRED)
+find_package (Python3 COMPONENTS Development NumPy REQUIRED)
 
 include(GenerateExportHeader)
 
