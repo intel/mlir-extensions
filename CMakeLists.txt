@@ -40,8 +40,28 @@ if (CMAKE_SYSTEM_NAME STREQUAL Windows)
     # add_link_options(-INTEGRITYCHECK) # require signatures of libs, only recommended
 endif()
 if (CMAKE_SYSTEM_NAME STREQUAL Linux)
-    add_compile_options(-D_FORTIFY_SOURCE=2 -Wformat -Wformat-security -Werror=format-security -fno-delete-null-pointer-checks -fstack-protector-strong -fno-strict-overflow -Wall)
-    add_compile_options(-fstack-clash-protection -fcf-protection=full) # v8.0 and newer
+    string(CONCAT WARN_FLAGS
+        "-Wall "
+        "-Wextra "
+        "-Winit-self "
+        "-Wunused-function "
+        "-Wuninitialized "
+        "-Wmissing-declarations "
+        "-fdiagnostics-color=auto "
+        "-Wno-deprecated-declarations "
+    )
+    string(CONCAT SDL_FLAGS
+        "-D_FORTIFY_SOURCE=2 "
+        "-Wformat "
+        "-Wformat-security "
+        "-Werror=format-security "
+        "-fno-delete-null-pointer-checks "
+        "-fstack-protector-strong  "
+        "-fno-strict-overflow "
+        "-fstack-clash-protection "
+        "-fcf-protection=full "
+    )
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${WARN_FLAGS} ${SDL_FLAGS}")
     # add_compile_options(-mcet) # v8.0 and newer # unrecognized command line option '-mcet', only recommended
     add_link_options(-Wl,-z,noexecstack,-z,relro,-z,now)
 endif()
@@ -51,18 +71,32 @@ if (CMAKE_SYSTEM_NAME STREQUAL Darwin)
     # add_compile_options(-mcet) # v8.0 and newer # unrecognized command line option '-mcet', only recommended
 endif()
 
-option(DPNP_ENABLE "Use DPNP for some math functions" OFF)
-option(GPU_ENABLE "Enable GPU codegen" OFF)
-option(NUMBA_ENABLE "Enable numba-based python frontend" OFF)
-option(TBB_ENABLE "Enable TBB" OFF)
+option(IMEX_USE_DPNP
+    "Use the dpnp Python NumPy-like library for some math functions"
+    OFF
+)
+option(IMEX_ENABLE_IGPU_DIALECT
+    "Enable GPU codegen"
+    OFF
+)
+option(IMEX_ENABLE_NUMBA_FE
+    "Enable numba-based python frontend"
+    OFF
+)
+option(IMEX_ENABLE_TBB_SUPPORT
+    "Enable TBB"
+    OFF
+)
+option(IMEX_ENABLE_TESTS
+    "Enable CTests"
+    OFF
+)
 
-message(STATUS "DPNP_ENABLE ${DPNP_ENABLE}")
-message(STATUS "GPU_ENABLE ${GPU_ENABLE}")
-message(STATUS "BUILD_TESTING ${BUILD_TESTING}")
-message(STATUS "NUMBA_ENABLE ${NUMBA_ENABLE}")
-message(STATUS "TBB_ENABLE ${TBB_ENABLE}")
-
-include(CTest)
+message(STATUS "IMEX_USE_DPNP ${DPNIMEX_USE_DPNPP_ENABLE}")
+message(STATUS "IMEX_ENABLE_IGPU_DIALECT ${IMEX_ENABLE_IGPU_DIALECT}")
+message(STATUS "IMEX_ENABLE_TESTS ${IMEX_ENABLE_TESTS}")
+message(STATUS "IMEX_ENABLE_NUMBA_FE ${IMEX_ENABLE_NUMBA_FE}")
+message(STATUS "IMEX_ENABLE_TBB_SUPPORT ${IMEX_ENABLE_TBB_SUPPORT}")
 
 macro(apply_llvm_compile_flags target)
     if (MSVC)
@@ -71,7 +105,7 @@ macro(apply_llvm_compile_flags target)
     target_compile_definitions(${target} PRIVATE ${LLVM_DEFINITIONS})
 endmacro()
 
-if(GPU_ENABLE)
+if(IMEX_ENABLE_IGPU_DIALECT)
     if(DEFINED ENV{LEVEL_ZERO_VERSION_CHECK_OFF})
         find_package(LevelZero REQUIRED)
     else()
@@ -84,10 +118,11 @@ add_subdirectory(mlir)
 add_subdirectory(dpcomp_runtime)
 add_subdirectory(tools)
 
-if(NUMBA_ENABLE)
+if(IMEX_ENABLE_NUMBA_FE)
     add_subdirectory(numba_dpcomp)
 endif()
 
-if(BUILD_TESTING)
+if(IMEX_ENABLE_TESTS)
+    include(CTest)
     add_subdirectory(test)
 endif()

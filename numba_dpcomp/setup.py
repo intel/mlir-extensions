@@ -63,8 +63,8 @@ if int(os.environ.get("DPCOMP_SETUP_RUN_CMAKE", 1)):
         "-DCMAKE_INSTALL_PREFIX=" + CMAKE_INSTALL_PREFIX,
         "-DPython3_NumPy_INCLUDE_DIRS=" + NUMPY_INCLUDE_DIR,
         "-DPython3_FIND_STRATEGY=LOCATION",
-        "-DNUMBA_ENABLE=ON",
-        "-DTBB_ENABLE=ON",
+        "-DIMEX_ENABLE_NUMBA_FE=ON",
+        "-DIMEX_ENABLE_TBB_SUPPORT=ON",
     ]
 
     # DPNP
@@ -76,7 +76,7 @@ if int(os.environ.get("DPCOMP_SETUP_RUN_CMAKE", 1)):
         cmake_cmd += [
             "-DDPNP_LIBRARY_DIR=" + DPNP_LIBRARY_DIR,
             "-DDPNP_INCLUDE_DIR=" + DPNP_INCLUDE_DIR,
-            "-DDPNP_ENABLE=ON",
+            "-DIMEX_USE_DPNP=ON",
         ]
         print("Found DPNP at", DPNP_LIBRARY_DIR)
     except ImportError:
@@ -89,7 +89,7 @@ if int(os.environ.get("DPCOMP_SETUP_RUN_CMAKE", 1)):
     else:
         print("LEVEL_ZERO_DIR is", LEVEL_ZERO_DIR)
         cmake_cmd += [
-            "-DGPU_ENABLE=ON",
+            "-DIMEX_ENABLE_IGPU_DIALECT=ON",
         ]
 
     try:

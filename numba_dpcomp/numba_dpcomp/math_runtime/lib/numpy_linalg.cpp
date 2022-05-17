@@ -16,7 +16,7 @@
 
 #include "common.hpp"
 
-#ifdef DPNP_ENABLE
+#ifdef IMEX_USE_DPNP
 #include <dpnp_iface.hpp>
 #endif
 
@@ -24,7 +24,7 @@ namespace {
 template <typename T>
 void eigImpl(Memref<2, const T> *input, Memref<1, T> *vals,
              Memref<2, T> *vecs) {
-#ifdef DPNP_ENABLE
+#ifdef IMEX_USE_DPNP
   dpnp_eig_c<T, T>(input->data, vals->data, vecs->data, input->dims[0]);
 #else
   (void)input;

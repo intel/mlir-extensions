@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifdef TBB_ENABLE
+#ifdef IMEX_ENABLE_TBB_SUPPORT
 
 #include <array>
 #include <cassert>
@@ -246,4 +246,4 @@ DPCOMP_RUNTIME_EXPORT void dpcompParallelFinalize() {
   globalContext.reset();
 }
 }
-#endif // TBB_ENABLE
+#endif // IMEX_ENABLE_TBB_SUPPORT
