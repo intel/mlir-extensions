@@ -15,7 +15,6 @@
 project(mlir_compiler LANGUAGES CXX C)
 
 find_package(pybind11 REQUIRED)
-
 find_package(LLVM REQUIRED CONFIG)
 find_package(MLIR REQUIRED CONFIG)
 
@@ -42,7 +41,7 @@ set(SOURCES_LIST
     lib/py_linalg_resolver.cpp
     lib/py_map_types.cpp
     lib/py_module.cpp
-    )
+)
 set(HEADERS_LIST
     lib/pipelines/base_pipeline.hpp
     lib/pipelines/lower_to_gpu.hpp
@@ -59,7 +58,7 @@ set(HEADERS_LIST
     lib/py_linalg_resolver.hpp
     lib/py_map_types.hpp
     lib/py_module.hpp
-    )
+)
 
 pybind11_add_module(${PROJECT_NAME} ${SOURCES_LIST} ${HEADERS_LIST})
 
@@ -71,7 +70,12 @@ if (CMAKE_SYSTEM_NAME STREQUAL Darwin)
     target_link_libraries(${PROJECT_NAME} PRIVATE "-Wl,-exported_symbols_list,${CMAKE_CURRENT_SOURCE_DIR}/export_darwin.txt")
 endif()
 
-apply_llvm_compile_flags(${PROJECT_NAME})
+
+if (MSVC)
+    target_compile_options(${PROJECT_NAME} PRIVATE /EHsc)
+else()
+    target_compile_definitions(${PROJECT_NAME} PRIVATE ${LLVM_DEFINITIONS})
+endif ()
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
     mlir-extensions
@@ -94,12 +98,13 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     MLIRSPIRVSerialization
     MLIRTensorTransforms
     MLIRReconcileUnrealizedCasts
-    )
+)
 
 target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE
     ${MLIR_INCLUDE_DIRS}
     PRIVATE
-    ./lib)
+    ./lib
+)
 
 if(IMEX_USE_DPNP)
     target_compile_definitions(${PROJECT_NAME} PRIVATE IMEX_USE_DPNP=1)
@@ -113,15 +118,9 @@ set(CMAKE_INSTALL_BINDIR ./numba_dpcomp/numba_dpcomp)
 set(CMAKE_INSTALL_LIBDIR ./numba_dpcomp/numba_dpcomp)
 set(CMAKE_INSTALL_INCLUDEDIR ./numba_dpcomp/numba_dpcomp)
 
-install(TARGETS dpcomp-runtime dpcomp-math-runtime dpcomp-python-runtime mlir_compiler
+install(TARGETS dpcomp-math-runtime dpcomp-python-runtime mlir_compiler
         LIBRARY DESTINATION numba_dpcomp/numba_dpcomp
-        )
-
-if(IMEX_ENABLE_IGPU_DIALECT)
-    install(TARGETS dpcomp-gpu-runtime
-            LIBRARY DESTINATION numba_dpcomp/numba_dpcomp
-            )
-endif()
+)
 
 get_filename_component(_tmp_path1 "${CMAKE_SOURCE_DIR}" REALPATH)
 get_filename_component(_tmp_path2 "${CMAKE_INSTALL_PREFIX}" REALPATH)

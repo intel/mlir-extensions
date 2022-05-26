@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+cmake_minimum_required(VERSION 3.20)
+project(numba-dpcomp)
+
 add_subdirectory(numba_dpcomp/python_runtime)
 add_subdirectory(numba_dpcomp/math_runtime)
 add_subdirectory(numba_dpcomp/mlir_compiler)

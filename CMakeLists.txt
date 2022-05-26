@@ -117,6 +117,7 @@ if(IMEX_ENABLE_IGPU_DIALECT)
         find_package(LevelZero 1.6 REQUIRED)
     endif()
     add_subdirectory(dpcomp_gpu_runtime)
+    install(TARGETS dpcomp-gpu-runtime)
 endif()
 
 if(IMEX_ENABLE_NUMBA_HOTFIX)
@@ -135,3 +136,5 @@ if(IMEX_ENABLE_TESTS)
     include(CTest)
     add_subdirectory(test)
 endif()
+
+install(TARGETS dpcomp-runtime)
