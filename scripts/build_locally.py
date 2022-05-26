@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from logging import warning
 import os
 import subprocess
 import sys
@@ -68,6 +67,65 @@ def _sha_matched(llvm_install_dir, llvm_sha):
     return sha == llvm_sha
 
 
+def _configure_llvm_build(
+    llvm_src_dir,
+    cmake_exec,
+    mlir_install_prefix,
+    build_type="Release",
+    enable_assertions=True,
+    c_compiler=None,
+    cxx_compiler=None,
+):
+    try:
+        temp_uuid = str(uuid.uuid1())
+        llvm_build_dir = llvm_src_dir + "/_build_" + temp_uuid
+        os.mkdir(llvm_build_dir)
+        llvm_build_dir = os.path.abspath(llvm_build_dir)
+    except FileExistsError:
+        raise RuntimeError("Could not create build directory.")
+    except FileNotFoundError:
+        raise RuntimeError(
+            f"Could not create build direcotry {llvm_build_dir}", llvm_build_dir,
+        )
+
+    if "linux" in sys.platform:
+        if c_compiler is None:
+            c_compiler = "gcc"
+        if cxx_compiler is None:
+            cxx_compiler = "g++"
+    else:
+        raise RuntimeError("Unsupported platform")
+
+    build_system = None
+    if sys.platform in ["linux", "win32", "cygwin"]:
+        build_system = "Ninja"
+    else:
+        assert False, sys.platform + " not supported"
+
+    cmake_config_args = cmake_exec + (
+        [
+            "-G",
+            build_system,
+            "-DCMAKE_BUILD_TYPE=" + build_type,
+            "-DCMAKE_C_COMPILER:PATH=" + c_compiler,
+            "-DCMAKE_CXX_COMPILER:PATH=" + cxx_compiler,
+            "-DLLVM_ENABLE_PROJECTS=mlir",
+            "-DLLVM_BUILD_EXAMPLES=ON",
+            #'-DLLVM_TARGETS_TO_BUILD="host"',
+            "-DLLVM_ENABLE_ASSERTIONS=" + "ON" if enable_assertions else "OFF",
+            "-DLLVM_ENABLE_RTTI=ON",
+            "-DLLVM_USE_LINKER=gold",
+            "-DCMAKE_INSTALL_PREFIX=" + os.path.abspath(mlir_install_prefix),
+            os.path.abspath(llvm_src_dir + "/llvm"),
+        ]
+    )
+    # Configure
+    subprocess.check_call(
+        cmake_config_args, shell=False, cwd=llvm_build_dir, env=os.environ
+    )
+    return llvm_build_dir
+
+
 def _build_llvm(
     llvm_src_dir,
     mlir_install_dir=None,
@@ -104,68 +162,28 @@ def _build_llvm(
             f"llvm_src_dir specified as {llvm_src_dir} does not exist.",
             os.path.abspath(llvm_src_dir),
         )
-
-    try:
-        temp_uuid = str(uuid.uuid1())
-        llvm_build_dir = llvm_src_dir + "/_build_" + temp_uuid
-        os.mkdir(llvm_build_dir)
-        llvm_build_dir = os.path.abspath(llvm_build_dir)
-    except FileExistsError:
-        raise RuntimeError("Could not create build directory.")
-    except FileNotFoundError:
-        raise RuntimeError(
-            f"Could not create build direcotry {llvm_build_dir}", llvm_build_dir
-        )
-
+    cmake_exec = [cmake_executable if cmake_executable else "cmake"]
     mlir_install_prefix = (
         mlir_install_dir if mlir_install_dir else llvm_src_dir + "/mlir_install"
     )
-
-    if "linux" in sys.platform:
-        if c_compiler is None:
-            c_compiler = "gcc"
-        if cxx_compiler is None:
-            cxx_compiler = "g++"
-    else:
-        raise RuntimeError("Unsupported platform")
-
-    build_system = None
-    if sys.platform in ["linux", "win32", "cygwin"]:
-        build_system = "Ninja"
-    else:
-        assert False, sys.platform + " not supported"
-
-    cmake_args = [cmake_executable if cmake_executable else "cmake"]
-    cmake_config_args = cmake_args + (
-        [
-            "-G",
-            build_system,
-            "-DCMAKE_BUILD_TYPE=" + build_type,
-            "-DCMAKE_C_COMPILER:PATH=" + c_compiler,
-            "-DCMAKE_CXX_COMPILER:PATH=" + cxx_compiler,
-            "-DLLVM_ENABLE_PROJECTS=mlir",
-            "-DLLVM_BUILD_EXAMPLES=ON",
-            #'-DLLVM_TARGETS_TO_BUILD="host"',
-            "-DLLVM_ENABLE_ASSERTIONS=" + "ON" if enable_assertions else "OFF",
-            "-DLLVM_ENABLE_RTTI=ON",
-            "-DLLVM_USE_LINKER=gold",
-            "-DCMAKE_INSTALL_PREFIX=" + os.path.abspath(mlir_install_prefix),
-            os.path.abspath(llvm_src_dir + "/llvm"),
-        ]
+    llvm_build_dir = _configure_llvm_build(
+        build_type=build_type,
+        llvm_src_dir=llvm_src_dir,
+        mlir_install_prefix=mlir_install_prefix,
+        cmake_exec=cmake_exec,
+        enable_assertions=enable_assertions,
+        c_compiler=c_compiler,
+        cxx_compiler=cxx_compiler,
     )
 
     try:
-        # Configure
-        subprocess.check_call(
-            cmake_config_args, shell=False, cwd=llvm_build_dir, env=os.environ
-        )
         # Build
-        cmake_build_args = cmake_args + ["--build", "."]
+        cmake_build_args = cmake_exec + ["--build", "."]
         subprocess.check_call(
             cmake_build_args, shell=False, cwd=llvm_build_dir, env=os.environ
         )
         # Install
-        cmake_install_args = cmake_args + ["--install", "."]
+        cmake_install_args = cmake_exec + ["--install", "."]
         subprocess.check_call(
             cmake_install_args, shell=False, cwd=llvm_build_dir, env=os.environ
         )
@@ -181,7 +199,7 @@ def _get_llvm(llvm_sha=None, working_dir=None):
     """Checks out the llvm git repo.
 
     The llvm git repo is cloned either to a sub-direcotry inside the provided
-    "working_fir" or into the system tmp folder. If a commit SHA is provided,
+    "working_dir" or into the system tmp folder. If a commit SHA is provided,
     then the commit is checked out into a new branch. The location of the cloned
     git repo is returned to caller.
 
@@ -204,7 +222,7 @@ def _get_llvm(llvm_sha=None, working_dir=None):
 
     if working_dir and not os.path.exists(working_dir):
         raise RuntimeError(
-            f"working_dir specified as {working_dir} does not exist.", working_dir
+            f"working_dir specified as {working_dir} does not exist.", working_dir,
         )
 
     git_checkout_dir = working_dir
@@ -265,10 +283,7 @@ def _checkout_sha_in_source_dir(llvm_source_dir, llvm_sha):
         )
     try:
         subprocess.check_call(
-            ["git", "fetch", "--all"],
-            shell=False,
-            env=os.environ,
-            cwd=llvm_source_dir,
+            ["git", "fetch", "--all"], shell=False, env=os.environ, cwd=llvm_source_dir,
         )
         subprocess.check_call(
             ["git", "checkout", llvm_sha.replace("\n", "")],
@@ -293,7 +308,7 @@ def _build_imex(
     enable_dpnp=False,
     enable_igpu=False,
     enable_numba_fe=False,
-    enable_tbb=False,
+    with_tbb=None,
 ):
     """Builds Intel MLIR extensions (IMEX).
 
@@ -316,8 +331,8 @@ def _build_imex(
         Defaults to False.
         enable_numba_fe (bool, optional): Set to build the Numba frontend.
         Defaults to False.
-        enable_tbb (bool, optional): Set to build with TBB parallelization
-        support. Defaults to False.
+        with_tbb (str, optional): Set to path where a TBB cmake config exists.
+        Defaults to None.
 
     Raises:
         RuntimeError: If the LLVM install directory is not found.
@@ -369,12 +384,18 @@ def _build_imex(
             "-DIMEX_ENABLE_IGPU_DIALECT=" + "ON" if enable_igpu else "OFF",
             "-DIMEX_ENABLE_TESTS=" + "ON" if enable_tests else "OFF",
             "-DIMEX_ENABLE_NUMBA_FE=" + "ON" if enable_numba_fe else "OFF",
-            "-DIMEX_ENABLE_TBB_SUPPORT=" "ON" if enable_tbb else "OFF",
             "-DCMAKE_VERBOSE_MAKEFILE=ON",
             "--debug-trycompile",
             os.path.abspath(imex_source_dir),
         ]
     )
+
+    if with_tbb is not None:
+        if os.path.exists(with_tbb):
+            cmake_config_args.append("-DTBB_DIR=" + with_tbb)
+            cmake_config_args.append("-DIMEX_ENABLE_TBB_SUPPORT=ON")
+        else:
+            warnings.warn("Provided TBB directory path does not exist.")
 
     build_dir = os.path.abspath(build_dir)
     # Configure
@@ -398,9 +419,7 @@ if __name__ == "__main__":
     imex_builder = parser.add_argument_group(title="IMEX build arguments")
 
     llvm_builder.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Turns on CMAKE_MAKE_VERBOSE",
+        "--verbose", action="store_true", help="Turns on CMAKE_MAKE_VERBOSE",
     )
     llvm_builder.add_argument(
         "--c-compiler", type=str, help="Name of C compiler", default=None
@@ -469,9 +488,11 @@ if __name__ == "__main__":
         help="Enables building the Numba front end for IMEX",
     )
     imex_builder.add_argument(
-        "--imex-enable-tbb",
-        action="store_true",
-        help="Enables building IMEX with TBB",
+        "--imex-tbb-dir",
+        help="A directory where the TBBConfig.cmake or tbb-config.cmake is stored",
+        dest="tbb_dir",
+        type=str,
+        default=None,
     )
     imex_builder.add_argument(
         "--imex-enable-dpnp",
@@ -491,21 +512,34 @@ if __name__ == "__main__":
     g_llvm_install_dir = getattr(args, "llvm_install", None)
     g_llvm_source_dir = getattr(args, "llvm_sources", None)
     g_working_dir = getattr(args, "working_dir", None)
+    g_tbb_dir = getattr(args, "tbb_dir", None)
+    # Get the llvm SHA as hard coded in llvm-sha.txt
+    llvm_sha = _get_llvm_sha()
 
-    if g_working_dir is None:
+    # If a working directory is provided, check if it was previously used to
+    # build IMEX. We check for the "llvm_project" (source directory of llvm) and
+    # "_mlir_install" (install directory for llvm)
+    if g_working_dir is not None:
+        if (
+            os.path.exists(g_working_dir + "/llvm-project")
+            and g_llvm_source_dir is None
+        ):
+            g_llvm_source_dir = os.path.abspath(g_working_dir) + "/llvm-project"
+
+        if (
+            os.path.exists(g_working_dir + "/_mlir_install")
+            and g_llvm_install_dir is None
+        ):
+            g_llvm_install_dir = os.path.abspath(g_working_dir) + "/_mlir_install"
+    elif g_working_dir is None:
         warnings.warn(
             "No working directory specified. Going to use system temp "
             + "directory to build LLVM"
         )
         g_working_dir = tempfile.gettempdir()
-    if g_working_dir == os.path.dirname(os.path.dirname(os.path.abspath(__file__))):
-        warnings.warn(
-            "Working directory is inside IMEX repo. A git clean will remove "
-            + "the LLVM install"
-        )
 
-    # Get the llvm SHA as hard coded in llvm-sha.txt
-    llvm_sha = _get_llvm_sha()
+    # At this point the working directory cannot be None
+    assert g_working_dir is not None
 
     # If a previously installed LLVM is to be used, then skip LLVM build. We
     # still need to check if the build meets the LLVM_SHA requirement.
@@ -532,7 +566,7 @@ if __name__ == "__main__":
                     c_compiler=args.c_compiler,
                     cxx_compiler=args.cxx_compiler,
                     cmake_executable=args.cmake_executable,
-                    save_llvm_build_dir=False,
+                    save_llvm_build_dir=args.save_llvm_build_dir,
                 )
             else:
                 raise RuntimeError(
@@ -549,7 +583,7 @@ if __name__ == "__main__":
             c_compiler=args.c_compiler,
             cxx_compiler=args.cxx_compiler,
             cmake_executable=args.cmake_executable,
-            save_llvm_build_dir=False,
+            save_llvm_build_dir=args.save_llvm_build_dir,
         )
     else:
         llvm_src = _get_llvm(working_dir=args.working_dir, llvm_sha=llvm_sha)
@@ -561,7 +595,7 @@ if __name__ == "__main__":
             c_compiler=args.c_compiler,
             cxx_compiler=args.cxx_compiler,
             cmake_executable=args.cmake_executable,
-            save_llvm_build_dir=False,
+            save_llvm_build_dir=args.save_llvm_build_dir,
         )
 
     # Now we are ready to build IMEX
@@ -583,7 +617,7 @@ if __name__ == "__main__":
         enable_dpnp=args.imex_enable_dpnp,
         enable_numba_fe=args.imex_enable_numba,
         enable_igpu=args.imex_enable_igpu,
-        enable_tbb=args.imex_enable_tbb,
+        with_tbb=g_tbb_dir,
         enable_tests=args.imex_enable_tests,
     )
 
