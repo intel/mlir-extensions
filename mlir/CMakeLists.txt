@@ -37,9 +37,9 @@ if (NOT EXPECTED_LLVM_SHA STREQUAL LLVM_SHA)
     message(FATAL_ERROR "Invalid llvm version")
 endif()
 
-add_subdirectory(include/mlir-extensions/dialect/plier)
-add_subdirectory(include/mlir-extensions/dialect/plier_util)
-add_subdirectory(include/mlir-extensions/dialect/gpu_runtime/IR)
+add_subdirectory(include/mlir-extensions/Dialect/plier)
+add_subdirectory(include/mlir-extensions/Dialect/plier_util)
+add_subdirectory(include/mlir-extensions/Dialect/gpu_runtime/IR)
 
 if (IMEX_ENABLE_IGPU_DIALECT)
     add_subdirectory(tools)
@@ -53,9 +53,9 @@ set(SOURCES_LIST
     lib/analysis/memory_ssa_analysis.cpp
     lib/compiler/compiler.cpp
     lib/compiler/pipeline_registry.cpp
-    lib/dialect/gpu_runtime/IR/gpu_runtime_ops.cpp
-    lib/dialect/plier/dialect.cpp
-    lib/dialect/plier_util/dialect.cpp
+    lib/Dialect/gpu_runtime/IR/gpu_runtime_ops.cpp
+    lib/Dialect/plier/dialect.cpp
+    lib/Dialect/plier_util/dialect.cpp
     lib/transforms/arg_lowering.cpp
     lib/transforms/call_lowering.cpp
     lib/transforms/canonicalize_reductions.cpp
@@ -86,9 +86,9 @@ set(HEADERS_LIST
     include/mlir-extensions/analysis/memory_ssa_analysis.hpp
     include/mlir-extensions/compiler/compiler.hpp
     include/mlir-extensions/compiler/pipeline_registry.hpp
-    include/mlir-extensions/dialect/gpu_runtime/IR/gpu_runtime_ops.hpp
-    include/mlir-extensions/dialect/plier/dialect.hpp
-    include/mlir-extensions/dialect/plier_util/dialect.hpp
+    include/mlir-extensions/Dialect/gpu_runtime/IR/gpu_runtime_ops.hpp
+    include/mlir-extensions/Dialect/plier/dialect.hpp
+    include/mlir-extensions/Dialect/plier_util/dialect.hpp
     include/mlir-extensions/transforms/arg_lowering.hpp
     include/mlir-extensions/transforms/call_lowering.hpp
     include/mlir-extensions/transforms/canonicalize_reductions.hpp

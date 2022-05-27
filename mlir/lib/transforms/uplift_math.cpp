@@ -14,7 +14,7 @@
 
 #include "mlir-extensions/transforms/uplift_math.hpp"
 
-#include "mlir-extensions/dialect/plier/dialect.hpp"
+#include "mlir-extensions/Dialect/plier/dialect.hpp"
 #include "mlir-extensions/transforms/rewrite_wrapper.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>

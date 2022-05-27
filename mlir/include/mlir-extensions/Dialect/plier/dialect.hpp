@@ -24,10 +24,10 @@
 #include <mlir/Interfaces/SideEffectInterfaces.h>
 #include <mlir/Interfaces/ViewLikeInterface.h>
 
-#include "mlir-extensions/dialect/plier/PlierOpsDialect.h.inc"
-//#include "mlir-extensions/dialect/plier/PlierOpsEnums.h.inc"
+#include "mlir-extensions/Dialect/plier/PlierOpsDialect.h.inc"
+//#include "mlir-extensions/Dialect/plier/PlierOpsEnums.h.inc"
 #define GET_OP_CLASSES
-#include "mlir-extensions/dialect/plier/PlierOps.h.inc"
+#include "mlir-extensions/Dialect/plier/PlierOps.h.inc"
 
 namespace plier {
 namespace attributes {

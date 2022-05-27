@@ -19,7 +19,7 @@
 #include <mlir/IR/TypeSupport.h>
 #include <mlir/Transforms/DialectConversion.h>
 
-#include "mlir-extensions/dialect/plier/dialect.hpp"
+#include "mlir-extensions/Dialect/plier/dialect.hpp"
 
 plier::ArgOpLowering::ArgOpLowering(mlir::MLIRContext *context)
     : OpRewritePattern(context) {}

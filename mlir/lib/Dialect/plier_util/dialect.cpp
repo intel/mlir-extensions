@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "mlir-extensions/dialect/plier/dialect.hpp"
-#include "mlir-extensions/dialect/plier_util/dialect.hpp"
+#include "mlir-extensions/Dialect/plier/dialect.hpp"
+#include "mlir-extensions/Dialect/plier_util/dialect.hpp"
 
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/BuiltinOps.h>
@@ -58,7 +58,7 @@ namespace plier {
 void PlierUtilDialect::initialize() {
   addOperations<
 #define GET_OP_LIST
-#include "mlir-extensions/dialect/plier_util/PlierUtilOps.cpp.inc"
+#include "mlir-extensions/Dialect/plier_util/PlierUtilOps.cpp.inc"
       >();
 
   addTypes<OpaqueType>();
@@ -66,7 +66,7 @@ void PlierUtilDialect::initialize() {
 
   addAttributes<
 #define GET_ATTRDEF_LIST
-#include "mlir-extensions/dialect/plier_util/PlierUtilOpsAttributes.cpp.inc"
+#include "mlir-extensions/Dialect/plier_util/PlierUtilOpsAttributes.cpp.inc"
       >();
 }
 
@@ -1613,12 +1613,12 @@ void TakeContextOp::build(mlir::OpBuilder &b, mlir::OperationState &result,
 
 } // namespace plier
 
-#include "mlir-extensions/dialect/plier_util/PlierUtilOpsDialect.cpp.inc"
+#include "mlir-extensions/Dialect/plier_util/PlierUtilOpsDialect.cpp.inc"
 
 #define GET_OP_CLASSES
-#include "mlir-extensions/dialect/plier_util/PlierUtilOps.cpp.inc"
+#include "mlir-extensions/Dialect/plier_util/PlierUtilOps.cpp.inc"
 
 #define GET_ATTRDEF_CLASSES
-#include "mlir-extensions/dialect/plier_util/PlierUtilOpsAttributes.cpp.inc"
+#include "mlir-extensions/Dialect/plier_util/PlierUtilOpsAttributes.cpp.inc"
 
-#include "mlir-extensions/dialect/plier_util/PlierUtilOpsEnums.cpp.inc"
+#include "mlir-extensions/Dialect/plier_util/PlierUtilOpsEnums.cpp.inc"

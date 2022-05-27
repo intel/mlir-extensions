@@ -14,7 +14,7 @@
 
 #include "mlir-extensions/transforms/inline_utils.hpp"
 
-#include "mlir-extensions/dialect/plier/dialect.hpp"
+#include "mlir-extensions/Dialect/plier/dialect.hpp"
 
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/SCF/SCF.h>

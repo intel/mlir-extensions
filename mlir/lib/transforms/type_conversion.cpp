@@ -21,7 +21,7 @@
 #include <mlir/Dialect/SCF/Transforms.h>
 #include <mlir/Transforms/DialectConversion.h>
 
-#include "mlir-extensions/dialect/plier/dialect.hpp"
+#include "mlir-extensions/Dialect/plier/dialect.hpp"
 
 namespace {
 class ConvertSelectOp
