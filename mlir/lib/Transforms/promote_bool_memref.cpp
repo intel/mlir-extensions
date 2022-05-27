@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "mlir-extensions/transforms/promote_bool_memref.hpp"
+#include "mlir-extensions/Transforms/promote_bool_memref.hpp"
 
 #include "mlir-extensions/Dialect/plier_util/dialect.hpp"
-#include "mlir-extensions/transforms/type_conversion.hpp"
+#include "mlir-extensions/Transforms/type_conversion.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>

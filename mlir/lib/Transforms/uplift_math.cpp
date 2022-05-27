@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "mlir-extensions/transforms/uplift_math.hpp"
+#include "mlir-extensions/Transforms/uplift_math.hpp"
 
 #include "mlir-extensions/Dialect/plier/dialect.hpp"
-#include "mlir-extensions/transforms/rewrite_wrapper.hpp"
+#include "mlir-extensions/Transforms/rewrite_wrapper.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>

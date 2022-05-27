@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "mlir-extensions/transforms/inline_utils.hpp"
+#include "mlir-extensions/Transforms/inline_utils.hpp"
 
 #include "mlir-extensions/Dialect/plier/dialect.hpp"
 

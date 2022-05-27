@@ -22,8 +22,8 @@
 #include <mlir/Dialect/SCF/SCF.h>
 
 #include "mlir-extensions/Conversion/SCFToAffine/SCFToAffine.h"
-#include "mlir-extensions/transforms/promote_to_parallel.hpp"
-#include "mlir-extensions/transforms/rewrite_wrapper.hpp"
+#include "mlir-extensions/Transforms/promote_to_parallel.hpp"
+#include "mlir-extensions/Transforms/rewrite_wrapper.hpp"
 
 namespace {
 template <typename Op, typename Rewrite>

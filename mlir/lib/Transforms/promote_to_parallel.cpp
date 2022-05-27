@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "mlir-extensions/transforms/promote_to_parallel.hpp"
+#include "mlir-extensions/Transforms/promote_to_parallel.hpp"
 
 #include "mlir-extensions/Dialect/plier/dialect.hpp"
 #include <mlir/Dialect/SCF/SCF.h>

@@ -32,7 +32,7 @@
 
 #include <llvm/ADT/TypeSwitch.h>
 
-#include "mlir-extensions/transforms/const_utils.hpp"
+#include "mlir-extensions/Transforms/const_utils.hpp"
 
 namespace MemoryEffects = ::mlir::MemoryEffects;
 

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "mlir-extensions/transforms/pipeline_utils.hpp"
+#include "mlir-extensions/Transforms/pipeline_utils.hpp"
 
 #include <mlir/IR/Attributes.h>
 #include <mlir/IR/BuiltinOps.h>

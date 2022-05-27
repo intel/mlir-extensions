@@ -16,7 +16,7 @@
 
 #include "mlir-extensions/Dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
 #include "mlir-extensions/Dialect/plier_util/dialect.hpp"
-#include "mlir-extensions/transforms/func_utils.hpp"
+#include "mlir-extensions/Transforms/func_utils.hpp"
 
 #include <mlir/Conversion/AsyncToLLVM/AsyncToLLVM.h>
 #include <mlir/Conversion/GPUCommon/GPUCommonPass.h>

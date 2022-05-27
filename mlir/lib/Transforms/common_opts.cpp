@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "mlir-extensions/transforms/common_opts.hpp"
+#include "mlir-extensions/Transforms/common_opts.hpp"
 
-#include "mlir-extensions/transforms/cse.hpp"
-#include "mlir-extensions/transforms/if_rewrites.hpp"
-#include "mlir-extensions/transforms/index_type_propagation.hpp"
-#include "mlir-extensions/transforms/loop_rewrites.hpp"
-#include "mlir-extensions/transforms/memory_rewrites.hpp"
+#include "mlir-extensions/Transforms/cse.hpp"
+#include "mlir-extensions/Transforms/if_rewrites.hpp"
+#include "mlir-extensions/Transforms/index_type_propagation.hpp"
+#include "mlir-extensions/Transforms/loop_rewrites.hpp"
+#include "mlir-extensions/Transforms/memory_rewrites.hpp"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
