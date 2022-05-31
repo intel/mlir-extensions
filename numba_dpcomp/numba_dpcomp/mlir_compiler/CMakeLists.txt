@@ -101,12 +101,12 @@ target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE
     PRIVATE
     ./lib)
 
-if(DPNP_ENABLE)
-    target_compile_definitions(${PROJECT_NAME} PRIVATE DPNP_ENABLE=1)
+if(IMEX_USE_DPNP)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE IMEX_USE_DPNP=1)
 endif()
 
-if(GPU_ENABLE)
-    target_compile_definitions(${PROJECT_NAME} PRIVATE GPU_ENABLE=1)
+if(IMEX_ENABLE_IGPU_DIALECT)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE IMEX_ENABLE_IGPU_DIALECT=1)
 endif()
 
 set(CMAKE_INSTALL_BINDIR ./numba_dpcomp/numba_dpcomp)
@@ -117,7 +117,7 @@ install(TARGETS dpcomp-runtime dpcomp-math-runtime dpcomp-python-runtime mlir_co
         LIBRARY DESTINATION numba_dpcomp/numba_dpcomp
         )
 
-if(GPU_ENABLE)
+if(IMEX_ENABLE_IGPU_DIALECT)
     install(TARGETS dpcomp-gpu-runtime
             LIBRARY DESTINATION numba_dpcomp/numba_dpcomp
             )

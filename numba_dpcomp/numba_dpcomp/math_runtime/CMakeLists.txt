@@ -31,7 +31,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${PROJECT_BINARY_DIR}
     )
 
-if(DPNP_ENABLE)
+if(IMEX_USE_DPNP)
     target_include_directories(${PROJECT_NAME} PRIVATE
         ${DPNP_INCLUDE_DIR}
         )
@@ -45,5 +45,5 @@ if(DPNP_ENABLE)
         INSTALL_RPATH "${DPNP_RPATH}"
     )
 
-    target_compile_definitions(${PROJECT_NAME} PRIVATE DPNP_ENABLE=1)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE IMEX_USE_DPNP=1)
 endif()
