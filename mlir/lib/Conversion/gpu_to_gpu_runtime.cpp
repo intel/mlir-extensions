@@ -637,6 +637,7 @@ struct UnstrideMemrefsPass
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::memref::MemRefDialect>();
     registry.insert<mlir::gpu::GPUDialect>();
+    registry.insert<plier::PlierUtilDialect>();
   }
 
   void runOnOperation() override {
