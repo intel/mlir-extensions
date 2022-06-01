@@ -91,11 +91,16 @@ option(IMEX_ENABLE_TESTS
     "Enable CTests"
     OFF
 )
+option(IMEX_ENABLE_NUMBA_HOTFIX
+    "Enable hotfix for numba dpcomp"
+    OFF
+)
 
 message(STATUS "IMEX_USE_DPNP ${DPNIMEX_USE_DPNPP_ENABLE}")
 message(STATUS "IMEX_ENABLE_IGPU_DIALECT ${IMEX_ENABLE_IGPU_DIALECT}")
 message(STATUS "IMEX_ENABLE_TESTS ${IMEX_ENABLE_TESTS}")
 message(STATUS "IMEX_ENABLE_NUMBA_FE ${IMEX_ENABLE_NUMBA_FE}")
+message(STATUS "IMEX_ENABLE_NUMBA_HOTFIX ${IMEX_ENABLE_NUMBA_HOTFIX}")
 message(STATUS "IMEX_ENABLE_TBB_SUPPORT ${IMEX_ENABLE_TBB_SUPPORT}")
 
 macro(apply_llvm_compile_flags target)
@@ -112,6 +117,10 @@ if(IMEX_ENABLE_IGPU_DIALECT)
         find_package(LevelZero 1.6 REQUIRED)
     endif()
     add_subdirectory(dpcomp_gpu_runtime)
+endif()
+
+if(IMEX_ENABLE_NUMBA_HOTFIX)
+    add_definitions(-DIMEX_ENABLE_NUMBA_HOTFIX)
 endif()
 
 add_subdirectory(mlir)

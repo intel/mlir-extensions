@@ -283,10 +283,10 @@ struct PyLinalgResolver::Context {
                 py::cpp_function(&printTypeCapsule));
   }
 
-  mlir::FuncOp compileBody(py::handle body, py::list arg_types) {
+  mlir::func::FuncOp compileBody(py::handle body, py::list arg_types) {
     auto func = compileFunc(body, arg_types).cast<py::capsule>();
     auto mlirFunc =
-        mlir::cast<mlir::FuncOp>(static_cast<mlir::Operation *>(func));
+        mlir::cast<mlir::func::FuncOp>(static_cast<mlir::Operation *>(func));
     mlirFunc.setPrivate();
     mlirFunc->setAttr(plier::attributes::getForceInlineName(),
                       mlir::UnitAttr::get(mlirFunc->getContext()));
@@ -1222,7 +1222,7 @@ static py::object externalCallImpl(py::capsule context, py::str funcName,
     auto mod =
         builder.getBlock()->getParentOp()->getParentOfType<mlir::ModuleOp>();
     assert(mod);
-    auto f = mod.lookupSymbol<mlir::FuncOp>(name);
+    auto f = mod.lookupSymbol<mlir::func::FuncOp>(name);
     if (f) {
       if (f.getType() != funcType) {
         plier::reportError(llvm::Twine("linalg_builder::external_call: "
@@ -1912,10 +1912,10 @@ PyLinalgResolver::rewrite(llvm::StringRef name, mlir::Location loc,
 
   PyBuilderContext pyBuilderContext{loc, builder, *context};
   auto pyContext = py::capsule(&pyBuilderContext);
-  auto pyArgs = getArgs(
-      context->inspect, builderFunc,
-      [&](auto val) { return context->createVar(pyContext, val); }, args,
-      kwargs);
+  auto pyArgs =
+      getArgs(context->inspect, builderFunc,
+              [&](auto val) { return context->createVar(pyContext, val); },
+              args, kwargs);
   if (pyArgs.is_none())
     return {};
 

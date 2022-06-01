@@ -21,7 +21,12 @@ class StringRef;
 }
 
 namespace mlir {
+namespace func {
 class FuncOp;
+}
+} // namespace mlir
+
+namespace mlir {
 class TypeRange;
 } // namespace mlir
 
@@ -30,7 +35,7 @@ public:
   PyFuncResolver();
   ~PyFuncResolver();
 
-  mlir::FuncOp getFunc(llvm::StringRef name, mlir::TypeRange types) const;
+  mlir::func::FuncOp getFunc(llvm::StringRef name, mlir::TypeRange types) const;
 
 private:
   struct Context;

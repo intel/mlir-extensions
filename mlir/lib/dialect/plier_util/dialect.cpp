@@ -26,6 +26,7 @@
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/Bufferization/IR/Bufferization.h>
+#include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/GPU/GPUDialect.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
@@ -330,7 +331,7 @@ struct ReshapeAlloca : public mlir::OpRewritePattern<mlir::memref::ReshapeOp> {
     if (!shapeOp.dynamicSizes().empty() || !shapeOp.symbolOperands().empty())
       return mlir::failure();
 
-    auto func = op->getParentOfType<mlir::FuncOp>();
+    auto func = op->getParentOfType<mlir::func::FuncOp>();
     if (!func)
       return mlir::failure();
 
@@ -439,6 +440,7 @@ void EnforceShapeOp::getCanonicalizationPatterns(
                  EnforceShapeDim<mlir::memref::DimOp>>(context);
 }
 
+/*
 mlir::LogicalResult
 ParallelOp::moveOutOfLoop(mlir::ArrayRef<mlir::Operation *> ops) {
   for (mlir::Operation *op : ops) {
@@ -446,12 +448,15 @@ ParallelOp::moveOutOfLoop(mlir::ArrayRef<mlir::Operation *> ops) {
   }
   return mlir::success();
 }
+*/
 
 mlir::Region &ParallelOp::getLoopBody() { return region(); }
 
+/*
 bool ParallelOp::isDefinedOutsideOfLoop(mlir::Value value) {
   return !region().isAncestor(value.getParentRegion());
 }
+*/
 
 void ParallelOp::build(
     mlir::OpBuilder &odsBuilder, mlir::OperationState &odsState,

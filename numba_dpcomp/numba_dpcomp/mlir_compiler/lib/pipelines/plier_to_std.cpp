@@ -1263,7 +1263,7 @@ protected:
 
     auto mod = op->getParentOfType<mlir::ModuleOp>();
     assert(mod);
-    auto externalFunc = mod.lookupSymbol<mlir::FuncOp>(mangledName);
+    auto externalFunc = mod.lookupSymbol<mlir::func::FuncOp>(mangledName);
     if (!externalFunc) {
       externalFunc = resolver.getFunc(name, types);
       if (externalFunc) {

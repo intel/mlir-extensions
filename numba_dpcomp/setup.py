@@ -64,6 +64,7 @@ if int(os.environ.get("DPCOMP_SETUP_RUN_CMAKE", 1)):
         "-DPython3_NumPy_INCLUDE_DIRS=" + NUMPY_INCLUDE_DIR,
         "-DPython3_FIND_STRATEGY=LOCATION",
         "-DIMEX_ENABLE_NUMBA_FE=ON",
+        "-DIMEX_ENABLE_NUMBA_HOTFIX=ON",
         "-DIMEX_ENABLE_TBB_SUPPORT=ON",
     ]
 

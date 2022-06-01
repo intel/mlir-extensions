@@ -22,7 +22,7 @@ static mlir::Value skipCasts(mlir::Value val) {
     if (!cast)
       return {};
 
-    auto inputs = cast.inputs();
+    auto inputs = cast.getInputs();
     if (inputs.size() != 1)
       return {};
 

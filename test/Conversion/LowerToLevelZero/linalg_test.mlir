@@ -4,8 +4,8 @@
 #map0 = affine_map<() -> ()>
 #map1 = affine_map<(d0) -> ()>
 #map2 = affine_map<(d0) -> (d0)>
-module @jit_func.0 {
-  func public @foo(%arg0: tensor<500xf64>, %arg1: tensor<5xf64>) -> tensor<500xf64> {
+module @jit_func.func.0 {
+  func.func public @foo(%arg0: tensor<500xf64>, %arg1: tensor<5xf64>) -> tensor<500xf64> {
     %0 = tensor.extract_slice %arg1[0] [1] [1] : tensor<5xf64> to tensor<1xf64>
     %1 = tensor.collapse_shape %0 [] : tensor<1xf64> into tensor<f64>
     %2 = tensor.extract_slice %arg1[1] [1] [1] : tensor<5xf64> to tensor<1xf64>
@@ -123,15 +123,15 @@ module @jit_func.0 {
     return %45 : tensor<500xf64>
   }
 
-  func @main() {
+  func.func @main() {
     %0 = arith.constant dense<1.000000e+00> : tensor<500xf64>
     %1 = arith.constant dense<[5.0, 4.0, 3.0, 2.0, 1.0]> : tensor<5xf64>
     %2 = call @foo(%0, %1) : (tensor<500xf64>, tensor<5xf64>) -> tensor<500xf64>
     %unranked = tensor.cast %2 : tensor<500xf64> to tensor<*xf64>
-    call @print_memref_f64(%unranked) : (tensor<*xf64>) -> ()
+    call @printMemrefF64(%unranked) : (tensor<*xf64>) -> ()
     return
   }
 
-  func private @print_memref_f64(%ptr : tensor<*xf64>)
+  func.func private @printMemrefF64(%ptr : tensor<*xf64>)
 }
 

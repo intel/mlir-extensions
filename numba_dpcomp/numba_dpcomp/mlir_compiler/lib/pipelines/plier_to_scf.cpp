@@ -366,7 +366,7 @@ createWhile(mlir::OpBuilder &builder, mlir::Location loc,
     auto afterblock = addRegion(cond.getArgs());
     afterBuilder(builder, state.location, afterblock->getArguments());
   }
-  return mlir::cast<mlir::scf::WhileOp>(builder.createOperation(state));
+  return mlir::cast<mlir::scf::WhileOp>(builder.create(state));
 }
 
 bool isInsideBlock(mlir::Operation *op, mlir::Block *block) {

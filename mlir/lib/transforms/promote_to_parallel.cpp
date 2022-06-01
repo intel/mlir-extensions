@@ -14,10 +14,10 @@
 
 #include "mlir-extensions/transforms/promote_to_parallel.hpp"
 
+#include "mlir-extensions/dialect/plier/dialect.hpp"
 #include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/IR/BlockAndValueMapping.h>
-
-#include "mlir-extensions/dialect/plier/dialect.hpp"
+#include <mlir/Interfaces/CallInterfaces.h>
 
 namespace {
 bool hasSideEffects(mlir::Operation *op) {

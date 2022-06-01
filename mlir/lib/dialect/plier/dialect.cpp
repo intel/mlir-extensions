@@ -24,6 +24,7 @@
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/Bufferization/IR/Bufferization.h>
+#include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/GPU/GPUDialect.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
@@ -204,7 +205,7 @@ void ArgOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
 }
 
 mlir::OpFoldResult ArgOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
-  auto func = getOperation()->getParentOfType<mlir::FuncOp>();
+  auto func = getOperation()->getParentOfType<mlir::func::FuncOp>();
   if (func) {
     auto ind = index();
     if (ind < func.getNumArguments() &&
@@ -293,7 +294,7 @@ struct PropagateCasts
   mlir::LogicalResult
   matchAndRewrite(mlir::UnrealizedConversionCastOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto inputs = op.inputs();
+    auto inputs = op.getInputs();
     if (inputs.size() != 1 || op->getNumResults() != 1)
       return mlir::failure();
 
@@ -356,7 +357,7 @@ foldBuildTupleGetitem(mlir::Value val, mlir::Type type,
       return cast.value();
 
     if (auto cast = arg.getDefiningOp<mlir::UnrealizedConversionCastOp>()) {
-      auto inputs = cast.inputs();
+      auto inputs = cast.getInputs();
       if (inputs.size() == 1)
         return inputs.front();
     }

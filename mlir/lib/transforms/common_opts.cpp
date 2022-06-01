@@ -22,6 +22,8 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
+#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/Math/IR/Math.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/SCF.h>
@@ -163,7 +165,7 @@ void plier::populateCommonOptsPatterns(mlir::MLIRContext &context,
 //      LoopInvariantCodeMotion, TODO
       plier::CmpLoopBoundsSimplify,
       plier::IfOpConstCond,
-      plier::CSERewrite<mlir::FuncOp, /*recusive*/ false>,
+      plier::CSERewrite<mlir::func::FuncOp, /*recusive*/ false>,
       SubviewLoadPropagate,
       SubviewStorePropagate,
       PowSimplify
