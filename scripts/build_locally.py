@@ -49,7 +49,7 @@ def _sha_matched(llvm_install_dir, llvm_sha):
 
     Raises:
         RuntimeError: When the SHA could not be found in the LLVM installation
-        direcotry.
+        directory.
 
     Returns:
         bool: True if the two SHAs matched, else False
@@ -84,9 +84,7 @@ def _configure_llvm_build(
     except FileExistsError:
         raise RuntimeError("Could not create build directory.")
     except FileNotFoundError:
-        raise RuntimeError(
-            f"Could not create build direcotry {llvm_build_dir}", llvm_build_dir,
-        )
+        raise RuntimeError("Could not create build directory" + llvm_build_dir)
 
     if "linux" in sys.platform:
         if c_compiler is None:
@@ -159,8 +157,8 @@ def _build_llvm(
     # Check if the LLVM source directory exists
     if not os.path.exists(llvm_src_dir):
         raise RuntimeError(
-            f"llvm_src_dir specified as {llvm_src_dir} does not exist.",
-            os.path.abspath(llvm_src_dir),
+            "llvm_src_dir specified as %s does not exist.",
+            (os.path.abspath(llvm_src_dir)),
         )
     cmake_exec = [cmake_executable if cmake_executable else "cmake"]
     mlir_install_prefix = (
@@ -189,7 +187,7 @@ def _build_llvm(
         )
     finally:
         if not save_llvm_build_dir:
-            print("Removing the llvm build direcotry")
+            print("Removing the llvm build directory")
             shutil.rmtree(llvm_build_dir)
 
     return mlir_install_prefix
@@ -198,7 +196,7 @@ def _build_llvm(
 def _get_llvm(llvm_sha=None, working_dir=None):
     """Checks out the llvm git repo.
 
-    The llvm git repo is cloned either to a sub-direcotry inside the provided
+    The llvm git repo is cloned either to a sub-directory inside the provided
     "working_dir" or into the system tmp folder. If a commit SHA is provided,
     then the commit is checked out into a new branch. The location of the cloned
     git repo is returned to caller.
@@ -207,7 +205,7 @@ def _get_llvm(llvm_sha=None, working_dir=None):
         working_dir (str, optional): Path where the LLVM repo is to be cloned.
         If None, then defaults to system temp directory.
         Defaults to None.
-        llvm_sha (str, optional): LLVM SHA that should be checkedout after
+        llvm_sha (str, optional): LLVM SHA that should be checked out after
         cloning. Defaults to None.
 
     Raises:
@@ -236,7 +234,7 @@ def _get_llvm(llvm_sha=None, working_dir=None):
             raise RuntimeError("Found existing build directory.")
         except FileNotFoundError:
             raise RuntimeError(
-                f"Could not create build direcotry {git_checkout_dir}",
+                f"Could not create build directory {git_checkout_dir}",
                 git_checkout_dir,
             )
 
