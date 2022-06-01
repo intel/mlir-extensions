@@ -180,3 +180,6 @@ _install
 
 # pip wheels
 *.whl
+
+# VSCode config
+.vscode/
