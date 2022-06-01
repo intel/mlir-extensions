@@ -31,16 +31,16 @@
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 #include <mlir/Transforms/Passes.h>
 
-#include "mlir-extensions/dialect/plier/dialect.hpp"
-#include "mlir-extensions/dialect/plier_util/dialect.hpp"
+#include "mlir-extensions/Dialect/plier/dialect.hpp"
+#include "mlir-extensions/Dialect/plier_util/dialect.hpp"
 
-#include "mlir-extensions/transforms/call_lowering.hpp"
-#include "mlir-extensions/transforms/cast_utils.hpp"
-#include "mlir-extensions/transforms/const_utils.hpp"
-#include "mlir-extensions/transforms/inline_utils.hpp"
-#include "mlir-extensions/transforms/pipeline_utils.hpp"
-#include "mlir-extensions/transforms/rewrite_wrapper.hpp"
-#include "mlir-extensions/transforms/type_conversion.hpp"
+#include "mlir-extensions/Transforms/call_lowering.hpp"
+#include "mlir-extensions/Transforms/cast_utils.hpp"
+#include "mlir-extensions/Transforms/const_utils.hpp"
+#include "mlir-extensions/Transforms/inline_utils.hpp"
+#include "mlir-extensions/Transforms/pipeline_utils.hpp"
+#include "mlir-extensions/Transforms/rewrite_wrapper.hpp"
+#include "mlir-extensions/Transforms/type_conversion.hpp"
 
 #include "base_pipeline.hpp"
 #include "loop_utils.hpp"
