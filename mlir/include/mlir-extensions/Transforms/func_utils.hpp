@@ -21,17 +21,16 @@ class ModuleOp;
 class OpBuilder;
 class FunctionType;
 class Operation;
+
+namespace func {
+class FuncOp;
+}
+
 } // namespace mlir
 
 namespace llvm {
 class StringRef;
 }
-
-namespace mlir {
-namespace func {
-class FuncOp;
-}
-} // namespace mlir
 
 namespace plier {
 mlir::func::FuncOp add_function(mlir::OpBuilder &builder, mlir::ModuleOp module,

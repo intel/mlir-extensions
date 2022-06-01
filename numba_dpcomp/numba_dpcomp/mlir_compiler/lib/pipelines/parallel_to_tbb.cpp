@@ -15,6 +15,7 @@
 #include "pipelines/parallel_to_tbb.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/IR/BlockAndValueMapping.h>
@@ -25,12 +26,12 @@
 #include "pipelines/base_pipeline.hpp"
 #include "pipelines/lower_to_llvm.hpp"
 
-#include "mlir-extensions/compiler/pipeline_registry.hpp"
 #include "mlir-extensions/Dialect/plier/dialect.hpp"
 #include "mlir-extensions/Dialect/plier_util/dialect.hpp"
 #include "mlir-extensions/Transforms/const_utils.hpp"
 #include "mlir-extensions/Transforms/func_utils.hpp"
 #include "mlir-extensions/Transforms/rewrite_wrapper.hpp"
+#include "mlir-extensions/compiler/pipeline_registry.hpp"
 
 namespace {
 mlir::MemRefType getReduceType(mlir::Type type, int64_t count) {
