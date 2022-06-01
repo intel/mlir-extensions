@@ -797,7 +797,7 @@ static void visitTypeRecursive(mlir::Type type, F &&visitor) {
 
 void MarkGpuArraysInputs::runOnOperation() {
   auto func = getOperation();
-  auto funcType = func.getType();
+  auto funcType = func.getFunctionType();
 
   mlir::OpBuilder builder(&getContext());
   auto attrStr = builder.getStringAttr(gpu_runtime::getGpuAccessibleAttrName());
@@ -816,7 +816,7 @@ void MarkGpuArraysInputs::runOnOperation() {
     needAttr = needAttr || res;
   };
 
-  for (auto type : (func.getType().getInputs()))
+  for (auto type : (func.getFunctionType().getInputs()))
     visitTypeRecursive(type, visitor);
 
   if (needAttr)
@@ -1081,7 +1081,7 @@ struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::func::CallOp> {
         if (auto cast = mlir::dyn_cast<plier::CastOp>(op))
           return cast.value();
         if (auto cast = mlir::dyn_cast<mlir::UnrealizedConversionCastOp>(op))
-          return cast.inputs()[0];
+          return cast.getInputs()[0];
 
         return {};
       };
@@ -1311,8 +1311,7 @@ public:
               return WalkResult::interrupt();
 
             return WalkResult::advance();
-          })
-            .wasInterrupted())
+          }).wasInterrupted())
       signalPassFailure();
   }
 };

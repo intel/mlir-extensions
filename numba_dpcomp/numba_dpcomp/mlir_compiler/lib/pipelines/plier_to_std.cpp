@@ -1274,10 +1274,11 @@ protected:
     if (!externalFunc)
       return mlir::failure();
 
-    assert(externalFunc.getType().getNumResults() == op->getNumResults());
+    assert(externalFunc.getFunctionType().getNumResults() ==
+           op->getNumResults());
 
     llvm::SmallVector<mlir::Value> castedArgs(args.size());
-    auto funcTypes = externalFunc.getType().getInputs();
+    auto funcTypes = externalFunc.getFunctionType().getInputs();
     for (auto it : llvm::enumerate(args)) {
       auto arg = it.value();
       auto i = it.index();

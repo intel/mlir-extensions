@@ -13,12 +13,10 @@
 // limitations under the License.
 
 #include "py_func_resolver.hpp"
-
-#include <pybind11/pybind11.h>
-
-#include <mlir/IR/BuiltinOps.h>
-
 #include "py_map_types.hpp"
+#include <mlir/Dialect/Func/IR/FuncOps.h>
+#include <mlir/IR/BuiltinOps.h>
+#include <pybind11/pybind11.h>
 
 namespace py = pybind11;
 
