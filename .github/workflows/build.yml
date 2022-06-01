@@ -156,7 +156,7 @@ jobs:
                 -DLLVM_USE_LINKER=gold                                         \
                 -DCMAKE_INSTALL_PREFIX=/home/runner/work/llvm-mlir/_mlir_install || exit 1
               cmake --build . || exit 1
-              cmake -- install . || exit 1
+              cmake --install . || exit 1
             fi
           else
             echo "INFO: Need to rebuild LLVM-MLIR"
