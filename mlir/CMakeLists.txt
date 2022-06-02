@@ -37,9 +37,9 @@ if (NOT EXPECTED_LLVM_SHA STREQUAL LLVM_SHA)
     message(FATAL_ERROR "Invalid llvm version")
 endif()
 
-add_subdirectory(include/mlir-extensions/dialect/plier)
-add_subdirectory(include/mlir-extensions/dialect/plier_util)
-add_subdirectory(include/mlir-extensions/dialect/gpu_runtime/IR)
+add_subdirectory(include/mlir-extensions/Dialect/plier)
+add_subdirectory(include/mlir-extensions/Dialect/plier_util)
+add_subdirectory(include/mlir-extensions/Dialect/gpu_runtime/IR)
 
 if (IMEX_ENABLE_IGPU_DIALECT)
     add_subdirectory(tools)
@@ -53,29 +53,29 @@ set(SOURCES_LIST
     lib/analysis/memory_ssa_analysis.cpp
     lib/compiler/compiler.cpp
     lib/compiler/pipeline_registry.cpp
-    lib/dialect/gpu_runtime/IR/gpu_runtime_ops.cpp
-    lib/dialect/plier/dialect.cpp
-    lib/dialect/plier_util/dialect.cpp
-    lib/transforms/arg_lowering.cpp
-    lib/transforms/call_lowering.cpp
-    lib/transforms/canonicalize_reductions.cpp
-    lib/transforms/cast_lowering.cpp
-    lib/transforms/cast_utils.cpp
-    lib/transforms/common_opts.cpp
-    lib/transforms/const_utils.cpp
-    lib/transforms/cse.cpp
-    lib/transforms/func_utils.cpp
-    lib/transforms/if_rewrites.cpp
-    lib/transforms/index_type_propagation.cpp
-    lib/transforms/inline_utils.cpp
-    lib/transforms/loop_rewrites.cpp
-    lib/transforms/loop_utils.cpp
-    lib/transforms/memory_rewrites.cpp
-    lib/transforms/pipeline_utils.cpp
-    lib/transforms/promote_bool_memref.cpp
-    lib/transforms/promote_to_parallel.cpp
-    lib/transforms/type_conversion.cpp
-    lib/transforms/uplift_math.cpp
+    lib/Dialect/gpu_runtime/IR/gpu_runtime_ops.cpp
+    lib/Dialect/plier/dialect.cpp
+    lib/Dialect/plier_util/dialect.cpp
+    lib/Transforms/arg_lowering.cpp
+    lib/Transforms/call_lowering.cpp
+    lib/Transforms/canonicalize_reductions.cpp
+    lib/Transforms/cast_lowering.cpp
+    lib/Transforms/cast_utils.cpp
+    lib/Transforms/common_opts.cpp
+    lib/Transforms/const_utils.cpp
+    lib/Transforms/cse.cpp
+    lib/Transforms/func_utils.cpp
+    lib/Transforms/if_rewrites.cpp
+    lib/Transforms/index_type_propagation.cpp
+    lib/Transforms/inline_utils.cpp
+    lib/Transforms/loop_rewrites.cpp
+    lib/Transforms/loop_utils.cpp
+    lib/Transforms/memory_rewrites.cpp
+    lib/Transforms/pipeline_utils.cpp
+    lib/Transforms/promote_bool_memref.cpp
+    lib/Transforms/promote_to_parallel.cpp
+    lib/Transforms/type_conversion.cpp
+    lib/Transforms/uplift_math.cpp
     lib/utils.cpp
     )
 set(HEADERS_LIST
@@ -86,30 +86,30 @@ set(HEADERS_LIST
     include/mlir-extensions/analysis/memory_ssa_analysis.hpp
     include/mlir-extensions/compiler/compiler.hpp
     include/mlir-extensions/compiler/pipeline_registry.hpp
-    include/mlir-extensions/dialect/gpu_runtime/IR/gpu_runtime_ops.hpp
-    include/mlir-extensions/dialect/plier/dialect.hpp
-    include/mlir-extensions/dialect/plier_util/dialect.hpp
-    include/mlir-extensions/transforms/arg_lowering.hpp
-    include/mlir-extensions/transforms/call_lowering.hpp
-    include/mlir-extensions/transforms/canonicalize_reductions.hpp
-    include/mlir-extensions/transforms/cast_lowering.hpp
-    include/mlir-extensions/transforms/cast_utils.hpp
-    include/mlir-extensions/transforms/common_opts.hpp
-    include/mlir-extensions/transforms/const_utils.hpp
-    include/mlir-extensions/transforms/cse.hpp
-    include/mlir-extensions/transforms/func_utils.hpp
-    include/mlir-extensions/transforms/if_rewrites.hpp
-    include/mlir-extensions/transforms/index_type_propagation.hpp
-    include/mlir-extensions/transforms/inline_utils.hpp
-    include/mlir-extensions/transforms/loop_rewrites.hpp
-    include/mlir-extensions/transforms/loop_utils.hpp
-    include/mlir-extensions/transforms/memory_rewrites.hpp
-    include/mlir-extensions/transforms/pipeline_utils.hpp
-    include/mlir-extensions/transforms/promote_bool_memref.hpp
-    include/mlir-extensions/transforms/promote_to_parallel.hpp
-    include/mlir-extensions/transforms/rewrite_wrapper.hpp
-    include/mlir-extensions/transforms/type_conversion.hpp
-    include/mlir-extensions/transforms/uplift_math.hpp
+    include/mlir-extensions/Dialect/gpu_runtime/IR/gpu_runtime_ops.hpp
+    include/mlir-extensions/Dialect/plier/dialect.hpp
+    include/mlir-extensions/Dialect/plier_util/dialect.hpp
+    include/mlir-extensions/Transforms/arg_lowering.hpp
+    include/mlir-extensions/Transforms/call_lowering.hpp
+    include/mlir-extensions/Transforms/canonicalize_reductions.hpp
+    include/mlir-extensions/Transforms/cast_lowering.hpp
+    include/mlir-extensions/Transforms/cast_utils.hpp
+    include/mlir-extensions/Transforms/common_opts.hpp
+    include/mlir-extensions/Transforms/const_utils.hpp
+    include/mlir-extensions/Transforms/cse.hpp
+    include/mlir-extensions/Transforms/func_utils.hpp
+    include/mlir-extensions/Transforms/if_rewrites.hpp
+    include/mlir-extensions/Transforms/index_type_propagation.hpp
+    include/mlir-extensions/Transforms/inline_utils.hpp
+    include/mlir-extensions/Transforms/loop_rewrites.hpp
+    include/mlir-extensions/Transforms/loop_utils.hpp
+    include/mlir-extensions/Transforms/memory_rewrites.hpp
+    include/mlir-extensions/Transforms/pipeline_utils.hpp
+    include/mlir-extensions/Transforms/promote_bool_memref.hpp
+    include/mlir-extensions/Transforms/promote_to_parallel.hpp
+    include/mlir-extensions/Transforms/rewrite_wrapper.hpp
+    include/mlir-extensions/Transforms/type_conversion.hpp
+    include/mlir-extensions/Transforms/uplift_math.hpp
     include/mlir-extensions/utils.hpp
     )
 

@@ -29,10 +29,10 @@
 #include <mlir/IR/BuiltinTypes.h>
 #include <mlir/Parser/Parser.h>
 
-#include "mlir-extensions/dialect/plier/dialect.hpp"
-#include "mlir-extensions/dialect/plier_util/dialect.hpp"
-#include "mlir-extensions/transforms/const_utils.hpp"
-#include "mlir-extensions/transforms/func_utils.hpp"
+#include "mlir-extensions/Dialect/plier/dialect.hpp"
+#include "mlir-extensions/Dialect/plier_util/dialect.hpp"
+#include "mlir-extensions/Transforms/const_utils.hpp"
+#include "mlir-extensions/Transforms/func_utils.hpp"
 #include "mlir-extensions/utils.hpp"
 #include "py_map_types.hpp"
 

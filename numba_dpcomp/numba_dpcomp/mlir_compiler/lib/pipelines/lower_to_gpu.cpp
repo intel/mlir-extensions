@@ -42,15 +42,15 @@
 
 #include "mlir-extensions/Conversion/gpu_runtime_to_llvm.hpp"
 #include "mlir-extensions/Conversion/gpu_to_gpu_runtime.hpp"
+#include "mlir-extensions/Dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
+#include "mlir-extensions/Dialect/plier_util/dialect.hpp"
+#include "mlir-extensions/Transforms/call_lowering.hpp"
+#include "mlir-extensions/Transforms/cast_utils.hpp"
+#include "mlir-extensions/Transforms/common_opts.hpp"
+#include "mlir-extensions/Transforms/pipeline_utils.hpp"
+#include "mlir-extensions/Transforms/rewrite_wrapper.hpp"
+#include "mlir-extensions/Transforms/type_conversion.hpp"
 #include "mlir-extensions/compiler/pipeline_registry.hpp"
-#include "mlir-extensions/dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
-#include "mlir-extensions/dialect/plier_util/dialect.hpp"
-#include "mlir-extensions/transforms/call_lowering.hpp"
-#include "mlir-extensions/transforms/cast_utils.hpp"
-#include "mlir-extensions/transforms/common_opts.hpp"
-#include "mlir-extensions/transforms/pipeline_utils.hpp"
-#include "mlir-extensions/transforms/rewrite_wrapper.hpp"
-#include "mlir-extensions/transforms/type_conversion.hpp"
 
 namespace {
 static void moveOpsIntoParallel(mlir::scf::ParallelOp outer, int depth = 0) {

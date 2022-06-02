@@ -23,10 +23,10 @@
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 #include <mlir/Transforms/Passes.h>
 
-#include "mlir-extensions/dialect/plier/dialect.hpp"
-#include "mlir-extensions/dialect/plier_util/dialect.hpp"
-#include "mlir-extensions/transforms/arg_lowering.hpp"
-#include "mlir-extensions/transforms/common_opts.hpp"
+#include "mlir-extensions/Dialect/plier/dialect.hpp"
+#include "mlir-extensions/Dialect/plier_util/dialect.hpp"
+#include "mlir-extensions/Transforms/arg_lowering.hpp"
+#include "mlir-extensions/Transforms/common_opts.hpp"
 
 #include "base_pipeline.hpp"
 #include "mlir-extensions/compiler/pipeline_registry.hpp"
