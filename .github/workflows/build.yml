@@ -16,6 +16,7 @@ jobs:
       TBB_VER: 2021.5.0
       LEVEL_ZERO_VER: v1.6.2
       TBB_URL_PREFIX: https://github.com/oneapi-src/oneTBB/releases/download/
+      LLVM_SHA: /home/runner/work/mlir-extensions/mlir-extensions/llvm-sha.txt
 
     strategy:
       matrix:
@@ -50,9 +51,14 @@ jobs:
         run: |
           conda install cmake ninja
 
+      - name: Checkout repo
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
       - name: Cache TBB
         id: cache-tbb
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: |
             /home/runner/work/tbb/*
@@ -60,7 +66,7 @@ jobs:
 
       - name: Cache Level-Zero
         id: cache-level-zero
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: |
             /home/runner/work/level-zero/**
@@ -68,11 +74,13 @@ jobs:
 
       - name: Cache LLLVM-MLIR
         id: cache-llvm-mlir
-        uses: actions/cache@v2
+        uses: actions/cache@v3
+        env:
+          CACHE_NUMBER: 0  # Increase to reset cache
         with:
           path: |
             /home/runner/work/llvm-mlir/_mlir_install/**
-          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('/home/runner/work/llvm-mlir/_mlir_install/include/llvm/Support/VCSRevision.h') }}
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ env.CACHE_NUMBER }}-${{ hashFiles( env.LLVM_SHA ) }}
 
       - name: Download TBB
         shell: bash -l {0}
@@ -120,63 +128,30 @@ jobs:
           fi
           popd
 
-      - name: Checkout repo
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: 0
-
       - name: Build LLVM-MLIR
+        if: steps.cache-llvm-mlir.outputs.cache-hit != 'true'
         shell: bash -l {0}
         timeout-minutes: 420
         run: |
           mkdir -p /home/runner/work/llvm-mlir
           pushd /home/runner/work/llvm-mlir
-          MLIR_INSTALL=/home/runner/work/llvm-mlir/_mlir_install
-          VCSREVISION=${MLIR_INSTALL}/include/llvm/Support/VCSRevision.h
-          LLVM_SHA=/home/runner/work/mlir-extensions/mlir-extensions/llvm-sha.txt
-          if [[ -f ${VCSREVISION} ]]
-          then
-            cached_sha=`grep -r "LLVM_REVISION" ${VCSREVISION} | cut -d " " -f 3` || exit 1
-            cached_sha=${cached_sha:1:-1}
-            if [[ ( "$(cat ${LLVM_SHA})" == ${cached_sha} ) ]]; then
-              echo "INFO: Use cached LLVM-MLIR build"
-            else
-              echo "INFO: Need to rebuild LLVM-MLIR"
-              git clone https://github.com/llvm/llvm-project || exit 1
-              cd llvm-project || exit 1
-              git checkout `cat ${LLVM_SHA}` || exit 1
-              mkdir _build || exit 1
-              cd _build || exit 1
-              cmake ../llvm                                                    \
-                -GNinja                                                        \
-                -DCMAKE_BUILD_TYPE=Release                                     \
-                -DLLVM_ENABLE_PROJECTS=mlir                                    \
-                -DLLVM_ENABLE_ASSERTIONS=ON                                    \
-                -DLLVM_ENABLE_RTTI=ON                                          \
-                -DLLVM_USE_LINKER=gold                                         \
-                -DCMAKE_INSTALL_PREFIX=/home/runner/work/llvm-mlir/_mlir_install || exit 1
-              cmake --build . || exit 1
-              cmake --install . || exit 1
-            fi
-          else
-            echo "INFO: Need to rebuild LLVM-MLIR"
-            rm -rf *
-            git clone https://github.com/llvm/llvm-project || exit 1
-            cd llvm-project || exit 1
-            git checkout `cat ${LLVM_SHA}` || exit 1
-            mkdir _build || exit 1
-            cd _build || exit 1
-            cmake ../llvm                                                    \
-              -GNinja                                                        \
-              -DCMAKE_BUILD_TYPE=Release                                     \
-              -DLLVM_ENABLE_PROJECTS=mlir                                    \
-              -DLLVM_ENABLE_ASSERTIONS=ON                                    \
-              -DLLVM_ENABLE_RTTI=ON                                          \
-              -DLLVM_USE_LINKER=gold                                         \
-              -DCMAKE_INSTALL_PREFIX=/home/runner/work/llvm-mlir/_mlir_install || exit 1
-            cmake --build . || exit 1
-            cmake --install . || exit 1
-          fi
+          echo "INFO: Need to rebuild LLVM-MLIR. Previous installation for MLIR not found"
+          np=`nproc`
+          git clone https://github.com/llvm/llvm-project || exit 1
+          cd llvm-project || exit 1
+          git checkout `cat ${{ env.LLVM_SHA }}` || exit 1
+          mkdir _build || exit 1
+          cd _build || exit 1
+          cmake ../llvm                                                    \
+            -GNinja                                                        \
+            -DCMAKE_BUILD_TYPE=Release                                     \
+            -DLLVM_ENABLE_PROJECTS=mlir                                    \
+            -DLLVM_ENABLE_ASSERTIONS=ON                                    \
+            -DLLVM_ENABLE_RTTI=ON                                          \
+            -DLLVM_USE_LINKER=gold                                         \
+            -DCMAKE_INSTALL_PREFIX=/home/runner/work/llvm-mlir/_mlir_install || exit 1
+          cmake --build . -j ${np} || exit 1
+          cmake --install . || exit 1
           popd
 
       - name: Build IMEX
