@@ -356,8 +356,8 @@ get_to_memref_conversion_func(mlir::ModuleOp module, mlir::OpBuilder &builder,
   assert(dst_type);
   auto func_name = gen_to_memref_conversion_func_name(memrefType);
   if (auto func = module.lookupSymbol<mlir::func::FuncOp>(func_name)) {
-    assert(func.getType().getNumResults() == 1);
-    assert(func.getType().getResult(0) == dst_type);
+    assert(func.getFunctionType().getNumResults() == 1);
+    assert(func.getFunctionType().getResult(0) == dst_type);
     return func;
   }
   auto func_type =
@@ -417,8 +417,8 @@ get_from_memref_conversion_func(mlir::ModuleOp module, mlir::OpBuilder &builder,
   assert(dst_type);
   auto func_name = gen_from_memref_conversion_func_name(memrefType);
   if (auto func = module.lookupSymbol<mlir::func::FuncOp>(func_name)) {
-    assert(func.getType().getNumResults() == 1);
-    assert(func.getType().getResult(0) == dst_type);
+    assert(func.getFunctionType().getNumResults() == 1);
+    assert(func.getFunctionType().getResult(0) == dst_type);
     return func;
   }
   auto func_type =
@@ -528,7 +528,7 @@ mlir::LogicalResult fixFuncSig(LLVMTypeHelper &typeHelper,
   if (func->getAttr(plier::attributes::getFastmathName()))
     func->setAttr("passthrough", get_fastmath_attrs(*func.getContext()));
 
-  auto oldType = func.getType();
+  auto oldType = func.getFunctionType();
   auto &ctx = *oldType.getContext();
   llvm::SmallVector<mlir::Type> args;
 

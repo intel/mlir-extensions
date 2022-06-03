@@ -214,7 +214,7 @@ static mlir::Value skipCasts(mlir::Value val) {
     if (!cast)
       return {};
 
-    auto inputs = cast.inputs();
+    auto inputs = cast.getInputs();
     if (inputs.size() != 1)
       return {};
 
@@ -433,10 +433,10 @@ protected:
     if (!externalFunc)
       return mlir::failure();
 
-    assert(externalFunc.getType().getNumResults() == op->getNumResults());
+    assert(externalFunc.getFunctionType().getNumResults() == op->getNumResults());
 
     llvm::SmallVector<mlir::Value> castedArgs(args.size());
-    auto funcTypes = externalFunc.getType().getInputs();
+    auto funcTypes = externalFunc.getFunctionType().getInputs();
     for (auto it : llvm::enumerate(args)) {
       auto arg = it.value();
       auto i = it.index();
@@ -2391,7 +2391,7 @@ struct MarkContigiousArraysPass
                                mlir::OperationPass<mlir::func::FuncOp>> {
   void runOnOperation() override {
     auto func = getOperation();
-    auto funcType = func.getType();
+    auto funcType = func.getFunctionType();
 
     mlir::OpBuilder builder(&getContext());
     auto attrStr = builder.getStringAttr(kContigiousArraysAttr);
@@ -2410,7 +2410,7 @@ struct MarkContigiousArraysPass
       needAttr = needAttr || res;
     };
 
-    for (auto type : (func.getType().getInputs()))
+    for (auto type : (func.getFunctionType().getInputs()))
       visitTypeRecursive(type, visitor);
 
     if (needAttr)
@@ -2531,13 +2531,13 @@ struct LoopInvariantCodeMotion
                   mlir::PatternRewriter &rewriter) const override {
     auto parentOp = op->getParentOp();
     rewriter.startRootUpdate(parentOp);
-    auto res = mlir::moveLoopInvariantCode(op);
-    if (mlir::succeeded(res)) {
+    bool res = mlir::moveLoopInvariantCode(op);
+    if (res) {
       rewriter.finalizeRootUpdate(parentOp);
     } else {
       rewriter.cancelRootUpdate(parentOp);
     }
-    return res;
+    return ::mlir::LogicalResult::success(res);
   }
 };
 
@@ -2802,7 +2802,7 @@ struct CloneArgsPass
 
 void CloneArgsPass::runOnOperation() {
   auto func = getOperation();
-  if (func.isPrivate() || func.isDeclaration() || func.body().empty()) {
+  if (func.isPrivate() || func.isDeclaration() || func.getBody().empty()) {
     return;
   }
 

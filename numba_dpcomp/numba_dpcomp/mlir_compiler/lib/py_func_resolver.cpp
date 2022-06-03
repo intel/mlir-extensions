@@ -17,6 +17,7 @@
 #include <pybind11/pybind11.h>
 
 #include <mlir/IR/BuiltinOps.h>
+#include <mlir/Dialect/Func/IR/FuncOps.h>
 
 #include "py_map_types.hpp"
 
