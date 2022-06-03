@@ -21,6 +21,7 @@
 #include <cstdlib>
 #include <tuple>
 #include <vector>
+#include <iostream>
 
 #include "dpcomp-gpu-runtime_export.h"
 
@@ -84,13 +85,20 @@ struct Queue {
 
   sycl::queue sycl_queue;
 
-  void *alloc_device_memory(size_t size) {
+  void *alloc_device_memory(size_t size, int shared) {
+    std::cout<<"IN ALLOC MEMORY "<<std::endl;	  
     void *mem_ptr;
-    mem_ptr = sycl::malloc_device(size, this->sycl_queue);
+    if(shared){
+      mem_ptr = sycl::malloc_shared(size, this->sycl_queue);
+    }
+    else{
+      mem_ptr = sycl::malloc_device(size, this->sycl_queue);
+    }
     return reinterpret_cast<void *>(mem_ptr);
   }
 
   ze_module_handle_t loadModule(const void *data, size_t dataSize) {
+    std::cout<<"IN MODULE LOAD "<<std::endl;	  
     assert(data);
     ze_module_handle_t ze_module;
     ze_module_desc_t desc = {};
@@ -107,6 +115,7 @@ struct Queue {
 
   void getKernel(ze_module_handle_t module, const char *name,
                  sycl::kernel &kernel) {
+    std::cout<<"IN GET KERNEL "<<std::endl;	  
     assert(module);
     assert(name);
     ze_kernel_handle_t ze_kernel;
@@ -127,6 +136,7 @@ struct Queue {
                     size_t gridZ, size_t blockX, size_t blockY, size_t blockZ,
                     size_t sharedMemBytes, ParamDesc *params, void *extra) {
 
+    std::cout<<"IN LAUNCH KERNEL "<<std::endl;	   
     auto queue = this->sycl_queue;
     auto sycl_global_range =
         ::sycl::range<3>(blockZ * gridZ, blockY * gridY, blockX * gridX);
@@ -194,7 +204,7 @@ extern "C" DPCOMP_GPU_RUNTIME_EXPORT void iGpuStreamDestroy(void *queue) {
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *
 iGpuMemAlloc(size_t size, void *queue, int shared) {
   catchAll(
-      [&]() { return static_cast<Queue *>(queue)->alloc_device_memory(size); });
+      [&]() { return static_cast<Queue *>(queue)->alloc_device_memory(size, 1); });
 }
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *
