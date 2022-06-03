@@ -14,9 +14,9 @@
 
 #include "mlir-extensions/Conversion/intel_gpu_to_llvm.hpp"
 
-#include "mlir-extensions/dialect/intel_gpu/IR/intel_gpu_ops.hpp"
+#include "mlir-extensions/Dialect/intel_gpu/IR/intel_gpu_ops.hpp"
 
-#include "mlir-extensions/transforms/func_utils.hpp"
+#include "mlir-extensions/Transforms/func_utils.hpp"
 
 #include <mlir/Conversion/AsyncToLLVM/AsyncToLLVM.h>
 #include <mlir/Conversion/GPUCommon/GPUCommonPass.h>
@@ -244,7 +244,7 @@ mlir::Value getStream(mlir::OpBuilder &builder) {
 
 mlir::Value getGpuStream(mlir::OpBuilder &builder, mlir::Operation *op) {
   assert(op);
-  auto func = op->getParentOfType<mlir::FuncOp>();
+  auto func = op->getParentOfType<mlir::func::FuncOp>();
   if (!func)
     return {};
 

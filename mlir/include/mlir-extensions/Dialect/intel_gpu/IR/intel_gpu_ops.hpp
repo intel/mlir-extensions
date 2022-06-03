@@ -26,15 +26,15 @@
 
 #include <mlir/Dialect/GPU/GPUDialect.h>
 
-#include "mlir-extensions/dialect/intel_gpu/IR/IntelGpuOpsDialect.h.inc"
+#include "mlir-extensions/Dialect/intel_gpu/IR/IntelGpuOpsDialect.h.inc"
 
-#include "mlir-extensions/dialect/intel_gpu/IR/IntelGpuOpsEnums.h.inc"
+#include "mlir-extensions/Dialect/intel_gpu/IR/IntelGpuOpsEnums.h.inc"
 
 #define GET_ATTRDEF_CLASSES
-#include "mlir-extensions/dialect/intel_gpu/IR/IntelGpuOpsAttributes.h.inc"
+#include "mlir-extensions/Dialect/intel_gpu/IR/IntelGpuOpsAttributes.h.inc"
 
 #define GET_OP_CLASSES
-#include "mlir-extensions/dialect/intel_gpu/IR/IntelGpuOps.h.inc"
+#include "mlir-extensions/Dialect/intel_gpu/IR/IntelGpuOps.h.inc"
 
 // TODO: OpaqueType is not tied to gpu dialect. Move this or create separate
 // types

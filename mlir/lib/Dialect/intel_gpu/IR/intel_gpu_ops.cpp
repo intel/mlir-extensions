@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "mlir-extensions/dialect/intel_gpu/IR/intel_gpu_ops.hpp"
+#include "mlir-extensions/Dialect/intel_gpu/IR/intel_gpu_ops.hpp"
 
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/BuiltinOps.h>
@@ -31,7 +31,7 @@
 #include <llvm/ADT/SmallBitVector.h>
 #include <llvm/ADT/TypeSwitch.h>
 
-#include "mlir-extensions/transforms/const_utils.hpp"
+#include "mlir-extensions/Transforms/const_utils.hpp"
 
 namespace MemoryEffects = ::mlir::MemoryEffects;
 
@@ -53,11 +53,11 @@ namespace intel_gpu {
 void IntelGpuDialect::initialize() {
   addOperations<
 #define GET_OP_LIST
-#include "mlir-extensions/dialect/intel_gpu/IR/IntelGpuOps.cpp.inc"
+#include "mlir-extensions/Dialect/intel_gpu/IR/IntelGpuOps.cpp.inc"
       >();
   addAttributes<
 #define GET_ATTRDEF_LIST
-#include "mlir-extensions/dialect/intel_gpu/IR/IntelGpuOpsAttributes.cpp.inc"
+#include "mlir-extensions/Dialect/intel_gpu/IR/IntelGpuOpsAttributes.cpp.inc"
       >();
   addTypes<OpaqueType>();
   addInterfaces<IntelGpuInlinerInterface>();
@@ -145,12 +145,12 @@ mlir::StringRef getGpuAccessibleAttrName() { return "gpu.gpu_accessible"; }
 
 } // namespace intel_gpu
 
-#include "mlir-extensions/dialect/intel_gpu/IR/IntelGpuOpsDialect.cpp.inc"
+#include "mlir-extensions/Dialect/intel_gpu/IR/IntelGpuOpsDialect.cpp.inc"
 
 #define GET_ATTRDEF_CLASSES
-#include "mlir-extensions/dialect/intel_gpu/IR/IntelGpuOpsAttributes.cpp.inc"
+#include "mlir-extensions/Dialect/intel_gpu/IR/IntelGpuOpsAttributes.cpp.inc"
 
 #define GET_OP_CLASSES
-#include "mlir-extensions/dialect/intel_gpu/IR/IntelGpuOps.cpp.inc"
+#include "mlir-extensions/Dialect/intel_gpu/IR/IntelGpuOps.cpp.inc"
 
-#include "mlir-extensions/dialect/intel_gpu/IR/IntelGpuOpsEnums.cpp.inc"
+#include "mlir-extensions/Dialect/intel_gpu/IR/IntelGpuOpsEnums.cpp.inc"
