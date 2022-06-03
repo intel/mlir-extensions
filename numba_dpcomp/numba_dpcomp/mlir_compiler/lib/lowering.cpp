@@ -34,8 +34,8 @@
 #include <llvm/Bitcode/BitcodeWriter.h>
 #include <llvm/Support/Debug.h>
 
-#include "mlir-extensions/dialect/plier/dialect.hpp"
-#include "mlir-extensions/dialect/plier_util/dialect.hpp"
+#include "mlir-extensions/Dialect/plier/dialect.hpp"
+#include "mlir-extensions/Dialect/plier_util/dialect.hpp"
 
 #include "mlir-extensions/compiler/compiler.hpp"
 #include "mlir-extensions/compiler/pipeline_registry.hpp"
@@ -157,14 +157,14 @@ struct PlierLowerer final {
     ctx.loadDialect<plier::PlierUtilDialect>();
   }
 
-  mlir::FuncOp lower(const py::object &compilationContext, mlir::ModuleOp mod,
-                     const py::object &funcIr) {
+  mlir::func::FuncOp lower(const py::object &compilationContext,
+                           mlir::ModuleOp mod, const py::object &funcIr) {
     typemap = compilationContext["typemap"];
     funcNameResolver = compilationContext["resolve_func"];
     auto name = compilationContext["fnname"]().cast<std::string>();
     auto typ = getFuncType(compilationContext["fnargs"],
                            compilationContext["restype"]);
-    func = mlir::FuncOp::create(builder.getUnknownLoc(), name, typ);
+    func = mlir::func::FuncOp::create(builder.getUnknownLoc(), name, typ);
     if (compilationContext["fastmath"]().cast<bool>())
       func->setAttr(plier::attributes::getFastmathName(),
                     mlir::UnitAttr::get(&ctx));
@@ -192,7 +192,7 @@ private:
   std::vector<mlir::Block *> blocks;
   std::unordered_map<int, mlir::Block *> blocksMap;
   InstHandles insts;
-  mlir::FuncOp func;
+  mlir::func::FuncOp func;
   std::unordered_map<std::string, mlir::Value> varsMap;
   struct BlockInfo {
     struct PhiDesc {
@@ -711,7 +711,7 @@ static void createPipeline(plier::PipelineRegistry &registry,
   registerParallelToTBBPipeline(registry);
 
   if (settings.enableGpuPipeline) {
-#ifdef GPU_ENABLE
+#ifdef IMEX_ENABLE_IGPU_DIALECT
     registerLowerToGPUPipeline(registry);
     // TODO(nbpatel): Add Gpu->GpuRuntime & GpuRuntimetoLlvm Transformation
 #else

@@ -24,7 +24,7 @@
 #include <unordered_map>
 
 #include "mlir-extensions/compiler/pipeline_registry.hpp"
-#include "mlir-extensions/transforms/pipeline_utils.hpp"
+#include "mlir-extensions/Transforms/pipeline_utils.hpp"
 #include "mlir-extensions/utils.hpp"
 
 namespace {

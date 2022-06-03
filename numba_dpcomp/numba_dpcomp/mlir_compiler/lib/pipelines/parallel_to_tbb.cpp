@@ -26,11 +26,11 @@
 #include "pipelines/lower_to_llvm.hpp"
 
 #include "mlir-extensions/compiler/pipeline_registry.hpp"
-#include "mlir-extensions/dialect/plier/dialect.hpp"
-#include "mlir-extensions/dialect/plier_util/dialect.hpp"
-#include "mlir-extensions/transforms/const_utils.hpp"
-#include "mlir-extensions/transforms/func_utils.hpp"
-#include "mlir-extensions/transforms/rewrite_wrapper.hpp"
+#include "mlir-extensions/Dialect/plier/dialect.hpp"
+#include "mlir-extensions/Dialect/plier_util/dialect.hpp"
+#include "mlir-extensions/Transforms/const_utils.hpp"
+#include "mlir-extensions/Transforms/func_utils.hpp"
+#include "mlir-extensions/Transforms/rewrite_wrapper.hpp"
 
 namespace {
 mlir::MemRefType getReduceType(mlir::Type type, int64_t count) {
@@ -223,14 +223,14 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
 
 struct ParallelToTbbPass
     : public plier::RewriteWrapperPass<
-          ParallelToTbbPass, mlir::FuncOp,
+          ParallelToTbbPass, mlir::func::FuncOp,
           plier::DependentDialectsList<
               plier::PlierDialect, plier::PlierUtilDialect,
               mlir::arith::ArithmeticDialect, mlir::scf::SCFDialect>,
           ParallelToTbb> {};
 
 static void populateParallelToTbbPipeline(mlir::OpPassManager &pm) {
-  pm.addNestedPass<mlir::FuncOp>(std::make_unique<ParallelToTbbPass>());
+  pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<ParallelToTbbPass>());
 }
 } // namespace
 

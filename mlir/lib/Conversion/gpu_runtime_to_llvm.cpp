@@ -14,9 +14,9 @@
 
 #include "mlir-extensions/Conversion/gpu_runtime_to_llvm.hpp"
 
-#include "mlir-extensions/dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
-#include "mlir-extensions/dialect/plier_util/dialect.hpp"
-#include "mlir-extensions/transforms/func_utils.hpp"
+#include "mlir-extensions/Dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
+#include "mlir-extensions/Dialect/plier_util/dialect.hpp"
+#include "mlir-extensions/Transforms/func_utils.hpp"
 
 #include <mlir/Conversion/AsyncToLLVM/AsyncToLLVM.h>
 #include <mlir/Conversion/GPUCommon/GPUCommonPass.h>
@@ -55,6 +55,7 @@ struct LowerTakeContext
   }
 };
 
+#if !defined(IMEX_ENABLE_NUMBA_HOTFIX)
 struct LowerUndef : public mlir::ConvertOpToLLVMPattern<plier::UndefOp> {
   using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
 
@@ -70,6 +71,7 @@ struct LowerUndef : public mlir::ConvertOpToLLVMPattern<plier::UndefOp> {
     return mlir::success();
   }
 };
+#endif
 
 struct FunctionCallBuilder {
   FunctionCallBuilder(mlir::StringRef functionName, mlir::Type returnType,
@@ -865,14 +867,16 @@ struct GPUToLLVMPass
                                                             target);
     mlir::populateGpuToLLVMConversionPatterns(
         converter, patterns, mlir::gpu::getDefaultGpuBinaryAnnotation());
-    mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::FuncOp>(
+#if defined(IMEX_ENABLE_NUMBA_HOTFIX)
+    mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::func::FuncOp>(
         patterns, converter);
     mlir::populateReturnOpTypeConversionPattern(patterns, converter);
     mlir::populateCallOpTypeConversionPattern(patterns, converter);
+#endif
 
-    target.addDynamicallyLegalOp<mlir::FuncOp>(
-        [&](mlir::FuncOp op) -> llvm::Optional<bool> {
-          if (converter.isSignatureLegal(op.getType()) &&
+    target.addDynamicallyLegalOp<mlir::func::FuncOp>(
+        [&](mlir::func::FuncOp op) -> llvm::Optional<bool> {
+          if (converter.isSignatureLegal(op.getFunctionType()) &&
               converter.isLegal(&op.getBody()))
             return true;
 
@@ -890,9 +894,9 @@ struct GPUToLLVMPass
 
           return llvm::None;
         });
-    target.addDynamicallyLegalOp<mlir::FuncOp>(
-        [&](mlir::FuncOp op) -> llvm::Optional<bool> {
-          auto type = op.getType();
+    target.addDynamicallyLegalOp<mlir::func::FuncOp>(
+        [&](mlir::func::FuncOp op) -> llvm::Optional<bool> {
+          auto type = op.getFunctionType();
           for (auto range : {type.getInputs(), type.getResults()})
             for (auto type : range)
               if (converter.isLegal(type))
@@ -913,8 +917,10 @@ struct GPUToLLVMPass
         ConvertGpuAllocPattern,
         ConvertGpuDeAllocPattern,
         ConvertGpuSuggestBlockSizePattern,
-        LowerTakeContext,
-        LowerUndef
+#if !defined(IMEX_ENABLE_NUMBA_HOTFIX)
+        LowerUndef,
+#endif
+        LowerTakeContext
         // clang-format on
         >(converter);
 

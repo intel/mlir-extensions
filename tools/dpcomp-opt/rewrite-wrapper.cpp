@@ -18,11 +18,12 @@
 #include <mlir/Pass/PassRegistry.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 
+#include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/SCF/SCF.h>
 
 #include "mlir-extensions/Conversion/SCFToAffine/SCFToAffine.h"
-#include "mlir-extensions/transforms/promote_to_parallel.hpp"
-#include "mlir-extensions/transforms/rewrite_wrapper.hpp"
+#include "mlir-extensions/Transforms/promote_to_parallel.hpp"
+#include "mlir-extensions/Transforms/rewrite_wrapper.hpp"
 
 namespace {
 template <typename Op, typename Rewrite>
@@ -54,13 +55,13 @@ template <typename Op, typename Rewrite>
 using WrapperRegistration =
     PassRegistrationWrapper<RewriteWrapper<Op, Rewrite>>;
 
-static WrapperRegistration<mlir::FuncOp, plier::PromoteToParallel>
+static WrapperRegistration<mlir::func::FuncOp, plier::PromoteToParallel>
     promoteToParallelReg("dpcomp-promote-to-parallel", "");
 
 static mlir::PassPipelineRegistration<> scfToAffineReg(
     "scf-to-affine", "Converts SCF parallel struct into Affine parallel",
     [](mlir::OpPassManager &pm) {
-      pm.addNestedPass<mlir::FuncOp>(mlir::createSCFToAffinePass());
+      pm.addNestedPass<mlir::func::FuncOp>(mlir::createSCFToAffinePass());
     });
 
 } // namespace

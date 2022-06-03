@@ -31,21 +31,21 @@ set(SOURCES_LIST
 set(HEADERS_LIST
     lib/level_zero_printing.hpp
     lib/level_zero_wrapper.hpp
-    )
+)
 
 add_library(${PROJECT_NAME} SHARED ${SOURCES_LIST} ${HEADERS_LIST})
 generate_export_header(${PROJECT_NAME})
 
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${PROJECT_BINARY_DIR}
-    ${LEVEL_ZERO_DIR}/include
+    ${LevelZero_INCLUDE_DIR}
     ${SYCL_DIR}/include/
     ${SYCL_DIR}/include/sycl
     )
 
 target_link_directories(${PROJECT_NAME} PRIVATE
-    ${LEVEL_ZERO_DIR}/lib
+    ${LevelZero_LIBRARIES_DIR}
     ${SYCL_DIR}/lib
     )
 
-target_link_libraries(${PROJECT_NAME} PRIVATE ze_loader sycl)
+target_link_libraries(${PROJECT_NAME} PRIVATE ${LevelZero_LIBRARY} sycl)

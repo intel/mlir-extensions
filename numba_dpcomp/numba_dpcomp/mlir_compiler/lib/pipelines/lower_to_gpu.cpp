@@ -42,15 +42,15 @@
 
 #include "mlir-extensions/Conversion/gpu_runtime_to_llvm.hpp"
 #include "mlir-extensions/Conversion/gpu_to_gpu_runtime.hpp"
+#include "mlir-extensions/Dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
+#include "mlir-extensions/Dialect/plier_util/dialect.hpp"
+#include "mlir-extensions/Transforms/call_lowering.hpp"
+#include "mlir-extensions/Transforms/cast_utils.hpp"
+#include "mlir-extensions/Transforms/common_opts.hpp"
+#include "mlir-extensions/Transforms/pipeline_utils.hpp"
+#include "mlir-extensions/Transforms/rewrite_wrapper.hpp"
+#include "mlir-extensions/Transforms/type_conversion.hpp"
 #include "mlir-extensions/compiler/pipeline_registry.hpp"
-#include "mlir-extensions/dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
-#include "mlir-extensions/dialect/plier_util/dialect.hpp"
-#include "mlir-extensions/transforms/call_lowering.hpp"
-#include "mlir-extensions/transforms/cast_utils.hpp"
-#include "mlir-extensions/transforms/common_opts.hpp"
-#include "mlir-extensions/transforms/pipeline_utils.hpp"
-#include "mlir-extensions/transforms/rewrite_wrapper.hpp"
-#include "mlir-extensions/transforms/type_conversion.hpp"
 
 namespace {
 static void moveOpsIntoParallel(mlir::scf::ParallelOp outer, int depth = 0) {
@@ -97,7 +97,7 @@ static void moveOpsIntoParallel(mlir::scf::ParallelOp outer, int depth = 0) {
 
 struct PrepareForGPUPass
     : public mlir::PassWrapper<PrepareForGPUPass,
-                               mlir::OperationPass<mlir::FuncOp>> {
+                               mlir::OperationPass<mlir::func::FuncOp>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::scf::SCFDialect>();
@@ -210,7 +210,7 @@ struct RemoveKernelMarkerPass
 
 struct KernelMemrefOpsMovementPass
     : public mlir::PassWrapper<KernelMemrefOpsMovementPass,
-                               mlir::OperationPass<mlir::FuncOp>> {
+                               mlir::OperationPass<mlir::func::FuncOp>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::memref::MemRefDialect>();
@@ -290,7 +290,7 @@ struct AssumeGpuIdRangePass
 
 struct GPULowerDefaultLocalSize
     : public mlir::PassWrapper<GPULowerDefaultLocalSize,
-                               mlir::OperationPass<mlir::FuncOp>> {
+                               mlir::OperationPass<mlir::func::FuncOp>> {
 
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
@@ -545,7 +545,7 @@ struct OutlineInitPass
 
     mlir::OpBuilder builder(&getContext());
     auto unknownLoc = builder.getUnknownLoc();
-    for (auto func : mod.getOps<mlir::FuncOp>()) {
+    for (auto func : mod.getOps<mlir::func::FuncOp>()) {
       auto &body = func.getBody();
       if (!llvm::hasSingleElement(body))
         continue;
@@ -564,7 +564,7 @@ struct OutlineInitPass
             types.emplace_back(type);
 
         auto funcType = builder.getFunctionType(llvm::None, types);
-        auto func = builder.create<mlir::FuncOp>(
+        auto func = builder.create<mlir::func::FuncOp>(
             builder.getUnknownLoc(), (funcName + "outlined_init").str(),
             funcType);
         func.setPrivate();
@@ -600,7 +600,7 @@ struct OutlineInitPass
         builder.setInsertionPointToStart(mod.getBody());
         assert(!types.empty());
         auto funcType = builder.getFunctionType(types, llvm::None);
-        auto func = builder.create<mlir::FuncOp>(
+        auto func = builder.create<mlir::func::FuncOp>(
             builder.getUnknownLoc(), (funcName + "outlined_deinit").str(),
             funcType);
         func.setPrivate();
@@ -628,7 +628,7 @@ struct OutlineInitPass
 
 struct GenerateOutlineContextPass
     : public mlir::PassWrapper<GenerateOutlineContextPass,
-                               mlir::OperationPass<mlir::FuncOp>> {
+                               mlir::OperationPass<mlir::func::FuncOp>> {
 
   void runOnOperation() override {
     auto func = getOperation();
@@ -776,7 +776,7 @@ static bool isGpuArray(mlir::Type type) {
 
 struct MarkGpuArraysInputs
     : public mlir::PassWrapper<MarkGpuArraysInputs,
-                               mlir::OperationPass<mlir::FuncOp>> {
+                               mlir::OperationPass<mlir::func::FuncOp>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::func::FuncDialect>();
@@ -1028,7 +1028,7 @@ struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::func::CallOp> {
     using handler_func_t = mlir::LogicalResult (*)(
         mlir::func::CallOp, mlir::ValueRange, mlir::ValueRange,
         mlir::ValueRange, mlir::ValueRange, mlir::PatternRewriter &, unsigned);
-    auto func = op->getParentOfType<mlir::FuncOp>();
+    auto func = op->getParentOfType<mlir::func::FuncOp>();
     if (!func || !llvm::hasSingleElement(func.getBody()))
       return mlir::failure();
 
@@ -1311,7 +1311,8 @@ public:
               return WalkResult::interrupt();
 
             return WalkResult::advance();
-          }).wasInterrupted())
+          })
+            .wasInterrupted())
       signalPassFailure();
   }
 };
@@ -1393,7 +1394,7 @@ static void commonOptPasses(mlir::OpPassManager &pm) {
 }
 
 static void populateLowerToGPUPipelineHigh(mlir::OpPassManager &pm) {
-  pm.addNestedPass<mlir::FuncOp>(std::make_unique<MarkGpuArraysInputs>());
+  pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<MarkGpuArraysInputs>());
   pm.addPass(std::make_unique<ConvertGpuArrays>());
   pm.addPass(std::make_unique<LowerGpuRangePass>());
   pm.addPass(std::make_unique<LowerGpuBuiltinsPass>());
@@ -1402,7 +1403,7 @@ static void populateLowerToGPUPipelineHigh(mlir::OpPassManager &pm) {
 }
 
 static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
-  auto &funcPM = pm.nest<mlir::FuncOp>();
+  auto &funcPM = pm.nest<mlir::func::FuncOp>();
   funcPM.addPass(std::make_unique<PrepareForGPUPass>());
   funcPM.addPass(mlir::createCanonicalizerPass());
   funcPM.addPass(std::make_unique<RemoveNestedParallelPass>());
@@ -1424,8 +1425,9 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createGpuKernelOutliningPass());
   pm.addPass(mlir::createSymbolDCEPass());
 
-  pm.addNestedPass<mlir::FuncOp>(std::make_unique<GPULowerDefaultLocalSize>());
-  pm.addNestedPass<mlir::FuncOp>(mlir::createCanonicalizerPass());
+  pm.addNestedPass<mlir::func::FuncOp>(
+      std::make_unique<GPULowerDefaultLocalSize>());
+  pm.addNestedPass<mlir::func::FuncOp>(mlir::createCanonicalizerPass());
   pm.addPass(mlir::createSymbolDCEPass());
 
   auto &gpuFuncPM =
@@ -1445,11 +1447,11 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   modulePM.addPass(mlir::spirv::createLowerABIAttributesPass());
   modulePM.addPass(mlir::spirv::createUpdateVersionCapabilityExtensionPass());
   pm.addPass(gpu_runtime::createSerializeSPIRVPass());
-  pm.addNestedPass<mlir::FuncOp>(gpu_runtime::createGPUExPass());
+  pm.addNestedPass<mlir::func::FuncOp>(gpu_runtime::createGPUExPass());
   commonOptPasses(pm);
-  pm.addNestedPass<mlir::FuncOp>(std::make_unique<GPUExDeallocPass>());
+  pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<GPUExDeallocPass>());
   pm.addPass(std::make_unique<OutlineInitPass>());
-  pm.addNestedPass<mlir::FuncOp>(
+  pm.addNestedPass<mlir::func::FuncOp>(
       std::make_unique<GenerateOutlineContextPass>());
   pm.addPass(gpu_runtime::createEnumerateEventsPass());
   pm.addPass(gpu_runtime::createGPUToLLVMPass());

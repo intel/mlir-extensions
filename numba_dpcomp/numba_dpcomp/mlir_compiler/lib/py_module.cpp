@@ -20,7 +20,7 @@
 
 namespace {
 bool is_dpnp_supported() {
-#ifdef DPNP_ENABLE
+#ifdef IMEX_USE_DPNP
   return true;
 #else
   return false;

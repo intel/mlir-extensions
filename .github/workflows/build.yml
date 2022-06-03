@@ -1,0 +1,196 @@
+name: Cross-compile IMEX on CPUs
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build_linux:
+    name: Builds IMEX on Linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 450
+
+    env:
+      TBB_VER: 2021.5.0
+      LEVEL_ZERO_VER: v1.6.2
+      TBB_URL_PREFIX: https://github.com/oneapi-src/oneTBB/releases/download/
+
+    strategy:
+      matrix:
+        python: [3.9]
+
+    steps:
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.6.0
+        with:
+          access_token: ${{ github.token }}
+
+      - name: Set pkgs_dirs
+        run: |
+          echo "pkgs_dirs: [~/.conda/pkgs]" >> ~/.condarc
+
+      - name: Cache conda packages
+        uses: actions/cache@v2
+        env:
+          CACHE_NUMBER: 1  # Increase to reset cache
+        with:
+          path: ~/.conda/pkgs
+          key:
+            ${{ runner.os }}-conda-${{ env.CACHE_NUMBER }}-python-${{ matrix.python }}-${{hashFiles('**/meta.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-conda-${{ env.CACHE_NUMBER }}-python-${{ matrix.python }}-
+            ${{ runner.os }}-conda-${{ env.CACHE_NUMBER }}-
+
+      - name: Add conda to system path
+        run: echo $CONDA/bin >> $GITHUB_PATH
+
+      - name: Install CMake and Ninja
+        run: |
+          conda install cmake ninja
+
+      - name: Cache TBB
+        id: cache-tbb
+        uses: actions/cache@v2
+        with:
+          path: |
+            /home/runner/work/tbb/*
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('/home/runner/work/tbb/bundle_id.txt') }}
+
+      - name: Cache Level-Zero
+        id: cache-level-zero
+        uses: actions/cache@v2
+        with:
+          path: |
+            /home/runner/work/level-zero/**
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('/home/runner/work/level-zero/bundle_id.txt') }}
+
+      - name: Cache LLLVM-MLIR
+        id: cache-llvm-mlir
+        uses: actions/cache@v2
+        with:
+          path: |
+            /home/runner/work/llvm-mlir/_mlir_install/**
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('/home/runner/work/llvm-mlir/_mlir_install/include/llvm/Support/VCSRevision.h') }}
+
+      - name: Download TBB
+        shell: bash -l {0}
+        run: |
+          cd /home/runner/work
+          mkdir -p tbb
+          pushd tbb
+          if [[ -f bundle_id.txt && ( "$(cat bundle_id.txt)" == "${TBB_VER}" ) ]]; then
+            echo "INFO: Using cached download of TBB ${TBB_VER}"
+          else
+            echo "INFO: Downloading TBB ${TBB_VER}"
+            rm -rf *
+            export TBB_FN=oneapi-tbb-${TBB_VER}-lin.tgz
+            wget ${TBB_URL_PREFIX}/v${TBB_VER}/${TBB_FN} || exit 1
+            tar xf ${TBB_FN} -C . || exit 1
+            cat $(find . -name tbb.pc) | grep Version: | cut -d " " -f 2 > bundle_id.txt || rm -rf bundle_id.txt
+            [ -f bundle_id.txt ] || exit 1
+          fi
+          popd
+
+      - name: Download and Build Level-Zero
+        shell: bash -l {0}
+        run: |
+          cd /home/runner/work
+          mkdir -p level-zero
+          pushd level-zero
+          tree
+          if [[ -f bundle_id.txt && ( "$(cat bundle_id.txt)" == "${LEVEL_ZERO_VER}" ) ]]; then
+            echo "INFO: Using cached build of Level-Zero ${LEVEL_ZERO_VER}"
+          else
+            echo "INFO: Downloading and building Level-Zero ${LEVEL_ZERO_VER}"
+            rm -rf *
+            echo ${LEVEL_ZERO_VER} > bundle_id.txt || rm -rf bundle_id.txt
+            cat bundle_id.txt || exit 1
+            [ -f bundle_id.txt ] || exit 1
+            git clone https://github.com/oneapi-src/level-zero.git || exit 1
+            pushd level-zero || exit 1
+            git checkout ${LEVEL_ZERO_VER} || exit 1
+            mkdir level_zero_install || exit 1
+            mkdir build || exit 1
+            cd build || exit 1
+            cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=../level_zero_install .. || exit 1
+            make install || exit 1
+            popd
+          fi
+          popd
+
+      - name: Checkout repo
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Build LLVM-MLIR
+        shell: bash -l {0}
+        timeout-minutes: 420
+        run: |
+          mkdir -p /home/runner/work/llvm-mlir
+          pushd /home/runner/work/llvm-mlir
+          MLIR_INSTALL=/home/runner/work/llvm-mlir/_mlir_install
+          VCSREVISION=${MLIR_INSTALL}/include/llvm/Support/VCSRevision.h
+          LLVM_SHA=/home/runner/work/mlir-extensions/mlir-extensions/llvm-sha.txt
+          if [[ -f ${VCSREVISION} ]]
+          then
+            cached_sha=`grep -r "LLVM_REVISION" ${VCSREVISION} | cut -d " " -f 3` || exit 1
+            cached_sha=${cached_sha:1:-1}
+            if [[ ( "$(cat ${LLVM_SHA})" == ${cached_sha} ) ]]; then
+              echo "INFO: Use cached LLVM-MLIR build"
+            else
+              echo "INFO: Need to rebuild LLVM-MLIR"
+              git clone https://github.com/llvm/llvm-project || exit 1
+              cd llvm-project || exit 1
+              git checkout `cat ${LLVM_SHA}` || exit 1
+              mkdir _build || exit 1
+              cd _build || exit 1
+              cmake ../llvm                                                    \
+                -GNinja                                                        \
+                -DCMAKE_BUILD_TYPE=Release                                     \
+                -DLLVM_ENABLE_PROJECTS=mlir                                    \
+                -DLLVM_ENABLE_ASSERTIONS=ON                                    \
+                -DLLVM_ENABLE_RTTI=ON                                          \
+                -DLLVM_USE_LINKER=gold                                         \
+                -DCMAKE_INSTALL_PREFIX=/home/runner/work/llvm-mlir/_mlir_install || exit 1
+              cmake --build . || exit 1
+              cmake --install . || exit 1
+            fi
+          else
+            echo "INFO: Need to rebuild LLVM-MLIR"
+            rm -rf *
+            git clone https://github.com/llvm/llvm-project || exit 1
+            cd llvm-project || exit 1
+            git checkout `cat ${LLVM_SHA}` || exit 1
+            mkdir _build || exit 1
+            cd _build || exit 1
+            cmake ../llvm                                                    \
+              -GNinja                                                        \
+              -DCMAKE_BUILD_TYPE=Release                                     \
+              -DLLVM_ENABLE_PROJECTS=mlir                                    \
+              -DLLVM_ENABLE_ASSERTIONS=ON                                    \
+              -DLLVM_ENABLE_RTTI=ON                                          \
+              -DLLVM_USE_LINKER=gold                                         \
+              -DCMAKE_INSTALL_PREFIX=/home/runner/work/llvm-mlir/_mlir_install || exit 1
+            cmake --build . || exit 1
+            cmake --install . || exit 1
+          fi
+          popd
+
+      - name: Build IMEX
+        shell: bash -l {0}
+
+        run: |
+          # make the llvm-mlir working dir
+          mkdir -p /home/runner/work/tmpdir
+          export TBB_PATH=/home/runner/work/tbb/oneapi-tbb-${TBB_VER}
+          export LEVEL_ZERO_DIR=/home/runner/work/level-zero/level-zero/level_zero_install
+          export LEVEL_ZERO_VERSION_CHECK_OFF=1
+          python scripts/build_locally.py                                      \
+            --working-dir /home/runner/work/tmpdir                             \
+            --llvm-install /home/runner/work/llvm-mlir/_mlir_install           \
+            --imex-enable-igpu                                                 \
+            --imex-enable-tests                                                \
+            --imex-tbb-dir /${TBB_PATH}/lib/cmake/tbb

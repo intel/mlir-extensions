@@ -53,10 +53,10 @@
 #include "pipelines/plier_to_std.hpp"
 
 #include "mlir-extensions/compiler/pipeline_registry.hpp"
-#include "mlir-extensions/dialect/plier/dialect.hpp"
-#include "mlir-extensions/dialect/plier_util/dialect.hpp"
-#include "mlir-extensions/transforms/func_utils.hpp"
-#include "mlir-extensions/transforms/type_conversion.hpp"
+#include "mlir-extensions/Dialect/plier/dialect.hpp"
+#include "mlir-extensions/Dialect/plier_util/dialect.hpp"
+#include "mlir-extensions/Transforms/func_utils.hpp"
+#include "mlir-extensions/Transforms/type_conversion.hpp"
 #include "mlir-extensions/utils.hpp"
 
 namespace {
@@ -346,7 +346,7 @@ unsigned item_size(mlir::Type type) {
   llvm_unreachable("item_size: invalid type");
 }
 
-mlir::FuncOp
+mlir::func::FuncOp
 get_to_memref_conversion_func(mlir::ModuleOp module, mlir::OpBuilder &builder,
                               mlir::MemRefType memrefType,
                               mlir::LLVM::LLVMStructType src_type,
@@ -355,7 +355,7 @@ get_to_memref_conversion_func(mlir::ModuleOp module, mlir::OpBuilder &builder,
   assert(src_type);
   assert(dst_type);
   auto func_name = gen_to_memref_conversion_func_name(memrefType);
-  if (auto func = module.lookupSymbol<mlir::FuncOp>(func_name)) {
+  if (auto func = module.lookupSymbol<mlir::func::FuncOp>(func_name)) {
     assert(func.getType().getNumResults() == 1);
     assert(func.getType().getResult(0) == dst_type);
     return func;
@@ -407,7 +407,7 @@ get_to_memref_conversion_func(mlir::ModuleOp module, mlir::OpBuilder &builder,
   return new_func;
 }
 
-mlir::FuncOp
+mlir::func::FuncOp
 get_from_memref_conversion_func(mlir::ModuleOp module, mlir::OpBuilder &builder,
                                 mlir::MemRefType memrefType,
                                 mlir::LLVM::LLVMStructType src_type,
@@ -416,7 +416,7 @@ get_from_memref_conversion_func(mlir::ModuleOp module, mlir::OpBuilder &builder,
   assert(src_type);
   assert(dst_type);
   auto func_name = gen_from_memref_conversion_func_name(memrefType);
-  if (auto func = module.lookupSymbol<mlir::FuncOp>(func_name)) {
+  if (auto func = module.lookupSymbol<mlir::func::FuncOp>(func_name)) {
     assert(func.getType().getNumResults() == 1);
     assert(func.getType().getResult(0) == dst_type);
     return func;
@@ -520,7 +520,8 @@ mlir::Type getFunctionResType(mlir::MLIRContext &context,
   return convertTupleTypes(context, converter, newResTypes);
 }
 
-mlir::LogicalResult fixFuncSig(LLVMTypeHelper &typeHelper, mlir::FuncOp func) {
+mlir::LogicalResult fixFuncSig(LLVMTypeHelper &typeHelper,
+                               mlir::func::FuncOp func) {
   if (func.isPrivate())
     return mlir::success();
 
@@ -610,7 +611,7 @@ struct ReturnOpLowering : public mlir::OpRewritePattern<mlir::func::ReturnOp> {
   mlir::LogicalResult
   matchAndRewrite(mlir::func::ReturnOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto parent = op->getParentOfType<mlir::FuncOp>();
+    auto parent = op->getParentOfType<mlir::func::FuncOp>();
     if (nullptr == parent || parent.isPrivate())
       return mlir::failure();
 
@@ -1039,7 +1040,8 @@ struct LowerParallel : public mlir::OpRewritePattern<plier::ParallelOp> {
               }
             }
             return mlir::WalkResult::advance();
-          }).wasInterrupted()) {
+          })
+            .wasInterrupted()) {
       return mlir::failure();
     }
 
@@ -1133,9 +1135,9 @@ struct LowerParallel : public mlir::OpRewritePattern<plier::ParallelOp> {
     }();
 
     auto mod = op->getParentOfType<mlir::ModuleOp>();
-    auto outlinedFunc = [&]() -> mlir::FuncOp {
+    auto outlinedFunc = [&]() -> mlir::func::FuncOp {
       auto func = [&]() {
-        auto parentFunc = op->getParentOfType<mlir::FuncOp>();
+        auto parentFunc = op->getParentOfType<mlir::func::FuncOp>();
         assert(parentFunc);
         auto func_name = [&]() {
           auto old_name = parentFunc.getName();
@@ -1145,7 +1147,7 @@ struct LowerParallel : public mlir::OpRewritePattern<plier::ParallelOp> {
                      ? (llvm::Twine(old_name) + "_outlined").str()
                      : (llvm::Twine(old_name) + "_outlined_" + llvm::Twine(i))
                            .str());
-            if (!mod.lookupSymbol<mlir::FuncOp>(name)) {
+            if (!mod.lookupSymbol<mlir::func::FuncOp>(name)) {
               return name;
             }
           }
@@ -1217,7 +1219,7 @@ struct LowerParallel : public mlir::OpRewritePattern<plier::ParallelOp> {
 
     auto parallelFor = [&]() {
       auto func_name = "dpcompParallelFor";
-      if (auto sym = mod.lookupSymbol<mlir::FuncOp>(func_name)) {
+      if (auto sym = mod.lookupSymbol<mlir::func::FuncOp>(func_name)) {
         return sym;
       }
       const mlir::Type args[] = {
@@ -1290,7 +1292,7 @@ struct LowerParallelToCFGPass
 
 struct PreLLVMLowering
     : public mlir::PassWrapper<PreLLVMLowering,
-                               mlir::OperationPass<mlir::FuncOp>> {
+                               mlir::OperationPass<mlir::func::FuncOp>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::LLVM::LLVMDialect>();
@@ -1820,9 +1822,10 @@ static void populateLowerToLlvmPipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<LowerParallelToCFGPass>());
   pm.addPass(mlir::createConvertSCFToCFPass());
   pm.addPass(mlir::createCanonicalizerPass());
-  pm.addNestedPass<mlir::FuncOp>(mlir::arith::createArithmeticExpandOpsPass());
-  pm.addNestedPass<mlir::FuncOp>(std::make_unique<PreLLVMLowering>());
-  pm.addNestedPass<mlir::FuncOp>(mlir::createConvertMathToLLVMPass());
+  pm.addNestedPass<mlir::func::FuncOp>(
+      mlir::arith::createArithmeticExpandOpsPass());
+  pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<PreLLVMLowering>());
+  pm.addNestedPass<mlir::func::FuncOp>(mlir::createConvertMathToLLVMPass());
   pm.addPass(mlir::createConvertMathToLibmPass());
   pm.addPass(std::make_unique<LLVMLoweringPass>());
   pm.addNestedPass<mlir::LLVM::LLVMFuncOp>(
