@@ -38,6 +38,11 @@ def load_lib(name):
         assert False, "unsupported platform"
 
     saved_errors = []
+    try:
+        return ctypes.CDLL(lib_name)
+    except Exception as e:
+        saved_errors.append(f'CDLL("{lib_name}"): {str(e)}')
+
     for path in runtime_search_paths:
         lib_path = lib_name if len(path) == 0 else os.path.join(path, lib_name)
         try:

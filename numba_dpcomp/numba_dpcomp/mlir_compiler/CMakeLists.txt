@@ -77,12 +77,18 @@ else()
     target_compile_definitions(${PROJECT_NAME} PRIVATE ${LLVM_DEFINITIONS})
 endif ()
 
+target_link_directories(${PROJECT_NAME} PRIVATE
+    /localdisk/work/diptorup/devel/imex-devel/_mlir_install/lib
+    /localdisk/work/diptorup/devel/mlir-extensions/_build/mlir
+)
+
 target_link_libraries(${PROJECT_NAME} PRIVATE
     mlir-extensions
     LLVM${LLVM_NATIVE_ARCH}CodeGen
     LLVM${LLVM_NATIVE_ARCH}Desc
     LLVMTarget
     MLIRIR
+    MLIRControlFlowToSPIRV
     MLIRLLVMIR
     MLIRLLVMToLLVMIRTranslation
     MLIRTransforms
@@ -91,6 +97,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     MLIRLinalgToLLVM
     MLIRMathToLLVM
     MLIRMathToLibm
+    MLIRMathToSPIRV
     MLIRSCFToGPU
     MLIRGPUToSPIRV
     MLIRGPUToGPURuntimeTransforms
@@ -102,6 +109,8 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 
 target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE
     ${MLIR_INCLUDE_DIRS}
+    /localdisk/work/diptorup/devel/mlir-extensions/mlir/include
+    /localdisk/work/diptorup/devel/mlir-extensions/_build/mlir/include
     PRIVATE
     ./lib
 )
