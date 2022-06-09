@@ -524,7 +524,7 @@ private:
 
   void retvar(py::handle inst) {
     auto var = loadvar(inst);
-    auto funcType = func.getType();
+    auto funcType = func.getFunctionType();
     auto retType = funcType.getResult(0);
     auto varType = var.getType();
     if (retType != varType)
