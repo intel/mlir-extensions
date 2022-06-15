@@ -1,4 +1,0 @@
-{
-	global: PyInit_mlir_compiler;
-	local: *;
-};
