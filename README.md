@@ -19,6 +19,11 @@ This will
 ## How to build
 **Note**: Make sure to pass `-DLLVM_INSTALL_UTILS=ON` when building LLVM with
 CMake so that it installs `FileCheck` to the chosen installation prefix.
+```sh
+mkdir build
+cd build
+CC=gcc-9 CXX=g++-9 MLIR_DIR=<llvm-c38ef550de81631641cb1485e0641d1d2227dce4> cmake ..
+make -j 12
 
 ## License
 This code is made available under the Apache License 2.0 with LLVM Exceptions. See the `LICENSE.txt` file for more details.
