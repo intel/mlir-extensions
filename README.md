@@ -9,6 +9,13 @@ This will
 * Extend/Create cmake infrastrcuture with defaults
 * Create stub soruce files for IR/Ops
 
+## Adding a new Conversion
+* Add directories include/mlir/Conversion/<conversion-name> and lib/Conversion/<conversion-name>
+* Add declarations to header include/mlir/Conversion/<conversion-name>/<conversion-name>.h
+* Put cpp definitions (implementations) to lib/Conversion/<conversion-name>/<conversion-name>.cpp
+* Add new conversion-dir to lib/Conversion/CMakeLists.txt
+* Copy lib/Conversion/PTensorToLinalg/CMakeLists.txt to lib/Conversion/<conversion-name>/ and adjust as needed
+
 ## How to build
 **Note**: Make sure to pass `-DLLVM_INSTALL_UTILS=ON` when building LLVM with
 CMake so that it installs `FileCheck` to the chosen installation prefix.
