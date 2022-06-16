@@ -91,17 +91,6 @@ public:
       : ConvertOpToLLVMPattern<OpTy>(typeConverter) {}
 
 protected:
-  Value getNumElements(ConversionPatternRewriter &rewriter, Location loc,
-                       MemRefType type, MemRefDescriptor desc) const {
-    return type.hasStaticShape()
-               ? ConvertToLLVMPattern::createIndexConstant(
-                     rewriter, loc, type.getNumElements())
-               // For identity maps (verified by caller), the number of
-               // elements is stride[0] * size[0].
-               : rewriter.create<LLVM::MulOp>(loc,
-                                              desc.stride(rewriter, loc, 0),
-                                              desc.size(rewriter, loc, 0));
-  }
 
   MLIRContext *context = &this->getTypeConverter()->getContext();
 
@@ -114,6 +103,13 @@ protected:
   Type llvmInt64Type = IntegerType::get(context, 64);
   Type llvmIntPtrType = IntegerType::get(
       context, this->getTypeConverter()->getPointerBitwidth(0));
+
+  Type llvmIndexType = mlir::IntegerType::get(
+      context, this->getTypeConverter()->getPointerBitwidth(0));
+  Type llvmRangeType = mlir::LLVM::LLVMStructType::getLiteral(
+      context, {llvmPointerType, llvmIndexType});
+  Type llvmRangePointerType =
+      mlir::LLVM::LLVMPointerType::get(llvmRangeType);
 
   FunctionCallBuilder moduleLoadCallBuilder = {
       "iGpuModuleLoad",
@@ -144,7 +140,7 @@ protected:
           llvmIntPtrType,         /* intptr_t blockYDim */
           llvmIntPtrType,         /* intptr_t blockZDim */
           llvmInt32Type,          /* unsigned int sharedMemBytes */
-          llvmPointerPointerType, /* void **kernelParams */
+          llvmRangePointerType,   /* Params */
           llvmPointerPointerType  /* void **extra */
       }};
   FunctionCallBuilder streamDestroyCallBuilder = {
@@ -157,6 +153,7 @@ protected:
       "iGpuMemAlloc",
       llvmPointerType /* void * */,
       {llvmIntPtrType /* intptr_t sizeBytes */,
+       llvmIndexType /* alignment */,	      
        llvmPointerType /* void *stream */}};
   FunctionCallBuilder deallocCallBuilder = {
       "iGpuMemFree",
@@ -372,6 +369,10 @@ private:
                   ConversionPatternRewriter &rewriter) const override {
 
     MemRefType memRefType = allocOp.getType();
+    auto converter = getTypeConverter();
+    auto dstType = converter->convertType(memRefType);
+    if (!dstType)
+      return mlir::failure();
 
     if (failed(areAllLLVMTypes(allocOp, adaptor.getOperands(), rewriter)) ||
         !isConvertibleAndHasIdentityMaps(memRefType) ||
@@ -387,24 +388,46 @@ private:
     getMemRefDescriptorSizes(loc, memRefType, adaptor.dynamicSizes(), rewriter,
                              shape, strides, sizeBytes);
 
+    assert(shape.size() == strides.size());
+
+    auto alignment = rewriter.getIntegerAttr(llvmIndexType, 64);
+    auto alignmentVar =
+        rewriter.create<mlir::LLVM::ConstantOp>(loc, llvmIndexType, alignment);
+
     // Allocate the underlying buffer and store a pointer to it in the MemRef
     // descriptor.
-    Type elementPtrType = this->getElementPtrType(memRefType);
+    //Type elementPtrType = this->getElementPtrType(memRefType);
 
     Value allocatedPtr =
-        allocCallBuilder.create(loc, rewriter, {sizeBytes, getStream(rewriter)})
+        allocCallBuilder.create(loc, rewriter, {sizeBytes, alignmentVar, getStream(rewriter)})
             .getResult(0);
-    allocatedPtr =
-        rewriter.create<LLVM::BitcastOp>(loc, elementPtrType, allocatedPtr);
 
-    // No alignment.
-    Value alignedPtr = allocatedPtr;
+    llvm::errs()<<"RETURNED ALLOCATED POINTER FROM ALLOCALLBUILDER " <<allocatedPtr<<"\n";
+   
+    auto memrefDesc = mlir::MemRefDescriptor::undef(rewriter, loc, dstType);
+    auto elemPtrTye = memrefDesc.getElementPtrType();
+    memrefDesc.setAllocatedPtr(
+        rewriter, loc,
+        rewriter.create<mlir::LLVM::BitcastOp>(loc, elemPtrTye, allocatedPtr));
+    memrefDesc.setAlignedPtr(
+        rewriter, loc,
+        rewriter.create<mlir::LLVM::BitcastOp>(loc, elemPtrTye, allocatedPtr));
 
+    auto zero = rewriter.create<mlir::LLVM::ConstantOp>(
+        loc, llvmIndexType, rewriter.getIntegerAttr(llvmIndexType, 0));
+
+    memrefDesc.setOffset(rewriter, loc, zero);
+    for (auto i : llvm::seq(0u, static_cast<unsigned>(shape.size()))) {
+      memrefDesc.setSize(rewriter, loc, i, shape[i]);
+      memrefDesc.setStride(rewriter, loc, i, strides[i]);
+    }
+
+    mlir::Value resMemref = memrefDesc;
     // Create the MemRef descriptor.
-    auto memRefDescriptor = this->createMemRefDescriptor(
-        loc, memRefType, allocatedPtr, alignedPtr, shape, strides, rewriter);
+    //auto memRefDescriptor = this->createMemRefDescriptor(
+    //    loc, memRefType, allocatedPtr, alignedPtr, shape, strides, rewriter);
 
-    rewriter.replaceOp(allocOp, {memRefDescriptor, getStream(rewriter)});
+    rewriter.replaceOp(allocOp, {resMemref, getStream(rewriter)});
 
     return success();
   }
@@ -657,7 +680,119 @@ private:
     auto zero = rewriter.create<LLVM::ConstantOp>(
         loc, llvmInt32Type, rewriter.getI32IntegerAttr(0));
     // Create array of pointers to kernel arguments.
-    auto kernelParams = generateParamsArray(launchOp, adaptor, rewriter);
+    //auto kernelParams = generateParamsArray(launchOp, adaptor, rewriter);
+    
+    plier::AllocaInsertionPoint allocaHelper(launchOp);
+    auto kernelParams = adaptor.operands();
+    auto paramsCount = static_cast<unsigned>(kernelParams.size());
+    auto paramsArrayType =
+        mlir::LLVM::LLVMArrayType::get(llvmRangeType, paramsCount + 1);
+    auto paramsArrayPtrType = mlir::LLVM::LLVMPointerType::get(paramsArrayType);
+
+    auto getKernelParamType = [&](unsigned i) -> mlir::Type {
+      if (launchOp.operands()[i].getType().isa<mlir::MemRefType>()) {
+        mlir::MemRefDescriptor desc(kernelParams[i]);
+        return desc.getElementPtrType();
+      }
+
+      return kernelParams[i].getType();
+    };
+
+    llvm::SmallVector<mlir::Value> paramsStorage(paramsCount);
+    auto paramsArrayPtr = allocaHelper.insert(rewriter, [&]() {
+      auto size = rewriter.create<mlir::LLVM::ConstantOp>(
+          loc, llvmInt64Type, rewriter.getI64IntegerAttr(paramsCount));
+      for (auto i : llvm::seq(0u, paramsCount)) {
+        auto ptrType = mlir::LLVM::LLVMPointerType::get(getKernelParamType(i));
+        paramsStorage[i] =
+            rewriter.create<mlir::LLVM::AllocaOp>(loc, ptrType, size, 0);
+      }
+      return rewriter.create<mlir::LLVM::AllocaOp>(loc, paramsArrayPtrType,
+                                                   size, 0);
+    });
+
+    mlir::Value one = rewriter.create<mlir::LLVM::ConstantOp>(
+        loc, llvmInt32Type, rewriter.getI32IntegerAttr(1));
+    auto localMemStorageClass = intel_gpu::StorageClassAttr::get(
+        getContext(), intel_gpu::StorageClass::local);
+    auto computeTypeSize = [&](mlir::Type type) -> mlir::Value {
+      // %Size = getelementptr %T* null, int 1
+      // %SizeI = ptrtoint %T* %Size to i32
+      auto nullPtr = rewriter.create<mlir::LLVM::NullOp>(loc, type);
+      auto gep = rewriter.create<mlir::LLVM::GEPOp>(loc, type, nullPtr, one);
+      return rewriter.create<mlir::LLVM::PtrToIntOp>(loc, llvmIndexType, gep);
+    };
+
+    auto getKernelParam =
+        [&](unsigned i) -> std::pair<mlir::Value, mlir::Value> {
+      auto memrefType = launchOp.operands()[i].getType().dyn_cast<mlir::MemRefType>();
+      auto paramType = paramsStorage[i].getType();
+      if (memrefType) {
+        mlir::MemRefDescriptor desc(kernelParams[i]);
+        if (memrefType.getMemorySpace() == localMemStorageClass) {
+          auto rank = static_cast<unsigned>(memrefType.getRank());
+          auto typeSize = std::max(memrefType.getElementTypeBitWidth(), 8u) / 8;
+          mlir::Value size = rewriter.create<mlir::LLVM::ConstantOp>(
+              loc, llvmIndexType,
+              rewriter.getIntegerAttr(llvmIndexType, typeSize));
+          for (auto i : llvm::seq(0u, rank)) {
+            auto dim = desc.size(rewriter, loc, i);
+            size = rewriter.create<mlir::LLVM::MulOp>(loc, llvmIndexType, size,
+                                                      dim);
+          }
+          auto null = rewriter.create<mlir::LLVM::NullOp>(
+              loc, desc.getElementPtrType());
+          return {size, null};
+        }
+        auto size = computeTypeSize(paramType);
+	llvm::errs()<<"DESCRIPTOR EXTRACTED  POINTER " <<desc.alignedPtr(rewriter, loc)<<"\n";
+        return {size, desc.alignedPtr(rewriter, loc)};
+      }
+
+      auto size = computeTypeSize(paramType);
+      return {size, kernelParams[i]};
+    };
+
+    mlir::Value paramsArray =
+        rewriter.create<mlir::LLVM::UndefOp>(loc, paramsArrayType);
+
+    for (auto i : llvm::seq(0u, paramsCount)) {
+      auto param = getKernelParam(i);
+      rewriter.create<mlir::LLVM::StoreOp>(loc, param.second, paramsStorage[i]);
+      auto ptr = rewriter.create<mlir::LLVM::BitcastOp>(loc, llvmPointerType,
+                                                        paramsStorage[i]);
+
+      auto typeSize = param.first;
+
+      mlir::Value range =
+          rewriter.create<mlir::LLVM::UndefOp>(loc, llvmRangeType);
+      range = rewriter.create<mlir::LLVM::InsertValueOp>(
+          loc, range, ptr, rewriter.getI64ArrayAttr(0));
+      range = rewriter.create<mlir::LLVM::InsertValueOp>(
+          loc, range, typeSize, rewriter.getI64ArrayAttr(1));
+
+      paramsArray = rewriter.create<mlir::LLVM::InsertValueOp>(
+          loc, paramsArray, range, rewriter.getI64ArrayAttr(i));
+    }
+
+    auto nullPtr = rewriter.create<mlir::LLVM::NullOp>(loc, llvmPointerType);
+    auto nullRange = [&]() {
+      auto zero = rewriter.create<mlir::LLVM::ConstantOp>(
+          loc, llvmIndexType, rewriter.getIntegerAttr(llvmIndexType, 0));
+      mlir::Value range =
+          rewriter.create<mlir::LLVM::UndefOp>(loc, llvmRangeType);
+      range = rewriter.create<mlir::LLVM::InsertValueOp>(
+          loc, range, nullPtr, rewriter.getI64ArrayAttr(0));
+      range = rewriter.create<mlir::LLVM::InsertValueOp>(
+          loc, range, zero, rewriter.getI64ArrayAttr(1));
+      return range;
+    }();
+    paramsArray = rewriter.create<mlir::LLVM::InsertValueOp>(
+        loc, paramsArray, nullRange, rewriter.getI64ArrayAttr(paramsCount));
+    rewriter.create<mlir::LLVM::StoreOp>(loc, paramsArray, paramsArrayPtr);
+
+    auto paramsArrayVoidPtr = rewriter.create<mlir::LLVM::BitcastOp>(
+        loc, llvmRangePointerType, paramsArrayPtr);
     auto nullpointer =
         rewriter.create<LLVM::NullOp>(loc, llvmPointerPointerType);
     Value dynamicSharedMemorySize = launchOp.dynamicSharedMemorySize()
@@ -668,7 +803,7 @@ private:
                                     adaptor.gridSizeX(), adaptor.gridSizeY(),
                                     adaptor.gridSizeZ(), adaptor.blockSizeX(),
                                     adaptor.blockSizeY(), adaptor.blockSizeZ(),
-                                    dynamicSharedMemorySize, kernelParams,
+                                    dynamicSharedMemorySize, paramsArrayVoidPtr,
                                     /*extra=*/nullpointer});
 
     if (launchOp.asyncToken()) {

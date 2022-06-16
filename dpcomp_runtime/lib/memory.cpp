@@ -24,6 +24,7 @@
 #include <mlir/ExecutionEngine/CRunnerUtils.h>
 
 #include "dpcomp-runtime_export.h"
+#include <iostream>
 
 template <typename T, int N> struct MemRefDescriptor {
   T *allocated;
@@ -37,6 +38,7 @@ template <typename T, int N> struct MemRefDescriptor {
 extern "C" DPCOMP_RUNTIME_EXPORT void
 _mlir_ciface_fillResource1DFloat(MemRefDescriptor<float, 1> *ptr, // NOLINT
                                  float value) {
+  std::cout<<"FILL RESOURCE ADDRESS "<<ptr->allocated<<std::endl;
   std::fill_n(ptr->allocated, ptr->sizes[0], value);
 }
 

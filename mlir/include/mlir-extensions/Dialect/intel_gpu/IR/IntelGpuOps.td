@@ -41,6 +41,16 @@ def IntelGpu_OpaqueType
                   "opaque_type">,
       BuildableType<"$_builder.getType<::intel_gpu::OpaqueType>()"> {}
 
+def IntelGpu_StorageClass : I32EnumAttr<"StorageClass",
+    "Kernel barrier and fence flags",
+    [
+      I32EnumAttrCase<"local", 1>,
+    ]>{
+  let genSpecializedAttr = 0;
+  let cppNamespace = "::intel_gpu";
+}
+def IntelGpu_StorageClassAttr : EnumAttr<IntelGpu_Dialect, IntelGpu_StorageClass, "storage_class">;
+
 
 def GetDeviceOp : IntelGpu_Op<"get_device", [NoSideEffect]> {
   let description = [{

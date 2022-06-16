@@ -48,7 +48,7 @@ template <typename F> auto catchAll(F &&func) {
 #define L0_SAFE_CALL(call)                                                     \
   {                                                                            \
     ze_result_t status = (call);                                               \
-    if (status != 0) {                                                         \
+    if (status != ZE_RESULT_SUCCESS) {                                                         \
       std::cout << "L0 error " << status << std::endl;                         \
       exit(1);                                                                 \
     }                                                                          \
@@ -57,7 +57,7 @@ template <typename F> auto catchAll(F &&func) {
 } // namespace
 
 struct ParamDesc {
-  const void *data;
+  void *data;
   size_t size;
 
   bool operator==(const ParamDesc &rhs) const {
@@ -77,10 +77,20 @@ template <typename T> size_t countUntil(T *ptr, T &&elem) {
 }
 
 struct Queue {
-  Queue() {
-    sycl::context context;
-    sycl::property_list propList{sycl::property::queue::in_order()};
-    sycl_queue = sycl::queue(context, sycl::gpu_selector(), propList);
+  Queue() { 
+  std::cout<<"QUEUE CTOR "<<std::endl;  
+  sycl::device device;
+  auto platform_list = sycl::platform::get_platforms();
+  for (const auto& platform : platform_list) {
+    auto platform_name = platform.get_info<sycl::info::platform::name>();
+    bool is_level_zero = platform_name.find("Level-Zero") != std::string::npos;
+    if (!is_level_zero) continue;
+    device = platform.get_devices()[0];
+    std::cout<<"Device Found"<<std::endl;
+  }
+  sycl::context context(device);  
+  sycl::property_list propList{sycl::property::queue::in_order()};
+  sycl_queue = sycl::queue(context, device, propList);
   }
 
   sycl::queue sycl_queue;
@@ -90,6 +100,7 @@ struct Queue {
     void *mem_ptr;
     if(shared){
       mem_ptr = sycl::malloc_shared(size, this->sycl_queue);
+      printf("&MEM_PTR   = %p\n", (void *) &mem_ptr);
     }
     else{
       mem_ptr = sycl::malloc_device(size, this->sycl_queue);
@@ -97,20 +108,26 @@ struct Queue {
     return reinterpret_cast<void *>(mem_ptr);
   }
 
-  ze_module_handle_t loadModule(const void *data, size_t dataSize) {
+  void loadModule(const void *data, size_t dataSize, ze_module_handle_t *ze_module) {
     std::cout<<"IN MODULE LOAD "<<std::endl;	  
     assert(data);
-    ze_module_handle_t ze_module;
-    ze_module_desc_t desc = {};
-    desc.format = ZE_MODULE_FORMAT_IL_SPIRV;
-    desc.pInputModule = static_cast<const uint8_t *>(data);
-    desc.inputSize = dataSize;
+    if(dataSize == 0)
+    	std::cout<<"UNABLE TO LOAD BINARY "<<std::endl;
+    else
+	std::cout<<"BINARY SIZE "<<dataSize<<std::endl;
+    ze_module_desc_t desc =  {ZE_STRUCTURE_TYPE_MODULE_DESC,
+                                 nullptr,
+                                 ZE_MODULE_FORMAT_IL_SPIRV,
+                                 dataSize,
+                                 (const uint8_t*)data,
+                                 nullptr,
+                                 nullptr};
     auto ze_device = sycl::get_native<sycl::backend::ext_oneapi_level_zero>(
         this->sycl_queue.get_device());
     auto ze_ctx = sycl::get_native<sycl::backend::ext_oneapi_level_zero>(
         this->sycl_queue.get_context());
-    L0_SAFE_CALL(zeModuleCreate(ze_ctx, ze_device, &desc, &ze_module, nullptr));
-    return ze_module;
+    L0_SAFE_CALL(zeModuleCreate(ze_ctx, ze_device, &desc, ze_module, nullptr));
+    std::cout<<"OUT MODULE LOAD "<<std::endl;
   }
 
   void getKernel(ze_module_handle_t module, const char *name,
@@ -130,6 +147,7 @@ struct Queue {
 
     kernel = sycl::make_kernel<sycl::backend::ext_oneapi_level_zero>(
         {kernel_bundle, ze_kernel}, this->sycl_queue.get_context());
+    std::cout<<"OUT GET KERNEL "<<std::endl;
   }
 
   void launchKernel(sycl::kernel *kernel, size_t gridX, size_t gridY,
@@ -146,12 +164,16 @@ struct Queue {
 
     auto paramsCount = countUntil(params, ParamDesc{nullptr, 0});
 
-    queue.submit([&](::sycl::handler &cgh) {
-      for (uint32_t i = 0; i < paramsCount; i++) {
-        cgh.set_arg(i, params[i]);
+    std::cout<<"PARAMS COUNT "<<paramsCount<<std::endl;
+    queue.submit([&](sycl::handler &cgh) {
+      for (size_t i = 0; i < paramsCount; i++) {
+        auto param = params[i]; 
+	std::cout<<"PARAM DATA ADDRESS IS "<<param.data<<std::endl;
+        cgh.set_arg(static_cast<uint32_t>(i), param.data);
       }
       cgh.parallel_for(sycl_nd_range, *kernel);
     });
+    std::cout<<"OUT LAUNCH KERNEL "<<std::endl;
   }
 
   static auto destroyModule(ze_module_handle_t module) {
@@ -162,32 +184,7 @@ struct Queue {
 private:
 };
 
-/*
-extern "C" DPCOMP_GPU_RUNTIME_EXPORT sycl::device dpcompGpuGetDevice() {
-  return catchAll([&]() {
-    sycl::device device;
-    auto platform_list = sycl::platform::get_platforms();
-    for (const auto &platform : platform_list) {
-      auto platform_name = platform.get_info<sycl::info::platform::name>();
-      bool is_level_zero =
-          platform_name.find("Level-Zero") != std::string::npos;
-      if (!is_level_zero)
-        continue;
-      device = platform.get_devices()[0];
-    }
-    return device;
-  });
-}
-
- extern "C" DPCOMP_GPU_RUNTIME_EXPORT sycl::context
- iGpuCreateContext(sycl::device device) {
- return catchAll([&]() {
-   auto sycl_context = sycl::context(device);
-   return sycl_context;
- });
-}
-*/
-
+// Wrappers
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *iGpuCreateStream(void *queue) {
   return catchAll([&]() {
     if (!static_cast<Queue *>(queue))
@@ -202,16 +199,45 @@ extern "C" DPCOMP_GPU_RUNTIME_EXPORT void iGpuStreamDestroy(void *queue) {
 }
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *
-iGpuMemAlloc(size_t size, void *queue, int shared) {
-  catchAll(
-      [&]() { return static_cast<Queue *>(queue)->alloc_device_memory(size, 1); });
+iGpuMemAlloc(size_t size, size_t alignment, void *queue, int shared) {
+    std::cout<<"IN ALLOC MEMORY "<<std::endl;
+    void *mem_ptr = nullptr;
+    shared = 1;
+    if(shared){
+      mem_ptr = sycl::aligned_alloc_shared(alignment, size, static_cast<Queue *>(queue)->sycl_queue);
+    }
+    else{
+      mem_ptr = sycl::malloc_device(size, static_cast<Queue *>(queue)->sycl_queue);
+    }
+    std::cout<<"RESULT PTR IS "<<mem_ptr<<std::endl;
+    return mem_ptr;
 }
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *
 iGpuModuleLoad(void *queue, const void *data, size_t dataSize) {
-  return catchAll([&]() {
-    return static_cast<Queue *>(queue)->loadModule(data, dataSize);
-  });
+    std::cout<<"IN MODULE LOAD "<<std::endl;
+    assert(data);
+    if(dataSize == 0)
+        std::cout<<"UNABLE TO LOAD BINARY "<<std::endl;
+    else
+        std::cout<<"BINARY SIZE "<<dataSize<<std::endl;
+    ze_module_desc_t desc =  {ZE_STRUCTURE_TYPE_MODULE_DESC,
+                                 nullptr,
+                                 ZE_MODULE_FORMAT_IL_SPIRV,
+                                 dataSize,
+                                 (const uint8_t*)data,
+                                 nullptr,
+                                 nullptr};
+    ze_module_handle_t ze_module;
+    auto sycl_queue = static_cast<Queue *>(queue)->sycl_queue;
+    //desc.format = ZE_MODULE_FORMAT_IL_SPIRV;
+    //desc.pInputModule = static_cast<const uint8_t *>(data);
+    //desc.inputSize = dataSize;
+    auto ze_device = sycl::get_native<sycl::backend::ext_oneapi_level_zero>(sycl_queue.get_device());
+    auto ze_ctx = sycl::get_native<sycl::backend::ext_oneapi_level_zero>(sycl_queue.get_context());
+    L0_SAFE_CALL(zeModuleCreate(ze_ctx, ze_device, &desc, &ze_module, nullptr));
+    std::cout<<"OUT MODULE LOAD "<<std::endl;
+    return ze_module;
 }
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void iGpuModuleDestroy(void *module) {
@@ -221,12 +247,26 @@ extern "C" DPCOMP_GPU_RUNTIME_EXPORT void iGpuModuleDestroy(void *module) {
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *
 iGpuKernelGet(void *queue, void *module, const char *name) {
-  return catchAll([&]() {
-    sycl::kernel *kernel;
-    static_cast<Queue *>(queue)->getKernel(
-        static_cast<ze_module_handle_t>(module), name, *kernel);
-    return kernel;
-  });
+	std::cout<<"IN GET KERNEL "<<std::endl;
+    assert(module);
+    assert(name);
+    ze_kernel_handle_t ze_kernel;
+    sycl::kernel *sycl_kernel;
+    ze_kernel_desc_t desc = {};
+    desc.pKernelName = name;
+    L0_SAFE_CALL(zeKernelCreate(static_cast<ze_module_handle_t>(module), &desc, &ze_kernel));
+
+    auto sycl_queue = static_cast<Queue *>(queue)->sycl_queue;
+    sycl::kernel_bundle<sycl::bundle_state::executable> kernel_bundle =
+        sycl::make_kernel_bundle<sycl::backend::ext_oneapi_level_zero,
+                                 sycl::bundle_state::executable>(
+            {static_cast<ze_module_handle_t>(module)}, sycl_queue.get_context());
+
+    auto kernel = sycl::make_kernel<sycl::backend::ext_oneapi_level_zero>(
+        {kernel_bundle, ze_kernel}, sycl_queue.get_context());
+    sycl_kernel = new sycl::kernel(kernel);
+    std::cout<<"OUT GET KERNEL "<<std::endl;
+    return sycl_kernel;
 }
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void iGpuKernelDestroy(void *kernel) {
@@ -237,12 +277,10 @@ extern "C" DPCOMP_GPU_RUNTIME_EXPORT void
 iGpuLaunchKernel(void *queue, void *kernel, size_t gridX, size_t gridY,
                  size_t gridZ, size_t blockX, size_t blockY, size_t blockZ,
                  size_t sharedMemBytes, void *params, void *extra) {
-  return catchAll([&]() {
     static_cast<Queue *>(queue)->launchKernel(
         static_cast<sycl::kernel *>(kernel), gridX, gridY, gridZ, blockX,
         blockY, blockZ, sharedMemBytes, static_cast<ParamDesc *>(params),
         extra);
-  });
 }
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void iGpuStreamSynchronize(void *queue) {
