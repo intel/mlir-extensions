@@ -13,17 +13,17 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 def PTensor_Dialect : Dialect {
     // The namespace of our dialect
     let name = "ptensor";
-    
+
     // A short one-line summary of our dialect.
     let summary = "A high-level dialect for parallel tensor operations";
-    
+
     // A longer description of our dialect.
     let description = [{
             The ptensor dialect describe parallel operations on tensors.
             Generic parallel patterns are provided, such as element-wise-unary,
             element-wise-binary or reduce.
         }];
-    
+
     // The C++ namespace that the dialect class definition resides in.
     let cppNamespace = "::ptensor";
 }
@@ -32,7 +32,7 @@ class PTensor_Type<string name, string typeMnemonic, list<Trait> traits = []>
     : TypeDef<PTensor_Dialect, name, traits> {
     let mnemonic = typeMnemonic;
 }
-    
+
 def PTensor_PTensor : PTensor_Type<"PTensor", "ptensor">
 {
   let summary = "RankedTensor, optionally distributed";

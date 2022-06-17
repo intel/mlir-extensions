@@ -6,7 +6,7 @@
 #ifndef _PTensorToLinalg_H_INCLUDED_
 #define _PTensorToLinalg_H_INCLUDED_
 
-#include <mlir/Dialect/PTensor/IR/PTensorOps.h>
+#include <imex/Dialect/PTensor/IR/PTensorOps.h>
 
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Transforms/DialectConversion.h>

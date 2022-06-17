@@ -12,10 +12,10 @@
 
 namespace dist {}
 
-#include <mlir/Dialect/Dist/IR/DistOpsDialect.h.inc>
+#include <imex/Dialect/Dist/IR/DistOpsDialect.h.inc>
 #define GET_TYPEDEF_CLASSES
-#include <mlir/Dialect/Dist/IR/DistOpsTypes.h.inc>
+#include <imex/Dialect/Dist/IR/DistOpsTypes.h.inc>
 #define GET_OP_CLASSES
-#include <mlir/Dialect/Dist/IR/DistOps.h.inc>
+#include <imex/Dialect/Dist/IR/DistOps.h.inc>
 
 #endif // _Dist_OPS_H_INCLUDED_

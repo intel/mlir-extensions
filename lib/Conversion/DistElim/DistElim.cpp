@@ -3,11 +3,11 @@
 
 // Eliminating dist calls (falling back to local compute)
 
-#include <mlir/Conversion/DistElim/DistElim.h>
+#include <imex/Conversion/DistElim/DistElim.h>
 
-#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
+#include <mlir/Dialect/LLVMIR/LLVMDialect.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/IR/BuiltinOps.h>
 

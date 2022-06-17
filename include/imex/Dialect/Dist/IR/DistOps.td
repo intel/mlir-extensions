@@ -13,16 +13,16 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 def Dist_Dialect : Dialect {
     // The namespace of our dialect
     let name = "dist";
-    
+
     // A short one-line summary of our dialect.
     let summary = "A high-level dialect for distributing PTensor operations";
-    
+
     // A longer description of our dialect.
     let description = [{
             The dist dialect describes interfaces for interacting with
 	    a runtime which handles distributed aspects of PTensor operations.
         }];
-    
+
     // The C++ namespace that the dialect class definition resides in.
     let cppNamespace = "::dist";
 }

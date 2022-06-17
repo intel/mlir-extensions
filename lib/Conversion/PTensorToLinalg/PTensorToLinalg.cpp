@@ -3,11 +3,11 @@
 
 // Converting PTensor to Linalg
 
-#include "mlir/Conversion/PTensorToLinalg/PTensorToLinalg.h"
-#include "mlir/Dialect/Dist/IR/DistOps.h"
+#include <imex/Conversion/PTensorToLinalg/PTensorToLinalg.h>
+#include <imex/Dialect/Dist/IR/DistOps.h>
 
-#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/LLVMIR/LLVMDialect.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/Shape/IR/Shape.h>

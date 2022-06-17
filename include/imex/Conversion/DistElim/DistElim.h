@@ -6,7 +6,7 @@
 #ifndef _DistElim_H_INCLUDED_
 #define _DistElim_H_INCLUDED_
 
-#include <mlir/Dialect/Dist/IR/DistOps.h>
+#include <imex/Dialect/Dist/IR/DistOps.h>
 
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Transforms/DialectConversion.h>

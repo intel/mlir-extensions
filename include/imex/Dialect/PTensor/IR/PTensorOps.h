@@ -51,10 +51,10 @@ enum ReduceOpId : int { MAX, MEAN, MIN, PROD, SUM, STD, VAR, REDUCEOPID_LAST };
 
 } // namespace ptensor
 
-#include <mlir/Dialect/PTensor/IR/PTensorOpsDialect.h.inc>
+#include <imex/Dialect/PTensor/IR/PTensorOpsDialect.h.inc>
 #define GET_TYPEDEF_CLASSES
-#include <mlir/Dialect/PTensor/IR/PTensorOpsTypes.h.inc>
+#include <imex/Dialect/PTensor/IR/PTensorOpsTypes.h.inc>
 #define GET_OP_CLASSES
-#include <mlir/Dialect/PTensor/IR/PTensorOps.h.inc>
+#include <imex/Dialect/PTensor/IR/PTensorOps.h.inc>
 
 #endif // _PTensor_OPS_H_INCLUDED_
