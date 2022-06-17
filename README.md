@@ -1,3 +1,21 @@
+## Setting up development environment
+```sh
+conda create -n imex-dev -c intel -c defaults -c conda-forge pip">=21.2.4" pre-commit cmake clang-format tbb-devel
+conda activate imex-dev
+pre-commit install -f -c ./scripts/.pre-commit-config.yaml
+```
+
+## Building
+### Linux
+**Note**: Make sure to pass `-DLLVM_INSTALL_UTILS=ON` when building LLVM with
+CMake so that it installs `FileCheck` to the chosen installation prefix.
+```sh
+mkdir build
+cd build
+CC=gcc-9 CXX=g++-9 MLIR_DIR=$llvm-c38ef550de81631641cb1485e0641d1d2227dce4 cmake ..
+make -j 12
+```
+
 ## Adding a new dialect
 ```sh
 # enter root directory of mlir-extension
@@ -16,15 +34,6 @@ This will
 * Add new conversion-dir to lib/Conversion/CMakeLists.txt
 * Copy lib/Conversion/PTensorToLinalg/CMakeLists.txt to lib/Conversion/<conversion-name>/ and adjust as needed
 
-## How to build
-**Note**: Make sure to pass `-DLLVM_INSTALL_UTILS=ON` when building LLVM with
-CMake so that it installs `FileCheck` to the chosen installation prefix.
-```sh
-mkdir build
-cd build
-CC=gcc-9 CXX=g++-9 MLIR_DIR=<llvm-c38ef550de81631641cb1485e0641d1d2227dce4> cmake ..
-make -j 12
-```
 
 ## License
 This code is made available under the Apache License 2.0 with LLVM Exceptions. See the `LICENSE.txt` file for more details.
