@@ -1,4 +1,4 @@
-add_mlir_conversion_library(MLIRDistElim
+add_mlir_conversion_library(IMEXDistElim
   DistElim.cpp
 
   ADDITIONAL_HEADER_DIRS
@@ -6,4 +6,4 @@ add_mlir_conversion_library(MLIRDistElim
 
   LINK_LIBS PUBLIC
   MLIRDist
-  )
+)

@@ -3,10 +3,13 @@ cmake_minimum_required(VERSION 3.13.4)
 # CMP0116: Ninja generators transform `DEPFILE`s from `add_custom_command()`
 # New in CMake 3.20. https://cmake.org/cmake/help/latest/policy/CMP0116.html
 if(POLICY CMP0116)
-  cmake_policy(SET CMP0116 OLD)
+    cmake_policy(SET CMP0116 OLD)
 endif()
 
 project(mlir-extensions LANGUAGES CXX C)
+
+# Must go below project(..)
+include(GNUInstallDirs)
 
 set(CMAKE_CXX_STANDARD 14 CACHE STRING "C++ standard to conform to")
 
@@ -39,5 +42,30 @@ include(sanitizers)
 
 add_subdirectory(include)
 add_subdirectory(lib)
-#add_subdirectory(test)
-#add_subdirectory(standalone-opt)
+
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/include/mlir
+    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+    COMPONENT mlir-headers
+    FILES_MATCHING
+    PATTERN "*.def"
+    PATTERN "*.h"
+    PATTERN "*.inc"
+    PATTERN "*.td"
+    PATTERN "LICENSE.TXT"
+)
+
+install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include
+    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+    COMPONENT mlir-headers
+    FILES_MATCHING
+    PATTERN "*.def"
+    PATTERN "*.h"
+    PATTERN "*.gen"
+    PATTERN "*.inc"
+    PATTERN "*.td"
+    PATTERN "CMakeFiles" EXCLUDE
+    PATTERN "config.h" EXCLUDE
+)
+
+# add_subdirectory(test)
+# add_subdirectory(standalone-opt)
