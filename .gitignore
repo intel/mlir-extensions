@@ -1,5 +1,7 @@
 *.log
 build/
+_build/
+_install/
 .clangd/
 .cache/
 .vscode/
