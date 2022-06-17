@@ -7,7 +7,10 @@ import os
 from os.path import join as jp
 import argparse
 
-parser = argparse.ArgumentParser(description='Create subfolders for a new dialect and create/extend CMakeLists and stub sources')
+parser = argparse.ArgumentParser(
+    description="Create subfolders for a new dialect and create/extend "
+    + "CMakeLists and stub sources"
+)
 parser.add_argument("name", help="new dialect's name")
 
 args = parser.parse_args()
@@ -17,7 +20,10 @@ libroot = jp("lib", "Dialect")
 
 # quick check that we are in the right dir
 if not os.path.isdir(incroot) or not os.path.isdir(libroot):
-    raise Exception(f"'{incroot}' and/or '{libroot}' not found. Are you in the right directory?")
+    raise Exception(
+        f"'{incroot}' and/or '{libroot}' not found. "
+        + "Are you in the right directory?"
+    )
 
 # create dialect subdirs and default CMakeLists
 for d in [jp(incroot), jp(libroot)]:
@@ -32,12 +38,19 @@ for d in [jp(incroot), jp(libroot)]:
 # Default rules for tablegen and alike
 with open(jp(incroot, args.name, "IR", "CMakeLists.txt"), "w") as f:
     f.write(f"add_mlir_dialect({args.name}Ops {args.name.lower()})\n")
-    f.write(f"add_mlir_doc({args.name}Dialect {args.name}Dialect {args.name}/ -gen-dialect-doc)\n")
-    f.write(f"add_mlir_doc({args.name}Ops {args.name}Ops {args.name}/ -gen-op-doc)\n")
+    f.write(
+        f"add_mlir_doc({args.name}Dialect {args.name}Dialect {args.name}/"
+        + " -gen-dialect-doc)\n"
+    )
+    f.write(
+        f"add_mlir_doc({args.name}Ops {args.name}Ops {args.name}/ "
+        + "-gen-op-doc)\n"
+    )
 
 # Default rules for tblgen'erated cpps
 with open(jp(libroot, args.name, "IR", "CMakeLists.txt"), "w") as f:
-    f.write("""add_mlir_dialect_library(MLIR{0}
+    f.write(
+        """add_mlir_dialect_library(IMEX{0}
         {0}Ops.cpp
 
         ADDITIONAL_HEADER_DIRS
@@ -46,10 +59,13 @@ with open(jp(libroot, args.name, "IR", "CMakeLists.txt"), "w") as f:
         DEPENDS
         MLIR{0}OpsIncGen
 
-	LINK_LIBS PUBLIC
-	MLIRIR
-	)
-""".format(args.name))
+    LINK_LIBS PUBLIC
+    MLIRIR
+    )
+""".format(
+            args.name
+        )
+    )
 
 # Generate default tablegen defs
 tgdef = """// Copyright 2022 Intel Corporation
@@ -67,15 +83,15 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 def {0}_Dialect : Dialect {{
     // The namespace of our dialect
     let name = "{1}";
-    
+
     // A short one-line summary of our dialect.
     let summary = "FIXME insert summary";
-    
+
     // A longer description of our dialect.
     let description = [{{
             FIXME insert discription
         }}];
-    
+
     // The C++ namespace that the dialect class definition resides in.
     let cppNamespace = "::{1}";
 }}
@@ -89,7 +105,9 @@ class {0}_Op<string mnemonic, list<Trait> traits = []> :
     Op<{0}_Dialect, mnemonic, traits>;
 
 #endif // _{0}_OPS_TD_INCLUDED_
-""".format(args.name, args.name.lower())
+""".format(
+    args.name, args.name.lower()
+)
 
 with open(jp(incroot, args.name, "IR", f"{args.name}Ops.td"), "w") as f:
     f.write(tgdef)
@@ -118,7 +136,9 @@ namespace {1} {{
 #include <mlir/Dialect/{0}/IR/{0}Ops.h.inc>
 
 #endif // _{0}_OPS_H_INCLUDED_
-""".format(args.name, args.name.lower())
+""".format(
+    args.name, args.name.lower()
+)
 
 with open(jp(incroot, args.name, "IR", f"{args.name}Ops.h"), "w") as f:
     f.write(irinc)
@@ -152,7 +172,9 @@ namespace {1} {{
 #include "mlir/Dialect/{0}/IR/{0}OpsTypes.cpp.inc"
 #define GET_OP_CLASSES
 #include "mlir/Dialect/{0}/IR/{0}Ops.cpp.inc"
-""".format(args.name, args.name.lower())
+""".format(
+    args.name, args.name.lower()
+)
 
 with open(jp(libroot, args.name, "IR", f"{args.name}Ops.cpp"), "w") as f:
     f.write(irlib)

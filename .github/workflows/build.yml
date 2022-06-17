@@ -4,7 +4,11 @@ on:
   push:
     branches:
       - main
+      - refactor
   pull_request:
+    branches:
+      - main
+      - refactor
 
 jobs:
   build_linux:
