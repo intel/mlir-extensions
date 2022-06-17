@@ -55,7 +55,9 @@ def _sha_matched(llvm_install_dir, llvm_sha):
         bool: True if the two SHAs matched, else False
     """
     sha = None
-    with open(llvm_install_dir + "/include/llvm/Support/VCSRevision.h", "r") as fd:
+    with open(
+        llvm_install_dir + "/include/llvm/Support/VCSRevision.h", "r"
+    ) as fd:
         for l in fd:
             if l.find("LLVM_REVISION") > -1:
                 sha = l.split()[2].strip('"')
@@ -234,7 +236,9 @@ def _get_llvm(llvm_sha=None, working_dir=None):
     if not git_checkout_dir:
         try:
             temp_uuid = str(uuid.uuid1())
-            git_checkout_dir = tempfile.gettempdir() + "/_llvm-repo_" + temp_uuid
+            git_checkout_dir = (
+                tempfile.gettempdir() + "/_llvm-repo_" + temp_uuid
+            )
             os.mkdir(git_checkout_dir)
         except FileExistsError:
             raise RuntimeError("Found existing build directory.")
@@ -263,7 +267,9 @@ def _get_llvm(llvm_sha=None, working_dir=None):
                 cwd=git_checkout_dir + "/llvm-project",
             )
         except subprocess.CalledProcessError:
-            raise RuntimeError(f"Could not checkout the sha: {llvm_sha}", llvm_sha)
+            raise RuntimeError(
+                f"Could not checkout the sha: {llvm_sha}", llvm_sha
+            )
 
     return git_checkout_dir + "/llvm-project"
 
@@ -394,7 +400,9 @@ def _build_imex(
             "-DIMEX_ENABLE_IGPU_DIALECT=" + "ON" if enable_igpu else "OFF",
             "-DIMEX_ENABLE_TESTS=" + "ON" if enable_tests else "OFF",
             "-DIMEX_ENABLE_NUMBA_FE=" + "ON" if enable_numba_fe else "OFF",
-            "-DIMEX_ENABLE_NUMBA_HOTFIX=" + "ON" if enable_numba_hotfix else "OFF",
+            "-DIMEX_ENABLE_NUMBA_HOTFIX=" + "ON"
+            if enable_numba_hotfix
+            else "OFF",
             "-DCMAKE_VERBOSE_MAKEFILE=ON",
             "--debug-trycompile",
             os.path.abspath(imex_source_dir),
@@ -410,10 +418,14 @@ def _build_imex(
 
     build_dir = os.path.abspath(build_dir)
     # Configure
-    subprocess.check_call(cmake_config_args, shell=False, cwd=build_dir, env=os.environ)
+    subprocess.check_call(
+        cmake_config_args, shell=False, cwd=build_dir, env=os.environ
+    )
     # Build
     cmake_build_args = cmake_args + ["--build", "."]
-    subprocess.check_call(cmake_build_args, shell=False, cwd=build_dir, env=os.environ)
+    subprocess.check_call(
+        cmake_build_args, shell=False, cwd=build_dir, env=os.environ
+    )
     # Install
     cmake_install_args = cmake_args + ["--install", "."]
     subprocess.check_call(
@@ -548,7 +560,9 @@ if __name__ == "__main__":
             os.path.exists(g_working_dir + "/_mlir_install")
             and g_llvm_install_dir is None
         ):
-            g_llvm_install_dir = os.path.abspath(g_working_dir) + "/_mlir_install"
+            g_llvm_install_dir = (
+                os.path.abspath(g_working_dir) + "/_mlir_install"
+            )
     elif g_working_dir is None:
         warnings.warn(
             "No working directory specified. Going to use system temp "
