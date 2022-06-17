@@ -1,7 +1,17 @@
+//===- PTensorToLinalg.cpp - PTensorToLinalg conversion  -------*- C++ -*-===//
+//
 // Copyright 2022 Intel Corporation
-// SPDX-License-Identifier: Apache-2.0
-
-// Converting PTensor to Linalg
+// Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+///
+/// \file
+/// This file implements the PTensorToLinalg conversion, converting the PTensor
+/// dialect to the Linalg and Dist dialects.
+///
+//===----------------------------------------------------------------------===//
 
 #include <imex/Conversion/PTensorToLinalg/PTensorToLinalg.h>
 #include <imex/Dialect/Dist/IR/DistOps.h>
