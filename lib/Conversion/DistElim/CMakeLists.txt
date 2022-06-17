@@ -5,5 +5,5 @@ add_mlir_conversion_library(IMEXDistElim
   ${MLIR_MAIN_INCLUDE_DIR}/mlir/Conversion/DistElim
 
   LINK_LIBS PUBLIC
-  MLIRDist
+  IMEXDist
 )

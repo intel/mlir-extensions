@@ -10,9 +10,7 @@
 #include <mlir/IR/Types.h>
 #include <mlir/Interfaces/SideEffectInterfaces.h>
 
-namespace dist {
-
-}
+namespace dist {}
 
 #include <mlir/Dialect/Dist/IR/DistOpsDialect.h.inc>
 #define GET_TYPEDEF_CLASSES

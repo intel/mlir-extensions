@@ -14,51 +14,42 @@ namespace ptensor {
 
 // The set of supported operations
 enum EWBinOpId : int {
-    ADD,
-    AND,
-    ATAN2,
-    BITWISE_AND,
-    BITWISE_LEFT_SHIFT,
-    BITWISE_OR,
-    BITWISE_RIGHT_SHIFT,
-    BITWISE_XOR,
-    EQUAL,
-    FLOOR_DIVIDE,
-    GREATER,
-    GREATER_EQUAL,
-    LESS,
-    LESS_EQUAL,
-    LOGADDEXP,
-    LOGICAL_AND,
-    LOGICAL_OR,
-    LOGICAL_XOR,
-    LSHIFT,
-    MATMUL,
-    MAXIMUM,
-    MINIMUM,
-    MODULO,
-    MULTIPLY,
-    NOT_EQUAL,
-    OR,
-    POWER,
-    SUBTRACT,
-    TRUE_DIVIDE,
-    XOR,
-    EWBINOPID_LAST
+  ADD,
+  AND,
+  ATAN2,
+  BITWISE_AND,
+  BITWISE_LEFT_SHIFT,
+  BITWISE_OR,
+  BITWISE_RIGHT_SHIFT,
+  BITWISE_XOR,
+  EQUAL,
+  FLOOR_DIVIDE,
+  GREATER,
+  GREATER_EQUAL,
+  LESS,
+  LESS_EQUAL,
+  LOGADDEXP,
+  LOGICAL_AND,
+  LOGICAL_OR,
+  LOGICAL_XOR,
+  LSHIFT,
+  MATMUL,
+  MAXIMUM,
+  MINIMUM,
+  MODULO,
+  MULTIPLY,
+  NOT_EQUAL,
+  OR,
+  POWER,
+  SUBTRACT,
+  TRUE_DIVIDE,
+  XOR,
+  EWBINOPID_LAST
 };
 
-enum ReduceOpId : int {
-    MAX,
-    MEAN,
-    MIN,
-    PROD,
-    SUM,
-    STD,
-    VAR,
-    REDUCEOPID_LAST
-};
+enum ReduceOpId : int { MAX, MEAN, MIN, PROD, SUM, STD, VAR, REDUCEOPID_LAST };
 
-}
+} // namespace ptensor
 
 #include <mlir/Dialect/PTensor/IR/PTensorOpsDialect.h.inc>
 #define GET_TYPEDEF_CLASSES

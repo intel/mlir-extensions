@@ -8,46 +8,48 @@
 
 #include <mlir/Dialect/Dist/IR/DistOps.h>
 
-#include <mlir/Transforms/DialectConversion.h>
 #include <mlir/IR/PatternMatch.h>
+#include <mlir/Transforms/DialectConversion.h>
 
 namespace dist {
 
-    // RegisterPTensorOp -> no-op
-    struct ElimRegisterPTensorOp : public mlir::OpRewritePattern<::dist::RegisterPTensorOp>
-    {
-        using OpRewritePattern::OpRewritePattern;
+// RegisterPTensorOp -> no-op
+struct ElimRegisterPTensorOp
+    : public mlir::OpRewritePattern<::dist::RegisterPTensorOp> {
+  using OpRewritePattern::OpRewritePattern;
 
-        ::mlir::LogicalResult
-        matchAndRewrite(::dist::RegisterPTensorOp op, mlir::PatternRewriter &rewriter) const override;
-    };
+  ::mlir::LogicalResult
+  matchAndRewrite(::dist::RegisterPTensorOp op,
+                  mlir::PatternRewriter &rewriter) const override;
+};
 
-    // LocalOffsetsOp -> const(0)
-    struct ElimLocalOffsetsOp : public mlir::OpRewritePattern<::dist::LocalOffsetsOp>
-    {
-        using OpRewritePattern::OpRewritePattern;
+// LocalOffsetsOp -> const(0)
+struct ElimLocalOffsetsOp
+    : public mlir::OpRewritePattern<::dist::LocalOffsetsOp> {
+  using OpRewritePattern::OpRewritePattern;
 
-        ::mlir::LogicalResult
-        matchAndRewrite(::dist::LocalOffsetsOp op, mlir::PatternRewriter &rewriter) const override;
-    };
+  ::mlir::LogicalResult
+  matchAndRewrite(::dist::LocalOffsetsOp op,
+                  mlir::PatternRewriter &rewriter) const override;
+};
 
-    // LocalShapeOp -> global shape
-    struct ElimLocalShapeOp : public mlir::OpRewritePattern<::dist::LocalShapeOp>
-    {
-        using OpRewritePattern::OpRewritePattern;
+// LocalShapeOp -> global shape
+struct ElimLocalShapeOp : public mlir::OpRewritePattern<::dist::LocalShapeOp> {
+  using OpRewritePattern::OpRewritePattern;
 
-        ::mlir::LogicalResult
-        matchAndRewrite(::dist::LocalShapeOp op, mlir::PatternRewriter &rewriter) const override;
-    };
+  ::mlir::LogicalResult
+  matchAndRewrite(::dist::LocalShapeOp op,
+                  mlir::PatternRewriter &rewriter) const override;
+};
 
-    // AllReduceOp -> identity cast
-    struct ElimAllReduceOp : public mlir::OpRewritePattern<::dist::AllReduceOp>
-    {
-        using OpRewritePattern::OpRewritePattern;
+// AllReduceOp -> identity cast
+struct ElimAllReduceOp : public mlir::OpRewritePattern<::dist::AllReduceOp> {
+  using OpRewritePattern::OpRewritePattern;
 
-        ::mlir::LogicalResult
-        matchAndRewrite(::dist::AllReduceOp op, mlir::PatternRewriter &rewriter) const override;
-    };
+  ::mlir::LogicalResult
+  matchAndRewrite(::dist::AllReduceOp op,
+                  mlir::PatternRewriter &rewriter) const override;
+};
 
 } // namespace dist
 

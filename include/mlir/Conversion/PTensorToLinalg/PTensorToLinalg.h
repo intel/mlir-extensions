@@ -8,43 +8,41 @@
 
 #include <mlir/Dialect/PTensor/IR/PTensorOps.h>
 
-#include <mlir/Transforms/DialectConversion.h>
 #include <mlir/IR/PatternMatch.h>
+#include <mlir/Transforms/DialectConversion.h>
 
 namespace ptensor {
 
-    // Convert PTensor's arange to Linalg
-    struct ARangeLowering : public ::mlir::OpConversionPattern<::ptensor::ARangeOp>
-    {
-        using OpConversionPattern::OpConversionPattern;
+// Convert PTensor's arange to Linalg
+struct ARangeLowering
+    : public ::mlir::OpConversionPattern<::ptensor::ARangeOp> {
+  using OpConversionPattern::OpConversionPattern;
 
-        ::mlir::LogicalResult
-              matchAndRewrite(::ptensor::ARangeOp op,
-                              ::ptensor::ARangeOp::Adaptor adaptor,
-                              ::mlir::ConversionPatternRewriter &rewriter) const override;
-    };
+  ::mlir::LogicalResult
+  matchAndRewrite(::ptensor::ARangeOp op, ::ptensor::ARangeOp::Adaptor adaptor,
+                  ::mlir::ConversionPatternRewriter &rewriter) const override;
+};
 
-    // Convert PTensor's elementwise binary operations to Linalg
-    struct EWBinOpLowering : public ::mlir::OpConversionPattern<::ptensor::EWBinOp>
-    {
-        using OpConversionPattern::OpConversionPattern;
+// Convert PTensor's elementwise binary operations to Linalg
+struct EWBinOpLowering
+    : public ::mlir::OpConversionPattern<::ptensor::EWBinOp> {
+  using OpConversionPattern::OpConversionPattern;
 
-        ::mlir::LogicalResult
-              matchAndRewrite(::ptensor::EWBinOp op,
-                              ::ptensor::EWBinOp::Adaptor adaptor,
-                              ::mlir::ConversionPatternRewriter &rewriter) const override;
-    };
+  ::mlir::LogicalResult
+  matchAndRewrite(::ptensor::EWBinOp op, ::ptensor::EWBinOp::Adaptor adaptor,
+                  ::mlir::ConversionPatternRewriter &rewriter) const override;
+};
 
-    // Convert PTensor's reduction operations to Linalg
-    struct ReductionOpLowering : public ::mlir::OpConversionPattern<::ptensor::ReductionOp>
-    {
-        using OpConversionPattern::OpConversionPattern;
+// Convert PTensor's reduction operations to Linalg
+struct ReductionOpLowering
+    : public ::mlir::OpConversionPattern<::ptensor::ReductionOp> {
+  using OpConversionPattern::OpConversionPattern;
 
-        ::mlir::LogicalResult
-              matchAndRewrite(::ptensor::ReductionOp op,
-                              ::ptensor::ReductionOp::Adaptor adaptor,
-                              ::mlir::ConversionPatternRewriter &rewriter) const override;
-    };
+  ::mlir::LogicalResult
+  matchAndRewrite(::ptensor::ReductionOp op,
+                  ::ptensor::ReductionOp::Adaptor adaptor,
+                  ::mlir::ConversionPatternRewriter &rewriter) const override;
+};
 } // namespace ptensor
 
 #endif // _PTensorToLinalg_H_INCLUDED_
