@@ -3,18 +3,13 @@
 
 // Converting PTensor to Linalg
 
-#include <iostream>
-
 #include "mlir/Conversion/PTensorToLinalg/PTensorToLinalg.h"
 #include "mlir/Dialect/Dist/IR/DistOps.h"
 
 #include <mlir/IR/BuiltinOps.h>
-#include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
-#include <mlir/Dialect/Bufferization/IR/Bufferization.h>
-#include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Dialect/Shape/IR/Shape.h>
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 
@@ -32,31 +27,30 @@ static mlir::Type makeSignlessType(mlir::Type type) {
   return type;
 }
 
-#define FIXME 0
 // creating operand cast to signless type if needed
 // copied from py_linalg_resolver.cpp
 static mlir::Value doSignCast(mlir::OpBuilder &builder, mlir::Location &loc,
                               mlir::Value val) {
   auto origType = val.getType();
   auto signlessType = makeSignlessType(origType);
-#if FIXME
-  if (signlessType != origType)
-    val = builder.createOrFold<plier::SignCastOp>(loc, signlessType, val);
-#endif
+  if (signlessType != origType) {
+      val = builder.create<::mlir::UnrealizedConversionCastOp>(loc, signlessType, val).getResult(0);
+  }
   return val;
 }
 
+#if 0
 // creating operand cast to given type if needed
 // copied from py_linalg_resolver.cpp
 static mlir::Value doSignCast(mlir::OpBuilder &builder, mlir::Location &loc,
                               mlir::Value val, mlir::Type dstType) {
   auto origType = val.getType();
-#if FIXME
-  if (dstType != origType)
-    val = builder.createOrFold<plier::SignCastOp>(loc, dstType, val);
-#endif
+  if (dstType != origType) {
+      val = builder.create<::mlir::UnrealizedConversionCastOp>(loc, dstType, val).getResult(0);
+  }
   return val;
 }
+#endif
 
 // Initialze a distributed Tensor:
 // 1. register tensor with runtime
@@ -123,17 +117,16 @@ ptensor::ARangeLowering::matchAndRewrite(::ptensor::ARangeOp op,
 
     // we operator on signless integers
     auto ityp = rewriter.getI64Type();
-#if FIXME
     if (start.getType() != ityp) {
-        start = rewriter.create<plier::SignCastOp>(loc, ityp, start);
+        start = rewriter.create<::mlir::UnrealizedConversionCastOp>(loc, ityp, start).getResult(0);
     }
     if (stop.getType() != ityp) {
-        stop = rewriter.create<plier::SignCastOp>(loc, ityp, stop);
+        stop = rewriter.create<::mlir::UnrealizedConversionCastOp>(loc, ityp, stop).getResult(0);
     }
     if (step.getType() != ityp) {
-        step = rewriter.create<plier::SignCastOp>(loc, ityp, step);
+        step = rewriter.create<::mlir::UnrealizedConversionCastOp>(loc, ityp, step).getResult(0);
     }
-#endif
+
     // Create constants 0, 1, -1 for later
     auto zattr = rewriter.getI64IntegerAttr(0);
     auto zero = rewriter.create<mlir::arith::ConstantOp>(loc, zattr).getResult();
@@ -149,9 +142,8 @@ ptensor::ARangeLowering::matchAndRewrite(::ptensor::ARangeOp op,
     auto tmp2 = rewriter.create<mlir::arith::AddIOp>(loc, tmp1, inc);
     auto tmp3 = rewriter.create<mlir::arith::SubIOp>(loc, tmp2, start);
     auto cnt = rewriter.create<mlir::arith::DivUIOp>(loc, tmp3, step).getResult();
-#if FIXME
-    cnt = rewriter.create<plier::SignCastOp>(loc, ::mlir::IndexType::get(cnt.getType().getContext()), cnt);
-#endif
+    cnt = rewriter.create<::mlir::UnrealizedConversionCastOp>(loc, ::mlir::IndexType::get(cnt.getType().getContext()), cnt).getResult(0);
+
     // create shape vector
     auto ttyp = converter.convertType(op.getType()).dyn_cast<::mlir::RankedTensorType>();
     assert(ttyp);
@@ -188,11 +180,9 @@ ptensor::ARangeLowering::matchAndRewrite(::ptensor::ARangeOp op,
         auto _idx = builder.create<mlir::arith::IndexCastOp>(loc, ityp, idx);
         auto tmp = builder.create<mlir::arith::MulIOp>(loc, step, _idx);
         auto val = builder.create<mlir::arith::AddIOp>(loc, start, tmp);
-#if FIXME
-        auto ret = builder.create<plier::SignCastOp>(loc, typ, val);
+        auto ret = builder.create<::mlir::UnrealizedConversionCastOp>(loc, typ, val.getResult());
         // auto _val = builder.create<mlir::arith::SIToFPOp>(loc, typ, val);
-        (void)builder.create<mlir::linalg::YieldOp>(loc, ret.getResult());
-#endif
+        (void)builder.create<mlir::linalg::YieldOp>(loc, ret.getResult(0));
     };
 
     (void)rewriter.replaceOpWithNewOp<mlir::linalg::GenericOp>(op, ttyp, llvm::None, tnsr_id.first, maps, iterators, body);
@@ -208,14 +198,12 @@ using BodyType = std::function<void(mlir::OpBuilder &builder, ::mlir::Location l
 // any genericOp body needs to close with a yield
 // we also add a cast op to "typ" if needed
 template<typename T>
-static void yield(mlir::OpBuilder &builder, ::mlir::Location loc, ::mlir::Type typ, T op)
+static void yield(mlir::OpBuilder &builder, ::mlir::Location loc, ::mlir::Type typ, T val)
 {
-    auto res = op.getResult();
-#if FIXME
+    auto res = val;
     if(typ != res.getType()) {
-        res = builder.create<plier::SignCastOp>(loc, typ, op).getResult();
+        res = builder.create<::mlir::UnrealizedConversionCastOp>(loc, typ, res).getResult(0);
     }
-#endif
     (void)builder.create<mlir::linalg::YieldOp>(loc, res);
 }
 
@@ -230,9 +218,9 @@ static BodyType buildTrivial(::mlir::Type typ)
         auto lhs = doSignCast(builder, loc, args[0]);
         auto rhs = doSignCast(builder, loc, args[1]);
         if(lhs.getType().isIntOrIndex()) {
-            yield(builder, loc, typ, builder.create<IOP>(loc, lhs, rhs));
+            yield(builder, loc, typ, builder.create<IOP>(loc, lhs, rhs).getResult());
         } else if(lhs.getType().isIntOrIndexOrFloat()) {
-            yield(builder, loc, typ, builder.create<FOP>(loc, lhs, rhs));
+            yield(builder, loc, typ, builder.create<FOP>(loc, lhs, rhs).getResult());
         } else {
             assert("Only integers and floats supported for binary ops" == nullptr);
         }
@@ -437,9 +425,7 @@ ptensor::ReductionOpLowering::matchAndRewrite(::ptensor::ReductionOp op,
 
     // For now we only support reduction over all dims and return a scalar
     auto rval = rewriter.create<::mlir::tensor::ExtractOp>(loc, sltyp, rtnsr, ::mlir::ValueRange());
-#if FIXME
-    auto x = rewriter.replaceOpWithNewOp<::plier::SignCastOp>(op, typ, rval);
-    x.dump();
-#endif
+    (void)rewriter.replaceOpWithNewOp<::mlir::UnrealizedConversionCastOp>(op, typ, rval.getResult());
+
     return ::mlir::success();
 }

@@ -3,24 +3,14 @@
 
 // Eliminating dist calls (falling back to local compute)
 
-#include <iostream>
-
-#include "mlir/Conversion/DistElim/DistElim.h"
-#include "mlir/Dialect/Dist/IR/DistOps.h"
+#include <mlir/Conversion/DistElim/DistElim.h>
 
 #include <mlir/IR/BuiltinOps.h>
+#include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
-#include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
-#include <mlir/Dialect/Linalg/IR/Linalg.h>
-#include <mlir/Dialect/Bufferization/IR/Bufferization.h>
-#include <mlir/Dialect/SCF/SCF.h>
-#include <mlir/Dialect/Shape/IR/Shape.h>
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 
-// *********************************************************
-// **************** Distributed ****************************
-// *********************************************************
 
 // dummy: constant op
 template<typename Op>
@@ -57,15 +47,11 @@ dist::ElimLocalShapeOp::matchAndRewrite(::dist::LocalShapeOp op, mlir::PatternRe
     return ::mlir::success();
 }
 
-void dummy()
-{
-    std::cerr << "yey\n";
-}
-
-// replace with idendity cast
+// replace with identity cast
 ::mlir::LogicalResult
 dist::ElimAllReduceOp::matchAndRewrite(::dist::AllReduceOp op, mlir::PatternRewriter &rewriter) const
 {
+#if 0
     auto loc = op.getLoc();
 
     ::mlir::ModuleOp module = op->getParentOfType<::mlir::ModuleOp>();
@@ -83,6 +69,7 @@ dist::ElimAllReduceOp::matchAndRewrite(::dist::AllReduceOp op, mlir::PatternRewr
     }
     auto fa = ::mlir::SymbolRefAttr::get(context, _f); 
     auto fc = rewriter.create<::mlir::func::CallOp>(loc, fa, ::mlir::TypeRange{});
+#endif
     rewriter.replaceOpWithNewOp<::mlir::tensor::CastOp>(op, op.tensor().getType(), op.tensor());
     return ::mlir::success();
 }

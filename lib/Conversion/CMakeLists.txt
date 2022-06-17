@@ -1,1 +1,2 @@
 add_subdirectory(PTensorToLinalg)
+add_subdirectory(DistElim)
