@@ -15,7 +15,7 @@ parser.add_argument("name", help="new dialect's name")
 
 args = parser.parse_args()
 
-incroot = jp("include", "mlir", "Dialect")
+incroot = jp("include", "imex", "Dialect")
 libroot = jp("lib", "Dialect")
 
 # quick check that we are in the right dir
@@ -26,7 +26,7 @@ if not os.path.isdir(incroot) or not os.path.isdir(libroot):
     )
 
 # create dialect subdirs and default CMakeLists
-for d in [jp(incroot), jp(libroot)]:
+for d in [incroot, libroot]:
     # This raises an exception if already exists -> no overwriting
     os.makedirs(jp(d, args.name, "IR"))
     # we append in the root CMakeLists, other dialects exist
@@ -54,10 +54,10 @@ with open(jp(libroot, args.name, "IR", "CMakeLists.txt"), "w") as f:
         {0}Ops.cpp
 
         ADDITIONAL_HEADER_DIRS
-        ${{PROJECT_SOURCE_DIR}}/include/mlir/Dialect/{0}
+        ${{PROJECT_SOURCE_DIR}}/include/imex/Dialect/{0}
 
         DEPENDS
-        MLIR{0}OpsIncGen
+        IMEX{0}OpsIncGen
 
     LINK_LIBS PUBLIC
     MLIRIR
@@ -129,11 +129,11 @@ namespace {1} {{
 
 }}
 
-#include <mlir/Dialect/{0}/IR/{0}OpsDialect.h.inc>
+#include <imex/Dialect/{0}/IR/{0}OpsDialect.h.inc>
 #define GET_TYPEDEF_CLASSES
-#include <mlir/Dialect/{0}/IR/{0}OpsTypes.h.inc>
+#include <imex/Dialect/{0}/IR/{0}OpsTypes.h.inc>
 #define GET_OP_CLASSES
-#include <mlir/Dialect/{0}/IR/{0}Ops.h.inc>
+#include <imex/Dialect/{0}/IR/{0}Ops.h.inc>
 
 #endif // _{0}_OPS_H_INCLUDED_
 """.format(
@@ -147,7 +147,7 @@ with open(jp(incroot, args.name, "IR", f"{args.name}Ops.h"), "w") as f:
 irlib = """// Copyright 2022 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-#include <mlir/Dialect/{0}/IR/{0}Ops.h>
+#include <imex/Dialect/{0}/IR/{0}Ops.h>
 #include <llvm/ADT/TypeSwitch.h>
 #include <mlir/IR/DialectImplementation.h>
 
@@ -157,21 +157,21 @@ namespace {1} {{
     {{
         addTypes<
 #define GET_TYPEDEF_LIST
-#include "mlir/Dialect/{0}/IR/{0}OpsTypes.cpp.inc"
+#include <imex/Dialect/{0}/IR/{0}OpsTypes.cpp.inc>
             >();
         addOperations<
 #define GET_OP_LIST
-#include "mlir/Dialect/{0}/IR/{0}Ops.cpp.inc"
+#include <imex/Dialect/{0}/IR/{0}Ops.cpp.inc>
             >();
     }}
 
 }} // namespace {1}
 
-#include "mlir/Dialect/{0}/IR/{0}OpsDialect.cpp.inc"
+#include <imex/Dialect/{0}/IR/{0}OpsDialect.cpp.inc>
 #define GET_TYPEDEF_CLASSES
-#include "mlir/Dialect/{0}/IR/{0}OpsTypes.cpp.inc"
+#include <imex/Dialect/{0}/IR/{0}OpsTypes.cpp.inc>
 #define GET_OP_CLASSES
-#include "mlir/Dialect/{0}/IR/{0}Ops.cpp.inc"
+#include <imex/Dialect/{0}/IR/{0}Ops.cpp.inc>
 """.format(
     args.name, args.name.lower()
 )
