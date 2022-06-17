@@ -68,21 +68,34 @@ with open(jp(libroot, args.name, "IR", "CMakeLists.txt"), "w") as f:
     )
 
 # Generate default tablegen defs
-tgdef = """// Copyright 2022 Intel Corporation
-// SPDX-License-Identifier: Apache-2.0
+fn = jp(incroot, args.name, "IR", f"{args.name}Ops.td")
+with open(fn, "w") as f:
+    f.write(f"""//===- {os.path.basename(fn)} - {args.name} dialect  -------*- tablegen -*-===//
+//
+// Copyright 2022 Intel Corporation
+// Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+///
+/// \\file
+/// This file defines the basic operations for the {args.name} dialect.
+///
+//===----------------------------------------------------------------------===//
 
-#ifndef _{0}_OPS_TD_INCLUDED_
-#define _{0}_OPS_TD_INCLUDED_
+#ifndef _{args.name}_OPS_TD_INCLUDED_
+#define _{args.name}_OPS_TD_INCLUDED_
 
 include "mlir/IR/OpBase.td"
 include "mlir/IR/AttrTypeBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
-// Provide a definition of the '{0}' dialect in the ODS framework so that we
+// Provide a definition of the '{args.name}' dialect in the ODS framework so that we
 // can define our operations.
-def {0}_Dialect : Dialect {{
+def {args.name}_Dialect : Dialect {{
     // The namespace of our dialect
-    let name = "{1}";
+    let name = "{args.name.lower()}";
 
     // A short one-line summary of our dialect.
     let summary = "FIXME insert summary";
@@ -93,7 +106,7 @@ def {0}_Dialect : Dialect {{
         }}];
 
     // The C++ namespace that the dialect class definition resides in.
-    let cppNamespace = "::{1}";
+    let cppNamespace = "::{args.name.lower()}";
 }}
 
 // Base class for dialect operations. This operation inherits from the base
@@ -101,23 +114,32 @@ def {0}_Dialect : Dialect {{
 //   * The parent dialect of the operation.
 //   * The mnemonic for the operation, or the name without the dialect prefix.
 //   * A list of traits for the operation.
-class {0}_Op<string mnemonic, list<Trait> traits = []> :
-    Op<{0}_Dialect, mnemonic, traits>;
+class {args.name}_Op<string mnemonic, list<Trait> traits = []> :
+    Op<{args.name}_Dialect, mnemonic, traits>;
 
-#endif // _{0}_OPS_TD_INCLUDED_
-""".format(
-    args.name, args.name.lower()
-)
+#endif // _{args.name}_OPS_TD_INCLUDED_
+""")
 
-with open(jp(incroot, args.name, "IR", f"{args.name}Ops.td"), "w") as f:
-    f.write(tgdef)
 
 # Generate default IR include file
-irinc = """// Copyright 2022 Intel Corporation
-// SPDX-License-Identifier: Apache-2.0
+fn = jp(incroot, args.name, "IR", f"{args.name}Ops.h")
+with open(fn, "w") as f:
+    f.write(f"""//===- {os.path.basename(fn)} - {args.name} dialect  -------*- C++ -*-===//
+//
+// Copyright 2022 Intel Corporation
+// Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+///
+/// \\file
+/// This file declares the {args.name} dialect.
+///
+//===----------------------------------------------------------------------===//
 
-#ifndef _{0}_OPS_H_INCLUDED_
-#define _{0}_OPS_H_INCLUDED_
+#ifndef _{args.name}_OPS_H_INCLUDED_
+#define _{args.name}_OPS_H_INCLUDED_
 
 #include <mlir/IR/BuiltinTypes.h>
 #include <mlir/IR/Dialect.h>
@@ -125,56 +147,59 @@ irinc = """// Copyright 2022 Intel Corporation
 #include <mlir/IR/Types.h>
 #include <mlir/Interfaces/SideEffectInterfaces.h>
 
-namespace {1} {{
+namespace {args.name.lower()} {{
 
 }}
 
-#include <imex/Dialect/{0}/IR/{0}OpsDialect.h.inc>
+#include <imex/Dialect/{args.name}/IR/{args.name}OpsDialect.h.inc>
 #define GET_TYPEDEF_CLASSES
-#include <imex/Dialect/{0}/IR/{0}OpsTypes.h.inc>
+#include <imex/Dialect/{args.name}/IR/{args.name}OpsTypes.h.inc>
 #define GET_OP_CLASSES
-#include <imex/Dialect/{0}/IR/{0}Ops.h.inc>
+#include <imex/Dialect/{args.name}/IR/{args.name}Ops.h.inc>
 
-#endif // _{0}_OPS_H_INCLUDED_
-""".format(
-    args.name, args.name.lower()
-)
-
-with open(jp(incroot, args.name, "IR", f"{args.name}Ops.h"), "w") as f:
-    f.write(irinc)
+#endif // _{args.name}_OPS_H_INCLUDED_
+""")
 
 # Generate default IR cpp file
-irlib = """// Copyright 2022 Intel Corporation
-// SPDX-License-Identifier: Apache-2.0
+fn = jp(libroot, args.name, "IR", f"{args.name}Ops.cpp")
+with open(fn, "w") as f:
+    f.write(f"""//===- {os.path.basename(fn)} - {args.name} dialect  -------*- C++ -*-===//
+//
+// Copyright 2022 Intel Corporation
+// Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+///
+/// \\file
+/// This file implements the {args.name} dialect and its basic operations.
+///
+//===----------------------------------------------------------------------===//
 
-#include <imex/Dialect/{0}/IR/{0}Ops.h>
+#include <imex/Dialect/{args.name}/IR/{args.name}Ops.h>
 #include <llvm/ADT/TypeSwitch.h>
 #include <mlir/IR/DialectImplementation.h>
 
-namespace {1} {{
+namespace {args.name.lower()} {{
 
-    void {0}Dialect::initialize()
+    void {args.name}Dialect::initialize()
     {{
         addTypes<
 #define GET_TYPEDEF_LIST
-#include <imex/Dialect/{0}/IR/{0}OpsTypes.cpp.inc>
+#include <imex/Dialect/{args.name}/IR/{args.name}OpsTypes.cpp.inc>
             >();
         addOperations<
 #define GET_OP_LIST
-#include <imex/Dialect/{0}/IR/{0}Ops.cpp.inc>
+#include <imex/Dialect/{args.name}/IR/{args.name}Ops.cpp.inc>
             >();
     }}
 
-}} // namespace {1}
+}} // namespace {args.name.lower()}
 
-#include <imex/Dialect/{0}/IR/{0}OpsDialect.cpp.inc>
+#include <imex/Dialect/{args.name}/IR/{args.name}OpsDialect.cpp.inc>
 #define GET_TYPEDEF_CLASSES
-#include <imex/Dialect/{0}/IR/{0}OpsTypes.cpp.inc>
+#include <imex/Dialect/{args.name}/IR/{args.name}OpsTypes.cpp.inc>
 #define GET_OP_CLASSES
-#include <imex/Dialect/{0}/IR/{0}Ops.cpp.inc>
-""".format(
-    args.name, args.name.lower()
-)
-
-with open(jp(libroot, args.name, "IR", f"{args.name}Ops.cpp"), "w") as f:
-    f.write(irlib)
+#include <imex/Dialect/{args.name}/IR/{args.name}Ops.cpp.inc>
+""")

@@ -1,7 +1,17 @@
+//===- DistElim.h - PTensorToLinalg conversion  ---------*- C++ -*-===//
+//
 // Copyright 2022 Intel Corporation
-// SPDX-License-Identifier: Apache-2.0
-
-// Eliminating dist calls (falling back to local compute)
+// Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+///
+/// \file
+/// This file implements elimination of the Dist dialects, leading to local-only
+/// operation
+///
+//===----------------------------------------------------------------------===//
 
 #include <imex/Conversion/DistElim/DistElim.h>
 #include <imex/Dialect/Dist/IR/DistOps.h>

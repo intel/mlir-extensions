@@ -52,11 +52,22 @@ with open(jp(libroot, name, f"CMakeLists.txt"), "w") as f:
 """)
 
 # Create header stub
-with open(jp(incroot, name, f"{name}.h"), "w") as f:
-    f.write(f"""// Copyright 2022 Intel Corporation
-// SPDX-License-Identifier: Apache-2.0
-
-// Converting {args.source} to {args.target}
+fn = jp(incroot, name, f"{name}.h")
+with open(fn, "w") as f:
+    f.write(f"""//===- {os.path.basename(fn)} - {name} conversion  -------*- C++ -*-===//
+//
+// Copyright 2022 Intel Corporation
+// Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+///
+/// \\file
+/// This file defines the {name} conversion, converting the {args.source}
+/// dialect to the {args.target} dialect.
+///
+//===----------------------------------------------------------------------===//
 
 #ifndef _{name}_H_INCLUDED_
 #define _{name}_H_INCLUDED_
@@ -87,11 +98,22 @@ std::unique_ptr<::mlir::OperationPass<::mlir::ModuleOp>> createConvert{name}Pass
 """)
 
 # Create cpp stub
-with open(jp(libroot, name, f"{name}.cpp"), "w") as f:
-    f.write(f"""// Copyright 2022 Intel Corporation
-// SPDX-License-Identifier: Apache-2.0
-
-// Converting {args.source} to {args.target}
+fn = jp(libroot, name, f"{name}.cpp")
+with open(fn, "w") as f:
+    f.write(f"""//===- {os.path.basename(fn)} - {name} conversion  -------*- C++ -*-===//
+//
+// Copyright 2022 Intel Corporation
+// Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+///
+/// \\file
+/// This file implements the {name} conversion, converting the {args.source}
+/// dialect to the {args.target} dialect.
+///
+//===----------------------------------------------------------------------===//
 
 #include <imex/Conversion/{name}/{name}.h>
 #include <imex/Dialect/{args.source}/IR/{args.source}Ops.h>

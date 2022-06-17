@@ -1,5 +1,16 @@
+//===- DistOps.h - Dist dialect  -------------------------------*- C++ -*-===//
+//
 // Copyright 2022 Intel Corporation
-// SPDX-License-Identifier: Apache-2.0
+// Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+///
+/// \file
+/// This file declares the Dist dialect and its basic operations.
+///
+//===----------------------------------------------------------------------===//
 
 #ifndef _Dist_OPS_H_INCLUDED_
 #define _Dist_OPS_H_INCLUDED_

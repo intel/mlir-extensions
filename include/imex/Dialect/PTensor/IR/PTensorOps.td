@@ -1,5 +1,16 @@
+//===- PTensorOps.h - PTensor dialect  --------------------*- tablegen -*-===//
+//
 // Copyright 2022 Intel Corporation
-// SPDX-License-Identifier: Apache-2.0
+// Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+///
+/// \file
+/// This file defines basic operations of the PTensor dialect.
+///
+//===----------------------------------------------------------------------===//
 
 #ifndef _PTENSOR_OPS_TD_INCLUDED_
 #define _PTENSOR_OPS_TD_INCLUDED_
