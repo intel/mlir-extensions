@@ -164,8 +164,6 @@ jobs:
         run: |
           # make the llvm-mlir working dir
           mkdir -p /home/runner/work/tmpdir
-          export TBB_PATH=/home/runner/work/tbb/oneapi-tbb-${TBB_VER}
           python scripts/build_locally.py                                      \
             --working-dir /home/runner/work/tmpdir                             \
             --llvm-install /home/runner/work/llvm-mlir/_mlir_install           \
-            --imex-tbb-dir /${TBB_PATH}/lib/cmake/tbb
