@@ -312,17 +312,11 @@ def _build_imex(
     build_dir,
     imex_source_dir,
     llvm_install_dir,
-    imex_install_dir=None,
+    imex_install_prefix=None,
     build_type="Release",
     c_compiler=None,
     cxx_compiler=None,
     cmake_executable=None,
-    enable_tests=False,
-    enable_dpnp=False,
-    enable_igpu=False,
-    enable_numba_fe=False,
-    with_tbb=None,
-    enable_numba_hotfix=False,
 ):
     """Builds Intel MLIR extensions (IMEX).
 
@@ -331,7 +325,7 @@ def _build_imex(
         imex_source_dir (str): Path to IMEX sources.
         llvm_install_dir (str): path to an LLVM installation that has the MLIR
         project.
-        imex_install_dir (str, optional): Path where IMEX is to be installed.
+        imex_install_prefix (str, optional): Path where IMEX is to be installed.
         Defaults to None.
         build_type (str, optional): CMake build type. Defaults to "Release".
         c_compiler (_type_, optional): Path to C compiler. Defaults to None.
@@ -339,17 +333,6 @@ def _build_imex(
         cmake_executable (_type_, optional): Path to CMake. Defaults to None.
         enable_tests (bool, optional): Set to build IMEX unit tests. Defaults to
         False.
-        enable_dpnp (bool, optional): Set to build with dpnp calls enabled.
-        Defaults to False.
-        enable_igpu (bool, optional): Set to build the Intel GPU dialect.
-        Defaults to False.
-        enable_numba_fe (bool, optional): Set to build the Numba frontend.
-        Defaults to False.
-        with_tbb (str, optional): Set to path where a TBB cmake config exists.
-        Defaults to None.
-        enable_numba_hotfix (bool, optional): Set to build with hotfix for Numba.
-        Defaults to False.
-
     Raises:
         RuntimeError: If the LLVM install directory is not found.
         RuntimeError: If a platform other than Linux
@@ -372,11 +355,8 @@ def _build_imex(
     else:
         assert False, sys.platform + " not supported"
 
-    imex_install_prefix = (
-        imex_install_dir
-        if imex_install_dir
-        else os.path.abspath(imex_source_dir) + "/_install"
-    )
+    if not imex_install_prefix:
+        imex_install_prefix = os.path.abspath(imex_source_dir) + "/_install"
 
     if "linux" in sys.platform:
         if c_compiler is None:
@@ -396,25 +376,11 @@ def _build_imex(
             "-DCMAKE_CXX_COMPILER:PATH=" + cxx_compiler,
             "-DCMAKE_PREFIX_PATH=" + os.path.abspath(llvm_install_dir),
             "-DCMAKE_INSTALL_PREFIX=" + os.path.abspath(imex_install_prefix),
-            "-DIMEX_USE_DPNP=" + "ON" if enable_dpnp else "OFF",
-            "-DIMEX_ENABLE_IGPU_DIALECT=" + "ON" if enable_igpu else "OFF",
-            "-DIMEX_ENABLE_TESTS=" + "ON" if enable_tests else "OFF",
-            "-DIMEX_ENABLE_NUMBA_FE=" + "ON" if enable_numba_fe else "OFF",
-            "-DIMEX_ENABLE_NUMBA_HOTFIX=" + "ON"
-            if enable_numba_hotfix
-            else "OFF",
             "-DCMAKE_VERBOSE_MAKEFILE=ON",
             "--debug-trycompile",
             os.path.abspath(imex_source_dir),
         ]
     )
-
-    if with_tbb is not None:
-        if os.path.exists(with_tbb):
-            cmake_config_args.append("-DTBB_DIR=" + with_tbb)
-            cmake_config_args.append("-DIMEX_ENABLE_TBB_SUPPORT=ON")
-        else:
-            warnings.warn("Provided TBB directory path does not exist.")
 
     build_dir = os.path.abspath(build_dir)
     # Configure
@@ -498,41 +464,20 @@ if __name__ == "__main__":
     )
 
     imex_builder.add_argument(
-        "--imex-enable-igpu",
-        action="store_true",
-        help="Enables building the iGPU dialect.",
-    )
-    imex_builder.add_argument(
         "--imex-enable-tests",
         action="store_true",
         help="Enables building the ctest unit tests",
     )
     imex_builder.add_argument(
-        "--imex-enable-numba",
-        action="store_true",
-        help="Enables building the Numba front end for IMEX",
-    )
-    imex_builder.add_argument(
-        "--imex-tbb-dir",
-        help="A directory where the TBBConfig.cmake or tbb-config.cmake is stored",
-        dest="tbb_dir",
-        type=str,
-        default=None,
-    )
-    imex_builder.add_argument(
-        "--imex-enable-numba-hotfix",
-        action="store_true",
-        help="Enables building IMEX with Numba hotfix",
-    )
-    imex_builder.add_argument(
-        "--imex-enable-dpnp",
-        action="store_true",
-        help="Enables building IMEX with dpnp",
-    )
-    imex_builder.add_argument(
         "--imex-clean-build",
         action="store_true",
         help="Removes any existing build directory when building IMEX",
+    )
+    llvm_builder.add_argument(
+        "--imex-install-dir",
+        help="Directory where IMEX should be installed",
+        dest="imex_install_dir",
+        type=str,
     )
 
     args = parser.parse_args()
@@ -546,8 +491,8 @@ if __name__ == "__main__":
     # Get the llvm SHA as hard coded in llvm-sha.txt
     llvm_sha = _get_llvm_sha()
 
-    # If a working directory is provided, check if it was previously used to
-    # build IMEX. We check for the "llvm_project" (source directory of llvm) and
+    # If a working directory is provided, check if it was previously used
+    # to build IMEX. We check for the "llvm_project" directory and
     # "_mlir_install" (install directory for llvm)
     if g_working_dir is not None:
         if (
@@ -642,16 +587,12 @@ if __name__ == "__main__":
         else:
             shutil.rmtree(imex_build_dir)
     os.mkdir(imex_build_dir)
+    print(args.imex_install_dir)
     _build_imex(
         build_dir=imex_build_dir,
         imex_source_dir=setup_dir,
         llvm_install_dir=g_llvm_install_dir,
-        enable_dpnp=args.imex_enable_dpnp,
-        enable_numba_fe=args.imex_enable_numba,
-        enable_numba_hotfix=args.imex_enable_numba_hotfix,
-        enable_igpu=args.imex_enable_igpu,
-        with_tbb=g_tbb_dir,
-        enable_tests=args.imex_enable_tests,
+        imex_install_prefix=args.imex_install_dir,
     )
 
     # TODO
