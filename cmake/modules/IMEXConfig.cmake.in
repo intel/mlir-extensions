@@ -1,0 +1,24 @@
+# This file allows users to call find_package(IMEX) and pick up our targets.
+
+@IMEX_CONFIG_CODE@
+
+find_package(LLVM REQUIRED CONFIG)
+find_package(MLIR REQUIRED CONFIG)
+
+set(IMEX_EXPORTED_TARGETS "@IMEX_EXPORTS@")
+set(IMEX_CMAKE_DIR "@IMEX_CONFIG_CMAKE_DIR@")
+set(IMEX_INCLUDE_DIRS "@IMEX_CONFIG_INCLUDE_DIRS@")
+set(IMEX_INSTALL_AGGREGATE_OBJECTS "@IMEX_INSTALL_AGGREGATE_OBJECTS@")
+
+set_property(GLOBAL PROPERTY IMEX_ALL_LIBS "@IMEX_ALL_LIBS@")
+set_property(GLOBAL PROPERTY IMEX_DIALECT_LIBS "@IMEX_DIALECT_LIBS@")
+set_property(GLOBAL PROPERTY IMEX_CONVERSION_LIBS "@IMEX_CONVERSION_LIBS@")
+set_property(GLOBAL PROPERTY IMEX_TRANSLATION_LIBS "@IMEX_TRANSLATION_LIBS@")
+
+# Provide all our library targets to users.
+# More specifically, configure IMEX so that it can be directly included in a top
+# level CMakeLists.txt, but also so that it can be imported via `find_package`.
+# This is based on how LLVM handles exports.
+if(NOT TARGET IMEXSupport)
+  @IMEX_CONFIG_INCLUDE_EXPORTS@
+endif()

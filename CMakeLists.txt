@@ -67,5 +67,4 @@ install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include
     PATTERN "config.h" EXCLUDE
 )
 
-# add_subdirectory(test)
-# add_subdirectory(standalone-opt)
+add_subdirectory(cmake/modules)
