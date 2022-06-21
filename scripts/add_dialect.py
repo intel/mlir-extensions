@@ -106,7 +106,7 @@ def {args.name}_Dialect : Dialect {{
         }}];
 
     // The C++ namespace that the dialect class definition resides in.
-    let cppNamespace = "::{args.name.lower()}";
+    let cppNamespace = "::imex::{args.name.lower()}";
 }}
 
 // Base class for dialect operations. This operation inherits from the base
@@ -147,9 +147,11 @@ with open(fn, "w") as f:
 #include <mlir/IR/Types.h>
 #include <mlir/Interfaces/SideEffectInterfaces.h>
 
+namespace imex {{
 namespace {args.name.lower()} {{
 
-}}
+}} // namespace {args.name.lower()}
+}} // namespace mlir
 
 #include <imex/Dialect/{args.name}/IR/{args.name}OpsDialect.h.inc>
 #define GET_TYPEDEF_CLASSES
@@ -181,6 +183,7 @@ with open(fn, "w") as f:
 #include <llvm/ADT/TypeSwitch.h>
 #include <mlir/IR/DialectImplementation.h>
 
+namespace imex {{
 namespace {args.name.lower()} {{
 
     void {args.name}Dialect::initialize()
@@ -196,6 +199,7 @@ namespace {args.name.lower()} {{
     }}
 
 }} // namespace {args.name.lower()}
+}} // namespace mlir
 
 #include <imex/Dialect/{args.name}/IR/{args.name}OpsDialect.cpp.inc>
 #define GET_TYPEDEF_CLASSES

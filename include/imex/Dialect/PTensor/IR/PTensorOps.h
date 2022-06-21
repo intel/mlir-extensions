@@ -21,6 +21,7 @@
 #include <mlir/IR/OpDefinition.h>
 #include <mlir/IR/Types.h>
 
+namespace imex {
 namespace ptensor {
 
 // The set of supported operations
@@ -61,6 +62,7 @@ enum EWBinOpId : int {
 enum ReduceOpId : int { MAX, MEAN, MIN, PROD, SUM, STD, VAR, REDUCEOPID_LAST };
 
 } // namespace ptensor
+} // namespace imex
 
 #include <imex/Dialect/PTensor/IR/PTensorOpsDialect.h.inc>
 #define GET_TYPEDEF_CLASSES

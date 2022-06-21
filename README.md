@@ -40,6 +40,10 @@ This will
 * Extend/Create cmake infrastrcuture with defaults
 * Create stub soruce files for IR/Ops
 
+Also add your dialect to `lib/Conversion/IMEXPassDetail.h`.
+
+Now fill in what's marked with FIXME
+
 ## Adding a new Conversion
 ```sh
 # enter root directory of mlir-extension
@@ -52,8 +56,13 @@ This will
 * Add declarations to header include/mlir/Conversion/<conversion-name>/<conversion-name>.h
 * Put cpp definition stubs to lib/Conversion/<conversion-name>/<conversion-name>.cpp
 * Add new conversion-dir to lib/Conversion/CMakeLists.txt
+* Add conversion to include/imex/Conversion/IMEXPasses.td and include/imex/Conversion/IMEXPasses.h
 * Create a basic lib/Conversion/<conversion-name>/CMakeLists.txt
 
+Now fill in what's marked with FIXME
+* Pattern rewriters
+* Populating lists with patterns
+* Passes
 
 ## License
 This code is made available under the Apache License 2.0 with LLVM Exceptions. See the `LICENSE.txt` file for more details.
