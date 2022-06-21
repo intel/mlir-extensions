@@ -12,9 +12,12 @@ Or make sure you have a working c++ compiler, python, clang-format and cmake>3.1
 CMake so that it installs `FileCheck` to the chosen installation prefix.
 
 #### Convenience Building LLVM/MLIR + IMEX
+
+The script `build_locally.py` can build both LLVM/MLIR and IMEX for you.
+
 ```sh
 python scripts/build_locally.py \
-    --working-dir $local-working-dir-for-tmp-files \
+    --working-dir $local-working-dir-to-build-llvm \
     --llvm-install $llvm-target-dir
 ```
 

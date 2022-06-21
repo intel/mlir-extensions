@@ -164,12 +164,6 @@ jobs:
         run: |
           # make the llvm-mlir working dir
           mkdir -p /home/runner/work/tmpdir
-          export TBB_PATH=/home/runner/work/tbb/oneapi-tbb-${TBB_VER}
-          export LEVEL_ZERO_DIR=/home/runner/work/level-zero/level-zero/level_zero_install
-          export LEVEL_ZERO_VERSION_CHECK_OFF=1
           python scripts/build_locally.py                                      \
             --working-dir /home/runner/work/tmpdir                             \
             --llvm-install /home/runner/work/llvm-mlir/_mlir_install           \
-            --imex-enable-igpu                                                 \
-            --imex-enable-tests                                                \
-            --imex-tbb-dir /${TBB_PATH}/lib/cmake/tbb
