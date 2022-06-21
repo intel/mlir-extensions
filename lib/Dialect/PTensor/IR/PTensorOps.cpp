@@ -16,6 +16,7 @@
 #include <llvm/ADT/TypeSwitch.h>
 #include <mlir/IR/DialectImplementation.h>
 
+namespace imex {
 namespace ptensor {
 
 void PTensorDialect::initialize() {
@@ -30,6 +31,7 @@ void PTensorDialect::initialize() {
 }
 
 } // namespace ptensor
+} // namespace imex
 
 #include <imex/Dialect/PTensor/IR/PTensorOpsDialect.cpp.inc>
 #define GET_TYPEDEF_CLASSES

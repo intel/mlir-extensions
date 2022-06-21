@@ -46,6 +46,9 @@ with open(jp(libroot, name, f"CMakeLists.txt"), "w") as f:
   ADDITIONAL_HEADER_DIRS
   ${{MLIR_MAIN_INCLUDE_DIR}}/mlir/Conversion/{name}
 
+  DEPENDS
+  IMEXConversionPassIncGen
+
   LINK_LIBS PUBLIC
   IMEX{args.target}
 )
@@ -53,6 +56,7 @@ with open(jp(libroot, name, f"CMakeLists.txt"), "w") as f:
 
 # Create header stub
 fn = jp(incroot, name, f"{name}.h")
+header = fn
 with open(fn, "w") as f:
     f.write(f"""//===- {os.path.basename(fn)} - {name} conversion  -------*- C++ -*-===//
 //
@@ -85,11 +89,11 @@ class RewritePatternSet;
 }}
 
 namespace imex {{
-/// Populate the given list with patterns that eliminate Dist ops
+/// Populate the given list with patterns rewrite {args.source} Ops
 void populate{name}ConversionPatterns(::mlir::LLVMTypeConverter &converter,
                                         ::mlir::RewritePatternSet &patterns);
 
-/// Create a pass to eliminate Dist ops
+/// Create a pass to convert the {args.source} dialect to the {args.target} dialect.
 std::unique_ptr<::mlir::OperationPass<::mlir::ModuleOp>> createConvert{name}Pass();
 
 }} // namespace imex
@@ -122,13 +126,16 @@ with open(fn, "w") as f:
 
 #include <mlir/IR/BuiltinOps.h>
 
+namespace imex {{
+
+namespace {{
 // *******************************
 // ***** Individual patterns *****
 // *******************************
 
-// RegisterPTensorOp -> no-op
-struct ElimRegisterPTensorOp
-    : public mlir::OpRewritePattern<::{args.source.lower()}::FIXME> {{
+// Some{args.source}Op -> Some{args.target}Op
+struct Some{args.source}OpRewriter
+    : public mlir::OpRewritePattern<::imex::{args.source.lower()}::FIXME> {{
   using OpRewritePattern::OpRewritePattern;
 
   ::mlir::LogicalResult
@@ -145,21 +152,27 @@ struct ElimRegisterPTensorOp
 // ***** Pass infrastructure *****
 // *******************************
 
-namespace imex {{
+// Full Pass
+struct Convert{name}Pass that convert {args.source} to {args.target}
+    : public ::imex::Convert{name}PassBase<Convert{name}Pass>
+{{
+  Convert{name}Pass() = default;
+
+  void runOnOperation() override {{
+    ::mlir::FrozenRewritePatternSet patterns;
+    insertPatterns<FIXME patterns>(getContext(), patterns);
+    (void)::mlir::applyPatternsAndFoldGreedily(this->getOperation(), patterns);
+  }}
+}};
+
+}} // namespace
 
 /// Populate the given list with patterns that convert {args.source} to {args.target}
 void populate{name}ConversionPatterns(::mlir::LLVMTypeConverter &converter,
-                                      ::mlir::RewritePatternSet &patterns);
-
-// Full Pass
-// FIXME if you need typ conversion or other more complicated stuff you have to write your own
-struct {name}Pass that convert {args.source} to {args.target}
-    : public ::imex::PassWrapper<{name}Pass, ::mlir::ModuleOp,
-                                 ::imex::DialectList<::imex::{args.target.lower()}::{args.target}Dialect,
-                                                     FIXME more target dialects>,
-                                 FIXMEOp,
-                                 ...>
-{{}};
+                                      ::mlir::RewritePatternSet &patterns)
+{{
+  FIXME
+}}
 
 /// Create a pass that convert {args.source} to {args.target}
 std::unique_ptr<::mlir::OperationPass<::mlir::ModuleOp>> createConvert{name}Pass() {{
@@ -168,3 +181,49 @@ std::unique_ptr<::mlir::OperationPass<::mlir::ModuleOp>> createConvert{name}Pass
 
 }} // namespace imex
 """)
+
+# add header-include to IMEXPasses.h
+fn = jp(incroot, "IMEXPasses.h")
+with open(fn, "r") as f:
+    lines = f.readlines()
+done = False
+with open(fn, "w") as f:
+    for l in lines:
+        if not done and l.startswith("#include "):
+            f.write(f"#include <imex/Conversion/{name}/{name}.h>\n")
+            done = True
+        f.write(l)
+
+# add Pass to IMEXPasses.td
+fn = jp(incroot, "IMEXPasses.td")
+with open(fn, "r") as f:
+    lines = f.readlines()
+done = False
+with open(fn, "w") as f:
+    for l in lines:
+        if not done and l.startswith("#endif // _IMEX_CONVERSION_PASSES_"):
+            f.write(f"""//===----------------------------------------------------------------------===//
+// {name}
+//===----------------------------------------------------------------------===//
+
+def Convert{name}: Pass<"convert-{args.source.lower()}-to-{args.target.lower()}", "::mlir::ModuleOp"> {{
+  let summary = "Convert from the {args.source} dialect to the {args.target} dialect.";
+  let description = [{{
+    Convert {args.source} dialect operations into the {args.target} dialect operations.
+
+    #### Input invariant
+
+    - FIXME
+
+    #### Output IR
+
+    - FIXME
+  }}];
+  let constructor = "::imex::create{name}ConvertPass()";
+  let dependentDialects = ["::imex::{args.target.lower()}::{args.target}Dialect"];
+  let options = [];
+}}
+
+""")
+            done = True
+        f.write(l)

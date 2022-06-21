@@ -16,6 +16,7 @@
 #include <llvm/ADT/TypeSwitch.h>
 #include <mlir/IR/DialectImplementation.h>
 
+namespace imex {
 namespace dist {
 
 void DistDialect::initialize() {
@@ -30,6 +31,7 @@ void DistDialect::initialize() {
 }
 
 } // namespace dist
+} // namespace imex
 
 #include <imex/Dialect/Dist/IR/DistOpsDialect.cpp.inc>
 #define GET_TYPEDEF_CLASSES

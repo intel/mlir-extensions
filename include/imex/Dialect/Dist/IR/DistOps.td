@@ -35,7 +35,7 @@ def Dist_Dialect : Dialect {
         }];
 
     // The C++ namespace that the dialect class definition resides in.
-    let cppNamespace = "::dist";
+    let cppNamespace = "::imex::dist";
 }
 
 // Base class for dialect operations. This operation inherits from the base
