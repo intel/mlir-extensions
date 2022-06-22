@@ -139,8 +139,7 @@ void populateDistElimConversionPatterns(::mlir::LLVMTypeConverter &converter,
                                         ::mlir::RewritePatternSet &patterns);
 
 /// Create a pass to eliminate Dist ops
-std::unique_ptr<::mlir::OperationPass<::mlir::ModuleOp>>
-createConvertDistElimPass() {
+std::unique_ptr<::mlir::OperationPass<::mlir::ModuleOp>> createDistElimPass() {
   return std::make_unique<DistElimPass>();
 }
 
