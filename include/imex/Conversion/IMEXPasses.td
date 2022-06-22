@@ -35,7 +35,7 @@ def ConvertPTensorToLinalg : Pass<"convert-ptensor-to-linalg", "::mlir::ModuleOp
     - PTensor operations are converted to Linalg operations, accompaigned by
       operations of the Dist dialect if the input tensors are distributed
   }];
-  let constructor = "imex::createPTensorToLinalgConvertPass()";
+  let constructor = "imex::createConvertPTensorToLinalgPass()";
   let dependentDialects = ["::imex::dist::DistDialect",
                            "::mlir::linalg::LinalgDialect",
                            "::mlir::AffineDialect",
@@ -62,7 +62,7 @@ def DistElim : Pass<"dist-elim", "::mlir::ModuleOp"> {
 
     - Shape dialect
   }];
-  let constructor = "imex::createPTensorToLinalgConvertPass()";
+  let constructor = "imex::createDistElimPass()";
   let dependentDialects = ["::mlir::shape::ShapeDialect"];
   let options = [];
 }
