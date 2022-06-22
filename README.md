@@ -36,11 +36,11 @@ cd mlir-extensions
 python scripts/add_dialect.py <name-of-new-dialect>
 ```
 This will
-* generate directories in the appropriate directories (include/mlir/Dialect and lib/dialect)
+* generate directories in the appropriate directories (`include/mlir/Dialect` and `lib/dialect`)
 * Extend/Create cmake infrastrcuture with defaults
-* Create stub soruce files for IR/Ops
+* Create stub source files for IR/Ops
 
-Also add your dialect to `lib/Conversion/IMEXPassDetail.h`.
+Also add your dialect to `include/imex/InitIMEXDialects.h` and to `lib/Conversion/IMEXPassDetail.h`.
 
 Now fill in what's marked with FIXME
 
@@ -52,12 +52,12 @@ python scripts/add_conversion.py $name-of-source-dialect $name-of-target-dialect
 ```
 This will
 * Let $conversion-name name be "$name-of-source-dialectTo$name-of-target-dialect"
-* Add directories include/mlir/Conversion/<conversion-name> and lib/Conversion/<conversion-name>
-* Add declarations to header include/mlir/Conversion/<conversion-name>/<conversion-name>.h
-* Put cpp definition stubs to lib/Conversion/<conversion-name>/<conversion-name>.cpp
-* Add new conversion-dir to lib/Conversion/CMakeLists.txt
-* Add conversion to include/imex/Conversion/IMEXPasses.td and include/imex/Conversion/IMEXPasses.h
-* Create a basic lib/Conversion/<conversion-name>/CMakeLists.txt
+* Add directories `include/mlir/Conversion/<conversion-name> and lib/Conversion/<conversion-name>`
+* Add declarations to header `include/mlir/Conversion/<conversion-name>/<conversion-name>.h`
+* Put cpp definition stubs to `lib/Conversion/<conversion-name>/<conversion-name>.cpp`
+* Add new conversion-dir to `lib/Conversion/CMakeLists.txt`
+* Add conversion to `include/imex/Conversion/IMEXPasses.td and include/imex/Conversion/IMEXPasses.h`
+* Create a basic `lib/Conversion/<conversion-name>/CMakeLists.txt`
 
 Now fill in what's marked with FIXME
 * Pattern rewriters
