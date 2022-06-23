@@ -1,8 +1,8 @@
-trigger:
-- '*'
+# A pipeline with no CI trigger
+trigger: none
 
-pr:
-- '*'
+# no PR triggers
+pr: none
 
 jobs:
 - job: Windows
