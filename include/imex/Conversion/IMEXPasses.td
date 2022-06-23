@@ -11,8 +11,8 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#ifndef _IMEX_CONVERSION_PASSES_INCLUDED_
-#define _IMEX_CONVERSION_PASSES_INCLUDED_
+#ifndef _IMEX_CONVERSION_PASSES_TD_INCLUDED_
+#define _IMEX_CONVERSION_PASSES_TD_INCLUDED_
 
 include "mlir/Pass/PassBase.td"
 
@@ -67,4 +67,4 @@ def DistElim : Pass<"dist-elim", "::mlir::ModuleOp"> {
   let options = [];
 }
 
-#endif // _IMEX_CONVERSION_PASSES_INCLUDED_
+#endif // _IMEX_CONVERSION_PASSES_TD_INCLUDED_
