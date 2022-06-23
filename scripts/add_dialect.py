@@ -89,6 +89,7 @@ with open(jp(libroot, args.name, "Transforms", "CMakeLists.txt"), "w") as f:
   MLIRIR
   MLIRPass
   IMEX{args.name}Dialect
+)
 """)
 
 # Generate default tablegen defs
@@ -303,6 +304,14 @@ with open(fn, "w") as f:
 
 #include <mlir/Pass/Pass.h>
 
+namespace mlir {
+class LLVMTypeConverter;
+class MLIRContext;
+class ModuleOp;
+template <typename T> class OperationPass;
+class RewritePatternSet;
+} // namespace mlir
+
 namespace imex {{
 
 //===----------------------------------------------------------------------===//
@@ -312,13 +321,17 @@ namespace imex {{
 /// FIXME
 std::unique_ptr<::mlir::Pass> createFIXMEPass();
 
-/===----------------------------------------------------------------------===//
+/// Populate the given list with patterns that eliminate Dist ops
+void populateFIXMEPatterns(::mlir::LLVMTypeConverter &converter,
+                           ::mlir::RewritePatternSet &patterns);
+
+//===----------------------------------------------------------------------===//
 // Registration
 //===----------------------------------------------------------------------===//
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
-#include <imex/Dialect/{args.name}/Passes.h.inc>
+#include <imex/Dialect/{args.name}/Transforms/Passes.h.inc>
 
 }} // namespace imex
 
@@ -369,5 +382,5 @@ namespace imex {{
 
 }} // namespace imex
 
-#endif _{args.name}_PASSDETAIL_H_INCLUDED_
+#endif // _{args.name}_PASSDETAIL_H_INCLUDED_
 """)

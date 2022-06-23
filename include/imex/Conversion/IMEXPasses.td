@@ -45,26 +45,4 @@ def ConvertPTensorToLinalg : Pass<"convert-ptensor-to-linalg", "::mlir::ModuleOp
   let options = [];
 }
 
-//===----------------------------------------------------------------------===//
-// DistElim
-//===----------------------------------------------------------------------===//
-
-def DistElim : Pass<"dist-elim", "::mlir::ModuleOp"> {
-  let summary = "Eliminate Dist dialect";
-  let description = [{
-    Eliminate Dist dialect by replacing ops with node-local equivalents.
-
-    #### Input invariant
-
-    - Dist Operations were converted from PTensor
-
-    #### Output IR
-
-    - Shape dialect
-  }];
-  let constructor = "imex::createDistElimPass()";
-  let dependentDialects = ["::mlir::shape::ShapeDialect"];
-  let options = [];
-}
-
 #endif // _IMEX_CONVERSION_PASSES_TD_INCLUDED_

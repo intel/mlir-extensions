@@ -1,4 +1,4 @@
-add_mlir_dialect_library(IMEXDist
+add_mlir_dialect_library(IMEXDistDialect
   DistOps.cpp
 
   ADDITIONAL_HEADER_DIRS
