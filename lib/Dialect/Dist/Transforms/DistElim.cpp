@@ -13,17 +13,19 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include "../IMEXPassDetail.h"
-#include <imex/Conversion/DistElim/DistElim.h>
+#include "PassDetail.h"
 #include <imex/Dialect/Dist/IR/DistOps.h>
 #include <imex/internal/PassWrapper.h>
 
+#include <mlir/Conversion/LLVMCommon/TypeConverter.h>
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/LLVMIR/LLVMDialect.h>
 #include <mlir/Dialect/Shape/IR/Shape.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/IR/BuiltinOps.h>
+#include <mlir/IR/PatternMatch.h>
+#include <mlir/Rewrite/FrozenRewritePatternSet.h>
 
 namespace imex {
 
@@ -135,8 +137,10 @@ struct DistElimPass : public ::imex::DistElimBase<DistElimPass> {
 } // namespace
 
 /// Populate the given list with patterns that eliminate Dist ops
-void populateDistElimConversionPatterns(::mlir::LLVMTypeConverter &converter,
-                                        ::mlir::RewritePatternSet &patterns);
+void populateDistElimPatterns(::mlir::LLVMTypeConverter &converter,
+                              ::mlir::RewritePatternSet &patterns) {
+  assert(false);
+}
 
 /// Create a pass to eliminate Dist ops
 std::unique_ptr<::mlir::OperationPass<::mlir::ModuleOp>> createDistElimPass() {

@@ -17,6 +17,7 @@
 
 #include <imex/Conversion/IMEXPasses.h>
 // #include <imex/Transforms/IMEXPasses.h>
+#include <imex/Dialect/Dist/Transforms/Passes.h>
 // #include <imex/Dialect/*/Transforms/Passes.h>
 
 #include <cstdlib>
@@ -38,7 +39,8 @@ inline void registerAllPasses() {
   registerConversionPasses();
 
   // Dialect passes
-  // register*ConversionPasses();
+  registerDistPasses();
+  // register*Passes();
 
   // Dialect pipelines
 }

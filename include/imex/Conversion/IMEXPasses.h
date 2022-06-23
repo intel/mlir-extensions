@@ -15,7 +15,6 @@
 #ifndef _IMEX_CONVERSION_PASSES_H_INCLUDED_
 #define _IMEX_CONVERSION_PASSES_H_INCLUDED_
 
-#include <imex/Conversion/DistElim/DistElim.h>
 #include <imex/Conversion/PTensorToLinalg/PTensorToLinalg.h>
 
 namespace imex {
