@@ -36,13 +36,23 @@ cd mlir-extensions
 python scripts/add_dialect.py <name-of-new-dialect>
 ```
 This will
-* generate directories in the appropriate directories (`include/mlir/Dialect` and `lib/dialect`)
-* Extend/Create cmake infrastrcuture with defaults
-* Create stub source files for IR/Ops
+* generate directories `IR` and `Transforms` in the directories (`include/mlir/Dialect`
+  and `lib/dialect`)
+* Extend/Create cmake infrastructure with defaults
+* Create stub source files for IR and transforms
+  - `include/imex/Dialect/<name>/IR/<name>Ops.h`
+  - `include/imex/Dialect/<name>/IR/<name>Ops.td`
+  - `lib/Dialect/IR/<name>Ops.cpp`
+  - `include/imex/Dialect/<name>/Transforms/Passes.h`
+  - `include/imex/Dialect/<name>/Transforms/Passes.td`
+  - `lib/Dialect/Transforms/PassDetail.h`
 
-Also add your dialect to `include/imex/InitIMEXDialects.h` and to `lib/Conversion/IMEXPassDetail.h`.
+Add your dialect and its transforms/passes to appropriate places in
+- `include/imex/InitIMEXDialects.h`
+- `include/imex/InitIMEXPasses.h`
+- `lib/Conversion/IMEXPassDetail.h`
 
-Now fill in what's marked with FIXME
+Fill in what's marked with FIXME
 
 ## Adding a new Conversion
 ```sh
@@ -52,12 +62,11 @@ python scripts/add_conversion.py $name-of-source-dialect $name-of-target-dialect
 ```
 This will
 * Let $conversion-name name be "$name-of-source-dialectTo$name-of-target-dialect"
-* Add directories `include/mlir/Conversion/<conversion-name> and lib/Conversion/<conversion-name>`
+* Add directories `include/mlir/Conversion/<conversion-name>` and `lib/Conversion/<conversion-name>`
+* Extend/Create cmake infrastructure with defaults
 * Add declarations to header `include/mlir/Conversion/<conversion-name>/<conversion-name>.h`
 * Put cpp definition stubs to `lib/Conversion/<conversion-name>/<conversion-name>.cpp`
-* Add new conversion-dir to `lib/Conversion/CMakeLists.txt`
 * Add conversion to `include/imex/Conversion/IMEXPasses.td and include/imex/Conversion/IMEXPasses.h`
-* Create a basic `lib/Conversion/<conversion-name>/CMakeLists.txt`
 
 Now fill in what's marked with FIXME
 * Pattern rewriters

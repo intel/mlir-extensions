@@ -50,7 +50,7 @@ with open(jp(libroot, name, f"CMakeLists.txt"), "w") as f:
   IMEXConversionPassIncGen
 
   LINK_LIBS PUBLIC
-  IMEX{args.target}
+  IMEX{args.target}Dialect
 )
 """)
 
