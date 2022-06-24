@@ -19,9 +19,9 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <iostream>
 #include <tuple>
 #include <vector>
-#include <iostream>
 
 #include "dpcomp-gpu-runtime_export.h"
 
@@ -48,7 +48,7 @@ template <typename F> auto catchAll(F &&func) {
 #define L0_SAFE_CALL(call)                                                     \
   {                                                                            \
     ze_result_t status = (call);                                               \
-    if (status != ZE_RESULT_SUCCESS) {                                                         \
+    if (status != ZE_RESULT_SUCCESS) {                                         \
       std::cout << "L0 error " << status << std::endl;                         \
       exit(1);                                                                 \
     }                                                                          \
@@ -77,20 +77,22 @@ template <typename T> size_t countUntil(T *ptr, T &&elem) {
 }
 
 struct Queue {
-  Queue() { 
-  std::cout<<"QUEUE CTOR "<<std::endl;  
-  sycl::device device;
-  auto platform_list = sycl::platform::get_platforms();
-  for (const auto& platform : platform_list) {
-    auto platform_name = platform.get_info<sycl::info::platform::name>();
-    bool is_level_zero = platform_name.find("Level-Zero") != std::string::npos;
-    if (!is_level_zero) continue;
-    device = platform.get_devices()[0];
-    std::cout<<"Device Found"<<std::endl;
-  }
-  sycl::context context(device);  
-  sycl::property_list propList{sycl::property::queue::in_order()};
-  sycl_queue = sycl::queue(context, device, propList);
+  Queue() {
+    std::cout << "QUEUE CTOR " << std::endl;
+    sycl::device device;
+    auto platform_list = sycl::platform::get_platforms();
+    for (const auto &platform : platform_list) {
+      auto platform_name = platform.get_info<sycl::info::platform::name>();
+      bool is_level_zero =
+          platform_name.find("Level-Zero") != std::string::npos;
+      if (!is_level_zero)
+        continue;
+      device = platform.get_devices()[0];
+      std::cout << "Device Found" << std::endl;
+    }
+    sycl::context context(device);
+    sycl::property_list propList{sycl::property::queue::in_order()};
+    sycl_queue = sycl::queue(context, device, propList);
   }
 
   sycl::queue sycl_queue;
@@ -98,26 +100,25 @@ struct Queue {
   void *alloc_device_memory(size_t size, size_t alignment) {
     void *mem_ptr = nullptr;
     int shared = 1;
-    if(shared){
+    if (shared) {
       mem_ptr = sycl::aligned_alloc_shared(alignment, size, this->sycl_queue);
-    }
-    else{
+    } else {
       mem_ptr = sycl::malloc_device(size, this->sycl_queue);
     }
-    std::cout<<"RESULT PTR IS "<<mem_ptr<<std::endl;
+    std::cout << "RESULT PTR IS " << mem_ptr << std::endl;
     return mem_ptr;
   }
 
   ze_module_handle_t loadModule(const void *data, size_t dataSize) {
     assert(data);
     ze_module_handle_t ze_module;
-    ze_module_desc_t desc =  {ZE_STRUCTURE_TYPE_MODULE_DESC,
-                                 nullptr,
-                                 ZE_MODULE_FORMAT_IL_SPIRV,
-                                 dataSize,
-                                 (const uint8_t*)data,
-                                 nullptr,
-                                 nullptr};
+    ze_module_desc_t desc = {ZE_STRUCTURE_TYPE_MODULE_DESC,
+                             nullptr,
+                             ZE_MODULE_FORMAT_IL_SPIRV,
+                             dataSize,
+                             (const uint8_t *)data,
+                             nullptr,
+                             nullptr};
     auto ze_device = sycl::get_native<sycl::backend::ext_oneapi_level_zero>(
         this->sycl_queue.get_device());
     auto ze_ctx = sycl::get_native<sycl::backend::ext_oneapi_level_zero>(
@@ -127,7 +128,6 @@ struct Queue {
   }
 
   void *getKernel(ze_module_handle_t module, const char *name) {
-    std::cout<<"IN GET KERNEL "<<std::endl;	  
     assert(module);
     assert(name);
     ze_kernel_handle_t ze_kernel;
@@ -141,7 +141,7 @@ struct Queue {
                                  sycl::bundle_state::executable>(
             {module}, this->sycl_queue.get_context());
 
-   auto kernel = sycl::make_kernel<sycl::backend::ext_oneapi_level_zero>(
+    auto kernel = sycl::make_kernel<sycl::backend::ext_oneapi_level_zero>(
         {kernel_bundle, ze_kernel}, this->sycl_queue.get_context());
     sycl_kernel = new sycl::kernel(kernel);
     return sycl_kernel;
@@ -150,8 +150,6 @@ struct Queue {
   void launchKernel(sycl::kernel *kernel, size_t gridX, size_t gridY,
                     size_t gridZ, size_t blockX, size_t blockY, size_t blockZ,
                     size_t sharedMemBytes, ParamDesc *params, void *extra) {
-
-    std::cout<<"IN LAUNCH KERNEL "<<std::endl;	   
     auto queue = this->sycl_queue;
     auto sycl_global_range =
         ::sycl::range<3>(blockZ * gridZ, blockY * gridY, blockX * gridX);
@@ -161,16 +159,17 @@ struct Queue {
 
     auto paramsCount = countUntil(params, ParamDesc{nullptr, 0});
 
-    std::cout<<"PARAMS COUNT "<<paramsCount<<std::endl;
+    std::cout << "PARAMS COUNT " << paramsCount << std::endl;
     queue.submit([&](sycl::handler &cgh) {
       for (size_t i = 0; i < paramsCount; i++) {
-        auto param = params[i]; 
-	std::cout<<"PARAM DATA ADDRESS IS "<<*(static_cast<void**>(param.data))<<std::endl;
-	cgh.set_arg(static_cast<uint32_t>(i), *(static_cast<void**>(param.data)));
+        auto param = params[i];
+        std::cout << "PARAM DATA ADDRESS IS "
+                  << *(static_cast<void **>(param.data)) << std::endl;
+        cgh.set_arg(static_cast<uint32_t>(i),
+                    *(static_cast<void **>(param.data)));
       }
       cgh.parallel_for(sycl_nd_range, *kernel);
     });
-    std::cout<<"OUT LAUNCH KERNEL "<<std::endl;
   }
 
   static auto destroyModule(ze_module_handle_t module) {
@@ -197,12 +196,12 @@ extern "C" DPCOMP_GPU_RUNTIME_EXPORT void iGpuStreamDestroy(void *queue) {
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *
 iGpuMemAlloc(size_t size, size_t alignment, void *queue) {
-    return static_cast<Queue *>(queue)->alloc_device_memory(size, alignment); 
+  return static_cast<Queue *>(queue)->alloc_device_memory(size, alignment);
 }
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *
 iGpuModuleLoad(void *queue, const void *data, size_t dataSize) {
-    return static_cast<Queue *>(queue)->loadModule(data, dataSize);	
+  return static_cast<Queue *>(queue)->loadModule(data, dataSize);
 }
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void iGpuModuleDestroy(void *module) {
@@ -212,7 +211,8 @@ extern "C" DPCOMP_GPU_RUNTIME_EXPORT void iGpuModuleDestroy(void *module) {
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *
 iGpuKernelGet(void *queue, void *module, const char *name) {
-     return static_cast<Queue *>(queue)->getKernel(static_cast<ze_module_handle_t>(module), name);	
+  return static_cast<Queue *>(queue)->getKernel(
+      static_cast<ze_module_handle_t>(module), name);
 }
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void iGpuKernelDestroy(void *kernel) {
@@ -223,10 +223,9 @@ extern "C" DPCOMP_GPU_RUNTIME_EXPORT void
 iGpuLaunchKernel(void *queue, void *kernel, size_t gridX, size_t gridY,
                  size_t gridZ, size_t blockX, size_t blockY, size_t blockZ,
                  size_t sharedMemBytes, void *params, void *extra) {
-    static_cast<Queue *>(queue)->launchKernel(
-        static_cast<sycl::kernel *>(kernel), gridX, gridY, gridZ, blockX,
-        blockY, blockZ, sharedMemBytes, static_cast<ParamDesc *>(params),
-        extra);
+  static_cast<Queue *>(queue)->launchKernel(
+      static_cast<sycl::kernel *>(kernel), gridX, gridY, gridZ, blockX, blockY,
+      blockZ, sharedMemBytes, static_cast<ParamDesc *>(params), extra);
 }
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void iGpuStreamSynchronize(void *queue) {

@@ -52,8 +52,6 @@
 #include "llvm/Support/Error.h"
 #include "llvm/Support/FormatVariadic.h"
 
-#include <iostream>
-
 using namespace mlir;
 
 static constexpr const char *kGpuBinaryStorageSuffix = "_spirv_binary";
@@ -91,7 +89,6 @@ public:
       : ConvertOpToLLVMPattern<OpTy>(typeConverter) {}
 
 protected:
-
   MLIRContext *context = &this->getTypeConverter()->getContext();
 
   Type llvmVoidType = LLVM::LLVMVoidType::get(context);
@@ -108,8 +105,7 @@ protected:
       context, this->getTypeConverter()->getPointerBitwidth(0));
   Type llvmRangeType = mlir::LLVM::LLVMStructType::getLiteral(
       context, {llvmPointerType, llvmIndexType});
-  Type llvmRangePointerType =
-      mlir::LLVM::LLVMPointerType::get(llvmRangeType);
+  Type llvmRangePointerType = mlir::LLVM::LLVMPointerType::get(llvmRangeType);
 
   FunctionCallBuilder moduleLoadCallBuilder = {
       "iGpuModuleLoad",
@@ -131,17 +127,17 @@ protected:
       "iGpuLaunchKernel",
       llvmVoidType,
       {
-          llvmPointerType,        /* void *stream */
-          llvmPointerType,        /* void* f */
-          llvmIntPtrType,         /* intptr_t gridXDim */
-          llvmIntPtrType,         /* intptr_t gridyDim */
-          llvmIntPtrType,         /* intptr_t gridZDim */
-          llvmIntPtrType,         /* intptr_t blockXDim */
-          llvmIntPtrType,         /* intptr_t blockYDim */
-          llvmIntPtrType,         /* intptr_t blockZDim */
-          llvmInt32Type,          /* unsigned int sharedMemBytes */
-          llvmRangePointerType,   /* Params */
-          llvmPointerPointerType  /* void **extra */
+          llvmPointerType,       /* void *stream */
+          llvmPointerType,       /* void* f */
+          llvmIntPtrType,        /* intptr_t gridXDim */
+          llvmIntPtrType,        /* intptr_t gridyDim */
+          llvmIntPtrType,        /* intptr_t gridZDim */
+          llvmIntPtrType,        /* intptr_t blockXDim */
+          llvmIntPtrType,        /* intptr_t blockYDim */
+          llvmIntPtrType,        /* intptr_t blockZDim */
+          llvmInt32Type,         /* unsigned int sharedMemBytes */
+          llvmRangePointerType,  /* Params */
+          llvmPointerPointerType /* void **extra */
       }};
   FunctionCallBuilder streamDestroyCallBuilder = {
       "iGpuStreamDestroy", llvmVoidType, {llvmPointerType /* void *stream */}};
@@ -152,8 +148,7 @@ protected:
   FunctionCallBuilder allocCallBuilder = {
       "iGpuMemAlloc",
       llvmPointerType /* void * */,
-      {llvmIntPtrType /* intptr_t sizeBytes */,
-       llvmIndexType /* alignment */,	      
+      {llvmIntPtrType /* intptr_t sizeBytes */, llvmIndexType /* alignment */,
        llvmPointerType /* void *stream */}};
   FunctionCallBuilder deallocCallBuilder = {
       "iGpuMemFree",
@@ -394,16 +389,12 @@ private:
     auto alignmentVar =
         rewriter.create<mlir::LLVM::ConstantOp>(loc, llvmIndexType, alignment);
 
-    // Allocate the underlying buffer and store a pointer to it in the MemRef
-    // descriptor.
-    //Type elementPtrType = this->getElementPtrType(memRefType);
-
     Value allocatedPtr =
-        allocCallBuilder.create(loc, rewriter, {sizeBytes, alignmentVar, getStream(rewriter)})
+        allocCallBuilder
+            .create(loc, rewriter,
+                    {sizeBytes, alignmentVar, getStream(rewriter)})
             .getResult(0);
 
-    llvm::errs()<<"RETURNED ALLOCATED POINTER FROM ALLOCALLBUILDER " <<allocatedPtr<<"\n";
-   
     auto memrefDesc = mlir::MemRefDescriptor::undef(rewriter, loc, dstType);
     auto elemPtrTye = memrefDesc.getElementPtrType();
     memrefDesc.setAllocatedPtr(
@@ -423,10 +414,6 @@ private:
     }
 
     mlir::Value resMemref = memrefDesc;
-    // Create the MemRef descriptor.
-    //auto memRefDescriptor = this->createMemRefDescriptor(
-    //    loc, memRefType, allocatedPtr, alignedPtr, shape, strides, rewriter);
-
     rewriter.replaceOp(allocOp, {resMemref, getStream(rewriter)});
 
     return success();
@@ -680,8 +667,8 @@ private:
     auto zero = rewriter.create<LLVM::ConstantOp>(
         loc, llvmInt32Type, rewriter.getI32IntegerAttr(0));
     // Create array of pointers to kernel arguments.
-    //auto kernelParams = generateParamsArray(launchOp, adaptor, rewriter);
-    
+    // auto kernelParams = generateParamsArray(launchOp, adaptor, rewriter);
+
     plier::AllocaInsertionPoint allocaHelper(launchOp);
     auto kernelParams = adaptor.operands();
     auto paramsCount = static_cast<unsigned>(kernelParams.size());
@@ -725,7 +712,8 @@ private:
 
     auto getKernelParam =
         [&](unsigned i) -> std::pair<mlir::Value, mlir::Value> {
-      auto memrefType = launchOp.operands()[i].getType().dyn_cast<mlir::MemRefType>();
+      auto memrefType =
+          launchOp.operands()[i].getType().dyn_cast<mlir::MemRefType>();
       auto paramType = paramsStorage[i].getType();
       if (memrefType) {
         mlir::MemRefDescriptor desc(kernelParams[i]);
@@ -745,7 +733,6 @@ private:
           return {size, null};
         }
         auto size = computeTypeSize(paramType);
-	llvm::errs()<<"DESCRIPTOR EXTRACTED  POINTER " <<desc.alignedPtr(rewriter, loc)<<"\n";
         return {size, desc.alignedPtr(rewriter, loc)};
       }
 

@@ -25,5 +25,4 @@ namespace intel_gpu {
 std::unique_ptr<mlir::Pass> createIntelGPUToLLVMPass();
 std::unique_ptr<mlir::Pass> createIntelGpuOpsPass();
 std::unique_ptr<mlir::Pass> createIntelStreamToLLVMPass();
-
 } // namespace intel_gpu

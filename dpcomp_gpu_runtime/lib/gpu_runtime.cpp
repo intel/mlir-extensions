@@ -19,9 +19,9 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <iostream>
 #include <tuple>
 #include <vector>
-#include <iostream>
 
 #include "dpcomp-gpu-runtime_export.h"
 
@@ -277,10 +277,8 @@ struct Stream {
 
     CHECK_ZE_RESULT(zeKernelSetGroupSize(kernel, castSz(blockX), castSz(blockY),
                                          castSz(blockZ)));
-    std::cout<<"PARAMS COUNT "<<paramsCount<<std::endl;
     for (size_t i = 0; i < paramsCount; ++i) {
       auto param = params[i];
-      std::cout<<"PARAM ADDRESS " <<param.data<<std::endl;
       CHECK_ZE_RESULT(zeKernelSetArgumentValue(kernel, static_cast<uint32_t>(i),
                                                param.size, param.data));
     }
@@ -328,12 +326,10 @@ struct Stream {
         hostDesc.stype = ZE_STRUCTURE_TYPE_HOST_MEM_ALLOC_DESC;
         CHECK_ZE_RESULT(zeMemAllocShared(context.get(), &devDesc, &hostDesc,
                                          size, alignment, device, &ret));
-	std::cout<<"RESULT ADDRESS SHARED MEM " <<ret<<std::endl;
       } else {
         devDesc.flags = ZE_DEVICE_MEM_ALLOC_FLAG_BIAS_INITIAL_PLACEMENT;
         CHECK_ZE_RESULT(zeMemAllocDevice(context.get(), &devDesc, size,
                                          alignment, device, &ret));
-	std::cout<<"RESULT ADDRESS DEVICE MEM " <<ret<<std::endl;
       }
       return ret;
     }();
@@ -351,9 +347,9 @@ struct Stream {
       throw std::runtime_error("Failed to allocate MemInfo");
     }
 
-    #if defined(IMEX_ENABLE_NUMBA_HOTFIX)
-       retain();
-    #endif
+#if defined(IMEX_ENABLE_NUMBA_HOTFIX)
+    retain();
+#endif
     return {info, mem, event};
   }
 

@@ -26,7 +26,6 @@
 #include <mlir/Dialect/Func/Transforms/FuncConversions.h>
 #include <mlir/Dialect/GPU/Passes.h>
 #include <mlir/Dialect/LLVMIR/LLVMDialect.h>
-#include <iostream>
 
 namespace {
 struct LowerTakeContext
@@ -470,7 +469,6 @@ private:
 
     plier::AllocaInsertionPoint allocaHelper(op);
     auto kernelParams = adaptor.operands();
-    std::cout<<"KERNEL PARAMS SIZE "<<kernelParams.size() <<std::endl;
     auto paramsCount = static_cast<unsigned>(kernelParams.size());
     auto paramsArrayType =
         mlir::LLVM::LLVMArrayType::get(llvmRangeType, paramsCount + 1);
@@ -529,17 +527,13 @@ private:
           }
           auto null = rewriter.create<mlir::LLVM::NullOp>(
               loc, desc.getElementPtrType());
-	  std::cout<<"FIRST RETURN "<<std::endl;
           return {size, null};
         }
         auto size = computeTypeSize(paramType);
-	std::cout<<"SECOND RETURN "<<std::endl;
-        llvm::errs()<<"DESC ALIGNED POINTER " <<desc.alignedPtr(rewriter, loc)<<"\n";  	
         return {size, desc.alignedPtr(rewriter, loc)};
       }
 
       auto size = computeTypeSize(paramType);
-      std::cout<<"THIRD RETURN "<<std::endl;
       return {size, kernelParams[i]};
     };
 
@@ -681,7 +675,8 @@ private:
         loc, llvmPointerType, res, rewriter.getI64ArrayAttr(0));
     auto dataPtr = rewriter.create<mlir::LLVM::ExtractValueOp>(
         loc, llvmPointerType, res, rewriter.getI64ArrayAttr(1));
-    llvm::errs()<<"RETURNED ALLOCATED POINTER FROM ALLOCALLBUILDER " <<dataPtr<<"\n";
+    llvm::errs() << "RETURNED ALLOCATED POINTER FROM ALLOCALLBUILDER "
+                 << dataPtr << "\n";
 
     auto memrefDesc = mlir::MemRefDescriptor::undef(rewriter, loc, dstType);
     auto elemPtrTye = memrefDesc.getElementPtrType();
