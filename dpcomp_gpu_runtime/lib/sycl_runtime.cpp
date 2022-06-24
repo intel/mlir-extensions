@@ -105,7 +105,6 @@ struct Queue {
     } else {
       mem_ptr = sycl::malloc_device(size, this->sycl_queue);
     }
-    std::cout << "RESULT PTR IS " << mem_ptr << std::endl;
     return mem_ptr;
   }
 
@@ -159,12 +158,9 @@ struct Queue {
 
     auto paramsCount = countUntil(params, ParamDesc{nullptr, 0});
 
-    std::cout << "PARAMS COUNT " << paramsCount << std::endl;
     queue.submit([&](sycl::handler &cgh) {
       for (size_t i = 0; i < paramsCount; i++) {
         auto param = params[i];
-        std::cout << "PARAM DATA ADDRESS IS "
-                  << *(static_cast<void **>(param.data)) << std::endl;
         cgh.set_arg(static_cast<uint32_t>(i),
                     *(static_cast<void **>(param.data)));
       }
