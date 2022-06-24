@@ -560,9 +560,9 @@ struct ConvertPTensorToLinalgPass
       }
       return ::llvm::None;
     };
-    // typeConverter.addArgumentMaterialization(materializeCast);
+    typeConverter.addArgumentMaterialization(materializeCast);
     typeConverter.addSourceMaterialization(materializeCast);
-    // typeConverter.addTargetMaterialization(materializeCast);
+    typeConverter.addTargetMaterialization(materializeCast);
 #endif
     // We convert all PTensor stuff...
     target.addIllegalDialect<::imex::ptensor::PTensorDialect>();
@@ -572,6 +572,8 @@ struct ConvertPTensorToLinalgPass
     target.addLegalDialect<::mlir::AffineDialect>();
     target.addLegalDialect<::mlir::tensor::TensorDialect>();
     target.addLegalDialect<::mlir::arith::ArithmeticDialect>();
+    target.addLegalDialect<::mlir::shape::ShapeDialect>();
+    target.addLegalOp<::mlir::UnrealizedConversionCastOp>(); // FIXME
 
     ::mlir::RewritePatternSet patterns(&ctxt);
 #define FIXME 0
