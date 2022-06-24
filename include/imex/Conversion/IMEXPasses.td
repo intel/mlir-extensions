@@ -41,7 +41,8 @@ def ConvertPTensorToLinalg : Pass<"convert-ptensor-to-linalg", "::mlir::ModuleOp
                            "::mlir::AffineDialect",
                            "::mlir::func::FuncDialect",
                            "::mlir::tensor::TensorDialect",
-                           "::mlir::arith::ArithmeticDialect"];
+                           "::mlir::arith::ArithmeticDialect",
+                           "::mlir::shape::ShapeDialect"];
   let options = [];
 }
 

@@ -20,6 +20,7 @@ name = f"{args.source}To{args.target}"
 
 incroot = jp("include", "imex", "Conversion")
 libroot = jp("lib", "Conversion")
+testroot = jp("test", "Conversion")
 
 # quick check that we are in the right dir
 if not os.path.isdir(incroot) or not os.path.isdir(libroot):
@@ -29,14 +30,20 @@ if not os.path.isdir(incroot) or not os.path.isdir(libroot):
     )
 
 # create dialect subdirs and default CMakeLists
-for d in [incroot, libroot]:
+for d in [incroot, libroot, testroot]:
     # This raises an exception if already exists -> no overwriting
     os.makedirs(jp(d, name))
-    # empty CMakeLists.txt (cpp will be filled below)
-    open(jp(d, name, "CMakeLists.txt"), "a").close()
-    # we append in the root CMakeLists, other dialects exist
-    with open(jp(d, "CMakeLists.txt"), "a") as f:
-        f.write(f"add_subdirectory({name})\n")
+    if d != testroot:
+        # empty CMakeLists.txt (cpp will be filled below)
+        open(jp(d, name, "CMakeLists.txt"), "a").close()
+        # we append in the root CMakeLists, other dialects exist
+        with open(jp(d, "CMakeLists.txt"), "a") as f:
+            f.write(f"add_subdirectory({name})\n")
+
+# add test file stub
+fn = jp(testroot, name, f"{name}.mlir")
+with open(fn, "w") as f:
+    f.write(f'// RUN: imex-opt --split-input-file --convert-{args.source.lower()}-to-{args.target.lower()} %s -verify-diagnostics -o -| FileCheck %s\n')
 
 # Create CMakeLists.txt
 with open(jp(libroot, name, f"CMakeLists.txt"), "w") as f:
