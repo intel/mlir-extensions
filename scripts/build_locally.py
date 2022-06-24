@@ -317,6 +317,7 @@ def _build_imex(
     c_compiler=None,
     cxx_compiler=None,
     cmake_executable=None,
+    external_lit=None,
 ):
     """Builds Intel MLIR extensions (IMEX).
 
@@ -381,6 +382,9 @@ def _build_imex(
             os.path.abspath(imex_source_dir),
         ]
     )
+
+    if external_lit is not None:
+        cmake_config_args.append("-DLLVM_EXTERNAL_LIT=" + external_lit)
 
     build_dir = os.path.abspath(build_dir)
     # Configure
@@ -478,6 +482,12 @@ if __name__ == "__main__":
         help="Directory where IMEX should be installed",
         dest="imex_install_dir",
         type=str,
+    )
+    imex_builder.add_argument(
+        "--external-lit",
+        type=str,
+        help="Path to a lit executable",
+        dest="external_lit",
     )
 
     args = parser.parse_args()
@@ -593,6 +603,7 @@ if __name__ == "__main__":
         imex_source_dir=setup_dir,
         llvm_install_dir=g_llvm_install_dir,
         imex_install_prefix=args.imex_install_dir,
+        external_lit=args.external_lit,
     )
 
     # TODO

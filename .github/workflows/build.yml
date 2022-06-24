@@ -32,28 +32,22 @@ jobs:
         with:
           access_token: ${{ github.token }}
 
-      - name: Set pkgs_dirs
-        run: |
-          echo "pkgs_dirs: [~/.conda/pkgs]" >> ~/.condarc
-
-      - name: Cache conda packages
-        uses: actions/cache@v2
-        env:
-          CACHE_NUMBER: 1  # Increase to reset cache
+      - name: Setup conda
+        uses: conda-incubator/setup-miniconda@v2
         with:
-          path: ~/.conda/pkgs
-          key:
-            ${{ runner.os }}-conda-${{ env.CACHE_NUMBER }}-python-${{ matrix.python }}-${{hashFiles('**/meta.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-conda-${{ env.CACHE_NUMBER }}-python-${{ matrix.python }}-
-            ${{ runner.os }}-conda-${{ env.CACHE_NUMBER }}-
+          auto-update-conda: true
+          python-version: ${{ matrix.python }}
+          activate-environment: imex-devel
 
-      - name: Add conda to system path
-        run: echo $CONDA/bin >> $GITHUB_PATH
+      - name: Conda info
+        shell: bash -l {0}
+        run: conda info
 
       - name: Install CMake and Ninja
+        shell: bash -l {0}
         run: |
-          conda install cmake ninja
+          conda install cmake ninja conda-forge::lit
+          conda list
 
       - name: Checkout repo
         uses: actions/checkout@v2
@@ -160,10 +154,12 @@ jobs:
 
       - name: Build IMEX
         shell: bash -l {0}
-
         run: |
+          external_lit=`which lit`
+          echo ${external_lit}
           # make the llvm-mlir working dir
           mkdir -p /home/runner/work/tmpdir
           python scripts/build_locally.py                                      \
             --working-dir /home/runner/work/tmpdir                             \
             --llvm-install /home/runner/work/llvm-mlir/_mlir_install           \
+            --external-lit ${external_lit}
