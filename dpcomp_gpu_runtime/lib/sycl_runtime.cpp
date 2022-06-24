@@ -95,26 +95,22 @@ struct Queue {
 
   sycl::queue sycl_queue;
 
-  void *alloc_device_memory(size_t size, int shared) {
-    std::cout<<"IN ALLOC MEMORY "<<std::endl;	  
-    void *mem_ptr;
+  void *alloc_device_memory(size_t size, size_t alignment) {
+    void *mem_ptr = nullptr;
+    int shared = 1;
     if(shared){
-      mem_ptr = sycl::malloc_shared(size, this->sycl_queue);
-      printf("&MEM_PTR   = %p\n", (void *) &mem_ptr);
+      mem_ptr = sycl::aligned_alloc_shared(alignment, size, this->sycl_queue);
     }
     else{
       mem_ptr = sycl::malloc_device(size, this->sycl_queue);
     }
-    return reinterpret_cast<void *>(mem_ptr);
+    std::cout<<"RESULT PTR IS "<<mem_ptr<<std::endl;
+    return mem_ptr;
   }
 
-  void loadModule(const void *data, size_t dataSize, ze_module_handle_t *ze_module) {
-    std::cout<<"IN MODULE LOAD "<<std::endl;	  
+  ze_module_handle_t loadModule(const void *data, size_t dataSize) {
     assert(data);
-    if(dataSize == 0)
-    	std::cout<<"UNABLE TO LOAD BINARY "<<std::endl;
-    else
-	std::cout<<"BINARY SIZE "<<dataSize<<std::endl;
+    ze_module_handle_t ze_module;
     ze_module_desc_t desc =  {ZE_STRUCTURE_TYPE_MODULE_DESC,
                                  nullptr,
                                  ZE_MODULE_FORMAT_IL_SPIRV,
@@ -126,16 +122,16 @@ struct Queue {
         this->sycl_queue.get_device());
     auto ze_ctx = sycl::get_native<sycl::backend::ext_oneapi_level_zero>(
         this->sycl_queue.get_context());
-    L0_SAFE_CALL(zeModuleCreate(ze_ctx, ze_device, &desc, ze_module, nullptr));
-    std::cout<<"OUT MODULE LOAD "<<std::endl;
+    L0_SAFE_CALL(zeModuleCreate(ze_ctx, ze_device, &desc, &ze_module, nullptr));
+    return ze_module;
   }
 
-  void getKernel(ze_module_handle_t module, const char *name,
-                 sycl::kernel &kernel) {
+  void *getKernel(ze_module_handle_t module, const char *name) {
     std::cout<<"IN GET KERNEL "<<std::endl;	  
     assert(module);
     assert(name);
     ze_kernel_handle_t ze_kernel;
+    sycl::kernel *sycl_kernel;
     ze_kernel_desc_t desc = {};
     desc.pKernelName = name;
     L0_SAFE_CALL(zeKernelCreate(module, &desc, &ze_kernel));
@@ -145,9 +141,10 @@ struct Queue {
                                  sycl::bundle_state::executable>(
             {module}, this->sycl_queue.get_context());
 
-    kernel = sycl::make_kernel<sycl::backend::ext_oneapi_level_zero>(
+   auto kernel = sycl::make_kernel<sycl::backend::ext_oneapi_level_zero>(
         {kernel_bundle, ze_kernel}, this->sycl_queue.get_context());
-    std::cout<<"OUT GET KERNEL "<<std::endl;
+    sycl_kernel = new sycl::kernel(kernel);
+    return sycl_kernel;
   }
 
   void launchKernel(sycl::kernel *kernel, size_t gridX, size_t gridY,
@@ -168,8 +165,8 @@ struct Queue {
     queue.submit([&](sycl::handler &cgh) {
       for (size_t i = 0; i < paramsCount; i++) {
         auto param = params[i]; 
-	std::cout<<"PARAM DATA ADDRESS IS "<<param.data<<std::endl;
-        cgh.set_arg(static_cast<uint32_t>(i), param.data);
+	std::cout<<"PARAM DATA ADDRESS IS "<<*(static_cast<void**>(param.data))<<std::endl;
+	cgh.set_arg(static_cast<uint32_t>(i), *(static_cast<void**>(param.data)));
       }
       cgh.parallel_for(sycl_nd_range, *kernel);
     });
@@ -199,45 +196,13 @@ extern "C" DPCOMP_GPU_RUNTIME_EXPORT void iGpuStreamDestroy(void *queue) {
 }
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *
-iGpuMemAlloc(size_t size, size_t alignment, void *queue, int shared) {
-    std::cout<<"IN ALLOC MEMORY "<<std::endl;
-    void *mem_ptr = nullptr;
-    shared = 1;
-    if(shared){
-      mem_ptr = sycl::aligned_alloc_shared(alignment, size, static_cast<Queue *>(queue)->sycl_queue);
-    }
-    else{
-      mem_ptr = sycl::malloc_device(size, static_cast<Queue *>(queue)->sycl_queue);
-    }
-    std::cout<<"RESULT PTR IS "<<mem_ptr<<std::endl;
-    return mem_ptr;
+iGpuMemAlloc(size_t size, size_t alignment, void *queue) {
+    return static_cast<Queue *>(queue)->alloc_device_memory(size, alignment); 
 }
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *
 iGpuModuleLoad(void *queue, const void *data, size_t dataSize) {
-    std::cout<<"IN MODULE LOAD "<<std::endl;
-    assert(data);
-    if(dataSize == 0)
-        std::cout<<"UNABLE TO LOAD BINARY "<<std::endl;
-    else
-        std::cout<<"BINARY SIZE "<<dataSize<<std::endl;
-    ze_module_desc_t desc =  {ZE_STRUCTURE_TYPE_MODULE_DESC,
-                                 nullptr,
-                                 ZE_MODULE_FORMAT_IL_SPIRV,
-                                 dataSize,
-                                 (const uint8_t*)data,
-                                 nullptr,
-                                 nullptr};
-    ze_module_handle_t ze_module;
-    auto sycl_queue = static_cast<Queue *>(queue)->sycl_queue;
-    //desc.format = ZE_MODULE_FORMAT_IL_SPIRV;
-    //desc.pInputModule = static_cast<const uint8_t *>(data);
-    //desc.inputSize = dataSize;
-    auto ze_device = sycl::get_native<sycl::backend::ext_oneapi_level_zero>(sycl_queue.get_device());
-    auto ze_ctx = sycl::get_native<sycl::backend::ext_oneapi_level_zero>(sycl_queue.get_context());
-    L0_SAFE_CALL(zeModuleCreate(ze_ctx, ze_device, &desc, &ze_module, nullptr));
-    std::cout<<"OUT MODULE LOAD "<<std::endl;
-    return ze_module;
+    return static_cast<Queue *>(queue)->loadModule(data, dataSize);	
 }
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void iGpuModuleDestroy(void *module) {
@@ -247,26 +212,7 @@ extern "C" DPCOMP_GPU_RUNTIME_EXPORT void iGpuModuleDestroy(void *module) {
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *
 iGpuKernelGet(void *queue, void *module, const char *name) {
-	std::cout<<"IN GET KERNEL "<<std::endl;
-    assert(module);
-    assert(name);
-    ze_kernel_handle_t ze_kernel;
-    sycl::kernel *sycl_kernel;
-    ze_kernel_desc_t desc = {};
-    desc.pKernelName = name;
-    L0_SAFE_CALL(zeKernelCreate(static_cast<ze_module_handle_t>(module), &desc, &ze_kernel));
-
-    auto sycl_queue = static_cast<Queue *>(queue)->sycl_queue;
-    sycl::kernel_bundle<sycl::bundle_state::executable> kernel_bundle =
-        sycl::make_kernel_bundle<sycl::backend::ext_oneapi_level_zero,
-                                 sycl::bundle_state::executable>(
-            {static_cast<ze_module_handle_t>(module)}, sycl_queue.get_context());
-
-    auto kernel = sycl::make_kernel<sycl::backend::ext_oneapi_level_zero>(
-        {kernel_bundle, ze_kernel}, sycl_queue.get_context());
-    sycl_kernel = new sycl::kernel(kernel);
-    std::cout<<"OUT GET KERNEL "<<std::endl;
-    return sycl_kernel;
+     return static_cast<Queue *>(queue)->getKernel(static_cast<ze_module_handle_t>(module), name);	
 }
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void iGpuKernelDestroy(void *kernel) {
