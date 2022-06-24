@@ -17,6 +17,7 @@ args = parser.parse_args()
 
 incroot = jp("include", "imex", "Dialect")
 libroot = jp("lib", "Dialect")
+testroot = jp("test", "Dialect")
 
 # quick check that we are in the right dir
 if not os.path.isdir(incroot) or not os.path.isdir(libroot):
@@ -26,15 +27,26 @@ if not os.path.isdir(incroot) or not os.path.isdir(libroot):
     )
 
 # create dialect subdirs and default CMakeLists
-for d in [incroot, libroot]:
+for d in [incroot, libroot, testroot]:
     # This raises an exception if already exists -> no overwriting
     os.makedirs(jp(d, args.name, "IR"))
     os.makedirs(jp(d, args.name, "Transforms"))
-    # we append in the root CMakeLists, other dialects exist
-    with open(jp(d, "CMakeLists.txt"), "a") as f:
-        f.write(f"add_subdirectory({args.name})\n")
-    with open(jp(d, args.name, "CMakeLists.txt"), "w") as f:
-        f.write("add_subdirectory(IR)\nadd_subdirectory(Transforms)\n")
+    if d != testroot:
+        # we append in the root CMakeLists, other dialects exist
+        with open(jp(d, "CMakeLists.txt"), "a") as f:
+            f.write(f"add_subdirectory({args.name})\n")
+        with open(jp(d, args.name, "CMakeLists.txt"), "w") as f:
+            f.write("add_subdirectory(IR)\nadd_subdirectory(Transforms)\n")
+
+# add test file stub
+fn = jp(testroot, args.name, "IR", f"{args.name}Ops.mlir")
+with open(fn, "w") as f:
+    f.write("""// RUN: imex-opt %s | FileCheck %s
+// Verify the printed output can be parsed.
+// RUN: imex-opt %s | imex-opt | FileCheck %s
+// Verify the generic form can be parsed.
+// RUN: imex-opt -mlir-print-op-generic %s | imex-opt | FileCheck %s
+""")
 
 # Default rules for IR tablegen and alike
 with open(jp(incroot, args.name, "IR", "CMakeLists.txt"), "w") as f:
@@ -304,13 +316,13 @@ with open(fn, "w") as f:
 
 #include <mlir/Pass/Pass.h>
 
-namespace mlir {
+namespace mlir {{
 class LLVMTypeConverter;
 class MLIRContext;
 class ModuleOp;
 template <typename T> class OperationPass;
 class RewritePatternSet;
-} // namespace mlir
+}} // namespace mlir
 
 namespace imex {{
 

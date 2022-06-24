@@ -50,9 +50,8 @@ def PTensor_PTensor : PTensor_Type<"PTensor", "ptensor">
   // Here we defined the underlying RankedTensor and whether the tensor is distributed
   let parameters = (ins "::mlir::RankedTensorType":$rtensor, "bool":$dist);
 
-  let assemblyFormat = "`<` $rtensor`,` $dist `>`";
+  let assemblyFormat = "`<` $rtensor`,` $dist `>`"; // FIXME
 }
-
 
 // Base class for dialect operations. This operation inherits from the base
 // `Op` class in OpBase.td, and provides:
