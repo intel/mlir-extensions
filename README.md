@@ -13,15 +13,15 @@ CMake so that it installs `FileCheck` to the chosen installation prefix.
 
 #### Convenience Building LLVM/MLIR + IMEX
 
-The script `build_locally.py` can build both LLVM/MLIR and IMEX for you. Use
-`build_locally.py -h` to look at all the options provided by the script. It is
+The script `build_tools/build_imex.py` can build both LLVM/MLIR and IMEX for you. Use
+`build_imex.py -h` to look at all the options provided by the script. It is
 advisable to use an external lit when building IMEX.
 
 If you want the script to build LLVM and then IMEX, do as follows:
 
 ```sh
 external_lit=`which lit`
-python scripts/build_locally.py                     \
+python scripts/build_imex.py                        \
     --working-dir $local-working-dir-to-build-llvm  \
     --external-lit ${external_lit}
 ```
@@ -30,7 +30,7 @@ To reuse a previously built LLVM, use the following steps:
 
 ```sh
 external_lit=`which lit`
-python scripts/build_locally.py                     \
+python scripts/build_imex.py                        \
     --working-dir $local-working-dir-to-build-llvm  \
     --llvm-install $llvm-target-dir                 \
     --external-lit ${external_lit}
@@ -88,5 +88,14 @@ Now fill in what's marked with FIXME
 * Populating lists with patterns
 * Passes
 
+## Run the lit tests
+To run the FileCheck based tests, follow the following steps:
+
+```sh
+cd <to your IMEX build directory>
+cmake --build . --target check-imex-opt
+```
+
 ## License
-This code is made available under the Apache License 2.0 with LLVM Exceptions. See the `LICENSE.txt` file for more details.
+This code is made available under the Apache License 2.0 with LLVM Exceptions.
+See the `LICENSE.txt` file for more details.
