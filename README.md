@@ -1,6 +1,6 @@
 ## Setting up development environment
 ```sh
-conda create -n imex-dev -c intel -c defaults -c conda-forge pip">=21.2.4" pre-commit cmake clang-format tbb-devel
+conda create -n imex-dev -c intel -c defaults -c conda-forge pip">=21.2.4" pre-commit cmake clang-format tbb-devel lit
 conda activate imex-dev
 pre-commit install -f -c ./scripts/.pre-commit-config.yaml
 ```
@@ -13,12 +13,27 @@ CMake so that it installs `FileCheck` to the chosen installation prefix.
 
 #### Convenience Building LLVM/MLIR + IMEX
 
-The script `build_locally.py` can build both LLVM/MLIR and IMEX for you.
+The script `build_locally.py` can build both LLVM/MLIR and IMEX for you. Use
+`build_locally.py -h` to look at all the options provided by the script. It is
+advisable to use an external lit when building IMEX.
+
+If you want the script to build LLVM and then IMEX, do as follows:
 
 ```sh
-python scripts/build_locally.py \
-    --working-dir $local-working-dir-to-build-llvm \
-    --llvm-install $llvm-target-dir
+external_lit=`which lit`
+python scripts/build_locally.py                     \
+    --working-dir $local-working-dir-to-build-llvm  \
+    --external-lit ${external_lit}
+```
+
+To reuse a previously built LLVM, use the following steps:
+
+```sh
+external_lit=`which lit`
+python scripts/build_locally.py                     \
+    --working-dir $local-working-dir-to-build-llvm  \
+    --llvm-install $llvm-target-dir                 \
+    --external-lit ${external_lit}
 ```
 
 #### Building Bare Metal With Existing LLVM/MLIR
