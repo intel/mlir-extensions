@@ -23,17 +23,18 @@ import shutil
 
 
 def _get_llvm_sha():
-    """Reads the SHA value from llvm-sha.txt
+    """Reads the SHA value from build_tools/llvm_version.txt
 
     Raises:
-        RuntimeError: If the SHA was not read properly from the llvm-sha.txt
+        RuntimeError: If the SHA was not read properly from the
+        build_tools/llvm_version.txt
     Returns:
-        str: The SHA value read from llvm-sha.txt
+        str: The SHA value read from build_tools/llvm_version.txt
 
     """
     sha = ""
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    with open(base_dir + "/llvm-sha.txt", "r") as fd:
+    with open(base_dir + "/build_tools/llvm_version.txt", "r") as fd:
         sha = fd.readline().strip()
     if len(sha) == 0:
         raise RuntimeError("sha cannot be empty")
@@ -41,7 +42,8 @@ def _get_llvm_sha():
 
 
 def _sha_matched(llvm_install_dir, llvm_sha):
-    """Checks if the SHA in llvm-sha.txt matches the SHA used to build LLVM.
+    """Checks if the SHA in build_tools/llvm_version.txt matches the SHA used
+    to build LLVM.
 
     Args:
         llvm_install_dir (str): Path to an LLVM installation directory
@@ -49,15 +51,13 @@ def _sha_matched(llvm_install_dir, llvm_sha):
 
     Raises:
         RuntimeError: When the SHA could not be found in the LLVM installation
-        direcotry.
+        directory.
 
     Returns:
         bool: True if the two SHAs matched, else False
     """
     sha = None
-    with open(
-        llvm_install_dir + "/include/llvm/Support/VCSRevision.h", "r"
-    ) as fd:
+    with open(llvm_install_dir + "/include/llvm/Support/VCSRevision.h", "r") as fd:
         for l in fd:
             if l.find("LLVM_REVISION") > -1:
                 sha = l.split()[2].strip('"')
@@ -236,9 +236,7 @@ def _get_llvm(llvm_sha=None, working_dir=None):
     if not git_checkout_dir:
         try:
             temp_uuid = str(uuid.uuid1())
-            git_checkout_dir = (
-                tempfile.gettempdir() + "/_llvm-repo_" + temp_uuid
-            )
+            git_checkout_dir = tempfile.gettempdir() + "/_llvm-repo_" + temp_uuid
             os.mkdir(git_checkout_dir)
         except FileExistsError:
             raise RuntimeError("Found existing build directory.")
@@ -267,9 +265,7 @@ def _get_llvm(llvm_sha=None, working_dir=None):
                 cwd=git_checkout_dir + "/llvm-project",
             )
         except subprocess.CalledProcessError:
-            raise RuntimeError(
-                f"Could not checkout the sha: {llvm_sha}", llvm_sha
-            )
+            raise RuntimeError(f"Could not checkout the sha: {llvm_sha}", llvm_sha)
 
     return git_checkout_dir + "/llvm-project"
 
@@ -317,6 +313,7 @@ def _build_imex(
     c_compiler=None,
     cxx_compiler=None,
     cmake_executable=None,
+    external_lit=None,
 ):
     """Builds Intel MLIR extensions (IMEX).
 
@@ -347,7 +344,7 @@ def _build_imex(
             "LLVM installation in "
             + g_llvm_install_dir
             + "has a different SHA than the required sha specified in "
-            + "llvm-sha.txt.Rebuild LLVM with require SHA."
+            + "build_tools/llvm_version.txt. Rebuild LLVM with require SHA."
         )
     build_system = None
     if sys.platform in ["linux", "win32", "cygwin"]:
@@ -382,16 +379,15 @@ def _build_imex(
         ]
     )
 
+    if external_lit is not None:
+        cmake_config_args.append("-DLLVM_EXTERNAL_LIT=" + external_lit)
+
     build_dir = os.path.abspath(build_dir)
     # Configure
-    subprocess.check_call(
-        cmake_config_args, shell=False, cwd=build_dir, env=os.environ
-    )
+    subprocess.check_call(cmake_config_args, shell=False, cwd=build_dir, env=os.environ)
     # Build
     cmake_build_args = cmake_args + ["--build", "."]
-    subprocess.check_call(
-        cmake_build_args, shell=False, cwd=build_dir, env=os.environ
-    )
+    subprocess.check_call(cmake_build_args, shell=False, cwd=build_dir, env=os.environ)
     # Install
     cmake_install_args = cmake_args + ["--install", "."]
     subprocess.check_call(
@@ -479,6 +475,12 @@ if __name__ == "__main__":
         dest="imex_install_dir",
         type=str,
     )
+    imex_builder.add_argument(
+        "--external-lit",
+        type=str,
+        help="Path to a lit executable",
+        dest="external_lit",
+    )
 
     args = parser.parse_args()
 
@@ -488,7 +490,7 @@ if __name__ == "__main__":
     g_llvm_source_dir = getattr(args, "llvm_sources", None)
     g_working_dir = getattr(args, "working_dir", None)
     g_tbb_dir = getattr(args, "tbb_dir", None)
-    # Get the llvm SHA as hard coded in llvm-sha.txt
+    # Get the llvm SHA as hard coded in build_tools/llvm_version.txt
     llvm_sha = _get_llvm_sha()
 
     # If a working directory is provided, check if it was previously used
@@ -505,9 +507,7 @@ if __name__ == "__main__":
             os.path.exists(g_working_dir + "/_mlir_install")
             and g_llvm_install_dir is None
         ):
-            g_llvm_install_dir = (
-                os.path.abspath(g_working_dir) + "/_mlir_install"
-            )
+            g_llvm_install_dir = os.path.abspath(g_working_dir) + "/_mlir_install"
     elif g_working_dir is None:
         warnings.warn(
             "No working directory specified. Going to use system temp "
@@ -531,7 +531,7 @@ if __name__ == "__main__":
                 "LLVM installation in "
                 + g_llvm_install_dir
                 + "has a different SHA than the required sha specified in "
-                + "llvm-sha.txt.Rebuild LLVM with require SHA."
+                + "build_tools/llvm_version.txt.Rebuild LLVM with require SHA."
             )
             if g_llvm_source_dir is not None:
                 _checkout_sha_in_source_dir(g_llvm_source_dir, llvm_sha)
@@ -593,6 +593,7 @@ if __name__ == "__main__":
         imex_source_dir=setup_dir,
         llvm_install_dir=g_llvm_install_dir,
         imex_install_prefix=args.imex_install_dir,
+        external_lit=args.external_lit,
     )
 
     # TODO

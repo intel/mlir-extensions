@@ -13,6 +13,7 @@
 ///
 //===----------------------------------------------------------------------===//
 
+#include "../IMEXPassDetail.h"
 #include <imex/Conversion/PTensorToLinalg/PTensorToLinalg.h>
 #include <imex/Dialect/Dist/IR/DistOps.h>
 #include <imex/Dialect/PTensor/IR/PTensorOps.h>
@@ -27,6 +28,8 @@
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/Pass/Pass.h>
+
+namespace imex {
 
 // return type without a sign
 // copied from py_linalg_resolver.cpp
@@ -87,9 +90,9 @@ static auto initDTensor(mlir::Location &loc,
 
     // Register with runtime
     ::mlir::Value id =
-        rewriter.create<::dist::RegisterPTensorOp>(loc, ityp, shp);
+        rewriter.create<::imex::dist::RegisterPTensorOp>(loc, ityp, shp);
     // and get local shape
-    auto lshp_mr = rewriter.create<::dist::LocalShapeOp>(loc, shptyp, id);
+    auto lshp_mr = rewriter.create<::imex::dist::LocalShapeOp>(loc, shptyp, id);
 
     // get shape as SmallVector<mlir::Value>
     // why can't we just use the existing tensor?
@@ -114,14 +117,16 @@ static auto initDTensor(mlir::Location &loc,
 // ***** Individual patterns *****
 // *******************************
 
+namespace {
 // convert PTensor's arange and its return type to Linalg/tensor
 // we also need some arith and affine (for linalg::genericop)
 struct ARangeLowering
-    : public ::mlir::OpConversionPattern<::ptensor::ARangeOp> {
+    : public ::mlir::OpConversionPattern<::imex::ptensor::ARangeOp> {
   using OpConversionPattern::OpConversionPattern;
 
   ::mlir::LogicalResult
-  matchAndRewrite(::ptensor::ARangeOp op, ::ptensor::ARangeOp::Adaptor adaptor,
+  matchAndRewrite(::imex::ptensor::ARangeOp op,
+                  ::imex::ptensor::ARangeOp::Adaptor adaptor,
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto converter = *getTypeConverter();
@@ -130,7 +135,7 @@ struct ARangeLowering
     auto start = adaptor.start();
     auto stop = adaptor.stop();
     auto step = adaptor.step();
-    auto orgrtyp = op.getType().dyn_cast<::ptensor::PTensorType>();
+    auto orgrtyp = op.getType().dyn_cast<::imex::ptensor::PTensorType>();
     assert(orgrtyp);
 
     // we operator on signless integers
@@ -197,8 +202,8 @@ struct ARangeLowering
           rewriter
               .getIndexType(); // mlir::MemRefType::get(llvm::SmallVector<int64_t>(1,
                                // mlir::ShapedType::kDynamicSize), ityp);
-      auto offs =
-          rewriter.create<::dist::LocalOffsetsOp>(loc, offtyp, tnsr_id.second);
+      auto offs = rewriter.create<::imex::dist::LocalOffsetsOp>(loc, offtyp,
+                                                                tnsr_id.second);
       // auto _off = rewriter.create<::mlir::memref::DimOp>(loc, offs, 0);
       auto off = rewriter.create<mlir::arith::IndexCastOp>(loc, ityp, offs);
       auto tmp =
@@ -274,7 +279,8 @@ static BodyType buildTrivial(::mlir::Type typ) {
 
 // get a body builder for given binary operation and result type
 // we accept a result type to insert a cast after the operation if needed
-static BodyType getBodyBuilder(::ptensor::EWBinOpId bop, ::mlir::Type typ) {
+static BodyType getBodyBuilder(::imex::ptensor::EWBinOpId bop,
+                               ::mlir::Type typ) {
   switch (bop) {
   case ptensor::ADD:
     return buildTrivial<mlir::arith::AddIOp, mlir::arith::AddFOp>(typ);
@@ -322,15 +328,18 @@ static BodyType getBodyBuilder(::ptensor::EWBinOpId bop, ::mlir::Type typ) {
 // linalg::genericop)
 // Convert PTensor's elementwise binary operations to Linalg
 struct EWBinOpLowering
-    : public ::mlir::OpConversionPattern<::ptensor::EWBinOp> {
+    : public ::mlir::OpConversionPattern<::imex::ptensor::EWBinOp> {
   using OpConversionPattern::OpConversionPattern;
 
   ::mlir::LogicalResult
-  matchAndRewrite(::ptensor::EWBinOp op, ::ptensor::EWBinOp::Adaptor adaptor,
+  matchAndRewrite(::imex::ptensor::EWBinOp op,
+                  ::imex::ptensor::EWBinOp::Adaptor adaptor,
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
     // We expect to lower PTensors
-    auto lhsorgtyp = op.lhs().getType().dyn_cast<::ptensor::PTensorType>();
-    auto rhsorgtyp = op.rhs().getType().dyn_cast<::ptensor::PTensorType>();
+    auto lhsorgtyp =
+        op.lhs().getType().dyn_cast<::imex::ptensor::PTensorType>();
+    auto rhsorgtyp =
+        op.rhs().getType().dyn_cast<::imex::ptensor::PTensorType>();
     // we expect RankedTensorType as operands
     auto lhstyp = adaptor.lhs().getType().dyn_cast<::mlir::RankedTensorType>();
     auto rhstyp = adaptor.rhs().getType().dyn_cast<::mlir::RankedTensorType>();
@@ -386,8 +395,10 @@ struct EWBinOpLowering
     const ::mlir::AffineMap maps[] = {imap, imap, imap};
 
     // create binop as linalg::generic
-    const ::ptensor::EWBinOpId bopid =
-        (::ptensor::EWBinOpId)adaptor.op().cast<::mlir::IntegerAttr>().getInt();
+    const ::imex::ptensor::EWBinOpId bopid =
+        (::imex::ptensor::EWBinOpId)adaptor.op()
+            .cast<::mlir::IntegerAttr>()
+            .getInt();
     auto bodyBuilder = getBodyBuilder(bopid, typ);
     (void)rewriter
         .replaceOpWithNewOp<::mlir::linalg::GenericOp>(
@@ -400,19 +411,20 @@ struct EWBinOpLowering
 
 // get a body builder for giben binary operation and result type
 // we accept a result type to insert a cast after the operation if needed
-static BodyType getBodyBuilder(::ptensor::ReduceOpId rop, ::mlir::Type typ) {
+static BodyType getBodyBuilder(::imex::ptensor::ReduceOpId rop,
+                               ::mlir::Type typ) {
   switch (rop) {
-  case ::ptensor::PROD:
-    return getBodyBuilder(::ptensor::MULTIPLY, typ);
-  case ::ptensor::SUM:
-    return getBodyBuilder(::ptensor::ADD, typ);
-  case ::ptensor::MAX:
-    return getBodyBuilder(::ptensor::MAXIMUM, typ);
-  case ::ptensor::MIN:
-    return getBodyBuilder(::ptensor::MINIMUM, typ);
-  case ::ptensor::MEAN:
-  case ::ptensor::STD:
-  case ::ptensor::VAR:
+  case ::imex::ptensor::PROD:
+    return getBodyBuilder(::imex::ptensor::MULTIPLY, typ);
+  case ::imex::ptensor::SUM:
+    return getBodyBuilder(::imex::ptensor::ADD, typ);
+  case ::imex::ptensor::MAX:
+    return getBodyBuilder(::imex::ptensor::MAXIMUM, typ);
+  case ::imex::ptensor::MIN:
+    return getBodyBuilder(::imex::ptensor::MINIMUM, typ);
+  case ::imex::ptensor::MEAN:
+  case ::imex::ptensor::STD:
+  case ::imex::ptensor::VAR:
   default:
     assert("unsupported reduction operation" == nullptr);
   };
@@ -423,17 +435,18 @@ static BodyType getBodyBuilder(::ptensor::ReduceOpId rop, ::mlir::Type typ) {
 // element-type) we also need some arith and affine (for linalg::genericop)
 // FIXME reduction over a subset of dimensionsstruct ReductionOpLowering
 struct ReductionOpLowering
-    : public ::mlir::OpConversionPattern<::ptensor::ReductionOp> {
+    : public ::mlir::OpConversionPattern<::imex::ptensor::ReductionOp> {
   using OpConversionPattern::OpConversionPattern;
 
   ::mlir::LogicalResult
-  matchAndRewrite(::ptensor::ReductionOp op,
-                  ::ptensor::ReductionOp::Adaptor adaptor,
+  matchAndRewrite(::imex::ptensor::ReductionOp op,
+                  ::imex::ptensor::ReductionOp::Adaptor adaptor,
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
     // we expect RankedTensorType as operands
     auto inptyp =
         adaptor.input().getType().dyn_cast<::mlir::RankedTensorType>();
-    auto orginptyp = op.input().getType().dyn_cast<::ptensor::PTensorType>();
+    auto orginptyp =
+        op.input().getType().dyn_cast<::imex::ptensor::PTensorType>();
     if (!inptyp || !orginptyp) {
       // fail if not, will be retired if operands get converted elsewhere
       return ::mlir::failure();
@@ -481,9 +494,10 @@ struct ReductionOpLowering
     llvm::SmallVector<mlir::StringRef> iterators(irank, "reduction");
 
     // create reduction op as linalg::generic
-    const ::ptensor::ReduceOpId ropid = (::ptensor::ReduceOpId)adaptor.op()
-                                            .cast<::mlir::IntegerAttr>()
-                                            .getInt();
+    const ::imex::ptensor::ReduceOpId ropid =
+        (::imex::ptensor::ReduceOpId)adaptor.op()
+            .cast<::mlir::IntegerAttr>()
+            .getInt();
     auto bodyBuilder = getBodyBuilder(ropid, sltyp);
     auto rtnsr = rewriter
                      .create<::mlir::linalg::GenericOp>(
@@ -493,8 +507,8 @@ struct ReductionOpLowering
 
     // we reduced the local part, now we reduce across processes
     if (orginptyp.getDist()) {
-      rtnsr = rewriter.create<::dist::AllReduceOp>(loc, tnsr.getType(0),
-                                                   adaptor.op(), rtnsr);
+      rtnsr = rewriter.create<::imex::dist::AllReduceOp>(loc, tnsr.getType(0),
+                                                         adaptor.op(), rtnsr);
     }
 
     // For now we only support reduction over all dims and return a scalar
@@ -511,28 +525,13 @@ struct ReductionOpLowering
 // ***** Pass infrastructure *****
 // *******************************
 
-namespace imex {
-
-/// Populate the given list with patterns that eliminate Dist ops
-void populateDistElimConversionPatterns(::mlir::LLVMTypeConverter &converter,
-                                        ::mlir::RewritePatternSet &patterns);
-
 // Converting PTensor to Linalg
 // After success, no more PTensor should be left, replaced by Linalg & Affine &
 // Arith We use a type converter to get rid of PTensorType
-struct PTensorToLinalgPass
-    : public ::mlir::PassWrapper<PTensorToLinalgPass,
-                                 ::mlir::OperationPass<::mlir::ModuleOp>> {
-  virtual void
-  getDependentDialects(::mlir::DialectRegistry &registry) const override {
-    registry.insert<::ptensor::PTensorDialect>();
-    registry.insert<::dist::DistDialect>();
-    registry.insert<::mlir::linalg::LinalgDialect>();
-    registry.insert<::mlir::AffineDialect>();
-    registry.insert<::mlir::func::FuncDialect>();
-    registry.insert<::mlir::tensor::TensorDialect>();
-    registry.insert<::mlir::arith::ArithmeticDialect>();
-  }
+struct ConvertPTensorToLinalgPass
+    : public ::imex::ConvertPTensorToLinalgBase<ConvertPTensorToLinalgPass> {
+
+  ConvertPTensorToLinalgPass() = default;
 
   void runOnOperation() override {
     auto &ctxt = getContext();
@@ -542,7 +541,7 @@ struct PTensorToLinalgPass
     typeConverter.addConversion([](::mlir::Type type) { return type; });
     // Convert PTensorType to its RankedTensorType
     typeConverter.addConversion(
-        [&typeConverter](::ptensor::PTensorType type)
+        [&typeConverter](::imex::ptensor::PTensorType type)
             -> llvm::Optional<::mlir::Type> { return type.getRtensor(); });
 
 #if 1
@@ -561,18 +560,20 @@ struct PTensorToLinalgPass
       }
       return ::llvm::None;
     };
-    // typeConverter.addArgumentMaterialization(materializeCast);
+    typeConverter.addArgumentMaterialization(materializeCast);
     typeConverter.addSourceMaterialization(materializeCast);
-    // typeConverter.addTargetMaterialization(materializeCast);
+    typeConverter.addTargetMaterialization(materializeCast);
 #endif
     // We convert all PTensor stuff...
-    target.addIllegalDialect<::ptensor::PTensorDialect>();
+    target.addIllegalDialect<::imex::ptensor::PTensorDialect>();
     // ...into Linalg, Affine, Tensor, Arith, Dist
-    target.addLegalDialect<::dist::DistDialect>();
+    target.addLegalDialect<::imex::dist::DistDialect>();
     target.addLegalDialect<::mlir::linalg::LinalgDialect>();
     target.addLegalDialect<::mlir::AffineDialect>();
     target.addLegalDialect<::mlir::tensor::TensorDialect>();
     target.addLegalDialect<::mlir::arith::ArithmeticDialect>();
+    target.addLegalDialect<::mlir::shape::ShapeDialect>();
+    target.addLegalOp<::mlir::UnrealizedConversionCastOp>(); // FIXME
 
     ::mlir::RewritePatternSet patterns(&ctxt);
 #define FIXME 0
@@ -594,11 +595,12 @@ struct PTensorToLinalgPass
     }
   }
 };
+} // namespace
 
 /// Create a pass to eliminate Dist ops
 std::unique_ptr<::mlir::OperationPass<::mlir::ModuleOp>>
-createConvertDistElimPass() {
-  return std::make_unique<PTensorToLinalgPass>();
+createConvertPTensorToLinalgPass() {
+  return std::make_unique<ConvertPTensorToLinalgPass>();
 }
 
 } // namespace imex

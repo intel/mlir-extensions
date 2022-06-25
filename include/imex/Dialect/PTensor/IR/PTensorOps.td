@@ -36,7 +36,7 @@ def PTensor_Dialect : Dialect {
         }];
 
     // The C++ namespace that the dialect class definition resides in.
-    let cppNamespace = "::ptensor";
+    let cppNamespace = "::imex::ptensor";
 }
 
 class PTensor_Type<string name, string typeMnemonic, list<Trait> traits = []>
@@ -50,9 +50,8 @@ def PTensor_PTensor : PTensor_Type<"PTensor", "ptensor">
   // Here we defined the underlying RankedTensor and whether the tensor is distributed
   let parameters = (ins "::mlir::RankedTensorType":$rtensor, "bool":$dist);
 
-  let assemblyFormat = "`<` $rtensor`,` $dist `>`";
+  let assemblyFormat = "`<` $rtensor`,` $dist `>`"; // FIXME
 }
-
 
 // Base class for dialect operations. This operation inherits from the base
 // `Op` class in OpBase.td, and provides:

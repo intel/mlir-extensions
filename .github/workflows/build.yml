@@ -20,7 +20,7 @@ jobs:
       TBB_VER: 2021.5.0
       LEVEL_ZERO_VER: v1.6.2
       TBB_URL_PREFIX: https://github.com/oneapi-src/oneTBB/releases/download/
-      LLVM_SHA: /home/runner/work/mlir-extensions/mlir-extensions/llvm-sha.txt
+      LLVM_SHA: /home/runner/work/mlir-extensions/mlir-extensions/build_tools/llvm_version.txt
 
     strategy:
       matrix:
@@ -32,28 +32,22 @@ jobs:
         with:
           access_token: ${{ github.token }}
 
-      - name: Set pkgs_dirs
-        run: |
-          echo "pkgs_dirs: [~/.conda/pkgs]" >> ~/.condarc
-
-      - name: Cache conda packages
-        uses: actions/cache@v2
-        env:
-          CACHE_NUMBER: 1  # Increase to reset cache
+      - name: Setup conda
+        uses: conda-incubator/setup-miniconda@v2
         with:
-          path: ~/.conda/pkgs
-          key:
-            ${{ runner.os }}-conda-${{ env.CACHE_NUMBER }}-python-${{ matrix.python }}-${{hashFiles('**/meta.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-conda-${{ env.CACHE_NUMBER }}-python-${{ matrix.python }}-
-            ${{ runner.os }}-conda-${{ env.CACHE_NUMBER }}-
+          auto-update-conda: true
+          python-version: ${{ matrix.python }}
+          activate-environment: imex-devel
 
-      - name: Add conda to system path
-        run: echo $CONDA/bin >> $GITHUB_PATH
+      - name: Conda info
+        shell: bash -l {0}
+        run: conda info
 
       - name: Install CMake and Ninja
+        shell: bash -l {0}
         run: |
-          conda install cmake ninja
+          conda install cmake ninja conda-forge::lit
+          conda list
 
       - name: Checkout repo
         uses: actions/checkout@v2
@@ -80,7 +74,7 @@ jobs:
         id: cache-llvm-mlir
         uses: actions/cache@v3
         env:
-          CACHE_NUMBER: 0  # Increase to reset cache
+          CACHE_NUMBER: 1  # Increase to reset cache
         with:
           path: |
             /home/runner/work/llvm-mlir/_mlir_install/**
@@ -153,6 +147,7 @@ jobs:
             -DLLVM_ENABLE_ASSERTIONS=ON                                    \
             -DLLVM_ENABLE_RTTI=ON                                          \
             -DLLVM_USE_LINKER=gold                                         \
+            -DLLVM_INSTALL_UTILS=ON                                        \
             -DCMAKE_INSTALL_PREFIX=/home/runner/work/llvm-mlir/_mlir_install || exit 1
           cmake --build . -j ${np} || exit 1
           cmake --install . || exit 1
@@ -160,10 +155,18 @@ jobs:
 
       - name: Build IMEX
         shell: bash -l {0}
-
         run: |
+          external_lit=`which lit`
+          echo ${external_lit}
           # make the llvm-mlir working dir
           mkdir -p /home/runner/work/tmpdir
-          python scripts/build_locally.py                                      \
+          python build_tools/build_imex.py                                     \
             --working-dir /home/runner/work/tmpdir                             \
             --llvm-install /home/runner/work/llvm-mlir/_mlir_install           \
+            --external-lit ${external_lit}
+
+      - name: Run lit tests
+        shell: bash -l {0}
+        run: |
+          cd /home/runner/work/mlir-extensions/mlir-extensions/_build || exit 1
+          cmake --build . --target check-imex-opt || exit 1

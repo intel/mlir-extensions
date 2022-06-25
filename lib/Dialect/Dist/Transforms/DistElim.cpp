@@ -13,16 +13,23 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include <imex/Conversion/DistElim/DistElim.h>
+#include "PassDetail.h"
 #include <imex/Dialect/Dist/IR/DistOps.h>
 #include <imex/internal/PassWrapper.h>
 
+#include <mlir/Conversion/LLVMCommon/TypeConverter.h>
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/LLVMIR/LLVMDialect.h>
 #include <mlir/Dialect/Shape/IR/Shape.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/IR/BuiltinOps.h>
+#include <mlir/IR/PatternMatch.h>
+#include <mlir/Rewrite/FrozenRewritePatternSet.h>
+
+namespace imex {
+
+namespace {
 
 // dummy: constant op
 template <typename Op>
@@ -37,11 +44,11 @@ static void _toConst(Op op, mlir::PatternRewriter &rewriter, int64_t v = 0) {
 
 // RegisterPTensorOp -> no-op
 struct ElimRegisterPTensorOp
-    : public mlir::OpRewritePattern<::dist::RegisterPTensorOp> {
+    : public mlir::OpRewritePattern<::imex::dist::RegisterPTensorOp> {
   using OpRewritePattern::OpRewritePattern;
 
   ::mlir::LogicalResult
-  matchAndRewrite(::dist::RegisterPTensorOp op,
+  matchAndRewrite(::imex::dist::RegisterPTensorOp op,
                   mlir::PatternRewriter &rewriter) const override {
     _toConst(op, rewriter);
     return ::mlir::success();
@@ -50,11 +57,11 @@ struct ElimRegisterPTensorOp
 
 // LocalOffsetsOp -> const(0)
 struct ElimLocalOffsetsOp
-    : public mlir::OpRewritePattern<::dist::LocalOffsetsOp> {
+    : public mlir::OpRewritePattern<::imex::dist::LocalOffsetsOp> {
   using OpRewritePattern::OpRewritePattern;
 
   ::mlir::LogicalResult
-  matchAndRewrite(::dist::LocalOffsetsOp op,
+  matchAndRewrite(::imex::dist::LocalOffsetsOp op,
                   mlir::PatternRewriter &rewriter) const override {
     _toConst(op, rewriter);
     return ::mlir::success();
@@ -62,13 +69,14 @@ struct ElimLocalOffsetsOp
 };
 
 // LocalShapeOp -> global shape
-struct ElimLocalShapeOp : public mlir::OpRewritePattern<::dist::LocalShapeOp> {
+struct ElimLocalShapeOp
+    : public mlir::OpRewritePattern<::imex::dist::LocalShapeOp> {
   using OpRewritePattern::OpRewritePattern;
 
   ::mlir::LogicalResult
-  matchAndRewrite(::dist::LocalShapeOp op,
+  matchAndRewrite(::imex::dist::LocalShapeOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto x = op.ptensor().getDefiningOp<::dist::RegisterPTensorOp>();
+    auto x = op.ptensor().getDefiningOp<::imex::dist::RegisterPTensorOp>();
     assert(x);
     x.shape().dump();
     rewriter.replaceOp(op, x.shape());
@@ -77,11 +85,12 @@ struct ElimLocalShapeOp : public mlir::OpRewritePattern<::dist::LocalShapeOp> {
 };
 
 // AllReduceOp -> identity cast
-struct ElimAllReduceOp : public mlir::OpRewritePattern<::dist::AllReduceOp> {
+struct ElimAllReduceOp
+    : public mlir::OpRewritePattern<::imex::dist::AllReduceOp> {
   using OpRewritePattern::OpRewritePattern;
 
   ::mlir::LogicalResult
-  matchAndRewrite(::dist::AllReduceOp op,
+  matchAndRewrite(::imex::dist::AllReduceOp op,
                   mlir::PatternRewriter &rewriter) const override {
 #if 0
     auto loc = op.getLoc();
@@ -112,22 +121,29 @@ struct ElimAllReduceOp : public mlir::OpRewritePattern<::dist::AllReduceOp> {
 // ***** Pass infrastructure *****
 // *******************************
 
-namespace imex {
+// Lowering dist dialect by no-ops
+struct DistElimPass : public ::imex::DistElimBase<DistElimPass> {
+
+  DistElimPass() = default;
+
+  void runOnOperation() override {
+    ::mlir::FrozenRewritePatternSet patterns;
+    insertPatterns<ElimRegisterPTensorOp, ElimLocalOffsetsOp, ElimLocalShapeOp,
+                   ElimAllReduceOp>(getContext(), patterns);
+    (void)::mlir::applyPatternsAndFoldGreedily(this->getOperation(), patterns);
+  }
+};
+
+} // namespace
 
 /// Populate the given list with patterns that eliminate Dist ops
-void populateDistElimConversionPatterns(::mlir::LLVMTypeConverter &converter,
-                                        ::mlir::RewritePatternSet &patterns);
-
-// Lowering dist dialect by no-ops
-struct DistElimPass : public ::imex::PassWrapper<
-                          DistElimPass, ::mlir::ModuleOp,
-                          ::imex::DialectList<::mlir::shape::ShapeDialect>,
-                          ElimRegisterPTensorOp, ElimLocalOffsetsOp,
-                          ElimLocalShapeOp, ElimAllReduceOp> {};
+void populateDistElimPatterns(::mlir::LLVMTypeConverter &converter,
+                              ::mlir::RewritePatternSet &patterns) {
+  assert(false);
+}
 
 /// Create a pass to eliminate Dist ops
-std::unique_ptr<::mlir::OperationPass<::mlir::ModuleOp>>
-createConvertDistElimPass() {
+std::unique_ptr<::mlir::OperationPass<::mlir::ModuleOp>> createDistElimPass() {
   return std::make_unique<DistElimPass>();
 }
 

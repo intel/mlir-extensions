@@ -72,7 +72,8 @@ function(find_prefix_from_config out_var prefix_var path_to_leave)
 endfunction()
 
 # -----------------------------------------------------------------------------#
-# We do not want to recreate the whole MLIR build infrastrcture. As such the
+# We do not want to recreate the whole MLIR build infrastructure. As such the
+
 # helper function extracts the IMEX dialect, conversion, and transform libs from
 # the global MLIR properties.
 function(get_imex_libs lib_type)

@@ -21,7 +21,9 @@
 #include <mlir/IR/Types.h>
 #include <mlir/Interfaces/SideEffectInterfaces.h>
 
-namespace dist {}
+namespace imex {
+namespace dist {} // namespace dist
+} // namespace imex
 
 #include <imex/Dialect/Dist/IR/DistOpsDialect.h.inc>
 #define GET_TYPEDEF_CLASSES

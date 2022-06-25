@@ -42,6 +42,8 @@ include(sanitizers)
 
 add_subdirectory(include)
 add_subdirectory(lib)
+add_subdirectory(tools)
+add_subdirectory(test)
 
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/include/mlir
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
