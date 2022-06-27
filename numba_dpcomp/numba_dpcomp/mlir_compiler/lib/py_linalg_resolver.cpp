@@ -20,6 +20,7 @@
 #include <mlir/Dialect/Bufferization/IR/Bufferization.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
+#include <mlir/Dialect/Math/IR/Math.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/SCF.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
@@ -928,7 +929,7 @@ static py::object genericImpl(py::capsule context, py::handle inputs,
   auto affineMaps = getAffineMaps(maps, mlirContext);
   auto bodyBuilder = [&](mlir::OpBuilder &builder, mlir::Location loc,
                          mlir::ValueRange args) {
-    auto funcType = bodyFunc.getType();
+    auto funcType = bodyFunc.getFunctionType();
     auto newArgs = castValues(doSignCast(builder, loc, args, bodyTypes),
                               funcType.getInputs());
     auto call = builder.create<mlir::func::CallOp>(loc, bodyFunc, newArgs);
@@ -1224,7 +1225,7 @@ static py::object externalCallImpl(py::capsule context, py::str funcName,
     assert(mod);
     auto f = mod.lookupSymbol<mlir::func::FuncOp>(name);
     if (f) {
-      if (f.getType() != funcType) {
+      if (f.getFunctionType() != funcType) {
         plier::reportError(llvm::Twine("linalg_builder::external_call: "
                                        "invalid function redefinition: ") +
                            name);
@@ -1335,7 +1336,7 @@ static py::object inlineFuncImpl(py::capsule context, py::handle func,
   auto funcTypes =
       mapTypesToNumbaChecked(ctx.context.typesMod, getTypes(argsValues));
   auto bodyFunc = ctx.context.compileBody(func, funcTypes);
-  auto funcType = bodyFunc.getType();
+  auto funcType = bodyFunc.getFunctionType();
   auto funcArgsTypes = funcType.getInputs();
   if (funcArgsTypes.size() != argsValues.size())
     plier::reportError(
@@ -1912,10 +1913,10 @@ PyLinalgResolver::rewrite(llvm::StringRef name, mlir::Location loc,
 
   PyBuilderContext pyBuilderContext{loc, builder, *context};
   auto pyContext = py::capsule(&pyBuilderContext);
-  auto pyArgs =
-      getArgs(context->inspect, builderFunc,
-              [&](auto val) { return context->createVar(pyContext, val); },
-              args, kwargs);
+  auto pyArgs = getArgs(
+      context->inspect, builderFunc,
+      [&](auto val) { return context->createVar(pyContext, val); }, args,
+      kwargs);
   if (pyArgs.is_none())
     return {};
 

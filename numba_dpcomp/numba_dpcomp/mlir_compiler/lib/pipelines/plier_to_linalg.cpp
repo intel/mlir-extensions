@@ -40,6 +40,7 @@
 #include <mlir/Pass/PassManager.h>
 #include <mlir/Transforms/DialectConversion.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
+#include <mlir/Transforms/LoopInvariantCodeMotionUtils.h>
 #include <mlir/Transforms/Passes.h>
 
 #include "mlir-extensions/Dialect/plier/dialect.hpp"
@@ -214,7 +215,7 @@ static mlir::Value skipCasts(mlir::Value val) {
     if (!cast)
       return {};
 
-    auto inputs = cast.inputs();
+    auto inputs = cast.getInputs();
     if (inputs.size() != 1)
       return {};
 
@@ -433,10 +434,11 @@ protected:
     if (!externalFunc)
       return mlir::failure();
 
-    assert(externalFunc.getType().getNumResults() == op->getNumResults());
+    assert(externalFunc.getFunctionType().getNumResults() ==
+           op->getNumResults());
 
     llvm::SmallVector<mlir::Value> castedArgs(args.size());
-    auto funcTypes = externalFunc.getType().getInputs();
+    auto funcTypes = externalFunc.getFunctionType().getInputs();
     for (auto it : llvm::enumerate(args)) {
       auto arg = it.value();
       auto i = it.index();
@@ -1263,7 +1265,7 @@ void MakeStridedLayoutPass::runOnOperation() {
       contigiousArrayArg.clear();
     }
 
-    auto funcType = func.getType();
+    auto funcType = func.getFunctionType();
     auto argTypes = funcType.getInputs();
     auto resTypes = funcType.getResults();
     newArgTypes.assign(argTypes.begin(), argTypes.end());
@@ -1470,14 +1472,15 @@ struct ChangeLayoutReturn
     rewriter.replaceOpWithNewOp<mlir::func::ReturnOp>(op, newArgs);
 
     auto newFuncType = [&]() {
-      auto origType = func.getType();
+      auto origType = func.getFunctionType();
       mlir::ValueRange r(newArgs);
       return mlir::FunctionType::get(getContext(), origType.getInputs(),
                                      r.getTypes());
     }();
 
-    rewriter.updateRootInPlace(
-        func, [&]() { func.typeAttr(mlir::TypeAttr::get(newFuncType)); });
+    rewriter.updateRootInPlace(func, [&]() {
+      func.setFunctionTypeAttr(mlir::TypeAttr::get(newFuncType));
+    });
 
     llvm::SmallVector<mlir::func::CallOp> calls;
     for (auto use : *funcUses) {
@@ -2391,7 +2394,7 @@ struct MarkContigiousArraysPass
                                mlir::OperationPass<mlir::func::FuncOp>> {
   void runOnOperation() override {
     auto func = getOperation();
-    auto funcType = func.getType();
+    auto funcType = func.getFunctionType();
 
     mlir::OpBuilder builder(&getContext());
     auto attrStr = builder.getStringAttr(kContigiousArraysAttr);
@@ -2410,7 +2413,7 @@ struct MarkContigiousArraysPass
       needAttr = needAttr || res;
     };
 
-    for (auto type : (func.getType().getInputs()))
+    for (auto type : (func.getFunctionType().getInputs()))
       visitTypeRecursive(type, visitor);
 
     if (needAttr)
@@ -2501,6 +2504,11 @@ struct LinalgOptPass
   void runOnOperation() override;
 };
 
+bool defaultControlFusionFn(const mlir::OpResult &producer,
+                            mlir::OpOperand &consumer) {
+  return true;
+}
+
 void LinalgOptPass::runOnOperation() {
   auto &context = getContext();
   mlir::RewritePatternSet patterns(&context);
@@ -2512,12 +2520,15 @@ void LinalgOptPass::runOnOperation() {
       SimplifyExpandDims,
       LowerEnforceShape,
       GenerateToFill,
-//      InsertSliceToPad,
+      // InsertSliceToPad,
       SliceOfGeneric
       // clang-format on
       >(&context);
 
-  mlir::linalg::populateElementwiseOpsFusionPatterns(patterns);
+  std::function<bool(const mlir::OpResult &producer, mlir::OpOperand &consumer)>
+      CtrnFn = defaultControlFusionFn;
+
+  mlir::linalg::populateElementwiseOpsFusionPatterns(patterns, CtrnFn);
 
   (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
 }
@@ -2531,7 +2542,8 @@ struct LoopInvariantCodeMotion
                   mlir::PatternRewriter &rewriter) const override {
     auto parentOp = op->getParentOp();
     rewriter.startRootUpdate(parentOp);
-    auto res = mlir::moveLoopInvariantCode(op);
+    auto res =
+        mlir::LogicalResult::success((bool)mlir::moveLoopInvariantCode(op));
     if (mlir::succeeded(res)) {
       rewriter.finalizeRootUpdate(parentOp);
     } else {
@@ -2802,7 +2814,7 @@ struct CloneArgsPass
 
 void CloneArgsPass::runOnOperation() {
   auto func = getOperation();
-  if (func.isPrivate() || func.isDeclaration() || func.body().empty()) {
+  if (func.isPrivate() || func.isDeclaration() || func.getBody().empty()) {
     return;
   }
 
