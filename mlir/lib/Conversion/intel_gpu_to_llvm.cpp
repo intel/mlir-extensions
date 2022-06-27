@@ -269,60 +269,12 @@ mlir::Value getGpuStream(mlir::OpBuilder &builder, mlir::Operation *op) {
   builder.setInsertionPointToStart(&block);
   auto loc = builder.getUnknownLoc();
 
-  // auto device = builder.create<intel_gpu::GetDeviceOp>(loc).getResult();
-  // auto context =
-  //    builder.create<intel_gpu::CreateContextOp>(loc, device).getResult();
-
   auto sycl_stream = builder.create<intel_gpu::GetStreamOp>(loc).getResult();
   builder.setInsertionPoint(block.getTerminator());
   builder.create<intel_gpu::DestroyStreamOp>(loc, sycl_stream);
   return sycl_stream;
 }
 
-class ConvertGetDeviceOpPattern
-    : public ConvertOpToGpuRuntimeCallPattern<intel_gpu::GetDeviceOp> {
-public:
-  ConvertGetDeviceOpPattern(mlir::LLVMTypeConverter &converter)
-      : ConvertOpToGpuRuntimeCallPattern<intel_gpu::GetDeviceOp>(converter) {}
-
-private:
-  mlir::LogicalResult
-  matchAndRewrite(intel_gpu::GetDeviceOp op,
-                  intel_gpu::GetDeviceOp::Adaptor /*adaptor*/,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
-    auto mod = op->getParentOfType<mlir::ModuleOp>();
-    if (!mod)
-      return mlir::failure();
-    auto loc = op.getLoc();
-    auto res = deviceCallBuilder.create(loc, rewriter, {});
-    rewriter.replaceOp(op, res.getResults());
-    return mlir::success();
-  }
-};
-
-class ConvertCreateContextOpPattern
-    : public ConvertOpToGpuRuntimeCallPattern<intel_gpu::CreateContextOp> {
-public:
-  ConvertCreateContextOpPattern(mlir::LLVMTypeConverter &converter)
-      : ConvertOpToGpuRuntimeCallPattern<intel_gpu::CreateContextOp>(
-            converter) {}
-
-private:
-  mlir::LogicalResult
-  matchAndRewrite(intel_gpu::CreateContextOp op,
-                  intel_gpu::CreateContextOp::Adaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
-    auto mod = op->getParentOfType<mlir::ModuleOp>();
-    if (!mod)
-      return mlir::failure();
-
-    auto loc = op.getLoc();
-    auto res =
-        contextCreateCallBuilder.create(loc, rewriter, {adaptor.device()});
-    rewriter.replaceOp(op, res.getResults());
-    return mlir::success();
-  }
-};
 
 class ConvertGetStreamOpPattern
     : public ConvertOpToGpuRuntimeCallPattern<intel_gpu::GetStreamOp> {
@@ -570,46 +522,6 @@ public:
 private:
   llvm::SmallString<32> gpuBinaryAnnotation;
 
-  Value generateParamsArray(gpu::LaunchFuncOp launchOp, OpAdaptor adaptor,
-                            OpBuilder &builder) const {
-    auto loc = launchOp.getLoc();
-    auto numKernelOperands = launchOp.getNumKernelOperands();
-    auto arguments = getTypeConverter()->promoteOperands(
-        loc, launchOp.getOperands().take_back(numKernelOperands),
-        adaptor.getOperands().take_back(numKernelOperands), builder);
-    auto numArguments = arguments.size();
-    SmallVector<Type, 4> argumentTypes;
-    argumentTypes.reserve(numArguments);
-    for (auto argument : arguments)
-      argumentTypes.push_back(argument.getType());
-    auto structType = LLVM::LLVMStructType::getNewIdentified(
-        context, StringRef(), argumentTypes);
-    auto one = builder.create<LLVM::ConstantOp>(loc, llvmInt32Type,
-                                                builder.getI32IntegerAttr(1));
-    auto structPtr = builder.create<LLVM::AllocaOp>(
-        loc, LLVM::LLVMPointerType::get(structType), one, /*alignment=*/0);
-    auto arraySize = builder.create<LLVM::ConstantOp>(
-        loc, llvmInt32Type, builder.getI32IntegerAttr(numArguments));
-    auto arrayPtr = builder.create<LLVM::AllocaOp>(loc, llvmPointerPointerType,
-                                                   arraySize, /*alignment=*/0);
-    auto zero = builder.create<LLVM::ConstantOp>(loc, llvmInt32Type,
-                                                 builder.getI32IntegerAttr(0));
-    for (const auto &en : llvm::enumerate(arguments)) {
-      auto index = builder.create<LLVM::ConstantOp>(
-          loc, llvmInt32Type, builder.getI32IntegerAttr(en.index()));
-      auto fieldPtr = builder.create<LLVM::GEPOp>(
-          loc, LLVM::LLVMPointerType::get(argumentTypes[en.index()]), structPtr,
-          ArrayRef<Value>{zero, index.getResult()});
-      builder.create<LLVM::StoreOp>(loc, en.value(), fieldPtr);
-      auto elementPtr = builder.create<LLVM::GEPOp>(
-          loc, llvmPointerPointerType, arrayPtr, index.getResult());
-      auto casted =
-          builder.create<LLVM::BitcastOp>(loc, llvmPointerType, fieldPtr);
-      builder.create<LLVM::StoreOp>(loc, casted, elementPtr);
-    }
-    return arrayPtr;
-  }
-
   Value generateKernelNameConstant(StringRef moduleName, StringRef name,
                                    Location loc, OpBuilder &builder) const {
     // Make sure the trailing zero is included in the constant.
@@ -684,7 +596,6 @@ private:
     auto zero = rewriter.create<LLVM::ConstantOp>(
         loc, llvmInt32Type, rewriter.getI32IntegerAttr(0));
     // Create array of pointers to kernel arguments.
-    // auto kernelParams = generateParamsArray(launchOp, adaptor, rewriter);
 
     plier::AllocaInsertionPoint allocaHelper(launchOp);
     auto kernelParams = adaptor.operands();

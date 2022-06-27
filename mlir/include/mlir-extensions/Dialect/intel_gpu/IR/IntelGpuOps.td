@@ -51,36 +51,6 @@ def IntelGpu_StorageClass : I32EnumAttr<"StorageClass",
 }
 def IntelGpu_StorageClassAttr : EnumAttr<IntelGpu_Dialect, IntelGpu_StorageClass, "storage_class">;
 
-
-def GetDeviceOp : IntelGpu_Op<"get_device", [NoSideEffect]> {
-  let description = [{
-    Returns the gpu device at the given index.
-
-    Example:
-      %ordinal = constant.i32 0
-      %device = device.get INTELGPU, %ordinal
-  }];
-
-  // Start with some default ordinal and device type
- // let arguments = (ins IntelGpu_OpaqueType:$platform, I32:$ordinal);
-  let results = (outs IntelGpu_OpaqueType : $device);
-  let builders = [OpBuilder<(ins)>];
-}
-
-def CreateContextOp : IntelGpu_Op<"create_context"> {
-  let description = [{
-    Returns a gpu context for the given device.
-
-    Example:
-      %ctx = context.create %device
-  }];
-
-  let arguments = (ins IntelGpu_OpaqueType : $device);
-  let results = (outs IntelGpu_OpaqueType : $context);
-  let builders = [OpBuilder<(ins "::mlir::Value"
-                             : $device)>];
-}
-
 def GetStreamOp : IntelGpu_Op<"get_stream"> {
   let results = (outs IntelGpu_OpaqueType : $stream);
   let hasCanonicalizer = 1;

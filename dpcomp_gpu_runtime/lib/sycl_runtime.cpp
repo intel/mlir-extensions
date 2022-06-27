@@ -78,8 +78,7 @@ template <typename T> size_t countUntil(T *ptr, T &&elem) {
 
 struct Queue {
   Queue() {
-    std::cout << "QUEUE CTOR " << std::endl;
-    sycl::device device;
+    sycl::device device;	  
     auto platform_list = sycl::platform::get_platforms();
     for (const auto &platform : platform_list) {
       auto platform_name = platform.get_info<sycl::info::platform::name>();
@@ -88,7 +87,6 @@ struct Queue {
       if (!is_level_zero)
         continue;
       device = platform.get_devices()[0];
-      std::cout << "Device Found" << std::endl;
     }
     sycl::context context(device);
     sycl::property_list propList{sycl::property::queue::in_order()};
@@ -192,12 +190,16 @@ extern "C" DPCOMP_GPU_RUNTIME_EXPORT void iGpuStreamDestroy(void *queue) {
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *
 iGpuMemAlloc(size_t size, size_t alignment, void *queue) {
+ return catchAll([&]() {	
   return static_cast<Queue *>(queue)->alloc_device_memory(size, alignment);
+  });
 }
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *
 iGpuModuleLoad(void *queue, const void *data, size_t dataSize) {
+ return catchAll([&]() {	
   return static_cast<Queue *>(queue)->loadModule(data, dataSize);
+  });
 }
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void iGpuModuleDestroy(void *module) {
@@ -207,8 +209,10 @@ extern "C" DPCOMP_GPU_RUNTIME_EXPORT void iGpuModuleDestroy(void *module) {
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *
 iGpuKernelGet(void *queue, void *module, const char *name) {
+ return catchAll([&]() {	
   return static_cast<Queue *>(queue)->getKernel(
       static_cast<ze_module_handle_t>(module), name);
+  });
 }
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void iGpuKernelDestroy(void *kernel) {
@@ -219,9 +223,11 @@ extern "C" DPCOMP_GPU_RUNTIME_EXPORT void
 iGpuLaunchKernel(void *queue, void *kernel, size_t gridX, size_t gridY,
                  size_t gridZ, size_t blockX, size_t blockY, size_t blockZ,
                  size_t sharedMemBytes, void *params, void *extra) {
+ return catchAll([&]() {	
   static_cast<Queue *>(queue)->launchKernel(
       static_cast<sycl::kernel *>(kernel), gridX, gridY, gridZ, blockX, blockY,
       blockZ, sharedMemBytes, static_cast<ParamDesc *>(params), extra);
+  });
 }
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void iGpuStreamSynchronize(void *queue) {

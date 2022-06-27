@@ -675,8 +675,6 @@ private:
         loc, llvmPointerType, res, rewriter.getI64ArrayAttr(0));
     auto dataPtr = rewriter.create<mlir::LLVM::ExtractValueOp>(
         loc, llvmPointerType, res, rewriter.getI64ArrayAttr(1));
-    llvm::errs() << "RETURNED ALLOCATED POINTER FROM ALLOCALLBUILDER "
-                 << dataPtr << "\n";
 
     auto memrefDesc = mlir::MemRefDescriptor::undef(rewriter, loc, dstType);
     auto elemPtrTye = memrefDesc.getElementPtrType();

@@ -116,20 +116,6 @@ struct RemoveUnusedOp : public mlir::OpRewritePattern<Op> {
 };
 } // namespace
 
-void GetDeviceOp::build(::mlir::OpBuilder &odsBuilder,
-                        ::mlir::OperationState &odsState) {
-  auto ctx = odsBuilder.getContext();
-  GetDeviceOp::build(odsBuilder, odsState, intel_gpu::OpaqueType::get(ctx));
-}
-
-void CreateContextOp::build(::mlir::OpBuilder &odsBuilder,
-                            ::mlir::OperationState &odsState,
-                            ::mlir::Value device) {
-  auto ctx = odsBuilder.getContext();
-  CreateContextOp::build(odsBuilder, odsState, intel_gpu::OpaqueType::get(ctx),
-                         device);
-}
-
 void GetStreamOp::build(::mlir::OpBuilder &odsBuilder,
                         ::mlir::OperationState &odsState) {
   auto ctx = odsBuilder.getContext();
