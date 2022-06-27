@@ -15,6 +15,7 @@
 #include "mlir-extensions/Conversion/intel_gpu_to_llvm.hpp"
 
 #include "mlir-extensions/Dialect/intel_gpu/IR/intel_gpu_ops.hpp"
+#include "mlir-extensions/Dialect/plier_util/dialect.hpp"
 
 #include "mlir-extensions/Transforms/func_utils.hpp"
 
@@ -80,6 +81,22 @@ struct FunctionCallBuilder {
 
   mlir::StringRef functionName;
   mlir::LLVM::LLVMFunctionType functionType;
+};
+
+struct LowerUndef : public mlir::ConvertOpToLLVMPattern<plier::UndefOp> {
+  using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::UndefOp op, plier::UndefOp::Adaptor /*adaptor*/,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto converter = getTypeConverter();
+    auto type = converter->convertType(op.getType());
+    if (!type)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::LLVM::UndefOp>(op, type);
+    return mlir::success();
+  }
 };
 
 template <typename OpTy>
@@ -920,7 +937,8 @@ struct IntelGPUToLLVMPass
     patterns.add<ConvertAllocOpToGpuRuntimeCallPattern,
                  ConvertDeallocOpToGpuRuntimeCallPattern,
                  ConvertWaitAsyncOpToGpuRuntimeCallPattern,
-                 ConvertWaitOpToGpuRuntimeCallPattern>(converter);
+                 ConvertWaitOpToGpuRuntimeCallPattern,
+		 LowerUndef>(converter);
 
     patterns.add<ConvertLaunchFuncOpToGpuRuntimeCallPattern>(
         converter, mlir::gpu::getDefaultGpuBinaryAnnotation());
