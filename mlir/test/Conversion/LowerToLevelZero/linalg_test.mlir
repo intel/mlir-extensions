@@ -1,4 +1,4 @@
-// RUN: level_zero_runner %s -e main -entry-point-result=void -shared-libs=%mlir_wrappers_dir/libmlir_c_runner_utils%shlibext -shared-libs=%mlir_wrappers_dir/libmlir_runner_utils%shlibext -shared-libs=%imex_runtime_dir/libdpcomp-runtime%shlibext -shared-libs=%imex_igpu_runtime_dir/libdpcomp-gpu-runtime%shlibext
+// RUN: level_zero_runner %s -e main -entry-point-result=void -shared-libs=%mlir_wrappers_dir/%shlibprefixmlir_c_runner_utils%shlibext -shared-libs=%mlir_wrappers_dir/%shlibprefixmlir_runner_utils%shlibext -shared-libs=%imex_runtime_dir/%shlibprefixdpcomp-runtime%shlibext -shared-libs=%imex_igpu_runtime_dir/%shlibprefixdpcomp-gpu-runtime%shlibext
 
 // CHECK: [11.0,  11.0,  11.0,  11.0,  11.0,  11.0,  11.0,  11.0]
 

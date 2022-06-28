@@ -31,6 +31,7 @@ config.test_exec_root = os.path.join(config.imex_obj_root, 'test')
 
 config.substitutions.append(('%PATH%', config.environment['PATH']))
 config.substitutions.append(('%shlibext', config.llvm_shlib_ext))
+config.substitutions.append(('%shlibprefix', config.imex_shlib_prefix))
 config.substitutions.append(('%mlir_wrappers_dir', config.mlir_wrappers_dir))
 config.substitutions.append(('%imex_runtime_dir', config.imex_runtime_dir))
 config.substitutions.append(('%imex_igpu_runtime_dir', config.imex_igpu_runtime_dir))

@@ -30,7 +30,12 @@ config.llvm_host_triple = '@LLVM_HOST_TRIPLE@'
 config.host_arch = "@HOST_ARCH@"
 config.imex_src_root = "@CMAKE_SOURCE_DIR@"
 config.imex_obj_root = "@CMAKE_BINARY_DIR@"
-config.mlir_wrappers_dir = os.path.join(config.llvm_obj_root, "lib")
+if sys.platform.startswith('win32'):
+    config.mlir_wrappers_dir = os.path.join(config.llvm_obj_root, "bin")
+    config.imex_shlib_prefix = ""
+else:
+    config.mlir_wrappers_dir = os.path.join(config.llvm_obj_root, "lib")
+    config.imex_shlib_prefix = "lib"
 config.imex_runtime_dir = os.path.join(config.imex_obj_root, "dpcomp_runtime")
 config.imex_igpu_runtime_dir = os.path.join(config.imex_obj_root, "dpcomp_gpu_runtime")
 
