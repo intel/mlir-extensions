@@ -1,5 +1,6 @@
-// XFAIL: *
-// RUN:
+// RUN: level_zero_runner %s -e main -entry-point-result=void -shared-libs=%mlir_wrappers_dir/libmlir_c_runner_utils%shlibext -shared-libs=%mlir_wrappers_dir/libmlir_runner_utils%shlibext -shared-libs=%imex_runtime_dir/libdpcomp-runtime%shlibext -shared-libs=%imex_igpu_runtime_dir/libdpcomp-gpu-runtime%shlibext
+
+// CHECK: [11.0,  11.0,  11.0,  11.0,  11.0,  11.0,  11.0,  11.0]
 
 #map = affine_map<(d0, d1) -> (d0, d1)>
 module {

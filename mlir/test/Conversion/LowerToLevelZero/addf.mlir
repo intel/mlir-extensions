@@ -1,5 +1,4 @@
-// REQUIRES: run-gpu-tests
-// RUN: mlir-vulkan-runner %s --shared-libs=%vulkan_wrapper_library_dir/libvulkan-runtime-wrappers%shlibext,%linalg_test_lib_dir/libmlir_runner_utils%shlibext --entry-point-result=void | FileCheck %s
+// RUN: level_zero_runner %s -e main -entry-point-result=void -shared-libs=%mlir_wrappers_dir/libmlir_c_runner_utils%shlibext -shared-libs=%mlir_wrappers_dir/libmlir_runner_utils%shlibext -shared-libs=%imex_runtime_dir/libdpcomp-runtime%shlibext -shared-libs=%imex_igpu_runtime_dir/libdpcomp-gpu-runtime%shlibext
 
 // CHECK: [3.3,  3.3,  3.3,  3.3,  3.3,  3.3,  3.3,  3.3]
 module attributes {
