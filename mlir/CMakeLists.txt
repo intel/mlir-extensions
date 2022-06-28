@@ -12,9 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-project(mlir-extensions LANGUAGES CXX C)
-
-find_package(LLVM REQUIRED CONFIG)
 find_package(MLIR REQUIRED CONFIG)
 
 list(APPEND CMAKE_MODULE_PATH "${MLIR_CMAKE_DIR}")
@@ -40,10 +37,6 @@ endif()
 add_subdirectory(include/mlir-extensions/Dialect/plier)
 add_subdirectory(include/mlir-extensions/Dialect/plier_util)
 add_subdirectory(include/mlir-extensions/Dialect/gpu_runtime/IR)
-
-if (IMEX_ENABLE_IGPU_DIALECT)
-    add_subdirectory(tools)
-endif()
 
 set(SOURCES_LIST
     lib/Conversion/SCFToAffine/SCFToAffine.cpp
@@ -149,8 +142,15 @@ target_include_directories(${MLIR_EXTENSIONS_LIB} SYSTEM PRIVATE
 
 target_include_directories(${MLIR_EXTENSIONS_LIB} PUBLIC
     ./include
-    ${PROJECT_BINARY_DIR}/include
+    ${PROJECT_BINARY_DIR}/mlir/include
     ${PROJECT_BINARY_DIR}/mlir-extensions/include
     )
 
 add_dependencies(${MLIR_EXTENSIONS_LIB} MLIRPlierOpsIncGen MLIRPlierUtilOpsIncGen MLIRGpuRuntimeOpsIncGen)
+
+if (IMEX_ENABLE_IGPU_DIALECT)
+    add_subdirectory(tools)
+    if(IMEX_ENABLE_TESTS)
+        add_subdirectory(test)
+    endif()
+endif()

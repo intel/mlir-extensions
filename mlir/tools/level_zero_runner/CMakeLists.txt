@@ -12,64 +12,44 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-project(level_zero_runner LANGUAGES CXX C)
-
-find_package(LLVM REQUIRED CONFIG)
-find_package(MLIR REQUIRED CONFIG)
-
-list(APPEND CMAKE_MODULE_PATH "${MLIR_CMAKE_DIR}")
-list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
-include(AddLLVM)
-include(AddMLIR)
-include(HandleLLVMOptions)
-
 get_property(dialect_libs GLOBAL PROPERTY MLIR_DIALECT_LIBS)
 get_property(conversion_libs GLOBAL PROPERTY MLIR_CONVERSION_LIBS)
 
-set(SOURCES_LIST
-    level_zero_runner.cpp
+message(STATUS ${dialect_libs})
+message(STATUS ${conversion_libs})
+
+set(LLVM_LINK_COMPONENTS
+    Core
+    Support
+    nativecodegen
+    native
     )
-set(HEADERS_LIST
-    )
 
-add_executable(${PROJECT_NAME} ${SOURCES_LIST} ${HEADERS_LIST})
+add_llvm_executable(level_zero_runner level_zero_runner.cpp)
 
-apply_llvm_compile_flags(${PROJECT_NAME})
+llvm_update_compile_flags(level_zero_runner)
 
-target_link_libraries(${PROJECT_NAME} PRIVATE
-    mlir-extensions
-    dpcomp-gpu-runtime
-    dpcomp-runtime
+target_link_libraries(level_zero_runner PRIVATE
+    ${MLIR_EXTENSIONS_LIB}
     ${dialect_libs}
     ${conversion_libs}
     MLIROptLib
-    MLIRPass
-    MLIRSupport
     MLIRAnalysis
-    MLIRArithmetic
     MLIRExecutionEngine
-    MLIRGPUOps
     MLIRIR
     MLIRJitRunner
     MLIRLLVMIR
-    MLIRLLVMCommonConversion
     MLIRLLVMToLLVMIRTranslation
-    MLIRMemRef
-    MLIRMemRefToLLVM
+    MLIRToLLVMIRTranslationRegistration
     MLIRParser
-    MLIRSPIRV
-    MLIRSPIRVTransforms
-    MLIRSupport
     MLIRTargetLLVMIRExport
-    MLIRTransforms
+    MLIRSupport
     )
 
-target_include_directories(${PROJECT_NAME} PRIVATE
+target_include_directories(level_zero_runner PRIVATE
     ${LLVM_INCLUDE_DIRS}
     ${MLIR_INCLUDE_DIRS}
     )
-
-set(CMAKE_INSTALL_BINDIR ${CMAKE_SOURCE_DIR}/build/level_zero_runner)
 
 install(TARGETS level_zero_runner
         PERMISSIONS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
