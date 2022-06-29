@@ -8,9 +8,11 @@ configure_lit_site_cfg(
 set(L0_RUNNER_TEST_DEPENDS
         FileCheck count not
         level_zero_runner
+        dpcomp-runtime
+        dpcomp-gpu-runtime
         )
 
-add_lit_testsuite(check-l0-runner "Running the leve-zero-runner regression tests"
+add_lit_testsuite(check-l0-runner "Running the level-zero-runner regression tests"
         ${CMAKE_CURRENT_BINARY_DIR}
         DEPENDS ${L0_RUNNER_TEST_DEPENDS}
         )

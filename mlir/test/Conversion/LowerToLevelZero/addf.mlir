@@ -1,6 +1,5 @@
-// RUN: level_zero_runner %s -e main -entry-point-result=void -shared-libs=%mlir_wrappers_dir/%shlibprefixmlir_c_runner_utils%shlibext -shared-libs=%mlir_wrappers_dir/%shlibprefixmlir_runner_utils%shlibext -shared-libs=%imex_runtime_dir/%shlibprefixdpcomp-runtime%shlibext -shared-libs=%imex_igpu_runtime_dir/%shlibprefixdpcomp-gpu-runtime%shlibext
+// RUN: level_zero_runner %s -e main -entry-point-result=void -shared-libs=%mlir_wrappers_dir/%shlibprefixmlir_c_runner_utils%shlibext -shared-libs=%mlir_wrappers_dir/%shlibprefixmlir_runner_utils%shlibext -shared-libs=%imex_runtime_dir/%shlibprefixdpcomp-runtime%shlibext -shared-libs=%imex_igpu_runtime_dir/%shlibprefixdpcomp-gpu-runtime%shlibext | FileCheck %s
 
-// CHECK: [3.3,  3.3,  3.3,  3.3,  3.3,  3.3,  3.3,  3.3]
 module attributes {
   gpu.container_module,
   spv.target_env = #spv.target_env<
@@ -36,6 +35,9 @@ module attributes {
     }
     %arg6 = memref.cast %arg5 : memref<?xf32> to memref<*xf32>
     call @printMemrefF32(%arg6) : (memref<*xf32>) -> ()
+    //      CHECK: Unranked Memref base@ = {{0x[-9a-f]*}}
+    // CHECK-SAME: rank = 1 offset = 0 sizes = [8] strides = [1] data =
+    // CHECK-NEXT: [3.3,  3.3,  3.3,  3.3,  3.3,  3.3,  3.3,  3.3]
     return
   }
   func.func private @fillResource1DFloat(%0 : memref<?xf32>, %1 : f32)
