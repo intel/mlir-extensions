@@ -16,7 +16,7 @@
 #define INTELGPU_OPS
 
 include "mlir/IR/OpBase.td"
-include "mlir/Dialect/GPU/GPUBase.td"
+include "mlir/Dialect/GPU/IR/GPUBase.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/LoopLikeInterface.td"
@@ -31,6 +31,7 @@ def IntelGpu_Dialect : Dialect {
     }];
   let cppNamespace = "intel_gpu";
   let hasConstantMaterializer = 1;
+  let useDefaultTypePrinterParser = 1;
 }
 
 class IntelGpu_Op<string mnemonic, list<Trait> traits = []> :
