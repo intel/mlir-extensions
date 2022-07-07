@@ -22,7 +22,7 @@
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/Math/IR/Math.h>
-#include <mlir/Dialect/SCF/SCF.h>
+#include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 #include <mlir/IR/Dialect.h>
 #include <mlir/Pass/Pass.h>

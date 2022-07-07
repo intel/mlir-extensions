@@ -15,7 +15,7 @@
 #include "mlir-extensions/Transforms/if_rewrites.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
-#include <mlir/Dialect/SCF/SCF.h>
+#include <mlir/Dialect/SCF/IR/SCF.h>
 
 mlir::LogicalResult
 plier::IfOpConstCond::matchAndRewrite(mlir::scf::IfOp op,

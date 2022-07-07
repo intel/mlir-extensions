@@ -15,7 +15,7 @@
 #include "mlir-extensions/Transforms/promote_to_parallel.hpp"
 
 #include "mlir-extensions/Dialect/plier/dialect.hpp"
-#include <mlir/Dialect/SCF/SCF.h>
+#include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 #include <mlir/Interfaces/CallInterfaces.h>
 

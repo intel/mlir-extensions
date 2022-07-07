@@ -27,10 +27,10 @@
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/Bufferization/IR/Bufferization.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
-#include <mlir/Dialect/GPU/GPUDialect.h>
+#include <mlir/Dialect/GPU/IR/GPUDialect.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
-#include <mlir/Dialect/SCF/SCF.h>
+#include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/Dialect/SPIRV/IR/SPIRVOps.h>
 
 #include <llvm/ADT/SmallBitVector.h>
@@ -615,7 +615,7 @@ struct ChangeLayoutClone
   mlir::LogicalResult
   matchAndRewrite(mlir::bufferization::CloneOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto cl = op.input().getDefiningOp<plier::ChangeLayoutOp>();
+    auto cl = op.getInput().getDefiningOp<plier::ChangeLayoutOp>();
     if (!cl)
       return mlir::failure();
 
@@ -636,7 +636,7 @@ struct PropagateCloneType
   mlir::LogicalResult
   matchAndRewrite(mlir::bufferization::CloneOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto src = op.input();
+    auto src = op.getInput();
     auto srcType = src.getType();
     auto dstType = op.getType();
     if (srcType == dstType)

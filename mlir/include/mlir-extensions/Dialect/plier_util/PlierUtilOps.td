@@ -29,6 +29,7 @@ def PlierUtil_Dialect : Dialect {
 
   let hasCanonicalizer = 1;
   let hasConstantMaterializer = 1;
+  let useDefaultTypePrinterParser = 1;
 }
 
 def PlierUtil_OpaqueType

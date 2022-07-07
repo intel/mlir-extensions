@@ -79,7 +79,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     LLVM${LLVM_NATIVE_ARCH}Desc
     LLVMTarget
     MLIRIR
-    MLIRLLVMIR
+    MLIRLLVMDialect
     MLIRLLVMToLLVMIRTranslation
     MLIRTransforms
     MLIRFuncTransforms

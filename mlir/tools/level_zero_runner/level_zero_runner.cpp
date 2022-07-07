@@ -18,9 +18,9 @@
 #include "mlir/Conversion/MemRefToLLVM/MemRefToLLVM.h"
 #include "mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
-#include "mlir/Dialect/GPU/GPUDialect.h"
-#include "mlir/Dialect/GPU/ParallelLoopMapper.h"
-#include "mlir/Dialect/GPU/Passes.h"
+#include "mlir/Dialect/GPU/IR/GPUDialect.h"
+#include "mlir/Dialect/GPU/Transforms/ParallelLoopMapper.h"
+#include "mlir/Dialect/GPU/Transforms/Passes.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/MemRef/Transforms/Passes.h"
@@ -32,6 +32,7 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
+#include "mlir/Dialect/LLVMIR/Transforms/RequestCWrappers.h"
 #include "mlir/Target/LLVMIR/Export.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/TargetSelect.h"
@@ -49,7 +50,9 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
 
   passManager.addPass(arith::createConstantBufferizePass());
   passManager.addNestedPass<mlir::func::FuncOp>(createSCFBufferizePass());
+  passManager.addNestedPass<mlir::func::FuncOp>(createLinalgInitTensorToAllocTensorPass());
   passManager.addNestedPass<mlir::func::FuncOp>(createLinalgBufferizePass());
+  passManager.addNestedPass<mlir::func::FuncOp>(bufferization::createBufferizationBufferizePass());
   passManager.addNestedPass<mlir::func::FuncOp>(createTensorBufferizePass());
   passManager.addPass(func::createFuncBufferizePass());
   passManager.addNestedPass<mlir::func::FuncOp>(
@@ -80,7 +83,7 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
   modulePM.addPass(spirv::createLowerABIAttributesPass());
   modulePM.addPass(spirv::createUpdateVersionCapabilityExtensionPass());
   LowerToLLVMOptions llvmOptions(module.getContext(), DataLayout(module));
-  llvmOptions.emitCWrappers = true;
+  passManager.nest<func::FuncOp>().addPass(LLVM::createRequestCWrappersPass());
 
   // Gpu -> GpuRuntime
   passManager.addPass(gpu_runtime::createSerializeSPIRVPass());
