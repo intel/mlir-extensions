@@ -23,7 +23,7 @@
 #include <mlir/Dialect/GPU/Passes.h>
 #include <mlir/Dialect/GPU/Utils.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
-#include <mlir/Dialect/SCF/SCF.h>
+#include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/Dialect/SPIRV/IR/SPIRVOps.h>
 #include <mlir/Dialect/SPIRV/Transforms/Passes.h>
 #include <mlir/IR/BlockAndValueMapping.h>

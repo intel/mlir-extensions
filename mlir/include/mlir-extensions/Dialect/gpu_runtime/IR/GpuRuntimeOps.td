@@ -17,7 +17,7 @@
 
 include "mlir/IR/OpBase.td"
 include "mlir/IR/EnumAttr.td"
-include "mlir/Dialect/GPU/GPUBase.td"
+include "mlir/Dialect/GPU/IR/GPUBase.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/LoopLikeInterface.td"
@@ -32,6 +32,7 @@ def GpuRuntime_Dialect : Dialect {
     }];
   let cppNamespace = "gpu_runtime";
   let hasConstantMaterializer = 1;
+  let useDefaultTypePrinterParser = 1;
 }
 
 class GpuRuntime_Op<string mnemonic, list<Trait> traits = []> :

@@ -25,10 +25,10 @@
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/Bufferization/IR/Bufferization.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
-#include <mlir/Dialect/GPU/GPUDialect.h>
+#include <mlir/Dialect/GPU/IR/GPUDialect.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
-#include <mlir/Dialect/SCF/SCF.h>
+#include <mlir/Dialect/SCF/IR/SCF.h>
 
 #include <llvm/ADT/TypeSwitch.h>
 

@@ -17,7 +17,7 @@
 
 include "mlir/IR/OpBase.td"
 include "mlir/IR/EnumAttr.td"
-include "mlir/Dialect/GPU/GPUBase.td"
+include "mlir/Dialect/GPU/IR/GPUBase.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/LoopLikeInterface.td"
@@ -29,6 +29,7 @@ def Plier_Dialect : Dialect {
   let cppNamespace = "plier";
 
   let hasConstantMaterializer = 1;
+  let useDefaultTypePrinterParser = 1;
 }
 
 def Plier_PyType

@@ -27,10 +27,10 @@
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
 #include <mlir/Dialect/ControlFlow/IR/ControlFlowOps.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
-#include <mlir/Dialect/GPU/ParallelLoopMapper.h>
-#include <mlir/Dialect/GPU/Passes.h>
+#include <mlir/Dialect/GPU/Transforms/ParallelLoopMapper.h>
+#include <mlir/Dialect/GPU/Transforms/Passes.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
-#include <mlir/Dialect/SCF/SCF.h>
+#include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/Dialect/SPIRV/IR/SPIRVDialect.h>
 #include <mlir/Dialect/SPIRV/IR/SPIRVOps.h>
 #include <mlir/Dialect/SPIRV/IR/TargetAndABI.h>
@@ -77,7 +77,7 @@ struct ParallelLoopGPUMappingPass
 
     mlir::OpBuilder builder(&getContext());
     auto identityMap = builder.getDimIdentityMap();
-    llvm::SmallVector<mlir::gpu::ParallelLoopDimMapping> mapping;
+    llvm::SmallVector<mlir::gpu::ParallelLoopDimMappingAttr> mapping;
     for (auto &op : llvm::make_early_inc_range(region.front())) {
       auto parallel = mlir::dyn_cast<mlir::scf::ParallelOp>(op);
       if (!parallel)
@@ -86,7 +86,7 @@ struct ParallelLoopGPUMappingPass
       auto numLoops = parallel.getNumLoops();
       mapping.resize(numLoops);
       for (auto i : llvm::seq(0u, numLoops))
-        mapping[i] = mlir::gpu::getParallelLoopDimMappingAttr(
+        mapping[i] = builder.getAttr<mlir::gpu::ParallelLoopDimMappingAttr>(
             getProcessor(i), identityMap, identityMap);
 
       if (mlir::failed(mlir::gpu::setMappingAttr(parallel, mapping))) {

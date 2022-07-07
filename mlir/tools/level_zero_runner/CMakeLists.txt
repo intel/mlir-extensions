@@ -46,18 +46,18 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     MLIRPass
     MLIRSupport
     MLIRAnalysis
-    MLIRArithmetic
+    MLIRArithmeticDialect
     MLIRExecutionEngine
     MLIRGPUOps
     MLIRIR
     MLIRJitRunner
-    MLIRLLVMIR
+    MLIRLLVMDialect
     MLIRLLVMCommonConversion
     MLIRLLVMToLLVMIRTranslation
-    MLIRMemRef
+    MLIRMemRefDialect
     MLIRMemRefToLLVM
     MLIRParser
-    MLIRSPIRV
+    MLIRSPIRVDialect
     MLIRSPIRVTransforms
     MLIRSupport
     MLIRTargetLLVMIRExport

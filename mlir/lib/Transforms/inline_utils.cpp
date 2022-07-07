@@ -17,7 +17,7 @@
 #include "mlir-extensions/Dialect/plier/dialect.hpp"
 
 #include <mlir/Dialect/Func/IR/FuncOps.h>
-#include <mlir/Dialect/SCF/SCF.h>
+#include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Pass/Pass.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
