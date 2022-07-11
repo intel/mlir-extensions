@@ -19,7 +19,7 @@
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 
 #include <mlir/Dialect/Func/IR/FuncOps.h>
-#include <mlir/Dialect/SCF/SCF.h>
+#include <mlir/Dialect/SCF/IR/SCF.h>
 
 #include "mlir-extensions/Conversion/SCFToAffine/SCFToAffine.h"
 #include "mlir-extensions/Transforms/promote_to_parallel.hpp"

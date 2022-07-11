@@ -125,7 +125,7 @@ unset(__offsetof_flag)
 
 target_link_libraries(${MLIR_EXTENSIONS_LIB} PRIVATE
     MLIRIR
-    MLIRLLVMIR
+    MLIRLLVMDialect
     MLIRTransforms
     MLIRFuncTransforms
     MLIRLinalgTransforms

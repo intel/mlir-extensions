@@ -16,7 +16,7 @@
 #include "mlir-extensions/Transforms/const_utils.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
-#include <mlir/Dialect/SCF/SCF.h>
+#include <mlir/Dialect/SCF/IR/SCF.h>
 
 namespace {
 template <mlir::arith::CmpIPredicate SrcPred,

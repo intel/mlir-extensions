@@ -35,7 +35,7 @@ target_link_libraries(level_zero_runner PRIVATE
     MLIRExecutionEngine
     MLIRIR
     MLIRJitRunner
-    MLIRLLVMIR
+    MLIRLLVMDialect
     MLIRLLVMToLLVMIRTranslation
     MLIRToLLVMIRTranslationRegistration
     MLIRParser
