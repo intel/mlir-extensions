@@ -125,7 +125,7 @@ endif()
 
 add_subdirectory(mlir)
 add_subdirectory(dpcomp_runtime)
-#add_subdirectory(tools)
+add_subdirectory(tools)
 
 if(IMEX_ENABLE_NUMBA_FE)
     add_subdirectory(numba_dpcomp)
