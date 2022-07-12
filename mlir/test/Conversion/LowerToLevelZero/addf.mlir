@@ -1,11 +1,5 @@
 // RUN: level_zero_runner %s -e main -entry-point-result=void -shared-libs=%mlir_wrappers_dir/%shlibprefixmlir_c_runner_utils%shlibext -shared-libs=%mlir_wrappers_dir/%shlibprefixmlir_runner_utils%shlibext -shared-libs=%imex_runtime_dir/%shlibprefixdpcomp-runtime%shlibext -shared-libs=%imex_igpu_runtime_dir/%shlibprefixdpcomp-gpu-runtime%shlibext | FileCheck %s
 
-module attributes {
-  gpu.container_module,
-  spv.target_env = #spv.target_env<
-    #spv.vce<v1.0, [Shader], [SPV_KHR_storage_buffer_storage_class]>, {}>
-} {
-  
   func.func @main() {
     %arg0 = memref.alloc() : memref<8xf32>
     %arg1 = memref.alloc() : memref<8xf32>
@@ -42,4 +36,3 @@ module attributes {
   }
   func.func private @fillResource1DFloat(%0 : memref<?xf32>, %1 : f32)
   func.func private @printMemrefF32(%ptr : memref<*xf32>)
-}

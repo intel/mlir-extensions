@@ -129,9 +129,5 @@ add_subdirectory(tools)
 
 if(IMEX_ENABLE_NUMBA_FE)
     add_subdirectory(numba_dpcomp)
+    add_subdirectory(test)
 endif()
-
-#if(IMEX_ENABLE_TESTS)
-#    include(CTest)
-#    add_subdirectory(test)
-#endif()
