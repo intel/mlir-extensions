@@ -368,10 +368,10 @@ struct InsertGPUAllocs
       if (access.hostRead && access.deviceWrite)
         builder.create<mlir::memref::CopyOp>(loc, allocResult, param);
 
- //     if (useGpuDealloc)
- //       builder.create<mlir::gpu::DeallocOp>(loc, llvm::None, allocResult);
- //     else
- //       builder.create<mlir::memref::DeallocOp>(loc, allocResult);
+      if (useGpuDealloc)
+        builder.create<mlir::gpu::DeallocOp>(loc, llvm::None, allocResult);
+      else
+        builder.create<mlir::memref::DeallocOp>(loc, allocResult);
     }
   }
 

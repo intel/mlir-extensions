@@ -89,8 +89,13 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
   passManager.addPass(gpu_runtime::createSerializeSPIRVPass());
 
   // GpuRuntime -> LLVM
+  // This pass is needed to convert the gpu::alloc regular flavor to 
+  // the gpu::alloc op async version. The upstream does not support
+  // conversion from non asyn version to llvm runtime call. The issue
+  // is described here 
+  // https://discourse.llvm.org/t/lowering-gpu-dialect/3609/4 
   passManager.addNestedPass<mlir::func::FuncOp>(
-      mlir::createGpuAsyncRegionPass());
+      mlir::createGpuAsyncRegionPass());   
   passManager.addNestedPass<mlir::func::FuncOp>(
       intel_gpu::createIntelGpuOpsPass());
   passManager.addPass(intel_gpu::createIntelStreamToLLVMPass());

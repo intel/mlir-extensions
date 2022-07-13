@@ -16,10 +16,6 @@ project(dpcomp-gpu-runtime LANGUAGES CXX C)
 
 include(GenerateExportHeader)
 
-if(NOT LEVEL_ZERO_DIR)
-    message(FATAL_ERROR "LEVEL_ZERO_DIR is not set")
-endif()
-
 if(NOT SYCL_DIR)
     message(FATAL_ERROR "SYCL_DIR is not set")
 endif()
