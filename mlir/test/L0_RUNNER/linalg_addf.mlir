@@ -1,5 +1,4 @@
-// XFAIL: *
-// RUN:
+// RUN: level_zero_runner %s -e main -entry-point-result=void -shared-libs=%mlir_wrappers_dir/%shlibprefixmlir_c_runner_utils%shlibext -shared-libs=%mlir_wrappers_dir/%shlibprefixmlir_runner_utils%shlibext -shared-libs=%imex_runtime_dir/%shlibprefixdpcomp-runtime%shlibext -shared-libs=%imex_igpu_runtime_dir/%shlibprefixdpcomp-gpu-runtime%shlibext | FileCheck %s
 
 #map = affine_map<(d0, d1) -> (d0, d1)>
 module {
@@ -21,6 +20,10 @@ func.func @main() {
 %2 = call @addt(%0, %1) : (tensor<2x5xf32>, tensor<2x5xf32>) -> tensor<2x5xf32>
 %unranked = tensor.cast %2 : tensor<2x5xf32> to tensor<*xf32>
 call @printMemrefF32(%unranked) : (tensor<*xf32>) -> ()
+//      CHECK: Unranked Memref base@ = {{0x[-9a-f]*}}
+// CHECK-SAME: rank = 2 offset = 0 sizes = [2, 5] strides = [5, 1] data =
+// CHECK-NEXT: [11, 11, 11, 11, 11]
+// CHECK-NEXT: [11, 11, 11, 11, 11]
 return
 }
 

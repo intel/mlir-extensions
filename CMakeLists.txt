@@ -14,7 +14,7 @@
 
 cmake_minimum_required(VERSION 3.20)
 
-project(mlir-extensions)
+project(mlir-extensions LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -129,9 +129,5 @@ add_subdirectory(tools)
 
 if(IMEX_ENABLE_NUMBA_FE)
     add_subdirectory(numba_dpcomp)
-endif()
-
-if(IMEX_ENABLE_TESTS)
-    include(CTest)
     add_subdirectory(test)
 endif()
