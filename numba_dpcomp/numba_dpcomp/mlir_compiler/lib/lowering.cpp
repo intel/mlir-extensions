@@ -681,6 +681,7 @@ static py::bytes genLLModule(mlir::ModuleOp mod) {
       errStream << diag;
   };
   llvm::LLVMContext llCtx;
+  llCtx.setOpaquePointers(false);
   std::unique_ptr<llvm::Module> llMod;
   plier::scopedDiagHandler(*mod.getContext(), diagHandler, [&]() {
     mlir::registerLLVMDialectTranslation(*mod.getContext());
