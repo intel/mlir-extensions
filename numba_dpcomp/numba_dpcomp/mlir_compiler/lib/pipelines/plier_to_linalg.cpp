@@ -30,9 +30,9 @@
 #include <mlir/Dialect/Linalg/Passes.h>
 #include <mlir/Dialect/Linalg/Transforms/Transforms.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
-#include <mlir/Dialect/SCF/Passes.h>
+#include <mlir/Dialect/SCF/Transforms/Passes.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
-#include <mlir/Dialect/SCF/Transforms.h>
+//#include <mlir/Dialect/SCF/Transforms.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/Dialect/Tensor/Transforms/Passes.h>
 #include <mlir/IR/Dialect.h>
@@ -779,7 +779,7 @@ static mlir::Value makeSubview(mlir::OpBuilder &builder, mlir::Location loc,
                                                        builder.getIndexAttr(1));
       auto viewType = view.getType().cast<mlir::RankedTensorType>();
       auto reducedType =
-          mlir::tensor::ExtractSliceOp::inferRankReducedResultType(
+          mlir::tensor::ExtractSliceOp::inferCanonicalRankReducedResultType(
               dstRank, viewType, newOfsets, sizes, newStrides)
               .cast<mlir::RankedTensorType>();
       view = builder.create<mlir::tensor::ExtractSliceOp>(
@@ -1232,6 +1232,8 @@ static constexpr llvm::StringLiteral
 struct MakeStridedLayoutPass
     : public mlir::PassWrapper<MakeStridedLayoutPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(MakeStridedLayoutPass)
+
   void runOnOperation() override;
 };
 
@@ -1513,6 +1515,8 @@ struct ChangeLayoutReturn
 struct OptimizeStridedLayoutPass
     : public mlir::PassWrapper<OptimizeStridedLayoutPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(OptimizeStridedLayoutPass)
+
   void runOnOperation() override {
     auto *context = &getContext();
     mlir::RewritePatternSet patterns(context);
@@ -1529,6 +1533,8 @@ struct OptimizeStridedLayoutPass
 struct FinalizeStridedLayoutPass
     : public mlir::PassWrapper<FinalizeStridedLayoutPass,
                                mlir::OperationPass<>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(FinalizeStridedLayoutPass)
+
   void runOnOperation() override;
 };
 
@@ -1550,6 +1556,8 @@ void FinalizeStridedLayoutPass::runOnOperation() {
 struct PlierToLinalgPass
     : public mlir::PassWrapper<PlierToLinalgPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(PlierToLinalgPass)
+
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::bufferization::BufferizationDialect>();
@@ -2111,7 +2119,7 @@ struct SliceOfGeneric : public mlir::OpRewritePattern<mlir::linalg::GenericOp> {
       if (needView) {
         mlir::RankedTensorType viewType;
         if (inputResultRank < inputRank) {
-          viewType = mlir::tensor::ExtractSliceOp::inferRankReducedResultType(
+          viewType = mlir::tensor::ExtractSliceOp::inferCanonicalRankReducedResultType(
               inputResultRank, inputType, tempOffsets, tempSizes, tempStrides);
         } else {
           viewType = mlir::tensor::ExtractSliceOp::inferResultType(
@@ -2130,7 +2138,7 @@ struct SliceOfGeneric : public mlir::OpRewritePattern<mlir::linalg::GenericOp> {
     mlir::RankedTensorType newInitType;
     if (droppedDims.any()) {
       auto initRank = droppedDims.size() - droppedDims.count();
-      newInitType = mlir::tensor::ExtractSliceOp::inferRankReducedResultType(
+      newInitType = mlir::tensor::ExtractSliceOp::inferCanonicalRankReducedResultType(
           initRank, outputType, offsets, sizes, strides);
     } else {
       newInitType = mlir::tensor::ExtractSliceOp::inferResultType(
@@ -2267,6 +2275,8 @@ void PlierToLinalgPass::runOnOperation() {
 struct LowerLinalgPass
     : public mlir::PassWrapper<LowerLinalgPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LowerLinalgPass)
+
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::AffineDialect>();
@@ -2352,6 +2362,8 @@ struct OptimizeGlobalsConstsLoad
 struct PostPlierToLinalgPass
     : public mlir::PassWrapper<PostPlierToLinalgPass,
                                mlir::OperationPass<void>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(PostPlierToLinalgPass)
+
   void runOnOperation() override;
 };
 
@@ -2392,6 +2404,8 @@ static bool isContigiousArray(mlir::Type type) {
 struct MarkContigiousArraysPass
     : public mlir::PassWrapper<MarkContigiousArraysPass,
                                mlir::OperationPass<mlir::func::FuncOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(MarkContigiousArraysPass)
+
   void runOnOperation() override {
     auto func = getOperation();
     auto funcType = func.getFunctionType();
@@ -2448,6 +2462,8 @@ struct ConvertAlloc : public mlir::OpConversionPattern<Op> {
 struct MakeTensorsSignlessPass
     : public mlir::PassWrapper<MakeTensorsSignlessPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(MakeTensorsSignlessPass)
+
   void runOnOperation() override;
 };
 
@@ -2501,6 +2517,8 @@ void MakeTensorsSignlessPass::runOnOperation() {
 struct LinalgOptPass
     : public mlir::PassWrapper<LinalgOptPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LinalgOptPass)
+
   void runOnOperation() override;
 };
 
@@ -2717,6 +2735,8 @@ struct FixDeallocPlacement
 
 struct AdditionalBufferize
     : public mlir::PassWrapper<AdditionalBufferize, mlir::OperationPass<void>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(AdditionalBufferize)
+
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<plier::PlierUtilDialect>();
@@ -2804,6 +2824,8 @@ struct RemovePseudoCopyPass
 struct CloneArgsPass
     : public mlir::PassWrapper<CloneArgsPass,
                                mlir::OperationPass<mlir::func::FuncOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(CloneArgsPass)
+
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<plier::PlierUtilDialect>();
@@ -2868,6 +2890,7 @@ struct LowerCloneOpsPass
 struct PostLinalgOptPass
     : public mlir::PassWrapper<PostLinalgOptPass,
                                mlir::OperationPass<mlir::func::FuncOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(PostLinalgOptPass)
 
   void runOnOperation() override;
 };

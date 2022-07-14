@@ -597,6 +597,8 @@ struct CondBranchSameTargetRewrite
 struct PlierToScfPass
     : public mlir::PassWrapper<PlierToScfPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(PlierToScfPass)
+
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::scf::SCFDialect>();

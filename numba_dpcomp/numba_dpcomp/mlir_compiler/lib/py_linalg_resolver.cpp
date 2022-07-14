@@ -1484,7 +1484,7 @@ py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
           .cast<mlir::RankedTensorType>();
     } else {
       auto rankVal = rank.cast<unsigned>();
-      return mlir::tensor::ExtractSliceOp::inferRankReducedResultType(
+      return mlir::tensor::ExtractSliceOp::inferCanonicalRankReducedResultType(
                  rankVal, srcType, offsetVals, sizeVals, strideVals)
           .cast<mlir::RankedTensorType>();
     }

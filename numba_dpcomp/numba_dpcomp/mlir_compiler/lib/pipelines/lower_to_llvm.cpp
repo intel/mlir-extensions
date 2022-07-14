@@ -77,7 +77,6 @@ mlir::LowerToLLVMOptions getLLVMOptions(mlir::MLIRContext &context) {
   mlir::LowerToLLVMOptions opts(&context);
   opts.dataLayout = dl;
   opts.useBarePtrCallConv = false;
-  opts.emitCWrappers = false;
   opts.allocLowering = mlir::LowerToLLVMOptions::AllocLowering::None;
   return opts;
 }
@@ -1273,6 +1272,8 @@ private:
 struct LowerParallelToCFGPass
     : public mlir::PassWrapper<LowerParallelToCFGPass,
                                mlir::OperationPass<void>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LowerParallelToCFGPass)
+
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::LLVM::LLVMDialect>();
@@ -1292,6 +1293,8 @@ struct LowerParallelToCFGPass
 struct PreLLVMLowering
     : public mlir::PassWrapper<PreLLVMLowering,
                                mlir::OperationPass<mlir::func::FuncOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(PreLLVMLowering)
+
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::LLVM::LLVMDialect>();
@@ -1319,6 +1322,8 @@ struct PreLLVMLowering
 
 struct PostLLVMLowering
     : public mlir::PassWrapper<PostLLVMLowering, LLVMFunctionPass> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(PostLLVMLowering)
+
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::LLVM::LLVMDialect>();
@@ -1753,19 +1758,13 @@ struct LowerReleaseContextOp
 struct LLVMLoweringPass
     : public mlir::PassWrapper<LLVMLoweringPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LLVMLoweringPass)
 
   /// Run the dialect converter on the module.
   void runOnOperation() override {
     using namespace mlir;
     auto &context = getContext();
     auto options = getLLVMOptions(context);
-    if (options.useBarePtrCallConv && options.emitCWrappers) {
-      getOperation().emitError()
-          << "incompatible conversion options: bare-pointer calling convention "
-             "and C wrapper emission";
-      signalPassFailure();
-      return;
-    }
     if (failed(LLVM::LLVMDialect::verifyDataLayoutString(
             options.dataLayout.getStringRepresentation(),
             [this](const Twine &message) {
