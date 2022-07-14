@@ -748,6 +748,10 @@ computeIndices(mlir::OpBuilder &builder, mlir::Location loc, mlir::Value value,
   return mlir::success();
 }
 
+static auto getDynShape(size_t rank) {
+  return llvm::SmallVector<int64_t>(rank, mlir::ShapedType::kDynamicSize);
+}
+
 static mlir::Value makeSubview(mlir::OpBuilder &builder, mlir::Location loc,
                                mlir::Value src,
                                llvm::ArrayRef<mlir::OpFoldResult> offsets,
@@ -800,9 +804,10 @@ static mlir::Value makeSubview(mlir::OpBuilder &builder, mlir::Location loc,
       llvm::SmallVector<mlir::OpFoldResult> newStrides(srcRank,
                                                        builder.getIndexAttr(1));
       auto viewType = view.getType().cast<mlir::MemRefType>();
-      auto reducedType = mlir::memref::SubViewOp::inferRankReducedResultType(
-                             dstRank, viewType, newOfsets, sizes, newStrides)
-                             .cast<mlir::MemRefType>();
+      auto reducedType =
+          mlir::memref::SubViewOp::inferRankReducedResultType(
+              getDynShape(dstRank), viewType, newOfsets, sizes, newStrides)
+              .cast<mlir::MemRefType>();
       view = builder.create<mlir::memref::SubViewOp>(
           loc, reducedType, view, newOfsets, sizes, newStrides);
       resType = reducedType;
@@ -2629,7 +2634,7 @@ struct BufferizeExtractSlice
             .cast<mlir::MemRefType>();
 
       return mlir::memref::SubViewOp::inferRankReducedResultType(
-                 dstRank, srcType, offsets, sizes, strides)
+                 getDynShape(dstRank), srcType, offsets, sizes, strides)
           .cast<mlir::MemRefType>();
     }();
     auto loc = op->getLoc();
