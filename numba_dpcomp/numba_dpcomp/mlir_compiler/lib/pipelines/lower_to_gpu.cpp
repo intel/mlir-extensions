@@ -1344,6 +1344,29 @@ public:
   }
 };
 
+class ConvertGroupOpsToSubgroup : public mlir::OpRewritePattern<mlir::gpu::AllReduceOp> {
+public:
+  using OpRewritePattern::OpRewritePattern;
+
+      mlir::LogicalResult
+      matchAndRewrite(mlir::gpu::AllReduceOp op,
+                      mlir::PatternRewriter &rewriter) const override {
+    auto launchOp = op->getParentOfType<mlir::gpu::LaunchOp>();
+    if (!launchOp)
+      return mlir::failure();
+
+    auto loc = op->getLoc();
+    using Dim = mlir::gpu::Dimension;
+    auto gidX = rewriter.create<mlir::gpu::GlobalIdOp>(loc, Dim::x);
+    auto gidY = rewriter.create<mlir::gpu::GlobalIdOp>(loc, Dim::y);
+    auto gidZ = rewriter.create<mlir::gpu::GlobalIdOp>(loc, Dim::z);
+
+    auto gsX = launchOp.
+
+    return mlir::failure();
+  }
+};
+
 struct LowerGpuBuiltins2Pass
     : public imex::RewriteWrapperPass<LowerGpuBuiltins2Pass, void, void,
                                       ConvertBarrierOps, ConvertGroupOps> {};
@@ -1666,9 +1689,9 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   funcPM.addPass(gpu_runtime::createUnstrideMemrefsPass());
   funcPM.addPass(mlir::createLowerAffinePass());
 
+  funcPM.addPass(std::make_unique<LowerGpuBuiltins2Pass>());
   commonOptPasses(funcPM);
   funcPM.addPass(std::make_unique<KernelMemrefOpsMovementPass>());
-  funcPM.addPass(std::make_unique<LowerGpuBuiltins2Pass>());
   funcPM.addPass(gpu_runtime::createMakeBarriersUniformPass());
   funcPM.addPass(std::make_unique<SinkGpuDimsPass>());
   funcPM.addPass(std::make_unique<GpuLaunchSinkOpsPass>());
