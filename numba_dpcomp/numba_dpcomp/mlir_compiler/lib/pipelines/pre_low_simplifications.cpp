@@ -16,10 +16,10 @@
 
 #include "pipelines/base_pipeline.hpp"
 
-#include "mlir-extensions/compiler/pipeline_registry.hpp"
 #include "mlir-extensions/Dialect/plier/dialect.hpp"
 #include "mlir-extensions/Dialect/plier_util/dialect.hpp"
 #include "mlir-extensions/Transforms/type_conversion.hpp"
+#include "mlir-extensions/compiler/pipeline_registry.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>

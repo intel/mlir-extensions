@@ -30,8 +30,8 @@
 #include <mlir/Dialect/Linalg/Passes.h>
 #include <mlir/Dialect/Linalg/Transforms/Transforms.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
-#include <mlir/Dialect/SCF/Transforms/Passes.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
+#include <mlir/Dialect/SCF/Transforms/Passes.h>
 //#include <mlir/Dialect/SCF/Transforms.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/Dialect/Tensor/Transforms/Passes.h>
@@ -2119,8 +2119,10 @@ struct SliceOfGeneric : public mlir::OpRewritePattern<mlir::linalg::GenericOp> {
       if (needView) {
         mlir::RankedTensorType viewType;
         if (inputResultRank < inputRank) {
-          viewType = mlir::tensor::ExtractSliceOp::inferCanonicalRankReducedResultType(
-              inputResultRank, inputType, tempOffsets, tempSizes, tempStrides);
+          viewType =
+              mlir::tensor::ExtractSliceOp::inferCanonicalRankReducedResultType(
+                  inputResultRank, inputType, tempOffsets, tempSizes,
+                  tempStrides);
         } else {
           viewType = mlir::tensor::ExtractSliceOp::inferResultType(
               inputType, tempOffsets, tempSizes, tempStrides);
@@ -2138,8 +2140,9 @@ struct SliceOfGeneric : public mlir::OpRewritePattern<mlir::linalg::GenericOp> {
     mlir::RankedTensorType newInitType;
     if (droppedDims.any()) {
       auto initRank = droppedDims.size() - droppedDims.count();
-      newInitType = mlir::tensor::ExtractSliceOp::inferCanonicalRankReducedResultType(
-          initRank, outputType, offsets, sizes, strides);
+      newInitType =
+          mlir::tensor::ExtractSliceOp::inferCanonicalRankReducedResultType(
+              initRank, outputType, offsets, sizes, strides);
     } else {
       newInitType = mlir::tensor::ExtractSliceOp::inferResultType(
           outputType, offsets, sizes, strides);

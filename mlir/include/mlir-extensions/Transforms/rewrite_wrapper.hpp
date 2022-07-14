@@ -39,8 +39,8 @@ class RewriteWrapperPass
 public:
   // TODO: Cannot use MLIR_DECLARE_EXPLICIT_TYPE_ID
   static ::mlir::TypeID resolveTypeID() {
-        static ::mlir::SelfOwningTypeID id;
-        return id;
+    static ::mlir::SelfOwningTypeID id;
+    return id;
   }
 
   virtual void
