@@ -1216,7 +1216,10 @@ def _cov(m, y=None, rowvar=True, bias=False, ddof=None):
 
 _rnd = np.random.RandomState(42)
 
-@pytest.mark.skipif(reason="Invalid folding in upstream MLIR, see https://github.com/llvm/llvm-project/issues/56557")
+
+@pytest.mark.skipif(
+    reason="Invalid folding in upstream MLIR, see https://github.com/llvm/llvm-project/issues/56557"
+)
 @parametrize_function_variants(
     "m",
     [
@@ -1256,7 +1259,9 @@ def test_cov_basic(m):
 _cov_inputs_m = _rnd.randn(105).reshape(15, 7)
 
 
-@pytest.mark.skipif(reason="Invalid folding in upstream MLIR, see https://github.com/llvm/llvm-project/issues/56557")
+@pytest.mark.skipif(
+    reason="Invalid folding in upstream MLIR, see https://github.com/llvm/llvm-project/issues/56557"
+)
 @pytest.mark.parametrize("m", [_cov_inputs_m])
 @pytest.mark.parametrize("y", [None, _cov_inputs_m[::-1]])
 @pytest.mark.parametrize("rowvar", [False, True])
@@ -1272,7 +1277,10 @@ def test_cov_explicit_arguments(m, y, rowvar, bias, ddof):
         atol=1e-14,
     )
 
-@pytest.mark.skipif(reason="Invalid folding in upstream MLIR, see https://github.com/llvm/llvm-project/issues/56557")
+
+@pytest.mark.skipif(
+    reason="Invalid folding in upstream MLIR, see https://github.com/llvm/llvm-project/issues/56557"
+)
 @parametrize_function_variants(
     "m, y, rowvar",
     [
@@ -1331,7 +1339,10 @@ def test_mean_loop(arr, parallel):
     jit_func = njit(py_func, parallel=parallel)
     assert_equal(py_func(arr), jit_func(arr))
 
-@pytest.mark.skipif(reason="Invalid folding in upstream MLIR, see https://github.com/llvm/llvm-project/issues/56557")
+
+@pytest.mark.skipif(
+    reason="Invalid folding in upstream MLIR, see https://github.com/llvm/llvm-project/issues/56557"
+)
 @pytest.mark.parametrize(
     "arr",
     [
