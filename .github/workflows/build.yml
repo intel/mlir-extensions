@@ -169,3 +169,25 @@ jobs:
             --imex-enable-igpu                                                 \
             --imex-enable-tests                                                \
             --imex-tbb-dir /${TBB_PATH}/lib/cmake/tbb
+
+      - name: Build Python frontend
+        shell: bash -l {0}
+
+        run: |
+          cd numba_dpcomp
+          conda create -y -n test-env python=3.9 numba=0.54 numpy=1.20 scikit-learn pytest-xdist ninja scipy pybind11 pytest lit tbb={TBB_VER} cmake -c conda-forge
+          conda activate test-env
+          export TBB_PATH=/home/runner/work/tbb/oneapi-tbb-${TBB_VER}
+          export LLVM_PATH=/home/runner/work/llvm-mlir/_mlir_install
+          export LEVEL_ZERO_DIR=/home/runner/work/level-zero/level-zero/level_zero_install
+          export LEVEL_ZERO_VERSION_CHECK_OFF=1
+          python setup.py develop
+
+      - name: Test Python frontend
+        shell: bash -l {0}
+
+        run: |
+          cd numba_dpcomp
+          conda activate test-env
+          export NUMBA_DISABLE_PERFORMANCE_WARNINGS=1
+          pytest -n1 -vv --capture=tee-sys -rXF
