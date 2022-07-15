@@ -177,7 +177,7 @@ jobs:
           cd numba_dpcomp
           conda create -y -n test-env python=3.9 numba=0.54 numpy=1.20 scikit-learn pytest-xdist ninja scipy pybind11 pytest lit tbb=${TBB_VER} cmake -c conda-forge
           conda info
-          $CONDA/bin/activate test-env
+          source $CONDA/bin/activate test-env
           conda list
           python -c "import numba; print('numba', numba.__version__)"
           python -c "import numpy; print(numpy.get_include())"
@@ -193,6 +193,6 @@ jobs:
 
         run: |
           cd numba_dpcomp
-          $CONDA/bin/activate test-env
+          source $CONDA/bin/activate test-env
           export NUMBA_DISABLE_PERFORMANCE_WARNINGS=1
           pytest -n1 -vv --capture=tee-sys -rXF
