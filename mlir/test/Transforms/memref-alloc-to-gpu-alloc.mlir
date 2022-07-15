@@ -1,3 +1,5 @@
+// RUN: level-zero-opt --insert-gpu-alloc %s | FileCheck %s
+
 func.func @main() {
   %c8 = arith.constant 8 : index
   %c1 = arith.constant 1 : index
