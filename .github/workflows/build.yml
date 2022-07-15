@@ -175,7 +175,7 @@ jobs:
 
         run: |
           cd numba_dpcomp
-          conda create -y -n test-env python=3.9 numba=0.54 numpy=1.20 scikit-learn pytest-xdist ninja scipy pybind11 pytest lit tbb={TBB_VER} cmake -c conda-forge
+          conda create -y -n test-env python=3.9 numba=0.54 numpy=1.20 scikit-learn pytest-xdist ninja scipy pybind11 pytest lit tbb=${TBB_VER} cmake -c conda-forge
           conda activate test-env
           export TBB_PATH=/home/runner/work/tbb/oneapi-tbb-${TBB_VER}
           export LLVM_PATH=/home/runner/work/llvm-mlir/_mlir_install
