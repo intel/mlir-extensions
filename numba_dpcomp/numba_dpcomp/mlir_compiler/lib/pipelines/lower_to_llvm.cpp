@@ -821,7 +821,8 @@ struct ReshapeLowering
   using ConvertOpToLLVMPattern<mlir::memref::ReshapeOp>::ConvertOpToLLVMPattern;
 
   explicit ReshapeLowering(mlir::LLVMTypeConverter &converter)
-      : ConvertOpToLLVMPattern<mlir::memref::ReshapeOp>(converter) {}
+      : ConvertOpToLLVMPattern<mlir::memref::ReshapeOp>(converter,
+                                                        /*benefit*/ 2) {}
 
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::ReshapeOp op,
