@@ -39,15 +39,15 @@ module attributes {gpu.container_module, spv.target_env = #spv.target_env<#spv.v
     // CHECK: spv.Branch ^bb1
     // CHECK: ^bb1:  // pred: ^bb0
     // CHECK: %__builtin_var_WorkgroupId___addr = spv.mlir.addressof @__builtin_var_WorkgroupId__ : !spv.ptr<vector<3xi64>, Input>
-    // CHECK: %0 = spv.Load "Input" %__builtin_var_WorkgroupId___addr : vector<3xi64>
-    // CHECK: %1 = spv.CompositeExtract %0[0 : i32] : vector<3xi64>
-    // CHECK: %2 = spv.InBoundsPtrAccessChain %arg0[%1] : !spv.ptr<f32, CrossWorkgroup>, i64
-    // CHECK: %3 = spv.Load "CrossWorkgroup" %2 ["Aligned", 4] : f32
-    // CHECK: %4 = spv.InBoundsPtrAccessChain %arg1[%1] : !spv.ptr<f32, CrossWorkgroup>, i64
-    // CHECK: %5 = spv.Load "CrossWorkgroup" %4 ["Aligned", 4] : f32
-    // CHECK:  %6 = spv.FAdd %3, %5 : f32
-    // CHECK:  %7 = spv.InBoundsPtrAccessChain %arg2[%1] : !spv.ptr<f32, CrossWorkgroup>, i64
-    // CHECK:   spv.Store "CrossWorkgroup" %7, %6 ["Aligned", 4] : f32
+    // CHECK: %[[VAR0:.*]] = spv.Load "Input" %__builtin_var_WorkgroupId___addr : vector<3xi64>
+    // CHECK: %[[VAR1:.*]] = spv.CompositeExtract %[[VAR0:.*]][0 : i32] : vector<3xi64>
+    // CHECK: %[[VAR2:.*]] = spv.InBoundsPtrAccessChain %arg0[%[[VAR1:.*]]] : !spv.ptr<f32, CrossWorkgroup>, i64
+    // CHECK: %[[VAR3:.*]] = spv.Load "CrossWorkgroup" %[[VAR2:.*]] ["Aligned", 4] : f32
+    // CHECK: %[[VAR4:.*]] = spv.InBoundsPtrAccessChain %arg1[%[[VAR1:.*]]] : !spv.ptr<f32, CrossWorkgroup>, i64
+    // CHECK: %[[VAR5:.*]] = spv.Load "CrossWorkgroup" %[[VAR4:.*]] ["Aligned", 4] : f32
+    // CHECK:  %[[VAR6:.*]] = spv.FAdd %[[VAR3:.*]], %[[VAR5:.*]] : f32
+    // CHECK:  %[[VAR7:.*]] = spv.InBoundsPtrAccessChain %arg2[%[[VAR1:.*]]] : !spv.ptr<f32, CrossWorkgroup>, i64
+    // CHECK:   spv.Store "CrossWorkgroup" %[[VAR7:.*]], %[[VAR6:.*]] ["Aligned", 4] : f32
     // CHECK:   spv.Return
     // CHECK:  }
     // CHECK: }
