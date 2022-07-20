@@ -229,6 +229,8 @@ void plier::populatePromoteBoolMemrefConversionRewritesAndTarget(
 namespace {
 struct PromoteBoolMemrefPass
     : public mlir::PassWrapper<PromoteBoolMemrefPass, mlir::OperationPass<>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(PromoteBoolMemrefPass)
+
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::arith::ArithmeticDialect>();

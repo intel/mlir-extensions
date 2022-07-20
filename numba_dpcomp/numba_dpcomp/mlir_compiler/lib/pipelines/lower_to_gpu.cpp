@@ -20,8 +20,8 @@
 #include <mlir/Dialect/Arithmetic/Transforms/Passes.h>
 #include <mlir/Dialect/ControlFlow/IR/ControlFlowOps.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
-#include <mlir/Dialect/GPU/Passes.h>
-#include <mlir/Dialect/GPU/Utils.h>
+#include <mlir/Dialect/GPU/Transforms/Passes.h>
+#include <mlir/Dialect/GPU/Transforms/Utils.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/Dialect/SPIRV/IR/SPIRVOps.h>
@@ -98,6 +98,8 @@ static void moveOpsIntoParallel(mlir::scf::ParallelOp outer, int depth = 0) {
 struct PrepareForGPUPass
     : public mlir::PassWrapper<PrepareForGPUPass,
                                mlir::OperationPass<mlir::func::FuncOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(PrepareForGPUPass)
+
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::scf::SCFDialect>();
@@ -186,6 +188,8 @@ struct RemoveNestedParallelPass
 struct RemoveKernelMarkerPass
     : public mlir::PassWrapper<RemoveKernelMarkerPass,
                                mlir::OperationPass<void>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(RemoveKernelMarkerPass)
+
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::func::FuncDialect>();
@@ -211,6 +215,8 @@ struct RemoveKernelMarkerPass
 struct KernelMemrefOpsMovementPass
     : public mlir::PassWrapper<KernelMemrefOpsMovementPass,
                                mlir::OperationPass<mlir::func::FuncOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(KernelMemrefOpsMovementPass)
+
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::memref::MemRefDialect>();
@@ -252,6 +258,8 @@ struct KernelMemrefOpsMovementPass
 struct AssumeGpuIdRangePass
     : public mlir::PassWrapper<AssumeGpuIdRangePass,
                                mlir::OperationPass<void>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(AssumeGpuIdRangePass)
+
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::arith::ArithmeticDialect>();
@@ -291,6 +299,7 @@ struct AssumeGpuIdRangePass
 struct GPULowerDefaultLocalSize
     : public mlir::PassWrapper<GPULowerDefaultLocalSize,
                                mlir::OperationPass<mlir::func::FuncOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(GPULowerDefaultLocalSize)
 
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
@@ -465,6 +474,7 @@ struct CreateDeallocOp : public mlir::OpRewritePattern<AllocOp> {
 
 struct GPUExDeallocPass
     : public mlir::PassWrapper<GPUExDeallocPass, mlir::OperationPass<void>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(GPUExDeallocPass)
 
   void runOnOperation() override {
     auto *ctx = &getContext();
@@ -508,6 +518,7 @@ constexpr static llvm::StringLiteral
 struct OutlineInitPass
     : public mlir::PassWrapper<OutlineInitPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(OutlineInitPass)
 
   void runOnOperation() override {
     auto mod = getOperation();
@@ -629,6 +640,7 @@ struct OutlineInitPass
 struct GenerateOutlineContextPass
     : public mlir::PassWrapper<GenerateOutlineContextPass,
                                mlir::OperationPass<mlir::func::FuncOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(GenerateOutlineContextPass)
 
   void runOnOperation() override {
     auto func = getOperation();
@@ -777,6 +789,8 @@ static bool isGpuArray(mlir::Type type) {
 struct MarkGpuArraysInputs
     : public mlir::PassWrapper<MarkGpuArraysInputs,
                                mlir::OperationPass<mlir::func::FuncOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(MarkGpuArraysInputs)
+
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::func::FuncDialect>();
@@ -828,6 +842,8 @@ void MarkGpuArraysInputs::runOnOperation() {
 struct ConvertGpuArrays
     : public mlir::PassWrapper<ConvertGpuArrays,
                                mlir::OperationPass<mlir::ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(ConvertGpuArrays)
+
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::func::FuncDialect>();
@@ -1294,6 +1310,8 @@ class GpuLaunchSinkOpsPass
     : public mlir::PassWrapper<GpuLaunchSinkOpsPass,
                                mlir::OperationPass<void>> {
 public:
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(GpuLaunchSinkOpsPass)
+
   void runOnOperation() override {
     using namespace mlir;
 

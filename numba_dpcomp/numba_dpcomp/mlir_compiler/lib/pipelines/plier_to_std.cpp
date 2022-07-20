@@ -1323,6 +1323,8 @@ struct BuiltinCallsLoweringPass
 struct PlierToStdPass
     : public mlir::PassWrapper<PlierToStdPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(PlierToStdPass)
+
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::func::FuncDialect>();

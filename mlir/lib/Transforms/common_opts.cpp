@@ -135,6 +135,7 @@ struct PowSimplify : public mlir::OpRewritePattern<mlir::math::PowFOp> {
 
 struct CommonOptsPass
     : public mlir::PassWrapper<CommonOptsPass, mlir::OperationPass<void>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(CommonOptsPass)
 
   void runOnOperation() override {
     auto *ctx = &getContext();

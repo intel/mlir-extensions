@@ -16,10 +16,10 @@
 
 #include "pipelines/base_pipeline.hpp"
 
-#include "mlir-extensions/compiler/pipeline_registry.hpp"
 #include "mlir-extensions/Dialect/plier/dialect.hpp"
 #include "mlir-extensions/Dialect/plier_util/dialect.hpp"
 #include "mlir-extensions/Transforms/type_conversion.hpp"
+#include "mlir-extensions/compiler/pipeline_registry.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
@@ -89,6 +89,8 @@ static mlir::Value reconstructTuple(mlir::OpBuilder &builder,
 struct UntuplePass
     : public mlir::PassWrapper<UntuplePass,
                                mlir::OperationPass<mlir::ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(UntuplePass)
+
   void runOnOperation() override {
     auto module = getOperation();
     auto *context = &getContext();
@@ -134,6 +136,8 @@ struct UntuplePass
 
 struct MakeSignlessPass
     : public mlir::PassWrapper<MakeSignlessPass, mlir::OperationPass<void>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(MakeSignlessPass)
+
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::func::FuncDialect>();

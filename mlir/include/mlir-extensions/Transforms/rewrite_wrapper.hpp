@@ -37,6 +37,12 @@ template <typename Fwd, typename Op, typename DependentDialects,
 class RewriteWrapperPass
     : public mlir::PassWrapper<Fwd, mlir::OperationPass<Op>> {
 public:
+  // TODO: Cannot use MLIR_DECLARE_EXPLICIT_TYPE_ID
+  static ::mlir::TypeID resolveTypeID() {
+    static ::mlir::SelfOwningTypeID id;
+    return id;
+  }
+
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     using Reg = std::conditional_t<std::is_void<DependentDialects>::value,
