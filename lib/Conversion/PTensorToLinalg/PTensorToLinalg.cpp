@@ -178,9 +178,9 @@ struct ARangeLowering
     auto cnt =
         rewriter.create<mlir::arith::DivUIOp>(loc, tmp3, step).getResult();
     cnt = rewriter
-              .create<::mlir::UnrealizedConversionCastOp>(
-                  loc, ::mlir::IndexType::get(cnt.getType().getContext()), cnt)
-              .getResult(0);
+              .create<::mlir::arith::IndexCastOp>(loc, rewriter.getIndexType(),
+                                                  cnt)
+              .getResult();
 
     // create shape vector
     auto ttyp = converter.convertType(op.getType())
@@ -575,7 +575,7 @@ struct ConvertPTensorToLinalgPass
       return ::llvm::None;
     };
     // typeConverter.addArgumentMaterialization(materializeCast);
-    // typeConverter.addSourceMaterialization(materializeCast);
+    typeConverter.addSourceMaterialization(materializeCast);
     // typeConverter.addTargetMaterialization(materializeCast);
 #endif
     // We convert all PTensor stuff...
@@ -593,7 +593,10 @@ struct ConvertPTensorToLinalgPass
           return typeConverter.isSignatureLegal(op.getFunctionType()) &&
                  typeConverter.isLegal(&op.getBody());
         });
-    target.addLegalOp<::mlir::func::ReturnOp>(); // FIXME
+    target.addDynamicallyLegalOp<::mlir::func::ReturnOp>(
+        [&](::mlir::func::ReturnOp op) { return typeConverter.isLegal(op); });
+    target.addDynamicallyLegalOp<mlir::func::CallOp>(
+        [&](mlir::func::CallOp op) { return typeConverter.isLegal(op); });
 
     ::mlir::RewritePatternSet patterns(&ctxt);
     patterns.insert<ARangeLowering, EWBinOpLowering, ReductionOpLowering>(
@@ -602,6 +605,7 @@ struct ConvertPTensorToLinalgPass
     ::mlir::populateFunctionOpInterfaceTypeConversionPattern<
         ::mlir::func::FuncOp>(patterns, typeConverter);
     ::mlir::populateReturnOpTypeConversionPattern(patterns, typeConverter);
+    ::mlir::populateCallOpTypeConversionPattern(patterns, typeConverter);
 
     if (::mlir::failed(::mlir::applyPartialConversion(getOperation(), target,
                                                       ::std::move(patterns)))) {
