@@ -96,12 +96,24 @@ option(IMEX_ENABLE_NUMBA_HOTFIX
     OFF
 )
 
+option(IMEX_GPU_L0_RUNTIME
+    "Enable Level zero runtime"
+    ON
+)
+
+option(IMEX_GPU_SYCL_RUNTIME
+    "Enable SYCL runtime"
+    OFF
+)
+
 message(STATUS "IMEX_USE_DPNP ${DPNIMEX_USE_DPNPP_ENABLE}")
 message(STATUS "IMEX_ENABLE_IGPU_DIALECT ${IMEX_ENABLE_IGPU_DIALECT}")
 message(STATUS "IMEX_ENABLE_TESTS ${IMEX_ENABLE_TESTS}")
 message(STATUS "IMEX_ENABLE_NUMBA_FE ${IMEX_ENABLE_NUMBA_FE}")
 message(STATUS "IMEX_ENABLE_NUMBA_HOTFIX ${IMEX_ENABLE_NUMBA_HOTFIX}")
 message(STATUS "IMEX_ENABLE_TBB_SUPPORT ${IMEX_ENABLE_TBB_SUPPORT}")
+message(STATUS "IMEX_GPU_L0_RUNTIME ${IMEX_GPU_L0_RUNTIME}")
+message(STATUS "IMEX_GPU_SYCL_RUNTIME ${IMEX_GPU_SYCL_RUNTIME}")
 
 macro(apply_llvm_compile_flags target)
     if (MSVC)
@@ -116,7 +128,13 @@ if(IMEX_ENABLE_IGPU_DIALECT)
     else()
         find_package(LevelZero 1.6 REQUIRED)
     endif()
-    add_subdirectory(dpcomp_gpu_runtime)
+    if(IMEX_GPU_L0_RUNTIME)
+        add_subdirectory(dpcomp_gpu_runtime)
+        add_subdirectory(dpcomp_runtime)
+    endif()   
+    if(IMEX_GPU_SYCL_RUNTIME)    
+        add_subdirectory(sycl_runtime)
+    endif()
 endif()
 
 if(IMEX_ENABLE_NUMBA_HOTFIX)
@@ -124,7 +142,6 @@ if(IMEX_ENABLE_NUMBA_HOTFIX)
 endif()
 
 add_subdirectory(mlir)
-add_subdirectory(dpcomp_runtime)
 add_subdirectory(tools)
 
 if(IMEX_ENABLE_NUMBA_FE)

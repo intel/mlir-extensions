@@ -22,7 +22,7 @@
 #include <tuple>
 #include <vector>
 
-#include "dpcomp-gpu-runtime_export.h"
+#include "sycl-runtime_export.h"
 
 #include <CL/sycl.hpp>
 #include <level_zero/ze_api.h>
@@ -169,14 +169,14 @@ struct Queue {
 
   static auto destroyModule(ze_module_handle_t module) {
     assert(module);
-    L0_SAFE_CALL(zeModuleDestroy(module));
+//    L0_SAFE_CALL(zeModuleDestroy(module));
   }
 
 private:
 };
 
 // Wrappers
-extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *iGpuCreateStream(void *queue) {
+extern "C" SYCL_RUNTIME_EXPORT void *iGpuCreateStream(void *queue) {
   return catchAll([&]() {
     if (!static_cast<Queue *>(queue))
       return new Queue();
@@ -185,34 +185,34 @@ extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *iGpuCreateStream(void *queue) {
   });
 }
 
-extern "C" DPCOMP_GPU_RUNTIME_EXPORT void iGpuStreamDestroy(void *queue) {
+extern "C" SYCL_RUNTIME_EXPORT void iGpuStreamDestroy(void *queue) {
   catchAll([&]() { delete static_cast<Queue *>(queue); });
 }
 
-extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *
+extern "C" SYCL_RUNTIME_EXPORT void *
 iGpuMemAlloc(size_t size, size_t alignment, void *queue) {
  return catchAll([&]() {	
   return static_cast<Queue *>(queue)->alloc_device_memory(size, alignment);
   });
 }
 
-extern "C" DPCOMP_GPU_RUNTIME_EXPORT void iGpuMemFree(void *ptr, void *queue) {
+extern "C" SYCL_RUNTIME_EXPORT void iGpuMemFree(void *ptr, void *queue) {
  catchAll([&]() { static_cast<Queue *>(queue)->dealloc_device_memory(ptr); });
 }
 
-extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *
+extern "C" SYCL_RUNTIME_EXPORT void *
 iGpuModuleLoad(void *queue, const void *data, size_t dataSize) {
  return catchAll([&]() {	
   return static_cast<Queue *>(queue)->loadModule(data, dataSize);
   });
 }
 
-extern "C" DPCOMP_GPU_RUNTIME_EXPORT void iGpuModuleDestroy(void *module) {
+extern "C" SYCL_RUNTIME_EXPORT void iGpuModuleDestroy(void *module) {
   catchAll(
       [&]() { Queue::destroyModule(static_cast<ze_module_handle_t>(module)); });
 }
 
-extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *
+extern "C" SYCL_RUNTIME_EXPORT void *
 iGpuKernelGet(void *queue, void *module, const char *name) {
  return catchAll([&]() {	
   return static_cast<Queue *>(queue)->getKernel(
@@ -220,11 +220,11 @@ iGpuKernelGet(void *queue, void *module, const char *name) {
   });
 }
 
-extern "C" DPCOMP_GPU_RUNTIME_EXPORT void iGpuKernelDestroy(void *kernel) {
+extern "C" SYCL_RUNTIME_EXPORT void iGpuKernelDestroy(void *kernel) {
   catchAll([&]() {});
 }
 
-extern "C" DPCOMP_GPU_RUNTIME_EXPORT void
+extern "C" SYCL_RUNTIME_EXPORT void
 iGpuLaunchKernel(void *queue, void *kernel, size_t gridX, size_t gridY,
                  size_t gridZ, size_t blockX, size_t blockY, size_t blockZ,
                  size_t sharedMemBytes, void *params, void *extra) {
@@ -235,7 +235,7 @@ iGpuLaunchKernel(void *queue, void *kernel, size_t gridX, size_t gridY,
   });
 }
 
-extern "C" DPCOMP_GPU_RUNTIME_EXPORT void iGpuStreamSynchronize(void *queue) {
+extern "C" SYCL_RUNTIME_EXPORT void iGpuStreamSynchronize(void *queue) {
 
   catchAll([&]() { static_cast<Queue *>(queue)->sycl_queue.wait(); });
 }
