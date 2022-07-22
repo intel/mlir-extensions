@@ -74,6 +74,8 @@ static ::mlir::LogicalResult runIMEXPasses(::mlir::ModuleOp module) {
 
   //  passManager.addPass(createGpuKernelOutliningPass());
   passManager.addPass(::mlir::memref::createFoldSubViewOpsPass());
+  passManager.addPass(::mlir::createConvertSCFToCFPass());
+
   //  passManager.addNestedPass<mlir::gpu::GPUModuleOp>(
   //      gpu_runtime::createAbiAttrsPass());
   //  passManager.addPass(gpu_runtime::createSetSPIRVCapabilitiesPass());
