@@ -21,6 +21,7 @@
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
+#include <mlir/Dialect/Func/Transforms/FuncConversions.h>
 #include <mlir/Dialect/LLVMIR/LLVMDialect.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
@@ -138,7 +139,7 @@ struct ARangeLowering
     auto orgrtyp = op.getType().dyn_cast<::imex::ptensor::PTensorType>();
     assert(orgrtyp);
 
-    // we operator on signless integers
+    // we operate on signless integers
     auto ityp = rewriter.getI64Type();
     if (start.getType() != ityp) {
       start =
@@ -166,8 +167,8 @@ struct ARangeLowering
     auto mone =
         rewriter.create<mlir::arith::ConstantOp>(loc, mattr).getResult();
 
-    // Compute number of elements as (stop - start + step + (step < 0 ? 1 : -1))
-    // / step
+    // Compute number of elements as
+    //   (stop - start + step + (step < 0 ? 1 : -1)) / step
     auto cnd = rewriter.create<mlir::arith::CmpIOp>(
         loc, ::mlir::arith::CmpIPredicate::ult, step, zero);
     auto inc = rewriter.create<mlir::arith::SelectOp>(loc, cnd, one, mone);
@@ -261,16 +262,29 @@ static void yield(mlir::OpBuilder &builder, ::mlir::Location loc,
 // the arith ops are template arguments, one for ints and one for floats
 // currently only integers and floats are supported
 // currently unsigned int ops are not supported
-template <typename IOP, typename FOP = IOP>
+template <typename IOP, typename FOP = void>
 static BodyType buildTrivial(::mlir::Type typ) {
   return [typ](mlir::OpBuilder &builder, ::mlir::Location loc,
                ::mlir::ValueRange args) -> void {
-    auto lhs = doSignCast(builder, loc, args[0]);
-    auto rhs = doSignCast(builder, loc, args[1]);
-    if (lhs.getType().isIntOrIndex()) {
-      yield(builder, loc, typ, builder.create<IOP>(loc, lhs, rhs).getResult());
-    } else if (lhs.getType().isIntOrIndexOrFloat()) {
-      yield(builder, loc, typ, builder.create<FOP>(loc, lhs, rhs).getResult());
+    auto lhs_typ = args[0].getType();
+    if (lhs_typ.isIntOrIndex()) {
+      if constexpr (!std::is_same_v<IOP, void>) {
+        auto lhs = doSignCast(builder, loc, args[0]);
+        auto rhs = doSignCast(builder, loc, args[1]);
+        yield(builder, loc, typ,
+              builder.create<IOP>(loc, lhs, rhs).getResult());
+        return;
+      } else
+        assert("Found integer type but binary op not defined for integers" ==
+               nullptr);
+    } else if (lhs_typ.isIntOrIndexOrFloat()) {
+      if constexpr (!std::is_same_v<FOP, void>) {
+        yield(builder, loc, typ,
+              builder.create<FOP>(loc, args[0], args[1]).getResult());
+        return;
+      } else
+        assert("Found float type but binary op not defined for floats" ==
+               nullptr);
     } else {
       assert("Only integers and floats supported for binary ops" == nullptr);
     }
@@ -344,7 +358,7 @@ struct EWBinOpLowering
     auto lhstyp = adaptor.lhs().getType().dyn_cast<::mlir::RankedTensorType>();
     auto rhstyp = adaptor.rhs().getType().dyn_cast<::mlir::RankedTensorType>();
     if (!lhstyp || !rhstyp || !lhsorgtyp || !rhsorgtyp) {
-      // fail if not, will be retired if operands get converted elsewhere
+      // fail if not, will be retried if operands get converted elsewhere
       return ::mlir::failure();
     }
 
@@ -409,7 +423,7 @@ struct EWBinOpLowering
   }
 };
 
-// get a body builder for giben binary operation and result type
+// get a body builder for given binary operation and result type
 // we accept a result type to insert a cast after the operation if needed
 static BodyType getBodyBuilder(::imex::ptensor::ReduceOpId rop,
                                ::mlir::Type typ) {
@@ -431,7 +445,7 @@ static BodyType getBodyBuilder(::imex::ptensor::ReduceOpId rop,
 }
 
 // convert PTensor's reduction operations and their return type to Linalg/tensor
-// the given op's type is expected to convert to the apprioprate type (shape and
+// the given op's type is expected to convert to the appropriate type (shape and
 // element-type) we also need some arith and affine (for linalg::genericop)
 // FIXME reduction over a subset of dimensionsstruct ReductionOpLowering
 struct ReductionOpLowering
@@ -448,7 +462,7 @@ struct ReductionOpLowering
     auto orginptyp =
         op.input().getType().dyn_cast<::imex::ptensor::PTensorType>();
     if (!inptyp || !orginptyp) {
-      // fail if not, will be retired if operands get converted elsewhere
+      // fail if not, will be retried if operands get converted elsewhere
       return ::mlir::failure();
     }
 
@@ -560,9 +574,9 @@ struct ConvertPTensorToLinalgPass
       }
       return ::llvm::None;
     };
-    typeConverter.addArgumentMaterialization(materializeCast);
-    typeConverter.addSourceMaterialization(materializeCast);
-    typeConverter.addTargetMaterialization(materializeCast);
+    // typeConverter.addArgumentMaterialization(materializeCast);
+    // typeConverter.addSourceMaterialization(materializeCast);
+    // typeConverter.addTargetMaterialization(materializeCast);
 #endif
     // We convert all PTensor stuff...
     target.addIllegalDialect<::imex::ptensor::PTensorDialect>();
@@ -574,20 +588,20 @@ struct ConvertPTensorToLinalgPass
     target.addLegalDialect<::mlir::arith::ArithmeticDialect>();
     target.addLegalDialect<::mlir::shape::ShapeDialect>();
     target.addLegalOp<::mlir::UnrealizedConversionCastOp>(); // FIXME
+    target.addDynamicallyLegalOp<::mlir::func::FuncOp>(
+        [&](::mlir::func::FuncOp op) {
+          return typeConverter.isSignatureLegal(op.getFunctionType()) &&
+                 typeConverter.isLegal(&op.getBody());
+        });
+    target.addLegalOp<::mlir::func::ReturnOp>(); // FIXME
 
     ::mlir::RewritePatternSet patterns(&ctxt);
-#define FIXME 0
-#if FIXME
-    // For now, we also use plier's SignCastOp
-    target.addLegalOp<::plier::SignCastOp>();
-
-    // add rewrites/conversions for return types/ops and other control flow
-    // stuff
-    plier::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
-                                                              patterns, target);
-#endif
     patterns.insert<ARangeLowering, EWBinOpLowering, ReductionOpLowering>(
         typeConverter, &ctxt);
+
+    ::mlir::populateFunctionOpInterfaceTypeConversionPattern<
+        ::mlir::func::FuncOp>(patterns, typeConverter);
+    ::mlir::populateReturnOpTypeConversionPattern(patterns, typeConverter);
 
     if (::mlir::failed(::mlir::applyPartialConversion(getOperation(), target,
                                                       ::std::move(patterns)))) {
