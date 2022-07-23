@@ -173,24 +173,18 @@ protected:
       {llvmPointerType /* void *ptr */, llvmPointerType /* void *stream */}};
   FunctionCallBuilder deviceCallBuilder = {
       "iGpuGetDevice", llvmPointerType /* void * */, {}};
-  FunctionCallBuilder contextCreateCallBuilder = {
-      "iGpuCreateContext",
-      llvmPointerType /* void * */,
-      {llvmPointerType /* void* device */}};
   FunctionCallBuilder streamCallBuilder = {
       "iGpuCreateStream",
       llvmPointerType /* void * */,
       {llvmPointerType /* void* stream_ptr */}};
-  FunctionCallBuilder streamCreateCallBuilder = {
-      "gpuStreamCreate", llvmPointerType /* void *stream */, {}};
+  FunctionCallBuilder eventCreateCallBuilder = {
+      "iGpuEventCreate", llvmPointerType /* void *event */, {}};
   FunctionCallBuilder eventDestroyCallBuilder = {
       "iGpuEventDestroy", llvmVoidType, {llvmPointerType /* void *event */}};
   FunctionCallBuilder eventSynchronizeCallBuilder = {
       "iGpuEventSynchronize",
       llvmVoidType,
       {llvmPointerType /* void *event */}};
-  FunctionCallBuilder eventCreateCallBuilder = {
-      "iGpuEventCreate", llvmPointerType /* void *event */, {}};
   FunctionCallBuilder eventRecordCallBuilder = {
       "iGpuEventRecord",
       llvmVoidType,
@@ -240,7 +234,7 @@ static bool isDefinedByCallTo(Value value, StringRef functionName) {
 
 mlir::Value getStream(mlir::OpBuilder &builder) {
   auto module =
-      builder.getBlock()->getParent()->getParentOfType<mlir::ModuleOp>();
+      builder.getBlock()->getParent()->getParentOfType<mlir::func::FuncOp>();
 
   Value stream;
   module.walk([&](mlir::LLVM::CallOp op) {
@@ -250,31 +244,6 @@ mlir::Value getStream(mlir::OpBuilder &builder) {
   });
   return stream;
 }
-
-mlir::Value getGpuStream(mlir::OpBuilder &builder, mlir::Operation *op) {
-  assert(op);
-  auto func = op->getParentOfType<mlir::func::FuncOp>();
-  if (!func)
-    return {};
-
-  if (!llvm::hasSingleElement(func.getBody()))
-    return {};
-
-  auto &block = func.getBody().front();
-  auto ops = block.getOps<intel_gpu::GetStreamOp>();
-  if (!ops.empty())
-    return (*ops.begin()).getResult();
-
-  mlir::OpBuilder::InsertionGuard g(builder);
-  builder.setInsertionPointToStart(&block);
-  auto loc = builder.getUnknownLoc();
-
-  auto sycl_stream = builder.create<intel_gpu::GetStreamOp>(loc).getResult();
-  builder.setInsertionPoint(block.getTerminator());
-  builder.create<intel_gpu::DestroyStreamOp>(loc, sycl_stream);
-  return sycl_stream;
-}
-
 
 class ConvertGetStreamOpPattern
     : public ConvertOpToGpuRuntimeCallPattern<intel_gpu::GetStreamOp> {
@@ -443,7 +412,6 @@ private:
       if (isDefinedByCallTo(operand, streamCallBuilder.functionName)) {
         // The converted operand's definition created a stream.
         streamSynchronizeCallBuilder.create(loc, rewriter, {operand});
-        // streamDestroyCallBuilder.create(loc, rewriter, {operand});
       } else {
         // Otherwise the converted operand is an event. This assumes that we
         // use events in control flow code as well.
@@ -739,23 +707,39 @@ private:
 }; // namespace
 
 // TODO(nbpatel) :Fix this. Entry point is gpu::AllocOp
-struct AddIntelGpuOps : public mlir::OpRewritePattern<gpu::AllocOp> {
+struct AddIntelGpuStreamOp : public mlir::OpRewritePattern<gpu::AllocOp> {
   using OpRewritePattern::OpRewritePattern;
 
   mlir::LogicalResult
   matchAndRewrite(gpu::AllocOp op,
                   mlir::PatternRewriter &rewriter) const override {
 
-    auto stream = getGpuStream(rewriter, op);
-    if (!stream)
-      return mlir::failure();
+  auto func = op->getParentOfType<mlir::func::FuncOp>();
+  if (!func)
+    return mlir::failure();
 
+  auto &block = func.getBody().front();
+  auto ops = block.getOps<intel_gpu::GetStreamOp>();
+  if (!ops.empty())
     return mlir::success();
+
+  mlir::OpBuilder::InsertionGuard g(rewriter);
+  rewriter.setInsertionPointToStart(&block);
+  auto loc = rewriter.getUnknownLoc();
+
+  auto sycl_stream = rewriter.create<intel_gpu::GetStreamOp>(loc).getResult();
+  rewriter.setInsertionPoint(block.getTerminator());
+  rewriter.create<intel_gpu::DestroyStreamOp>(loc, sycl_stream);
+  
+  if (!sycl_stream)
+      return mlir::failure();
+  
+  return mlir::success();
   }
 };
 
-struct IntelGpuOpsPass
-    : public mlir::PassWrapper<IntelGpuOpsPass, mlir::OperationPass<void>> {
+struct IntelGpuStreamOp
+    : public mlir::PassWrapper<IntelGpuStreamOp, mlir::OperationPass<void>> {
 
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
@@ -766,15 +750,15 @@ struct IntelGpuOpsPass
     auto *ctx = &getContext();
     mlir::RewritePatternSet patterns(ctx);
 
-    patterns.insert<AddIntelGpuOps>(ctx);
+    patterns.insert<AddIntelGpuStreamOp>(ctx);
 
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
                                              std::move(patterns));
   }
 };
 
-struct IntelStreamToLLVMPass
-    : public mlir::PassWrapper<IntelStreamToLLVMPass,
+struct IntelGpuToLLVMPass
+    : public mlir::PassWrapper<IntelGpuToLLVMPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
@@ -812,8 +796,8 @@ struct IntelStreamToLLVMPass
   }
 };
 
-struct IntelGPUToLLVMPass
-    : public mlir::PassWrapper<IntelGPUToLLVMPass,
+struct GPUtoLLVMPass
+    : public mlir::PassWrapper<GPUtoLLVMPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
@@ -862,14 +846,14 @@ struct IntelGPUToLLVMPass
 
 } // namespace
 
-std::unique_ptr<mlir::Pass> intel_gpu::createIntelGpuOpsPass() {
-  return std::make_unique<IntelGpuOpsPass>();
+std::unique_ptr<mlir::Pass> intel_gpu::createIntelGpuStreamOp() {
+  return std::make_unique<IntelGpuStreamOp>();
 }
 
-std::unique_ptr<mlir::Pass> intel_gpu::createIntelStreamToLLVMPass() {
-  return std::make_unique<IntelStreamToLLVMPass>();
+std::unique_ptr<mlir::Pass> intel_gpu::createIntelGpuToLLVMPass() {
+  return std::make_unique<IntelGpuToLLVMPass>();
 }
 
-std::unique_ptr<mlir::Pass> intel_gpu::createIntelGPUToLLVMPass() {
-  return std::make_unique<IntelGPUToLLVMPass>();
+std::unique_ptr<mlir::Pass> intel_gpu::createGPUtoLLVMPass() {
+  return std::make_unique<GPUtoLLVMPass>();
 }
