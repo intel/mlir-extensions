@@ -29,8 +29,7 @@
     }
     %arg6 = memref.cast %arg5 : memref<?xf32> to memref<*xf32>
     call @printMemrefF32(%arg6) : (memref<*xf32>) -> ()
-    //      CHECK: Unranked Memref base@ = {{0x[-9a-f]*}}
-    // CHECK-SAME: rank = 1 offset = 0 sizes = [8] strides = [1] data =
+    //      CHECK: Unranked Memref base@ = {{.*}} rank = 1 offset = 0 sizes = [8] strides = [1] data =
     // CHECK-NEXT: [3.3,  3.3,  3.3,  3.3,  3.3,  3.3,  3.3,  3.3]
     return
   }

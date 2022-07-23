@@ -737,6 +737,10 @@ struct ChangeLayoutStore
   }
 };
 
+static auto getDynShape(size_t rank) {
+  return llvm::SmallVector<int64_t>(rank, mlir::ShapedType::kDynamicSize);
+}
+
 struct ChangeLayoutSubview
     : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
   using OpRewritePattern::OpRewritePattern;
@@ -764,7 +768,7 @@ struct ChangeLayoutSubview
                                                             sizes, strides);
 
           return mlir::memref::SubViewOp::inferRankReducedResultType(
-              dstRank, srcType, offsets, sizes, strides);
+              getDynShape(dstRank), srcType, offsets, sizes, strides);
         }()
             .cast<mlir::MemRefType>();
 
@@ -988,9 +992,10 @@ struct ChangeLayout1DReshape
       llvm::SmallVector<mlir::OpFoldResult> newStrides(
           srcRank, rewriter.getIndexAttr(1));
       auto viewType = view.getType().cast<mlir::MemRefType>();
-      auto reducedType = mlir::memref::SubViewOp::inferRankReducedResultType(
-                             dstRank, viewType, newOfsets, sizes, newStrides)
-                             .cast<mlir::MemRefType>();
+      auto reducedType =
+          mlir::memref::SubViewOp::inferRankReducedResultType(
+              getDynShape(dstRank), viewType, newOfsets, sizes, newStrides)
+              .cast<mlir::MemRefType>();
       view = rewriter.create<mlir::memref::SubViewOp>(
           loc, reducedType, view, newOfsets, sizes, newStrides);
     }

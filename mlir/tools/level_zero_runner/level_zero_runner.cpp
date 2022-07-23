@@ -22,6 +22,7 @@
 #include "mlir/Dialect/GPU/Transforms/ParallelLoopMapper.h"
 #include "mlir/Dialect/GPU/Transforms/Passes.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/LLVMIR/Transforms/RequestCWrappers.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/MemRef/Transforms/Passes.h"
 #include "mlir/Dialect/SPIRV/IR/SPIRVDialect.h"
@@ -32,7 +33,6 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
-#include "mlir/Dialect/LLVMIR/Transforms/RequestCWrappers.h"
 #include "mlir/Target/LLVMIR/Export.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/TargetSelect.h"
@@ -51,9 +51,11 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
 
   passManager.addPass(arith::createConstantBufferizePass());
   passManager.addNestedPass<mlir::func::FuncOp>(createSCFBufferizePass());
-  passManager.addNestedPass<mlir::func::FuncOp>(createLinalgInitTensorToAllocTensorPass());
+  passManager.addNestedPass<mlir::func::FuncOp>(
+      createLinalgInitTensorToAllocTensorPass());
   passManager.addNestedPass<mlir::func::FuncOp>(createLinalgBufferizePass());
-  passManager.addNestedPass<mlir::func::FuncOp>(bufferization::createBufferizationBufferizePass());
+  passManager.addNestedPass<mlir::func::FuncOp>(
+      bufferization::createBufferizationBufferizePass());
   passManager.addNestedPass<mlir::func::FuncOp>(createTensorBufferizePass());
   passManager.addPass(func::createFuncBufferizePass());
   passManager.addNestedPass<mlir::func::FuncOp>(
