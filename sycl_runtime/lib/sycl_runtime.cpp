@@ -100,7 +100,7 @@ struct Queue {
     if (shared) {
       mem_ptr = sycl::aligned_alloc_shared(alignment, size, this->sycl_queue);
     } else {
-      mem_ptr = sycl::malloc_device(size, this->sycl_queue);
+      mem_ptr = sycl::aligned_alloc_device(alignment, size, this->sycl_queue);
     }
     return mem_ptr;
   }
@@ -123,6 +123,11 @@ struct Queue {
         this->sycl_queue.get_context());
     L0_SAFE_CALL(zeModuleCreate(ze_ctx, ze_device, &desc, &ze_module, nullptr));
     return ze_module;
+  }
+
+  static auto destroyModule(ze_module_handle_t module) {
+    assert(module);
+    L0_SAFE_CALL(zeModuleDestroy(module));
   }
 
   void *getKernel(ze_module_handle_t module, const char *name) {
@@ -165,11 +170,6 @@ struct Queue {
       }
       cgh.parallel_for(sycl_nd_range, *kernel);
     });
-  }
-
-  static auto destroyModule(ze_module_handle_t module) {
-    assert(module);
-//    L0_SAFE_CALL(zeModuleDestroy(module));
   }
 
 private:

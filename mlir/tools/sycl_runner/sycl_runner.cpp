@@ -84,8 +84,6 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
   modulePM.addPass(spirv::createUpdateVersionCapabilityExtensionPass());
   LowerToLLVMOptions llvmOptions(module.getContext(), DataLayout(module));
   passManager.nest<func::FuncOp>().addPass(LLVM::createRequestCWrappersPass());
-
-  // Gpu -> GpuRuntime
   passManager.addPass(gpu_runtime::createSerializeSPIRVPass());
 
   // GpuRuntime -> LLVM
@@ -95,11 +93,20 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
   // is described here 
   // https://discourse.llvm.org/t/lowering-gpu-dialect/3609/4 
   passManager.addNestedPass<mlir::func::FuncOp>(
-      mlir::createGpuAsyncRegionPass());   
+      mlir::createGpuAsyncRegionPass());
+
+  // This pass adds the Intel Gpu Stream Op to the IR. This op is
+  // part of the Intel Gpu Dialect.
+  // Intel Gpu Stream op internally creates a Queue Data structure
+  // which encapsulates Sycl Queue.
   passManager.addNestedPass<mlir::func::FuncOp>(
-      intel_gpu::createIntelGpuOpsPass());
-  passManager.addPass(intel_gpu::createIntelStreamToLLVMPass());
-  passManager.addPass(intel_gpu::createIntelGPUToLLVMPass());
+      intel_gpu::createIntelGpuStreamOp());
+  
+  // This Pass converts the Intel Gpu Dialect to llvm.
+  // The dialect has just one op called intel gpu stream.
+  // This stream is used later in the GPU to LLVM pass.
+  passManager.addPass(intel_gpu::createIntelGpuToLLVMPass());
+  passManager.addPass(intel_gpu::createGPUtoLLVMPass());
   passManager.addPass(createConvertFuncToLLVMPass(llvmOptions));
   passManager.addPass(createMemRefToLLVMPass());
   passManager.addPass(createReconcileUnrealizedCastsPass());

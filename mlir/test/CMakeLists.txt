@@ -25,8 +25,6 @@ configure_lit_site_cfg(
 set(L0_RUNNER_TEST_DEPENDS
         FileCheck
         level_zero_runner
-        #dpcomp-runtime
-        #dpcomp-gpu-runtime
         )
 
 add_lit_testsuite(check-l0-runner "Running the level-zero-runner regression tests"
