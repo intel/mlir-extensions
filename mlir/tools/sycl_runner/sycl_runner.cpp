@@ -22,7 +22,6 @@
 #include "mlir/Dialect/GPU/Transforms/ParallelLoopMapper.h"
 #include "mlir/Dialect/GPU/Transforms/Passes.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
-#include "mlir/Dialect/LLVMIR/Transforms/RequestCWrappers.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/MemRef/Transforms/Passes.h"
 #include "mlir/Dialect/SPIRV/IR/SPIRVDialect.h"
@@ -51,11 +50,9 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
 
   passManager.addPass(arith::createConstantBufferizePass());
   passManager.addNestedPass<mlir::func::FuncOp>(createSCFBufferizePass());
-  passManager.addNestedPass<mlir::func::FuncOp>(
-      createLinalgInitTensorToAllocTensorPass());
+  passManager.addNestedPass<mlir::func::FuncOp>(createLinalgInitTensorToAllocTensorPass());
   passManager.addNestedPass<mlir::func::FuncOp>(createLinalgBufferizePass());
-  passManager.addNestedPass<mlir::func::FuncOp>(
-      bufferization::createBufferizationBufferizePass());
+  passManager.addNestedPass<mlir::func::FuncOp>(bufferization::createBufferizationBufferizePass());
   passManager.addNestedPass<mlir::func::FuncOp>(createTensorBufferizePass());
   passManager.addPass(func::createFuncBufferizePass());
   passManager.addNestedPass<mlir::func::FuncOp>(
@@ -69,7 +66,7 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
   passManager.addNestedPass<mlir::func::FuncOp>(createParallelLoopToGpuPass());
 
   passManager.addNestedPass<mlir::func::FuncOp>(
-      gpu_runtime::createInsertGPUAllocsPass());
+      gpu_runtime::createInsertGPUAllocsPass(1));
   passManager.addPass(mlir::createCanonicalizerPass());
   passManager.addNestedPass<mlir::func::FuncOp>(
       gpu_runtime::createUnstrideMemrefsPass());
@@ -87,14 +84,29 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
   modulePM.addPass(spirv::createUpdateVersionCapabilityExtensionPass());
   LowerToLLVMOptions llvmOptions(module.getContext(), DataLayout(module));
   passManager.nest<func::FuncOp>().addPass(LLVM::createRequestCWrappersPass());
-
-  // Gpu -> GpuRuntime
   passManager.addPass(gpu_runtime::createSerializeSPIRVPass());
-  passManager.addNestedPass<mlir::func::FuncOp>(gpu_runtime::createGPUExPass());
 
   // GpuRuntime -> LLVM
-  passManager.addPass(gpu_runtime::createEnumerateEventsPass());
-  passManager.addPass(gpu_runtime::createGPUToLLVMPass());
+  // This pass is needed to convert the gpu::alloc regular flavor to 
+  // the gpu::alloc op async version. The upstream does not support
+  // conversion from non asyn version to llvm runtime call. The issue
+  // is described here 
+  // https://discourse.llvm.org/t/lowering-gpu-dialect/3609/4 
+  passManager.addNestedPass<mlir::func::FuncOp>(
+      mlir::createGpuAsyncRegionPass());
+
+  // This pass adds the Intel Gpu Stream Op to the IR. This op is
+  // part of the Intel Gpu Dialect.
+  // Intel Gpu Stream op internally creates a Queue Data structure
+  // which encapsulates Sycl Queue.
+  passManager.addNestedPass<mlir::func::FuncOp>(
+      intel_gpu::createIntelGpuStreamOp());
+  
+  // This Pass converts the Intel Gpu Dialect to llvm.
+  // The dialect has just one op called intel gpu stream.
+  // This stream is used later in the GPU to LLVM pass.
+  passManager.addPass(intel_gpu::createIntelGpuToLLVMPass());
+  passManager.addPass(intel_gpu::createGPUtoLLVMPass());
   passManager.addPass(createConvertFuncToLLVMPass(llvmOptions));
   passManager.addPass(createMemRefToLLVMPass());
   passManager.addPass(createReconcileUnrealizedCastsPass());

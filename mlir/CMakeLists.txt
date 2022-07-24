@@ -37,16 +37,19 @@ endif()
 add_subdirectory(include/mlir-extensions/Dialect/plier)
 add_subdirectory(include/mlir-extensions/Dialect/plier_util)
 add_subdirectory(include/mlir-extensions/Dialect/gpu_runtime/IR)
+add_subdirectory(include/mlir-extensions/Dialect/intel_gpu/IR)
 
 set(SOURCES_LIST
     lib/Conversion/SCFToAffine/SCFToAffine.cpp
     lib/Conversion/gpu_to_gpu_runtime.cpp
     lib/Conversion/gpu_runtime_to_llvm.cpp
+    lib/Conversion/intel_gpu_to_llvm.cpp
     lib/analysis/memory_ssa.cpp
     lib/analysis/memory_ssa_analysis.cpp
     lib/compiler/compiler.cpp
     lib/compiler/pipeline_registry.cpp
     lib/Dialect/gpu_runtime/IR/gpu_runtime_ops.cpp
+    lib/Dialect/intel_gpu/IR/intel_gpu_ops.cpp
     lib/Dialect/plier/dialect.cpp
     lib/Dialect/plier_util/dialect.cpp
     lib/Transforms/arg_lowering.cpp
@@ -80,6 +83,7 @@ set(HEADERS_LIST
     include/mlir-extensions/compiler/compiler.hpp
     include/mlir-extensions/compiler/pipeline_registry.hpp
     include/mlir-extensions/Dialect/gpu_runtime/IR/gpu_runtime_ops.hpp
+    include/mlir-extensions/Dialect/intel_gpu/IR/intel_gpu_ops.hpp
     include/mlir-extensions/Dialect/plier/dialect.hpp
     include/mlir-extensions/Dialect/plier_util/dialect.hpp
     include/mlir-extensions/Transforms/arg_lowering.hpp
@@ -146,7 +150,7 @@ target_include_directories(${MLIR_EXTENSIONS_LIB} PUBLIC
     ${PROJECT_BINARY_DIR}/mlir-extensions/include
     )
 
-add_dependencies(${MLIR_EXTENSIONS_LIB} MLIRPlierOpsIncGen MLIRPlierUtilOpsIncGen MLIRGpuRuntimeOpsIncGen)
+add_dependencies(${MLIR_EXTENSIONS_LIB} MLIRPlierOpsIncGen MLIRPlierUtilOpsIncGen MLIRGpuRuntimeOpsIncGen MLIRIntelGpuOpsIncGen)
 
 if (IMEX_ENABLE_IGPU_DIALECT)
     add_subdirectory(tools)

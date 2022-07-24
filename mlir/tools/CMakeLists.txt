@@ -13,4 +13,4 @@
 # limitations under the License.
 
 add_subdirectory(level_zero_runner)
-
+add_subdirectory(sycl_runner)

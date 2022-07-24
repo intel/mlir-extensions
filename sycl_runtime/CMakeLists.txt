@@ -1,4 +1,4 @@
-# Copyright 2021 Intel Corporation
+# Copyright 2022 Intel Corporation
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,28 +12,36 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-project(dpcomp-gpu-runtime LANGUAGES CXX C)
+project(sycl-runtime LANGUAGES CXX C)
 
 include(GenerateExportHeader)
 
+if(NOT SYCL_DIR)
+    message(FATAL_ERROR "SYCL_DIR is not set")
+endif()
+
+find_package(MLIR REQUIRED CONFIG)
+
 set(SOURCES_LIST
-    lib/gpu_runtime.cpp
+    lib/sycl_runtime.cpp
+    lib/utils.cpp
     )
+
 set(HEADERS_LIST
-    lib/level_zero_printing.hpp
-    lib/level_zero_wrapper.hpp
-)
+    )
 
 add_library(${PROJECT_NAME} SHARED ${SOURCES_LIST} ${HEADERS_LIST})
 generate_export_header(${PROJECT_NAME})
 
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${PROJECT_BINARY_DIR}
-    ${LevelZero_INCLUDE_DIR}
+    ${MLIR_INCLUDE_DIRS}
+    ${SYCL_DIR}/include/
+    ${SYCL_DIR}/include/sycl
     )
 
 target_link_directories(${PROJECT_NAME} PRIVATE
-    ${LevelZero_LIBRARIES_DIR}
+    ${SYCL_DIR}/lib
     )
 
-target_link_libraries(${PROJECT_NAME} PRIVATE ${LevelZero_LIBRARY})
+target_link_libraries(${PROJECT_NAME} PRIVATE ${LevelZero_LIBRARY} sycl)

@@ -15,8 +15,8 @@
 #include "mlir-extensions/Conversion/gpu_to_gpu_runtime.hpp"
 
 #include "mlir-extensions/Dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
+#include "mlir-extensions/Dialect/intel_gpu/IR/intel_gpu_ops.hpp"
 #include "mlir-extensions/Dialect/plier_util/dialect.hpp"
-
 #include <mlir/Analysis/BufferViewFlowAnalysis.h>
 #include <mlir/Conversion/ArithmeticToSPIRV/ArithmeticToSPIRV.h>
 #include <mlir/Conversion/ControlFlowToSPIRV/ControlFlowToSPIRV.h>
