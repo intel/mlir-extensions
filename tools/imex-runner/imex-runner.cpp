@@ -96,8 +96,8 @@ static ::mlir::LogicalResult runIMEXPasses(::mlir::ModuleOp module) {
 
   //   passManager.addPass(gpu_runtime::createEnumerateEventsPass());
   //   passManager.addPass(gpu_runtime::createGPUToLLVMPass());
-  passManager.addPass(::mlir::createConvertFuncToLLVMPass(llvmOptions));
   passManager.addPass(::mlir::createMemRefToLLVMPass());
+  passManager.addPass(::mlir::createConvertFuncToLLVMPass(llvmOptions));
   passManager.addPass(::mlir::createReconcileUnrealizedCastsPass());
 
   return passManager.run(module);
