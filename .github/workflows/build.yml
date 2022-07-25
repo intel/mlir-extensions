@@ -176,4 +176,4 @@ jobs:
         shell: bash -l {0}
         run: |
           cd /home/runner/work/mlir-extensions/mlir-extensions/_build || exit 1
-          cmake --build . --target check-imex-opt || exit 1
+          cmake --build . --target check-imex || exit 1

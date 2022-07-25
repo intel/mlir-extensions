@@ -81,24 +81,25 @@ static mlir::Value doSignCast(mlir::OpBuilder &builder, mlir::Location &loc,
 // If not distributed, simply init tensor
 static auto initDTensor(mlir::Location &loc,
                         ::mlir::ConversionPatternRewriter &rewriter, bool dist,
-                        uint64_t rank, ::mlir::Value shp, ::mlir::Type eltyp,
+                        uint64_t rank, llvm::SmallVector<mlir::Value> shp_vals,
+                        ::mlir::Value shp_tnsr, ::mlir::Type eltyp,
                         ::llvm::SmallVector<mlir::Value> &lshp /* out */) {
   if (dist) {
     auto ityp = rewriter.getI64Type();
     auto idxtyp = rewriter.getIndexType();
-    auto shptyp = mlir::RankedTensorType::get(
-        llvm::SmallVector<int64_t>(1, rank), idxtyp);
+    auto shptyp =
+        mlir::RankedTensorType::get(llvm::SmallVector<int64_t>(rank), idxtyp);
 
     // Register with runtime
     ::mlir::Value id =
-        rewriter.create<::imex::dist::RegisterPTensorOp>(loc, ityp, shp);
+        rewriter.create<::imex::dist::RegisterPTensorOp>(loc, ityp, shp_tnsr);
     // and get local shape
     auto lshp_mr = rewriter.create<::imex::dist::LocalShapeOp>(loc, shptyp, id);
 
     // get shape as SmallVector<mlir::Value>
     // why can't we just use the existing tensor?
     lshp.resize(rank);
-    for (auto i : ::llvm::seq(0lu, rank)) {
+    for (auto i : ::llvm::seq(0LU, rank)) {
       auto ia = rewriter.getIndexAttr(i);
       auto idx = rewriter.create<::mlir::arith::ConstantOp>(loc, ia);
       lshp[i] = rewriter.create<::mlir::tensor::ExtractOp>(
@@ -109,7 +110,8 @@ static auto initDTensor(mlir::Location &loc,
         rewriter.create<::mlir::linalg::InitTensorOp>(loc, lshp, eltyp);
     return std::make_pair(ltnsr.getResult(), id);
   } else { // not distributed, simply init
-    auto ltnsr = rewriter.create<::mlir::linalg::InitTensorOp>(loc, shp, eltyp);
+    auto ltnsr =
+        rewriter.create<::mlir::linalg::InitTensorOp>(loc, shp_vals, eltyp);
     return std::make_pair(ltnsr.getResult(), ::mlir::Value());
   }
 }
@@ -195,7 +197,7 @@ struct ARangeLowering
         rewriter.create<::mlir::linalg::InitTensorOp>(loc, shp, typ);
     auto shape = rewriter.create<::mlir::shape::ShapeOfOp>(loc, tmp_tnsr);
     auto tnsr_id =
-        initDTensor(loc, rewriter, orgrtyp.getDist(), 1, shape, typ, lshp);
+        initDTensor(loc, rewriter, orgrtyp.getDist(), 1, shp, shape, typ, lshp);
 
     // compute start index of local partition
     if (orgrtyp.getDist()) {
@@ -397,8 +399,8 @@ struct EWBinOpLowering
     auto tmp_tnsr =
         rewriter.create<::mlir::linalg::InitTensorOp>(loc, shp, typ);
     auto shape = rewriter.create<::mlir::shape::ShapeOfOp>(loc, tmp_tnsr);
-    auto tnsr_id =
-        initDTensor(loc, rewriter, lhsorgtyp.getDist(), rank, shape, typ, lshp);
+    auto tnsr_id = initDTensor(loc, rewriter, lhsorgtyp.getDist(), rank, shp,
+                               shape, typ, lshp);
 
     // Get signless operands into vec
     llvm::SmallVector<mlir::Value, 2> oprnds = {adaptor.lhs(), adaptor.rhs()};
@@ -483,7 +485,8 @@ struct ReductionOpLowering
     // FIXME support reduction dimensions
     auto rank = static_cast<unsigned>(shaped.getRank());
     assert(rank == 0);
-    llvm::SmallVector<mlir::Value> shp(0); //::mlir::ShapedType::kDynamicSize;
+    llvm::SmallVector<mlir::Value> shp(
+        rank); //::mlir::ShapedType::kDynamicSize;
     // create new tensor
     auto zattr = rewriter.getI64IntegerAttr(0);
     auto zero =
@@ -492,8 +495,8 @@ struct ReductionOpLowering
     auto tmp_tnsr =
         rewriter.create<::mlir::linalg::InitTensorOp>(loc, shp, typ);
     auto shape = rewriter.create<::mlir::shape::ShapeOfOp>(loc, tmp_tnsr);
-    auto tnsr_id = initDTensor(loc, rewriter, orginptyp.getDist(), rank, shape,
-                               sltyp, lshp);
+    auto tnsr_id = initDTensor(loc, rewriter, orginptyp.getDist(), rank, shp,
+                               shape, sltyp, lshp);
     auto tnsr =
         rewriter.create<::mlir::linalg::FillOp>(loc, zero, tnsr_id.first);
 
