@@ -21,7 +21,7 @@ module {
         %4 = "builtin.unrealized_conversion_cast"(%3) : (!ptensor.ptensor<tensor<?xi64>, 0>) -> tensor<?xi64>
         %5 = tensor.cast %4 : tensor<?xi64> to tensor<*xi64>
         call @printMemrefI64(%5) : (tensor<*xi64>) -> ()
-        // CHECK: Unranked Memref base@ = {{0x[-9a-f]*}}
+        // CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
         // CHECK-SAME: rank = 1 offset = 0 sizes = [5] strides = [1] data =
         // CHECK-NEXT: [0,  2,  4,  6,  8]
 
@@ -29,7 +29,7 @@ module {
         %14 = "builtin.unrealized_conversion_cast"(%13) : (!ptensor.ptensor<tensor<?xi64>, 1>) -> tensor<?xi64>
         %15 = tensor.cast %14 : tensor<?xi64> to tensor<*xi64>
         call @printMemrefI64(%15) : (tensor<*xi64>) -> ()
-        // CHECK: Unranked Memref base@ = {{0x[-9a-f]*}}
+        // CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
         // CHECK-SAME: rank = 1 offset = 0 sizes = [5] strides = [1] data =
         // CHECK-NEXT: [0,  2,  4,  6,  8]
 
