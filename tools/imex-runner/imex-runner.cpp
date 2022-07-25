@@ -31,15 +31,10 @@
 #include <mlir/InitAllDialects.h>
 #include <mlir/InitAllPasses.h>
 
-#include <imex/InitIMEXDialects.h>
-#include <imex/InitIMEXPasses.h>
-
 static ::mlir::LogicalResult runIMEXPasses(::mlir::ModuleOp module) {
   ::mlir::PassManager passManager(module.getContext());
   ::mlir::applyPassManagerCLOptions(passManager);
 
-  passManager.addPass(::imex::createConvertPTensorToLinalgPass());
-  passManager.addPass(::imex::createDistElimPass());
   passManager.addPass(::mlir::createConvertShapeToStandardPass());
 
   passManager.addPass(::mlir::arith::createConstantBufferizePass());
@@ -121,7 +116,6 @@ int main(int argc, char **argv) {
                   ::mlir::linalg::LinalgDialect, ::mlir::tensor::TensorDialect,
                   ::mlir::shape::ShapeDialect, ::mlir::AffineDialect>();
   ::mlir::registerLLVMDialectTranslation(registry);
-  ::imex::registerAllDialects(registry);
 
   return ::mlir::JitRunnerMain(argc, argv, registry, jitRunnerConfig);
 }
