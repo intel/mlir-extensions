@@ -16,7 +16,7 @@ from lit.llvm.subst import FindTool
 # Configuration file for the 'lit' test runner.
 
 # name: The name of this test suite.
-config.name = 'IMEX_OPT'
+config.name = 'IMEX'
 
 config.test_format = lit.formats.ShTest(not llvm_config.use_lit_shell)
 
@@ -31,6 +31,7 @@ config.test_exec_root = os.path.join(config.imex_obj_root, 'test')
 
 config.substitutions.append(('%PATH%', config.environment['PATH']))
 config.substitutions.append(('%shlibext', config.llvm_shlib_ext))
+config.substitutions.append(('%{mlir_shlib_dir}', config.mlir_runner_utils_dir))
 
 llvm_config.with_system_environment(
     ['HOME', 'INCLUDE', 'LIB', 'TMP', 'TEMP'])
@@ -51,7 +52,8 @@ llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
 
 tool_dirs = [config.imex_tools_dir, config.llvm_tools_dir]
 tools = [
-    'imex-opt'
+    'imex-opt',
+    'imex-runner'
 ]
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)
