@@ -27,6 +27,7 @@
 #include "mlir-extensions/Dialect/plier_util/dialect.hpp"
 #include "mlir-extensions/Transforms/arg_lowering.hpp"
 #include "mlir-extensions/Transforms/common_opts.hpp"
+#include "mlir-extensions/Transforms/rewrite_wrapper.hpp"
 
 #include "base_pipeline.hpp"
 #include "mlir-extensions/compiler/pipeline_registry.hpp"
@@ -594,15 +595,18 @@ struct CondBranchSameTargetRewrite
   }
 };
 
+struct LowerArgOps
+    : public plier::RewriteWrapperPass<
+          LowerArgOps, void, plier::DependentDialectsList<plier::PlierDialect>,
+          plier::ArgOpLowering> {};
+
 struct PlierToScfPass
-    : public mlir::PassWrapper<PlierToScfPass,
-                               mlir::OperationPass<mlir::ModuleOp>> {
+    : public mlir::PassWrapper<PlierToScfPass, mlir::OperationPass<void>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(PlierToScfPass)
 
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::scf::SCFDialect>();
-    registry.insert<plier::PlierDialect>();
     registry.insert<plier::PlierUtilDialect>();
   }
 
@@ -616,7 +620,6 @@ void PlierToScfPass::runOnOperation() {
 
   patterns.insert<
       // clang-format off
-      plier::ArgOpLowering,
       BreakRewrite,
       ScfIfRewriteOneExit,
       ScfIfRewriteTwoExits,
@@ -630,7 +633,7 @@ void PlierToScfPass::runOnOperation() {
   auto op = getOperation();
   (void)mlir::applyPatternsAndFoldGreedily(op, std::move(patterns));
 
-  op.walk([&](mlir::Operation *o) -> mlir::WalkResult {
+  op->walk([&](mlir::Operation *o) -> mlir::WalkResult {
     if (mlir::isa<mlir::cf::BranchOp, mlir::cf::CondBranchOp>(o)) {
       o->emitError("Unable to convert CFG to SCF");
       signalPassFailure();
@@ -641,9 +644,10 @@ void PlierToScfPass::runOnOperation() {
 }
 
 static void populatePlierToScfPipeline(mlir::OpPassManager &pm) {
-  pm.addPass(mlir::createCanonicalizerPass());
-  pm.addPass(std::make_unique<PlierToScfPass>());
-  pm.addPass(mlir::createCanonicalizerPass());
+  pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<LowerArgOps>());
+  pm.addNestedPass<mlir::func::FuncOp>(mlir::createCanonicalizerPass());
+  pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<PlierToScfPass>());
+  pm.addNestedPass<mlir::func::FuncOp>(mlir::createCanonicalizerPass());
 }
 } // namespace
 
