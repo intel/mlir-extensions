@@ -32,6 +32,7 @@ config.test_exec_root = os.path.join(config.imex_obj_root, 'test')
 config.substitutions.append(('%PATH%', config.environment['PATH']))
 config.substitutions.append(('%shlibext', config.llvm_shlib_ext))
 config.substitutions.append(('%{mlir_shlib_dir}', config.mlir_runner_utils_dir))
+config.substitutions.append(('%{imex_tools_dir}', config.imex_tools_dir))
 
 llvm_config.with_system_environment(
     ['HOME', 'INCLUDE', 'LIB', 'TMP', 'TEMP'])
@@ -49,11 +50,12 @@ config.imex_tools_dir = os.path.join(config.imex_obj_root, 'bin')
 
 # Tweak the PATH to include the tools dir.
 llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
-
+llvm_config.with_environment('PATH', config.imex_tools_dir, append_path=True)
+print(config.llvm_tools_dir, config.imex_tools_dir)
 tool_dirs = [config.imex_tools_dir, config.llvm_tools_dir]
 tools = [
     'imex-opt',
-    'imex-runner'
+    'imex-runner.py'
 ]
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)

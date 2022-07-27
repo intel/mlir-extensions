@@ -1,4 +1,4 @@
-// RUN: imex-opt --convert-ptensor-to-linalg --dist-elim %s | imex-runner -e main -entry-point-result=void --shared-libs=%{mlir_shlib_dir}/libmlir_c_runner_utils%shlibext --shared-libs=%{mlir_shlib_dir}/libmlir_runner_utils%shlibext | FileCheck %s
+// RUN: python %{imex_tools_dir}/imex-runner.py -i %s --pass-pipeline-file=ptensor.pp -e main -entry-point-result=void --shared-libs=%{mlir_shlib_dir}/libmlir_c_runner_utils%shlibext --shared-libs=%{mlir_shlib_dir}/libmlir_runner_utils%shlibext | FileCheck %s
 
 module {
     func.func @arange(%arg0: i64, %arg1: i64, %arg2: i64) -> !ptensor.ptensor<tensor<?xi64>, 0> {
