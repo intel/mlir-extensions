@@ -170,6 +170,15 @@ jobs:
             --imex-enable-tests                                                \
             --imex-tbb-dir /${TBB_PATH}/lib/cmake/tbb
 
+
+      - name: Run IMEX core test cases
+        shell: bash -l {0}
+
+        run: |
+          cd _build || exit 1
+          cmake --build . --target check-l0-runner || exit 1  
+
+
       - name: Build Python frontend
         shell: bash -l {0}
 
