@@ -3,12 +3,12 @@ dist-elim
 convert-shape-to-std
 arith-bufferize
 func.func(scf-bufferize,
-	      shape-bufferize
-		  linalg-bufferize
-		  tensor-bufferize)
+          shape-bufferize
+          linalg-bufferize
+          tensor-bufferize)
 func-bufferize
 func.func(finalizing-bufferize
-	      convert-linalg-to-parallel-loops)
+          convert-linalg-to-parallel-loops)
 canonicalize
 func.func(lower-affine)
 fold-memref-subview-ops

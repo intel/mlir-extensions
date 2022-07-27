@@ -1,4 +1,4 @@
-#===- pass-pipeline.py --------------------------------------*- Python -*-===#
+#===- imex-runner.py ----------------------------------------*- Python -*-===#
 #
 # Copyright 2022 Intel Corporation
 # This file is licensed under the Apache License v2.0 with LLVM Exceptions.
