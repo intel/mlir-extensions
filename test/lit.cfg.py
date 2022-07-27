@@ -51,7 +51,7 @@ config.imex_tools_dir = os.path.join(config.imex_obj_root, 'bin')
 # Tweak the PATH to include the tools dir.
 llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
 llvm_config.with_environment('PATH', config.imex_tools_dir, append_path=True)
-print(config.llvm_tools_dir, config.imex_tools_dir)
+
 tool_dirs = [config.imex_tools_dir, config.llvm_tools_dir]
 tools = [
     'imex-opt',
