@@ -1,4 +1,5 @@
 add_custom_target(imex-runner-pps
+                  COMMAND mkdir -p imex-runner
                   COMMAND cp ${CMAKE_CURRENT_SOURCE_DIR}/imex-runner/*.pp imex-runner/)
 
 configure_lit_site_cfg(
