@@ -1787,7 +1787,7 @@ struct PierUtilToLLVMPass
 
     mlir::LLVMConversionTarget target(context);
     target.addLegalOp<mlir::func::FuncOp>();
-    target.addIllegalOp<plier::TakeContextOp, plier::ReleaseContextOp>();
+    target.addIllegalDialect<plier::PlierUtilDialect>();
     if (failed(applyPartialConversion(op, target, std::move(patterns))))
       signalPassFailure();
   }
