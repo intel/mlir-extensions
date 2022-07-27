@@ -1755,6 +1755,7 @@ struct LowerReleaseContextOp
   }
 };
 
+// Convert operations from the plier_util dialect to the LLVM dialect.
 struct PierUtilToLLVMPass
     : public mlir::PassWrapper<PierUtilToLLVMPass,
                                mlir::OperationPass<mlir::ModuleOp>> {

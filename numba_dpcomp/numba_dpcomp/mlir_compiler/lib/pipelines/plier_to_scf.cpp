@@ -595,6 +595,9 @@ struct CondBranchSameTargetRewrite
   }
 };
 
+// Convert plier::ArgOp into direct function argument access. ArgOp is just an
+// artifact of Numba IR conversion and doens't really have any functional
+// meaning so we can get rid of ot early.
 struct LowerArgOps
     : public plier::RewriteWrapperPass<
           LowerArgOps, void, plier::DependentDialectsList<plier::PlierDialect>,
