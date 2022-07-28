@@ -33,7 +33,7 @@ git checkout $SHA
 cd ..
 mkdir llvm-build
 cd llvm-build
-cmake ../llvm-project/llvm -GNinja -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_ENABLE_RTTI=ON -DLLVM_USE_LINKER=gold -DCMAKE_INSTALL_PREFIX=../llvm-install
+cmake ../llvm-project/llvm -GNinja -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_ENABLE_RTTI=ON -DLLVM_USE_LINKER=gold -DLLVM_INSTALL_UTILS=ON -DCMAKE_INSTALL_PREFIX=../llvm-install
 ninja install
 ```
 
