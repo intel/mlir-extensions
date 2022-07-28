@@ -149,10 +149,12 @@ jobs:
             -DLLVM_ENABLE_ASSERTIONS=ON                                    \
             -DLLVM_ENABLE_RTTI=ON                                          \
             -DLLVM_USE_LINKER=gold                                         \
-            -DLLVM_INSTALL_UTILS=ON                                        \
             -DCMAKE_INSTALL_PREFIX=/home/runner/work/llvm-mlir/_mlir_install || exit 1
           cmake --build . -j ${np} || exit 1
           cmake --install . || exit 1
+          cp bin/FileCheck ../../test-install/bin/
+          cp bin/count ../../test-install/bin/
+          cp bin/not ../../test-install/bin/
           popd
 
       - name: Build IMEX
