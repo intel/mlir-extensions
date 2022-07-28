@@ -1755,6 +1755,44 @@ struct LowerReleaseContextOp
   }
 };
 
+/// Convert operations from the plier_util dialect to the LLVM dialect.
+struct PierUtilToLLVMPass
+    : public mlir::PassWrapper<PierUtilToLLVMPass,
+                               mlir::OperationPass<mlir::ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(PierUtilToLLVMPass)
+
+  PierUtilToLLVMPass() = default;
+
+  void runOnOperation() override {
+    mlir::Operation *op = getOperation();
+    auto &context = getContext();
+    auto options = getLLVMOptions(context);
+
+    mlir::LLVMTypeConverter typeConverter(&context, options);
+    populateToLLVMAdditionalTypeConversion(typeConverter);
+    mlir::RewritePatternSet patterns(&context);
+
+    patterns.insert<
+        // clang-format off
+        LowerUndef,
+        LowerBuildTuple,
+        LowerRetainOp,
+        ReshapeLowering,
+        ExpandShapeLowering,
+        LowerExtractMemrefMetadataOp,
+        LowerTakeContextOp,
+        LowerReleaseContextOp
+        // clang-format on
+        >(typeConverter);
+
+    mlir::LLVMConversionTarget target(context);
+    target.addLegalOp<mlir::func::FuncOp>();
+    target.addIllegalDialect<plier::PlierUtilDialect>();
+    if (failed(applyPartialConversion(op, target, std::move(patterns))))
+      signalPassFailure();
+  }
+};
+
 // Copypasted from mlir
 struct LLVMLoweringPass
     : public mlir::PassWrapper<LLVMLoweringPass,
@@ -1787,23 +1825,9 @@ struct LLVMLoweringPass
     cf::populateControlFlowToLLVMConversionPatterns(typeConverter, patterns);
     arith::populateArithmeticToLLVMConversionPatterns(typeConverter, patterns);
 
-    patterns.insert<
-        // clang-format off
-        LowerUndef,
-        LowerBuildTuple,
-        LowerRetainOp,
-        AllocOpLowering,
-        DeallocOpLowering,
-        ReshapeLowering,
-        ExpandShapeLowering,
-        LowerExtractMemrefMetadataOp,
-        LowerTakeContextOp,
-        LowerReleaseContextOp
-        // clang-format on
-        >(typeConverter);
+    patterns.insert<AllocOpLowering, DeallocOpLowering>(typeConverter);
 
     LLVMConversionTarget target(context);
-    target.addIllegalOp<plier::TakeContextOp, plier::ReleaseContextOp>();
     target.addIllegalDialect<mlir::func::FuncDialect>();
 
     if (failed(applyPartialConversion(m, target, std::move(patterns))))
@@ -1826,6 +1850,7 @@ static void populateLowerToLlvmPipeline(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<PreLLVMLowering>());
   pm.addNestedPass<mlir::func::FuncOp>(mlir::createConvertMathToLLVMPass());
   pm.addPass(mlir::createConvertMathToLibmPass());
+  pm.addPass(std::make_unique<PierUtilToLLVMPass>());
   pm.addPass(std::make_unique<LLVMLoweringPass>());
   pm.addNestedPass<mlir::LLVM::LLVMFuncOp>(
       std::make_unique<PostLLVMLowering>());

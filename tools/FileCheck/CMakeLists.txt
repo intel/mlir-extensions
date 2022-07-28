@@ -14,6 +14,11 @@
 
 find_package(LLVM REQUIRED CONFIG)
 
+if (TARGET FileCheck)
+  message(STATUS "FileCheck already exists, skipping local")
+  return()
+endif()
+
 list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
 include(AddLLVM)
 include(HandleLLVMOptions)
