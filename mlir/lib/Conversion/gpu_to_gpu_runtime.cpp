@@ -46,6 +46,8 @@ namespace {
 struct ParallelLoopGPUMappingPass
     : public mlir::PassWrapper<ParallelLoopGPUMappingPass,
                                mlir::OperationPass<mlir::func::FuncOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(ParallelLoopGPUMappingPass)
+
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::scf::SCFDialect>();
@@ -100,6 +102,7 @@ struct ParallelLoopGPUMappingPass
 struct InsertGPUAllocs
     : public mlir::PassWrapper<InsertGPUAllocs,
                                mlir::OperationPass<mlir::func::FuncOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(InsertGPUAllocs)
 
   InsertGPUAllocs() = default;
   InsertGPUAllocs(bool gpuDealloc) { useGpuDealloc = gpuDealloc; }
@@ -633,6 +636,8 @@ struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
 
 struct UnstrideMemrefsPass
     : public mlir::PassWrapper<UnstrideMemrefsPass, mlir::OperationPass<void>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(UnstrideMemrefsPass)
+
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::memref::MemRefDialect>();
@@ -1094,6 +1099,7 @@ public:
 struct GPUToSpirvPass
     : public mlir::PassWrapper<GPUToSpirvPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(GPUToSpirvPass)
 
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
@@ -1275,6 +1281,8 @@ struct ExpandSuggestBlockSizeOp
 struct AbiAttrsPass
     : public mlir::PassWrapper<AbiAttrsPass,
                                mlir::OperationPass<mlir::gpu::GPUModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(AbiAttrsPass)
+
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::gpu::GPUDialect>();
@@ -1299,6 +1307,8 @@ struct AbiAttrsPass
 struct SetSPIRVCapabilitiesPass
     : public mlir::PassWrapper<SetSPIRVCapabilitiesPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(SetSPIRVCapabilitiesPass)
+
   void runOnOperation() override {
     namespace spirv = mlir::spirv;
     auto context = &getContext();
@@ -1337,6 +1347,8 @@ struct SetSPIRVCapabilitiesPass
 struct SerializeSPIRVPass
     : public mlir::PassWrapper<SerializeSPIRVPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(SerializeSPIRVPass)
+
   void runOnOperation() override {
     auto mod = getOperation();
 
@@ -1377,6 +1389,7 @@ struct SerializeSPIRVPass
 
 struct GPUExPass
     : public mlir::PassWrapper<GPUExPass, mlir::OperationPass<void>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(GPUExPass)
 
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {

@@ -816,6 +816,8 @@ private:
 struct EnumerateEventsPass
     : public mlir::PassWrapper<EnumerateEventsPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(EnumerateEventsPass)
+
   void runOnOperation() override {
     auto mod = getOperation();
     int64_t eventCount = 0;
@@ -835,6 +837,8 @@ struct EnumerateEventsPass
 struct GPUToLLVMPass
     : public mlir::PassWrapper<GPUToLLVMPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(GPUToLLVMPass)
+
   void runOnOperation() override {
     mlir::LLVMTypeConverter converter(&getContext());
     mlir::RewritePatternSet patterns(&getContext());

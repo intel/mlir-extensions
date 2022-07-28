@@ -681,6 +681,7 @@ static py::bytes genLLModule(mlir::ModuleOp mod) {
       errStream << diag;
   };
   llvm::LLVMContext llCtx;
+  llCtx.setOpaquePointers(false);
   std::unique_ptr<llvm::Module> llMod;
   plier::scopedDiagHandler(*mod.getContext(), diagHandler, [&]() {
     mlir::registerLLVMDialectTranslation(*mod.getContext());
@@ -693,6 +694,15 @@ static py::bytes genLLModule(mlir::ModuleOp mod) {
     }
   });
   assert(nullptr != llMod);
+
+  // TODO: We are parsing resulting bitcode with older llvm version, remove
+  // unbsupported attributes
+  for (auto &g : llMod->functions()) {
+    auto attrs = g.getAttributes();
+    if (attrs.hasFnAttr(llvm::Attribute::AttrKind::NoCallback))
+      g.setAttributes(attrs.removeFnAttribute(
+          llCtx, llvm::Attribute::AttrKind::NoCallback));
+  }
   return serializeMod(*llMod);
 }
 
