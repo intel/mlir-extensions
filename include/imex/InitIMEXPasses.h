@@ -15,7 +15,7 @@
 #ifndef _IMEX_INITALLPASSES_H_
 #define _IMEX_INITALLPASSES_H_
 
-#include <imex/Conversion/IMEXPasses.h>
+#include <imex/Conversion/Passes.h>
 // #include <imex/Transforms/IMEXPasses.h>
 #include <imex/Dialect/Dist/Transforms/Passes.h>
 // #include <imex/Dialect/*/Transforms/Passes.h>

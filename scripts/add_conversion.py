@@ -189,8 +189,8 @@ std::unique_ptr<::mlir::OperationPass<::mlir::ModuleOp>> createConvert{name}Pass
 }} // namespace imex
 """)
 
-# add header-include to IMEXPasses.h
-fn = jp(incroot, "IMEXPasses.h")
+# add header-include to Passes.h
+fn = jp(incroot, "Passes.h")
 with open(fn, "r") as f:
     lines = f.readlines()
 done = False
@@ -201,8 +201,8 @@ with open(fn, "w") as f:
             done = True
         f.write(l)
 
-# add Pass to IMEXPasses.td
-fn = jp(incroot, "IMEXPasses.td")
+# add Pass to Passes.td
+fn = jp(incroot, "Passes.td")
 with open(fn, "r") as f:
     lines = f.readlines()
 done = False
