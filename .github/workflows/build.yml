@@ -59,6 +59,7 @@ jobs:
           echo $LLVM_SHA_FILE
           echo 'LLVM_SHA<<EOF' >> $GITHUB_ENV
           cat $LLVM_SHA_FILE >> $GITHUB_ENV
+          echo 'EOF' >> $GITHUB_ENV
 
       - name: Cache TBB
         id: cache-tbb
