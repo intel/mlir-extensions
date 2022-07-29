@@ -16,7 +16,7 @@ jobs:
       TBB_VER: 2021.5.0
       LEVEL_ZERO_VER: v1.6.2
       TBB_URL_PREFIX: https://github.com/oneapi-src/oneTBB/releases/download/
-      LLVM_SHA_FILE: /home/runner/work/mlir-extensions/mlir-extensions/llvm-sha.txt
+      LLVM_SHA: /home/runner/work/mlir-extensions/mlir-extensions/llvm-sha.txt
 
     strategy:
       matrix:
@@ -56,19 +56,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Cache Vars
-        run: |
-          echo 'LLVM_SHA<<EOF' >> $GITHUB_ENV
-          cat $LLVM_SHA_FILE >> $GITHUB_ENV
-          echo 'EOF' >> $GITHUB_ENV
-
       - name: Cache TBB
         id: cache-tbb
         uses: actions/cache@v3
         with:
           path: |
             /home/runner/work/tbb/*
-          key: ${{ runner.os }}-build-tbb-${{ env.TBBVER }}
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('/home/runner/work/tbb/bundle_id.txt') }}
 
       - name: Cache Level-Zero
         id: cache-level-zero
@@ -76,7 +70,7 @@ jobs:
         with:
           path: |
             /home/runner/work/level-zero/**
-          key: ${{ runner.os }}-build-l0-${{ env.LEVEL_ZERO_VER }}
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('/home/runner/work/level-zero/bundle_id.txt') }}
 
       - name: Cache LLLVM-MLIR
         id: cache-llvm-mlir
@@ -86,10 +80,9 @@ jobs:
         with:
           path: |
             /home/runner/work/llvm-mlir/_mlir_install/**
-          key: ${{ runner.os }}-build-llvm-${{ env.CACHE_NUMBER }}-${{ env.LLVM_SHA }}
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ env.CACHE_NUMBER }}-${{ hashFiles( env.LLVM_SHA ) }}
 
       - name: Download TBB
-        if: steps.cache-tbb.outputs.cache-hit != 'true'
         shell: bash -l {0}
         run: |
           cd /home/runner/work
@@ -109,7 +102,6 @@ jobs:
           popd
 
       - name: Download and Build Level-Zero
-        if: steps.cache-level-zero.outputs.cache-hit != 'true'
         shell: bash -l {0}
         run: |
           cd /home/runner/work
@@ -147,7 +139,7 @@ jobs:
           np=`nproc`
           git clone https://github.com/llvm/llvm-project || exit 1
           cd llvm-project || exit 1
-          git checkout $LLVM_SHA || exit 1
+          git checkout `cat ${{ env.LLVM_SHA }}` || exit 1
           mkdir _build || exit 1
           cd _build || exit 1
           cmake ../llvm                                                    \
@@ -157,7 +149,6 @@ jobs:
             -DLLVM_ENABLE_ASSERTIONS=ON                                    \
             -DLLVM_ENABLE_RTTI=ON                                          \
             -DLLVM_USE_LINKER=gold                                         \
-            -DLLVM_INSTALL_UTILS=ON                                        \
             -DCMAKE_INSTALL_PREFIX=/home/runner/work/llvm-mlir/_mlir_install || exit 1
           cmake --build . -j ${np} || exit 1
           cmake --install . || exit 1
