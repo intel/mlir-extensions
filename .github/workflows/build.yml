@@ -17,16 +17,31 @@ jobs:
     timeout-minutes: 450
 
     env:
-      TBB_VER: 2021.5.0
       LEVEL_ZERO_VER: v1.6.2
+      LEVEL_ZERO_BUILDID_FILE: /home/runner/work/level-zero/bundle_id.txt
+      TBB_VER: 2021.5.0
+      TBB_BUILDID_FILE: /home/runner/work/tbb/bundle_id.txt
       TBB_URL_PREFIX: https://github.com/oneapi-src/oneTBB/releases/download/
-      LLVM_SHA: /home/runner/work/mlir-extensions/mlir-extensions/build_tools/llvm_version.txt
+      LLVM_SHA_FILE: /home/runner/work/mlir-extensions/mlir-extensions/build_tools/llvm_version.txt
 
     strategy:
       matrix:
         python: [3.9]
 
     steps:
+      - name: Setup Cache Vars
+        run: |
+          echo $LLVM_SHA_FILE
+          echo 'LLVM_SHA<<EOF' >> $GITHUB_ENV
+          cat $LLVM_SHA_FILE >> $GITHUB_ENV
+          echo 'EOF' >> $GITHUB_ENV
+          echo 'LEVEL_ZERO_BUILDID<<EOF' >> $GITHUB_ENV
+          cat $LEVEL_ZERO_BUILDID_FILE >> $GITHUB_ENV
+          echo 'EOF' >> $GITHUB_ENV
+          echo 'TBB_BUILDID<<EOF' >> $GITHUB_ENV
+          cat $TBB_BUILDID_FILE >> $GITHUB_ENV
+          echo 'EOF' >> $GITHUB_ENV
+
       - name: Cancel Previous Runs
         uses: styfle/cancel-workflow-action@0.6.0
         with:
@@ -60,7 +75,7 @@ jobs:
         with:
           path: |
             /home/runner/work/tbb/*
-          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('/home/runner/work/tbb/bundle_id.txt') }}
+          key: ${{ runner.os }}-build-tbb-${{ env.TBB_BUILD_ID }}
 
       - name: Cache Level-Zero
         id: cache-level-zero
@@ -68,7 +83,7 @@ jobs:
         with:
           path: |
             /home/runner/work/level-zero/**
-          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('/home/runner/work/level-zero/bundle_id.txt') }}
+          key: ${{ runner.os }}-build-level_zero-${{ env.LEVEL_ZERO_BUILDID }}
 
       - name: Cache LLLVM-MLIR
         id: cache-llvm-mlir
@@ -78,7 +93,7 @@ jobs:
         with:
           path: |
             /home/runner/work/llvm-mlir/_mlir_install/**
-          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ env.CACHE_NUMBER }}-${{ hashFiles( env.LLVM_SHA ) }}
+          key: ${{ runner.os }}-build-llvm-${{ env.CACHE_NUMBER }}-${{ env.LLVM_SHA }}
 
       - name: Download TBB
         shell: bash -l {0}
