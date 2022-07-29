@@ -142,8 +142,9 @@ jobs:
           pushd /home/runner/work/llvm-mlir
           echo "INFO: Need to rebuild LLVM-MLIR. Previous installation for MLIR not found"
           np=`nproc`
-          git clone https://github.com/llvm/llvm-project --branch ${LLVM_SHA} --single-branch || exit 1
+          git clone https://github.com/llvm/llvm-project --branch main --single-branch || exit 1
           cd llvm-project || exit 1
+          git checkout ${LLVM_SHA} || exit 1
           mkdir _build || exit 1
           cd _build || exit 1
           cmake ../llvm                                                    \
