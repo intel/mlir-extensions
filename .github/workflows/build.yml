@@ -49,8 +49,7 @@ jobs:
 
       - name: Install CMake and Ninja
         run: |
-          conda install cmake ninja
-          conda install -c conda-forge lit
+          conda install cmake ninja conda-forge::lit
 
       - name: Checkout repo
         uses: actions/checkout@v2
@@ -162,6 +161,8 @@ jobs:
         shell: bash -l {0}
 
         run: |
+          external_lit=`which lit`
+          echo ${external_lit}
           # make the llvm-mlir working dir
           mkdir -p /home/runner/work/tmpdir
           export TBB_PATH=/home/runner/work/tbb/oneapi-tbb-${TBB_VER}
@@ -172,7 +173,9 @@ jobs:
             --llvm-install /home/runner/work/llvm-mlir/_mlir_install           \
             --imex-enable-igpu                                                 \
             --imex-enable-tests                                                \
-            --imex-tbb-dir /${TBB_PATH}/lib/cmake/tbb
+            --imex-tbb-dir /${TBB_PATH}/lib/cmake/tbb                          \
+            --external-lit ${external_lit}
+            
 
       - name: Run IMEX core test cases
         shell: bash -l {0}
