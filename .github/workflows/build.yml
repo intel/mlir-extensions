@@ -56,7 +56,6 @@ jobs:
 
       - name: Setup Cache Vars
         run: |
-          echo $LLVM_SHA_FILE
           echo 'LLVM_SHA<<EOF' >> $GITHUB_ENV
           cat $LLVM_SHA_FILE >> $GITHUB_ENV
           echo 'EOF' >> $GITHUB_ENV
@@ -88,6 +87,7 @@ jobs:
           key: ${{ runner.os }}-build-llvm-${{ env.CACHE_NUMBER }}-${{ env.LLVM_SHA }}
 
       - name: Download TBB
+        if: steps.cache-tbb.outputs.cache-hit != 'true'
         shell: bash -l {0}
         run: |
           cd /home/runner/work
@@ -107,6 +107,7 @@ jobs:
           popd
 
       - name: Download and Build Level-Zero
+        if: steps.cache-level-zero.outputs.cache-hit != 'true'
         shell: bash -l {0}
         run: |
           cd /home/runner/work
