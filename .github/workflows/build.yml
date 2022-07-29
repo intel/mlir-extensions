@@ -68,7 +68,7 @@ jobs:
         with:
           path: |
             /home/runner/work/tbb/*
-          key: ${{ runner.os }}-build-tbb-${{ env.TBBVER }}
+          key: ${{ runner.os }}-build-tbb-${{ env.TBB_VER }}
 
       - name: Cache Level-Zero
         id: cache-level-zero
