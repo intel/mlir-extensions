@@ -1,6 +1,7 @@
 ## Setting up development environment
 ```sh
-conda create -n imex-dev -c intel -c defaults -c conda-forge pip">=21.2.4" pre-commit cmake clang-format tbb-devel lit
+conda create -n imex-dev -c intel -c defaults -c conda-forge pip">=21.2.4" pre-commit cmake clang-format tbb-devel lit doxygen
+
 conda activate imex-dev
 pre-commit install -f -c ./scripts/.pre-commit-config.yaml
 ```
@@ -42,6 +43,12 @@ mkdir build
 cd build
 CC=gcc-9 CXX=g++-9 MLIR_DIR=$llvm-c38ef550de81631641cb1485e0641d1d2227dce4 cmake ..
 make -j 12
+```
+
+#### Building code docu
+```sh
+cd build
+cmake --build . --target doc_doxygen
 ```
 
 ## Adding a new dialect

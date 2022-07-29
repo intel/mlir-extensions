@@ -23,7 +23,7 @@
 
 namespace imex {
 
-/// Add all the MLIR dialects to the provided registry.
+/// Add all the IMEX dialects to the provided registry.
 inline void registerAllDialects(::mlir::DialectRegistry &registry) {
   // clang-format off
     registry.insert<::imex::ptensor::PTensorDialect,
@@ -31,7 +31,7 @@ inline void registerAllDialects(::mlir::DialectRegistry &registry) {
   // clang-format on
 }
 
-/// Append all the MLIR dialects to the registry contained in the given context.
+/// Append all the IMEX dialects to the registry contained in the given context.
 inline void registerAllDialects(::mlir::MLIRContext &context) {
   ::mlir::DialectRegistry registry;
   ::imex::registerAllDialects(registry);
