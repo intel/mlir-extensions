@@ -50,6 +50,7 @@ jobs:
       - name: Install CMake and Ninja
         run: |
           conda install cmake ninja
+          conda install -c conda-forge lit
 
       - name: Checkout repo
         uses: actions/checkout@v2
