@@ -145,7 +145,7 @@ jobs:
           np=`nproc`
           git clone https://github.com/llvm/llvm-project || exit 1
           cd llvm-project || exit 1
-          git checkout `cat ${{ env.LLVM_SHA }}` || exit 1
+          git checkout $LLVM_SHA || exit 1
           mkdir _build || exit 1
           cd _build || exit 1
           cmake ../llvm                                                    \
