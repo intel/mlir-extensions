@@ -170,3 +170,9 @@ jobs:
         run: |
           cd /home/runner/work/mlir-extensions/mlir-extensions/_build || exit 1
           cmake --build . --target check-imex-opt || exit 1
+
+      - name: Build doxygen docs
+        shell: bash -l {0}
+        run: |
+          cd /home/runner/work/mlir-extensions/mlir-extensions/_build || exit 1
+          cmake --build . --target doc_doxygen || exit 1
