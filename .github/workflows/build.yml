@@ -122,9 +122,8 @@ jobs:
             echo ${LEVEL_ZERO_VER} > bundle_id.txt || rm -rf bundle_id.txt
             cat bundle_id.txt || exit 1
             [ -f bundle_id.txt ] || exit 1
-            git clone https://github.com/oneapi-src/level-zero.git || exit 1
+            git clone https://github.com/oneapi-src/level-zero.git --branch ${LEVEL_ZERO_VER} --single-branch || exit 1
             pushd level-zero || exit 1
-            git checkout ${LEVEL_ZERO_VER} || exit 1
             mkdir level_zero_install || exit 1
             mkdir build || exit 1
             cd build || exit 1
@@ -143,9 +142,8 @@ jobs:
           pushd /home/runner/work/llvm-mlir
           echo "INFO: Need to rebuild LLVM-MLIR. Previous installation for MLIR not found"
           np=`nproc`
-          git clone https://github.com/llvm/llvm-project || exit 1
+          git clone https://github.com/llvm/llvm-project --branch ${LLVM_SHA} --single-branch || exit 1
           cd llvm-project || exit 1
-          git checkout $LLVM_SHA || exit 1
           mkdir _build || exit 1
           cd _build || exit 1
           cmake ../llvm                                                    \
