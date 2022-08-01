@@ -43,10 +43,10 @@ jobs:
         shell: bash -l {0}
         run: conda info
 
-      - name: Install CMake and Ninja
+      - name: Install Build tools
         shell: bash -l {0}
         run: |
-          conda install cmake ninja conda-forge::lit
+          conda install cmake ninja conda-forge::lit conda-forge::doxygen
           conda list
 
       - name: Checkout repo
