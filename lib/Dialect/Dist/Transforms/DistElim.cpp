@@ -78,7 +78,6 @@ struct ElimLocalShapeOp
                   mlir::PatternRewriter &rewriter) const override {
     auto x = op.ptensor().getDefiningOp<::imex::dist::RegisterPTensorOp>();
     assert(x);
-    x.shape().dump();
     rewriter.replaceOp(op, x.shape());
     return ::mlir::success();
   }
