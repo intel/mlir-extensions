@@ -9,5 +9,5 @@ add_mlir_conversion_library(IMEXPTensorToLinalg
 
   LINK_LIBS PUBLIC
   IMEXPTensor
-  MLIRLinalg
+  MLIRLinalgDialect
 )
