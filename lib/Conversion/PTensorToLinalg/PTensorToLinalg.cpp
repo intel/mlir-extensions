@@ -193,8 +193,8 @@ struct ARangeLowering
 
     // register and init tensor
     llvm::SmallVector<mlir::Value> lshp(1);
-    auto tmp_tnsr =
-        rewriter.create<::mlir::linalg::InitTensorOp>(loc, shp, typ);
+    auto tmp_tnsr = rewriter.create<::mlir::linalg::InitTensorOp>(
+        loc, ::mlir::ValueRange({cnt}), typ);
     auto shape = rewriter.create<::mlir::shape::ShapeOfOp>(loc, tmp_tnsr);
     auto tnsr_id =
         initDTensor(loc, rewriter, orgrtyp.getDist(), 1, shp, shape, typ, lshp);
