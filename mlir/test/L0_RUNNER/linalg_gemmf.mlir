@@ -12,7 +12,7 @@ func.func @main() {
     %unranked = tensor.cast %3 : tensor<3x3xf32>to tensor<*xf32>
     call @printMemrefF32(%unranked) : (tensor<*xf32>) -> () 
     
-// CHECK: Unranked Memref base@ = {{0x[-9a-f]*}}
+// CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
 // CHECK-SAME: rank = 2 offset = 0 sizes = [3, 3] strides = [3, 1] data = 
 // CHECK-NEXT: [14.1,   14.8,   14.6]
 // CHECK-NEXT:  [11,   13,   10.5]
