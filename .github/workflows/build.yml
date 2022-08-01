@@ -74,7 +74,7 @@ jobs:
         with:
           path: |
             /home/runner/work/level-zero/**
-          key: ${{ runner.os }}-build-level_zero-${{ env.LEVEL_ZERO_VER }}
+          key: ${{ runner.os }}-build-l0-${{ env.LEVEL_ZERO_VER }}
 
       - name: Cache LLLVM-MLIR
         id: cache-llvm-mlir
