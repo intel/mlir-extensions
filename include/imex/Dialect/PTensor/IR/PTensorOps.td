@@ -37,6 +37,9 @@ def PTensor_Dialect : Dialect {
 
     // The C++ namespace that the dialect class definition resides in.
     let cppNamespace = "::imex::ptensor";
+
+    //  We use the default parser/printer which handles registered types
+    let useDefaultTypePrinterParser = true;
 }
 
 class PTensor_Type<string name, string typeMnemonic, list<Trait> traits = []>
