@@ -1560,10 +1560,12 @@ struct LowerTakeContextOp
             &func.getBody(), mlir::Region::iterator{}, ctxType, unknownLoc);
         rewriter.setInsertionPointToStart(block);
 
+        // Get init func declaration so we can check original return types.
         auto initFunc = mod.lookupSymbol<mlir::func::FuncOp>(initFuncSym);
         assert(initFunc && "Invalid init func");
         auto initFuncType = initFunc.getFunctionType();
-        assert(initFuncType.getNumResults() == resultsCount);
+        assert(initFuncType.getNumResults() == resultsCount &&
+               "Invalid init func");
 
         auto innerResults =
             rewriter
@@ -1580,6 +1582,8 @@ struct LowerTakeContextOp
           assert(convertedType && "Invalid init func result type");
 
           mlir::Value val = innerResults[i];
+          // Init function may not be type-converted at this point, so insert
+          // conversion casts.
           if (convertedType != srcType)
             val = converter->materializeSourceConversion(rewriter, unknownLoc,
                                                          convertedType, val);
@@ -1618,6 +1622,7 @@ struct LowerTakeContextOp
         auto ctxStruct =
             rewriter.create<mlir::LLVM::LoadOp>(unknownLoc, ctxStructType, ptr);
 
+        // Get deinit func declaration so we can check original arg types.
         auto deinitFunc = mod.lookupSymbol<mlir::func::FuncOp>(deinitFuncSym);
         assert(deinitFunc && "Invalid deinit func");
         auto deinitFuncType = deinitFunc.getFunctionType();
@@ -1629,6 +1634,8 @@ struct LowerTakeContextOp
           mlir::Value val = rewriter.create<mlir::LLVM::ExtractValueOp>(
               unknownLoc, resultTypes[i], ctxStruct, pos);
           auto resType = deinitFuncType.getInput(i);
+          // Deinit function may not be type-converted at this point, so insert
+          // conversion casts.
           if (resultTypes[i] != resType)
             val = converter->materializeTargetConversion(rewriter, unknownLoc,
                                                          resType, val);
