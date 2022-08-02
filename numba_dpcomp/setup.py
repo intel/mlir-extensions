@@ -66,7 +66,6 @@ if int(os.environ.get("DPCOMP_SETUP_RUN_CMAKE", 1)):
         "-DIMEX_ENABLE_NUMBA_FE=ON",
         "-DIMEX_ENABLE_NUMBA_HOTFIX=ON",
         "-DIMEX_ENABLE_TBB_SUPPORT=ON",
-        "-DLLVM_ENABLE_ZLIB=OFF",
     ]
 
     # DPNP
