@@ -1560,16 +1560,35 @@ struct LowerTakeContextOp
             &func.getBody(), mlir::Region::iterator{}, ctxType, unknownLoc);
         rewriter.setInsertionPointToStart(block);
 
-        auto innerResults = rewriter
-                                .create<mlir::func::CallOp>(
-                                    unknownLoc, initFuncSym, results.getTypes())
-                                ->getResults();
+        // Get init func declaration so we can check original return types.
+        auto initFunc = mod.lookupSymbol<mlir::func::FuncOp>(initFuncSym);
+        assert(initFunc && "Invalid init func");
+        auto initFuncType = initFunc.getFunctionType();
+        assert(initFuncType.getNumResults() == resultsCount &&
+               "Invalid init func");
+
+        auto innerResults =
+            rewriter
+                .create<mlir::func::CallOp>(unknownLoc, initFuncSym,
+                                            initFuncType.getResults())
+                ->getResults();
 
         mlir::Value ctxStruct =
             rewriter.create<mlir::LLVM::UndefOp>(unknownLoc, ctxStructType);
         for (auto i : llvm::seq(0u, resultsCount)) {
           auto pos = rewriter.getI64ArrayAttr(i);
-          auto val = rewriter.getRemappedValue(innerResults[i]);
+          auto srcType = initFuncType.getResult(i);
+          auto convertedType = converter->convertType(srcType);
+          assert(convertedType && "Invalid init func result type");
+
+          mlir::Value val = innerResults[i];
+          // Init function may not be type-converted at this point, so insert
+          // conversion casts.
+          if (convertedType != srcType)
+            val = converter->materializeSourceConversion(rewriter, unknownLoc,
+                                                         convertedType, val);
+          assert(val && "Invalid init func result type");
+
           ctxStruct = rewriter.create<mlir::LLVM::InsertValueOp>(
               unknownLoc, ctxStruct, val, pos);
         }
@@ -1603,17 +1622,23 @@ struct LowerTakeContextOp
         auto ctxStruct =
             rewriter.create<mlir::LLVM::LoadOp>(unknownLoc, ctxStructType, ptr);
 
+        // Get deinit func declaration so we can check original arg types.
+        auto deinitFunc = mod.lookupSymbol<mlir::func::FuncOp>(deinitFuncSym);
+        assert(deinitFunc && "Invalid deinit func");
+        auto deinitFuncType = deinitFunc.getFunctionType();
+        assert(deinitFuncType.getNumInputs() == resultsCount);
+
         llvm::SmallVector<mlir::Value> args(resultsCount);
         for (auto i : llvm::seq(0u, resultsCount)) {
           auto pos = rewriter.getI64ArrayAttr(i);
           mlir::Value val = rewriter.create<mlir::LLVM::ExtractValueOp>(
               unknownLoc, resultTypes[i], ctxStruct, pos);
-          auto resType = results[i].getType();
-          if (val.getType() != resType)
-            val = rewriter
-                      .create<mlir::UnrealizedConversionCastOp>(unknownLoc,
-                                                                resType, val)
-                      .getResult(0);
+          auto resType = deinitFuncType.getInput(i);
+          // Deinit function may not be type-converted at this point, so insert
+          // conversion casts.
+          if (resultTypes[i] != resType)
+            val = converter->materializeTargetConversion(rewriter, unknownLoc,
+                                                         resType, val);
 
           args[i] = val;
         }
@@ -1756,12 +1781,12 @@ struct LowerReleaseContextOp
 };
 
 /// Convert operations from the plier_util dialect to the LLVM dialect.
-struct PierUtilToLLVMPass
-    : public mlir::PassWrapper<PierUtilToLLVMPass,
+struct PlierUtilToLLVMPass
+    : public mlir::PassWrapper<PlierUtilToLLVMPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
-  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(PierUtilToLLVMPass)
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(PlierUtilToLLVMPass)
 
-  PierUtilToLLVMPass() = default;
+  PlierUtilToLLVMPass() = default;
 
   void runOnOperation() override {
     mlir::Operation *op = getOperation();
@@ -1787,6 +1812,7 @@ struct PierUtilToLLVMPass
 
     mlir::LLVMConversionTarget target(context);
     target.addLegalOp<mlir::func::FuncOp>();
+    target.addLegalOp<mlir::func::CallOp>();
     target.addIllegalDialect<plier::PlierUtilDialect>();
     if (failed(applyPartialConversion(op, target, std::move(patterns))))
       signalPassFailure();
@@ -1850,7 +1876,7 @@ static void populateLowerToLlvmPipeline(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<PreLLVMLowering>());
   pm.addNestedPass<mlir::func::FuncOp>(mlir::createConvertMathToLLVMPass());
   pm.addPass(mlir::createConvertMathToLibmPass());
-  pm.addPass(std::make_unique<PierUtilToLLVMPass>());
+  pm.addPass(std::make_unique<PlierUtilToLLVMPass>());
   pm.addPass(std::make_unique<LLVMLoweringPass>());
   pm.addNestedPass<mlir::LLVM::LLVMFuncOp>(
       std::make_unique<PostLLVMLowering>());

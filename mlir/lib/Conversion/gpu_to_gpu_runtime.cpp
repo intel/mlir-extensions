@@ -829,7 +829,10 @@ static mlir::Value lowerFloatSubAtomic(mlir::OpBuilder &builder,
 
 class ConvertAtomicOps : public mlir::OpConversionPattern<mlir::func::CallOp> {
 public:
-  using OpConversionPattern::OpConversionPattern;
+  ConvertAtomicOps(mlir::TypeConverter &typeConverter,
+                   mlir::MLIRContext *context)
+      : mlir::OpConversionPattern<mlir::func::CallOp>(typeConverter, context,
+                                                      /*benefit*/ 10) {}
 
   mlir::LogicalResult
   matchAndRewrite(mlir::func::CallOp op, mlir::func::CallOp::Adaptor adaptor,
