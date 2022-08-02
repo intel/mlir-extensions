@@ -1132,7 +1132,7 @@ static mlir::Value propagateCasts(mlir::Value val, mlir::Type thisType) {
 mlir::OpFoldResult SignCastOp::fold(llvm::ArrayRef<mlir::Attribute> operands) {
   assert(operands.size() == 1);
   auto thisType = getType();
-  auto attrOperand = operands.front();
+  auto attrOperand = operands.front().dyn_cast_or_null<mlir::TypedAttr>();
   if (attrOperand && attrOperand.getType() == thisType)
     return attrOperand;
 
