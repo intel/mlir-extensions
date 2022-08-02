@@ -82,7 +82,7 @@ jobs:
         id: cache-llvm-mlir
         uses: actions/cache@v3
         env:
-          CACHE_NUMBER: 1  # Increase to reset cache
+          CACHE_NUMBER: 0  # Increase to reset cache
         with:
           path: |
             /home/runner/work/llvm-mlir/_mlir_install/**
@@ -158,7 +158,6 @@ jobs:
             -DLLVM_ENABLE_RTTI=ON                                          \
             -DLLVM_USE_LINKER=gold                                         \
             -DLLVM_INSTALL_UTILS=ON                                        \
-            -DLLVM_ENABLE_ZLIB=OFF                                         \
             -DCMAKE_INSTALL_PREFIX=/home/runner/work/llvm-mlir/_mlir_install || exit 1
           cmake --build . -j ${np} || exit 1
           cmake --install . || exit 1
