@@ -80,11 +80,11 @@ jobs:
         id: cache-llvm-mlir
         uses: actions/cache@v3
         env:
-          CACHE_NUMBER: 0  # Increase to reset cache
+          LLVM_CACHE_NUMBER: 1  # Increase to reset cache
         with:
           path: |
             /home/runner/work/llvm-mlir/_mlir_install/**
-          key: ${{ runner.os }}-build-llvm-${{ env.CACHE_NUMBER }}-${{ env.LLVM_SHA }}
+          key: ${{ runner.os }}-build-llvm-${{ env.LLVM_CACHE_NUMBER }}-${{ env.LLVM_SHA }}
 
       - name: Download TBB
         if: steps.cache-tbb.outputs.cache-hit != 'true'
@@ -155,6 +155,7 @@ jobs:
             -DLLVM_ENABLE_RTTI=ON                                          \
             -DLLVM_USE_LINKER=gold                                         \
             -DLLVM_INSTALL_UTILS=ON                                        \
+            -DLLVM_ENABLE_ZSTD=OFF                                         \
             -DCMAKE_INSTALL_PREFIX=/home/runner/work/llvm-mlir/_mlir_install || exit 1
           cmake --build . -j ${np} || exit 1
           cmake --install . || exit 1
