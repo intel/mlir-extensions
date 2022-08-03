@@ -49,7 +49,7 @@ jobs:
 
       - name: Install CMake and Ninja
         run: |
-          conda install cmake ninja
+          conda install cmake ninja conda-forge::lit
 
       - name: Checkout repo
         uses: actions/checkout@v2
@@ -82,7 +82,7 @@ jobs:
         id: cache-llvm-mlir
         uses: actions/cache@v3
         env:
-          CACHE_NUMBER: 0  # Increase to reset cache
+          CACHE_NUMBER: 1  # Increase to reset cache
         with:
           path: |
             /home/runner/work/llvm-mlir/_mlir_install/**
@@ -162,12 +162,17 @@ jobs:
             -DCMAKE_INSTALL_PREFIX=/home/runner/work/llvm-mlir/_mlir_install || exit 1
           cmake --build . -j ${np} || exit 1
           cmake --install . || exit 1
+          cp bin/FileCheck /home/runner/work/llvm-mlir/_mlir_install/bin/
+          cp bin/count /home/runner/work/llvm-mlir/_mlir_install/bin/
+          cp bin/not /home/runner/work/llvm-mlir/_mlir_install/bin/
           popd
 
       - name: Build IMEX
         shell: bash -l {0}
 
         run: |
+          external_lit=`which lit`
+          echo ${external_lit}
           # make the llvm-mlir working dir
           mkdir -p /home/runner/work/tmpdir
           export TBB_PATH=/home/runner/work/tbb/oneapi-tbb-${TBB_VER}
@@ -178,7 +183,16 @@ jobs:
             --llvm-install /home/runner/work/llvm-mlir/_mlir_install           \
             --imex-enable-igpu                                                 \
             --imex-enable-tests                                                \
-            --imex-tbb-dir /${TBB_PATH}/lib/cmake/tbb
+            --imex-tbb-dir /${TBB_PATH}/lib/cmake/tbb                          \
+            --external-lit ${external_lit}
+            
+
+      - name: Run IMEX core test cases
+        shell: bash -l {0}
+
+        run: |
+          cd _build || exit 1
+          cmake --build . --target check-l0-runner || exit 1
 
       - name: Build Python frontend
         shell: bash -l {0}

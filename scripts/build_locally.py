@@ -310,6 +310,7 @@ def _build_imex(
     enable_numba_fe=False,
     with_tbb=None,
     enable_numba_hotfix=False,
+    external_lit=None,
 ):
     """Builds Intel MLIR extensions (IMEX).
 
@@ -400,6 +401,9 @@ def _build_imex(
             cmake_config_args.append("-DIMEX_ENABLE_TBB_SUPPORT=ON")
         else:
             warnings.warn("Provided TBB directory path does not exist.")
+    
+    if external_lit is not None:
+        cmake_config_args.append("-DLLVM_EXTERNAL_LIT=" + external_lit)
 
     build_dir = os.path.abspath(build_dir)
     # Configure
@@ -512,6 +516,12 @@ if __name__ == "__main__":
         "--imex-clean-build",
         action="store_true",
         help="Removes any existing build directory when building IMEX",
+    )
+    imex_builder.add_argument(
+        "--external-lit",
+        type=str,
+        help="Path to a lit executable",
+        dest="external_lit",
     )
 
     args = parser.parse_args()
@@ -629,6 +639,7 @@ if __name__ == "__main__":
         enable_igpu=args.imex_enable_igpu,
         with_tbb=g_tbb_dir,
         enable_tests=args.imex_enable_tests,
+        external_lit=args.external_lit,
     )
 
     # TODO
