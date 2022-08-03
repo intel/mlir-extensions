@@ -871,12 +871,10 @@ struct GPUToLLVMPass
                                                             target);
     mlir::populateGpuToLLVMConversionPatterns(
         converter, patterns, mlir::gpu::getDefaultGpuBinaryAnnotation());
-#if defined(IMEX_ENABLE_NUMBA_HOTFIX)
     mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::func::FuncOp>(
         patterns, converter);
     mlir::populateReturnOpTypeConversionPattern(patterns, converter);
     mlir::populateCallOpTypeConversionPattern(patterns, converter);
-#endif
 
     target.addDynamicallyLegalOp<mlir::func::FuncOp>(
         [&](mlir::func::FuncOp op) -> llvm::Optional<bool> {
