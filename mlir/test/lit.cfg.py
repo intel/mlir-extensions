@@ -49,15 +49,15 @@ config.excludes = ['Inputs', 'Examples', 'CMakeLists.txt', 'README.txt', 'LICENS
 # test_exec_root: The root path where tests should be run.
 config.test_exec_root = os.path.join(config.imex_obj_root, 'mlir', 'test')
 config.imex_tools_dir = os.path.join(config.imex_obj_root, 'mlir', 'tools', 'level_zero_runner')
-config.imex_level_zero_opt_dir = os.path.join(config.imex_obj_root, 'mlir', 'tools', 'level-zero-opt')
+config.imex_opt_dir = os.path.join(config.imex_obj_root, 'mlir', 'tools', 'imex-opt')
 
 # Tweak the PATH to include the tools dir.
 llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
 
-tool_dirs = [config.imex_tools_dir, config.llvm_tools_dir, config.imex_level_zero_opt_dir]
+tool_dirs = [config.imex_tools_dir, config.llvm_tools_dir, config.imex_opt_dir]
 tools = [
     'level_zero_runner',
-    'level-zero-opt'
+    'imex-opt'
 ]
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)

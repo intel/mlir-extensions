@@ -13,5 +13,5 @@
 # limitations under the License.
 
 add_subdirectory(level_zero_runner)
-add_subdirectory(level-zero-opt)
+add_subdirectory(imex-opt)
 

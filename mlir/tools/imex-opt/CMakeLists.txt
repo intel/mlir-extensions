@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-project(level-zero-opt LANGUAGES CXX C)
+project(imex-opt LANGUAGES CXX C)
 
 find_package(LLVM REQUIRED CONFIG)
 find_package(MLIR REQUIRED CONFIG)
@@ -51,8 +51,8 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${MLIR_INCLUDE_DIRS}
     )
 
-set(CMAKE_INSTALL_BINDIR ./tools/level-zero-opt)
+set(CMAKE_INSTALL_BINDIR "./tools/${PROJECT_NAME}")
 
-install(TARGETS level-zero-opt
+install(TARGETS ${PROJECT_NAME}
         PERMISSIONS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
         )

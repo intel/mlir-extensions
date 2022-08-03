@@ -24,6 +24,7 @@ configure_lit_site_cfg(
 
 set(L0_RUNNER_TEST_DEPENDS
         FileCheck
+        imex-opt
         level_zero_runner
         dpcomp-runtime
         dpcomp-gpu-runtime
