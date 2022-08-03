@@ -92,6 +92,8 @@ public:
 
 struct SCFToAffinePass
     : public mlir::PassWrapper<SCFToAffinePass, mlir::OperationPass<void>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(SCFToAffinePass)
+
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::AffineDialect>();
