@@ -816,78 +816,6 @@ struct DeallocOpLowering
   }
 };
 
-struct ReshapeLowering
-    : public mlir::ConvertOpToLLVMPattern<mlir::memref::ReshapeOp> {
-  using ConvertOpToLLVMPattern<mlir::memref::ReshapeOp>::ConvertOpToLLVMPattern;
-
-  explicit ReshapeLowering(mlir::LLVMTypeConverter &converter)
-      : ConvertOpToLLVMPattern<mlir::memref::ReshapeOp>(converter,
-                                                        /*benefit*/ 2) {}
-
-  mlir::LogicalResult
-  matchAndRewrite(mlir::memref::ReshapeOp op,
-                  mlir::memref::ReshapeOp::Adaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
-    auto converter = getTypeConverter();
-    auto dstType = converter->convertType(op.getType());
-    if (!dstType)
-      return mlir::failure();
-
-    mlir::MemRefDescriptor source(adaptor.source());
-    mlir::MemRefDescriptor shape(adaptor.shape());
-
-    auto loc = op.getLoc();
-    auto result = mlir::MemRefDescriptor::undef(rewriter, loc, dstType);
-    result.setAllocatedPtr(rewriter, loc, source.allocatedPtr(rewriter, loc));
-    result.setAlignedPtr(rewriter, loc, source.alignedPtr(rewriter, loc));
-    result.setOffset(rewriter, loc, source.offset(rewriter, loc));
-
-    auto memRefType = op.getType().cast<mlir::MemRefType>();
-    auto numDims = memRefType.getRank();
-    llvm::SmallVector<mlir::Value> sizes(static_cast<unsigned>(numDims));
-    auto indexType = getIndexType();
-    for (unsigned i = 0; i < numDims; ++i) {
-      auto ind = createIndexConstant(rewriter, loc, i);
-      mlir::Value dataPtr =
-          getStridedElementPtr(loc, memRefType, shape, ind, rewriter);
-      auto size = rewriter.create<mlir::LLVM::LoadOp>(loc, dataPtr).getResult();
-      if (size.getType() != indexType)
-        size = rewriter.create<mlir::LLVM::ZExtOp>(loc, indexType, size);
-
-      result.setSize(rewriter, loc, i, size);
-      sizes[i] = size;
-    }
-
-    // Strides: iterate sizes in reverse order and multiply.
-    int64_t stride = 1;
-    mlir::Value runningStride = createIndexConstant(rewriter, loc, 1);
-    for (auto i = static_cast<unsigned>(memRefType.getRank()); i-- > 0;) {
-      result.setStride(rewriter, loc, i, runningStride);
-
-      int64_t size = memRefType.getShape()[i];
-      if (size == 0)
-        continue;
-      bool useSizeAsStride = stride == 1;
-      if (size == mlir::ShapedType::kDynamicSize)
-        stride = mlir::ShapedType::kDynamicSize;
-      if (stride != mlir::ShapedType::kDynamicSize)
-        stride *= size;
-
-      if (useSizeAsStride)
-        runningStride = sizes[i];
-      else if (stride == mlir::ShapedType::kDynamicSize)
-        runningStride =
-            rewriter.create<mlir::LLVM::MulOp>(loc, runningStride, sizes[i]);
-      else
-        runningStride =
-            createIndexConstant(rewriter, loc, static_cast<uint64_t>(stride));
-    }
-
-    rewriter.replaceOp(op, static_cast<mlir::Value>(result));
-    return mlir::success();
-  }
-};
-
 struct ExpandShapeLowering
     : public mlir::ConvertOpToLLVMPattern<mlir::memref::ExpandShapeOp> {
   using ConvertOpToLLVMPattern<
@@ -1802,7 +1730,6 @@ struct PlierUtilToLLVMPass
         LowerUndef,
         LowerBuildTuple,
         LowerRetainOp,
-        ReshapeLowering,
         ExpandShapeLowering,
         LowerExtractMemrefMetadataOp,
         LowerTakeContextOp,

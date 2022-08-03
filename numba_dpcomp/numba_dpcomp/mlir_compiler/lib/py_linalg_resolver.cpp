@@ -16,6 +16,7 @@
 
 #include <pybind11/pybind11.h>
 
+#include <mlir/AsmParser/AsmParser.h>
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/Bufferization/IR/Bufferization.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
@@ -220,7 +221,9 @@ static auto toValues(py::handle obj, UnwrapFunc &&unwrapFunc) {
 static llvm::Optional<py::object> getPyLiteral(mlir::Attribute attr) {
   assert(attr);
   if (auto intAttr = attr.dyn_cast<mlir::IntegerAttr>()) {
-    if (auto intType = attr.getType().dyn_cast<mlir::IntegerType>()) {
+    if (auto intType = attr.cast<mlir::TypedAttr>()
+                           .getType()
+                           .dyn_cast<mlir::IntegerType>()) {
       // Ignore index type
       if (intType.getWidth() == 1)
         return py::bool_(intAttr.getInt() != 0);
