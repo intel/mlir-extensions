@@ -192,7 +192,7 @@ jobs:
 
         run: |
           cd _build || exit 1
-          cmake --build . --target check-l0-runner || exit 1
+          cmake --build . --target check-imex || exit 1
 
       - name: Build Python frontend
         shell: bash -l {0}

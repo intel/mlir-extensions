@@ -22,7 +22,7 @@ configure_lit_site_cfg(
         ${CMAKE_CURRENT_SOURCE_DIR}/lit.cfg.py
 )
 
-set(L0_RUNNER_TEST_DEPENDS
+set(IMEX_TEST_DEPENDS
         FileCheck
         imex-opt
         level_zero_runner
@@ -30,10 +30,10 @@ set(L0_RUNNER_TEST_DEPENDS
         dpcomp-gpu-runtime
         )
 
-add_lit_testsuite(check-l0-runner "Running the level-zero-runner regression tests"
+add_lit_testsuite(check-imex "Running the imex regression tests"
         ${CMAKE_CURRENT_BINARY_DIR}
-        DEPENDS ${L0_RUNNER_TEST_DEPENDS}
+        DEPENDS ${IMEX_TEST_DEPENDS}
         )
-set_target_properties(check-l0-runner PROPERTIES FOLDER "Tests")
+set_target_properties(check-imex PROPERTIES FOLDER "Tests")
 
-add_lit_testsuites(L0_RUNNER ${CMAKE_CURRENT_SOURCE_DIR} DEPENDS ${L0_RUNNER_TEST_DEPENDS})
+add_lit_testsuites(imex-tests ${CMAKE_CURRENT_SOURCE_DIR} DEPENDS ${IMEX_TEST_DEPENDS})
