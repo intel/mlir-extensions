@@ -82,11 +82,11 @@ jobs:
         id: cache-llvm-mlir
         uses: actions/cache@v3
         env:
-          CACHE_NUMBER: 1  # Increase to reset cache
+          LLVM_CACHE_NUMBER: 1  # Increase to reset cache
         with:
           path: |
             /home/runner/work/llvm-mlir/_mlir_install/**
-          key: ${{ runner.os }}-build-llvm-${{ env.CACHE_NUMBER }}-${{ env.LLVM_SHA }}
+          key: ${{ runner.os }}-build-llvm-${{ env.LLVM_CACHE_NUMBER }}-${{ env.LLVM_SHA }}
 
       - name: Download TBB
         if: steps.cache-tbb.outputs.cache-hit != 'true'
