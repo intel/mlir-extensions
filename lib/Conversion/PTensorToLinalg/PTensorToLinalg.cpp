@@ -21,6 +21,7 @@
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
+#include <mlir/Dialect/Func/Transforms/FuncConversions.h>
 #include <mlir/Dialect/LLVMIR/LLVMDialect.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
@@ -80,24 +81,25 @@ static mlir::Value doSignCast(mlir::OpBuilder &builder, mlir::Location &loc,
 // If not distributed, simply init tensor
 static auto initDTensor(mlir::Location &loc,
                         ::mlir::ConversionPatternRewriter &rewriter, bool dist,
-                        uint64_t rank, ::mlir::Value shp, ::mlir::Type eltyp,
+                        uint64_t rank, llvm::SmallVector<mlir::Value> shp_vals,
+                        ::mlir::Value shp_tnsr, ::mlir::Type eltyp,
                         ::llvm::SmallVector<mlir::Value> &lshp /* out */) {
   if (dist) {
     auto ityp = rewriter.getI64Type();
     auto idxtyp = rewriter.getIndexType();
-    auto shptyp = mlir::RankedTensorType::get(
-        llvm::SmallVector<int64_t>(1, rank), idxtyp);
+    auto shptyp =
+        mlir::RankedTensorType::get(llvm::SmallVector<int64_t>(rank), idxtyp);
 
     // Register with runtime
     ::mlir::Value id =
-        rewriter.create<::imex::dist::RegisterPTensorOp>(loc, ityp, shp);
+        rewriter.create<::imex::dist::RegisterPTensorOp>(loc, ityp, shp_tnsr);
     // and get local shape
     auto lshp_mr = rewriter.create<::imex::dist::LocalShapeOp>(loc, shptyp, id);
 
     // get shape as SmallVector<mlir::Value>
     // why can't we just use the existing tensor?
     lshp.resize(rank);
-    for (auto i : ::llvm::seq(0lu, rank)) {
+    for (auto i : ::llvm::seq(0LU, rank)) {
       auto ia = rewriter.getIndexAttr(i);
       auto idx = rewriter.create<::mlir::arith::ConstantOp>(loc, ia);
       lshp[i] = rewriter.create<::mlir::tensor::ExtractOp>(
@@ -108,7 +110,8 @@ static auto initDTensor(mlir::Location &loc,
         rewriter.create<::mlir::linalg::InitTensorOp>(loc, lshp, eltyp);
     return std::make_pair(ltnsr.getResult(), id);
   } else { // not distributed, simply init
-    auto ltnsr = rewriter.create<::mlir::linalg::InitTensorOp>(loc, shp, eltyp);
+    auto ltnsr =
+        rewriter.create<::mlir::linalg::InitTensorOp>(loc, shp_vals, eltyp);
     return std::make_pair(ltnsr.getResult(), ::mlir::Value());
   }
 }
@@ -138,7 +141,7 @@ struct ARangeLowering
     auto orgrtyp = op.getType().dyn_cast<::imex::ptensor::PTensorType>();
     assert(orgrtyp);
 
-    // we operator on signless integers
+    // we operate on signless integers
     auto ityp = rewriter.getI64Type();
     if (start.getType() != ityp) {
       start =
@@ -166,8 +169,8 @@ struct ARangeLowering
     auto mone =
         rewriter.create<mlir::arith::ConstantOp>(loc, mattr).getResult();
 
-    // Compute number of elements as (stop - start + step + (step < 0 ? 1 : -1))
-    // / step
+    // Compute number of elements as
+    //   (stop - start + step + (step < 0 ? 1 : -1)) / step
     auto cnd = rewriter.create<mlir::arith::CmpIOp>(
         loc, ::mlir::arith::CmpIPredicate::ult, step, zero);
     auto inc = rewriter.create<mlir::arith::SelectOp>(loc, cnd, one, mone);
@@ -177,9 +180,9 @@ struct ARangeLowering
     auto cnt =
         rewriter.create<mlir::arith::DivUIOp>(loc, tmp3, step).getResult();
     cnt = rewriter
-              .create<::mlir::UnrealizedConversionCastOp>(
-                  loc, ::mlir::IndexType::get(cnt.getType().getContext()), cnt)
-              .getResult(0);
+              .create<::mlir::arith::IndexCastOp>(loc, rewriter.getIndexType(),
+                                                  cnt)
+              .getResult();
 
     // create shape vector
     auto ttyp = converter.convertType(op.getType())
@@ -190,11 +193,11 @@ struct ARangeLowering
 
     // register and init tensor
     llvm::SmallVector<mlir::Value> lshp(1);
-    auto tmp_tnsr =
-        rewriter.create<::mlir::linalg::InitTensorOp>(loc, shp, typ);
+    auto tmp_tnsr = rewriter.create<::mlir::linalg::InitTensorOp>(
+        loc, ::mlir::ValueRange({cnt}), typ);
     auto shape = rewriter.create<::mlir::shape::ShapeOfOp>(loc, tmp_tnsr);
     auto tnsr_id =
-        initDTensor(loc, rewriter, orgrtyp.getDist(), 1, shape, typ, lshp);
+        initDTensor(loc, rewriter, orgrtyp.getDist(), 1, shp, shape, typ, lshp);
 
     // compute start index of local partition
     if (orgrtyp.getDist()) {
@@ -261,16 +264,29 @@ static void yield(mlir::OpBuilder &builder, ::mlir::Location loc,
 // the arith ops are template arguments, one for ints and one for floats
 // currently only integers and floats are supported
 // currently unsigned int ops are not supported
-template <typename IOP, typename FOP = IOP>
+template <typename IOP, typename FOP = void>
 static BodyType buildTrivial(::mlir::Type typ) {
   return [typ](mlir::OpBuilder &builder, ::mlir::Location loc,
                ::mlir::ValueRange args) -> void {
-    auto lhs = doSignCast(builder, loc, args[0]);
-    auto rhs = doSignCast(builder, loc, args[1]);
-    if (lhs.getType().isIntOrIndex()) {
-      yield(builder, loc, typ, builder.create<IOP>(loc, lhs, rhs).getResult());
-    } else if (lhs.getType().isIntOrIndexOrFloat()) {
-      yield(builder, loc, typ, builder.create<FOP>(loc, lhs, rhs).getResult());
+    auto lhs_typ = args[0].getType();
+    if (lhs_typ.isIntOrIndex()) {
+      if constexpr (!std::is_same_v<IOP, void>) {
+        auto lhs = doSignCast(builder, loc, args[0]);
+        auto rhs = doSignCast(builder, loc, args[1]);
+        yield(builder, loc, typ,
+              builder.create<IOP>(loc, lhs, rhs).getResult());
+        return;
+      } else
+        assert("Found integer type but binary op not defined for integers" ==
+               nullptr);
+    } else if (lhs_typ.isIntOrIndexOrFloat()) {
+      if constexpr (!std::is_same_v<FOP, void>) {
+        yield(builder, loc, typ,
+              builder.create<FOP>(loc, args[0], args[1]).getResult());
+        return;
+      } else
+        assert("Found float type but binary op not defined for floats" ==
+               nullptr);
     } else {
       assert("Only integers and floats supported for binary ops" == nullptr);
     }
@@ -344,7 +360,7 @@ struct EWBinOpLowering
     auto lhstyp = adaptor.lhs().getType().dyn_cast<::mlir::RankedTensorType>();
     auto rhstyp = adaptor.rhs().getType().dyn_cast<::mlir::RankedTensorType>();
     if (!lhstyp || !rhstyp || !lhsorgtyp || !rhsorgtyp) {
-      // fail if not, will be retired if operands get converted elsewhere
+      // fail if not, will be retried if operands get converted elsewhere
       return ::mlir::failure();
     }
 
@@ -383,8 +399,8 @@ struct EWBinOpLowering
     auto tmp_tnsr =
         rewriter.create<::mlir::linalg::InitTensorOp>(loc, shp, typ);
     auto shape = rewriter.create<::mlir::shape::ShapeOfOp>(loc, tmp_tnsr);
-    auto tnsr_id =
-        initDTensor(loc, rewriter, lhsorgtyp.getDist(), rank, shape, typ, lshp);
+    auto tnsr_id = initDTensor(loc, rewriter, lhsorgtyp.getDist(), rank, shp,
+                               shape, typ, lshp);
 
     // Get signless operands into vec
     llvm::SmallVector<mlir::Value, 2> oprnds = {adaptor.lhs(), adaptor.rhs()};
@@ -409,7 +425,7 @@ struct EWBinOpLowering
   }
 };
 
-// get a body builder for giben binary operation and result type
+// get a body builder for given binary operation and result type
 // we accept a result type to insert a cast after the operation if needed
 static BodyType getBodyBuilder(::imex::ptensor::ReduceOpId rop,
                                ::mlir::Type typ) {
@@ -431,7 +447,7 @@ static BodyType getBodyBuilder(::imex::ptensor::ReduceOpId rop,
 }
 
 // convert PTensor's reduction operations and their return type to Linalg/tensor
-// the given op's type is expected to convert to the apprioprate type (shape and
+// the given op's type is expected to convert to the appropriate type (shape and
 // element-type) we also need some arith and affine (for linalg::genericop)
 // FIXME reduction over a subset of dimensionsstruct ReductionOpLowering
 struct ReductionOpLowering
@@ -448,7 +464,7 @@ struct ReductionOpLowering
     auto orginptyp =
         op.input().getType().dyn_cast<::imex::ptensor::PTensorType>();
     if (!inptyp || !orginptyp) {
-      // fail if not, will be retired if operands get converted elsewhere
+      // fail if not, will be retried if operands get converted elsewhere
       return ::mlir::failure();
     }
 
@@ -469,7 +485,8 @@ struct ReductionOpLowering
     // FIXME support reduction dimensions
     auto rank = static_cast<unsigned>(shaped.getRank());
     assert(rank == 0);
-    llvm::SmallVector<mlir::Value> shp(0); //::mlir::ShapedType::kDynamicSize;
+    llvm::SmallVector<mlir::Value> shp(
+        rank); //::mlir::ShapedType::kDynamicSize;
     // create new tensor
     auto zattr = rewriter.getI64IntegerAttr(0);
     auto zero =
@@ -478,8 +495,8 @@ struct ReductionOpLowering
     auto tmp_tnsr =
         rewriter.create<::mlir::linalg::InitTensorOp>(loc, shp, typ);
     auto shape = rewriter.create<::mlir::shape::ShapeOfOp>(loc, tmp_tnsr);
-    auto tnsr_id = initDTensor(loc, rewriter, orginptyp.getDist(), rank, shape,
-                               sltyp, lshp);
+    auto tnsr_id = initDTensor(loc, rewriter, orginptyp.getDist(), rank, shp,
+                               shape, sltyp, lshp);
     auto tnsr =
         rewriter.create<::mlir::linalg::FillOp>(loc, zero, tnsr_id.first);
 
@@ -560,9 +577,9 @@ struct ConvertPTensorToLinalgPass
       }
       return ::llvm::None;
     };
-    typeConverter.addArgumentMaterialization(materializeCast);
+    // typeConverter.addArgumentMaterialization(materializeCast);
     typeConverter.addSourceMaterialization(materializeCast);
-    typeConverter.addTargetMaterialization(materializeCast);
+    // typeConverter.addTargetMaterialization(materializeCast);
 #endif
     // We convert all PTensor stuff...
     target.addIllegalDialect<::imex::ptensor::PTensorDialect>();
@@ -574,20 +591,24 @@ struct ConvertPTensorToLinalgPass
     target.addLegalDialect<::mlir::arith::ArithmeticDialect>();
     target.addLegalDialect<::mlir::shape::ShapeDialect>();
     target.addLegalOp<::mlir::UnrealizedConversionCastOp>(); // FIXME
+    target.addDynamicallyLegalOp<::mlir::func::FuncOp>(
+        [&](::mlir::func::FuncOp op) {
+          return typeConverter.isSignatureLegal(op.getFunctionType()) &&
+                 typeConverter.isLegal(&op.getBody());
+        });
+    target.addDynamicallyLegalOp<::mlir::func::ReturnOp>(
+        [&](::mlir::func::ReturnOp op) { return typeConverter.isLegal(op); });
+    target.addDynamicallyLegalOp<mlir::func::CallOp>(
+        [&](mlir::func::CallOp op) { return typeConverter.isLegal(op); });
 
     ::mlir::RewritePatternSet patterns(&ctxt);
-#define FIXME 0
-#if FIXME
-    // For now, we also use plier's SignCastOp
-    target.addLegalOp<::plier::SignCastOp>();
-
-    // add rewrites/conversions for return types/ops and other control flow
-    // stuff
-    plier::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
-                                                              patterns, target);
-#endif
     patterns.insert<ARangeLowering, EWBinOpLowering, ReductionOpLowering>(
         typeConverter, &ctxt);
+
+    ::mlir::populateFunctionOpInterfaceTypeConversionPattern<
+        ::mlir::func::FuncOp>(patterns, typeConverter);
+    ::mlir::populateReturnOpTypeConversionPattern(patterns, typeConverter);
+    ::mlir::populateCallOpTypeConversionPattern(patterns, typeConverter);
 
     if (::mlir::failed(::mlir::applyPartialConversion(getOperation(), target,
                                                       ::std::move(patterns)))) {

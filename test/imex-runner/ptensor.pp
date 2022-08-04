@@ -1,0 +1,19 @@
+convert-ptensor-to-linalg
+dist-elim
+convert-shape-to-std
+arith-bufferize
+func.func(linalg-init-tensor-to-alloc-tensor
+          scf-bufferize
+          shape-bufferize
+          linalg-bufferize
+          tensor-bufferize)
+func-bufferize
+func.func(finalizing-bufferize
+          convert-linalg-to-parallel-loops)
+canonicalize
+func.func(lower-affine)
+fold-memref-subview-ops
+convert-scf-to-cf
+convert-memref-to-llvm
+convert-func-to-llvm
+reconcile-unrealized-casts
