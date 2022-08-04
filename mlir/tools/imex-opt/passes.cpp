@@ -26,6 +26,8 @@
 #include "mlir-extensions/Conversion/gpu_to_gpu_runtime.hpp"
 #include "mlir/Dialect/GPU/Transforms/Passes.h"
 
+// Passes registration.
+
 static mlir::PassPipelineRegistration<>
     ParallelLoopToGpu("parallel-loop-to-gpu", "Maps scf parallel loop to gpu",
                       [](mlir::OpPassManager &pm) {

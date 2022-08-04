@@ -28,7 +28,7 @@ get_property(conversion_libs GLOBAL PROPERTY MLIR_CONVERSION_LIBS)
 
 set(SOURCES_LIST
     main.cpp
-    rewrite-wrapper.cpp
+    passes.cpp
     )
 set(HEADERS_LIST
     )
