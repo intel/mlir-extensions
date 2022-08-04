@@ -1,4 +1,4 @@
-// RUN: imex-opt %s --scf-to-affine -lower-affine  -allow-unregistered-dialect -split-input-file| FileCheck %s
+// RUN: imex-opt %s --scf-to-affine -lower-affine -split-input-file| FileCheck %s
 
 // CHECK-LABLEL: copy_affine
 // CHECK: scf.parallel
