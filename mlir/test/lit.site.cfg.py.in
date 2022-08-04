@@ -39,6 +39,7 @@ else:
 config.imex_runtime_dir = os.path.join(config.imex_obj_root, "dpcomp_runtime")
 config.imex_igpu_runtime_dir = os.path.join(config.imex_obj_root, "dpcomp_gpu_runtime")
 
+
 # Support substitution of the tools_dir with user parameters. This is
 # used when we can't determine the tool dir at configuration time.
 try:
