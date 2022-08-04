@@ -97,7 +97,7 @@ option(IMEX_ENABLE_NUMBA_HOTFIX
 )
 
 option(ENABLE_E2E_GPU_TEST
-     "Generate build targets for the L0 integration tests."
+     "Generate build targets for the L0 end-to-end tests."
      OFF       
 )
 
