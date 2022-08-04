@@ -96,6 +96,25 @@ option(IMEX_ENABLE_NUMBA_HOTFIX
     OFF
 )
 
+option(ENABLE_E2E_GPU_TEST
+     "Generate build targets for the L0 integration tests."
+     OFF       
+)
+
+function(llvm_canonicalize_cmake_booleans)
+  foreach(var ${ARGN})
+    if(${var})
+      set(${var} 1 PARENT_SCOPE)
+    else()
+      set(${var} 0 PARENT_SCOPE)
+    endif()
+  endforeach()
+endfunction(llvm_canonicalize_cmake_booleans)
+
+llvm_canonicalize_cmake_booleans(
+    ENABLE_E2E_GPU_TEST
+)
+
 message(STATUS "IMEX_USE_DPNP ${DPNIMEX_USE_DPNPP_ENABLE}")
 message(STATUS "IMEX_ENABLE_IGPU_DIALECT ${IMEX_ENABLE_IGPU_DIALECT}")
 message(STATUS "IMEX_ENABLE_TESTS ${IMEX_ENABLE_TESTS}")

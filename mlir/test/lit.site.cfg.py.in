@@ -38,7 +38,7 @@ else:
     config.imex_shlib_prefix = "lib"
 config.imex_runtime_dir = os.path.join(config.imex_obj_root, "dpcomp_runtime")
 config.imex_igpu_runtime_dir = os.path.join(config.imex_obj_root, "dpcomp_gpu_runtime")
-
+config.enable_e2e_gpu_test = @ENABLE_E2E_GPU_TEST@
 
 # Support substitution of the tools_dir with user parameters. This is
 # used when we can't determine the tool dir at configuration time.
