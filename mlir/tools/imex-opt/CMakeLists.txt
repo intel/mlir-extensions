@@ -1,4 +1,4 @@
-# Copyright 2021 Intel Corporation
+# Copyright 2022 Intel Corporation
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-project(dpcomp-opt LANGUAGES CXX C)
+project(imex-opt LANGUAGES CXX C)
 
 find_package(LLVM REQUIRED CONFIG)
 find_package(MLIR REQUIRED CONFIG)
@@ -28,7 +28,7 @@ get_property(conversion_libs GLOBAL PROPERTY MLIR_CONVERSION_LIBS)
 
 set(SOURCES_LIST
     main.cpp
-    rewrite-wrapper.cpp
+    passes.cpp
     )
 set(HEADERS_LIST
     )
@@ -51,8 +51,8 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${MLIR_INCLUDE_DIRS}
     )
 
-set(CMAKE_INSTALL_BINDIR ./tools/dpcomp-opt)
+set(CMAKE_INSTALL_BINDIR "./tools/${PROJECT_NAME}")
 
-install(TARGETS dpcomp-opt
+install(TARGETS ${PROJECT_NAME}
         PERMISSIONS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
         )

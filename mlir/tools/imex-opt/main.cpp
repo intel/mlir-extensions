@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
   mlir::registerAllPasses();
   mlir::DialectRegistry registry;
   mlir::registerAllDialects(registry);
-  return mlir::failed(MlirOptMain(argc, argv,
-                                  "L0 modular optimizer driver\n", registry,
+  return mlir::failed(MlirOptMain(argc, argv, "imex modular optimizer driver\n",
+                                  registry,
                                   /*preloadDialectsInContext=*/false));
 }
