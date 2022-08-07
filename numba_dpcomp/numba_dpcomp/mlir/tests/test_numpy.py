@@ -1331,7 +1331,6 @@ def test_mean_loop(arr, parallel):
     assert_equal(py_func(arr), jit_func(arr))
 
 
-@pytest.mark.skipif(reason="Failure in propagate layout pass")
 @pytest.mark.parametrize(
     "arr",
     [
