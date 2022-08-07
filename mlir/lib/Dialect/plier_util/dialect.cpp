@@ -1081,7 +1081,8 @@ struct ChangeLayoutSelect
       }
 
       auto cond = op.getCondition();
-      auto result = rewriter.create<mlir::arith::SelectOp>(loc, cond, trueArg, falseArg);
+      auto result =
+          rewriter.create<mlir::arith::SelectOp>(loc, cond, trueArg, falseArg);
       rewriter.replaceOpWithNewOp<plier::ChangeLayoutOp>(op, dstType, result);
 
       return mlir::success();
