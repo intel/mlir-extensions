@@ -14,7 +14,7 @@
 
 #include <cstdint>
 #include <cstring>
-#include <stdlib.h>
+#include <cstdlib>
 #if defined(__MACH__)
 #include <cstdlib>
 #else
