@@ -46,7 +46,7 @@ jobs:
       - name: Install Build tools
         shell: bash -l {0}
         run: |
-          conda install cmake ninja conda-forge::lit conda-forge::doxygen
+          conda install cmake ninja graphviz conda-forge::lit conda-forge::doxygen
           conda list
 
       - name: Checkout repo

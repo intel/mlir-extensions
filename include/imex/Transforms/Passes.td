@@ -1,4 +1,4 @@
-//===-- IMEXPasses.td - Transforms pass definition file ----*- tablegen -*-===//
+//===-- Passes.td - Transform pass definition file ---------*- tablegen -*-===//
 //
 // Copyright 2022 Intel Corporation
 // Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -8,7 +8,7 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// This file defines the base classes of IMEX conversino passes.
+/// This file defines the base classes of IMEX conversion passes.
 ///
 //===----------------------------------------------------------------------===//
 
