@@ -5,7 +5,7 @@ if (DOXYGEN_FOUND)
     set(DOXYGEN_IN ${CMAKE_CURRENT_SOURCE_DIR}/../docs/Doxyfile.in)
     set(DOXYGEN_OUT ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile)
 
-    set(abs_srcdir ${CMAKE_CURRENT_BINARY_DIR})
+    set(abs_srcdir ${CMAKE_CURRENT_SOURCE_DIR})
     set(abs_builddir ${CMAKE_CURRENT_BINARY_DIR})
     set(enable_searchengine "NO")
     set(searchengine_url "")
@@ -26,6 +26,7 @@ if (DOXYGEN_FOUND)
     # note the option ALL which allows to build the docs together with the application
     add_custom_target(doc_doxygen # ALL
         COMMAND ${DOXYGEN_EXECUTABLE} ${DOXYGEN_OUT}
+        DEPENDS doxygen-mainpage.dox
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         COMMENT "Generating API documentation with Doxygen"
         VERBATIM)

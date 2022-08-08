@@ -1,0 +1,15 @@
+/// \mainpage IMEX
+///
+/// \section main_intro Introduction
+/// Welcome to the IMEX project.
+///
+/// This documentation describes the **internal** software that makes
+/// up IMEX, not the **external** use of IMEX or even MLIR. There are no instructions
+/// here on how to use IMEX/MLIR, only the APIs that make up the software. For
+/// usage instructions, please see the [project website](http://mlir.llvm.org)
+/// for further detail.
+///
+/// \section main_caveat Caveat
+/// This documentation is generated directly from the source code with doxygen.
+/// Since IMEX is constantly under active development, what you're about to
+/// read is out of date!
