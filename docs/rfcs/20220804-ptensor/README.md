@@ -1,54 +1,114 @@
 # RFC: Parallel Tensor Dialect (PTensor)
+Frank Schlimbach, Ivan Butygin
+
 ## Summary
 We propose a solution which can provide a high-level dialect for tensors and (numpy-like) tensor-operations allowing passes to create parallelism for GPU, OpenMP but also distributed memory while following the compute-follows-data concept.
+
+In this document, we describe several dialects and passes to provide a good high-level view on the overall flow. We might want to split this into more than one document.
 
 ## Motivation
 MLIR provides a few tensor dialects (like tensor and TOSA) and separate dialects/conversions for targeting devices and parallelism. More complicated flows, for example when device and host tensors exist at the same time, complicated analysis is needed to correctly implement compute-follows data. Similarly, converting to distributed parallelism, such as MPI-based, is difficult to get right with existing dialects if possible at all.
 Additionally, the current architecture in Plier does not have an explicit MLIR representation of arrays/tensors and so makes it very hard to re-use its tensor functionality without coming from python/numba. Currently conversions are even relying the Python runtime. A dialect for such numpy-like tensors and -operations can accept hints for targets (like devices, MPI etc) and enable its use in libraries independent of numba and Python.
 
 ## Proposal
-We propose two new Dialects:
+We propose three new Dialects:
 1. __PTensor__: providing a tensor type (ptensor) and operations on such ptensors
 2. __Dist__: dealing with the aspects of distributed data management, such as distributed memory alloction, GC and communication
-3. FIXME: I hope we do not need an extra GPU dialect and can use what already exists
+3. __CFD__: providing utilities to facilitate compute follows data
 
 Additionally we propose appropriate passes
-1. Converting __PTensor__ operations into dialects __Linalg__, __GPU__ and __Dist__
+1. Converting __PTensor__ operations into dialects __Linalg__, __GPU__, __CFD__ and __Dist__
 2. Converting __Dist__ operations into appropriate runtime calls
 
 ### ptensor Type
-The ptensor type extends the `mlir::tensor` with `device` and `dist` attributes.
+The ptensor type extends the `mlir::tensor` with `device` and `dist` attributes. It also carries
 The `device` indicates where the tensor lives, e.g. on which device.
 The target device is represented as a plain string which will be forwarded to the gpu/distributed runtimes. The exact syntax of device-identifiers is defined by the GPU runtime. The default value is `device="default"`.
 The `dist` attribute indicates whether the tensor is partitioned-distributed or not (boolean `UnitAttr`) and its default is `dist=false`.
 
-### ptensor Operations
-The initial set of operations matches the requirements of the core of [array-API](https://data-apis.org/array-api/latest/API_specification/index.html). Notice, since we focus in compute-follows-data, only the creation functions/operations will require the `device` and `dist` attributes. Operations consuming ptensors react on the the `device` and `dist` attribute of their input.
+### __PTensor__ Operations
+The initial set of operations matches the requirements of the core of [array-API](https://data-apis.org/array-api/latest/API_specification/index.html). Notice, since we focus on compute-follows-data, only the creation functions/operations will require the `device` and `dist` attributes. Operations consuming ptensors react on the the `device` and `dist` attribute of their input.
 
-### dist Operations
-- `alloc_dtensor(shape) : (ValueRange) -> (int64, RankedTensor)`
-- `dealloc_dtensor(dtensor) : (int64) -> void`
-- `create_view(dtensor, slice) : (int64, slice) -> (int64, RankedTensor)`
-- `local_shape(dtensor) : (int64) -> shape.shape`
-- `finalize_reduce(dtensor) : (int64) -> void`
-- `copy_view(from, to) : (int64, int64) -> void`
+There are many operations defined in the array API and even more in the numpy API. It does not seem feasable to have one MLIR operation per numpy function (we'd get a hundred or more). The Linalg dialect addresses this by 'classifiying' them, for example into 'elementwise_unary' and 'elementwise_binary' operations and having the actual element-operation as a parameter. On the contrary, the TOSA dialect decided to have have an excat 1:1 mapping for every tensor-operation ('add', 'abs', 'ceil' 'arithmetic_right_shift' etc.).
+
+There are several aspects to consider and each apporach has its pros and cons
+
+Classification
+* \+ in theory a single operation suffices and so the operation spec will be small
+* \+ easier to use when coming from numba
+* \- manual dispatch needed (potentially at various places)
+
+One Op per tensor-operation
+* \+ MLIR handles dispatch
+* \+ clearer syntax and documentation
+* \- large spec, likely including code duplication
+
+### __Dist__ Operations
+The Dist dialect provides operations dealing with tensors which are partitioned and distributed across multiple processes. The operations assume soem kind of a runtime which handles aspects like communication and partitioning.
+- `init_dtensor(shape) : (ValueRange) -> (int64)`
+- `fini_dtensor(dtensor_id) : (int64) -> void`
+- `init_view(dtensor_id, slice) : (int64, slice) -> (int64)`
+- `local_shape(dtensor_id) : (int64) -> shape.shape`
+- `local_slice(dtensor_id) : (int64) -> slice`
+- `copy(from_id, to_id, from_ltensor, to_ltensor) : (int64, int64, RankedTensor, RankedTensor) -> void`
+- `finalize_reduce(dtensor_id, ltensor) : (int64, RankedTensor) -> void`
+
+### __CFD__ Operations
+The CFD dialect provides region operation which defines the target on which operations within the region should be executed on.
 
 ### Passes
 All passes which consume `ptensor`s and -operations comply to compute-follows-data: Generation of GPU-, distribution-, parallelization- et al. operations depend on the `dist` and `device` attributes of input tensors. For example, if a tensor has the attribute "device='GPU'" then memory allocation operations must target the GPU.
+
+#### --ptensor-gpu
+This pass inserts GPU regions around all operations which are expected to execute on GPU devices. This enables compute-follows-data and allows later passes to identify what goes to non-default devices and what stays on the default target device.
+
+It constitutes an error if an operation has multiple (input and output) arguments of type ptensor and their `device` argument is not the same on all ptensor arguments. If the `device` attribute is not the default device, a region is created and populated with the input op.
+
+This pass needs to be executed before --lower-ptensor to be effective.
+
+Example:
+```
+ptensor.add(%pt, %1): (ptensor<..., dist='GPU'>, int64) -> ptensor.ptensor<..., dist='GPU'>
+```
+will become
+```
+cfd.region(team)['dist'] {
+  cfd.region()['GPU'] {
+    ptensor.add(%pt, %1): (ptensor<..., dist='GPU'>, int64) -> ptensor.ptensor<..., dist='GPU'>
+  }
+}
+```
 
 #### --lower-ptensor
 This pass completely lowers ptensor operations to
 - __Tensor__: Tensor types will convert to plain tensors. `dist` and `device` attributes get stripped off and used to appropriately create necessary operations in __GPU__ and __Dist__ dialects.
 - __Linalg__: The actual functionality will be represnted by one or more operations of the Linalg dialect.
-- __GPU__: highest level GPU dialect to indicate what needs to go to GPUs
 - __Dist__: new dialect which deals with primitives to manage operations on distributed tensors. Similar to the __GPU__ dialect the primitives might lower to interaction with a runtime (library).
-- utility dialects like __shape__, __affine__, __func__ and __arith__
+- utility dialects like __memref__, __shape__, __affine__, __func__ and __arith__
 
-Combining conversions to multiple dialects keeps analysis simple and allows effective code generation. Some operations require interleaving operations from various dialects. Separate passes would become unnecessarily complicated because they need to understand the context (which we know while we convert ptensor). For instance, distributed `arange` requires various interactions with __Dist__ interleaving process-local operation in __Linalg__; a simple wrap of the local operation is not feasible.
+The ptensor type will be replaced by `RankedTensor` if if `dist==false`. Distributed tensors will be replaced by 2 values: The `RankedTensor` and an `int64` representing the a unique identifier of the 'global' tensor entity. The latter is used in for interacting with the __Dist__ dialect.
+
+Combining conversions to multiple dialects keeps analysis simple and allows effective code generation. Some operations require interleaving operations from various dialects. Separate passes would become unnecessarily complicated because they need to understand the context (which we know while we convert ptensor). For instance, distributed `arange` requires various interactions with __Dist__ interleaving process-local operation in __Linalg__; a simple wrap of the local operation is not feasible:
+```
+%res = ptensor.arange(%1, %2, %3){dist} : (int64, int64, int64)  -> ptensor.ptensor<..., dist=true>
+```
+would decompose into the following high-level ops:
+```
+%start = $1
+%stop = $compute_stop_index(%1, %2, %3)
+%step = $3
+%gshape = $compute_global_shape(%1, %2, %3)
+%did = dist.init_dtensor(%gshape)
+%lshape = dist.local_shape(%did)
+%lslice = dist.local_slice(%did)
+%ltensor = linalg.init_tensor(%lshape)
+%rtensor = linalg.generic($compute_arange, %lslice, %lshape, %ltensor)
+%res = %rtensor, %did
+```
 
 Complicated computation kernels might be simply replaced with a an appropriate library call to MKL or alike.
 
-Possible parameters to this pass could be flags to ignore `dist` and/or `device` attributes.
+Possible parameters to this pass could be flags to ignore `dist` attributes.
 
 #### --dist-to-intel-runtime
 FIXME: name and flow should be similar to what happens on the GPU side
