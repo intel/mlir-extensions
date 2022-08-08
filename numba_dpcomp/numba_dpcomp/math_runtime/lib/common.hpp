@@ -15,6 +15,7 @@
 #pragma once
 
 #include <array>
+#include <stdlib.h>
 
 #include "dpcomp-math-runtime_export.h"
 
