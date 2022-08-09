@@ -19,6 +19,7 @@ We propose three new Dialects:
 Additionally we propose appropriate passes
 1. Converting __PTensor__ operations into dialects __Linalg__, __GPU__, __CFD__ and __Dist__
 2. Converting __Dist__ operations into appropriate runtime calls
+3. Converting __CFD__ to __GPU__ Where?
 
 ### ptensor Type
 The ptensor type extends the `mlir::tensor` with `device` and `dist` attributes. It also carries
@@ -29,19 +30,95 @@ The `dist` attribute indicates whether the tensor is partitioned-distributed or 
 ### __PTensor__ Operations
 The initial set of operations matches the requirements of the core of [array-API](https://data-apis.org/array-api/latest/API_specification/index.html). Notice, since we focus on compute-follows-data, only the creation functions/operations will require the `device` and `dist` attributes. Operations consuming ptensors react on the the `device` and `dist` attribute of their input.
 
-There are many operations defined in the array API and even more in the numpy API. It does not seem feasable to have one MLIR operation per numpy function (we'd get a hundred or more). The Linalg dialect addresses this by 'classifiying' them, for example into 'elementwise_unary' and 'elementwise_binary' operations and having the actual element-operation as a parameter. On the contrary, the TOSA dialect decided to have have an excat 1:1 mapping for every tensor-operation ('add', 'abs', 'ceil' 'arithmetic_right_shift' etc.).
+There are many operations defined in the array API and even more in the numpy API. It does not seem feasable to have one MLIR operation per numpy function (we'd get a hundred or more). The Linalg dialect addresses this by 'classifying' them, for example into 'elementwise_unary' and 'elementwise_binary' operations and having the actual per-element-operation as a parameter. On the contrary, the TOSA dialect decided to have have an excat 1:1 mapping for every tensor-operation ('add', 'abs', 'ceil' 'arithmetic_right_shift' etc.).
 
-There are several aspects to consider and each apporach has its pros and cons
+There are several aspects to consider and each approach has its pros and cons
 
 Classification
 * \+ in theory a single operation suffices and so the operation spec will be small
 * \+ easier to use when coming from numba
+* \- some late error checking
 * \- manual dispatch needed (potentially at various places)
 
 One Op per tensor-operation
 * \+ MLIR handles dispatch
 * \+ clearer syntax and documentation
+* \+ more early error checking (like type checking)
 * \- large spec, likely including code duplication
+* \- potentially more verbose code when coming from numba/Python
+
+In the end, the crucial question probably is if PTensor is to be positioned as a generic (parallel) tensor dialect or primarily as an entry point into MLIR from Python. Also, priorization of aspects of SW design practices play a role.
+
+We suggest
+* classify/group where semantically justifyable and so reduce the interface's surface
+* do not classify when parameters differ and so allow early type checking
+
+* Tensor creation
+  * arange(start, stop, step, dtype, device) : (int64, int64, int64, type, str) -> ptensor.ptensor
+  * asarray(??) : (??) -> ptensor.ptensor
+  * create(shape, value, dtype, device) : (shape.shape, anytype, type, str) -> ptensor.ptensor
+    * covers empty, ones, zeros, full
+  * create_like(rsh, value, dtype, device) : (shape.shape, anytype, type, str) -> ptensor.ptensor
+    * covers empty_like, ones_like, zeros_like, full_like
+  * eye(n_rows, n_cols, k, dtype, device) : (int63, int64, int64, type, str) -> ptensor.ptensor
+  * from_dlpack(obj) : (ptr) -> ptensor.ptensor
+  * linspace(start, stop, n, dtype, device) : (number, number, number, type, str) -> ptensor.ptensor
+  * meshgrid(arrays) : (list) -> list
+  * extract_triangle{$side}(rhs, k) : (ptensor.ptensor, int64) -> ptensor.ptensor
+    * $side = ['lower', 'upper']
+* Tensor attributes
+  * shape(rhs) : (ptensor.ptensor) -> shape.shape
+  * rank(rhs) : (ptensor.ptensor) -> int64
+  * size(rhs) : (ptensor.ptensor) -> int64
+* Data Type functions
+  * cast(rhs, dtype, do_copy) : (ptensor.ptensor, type, bool) -> ptensor.ptensor
+  * broadcast(rhs, shape) : (ptensor.ptensor, shape.shape) -> ptensor.ptensor
+  * result_type(inpts) : (list) -> type
+* Indexing
+  * extract_slice(rhs, slice) : (ptensor.ptensor, list) -> ptensor.ptensor
+  * extract_mask(rhs, mask) : (ptensor.ptensor, ptensor.ptensor) -> ptensor.ptensor
+* Manipulation
+  * combine{$cop}(tensors, axis) : (list, int64) -> ptensor.ptensor
+    * $cop = ['concat', 'stack']
+  * expand_dims(rhs, axis) : (ptensor.ptensor, array) -> ptensor.ptensor
+  * flip(rhs, axis) : (ptensor.ptensor, array) -> ptensor.ptensor
+  * permute_dims(rhs, axis) : (ptensor.ptensor, array) -> ptensor.ptensor
+  * reshape(rhs, shape, copy) : (ptensor.ptensor, shape.shape, bool) -> ptensor.ptensor
+  * roll(rhs, shift, axis) : (ptensor.ptensor, int64, array) -> ptensor.ptensor
+  * squeeze(rhs, axis) : (ptensor.ptensor, array) -> ptensor.ptensor
+* Elementwise operations
+  * elementwise_unary_op{$euop}(rhs) : (ptensor.ptensor) -> ptensor
+    * $euop = ['abs', 'acos', 'acosh', 'asin', 'bitwise_invert', ...]
+  * elementwise_unary_test{$euop}(rhs) : (ptensor.ptensor) -> ptensor
+    * $euop = ['isnan', 'isinf', 'logical_not', ...]
+  * elementwise_binary_op{$ebop}(lhs, rhs) : (ptensor.ptensor, ptensor.ptensor) -> ptensor
+    * $ebop = ['add', 'sub', 'greater', 'bitwise_left_shift', ...]
+  * elementwise_binary_test{$ebop}(lhs, rhs) : (ptensor.ptensor, ptensor.ptensor) -> ptensor
+    * $ebop = ['greater', 'less', 'equal', 'logical_and', ...]
+* Linear Algebra
+  * matmul(rhs, lhs) : (ptensor.ptensor, ptensor.ptensor) -> ptensor.ptensor
+  * matrix_transpose(rhs) : (ptensor.ptensor) -> ptensor.ptensor
+  * vecdot(rhs, lhs, axis) : (ptensor.ptensor, ptensor.ptensor, int64) -> ptensor.ptensor
+  * tensor_dot(rhs, lhs, axis) : (ptensor.ptensor, ptensor.ptensor, array) -> ptensor.ptensor
+* Searching
+  * find_index{$fop}(rhs, axis) : (ptensor.ptensor, int64, bool) -> ptensor.ptensor
+    * $fop = ['argmax', 'argmin']
+  * nonzero(rhs) : (ptensor.ptensor) -> tuple
+  * where(cond, rhs, lhs) : (scf.condition, ptensor.ptensor, ptensor.ptensor) -> ptensor.ptensor
+* Set Functions
+  * unique_all(rhs) : (ptensor.ptensor) -> [ptensor.ptensor, ptensor.ptensor, ptensor.ptensor, ptensor.ptensor]
+  * unique_counts(rhs) : (ptensor.ptensor) -> [ptensor.ptensor, ptensor.ptensor]
+  * unique_inverse(rhs) : (ptensor.ptensor) -> [ptensor.ptensor, ptensor.ptensor]
+  * unique_values(rhs) : (ptensor.ptensor) -> ptensor.ptensor
+* Sorting Functions
+  * sort{$sop}(rhs, descending, stable) : (ptensor.ptensor, bool, bool) -> ptensor.ptensor
+  * argsort{$sop}(rhs, descending, stable) : (ptensor.ptensor, bool, bool) -> ptensor.ptensor
+* Statistical Functions
+  * reduce{$rop}(rhs, axis, correction) : (ptensor.ptensor, int64) -> ptensor.ptensor
+    * $rop = ['max', 'min', 'mean', 'prod', 'sum', 'var', 'std']
+* Utility Functions
+  * test{$top}(rhs, axis) : (ptensor.ptensor, int64) -> ptensor.ptensor
+    * $rop = ['any', 'all']
 
 ### __Dist__ Operations
 The Dist dialect provides operations dealing with tensors which are partitioned and distributed across multiple processes. The operations assume soem kind of a runtime which handles aspects like communication and partitioning.
@@ -72,8 +149,8 @@ ptensor.add(%pt, %1): (ptensor<..., dist='GPU'>, int64) -> ptensor.ptensor<..., 
 ```
 will become
 ```
-cfd.region(team)['dist'] {
-  cfd.region()['GPU'] {
+cfd.region{'dist'}(team) {
+  cfd.region{'GPU'}() {
     ptensor.add(%pt, %1): (ptensor<..., dist='GPU'>, int64) -> ptensor.ptensor<..., dist='GPU'>
   }
 }
