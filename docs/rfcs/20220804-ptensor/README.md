@@ -55,71 +55,71 @@ We suggest
 
 #### Operation details
 * Tensor creation
-  * arange(start, stop, step, dtype, device) : (int64, int64, int64, type, str) -> ptensor.ptensor
-  * asarray(??) : (??) -> ptensor.ptensor
-  * create(shape, value, dtype, device) : (shape.shape, anytype, type, str) -> ptensor.ptensor
-    * covers empty, ones, zeros, full
-  * create_like(rsh, value, dtype, device) : (shape.shape, anytype, type, str) -> ptensor.ptensor
-    * covers empty_like, ones_like, zeros_like, full_like
-  * eye(n_rows, n_cols, k, dtype, device) : (int63, int64, int64, type, str) -> ptensor.ptensor
-  * from_dlpack(obj) : (ptr) -> ptensor.ptensor
-  * linspace(start, stop, n, dtype, device) : (number, number, number, type, str) -> ptensor.ptensor
-  * meshgrid(arrays) : (list) -> list
-  * extract_triangle{$side}(rhs, k) : (ptensor.ptensor, int64) -> ptensor.ptensor
-    * $side = ['lower', 'upper']
+  * `arange(start, stop, step, dtype, device) : (int64, int64, int64, type, str) -> ptensor.ptensor`
+  * `asarray(??) : (??) -> ptensor.ptensor`
+  * `create(shape, value, dtype, device) : (shape.shape, anytype, type, str) -> ptensor.ptensor`
+    * covers `empty, ones, zeros, full`
+  * `create_like(rsh, value, dtype, device) : (shape.shape, anytype, type, str) -> ptensor.ptensor`
+    * covers `empty_like, ones_like, zeros_like, full_like`
+  * `eye(n_rows, n_cols, k, dtype, device) : (int63, int64, int64, type, str) -> ptensor.ptensor`
+  * `from_dlpack(obj) : (ptr) -> ptensor.ptensor`
+  * `linspace(start, stop, n, dtype, device) : (number, number, number, type, str) -> ptensor.ptensor`
+  * `meshgrid(arrays) : (list) -> list`
+  * `extract_triangle{$side}(rhs, k) : (ptensor.ptensor, int64) -> ptensor.ptensor`
+    * `$side = ['lower', 'upper']`
 * Tensor attributes
-  * shape(rhs) : (ptensor.ptensor) -> shape.shape
-  * rank(rhs) : (ptensor.ptensor) -> int64
-  * size(rhs) : (ptensor.ptensor) -> int64
+  * `shape(rhs) : (ptensor.ptensor) -> shape.shape`
+  * `rank(rhs) : (ptensor.ptensor) -> int64`
+  * `size(rhs) : (ptensor.ptensor) -> int64`
 * Data Type functions
-  * cast(rhs, dtype, do_copy) : (ptensor.ptensor, type, bool) -> ptensor.ptensor
-  * broadcast(rhs, shape) : (ptensor.ptensor, shape.shape) -> ptensor.ptensor
-  * result_type(inpts) : (list) -> type
+  * `cast(rhs, dtype, do_copy) : (ptensor.ptensor, type, bool) -> ptensor.ptensor`
+  * `broadcast(rhs, shape) : (ptensor.ptensor, shape.shape) -> ptensor.ptensor`
+  * `result_type(inpts) : (list) -> type`
 * Indexing
-  * extract_slice(rhs, slice) : (ptensor.ptensor, list) -> ptensor.ptensor
-  * extract_mask(rhs, mask) : (ptensor.ptensor, ptensor.ptensor) -> ptensor.ptensor
+  * `extract_slice(rhs, slice) : (ptensor.ptensor, list) -> ptensor.ptensor`
+  * `extract_mask(rhs, mask) : (ptensor.ptensor, ptensor.ptensor) -> ptensor.ptensor`
 * Manipulation
-  * combine{$cop}(tensors, axis) : (list, int64) -> ptensor.ptensor
-    * $cop = ['concat', 'stack']
-  * expand_dims(rhs, axis) : (ptensor.ptensor, array) -> ptensor.ptensor
-  * flip(rhs, axis) : (ptensor.ptensor, array) -> ptensor.ptensor
-  * permute_dims(rhs, axis) : (ptensor.ptensor, array) -> ptensor.ptensor
-  * reshape(rhs, shape, copy) : (ptensor.ptensor, shape.shape, bool) -> ptensor.ptensor
-  * roll(rhs, shift, axis) : (ptensor.ptensor, int64, array) -> ptensor.ptensor
-  * squeeze(rhs, axis) : (ptensor.ptensor, array) -> ptensor.ptensor
+  * `combine{$cop}(tensors, axis) : (list, int64) -> ptensor.ptensor`
+    * `$cop = ['concat', 'stack']`
+  * `expand_dims(rhs, axis) : (ptensor.ptensor, array) -> ptensor.ptensor`
+  * `flip(rhs, axis) : (ptensor.ptensor, array) -> ptensor.ptensor`
+  * `permute_dims(rhs, axis) : (ptensor.ptensor, array) -> ptensor.ptensor`
+  * `reshape(rhs, shape, copy) : (ptensor.ptensor, shape.shape, bool) -> ptensor.ptensor`
+  * `roll(rhs, shift, axis) : (ptensor.ptensor, int64, array) -> ptensor.ptensor`
+  * `squeeze(rhs, axis) : (ptensor.ptensor, array) -> ptensor.ptensor`
 * Elementwise operations
-  * elementwise_unary_op{$euop}(rhs) : (ptensor.ptensor) -> ptensor
-    * $euop = ['abs', 'acos', 'acosh', 'asin', 'bitwise_invert', ...]
-  * elementwise_unary_test{$euop}(rhs) : (ptensor.ptensor) -> ptensor
-    * $euop = ['isnan', 'isinf', 'logical_not', ...]
-  * elementwise_binary_op{$ebop}(lhs, rhs) : (ptensor.ptensor, ptensor.ptensor) -> ptensor
-    * $ebop = ['add', 'sub', 'greater', 'bitwise_left_shift', ...]
-  * elementwise_binary_test{$ebop}(lhs, rhs) : (ptensor.ptensor, ptensor.ptensor) -> ptensor
-    * $ebop = ['greater', 'less', 'equal', 'logical_and', ...]
+  * `elementwise_unary_op{$euop}(rhs) : (ptensor.ptensor) -> ptensor`
+    * `$euop = ['abs', 'acos', 'acosh', 'asin', 'bitwise_invert', ...]`
+  * `elementwise_unary_test{$euop}(rhs) : (ptensor.ptensor) -> ptensor`
+    * `$euop = ['isnan', 'isinf', 'logical_not', ...]`
+  * `elementwise_binary_op{$ebop}(lhs, rhs) : (ptensor.ptensor, ptensor.ptensor) -> ptensor`
+    * `$ebop = ['add', 'sub', 'greater', 'bitwise_left_shift', ...]`
+  * `elementwise_binary_test{$ebop}(lhs, rhs) : (ptensor.ptensor, ptensor.ptensor) -> ptensor`
+    * `$ebop = ['greater', 'less', 'equal', 'logical_and', ...]`
 * Linear Algebra
-  * matmul(rhs, lhs) : (ptensor.ptensor, ptensor.ptensor) -> ptensor.ptensor
-  * matrix_transpose(rhs) : (ptensor.ptensor) -> ptensor.ptensor
-  * vecdot(rhs, lhs, axis) : (ptensor.ptensor, ptensor.ptensor, int64) -> ptensor.ptensor
-  * tensor_dot(rhs, lhs, axis) : (ptensor.ptensor, ptensor.ptensor, array) -> ptensor.ptensor
+  * `matmul(rhs, lhs) : (ptensor.ptensor, ptensor.ptensor) -> ptensor.ptensor`
+  * `matrix_transpose(rhs) : (ptensor.ptensor) -> ptensor.ptensor`
+  * `vecdot(rhs, lhs, axis) : (ptensor.ptensor, ptensor.ptensor, int64) -> ptensor.ptensor`
+  * `tensor_dot(rhs, lhs, axis) : (ptensor.ptensor, ptensor.ptensor, array) -> ptensor.ptensor`
 * Searching
-  * find_index{$fop}(rhs, axis) : (ptensor.ptensor, int64, bool) -> ptensor.ptensor
-    * $fop = ['argmax', 'argmin']
-  * nonzero(rhs) : (ptensor.ptensor) -> tuple
-  * where(cond, rhs, lhs) : (scf.condition, ptensor.ptensor, ptensor.ptensor) -> ptensor.ptensor
+  * `find_index{$fop}(rhs, axis) : (ptensor.ptensor, int64, bool) -> ptensor.ptensor`
+    * `$fop = ['argmax', 'argmin']`
+  * `nonzero(rhs) : (ptensor.ptensor) -> tuple`
+  * `where(cond, rhs, lhs) : (scf.condition, ptensor.ptensor, ptensor.ptensor) -> ptensor.ptensor`
 * Set Functions
-  * unique_all(rhs) : (ptensor.ptensor) -> [ptensor.ptensor, ptensor.ptensor, ptensor.ptensor, ptensor.ptensor]
-  * unique_counts(rhs) : (ptensor.ptensor) -> [ptensor.ptensor, ptensor.ptensor]
-  * unique_inverse(rhs) : (ptensor.ptensor) -> [ptensor.ptensor, ptensor.ptensor]
-  * unique_values(rhs) : (ptensor.ptensor) -> ptensor.ptensor
+  * `unique_all(rhs) : (ptensor.ptensor) -> [ptensor.ptensor, ptensor.ptensor, ptensor.ptensor, ptensor.ptensor]`
+  * `unique_counts(rhs) : (ptensor.ptensor) -> [ptensor.ptensor, ptensor.ptensor]`
+  * `unique_inverse(rhs) : (ptensor.ptensor) -> [ptensor.ptensor, ptensor.ptensor]`
+  * `unique_values(rhs) : (ptensor.ptensor) -> ptensor.ptensor`
 * Sorting Functions
-  * sort{$sop}(rhs, descending, stable) : (ptensor.ptensor, bool, bool) -> ptensor.ptensor
-  * argsort{$sop}(rhs, descending, stable) : (ptensor.ptensor, bool, bool) -> ptensor.ptensor
+  * `sort{$sop}(rhs, descending, stable) : (ptensor.ptensor, bool, bool) -> ptensor.ptensor`
+  * `argsort{$sop}(rhs, descending, stable) : (ptensor.ptensor, bool, bool) -> ptensor.ptensor`
 * Statistical Functions
-  * reduce{$rop}(rhs, axis, correction) : (ptensor.ptensor, int64) -> ptensor.ptensor
-    * $rop = ['max', 'min', 'mean', 'prod', 'sum', 'var', 'std']
+  * `reduce{$rop}(rhs, axis, correction) : (ptensor.ptensor, int64) -> ptensor.ptensor`
+    * `$rop = ['max', 'min', 'mean', 'prod', 'sum', 'var', 'std']`
 * Utility Functions
-  * test{$top}(rhs, axis) : (ptensor.ptensor, int64) -> ptensor.ptensor
-    * $rop = ['any', 'all']
+  * `test{$top}(rhs, axis) : (ptensor.ptensor, int64) -> ptensor.ptensor`
+    * `$rop = ['any', 'all']`
 
 ### __Dist__ Operations
 The Dist dialect provides operations dealing with tensors which are partitioned and distributed across multiple processes. The operations assume soem kind of a runtime which handles aspects like communication and partitioning.
