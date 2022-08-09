@@ -53,6 +53,7 @@ We suggest
 * classify/group where semantically justifyable and so reduce the interface's surface
 * do not classify when parameters differ and so allow early type checking
 
+#### Operation details
 * Tensor creation
   * arange(start, stop, step, dtype, device) : (int64, int64, int64, type, str) -> ptensor.ptensor
   * asarray(??) : (??) -> ptensor.ptensor
