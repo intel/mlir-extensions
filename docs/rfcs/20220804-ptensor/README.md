@@ -132,7 +132,20 @@ The Dist dialect provides operations dealing with tensors which are partitioned 
 - `finalize_reduce(dtensor_id, ltensor) : (int64, RankedTensor) -> void`
 
 ### __CFD__ Operations
-The CFD dialect provides region operation which defines the target on which operations within the region should be executed on.
+The CFD dialect provides region operation which defines the target on which operations within the region should be executed on. The region is configureted with an attribute which defines the HW type, such as 'dist' for distributed, or 'CUDA', 'L0', and alike for GPU execution. The exact syntax and configuration possiblities depend on the targeted runtime.
+Regions can be nested.
+Additionally, regions accept an optional runtime parameter
+* a team identifier for distributed regions refering to a team of processes
+* a device identifier for GPU regions refering to a specific HW device
+
+Example nesting a GPU region into a distributed region ('IDR'= Intel Distributed Runtime)
+```
+cfd.region{'IDR'}(0) {
+  cfd.region{'L0'}(0) {
+    ptensor.add(%pt, %1): (ptensor<..., dist='L0'>, int64) -> ptensor.ptensor<..., dist='L0'>
+  }
+}
+```
 
 ### Passes
 All passes which consume `ptensor`s and -operations comply to compute-follows-data: Generation of GPU-, distribution-, parallelization- et al. operations depend on the `dist` and `device` attributes of input tensors. For example, if a tensor has the attribute "device='GPU'" then memory allocation operations must target the GPU.
@@ -146,25 +159,23 @@ This pass needs to be executed before --lower-ptensor to be effective.
 
 Example:
 ```
-ptensor.add(%pt, %1): (ptensor<..., dist='GPU'>, int64) -> ptensor.ptensor<..., dist='GPU'>
+ptensor.add(%pt, %1): (ptensor<..., device='L0', dist=true>, int64) -> ptensor.ptensor<..., device='L0', dist=true>
 ```
 will become
 ```
-cfd.region{'dist'}(team) {
-  cfd.region{'GPU'}() {
-    ptensor.add(%pt, %1): (ptensor<..., dist='GPU'>, int64) -> ptensor.ptensor<..., dist='GPU'>
-  }
+cfd.region{'L0'}(0) {
+  ptensor.add(%pt, %1): (ptensor<..., dist='L0'>, int64) -> ptensor.ptensor<..., dist='L0'>
 }
 ```
 
 #### --lower-ptensor
 This pass completely lowers ptensor operations to
 - __Tensor__: Tensor types will convert to plain tensors. `dist` and `device` attributes get stripped off and used to appropriately create necessary operations in __GPU__ and __Dist__ dialects.
-- __Linalg__: The actual functionality will be represnted by one or more operations of the Linalg dialect.
+- __Linalg__: The actual functionality will be represented by one or more operations of the Linalg dialect.
 - __Dist__: new dialect which deals with primitives to manage operations on distributed tensors. Similar to the __GPU__ dialect the primitives might lower to interaction with a runtime (library).
 - utility dialects like __memref__, __shape__, __affine__, __func__ and __arith__
 
-The ptensor type will be replaced by `RankedTensor` if if `dist==false`. Distributed tensors will be replaced by 2 values: The `RankedTensor` and an `int64` representing the a unique identifier of the 'global' tensor entity. The latter is used in for interacting with the __Dist__ dialect.
+The ptensor type will be replaced by `RankedTensor` if `dist==false`. Distributed tensors will be replaced by 2 values: The `RankedTensor` and an `int64` representing the a unique identifier of the 'global' tensor entity. The latter is used in for interacting with the __Dist__ dialect.
 
 Combining conversions to multiple dialects keeps analysis simple and allows effective code generation. Some operations require interleaving operations from various dialects. Separate passes would become unnecessarily complicated because they need to understand the context (which we know while we convert ptensor). For instance, distributed `arange` requires various interactions with __Dist__ interleaving process-local operation in __Linalg__; a simple wrap of the local operation is not feasible:
 ```
