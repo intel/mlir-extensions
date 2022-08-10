@@ -29,13 +29,6 @@
 // Passes registration.
 
 static mlir::PassPipelineRegistration<>
-    ParallelLoopToGpu("parallel-loop-to-gpu", "Maps scf parallel loop to gpu",
-                      [](mlir::OpPassManager &pm) {
-                        pm.addNestedPass<mlir::func::FuncOp>(
-                            gpu_runtime::createParallelLoopGPUMappingPass());
-                      });
-
-static mlir::PassPipelineRegistration<>
     InsertGpuAlloc("insert-gpu-alloc", "Converts memref alloc to gpu alloc",
                    [](mlir::OpPassManager &pm) {
                      pm.addNestedPass<mlir::func::FuncOp>(
