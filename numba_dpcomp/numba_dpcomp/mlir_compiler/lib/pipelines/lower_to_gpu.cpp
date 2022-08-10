@@ -1424,7 +1424,7 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   funcPM.addPass(std::make_unique<PrepareForGPUPass>());
   funcPM.addPass(mlir::createCanonicalizerPass());
   funcPM.addPass(std::make_unique<RemoveNestedParallelPass>());
-  funcPM.addPass(gpu_runtime::createParallelLoopGPUMappingPass());
+  funcPM.addPass(mlir::createGpuMapParallelLoopsPass());
   funcPM.addPass(mlir::createParallelLoopToGpuPass());
   funcPM.addPass(std::make_unique<RemoveKernelMarkerPass>());
   funcPM.addPass(mlir::createCanonicalizerPass());
