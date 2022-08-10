@@ -7,8 +7,9 @@ We propose a solution which can provide a high-level dialect for tensors and (nu
 In this document, we describe several dialects and passes to provide a good high-level view on the overall flow. We might want to split this into more than one document.
 
 ## Motivation
-MLIR provides a few tensor dialects (like tensor and TOSA) and separate dialects/conversions for targeting devices and parallelism. More complicated flows, for example when device and host tensors exist at the same time, complicated analysis is needed to correctly implement compute-follows data. Similarly, converting to distributed parallelism, such as MPI-based, is difficult to get right with existing dialects if possible at all.
-Additionally, the current architecture in Plier does not have an explicit MLIR representation of arrays/tensors and so makes it very hard to re-use its tensor functionality without coming from python/numba. Currently conversions are even relying the Python runtime. A dialect for such numpy-like tensors and -operations can accept hints for targets (like devices, MPI etc) and enable its use in libraries independent of numba and Python.
+MLIR provides a few tensor dialects (like tensor and TOSA) and separate dialects/conversions for targeting devices and parallelism. An annotated type is needed to keep the required analysis in the compiler pipeline to an acceptable extent. Even moderately complicated flows, for example when device and host tensors exist at the same time, complicated analysis is needed to correctly implement compute-follows data. This is particualarly true when converting to distributed parallelism, such as MPI-based; this is difficult to get right with existing dialects if possible at all.
+
+Additionally, the current architecture in Plier does not have an explicit MLIR representation of arrays/tensors and so makes it very hard to re-use its tensor functionality without coming from python/numba. Currently conversions are even relying the Python runtime. A dialect for such numpy-like tensors and -operations can accept hints for targets (like devices, MPI etc) and enable its use in libraries independent of numba and Python. One example of such a use case is a distributed and JIT-compiler based numpy implementation.
 
 ## Proposal
 We propose three new Dialects:
@@ -22,9 +23,10 @@ Additionally we propose appropriate passes
 3. Converting __CFD__ to __GPU__ Where?
 
 ### ptensor Type
-The ptensor type extends the `mlir::tensor` with `device` and `dist` attributes. It also carries
-The `device` indicates where the tensor lives, e.g. on which device.
-The target device is represented as a plain string which will be forwarded to the gpu/distributed runtimes. The exact syntax of device-identifiers is defined by the GPU runtime. The default value is `device="default"`.
+The ptensor type extends the `mlir::tensor` with `device` and `dist` attributes.
+
+The `device` indicates where the tensor lives, e.g. on which device. The target device is represented as a plain string which will be forwarded to the gpu/distributed runtimes. The exact syntax of device-identifiers is defined by the GPU runtime. The default value is `device="default"`.
+
 The `dist` attribute indicates whether the tensor is partitioned-distributed or not (boolean `UnitAttr`) and its default is `dist=false`.
 
 ### __PTensor__ Operations
@@ -49,7 +51,7 @@ One Op per tensor-operation
 
 In the end, the crucial question probably is if PTensor is to be positioned as a generic (parallel) tensor dialect or primarily as an entry point into MLIR from Python. Also, priorization of aspects of SW design practices play a role.
 
-We suggest
+The below set of operations acrues from the following rules:
 * classify/group where semantically justifyable and so reduce the interface's surface
 * do not classify when parameters differ and so allow early type checking
 
@@ -122,7 +124,7 @@ We suggest
     * `$rop = ['any', 'all']`
 
 ### __Dist__ Operations
-The Dist dialect provides operations dealing with tensors which are partitioned and distributed across multiple processes. The operations assume soem kind of a runtime which handles aspects like communication and partitioning.
+The Dist dialect provides operations dealing with tensors which are partitioned and distributed across multiple processes. The operations assume some kind of a runtime which handles aspects like communication and partitioning.
 - `init_dtensor(shape) : (ValueRange) -> (int64)`
 - `fini_dtensor(dtensor_id) : (int64) -> void`
 - `init_view(dtensor_id, slice) : (int64, slice) -> (int64)`
@@ -133,14 +135,16 @@ The Dist dialect provides operations dealing with tensors which are partitioned 
 
 ### __CFD__ Operations
 The CFD dialect provides region operation which defines the target on which operations within the region should be executed on. The region is configureted with an attribute which defines the HW type, such as 'dist' for distributed, or 'CUDA', 'L0', and alike for GPU execution. The exact syntax and configuration possiblities depend on the targeted runtime.
+
 Regions can be nested.
+
 Additionally, regions accept an optional runtime parameter
 * a team identifier for distributed regions refering to a team of processes
 * a device identifier for GPU regions refering to a specific HW device
 
-Example nesting a GPU region into a distributed region ('IDR'= Intel Distributed Runtime)
+Example nesting a GPU region into a distributed region ('IDRM'= "Intel Distributed Runtime for MLIR (TM)")
 ```
-cfd.region{'IDR'}(0) {
+cfd.region{'IDRM'}(0) {
   cfd.region{'L0'}(0) {
     ptensor.add(%pt, %1): (ptensor<..., dist='L0'>, int64) -> ptensor.ptensor<..., dist='L0'>
   }
@@ -201,15 +205,21 @@ Possible parameters to this pass could be flags to ignore `dist` attributes.
 
 #### --dist-to-intel-runtime
 FIXME: name and flow should be similar to what happens on the GPU side
-This pass converts all operations from __Dist__ into appropriate calls to the "Intel distributed runtime for MLIR (C)". This library provides the necessary hooks to deal with aspects like data/shape partitioning, tensor registration, GC, communication and more.
+This pass converts all operations from __Dist__ into appropriate calls to the "Intel distributed runtime for MLIR (TM)". This library provides the necessary hooks to deal with aspects like data/shape partitioning, tensor registration, GC, communication and more.
 
 ## Alternatives
-We could also consider the `TOSA` dialect, either by extending it directly or lowering to it instead of to Linalg. The benefit of the latter is unclear and the first seems reasonable only if we can get the MLIR community's/TOSA maintainers' buy in.
+### TOSA
+We could also consider the `TOSA` dialect, either by extending it directly or lowering to it instead of to Linalg. The benefit of he latter seems small because it does not offer significantly richer functionality.
+
+Extending TOSA could be a viable alternative to PTensor. TOSA's design requires any operation to be fundamental in the sense that it cannot be build out of others. We can add the `dist` and `device` information to the TOSA tensor but we'll need to add higher-level wrapper/generation functions to establish the desired level of abstraction. This is more complicated than PTensor and so only useful if upstream TOSA is onboard with the idea. It is also thinkable to start with a separate dialect and merge it into TOSA once stabilized.
+
+### Wrapper/generator functions
+A generator function for creating distributed operations like the above `arange` example is possible as long as the information about the distributed aspect of the input tensor(s) is available. This could be handled by the __CFD__ dialect and does not require a new tensor dialect. However, it is unclear how operations on the created tensors can be wrapped with such a dist-region without a type which contains the appropriate information. In particular interchanging distributed- (and maybe even device-)tensors across function boundaries requires additional information embeded in the type/argument. Is this possible with reasonable effort?
 
 ## Remarks
 - most of the __Dist__-unrelated work is planned independent of this in some form or another (elminating dependence on Python runtime, streamlining compile pipeline) or can be copied from existing passes in Plier. PTensor and its passes will provide a structured and re-usable context for them.
-- The detailed API of the distributed runtime is to be defined.
+- The detailed API the distributed runtime is to be defined, possibly in an iterative process during implementation.
 
-## Questions
+## Other Questions
 - target: mapping queue <-> device
 - how are differences in HW handled in GPU pipeline/SPIR-V?
