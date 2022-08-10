@@ -2,7 +2,7 @@
 # UnstrideMemref Pass
 
 
-This pass is used for handling ranks greater than 1.
+This pass is used for handling memref with ranks greater than 1.
 In MLIR, Memrefs are lowered in various paths. Two of them are of importance to us at this point: 
 Lowering in CPU (via LLVM dialect)
 Lowering in GPU (via spv dialect)
@@ -14,6 +14,7 @@ In the GPU path, spv dialect didn’t choose this path due to complexities in SP
 
 Therefore, to enable this process, in this pass we convert memrefs with more than rank of 1 (ranks > 1) to flat pointers (1-D ranked spv.ptr) and keep other information separately in other variables. So that we can do the right index calculations. Since, we lose the information about both ranks and sizes in each ranks, we need to keep the information about both the shape and the strides to calculate the right address. 
 
+This pass supports both statically and dynamically shaped memrefs.
 
 # Example
 
