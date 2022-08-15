@@ -6,7 +6,7 @@ if(POLICY CMP0116)
     cmake_policy(SET CMP0116 OLD)
 endif()
 
-project(mlir-extensions LANGUAGES CXX C)
+project(IMEX LANGUAGES CXX C)
 
 # Must go below project(..)
 include(GNUInstallDirs)
@@ -45,7 +45,7 @@ add_subdirectory(lib)
 add_subdirectory(tools)
 add_subdirectory(test)
 
-install(DIRECTORY ${PROJECT_SOURCE_DIR}/include/mlir
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/include/imex
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
     COMPONENT mlir-headers
     FILES_MATCHING
