@@ -302,7 +302,8 @@ static mlir::Type mapPlierType(mlir::Type type) {
 static mlir::Type dropLiteralType(mlir::Type t) {
   assert(t);
   if (auto literal = t.dyn_cast<plier::LiteralType>())
-    return dropLiteralType(literal.getValue().getType());
+    return dropLiteralType(
+        literal.getValue().cast<mlir::TypedAttr>().getType());
 
   return t;
 }
@@ -339,7 +340,8 @@ struct ConstOpLowering : public mlir::OpConversionPattern<plier::ConstOp> {
       return mlir::failure();
 
     auto value = adaptor.val();
-    if (isSupportedType(value.getType())) {
+    auto typeAttr = value.dyn_cast_or_null<mlir::TypedAttr>();
+    if (typeAttr && isSupportedType(typeAttr.getType())) {
       if (auto intAttr = value.dyn_cast<mlir::IntegerAttr>()) {
         auto type = intAttr.getType().cast<mlir::IntegerType>();
         if (!type.isSignless()) {
@@ -379,7 +381,7 @@ static bool isOmittedType(mlir::Type type) {
 }
 
 static mlir::Attribute makeSignlessAttr(mlir::Attribute val) {
-  auto type = val.getType();
+  auto type = val.cast<mlir::TypedAttr>().getType();
   if (auto intType = type.dyn_cast<mlir::IntegerType>()) {
     if (!intType.isSignless()) {
       auto newType = plier::makeSignlessType(intType);
@@ -411,8 +413,8 @@ struct LiteralLowering : public mlir::OpConversionPattern<Op> {
     if (auto literal = convertedType.template dyn_cast<plier::LiteralType>()) {
       auto loc = op.getLoc();
       auto attrVal = literal.getValue();
-      auto dstType = attrVal.getType();
-      auto val = makeSignlessAttr(attrVal);
+      auto dstType = attrVal.template cast<mlir::TypedAttr>().getType();
+      auto val = makeSignlessAttr(attrVal).template cast<mlir::TypedAttr>();
       auto newVal =
           rewriter.create<mlir::arith::ConstantOp>(loc, val).getResult();
       if (dstType != val.getType())
@@ -470,11 +472,11 @@ struct OmittedLowering : public mlir::OpConversionPattern<plier::CastOp> {
     if (auto omittedAttr =
             getOmittedValue(adaptor.value().getType(), convertedType)) {
       auto loc = op.getLoc();
-      auto dstType = omittedAttr.getType();
+      auto dstType = omittedAttr.cast<mlir::TypedAttr>().getType();
       auto val = makeSignlessAttr(omittedAttr);
       auto newVal =
           rewriter.create<mlir::arith::ConstantOp>(loc, val).getResult();
-      if (dstType != val.getType())
+      if (dstType != val.cast<mlir::TypedAttr>().getType())
         newVal = rewriter.create<plier::SignCastOp>(loc, dstType, newVal);
 
       rewriter.replaceOp(op, newVal);
@@ -697,8 +699,8 @@ mlir::Value doCast(mlir::PatternRewriter &rewriter, mlir::Location loc,
   assert(dstType);
   auto srcType = val.getType();
   if (auto literal = srcType.dyn_cast<plier::LiteralType>()) {
-    auto attr = literal.getValue();
-    auto signlessAttr = makeSignlessAttr(attr);
+    auto attr = literal.getValue().cast<mlir::TypedAttr>();
+    auto signlessAttr = makeSignlessAttr(attr).cast<mlir::TypedAttr>();
     val = rewriter.create<mlir::arith::ConstantOp>(loc, signlessAttr);
     if (signlessAttr.getType() != attr.getType())
       val = rewriter.create<plier::SignCastOp>(loc, attr.getType(), val);
@@ -1413,7 +1415,7 @@ void PlierToStdPass::runOnOperation() {
           return false;
 
         if (auto literal = type.dyn_cast<plier::LiteralType>())
-          type = literal.getValue().getType();
+          type = literal.getValue().cast<mlir::TypedAttr>().getType();
 
         return !type.isIntOrFloat();
       });
@@ -1462,8 +1464,9 @@ struct ConvertLiteralTypesPass
     typeConverter.addConversion([](mlir::Type type) { return type; });
 
     auto context = &getContext();
-    typeConverter.addConversion(
-        [](plier::LiteralType type) { return type.getValue().getType(); });
+    typeConverter.addConversion([](plier::LiteralType type) {
+      return type.getValue().cast<mlir::TypedAttr>().getType();
+    });
 
     auto materializeCast =
         [](mlir::OpBuilder &builder, mlir::Type type, mlir::ValueRange inputs,

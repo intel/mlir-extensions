@@ -61,7 +61,7 @@ public:
         llvm::makeArrayRef(newSteps));
 
     // Steal the body of the old affine for op.
-    newPloop.region().takeBody(op.getRegion());
+    newPloop.getRegion().takeBody(op.getRegion());
 
     Operation *yieldOp = newPloop.getBody()->getTerminator();
     assert(yieldOp);
@@ -92,6 +92,8 @@ public:
 
 struct SCFToAffinePass
     : public mlir::PassWrapper<SCFToAffinePass, mlir::OperationPass<void>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(SCFToAffinePass)
+
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::AffineDialect>();

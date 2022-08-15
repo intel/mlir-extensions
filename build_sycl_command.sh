@@ -1,0 +1,3 @@
+cmake /data/nbpatel/mlir-extensions -GNinja .. -DCMAKE_BUILD_TYPE=Debug -DLLVM_DIR=/data/nbpatel/llvm-install/lib/cmake/llvm -DMLIR_DIR=/data/nbpatel/llvm-install/lib/cmake/mlir -DSYCL_DIR=/opt/intel/oneapi/compiler/latest/linux/ -DCMAKE_INSTALL_PREFIX=/data/nbpatel/mlir-extensions/build -DIMEX_ENABLE_IGPU_DIALECT=ON -DIMEX_ENABLE_TESTS=ON -DIMEX_GPU_SYCL_RUNTIME=ON -DIMEX_GPU_L0_RUNTIME=ON
+cmake --build .
+cmake --install .

@@ -294,7 +294,7 @@ def test_math_funcs_unary(op):
         b[i] = f(a[i])
 
     _test_unary(
-        func, np.float32, "GPUToSpirvPass", lambda ir: ir.count(f"OCL.{op}") == 1
+        func, np.float32, "GPUToSpirvPass", lambda ir: ir.count(f"CL.{op}") == 1
     )
 
 
@@ -647,7 +647,7 @@ def test_fastmath():
         gpu_func = kernel(fastmath=False)(func)
         gpu_func[a.shape, DEFAULT_LOCAL_SIZE](a, b, c, gpu_res)
         ir = get_print_buffer()
-        assert ir.count("spv.OCL.fma") == 0, ir
+        assert ir.count("spv.CL.fma") == 0, ir
         assert_equal(gpu_res, sim_res)
 
     with print_pass_ir([], ["GPUToSpirvPass"]):
@@ -655,7 +655,7 @@ def test_fastmath():
         gpu_func = kernel(fastmath=True)(func)
         gpu_func[a.shape, DEFAULT_LOCAL_SIZE](a, b, c, gpu_res)
         ir = get_print_buffer()
-        assert ir.count("spv.OCL.fma") == 1, ir
+        assert ir.count("spv.CL.fma") == 1, ir
         assert_equal(gpu_res, sim_res)
 
 

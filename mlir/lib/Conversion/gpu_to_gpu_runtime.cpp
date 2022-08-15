@@ -43,61 +43,6 @@
 #include <llvm/ADT/SmallBitVector.h>
 
 namespace {
-struct ParallelLoopGPUMappingPass
-    : public mlir::PassWrapper<ParallelLoopGPUMappingPass,
-                               mlir::OperationPass<mlir::func::FuncOp>> {
-  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(ParallelLoopGPUMappingPass)
-
-  virtual void
-  getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<mlir::scf::SCFDialect>();
-  }
-
-  void runOnOperation() override {
-    auto func = getOperation();
-    auto &region = func.getBody();
-    if (region.empty())
-      return;
-
-    if (!llvm::hasSingleElement(region)) {
-      func.emitError("Only strucutred control flow is supported");
-      signalPassFailure();
-      return;
-    }
-
-    auto getProcessor = [](unsigned val) -> mlir::gpu::Processor {
-      const mlir::gpu::Processor mapping[] = {
-          mlir::gpu::Processor::BlockX,  mlir::gpu::Processor::BlockY,
-          mlir::gpu::Processor::BlockZ,  mlir::gpu::Processor::ThreadX,
-          mlir::gpu::Processor::ThreadY, mlir::gpu::Processor::ThreadZ,
-      };
-      if (val >= llvm::array_lengthof(mapping))
-        return mlir::gpu::Processor::Sequential;
-
-      return mapping[val];
-    };
-
-    mlir::OpBuilder builder(&getContext());
-    auto identityMap = builder.getDimIdentityMap();
-    llvm::SmallVector<mlir::gpu::ParallelLoopDimMappingAttr> mapping;
-    for (auto &op : llvm::make_early_inc_range(region.front())) {
-      auto parallel = mlir::dyn_cast<mlir::scf::ParallelOp>(op);
-      if (!parallel)
-        continue;
-
-      auto numLoops = parallel.getNumLoops();
-      mapping.resize(numLoops);
-      for (auto i : llvm::seq(0u, numLoops))
-        mapping[i] = builder.getAttr<mlir::gpu::ParallelLoopDimMappingAttr>(
-            getProcessor(i), identityMap, identityMap);
-
-      if (mlir::failed(mlir::gpu::setMappingAttr(parallel, mapping))) {
-        signalPassFailure();
-        return;
-      }
-    }
-  }
-};
 
 struct InsertGPUAllocs
     : public mlir::PassWrapper<InsertGPUAllocs,
@@ -829,7 +774,10 @@ static mlir::Value lowerFloatSubAtomic(mlir::OpBuilder &builder,
 
 class ConvertAtomicOps : public mlir::OpConversionPattern<mlir::func::CallOp> {
 public:
-  using OpConversionPattern::OpConversionPattern;
+  ConvertAtomicOps(mlir::TypeConverter &typeConverter,
+                   mlir::MLIRContext *context)
+      : mlir::OpConversionPattern<mlir::func::CallOp>(typeConverter, context,
+                                                      /*benefit*/ 10) {}
 
   mlir::LogicalResult
   matchAndRewrite(mlir::func::CallOp op, mlir::func::CallOp::Adaptor adaptor,
@@ -1438,8 +1386,4 @@ std::unique_ptr<mlir::Pass> gpu_runtime::createSerializeSPIRVPass() {
 
 std::unique_ptr<mlir::Pass> gpu_runtime::createGPUExPass() {
   return std::make_unique<GPUExPass>();
-}
-
-std::unique_ptr<mlir::Pass> gpu_runtime::createParallelLoopGPUMappingPass() {
-  return std::make_unique<ParallelLoopGPUMappingPass>();
 }

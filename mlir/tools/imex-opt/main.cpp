@@ -1,4 +1,4 @@
-// Copyright 2021 Intel Corporation
+// Copyright 2022 Intel Corporation
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
   mlir::registerAllPasses();
   mlir::DialectRegistry registry;
   mlir::registerAllDialects(registry);
-  return mlir::failed(MlirOptMain(argc, argv,
-                                  "DPCOMP modular optimizer driver\n", registry,
+  return mlir::failed(MlirOptMain(argc, argv, "imex modular optimizer driver\n",
+                                  registry,
                                   /*preloadDialectsInContext=*/false));
 }
