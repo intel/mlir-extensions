@@ -1041,6 +1041,16 @@ struct ChangeLayoutExpandShape
   }
 };
 
+/// Propagates ChangeLayoutOp through SelectOp.
+///
+/// Example:
+/// %0 = plier_util.change_layout %arg1 : memref<?xi32, #map> to memref<?xi32>
+/// %res = arith.select %arg3, %0, %arg2 : memref<?xi32>
+///
+/// Becomes:
+/// %0 = memref.cast %arg2 : memref<?xi32> to memref<?xi32, #map>
+/// %1 = arith.select %arg3, %arg1, %0 : memref<?xi32, #map>
+/// %res  = plier_util.change_layout %1 : memref<?xi32, #map> to memref<?xi32>
 struct ChangeLayoutSelect
     : public mlir::OpRewritePattern<mlir::arith::SelectOp> {
   using OpRewritePattern::OpRewritePattern;
