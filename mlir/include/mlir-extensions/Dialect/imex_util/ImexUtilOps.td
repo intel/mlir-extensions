@@ -221,4 +221,55 @@ def TupleExtractOp : ImexUtil_Op<"tuple_extract", [NoSideEffect]> {
   let hasFolder = 1;
 }
 
+def EnvironmentRegionOp : PlierUtil_Op<"env_region", [
+    DeclareOpInterfaceMethods<RegionBranchOpInterface>,
+    SingleBlockImplicitTerminator<"plier::EnvironmentRegionYieldOp">,
+    RecursiveSideEffects]> {
+  let summary = "operation that executes its region with a specific environment";
+  let description = [{
+    "env_region" executes operations inside its region within a specific
+    enviroment. Operations are executed exactly once. All SSA values that
+    dominate the op can be accessed inside the op.
+
+    "env_region" takes "environment" attribute and zero or more SSA arguments.
+
+    Actual intepretation of the "environment" attribute and arguments is not
+    specified here and is left to the lowering passes.
+
+    Values can be yielded from "env_region" region using "env_region_yield" op.
+    Values yielded from this op's region define the op's results.
+  }];
+
+
+  let arguments = (ins AnyAttr:$environment, Variadic<AnyType>:$args);
+  let results = (outs Variadic<AnyType>);
+
+  let regions = (region SizedRegion<1>:$region);
+
+  let hasCustomAssemblyFormat = 1;
+}
+
+def EnvironmentRegionYieldOp : PlierUtil_Op<"env_region_yield", [
+  NoSideEffect,
+  ReturnLike,
+  Terminator,
+  HasParent<"EnvironmentRegionOp">
+  ]> {
+
+  let summary = "environment region yield and termination operation";
+  let description = [{
+    "env_region_yield" yields an SSA value from the "env_region" op region and
+    terminates it.
+
+    If "env_region_yield" has any operands, the operands must match the parent
+    operation's results.
+  }];
+
+  let arguments = (ins Variadic<AnyType>:$results);
+  let builders = [OpBuilder<(ins), [{ /* nothing to do */ }]>];
+
+  let assemblyFormat =
+      [{  attr-dict ($results^ `:` type($results))? }];
+}
+
 #endif // PLIER_UTIL_OPS
