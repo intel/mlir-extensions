@@ -17,14 +17,13 @@ We propose two new Dialects and one dialect extension:
 2. __Dist__ dialect: dealing with the aspects of distributed data management, such as distributed memory alloction, GC and communication
 3. __intel_sycl.device_region__ operation in __intel_sycl__ dialect (RFC #291)
 
-
 Additionally we propose appropriate passes
 1. Converting __PTensor__ operations into dialects __Linalg__, __GPU__, __intel_sycl__ and __Dist__
 2. Converting __Dist__ operations into appropriate runtime calls
 3. Converting __intel-sycl.device_region__ to appropriate runtime calls.
 
 ### ptensor Type
-Logicaly, the ptensor type extends the `mlir::tensor` type with `device`, `team` and `gid` attributes. The `ptensor.ptensor` enables SSA values representing tensors with annotations for distributed and device operation.
+Logicaly, the ptensor type extends the `mlir::tensor` type with `device`, `team` and `gid` attributes. The `ptensor.ptensor` enables SSA values representing tensors with annotations for distributed and device operation. The tensors themselves are assumed to eventually lower to memrefs.
 
 The optional `device` indicates where the tensor lives, e.g. on which device. The target device is represented as a plain string which will be forwarded to the gpu/distributed runtimes. The exact syntax of device-identifiers is defined by the GPU runtime. For example, SYCL runtime will accept SYCL filter strings as defined [here](https://github.com/intel/llvm/blob/sycl/sycl/doc/EnvironmentVariables.md#sycl_device_filter). The default `NoneType` which disables device support.
 
@@ -33,40 +32,25 @@ The optional `team` attribute indicates a team (of processes) among which the te
 ### __PTensor__ Operations
 The initial set of operations matches the requirements of the core of [array-API](https://data-apis.org/array-api/latest/API_specification/index.html). Notice, since we focus on compute-follows-data, only the creation functions/operations will require the `device` and `team` attributes. Operations consuming ptensors react on the the `device` and `team` attribute of their input.
 
-There are many operations defined in the array API and even more in the numpy API. It does not seem feasable to have one MLIR operation per numpy function (we'd get a hundred or more). The Linalg dialect addresses this by 'classifying' them, for example into 'elementwise_unary' and 'elementwise_binary' operations and having the actual per-element-operation as a parameter. On the contrary, the TOSA dialect decided to have have an excat 1:1 mapping for every tensor-operation ('add', 'abs', 'ceil' 'arithmetic_right_shift' etc.).
-
-There are several aspects to consider and each approach has its pros and cons
-
-Classification
-* \+ in theory a single operation suffices and so the operation spec will be small
-* \+ easier to use when coming from numba
-* \- some late error checking
-* \- manual dispatch needed (potentially at various places)
-
-One Op per tensor-operation
-* \+ MLIR handles dispatch
-* \+ clearer syntax and documentation
-* \+ more early error checking (like type checking)
-* \- large spec, likely including code duplication
-* \- potentially more verbose code when coming from numba/Python
-
-In the end, the crucial question probably is if PTensor is to be positioned as a generic (parallel) tensor dialect or primarily as an entry point into MLIR from Python. Also, priorization of aspects of SW design practices play a role.
+There are many operations defined in the array API and even more in the numpy API. It does not seem feasable to have one MLIR operation per numpy function (we'd get a hundred or more). The Linalg dialect addresses this by 'classifying' them, for example into 'elementwise_unary' and 'elementwise_binary' operations and having the actual per-element-operation as a parameter. On the contrary, the TOSA dialect decided to have have an exact 1:1 mapping for every tensor-operation ('add', 'abs', 'ceil' 'arithmetic_right_shift' etc.).
 
 The below set of operations acrues from the following rules:
-* classify/group where semantically justifyable and so reduce the interface's surface
+* classify/group where semantically justifiable and so reduce the interface's surface
 * do not classify when parameters differ and so allow early type checking
+
+Notice: some of the operations mutate existing ptensors.
 
 #### Operation details
 * Tensor creation
-  * `arange(start, stop, step, dtype, device, dist) : (int64, int64, int64, type, str, int64) -> ptensor.ptensor`
+  * `arange(start, stop, step, dtype, device, team) : (int64, int64, int64, type, str, int64) -> ptensor.ptensor`
   * `asarray(??) : (??) -> ptensor.ptensor`
-  * `create(shape, value, dtype, device, dist) : (shape.shape, anytype, type, str, int64) -> ptensor.ptensor`
+  * `create(shape, value, dtype, device, team) : (shape.shape, anytype, type, str, int64) -> ptensor.ptensor`
     * covers `empty, ones, zeros, full`
-  * `create_like(rsh, value, dtype, device, dist) : (shape.shape, anytype, type, str, int64) -> ptensor.ptensor`
+  * `create_like(rsh, value, dtype, device, team) : (shape.shape, anytype, type, str, int64) -> ptensor.ptensor`
     * covers `empty_like, ones_like, zeros_like, full_like`
-  * `eye(n_rows, n_cols, k, dtype, device, dist) : (int64, int64, int64, type, str, int64) -> ptensor.ptensor`
+  * `eye(n_rows, n_cols, k, dtype, device, team) : (int64, int64, int64, type, str, int64) -> ptensor.ptensor`
   * `from_dlpack(obj) : (ptr) -> ptensor.ptensor`
-  * `linspace(start, stop, n, dtype, device, dist) : (number, number, number, type, str, int64) -> ptensor.ptensor`
+  * `linspace(start, stop, n, dtype, device, team) : (number, number, number, type, str, int64) -> ptensor.ptensor`
   * `meshgrid(arrays) : (list) -> list`
   * `extract_triangle{$side}(rhs, k) : (ptensor.ptensor, int64) -> ptensor.ptensor`
     * `$side = ['lower', 'upper']`
@@ -160,23 +144,11 @@ This pass completely lowers ptensor operations to
 - __Dist__: new dialect which deals with primitives to manage operations on distributed tensors. Operations from the `team` dialect will generated if input tensors have non-none `team` attributes.
 - utility dialects like __memref__, __shape__, __affine__, __func__ and __arith__
 
-Example:
-```
-ptensor.elementwise_binary_op{'add'}(%pt1, %pt2): (ptensor<..., device='level_zero:GPU:1'>, ptensor<..., device='level_zero:GPU:1'>) -> ptensor.ptensor<..., device='level_zero:GPU:1'>
-```
-will become
-```
-intel_sycl.device_region('level_zero:GPU:1') {
-  linalg.add(%pt1[0], %pt2[0]): (tensor<...>, tensor<...>) -> tensor<...>
-}
-```
-
 Combining conversions to multiple dialects keeps analysis simple and allows effective code generation. Some operations require interleaving operations from various dialects. Separate passes would become unnecessarily complicated because they need to understand the context (which we know while we convert ptensor). For instance, distributed `arange` requires various interactions with __Dist__ interleaving process-local operation in __Linalg__; a simple wrap of the local operation is not feasible.
 
 It constitutes an error if an operation has multiple (input and output) arguments of type ptensor and their `device` attribute is not the same on all ptensor arguments. If the `device` attribute is not the default device, a region is created and populated with the input op.
 
 Similarly, it constitutes an error if an operation has multiple (input and output) arguments of type ptensor and their `team` attribute is not the same on all ptensor arguments.
-
 
 Complicated computation kernels might be simply replaced with a an appropriate library call to MKL or alike.
 
@@ -184,10 +156,10 @@ Possible parameters to this pass could be flags to ignore `team` attributes.
 
 ##### Example:
 ```
-%res = ptensor.arange(%1, %2, %3, device, dist) : (int64, int64, int64, str, int64)  -> ptensor.ptensor<...>
+%res = ptensor.arange(%1, %2, %3, device, team) : (int64, int64, int64, str, int64)  -> ptensor.ptensor<...>
 ```
 
-If device==null and dist==none this would decompose into the following high-level ops:
+If device==null and team==none this would decompose into the following high-level ops:
 ```
 %start = $1
 %stop = $compute_stop_index(%1, %2, %3)
@@ -195,10 +167,10 @@ If device==null and dist==none this would decompose into the following high-leve
 %gshape = $compute_global_shape(%1, %2, %3)
 %ltensor = linalg.init_tensor(%gshape)
 %rtensor = linalg.generic($compute_arange, %lslice, %lshape, %ltensor)
-%res = %rtensor, %device, %dist, None
+%res = %rtensor, %device, %team, None
 ```
 
-If device==null but dist!=none this would decompose into the following high-level ops:
+If device==null but team!=none this would decompose into the following high-level ops:
 ```
 %start = $1
 %stop = $compute_stop_index(%1, %2, %3)
@@ -209,10 +181,10 @@ If device==null but dist!=none this would decompose into the following high-leve
 %lslice = dist.local_slice(%gid)
 %ltensor = linalg.init_tensor(%lshape)
 %rtensor = linalg.generic($compute_arange, %lslice, %lshape, %ltensor)
-%res = %rtensor, %device, %dist, %gid
+%res = %rtensor, %device, %team, %gid
 ```
 
-If device!=null but dist==none this would decompose into the following
+If device!=null but team==none this would decompose into the following
 ```
 %start = $1
 %stop = $compute_stop_index(%1, %2, %3)
@@ -223,10 +195,10 @@ intel_sycl.device_region(%device) {
   %ltensor = linalg.init_tensor(%gshape)
   %rtensor = linalg.generic($compute_arange, %gslice, %gshape, %ltensor)
 }
-%res = %rtensor, %device, %dist, None
+%res = %rtensor, %device, %team, None
 ```
 
-If device!=null and dist!=none this would become something like:
+If device!=null and team!=none this would become something like:
 ```
 %start = $1
 %stop = $compute_stop_index(%1, %2, %3)
@@ -239,7 +211,7 @@ intel_sycl.device_region(%device) {
   %ltensor = linalg.init_tensor(%lshape)
   %rtensor = linalg.generic($compute_arange, %lslice, %lshape, %ltensor)
 }
-%res = %rtensor, %device, %dist, %gid
+%res = %rtensor, %device, %team, %gid
 ```
 
 #### --dist-to-intel-runtime
@@ -258,6 +230,24 @@ The `intel_sycl.device_region` operation could also live in the PTensor dialect 
 A generator function for creating distributed operations like the above `arange` example is possible as long as the information about the distributed aspect of the input tensor(s) is available. This could be handled by a dialect providing a dist-region and and so would not require a new tensor dialect. However, it is unclear how operations on the created tensors can be wrapped with such a dist-region without a type which contains the appropriate information. In particular interchanging distributed- (and maybe even device-)tensors across function boundaries requires additional information embeded in the type/argument. The same is true for device aspect. Basically the ptensor type removes the analysis burden if compute-follows-data is desired.
 
 Is the ptensor-type-less option possible with reasonable effort?
+
+### Operation classification options
+There are several aspects to consider and each approach has its pros and cons
+
+Classification
+* \+ in theory a single operation suffices and so the operation spec will be small
+* \+ easier to use when coming from numba
+* \- some late error checking
+* \- manual dispatch needed (potentially at various places)
+
+One Op per tensor-operation
+* \+ MLIR handles dispatch
+* \+ clearer syntax and documentation
+* \+ more early error checking (like type checking)
+* \- large spec, likely including code duplication
+* \- potentially more verbose code when coming from numba/Python
+
+In the end, the crucial question probably is if PTensor is to be positioned as a generic (parallel) tensor dialect or primarily as an entry point into MLIR from Python. Also, priorization of aspects of SW design practices play a role.
 
 ## Remarks
 - most of the __Dist__-unrelated work is planned independent of this in some form or another (elminating dependence on Python runtime, streamlining compile pipeline) or can be copied from existing passes in Plier. PTensor and its passes will provide a structured and re-usable context for them.
