@@ -54,6 +54,7 @@ Notice: some of the operations mutate existing ptensors.
   * `meshgrid(arrays) : (list) -> list`
   * `extract_triangle{$side}(rhs, k) : (ptensor.ptensor, int64) -> ptensor.ptensor`
     * `$side = ['lower', 'upper']`
+  * `delete(tensor) : (ptensor) -> void`
 * Tensor attributes
   * `shape(rhs) : (ptensor.ptensor) -> shape.shape`
   * `rank(rhs) : (ptensor.ptensor) -> int64`
