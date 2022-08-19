@@ -69,12 +69,14 @@ This will
   - `include/imex/Dialect/<name>/Transforms/Passes.td`
   - `lib/Dialect/Transforms/PassDetail.h`
 
-Add your dialect and its transforms/passes to appropriate places in
-- `include/imex/InitIMEXDialects.h`
-- `include/imex/InitIMEXPasses.h`
-- `lib/Conversion/IMEXPassDetail.h`
-
-Fill in what's marked with FIXME
+Now, it's your turn to
+* Add your dialect and its transforms/passes to appropriate places in
+  - `include/imex/InitIMEXDialects.h`
+  - `include/imex/InitIMEXPasses.h`
+  - `lib/Conversion/IMEXPassDetail.h`
+* Fill in what's marked with FIXME
+* The documentation of the dialect should go into the `description` fields in `<name>Ops.td`. At build time the description
+will be extracted and a file `doc/<name>.md` will be generated automatically. It will include descriptions of the dialect and operations in a standardized way.
 
 ## Adding a new Conversion
 ```sh
@@ -89,11 +91,13 @@ This will
 * Add declarations to header `include/mlir/Conversion/<conversion-name>/<conversion-name>.h`
 * Put cpp definition stubs to `lib/Conversion/<conversion-name>/<conversion-name>.cpp`
 * Add conversion to `include/imex/Conversion/IMEXPasses.td and include/imex/Conversion/IMEXPasses.h`
+* Add a pass def stub to `include/imex/Conversion/IMEXPasses.td and include/imex/Conversion/Passes.td`
 
-Now fill in what's marked with FIXME
-* Pattern rewriters
-* Populating lists with patterns
-* Passes
+You will now have to
+* Fill in the above files what's marked with FIXME
+* The documentation of the pass should go into the `description` field in `Passes.td`. At build time the description
+will be extracted and a file `doc/Conversions.md` will be generated automatically.
+* Write your Pattern rewriters
 
 ## Run the lit tests
 To run the FileCheck based tests, follow the following steps:
