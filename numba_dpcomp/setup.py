@@ -34,14 +34,14 @@ else:
 
 # CMAKE =======================================================================
 
-if int(os.environ.get("DPCOMP_SETUP_RUN_CMAKE", 1)):
+if int(os.environ.get("IMEX_SETUP_RUN_CMAKE", 1)):
     cwd = os.getcwd()
     root_dir = os.path.dirname(cwd)
 
-    LLVM_PATH = os.environ["LLVM_PATH"]
+    LLVM_PATH = os.environ["IMEX_LLVM_PATH"]
     LLVM_DIR = os.path.join(LLVM_PATH, "lib", "cmake", "llvm")
     MLIR_DIR = os.path.join(LLVM_PATH, "lib", "cmake", "mlir")
-    TBB_DIR = os.path.join(os.environ["TBB_PATH"], "lib", "cmake", "tbb")
+    TBB_DIR = os.path.join(os.environ["IMEX_TBB_PATH"], "lib", "cmake", "tbb")
     CMAKE_INSTALL_PREFIX = root_dir
 
     cmake_build_dir = os.path.join(root_dir, "cmake_build")
@@ -85,11 +85,11 @@ if int(os.environ.get("DPCOMP_SETUP_RUN_CMAKE", 1)):
         print("DPNP not found")
 
     # GPU/L0
-    LEVEL_ZERO_DIR = os.getenv("LEVEL_ZERO_DIR", None)
-    if LEVEL_ZERO_DIR is None:
-        print("LEVEL_ZERO_DIR is not set")
+    ENABLE_GPU = int(os.getenv("IMEX_ENABLE_GPU", 0))
+    if ENABLE_GPU:
+        print("IMEX gpu support disabled")
     else:
-        print("LEVEL_ZERO_DIR is", LEVEL_ZERO_DIR)
+        print("IMEX gpu support enabled")
         cmake_cmd += [
             "-DIMEX_ENABLE_IGPU_DIALECT=ON",
         ]

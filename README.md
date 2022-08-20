@@ -60,9 +60,9 @@ Building and testing Python package
 cd numba_dpcomp
 conda create -n test-env python=3.9 numba=0.54 numpy=1.20 scikit-learn pytest-xdist ninja scipy pybind11 pytest lit tbb=2021.5.0 cmake -c conda-forge
 conda activate test-env
-export TBB_PATH=<...>/tbb
-export LLVM_PATH=<...>/llvm-install
-export LEVEL_ZERO_DIR=<...>/level-zero-install # Optional
+export IMEX_TBB_PATH=<...>/tbb
+export IMEX_LLVM_PATH=<...>/llvm-install
+export IMEX_ENABLE_GPU=1 # Optional
 export LEVEL_ZERO_VERSION_CHECK_OFF=1 # Optional
 python setup.py develop
 pytest -n8 --capture=tee-sys -rXF

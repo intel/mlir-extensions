@@ -206,9 +206,9 @@ jobs:
           python -c "import numba; print('numba', numba.__version__)"
           python -c "import numpy; print(numpy.get_include())"
           cmake --version
-          export TBB_PATH=/home/runner/work/tbb/oneapi-tbb-${TBB_VER}
-          export LLVM_PATH=/home/runner/work/llvm-mlir/_mlir_install
-          export LEVEL_ZERO_DIR=/home/runner/work/level-zero/level-zero/level_zero_install
+          export IMEX_TBB_PATH=/home/runner/work/tbb/oneapi-tbb-${TBB_VER}
+          export IMEX_LLVM_PATH=/home/runner/work/llvm-mlir/_mlir_install
+          export IMEX_ENABLE_GPU=1
           export LEVEL_ZERO_VERSION_CHECK_OFF=1
           python setup.py develop
 
