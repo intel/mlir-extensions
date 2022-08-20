@@ -86,7 +86,7 @@ if int(os.environ.get("IMEX_SETUP_RUN_CMAKE", 1)):
 
     # GPU/L0
     ENABLE_GPU = int(os.getenv("IMEX_ENABLE_GPU", 0))
-    if ENABLE_GPU:
+    if not ENABLE_GPU:
         print("IMEX gpu support disabled")
     else:
         print("IMEX gpu support enabled")
