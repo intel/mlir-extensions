@@ -45,6 +45,11 @@ add_subdirectory(lib)
 add_subdirectory(tools)
 add_subdirectory(test)
 
+option(IMEX_INCLUDE_DOCS "Generate build targets for the IMEX docs." ON)
+if (IMEX_INCLUDE_DOCS)
+  add_subdirectory(docs)
+endif()
+
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/include/mlir
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
     COMPONENT mlir-headers

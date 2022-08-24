@@ -21,7 +21,7 @@ namespace imex {
 
 /// Generate the code for registering conversion passes.
 #define GEN_PASS_REGISTRATION
-#include <imex/Conversion/IMEXPasses.h.inc>
+#include <imex/Conversion/Passes.h.inc>
 
 } // namespace imex
 

@@ -15,7 +15,7 @@
 #ifndef _IMEX_INITALLPASSES_H_
 #define _IMEX_INITALLPASSES_H_
 
-#include <imex/Conversion/IMEXPasses.h>
+#include <imex/Conversion/Passes.h>
 // #include <imex/Transforms/IMEXPasses.h>
 #include <imex/Dialect/Dist/Transforms/Passes.h>
 // #include <imex/Dialect/*/Transforms/Passes.h>
@@ -24,13 +24,13 @@
 
 namespace imex {
 
-// This function may be called to register the IMEX passes with the
-// global registry.
-// If you're building a compiler, you likely don't need this: you would build a
-// pipeline programmatically without the need to register with the global
-// registry, since it would already be calling the creation routine of the
-// individual passes.
-// The global registry is interesting to interact with the command-line tools.
+/// This function may be called to register the IMEX passes with the
+/// global registry.
+/// If you're building a compiler, you likely don't need this: you would build a
+/// pipeline programmatically without the need to register with the global
+/// registry, since it would already be calling the creation routine of the
+/// individual passes.
+/// The global registry is interesting to interact with the command-line tools.
 inline void registerAllPasses() {
   // General passes
   // registerTransformsPasses();

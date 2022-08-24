@@ -72,7 +72,7 @@ class DistDialect;
 } // namespace dist
 
 #define GEN_PASS_CLASSES
-#include <imex/Conversion/IMEXPasses.h.inc>
+#include <imex/Conversion/Passes.h.inc>
 
 } // namespace imex
 

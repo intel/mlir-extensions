@@ -43,10 +43,10 @@ jobs:
         shell: bash -l {0}
         run: conda info
 
-      - name: Install CMake and Ninja
+      - name: Install Build tools
         shell: bash -l {0}
         run: |
-          conda install cmake ninja conda-forge::lit
+          conda install cmake ninja graphviz conda-forge::lit conda-forge::doxygen
           conda list
 
       - name: Checkout repo
@@ -178,3 +178,9 @@ jobs:
         run: |
           cd /home/runner/work/mlir-extensions/mlir-extensions/_build || exit 1
           cmake --build . --target check-imex || exit 1
+
+      - name: Build doxygen docs
+        shell: bash -l {0}
+        run: |
+          cd /home/runner/work/mlir-extensions/mlir-extensions/_build || exit 1
+          cmake --build . --target doc_doxygen || exit 1

@@ -28,7 +28,8 @@ class RewritePatternSet;
 } // namespace mlir
 
 namespace imex {
-/// Populate the given list with patterns that eliminate Dist ops
+/// Populate the given list with patterns which convert PTensor ops to Linalg
+/// and Dist
 void populatePTensorToLinalgConversionPatterns(
     ::mlir::LLVMTypeConverter &converter, ::mlir::RewritePatternSet &patterns);
 
