@@ -51,7 +51,7 @@ dpcompTakeContext(void **ctxHandle, size_t contextSize, init_func_t init,
   return toData(*ctxHandle);
 }
 
-extern "C" DPCOMP_RUNTIME_EXPORT void dpcompReleaseContext(void *context) {
+extern "C" DPCOMP_RUNTIME_EXPORT void dpcompReleaseContext(void * /*context*/) {
   // Nothing For now
 }
 
