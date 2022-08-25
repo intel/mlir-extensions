@@ -194,8 +194,8 @@ void GPUSuggestBlockSizeOp::build(::mlir::OpBuilder &odsBuilder,
     kernRef = kernel.get<mlir::Attribute>().cast<mlir::SymbolRefAttr>();
 
   GPUSuggestBlockSizeOp::build(odsBuilder, odsState, resTypes,
-                               stream.getValueOr(mlir::Value{}), kernVal,
-                               kernRef, gridSize);
+                               stream.value_or(mlir::Value{}), kernVal, kernRef,
+                               gridSize);
 }
 
 mlir::StringAttr GPUSuggestBlockSizeOp::getKernelModuleName() {

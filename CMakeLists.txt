@@ -46,7 +46,6 @@ if (CMAKE_SYSTEM_NAME STREQUAL Linux)
         "-Winit-self "
         "-Wunused-function "
         "-Wuninitialized "
-        "-Wmissing-declarations "
         "-fdiagnostics-color=auto "
         "-Wno-deprecated-declarations "
     )

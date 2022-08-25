@@ -13,11 +13,9 @@
 // limitations under the License.
 
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
-#include <cstdlib>
-#if defined(__MACH__)
-#include <cstdlib>
-#else
+#if !defined(__MACH__)
 #include <malloc.h>
 #endif
 
