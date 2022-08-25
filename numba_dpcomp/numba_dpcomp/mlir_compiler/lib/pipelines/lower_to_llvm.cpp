@@ -1256,7 +1256,7 @@ static void populateLowerToLlvmPipeline(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<PreLLVMLowering>());
   pm.addNestedPass<mlir::func::FuncOp>(mlir::createConvertMathToLLVMPass());
   pm.addPass(mlir::createConvertMathToLibmPass());
-  pm.addPass(plier::createUtilToLLVMPass(&getLLVMOptions));
+  pm.addPass(imex::createUtilToLLVMPass(&getLLVMOptions));
   pm.addPass(std::make_unique<LLVMLoweringPass>());
   pm.addNestedPass<mlir::LLVM::LLVMFuncOp>(
       std::make_unique<PostLLVMLowering>());

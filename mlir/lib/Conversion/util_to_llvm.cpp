@@ -561,7 +561,7 @@ private:
 
 } // namespace
 
-std::unique_ptr<mlir::Pass> plier::createUtilToLLVMPass(
+std::unique_ptr<mlir::Pass> imex::createUtilToLLVMPass(
     std::function<mlir::LowerToLLVMOptions(mlir::MLIRContext &)> optsGetter) {
   assert(optsGetter && "invalid optsGetter");
   return std::make_unique<PlierUtilToLLVMPass>(std::move(optsGetter));

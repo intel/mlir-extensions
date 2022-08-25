@@ -23,7 +23,7 @@ class MLIRContext;
 class Pass;
 } // namespace mlir
 
-namespace plier {
+namespace imex {
 
 /// Convert operations from the plier_util dialect to the LLVM dialect.
 ///
@@ -32,4 +32,4 @@ namespace plier {
 /// function instead.
 std::unique_ptr<mlir::Pass> createUtilToLLVMPass(
     std::function<mlir::LowerToLLVMOptions(mlir::MLIRContext &)> optsGetter);
-} // namespace plier
+} // namespace imex
