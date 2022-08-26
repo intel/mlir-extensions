@@ -309,7 +309,6 @@ def _build_imex(
     enable_igpu=False,
     enable_numba_fe=False,
     with_tbb=None,
-    enable_numba_hotfix=False,
     external_lit=None,
 ):
     """Builds Intel MLIR extensions (IMEX).
@@ -335,8 +334,6 @@ def _build_imex(
         Defaults to False.
         with_tbb (str, optional): Set to path where a TBB cmake config exists.
         Defaults to None.
-        enable_numba_hotfix (bool, optional): Set to build with hotfix for Numba.
-        Defaults to False.
 
     Raises:
         RuntimeError: If the LLVM install directory is not found.
@@ -388,7 +385,6 @@ def _build_imex(
             "-DIMEX_ENABLE_IGPU_DIALECT=" + "ON" if enable_igpu else "OFF",
             "-DIMEX_ENABLE_TESTS=" + "ON" if enable_tests else "OFF",
             "-DIMEX_ENABLE_NUMBA_FE=" + "ON" if enable_numba_fe else "OFF",
-            "-DIMEX_ENABLE_NUMBA_HOTFIX=" + "ON" if enable_numba_hotfix else "OFF",
             "-DCMAKE_VERBOSE_MAKEFILE=ON",
             "--debug-trycompile",
             os.path.abspath(imex_source_dir),
@@ -501,11 +497,6 @@ if __name__ == "__main__":
         dest="tbb_dir",
         type=str,
         default=None,
-    )
-    imex_builder.add_argument(
-        "--imex-enable-numba-hotfix",
-        action="store_true",
-        help="Enables building IMEX with Numba hotfix",
     )
     imex_builder.add_argument(
         "--imex-enable-dpnp",
@@ -635,7 +626,6 @@ if __name__ == "__main__":
         llvm_install_dir=g_llvm_install_dir,
         enable_dpnp=args.imex_enable_dpnp,
         enable_numba_fe=args.imex_enable_numba,
-        enable_numba_hotfix=args.imex_enable_numba_hotfix,
         enable_igpu=args.imex_enable_igpu,
         with_tbb=g_tbb_dir,
         enable_tests=args.imex_enable_tests,

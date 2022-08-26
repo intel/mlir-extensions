@@ -346,9 +346,7 @@ struct Stream {
       throw std::runtime_error("Failed to allocate MemInfo");
     }
 
-#if defined(IMEX_ENABLE_NUMBA_HOTFIX)
     retain();
-#endif
     return {info, mem, event};
   }
 
