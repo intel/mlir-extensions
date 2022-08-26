@@ -1767,7 +1767,7 @@ void EnvironmentRegionOp::getSuccessorRegions(
     return;
   }
 
-  // Brant to parent region from body.
+  // Branch to parent region from body.
   assert(*index == 0 && "EnvironmentRegionOp must have single region");
   regions.push_back(mlir::RegionSuccessor(getResults()));
 }
