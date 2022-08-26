@@ -242,11 +242,12 @@ def EnvironmentRegionOp : PlierUtil_Op<"env_region", [
 
 
   let arguments = (ins AnyAttr:$environment, Variadic<AnyType>:$args);
-  let results = (outs Variadic<AnyType>);
+  let results = (outs Variadic<AnyType>:$results);
 
   let regions = (region SizedRegion<1>:$region);
 
-  let hasCustomAssemblyFormat = 1;
+  let assemblyFormat =
+      "attr-dict $environment ($args^ `:` type($args))? (`->` type($results)^)? $region";
 }
 
 def EnvironmentRegionYieldOp : PlierUtil_Op<"env_region_yield", [
@@ -268,8 +269,7 @@ def EnvironmentRegionYieldOp : PlierUtil_Op<"env_region_yield", [
   let arguments = (ins Variadic<AnyType>:$results);
   let builders = [OpBuilder<(ins), [{ /* nothing to do */ }]>];
 
-  let assemblyFormat =
-      [{  attr-dict ($results^ `:` type($results))? }];
+  let assemblyFormat = "attr-dict ($results^ `:` type($results))?";
 }
 
 #endif // PLIER_UTIL_OPS
