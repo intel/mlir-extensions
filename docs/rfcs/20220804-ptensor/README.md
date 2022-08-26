@@ -7,14 +7,14 @@ We propose a solution which can provide a high-level dialect for tensors and (nu
 In this document, we describe several dialects and passes to provide a good high-level view on the overall flow. We might want to split this into more than one document.
 
 ## Motivation
-MLIR provides a few tensor dialects (like tensor and TOSA) and separate dialects/conversions for targeting devices and parallelism. An annotated type is needed to keep the required analysis in the compiler pipeline to an acceptable extent. Even moderately complicated flows, for example when device and host tensors exist at the same time, complicated analysis is needed to correctly implement compute-follows data. This is particualarly true when converting to distributed parallelism, such as MPI-based; this is difficult to get right with existing dialects if possible at all.
+MLIR provides a few tensor dialects (like tensor and TOSA) and separate dialects/conversions for targeting devices and parallelism. An annotated type is needed to keep the required analysis in the compiler pipeline to an acceptable extent. Even moderately complicated flows, for example when device and host tensors exist at the same time, complicated analysis is needed to correctly implement compute-follows data. This is particularly true when converting to distributed parallelism, such as MPI-based; this is difficult to get right with existing dialects if possible at all.
 
 Additionally, the current architecture in Plier does not have an explicit MLIR representation of arrays/tensors and so makes it very hard to re-use its tensor functionality without coming from python/numba. Currently conversions are even relying the Python runtime. A dialect for such numpy-like tensors and -operations can accept hints for targets (like devices, MPI etc) and enable its use in libraries independent of numba and Python. One example of such a use case is a distributed and JIT-compiler based numpy implementation.
 
 ## Proposal
 We propose two new Dialects and one dialect extension:
-1. __PTensor__ dialect: providing a tensor type (ptensor) and operations on such ptensors
-2. __Dist__ dialect: dealing with the aspects of distributed data management, such as distributed memory alloction, GC and communication
+1. __PTensor__ dialect: providing a tensor type (ptensor) and operations on tensors
+2. __Dist__ dialect: dealing with the aspects of distributed data management, such as distributed memory allocation, GC and communication
 3. __intel_sycl.device_region__ operation in __intel_sycl__ dialect (RFC #291)
 
 Additionally we propose appropriate passes
@@ -23,18 +23,20 @@ Additionally we propose appropriate passes
 3. Converting __intel-sycl.device_region__ to appropriate runtime calls.
 
 ### ptensor Type
-Logicaly, the ptensor type extends the `mlir::tensor` type with `device`, `team` and `gid` attributes. The `ptensor.ptensor` enables SSA values representing tensors with annotations for distributed and device operation. The tensors themselves are assumed to eventually lower to memrefs.
+Logically, the ptensor type extends the `mlir::tensor` type with `device`, `team` and `gid` attributes. The `ptensor.ptensor` enables SSA values representing tensors with annotations for distributed and device operation. The tensors themselves are assumed to eventually lower to memrefs.
 
 The optional `device` indicates where the tensor lives, e.g. on which device. The target device is represented as a plain string which will be forwarded to the gpu/distributed runtimes. The exact syntax of device-identifiers is defined by the GPU runtime. For example, SYCL runtime will accept SYCL filter strings as defined [here](https://github.com/intel/llvm/blob/sycl/sycl/doc/EnvironmentVariables.md#sycl_device_filter). The default `NoneType` which disables device support.
 
 The optional `team` attribute indicates a team (of processes) among which the tensor is partitioned-distributed. The type of the `team` attribute depends on the underlying runtime; for MPI and Intel's distributed runtime this would be a `int64`. It defaults to `NoneType` which disables support for distributed operation.
 
+Notice: By default device and distribution support is disabled and so renders conventional host operations.
+
 ### __PTensor__ Operations
-The initial set of operations matches the requirements of the core of [array-API](https://data-apis.org/array-api/latest/API_specification/index.html). Notice, since we focus on compute-follows-data, only the creation functions/operations will require the `device` and `team` attributes. Operations consuming ptensors react on the the `device` and `team` attribute of their input.
+The initial set of operations matches the requirements of the core of [array-API](https://data-apis.org/array-api/latest/API_specification/index.html). Notice, since we focus on compute-follows-data, only the creation functions/operations will require the `device` and `team` attributes. The operations in the PTensor dialect accept different tensor-like types as input arguments: ptensors, tensors and MemRefs. Apparently, operations can only implement compute-follows-data if the inputs have `device` and `team` attributes, e.g. if they are of ptensor type. Standard tensor and memref inputs are treated as ptensors with default `device` and `team`.
 
-There are many operations defined in the array API and even more in the numpy API. It does not seem feasable to have one MLIR operation per numpy function (we'd get a hundred or more). The Linalg dialect addresses this by 'classifying' them, for example into 'elementwise_unary' and 'elementwise_binary' operations and having the actual per-element-operation as a parameter. On the contrary, the TOSA dialect decided to have have an exact 1:1 mapping for every tensor-operation ('add', 'abs', 'ceil' 'arithmetic_right_shift' etc.).
+There are many operations defined in the array API and even more in the numpy API. It does not seem feasible to have one MLIR operation per numpy function (we'd get a hundred or more). The Linalg dialect addresses this by 'classifying' them, for example into 'elementwise_unary' and 'elementwise_binary' operations and having the actual per-element-operation as a parameter. On the contrary, the TOSA dialect decided to have have an exact 1:1 mapping for every tensor-operation ('add', 'abs', 'ceil' 'arithmetic_right_shift' etc.).
 
-The below set of operations acrues from the following rules:
+The below set of operations accrues from the following rules:
 * classify/group where semantically justifiable and so reduce the interface's surface
 * do not classify when parameters differ and so allow early type checking
 
@@ -43,7 +45,6 @@ Notice: some of the operations mutate existing ptensors.
 #### Operation details
 * Tensor creation
   * `arange(start, stop, step, dtype, device, team) : (int64, int64, int64, type, str, int64) -> ptensor.ptensor`
-  * `asarray(??) : (??) -> ptensor.ptensor`
   * `create(shape, value, dtype, device, team) : (shape.shape, anytype, type, str, int64) -> ptensor.ptensor`
     * covers `empty, ones, zeros, full`
   * `create_like(rsh, value, dtype, device, team) : (shape.shape, anytype, type, str, int64) -> ptensor.ptensor`
@@ -122,7 +123,7 @@ The Dist dialect provides operations dealing with tensors which are partitioned 
 For details watch out for a separate RFC.
 
 ### __intel_sycl.gpu-region__
-The `intel_sycl.device_region` operation defines the target on which operations within the region should be executed on. The region carries a parameter defining the concrete target device. The parameter meets the same reqwuirements as the `device` attribute of a `ptensor.ptensor`. The main prupose of this region is 1. to provide an easy way for lower passes to comply to compute-follows-data operation and 2. to shared runtime information among operations on devices.
+The `intel_sycl.device_region` operation defines the target on which operations within the region should be executed on. The region carries a parameter defining the concrete target device. The parameter meets the same requirements as the `device` attribute of a `ptensor.ptensor`. The main purpose of this region is 1. to provide an easy way for lower passes to comply to compute-follows-data operation and 2. to shared runtime information among operations on devices.
 
 A `intel_sycl.device_region` must not be nested within another `intel_sycl.device_region`.
 
