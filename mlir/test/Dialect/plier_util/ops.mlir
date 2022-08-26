@@ -15,6 +15,18 @@ func.func @test() {
 
 // -----
 
+func.func @test() {
+  plier_util.env_region "test" {
+  }
+  return
+}
+// CHECK-LABEL: func @test
+//  CHECK-NEXT:   plier_util.env_region "test" {
+//  CHECK-NEXT:   }
+//  CHECK-NEXT:   return
+
+// -----
+
 func.func @test(%arg1: index) {
   plier_util.env_region "test" %arg1 : index {
     plier_util.env_region_yield
