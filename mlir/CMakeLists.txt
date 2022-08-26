@@ -40,12 +40,9 @@ add_subdirectory(include/mlir-extensions/Dialect/gpu_runtime/IR)
 
 set(SOURCES_LIST
     lib/Conversion/SCFToAffine/SCFToAffine.cpp
-    lib/Conversion/gpu_to_gpu_runtime.cpp
     lib/Conversion/gpu_runtime_to_llvm.cpp
-    lib/analysis/memory_ssa.cpp
-    lib/analysis/memory_ssa_analysis.cpp
-    lib/compiler/compiler.cpp
-    lib/compiler/pipeline_registry.cpp
+    lib/Conversion/gpu_to_gpu_runtime.cpp
+    lib/Conversion/util_to_llvm.cpp
     lib/Dialect/gpu_runtime/IR/gpu_runtime_ops.cpp
     lib/Dialect/plier/dialect.cpp
     lib/Dialect/plier_util/dialect.cpp
@@ -69,16 +66,17 @@ set(SOURCES_LIST
     lib/Transforms/promote_to_parallel.cpp
     lib/Transforms/type_conversion.cpp
     lib/Transforms/uplift_math.cpp
+    lib/analysis/memory_ssa.cpp
+    lib/analysis/memory_ssa_analysis.cpp
+    lib/compiler/compiler.cpp
+    lib/compiler/pipeline_registry.cpp
     lib/utils.cpp
     )
 set(HEADERS_LIST
     include/mlir-extensions/Conversion/SCFToAffine/SCFToAffine.h
-    include/mlir-extensions/Conversion/gpu_to_gpu_runtime.hpp
     include/mlir-extensions/Conversion/gpu_runtime_to_llvm.hpp
-    include/mlir-extensions/analysis/memory_ssa.hpp
-    include/mlir-extensions/analysis/memory_ssa_analysis.hpp
-    include/mlir-extensions/compiler/compiler.hpp
-    include/mlir-extensions/compiler/pipeline_registry.hpp
+    include/mlir-extensions/Conversion/gpu_to_gpu_runtime.hpp
+    include/mlir-extensions/Conversion/util_to_llvm.hpp
     include/mlir-extensions/Dialect/gpu_runtime/IR/gpu_runtime_ops.hpp
     include/mlir-extensions/Dialect/plier/dialect.hpp
     include/mlir-extensions/Dialect/plier_util/dialect.hpp
@@ -103,6 +101,10 @@ set(HEADERS_LIST
     include/mlir-extensions/Transforms/rewrite_wrapper.hpp
     include/mlir-extensions/Transforms/type_conversion.hpp
     include/mlir-extensions/Transforms/uplift_math.hpp
+    include/mlir-extensions/analysis/memory_ssa.hpp
+    include/mlir-extensions/analysis/memory_ssa_analysis.hpp
+    include/mlir-extensions/compiler/compiler.hpp
+    include/mlir-extensions/compiler/pipeline_registry.hpp
     include/mlir-extensions/utils.hpp
     )
 
