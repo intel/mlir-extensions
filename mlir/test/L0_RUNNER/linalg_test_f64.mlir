@@ -128,7 +128,7 @@ module @jit_func.func.0 {
     %2 = call @foo(%0, %1) : (tensor<500xf64>, tensor<5xf64>) -> tensor<500xf64>
     %unranked = tensor.cast %2 : tensor<500xf64> to tensor<*xf64>
     call @printMemrefF64(%unranked) : (tensor<*xf64>) -> ()
-    //      CHECK: Unranked Memref base@ = {{0x[-9a-f]*}}
+    //      CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
     // CHECK-SAME: rank = 1 offset = 0 sizes = [500] strides = [1] data =
     // CHECK-NEXT: [1.00002, 1.00002, 1.00002, 1.00002, 1.00002, 1.00002, 1.00002, 1.00002, 1.00002, 1.00002,
     // CHECK-SAME: 1.00002, 1.00002, 1.00002, 1.00002, 1.00002, 1.00002, 1.00002, 1.00002, 1.00002, 1.00002,
