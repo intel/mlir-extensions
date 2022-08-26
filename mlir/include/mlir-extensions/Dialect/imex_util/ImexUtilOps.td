@@ -225,7 +225,7 @@ def EnvironmentRegionOp : PlierUtil_Op<"env_region", [
     DeclareOpInterfaceMethods<RegionBranchOpInterface>,
     SingleBlockImplicitTerminator<"plier::EnvironmentRegionYieldOp">,
     RecursiveSideEffects]> {
-  let summary = "operation that executes its region with a specific environment";
+  let summary = "Operation that executes its region with a specific environment";
   let description = [{
     "env_region" executes operations inside its region within a specific
     enviroment. Operations are executed exactly once. All SSA values that
@@ -257,7 +257,7 @@ def EnvironmentRegionYieldOp : PlierUtil_Op<"env_region_yield", [
   HasParent<"EnvironmentRegionOp">
   ]> {
 
-  let summary = "environment region yield and termination operation";
+  let summary = "Environment region yield and termination operation";
   let description = [{
     "env_region_yield" yields an SSA value from the "env_region" op region and
     terminates it.
