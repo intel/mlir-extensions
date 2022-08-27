@@ -80,17 +80,17 @@ populateToLLVMAdditionalTypeConversion(mlir::LLVMTypeConverter &converter) {
         return voidPtrType;
       });
   converter.addConversion(
-      [voidPtrType](plier::OpaqueType) -> llvm::Optional<mlir::Type> {
+      [voidPtrType](imex::util::OpaqueType) -> llvm::Optional<mlir::Type> {
         return voidPtrType;
       });
 }
 
 namespace {
-struct LowerRetainOp : public mlir::ConvertOpToLLVMPattern<plier::RetainOp> {
+struct LowerRetainOp : public mlir::ConvertOpToLLVMPattern<imex::util::RetainOp> {
   using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::RetainOp op, plier::RetainOp::Adaptor adaptor,
+  matchAndRewrite(imex::util::RetainOp op, imex::util::RetainOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto arg = adaptor.source();
     if (!arg.getType().isa<mlir::LLVM::LLVMStructType>())
@@ -126,12 +126,12 @@ struct LowerRetainOp : public mlir::ConvertOpToLLVMPattern<plier::RetainOp> {
 };
 
 struct LowerExtractMemrefMetadataOp
-    : public mlir::ConvertOpToLLVMPattern<plier::ExtractMemrefMetadataOp> {
+    : public mlir::ConvertOpToLLVMPattern<imex::util::ExtractMemrefMetadataOp> {
   using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::ExtractMemrefMetadataOp op,
-                  plier::ExtractMemrefMetadataOp::Adaptor adaptor,
+  matchAndRewrite(imex::util::ExtractMemrefMetadataOp op,
+                  imex::util::ExtractMemrefMetadataOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto arg = adaptor.source();
     if (!arg.getType().isa<mlir::LLVM::LLVMStructType>())
@@ -179,11 +179,11 @@ struct LowerBuildTuple
   }
 };
 
-struct LowerUndef : public mlir::ConvertOpToLLVMPattern<plier::UndefOp> {
+struct LowerUndef : public mlir::ConvertOpToLLVMPattern<imex::util::UndefOp> {
   using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::UndefOp op, plier::UndefOp::Adaptor /*adaptor*/,
+  matchAndRewrite(imex::util::UndefOp op, imex::util::UndefOp::Adaptor /*adaptor*/,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto converter = getTypeConverter();
     auto type = converter->convertType(op.getType());
@@ -227,12 +227,12 @@ static void addToGlobalDtors(mlir::ConversionPatternRewriter &rewriter,
 }
 
 struct LowerTakeContextOp
-    : public mlir::ConvertOpToLLVMPattern<plier::TakeContextOp> {
+    : public mlir::ConvertOpToLLVMPattern<imex::util::TakeContextOp> {
   using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::TakeContextOp op,
-                  plier::TakeContextOp::Adaptor adaptor,
+  matchAndRewrite(imex::util::TakeContextOp op,
+                  imex::util::TakeContextOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto converter = getTypeConverter();
     assert(converter);
@@ -480,12 +480,12 @@ struct LowerTakeContextOp
 };
 
 struct LowerReleaseContextOp
-    : public mlir::ConvertOpToLLVMPattern<plier::ReleaseContextOp> {
+    : public mlir::ConvertOpToLLVMPattern<imex::util::ReleaseContextOp> {
   using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::ReleaseContextOp op,
-                  plier::ReleaseContextOp::Adaptor adaptor,
+  matchAndRewrite(imex::util::ReleaseContextOp op,
+                  imex::util::ReleaseContextOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto mod = op->getParentOfType<mlir::ModuleOp>();
     assert(mod);
@@ -550,7 +550,7 @@ struct PlierUtilToLLVMPass
     mlir::LLVMConversionTarget target(context);
     target.addLegalOp<mlir::func::FuncOp>();
     target.addLegalOp<mlir::func::CallOp>();
-    target.addIllegalDialect<plier::PlierUtilDialect>();
+    target.addIllegalDialect<imex::util::PlierUtilDialect>();
     if (failed(applyPartialConversion(op, target, std::move(patterns))))
       signalPassFailure();
   }

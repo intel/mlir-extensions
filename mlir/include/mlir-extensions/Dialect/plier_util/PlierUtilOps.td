@@ -24,8 +24,8 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/ViewLikeInterface.td"
 
 def PlierUtil_Dialect : Dialect {
-  let name = "plier_util";
-  let cppNamespace = "plier";
+  let name = "imex_util";
+  let cppNamespace = "::imex::util";
 
   let dependentDialects = ["::mlir::memref::MemRefDialect"];
 
@@ -35,9 +35,9 @@ def PlierUtil_Dialect : Dialect {
 }
 
 def PlierUtil_OpaqueType
-    : DialectType<PlierUtil_Dialect, CPred<"$_self.isa<::plier::OpaqueType>()">,
+    : DialectType<PlierUtil_Dialect, CPred<"$_self.isa<::imex::util::OpaqueType>()">,
                   "opaque_type">,
-      BuildableType<"$_builder.getType<::plier::OpaqueType>()"> {}
+      BuildableType<"$_builder.getType<::imex::util::OpaqueType>()"> {}
 
 class PlierUtil_Op<string mnemonic, list<Trait> traits = []>
     : Op<PlierUtil_Dialect, mnemonic, traits>;
@@ -57,7 +57,7 @@ def EnforceShapeOp : PlierUtil_Op<"enforce_shape"> {
 
 def ParallelOp : PlierUtil_Op<"parallel", [
   AttrSizedOperandSegments, DeclareOpInterfaceMethods<LoopLikeOpInterface>,
-  SingleBlockImplicitTerminator<"plier::YieldOp">, RecursiveSideEffects
+  SingleBlockImplicitTerminator<"::imex::util::YieldOp">, RecursiveSideEffects
 ]> {
 
   let arguments = (ins Variadic<Index>:$lowerBounds,
@@ -85,7 +85,7 @@ def UndefOp : PlierUtil_Op<"undef", [NoSideEffect]> {
 }
 
 def YieldOp : PlierUtil_Op<"yield", [
-  NoSideEffect, ReturnLike, Terminator, ParentOneOf<["ParallelOp"]>
+  NoSideEffect, ReturnLike, Terminator, ParentOneOf<["::imex::util::ParallelOp"]>
 ]> {
   let arguments = (ins Variadic<AnyType> : $results);
   let builders = [OpBuilder<(ins), [{/* nothing to do */}]>];

@@ -64,7 +64,7 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
   mlir::LogicalResult
   matchAndRewrite(mlir::scf::ParallelOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    if (mlir::isa<plier::ParallelOp>(op->getParentOp()))
+    if (mlir::isa<imex::util::ParallelOp>(op->getParentOp()))
       return mlir::failure();
 
     bool needParallel = op->hasAttr(plier::attributes::getParallelName()) ||
@@ -177,7 +177,7 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
       }
     };
 
-    rewriter.create<plier::ParallelOp>(loc, origLowerBound, origUpperBound,
+    rewriter.create<imex::util::ParallelOp>(loc, origLowerBound, origUpperBound,
                                        origStep, bodyBuilder);
 
     auto reduceBodyBuilder = [&](mlir::OpBuilder &builder, mlir::Location loc,
@@ -226,7 +226,7 @@ struct ParallelToTbbPass
     : public plier::RewriteWrapperPass<
           ParallelToTbbPass, mlir::func::FuncOp,
           plier::DependentDialectsList<
-              plier::PlierDialect, plier::PlierUtilDialect,
+              plier::PlierDialect, imex::util::PlierUtilDialect,
               mlir::arith::ArithmeticDialect, mlir::scf::SCFDialect>,
           ParallelToTbb> {};
 

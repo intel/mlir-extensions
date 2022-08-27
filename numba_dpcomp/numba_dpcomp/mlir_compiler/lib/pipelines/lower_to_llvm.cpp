@@ -146,7 +146,7 @@ void populateToLLVMAdditionalTypeConversion(
         return voidPtrType;
       });
   converter.addConversion(
-      [voidPtrType](plier::OpaqueType) -> llvm::Optional<mlir::Type> {
+      [voidPtrType](imex::util::OpaqueType) -> llvm::Optional<mlir::Type> {
         return voidPtrType;
       });
   converter.addConversion(
@@ -847,12 +847,12 @@ void copyAttrs(mlir::Operation *src, mlir::Operation *dst) {
   }
 }
 
-struct LowerParallel : public mlir::OpRewritePattern<plier::ParallelOp> {
+struct LowerParallel : public mlir::OpRewritePattern<imex::util::ParallelOp> {
   LowerParallel(mlir::MLIRContext *context)
       : OpRewritePattern(context), converter(context) {}
 
   mlir::LogicalResult
-  matchAndRewrite(plier::ParallelOp op,
+  matchAndRewrite(imex::util::ParallelOp op,
                   mlir::PatternRewriter &rewriter) const override {
     auto num_loops = op.getNumLoops();
     llvm::SmallVector<mlir::Value> contextVars;
@@ -1061,7 +1061,7 @@ struct LowerParallel : public mlir::OpRewritePattern<plier::ParallelOp> {
       auto &orig_entry = *std::next(func.getBody().begin());
       rewriter.create<mlir::cf::BranchOp>(loc, &orig_entry);
       for (auto &block : func.getBody()) {
-        if (auto term = mlir::dyn_cast<plier::YieldOp>(block.getTerminator())) {
+        if (auto term = mlir::dyn_cast<imex::util::YieldOp>(block.getTerminator())) {
           rewriter.eraseOp(term);
           rewriter.setInsertionPointToEnd(&block);
           rewriter.create<mlir::func::ReturnOp>(loc);

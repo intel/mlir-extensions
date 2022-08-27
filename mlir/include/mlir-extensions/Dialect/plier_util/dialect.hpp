@@ -33,7 +33,8 @@
 #define GET_OP_CLASSES
 #include "mlir-extensions/Dialect/plier_util/PlierUtilOps.h.inc"
 
-namespace plier {
+namespace imex {
+namespace util {
 class OpaqueType : public ::mlir::Type::TypeBase<OpaqueType, ::mlir::Type,
                                                  ::mlir::TypeStorage> {
 public:
@@ -43,3 +44,4 @@ public:
 };
 
 } // namespace plier
+}

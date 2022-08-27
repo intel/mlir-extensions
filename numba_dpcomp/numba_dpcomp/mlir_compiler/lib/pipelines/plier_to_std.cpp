@@ -246,7 +246,7 @@ static mlir::Type mapNoneType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
 static mlir::Type mapDispatcherType(mlir::MLIRContext &ctx,
                                     llvm::StringRef &name) {
   if (name.consume_front("type(CPUDispatcher(") && consumeUntil(name, "))"))
-    return plier::OpaqueType::get(&ctx);
+    return imex::util::OpaqueType::get(&ctx);
 
   return nullptr;
 }
@@ -350,7 +350,7 @@ struct ConstOpLowering : public mlir::OpConversionPattern<plier::ConstOp> {
           auto constVal = rewriter.create<mlir::arith::ConstantIntOp>(
               loc, intVal, type.getWidth());
           mlir::Value res =
-              rewriter.create<plier::SignCastOp>(loc, type, constVal);
+              rewriter.create<imex::util::SignCastOp>(loc, type, constVal);
           if (res.getType() != expectedType)
             res = rewriter.create<plier::CastOp>(loc, expectedType, res);
 
@@ -363,7 +363,7 @@ struct ConstOpLowering : public mlir::OpConversionPattern<plier::ConstOp> {
     }
 
     if (expectedType.isa<mlir::NoneType>()) {
-      rewriter.replaceOpWithNewOp<plier::UndefOp>(op, expectedType);
+      rewriter.replaceOpWithNewOp<imex::util::UndefOp>(op, expectedType);
       return mlir::success();
     }
     return mlir::failure();
@@ -406,7 +406,7 @@ struct LiteralLowering : public mlir::OpConversionPattern<Op> {
       return mlir::failure();
 
     if (convertedType.template isa<mlir::NoneType>()) {
-      rewriter.replaceOpWithNewOp<plier::UndefOp>(op, convertedType);
+      rewriter.replaceOpWithNewOp<imex::util::UndefOp>(op, convertedType);
       return mlir::success();
     }
 
@@ -418,14 +418,14 @@ struct LiteralLowering : public mlir::OpConversionPattern<Op> {
       auto newVal =
           rewriter.create<mlir::arith::ConstantOp>(loc, val).getResult();
       if (dstType != val.getType())
-        newVal = rewriter.create<plier::SignCastOp>(loc, dstType, newVal);
+        newVal = rewriter.create<imex::util::SignCastOp>(loc, dstType, newVal);
 
       rewriter.replaceOp(op, newVal);
       return mlir::success();
     }
 
     if (auto typevar = convertedType.template dyn_cast<plier::TypeVar>()) {
-      rewriter.replaceOpWithNewOp<plier::UndefOp>(op, typevar);
+      rewriter.replaceOpWithNewOp<imex::util::UndefOp>(op, typevar);
       return mlir::success();
     }
 
@@ -477,7 +477,7 @@ struct OmittedLowering : public mlir::OpConversionPattern<plier::CastOp> {
       auto newVal =
           rewriter.create<mlir::arith::ConstantOp>(loc, val).getResult();
       if (dstType != val.cast<mlir::TypedAttr>().getType())
-        newVal = rewriter.create<plier::SignCastOp>(loc, dstType, newVal);
+        newVal = rewriter.create<imex::util::SignCastOp>(loc, dstType, newVal);
 
       rewriter.replaceOp(op, newVal);
       return mlir::success();
@@ -534,11 +534,11 @@ struct LowerGlobals : public mlir::OpConversionPattern<plier::GlobalOp> {
   }
 };
 
-struct UndefOpLowering : public mlir::OpConversionPattern<plier::UndefOp> {
+struct UndefOpLowering : public mlir::OpConversionPattern<imex::util::UndefOp> {
   using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::UndefOp op, plier::UndefOp::Adaptor /*adapator*/,
+  matchAndRewrite(imex::util::UndefOp op, imex::util::UndefOp::Adaptor /*adapator*/,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto oldType = op.getType();
     auto &converter = *getTypeConverter();
@@ -546,7 +546,7 @@ struct UndefOpLowering : public mlir::OpConversionPattern<plier::UndefOp> {
     if (!type || oldType == type)
       return mlir::failure();
 
-    rewriter.replaceOpWithNewOp<plier::UndefOp>(op, type);
+    rewriter.replaceOpWithNewOp<imex::util::UndefOp>(op, type);
     return mlir::success();
   }
 };
@@ -591,7 +591,7 @@ mlir::Value intCast(mlir::PatternRewriter &rewriter, mlir::Location loc,
   auto dstBits = dstIntType.getWidth();
 
   if (srcIntType != srcSignless)
-    val = rewriter.createOrFold<plier::SignCastOp>(loc, srcSignless, val);
+    val = rewriter.createOrFold<imex::util::SignCastOp>(loc, srcSignless, val);
 
   if (dstBits > srcBits) {
     if (srcIntType.isSigned()) {
@@ -615,7 +615,7 @@ mlir::Value intCast(mlir::PatternRewriter &rewriter, mlir::Location loc,
   }
 
   if (dstIntType != dstSignless)
-    val = rewriter.createOrFold<plier::SignCastOp>(loc, dstIntType, val);
+    val = rewriter.createOrFold<imex::util::SignCastOp>(loc, dstIntType, val);
 
   return val;
 }
@@ -625,7 +625,7 @@ mlir::Value intFloatCast(mlir::PatternRewriter &rewriter, mlir::Location loc,
   auto srcIntType = val.getType().cast<mlir::IntegerType>();
   auto signlessType = plier::makeSignlessType(srcIntType);
   if (val.getType() != signlessType)
-    val = rewriter.createOrFold<plier::SignCastOp>(loc, signlessType, val);
+    val = rewriter.createOrFold<imex::util::SignCastOp>(loc, signlessType, val);
 
   if (srcIntType.isSigned()) {
     return rewriter.createOrFold<mlir::arith::SIToFPOp>(loc, dstType, val);
@@ -663,7 +663,7 @@ mlir::Value floatIntCast(mlir::PatternRewriter &rewriter, mlir::Location loc,
     res = rewriter.create<mlir::arith::FPToUIOp>(loc, dstSignlessType, val);
   }
   if (dstSignlessType != dstIntType) {
-    return rewriter.createOrFold<plier::SignCastOp>(loc, dstIntType, res);
+    return rewriter.createOrFold<imex::util::SignCastOp>(loc, dstIntType, res);
   }
   return res;
 }
@@ -703,7 +703,7 @@ mlir::Value doCast(mlir::PatternRewriter &rewriter, mlir::Location loc,
     auto signlessAttr = makeSignlessAttr(attr).cast<mlir::TypedAttr>();
     val = rewriter.create<mlir::arith::ConstantOp>(loc, signlessAttr);
     if (signlessAttr.getType() != attr.getType())
-      val = rewriter.create<plier::SignCastOp>(loc, attr.getType(), val);
+      val = rewriter.create<imex::util::SignCastOp>(loc, attr.getType(), val);
 
     srcType = val.getType();
   }
@@ -938,7 +938,7 @@ struct BinOpLowering : public mlir::OpConversionPattern<plier::BinOp> {
         if (h.type == op.op()) {
           auto res = (h.*mem)(rewriter, loc, convertedOperands, resType);
           if (res.getType() != resType)
-            res = rewriter.createOrFold<plier::SignCastOp>(loc, resType, res);
+            res = rewriter.createOrFold<imex::util::SignCastOp>(loc, resType, res);
           rewriter.replaceOp(op, res);
           return mlir::success();
         }
@@ -1008,14 +1008,14 @@ static mlir::Value negate(mlir::PatternRewriter &rewriter, mlir::Location loc,
   if (auto itype = resType.dyn_cast<mlir::IntegerType>()) {
     auto signless = plier::makeSignlessType(resType);
     if (signless != itype)
-      val = rewriter.create<plier::SignCastOp>(loc, signless, val);
+      val = rewriter.create<imex::util::SignCastOp>(loc, signless, val);
 
     // TODO: no int negation?
     auto zero = rewriter.create<mlir::arith::ConstantOp>(
         loc, mlir::IntegerAttr::get(signless, 0));
     auto res = rewriter.create<mlir::arith::SubIOp>(loc, zero, val).getResult();
     if (signless != itype)
-      res = rewriter.create<plier::SignCastOp>(loc, itype, res);
+      res = rewriter.create<imex::util::SignCastOp>(loc, itype, res);
 
     return res;
   }
@@ -1060,7 +1060,7 @@ static mlir::Value unaryInvert(mlir::PatternRewriter &rewriter,
   } else {
     signlessType = plier::makeSignlessType(intType);
     if (intType != signlessType)
-      arg = rewriter.create<plier::SignCastOp>(loc, signlessType, arg);
+      arg = rewriter.create<imex::util::SignCastOp>(loc, signlessType, arg);
   }
 
   auto all = rewriter.create<mlir::arith::ConstantIntOp>(loc, -1, signlessType);
@@ -1068,7 +1068,7 @@ static mlir::Value unaryInvert(mlir::PatternRewriter &rewriter,
   arg = rewriter.create<mlir::arith::XOrIOp>(loc, all, arg);
 
   if (intType != signlessType)
-    arg = rewriter.create<plier::SignCastOp>(loc, intType, arg);
+    arg = rewriter.create<imex::util::SignCastOp>(loc, intType, arg);
 
   if (resType != arg.getType())
     arg = doCast(rewriter, loc, arg, resType);
@@ -1333,7 +1333,7 @@ struct PlierToStdPass
     registry.insert<mlir::math::MathDialect>();
     registry.insert<mlir::scf::SCFDialect>();
     registry.insert<plier::PlierDialect>();
-    registry.insert<plier::PlierUtilDialect>();
+    registry.insert<imex::util::PlierUtilDialect>();
   }
 
   void runOnOperation() override;
@@ -1419,7 +1419,7 @@ void PlierToStdPass::runOnOperation() {
 
         return !type.isIntOrFloat();
       });
-  target.addDynamicallyLegalOp<plier::UndefOp>([&](plier::UndefOp op) {
+  target.addDynamicallyLegalOp<imex::util::UndefOp>([&](imex::util::UndefOp op) {
     auto srcType = op.getType();
     auto dstType = typeConverter.convertType(srcType);
     return srcType == dstType;

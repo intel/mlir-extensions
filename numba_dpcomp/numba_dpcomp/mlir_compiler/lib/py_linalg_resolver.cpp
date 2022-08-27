@@ -103,7 +103,7 @@ static mlir::Value doSignCast(mlir::OpBuilder &builder, mlir::Location &loc,
   auto origType = val.getType();
   auto signlessType = makeSignlessType(origType);
   if (signlessType != origType)
-    val = builder.createOrFold<plier::SignCastOp>(loc, signlessType, val);
+    val = builder.createOrFold<imex::util::SignCastOp>(loc, signlessType, val);
 
   return val;
 }
@@ -112,7 +112,7 @@ static mlir::Value doSignCast(mlir::OpBuilder &builder, mlir::Location &loc,
                               mlir::Value val, mlir::Type dstType) {
   auto origType = val.getType();
   if (dstType != origType)
-    val = builder.createOrFold<plier::SignCastOp>(loc, dstType, val);
+    val = builder.createOrFold<imex::util::SignCastOp>(loc, dstType, val);
 
   return val;
 }
@@ -318,12 +318,12 @@ struct PyLinalgResolver::Context {
 
     if (py::isinstance(obj, type)) {
       auto type = plier::TypeVar::get(unwrapType(obj));
-      return builder.create<plier::UndefOp>(loc, type);
+      return builder.create<imex::util::UndefOp>(loc, type);
     }
 
     if (obj.is_none()) {
       auto type = mlir::NoneType::get(builder.getContext());
-      return builder.create<plier::UndefOp>(loc, type);
+      return builder.create<imex::util::UndefOp>(loc, type);
     }
 
     if (py::isinstance<py::iterable>(obj)) {
@@ -346,7 +346,7 @@ struct PyLinalgResolver::Context {
       auto attr = builder.getI64IntegerAttr(obj.cast<int64_t>());
       auto res = builder.create<mlir::arith::ConstantOp>(loc, attr);
       auto intType = builder.getIntegerType(64, true);
-      return builder.create<plier::SignCastOp>(loc, intType, res);
+      return builder.create<imex::util::SignCastOp>(loc, intType, res);
     }
 
     if (py::isinstance<py::float_>(obj)) {
@@ -371,7 +371,7 @@ struct PyLinalgResolver::Context {
       mlir::Value res = builder.create<mlir::arith::ConstantIntOp>(
           loc, obj.cast<int64_t>(), intSignlessType);
       if (intSignlessType != intType)
-        res = builder.create<plier::SignCastOp>(loc, intType, res);
+        res = builder.create<imex::util::SignCastOp>(loc, intType, res);
 
       return res;
     } else if (resultType.isa<mlir::FloatType>() &&
@@ -408,7 +408,7 @@ private:
       return ret;
     }
 
-    if (auto cast = val.getDefiningOp<plier::SignCastOp>())
+    if (auto cast = val.getDefiningOp<imex::util::SignCastOp>())
       val = cast.value();
 
     if (auto attr = plier::getConstVal<mlir::Attribute>(val))
@@ -658,7 +658,7 @@ static mlir::Value expandDims(mlir::OpBuilder &builder, mlir::Location loc,
   for (unsigned i = 0; i < numDims; ++i)
     current = expandDim(builder, loc, val, current, i, targetShape);
 
-  current = builder.create<plier::EnforceShapeOp>(loc, current, targetShape);
+  current = builder.create<imex::util::EnforceShapeOp>(loc, current, targetShape);
   return current;
 }
 
@@ -1390,7 +1390,7 @@ static py::object undefImpl(py::capsule context, py::handle dtype) {
   auto &builder = ctx.builder;
   auto loc = ctx.loc;
   auto type = unwrapType(dtype);
-  auto ret = builder.createOrFold<plier::UndefOp>(loc, type);
+  auto ret = builder.createOrFold<imex::util::UndefOp>(loc, type);
   return ctx.context.createVar(context, ret);
 }
 
@@ -1411,7 +1411,7 @@ py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
 
   auto indexType = builder.getIndexType();
   auto indexCast = [&](mlir::Value val) -> mlir::OpFoldResult {
-    while (auto parent = val.getDefiningOp<plier::SignCastOp>())
+    while (auto parent = val.getDefiningOp<imex::util::SignCastOp>())
       val = parent.value();
 
     if (auto constVal = mlir::getConstantIntValue(val))
@@ -1516,7 +1516,7 @@ py::object forceCopyImpl(py::capsule context, py::handle src) {
       toTensor(loc, builder, ctx.context.unwrapVal(loc, builder, src));
   auto origSrcType = origSrcVal.getType();
   auto srcVal = doSignCast(builder, loc, origSrcVal);
-  auto res = builder.create<plier::ForceCopyOp>(loc, srcVal);
+  auto res = builder.create<imex::util::ForceCopyOp>(loc, srcVal);
   return ctx.context.createVar(context,
                                doSignCast(builder, loc, res, origSrcType));
 }

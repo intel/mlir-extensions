@@ -29,12 +29,12 @@
 
 namespace {
 struct LowerTakeContext
-    : public mlir::ConvertOpToLLVMPattern<plier::TakeContextOp> {
+    : public mlir::ConvertOpToLLVMPattern<imex::util::TakeContextOp> {
   using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::TakeContextOp op,
-                  plier::TakeContextOp::Adaptor adaptor,
+  matchAndRewrite(imex::util::TakeContextOp op,
+                  imex::util::TakeContextOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto srcTypes = op.getResultTypes();
     auto count = static_cast<unsigned>(srcTypes.size());
@@ -49,7 +49,7 @@ struct LowerTakeContext
 
     auto initFunc = adaptor.initFunc().value_or(mlir::SymbolRefAttr());
     auto releaseFunc = adaptor.releaseFunc().value_or(mlir::SymbolRefAttr());
-    rewriter.replaceOpWithNewOp<plier::TakeContextOp>(op, newTypes, initFunc,
+    rewriter.replaceOpWithNewOp<imex::util::TakeContextOp>(op, newTypes, initFunc,
                                                       releaseFunc);
     return mlir::success();
   }
@@ -867,7 +867,7 @@ struct GPUToLLVMPass
           return llvm::None;
         });
 
-    target.addDynamicallyLegalOp<mlir::func::ReturnOp, plier::TakeContextOp,
+    target.addDynamicallyLegalOp<mlir::func::ReturnOp, imex::util::TakeContextOp,
                                  mlir::func::CallOp>(
         [&](mlir::Operation *op) -> llvm::Optional<bool> {
           for (auto range : {mlir::TypeRange(op->getOperandTypes()),

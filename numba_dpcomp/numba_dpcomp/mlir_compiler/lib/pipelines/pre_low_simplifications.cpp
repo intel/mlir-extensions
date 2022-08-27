@@ -163,7 +163,7 @@ struct MakeSignlessPass
                                   mlir::ValueRange inputs,
                                   mlir::Location loc) -> mlir::Value {
       assert(inputs.size() == 1);
-      return builder.create<plier::SignCastOp>(loc, type, inputs[0]);
+      return builder.create<imex::util::SignCastOp>(loc, type, inputs[0]);
     };
     typeConverter.addArgumentMaterialization(materializeSignCast);
     typeConverter.addSourceMaterialization(materializeSignCast);

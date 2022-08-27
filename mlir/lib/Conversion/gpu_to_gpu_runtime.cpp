@@ -441,12 +441,12 @@ static mlir::Value getFlatIndex(mlir::OpBuilder &builder, mlir::Location loc,
       auto numSymbols = affineMap.getNumSymbols();
       if (numSymbols > 0) {
         applyOperands.emplace_back(
-            builder.createOrFold<plier::ExtractMemrefMetadataOp>(loc, memref));
+            builder.createOrFold<imex::util::ExtractMemrefMetadataOp>(loc, memref));
         --numSymbols;
         assert(numSymbols <= rank);
         for (auto i : llvm::seq(0u, numSymbols)) {
           applyOperands.emplace_back(
-              builder.createOrFold<plier::ExtractMemrefMetadataOp>(loc, memref,
+              builder.createOrFold<imex::util::ExtractMemrefMetadataOp>(loc, memref,
                                                                    i));
         }
       }
@@ -482,7 +482,7 @@ static mlir::Value getFlatMemref(mlir::OpBuilder &builder, mlir::Location loc,
   setInsertionPointToStart(builder, memref);
   mlir::OpFoldResult offset = builder.getIndexAttr(0);
   mlir::OpFoldResult size =
-      builder.createOrFold<plier::UndefOp>(loc, builder.getIndexType());
+      builder.createOrFold<imex::util::UndefOp>(loc, builder.getIndexType());
   mlir::OpFoldResult stride = builder.getIndexAttr(1);
   return builder.createOrFold<mlir::memref::ReinterpretCastOp>(
       loc, resultType, memref, offset, size, stride);
@@ -568,7 +568,7 @@ struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
     auto loc = op.getLoc();
     mlir::OpFoldResult flatIndex = getFlatIndex(rewriter, loc, memref, offsets);
     mlir::OpFoldResult flatSize =
-        rewriter.create<plier::UndefOp>(loc, rewriter.getIndexType())
+        rewriter.create<imex::util::UndefOp>(loc, rewriter.getIndexType())
             .getResult();
     mlir::OpFoldResult flatStride = rewriter.getIndexAttr(1);
     auto flatMemref = getFlatMemref(rewriter, loc, memref);
@@ -595,7 +595,7 @@ struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
         auto origStride = [&]() {
           mlir::OpBuilder::InsertionGuard g(rewriter);
           setInsertionPointToStart(rewriter, memref);
-          return rewriter.createOrFold<plier::ExtractMemrefMetadataOp>(
+          return rewriter.createOrFold<imex::util::ExtractMemrefMetadataOp>(
               loc, memref, i);
         }();
         auto newStride = rewriter.createOrFold<mlir::arith::MulIOp>(
@@ -642,7 +642,7 @@ struct UnstrideMemrefsPass
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::memref::MemRefDialect>();
     registry.insert<mlir::gpu::GPUDialect>();
-    registry.insert<plier::PlierUtilDialect>();
+    registry.insert<imex::util::PlierUtilDialect>();
   }
 
   void runOnOperation() override {
@@ -1080,12 +1080,12 @@ public:
   }
 };
 
-class ConvertUndef : public mlir::OpConversionPattern<plier::UndefOp> {
+class ConvertUndef : public mlir::OpConversionPattern<imex::util::UndefOp> {
 public:
   using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::UndefOp op, plier::UndefOp::Adaptor adaptor,
+  matchAndRewrite(imex::util::UndefOp op, imex::util::UndefOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto converter = getTypeConverter();
     assert(converter);
