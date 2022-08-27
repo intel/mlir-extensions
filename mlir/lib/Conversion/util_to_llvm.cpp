@@ -521,12 +521,12 @@ struct LowerReleaseContextOp
 };
 
 /// Convert operations from the imex_util dialect to the LLVM dialect.
-struct PlierUtilToLLVMPass
-    : public mlir::PassWrapper<PlierUtilToLLVMPass,
+struct ImexUtilToLLVMPass
+    : public mlir::PassWrapper<ImexUtilToLLVMPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
-  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(PlierUtilToLLVMPass)
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(ImexUtilToLLVMPass)
 
-  PlierUtilToLLVMPass(
+  ImexUtilToLLVMPass(
       std::function<mlir::LowerToLLVMOptions(mlir::MLIRContext &)> &&getter)
       : optsGetter(std::move(getter)) {}
 
@@ -567,5 +567,5 @@ private:
 std::unique_ptr<mlir::Pass> imex::createUtilToLLVMPass(
     std::function<mlir::LowerToLLVMOptions(mlir::MLIRContext &)> optsGetter) {
   assert(optsGetter && "invalid optsGetter");
-  return std::make_unique<PlierUtilToLLVMPass>(std::move(optsGetter));
+  return std::make_unique<ImexUtilToLLVMPass>(std::move(optsGetter));
 }

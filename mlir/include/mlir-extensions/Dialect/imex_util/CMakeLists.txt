@@ -1,5 +1,5 @@
 include_directories(${MLIR_INCLUDE_DIRS})
-set(dialect PlierUtilOps)
+set(dialect ImexUtilOps)
 set(dialect_namespace imex_util)
 set(LLVM_TARGET_DEFINITIONS ${dialect}.td)
 mlir_tablegen(${dialect}Enums.h.inc -gen-enum-decls)

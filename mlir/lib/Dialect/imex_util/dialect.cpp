@@ -59,7 +59,7 @@ namespace util {
 void ImexUtilDialect::initialize() {
   addOperations<
 #define GET_OP_LIST
-#include "mlir-extensions/Dialect/imex_util/PlierUtilOps.cpp.inc"
+#include "mlir-extensions/Dialect/imex_util/ImexUtilOps.cpp.inc"
       >();
 
   addTypes<OpaqueType>();
@@ -67,7 +67,7 @@ void ImexUtilDialect::initialize() {
 
   addAttributes<
 #define GET_ATTRDEF_LIST
-#include "mlir-extensions/Dialect/imex_util/PlierUtilOpsAttributes.cpp.inc"
+#include "mlir-extensions/Dialect/imex_util/ImexUtilOpsAttributes.cpp.inc"
       >();
 }
 
@@ -1643,12 +1643,12 @@ void TakeContextOp::build(mlir::OpBuilder &b, mlir::OperationState &result,
 } // namespace util
 } // namespace imex
 
-#include "mlir-extensions/Dialect/imex_util/PlierUtilOpsDialect.cpp.inc"
+#include "mlir-extensions/Dialect/imex_util/ImexUtilOpsDialect.cpp.inc"
 
 #define GET_OP_CLASSES
-#include "mlir-extensions/Dialect/imex_util/PlierUtilOps.cpp.inc"
+#include "mlir-extensions/Dialect/imex_util/ImexUtilOps.cpp.inc"
 
 #define GET_ATTRDEF_CLASSES
-#include "mlir-extensions/Dialect/imex_util/PlierUtilOpsAttributes.cpp.inc"
+#include "mlir-extensions/Dialect/imex_util/ImexUtilOpsAttributes.cpp.inc"
 
-#include "mlir-extensions/Dialect/imex_util/PlierUtilOpsEnums.cpp.inc"
+#include "mlir-extensions/Dialect/imex_util/ImexUtilOpsEnums.cpp.inc"

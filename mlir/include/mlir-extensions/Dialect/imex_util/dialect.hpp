@@ -24,14 +24,14 @@
 #include <mlir/Interfaces/SideEffectInterfaces.h>
 #include <mlir/Interfaces/ViewLikeInterface.h>
 
-#include "mlir-extensions/Dialect/imex_util/PlierUtilOpsDialect.h.inc"
-#include "mlir-extensions/Dialect/imex_util/PlierUtilOpsEnums.h.inc"
+#include "mlir-extensions/Dialect/imex_util/ImexUtilOpsDialect.h.inc"
+#include "mlir-extensions/Dialect/imex_util/ImexUtilOpsEnums.h.inc"
 
 #define GET_ATTRDEF_CLASSES
-#include "mlir-extensions/Dialect/imex_util/PlierUtilOpsAttributes.h.inc"
+#include "mlir-extensions/Dialect/imex_util/ImexUtilOpsAttributes.h.inc"
 
 #define GET_OP_CLASSES
-#include "mlir-extensions/Dialect/imex_util/PlierUtilOps.h.inc"
+#include "mlir-extensions/Dialect/imex_util/ImexUtilOps.h.inc"
 
 namespace imex {
 namespace util {
