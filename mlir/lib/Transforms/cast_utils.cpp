@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #include "mlir-extensions/Transforms/cast_utils.hpp"
-#include "mlir-extensions/Dialect/plier_util/dialect.hpp"
+#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 

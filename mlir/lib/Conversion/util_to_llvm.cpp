@@ -19,8 +19,8 @@
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Pass/Pass.h>
 
+#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
 #include "mlir-extensions/Dialect/plier/dialect.hpp"
-#include "mlir-extensions/Dialect/plier_util/dialect.hpp"
 
 #include "mlir-extensions/Conversion/util_to_llvm.hpp"
 
@@ -520,7 +520,7 @@ struct LowerReleaseContextOp
   }
 };
 
-/// Convert operations from the plier_util dialect to the LLVM dialect.
+/// Convert operations from the imex_util dialect to the LLVM dialect.
 struct PlierUtilToLLVMPass
     : public mlir::PassWrapper<PlierUtilToLLVMPass,
                                mlir::OperationPass<mlir::ModuleOp>> {

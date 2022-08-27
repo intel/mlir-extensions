@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #include "mlir-extensions/Dialect/plier/dialect.hpp"
-#include "mlir-extensions/Dialect/plier_util/dialect.hpp"
+#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
 
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/BuiltinOps.h>
@@ -59,7 +59,7 @@ namespace util {
 void ImexUtilDialect::initialize() {
   addOperations<
 #define GET_OP_LIST
-#include "mlir-extensions/Dialect/plier_util/PlierUtilOps.cpp.inc"
+#include "mlir-extensions/Dialect/imex_util/PlierUtilOps.cpp.inc"
       >();
 
   addTypes<OpaqueType>();
@@ -67,7 +67,7 @@ void ImexUtilDialect::initialize() {
 
   addAttributes<
 #define GET_ATTRDEF_LIST
-#include "mlir-extensions/Dialect/plier_util/PlierUtilOpsAttributes.cpp.inc"
+#include "mlir-extensions/Dialect/imex_util/PlierUtilOpsAttributes.cpp.inc"
       >();
 }
 
@@ -1045,13 +1045,13 @@ struct ChangeLayoutExpandShape
 /// Propagates ChangeLayoutOp through SelectOp.
 ///
 /// Example:
-/// %0 = plier_util.change_layout %arg1 : memref<?xi32, #map> to memref<?xi32>
+/// %0 = imex_util.change_layout %arg1 : memref<?xi32, #map> to memref<?xi32>
 /// %res = arith.select %arg3, %0, %arg2 : memref<?xi32>
 ///
 /// Becomes:
 /// %0 = memref.cast %arg2 : memref<?xi32> to memref<?xi32, #map>
 /// %1 = arith.select %arg3, %arg1, %0 : memref<?xi32, #map>
-/// %res  = plier_util.change_layout %1 : memref<?xi32, #map> to memref<?xi32>
+/// %res  = imex_util.change_layout %1 : memref<?xi32, #map> to memref<?xi32>
 struct ChangeLayoutSelect
     : public mlir::OpRewritePattern<mlir::arith::SelectOp> {
   using OpRewritePattern::OpRewritePattern;
@@ -1643,12 +1643,12 @@ void TakeContextOp::build(mlir::OpBuilder &b, mlir::OperationState &result,
 } // namespace util
 } // namespace imex
 
-#include "mlir-extensions/Dialect/plier_util/PlierUtilOpsDialect.cpp.inc"
+#include "mlir-extensions/Dialect/imex_util/PlierUtilOpsDialect.cpp.inc"
 
 #define GET_OP_CLASSES
-#include "mlir-extensions/Dialect/plier_util/PlierUtilOps.cpp.inc"
+#include "mlir-extensions/Dialect/imex_util/PlierUtilOps.cpp.inc"
 
 #define GET_ATTRDEF_CLASSES
-#include "mlir-extensions/Dialect/plier_util/PlierUtilOpsAttributes.cpp.inc"
+#include "mlir-extensions/Dialect/imex_util/PlierUtilOpsAttributes.cpp.inc"
 
-#include "mlir-extensions/Dialect/plier_util/PlierUtilOpsEnums.cpp.inc"
+#include "mlir-extensions/Dialect/imex_util/PlierUtilOpsEnums.cpp.inc"

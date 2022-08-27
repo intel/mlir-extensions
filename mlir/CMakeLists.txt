@@ -35,7 +35,7 @@ if (NOT EXPECTED_LLVM_SHA STREQUAL LLVM_SHA)
 endif()
 
 add_subdirectory(include/mlir-extensions/Dialect/plier)
-add_subdirectory(include/mlir-extensions/Dialect/plier_util)
+add_subdirectory(include/mlir-extensions/Dialect/imex_util)
 add_subdirectory(include/mlir-extensions/Dialect/gpu_runtime/IR)
 
 set(SOURCES_LIST
@@ -45,7 +45,7 @@ set(SOURCES_LIST
     lib/Conversion/util_to_llvm.cpp
     lib/Dialect/gpu_runtime/IR/gpu_runtime_ops.cpp
     lib/Dialect/plier/dialect.cpp
-    lib/Dialect/plier_util/dialect.cpp
+    lib/Dialect/imex_util/dialect.cpp
     lib/Transforms/arg_lowering.cpp
     lib/Transforms/call_lowering.cpp
     lib/Transforms/canonicalize_reductions.cpp
@@ -79,7 +79,7 @@ set(HEADERS_LIST
     include/mlir-extensions/Conversion/util_to_llvm.hpp
     include/mlir-extensions/Dialect/gpu_runtime/IR/gpu_runtime_ops.hpp
     include/mlir-extensions/Dialect/plier/dialect.hpp
-    include/mlir-extensions/Dialect/plier_util/dialect.hpp
+    include/mlir-extensions/Dialect/imex_util/dialect.hpp
     include/mlir-extensions/Transforms/arg_lowering.hpp
     include/mlir-extensions/Transforms/call_lowering.hpp
     include/mlir-extensions/Transforms/canonicalize_reductions.hpp

@@ -14,7 +14,7 @@
 
 #include "mlir-extensions/Transforms/promote_bool_memref.hpp"
 
-#include "mlir-extensions/Dialect/plier_util/dialect.hpp"
+#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
 #include "mlir-extensions/Transforms/type_conversion.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>

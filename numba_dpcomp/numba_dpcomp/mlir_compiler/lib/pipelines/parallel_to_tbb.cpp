@@ -26,8 +26,8 @@
 #include "pipelines/base_pipeline.hpp"
 #include "pipelines/lower_to_llvm.hpp"
 
+#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
 #include "mlir-extensions/Dialect/plier/dialect.hpp"
-#include "mlir-extensions/Dialect/plier_util/dialect.hpp"
 #include "mlir-extensions/Transforms/const_utils.hpp"
 #include "mlir-extensions/Transforms/func_utils.hpp"
 #include "mlir-extensions/Transforms/rewrite_wrapper.hpp"

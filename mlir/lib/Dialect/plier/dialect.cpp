@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #include "mlir-extensions/Dialect/plier/dialect.hpp"
-#include "mlir-extensions/Dialect/plier_util/dialect.hpp"
+#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
 
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/BuiltinOps.h>

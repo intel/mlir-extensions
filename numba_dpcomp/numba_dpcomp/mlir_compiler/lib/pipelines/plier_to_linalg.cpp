@@ -42,8 +42,8 @@
 #include <mlir/Transforms/LoopInvariantCodeMotionUtils.h>
 #include <mlir/Transforms/Passes.h>
 
+#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
 #include "mlir-extensions/Dialect/plier/dialect.hpp"
-#include "mlir-extensions/Dialect/plier_util/dialect.hpp"
 
 #include "pipelines/plier_to_scf.hpp"
 #include "pipelines/plier_to_std.hpp"

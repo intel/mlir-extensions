@@ -43,7 +43,7 @@
 #include "mlir-extensions/Conversion/gpu_runtime_to_llvm.hpp"
 #include "mlir-extensions/Conversion/gpu_to_gpu_runtime.hpp"
 #include "mlir-extensions/Dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
-#include "mlir-extensions/Dialect/plier_util/dialect.hpp"
+#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
 #include "mlir-extensions/Transforms/call_lowering.hpp"
 #include "mlir-extensions/Transforms/cast_utils.hpp"
 #include "mlir-extensions/Transforms/common_opts.hpp"
