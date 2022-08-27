@@ -1041,6 +1041,67 @@ struct ChangeLayoutExpandShape
   }
 };
 
+/// Propagates ChangeLayoutOp through SelectOp.
+///
+/// Example:
+/// %0 = plier_util.change_layout %arg1 : memref<?xi32, #map> to memref<?xi32>
+/// %res = arith.select %arg3, %0, %arg2 : memref<?xi32>
+///
+/// Becomes:
+/// %0 = memref.cast %arg2 : memref<?xi32> to memref<?xi32, #map>
+/// %1 = arith.select %arg3, %arg1, %0 : memref<?xi32, #map>
+/// %res  = plier_util.change_layout %1 : memref<?xi32, #map> to memref<?xi32>
+struct ChangeLayoutSelect
+    : public mlir::OpRewritePattern<mlir::arith::SelectOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::arith::SelectOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    if (!op.getResult().getType().isa<mlir::MemRefType>())
+      return mlir::failure();
+
+    auto trueArg = op.getTrueValue();
+    auto falseArg = op.getFalseValue();
+    for (bool reverse : {false, true}) {
+      auto arg = reverse ? falseArg : trueArg;
+      auto cl = arg.getDefiningOp<plier::ChangeLayoutOp>();
+      if (!cl)
+        continue;
+
+      auto srcType = cl.source().getType().cast<mlir::MemRefType>();
+      auto dstType = arg.getType().cast<mlir::MemRefType>();
+
+      auto otherArg = reverse ? trueArg : falseArg;
+
+      auto otherArgType = otherArg.getType().cast<mlir::MemRefType>();
+      if (!canTransformLayoutCast(otherArgType, srcType))
+        continue;
+
+      auto loc = op->getLoc();
+      otherArg = rewriter.create<mlir::memref::CastOp>(loc, srcType, otherArg);
+      arg = cl.source();
+
+      if (reverse) {
+        trueArg = otherArg;
+        falseArg = arg;
+      } else {
+        trueArg = arg;
+        falseArg = otherArg;
+      }
+
+      auto cond = op.getCondition();
+      auto result =
+          rewriter.create<mlir::arith::SelectOp>(loc, cond, trueArg, falseArg);
+      rewriter.replaceOpWithNewOp<plier::ChangeLayoutOp>(op, dstType, result);
+
+      return mlir::success();
+    }
+
+    return mlir::failure();
+  }
+};
+
 } // namespace
 
 void ChangeLayoutOp::getCanonicalizationPatterns(
@@ -1051,7 +1112,7 @@ void ChangeLayoutOp::getCanonicalizationPatterns(
       ChangeLayoutFromCast, ChangeLayoutLoad, ChangeLayoutStore,
       ChangeLayoutSubview, ChangeLayoutLinalgGeneric, ChangeLayoutLinalgFill,
       ChangeLayoutIf, ChangeLayout1DReshape, ChangeLayoutSliceGetItem,
-      ChangeLayoutCopy, ChangeLayoutExpandShape>(context);
+      ChangeLayoutCopy, ChangeLayoutExpandShape, ChangeLayoutSelect>(context);
 }
 
 static mlir::Value propagateCasts(mlir::Value val, mlir::Type thisType);

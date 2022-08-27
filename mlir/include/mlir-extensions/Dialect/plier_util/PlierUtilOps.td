@@ -27,6 +27,8 @@ def PlierUtil_Dialect : Dialect {
   let name = "plier_util";
   let cppNamespace = "plier";
 
+  let dependentDialects = ["::mlir::memref::MemRefDialect"];
+
   let hasCanonicalizer = 1;
   let hasConstantMaterializer = 1;
   let useDefaultTypePrinterParser = 1;
@@ -107,7 +109,9 @@ def RetainOp : PlierUtil_Op<"retain", [ViewLikeOpInterface]> {
 def ChangeLayoutOp : PlierUtil_Op<"change_layout", [ViewLikeOpInterface, NoSideEffect]> {
   let arguments = (ins AnyMemRef : $source);
 
-  let results = (outs AnyMemRef);
+  let results = (outs AnyMemRef : $dest);
+  let assemblyFormat = "$source attr-dict `:` type($source) `to` type($dest)";
+
   let hasFolder = 1;
   let hasCanonicalizer = 1;
 
