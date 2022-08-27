@@ -77,16 +77,16 @@ mlir::Type ImexUtilDialect::parseType(mlir::DialectAsmParser &parser) const {
 }
 
 void ImexUtilDialect::printType(mlir::Type type,
-                                 mlir::DialectAsmPrinter &os) const {
+                                mlir::DialectAsmPrinter &os) const {
   llvm::TypeSwitch<mlir::Type>(type)
       .Case<imex::util::OpaqueType>([&](auto) { os << "OpaqueType"; })
       .Default([](auto) { llvm_unreachable("unexpected type"); });
 }
 
 mlir::Operation *ImexUtilDialect::materializeConstant(mlir::OpBuilder &builder,
-                                                       mlir::Attribute value,
-                                                       mlir::Type type,
-                                                       mlir::Location loc) {
+                                                      mlir::Attribute value,
+                                                      mlir::Type type,
+                                                      mlir::Location loc) {
   if (mlir::arith::ConstantOp::isBuildableWith(value, type))
     return builder.create<mlir::arith::ConstantOp>(loc, type, value);
 
@@ -735,8 +735,8 @@ struct ChangeLayoutSubview
     auto newSubview = rewriter.createOrFold<mlir::memref::SubViewOp>(
         loc, newDstType, src, offsets, sizes, strides);
     if (newDstType != dstType)
-      newSubview = rewriter.createOrFold<imex::util::ChangeLayoutOp>(loc, dstType,
-                                                                newSubview);
+      newSubview = rewriter.createOrFold<imex::util::ChangeLayoutOp>(
+          loc, dstType, newSubview);
 
     rewriter.replaceOp(op, newSubview);
     return mlir::success();
@@ -1094,7 +1094,8 @@ struct ChangeLayoutSelect
       auto cond = op.getCondition();
       auto result =
           rewriter.create<mlir::arith::SelectOp>(loc, cond, trueArg, falseArg);
-      rewriter.replaceOpWithNewOp<imex::util::ChangeLayoutOp>(op, dstType, result);
+      rewriter.replaceOpWithNewOp<imex::util::ChangeLayoutOp>(op, dstType,
+                                                              result);
 
       return mlir::success();
     }
@@ -1173,8 +1174,8 @@ struct SignCastDimPropagate : public mlir::OpRewritePattern<Op> {
 
   mlir::LogicalResult
   matchAndRewrite(Op op, mlir::PatternRewriter &rewriter) const override {
-    auto castOp =
-        mlir::dyn_cast_or_null<imex::util::SignCastOp>(op.source().getDefiningOp());
+    auto castOp = mlir::dyn_cast_or_null<imex::util::SignCastOp>(
+        op.source().getDefiningOp());
     if (!castOp)
       return mlir::failure();
 
@@ -1206,7 +1207,8 @@ struct SignCastCastPropagate : public mlir::OpRewritePattern<CastOp> {
 
   mlir::LogicalResult
   matchAndRewrite(CastOp op, mlir::PatternRewriter &rewriter) const override {
-    auto signCast = op.source().template getDefiningOp<imex::util::SignCastOp>();
+    auto signCast =
+        op.source().template getDefiningOp<imex::util::SignCastOp>();
     if (!signCast)
       return mlir::failure();
 
@@ -1304,7 +1306,8 @@ struct SignCastStorePropagate
     auto srcElemType = src.getType().cast<mlir::MemRefType>().getElementType();
     auto val = op.value();
     if (val.getType() != srcElemType)
-      val = rewriter.create<imex::util::SignCastOp>(op.getLoc(), srcElemType, val);
+      val = rewriter.create<imex::util::SignCastOp>(op.getLoc(), srcElemType,
+                                                    val);
 
     rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(op, val, src,
                                                        op.indices());
@@ -1415,7 +1418,8 @@ struct SignCastSubviewPropagate : public mlir::OpRewritePattern<ViewOp> {
 
   mlir::LogicalResult
   matchAndRewrite(ViewOp op, mlir::PatternRewriter &rewriter) const override {
-    auto signCast = op.source().template getDefiningOp<imex::util::SignCastOp>();
+    auto signCast =
+        op.source().template getDefiningOp<imex::util::SignCastOp>();
     if (!signCast)
       return mlir::failure();
 
@@ -1513,8 +1517,8 @@ struct SignCastForPropagate : public mlir::OpRewritePattern<mlir::scf::ForOp> {
       auto oldRersultType = initArgs[i].getType();
       mlir::Value newResult = newResults[i];
       if (newResult.getType() != oldRersultType)
-        newResult =
-            rewriter.create<imex::util::SignCastOp>(loc, oldRersultType, newResult);
+        newResult = rewriter.create<imex::util::SignCastOp>(loc, oldRersultType,
+                                                            newResult);
 
       newInitArgs[i] = newResult;
     }
@@ -1636,8 +1640,8 @@ void TakeContextOp::build(mlir::OpBuilder &b, mlir::OperationState &result,
   build(b, result, allTypes, initFunc, releaseFunc);
 }
 
-} // namespace plier
-}
+} // namespace util
+} // namespace imex
 
 #include "mlir-extensions/Dialect/plier_util/PlierUtilOpsDialect.cpp.inc"
 

@@ -232,7 +232,8 @@ struct KernelMemrefOpsMovementPass
     mlir::DominanceInfo dom(func);
     body.walk([&](mlir::gpu::LaunchOp launch) {
       launch.body().walk([&](mlir::Operation *op) {
-        if (!mlir::isa<mlir::memref::DimOp, imex::util::ExtractMemrefMetadataOp>(op))
+        if (!mlir::isa<mlir::memref::DimOp,
+                       imex::util::ExtractMemrefMetadataOp>(op))
           return;
 
         for (auto &arg : op->getOpOperands()) {
@@ -691,11 +692,11 @@ struct GenerateOutlineContextPass
     mlir::SymbolRefAttr deinitSym = (deinit ? deinit.getCalleeAttr() : nullptr);
 
     builder.setInsertionPoint(init);
-    auto res =
-        builder
-            .create<imex::util::TakeContextOp>(init->getLoc(), initSym, deinitSym,
-                                          init->getResultTypes())
-            .getResults();
+    auto res = builder
+                   .create<imex::util::TakeContextOp>(init->getLoc(), initSym,
+                                                      deinitSym,
+                                                      init->getResultTypes())
+                   .getResults();
     assert(res.size() > 1);
     auto ctx = res.front();
     auto resValues = res.drop_front(1);
@@ -708,7 +709,8 @@ struct GenerateOutlineContextPass
       deinit->erase();
     } else {
       builder.setInsertionPoint(body.front().getTerminator());
-      builder.create<imex::util::ReleaseContextOp>(builder.getUnknownLoc(), ctx);
+      builder.create<imex::util::ReleaseContextOp>(builder.getUnknownLoc(),
+                                                   ctx);
     }
   }
 };

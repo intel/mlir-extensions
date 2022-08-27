@@ -1061,7 +1061,8 @@ struct LowerParallel : public mlir::OpRewritePattern<imex::util::ParallelOp> {
       auto &orig_entry = *std::next(func.getBody().begin());
       rewriter.create<mlir::cf::BranchOp>(loc, &orig_entry);
       for (auto &block : func.getBody()) {
-        if (auto term = mlir::dyn_cast<imex::util::YieldOp>(block.getTerminator())) {
+        if (auto term =
+                mlir::dyn_cast<imex::util::YieldOp>(block.getTerminator())) {
           rewriter.eraseOp(term);
           rewriter.setInsertionPointToEnd(&block);
           rewriter.create<mlir::func::ReturnOp>(loc);

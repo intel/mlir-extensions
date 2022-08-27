@@ -178,7 +178,7 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
     };
 
     rewriter.create<imex::util::ParallelOp>(loc, origLowerBound, origUpperBound,
-                                       origStep, bodyBuilder);
+                                            origStep, bodyBuilder);
 
     auto reduceBodyBuilder = [&](mlir::OpBuilder &builder, mlir::Location loc,
                                  mlir::Value index, mlir::ValueRange args) {

@@ -191,14 +191,16 @@ public:
   using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(imex::util::RetainOp op, imex::util::RetainOp::Adaptor adaptor,
+  matchAndRewrite(imex::util::RetainOp op,
+                  imex::util::RetainOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto *converter = getTypeConverter();
     auto resType = converter->convertType(op.getType())
                        .dyn_cast_or_null<mlir::MemRefType>();
     if (!resType)
       return mlir::failure();
-    rewriter.replaceOpWithNewOp<imex::util::RetainOp>(op, resType, adaptor.source());
+    rewriter.replaceOpWithNewOp<imex::util::RetainOp>(op, resType,
+                                                      adaptor.source());
     return mlir::success();
   }
 };

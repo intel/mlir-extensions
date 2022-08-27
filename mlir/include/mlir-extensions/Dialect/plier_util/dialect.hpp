@@ -43,5 +43,5 @@ public:
   static OpaqueType get(mlir::MLIRContext *context);
 };
 
-} // namespace plier
-}
+} // namespace util
+} // namespace imex

@@ -441,13 +441,14 @@ static mlir::Value getFlatIndex(mlir::OpBuilder &builder, mlir::Location loc,
       auto numSymbols = affineMap.getNumSymbols();
       if (numSymbols > 0) {
         applyOperands.emplace_back(
-            builder.createOrFold<imex::util::ExtractMemrefMetadataOp>(loc, memref));
+            builder.createOrFold<imex::util::ExtractMemrefMetadataOp>(loc,
+                                                                      memref));
         --numSymbols;
         assert(numSymbols <= rank);
         for (auto i : llvm::seq(0u, numSymbols)) {
           applyOperands.emplace_back(
-              builder.createOrFold<imex::util::ExtractMemrefMetadataOp>(loc, memref,
-                                                                   i));
+              builder.createOrFold<imex::util::ExtractMemrefMetadataOp>(
+                  loc, memref, i));
         }
       }
     }

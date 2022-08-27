@@ -538,7 +538,8 @@ struct UndefOpLowering : public mlir::OpConversionPattern<imex::util::UndefOp> {
   using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(imex::util::UndefOp op, imex::util::UndefOp::Adaptor /*adapator*/,
+  matchAndRewrite(imex::util::UndefOp op,
+                  imex::util::UndefOp::Adaptor /*adapator*/,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto oldType = op.getType();
     auto &converter = *getTypeConverter();
@@ -938,7 +939,8 @@ struct BinOpLowering : public mlir::OpConversionPattern<plier::BinOp> {
         if (h.type == op.op()) {
           auto res = (h.*mem)(rewriter, loc, convertedOperands, resType);
           if (res.getType() != resType)
-            res = rewriter.createOrFold<imex::util::SignCastOp>(loc, resType, res);
+            res = rewriter.createOrFold<imex::util::SignCastOp>(loc, resType,
+                                                                res);
           rewriter.replaceOp(op, res);
           return mlir::success();
         }
@@ -1419,11 +1421,12 @@ void PlierToStdPass::runOnOperation() {
 
         return !type.isIntOrFloat();
       });
-  target.addDynamicallyLegalOp<imex::util::UndefOp>([&](imex::util::UndefOp op) {
-    auto srcType = op.getType();
-    auto dstType = typeConverter.convertType(srcType);
-    return srcType == dstType;
-  });
+  target.addDynamicallyLegalOp<imex::util::UndefOp>(
+      [&](imex::util::UndefOp op) {
+        auto srcType = op.getType();
+        auto dstType = typeConverter.convertType(srcType);
+        return srcType == dstType;
+      });
 
   patterns.insert<
       // clang-format off

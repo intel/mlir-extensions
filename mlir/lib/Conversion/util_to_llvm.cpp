@@ -86,11 +86,13 @@ populateToLLVMAdditionalTypeConversion(mlir::LLVMTypeConverter &converter) {
 }
 
 namespace {
-struct LowerRetainOp : public mlir::ConvertOpToLLVMPattern<imex::util::RetainOp> {
+struct LowerRetainOp
+    : public mlir::ConvertOpToLLVMPattern<imex::util::RetainOp> {
   using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(imex::util::RetainOp op, imex::util::RetainOp::Adaptor adaptor,
+  matchAndRewrite(imex::util::RetainOp op,
+                  imex::util::RetainOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto arg = adaptor.source();
     if (!arg.getType().isa<mlir::LLVM::LLVMStructType>())
@@ -183,7 +185,8 @@ struct LowerUndef : public mlir::ConvertOpToLLVMPattern<imex::util::UndefOp> {
   using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(imex::util::UndefOp op, imex::util::UndefOp::Adaptor /*adaptor*/,
+  matchAndRewrite(imex::util::UndefOp op,
+                  imex::util::UndefOp::Adaptor /*adaptor*/,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto converter = getTypeConverter();
     auto type = converter->convertType(op.getType());

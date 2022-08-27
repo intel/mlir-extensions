@@ -49,8 +49,8 @@ struct LowerTakeContext
 
     auto initFunc = adaptor.initFunc().value_or(mlir::SymbolRefAttr());
     auto releaseFunc = adaptor.releaseFunc().value_or(mlir::SymbolRefAttr());
-    rewriter.replaceOpWithNewOp<imex::util::TakeContextOp>(op, newTypes, initFunc,
-                                                      releaseFunc);
+    rewriter.replaceOpWithNewOp<imex::util::TakeContextOp>(
+        op, newTypes, initFunc, releaseFunc);
     return mlir::success();
   }
 };
@@ -867,8 +867,8 @@ struct GPUToLLVMPass
           return llvm::None;
         });
 
-    target.addDynamicallyLegalOp<mlir::func::ReturnOp, imex::util::TakeContextOp,
-                                 mlir::func::CallOp>(
+    target.addDynamicallyLegalOp<mlir::func::ReturnOp,
+                                 imex::util::TakeContextOp, mlir::func::CallOp>(
         [&](mlir::Operation *op) -> llvm::Optional<bool> {
           for (auto range : {mlir::TypeRange(op->getOperandTypes()),
                              mlir::TypeRange(op->getResultTypes())})

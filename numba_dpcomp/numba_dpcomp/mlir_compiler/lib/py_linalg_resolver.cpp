@@ -658,7 +658,8 @@ static mlir::Value expandDims(mlir::OpBuilder &builder, mlir::Location loc,
   for (unsigned i = 0; i < numDims; ++i)
     current = expandDim(builder, loc, val, current, i, targetShape);
 
-  current = builder.create<imex::util::EnforceShapeOp>(loc, current, targetShape);
+  current =
+      builder.create<imex::util::EnforceShapeOp>(loc, current, targetShape);
   return current;
 }
 
