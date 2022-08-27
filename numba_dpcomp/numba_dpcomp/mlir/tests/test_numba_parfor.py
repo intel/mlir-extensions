@@ -169,7 +169,7 @@ def _gen_tests():
                         res = njit(parallel=True)(func)(*args, **kwargs)
                         ir = get_print_buffer()
                         # Check some parallel loops were actually generated
-                        if ir.count("plier_util.parallel") == 0:
+                        if ir.count("imex_util.parallel") == 0:
                             # In some cases we can canonicalize all loops away
                             # Make sure no loops are present
                             assert ir.count("scf.for") == 0, ir
