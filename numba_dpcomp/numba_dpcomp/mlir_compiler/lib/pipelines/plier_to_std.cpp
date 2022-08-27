@@ -1333,7 +1333,7 @@ struct PlierToStdPass
     registry.insert<mlir::math::MathDialect>();
     registry.insert<mlir::scf::SCFDialect>();
     registry.insert<plier::PlierDialect>();
-    registry.insert<imex::util::PlierUtilDialect>();
+    registry.insert<imex::util::ImexUtilDialect>();
   }
 
   void runOnOperation() override;

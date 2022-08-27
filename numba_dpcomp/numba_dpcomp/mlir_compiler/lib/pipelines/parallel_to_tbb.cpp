@@ -226,7 +226,7 @@ struct ParallelToTbbPass
     : public plier::RewriteWrapperPass<
           ParallelToTbbPass, mlir::func::FuncOp,
           plier::DependentDialectsList<
-              plier::PlierDialect, imex::util::PlierUtilDialect,
+              plier::PlierDialect, imex::util::ImexUtilDialect,
               mlir::arith::ArithmeticDialect, mlir::scf::SCFDialect>,
           ParallelToTbb> {};
 

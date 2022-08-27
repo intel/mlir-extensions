@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
   mlir::registerAllPasses();
   mlir::DialectRegistry registry;
   mlir::registerAllDialects(registry);
-  registry.insert<imex::util::PlierUtilDialect>();
+  registry.insert<imex::util::ImexUtilDialect>();
   return mlir::failed(MlirOptMain(argc, argv, "imex modular optimizer driver\n",
                                   registry,
                                   /*preloadDialectsInContext=*/false));

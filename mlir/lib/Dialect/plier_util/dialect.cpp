@@ -41,7 +41,7 @@
 namespace MemoryEffects = ::mlir::MemoryEffects;
 
 namespace {
-struct PlierUtilInlinerInterface : public mlir::DialectInlinerInterface {
+struct ImexUtilInlinerInterface : public mlir::DialectInlinerInterface {
   using mlir::DialectInlinerInterface::DialectInlinerInterface;
   bool isLegalToInline(mlir::Region *, mlir::Region *, bool,
                        mlir::BlockAndValueMapping &) const final override {
@@ -56,14 +56,14 @@ struct PlierUtilInlinerInterface : public mlir::DialectInlinerInterface {
 
 namespace imex {
 namespace util {
-void PlierUtilDialect::initialize() {
+void ImexUtilDialect::initialize() {
   addOperations<
 #define GET_OP_LIST
 #include "mlir-extensions/Dialect/plier_util/PlierUtilOps.cpp.inc"
       >();
 
   addTypes<OpaqueType>();
-  addInterfaces<PlierUtilInlinerInterface>();
+  addInterfaces<ImexUtilInlinerInterface>();
 
   addAttributes<
 #define GET_ATTRDEF_LIST
@@ -71,19 +71,19 @@ void PlierUtilDialect::initialize() {
       >();
 }
 
-mlir::Type PlierUtilDialect::parseType(mlir::DialectAsmParser &parser) const {
+mlir::Type ImexUtilDialect::parseType(mlir::DialectAsmParser &parser) const {
   parser.emitError(parser.getNameLoc(), "unknown type");
   return mlir::Type();
 }
 
-void PlierUtilDialect::printType(mlir::Type type,
+void ImexUtilDialect::printType(mlir::Type type,
                                  mlir::DialectAsmPrinter &os) const {
   llvm::TypeSwitch<mlir::Type>(type)
       .Case<imex::util::OpaqueType>([&](auto) { os << "OpaqueType"; })
       .Default([](auto) { llvm_unreachable("unexpected type"); });
 }
 
-mlir::Operation *PlierUtilDialect::materializeConstant(mlir::OpBuilder &builder,
+mlir::Operation *ImexUtilDialect::materializeConstant(mlir::OpBuilder &builder,
                                                        mlir::Attribute value,
                                                        mlir::Type type,
                                                        mlir::Location loc) {
@@ -309,7 +309,7 @@ struct ReshapeAlloca : public mlir::OpRewritePattern<mlir::memref::ReshapeOp> {
 };
 } // namespace
 
-void PlierUtilDialect::getCanonicalizationPatterns(
+void ImexUtilDialect::getCanonicalizationPatterns(
     mlir::RewritePatternSet &results) const {
   results.add<DimExpandShape<mlir::tensor::DimOp, mlir::tensor::ExpandShapeOp>,
               DimExpandShape<mlir::memref::DimOp, mlir::memref::ExpandShapeOp>,

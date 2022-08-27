@@ -550,7 +550,7 @@ struct PlierUtilToLLVMPass
     mlir::LLVMConversionTarget target(context);
     target.addLegalOp<mlir::func::FuncOp>();
     target.addLegalOp<mlir::func::CallOp>();
-    target.addIllegalDialect<imex::util::PlierUtilDialect>();
+    target.addIllegalDialect<imex::util::ImexUtilDialect>();
     if (failed(applyPartialConversion(op, target, std::move(patterns))))
       signalPassFailure();
   }

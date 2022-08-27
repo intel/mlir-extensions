@@ -23,7 +23,7 @@ include "mlir/Interfaces/LoopLikeInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/ViewLikeInterface.td"
 
-def PlierUtil_Dialect : Dialect {
+def ImexUtil_Dialect : Dialect {
   let name = "imex_util";
   let cppNamespace = "::imex::util";
 
@@ -35,12 +35,12 @@ def PlierUtil_Dialect : Dialect {
 }
 
 def PlierUtil_OpaqueType
-    : DialectType<PlierUtil_Dialect, CPred<"$_self.isa<::imex::util::OpaqueType>()">,
+    : DialectType<ImexUtil_Dialect, CPred<"$_self.isa<::imex::util::OpaqueType>()">,
                   "opaque_type">,
       BuildableType<"$_builder.getType<::imex::util::OpaqueType>()"> {}
 
 class PlierUtil_Op<string mnemonic, list<Trait> traits = []>
-    : Op<PlierUtil_Dialect, mnemonic, traits>;
+    : Op<ImexUtil_Dialect, mnemonic, traits>;
 
 def EnforceShapeOp : PlierUtil_Op<"enforce_shape"> {
   let arguments = (ins AnyRankedTensor : $value, Variadic<Index> : $sizes);
