@@ -14,7 +14,6 @@
 
 #include "mlir-extensions/Conversion/gpu_runtime_to_llvm.hpp"
 
-#include "mlir-extensions/Conversion/util_conversion.hpp"
 #include "mlir-extensions/Dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
 #include "mlir-extensions/Transforms/func_utils.hpp"
 #include "mlir-extensions/Transforms/type_conversion.hpp"
@@ -811,7 +810,6 @@ struct GPUToLLVMPass
 
     gpu_runtime::populateGpuToLLVMPatternsAndLegality(converter, patterns,
                                                       target);
-    imex::populateUtilConversionPatterns(context, converter, patterns, target);
 
     auto mod = getOperation();
     if (mlir::failed(
