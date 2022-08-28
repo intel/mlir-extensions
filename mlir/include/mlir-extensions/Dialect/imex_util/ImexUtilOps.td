@@ -184,4 +184,17 @@ def ReleaseContextOp : ImexUtil_Op<"release_context"> {
   let arguments = (ins ImexUtil_OpaqueType:$context);
 }
 
+def BuildTupleOp : ImexUtil_Op<"build_tuple", [NoSideEffect]> {
+  let summary = "Constructs tuple from provided values";
+  let description = [{
+    "build_tuple" takes multiple SSA values and constructs tuple from them.
+    Zero arguments are allowed and will result in an empty tuple.
+  }];
+
+  let arguments = (ins Variadic<AnyType>:$args);
+  let results = (outs AnyTuple);
+
+  let assemblyFormat = "attr-dict ($args^ `:` type($args) `->`)? type(results)";
+}
+
 #endif // PLIER_UTIL_OPS
