@@ -811,21 +811,16 @@ struct GPUToLLVMPass
 
     target.addDynamicallyLegalOp<mlir::func::ReturnOp, mlir::func::CallOp>(
         [&](mlir::Operation *op) -> llvm::Optional<bool> {
-          for (auto range : {mlir::TypeRange(op->getOperandTypes()),
-                             mlir::TypeRange(op->getResultTypes())})
-            for (auto type : range)
-              if (converter.isLegal(type))
-                return true;
+          if (converter.isLegal(op))
+            return true;
 
           return llvm::None;
         });
     target.addDynamicallyLegalOp<mlir::func::FuncOp>(
         [&](mlir::func::FuncOp op) -> llvm::Optional<bool> {
-          auto type = op.getFunctionType();
-          for (auto range : {type.getInputs(), type.getResults()})
-            for (auto type : range)
-              if (converter.isLegal(type))
-                return true;
+          if (converter.isSignatureLegal(op.getFunctionType()) &&
+              converter.isLegal(&op.getBody()))
+            return true;
 
           return llvm::None;
         });
