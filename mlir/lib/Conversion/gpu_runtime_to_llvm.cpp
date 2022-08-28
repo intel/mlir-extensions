@@ -822,16 +822,10 @@ struct GPUToLLVMPass
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(GPUToLLVMPass)
 
   void runOnOperation() override {
-    mlir::LLVMTypeConverter converter(&getContext());
-    mlir::RewritePatternSet patterns(&getContext());
-    mlir::LLVMConversionTarget target(getContext());
-
-    auto llvmPointerType = mlir::LLVM::LLVMPointerType::get(
-        mlir::IntegerType::get(&getContext(), 8));
-    converter.addConversion(
-        [llvmPointerType](gpu_runtime::OpaqueType) -> mlir::Type {
-          return llvmPointerType;
-        });
+    mlir::MLIRContext &context = getContext();
+    mlir::LLVMTypeConverter converter(&context);
+    mlir::RewritePatternSet patterns(&context);
+    mlir::LLVMConversionTarget target(context);
 
     target.addIllegalDialect<mlir::gpu::GPUDialect>();
     target.addIllegalOp<
@@ -889,21 +883,7 @@ struct GPUToLLVMPass
           return llvm::None;
         });
 
-    patterns.insert<
-        // clang-format off
-        ConvertGpuStreamCreatePattern,
-        ConvertGpuStreamDestroyPattern,
-        ConvertGpuModuleLoadPattern,
-        ConvertGpuModuleDestroyPattern,
-        ConvertGpuKernelGetPattern,
-        ConvertGpuKernelDestroyPattern,
-        ConvertGpuKernelLaunchPattern,
-        ConvertGpuAllocPattern,
-        ConvertGpuDeAllocPattern,
-        ConvertGpuSuggestBlockSizePattern,
-        LowerTakeContext
-        // clang-format on
-        >(converter);
+    gpu_runtime::populateGpuToLLVMPatterns(converter, patterns);
 
     auto mod = getOperation();
     if (mlir::failed(
@@ -917,6 +897,33 @@ struct GPUToLLVMPass
 // Expose the passes to the outside world
 std::unique_ptr<mlir::Pass> gpu_runtime::createEnumerateEventsPass() {
   return std::make_unique<EnumerateEventsPass>();
+}
+
+void gpu_runtime::populateGpuToLLVMPatterns(mlir::LLVMTypeConverter &converter,
+                                            mlir::RewritePatternSet &patterns) {
+  auto context = patterns.getContext();
+  auto llvmPointerType =
+      mlir::LLVM::LLVMPointerType::get(mlir::IntegerType::get(context, 8));
+  converter.addConversion(
+      [llvmPointerType](gpu_runtime::OpaqueType) -> mlir::Type {
+        return llvmPointerType;
+      });
+
+  patterns.insert<
+      // clang-format off
+      ConvertGpuStreamCreatePattern,
+      ConvertGpuStreamDestroyPattern,
+      ConvertGpuModuleLoadPattern,
+      ConvertGpuModuleDestroyPattern,
+      ConvertGpuKernelGetPattern,
+      ConvertGpuKernelDestroyPattern,
+      ConvertGpuKernelLaunchPattern,
+      ConvertGpuAllocPattern,
+      ConvertGpuDeAllocPattern,
+      ConvertGpuSuggestBlockSizePattern,
+      LowerTakeContext
+      // clang-format on
+      >(converter);
 }
 
 std::unique_ptr<mlir::Pass> gpu_runtime::createGPUToLLVMPass() {

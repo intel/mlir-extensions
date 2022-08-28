@@ -17,12 +17,20 @@
 #include <memory>
 
 namespace mlir {
+class LLVMTypeConverter;
 class Pass;
-}
+class RewritePatternSet;
+} // namespace mlir
 
 namespace gpu_runtime {
 
 std::unique_ptr<mlir::Pass> createEnumerateEventsPass();
+
+/// Populates the given list with patterns that convert from gpu_runtime to
+/// LLVM.
+void populateGpuToLLVMPatterns(mlir::LLVMTypeConverter &converter,
+                               mlir::RewritePatternSet &patterns);
+
 std::unique_ptr<mlir::Pass> createGPUToLLVMPass();
 
 } // namespace gpu_runtime
