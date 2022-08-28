@@ -800,22 +800,6 @@ struct GPUToLLVMPass
     mlir::RewritePatternSet patterns(&context);
     mlir::LLVMConversionTarget target(context);
 
-    target.addIllegalDialect<mlir::gpu::GPUDialect>();
-    target.addIllegalOp<
-        // clang-format off
-        gpu_runtime::CreateGpuStreamOp,
-        gpu_runtime::DestroyGpuStreamOp,
-        gpu_runtime::LoadGpuModuleOp,
-        gpu_runtime::DestroyGpuModuleOp,
-        gpu_runtime::GetGpuKernelOp,
-        gpu_runtime::DestroyGpuKernelOp,
-        gpu_runtime::LaunchGpuKernelOp,
-        gpu_runtime::GPUAllocOp,
-        gpu_runtime::GPUDeallocOp,
-        gpu_runtime::GPUSuggestBlockSizeOp
-        // clang-format on
-        >();
-
     mlir::populateAsyncStructuralTypeConversionsAndLegality(converter, patterns,
                                                             target);
     mlir::populateGpuToLLVMConversionPatterns(
@@ -846,7 +830,8 @@ struct GPUToLLVMPass
           return llvm::None;
         });
 
-    gpu_runtime::populateGpuToLLVMPatterns(converter, patterns);
+    gpu_runtime::populateGpuToLLVMPatternsAndLegality(converter, patterns,
+                                                      target);
     imex::populateUtilConversionPatterns(context, converter, patterns, target);
 
     auto mod = getOperation();
@@ -863,8 +848,9 @@ std::unique_ptr<mlir::Pass> gpu_runtime::createEnumerateEventsPass() {
   return std::make_unique<EnumerateEventsPass>();
 }
 
-void gpu_runtime::populateGpuToLLVMPatterns(mlir::LLVMTypeConverter &converter,
-                                            mlir::RewritePatternSet &patterns) {
+void gpu_runtime::populateGpuToLLVMPatternsAndLegality(
+    mlir::LLVMTypeConverter &converter, mlir::RewritePatternSet &patterns,
+    mlir::ConversionTarget &target) {
   auto context = patterns.getContext();
   auto llvmPointerType =
       mlir::LLVM::LLVMPointerType::get(mlir::IntegerType::get(context, 8));
@@ -887,6 +873,9 @@ void gpu_runtime::populateGpuToLLVMPatterns(mlir::LLVMTypeConverter &converter,
       ConvertGpuSuggestBlockSizePattern
       // clang-format on
       >(converter);
+
+  target.addIllegalDialect<mlir::gpu::GPUDialect>();
+  target.addIllegalDialect<gpu_runtime::GpuRuntimeDialect>();
 }
 
 std::unique_ptr<mlir::Pass> gpu_runtime::createGPUToLLVMPass() {

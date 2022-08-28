@@ -17,6 +17,7 @@
 #include <memory>
 
 namespace mlir {
+class ConversionTarget;
 class LLVMTypeConverter;
 class Pass;
 class RewritePatternSet;
@@ -28,8 +29,9 @@ std::unique_ptr<mlir::Pass> createEnumerateEventsPass();
 
 /// Populates the given list with patterns that convert from gpu_runtime to
 /// LLVM.
-void populateGpuToLLVMPatterns(mlir::LLVMTypeConverter &converter,
-                               mlir::RewritePatternSet &patterns);
+void populateGpuToLLVMPatternsAndLegality(mlir::LLVMTypeConverter &converter,
+                                          mlir::RewritePatternSet &patterns,
+                                          mlir::ConversionTarget &target);
 
 std::unique_ptr<mlir::Pass> createGPUToLLVMPass();
 
