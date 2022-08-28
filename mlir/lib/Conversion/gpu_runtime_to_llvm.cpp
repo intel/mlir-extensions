@@ -14,8 +14,8 @@
 
 #include "mlir-extensions/Conversion/gpu_runtime_to_llvm.hpp"
 
+#include "mlir-extensions/Conversion/util_conversion.hpp"
 #include "mlir-extensions/Dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
-#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
 #include "mlir-extensions/Transforms/func_utils.hpp"
 
 #include <mlir/Conversion/AsyncToLLVM/AsyncToLLVM.h>
@@ -28,33 +28,6 @@
 #include <mlir/Dialect/LLVMIR/LLVMDialect.h>
 
 namespace {
-struct LowerTakeContext
-    : public mlir::ConvertOpToLLVMPattern<imex::util::TakeContextOp> {
-  using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(imex::util::TakeContextOp op,
-                  imex::util::TakeContextOp::Adaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
-    auto srcTypes = op.getResultTypes();
-    auto count = static_cast<unsigned>(srcTypes.size());
-    llvm::SmallVector<mlir::Type> newTypes(count);
-    auto converter = getTypeConverter();
-    assert(converter);
-    for (auto i : llvm::seq(0u, count)) {
-      auto oldType = srcTypes[i];
-      auto newType = converter->convertType(oldType);
-      newTypes[i] = (newType ? newType : oldType);
-    }
-
-    auto initFunc = adaptor.initFunc().value_or(mlir::SymbolRefAttr());
-    auto releaseFunc = adaptor.releaseFunc().value_or(mlir::SymbolRefAttr());
-    rewriter.replaceOpWithNewOp<imex::util::TakeContextOp>(
-        op, newTypes, initFunc, releaseFunc);
-    return mlir::success();
-  }
-};
-
 struct FunctionCallBuilder {
   FunctionCallBuilder(mlir::StringRef functionName, mlir::Type returnType,
                       mlir::ArrayRef<mlir::Type> argumentTypes)
@@ -861,8 +834,7 @@ struct GPUToLLVMPass
           return llvm::None;
         });
 
-    target.addDynamicallyLegalOp<mlir::func::ReturnOp,
-                                 imex::util::TakeContextOp, mlir::func::CallOp>(
+    target.addDynamicallyLegalOp<mlir::func::ReturnOp, mlir::func::CallOp>(
         [&](mlir::Operation *op) -> llvm::Optional<bool> {
           for (auto range : {mlir::TypeRange(op->getOperandTypes()),
                              mlir::TypeRange(op->getResultTypes())})
@@ -884,6 +856,7 @@ struct GPUToLLVMPass
         });
 
     gpu_runtime::populateGpuToLLVMPatterns(converter, patterns);
+    imex::populateUtilConversionPatterns(context, converter, patterns, target);
 
     auto mod = getOperation();
     if (mlir::failed(
@@ -920,8 +893,7 @@ void gpu_runtime::populateGpuToLLVMPatterns(mlir::LLVMTypeConverter &converter,
       ConvertGpuKernelLaunchPattern,
       ConvertGpuAllocPattern,
       ConvertGpuDeAllocPattern,
-      ConvertGpuSuggestBlockSizePattern,
-      LowerTakeContext
+      ConvertGpuSuggestBlockSizePattern
       // clang-format on
       >(converter);
 }
