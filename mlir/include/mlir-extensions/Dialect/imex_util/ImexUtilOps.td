@@ -212,6 +212,13 @@ def TupleExtractOp : ImexUtil_Op<"tuple_extract", [NoSideEffect]> {
   let results = (outs AnyType:$result);
 
   let assemblyFormat = "attr-dict $source `:` type($source) `,` $index `->` type($result)";
+
+  let extraClassDeclaration = [{
+    /// Helper function to get the index as a simple integer if it is constant.
+    ::llvm::Optional<int64_t> getConstantIndex();
+  }];
+
+  let hasFolder = 1;
 }
 
 #endif // PLIER_UTIL_OPS
