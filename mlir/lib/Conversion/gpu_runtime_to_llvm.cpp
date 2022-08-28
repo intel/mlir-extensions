@@ -17,6 +17,7 @@
 #include "mlir-extensions/Conversion/util_conversion.hpp"
 #include "mlir-extensions/Dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
 #include "mlir-extensions/Transforms/func_utils.hpp"
+#include "mlir-extensions/Transforms/type_conversion.hpp"
 
 #include <mlir/Conversion/AsyncToLLVM/AsyncToLLVM.h>
 #include <mlir/Conversion/GPUCommon/GPUCommonPass.h>
@@ -804,26 +805,9 @@ struct GPUToLLVMPass
                                                             target);
     mlir::populateGpuToLLVMConversionPatterns(
         converter, patterns, mlir::gpu::getDefaultGpuBinaryAnnotation());
-    mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::func::FuncOp>(
-        patterns, converter);
-    mlir::populateReturnOpTypeConversionPattern(patterns, converter);
-    mlir::populateCallOpTypeConversionPattern(patterns, converter);
 
-    target.addDynamicallyLegalOp<mlir::func::ReturnOp, mlir::func::CallOp>(
-        [&](mlir::Operation *op) -> llvm::Optional<bool> {
-          if (converter.isLegal(op))
-            return true;
-
-          return llvm::None;
-        });
-    target.addDynamicallyLegalOp<mlir::func::FuncOp>(
-        [&](mlir::func::FuncOp op) -> llvm::Optional<bool> {
-          if (converter.isSignatureLegal(op.getFunctionType()) &&
-              converter.isLegal(&op.getBody()))
-            return true;
-
-          return llvm::None;
-        });
+    plier::populateControlFlowTypeConversionRewritesAndTarget(converter,
+                                                              patterns, target);
 
     gpu_runtime::populateGpuToLLVMPatternsAndLegality(converter, patterns,
                                                       target);
