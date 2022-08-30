@@ -22,7 +22,7 @@ If you want the script to build LLVM and then IMEX, do as follows:
 
 ```sh
 external_lit=`which lit`
-python scripts/build_imex.py                        \
+python build_tools/build_imex.py                        \
     --working-dir $local-working-dir-to-build-llvm  \
     --external-lit ${external_lit}
 ```
@@ -34,7 +34,7 @@ Make sure your LLVM install is built from the git commit sha as stated in
 
 ```sh
 external_lit=`which lit`
-python scripts/build_imex.py                        \
+python build_tools/build_imex.py                        \
     --working-dir $local-working-dir-to-build-llvm  \
     --llvm-install $llvm-target-dir                 \
     --external-lit ${external_lit}
