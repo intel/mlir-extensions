@@ -14,18 +14,18 @@
 
 #include <mlir/Conversion/Passes.h>
 
-#include "mlir-extensions/Dialect/plier_util/dialect.hpp"
+#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
 
 #include "mlir-extensions/Conversion/util_conversion.hpp"
 
 namespace {
 struct ConvertTakeContext
-    : public mlir::OpConversionPattern<plier::TakeContextOp> {
+    : public mlir::OpConversionPattern<imex::util::TakeContextOp> {
   using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::TakeContextOp op,
-                  plier::TakeContextOp::Adaptor adaptor,
+  matchAndRewrite(imex::util::TakeContextOp op,
+                  imex::util::TakeContextOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto srcTypes = op.getResultTypes();
     auto count = static_cast<unsigned>(srcTypes.size());
@@ -40,8 +40,8 @@ struct ConvertTakeContext
 
     auto initFunc = adaptor.initFunc().value_or(mlir::SymbolRefAttr());
     auto releaseFunc = adaptor.releaseFunc().value_or(mlir::SymbolRefAttr());
-    rewriter.replaceOpWithNewOp<plier::TakeContextOp>(op, newTypes, initFunc,
-                                                      releaseFunc);
+    rewriter.replaceOpWithNewOp<imex::util::TakeContextOp>(
+        op, newTypes, initFunc, releaseFunc);
     return mlir::success();
   }
 };
@@ -53,7 +53,7 @@ void imex::populateUtilConversionPatterns(mlir::MLIRContext &context,
                                           mlir::ConversionTarget &target) {
   patterns.insert<ConvertTakeContext>(converter, &context);
 
-  target.addDynamicallyLegalOp<plier::TakeContextOp>(
+  target.addDynamicallyLegalOp<imex::util::TakeContextOp>(
       [&](mlir::Operation *op) -> llvm::Optional<bool> {
         for (auto range : {mlir::TypeRange(op->getOperandTypes()),
                            mlir::TypeRange(op->getResultTypes())})
