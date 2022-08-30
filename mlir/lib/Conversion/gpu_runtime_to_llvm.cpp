@@ -15,7 +15,7 @@
 #include "mlir-extensions/Conversion/gpu_runtime_to_llvm.hpp"
 
 #include "mlir-extensions/Dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
-#include "mlir-extensions/Dialect/plier_util/dialect.hpp"
+#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
 #include "mlir-extensions/Transforms/func_utils.hpp"
 
 #include <mlir/Conversion/AsyncToLLVM/AsyncToLLVM.h>
@@ -29,12 +29,12 @@
 
 namespace {
 struct LowerTakeContext
-    : public mlir::ConvertOpToLLVMPattern<plier::TakeContextOp> {
+    : public mlir::ConvertOpToLLVMPattern<imex::util::TakeContextOp> {
   using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::TakeContextOp op,
-                  plier::TakeContextOp::Adaptor adaptor,
+  matchAndRewrite(imex::util::TakeContextOp op,
+                  imex::util::TakeContextOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto srcTypes = op.getResultTypes();
     auto count = static_cast<unsigned>(srcTypes.size());
@@ -49,8 +49,8 @@ struct LowerTakeContext
 
     auto initFunc = adaptor.initFunc().value_or(mlir::SymbolRefAttr());
     auto releaseFunc = adaptor.releaseFunc().value_or(mlir::SymbolRefAttr());
-    rewriter.replaceOpWithNewOp<plier::TakeContextOp>(op, newTypes, initFunc,
-                                                      releaseFunc);
+    rewriter.replaceOpWithNewOp<imex::util::TakeContextOp>(
+        op, newTypes, initFunc, releaseFunc);
     return mlir::success();
   }
 };
@@ -867,8 +867,8 @@ struct GPUToLLVMPass
           return llvm::None;
         });
 
-    target.addDynamicallyLegalOp<mlir::func::ReturnOp, plier::TakeContextOp,
-                                 mlir::func::CallOp>(
+    target.addDynamicallyLegalOp<mlir::func::ReturnOp,
+                                 imex::util::TakeContextOp, mlir::func::CallOp>(
         [&](mlir::Operation *op) -> llvm::Optional<bool> {
           for (auto range : {mlir::TypeRange(op->getOperandTypes()),
                              mlir::TypeRange(op->getResultTypes())})

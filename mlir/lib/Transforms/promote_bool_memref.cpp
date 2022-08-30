@@ -14,7 +14,7 @@
 
 #include "mlir-extensions/Transforms/promote_bool_memref.hpp"
 
-#include "mlir-extensions/Dialect/plier_util/dialect.hpp"
+#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
 #include "mlir-extensions/Transforms/type_conversion.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
@@ -186,19 +186,21 @@ public:
   }
 };
 
-class ConvertRetainOp : public mlir::OpConversionPattern<plier::RetainOp> {
+class ConvertRetainOp : public mlir::OpConversionPattern<imex::util::RetainOp> {
 public:
   using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::RetainOp op, plier::RetainOp::Adaptor adaptor,
+  matchAndRewrite(imex::util::RetainOp op,
+                  imex::util::RetainOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto *converter = getTypeConverter();
     auto resType = converter->convertType(op.getType())
                        .dyn_cast_or_null<mlir::MemRefType>();
     if (!resType)
       return mlir::failure();
-    rewriter.replaceOpWithNewOp<plier::RetainOp>(op, resType, adaptor.source());
+    rewriter.replaceOpWithNewOp<imex::util::RetainOp>(op, resType,
+                                                      adaptor.source());
     return mlir::success();
   }
 };
@@ -219,7 +221,7 @@ void plier::populatePromoteBoolMemrefConversionRewritesAndTarget(
       });
 
   target.addDynamicallyLegalDialect<mlir::memref::MemRefDialect>(&checkOp);
-  target.addDynamicallyLegalOp<plier::RetainOp>(&checkOp);
+  target.addDynamicallyLegalOp<imex::util::RetainOp>(&checkOp);
 
   patterns.insert<ConvertDimOp, ConvertLoadOp, ConvertStoreOp, ConvertAllocOp,
                   ConvertAllocaOp, ConvertDeallocOp, ConvertCastOp,

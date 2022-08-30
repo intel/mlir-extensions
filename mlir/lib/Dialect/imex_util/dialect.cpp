@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #include "mlir-extensions/Dialect/plier/dialect.hpp"
-#include "mlir-extensions/Dialect/plier_util/dialect.hpp"
+#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
 
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/BuiltinOps.h>
@@ -41,7 +41,7 @@
 namespace MemoryEffects = ::mlir::MemoryEffects;
 
 namespace {
-struct PlierUtilInlinerInterface : public mlir::DialectInlinerInterface {
+struct ImexUtilInlinerInterface : public mlir::DialectInlinerInterface {
   using mlir::DialectInlinerInterface::DialectInlinerInterface;
   bool isLegalToInline(mlir::Region *, mlir::Region *, bool,
                        mlir::BlockAndValueMapping &) const final override {
@@ -54,38 +54,39 @@ struct PlierUtilInlinerInterface : public mlir::DialectInlinerInterface {
 };
 } // namespace
 
-namespace plier {
-void PlierUtilDialect::initialize() {
+namespace imex {
+namespace util {
+void ImexUtilDialect::initialize() {
   addOperations<
 #define GET_OP_LIST
-#include "mlir-extensions/Dialect/plier_util/PlierUtilOps.cpp.inc"
+#include "mlir-extensions/Dialect/imex_util/ImexUtilOps.cpp.inc"
       >();
 
   addTypes<OpaqueType>();
-  addInterfaces<PlierUtilInlinerInterface>();
+  addInterfaces<ImexUtilInlinerInterface>();
 
   addAttributes<
 #define GET_ATTRDEF_LIST
-#include "mlir-extensions/Dialect/plier_util/PlierUtilOpsAttributes.cpp.inc"
+#include "mlir-extensions/Dialect/imex_util/ImexUtilOpsAttributes.cpp.inc"
       >();
 }
 
-mlir::Type PlierUtilDialect::parseType(mlir::DialectAsmParser &parser) const {
+mlir::Type ImexUtilDialect::parseType(mlir::DialectAsmParser &parser) const {
   parser.emitError(parser.getNameLoc(), "unknown type");
   return mlir::Type();
 }
 
-void PlierUtilDialect::printType(mlir::Type type,
-                                 mlir::DialectAsmPrinter &os) const {
+void ImexUtilDialect::printType(mlir::Type type,
+                                mlir::DialectAsmPrinter &os) const {
   llvm::TypeSwitch<mlir::Type>(type)
-      .Case<plier::OpaqueType>([&](auto) { os << "OpaqueType"; })
+      .Case<imex::util::OpaqueType>([&](auto) { os << "OpaqueType"; })
       .Default([](auto) { llvm_unreachable("unexpected type"); });
 }
 
-mlir::Operation *PlierUtilDialect::materializeConstant(mlir::OpBuilder &builder,
-                                                       mlir::Attribute value,
-                                                       mlir::Type type,
-                                                       mlir::Location loc) {
+mlir::Operation *ImexUtilDialect::materializeConstant(mlir::OpBuilder &builder,
+                                                      mlir::Attribute value,
+                                                      mlir::Type type,
+                                                      mlir::Location loc) {
   if (mlir::arith::ConstantOp::isBuildableWith(value, type))
     return builder.create<mlir::arith::ConstantOp>(loc, type, value);
 
@@ -308,7 +309,7 @@ struct ReshapeAlloca : public mlir::OpRewritePattern<mlir::memref::ReshapeOp> {
 };
 } // namespace
 
-void PlierUtilDialect::getCanonicalizationPatterns(
+void ImexUtilDialect::getCanonicalizationPatterns(
     mlir::RewritePatternSet &results) const {
   results.add<DimExpandShape<mlir::tensor::DimOp, mlir::tensor::ExpandShapeOp>,
               DimExpandShape<mlir::memref::DimOp, mlir::memref::ExpandShapeOp>,
@@ -374,7 +375,7 @@ struct EnforceShapeDim : public mlir::OpRewritePattern<DimOp> {
   mlir::LogicalResult
   matchAndRewrite(DimOp op, mlir::PatternRewriter &rewriter) const override {
     auto enforceOp =
-        op.source().template getDefiningOp<plier::EnforceShapeOp>();
+        op.source().template getDefiningOp<imex::util::EnforceShapeOp>();
     if (!enforceOp)
       return mlir::failure();
 
@@ -457,7 +458,7 @@ void RetainOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
 }
 
 static mlir::Value getChangeLayoutParent(mlir::Value val) {
-  if (auto parent = val.getDefiningOp<plier::ChangeLayoutOp>())
+  if (auto parent = val.getDefiningOp<imex::util::ChangeLayoutOp>())
     return parent.source();
 
   return {};
@@ -516,11 +517,11 @@ static bool canTransformLayoutCast(mlir::MemRefType srcType,
 }
 
 struct ChangeLayoutIdentity
-    : public mlir::OpRewritePattern<plier::ChangeLayoutOp> {
+    : public mlir::OpRewritePattern<imex::util::ChangeLayoutOp> {
   using OpRewritePattern::OpRewritePattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::ChangeLayoutOp op,
+  matchAndRewrite(imex::util::ChangeLayoutOp op,
                   mlir::PatternRewriter &rewriter) const override {
     auto src = op.source();
     auto srcType = src.getType().cast<mlir::MemRefType>();
@@ -539,7 +540,7 @@ struct ChangeLayoutDim : public mlir::OpRewritePattern<mlir::memref::DimOp> {
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::DimOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto cl = op.source().getDefiningOp<plier::ChangeLayoutOp>();
+    auto cl = op.source().getDefiningOp<imex::util::ChangeLayoutOp>();
     if (!cl)
       return mlir::failure();
 
@@ -550,17 +551,17 @@ struct ChangeLayoutDim : public mlir::OpRewritePattern<mlir::memref::DimOp> {
 };
 
 struct ChangeLayoutExtractMetadata
-    : public mlir::OpRewritePattern<plier::ExtractMemrefMetadataOp> {
+    : public mlir::OpRewritePattern<imex::util::ExtractMemrefMetadataOp> {
   using OpRewritePattern::OpRewritePattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::ExtractMemrefMetadataOp op,
+  matchAndRewrite(imex::util::ExtractMemrefMetadataOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto cl = op.source().getDefiningOp<plier::ChangeLayoutOp>();
+    auto cl = op.source().getDefiningOp<imex::util::ChangeLayoutOp>();
     if (!cl)
       return mlir::failure();
 
-    rewriter.replaceOpWithNewOp<plier::ExtractMemrefMetadataOp>(
+    rewriter.replaceOpWithNewOp<imex::util::ExtractMemrefMetadataOp>(
         op, cl.source(), op.dimIndex().getSExtValue());
     return mlir::success();
   }
@@ -573,7 +574,7 @@ struct ChangeLayoutClone
   mlir::LogicalResult
   matchAndRewrite(mlir::bufferization::CloneOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto cl = op.getInput().getDefiningOp<plier::ChangeLayoutOp>();
+    auto cl = op.getInput().getDefiningOp<imex::util::ChangeLayoutOp>();
     if (!cl)
       return mlir::failure();
 
@@ -582,7 +583,7 @@ struct ChangeLayoutClone
 
     auto loc = op.getLoc();
     auto res = rewriter.createOrFold<mlir::bufferization::CloneOp>(loc, src);
-    rewriter.replaceOpWithNewOp<plier::ChangeLayoutOp>(op, dstType, res);
+    rewriter.replaceOpWithNewOp<imex::util::ChangeLayoutOp>(op, dstType, res);
     return mlir::success();
   }
 };
@@ -602,7 +603,7 @@ struct PropagateCloneType
 
     auto loc = op.getLoc();
     auto res = rewriter.createOrFold<mlir::bufferization::CloneOp>(loc, src);
-    rewriter.replaceOpWithNewOp<plier::ChangeLayoutOp>(op, dstType, res);
+    rewriter.replaceOpWithNewOp<imex::util::ChangeLayoutOp>(op, dstType, res);
     return mlir::success();
   }
 };
@@ -613,7 +614,7 @@ struct ChangeLayoutCast : public mlir::OpRewritePattern<mlir::memref::CastOp> {
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::CastOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto cl = op.source().getDefiningOp<plier::ChangeLayoutOp>();
+    auto cl = op.source().getDefiningOp<imex::util::ChangeLayoutOp>();
     if (!cl)
       return mlir::failure();
 
@@ -635,11 +636,11 @@ struct ChangeLayoutCast : public mlir::OpRewritePattern<mlir::memref::CastOp> {
 };
 
 struct ChangeLayoutFromCast
-    : public mlir::OpRewritePattern<plier::ChangeLayoutOp> {
+    : public mlir::OpRewritePattern<imex::util::ChangeLayoutOp> {
   using OpRewritePattern::OpRewritePattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::ChangeLayoutOp op,
+  matchAndRewrite(imex::util::ChangeLayoutOp op,
                   mlir::PatternRewriter &rewriter) const override {
     auto cast = op.source().getDefiningOp<mlir::memref::CastOp>();
     if (!cast)
@@ -668,7 +669,7 @@ struct ChangeLayoutLoad : public mlir::OpRewritePattern<mlir::memref::LoadOp> {
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::LoadOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto cl = op.memref().getDefiningOp<plier::ChangeLayoutOp>();
+    auto cl = op.memref().getDefiningOp<imex::util::ChangeLayoutOp>();
     if (!cl)
       return mlir::failure();
 
@@ -685,7 +686,7 @@ struct ChangeLayoutStore
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::StoreOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto cl = op.memref().getDefiningOp<plier::ChangeLayoutOp>();
+    auto cl = op.memref().getDefiningOp<imex::util::ChangeLayoutOp>();
     if (!cl)
       return mlir::failure();
 
@@ -706,7 +707,7 @@ struct ChangeLayoutSubview
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::SubViewOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto cl = op.source().getDefiningOp<plier::ChangeLayoutOp>();
+    auto cl = op.source().getDefiningOp<imex::util::ChangeLayoutOp>();
     if (!cl)
       return mlir::failure();
 
@@ -734,8 +735,8 @@ struct ChangeLayoutSubview
     auto newSubview = rewriter.createOrFold<mlir::memref::SubViewOp>(
         loc, newDstType, src, offsets, sizes, strides);
     if (newDstType != dstType)
-      newSubview = rewriter.createOrFold<plier::ChangeLayoutOp>(loc, dstType,
-                                                                newSubview);
+      newSubview = rewriter.createOrFold<imex::util::ChangeLayoutOp>(
+          loc, dstType, newSubview);
 
     rewriter.replaceOp(op, newSubview);
     return mlir::success();
@@ -759,7 +760,7 @@ struct ChangeLayoutLinalgGeneric
       bool needUpdate = false;
       for (auto i : llvm::seq(0u, count)) {
         auto arg = args[i];
-        auto cl = arg.getDefiningOp<plier::ChangeLayoutOp>();
+        auto cl = arg.getDefiningOp<imex::util::ChangeLayoutOp>();
         if (cl) {
           assert(arg.getType().isa<mlir::MemRefType>());
           assert(cl.source().getType().isa<mlir::MemRefType>());
@@ -791,7 +792,7 @@ struct ChangeLayoutLinalgFill
   matchAndRewrite(mlir::linalg::FillOp op,
                   mlir::PatternRewriter &rewriter) const override {
     auto output = op.output();
-    auto clOutput = output.getDefiningOp<plier::ChangeLayoutOp>();
+    auto clOutput = output.getDefiningOp<imex::util::ChangeLayoutOp>();
     if (!clOutput)
       return mlir::failure();
 
@@ -834,7 +835,7 @@ struct ChangeLayoutIf : public mlir::OpRewritePattern<mlir::scf::YieldOp> {
         if (!arg.getType().isa<mlir::MemRefType>())
           continue;
 
-        auto cl = arg.getDefiningOp<plier::ChangeLayoutOp>();
+        auto cl = arg.getDefiningOp<imex::util::ChangeLayoutOp>();
         if (!cl)
           continue;
 
@@ -877,7 +878,7 @@ struct ChangeLayoutIf : public mlir::OpRewritePattern<mlir::scf::YieldOp> {
           if (origType != newType) {
             res.setType(newType);
             auto cl =
-                rewriter.create<plier::ChangeLayoutOp>(loc, origType, res);
+                rewriter.create<imex::util::ChangeLayoutOp>(loc, origType, res);
             res.replaceAllUsesExcept(cl, cl);
           }
         }
@@ -957,7 +958,7 @@ struct ChangeLayout1DReshape
       view = rewriter.create<mlir::memref::SubViewOp>(
           loc, reducedType, view, newOfsets, sizes, newStrides);
     }
-    rewriter.replaceOpWithNewOp<plier::ChangeLayoutOp>(op, dstType, view);
+    rewriter.replaceOpWithNewOp<imex::util::ChangeLayoutOp>(op, dstType, view);
     return mlir::success();
   }
 };
@@ -969,7 +970,7 @@ struct ChangeLayoutSliceGetItem
   mlir::LogicalResult
   matchAndRewrite(plier::SliceGetItemOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto cl = op.array().getDefiningOp<plier::ChangeLayoutOp>();
+    auto cl = op.array().getDefiningOp<imex::util::ChangeLayoutOp>();
     if (!cl)
       return mlir::failure();
 
@@ -987,8 +988,8 @@ struct ChangeLayoutCopy : public mlir::OpRewritePattern<mlir::memref::CopyOp> {
                   mlir::PatternRewriter &rewriter) const override {
     auto input = op.source();
     auto output = op.target();
-    auto clInput = input.getDefiningOp<plier::ChangeLayoutOp>();
-    auto clOutput = output.getDefiningOp<plier::ChangeLayoutOp>();
+    auto clInput = input.getDefiningOp<imex::util::ChangeLayoutOp>();
+    auto clOutput = output.getDefiningOp<imex::util::ChangeLayoutOp>();
     if (!clInput && !clOutput)
       return mlir::failure();
 
@@ -1010,7 +1011,7 @@ struct ChangeLayoutExpandShape
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::ExpandShapeOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto cl = op.src().getDefiningOp<plier::ChangeLayoutOp>();
+    auto cl = op.src().getDefiningOp<imex::util::ChangeLayoutOp>();
     if (!cl)
       return mlir::failure();
 
@@ -1036,7 +1037,7 @@ struct ChangeLayoutExpandShape
     auto loc = op->getLoc();
     mlir::Value newOp = rewriter.create<mlir::memref::ExpandShapeOp>(
         loc, newDstType, src, op.getReassociationIndices());
-    rewriter.replaceOpWithNewOp<plier::ChangeLayoutOp>(op, dstType, newOp);
+    rewriter.replaceOpWithNewOp<imex::util::ChangeLayoutOp>(op, dstType, newOp);
     return mlir::success();
   }
 };
@@ -1044,13 +1045,13 @@ struct ChangeLayoutExpandShape
 /// Propagates ChangeLayoutOp through SelectOp.
 ///
 /// Example:
-/// %0 = plier_util.change_layout %arg1 : memref<?xi32, #map> to memref<?xi32>
+/// %0 = imex_util.change_layout %arg1 : memref<?xi32, #map> to memref<?xi32>
 /// %res = arith.select %arg3, %0, %arg2 : memref<?xi32>
 ///
 /// Becomes:
 /// %0 = memref.cast %arg2 : memref<?xi32> to memref<?xi32, #map>
 /// %1 = arith.select %arg3, %arg1, %0 : memref<?xi32, #map>
-/// %res  = plier_util.change_layout %1 : memref<?xi32, #map> to memref<?xi32>
+/// %res  = imex_util.change_layout %1 : memref<?xi32, #map> to memref<?xi32>
 struct ChangeLayoutSelect
     : public mlir::OpRewritePattern<mlir::arith::SelectOp> {
   using OpRewritePattern::OpRewritePattern;
@@ -1065,7 +1066,7 @@ struct ChangeLayoutSelect
     auto falseArg = op.getFalseValue();
     for (bool reverse : {false, true}) {
       auto arg = reverse ? falseArg : trueArg;
-      auto cl = arg.getDefiningOp<plier::ChangeLayoutOp>();
+      auto cl = arg.getDefiningOp<imex::util::ChangeLayoutOp>();
       if (!cl)
         continue;
 
@@ -1093,7 +1094,8 @@ struct ChangeLayoutSelect
       auto cond = op.getCondition();
       auto result =
           rewriter.create<mlir::arith::SelectOp>(loc, cond, trueArg, falseArg);
-      rewriter.replaceOpWithNewOp<plier::ChangeLayoutOp>(op, dstType, result);
+      rewriter.replaceOpWithNewOp<imex::util::ChangeLayoutOp>(op, dstType,
+                                                              result);
 
       return mlir::success();
     }
@@ -1134,8 +1136,8 @@ static mlir::Value foldPrevCast(mlir::Value val, mlir::Type thisType) {
 static mlir::Value propagateCasts(mlir::Value val, mlir::Type thisType) {
   using fptr = mlir::Value (*)(mlir::Value, mlir::Type);
   const fptr handlers[] = {
-      &foldPrevCast<SignCastOp>,
-      &foldPrevCast<CastOp>,
+      &foldPrevCast<imex::util::SignCastOp>,
+      &foldPrevCast<plier::CastOp>,
       &foldPrevCast<mlir::UnrealizedConversionCastOp>,
   };
 
@@ -1172,8 +1174,8 @@ struct SignCastDimPropagate : public mlir::OpRewritePattern<Op> {
 
   mlir::LogicalResult
   matchAndRewrite(Op op, mlir::PatternRewriter &rewriter) const override {
-    auto castOp =
-        mlir::dyn_cast_or_null<plier::SignCastOp>(op.source().getDefiningOp());
+    auto castOp = mlir::dyn_cast_or_null<imex::util::SignCastOp>(
+        op.source().getDefiningOp());
     if (!castOp)
       return mlir::failure();
 
@@ -1184,17 +1186,17 @@ struct SignCastDimPropagate : public mlir::OpRewritePattern<Op> {
 };
 
 struct SignCastUndefPropagate
-    : public mlir::OpRewritePattern<plier::SignCastOp> {
-  using mlir::OpRewritePattern<plier::SignCastOp>::OpRewritePattern;
+    : public mlir::OpRewritePattern<imex::util::SignCastOp> {
+  using OpRewritePattern::OpRewritePattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::SignCastOp op,
+  matchAndRewrite(imex::util::SignCastOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto undefOp = op.value().getDefiningOp<plier::UndefOp>();
+    auto undefOp = op.value().getDefiningOp<imex::util::UndefOp>();
     if (!undefOp)
       return mlir::failure();
 
-    rewriter.replaceOpWithNewOp<plier::UndefOp>(op, op.getType());
+    rewriter.replaceOpWithNewOp<imex::util::UndefOp>(op, op.getType());
     return mlir::success();
   }
 };
@@ -1205,7 +1207,8 @@ struct SignCastCastPropagate : public mlir::OpRewritePattern<CastOp> {
 
   mlir::LogicalResult
   matchAndRewrite(CastOp op, mlir::PatternRewriter &rewriter) const override {
-    auto signCast = op.source().template getDefiningOp<plier::SignCastOp>();
+    auto signCast =
+        op.source().template getDefiningOp<imex::util::SignCastOp>();
     if (!signCast)
       return mlir::failure();
 
@@ -1223,7 +1226,7 @@ struct SignCastCastPropagate : public mlir::OpRewritePattern<CastOp> {
 
     auto loc = op.getLoc();
     auto cast = rewriter.createOrFold<CastOp>(loc, newDstType, src);
-    rewriter.replaceOpWithNewOp<plier::SignCastOp>(op, dstType, cast);
+    rewriter.replaceOpWithNewOp<imex::util::SignCastOp>(op, dstType, cast);
 
     return mlir::success();
   }
@@ -1236,7 +1239,7 @@ struct SignCastReinterpretPropagate
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::ReinterpretCastOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto signCast = op.source().getDefiningOp<plier::SignCastOp>();
+    auto signCast = op.source().getDefiningOp<imex::util::SignCastOp>();
     if (!signCast)
       return mlir::failure();
 
@@ -1258,7 +1261,7 @@ struct SignCastReinterpretPropagate
     auto strides = op.getMixedStrides();
     auto cast = rewriter.createOrFold<mlir::memref::ReinterpretCastOp>(
         loc, newDstType, src, offset, sizes, strides);
-    rewriter.replaceOpWithNewOp<plier::SignCastOp>(op, dstType, cast);
+    rewriter.replaceOpWithNewOp<imex::util::SignCastOp>(op, dstType, cast);
 
     return mlir::success();
   }
@@ -1271,7 +1274,7 @@ struct SignCastLoadPropagate
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::LoadOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto signCast = op.memref().getDefiningOp<plier::SignCastOp>();
+    auto signCast = op.memref().getDefiningOp<imex::util::SignCastOp>();
     if (!signCast)
       return mlir::failure();
 
@@ -1281,7 +1284,7 @@ struct SignCastLoadPropagate
         rewriter.createOrFold<mlir::memref::LoadOp>(loc, src, op.indices());
 
     if (newOp.getType() != op.getType())
-      newOp = rewriter.create<plier::SignCastOp>(loc, op.getType(), newOp);
+      newOp = rewriter.create<imex::util::SignCastOp>(loc, op.getType(), newOp);
 
     rewriter.replaceOp(op, newOp);
     return mlir::success();
@@ -1295,7 +1298,7 @@ struct SignCastStorePropagate
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::StoreOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto signCast = op.memref().getDefiningOp<plier::SignCastOp>();
+    auto signCast = op.memref().getDefiningOp<imex::util::SignCastOp>();
     if (!signCast)
       return mlir::failure();
 
@@ -1303,7 +1306,8 @@ struct SignCastStorePropagate
     auto srcElemType = src.getType().cast<mlir::MemRefType>().getElementType();
     auto val = op.value();
     if (val.getType() != srcElemType)
-      val = rewriter.create<plier::SignCastOp>(op.getLoc(), srcElemType, val);
+      val = rewriter.create<imex::util::SignCastOp>(op.getLoc(), srcElemType,
+                                                    val);
 
     rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(op, val, src,
                                                        op.indices());
@@ -1313,11 +1317,11 @@ struct SignCastStorePropagate
 
 template <typename Op>
 struct SignCastAllocPropagate
-    : public mlir::OpRewritePattern<plier::SignCastOp> {
-  using mlir::OpRewritePattern<plier::SignCastOp>::OpRewritePattern;
+    : public mlir::OpRewritePattern<imex::util::SignCastOp> {
+  using mlir::OpRewritePattern<imex::util::SignCastOp>::OpRewritePattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::SignCastOp op,
+  matchAndRewrite(imex::util::SignCastOp op,
                   mlir::PatternRewriter &rewriter) const override {
     auto alloc = op.value().getDefiningOp<Op>();
     if (!alloc || !alloc->hasOneUse())
@@ -1333,11 +1337,11 @@ struct SignCastAllocPropagate
 };
 
 struct SignCastTensorFromElementsPropagate
-    : public mlir::OpRewritePattern<plier::SignCastOp> {
+    : public mlir::OpRewritePattern<imex::util::SignCastOp> {
   using OpRewritePattern::OpRewritePattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::SignCastOp op,
+  matchAndRewrite(imex::util::SignCastOp op,
                   mlir::PatternRewriter &rewriter) const override {
     auto fromElements =
         op.value().getDefiningOp<mlir::tensor::FromElementsOp>();
@@ -1352,7 +1356,7 @@ struct SignCastTensorFromElementsPropagate
     llvm::SmallVector<mlir::Value> castedVals(count);
     for (auto i : llvm::seq(0u, count))
       castedVals[i] =
-          rewriter.create<plier::SignCastOp>(loc, elemType, elements[i]);
+          rewriter.create<imex::util::SignCastOp>(loc, elemType, elements[i]);
 
     rewriter.replaceOpWithNewOp<mlir::tensor::FromElementsOp>(op, castedVals);
     return mlir::success();
@@ -1360,11 +1364,11 @@ struct SignCastTensorFromElementsPropagate
 };
 
 struct SignCastTensorCollapseShapePropagate
-    : public mlir::OpRewritePattern<plier::SignCastOp> {
+    : public mlir::OpRewritePattern<imex::util::SignCastOp> {
   using OpRewritePattern::OpRewritePattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::SignCastOp op,
+  matchAndRewrite(imex::util::SignCastOp op,
                   mlir::PatternRewriter &rewriter) const override {
     auto prevOp = op.value().getDefiningOp<mlir::tensor::CollapseShapeOp>();
     if (!prevOp)
@@ -1378,7 +1382,7 @@ struct SignCastTensorCollapseShapePropagate
     auto newDstType = dstType.clone(dstType.getElementType());
 
     auto loc = prevOp->getLoc();
-    auto newSrc = rewriter.create<plier::SignCastOp>(loc, newSrcType, src);
+    auto newSrc = rewriter.create<imex::util::SignCastOp>(loc, newSrcType, src);
     rewriter.replaceOpWithNewOp<mlir::tensor::CollapseShapeOp>(
         op, newDstType, newSrc, prevOp.reassociation());
     return mlir::success();
@@ -1392,7 +1396,7 @@ struct SignCastBuferizationPropagate : public mlir::OpRewritePattern<BuffOp> {
   mlir::LogicalResult
   matchAndRewrite(BuffOp op, mlir::PatternRewriter &rewriter) const override {
     auto signCast =
-        op->getOperand(0).template getDefiningOp<plier::SignCastOp>();
+        op->getOperand(0).template getDefiningOp<imex::util::SignCastOp>();
     if (!signCast)
       return mlir::failure();
 
@@ -1403,7 +1407,7 @@ struct SignCastBuferizationPropagate : public mlir::OpRewritePattern<BuffOp> {
 
     auto loc = op->getLoc();
     auto res = rewriter.create<BuffOp>(loc, newDstType, src);
-    rewriter.replaceOpWithNewOp<plier::SignCastOp>(op, dstType, res);
+    rewriter.replaceOpWithNewOp<imex::util::SignCastOp>(op, dstType, res);
     return mlir::success();
   }
 };
@@ -1414,7 +1418,8 @@ struct SignCastSubviewPropagate : public mlir::OpRewritePattern<ViewOp> {
 
   mlir::LogicalResult
   matchAndRewrite(ViewOp op, mlir::PatternRewriter &rewriter) const override {
-    auto signCast = op.source().template getDefiningOp<plier::SignCastOp>();
+    auto signCast =
+        op.source().template getDefiningOp<imex::util::SignCastOp>();
     if (!signCast)
       return mlir::failure();
 
@@ -1428,7 +1433,7 @@ struct SignCastSubviewPropagate : public mlir::OpRewritePattern<ViewOp> {
     auto res =
         rewriter.create<ViewOp>(loc, newDstType, src, op.getMixedOffsets(),
                                 op.getMixedSizes(), op.getMixedStrides());
-    rewriter.replaceOpWithNewOp<plier::SignCastOp>(op, dstType, res);
+    rewriter.replaceOpWithNewOp<imex::util::SignCastOp>(op, dstType, res);
     return mlir::success();
   }
 };
@@ -1453,11 +1458,11 @@ struct SignCastForPropagate : public mlir::OpRewritePattern<mlir::scf::ForOp> {
       auto initArg = initArgs[i];
       auto yieldArg = termResults[i];
       assert(initArg.getType() == yieldArg.getType());
-      auto yieldCast = yieldArg.getDefiningOp<plier::SignCastOp>();
+      auto yieldCast = yieldArg.getDefiningOp<imex::util::SignCastOp>();
       if (yieldCast) {
         auto newType = yieldCast.value().getType();
         newInitArgs[i] =
-            rewriter.create<plier::SignCastOp>(loc, newType, initArg);
+            rewriter.create<imex::util::SignCastOp>(loc, newType, initArg);
         needUpdate = true;
       } else {
         newInitArgs[i] = initArg;
@@ -1479,7 +1484,7 @@ struct SignCastForPropagate : public mlir::OpRewritePattern<mlir::scf::ForOp> {
         auto oldType = oldIterVal.getType();
         if (iterVal.getType() != oldType) {
           auto newIterVal =
-              builder.create<plier::SignCastOp>(loc, oldType, iterVal);
+              builder.create<imex::util::SignCastOp>(loc, oldType, iterVal);
           mapping.map(oldIterVal, newIterVal.getResult());
         } else {
           mapping.map(oldIterVal, iterVal);
@@ -1494,7 +1499,7 @@ struct SignCastForPropagate : public mlir::OpRewritePattern<mlir::scf::ForOp> {
         auto val = mapping.lookupOrDefault(termResults[i]);
         auto newType = newInitArgs[i].getType();
         if (val.getType() != newType)
-          val = val.getDefiningOp<plier::SignCastOp>().value();
+          val = val.getDefiningOp<imex::util::SignCastOp>().value();
 
         assert(val.getType() == newType);
         newYieldArgs[i] = val;
@@ -1512,8 +1517,8 @@ struct SignCastForPropagate : public mlir::OpRewritePattern<mlir::scf::ForOp> {
       auto oldRersultType = initArgs[i].getType();
       mlir::Value newResult = newResults[i];
       if (newResult.getType() != oldRersultType)
-        newResult =
-            rewriter.create<plier::SignCastOp>(loc, oldRersultType, newResult);
+        newResult = rewriter.create<imex::util::SignCastOp>(loc, oldRersultType,
+                                                            newResult);
 
       newInitArgs[i] = newResult;
     }
@@ -1532,7 +1537,7 @@ void SignCastOp::getCanonicalizationPatterns(::mlir::RewritePatternSet &results,
       SignCastDimPropagate<mlir::memref::DimOp>, SignCastUndefPropagate,
       SignCastCastPropagate<mlir::tensor::CastOp>,
       SignCastCastPropagate<mlir::memref::CastOp>,
-      SignCastCastPropagate<plier::ChangeLayoutOp>,
+      SignCastCastPropagate<imex::util::ChangeLayoutOp>,
       SignCastReinterpretPropagate, SignCastLoadPropagate,
       SignCastStorePropagate, SignCastAllocPropagate<mlir::memref::AllocOp>,
       SignCastAllocPropagate<mlir::memref::AllocaOp>,
@@ -1630,19 +1635,20 @@ void TakeContextOp::build(mlir::OpBuilder &b, mlir::OperationState &result,
                           mlir::SymbolRefAttr releaseFunc,
                           mlir::TypeRange resultTypes) {
   llvm::SmallVector<mlir::Type> allTypes;
-  allTypes.emplace_back(plier::OpaqueType::get(b.getContext()));
+  allTypes.emplace_back(imex::util::OpaqueType::get(b.getContext()));
   allTypes.append(resultTypes.begin(), resultTypes.end());
   build(b, result, allTypes, initFunc, releaseFunc);
 }
 
-} // namespace plier
+} // namespace util
+} // namespace imex
 
-#include "mlir-extensions/Dialect/plier_util/PlierUtilOpsDialect.cpp.inc"
+#include "mlir-extensions/Dialect/imex_util/ImexUtilOpsDialect.cpp.inc"
 
 #define GET_OP_CLASSES
-#include "mlir-extensions/Dialect/plier_util/PlierUtilOps.cpp.inc"
+#include "mlir-extensions/Dialect/imex_util/ImexUtilOps.cpp.inc"
 
 #define GET_ATTRDEF_CLASSES
-#include "mlir-extensions/Dialect/plier_util/PlierUtilOpsAttributes.cpp.inc"
+#include "mlir-extensions/Dialect/imex_util/ImexUtilOpsAttributes.cpp.inc"
 
-#include "mlir-extensions/Dialect/plier_util/PlierUtilOpsEnums.cpp.inc"
+#include "mlir-extensions/Dialect/imex_util/ImexUtilOpsEnums.cpp.inc"

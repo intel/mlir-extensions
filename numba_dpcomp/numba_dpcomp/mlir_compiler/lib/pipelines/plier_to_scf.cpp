@@ -23,8 +23,8 @@
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 #include <mlir/Transforms/Passes.h>
 
+#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
 #include "mlir-extensions/Dialect/plier/dialect.hpp"
-#include "mlir-extensions/Dialect/plier_util/dialect.hpp"
 #include "mlir-extensions/Transforms/arg_lowering.hpp"
 #include "mlir-extensions/Transforms/common_opts.hpp"
 #include "mlir-extensions/Transforms/rewrite_wrapper.hpp"
@@ -291,7 +291,7 @@ struct ScfIfRewriteTwoExits
         ret.emplace_back(cond);
         llvm::copy(exitOps, std::back_inserter(ret));
         for (auto user : thenValsUsers) {
-          auto val = builder.create<plier::UndefOp>(loc, user.getType());
+          auto val = builder.create<imex::util::UndefOp>(loc, user.getType());
           ret.emplace_back(val);
         }
         builder.create<mlir::scf::YieldOp>(loc, ret);
@@ -610,7 +610,7 @@ struct PlierToScfPass
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::scf::SCFDialect>();
-    registry.insert<plier::PlierUtilDialect>();
+    registry.insert<imex::util::ImexUtilDialect>();
   }
 
   void runOnOperation() override;

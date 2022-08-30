@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #include "mlir-extensions/Transforms/cast_utils.hpp"
-#include "mlir-extensions/Dialect/plier_util/dialect.hpp"
+#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 
@@ -37,12 +37,12 @@ mlir::Value plier::indexCast(mlir::OpBuilder &builder, mlir::Location loc,
 
   auto newSrcType = makeSignless(srcType);
   if (newSrcType != srcType)
-    val = builder.createOrFold<plier::SignCastOp>(loc, newSrcType, val);
+    val = builder.createOrFold<imex::util::SignCastOp>(loc, newSrcType, val);
 
   auto newDstType = makeSignless(dstType);
   val = builder.createOrFold<mlir::arith::IndexCastOp>(loc, newDstType, val);
   if (newDstType != dstType)
-    val = builder.createOrFold<plier::SignCastOp>(loc, dstType, val);
+    val = builder.createOrFold<imex::util::SignCastOp>(loc, dstType, val);
 
   return val;
 }

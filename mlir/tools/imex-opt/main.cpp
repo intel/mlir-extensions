@@ -17,13 +17,13 @@
 #include <mlir/InitAllPasses.h>
 #include <mlir/Tools/mlir-opt/MlirOptMain.h>
 
-#include "mlir-extensions/Dialect/plier_util/dialect.hpp"
+#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
 
 int main(int argc, char **argv) {
   mlir::registerAllPasses();
   mlir::DialectRegistry registry;
   mlir::registerAllDialects(registry);
-  registry.insert<plier::PlierUtilDialect>();
+  registry.insert<imex::util::ImexUtilDialect>();
   return mlir::failed(MlirOptMain(argc, argv, "imex modular optimizer driver\n",
                                   registry,
                                   /*preloadDialectsInContext=*/false));

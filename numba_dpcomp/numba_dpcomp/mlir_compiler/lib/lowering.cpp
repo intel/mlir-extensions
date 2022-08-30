@@ -34,8 +34,8 @@
 #include <llvm/Bitcode/BitcodeWriter.h>
 #include <llvm/Support/Debug.h>
 
+#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
 #include "mlir-extensions/Dialect/plier/dialect.hpp"
-#include "mlir-extensions/Dialect/plier_util/dialect.hpp"
 
 #include "mlir-extensions/compiler/compiler.hpp"
 #include "mlir-extensions/compiler/pipeline_registry.hpp"
@@ -154,7 +154,7 @@ struct PlierLowerer final {
   PlierLowerer(mlir::MLIRContext &context) : ctx(context), builder(&ctx) {
     ctx.loadDialect<mlir::func::FuncDialect>();
     ctx.loadDialect<plier::PlierDialect>();
-    ctx.loadDialect<plier::PlierUtilDialect>();
+    ctx.loadDialect<imex::util::ImexUtilDialect>();
   }
 
   mlir::func::FuncOp lower(const py::object &compilationContext,
@@ -344,7 +344,7 @@ private:
   mlir::Value lowerStaticIndex(mlir::Location loc, py::handle obj) {
     if (obj.is_none()) {
       auto type = mlir::NoneType::get(builder.getContext());
-      return builder.create<plier::UndefOp>(loc, type);
+      return builder.create<imex::util::UndefOp>(loc, type);
     }
     if (py::isinstance<py::int_>(obj)) {
       auto index = obj.cast<int64_t>();

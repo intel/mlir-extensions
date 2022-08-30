@@ -43,7 +43,7 @@
 #include "mlir-extensions/Conversion/gpu_runtime_to_llvm.hpp"
 #include "mlir-extensions/Conversion/gpu_to_gpu_runtime.hpp"
 #include "mlir-extensions/Dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
-#include "mlir-extensions/Dialect/plier_util/dialect.hpp"
+#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
 #include "mlir-extensions/Transforms/call_lowering.hpp"
 #include "mlir-extensions/Transforms/cast_utils.hpp"
 #include "mlir-extensions/Transforms/common_opts.hpp"
@@ -232,7 +232,8 @@ struct KernelMemrefOpsMovementPass
     mlir::DominanceInfo dom(func);
     body.walk([&](mlir::gpu::LaunchOp launch) {
       launch.body().walk([&](mlir::Operation *op) {
-        if (!mlir::isa<mlir::memref::DimOp, plier::ExtractMemrefMetadataOp>(op))
+        if (!mlir::isa<mlir::memref::DimOp,
+                       imex::util::ExtractMemrefMetadataOp>(op))
           return;
 
         for (auto &arg : op->getOpOperands()) {
@@ -304,7 +305,7 @@ struct GPULowerDefaultLocalSize
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::func::FuncDialect>();
-    registry.insert<plier::PlierUtilDialect>();
+    registry.insert<imex::util::ImexUtilDialect>();
   }
 
   void runOnOperation() override {
@@ -691,11 +692,11 @@ struct GenerateOutlineContextPass
     mlir::SymbolRefAttr deinitSym = (deinit ? deinit.getCalleeAttr() : nullptr);
 
     builder.setInsertionPoint(init);
-    auto res =
-        builder
-            .create<plier::TakeContextOp>(init->getLoc(), initSym, deinitSym,
-                                          init->getResultTypes())
-            .getResults();
+    auto res = builder
+                   .create<imex::util::TakeContextOp>(init->getLoc(), initSym,
+                                                      deinitSym,
+                                                      init->getResultTypes())
+                   .getResults();
     assert(res.size() > 1);
     auto ctx = res.front();
     auto resValues = res.drop_front(1);
@@ -704,11 +705,12 @@ struct GenerateOutlineContextPass
 
     if (deinit) {
       builder.setInsertionPoint(deinit);
-      builder.create<plier::ReleaseContextOp>(deinit->getLoc(), ctx);
+      builder.create<imex::util::ReleaseContextOp>(deinit->getLoc(), ctx);
       deinit->erase();
     } else {
       builder.setInsertionPoint(body.front().getTerminator());
-      builder.create<plier::ReleaseContextOp>(builder.getUnknownLoc(), ctx);
+      builder.create<imex::util::ReleaseContextOp>(builder.getUnknownLoc(),
+                                                   ctx);
     }
   }
 };
@@ -1092,7 +1094,7 @@ struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::func::CallOp> {
         if (!op)
           return {};
 
-        if (auto cast = mlir::dyn_cast<plier::SignCastOp>(op))
+        if (auto cast = mlir::dyn_cast<imex::util::SignCastOp>(op))
           return cast.value();
         if (auto cast = mlir::dyn_cast<plier::CastOp>(op))
           return cast.value();
@@ -1173,7 +1175,7 @@ static void genBarrierOp(mlir::Operation *srcOp,
   // TODO: remove
   assert(srcOp->getNumResults() == 1);
   auto retType = srcOp->getResult(0).getType();
-  rewriter.replaceOpWithNewOp<plier::UndefOp>(srcOp, retType);
+  rewriter.replaceOpWithNewOp<imex::util::UndefOp>(srcOp, retType);
 }
 
 class ConvertBarrierOps : public mlir::OpRewritePattern<mlir::func::CallOp> {
@@ -1292,7 +1294,7 @@ public:
     mlir::Value newArray =
         rewriter.create<mlir::memref::GetGlobalOp>(loc, typeLocal, global);
 
-    newArray = rewriter.create<plier::SignCastOp>(loc, type, newArray);
+    newArray = rewriter.create<imex::util::SignCastOp>(loc, type, newArray);
 
     if (type != oldType)
       newArray = rewriter.create<mlir::memref::CastOp>(loc, oldType, newArray);
@@ -1320,7 +1322,7 @@ public:
             auto isSinkingBeneficiary = [](mlir::Operation *op) -> bool {
               return isa<arith::ConstantOp, func::ConstantOp, arith::SelectOp,
                          arith::CmpIOp, arith::IndexCastOp, arith::MulIOp,
-                         arith::SubIOp, arith::AddIOp, plier::UndefOp>(op);
+                         arith::SubIOp, arith::AddIOp, imex::util::UndefOp>(op);
             };
 
             // Pull in instructions that can be sunk

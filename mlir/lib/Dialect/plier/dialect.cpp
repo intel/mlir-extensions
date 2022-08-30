@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #include "mlir-extensions/Dialect/plier/dialect.hpp"
-#include "mlir-extensions/Dialect/plier_util/dialect.hpp"
+#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
 
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/BuiltinOps.h>
@@ -259,7 +259,7 @@ static mlir::Value foldPrevCast(mlir::Value val, mlir::Type thisType) {
 static mlir::Value propagateCasts(mlir::Value val, mlir::Type thisType) {
   using fptr = mlir::Value (*)(mlir::Value, mlir::Type);
   const fptr handlers[] = {
-      &foldPrevCast<SignCastOp>,
+      &foldPrevCast<imex::util::SignCastOp>,
       &foldPrevCast<CastOp>,
       &foldPrevCast<mlir::UnrealizedConversionCastOp>,
   };
@@ -524,7 +524,7 @@ struct SliceGetitemPropagate
         if (!intType.isSignless()) {
           auto signless =
               mlir::IntegerType::get(intType.getContext(), intType.getWidth());
-          src = rewriter.create<plier::SignCastOp>(loc, signless, src);
+          src = rewriter.create<imex::util::SignCastOp>(loc, signless, src);
         }
         auto indexType = rewriter.getIndexType();
         src = rewriter.create<mlir::arith::IndexCastOp>(loc, indexType, src);

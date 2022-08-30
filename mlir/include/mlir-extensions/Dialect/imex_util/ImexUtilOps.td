@@ -23,9 +23,9 @@ include "mlir/Interfaces/LoopLikeInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/ViewLikeInterface.td"
 
-def PlierUtil_Dialect : Dialect {
-  let name = "plier_util";
-  let cppNamespace = "plier";
+def ImexUtil_Dialect : Dialect {
+  let name = "imex_util";
+  let cppNamespace = "::imex::util";
 
   let dependentDialects = ["::mlir::memref::MemRefDialect"];
 
@@ -34,15 +34,15 @@ def PlierUtil_Dialect : Dialect {
   let useDefaultTypePrinterParser = 1;
 }
 
-def PlierUtil_OpaqueType
-    : DialectType<PlierUtil_Dialect, CPred<"$_self.isa<::plier::OpaqueType>()">,
+def ImexUtil_OpaqueType
+    : DialectType<ImexUtil_Dialect, CPred<"$_self.isa<::imex::util::OpaqueType>()">,
                   "opaque_type">,
-      BuildableType<"$_builder.getType<::plier::OpaqueType>()"> {}
+      BuildableType<"$_builder.getType<::imex::util::OpaqueType>()"> {}
 
-class PlierUtil_Op<string mnemonic, list<Trait> traits = []>
-    : Op<PlierUtil_Dialect, mnemonic, traits>;
+class ImexUtil_Op<string mnemonic, list<Trait> traits = []>
+    : Op<ImexUtil_Dialect, mnemonic, traits>;
 
-def EnforceShapeOp : PlierUtil_Op<"enforce_shape"> {
+def EnforceShapeOp : ImexUtil_Op<"enforce_shape"> {
   let arguments = (ins AnyRankedTensor : $value, Variadic<Index> : $sizes);
 
   let results = (outs AnyRankedTensor : $result);
@@ -55,9 +55,9 @@ def EnforceShapeOp : PlierUtil_Op<"enforce_shape"> {
   let hasCanonicalizer = 1;
 }
 
-def ParallelOp : PlierUtil_Op<"parallel", [
+def ParallelOp : ImexUtil_Op<"parallel", [
   AttrSizedOperandSegments, DeclareOpInterfaceMethods<LoopLikeOpInterface>,
-  SingleBlockImplicitTerminator<"plier::YieldOp">, RecursiveSideEffects
+  SingleBlockImplicitTerminator<"::imex::util::YieldOp">, RecursiveSideEffects
 ]> {
 
   let arguments = (ins Variadic<Index>:$lowerBounds,
@@ -80,12 +80,12 @@ def ParallelOp : PlierUtil_Op<"parallel", [
     }];
 }
 
-def UndefOp : PlierUtil_Op<"undef", [NoSideEffect]> {
+def UndefOp : ImexUtil_Op<"undef", [NoSideEffect]> {
   let results = (outs AnyType);
 }
 
-def YieldOp : PlierUtil_Op<"yield", [
-  NoSideEffect, ReturnLike, Terminator, ParentOneOf<["ParallelOp"]>
+def YieldOp : ImexUtil_Op<"yield", [
+  NoSideEffect, ReturnLike, Terminator, ParentOneOf<["::imex::util::ParallelOp"]>
 ]> {
   let arguments = (ins Variadic<AnyType> : $results);
   let builders = [OpBuilder<(ins), [{/* nothing to do */}]>];
@@ -94,7 +94,7 @@ def YieldOp : PlierUtil_Op<"yield", [
   let hasVerifier = 0;
 }
 
-def RetainOp : PlierUtil_Op<"retain", [ViewLikeOpInterface]> {
+def RetainOp : ImexUtil_Op<"retain", [ViewLikeOpInterface]> {
   let arguments = (ins AnyMemRef : $source);
 
   let results = (outs AnyMemRef);
@@ -106,7 +106,7 @@ def RetainOp : PlierUtil_Op<"retain", [ViewLikeOpInterface]> {
   }];
 }
 
-def ChangeLayoutOp : PlierUtil_Op<"change_layout", [ViewLikeOpInterface, NoSideEffect]> {
+def ChangeLayoutOp : ImexUtil_Op<"change_layout", [ViewLikeOpInterface, NoSideEffect]> {
   let arguments = (ins AnyMemRef : $source);
 
   let results = (outs AnyMemRef : $dest);
@@ -120,7 +120,7 @@ def ChangeLayoutOp : PlierUtil_Op<"change_layout", [ViewLikeOpInterface, NoSideE
   }];
 }
 
-def SignCastOp : PlierUtil_Op<"sign_cast", [NoSideEffect]> {
+def SignCastOp : ImexUtil_Op<"sign_cast", [NoSideEffect]> {
   let arguments = (ins AnyType : $value);
 
   let results = (outs AnyType);
@@ -129,7 +129,7 @@ def SignCastOp : PlierUtil_Op<"sign_cast", [NoSideEffect]> {
 }
 
 def ExtractMemrefMetadataOp
-    : PlierUtil_Op<"extract_memref_metadata", [NoSideEffect]> {
+    : ImexUtil_Op<"extract_memref_metadata", [NoSideEffect]> {
   let arguments = (ins AnyMemRef : $source, IndexAttr : $dimIndex);
 
   let results = (outs Index : $result);
@@ -142,7 +142,7 @@ def ExtractMemrefMetadataOp
   ];
 }
 
-def PseudoCopyOp : PlierUtil_Op<"pseudo_copy", [ViewLikeOpInterface]> {
+def PseudoCopyOp : ImexUtil_Op<"pseudo_copy", [ViewLikeOpInterface]> {
   let arguments = (ins AnyType : $source);
 
   let results = (outs AnyType);
@@ -154,7 +154,7 @@ def PseudoCopyOp : PlierUtil_Op<"pseudo_copy", [ViewLikeOpInterface]> {
   }];
 }
 
-def ForceCopyOp : PlierUtil_Op<"force_copy", [ViewLikeOpInterface]> {
+def ForceCopyOp : ImexUtil_Op<"force_copy", [ViewLikeOpInterface]> {
   let arguments = (ins AnyRankedTensor : $source);
 
   let results = (outs AnyRankedTensor);
@@ -166,11 +166,11 @@ def ForceCopyOp : PlierUtil_Op<"force_copy", [ViewLikeOpInterface]> {
   }];
 }
 
-def TakeContextOp : PlierUtil_Op<"take_context"> {
+def TakeContextOp : ImexUtil_Op<"take_context"> {
   let arguments = (ins OptionalAttr<SymbolRefAttr>:$initFunc,
                        OptionalAttr<SymbolRefAttr>:$releaseFunc);
 
-  let results = (outs PlierUtil_OpaqueType:$context,
+  let results = (outs ImexUtil_OpaqueType:$context,
                       Variadic<AnyType>:$results);
 
     let builders = [
@@ -180,8 +180,8 @@ def TakeContextOp : PlierUtil_Op<"take_context"> {
    ];
 }
 
-def ReleaseContextOp : PlierUtil_Op<"release_context"> {
-  let arguments = (ins PlierUtil_OpaqueType:$context);
+def ReleaseContextOp : ImexUtil_Op<"release_context"> {
+  let arguments = (ins ImexUtil_OpaqueType:$context);
 }
 
 #endif // PLIER_UTIL_OPS

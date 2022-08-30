@@ -24,16 +24,17 @@
 #include <mlir/Interfaces/SideEffectInterfaces.h>
 #include <mlir/Interfaces/ViewLikeInterface.h>
 
-#include "mlir-extensions/Dialect/plier_util/PlierUtilOpsDialect.h.inc"
-#include "mlir-extensions/Dialect/plier_util/PlierUtilOpsEnums.h.inc"
+#include "mlir-extensions/Dialect/imex_util/ImexUtilOpsDialect.h.inc"
+#include "mlir-extensions/Dialect/imex_util/ImexUtilOpsEnums.h.inc"
 
 #define GET_ATTRDEF_CLASSES
-#include "mlir-extensions/Dialect/plier_util/PlierUtilOpsAttributes.h.inc"
+#include "mlir-extensions/Dialect/imex_util/ImexUtilOpsAttributes.h.inc"
 
 #define GET_OP_CLASSES
-#include "mlir-extensions/Dialect/plier_util/PlierUtilOps.h.inc"
+#include "mlir-extensions/Dialect/imex_util/ImexUtilOps.h.inc"
 
-namespace plier {
+namespace imex {
+namespace util {
 class OpaqueType : public ::mlir::Type::TypeBase<OpaqueType, ::mlir::Type,
                                                  ::mlir::TypeStorage> {
 public:
@@ -42,4 +43,5 @@ public:
   static OpaqueType get(mlir::MLIRContext *context);
 };
 
-} // namespace plier
+} // namespace util
+} // namespace imex

@@ -42,8 +42,8 @@
 #include <mlir/Transforms/LoopInvariantCodeMotionUtils.h>
 #include <mlir/Transforms/Passes.h>
 
+#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
 #include "mlir-extensions/Dialect/plier/dialect.hpp"
-#include "mlir-extensions/Dialect/plier_util/dialect.hpp"
 
 #include "pipelines/plier_to_scf.hpp"
 #include "pipelines/plier_to_std.hpp"
@@ -520,7 +520,8 @@ struct UnrankedToElementCasts
         mlir::Value memref =
             rewriter.create<mlir::memref::AllocOp>(loc, signlessMemrefType);
         if (memrefType != signlessMemrefType)
-          memref = rewriter.create<plier::SignCastOp>(loc, memrefType, memref);
+          memref =
+              rewriter.create<imex::util::SignCastOp>(loc, memrefType, memref);
 
         rewriter.create<mlir::memref::StoreOp>(loc, value, memref);
         rewriter.replaceOp(op, memref);
@@ -816,7 +817,8 @@ static mlir::Value makeSubview(mlir::OpBuilder &builder, mlir::Location loc,
         mlir::MemRefType::get(resType.getShape(), resType.getElementType());
 
     if (resType != flatMemrefType)
-      view = builder.create<plier::ChangeLayoutOp>(loc, flatMemrefType, view);
+      view =
+          builder.create<imex::util::ChangeLayoutOp>(loc, flatMemrefType, view);
   }
 
   return view;
@@ -858,12 +860,14 @@ struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
         auto memrefType = type.cast<mlir::MemRefType>();
         auto signlessType = mlir::MemRefType::get(
             memrefType.getShape(), elemTypeSignless, memrefType.getLayout());
-        value = rewriter.create<plier::SignCastOp>(loc, signlessType, value);
+        value =
+            rewriter.create<imex::util::SignCastOp>(loc, signlessType, value);
       } else if (isTensor) {
         auto tensorType = type.cast<mlir::RankedTensorType>();
         auto signlessType = mlir::RankedTensorType::get(
             tensorType.getShape(), elemTypeSignless, tensorType.getEncoding());
-        value = rewriter.create<plier::SignCastOp>(loc, signlessType, value);
+        value =
+            rewriter.create<imex::util::SignCastOp>(loc, signlessType, value);
       } else {
         llvm_unreachable("Invalid getitem");
       }
@@ -888,7 +892,7 @@ struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
       }
 
       if (resultType != resultTypeSignless)
-        res = rewriter.create<plier::SignCastOp>(loc, resultType, res);
+        res = rewriter.create<imex::util::SignCastOp>(loc, resultType, res);
     } else {
       // Is single element
       auto toValues = [&](auto &vals) {
@@ -919,7 +923,7 @@ struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
       }
 
       if (elemType != elemTypeSignless)
-        res = rewriter.create<plier::SignCastOp>(loc, elemType, res);
+        res = rewriter.create<imex::util::SignCastOp>(loc, elemType, res);
     }
 
     rerunScfPipeline(op);
@@ -1023,7 +1027,8 @@ struct SetitemOpLowering : public mlir::OpConversionPattern<plier::SetItemOp> {
         rerunScfPipeline(op);
       }
       if (elemType != signlessElemType)
-        val = rewriter.create<plier::SignCastOp>(loc, signlessElemType, val);
+        val =
+            rewriter.create<imex::util::SignCastOp>(loc, signlessElemType, val);
 
       return val;
     };
@@ -1037,7 +1042,8 @@ struct SetitemOpLowering : public mlir::OpConversionPattern<plier::SetItemOp> {
         auto viewType = val.getType().cast<mlir::MemRefType>();
         if (viewType.getElementType() != signlessElemType) {
           auto signlessMemref = viewType.clone(signlessElemType);
-          val = rewriter.create<plier::SignCastOp>(loc, signlessMemref, val);
+          val =
+              rewriter.create<imex::util::SignCastOp>(loc, signlessMemref, val);
         }
         return val;
       };
@@ -1084,8 +1090,8 @@ struct SetitemOpLowering : public mlir::OpConversionPattern<plier::SetItemOp> {
 
       if (signlessElemType != elemType) {
         auto signlessMemref = targetType.clone(signlessElemType);
-        target =
-            rewriter.create<plier::SignCastOp>(loc, signlessMemref, target);
+        target = rewriter.create<imex::util::SignCastOp>(loc, signlessMemref,
+                                                         target);
       }
 
       rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(
@@ -1127,7 +1133,7 @@ struct ReshapeChangeLayout
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::ReshapeOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto cl = op.source().getDefiningOp<plier::ChangeLayoutOp>();
+    auto cl = op.source().getDefiningOp<imex::util::ChangeLayoutOp>();
     if (!cl)
       return mlir::failure();
 
@@ -1182,7 +1188,7 @@ struct ReshapeChangeLayout
     auto offsetConst =
         rewriter.create<mlir::arith::ConstantIndexOp>(loc, offset);
     auto actualOffset =
-        rewriter.createOrFold<plier::ExtractMemrefMetadataOp>(loc, src);
+        rewriter.createOrFold<imex::util::ExtractMemrefMetadataOp>(loc, src);
     auto cmp = rewriter.createOrFold<mlir::arith::CmpIOp>(
         loc, mlir::arith::CmpIPredicate::eq, offsetConst, actualOffset);
     for (auto i : llvm::seq(0u, rank)) {
@@ -1192,7 +1198,8 @@ struct ReshapeChangeLayout
         stridesVals[i] = rewriter.getIndexAttr(strides[i]);
       }
       auto actualStride =
-          rewriter.createOrFold<plier::ExtractMemrefMetadataOp>(loc, src, i);
+          rewriter.createOrFold<imex::util::ExtractMemrefMetadataOp>(loc, src,
+                                                                     i);
       auto strideVal =
           rewriter.create<mlir::arith::ConstantIndexOp>(loc, strides[i]);
       auto cmpTemp = rewriter.createOrFold<mlir::arith::CmpIOp>(
@@ -1307,7 +1314,7 @@ void MakeStridedLayoutPass::runOnOperation() {
           auto arg = body.front().getArgument(i);
           arg.setType(newMemrefType);
           auto dst =
-              builder.create<plier::ChangeLayoutOp>(loc, memrefType, arg);
+              builder.create<imex::util::ChangeLayoutOp>(loc, memrefType, arg);
           arg.replaceAllUsesExcept(dst, dst);
         }
       }
@@ -1369,7 +1376,7 @@ void MakeStridedLayoutPass::runOnOperation() {
               assert(oldType.isa<mlir::MemRefType>());
               assert(newType.isa<mlir::MemRefType>());
               auto newArg =
-                  builder.create<plier::ChangeLayoutOp>(loc, newType, arg)
+                  builder.create<imex::util::ChangeLayoutOp>(loc, newType, arg)
                       .getResult();
               newOperands[i] = newArg;
             } else {
@@ -1390,7 +1397,7 @@ void MakeStridedLayoutPass::runOnOperation() {
               assert(newType.isa<mlir::MemRefType>());
               res.setType(newType);
               auto newRes =
-                  builder.create<plier::ChangeLayoutOp>(loc, oldType, res);
+                  builder.create<imex::util::ChangeLayoutOp>(loc, oldType, res);
               res.replaceAllUsesExcept(newRes, newRes);
             }
           }
@@ -1551,7 +1558,7 @@ void FinalizeStridedLayoutPass::runOnOperation() {
 
   (void)mlir::applyPatternsAndFoldGreedily(op, std::move(patterns));
 
-  op->walk([&](plier::ChangeLayoutOp cl) {
+  op->walk([&](imex::util::ChangeLayoutOp cl) {
     cl.emitError("Layout change failed");
     signalPassFailure();
   });
@@ -1570,7 +1577,7 @@ struct PlierToLinalgPass
     registry.insert<mlir::memref::MemRefDialect>();
     registry.insert<mlir::tensor::TensorDialect>();
     registry.insert<plier::PlierDialect>();
-    registry.insert<plier::PlierUtilDialect>();
+    registry.insert<imex::util::ImexUtilDialect>();
   }
 
   void runOnOperation() override;
@@ -1667,7 +1674,7 @@ static mlir::Value convertTensorElements(mlir::OpBuilder &builder,
     assert(args.size() == 2);
     auto doSignCast = [&](mlir::Value src, mlir::Type dstType) -> mlir::Value {
       if (src.getType() != dstType)
-        return b.create<plier::SignCastOp>(l, dstType, src);
+        return b.create<imex::util::SignCastOp>(l, dstType, src);
 
       return src;
     };
@@ -1726,8 +1733,8 @@ struct LowerTensorCasts : public mlir::OpConversionPattern<plier::CastOp> {
 
     auto loc = op.getLoc();
     if (signlessSrcType != srcType)
-      value =
-          rewriter.createOrFold<plier::SignCastOp>(loc, signlessSrcType, value);
+      value = rewriter.createOrFold<imex::util::SignCastOp>(
+          loc, signlessSrcType, value);
 
     value = convertTensorElements(rewriter, loc, value, signlessDstType,
                                   srcElem, dstElem);
@@ -1750,8 +1757,8 @@ struct LowerTensorCasts : public mlir::OpConversionPattern<plier::CastOp> {
       auto flatMemrefType = mlir::MemRefType::get(
           dstType.getShape(), signlessDstType.getElementType());
       if (dstMemrefType != flatMemrefType)
-        value =
-            rewriter.create<plier::ChangeLayoutOp>(loc, flatMemrefType, value);
+        value = rewriter.create<imex::util::ChangeLayoutOp>(loc, flatMemrefType,
+                                                            value);
 
       value = rewriter.create<mlir::bufferization::ToTensorOp>(loc, value);
     } else if (!isSrcMemref && isDstMemref) {
@@ -1768,7 +1775,8 @@ struct LowerTensorCasts : public mlir::OpConversionPattern<plier::CastOp> {
     }
 
     if (signlessDstType != dstType)
-      value = rewriter.createOrFold<plier::SignCastOp>(loc, dstType, value);
+      value =
+          rewriter.createOrFold<imex::util::SignCastOp>(loc, dstType, value);
 
     rewriter.replaceOp(op, value);
     return mlir::success();
@@ -1845,11 +1853,11 @@ struct SimplifyExpandDims
 };
 
 struct LowerEnforceShape
-    : public mlir::OpRewritePattern<plier::EnforceShapeOp> {
+    : public mlir::OpRewritePattern<imex::util::EnforceShapeOp> {
   using OpRewritePattern::OpRewritePattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::EnforceShapeOp op,
+  matchAndRewrite(imex::util::EnforceShapeOp op,
                   mlir::PatternRewriter &rewriter) const override {
     auto type = op.getType();
     auto src = op.value();
@@ -2495,7 +2503,7 @@ void MakeTensorsSignlessPass::runOnOperation() {
                                 mlir::ValueRange inputs,
                                 mlir::Location loc) -> mlir::Value {
     assert(inputs.size() == 1);
-    return builder.create<plier::SignCastOp>(loc, type, inputs[0]);
+    return builder.create<imex::util::SignCastOp>(loc, type, inputs[0]);
   };
   typeConverter.addArgumentMaterialization(materializeSignCast);
   typeConverter.addSourceMaterialization(materializeSignCast);
@@ -2509,7 +2517,7 @@ void MakeTensorsSignlessPass::runOnOperation() {
   plier::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
                                                       target);
 
-  target.addLegalOp<mlir::ModuleOp, plier::SignCastOp>();
+  target.addLegalOp<mlir::ModuleOp, imex::util::SignCastOp>();
 
   patterns.insert<ConvertAlloc<mlir::memref::AllocOp>,
                   ConvertAlloc<mlir::memref::AllocaOp>>(typeConverter, context);
@@ -2641,7 +2649,7 @@ struct BufferizeExtractSlice
         loc, viewType, src, offsets, sizes, strides);
 
     if (viewType != dstType)
-      view = rewriter.create<plier::ChangeLayoutOp>(loc, dstType, view);
+      view = rewriter.create<imex::util::ChangeLayoutOp>(loc, dstType, view);
 
     rewriter.replaceOp(op, view);
     return mlir::success();
@@ -2649,11 +2657,12 @@ struct BufferizeExtractSlice
 };
 
 struct BufferizeForceCopy
-    : public mlir::OpConversionPattern<plier::ForceCopyOp> {
+    : public mlir::OpConversionPattern<imex::util::ForceCopyOp> {
   using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::ForceCopyOp op, plier::ForceCopyOp::Adaptor adaptor,
+  matchAndRewrite(imex::util::ForceCopyOp op,
+                  imex::util::ForceCopyOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto converter = getTypeConverter();
     assert(converter);
@@ -2680,11 +2689,12 @@ struct BufferizeForceCopy
 };
 
 struct BufferizePseudoCopy
-    : public mlir::OpConversionPattern<plier::PseudoCopyOp> {
+    : public mlir::OpConversionPattern<imex::util::PseudoCopyOp> {
   using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::PseudoCopyOp op, plier::PseudoCopyOp::Adaptor adaptor,
+  matchAndRewrite(imex::util::PseudoCopyOp op,
+                  imex::util::PseudoCopyOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto converter = getTypeConverter();
     assert(converter);
@@ -2695,7 +2705,7 @@ struct BufferizePseudoCopy
       return mlir::failure();
 
     auto arg = adaptor.source();
-    rewriter.replaceOpWithNewOp<plier::PseudoCopyOp>(op, dstType, arg);
+    rewriter.replaceOpWithNewOp<imex::util::PseudoCopyOp>(op, dstType, arg);
     return mlir::success();
   }
 };
@@ -2746,7 +2756,7 @@ struct AdditionalBufferize
 
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<plier::PlierUtilDialect>();
+    registry.insert<imex::util::ImexUtilDialect>();
   }
 
   void runOnOperation() override;
@@ -2782,11 +2792,12 @@ void AdditionalBufferize::runOnOperation() {
   plier::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
                                                       target);
   target.addIllegalOp<mlir::tensor::ReshapeOp, mlir::tensor::ExtractSliceOp>();
-  target.addIllegalOp<plier::ForceCopyOp>();
+  target.addIllegalOp<imex::util::ForceCopyOp>();
   target.addLegalOp<mlir::memref::ReshapeOp>();
-  target.addDynamicallyLegalOp<plier::PseudoCopyOp>([](mlir::Operation *op) {
-    return !op->getResultTypes().front().isa<mlir::RankedTensorType>();
-  });
+  target.addDynamicallyLegalOp<imex::util::PseudoCopyOp>(
+      [](mlir::Operation *op) {
+        return !op->getResultTypes().front().isa<mlir::RankedTensorType>();
+      });
 
   patterns.insert<BufferizeReshape, BufferizeExtractSlice, BufferizeForceCopy,
                   BufferizePseudoCopy>(typeConverter, context);
@@ -2796,11 +2807,12 @@ void AdditionalBufferize::runOnOperation() {
     signalPassFailure();
 }
 
-struct RemovePseudoCopy : public mlir::OpRewritePattern<plier::PseudoCopyOp> {
+struct RemovePseudoCopy
+    : public mlir::OpRewritePattern<imex::util::PseudoCopyOp> {
   using OpRewritePattern::OpRewritePattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::PseudoCopyOp op,
+  matchAndRewrite(imex::util::PseudoCopyOp op,
                   mlir::PatternRewriter &rewriter) const override {
     auto arg = op.source();
     if (arg.getType() != op.getType())
@@ -2835,7 +2847,7 @@ struct CloneArgsPass
 
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<plier::PlierUtilDialect>();
+    registry.insert<imex::util::ImexUtilDialect>();
   }
 
   void runOnOperation() override;
@@ -2884,8 +2896,8 @@ struct ReplaceClones
   mlir::LogicalResult
   matchAndRewrite(mlir::bufferization::CloneOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<plier::RetainOp>(op, op.getType(),
-                                                 op.getSource());
+    rewriter.replaceOpWithNewOp<imex::util::RetainOp>(op, op.getType(),
+                                                      op.getSource());
     return mlir::success();
   }
 };

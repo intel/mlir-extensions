@@ -26,8 +26,8 @@
 #include "pipelines/base_pipeline.hpp"
 #include "pipelines/lower_to_llvm.hpp"
 
+#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
 #include "mlir-extensions/Dialect/plier/dialect.hpp"
-#include "mlir-extensions/Dialect/plier_util/dialect.hpp"
 #include "mlir-extensions/Transforms/const_utils.hpp"
 #include "mlir-extensions/Transforms/func_utils.hpp"
 #include "mlir-extensions/Transforms/rewrite_wrapper.hpp"
@@ -64,7 +64,7 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
   mlir::LogicalResult
   matchAndRewrite(mlir::scf::ParallelOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    if (mlir::isa<plier::ParallelOp>(op->getParentOp()))
+    if (mlir::isa<imex::util::ParallelOp>(op->getParentOp()))
       return mlir::failure();
 
     bool needParallel = op->hasAttr(plier::attributes::getParallelName()) ||
@@ -177,8 +177,8 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
       }
     };
 
-    rewriter.create<plier::ParallelOp>(loc, origLowerBound, origUpperBound,
-                                       origStep, bodyBuilder);
+    rewriter.create<imex::util::ParallelOp>(loc, origLowerBound, origUpperBound,
+                                            origStep, bodyBuilder);
 
     auto reduceBodyBuilder = [&](mlir::OpBuilder &builder, mlir::Location loc,
                                  mlir::Value index, mlir::ValueRange args) {
@@ -226,7 +226,7 @@ struct ParallelToTbbPass
     : public plier::RewriteWrapperPass<
           ParallelToTbbPass, mlir::func::FuncOp,
           plier::DependentDialectsList<
-              plier::PlierDialect, plier::PlierUtilDialect,
+              plier::PlierDialect, imex::util::ImexUtilDialect,
               mlir::arith::ArithmeticDialect, mlir::scf::SCFDialect>,
           ParallelToTbb> {};
 

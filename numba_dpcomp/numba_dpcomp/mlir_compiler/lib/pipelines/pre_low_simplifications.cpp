@@ -16,8 +16,8 @@
 
 #include "pipelines/base_pipeline.hpp"
 
+#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
 #include "mlir-extensions/Dialect/plier/dialect.hpp"
-#include "mlir-extensions/Dialect/plier_util/dialect.hpp"
 #include "mlir-extensions/Transforms/type_conversion.hpp"
 #include "mlir-extensions/compiler/pipeline_registry.hpp"
 
@@ -163,7 +163,7 @@ struct MakeSignlessPass
                                   mlir::ValueRange inputs,
                                   mlir::Location loc) -> mlir::Value {
       assert(inputs.size() == 1);
-      return builder.create<plier::SignCastOp>(loc, type, inputs[0]);
+      return builder.create<imex::util::SignCastOp>(loc, type, inputs[0]);
     };
     typeConverter.addArgumentMaterialization(materializeSignCast);
     typeConverter.addSourceMaterialization(materializeSignCast);
