@@ -51,7 +51,7 @@ with open(jp(libroot, name, f"CMakeLists.txt"), "w") as f:
   {name}.cpp
 
   ADDITIONAL_HEADER_DIRS
-  ${{MLIR_MAIN_INCLUDE_DIR}}/mlir/Conversion/{name}
+  ${{MLIR_MAIN_INCLUDE_DIR}}/imex/Conversion/{name}
 
   DEPENDS
   IMEXConversionPassIncGen
