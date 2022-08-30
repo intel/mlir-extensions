@@ -45,3 +45,9 @@ static mlir::PassPipelineRegistration<> InsertGpuAlloc(
     [](mlir::OpPassManager &pm) {
       pm.addNestedPass<mlir::func::FuncOp>(imex::createInsertGPUAllocsPass());
     });
+
+static mlir::PassPipelineRegistration<>
+    SetSpirvCapabalities("set-spirv-capablilities", "Sets Spirv capabilities",
+                         [](mlir::OpPassManager &pm) {
+                           pm.addPass(imex::createSetSPIRVCapabilitiesPass());
+                         });
