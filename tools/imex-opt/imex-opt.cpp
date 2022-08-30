@@ -26,6 +26,7 @@
 
 #include <imex/InitIMEXDialects.h>
 #include <imex/InitIMEXPasses.h>
+#include <imex/Transforms/Transforms.hpp>
 
 int main(int argc, char **argv) {
   ::mlir::registerAllPasses();
@@ -38,3 +39,9 @@ int main(int argc, char **argv) {
   return ::mlir::asMainReturnCode(
       ::mlir::MlirOptMain(argc, argv, "Imex optimizer driver\n", registry));
 }
+
+static mlir::PassPipelineRegistration<> InsertGpuAlloc(
+    "insert-gpu-alloc", "Converts memref alloc to gpu alloc",
+    [](mlir::OpPassManager &pm) {
+      pm.addNestedPass<mlir::func::FuncOp>(imex::createInsertGPUAllocsPass());
+    });

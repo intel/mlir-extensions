@@ -35,7 +35,10 @@
 #include <mlir/Transforms/DialectConversion.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 
+#include <imex/Transforms/Transforms.hpp>
 #include <llvm/ADT/SmallBitVector.h>
+
+namespace imex {
 
 struct InsertGPUAllocs
     : public mlir::PassWrapper<InsertGPUAllocs,
@@ -302,3 +305,10 @@ struct InsertGPUAllocs
                      "memref.dealloc will be used otherwise"),
       llvm::cl::init(true)};
 };
+
+} // namespace imex
+
+std::unique_ptr<mlir::Pass>
+imex::createInsertGPUAllocsPass(bool useGpuDealloc) {
+  return std::make_unique<InsertGPUAllocs>(useGpuDealloc);
+}
