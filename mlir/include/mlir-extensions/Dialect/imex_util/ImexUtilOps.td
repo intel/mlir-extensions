@@ -221,9 +221,9 @@ def TupleExtractOp : ImexUtil_Op<"tuple_extract", [NoSideEffect]> {
   let hasFolder = 1;
 }
 
-def EnvironmentRegionOp : PlierUtil_Op<"env_region", [
+def EnvironmentRegionOp : ImexUtil_Op<"env_region", [
     DeclareOpInterfaceMethods<RegionBranchOpInterface>,
-    SingleBlockImplicitTerminator<"plier::EnvironmentRegionYieldOp">,
+    SingleBlockImplicitTerminator<"::imex::util::EnvironmentRegionYieldOp">,
     RecursiveSideEffects]> {
   let summary = "Operation that executes its region with a specific environment";
   let description = [{
@@ -250,11 +250,11 @@ def EnvironmentRegionOp : PlierUtil_Op<"env_region", [
       "attr-dict $environment ($args^ `:` type($args))? (`->` type($results)^)? $region";
 }
 
-def EnvironmentRegionYieldOp : PlierUtil_Op<"env_region_yield", [
+def EnvironmentRegionYieldOp : ImexUtil_Op<"env_region_yield", [
   NoSideEffect,
   ReturnLike,
   Terminator,
-  HasParent<"EnvironmentRegionOp">
+  HasParent<"::imex::util::EnvironmentRegionOp">
   ]> {
 
   let summary = "Environment region yield and termination operation";

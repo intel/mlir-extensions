@@ -31,3 +31,86 @@ func.func @test(%arg1: tuple<index, i64>, %arg2: index) -> i64 {
 //  CHECK-SAME:   (%[[ARG1:.*]]: tuple<index, i64>, %[[ARG2:.*]]: index)
 //  CHECK-NEXT:   %[[RES:.*]] = imex_util.tuple_extract %[[ARG1]] : tuple<index, i64>, %[[ARG2]] -> i64
 //  CHECK-NEXT:   return %[[RES]] : i64
+
+// -----
+
+func.func @test() {
+  imex_util.env_region "test" {
+    imex_util.env_region_yield
+  }
+  return
+}
+// CHECK-LABEL: func @test
+//  CHECK-NEXT:   imex_util.env_region "test" {
+//  CHECK-NEXT:   }
+//  CHECK-NEXT:   return
+
+// -----
+
+func.func @test() {
+  imex_util.env_region "test" {
+  }
+  return
+}
+// CHECK-LABEL: func @test
+//  CHECK-NEXT:   imex_util.env_region "test" {
+//  CHECK-NEXT:   }
+//  CHECK-NEXT:   return
+
+// -----
+
+func.func @test(%arg1: index) {
+  imex_util.env_region "test" %arg1 : index {
+    imex_util.env_region_yield
+  }
+  return
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG1:.*]]: index)
+//  CHECK-NEXT:   imex_util.env_region "test" %[[ARG1]] : index {
+//  CHECK-NEXT:   }
+//  CHECK-NEXT:   return
+
+// -----
+
+func.func @test(%arg1: index, %arg2: i64) {
+  imex_util.env_region "test" %arg1, %arg2 : index, i64 {
+    imex_util.env_region_yield
+  }
+  return
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG1:.*]]: index, %[[ARG2:.*]]: i64)
+//  CHECK-NEXT:   imex_util.env_region "test" %[[ARG1]], %[[ARG2]] : index, i64 {
+//  CHECK-NEXT:   }
+//  CHECK-NEXT:   return
+
+// -----
+
+func.func @test(%arg1: index) -> index {
+  %0 = imex_util.env_region "test" -> index {
+    imex_util.env_region_yield %arg1: index
+  }
+  return %0: index
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG1:.*]]: index)
+//  CHECK-NEXT:   %[[RES:.*]] = imex_util.env_region "test" -> index {
+//  CHECK-NEXT:     imex_util.env_region_yield %[[ARG1]] : index
+//  CHECK-NEXT:   }
+//  CHECK-NEXT:   return %[[RES]] : index
+
+// -----
+
+func.func @test(%arg1: index) -> index {
+  %0 = imex_util.env_region "test" %arg1 : index -> index {
+    imex_util.env_region_yield %arg1: index
+  }
+  return %0: index
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG1:.*]]: index)
+//  CHECK-NEXT:   %[[RES:.*]] = imex_util.env_region "test" %[[ARG1]] : index -> index {
+//  CHECK-NEXT:     imex_util.env_region_yield %[[ARG1]] : index
+//  CHECK-NEXT:   }
+//  CHECK-NEXT:   return %[[RES]] : index
