@@ -29,6 +29,9 @@ python scripts/build_imex.py                        \
 
 To reuse a previously built LLVM, use the following steps:
 
+Make sure your LLVM install is built from the git commit sha as stated in
+'build_tools/llvm_version.txt'.
+
 ```sh
 external_lit=`which lit`
 python scripts/build_imex.py                        \
@@ -38,14 +41,24 @@ python scripts/build_imex.py                        \
 ```
 
 #### Building Bare Metal With Existing LLVM/MLIR
+Make sure your LLVM install is built from the git commit sha as stated in
+'build_tools/llvm_version.txt'.
 ```sh
 mkdir build
 cd build
-CC=gcc-9 CXX=g++-9 MLIR_DIR=$llvm-c38ef550de81631641cb1485e0641d1d2227dce4 cmake ..
+CC=gcc-9 CXX=g++-9 MLIR_DIR=<llvm-install-directory> cmake ..
 make -j 12
 ```
 
-#### Building code docu
+#### Building docs
+To build user documentation do
+```sh
+cd build
+cmake --build . --target mlir-doc
+```
+It will render docs to the 'doc' directory.
+
+To build code documentation use '-DIMEX_INCLUDE_DOCS' when configuring with cmake and do
 ```sh
 cd build
 cmake --build . --target doc_doxygen
@@ -104,8 +117,9 @@ To run the FileCheck based tests, follow the following steps:
 
 ```sh
 cd <to your IMEX build directory>
-cmake --build . --target check-imex-opt
+cmake --build . --target check-imex
 ```
+Add '-v' to the above command-line to get verbose output.
 
 ## License
 This code is made available under the Apache License 2.0 with LLVM Exceptions.
