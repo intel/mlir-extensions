@@ -150,9 +150,7 @@ target_include_directories(${MLIR_EXTENSIONS_LIB} PUBLIC
 
 add_dependencies(${MLIR_EXTENSIONS_LIB} MLIRPlierOpsIncGen MLIRImexUtilOpsIncGen MLIRGpuRuntimeOpsIncGen)
 
-if (IMEX_ENABLE_IGPU_DIALECT)
-    add_subdirectory(tools)
-    if(IMEX_ENABLE_TESTS)
-        add_subdirectory(test)
-    endif()
+add_subdirectory(tools)
+if(IMEX_ENABLE_TESTS)
+    add_subdirectory(test)
 endif()
