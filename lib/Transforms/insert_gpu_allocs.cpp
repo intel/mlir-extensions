@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-
 #include <imex/Transforms/Transforms.hpp>
 
 namespace imex {
+
+mlir::StringRef getAllocSharedAttrName() { return "gpu.alloc_shared"; }
 
 struct InsertGPUAllocs
     : public mlir::PassWrapper<InsertGPUAllocs,
@@ -216,9 +216,9 @@ struct InsertGPUAllocs
           alloc.symbolOperands());
       alloc->replaceAllUsesWith(gpuAlloc);
       alloc.erase();
-      // if (access.hostRead || access.hostWrite)
-      //  gpuAlloc->setAttr(gpu_runtime::getAllocSharedAttrName(),
-      //                    builder.getUnitAttr());
+      if (access.hostRead || access.hostWrite)
+        gpuAlloc->setAttr(imex::getAllocSharedAttrName(),
+                          builder.getUnitAttr());
     }
 
     auto term = block.getTerminator();
@@ -251,9 +251,9 @@ struct InsertGPUAllocs
           /*symbolOperands*/ llvm::None);
       auto allocResult = gpuAlloc.getResult(0);
 
-      // if (access.hostRead || access.hostWrite)
-      // gpuAlloc->setAttr(gpu_runtime::getAllocSharedAttrName(),
-      //                   builder.getUnitAttr());
+      if (access.hostRead || access.hostWrite)
+        gpuAlloc->setAttr(imex::getAllocSharedAttrName(),
+                          builder.getUnitAttr());
 
       if (access.hostWrite && access.deviceRead) {
         auto copy =

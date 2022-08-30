@@ -18,12 +18,6 @@ namespace imex {
 struct SetSPIRVCapabilitiesPass
     : public mlir::PassWrapper<SetSPIRVCapabilitiesPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
-
-  virtual void
-  getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<mlir::gpu::GPUDialect>();
-  }
-
   void runOnOperation() override {
     namespace spirv = mlir::spirv;
     auto context = &getContext();

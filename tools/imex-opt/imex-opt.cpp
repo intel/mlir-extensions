@@ -51,3 +51,8 @@ static mlir::PassPipelineRegistration<>
                          [](mlir::OpPassManager &pm) {
                            pm.addPass(imex::createSetSPIRVCapabilitiesPass());
                          });
+
+static mlir::PassPipelineRegistration<> AbiAttrsPass(
+    "set-spirv-abi-attrs", "Create AbiAttrs Pass", [](mlir::OpPassManager &pm) {
+      pm.addNestedPass<mlir::gpu::GPUModuleOp>(imex::createAbiAttrsPass());
+    });
