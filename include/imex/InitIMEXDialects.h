@@ -19,6 +19,7 @@
 #include <mlir/IR/MLIRContext.h>
 
 #include <imex/Dialect/Dist/IR/DistOps.h>
+#include <imex/Dialect/GPUX/IR/GPUXOps.h>
 #include <imex/Dialect/PTensor/IR/PTensorOps.h>
 
 namespace imex {
@@ -27,7 +28,8 @@ namespace imex {
 inline void registerAllDialects(::mlir::DialectRegistry &registry) {
   // clang-format off
     registry.insert<::imex::ptensor::PTensorDialect,
-                    ::imex::dist::DistDialect>();
+                    ::imex::dist::DistDialect,
+                    ::imex::gpux::GPUXDialect>();
   // clang-format on
 }
 
