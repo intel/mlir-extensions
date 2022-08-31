@@ -16,15 +16,15 @@
 
 #include <mlir/Transforms/DialectConversion.h>
 
-plier::CastOpLowering::CastOpLowering(mlir::TypeConverter &typeConverter,
-                                      mlir::MLIRContext *context,
-                                      CastOpLowering::cast_t cast_func)
+imex::CastOpLowering::CastOpLowering(mlir::TypeConverter &typeConverter,
+                                     mlir::MLIRContext *context,
+                                     CastOpLowering::cast_t cast_func)
     : OpRewritePattern(context), converter(typeConverter),
       castFunc(std::move(cast_func)) {}
 
 mlir::LogicalResult
-plier::CastOpLowering::matchAndRewrite(plier::CastOp op,
-                                       mlir::PatternRewriter &rewriter) const {
+imex::CastOpLowering::matchAndRewrite(plier::CastOp op,
+                                      mlir::PatternRewriter &rewriter) const {
   auto src = op.value();
   auto srcType = src.getType();
   auto dstType = converter.convertType(op.getType());

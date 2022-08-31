@@ -19,7 +19,7 @@ class RewritePatternSet;
 class MLIRContext;
 } // namespace mlir
 
-namespace plier {
+namespace imex {
 void populateIndexPropagatePatterns(mlir::MLIRContext &context,
                                     mlir::RewritePatternSet &patterns);
 }

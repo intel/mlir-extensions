@@ -34,14 +34,15 @@
 #include "mlir-extensions/compiler/pipeline_registry.hpp"
 
 namespace {
-mlir::MemRefType getReduceType(mlir::Type type, int64_t count) {
+static mlir::MemRefType getReduceType(mlir::Type type, int64_t count) {
   if (type.isIntOrFloat())
     return mlir::MemRefType::get(count, type);
 
   return {};
 }
 
-mlir::Attribute getReduceInitVal(mlir::Type type, mlir::Block &reduceBlock) {
+static mlir::Attribute getReduceInitVal(mlir::Type type,
+                                        mlir::Block &reduceBlock) {
   if (!llvm::hasSingleElement(reduceBlock.without_terminator()))
     return {};
 
@@ -55,7 +56,7 @@ mlir::Attribute getReduceInitVal(mlir::Type type, mlir::Block &reduceBlock) {
   } else {
     return {};
   }
-  return plier::getConstAttr(type, reduceInit);
+  return imex::getConstAttr(type, reduceInit);
 }
 
 struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
@@ -109,7 +110,7 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
     if (initVals.size() != op.getNumResults())
       return mlir::failure();
 
-    plier::AllocaInsertionPoint allocaIP(op);
+    imex::AllocaInsertionPoint allocaIP(op);
 
     auto loc = op.getLoc();
     mlir::BlockAndValueMapping mapping;
@@ -196,12 +197,12 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
         auto reduceOp = mlir::cast<mlir::scf::ReduceOp>(it.value());
         auto &reduceOpBody = reduceOp.getReductionOperator().front();
         assert(reduceOpBody.getNumArguments() == 2);
-        auto prev_val =
+        auto prevVal =
             builder.create<mlir::memref::LoadOp>(loc, reduceVar, index);
         mapping.map(reduceOpBody.getArgument(0), arg);
-        mapping.map(reduceOpBody.getArgument(1), prev_val);
-        for (auto &old_reduce_op : reduceOpBody.without_terminator())
-          builder.clone(old_reduce_op, mapping);
+        mapping.map(reduceOpBody.getArgument(1), prevVal);
+        for (auto &oldReduceOp : reduceOpBody.without_terminator())
+          builder.clone(oldReduceOp, mapping);
 
         auto result =
             mlir::cast<mlir::scf::ReduceReturnOp>(reduceOpBody.getTerminator())
@@ -223,9 +224,9 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
 };
 
 struct ParallelToTbbPass
-    : public plier::RewriteWrapperPass<
+    : public imex::RewriteWrapperPass<
           ParallelToTbbPass, mlir::func::FuncOp,
-          plier::DependentDialectsList<
+          imex::DependentDialectsList<
               plier::PlierDialect, imex::util::ImexUtilDialect,
               mlir::arith::ArithmeticDialect, mlir::scf::SCFDialect>,
           ParallelToTbb> {};
@@ -235,7 +236,7 @@ static void populateParallelToTbbPipeline(mlir::OpPassManager &pm) {
 }
 } // namespace
 
-void registerParallelToTBBPipeline(plier::PipelineRegistry &registry) {
+void registerParallelToTBBPipeline(imex::PipelineRegistry &registry) {
   registry.registerPipeline([](auto sink) {
     auto stage = getLowerLoweringStage();
     auto llvm_pipeline = lowerToLLVMPipelineName();

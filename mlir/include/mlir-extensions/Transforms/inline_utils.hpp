@@ -20,6 +20,6 @@ namespace mlir {
 class Pass;
 }
 
-namespace plier {
+namespace imex {
 std::unique_ptr<mlir::Pass> createForceInlinePass();
 }

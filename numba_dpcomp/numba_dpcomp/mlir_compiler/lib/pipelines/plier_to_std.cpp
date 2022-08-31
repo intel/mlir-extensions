@@ -384,9 +384,9 @@ static mlir::Attribute makeSignlessAttr(mlir::Attribute val) {
   auto type = val.cast<mlir::TypedAttr>().getType();
   if (auto intType = type.dyn_cast<mlir::IntegerType>()) {
     if (!intType.isSignless()) {
-      auto newType = plier::makeSignlessType(intType);
+      auto newType = imex::makeSignlessType(intType);
       return mlir::IntegerAttr::get(
-          newType, plier::getIntAttrValue(val.cast<mlir::IntegerAttr>()));
+          newType, imex::getIntAttrValue(val.cast<mlir::IntegerAttr>()));
     }
   }
   return val;
@@ -586,8 +586,8 @@ mlir::Value intCast(mlir::PatternRewriter &rewriter, mlir::Location loc,
                     mlir::Value val, mlir::Type dstType) {
   auto srcIntType = val.getType().cast<mlir::IntegerType>();
   auto dstIntType = dstType.cast<mlir::IntegerType>();
-  auto srcSignless = plier::makeSignlessType(srcIntType);
-  auto dstSignless = plier::makeSignlessType(dstIntType);
+  auto srcSignless = imex::makeSignlessType(srcIntType);
+  auto dstSignless = imex::makeSignlessType(dstIntType);
   auto srcBits = srcIntType.getWidth();
   auto dstBits = dstIntType.getWidth();
 
@@ -624,7 +624,7 @@ mlir::Value intCast(mlir::PatternRewriter &rewriter, mlir::Location loc,
 mlir::Value intFloatCast(mlir::PatternRewriter &rewriter, mlir::Location loc,
                          mlir::Value val, mlir::Type dstType) {
   auto srcIntType = val.getType().cast<mlir::IntegerType>();
-  auto signlessType = plier::makeSignlessType(srcIntType);
+  auto signlessType = imex::makeSignlessType(srcIntType);
   if (val.getType() != signlessType)
     val = rewriter.createOrFold<imex::util::SignCastOp>(loc, signlessType, val);
 
@@ -639,7 +639,7 @@ mlir::Value floatIntCast(mlir::PatternRewriter &rewriter, mlir::Location loc,
                          mlir::Value val, mlir::Type dstType) {
   auto dstIntType = dstType.cast<mlir::IntegerType>();
   mlir::Value res;
-  auto dstSignlessType = plier::makeSignlessType(dstIntType);
+  auto dstSignlessType = imex::makeSignlessType(dstIntType);
   if (dstIntType.getWidth() == 1) {
     // Special handling for bool
     auto floatType = val.getType().cast<mlir::FloatType>();
@@ -677,10 +677,10 @@ mlir::Value indexCastImpl(mlir::PatternRewriter &rewriter, mlir::Location loc,
   }
   if (dstType.isa<mlir::FloatType>()) {
     auto intType = rewriter.getI64Type();
-    val = plier::indexCast(rewriter, loc, val, intType);
+    val = imex::indexCast(rewriter, loc, val, intType);
     return rewriter.createOrFold<mlir::arith::SIToFPOp>(loc, dstType, val);
   }
-  return plier::indexCast(rewriter, loc, val, dstType);
+  return imex::indexCast(rewriter, loc, val, dstType);
 }
 
 mlir::Value floatCastImpl(mlir::PatternRewriter &rewriter, mlir::Location loc,
@@ -749,7 +749,7 @@ mlir::Value invalidReplaceOp(mlir::PatternRewriter & /*rewriter*/,
 template <typename T>
 mlir::Value replaceOp(mlir::PatternRewriter &rewriter, mlir::Location loc,
                       mlir::ValueRange operands, mlir::Type newType) {
-  auto signlessType = plier::makeSignlessType(newType);
+  auto signlessType = imex::makeSignlessType(newType);
   llvm::SmallVector<mlir::Value> newOperands(operands.size());
   for (auto it : llvm::enumerate(operands))
     newOperands[it.index()] = doCast(rewriter, loc, it.value(), signlessType);
@@ -780,7 +780,7 @@ mlir::Value replaceIfloordivOp(mlir::PatternRewriter &rewriter,
                                mlir::Location loc, mlir::ValueRange operands,
                                mlir::Type newType) {
   auto newIntType = newType.cast<mlir::IntegerType>();
-  auto signlessType = plier::makeSignlessType(newIntType);
+  auto signlessType = imex::makeSignlessType(newIntType);
   auto lhs = doCast(rewriter, loc, operands[0], signlessType);
   auto rhs = doCast(rewriter, loc, operands[1], signlessType);
   mlir::Value res;
@@ -804,7 +804,7 @@ mlir::Value replaceFfloordivOp(mlir::PatternRewriter &rewriter,
 
 mlir::Value replaceImodOp(mlir::PatternRewriter &rewriter, mlir::Location loc,
                           mlir::ValueRange operands, mlir::Type newType) {
-  auto signlessType = plier::makeSignlessType(operands[0].getType());
+  auto signlessType = imex::makeSignlessType(operands[0].getType());
   auto a = doCast(rewriter, loc, operands[0], signlessType);
   auto b = doCast(rewriter, loc, operands[1], signlessType);
   auto v1 = rewriter.create<mlir::arith::RemSIOp>(loc, a, b).getResult();
@@ -829,7 +829,7 @@ mlir::Value replaceCmpiOp(mlir::PatternRewriter &rewriter, mlir::Location loc,
   assert(operands.size() == 2);
   assert(operands[0].getType() == operands[1].getType());
   auto type = operands[0].getType().cast<mlir::IntegerType>();
-  auto signlessType = plier::makeSignlessType(type);
+  auto signlessType = imex::makeSignlessType(type);
   auto a = doCast(rewriter, loc, operands[0], signlessType);
   auto b = doCast(rewriter, loc, operands[1], signlessType);
   if (SignedPred == UnsignedPred || type.isSigned()) {
@@ -842,7 +842,7 @@ mlir::Value replaceCmpiOp(mlir::PatternRewriter &rewriter, mlir::Location loc,
 template <mlir::arith::CmpFPredicate Pred>
 mlir::Value replaceCmpfOp(mlir::PatternRewriter &rewriter, mlir::Location loc,
                           mlir::ValueRange operands, mlir::Type /*newType*/) {
-  auto signlessType = plier::makeSignlessType(operands[0].getType());
+  auto signlessType = imex::makeSignlessType(operands[0].getType());
   auto a = doCast(rewriter, loc, operands[0], signlessType);
   auto b = doCast(rewriter, loc, operands[1], signlessType);
   return rewriter.createOrFold<mlir::arith::CmpFOp>(loc, Pred, a, b);
@@ -1008,7 +1008,7 @@ static mlir::Value negate(mlir::PatternRewriter &rewriter, mlir::Location loc,
                           mlir::Value val, mlir::Type resType) {
   val = doCast(rewriter, loc, val, resType);
   if (auto itype = resType.dyn_cast<mlir::IntegerType>()) {
-    auto signless = plier::makeSignlessType(resType);
+    auto signless = imex::makeSignlessType(resType);
     if (signless != itype)
       val = rewriter.create<imex::util::SignCastOp>(loc, signless, val);
 
@@ -1060,7 +1060,7 @@ static mlir::Value unaryInvert(mlir::PatternRewriter &rewriter,
     signlessType = intType;
     arg = rewriter.create<mlir::arith::ExtUIOp>(loc, intType, arg);
   } else {
-    signlessType = plier::makeSignlessType(intType);
+    signlessType = imex::makeSignlessType(intType);
     if (intType != signlessType)
       arg = rewriter.create<imex::util::SignCastOp>(loc, signlessType, arg);
   }
@@ -1157,10 +1157,10 @@ static void rerunScfPipeline(mlir::Operation *op) {
       mlir::StringAttr::get(op->getContext(), plierToScfPipelineName());
   auto mod = op->getParentOfType<mlir::ModuleOp>();
   assert(nullptr != mod);
-  plier::addPipelineJumpMarker(mod, marker);
+  imex::addPipelineJumpMarker(mod, marker);
 }
 
-mlir::LogicalResult
+static mlir::LogicalResult
 lowerSlice(plier::PyCallOp op, mlir::ValueRange operands,
            llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs,
            mlir::PatternRewriter &rewriter) {
@@ -1190,12 +1190,12 @@ lowerSlice(plier::PyCallOp op, mlir::ValueRange operands,
   return mlir::success();
 }
 
-mlir::LogicalResult
+static mlir::LogicalResult
 lowerRangeImpl(plier::PyCallOp op, mlir::ValueRange operands,
                llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs,
                mlir::PatternRewriter &rewriter) {
   auto parent = op->getParentOp();
-  auto res = lowerRange(op, operands, kwargs, rewriter);
+  auto res = imex::lowerRange(op, operands, kwargs, rewriter);
   if (mlir::succeeded(res))
     rerunScfPipeline(parent);
 
@@ -1212,7 +1212,7 @@ static const std::pair<llvm::StringRef, func_t> builtinFuncsHandlers[] = {
     // clang-format on
 };
 
-struct BuiltinCallsLowering final : public plier::CallOpLowering {
+struct BuiltinCallsLowering final : public imex::CallOpLowering {
   BuiltinCallsLowering(mlir::MLIRContext *context)
       : CallOpLowering(context),
         resolver("numba_dpcomp.mlir.builtin.funcs", "registry") {}
@@ -1249,7 +1249,7 @@ private:
   PyLinalgResolver resolver;
 };
 
-struct ExternalCallsLowering final : public plier::CallOpLowering {
+struct ExternalCallsLowering final : public imex::CallOpLowering {
   using CallOpLowering::CallOpLowering;
 
 protected:
@@ -1320,9 +1320,9 @@ private:
 };
 
 struct BuiltinCallsLoweringPass
-    : public plier::RewriteWrapperPass<
+    : public imex::RewriteWrapperPass<
           BuiltinCallsLoweringPass, void, void, BuiltinCallsLowering,
-          plier::ExpandCallVarargs, ExternalCallsLowering> {};
+          imex::ExpandCallVarargs, ExternalCallsLowering> {};
 
 struct PlierToStdPass
     : public mlir::PassWrapper<PlierToStdPass,
@@ -1348,7 +1348,7 @@ void PlierToStdPass::runOnOperation() {
 
   auto context = &getContext();
   populateStdTypeConverter(*context, typeConverter);
-  plier::populateTupleTypeConverter(*context, typeConverter);
+  imex::populateTupleTypeConverter(*context, typeConverter);
 
   auto materializeCast = [](mlir::OpBuilder &builder, mlir::Type type,
                             mlir::ValueRange inputs,
@@ -1443,10 +1443,10 @@ void PlierToStdPass::runOnOperation() {
       // clang-format on
       >(typeConverter, context);
 
-  plier::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
-                                                            patterns, target);
-  plier::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
-                                                      target);
+  imex::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
+                                                           patterns, target);
+  imex::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
+                                                     target);
 
   if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
                                                 std::move(patterns))))
@@ -1488,10 +1488,10 @@ struct ConvertLiteralTypesPass
     mlir::RewritePatternSet patterns(context);
     mlir::ConversionTarget target(*context);
 
-    plier::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
-                                                              patterns, target);
-    plier::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
-                                                        target);
+    imex::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
+                                                             patterns, target);
+    imex::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
+                                                       target);
 
     if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
                                                   std::move(patterns))))
@@ -1504,7 +1504,7 @@ static void populatePlierToStdPipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<PlierToStdPass>());
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(std::make_unique<BuiltinCallsLoweringPass>());
-  pm.addPass(plier::createForceInlinePass());
+  pm.addPass(imex::createForceInlinePass());
   pm.addPass(mlir::createSymbolDCEPass());
   pm.addPass(std::make_unique<ConvertLiteralTypesPass>());
   pm.addPass(mlir::createCanonicalizerPass());
@@ -1528,7 +1528,7 @@ void populateStdTypeConverter(mlir::MLIRContext & /*context*/,
       });
 }
 
-void registerPlierToStdPipeline(plier::PipelineRegistry &registry) {
+void registerPlierToStdPipeline(imex::PipelineRegistry &registry) {
   registry.registerPipeline([](auto sink) {
     auto stage = getHighLoweringStage();
     sink(plierToStdPipelineName(), {plierToScfPipelineName()}, {stage.end},

@@ -19,10 +19,10 @@
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/BuiltinOps.h>
 
-mlir::func::FuncOp plier::add_function(mlir::OpBuilder &builder,
-                                       mlir::ModuleOp module,
-                                       llvm::StringRef name,
-                                       mlir::FunctionType type) {
+mlir::func::FuncOp imex::addFunction(mlir::OpBuilder &builder,
+                                     mlir::ModuleOp module,
+                                     llvm::StringRef name,
+                                     mlir::FunctionType type) {
   mlir::OpBuilder::InsertionGuard guard(builder);
   // Insert before module terminator.
   builder.setInsertionPoint(module.getBody(),
@@ -33,7 +33,7 @@ mlir::func::FuncOp plier::add_function(mlir::OpBuilder &builder,
   return func;
 }
 
-plier::AllocaInsertionPoint::AllocaInsertionPoint(mlir::Operation *inst) {
+imex::AllocaInsertionPoint::AllocaInsertionPoint(mlir::Operation *inst) {
   assert(nullptr != inst);
   auto parent = inst->getParentWithTrait<mlir::OpTrait::IsIsolatedFromAbove>();
   assert(parent->getNumRegions() == 1);

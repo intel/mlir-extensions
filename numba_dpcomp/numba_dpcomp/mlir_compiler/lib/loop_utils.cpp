@@ -21,10 +21,10 @@
 #include "mlir-extensions/Transforms/loop_utils.hpp"
 
 mlir::LogicalResult
-lowerRange(plier::PyCallOp op, mlir::ValueRange operands,
-           llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs,
-           mlir::PatternRewriter &rewriter,
-           llvm::function_ref<void(mlir::scf::ForOp)> results) {
+imex::lowerRange(plier::PyCallOp op, mlir::ValueRange operands,
+                 llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs,
+                 mlir::PatternRewriter &rewriter,
+                 llvm::function_ref<void(mlir::scf::ForOp)> results) {
   if (!kwargs.empty())
     return mlir::failure();
 

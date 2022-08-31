@@ -22,7 +22,7 @@ class Type;
 class IntegerType;
 } // namespace mlir
 
-namespace plier {
+namespace imex {
 mlir::Value indexCast(mlir::OpBuilder &builder, mlir::Location loc,
                       mlir::Value src, mlir::Type dst_type);
 mlir::Value indexCast(mlir::OpBuilder &builder, mlir::Location loc,
@@ -30,4 +30,4 @@ mlir::Value indexCast(mlir::OpBuilder &builder, mlir::Location loc,
 
 mlir::Type makeSignlessType(mlir::Type type);
 mlir::IntegerType makeSignlessType(mlir::IntegerType type);
-} // namespace plier
+} // namespace imex

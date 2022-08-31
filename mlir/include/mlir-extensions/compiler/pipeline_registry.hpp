@@ -25,7 +25,7 @@ namespace mlir {
 class OpPassManager;
 }
 
-namespace plier {
+namespace imex {
 class PipelineRegistry {
 public:
   PipelineRegistry() = default;
@@ -54,4 +54,4 @@ public:
 private:
   std::vector<registry_entry_t> pipelines;
 };
-} // namespace plier
+} // namespace imex

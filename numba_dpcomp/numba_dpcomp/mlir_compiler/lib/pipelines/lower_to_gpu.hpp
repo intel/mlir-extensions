@@ -14,7 +14,7 @@
 
 #pragma once
 
-namespace plier {
+namespace imex {
 class PipelineRegistry;
 }
 
@@ -22,7 +22,7 @@ namespace llvm {
 class StringRef;
 }
 
-void registerLowerToGPUPipeline(plier::PipelineRegistry &registry);
+void registerLowerToGPUPipeline(imex::PipelineRegistry &registry);
 
 llvm::StringRef lowerToGPUPipelineNameHigh();
 llvm::StringRef lowerToGPUPipelineNameLow();

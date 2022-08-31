@@ -14,7 +14,7 @@
 
 #pragma once
 
-namespace plier {
+namespace imex {
 class PipelineRegistry;
 }
 
@@ -22,6 +22,6 @@ namespace llvm {
 class StringRef;
 }
 
-void registerPlierToScfPipeline(plier::PipelineRegistry &registry);
+void registerPlierToScfPipeline(imex::PipelineRegistry &registry);
 
 llvm::StringRef plierToScfPipelineName();

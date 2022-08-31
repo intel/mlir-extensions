@@ -20,7 +20,7 @@
 #include <mlir/Pass/Pass.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 
-namespace plier {
+namespace imex {
 
 template <typename... Dialects> struct DependentDialectsList {
   void operator()(mlir::DialectRegistry &registry) const {
@@ -65,4 +65,4 @@ public:
 private:
   mlir::FrozenRewritePatternSet patterns;
 };
-} // namespace plier
+} // namespace imex

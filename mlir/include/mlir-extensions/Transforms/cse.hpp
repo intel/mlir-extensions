@@ -17,7 +17,7 @@
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Support/LogicalResult.h>
 
-namespace plier {
+namespace imex {
 mlir::LogicalResult applyCSE(mlir::Region &region,
                              mlir::PatternRewriter &rewriter, bool recursive);
 mlir::LogicalResult applyCSE(mlir::Region &region, bool recursive);
@@ -29,7 +29,7 @@ struct CSERewrite : public mlir::OpRewritePattern<Op> {
 
   mlir::LogicalResult
   matchAndRewrite(Op op, mlir::PatternRewriter &rewriter) const override {
-    return ::plier::applyCSE(op.getRegion(), rewriter, Recursive);
+    return ::imex::applyCSE(op.getRegion(), rewriter, Recursive);
   }
 };
-} // namespace plier
+} // namespace imex

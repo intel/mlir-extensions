@@ -206,7 +206,7 @@ public:
 };
 } // namespace
 
-void plier::populatePromoteBoolMemrefConversionRewritesAndTarget(
+void imex::populatePromoteBoolMemrefConversionRewritesAndTarget(
     mlir::TypeConverter &typeConverter, mlir::RewritePatternSet &patterns,
     mlir::ConversionTarget &target) {
   auto context = patterns.getContext();
@@ -249,12 +249,12 @@ struct PromoteBoolMemrefPass
     mlir::RewritePatternSet patterns(&context);
     mlir::ConversionTarget target(context);
 
-    plier::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
-                                                        target);
-    plier::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
-                                                              patterns, target);
+    imex::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
+                                                       target);
+    imex::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
+                                                             patterns, target);
 
-    plier::populatePromoteBoolMemrefConversionRewritesAndTarget(
+    imex::populatePromoteBoolMemrefConversionRewritesAndTarget(
         typeConverter, patterns, target);
     if (mlir::failed(mlir::applyFullConversion(getOperation(), target,
                                                std::move(patterns))))
@@ -263,6 +263,6 @@ struct PromoteBoolMemrefPass
 };
 } // namespace
 
-std::unique_ptr<mlir::Pass> plier::createPromoteBoolMemrefPass() {
+std::unique_ptr<mlir::Pass> imex::createPromoteBoolMemrefPass() {
   return std::make_unique<PromoteBoolMemrefPass>();
 }

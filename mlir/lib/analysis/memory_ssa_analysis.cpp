@@ -35,8 +35,8 @@ static llvm::Optional<Meminfo> getMeminfo(mlir::Operation *op) {
 }
 } // namespace
 
-plier::MemorySSAAnalysis::MemorySSAAnalysis(mlir::Operation *op,
-                                            mlir::AnalysisManager &am) {
+imex::MemorySSAAnalysis::MemorySSAAnalysis(mlir::Operation *op,
+                                           mlir::AnalysisManager &am) {
   if (op->getNumRegions() != 1)
     return;
 
@@ -47,7 +47,7 @@ plier::MemorySSAAnalysis::MemorySSAAnalysis(mlir::Operation *op,
   }
 }
 
-mlir::LogicalResult plier::MemorySSAAnalysis::optimizeUses() {
+mlir::LogicalResult imex::MemorySSAAnalysis::optimizeUses() {
   if (memssa) {
     assert(nullptr != aliasAnalysis);
     auto mayAlias = [&](mlir::Operation *op1, mlir::Operation *op2) {
@@ -71,7 +71,7 @@ mlir::LogicalResult plier::MemorySSAAnalysis::optimizeUses() {
   return mlir::failure();
 }
 
-bool plier::MemorySSAAnalysis::isInvalidated(
+bool imex::MemorySSAAnalysis::isInvalidated(
     const mlir::AnalysisManager::PreservedAnalyses &pa) {
   return !pa.isPreserved<MemorySSAAnalysis>() ||
          !pa.isPreserved<mlir::AliasAnalysis>();

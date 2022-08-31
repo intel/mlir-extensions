@@ -18,8 +18,8 @@
 #include <mlir/Dialect/SCF/IR/SCF.h>
 
 mlir::LogicalResult
-plier::IfOpConstCond::matchAndRewrite(mlir::scf::IfOp op,
-                                      mlir::PatternRewriter &rewriter) const {
+imex::IfOpConstCond::matchAndRewrite(mlir::scf::IfOp op,
+                                     mlir::PatternRewriter &rewriter) const {
   auto cond = mlir::dyn_cast_or_null<mlir::arith::CmpIOp>(
       op.getCondition().getDefiningOp());
   if (!cond)

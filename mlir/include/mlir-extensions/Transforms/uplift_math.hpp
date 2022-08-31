@@ -22,9 +22,9 @@ class RewritePatternSet;
 class Pass;
 } // namespace mlir
 
-namespace plier {
+namespace imex {
 void populateUpliftmathPatterns(mlir::MLIRContext &context,
                                 mlir::RewritePatternSet &patterns);
 
 std::unique_ptr<mlir::Pass> createUpliftMathPass();
-} // namespace plier
+} // namespace imex

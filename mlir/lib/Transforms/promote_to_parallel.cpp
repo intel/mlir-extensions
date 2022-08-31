@@ -19,8 +19,7 @@
 #include <mlir/IR/BlockAndValueMapping.h>
 #include <mlir/Interfaces/CallInterfaces.h>
 
-namespace {
-bool hasSideEffects(mlir::Operation *op) {
+static bool hasSideEffects(mlir::Operation *op) {
   return op
       ->walk([&](mlir::Operation *op) {
         if (auto effects = mlir::dyn_cast<mlir::MemoryEffectOpInterface>(op)) {
@@ -40,7 +39,7 @@ bool hasSideEffects(mlir::Operation *op) {
       .wasInterrupted();
 }
 
-bool canParallelizeLoop(mlir::Operation *op, bool hasParallelAttr) {
+static bool canParallelizeLoop(mlir::Operation *op, bool hasParallelAttr) {
   return hasParallelAttr || !hasSideEffects(op);
 }
 
@@ -51,9 +50,7 @@ static mlir::Operation *getSingleUser(mlir::Value val) {
   return *val.user_begin();
 }
 
-} // namespace
-
-mlir::LogicalResult plier::PromoteToParallel::matchAndRewrite(
+mlir::LogicalResult imex::PromoteToParallel::matchAndRewrite(
     mlir::scf::ForOp op, mlir::PatternRewriter &rewriter) const {
   auto hasParallelAttr = op->hasAttr(plier::attributes::getParallelName());
   if (!canParallelizeLoop(op, hasParallelAttr))
@@ -152,7 +149,7 @@ mlir::LogicalResult plier::PromoteToParallel::matchAndRewrite(
   return mlir::success();
 }
 
-mlir::LogicalResult plier::MergeNestedForIntoParallel::matchAndRewrite(
+mlir::LogicalResult imex::MergeNestedForIntoParallel::matchAndRewrite(
     mlir::scf::ParallelOp op, mlir::PatternRewriter &rewriter) const {
   auto parent = mlir::dyn_cast<mlir::scf::ForOp>(op->getParentOp());
   if (!parent)
@@ -173,9 +170,8 @@ mlir::LogicalResult plier::MergeNestedForIntoParallel::matchAndRewrite(
     auto initVal = std::get<1>(it);
     auto result = std::get<2>(it);
     auto yieldOp = std::get<3>(it);
-    if (!arg.hasOneUse() || arg != initVal || result != yieldOp) {
+    if (!arg.hasOneUse() || arg != initVal || result != yieldOp)
       return mlir::failure();
-    }
   }
   auto checkVals = [&](auto vals) {
     for (auto val : vals)

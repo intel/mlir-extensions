@@ -123,8 +123,8 @@ struct UntuplePass
     mlir::RewritePatternSet patterns(context);
     mlir::ConversionTarget target(*context);
 
-    plier::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
-                                                              patterns, target);
+    imex::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
+                                                             patterns, target);
     //    target.addIllegalOp<plier::GetItemOp, plier::BuildTupleOp>();
 
     patterns.insert<UntupleReturn>(typeConverter, context);
@@ -157,7 +157,7 @@ struct MakeSignlessPass
           }
           return llvm::None;
         });
-    plier::populateTupleTypeConverter(*context, typeConverter);
+    imex::populateTupleTypeConverter(*context, typeConverter);
 
     auto materializeSignCast = [](mlir::OpBuilder &builder, mlir::Type type,
                                   mlir::ValueRange inputs,
@@ -172,10 +172,10 @@ struct MakeSignlessPass
     mlir::RewritePatternSet patterns(context);
     mlir::ConversionTarget target(*context);
 
-    plier::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
-                                                              patterns, target);
-    plier::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
-                                                        target);
+    imex::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
+                                                             patterns, target);
+    imex::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
+                                                       target);
 
     if (failed(applyFullConversion(module, target, std::move(patterns))))
       signalPassFailure();
@@ -193,7 +193,7 @@ void populateRemoveSignPipeline(mlir::OpPassManager &pm) {
 }
 } // namespace
 
-void registerPreLowSimpleficationsPipeline(plier::PipelineRegistry &registry) {
+void registerPreLowSimpleficationsPipeline(imex::PipelineRegistry &registry) {
   registry.registerPipeline([](auto sink) {
     auto stage = getHighLoweringStage();
     sink(untuplePipelineName(), {stage.begin}, {stage.end}, {},

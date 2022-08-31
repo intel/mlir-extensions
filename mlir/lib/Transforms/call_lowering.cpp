@@ -35,7 +35,7 @@ static mlir::Value skipCasts(mlir::Value val) {
   return val;
 };
 
-mlir::LogicalResult plier::ExpandCallVarargs::matchAndRewrite(
+mlir::LogicalResult imex::ExpandCallVarargs::matchAndRewrite(
     plier::PyCallOp op, mlir::PatternRewriter &rewriter) const {
   auto vararg = op.varargs();
   if (!vararg)
@@ -69,8 +69,8 @@ mlir::LogicalResult plier::ExpandCallVarargs::matchAndRewrite(
 }
 
 mlir::LogicalResult
-plier::CallOpLowering::matchAndRewrite(plier::PyCallOp op,
-                                       mlir::PatternRewriter &rewriter) const {
+imex::CallOpLowering::matchAndRewrite(plier::PyCallOp op,
+                                      mlir::PatternRewriter &rewriter) const {
   if (op.varargs())
     return mlir::failure();
 

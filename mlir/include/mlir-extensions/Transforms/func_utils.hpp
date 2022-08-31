@@ -32,9 +32,9 @@ namespace llvm {
 class StringRef;
 }
 
-namespace plier {
-mlir::func::FuncOp add_function(mlir::OpBuilder &builder, mlir::ModuleOp module,
-                                llvm::StringRef name, mlir::FunctionType type);
+namespace imex {
+mlir::func::FuncOp addFunction(mlir::OpBuilder &builder, mlir::ModuleOp module,
+                               llvm::StringRef name, mlir::FunctionType type);
 
 struct AllocaInsertionPoint {
   AllocaInsertionPoint(mlir::Operation *inst);
@@ -52,4 +52,4 @@ struct AllocaInsertionPoint {
 private:
   mlir::Operation *insertionPoint = nullptr;
 };
-} // namespace plier
+} // namespace imex

@@ -21,7 +21,7 @@ namespace mlir {
 class AnalysisManager;
 }
 
-namespace plier {
+namespace imex {
 llvm::Optional<mlir::LogicalResult>
 optimizeMemoryOps(mlir::AnalysisManager &am);
 }

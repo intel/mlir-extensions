@@ -31,7 +31,7 @@ namespace {
 struct PassManagerStage {
   template <typename F>
   PassManagerStage(mlir::MLIRContext &ctx,
-                   const plier::CompilerContext::Settings &settings,
+                   const imex::CompilerContext::Settings &settings,
                    F &&init_func)
       : pm(&ctx) {
     pm.enableVerifier(settings.verify);
@@ -110,8 +110,8 @@ private:
 
 struct PassManagerSchedule {
   PassManagerSchedule(mlir::MLIRContext &ctx,
-                      const plier::CompilerContext::Settings &settings,
-                      const plier::PipelineRegistry &registry) {
+                      const imex::CompilerContext::Settings &settings,
+                      const imex::PipelineRegistry &registry) {
     auto func = [&](auto sink) {
       struct StageDesc {
         llvm::StringRef name;
@@ -169,10 +169,10 @@ struct PassManagerSchedule {
       if (mlir::failed(current->run(module))) {
         return mlir::failure();
       }
-      auto markers = plier::getPipelineJumpMarkers(module);
+      auto markers = imex::getPipelineJumpMarkers(module);
       auto jumpTarget = current->get_jump(markers);
       if (nullptr != jumpTarget.first) {
-        plier::removePipelineJumpMarker(module, jumpTarget.second);
+        imex::removePipelineJumpMarker(module, jumpTarget.second);
         current = jumpTarget.first;
       } else {
         current = current->get_next_stage();
@@ -193,11 +193,11 @@ static void printDiag(llvm::raw_ostream &os, const mlir::Diagnostic &diag) {
 
 } // namespace
 
-class plier::CompilerContext::CompilerContextImpl {
+class imex::CompilerContext::CompilerContextImpl {
 public:
   CompilerContextImpl(mlir::MLIRContext &ctx,
                       const CompilerContext::Settings &settings,
-                      const plier::PipelineRegistry &registry)
+                      const imex::PipelineRegistry &registry)
       : schedule(ctx, settings, registry), dumpDiag(settings.diagDumpStderr) {}
 
   void run(mlir::ModuleOp module) {
@@ -211,12 +211,12 @@ public:
         printDiag(errStream, diag);
     };
 
-    plier::scopedDiagHandler(*module.getContext(), diagHandler, [&]() {
+    imex::scopedDiagHandler(*module.getContext(), diagHandler, [&]() {
       if (mlir::failed(schedule.run(module))) {
         errStream << "\n";
         module.print(errStream);
         errStream.flush();
-        plier::reportError(llvm::Twine("MLIR pipeline failed\n") + err);
+        imex::reportError(llvm::Twine("MLIR pipeline failed\n") + err);
       }
     });
   }
@@ -226,11 +226,11 @@ private:
   bool dumpDiag = false;
 };
 
-plier::CompilerContext::CompilerContext(mlir::MLIRContext &ctx,
-                                        const Settings &settings,
-                                        const PipelineRegistry &registry)
+imex::CompilerContext::CompilerContext(mlir::MLIRContext &ctx,
+                                       const Settings &settings,
+                                       const PipelineRegistry &registry)
     : impl(std::make_unique<CompilerContextImpl>(ctx, settings, registry)) {}
 
-plier::CompilerContext::~CompilerContext() {}
+imex::CompilerContext::~CompilerContext() {}
 
-void plier::CompilerContext::run(mlir::ModuleOp module) { impl->run(module); }
+void imex::CompilerContext::run(mlir::ModuleOp module) { impl->run(module); }

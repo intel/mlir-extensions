@@ -18,7 +18,9 @@
 
 namespace plier {
 class ArgOp;
+}
 
+namespace imex {
 struct ArgOpLowering : public mlir::OpRewritePattern<plier::ArgOp> {
   ArgOpLowering(mlir::MLIRContext *context);
 
@@ -26,4 +28,4 @@ struct ArgOpLowering : public mlir::OpRewritePattern<plier::ArgOp> {
   matchAndRewrite(plier::ArgOp op,
                   mlir::PatternRewriter &rewriter) const override;
 };
-} // namespace plier
+} // namespace imex

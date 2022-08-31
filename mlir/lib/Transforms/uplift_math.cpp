@@ -145,19 +145,19 @@ struct UpliftFma : public mlir::OpRewritePattern<mlir::arith::AddFOp> {
 };
 
 struct UpliftMathPass
-    : public plier::RewriteWrapperPass<
+    : public imex::RewriteWrapperPass<
           UpliftMathPass, void,
-          plier::DependentDialectsList<mlir::func::FuncDialect,
-                                       mlir::arith::ArithmeticDialect,
-                                       mlir::math::MathDialect>,
+          imex::DependentDialectsList<mlir::func::FuncDialect,
+                                      mlir::arith::ArithmeticDialect,
+                                      mlir::math::MathDialect>,
           UpliftMathCalls, UpliftFabsCalls, UpliftFma> {};
 } // namespace
 
-void plier::populateUpliftmathPatterns(mlir::MLIRContext &context,
-                                       mlir::RewritePatternSet &patterns) {
+void imex::populateUpliftmathPatterns(mlir::MLIRContext &context,
+                                      mlir::RewritePatternSet &patterns) {
   patterns.insert<UpliftMathCalls>(&context);
 }
 
-std::unique_ptr<mlir::Pass> plier::createUpliftMathPass() {
+std::unique_ptr<mlir::Pass> imex::createUpliftMathPass() {
   return std::make_unique<UpliftMathPass>();
 }

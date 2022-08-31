@@ -22,7 +22,7 @@ class ForOp;
 }
 } // namespace mlir
 
-namespace plier {
+namespace imex {
 struct CanonicalizeReduction : public mlir::OpRewritePattern<mlir::scf::ForOp> {
   using mlir::OpRewritePattern<mlir::scf::ForOp>::OpRewritePattern;
 
@@ -30,4 +30,4 @@ struct CanonicalizeReduction : public mlir::OpRewritePattern<mlir::scf::ForOp> {
   matchAndRewrite(mlir::scf::ForOp op,
                   mlir::PatternRewriter &rewriter) const override;
 };
-} // namespace plier
+} // namespace imex

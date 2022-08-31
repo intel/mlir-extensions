@@ -112,6 +112,6 @@ private:
 };
 } // namespace
 
-std::unique_ptr<mlir::Pass> plier::createForceInlinePass() {
+std::unique_ptr<mlir::Pass> imex::createForceInlinePass() {
   return std::make_unique<ForceInlinePass>();
 }

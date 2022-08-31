@@ -18,8 +18,8 @@
 #include <mlir/Interfaces/LoopLikeInterface.h>
 #include <mlir/Interfaces/SideEffectInterfaces.h>
 
-struct plier::MemorySSA::Node : public llvm::ilist_node<Node> {
-  using Type = plier::MemorySSA::NodeType;
+struct imex::MemorySSA::Node : public llvm::ilist_node<Node> {
+  using Type = imex::MemorySSA::NodeType;
 
   mlir::Operation *getOperation() const { return operation; }
 
@@ -152,9 +152,9 @@ private:
   Arg args[1]; // Variadic size
 };
 
-plier::MemorySSA::Node *
-plier::MemorySSA::createNode(mlir::Operation *op, NodeType type,
-                             llvm::ArrayRef<plier::MemorySSA::Node *> args) {
+imex::MemorySSA::Node *
+imex::MemorySSA::createNode(mlir::Operation *op, NodeType type,
+                            llvm::ArrayRef<imex::MemorySSA::Node *> args) {
   auto ptr = allocator.Allocate(Node::computeSize(args.size()),
                                 std::alignment_of<Node>::value);
   auto node = new (ptr) Node(op, type, args);
@@ -163,23 +163,23 @@ plier::MemorySSA::createNode(mlir::Operation *op, NodeType type,
   return node;
 }
 
-plier::MemorySSA::Node *
-plier::MemorySSA::createDef(mlir::Operation *op, plier::MemorySSA::Node *arg) {
+imex::MemorySSA::Node *imex::MemorySSA::createDef(mlir::Operation *op,
+                                                  imex::MemorySSA::Node *arg) {
   return createNode(op, NodeType::Def, arg);
 }
 
-plier::MemorySSA::Node *
-plier::MemorySSA::createUse(mlir::Operation *op, plier::MemorySSA::Node *arg) {
+imex::MemorySSA::Node *imex::MemorySSA::createUse(mlir::Operation *op,
+                                                  imex::MemorySSA::Node *arg) {
   return createNode(op, NodeType::Use, arg);
 }
 
-plier::MemorySSA::Node *
-plier::MemorySSA::createPhi(mlir::Operation *op,
-                            llvm::ArrayRef<plier::MemorySSA::Node *> args) {
+imex::MemorySSA::Node *
+imex::MemorySSA::createPhi(mlir::Operation *op,
+                           llvm::ArrayRef<imex::MemorySSA::Node *> args) {
   return createNode(op, NodeType::Phi, args);
 }
 
-void plier::MemorySSA::eraseNode(plier::MemorySSA::Node *node) {
+void imex::MemorySSA::eraseNode(imex::MemorySSA::Node *node) {
   assert(nullptr != node);
   if (NodeType::Def == node->getType()) {
     assert(node->getNumArguments() == 1);
@@ -205,20 +205,20 @@ void plier::MemorySSA::eraseNode(plier::MemorySSA::Node *node) {
   node->~Node();
 }
 
-plier::MemorySSA::NodeType
-plier::MemorySSA::getNodeType(plier::MemorySSA::Node *node) const {
+imex::MemorySSA::NodeType
+imex::MemorySSA::getNodeType(imex::MemorySSA::Node *node) const {
   assert(nullptr != node);
   return node->getType();
 }
 
 mlir::Operation *
-plier::MemorySSA::getNodeOperation(plier::MemorySSA::Node *node) const {
+imex::MemorySSA::getNodeOperation(imex::MemorySSA::Node *node) const {
   assert(nullptr != node);
   return node->getOperation();
 }
 
-plier::MemorySSA::Node *
-plier::MemorySSA::getNodeDef(plier::MemorySSA::Node *node) const {
+imex::MemorySSA::Node *
+imex::MemorySSA::getNodeDef(imex::MemorySSA::Node *node) const {
   node->getIterator();
   assert(nullptr != node);
   assert(NodeType::Use == node->getType());
@@ -226,14 +226,14 @@ plier::MemorySSA::getNodeDef(plier::MemorySSA::Node *node) const {
   return node->getArgument(0);
 }
 
-llvm::SmallVector<plier::MemorySSA::Node *>
-plier::MemorySSA::getUsers(plier::MemorySSA::Node *node) {
+llvm::SmallVector<imex::MemorySSA::Node *>
+imex::MemorySSA::getUsers(imex::MemorySSA::Node *node) {
   assert(nullptr != node);
   auto users = node->getUsers();
   return {users.begin(), users.end()};
 }
 
-plier::MemorySSA::Node *plier::MemorySSA::getRoot() {
+imex::MemorySSA::Node *imex::MemorySSA::getRoot() {
   if (nullptr == root) {
     root = new (allocator.Allocate(Node::computeSize(0),
                                    std::alignment_of<Node>::value)) Node();
@@ -242,7 +242,7 @@ plier::MemorySSA::Node *plier::MemorySSA::getRoot() {
   return root;
 }
 
-plier::MemorySSA::Node *plier::MemorySSA::getTerm() {
+imex::MemorySSA::Node *imex::MemorySSA::getTerm() {
   if (nullptr == term) {
     Node *temp = nullptr;
     term = new (allocator.Allocate(Node::computeSize(1),
@@ -253,18 +253,18 @@ plier::MemorySSA::Node *plier::MemorySSA::getTerm() {
   return term;
 }
 
-plier::MemorySSA::Node *plier::MemorySSA::getNode(mlir::Operation *op) const {
+imex::MemorySSA::Node *imex::MemorySSA::getNode(mlir::Operation *op) const {
   assert(nullptr != op);
   auto it = nodesMap.find(op);
   return it != nodesMap.end() ? it->second : nullptr;
 }
 
-llvm::iterator_range<plier::MemorySSA::NodesIterator>
-plier::MemorySSA::getNodes() {
+llvm::iterator_range<imex::MemorySSA::NodesIterator>
+imex::MemorySSA::getNodes() {
   return llvm::make_range(nodes.begin(), nodes.end());
 }
 
-void plier::MemorySSA::print(llvm::raw_ostream &os) {
+void imex::MemorySSA::print(llvm::raw_ostream &os) {
   for (auto &node : getNodes()) {
     os << "\n";
     print(&node, os);
@@ -275,8 +275,8 @@ void plier::MemorySSA::print(llvm::raw_ostream &os) {
   }
 }
 
-void plier::MemorySSA::print(
-    plier::MemorySSA::Node *node,
+void imex::MemorySSA::print(
+    imex::MemorySSA::Node *node,
     llvm::raw_ostream &os) /*const*/ // TODO: identifyObject const
 {
   const llvm::StringRef types[] = {
@@ -317,13 +317,13 @@ void plier::MemorySSA::print(
 
 namespace {
 template <typename C, typename F>
-bool checkPhisAlias(C &phiCache, plier::MemorySSA::Node *phi,
-                    plier::MemorySSA::Node *stop, mlir::Operation *useOp,
+bool checkPhisAlias(C &phiCache, imex::MemorySSA::Node *phi,
+                    imex::MemorySSA::Node *stop, mlir::Operation *useOp,
                     F &&mayAlias) {
   assert(nullptr != phi);
   assert(nullptr != stop);
   assert(nullptr != useOp);
-  using NodeType = plier::MemorySSA::Node::Type;
+  using NodeType = imex::MemorySSA::Node::Type;
   assert(phi->getType() == NodeType::Phi);
   if (phiCache.count(phi) == 0) {
     phiCache.insert(phi);
@@ -352,8 +352,8 @@ bool checkPhisAlias(C &phiCache, plier::MemorySSA::Node *phi,
 }
 
 template <typename F>
-plier::MemorySSA::Node *getDef(plier::MemorySSA::Node *def,
-                               mlir::Operation *useOp, F &&mayAlias) {
+imex::MemorySSA::Node *getDef(imex::MemorySSA::Node *def,
+                              mlir::Operation *useOp, F &&mayAlias) {
   while (true) {
     assert(nullptr != def);
     auto dom = def->getDominator();
@@ -361,11 +361,11 @@ plier::MemorySSA::Node *getDef(plier::MemorySSA::Node *def,
       return def;
 
     auto type = def->getType();
-    if (type == plier::MemorySSA::Node::Type::Phi) {
-      llvm::SmallDenseSet<plier::MemorySSA::Node *> phiCache;
+    if (type == imex::MemorySSA::Node::Type::Phi) {
+      llvm::SmallDenseSet<imex::MemorySSA::Node *> phiCache;
       if (!checkPhisAlias(phiCache, def, dom, useOp, std::forward<F>(mayAlias)))
         return def;
-    } else if (type == plier::MemorySSA::Node::Type::Def) {
+    } else if (type == imex::MemorySSA::Node::Type::Def) {
       assert(nullptr != def->getOperation());
       if (mayAlias(def->getOperation(), useOp))
         return def;
@@ -377,7 +377,7 @@ plier::MemorySSA::Node *getDef(plier::MemorySSA::Node *def,
 }
 } // namespace
 
-mlir::LogicalResult plier::MemorySSA::optimizeUses(
+mlir::LogicalResult imex::MemorySSA::optimizeUses(
     llvm::function_ref<bool(mlir::Operation *, mlir::Operation *)> mayAlias) {
   assert(mayAlias);
   bool changed = false;
@@ -419,21 +419,20 @@ auto hasMemEffect(mlir::Operation &op) {
   return ret;
 }
 
-plier::MemorySSA::Node *memSSAProcessRegion(mlir::Region &region,
-                                            plier::MemorySSA::Node *entryNode,
-                                            plier::MemorySSA &memSSA) {
+imex::MemorySSA::Node *memSSAProcessRegion(mlir::Region &region,
+                                           imex::MemorySSA::Node *entryNode,
+                                           imex::MemorySSA &memSSA) {
   assert(nullptr != entryNode);
   // Only structured control flow is supported for now
   if (!llvm::hasSingleElement(region))
     return nullptr;
 
   auto &block = region.front();
-  plier::MemorySSA::Node *currentNode = entryNode;
+  imex::MemorySSA::Node *currentNode = entryNode;
   for (auto &op : block) {
     if (!op.getRegions().empty()) {
       if (auto loop = mlir::dyn_cast<mlir::LoopLikeOpInterface>(op)) {
-        std::array<plier::MemorySSA::Node *, 2> phiArgs = {nullptr,
-                                                           currentNode};
+        std::array<imex::MemorySSA::Node *, 2> phiArgs = {nullptr, currentNode};
         auto phi = memSSA.createPhi(&op, phiArgs);
         auto result = memSSAProcessRegion(loop.getLoopBody(), phi, memSSA);
         if (nullptr == result)
@@ -498,7 +497,7 @@ plier::MemorySSA::Node *memSSAProcessRegion(mlir::Region &region,
           }
         }
 
-        llvm::SmallVector<plier::MemorySSA::Node *> regResults(numRegions);
+        llvm::SmallVector<imex::MemorySSA::Node *> regResults(numRegions);
 
         struct RegionVisitor {
           decltype(branchReg) _op;
@@ -507,7 +506,7 @@ plier::MemorySSA::Node *memSSAProcessRegion(mlir::Region &region,
           decltype(memSSA) &_memSSA;
           decltype(predecessors) &_predecessors;
 
-          plier::MemorySSA::Node *visit(llvm::Optional<unsigned> ii) {
+          imex::MemorySSA::Node *visit(llvm::Optional<unsigned> ii) {
             if (!ii)
               return _currentNode;
 
@@ -533,8 +532,8 @@ plier::MemorySSA::Node *memSSAProcessRegion(mlir::Region &region,
               _regResults[i] = res;
               return res;
             } else {
-              llvm::SmallVector<plier::MemorySSA::Node *> prevNodes(pred.size(),
-                                                                    nullptr);
+              llvm::SmallVector<imex::MemorySSA::Node *> prevNodes(pred.size(),
+                                                                   nullptr);
               auto phi = _memSSA.createPhi(_op, prevNodes);
               phi->setDominator(_currentNode); // TODO: not very robust
               _currentNode->setPostDominator(phi);
@@ -566,7 +565,7 @@ plier::MemorySSA::Node *memSSAProcessRegion(mlir::Region &region,
           if (currentNode == nullptr)
             return nullptr;
         } else {
-          llvm::SmallVector<plier::MemorySSA::Node *> prevNodes(
+          llvm::SmallVector<imex::MemorySSA::Node *> prevNodes(
               parentPredecessors.size());
           for (auto it : llvm::enumerate(parentPredecessors)) {
             auto prev = visitor.visit(it.value());
@@ -609,8 +608,8 @@ plier::MemorySSA::Node *memSSAProcessRegion(mlir::Region &region,
 }
 } // namespace
 
-llvm::Optional<plier::MemorySSA> plier::buildMemorySSA(mlir::Region &region) {
-  plier::MemorySSA ret;
+llvm::Optional<imex::MemorySSA> imex::buildMemorySSA(mlir::Region &region) {
+  imex::MemorySSA ret;
   if (auto last = memSSAProcessRegion(region, ret.getRoot(), ret)) {
     ret.getTerm()->setArgument(0, last);
   } else {
@@ -619,40 +618,38 @@ llvm::Optional<plier::MemorySSA> plier::buildMemorySSA(mlir::Region &region) {
   return std::move(ret);
 }
 
-plier::MemorySSA::NodesIterator::NodesIterator(
-    plier::MemorySSA::NodesIterator::internal_iterator iter)
+imex::MemorySSA::NodesIterator::NodesIterator(
+    imex::MemorySSA::NodesIterator::internal_iterator iter)
     : iterator(iter) {}
 
-plier::MemorySSA::NodesIterator &plier::MemorySSA::NodesIterator::operator++() {
+imex::MemorySSA::NodesIterator &imex::MemorySSA::NodesIterator::operator++() {
   ++iterator;
   return *this;
 }
 
-plier::MemorySSA::NodesIterator
-plier::MemorySSA::NodesIterator::operator++(int) {
+imex::MemorySSA::NodesIterator imex::MemorySSA::NodesIterator::operator++(int) {
   auto tmp = *this;
   ++iterator;
   return tmp;
 }
 
-plier::MemorySSA::NodesIterator &plier::MemorySSA::NodesIterator::operator--() {
+imex::MemorySSA::NodesIterator &imex::MemorySSA::NodesIterator::operator--() {
   --iterator;
   return *this;
 }
 
-plier::MemorySSA::NodesIterator
-plier::MemorySSA::NodesIterator::operator--(int) {
+imex::MemorySSA::NodesIterator imex::MemorySSA::NodesIterator::operator--(int) {
   auto tmp = *this;
   --iterator;
   return tmp;
 }
 
-plier::MemorySSA::NodesIterator::reference
-plier::MemorySSA::NodesIterator::operator*() {
+imex::MemorySSA::NodesIterator::reference
+imex::MemorySSA::NodesIterator::operator*() {
   return *iterator;
 }
 
-plier::MemorySSA::NodesIterator::pointer
-plier::MemorySSA::NodesIterator::operator->() {
+imex::MemorySSA::NodesIterator::pointer
+imex::MemorySSA::NodesIterator::operator->() {
   return iterator.operator->();
 }

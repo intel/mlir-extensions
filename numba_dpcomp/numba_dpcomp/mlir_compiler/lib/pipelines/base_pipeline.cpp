@@ -17,22 +17,22 @@
 #include "mlir-extensions/compiler/pipeline_registry.hpp"
 
 namespace {
-const constexpr llvm::StringRef passes[] = {
+static const constexpr llvm::StringLiteral passes[] = {
     "init",
     "lowering",
     "terminate",
 };
 
-void dummy_pass_func(mlir::OpPassManager &) {}
+void dummyPassFunc(mlir::OpPassManager &) {}
 } // namespace
 
-void registerBasePipeline(plier::PipelineRegistry &registry) {
+void registerBasePipeline(imex::PipelineRegistry &registry) {
   for (std::size_t i = 0; i < llvm::array_lengthof(passes); ++i) {
     registry.registerPipeline([i](auto sink) {
       if (0 == i) {
-        sink(passes[i], {}, {}, {}, dummy_pass_func);
+        sink(passes[i], {}, {}, {}, dummyPassFunc);
       } else {
-        sink(passes[i], {passes[i - 1]}, {}, {}, dummy_pass_func);
+        sink(passes[i], {passes[i - 1]}, {}, {}, dummyPassFunc);
       }
     });
   }

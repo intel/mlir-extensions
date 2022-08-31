@@ -14,7 +14,7 @@
 
 #pragma once
 
-namespace plier {
+namespace imex {
 class PipelineRegistry;
 }
 
@@ -30,7 +30,7 @@ class TypeConverter;
 void populateArrayTypeConverter(mlir::MLIRContext &context,
                                 mlir::TypeConverter &converter);
 
-void registerPlierToLinalgPipeline(plier::PipelineRegistry &registry);
+void registerPlierToLinalgPipeline(imex::PipelineRegistry &registry);
 
 llvm::StringRef plierToLinalgGenPipelineName();
 llvm::StringRef plierToLinalgOptPipelineName();

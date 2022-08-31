@@ -90,7 +90,7 @@ static mlir::Value skipCasts(mlir::Value val) {
 };
 } // namespace
 
-bool plier::canLowerWhileToFor(mlir::scf::WhileOp whileOp) {
+bool imex::canLowerWhileToFor(mlir::scf::WhileOp whileOp) {
   auto &beforeBlock = whileOp.getBefore().front();
   auto iters = llvm::iterator_range<mlir::Block::iterator>(beforeBlock);
   auto iternext = getNextOp<plier::IternextOp>(iters);
@@ -105,7 +105,7 @@ bool plier::canLowerWhileToFor(mlir::scf::WhileOp whileOp) {
   return true;
 }
 
-llvm::SmallVector<mlir::scf::ForOp, 2> plier::lowerWhileToFor(
+llvm::SmallVector<mlir::scf::ForOp, 2> imex::lowerWhileToFor(
     mlir::scf::WhileOp whileOp, mlir::PatternRewriter &builder,
     llvm::function_ref<std::tuple<mlir::Value, mlir::Value, mlir::Value>(
         mlir::OpBuilder &, mlir::Location)>
@@ -142,7 +142,7 @@ llvm::SmallVector<mlir::scf::ForOp, 2> plier::lowerWhileToFor(
   auto &afterBlock = whileOp.getAfter().front();
 
   auto indexCast = [&](mlir::Value val) -> mlir::Value {
-    return ::plier::indexCast(builder, loc, val);
+    return ::imex::indexCast(builder, loc, val);
   };
 
   auto bounds = getBounds(builder, loc);
@@ -264,7 +264,7 @@ llvm::SmallVector<mlir::scf::ForOp, 2> plier::lowerWhileToFor(
   return results;
 }
 
-mlir::LogicalResult plier::lowerWhileToFor(
+mlir::LogicalResult imex::lowerWhileToFor(
     plier::GetiterOp getiter, mlir::PatternRewriter &builder,
     llvm::function_ref<std::tuple<mlir::Value, mlir::Value, mlir::Value>(
         mlir::OpBuilder &, mlir::Location)>
@@ -482,7 +482,7 @@ bool hasNoEffect(mlir::scf::ParallelOp currentPloop, mlir::Operation *op) {
 }
 } // namespace
 
-mlir::LogicalResult plier::naivelyFuseParallelOps(Region &region) {
+mlir::LogicalResult imex::naivelyFuseParallelOps(Region &region) {
   OpBuilder b(region);
   // Consider every single block and attempt to fuse adjacent loops.
   bool changed = false;
@@ -523,7 +523,7 @@ mlir::LogicalResult plier::naivelyFuseParallelOps(Region &region) {
   return mlir::success(changed);
 }
 
-LogicalResult plier::prepareForFusion(Region &region) {
+LogicalResult imex::prepareForFusion(Region &region) {
   DominanceInfo dom(region.getParentOp());
   bool changed = false;
   for (auto &block : region) {

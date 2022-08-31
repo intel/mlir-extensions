@@ -14,7 +14,7 @@
 
 #pragma once
 
-namespace plier {
+namespace imex {
 class PipelineRegistry;
 }
 
@@ -27,7 +27,7 @@ class MLIRContext;
 class TypeConverter;
 } // namespace mlir
 
-void registerPreLowSimpleficationsPipeline(plier::PipelineRegistry &registry);
+void registerPreLowSimpleficationsPipeline(imex::PipelineRegistry &registry);
 
 llvm::StringRef untuplePipelineName();
 llvm::StringRef removeSignPipelineName();
