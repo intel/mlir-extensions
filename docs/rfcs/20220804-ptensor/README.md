@@ -34,26 +34,33 @@ Notice: By default device and distribution support is disabled and so renders co
 ### __PTensor__ Operations
 The initial set of operations matches the requirements of the core of [array-API](https://data-apis.org/array-api/latest/API_specification/index.html). Notice, since we focus on compute-follows-data, only the creation functions/operations will require the `device` and `team` attributes. The operations in the PTensor dialect accept different tensor-like types as input arguments: ptensors, tensors and MemRefs. Apparently, operations can only implement compute-follows-data if the inputs have `device` and `team` attributes, e.g. if they are of ptensor type. Standard tensor and memref inputs are treated as ptensors with default `device` and `team`.
 
+Notice: some of the operations mutate existing ptensors.
+
+#### Broadcasting/Ranked Tensors
+PTensor operates on ranked tensors. In rare cases the shape of input tensor(s) needs to be known as well. Unranked tensors are not supported.
+
+PTensor operations follow the [broadcasting semantics of the array-API](https://data-apis.org/array-api/latest/API_specification/broadcasting.html).
+
+Broadcasting happens implicitly, it is the responsibility of the implementation of affected operations to perform the necessary (logical) expansion. In addition, an explicit broadcast operation is available.
+
+#### Operation details
 There are many operations defined in the array API and even more in the numpy API. It does not seem feasible to have one MLIR operation per numpy function (we'd get a hundred or more). The Linalg dialect addresses this by 'classifying' them, for example into 'elementwise_unary' and 'elementwise_binary' operations and having the actual per-element-operation as a parameter. On the contrary, the TOSA dialect decided to have have an exact 1:1 mapping for every tensor-operation ('add', 'abs', 'ceil' 'arithmetic_right_shift' etc.).
 
 The below set of operations accrues from the following rules:
-* classify/group where semantically justifiable and so reduce the interface's surface
-* do not classify when parameters differ and so allow early type checking
+1. classify/group where semantically justifiable and so reduce the interface's surface
+2. do not classify when parameters differ and so allow early type checking
 
-Notice: some of the operations mutate existing ptensors.
-
-#### Operation details
 * Tensor creation
-  * `arange(start, stop, step, dtype, device, team) : (int64, int64, int64, type, str, int64) -> ptensor.ptensor`
-  * `create(shape, value, dtype, device, team) : (shape.shape, anytype, type, str, int64) -> ptensor.ptensor`
+  * `arange(start, stop, step, dtype, device, team) : (int, int, int, type, str, int) -> ptensor.ptensor`
+  * `create(shape, value, dtype, device, team) : (shape.shape, anytype, type, str, int) -> ptensor.ptensor`
     * covers `empty, ones, zeros, full`
-  * `create_like(rsh, value, dtype, device, team) : (shape.shape, anytype, type, str, int64) -> ptensor.ptensor`
+  * `create_like(rsh, value, dtype, device, team) : (shape.shape, anytype, type, str, int) -> ptensor.ptensor`
     * covers `empty_like, ones_like, zeros_like, full_like`
-  * `eye(n_rows, n_cols, k, dtype, device, team) : (int64, int64, int64, type, str, int64) -> ptensor.ptensor`
+  * `eye(n_rows, n_cols, k, dtype, device, team) : (int, int, int, type, str, int) -> ptensor.ptensor`
   * `from_dlpack(obj) : (ptr) -> ptensor.ptensor`
-  * `linspace(start, stop, n, dtype, device, team) : (number, number, number, type, str, int64) -> ptensor.ptensor`
+  * `linspace(start, stop, n, dtype, device, team) : (number, number, number, type, str, int) -> ptensor.ptensor`
   * `meshgrid(arrays) : (list) -> list`
-  * `extract_triangle{$side}(rhs, k) : (ptensor.ptensor, int64) -> ptensor.ptensor`
+  * `extract_triangle{$side}(rhs, k) : (ptensor.ptensor, int) -> ptensor.ptensor`
     * `$side = ['lower', 'upper']`
   * `delete(tensor) : (ptensor) -> void`
 * Tensor attributes
@@ -68,14 +75,14 @@ Notice: some of the operations mutate existing ptensors.
   * `extract_slice(rhs, slice) : (ptensor.ptensor, list) -> ptensor.ptensor`
   * `extract_mask(rhs, mask) : (ptensor.ptensor, ptensor.ptensor) -> ptensor.ptensor`
 * Manipulation
-  * `combine{$cop}(tensors, axis) : (list, int64) -> ptensor.ptensor`
+  * `combine{$cop}(tensors, axis) : (list, int) -> ptensor.ptensor`
     * `$cop = ['concat', 'stack']`
   * `expand_dims(rhs, axis) : (ptensor.ptensor, array) -> ptensor.ptensor`
   * `flip(rhs, axis) : (ptensor.ptensor, array) -> ptensor.ptensor`
   * `permute_dims(rhs, axis) : (ptensor.ptensor, array) -> ptensor.ptensor`
   * `reshape(rhs, shape, copy) : (ptensor.ptensor, shape.shape, bool) -> ptensor.ptensor`
-  * `roll(rhs, shift, axis) : (ptensor.ptensor, int64, array) -> ptensor.ptensor`
-  * `squeeze(rhs, axis) : (ptensor.ptensor, array) -> ptensor.ptensor`
+  * `roll(rhs, shift, axis) : (ptensor.ptensor, int, array) -> ptensor.ptensor`
+  * `squeeze(rhs, axis) : (ptensor.ptensor, array) -> ptensor.ptensor` Requires shaped tensor as input, number of ranks is not sufficient.
 * Elementwise operations
   * `elementwise_unary_op{$euop}(rhs) : (ptensor.ptensor) -> ptensor`
     * `$euop = ['abs', 'acos', 'acosh', 'asin', 'bitwise_invert', ...]`
@@ -88,10 +95,10 @@ Notice: some of the operations mutate existing ptensors.
 * Linear Algebra
   * `matmul(rhs, lhs) : (ptensor.ptensor, ptensor.ptensor) -> ptensor.ptensor`
   * `matrix_transpose(rhs) : (ptensor.ptensor) -> ptensor.ptensor`
-  * `vecdot(rhs, lhs, axis) : (ptensor.ptensor, ptensor.ptensor, int64) -> ptensor.ptensor`
+  * `vecdot(rhs, lhs, axis) : (ptensor.ptensor, ptensor.ptensor, int) -> ptensor.ptensor`
   * `tensor_dot(rhs, lhs, axis) : (ptensor.ptensor, ptensor.ptensor, array) -> ptensor.ptensor`
 * Searching
-  * `find_index{$fop}(rhs, axis) : (ptensor.ptensor, int64, bool) -> ptensor.ptensor`
+  * `find_index{$fop}(rhs, axis) : (ptensor.ptensor, int, bool) -> ptensor.ptensor`
     * `$fop = ['argmax', 'argmin']`
   * `nonzero(rhs) : (ptensor.ptensor) -> tuple`
   * `where(cond, rhs, lhs) : (scf.condition, ptensor.ptensor, ptensor.ptensor) -> ptensor.ptensor`
@@ -104,21 +111,21 @@ Notice: some of the operations mutate existing ptensors.
   * `sort{$sop}(rhs, descending, stable) : (ptensor.ptensor, bool, bool) -> ptensor.ptensor`
   * `argsort{$sop}(rhs, descending, stable) : (ptensor.ptensor, bool, bool) -> ptensor.ptensor`
 * Statistical Functions
-  * `reduce{$rop}(rhs, axis, correction) : (ptensor.ptensor, int64) -> ptensor.ptensor`
+  * `reduce{$rop}(rhs, axis, correction) : (ptensor.ptensor, int) -> ptensor.ptensor`
     * `$rop = ['max', 'min', 'mean', 'prod', 'sum', 'var', 'std']`
 * Utility Functions
-  * `test{$top}(rhs, axis) : (ptensor.ptensor, int64) -> ptensor.ptensor`
+  * `test{$top}(rhs, axis) : (ptensor.ptensor, int) -> ptensor.ptensor`
     * `$rop = ['any', 'all']`
 
 ### __Dist__ Operations
 The Dist dialect provides operations dealing with tensors which are partitioned and distributed across multiple processes. The operations assume some kind of a runtime which handles aspects like communication and partitioning.
-- `init_dtensor(team, shape) : (int64, ValueRange) -> (int64)`
-- `fini_dtensor(team, dtensor_id) : (int64, int64) -> void`
-- `init_view(team, dtensor_id, slice) : (int64, int64, slice) -> (int64)`
-- `local_shape(team, dtensor_id) : (int64, int64) -> shape.shape`
-- `local_slice(team, dtensor_id) : (int64, int64) -> slice`
-- `copy(team, from_id, to_id, from_ltensor, to_ltensor) : (int64, int64, int64, RankedTensor, RankedTensor) -> void`
-- `finalize_reduce(team, dtensor_id, ltensor) : (int64, int64, RankedTensor) -> void`
+- `init_dtensor(team, shape) : (int, ValueRange) -> (int64)`
+- `fini_dtensor(team, dtensor_id) : (int, int) -> void`
+- `init_view(team, dtensor_id, slice) : (int, int, slice) -> (int64)`
+- `local_shape(team, dtensor_id) : (int, int) -> shape.shape`
+- `local_slice(team, dtensor_id) : (int, int) -> slice`
+- `copy(team, from_id, to_id, from_ltensor, to_ltensor) : (int, int, int, RankedTensor, RankedTensor) -> void`
+- `finalize_reduce(team, dtensor_id, ltensor) : (int, int, RankedTensor) -> void`
 
 For details watch out for a separate RFC.
 
