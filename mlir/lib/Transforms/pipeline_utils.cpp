@@ -17,18 +17,18 @@
 #include <mlir/IR/Attributes.h>
 #include <mlir/IR/BuiltinOps.h>
 
-#include "mlir-extensions/Dialect/plier/dialect.hpp"
+#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
 
 mlir::ArrayAttr imex::getPipelineJumpMarkers(mlir::ModuleOp module) {
   return module->getAttrOfType<mlir::ArrayAttr>(
-      plier::attributes::getJumpMarkersName());
+      imex::util::attributes::getJumpMarkersName());
 }
 
 void imex::addPipelineJumpMarker(mlir::ModuleOp module, mlir::StringAttr name) {
   assert(name);
   assert(!name.getValue().empty());
 
-  auto jumpMarkers = plier::attributes::getJumpMarkersName();
+  auto jumpMarkers = imex::util::attributes::getJumpMarkersName();
   llvm::SmallVector<mlir::Attribute, 16> nameList;
   if (auto oldAttr = module->getAttrOfType<mlir::ArrayAttr>(jumpMarkers))
     nameList.assign(oldAttr.begin(), oldAttr.end());
@@ -51,7 +51,7 @@ void imex::removePipelineJumpMarker(mlir::ModuleOp module,
   assert(name);
   assert(!name.getValue().empty());
 
-  auto jumpMarkers = plier::attributes::getJumpMarkersName();
+  auto jumpMarkers = imex::util::attributes::getJumpMarkersName();
   llvm::SmallVector<mlir::Attribute, 16> nameList;
   if (auto oldAttr = module->getAttrOfType<mlir::ArrayAttr>(jumpMarkers))
     nameList.assign(oldAttr.begin(), oldAttr.end());

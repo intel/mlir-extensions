@@ -292,7 +292,7 @@ struct PyLinalgResolver::Context {
     auto mlirFunc =
         mlir::cast<mlir::func::FuncOp>(static_cast<mlir::Operation *>(func));
     mlirFunc.setPrivate();
-    mlirFunc->setAttr(plier::attributes::getForceInlineName(),
+    mlirFunc->setAttr(imex::util::attributes::getForceInlineName(),
                       mlir::UnitAttr::get(mlirFunc->getContext()));
     return mlirFunc;
   }

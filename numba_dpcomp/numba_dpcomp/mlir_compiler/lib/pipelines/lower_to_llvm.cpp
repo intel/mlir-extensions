@@ -496,7 +496,7 @@ static mlir::Attribute getFastmathAttrs(mlir::MLIRContext &ctx) {
       addPair("no-nans-fp-math", "true"),
       addPair("no-signed-zeros-fp-math", "true"),
       addPair("unsafe-fp-math", "true"),
-      addPair(plier::attributes::getFastmathName(), "1"),
+      addPair(imex::util::attributes::getFastmathName(), "1"),
   };
   return mlir::ArrayAttr::get(&ctx, attrs);
 }
@@ -530,7 +530,7 @@ static mlir::LogicalResult fixFuncSig(LLVMTypeHelper &typeHelper,
   if (func.isPrivate())
     return mlir::success();
 
-  if (func->getAttr(plier::attributes::getFastmathName()))
+  if (func->getAttr(imex::util::attributes::getFastmathName()))
     func->setAttr("passthrough", getFastmathAttrs(*func.getContext()));
 
   auto oldType = func.getFunctionType();
@@ -714,7 +714,7 @@ struct ApplyFastmathFlags : public mlir::OpRewritePattern<Op> {
 private:
   template <typename F>
   static void getFastmathFlags(mlir::LLVM::LLVMFuncOp func, F &&sink) {
-    if (func->hasAttr(plier::attributes::getFastmathName())) {
+    if (func->hasAttr(imex::util::attributes::getFastmathName())) {
       sink(mlir::LLVM::FastmathFlags::fast);
     }
   }
@@ -841,15 +841,13 @@ public:
 
 static void copyAttrs(mlir::Operation *src, mlir::Operation *dst) {
   const mlir::StringRef attrs[] = {
-      plier::attributes::getFastmathName(),
-      plier::attributes::getParallelName(),
-      plier::attributes::getMaxConcurrencyName(),
+      imex::util::attributes::getFastmathName(),
+      imex::util::attributes::getParallelName(),
+      imex::util::attributes::getMaxConcurrencyName(),
   };
-  for (auto name : attrs) {
-    if (auto attr = src->getAttr(name)) {
+  for (auto name : attrs)
+    if (auto attr = src->getAttr(name))
       dst->setAttr(name, attr);
-    }
-  }
 }
 
 struct LowerParallel : public mlir::OpRewritePattern<imex::util::ParallelOp> {

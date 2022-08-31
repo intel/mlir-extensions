@@ -14,7 +14,7 @@
 
 #include "mlir-extensions/Transforms/uplift_math.hpp"
 
-#include "mlir-extensions/Dialect/plier/dialect.hpp"
+#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
 #include "mlir-extensions/Transforms/rewrite_wrapper.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
@@ -124,7 +124,7 @@ struct UpliftFma : public mlir::OpRewritePattern<mlir::arith::AddFOp> {
   matchAndRewrite(mlir::arith::AddFOp op,
                   mlir::PatternRewriter &rewriter) const override {
     auto func = op->getParentOfType<mlir::func::FuncOp>();
-    if (!func || !func->hasAttr(plier::attributes::getFastmathName()))
+    if (!func || !func->hasAttr(imex::util::attributes::getFastmathName()))
       return mlir::failure();
 
     mlir::Value c;

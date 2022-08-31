@@ -68,15 +68,16 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
     if (mlir::isa<imex::util::ParallelOp>(op->getParentOp()))
       return mlir::failure();
 
-    bool needParallel = op->hasAttr(plier::attributes::getParallelName()) ||
-                        !op->getParentOfType<mlir::scf::ParallelOp>();
+    bool needParallel =
+        op->hasAttr(imex::util::attributes::getParallelName()) ||
+        !op->getParentOfType<mlir::scf::ParallelOp>();
     if (!needParallel)
       return mlir::failure();
 
     int64_t maxConcurrency = 0;
     auto mod = op->getParentOfType<mlir::ModuleOp>();
     if (auto mc = mod->getAttrOfType<mlir::IntegerAttr>(
-            plier::attributes::getMaxConcurrencyName()))
+            imex::util::attributes::getMaxConcurrencyName()))
       maxConcurrency = mc.getInt();
 
     if (maxConcurrency <= 1)
@@ -166,7 +167,7 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
       }
       auto newOp =
           mlir::cast<mlir::scf::ParallelOp>(builder.clone(*op, mapping));
-      newOp->removeAttr(plier::attributes::getParallelName());
+      newOp->removeAttr(imex::util::attributes::getParallelName());
       assert(newOp->getNumResults() == reduceVars.size());
       newOp.getLowerBoundMutable().assign(lowerBound);
       newOp.getUpperBoundMutable().assign(upperBound);

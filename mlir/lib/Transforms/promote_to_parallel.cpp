@@ -14,7 +14,8 @@
 
 #include "mlir-extensions/Transforms/promote_to_parallel.hpp"
 
-#include "mlir-extensions/Dialect/plier/dialect.hpp"
+#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
+
 #include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 #include <mlir/Interfaces/CallInterfaces.h>
@@ -52,7 +53,7 @@ static mlir::Operation *getSingleUser(mlir::Value val) {
 
 mlir::LogicalResult imex::PromoteToParallel::matchAndRewrite(
     mlir::scf::ForOp op, mlir::PatternRewriter &rewriter) const {
-  auto hasParallelAttr = op->hasAttr(plier::attributes::getParallelName());
+  auto hasParallelAttr = op->hasAttr(imex::util::attributes::getParallelName());
   if (!canParallelizeLoop(op, hasParallelAttr))
     return mlir::failure();
 
@@ -143,7 +144,7 @@ mlir::LogicalResult imex::PromoteToParallel::matchAndRewrite(
       op, op.getLowerBound(), op.getUpperBound(), op.getStep(),
       op.getInitArgs(), bodyBuilder);
   if (hasParallelAttr)
-    parallelOp->setAttr(plier::attributes::getParallelName(),
+    parallelOp->setAttr(imex::util::attributes::getParallelName(),
                         rewriter.getUnitAttr());
 
   return mlir::success();
@@ -184,7 +185,7 @@ mlir::LogicalResult imex::MergeNestedForIntoParallel::matchAndRewrite(
       checkVals(op.getStep()))
     return mlir::failure();
 
-  auto hasParallelAttr = op->hasAttr(plier::attributes::getParallelName());
+  auto hasParallelAttr = op->hasAttr(imex::util::attributes::getParallelName());
   if (!canParallelizeLoop(op, hasParallelAttr))
     return mlir::failure();
 
@@ -218,7 +219,7 @@ mlir::LogicalResult imex::MergeNestedForIntoParallel::matchAndRewrite(
       parent, lowerBounds, upperBounds, steps, parent.getInitArgs(),
       bodyBuilder);
   if (hasParallelAttr)
-    newOp->setAttr(plier::attributes::getParallelName(),
+    newOp->setAttr(imex::util::attributes::getParallelName(),
                    rewriter.getUnitAttr());
 
   return mlir::success();

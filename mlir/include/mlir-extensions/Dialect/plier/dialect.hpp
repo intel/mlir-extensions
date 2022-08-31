@@ -30,16 +30,6 @@
 #include "mlir-extensions/Dialect/plier/PlierOps.h.inc"
 
 namespace plier {
-namespace attributes {
-llvm::StringRef getFastmathName();
-llvm::StringRef getJumpMarkersName();
-llvm::StringRef getParallelName();
-llvm::StringRef getMaxConcurrencyName();
-llvm::StringRef getForceInlineName();
-llvm::StringRef getOptLevelName();
-llvm::StringRef getGpuRangeName();
-} // namespace attributes
-
 namespace detail {
 struct PyTypeStorage;
 struct LiteralTypeStorage;

@@ -738,8 +738,8 @@ protected:
     auto parent = op->getParentOp();
     auto setAttr = [](mlir::scf::ForOp op) {
       auto unitAttr = mlir::UnitAttr::get(op->getContext());
-      op->setAttr(plier::attributes::getParallelName(), unitAttr);
-      op->setAttr(plier::attributes::getGpuRangeName(), unitAttr);
+      op->setAttr(imex::util::attributes::getParallelName(), unitAttr);
+      op->setAttr(imex::util::attributes::getGpuRangeName(), unitAttr);
     };
     if (mlir::failed(imex::lowerRange(op, args, kwargs, rewriter, setAttr)))
       return mlir::failure();
@@ -1118,8 +1118,8 @@ struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::func::CallOp> {
       return mlir::failure();
 
     llvm::SmallVector<mlir::Value, 6> indexArgs;
-    auto attrId = mlir::StringAttr::get(op.getContext(),
-                                        plier::attributes::getGpuRangeName());
+    auto attrId = mlir::StringAttr::get(
+        op.getContext(), imex::util::attributes::getGpuRangeName());
     mlir::Operation *parent = op;
     while (true) {
       parent = parent->getParentOfType<mlir::scf::ForOp>();

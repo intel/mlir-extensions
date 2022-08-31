@@ -166,19 +166,19 @@ struct PlierLowerer final {
                            compilationContext["restype"]);
     func = mlir::func::FuncOp::create(builder.getUnknownLoc(), name, typ);
     if (compilationContext["fastmath"]().cast<bool>())
-      func->setAttr(plier::attributes::getFastmathName(),
+      func->setAttr(imex::util::attributes::getFastmathName(),
                     mlir::UnitAttr::get(&ctx));
 
     if (compilationContext["force_inline"]().cast<bool>())
-      func->setAttr(plier::attributes::getForceInlineName(),
+      func->setAttr(imex::util::attributes::getForceInlineName(),
                     mlir::UnitAttr::get(&ctx));
 
-    func->setAttr(plier::attributes::getOptLevelName(),
+    func->setAttr(imex::util::attributes::getOptLevelName(),
                   builder.getI64IntegerAttr(
                       compilationContext["opt_level"]().cast<int64_t>()));
     auto maxConcurrency = compilationContext["max_concurrency"]().cast<int>();
     if (maxConcurrency > 0)
-      mod->setAttr(plier::attributes::getMaxConcurrencyName(),
+      mod->setAttr(imex::util::attributes::getMaxConcurrencyName(),
                    builder.getI64IntegerAttr(maxConcurrency));
 
     lowerFuncBody(funcIr);

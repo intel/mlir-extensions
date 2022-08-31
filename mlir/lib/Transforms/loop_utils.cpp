@@ -24,6 +24,7 @@
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Support/LogicalResult.h>
 
+#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
 #include "mlir-extensions/Dialect/plier/dialect.hpp"
 #include "mlir-extensions/Transforms/cast_utils.hpp"
 #include "mlir-extensions/Transforms/const_utils.hpp"
@@ -427,8 +428,8 @@ static bool fuseIfLegal(scf::ParallelOp firstPloop,
   auto newSecondPloop = b.create<mlir::scf::ParallelOp>(
       secondPloop.getLoc(), secondPloop.getLowerBound(),
       secondPloop.getUpperBound(), secondPloop.getStep(), newInitVars);
-  if (secondPloop->hasAttr(plier::attributes::getParallelName()))
-    newSecondPloop->setAttr(plier::attributes::getParallelName(),
+  if (secondPloop->hasAttr(imex::util::attributes::getParallelName()))
+    newSecondPloop->setAttr(imex::util::attributes::getParallelName(),
                             mlir::UnitAttr::get(b.getContext()));
 
   newSecondPloop.getRegion().getBlocks().splice(

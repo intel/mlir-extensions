@@ -79,11 +79,11 @@
 namespace {
 static int64_t getOptLevel(mlir::Operation *op) {
   assert(op);
-  auto attr = op->getAttr(plier::attributes::getOptLevelName())
+  auto attr = op->getAttr(imex::util::attributes::getOptLevelName())
                   .dyn_cast_or_null<mlir::IntegerAttr>();
-  if (!attr) {
+  if (!attr)
     return 0;
-  }
+
   return std::max(static_cast<int64_t>(0), attr.getInt());
 }
 
@@ -231,7 +231,7 @@ lowerPrange(plier::PyCallOp op, mlir::ValueRange operands,
             mlir::PatternRewriter &rewriter) {
   auto parent = op->getParentOp();
   auto setAttr = [](mlir::scf::ForOp op) {
-    op->setAttr(plier::attributes::getParallelName(),
+    op->setAttr(imex::util::attributes::getParallelName(),
                 mlir::UnitAttr::get(op->getContext()));
   };
   if (mlir::succeeded(
