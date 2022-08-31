@@ -20,8 +20,8 @@ class ModuleOp;
 class StringAttr;
 } // namespace mlir
 
-namespace plier {
+namespace imex {
 mlir::ArrayAttr getPipelineJumpMarkers(mlir::ModuleOp module);
 void addPipelineJumpMarker(mlir::ModuleOp module, mlir::StringAttr name);
 void removePipelineJumpMarker(mlir::ModuleOp module, mlir::StringAttr name);
-} // namespace plier
+} // namespace imex

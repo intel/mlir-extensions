@@ -141,7 +141,7 @@ struct CommonOptsPass
     auto *ctx = &getContext();
     mlir::RewritePatternSet patterns(ctx);
 
-    plier::populateCommonOptsPatterns(*ctx, patterns);
+    imex::populateCommonOptsPatterns(*ctx, patterns);
 
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
                                              std::move(patterns));
@@ -149,33 +149,33 @@ struct CommonOptsPass
 };
 } // namespace
 
-void plier::populateCanonicalizationPatterns(
-    mlir::MLIRContext &context, mlir::RewritePatternSet &patterns) {
+void imex::populateCanonicalizationPatterns(mlir::MLIRContext &context,
+                                            mlir::RewritePatternSet &patterns) {
   for (auto *dialect : context.getLoadedDialects())
     dialect->getCanonicalizationPatterns(patterns);
   for (auto op : context.getRegisteredOperations())
     op.getCanonicalizationPatterns(patterns, &context);
 }
 
-void plier::populateCommonOptsPatterns(mlir::MLIRContext &context,
-                                       mlir::RewritePatternSet &patterns) {
+void imex::populateCommonOptsPatterns(mlir::MLIRContext &context,
+                                      mlir::RewritePatternSet &patterns) {
   populateCanonicalizationPatterns(context, patterns);
 
   patterns.insert<
       // clang-format off
 //      LoopInvariantCodeMotion, TODO
-      plier::CmpLoopBoundsSimplify,
-      plier::IfOpConstCond,
-      plier::CSERewrite<mlir::func::FuncOp, /*recusive*/ false>,
+      imex::CmpLoopBoundsSimplify,
+      imex::IfOpConstCond,
+      imex::CSERewrite<mlir::func::FuncOp, /*recusive*/ false>,
       SubviewLoadPropagate,
       SubviewStorePropagate,
       PowSimplify
       // clang-format on
       >(&context);
 
-  plier::populateIndexPropagatePatterns(context, patterns);
+  imex::populateIndexPropagatePatterns(context, patterns);
 }
 
-std::unique_ptr<mlir::Pass> plier::createCommonOptsPass() {
+std::unique_ptr<mlir::Pass> imex::createCommonOptsPass() {
   return std::make_unique<CommonOptsPass>();
 }

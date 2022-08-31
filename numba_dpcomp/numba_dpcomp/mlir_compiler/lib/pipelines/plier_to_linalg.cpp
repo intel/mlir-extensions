@@ -79,11 +79,11 @@
 namespace {
 static int64_t getOptLevel(mlir::Operation *op) {
   assert(op);
-  auto attr = op->getAttr(plier::attributes::getOptLevelName())
+  auto attr = op->getAttr(imex::util::attributes::getOptLevelName())
                   .dyn_cast_or_null<mlir::IntegerAttr>();
-  if (!attr) {
+  if (!attr)
     return 0;
-  }
+
   return std::max(static_cast<int64_t>(0), attr.getInt());
 }
 
@@ -96,11 +96,10 @@ static mlir::LogicalResult applyOptimizations(
   do {
     repeat = false;
     (void)mlir::applyPatternsAndFoldGreedily(op, patterns);
-    if (mlir::succeeded(plier::applyCSE(op.getRegion(), false))) {
+    if (mlir::succeeded(imex::applyCSE(op.getRegion(), false)))
       repeat = true;
-    }
 
-    auto memOptRes = plier::optimizeMemoryOps(am);
+    auto memOptRes = imex::optimizeMemoryOps(am);
     if (!memOptRes) {
       op.emitError() << "Failed to build memssa analysis";
       return mlir::failure();
@@ -205,7 +204,7 @@ static void rerunScfPipeline(mlir::Operation *op) {
       mlir::StringAttr::get(op->getContext(), plierToScfPipelineName());
   auto mod = op->getParentOfType<mlir::ModuleOp>();
   assert(nullptr != mod);
-  plier::addPipelineJumpMarker(mod, marker);
+  imex::addPipelineJumpMarker(mod, marker);
 }
 
 static mlir::Value skipCasts(mlir::Value val) {
@@ -232,10 +231,11 @@ lowerPrange(plier::PyCallOp op, mlir::ValueRange operands,
             mlir::PatternRewriter &rewriter) {
   auto parent = op->getParentOp();
   auto setAttr = [](mlir::scf::ForOp op) {
-    op->setAttr(plier::attributes::getParallelName(),
+    op->setAttr(imex::util::attributes::getParallelName(),
                 mlir::UnitAttr::get(op->getContext()));
   };
-  if (mlir::succeeded(lowerRange(op, operands, kwargs, rewriter, setAttr))) {
+  if (mlir::succeeded(
+          imex::lowerRange(op, operands, kwargs, rewriter, setAttr))) {
     rerunScfPipeline(parent);
     return mlir::success();
   }
@@ -305,7 +305,7 @@ castRetTypes(mlir::Location loc, mlir::PatternRewriter &rewriter,
   return results;
 }
 
-struct NumpyCallsLowering final : public plier::CallOpLowering {
+struct NumpyCallsLowering final : public imex::CallOpLowering {
   NumpyCallsLowering(mlir::MLIRContext *context)
       : CallOpLowering(context),
         resolver("numba_dpcomp.mlir.numpy.funcs", "registry") {}
@@ -404,7 +404,7 @@ private:
 };
 
 // TODO: remove
-struct ExternalCallsLowering final : public plier::CallOpLowering {
+struct ExternalCallsLowering final : public imex::CallOpLowering {
   using CallOpLowering::CallOpLowering;
 
 protected:
@@ -514,7 +514,7 @@ struct UnrankedToElementCasts
       } else {
         auto memrefType = dstType.cast<mlir::MemRefType>();
         auto signlessElemType =
-            plier::makeSignlessType(memrefType.getElementType());
+            imex::makeSignlessType(memrefType.getElementType());
         auto signlessMemrefType =
             memrefType.clone(signlessElemType).cast<mlir::MemRefType>();
         mlir::Value memref =
@@ -584,7 +584,7 @@ public:
 };
 
 struct NumpyCallsLoweringPass
-    : public plier::RewriteWrapperPass<
+    : public imex::RewriteWrapperPass<
           NumpyCallsLoweringPass, void, void, NumpyCallsLowering,
           NumpyAttrsLowering, NumpyBinOpLowering, ExternalCallsLowering> {};
 
@@ -854,7 +854,7 @@ struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
 
     mlir::Value res;
     auto elemType = shapedType.getElementType();
-    auto elemTypeSignless = plier::makeSignlessType(elemType);
+    auto elemTypeSignless = imex::makeSignlessType(elemType);
     if (elemType != elemTypeSignless) {
       if (isMemref) {
         auto memrefType = type.cast<mlir::MemRefType>();
@@ -1008,7 +1008,7 @@ struct SetitemOpLowering : public mlir::OpConversionPattern<plier::SetItemOp> {
       return mlir::failure();
 
     auto elemType = targetType.getElementType();
-    auto signlessElemType = plier::makeSignlessType(elemType);
+    auto signlessElemType = imex::makeSignlessType(elemType);
 
     auto value = adaptor.value();
     auto loc = op.getLoc();
@@ -1532,7 +1532,7 @@ struct OptimizeStridedLayoutPass
     auto *context = &getContext();
     mlir::RewritePatternSet patterns(context);
 
-    plier::populateCanonicalizationPatterns(*context, patterns);
+    imex::populateCanonicalizationPatterns(*context, patterns);
 
     patterns.insert<ChangeLayoutReturn>(context);
 
@@ -1728,8 +1728,8 @@ struct LowerTensorCasts : public mlir::OpConversionPattern<plier::CastOp> {
     if (!hasCompatibleShape(srcType, dstType))
       return mlir::failure();
 
-    auto signlessSrcType = srcType.clone(plier::makeSignlessType(srcElem));
-    auto signlessDstType = dstType.clone(plier::makeSignlessType(dstElem));
+    auto signlessSrcType = srcType.clone(imex::makeSignlessType(srcElem));
+    auto signlessDstType = dstType.clone(imex::makeSignlessType(dstElem));
 
     auto loc = op.getLoc();
     if (signlessSrcType != srcType)
@@ -2190,7 +2190,7 @@ void PlierToLinalgPass::runOnOperation() {
   // Convert unknown types to itself
   typeConverter.addConversion([](mlir::Type type) { return type; });
   populateStdTypeConverter(context, typeConverter);
-  plier::populateTupleTypeConverter(context, typeConverter);
+  imex::populateTupleTypeConverter(context, typeConverter);
   populateArrayTypeConverter(context, typeConverter);
 
   auto materializeCast = [](mlir::OpBuilder &builder, mlir::Type type,
@@ -2210,8 +2210,8 @@ void PlierToLinalgPass::runOnOperation() {
   mlir::RewritePatternSet patterns(&context);
   mlir::ConversionTarget target(context);
 
-  plier::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
-                                                      target);
+  imex::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
+                                                     target);
 
   target.addDynamicallyLegalOp<plier::GetItemOp>(
       [&typeConverter](plier::GetItemOp op) -> llvm::Optional<bool> {
@@ -2267,8 +2267,8 @@ void PlierToLinalgPass::runOnOperation() {
                                    dstType.isa<mlir::ShapedType>());
   });
 
-  plier::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
-                                                            patterns, target);
+  imex::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
+                                                           patterns, target);
 
   patterns.insert<
       // clang-format off
@@ -2386,7 +2386,7 @@ void PostPlierToLinalgPass::runOnOperation() {
   auto &context = getContext();
   mlir::RewritePatternSet patterns(&context);
 
-  plier::populateCommonOptsPatterns(context, patterns);
+  imex::populateCommonOptsPatterns(context, patterns);
 
   patterns.insert<SimplifyExpandDims>(&context);
 
@@ -2491,13 +2491,13 @@ void MakeTensorsSignlessPass::runOnOperation() {
   typeConverter.addConversion(
       [](mlir::ShapedType type) -> llvm::Optional<mlir::Type> {
         auto elemType = type.getElementType();
-        auto signless = plier::makeSignlessType(elemType);
+        auto signless = imex::makeSignlessType(elemType);
         if (signless != elemType)
           return type.clone(signless);
 
         return llvm::None;
       });
-  plier::populateTupleTypeConverter(*context, typeConverter);
+  imex::populateTupleTypeConverter(*context, typeConverter);
 
   auto materializeSignCast = [](mlir::OpBuilder &builder, mlir::Type type,
                                 mlir::ValueRange inputs,
@@ -2512,10 +2512,10 @@ void MakeTensorsSignlessPass::runOnOperation() {
   mlir::RewritePatternSet patterns(context);
   mlir::ConversionTarget target(*context);
 
-  plier::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
-                                                            patterns, target);
-  plier::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
-                                                      target);
+  imex::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
+                                                           patterns, target);
+  imex::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
+                                                     target);
 
   target.addLegalOp<mlir::ModuleOp, imex::util::SignCastOp>();
 
@@ -2546,7 +2546,7 @@ void LinalgOptPass::runOnOperation() {
   auto &context = getContext();
   mlir::RewritePatternSet patterns(&context);
 
-  plier::populateCommonOptsPatterns(context, patterns);
+  imex::populateCommonOptsPatterns(context, patterns);
 
   patterns.insert<
       // clang-format off
@@ -2766,7 +2766,7 @@ void AdditionalBufferize::runOnOperation() {
   auto *context = &getContext();
 
   mlir::bufferization::BufferizeTypeConverter typeConverter;
-  plier::populateTupleTypeConverter(*context, typeConverter);
+  imex::populateTupleTypeConverter(*context, typeConverter);
 
   auto materializeTupleCast =
       [](mlir::OpBuilder &builder, mlir::Type type, mlir::ValueRange inputs,
@@ -2787,10 +2787,10 @@ void AdditionalBufferize::runOnOperation() {
   mlir::RewritePatternSet patterns(context);
   mlir::ConversionTarget target(*context);
 
-  plier::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
-                                                            patterns, target);
-  plier::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
-                                                      target);
+  imex::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
+                                                           patterns, target);
+  imex::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
+                                                     target);
   target.addIllegalOp<mlir::tensor::ReshapeOp, mlir::tensor::ExtractSliceOp>();
   target.addIllegalOp<imex::util::ForceCopyOp>();
   target.addLegalOp<mlir::memref::ReshapeOp>();
@@ -2836,9 +2836,9 @@ struct ReplaceMemrefCopy : public mlir::OpRewritePattern<mlir::memref::CopyOp> {
 };
 
 struct RemovePseudoCopyPass
-    : public plier::RewriteWrapperPass<RemovePseudoCopyPass, mlir::func::FuncOp,
-                                       void, RemovePseudoCopy,
-                                       ReplaceMemrefCopy> {};
+    : public imex::RewriteWrapperPass<RemovePseudoCopyPass, mlir::func::FuncOp,
+                                      void, RemovePseudoCopy,
+                                      ReplaceMemrefCopy> {};
 
 struct CloneArgsPass
     : public mlir::PassWrapper<CloneArgsPass,
@@ -2903,8 +2903,8 @@ struct ReplaceClones
 };
 
 struct LowerCloneOpsPass
-    : public plier::RewriteWrapperPass<LowerCloneOpsPass, mlir::func::FuncOp,
-                                       void, ReplaceClones> {};
+    : public imex::RewriteWrapperPass<LowerCloneOpsPass, mlir::func::FuncOp,
+                                      void, ReplaceClones> {};
 
 struct PostLinalgOptPass
     : public mlir::PassWrapper<PostLinalgOptPass,
@@ -2923,26 +2923,26 @@ void PostLinalgOptPass::runOnOperation() {
   auto &context = getContext();
   mlir::RewritePatternSet patterns(&context);
 
-  plier::populateCommonOptsPatterns(context, patterns);
+  imex::populateCommonOptsPatterns(context, patterns);
 
-  patterns.insert<OptimizeGlobalsConstsLoad, plier::CanonicalizeReduction,
-                  plier::PromoteToParallel, plier::MergeNestedForIntoParallel>(
+  patterns.insert<OptimizeGlobalsConstsLoad, imex::CanonicalizeReduction,
+                  imex::PromoteToParallel, imex::MergeNestedForIntoParallel>(
       &context);
 
   auto additionalOpt = [](mlir::func::FuncOp op) {
-    (void)plier::prepareForFusion(op.getRegion());
-    return plier::naivelyFuseParallelOps(op.getRegion());
+    (void)imex::prepareForFusion(op.getRegion());
+    return imex::naivelyFuseParallelOps(op.getRegion());
   };
+
   if (mlir::failed(applyOptimizations(func, std::move(patterns),
-                                      getAnalysisManager(), additionalOpt))) {
+                                      getAnalysisManager(), additionalOpt)))
     signalPassFailure();
-  }
 }
 
 struct FixDeallocPlacementPass
-    : public plier::RewriteWrapperPass<FixDeallocPlacementPass,
-                                       mlir::func::FuncOp, void,
-                                       FixDeallocPlacement> {};
+    : public imex::RewriteWrapperPass<FixDeallocPlacementPass,
+                                      mlir::func::FuncOp, void,
+                                      FixDeallocPlacement> {};
 
 static void populatePlierToLinalgGenPipeline(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::func::FuncOp>(
@@ -2950,7 +2950,7 @@ static void populatePlierToLinalgGenPipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<PlierToLinalgPass>());
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(std::make_unique<NumpyCallsLoweringPass>());
-  pm.addPass(plier::createForceInlinePass());
+  pm.addPass(imex::createForceInlinePass());
   pm.addPass(mlir::createSymbolDCEPass());
   pm.addNestedPass<mlir::func::FuncOp>(
       std::make_unique<PostPlierToLinalgPass>());
@@ -3001,11 +3001,11 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
       mlir::bufferization::createPromoteBuffersToStackPass());
 
   pm.addPass(std::make_unique<LowerLinalgPass>());
-  pm.addPass(plier::createForceInlinePass());
+  pm.addPass(imex::createForceInlinePass());
   pm.addPass(mlir::createSymbolDCEPass());
 
-  pm.addPass(plier::createPromoteBoolMemrefPass());
-  pm.addNestedPass<mlir::func::FuncOp>(plier::createUpliftMathPass());
+  pm.addPass(imex::createPromoteBoolMemrefPass());
+  pm.addNestedPass<mlir::func::FuncOp>(imex::createUpliftMathPass());
   pm.addNestedPass<mlir::func::FuncOp>(mlir::createCanonicalizerPass());
   pm.addNestedPass<mlir::func::FuncOp>(
       mlir::createLoopInvariantCodeMotionPass());
@@ -3034,7 +3034,7 @@ void populateArrayTypeConverter(mlir::MLIRContext & /*context*/,
 }
 
 // ToDo: how does this sink stuff actually works?
-void registerPlierToLinalgPipeline(plier::PipelineRegistry &registry) {
+void registerPlierToLinalgPipeline(imex::PipelineRegistry &registry) {
   registry.registerPipeline([](auto sink) {
     auto stage = getHighLoweringStage();
     sink(plierToLinalgGenPipelineName(), {plierToStdPipelineName()},

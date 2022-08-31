@@ -27,7 +27,7 @@ class MLIRContext;
 class ModuleOp;
 } // namespace mlir
 
-namespace plier {
+namespace imex {
 class PipelineRegistry;
 
 class CompilerContext {
@@ -61,4 +61,4 @@ public:
 private:
   std::unique_ptr<CompilerContextImpl> impl;
 };
-} // namespace plier
+} // namespace imex

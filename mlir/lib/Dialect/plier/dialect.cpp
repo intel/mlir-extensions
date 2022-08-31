@@ -51,27 +51,6 @@ struct PlierInlinerInterface : public mlir::DialectInlinerInterface {
 } // namespace
 
 namespace plier {
-
-llvm::StringRef attributes::getFastmathName() { return "#plier.fastmath"; }
-
-llvm::StringRef attributes::getJumpMarkersName() {
-  return "#plier.pipeline_jump_markers";
-}
-
-llvm::StringRef attributes::getParallelName() { return "#plier.parallel"; }
-
-llvm::StringRef attributes::getMaxConcurrencyName() {
-  return "#plier.max_concurrency";
-}
-
-llvm::StringRef attributes::getForceInlineName() {
-  return "#plier.force_inline";
-}
-
-llvm::StringRef attributes::getOptLevelName() { return "#plier.opt_level"; }
-
-llvm::StringRef attributes::getGpuRangeName() { return "#plier.gpu_range"; }
-
 namespace detail {
 struct PyTypeStorage : public mlir::TypeStorage {
   using KeyTy = mlir::StringRef;

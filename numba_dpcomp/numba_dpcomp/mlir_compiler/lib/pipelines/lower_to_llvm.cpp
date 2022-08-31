@@ -61,15 +61,15 @@
 #include "mlir-extensions/utils.hpp"
 
 namespace {
-mlir::LowerToLLVMOptions getLLVMOptions(mlir::MLIRContext &context) {
+static mlir::LowerToLLVMOptions getLLVMOptions(mlir::MLIRContext &context) {
   static llvm::DataLayout dl = []() {
     llvm::InitializeNativeTarget();
     auto triple = llvm::sys::getProcessTriple();
-    std::string err_str;
-    auto target = llvm::TargetRegistry::lookupTarget(triple, err_str);
-    if (nullptr == target) {
-      plier::reportError(llvm::Twine("Unable to get target: ") + err_str);
-    }
+    std::string errStr;
+    auto target = llvm::TargetRegistry::lookupTarget(triple, errStr);
+    if (nullptr == target)
+      imex::reportError(llvm::Twine("Unable to get target: ") + errStr);
+
     llvm::TargetOptions target_opts;
     std::unique_ptr<llvm::TargetMachine> machine(target->createTargetMachine(
         triple, llvm::sys::getHostCPUName(), "", target_opts, llvm::None));
@@ -82,8 +82,8 @@ mlir::LowerToLLVMOptions getLLVMOptions(mlir::MLIRContext &context) {
   return opts;
 }
 
-mlir::Value doCast(mlir::OpBuilder &builder, mlir::Location loc,
-                   mlir::Value src, mlir::Type dstType) {
+static mlir::Value doCast(mlir::OpBuilder &builder, mlir::Location loc,
+                          mlir::Value src, mlir::Type dstType) {
   if (src.getType() == dstType)
     return src;
 
@@ -91,9 +91,9 @@ mlir::Value doCast(mlir::OpBuilder &builder, mlir::Location loc,
       .getResult(0);
 }
 
-mlir::Type convertTupleTypes(mlir::MLIRContext &context,
-                             mlir::TypeConverter &converter,
-                             mlir::TypeRange types) {
+static mlir::Type convertTupleTypes(mlir::MLIRContext &context,
+                                    mlir::TypeConverter &converter,
+                                    mlir::TypeRange types) {
   if (types.empty())
     return mlir::LLVM::LLVMStructType::getLiteral(&context, llvm::None);
 
@@ -103,6 +103,7 @@ mlir::Type convertTupleTypes(mlir::MLIRContext &context,
     auto tail = types.drop_front();
     if (llvm::all_of(tail, [&](auto t) { return t == elemType; }))
       return elemType;
+
     return nullptr;
   }();
 
@@ -119,19 +120,21 @@ mlir::Type convertTupleTypes(mlir::MLIRContext &context,
     auto newType = converter.convertType(type);
     if (!newType)
       return {};
+
     newTypes.emplace_back(newType);
   }
 
   return mlir::LLVM::LLVMStructType::getLiteral(&context, newTypes);
 }
 
-mlir::Type convertTuple(mlir::MLIRContext &context,
-                        mlir::TypeConverter &converter, mlir::TupleType tuple) {
+static mlir::Type convertTuple(mlir::MLIRContext &context,
+                               mlir::TypeConverter &converter,
+                               mlir::TupleType tuple) {
   return convertTupleTypes(context, converter, tuple.getTypes());
 }
 
-void populateToLLVMAdditionalTypeConversion(
-    mlir::LLVMTypeConverter &converter) {
+static void
+populateToLLVMAdditionalTypeConversion(mlir::LLVMTypeConverter &converter) {
   converter.addConversion(
       [&converter](mlir::TupleType type) -> llvm::Optional<mlir::Type> {
         auto res = convertTuple(*type.getContext(), converter, type);
@@ -166,9 +169,9 @@ struct LLVMTypeHelper {
 
   mlir::Type ptr(mlir::Type type) {
     assert(static_cast<bool>(type));
-    auto ll_type = type_converter.convertType(type);
-    assert(static_cast<bool>(ll_type));
-    return mlir::LLVM::LLVMPointerType::get(ll_type);
+    auto llType = type_converter.convertType(type);
+    assert(static_cast<bool>(llType));
+    return mlir::LLVM::LLVMPointerType::get(llType);
   }
 
   mlir::MLIRContext &get_context() { return type_converter.getContext(); }
@@ -179,7 +182,7 @@ private:
   mlir::LLVMTypeConverter type_converter;
 };
 
-mlir::Type getExceptInfoType(LLVMTypeHelper &type_helper) {
+static mlir::Type getExceptInfoType(LLVMTypeHelper &type_helper) {
   mlir::Type elems[] = {
       type_helper.ptr(type_helper.i(8)),
       type_helper.i(32),
@@ -189,8 +192,8 @@ mlir::Type getExceptInfoType(LLVMTypeHelper &type_helper) {
                                                 elems);
 }
 
-mlir::LLVM::LLVMStructType get_array_type(mlir::TypeConverter &converter,
-                                          mlir::MemRefType type) {
+static mlir::LLVM::LLVMStructType getArrayType(mlir::TypeConverter &converter,
+                                               mlir::MemRefType type) {
   assert(type);
   auto ctx = type.getContext();
   auto i8p = mlir::LLVM::LLVMPointerType::get(mlir::IntegerType::get(ctx, 8));
@@ -222,25 +225,25 @@ mlir::LLVM::LLVMStructType get_array_type(mlir::TypeConverter &converter,
   }
 }
 
-template <typename F> void flatten_type(mlir::Type type, F &&func) {
+template <typename F> static void flattenType(mlir::Type type, F &&func) {
   if (auto struct_type = type.dyn_cast<mlir::LLVM::LLVMStructType>()) {
-    for (auto elem : struct_type.getBody()) {
-      flatten_type(elem, std::forward<F>(func));
-    }
+    for (auto elem : struct_type.getBody())
+      flattenType(elem, std::forward<F>(func));
+
   } else if (auto arr_type = type.dyn_cast<mlir::LLVM::LLVMArrayType>()) {
     auto elem = arr_type.getElementType();
     auto size = arr_type.getNumElements();
-    for (unsigned i = 0; i < size; ++i) {
-      flatten_type(elem, std::forward<F>(func));
-    }
+    for (unsigned i = 0; i < size; ++i)
+      flattenType(elem, std::forward<F>(func));
+
   } else {
     func(type);
   }
 }
 
 template <typename F>
-mlir::Value unflatten(mlir::Type type, mlir::Location loc,
-                      mlir::OpBuilder &builder, F &&next_func) {
+static mlir::Value unflatten(mlir::Type type, mlir::Location loc,
+                             mlir::OpBuilder &builder, F &&next_func) {
   namespace mllvm = mlir::LLVM;
   if (auto struct_type = type.dyn_cast<mlir::LLVM::LLVMStructType>()) {
     mlir::Value val = builder.create<mllvm::UndefOp>(loc, struct_type);
@@ -271,41 +274,43 @@ mlir::Value unflatten(mlir::Type type, mlir::Location loc,
   }
 }
 
-void write_memref_desc(llvm::raw_ostream &os, mlir::MemRefType memref_type) {
+static void writeMemrefDesc(llvm::raw_ostream &os,
+                            mlir::MemRefType memref_type) {
   if (memref_type.hasRank()) {
     auto rank = memref_type.getRank();
     assert(rank >= 0);
-    if (rank > 0) {
+    if (rank > 0)
       os << memref_type.getRank() << "x";
-    }
+
   } else {
     os << "?x";
   }
   memref_type.getElementType().print(os);
 }
 
-std::string gen_to_memref_conversion_func_name(mlir::MemRefType memref_type) {
+static std::string genToMemrefConversionFuncName(mlir::MemRefType memref_type) {
   assert(memref_type);
   std::string ret;
   llvm::raw_string_ostream ss(ret);
   ss << "__convert_to_memref_";
-  write_memref_desc(ss, memref_type);
+  writeMemrefDesc(ss, memref_type);
   ss.flush();
   return ret;
 }
 
-std::string gen_from_memref_conversion_func_name(mlir::MemRefType memref_type) {
+static std::string
+genFromMemrefConversionFuncName(mlir::MemRefType memref_type) {
   assert(memref_type);
   std::string ret;
   llvm::raw_string_ostream ss(ret);
   ss << "__convert_from_memref_";
-  write_memref_desc(ss, memref_type);
+  writeMemrefDesc(ss, memref_type);
   ss.flush();
   return ret;
 }
 
-mlir::Value div_strides(mlir::Location loc, mlir::OpBuilder &builder,
-                        mlir::Value strides, mlir::Value m) {
+static mlir::Value divStrides(mlir::Location loc, mlir::OpBuilder &builder,
+                              mlir::Value strides, mlir::Value m) {
   auto array_type = strides.getType().cast<mlir::LLVM::LLVMArrayType>();
   mlir::Value array = builder.create<mlir::LLVM::UndefOp>(loc, array_type);
   auto count = array_type.getNumElements();
@@ -319,22 +324,22 @@ mlir::Value div_strides(mlir::Location loc, mlir::OpBuilder &builder,
   return array;
 }
 
-mlir::Value mul_strides(mlir::Location loc, mlir::OpBuilder &builder,
-                        mlir::Value strides, mlir::Value m) {
-  auto array_type = strides.getType().cast<mlir::LLVM::LLVMArrayType>();
-  mlir::Value array = builder.create<mlir::LLVM::UndefOp>(loc, array_type);
-  auto count = array_type.getNumElements();
+static mlir::Value mulStrides(mlir::Location loc, mlir::OpBuilder &builder,
+                              mlir::Value strides, mlir::Value m) {
+  auto arrayType = strides.getType().cast<mlir::LLVM::LLVMArrayType>();
+  mlir::Value array = builder.create<mlir::LLVM::UndefOp>(loc, arrayType);
+  auto count = arrayType.getNumElements();
   for (unsigned i = 0; i < count; ++i) {
     auto index = builder.getI64ArrayAttr(i);
     auto prev = builder.create<mlir::LLVM::ExtractValueOp>(
-        loc, array_type.getElementType(), strides, index);
+        loc, arrayType.getElementType(), strides, index);
     auto val = builder.create<mlir::LLVM::MulOp>(loc, prev, m);
     array = builder.create<mlir::LLVM::InsertValueOp>(loc, array, val, index);
   }
   return array;
 }
 
-unsigned item_size(mlir::Type type) {
+static unsigned itemSize(mlir::Type type) {
   if (auto inttype = type.dyn_cast<mlir::IntegerType>()) {
     assert((inttype.getWidth() % 8) == 0);
     return inttype.getWidth() / 8;
@@ -346,37 +351,37 @@ unsigned item_size(mlir::Type type) {
   llvm_unreachable("item_size: invalid type");
 }
 
-mlir::func::FuncOp
-get_to_memref_conversion_func(mlir::ModuleOp module, mlir::OpBuilder &builder,
-                              mlir::MemRefType memrefType,
-                              mlir::LLVM::LLVMStructType src_type,
-                              mlir::LLVM::LLVMStructType dst_type) {
+static mlir::func::FuncOp
+getToMemrefConversionFunc(mlir::ModuleOp module, mlir::OpBuilder &builder,
+                          mlir::MemRefType memrefType,
+                          mlir::LLVM::LLVMStructType srcType,
+                          mlir::LLVM::LLVMStructType dstType) {
   assert(memrefType);
-  assert(src_type);
-  assert(dst_type);
-  auto func_name = gen_to_memref_conversion_func_name(memrefType);
-  if (auto func = module.lookupSymbol<mlir::func::FuncOp>(func_name)) {
+  assert(srcType);
+  assert(dstType);
+  auto funcName = genToMemrefConversionFuncName(memrefType);
+  if (auto func = module.lookupSymbol<mlir::func::FuncOp>(funcName)) {
     assert(func.getFunctionType().getNumResults() == 1);
-    assert(func.getFunctionType().getResult(0) == dst_type);
+    assert(func.getFunctionType().getResult(0) == dstType);
     return func;
   }
-  auto func_type =
-      mlir::FunctionType::get(builder.getContext(), src_type, dst_type);
+  auto funcType =
+      mlir::FunctionType::get(builder.getContext(), srcType, dstType);
   auto loc = builder.getUnknownLoc();
-  auto new_func = plier::add_function(builder, module, func_name, func_type);
+  auto newFunc = imex::addFunction(builder, module, funcName, funcType);
   auto alwaysinline =
       mlir::StringAttr::get(builder.getContext(), "alwaysinline");
-  new_func->setAttr("passthrough",
-                    mlir::ArrayAttr::get(builder.getContext(), alwaysinline));
+  newFunc->setAttr("passthrough",
+                   mlir::ArrayAttr::get(builder.getContext(), alwaysinline));
   mlir::OpBuilder::InsertionGuard guard(builder);
-  auto block = new_func.addEntryBlock();
+  auto block = newFunc.addEntryBlock();
   builder.setInsertionPointToStart(block);
   namespace mllvm = mlir::LLVM;
   mlir::Value arg = block->getArgument(0);
   auto extract = [&](unsigned index) {
-    auto res_type = src_type.getBody()[index];
+    auto resType = srcType.getBody()[index];
     auto i = builder.getI64ArrayAttr(index);
-    return builder.create<mllvm::ExtractValueOp>(loc, res_type, arg, i);
+    return builder.create<mllvm::ExtractValueOp>(loc, resType, arg, i);
   };
   auto meminfo = extract(0);
   auto ptr = extract(4);
@@ -386,81 +391,81 @@ get_to_memref_conversion_func(mlir::ModuleOp module, mlir::OpBuilder &builder,
   auto i64 = mlir::IntegerType::get(builder.getContext(), 64);
   auto offset =
       builder.create<mllvm::ConstantOp>(loc, i64, builder.getI64IntegerAttr(0));
-  mlir::Value res = builder.create<mllvm::UndefOp>(loc, dst_type);
-  auto meminfo_casted =
+  mlir::Value res = builder.create<mllvm::UndefOp>(loc, dstType);
+  auto meminfoCasted =
       builder.create<mllvm::BitcastOp>(loc, ptr.getType(), meminfo);
   auto itemsize = builder.create<mllvm::ConstantOp>(
       loc, i64,
-      builder.getI64IntegerAttr(item_size(memrefType.getElementType())));
+      builder.getI64IntegerAttr(itemSize(memrefType.getElementType())));
   auto insert = [&](unsigned index, mlir::Value val) {
     auto i = builder.getI64ArrayAttr(index);
     res = builder.create<mllvm::InsertValueOp>(loc, res, val, i);
   };
-  insert(0, meminfo_casted);
+  insert(0, meminfoCasted);
   insert(1, ptr);
   insert(2, offset);
   if (rank > 0) {
     insert(3, shape);
-    insert(4, div_strides(loc, builder, strides, itemsize));
+    insert(4, divStrides(loc, builder, strides, itemsize));
   }
   builder.create<mllvm::ReturnOp>(loc, res);
-  return new_func;
+  return newFunc;
 }
 
-mlir::func::FuncOp
-get_from_memref_conversion_func(mlir::ModuleOp module, mlir::OpBuilder &builder,
-                                mlir::MemRefType memrefType,
-                                mlir::LLVM::LLVMStructType src_type,
-                                mlir::LLVM::LLVMStructType dst_type) {
+static mlir::func::FuncOp
+getFromMemrefConversionFunc(mlir::ModuleOp module, mlir::OpBuilder &builder,
+                            mlir::MemRefType memrefType,
+                            mlir::LLVM::LLVMStructType srcType,
+                            mlir::LLVM::LLVMStructType dstType) {
   assert(memrefType);
-  assert(src_type);
-  assert(dst_type);
-  auto func_name = gen_from_memref_conversion_func_name(memrefType);
-  if (auto func = module.lookupSymbol<mlir::func::FuncOp>(func_name)) {
+  assert(srcType);
+  assert(dstType);
+  auto funcName = genFromMemrefConversionFuncName(memrefType);
+  if (auto func = module.lookupSymbol<mlir::func::FuncOp>(funcName)) {
     assert(func.getFunctionType().getNumResults() == 1);
-    assert(func.getFunctionType().getResult(0) == dst_type);
+    assert(func.getFunctionType().getResult(0) == dstType);
     return func;
   }
-  auto func_type =
-      mlir::FunctionType::get(builder.getContext(), src_type, dst_type);
+  auto funcType =
+      mlir::FunctionType::get(builder.getContext(), srcType, dstType);
   auto loc = builder.getUnknownLoc();
-  auto new_func = plier::add_function(builder, module, func_name, func_type);
+  auto newFunc = imex::addFunction(builder, module, funcName, funcType);
   auto alwaysinline =
       mlir::StringAttr::get(builder.getContext(), "alwaysinline");
-  new_func->setAttr("passthrough",
-                    mlir::ArrayAttr::get(builder.getContext(), alwaysinline));
+  newFunc->setAttr("passthrough",
+                   mlir::ArrayAttr::get(builder.getContext(), alwaysinline));
   mlir::OpBuilder::InsertionGuard guard(builder);
-  auto block = new_func.addEntryBlock();
+  auto block = newFunc.addEntryBlock();
   builder.setInsertionPointToStart(block);
   namespace mllvm = mlir::LLVM;
   mlir::Value arg = block->getArgument(0);
-  auto i8ptr_type = mllvm::LLVMPointerType::get(builder.getIntegerType(8));
-  auto i64_type = builder.getIntegerType(64);
+  auto i8ptrType = mllvm::LLVMPointerType::get(builder.getIntegerType(8));
+  auto i64Type = builder.getIntegerType(64);
   auto extract = [&](unsigned index) {
-    auto res_type = src_type.getBody()[index];
+    auto resType = srcType.getBody()[index];
     auto i = builder.getI64ArrayAttr(index);
-    return builder.create<mllvm::ExtractValueOp>(loc, res_type, arg, i);
+    return builder.create<mllvm::ExtractValueOp>(loc, resType, arg, i);
   };
-  auto meminfo = builder.create<mllvm::BitcastOp>(loc, i8ptr_type, extract(0));
-  auto orig_ptr = extract(1);
+  auto meminfo = builder.create<mllvm::BitcastOp>(loc, i8ptrType, extract(0));
+  auto origPtr = extract(1);
   auto offset = extract(2);
   auto rank = memrefType.getRank();
   auto shape = (rank > 0 ? extract(3) : mlir::Value());
   auto strides = (rank > 0 ? extract(4) : mlir::Value());
-  auto ptr = builder.create<mllvm::GEPOp>(loc, orig_ptr.getType(), orig_ptr,
+  auto ptr = builder.create<mllvm::GEPOp>(loc, origPtr.getType(), origPtr,
                                           offset.getResult());
-  mlir::Value res = builder.create<mllvm::UndefOp>(loc, dst_type);
-  auto null = builder.create<mllvm::NullOp>(loc, i8ptr_type);
+  mlir::Value res = builder.create<mllvm::UndefOp>(loc, dstType);
+  auto null = builder.create<mllvm::NullOp>(loc, i8ptrType);
   mlir::Value nitems = builder.create<mllvm::ConstantOp>(
-      loc, i64_type, builder.getI64IntegerAttr(1));
+      loc, i64Type, builder.getI64IntegerAttr(1));
   for (int64_t i = 0; i < rank; ++i) {
     auto dim = builder.create<mllvm::ExtractValueOp>(
         loc, nitems.getType(), shape, builder.getI64ArrayAttr(i));
     nitems = builder.create<mllvm::MulOp>(loc, nitems, dim);
   }
   auto itemsize = builder.create<mllvm::ConstantOp>(
-      loc, i64_type,
-      builder.getI64IntegerAttr(item_size(memrefType.getElementType())));
+      loc, i64Type,
+      builder.getI64IntegerAttr(itemSize(memrefType.getElementType())));
   auto insert = [&](unsigned index, mlir::Value val) {
     auto i = builder.getI64ArrayAttr(index);
     res = builder.create<mllvm::InsertValueOp>(loc, res, val, i);
@@ -472,33 +477,33 @@ get_from_memref_conversion_func(mlir::ModuleOp module, mlir::OpBuilder &builder,
   insert(4, ptr);
   if (rank > 0) {
     insert(5, shape);
-    insert(6, mul_strides(loc, builder, strides, itemsize));
+    insert(6, mulStrides(loc, builder, strides, itemsize));
   }
   builder.create<mllvm::ReturnOp>(loc, res);
-  return new_func;
+  return newFunc;
 }
 
-mlir::Attribute get_fastmath_attrs(mlir::MLIRContext &ctx) {
-  auto add_pair = [&](auto name, auto val) {
+static mlir::Attribute getFastmathAttrs(mlir::MLIRContext &ctx) {
+  auto addPair = [&](auto name, auto val) {
     const mlir::Attribute attrs[] = {mlir::StringAttr::get(&ctx, name),
                                      mlir::StringAttr::get(&ctx, val)};
     return mlir::ArrayAttr::get(&ctx, attrs);
   };
   const mlir::Attribute attrs[] = {
-      add_pair("denormal-fp-math", "preserve-sign,preserve-sign"),
-      add_pair("denormal-fp-math-f32", "ieee,ieee"),
-      add_pair("no-infs-fp-math", "true"),
-      add_pair("no-nans-fp-math", "true"),
-      add_pair("no-signed-zeros-fp-math", "true"),
-      add_pair("unsafe-fp-math", "true"),
-      add_pair(plier::attributes::getFastmathName(), "1"),
+      addPair("denormal-fp-math", "preserve-sign,preserve-sign"),
+      addPair("denormal-fp-math-f32", "ieee,ieee"),
+      addPair("no-infs-fp-math", "true"),
+      addPair("no-nans-fp-math", "true"),
+      addPair("no-signed-zeros-fp-math", "true"),
+      addPair("unsafe-fp-math", "true"),
+      addPair(imex::util::attributes::getFastmathName(), "1"),
   };
   return mlir::ArrayAttr::get(&ctx, attrs);
 }
 
-mlir::Type getFunctionResType(mlir::MLIRContext &context,
-                              mlir::TypeConverter &converter,
-                              mlir::TypeRange types) {
+static mlir::Type getFunctionResType(mlir::MLIRContext &context,
+                                     mlir::TypeConverter &converter,
+                                     mlir::TypeRange types) {
   if (types.empty())
     return mlir::LLVM::LLVMPointerType::get(
         mlir::IntegerType::get(&context, 8));
@@ -508,7 +513,7 @@ mlir::Type getFunctionResType(mlir::MLIRContext &context,
     auto i = it.index();
     auto type = it.value();
     if (auto memreftype = type.dyn_cast<mlir::MemRefType>()) {
-      newResTypes[i] = get_array_type(converter, memreftype);
+      newResTypes[i] = getArrayType(converter, memreftype);
     } else {
       newResTypes[i] = type;
     }
@@ -520,13 +525,13 @@ mlir::Type getFunctionResType(mlir::MLIRContext &context,
   return convertTupleTypes(context, converter, newResTypes);
 }
 
-mlir::LogicalResult fixFuncSig(LLVMTypeHelper &typeHelper,
-                               mlir::func::FuncOp func) {
+static mlir::LogicalResult fixFuncSig(LLVMTypeHelper &typeHelper,
+                                      mlir::func::FuncOp func) {
   if (func.isPrivate())
     return mlir::success();
 
-  if (func->getAttr(plier::attributes::getFastmathName()))
-    func->setAttr("passthrough", get_fastmath_attrs(*func.getContext()));
+  if (func->getAttr(imex::util::attributes::getFastmathName()))
+    func->setAttr("passthrough", getFastmathAttrs(*func.getContext()));
 
   auto oldType = func.getFunctionType();
   auto &ctx = *oldType.getContext();
@@ -564,8 +569,8 @@ mlir::LogicalResult fixFuncSig(LLVMTypeHelper &typeHelper,
   auto processArg = [&](mlir::Type type) {
     if (auto memrefType = type.dyn_cast<mlir::MemRefType>()) {
       newArgs.clear();
-      auto arrType = get_array_type(typeConverter, memrefType);
-      flatten_type(arrType, [&](mlir::Type new_type) {
+      auto arrType = getArrayType(typeConverter, memrefType);
+      flattenType(arrType, [&](mlir::Type new_type) {
         newArgs.push_back(addArg(new_type));
       });
       auto it = newArgs.begin();
@@ -578,9 +583,9 @@ mlir::LogicalResult fixFuncSig(LLVMTypeHelper &typeHelper,
       auto mod = mlir::cast<mlir::ModuleOp>(func->getParentOp());
       auto dstType = typeConverter.convertType(memrefType);
       assert(dstType);
-      auto convFunc = get_to_memref_conversion_func(
-          mod, builder, memrefType, arrType,
-          dstType.cast<mlir::LLVM::LLVMStructType>());
+      auto convFunc =
+          getToMemrefConversionFunc(mod, builder, memrefType, arrType,
+                                    dstType.cast<mlir::LLVM::LLVMStructType>());
       auto converted =
           builder.create<mlir::func::CallOp>(loc, convFunc, desc).getResult(0);
       auto casted = doCast(builder, loc, converted, memrefType);
@@ -596,9 +601,9 @@ mlir::LogicalResult fixFuncSig(LLVMTypeHelper &typeHelper,
   addArg(ptr(ptr(getExceptInfoType(typeHelper))));
 
   auto oldArgs = oldType.getInputs();
-  for (auto arg : oldArgs) {
+  for (auto arg : oldArgs)
     processArg(arg);
-  }
+
   auto retType = mlir::IntegerType::get(&ctx, 32);
   func.setType(mlir::FunctionType::get(&ctx, args, retType));
   return mlir::success();
@@ -632,9 +637,9 @@ struct ReturnOpLowering : public mlir::OpRewritePattern<mlir::func::ReturnOp> {
 
       val = doCast(rewriter, loc, val, llRetType);
       if (auto memrefType = origType.dyn_cast<mlir::MemRefType>()) {
-        auto dstType = get_array_type(typeConverter, memrefType)
+        auto dstType = getArrayType(typeConverter, memrefType)
                            .cast<mlir::LLVM::LLVMStructType>();
-        auto func = get_from_memref_conversion_func(
+        auto func = getFromMemrefConversionFunc(
             mod, rewriter, memrefType,
             llRetType.cast<mlir::LLVM::LLVMStructType>(), dstType);
         val = rewriter.create<mlir::func::CallOp>(loc, func, val).getResult(0);
@@ -709,7 +714,7 @@ struct ApplyFastmathFlags : public mlir::OpRewritePattern<Op> {
 private:
   template <typename F>
   static void getFastmathFlags(mlir::LLVM::LLVMFuncOp func, F &&sink) {
-    if (func->hasAttr(plier::attributes::getFastmathName())) {
+    if (func->hasAttr(imex::util::attributes::getFastmathName())) {
       sink(mlir::LLVM::FastmathFlags::fast);
     }
   }
@@ -742,20 +747,20 @@ struct AllocOpLowering : public mlir::AllocLikeOpLLVMLowering {
         loc, rewriter.getIntegerType(32), alignment);
 
     auto mod = allocOp->getParentOfType<mlir::ModuleOp>();
-    auto meminfo_ptr =
+    auto meminfoPtr =
         createAllocCall(loc, "NRT_MemInfo_alloc_safe_aligned", getVoidPtrType(),
                         {sizeBytes, alignment}, mod, rewriter);
-    auto data_ptr =
+    auto dataPtr =
         createAllocCall(loc, "NRT_MemInfo_data_fast", getVoidPtrType(),
-                        {meminfo_ptr}, mod, rewriter);
+                        {meminfoPtr}, mod, rewriter);
 
-    auto elem_ptr_type =
+    auto elemPtrType =
         mlir::LLVM::LLVMPointerType::get(memRefType.getElementType());
     auto bitcast = [&](mlir::Value val) {
-      return rewriter.create<mlir::LLVM::BitcastOp>(loc, elem_ptr_type, val);
+      return rewriter.create<mlir::LLVM::BitcastOp>(loc, elemPtrType, val);
     };
 
-    return std::make_tuple(bitcast(meminfo_ptr), bitcast(data_ptr));
+    return std::make_tuple(bitcast(meminfoPtr), bitcast(dataPtr));
   }
 
 private:
@@ -834,17 +839,15 @@ public:
   mlir::LLVM::LLVMFuncOp getFunction() { return this->getOperation(); }
 };
 
-void copyAttrs(mlir::Operation *src, mlir::Operation *dst) {
+static void copyAttrs(mlir::Operation *src, mlir::Operation *dst) {
   const mlir::StringRef attrs[] = {
-      plier::attributes::getFastmathName(),
-      plier::attributes::getParallelName(),
-      plier::attributes::getMaxConcurrencyName(),
+      imex::util::attributes::getFastmathName(),
+      imex::util::attributes::getParallelName(),
+      imex::util::attributes::getMaxConcurrencyName(),
   };
-  for (auto name : attrs) {
-    if (auto attr = src->getAttr(name)) {
+  for (auto name : attrs)
+    if (auto attr = src->getAttr(name))
       dst->setAttr(name, attr);
-    }
-  }
 }
 
 struct LowerParallel : public mlir::OpRewritePattern<imex::util::ParallelOp> {
@@ -854,15 +857,15 @@ struct LowerParallel : public mlir::OpRewritePattern<imex::util::ParallelOp> {
   mlir::LogicalResult
   matchAndRewrite(imex::util::ParallelOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto num_loops = op.getNumLoops();
+    auto numLoops = op.getNumLoops();
     llvm::SmallVector<mlir::Value> contextVars;
     llvm::SmallVector<mlir::Operation *> contextConstants;
-    llvm::DenseSet<mlir::Value> context_vars_set;
+    llvm::DenseSet<mlir::Value> contextVarsSet;
     auto addContextVar = [&](mlir::Value value) {
-      if (0 != context_vars_set.count(value)) {
+      if (0 != contextVarsSet.count(value))
         return;
-      }
-      context_vars_set.insert(value);
+
+      contextVarsSet.insert(value);
       if (auto op = value.getDefiningOp()) {
         if (op->hasTrait<mlir::OpTrait::ConstantLike>()) {
           contextConstants.emplace_back(op);
@@ -877,9 +880,9 @@ struct LowerParallel : public mlir::OpRewritePattern<imex::util::ParallelOp> {
       auto opRegion = value.getParentRegion();
       assert(nullptr != opRegion);
       do {
-        if (opRegion == &thisRegion) {
+        if (opRegion == &thisRegion)
           return true;
-        }
+
         opRegion = opRegion->getParentRegion();
       } while (nullptr != opRegion);
       return false;
@@ -888,9 +891,8 @@ struct LowerParallel : public mlir::OpRewritePattern<imex::util::ParallelOp> {
     if (op->walk([&](mlir::Operation *inner) -> mlir::WalkResult {
             if (op != inner) {
               for (auto arg : inner->getOperands()) {
-                if (!isDefinedInside(arg)) {
+                if (!isDefinedInside(arg))
                   addContextVar(arg);
-                }
               }
             }
             return mlir::WalkResult::advance();
@@ -903,9 +905,9 @@ struct LowerParallel : public mlir::OpRewritePattern<imex::util::ParallelOp> {
       fields.reserve(contextVars.size());
       for (auto var : contextVars) {
         auto type = converter.convertType(var.getType());
-        if (!type) {
+        if (!type)
           return {};
-        }
+
         fields.emplace_back(type);
       }
       return mlir::LLVM::LLVMStructType::getLiteral(op.getContext(), fields);
@@ -915,7 +917,7 @@ struct LowerParallel : public mlir::OpRewritePattern<imex::util::ParallelOp> {
       return mlir::failure();
     }
 
-    plier::AllocaInsertionPoint allocaInsertionPoint(op);
+    imex::AllocaInsertionPoint allocaInsertionPoint(op);
 
     auto contextPtrType = mlir::LLVM::LLVMPointerType::get(contextType);
 
@@ -931,9 +933,9 @@ struct LowerParallel : public mlir::OpRewritePattern<imex::util::ParallelOp> {
       return val;
     };
     auto fromLLVMIndex = [&](mlir::Value val) -> mlir::Value {
-      if (val.getType() != indexType) {
+      if (val.getType() != indexType)
         return doCast(rewriter, loc, val, indexType);
-      }
+
       return val;
     };
     auto llvmI32Type = mlir::IntegerType::get(op.getContext(), 32);
@@ -992,21 +994,20 @@ struct LowerParallel : public mlir::OpRewritePattern<imex::util::ParallelOp> {
       auto func = [&]() {
         auto parentFunc = op->getParentOfType<mlir::func::FuncOp>();
         assert(parentFunc);
-        auto func_name = [&]() {
-          auto old_name = parentFunc.getName();
+        auto funcName = [&]() {
+          auto oldName = parentFunc.getName();
           for (int i = 0;; ++i) {
             auto name =
-                (0 == i
-                     ? (llvm::Twine(old_name) + "_outlined").str()
-                     : (llvm::Twine(old_name) + "_outlined_" + llvm::Twine(i))
-                           .str());
+                (0 == i ? (llvm::Twine(oldName) + "_outlined").str()
+                        : (llvm::Twine(oldName) + "_outlined_" + llvm::Twine(i))
+                              .str());
             if (!mod.lookupSymbol<mlir::func::FuncOp>(name)) {
               return name;
             }
           }
         }();
 
-        auto func = plier::add_function(rewriter, mod, func_name, funcType);
+        auto func = imex::addFunction(rewriter, mod, funcName, funcType);
         copyAttrs(parentFunc, func);
         return func;
       }();
@@ -1018,7 +1019,7 @@ struct LowerParallel : public mlir::OpRewritePattern<imex::util::ParallelOp> {
       rewriter.setInsertionPointToStart(entry);
       auto pos0 = rewriter.getI64ArrayAttr(0);
       auto pos1 = rewriter.getI64ArrayAttr(1);
-      for (unsigned i = 0; i < num_loops; ++i) {
+      for (unsigned i = 0; i < numLoops; ++i) {
         auto arg = entry->getArgument(0);
         const mlir::Value indices[] = {rewriter.create<mlir::LLVM::ConstantOp>(
             loc, llvmI32Type,
@@ -1031,9 +1032,9 @@ struct LowerParallel : public mlir::OpRewritePattern<imex::util::ParallelOp> {
         auto upper = rewriter.create<mlir::LLVM::ExtractValueOp>(
             loc, llvmIndexType, dims, pos1);
         mapping.map(oldEntry.getArgument(i), fromLLVMIndex(lower));
-        mapping.map(oldEntry.getArgument(i + num_loops), fromLLVMIndex(upper));
+        mapping.map(oldEntry.getArgument(i + numLoops), fromLLVMIndex(upper));
       }
-      mapping.map(oldEntry.getArgument(2 * num_loops),
+      mapping.map(oldEntry.getArgument(2 * numLoops),
                   entry->getArgument(1)); // thread index
       for (auto arg : contextConstants)
         rewriter.clone(*arg, mapping);
@@ -1058,8 +1059,8 @@ struct LowerParallel : public mlir::OpRewritePattern<imex::util::ParallelOp> {
         mapping.map(oldVal, val);
       }
       op.getLoopBody().cloneInto(&func.getBody(), mapping);
-      auto &orig_entry = *std::next(func.getBody().begin());
-      rewriter.create<mlir::cf::BranchOp>(loc, &orig_entry);
+      auto &origEntry = *std::next(func.getBody().begin());
+      rewriter.create<mlir::cf::BranchOp>(loc, &origEntry);
       for (auto &block : func.getBody()) {
         if (auto term =
                 mlir::dyn_cast<imex::util::YieldOp>(block.getTerminator())) {
@@ -1072,10 +1073,10 @@ struct LowerParallel : public mlir::OpRewritePattern<imex::util::ParallelOp> {
     }();
 
     auto parallelFor = [&]() {
-      auto func_name = "dpcompParallelFor";
-      if (auto sym = mod.lookupSymbol<mlir::func::FuncOp>(func_name)) {
+      auto funcName = "dpcompParallelFor";
+      if (auto sym = mod.lookupSymbol<mlir::func::FuncOp>(funcName))
         return sym;
-      }
+
       const mlir::Type args[] = {
           inputRangePtr, // bounds
           indexType,     // num_loops
@@ -1084,19 +1085,19 @@ struct LowerParallel : public mlir::OpRewritePattern<imex::util::ParallelOp> {
       };
       auto parallelFuncType =
           mlir::FunctionType::get(op.getContext(), args, {});
-      return plier::add_function(rewriter, mod, func_name, parallelFuncType);
+      return imex::addFunction(rewriter, mod, funcName, parallelFuncType);
     }();
     auto funcAddr = rewriter.create<mlir::func::ConstantOp>(
         loc, funcType, mlir::SymbolRefAttr::get(outlinedFunc));
 
     auto inputRanges = allocaInsertionPoint.insert(rewriter, [&]() {
-      auto numLoopsAttr = rewriter.getIntegerAttr(llvmIndexType, num_loops);
+      auto numLoopsAttr = rewriter.getIntegerAttr(llvmIndexType, numLoops);
       auto numLoopsVar = rewriter.create<mlir::LLVM::ConstantOp>(
           loc, llvmIndexType, numLoopsAttr);
       return rewriter.create<mlir::LLVM::AllocaOp>(loc, inputRangePtr,
                                                    numLoopsVar, 0);
     });
-    for (unsigned i = 0; i < num_loops; ++i) {
+    for (unsigned i = 0; i < numLoops; ++i) {
       mlir::Value inputRange =
           rewriter.create<mlir::LLVM::UndefOp>(loc, inputRangeType);
       auto insert = [&](mlir::Value val, unsigned index) {
@@ -1114,7 +1115,7 @@ struct LowerParallel : public mlir::OpRewritePattern<imex::util::ParallelOp> {
     }
 
     auto numLoopsVar =
-        rewriter.create<mlir::arith::ConstantIndexOp>(loc, num_loops);
+        rewriter.create<mlir::arith::ConstantIndexOp>(loc, numLoops);
     const mlir::Value pfArgs[] = {inputRanges, numLoopsVar, funcAddr,
                                   contextAbstract};
     rewriter.replaceOpWithNewOp<mlir::func::CallOp>(op, parallelFor, pfArgs);
@@ -1266,7 +1267,7 @@ static void populateLowerToLlvmPipeline(mlir::OpPassManager &pm) {
 }
 } // namespace
 
-void registerLowerToLLVMPipeline(plier::PipelineRegistry &registry) {
+void registerLowerToLLVMPipeline(imex::PipelineRegistry &registry) {
   registry.registerPipeline([](auto sink) {
     auto stage = getLowerLoweringStage();
     sink(lowerToLLVMPipelineName(), {stage.begin}, {stage.end}, {},

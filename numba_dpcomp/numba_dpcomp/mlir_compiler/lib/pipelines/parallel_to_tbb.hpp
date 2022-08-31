@@ -14,7 +14,7 @@
 
 #pragma once
 
-namespace plier {
+namespace imex {
 class PipelineRegistry;
 }
 
@@ -22,6 +22,6 @@ namespace llvm {
 class StringRef;
 }
 
-void registerParallelToTBBPipeline(plier::PipelineRegistry &registry);
+void registerParallelToTBBPipeline(imex::PipelineRegistry &registry);
 
 llvm::StringRef parallelToTBBPipelineName();

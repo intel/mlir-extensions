@@ -26,40 +26,41 @@ struct Meminfo {
   mlir::ValueRange indices;
 };
 
-llvm::Optional<Meminfo> getMeminfo(mlir::Operation *op) {
+static llvm::Optional<Meminfo> getMeminfo(mlir::Operation *op) {
   assert(nullptr != op);
-  if (auto load = mlir::dyn_cast<mlir::memref::LoadOp>(op)) {
+  if (auto load = mlir::dyn_cast<mlir::memref::LoadOp>(op))
     return Meminfo{load.memref(), load.indices()};
-  }
-  if (auto store = mlir::dyn_cast<mlir::memref::StoreOp>(op)) {
+
+  if (auto store = mlir::dyn_cast<mlir::memref::StoreOp>(op))
     return Meminfo{store.memref(), store.indices()};
-  }
+
   return {};
 }
 
 struct MustAlias {
   bool operator()(mlir::Operation *op1, mlir::Operation *op2) const {
     auto meminfo1 = getMeminfo(op1);
-    if (!meminfo1) {
+    if (!meminfo1)
       return false;
-    }
+
     auto meminfo2 = getMeminfo(op2);
-    if (!meminfo2) {
+    if (!meminfo2)
       return false;
-    }
+
     return meminfo1->memref == meminfo2->memref &&
            meminfo1->indices == meminfo2->indices;
   }
 };
 
-mlir::LogicalResult optimizeUses(plier::MemorySSAAnalysis &memSSAAnalysis) {
+static mlir::LogicalResult
+optimizeUses(imex::MemorySSAAnalysis &memSSAAnalysis) {
   return memSSAAnalysis.optimizeUses();
 }
 
-mlir::LogicalResult foldLoads(plier::MemorySSAAnalysis &memSSAAnalysis) {
+static mlir::LogicalResult foldLoads(imex::MemorySSAAnalysis &memSSAAnalysis) {
   assert(memSSAAnalysis.memssa);
   auto &memSSA = *memSSAAnalysis.memssa;
-  using NodeType = plier::MemorySSA::NodeType;
+  using NodeType = imex::MemorySSA::NodeType;
   bool changed = false;
   for (auto &node : llvm::make_early_inc_range(memSSA.getNodes())) {
     if (NodeType::Use == memSSA.getNodeType(&node)) {
@@ -84,20 +85,20 @@ mlir::LogicalResult foldLoads(plier::MemorySSAAnalysis &memSSAAnalysis) {
   return mlir::success(changed);
 }
 
-mlir::LogicalResult
-deadStoreElemination(plier::MemorySSAAnalysis &memSSAAnalysis) {
+static mlir::LogicalResult
+deadStoreElemination(imex::MemorySSAAnalysis &memSSAAnalysis) {
   assert(memSSAAnalysis.memssa);
   auto &memSSA = *memSSAAnalysis.memssa;
-  using NodeType = plier::MemorySSA::NodeType;
+  using NodeType = imex::MemorySSA::NodeType;
   auto getNextDef =
-      [&](plier::MemorySSA::Node *node) -> plier::MemorySSA::Node * {
-    plier::MemorySSA::Node *def = nullptr;
+      [&](imex::MemorySSA::Node *node) -> imex::MemorySSA::Node * {
+    imex::MemorySSA::Node *def = nullptr;
     for (auto user : memSSA.getUsers(node)) {
       auto type = memSSA.getNodeType(user);
       if (NodeType::Def == type) {
-        if (def != nullptr) {
+        if (def != nullptr)
           return nullptr;
-        }
+
         def = user;
       } else {
         return nullptr;
@@ -150,11 +151,11 @@ struct SimpleOperationInfo : public llvm::DenseMapInfo<mlir::Operation *> {
   }
 };
 
-mlir::LogicalResult loadCSE(plier::MemorySSAAnalysis &memSSAAnalysis) {
+static mlir::LogicalResult loadCSE(imex::MemorySSAAnalysis &memSSAAnalysis) {
   mlir::DominanceInfo dom;
   assert(memSSAAnalysis.memssa);
   auto &memSSA = *memSSAAnalysis.memssa;
-  using NodeType = plier::MemorySSA::NodeType;
+  using NodeType = imex::MemorySSA::NodeType;
   bool changed = false;
   llvm::SmallDenseMap<mlir::Operation *, mlir::Operation *, 4,
                       SimpleOperationInfo>
@@ -205,11 +206,10 @@ mlir::LogicalResult loadCSE(plier::MemorySSAAnalysis &memSSAAnalysis) {
 } // namespace
 
 llvm::Optional<mlir::LogicalResult>
-plier::optimizeMemoryOps(mlir::AnalysisManager &am) {
+imex::optimizeMemoryOps(mlir::AnalysisManager &am) {
   auto &memSSAAnalysis = am.getAnalysis<MemorySSAAnalysis>();
-  if (!memSSAAnalysis.memssa) {
+  if (!memSSAAnalysis.memssa)
     return {};
-  }
 
   using fptr_t = mlir::LogicalResult (*)(MemorySSAAnalysis &);
   const fptr_t funcs[] = {

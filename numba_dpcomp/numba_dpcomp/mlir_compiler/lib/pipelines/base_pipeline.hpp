@@ -16,11 +16,11 @@
 
 #include <llvm/ADT/StringRef.h>
 
-namespace plier {
+namespace imex {
 class PipelineRegistry;
 }
 
-void registerBasePipeline(plier::PipelineRegistry &registry);
+void registerBasePipeline(imex::PipelineRegistry &registry);
 
 struct PipelineStage {
   llvm::StringRef begin;

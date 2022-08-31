@@ -54,8 +54,37 @@ struct ImexUtilInlinerInterface : public mlir::DialectInlinerInterface {
 };
 } // namespace
 
+llvm::StringRef imex::util::attributes::getFastmathName() {
+  return "#plier.fastmath";
+}
+
+llvm::StringRef imex::util::attributes::getJumpMarkersName() {
+  return "#plier.pipeline_jump_markers";
+}
+
+llvm::StringRef imex::util::attributes::getParallelName() {
+  return "#plier.parallel";
+}
+
+llvm::StringRef imex::util::attributes::getMaxConcurrencyName() {
+  return "#plier.max_concurrency";
+}
+
+llvm::StringRef imex::util::attributes::getForceInlineName() {
+  return "#plier.force_inline";
+}
+
+llvm::StringRef imex::util::attributes::getOptLevelName() {
+  return "#plier.opt_level";
+}
+
+llvm::StringRef imex::util::attributes::getGpuRangeName() {
+  return "#plier.gpu_range";
+}
+
 namespace imex {
 namespace util {
+
 void ImexUtilDialect::initialize() {
   addOperations<
 #define GET_OP_LIST

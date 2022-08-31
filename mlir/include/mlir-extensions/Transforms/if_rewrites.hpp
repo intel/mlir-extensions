@@ -23,7 +23,7 @@ class IfOp;
 }
 } // namespace mlir
 
-namespace plier {
+namespace imex {
 struct IfOpConstCond : public mlir::OpRewritePattern<mlir::scf::IfOp> {
   IfOpConstCond(mlir::MLIRContext *context)
       : mlir::OpRewritePattern<mlir::scf::IfOp>(context, /*benefit*/ 1) {}
@@ -32,4 +32,4 @@ struct IfOpConstCond : public mlir::OpRewritePattern<mlir::scf::IfOp> {
   matchAndRewrite(mlir::scf::IfOp op,
                   mlir::PatternRewriter &rewriter) const override;
 };
-} // namespace plier
+} // namespace imex

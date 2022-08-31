@@ -18,8 +18,7 @@
 #include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 
-namespace {
-bool checkMemrefType(mlir::Value value) {
+static bool checkMemrefType(mlir::Value value) {
   if (auto type = value.getType().dyn_cast<mlir::MemRefType>()) {
     //        auto shape = type.getShape();
     //        return shape.empty() || (1 == shape.size() && 1 == shape[0]);
@@ -28,7 +27,7 @@ bool checkMemrefType(mlir::Value value) {
   return false;
 }
 
-bool isOutsideBlock(mlir::ValueRange values, mlir::Block &block) {
+static bool isOutsideBlock(mlir::ValueRange values, mlir::Block &block) {
   auto blockArgs = block.getArguments();
   for (auto val : values) {
     if (llvm::is_contained(blockArgs, val))
@@ -41,7 +40,8 @@ bool isOutsideBlock(mlir::ValueRange values, mlir::Block &block) {
   return true;
 }
 
-bool checkForPotentialAliases(mlir::Value value, mlir::Operation *parent) {
+static bool checkForPotentialAliases(mlir::Value value,
+                                     mlir::Operation *parent) {
   assert(parent->getRegions().size() == 1);
   assert(llvm::hasNItems(parent->getRegions().front(), 1));
   if (auto effects = mlir::dyn_cast_or_null<mlir::MemoryEffectOpInterface>(
@@ -89,7 +89,7 @@ bool checkForPotentialAliases(mlir::Value value, mlir::Operation *parent) {
   return true;
 }
 
-bool checkSupportedOps(mlir::Value value, mlir::Operation *parent) {
+static bool checkSupportedOps(mlir::Value value, mlir::Operation *parent) {
   for (auto user : value.getUsers()) {
     if (user->getParentOp() == parent &&
         !mlir::isa<mlir::memref::LoadOp, mlir::memref::StoreOp>(user))
@@ -98,38 +98,38 @@ bool checkSupportedOps(mlir::Value value, mlir::Operation *parent) {
   return true;
 }
 
-bool checkMemref(mlir::Value value, mlir::Operation *parent) {
+static bool checkMemref(mlir::Value value, mlir::Operation *parent) {
   return checkMemrefType(value) && checkForPotentialAliases(value, parent) &&
          checkSupportedOps(value, parent);
 }
 
-mlir::Value createScalarLoad(mlir::PatternRewriter &builder, mlir::Location loc,
-                             mlir::Value memref, mlir::ValueRange indices) {
+static mlir::Value createScalarLoad(mlir::PatternRewriter &builder,
+                                    mlir::Location loc, mlir::Value memref,
+                                    mlir::ValueRange indices) {
   return builder.create<mlir::memref::LoadOp>(loc, memref, indices);
 }
 
-void createScalarStore(mlir::PatternRewriter &builder, mlir::Location loc,
-                       mlir::Value val, mlir::Value memref,
-                       mlir::ValueRange indices) {
+static void createScalarStore(mlir::PatternRewriter &builder,
+                              mlir::Location loc, mlir::Value val,
+                              mlir::Value memref, mlir::ValueRange indices) {
   builder.create<mlir::memref::StoreOp>(loc, val, memref, indices);
 }
-} // namespace
 
-mlir::LogicalResult plier::CanonicalizeReduction::matchAndRewrite(
+mlir::LogicalResult imex::CanonicalizeReduction::matchAndRewrite(
     mlir::scf::ForOp op, mlir::PatternRewriter &rewriter) const {
-  llvm::SmallVector<std::pair<mlir::Value, mlir::ValueRange>> to_process;
+  llvm::SmallVector<std::pair<mlir::Value, mlir::ValueRange>> toProcess;
   for (auto &current : op.getLoopBody().front()) {
     if (auto load = mlir::dyn_cast<mlir::memref::LoadOp>(current)) {
       auto memref = load.memref();
       if (checkMemref(memref, op))
-        to_process.push_back({memref, load.indices()});
+        toProcess.push_back({memref, load.indices()});
     }
   }
 
-  if (!to_process.empty()) {
+  if (!toProcess.empty()) {
     auto loc = op.getLoc();
     auto initArgs = llvm::to_vector<8>(op.getInitArgs());
-    for (auto it : to_process) {
+    for (auto it : toProcess) {
       initArgs.emplace_back(
           createScalarLoad(rewriter, loc, it.first, it.second));
     }
@@ -140,47 +140,46 @@ mlir::LogicalResult plier::CanonicalizeReduction::matchAndRewrite(
       mlir::BlockAndValueMapping mapping;
       mapping.map(oldBody.getArguments().front(), iter);
       mapping.map(oldBody.getArguments().drop_front(), iterVals);
-      auto yield_args = llvm::to_vector<8>(iterVals);
-      for (auto &body_op : oldBody.without_terminator()) {
-        auto invalid_index = static_cast<unsigned>(-1);
-        auto get_iter_index = [&](auto op) -> unsigned {
+      auto yieldArgs = llvm::to_vector(iterVals);
+      for (auto &bodyOp : oldBody.without_terminator()) {
+        auto invalidIndex = static_cast<unsigned>(-1);
+        auto getIterIndex = [&](auto op) -> unsigned {
           auto arg = op.memref();
-          for (auto it : llvm::enumerate(llvm::make_first_range(to_process))) {
+          for (auto it : llvm::enumerate(llvm::make_first_range(toProcess))) {
             if (arg == it.value()) {
               return static_cast<unsigned>(it.index() + prevArgsOffset);
             }
           }
-          return invalid_index;
+          return invalidIndex;
         };
-        if (auto load = mlir::dyn_cast<mlir::memref::LoadOp>(body_op)) {
-          auto index = get_iter_index(load);
-          if (index != invalid_index) {
-            mapping.map(body_op.getResults().front(), yield_args[index]);
+        if (auto load = mlir::dyn_cast<mlir::memref::LoadOp>(bodyOp)) {
+          auto index = getIterIndex(load);
+          if (index != invalidIndex) {
+            mapping.map(bodyOp.getResults().front(), yieldArgs[index]);
           } else {
-            builder.clone(body_op, mapping);
+            builder.clone(bodyOp, mapping);
           }
-        } else if (auto store =
-                       mlir::dyn_cast<mlir::memref::StoreOp>(body_op)) {
-          auto index = get_iter_index(store);
-          if (index != invalid_index) {
-            yield_args[index] = mapping.lookup(store.value());
+        } else if (auto store = mlir::dyn_cast<mlir::memref::StoreOp>(bodyOp)) {
+          auto index = getIterIndex(store);
+          if (index != invalidIndex) {
+            yieldArgs[index] = mapping.lookup(store.value());
           } else {
-            builder.clone(body_op, mapping);
+            builder.clone(bodyOp, mapping);
           }
         } else {
-          builder.clone(body_op, mapping);
+          builder.clone(bodyOp, mapping);
         }
       }
       auto yield = mlir::cast<mlir::scf::YieldOp>(oldBody.getTerminator());
-      llvm::copy(yield.getResults(), yield_args.begin());
-      builder.create<mlir::scf::YieldOp>(loc, yield_args);
+      llvm::copy(yield.getResults(), yieldArgs.begin());
+      builder.create<mlir::scf::YieldOp>(loc, yieldArgs);
     };
     auto results = rewriter
                        .create<mlir::scf::ForOp>(loc, op.getLowerBound(),
                                                  op.getUpperBound(),
                                                  op.getStep(), initArgs, body)
                        .getResults();
-    for (auto it : llvm::enumerate(to_process)) {
+    for (auto it : llvm::enumerate(toProcess)) {
       auto index = prevArgsOffset + it.index();
       auto result = results[static_cast<unsigned>(index)];
       createScalarStore(rewriter, loc, result, it.value().first,

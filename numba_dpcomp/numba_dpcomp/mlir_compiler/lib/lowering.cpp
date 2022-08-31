@@ -166,19 +166,19 @@ struct PlierLowerer final {
                            compilationContext["restype"]);
     func = mlir::func::FuncOp::create(builder.getUnknownLoc(), name, typ);
     if (compilationContext["fastmath"]().cast<bool>())
-      func->setAttr(plier::attributes::getFastmathName(),
+      func->setAttr(imex::util::attributes::getFastmathName(),
                     mlir::UnitAttr::get(&ctx));
 
     if (compilationContext["force_inline"]().cast<bool>())
-      func->setAttr(plier::attributes::getForceInlineName(),
+      func->setAttr(imex::util::attributes::getForceInlineName(),
                     mlir::UnitAttr::get(&ctx));
 
-    func->setAttr(plier::attributes::getOptLevelName(),
+    func->setAttr(imex::util::attributes::getOptLevelName(),
                   builder.getI64IntegerAttr(
                       compilationContext["opt_level"]().cast<int64_t>()));
     auto maxConcurrency = compilationContext["max_concurrency"]().cast<int>();
     if (maxConcurrency > 0)
-      mod->setAttr(plier::attributes::getMaxConcurrencyName(),
+      mod->setAttr(imex::util::attributes::getMaxConcurrencyName(),
                    builder.getI64IntegerAttr(maxConcurrency));
 
     lowerFuncBody(funcIr);
@@ -262,8 +262,8 @@ private:
     } else if (py::isinstance(inst, insts.Jump)) {
       jump(inst.attr("target"));
     } else {
-      plier::reportError(llvm::Twine("lower_inst not handled: \"") +
-                         py::str(inst.get_type()).cast<std::string>() + "\"");
+      imex::reportError(llvm::Twine("lower_inst not handled: \"") +
+                        py::str(inst.get_type()).cast<std::string>() + "\"");
     }
   }
 
@@ -293,8 +293,8 @@ private:
       return builder.create<plier::GlobalOp>(getCurrentLoc(), name);
     }
 
-    plier::reportError(llvm::Twine("lower_assign not handled: \"") +
-                       py::str(value.get_type()).cast<std::string>() + "\"");
+    imex::reportError(llvm::Twine("lower_assign not handled: \"") +
+                      py::str(value.get_type()).cast<std::string>() + "\"");
   }
 
   mlir::Value lowerExpr(py::handle expr) {
@@ -321,7 +321,7 @@ private:
       if (h.first == op)
         return (this->*h.second)(expr);
 
-    plier::reportError(llvm::Twine("lower_expr not handled: \"") + op + "\"");
+    imex::reportError(llvm::Twine("lower_expr not handled: \"") + op + "\"");
   }
 
   template <typename T> mlir::Value lowerSimple(py::handle inst) {
@@ -370,8 +370,8 @@ private:
       auto tupleType = builder.getTupleType(types);
       return builder.create<plier::BuildTupleOp>(loc, tupleType, args);
     }
-    plier::reportError(llvm::Twine("Unhandled index type: ") +
-                       py::str(obj.get_type()).cast<std::string>());
+    imex::reportError(llvm::Twine("Unhandled index type: ") +
+                      py::str(obj.get_type()).cast<std::string>());
   }
 
   mlir::Value lowerStaticGetitem(py::handle inst) {
@@ -437,8 +437,8 @@ private:
 
     auto pyFuncName = funcNameResolver(typemap(pyPunc));
     if (pyFuncName.is_none())
-      plier::reportError(llvm::Twine("Can't resolve function: ") +
-                         py::str(typemap(pyPunc)).cast<std::string>());
+      imex::reportError(llvm::Twine("Can't resolve function: ") +
+                        py::str(typemap(pyPunc)).cast<std::string>());
 
     auto funcName = pyFuncName.cast<std::string>();
 
@@ -479,8 +479,8 @@ private:
       if (op.is(std::get<1>(elem)))
         return std::get<0>(elem).op;
 
-    plier::reportError(llvm::Twine("resolve_op not handled: \"") +
-                       py::str(op).cast<std::string>() + "\"");
+    imex::reportError(llvm::Twine("resolve_op not handled: \"") +
+                      py::str(op).cast<std::string>() + "\"");
   }
 
   mlir::Value lowerGetattr(py::handle inst) {
@@ -570,8 +570,8 @@ private:
   mlir::Value getConst(py::handle val) {
     auto ret = getConstOrNull(val);
     if (!ret)
-      plier::reportError(llvm::Twine("get_const unhandled type \"") +
-                         py::str(val.get_type()).cast<std::string>() + "\"");
+      imex::reportError(llvm::Twine("get_const unhandled type \"") +
+                        py::str(val.get_type()).cast<std::string>() + "\"");
     return ret;
   }
 
@@ -612,7 +612,7 @@ private:
         auto &info = it->second;
         auto term = bb.getTerminator();
         if (nullptr == term)
-          plier::reportError("broken ir: block without terminator");
+          imex::reportError("broken ir: block without terminator");
 
         builder.setInsertionPointToEnd(&bb);
 
@@ -636,17 +636,17 @@ private:
                                                  trueDest, trueArgs, falseDest,
                                                  falseArgs);
         } else {
-          plier::reportError(llvm::Twine("Unhandled terminator: ") +
-                             term->getName().getStringRef());
+          imex::reportError(llvm::Twine("Unhandled terminator: ") +
+                            term->getName().getStringRef());
         }
       }
     }
   }
 };
 
-plier::CompilerContext::Settings getSettings(py::handle settings,
-                                             CallbackOstream &os) {
-  plier::CompilerContext::Settings ret;
+imex::CompilerContext::Settings getSettings(py::handle settings,
+                                            CallbackOstream &os) {
+  imex::CompilerContext::Settings ret;
   ret.verify = settings["verify"].cast<bool>();
   ret.passStatistics = settings["pass_statistics"].cast<bool>();
   ret.passTimings = settings["pass_timings"].cast<bool>();
@@ -667,7 +667,7 @@ plier::CompilerContext::Settings getSettings(py::handle settings,
     os.setCallback([callback](llvm::StringRef text) {
       callback(py::str(text.data(), text.size()));
     });
-    using S = plier::CompilerContext::Settings::IRPrintingSettings;
+    using S = imex::CompilerContext::Settings::IRPrintingSettings;
     ret.irPrinting = S{getList(printBefore), getList(printAfter), &os};
   }
   return ret;
@@ -683,14 +683,14 @@ static py::bytes genLLModule(mlir::ModuleOp mod) {
   llvm::LLVMContext llCtx;
   llCtx.setOpaquePointers(false);
   std::unique_ptr<llvm::Module> llMod;
-  plier::scopedDiagHandler(*mod.getContext(), diagHandler, [&]() {
+  imex::scopedDiagHandler(*mod.getContext(), diagHandler, [&]() {
     mlir::registerLLVMDialectTranslation(*mod.getContext());
     llMod = mlir::translateModuleToLLVMIR(mod, llCtx);
     if (nullptr == llMod) {
       errStream << "\n";
       mod.print(errStream);
       errStream.flush();
-      plier::reportError(llvm::Twine("Cannot generate LLVM module\n") + err);
+      imex::reportError(llvm::Twine("Cannot generate LLVM module\n") + err);
     }
   });
   assert(nullptr != llMod);
@@ -710,7 +710,7 @@ struct ModuleSettings {
   bool enableGpuPipeline = false;
 };
 
-static void createPipeline(plier::PipelineRegistry &registry,
+static void createPipeline(imex::PipelineRegistry &registry,
                            const ModuleSettings &settings) {
   registerBasePipeline(registry);
   registerLowerToLLVMPipeline(registry);
@@ -732,7 +732,7 @@ static void createPipeline(plier::PipelineRegistry &registry,
 
 struct Module {
   mlir::MLIRContext context;
-  plier::PipelineRegistry registry;
+  imex::PipelineRegistry registry;
   mlir::ModuleOp module;
 
   Module(const ModuleSettings &settings) { createPipeline(registry, settings); }
@@ -746,7 +746,7 @@ static void runCompiler(Module &mod, const py::object &compilationContext) {
   CallbackOstream printStream;
   auto settings =
       getSettings(compilationContext["compiler_settings"], printStream);
-  plier::CompilerContext compiler(context, settings, registry);
+  imex::CompilerContext compiler(context, settings, registry);
   compiler.run(module);
 }
 } // namespace
@@ -771,6 +771,7 @@ static bool getDictVal(py::dict &dict, const char *str, T &&def) {
   auto key = py::str(str);
   if (dict.contains(key))
     return dict[key].cast<T>();
+
   return def;
 }
 

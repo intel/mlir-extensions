@@ -228,7 +228,7 @@ protected:
         loc, depsArray, nullPtr, rewriter.getI64ArrayAttr(depsArraySize));
 
     auto depsArrayPtrType = mlir::LLVM::LLVMPointerType::get(depsArrayType);
-    plier::AllocaInsertionPoint allocaHelper(op);
+    imex::AllocaInsertionPoint allocaHelper(op);
     auto depsArrayPtr = allocaHelper.insert(rewriter, [&]() {
       auto size = rewriter.create<mlir::LLVM::ConstantOp>(
           loc, llvmInt64Type, rewriter.getI64IntegerAttr(1));
@@ -449,7 +449,7 @@ private:
     auto depsArrayPtr =
         createDepsArray(rewriter, loc, op, adaptor.asyncDependencies());
 
-    plier::AllocaInsertionPoint allocaHelper(op);
+    imex::AllocaInsertionPoint allocaHelper(op);
     auto kernelParams = adaptor.operands();
     auto paramsCount = static_cast<unsigned>(kernelParams.size());
     auto paramsArrayType =
@@ -632,7 +632,7 @@ private:
 
     auto eventIndexVar = createEventIndexVar(rewriter, loc, op);
 
-    plier::AllocaInsertionPoint allocaHelper(op);
+    imex::AllocaInsertionPoint allocaHelper(op);
     auto resultPtr = allocaHelper.insert(rewriter, [&]() {
       auto size = rewriter.create<mlir::LLVM::ConstantOp>(
           loc, llvmInt64Type, rewriter.getI64IntegerAttr(1));
@@ -732,7 +732,7 @@ private:
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto numDims = op.getNumResults();
     auto loc = op.getLoc();
-    plier::AllocaInsertionPoint allocaHelper(op);
+    imex::AllocaInsertionPoint allocaHelper(op);
     auto gridArrayPtr = allocaHelper.insert(rewriter, [&]() {
       auto size = rewriter.create<mlir::LLVM::ConstantOp>(
           loc, llvmInt64Type, rewriter.getI64IntegerAttr(numDims));

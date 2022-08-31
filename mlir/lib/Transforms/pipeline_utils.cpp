@@ -17,52 +17,51 @@
 #include <mlir/IR/Attributes.h>
 #include <mlir/IR/BuiltinOps.h>
 
-#include "mlir-extensions/Dialect/plier/dialect.hpp"
+#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
 
-mlir::ArrayAttr plier::getPipelineJumpMarkers(mlir::ModuleOp module) {
+mlir::ArrayAttr imex::getPipelineJumpMarkers(mlir::ModuleOp module) {
   return module->getAttrOfType<mlir::ArrayAttr>(
-      plier::attributes::getJumpMarkersName());
+      imex::util::attributes::getJumpMarkersName());
 }
 
-void plier::addPipelineJumpMarker(mlir::ModuleOp module,
-                                  mlir::StringAttr name) {
+void imex::addPipelineJumpMarker(mlir::ModuleOp module, mlir::StringAttr name) {
   assert(name);
   assert(!name.getValue().empty());
 
-  auto jump_markers = plier::attributes::getJumpMarkersName();
-  llvm::SmallVector<mlir::Attribute, 16> name_list;
-  if (auto old_attr = module->getAttrOfType<mlir::ArrayAttr>(jump_markers)) {
-    name_list.assign(old_attr.begin(), old_attr.end());
-  }
+  auto jumpMarkers = imex::util::attributes::getJumpMarkersName();
+  llvm::SmallVector<mlir::Attribute, 16> nameList;
+  if (auto oldAttr = module->getAttrOfType<mlir::ArrayAttr>(jumpMarkers))
+    nameList.assign(oldAttr.begin(), oldAttr.end());
+
   auto it = llvm::lower_bound(
-      name_list, name, [](mlir::Attribute lhs, mlir::StringAttr rhs) {
+      nameList, name, [](mlir::Attribute lhs, mlir::StringAttr rhs) {
         return lhs.cast<mlir::StringAttr>().getValue() < rhs.getValue();
       });
-  if (it == name_list.end()) {
-    name_list.emplace_back(name);
+  if (it == nameList.end()) {
+    nameList.emplace_back(name);
   } else if (*it != name) {
-    name_list.insert(it, name);
+    nameList.insert(it, name);
   }
-  module->setAttr(jump_markers,
-                  mlir::ArrayAttr::get(module.getContext(), name_list));
+  module->setAttr(jumpMarkers,
+                  mlir::ArrayAttr::get(module.getContext(), nameList));
 }
 
-void plier::removePipelineJumpMarker(mlir::ModuleOp module,
-                                     mlir::StringAttr name) {
+void imex::removePipelineJumpMarker(mlir::ModuleOp module,
+                                    mlir::StringAttr name) {
   assert(name);
   assert(!name.getValue().empty());
 
-  auto jump_markers = plier::attributes::getJumpMarkersName();
-  llvm::SmallVector<mlir::Attribute, 16> name_list;
-  if (auto old_attr = module->getAttrOfType<mlir::ArrayAttr>(jump_markers)) {
-    name_list.assign(old_attr.begin(), old_attr.end());
-  }
+  auto jumpMarkers = imex::util::attributes::getJumpMarkersName();
+  llvm::SmallVector<mlir::Attribute, 16> nameList;
+  if (auto oldAttr = module->getAttrOfType<mlir::ArrayAttr>(jumpMarkers))
+    nameList.assign(oldAttr.begin(), oldAttr.end());
+
   auto it = llvm::lower_bound(
-      name_list, name, [](mlir::Attribute lhs, mlir::StringAttr rhs) {
+      nameList, name, [](mlir::Attribute lhs, mlir::StringAttr rhs) {
         return lhs.cast<mlir::StringAttr>().getValue() < rhs.getValue();
       });
-  assert(it != name_list.end());
-  name_list.erase(it);
-  module->setAttr(jump_markers,
-                  mlir::ArrayAttr::get(module.getContext(), name_list));
+  assert(it != nameList.end());
+  nameList.erase(it);
+  module->setAttr(jumpMarkers,
+                  mlir::ArrayAttr::get(module.getContext(), nameList));
 }

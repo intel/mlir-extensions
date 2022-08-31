@@ -28,7 +28,7 @@ class Operation;
 class Region;
 } // namespace mlir
 
-namespace plier {
+namespace imex {
 
 class MemorySSA {
 public:
@@ -111,5 +111,5 @@ private:
                    llvm::ArrayRef<Node *> args);
 };
 
-llvm::Optional<plier::MemorySSA> buildMemorySSA(mlir::Region &region);
-} // namespace plier
+llvm::Optional<imex::MemorySSA> buildMemorySSA(mlir::Region &region);
+} // namespace imex

@@ -599,9 +599,9 @@ struct CondBranchSameTargetRewrite
 /// artifact of Numba IR conversion and doesn't really have any functional
 /// meaning so we can get rid of it early.
 struct LowerArgOps
-    : public plier::RewriteWrapperPass<
-          LowerArgOps, void, plier::DependentDialectsList<plier::PlierDialect>,
-          plier::ArgOpLowering> {};
+    : public imex::RewriteWrapperPass<
+          LowerArgOps, void, imex::DependentDialectsList<plier::PlierDialect>,
+          imex::ArgOpLowering> {};
 
 struct PlierToScfPass
     : public mlir::PassWrapper<PlierToScfPass, mlir::OperationPass<void>> {
@@ -631,7 +631,7 @@ void PlierToScfPass::runOnOperation() {
       // clang-format on
       >(context);
 
-  plier::populateCanonicalizationPatterns(*context, patterns);
+  imex::populateCanonicalizationPatterns(*context, patterns);
 
   auto op = getOperation();
   (void)mlir::applyPatternsAndFoldGreedily(op, std::move(patterns));
@@ -654,7 +654,7 @@ static void populatePlierToScfPipeline(mlir::OpPassManager &pm) {
 }
 } // namespace
 
-void registerPlierToScfPipeline(plier::PipelineRegistry &registry) {
+void registerPlierToScfPipeline(imex::PipelineRegistry &registry) {
   registry.registerPipeline([](auto sink) {
     auto stage = getHighLoweringStage();
     sink(plierToScfPipelineName(), {stage.begin}, {stage.end}, {},

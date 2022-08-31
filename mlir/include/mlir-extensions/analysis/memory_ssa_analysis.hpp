@@ -23,7 +23,7 @@ class Operation;
 class AliasAnalysis;
 } // namespace mlir
 
-namespace plier {
+namespace imex {
 class MemorySSAAnalysis {
 public:
   MemorySSAAnalysis(mlir::Operation *op, mlir::AnalysisManager &am);
@@ -33,7 +33,7 @@ public:
 
   static bool isInvalidated(const mlir::AnalysisManager::PreservedAnalyses &pa);
 
-  llvm::Optional<plier::MemorySSA> memssa;
+  llvm::Optional<imex::MemorySSA> memssa;
   mlir::AliasAnalysis *aliasAnalysis = nullptr;
 };
-} // namespace plier
+} // namespace imex

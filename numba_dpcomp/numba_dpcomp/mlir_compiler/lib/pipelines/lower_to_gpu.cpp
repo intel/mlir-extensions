@@ -182,8 +182,8 @@ struct RemoveNestedParallel
 
 // TODO: fix ParallelLoopToGpuPass
 struct RemoveNestedParallelPass
-    : public plier::RewriteWrapperPass<RemoveNestedParallelPass, void, void,
-                                       RemoveNestedParallel> {};
+    : public imex::RewriteWrapperPass<RemoveNestedParallelPass, void, void,
+                                      RemoveNestedParallel> {};
 
 struct RemoveKernelMarkerPass
     : public mlir::PassWrapper<RemoveKernelMarkerPass,
@@ -347,7 +347,7 @@ struct GPULowerDefaultLocalSize
         auto count = static_cast<unsigned>(operands.size());
         llvm::SmallVector<mlir::Value, 3> globalSize(count);
         for (auto i : llvm::seq(0u, count))
-          globalSize[i] = plier::indexCast(builder, loc, operands[i]);
+          globalSize[i] = imex::indexCast(builder, loc, operands[i]);
 
         auto res = builder
                        .create<gpu_runtime::GPUSuggestBlockSizeOp>(
@@ -355,8 +355,8 @@ struct GPULowerDefaultLocalSize
                        .getResults();
 
         for (auto i : llvm::seq(0u, count)) {
-          auto castedRes = plier::indexCast(builder, loc, res[i],
-                                            call.getResult(i).getType());
+          auto castedRes = imex::indexCast(builder, loc, res[i],
+                                           call.getResult(i).getType());
           call.getResult(i).replaceAllUsesWith(castedRes);
         }
       }
@@ -423,8 +423,8 @@ struct FlattenScfIf : public mlir::OpRewritePattern<mlir::scf::IfOp> {
   }
 };
 
-struct FlattenScfPass : public plier::RewriteWrapperPass<FlattenScfPass, void,
-                                                         void, FlattenScfIf> {};
+struct FlattenScfPass : public imex::RewriteWrapperPass<FlattenScfPass, void,
+                                                        void, FlattenScfIf> {};
 
 static mlir::LogicalResult processAllocUser(mlir::Operation *user,
                                             mlir::Operation *allocParent,
@@ -721,10 +721,10 @@ void rerun_std_pipeline(mlir::Operation *op) {
       mlir::StringAttr::get(op->getContext(), plierToStdPipelineName());
   auto mod = op->getParentOfType<mlir::ModuleOp>();
   assert(nullptr != mod);
-  plier::addPipelineJumpMarker(mod, marker);
+  imex::addPipelineJumpMarker(mod, marker);
 }
 
-struct LowerGpuRange final : public plier::CallOpLowering {
+struct LowerGpuRange final : public imex::CallOpLowering {
   using CallOpLowering::CallOpLowering;
 
 protected:
@@ -738,10 +738,10 @@ protected:
     auto parent = op->getParentOp();
     auto setAttr = [](mlir::scf::ForOp op) {
       auto unitAttr = mlir::UnitAttr::get(op->getContext());
-      op->setAttr(plier::attributes::getParallelName(), unitAttr);
-      op->setAttr(plier::attributes::getGpuRangeName(), unitAttr);
+      op->setAttr(imex::util::attributes::getParallelName(), unitAttr);
+      op->setAttr(imex::util::attributes::getGpuRangeName(), unitAttr);
     };
-    if (mlir::failed(lowerRange(op, args, kwargs, rewriter, setAttr)))
+    if (mlir::failed(imex::lowerRange(op, args, kwargs, rewriter, setAttr)))
       return mlir::failure();
 
     rerun_std_pipeline(parent);
@@ -861,7 +861,7 @@ void ConvertGpuArrays::runOnOperation() {
   // Convert unknown types to itself
   typeConverter.addConversion([](mlir::Type type) { return type; });
   populateStdTypeConverter(context, typeConverter);
-  plier::populateTupleTypeConverter(context, typeConverter);
+  imex::populateTupleTypeConverter(context, typeConverter);
   typeConverter.addConversion(
       [&](plier::PyType type) -> llvm::Optional<mlir::Type> {
         auto name = type.getName();
@@ -890,11 +890,11 @@ void ConvertGpuArrays::runOnOperation() {
   mlir::RewritePatternSet patterns(&context);
   mlir::ConversionTarget target(context);
 
-  plier::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
-                                                      target);
+  imex::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
+                                                     target);
 
-  plier::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
-                                                            patterns, target);
+  imex::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
+                                                           patterns, target);
 
   target.addDynamicallyLegalOp<plier::GetItemOp, plier::SetItemOp>(
       [&](mlir::Operation *op) { return typeConverter.isLegal(op); });
@@ -912,10 +912,10 @@ void ConvertGpuArrays::runOnOperation() {
 }
 
 struct LowerGpuRangePass
-    : public plier::RewriteWrapperPass<LowerGpuRangePass, void, void,
-                                       LowerGpuRange> {};
+    : public imex::RewriteWrapperPass<LowerGpuRangePass, void, void,
+                                      LowerGpuRange> {};
 
-struct LowerPlierCalls final : public plier::CallOpLowering {
+struct LowerPlierCalls final : public imex::CallOpLowering {
   LowerPlierCalls(mlir::MLIRContext *context)
       : CallOpLowering(context),
         resolver("numba_dpcomp.mlir.kernel_impl", "registry") {}
@@ -1118,8 +1118,8 @@ struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::func::CallOp> {
       return mlir::failure();
 
     llvm::SmallVector<mlir::Value, 6> indexArgs;
-    auto attrId = mlir::StringAttr::get(op.getContext(),
-                                        plier::attributes::getGpuRangeName());
+    auto attrId = mlir::StringAttr::get(
+        op.getContext(), imex::util::attributes::getGpuRangeName());
     mlir::Operation *parent = op;
     while (true) {
       parent = parent->getParentOfType<mlir::scf::ForOp>();
@@ -1147,8 +1147,8 @@ struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::func::CallOp> {
 };
 
 struct LowerGpuBuiltinsPass
-    : public plier::RewriteWrapperPass<LowerGpuBuiltinsPass, void, void,
-                                       LowerPlierCalls, LowerBuiltinCalls> {};
+    : public imex::RewriteWrapperPass<LowerGpuBuiltinsPass, void, void,
+                                      LowerPlierCalls, LowerBuiltinCalls> {};
 
 static llvm::Optional<gpu_runtime::FenceFlags>
 getFenceFlags(mlir::OpFoldResult arg) {
@@ -1219,8 +1219,8 @@ public:
 };
 
 struct LowerGpuBuiltins2Pass
-    : public plier::RewriteWrapperPass<LowerGpuBuiltins2Pass, void, void,
-                                       ConvertBarrierOps> {};
+    : public imex::RewriteWrapperPass<LowerGpuBuiltins2Pass, void, void,
+                                      ConvertBarrierOps> {};
 
 class ConvertArrayAllocOps : public mlir::OpRewritePattern<mlir::func::CallOp> {
 public:
@@ -1305,8 +1305,8 @@ public:
 };
 
 struct LowerGpuBuiltins3Pass
-    : public plier::RewriteWrapperPass<LowerGpuBuiltins3Pass, void, void,
-                                       ConvertArrayAllocOps> {};
+    : public imex::RewriteWrapperPass<LowerGpuBuiltins3Pass, void, void,
+                                      ConvertArrayAllocOps> {};
 
 class GpuLaunchSinkOpsPass
     : public mlir::PassWrapper<GpuLaunchSinkOpsPass,
@@ -1403,13 +1403,13 @@ struct SinkGpuDims : public mlir::OpRewritePattern<mlir::gpu::LaunchOp> {
   }
 };
 
-struct SinkGpuDimsPass : public plier::RewriteWrapperPass<SinkGpuDimsPass, void,
-                                                          void, SinkGpuDims> {};
+struct SinkGpuDimsPass : public imex::RewriteWrapperPass<SinkGpuDimsPass, void,
+                                                         void, SinkGpuDims> {};
 
 static void commonOptPasses(mlir::OpPassManager &pm) {
-  pm.addPass(plier::createCommonOptsPass());
+  pm.addPass(imex::createCommonOptsPass());
   pm.addPass(mlir::createCSEPass());
-  pm.addPass(plier::createCommonOptsPass());
+  pm.addPass(imex::createCommonOptsPass());
 }
 
 static void populateLowerToGPUPipelineHigh(mlir::OpPassManager &pm) {
@@ -1478,7 +1478,7 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
 }
 } // namespace
 
-void registerLowerToGPUPipeline(plier::PipelineRegistry &registry) {
+void registerLowerToGPUPipeline(imex::PipelineRegistry &registry) {
   registry.registerPipeline([](auto sink) {
     auto highStage = getHighLoweringStage();
     sink(lowerToGPUPipelineNameHigh(),

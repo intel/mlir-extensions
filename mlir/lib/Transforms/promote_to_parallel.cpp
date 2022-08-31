@@ -14,13 +14,13 @@
 
 #include "mlir-extensions/Transforms/promote_to_parallel.hpp"
 
-#include "mlir-extensions/Dialect/plier/dialect.hpp"
+#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
+
 #include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 #include <mlir/Interfaces/CallInterfaces.h>
 
-namespace {
-bool hasSideEffects(mlir::Operation *op) {
+static bool hasSideEffects(mlir::Operation *op) {
   return op
       ->walk([&](mlir::Operation *op) {
         if (auto effects = mlir::dyn_cast<mlir::MemoryEffectOpInterface>(op)) {
@@ -40,7 +40,7 @@ bool hasSideEffects(mlir::Operation *op) {
       .wasInterrupted();
 }
 
-bool canParallelizeLoop(mlir::Operation *op, bool hasParallelAttr) {
+static bool canParallelizeLoop(mlir::Operation *op, bool hasParallelAttr) {
   return hasParallelAttr || !hasSideEffects(op);
 }
 
@@ -51,11 +51,9 @@ static mlir::Operation *getSingleUser(mlir::Value val) {
   return *val.user_begin();
 }
 
-} // namespace
-
-mlir::LogicalResult plier::PromoteToParallel::matchAndRewrite(
+mlir::LogicalResult imex::PromoteToParallel::matchAndRewrite(
     mlir::scf::ForOp op, mlir::PatternRewriter &rewriter) const {
-  auto hasParallelAttr = op->hasAttr(plier::attributes::getParallelName());
+  auto hasParallelAttr = op->hasAttr(imex::util::attributes::getParallelName());
   if (!canParallelizeLoop(op, hasParallelAttr))
     return mlir::failure();
 
@@ -146,13 +144,13 @@ mlir::LogicalResult plier::PromoteToParallel::matchAndRewrite(
       op, op.getLowerBound(), op.getUpperBound(), op.getStep(),
       op.getInitArgs(), bodyBuilder);
   if (hasParallelAttr)
-    parallelOp->setAttr(plier::attributes::getParallelName(),
+    parallelOp->setAttr(imex::util::attributes::getParallelName(),
                         rewriter.getUnitAttr());
 
   return mlir::success();
 }
 
-mlir::LogicalResult plier::MergeNestedForIntoParallel::matchAndRewrite(
+mlir::LogicalResult imex::MergeNestedForIntoParallel::matchAndRewrite(
     mlir::scf::ParallelOp op, mlir::PatternRewriter &rewriter) const {
   auto parent = mlir::dyn_cast<mlir::scf::ForOp>(op->getParentOp());
   if (!parent)
@@ -173,9 +171,8 @@ mlir::LogicalResult plier::MergeNestedForIntoParallel::matchAndRewrite(
     auto initVal = std::get<1>(it);
     auto result = std::get<2>(it);
     auto yieldOp = std::get<3>(it);
-    if (!arg.hasOneUse() || arg != initVal || result != yieldOp) {
+    if (!arg.hasOneUse() || arg != initVal || result != yieldOp)
       return mlir::failure();
-    }
   }
   auto checkVals = [&](auto vals) {
     for (auto val : vals)
@@ -188,7 +185,7 @@ mlir::LogicalResult plier::MergeNestedForIntoParallel::matchAndRewrite(
       checkVals(op.getStep()))
     return mlir::failure();
 
-  auto hasParallelAttr = op->hasAttr(plier::attributes::getParallelName());
+  auto hasParallelAttr = op->hasAttr(imex::util::attributes::getParallelName());
   if (!canParallelizeLoop(op, hasParallelAttr))
     return mlir::failure();
 
@@ -222,7 +219,7 @@ mlir::LogicalResult plier::MergeNestedForIntoParallel::matchAndRewrite(
       parent, lowerBounds, upperBounds, steps, parent.getInitArgs(),
       bodyBuilder);
   if (hasParallelAttr)
-    newOp->setAttr(plier::attributes::getParallelName(),
+    newOp->setAttr(imex::util::attributes::getParallelName(),
                    rewriter.getUnitAttr());
 
   return mlir::success();

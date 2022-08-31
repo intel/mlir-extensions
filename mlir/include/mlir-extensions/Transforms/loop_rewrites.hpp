@@ -22,7 +22,7 @@ class ForOp;
 }
 } // namespace mlir
 
-namespace plier {
+namespace imex {
 struct CmpLoopBoundsSimplify : public mlir::OpRewritePattern<mlir::scf::ForOp> {
   using mlir::OpRewritePattern<mlir::scf::ForOp>::OpRewritePattern;
 
@@ -30,4 +30,4 @@ struct CmpLoopBoundsSimplify : public mlir::OpRewritePattern<mlir::scf::ForOp> {
   matchAndRewrite(mlir::scf::ForOp op,
                   mlir::PatternRewriter &rewriter) const override;
 };
-} // namespace plier
+} // namespace imex

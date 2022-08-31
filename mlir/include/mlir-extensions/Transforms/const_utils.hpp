@@ -22,7 +22,7 @@ class Operation;
 class IntegerAttr;
 } // namespace mlir
 
-namespace plier {
+namespace imex {
 mlir::Attribute getConstVal(mlir::Operation *op);
 mlir::Attribute getConstVal(mlir::Value op);
 
@@ -37,4 +37,4 @@ template <typename T> T getConstVal(mlir::Value op) {
 mlir::Attribute getConstAttr(mlir::Type type, double val);
 
 int64_t getIntAttrValue(mlir::IntegerAttr attr);
-} // namespace plier
+} // namespace imex

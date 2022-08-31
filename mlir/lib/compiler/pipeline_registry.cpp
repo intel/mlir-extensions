@@ -24,7 +24,7 @@
 #include <unordered_map>
 #include <utility>
 
-void plier::PipelineRegistry::registerPipeline(
+void imex::PipelineRegistry::registerPipeline(
     PipelineRegistry::registry_entry_t func) {
   assert(nullptr != func);
   pipelines.push_back(std::move(func));
@@ -44,7 +44,7 @@ static void topoVisit(T &elem, IterF &&iterFunc, VisitF &&func) {
 }
 } // namespace
 
-void plier::PipelineRegistry::populatePassManager(
+void imex::PipelineRegistry::populatePassManager(
     populate_pass_manager_t resultSink) const {
   llvm::BumpPtrAllocator allocator;
   llvm::UniqueStringSaver stringSet(allocator);

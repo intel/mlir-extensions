@@ -22,15 +22,15 @@ namespace llvm {
 class Twine;
 }
 
-namespace plier {
+namespace imex {
 [[noreturn]] void reportError(const llvm::Twine &msg);
 
 template <typename T, typename H, typename F>
 void scopedDiagHandler(T &ctx, H &&diag_handler, F &&func) {
-  auto &diag_engine = ctx.getDiagEngine();
-  auto diag_id = diag_engine.registerHandler(std::forward<H>(diag_handler));
-  auto diag_guard =
-      llvm::make_scope_exit([&]() { diag_engine.eraseHandler(diag_id); });
+  auto &diagEngine = ctx.getDiagEngine();
+  auto diagId = diagEngine.registerHandler(std::forward<H>(diag_handler));
+  auto diagGuard =
+      llvm::make_scope_exit([&]() { diagEngine.eraseHandler(diagId); });
   func();
 }
-} // namespace plier
+} // namespace imex

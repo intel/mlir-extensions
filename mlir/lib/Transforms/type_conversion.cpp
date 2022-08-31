@@ -40,7 +40,7 @@ public:
 };
 } // namespace
 
-void plier::populateControlFlowTypeConversionRewritesAndTarget(
+void imex::populateControlFlowTypeConversionRewritesAndTarget(
     mlir::TypeConverter &typeConverter, mlir::RewritePatternSet &patterns,
     mlir::ConversionTarget &target) {
   mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::func::FuncOp>(
@@ -143,8 +143,8 @@ public:
 };
 } // namespace
 
-void plier::populateTupleTypeConverter(mlir::MLIRContext & /*context*/,
-                                       mlir::TypeConverter &typeConverter) {
+void imex::populateTupleTypeConverter(mlir::MLIRContext & /*context*/,
+                                      mlir::TypeConverter &typeConverter) {
   typeConverter.addConversion(
       [&typeConverter](mlir::TupleType type) -> llvm::Optional<mlir::Type> {
         auto count = static_cast<unsigned>(type.size());
@@ -168,7 +168,7 @@ void plier::populateTupleTypeConverter(mlir::MLIRContext & /*context*/,
       });
 }
 
-void plier::populateTupleTypeConversionRewritesAndTarget(
+void imex::populateTupleTypeConversionRewritesAndTarget(
     mlir::TypeConverter &typeConverter, mlir::RewritePatternSet &patterns,
     mlir::ConversionTarget &target) {
   patterns.insert<BuildTupleConversionPattern, GetItemTupleConversionPattern>(

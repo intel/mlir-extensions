@@ -17,8 +17,7 @@
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/IR/PatternMatch.h>
 
-namespace {
-bool is_index_compatible(mlir::Type lhsType, mlir::Type rhsType) {
+static bool isIndexCompatible(mlir::Type lhsType, mlir::Type rhsType) {
   if (!lhsType.isa<mlir::IntegerType>() || lhsType != rhsType)
     return false;
 
@@ -28,6 +27,7 @@ bool is_index_compatible(mlir::Type lhsType, mlir::Type rhsType) {
   return true;
 }
 
+namespace {
 template <typename Op>
 struct ArithIndexCastSimplify : public mlir::OpRewritePattern<Op> {
   using mlir::OpRewritePattern<Op>::OpRewritePattern;
@@ -36,7 +36,7 @@ struct ArithIndexCastSimplify : public mlir::OpRewritePattern<Op> {
   matchAndRewrite(Op op, mlir::PatternRewriter &rewriter) const override {
     auto lhsType = op.getLhs().getType();
     auto rhsType = op.getRhs().getType();
-    if (!is_index_compatible(lhsType, rhsType))
+    if (!isIndexCompatible(lhsType, rhsType))
       return mlir::failure();
 
     auto getCast = [](mlir::Value val) -> mlir::Value {
@@ -97,7 +97,7 @@ struct CmpIndexCastSimplify
                   mlir::PatternRewriter &rewriter) const override {
     auto lhsType = op.getLhs().getType();
     auto rhsType = op.getRhs().getType();
-    if (!is_index_compatible(lhsType, rhsType))
+    if (!isIndexCompatible(lhsType, rhsType))
       return mlir::failure();
 
     auto getCast = [](mlir::Value val) -> mlir::Value {
@@ -147,8 +147,8 @@ struct CmpIndexCastSimplify
 };
 } // namespace
 
-void plier::populateIndexPropagatePatterns(mlir::MLIRContext &context,
-                                           mlir::RewritePatternSet &patterns) {
+void imex::populateIndexPropagatePatterns(mlir::MLIRContext &context,
+                                          mlir::RewritePatternSet &patterns) {
   patterns
       .insert<CmpIndexCastSimplify, ArithIndexCastSimplify<mlir::arith::SubIOp>,
               ArithIndexCastSimplify<mlir::arith::AddIOp>,

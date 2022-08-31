@@ -23,10 +23,10 @@ class ConversionTarget;
 class Pass;
 } // namespace mlir
 
-namespace plier {
+namespace imex {
 void populatePromoteBoolMemrefConversionRewritesAndTarget(
     mlir::TypeConverter &typeConverter, mlir::RewritePatternSet &patterns,
     mlir::ConversionTarget &target);
 
 std::unique_ptr<mlir::Pass> createPromoteBoolMemrefPass();
-} // namespace plier
+} // namespace imex

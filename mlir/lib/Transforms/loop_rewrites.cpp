@@ -60,7 +60,7 @@ handlerImpl(mlir::arith::CmpIPredicate pred, mlir::Value lhs, mlir::Value rhs,
 }
 } // namespace
 
-mlir::LogicalResult plier::CmpLoopBoundsSimplify::matchAndRewrite(
+mlir::LogicalResult imex::CmpLoopBoundsSimplify::matchAndRewrite(
     mlir::scf::ForOp op, mlir::PatternRewriter &rewriter) const {
   auto indexVar = op.getLoopBody().front().getArgument(0);
   bool matched = false;

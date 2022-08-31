@@ -22,7 +22,7 @@ class MLIRContext;
 class Pass;
 } // namespace mlir
 
-namespace plier {
+namespace imex {
 void populateCanonicalizationPatterns(mlir::MLIRContext &context,
                                       mlir::RewritePatternSet &patterns);
 
@@ -30,4 +30,4 @@ void populateCommonOptsPatterns(mlir::MLIRContext &context,
                                 mlir::RewritePatternSet &patterns);
 
 std::unique_ptr<mlir::Pass> createCommonOptsPass();
-} // namespace plier
+} // namespace imex

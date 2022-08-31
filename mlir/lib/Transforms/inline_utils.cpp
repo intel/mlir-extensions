@@ -14,7 +14,7 @@
 
 #include "mlir-extensions/Transforms/inline_utils.hpp"
 
-#include "mlir-extensions/Dialect/plier/dialect.hpp"
+#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
 
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
@@ -25,8 +25,8 @@
 
 namespace {
 static bool mustInline(mlir::func::CallOp call, mlir::func::FuncOp func) {
-  auto attr = mlir::StringAttr::get(call.getContext(),
-                                    plier::attributes::getForceInlineName());
+  auto attr = mlir::StringAttr::get(
+      call.getContext(), imex::util::attributes::getForceInlineName());
   return call->hasAttr(attr) || func->hasAttr(attr);
 }
 
@@ -112,6 +112,6 @@ private:
 };
 } // namespace
 
-std::unique_ptr<mlir::Pass> plier::createForceInlinePass() {
+std::unique_ptr<mlir::Pass> imex::createForceInlinePass() {
   return std::make_unique<ForceInlinePass>();
 }

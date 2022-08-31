@@ -35,6 +35,16 @@
 
 namespace imex {
 namespace util {
+namespace attributes {
+llvm::StringRef getFastmathName();
+llvm::StringRef getJumpMarkersName();
+llvm::StringRef getParallelName();
+llvm::StringRef getMaxConcurrencyName();
+llvm::StringRef getForceInlineName();
+llvm::StringRef getOptLevelName();
+llvm::StringRef getGpuRangeName();
+} // namespace attributes
+
 class OpaqueType : public ::mlir::Type::TypeBase<OpaqueType, ::mlir::Type,
                                                  ::mlir::TypeStorage> {
 public:

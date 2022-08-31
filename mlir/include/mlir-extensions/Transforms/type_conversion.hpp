@@ -15,13 +15,13 @@
 #pragma once
 
 namespace mlir {
-class MLIRContext;
-class TypeConverter;
-class RewritePatternSet;
 class ConversionTarget;
+class MLIRContext;
+class RewritePatternSet;
+class TypeConverter;
 } // namespace mlir
 
-namespace plier {
+namespace imex {
 void populateControlFlowTypeConversionRewritesAndTarget(
     mlir::TypeConverter &typeConverter, mlir::RewritePatternSet &patterns,
     mlir::ConversionTarget &target);
@@ -32,4 +32,4 @@ void populateTupleTypeConverter(mlir::MLIRContext &context,
 void populateTupleTypeConversionRewritesAndTarget(
     mlir::TypeConverter &typeConverter, mlir::RewritePatternSet &patterns,
     mlir::ConversionTarget &target);
-} // namespace plier
+} // namespace imex
