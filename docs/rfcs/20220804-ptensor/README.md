@@ -12,6 +12,8 @@ MLIR provides a few tensor dialects (like tensor and TOSA) and separate dialects
 Additionally, the current architecture in Plier does not have an explicit MLIR representation of arrays/tensors and so makes it very hard to re-use its tensor functionality without coming from python/numba. Currently conversions are even relying the Python runtime. A dialect for such numpy-like tensors and -operations can accept hints for targets (like devices, MPI etc) and enable its use in libraries independent of numba and Python. One example of such a use case is a distributed and JIT-compiler based numpy implementation.
 
 ## Proposal
+The main purpose of this proposal is to enable compute-follows-data for a large variety of platforms. We strive to enable it not only different kinds of shared memory systems (like CPUs, GPUs, FPGAs, ...) but also (potentially heterogenous) distributed memory systems. In its core, compute-follows-data means that operations on an tensor will happen where the tensor was allocated.
+
 We propose two new Dialects and one dialect extension:
 1. __PTensor__ dialect: providing a tensor type (ptensor) and operations on tensors
 2. __Dist__ dialect: dealing with the aspects of distributed data management, such as distributed memory allocation, GC and communication
@@ -23,11 +25,12 @@ Additionally we propose appropriate passes
 3. Converting __intel-sycl.device_region__ to appropriate runtime calls.
 
 ### ptensor Type
-Logically, the ptensor type extends the `mlir::tensor` type with `device`, `team` and `gid` attributes. The `ptensor.ptensor` enables SSA values representing tensors with annotations for distributed and device operation. The tensors themselves are assumed to eventually lower to memrefs.
+Since operations are expected to execute in the same location as its input tensors, it is necessary to carry the tensor-location from the point of its allocation to the point of the operation. For this, we introduce a type which logically extends the `mlir::tensor` type with the necessary location information. The location information includes:
+* the `device`: The optional `device` indicates where the tensor lives, e.g. on which device. The target device is represented as a generic type which will be forwarded to the gpu/distributed runtimes. The exact type/syntax of device-identifiers is defined by the GPU runtime. For example, SYCL runtime will accept SYCL filter strings as defined [here](https://github.com/intel/llvm/blob/sycl/sycl/doc/EnvironmentVariables.md#sycl_device_filter). The default `NoneType` which disables device support.
+* a distributed `team`:  The optional `team` indicates a team (of processes) among which the tensor is partitioned-distributed. The type of the `team` depends on the underlying runtime; for MPI and Intel's distributed runtime this would be a `int64`. It defaults to `NoneType` which disables support for distributed operation.
+* a globally unique id `gid`: `int64`
 
-The optional `device` indicates where the tensor lives, e.g. on which device. The target device is represented as a plain string which will be forwarded to the gpu/distributed runtimes. The exact syntax of device-identifiers is defined by the GPU runtime. For example, SYCL runtime will accept SYCL filter strings as defined [here](https://github.com/intel/llvm/blob/sycl/sycl/doc/EnvironmentVariables.md#sycl_device_filter). The default `NoneType` which disables device support.
-
-The optional `team` attribute indicates a team (of processes) among which the tensor is partitioned-distributed. The type of the `team` attribute depends on the underlying runtime; for MPI and Intel's distributed runtime this would be a `int64`. It defaults to `NoneType` which disables support for distributed operation.
+The tensors themselves are assumed to eventually lower to memrefs.
 
 Notice: By default device and distribution support is disabled and so renders conventional host operations.
 
