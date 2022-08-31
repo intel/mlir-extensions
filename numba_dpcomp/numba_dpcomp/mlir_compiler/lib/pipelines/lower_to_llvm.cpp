@@ -857,7 +857,7 @@ struct LowerParallel : public mlir::OpRewritePattern<imex::util::ParallelOp> {
   mlir::LogicalResult
   matchAndRewrite(imex::util::ParallelOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto num_loops = op.getNumLoops();
+    auto numLoops = op.getNumLoops();
     llvm::SmallVector<mlir::Value> contextVars;
     llvm::SmallVector<mlir::Operation *> contextConstants;
     llvm::DenseSet<mlir::Value> contextVarsSet;
@@ -1019,7 +1019,7 @@ struct LowerParallel : public mlir::OpRewritePattern<imex::util::ParallelOp> {
       rewriter.setInsertionPointToStart(entry);
       auto pos0 = rewriter.getI64ArrayAttr(0);
       auto pos1 = rewriter.getI64ArrayAttr(1);
-      for (unsigned i = 0; i < num_loops; ++i) {
+      for (unsigned i = 0; i < numLoops; ++i) {
         auto arg = entry->getArgument(0);
         const mlir::Value indices[] = {rewriter.create<mlir::LLVM::ConstantOp>(
             loc, llvmI32Type,
@@ -1032,9 +1032,9 @@ struct LowerParallel : public mlir::OpRewritePattern<imex::util::ParallelOp> {
         auto upper = rewriter.create<mlir::LLVM::ExtractValueOp>(
             loc, llvmIndexType, dims, pos1);
         mapping.map(oldEntry.getArgument(i), fromLLVMIndex(lower));
-        mapping.map(oldEntry.getArgument(i + num_loops), fromLLVMIndex(upper));
+        mapping.map(oldEntry.getArgument(i + numLoops), fromLLVMIndex(upper));
       }
-      mapping.map(oldEntry.getArgument(2 * num_loops),
+      mapping.map(oldEntry.getArgument(2 * numLoops),
                   entry->getArgument(1)); // thread index
       for (auto arg : contextConstants)
         rewriter.clone(*arg, mapping);
@@ -1091,13 +1091,13 @@ struct LowerParallel : public mlir::OpRewritePattern<imex::util::ParallelOp> {
         loc, funcType, mlir::SymbolRefAttr::get(outlinedFunc));
 
     auto inputRanges = allocaInsertionPoint.insert(rewriter, [&]() {
-      auto numLoopsAttr = rewriter.getIntegerAttr(llvmIndexType, num_loops);
+      auto numLoopsAttr = rewriter.getIntegerAttr(llvmIndexType, numLoops);
       auto numLoopsVar = rewriter.create<mlir::LLVM::ConstantOp>(
           loc, llvmIndexType, numLoopsAttr);
       return rewriter.create<mlir::LLVM::AllocaOp>(loc, inputRangePtr,
                                                    numLoopsVar, 0);
     });
-    for (unsigned i = 0; i < num_loops; ++i) {
+    for (unsigned i = 0; i < numLoops; ++i) {
       mlir::Value inputRange =
           rewriter.create<mlir::LLVM::UndefOp>(loc, inputRangeType);
       auto insert = [&](mlir::Value val, unsigned index) {
@@ -1115,7 +1115,7 @@ struct LowerParallel : public mlir::OpRewritePattern<imex::util::ParallelOp> {
     }
 
     auto numLoopsVar =
-        rewriter.create<mlir::arith::ConstantIndexOp>(loc, num_loops);
+        rewriter.create<mlir::arith::ConstantIndexOp>(loc, numLoops);
     const mlir::Value pfArgs[] = {inputRanges, numLoopsVar, funcAddr,
                                   contextAbstract};
     rewriter.replaceOpWithNewOp<mlir::func::CallOp>(op, parallelFor, pfArgs);
