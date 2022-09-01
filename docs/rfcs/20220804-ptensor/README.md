@@ -35,7 +35,7 @@ The tensors themselves are assumed to eventually lower to memrefs.
 Notice: By default device and distribution support is disabled and so renders conventional host operations.
 
 ### __PTensor__ Operations
-The initial set of operations matches the requirements of the core of [array-API](https://data-apis.org/array-api/latest/API_specification/index.html). Notice, since we focus on compute-follows-data, only the creation functions/operations will require the `device` and `team` attributes. The operations in the PTensor dialect accept different tensor-like types as input arguments: ptensors, tensors and MemRefs. Apparently, operations can only implement compute-follows-data if the inputs have `device` and `team` attributes, e.g. if they are of ptensor type. Standard tensor and memref inputs are treated as ptensors with default `device` and `team`.
+The initial set of operations matches the requirements of the core of [array-API](https://data-apis.org/array-api/latest/API_specification/index.html). Notice, since we focus on compute-follows-data, only the creation functions/operations will require the `device` and `team` attributes. The operations in the PTensor dialect operate on ptensors. To allow operations on standard tensors and memrefs the PTensor dialect provides the operation `from_ranked` to convert MemRefs and RankedTensors to ptensors with default `device` and `team`.
 
 Notice: some of the operations mutate existing ptensors.
 
@@ -60,12 +60,13 @@ The below set of operations accrues from the following rules:
   * `create_like(rsh, value, dtype, device, team) : (shape.shape, anytype, type, str, int) -> ptensor.ptensor`
     * covers `empty_like, ones_like, zeros_like, full_like`
   * `eye(n_rows, n_cols, k, dtype, device, team) : (int, int, int, type, str, int) -> ptensor.ptensor`
-  * `from_dlpack(obj) : (ptr) -> ptensor.ptensor`
   * `linspace(start, stop, n, dtype, device, team) : (number, number, number, type, str, int) -> ptensor.ptensor`
   * `meshgrid(arrays) : (list) -> list`
   * `extract_triangle{$side}(rhs, k) : (ptensor.ptensor, int) -> ptensor.ptensor`
     * `$side = ['lower', 'upper']`
   * `delete(tensor) : (ptensor) -> void`
+  * `from_dlpack(obj) : (ptr) -> ptensor.ptensor`
+  * `from_ranked(ranked) : (Memref|RankedTensor) -> ptensor.ptensor`
 * Tensor attributes
   * `shape(rhs) : (ptensor.ptensor) -> shape.shape`
   * `rank(rhs) : (ptensor.ptensor) -> int64`
