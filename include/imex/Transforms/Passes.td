@@ -17,4 +17,13 @@
 
 include "mlir/Pass/PassBase.td"
 
+def SerializeSPIRVPass : Pass<"serialize-spirv", "::mlir::ModuleOp"> {
+  let summary = "serialize MLIR SPIR-V module to SPIR-V binary";
+  let constructor = "imex::createSerializeSPIRVPass()";
+  let dependentDialects = [
+    "mlir::gpu::GPUDialect",
+    "mlir::spirv::SPIRVDialect"
+    ];
+}
+
 #endif // _IMEX_TRANSFORMS_PASSES_TD_INCLUDED_
