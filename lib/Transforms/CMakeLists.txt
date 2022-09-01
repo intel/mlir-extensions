@@ -1,6 +1,5 @@
 add_mlir_library(IMEXTransforms
   insert_gpu_allocs.cpp
-  unstride_memref_pass.cpp
   set_spirv_capability.cpp
   spirv_abi_attribute_pass.cpp
 
