@@ -54,6 +54,8 @@ struct InsertGPUAllocs
 
     llvm::SmallMapVector<mlir::Operation *, AccessType, 8> gpuBufferAllocs;
     llvm::SmallMapVector<unsigned, AccessType, 8> gpuBufferParams;
+    llvm::SmallMapVector<mlir::Operation *, AccessType, 8>
+        gpuGetMemrefGlobalParams;
     auto &aliases = getAnalysis<mlir::BufferViewFlowAnalysis>();
 
     auto getMemref = [](mlir::Operation *op)
@@ -112,11 +114,14 @@ struct InsertGPUAllocs
                 for (auto alias : aliases.resolve(mem)) {
                   auto op = alias.getDefiningOp();
                   if (op) {
+                    if (mlir::isa<mlir::memref::GetGlobalOp>(op)) {
+                      gpuGetMemrefGlobalParams.insert({op, {}});
+                      continue;
+                    }
                     if (op->getDialect() == scfDialect ||
                         mlir::isa<mlir::ViewLikeOpInterface>(op))
                       continue;
-                    if (mlir::isa<mlir::memref::AllocOp,
-                                  mlir::memref::GetGlobalOp>(op)) {
+                    if (mlir::isa<mlir::memref::AllocOp>(op)) {
                       gpuBufferAllocs.insert({op, {}});
                     } else if (mlir::isa<mlir::func::CallOp>(op)) {
                       // Ignore
@@ -187,12 +192,7 @@ struct InsertGPUAllocs
 
     for (auto &it : gpuBufferAllocs) {
       auto alloc = mlir::cast<mlir::memref::AllocOp>(it.first);
-      if (alloc)
-        it.second = getAccessType(alloc);
-      else {
-        auto memrefGlobal = mlir::cast<mlir::memref::GetGlobalOp>(it.first);
-        it.second = getAccessType(memrefGlobal);
-      }
+      it.second = getAccessType(alloc);
     }
 
     auto &block = funcBody.front();
@@ -204,7 +204,71 @@ struct InsertGPUAllocs
       it.second.hostWrite = true;
     }
 
+    // GetMemrefGlobal Op:
     mlir::OpBuilder builder(func);
+    llvm::SmallVector<mlir::Value> dims;
+    llvm::SmallPtrSet<mlir::Operation *, 8> filter;
+    auto term = block.getTerminator();
+    assert(term);
+
+    for (auto &it : gpuGetMemrefGlobalParams) {
+      auto getGlobalOp = mlir::cast<mlir::memref::GetGlobalOp>(it.first);
+      it.second = getAccessType(getGlobalOp);
+      it.second.hostRead = true;
+      it.second.hostWrite = true;
+
+      auto loc = getGlobalOp.getLoc();
+      auto access = it.second;
+      builder.setInsertionPointAfter(getGlobalOp);
+      auto getGlobalOpResult = getGlobalOp.getResult();
+      auto memrefType = getGlobalOp.getType().cast<mlir::MemRefType>();
+      auto rank = static_cast<unsigned>(memrefType.getRank());
+      filter.clear();
+      dims.clear();
+      for (auto i : llvm::seq(0u, rank)) {
+        if (memrefType.isDynamicDim(i)) {
+          auto op =
+              builder.create<mlir::memref::DimOp>(loc, getGlobalOpResult, i);
+          dims.push_back(op);
+          filter.insert(op);
+        }
+      }
+      auto allocType = mlir::MemRefType::get(
+          memrefType.getShape(), memrefType.getElementType(),
+          mlir::MemRefLayoutAttrInterface{}, memrefType.getMemorySpace());
+      auto gpuAlloc = builder.create<mlir::gpu::AllocOp>(
+          loc, allocType, /*asyncToken*/ nullptr,
+          /*asyncDependencies*/ llvm::None, dims,
+          /*symbolOperands*/ llvm::None);
+      auto allocResult = gpuAlloc.getResult(0);
+
+      if (access.hostRead || access.hostWrite)
+        gpuAlloc->setAttr(imex::getAllocSharedAttrName(),
+                          builder.getUnitAttr());
+
+      if (access.hostWrite && access.deviceRead) {
+        auto copy =
+            builder.create<mlir::memref::CopyOp>(loc, getGlobalOp, allocResult);
+        filter.insert(copy);
+      }
+
+      if (allocType != memrefType)
+        allocResult =
+            builder.create<mlir::memref::CastOp>(loc, memrefType, allocResult);
+
+      getGlobalOpResult.replaceAllUsesExcept(allocResult, filter);
+
+      builder.setInsertionPoint(term);
+      if (access.hostRead && access.deviceWrite) {
+        builder.create<mlir::memref::CopyOp>(loc, allocResult, getGlobalOp);
+      }
+
+      if (useGpuDealloc)
+        builder.create<mlir::gpu::DeallocOp>(loc, llvm::None, allocResult);
+      else
+        builder.create<mlir::memref::DeallocOp>(loc, allocResult);
+    }
+
     for (auto it : gpuBufferAllocs) {
       auto alloc = mlir::cast<mlir::memref::AllocOp>(it.first);
       auto access = it.second;
@@ -221,11 +285,6 @@ struct InsertGPUAllocs
                           builder.getUnitAttr());
     }
 
-    auto term = block.getTerminator();
-    assert(term);
-
-    llvm::SmallVector<mlir::Value> dims;
-    llvm::SmallPtrSet<mlir::Operation *, 8> filter;
     for (auto it : gpuBufferParams) {
       auto param = block.getArgument(it.first);
       auto access = it.second;
