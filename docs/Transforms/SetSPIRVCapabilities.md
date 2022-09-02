@@ -1,7 +1,7 @@
-# SetSpirvCapabilities Pass
+# SetSPIRVCapabilities Pass
 
 
-SPIR-V aims to support multiple execution environments. These execution environments affect the availability of certain SPIR-V features. SPIR-V compilation should also take into consideration the execution environment, so we generate SPIR-V modules valid for the target environment. This is conveyed by the spv.target_env  attribute. The SetSpirvCapabilities pass, adds these various capabilties for the Spirv execution. The attribute #spv.vce has a few fields:
+SPIR-V aims to support multiple execution environments. These execution environments affect the availability of certain SPIR-V features. SPIR-V compilation should also take into consideration the execution environment, so we generate SPIR-V modules valid for the target environment. This is conveyed by the spv.target_env  attribute. The SetSPIRVCapabilities pass, adds these various capabilties for the SPIR-V execution. The attribute #spv.vce has a few fields:
 
 A #spv.vce (spirv::VerCapExtAttr) attribute:
 1. The target SPIR-V version.
@@ -68,4 +68,4 @@ As shown in the example above, the pass adds the SPIR-V capabilites as an attrib
 
 ## Reason for this Custom Pass:
 
-Upstream does not have a pass which does these conversions. Our goal is to add this pass to upstream which we think will be useful to the MLIR community.
+Upstream does not have a pass which does these conversions. This pass add a lot of things specific to Intel GPU. So, maybe we can have it as a custom pass rather than upstreaming.

@@ -1,18 +1,19 @@
+//===- InsertGpuAllocs.cpp - InsertGpuAllocs Pass  -------*- C++ -*-===//
+//
 // Copyright 2022 Intel Corporation
+// Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+//===----------------------------------------------------------------------===//
+///
+/// \file
+/// This file converts the memref.allocs for device side to gpu.allocs to
+/// distinguish between host & device side memory allocations.
+///
+//===----------------------------------------------------------------------===//
 
-#include <imex/Transforms/Transforms.hpp>
+#include <imex/Transforms/Transforms.h>
 
 namespace imex {
 
@@ -95,6 +96,8 @@ struct InsertGPUAllocs
       return false;
     };
 
+    // Traverse through all the memory access ops under GPU launch Op
+    // and add device memory allocation appropriately
     if (func.walk([&](mlir::Operation *op) {
               if (!op->getParentOfType<mlir::gpu::LaunchOp>())
                 return mlir::WalkResult::advance();
@@ -148,6 +151,7 @@ struct InsertGPUAllocs
       return;
     }
 
+    // Checks the access type of the OP
     auto getAccessType = [&](mlir::Value memref) {
       AccessType ret;
       for (auto mem : aliases.resolve(memref)) {
@@ -204,7 +208,10 @@ struct InsertGPUAllocs
       it.second.hostWrite = true;
     }
 
-    // GetMemrefGlobal Op:
+    // GetMemrefGlobal Op Case:
+    // This is the case where the inputs are globals contants and accessed using
+    // memref.get_global op. This code will add the IR for memeory allocation on
+    // the device with gpu.alloc and insert a memref.copy from host to device
     mlir::OpBuilder builder(func);
     llvm::SmallVector<mlir::Value> dims;
     llvm::SmallPtrSet<mlir::Operation *, 8> filter;
@@ -269,6 +276,8 @@ struct InsertGPUAllocs
         builder.create<mlir::memref::DeallocOp>(loc, allocResult);
     }
 
+    // This is the case where a memref.alloc op is directly converted to
+    // gpu.alloc
     for (auto it : gpuBufferAllocs) {
       auto alloc = mlir::cast<mlir::memref::AllocOp>(it.first);
       auto access = it.second;
@@ -285,6 +294,9 @@ struct InsertGPUAllocs
                           builder.getUnitAttr());
     }
 
+    // This is the case where the inputs are passed as arguments to the
+    // function. This code will add the IR for memeory allocation on the device
+    // with gpu.alloc and insert a memref.copy from host to device
     for (auto it : gpuBufferParams) {
       auto param = block.getArgument(it.first);
       auto access = it.second;

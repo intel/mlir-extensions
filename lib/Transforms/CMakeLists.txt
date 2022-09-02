@@ -1,7 +1,7 @@
 add_mlir_library(IMEXTransforms
-  insert_gpu_allocs.cpp
-  set_spirv_capability.cpp
-  spirv_abi_attribute_pass.cpp
+  InsertGpuAllocs.cpp
+  SetSPIRVCapabalities.cpp
+  SetSPIRVAbiAttribute.cpp
 
   #ADDITIONAL_HEADER_DIRS
   #${MLIR_MAIN_INCLUDE_DIR}/mlir/Transforms

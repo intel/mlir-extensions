@@ -26,7 +26,7 @@
 
 #include <imex/InitIMEXDialects.h>
 #include <imex/InitIMEXPasses.h>
-#include <imex/Transforms/Transforms.hpp>
+#include <imex/Transforms/Transforms.h>
 
 int main(int argc, char **argv) {
   ::mlir::registerAllPasses();
@@ -52,7 +52,9 @@ static mlir::PassPipelineRegistration<>
                            pm.addPass(imex::createSetSPIRVCapabilitiesPass());
                          });
 
-static mlir::PassPipelineRegistration<> AbiAttrsPass(
-    "set-spirv-abi-attrs", "Create AbiAttrs Pass", [](mlir::OpPassManager &pm) {
-      pm.addNestedPass<mlir::gpu::GPUModuleOp>(imex::createAbiAttrsPass());
-    });
+static mlir::PassPipelineRegistration<>
+    SetSPIRVAbiAttribute("set-spirv-abi-attrs", "Create AbiAttrs Pass",
+                         [](mlir::OpPassManager &pm) {
+                           pm.addNestedPass<mlir::gpu::GPUModuleOp>(
+                               imex::createSetSPIRVAbiAttribute());
+                         });
