@@ -476,3 +476,44 @@ func.func @if_break_test4() {
 // CHECK: }
 // CHECK: "test.test5"(%[[RES]]) : (index) -> ()
 // CHECK: return
+
+// -----
+
+func.func @if_break_test5() {
+  "test.test1"() : () -> ()
+  cf.br ^bb1
+^bb1:
+  %cond = "test.test2"() : () -> i1
+  cf.cond_br %cond, ^bb2, ^bb4
+^bb2:
+  %cond2:2 = "test.test3"() : () -> (i1, index)
+  cf.cond_br %cond2#0, ^bb3, ^bb4
+^bb3:
+  "test.test4"(%cond2#1) : (index) -> ()
+  cf.br ^bb1
+^bb4:
+  "test.test5"() : () -> ()
+  return
+}
+
+// CHECK-LABEL: func @if_break_test5
+// CHECK: %[[FALSE:.*]] = arith.constant false
+// CHECK: "test.test1"() : () -> ()
+// CHECK: %[[RES:.*]]:2 = scf.while : () -> (i1, index) {
+// CHECK: %[[COND1:.*]] = "test.test2"() : () -> i1
+// CHECK: %[[COND2:.*]]:2 = scf.if %[[COND1]] -> (i1, index) {
+// CHECK: %[[VAL1:.*]]:2 = "test.test3"() : () -> (i1, index)
+// CHECK: scf.yield %[[VAL1]]#0, %[[VAL1]]#1 : i1, index
+// CHECK: } else {
+// CHECK: %[[VAL2:.*]] = "imex_util.undef"() : () -> index
+// CHECK: scf.yield %[[FALSE]], %[[VAL2]] : i1, index
+// CHECK: }
+// CHECK: %[[COND3:.*]] = arith.andi %[[COND1]], %[[COND2]]#0 : i1
+// CHECK: scf.condition(%[[COND3]])
+// CHECK: } do {
+// CHECK: ^bb{{.+}}(%[[ARG1:.*]]: i1, %[[ARG2:.*]]: index):
+// CHECK: "test.test4"(%[[ARG2]]) : (index) -> ()
+// CHECK: scf.yield
+// CHECK: }
+// CHECK: "test.test5"() : () -> ()
+// CHECK: return
