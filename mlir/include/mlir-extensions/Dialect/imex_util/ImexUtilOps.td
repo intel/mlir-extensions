@@ -81,7 +81,9 @@ def ParallelOp : ImexUtil_Op<"parallel", [
 }
 
 def UndefOp : ImexUtil_Op<"undef", [NoSideEffect]> {
-  let results = (outs AnyType);
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = "attr-dict `:` type($result)";
 }
 
 def YieldOp : ImexUtil_Op<"yield", [
