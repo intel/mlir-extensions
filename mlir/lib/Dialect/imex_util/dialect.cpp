@@ -1675,7 +1675,8 @@ llvm::Optional<int64_t> TupleExtractOp::getConstantIndex() {
   return {};
 }
 
-mlir::OpFoldResult TupleExtractOp::fold(mlir::ArrayRef<mlir::Attribute> operands) {
+mlir::OpFoldResult
+TupleExtractOp::fold(mlir::ArrayRef<mlir::Attribute> operands) {
   // All forms of folding require a known index.
   auto index = operands[1].dyn_cast_or_null<mlir::IntegerAttr>();
   if (!index)
