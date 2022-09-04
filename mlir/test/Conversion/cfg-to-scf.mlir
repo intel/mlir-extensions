@@ -168,3 +168,32 @@ func.func @test() {
 // CHECK: scf.yield
 // CHECK: }
 // CHECK: return
+
+// -----
+
+func.func @test() -> i64{
+  %1 = "test.test1"() : () -> index
+  cf.br ^bb1(%1: index)
+^bb1(%2: index):
+  %cond:2 = "test.test2"() : () -> (i1, i64)
+  cf.cond_br %cond#0, ^bb2(%cond#1: i64), ^bb3(%cond#1: i64)
+^bb2(%3: i64):
+  %4 = "test.test3"(%3) : (i64) -> index
+  cf.br ^bb1(%4: index)
+^bb3(%5: i64):
+  "test.test4"() : () -> ()
+  return %5 : i64
+}
+
+// CHECK-LABEL: func @test
+// CHECK: %[[VAL1:.*]] = "test.test1"() : () -> index
+// CHECK: %[[RES:.*]]:2 = scf.while (%[[ARG0:.*]] = %[[VAL1]]) : (index) -> (index, i64) {
+// CHECK: %[[COND:.*]]:2 = "test.test2"() : () -> (i1, i64)
+// CHECK: scf.condition(%[[COND]]#0) %[[ARG0]], %[[COND]]#1 : index, i64
+// CHECK: } do {
+// CHECK: ^bb{{.+}}(%[[ARG1:.*]]: index, %[[ARG2:.*]]: i64):
+// CHECK: %[[VAL2:.*]] = "test.test3"(%[[ARG2]]) : (i64) -> index
+// CHECK: scf.yield %[[VAL2]] : index
+// CHECK: }
+// CHECK: "test.test4"() : () -> ()
+// CHECK: return %[[RES]]#1 : i64

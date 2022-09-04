@@ -467,6 +467,8 @@ struct ScfWhileRewrite : public mlir::OpRewritePattern<mlir::cf::BranchOp> {
       mapper.clear();
       assert(origVars.size() == iterargs.size());
       mapper.map(origVars, iterargs);
+      auto afterArgs = afterBlock->getArguments();
+      mapper.map(afterArgs, iterargs.take_back(afterArgs.size()));
       for (auto &op : afterBlock->without_terminator())
         builder.clone(op, mapper);
 
