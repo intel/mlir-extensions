@@ -141,3 +141,30 @@ func.func @test() -> index {
 // CHECK: %[[RES:.*]]  = arith.select %[[COND]], %[[VAL1]], %[[VAL2]] : index
 // CHECK: "test.test4"() : () -> ()
 // CHECK: return %[[RES]] : index
+
+// -----
+
+func.func @test() {
+  "test.test1"() : () -> ()
+  cf.br ^bb1
+^bb1:
+  %cond = "test.test2"() : () -> i1
+  cf.cond_br %cond, ^bb2, ^bb3
+^bb2:
+  "test.test3"() : () -> ()
+  cf.br ^bb1
+^bb3:
+  "test.test4"() : () -> ()
+  return
+}
+
+// CHECK-LABEL: func @test
+// CHECK: "test.test1"() : () -> ()
+// CHECK: scf.while : () -> () {
+// CHECK: %[[COND:.*]] = "test.test2"() : () -> i1
+// CHECK: scf.condition(%[[COND]])
+// CHECK: } do {
+// CHECK: "test.test3"() : () -> ()
+// CHECK: scf.yield
+// CHECK: }
+// CHECK: return
