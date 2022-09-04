@@ -533,9 +533,18 @@ struct BreakRewrite : public mlir::OpRewritePattern<mlir::cf::CondBranchOp> {
       if (!conditionBr)
         continue;
 
-      if (conditionBr.getTrueDest() != bodyBlock ||
-          conditionBr.getFalseDest() != exitBlock)
+      mlir::ValueRange bodyArgs = conditionBr.getTrueDestOperands();
+      mlir::ValueRange exitArgs = conditionBr.getFalseDestOperands();
+      if (conditionBr.getTrueDest() == bodyBlock &&
+          conditionBr.getFalseDest() == exitBlock) {
+        // Nothing
+      } else if (conditionBr.getTrueDest() == exitBlock &&
+                 conditionBr.getFalseDest() == bodyBlock) {
+        std::swap(exitBlock, bodyBlock);
+        std::swap(exitArgs, bodyArgs);
+      } else {
         continue;
+      }
 
       auto loc = rewriter.getUnknownLoc();
 
@@ -579,11 +588,10 @@ struct BreakRewrite : public mlir::OpRewritePattern<mlir::cf::CondBranchOp> {
       auto oldCond = conditionBr.getCondition();
       mlir::Value newCond = conditionBlock->getArguments().back();
       one = rewriter.create<mlir::arith::ConstantOp>(loc, condVal);
+
       newCond = rewriter.create<mlir::arith::AndIOp>(loc, newCond, oldCond);
       rewriter.replaceOpWithNewOp<mlir::cf::CondBranchOp>(
-          conditionBr, newCond, conditionBr.getTrueDest(),
-          conditionBr.getTrueOperands(), conditionBr.getFalseDest(),
-          conditionBr.getFalseOperands());
+          conditionBr, newCond, bodyBlock, bodyArgs, exitBlock, exitArgs);
       return mlir::success();
     }
     return mlir::failure();
