@@ -14,7 +14,6 @@
 
 #include "mlir-extensions/Conversion/cfg_to_scf.hpp"
 #include "mlir-extensions/Dialect/imex_util/dialect.hpp"
-#include "mlir-extensions/Transforms/common_opts.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/ControlFlow/IR/ControlFlowOps.h>
@@ -613,7 +612,12 @@ struct CFGToSCFPass
         // clang-format on
         >(context);
 
-    imex::populateCanonicalizationPatterns(*context, patterns);
+    context->getLoadedDialect<mlir::cf::ControlFlowDialect>()
+        ->getCanonicalizationPatterns(patterns);
+    mlir::cf::BranchOp::getCanonicalizationPatterns(patterns, context);
+    mlir::cf::CondBranchOp::getCanonicalizationPatterns(patterns, context);
+
+    mlir::scf::ExecuteRegionOp::getCanonicalizationPatterns(patterns, context);
 
     auto op = getOperation();
     (void)mlir::applyPatternsAndFoldGreedily(op, std::move(patterns));
