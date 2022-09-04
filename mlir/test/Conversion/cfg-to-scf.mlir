@@ -505,7 +505,7 @@ func.func @if_break_test5() {
 // CHECK: %[[VAL1:.*]]:2 = "test.test3"() : () -> (i1, index)
 // CHECK: scf.yield %[[VAL1]]#0, %[[VAL1]]#1 : i1, index
 // CHECK: } else {
-// CHECK: %[[VAL2:.*]] = "imex_util.undef"() : () -> index
+// CHECK: %[[VAL2:.*]] = imex_util.undef : index
 // CHECK: scf.yield %[[FALSE]], %[[VAL2]] : i1, index
 // CHECK: }
 // CHECK: %[[COND3:.*]] = arith.andi %[[COND1]], %[[COND2]]#0 : i1
