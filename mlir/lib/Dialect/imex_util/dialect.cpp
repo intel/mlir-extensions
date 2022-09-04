@@ -1693,66 +1693,6 @@ mlir::OpFoldResult TupleExtractOp::fold(mlir::ArrayRef<mlir::Attribute> operands
   return args[indexVal];
 }
 
-mlir::ParseResult EnvironmentRegionOp::parse(mlir::OpAsmParser &parser,
-                                             mlir::OperationState &result) {
-  mlir::Attribute env;
-  if (parser.parseAttribute(env))
-    return mlir::failure();
-
-  result.addAttribute(environmentAttrName(mlir::OperationName(
-                          getOperationName(), parser.getContext())),
-                      env);
-
-  mlir::SmallVector<mlir::OpAsmParser::UnresolvedOperand, 4> args;
-  if (parser.parseOperandList(args, mlir::OpAsmParser::Delimiter::Paren))
-    return mlir::failure();
-
-  mlir::SmallVector<mlir::Type, 4> argsTypes;
-  if (parser.parseOptionalArrowTypeList(argsTypes))
-    return mlir::failure();
-
-  if (parser.resolveOperands(args, argsTypes, parser.getCurrentLocation(),
-                             result.operands))
-    return mlir::failure();
-
-  if (parser.parseOptionalColonTypeList(result.types))
-    return mlir::failure();
-
-  // Introduce the body region and parse it.
-  mlir::Region *body = result.addRegion();
-  if (parser.parseRegion(*body, /*arguments=*/{}, /*argTypes=*/{}) ||
-      parser.parseOptionalAttrDict(result.attributes))
-    return mlir::failure();
-
-  return mlir::success();
-}
-
-static void printTypesList(mlir::OpAsmPrinter &p, mlir::TypeRange types) {
-  if (types.empty())
-    return;
-
-  p << ": ";
-  if (types.size() == 1) {
-    p << types.front();
-  } else {
-    p << types;
-  }
-}
-
-void EnvironmentRegionOp::print(mlir::OpAsmPrinter &p) {
-  p << " " << environment() << " (" << args() << ")";
-  p.printOptionalArrowTypeList(args().getTypes());
-  printTypesList(p, getResultTypes());
-
-  p << ' ';
-  p.printRegion(getRegion(),
-                /*printEntryBlockArgs=*/false,
-                /*printBlockTerminators=*/true);
-
-  auto envVarName = environmentAttrName().getValue();
-  p.printOptionalAttrDict((*this)->getAttrs(), envVarName);
-}
-
 /// Given the region at `index`, or the parent operation if `index` is None,
 /// return the successor regions. These are the regions that may be selected
 /// during the flow of control. `operands` is a set of optional attributes that
