@@ -1,6 +1,6 @@
 // RUN: imex-opt -allow-unregistered-dialect --cfg-to-scf -split-input-file %s | FileCheck %s
 
-func.func @test() {
+func.func @if_test1() {
   %cond = "test.test1"() : () -> i1
   cf.cond_br %cond, ^bb1, ^bb2
 ^bb1:
@@ -14,7 +14,7 @@ func.func @test() {
   return
 }
 
-// CHECK-LABEL: func @test
+// CHECK-LABEL: func @if_test1
 // CHECK: %[[COND:.*]] = "test.test1"() : () -> i1
 // CHECK: scf.if %[[COND]] {
 // CHECK: "test.test2"() : () -> ()
@@ -26,7 +26,7 @@ func.func @test() {
 
 // -----
 
-func.func @test() -> index {
+func.func @if_test2() -> index {
   %cond = "test.test1"() : () -> i1
   cf.cond_br %cond, ^bb1, ^bb2
 ^bb1:
@@ -40,7 +40,7 @@ func.func @test() -> index {
   return %3 : index
 }
 
-// CHECK-LABEL: func @test
+// CHECK-LABEL: func @if_test2
 // CHECK: %[[COND:.*]] = "test.test1"() : () -> i1
 // CHECK: %[[RES:.*]] = scf.if %[[COND]] -> (index) {
 // CHECK: %[[VAL1:.*]]  = "test.test2"() : () -> index
@@ -54,7 +54,7 @@ func.func @test() -> index {
 
 // -----
 
-func.func @test() {
+func.func @if_test3() {
   %cond = "test.test1"() : () -> i1
   cf.cond_br %cond, ^bb1, ^bb3
 ^bb1:
@@ -65,7 +65,7 @@ func.func @test() {
   return
 }
 
-// CHECK-LABEL: func @test
+// CHECK-LABEL: func @if_test3
 // CHECK: %[[COND:.*]] = "test.test1"() : () -> i1
 // CHECK: scf.if %[[COND]] {
 // CHECK: "test.test2"() : () -> ()
@@ -75,7 +75,7 @@ func.func @test() {
 
 // -----
 
-func.func @test() {
+func.func @if_test4() {
   %cond = "test.test1"() : () -> i1
   cf.cond_br %cond, ^bb3, ^bb2
 ^bb2:
@@ -86,7 +86,7 @@ func.func @test() {
   return
 }
 
-// CHECK-LABEL: func @test
+// CHECK-LABEL: func @if_test4
 // CHECK: %[[TRUE:.*]] = arith.constant true
 // CHECK: %[[COND:.*]] = "test.test1"() : () -> i1
 // CHECK: %[[NCOND:.*]] = arith.xori %[[COND]], %[[TRUE]] : i1
@@ -124,7 +124,7 @@ func.func @test() -> index {
 
 // -----
 
-func.func @test() -> index {
+func.func @select_test() -> index {
   %cond = "test.test1"() : () -> i1
   %1 = "test.test2"() : () -> (index)
   %2 = "test.test3"() : () -> (index)
@@ -134,7 +134,7 @@ func.func @test() -> index {
   return %3 : index
 }
 
-// CHECK-LABEL: func @test
+// CHECK-LABEL: func @select_test
 // CHECK: %[[COND:.*]] = "test.test1"() : () -> i1
 // CHECK: %[[VAL1:.*]]  = "test.test2"() : () -> index
 // CHECK: %[[VAL2:.*]]  = "test.test3"() : () -> index
@@ -144,7 +144,7 @@ func.func @test() -> index {
 
 // -----
 
-func.func @test() {
+func.func @while_test1() {
   "test.test1"() : () -> ()
   cf.br ^bb1
 ^bb1:
@@ -158,7 +158,7 @@ func.func @test() {
   return
 }
 
-// CHECK-LABEL: func @test
+// CHECK-LABEL: func @while_test1
 // CHECK: "test.test1"() : () -> ()
 // CHECK: scf.while : () -> () {
 // CHECK: %[[COND:.*]] = "test.test2"() : () -> i1
@@ -171,7 +171,7 @@ func.func @test() {
 
 // -----
 
-func.func @test() {
+func.func @while_test2() {
   "test.test1"() : () -> ()
   cf.br ^bb1
 ^bb1:
@@ -185,7 +185,7 @@ func.func @test() {
   return
 }
 
-// CHECK-LABEL: func @test
+// CHECK-LABEL: func @while_test2
 // CHECK: %[[TRUE:.*]] = arith.constant true
 // CHECK: "test.test1"() : () -> ()
 // CHECK: scf.while : () -> () {
@@ -200,7 +200,7 @@ func.func @test() {
 
 // -----
 
-func.func @test() -> i64{
+func.func @while_test3() -> i64{
   %1 = "test.test1"() : () -> index
   cf.br ^bb1(%1: index)
 ^bb1(%2: index):
@@ -214,7 +214,7 @@ func.func @test() -> i64{
   return %5 : i64
 }
 
-// CHECK-LABEL: func @test
+// CHECK-LABEL: func @while_test3
 // CHECK: %[[VAL1:.*]] = "test.test1"() : () -> index
 // CHECK: %[[RES:.*]]:2 = scf.while (%[[ARG0:.*]] = %[[VAL1]]) : (index) -> (index, i64) {
 // CHECK: %[[COND:.*]]:2 = "test.test2"() : () -> (i1, i64)
@@ -229,7 +229,7 @@ func.func @test() -> i64{
 
 // -----
 
-func.func @test() {
+func.func @break_test1() {
   "test.test1"() : () -> ()
   cf.br ^bb1
 ^bb1:
@@ -243,7 +243,7 @@ func.func @test() {
   return
 }
 
-// CHECK-LABEL: func @test
+// CHECK-LABEL: func @break_test1
 // CHECK: %[[TRUE:.*]] = arith.constant true
 // CHECK: "test.test1"() : () -> ()
 // CHECK: %{{.*}} = scf.while (%[[ARG0:.*]] = %[[TRUE]]) : (i1) -> i1 {
@@ -259,7 +259,7 @@ func.func @test() {
 
 // -----
 
-func.func @test() {
+func.func @break_test2() {
   "test.test1"() : () -> ()
   cf.br ^bb1
 ^bb1:
@@ -273,7 +273,7 @@ func.func @test() {
   return
 }
 
-// CHECK-LABEL: func @test
+// CHECK-LABEL: func @break_test2
 // CHECK: %[[TRUE:.*]] = arith.constant true
 // CHECK: "test.test1"() : () -> ()
 // CHECK: %{{.*}} = scf.while (%[[ARG0:.*]] = %[[TRUE]]) : (i1) -> i1 {
@@ -288,7 +288,7 @@ func.func @test() {
 
 // -----
 
-func.func @test() {
+func.func @break_test3() {
   "test.test1"() : () -> ()
   cf.br ^bb1
 ^bb1:
@@ -302,7 +302,7 @@ func.func @test() {
   return
 }
 
-// CHECK-LABEL: func @test
+// CHECK-LABEL: func @break_test3
 // CHECK: %[[TRUE:.*]] = arith.constant true
 // CHECK: "test.test1"() : () -> ()
 // CHECK: %{{.*}} = scf.while (%[[ARG0:.*]] = %[[TRUE]]) : (i1) -> i1 {
