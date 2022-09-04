@@ -121,3 +121,23 @@ func.func @test() -> index {
 // CHECK: }
 // CHECK: "test.test4"() : () -> ()
 // CHECK: return %[[RES]] : index
+
+// -----
+
+func.func @test() -> index {
+  %cond = "test.test1"() : () -> i1
+  %1 = "test.test2"() : () -> (index)
+  %2 = "test.test3"() : () -> (index)
+  cf.cond_br %cond, ^bb1(%1: index), ^bb1(%2: index)
+^bb1(%3: index):
+  "test.test4"() : () -> ()
+  return %3 : index
+}
+
+// CHECK-LABEL: func @test
+// CHECK: %[[COND:.*]] = "test.test1"() : () -> i1
+// CHECK: %[[VAL1:.*]]  = "test.test2"() : () -> index
+// CHECK: %[[VAL2:.*]]  = "test.test3"() : () -> index
+// CHECK: %[[RES:.*]]  = arith.select %[[COND]], %[[VAL1]], %[[VAL2]] : index
+// CHECK: "test.test4"() : () -> ()
+// CHECK: return %[[RES]] : index
