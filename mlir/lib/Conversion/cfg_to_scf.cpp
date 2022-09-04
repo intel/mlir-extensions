@@ -208,6 +208,29 @@ struct ScfIfRewriteOneExit
   }
 };
 
+/// Convert
+///
+/// ```
+///    BB1
+///    / |
+/// BB2  |
+///  | \ |
+///  |  \|
+/// BB3 BB4
+/// ```
+///
+/// To
+///
+/// ```
+///    |
+/// scf.if
+///    |
+///   BB1
+///  /   \
+/// BB3 BB4
+/// ```
+///
+/// To open more opportunities for `scf.while` conversion
 struct ScfIfRewriteTwoExits
     : public mlir::OpRewritePattern<mlir::cf::CondBranchOp> {
   using OpRewritePattern::OpRewritePattern;
@@ -220,11 +243,8 @@ struct ScfIfRewriteTwoExits
 
     auto thisBlock = op->getBlock();
     for (bool reverse : {false, true}) {
-      auto getDest = [&](bool reverse) {
-        return reverse ? op.getTrueDest() : op.getFalseDest();
-      };
-      auto thenBlock = getDest(!reverse);
-      auto exitBlock = getDest(reverse);
+      auto thenBlock = reverse ? op.getFalseDest() : op.getTrueDest();
+      auto exitBlock = reverse ? op.getTrueDest() : op.getFalseDest();
       auto exitOps = (reverse ? op.getTrueOperands() : op.getFalseOperands());
       if (thenBlock == thisBlock || exitBlock == thisBlock)
         continue;
@@ -327,7 +347,10 @@ struct ScfIfRewriteTwoExits
                                ifResults.take_back(thenValsUsers.size()))) {
         auto oldUser = std::get<0>(it);
         auto newUser = std::get<1>(it);
-        oldUser.replaceAllUsesWith(newUser);
+        for (auto &use : llvm::make_early_inc_range(oldUser.getUses())) {
+          auto *owner = use.getOwner();
+          rewriter.updateRootInPlace(owner, [&]() { use.set(newUser); });
+        }
       }
       return mlir::success();
     }
@@ -704,7 +727,7 @@ struct CFGToSCFPass
         // clang-format off
         BreakRewrite,
         ScfIfRewriteOneExit,
-//        ScfIfRewriteTwoExits,
+        ScfIfRewriteTwoExits,
         ScfWhileRewrite,
         CondBranchSameTargetRewrite
         // clang-format on
