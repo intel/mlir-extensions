@@ -515,6 +515,45 @@ struct ScfWhileRewrite : public mlir::OpRewritePattern<mlir::cf::BranchOp> {
   }
 };
 
+/// Changes conditional branch on the end of loop body block to unconditiona to
+/// open opportunities for scf.while rewrites.
+///
+/// ```
+/// func.func @test() {
+///   "test.test1"() : () -> ()
+///   cf.br ^bb1
+/// ^bb1:
+///   %cond = "test.test2"() : () -> i1
+///   cf.cond_br %cond, ^bb3, ^bb2
+/// ^bb2:
+///   %cond2 = "test.test3"() : () -> i1
+///   cf.cond_br %cond2, ^bb3, ^bb1
+/// ^bb3:
+///   "test.test4"() : () -> ()
+///   return
+/// }
+/// ```
+///
+/// Tranformed into
+///
+/// ```
+/// func.func @test() {
+///   "test.test1"() : () -> ()
+///   %true = arith.constant true
+///   cf.br ^bb1(%true : i1)
+/// ^bb1(%0: i1):  // 2 preds: ^bb0, ^bb2
+///   %1 = "test.test2"() : () -> i1
+///   %2 = arith.andi %0, %1 : i1
+///   cf.cond_br %2, ^bb3, ^bb2
+/// ^bb2:  // pred: ^bb1
+///   %3 = "test.test3"() : () -> i1
+///   %4 = arith.xori %true, %3 : i1
+///   cf.br ^bb1(%4 : i1)
+/// ^bb3:  // pred: ^bb1
+///   "test.test4"() : () -> ()
+///   return
+/// }
+/// ```
 struct BreakRewrite : public mlir::OpRewritePattern<mlir::cf::CondBranchOp> {
   using OpRewritePattern::OpRewritePattern;
 
@@ -587,8 +626,6 @@ struct BreakRewrite : public mlir::OpRewritePattern<mlir::cf::CondBranchOp> {
       rewriter.setInsertionPoint(conditionBr);
       auto oldCond = conditionBr.getCondition();
       mlir::Value newCond = conditionBlock->getArguments().back();
-      one = rewriter.create<mlir::arith::ConstantOp>(loc, condVal);
-
       newCond = rewriter.create<mlir::arith::AndIOp>(loc, newCond, oldCond);
       rewriter.replaceOpWithNewOp<mlir::cf::CondBranchOp>(
           conditionBr, newCond, bodyBlock, bodyArgs, exitBlock, exitArgs);
