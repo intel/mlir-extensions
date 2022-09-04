@@ -1675,7 +1675,8 @@ llvm::Optional<int64_t> TupleExtractOp::getConstantIndex() {
   return {};
 }
 
-mlir::OpFoldResult TupleExtractOp::fold(mlir::ArrayRef<mlir::Attribute> operands) {
+mlir::OpFoldResult
+TupleExtractOp::fold(mlir::ArrayRef<mlir::Attribute> operands) {
   // All forms of folding require a known index.
   auto index = operands[1].dyn_cast_or_null<mlir::IntegerAttr>();
   if (!index)
@@ -1693,6 +1694,24 @@ mlir::OpFoldResult TupleExtractOp::fold(mlir::ArrayRef<mlir::Attribute> operands
   return args[indexVal];
 }
 
+/// Given the region at `index`, or the parent operation if `index` is None,
+/// return the successor regions. These are the regions that may be selected
+/// during the flow of control. `operands` is a set of optional attributes that
+/// correspond to a constant value for each operand, or null if that operand is
+/// not a constant.
+void EnvironmentRegionOp::getSuccessorRegions(
+    llvm::Optional<unsigned> index, mlir::ArrayRef<mlir::Attribute> operands,
+    mlir::SmallVectorImpl<mlir::RegionSuccessor> &regions) {
+  // Branch into body if we came from parent region.
+  if (!index) {
+    regions.push_back(mlir::RegionSuccessor(&region()));
+    return;
+  }
+
+  // Branch to parent region from body.
+  assert(*index == 0 && "EnvironmentRegionOp must have single region");
+  regions.push_back(mlir::RegionSuccessor(getResults()));
+}
 } // namespace util
 } // namespace imex
 
