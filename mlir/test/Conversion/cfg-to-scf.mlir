@@ -197,3 +197,62 @@ func.func @test() -> i64{
 // CHECK: }
 // CHECK: "test.test4"() : () -> ()
 // CHECK: return %[[RES]]#1 : i64
+
+// -----
+
+func.func @test() {
+  "test.test1"() : () -> ()
+  cf.br ^bb1
+^bb1:
+  %cond = "test.test2"() : () -> i1
+  cf.cond_br %cond, ^bb2, ^bb3
+^bb2:
+  %cond2 = "test.test3"() : () -> i1
+  cf.cond_br %cond2, ^bb3, ^bb1
+^bb3:
+  "test.test4"() : () -> ()
+  return
+}
+
+// CHECK-LABEL: func @test
+// CHECK: %[[TRUE:.*]] = arith.constant true
+// CHECK: "test.test1"() : () -> ()
+// CHECK: %{{.*}} = scf.while (%[[ARG0:.*]] = %[[TRUE]]) : (i1) -> i1 {
+// CHECK: %[[COND:.*]] = "test.test2"() : () -> i1
+// CHECK: %[[ACOND:.*]] = arith.andi %[[ARG0]], %[[COND]] : i1
+// CHECK: scf.condition(%[[ACOND]]) %[[ARG0]] : i1
+// CHECK: } do {
+// CHECK: %[[COND2:.*]] = "test.test3"() : () -> i1
+// CHECK: %[[XCOND2:.*]] = arith.xori %[[COND2]], %[[TRUE]] : i1
+// CHECK: scf.yield %[[XCOND2]] : i1
+// CHECK: }
+// CHECK: return
+
+// -----
+
+func.func @test() {
+  "test.test1"() : () -> ()
+  cf.br ^bb1
+^bb1:
+  %cond = "test.test2"() : () -> i1
+  cf.cond_br %cond, ^bb2, ^bb3
+^bb2:
+  %cond2 = "test.test3"() : () -> i1
+  cf.cond_br %cond2, ^bb1, ^bb3
+^bb3:
+  "test.test4"() : () -> ()
+  return
+}
+
+// CHECK-LABEL: func @test
+// CHECK: %[[TRUE:.*]] = arith.constant true
+// CHECK: "test.test1"() : () -> ()
+// CHECK: %{{.*}} = scf.while (%[[ARG0:.*]] = %[[TRUE]]) : (i1) -> i1 {
+// CHECK: %[[COND:.*]] = "test.test2"() : () -> i1
+// CHECK: %[[ACOND:.*]] = arith.andi %[[ARG0]], %[[COND]] : i1
+// CHECK: scf.condition(%[[ACOND]]) %[[ARG0]] : i1
+// CHECK: } do {
+// CHECK: %[[COND2:.*]] = "test.test3"() : () -> i1
+// CHECK: scf.yield %[[COND2]] : i1
+// CHECK: }
+// CHECK: return

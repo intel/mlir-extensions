@@ -511,64 +511,72 @@ struct BreakRewrite : public mlir::OpRewritePattern<mlir::cf::CondBranchOp> {
   mlir::LogicalResult
   matchAndRewrite(mlir::cf::CondBranchOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto bodyBlock = op->getBlock();
-    auto exitBlock = op.getTrueDest();
-    auto conditionBlock = op.getFalseDest();
-    assert(exitBlock);
-    assert(conditionBlock);
+    for (bool reverse : {false, true}) {
+      auto bodyBlock = op->getBlock();
+      auto exitBlock = reverse ? op.getFalseDest() : op.getTrueDest();
+      auto conditionBlock = reverse ? op.getTrueDest() : op.getFalseDest();
+      assert(exitBlock);
+      assert(conditionBlock);
 
-    auto conditionBr =
-        mlir::dyn_cast<mlir::cf::CondBranchOp>(conditionBlock->getTerminator());
-    if (!conditionBr)
-      return mlir::failure();
+      auto conditionBr = mlir::dyn_cast<mlir::cf::CondBranchOp>(
+          conditionBlock->getTerminator());
+      if (!conditionBr)
+        continue;
 
-    if (conditionBr.getTrueDest() != bodyBlock ||
-        conditionBr.getFalseDest() != exitBlock)
-      return mlir::failure();
+      if (conditionBr.getTrueDest() != bodyBlock ||
+          conditionBr.getFalseDest() != exitBlock)
+        continue;
 
-    auto loc = rewriter.getUnknownLoc();
+      auto loc = rewriter.getUnknownLoc();
 
-    auto type = rewriter.getIntegerType(1);
-    auto condVal = rewriter.getIntegerAttr(type, 1);
+      auto type = rewriter.getIntegerType(1);
+      auto condVal = rewriter.getIntegerAttr(type, 1);
 
-    conditionBlock->addArgument(op.getCondition().getType(),
-                                rewriter.getUnknownLoc());
-    mlir::OpBuilder::InsertionGuard g(rewriter);
-    for (auto user : llvm::make_early_inc_range(conditionBlock->getUsers())) {
-      if (user != op) {
-        rewriter.setInsertionPoint(user);
-        auto condConst = rewriter.create<mlir::arith::ConstantOp>(loc, condVal);
-        if (auto br = mlir::dyn_cast<mlir::cf::BranchOp>(user)) {
-          llvm::SmallVector<mlir::Value> params(br.getDestOperands());
-          params.emplace_back(condConst);
-          rewriter.replaceOpWithNewOp<mlir::cf::BranchOp>(br, conditionBlock,
-                                                          params);
-        } else if (auto condBr = mlir::dyn_cast<mlir::cf::CondBranchOp>(user)) {
-          llvm_unreachable("not implemented");
-        } else {
-          llvm_unreachable("Unknown terminator type");
+      conditionBlock->addArgument(op.getCondition().getType(),
+                                  rewriter.getUnknownLoc());
+      mlir::OpBuilder::InsertionGuard g(rewriter);
+      for (auto user : llvm::make_early_inc_range(conditionBlock->getUsers())) {
+        if (user != op) {
+          rewriter.setInsertionPoint(user);
+          auto condConst =
+              rewriter.create<mlir::arith::ConstantOp>(loc, condVal);
+          if (auto br = mlir::dyn_cast<mlir::cf::BranchOp>(user)) {
+            llvm::SmallVector<mlir::Value> params(br.getDestOperands());
+            params.emplace_back(condConst);
+            rewriter.replaceOpWithNewOp<mlir::cf::BranchOp>(br, conditionBlock,
+                                                            params);
+          } else if (auto condBr =
+                         mlir::dyn_cast<mlir::cf::CondBranchOp>(user)) {
+            llvm_unreachable("not implemented");
+          } else {
+            llvm_unreachable("Unknown terminator type");
+          }
         }
       }
+
+      rewriter.setInsertionPoint(op);
+      llvm::SmallVector<mlir::Value> params(op.getFalseOperands());
+      auto one = rewriter.create<mlir::arith::ConstantOp>(loc, condVal);
+      mlir::Value cond = op.getCondition();
+      if (!reverse)
+        cond = rewriter.create<mlir::arith::XOrIOp>(loc, one, cond);
+
+      params.push_back(cond);
+      rewriter.replaceOpWithNewOp<mlir::cf::BranchOp>(op, conditionBlock,
+                                                      params);
+
+      rewriter.setInsertionPoint(conditionBr);
+      auto oldCond = conditionBr.getCondition();
+      mlir::Value newCond = conditionBlock->getArguments().back();
+      one = rewriter.create<mlir::arith::ConstantOp>(loc, condVal);
+      newCond = rewriter.create<mlir::arith::AndIOp>(loc, newCond, oldCond);
+      rewriter.replaceOpWithNewOp<mlir::cf::CondBranchOp>(
+          conditionBr, newCond, conditionBr.getTrueDest(),
+          conditionBr.getTrueOperands(), conditionBr.getFalseDest(),
+          conditionBr.getFalseOperands());
+      return mlir::success();
     }
-
-    rewriter.setInsertionPoint(op);
-    llvm::SmallVector<mlir::Value> params(op.getFalseOperands());
-    auto one = rewriter.create<mlir::arith::ConstantOp>(loc, condVal);
-    auto invertedCond =
-        rewriter.create<mlir::arith::XOrIOp>(loc, one, op.getCondition());
-    params.push_back(invertedCond);
-    rewriter.replaceOpWithNewOp<mlir::cf::BranchOp>(op, conditionBlock, params);
-
-    rewriter.setInsertionPoint(conditionBr);
-    auto oldCond = conditionBr.getCondition();
-    mlir::Value newCond = conditionBlock->getArguments().back();
-    one = rewriter.create<mlir::arith::ConstantOp>(loc, condVal);
-    newCond = rewriter.create<mlir::arith::AndIOp>(loc, newCond, oldCond);
-    rewriter.replaceOpWithNewOp<mlir::cf::CondBranchOp>(
-        conditionBr, newCond, conditionBr.getTrueDest(),
-        conditionBr.getTrueOperands(), conditionBr.getFalseDest(),
-        conditionBr.getFalseOperands());
-    return mlir::success();
+    return mlir::failure();
   }
 };
 
@@ -641,7 +649,7 @@ struct CFGToSCFPass
         // clang-format off
         BreakRewrite,
         ScfIfRewriteOneExit,
-        ScfIfRewriteTwoExits,
+//        ScfIfRewriteTwoExits,
         ScfWhileRewrite,
         CondBranchSameTargetRewrite
         // clang-format on
