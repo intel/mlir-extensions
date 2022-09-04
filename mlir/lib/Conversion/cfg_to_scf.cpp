@@ -58,6 +58,18 @@ static bool isBlocksDifferent(llvm::ArrayRef<mlir::Block *> blocks) {
   return true;
 }
 
+/// Convert
+///
+///  ```
+///    BB1       BB1
+///   /   \      |  \
+/// BB2  BB3     |  BB2
+///   \   /      |  /
+///    BB4       BB3
+/// ```
+///
+///  to `scf.if`
+///
 struct ScfIfRewriteOneExit
     : public mlir::OpRewritePattern<mlir::cf::CondBranchOp> {
   using OpRewritePattern::OpRewritePattern;
@@ -244,13 +256,10 @@ struct ScfIfRewriteTwoExits
         continue;
 
       llvm::SmallVector<mlir::Value> thenValsUsers;
-      for (auto &op : thenBlock->without_terminator()) {
-        for (auto res : op.getResults()) {
-          if (res.isUsedOutsideOfBlock(thenBlock)) {
+      for (auto &op : thenBlock->without_terminator())
+        for (auto res : op.getResults())
+          if (res.isUsedOutsideOfBlock(thenBlock))
             thenValsUsers.emplace_back(res);
-          }
-        }
-      }
 
       auto trueBuilder = [&](mlir::OpBuilder &builder, mlir::Location loc) {
         mlir::BlockAndValueMapping mapper;
@@ -326,7 +335,7 @@ struct ScfIfRewriteTwoExits
   }
 };
 
-mlir::scf::WhileOp
+static mlir::scf::WhileOp
 createWhile(mlir::OpBuilder &builder, mlir::Location loc,
             mlir::ValueRange iterArgs,
             llvm::function_ref<void(mlir::OpBuilder &, mlir::Location,
@@ -362,7 +371,7 @@ createWhile(mlir::OpBuilder &builder, mlir::Location loc,
   return mlir::cast<mlir::scf::WhileOp>(builder.create(state));
 }
 
-bool isInsideBlock(mlir::Operation *op, mlir::Block *block) {
+static bool isInsideBlock(mlir::Operation *op, mlir::Block *block) {
   assert(nullptr != op);
   assert(nullptr != block);
   do {
@@ -372,6 +381,19 @@ bool isInsideBlock(mlir::Operation *op, mlir::Block *block) {
   return false;
 }
 
+/// Convert
+/// ```
+///  BB1
+///   |
+///  BB2
+/// / | \
+/// | V ^
+/// | | /
+/// | BB3
+/// |
+/// BB4
+/// ```
+/// To `scf.while`
 struct ScfWhileRewrite : public mlir::OpRewritePattern<mlir::cf::BranchOp> {
   using OpRewritePattern::OpRewritePattern;
 
@@ -548,6 +570,15 @@ struct BreakRewrite : public mlir::OpRewritePattern<mlir::cf::CondBranchOp> {
   }
 };
 
+/// Convert
+/// ```
+/// cf.cond_br %cond, ^bb1(%1: index), ^bb1(%2: index)
+/// ```
+/// to
+/// ```
+/// %3 = arith.select %cond, %1, %2 : index
+/// cf.br ^bb1(%3: index)
+/// ```
 struct CondBranchSameTargetRewrite
     : public mlir::OpRewritePattern<mlir::cf::CondBranchOp> {
   // Set higher benefit than if rewrites
