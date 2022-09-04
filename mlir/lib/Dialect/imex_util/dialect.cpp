@@ -1669,6 +1669,30 @@ void TakeContextOp::build(mlir::OpBuilder &b, mlir::OperationState &result,
   build(b, result, allTypes, initFunc, releaseFunc);
 }
 
+llvm::Optional<int64_t> TupleExtractOp::getConstantIndex() {
+  if (auto constantOp = index().getDefiningOp<mlir::arith::ConstantOp>())
+    return constantOp.getValue().cast<mlir::IntegerAttr>().getInt();
+  return {};
+}
+
+mlir::OpFoldResult TupleExtractOp::fold(mlir::ArrayRef<mlir::Attribute> operands) {
+  // All forms of folding require a known index.
+  auto index = operands[1].dyn_cast_or_null<mlir::IntegerAttr>();
+  if (!index)
+    return {};
+
+  auto parent = source().getDefiningOp<BuildTupleOp>();
+  if (!parent)
+    return {};
+
+  int64_t indexVal = index.getInt();
+  mlir::ValueRange args = parent.args();
+  if (indexVal < 0 || indexVal >= static_cast<int64_t>(args.size()))
+    return {};
+
+  return args[indexVal];
+}
+
 } // namespace util
 } // namespace imex
 

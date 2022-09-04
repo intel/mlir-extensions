@@ -184,4 +184,41 @@ def ReleaseContextOp : ImexUtil_Op<"release_context"> {
   let arguments = (ins ImexUtil_OpaqueType:$context);
 }
 
+def BuildTupleOp : ImexUtil_Op<"build_tuple", [NoSideEffect]> {
+  let summary = "Constructs tuple from provided values";
+  let description = [{
+    "build_tuple" takes multiple SSA values and constructs tuple from them.
+
+    Zero arguments are allowed and will result in an empty tuple.
+  }];
+
+  let arguments = (ins Variadic<AnyType>:$args);
+  let results = (outs AnyTuple:$result);
+
+  let assemblyFormat = "attr-dict ($args^ `:` type($args) `->`)? type($result)";
+}
+
+def TupleExtractOp : ImexUtil_Op<"tuple_extract", [NoSideEffect]> {
+  let summary = "Extracts value from tuple";
+  let description = [{
+    "tuple_extract" extracts element with specific index from tuple.
+
+    If index is out of bounds behaviour is unspecified and is left to the
+    lowering passes.
+  }];
+
+  let arguments = (ins AnyTuple:$source,
+                       Index:$index);
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = "attr-dict $source `:` type($source) `,` $index `->` type($result)";
+
+  let extraClassDeclaration = [{
+    /// Helper function to get the index as a simple integer if it is constant.
+    ::llvm::Optional<int64_t> getConstantIndex();
+  }];
+
+  let hasFolder = 1;
+}
+
 #endif // PLIER_UTIL_OPS
