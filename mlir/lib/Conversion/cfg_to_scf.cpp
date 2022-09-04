@@ -408,100 +408,110 @@ struct ScfWhileRewrite : public mlir::OpRewritePattern<mlir::cf::BranchOp> {
 
     mlir::DominanceInfo dom;
     auto startBlock = op.getOperation()->getBlock();
-    auto afterBlock = beforeTerm.getTrueDest();
-    auto postBlock = beforeTerm.getFalseDest();
-    if (getNextBlock(afterBlock) != beforeBlock ||
-        !isBlocksDifferent({startBlock, beforeBlock, afterBlock, postBlock}))
-      return mlir::failure();
+    for (bool reverse : {false, true}) {
+      auto afterBlock =
+          reverse ? beforeTerm.getFalseDest() : beforeTerm.getTrueDest();
+      auto postBlock =
+          reverse ? beforeTerm.getTrueDest() : beforeTerm.getFalseDest();
+      auto falseArgs = reverse ? beforeTerm.getTrueDestOperands()
+                               : beforeTerm.getFalseDestOperands();
+      if (getNextBlock(afterBlock) != beforeBlock ||
+          !isBlocksDifferent({startBlock, beforeBlock, afterBlock, postBlock}))
+        continue;
 
-    auto checkOutsideVals = [&](mlir::Operation *op) -> mlir::WalkResult {
-      for (auto user : op->getUsers())
-        if (!isInsideBlock(user, beforeBlock) &&
-            !isInsideBlock(user, afterBlock))
-          return mlir::WalkResult::interrupt();
+      auto checkOutsideVals = [&](mlir::Operation *op) -> mlir::WalkResult {
+        for (auto user : op->getUsers())
+          if (!isInsideBlock(user, beforeBlock) &&
+              !isInsideBlock(user, afterBlock))
+            return mlir::WalkResult::interrupt();
 
-      return mlir::WalkResult::advance();
-    };
+        return mlir::WalkResult::advance();
+      };
 
-    if (afterBlock->walk(checkOutsideVals).wasInterrupted())
-      return mlir::failure();
+      if (afterBlock->walk(checkOutsideVals).wasInterrupted())
+        continue;
 
-    mlir::BlockAndValueMapping mapper;
-    llvm::SmallVector<mlir::Value> yieldVars;
-    auto beforeBlockArgs = beforeBlock->getArguments();
-    llvm::SmallVector<mlir::Value> origVars(beforeBlockArgs.begin(),
-                                            beforeBlockArgs.end());
+      mlir::BlockAndValueMapping mapper;
+      llvm::SmallVector<mlir::Value> yieldVars;
+      auto beforeBlockArgs = beforeBlock->getArguments();
+      llvm::SmallVector<mlir::Value> origVars(beforeBlockArgs.begin(),
+                                              beforeBlockArgs.end());
 
-    auto beforeBody = [&](mlir::OpBuilder &builder, mlir::Location loc,
-                          mlir::ValueRange iterargs) {
-      mapper.map(beforeBlockArgs, iterargs);
-      yieldVars.resize(beforeBlockArgs.size());
-      for (auto &op : beforeBlock->without_terminator()) {
-        auto newOp = builder.clone(op, mapper);
-        for (auto user : op.getUsers()) {
-          if (!isInsideBlock(user, beforeBlock)) {
-            for (auto it : llvm::zip(op.getResults(), newOp->getResults())) {
-              origVars.emplace_back(std::get<0>(it));
-              yieldVars.emplace_back(std::get<1>(it));
+      auto beforeBody = [&](mlir::OpBuilder &builder, mlir::Location loc,
+                            mlir::ValueRange iterargs) {
+        mapper.map(beforeBlockArgs, iterargs);
+        yieldVars.resize(beforeBlockArgs.size());
+        for (auto &op : beforeBlock->without_terminator()) {
+          auto newOp = builder.clone(op, mapper);
+          for (auto user : op.getUsers()) {
+            if (!isInsideBlock(user, beforeBlock)) {
+              for (auto it : llvm::zip(op.getResults(), newOp->getResults())) {
+                origVars.emplace_back(std::get<0>(it));
+                yieldVars.emplace_back(std::get<1>(it));
+              }
+              break;
             }
-            break;
+          }
+        }
+
+        llvm::transform(
+            beforeBlockArgs, yieldVars.begin(),
+            [&](mlir::Value val) { return mapper.lookupOrDefault(val); });
+
+        for (auto arg : falseArgs) {
+          origVars.emplace_back(arg);
+          yieldVars.emplace_back(mapper.lookupOrDefault(arg));
+        }
+
+        auto cond = mapper.lookupOrDefault(beforeTerm.getCondition());
+        if (reverse) {
+          auto condVal = rewriter.getIntegerAttr(cond.getType(), 1);
+          auto one = rewriter.create<mlir::arith::ConstantOp>(loc, condVal);
+          cond = rewriter.create<mlir::arith::XOrIOp>(loc, one, cond);
+        }
+        builder.create<mlir::scf::ConditionOp>(loc, cond, yieldVars);
+      };
+      auto afterBody = [&](mlir::OpBuilder &builder, mlir::Location loc,
+                           mlir::ValueRange iterargs) {
+        mapper.clear();
+        assert(origVars.size() == iterargs.size());
+        mapper.map(origVars, iterargs);
+        auto afterArgs = afterBlock->getArguments();
+        mapper.map(afterArgs, iterargs.take_back(afterArgs.size()));
+        for (auto &op : afterBlock->without_terminator())
+          builder.clone(op, mapper);
+
+        yieldVars.clear();
+        auto term = mlir::cast<mlir::cf::BranchOp>(afterBlock->getTerminator());
+        for (auto arg : term.getOperands())
+          yieldVars.emplace_back(mapper.lookupOrDefault(arg));
+
+        builder.create<mlir::scf::YieldOp>(loc, yieldVars);
+      };
+
+      auto whileOp = createWhile(rewriter, op.getLoc(), op.getOperands(),
+                                 beforeBody, afterBody);
+
+      assert(origVars.size() == whileOp.getNumResults());
+      for (auto arg : llvm::zip(origVars, whileOp.getResults())) {
+        auto origVal = std::get<0>(arg);
+        for (auto &use : llvm::make_early_inc_range(origVal.getUses())) {
+          auto *owner = use.getOwner();
+          auto *block = owner->getBlock();
+          if (block != &whileOp.getBefore().front() &&
+              block != &whileOp.getAfter().front()) {
+            auto newVal = std::get<1>(arg);
+            if (dom.properlyDominates(newVal, owner))
+              rewriter.updateRootInPlace(owner, [&]() { use.set(newVal); });
           }
         }
       }
 
-      llvm::transform(beforeBlockArgs, yieldVars.begin(), [&](mlir::Value val) {
-        return mapper.lookupOrDefault(val);
-      });
-
-      auto falseArgs = beforeTerm.getFalseDestOperands();
-      for (auto arg : falseArgs) {
-        origVars.emplace_back(arg);
-        yieldVars.emplace_back(mapper.lookupOrDefault(arg));
-      }
-
-      auto cond = mapper.lookupOrDefault(beforeTerm.getCondition());
-      builder.create<mlir::scf::ConditionOp>(loc, cond, yieldVars);
-    };
-    auto afterBody = [&](mlir::OpBuilder &builder, mlir::Location loc,
-                         mlir::ValueRange iterargs) {
-      mapper.clear();
-      assert(origVars.size() == iterargs.size());
-      mapper.map(origVars, iterargs);
-      auto afterArgs = afterBlock->getArguments();
-      mapper.map(afterArgs, iterargs.take_back(afterArgs.size()));
-      for (auto &op : afterBlock->without_terminator())
-        builder.clone(op, mapper);
-
-      yieldVars.clear();
-      auto term = mlir::cast<mlir::cf::BranchOp>(afterBlock->getTerminator());
-      for (auto arg : term.getOperands())
-        yieldVars.emplace_back(mapper.lookupOrDefault(arg));
-
-      builder.create<mlir::scf::YieldOp>(loc, yieldVars);
-    };
-
-    auto whileOp = createWhile(rewriter, op.getLoc(), op.getOperands(),
-                               beforeBody, afterBody);
-
-    assert(origVars.size() == whileOp.getNumResults());
-    for (auto arg : llvm::zip(origVars, whileOp.getResults())) {
-      auto origVal = std::get<0>(arg);
-      for (auto &use : llvm::make_early_inc_range(origVal.getUses())) {
-        auto *owner = use.getOwner();
-        auto *block = owner->getBlock();
-        if (block != &whileOp.getBefore().front() &&
-            block != &whileOp.getAfter().front()) {
-          auto newVal = std::get<1>(arg);
-          if (dom.properlyDominates(newVal, owner))
-            rewriter.updateRootInPlace(owner, [&]() { use.set(newVal); });
-        }
-      }
+      auto results = whileOp.getResults().take_back(falseArgs.size());
+      rewriter.replaceOpWithNewOp<mlir::cf::BranchOp>(op, postBlock, results);
+      return mlir::success();
     }
-
-    auto results =
-        whileOp.getResults().take_back(beforeTerm.getNumFalseOperands());
-    rewriter.replaceOpWithNewOp<mlir::cf::BranchOp>(op, postBlock, results);
-    return mlir::success();
+    return mlir::failure();
   }
 };
 

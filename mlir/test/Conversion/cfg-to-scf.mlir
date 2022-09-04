@@ -171,6 +171,35 @@ func.func @test() {
 
 // -----
 
+func.func @test() {
+  "test.test1"() : () -> ()
+  cf.br ^bb1
+^bb1:
+  %cond = "test.test2"() : () -> i1
+  cf.cond_br %cond, ^bb3, ^bb2
+^bb2:
+  "test.test3"() : () -> ()
+  cf.br ^bb1
+^bb3:
+  "test.test4"() : () -> ()
+  return
+}
+
+// CHECK-LABEL: func @test
+// CHECK: %[[TRUE:.*]] = arith.constant true
+// CHECK: "test.test1"() : () -> ()
+// CHECK: scf.while : () -> () {
+// CHECK: %[[COND:.*]] = "test.test2"() : () -> i1
+// CHECK: %[[XCOND:.*]] = arith.xori %[[COND]], %[[TRUE]] : i1
+// CHECK: scf.condition(%[[XCOND]])
+// CHECK: } do {
+// CHECK: "test.test3"() : () -> ()
+// CHECK: scf.yield
+// CHECK: }
+// CHECK: return
+
+// -----
+
 func.func @test() -> i64{
   %1 = "test.test1"() : () -> index
   cf.br ^bb1(%1: index)
