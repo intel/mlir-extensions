@@ -20,6 +20,7 @@
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/IR/BlockAndValueMapping.h>
+#include <mlir/IR/Dominance.h>
 #include <mlir/Pass/PassManager.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 #include <mlir/Transforms/Passes.h>
@@ -28,9 +29,9 @@ namespace {
 static mlir::Block *getNextBlock(mlir::Block *block) {
   assert(nullptr != block);
   if (auto br =
-          mlir::dyn_cast_or_null<mlir::cf::BranchOp>(block->getTerminator())) {
+          mlir::dyn_cast_or_null<mlir::cf::BranchOp>(block->getTerminator()))
     return br.getDest();
-  }
+
   return nullptr;
 };
 
@@ -40,9 +41,8 @@ static void eraseBlocks(mlir::PatternRewriter &rewriter,
     assert(nullptr != block);
     block->dropAllDefinedValueUses();
   }
-  for (auto block : blocks) {
+  for (auto block : blocks)
     rewriter.eraseBlock(block);
-  }
 }
 
 static bool isBlocksDifferent(llvm::ArrayRef<mlir::Block *> blocks) {
@@ -384,6 +384,7 @@ struct ScfWhileRewrite : public mlir::OpRewritePattern<mlir::cf::BranchOp> {
     if (!beforeTerm)
       return mlir::failure();
 
+    mlir::DominanceInfo dom;
     auto startBlock = op.getOperation()->getBlock();
     auto afterBlock = beforeTerm.getTrueDest();
     auto postBlock = beforeTerm.getFalseDest();
@@ -467,7 +468,8 @@ struct ScfWhileRewrite : public mlir::OpRewritePattern<mlir::cf::BranchOp> {
         if (block != &whileOp.getBefore().front() &&
             block != &whileOp.getAfter().front()) {
           auto newVal = std::get<1>(arg);
-          rewriter.updateRootInPlace(owner, [&]() { use.set(newVal); });
+          if (dom.properlyDominates(newVal, owner))
+            rewriter.updateRootInPlace(owner, [&]() { use.set(newVal); });
         }
       }
     }
