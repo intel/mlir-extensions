@@ -22,6 +22,7 @@
 #include <mlir/Dialect/SCF/IR/SCF.h>
 
 #include "mlir-extensions/Conversion/SCFToAffine/SCFToAffine.h"
+#include "mlir-extensions/Conversion/cfg_to_scf.hpp"
 #include "mlir-extensions/Conversion/gpu_runtime_to_llvm.hpp"
 #include "mlir-extensions/Conversion/gpu_to_gpu_runtime.hpp"
 #include "mlir/Dialect/GPU/Transforms/Passes.h"
@@ -98,3 +99,9 @@ static mlir::PassPipelineRegistration<> scfToAffineReg(
     [](mlir::OpPassManager &pm) {
       pm.addNestedPass<mlir::func::FuncOp>(mlir::createSCFToAffinePass());
     });
+
+static mlir::PassPipelineRegistration<>
+    cfgToscf("cfg-to-scf", "Cnvert function from CFG form to SCF ops",
+             [](mlir::OpPassManager &pm) {
+               pm.addNestedPass<mlir::func::FuncOp>(imex::createCFGToSCFPass());
+             });
