@@ -70,3 +70,49 @@ func.func @nested_region_yield_args() {
 //  CHECK-NEXT:   }
 //  CHECK-NEXT:   "test.test2"(%[[RES]]#0, %[[RES]]#0, %[[RES]]#1) : (index, index, i64) -> ()
 //  CHECK-NEXT:   return
+
+// -----
+
+func.func @merge_adjacent_region1() {
+  imex_util.env_region "test" {
+    "test.test1"() : () -> ()
+  }
+  imex_util.env_region "test" {
+    "test.test2"() : () -> ()
+  }
+  imex_util.env_region "test" {
+    "test.test3"() : () -> ()
+  }
+  return
+}
+// CHECK-LABEL: func @merge_adjacent_region1
+//  CHECK-NEXT:   imex_util.env_region
+//  CHECK-NEXT:   "test.test1"() : () -> ()
+//  CHECK-NEXT:   "test.test2"() : () -> ()
+//  CHECK-NEXT:   "test.test3"() : () -> ()
+//  CHECK-NEXT:   }
+//  CHECK-NEXT:   return
+
+// -----
+
+func.func @merge_adjacent_region2() {
+  %0 = imex_util.env_region "test" -> index {
+    %1 = "test.test1"() : () -> index
+    imex_util.env_region_yield %1: index
+  }
+  %2 = imex_util.env_region "test" -> i64 {
+    %3 = "test.test2"(%0) : (index) -> i64
+    imex_util.env_region_yield %3: i64
+  }
+  imex_util.env_region "test" {
+    "test.test3"(%2) : (i64) -> ()
+  }
+  return
+}
+// CHECK-LABEL: func @merge_adjacent_region2
+//  CHECK-NEXT:   imex_util.env_region
+//  CHECK-NEXT:   %[[VAL1:.*]] = "test.test1"() : () -> index
+//  CHECK-NEXT:   %[[VAL2:.*]] = "test.test2"(%[[VAL1]]) : (index) -> i64
+//  CHECK-NEXT:   "test.test3"(%[[VAL2]]) : (i64) -> ()
+//  CHECK-NEXT:   }
+//  CHECK-NEXT:   return

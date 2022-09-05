@@ -1852,10 +1852,76 @@ struct CleanupRegionYieldArgs
   }
 };
 
+/// Merge adjacent env regions.
+struct MergeAdjacentRegions
+    : public mlir::OpRewritePattern<EnvironmentRegionOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(EnvironmentRegionOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto opPos = op->getIterator();
+    auto nextOp = mlir::dyn_cast<EnvironmentRegionOp>(*std::next(opPos));
+    if (!nextOp)
+      return mlir::failure();
+
+    if (nextOp.environment() != op.environment() || nextOp.args() != op.args())
+      return mlir::failure();
+
+    mlir::Block *body = &op.getRegion().front();
+    auto term = mlir::cast<EnvironmentRegionYieldOp>(body->getTerminator());
+
+    auto results = op.getResults();
+    auto yieldArgs = term.results();
+    assert(results.size() == yieldArgs.size());
+    auto count = static_cast<unsigned>(results.size());
+
+    for (auto i : llvm::seq(0u, count)) {
+      auto res = results[i];
+      for (auto &use : llvm::make_early_inc_range(res.getUses())) {
+        auto *owner = use.getOwner();
+        if (nextOp->isProperAncestor(owner)) {
+          auto arg = yieldArgs[i];
+          rewriter.updateRootInPlace(owner, [&]() { use.set(arg); });
+        }
+      }
+    }
+
+    mlir::Block *nextBody = &nextOp.getRegion().front();
+    auto nextTerm =
+        mlir::cast<EnvironmentRegionYieldOp>(nextBody->getTerminator());
+    auto nextYieldArgs = nextTerm.results();
+
+    llvm::SmallVector<mlir::Value> newYieldArgs(count + nextYieldArgs.size());
+    llvm::copy(nextYieldArgs, llvm::copy(yieldArgs, newYieldArgs.begin()));
+    {
+      mlir::OpBuilder::InsertionGuard g(rewriter);
+      rewriter.mergeBlockBefore(nextBody, term);
+      rewriter.setInsertionPoint(term);
+      rewriter.create<EnvironmentRegionYieldOp>(term->getLoc(), newYieldArgs);
+      rewriter.eraseOp(term);
+      rewriter.eraseOp(nextTerm);
+    }
+
+    mlir::ValueRange newYieldArgsRange(newYieldArgs);
+    auto newOp = rewriter.create<EnvironmentRegionOp>(
+        op->getLoc(), newYieldArgsRange.getTypes(), op.environment(),
+        op.args());
+    mlir::Region &newRegion = newOp.getRegion();
+    rewriter.inlineRegionBefore(op.getRegion(), newRegion, newRegion.end());
+
+    auto newResults = newOp.getResults();
+
+    rewriter.replaceOp(op, newResults.take_front(count));
+    rewriter.replaceOp(nextOp, newResults.drop_front(count));
+    return mlir::success();
+  }
+};
+
 void EnvironmentRegionOp::getCanonicalizationPatterns(
     mlir::RewritePatternSet &results, mlir::MLIRContext *context) {
   results.insert<EnvRegionPropagateOutsideValues, MergeNestedEnvRegion,
-                 CleanupRegionYieldArgs>(context);
+                 CleanupRegionYieldArgs, MergeAdjacentRegions>(context);
 }
 
 void EnvironmentRegionOp::inlineIntoParent(mlir::PatternRewriter &builder,
