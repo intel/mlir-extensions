@@ -250,6 +250,8 @@ def EnvironmentRegionOp : ImexUtil_Op<"env_region", [
 
   let assemblyFormat =
       "attr-dict $environment ($args^ `:` type($args))? (`->` type($results)^)? $region";
+
+  let hasCanonicalizer = 1;
 }
 
 def EnvironmentRegionYieldOp : ImexUtil_Op<"env_region_yield", [

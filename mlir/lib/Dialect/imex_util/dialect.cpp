@@ -1712,6 +1712,66 @@ void EnvironmentRegionOp::getSuccessorRegions(
   assert(*index == 0 && "EnvironmentRegionOp must have single region");
   regions.push_back(mlir::RegionSuccessor(getResults()));
 }
+
+/// Propagate yielded values, defined outside region.
+struct EnvRegionPropagateOutsideValues
+    : public mlir::OpRewritePattern<EnvironmentRegionOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(EnvironmentRegionOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto oldResults = op.getResults();
+    auto count = static_cast<unsigned>(oldResults.size());
+
+    mlir::Block *body = &op.getRegion().front();
+    auto term = mlir::cast<EnvironmentRegionYieldOp>(body->getTerminator());
+    auto termArgs = term.results();
+    assert(oldResults.size() == termArgs.size());
+
+    bool changed = false;
+    llvm::SmallVector<mlir::Value> newResults(count);
+    llvm::SmallVector<mlir::Value> newYieldArgs;
+    for (auto i : llvm::seq(0u, count)) {
+      auto arg = termArgs[i];
+      if (!op.getRegion().isAncestor(arg.getParentRegion())) {
+        newResults[i] = arg;
+        changed = true;
+      } else {
+        newYieldArgs.emplace_back(arg);
+      }
+    }
+
+    if (!changed)
+      return mlir::failure();
+
+    mlir::ValueRange newYieldArgsRange(newYieldArgs);
+    auto newOp = rewriter.create<EnvironmentRegionOp>(
+        op->getLoc(), newYieldArgsRange.getTypes(), op.environment(),
+        op.args());
+    mlir::Region &newRegion = newOp.getRegion();
+    rewriter.inlineRegionBefore(op.getRegion(), newRegion, newRegion.end());
+    {
+      mlir::OpBuilder::InsertionGuard g(rewriter);
+      rewriter.setInsertionPoint(term);
+      rewriter.replaceOpWithNewOp<EnvironmentRegionYieldOp>(term, newYieldArgs);
+    }
+    for (auto i : llvm::seq(0u, count)) {
+      if (!newResults[i]) {
+        newResults[i] = newYieldArgsRange.front();
+        newYieldArgsRange = newYieldArgsRange.drop_front();
+      }
+    }
+    assert(newYieldArgsRange.empty());
+    rewriter.replaceOp(op, newResults);
+    return mlir::success();
+  }
+};
+
+void EnvironmentRegionOp::getCanonicalizationPatterns(
+    mlir::RewritePatternSet &results, mlir::MLIRContext *context) {
+  results.insert<EnvRegionPropagateOutsideValues>(context);
+}
 } // namespace util
 } // namespace imex
 
