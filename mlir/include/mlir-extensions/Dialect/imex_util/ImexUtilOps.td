@@ -251,6 +251,11 @@ def EnvironmentRegionOp : ImexUtil_Op<"env_region", [
   let assemblyFormat =
       "attr-dict $environment ($args^ `:` type($args))? (`->` type($results)^)? $region";
 
+  let extraClassDeclaration = [{
+    /// Inline op body into parent region and erase the op.
+    static void inlineIntoParent(::mlir::PatternRewriter &builder, EnvironmentRegionOp op);
+  }];
+
   let hasCanonicalizer = 1;
 }
 

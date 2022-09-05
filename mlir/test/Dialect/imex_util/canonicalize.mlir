@@ -1,4 +1,4 @@
-// RUN: imex-opt %s -canonicalize --split-input-file | FileCheck %s
+// RUN: imex-opt %s -allow-unregistered-dialect -canonicalize --split-input-file | FileCheck %s
 
 func.func @test(%arg1: index, %arg2: i64) -> i64 {
   %0 = imex_util.build_tuple %arg1, %arg2: index, i64 -> tuple<index, i64>
@@ -32,3 +32,23 @@ func.func @empty_region_out_value(%arg1: index) -> index {
 // CHECK-LABEL: func @empty_region_out_value
 //  CHECK-SAME: (%[[ARG:.*]]: index)
 //       CHECK: return %[[ARG]] : index
+
+// -----
+
+func.func @merge_nested_region() {
+  imex_util.env_region "test" {
+    "test.test1"() : () -> ()
+    imex_util.env_region "test" {
+      "test.test2"() : () -> ()
+    }
+    "test.test3"() : () -> ()
+  }
+  return
+}
+// CHECK-LABEL: func @merge_nested_region
+//  CHECK-NEXT:   imex_util.env_region
+//  CHECK-NEXT:   "test.test1"() : () -> ()
+//  CHECK-NEXT:   "test.test2"() : () -> ()
+//  CHECK-NEXT:   "test.test3"() : () -> ()
+//  CHECK-NEXT:   }
+//  CHECK-NEXT:   return

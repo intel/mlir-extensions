@@ -1768,9 +1768,40 @@ struct EnvRegionPropagateOutsideValues
   }
 };
 
+/// Merge nested env region if parent have same environment and args.
+struct MergeNestedEnvRegion
+    : public mlir::OpRewritePattern<EnvironmentRegionOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(EnvironmentRegionOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto parent = op->getParentOfType<EnvironmentRegionOp>();
+    if (!parent)
+      return mlir::failure();
+
+    if (parent.environment() != op.environment() || parent.args() != op.args())
+      return mlir::failure();
+
+    EnvironmentRegionOp::inlineIntoParent(rewriter, op);
+    return mlir::success();
+  }
+};
+
 void EnvironmentRegionOp::getCanonicalizationPatterns(
     mlir::RewritePatternSet &results, mlir::MLIRContext *context) {
-  results.insert<EnvRegionPropagateOutsideValues>(context);
+  results.insert<EnvRegionPropagateOutsideValues, MergeNestedEnvRegion>(
+      context);
+}
+
+void EnvironmentRegionOp::inlineIntoParent(mlir::PatternRewriter &builder,
+                                           EnvironmentRegionOp op) {
+  mlir::Block *block = &op.getRegion().front();
+  auto term = mlir::cast<EnvironmentRegionYieldOp>(block->getTerminator());
+  auto args = llvm::to_vector(term.results());
+  builder.eraseOp(term);
+  builder.mergeBlockBefore(block, op);
+  builder.replaceOp(op, args);
 }
 } // namespace util
 } // namespace imex
