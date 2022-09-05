@@ -52,3 +52,21 @@ func.func @merge_nested_region() {
 //  CHECK-NEXT:   "test.test3"() : () -> ()
 //  CHECK-NEXT:   }
 //  CHECK-NEXT:   return
+
+// -----
+
+func.func @nested_region_yield_args() {
+  %0:4 = imex_util.env_region "test" -> index, i32, index, i64 {
+    %1:3 = "test.test1"() : () -> (index, i32, i64)
+    imex_util.env_region_yield %1#0, %1#1, %1#0, %1#2: index, i32, index, i64
+  }
+  "test.test2"(%0#0, %0#2, %0#3) : (index, index, i64) -> ()
+  return
+}
+// CHECK-LABEL: func @nested_region_yield_args
+//  CHECK-NEXT:   %[[RES:.*]]:2 = imex_util.env_region "test" -> index, i64 {
+//  CHECK-NEXT:   %[[VAL:.*]]:3 = "test.test1"() : () -> (index, i32, i64)
+//  CHECK-NEXT:   imex_util.env_region_yield %[[VAL]]#0, %[[VAL]]#2 : index, i64
+//  CHECK-NEXT:   }
+//  CHECK-NEXT:   "test.test2"(%[[RES]]#0, %[[RES]]#0, %[[RES]]#1) : (index, index, i64) -> ()
+//  CHECK-NEXT:   return

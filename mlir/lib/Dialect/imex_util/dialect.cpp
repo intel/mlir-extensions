@@ -1788,10 +1788,74 @@ struct MergeNestedEnvRegion
   }
 };
 
+/// Remove duplicated and unused env region yield args.
+struct CleanupRegionYieldArgs
+    : public mlir::OpRewritePattern<EnvironmentRegionOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(EnvironmentRegionOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    mlir::Block *body = &op.getRegion().front();
+    auto term = mlir::cast<EnvironmentRegionYieldOp>(body->getTerminator());
+
+    auto results = op.getResults();
+    auto yieldArgs = term.results();
+    assert(results.size() == yieldArgs.size());
+    auto count = static_cast<unsigned>(results.size());
+
+    llvm::SmallVector<mlir::Value> newYieldArgs;
+    llvm::SmallVector<int> newResultsMapping(count, -1);
+    llvm::SmallDenseMap<mlir::Value, int> argsMap;
+    for (auto i : llvm::seq(0u, count)) {
+      auto res = results[i];
+      if (res.getUses().empty())
+        continue;
+
+      auto arg = yieldArgs[i];
+      auto it = argsMap.find_as(arg);
+      if (it == argsMap.end()) {
+        auto ind = static_cast<int>(newYieldArgs.size());
+        argsMap.insert({arg, ind});
+        newYieldArgs.emplace_back(arg);
+        newResultsMapping[i] = ind;
+      } else {
+        newResultsMapping[i] = it->second;
+      }
+    }
+
+    if (newYieldArgs.size() == count)
+      return mlir::failure();
+
+    mlir::ValueRange newYieldArgsRange(newYieldArgs);
+    auto newOp = rewriter.create<EnvironmentRegionOp>(
+        op->getLoc(), newYieldArgsRange.getTypes(), op.environment(),
+        op.args());
+    mlir::Region &newRegion = newOp.getRegion();
+    rewriter.inlineRegionBefore(op.getRegion(), newRegion, newRegion.end());
+    {
+      mlir::OpBuilder::InsertionGuard g(rewriter);
+      rewriter.setInsertionPoint(term);
+      rewriter.replaceOpWithNewOp<EnvironmentRegionYieldOp>(term, newYieldArgs);
+    }
+
+    auto newResults = newOp.getResults();
+    llvm::SmallVector<mlir::Value> newResultsToTeplace(count);
+    for (auto i : llvm::seq(0u, count)) {
+      auto mapInd = newResultsMapping[i];
+      if (mapInd != -1)
+        newResultsToTeplace[i] = newResults[mapInd];
+    }
+
+    rewriter.replaceOp(op, newResultsToTeplace);
+    return mlir::success();
+  }
+};
+
 void EnvironmentRegionOp::getCanonicalizationPatterns(
     mlir::RewritePatternSet &results, mlir::MLIRContext *context) {
-  results.insert<EnvRegionPropagateOutsideValues, MergeNestedEnvRegion>(
-      context);
+  results.insert<EnvRegionPropagateOutsideValues, MergeNestedEnvRegion,
+                 CleanupRegionYieldArgs>(context);
 }
 
 void EnvironmentRegionOp::inlineIntoParent(mlir::PatternRewriter &builder,
