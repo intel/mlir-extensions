@@ -10,7 +10,7 @@
 ///
 /// \file
 /// This file adds a kernel attribute called spv.entry_point_abi to the kernel
-/// function
+/// function.
 ///
 //===----------------------------------------------------------------------===//
 

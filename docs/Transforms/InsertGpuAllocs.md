@@ -3,7 +3,7 @@
 
 The InsertGpuAllocs pass, as the name suggests, inserts the gpu allocs in the IR. Memref alloc is an operation in the memref dialect that can be used to allocate the memory on the host side and or on the device side. The MLIR IR is a mix of host and device code.
 To distinguish between host side memory allocation and device side memory allocation, we convert all the memref.allocs that refer to device (gpu) side memory allocations and references, into gpu.alloc, which is an operation of the upstream GPU dialect. This distinction helps in lowering to llvm and calling the appropriate memory allocation operation at runtime.
-The pass traverses all the memref (load/store) operations inside the gpu launch op in the IR and checks for its aliases and its defining op. If the defining op is a memref.alloc op it replaces that op in the IR with gpu.alloc op, because all the operations under the gpu.launch op are device side computations and will execute on the device. 
+The pass traverses all the memref (load/store) operations inside the gpu launch op in the IR and checks for its aliases and its defining op. If the defining op is a memref.alloc op it replaces that op in the IR with gpu.alloc op, because all the operations under the gpu.launch op are device side computations and will execute on the device.
 
 # Example
 

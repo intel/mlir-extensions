@@ -97,7 +97,7 @@ struct InsertGPUAllocs
     };
 
     // Traverse through all the memory access ops under GPU launch Op
-    // and add device memory allocation appropriately
+    // and add device memory allocation appropriately.
     if (func.walk([&](mlir::Operation *op) {
               if (!op->getParentOfType<mlir::gpu::LaunchOp>())
                 return mlir::WalkResult::advance();
@@ -211,7 +211,7 @@ struct InsertGPUAllocs
     // GetMemrefGlobal Op Case:
     // This is the case where the inputs are globals contants and accessed using
     // memref.get_global op. This code will add the IR for memeory allocation on
-    // the device with gpu.alloc and insert a memref.copy from host to device
+    // the device with gpu.alloc and insert a memref.copy from host to device.
     mlir::OpBuilder builder(func);
     llvm::SmallVector<mlir::Value> dims;
     llvm::SmallPtrSet<mlir::Operation *, 8> filter;

@@ -9,7 +9,7 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// This file adds various capabilties & extensions for the SPIRV execution
+/// This file adds various capabilties & extensions for the SPIRV execution.
 ///
 //===----------------------------------------------------------------------===//
 
