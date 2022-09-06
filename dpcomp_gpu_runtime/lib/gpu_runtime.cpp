@@ -346,11 +346,18 @@ struct Stream {
       throw std::runtime_error("Failed to allocate MemInfo");
     }
 
+    // Prolong gpu_runtime lifetime until all buffers are released (in case we
+    // need to return allocated buffer from function).
     retain();
     return {info, mem, event};
   }
 
-  void deallocBuffer(void *ptr) { zeMemFree(context.get(), ptr); }
+  void deallocBuffer(void *ptr) {
+    zeMemFree(context.get(), ptr);
+
+    // We are incrementing runtime refcount in alloc.
+    release();
+  }
 
   void suggestBlockSize(ze_kernel_handle_t kernel, const uint32_t *gridSize,
                         uint32_t *blockSize, size_t numDims) {
