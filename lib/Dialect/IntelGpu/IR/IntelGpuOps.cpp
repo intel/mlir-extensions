@@ -40,39 +40,6 @@ OpaqueType OpaqueType::get(mlir::MLIRContext *context) {
   return Base::get(context);
 }
 
-namespace {
-template <typename Op, typename DelOp>
-struct RemoveUnusedOp : public mlir::OpRewritePattern<Op> {
-  using mlir::OpRewritePattern<Op>::OpRewritePattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(Op op, mlir::PatternRewriter &rewriter) const override {
-    for (auto user : op->getUsers()) {
-      if (!mlir::isa<DelOp>(user))
-        return mlir::failure();
-    }
-
-    for (auto user : llvm::make_early_inc_range(op->getUsers())) {
-      assert(user->getNumResults() == 0);
-      rewriter.eraseOp(user);
-    }
-    rewriter.eraseOp(op);
-    return mlir::success();
-  }
-};
-} // namespace
-
-void CreateStreamOp::build(::mlir::OpBuilder &odsBuilder,
-                           ::mlir::OperationState &odsState) {
-  auto ctx = odsBuilder.getContext();
-  CreateStreamOp::build(odsBuilder, odsState, OpaqueType::get(ctx));
-}
-
-void CreateStreamOp::getCanonicalizationPatterns(
-    ::mlir::RewritePatternSet &results, ::mlir::MLIRContext *context) {
-  results.insert<RemoveUnusedOp<CreateStreamOp, DestroyStreamOp>>(context);
-}
-
 } // namespace intel_gpu
 } // namespace imex
 

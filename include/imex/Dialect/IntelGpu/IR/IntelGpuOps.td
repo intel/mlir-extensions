@@ -8,7 +8,7 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// This file defines the basic operations for the IntelGpu dialect.
+/// This file defines basic operations of the IntelG dialect.
 ///
 //===----------------------------------------------------------------------===//
 
@@ -31,7 +31,9 @@ def IntelGpu_Dialect : Dialect {
 
     // A longer description of our dialect.
     let description = [{
-            FIXME insert discription
+            IntelGpu Dialect provides operators for creating and destroying a stream.
+            A stream operation underneath prepares the runtime data structure required for
+            kernel dispatch on device.
         }];
 
     // The C++ namespace that the dialect class definition resides in.
@@ -52,12 +54,14 @@ def IntelGpu_OpaqueType
       BuildableType<"$_builder.getType<::imex::intel_gpu::OpaqueType>()"> {}
 
 def CreateStreamOp : IntelGpu_Op<"create_stream"> {
+
+  // result is a Stream
   let results = (outs IntelGpu_OpaqueType : $stream);
-  let hasCanonicalizer = 1;
-  let builders = [OpBuilder<(ins)>];
 }
 
 def DestroyStreamOp : IntelGpu_Op<"destroy_stream"> {
+
+  // Takes the stream to be  destroyed as an argument
   let arguments = (ins IntelGpu_OpaqueType : $stream);
 }
 
