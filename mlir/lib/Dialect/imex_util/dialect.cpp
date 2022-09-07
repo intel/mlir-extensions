@@ -1853,7 +1853,7 @@ struct CleanupRegionYieldArgs
       rewriter.replaceOpWithNewOp<EnvironmentRegionYieldOp>(term, newYieldArgs);
     }
 
-    // Contruct new result list, using mapping previously contructed.
+    // Contruct new result list, using mapping previously constructed.
     auto newResults = newOp.getResults();
     llvm::SmallVector<mlir::Value> newResultsToTeplace(count);
     for (auto i : llvm::seq(0u, count)) {
@@ -1912,7 +1912,7 @@ struct MergeAdjacentRegions
     auto nextYieldArgs = nextTerm.results();
 
     // Contruct merged yield args list, some of the results may become unused,
-    // but they will be cleaned up be other pattern.
+    // but they will be cleaned up by other pattern.
     llvm::SmallVector<mlir::Value> newYieldArgs(count + nextYieldArgs.size());
     llvm::copy(nextYieldArgs, llvm::copy(yieldArgs, newYieldArgs.begin()));
 
