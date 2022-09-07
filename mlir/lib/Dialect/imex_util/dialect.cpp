@@ -1729,20 +1729,18 @@ struct EnvRegionPropagateOutsideValues
     auto termArgs = term.results();
     assert(oldResults.size() == termArgs.size());
 
-    bool changed = false;
     llvm::SmallVector<mlir::Value> newResults(count);
     llvm::SmallVector<mlir::Value> newYieldArgs;
     for (auto i : llvm::seq(0u, count)) {
       auto arg = termArgs[i];
       if (!op.getRegion().isAncestor(arg.getParentRegion())) {
         newResults[i] = arg;
-        changed = true;
       } else {
         newYieldArgs.emplace_back(arg);
       }
     }
 
-    if (!changed)
+    if (newYieldArgs.size() == count)
       return mlir::failure();
 
     mlir::ValueRange newYieldArgsRange(newYieldArgs);
