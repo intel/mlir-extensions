@@ -16,6 +16,8 @@ set(IMEX_TEST_DEPENDS
         imex-runner
         imex-runner-pps
         mlir-cpu-runner
+        mlir_c_runner_utils
+        mlir_runner_utils
         )
 
 configure_lit_site_cfg(
