@@ -588,6 +588,41 @@ struct ReductionOpLowering
   }
 };
 
+/// Convert return operands of type ptensor to multiple operands (rtensor,
+/// device, team, handle)
+struct ReturnOpConversion
+    : public ::mlir::OpConversionPattern<::mlir::func::ReturnOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  ::mlir::LogicalResult
+  matchAndRewrite(::mlir::func::ReturnOp op,
+                  ::mlir::func::ReturnOp::Adaptor adaptor,
+                  ::mlir::ConversionPatternRewriter &rewriter) const override {
+    auto orgOprnd = op.operands().begin();
+    auto oldOprnds = adaptor.operands();
+    ::mlir::SmallVector<::mlir::Value> newOprnds;
+    for (auto o : oldOprnds) {
+      // we assume the number of operands is identical in op and adaptor
+      // -> we can check for original ptensor type which is safer than TupleType
+      // in adaptor
+      if ((*orgOprnd).getType().isa<::imex::ptensor::PTensorType>()) {
+        auto defOp = o.getDefiningOp<::mlir::UnrealizedConversionCastOp>();
+        assert(defOp);
+        // ptensor operands get expanded
+        for (auto i : defOp.getInputs()) {
+          newOprnds.push_back(i);
+        }
+      } else {
+        // all other types get added as-is
+        newOprnds.push_back(o);
+      }
+      ++orgOprnd; // explicitly move iterator for orig type
+    }
+    rewriter.replaceOpWithNewOp<::mlir::func::ReturnOp>(op, newOprnds);
+    return ::mlir::success();
+  }
+};
+
 // *******************************
 // ***** Pass infrastructure *****
 // *******************************
@@ -605,15 +640,23 @@ struct ConvertPTensorToLinalgPass
     ::mlir::ConversionTarget target(ctxt);
     ::mlir::TypeConverter typeConverter;
     // Convert unknown types to itself
-    typeConverter.addConversion([](::mlir::Type type) { return type; });
+    auto convT2T = [](::mlir::Type type) { return type; };
     // Convert PTensorType to (RankedTensorType, device, team, handle)
-    typeConverter.addConversion([&ctxt](::imex::ptensor::PTensorType type)
-                                    -> ::mlir::Optional<::mlir::Type> {
+    auto convPT2Tuple = [&ctxt](::imex::ptensor::PTensorType type)
+        -> ::mlir::Optional<::mlir::Type> {
       return ::mlir::TupleType::get(
           &ctxt, {type.getRtensor(), ::mlir::IntegerType::get(&ctxt, 0),
                   ::mlir::IntegerType::get(&ctxt, 0),
                   ::mlir::IntegerType::get(&ctxt, 0)});
-    });
+    };
+    // auto convTuple2Multiple = [&ctxt](::mlir::TupleType type,
+    // ::mlir::SmallVectorImpl<::mlir::Type> & target) ->
+    // ::mlir::Optional<::mlir::LogicalResult> {
+    //   for(auto t : type.getTypes()) target.push_back(t);
+    //   return ::mlir::success();
+    // };
+    typeConverter.addConversion(convT2T);
+    typeConverter.addConversion(convPT2Tuple);
 
 #if 1
     // In theory we should not need any materialization
@@ -651,17 +694,26 @@ struct ConvertPTensorToLinalgPass
                  typeConverter.isLegal(&op.getBody());
         });
     target.addDynamicallyLegalOp<::mlir::func::ReturnOp>(
-        [&](::mlir::func::ReturnOp op) { return typeConverter.isLegal(op); });
+        [&](::mlir::func::ReturnOp op) {
+          for (auto o : op.operands()) {
+            if (o.getType().isa<::mlir::TupleType>())
+              return false;
+          }
+          return typeConverter.isLegal(op);
+        });
+
     target.addDynamicallyLegalOp<mlir::func::CallOp>(
         [&](mlir::func::CallOp op) { return typeConverter.isLegal(op); });
 
     ::mlir::RewritePatternSet patterns(&ctxt);
     patterns.insert<MkPTensorLowering, ExtractRTensorLowering, ARangeLowering,
-                    EWBinOpLowering, ReductionOpLowering>(typeConverter, &ctxt);
+                    EWBinOpLowering, ReductionOpLowering, ReturnOpConversion>(
+        typeConverter, &ctxt);
 
     ::mlir::populateFunctionOpInterfaceTypeConversionPattern<
         ::mlir::func::FuncOp>(patterns, typeConverter);
-    ::mlir::populateReturnOpTypeConversionPattern(patterns, typeConverter);
+
+    // ::mlir::populateReturnOpTypeConversionPattern(patterns, typeConverter);
     ::mlir::populateCallOpTypeConversionPattern(patterns, typeConverter);
 
     if (::mlir::failed(::mlir::applyPartialConversion(getOperation(), target,
