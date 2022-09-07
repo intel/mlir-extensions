@@ -1729,20 +1729,25 @@ struct EnvRegionPropagateOutsideValues
     auto termArgs = term.results();
     assert(oldResults.size() == termArgs.size());
 
+    // Build list of propagated and new yield args.
     llvm::SmallVector<mlir::Value> newResults(count);
     llvm::SmallVector<mlir::Value> newYieldArgs;
     for (auto i : llvm::seq(0u, count)) {
       auto arg = termArgs[i];
       if (!op.getRegion().isAncestor(arg.getParentRegion())) {
+        // Value defined outside op region - use it directly instead of
+        // yielding.
         newResults[i] = arg;
       } else {
         newYieldArgs.emplace_back(arg);
       }
     }
 
+    // Same yield results count - nothing changed.
     if (newYieldArgs.size() == count)
       return mlir::failure();
 
+    // Contruct new env region op, only yielding values that weren't propagated.
     mlir::ValueRange newYieldArgsRange(newYieldArgs);
     auto newOp = rewriter.create<EnvironmentRegionOp>(
         op->getLoc(), newYieldArgsRange.getTypes(), op.environment(),
@@ -1754,13 +1759,17 @@ struct EnvRegionPropagateOutsideValues
       rewriter.setInsertionPoint(term);
       rewriter.replaceOpWithNewOp<EnvironmentRegionYieldOp>(term, newYieldArgs);
     }
+
+    // Fill results that weren't propagated with results of new op.
     for (auto i : llvm::seq(0u, count)) {
       if (!newResults[i]) {
         newResults[i] = newYieldArgsRange.front();
         newYieldArgsRange = newYieldArgsRange.drop_front();
       }
     }
-    assert(newYieldArgsRange.empty());
+    assert(newYieldArgsRange.empty() &&
+           "Some values weren't consumed - yield args count mismatch?");
+
     rewriter.replaceOp(op, newResults);
     return mlir::success();
   }
@@ -1802,29 +1811,36 @@ struct CleanupRegionYieldArgs
     assert(results.size() == yieldArgs.size());
     auto count = static_cast<unsigned>(results.size());
 
+    // Build new yield args list, and mapping between old and new results
     llvm::SmallVector<mlir::Value> newYieldArgs;
     llvm::SmallVector<int> newResultsMapping(count, -1);
     llvm::SmallDenseMap<mlir::Value, int> argsMap;
     for (auto i : llvm::seq(0u, count)) {
       auto res = results[i];
+
+      // Unused result.
       if (res.getUses().empty())
         continue;
 
       auto arg = yieldArgs[i];
       auto it = argsMap.find_as(arg);
       if (it == argsMap.end()) {
+        // Add new result, compute index mapping for it.
         auto ind = static_cast<int>(newYieldArgs.size());
         argsMap.insert({arg, ind});
         newYieldArgs.emplace_back(arg);
         newResultsMapping[i] = ind;
       } else {
+        // Duplicated result, reuse prev result index.
         newResultsMapping[i] = it->second;
       }
     }
 
+    // Same yield results count - nothing changed.
     if (newYieldArgs.size() == count)
       return mlir::failure();
 
+    // Contruct new env region op, only yielding values we selected.
     mlir::ValueRange newYieldArgsRange(newYieldArgs);
     auto newOp = rewriter.create<EnvironmentRegionOp>(
         op->getLoc(), newYieldArgsRange.getTypes(), op.environment(),
@@ -1837,6 +1853,7 @@ struct CleanupRegionYieldArgs
       rewriter.replaceOpWithNewOp<EnvironmentRegionYieldOp>(term, newYieldArgs);
     }
 
+    // Contruct new result list, using mapping previously contructed.
     auto newResults = newOp.getResults();
     llvm::SmallVector<mlir::Value> newResultsToTeplace(count);
     for (auto i : llvm::seq(0u, count)) {
@@ -1858,6 +1875,8 @@ struct MergeAdjacentRegions
   mlir::LogicalResult
   matchAndRewrite(EnvironmentRegionOp op,
                   mlir::PatternRewriter &rewriter) const override {
+    // Get next pos and check if it is also env region op, current op cannot be
+    // last as it is not a terminator.
     auto opPos = op->getIterator();
     auto nextOp = mlir::dyn_cast<EnvironmentRegionOp>(*std::next(opPos));
     if (!nextOp)
@@ -1874,6 +1893,8 @@ struct MergeAdjacentRegions
     assert(results.size() == yieldArgs.size());
     auto count = static_cast<unsigned>(results.size());
 
+    // Check if any results from first op are being used in second one, we need
+    // to replace them by direct values.
     for (auto i : llvm::seq(0u, count)) {
       auto res = results[i];
       for (auto &use : llvm::make_early_inc_range(res.getUses())) {
@@ -1890,9 +1911,13 @@ struct MergeAdjacentRegions
         mlir::cast<EnvironmentRegionYieldOp>(nextBody->getTerminator());
     auto nextYieldArgs = nextTerm.results();
 
+    // Contruct merged yield args list, some of the results may become unused,
+    // but they will be cleaned up be other pattern.
     llvm::SmallVector<mlir::Value> newYieldArgs(count + nextYieldArgs.size());
     llvm::copy(nextYieldArgs, llvm::copy(yieldArgs, newYieldArgs.begin()));
+
     {
+      // Merge region from second op into ferst one.
       mlir::OpBuilder::InsertionGuard g(rewriter);
       rewriter.mergeBlockBefore(nextBody, term);
       rewriter.setInsertionPoint(term);
@@ -1901,6 +1926,7 @@ struct MergeAdjacentRegions
       rewriter.eraseOp(nextTerm);
     }
 
+    // Contruct new env region op and steal new merged region into it.
     mlir::ValueRange newYieldArgsRange(newYieldArgs);
     auto newOp = rewriter.create<EnvironmentRegionOp>(
         op->getLoc(), newYieldArgsRange.getTypes(), op.environment(),
