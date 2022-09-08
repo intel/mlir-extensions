@@ -47,7 +47,7 @@ static mlir::PassPipelineRegistration<> InsertGpuAlloc(
     });
 
 static mlir::PassPipelineRegistration<>
-    SetSpirvCapabalities("set-spirv-capablilities", "Sets Spirv capabilities",
+    SetSPIRVCapabilities("set-spirv-capablilities", "Sets Spirv capabilities",
                          [](mlir::OpPassManager &pm) {
                            pm.addPass(imex::createSetSPIRVCapabilitiesPass());
                          });

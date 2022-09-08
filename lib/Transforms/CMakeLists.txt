@@ -1,6 +1,6 @@
 add_mlir_library(IMEXTransforms
   InsertGpuAllocs.cpp
-  SetSPIRVCapabalities.cpp
+  SetSPIRVCapabilities.cpp
   SetSPIRVAbiAttribute.cpp
 
   #ADDITIONAL_HEADER_DIRS

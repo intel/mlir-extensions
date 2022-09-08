@@ -10,20 +10,12 @@ The pass traverses all the memref (load/store) operations inside the gpu launch 
 ```
 // -----// IR Dump Before {anonymous}::InsertGPUAllocs //----- //
 func.func @main() {
-  %c8 = arith.constant 8 : index
-  %c1 = arith.constant 1 : index
-  %cst = arith.constant 2.200000e+00 : f32
-  %cst_0 = arith.constant 1.100000e+00 : f32
-  %cst_1 = arith.constant 0.000000e+00 : f32
   %0 = memref.alloc() : memref<8xf32>
   %1 = memref.alloc() : memref<8xf32>
   %2 = memref.alloc() : memref<8xf32>
-  %3 = memref.cast %0 : memref<8xf32> to memref<?xf32>
-  %4 = memref.cast %1 : memref<8xf32> to memref<?xf32>
-  %5 = memref.cast %2 : memref<8xf32> to memref<?xf32>
-  call @fillResource1DFloat(%3, %cst_0) : (memref<?xf32>, f32) -> ()
-  call @fillResource1DFloat(%4, %cst) : (memref<?xf32>, f32) -> ()
-  call @fillResource1DFloat(%5, %cst_1) : (memref<?xf32>, f32) -> ()
+  .
+  .
+  .
   gpu.launch blocks(%arg0, %arg1, %arg2) in (%arg6 = %c8, %arg7 = %c1, %arg8 = %c1) threads(%arg3, %arg4, %arg5) in (%arg9 = %c1, %arg10 = %c1, %arg11 = %c1) {
     %7 = gpu.block_id  x
     %8 = memref.load %0[%7] : memref<8xf32>
@@ -43,20 +35,12 @@ The Pass will change the IR to:
 ```
 // -----// IR Dump After {anonymous}::InsertGPUAllocs //----- //
 func.func @main() {
-  %c8 = arith.constant 8 : index
-  %c1 = arith.constant 1 : index
-  %cst = arith.constant 2.200000e+00 : f32
-  %cst_0 = arith.constant 1.100000e+00 : f32
-  %cst_1 = arith.constant 0.000000e+00 : f32
   %memref = gpu.alloc  () {gpu.alloc_shared} : memref<8xf32>
   %memref_2 = gpu.alloc  () {gpu.alloc_shared} : memref<8xf32>
   %memref_3 = gpu.alloc  () {gpu.alloc_shared} : memref<8xf32>
-  %0 = memref.cast %memref : memref<8xf32> to memref<?xf32>
-  %1 = memref.cast %memref_2 : memref<8xf32> to memref<?xf32>
-  %2 = memref.cast %memref_3 : memref<8xf32> to memref<?xf32>
-  call @fillResource1DFloat(%0, %cst_0) : (memref<?xf32>, f32) -> ()
-  call @fillResource1DFloat(%1, %cst) : (memref<?xf32>, f32) -> ()
-  call @fillResource1DFloat(%2, %cst_1) : (memref<?xf32>, f32) -> ()
+  .
+  .
+  .
   gpu.launch blocks(%arg0, %arg1, %arg2) in (%arg6 = %c8, %arg7 = %c1, %arg8 = %c1) threads(%arg3, %arg4, %arg5) in (%arg9 = %c1, %arg10 = %c1, %arg11 = %c1) {
     %4 = gpu.block_id  x
     %5 = memref.load %memref[%4] : memref<8xf32>
@@ -74,6 +58,13 @@ func.func @main() {
 
 As shown in the example above, the memref.allocs in the IR are referring to device buffer allocation and hence they are replaced with gpu.alloc from the gpu dialect.
 
+## Limitations of this pass.
+
+1. This pass only supports only memref::AllocOp and not its variants like memref::AllocaOp, memref::AllocaScopeOp & AllocaScopeReturnOp.
+2. This pass needs to be run before the GpuKernelOutlining pass since it operates on gpu.launch blocks and not on gpu.launch_func.
+3. This pass only covers static shapes and shapes with unknown dims and known rank.
+
+Note: We plan to add support for these limitations in incremental future PR's.
 
 ## Reason for this Custom Pass:
 

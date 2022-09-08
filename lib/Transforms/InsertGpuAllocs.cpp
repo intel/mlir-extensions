@@ -10,6 +10,11 @@
 /// \file
 /// This file converts the memref.allocs for device side to gpu.allocs to
 /// distinguish between host & device side memory allocations.
+/// The pass traverses all the memref (load/store) operations inside the gpu
+/// launch op in the IR and checks for its aliases and its defining op. If the
+/// defining op is a memref.alloc op it replaces that op in the IR with
+/// gpu.alloc op, because all the operations under the gpu.launch op are device
+/// side computations and will execute on the device.
 ///
 //===----------------------------------------------------------------------===//
 
@@ -59,13 +64,20 @@ struct InsertGPUAllocs
         gpuGetMemrefGlobalParams;
     auto &aliases = getAnalysis<mlir::BufferViewFlowAnalysis>();
 
+    // This lamda function checks the type of memref operation and
+    // returns the reference to it.
+
     auto getMemref = [](mlir::Operation *op)
         -> llvm::Optional<mlir::SmallVector<mlir::Value, 4>> {
       if (auto load = mlir::dyn_cast<mlir::memref::LoadOp>(op)) {
         return {{load.memref()}};
       } else if (auto store = mlir::dyn_cast<mlir::memref::StoreOp>(op)) {
         return {{store.memref()}};
-      } else if (auto call = mlir::dyn_cast<mlir::func::CallOp>(op)) {
+      }
+      // This case checks if a mlir func call within the gpu.launch has
+      // operands which have memref as operands.It just collects them and checks
+      // for its origin later in the code
+      else if (auto call = mlir::dyn_cast<mlir::func::CallOp>(op)) {
         mlir::SmallVector<mlir::Value, 4> ret;
         for (auto arg : call.operands()) {
           if (arg.getType().isa<mlir::MemRefType>())
@@ -78,8 +90,10 @@ struct InsertGPUAllocs
       }
     };
 
-    auto scfDialect = getContext().getOrLoadDialect<mlir::scf::SCFDialect>();
-
+    // This lamda function checks if the op under consideration
+    // within the gpu.launch is a memory operation or no.
+    // This pass is only interested in memory operations or operands
+    // of mlir call op which are memory ops.
     auto hasMemAccess = [](mlir::Operation *op) -> bool {
       if (auto memInterface =
               mlir::dyn_cast<mlir::MemoryEffectOpInterface>(op)) {
@@ -98,7 +112,12 @@ struct InsertGPUAllocs
 
     // Traverse through all the memory access ops under GPU launch Op
     // and add device memory allocation appropriately.
+    // It is looking for all the memref producers/consumers used in the device
+    // kernels but has its buffers prepared outside.
     if (func.walk([&](mlir::Operation *op) {
+              // Limitation is that this pass needs to be be run before the
+              // kernel outlining since kernel outlinging with convert the
+              // gpu.launch OP to gpu.launch_func.
               if (!op->getParentOfType<mlir::gpu::LaunchOp>())
                 return mlir::WalkResult::advance();
 
@@ -121,19 +140,30 @@ struct InsertGPUAllocs
                       gpuGetMemrefGlobalParams.insert({op, {}});
                       continue;
                     }
-                    if (op->getDialect() == scfDialect ||
-                        mlir::isa<mlir::ViewLikeOpInterface>(op))
+                    // This is for cases where the memref aliases are just
+                    // ViewLikeOps for e.g memref.cast
+                    if (mlir::isa<mlir::ViewLikeOpInterface>(op))
                       continue;
+                    // Currently the pass only supports memref::AllocOp op and
+                    // not its other vairants like memref::AllocaOp,
+                    // memref::AllocaScopeOp & AllocaScopeReturnOp.
+                    // TODO (nbpatel): Support these ops in the future.
                     if (mlir::isa<mlir::memref::AllocOp>(op)) {
                       gpuBufferAllocs.insert({op, {}});
                     } else if (mlir::isa<mlir::func::CallOp>(op)) {
-                      // Ignore
+                      // TODO(nbpatel): Add the code here and a test case.
+                      // This is a stub for case where the call op has memref
+                      // producers/consumers. This case is not covered yet.
+                      // Subsequent PR will add this.
                     } else {
                       op->emitError("Unhandled memref producer");
                       return mlir::WalkResult::interrupt();
                     }
 
                   } else {
+                    // This is the gpu params case. So if the defining op is not
+                    // a memref.alloc or memref.get_global or callOp it assumes
+                    // that the inputs are passed in as function args.
                     auto block = alias.getParentBlock();
                     auto blockArgs = block->getArguments();
                     auto it = llvm::find(blockArgs, alias);
@@ -151,7 +181,7 @@ struct InsertGPUAllocs
       return;
     }
 
-    // Checks the access type of the OP
+    // Checks the access type of the OP under consideration.
     auto getAccessType = [&](mlir::Value memref) {
       AccessType ret;
       for (auto mem : aliases.resolve(memref)) {
@@ -210,14 +240,13 @@ struct InsertGPUAllocs
 
     // GetMemrefGlobal Op Case:
     // This is the case where the inputs are globals contants and accessed using
-    // memref.get_global op. This code will add the IR for memeory allocation on
+    // memref.get_global op. This code will add the IR for memory allocation on
     // the device with gpu.alloc and insert a memref.copy from host to device.
     mlir::OpBuilder builder(func);
     llvm::SmallVector<mlir::Value> dims;
     llvm::SmallPtrSet<mlir::Operation *, 8> filter;
     auto term = block.getTerminator();
     assert(term);
-
     for (auto &it : gpuGetMemrefGlobalParams) {
       auto getGlobalOp = mlir::cast<mlir::memref::GetGlobalOp>(it.first);
       it.second = getAccessType(getGlobalOp);
@@ -287,15 +316,22 @@ struct InsertGPUAllocs
           loc, alloc.getType(), /*asyncToken*/ nullptr,
           /*asyncDependencies*/ llvm::None, alloc.dynamicSizes(),
           alloc.symbolOperands());
+      auto allocResult = gpuAlloc.getResult(0);
       alloc->replaceAllUsesWith(gpuAlloc);
       alloc.erase();
       if (access.hostRead || access.hostWrite)
         gpuAlloc->setAttr(imex::getAllocSharedAttrName(),
                           builder.getUnitAttr());
+
+      builder.setInsertionPoint(term);
+      if (useGpuDealloc)
+        builder.create<mlir::gpu::DeallocOp>(loc, llvm::None, allocResult);
+      else
+        builder.create<mlir::memref::DeallocOp>(loc, allocResult);
     }
 
     // This is the case where the inputs are passed as arguments to the
-    // function. This code will add the IR for memeory allocation on the device
+    // function. This code will add the IR for memory allocation on the device
     // with gpu.alloc and insert a memref.copy from host to device
     for (auto it : gpuBufferParams) {
       auto param = block.getArgument(it.first);
@@ -306,6 +342,15 @@ struct InsertGPUAllocs
       auto rank = static_cast<unsigned>(memrefType.getRank());
       filter.clear();
       dims.clear();
+      // This code is for handling dynamic dims. Example is:
+      // %c0 = arith.constant 0 : index
+      // %0 = memref.dim %arg0, %c0 : memref<?x?x?xi32, #map>
+      // %c1 = arith.constant 1 : index
+      // %1 = memref.dim %arg0, %c1 : memref<?x?x?xi32, #map>
+      // %c2 = arith.constant 2 : index
+      // %2 = memref.dim %arg0, %c2 : memref<?x?x?xi32, #map>
+      // %memref = gpu.alloc  (%0, %1, %2) {gpu.alloc_shared} :
+      // memref<?x?x?xi32>
       for (auto i : llvm::seq(0u, rank)) {
         if (memrefType.isDynamicDim(i)) {
           auto op = builder.create<mlir::memref::DimOp>(loc, param, i);

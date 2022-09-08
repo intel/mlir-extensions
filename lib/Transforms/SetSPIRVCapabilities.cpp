@@ -1,4 +1,4 @@
-//===- SetSPIRVCapabalities.cpp - SetSPIRVCapabalities Pass  -------*- C++
+//===- SetSPIRVCapabilities.cpp - SetSPIRVCapabilities Pass  -------*- C++
 //-*-===//
 //
 // Copyright 2022 Intel Corporation
