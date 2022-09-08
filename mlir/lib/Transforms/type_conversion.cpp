@@ -45,13 +45,23 @@ void imex::populateControlFlowTypeConversionRewritesAndTarget(
     mlir::ConversionTarget &target) {
   mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::func::FuncOp>(
       patterns, typeConverter);
-  target.addDynamicallyLegalOp<mlir::func::FuncOp>([&](mlir::func::FuncOp op) {
-    return typeConverter.isSignatureLegal(op.getFunctionType()) &&
-           typeConverter.isLegal(&op.getBody());
-  });
+  target.addDynamicallyLegalOp<mlir::func::FuncOp>(
+      [&](mlir::func::FuncOp op) -> llvm::Optional<bool> {
+        if (typeConverter.isSignatureLegal(op.getFunctionType()) &&
+            typeConverter.isLegal(&op.getBody()))
+          return true;
+
+        return llvm::None;
+      });
+
   mlir::populateCallOpTypeConversionPattern(patterns, typeConverter);
-  target.addDynamicallyLegalOp<mlir::func::CallOp>(
-      [&](mlir::func::CallOp op) { return typeConverter.isLegal(op); });
+  target.addDynamicallyLegalOp<mlir::arith::SelectOp, mlir::func::CallOp>(
+      [&](mlir::Operation *op) -> llvm::Optional<bool> {
+        if (typeConverter.isLegal(op))
+          return true;
+
+        return llvm::None;
+      });
 
   mlir::populateBranchOpInterfaceTypeConversionPattern(patterns, typeConverter);
   mlir::populateReturnOpTypeConversionPattern(patterns, typeConverter);
@@ -59,17 +69,17 @@ void imex::populateControlFlowTypeConversionRewritesAndTarget(
                                                              patterns, target);
 
   patterns.insert<ConvertSelectOp>(typeConverter, patterns.getContext());
-  target.addDynamicallyLegalOp<mlir::arith::SelectOp>(
-      [&typeConverter](mlir::arith::SelectOp op) {
-        return typeConverter.isLegal(op);
-      });
 
-  target.markUnknownOpDynamicallyLegal([&](mlir::Operation *op) {
-    return mlir::isNotBranchOpInterfaceOrReturnLikeOp(op) ||
-           mlir::isLegalForBranchOpInterfaceTypeConversionPattern(
-               op, typeConverter) ||
-           mlir::isLegalForReturnOpTypeConversionPattern(op, typeConverter);
-  });
+  target.markUnknownOpDynamicallyLegal(
+      [&](mlir::Operation *op) -> llvm::Optional<bool> {
+        if (mlir::isNotBranchOpInterfaceOrReturnLikeOp(op) ||
+            mlir::isLegalForBranchOpInterfaceTypeConversionPattern(
+                op, typeConverter) ||
+            mlir::isLegalForReturnOpTypeConversionPattern(op, typeConverter))
+          return true;
+
+        return llvm::None;
+      });
 }
 
 namespace {

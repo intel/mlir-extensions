@@ -15,6 +15,10 @@
 #include "pipelines/lower_to_gpu.hpp"
 
 #include <mlir/Conversion/AffineToStandard/AffineToStandard.h>
+#include <mlir/Conversion/AsyncToLLVM/AsyncToLLVM.h>
+#include <mlir/Conversion/GPUCommon/GPUCommonPass.h>
+#include <mlir/Conversion/LLVMCommon/ConversionTarget.h>
+#include <mlir/Conversion/LLVMCommon/TypeConverter.h>
 #include <mlir/Conversion/SCFToGPU/SCFToGPUPass.h>
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
 #include <mlir/Dialect/Arithmetic/Transforms/Passes.h>
@@ -42,6 +46,7 @@
 
 #include "mlir-extensions/Conversion/gpu_runtime_to_llvm.hpp"
 #include "mlir-extensions/Conversion/gpu_to_gpu_runtime.hpp"
+#include "mlir-extensions/Conversion/util_conversion.hpp"
 #include "mlir-extensions/Dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
 #include "mlir-extensions/Dialect/imex_util/dialect.hpp"
 #include "mlir-extensions/Transforms/call_lowering.hpp"
@@ -1406,6 +1411,36 @@ struct SinkGpuDims : public mlir::OpRewritePattern<mlir::gpu::LaunchOp> {
 struct SinkGpuDimsPass : public imex::RewriteWrapperPass<SinkGpuDimsPass, void,
                                                          void, SinkGpuDims> {};
 
+struct GPUToLLVMPass
+    : public mlir::PassWrapper<GPUToLLVMPass,
+                               mlir::OperationPass<mlir::ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(GPUToLLVMPass)
+
+  void runOnOperation() override {
+    mlir::MLIRContext &context = getContext();
+    mlir::LLVMTypeConverter converter(&context);
+    mlir::RewritePatternSet patterns(&context);
+    mlir::LLVMConversionTarget target(context);
+
+    mlir::populateAsyncStructuralTypeConversionsAndLegality(converter, patterns,
+                                                            target);
+    mlir::populateGpuToLLVMConversionPatterns(
+        converter, patterns, mlir::gpu::getDefaultGpuBinaryAnnotation());
+
+    imex::populateControlFlowTypeConversionRewritesAndTarget(converter,
+                                                             patterns, target);
+
+    gpu_runtime::populateGpuToLLVMPatternsAndLegality(converter, patterns,
+                                                      target);
+    imex::populateUtilConversionPatterns(context, converter, patterns, target);
+
+    auto mod = getOperation();
+    if (mlir::failed(
+            mlir::applyPartialConversion(mod, target, std::move(patterns))))
+      signalPassFailure();
+  }
+};
+
 static void commonOptPasses(mlir::OpPassManager &pm) {
   pm.addPass(imex::createCommonOptsPass());
   pm.addPass(mlir::createCSEPass());
@@ -1473,7 +1508,7 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::func::FuncOp>(
       std::make_unique<GenerateOutlineContextPass>());
   pm.addPass(gpu_runtime::createEnumerateEventsPass());
-  pm.addPass(gpu_runtime::createGPUToLLVMPass());
+  pm.addPass(std::make_unique<GPUToLLVMPass>());
   commonOptPasses(pm);
 }
 } // namespace

@@ -43,6 +43,7 @@ set(SOURCES_LIST
     lib/Conversion/cfg_to_scf.cpp
     lib/Conversion/gpu_runtime_to_llvm.cpp
     lib/Conversion/gpu_to_gpu_runtime.cpp
+    lib/Conversion/util_conversion.cpp
     lib/Conversion/util_to_llvm.cpp
     lib/Dialect/gpu_runtime/IR/gpu_runtime_ops.cpp
     lib/Dialect/imex_util/dialect.cpp
@@ -78,6 +79,7 @@ set(HEADERS_LIST
     include/mlir-extensions/Conversion/cfg_to_scf.hpp
     include/mlir-extensions/Conversion/gpu_runtime_to_llvm.hpp
     include/mlir-extensions/Conversion/gpu_to_gpu_runtime.hpp
+    include/mlir-extensions/Conversion/util_conversion.hpp
     include/mlir-extensions/Conversion/util_to_llvm.hpp
     include/mlir-extensions/Dialect/gpu_runtime/IR/gpu_runtime_ops.hpp
     include/mlir-extensions/Dialect/imex_util/dialect.hpp
