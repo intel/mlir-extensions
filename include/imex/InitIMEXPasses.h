@@ -19,6 +19,7 @@
 // #include <imex/Transforms/IMEXPasses.h>
 #include <imex/Dialect/Dist/Transforms/Passes.h>
 // #include <imex/Dialect/*/Transforms/Passes.h>
+#include "imex/Transforms/Passes.h"
 
 #include <cstdlib>
 
@@ -33,7 +34,7 @@ namespace imex {
 /// The global registry is interesting to interact with the command-line tools.
 inline void registerAllPasses() {
   // General passes
-  // registerTransformsPasses();
+  registerTransformsPasses();
 
   // Conversion passes
   registerConversionPasses();

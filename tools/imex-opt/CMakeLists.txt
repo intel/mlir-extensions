@@ -4,6 +4,7 @@ set(LIBS
         ${dialect_libs}
         ${conversion_libs}
 	MLIROptLib
+        IMEXTransforms
         )
 add_llvm_executable(imex-opt imex-opt.cpp)
 
