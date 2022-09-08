@@ -28,7 +28,7 @@ Additionally we propose appropriate passes
 Since operations are expected to execute in the same location as its input tensors, it is necessary to carry the tensor-location from the point of its allocation to the point of the operation. For this, we introduce a type which logically extends the `mlir::tensor` type with the necessary location information. The location information includes:
 * the `device`: The optional `device` indicates where the tensor lives, e.g. on which device. The target device is represented as a generic type which will be forwarded to the gpu/distributed runtimes. The exact type/syntax of device-identifiers is defined by the GPU runtime. For example, SYCL runtime will accept SYCL filter strings as defined [here](https://github.com/intel/llvm/blob/sycl/sycl/doc/EnvironmentVariables.md#sycl_device_filter). The default `NoneType` which disables device support.
 * a distributed `team`:  The optional `team` indicates a team (of processes) among which the tensor is partitioned-distributed. The type of the `team` depends on the underlying runtime; for MPI and Intel's distributed runtime this would be a `int64`. It defaults to `NoneType` which disables support for distributed operation.
-* a globally unique id `gid`: `int64`
+* An optional runtime handle passed to/from the underlying distributed runtime.
 
 The tensors themselves are assumed to eventually lower to memrefs.
 
@@ -120,6 +120,11 @@ The below set of operations accrues from the following rules:
 * Utility Functions
   * `test{$top}(rhs, axis) : (ptensor.ptensor, int) -> ptensor.ptensor`
     * `$rop = ['any', 'all']`
+  * Utility functions not part of the array-API
+    * Get the (local) ranked tensor from a ptensor:
+      `extract_rtensor(tensor) : (ptensor.ptensor) -> RankedTensor`
+    * Initialize a ptensor value from a RankedTensor, device, team and handle:
+      `init_ptensor(rtensor, device, team, handle) {onDevice : bool, dist : bool} : (RankedTensor, AnyType, AnyType, AnyType, AnyType -> ptensor.ptensor`
 
 ### __Dist__ Operations
 The Dist dialect provides operations dealing with tensors which are partitioned and distributed across multiple processes. The operations assume some kind of a runtime which handles aspects like communication and partitioning.
@@ -149,9 +154,10 @@ intel_sycl.device_region('level_zero:gpu:1') {
 All passes which consume `ptensor`s and -operations comply to compute-follows-data: Generation of GPU-, distribution-, parallelization- et al. operations depend on the `team` and `device` attributes of input tensors. For example, if a tensor has the attribute "device='GPU'" then memory allocation operations must target the GPU.
 
 #### --lower-ptensor
-This pass completely lowers ptensor operations to
-- __Tensor__: `ptensor.ptensor` will be type-converted to `tuple(tensor, str, int64, int64)` representing the tensor, the device, the team and a globally unique id.
-  - the tuple elements `team`, `gid` and `device` are used to appropriately create necessary operations in __intel_sycl__ and __Dist__ dialects
+This pass completely lowers ptensor operations:
+- __Tensor__: `ptensor.ptensor` will be type-converted to `tuple(tensor, AnyType, AnyType, AnyType)` representing the tensor, the device, the team and a runtime handle
+  - the tuple elements `team`, `handle` and `device` are used to appropriately create necessary operations in __intel_sycl__ and __Dist__ dialects
+  - on function boundary (ReturnOp, callOp, functionOp) the ptensor will be expanded to 4 arguments: RankedTensor, device, team and handle.
 - __Linalg__: The actual functionality will be represented by one or more operations of the Linalg dialect.
 - __intel_sycl__: Appropriate `intel_sycl.device_region` will be put around operations which have inputs of type `ptensor.ptensor` with a non-null `device` attribute.
 - __Dist__: new dialect which deals with primitives to manage operations on distributed tensors. Operations from the `team` dialect will generated if input tensors have non-none `team` attributes.
@@ -189,12 +195,12 @@ If device==null but team!=none this would decompose into the following high-leve
 %stop = $compute_stop_index(%1, %2, %3)
 %step = $3
 %gshape = $compute_global_shape(%1, %2, %3)
-%gid = dist.init_dtensor(%gshape)
-%lshape = dist.local_shape(%gid)
-%lslice = dist.local_slice(%gid)
+%handle = dist.init_dtensor(%gshape)
+%lshape = dist.local_shape(%handle)
+%lslice = dist.local_slice(%handle)
 %ltensor = linalg.init_tensor(%lshape)
 %rtensor = linalg.generic($compute_arange, %lslice, %lshape, %ltensor)
-%res = %rtensor, %device, %team, %gid
+%res = %rtensor, %device, %team, %handle
 ```
 
 If device!=null but team==none this would decompose into the following
@@ -217,14 +223,14 @@ If device!=null and team!=none this would become something like:
 %stop = $compute_stop_index(%1, %2, %3)
 %step = $3
 %gshape = $compute_global_shape(%1, %2, %3)
-%gid = dist.init_dtensor(%gshape)
-%lshape = dist.local_shape(%gid)
-%lslice = dist.local_slice(%gid)
+%handle = dist.init_dtensor(%gshape)
+%lshape = dist.local_shape(%handle)
+%lslice = dist.local_slice(%handle)
 intel_sycl.device_region(%device) {
   %ltensor = linalg.init_tensor(%lshape)
   %rtensor = linalg.generic($compute_arange, %lslice, %lshape, %ltensor)
 }
-%res = %rtensor, %device, %team, %gid
+%res = %rtensor, %device, %team, %handle
 ```
 
 #### --dist-to-intel-runtime
