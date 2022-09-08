@@ -3,7 +3,7 @@
 // FIXME just a stub to have an initial conversion test
 
 // -----
-// CHECK-LABEL: register_ptensor
+// CHECK-LABEL: generic
 func.func @test_arange(%arg0: si64, %arg1: si64, %arg2: si64) -> !ptensor.ptensor<tensor<?xi64>> {
     %0 = "ptensor.arange"(%arg0, %arg1, %arg2) {dist = true} : (si64, si64, si64) -> !ptensor.ptensor<tensor<?xi64>>
     return %0 : !ptensor.ptensor<tensor<?xi64>>
