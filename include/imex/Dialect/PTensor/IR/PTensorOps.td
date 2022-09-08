@@ -108,7 +108,7 @@ def MkPTensorOp : PTensor_Op<"mkptensor", [NoSideEffect]> {
       }]>,
       // Default: no device, non-distributed
       OpBuilder<(ins "::mlir::Value":$rtensor), [{
-        auto null = createSignlessInt<0>($_builder, $_builder.getUnknownLoc(), 0);
+        auto null = createSignlessInt<1>($_builder, $_builder.getUnknownLoc(), 0);
         build($_builder, $_state, false, false, rtensor, null, null, null);
       }]>,
     ];
