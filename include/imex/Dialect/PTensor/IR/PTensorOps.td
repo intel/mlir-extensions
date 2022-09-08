@@ -77,7 +77,7 @@ class PTensor_Op<string mnemonic, list<Trait> traits = []> :
     Op<PTensor_Dialect, mnemonic, traits>;
 
 
-def MkPTensorOp : PTensor_Op<"mkptensor", [NoSideEffect]> {
+def MkPTensorOp : PTensor_Op<"init_ptensor", [NoSideEffect]> {
     let summary = "Create a new PTensor from RankedTensor, device, team and guid";
     let description = [{
         High-level operation to create a new PTensor.
