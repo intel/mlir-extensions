@@ -13,7 +13,7 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include "../IMEXPassDetail.h"
+#include "../PassDetail.h"
 #include <imex/Conversion/PTensorToLinalg/PTensorToLinalg.h>
 #include <imex/Dialect/Dist/IR/DistOps.h>
 #include <imex/Dialect/PTensor/IR/PTensorOps.h>

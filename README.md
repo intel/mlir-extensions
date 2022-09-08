@@ -1,6 +1,7 @@
 ## Setting up development environment
 ```sh
-conda create -n imex-dev -c intel -c defaults -c conda-forge pip">=21.2.4" pre-commit cmake clang-format tbb-devel lit
+conda create -n imex-dev -c intel -c defaults -c conda-forge pip">=21.2.4" pre-commit cmake clang-format tbb-devel lit doxygen
+
 conda activate imex-dev
 pre-commit install -f -c ./scripts/.pre-commit-config.yaml
 ```
@@ -21,27 +22,46 @@ If you want the script to build LLVM and then IMEX, do as follows:
 
 ```sh
 external_lit=`which lit`
-python scripts/build_imex.py                        \
+python build_tools/build_imex.py                        \
     --working-dir $local-working-dir-to-build-llvm  \
     --external-lit ${external_lit}
 ```
 
 To reuse a previously built LLVM, use the following steps:
 
+Make sure your LLVM install is built from the git commit sha as stated in
+'build_tools/llvm_version.txt'.
+
 ```sh
 external_lit=`which lit`
-python scripts/build_imex.py                        \
+python build_tools/build_imex.py                        \
     --working-dir $local-working-dir-to-build-llvm  \
     --llvm-install $llvm-target-dir                 \
     --external-lit ${external_lit}
 ```
 
 #### Building Bare Metal With Existing LLVM/MLIR
+Make sure your LLVM install is built from the git commit sha as stated in
+'build_tools/llvm_version.txt'.
 ```sh
 mkdir build
 cd build
-CC=gcc-9 CXX=g++-9 MLIR_DIR=$llvm-c38ef550de81631641cb1485e0641d1d2227dce4 cmake ..
+CC=gcc-9 CXX=g++-9 MLIR_DIR=<llvm-install-directory> cmake ..
 make -j 12
+```
+
+#### Building docs
+To build user documentation do
+```sh
+cd build
+cmake --build . --target mlir-doc
+```
+It will render docs to the 'doc' directory.
+
+To build code documentation use '-DIMEX_INCLUDE_DOCS' when configuring with cmake and do
+```sh
+cd build
+cmake --build . --target doc_doxygen
 ```
 
 ## Adding a new dialect
@@ -62,12 +82,14 @@ This will
   - `include/imex/Dialect/<name>/Transforms/Passes.td`
   - `lib/Dialect/Transforms/PassDetail.h`
 
-Add your dialect and its transforms/passes to appropriate places in
-- `include/imex/InitIMEXDialects.h`
-- `include/imex/InitIMEXPasses.h`
-- `lib/Conversion/IMEXPassDetail.h`
-
-Fill in what's marked with FIXME
+Now, it's your turn to
+* Add your dialect and its transforms/passes to appropriate places in
+  - `include/imex/InitIMEXDialects.h`
+  - `include/imex/InitIMEXPasses.h`
+  - `lib/Conversion/IMEXPassDetail.h`
+* Fill in what's marked with FIXME
+* The documentation of the dialect should go into the `description` fields in `<name>Ops.td`. At build time the description
+will be extracted and a file `doc/<name>.md` will be generated automatically. It will include descriptions of the dialect and operations in a standardized way.
 
 ## Adding a new Conversion
 ```sh
@@ -82,19 +104,22 @@ This will
 * Add declarations to header `include/mlir/Conversion/<conversion-name>/<conversion-name>.h`
 * Put cpp definition stubs to `lib/Conversion/<conversion-name>/<conversion-name>.cpp`
 * Add conversion to `include/imex/Conversion/IMEXPasses.td and include/imex/Conversion/IMEXPasses.h`
+* Add a pass def stub to `include/imex/Conversion/IMEXPasses.td and include/imex/Conversion/Passes.td`
 
-Now fill in what's marked with FIXME
-* Pattern rewriters
-* Populating lists with patterns
-* Passes
+You will now have to
+* Fill in the above files what's marked with FIXME
+* The documentation of the pass should go into the `description` field in `Passes.td`. At build time the description
+will be extracted and a file `doc/Conversions.md` will be generated automatically.
+* Write your Pattern rewriters
 
 ## Run the lit tests
 To run the FileCheck based tests, follow the following steps:
 
 ```sh
 cd <to your IMEX build directory>
-cmake --build . --target check-imex-opt
+cmake --build . --target check-imex
 ```
+Add '-v' to the above command-line to get verbose output.
 
 ## License
 This code is made available under the Apache License 2.0 with LLVM Exceptions.

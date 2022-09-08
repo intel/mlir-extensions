@@ -25,7 +25,7 @@
 namespace imex {
 namespace ptensor {
 
-// The set of supported operations
+/// The set of supported elementwise binary operations
 enum EWBinOpId : int {
   ADD,
   AND,
@@ -60,6 +60,7 @@ enum EWBinOpId : int {
   EWBINOPID_LAST
 };
 
+/// The set of supported reduction operations
 enum ReduceOpId : int { MAX, MEAN, MIN, PROD, SUM, STD, VAR, REDUCEOPID_LAST };
 
 } // namespace ptensor

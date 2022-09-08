@@ -52,12 +52,8 @@ with open(fn, "w") as f:
 with open(jp(incroot, args.name, "IR", "CMakeLists.txt"), "w") as f:
     f.write(f"add_mlir_dialect({args.name}Ops {args.name.lower()})\n")
     f.write(
-        f"add_mlir_doc({args.name}Dialect {args.name}Dialect {args.name}/"
-        + " -gen-dialect-doc)\n"
-    )
-    f.write(
-        f"add_mlir_doc({args.name}Ops {args.name}Ops {args.name}/ "
-        + "-gen-op-doc)\n"
+        f"add_mlir_doc({args.name}Ops {args.name}Dialect Dialects/ "
+        + "-gen-dialect-doc)\n"
     )
 
 # Default rules for transforms/passes tablegen and alike

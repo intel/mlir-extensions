@@ -12,17 +12,8 @@
 
 namespace imex {
 
-// A list of dialects to be inserted into ::mlir::DialectRegistry
-template <typename... Dialects> struct DialectList {
-  void insert(::mlir::DialectRegistry &registry) const {
-    if constexpr (sizeof...(Dialects) > 0) {
-      registry.insert<Dialects...>();
-    }
-  }
-};
-
-// Convenience functions for filling in a pattern set with patterns provided as
-// template args
+/// Convenience functions for filling in a pattern set with patterns provided as
+/// template args
 template <typename... Rewrites>
 void insertPatterns(::mlir::MLIRContext &context,
                     ::mlir::FrozenRewritePatternSet &patterns) {
