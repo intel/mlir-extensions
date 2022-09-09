@@ -104,10 +104,6 @@ struct InsertGPUAllocs
                                mlir::OperationPass<mlir::func::FuncOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(InsertGPUAllocs)
 
-  InsertGPUAllocs() = default;
-  InsertGPUAllocs(bool gpuDealloc) { useGpuDealloc = gpuDealloc; }
-  InsertGPUAllocs(const InsertGPUAllocs &pass) : PassWrapper(pass) {}
-
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::memref::MemRefDialect>();
@@ -371,18 +367,38 @@ struct InsertGPUAllocs
       if (access.hostRead && access.deviceWrite)
         builder.create<mlir::memref::CopyOp>(loc, allocResult, param);
 
-      if (useGpuDealloc)
-        builder.create<mlir::gpu::DeallocOp>(loc, llvm::None, allocResult);
-      else
-        builder.create<mlir::memref::DeallocOp>(loc, allocResult);
+      builder.create<mlir::gpu::DeallocOp>(loc, llvm::None, allocResult);
     }
   }
+};
 
-  Option<bool> useGpuDealloc{
-      *this, "use-gpu-dealloc",
-      llvm::cl::desc("use gpu.dealloc for gpu allocated memrefs, "
-                     "memref.dealloc will be used otherwise"),
-      llvm::cl::init(true)};
+struct ConvertGPUDeallocsPass
+    : public mlir::PassWrapper<ConvertGPUDeallocsPass,
+                               mlir::OperationPass<void>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(ConvertGPUDeallocsPass)
+
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::gpu::GPUDialect>();
+    registry.insert<mlir::memref::MemRefDialect>();
+  }
+
+  void runOnOperation() override {
+    auto op = getOperation();
+
+    mlir::OpBuilder builder(&getContext());
+    op->walk([&](mlir::gpu::DeallocOp dealloc) {
+      if (dealloc.asyncToken()) {
+        dealloc->emitError("Cannot convert gpu.dealloc with async tokens");
+        signalPassFailure();
+        return;
+      }
+      builder.setInsertionPoint(dealloc);
+      builder.create<mlir::memref::DeallocOp>(dealloc->getLoc(),
+                                              dealloc.memref());
+      dealloc->erase();
+    });
+  }
 };
 
 static void setInsertionPointToStart(mlir::OpBuilder &builder,
@@ -1427,9 +1443,12 @@ std::unique_ptr<mlir::Pass> gpu_runtime::createGPUToSpirvPass() {
   return std::make_unique<GPUToSpirvPass>();
 }
 
-std::unique_ptr<mlir::Pass>
-gpu_runtime::createInsertGPUAllocsPass(bool useGpuDealloc) {
-  return std::make_unique<InsertGPUAllocs>(useGpuDealloc);
+std::unique_ptr<mlir::Pass> gpu_runtime::createInsertGPUAllocsPass() {
+  return std::make_unique<InsertGPUAllocs>();
+}
+
+std::unique_ptr<mlir::Pass> gpu_runtime::createConvertGPUDeallocsPass() {
+  return std::make_unique<ConvertGPUDeallocsPass>();
 }
 
 std::unique_ptr<mlir::Pass> gpu_runtime::createUnstrideMemrefsPass() {
