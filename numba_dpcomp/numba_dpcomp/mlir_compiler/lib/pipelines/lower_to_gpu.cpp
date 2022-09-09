@@ -1186,28 +1186,27 @@ struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::func::CallOp> {
     if (ind < 0 || ind >= 3)
       return mlir::failure();
 
-    llvm::SmallVector<mlir::Value, 6> indexArgs;
-    auto attrId = mlir::StringAttr::get(
-        op.getContext(), imex::util::attributes::getGpuRangeName());
+    llvm::SmallVector<mlir::Value> indexArgs;
     mlir::Operation *parent = op;
     while (true) {
       parent = parent->getParentOfType<mlir::scf::ForOp>();
       if (!parent)
         break;
 
-      if (parent->hasAttr(attrId)) {
-        auto arg =
-            mlir::cast<mlir::scf::ForOp>(parent).getBody()->getArgument(0);
-        indexArgs.emplace_back(arg);
-      }
+      auto envReg = parent->getParentOfType<imex::util::EnvironmentRegionOp>();
+      if (!envReg || !isGpuRegion(envReg))
+        break;
+
+      auto arg = mlir::cast<mlir::scf::ForOp>(parent).getBody()->getArgument(0);
+      indexArgs.emplace_back(arg);
     }
 
-    if (indexArgs.size() != 6)
+    if (indexArgs.size() < 6)
       return mlir::failure();
 
     std::reverse(indexArgs.begin(), indexArgs.end());
     auto gridArgs = llvm::makeArrayRef(indexArgs).take_front(3);
-    auto blockArgs = llvm::makeArrayRef(indexArgs).drop_front(3);
+    auto blockArgs = llvm::makeArrayRef(indexArgs).drop_front(3).take_front(3);
 
     auto uind = static_cast<unsigned>(ind);
     return handler(op, globalSize, localSize, gridArgs, blockArgs, rewriter,
