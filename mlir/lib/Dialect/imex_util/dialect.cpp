@@ -1957,6 +1957,26 @@ void EnvironmentRegionOp::inlineIntoParent(mlir::PatternRewriter &builder,
   builder.mergeBlockBefore(block, op);
   builder.replaceOp(op, args);
 }
+
+void EnvironmentRegionOp::build(
+    ::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState,
+    ::mlir::Attribute environment, ::mlir::ValueRange args,
+    ::mlir::TypeRange results,
+    ::llvm::function_ref<void(::mlir::OpBuilder &, ::mlir::Location)>
+        bodyBuilder) {
+  build(odsBuilder, odsState, results, environment, args);
+  mlir::Region *bodyRegion = odsState.regions.back().get();
+  if (bodyBuilder) {
+    bodyRegion->push_back(new mlir::Block);
+    mlir::Block &bodyBlock = bodyRegion->front();
+
+    mlir::OpBuilder::InsertionGuard guard(odsBuilder);
+    odsBuilder.setInsertionPointToStart(&bodyBlock);
+    bodyBuilder(odsBuilder, odsState.location);
+  }
+  ensureTerminator(*bodyRegion, odsBuilder, odsState.location);
+}
+
 } // namespace util
 } // namespace imex
 
