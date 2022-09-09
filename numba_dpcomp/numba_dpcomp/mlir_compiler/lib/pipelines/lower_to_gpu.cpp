@@ -771,7 +771,6 @@ protected:
     auto setAttr = [&](mlir::scf::ForOp op) {
       auto unitAttr = mlir::UnitAttr::get(op->getContext());
       op->setAttr(imex::util::attributes::getParallelName(), unitAttr);
-      op->setAttr(imex::util::attributes::getGpuRangeName(), unitAttr);
       newOps.emplace_back(op);
     };
     if (mlir::failed(imex::lowerRange(op, args, kwargs, rewriter, setAttr)))

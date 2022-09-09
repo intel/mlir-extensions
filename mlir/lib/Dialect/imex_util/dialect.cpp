@@ -78,10 +78,6 @@ llvm::StringRef imex::util::attributes::getOptLevelName() {
   return "#plier.opt_level";
 }
 
-llvm::StringRef imex::util::attributes::getGpuRangeName() {
-  return "#plier.gpu_range";
-}
-
 namespace imex {
 namespace util {
 
