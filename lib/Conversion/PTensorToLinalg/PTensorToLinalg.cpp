@@ -11,6 +11,26 @@
 /// This file implements the PTensorToLinalg conversion, converting the PTensor
 /// dialect to the Linalg and Dist dialects.
 ///
+/// Any tensor of PTensorType is expected to be initialized by MkPTensorOp.
+/// Lowering a MkPtenorTypeOp results in a unrealized_conversion_cast to
+/// tuple<RankedTensorType, devicetype, teamtype, handletype>. Since MLIR
+/// provides no Ops on tuples, extra Ops are provided to extract the members
+/// (such as ExtractRTensorOp). These extraction ops chase
+/// unrealized_conversion_cast to find the tuple-defining op and return the
+/// corresponding operand.
+///
+/// In a similar way, RTensorTypes get converted to multiple arguments on
+/// function boundaries.
+///
+/// Ops of the array-API get lowered mostly to Linalg. If input types are
+/// distributed (PTEnsorType.getDist()) necessary ops of the Dist dialect are
+/// created.
+/// FIXME: same for device by adding regions.
+///
+/// The pass is based on a ConvertionTarget, TypeConverters. legality checks and
+/// conversion patterns.
+///
+///
 //===----------------------------------------------------------------------===//
 
 #include "../PassDetail.h"

@@ -52,13 +52,18 @@ def PTensor_PTensor : PTensor_Type<"PTensor", "ptensor">
 {
   let summary = "RankedTensor, optionally annoted with device and distribution info";
   let description = [{
-    The ptensor type represents a tensor to applied to and created by operations in the PTensor dialect.
-    Every PTensor is expected to be created by MkPTensorOp, either explicitly or implicitly by creation operations in the PTensor dialect.
+    The ptensor type represents a tensor to applied to and created by operations in
+    the PTensor dialect. Every PTensor is expected to be created by MkPTensorOp,
+    either explicitly or implicitly by creation operations in the PTensor dialect.
     The lower-ptensor pass will lower a ptensor value to a tuple of
     * rtensor: RankedTensor
     * device: device where the tensor lives (AnyType, default=None)
-    * team: a group of processes among which the tensor is distributed (AnyType, default=None)
-    * rthandle: a handle for communication with the dist dialect/runtime (AnyType, default=None)
+    * team: a group of processes among which the tensor is distributed
+      (AnyType, default=None)
+    * rthandle: a handle for communication with the dist dialect/runtime
+      (AnyType, default=None)
+    On function boundaries (func::callOp, func::returnOp, func::functionOp)
+    PTensorTypes get expanded into 4 separate arguments (rtensor, device, team, handle).
   }];
   // Here we define the underlying RankedTensor
   let parameters = (ins "::mlir::RankedTensorType":$rtensor,
