@@ -17,6 +17,17 @@
 
 include "mlir/Pass/PassBase.td"
 
+
+include "mlir/IR/OpBase.td"
+include "mlir/IR/EnumAttr.td"
+include "mlir/Dialect/GPU/IR/GPUBase.td"
+include "mlir/Interfaces/ControlFlowInterfaces.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
+include "mlir/Interfaces/LoopLikeInterface.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/Interfaces/ViewLikeInterface.td"
+include "mlir/IR/EnumAttr.td"
+
 //===----------------------------------------------------------------------===//
 // PTensorToLinalg
 //===----------------------------------------------------------------------===//
@@ -46,5 +57,22 @@ def ConvertPTensorToLinalg : Pass<"convert-ptensor-to-linalg", "::mlir::ModuleOp
                            "::mlir::shape::ShapeDialect"];
   let options = [];
 }
+//===----------------------------------------------------------------------===//
+// GPUToSPIRV
+//===----------------------------------------------------------------------===//
 
+def ConvertGPUXToSPIRV : Pass<"convert-gpux-to-spirv", "::mlir::ModuleOp"> {
+  let summary = "Convert GPU dialect to SPIR-V dialect";
+  let description = [{
+    This pass extends upstream GPU dialect to SPIR-V dialect pass by adding more
+    conversion patterns like SCF, math and control flow.
+    This pass converts gpu.func ops inside gpu.module op.
+
+    For more detailed documentation, refer upstream MLIR Pass -convert-gpu-to-spirv
+    https://mlir.llvm.org/docs/Passes/#-convert-gpu-to-spirv-convert-gpu-dialect-to-spir-v-dialect
+
+  }];
+  let constructor = "imex::createConvertGPUXToSPIRVPass()";
+  let dependentDialects = ["::mlir::spirv::SPIRVDialect"];
+}
 #endif // _IMEX_CONVERSION_PASSES_TD_INCLUDED_
