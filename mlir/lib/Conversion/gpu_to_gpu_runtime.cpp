@@ -55,47 +55,44 @@ struct ParallelLoopGPUMappingPass
 
   void runOnOperation() override {
     auto func = getOperation();
-    auto &region = func.getBody();
-    if (region.empty())
-      return;
-
-    if (!llvm::hasSingleElement(region)) {
-      func.emitError("Only strucutred control flow is supported");
-      signalPassFailure();
-      return;
-    }
-
-    auto getProcessor = [](unsigned val) -> mlir::gpu::Processor {
-      const mlir::gpu::Processor mapping[] = {
-          mlir::gpu::Processor::BlockX,  mlir::gpu::Processor::BlockY,
-          mlir::gpu::Processor::BlockZ,  mlir::gpu::Processor::ThreadX,
-          mlir::gpu::Processor::ThreadY, mlir::gpu::Processor::ThreadZ,
-      };
-      if (val >= llvm::array_lengthof(mapping))
-        return mlir::gpu::Processor::Sequential;
-
-      return mapping[val];
-    };
-
-    mlir::OpBuilder builder(&getContext());
-    auto identityMap = builder.getDimIdentityMap();
-    llvm::SmallVector<mlir::gpu::ParallelLoopDimMappingAttr> mapping;
-    for (auto &op : llvm::make_early_inc_range(region.front())) {
-      auto parallel = mlir::dyn_cast<mlir::scf::ParallelOp>(op);
-      if (!parallel)
-        continue;
-
-      auto numLoops = parallel.getNumLoops();
-      mapping.resize(numLoops);
-      for (auto i : llvm::seq(0u, numLoops))
-        mapping[i] = builder.getAttr<mlir::gpu::ParallelLoopDimMappingAttr>(
-            getProcessor(i), identityMap, identityMap);
-
-      if (mlir::failed(mlir::gpu::setMappingAttr(parallel, mapping))) {
-        signalPassFailure();
+    func->walk([&](imex::util::EnvironmentRegionOp envOp) {
+      if (!envOp.environment().isa<gpu_runtime::GPURegionDescAttr>())
         return;
+
+      auto &region = envOp.getRegion();
+
+      auto getProcessor = [](unsigned val) -> mlir::gpu::Processor {
+        const mlir::gpu::Processor mapping[] = {
+            mlir::gpu::Processor::BlockX,  mlir::gpu::Processor::BlockY,
+            mlir::gpu::Processor::BlockZ,  mlir::gpu::Processor::ThreadX,
+            mlir::gpu::Processor::ThreadY, mlir::gpu::Processor::ThreadZ,
+        };
+        if (val >= llvm::array_lengthof(mapping))
+          return mlir::gpu::Processor::Sequential;
+
+        return mapping[val];
+      };
+
+      mlir::OpBuilder builder(&getContext());
+      auto identityMap = builder.getDimIdentityMap();
+      llvm::SmallVector<mlir::gpu::ParallelLoopDimMappingAttr> mapping;
+      for (auto &op : llvm::make_early_inc_range(region.front())) {
+        auto parallel = mlir::dyn_cast<mlir::scf::ParallelOp>(op);
+        if (!parallel)
+          continue;
+
+        auto numLoops = parallel.getNumLoops();
+        mapping.resize(numLoops);
+        for (auto i : llvm::seq(0u, numLoops))
+          mapping[i] = builder.getAttr<mlir::gpu::ParallelLoopDimMappingAttr>(
+              getProcessor(i), identityMap, identityMap);
+
+        if (mlir::failed(mlir::gpu::setMappingAttr(parallel, mapping))) {
+          signalPassFailure();
+          return;
+        }
       }
-    }
+    });
   }
 };
 
