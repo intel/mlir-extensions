@@ -962,10 +962,27 @@ void ConvertGpuArrays::runOnOperation() {
 }
 
 struct LowerGpuRangePass
-    : public imex::RewriteWrapperPass<
-          LowerGpuRangePass, void,
-          imex::DependentDialectsList<gpu_runtime::GpuRuntimeDialect>,
-          LowerGpuRange> {};
+    : public mlir::PassWrapper<LowerGpuRangePass, mlir::OperationPass<void>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LowerGpuRangePass)
+
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<gpu_runtime::GpuRuntimeDialect>();
+  }
+
+  void runOnOperation() override {
+    auto context = &getContext();
+    mlir::RewritePatternSet patterns(context);
+
+    patterns.insert<LowerGpuRange>(context);
+
+    imex::util::EnvironmentRegionOp::getCanonicalizationPatterns(patterns,
+                                                                 context);
+
+    auto op = getOperation();
+    (void)mlir::applyPatternsAndFoldGreedily(op, std::move(patterns));
+  }
+};
 
 struct LowerPlierCalls final : public imex::CallOpLowering {
   LowerPlierCalls(mlir::MLIRContext *context)
@@ -1498,7 +1515,6 @@ static void populateLowerToGPUPipelineHigh(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<MarkGpuArraysInputs>());
   pm.addPass(std::make_unique<ConvertGpuArrays>());
   pm.addPass(std::make_unique<LowerGpuRangePass>());
-  pm.addPass(imex::createCommonOptsPass());
   pm.addPass(std::make_unique<LowerGpuBuiltinsPass>());
   commonOptPasses(pm);
   pm.addPass(mlir::createSymbolDCEPass());
