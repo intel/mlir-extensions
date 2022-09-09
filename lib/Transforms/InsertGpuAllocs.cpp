@@ -28,10 +28,6 @@ struct InsertGPUAllocs
     : public mlir::PassWrapper<InsertGPUAllocs,
                                mlir::OperationPass<mlir::func::FuncOp>> {
 
-  InsertGPUAllocs() = default;
-  InsertGPUAllocs(bool gpuDealloc) { useGpuDealloc = gpuDealloc; }
-  InsertGPUAllocs(const InsertGPUAllocs &pass) : PassWrapper(pass) {}
-
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::memref::MemRefDialect>();
@@ -67,7 +63,7 @@ struct InsertGPUAllocs
     // This lamda function checks the type of memref operation and
     // returns the reference to it.
 
-    auto getMemref = [](mlir::Operation *op)
+    auto getMemReadWriteOp = [](mlir::Operation *op)
         -> llvm::Optional<mlir::SmallVector<mlir::Value, 4>> {
       if (auto load = mlir::dyn_cast<mlir::memref::LoadOp>(op)) {
         return {{load.memref()}};
@@ -94,9 +90,11 @@ struct InsertGPUAllocs
     // within the gpu.launch is a memory operation or no.
     // This pass is only interested in memory operations or operands
     // of mlir call op which are memory ops.
-    auto hasMemAccess = [](mlir::Operation *op) -> bool {
+    auto isMemReadWriteOp = [](mlir::Operation *op) -> bool {
       if (auto memInterface =
               mlir::dyn_cast<mlir::MemoryEffectOpInterface>(op)) {
+        // Only load and Copy op have Read MemoryEffects &
+        // Store and TensorOp have Write MemoryEffects
         if (memInterface.hasEffect<mlir::MemoryEffects::Read>() ||
             memInterface.hasEffect<mlir::MemoryEffects::Write>())
           return true;
@@ -121,10 +119,10 @@ struct InsertGPUAllocs
               if (!op->getParentOfType<mlir::gpu::LaunchOp>())
                 return mlir::WalkResult::advance();
 
-              if (!hasMemAccess(op))
+              if (!isMemReadWriteOp(op))
                 return mlir::WalkResult::advance();
 
-              auto memref = getMemref(op);
+              auto memref = getMemReadWriteOp(op);
               if (!memref)
                 return mlir::WalkResult::interrupt();
 
@@ -299,10 +297,7 @@ struct InsertGPUAllocs
         builder.create<mlir::memref::CopyOp>(loc, allocResult, getGlobalOp);
       }
 
-      if (useGpuDealloc)
-        builder.create<mlir::gpu::DeallocOp>(loc, llvm::None, allocResult);
-      else
-        builder.create<mlir::memref::DeallocOp>(loc, allocResult);
+      builder.create<mlir::gpu::DeallocOp>(loc, llvm::None, allocResult);
     }
 
     // This is the case where a memref.alloc op is directly converted to
@@ -324,10 +319,8 @@ struct InsertGPUAllocs
                           builder.getUnitAttr());
 
       builder.setInsertionPoint(term);
-      if (useGpuDealloc)
-        builder.create<mlir::gpu::DeallocOp>(loc, llvm::None, allocResult);
-      else
-        builder.create<mlir::memref::DeallocOp>(loc, allocResult);
+
+      builder.create<mlir::gpu::DeallocOp>(loc, llvm::None, allocResult);
     }
 
     // This is the case where the inputs are passed as arguments to the
@@ -342,15 +335,7 @@ struct InsertGPUAllocs
       auto rank = static_cast<unsigned>(memrefType.getRank());
       filter.clear();
       dims.clear();
-      // This code is for handling dynamic dims. Example is:
-      // %c0 = arith.constant 0 : index
-      // %0 = memref.dim %arg0, %c0 : memref<?x?x?xi32, #map>
-      // %c1 = arith.constant 1 : index
-      // %1 = memref.dim %arg0, %c1 : memref<?x?x?xi32, #map>
-      // %c2 = arith.constant 2 : index
-      // %2 = memref.dim %arg0, %c2 : memref<?x?x?xi32, #map>
-      // %memref = gpu.alloc  (%0, %1, %2) {gpu.alloc_shared} :
-      // memref<?x?x?xi32>
+      // This code is for handling dynamic dims and known rank.
       for (auto i : llvm::seq(0u, rank)) {
         if (memrefType.isDynamicDim(i)) {
           auto op = builder.create<mlir::memref::DimOp>(loc, param, i);
@@ -386,23 +371,13 @@ struct InsertGPUAllocs
       if (access.hostRead && access.deviceWrite)
         builder.create<mlir::memref::CopyOp>(loc, allocResult, param);
 
-      if (useGpuDealloc)
-        builder.create<mlir::gpu::DeallocOp>(loc, llvm::None, allocResult);
-      else
-        builder.create<mlir::memref::DeallocOp>(loc, allocResult);
+      builder.create<mlir::gpu::DeallocOp>(loc, llvm::None, allocResult);
     }
   }
-
-  Option<bool> useGpuDealloc{
-      *this, "use-gpu-dealloc",
-      llvm::cl::desc("use gpu.dealloc for gpu allocated memrefs, "
-                     "memref.dealloc will be used otherwise"),
-      llvm::cl::init(true)};
 };
 
 } // namespace imex
 
-std::unique_ptr<mlir::Pass>
-imex::createInsertGPUAllocsPass(bool useGpuDealloc) {
-  return std::make_unique<InsertGPUAllocs>(useGpuDealloc);
+std::unique_ptr<mlir::Pass> imex::createInsertGPUAllocsPass() {
+  return std::make_unique<InsertGPUAllocs>();
 }

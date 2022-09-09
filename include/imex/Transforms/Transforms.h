@@ -45,8 +45,7 @@ class Pass;
 
 namespace imex {
 
-std::unique_ptr<mlir::Pass>
-createInsertGPUAllocsPass(bool useGpuDealloc = true);
+std::unique_ptr<mlir::Pass> createInsertGPUAllocsPass();
 std::unique_ptr<mlir::Pass> createSetSPIRVCapabilitiesPass();
 std::unique_ptr<mlir::Pass> createSetSPIRVAbiAttribute();
 } // namespace imex
