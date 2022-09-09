@@ -25,8 +25,8 @@ namespace gpu_runtime {
 std::unique_ptr<mlir::Pass> createAbiAttrsPass();
 std::unique_ptr<mlir::Pass> createSetSPIRVCapabilitiesPass();
 std::unique_ptr<mlir::Pass> createGPUToSpirvPass();
-std::unique_ptr<mlir::Pass>
-createInsertGPUAllocsPass(bool useGpuDealloc = true);
+std::unique_ptr<mlir::Pass> createInsertGPUAllocsPass();
+std::unique_ptr<mlir::Pass> createConvertGPUDeallocsPass();
 std::unique_ptr<mlir::Pass> createUnstrideMemrefsPass();
 std::unique_ptr<mlir::Pass> createSerializeSPIRVPass();
 std::unique_ptr<mlir::Pass> createGPUExPass();
