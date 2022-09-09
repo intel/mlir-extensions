@@ -28,13 +28,22 @@ def ConvertPTensorToLinalg : Pass<"convert-ptensor-to-linalg", "::mlir::ModuleOp
 
     #### Input invariant
 
-    -   all tensors are PTensorType;
+    -   all tensors are PTensorType
 
     #### Output IR
 
-    - PTensorTypes are converted to mlir::Tensor
+    - a PTensorType will be lowered to a unrealized_conversion_cast to tuple of
+      * rtensor: RankedTensor
+      * device: device where the tensor lives (AnyType, default=None)
+      * team: a group of processes among which the tensor is distributed
+        (AnyType, default=None)
+      * rthandle: a handle for communication with the dist dialect/runtime
+        (AnyType, default=None)
+    - On function boundaries (func::callOp, func::returnOp, func::functionOp)
+      PTensorTypes get expanded into 4 separate arguments (rtensor, device, team, handle).
     - PTensor operations are converted to Linalg operations, accompaigned by
-      operations of the Dist dialect if the input tensors are distributed
+      * operations of the Dist dialect if the input tensors are distributed
+      * FIXME iGPU::deviceRegionOps if the input tensors live on a device
   }];
   let constructor = "imex::createConvertPTensorToLinalgPass()";
   let dependentDialects = ["::imex::dist::DistDialect",

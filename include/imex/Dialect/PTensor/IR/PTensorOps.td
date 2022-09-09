@@ -33,6 +33,14 @@ def PTensor_Dialect : Dialect {
             The ptensor dialect describes parallel operations on tensors.
             Generic parallel patterns are provided, such as element-wise-unary,
             element-wise-binary or reduce.
+
+            Generally the PTensor dialect is intended to provide high-level abstractions
+            to allow compute-follows-data semantics. For this the PTensorType annotates
+            RankedTensors with information about the location (device, distrbution) of
+            the tensor-data when PTensors are created.
+
+            Initially the functional scope of the dialect is the
+            [array-API](https://data-apis.org/array-api/latest/index.html).
         }];
 
     // The C++ namespace that the dialect class definition resides in.
@@ -55,15 +63,6 @@ def PTensor_PTensor : PTensor_Type<"PTensor", "ptensor">
     The ptensor type represents a tensor to applied to and created by operations in
     the PTensor dialect. Every PTensor is expected to be created by MkPTensorOp,
     either explicitly or implicitly by creation operations in the PTensor dialect.
-    The lower-ptensor pass will lower a ptensor value to a tuple of
-    * rtensor: RankedTensor
-    * device: device where the tensor lives (AnyType, default=None)
-    * team: a group of processes among which the tensor is distributed
-      (AnyType, default=None)
-    * rthandle: a handle for communication with the dist dialect/runtime
-      (AnyType, default=None)
-    On function boundaries (func::callOp, func::returnOp, func::functionOp)
-    PTensorTypes get expanded into 4 separate arguments (rtensor, device, team, handle).
   }];
   // Here we define the underlying RankedTensor
   let parameters = (ins "::mlir::RankedTensorType":$rtensor,
