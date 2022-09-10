@@ -908,17 +908,9 @@ struct DeallocOpLowering
   matchAndRewrite(mlir::memref::DeallocOp op,
                   mlir::memref::DeallocOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    // Insert the `free` declaration if it is not already present.
-    auto freeFunc = op->getParentOfType<mlir::ModuleOp>()
-                        .lookupSymbol<mlir::LLVM::LLVMFuncOp>("NRT_decref");
-    if (!freeFunc) {
-      mlir::OpBuilder::InsertionGuard guard(rewriter);
-      rewriter.setInsertionPointToStart(
-          op->getParentOfType<mlir::ModuleOp>().getBody());
-      freeFunc = rewriter.create<mlir::LLVM::LLVMFuncOp>(
-          rewriter.getUnknownLoc(), "NRT_decref",
-          mlir::LLVM::LLVMFunctionType::get(getVoidType(), getVoidPtrType()));
-    }
+    auto mod = op->getParentOfType<mlir::ModuleOp>();
+    assert(mod);
+    auto freeFunc = getDecrefFunc(rewriter, mod);
 
     mlir::MemRefDescriptor memref(adaptor.memref());
     mlir::Value casted = rewriter.create<mlir::LLVM::BitcastOp>(
@@ -927,6 +919,78 @@ struct DeallocOpLowering
     rewriter.replaceOpWithNewOp<mlir::LLVM::CallOp>(
         op, mlir::TypeRange(), mlir::SymbolRefAttr::get(freeFunc), casted);
     return mlir::success();
+  }
+
+private:
+  mlir::LLVM::LLVMFuncOp getDecrefFunc(mlir::OpBuilder &builder,
+                                       mlir::ModuleOp mod) const {
+    llvm::StringRef funcName("NRT_decref");
+    auto func = mod.lookupSymbol<mlir::LLVM::LLVMFuncOp>(funcName);
+    if (!func) {
+      auto loc = builder.getUnknownLoc();
+      mlir::OpBuilder::InsertionGuard g(builder);
+      builder.setInsertionPointToStart(mod.getBody());
+      auto llvmVoidType = getVoidType();
+      auto llvmVoidPointerType = getVoidPtrType();
+      func = builder.create<mlir::LLVM::LLVMFuncOp>(
+          loc, funcName,
+          mlir::LLVM::LLVMFunctionType::get(llvmVoidType, llvmVoidPointerType));
+      if (defineMeminfoFuncs) {
+        func.setPrivate();
+        auto block = func.addEntryBlock();
+        auto releaseBlock = func.addBlock();
+        auto returnBlock = func.addBlock();
+
+        builder.setInsertionPointToStart(block);
+        auto arg = block->getArgument(0);
+        auto meminfoType = mlir::LLVM::LLVMPointerType::get(
+            getMeminfoType(*getTypeConverter()));
+        auto meminfo =
+            builder.create<mlir::LLVM::BitcastOp>(loc, meminfoType, arg);
+
+        auto llvmI32Type = builder.getI32Type();
+
+        auto indexType = getIndexType();
+        auto refcntType = mlir::LLVM::LLVMPointerType::get(indexType);
+        auto i32zero = builder.create<mlir::LLVM::ConstantOp>(
+            loc, llvmI32Type, builder.getI32IntegerAttr(0));
+        mlir::Value indices[] = {i32zero, i32zero};
+        auto refcntPtr = builder.create<mlir::LLVM::GEPOp>(loc, refcntType,
+                                                           meminfo, indices);
+
+        auto one = builder.create<mlir::LLVM::ConstantOp>(
+            loc, indexType, builder.getIntegerAttr(indexType, 1));
+        auto res = builder.create<mlir::LLVM::AtomicRMWOp>(
+            loc, indexType, mlir::LLVM::AtomicBinOp::sub, refcntPtr, one,
+            mlir::LLVM::AtomicOrdering::monotonic);
+
+        auto zero = builder.create<mlir::LLVM::ConstantOp>(
+            loc, indexType, builder.getIntegerAttr(indexType, 0));
+        auto isRelease = builder.create<mlir::LLVM::ICmpOp>(
+            loc, mlir::LLVM::ICmpPredicate::eq, res, zero);
+        builder.create<mlir::LLVM::CondBrOp>(loc, isRelease, releaseBlock,
+                                             returnBlock);
+
+        builder.setInsertionPointToStart(releaseBlock);
+        llvm::StringRef dtorFuncName("NRT_MemInfo_call_dtor");
+        auto dtorFunc = mod.lookupSymbol<mlir::LLVM::LLVMFuncOp>(dtorFuncName);
+        if (!dtorFunc) {
+          mlir::OpBuilder::InsertionGuard g1(builder);
+          builder.setInsertionPointToStart(mod.getBody());
+          dtorFunc = builder.create<mlir::LLVM::LLVMFuncOp>(
+              loc, dtorFuncName,
+              mlir::LLVM::LLVMFunctionType::get(llvmVoidType, meminfoType));
+        }
+        builder.create<mlir::LLVM::CallOp>(loc, mlir::TypeRange(),
+                                           mlir::SymbolRefAttr::get(dtorFunc),
+                                           meminfo.getRes());
+        builder.create<mlir::func::ReturnOp>(loc);
+
+        builder.setInsertionPointToStart(returnBlock);
+        builder.create<mlir::func::ReturnOp>(loc);
+      }
+    }
+    return func;
   }
 };
 
