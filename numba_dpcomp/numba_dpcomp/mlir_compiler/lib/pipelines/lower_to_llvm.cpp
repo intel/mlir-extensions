@@ -718,6 +718,47 @@ private:
   }
 };
 
+struct LowerRetainOp
+    : public mlir::ConvertOpToLLVMPattern<imex::util::RetainOp> {
+  using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::util::RetainOp op,
+                  imex::util::RetainOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto arg = adaptor.source();
+    if (!arg.getType().isa<mlir::LLVM::LLVMStructType>())
+      return mlir::failure();
+
+    auto llvmVoidPointerType = getVoidPtrType();
+    auto incref_func = [&]() {
+      auto mod = op->getParentOfType<mlir::ModuleOp>();
+      assert(mod);
+      auto func = mod.lookupSymbol<mlir::LLVM::LLVMFuncOp>("NRT_incref");
+      if (!func) {
+        mlir::OpBuilder::InsertionGuard guard(rewriter);
+        rewriter.setInsertionPointToStart(mod.getBody());
+        auto llvmVoidType = getVoidType();
+        func = rewriter.create<mlir::LLVM::LLVMFuncOp>(
+            rewriter.getUnknownLoc(), "NRT_incref",
+            mlir::LLVM::LLVMFunctionType::get(llvmVoidType,
+                                              llvmVoidPointerType));
+      }
+      return func;
+    }();
+
+    mlir::MemRefDescriptor source(arg);
+
+    auto loc = op.getLoc();
+    mlir::Value ptr = source.allocatedPtr(rewriter, loc);
+    ptr = rewriter.create<mlir::LLVM::BitcastOp>(loc, llvmVoidPointerType, ptr);
+    rewriter.create<mlir::LLVM::CallOp>(loc, incref_func, ptr);
+    rewriter.replaceOp(op, arg);
+
+    return mlir::success();
+  }
+};
+
 struct AllocOpLowering : public mlir::AllocLikeOpLLVMLowering {
   AllocOpLowering(mlir::LLVMTypeConverter &converter)
       : AllocLikeOpLLVMLowering(mlir::memref::AllocOp::getOperationName(),
@@ -1233,10 +1274,12 @@ struct LLVMLoweringPass
     cf::populateControlFlowToLLVMConversionPatterns(typeConverter, patterns);
     arith::populateArithmeticToLLVMConversionPatterns(typeConverter, patterns);
 
-    patterns.insert<AllocOpLowering, DeallocOpLowering>(typeConverter);
+    patterns.insert<AllocOpLowering, DeallocOpLowering, LowerRetainOp>(
+        typeConverter);
 
     LLVMConversionTarget target(context);
     target.addIllegalDialect<mlir::func::FuncDialect>();
+    target.addIllegalOp<imex::util::RetainOp>();
 
     if (failed(applyPartialConversion(m, target, std::move(patterns))))
       signalPassFailure();

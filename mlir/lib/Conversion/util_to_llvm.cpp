@@ -86,47 +86,6 @@ populateToLLVMAdditionalTypeConversion(mlir::LLVMTypeConverter &converter) {
 }
 
 namespace {
-struct LowerRetainOp
-    : public mlir::ConvertOpToLLVMPattern<imex::util::RetainOp> {
-  using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(imex::util::RetainOp op,
-                  imex::util::RetainOp::Adaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
-    auto arg = adaptor.source();
-    if (!arg.getType().isa<mlir::LLVM::LLVMStructType>())
-      return mlir::failure();
-
-    auto llvmVoidPointerType = getVoidPtrType();
-    auto incref_func = [&]() {
-      auto mod = op->getParentOfType<mlir::ModuleOp>();
-      assert(mod);
-      auto func = mod.lookupSymbol<mlir::LLVM::LLVMFuncOp>("NRT_incref");
-      if (!func) {
-        mlir::OpBuilder::InsertionGuard guard(rewriter);
-        rewriter.setInsertionPointToStart(mod.getBody());
-        auto llvmVoidType = getVoidType();
-        func = rewriter.create<mlir::LLVM::LLVMFuncOp>(
-            rewriter.getUnknownLoc(), "NRT_incref",
-            mlir::LLVM::LLVMFunctionType::get(llvmVoidType,
-                                              llvmVoidPointerType));
-      }
-      return func;
-    }();
-
-    mlir::MemRefDescriptor source(arg);
-
-    auto loc = op.getLoc();
-    mlir::Value ptr = source.allocatedPtr(rewriter, loc);
-    ptr = rewriter.create<mlir::LLVM::BitcastOp>(loc, llvmVoidPointerType, ptr);
-    rewriter.create<mlir::LLVM::CallOp>(loc, incref_func, ptr);
-    rewriter.replaceOp(op, arg);
-
-    return mlir::success();
-  }
-};
-
 struct LowerExtractMemrefMetadataOp
     : public mlir::ConvertOpToLLVMPattern<imex::util::ExtractMemrefMetadataOp> {
   using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
@@ -543,7 +502,6 @@ struct ImexUtilToLLVMPass
         // clang-format off
         LowerUndef,
         LowerBuildTuple,
-        LowerRetainOp,
         LowerExtractMemrefMetadataOp,
         LowerTakeContextOp,
         LowerReleaseContextOp
@@ -553,6 +511,7 @@ struct ImexUtilToLLVMPass
     mlir::LLVMConversionTarget target(context);
     target.addLegalOp<mlir::func::FuncOp>();
     target.addLegalOp<mlir::func::CallOp>();
+    target.addLegalOp<imex::util::RetainOp>();
     target.addIllegalDialect<imex::util::ImexUtilDialect>();
     if (failed(applyPartialConversion(op, target, std::move(patterns))))
       signalPassFailure();
