@@ -200,13 +200,6 @@ imex::ExecutionEngine::ExecutionEngine(const ExecutionEngineOptions &options)
                      .setObjectLinkingLayerCreator(objectLinkingLayerCreator)
                      .create());
 
-  // Resolve symbols that are statically linked in the current process.
-  llvm::orc::JITDylib &mainJD = jit->getMainJITDylib();
-  auto dataLayout = jit->getDataLayout();
-  mainJD.addGenerator(
-      cantFail(llvm::orc::DynamicLibrarySearchGenerator::GetForCurrentProcess(
-          dataLayout.getGlobalPrefix())));
-
   symbolMap = options.symbolMap;
 }
 
@@ -242,6 +235,11 @@ imex::ExecutionEngine::loadModule(mlir::ModuleOp m) {
     break;
   }
   assert(dylib);
+
+  auto dataLayout = jit->getDataLayout();
+  dylib->addGenerator(
+      cantFail(llvm::orc::DynamicLibrarySearchGenerator::GetForCurrentProcess(
+          dataLayout.getGlobalPrefix())));
 
   if (symbolMap)
     cantFail(
