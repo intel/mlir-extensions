@@ -734,7 +734,7 @@ static mlir::Type getMeminfoType(mlir::LLVMTypeConverter &converter) {
   return mlir::LLVM::LLVMStructType::getLiteral(context, members);
 }
 
-static bool defineMeminfoFuncs = false;
+static const bool defineMeminfoFuncs = false;
 
 struct LowerRetainOp
     : public mlir::ConvertOpToLLVMPattern<imex::util::RetainOp> {
@@ -840,9 +840,7 @@ struct AllocOpLowering : public mlir::AllocLikeOpLLVMLowering {
     auto meminfoPtr =
         createAllocCall(loc, "NRT_MemInfo_alloc_safe_aligned", getVoidPtrType(),
                         {sizeBytes, alignment}, mod, rewriter);
-    auto dataPtr =
-        createAllocCall(loc, "NRT_MemInfo_data_fast", getVoidPtrType(),
-                        {meminfoPtr}, mod, rewriter);
+    auto dataPtr = getDataPtr(loc, rewriter, meminfoPtr);
 
     auto elemPtrType =
         mlir::LLVM::LLVMPointerType::get(memRefType.getElementType());
@@ -879,6 +877,26 @@ private:
                                                   allocFuncSymbol, params)
                             .getResult(0);
     return rewriter.create<LLVM::BitcastOp>(loc, ptrType, allocatedPtr);
+  }
+
+  mlir::Value getDataPtr(mlir::Location loc,
+                         mlir::ConversionPatternRewriter &rewriter,
+                         mlir::Value allocPtr) const {
+    auto meminfoType = getMeminfoType(*getTypeConverter());
+    auto meminfoPtrType = mlir::LLVM::LLVMPointerType::get(meminfoType);
+    auto meminfo =
+        rewriter.create<mlir::LLVM::BitcastOp>(loc, meminfoPtrType, allocPtr);
+
+    auto dataPtrPtrType = mlir::LLVM::LLVMPointerType::get(getVoidPtrType());
+    auto llvmI32Type = rewriter.getI32Type();
+    auto i32zero = rewriter.create<mlir::LLVM::ConstantOp>(
+        loc, llvmI32Type, rewriter.getI32IntegerAttr(0));
+    auto i32three = rewriter.create<mlir::LLVM::ConstantOp>(
+        loc, llvmI32Type, rewriter.getI32IntegerAttr(3));
+    mlir::Value indices[] = {i32zero, i32three};
+    auto dataPtrPtr = rewriter.create<mlir::LLVM::GEPOp>(loc, dataPtrPtrType,
+                                                         meminfo, indices);
+    return rewriter.create<mlir::LLVM::LoadOp>(loc, dataPtrPtr);
   }
 };
 
