@@ -50,13 +50,11 @@
 #include <llvm/Target/TargetMachine.h>
 
 #include "base_pipeline.hpp"
-#include "pipelines/plier_to_std.hpp"
 
 #include "mlir-extensions/Conversion/util_to_llvm.hpp"
 #include "mlir-extensions/Dialect/imex_util/dialect.hpp"
 #include "mlir-extensions/Dialect/plier/dialect.hpp"
 #include "mlir-extensions/Transforms/func_utils.hpp"
-#include "mlir-extensions/Transforms/type_conversion.hpp"
 #include "mlir-extensions/compiler/pipeline_registry.hpp"
 #include "mlir-extensions/utils.hpp"
 
