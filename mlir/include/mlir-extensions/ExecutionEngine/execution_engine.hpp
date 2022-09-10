@@ -57,6 +57,10 @@ struct ExecutionEngineOptions {
 
   /// Register symbols with this ExecutionEngine.
   std::function<llvm::orc::SymbolMap(llvm::orc::MangleAndInterner)> symbolMap;
+
+  /// If `transformer` is provided, it will be called on the LLVM module during
+  /// JIT-compilation and can be used, e.g., for reporting or optimization.
+  std::function<llvm::Error(llvm::Module *)> transformer;
 };
 
 class ExecutionEngine {
@@ -65,7 +69,7 @@ class ExecutionEngine {
 public:
   using ModuleHandle = void *;
 
-  ExecutionEngine(const ExecutionEngineOptions &options);
+  ExecutionEngine(ExecutionEngineOptions options);
   ~ExecutionEngine();
 
   /// Compiles given module, adds it to execution engine and run its contructors
@@ -102,6 +106,10 @@ private:
 
   /// Callback to get additional symbol definitions.
   std::function<llvm::orc::SymbolMap(llvm::orc::MangleAndInterner)> symbolMap;
+
+  /// If `transformer` is provided, it will be called on the LLVM module during
+  /// JIT-compilation and can be used, e.g., for reporting or optimization.
+  std::function<llvm::Error(llvm::Module *)> transformer;
 
   /// Id for unique module name generation.
   int uniqueNameCounter = 0;

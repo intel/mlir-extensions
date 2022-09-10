@@ -117,7 +117,7 @@ static bool setupTargetTriple(llvm::Module *llvmModule) {
   return false;
 }
 
-imex::ExecutionEngine::ExecutionEngine(const ExecutionEngineOptions &options)
+imex::ExecutionEngine::ExecutionEngine(ExecutionEngineOptions options)
     : cache(options.enableObjectCache ? new SimpleObjectCache() : nullptr),
       gdbListener(options.enableGDBNotificationListener
                       ? llvm::JITEventListener::createGDBRegistrationListener()
@@ -200,7 +200,8 @@ imex::ExecutionEngine::ExecutionEngine(const ExecutionEngineOptions &options)
                      .setObjectLinkingLayerCreator(objectLinkingLayerCreator)
                      .create());
 
-  symbolMap = options.symbolMap;
+  symbolMap = std::move(options.symbolMap);
+  transformer = std::move(options.transformer);
 }
 
 imex::ExecutionEngine::~ExecutionEngine() {}
@@ -219,6 +220,9 @@ imex::ExecutionEngine::loadModule(mlir::ModuleOp m) {
 
   // Add a ThreadSafemodule to the engine and return.
   llvm::orc::ThreadSafeModule tsm(std::move(llvmModule), std::move(ctx));
+  if (transformer)
+    cantFail(tsm.withModuleDo(
+        [this](llvm::Module &module) { return transformer(&module); }));
 
   llvm::orc::JITDylib *dylib;
   while (true) {
