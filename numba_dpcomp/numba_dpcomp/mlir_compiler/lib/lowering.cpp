@@ -32,6 +32,7 @@
 #include <mlir/Target/LLVMIR/Export.h>
 
 #include <llvm/Bitcode/BitcodeWriter.h>
+#include <llvm/ExecutionEngine/Orc/Mangling.h>
 #include <llvm/Support/Debug.h>
 #include <llvm/Support/TargetSelect.h>
 
@@ -753,10 +754,28 @@ static void runCompiler(Module &mod, const py::object &compilationContext) {
 }
 
 struct GlobalCompilerContext {
-  GlobalCompilerContext(const imex::ExecutionEngineOptions &opts)
-      : executionEngine(opts) {}
+  GlobalCompilerContext() : executionEngine(getOpts()) {}
 
+  llvm::SmallVector<std::pair<std::string, void *>, 0> symbolList;
   imex::ExecutionEngine executionEngine;
+
+private:
+  imex::ExecutionEngineOptions getOpts() {
+    imex::ExecutionEngineOptions opts;
+    opts.symbolMap =
+        [this](llvm::orc::MangleAndInterner m) -> llvm::orc::SymbolMap {
+      llvm::orc::SymbolMap ret;
+      for (auto it : symbolList) {
+        auto name = it.first;
+        auto ptr = it.second;
+        auto jitPtr = llvm::JITEvaluatedSymbol::fromPointer(ptr);
+        ret.insert({m(name), jitPtr});
+      }
+      return ret;
+    };
+
+    return opts;
+  }
 };
 } // namespace
 
@@ -777,8 +796,7 @@ py::capsule initCompiler(py::dict settings) {
   llvm::InitializeNativeTarget();
   llvm::InitializeNativeTargetAsmPrinter();
   llvm::InitializeNativeTargetAsmParser();
-  imex::ExecutionEngineOptions opts;
-  auto context = std::make_unique<GlobalCompilerContext>(opts);
+  auto context = std::make_unique<GlobalCompilerContext>();
   return py::capsule(context.release(), [](void *ptr) {
     delete static_cast<GlobalCompilerContext *>(ptr);
   });
@@ -840,6 +858,15 @@ py::capsule compileModule2(const py::capsule &compiler,
                       llvm::toString(res.takeError()));
 
   return py::capsule(static_cast<void *>(res.get()));
+}
+
+void registerSymbol(const py::capsule &compiler, const py::str &name,
+                    const py::int_ &ptr) {
+  auto context = static_cast<GlobalCompilerContext *>(compiler);
+  assert(context);
+
+  auto ptrValue = reinterpret_cast<void *>(ptr.cast<intptr_t>());
+  context->symbolList.emplace_back(name.cast<std::string>(), ptrValue);
 }
 
 py::int_ getFunctionPointer(const py::capsule &compiler,

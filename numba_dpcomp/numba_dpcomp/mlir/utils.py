@@ -19,7 +19,8 @@ import atexit
 import sys
 import numba_dpcomp
 import llvmlite.binding as ll
-
+from .compiler_context import global_compiler_context
+from .. import mlir_compiler
 
 def load_lib(name):
     runtime_search_paths = [os.path.dirname(numba_dpcomp.__file__)]
@@ -61,3 +62,4 @@ def register_cfunc(name, cfunc):
     ptr = ctypes.cast(cfunc, ctypes.c_void_p)
     _registered_cfuncs.append(ptr)
     ll.add_symbol(name, ptr.value)
+    mlir_compiler.register_symbol(global_compiler_context, name, ptr.value)

@@ -20,9 +20,10 @@ from numba.np.ufunc.parallel import get_thread_count
 import numba.core.types.functions
 from contextlib import contextmanager
 
-from .settings import DUMP_IR, DEBUG_TYPE, OPT_LEVEL, DUMP_DIAGNOSTICS
+from .settings import DUMP_IR, OPT_LEVEL, DUMP_DIAGNOSTICS
 from . import func_registry
 from .. import mlir_compiler
+from .compiler_context import global_compiler_context
 
 
 _print_before = []
@@ -69,17 +70,6 @@ def print_pass_ir(print_before, print_after):
 
 _mlir_last_compiled_func = None
 _mlir_active_module = None
-
-
-def _init_compiler():
-    settings = {}
-    settings["debug_type"] = DEBUG_TYPE
-    return mlir_compiler.init_compiler(settings)
-
-
-global_compiler_context = _init_compiler()
-del _init_compiler
-
 
 class MlirBackendBase(FunctionPass):
     def __init__(self, push_func_stack):
