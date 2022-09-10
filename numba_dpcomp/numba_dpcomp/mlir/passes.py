@@ -74,10 +74,11 @@ _mlir_active_module = None
 def _init_compiler():
     settings = {}
     settings["debug_type"] = DEBUG_TYPE
-    mlir_compiler.init_compiler(settings)
+    return mlir_compiler.init_compiler(settings)
 
 
-_init_compiler()
+global_compiler_context = _init_compiler()
+del _init_compiler
 
 
 class MlirBackendBase(FunctionPass):
@@ -195,9 +196,14 @@ class MlirBackend(MlirBackendBase):
                 ctx, module, state.func_ir
             )
             mod_ir = mlir_compiler.compile_module(ctx, module)
+
+            # TODO: properly handle returned module ownership
+            compiled_mod = mlir_compiler.compile_module2(global_compiler_context, ctx, module)
+            func_ptr = mlir_compiler.get_function_pointer(global_compiler_context, compiled_mod, ctx["fnname"]())
         finally:
             _mlir_active_module = old_module
         state.metadata["mlir_blob"] = mod_ir
+        state.metadata["mlir_func_ptr"] = func_ptr
         return True
 
 

@@ -33,10 +33,12 @@
 
 #include <llvm/Bitcode/BitcodeWriter.h>
 #include <llvm/Support/Debug.h>
+#include <llvm/Support/TargetSelect.h>
 
 #include "mlir-extensions/Dialect/imex_util/dialect.hpp"
 #include "mlir-extensions/Dialect/plier/dialect.hpp"
 
+#include "mlir-extensions/ExecutionEngine/execution_engine.hpp"
 #include "mlir-extensions/compiler/compiler.hpp"
 #include "mlir-extensions/compiler/pipeline_registry.hpp"
 #include "mlir-extensions/utils.hpp"
@@ -749,9 +751,16 @@ static void runCompiler(Module &mod, const py::object &compilationContext) {
   imex::CompilerContext compiler(context, settings, registry);
   compiler.run(module);
 }
+
+struct GlobalCompilerContext {
+  GlobalCompilerContext(const imex::ExecutionEngineOptions &opts)
+      : executionEngine(opts) {}
+
+  imex::ExecutionEngine executionEngine;
+};
 } // namespace
 
-void initCompiler(py::dict settings) {
+py::capsule initCompiler(py::dict settings) {
   auto debugType = settings["debug_type"].cast<py::list>();
   auto debugTypeSize = debugType.size();
   if (debugTypeSize != 0) {
@@ -764,6 +773,15 @@ void initCompiler(py::dict settings) {
     }
     llvm::setCurrentDebugTypes(types, static_cast<unsigned>(debugTypeSize));
   }
+
+  llvm::InitializeNativeTarget();
+  llvm::InitializeNativeTargetAsmPrinter();
+  llvm::InitializeNativeTargetAsmParser();
+  imex::ExecutionEngineOptions opts;
+  auto context = std::make_unique<GlobalCompilerContext>(opts);
+  return py::capsule(context.release(), [](void *ptr) {
+    delete static_cast<GlobalCompilerContext *>(ptr);
+  });
 }
 
 template <typename T>
@@ -805,6 +823,48 @@ py::bytes compileModule(const py::object &compilationContext,
   auto mod = static_cast<Module *>(pyMod);
   runCompiler(*mod, compilationContext);
   return genLLModule(mod->module);
+}
+
+py::capsule compileModule2(const py::capsule &compiler,
+                           const py::object &compilationContext,
+                           const py::capsule &pyMod) {
+  auto context = static_cast<GlobalCompilerContext *>(compiler);
+  assert(context);
+  auto mod = static_cast<Module *>(pyMod);
+  assert(mod);
+
+  runCompiler(*mod, compilationContext);
+  auto res = context->executionEngine.loadModule(mod->module);
+  if (!res)
+    imex::reportError(llvm::Twine("Failed to load MLIR module:\n") +
+                      llvm::toString(res.takeError()));
+
+  return py::capsule(static_cast<void *>(res.get()));
+}
+
+py::int_ getFunctionPointer(const py::capsule &compiler,
+                            const py::capsule &module, py::str funcName) {
+  auto context = static_cast<GlobalCompilerContext *>(compiler);
+  assert(context);
+  auto handle = static_cast<imex::ExecutionEngine::ModuleHandle *>(module);
+  assert(handle);
+
+  auto name = funcName.cast<std::string>();
+  auto res = context->executionEngine.lookup(handle, name);
+  if (!res)
+    imex::reportError(llvm::Twine("Failed to get function pointer:\n") +
+                      llvm::toString(res.takeError()));
+
+  return py::int_(reinterpret_cast<intptr_t>(res.get()));
+}
+
+void releaseModule(const py::capsule &compiler, const py::capsule &module) {
+  auto context = static_cast<GlobalCompilerContext *>(compiler);
+  assert(context);
+  auto handle = static_cast<imex::ExecutionEngine::ModuleHandle *>(module);
+  assert(handle);
+
+  context->executionEngine.releaseModule(handle);
 }
 
 py::str moduleStr(const py::capsule &pyMod) {
