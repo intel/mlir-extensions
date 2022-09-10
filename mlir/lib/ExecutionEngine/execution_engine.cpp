@@ -222,7 +222,7 @@ imex::ExecutionEngine::loadModule(mlir::ModuleOp m) {
   llvm::orc::ThreadSafeModule tsm(std::move(llvmModule), std::move(ctx));
   if (transformer)
     cantFail(tsm.withModuleDo(
-        [this](llvm::Module &module) { return transformer(&module); }));
+        [this](llvm::Module &module) { return transformer(module); }));
 
   llvm::orc::JITDylib *dylib;
   while (true) {

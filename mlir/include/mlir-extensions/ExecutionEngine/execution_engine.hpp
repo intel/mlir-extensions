@@ -60,7 +60,7 @@ struct ExecutionEngineOptions {
 
   /// If `transformer` is provided, it will be called on the LLVM module during
   /// JIT-compilation and can be used, e.g., for reporting or optimization.
-  std::function<llvm::Error(llvm::Module *)> transformer;
+  std::function<llvm::Error(llvm::Module &)> transformer;
 };
 
 class ExecutionEngine {
@@ -109,7 +109,7 @@ private:
 
   /// If `transformer` is provided, it will be called on the LLVM module during
   /// JIT-compilation and can be used, e.g., for reporting or optimization.
-  std::function<llvm::Error(llvm::Module *)> transformer;
+  std::function<llvm::Error(llvm::Module &)> transformer;
 
   /// Id for unique module name generation.
   int uniqueNameCounter = 0;
