@@ -18,6 +18,7 @@ import os
 import atexit
 import sys
 import numba_dpcomp
+import llvmlite.binding as ll
 
 
 def load_lib(name):
@@ -55,7 +56,7 @@ def mlir_func_name(name):
 _registered_cfuncs = []
 
 
-def register_cfunc(ll, name, cfunc):
+def register_cfunc(name, cfunc):
     global _registered_cfuncs
     ptr = ctypes.cast(cfunc, ctypes.c_void_p)
     _registered_cfuncs.append(ptr)
