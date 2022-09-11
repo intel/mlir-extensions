@@ -148,9 +148,9 @@ struct InstHandles {
 
 struct PlierLowerer final {
   PlierLowerer(mlir::MLIRContext &context) : ctx(context), builder(&ctx) {
+    ctx.loadDialect<imex::util::ImexUtilDialect>();
     ctx.loadDialect<mlir::func::FuncDialect>();
     ctx.loadDialect<plier::PlierDialect>();
-    ctx.loadDialect<imex::util::ImexUtilDialect>();
   }
 
   mlir::func::FuncOp lower(const py::object &compilationContext,
