@@ -802,7 +802,7 @@ private:
             loc, indexType, builder.getIntegerAttr(indexType, 1));
         builder.create<mlir::LLVM::AtomicRMWOp>(
             loc, indexType, mlir::LLVM::AtomicBinOp::add, refcntPtr, one,
-            mlir::LLVM::AtomicOrdering::monotonic);
+            mlir::LLVM::AtomicOrdering::seq_cst);
         builder.create<mlir::func::ReturnOp>(loc);
       }
     }
@@ -945,7 +945,7 @@ private:
         auto arg = block->getArgument(0);
         auto meminfoType = mlir::LLVM::LLVMPointerType::get(
             getMeminfoType(*getTypeConverter()));
-        auto meminfo =
+        mlir::Value meminfo =
             builder.create<mlir::LLVM::BitcastOp>(loc, meminfoType, arg);
 
         auto llvmI32Type = builder.getI32Type();
@@ -962,12 +962,10 @@ private:
             loc, indexType, builder.getIntegerAttr(indexType, 1));
         auto res = builder.create<mlir::LLVM::AtomicRMWOp>(
             loc, indexType, mlir::LLVM::AtomicBinOp::sub, refcntPtr, one,
-            mlir::LLVM::AtomicOrdering::monotonic);
+            mlir::LLVM::AtomicOrdering::seq_cst);
 
-        auto zero = builder.create<mlir::LLVM::ConstantOp>(
-            loc, indexType, builder.getIntegerAttr(indexType, 0));
         auto isRelease = builder.create<mlir::LLVM::ICmpOp>(
-            loc, mlir::LLVM::ICmpPredicate::eq, res, zero);
+            loc, mlir::LLVM::ICmpPredicate::eq, res, one);
         builder.create<mlir::LLVM::CondBrOp>(loc, isRelease, releaseBlock,
                                              returnBlock);
 
@@ -983,7 +981,7 @@ private:
         }
         builder.create<mlir::LLVM::CallOp>(loc, mlir::TypeRange(),
                                            mlir::SymbolRefAttr::get(dtorFunc),
-                                           meminfo.getRes());
+                                           meminfo);
         builder.create<mlir::func::ReturnOp>(loc);
 
         builder.setInsertionPointToStart(returnBlock);
