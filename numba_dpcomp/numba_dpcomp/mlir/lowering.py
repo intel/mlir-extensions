@@ -54,7 +54,7 @@ class mlir_lower(orig_Lower):
             func_ptr = self.metadata.pop("mlir_func_ptr")
             func_name = self.metadata.pop("mlir_func_name")
 
-            # TODO: Contruct new ir module instead of globally registering symbol
+            # TODO: Construct new ir module instead of globally registering symbol
             llvm.add_symbol(func_name, func_ptr)
         else:
             orig_Lower.lower_normal_function(self, desc)
