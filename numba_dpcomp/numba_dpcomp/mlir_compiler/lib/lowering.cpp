@@ -34,6 +34,7 @@
 #include <llvm/Bitcode/BitcodeWriter.h>
 #include <llvm/ExecutionEngine/Orc/Mangling.h>
 #include <llvm/Support/Debug.h>
+#include <llvm/Support/ManagedStatic.h>
 #include <llvm/Support/TargetSelect.h>
 
 #include "mlir-extensions/Dialect/imex_util/dialect.hpp"
@@ -756,11 +757,16 @@ static void runCompiler(Module &mod, const py::object &compilationContext) {
 struct GlobalCompilerContext {
   GlobalCompilerContext() : executionEngine(getOpts()) {}
 
+  llvm::llvm_shutdown_obj s;
   llvm::SmallVector<std::pair<std::string, void *>, 0> symbolList;
   imex::ExecutionEngine executionEngine;
 
 private:
   imex::ExecutionEngineOptions getOpts() const {
+    llvm::InitializeNativeTarget();
+    llvm::InitializeNativeTargetAsmPrinter();
+    llvm::InitializeNativeTargetAsmParser();
+
     imex::ExecutionEngineOptions opts;
     opts.symbolMap =
         [this](llvm::orc::MangleAndInterner m) -> llvm::orc::SymbolMap {
@@ -794,9 +800,6 @@ py::capsule initCompiler(py::dict settings) {
     llvm::setCurrentDebugTypes(types, static_cast<unsigned>(debugTypeSize));
   }
 
-  llvm::InitializeNativeTarget();
-  llvm::InitializeNativeTargetAsmPrinter();
-  llvm::InitializeNativeTargetAsmParser();
   auto context = std::make_unique<GlobalCompilerContext>();
   return py::capsule(context.release(), [](void *ptr) {
     delete static_cast<GlobalCompilerContext *>(ptr);
