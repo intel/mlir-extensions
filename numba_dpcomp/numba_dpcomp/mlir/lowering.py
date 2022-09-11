@@ -29,6 +29,7 @@ from numba.core.typed_passes import NativeLowering as orig_NativeLowering
 
 from .runtime import *
 from .math_runtime import *
+from .numba_runtime import *
 from .gpu_runtime import *
 
 import llvmlite.binding as llvm
@@ -46,10 +47,14 @@ class mlir_lower(orig_Lower):
 
     def lower_normal_function(self, fndesc):
         if USE_MLIR:
-            mod_ir = self.metadata.pop("mlir_blob")
-            mod = llvm.parse_bitcode(mod_ir)
+            # mod_ir = self.metadata.pop("mlir_blob")
+            # mod = llvm.parse_bitcode(mod_ir)
             self.setup_function(fndesc)
-            self.library.add_llvm_module(mod)
+            # self.library.add_llvm_module(mod)
+
+            func_ptr = self.metadata.pop("mlir_func_ptr")
+            func_name = self.metadata.pop("mlir_func_name")
+            llvm.add_symbol(func_name, func_ptr)
         else:
             orig_Lower.lower_normal_function(self, desc)
 
