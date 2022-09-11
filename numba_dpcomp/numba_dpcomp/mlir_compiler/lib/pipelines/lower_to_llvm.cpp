@@ -718,6 +718,11 @@ private:
   }
 };
 
+enum {
+  MeminfoRefcntIndex = 0,
+  MeminfoDataIndex = 3,
+};
+
 static mlir::Type getMeminfoType(mlir::LLVMTypeConverter &converter) {
   auto indexType = converter.getIndexType();
   auto *context = &converter.getContext();
@@ -794,7 +799,9 @@ private:
         auto refcntType = mlir::LLVM::LLVMPointerType::get(indexType);
         auto i32zero = builder.create<mlir::LLVM::ConstantOp>(
             loc, llvmI32Type, builder.getI32IntegerAttr(0));
-        mlir::Value indices[] = {i32zero, i32zero};
+        auto refcntOffset = builder.create<mlir::LLVM::ConstantOp>(
+            loc, llvmI32Type, builder.getI32IntegerAttr(MeminfoRefcntIndex));
+        mlir::Value indices[] = {i32zero, refcntOffset};
         auto refcntPtr = builder.create<mlir::LLVM::GEPOp>(loc, refcntType,
                                                            meminfo, indices);
 
@@ -891,9 +898,9 @@ private:
     auto llvmI32Type = rewriter.getI32Type();
     auto i32zero = rewriter.create<mlir::LLVM::ConstantOp>(
         loc, llvmI32Type, rewriter.getI32IntegerAttr(0));
-    auto i32three = rewriter.create<mlir::LLVM::ConstantOp>(
-        loc, llvmI32Type, rewriter.getI32IntegerAttr(3));
-    mlir::Value indices[] = {i32zero, i32three};
+    auto dataOffset = rewriter.create<mlir::LLVM::ConstantOp>(
+        loc, llvmI32Type, rewriter.getI32IntegerAttr(MeminfoDataIndex));
+    mlir::Value indices[] = {i32zero, dataOffset};
     auto dataPtrPtr = rewriter.create<mlir::LLVM::GEPOp>(loc, dataPtrPtrType,
                                                          meminfo, indices);
     return rewriter.create<mlir::LLVM::LoadOp>(loc, dataPtrPtr);
@@ -954,7 +961,9 @@ private:
         auto refcntType = mlir::LLVM::LLVMPointerType::get(indexType);
         auto i32zero = builder.create<mlir::LLVM::ConstantOp>(
             loc, llvmI32Type, builder.getI32IntegerAttr(0));
-        mlir::Value indices[] = {i32zero, i32zero};
+        auto refcntOffset = builder.create<mlir::LLVM::ConstantOp>(
+            loc, llvmI32Type, builder.getI32IntegerAttr(MeminfoRefcntIndex));
+        mlir::Value indices[] = {i32zero, refcntOffset};
         auto refcntPtr = builder.create<mlir::LLVM::GEPOp>(loc, refcntType,
                                                            meminfo, indices);
 
