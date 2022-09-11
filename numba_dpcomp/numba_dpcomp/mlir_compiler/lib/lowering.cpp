@@ -760,7 +760,7 @@ struct GlobalCompilerContext {
   imex::ExecutionEngine executionEngine;
 
 private:
-  imex::ExecutionEngineOptions getOpts() {
+  imex::ExecutionEngineOptions getOpts() const {
     imex::ExecutionEngineOptions opts;
     opts.symbolMap =
         [this](llvm::orc::MangleAndInterner m) -> llvm::orc::SymbolMap {
@@ -773,6 +773,7 @@ private:
       }
       return ret;
     };
+    opts.jitCodeGenOptLevel = llvm::CodeGenOpt::Level::Aggressive;
 
     return opts;
   }
