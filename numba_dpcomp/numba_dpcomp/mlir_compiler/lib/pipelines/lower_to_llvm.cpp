@@ -734,7 +734,7 @@ static mlir::Type getMeminfoType(mlir::LLVMTypeConverter &converter) {
   return mlir::LLVM::LLVMStructType::getLiteral(context, members);
 }
 
-static const bool defineMeminfoFuncs = false;
+static const bool defineMeminfoFuncs = true;
 
 struct LowerRetainOp
     : public mlir::ConvertOpToLLVMPattern<imex::util::RetainOp> {

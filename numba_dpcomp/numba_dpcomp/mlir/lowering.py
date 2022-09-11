@@ -52,8 +52,12 @@ class mlir_lower(orig_Lower):
             self.setup_function(fndesc)
             # self.library.add_llvm_module(mod)
 
+            # Skip check that all numba symbols defined
+            setattr(self.library, "_verify_declare_only_symbols", lambda: None)
             func_ptr = self.metadata.pop("mlir_func_ptr")
             func_name = self.metadata.pop("mlir_func_name")
+
+            # TODO: Contruct new ir module instead of globally registering symbol
             llvm.add_symbol(func_name, func_ptr)
         else:
             orig_Lower.lower_normal_function(self, desc)

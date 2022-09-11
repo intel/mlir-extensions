@@ -20,6 +20,7 @@ from numba.core.runtime import _nrt_python as _nrt
 def _register_symbols():
     names = [
         'MemInfo_alloc_safe_aligned',
+        'MemInfo_call_dtor',
     ]
 
     helpers = _nrt.c_helpers
