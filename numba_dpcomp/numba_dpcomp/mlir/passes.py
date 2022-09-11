@@ -185,7 +185,6 @@ class MlirBackend(MlirBackendBase):
             _mlir_last_compiled_func = mlir_compiler.lower_function(
                 ctx, module, state.func_ir
             )
-            mod_ir = mlir_compiler.compile_module(ctx, module)
 
             # TODO: properly handle returned module ownership
             compiled_mod = mlir_compiler.compile_module2(global_compiler_context, ctx, module)
@@ -193,7 +192,6 @@ class MlirBackend(MlirBackendBase):
             func_ptr = mlir_compiler.get_function_pointer(global_compiler_context, compiled_mod, func_name)
         finally:
             _mlir_active_module = old_module
-        state.metadata["mlir_blob"] = mod_ir
         state.metadata["mlir_func_ptr"] = func_ptr
         state.metadata["mlir_func_name"] = func_name
         return True

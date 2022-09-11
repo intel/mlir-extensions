@@ -856,6 +856,7 @@ py::capsule compileModule2(const py::capsule &compiler,
   assert(mod);
 
   runCompiler(*mod, compilationContext);
+  mlir::registerLLVMDialectTranslation(*mod->module->getContext());
   auto res = context->executionEngine.loadModule(mod->module);
   if (!res)
     imex::reportError(llvm::Twine("Failed to load MLIR module:\n") +
