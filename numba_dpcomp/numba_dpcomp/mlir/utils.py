@@ -22,6 +22,7 @@ import llvmlite.binding as ll
 from .compiler_context import global_compiler_context
 from .. import mlir_compiler
 
+
 def load_lib(name):
     runtime_search_paths = [os.path.dirname(numba_dpcomp.__file__)]
 

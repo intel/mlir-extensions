@@ -71,6 +71,7 @@ def print_pass_ir(print_before, print_after):
 _mlir_last_compiled_func = None
 _mlir_active_module = None
 
+
 class MlirBackendBase(FunctionPass):
     def __init__(self, push_func_stack):
         self._push_func_stack = push_func_stack
@@ -187,9 +188,13 @@ class MlirBackend(MlirBackendBase):
             )
 
             # TODO: properly handle returned module ownership
-            compiled_mod = mlir_compiler.compile_module(global_compiler_context, ctx, module)
+            compiled_mod = mlir_compiler.compile_module(
+                global_compiler_context, ctx, module
+            )
             func_name = ctx["fnname"]()
-            func_ptr = mlir_compiler.get_function_pointer(global_compiler_context, compiled_mod, func_name)
+            func_ptr = mlir_compiler.get_function_pointer(
+                global_compiler_context, compiled_mod, func_name
+            )
         finally:
             _mlir_active_module = old_module
         state.metadata["mlir_func_ptr"] = func_ptr

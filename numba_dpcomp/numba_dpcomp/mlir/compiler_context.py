@@ -15,6 +15,7 @@
 from .settings import DEBUG_TYPE
 from .. import mlir_compiler
 
+
 def _init_compiler():
     settings = {}
     settings["debug_type"] = DEBUG_TYPE
