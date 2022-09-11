@@ -81,14 +81,6 @@ private:
   uint64_t pos;
 };
 
-static std::string serializeMod(const llvm::Module &mod) {
-  std::string ret;
-  llvm::raw_string_ostream stream(ret);
-  llvm::WriteBitcodeToFile(mod, stream);
-  stream.flush();
-  return ret;
-}
-
 static std::vector<std::pair<int, py::handle>>
 getBlocks(const py::object &func) {
   std::vector<std::pair<int, py::handle>> ret;
@@ -677,39 +669,6 @@ imex::CompilerContext::Settings getSettings(py::handle settings,
   return ret;
 }
 
-static py::bytes genLLModule(mlir::ModuleOp mod) {
-  std::string err;
-  llvm::raw_string_ostream errStream(err);
-  auto diagHandler = [&](mlir::Diagnostic &diag) {
-    if (diag.getSeverity() == mlir::DiagnosticSeverity::Error)
-      errStream << diag;
-  };
-  llvm::LLVMContext llCtx;
-  llCtx.setOpaquePointers(false);
-  std::unique_ptr<llvm::Module> llMod;
-  imex::scopedDiagHandler(*mod.getContext(), diagHandler, [&]() {
-    mlir::registerLLVMDialectTranslation(*mod.getContext());
-    llMod = mlir::translateModuleToLLVMIR(mod, llCtx);
-    if (nullptr == llMod) {
-      errStream << "\n";
-      mod.print(errStream);
-      errStream.flush();
-      imex::reportError(llvm::Twine("Cannot generate LLVM module\n") + err);
-    }
-  });
-  assert(nullptr != llMod);
-
-  // TODO: We are parsing resulting bitcode with older llvm version, remove
-  // unbsupported attributes
-  for (auto &g : llMod->functions()) {
-    auto attrs = g.getAttributes();
-    if (attrs.hasFnAttr(llvm::Attribute::AttrKind::NoCallback))
-      g.setAttributes(attrs.removeFnAttribute(
-          llCtx, llvm::Attribute::AttrKind::NoCallback));
-  }
-  return serializeMod(*llMod);
-}
-
 struct ModuleSettings {
   bool enableGpuPipeline = false;
 };
@@ -840,16 +799,9 @@ py::capsule lowerFunction(const py::object &compilationContext,
   return py::capsule(func.getOperation()); // no dtor, func owned by module
 }
 
-py::bytes compileModule(const py::object &compilationContext,
-                        const py::capsule &pyMod) {
-  auto mod = static_cast<Module *>(pyMod);
-  runCompiler(*mod, compilationContext);
-  return genLLModule(mod->module);
-}
-
-py::capsule compileModule2(const py::capsule &compiler,
-                           const py::object &compilationContext,
-                           const py::capsule &pyMod) {
+py::capsule compileModule(const py::capsule &compiler,
+                          const py::object &compilationContext,
+                          const py::capsule &pyMod) {
   auto context = static_cast<GlobalCompilerContext *>(compiler);
   assert(context);
   auto mod = static_cast<Module *>(pyMod);

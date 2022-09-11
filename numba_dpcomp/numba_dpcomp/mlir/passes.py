@@ -187,7 +187,7 @@ class MlirBackend(MlirBackendBase):
             )
 
             # TODO: properly handle returned module ownership
-            compiled_mod = mlir_compiler.compile_module2(global_compiler_context, ctx, module)
+            compiled_mod = mlir_compiler.compile_module(global_compiler_context, ctx, module)
             func_name = ctx["fnname"]()
             func_ptr = mlir_compiler.get_function_pointer(global_compiler_context, compiled_mod, func_name)
         finally:
