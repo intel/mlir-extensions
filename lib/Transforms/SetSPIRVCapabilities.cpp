@@ -15,6 +15,10 @@
 
 #include <imex/Transforms/Transforms.h>
 
+#include <mlir/Dialect/MemRef/IR/MemRef.h>
+#include <mlir/Dialect/SPIRV/IR/TargetAndABI.h>
+#include <mlir/Pass/Pass.h>
+
 namespace imex {
 struct SetSPIRVCapabilitiesPass
     : public mlir::PassWrapper<SetSPIRVCapabilitiesPass,

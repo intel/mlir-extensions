@@ -16,6 +16,11 @@
 
 #include <imex/Transforms/Transforms.h>
 
+#include <mlir/Dialect/GPU/Transforms/Passes.h>
+#include <mlir/Dialect/MemRef/IR/MemRef.h>
+#include <mlir/Dialect/SPIRV/IR/SPIRVDialect.h>
+#include <mlir/Dialect/SPIRV/IR/TargetAndABI.h>
+
 namespace imex {
 struct SetSPIRVAbiAttribute
     : public mlir::PassWrapper<SetSPIRVAbiAttribute,

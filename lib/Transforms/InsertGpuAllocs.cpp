@@ -20,6 +20,13 @@
 
 #include <imex/Transforms/Transforms.h>
 
+#include <mlir/Analysis/BufferViewFlowAnalysis.h>
+#include <mlir/Dialect/Affine/IR/AffineOps.h>
+#include <mlir/Dialect/Func/IR/FuncOps.h>
+#include <mlir/Dialect/GPU/Transforms/Passes.h>
+#include <mlir/Dialect/MemRef/IR/MemRef.h>
+#include <mlir/Pass/Pass.h>
+
 namespace imex {
 
 mlir::StringRef getAllocSharedAttrName() { return "gpu.alloc_shared"; }
@@ -32,7 +39,6 @@ struct InsertGPUAllocs
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::memref::MemRefDialect>();
     registry.insert<mlir::gpu::GPUDialect>();
-    registry.insert<mlir::scf::SCFDialect>();
     registry.insert<mlir::arith::ArithmeticDialect>();
   }
 
@@ -148,11 +154,6 @@ struct InsertGPUAllocs
                     // TODO (nbpatel): Support these ops in the future.
                     if (mlir::isa<mlir::memref::AllocOp>(op)) {
                       gpuBufferAllocs.insert({op, {}});
-                    } else if (mlir::isa<mlir::func::CallOp>(op)) {
-                      // TODO(nbpatel): Add the code here and a test case.
-                      // This is a stub for case where the call op has memref
-                      // producers/consumers. This case is not covered yet.
-                      // Subsequent PR will add this.
                     } else {
                       op->emitError("Unhandled memref producer");
                       return mlir::WalkResult::interrupt();
@@ -222,89 +223,16 @@ struct InsertGPUAllocs
       return ret;
     };
 
-    for (auto &it : gpuBufferAllocs) {
-      auto alloc = mlir::cast<mlir::memref::AllocOp>(it.first);
-      it.second = getAccessType(alloc);
-    }
-
-    auto &block = funcBody.front();
-    for (auto &it : gpuBufferParams) {
-      auto param = block.getArgument(it.first);
-      it.second = getAccessType(param);
-
-      it.second.hostRead = true;
-      it.second.hostWrite = true;
-    }
-
-    // GetMemrefGlobal Op Case:
-    // This is the case where the inputs are globals contants and accessed using
-    // memref.get_global op. This code will add the IR for memory allocation on
-    // the device with gpu.alloc and insert a memref.copy from host to device.
     mlir::OpBuilder builder(func);
-    llvm::SmallVector<mlir::Value> dims;
-    llvm::SmallPtrSet<mlir::Operation *, 8> filter;
+    auto &block = funcBody.front();
     auto term = block.getTerminator();
     assert(term);
-    for (auto &it : gpuGetMemrefGlobalParams) {
-      auto getGlobalOp = mlir::cast<mlir::memref::GetGlobalOp>(it.first);
-      it.second = getAccessType(getGlobalOp);
-      it.second.hostRead = true;
-      it.second.hostWrite = true;
-
-      auto loc = getGlobalOp.getLoc();
-      auto access = it.second;
-      builder.setInsertionPointAfter(getGlobalOp);
-      auto getGlobalOpResult = getGlobalOp.getResult();
-      auto memrefType = getGlobalOp.getType().cast<mlir::MemRefType>();
-      auto rank = static_cast<unsigned>(memrefType.getRank());
-      filter.clear();
-      dims.clear();
-      for (auto i : llvm::seq(0u, rank)) {
-        if (memrefType.isDynamicDim(i)) {
-          auto op =
-              builder.create<mlir::memref::DimOp>(loc, getGlobalOpResult, i);
-          dims.push_back(op);
-          filter.insert(op);
-        }
-      }
-      auto allocType = mlir::MemRefType::get(
-          memrefType.getShape(), memrefType.getElementType(),
-          mlir::MemRefLayoutAttrInterface{}, memrefType.getMemorySpace());
-      auto gpuAlloc = builder.create<mlir::gpu::AllocOp>(
-          loc, allocType, /*asyncToken*/ nullptr,
-          /*asyncDependencies*/ llvm::None, dims,
-          /*symbolOperands*/ llvm::None);
-      auto allocResult = gpuAlloc.getResult(0);
-
-      if (access.hostRead || access.hostWrite)
-        gpuAlloc->setAttr(imex::getAllocSharedAttrName(),
-                          builder.getUnitAttr());
-
-      if (access.hostWrite && access.deviceRead) {
-        auto copy =
-            builder.create<mlir::memref::CopyOp>(loc, getGlobalOp, allocResult);
-        filter.insert(copy);
-      }
-
-      if (allocType != memrefType)
-        allocResult =
-            builder.create<mlir::memref::CastOp>(loc, memrefType, allocResult);
-
-      getGlobalOpResult.replaceAllUsesExcept(allocResult, filter);
-
-      builder.setInsertionPoint(term);
-      if (access.hostRead && access.deviceWrite) {
-        builder.create<mlir::memref::CopyOp>(loc, allocResult, getGlobalOp);
-      }
-
-      builder.create<mlir::gpu::DeallocOp>(loc, llvm::None, allocResult);
-    }
 
     // This is the case where a memref.alloc op is directly converted to
     // gpu.alloc
     for (auto it : gpuBufferAllocs) {
       auto alloc = mlir::cast<mlir::memref::AllocOp>(it.first);
-      auto access = it.second;
+      auto access = getAccessType(alloc);
       auto loc = alloc.getLoc();
       builder.setInsertionPoint(alloc);
       auto gpuAlloc = builder.create<mlir::gpu::AllocOp>(
@@ -323,26 +251,25 @@ struct InsertGPUAllocs
       builder.create<mlir::gpu::DeallocOp>(loc, llvm::None, allocResult);
     }
 
-    // This is the case where the inputs are passed as arguments to the
-    // function. This code will add the IR for memory allocation on the device
-    // with gpu.alloc and insert a memref.copy from host to device
-    for (auto it : gpuBufferParams) {
-      auto param = block.getArgument(it.first);
-      auto access = it.second;
-      auto loc = param.getLoc();
-      builder.setInsertionPointToStart(&block);
-      auto memrefType = param.getType().cast<mlir::MemRefType>();
+    auto add_gpu_alloc = [](mlir::OpBuilder builder, mlir::Value op,
+                            AccessType access, auto term) {
+      llvm::SmallVector<mlir::Value> dims;
+      llvm::SmallPtrSet<mlir::Operation *, 8> filter;
+      auto memrefType = op.getType().cast<mlir::MemRefType>();
+      auto loc = op.getLoc();
       auto rank = static_cast<unsigned>(memrefType.getRank());
       filter.clear();
       dims.clear();
-      // This code is for handling dynamic dims and known rank.
+
+      // This code handles dynamic dims with known rank.
       for (auto i : llvm::seq(0u, rank)) {
         if (memrefType.isDynamicDim(i)) {
-          auto op = builder.create<mlir::memref::DimOp>(loc, param, i);
-          dims.push_back(op);
-          filter.insert(op);
+          auto dim_op = builder.create<mlir::memref::DimOp>(loc, op, i);
+          dims.push_back(dim_op);
+          filter.insert(dim_op);
         }
       }
+
       auto allocType = mlir::MemRefType::get(
           memrefType.getShape(), memrefType.getElementType(),
           mlir::MemRefLayoutAttrInterface{}, memrefType.getMemorySpace());
@@ -351,14 +278,12 @@ struct InsertGPUAllocs
           /*asyncDependencies*/ llvm::None, dims,
           /*symbolOperands*/ llvm::None);
       auto allocResult = gpuAlloc.getResult(0);
-
       if (access.hostRead || access.hostWrite)
         gpuAlloc->setAttr(imex::getAllocSharedAttrName(),
                           builder.getUnitAttr());
 
       if (access.hostWrite && access.deviceRead) {
-        auto copy =
-            builder.create<mlir::memref::CopyOp>(loc, param, allocResult);
+        auto copy = builder.create<mlir::memref::CopyOp>(loc, op, allocResult);
         filter.insert(copy);
       }
 
@@ -366,12 +291,38 @@ struct InsertGPUAllocs
         allocResult =
             builder.create<mlir::memref::CastOp>(loc, memrefType, allocResult);
 
-      param.replaceAllUsesExcept(allocResult, filter);
+      op.replaceAllUsesExcept(allocResult, filter);
       builder.setInsertionPoint(term);
-      if (access.hostRead && access.deviceWrite)
-        builder.create<mlir::memref::CopyOp>(loc, allocResult, param);
+      if (access.hostRead && access.deviceWrite) {
+        builder.create<mlir::memref::CopyOp>(loc, allocResult, op);
+      }
 
       builder.create<mlir::gpu::DeallocOp>(loc, llvm::None, allocResult);
+    };
+
+    // GetMemrefGlobal Op Case:
+    // This is the case where the inputs are globals contants and accessed using
+    // memref.get_global op. This code will add the IR for memory allocation on
+    // the device with gpu.alloc and insert a memref.copy from host to device.
+    for (auto &it : gpuGetMemrefGlobalParams) {
+      auto getGlobalOp = mlir::cast<mlir::memref::GetGlobalOp>(it.first);
+      auto access = getAccessType(getGlobalOp);
+      access.hostRead = true;
+      access.hostWrite = true;
+      builder.setInsertionPointAfter(getGlobalOp);
+      add_gpu_alloc(builder, getGlobalOp, access, term);
+    }
+
+    // This is the case where the inputs are passed as arguments to the
+    // function. This code will add the IR for memory allocation on the device
+    // with gpu.alloc and insert a memref.copy from host to device
+    for (auto it : gpuBufferParams) {
+      auto param = block.getArgument(it.first);
+      auto access = getAccessType(param);
+      access.hostRead = true;
+      access.hostWrite = true;
+      builder.setInsertionPointToStart(&block);
+      add_gpu_alloc(builder, param, access, term);
     }
   }
 };
