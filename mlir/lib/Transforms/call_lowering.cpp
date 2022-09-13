@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "mlir-extensions/Transforms/call_lowering.hpp"
+#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 
@@ -58,7 +59,7 @@ mlir::LogicalResult imex::ExpandCallVarargs::matchAndRewrite(
     auto index = rewriter.create<mlir::arith::ConstantIndexOp>(
         loc, static_cast<int64_t>(i));
     args[argsCount + i] =
-        rewriter.create<plier::GetItemOp>(loc, type, vararg, index);
+        rewriter.create<imex::util::TupleExtractOp>(loc, type, vararg, index);
   }
 
   auto resType = op.getType();
