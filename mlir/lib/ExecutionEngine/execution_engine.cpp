@@ -154,27 +154,6 @@ imex::ExecutionEngine::ExecutionEngine(ExecutionEngineOptions options)
       objectLayer->setAutoClaimResponsibilityForObjectSymbols(true);
     }
 
-    // Resolve symbols from shared libraries.
-    //    for (auto libPath : options.sharedLibPaths) {
-    //      auto mb = llvm::MemoryBuffer::getFile(libPath);
-    //      if (!mb) {
-    //        llvm::errs() << "Failed to create MemoryBuffer for: " << libPath
-    //               << "\nError: " << mb.getError().message() << "\n";
-    //        continue;
-    //      }
-    //      auto &jd = session.createBareJITDylib(std::string(libPath));
-    //      auto loaded = DynamicLibrarySearchGenerator::Load(
-    //          libPath.data(), dataLayout.getGlobalPrefix());
-    //      if (!loaded) {
-    //        llvm::errs() << "Could not load " << libPath << ":\n  " <<
-    //        loaded.takeError()
-    //               << "\n";
-    //        continue;
-    //      }
-    //      jd.addGenerator(std::move(*loaded));
-    //      cantFail(objectLayer->add(jd, std::move(mb.get())));
-    //    }
-
     return objectLayer;
   };
 
