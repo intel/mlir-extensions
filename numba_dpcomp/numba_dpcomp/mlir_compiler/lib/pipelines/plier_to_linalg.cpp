@@ -721,8 +721,8 @@ computeIndices(mlir::OpBuilder &builder, mlir::Location loc, mlir::Value value,
     for (auto it : llvm::enumerate(tupleType)) {
       auto i = static_cast<unsigned>(it.index());
       auto getitemInd = builder.create<mlir::arith::ConstantIndexOp>(loc, i);
-      auto ind = builder.createOrFold<plier::GetItemOp>(loc, it.value(), index,
-                                                        getitemInd);
+      auto ind = builder.createOrFold<imex::util::TupleExtractOp>(
+          loc, it.value(), index, getitemInd);
       bool isSlice = false;
       std::tie(offsets[i], sizes[i], strides[i], isSlice) = getPos(ind, i);
       if (isSlice)
@@ -1571,13 +1571,13 @@ struct PlierToLinalgPass
 
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<imex::util::ImexUtilDialect>();
     registry.insert<mlir::bufferization::BufferizationDialect>();
     registry.insert<mlir::func::FuncDialect>();
     registry.insert<mlir::linalg::LinalgDialect>();
     registry.insert<mlir::memref::MemRefDialect>();
     registry.insert<mlir::tensor::TensorDialect>();
     registry.insert<plier::PlierDialect>();
-    registry.insert<imex::util::ImexUtilDialect>();
   }
 
   void runOnOperation() override;
@@ -1625,15 +1625,15 @@ struct LowerTupleCasts : public mlir::OpConversionPattern<plier::CastOp> {
       auto srcElemType = srcType.getType(i);
       auto dstElemType = dstType.getType(i);
       auto ind = rewriter.create<mlir::arith::ConstantIndexOp>(loc, i);
-      mlir::Value val =
-          rewriter.create<plier::GetItemOp>(loc, srcElemType, src, ind);
+      mlir::Value val = rewriter.create<imex::util::TupleExtractOp>(
+          loc, srcElemType, src, ind);
       if (srcElemType != dstElemType)
         val = rewriter.create<plier::CastOp>(loc, dstElemType, val);
 
       newArgs[i] = val;
     }
 
-    rewriter.replaceOpWithNewOp<plier::BuildTupleOp>(op, dstType, newArgs);
+    rewriter.replaceOpWithNewOp<imex::util::BuildTupleOp>(op, dstType, newArgs);
     return mlir::success();
   }
 };
