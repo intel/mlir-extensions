@@ -1375,7 +1375,7 @@ struct GetItemTupleConversionPattern
     auto &converter = *getTypeConverter();
 
     auto retType = converter.convertType(op.getType());
-    if (retType)
+    if (!retType)
       return mlir::failure();
 
     auto index = adaptor.index();
