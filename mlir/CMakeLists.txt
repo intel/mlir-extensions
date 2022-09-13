@@ -56,6 +56,7 @@ set(SOURCES_LIST
     lib/Transforms/common_opts.cpp
     lib/Transforms/const_utils.cpp
     lib/Transforms/cse.cpp
+    lib/Transforms/expand_tuple.cpp
     lib/Transforms/func_utils.cpp
     lib/Transforms/if_rewrites.cpp
     lib/Transforms/index_type_propagation.cpp
@@ -92,6 +93,7 @@ set(HEADERS_LIST
     include/mlir-extensions/Transforms/common_opts.hpp
     include/mlir-extensions/Transforms/const_utils.hpp
     include/mlir-extensions/Transforms/cse.hpp
+    include/mlir-extensions/Transforms/expand_tuple.hpp
     include/mlir-extensions/Transforms/func_utils.hpp
     include/mlir-extensions/Transforms/if_rewrites.hpp
     include/mlir-extensions/Transforms/index_type_propagation.hpp

@@ -19,13 +19,14 @@
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 
 #include <mlir/Dialect/Func/IR/FuncOps.h>
+#include <mlir/Dialect/GPU/IR/GPUDialect.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
 
 #include "mlir-extensions/Conversion/SCFToAffine/SCFToAffine.h"
 #include "mlir-extensions/Conversion/cfg_to_scf.hpp"
 #include "mlir-extensions/Conversion/gpu_runtime_to_llvm.hpp"
 #include "mlir-extensions/Conversion/gpu_to_gpu_runtime.hpp"
-#include "mlir/Dialect/GPU/Transforms/Passes.h"
+#include "mlir-extensions/Transforms/expand_tuple.hpp"
 
 // Passes registration.
 
@@ -101,7 +102,11 @@ static mlir::PassPipelineRegistration<> scfToAffineReg(
     });
 
 static mlir::PassPipelineRegistration<>
-    cfgToscf("cfg-to-scf", "Cnvert function from CFG form to SCF ops",
+    cfgToScf("cfg-to-scf", "Convert function from CFG form to SCF ops",
              [](mlir::OpPassManager &pm) {
                pm.addNestedPass<mlir::func::FuncOp>(imex::createCFGToSCFPass());
              });
+
+static mlir::PassPipelineRegistration<> expandTuple(
+    "expand-tuple", "Expand tuple into individual elements",
+    [](mlir::OpPassManager &pm) { pm.addPass(imex::createExpandTuplePass()); });
