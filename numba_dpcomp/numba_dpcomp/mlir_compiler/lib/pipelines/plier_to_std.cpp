@@ -987,16 +987,16 @@ struct BinOpTupleLowering : public mlir::OpConversionPattern<plier::BinOp> {
           auto elemType = type.getType(i);
           auto ind = rewriter.create<mlir::arith::ConstantIndexOp>(
               loc, static_cast<int64_t>(i));
-          auto elem =
-              rewriter.create<plier::GetItemOp>(loc, elemType, arg, ind);
+          auto elem = rewriter.create<imex::util::TupleExtractOp>(loc, elemType,
+                                                                  arg, ind);
           newArgs.emplace_back(elem);
           newTypes.emplace_back(elemType);
         }
       }
 
       auto newTupleType = mlir::TupleType::get(getContext(), newTypes);
-      rewriter.replaceOpWithNewOp<plier::BuildTupleOp>(op, newTupleType,
-                                                       newArgs);
+      rewriter.replaceOpWithNewOp<imex::util::BuildTupleOp>(op, newTupleType,
+                                                            newArgs);
       return mlir::success();
     }
 
@@ -1331,14 +1331,59 @@ struct PlierToStdPass
 
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<imex::util::ImexUtilDialect>();
     registry.insert<mlir::func::FuncDialect>();
     registry.insert<mlir::math::MathDialect>();
     registry.insert<mlir::scf::SCFDialect>();
     registry.insert<plier::PlierDialect>();
-    registry.insert<imex::util::ImexUtilDialect>();
   }
 
   void runOnOperation() override;
+};
+
+struct BuildTupleConversionPattern
+    : public mlir::OpConversionPattern<plier::BuildTupleOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::BuildTupleOp op, plier::BuildTupleOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const final {
+    auto converter = getTypeConverter();
+    assert(converter);
+    auto retType = converter->convertType(op.getResult().getType());
+    if (!retType.isa_and_nonnull<mlir::TupleType>())
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<imex::util::BuildTupleOp>(op, retType,
+                                                          adaptor.args());
+    return mlir::success();
+  }
+};
+
+struct GetItemTupleConversionPattern
+    : public mlir::OpConversionPattern<plier::GetItemOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::GetItemOp op, plier::GetItemOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const final {
+    auto container = adaptor.value();
+    auto containerType = container.getType().dyn_cast<mlir::TupleType>();
+    if (!containerType)
+      return mlir::failure();
+
+    auto &converter = *getTypeConverter();
+
+    auto retType = converter.convertType(op.getType());
+    if (retType)
+      return mlir::failure();
+
+    auto index = adaptor.index();
+
+    rewriter.replaceOpWithNewOp<imex::util::TupleExtractOp>(op, retType,
+                                                            container, index);
+    return mlir::success();
+  }
 };
 
 void PlierToStdPass::runOnOperation() {
@@ -1428,6 +1473,17 @@ void PlierToStdPass::runOnOperation() {
         return srcType == dstType;
       });
 
+  target.addDynamicallyLegalOp<plier::GetItemOp>(
+      [&](plier::GetItemOp op) -> llvm::Optional<bool> {
+        auto type = typeConverter.convertType(op.value().getType());
+        if (type.isa_and_nonnull<mlir::TupleType>())
+          return false;
+
+        return llvm::None;
+      });
+  target.addIllegalOp<plier::BuildTupleOp>();
+  target.addLegalOp<imex::util::BuildTupleOp, imex::util::TupleExtractOp>();
+
   patterns.insert<
       // clang-format off
       BinOpLowering,
@@ -1439,7 +1495,9 @@ void PlierToStdPass::runOnOperation() {
       LiteralLowering<plier::GlobalOp>,
       OmittedLowering,
       LowerGlobals,
-      UndefOpLowering
+      UndefOpLowering,
+      BuildTupleConversionPattern,
+      GetItemTupleConversionPattern
       // clang-format on
       >(typeConverter, context);
 
