@@ -32,8 +32,6 @@
 
 #include <llvm/ADT/TypeSwitch.h>
 
-#include "mlir-extensions/Transforms/const_utils.hpp"
-
 namespace MemoryEffects = ::mlir::MemoryEffects;
 
 namespace {
@@ -328,51 +326,10 @@ void BuildTupleOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                       args);
 }
 
-static mlir::Value
-foldBuildTupleGetitem(mlir::Value val, mlir::Type type,
-                      llvm::ArrayRef<mlir::Attribute> operands) {
-  auto getCastArg = [](mlir::Value arg) -> mlir::Value {
-    if (auto cast = arg.getDefiningOp<plier::CastOp>())
-      return cast.value();
-
-    if (auto cast = arg.getDefiningOp<mlir::UnrealizedConversionCastOp>()) {
-      auto inputs = cast.getInputs();
-      if (inputs.size() == 1)
-        return inputs.front();
-    }
-
-    return {};
-  };
-
-  while (auto arg = getCastArg(val))
-    val = arg;
-
-  auto buildTuple = val.getDefiningOp<plier::BuildTupleOp>();
-  if (buildTuple) {
-    if (auto val = operands[1].dyn_cast_or_null<mlir::IntegerAttr>()) {
-      auto index = val.getInt();
-      auto numArgs = static_cast<unsigned>(buildTuple.args().size());
-      if (index >= 0 && index < numArgs) {
-        auto op = buildTuple.args()[static_cast<unsigned>(index)];
-        if (op.getType() == type)
-          return op;
-      }
-    }
-  }
-  return {};
-}
-
 void GetItemOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                       ::mlir::Value value, ::mlir::Value index) {
   GetItemOp::build(builder, state, PyType::getUndefined(state.getContext()),
                    value, index);
-}
-
-mlir::OpFoldResult GetItemOp::fold(llvm::ArrayRef<mlir::Attribute> operands) {
-  if (auto val = foldBuildTupleGetitem(value(), getType(), operands))
-    return val;
-
-  return nullptr;
 }
 
 void GetiterOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
