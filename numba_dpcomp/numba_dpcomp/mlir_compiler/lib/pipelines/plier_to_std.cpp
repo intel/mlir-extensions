@@ -1378,7 +1378,7 @@ struct GetItemTupleConversionPattern
     if (!retType)
       return mlir::failure();
 
-    auto index = adaptor.index();
+    auto index = imex::indexCast(rewriter, op->getLoc(), adaptor.index());
 
     rewriter.replaceOpWithNewOp<imex::util::TupleExtractOp>(op, retType,
                                                             container, index);
