@@ -100,6 +100,10 @@ static void moveOpsIntoParallel(mlir::scf::ParallelOp outer, int depth = 0) {
   moveOpsIntoParallel(parallelOp, depth);
 }
 
+static bool isGpuRegion(imex::util::EnvironmentRegionOp op) {
+  return op.environment().isa<gpu_runtime::GPURegionDescAttr>();
+}
+
 struct PrepareForGPUPass
     : public mlir::PassWrapper<PrepareForGPUPass,
                                mlir::OperationPass<mlir::func::FuncOp>> {
@@ -107,17 +111,20 @@ struct PrepareForGPUPass
 
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<gpu_runtime::GpuRuntimeDialect>();
     registry.insert<mlir::scf::SCFDialect>();
   }
 
   void runOnOperation() override {
-    for (auto &block : getOperation().getBody()) {
-      for (auto &op : block) {
-        if (auto parallel = mlir::dyn_cast<mlir::scf::ParallelOp>(op)) {
+    getOperation()->walk([](imex::util::EnvironmentRegionOp envOp) {
+      if (!isGpuRegion(envOp))
+        return;
+
+      for (auto &op : envOp.getRegion().front()) {
+        if (auto parallel = mlir::dyn_cast<mlir::scf::ParallelOp>(op))
           moveOpsIntoParallel(parallel);
-        }
       }
-    }
+    });
   }
 };
 
@@ -189,6 +196,25 @@ struct RemoveNestedParallel
 struct RemoveNestedParallelPass
     : public imex::RewriteWrapperPass<RemoveNestedParallelPass, void, void,
                                       RemoveNestedParallel> {};
+
+struct RemoveGpuRegion
+    : public mlir::OpRewritePattern<imex::util::EnvironmentRegionOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::util::EnvironmentRegionOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    if (!isGpuRegion(op))
+      return mlir::failure();
+
+    imex::util::EnvironmentRegionOp::inlineIntoParent(rewriter, op);
+    return mlir::success();
+  }
+};
+
+struct RemoveGpuRegionPass
+    : public imex::RewriteWrapperPass<RemoveGpuRegionPass, void, void,
+                                      RemoveGpuRegion> {};
 
 struct RemoveKernelMarkerPass
     : public mlir::PassWrapper<RemoveKernelMarkerPass,
@@ -741,13 +767,31 @@ protected:
       return mlir::failure();
 
     auto parent = op->getParentOp();
-    auto setAttr = [](mlir::scf::ForOp op) {
+    llvm::SmallVector<mlir::scf::ForOp> newOps;
+    auto setAttr = [&](mlir::scf::ForOp op) {
       auto unitAttr = mlir::UnitAttr::get(op->getContext());
       op->setAttr(imex::util::attributes::getParallelName(), unitAttr);
-      op->setAttr(imex::util::attributes::getGpuRangeName(), unitAttr);
+      newOps.emplace_back(op);
     };
     if (mlir::failed(imex::lowerRange(op, args, kwargs, rewriter, setAttr)))
       return mlir::failure();
+
+    mlir::OpBuilder::InsertionGuard g(rewriter);
+    auto envAttr = gpu_runtime::GPURegionDescAttr::get(
+        getContext(), rewriter.getStringAttr("gpu"));
+    for (auto op : newOps) {
+      auto bodyBuilder = [&](mlir::OpBuilder &builder, mlir::Location loc) {
+        auto newOp = builder.clone(*op);
+        builder.create<imex::util::EnvironmentRegionYieldOp>(
+            loc, newOp->getResults());
+      };
+      auto opResults = op.getResults();
+      rewriter.setInsertionPoint(op);
+      auto newOp = rewriter.create<imex::util::EnvironmentRegionOp>(
+          op->getLoc(), envAttr, /*args*/ llvm::None, opResults.getTypes(),
+          bodyBuilder);
+      rewriter.replaceOp(op, newOp->getResults());
+    }
 
     rerun_std_pipeline(parent);
     return mlir::success();
@@ -917,8 +961,27 @@ void ConvertGpuArrays::runOnOperation() {
 }
 
 struct LowerGpuRangePass
-    : public imex::RewriteWrapperPass<LowerGpuRangePass, void, void,
-                                      LowerGpuRange> {};
+    : public mlir::PassWrapper<LowerGpuRangePass, mlir::OperationPass<void>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LowerGpuRangePass)
+
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<gpu_runtime::GpuRuntimeDialect>();
+  }
+
+  void runOnOperation() override {
+    auto context = &getContext();
+    mlir::RewritePatternSet patterns(context);
+
+    patterns.insert<LowerGpuRange>(context);
+
+    imex::util::EnvironmentRegionOp::getCanonicalizationPatterns(patterns,
+                                                                 context);
+
+    auto op = getOperation();
+    (void)mlir::applyPatternsAndFoldGreedily(op, std::move(patterns));
+  }
+};
 
 struct LowerPlierCalls final : public imex::CallOpLowering {
   LowerPlierCalls(mlir::MLIRContext *context)
@@ -1122,28 +1185,27 @@ struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::func::CallOp> {
     if (ind < 0 || ind >= 3)
       return mlir::failure();
 
-    llvm::SmallVector<mlir::Value, 6> indexArgs;
-    auto attrId = mlir::StringAttr::get(
-        op.getContext(), imex::util::attributes::getGpuRangeName());
+    llvm::SmallVector<mlir::Value> indexArgs;
     mlir::Operation *parent = op;
     while (true) {
       parent = parent->getParentOfType<mlir::scf::ForOp>();
       if (!parent)
         break;
 
-      if (parent->hasAttr(attrId)) {
-        auto arg =
-            mlir::cast<mlir::scf::ForOp>(parent).getBody()->getArgument(0);
-        indexArgs.emplace_back(arg);
-      }
+      auto envReg = parent->getParentOfType<imex::util::EnvironmentRegionOp>();
+      if (!envReg || !isGpuRegion(envReg))
+        break;
+
+      auto arg = mlir::cast<mlir::scf::ForOp>(parent).getBody()->getArgument(0);
+      indexArgs.emplace_back(arg);
     }
 
-    if (indexArgs.size() != 6)
+    if (indexArgs.size() < 6)
       return mlir::failure();
 
     std::reverse(indexArgs.begin(), indexArgs.end());
     auto gridArgs = llvm::makeArrayRef(indexArgs).take_front(3);
-    auto blockArgs = llvm::makeArrayRef(indexArgs).drop_front(3);
+    auto blockArgs = llvm::makeArrayRef(indexArgs).drop_front(3).take_front(3);
 
     auto uind = static_cast<unsigned>(ind);
     return handler(op, globalSize, localSize, gridArgs, blockArgs, rewriter,
@@ -1462,6 +1524,7 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   funcPM.addPass(mlir::createCanonicalizerPass());
   funcPM.addPass(std::make_unique<RemoveNestedParallelPass>());
   funcPM.addPass(gpu_runtime::createParallelLoopGPUMappingPass());
+  funcPM.addPass(std::make_unique<RemoveGpuRegionPass>());
   funcPM.addPass(mlir::createParallelLoopToGpuPass());
   funcPM.addPass(std::make_unique<RemoveKernelMarkerPass>());
   funcPM.addPass(mlir::createCanonicalizerPass());

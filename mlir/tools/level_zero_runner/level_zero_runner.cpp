@@ -65,7 +65,7 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
   passManager.addNestedPass<mlir::func::FuncOp>(
       createConvertLinalgToParallelLoopsPass());
   passManager.addNestedPass<mlir::func::FuncOp>(
-      gpu_runtime::createParallelLoopGPUMappingPass());
+      createGpuMapParallelLoopsPass());
   passManager.addNestedPass<mlir::func::FuncOp>(createParallelLoopToGpuPass());
 
   passManager.addNestedPass<mlir::func::FuncOp>(

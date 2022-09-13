@@ -256,6 +256,13 @@ def EnvironmentRegionOp : ImexUtil_Op<"env_region", [
     static void inlineIntoParent(::mlir::PatternRewriter &builder, EnvironmentRegionOp op);
   }];
 
+  let builders = [
+    OpBuilder<(ins "::mlir::Attribute":$environment,
+      CArg<"::mlir::ValueRange", "llvm::None">:$args,
+      CArg<"::mlir::TypeRange", "llvm::None">:$results,
+      CArg<"::llvm::function_ref<void(::mlir::OpBuilder &, ::mlir::Location)>", "nullptr">)>
+  ];
+
   let hasCanonicalizer = 1;
 }
 

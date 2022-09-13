@@ -15,15 +15,15 @@
 #ifndef GPURUNTIME_OPS
 #define GPURUNTIME_OPS
 
-include "mlir/IR/OpBase.td"
-include "mlir/IR/EnumAttr.td"
 include "mlir/Dialect/GPU/IR/GPUBase.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/LoopLikeInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/ViewLikeInterface.td"
+include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/EnumAttr.td"
+include "mlir/IR/OpBase.td"
 
 def GpuRuntime_Dialect : Dialect {
   let name = "gpu_runtime";
@@ -34,6 +34,11 @@ def GpuRuntime_Dialect : Dialect {
   let hasConstantMaterializer = 1;
   let useDefaultAttributePrinterParser = 1;
   let useDefaultTypePrinterParser = 1;
+}
+
+class GpuRuntime_Attr<string attrName, string attrMnemonic, list<Trait> traits = []>
+    : AttrDef<GpuRuntime_Dialect, attrName, traits> {
+  let mnemonic = attrMnemonic;
 }
 
 class GpuRuntime_Op<string mnemonic, list<Trait> traits = []> :
@@ -64,6 +69,12 @@ def GpuRuntime_StorageClass : I32EnumAttr<"StorageClass",
   let cppNamespace = "::gpu_runtime";
 }
 def GpuRuntime_StorageClassAttr : EnumAttr<GpuRuntime_Dialect, GpuRuntime_StorageClass, "storage_class">;
+
+def GPURegionDescAttr
+    : GpuRuntime_Attr<"GPURegionDesc", "region_desc"> {
+  let parameters = (ins "::mlir::StringAttr":$device);
+  let assemblyFormat = "`<` struct(params) `>`";
+}
 
 def CreateGpuStreamOp : GpuRuntime_Op<"create_gpu_stream", [NoSideEffect]> {
   let results = (outs GpuRuntime_OpaqueType : $result);
