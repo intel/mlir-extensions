@@ -713,15 +713,34 @@ static void runCompiler(Module &mod, const py::object &compilationContext) {
   compiler.run(module);
 }
 
+static auto getLLModulePrinter(py::handle printer) {
+  return [func = printer.cast<py::function>()](llvm::Module &m) -> llvm::Error {
+    std::string str;
+    llvm::raw_string_ostream os(str);
+    m.print(os, nullptr);
+    os.flush();
+
+    func(py::str(str));
+    return llvm::Error::success();
+  };
+}
+
+static auto getPrinter(py::handle printer) {
+  return [func = printer.cast<py::function>()](llvm::StringRef str) {
+    func(py::str(str.data(), str.size()));
+  };
+}
+
 struct GlobalCompilerContext {
-  GlobalCompilerContext() : executionEngine(getOpts()) {}
+  GlobalCompilerContext(const py::dict &settings)
+      : executionEngine(getOpts(settings)) {}
 
   llvm::llvm_shutdown_obj s;
   llvm::SmallVector<std::pair<std::string, void *>, 0> symbolList;
   imex::ExecutionEngine executionEngine;
 
 private:
-  imex::ExecutionEngineOptions getOpts() const {
+  imex::ExecutionEngineOptions getOpts(const py::dict &settings) const {
     llvm::InitializeNativeTarget();
     llvm::InitializeNativeTargetAsmPrinter();
     llvm::InitializeNativeTargetAsmParser();
@@ -739,6 +758,18 @@ private:
       return ret;
     };
     opts.jitCodeGenOptLevel = llvm::CodeGenOpt::Level::Aggressive;
+
+    auto llvmPrinter = settings["llvm_printer"];
+    if (!llvmPrinter.is_none())
+      opts.transformer = getLLModulePrinter(llvmPrinter);
+
+    auto optimizedPrinter = settings["optimized_printer"];
+    if (!optimizedPrinter.is_none())
+      opts.lateTransformer = getLLModulePrinter(optimizedPrinter);
+
+    auto asmPrinter = settings["asm_printer"];
+    if (!asmPrinter.is_none())
+      opts.asmPrinter = getPrinter(asmPrinter);
 
     return opts;
   }
@@ -759,7 +790,7 @@ py::capsule initCompiler(py::dict settings) {
     llvm::setCurrentDebugTypes(types, static_cast<unsigned>(debugTypeSize));
   }
 
-  auto context = std::make_unique<GlobalCompilerContext>();
+  auto context = std::make_unique<GlobalCompilerContext>(settings);
   return py::capsule(context.release(), [](void *ptr) {
     delete static_cast<GlobalCompilerContext *>(ptr);
   });
