@@ -48,6 +48,7 @@ set(SOURCES_LIST
     lib/Dialect/gpu_runtime/IR/gpu_runtime_ops.cpp
     lib/Dialect/imex_util/dialect.cpp
     lib/Dialect/plier/dialect.cpp
+    lib/ExecutionEngine/execution_engine.cpp
     lib/Transforms/arg_lowering.cpp
     lib/Transforms/call_lowering.cpp
     lib/Transforms/canonicalize_reductions.cpp
@@ -85,6 +86,7 @@ set(HEADERS_LIST
     include/mlir-extensions/Dialect/gpu_runtime/IR/gpu_runtime_ops.hpp
     include/mlir-extensions/Dialect/imex_util/dialect.hpp
     include/mlir-extensions/Dialect/plier/dialect.hpp
+    include/mlir-extensions/ExecutionEngine/execution_engine.hpp
     include/mlir-extensions/Transforms/arg_lowering.hpp
     include/mlir-extensions/Transforms/call_lowering.hpp
     include/mlir-extensions/Transforms/canonicalize_reductions.hpp
@@ -132,14 +134,14 @@ endif()
 unset(__offsetof_flag)
 
 target_link_libraries(${MLIR_EXTENSIONS_LIB} PRIVATE
+    MLIRControlFlowToSPIRV
+    MLIRFuncTransforms
     MLIRIR
     MLIRLLVMDialect
-    MLIRTransforms
-    MLIRFuncTransforms
     MLIRLinalgTransforms
-    MLIRTensorTransforms
     MLIRMathToSPIRV
-    MLIRControlFlowToSPIRV
+    MLIRTensorTransforms
+    MLIRTransforms
     )
 
 target_include_directories(${MLIR_EXTENSIONS_LIB} SYSTEM PRIVATE

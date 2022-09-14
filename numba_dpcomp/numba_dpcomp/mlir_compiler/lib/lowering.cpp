@@ -32,11 +32,15 @@
 #include <mlir/Target/LLVMIR/Export.h>
 
 #include <llvm/Bitcode/BitcodeWriter.h>
+#include <llvm/ExecutionEngine/Orc/Mangling.h>
 #include <llvm/Support/Debug.h>
+#include <llvm/Support/ManagedStatic.h>
+#include <llvm/Support/TargetSelect.h>
 
 #include "mlir-extensions/Dialect/imex_util/dialect.hpp"
 #include "mlir-extensions/Dialect/plier/dialect.hpp"
 
+#include "mlir-extensions/ExecutionEngine/execution_engine.hpp"
 #include "mlir-extensions/compiler/compiler.hpp"
 #include "mlir-extensions/compiler/pipeline_registry.hpp"
 #include "mlir-extensions/utils.hpp"
@@ -76,14 +80,6 @@ private:
   Func callback;
   uint64_t pos;
 };
-
-static std::string serializeMod(const llvm::Module &mod) {
-  std::string ret;
-  llvm::raw_string_ostream stream(ret);
-  llvm::WriteBitcodeToFile(mod, stream);
-  stream.flush();
-  return ret;
-}
 
 static std::vector<std::pair<int, py::handle>>
 getBlocks(const py::object &func) {
@@ -152,9 +148,9 @@ struct InstHandles {
 
 struct PlierLowerer final {
   PlierLowerer(mlir::MLIRContext &context) : ctx(context), builder(&ctx) {
+    ctx.loadDialect<imex::util::ImexUtilDialect>();
     ctx.loadDialect<mlir::func::FuncDialect>();
     ctx.loadDialect<plier::PlierDialect>();
-    ctx.loadDialect<imex::util::ImexUtilDialect>();
   }
 
   mlir::func::FuncOp lower(const py::object &compilationContext,
@@ -673,39 +669,6 @@ imex::CompilerContext::Settings getSettings(py::handle settings,
   return ret;
 }
 
-static py::bytes genLLModule(mlir::ModuleOp mod) {
-  std::string err;
-  llvm::raw_string_ostream errStream(err);
-  auto diagHandler = [&](mlir::Diagnostic &diag) {
-    if (diag.getSeverity() == mlir::DiagnosticSeverity::Error)
-      errStream << diag;
-  };
-  llvm::LLVMContext llCtx;
-  llCtx.setOpaquePointers(false);
-  std::unique_ptr<llvm::Module> llMod;
-  imex::scopedDiagHandler(*mod.getContext(), diagHandler, [&]() {
-    mlir::registerLLVMDialectTranslation(*mod.getContext());
-    llMod = mlir::translateModuleToLLVMIR(mod, llCtx);
-    if (nullptr == llMod) {
-      errStream << "\n";
-      mod.print(errStream);
-      errStream.flush();
-      imex::reportError(llvm::Twine("Cannot generate LLVM module\n") + err);
-    }
-  });
-  assert(nullptr != llMod);
-
-  // TODO: We are parsing resulting bitcode with older llvm version, remove
-  // unbsupported attributes
-  for (auto &g : llMod->functions()) {
-    auto attrs = g.getAttributes();
-    if (attrs.hasFnAttr(llvm::Attribute::AttrKind::NoCallback))
-      g.setAttributes(attrs.removeFnAttribute(
-          llCtx, llvm::Attribute::AttrKind::NoCallback));
-  }
-  return serializeMod(*llMod);
-}
-
 struct ModuleSettings {
   bool enableGpuPipeline = false;
 };
@@ -749,9 +712,40 @@ static void runCompiler(Module &mod, const py::object &compilationContext) {
   imex::CompilerContext compiler(context, settings, registry);
   compiler.run(module);
 }
+
+struct GlobalCompilerContext {
+  GlobalCompilerContext() : executionEngine(getOpts()) {}
+
+  llvm::llvm_shutdown_obj s;
+  llvm::SmallVector<std::pair<std::string, void *>, 0> symbolList;
+  imex::ExecutionEngine executionEngine;
+
+private:
+  imex::ExecutionEngineOptions getOpts() const {
+    llvm::InitializeNativeTarget();
+    llvm::InitializeNativeTargetAsmPrinter();
+    llvm::InitializeNativeTargetAsmParser();
+
+    imex::ExecutionEngineOptions opts;
+    opts.symbolMap =
+        [this](llvm::orc::MangleAndInterner m) -> llvm::orc::SymbolMap {
+      llvm::orc::SymbolMap ret;
+      for (auto it : symbolList) {
+        auto name = it.first;
+        auto ptr = it.second;
+        auto jitPtr = llvm::JITEvaluatedSymbol::fromPointer(ptr);
+        ret.insert({m(name), jitPtr});
+      }
+      return ret;
+    };
+    opts.jitCodeGenOptLevel = llvm::CodeGenOpt::Level::Aggressive;
+
+    return opts;
+  }
+};
 } // namespace
 
-void initCompiler(py::dict settings) {
+py::capsule initCompiler(py::dict settings) {
   auto debugType = settings["debug_type"].cast<py::list>();
   auto debugTypeSize = debugType.size();
   if (debugTypeSize != 0) {
@@ -764,6 +758,11 @@ void initCompiler(py::dict settings) {
     }
     llvm::setCurrentDebugTypes(types, static_cast<unsigned>(debugTypeSize));
   }
+
+  auto context = std::make_unique<GlobalCompilerContext>();
+  return py::capsule(context.release(), [](void *ptr) {
+    delete static_cast<GlobalCompilerContext *>(ptr);
+  });
 }
 
 template <typename T>
@@ -800,11 +799,56 @@ py::capsule lowerFunction(const py::object &compilationContext,
   return py::capsule(func.getOperation()); // no dtor, func owned by module
 }
 
-py::bytes compileModule(const py::object &compilationContext,
-                        const py::capsule &pyMod) {
+py::capsule compileModule(const py::capsule &compiler,
+                          const py::object &compilationContext,
+                          const py::capsule &pyMod) {
+  auto context = static_cast<GlobalCompilerContext *>(compiler);
+  assert(context);
   auto mod = static_cast<Module *>(pyMod);
+  assert(mod);
+
   runCompiler(*mod, compilationContext);
-  return genLLModule(mod->module);
+  mlir::registerLLVMDialectTranslation(*mod->module->getContext());
+  auto res = context->executionEngine.loadModule(mod->module);
+  if (!res)
+    imex::reportError(llvm::Twine("Failed to load MLIR module:\n") +
+                      llvm::toString(res.takeError()));
+
+  return py::capsule(static_cast<void *>(res.get()));
+}
+
+void registerSymbol(const py::capsule &compiler, const py::str &name,
+                    const py::int_ &ptr) {
+  auto context = static_cast<GlobalCompilerContext *>(compiler);
+  assert(context);
+
+  auto ptrValue = reinterpret_cast<void *>(ptr.cast<intptr_t>());
+  context->symbolList.emplace_back(name.cast<std::string>(), ptrValue);
+}
+
+py::int_ getFunctionPointer(const py::capsule &compiler,
+                            const py::capsule &module, py::str funcName) {
+  auto context = static_cast<GlobalCompilerContext *>(compiler);
+  assert(context);
+  auto handle = static_cast<imex::ExecutionEngine::ModuleHandle *>(module);
+  assert(handle);
+
+  auto name = funcName.cast<std::string>();
+  auto res = context->executionEngine.lookup(handle, name);
+  if (!res)
+    imex::reportError(llvm::Twine("Failed to get function pointer:\n") +
+                      llvm::toString(res.takeError()));
+
+  return py::int_(reinterpret_cast<intptr_t>(res.get()));
+}
+
+void releaseModule(const py::capsule &compiler, const py::capsule &module) {
+  auto context = static_cast<GlobalCompilerContext *>(compiler);
+  assert(context);
+  auto handle = static_cast<imex::ExecutionEngine::ModuleHandle *>(module);
+  assert(handle);
+
+  context->executionEngine.releaseModule(handle);
 }
 
 py::str moduleStr(const py::capsule &pyMod) {

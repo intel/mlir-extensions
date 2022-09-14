@@ -20,9 +20,10 @@ from numba.np.ufunc.parallel import get_thread_count
 import numba.core.types.functions
 from contextlib import contextmanager
 
-from .settings import DUMP_IR, DEBUG_TYPE, OPT_LEVEL, DUMP_DIAGNOSTICS
+from .settings import DUMP_IR, OPT_LEVEL, DUMP_DIAGNOSTICS
 from . import func_registry
 from .. import mlir_compiler
+from .compiler_context import global_compiler_context
 
 
 _print_before = []
@@ -69,15 +70,6 @@ def print_pass_ir(print_before, print_after):
 
 _mlir_last_compiled_func = None
 _mlir_active_module = None
-
-
-def _init_compiler():
-    settings = {}
-    settings["debug_type"] = DEBUG_TYPE
-    mlir_compiler.init_compiler(settings)
-
-
-_init_compiler()
 
 
 class MlirBackendBase(FunctionPass):
@@ -194,10 +186,19 @@ class MlirBackend(MlirBackendBase):
             _mlir_last_compiled_func = mlir_compiler.lower_function(
                 ctx, module, state.func_ir
             )
-            mod_ir = mlir_compiler.compile_module(ctx, module)
+
+            # TODO: properly handle returned module ownership
+            compiled_mod = mlir_compiler.compile_module(
+                global_compiler_context, ctx, module
+            )
+            func_name = ctx["fnname"]()
+            func_ptr = mlir_compiler.get_function_pointer(
+                global_compiler_context, compiled_mod, func_name
+            )
         finally:
             _mlir_active_module = old_module
-        state.metadata["mlir_blob"] = mod_ir
+        state.metadata["mlir_func_ptr"] = func_ptr
+        state.metadata["mlir_func_name"] = func_name
         return True
 
 

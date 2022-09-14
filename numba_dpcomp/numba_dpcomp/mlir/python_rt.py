@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import ctypes
-import llvmlite.binding as ll
 from numba.core.runtime import _nrt_python as _nrt
 from .utils import load_lib, register_cfunc
 
@@ -25,7 +24,7 @@ def _register_funcs():
 
     for name in _funcs:
         func = getattr(runtime_lib, name)
-        register_cfunc(ll, name, func)
+        register_cfunc(name, func)
 
     _alloc_func = runtime_lib.dpcompSetMemInfoAllocFunc
     _alloc_func.argtypes = [ctypes.c_void_p]

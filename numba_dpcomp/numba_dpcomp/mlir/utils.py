@@ -18,6 +18,9 @@ import os
 import atexit
 import sys
 import numba_dpcomp
+import llvmlite.binding as ll
+from .compiler_context import global_compiler_context
+from .. import mlir_compiler
 
 
 def load_lib(name):
@@ -55,8 +58,9 @@ def mlir_func_name(name):
 _registered_cfuncs = []
 
 
-def register_cfunc(ll, name, cfunc):
+def register_cfunc(name, cfunc):
     global _registered_cfuncs
     ptr = ctypes.cast(cfunc, ctypes.c_void_p)
     _registered_cfuncs.append(ptr)
     ll.add_symbol(name, ptr.value)
+    mlir_compiler.register_symbol(global_compiler_context, name, ptr.value)

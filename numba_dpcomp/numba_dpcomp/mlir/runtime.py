@@ -15,7 +15,6 @@
 import ctypes
 import atexit
 from numba.np.ufunc.parallel import get_thread_count
-import llvmlite.binding as ll
 from .utils import load_lib, register_cfunc
 
 runtime_lib = load_lib("dpcomp-runtime")
@@ -36,7 +35,7 @@ _funcs = [
 
 for name in _funcs:
     func = getattr(runtime_lib, name)
-    register_cfunc(ll, name, func)
+    register_cfunc(name, func)
 
 
 @atexit.register

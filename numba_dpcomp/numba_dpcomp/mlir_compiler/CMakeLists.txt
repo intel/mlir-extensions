@@ -75,25 +75,28 @@ apply_llvm_compile_flags(${PROJECT_NAME})
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
     mlir-extensions
+
+    LLVM${LLVM_NATIVE_ARCH}AsmParser
     LLVM${LLVM_NATIVE_ARCH}CodeGen
     LLVM${LLVM_NATIVE_ARCH}Desc
+    LLVMOrcJIT
     LLVMTarget
+    MLIRFuncTransforms
+    MLIRGPUToGPURuntimeTransforms
+    MLIRGPUToSPIRV
     MLIRIR
     MLIRLLVMDialect
     MLIRLLVMToLLVMIRTranslation
-    MLIRTransforms
-    MLIRFuncTransforms
-    MLIRLinalgTransforms
     MLIRLinalgToLLVM
+    MLIRLinalgTransforms
     MLIRMathToLLVM
     MLIRMathToLibm
-    MLIRSCFToGPU
-    MLIRGPUToSPIRV
-    MLIRGPUToGPURuntimeTransforms
-    MLIRSPIRVTransforms
-    MLIRSPIRVSerialization
-    MLIRTensorTransforms
     MLIRReconcileUnrealizedCasts
+    MLIRSCFToGPU
+    MLIRSPIRVSerialization
+    MLIRSPIRVTransforms
+    MLIRTensorTransforms
+    MLIRTransforms
     )
 
 target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE
