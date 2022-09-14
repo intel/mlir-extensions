@@ -66,6 +66,10 @@ struct ExecutionEngineOptions {
   /// just before final code generation and can be used, e.g., for reporting or
   /// optimization.
   std::function<llvm::Error(llvm::Module &)> lateTransformer;
+
+  /// If `asmPrinter` is provided, it will be called to print resulted assembly
+  /// just before final code generation.
+  std::function<void(llvm::StringRef)> asmPrinter;
 };
 
 class ExecutionEngine {
