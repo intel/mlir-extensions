@@ -18,7 +18,7 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include <imex/Transforms/Transforms.h>
+#include <imex/Transforms/Passes.h>
 
 #include <mlir/Analysis/BufferViewFlowAnalysis.h>
 #include <mlir/Dialect/Affine/IR/AffineOps.h>

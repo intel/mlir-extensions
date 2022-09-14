@@ -13,7 +13,7 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include <imex/Transforms/Transforms.h>
+#include <imex/Transforms/Passes.h>
 
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SPIRV/IR/TargetAndABI.h>

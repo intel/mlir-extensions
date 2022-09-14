@@ -26,7 +26,7 @@
 
 #include <imex/InitIMEXDialects.h>
 #include <imex/InitIMEXPasses.h>
-#include <imex/Transforms/Transforms.h>
+#include <imex/Transforms/Passes.h>
 
 int main(int argc, char **argv) {
   ::mlir::registerAllPasses();
