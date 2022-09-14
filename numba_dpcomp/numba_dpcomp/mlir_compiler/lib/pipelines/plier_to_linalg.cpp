@@ -550,15 +550,15 @@ static bool isUniTuple(mlir::Type type) {
   return tupleType && isUniTuple(tupleType);
 }
 
-class GetItemUniTupleConversionPattern
-    : public mlir::OpConversionPattern<plier::GetItemOp> {
-public:
-  using OpConversionPattern<plier::GetItemOp>::OpConversionPattern;
+struct GetItemUniTupleConversionPattern
+    : public mlir::OpConversionPattern<imex::util::TupleExtractOp> {
+  using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::GetItemOp op, plier::GetItemOp::Adaptor adaptor,
+  matchAndRewrite(imex::util::TupleExtractOp op,
+                  imex::util::TupleExtractOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const final {
-    auto container = adaptor.value();
+    auto container = adaptor.source();
     auto tupleType = container.getType().dyn_cast<mlir::TupleType>();
     if (!tupleType || !isUniTuple(tupleType))
       return mlir::failure();
@@ -573,8 +573,8 @@ public:
     llvm::SmallVector<mlir::Value> elems(count);
     for (auto i : llvm::seq(0u, count)) {
       auto idx = rewriter.create<mlir::arith::ConstantIndexOp>(loc, i);
-      elems[i] =
-          rewriter.create<plier::GetItemOp>(loc, elemType, container, idx);
+      elems[i] = rewriter.create<imex::util::TupleExtractOp>(loc, elemType,
+                                                             container, idx);
     }
 
     auto tensor = rewriter.create<mlir::tensor::FromElementsOp>(loc, elems);
@@ -721,8 +721,8 @@ computeIndices(mlir::OpBuilder &builder, mlir::Location loc, mlir::Value value,
     for (auto it : llvm::enumerate(tupleType)) {
       auto i = static_cast<unsigned>(it.index());
       auto getitemInd = builder.create<mlir::arith::ConstantIndexOp>(loc, i);
-      auto ind = builder.createOrFold<plier::GetItemOp>(loc, it.value(), index,
-                                                        getitemInd);
+      auto ind = builder.createOrFold<imex::util::TupleExtractOp>(
+          loc, it.value(), index, getitemInd);
       bool isSlice = false;
       std::tie(offsets[i], sizes[i], strides[i], isSlice) = getPos(ind, i);
       if (isSlice)
@@ -1571,13 +1571,13 @@ struct PlierToLinalgPass
 
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<imex::util::ImexUtilDialect>();
     registry.insert<mlir::bufferization::BufferizationDialect>();
     registry.insert<mlir::func::FuncDialect>();
     registry.insert<mlir::linalg::LinalgDialect>();
     registry.insert<mlir::memref::MemRefDialect>();
     registry.insert<mlir::tensor::TensorDialect>();
     registry.insert<plier::PlierDialect>();
-    registry.insert<imex::util::ImexUtilDialect>();
   }
 
   void runOnOperation() override;
@@ -1625,15 +1625,15 @@ struct LowerTupleCasts : public mlir::OpConversionPattern<plier::CastOp> {
       auto srcElemType = srcType.getType(i);
       auto dstElemType = dstType.getType(i);
       auto ind = rewriter.create<mlir::arith::ConstantIndexOp>(loc, i);
-      mlir::Value val =
-          rewriter.create<plier::GetItemOp>(loc, srcElemType, src, ind);
+      mlir::Value val = rewriter.create<imex::util::TupleExtractOp>(
+          loc, srcElemType, src, ind);
       if (srcElemType != dstElemType)
         val = rewriter.create<plier::CastOp>(loc, dstElemType, val);
 
       newArgs[i] = val;
     }
 
-    rewriter.replaceOpWithNewOp<plier::BuildTupleOp>(op, dstType, newArgs);
+    rewriter.replaceOpWithNewOp<imex::util::BuildTupleOp>(op, dstType, newArgs);
     return mlir::success();
   }
 };
@@ -2213,13 +2213,19 @@ void PlierToLinalgPass::runOnOperation() {
   imex::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
                                                      target);
 
+  target.addDynamicallyLegalOp<imex::util::TupleExtractOp>(
+      [](imex::util::TupleExtractOp op) -> llvm::Optional<bool> {
+        auto containerType = op.source().getType();
+        if (isUniTuple(containerType) && !mlir::getConstantIntValue(op.index()))
+          return false;
+
+        return llvm::None;
+      });
+
   target.addDynamicallyLegalOp<plier::GetItemOp>(
       [&typeConverter](plier::GetItemOp op) -> llvm::Optional<bool> {
         auto containerType = op.value().getType();
         if (isShaped(typeConverter, containerType))
-          return false;
-
-        if (isUniTuple(containerType) && !mlir::getConstantIntValue(op.index()))
           return false;
 
         return llvm::None;

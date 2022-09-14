@@ -21,7 +21,7 @@
 #include <mlir/Dialect/SCF/Transforms/Transforms.h>
 #include <mlir/Transforms/DialectConversion.h>
 
-#include "mlir-extensions/Dialect/plier/dialect.hpp"
+#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
 
 namespace {
 class ConvertSelectOp
@@ -83,18 +83,18 @@ void imex::populateControlFlowTypeConversionRewritesAndTarget(
 }
 
 namespace {
-class BuildTupleConversionPattern
-    : public mlir::OpConversionPattern<plier::BuildTupleOp> {
-public:
-  using OpConversionPattern<plier::BuildTupleOp>::OpConversionPattern;
+struct BuildTupleConversionPattern
+    : public mlir::OpConversionPattern<imex::util::BuildTupleOp> {
+  using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::BuildTupleOp op, plier::BuildTupleOp::Adaptor adaptor,
+  matchAndRewrite(imex::util::BuildTupleOp op,
+                  imex::util::BuildTupleOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const final {
     auto retType =
         mlir::TupleType::get(op.getContext(), adaptor.args().getTypes());
-    rewriter.replaceOpWithNewOp<plier::BuildTupleOp>(op, retType,
-                                                     adaptor.args());
+    rewriter.replaceOpWithNewOp<imex::util::BuildTupleOp>(op, retType,
+                                                          adaptor.args());
     return mlir::success();
   }
 };
@@ -112,15 +112,15 @@ static bool isUniTuple(mlir::TupleType type) {
   return true;
 }
 
-class GetItemTupleConversionPattern
-    : public mlir::OpConversionPattern<plier::GetItemOp> {
-public:
-  using OpConversionPattern<plier::GetItemOp>::OpConversionPattern;
+struct GetItemTupleConversionPattern
+    : public mlir::OpConversionPattern<imex::util::TupleExtractOp> {
+  using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::GetItemOp op, plier::GetItemOp::Adaptor adaptor,
+  matchAndRewrite(imex::util::TupleExtractOp op,
+                  imex::util::TupleExtractOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const final {
-    auto container = adaptor.value();
+    auto container = adaptor.source();
     auto containerType = container.getType().dyn_cast<mlir::TupleType>();
     if (!containerType || containerType.size() == 0)
       return mlir::failure();
@@ -146,8 +146,8 @@ public:
         return mlir::failure();
     }
 
-    rewriter.replaceOpWithNewOp<plier::GetItemOp>(op, retType, container,
-                                                  index);
+    rewriter.replaceOpWithNewOp<imex::util::TupleExtractOp>(op, retType,
+                                                            container, index);
     return mlir::success();
   }
 };
@@ -184,14 +184,14 @@ void imex::populateTupleTypeConversionRewritesAndTarget(
   patterns.insert<BuildTupleConversionPattern, GetItemTupleConversionPattern>(
       typeConverter, patterns.getContext());
 
-  target.addDynamicallyLegalOp<plier::BuildTupleOp>(
-      [&typeConverter](plier::BuildTupleOp op) {
+  target.addDynamicallyLegalOp<imex::util::BuildTupleOp>(
+      [&typeConverter](imex::util::BuildTupleOp op) {
         return typeConverter.isLegal(op.getResult().getType());
       });
 
-  target.addDynamicallyLegalOp<plier::GetItemOp>(
-      [&typeConverter](plier::GetItemOp op) -> llvm::Optional<bool> {
-        auto inputType = op.value().getType();
+  target.addDynamicallyLegalOp<imex::util::TupleExtractOp>(
+      [&typeConverter](imex::util::TupleExtractOp op) -> llvm::Optional<bool> {
+        auto inputType = op.source().getType();
         auto tupleType = typeConverter.convertType(inputType)
                              .dyn_cast_or_null<mlir::TupleType>();
         if (!tupleType)

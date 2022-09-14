@@ -136,7 +136,6 @@ def GetItemOp : Plier_Op<"getitem", [NoSideEffect]> {
   let arguments = (ins AnyType : $value, AnyType : $index);
 
   let results = (outs AnyType);
-  let hasFolder = 1;
 
   let builders = [OpBuilder<(ins "::mlir::Value"
                              : $value, "::mlir::Value"

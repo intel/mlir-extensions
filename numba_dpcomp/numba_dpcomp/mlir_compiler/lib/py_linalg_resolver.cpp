@@ -333,7 +333,7 @@ struct PyLinalgResolver::Context {
 
       mlir::ValueRange vr(elems);
       auto resType = mlir::TupleType::get(builder.getContext(), vr.getTypes());
-      return builder.create<plier::BuildTupleOp>(loc, resType, elems);
+      return builder.create<imex::util::BuildTupleOp>(loc, resType, elems);
     }
 
     if (py::isinstance<py::bool_>(obj)) {
@@ -398,7 +398,7 @@ private:
     if (auto literal = val.getType().dyn_cast<plier::LiteralType>())
       return getPyLiteral(literal.getValue());
 
-    if (auto buildTuple = val.getDefiningOp<plier::BuildTupleOp>()) {
+    if (auto buildTuple = val.getDefiningOp<imex::util::BuildTupleOp>()) {
       auto args = buildTuple.args();
       auto count = static_cast<unsigned>(args.size());
       py::tuple ret(count);
@@ -1621,7 +1621,7 @@ static py::object shapeImpl(py::capsule context, py::capsule ssaVal) {
     llvm::SmallVector<mlir::Type> shapeTypes(rank, builder.getIndexType());
     auto shapeType = mlir::TupleType::get(builder.getContext(), shapeTypes);
     auto shapeVar =
-        builder.create<plier::BuildTupleOp>(loc, shapeType, shapeVals);
+        builder.create<imex::util::BuildTupleOp>(loc, shapeType, shapeVals);
     return ctx.context.createVar(context, shapeVar.getResult());
   }
   return py::list();
@@ -1675,7 +1675,7 @@ static py::object getitemImpl(py::capsule context, py::capsule ssaVal,
                              ", expected [0:" + llvm::Twine(maxIndex) + ")")
                                 .str());
 
-    if (auto parentOp = value.getDefiningOp<plier::BuildTupleOp>())
+    if (auto parentOp = value.getDefiningOp<imex::util::BuildTupleOp>())
       return ctx.context.createVar(
           context, parentOp.getOperand(static_cast<unsigned>(indexVal)));
 
@@ -1862,7 +1862,8 @@ static PyLinalgResolver::Values unpackResults(PyBuilderContext &ctx,
     mlir::ValueRange vr(vals);
 
     auto tupleType = mlir::TupleType::get(builder.getContext(), vr.getTypes());
-    ret.emplace_back(builder.create<plier::BuildTupleOp>(loc, tupleType, vr));
+    ret.emplace_back(
+        builder.create<imex::util::BuildTupleOp>(loc, tupleType, vr));
   } else {
     ret.emplace_back(unwrapVal(object));
   }

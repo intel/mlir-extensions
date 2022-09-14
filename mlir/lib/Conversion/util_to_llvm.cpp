@@ -20,7 +20,6 @@
 #include <mlir/Pass/Pass.h>
 
 #include "mlir-extensions/Dialect/imex_util/dialect.hpp"
-#include "mlir-extensions/Dialect/plier/dialect.hpp"
 
 #include "mlir-extensions/Conversion/util_to_llvm.hpp"
 
@@ -114,11 +113,12 @@ struct LowerExtractMemrefMetadataOp
 };
 
 struct LowerBuildTuple
-    : public mlir::ConvertOpToLLVMPattern<plier::BuildTupleOp> {
+    : public mlir::ConvertOpToLLVMPattern<imex::util::BuildTupleOp> {
   using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::BuildTupleOp op, plier::BuildTupleOp::Adaptor adaptor,
+  matchAndRewrite(imex::util::BuildTupleOp op,
+                  imex::util::BuildTupleOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto converter = getTypeConverter();
     auto type = converter->convertType(op.getType());
