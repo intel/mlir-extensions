@@ -171,7 +171,8 @@ jobs:
           python build_tools/build_imex.py                                     \
             --working-dir /home/runner/work/tmpdir                             \
             --llvm-install /home/runner/work/llvm-mlir/_mlir_install           \
-            --external-lit ${external_lit}
+            --external-lit ${external_lit}                                     \
+            --imex-include-docs
 
       - name: Run lit tests
         shell: bash -l {0}
@@ -184,3 +185,9 @@ jobs:
         run: |
           cd /home/runner/work/mlir-extensions/mlir-extensions/_build || exit 1
           cmake --build . --target doc_doxygen || exit 1
+
+      - name: Build mlir user docs
+        shell: bash -l {0}
+        run: |
+          cd /home/runner/work/mlir-extensions/mlir-extensions/_build || exit 1
+          cmake --build . --target mlir-doc || exit 1

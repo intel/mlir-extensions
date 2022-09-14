@@ -314,6 +314,7 @@ def _build_imex(
     cxx_compiler=None,
     cmake_executable=None,
     external_lit=None,
+    imex_include_docs=False,
 ):
     """Builds Intel MLIR extensions (IMEX).
 
@@ -330,6 +331,8 @@ def _build_imex(
         cmake_executable (_type_, optional): Path to CMake. Defaults to None.
         enable_tests (bool, optional): Set to build IMEX unit tests. Defaults to
         False.
+        imex_include_docs (bool, optional): Set to build the IMEX documentations.
+
     Raises:
         RuntimeError: If the LLVM install directory is not found.
         RuntimeError: If a platform other than Linux
@@ -374,6 +377,7 @@ def _build_imex(
             "-DCMAKE_PREFIX_PATH=" + os.path.abspath(llvm_install_dir),
             "-DCMAKE_INSTALL_PREFIX=" + os.path.abspath(imex_install_prefix),
             "-DCMAKE_VERBOSE_MAKEFILE=ON",
+            "-DIMEX_INCLUDE_DOCS=" + ("ON" if imex_include_docs else "OFF"),
             "--debug-trycompile",
             os.path.abspath(imex_source_dir),
         ]
@@ -393,7 +397,6 @@ def _build_imex(
     subprocess.check_call(
         cmake_install_args, shell=False, cwd=build_dir, env=os.environ
     )
-
 
 if __name__ == "__main__":
 
@@ -480,6 +483,12 @@ if __name__ == "__main__":
         type=str,
         help="Path to a lit executable",
         dest="external_lit",
+    )
+    # docs flag
+    imex_builder.add_argument(
+        "--imex-include-docs",
+        action="store_true",
+        help="IMEX docs will be built if set",
     )
 
     args = parser.parse_args()
@@ -594,6 +603,7 @@ if __name__ == "__main__":
         llvm_install_dir=g_llvm_install_dir,
         imex_install_prefix=args.imex_install_dir,
         external_lit=args.external_lit,
+        imex_include_docs=args.imex_include_docs,
     )
 
     # TODO
