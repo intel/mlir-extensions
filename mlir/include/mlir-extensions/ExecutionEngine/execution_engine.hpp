@@ -61,6 +61,11 @@ struct ExecutionEngineOptions {
   /// If `transformer` is provided, it will be called on the LLVM module during
   /// JIT-compilation and can be used, e.g., for reporting or optimization.
   std::function<llvm::Error(llvm::Module &)> transformer;
+
+  /// If `lateTransformer` is provided, it will be called on the LLVM module
+  /// just before final code generation and can be used, e.g., for reporting or
+  /// optimization.
+  std::function<llvm::Error(llvm::Module &)> lateTransformer;
 };
 
 class ExecutionEngine {

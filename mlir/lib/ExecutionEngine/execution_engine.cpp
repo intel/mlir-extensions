@@ -117,6 +117,30 @@ static bool setupTargetTriple(llvm::Module *llvmModule) {
   return false;
 }
 
+namespace {
+class CustomCompiler : public llvm::orc::TMOwningSimpleCompiler {
+public:
+  using Transformer = std::function<llvm::Error(llvm::Module &)>;
+  CustomCompiler(Transformer t, std::unique_ptr<llvm::TargetMachine> TM,
+                 llvm::ObjectCache *ObjCache = nullptr)
+      : TMOwningSimpleCompiler(std::move(TM), ObjCache),
+        transformer(std::move(t)) {}
+
+  llvm::Expected<CompileResult> operator()(llvm::Module &M) override {
+    if (transformer) {
+      auto err = transformer(M);
+      if (err)
+        return err;
+    }
+
+    return llvm::orc::TMOwningSimpleCompiler::operator()(M);
+  }
+
+private:
+  Transformer transformer;
+};
+} // namespace
+
 imex::ExecutionEngine::ExecutionEngine(ExecutionEngineOptions options)
     : cache(options.enableObjectCache ? new SimpleObjectCache() : nullptr),
       gdbListener(options.enableGDBNotificationListener
@@ -159,9 +183,10 @@ imex::ExecutionEngine::ExecutionEngine(ExecutionEngineOptions options)
 
   // Callback to inspect the cache and recompile on demand. This follows Lang's
   // LLJITWithObjectCache example.
-  auto compileFunctionCreator = [this, jitCodeGenOptLevel =
-                                           options.jitCodeGenOptLevel](
-                                    llvm::orc::JITTargetMachineBuilder jtmb)
+  auto compileFunctionCreator =
+      [this, jitCodeGenOptLevel = options.jitCodeGenOptLevel,
+       transformer =
+           options.lateTransformer](llvm::orc::JITTargetMachineBuilder jtmb)
       -> llvm::Expected<
           std::unique_ptr<llvm::orc::IRCompileLayer::IRCompiler>> {
     if (jitCodeGenOptLevel)
@@ -169,8 +194,8 @@ imex::ExecutionEngine::ExecutionEngine(ExecutionEngineOptions options)
     auto tm = jtmb.createTargetMachine();
     if (!tm)
       return tm.takeError();
-    return std::make_unique<llvm::orc::TMOwningSimpleCompiler>(std::move(*tm),
-                                                               cache.get());
+    return std::make_unique<CustomCompiler>(transformer, std::move(*tm),
+                                            cache.get());
   };
 
   // Create the LLJIT by calling the LLJITBuilder with 2 callbacks.
