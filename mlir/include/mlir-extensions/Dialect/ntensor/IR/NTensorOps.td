@@ -85,6 +85,8 @@ def UnaryOp : NTensor_OpBase<"unary", []> {
   let arguments = (ins AnyType:$value, StrAttr:$op);
 
   let results = (outs AnyType:$result);
+
+  let assemblyFormat = "$op ` ` attr-dict `(` $value `:` type($value) `)` `->` type($result)";
 }
 
 def BinaryOp : NTensor_OpBase<"binary", []> {
