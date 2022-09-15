@@ -102,17 +102,6 @@ def BinaryOp : NTensor_OpBase<"binary", []> {
   let assemblyFormat = "$op ` ` attr-dict `(` $lhs `:` type($lhs) `,` $rhs `:` type($rhs) `)` `->` type($result)";
 }
 
-def CallOp : NTensor_OpBase<"call", []> {
-  let summary = "Call operation.";
-  let description = [{
-
-  }];
-
-  let arguments = (ins Variadic<AnyType>:$args, StrAttr:$op);
-
-  let results = (outs Variadic<AnyType>:$results);
-}
-
 def SetitemOp : NTensor_OpBase<"setitem", []> {
   let summary = "Array setitem operation.";
   let description = [{
@@ -131,6 +120,17 @@ def GetitemOp : NTensor_OpBase<"getitem", [NoSideEffect]> {
   let arguments = (ins AnyType:$source, AnyType:$index);
 
   let results = (outs AnyType:$result);
+}
+
+def CallOp : NTensor_OpBase<"call", []> {
+  let summary = "Call operation.";
+  let description = [{
+
+  }];
+
+  let arguments = (ins Variadic<AnyType>:$args, StrAttr:$op);
+
+  let results = (outs Variadic<AnyType>:$results);
 }
 
 def PrimitiveOp : NTensor_OpBase<"primitive", []> {
