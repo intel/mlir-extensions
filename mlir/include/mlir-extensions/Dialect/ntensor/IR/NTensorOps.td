@@ -148,6 +148,8 @@ def PrimitiveOp : NTensor_OpBase<"primitive", []> {
   let arguments = (ins Variadic<AnyType>:$args, StrAttr:$op);
 
   let results = (outs Variadic<AnyType>:$results);
+
+  let assemblyFormat = "$op ` ` attr-dict `(` $args `)` (`:` type($args)^)? (`->` type($results)^)?";
 }
 
 #endif // NTENSOR_OPS
