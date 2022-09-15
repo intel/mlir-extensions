@@ -132,9 +132,11 @@ def CallOp : NTensor_OpBase<"call", []> {
 
   }];
 
-  let arguments = (ins Variadic<AnyType>:$args, StrAttr:$op);
+  let arguments = (ins Variadic<AnyType>:$args, ArrayAttr:$args_names, StrAttr:$op);
 
   let results = (outs Variadic<AnyType>:$results);
+
+  let assemblyFormat = "$op ` ` attr-dict custom<ArgList>($args, $args_names) (`:` type($args)^)? (`->` type($results)^)?";
 }
 
 def PrimitiveOp : NTensor_OpBase<"primitive", []> {

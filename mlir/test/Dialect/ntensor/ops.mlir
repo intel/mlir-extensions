@@ -61,3 +61,33 @@ func.func @test(%arg1: !ntensor.ntensor<?xf32>, %arg2: index) -> f32 {
 //  CHECK-SAME:   (%[[ARG1:.*]]: !ntensor.ntensor<?xf32>, %[[ARG2:.*]]: index)
 //  CHECK-NEXT:   %[[RES:.*]] = ntensor.getitem(%[[ARG1]] : !ntensor.ntensor<?xf32>) [%[[ARG2]] : index] -> f32
 //  CHECK-NEXT:   return %[[RES]] : f32
+
+// -----
+
+func.func @test() {
+  ntensor.call "foo" ()
+  return
+}
+// CHECK-LABEL: func @test
+//  CHECK-NEXT:   ntensor.call "foo" ()
+//  CHECK-NEXT:   return
+
+// -----
+
+func.func @test() -> !ntensor.ntensor<?xf32> {
+  %0 = ntensor.call "foo" () -> !ntensor.ntensor<?xf32>
+  return %0 : !ntensor.ntensor<?xf32>
+}
+// CHECK-LABEL: func @test
+//  CHECK-NEXT:   %[[RES:.*]] = ntensor.call "foo" () -> !ntensor.ntensor<?xf32>
+//  CHECK-NEXT:   return %[[RES]] : !ntensor.ntensor<?xf32>
+
+// -----
+
+func.func @test() -> (!ntensor.ntensor<?xf32>, f32) {
+  %0:2 = ntensor.call "foo" () -> !ntensor.ntensor<?xf32>, f32
+  return %0#0, %0#1 : !ntensor.ntensor<?xf32>, f32
+}
+// CHECK-LABEL: func @test
+//  CHECK-NEXT:   %[[RES:.*]]:2 = ntensor.call "foo" () -> !ntensor.ntensor<?xf32>, f32
+//  CHECK-NEXT:   return %[[RES]]#0, %[[RES]]#1 : !ntensor.ntensor<?xf32>, f32
