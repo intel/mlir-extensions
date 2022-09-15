@@ -15,6 +15,9 @@
 #pragma once
 
 #include <mlir/IR/Dialect.h>
+#include <mlir/IR/OpDefinition.h>
+#include <mlir/IR/Region.h>
+#include <mlir/Interfaces/SideEffectInterfaces.h>
 
 #include "mlir-extensions/Dialect/ntensor/IR/NTensorOpsDialect.h.inc"
 #include "mlir-extensions/Dialect/ntensor/IR/NTensorOpsEnums.h.inc"

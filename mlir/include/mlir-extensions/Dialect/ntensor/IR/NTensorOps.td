@@ -15,6 +15,7 @@
 #ifndef NTENSOR_OPS
 #define NTENSOR_OPS
 
+include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/BuiltinTypeInterfaces.td"
 include "mlir/IR/EnumAttr.td"
@@ -47,7 +48,7 @@ def NTensor_Tensor : NTensor_Type<"NTensor", "ntensor", [
   let parameters = (ins
     ArrayRefParameter<"int64_t">:$shape,
     "::mlir::Type":$elementType,
-    "::mlir::Attribute":$environment
+    DefaultValuedParameter<"::mlir::Attribute", "">:$environment
   );
 
   let builders = [
@@ -72,8 +73,71 @@ def NTensor_Tensor : NTensor_Type<"NTensor", "ntensor", [
     using ::mlir::ShapedType::Trait<NTensorType>::getDynamicDimIndex;
   }];
 
-  let assemblyFormat = "`<` custom<Shape>($shape, $elementType) $environment `>`";
+  let assemblyFormat = "`<` custom<Shape>($shape, $elementType) (`,` $environment^)? `>`";
 }
 
+def UnaryOp : NTensor_OpBase<"unary", []> {
+  let summary = "Unary operation.";
+  let description = [{
+
+  }];
+
+  let arguments = (ins AnyType:$value, StrAttr:$op);
+
+  let results = (outs AnyType:$result);
+}
+
+def BinaryOp : NTensor_OpBase<"binary", []> {
+  let summary = "Binary operation.";
+  let description = [{
+
+  }];
+
+  let arguments = (ins AnyType:$lhs, AnyType:$rhs, StrAttr:$op);
+
+  let results = (outs AnyType:$result);
+}
+
+def CallOp : NTensor_OpBase<"call", []> {
+  let summary = "Call operation.";
+  let description = [{
+
+  }];
+
+  let arguments = (ins Variadic<AnyType>:$args, StrAttr:$op);
+
+  let results = (outs Variadic<AnyType>:$results);
+}
+
+def SetitemOp : NTensor_OpBase<"setitem", []> {
+  let summary = "Array setitem operation.";
+  let description = [{
+
+  }];
+
+  let arguments = (ins AnyType:$source, AnyType:$index, AnyType:$value);
+}
+
+def GetitemOp : NTensor_OpBase<"getitem", [NoSideEffect]> {
+  let summary = "Array setitem operation.";
+  let description = [{
+
+  }];
+
+  let arguments = (ins AnyType:$source, AnyType:$index);
+
+  let results = (outs AnyType:$result);
+}
+
+def PrimitiveOp : NTensor_OpBase<"primitive", []> {
+  let summary = "Primitive operation.";
+  let description = [{
+
+  }];
+
+  let arguments = (ins Variadic<AnyType>:$args, StrAttr:$op);
+
+  let results = (outs Variadic<AnyType>:$results);
+}
 
 #endif // NTENSOR_OPS

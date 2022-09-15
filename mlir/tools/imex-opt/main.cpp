@@ -18,12 +18,14 @@
 #include <mlir/Tools/mlir-opt/MlirOptMain.h>
 
 #include "mlir-extensions/Dialect/imex_util/dialect.hpp"
+#include "mlir-extensions/Dialect/ntensor/IR/NTensorOps.hpp"
 
 int main(int argc, char **argv) {
   mlir::registerAllPasses();
   mlir::DialectRegistry registry;
   mlir::registerAllDialects(registry);
   registry.insert<imex::util::ImexUtilDialect>();
+  registry.insert<imex::ntensor::NTensorDialect>();
   return mlir::failed(MlirOptMain(argc, argv, "imex modular optimizer driver\n",
                                   registry,
                                   /*preloadDialectsInContext=*/false));
