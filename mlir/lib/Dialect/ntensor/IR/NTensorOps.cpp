@@ -133,30 +133,35 @@ static void printShape(mlir::AsmPrinter &printer, llvm::ArrayRef<int64_t> shape,
   printer << type;
 }
 
-static bool
-parseArgList(mlir::OpAsmParser &parser,
-           llvm::SmallVectorImpl<mlir::OpAsmParser::UnresolvedOperand> &argsOperands,
-           mlir::ArrayAttr &args_namesAttr) {
+static bool parseArgList(
+    mlir::OpAsmParser &parser,
+    llvm::SmallVectorImpl<mlir::OpAsmParser::UnresolvedOperand> &argsOperands,
+    mlir::ArrayAttr &args_namesAttr) {
   if (parser.parseLParen())
     return true;
 
   auto *context = parser.getContext();
-  std::string name;
   llvm::SmallVector<mlir::Attribute> names;
-  while (true) {
-    if (!parser.parseRParen())
-      break;
+  if (parser.parseOptionalRParen()) {
+    std::string name;
+    while (true) {
+      name.clear();
+      if (!parser.parseOptionalKeywordOrString(&name)) {
+        if (parser.parseColon())
+          return true;
+      }
+      names.push_back(mlir::StringAttr::get(context, name));
 
-    name.clear();
-    if (!parser.parseOptionalKeywordOrString(&name)) {
-      if (parser.parseColon())
+      argsOperands.push_back({});
+      if (parser.parseOperand(argsOperands.back()))
+        return true;
+
+      if (!parser.parseOptionalRParen())
+        break;
+
+      if (parser.parseComma())
         return true;
     }
-    names.push_back(mlir::StringAttr::get(context, name));
-
-    argsOperands.push_back({});
-    if (parser.parseOperand(argsOperands.back()))
-      return true;
   }
 
   assert(names.size() == argsOperands.size());
@@ -164,9 +169,9 @@ parseArgList(mlir::OpAsmParser &parser,
   return false;
 }
 
-static void printArgList(mlir::OpAsmPrinter &printer, imex::ntensor::CallOp call,
-                         mlir::ValueRange args,
-                       mlir::ArrayAttr args_names) {
+static void printArgList(mlir::OpAsmPrinter &printer,
+                         imex::ntensor::CallOp call, mlir::ValueRange args,
+                         mlir::ArrayAttr args_names) {
   assert(args.size() == args_names.size());
   printer << '(';
   bool first = true;
@@ -178,7 +183,8 @@ static void printArgList(mlir::OpAsmPrinter &printer, imex::ntensor::CallOp call
     }
     auto arg = std::get<0>(it);
     auto name = std::get<1>(it);
-    auto nameStr = (name ? name.cast<mlir::StringAttr>().getValue() : llvm::StringRef());
+    auto nameStr =
+        (name ? name.cast<mlir::StringAttr>().getValue() : llvm::StringRef());
     if (!nameStr.empty())
       printer << nameStr << ':';
     printer.printOperand(arg);
