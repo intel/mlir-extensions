@@ -114,7 +114,7 @@ def SetitemOp : NTensor_OpBase<"setitem", []> {
 }
 
 def GetitemOp : NTensor_OpBase<"getitem", [NoSideEffect]> {
-  let summary = "Array setitem operation.";
+  let summary = "Array getitem operation.";
   let description = [{
 
   }];
