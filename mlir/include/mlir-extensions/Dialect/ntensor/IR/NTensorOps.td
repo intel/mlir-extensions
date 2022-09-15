@@ -98,6 +98,8 @@ def BinaryOp : NTensor_OpBase<"binary", []> {
   let arguments = (ins AnyType:$lhs, AnyType:$rhs, StrAttr:$op);
 
   let results = (outs AnyType:$result);
+
+  let assemblyFormat = "$op ` ` attr-dict `(` $lhs `:` type($lhs) `,` $rhs `:` type($rhs) `)` `->` type($result)";
 }
 
 def CallOp : NTensor_OpBase<"call", []> {

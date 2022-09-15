@@ -28,3 +28,14 @@ func.func @test(%arg: !ntensor.ntensor<?xf32>) -> !ntensor.ntensor<?xf32> {
 //  CHECK-SAME:   (%[[ARG:.*]]: !ntensor.ntensor<?xf32>)
 //  CHECK-NEXT:   %[[RES:.*]] = ntensor.unary "-" (%[[ARG]] : !ntensor.ntensor<?xf32>) -> !ntensor.ntensor<?xf32>
 //  CHECK-NEXT:   return %[[RES]] : !ntensor.ntensor<?xf32>
+
+// -----
+
+func.func @test(%arg1: !ntensor.ntensor<?xf32>, %arg2: !ntensor.ntensor<?xf32>) -> !ntensor.ntensor<?xf32> {
+  %0 = ntensor.binary "-" (%arg1 : !ntensor.ntensor<?xf32>, %arg2 : !ntensor.ntensor<?xf32>) -> !ntensor.ntensor<?xf32>
+  return %0 : !ntensor.ntensor<?xf32>
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG1:.*]]: !ntensor.ntensor<?xf32>, %[[ARG2:.*]]: !ntensor.ntensor<?xf32>)
+//  CHECK-NEXT:   %[[RES:.*]] = ntensor.binary "-" (%[[ARG1]] : !ntensor.ntensor<?xf32>, %[[ARG2]] : !ntensor.ntensor<?xf32>) -> !ntensor.ntensor<?xf32>
+//  CHECK-NEXT:   return %[[RES]] : !ntensor.ntensor<?xf32>
