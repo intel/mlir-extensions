@@ -109,6 +109,8 @@ def SetitemOp : NTensor_OpBase<"setitem", []> {
   }];
 
   let arguments = (ins AnyType:$source, AnyType:$index, AnyType:$value);
+
+  let assemblyFormat = "attr-dict `(` $source `:` type($source) `)`  `[` $index `:` type($index) `]` `=` `(` $value `:` type($value) `)`";
 }
 
 def GetitemOp : NTensor_OpBase<"getitem", [NoSideEffect]> {
