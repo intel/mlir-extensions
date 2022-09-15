@@ -14,10 +14,16 @@
 
 #include "mlir-extensions/Dialect/ntensor/IR/NTensorOps.hpp"
 
+#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Utils/StaticValueUtils.h"
+#include <mlir/IR/Builders.h>
+#include <mlir/IR/DialectImplementation.h>
 #include <mlir/Transforms/InliningUtils.h>
 
+#include <llvm/ADT/TypeSwitch.h>
+
 namespace {
-struct InlinerInterface : public mlir::DialectInlinerInterface {
+struct NTensorInlinerInterface : public mlir::DialectInlinerInterface {
   using mlir::DialectInlinerInterface::DialectInlinerInterface;
   bool isLegalToInline(mlir::Region *, mlir::Region *, bool,
                        mlir::BlockAndValueMapping &) const final override {
@@ -39,7 +45,12 @@ void NTensorDialect::initialize() {
 #include "mlir-extensions/Dialect/ntensor/IR/NTensorOps.cpp.inc"
       >();
 
-  addInterfaces<InlinerInterface>();
+  addInterfaces<NTensorInlinerInterface>();
+
+  addTypes<
+#define GET_TYPEDEF_LIST
+#include "mlir-extensions/Dialect/ntensor/IR/NTensorOpsTypes.cpp.inc"
+      >();
 
   addAttributes<
 #define GET_ATTRDEF_LIST
@@ -47,8 +58,80 @@ void NTensorDialect::initialize() {
       >();
 }
 
+mlir::Operation *NTensorDialect::materializeConstant(mlir::OpBuilder &builder,
+                                                     mlir::Attribute value,
+                                                     mlir::Type type,
+                                                     mlir::Location loc) {
+  if (mlir::arith::ConstantOp::isBuildableWith(value, type))
+    return builder.create<mlir::arith::ConstantOp>(loc, type, value);
+
+  if (type.isa<mlir::IndexType>())
+    if (auto val = mlir::getConstantIntValue(value))
+      return builder.create<mlir::arith::ConstantIndexOp>(loc, *val);
+
+  return nullptr;
+}
+
+void NTensorType::walkImmediateSubElements(
+    llvm::function_ref<void(mlir::Attribute)> walkAttrsFn,
+    llvm::function_ref<void(mlir::Type)> walkTypesFn) const {
+  walkTypesFn(getElementType());
+  if (mlir::Attribute env = getEnvironment())
+    walkAttrsFn(env);
+}
+
+bool NTensorBase::hasRank() const { return true; }
+
+llvm::ArrayRef<int64_t> NTensorBase::getShape() const {
+  return cast<NTensorType>().getShape();
+}
+
+NTensorBase
+NTensorBase::cloneWith(llvm::Optional<llvm::ArrayRef<int64_t>> shape,
+                       Type elementType) const {
+  auto t = cast<NTensorType>();
+  return NTensorType::get(shape.value_or(getShape()), elementType,
+                          t.getEnvironment());
+}
+
+mlir::Type NTensorType::replaceImmediateSubElements(
+    llvm::ArrayRef<mlir::Attribute> replAttrs,
+    llvm::ArrayRef<mlir::Type> replTypes) const {
+  return get(getShape(), replTypes.front(),
+             replAttrs.empty() ? mlir::Attribute() : replAttrs.back());
+}
+
 } // namespace ntensor
 } // namespace imex
+
+static mlir::LogicalResult
+parseShape(mlir::AsmParser &parser,
+           mlir::FailureOr<llvm::SmallVector<int64_t>> &shape,
+           mlir::FailureOr<mlir::Type> &type) {
+  llvm::SmallVector<int64_t> dimensions;
+  if (parser.parseDimensionList(dimensions))
+    return mlir::failure();
+
+  mlir::Type t;
+  if (parser.parseType(t))
+    return mlir::failure();
+
+  shape = std::move(dimensions);
+  type = std::move(t);
+  return mlir::success();
+}
+
+static void printShape(mlir::AsmPrinter &printer, llvm::ArrayRef<int64_t> shape,
+                       mlir::Type type) {
+  for (int64_t dim : shape) {
+    if (mlir::ShapedType::isDynamic(dim))
+      printer << '?';
+    else
+      printer << dim;
+    printer << 'x';
+  }
+  printer << type;
+}
 
 #include "mlir-extensions/Dialect/ntensor/IR/NTensorOpsDialect.cpp.inc"
 
@@ -57,5 +140,8 @@ void NTensorDialect::initialize() {
 
 #define GET_ATTRDEF_CLASSES
 #include "mlir-extensions/Dialect/ntensor/IR/NTensorOpsAttributes.cpp.inc"
+
+#define GET_TYPEDEF_CLASSES
+#include "mlir-extensions/Dialect/ntensor/IR/NTensorOpsTypes.cpp.inc"
 
 #include "mlir-extensions/Dialect/ntensor/IR/NTensorOpsEnums.cpp.inc"

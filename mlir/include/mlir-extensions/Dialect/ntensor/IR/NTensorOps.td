@@ -15,8 +15,11 @@
 #ifndef NTENSOR_OPS
 #define NTENSOR_OPS
 
-include "mlir/IR/OpBase.td"
+include "mlir/IR/AttrTypeBase.td"
+include "mlir/IR/BuiltinTypeInterfaces.td"
 include "mlir/IR/EnumAttr.td"
+include "mlir/IR/OpBase.td"
+include "mlir/IR/SubElementInterfaces.td"
 
 def NTensor_Dialect : Dialect {
   let name = "ntensor";
@@ -26,9 +29,51 @@ def NTensor_Dialect : Dialect {
   let useDefaultTypePrinterParser = 1;
 }
 
+class NTensor_Type<string name, string typeMnemonic, list<Trait> traits = [],
+                   string baseCppClass = "::mlir::Type">
+    : TypeDef<NTensor_Dialect, name, traits, baseCppClass> {
+  let mnemonic = typeMnemonic;
+}
+
 class NTensor_OpBase<string mnemonic, list<Trait> traits = []>
     : Op<NTensor_Dialect, mnemonic, traits>;
 
+def NTensor_Tensor : NTensor_Type<"NTensor", "ntensor", [
+  DeclareTypeInterfaceMethods<SubElementTypeInterface>, ShapedTypeInterface],
+  "::imex::ntensor::NTensorBase"> {
+  let summary = "Multi-dimensional array with a fixed number of dimensions";
+  let description = [{
+  }];
+  let parameters = (ins
+    ArrayRefParameter<"int64_t">:$shape,
+    "::mlir::Type":$elementType,
+    "::mlir::Attribute":$environment
+  );
+
+  let builders = [
+    TypeBuilderWithInferredContext<(ins
+      "::llvm::ArrayRef<int64_t>":$shape,
+      "::mlir::Type":$elementType,
+      CArg<"::mlir::Attribute", "{}">:$environment
+    ), [{
+      return $_get(elementType.getContext(), shape, elementType, environment);
+    }]>
+  ];
+
+  let extraClassDeclaration = [{
+    using ::mlir::ShapedType::Trait<NTensorType>::clone;
+    using ::mlir::ShapedType::Trait<NTensorType>::getElementTypeBitWidth;
+    using ::mlir::ShapedType::Trait<NTensorType>::getRank;
+    using ::mlir::ShapedType::Trait<NTensorType>::getNumElements;
+    using ::mlir::ShapedType::Trait<NTensorType>::isDynamicDim;
+    using ::mlir::ShapedType::Trait<NTensorType>::hasStaticShape;
+    using ::mlir::ShapedType::Trait<NTensorType>::getNumDynamicDims;
+    using ::mlir::ShapedType::Trait<NTensorType>::getDimSize;
+    using ::mlir::ShapedType::Trait<NTensorType>::getDynamicDimIndex;
+  }];
+
+  let assemblyFormat = "`<` custom<Shape>($shape, $elementType) $environment `>`";
+}
 
 
 #endif // NTENSOR_OPS
