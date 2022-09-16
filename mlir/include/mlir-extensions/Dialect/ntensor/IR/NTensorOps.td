@@ -69,6 +69,10 @@ def NTensor_Tensor : NTensor_Type<"NTensor", "ntensor", [
     Contrary to upstream tensor type is has a reference semantics and allow to
     modify data inplace.
 
+    Has optional `environment` attribute, which specifies additional environment
+    information for computations on this tensor (e.g. it computation must run on
+    specific GPU device).
+
     TBD
   }];
   let parameters = (ins
