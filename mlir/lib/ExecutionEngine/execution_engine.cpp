@@ -22,6 +22,7 @@
 #include <llvm/ExecutionEngine/Orc/LLJIT.h>
 #include <llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h>
 #include <llvm/ExecutionEngine/SectionMemoryManager.h>
+#include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/Module.h>
 #include <llvm/MC/SubtargetFeature.h>
 #include <llvm/MC/TargetRegistry.h>
@@ -117,6 +118,48 @@ static bool setupTargetTriple(llvm::Module *llvmModule) {
   return false;
 }
 
+namespace {
+class CustomCompiler : public llvm::orc::SimpleCompiler {
+public:
+  using Transformer = std::function<llvm::Error(llvm::Module &)>;
+  using AsmPrinter = std::function<void(llvm::StringRef)>;
+
+  CustomCompiler(Transformer t, AsmPrinter a,
+                 std::unique_ptr<llvm::TargetMachine> TM,
+                 llvm::ObjectCache *ObjCache = nullptr)
+      : SimpleCompiler(*TM, ObjCache), TM(std::move(TM)),
+        transformer(std::move(t)), printer(std::move(a)) {}
+
+  llvm::Expected<CompileResult> operator()(llvm::Module &M) override {
+    if (transformer) {
+      auto err = transformer(M);
+      if (err)
+        return err;
+    }
+
+    if (printer) {
+      llvm::SmallVector<char, 0> buffer;
+      llvm::raw_svector_ostream os(buffer);
+
+      llvm::legacy::PassManager PM;
+      if (TM->addPassesToEmitFile(PM, os, nullptr,
+                                  llvm::CodeGenFileType::CGFT_AssemblyFile))
+        return makeStringError("Target does not support Asm emission");
+
+      PM.run(M);
+      printer(llvm::StringRef(buffer.data(), buffer.size()));
+    }
+
+    return llvm::orc::SimpleCompiler::operator()(M);
+  }
+
+private:
+  std::shared_ptr<llvm::TargetMachine> TM;
+  Transformer transformer;
+  AsmPrinter printer;
+};
+} // namespace
+
 imex::ExecutionEngine::ExecutionEngine(ExecutionEngineOptions options)
     : cache(options.enableObjectCache ? new SimpleObjectCache() : nullptr),
       gdbListener(options.enableGDBNotificationListener
@@ -159,9 +202,10 @@ imex::ExecutionEngine::ExecutionEngine(ExecutionEngineOptions options)
 
   // Callback to inspect the cache and recompile on demand. This follows Lang's
   // LLJITWithObjectCache example.
-  auto compileFunctionCreator = [this, jitCodeGenOptLevel =
-                                           options.jitCodeGenOptLevel](
-                                    llvm::orc::JITTargetMachineBuilder jtmb)
+  auto compileFunctionCreator =
+      [this, jitCodeGenOptLevel = options.jitCodeGenOptLevel,
+       transformer = options.lateTransformer,
+       asmPrinter = options.asmPrinter](llvm::orc::JITTargetMachineBuilder jtmb)
       -> llvm::Expected<
           std::unique_ptr<llvm::orc::IRCompileLayer::IRCompiler>> {
     if (jitCodeGenOptLevel)
@@ -169,8 +213,8 @@ imex::ExecutionEngine::ExecutionEngine(ExecutionEngineOptions options)
     auto tm = jtmb.createTargetMachine();
     if (!tm)
       return tm.takeError();
-    return std::make_unique<llvm::orc::TMOwningSimpleCompiler>(std::move(*tm),
-                                                               cache.get());
+    return std::make_unique<CustomCompiler>(transformer, asmPrinter,
+                                            std::move(*tm), cache.get());
   };
 
   // Create the LLJIT by calling the LLJITBuilder with 2 callbacks.
