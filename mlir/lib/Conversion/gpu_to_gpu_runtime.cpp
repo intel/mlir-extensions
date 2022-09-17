@@ -1305,6 +1305,7 @@ struct AbiAttrsPass
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::gpu::GPUDialect>();
+    registry.insert<mlir::spirv::SPIRVDialect>();
   }
 
   void runOnOperation() override {
@@ -1327,6 +1328,12 @@ struct SetSPIRVCapabilitiesPass
     : public mlir::PassWrapper<SetSPIRVCapabilitiesPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(SetSPIRVCapabilitiesPass)
+
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::gpu::GPUDialect>();
+    registry.insert<mlir::spirv::SPIRVDialect>();
+  }
 
   void runOnOperation() override {
     namespace spirv = mlir::spirv;
