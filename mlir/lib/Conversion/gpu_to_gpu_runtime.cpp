@@ -103,10 +103,10 @@ struct InsertGPUAllocs
 
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<mlir::memref::MemRefDialect>();
-    registry.insert<mlir::gpu::GPUDialect>();
-    registry.insert<mlir::scf::SCFDialect>();
     registry.insert<mlir::arith::ArithmeticDialect>();
+    registry.insert<mlir::gpu::GPUDialect>();
+    registry.insert<mlir::memref::MemRefDialect>();
+    registry.insert<mlir::scf::SCFDialect>();
   }
 
   void runOnOperation() override {
@@ -280,13 +280,11 @@ struct InsertGPUAllocs
     };
 
     for (auto &it : gpuBufferAllocs) {
-      auto alloc = mlir::cast<mlir::memref::AllocOp>(it.first);
-      if (alloc)
-        it.second = getAccessType(alloc);
-      else {
-        auto memrefGlobal = mlir::cast<mlir::memref::GetGlobalOp>(it.first);
-        it.second = getAccessType(memrefGlobal);
-      }
+      auto op = it.first;
+      assert(op->getNumResults() == 1);
+      it.second = getAccessType(op->getResult(0));
+      if (mlir::isa<mlir::memref::GetGlobalOp>(op))
+        it.second.hostWrite = true;
     }
 
     auto &block = funcBody.front();
@@ -298,73 +296,77 @@ struct InsertGPUAllocs
       it.second.hostWrite = true;
     }
 
-    mlir::OpBuilder builder(func);
-    for (auto it : gpuBufferAllocs) {
-      auto alloc = mlir::cast<mlir::memref::AllocOp>(it.first);
-      auto access = it.second;
-      auto loc = alloc.getLoc();
-      builder.setInsertionPoint(alloc);
-      auto gpuAlloc = builder.create<mlir::gpu::AllocOp>(
-          loc, alloc.getType(), /*asyncToken*/ nullptr,
-          /*asyncDependencies*/ llvm::None, alloc.dynamicSizes(),
-          alloc.symbolOperands());
-      alloc->replaceAllUsesWith(gpuAlloc);
-      alloc.erase();
-      if (access.hostRead || access.hostWrite)
-        gpuAlloc->setAttr(gpu_runtime::getAllocSharedAttrName(),
-                          builder.getUnitAttr());
-    }
-
     auto term = block.getTerminator();
     assert(term);
 
     llvm::SmallVector<mlir::Value> dims;
     llvm::SmallPtrSet<mlir::Operation *, 8> filter;
-    for (auto it : gpuBufferParams) {
-      auto param = block.getArgument(it.first);
-      auto access = it.second;
-      auto loc = param.getLoc();
-      builder.setInsertionPointToStart(&block);
-      auto memrefType = param.getType().cast<mlir::MemRefType>();
-      auto rank = static_cast<unsigned>(memrefType.getRank());
+    mlir::OpBuilder builder(func);
+    auto createGpuAlloc = [&](mlir::Value src, const AccessType &access) {
+      auto loc = src.getLoc();
       filter.clear();
       dims.clear();
+      auto memrefType = src.getType().cast<mlir::MemRefType>();
+      auto rank = static_cast<unsigned>(memrefType.getRank());
       for (auto i : llvm::seq(0u, rank)) {
         if (memrefType.isDynamicDim(i)) {
-          auto op = builder.create<mlir::memref::DimOp>(loc, param, i);
-          dims.push_back(op);
-          filter.insert(op);
+          auto dimOp = builder.create<mlir::memref::DimOp>(loc, src, i);
+          dims.push_back(dimOp);
+          filter.insert(dimOp);
         }
       }
-      auto allocType = mlir::MemRefType::get(
-          memrefType.getShape(), memrefType.getElementType(),
-          mlir::MemRefLayoutAttrInterface{}, memrefType.getMemorySpace());
+
       auto gpuAlloc = builder.create<mlir::gpu::AllocOp>(
-          loc, allocType, /*asyncToken*/ nullptr,
+          loc, memrefType, /*asyncToken*/ nullptr,
           /*asyncDependencies*/ llvm::None, dims,
           /*symbolOperands*/ llvm::None);
-      auto allocResult = gpuAlloc.getResult(0);
+      auto allocResult = gpuAlloc.memref();
+      if (access.hostWrite && access.deviceRead) {
+        auto copy = builder.create<mlir::memref::CopyOp>(loc, src, allocResult);
+        filter.insert(copy);
+      }
 
+      src.replaceAllUsesExcept(allocResult, filter);
       if (access.hostRead || access.hostWrite)
         gpuAlloc->setAttr(gpu_runtime::getAllocSharedAttrName(),
                           builder.getUnitAttr());
 
-      if (access.hostWrite && access.deviceRead) {
-        auto copy =
-            builder.create<mlir::memref::CopyOp>(loc, param, allocResult);
-        filter.insert(copy);
-      }
-
-      if (allocType != memrefType)
-        allocResult =
-            builder.create<mlir::memref::CastOp>(loc, memrefType, allocResult);
-
-      param.replaceAllUsesExcept(allocResult, filter);
       builder.setInsertionPoint(term);
       if (access.hostRead && access.deviceWrite)
-        builder.create<mlir::memref::CopyOp>(loc, allocResult, param);
+        builder.create<mlir::memref::CopyOp>(loc, allocResult, src);
 
       builder.create<mlir::gpu::DeallocOp>(loc, llvm::None, allocResult);
+    };
+
+    for (auto it : gpuBufferAllocs) {
+      auto access = it.second;
+      auto op = it.first;
+      auto loc = op->getLoc();
+      if (auto alloc = mlir::dyn_cast<mlir::memref::AllocOp>(op)) {
+        builder.setInsertionPoint(alloc);
+        auto gpuAlloc = builder.create<mlir::gpu::AllocOp>(
+            loc, alloc.getType(), /*asyncToken*/ nullptr,
+            /*asyncDependencies*/ llvm::None, alloc.dynamicSizes(),
+            alloc.symbolOperands());
+        alloc->replaceAllUsesWith(gpuAlloc);
+        alloc.erase();
+        if (access.hostRead || access.hostWrite)
+          gpuAlloc->setAttr(gpu_runtime::getAllocSharedAttrName(),
+                            builder.getUnitAttr());
+      } else if (auto getGlobal =
+                     mlir::dyn_cast<mlir::memref::GetGlobalOp>(op)) {
+        builder.setInsertionPointAfter(getGlobal);
+        createGpuAlloc(getGlobal.getResult(), access);
+      } else {
+        llvm_unreachable("Invalid alloc type");
+      }
+    }
+
+    for (auto it : gpuBufferParams) {
+      auto param = block.getArgument(it.first);
+      auto access = it.second;
+      builder.setInsertionPointToStart(&block);
+      createGpuAlloc(param, access);
     }
   }
 };
@@ -1303,6 +1305,7 @@ struct AbiAttrsPass
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::gpu::GPUDialect>();
+    registry.insert<mlir::spirv::SPIRVDialect>();
   }
 
   void runOnOperation() override {
@@ -1325,6 +1328,12 @@ struct SetSPIRVCapabilitiesPass
     : public mlir::PassWrapper<SetSPIRVCapabilitiesPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(SetSPIRVCapabilitiesPass)
+
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::gpu::GPUDialect>();
+    registry.insert<mlir::spirv::SPIRVDialect>();
+  }
 
   void runOnOperation() override {
     namespace spirv = mlir::spirv;

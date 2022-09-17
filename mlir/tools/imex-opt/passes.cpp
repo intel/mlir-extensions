@@ -52,17 +52,17 @@ static mlir::PassPipelineRegistration<>
                        });
 
 static mlir::PassPipelineRegistration<>
-    AbiAttrsPass("abi-attrs", "Create AbiAttrs Pass",
+    AbiAttrsPass("set-spirv-abi-attrs", "Create AbiAttrs Pass",
                  [](mlir::OpPassManager &pm) {
                    pm.addNestedPass<mlir::gpu::GPUModuleOp>(
                        gpu_runtime::createAbiAttrsPass());
                  });
 
-static mlir::PassPipelineRegistration<>
-    SetSpirvCapabalities("set-spirv-capablilities", "Sets Spirv capabilities",
-                         [](mlir::OpPassManager &pm) {
-                           pm.addPass(gpu_runtime::createGPUToSpirvPass());
-                         });
+static mlir::PassPipelineRegistration<> SetSpirvCapabalities(
+    "set-spirv-capablilities", "Sets spirv capablilities",
+    [](mlir::OpPassManager &pm) {
+      pm.addPass(gpu_runtime::createSetSPIRVCapabilitiesPass());
+    });
 
 static mlir::PassPipelineRegistration<>
     GpuToSpirv("gpu-to-spirv", "Converts Gpu to spirv module",
