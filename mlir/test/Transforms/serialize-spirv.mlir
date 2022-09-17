@@ -51,4 +51,3 @@ module attributes {gpu.container_module, spv.target_env = #spv.target_env<#spv.v
     }
   }
 }
-
