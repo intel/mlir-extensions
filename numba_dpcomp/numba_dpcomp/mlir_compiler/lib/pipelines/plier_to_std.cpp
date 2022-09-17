@@ -339,7 +339,7 @@ struct ConstOpLowering : public mlir::OpConversionPattern<plier::ConstOp> {
     if (!expectedType)
       return mlir::failure();
 
-    auto value = adaptor.val();
+    auto value = adaptor.getVal();
     auto typeAttr = value.dyn_cast_or_null<mlir::TypedAttr>();
     if (typeAttr && isSupportedType(typeAttr.getType())) {
       if (auto intAttr = value.dyn_cast<mlir::IntegerAttr>()) {
@@ -470,7 +470,7 @@ struct OmittedLowering : public mlir::OpConversionPattern<plier::CastOp> {
     };
 
     if (auto omittedAttr =
-            getOmittedValue(adaptor.value().getType(), convertedType)) {
+            getOmittedValue(adaptor.getValue().getType(), convertedType)) {
       auto loc = op.getLoc();
       auto dstType = omittedAttr.cast<mlir::TypedAttr>().getType();
       auto val = makeSignlessAttr(omittedAttr);
@@ -517,7 +517,7 @@ struct LowerGlobals : public mlir::OpConversionPattern<plier::GlobalOp> {
     };
 
     mlir::Value res;
-    auto name = op.name();
+    auto name = op.getName();
     auto loc = op.getLoc();
     for (auto h : handlers) {
       if (h.first == name) {
@@ -936,7 +936,7 @@ struct BinOpLowering : public mlir::OpConversionPattern<plier::BinOp> {
     using membptr_t = func_t OpDesc::*;
     auto callHandler = [&](membptr_t mem) {
       for (auto &h : handlers) {
-        if (h.type == op.op()) {
+        if (h.type == op.getOp()) {
           auto res = (h.*mem)(rewriter, loc, convertedOperands, resType);
           if (res.getType() != resType)
             res = rewriter.createOrFold<imex::util::SignCastOp>(loc, resType,
@@ -963,14 +963,14 @@ struct BinOpTupleLowering : public mlir::OpConversionPattern<plier::BinOp> {
   mlir::LogicalResult
   matchAndRewrite(plier::BinOp op, plier::BinOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    auto lhs = adaptor.lhs();
-    auto rhs = adaptor.rhs();
+    auto lhs = adaptor.getLhs();
+    auto rhs = adaptor.getRhs();
     auto lhsType = lhs.getType().dyn_cast<mlir::TupleType>();
     if (!lhsType)
       return mlir::failure();
 
     auto loc = op->getLoc();
-    if (adaptor.op() == "+") {
+    if (adaptor.getOp() == "+") {
       auto rhsType = rhs.getType().dyn_cast<mlir::TupleType>();
       if (!rhsType)
         return mlir::failure();
@@ -1085,7 +1085,7 @@ struct UnaryOpLowering : public mlir::OpConversionPattern<plier::UnaryOp> {
   matchAndRewrite(plier::UnaryOp op, plier::UnaryOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto &converter = *getTypeConverter();
-    auto arg = adaptor.value();
+    auto arg = adaptor.getValue();
     auto type = arg.getType();
     if (!isSupportedType(type))
       return mlir::failure();
@@ -1105,7 +1105,7 @@ struct UnaryOpLowering : public mlir::OpConversionPattern<plier::UnaryOp> {
         {"~", &unaryInvert},
     };
 
-    auto opname = op.op();
+    auto opname = op.getOp();
     for (auto &h : handlers) {
       if (h.first == opname) {
         auto loc = op.getLoc();
@@ -1129,7 +1129,7 @@ struct LowerCasts : public mlir::OpConversionPattern<plier::CastOp> {
   matchAndRewrite(plier::CastOp op, plier::CastOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto &converter = *getTypeConverter();
-    auto src = adaptor.value();
+    auto src = adaptor.getValue();
     auto dstType = converter.convertType(op.getType());
     if (!dstType)
       return mlir::failure();
@@ -1230,7 +1230,7 @@ protected:
     if (!res)
       return mlir::failure();
 
-    auto results = std::move(res).getValue();
+    auto results = std::move(res).value();
     assert(results.size() == op->getNumResults());
     for (auto it : llvm::enumerate(results)) {
       auto i = it.index();
@@ -1355,7 +1355,7 @@ struct BuildTupleConversionPattern
       return mlir::failure();
 
     rewriter.replaceOpWithNewOp<imex::util::BuildTupleOp>(op, retType,
-                                                          adaptor.args());
+                                                          adaptor.getArgs());
     return mlir::success();
   }
 };
@@ -1367,7 +1367,7 @@ struct GetItemTupleConversionPattern
   mlir::LogicalResult
   matchAndRewrite(plier::GetItemOp op, plier::GetItemOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const final {
-    auto container = adaptor.value();
+    auto container = adaptor.getValue();
     auto containerType = container.getType().dyn_cast<mlir::TupleType>();
     if (!containerType)
       return mlir::failure();
@@ -1378,7 +1378,7 @@ struct GetItemTupleConversionPattern
     if (!retType)
       return mlir::failure();
 
-    auto index = imex::indexCast(rewriter, op->getLoc(), adaptor.index());
+    auto index = imex::indexCast(rewriter, op->getLoc(), adaptor.getIndex());
 
     rewriter.replaceOpWithNewOp<imex::util::TupleExtractOp>(op, retType,
                                                             container, index);
@@ -1430,18 +1430,18 @@ void PlierToStdPass::runOnOperation() {
   };
 
   target.addDynamicallyLegalOp<plier::BinOp>([&](plier::BinOp op) {
-    auto lhsType = op.lhs().getType();
-    auto rhsType = op.rhs().getType();
-    if (op.op() == "+" && isTuple(lhsType) && isTuple(rhsType))
+    auto lhsType = op.getLhs().getType();
+    auto rhsType = op.getRhs().getType();
+    if (op.getOp() == "+" && isTuple(lhsType) && isTuple(rhsType))
       return false;
 
     return !isNum(lhsType) || !isNum(rhsType) || !isNum(op.getType());
   });
   target.addDynamicallyLegalOp<plier::UnaryOp>([&](plier::UnaryOp op) {
-    return !isNum(op.value().getType()) && !isNum(op.getType());
+    return !isNum(op.getValue().getType()) && !isNum(op.getType());
   });
   target.addDynamicallyLegalOp<plier::CastOp>([&](plier::CastOp op) {
-    auto inputType = op.value().getType();
+    auto inputType = op.getValue().getType();
     if (isOmittedType(inputType))
       return false;
 
@@ -1475,7 +1475,7 @@ void PlierToStdPass::runOnOperation() {
 
   target.addDynamicallyLegalOp<plier::GetItemOp>(
       [&](plier::GetItemOp op) -> llvm::Optional<bool> {
-        auto type = typeConverter.convertType(op.value().getType());
+        auto type = typeConverter.convertType(op.getValue().getType());
         if (type.isa_and_nonnull<mlir::TupleType>())
           return false;
 

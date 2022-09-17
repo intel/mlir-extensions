@@ -76,7 +76,7 @@ def ParallelOp : ImexUtil_Op<"parallel", [
              "nullptr">)>];
 
     let extraClassDeclaration = [{
-        unsigned getNumLoops() { return steps().size(); }
+        unsigned getNumLoops() { return getSteps().size(); }
     }];
 }
 
@@ -104,7 +104,7 @@ def RetainOp : ImexUtil_Op<"retain", [ViewLikeOpInterface]> {
   let builders = [OpBuilder<(ins "::mlir::Value" : $value)>];
 
   let extraClassDeclaration = [{
-      ::mlir::Value getViewSource() { return source(); }
+      ::mlir::Value getViewSource() { return getSource(); }
   }];
 }
 
@@ -118,7 +118,7 @@ def ChangeLayoutOp : ImexUtil_Op<"change_layout", [ViewLikeOpInterface, NoSideEf
   let hasCanonicalizer = 1;
 
   let extraClassDeclaration = [{
-      ::mlir::Value getViewSource() { return source(); }
+      ::mlir::Value getViewSource() { return getSource(); }
   }];
 }
 
@@ -152,7 +152,7 @@ def PseudoCopyOp : ImexUtil_Op<"pseudo_copy", [ViewLikeOpInterface]> {
   let builders = [OpBuilder<(ins "::mlir::Value" : $value)>];
 
   let extraClassDeclaration = [{
-      ::mlir::Value getViewSource() { return source(); }
+      ::mlir::Value getViewSource() { return getSource(); }
   }];
 }
 
@@ -164,7 +164,7 @@ def ForceCopyOp : ImexUtil_Op<"force_copy", [ViewLikeOpInterface]> {
   let builders = [OpBuilder<(ins "::mlir::Value" : $value)>];
 
   let extraClassDeclaration = [{
-      ::mlir::Value getViewSource() { return source(); }
+      ::mlir::Value getViewSource() { return getSource(); }
   }];
 }
 

@@ -25,7 +25,7 @@ imex::CastOpLowering::CastOpLowering(mlir::TypeConverter &typeConverter,
 mlir::LogicalResult
 imex::CastOpLowering::matchAndRewrite(plier::CastOp op,
                                       mlir::PatternRewriter &rewriter) const {
-  auto src = op.value();
+  auto src = op.getValue();
   auto srcType = src.getType();
   auto dstType = converter.convertType(op.getType());
   if (dstType) {

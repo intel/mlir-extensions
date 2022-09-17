@@ -184,7 +184,7 @@ void ArgOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
 mlir::OpFoldResult ArgOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
   auto func = getOperation()->getParentOfType<mlir::func::FuncOp>();
   if (func) {
-    auto ind = index();
+    auto ind = getIndex();
     if (ind < func.getNumArguments() &&
         func.getArgument(ind).getType() == getType()) {
       return func.getArgument(ind);
@@ -251,7 +251,7 @@ static mlir::Value propagateCasts(mlir::Value val, mlir::Type thisType) {
 }
 
 mlir::OpFoldResult CastOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
-  auto arg = value();
+  auto arg = getValue();
   auto opType = arg.getType();
   auto retType = getType();
   if (opType == retType && opType != PyType::getUndefined(getContext()))
@@ -384,13 +384,13 @@ struct GetattrGlobalRewrite : public mlir::OpRewritePattern<GetattrOp> {
   mlir::LogicalResult
   matchAndRewrite(GetattrOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto prev_op = mlir::dyn_cast_or_null<plier::GlobalOp>(
+    auto prevOp = mlir::dyn_cast_or_null<plier::GlobalOp>(
         op.getOperand().getDefiningOp());
-    if (prev_op) {
-      auto new_name = llvm::Twine(prev_op.name() + "." + op.name()).str();
-      auto new_op =
-          rewriter.create<plier::GlobalOp>(op.getLoc(), op.getType(), new_name);
-      rewriter.replaceOp(op, new_op.getResult());
+    if (prevOp) {
+      auto newName = llvm::Twine(prevOp.getName() + "." + op.getName()).str();
+      auto newOp =
+          rewriter.create<plier::GlobalOp>(op.getLoc(), op.getType(), newName);
+      rewriter.replaceOp(op, newOp.getResult());
       return mlir::success();
     }
     return mlir::failure();
@@ -418,10 +418,10 @@ struct SliceGetitemPropagate
   mlir::LogicalResult
   matchAndRewrite(plier::SliceGetItemOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    if (!op.array().getType().isa<mlir::ShapedType>())
+    if (!op.getArray().getType().isa<mlir::ShapedType>())
       return mlir::failure();
 
-    auto index = mlir::getConstantIntValue(op.index());
+    auto index = mlir::getConstantIntValue(op.getIndex());
     if (!index)
       return mlir::failure();
 
@@ -429,7 +429,7 @@ struct SliceGetitemPropagate
     if (i < 0 || i >= 3)
       return mlir::failure();
 
-    auto buildSlice = op.slice().getDefiningOp<plier::BuildSliceOp>();
+    auto buildSlice = op.getSlice().getDefiningOp<plier::BuildSliceOp>();
     if (!buildSlice)
       return mlir::failure();
 
@@ -445,11 +445,11 @@ struct SliceGetitemPropagate
         rewriter.replaceOp(op, getInd(0));
       } else if (i == 1) {
         auto size = [&]() -> mlir::Value {
-          if (op.array().getType().isa<mlir::TensorType>())
-            return rewriter.create<mlir::tensor::DimOp>(loc, op.array(),
-                                                        op.dim());
-          return rewriter.create<mlir::memref::DimOp>(loc, op.array(),
-                                                      op.dim());
+          if (op.getArray().getType().isa<mlir::TensorType>())
+            return rewriter.create<mlir::tensor::DimOp>(loc, op.getArray(),
+                                                        op.getDim());
+          return rewriter.create<mlir::memref::DimOp>(loc, op.getArray(),
+                                                      op.getDim());
         }();
         rewriter.replaceOp(op, size);
       } else { // i == 2

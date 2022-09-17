@@ -92,9 +92,9 @@ struct BuildTupleConversionPattern
                   imex::util::BuildTupleOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const final {
     auto retType =
-        mlir::TupleType::get(op.getContext(), adaptor.args().getTypes());
+        mlir::TupleType::get(op.getContext(), adaptor.getArgs().getTypes());
     rewriter.replaceOpWithNewOp<imex::util::BuildTupleOp>(op, retType,
-                                                          adaptor.args());
+                                                          adaptor.getArgs());
     return mlir::success();
   }
 };
@@ -120,7 +120,7 @@ struct GetItemTupleConversionPattern
   matchAndRewrite(imex::util::TupleExtractOp op,
                   imex::util::TupleExtractOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const final {
-    auto container = adaptor.source();
+    auto container = adaptor.getSource();
     auto containerType = container.getType().dyn_cast<mlir::TupleType>();
     if (!containerType || containerType.size() == 0)
       return mlir::failure();
@@ -131,7 +131,7 @@ struct GetItemTupleConversionPattern
     if (!retType)
       return mlir::failure();
 
-    auto index = adaptor.index();
+    auto index = adaptor.getIndex();
     if (isUniTuple(containerType)) {
       if (retType != containerType.getType(0))
         return mlir::failure();
@@ -191,14 +191,14 @@ void imex::populateTupleTypeConversionRewritesAndTarget(
 
   target.addDynamicallyLegalOp<imex::util::TupleExtractOp>(
       [&typeConverter](imex::util::TupleExtractOp op) -> llvm::Optional<bool> {
-        auto inputType = op.source().getType();
+        auto inputType = op.getSource().getType();
         auto tupleType = typeConverter.convertType(inputType)
                              .dyn_cast_or_null<mlir::TupleType>();
         if (!tupleType)
           return llvm::None;
 
         auto srcType = [&]() -> mlir::Type {
-          if (auto index = mlir::getConstantIntValue(op.index())) {
+          if (auto index = mlir::getConstantIntValue(op.getIndex())) {
             auto i = *index;
             auto size = static_cast<unsigned>(tupleType.size());
             if (i >= 0 && i < size)

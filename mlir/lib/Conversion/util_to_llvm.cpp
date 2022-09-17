@@ -93,14 +93,14 @@ struct LowerExtractMemrefMetadataOp
   matchAndRewrite(imex::util::ExtractMemrefMetadataOp op,
                   imex::util::ExtractMemrefMetadataOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    auto arg = adaptor.source();
+    auto arg = adaptor.getSource();
     if (!arg.getType().isa<mlir::LLVM::LLVMStructType>())
       return mlir::failure();
 
     auto loc = op.getLoc();
     mlir::MemRefDescriptor src(arg);
     auto val = [&]() -> mlir::Value {
-      auto index = op.dimIndex().getSExtValue();
+      auto index = op.getDimIndex().getSExtValue();
       if (index == -1)
         return src.offset(rewriter, loc);
 
@@ -127,11 +127,12 @@ struct LowerBuildTuple
 
     auto loc = op.getLoc();
     mlir::Value init = rewriter.create<mlir::LLVM::UndefOp>(loc, type);
-    for (auto it : llvm::enumerate(adaptor.args())) {
+    for (auto it : llvm::enumerate(adaptor.getArgs())) {
       auto arg = it.value();
       auto newType = arg.getType();
       assert(newType);
-      auto index = rewriter.getI64ArrayAttr(static_cast<int64_t>(it.index()));
+      auto index =
+          rewriter.getDenseI64ArrayAttr(static_cast<int64_t>(it.index()));
       init = rewriter.create<mlir::LLVM::InsertValueOp>(loc, init, arg, index);
     }
 
@@ -198,12 +199,12 @@ struct LowerTakeContextOp
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto converter = getTypeConverter();
     assert(converter);
-    auto ctx = op.context();
+    auto ctx = op.getContext();
     auto ctxType = converter->convertType(ctx.getType());
     if (!ctxType)
       return mlir::failure();
 
-    mlir::ValueRange results = op.results();
+    mlir::ValueRange results = op.getResults();
     auto resultsCount = static_cast<unsigned>(results.size());
     llvm::SmallVector<mlir::Type> resultTypes(resultsCount);
     for (auto i : llvm::seq(0u, resultsCount)) {
@@ -247,7 +248,7 @@ struct LowerTakeContextOp
           unknownLoc, name, type, mlir::LLVM::Linkage::External);
     };
 
-    if (auto initFuncSym = adaptor.initFuncAttr()) {
+    if (auto initFuncSym = adaptor.getInitFuncAttr()) {
       auto funcName = initFuncSym.getLeafReference().getValue();
       auto wrapperName = (funcName + "_wrapper").str();
 
@@ -275,7 +276,7 @@ struct LowerTakeContextOp
         mlir::Value ctxStruct =
             rewriter.create<mlir::LLVM::UndefOp>(unknownLoc, ctxStructType);
         for (auto i : llvm::seq(0u, resultsCount)) {
-          auto pos = rewriter.getI64ArrayAttr(i);
+          auto pos = rewriter.getDenseI64ArrayAttr(i);
           auto srcType = initFuncType.getResult(i);
           auto convertedType = converter->convertType(srcType);
           assert(convertedType && "Invalid init func result type");
@@ -304,7 +305,7 @@ struct LowerTakeContextOp
     }
 
     mlir::Value deinitFuncPtr;
-    if (auto deinitFuncSym = adaptor.releaseFuncAttr()) {
+    if (auto deinitFuncSym = adaptor.getReleaseFuncAttr()) {
       auto funcName = deinitFuncSym.getLeafReference().getValue();
       auto wrapperName = (funcName + "_wrapper").str();
 
@@ -329,7 +330,7 @@ struct LowerTakeContextOp
 
         llvm::SmallVector<mlir::Value> args(resultsCount);
         for (auto i : llvm::seq(0u, resultsCount)) {
-          auto pos = rewriter.getI64ArrayAttr(i);
+          auto pos = rewriter.getDenseI64ArrayAttr(i);
           mlir::Value val = rewriter.create<mlir::LLVM::ExtractValueOp>(
               unknownLoc, resultTypes[i], ctxStruct, pos);
           auto resType = deinitFuncType.getInput(i);
@@ -419,7 +420,7 @@ struct LowerTakeContextOp
     };
     auto ctxPtr =
         rewriter.create<mlir::LLVM::CallOp>(loc, takeCtxFunc, takeCtxArgs)
-            .getResult(0);
+            .getResult();
 
     llvm::SmallVector<mlir::Value> takeCtxResults;
     takeCtxResults.emplace_back(ctxPtr);
@@ -430,7 +431,7 @@ struct LowerTakeContextOp
         rewriter.create<mlir::LLVM::LoadOp>(loc, ctxStructType, ctxStructPtr);
 
     for (auto i : llvm::seq(0u, resultsCount)) {
-      auto pos = rewriter.getI64ArrayAttr(i);
+      auto pos = rewriter.getDenseI64ArrayAttr(i);
       auto res = rewriter.create<mlir::LLVM::ExtractValueOp>(
           loc, resultTypes[i], ctxStruct, pos);
       takeCtxResults.emplace_back(res);
@@ -473,7 +474,8 @@ struct LowerReleaseContextOp
       return lookupFunc(name, funcType);
     }();
 
-    rewriter.create<mlir::LLVM::CallOp>(loc, releaseCtxFunc, adaptor.context());
+    rewriter.create<mlir::LLVM::CallOp>(loc, releaseCtxFunc,
+                                        adaptor.getContext());
     rewriter.eraseOp(op);
     return mlir::success();
   }

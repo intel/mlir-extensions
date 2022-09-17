@@ -38,8 +38,8 @@ struct ConvertTakeContext
       newTypes[i] = (newType ? newType : oldType);
     }
 
-    auto initFunc = adaptor.initFunc().value_or(mlir::SymbolRefAttr());
-    auto releaseFunc = adaptor.releaseFunc().value_or(mlir::SymbolRefAttr());
+    auto initFunc = adaptor.getInitFunc().value_or(mlir::SymbolRefAttr());
+    auto releaseFunc = adaptor.getReleaseFunc().value_or(mlir::SymbolRefAttr());
     rewriter.replaceOpWithNewOp<imex::util::TakeContextOp>(
         op, newTypes, initFunc, releaseFunc);
     return mlir::success();

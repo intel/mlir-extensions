@@ -101,7 +101,7 @@ static void moveOpsIntoParallel(mlir::scf::ParallelOp outer, int depth = 0) {
 }
 
 static bool isGpuRegion(imex::util::EnvironmentRegionOp op) {
-  return op.environment().isa<gpu_runtime::GPURegionDescAttr>();
+  return op.getEnvironment().isa<gpu_runtime::GPURegionDescAttr>();
 }
 
 struct PrepareForGPUPass
@@ -997,7 +997,7 @@ protected:
     if (!res)
       return mlir::failure();
 
-    auto results = std::move(res).getValue();
+    auto results = std::move(res).value();
     assert(results.size() == op->getNumResults());
     for (auto it : llvm::enumerate(results)) {
       auto i = it.index();
@@ -1163,9 +1163,9 @@ struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::func::CallOp> {
           return {};
 
         if (auto cast = mlir::dyn_cast<imex::util::SignCastOp>(op))
-          return cast.value();
+          return cast.getValue();
         if (auto cast = mlir::dyn_cast<plier::CastOp>(op))
-          return cast.value();
+          return cast.getValue();
         if (auto cast = mlir::dyn_cast<mlir::UnrealizedConversionCastOp>(op))
           return cast.getInputs()[0];
 

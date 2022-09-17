@@ -31,8 +31,6 @@
 #include <llvm/ADT/SmallBitVector.h>
 #include <llvm/ADT/TypeSwitch.h>
 
-#include "mlir-extensions/Transforms/const_utils.hpp"
-
 namespace MemoryEffects = ::mlir::MemoryEffects;
 
 namespace {

@@ -200,7 +200,7 @@ public:
     if (!resType)
       return mlir::failure();
     rewriter.replaceOpWithNewOp<imex::util::RetainOp>(op, resType,
-                                                      adaptor.source());
+                                                      adaptor.getSource());
     return mlir::success();
   }
 };

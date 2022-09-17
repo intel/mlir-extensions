@@ -72,7 +72,7 @@ static mlir::Value getLastIterValue(mlir::PatternRewriter &builder,
 
 static mlir::Value getCastArg(mlir::Value val) {
   if (auto cast = val.getDefiningOp<plier::CastOp>())
-    return cast.value();
+    return cast.getValue();
 
   if (auto cast = val.getDefiningOp<mlir::UnrealizedConversionCastOp>()) {
     auto inputs = cast.getInputs();
