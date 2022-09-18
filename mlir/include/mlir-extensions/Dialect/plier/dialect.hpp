@@ -70,7 +70,7 @@ static const constexpr OperatorNamePair OperatorNames[] = {
 };
 } // namespace detail
 
-enum { OperatorsCount = llvm::array_lengthof(detail::OperatorNames) };
+enum { OperatorsCount = std::size(detail::OperatorNames) };
 
 mlir::ArrayRef<detail::OperatorNamePair> getOperators();
 

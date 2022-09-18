@@ -14,14 +14,14 @@
 
 #include "pipelines/plier_to_linalg.hpp"
 
-#include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
-#include <mlir/Analysis/BufferViewFlowAnalysis.h>
+#include <mlir/Conversion/AffineToStandard/AffineToStandard.h>
 #include <mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h>
 #include <mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h>
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/Arithmetic/Transforms/Passes.h>
 #include <mlir/Dialect/Bufferization/IR/Bufferization.h>
+#include <mlir/Dialect/Bufferization/Transforms/BufferViewFlowAnalysis.h>
 #include <mlir/Dialect/Bufferization/Transforms/Bufferize.h>
 #include <mlir/Dialect/Bufferization/Transforms/Passes.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
@@ -49,15 +49,12 @@
 #include "pipelines/plier_to_std.hpp"
 #include "pipelines/pre_low_simplifications.hpp"
 
-#include "mlir-extensions/Conversion/SCFToAffine/SCFToAffine.h"
 #include "mlir-extensions/Transforms/call_lowering.hpp"
 #include "mlir-extensions/Transforms/canonicalize_reductions.hpp"
 #include "mlir-extensions/Transforms/cast_utils.hpp"
 #include "mlir-extensions/Transforms/common_opts.hpp"
-#include "mlir-extensions/Transforms/const_utils.hpp"
 #include "mlir-extensions/Transforms/cse.hpp"
 #include "mlir-extensions/Transforms/inline_utils.hpp"
-#include "mlir-extensions/Transforms/loop_rewrites.hpp"
 #include "mlir-extensions/Transforms/loop_utils.hpp"
 #include "mlir-extensions/Transforms/memory_rewrites.hpp"
 #include "mlir-extensions/Transforms/pipeline_utils.hpp"
@@ -292,7 +289,7 @@ static PyLinalgResolver::Values
 castRetTypes(mlir::Location loc, mlir::PatternRewriter &rewriter,
              mlir::Operation *op,
              llvm::Optional<PyLinalgResolver::Values> vals) {
-  auto results = std::move(vals).getValue();
+  auto results = std::move(vals).value();
   assert(results.size() == op->getNumResults());
   for (auto it : llvm::enumerate(results)) {
     auto i = it.index();
@@ -342,13 +339,13 @@ struct NumpyAttrsLowering : public mlir::OpRewritePattern<plier::GetattrOp> {
   mlir::LogicalResult
   matchAndRewrite(plier::GetattrOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto arg = skipCasts(op.value());
+    auto arg = skipCasts(op.getValue());
 
     if (!arg.getType().isa<mlir::ShapedType>())
       return mlir::failure();
 
     auto loc = op.getLoc();
-    auto res = resolver.rewriteAttr(llvm::Twine("array.") + op.name(), loc,
+    auto res = resolver.rewriteAttr(llvm::Twine("array.") + op.getName(), loc,
                                     rewriter, arg);
     if (!res)
       return mlir::failure();
@@ -372,14 +369,14 @@ struct NumpyBinOpLowering : public mlir::OpRewritePattern<plier::BinOp> {
   mlir::LogicalResult
   matchAndRewrite(plier::BinOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto lhs = skipCasts(op.lhs());
-    auto rhs = skipCasts(op.rhs());
+    auto lhs = skipCasts(op.getLhs());
+    auto rhs = skipCasts(op.getRhs());
 
     if (!lhs.getType().isa<mlir::ShapedType>() &&
         !rhs.getType().isa<mlir::ShapedType>())
       return mlir::failure();
 
-    auto name = op.op();
+    auto name = op.getOp();
 
     for (auto it : plier::getOperators()) {
       if (it.op == name) {
@@ -481,7 +478,7 @@ struct UnrankedToElementCasts
   mlir::LogicalResult
   matchAndRewrite(plier::CastOp op, plier::CastOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    auto value = adaptor.value();
+    auto value = adaptor.getValue();
     auto srcType = value.getType();
     auto converter = *getTypeConverter();
     auto dstType = converter.convertType(op.getType());
@@ -558,12 +555,12 @@ struct GetItemUniTupleConversionPattern
   matchAndRewrite(imex::util::TupleExtractOp op,
                   imex::util::TupleExtractOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const final {
-    auto container = adaptor.source();
+    auto container = adaptor.getSource();
     auto tupleType = container.getType().dyn_cast<mlir::TupleType>();
     if (!tupleType || !isUniTuple(tupleType))
       return mlir::failure();
 
-    auto index = adaptor.index();
+    auto index = adaptor.getIndex();
     if (mlir::getConstantIntValue(index))
       return mlir::failure();
 
@@ -830,8 +827,8 @@ struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
   mlir::LogicalResult
   matchAndRewrite(plier::GetItemOp op, plier::GetItemOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    auto value = adaptor.value();
-    auto index = adaptor.index();
+    auto value = adaptor.getValue();
+    auto index = adaptor.getIndex();
     auto type = value.getType();
     bool isMemref = type.isa<mlir::MemRefType>();
     bool isTensor = type.isa<mlir::TensorType>();
@@ -939,8 +936,8 @@ struct GetitemOpArrLowering
   mlir::LogicalResult
   matchAndRewrite(plier::GetItemOp op, plier::GetItemOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    auto value = adaptor.value();
-    auto index = adaptor.index();
+    auto value = adaptor.getValue();
+    auto index = adaptor.getIndex();
     auto type = value.getType().dyn_cast<mlir::ShapedType>();
     if (!type || !type.hasRank())
       return mlir::failure();
@@ -998,19 +995,19 @@ struct SetitemOpLowering : public mlir::OpConversionPattern<plier::SetItemOp> {
   mlir::LogicalResult
   matchAndRewrite(plier::SetItemOp op, plier::SetItemOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    auto target = adaptor.target();
+    auto target = adaptor.getTarget();
     auto targetType = target.getType().dyn_cast<mlir::MemRefType>();
     if (!targetType)
       return mlir::failure();
 
-    auto index = adaptor.index();
+    auto index = adaptor.getIndex();
     if (!isValidGetitemIndex(index.getType()))
       return mlir::failure();
 
     auto elemType = targetType.getElementType();
     auto signlessElemType = imex::makeSignlessType(elemType);
 
-    auto value = adaptor.value();
+    auto value = adaptor.getValue();
     auto loc = op.getLoc();
     llvm::SmallVector<mlir::OpFoldResult> offsets;
     llvm::SmallVector<mlir::OpFoldResult> sizes;
@@ -1137,7 +1134,7 @@ struct ReshapeChangeLayout
     if (!cl)
       return mlir::failure();
 
-    auto src = cl.source();
+    auto src = cl.getSource();
     auto dstType = op.source().getType().cast<mlir::MemRefType>();
 
     auto rank = static_cast<unsigned>(dstType.getRank());
@@ -1603,7 +1600,7 @@ struct LowerTupleCasts : public mlir::OpConversionPattern<plier::CastOp> {
   mlir::LogicalResult
   matchAndRewrite(plier::CastOp op, plier::CastOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    auto src = adaptor.value();
+    auto src = adaptor.getValue();
     auto srcType = src.getType().dyn_cast<mlir::TupleType>();
     if (!srcType)
       return mlir::failure();
@@ -1707,7 +1704,7 @@ struct LowerTensorCasts : public mlir::OpConversionPattern<plier::CastOp> {
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto converter = *getTypeConverter();
 
-    auto value = adaptor.value();
+    auto value = adaptor.getValue();
     auto srcType = value.getType().dyn_cast<mlir::ShapedType>();
     if (!srcType || !srcType.hasRank())
       return mlir::failure();
@@ -1860,7 +1857,7 @@ struct LowerEnforceShape
   matchAndRewrite(imex::util::EnforceShapeOp op,
                   mlir::PatternRewriter &rewriter) const override {
     auto type = op.getType();
-    auto src = op.value();
+    auto src = op.getValue();
     rewriter.replaceOpWithNewOp<mlir::tensor::CastOp>(op, type, src);
     return mlir::success();
   }
@@ -1873,7 +1870,7 @@ struct InsertSliceToPad
   mlir::LogicalResult
   matchAndRewrite(mlir::tensor::InsertSliceOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto gen = op.dest().getDefiningOp<mlir::tensor::GenerateOp>();
+    auto gen = op.getDest().getDefiningOp<mlir::tensor::GenerateOp>();
     if (!gen)
       return mlir::failure();
 
@@ -1883,7 +1880,7 @@ struct InsertSliceToPad
         return mlir::failure();
     }
 
-    auto src = op.source();
+    auto src = op.getSource();
     auto srcType = src.getType().cast<mlir::RankedTensorType>();
     auto dstType = gen.getType().cast<mlir::RankedTensorType>();
 
@@ -1914,8 +1911,8 @@ struct InsertSliceToPad
 
     auto pad =
         rewriter.create<mlir::tensor::PadOp>(loc, dstType, src, low, high);
-    rewriter.cloneRegionBefore(gen.getRegion(), pad.region(),
-                               pad.region().end());
+    rewriter.cloneRegionBefore(gen.getRegion(), pad.getRegion(),
+                               pad.getRegion().end());
     rewriter.replaceOp(op, pad.getResult());
     return mlir::success();
   }
@@ -1928,7 +1925,7 @@ struct GenerateToFill
   mlir::LogicalResult
   matchAndRewrite(mlir::tensor::GenerateOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto &body = op.body();
+    auto &body = op.getBody();
     if (!llvm::hasSingleElement(body))
       return mlir::failure();
 
@@ -1941,9 +1938,11 @@ struct GenerateToFill
 
     auto loc = op->getLoc();
     mlir::Value init = rewriter.create<mlir::linalg::InitTensorOp>(
-        loc, op.dynamicExtents(), resType.getShape(), resType.getElementType());
+        loc, op.getDynamicExtents(), resType.getShape(),
+        resType.getElementType());
 
-    rewriter.replaceOpWithNewOp<mlir::linalg::FillOp>(op, term.value(), init);
+    rewriter.replaceOpWithNewOp<mlir::linalg::FillOp>(op, term.getValue(),
+                                                      init);
     return mlir::success();
   }
 };
@@ -2015,11 +2014,11 @@ struct SliceOfGeneric : public mlir::OpRewritePattern<mlir::linalg::GenericOp> {
       strides = sliceOp.getMixedStrides();
       droppedDims = sliceOp.getDroppedDims();
     } else if (auto extractOp = mlir::dyn_cast<mlir::tensor::ExtractOp>(user)) {
-      if (extractOp.indices().empty())
+      if (extractOp.getIndices().empty())
         return mlir::failure();
 
       extractElem = true;
-      assignArr(offsets, extractOp.indices());
+      assignArr(offsets, extractOp.getIndices());
       sizes.resize(offsets.size(), one);
       strides.resize(offsets.size(), one);
       droppedDims.resize(offsets.size(), true);
@@ -2215,8 +2214,9 @@ void PlierToLinalgPass::runOnOperation() {
 
   target.addDynamicallyLegalOp<imex::util::TupleExtractOp>(
       [](imex::util::TupleExtractOp op) -> llvm::Optional<bool> {
-        auto containerType = op.source().getType();
-        if (isUniTuple(containerType) && !mlir::getConstantIntValue(op.index()))
+        auto containerType = op.getSource().getType();
+        if (isUniTuple(containerType) &&
+            !mlir::getConstantIntValue(op.getIndex()))
           return false;
 
         return llvm::None;
@@ -2224,7 +2224,7 @@ void PlierToLinalgPass::runOnOperation() {
 
   target.addDynamicallyLegalOp<plier::GetItemOp>(
       [&typeConverter](plier::GetItemOp op) -> llvm::Optional<bool> {
-        auto containerType = op.value().getType();
+        auto containerType = op.getValue().getType();
         if (isShaped(typeConverter, containerType))
           return false;
 
@@ -2233,11 +2233,11 @@ void PlierToLinalgPass::runOnOperation() {
 
   target.addDynamicallyLegalOp<plier::SetItemOp>(
       [&typeConverter](plier::SetItemOp op) -> bool {
-        return !isShaped(typeConverter, op.target().getType());
+        return !isShaped(typeConverter, op.getTarget().getType());
       });
 
   target.addDynamicallyLegalOp<plier::CastOp>([&](plier::CastOp op) -> bool {
-    auto inputType = op.value().getType();
+    auto inputType = op.getValue().getType();
     auto srcType = typeConverter.convertType(inputType);
     auto dstType = typeConverter.convertType(op.getType());
     if (!srcType || !dstType)
@@ -2543,8 +2543,7 @@ struct LinalgOptPass
   void runOnOperation() override;
 };
 
-bool defaultControlFusionFn(const mlir::OpResult &producer,
-                            mlir::OpOperand &consumer) {
+static bool defaultControlFusionFn(mlir::OpOperand * /*fusedOperand*/) {
   return true;
 }
 
@@ -2564,10 +2563,8 @@ void LinalgOptPass::runOnOperation() {
       // clang-format on
       >(&context);
 
-  std::function<bool(const mlir::OpResult &producer, mlir::OpOperand &consumer)>
-      CtrnFn = defaultControlFusionFn;
-
-  mlir::linalg::populateElementwiseOpsFusionPatterns(patterns, CtrnFn);
+  mlir::linalg::populateElementwiseOpsFusionPatterns(patterns,
+                                                     defaultControlFusionFn);
 
   (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
 }
@@ -2605,8 +2602,8 @@ struct BufferizeReshape
       return mlir::MemRefType::get(shapedType.getShape(),
                                    shapedType.getElementType());
     };
-    auto source = adaptor.source();
-    auto shape = adaptor.shape();
+    auto source = adaptor.getSource();
+    auto shape = adaptor.getShape();
     auto resType = getType(op.getType());
     rewriter.replaceOpWithNewOp<mlir::memref::ReshapeOp>(op, resType, source,
                                                          shape);
@@ -2629,16 +2626,16 @@ struct BufferizeExtractSlice
     if (!dstType)
       return mlir::failure();
 
-    auto src = adaptor.source();
+    auto src = adaptor.getSource();
     auto srcType = src.getType().cast<mlir::MemRefType>();
 
     auto dstRank = dstType.getRank();
-    auto offsets =
-        mlir::getMixedOffsets(op, adaptor.static_offsets(), adaptor.offsets());
+    auto offsets = mlir::getMixedStridesOrOffsets(adaptor.getStaticOffsets(),
+                                                  adaptor.getOffsets());
     auto sizes =
-        mlir::getMixedSizes(op, adaptor.static_sizes(), adaptor.sizes());
-    auto strides =
-        mlir::getMixedStrides(op, adaptor.static_strides(), adaptor.strides());
+        mlir::getMixedSizes(adaptor.getStaticSizes(), adaptor.getSizes());
+    auto strides = mlir::getMixedStridesOrOffsets(adaptor.getStaticStrides(),
+                                                  adaptor.getStrides());
 
     auto viewType = [&]() {
       if (srcType.getRank() == dstRank)
@@ -2678,7 +2675,7 @@ struct BufferizeForceCopy
     if (!dstType)
       return mlir::failure();
 
-    auto src = adaptor.source();
+    auto src = adaptor.getSource();
     auto srcType = src.getType().cast<mlir::MemRefType>();
     auto rank = static_cast<unsigned>(srcType.getRank());
 
@@ -2710,7 +2707,7 @@ struct BufferizePseudoCopy
     if (!dstType)
       return mlir::failure();
 
-    auto arg = adaptor.source();
+    auto arg = adaptor.getSource();
     rewriter.replaceOpWithNewOp<imex::util::PseudoCopyOp>(op, dstType, arg);
     return mlir::success();
   }
@@ -2820,7 +2817,7 @@ struct RemovePseudoCopy
   mlir::LogicalResult
   matchAndRewrite(imex::util::PseudoCopyOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto arg = op.source();
+    auto arg = op.getSource();
     if (arg.getType() != op.getType())
       return mlir::failure();
 

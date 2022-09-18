@@ -17,7 +17,6 @@
 #include "mlir-extensions/Dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
 #include "mlir-extensions/Dialect/imex_util/dialect.hpp"
 
-#include <mlir/Analysis/BufferViewFlowAnalysis.h>
 #include <mlir/Conversion/ArithmeticToSPIRV/ArithmeticToSPIRV.h>
 #include <mlir/Conversion/ControlFlowToSPIRV/ControlFlowToSPIRV.h>
 #include <mlir/Conversion/FuncToSPIRV/FuncToSPIRV.h>
@@ -25,6 +24,7 @@
 #include <mlir/Conversion/MathToSPIRV/MathToSPIRV.h>
 #include <mlir/Conversion/SCFToSPIRV/SCFToSPIRV.h>
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
+#include <mlir/Dialect/Bufferization/Transforms/BufferViewFlowAnalysis.h>
 #include <mlir/Dialect/ControlFlow/IR/ControlFlowOps.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/GPU/Transforms/ParallelLoopMapper.h>
@@ -56,7 +56,7 @@ struct ParallelLoopGPUMappingPass
   void runOnOperation() override {
     auto func = getOperation();
     func->walk([&](imex::util::EnvironmentRegionOp envOp) {
-      if (!envOp.environment().isa<gpu_runtime::GPURegionDescAttr>())
+      if (!envOp.getEnvironment().isa<gpu_runtime::GPURegionDescAttr>())
         return;
 
       auto &region = envOp.getRegion();
@@ -67,7 +67,7 @@ struct ParallelLoopGPUMappingPass
             mlir::gpu::Processor::BlockZ,  mlir::gpu::Processor::ThreadX,
             mlir::gpu::Processor::ThreadY, mlir::gpu::Processor::ThreadZ,
         };
-        if (val >= llvm::array_lengthof(mapping))
+        if (val >= std::size(mapping))
           return mlir::gpu::Processor::Sequential;
 
         return mapping[val];
@@ -829,7 +829,7 @@ static mlir::Value lowerIntAtomic(mlir::OpBuilder &builder, mlir::Location loc,
 static mlir::Value lowerFloatAddAtomic(mlir::OpBuilder &builder,
                                        mlir::Location loc, mlir::Value ptr,
                                        mlir::Value val) {
-  return builder.create<mlir::spirv::AtomicFAddEXTOp>(
+  return builder.create<mlir::spirv::EXTAtomicFAddOp>(
       loc, val.getType(), ptr, mlir::spirv::Scope::Device,
       mlir::spirv::MemorySemantics::None, val);
 }
@@ -838,7 +838,7 @@ static mlir::Value lowerFloatSubAtomic(mlir::OpBuilder &builder,
                                        mlir::Location loc, mlir::Value ptr,
                                        mlir::Value val) {
   auto neg = builder.create<mlir::spirv::FNegateOp>(loc, val).getResult();
-  return builder.create<mlir::spirv::AtomicFAddEXTOp>(
+  return builder.create<mlir::spirv::EXTAtomicFAddOp>(
       loc, neg.getType(), ptr, mlir::spirv::Scope::Device,
       mlir::spirv::MemorySemantics::None, neg);
 }
@@ -1090,7 +1090,7 @@ public:
   mlir::LogicalResult
   matchAndRewrite(mlir::cf::AssertOp op, mlir::cf::AssertOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<mlir::spirv::AssumeTrueKHROp>(op,
+    rewriter.replaceOpWithNewOp<mlir::spirv::KHRAssumeTrueOp>(op,
                                                               adaptor.getArg());
     return mlir::success();
   }
@@ -1143,7 +1143,7 @@ struct GPUToSpirvPass
     auto targetAttr = mlir::spirv::lookupTargetEnvOrDefault(module);
     auto target = mlir::SPIRVConversionTarget::get(targetAttr);
 
-    mlir::SPIRVTypeConverter::Options options;
+    mlir::SPIRVConversionOptions options;
     options.use64bitIndex = true;
 
     mlir::SPIRVTypeConverter typeConverter(targetAttr, options);

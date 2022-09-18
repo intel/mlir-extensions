@@ -28,7 +28,7 @@ imex::ArgOpLowering::matchAndRewrite(plier::ArgOp op,
   if (!func)
     return mlir::failure();
 
-  auto index = op.index();
+  auto index = op.getIndex();
   if (index >= func.getNumArguments())
     return mlir::failure();
 

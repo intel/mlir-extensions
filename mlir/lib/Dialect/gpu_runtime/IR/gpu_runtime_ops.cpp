@@ -31,8 +31,6 @@
 #include <llvm/ADT/SmallBitVector.h>
 #include <llvm/ADT/TypeSwitch.h>
 
-#include "mlir-extensions/Transforms/const_utils.hpp"
-
 namespace MemoryEffects = ::mlir::MemoryEffects;
 
 namespace {
@@ -174,7 +172,7 @@ void LaunchGpuKernelOp::build(::mlir::OpBuilder &builder,
   segmentSizes.front() = 0; // Initially no async dependencies.
   segmentSizes.back() = static_cast<int32_t>(kernelOperands.size());
   result.addAttribute(getOperandSegmentSizeAttr(),
-                      builder.getI32VectorAttr(segmentSizes));
+                      builder.getDenseI32ArrayAttr(segmentSizes));
 }
 
 void GPUSuggestBlockSizeOp::build(::mlir::OpBuilder &odsBuilder,

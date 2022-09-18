@@ -399,7 +399,7 @@ private:
       return getPyLiteral(literal.getValue());
 
     if (auto buildTuple = val.getDefiningOp<imex::util::BuildTupleOp>()) {
-      auto args = buildTuple.args();
+      auto args = buildTuple.getArgs();
       auto count = static_cast<unsigned>(args.size());
       py::tuple ret(count);
       for (auto i : llvm::seq(0u, count))
@@ -409,7 +409,7 @@ private:
     }
 
     if (auto cast = val.getDefiningOp<imex::util::SignCastOp>())
-      val = cast.value();
+      val = cast.getValue();
 
     if (auto attr = imex::getConstVal<mlir::Attribute>(val))
       return getPyLiteral(attr);
@@ -1413,7 +1413,7 @@ py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
   auto indexType = builder.getIndexType();
   auto indexCast = [&](mlir::Value val) -> mlir::OpFoldResult {
     while (auto parent = val.getDefiningOp<imex::util::SignCastOp>())
-      val = parent.value();
+      val = parent.getValue();
 
     if (auto constVal = mlir::getConstantIntValue(val))
       return builder.getIndexAttr(*constVal);

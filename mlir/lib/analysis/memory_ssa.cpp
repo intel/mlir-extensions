@@ -293,8 +293,7 @@ void imex::MemorySSA::print(
   writeId(node);
   os << " = ";
   auto typeInd = static_cast<int>(type);
-  assert(typeInd >= 0 &&
-         typeInd < static_cast<int>(llvm::array_lengthof(types)));
+  assert(typeInd >= 0 && typeInd < static_cast<int>(std::size(types)));
   os << types[typeInd] << "(";
   auto args = node->getArguments();
   llvm::interleaveComma(args, os, writeId);

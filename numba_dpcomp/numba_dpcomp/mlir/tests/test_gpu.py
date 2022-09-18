@@ -513,7 +513,7 @@ def _check_atomic_ir(ir):
     return (
         ir.count("spv.AtomicIAdd") == 1
         or ir.count("spv.AtomicISub") == 1
-        or ir.count("spv.AtomicFAddEXT") == 1
+        or ir.count("spv.EXT.AtomicFAdd") == 1
     )
 
 

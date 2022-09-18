@@ -101,7 +101,7 @@ static void moveOpsIntoParallel(mlir::scf::ParallelOp outer, int depth = 0) {
 }
 
 static bool isGpuRegion(imex::util::EnvironmentRegionOp op) {
-  return op.environment().isa<gpu_runtime::GPURegionDescAttr>();
+  return op.getEnvironment().isa<gpu_runtime::GPURegionDescAttr>();
 }
 
 struct PrepareForGPUPass
@@ -707,6 +707,12 @@ struct GenerateOutlineContextPass
       }
 
       if (call->hasAttr(deinitAttr)) {
+        if (call->getNumResults() != 0) {
+          call.emitError("deinit function mus have zero results");
+          signalPassFailure();
+          return;
+        }
+
         if (deinit) {
           call.emitError("More than one deinit function");
           signalPassFailure();
@@ -723,14 +729,10 @@ struct GenerateOutlineContextPass
     mlir::SymbolRefAttr deinitSym = (deinit ? deinit.getCalleeAttr() : nullptr);
 
     builder.setInsertionPoint(init);
-    auto res = builder
-                   .create<imex::util::TakeContextOp>(init->getLoc(), initSym,
-                                                      deinitSym,
-                                                      init->getResultTypes())
-                   .getResults();
-    assert(res.size() > 1);
-    auto ctx = res.front();
-    auto resValues = res.drop_front(1);
+    auto takeCtx = builder.create<imex::util::TakeContextOp>(
+        init->getLoc(), initSym, deinitSym, init.getResultTypes());
+    auto ctx = takeCtx.getContext();
+    auto resValues = takeCtx.getResults();
     init->replaceAllUsesWith(resValues);
     init->erase();
 
@@ -997,7 +999,7 @@ protected:
     if (!res)
       return mlir::failure();
 
-    auto results = std::move(res).getValue();
+    auto results = std::move(res).value();
     assert(results.size() == op->getNumResults());
     for (auto it : llvm::enumerate(results)) {
       auto i = it.index();
@@ -1163,9 +1165,9 @@ struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::func::CallOp> {
           return {};
 
         if (auto cast = mlir::dyn_cast<imex::util::SignCastOp>(op))
-          return cast.value();
+          return cast.getValue();
         if (auto cast = mlir::dyn_cast<plier::CastOp>(op))
-          return cast.value();
+          return cast.getValue();
         if (auto cast = mlir::dyn_cast<mlir::UnrealizedConversionCastOp>(op))
           return cast.getInputs()[0];
 
