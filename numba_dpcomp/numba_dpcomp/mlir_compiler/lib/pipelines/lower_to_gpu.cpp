@@ -707,6 +707,12 @@ struct GenerateOutlineContextPass
       }
 
       if (call->hasAttr(deinitAttr)) {
+        if (call->getNumResults() != 0) {
+          call.emitError("deinit function mus have zero results");
+          signalPassFailure();
+          return;
+        }
+
         if (deinit) {
           call.emitError("More than one deinit function");
           signalPassFailure();
@@ -723,14 +729,10 @@ struct GenerateOutlineContextPass
     mlir::SymbolRefAttr deinitSym = (deinit ? deinit.getCalleeAttr() : nullptr);
 
     builder.setInsertionPoint(init);
-    auto res = builder
-                   .create<imex::util::TakeContextOp>(init->getLoc(), initSym,
-                                                      deinitSym,
-                                                      init->getResultTypes())
-                   .getResults();
-    assert(res.size() > 1);
-    auto ctx = res.front();
-    auto resValues = res.drop_front(1);
+    auto takeCtx = builder.create<imex::util::TakeContextOp>(
+        init->getLoc(), initSym, deinitSym, init.getResultTypes());
+    auto ctx = takeCtx.getContext();
+    auto resValues = takeCtx.getResults();
     init->replaceAllUsesWith(resValues);
     init->erase();
 
