@@ -455,9 +455,9 @@ void ParallelOp::build(
   odsState.addOperands(steps);
   odsState.addAttribute(
       ParallelOp::getOperandSegmentSizeAttr(),
-      odsBuilder.getI32VectorAttr({static_cast<int32_t>(lowerBounds.size()),
-                                   static_cast<int32_t>(upperBounds.size()),
-                                   static_cast<int32_t>(steps.size())}));
+      odsBuilder.getDenseI32ArrayAttr({static_cast<int32_t>(lowerBounds.size()),
+                                       static_cast<int32_t>(upperBounds.size()),
+                                       static_cast<int32_t>(steps.size())}));
   auto bodyRegion = odsState.addRegion();
   auto count = lowerBounds.size();
   mlir::OpBuilder::InsertionGuard guard(odsBuilder);
