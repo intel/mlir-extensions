@@ -241,16 +241,15 @@ template <typename F> static void flattenType(mlir::Type type, F &&func) {
 
 template <typename F>
 static mlir::Value unflatten(mlir::Type type, mlir::Location loc,
-                             mlir::OpBuilder &builder, F &&next_func) {
+                             mlir::OpBuilder &builder, F &&nextFunc) {
   namespace mllvm = mlir::LLVM;
   if (auto structType = type.dyn_cast<mlir::LLVM::LLVMStructType>()) {
     mlir::Value val = builder.create<mllvm::UndefOp>(loc, structType);
     for (auto elem : llvm::enumerate(structType.getBody())) {
-      auto elemIndex =
-          builder.getDenseI64ArrayAttr(static_cast<int64_t>(elem.index()));
+      auto elemIndex = static_cast<int64_t>(elem.index());
       auto elemType = elem.value();
       auto elemVal =
-          unflatten(elemType, loc, builder, std::forward<F>(next_func));
+          unflatten(elemType, loc, builder, std::forward<F>(nextFunc));
       val = builder.create<mlir::LLVM::InsertValueOp>(loc, val, elemVal,
                                                       elemIndex);
     }
@@ -260,49 +259,47 @@ static mlir::Value unflatten(mlir::Type type, mlir::Location loc,
     auto size = arrType.getNumElements();
     mlir::Value val = builder.create<mllvm::UndefOp>(loc, arrType);
     for (unsigned i = 0; i < size; ++i) {
-      auto elemIndex = builder.getDenseI64ArrayAttr(static_cast<int64_t>(i));
       auto elemVal =
-          unflatten(elemType, loc, builder, std::forward<F>(next_func));
-      val = builder.create<mlir::LLVM::InsertValueOp>(loc, val, elemVal,
-                                                      elemIndex);
+          unflatten(elemType, loc, builder, std::forward<F>(nextFunc));
+      val = builder.create<mlir::LLVM::InsertValueOp>(loc, val, elemVal, i);
     }
     return val;
   } else {
-    return next_func();
+    return nextFunc();
   }
 }
 
 static void writeMemrefDesc(llvm::raw_ostream &os,
-                            mlir::MemRefType memref_type) {
-  if (memref_type.hasRank()) {
-    auto rank = memref_type.getRank();
+                            mlir::MemRefType memrefType) {
+  if (memrefType.hasRank()) {
+    auto rank = memrefType.getRank();
     assert(rank >= 0);
     if (rank > 0)
-      os << memref_type.getRank() << "x";
+      os << memrefType.getRank() << "x";
 
   } else {
     os << "?x";
   }
-  memref_type.getElementType().print(os);
+  memrefType.getElementType().print(os);
 }
 
-static std::string genToMemrefConversionFuncName(mlir::MemRefType memref_type) {
-  assert(memref_type);
+static std::string genToMemrefConversionFuncName(mlir::MemRefType memrefType) {
+  assert(memrefType);
   std::string ret;
   llvm::raw_string_ostream ss(ret);
   ss << "__convert_to_memref_";
-  writeMemrefDesc(ss, memref_type);
+  writeMemrefDesc(ss, memrefType);
   ss.flush();
   return ret;
 }
 
 static std::string
-genFromMemrefConversionFuncName(mlir::MemRefType memref_type) {
-  assert(memref_type);
+genFromMemrefConversionFuncName(mlir::MemRefType memrefType) {
+  assert(memrefType);
   std::string ret;
   llvm::raw_string_ostream ss(ret);
   ss << "__convert_from_memref_";
-  writeMemrefDesc(ss, memref_type);
+  writeMemrefDesc(ss, memrefType);
   ss.flush();
   return ret;
 }
@@ -313,11 +310,10 @@ static mlir::Value divStrides(mlir::Location loc, mlir::OpBuilder &builder,
   mlir::Value array = builder.create<mlir::LLVM::UndefOp>(loc, arrayType);
   auto count = arrayType.getNumElements();
   for (auto i : llvm::seq(0u, count)) {
-    auto index = builder.getDenseI64ArrayAttr(i);
     mlir::Value prev = builder.create<mlir::LLVM::ExtractValueOp>(
-        loc, arrayType.getElementType(), strides, index);
+        loc, arrayType.getElementType(), strides, i);
     mlir::Value val = builder.create<mlir::LLVM::SDivOp>(loc, prev, m);
-    array = builder.create<mlir::LLVM::InsertValueOp>(loc, array, val, index);
+    array = builder.create<mlir::LLVM::InsertValueOp>(loc, array, val, i);
   }
   return array;
 }
@@ -328,11 +324,10 @@ static mlir::Value mulStrides(mlir::Location loc, mlir::OpBuilder &builder,
   mlir::Value array = builder.create<mlir::LLVM::UndefOp>(loc, arrayType);
   auto count = arrayType.getNumElements();
   for (auto i : llvm::seq(0u, count)) {
-    auto index = builder.getDenseI64ArrayAttr(i);
     mlir::Value prev = builder.create<mlir::LLVM::ExtractValueOp>(
-        loc, arrayType.getElementType(), strides, index);
+        loc, arrayType.getElementType(), strides, i);
     mlir::Value val = builder.create<mlir::LLVM::MulOp>(loc, prev, m);
-    array = builder.create<mlir::LLVM::InsertValueOp>(loc, array, val, index);
+    array = builder.create<mlir::LLVM::InsertValueOp>(loc, array, val, i);
   }
   return array;
 }
@@ -378,8 +373,7 @@ getToMemrefConversionFunc(mlir::ModuleOp module, mlir::OpBuilder &builder,
   mlir::Value arg = block->getArgument(0);
   auto extract = [&](unsigned index) {
     auto resType = srcType.getBody()[index];
-    auto i = builder.getDenseI64ArrayAttr(index);
-    return builder.create<mllvm::ExtractValueOp>(loc, resType, arg, i);
+    return builder.create<mllvm::ExtractValueOp>(loc, resType, arg, index);
   };
   auto meminfo = extract(0);
   auto ptr = extract(4);
@@ -396,8 +390,7 @@ getToMemrefConversionFunc(mlir::ModuleOp module, mlir::OpBuilder &builder,
       loc, i64,
       builder.getI64IntegerAttr(itemSize(memrefType.getElementType())));
   auto insert = [&](unsigned index, mlir::Value val) {
-    auto i = builder.getDenseI64ArrayAttr(index);
-    res = builder.create<mllvm::InsertValueOp>(loc, res, val, i);
+    res = builder.create<mllvm::InsertValueOp>(loc, res, val, index);
   };
   insert(0, meminfoCasted);
   insert(1, ptr);
@@ -441,8 +434,7 @@ getFromMemrefConversionFunc(mlir::ModuleOp module, mlir::OpBuilder &builder,
   auto i64Type = builder.getIntegerType(64);
   auto extract = [&](unsigned index) {
     auto resType = srcType.getBody()[index];
-    auto i = builder.getDenseI64ArrayAttr(index);
-    return builder.create<mllvm::ExtractValueOp>(loc, resType, arg, i);
+    return builder.create<mllvm::ExtractValueOp>(loc, resType, arg, index);
   };
   auto meminfo = builder.create<mllvm::BitcastOp>(loc, i8ptrType, extract(0));
   auto origPtr = extract(1);
@@ -457,16 +449,15 @@ getFromMemrefConversionFunc(mlir::ModuleOp module, mlir::OpBuilder &builder,
   mlir::Value nitems = builder.create<mllvm::ConstantOp>(
       loc, i64Type, builder.getI64IntegerAttr(1));
   for (int64_t i = 0; i < rank; ++i) {
-    auto dim = builder.create<mllvm::ExtractValueOp>(
-        loc, nitems.getType(), shape, builder.getDenseI64ArrayAttr(i));
+    auto dim =
+        builder.create<mllvm::ExtractValueOp>(loc, nitems.getType(), shape, i);
     nitems = builder.create<mllvm::MulOp>(loc, nitems, dim);
   }
   auto itemsize = builder.create<mllvm::ConstantOp>(
       loc, i64Type,
       builder.getI64IntegerAttr(itemSize(memrefType.getElementType())));
   auto insert = [&](unsigned index, mlir::Value val) {
-    auto i = builder.getDenseI64ArrayAttr(index);
-    res = builder.create<mllvm::InsertValueOp>(loc, res, val, i);
+    res = builder.create<mllvm::InsertValueOp>(loc, res, val, index);
   };
   insert(0, meminfo);
   insert(1, null); // parent
@@ -666,8 +657,7 @@ struct ReturnOpLowering : public mlir::OpRewritePattern<mlir::func::ReturnOp> {
         if (!arg)
           return mlir::failure();
 
-        auto index =
-            rewriter.getDenseI64ArrayAttr(static_cast<int64_t>(it.index()));
+        auto index = static_cast<int64_t>(it.index());
         val = rewriter.create<mlir::LLVM::InsertValueOp>(loc, val, arg, index);
       }
       rewriter.create<mlir::LLVM::StoreOp>(loc, val, addr);
@@ -1196,8 +1186,6 @@ struct LowerParallel : public mlir::OpRewritePattern<imex::util::ParallelOp> {
       auto loc = rewriter.getUnknownLoc();
       mlir::OpBuilder::InsertionGuard guard(rewriter);
       rewriter.setInsertionPointToStart(entry);
-      auto pos0 = rewriter.getDenseI64ArrayAttr(0);
-      auto pos1 = rewriter.getDenseI64ArrayAttr(1);
       for (unsigned i = 0; i < numLoops; ++i) {
         auto arg = entry->getArgument(0);
         const mlir::Value indices[] = {rewriter.create<mlir::LLVM::ConstantOp>(
@@ -1207,9 +1195,9 @@ struct LowerParallel : public mlir::OpRewritePattern<imex::util::ParallelOp> {
             rewriter.create<mlir::LLVM::GEPOp>(loc, rangePtr, arg, indices);
         auto dims = rewriter.create<mlir::LLVM::LoadOp>(loc, ptr);
         auto lower = rewriter.create<mlir::LLVM::ExtractValueOp>(
-            loc, llvmIndexType, dims, pos0);
+            loc, llvmIndexType, dims, 0);
         auto upper = rewriter.create<mlir::LLVM::ExtractValueOp>(
-            loc, llvmIndexType, dims, pos1);
+            loc, llvmIndexType, dims, 1);
         mapping.map(oldEntry.getArgument(i), fromLLVMIndex(lower));
         mapping.map(oldEntry.getArgument(i + numLoops), fromLLVMIndex(upper));
       }
@@ -1280,8 +1268,8 @@ struct LowerParallel : public mlir::OpRewritePattern<imex::util::ParallelOp> {
       mlir::Value inputRange =
           rewriter.create<mlir::LLVM::UndefOp>(loc, inputRangeType);
       auto insert = [&](mlir::Value val, unsigned index) {
-        inputRange = rewriter.create<mlir::LLVM::InsertValueOp>(
-            loc, inputRange, val, rewriter.getDenseI64ArrayAttr(index));
+        inputRange = rewriter.create<mlir::LLVM::InsertValueOp>(loc, inputRange,
+                                                                val, index);
       };
       insert(toLLVMIndex(op.getLowerBounds()[i]), 0);
       insert(toLLVMIndex(op.getUpperBounds()[i]), 1);

@@ -192,13 +192,12 @@ protected:
     mlir::Value depsArray =
         rewriter.create<mlir::LLVM::UndefOp>(loc, depsArrayType);
     for (auto i : llvm::seq(0u, depsArraySize)) {
-      auto index = rewriter.getDenseI64ArrayAttr(i);
       depsArray = rewriter.create<mlir::LLVM::InsertValueOp>(loc, depsArray,
-                                                             deps[i], index);
+                                                             deps[i], i);
     }
     auto nullPtr = rewriter.create<mlir::LLVM::NullOp>(loc, llvmPointerType);
     depsArray = rewriter.create<mlir::LLVM::InsertValueOp>(
-        loc, depsArray, nullPtr, rewriter.getDenseI64ArrayAttr(depsArraySize));
+        loc, depsArray, nullPtr, depsArraySize);
 
     auto depsArrayPtrType = mlir::LLVM::LLVMPointerType::get(depsArrayType);
     imex::AllocaInsertionPoint allocaHelper(op);
@@ -505,13 +504,12 @@ private:
 
       mlir::Value range =
           rewriter.create<mlir::LLVM::UndefOp>(loc, llvmRangeType);
-      range = rewriter.create<mlir::LLVM::InsertValueOp>(
-          loc, range, ptr, rewriter.getDenseI64ArrayAttr(0));
-      range = rewriter.create<mlir::LLVM::InsertValueOp>(
-          loc, range, typeSize, rewriter.getDenseI64ArrayAttr(1));
+      range = rewriter.create<mlir::LLVM::InsertValueOp>(loc, range, ptr, 0);
+      range =
+          rewriter.create<mlir::LLVM::InsertValueOp>(loc, range, typeSize, 1);
 
-      paramsArray = rewriter.create<mlir::LLVM::InsertValueOp>(
-          loc, paramsArray, range, rewriter.getDenseI64ArrayAttr(i));
+      paramsArray = rewriter.create<mlir::LLVM::InsertValueOp>(loc, paramsArray,
+                                                               range, i);
     }
 
     auto nullPtr = rewriter.create<mlir::LLVM::NullOp>(loc, llvmPointerType);
@@ -520,15 +518,13 @@ private:
           loc, llvmIndexType, rewriter.getIntegerAttr(llvmIndexType, 0));
       mlir::Value range =
           rewriter.create<mlir::LLVM::UndefOp>(loc, llvmRangeType);
-      range = rewriter.create<mlir::LLVM::InsertValueOp>(
-          loc, range, nullPtr, rewriter.getDenseI64ArrayAttr(0));
-      range = rewriter.create<mlir::LLVM::InsertValueOp>(
-          loc, range, zero, rewriter.getDenseI64ArrayAttr(1));
+      range =
+          rewriter.create<mlir::LLVM::InsertValueOp>(loc, range, nullPtr, 0);
+      range = rewriter.create<mlir::LLVM::InsertValueOp>(loc, range, zero, 1);
       return range;
     }();
     paramsArray = rewriter.create<mlir::LLVM::InsertValueOp>(
-        loc, paramsArray, nullRange,
-        rewriter.getDenseI64ArrayAttr(paramsCount));
+        loc, paramsArray, nullRange, paramsCount);
     rewriter.create<mlir::LLVM::StoreOp>(loc, paramsArray, paramsArrayPtr);
 
     auto eventIndexVar = createEventIndexVar(rewriter, loc, op);
@@ -628,9 +624,9 @@ private:
     allocCallBuilder.create(loc, rewriter, params);
     auto res = rewriter.create<mlir::LLVM::LoadOp>(loc, resultPtr);
     auto meminfo = rewriter.create<mlir::LLVM::ExtractValueOp>(
-        loc, llvmPointerType, res, rewriter.getDenseI64ArrayAttr(0));
+        loc, llvmPointerType, res, 0);
     auto dataPtr = rewriter.create<mlir::LLVM::ExtractValueOp>(
-        loc, llvmPointerType, res, rewriter.getDenseI64ArrayAttr(1));
+        loc, llvmPointerType, res, 1);
 
     auto memrefDesc = mlir::MemRefDescriptor::undef(rewriter, loc, dstType);
     auto elemPtrTye = memrefDesc.getElementPtrType();
@@ -652,7 +648,7 @@ private:
 
     mlir::Value resMemref = memrefDesc;
     mlir::Value event = rewriter.create<mlir::LLVM::ExtractValueOp>(
-        loc, llvmPointerType, res, rewriter.getDenseI64ArrayAttr(2));
+        loc, llvmPointerType, res, 2);
     if (op.getNumResults() == 1) {
       waitEventCallBuilder.create(loc, rewriter, event);
       rewriter.replaceOp(op, resMemref);
@@ -729,11 +725,10 @@ private:
     mlir::Value gridArray =
         rewriter.create<mlir::LLVM::UndefOp>(loc, sizesType);
     for (auto i : llvm::seq(0u, numDims)) {
-      auto index = rewriter.getDenseI64ArrayAttr(i);
       auto gridSize = rewriter.create<mlir::LLVM::TruncOp>(
           loc, llvmInt32Type, adaptor.gridSize()[i]);
       gridArray = rewriter.create<mlir::LLVM::InsertValueOp>(loc, gridArray,
-                                                             gridSize, index);
+                                                             gridSize, i);
     }
 
     rewriter.create<mlir::LLVM::StoreOp>(loc, gridArray,
@@ -757,9 +752,8 @@ private:
         loc, castToSizesPtrType(blockArrayPtr));
     llvm::SmallVector<mlir::Value, 3> result(numDims);
     for (auto i : llvm::seq(0u, numDims)) {
-      auto ind = rewriter.getDenseI64ArrayAttr(i);
       auto blockSize = rewriter.create<mlir::LLVM::ExtractValueOp>(
-          loc, llvmInt32Type, blockSizeArray, ind);
+          loc, llvmInt32Type, blockSizeArray, i);
       result[i] =
           rewriter.create<mlir::LLVM::ZExtOp>(loc, llvmIndexType, blockSize);
     }

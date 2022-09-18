@@ -131,8 +131,7 @@ struct LowerBuildTuple
       auto arg = it.value();
       auto newType = arg.getType();
       assert(newType);
-      auto index =
-          rewriter.getDenseI64ArrayAttr(static_cast<int64_t>(it.index()));
+      auto index = static_cast<int64_t>(it.index());
       init = rewriter.create<mlir::LLVM::InsertValueOp>(loc, init, arg, index);
     }
 
@@ -276,7 +275,6 @@ struct LowerTakeContextOp
         mlir::Value ctxStruct =
             rewriter.create<mlir::LLVM::UndefOp>(unknownLoc, ctxStructType);
         for (auto i : llvm::seq(0u, resultsCount)) {
-          auto pos = rewriter.getDenseI64ArrayAttr(i);
           auto srcType = initFuncType.getResult(i);
           auto convertedType = converter->convertType(srcType);
           assert(convertedType && "Invalid init func result type");
@@ -290,7 +288,7 @@ struct LowerTakeContextOp
           assert(val && "Invalid init func result type");
 
           ctxStruct = rewriter.create<mlir::LLVM::InsertValueOp>(
-              unknownLoc, ctxStruct, val, pos);
+              unknownLoc, ctxStruct, val, i);
         }
         auto ptr = rewriter.create<mlir::LLVM::BitcastOp>(
             unknownLoc, ctxStructPtrType, block->getArgument(0));
@@ -330,9 +328,8 @@ struct LowerTakeContextOp
 
         llvm::SmallVector<mlir::Value> args(resultsCount);
         for (auto i : llvm::seq(0u, resultsCount)) {
-          auto pos = rewriter.getDenseI64ArrayAttr(i);
           mlir::Value val = rewriter.create<mlir::LLVM::ExtractValueOp>(
-              unknownLoc, resultTypes[i], ctxStruct, pos);
+              unknownLoc, resultTypes[i], ctxStruct, i);
           auto resType = deinitFuncType.getInput(i);
           // Deinit function may not be type-converted at this point, so insert
           // conversion casts.
@@ -431,9 +428,8 @@ struct LowerTakeContextOp
         rewriter.create<mlir::LLVM::LoadOp>(loc, ctxStructType, ctxStructPtr);
 
     for (auto i : llvm::seq(0u, resultsCount)) {
-      auto pos = rewriter.getDenseI64ArrayAttr(i);
       auto res = rewriter.create<mlir::LLVM::ExtractValueOp>(
-          loc, resultTypes[i], ctxStruct, pos);
+          loc, resultTypes[i], ctxStruct, i);
       takeCtxResults.emplace_back(res);
     }
 
