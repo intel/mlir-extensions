@@ -14,4 +14,5 @@ repos:
   - repo: https://github.com/psf/black
     rev: stable
     hooks:
-    - id: black
+    -   id: black
+        language_version: python3.9
