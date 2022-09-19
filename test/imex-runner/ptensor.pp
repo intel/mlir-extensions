@@ -12,7 +12,7 @@ func.func(finalizing-bufferize
           convert-linalg-to-parallel-loops)
 canonicalize
 func.func(lower-affine)
-fold-memref-subview-ops
+fold-memref-alias-ops
 convert-scf-to-cf
 convert-memref-to-llvm
 convert-func-to-llvm
