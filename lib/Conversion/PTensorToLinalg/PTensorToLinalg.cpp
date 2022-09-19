@@ -357,8 +357,10 @@ struct EWBinOpLowering
     auto rhsorgtyp =
         op.getRhs().getType().dyn_cast<::imex::ptensor::PTensorType>();
     // we expect RankedTensorType as operands
-    auto lhstyp = adaptor.getLhs().getType().dyn_cast<::mlir::RankedTensorType>();
-    auto rhstyp = adaptor.getRhs().getType().dyn_cast<::mlir::RankedTensorType>();
+    auto lhstyp =
+        adaptor.getLhs().getType().dyn_cast<::mlir::RankedTensorType>();
+    auto rhstyp =
+        adaptor.getRhs().getType().dyn_cast<::mlir::RankedTensorType>();
     if (!lhstyp || !rhstyp || !lhsorgtyp || !rhsorgtyp) {
       // fail if not, will be retried if operands get converted elsewhere
       return ::mlir::failure();
@@ -403,7 +405,8 @@ struct EWBinOpLowering
                                shape, typ, lshp);
 
     // Get signless operands into vec
-    llvm::SmallVector<mlir::Value, 2> oprnds = {adaptor.getLhs(), adaptor.getRhs()};
+    llvm::SmallVector<mlir::Value, 2> oprnds = {adaptor.getLhs(),
+                                                adaptor.getRhs()};
 
     // all maps are identity maps
     auto imap =
@@ -524,8 +527,8 @@ struct ReductionOpLowering
 
     // we reduced the local part, now we reduce across processes
     if (orginptyp.getDist()) {
-      rtnsr = rewriter.create<::imex::dist::AllReduceOp>(loc, tnsr.getType(0),
-                                                         adaptor.getOp(), rtnsr);
+      rtnsr = rewriter.create<::imex::dist::AllReduceOp>(
+          loc, tnsr.getType(0), adaptor.getOp(), rtnsr);
     }
 
     // For now we only support reduction over all dims and return a scalar
