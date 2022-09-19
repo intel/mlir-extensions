@@ -59,7 +59,7 @@ include(AddMLIR)
 include(HandleLLVMOptions)
 
 if(NOT IMEX_EXTERNAL_PROJECT_BUILD)
-    find_package(Python3 Python3 ${LLVM_MINIMUM_PYTHON_VERSION} REQUIRED
+    find_package(Python3 ${LLVM_MINIMUM_PYTHON_VERSION} REQUIRED
         COMPONENTS Interpreter)
 endif()
 
