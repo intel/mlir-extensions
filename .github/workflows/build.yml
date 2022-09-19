@@ -185,7 +185,7 @@ jobs:
             --imex-enable-tests                                                \
             --imex-tbb-dir /${TBB_PATH}/lib/cmake/tbb                          \
             --external-lit ${external_lit}
-            
+
 
       - name: Run IMEX core test cases
         shell: bash -l {0}

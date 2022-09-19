@@ -109,7 +109,13 @@ def test_inplace_op(a, b):
 
 
 @parametrize_function_variants(
-    "py_func", ["lambda a: +a", "lambda a: -a", "lambda a: ~a", "lambda a: abs(a)",]
+    "py_func",
+    [
+        "lambda a: +a",
+        "lambda a: -a",
+        "lambda a: ~a",
+        "lambda a: abs(a)",
+    ],
 )
 @pytest.mark.parametrize("val", _test_values)
 def test_unary_ops(py_func, val, request):
@@ -153,7 +159,13 @@ def test_const_ops(py_func, val):
     assert_equal(py_func(val), jit_func(val))
 
 
-@parametrize_function_variants("py_func", ["lambda a: a ** 1", "lambda a: a ** 2",])
+@parametrize_function_variants(
+    "py_func",
+    [
+        "lambda a: a ** 1",
+        "lambda a: a ** 2",
+    ],
+)
 @pytest.mark.parametrize("val", [1, 2.5])
 def test_pow_folding(py_func, val):
     jit_func = njit(py_func)
@@ -206,7 +218,12 @@ def test_math_uplifting1(val, name):
 
 
 @pytest.mark.parametrize("val", [5, 5.5])
-@pytest.mark.parametrize("name", ["atan2",])
+@pytest.mark.parametrize(
+    "name",
+    [
+        "atan2",
+    ],
+)
 def test_math_uplifting2(val, name):
     py_func = eval(f"lambda a, b: math.{name}(a, b)")
 
@@ -219,7 +236,11 @@ def test_math_uplifting2(val, name):
 
 
 @parametrize_function_variants(
-    "py_func", ["lambda x, y, z: x * y + z", "lambda x, y, z: z + x * y",]
+    "py_func",
+    [
+        "lambda x, y, z: x * y + z",
+        "lambda x, y, z: z + x * y",
+    ],
 )
 def test_math_uplifting_fma(py_func):
     x = 2.0
@@ -241,7 +262,13 @@ def test_math_uplifting_fma(py_func):
         assert ir.count(f"math.fma") == 1, ir
 
 
-@parametrize_function_variants("py_func", ["lambda: math.pi", "lambda: math.e",])
+@parametrize_function_variants(
+    "py_func",
+    [
+        "lambda: math.pi",
+        "lambda: math.e",
+    ],
+)
 def test_math_const(py_func):
     jit_func = njit(py_func)
     assert_equal(py_func(), jit_func())

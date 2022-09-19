@@ -85,7 +85,8 @@ def _configure_llvm_build(
         raise RuntimeError("Could not create build directory.")
     except FileNotFoundError:
         raise RuntimeError(
-            f"Could not create build direcotry {llvm_build_dir}", llvm_build_dir,
+            f"Could not create build direcotry {llvm_build_dir}",
+            llvm_build_dir,
         )
 
     if "linux" in sys.platform:
@@ -222,7 +223,8 @@ def _get_llvm(llvm_sha=None, working_dir=None):
 
     if working_dir and not os.path.exists(working_dir):
         raise RuntimeError(
-            f"working_dir specified as {working_dir} does not exist.", working_dir,
+            f"working_dir specified as {working_dir} does not exist.",
+            working_dir,
         )
 
     git_checkout_dir = working_dir
@@ -283,7 +285,10 @@ def _checkout_sha_in_source_dir(llvm_source_dir, llvm_sha):
         )
     try:
         subprocess.check_call(
-            ["git", "fetch", "--all"], shell=False, env=os.environ, cwd=llvm_source_dir,
+            ["git", "fetch", "--all"],
+            shell=False,
+            env=os.environ,
+            cwd=llvm_source_dir,
         )
         subprocess.check_call(
             ["git", "checkout", llvm_sha.replace("\n", "")],
@@ -397,7 +402,7 @@ def _build_imex(
             cmake_config_args.append("-DIMEX_ENABLE_TBB_SUPPORT=ON")
         else:
             warnings.warn("Provided TBB directory path does not exist.")
-    
+
     if external_lit is not None:
         cmake_config_args.append("-DLLVM_EXTERNAL_LIT=" + external_lit)
 
@@ -423,7 +428,9 @@ if __name__ == "__main__":
     imex_builder = parser.add_argument_group(title="IMEX build arguments")
 
     llvm_builder.add_argument(
-        "--verbose", action="store_true", help="Turns on CMAKE_MAKE_VERBOSE",
+        "--verbose",
+        action="store_true",
+        help="Turns on CMAKE_MAKE_VERBOSE",
     )
     llvm_builder.add_argument(
         "--c-compiler", type=str, help="Name of C compiler", default=None

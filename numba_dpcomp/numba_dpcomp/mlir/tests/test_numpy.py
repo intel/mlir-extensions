@@ -170,7 +170,12 @@ _test_logical_arrays = [
 ]
 
 
-@parametrize_function_variants("py_func", ["lambda a: np.logical_not(a)",])
+@parametrize_function_variants(
+    "py_func",
+    [
+        "lambda a: np.logical_not(a)",
+    ],
+)
 @pytest.mark.parametrize("a", _test_logical_arrays)
 def test_logical1(py_func, a):
     jit_func = njit(py_func)
@@ -333,7 +338,12 @@ def test_reduce_axis(py_func, arr):
     assert_equal(py_func(arr), jit_func(arr))
 
 
-@parametrize_function_variants("py_func", ["lambda a: np.flip(a)",])
+@parametrize_function_variants(
+    "py_func",
+    [
+        "lambda a: np.flip(a)",
+    ],
+)
 @pytest.mark.parametrize(
     "arr",
     [
@@ -1074,7 +1084,11 @@ def test_flatten(py_func, array):
 
 @parametrize_function_variants(
     "py_func",
-    ["lambda a, b: ()", "lambda a, b: (a,b)", "lambda a, b: ((a,b),(a,a),(b,b),())",],
+    [
+        "lambda a, b: ()",
+        "lambda a, b: (a,b)",
+        "lambda a, b: ((a,b),(a,a),(b,b),())",
+    ],
 )
 @pytest.mark.parametrize(
     "a,b",
@@ -1340,7 +1354,7 @@ def test_mean_loop(arr, parallel):
         np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 0], dtype=np.float32).reshape((5, 2)),
         np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 0], dtype=np.int32).reshape((5, 2)).T,
         np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 0], dtype=np.float32).reshape((5, 2)).T,
-        make_regression(n_samples=2 ** 10, n_features=2 ** 7, random_state=0)[0],
+        make_regression(n_samples=2**10, n_features=2**7, random_state=0)[0],
     ],
 )
 @pytest.mark.parametrize("parallel", [False, True])
@@ -1362,7 +1376,18 @@ def test_mean_loop_cov(arr, parallel):
 
 
 @pytest.mark.parametrize(
-    "N,k", [(1, 0), (2, -1), (2, 0), (2, 1), (3, -2), (3, -1), (3, 0), (3, 1), (3, 2),]
+    "N,k",
+    [
+        (1, 0),
+        (2, -1),
+        (2, 0),
+        (2, 1),
+        (3, -2),
+        (3, -1),
+        (3, 0),
+        (3, 1),
+        (3, 2),
+    ],
 )
 @pytest.mark.parametrize("dtype", [np.int32, np.int64, np.float32, np.float64])
 def test_eye1(N, k, dtype):
@@ -1374,7 +1399,15 @@ def test_eye1(N, k, dtype):
 
 
 @pytest.mark.parametrize(
-    "N,M,k", [(2, 3, -1), (2, 3, 0), (2, 3, 1), (3, 2, -1), (3, 2, 0), (3, 2, 1),]
+    "N,M,k",
+    [
+        (2, 3, -1),
+        (2, 3, 0),
+        (2, 3, 1),
+        (3, 2, -1),
+        (3, 2, 0),
+        (3, 2, 1),
+    ],
 )
 def test_eye2(N, M, k):
     def py_func(N, M, k):
@@ -1415,7 +1448,12 @@ def test_matmul1(py_func, a, b, dtype):
     assert_allclose(py_func(a, b), jit_func(a, b), rtol=1e-4, atol=1e-7)
 
 
-@parametrize_function_variants("py_func", ["lambda a, b: (a @ b) @ a",])
+@parametrize_function_variants(
+    "py_func",
+    [
+        "lambda a, b: (a @ b) @ a",
+    ],
+)
 @pytest.mark.parametrize(
     "a,b",
     [

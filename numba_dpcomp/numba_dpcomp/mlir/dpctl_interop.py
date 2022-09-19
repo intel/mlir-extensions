@@ -53,7 +53,12 @@ if _is_dpctl_available:
         ):
             self.addrspace = addrspace
             super(USMNdArrayBaseType, self).__init__(
-                dtype, ndim, layout, readonly=readonly, name=name, aligned=aligned,
+                dtype,
+                ndim,
+                layout,
+                readonly=readonly,
+                name=name,
+                aligned=aligned,
             )
 
         def copy(
@@ -104,7 +109,10 @@ if _is_dpctl_available:
                 ("parent", types.pyobject),
                 ("nitems", types.intp),
                 ("itemsize", types.intp),
-                ("data", types.CPointer(fe_type.dtype, addrspace=fe_type.addrspace),),
+                (
+                    "data",
+                    types.CPointer(fe_type.dtype, addrspace=fe_type.addrspace),
+                ),
                 ("shape", types.UniTuple(types.intp, ndim)),
                 ("strides", types.UniTuple(types.intp, ndim)),
             ]
@@ -133,7 +141,12 @@ if _is_dpctl_available:
             # This name defines how this type will be shown in Numba's type dumps.
             name = "USM:ndarray(%s, %sd, %s)" % (dtype, ndim, layout)
             super(USMNdArrayType, self).__init__(
-                dtype, ndim, layout, readonly=readonly, name=name, addrspace=addrspace,
+                dtype,
+                ndim,
+                layout,
+                readonly=readonly,
+                name=name,
+                addrspace=addrspace,
             )
 
         def copy(self, *args, **kwargs):

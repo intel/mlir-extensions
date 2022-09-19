@@ -198,4 +198,3 @@ def GPUMemFenceOp : GpuRuntime_Op<"mem_fence"> {
 }
 
 #endif // GPURUNTIME_OPS
-
