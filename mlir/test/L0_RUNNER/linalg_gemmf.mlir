@@ -10,22 +10,22 @@ func.func @main() {
     %2= arith.constant dense<[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]>:tensor<3x3xf32>
     %3 = call @test(%0,%1,%2) : (tensor<3x3xf32>,tensor<3x3xf32>,tensor<3x3xf32>) -> tensor<3x3xf32>
     %unranked = tensor.cast %3 : tensor<3x3xf32>to tensor<*xf32>
-    call @printMemrefF32(%unranked) : (tensor<*xf32>) -> () 
-    
+    call @printMemrefF32(%unranked) : (tensor<*xf32>) -> ()
+
 // CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
-// CHECK-SAME: rank = 2 offset = 0 sizes = [3, 3] strides = [3, 1] data = 
+// CHECK-SAME: rank = 2 offset = 0 sizes = [3, 3] strides = [3, 1] data =
 // CHECK-NEXT: [14.1,   14.8,   14.6]
 // CHECK-NEXT:  [11,   13,   10.5]
 // CHECK-NEXT: [13.9,   19.9,   12.4]
-    return 
-} 
+    return
+}
 func.func private @printMemrefF32(tensor<*xf32>)
 func.func @test(%arg0: tensor<3x3xf32>, %arg1: tensor<3x3xf32>, %arg2: tensor<3x3xf32>)
   ->tensor<3x3xf32>{
     %1 = linalg.generic {
-      indexing_maps = [#map0, #map1, #map2], 
-      iterator_types = ["parallel", "parallel", "reduction"]} 
-      ins(%arg0, %arg1 : tensor<3x3xf32>, tensor<3x3xf32>) 
+      indexing_maps = [#map0, #map1, #map2],
+      iterator_types = ["parallel", "parallel", "reduction"]}
+      ins(%arg0, %arg1 : tensor<3x3xf32>, tensor<3x3xf32>)
       outs(%arg2 : tensor<3x3xf32>) attrs =  {iterator_ranges = [3, 3, 3]} {
         ^bb0(%arg3: f32, %arg4: f32, %arg5: f32):
            %2 = arith.mulf %arg3, %arg4 : f32

@@ -18,7 +18,7 @@ from .. import mlir_compiler
 
 def _init_compiler():
     def _print(s):
-        print(s, end='')
+        print(s, end="")
 
     def _get_printer(enabled):
         return _print if enabled else None

@@ -185,4 +185,3 @@ module @jit_func.func.0 {
 
   func.func private @printMemrefF32(%ptr : tensor<*xf32>)
 }
-

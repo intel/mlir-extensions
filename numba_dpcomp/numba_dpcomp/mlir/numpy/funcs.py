@@ -291,9 +291,9 @@ def _gen_binary_ops():
         (
             register_func("numpy.power", numpy.power),
             _select_float_type,
-            lambda a, b, c: a ** b,
+            lambda a, b, c: a**b,
         ),
-        (register_func("operator.pow"), _select_float_type, lambda a, b, c: a ** b),
+        (register_func("operator.pow"), _select_float_type, lambda a, b, c: a**b),
         (
             register_func("numpy.arctan2", numpy.arctan2),
             select_float_type_f64,
