@@ -25,12 +25,6 @@ endif()
 
 
 if(IMEX_EXTERNAL_PROJECT_BUILD)
-    # if you configure llvm with these additional options
-    # -DCMAKE_CXX_STANDARD=17 \
-    # -DLLVM_EXTERNAL_PROJECTS="Imex" \
-    # -DLLVM_EXTERNAL_IMEX_SOURCE_DIR=<path to mlir-extensions>
-    # LLVM main trunk switched from C++14 to C++17 on 8/6/2022
-    # https://github.com/llvm/llvm-project/commits/b1356504e63ae821cccf1e051a0d2526bdfef2b0
     message(STATUS "Building IMEX with LLVM_EXTERNAL_PROJECTS")
     set(MLIR_MAIN_SRC_DIR ${LLVM_MAIN_SRC_DIR}/../mlir )
     set(MLIR_INCLUDE_DIR ${MLIR_MAIN_SRC_DIR}/include )
@@ -63,6 +57,11 @@ include(TableGen)
 include(AddLLVM)
 include(AddMLIR)
 include(HandleLLVMOptions)
+
+if(NOT IMEX_EXTERNAL_PROJECT_BUILD)
+    find_package(Python3 Python3 ${LLVM_MINIMUM_PYTHON_VERSION} REQUIRED
+        COMPONENTS Interpreter)
+endif()
 
 include_directories(${LLVM_INCLUDE_DIRS})
 include_directories(${MLIR_INCLUDE_DIRS})

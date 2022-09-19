@@ -4,4 +4,4 @@ mlir_tablegen(Passes.capi.h.inc -gen-pass-capi-header --prefix Conversion)
 mlir_tablegen(Passes.capi.cpp.inc -gen-pass-capi-impl --prefix Conversion)
 add_public_tablegen_target(IMEXConversionPassIncGen)
 
-add_mlir_doc(Passes ImexConversionPasses ./ -gen-pass-doc)
+add_mlir_doc(Passes IMEXConversionPasses ./ -gen-pass-doc)

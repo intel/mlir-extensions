@@ -66,12 +66,15 @@ cmake -G Ninja -B build -S llvm \
    -DLLVM_TARGETS_TO_BUILD="X86" \
    -DCMAKE_BUILD_TYPE=Release \
    -DLLVM_ENABLE_ASSERTIONS=ON \
-   -DCMAKE_CXX_STANDARD=17 \
    -DLLVM_EXTERNAL_PROJECTS="Imex" \
    -DLLVM_EXTERNAL_IMEX_SOURCE_DIR=../mlir-extensions
 
 cmake --build build --target check-imex
 ```
+**Note**: `-DLLVM_INSTALL_UTILS=ON` is not needed for this build since all tests
+will run using `FileCheck` utility in LLVM built tree.
+External `lit` is not needed as well since all tests will run using `llvm-lit`
+in the LLVM build tree.
 
 #### Building docs
 To build user documentation do
