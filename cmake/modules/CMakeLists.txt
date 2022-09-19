@@ -108,7 +108,7 @@ endfunction(get_imex_libs)
 # link against them. LLVM calls its version of this file LLVMExports.cmake, but
 # the usual CMake convention seems to be ${Project}Targets.cmake.
 set(IMEX_INSTALL_PACKAGE_DIR lib/cmake)
-set(imex_cmake_builddir " ${CMAKE_BINARY_DIR}/${IMEX_INSTALL_PACKAGE_DIR} ")
+set(imex_cmake_builddir " ${IMEX_BINARY_DIR}/${IMEX_INSTALL_PACKAGE_DIR} ")
 
 # Keep this in sync with llvm/cmake/CMakeLists.txt!
 set(LLVM_INSTALL_PACKAGE_DIR lib${LLVM_LIBDIR_SUFFIX}/cmake/llvm)
