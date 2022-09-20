@@ -50,6 +50,32 @@ CC=gcc-9 CXX=g++-9 MLIR_DIR=<llvm-install-directory> cmake ..
 make -j 12
 ```
 
+#### Building as an LLVM external project
+You can also build IMEX as an LLVM external project.
+```
+git clone https://github.com/intel/mlir-extensions.git
+cd mlir-extensions
+git checkout refactor
+cd ..
+git clone https://github.com/llvm/llvm-project.git
+cd llvm-project
+git checkout `cat ../mlir-extensions/build_tools/llvm_version.txt`
+cmake -G Ninja -B build -S llvm \
+   -DLLVM_ENABLE_PROJECTS=mlir \
+   -DLLVM_BUILD_EXAMPLES=ON \
+   -DLLVM_TARGETS_TO_BUILD="X86" \
+   -DCMAKE_BUILD_TYPE=Release \
+   -DLLVM_ENABLE_ASSERTIONS=ON \
+   -DLLVM_EXTERNAL_PROJECTS="Imex" \
+   -DLLVM_EXTERNAL_IMEX_SOURCE_DIR=../mlir-extensions
+
+cmake --build build --target check-imex
+```
+**Note**: `-DLLVM_INSTALL_UTILS=ON` is not needed for this build since all tests
+will run using `FileCheck` utility in LLVM built tree.
+External `lit` is not needed as well since all tests will run using `llvm-lit`
+in the LLVM build tree.
+
 #### Building docs
 To build user documentation do
 ```sh
