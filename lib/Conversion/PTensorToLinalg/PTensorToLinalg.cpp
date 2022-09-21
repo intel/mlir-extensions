@@ -383,7 +383,7 @@ struct EWBinOpLowering
     auto rank = static_cast<unsigned>(retRtTyp.getRank());
     llvm::SmallVector<::mlir::OpFoldResult> shapeVVec(rank);
     llvm::SmallVector<mlir::StringRef> iterators(rank);
-    for (auto i : llvm::seq(0u, rank)) {
+    for (auto i : llvm::seq<unsigned>(0u, rank)) {
       shapeVVec[i] =
           rewriter.create<::mlir::tensor::DimOp>(loc, lhsTnsr, i).getResult();
       // iterate in parallel

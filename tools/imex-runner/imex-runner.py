@@ -35,7 +35,7 @@ All unknown arguments will be forwarded to mlir-runner. Currently there is no
 option to forward user-provided args to imex-opt.
 
 To use this in a lit test, you can do something similar to
-`// RUN: %{python_executable} %{imex_tools_dir}/imex-runner.py -i %s --pass-pipeline-file=%p/ptensor.pp -e main -entry-point-result=void --shared-libs=%{mlir_shlib_dir}/libmlir_c_runner_utils%shlibext --shared-libs=%{mlir_shlib_dir}/libmlir_runner_utils%shlibext | FileCheck %s`
+`// RUN: %{python_executable} %{imex-runner} -i %s --pass-pipeline-file=%p/ptensor.pp -e main -entry-point-result=void --shared-libs=%{mlir_c_runner_utils} --shared-libs=%{mlir_runner_utils} | FileCheck %s`
 """
 
 import os, sys, re
@@ -49,8 +49,8 @@ parser = argparse.ArgumentParser(
 parser.add_argument("--input-file", "-i", default=None, help="input MLIR file")
 parser.add_argument("--pass-pipeline-file", "-f", default=None, help="file defining pass pipeline")
 parser.add_argument("--pass-pipeline", "-p", default=None, help="pass pipeline (string)")
-parser.add_argument("--print-before-all", "-b", action='store_true', dest='before', help="print ir before all passes")
-parser.add_argument("--print-after-all", "-a", action='store_true', dest='after', help="print ir after all passes")
+parser.add_argument("--imex-print-before-all", "-b", action='store_true', dest='before', help="print ir before all passes")
+parser.add_argument("--imex-print-after-all", "-a", action='store_true', dest='after', help="print ir after all passes")
 parser.add_argument("--no-mlir-runner", "-n", action='store_true', dest='no_mlir_runner', help="skip mlir runner")
 parser.add_argument("--runner", "-r", default="mlir-cpu-runner", choices=['mlir-cpu-runner', 'mlir-vulkan-runner'], help="mlir runner name")
 
