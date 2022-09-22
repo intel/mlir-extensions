@@ -135,9 +135,9 @@ struct ARangeLowering
     auto converter = *getTypeConverter();
 
     // Get Operands
-    auto start = adaptor.start();
-    auto stop = adaptor.stop();
-    auto step = adaptor.step();
+    auto start = adaptor.getStart();
+    auto stop = adaptor.getStop();
+    auto step = adaptor.getStep();
     auto orgrtyp = op.getType().dyn_cast<::imex::ptensor::PTensorType>();
     assert(orgrtyp);
 
@@ -353,12 +353,14 @@ struct EWBinOpLowering
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
     // We expect to lower PTensors
     auto lhsorgtyp =
-        op.lhs().getType().dyn_cast<::imex::ptensor::PTensorType>();
+        op.getLhs().getType().dyn_cast<::imex::ptensor::PTensorType>();
     auto rhsorgtyp =
-        op.rhs().getType().dyn_cast<::imex::ptensor::PTensorType>();
+        op.getRhs().getType().dyn_cast<::imex::ptensor::PTensorType>();
     // we expect RankedTensorType as operands
-    auto lhstyp = adaptor.lhs().getType().dyn_cast<::mlir::RankedTensorType>();
-    auto rhstyp = adaptor.rhs().getType().dyn_cast<::mlir::RankedTensorType>();
+    auto lhstyp =
+        adaptor.getLhs().getType().dyn_cast<::mlir::RankedTensorType>();
+    auto rhstyp =
+        adaptor.getRhs().getType().dyn_cast<::mlir::RankedTensorType>();
     if (!lhstyp || !rhstyp || !lhsorgtyp || !rhsorgtyp) {
       // fail if not, will be retried if operands get converted elsewhere
       return ::mlir::failure();
@@ -368,8 +370,8 @@ struct EWBinOpLowering
     auto converter = *getTypeConverter();
 
     // input tensors might have compatible but different types
-    assert(adaptor.lhs().getType() == adaptor.rhs().getType());
-    assert(adaptor.lhs().getType() == adaptor.rhs().getType());
+    assert(adaptor.getLhs().getType() == adaptor.getRhs().getType());
+    assert(adaptor.getLhs().getType() == adaptor.getRhs().getType());
 
     // the element type of a binop depends on the input arguments and the
     // operation itself we assume this had beeen taken care of and simply use
@@ -384,7 +386,7 @@ struct EWBinOpLowering
     // as the input shapes)
     // FIXME shape broadcasting: input tensors might have compatible but
     // different shapes
-    auto lhs = adaptor.lhs();
+    auto lhs = adaptor.getLhs();
     auto rank = static_cast<unsigned>(shaped.getRank());
     llvm::SmallVector<mlir::Value> shp(rank);
     llvm::SmallVector<mlir::StringRef> iterators(rank);
@@ -403,7 +405,8 @@ struct EWBinOpLowering
                                shape, typ, lshp);
 
     // Get signless operands into vec
-    llvm::SmallVector<mlir::Value, 2> oprnds = {adaptor.lhs(), adaptor.rhs()};
+    llvm::SmallVector<mlir::Value, 2> oprnds = {adaptor.getLhs(),
+                                                adaptor.getRhs()};
 
     // all maps are identity maps
     auto imap =
@@ -412,7 +415,7 @@ struct EWBinOpLowering
 
     // create binop as linalg::generic
     const ::imex::ptensor::EWBinOpId bopid =
-        (::imex::ptensor::EWBinOpId)adaptor.op()
+        (::imex::ptensor::EWBinOpId)adaptor.getOp()
             .cast<::mlir::IntegerAttr>()
             .getInt();
     auto bodyBuilder = getBodyBuilder(bopid, typ);
@@ -460,9 +463,9 @@ struct ReductionOpLowering
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
     // we expect RankedTensorType as operands
     auto inptyp =
-        adaptor.input().getType().dyn_cast<::mlir::RankedTensorType>();
+        adaptor.getInput().getType().dyn_cast<::mlir::RankedTensorType>();
     auto orginptyp =
-        op.input().getType().dyn_cast<::imex::ptensor::PTensorType>();
+        op.getInput().getType().dyn_cast<::imex::ptensor::PTensorType>();
     if (!inptyp || !orginptyp) {
       // fail if not, will be retried if operands get converted elsewhere
       return ::mlir::failure();
@@ -472,7 +475,7 @@ struct ReductionOpLowering
     auto converter = *getTypeConverter();
 
     // Get signless operands into vec
-    llvm::SmallVector<mlir::Value, 1> oprnds = {adaptor.input()};
+    llvm::SmallVector<mlir::Value, 1> oprnds = {adaptor.getInput()};
 
     // determine resulting element type from converted op-type
     auto _t = converter.convertType(op.getType());
@@ -512,7 +515,7 @@ struct ReductionOpLowering
 
     // create reduction op as linalg::generic
     const ::imex::ptensor::ReduceOpId ropid =
-        (::imex::ptensor::ReduceOpId)adaptor.op()
+        (::imex::ptensor::ReduceOpId)adaptor.getOp()
             .cast<::mlir::IntegerAttr>()
             .getInt();
     auto bodyBuilder = getBodyBuilder(ropid, sltyp);
@@ -524,8 +527,8 @@ struct ReductionOpLowering
 
     // we reduced the local part, now we reduce across processes
     if (orginptyp.getDist()) {
-      rtnsr = rewriter.create<::imex::dist::AllReduceOp>(loc, tnsr.getType(0),
-                                                         adaptor.op(), rtnsr);
+      rtnsr = rewriter.create<::imex::dist::AllReduceOp>(
+          loc, tnsr.getType(0), adaptor.getOp(), rtnsr);
     }
 
     // For now we only support reduction over all dims and return a scalar
