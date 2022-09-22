@@ -52,7 +52,7 @@ enum EWBinOpId : int {
   MULTIPLY,
   NOT_EQUAL,
   OR,
-  POWER,
+  POW,
   SUBTRACT,
   TRUE_DIVIDE,
   XOR,

@@ -24,6 +24,7 @@
 #include <mlir/Dialect/Func/Transforms/FuncConversions.h>
 #include <mlir/Dialect/LLVMIR/LLVMDialect.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
+#include <mlir/Dialect/Math/IR/Math.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/Shape/IR/Shape.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
@@ -300,7 +301,8 @@ static BodyType getBodyBuilder(::imex::ptensor::EWBinOpId bop,
   switch (bop) {
   case ptensor::ADD:
     return buildTrivial<mlir::arith::AddIOp, mlir::arith::AddFOp>(typ);
-  // case ptensor::ATAN2] =
+  case ptensor::ATAN2:
+    return buildTrivial<mlir::math::Atan2Op, void>(typ);
   case ptensor::FLOOR_DIVIDE:
     return buildTrivial<mlir::arith::FloorDivSIOp>(typ);
   // case ptensor::LOGADDEXP] =
@@ -314,7 +316,8 @@ static BodyType getBodyBuilder(::imex::ptensor::EWBinOpId bop,
     return buildTrivial<mlir::arith::RemSIOp, mlir::arith::RemFOp>(typ);
   case ptensor::MULTIPLY:
     return buildTrivial<mlir::arith::MulIOp, mlir::arith::MulFOp>(typ);
-  // case ptensor::POW] =
+  case ptensor::POW:
+    return buildTrivial<mlir::math::IPowIOp, mlir::math::FPowIOp>(typ);
   case ptensor::SUBTRACT:
     return buildTrivial<mlir::arith::SubIOp, mlir::arith::SubFOp>(typ);
   // case ptensor::TRUE_DIVIDE] =
@@ -592,6 +595,7 @@ struct ConvertPTensorToLinalgPass
     target.addLegalDialect<::mlir::AffineDialect>();
     target.addLegalDialect<::mlir::tensor::TensorDialect>();
     target.addLegalDialect<::mlir::arith::ArithmeticDialect>();
+    target.addLegalDialect<::mlir::math::MathDialect>();
     target.addLegalDialect<::mlir::shape::ShapeDialect>();
     target.addLegalOp<::mlir::UnrealizedConversionCastOp>(); // FIXME
     target.addDynamicallyLegalOp<::mlir::func::FuncOp>(
