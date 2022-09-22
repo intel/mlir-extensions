@@ -27,7 +27,7 @@
 /// created.
 /// FIXME: same for device by adding regions.
 ///
-/// The pass is based on a ConvertionTarget, TypeConverters. legality checks and
+/// The pass is based on a ConversionTarget, TypeConverters. legality checks and
 /// conversion patterns.
 ///
 ///
@@ -160,26 +160,39 @@ struct ExtractRTensorLowering
   matchAndRewrite(::imex::ptensor::ExtractRTensorOp op,
                   ::imex::ptensor::ExtractRTensorOp::Adaptor adaptor,
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
+    // std::cerr << "op: "; op.dump(); std::cerr << std::endl;
+    // std::cerr << "oinput: "; op.input().dump(); std::cerr << std::endl;
+    // std::cerr << "ainput: "; adaptor.input().dump(); std::cerr << std::endl;
+    // std::cerr << "odefop: "; if(op.input().getDefiningOp())
+    // op.input().getDefiningOp()->dump(); std::cerr << std::endl; std::cerr <<
+    // "adefop: "; if(adaptor.input().getDefiningOp())
+    // adaptor.input().getDefiningOp()->dump(); std::cerr << std::endl;
     auto inpOp =
         adaptor.input().getDefiningOp<::mlir::UnrealizedConversionCastOp>();
-    // This can be a chain of casts, originating from type conversion like type
-    // materialization for function arguments. This requires chasing the chain
-    // of casts. We cannot chase casts with more than one operand without
-    // getting into realms of unclear semantics.
-    while (inpOp && inpOp.getOperands().size() == 1 &&
-           !inpOp.getOperands()
-                .front()
-                .getType()
-                .isa<::mlir::RankedTensorType>()) {
-      inpOp = inpOp.getOperands()
+    if (!inpOp) { // block arg or similar
+      rewriter.replaceOp(op, adaptor.input());
+    } else {
+      // This can be a chain of casts, originating from type conversion like
+      // type materialization for function arguments. This requires chasing the
+      // chain of casts. We cannot chase casts with more than one operand
+      // without getting into realms of unclear semantics.
+      while (inpOp && inpOp.getOperands().size() == 1 &&
+             !inpOp.getOperands()
                   .front()
-                  .getDefiningOp<::mlir::UnrealizedConversionCastOp>();
+                  .getType()
+                  .isa<::mlir::RankedTensorType>()) {
+        inpOp = inpOp.getOperands()
+                    .front()
+                    .getDefiningOp<::mlir::UnrealizedConversionCastOp>();
+      }
+      assert(inpOp);
+      // assert(inpOp.getOperands().size() == 4);
+      assert(inpOp.getOperands()
+                 .front()
+                 .getType()
+                 .isa<::mlir::RankedTensorType>());
+      rewriter.replaceOp(op, inpOp.getOperands()[0]);
     }
-    assert(inpOp);
-    assert(inpOp.getOperands().size() == 4);
-    assert(
-        inpOp.getOperands().front().getType().isa<::mlir::RankedTensorType>());
-    rewriter.replaceOp(op, inpOp.getOperands()[0]);
     return ::mlir::success();
   }
 };
@@ -622,15 +635,17 @@ struct ReturnOpConversion
       // we assume the number of operands is identical in op and adaptor
       // -> we can check for original ptensor type which is safer than TupleType
       // in adaptor
-      if ((*orgOprnd).getType().isa<::imex::ptensor::PTensorType>()) {
+      if ((*orgOprnd).getType().isa<::imex::ptensor::PTensorType>() &&
+          o.getDefiningOp()) {
         auto defOp = o.getDefiningOp<::mlir::UnrealizedConversionCastOp>();
         assert(defOp);
         // ptensor operands get expanded
-        for (auto i : defOp.getInputs()) {
-          newOprnds.push_back(i);
-        }
+        // for (auto i : defOp.getInputs()) {
+        //  newOprnds.push_back(i);
+        // }
+        newOprnds.push_back(defOp.getInputs().front());
       } else {
-        // all other types get added as-is
+        // block args and all other types get added as-is
         newOprnds.push_back(o);
       }
       ++orgOprnd; // explicitly move iterator for orig type
@@ -702,20 +717,21 @@ struct ConvertPTensorToLinalgPass
     // Convert PTensorType to (RankedTensorType, device, team, handle)
     auto convPT2Tuple = [&ctxt](::imex::ptensor::PTensorType type)
         -> ::mlir::Optional<::mlir::Type> {
-      return ::mlir::TupleType::get(
-          &ctxt, {type.getRtensor(), ::mlir::IntegerType::get(&ctxt, 1),
-                  ::mlir::IntegerType::get(&ctxt, 1),
-                  ::mlir::IntegerType::get(&ctxt, 1)});
+      return type.getRtensor();
+      // return ::mlir::TupleType::get(
+      //     &ctxt, {type.getRtensor(), ::mlir::IntegerType::get(&ctxt, 1),
+      //             ::mlir::IntegerType::get(&ctxt, 1),
+      //             ::mlir::IntegerType::get(&ctxt, 1)});
     };
     auto convPT2Multiple =
         [&ctxt](::imex::ptensor::PTensorType type,
                 ::mlir::SmallVectorImpl<::mlir::Type> &target)
         -> ::mlir::Optional<::mlir::LogicalResult> {
       //  for(auto t : type.getTypes()) target.push_back(t);
-      target = ::mlir::SmallVector<::mlir::Type>(
-          {type.getRtensor(), ::mlir::IntegerType::get(&ctxt, 1),
-           ::mlir::IntegerType::get(&ctxt, 1),
-           ::mlir::IntegerType::get(&ctxt, 1)});
+      target = ::mlir::SmallVector<::mlir::Type>({type.getRtensor()});
+      //, ::mlir::IntegerType::get(&ctxt, 1),
+      // ::mlir::IntegerType::get(&ctxt, 1),
+      // ::mlir::IntegerType::get(&ctxt, 1)});
       return ::mlir::success();
     };
     typeConverter.addConversion(convT2T);
