@@ -35,7 +35,7 @@ All unknown arguments will be forwarded to mlir-runner. Currently there is no
 option to forward user-provided args to imex-opt.
 
 To use this in a lit test, you can do something similar to
-`// RUN: %{python_executable} %{imex_tools_dir}/imex-runner.py -i %s --pass-pipeline-file=ptensor.pp -e main -entry-point-result=void --shared-libs=%{mlir_shlib_dir}/libmlir_c_runner_utils%shlibext --shared-libs=%{mlir_shlib_dir}/libmlir_runner_utils%shlibext | FileCheck %s`
+`// RUN: %{python_executable} %{imex_tools_dir}/imex-runner.py -i %s --pass-pipeline-file=%p/ptensor.pp -e main -entry-point-result=void --shared-libs=%{mlir_shlib_dir}/libmlir_c_runner_utils%shlibext --shared-libs=%{mlir_shlib_dir}/libmlir_runner_utils%shlibext | FileCheck %s`
 """
 
 import os, sys, re
