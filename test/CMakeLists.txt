@@ -1,7 +1,3 @@
-add_custom_target(imex-runner-pps
-                  COMMAND mkdir -p imex-runner
-                  COMMAND cp ${CMAKE_CURRENT_SOURCE_DIR}/imex-runner/*.pp imex-runner/)
-
 configure_lit_site_cfg(
         ${CMAKE_CURRENT_SOURCE_DIR}/lit.site.cfg.py.in
         ${CMAKE_CURRENT_BINARY_DIR}/lit.site.cfg.py
@@ -14,7 +10,6 @@ set(IMEX_TEST_DEPENDS
         FileCheck count not
         imex-opt
         imex-runner
-        imex-runner-pps
         mlir-cpu-runner
         mlir_c_runner_utils
         mlir_runner_utils

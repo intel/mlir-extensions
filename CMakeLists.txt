@@ -50,9 +50,6 @@ else()
     list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
 endif()
 
-set(IMEX_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
-set(IMEX_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
-
 include(TableGen)
 include(AddLLVM)
 include(AddMLIR)
@@ -65,12 +62,17 @@ endif()
 
 include_directories(${LLVM_INCLUDE_DIRS})
 include_directories(${MLIR_INCLUDE_DIRS})
-include_directories(${IMEX_SOURCE_DIR}/include)
-include_directories(${IMEX_BINARY_DIR}/include)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
+include_directories(${CMAKE_CURRENT_BINARY_DIR}/include)
 link_directories(${LLVM_BUILD_LIBRARY_DIR})
 add_definitions(${LLVM_DEFINITIONS})
 
 set(LLVM_LIT_ARGS "-sv" CACHE STRING "lit default options")
+
+set(IMEX_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+# LLVM_EXTERNAL_PROJECTS build puts library, executables and tools in LLVM's CMAKE_BINARY_DIR
+set(IMEX_BINARY_DIR ${CMAKE_BINARY_DIR})
+
 include(sanitizers)
 
 add_subdirectory(include)
