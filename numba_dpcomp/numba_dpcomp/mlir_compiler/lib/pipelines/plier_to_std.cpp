@@ -43,9 +43,9 @@
 #include "imex/Transforms/type_conversion.hpp"
 
 #include "base_pipeline.hpp"
+#include "imex/compiler/pipeline_registry.hpp"
 #include "loop_utils.hpp"
 #include "mangle.hpp"
-#include "imex/compiler/pipeline_registry.hpp"
 #include "py_func_resolver.hpp"
 #include "py_linalg_resolver.hpp"
 
