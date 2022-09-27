@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "mlir-extensions/Transforms/call_lowering.hpp"
-#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
+#include "imex/Transforms/call_lowering.hpp"
+#include "imex/Dialect/imex_util/dialect.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 

@@ -19,14 +19,14 @@
 #include <mlir/IR/Region.h>
 #include <mlir/Interfaces/SideEffectInterfaces.h>
 
-#include "mlir-extensions/Dialect/ntensor/IR/NTensorOpsDialect.h.inc"
-#include "mlir-extensions/Dialect/ntensor/IR/NTensorOpsEnums.h.inc"
+#include "imex/Dialect/ntensor/IR/NTensorOpsDialect.h.inc"
+#include "imex/Dialect/ntensor/IR/NTensorOpsEnums.h.inc"
 
 #define GET_ATTRDEF_CLASSES
-#include "mlir-extensions/Dialect/ntensor/IR/NTensorOpsAttributes.h.inc"
+#include "imex/Dialect/ntensor/IR/NTensorOpsAttributes.h.inc"
 
 #define GET_OP_CLASSES
-#include "mlir-extensions/Dialect/ntensor/IR/NTensorOps.h.inc"
+#include "imex/Dialect/ntensor/IR/NTensorOps.h.inc"
 
 namespace imex {
 namespace ntensor {
@@ -62,4 +62,4 @@ public:
 } // namespace imex
 
 #define GET_TYPEDEF_CLASSES
-#include "mlir-extensions/Dialect/ntensor/IR/NTensorOpsTypes.h.inc"
+#include "imex/Dialect/ntensor/IR/NTensorOpsTypes.h.inc"

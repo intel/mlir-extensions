@@ -33,9 +33,9 @@
 #include <mlir/InitAllDialects.h>
 #include <mlir/InitAllPasses.h>
 
-#include "mlir-extensions/Conversion/gpu_runtime_to_llvm.hpp"
-#include "mlir-extensions/Conversion/gpu_to_gpu_runtime.hpp"
-#include "mlir-extensions/Conversion/util_to_llvm.hpp"
+#include "imex/Conversion/gpu_runtime_to_llvm.hpp"
+#include "imex/Conversion/gpu_to_gpu_runtime.hpp"
+#include "imex/Conversion/util_to_llvm.hpp"
 
 using namespace mlir;
 

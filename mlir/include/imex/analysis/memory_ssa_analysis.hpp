@@ -14,30 +14,26 @@
 
 #pragma once
 
-#include <functional>
+#include "imex/analysis/memory_ssa.hpp"
 
-#include "mlir-extensions/Dialect/plier/dialect.hpp"
-
-#include <mlir/IR/PatternMatch.h>
+#include <mlir/Pass/AnalysisManager.h>
 
 namespace mlir {
-class TypeConverter;
-}
+class Operation;
+class AliasAnalysis;
+} // namespace mlir
 
 namespace imex {
-struct CastOpLowering : public mlir::OpRewritePattern<plier::CastOp> {
-  using cast_t = std::function<mlir::Value(
-      mlir::PatternRewriter &, mlir::Location, mlir::Value, mlir::Type)>;
+class MemorySSAAnalysis {
+public:
+  MemorySSAAnalysis(mlir::Operation *op, mlir::AnalysisManager &am);
+  MemorySSAAnalysis(const MemorySSAAnalysis &) = delete;
 
-  CastOpLowering(mlir::TypeConverter &typeConverter, mlir::MLIRContext *context,
-                 cast_t cast_func = nullptr);
+  mlir::LogicalResult optimizeUses();
 
-  mlir::LogicalResult
-  matchAndRewrite(plier::CastOp op,
-                  mlir::PatternRewriter &rewriter) const override;
+  static bool isInvalidated(const mlir::AnalysisManager::PreservedAnalyses &pa);
 
-private:
-  mlir::TypeConverter &converter;
-  cast_t castFunc;
+  llvm::Optional<imex::MemorySSA> memssa;
+  mlir::AliasAnalysis *aliasAnalysis = nullptr;
 };
 } // namespace imex

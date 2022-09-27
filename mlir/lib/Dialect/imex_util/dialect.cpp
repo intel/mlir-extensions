@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "mlir-extensions/Dialect/plier/dialect.hpp"
-#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
+#include "imex/Dialect/plier/dialect.hpp"
+#include "imex/Dialect/imex_util/dialect.hpp"
 
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/BuiltinOps.h>
@@ -82,7 +82,7 @@ namespace util {
 void ImexUtilDialect::initialize() {
   addOperations<
 #define GET_OP_LIST
-#include "mlir-extensions/Dialect/imex_util/ImexUtilOps.cpp.inc"
+#include "imex/Dialect/imex_util/ImexUtilOps.cpp.inc"
       >();
 
   addTypes<OpaqueType>();
@@ -90,7 +90,7 @@ void ImexUtilDialect::initialize() {
 
   addAttributes<
 #define GET_ATTRDEF_LIST
-#include "mlir-extensions/Dialect/imex_util/ImexUtilOpsAttributes.cpp.inc"
+#include "imex/Dialect/imex_util/ImexUtilOpsAttributes.cpp.inc"
       >();
 }
 
@@ -1978,12 +1978,12 @@ void EnvironmentRegionOp::build(
 } // namespace util
 } // namespace imex
 
-#include "mlir-extensions/Dialect/imex_util/ImexUtilOpsDialect.cpp.inc"
+#include "imex/Dialect/imex_util/ImexUtilOpsDialect.cpp.inc"
 
 #define GET_OP_CLASSES
-#include "mlir-extensions/Dialect/imex_util/ImexUtilOps.cpp.inc"
+#include "imex/Dialect/imex_util/ImexUtilOps.cpp.inc"
 
 #define GET_ATTRDEF_CLASSES
-#include "mlir-extensions/Dialect/imex_util/ImexUtilOpsAttributes.cpp.inc"
+#include "imex/Dialect/imex_util/ImexUtilOpsAttributes.cpp.inc"
 
-#include "mlir-extensions/Dialect/imex_util/ImexUtilOpsEnums.cpp.inc"
+#include "imex/Dialect/imex_util/ImexUtilOpsEnums.cpp.inc"

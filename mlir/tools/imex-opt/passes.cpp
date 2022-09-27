@@ -22,11 +22,11 @@
 #include <mlir/Dialect/GPU/IR/GPUDialect.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
 
-#include "mlir-extensions/Conversion/SCFToAffine/SCFToAffine.h"
-#include "mlir-extensions/Conversion/cfg_to_scf.hpp"
-#include "mlir-extensions/Conversion/gpu_runtime_to_llvm.hpp"
-#include "mlir-extensions/Conversion/gpu_to_gpu_runtime.hpp"
-#include "mlir-extensions/Transforms/expand_tuple.hpp"
+#include "imex/Conversion/SCFToAffine/SCFToAffine.h"
+#include "imex/Conversion/cfg_to_scf.hpp"
+#include "imex/Conversion/gpu_runtime_to_llvm.hpp"
+#include "imex/Conversion/gpu_to_gpu_runtime.hpp"
+#include "imex/Transforms/expand_tuple.hpp"
 
 // Passes registration.
 

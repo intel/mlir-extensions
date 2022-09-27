@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "mlir-extensions/Dialect/plier/dialect.hpp"
-#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
+#include "imex/Dialect/plier/dialect.hpp"
+#include "imex/Dialect/imex_util/dialect.hpp"
 
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/BuiltinOps.h>
@@ -105,7 +105,7 @@ mlir::ArrayRef<detail::OperatorNamePair> getOperators() {
 void PlierDialect::initialize() {
   addOperations<
 #define GET_OP_LIST
-#include "mlir-extensions/Dialect/plier/PlierOps.cpp.inc"
+#include "imex/Dialect/plier/PlierOps.cpp.inc"
       >();
   addTypes<plier::PyType, plier::LiteralType, SliceType, plier::TypeVar>();
   addInterfaces<PlierInlinerInterface>();
@@ -483,9 +483,9 @@ void SliceGetItemOp::getCanonicalizationPatterns(
 }
 } // namespace plier
 
-#include "mlir-extensions/Dialect/plier/PlierOpsDialect.cpp.inc"
+#include "imex/Dialect/plier/PlierOpsDialect.cpp.inc"
 
 #define GET_OP_CLASSES
-#include "mlir-extensions/Dialect/plier/PlierOps.cpp.inc"
+#include "imex/Dialect/plier/PlierOps.cpp.inc"
 
-//#include "mlir-extensions/Dialect/plier/PlierOpsEnums.cpp.inc"
+//#include "imex/Dialect/plier/PlierOpsEnums.cpp.inc"

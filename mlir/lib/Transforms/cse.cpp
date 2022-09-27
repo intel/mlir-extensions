@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "mlir-extensions/Transforms/cse.hpp"
+#include "imex/Transforms/cse.hpp"
 
 #include <llvm/ADT/ScopedHashTable.h>
 #include <llvm/Support/Allocator.h>

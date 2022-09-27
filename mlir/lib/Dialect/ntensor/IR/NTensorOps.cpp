@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "mlir-extensions/Dialect/ntensor/IR/NTensorOps.hpp"
+#include "imex/Dialect/ntensor/IR/NTensorOps.hpp"
 
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/Utils/StaticValueUtils.h"
@@ -42,19 +42,19 @@ namespace ntensor {
 void NTensorDialect::initialize() {
   addOperations<
 #define GET_OP_LIST
-#include "mlir-extensions/Dialect/ntensor/IR/NTensorOps.cpp.inc"
+#include "imex/Dialect/ntensor/IR/NTensorOps.cpp.inc"
       >();
 
   addInterfaces<NTensorInlinerInterface>();
 
   addTypes<
 #define GET_TYPEDEF_LIST
-#include "mlir-extensions/Dialect/ntensor/IR/NTensorOpsTypes.cpp.inc"
+#include "imex/Dialect/ntensor/IR/NTensorOpsTypes.cpp.inc"
       >();
 
   addAttributes<
 #define GET_ATTRDEF_LIST
-#include "mlir-extensions/Dialect/ntensor/IR/NTensorOpsAttributes.cpp.inc"
+#include "imex/Dialect/ntensor/IR/NTensorOpsAttributes.cpp.inc"
       >();
 }
 
@@ -192,15 +192,15 @@ static void printArgList(mlir::OpAsmPrinter &printer,
   printer << ')';
 }
 
-#include "mlir-extensions/Dialect/ntensor/IR/NTensorOpsDialect.cpp.inc"
+#include "imex/Dialect/ntensor/IR/NTensorOpsDialect.cpp.inc"
 
 #define GET_OP_CLASSES
-#include "mlir-extensions/Dialect/ntensor/IR/NTensorOps.cpp.inc"
+#include "imex/Dialect/ntensor/IR/NTensorOps.cpp.inc"
 
 #define GET_ATTRDEF_CLASSES
-#include "mlir-extensions/Dialect/ntensor/IR/NTensorOpsAttributes.cpp.inc"
+#include "imex/Dialect/ntensor/IR/NTensorOpsAttributes.cpp.inc"
 
 #define GET_TYPEDEF_CLASSES
-#include "mlir-extensions/Dialect/ntensor/IR/NTensorOpsTypes.cpp.inc"
+#include "imex/Dialect/ntensor/IR/NTensorOpsTypes.cpp.inc"
 
-#include "mlir-extensions/Dialect/ntensor/IR/NTensorOpsEnums.cpp.inc"
+#include "imex/Dialect/ntensor/IR/NTensorOpsEnums.cpp.inc"

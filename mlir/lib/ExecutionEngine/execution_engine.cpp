@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "mlir-extensions/ExecutionEngine/execution_engine.hpp"
+#include "imex/ExecutionEngine/execution_engine.hpp"
 
 #include <llvm/ExecutionEngine/JITEventListener.h>
 #include <llvm/ExecutionEngine/ObjectCache.h>

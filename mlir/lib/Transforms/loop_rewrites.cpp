@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "mlir-extensions/Transforms/loop_rewrites.hpp"
-#include "mlir-extensions/Transforms/const_utils.hpp"
+#include "imex/Transforms/loop_rewrites.hpp"
+#include "imex/Transforms/const_utils.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
