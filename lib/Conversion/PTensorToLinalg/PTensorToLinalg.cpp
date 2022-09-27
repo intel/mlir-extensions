@@ -302,7 +302,9 @@ static BodyType getBodyBuilder(::imex::ptensor::EWBinOpId bop,
   case ptensor::ADD:
     return buildTrivial<mlir::arith::AddIOp, mlir::arith::AddFOp>(typ);
   case ptensor::ATAN2:
-    return buildTrivial<mlir::math::Atan2Op, void>(typ);
+    return buildTrivial<void, mlir::math::Atan2Op>(typ);
+  // case ptensor::ERF:
+  //  return buildTrivial<void, mlir::math::ErfOp>(typ);
   case ptensor::FLOOR_DIVIDE:
     return buildTrivial<mlir::arith::FloorDivSIOp>(typ);
   // case ptensor::LOGADDEXP] =
@@ -316,7 +318,7 @@ static BodyType getBodyBuilder(::imex::ptensor::EWBinOpId bop,
     return buildTrivial<mlir::arith::RemSIOp, mlir::arith::RemFOp>(typ);
   case ptensor::MULTIPLY:
     return buildTrivial<mlir::arith::MulIOp, mlir::arith::MulFOp>(typ);
-  case ptensor::POW:
+  case ptensor::POWER:
     return buildTrivial<mlir::math::IPowIOp, mlir::math::FPowIOp>(typ);
   case ptensor::SUBTRACT:
     return buildTrivial<mlir::arith::SubIOp, mlir::arith::SubFOp>(typ);
