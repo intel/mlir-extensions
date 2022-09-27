@@ -24,6 +24,7 @@ std::unique_ptr<mlir::Pass> createSerializeSPIRVPass();
 std::unique_ptr<mlir::Pass> createInsertGPUAllocsPass();
 std::unique_ptr<mlir::Pass> createSetSPIRVCapabilitiesPass();
 std::unique_ptr<mlir::Pass> createSetSPIRVAbiAttribute();
+std::unique_ptr<mlir::Pass> createUnstrideMemrefsPass();
 
 //===----------------------------------------------------------------------===//
 // Registration

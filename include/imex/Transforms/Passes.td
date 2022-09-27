@@ -31,4 +31,18 @@ def SerializeSPIRVPass : Pass<"serialize-spirv", "::mlir::ModuleOp"> {
     ];
 }
 
+def UnstrideMemrefsPass : Pass<"unstride-memrefs", "::mlir::func::FuncOp"> {
+  let summary = "convert 2D+ memrefs into 1D memrefs";
+  let description = [{
+    This pass iterates all memrefs and if the memref's rank is greater than one,
+    the pass converts the memref into rank 1 and updates all usage of the previous
+    memref with the new one and update access expressions accordingly.
+  }];
+  let constructor = "imex::createUnstrideMemrefsPass()";
+  let dependentDialects = [
+    "mlir::gpu::GPUDialect",
+    "mlir::memref::MemRefDialect"
+    ];
+}
+
 #endif // _IMEX_TRANSFORMS_PASSES_TD_INCLUDED_

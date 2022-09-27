@@ -3,6 +3,7 @@ add_mlir_library(IMEXTransforms
   InsertGpuAllocs.cpp
   SetSPIRVCapabilities.cpp
   SetSPIRVAbiAttribute.cpp
+  UnstrideMemrefs.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${PROJECT_SOURCE_DIR}/imex/Transforms
