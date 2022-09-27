@@ -37,6 +37,7 @@ endif()
 add_subdirectory(include/mlir-extensions/Dialect/plier)
 add_subdirectory(include/mlir-extensions/Dialect/imex_util)
 add_subdirectory(include/mlir-extensions/Dialect/gpu_runtime/IR)
+add_subdirectory(include/mlir-extensions/Dialect/ntensor/IR)
 
 set(SOURCES_LIST
     lib/Conversion/SCFToAffine/SCFToAffine.cpp
@@ -47,6 +48,7 @@ set(SOURCES_LIST
     lib/Conversion/util_to_llvm.cpp
     lib/Dialect/gpu_runtime/IR/gpu_runtime_ops.cpp
     lib/Dialect/imex_util/dialect.cpp
+    lib/Dialect/ntensor/IR/NTensorOps.cpp
     lib/Dialect/plier/dialect.cpp
     lib/ExecutionEngine/execution_engine.cpp
     lib/Transforms/arg_lowering.cpp
@@ -85,6 +87,7 @@ set(HEADERS_LIST
     include/mlir-extensions/Conversion/util_to_llvm.hpp
     include/mlir-extensions/Dialect/gpu_runtime/IR/gpu_runtime_ops.hpp
     include/mlir-extensions/Dialect/imex_util/dialect.hpp
+    include/mlir-extensions/Dialect/ntensor/IR/NTensorOps.hpp
     include/mlir-extensions/Dialect/plier/dialect.hpp
     include/mlir-extensions/ExecutionEngine/execution_engine.hpp
     include/mlir-extensions/Transforms/arg_lowering.hpp
@@ -156,7 +159,7 @@ target_include_directories(${MLIR_EXTENSIONS_LIB} PUBLIC
     ${PROJECT_BINARY_DIR}/mlir-extensions/include
     )
 
-add_dependencies(${MLIR_EXTENSIONS_LIB} MLIRPlierOpsIncGen MLIRImexUtilOpsIncGen MLIRGpuRuntimeOpsIncGen)
+add_dependencies(${MLIR_EXTENSIONS_LIB} MLIRPlierOpsIncGen MLIRImexUtilOpsIncGen MLIRGpuRuntimeOpsIncGen MLIRNTensorOpsIncGen)
 
 add_subdirectory(tools)
 if(IMEX_ENABLE_TESTS)
