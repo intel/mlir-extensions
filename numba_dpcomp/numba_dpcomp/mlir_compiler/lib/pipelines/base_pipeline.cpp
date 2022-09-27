@@ -14,7 +14,7 @@
 
 #include "pipelines/base_pipeline.hpp"
 
-#include "mlir-extensions/compiler/pipeline_registry.hpp"
+#include "imex/compiler/pipeline_registry.hpp"
 
 namespace {
 static const constexpr llvm::StringLiteral passes[] = {

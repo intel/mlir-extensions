@@ -51,12 +51,12 @@
 
 #include "base_pipeline.hpp"
 
-#include "mlir-extensions/Conversion/util_to_llvm.hpp"
-#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
-#include "mlir-extensions/Dialect/plier/dialect.hpp"
-#include "mlir-extensions/Transforms/func_utils.hpp"
-#include "mlir-extensions/compiler/pipeline_registry.hpp"
-#include "mlir-extensions/utils.hpp"
+#include "imex/Conversion/util_to_llvm.hpp"
+#include "imex/Dialect/imex_util/dialect.hpp"
+#include "imex/Dialect/plier/dialect.hpp"
+#include "imex/Transforms/func_utils.hpp"
+#include "imex/compiler/pipeline_registry.hpp"
+#include "imex/utils.hpp"
 
 namespace {
 static mlir::LowerToLLVMOptions getLLVMOptions(mlir::MLIRContext &context) {

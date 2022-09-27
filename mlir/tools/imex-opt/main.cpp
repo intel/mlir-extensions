@@ -17,8 +17,8 @@
 #include <mlir/InitAllPasses.h>
 #include <mlir/Tools/mlir-opt/MlirOptMain.h>
 
-#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
-#include "mlir-extensions/Dialect/ntensor/IR/NTensorOps.hpp"
+#include "imex/Dialect/imex_util/dialect.hpp"
+#include "imex/Dialect/ntensor/IR/NTensorOps.hpp"
 
 int main(int argc, char **argv) {
   mlir::registerAllPasses();

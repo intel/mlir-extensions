@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "mlir-extensions/Conversion/gpu_runtime_to_llvm.hpp"
+#include "imex/Conversion/gpu_runtime_to_llvm.hpp"
 
-#include "mlir-extensions/Dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
-#include "mlir-extensions/Transforms/func_utils.hpp"
-#include "mlir-extensions/Transforms/type_conversion.hpp"
+#include "imex/Dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
+#include "imex/Transforms/func_utils.hpp"
+#include "imex/Transforms/type_conversion.hpp"
 
 #include <mlir/Conversion/AsyncToLLVM/AsyncToLLVM.h>
 #include <mlir/Conversion/GPUCommon/GPUCommonPass.h>

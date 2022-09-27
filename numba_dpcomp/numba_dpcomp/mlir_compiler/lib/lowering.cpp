@@ -37,13 +37,13 @@
 #include <llvm/Support/ManagedStatic.h>
 #include <llvm/Support/TargetSelect.h>
 
-#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
-#include "mlir-extensions/Dialect/plier/dialect.hpp"
+#include "imex/Dialect/imex_util/dialect.hpp"
+#include "imex/Dialect/plier/dialect.hpp"
 
-#include "mlir-extensions/ExecutionEngine/execution_engine.hpp"
-#include "mlir-extensions/compiler/compiler.hpp"
-#include "mlir-extensions/compiler/pipeline_registry.hpp"
-#include "mlir-extensions/utils.hpp"
+#include "imex/ExecutionEngine/execution_engine.hpp"
+#include "imex/compiler/compiler.hpp"
+#include "imex/compiler/pipeline_registry.hpp"
+#include "imex/utils.hpp"
 
 #include "pipelines/base_pipeline.hpp"
 #include "pipelines/lower_to_gpu.hpp"

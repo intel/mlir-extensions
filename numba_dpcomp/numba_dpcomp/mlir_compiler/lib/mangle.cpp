@@ -23,7 +23,7 @@
 
 #include <cctype>
 
-#include "mlir-extensions/Dialect/plier/dialect.hpp"
+#include "imex/Dialect/plier/dialect.hpp"
 
 namespace {
 static const constexpr auto PREFIX = "_Z";

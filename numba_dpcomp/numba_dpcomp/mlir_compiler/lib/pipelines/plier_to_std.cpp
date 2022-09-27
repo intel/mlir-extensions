@@ -31,21 +31,21 @@
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 #include <mlir/Transforms/Passes.h>
 
-#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
-#include "mlir-extensions/Dialect/plier/dialect.hpp"
+#include "imex/Dialect/imex_util/dialect.hpp"
+#include "imex/Dialect/plier/dialect.hpp"
 
-#include "mlir-extensions/Transforms/call_lowering.hpp"
-#include "mlir-extensions/Transforms/cast_utils.hpp"
-#include "mlir-extensions/Transforms/const_utils.hpp"
-#include "mlir-extensions/Transforms/inline_utils.hpp"
-#include "mlir-extensions/Transforms/pipeline_utils.hpp"
-#include "mlir-extensions/Transforms/rewrite_wrapper.hpp"
-#include "mlir-extensions/Transforms/type_conversion.hpp"
+#include "imex/Transforms/call_lowering.hpp"
+#include "imex/Transforms/cast_utils.hpp"
+#include "imex/Transforms/const_utils.hpp"
+#include "imex/Transforms/inline_utils.hpp"
+#include "imex/Transforms/pipeline_utils.hpp"
+#include "imex/Transforms/rewrite_wrapper.hpp"
+#include "imex/Transforms/type_conversion.hpp"
 
 #include "base_pipeline.hpp"
+#include "imex/compiler/pipeline_registry.hpp"
 #include "loop_utils.hpp"
 #include "mangle.hpp"
-#include "mlir-extensions/compiler/pipeline_registry.hpp"
 #include "py_func_resolver.hpp"
 #include "py_linalg_resolver.hpp"
 

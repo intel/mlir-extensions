@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "mlir-extensions/Transforms/cast_utils.hpp"
-#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
+#include "imex/Transforms/cast_utils.hpp"
+#include "imex/Dialect/imex_util/dialect.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 

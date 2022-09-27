@@ -34,10 +34,10 @@ if (NOT EXPECTED_LLVM_SHA STREQUAL LLVM_SHA)
     message(FATAL_ERROR "Invalid llvm version")
 endif()
 
-add_subdirectory(include/mlir-extensions/Dialect/plier)
-add_subdirectory(include/mlir-extensions/Dialect/imex_util)
-add_subdirectory(include/mlir-extensions/Dialect/gpu_runtime/IR)
-add_subdirectory(include/mlir-extensions/Dialect/ntensor/IR)
+add_subdirectory(include/imex/Dialect/plier)
+add_subdirectory(include/imex/Dialect/imex_util)
+add_subdirectory(include/imex/Dialect/gpu_runtime/IR)
+add_subdirectory(include/imex/Dialect/ntensor/IR)
 
 set(SOURCES_LIST
     lib/Conversion/SCFToAffine/SCFToAffine.cpp
@@ -79,44 +79,44 @@ set(SOURCES_LIST
     lib/utils.cpp
     )
 set(HEADERS_LIST
-    include/mlir-extensions/Conversion/SCFToAffine/SCFToAffine.h
-    include/mlir-extensions/Conversion/cfg_to_scf.hpp
-    include/mlir-extensions/Conversion/gpu_runtime_to_llvm.hpp
-    include/mlir-extensions/Conversion/gpu_to_gpu_runtime.hpp
-    include/mlir-extensions/Conversion/util_conversion.hpp
-    include/mlir-extensions/Conversion/util_to_llvm.hpp
-    include/mlir-extensions/Dialect/gpu_runtime/IR/gpu_runtime_ops.hpp
-    include/mlir-extensions/Dialect/imex_util/dialect.hpp
-    include/mlir-extensions/Dialect/ntensor/IR/NTensorOps.hpp
-    include/mlir-extensions/Dialect/plier/dialect.hpp
-    include/mlir-extensions/ExecutionEngine/execution_engine.hpp
-    include/mlir-extensions/Transforms/arg_lowering.hpp
-    include/mlir-extensions/Transforms/call_lowering.hpp
-    include/mlir-extensions/Transforms/canonicalize_reductions.hpp
-    include/mlir-extensions/Transforms/cast_lowering.hpp
-    include/mlir-extensions/Transforms/cast_utils.hpp
-    include/mlir-extensions/Transforms/common_opts.hpp
-    include/mlir-extensions/Transforms/const_utils.hpp
-    include/mlir-extensions/Transforms/cse.hpp
-    include/mlir-extensions/Transforms/expand_tuple.hpp
-    include/mlir-extensions/Transforms/func_utils.hpp
-    include/mlir-extensions/Transforms/if_rewrites.hpp
-    include/mlir-extensions/Transforms/index_type_propagation.hpp
-    include/mlir-extensions/Transforms/inline_utils.hpp
-    include/mlir-extensions/Transforms/loop_rewrites.hpp
-    include/mlir-extensions/Transforms/loop_utils.hpp
-    include/mlir-extensions/Transforms/memory_rewrites.hpp
-    include/mlir-extensions/Transforms/pipeline_utils.hpp
-    include/mlir-extensions/Transforms/promote_bool_memref.hpp
-    include/mlir-extensions/Transforms/promote_to_parallel.hpp
-    include/mlir-extensions/Transforms/rewrite_wrapper.hpp
-    include/mlir-extensions/Transforms/type_conversion.hpp
-    include/mlir-extensions/Transforms/uplift_math.hpp
-    include/mlir-extensions/analysis/memory_ssa.hpp
-    include/mlir-extensions/analysis/memory_ssa_analysis.hpp
-    include/mlir-extensions/compiler/compiler.hpp
-    include/mlir-extensions/compiler/pipeline_registry.hpp
-    include/mlir-extensions/utils.hpp
+    include/imex/Conversion/SCFToAffine/SCFToAffine.h
+    include/imex/Conversion/cfg_to_scf.hpp
+    include/imex/Conversion/gpu_runtime_to_llvm.hpp
+    include/imex/Conversion/gpu_to_gpu_runtime.hpp
+    include/imex/Conversion/util_conversion.hpp
+    include/imex/Conversion/util_to_llvm.hpp
+    include/imex/Dialect/gpu_runtime/IR/gpu_runtime_ops.hpp
+    include/imex/Dialect/imex_util/dialect.hpp
+    include/imex/Dialect/ntensor/IR/NTensorOps.hpp
+    include/imex/Dialect/plier/dialect.hpp
+    include/imex/ExecutionEngine/execution_engine.hpp
+    include/imex/Transforms/arg_lowering.hpp
+    include/imex/Transforms/call_lowering.hpp
+    include/imex/Transforms/canonicalize_reductions.hpp
+    include/imex/Transforms/cast_lowering.hpp
+    include/imex/Transforms/cast_utils.hpp
+    include/imex/Transforms/common_opts.hpp
+    include/imex/Transforms/const_utils.hpp
+    include/imex/Transforms/cse.hpp
+    include/imex/Transforms/expand_tuple.hpp
+    include/imex/Transforms/func_utils.hpp
+    include/imex/Transforms/if_rewrites.hpp
+    include/imex/Transforms/index_type_propagation.hpp
+    include/imex/Transforms/inline_utils.hpp
+    include/imex/Transforms/loop_rewrites.hpp
+    include/imex/Transforms/loop_utils.hpp
+    include/imex/Transforms/memory_rewrites.hpp
+    include/imex/Transforms/pipeline_utils.hpp
+    include/imex/Transforms/promote_bool_memref.hpp
+    include/imex/Transforms/promote_to_parallel.hpp
+    include/imex/Transforms/rewrite_wrapper.hpp
+    include/imex/Transforms/type_conversion.hpp
+    include/imex/Transforms/uplift_math.hpp
+    include/imex/analysis/memory_ssa.hpp
+    include/imex/analysis/memory_ssa_analysis.hpp
+    include/imex/compiler/compiler.hpp
+    include/imex/compiler/pipeline_registry.hpp
+    include/imex/utils.hpp
     )
 
 set(MLIR_EXTENSIONS_LIB "mlir-extensions")
@@ -156,7 +156,7 @@ target_include_directories(${MLIR_EXTENSIONS_LIB} SYSTEM PRIVATE
 target_include_directories(${MLIR_EXTENSIONS_LIB} PUBLIC
     ./include
     ${PROJECT_BINARY_DIR}/mlir/include
-    ${PROJECT_BINARY_DIR}/mlir-extensions/include
+    ${PROJECT_BINARY_DIR}/imex/include
     )
 
 add_dependencies(${MLIR_EXTENSIONS_LIB} MLIRPlierOpsIncGen MLIRImexUtilOpsIncGen MLIRGpuRuntimeOpsIncGen MLIRNTensorOpsIncGen)

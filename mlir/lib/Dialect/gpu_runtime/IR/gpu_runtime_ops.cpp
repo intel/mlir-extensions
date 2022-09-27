@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "mlir-extensions/Dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
+#include "imex/Dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
 
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/BuiltinOps.h>
@@ -51,11 +51,11 @@ namespace gpu_runtime {
 void GpuRuntimeDialect::initialize() {
   addOperations<
 #define GET_OP_LIST
-#include "mlir-extensions/Dialect/gpu_runtime/IR/GpuRuntimeOps.cpp.inc"
+#include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOps.cpp.inc"
       >();
   addAttributes<
 #define GET_ATTRDEF_LIST
-#include "mlir-extensions/Dialect/gpu_runtime/IR/GpuRuntimeOpsAttributes.cpp.inc"
+#include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOpsAttributes.cpp.inc"
       >();
   addTypes<OpaqueType>();
   addInterfaces<GpuRuntimeInlinerInterface>();
@@ -212,12 +212,12 @@ mlir::StringRef getGpuAccessibleAttrName() { return "gpu.gpu_accessible"; }
 
 } // namespace gpu_runtime
 
-#include "mlir-extensions/Dialect/gpu_runtime/IR/GpuRuntimeOpsDialect.cpp.inc"
+#include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOpsDialect.cpp.inc"
 
 #define GET_ATTRDEF_CLASSES
-#include "mlir-extensions/Dialect/gpu_runtime/IR/GpuRuntimeOpsAttributes.cpp.inc"
+#include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOpsAttributes.cpp.inc"
 
 #define GET_OP_CLASSES
-#include "mlir-extensions/Dialect/gpu_runtime/IR/GpuRuntimeOps.cpp.inc"
+#include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOps.cpp.inc"
 
-#include "mlir-extensions/Dialect/gpu_runtime/IR/GpuRuntimeOpsEnums.cpp.inc"
+#include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOpsEnums.cpp.inc"

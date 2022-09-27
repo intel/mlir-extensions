@@ -14,9 +14,9 @@
 
 #include <mlir/Conversion/Passes.h>
 
-#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
+#include "imex/Dialect/imex_util/dialect.hpp"
 
-#include "mlir-extensions/Conversion/util_conversion.hpp"
+#include "imex/Conversion/util_conversion.hpp"
 
 namespace {
 struct ConvertTakeContext

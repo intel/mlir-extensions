@@ -31,11 +31,11 @@
 #include <mlir/IR/BuiltinTypes.h>
 #include <mlir/Parser/Parser.h>
 
-#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
-#include "mlir-extensions/Dialect/plier/dialect.hpp"
-#include "mlir-extensions/Transforms/const_utils.hpp"
-#include "mlir-extensions/Transforms/func_utils.hpp"
-#include "mlir-extensions/utils.hpp"
+#include "imex/Dialect/imex_util/dialect.hpp"
+#include "imex/Dialect/plier/dialect.hpp"
+#include "imex/Transforms/const_utils.hpp"
+#include "imex/Transforms/func_utils.hpp"
+#include "imex/utils.hpp"
 #include "py_map_types.hpp"
 
 namespace py = pybind11;

@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "mlir-extensions/Transforms/expand_tuple.hpp"
+#include "imex/Transforms/expand_tuple.hpp"
 
-#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
-#include "mlir-extensions/Transforms/type_conversion.hpp"
+#include "imex/Dialect/imex_util/dialect.hpp"
+#include "imex/Transforms/type_conversion.hpp"
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>

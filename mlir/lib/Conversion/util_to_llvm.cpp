@@ -19,9 +19,9 @@
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Pass/Pass.h>
 
-#include "mlir-extensions/Dialect/imex_util/dialect.hpp"
+#include "imex/Dialect/imex_util/dialect.hpp"
 
-#include "mlir-extensions/Conversion/util_to_llvm.hpp"
+#include "imex/Conversion/util_to_llvm.hpp"
 
 static mlir::Type convertTupleTypes(mlir::MLIRContext &context,
                                     mlir::TypeConverter &converter,
