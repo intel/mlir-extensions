@@ -106,9 +106,8 @@ def NTensor_Tensor : NTensor_Type<"NTensor", "ntensor", [
   let assemblyFormat = "`<` custom<Shape>($shape, $elementType) (`,` $environment^)? `>`";
 }
 
-def NTensorSlice : DialectType<
-  NTensor_Dialect, CPred<"$_self.isa<::imex::ntensor::SliceType>()">, "ntensor slice type">,
-             BuildableType<"::imex::ntensor::SliceType::get($_builder.getContext())">;
+def NTensorSlice : NTensor_Type<"Slice", "slice", [], "::mlir::Type"> {
+}
 
 def UnaryOp : NTensor_OpBase<"unary", []> {
   let summary = "Unary operation.";
@@ -171,7 +170,7 @@ def BuildSliceOp : NTensor_OpBase<"build_slice", [
 
   let results = (outs NTensorSlice:$result);
 
-  let assemblyFormat = "attr-dict ($begin^)? $end ($step^)?";
+  let assemblyFormat = "attr-dict `(` $begin `:` $end `:` $step `)`";
 }
 
 def ResolveSliceOp : NTensor_OpBase<"resolve_slice", [NoSideEffect]> {
