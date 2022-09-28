@@ -201,7 +201,7 @@ def DimOp : NTensor_OpBase<"dim", [NoSideEffect]> {
   let results = (outs Index:$result);
 
   let assemblyFormat = [{
-    attr-dict $source `,` $index `:` type($source)
+    attr-dict $source `,` $index `:` qualified(type($source))
   }];
 
   let extraClassDeclaration = [{
