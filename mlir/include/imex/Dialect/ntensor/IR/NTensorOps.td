@@ -107,6 +107,10 @@ def NTensor_Tensor : NTensor_Type<"NTensor", "ntensor", [
 }
 
 def NTensor_Slice : NTensor_Type<"Slice", "slice", [], "::mlir::Type"> {
+  let summary = "Slice type for indexing into arrays";
+  let description = [{
+    TBD
+  }];
 }
 
 def UnaryOp : NTensor_OpBase<"unary", []> {
