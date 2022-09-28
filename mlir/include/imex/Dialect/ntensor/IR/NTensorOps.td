@@ -106,7 +106,7 @@ def NTensor_Tensor : NTensor_Type<"NTensor", "ntensor", [
   let assemblyFormat = "`<` custom<Shape>($shape, $elementType) (`,` $environment^)? `>`";
 }
 
-def NTensorSlice : NTensor_Type<"Slice", "slice", [], "::mlir::Type"> {
+def NTensor_Slice : NTensor_Type<"Slice", "slice", [], "::mlir::Type"> {
 }
 
 def UnaryOp : NTensor_OpBase<"unary", []> {
@@ -168,7 +168,7 @@ def BuildSliceOp : NTensor_OpBase<"build_slice", [
 
   let arguments = (ins Optional<Index>:$begin, Index:$end, Optional<Index>:$step);
 
-  let results = (outs NTensorSlice:$result);
+  let results = (outs NTensor_Slice:$result);
 
   let assemblyFormat = "attr-dict `(` $begin `:` $end `:` $step `)`";
 }
@@ -180,7 +180,7 @@ def ResolveSliceOp : NTensor_OpBase<"resolve_slice", [NoSideEffect]> {
     `step` values.
   }];
 
-  let arguments = (ins NTensorSlice:$slice, NTensor_Tensor:$array, IndexAttr:$dim);
+  let arguments = (ins NTensor_Slice:$slice, NTensor_Tensor:$array, IndexAttr:$dim);
 
   let results = (outs Index:$begin, Index:$end, Index:$step);
 
