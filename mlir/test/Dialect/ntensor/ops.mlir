@@ -232,3 +232,14 @@ func.func @test() -> (!ntensor.slice, !ntensor.slice, !ntensor.slice) {
 //  CHECK-NEXT:   %[[S2:.*]] = ntensor.build_slice(%[[BEGIN]] : %[[END]] : )
 //  CHECK-NEXT:   %[[S3:.*]] = ntensor.build_slice(%[[BEGIN]] : %[[END]] : %[[STEP]])
 //  CHECK-NEXT:   %[[S1]], %[[S2]], %[[S3]] : !ntensor.slice, !ntensor.slice, !ntensor.slice
+
+// -----
+
+func.func @test(%arg1: !ntensor.ntensor<?xf32>, %arg2: !ntensor.slice) -> (index, index, index) {
+  %0:3 = ntensor.resolve_slice %arg2 (%arg1 : !ntensor.ntensor<?xf32>)[0]
+  return %0#0, %0#1, %0#2 : index, index, index
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG1:.*]]: !ntensor.ntensor<?xf32>, %[[ARG2:.*]]: !ntensor.slice)
+//  CHECK-NEXT:   %[[BEGIN:.*]], %[[END:.*]], %[[STEP:.*]] = ntensor.resolve_slice %[[ARG2]](%[[ARG1]] : <?xf32>) [0]
+//  CHECK-NEXT:   return %[[BEGIN]], %[[END]], %[[STEP]] : index, index, index
