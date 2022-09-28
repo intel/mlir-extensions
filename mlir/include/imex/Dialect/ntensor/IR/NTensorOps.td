@@ -106,6 +106,10 @@ def NTensor_Tensor : NTensor_Type<"NTensor", "ntensor", [
   let assemblyFormat = "`<` custom<Shape>($shape, $elementType) (`,` $environment^)? `>`";
 }
 
+def NTensorSlice : DialectType<
+  NTensor_Dialect, CPred<"$_self.isa<::imex::ntensor::SliceType>()">, "ntensor slice type">,
+             BuildableType<"::imex::ntensor::SliceType::get($_builder.getContext())">;
+
 def UnaryOp : NTensor_OpBase<"unary", []> {
   let summary = "Unary operation.";
   let description = [{

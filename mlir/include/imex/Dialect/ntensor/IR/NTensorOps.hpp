@@ -58,6 +58,14 @@ public:
   /// Allow implicit conversion to ShapedType.
   operator mlir::ShapedType() const { return cast<mlir::ShapedType>(); }
 };
+
+class SliceType : public ::mlir::Type::TypeBase<SliceType, ::mlir::Type,
+                                                ::mlir::TypeStorage> {
+public:
+  // Used for generic hooks in TypeBase.
+  using Base::Base;
+};
+
 } // namespace ntensor
 } // namespace imex
 
