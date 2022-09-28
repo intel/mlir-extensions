@@ -188,6 +188,28 @@ def ResolveSliceOp : NTensor_OpBase<"resolve_slice", [NoSideEffect]> {
   let assemblyFormat = "attr-dict $slice `(` $array `:` type($array) `)` `[` $dim `]`";
 }
 
+def DimOp : NTensor_OpBase<"dim", [NoSideEffect]> {
+  let summary = "dimension index operation";
+  let description = [{
+    The `dim` operation takes a array and a dimension operand of type `index`.
+    It returns the size of the requested dimension of the given array.
+    If the dimension index is out of bounds the behavior is undefined.
+  }];
+
+  let arguments = (ins NTensor_Tensor:$source,
+                       Index:$index);
+  let results = (outs Index:$result);
+
+  let assemblyFormat = [{
+    attr-dict $source `,` $index `:` type($source)
+  }];
+
+  let extraClassDeclaration = [{
+    /// Helper function to get the index as a simple integer if it is constant.
+    ::llvm::Optional<int64_t> getConstantIndex();
+  }];
+}
+
 def CallOp : NTensor_OpBase<"call", []> {
   let summary = "Call operation.";
   let description = [{
