@@ -160,6 +160,34 @@ def GetitemOp : NTensor_OpBase<"getitem", [NoSideEffect]> {
   let assemblyFormat = "attr-dict `(` $source `:` type($source) `)` `[` $index `:` type($index) `]` `->` type($result)";
 }
 
+def BuildSliceOp : NTensor_OpBase<"build_slice", [
+    AttrSizedOperandSegments, NoSideEffect]> {
+  let summary = "Slice creation operation.";
+  let description = [{
+    Creates a slice to index into ntensor array.
+  }];
+
+  let arguments = (ins Optional<Index>:$begin, Index:$end, Optional<Index>:$step);
+
+  let results = (outs NTensorSlice:$result);
+
+  let assemblyFormat = "attr-dict ($begin^)? $end ($step^)?";
+}
+
+def ResolveSliceOp : NTensor_OpBase<"resolve_slice", [NoSideEffect]> {
+  let summary = "Slice resolving operation.";
+  let description = [{
+    Resolves slice for the specified array and dimension into `begin`, `end` and
+    `step` values.
+  }];
+
+  let arguments = (ins NTensorSlice:$slice, NTensor_Tensor:$array, IndexAttr:$dim);
+
+  let results = (outs Index:$begin, Index:$end, Index:$step);
+
+  let assemblyFormat = "attr-dict $slice `(` $array `:` type($array) `)` `[` $dim `]`";
+}
+
 def CallOp : NTensor_OpBase<"call", []> {
   let summary = "Call operation.";
   let description = [{

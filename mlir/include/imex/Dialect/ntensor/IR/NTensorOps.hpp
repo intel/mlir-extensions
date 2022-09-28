@@ -14,10 +14,19 @@
 
 #pragma once
 
+#include <mlir/IR/BuiltinTypes.h>
 #include <mlir/IR/Dialect.h>
 #include <mlir/IR/OpDefinition.h>
+#include <mlir/IR/OpImplementation.h>
 #include <mlir/IR/Region.h>
 #include <mlir/Interfaces/SideEffectInterfaces.h>
+
+namespace imex {
+namespace ntensor {
+class NTensorType;
+class SliceType;
+} // namespace ntensor
+} // namespace imex
 
 #include "imex/Dialect/ntensor/IR/NTensorOpsDialect.h.inc"
 #include "imex/Dialect/ntensor/IR/NTensorOpsEnums.h.inc"
