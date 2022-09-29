@@ -14,10 +14,11 @@
 
 #include "imex/Dialect/ntensor/IR/NTensorOps.hpp"
 
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
-#include "mlir/Dialect/Utils/StaticValueUtils.h"
+#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Utils/StaticValueUtils.h>
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/DialectImplementation.h>
+#include <mlir/IR/PatternMatch.h>
 #include <mlir/Transforms/InliningUtils.h>
 
 #include <llvm/ADT/TypeSwitch.h>
@@ -36,10 +37,7 @@ struct NTensorInlinerInterface : public mlir::DialectInlinerInterface {
 };
 } // namespace
 
-namespace imex {
-namespace ntensor {
-
-void NTensorDialect::initialize() {
+void imex::ntensor::NTensorDialect::initialize() {
   addOperations<
 #define GET_OP_LIST
 #include "imex/Dialect/ntensor/IR/NTensorOps.cpp.inc"
@@ -58,10 +56,9 @@ void NTensorDialect::initialize() {
       >();
 }
 
-mlir::Operation *NTensorDialect::materializeConstant(mlir::OpBuilder &builder,
-                                                     mlir::Attribute value,
-                                                     mlir::Type type,
-                                                     mlir::Location loc) {
+mlir::Operation *imex::ntensor::NTensorDialect::materializeConstant(
+    mlir::OpBuilder &builder, mlir::Attribute value, mlir::Type type,
+    mlir::Location loc) {
   if (mlir::arith::ConstantOp::isBuildableWith(value, type))
     return builder.create<mlir::arith::ConstantOp>(loc, type, value);
 
@@ -72,7 +69,7 @@ mlir::Operation *NTensorDialect::materializeConstant(mlir::OpBuilder &builder,
   return nullptr;
 }
 
-void NTensorType::walkImmediateSubElements(
+void imex::ntensor::NTensorType::walkImmediateSubElements(
     llvm::function_ref<void(mlir::Attribute)> walkAttrsFn,
     llvm::function_ref<void(mlir::Type)> walkTypesFn) const {
   walkTypesFn(getElementType());
@@ -80,29 +77,91 @@ void NTensorType::walkImmediateSubElements(
     walkAttrsFn(env);
 }
 
-bool NTensorBase::hasRank() const { return true; }
+bool imex::ntensor::NTensorBase::hasRank() const { return true; }
 
-llvm::ArrayRef<int64_t> NTensorBase::getShape() const {
+llvm::ArrayRef<int64_t> imex::ntensor::NTensorBase::getShape() const {
   return cast<NTensorType>().getShape();
 }
 
-NTensorBase
-NTensorBase::cloneWith(llvm::Optional<llvm::ArrayRef<int64_t>> shape,
-                       Type elementType) const {
+imex::ntensor::NTensorBase imex::ntensor::NTensorBase::cloneWith(
+    llvm::Optional<llvm::ArrayRef<int64_t>> shape, Type elementType) const {
   auto t = cast<NTensorType>();
   return NTensorType::get(shape.value_or(getShape()), elementType,
                           t.getEnvironment());
 }
 
-mlir::Type NTensorType::replaceImmediateSubElements(
+mlir::Type imex::ntensor::NTensorType::replaceImmediateSubElements(
     llvm::ArrayRef<mlir::Attribute> replAttrs,
     llvm::ArrayRef<mlir::Type> replTypes) const {
   return get(getShape(), replTypes.front(),
              replAttrs.empty() ? mlir::Attribute() : replAttrs.back());
 }
 
-} // namespace ntensor
-} // namespace imex
+namespace {
+struct ResolveSlicePropagate
+    : public mlir::OpRewritePattern<imex::ntensor::ResolveSliceOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::ResolveSliceOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto buildSlice =
+        op.getSlice().getDefiningOp<imex::ntensor::BuildSliceOp>();
+    if (!buildSlice)
+      return mlir::failure();
+
+    auto loc = op->getLoc();
+
+    mlir::Value zero;
+    auto getZero = [&]() {
+      if (!zero)
+        zero = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
+
+      return zero;
+    };
+
+    auto size = op.getSize();
+    auto handleNegativeVal = [&](mlir::Value val) -> mlir::Value {
+      auto isNeg = rewriter.create<mlir::arith::CmpIOp>(
+          loc, mlir::arith::CmpIPredicate::slt, val, getZero());
+      auto negIndex = rewriter.create<mlir::arith::AddIOp>(loc, size, val);
+      auto posIndex =
+          rewriter.create<mlir::arith::SelectOp>(loc, isNeg, negIndex, val);
+      auto isOutOfRange = rewriter.create<mlir::arith::CmpIOp>(
+          loc, mlir::arith::CmpIPredicate::sgt, val, size);
+      return rewriter.create<mlir::arith::SelectOp>(loc, isOutOfRange, size,
+                                                    posIndex);
+    };
+
+    mlir::Value results[3];
+    if (auto begin = buildSlice.getBegin()) {
+      results[0] = handleNegativeVal(begin);
+    } else {
+      results[0] = getZero();
+    }
+
+    if (auto end = buildSlice.getEnd()) {
+      results[1] = handleNegativeVal(end);
+    } else {
+      results[1] = size;
+    }
+
+    if (auto step = buildSlice.getStep()) {
+      results[2] = step;
+    } else {
+      results[2] = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
+    }
+
+    rewriter.replaceOp(op, results);
+    return mlir::success();
+  }
+};
+} // namespace
+
+void imex::ntensor::ResolveSliceOp::getCanonicalizationPatterns(
+    ::mlir::RewritePatternSet &results, ::mlir::MLIRContext *context) {
+  results.insert<ResolveSlicePropagate>(context);
+}
 
 static mlir::LogicalResult
 parseShape(mlir::AsmParser &parser,
