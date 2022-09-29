@@ -46,7 +46,6 @@ computeIndices(mlir::OpBuilder &builder, mlir::Location loc, mlir::Value value,
     return builder.create<mlir::memref::DimOp>(loc, value, dim);
   };
 
-  auto zero = builder.create<mlir::arith::ConstantIndexOp>(loc, 0);
   auto one = builder.create<mlir::arith::ConstantIndexOp>(loc, 1);
 
   auto foldConst = [&](mlir::Value val) -> mlir::OpFoldResult {
@@ -78,9 +77,8 @@ computeIndices(mlir::OpBuilder &builder, mlir::Location loc, mlir::Value value,
       }
       return {foldConst(begin), foldConst(size), step, true};
     } else {
-      auto offset =
-          foldConst(handleNegativeVal(imex::indexCast(builder, loc, indexVal)));
-      return {offset, builder.getIndexAttr(1), builder.getIndexAttr(1), false};
+      mlir::Value index = builder.create<imex::ntensor::ResolveIndexOp>(loc, indexVal, len);
+      return {index, builder.getIndexAttr(1), builder.getIndexAttr(1), false};
     }
   };
 
@@ -149,9 +147,6 @@ struct SetitemOpLowering : public mlir::OpConversionPattern<imex::ntensor::Setit
     if (!isValidGetitemIndex(index.getType()))
       return mlir::failure();
 
-    auto elemType = targetType.getElementType();
-    auto signlessElemType = imex::makeSignlessType(elemType);
-
     auto value = adaptor.getValue();
     auto loc = op.getLoc();
     llvm::SmallVector<mlir::OpFoldResult> offsets;
@@ -162,54 +157,10 @@ struct SetitemOpLowering : public mlir::OpConversionPattern<imex::ntensor::Setit
                                     sizes, strides, dimsIndices)))
       return mlir::failure();
 
-    auto castElem = [&](mlir::Value val) -> mlir::Value {
-      if (val.getType() != elemType) {
-        // TODO
-        val = rewriter.createOrFold<plier::CastOp>(loc, elemType, val);
-        rerunScfPipeline(op);
-      }
-      if (elemType != signlessElemType)
-        val =
-            rewriter.create<imex::util::SignCastOp>(loc, signlessElemType, val);
-
-      return val;
-    };
-
     if (!dimsIndices.empty()) {
       // Is slice
-      auto dst = makeSubview(rewriter, loc, target, offsets, sizes, strides,
-                             dimsIndices);
-
-      auto castView = [&](mlir::Value val) -> mlir::Value {
-        auto viewType = val.getType().cast<mlir::MemRefType>();
-        if (viewType.getElementType() != signlessElemType) {
-          auto signlessMemref = viewType.clone(signlessElemType);
-          val =
-              rewriter.create<imex::util::SignCastOp>(loc, signlessMemref, val);
-        }
-        return val;
-      };
-
-      auto valType = value.getType();
-      if (auto tensType = valType.dyn_cast<mlir::TensorType>()) {
-        auto memrefType = mlir::MemRefType::get(tensType.getShape(),
-                                                tensType.getElementType());
-        auto src =
-            rewriter
-                .create<mlir::bufferization::ToMemrefOp>(loc, memrefType, value)
-                .getResult();
-        genCopy(rewriter, loc, castView(src), dst);
-        rewriter.eraseOp(op);
-      } else if (valType.isa<mlir::MemRefType>()) {
-        auto srcView = castView(value);
-        auto dstView = castView(dst);
-        genCopy(rewriter, loc, srcView, dstView);
-        rewriter.eraseOp(op);
-      } else {
-        auto elem = castElem(value);
-        auto view = castView(dst);
-        rewriter.replaceOpWithNewOp<mlir::linalg::FillOp>(op, elem, view);
-      }
+      // TODO: Covered elsewhere
+      return mlir::failure();
     } else {
       // Is single element
       auto toValues = [&](auto &vals) {
@@ -230,14 +181,8 @@ struct SetitemOpLowering : public mlir::OpConversionPattern<imex::ntensor::Setit
         return ret;
       };
 
-      if (signlessElemType != elemType) {
-        auto signlessMemref = targetType.clone(signlessElemType);
-        target = rewriter.create<imex::util::SignCastOp>(loc, signlessMemref,
-                                                         target);
-      }
-
       rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(
-          op, castElem(value), target, toValues(offsets));
+          op, value, target, toValues(offsets));
     }
 
     return mlir::success();
