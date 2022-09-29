@@ -13,14 +13,14 @@
 // limitations under the License.
 
 #include "imex/Conversion/ntensor_to_memref.hpp"
-#include "imex/Dialect/ntensor/IR/NTensorOps.hpp"
 #include "imex/Dialect/imex_util/dialect.hpp"
+#include "imex/Dialect/ntensor/IR/NTensorOps.hpp"
 #include "imex/Transforms/cast_utils.hpp"
 
-#include <mlir/Transforms/DialectConversion.h>
-#include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Pass/PassManager.h>
+#include <mlir/Transforms/DialectConversion.h>
 #include <mlir/Transforms/Passes.h>
 
 static bool isValidGetitemIndex(mlir::Type type) {
@@ -62,7 +62,8 @@ computeIndices(mlir::OpBuilder &builder, mlir::Location loc, mlir::Value value,
     auto valType = indexVal.getType();
     auto len = getDim(dim);
     if (valType.isa<imex::ntensor::SliceType>()) {
-      auto resolved = builder.create<imex::ntensor::ResolveSliceOp>(loc, indexVal, len);
+      auto resolved =
+          builder.create<imex::ntensor::ResolveSliceOp>(loc, indexVal, len);
 
       auto begin = resolved.getBegin();
       auto end = resolved.getEnd();
@@ -77,7 +78,8 @@ computeIndices(mlir::OpBuilder &builder, mlir::Location loc, mlir::Value value,
       }
       return {foldConst(begin), foldConst(size), step, true};
     } else {
-      mlir::Value index = builder.create<imex::ntensor::ResolveIndexOp>(loc, indexVal, len);
+      mlir::Value index =
+          builder.create<imex::ntensor::ResolveIndexOp>(loc, indexVal, len);
       return {index, builder.getIndexAttr(1), builder.getIndexAttr(1), false};
     }
   };
@@ -131,12 +133,64 @@ computeIndices(mlir::OpBuilder &builder, mlir::Location loc, mlir::Value value,
   return mlir::success();
 }
 
+static auto getDynShape(size_t rank) {
+  return llvm::SmallVector<int64_t>(rank, mlir::ShapedType::kDynamicSize);
+}
+
+static mlir::Value makeSubview(mlir::OpBuilder &builder, mlir::Location loc,
+                               mlir::Value src,
+                               llvm::ArrayRef<mlir::OpFoldResult> offsets,
+                               llvm::ArrayRef<mlir::OpFoldResult> sizes,
+                               llvm::ArrayRef<mlir::OpFoldResult> strides,
+                               llvm::ArrayRef<unsigned> dimIndices) {
+  auto srcType = src.getType().cast<mlir::MemRefType>();
+  auto srcRank = static_cast<unsigned>(srcType.getRank());
+  auto dstRank = dimIndices.size();
+  assert(srcRank > 0);
+  assert(dstRank > 0);
+  assert(dstRank <= srcRank);
+
+  auto memrefType = srcType.cast<mlir::MemRefType>();
+  auto resType = mlir::memref::SubViewOp::inferResultType(memrefType, offsets,
+                                                          sizes, strides)
+                     .cast<mlir::MemRefType>();
+
+  mlir::Value view = builder.create<mlir::memref::SubViewOp>(
+      loc, resType, src, offsets, sizes, strides);
+
+  if (srcRank != dstRank) {
+    llvm::SmallVector<mlir::OpFoldResult> newOfsets(srcRank,
+                                                    builder.getIndexAttr(0));
+    llvm::SmallVector<mlir::OpFoldResult> newStrides(srcRank,
+                                                     builder.getIndexAttr(1));
+    auto viewType = view.getType().cast<mlir::MemRefType>();
+    auto reducedType =
+        mlir::memref::SubViewOp::inferRankReducedResultType(
+            getDynShape(dstRank), viewType, newOfsets, sizes, newStrides)
+            .cast<mlir::MemRefType>();
+    view = builder.create<mlir::memref::SubViewOp>(
+        loc, reducedType, view, newOfsets, sizes, newStrides);
+    resType = reducedType;
+  }
+
+  auto flatMemrefType =
+      mlir::MemRefType::get(resType.getShape(), resType.getElementType());
+
+  if (resType != flatMemrefType)
+    view =
+        builder.create<imex::util::ChangeLayoutOp>(loc, flatMemrefType, view);
+
+  return view;
+}
+
 namespace {
-struct SetitemOpLowering : public mlir::OpConversionPattern<imex::ntensor::SetitemOp> {
+struct SetitemOpLowering
+    : public mlir::OpConversionPattern<imex::ntensor::SetitemOp> {
   using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(imex::ntensor::SetitemOp op, imex::ntensor::SetitemOp::Adaptor adaptor,
+  matchAndRewrite(imex::ntensor::SetitemOp op,
+                  imex::ntensor::SetitemOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto target = adaptor.getSource();
     auto targetType = target.getType().dyn_cast<mlir::MemRefType>();
@@ -181,136 +235,85 @@ struct SetitemOpLowering : public mlir::OpConversionPattern<imex::ntensor::Setit
         return ret;
       };
 
-      rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(
-          op, value, target, toValues(offsets));
+      rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(op, value, target,
+                                                         toValues(offsets));
     }
 
     return mlir::success();
   }
 };
 
-//struct GetitemOpLowering : public mlir::OpConversionPattern<imex::ntensor::GetitemOp> {
-//  using OpConversionPattern::OpConversionPattern;
+struct GetitemOpLowering
+    : public mlir::OpConversionPattern<imex::ntensor::GetitemOp> {
+  using OpConversionPattern::OpConversionPattern;
 
-//  mlir::LogicalResult
-//  matchAndRewrite(imex::ntensor::GetitemOp op, imex::ntensor::GetitemOp::Adaptor adaptor,
-//                  mlir::ConversionPatternRewriter &rewriter) const override {
-//    auto value = adaptor.getValue();
-//    auto index = adaptor.getIndex();
-//    auto type = value.getType();
-//    bool isMemref = type.isa<mlir::MemRefType>();
-//    bool isTensor = type.isa<mlir::TensorType>();
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::GetitemOp op,
+                  imex::ntensor::GetitemOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto value = adaptor.getSource();
+    auto index = adaptor.getIndex();
+    auto memrefType = value.getType().dyn_cast<mlir::MemRefType>();
+    if (!memrefType)
+      return mlir::failure();
 
-//    if (!isMemref && !isTensor)
-//      return mlir::failure();
+    if (!isValidGetitemIndex(index.getType()))
+      return mlir::failure();
 
-//    if (!isValidGetitemIndex(index.getType()))
-//      return mlir::failure();
+    auto loc = op.getLoc();
+    llvm::SmallVector<mlir::OpFoldResult> offsets;
+    llvm::SmallVector<mlir::OpFoldResult> sizes;
+    llvm::SmallVector<mlir::OpFoldResult> strides;
+    llvm::SmallVector<unsigned> dimsIndices;
+    if (mlir::failed(computeIndices(rewriter, loc, value, index, offsets, sizes,
+                                    strides, dimsIndices)))
+      return mlir::failure();
 
-//    auto loc = op.getLoc();
-//    auto shapedType = type.cast<mlir::ShapedType>();
-//    llvm::SmallVector<mlir::OpFoldResult> offsets;
-//    llvm::SmallVector<mlir::OpFoldResult> sizes;
-//    llvm::SmallVector<mlir::OpFoldResult> strides;
-//    llvm::SmallVector<unsigned> dimsIndices;
-//    if (mlir::failed(computeIndices(rewriter, loc, value, index, offsets, sizes,
-//                                    strides, dimsIndices)))
-//      return mlir::failure();
+    mlir::Value res;
+    if (!dimsIndices.empty()) {
+      // Is slice
+      res = makeSubview(rewriter, loc, value, offsets, sizes, strides,
+                        dimsIndices);
+    } else {
+      // Is single element
+      auto toValues = [&](auto &vals) {
+        llvm::SmallVector<mlir::Value> ret(vals.size());
+        for (auto it : llvm::enumerate(vals)) {
+          auto i = it.index();
+          auto val = it.value();
+          if (auto attr = val.template dyn_cast<mlir::Attribute>()) {
+            ret[i] = rewriter.create<mlir::arith::ConstantIndexOp>(
+                loc, attr.template cast<mlir::IntegerAttr>()
+                         .getValue()
+                         .getSExtValue());
+          } else {
+            ret[i] = val.template get<mlir::Value>();
+          }
+        }
 
-//    mlir::Value res;
-//    auto elemType = shapedType.getElementType();
-//    auto elemTypeSignless = imex::makeSignlessType(elemType);
-//    if (elemType != elemTypeSignless) {
-//      if (isMemref) {
-//        auto memrefType = type.cast<mlir::MemRefType>();
-//        auto signlessType = mlir::MemRefType::get(
-//            memrefType.getShape(), elemTypeSignless, memrefType.getLayout());
-//        value =
-//            rewriter.create<imex::util::SignCastOp>(loc, signlessType, value);
-//      } else if (isTensor) {
-//        auto tensorType = type.cast<mlir::RankedTensorType>();
-//        auto signlessType = mlir::RankedTensorType::get(
-//            tensorType.getShape(), elemTypeSignless, tensorType.getEncoding());
-//        value =
-//            rewriter.create<imex::util::SignCastOp>(loc, signlessType, value);
-//      } else {
-//        llvm_unreachable("Invalid getitem");
-//      }
-//    }
-
-//    if (!dimsIndices.empty()) {
-//      // Is slice
-//      res = makeSubview(rewriter, loc, value, offsets, sizes, strides,
-//                        dimsIndices);
-
-//      mlir::ShapedType resultTypeSignless =
-//          res.getType().cast<mlir::ShapedType>();
-//      mlir::Type resultType;
-//      if (isMemref) {
-//        resultType =
-//            mlir::MemRefType::get(resultTypeSignless.getShape(), elemType);
-//      } else if (isTensor) {
-//        resultType = mlir::RankedTensorType::get(resultTypeSignless.getShape(),
-//                                                 elemType);
-//      } else {
-//        llvm_unreachable("Invalid getitem");
-//      }
-
-//      if (resultType != resultTypeSignless)
-//        res = rewriter.create<imex::util::SignCastOp>(loc, resultType, res);
-//    } else {
-//      // Is single element
-//      auto toValues = [&](auto &vals) {
-//        llvm::SmallVector<mlir::Value> ret(vals.size());
-//        for (auto it : llvm::enumerate(vals)) {
-//          auto i = it.index();
-//          auto val = it.value();
-//          if (auto attr = val.template dyn_cast<mlir::Attribute>()) {
-//            ret[i] = rewriter.create<mlir::arith::ConstantIndexOp>(
-//                loc, attr.template cast<mlir::IntegerAttr>()
-//                         .getValue()
-//                         .getSExtValue());
-//          } else {
-//            ret[i] = val.template get<mlir::Value>();
-//          }
-//        }
-
-//        return ret;
-//      };
-//      if (isMemref) {
-//        res = rewriter.create<mlir::memref::LoadOp>(loc, value,
-//                                                    toValues(offsets));
-//      } else if (isTensor) {
-//        res = rewriter.create<mlir::tensor::ExtractOp>(loc, value,
-//                                                       toValues(offsets));
-//      } else {
-//        llvm_unreachable("Invalid getitem");
-//      }
-
-//      if (elemType != elemTypeSignless)
-//        res = rewriter.create<imex::util::SignCastOp>(loc, elemType, res);
-//    }
-
-//    rerunScfPipeline(op);
-//    rewriter.replaceOp(op, res);
-//    return mlir::success();
-//  }
-//};
-}
-
+        return ret;
+      };
+      res =
+          rewriter.create<mlir::memref::LoadOp>(loc, value, toValues(offsets));
+    }
+    rewriter.replaceOp(op, res);
+    return mlir::success();
+  }
+};
+} // namespace
 
 void imex::populateNtensorToMemrefPatterns(mlir::MLIRContext &context,
                                            mlir::TypeConverter &converter,
                                            mlir::RewritePatternSet &patterns,
-                                           mlir::ConversionTarget &target)
-{
-  converter.addConversion([](imex::ntensor::NTensorType type) -> llvm::Optional<mlir::Type>{
-    auto elemType = type.getElementType();
-    if (mlir::MemRefType::isValidElementType(elemType))
-      return mlir::MemRefType::get(type.getShape(), elemType);
+                                           mlir::ConversionTarget &target) {
+  converter.addConversion(
+      [](imex::ntensor::NTensorType type) -> llvm::Optional<mlir::Type> {
+        auto elemType = type.getElementType();
+        if (mlir::MemRefType::isValidElementType(elemType))
+          return mlir::MemRefType::get(type.getShape(), elemType);
 
-    return llvm::None;
-  });
+        return llvm::None;
+      });
 }
 
 namespace {
@@ -339,10 +342,8 @@ struct NtensorToMemrefPass
       signalPassFailure();
   }
 };
-}
+} // namespace
 
-std::unique_ptr<mlir::Pass> imex::createNtensorToMemrefPass()
-{
+std::unique_ptr<mlir::Pass> imex::createNtensorToMemrefPass() {
   return std::make_unique<NtensorToMemrefPass>();
 }
-
