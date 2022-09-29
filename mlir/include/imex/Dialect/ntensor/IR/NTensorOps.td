@@ -106,6 +106,13 @@ def NTensor_Tensor : NTensor_Type<"NTensor", "ntensor", [
   let assemblyFormat = "`<` custom<Shape>($shape, $elementType) (`,` $environment^)? `>`";
 }
 
+def NTensor_Slice : NTensor_Type<"Slice", "slice", [], "::mlir::Type"> {
+  let summary = "Slice type for indexing into arrays";
+  let description = [{
+    TBD
+  }];
+}
+
 def UnaryOp : NTensor_OpBase<"unary", []> {
   let summary = "Unary operation.";
   let description = [{
@@ -154,6 +161,58 @@ def GetitemOp : NTensor_OpBase<"getitem", [NoSideEffect]> {
   let results = (outs AnyType:$result);
 
   let assemblyFormat = "attr-dict `(` $source `:` type($source) `)` `[` $index `:` type($index) `]` `->` type($result)";
+}
+
+def BuildSliceOp : NTensor_OpBase<"build_slice", [
+    AttrSizedOperandSegments, NoSideEffect]> {
+  let summary = "Slice creation operation.";
+  let description = [{
+    Creates a slice to index into ntensor array.
+  }];
+
+  let arguments = (ins Optional<Index>:$begin, Index:$end, Optional<Index>:$step);
+
+  let results = (outs NTensor_Slice:$result);
+
+  let assemblyFormat = "attr-dict `(` $begin `:` $end `:` $step `)`";
+}
+
+def ResolveSliceOp : NTensor_OpBase<"resolve_slice", [NoSideEffect]> {
+  let summary = "Slice resolving operation.";
+  let description = [{
+    Resolves slice using specified size into `begin`, `end` and `step` values.
+
+    Properly handles omitted and negative slice arguments and translates them
+    into indices within array bounds.
+  }];
+
+  let arguments = (ins NTensor_Slice:$slice, Index:$size);
+
+  let results = (outs Index:$begin, Index:$end, Index:$step);
+
+  let assemblyFormat = "attr-dict $slice `,` $size";
+}
+
+def DimOp : NTensor_OpBase<"dim", [NoSideEffect]> {
+  let summary = "dimension index operation";
+  let description = [{
+    The `dim` operation takes a array and a dimension operand of type `index`.
+    It returns the size of the requested dimension of the given array.
+    If the dimension index is out of bounds the behavior is undefined.
+  }];
+
+  let arguments = (ins NTensor_Tensor:$source,
+                       Index:$index);
+  let results = (outs Index:$result);
+
+  let assemblyFormat = [{
+    attr-dict $source `,` $index `:` qualified(type($source))
+  }];
+
+  let extraClassDeclaration = [{
+    /// Helper function to get the index as a simple integer if it is constant.
+    ::llvm::Optional<int64_t> getConstantIndex();
+  }];
 }
 
 def CallOp : NTensor_OpBase<"call", []> {
