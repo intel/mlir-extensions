@@ -97,6 +97,21 @@ mlir::Type imex::ntensor::NTensorType::replaceImmediateSubElements(
              replAttrs.empty() ? mlir::Attribute() : replAttrs.back());
 }
 
+static mlir::Value handleSliceIndexVars(mlir::OpBuilder &builder,
+                                        mlir::Location loc, mlir::Value source,
+                                        mlir::Value size) {
+  auto zero = builder.create<mlir::arith::ConstantIndexOp>(loc, 0);
+  auto isNeg = builder.create<mlir::arith::CmpIOp>(
+      loc, mlir::arith::CmpIPredicate::slt, source, zero);
+  auto negIndex = builder.create<mlir::arith::AddIOp>(loc, size, source);
+  auto posIndex =
+      builder.create<mlir::arith::SelectOp>(loc, isNeg, negIndex, source);
+  auto isOutOfRange = builder.create<mlir::arith::CmpIOp>(
+      loc, mlir::arith::CmpIPredicate::sgt, posIndex, size);
+  return builder.create<mlir::arith::SelectOp>(loc, isOutOfRange, size,
+                                               posIndex);
+}
+
 namespace {
 struct ResolveSlicePropagate
     : public mlir::OpRewritePattern<imex::ntensor::ResolveSliceOp> {
@@ -111,37 +126,16 @@ struct ResolveSlicePropagate
       return mlir::failure();
 
     auto loc = op->getLoc();
-
-    mlir::Value zero;
-    auto getZero = [&]() {
-      if (!zero)
-        zero = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
-
-      return zero;
-    };
-
     auto size = op.getSize();
-    auto handleNegativeVal = [&](mlir::Value val) -> mlir::Value {
-      auto isNeg = rewriter.create<mlir::arith::CmpIOp>(
-          loc, mlir::arith::CmpIPredicate::slt, val, getZero());
-      auto negIndex = rewriter.create<mlir::arith::AddIOp>(loc, size, val);
-      auto posIndex =
-          rewriter.create<mlir::arith::SelectOp>(loc, isNeg, negIndex, val);
-      auto isOutOfRange = rewriter.create<mlir::arith::CmpIOp>(
-          loc, mlir::arith::CmpIPredicate::sgt, val, size);
-      return rewriter.create<mlir::arith::SelectOp>(loc, isOutOfRange, size,
-                                                    posIndex);
-    };
-
     mlir::Value results[3];
     if (auto begin = buildSlice.getBegin()) {
-      results[0] = handleNegativeVal(begin);
+      results[0] = handleSliceIndexVars(rewriter, loc, begin, size);
     } else {
-      results[0] = getZero();
+      results[0] = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
     }
 
     if (auto end = buildSlice.getEnd()) {
-      results[1] = handleNegativeVal(end);
+      results[1] = handleSliceIndexVars(rewriter, loc, end, size);
     } else {
       results[1] = size;
     }
@@ -161,6 +155,27 @@ struct ResolveSlicePropagate
 void imex::ntensor::ResolveSliceOp::getCanonicalizationPatterns(
     ::mlir::RewritePatternSet &results, ::mlir::MLIRContext *context) {
   results.insert<ResolveSlicePropagate>(context);
+}
+
+namespace {
+struct ResolveIndexPropagate
+    : public mlir::OpRewritePattern<imex::ntensor::ResolveIndexOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::ResolveIndexOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto res = handleSliceIndexVars(rewriter, op->getLoc(), op.getIndex(),
+                                    op.getSize());
+    rewriter.replaceOp(op, res);
+    return mlir::success();
+  }
+};
+} // namespace
+
+void imex::ntensor::ResolveIndexOp::getCanonicalizationPatterns(
+    ::mlir::RewritePatternSet &results, ::mlir::MLIRContext *context) {
+  results.insert<ResolveIndexPropagate>(context);
 }
 
 static mlir::LogicalResult

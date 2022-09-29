@@ -209,6 +209,8 @@ def ResolveIndexOp : NTensor_OpBase<"resolve_index", [NoSideEffect]> {
   let results = (outs Index:$result);
 
   let assemblyFormat = "attr-dict $index `,` $size";
+
+  let hasCanonicalizer = 1;
 }
 
 def DimOp : NTensor_OpBase<"dim", [NoSideEffect]> {
