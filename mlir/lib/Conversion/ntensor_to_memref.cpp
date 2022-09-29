@@ -24,13 +24,13 @@
 #include <mlir/Transforms/Passes.h>
 
 static bool isValidGetitemIndex(mlir::Type type) {
-//  if (type.isa<plier::SliceType>())
-//    return true;
+  if (type.isa<imex::ntensor::SliceType>())
+    return true;
 
   if (auto tupleType = type.dyn_cast<mlir::TupleType>())
     return llvm::all_of(tupleType.getTypes(), &isValidGetitemIndex);
 
-  return type.isa<mlir::IntegerType, mlir::IndexType>();
+  return type.isa<mlir::IndexType>();
 }
 
 static mlir::LogicalResult
@@ -40,11 +40,10 @@ computeIndices(mlir::OpBuilder &builder, mlir::Location loc, mlir::Value value,
                llvm::SmallVectorImpl<mlir::OpFoldResult> &sizes,
                llvm::SmallVectorImpl<mlir::OpFoldResult> &strides,
                llvm::SmallVectorImpl<unsigned> &dimsIndices) {
-  auto shapedType = value.getType().cast<mlir::MemRefType>();
-  auto indexType = builder.getIndexType();
+  auto shapedType = value.getType().cast<mlir::ShapedType>();
 
   auto getDim = [&](unsigned dim) -> mlir::Value {
-    return builder.createOrFold<mlir::memref::DimOp>(loc, value, dim);
+    return builder.create<mlir::memref::DimOp>(loc, value, dim);
   };
 
   auto zero = builder.create<mlir::arith::ConstantIndexOp>(loc, 0);
@@ -62,56 +61,23 @@ computeIndices(mlir::OpBuilder &builder, mlir::Location loc, mlir::Value value,
           unsigned dim) -> std::tuple<mlir::OpFoldResult, mlir::OpFoldResult,
                                       mlir::OpFoldResult, bool> {
     auto valType = indexVal.getType();
-
     auto len = getDim(dim);
-    bool ignoreNegativeInd = false;
-    auto handleNegativeVal = [&](mlir::OpFoldResult val) -> mlir::Value {
-      mlir::Value idx;
-      if (auto v = val.dyn_cast<mlir::Value>()) {
-        idx = v;
-      } else {
-        auto attr = val.get<mlir::Attribute>();
-        auto attrVal = attr.cast<mlir::IntegerAttr>().getValue().getSExtValue();
-        idx = builder.create<mlir::arith::ConstantIndexOp>(loc, attrVal);
-      }
-      if (ignoreNegativeInd) {
-        return idx;
-      } else {
-        auto isNeg = builder.createOrFold<mlir::arith::CmpIOp>(
-            loc, mlir::arith::CmpIPredicate::slt, idx, zero);
-        auto negIndex =
-            builder.createOrFold<mlir::arith::AddIOp>(loc, len, idx);
-        return builder.createOrFold<mlir::arith::SelectOp>(loc, isNeg, negIndex,
-                                                           idx);
-      }
-    };
+    if (valType.isa<imex::ntensor::SliceType>()) {
+      auto resolved = builder.create<imex::ntensor::ResolveSliceOp>(loc, indexVal, len);
 
-    /*if (auto sliceType = valType.dyn_cast<plier::SliceType>()) {
-      auto getItemOrConst = [&](unsigned i) -> mlir::Value {
-        assert(i < 3);
-        auto createInd = [&](int64_t i) {
-          return builder.create<mlir::arith::ConstantIndexOp>(loc, i);
-        };
-        return builder.createOrFold<plier::SliceGetItemOp>(
-            loc, indexType, indexVal, value, createInd(i), dim);
-      };
+      auto begin = resolved.getBegin();
+      auto end = resolved.getEnd();
+      auto step = resolved.getStep();
+      auto size = builder.createOrFold<mlir::arith::SubIOp>(loc, end, begin);
 
-      auto offset = handleNegativeVal(getItemOrConst(0));
-      auto end = handleNegativeVal(getItemOrConst(1));
-      auto stride = getItemOrConst(2);
-      auto size = builder.createOrFold<mlir::arith::SubIOp>(loc, end, offset);
-
-      auto constStride = mlir::getConstantIntValue(stride);
+      auto constStride = mlir::getConstantIntValue(step);
       if (!constStride || *constStride > 1 || *constStride < -1) {
         size = builder.createOrFold<mlir::arith::SubIOp>(loc, size, one);
-        size = builder.createOrFold<mlir::arith::AddIOp>(loc, size, stride);
-        size = builder.createOrFold<mlir::arith::DivUIOp>(loc, size, stride);
+        size = builder.createOrFold<mlir::arith::AddIOp>(loc, size, step);
+        size = builder.createOrFold<mlir::arith::DivUIOp>(loc, size, step);
       }
-      return {foldConst(offset), foldConst(size), stride, true};
-    } else if (auto literal = valType.dyn_cast<plier::LiteralType>()) {
-      auto offset = foldConst(handleNegativeVal(literal.getValue()));
-      return {offset, builder.getIndexAttr(1), builder.getIndexAttr(1), false};
-    } else*/ {
+      return {foldConst(begin), foldConst(size), step, true};
+    } else {
       auto offset =
           foldConst(handleNegativeVal(imex::indexCast(builder, loc, indexVal)));
       return {offset, builder.getIndexAttr(1), builder.getIndexAttr(1), false};
