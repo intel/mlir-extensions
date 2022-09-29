@@ -243,3 +243,14 @@ func.func @test(%arg1: index, %arg2: !ntensor.slice) -> (index, index, index) {
 //  CHECK-SAME:   (%[[ARG1:.*]]: index, %[[ARG2:.*]]: !ntensor.slice)
 //  CHECK-NEXT:   %[[BEGIN:.*]], %[[END:.*]], %[[STEP:.*]] = ntensor.resolve_slice %[[ARG2]], %[[ARG1]]
 //  CHECK-NEXT:   return %[[BEGIN]], %[[END]], %[[STEP]] : index, index, index
+
+// -----
+
+func.func @test(%arg1: index, %arg2: index) -> index {
+  %0 = ntensor.resolve_index %arg1, %arg2
+  return %0 : index
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG1:.*]]: index, %[[ARG2:.*]]: index)
+//  CHECK-NEXT:   %[[RES:.*]] = ntensor.resolve_index %[[ARG1]], %[[ARG2]]
+//  CHECK-NEXT:   return %[[RES]] : index

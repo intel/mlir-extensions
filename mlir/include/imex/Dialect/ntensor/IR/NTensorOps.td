@@ -193,6 +193,22 @@ def ResolveSliceOp : NTensor_OpBase<"resolve_slice", [NoSideEffect]> {
   let assemblyFormat = "attr-dict $slice `,` $size";
 }
 
+def ResolveIndexOp : NTensor_OpBase<"resolve_index", [NoSideEffect]> {
+  let summary = "Index resolving operation.";
+  let description = [{
+    Resolves index into array using specified size.
+
+    Properly negative arguments and translates them into offset within array
+    bounds.
+  }];
+
+  let arguments = (ins Index:$index, Index:$size);
+
+  let results = (outs Index:$result);
+
+  let assemblyFormat = "attr-dict $index `,` $size";
+}
+
 def DimOp : NTensor_OpBase<"dim", [NoSideEffect]> {
   let summary = "dimension index operation";
   let description = [{
