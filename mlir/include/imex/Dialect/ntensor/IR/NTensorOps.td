@@ -196,10 +196,10 @@ def ResolveSliceOp : NTensor_OpBase<"resolve_slice", [NoSideEffect]> {
 def ResolveIndexOp : NTensor_OpBase<"resolve_index", [NoSideEffect]> {
   let summary = "Index resolving operation.";
   let description = [{
-    Resolves index into array using specified size.
+    Resolves index into array using specified array size.
 
-    Properly negative arguments and translates them into offset within array
-    bounds.
+    Properly handles negative arguments and translates them into offset within
+    array bounds.
   }];
 
   let arguments = (ins Index:$index, Index:$size);
