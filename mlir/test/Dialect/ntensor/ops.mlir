@@ -235,11 +235,11 @@ func.func @test() -> (!ntensor.slice, !ntensor.slice, !ntensor.slice) {
 
 // -----
 
-func.func @test(%arg1: !ntensor.ntensor<?xf32>, %arg2: !ntensor.slice) -> (index, index, index) {
-  %0:3 = ntensor.resolve_slice %arg2 (%arg1 : !ntensor.ntensor<?xf32>)[0]
+func.func @test(%arg1: index, %arg2: !ntensor.slice) -> (index, index, index) {
+  %0:3 = ntensor.resolve_slice %arg2, %arg1
   return %0#0, %0#1, %0#2 : index, index, index
 }
 // CHECK-LABEL: func @test
-//  CHECK-SAME:   (%[[ARG1:.*]]: !ntensor.ntensor<?xf32>, %[[ARG2:.*]]: !ntensor.slice)
-//  CHECK-NEXT:   %[[BEGIN:.*]], %[[END:.*]], %[[STEP:.*]] = ntensor.resolve_slice %[[ARG2]](%[[ARG1]] : <?xf32>) [0]
+//  CHECK-SAME:   (%[[ARG1:.*]]: index, %[[ARG2:.*]]: !ntensor.slice)
+//  CHECK-NEXT:   %[[BEGIN:.*]], %[[END:.*]], %[[STEP:.*]] = ntensor.resolve_slice %[[ARG2]], %[[ARG1]]
 //  CHECK-NEXT:   return %[[BEGIN]], %[[END]], %[[STEP]] : index, index, index

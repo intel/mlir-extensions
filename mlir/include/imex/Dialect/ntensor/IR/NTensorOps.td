@@ -180,15 +180,17 @@ def BuildSliceOp : NTensor_OpBase<"build_slice", [
 def ResolveSliceOp : NTensor_OpBase<"resolve_slice", [NoSideEffect]> {
   let summary = "Slice resolving operation.";
   let description = [{
-    Resolves slice for the specified array and dimension into `begin`, `end` and
-    `step` values.
+    Resolves slice using specified size into `begin`, `end` and `step` values.
+
+    Properly handles omitted and negative slice arguments and translates them
+    into indices within array bounds.
   }];
 
-  let arguments = (ins NTensor_Slice:$slice, NTensor_Tensor:$array, IndexAttr:$dim);
+  let arguments = (ins NTensor_Slice:$slice, Index:$size);
 
   let results = (outs Index:$begin, Index:$end, Index:$step);
 
-  let assemblyFormat = "attr-dict $slice `(` $array `:` type($array) `)` `[` $dim `]`";
+  let assemblyFormat = "attr-dict $slice `,` $size";
 }
 
 def DimOp : NTensor_OpBase<"dim", [NoSideEffect]> {
