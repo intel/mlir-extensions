@@ -48,40 +48,37 @@ static void setInsertionPointToStart(mlir::OpBuilder &builder,
   }
 }
 
-
 static mlir::Value getFlatIndex(mlir::OpBuilder &builder, mlir::Location loc,
                                 mlir::Value memref, mlir::ValueRange indices) {
   auto memrefType = memref.getType().cast<mlir::MemRefType>();
   auto rank = static_cast<unsigned>(memrefType.getRank());
   assert(indices.size() == rank);
   auto shape = memrefType.getShape();
-  auto expr =
-    mlir::makeCanonicalStridedLayoutExpr(shape, builder.getContext());
+  auto expr = mlir::makeCanonicalStridedLayoutExpr(shape, builder.getContext());
   llvm::SmallVector<mlir::Value> applyOperands;
   if (rank != 0) {
-      applyOperands.reserve(rank * 2);
-      applyOperands.assign(indices.begin(), indices.end());
-      mlir::OpBuilder::InsertionGuard g(builder);
-      setInsertionPointToStart(builder, memref);
-      mlir::Value size;
-      for (auto i : llvm::seq(0u, rank - 1)) {
-        auto dimInd = rank - i - 1;
-        auto dim =
-            builder.createOrFold<mlir::memref::DimOp>(loc, memref, dimInd);
-        if (i != 0) {
-          size = builder.createOrFold<mlir::arith::MulIOp>(loc, size, dim);
-        } else {
-          size = dim;
-        }
-
-        applyOperands.emplace_back(size);
+    applyOperands.reserve(rank * 2);
+    applyOperands.assign(indices.begin(), indices.end());
+    mlir::OpBuilder::InsertionGuard g(builder);
+    setInsertionPointToStart(builder, memref);
+    mlir::Value size;
+    for (auto i : llvm::seq(0u, rank - 1)) {
+      auto dimInd = rank - i - 1;
+      auto dim = builder.createOrFold<mlir::memref::DimOp>(loc, memref, dimInd);
+      if (i != 0) {
+        size = builder.createOrFold<mlir::arith::MulIOp>(loc, size, dim);
+      } else {
+        size = dim;
       }
+
+      applyOperands.emplace_back(size);
     }
-    auto affineMap = mlir::AffineMap::get(
-        rank, static_cast<unsigned>(applyOperands.size()) - rank, expr);
-    assert(affineMap.getNumDims() == indices.size());
-    return builder.createOrFold<mlir::AffineApplyOp>(loc, affineMap,
-                                                     applyOperands);
+  }
+  auto affineMap = mlir::AffineMap::get(
+      rank, static_cast<unsigned>(applyOperands.size()) - rank, expr);
+  assert(affineMap.getNumDims() == indices.size());
+  return builder.createOrFold<mlir::AffineApplyOp>(loc, affineMap,
+                                                   applyOperands);
 }
 
 static mlir::Value getFlatMemref(mlir::OpBuilder &builder, mlir::Location loc,
@@ -95,10 +92,11 @@ static mlir::Value getFlatMemref(mlir::OpBuilder &builder, mlir::Location loc,
 
   int64_t mem_rank = memrefType.getRank();
   int64_t mem_size = 1;
-  for(int64_t i = 0; i < mem_rank; i++) {
-      mem_size = mem_size * memrefType.getDimSize(i);
+  for (int64_t i = 0; i < mem_rank; i++) {
+    mem_size = mem_size * memrefType.getDimSize(i);
   }
-  mlir::OpFoldResult size = builder.createOrFold<mlir::arith::ConstantIndexOp>(loc, mem_size);
+  mlir::OpFoldResult size =
+      builder.createOrFold<mlir::arith::ConstantIndexOp>(loc, mem_size);
   mlir::OpFoldResult stride = builder.getIndexAttr(1);
   return builder.createOrFold<mlir::memref::ReinterpretCastOp>(
       loc, resultType, memref, offset, size, stride);
@@ -171,7 +169,7 @@ public:
                                              std::move(patterns));
   }
 };
-} // namespace
+} // namespace imex
 
 namespace imex {
 std::unique_ptr<mlir::Pass> createUnstrideMemrefsPass() {
