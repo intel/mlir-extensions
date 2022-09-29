@@ -84,25 +84,6 @@ static mlir::Value getFlatIndex(mlir::OpBuilder &builder, mlir::Location loc,
                                                      applyOperands);
 }
 
-/*
-static mlir::Value getFlatIndex(mlir::OpBuilder &builder, mlir::Location loc,
-                                mlir::Value memref,
-                                llvm::ArrayRef<mlir::OpFoldResult> indices) {
-  llvm::SmallVector<mlir::Value> vals(indices.size());
-  for (auto it : llvm::enumerate(indices)) {
-    auto i = it.index();
-    auto val = it.value();
-    if (auto attr = val.dyn_cast<mlir::Attribute>()) {
-      auto ind = attr.cast<mlir::IntegerAttr>().getValue().getSExtValue();
-      vals[i] = builder.create<mlir::arith::ConstantIndexOp>(loc, ind);
-    } else {
-      vals[i] = val.get<mlir::Value>();
-    }
-  }
-  return getFlatIndex(builder, loc, memref, vals);
-}
-*/
-
 static mlir::Value getFlatMemref(mlir::OpBuilder &builder, mlir::Location loc,
                                  mlir::Value memref) {
   auto memrefType = memref.getType().cast<mlir::MemRefType>();
@@ -111,11 +92,13 @@ static mlir::Value getFlatMemref(mlir::OpBuilder &builder, mlir::Location loc,
   mlir::OpBuilder::InsertionGuard g(builder);
   setInsertionPointToStart(builder, memref);
   mlir::OpFoldResult offset = builder.getIndexAttr(0);
-  //mlir::OpFoldResult size =
-  //    builder.createOrFold<imex::util::UndefOp>(loc, builder.getIndexType());
 
-  // Fake place holder
-  mlir::OpFoldResult size = builder.getIndexAttr(0);
+  int64_t mem_rank = memrefType.getRank();
+  int64_t mem_size = 1;
+  for(int64_t i = 0; i < mem_rank; i++) {
+      mem_size = mem_size * memrefType.getDimSize(i);
+  }
+  mlir::OpFoldResult size = builder.createOrFold<mlir::arith::ConstantIndexOp>(loc, mem_size);
   mlir::OpFoldResult stride = builder.getIndexAttr(1);
   return builder.createOrFold<mlir::memref::ReinterpretCastOp>(
       loc, resultType, memref, offset, size, stride);

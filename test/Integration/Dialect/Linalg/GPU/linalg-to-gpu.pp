@@ -1,0 +1,24 @@
+convert-tensor-to-linalg
+arith-bufferize
+func.func(linalg-init-tensor-to-alloc-tensor
+          scf-bufferize
+          shape-bufferize
+          linalg-bufferize
+          bufferization-bufferize
+          tensor-bufferize)
+func-bufferize
+func.func(finalizing-bufferize
+          convert-linalg-to-parallel-loops
+          gpu-map-parallel-loops
+          convert-parallel-loops-to-gpu)
+insert-gpu-alloc
+canonicalize
+normalize-memrefs
+func.func(unstride-memrefs)
+func.func(lower-affine)
+gpu-kernel-outlining
+canonicalize
+cse
+set-spirv-capablilities
+set-spirv-abi-attrs
+canonicalize

@@ -49,6 +49,9 @@ parser = argparse.ArgumentParser(
 parser.add_argument("--input-file", "-i", default=None, help="input MLIR file")
 parser.add_argument("--pass-pipeline-file", "-f", default=None, help="file defining pass pipeline")
 parser.add_argument("--pass-pipeline", "-p", default=None, help="pass pipeline (string)")
+parser.add_argument("--print-before-all", "-b", action='store_true', dest='before', help="print ir before all passes")
+parser.add_argument("--print-after-all", "-a", action='store_true', dest='after', help="print ir after all passes")
+parser.add_argument("--no-mlir-runner", "-n", action='store_true', dest='no_mlir_runner', help="skip mlir runner")
 
 args, unknown = parser.parse_known_args()
 
@@ -56,6 +59,9 @@ ppipeline = None
 if args.pass_pipeline_file:
     with open(args.pass_pipeline_file, 'r') as infile:
         for l in infile:
+            # Strip python style single line comments and append to ppipeline
+            res = l.split('#')
+            l = res[0]
             ppipeline = ','.join([ppipeline, l]) if ppipeline else l
         # get rid of whitespaces, tabs and newlines
         ppipeline = re.sub(r"[\s\n\t]*", "", ppipeline)
@@ -72,11 +78,18 @@ elif args.pass_pipeline:
     cmd.append(f'--pass-pipeline={args.pass_pipeline}')
 if args.input_file:
     cmd.append(args.input_file)
+if args.before:
+    cmd.append(f'--mlir-print-ir-before-all')
+if args.after:
+    cmd.append(f'--mlir-print-ir-after-all')
 # run and feed into pipe
 p1 = subprocess.Popen(cmd, stdout=subprocess.PIPE)
-# build mlir-opt command: all unknown args will be passed to imex-opt
-cmd = ["mlir-cpu-runner"] + unknown
-# get stdout from imex-opt and pipe into mlir-opt
-p2 = subprocess.Popen(cmd, stdin=p1.stdout)
-p1.wait()
-p2.wait()
+if args.no_mlir_runner:
+    p1.wait()
+else:
+    # build mlir-opt command: all unknown args will be passed to imex-opt
+    cmd = ["mlir-cpu-runner"] + unknown
+    # get stdout from imex-opt and pipe into mlir-opt
+    p2 = subprocess.Popen(cmd, stdin=p1.stdout)
+    p1.wait()
+    p2.wait()
