@@ -27,6 +27,8 @@ namespace ntensor {
 void populateResolveArrayOpsPatterns(mlir::MLIRContext &context,
                                      mlir::RewritePatternSet &patterns);
 
+/// This pass translates high level array manipulation ops into primitive
+/// ops like `resolve_index`, `subview`, `load`, `store` etc.
 std::unique_ptr<mlir::Pass> createResolveArrayOpsPass();
 } // namespace ntensor
 } // namespace imex
