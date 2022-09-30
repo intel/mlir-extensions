@@ -286,4 +286,22 @@ def PrimitiveOp : NTensor_OpBase<"primitive", [NoSideEffect]> {
   let assemblyFormat = "$op ` ` attr-dict `(` $args `)` (`:` type($args)^)? (`->` type($results)^)?";
 }
 
+def CreateArrayOp : NTensor_OpBase<"create", [AttrSizedOperandSegments, NoSideEffect]> {
+  let summary = "Array creation operation.";
+  let description = [{
+    Creates new array from provided shape;
+
+    Follows memref.alloc conventions.
+
+    If `initValue` is provided resulting array wull be initialized with it,
+    otherwise it contents is undefined.
+  }];
+
+  let arguments = (ins Variadic<Index>:$dynamicSizes, Optional<AnyType>:$initValue);
+
+  let results = (outs NTensor_Tensor:$result);
+
+  let assemblyFormat = "`(`$dynamicSizes`)` (`=` `(` $initValue^ `:` type($initValue) `)`)? attr-dict `:` qualified(type($result))";
+}
+
 #endif // NTENSOR_OPS
