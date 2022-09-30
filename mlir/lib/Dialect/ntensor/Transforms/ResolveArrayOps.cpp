@@ -21,12 +21,16 @@
 #include <mlir/Pass/Pass.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 
+static bool isIndexOrSlice(mlir::Type type) {
+  return type.isa<imex::ntensor::SliceType, mlir::IndexType>();
+}
+
 static bool isValidGetitemIndex(mlir::Type type) {
-  if (type.isa<imex::ntensor::SliceType, mlir::IndexType>())
+  if (isIndexOrSlice(type))
     return true;
 
   if (auto tupleType = type.dyn_cast<mlir::TupleType>())
-    return llvm::all_of(tupleType.getTypes(), &isValidGetitemIndex);
+    return llvm::all_of(tupleType.getTypes(), &isIndexOrSlice);
 
   return false;
 }
