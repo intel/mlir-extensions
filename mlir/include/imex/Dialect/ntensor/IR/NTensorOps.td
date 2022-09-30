@@ -299,26 +299,23 @@ def SubviewOp : NTensor_OpWithOffsetSizesAndStrides<"subview", [
       ::mlir::ArrayRef<::mlir::OpFoldResult> staticSizes,
       ::mlir::ArrayRef<::mlir::OpFoldResult> staticStrides);
 
-    /// If the rank is reduced (i.e. the desiredResultRank is smaller than the
-    /// number of sizes), drop as many size 1 as needed to produce an inferred type
-    /// with the desired rank.
+    /// A rank-reducing result type can be inferred from the desired result
+    /// shape. Only the layout map is inferred.
     ///
-    /// Note that there may be multiple ways to compute this rank-reduced type:
-    ///   e.g. 1x6x1 can rank-reduce to either 1x6 or 6x1 2-D tensors.
-    ///
-    /// To disambiguate, this function always drops the first 1 sizes occurrences.
-    static NTensorType inferCanonicalRankReducedResultType(
-      unsigned resultRank,
-      NTensorType sourceRankedTensorType,
-      ::mlir::ArrayRef<int64_t> staticOffsets,
-      ::mlir::ArrayRef<int64_t> staticSizes,
-      ::mlir::ArrayRef<int64_t> staticStrides);
-    static NTensorType inferCanonicalRankReducedResultType(
-      unsigned resultRank,
-      NTensorType sourceRankedTensorType,
-      ::mlir::ArrayRef<::mlir::OpFoldResult> staticOffsets,
-      ::mlir::ArrayRef<::mlir::OpFoldResult> staticSizes,
-      ::mlir::ArrayRef<::mlir::OpFoldResult> staticStrides);
+    /// Note: The result shape cannot be inferred with just the result rank and
+    /// and the desired sizes. In case there are more "ones" among the sizes
+    /// than the difference in source/result rank, it is not clear which dims of
+    /// size one should be dropped.
+    static NTensorType inferRankReducedResultType(::mlir::ArrayRef<int64_t> resultShape,
+                                                  ::mlir::ShapedType sourceMemRefType,
+                                                  ::mlir::ArrayRef<int64_t> staticOffsets,
+                                                  ::mlir::ArrayRef<int64_t> staticSizes,
+                                                  ::mlir::ArrayRef<int64_t> staticStrides);
+    static NTensorType inferRankReducedResultType(::mlir::ArrayRef<int64_t> resultShape,
+                                                  ::mlir::ShapedType sourceMemRefType,
+                                                  ::mlir::ArrayRef<::mlir::OpFoldResult> staticOffsets,
+                                                  ::mlir::ArrayRef<::mlir::OpFoldResult> staticSizes,
+                                                  ::mlir::ArrayRef<::mlir::OpFoldResult> staticStrides);
 
     /// Return the expected rank of each of the`static_offsets`, `static_sizes`
     /// and `static_strides` attributes.
