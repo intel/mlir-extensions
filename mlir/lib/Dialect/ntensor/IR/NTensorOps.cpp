@@ -187,6 +187,21 @@ struct ResolveIndexPropagate
 };
 } // namespace
 
+void imex::ntensor::DimOp::build(mlir::OpBuilder &builder,
+                                 mlir::OperationState &result,
+                                 mlir::Value source, int64_t index) {
+  auto loc = result.location;
+  auto indexValue = builder.create<mlir::arith::ConstantIndexOp>(loc, index);
+  build(builder, result, source, indexValue);
+}
+
+void imex::ntensor::DimOp::build(mlir::OpBuilder &builder,
+                                 mlir::OperationState &result,
+                                 mlir::Value source, mlir::Value index) {
+  auto indexTy = builder.getIndexType();
+  build(builder, result, indexTy, source, index);
+}
+
 void imex::ntensor::ResolveIndexOp::getCanonicalizationPatterns(
     ::mlir::RewritePatternSet &results, ::mlir::MLIRContext *context) {
   results.insert<ResolveIndexPropagate>(context);
