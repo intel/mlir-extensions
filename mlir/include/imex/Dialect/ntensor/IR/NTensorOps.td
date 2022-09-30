@@ -240,30 +240,60 @@ def SubviewOp : NTensor_OpWithOffsetSizesAndStrides<"subview", [
   }];
 
   let builders = [
-    // Build an ExtractSliceOp with mixed static and dynamic entries and
-    // inferred result type.
-    OpBuilder<(ins "::mlir::Value":$source, "::mlir::ArrayRef<::mlir::OpFoldResult>":$offsets,
-      "::mlir::ArrayRef<::mlir::OpFoldResult>":$sizes, "::mlir::ArrayRef<::mlir::OpFoldResult>":$strides,
-      CArg<"::mlir::ArrayRef<::mlir::NamedAttribute>", "{}">:$attrs)>,
-    // Build an ExtractSliceOp with mixed static and dynamic entries and custom
+    // Build a SubViewOp with mixed static and dynamic entries and custom
     // result type. If the type passed is nullptr, it is inferred.
-    OpBuilder<(ins "NTensorType":$resultType, "::mlir::Value":$source,
-      "::mlir::ArrayRef<::mlir::OpFoldResult>":$offsets, "::mlir::ArrayRef<::mlir::OpFoldResult>":$sizes,
+    OpBuilder<(ins
+      "::mlir::Value":$source,
+      "::mlir::ArrayRef<::mlir::OpFoldResult>":$offsets,
+      "::mlir::ArrayRef<::mlir::OpFoldResult>":$sizes,
       "::mlir::ArrayRef<::mlir::OpFoldResult>":$strides,
       CArg<"::mlir::ArrayRef<::mlir::NamedAttribute>", "{}">:$attrs)>,
-    // Build an ExtractSliceOp with dynamic entries and custom result type. If
-    // the type passed is nullptr, it is inferred.
-    OpBuilder<(ins "::mlir::Value":$source, "::mlir::ValueRange":$offsets,
-      "::mlir::ValueRange":$sizes, "::mlir::ValueRange":$strides,
+
+    // Build a SubViewOp with mixed static and dynamic entries and inferred
+    // result type.
+    OpBuilder<(ins
+      "NTensorType":$resultType,
+      "::mlir::Value":$source,
+      "::mlir::ArrayRef<::mlir::OpFoldResult>":$offsets,
+      "::mlir::ArrayRef<::mlir::OpFoldResult>":$sizes,
+      "::mlir::ArrayRef<::mlir::OpFoldResult>":$strides,
       CArg<"::mlir::ArrayRef<::mlir::NamedAttribute>", "{}">:$attrs)>,
-    // Build an ExtractSliceOp with dynamic entries and inferred result type.
-    OpBuilder<(ins "NTensorType":$resultType, "::mlir::Value":$source,
-      "::mlir::ValueRange":$offsets, "::mlir::ValueRange":$sizes, "::mlir::ValueRange":$strides,
+
+    // Build a SubViewOp with static entries and custom result type. If the
+    // type passed is nullptr, it is inferred.
+    OpBuilder<(ins
+      "::mlir::Value":$source,
+      "::mlir::ArrayRef<int64_t>":$offsets,
+      "::mlir::ArrayRef<int64_t>":$sizes,
+      "::mlir::ArrayRef<int64_t>":$strides,
       CArg<"::mlir::ArrayRef<::mlir::NamedAttribute>", "{}">:$attrs)>,
-    // Build an ExtractSliceOp with mixed static and dynamic entries packed in
-    // a Range vector.
-    OpBuilder<(ins "::mlir::Value":$source, "::mlir::ArrayRef<::mlir::Range>":$ranges,
+
+    // Build a SubViewOp with static entries and inferred result type.
+    OpBuilder<(ins
+      "NTensorType":$resultType,
+      "::mlir::Value":$source,
+      "::mlir::ArrayRef<int64_t>":$offsets,
+      "::mlir::ArrayRef<int64_t>":$sizes,
+      "::mlir::ArrayRef<int64_t>":$strides,
       CArg<"::mlir::ArrayRef<::mlir::NamedAttribute>", "{}">:$attrs)>,
+
+    // Build a SubViewOp with dynamic entries and custom result type. If the
+    // type passed is nullptr, it is inferred.
+    OpBuilder<(ins
+      "::mlir::Value":$source,
+      "::mlir::ValueRange":$offsets,
+      "::mlir::ValueRange":$sizes,
+      "::mlir::ValueRange":$strides,
+      CArg<"::mlir::ArrayRef<::mlir::NamedAttribute>", "{}">:$attrs)>,
+
+    // Build a SubViewOp with dynamic entries and inferred result type.
+    OpBuilder<(ins
+      "NTensorType":$resultType,
+      "::mlir::Value":$source,
+      "::mlir::ValueRange":$offsets,
+      "::mlir::ValueRange":$sizes,
+      "::mlir::ValueRange":$strides,
+      CArg<"::mlir::ArrayRef<::mlir::NamedAttribute>", "{}">:$attrs)>
   ];
 
   let extraClassDeclaration = extraBaseClassDeclaration # [{

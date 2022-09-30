@@ -202,6 +202,120 @@ void imex::ntensor::DimOp::build(mlir::OpBuilder &builder,
   build(builder, result, indexTy, source, index);
 }
 
+// Build a SubViewOp with mixed static and dynamic entries and custom result
+// type. If the type passed is nullptr, it is inferred.
+void imex::ntensor::SubviewOp::build(
+    mlir::OpBuilder &b, mlir::OperationState &result,
+    imex::ntensor::NTensorType resultType, mlir::Value source,
+    mlir::ArrayRef<mlir::OpFoldResult> offsets,
+    mlir::ArrayRef<mlir::OpFoldResult> sizes,
+    mlir::ArrayRef<mlir::OpFoldResult> strides,
+    mlir::ArrayRef<mlir::NamedAttribute> attrs) {
+  mlir::SmallVector<int64_t> staticOffsets, staticSizes, staticStrides;
+  mlir::SmallVector<mlir::Value> dynamicOffsets, dynamicSizes, dynamicStrides;
+  dispatchIndexOpFoldResults(offsets, dynamicOffsets, staticOffsets,
+                             mlir::ShapedType::kDynamicStrideOrOffset);
+  dispatchIndexOpFoldResults(sizes, dynamicSizes, staticSizes,
+                             mlir::ShapedType::kDynamicSize);
+  dispatchIndexOpFoldResults(strides, dynamicStrides, staticStrides,
+                             mlir::ShapedType::kDynamicStrideOrOffset);
+  auto sourceType = source.getType().cast<imex::ntensor::NTensorType>();
+  // Structuring implementation this way avoids duplication between builders.
+  if (!resultType) {
+    resultType = imex::ntensor::SubviewOp::inferResultType(
+        sourceType, staticOffsets, staticSizes, staticStrides);
+  }
+  build(b, result, resultType, source, dynamicOffsets, dynamicSizes,
+        dynamicStrides, b.getI64ArrayAttr(staticOffsets),
+        b.getI64ArrayAttr(staticSizes), b.getI64ArrayAttr(staticStrides));
+  result.addAttributes(attrs);
+}
+
+// Build a SubViewOp with mixed static and dynamic entries and inferred result
+// type.
+void imex::ntensor::SubviewOp::build(
+    mlir::OpBuilder &b, mlir::OperationState &result, mlir::Value source,
+    mlir::ArrayRef<mlir::OpFoldResult> offsets,
+    mlir::ArrayRef<mlir::OpFoldResult> sizes,
+    mlir::ArrayRef<mlir::OpFoldResult> strides,
+    mlir::ArrayRef<mlir::NamedAttribute> attrs) {
+  build(b, result, imex::ntensor::NTensorType(), source, offsets, sizes,
+        strides, attrs);
+}
+
+// Build a SubViewOp with static entries and inferred result type.
+void imex::ntensor::SubviewOp::build(
+    mlir::OpBuilder &b, mlir::OperationState &result, mlir::Value source,
+    mlir::ArrayRef<int64_t> offsets, mlir::ArrayRef<int64_t> sizes,
+    mlir::ArrayRef<int64_t> strides,
+    mlir::ArrayRef<mlir::NamedAttribute> attrs) {
+  mlir::SmallVector<mlir::OpFoldResult> offsetValues = llvm::to_vector<4>(
+      llvm::map_range(offsets, [&](int64_t v) -> mlir::OpFoldResult {
+        return b.getI64IntegerAttr(v);
+      }));
+  mlir::SmallVector<mlir::OpFoldResult> sizeValues = llvm::to_vector<4>(
+      llvm::map_range(sizes, [&](int64_t v) -> mlir::OpFoldResult {
+        return b.getI64IntegerAttr(v);
+      }));
+  mlir::SmallVector<mlir::OpFoldResult> strideValues = llvm::to_vector<4>(
+      llvm::map_range(strides, [&](int64_t v) -> mlir::OpFoldResult {
+        return b.getI64IntegerAttr(v);
+      }));
+  build(b, result, source, offsetValues, sizeValues, strideValues, attrs);
+}
+
+// Build a SubViewOp with dynamic entries and custom result type. If the
+// type passed is nullptr, it is inferred.
+void imex::ntensor::SubviewOp::build(
+    mlir::OpBuilder &b, mlir::OperationState &result,
+    imex::ntensor::NTensorType resultType, mlir::Value source,
+    mlir::ArrayRef<int64_t> offsets, mlir::ArrayRef<int64_t> sizes,
+    mlir::ArrayRef<int64_t> strides,
+    mlir::ArrayRef<mlir::NamedAttribute> attrs) {
+  mlir::SmallVector<mlir::OpFoldResult> offsetValues = llvm::to_vector<4>(
+      llvm::map_range(offsets, [&](int64_t v) -> mlir::OpFoldResult {
+        return b.getI64IntegerAttr(v);
+      }));
+  mlir::SmallVector<mlir::OpFoldResult> sizeValues = llvm::to_vector<4>(
+      llvm::map_range(sizes, [&](int64_t v) -> mlir::OpFoldResult {
+        return b.getI64IntegerAttr(v);
+      }));
+  mlir::SmallVector<mlir::OpFoldResult> strideValues = llvm::to_vector<4>(
+      llvm::map_range(strides, [&](int64_t v) -> mlir::OpFoldResult {
+        return b.getI64IntegerAttr(v);
+      }));
+  build(b, result, resultType, source, offsetValues, sizeValues, strideValues,
+        attrs);
+}
+
+// Build a SubViewOp with dynamic entries and custom result type. If the type
+// passed is nullptr, it is inferred.
+void imex::ntensor::SubviewOp::build(
+    mlir::OpBuilder &b, mlir::OperationState &result,
+    imex::ntensor::NTensorType resultType, mlir::Value source,
+    mlir::ValueRange offsets, mlir::ValueRange sizes, mlir::ValueRange strides,
+    mlir::ArrayRef<mlir::NamedAttribute> attrs) {
+  mlir::SmallVector<mlir::OpFoldResult> offsetValues =
+      llvm::to_vector<4>(llvm::map_range(
+          offsets, [](mlir::Value v) -> mlir::OpFoldResult { return v; }));
+  mlir::SmallVector<mlir::OpFoldResult> sizeValues =
+      llvm::to_vector<4>(llvm::map_range(
+          sizes, [](mlir::Value v) -> mlir::OpFoldResult { return v; }));
+  mlir::SmallVector<mlir::OpFoldResult> strideValues =
+      llvm::to_vector<4>(llvm::map_range(
+          strides, [](mlir::Value v) -> mlir::OpFoldResult { return v; }));
+  build(b, result, resultType, source, offsetValues, sizeValues, strideValues);
+}
+
+// Build a SubViewOp with dynamic entries and inferred result type.
+void imex::ntensor::SubviewOp::build(
+    mlir::OpBuilder &b, mlir::OperationState &result, mlir::Value source,
+    mlir::ValueRange offsets, mlir::ValueRange sizes, mlir::ValueRange strides,
+    mlir::ArrayRef<mlir::NamedAttribute> attrs) {
+  build(b, result, imex::ntensor::NTensorType(), source, offsets, sizes,
+        strides, attrs);
+}
+
 void imex::ntensor::ResolveIndexOp::getCanonicalizationPatterns(
     ::mlir::RewritePatternSet &results, ::mlir::MLIRContext *context) {
   results.insert<ResolveIndexPropagate>(context);
