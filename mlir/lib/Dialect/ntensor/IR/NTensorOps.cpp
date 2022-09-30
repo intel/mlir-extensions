@@ -178,6 +178,50 @@ void imex::ntensor::ResolveIndexOp::getCanonicalizationPatterns(
   results.insert<ResolveIndexPropagate>(context);
 }
 
+// Copypasted from upstream tensor.
+llvm::SmallBitVector imex::ntensor::SubviewOp::getDroppedDims() {
+  mlir::ArrayRef<int64_t> resultShape = getType().getShape();
+  mlir::SmallVector<mlir::OpFoldResult> mixedSizes = getMixedSizes();
+  llvm::SmallBitVector droppedDims(mixedSizes.size());
+  unsigned shapePos = 0;
+  for (const auto &size : enumerate(mixedSizes)) {
+    llvm::Optional<int64_t> sizeVal = getConstantIntValue(size.value());
+    // If the size is not 1, or if the current matched dimension of the result
+    // is the same static shape as the size value (which is 1), then the
+    // dimension is preserved.
+    if (!sizeVal || *sizeVal != 1 ||
+        (shapePos < resultShape.size() && resultShape[shapePos] == 1)) {
+      shapePos++;
+      continue;
+    }
+    droppedDims.set(size.index());
+  }
+  return droppedDims;
+}
+
+// Copypasted from upstream tensor.
+mlir::LogicalResult imex::ntensor::SubviewOp::reifyResultShapes(
+    mlir::OpBuilder &builder,
+    mlir::ReifiedRankedShapedTypeDims &reifiedReturnShapes) {
+  reifiedReturnShapes.resize(1);
+  reifiedReturnShapes[0].reserve(getType().getRank());
+  mlir::SmallVector<mlir::OpFoldResult> mixedSizes = getMixedSizes();
+  llvm::SmallBitVector droppedDims = getDroppedDims();
+  mlir::Location loc = getLoc();
+  for (const auto &size : enumerate(mixedSizes)) {
+    if (droppedDims.test(size.index()))
+      continue;
+    if (auto attr = size.value().dyn_cast<mlir::Attribute>()) {
+      reifiedReturnShapes[0].push_back(
+          builder.create<mlir::arith::ConstantIndexOp>(
+              loc, attr.cast<mlir::IntegerAttr>().getInt()));
+      continue;
+    }
+    reifiedReturnShapes[0].push_back(size.value().get<mlir::Value>());
+  }
+  return mlir::success();
+}
+
 static mlir::LogicalResult
 parseShape(mlir::AsmParser &parser,
            mlir::FailureOr<llvm::SmallVector<int64_t>> &shape,

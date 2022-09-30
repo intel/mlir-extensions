@@ -19,7 +19,20 @@
 #include <mlir/IR/OpDefinition.h>
 #include <mlir/IR/OpImplementation.h>
 #include <mlir/IR/Region.h>
+#include <mlir/Interfaces/CopyOpInterface.h>
+#include <mlir/Interfaces/InferTypeOpInterface.h>
 #include <mlir/Interfaces/SideEffectInterfaces.h>
+#include <mlir/Interfaces/ViewLikeInterface.h>
+
+namespace mlir {
+
+/// Return the list of Range (i.e. offset, size, stride). Each Range
+/// entry contains either the dynamic value or a ConstantIndexOp constructed
+/// with `b` at location `loc`.
+SmallVector<Range, 8> getOrCreateRanges(OffsetSizeAndStrideOpInterface op,
+                                        OpBuilder &b, Location loc);
+
+} // namespace mlir
 
 namespace imex {
 namespace ntensor {
@@ -30,12 +43,6 @@ class SliceType;
 
 #include "imex/Dialect/ntensor/IR/NTensorOpsDialect.h.inc"
 #include "imex/Dialect/ntensor/IR/NTensorOpsEnums.h.inc"
-
-#define GET_ATTRDEF_CLASSES
-#include "imex/Dialect/ntensor/IR/NTensorOpsAttributes.h.inc"
-
-#define GET_OP_CLASSES
-#include "imex/Dialect/ntensor/IR/NTensorOps.h.inc"
 
 namespace imex {
 namespace ntensor {
@@ -73,3 +80,9 @@ public:
 
 #define GET_TYPEDEF_CLASSES
 #include "imex/Dialect/ntensor/IR/NTensorOpsTypes.h.inc"
+
+#define GET_ATTRDEF_CLASSES
+#include "imex/Dialect/ntensor/IR/NTensorOpsAttributes.h.inc"
+
+#define GET_OP_CLASSES
+#include "imex/Dialect/ntensor/IR/NTensorOps.h.inc"
