@@ -150,7 +150,7 @@ static mlir::Value makeSubview(mlir::OpBuilder &builder, mlir::Location loc,
 
   auto memrefType = srcType.cast<imex::ntensor::NTensorType>();
   auto resType = imex::ntensor::SubviewOp::inferResultType(memrefType, offsets,
-                                                          sizes, strides);
+                                                           sizes, strides);
 
   mlir::Value view = builder.create<imex::ntensor::SubviewOp>(
       loc, resType, src, offsets, sizes, strides);
@@ -161,9 +161,8 @@ static mlir::Value makeSubview(mlir::OpBuilder &builder, mlir::Location loc,
     llvm::SmallVector<mlir::OpFoldResult> newStrides(srcRank,
                                                      builder.getIndexAttr(1));
     auto viewType = view.getType().cast<imex::ntensor::NTensorType>();
-    auto reducedType =
-        imex::ntensor::SubviewOp::inferRankReducedResultType(
-            getDynShape(dstRank), viewType, newOfsets, sizes, newStrides);
+    auto reducedType = imex::ntensor::SubviewOp::inferRankReducedResultType(
+        getDynShape(dstRank), viewType, newOfsets, sizes, newStrides);
     view = builder.create<imex::ntensor::SubviewOp>(
         loc, reducedType, view, newOfsets, sizes, newStrides);
     resType = reducedType;
@@ -179,16 +178,16 @@ static mlir::Value makeSubview(mlir::OpBuilder &builder, mlir::Location loc,
   return view;
 }
 
-static llvm::SmallVector<mlir::Value> toValues(mlir::OpBuilder & builder, mlir::Location loc, mlir::ArrayRef<mlir::OpFoldResult> vals) {
+static llvm::SmallVector<mlir::Value>
+toValues(mlir::OpBuilder &builder, mlir::Location loc,
+         mlir::ArrayRef<mlir::OpFoldResult> vals) {
   llvm::SmallVector<mlir::Value> ret(vals.size());
   for (auto it : llvm::enumerate(vals)) {
     auto i = it.index();
     auto val = it.value();
     if (auto attr = val.dyn_cast<mlir::Attribute>()) {
       ret[i] = builder.create<mlir::arith::ConstantIndexOp>(
-          loc, attr.cast<mlir::IntegerAttr>()
-                   .getValue()
-                   .getSExtValue());
+          loc, attr.cast<mlir::IntegerAttr>().getValue().getSExtValue());
     } else {
       ret[i] = val.template get<mlir::Value>();
     }
@@ -230,8 +229,8 @@ struct SetitemOpLowering
       return mlir::failure();
     } else {
       // Is single element
-      rewriter.replaceOpWithNewOp<imex::ntensor::StoreOp>(op, value, target,
-                                                         toValues(rewriter, loc, offsets));
+      rewriter.replaceOpWithNewOp<imex::ntensor::StoreOp>(
+          op, value, target, toValues(rewriter, loc, offsets));
     }
 
     return mlir::success();
@@ -270,8 +269,8 @@ struct GetitemOpLowering
                         dimsIndices);
     } else {
       // Is single element
-      res =
-          rewriter.create<imex::ntensor::LoadOp>(loc, value, toValues(rewriter, loc, offsets));
+      res = rewriter.create<imex::ntensor::LoadOp>(
+          loc, value, toValues(rewriter, loc, offsets));
     }
     rewriter.replaceOp(op, res);
     return mlir::success();
@@ -279,8 +278,8 @@ struct GetitemOpLowering
 };
 } // namespace
 
-void imex::ntensor::populateResolveArrayOpsPatterns(mlir::MLIRContext &context, mlir::RewritePatternSet &patterns)
-{
+void imex::ntensor::populateResolveArrayOpsPatterns(
+    mlir::MLIRContext &context, mlir::RewritePatternSet &patterns) {
   patterns.insert<SetitemOpLowering, GetitemOpLowering>(&context);
 }
 
@@ -306,9 +305,8 @@ struct ResolveArrayOpsPass
                                              std::move(patterns));
   }
 };
-}
+} // namespace
 
-std::unique_ptr<mlir::Pass> imex::ntensor::createResolveArrayOpsPass()
-{
+std::unique_ptr<mlir::Pass> imex::ntensor::createResolveArrayOpsPass() {
   return std::make_unique<ResolveArrayOpsPass>();
 }

@@ -20,12 +20,13 @@ namespace mlir {
 class MLIRContext;
 class Pass;
 class RewritePatternSet;
-}
+} // namespace mlir
 
 namespace imex {
 namespace ntensor {
-void populateResolveArrayOpsPatterns(mlir::MLIRContext &context, mlir::RewritePatternSet& patterns);
+void populateResolveArrayOpsPatterns(mlir::MLIRContext &context,
+                                     mlir::RewritePatternSet &patterns);
 
 std::unique_ptr<mlir::Pass> createResolveArrayOpsPass();
-}
-}
+} // namespace ntensor
+} // namespace imex
