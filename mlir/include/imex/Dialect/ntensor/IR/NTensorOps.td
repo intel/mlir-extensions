@@ -454,6 +454,11 @@ def DimOp : NTensor_OpBase<"dim", [NoSideEffect]> {
     attr-dict $source `,` $index `:` qualified(type($source))
   }];
 
+  let builders = [
+    OpBuilder<(ins "::mlir::Value":$source, "int64_t":$index)>,
+    OpBuilder<(ins "::mlir::Value":$source, "::mlir::Value":$index)>
+  ];
+
   let extraClassDeclaration = [{
     /// Helper function to get the index as a simple integer if it is constant.
     ::llvm::Optional<int64_t> getConstantIndex();

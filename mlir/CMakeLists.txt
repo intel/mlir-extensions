@@ -49,6 +49,7 @@ set(SOURCES_LIST
     lib/Dialect/gpu_runtime/IR/gpu_runtime_ops.cpp
     lib/Dialect/imex_util/dialect.cpp
     lib/Dialect/ntensor/IR/NTensorOps.cpp
+    lib/Dialect/ntensor/Transforms/ResolveArrayOps.cpp
     lib/Dialect/plier/dialect.cpp
     lib/ExecutionEngine/execution_engine.cpp
     lib/Transforms/arg_lowering.cpp
@@ -88,6 +89,7 @@ set(HEADERS_LIST
     include/imex/Dialect/gpu_runtime/IR/gpu_runtime_ops.hpp
     include/imex/Dialect/imex_util/dialect.hpp
     include/imex/Dialect/ntensor/IR/NTensorOps.hpp
+    include/imex/Dialect/ntensor/Transforms/ResolveArrayOps.hpp
     include/imex/Dialect/plier/dialect.hpp
     include/imex/ExecutionEngine/execution_engine.hpp
     include/imex/Transforms/arg_lowering.hpp
