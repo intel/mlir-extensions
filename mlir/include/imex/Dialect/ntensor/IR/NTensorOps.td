@@ -319,12 +319,12 @@ def SubviewOp : NTensor_OpWithOffsetSizesAndStrides<"subview", [
     /// rank-reduced, from the source type and the static representation of
     /// offsets, sizes and strides. Special sentinels encode the dynamic case.
     static NTensorType inferResultType(
-      ::mlir::ShapedType sourceShapedTensorType,
+      NTensorType sourceType,
       ::mlir::ArrayRef<int64_t> staticOffsets,
       ::mlir::ArrayRef<int64_t> staticSizes,
       ::mlir::ArrayRef<int64_t> staticStrides);
     static NTensorType inferResultType(
-      ::mlir::ShapedType sourceShapedTensorType,
+      NTensorType sourceType,
       ::mlir::ArrayRef<::mlir::OpFoldResult> staticOffsets,
       ::mlir::ArrayRef<::mlir::OpFoldResult> staticSizes,
       ::mlir::ArrayRef<::mlir::OpFoldResult> staticStrides);
@@ -337,12 +337,12 @@ def SubviewOp : NTensor_OpWithOffsetSizesAndStrides<"subview", [
     /// than the difference in source/result rank, it is not clear which dims of
     /// size one should be dropped.
     static NTensorType inferRankReducedResultType(::mlir::ArrayRef<int64_t> resultShape,
-                                                  ::mlir::ShapedType sourceMemRefType,
+                                                  NTensorType sourceType,
                                                   ::mlir::ArrayRef<int64_t> staticOffsets,
                                                   ::mlir::ArrayRef<int64_t> staticSizes,
                                                   ::mlir::ArrayRef<int64_t> staticStrides);
     static NTensorType inferRankReducedResultType(::mlir::ArrayRef<int64_t> resultShape,
-                                                  ::mlir::ShapedType sourceMemRefType,
+                                                  NTensorType sourceType,
                                                   ::mlir::ArrayRef<::mlir::OpFoldResult> staticOffsets,
                                                   ::mlir::ArrayRef<::mlir::OpFoldResult> staticSizes,
                                                   ::mlir::ArrayRef<::mlir::OpFoldResult> staticStrides);

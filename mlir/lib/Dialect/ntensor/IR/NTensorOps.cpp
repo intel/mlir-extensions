@@ -202,6 +202,71 @@ void imex::ntensor::DimOp::build(mlir::OpBuilder &builder,
   build(builder, result, indexTy, source, index);
 }
 
+imex::ntensor::NTensorType imex::ntensor::SubviewOp::inferResultType(
+    imex::ntensor::NTensorType sourceType,
+    mlir::ArrayRef<int64_t> staticOffsets, mlir::ArrayRef<int64_t> staticSizes,
+    mlir::ArrayRef<int64_t> staticStrides) {
+  unsigned rank = sourceType.getRank();
+  (void)rank;
+  assert(staticOffsets.size() == rank && "staticOffsets length mismatch");
+  assert(staticSizes.size() == rank && "staticSizes length mismatch");
+  assert(staticStrides.size() == rank && "staticStrides length mismatch");
+  return imex::ntensor::NTensorType::get(
+      staticSizes, sourceType.getElementType(), sourceType.getEnvironment());
+}
+
+imex::ntensor::NTensorType imex::ntensor::SubviewOp::inferResultType(
+    imex::ntensor::NTensorType sourceShapedTensorType,
+    mlir::ArrayRef<mlir::OpFoldResult> offsets,
+    mlir::ArrayRef<mlir::OpFoldResult> sizes,
+    mlir::ArrayRef<mlir::OpFoldResult> strides) {
+  mlir::SmallVector<int64_t> staticOffsets, staticSizes, staticStrides;
+  mlir::SmallVector<mlir::Value> dynamicOffsets, dynamicSizes, dynamicStrides;
+  dispatchIndexOpFoldResults(offsets, dynamicOffsets, staticOffsets,
+                             mlir::ShapedType::kDynamicStrideOrOffset);
+  dispatchIndexOpFoldResults(sizes, dynamicSizes, staticSizes,
+                             mlir::ShapedType::kDynamicSize);
+  dispatchIndexOpFoldResults(strides, dynamicStrides, staticStrides,
+                             mlir::ShapedType::kDynamicStrideOrOffset);
+  return SubviewOp::inferResultType(sourceShapedTensorType, staticOffsets,
+                                    staticSizes, staticStrides);
+}
+
+imex::ntensor::NTensorType imex::ntensor::SubviewOp::inferRankReducedResultType(
+    mlir::ArrayRef<int64_t> resultShape, imex::ntensor::NTensorType sourceType,
+    mlir::ArrayRef<int64_t> offsets, mlir::ArrayRef<int64_t> sizes,
+    mlir::ArrayRef<int64_t> strides) {
+  auto inferredType = inferResultType(sourceType, offsets, sizes, strides);
+  assert(inferredType.getRank() >= static_cast<int64_t>(resultShape.size()) &&
+         "expected ");
+  if (inferredType.getRank() == static_cast<int64_t>(resultShape.size()))
+    return inferredType;
+
+  assert(mlir::computeRankReductionMask(inferredType.getShape(), resultShape)
+             .has_value() &&
+         "invalid rank reduction");
+
+  return imex::ntensor::NTensorType::get(
+      resultShape, sourceType.getElementType(), sourceType.getEnvironment());
+}
+
+imex::ntensor::NTensorType imex::ntensor::SubviewOp::inferRankReducedResultType(
+    mlir::ArrayRef<int64_t> resultShape, imex::ntensor::NTensorType sourceType,
+    mlir::ArrayRef<mlir::OpFoldResult> offsets,
+    mlir::ArrayRef<mlir::OpFoldResult> sizes,
+    mlir::ArrayRef<mlir::OpFoldResult> strides) {
+  mlir::SmallVector<int64_t> staticOffsets, staticSizes, staticStrides;
+  mlir::SmallVector<mlir::Value> dynamicOffsets, dynamicSizes, dynamicStrides;
+  dispatchIndexOpFoldResults(offsets, dynamicOffsets, staticOffsets,
+                             mlir::ShapedType::kDynamicStrideOrOffset);
+  dispatchIndexOpFoldResults(sizes, dynamicSizes, staticSizes,
+                             mlir::ShapedType::kDynamicSize);
+  dispatchIndexOpFoldResults(strides, dynamicStrides, staticStrides,
+                             mlir::ShapedType::kDynamicStrideOrOffset);
+  return SubviewOp::inferRankReducedResultType(
+      resultShape, sourceType, staticOffsets, staticSizes, staticStrides);
+}
+
 // Build a SubViewOp with mixed static and dynamic entries and custom result
 // type. If the type passed is nullptr, it is inferred.
 void imex::ntensor::SubviewOp::build(
