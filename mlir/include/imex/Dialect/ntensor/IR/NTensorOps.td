@@ -366,6 +366,31 @@ def LoadOp : NTensor_OpBase<"load",
   let assemblyFormat = "$array `[` $indices `]` attr-dict `:` qualified(type($array))";
 }
 
+def StoreOp : NTensor_OpBase<"store",
+     [TypesMatchWith<"type of 'value' matches element type of 'array'",
+                     "array", "value",
+                     "$_self.cast<NTensorType>().getElementType()">]> {
+  let summary = "array element store operation";
+  let description = [{
+    Store a value to a array location given by indices. The value stored should
+    have the same type as the elemental type of the array. The number of
+    arguments provided within brackets need to match the rank of the array.
+  }];
+
+  let arguments = (ins AnyType:$value,
+                       Arg<NTensor_Tensor, "the reference to store to",
+                           [MemWrite]>:$array,
+                       Variadic<Index>:$indices);
+
+  let builders = [
+    OpBuilder<(ins "::mlir::Value":$valueToStore, "::mlir::Value":$array), [{
+      $_state.addOperands(valueToStore);
+      $_state.addOperands(array);
+    }]>];
+
+  let assemblyFormat = "$value `,` $array `[` $indices `]` attr-dict `:` qualified(type($array))";
+}
+
 def BuildSliceOp : NTensor_OpBase<"build_slice", [
     AttrSizedOperandSegments, NoSideEffect]> {
   let summary = "Slice creation operation.";
