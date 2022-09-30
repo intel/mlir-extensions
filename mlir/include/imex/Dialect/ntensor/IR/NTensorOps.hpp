@@ -19,6 +19,7 @@
 #include <mlir/IR/OpDefinition.h>
 #include <mlir/IR/OpImplementation.h>
 #include <mlir/IR/Region.h>
+#include <mlir/Interfaces/CopyOpInterface.h>
 #include <mlir/Interfaces/SideEffectInterfaces.h>
 
 namespace imex {

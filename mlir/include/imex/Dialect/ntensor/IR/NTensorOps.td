@@ -15,6 +15,7 @@
 #ifndef NTENSOR_OPS
 #define NTENSOR_OPS
 
+include "mlir/Interfaces/CopyOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/BuiltinTypeInterfaces.td"
@@ -161,6 +162,26 @@ def GetitemOp : NTensor_OpBase<"getitem", [NoSideEffect]> {
   let results = (outs AnyType:$result);
 
   let assemblyFormat = "attr-dict `(` $source `:` type($source) `)` `[` $index `:` type($index) `]` `->` type($result)";
+}
+
+def CopyOp : NTensor_OpBase<"copy",
+    [CopyOpInterface, SameOperandsElementType, SameOperandsShape]> {
+
+  let description = [{
+    Copies the data from the source to the destination arrau.
+
+    Source and destination are expected to have the same element type and shape.
+    Otherwise, the result is undefined.
+  }];
+
+  let arguments = (ins Arg<NTensor_Tensor, "the array to copy from",
+                           [MemRead]>:$source,
+                       Arg<NTensor_Tensor, "the array to copy to",
+                           [MemWrite]>:$target);
+
+  let assemblyFormat = [{
+    $source `,` $target attr-dict `:` qualified(type($source)) `to` qualified(type($target))
+  }];
 }
 
 def BuildSliceOp : NTensor_OpBase<"build_slice", [

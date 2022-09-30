@@ -254,3 +254,14 @@ func.func @test(%arg1: index, %arg2: index) -> index {
 //  CHECK-SAME:   (%[[ARG1:.*]]: index, %[[ARG2:.*]]: index)
 //  CHECK-NEXT:   %[[RES:.*]] = ntensor.resolve_index %[[ARG1]], %[[ARG2]]
 //  CHECK-NEXT:   return %[[RES]] : index
+
+// -----
+
+func.func @test(%arg1: !ntensor.ntensor<?xf32, "test1">, %arg2: !ntensor.ntensor<?xf32, "test2">) {
+  ntensor.copy %arg1, %arg2 : !ntensor.ntensor<?xf32, "test1"> to !ntensor.ntensor<?xf32, "test2">
+  return
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG1:.*]]: !ntensor.ntensor<?xf32, "test1">, %[[ARG2:.*]]: !ntensor.ntensor<?xf32, "test2">)
+//  CHECK-NEXT:   ntensor.copy %[[ARG1]], %[[ARG2]] : !ntensor.ntensor<?xf32, "test1"> to !ntensor.ntensor<?xf32, "test2">
+//  CHECK-NEXT:   return
