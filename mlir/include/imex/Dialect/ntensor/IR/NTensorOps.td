@@ -191,6 +191,8 @@ def ResolveSliceOp : NTensor_OpBase<"resolve_slice", [NoSideEffect]> {
   let results = (outs Index:$begin, Index:$end, Index:$step);
 
   let assemblyFormat = "attr-dict $slice `,` $size";
+
+  let hasCanonicalizer = 1;
 }
 
 def ResolveIndexOp : NTensor_OpBase<"resolve_index", [NoSideEffect]> {
@@ -207,6 +209,8 @@ def ResolveIndexOp : NTensor_OpBase<"resolve_index", [NoSideEffect]> {
   let results = (outs Index:$result);
 
   let assemblyFormat = "attr-dict $index `,` $size";
+
+  let hasCanonicalizer = 1;
 }
 
 def DimOp : NTensor_OpBase<"dim", [NoSideEffect]> {
