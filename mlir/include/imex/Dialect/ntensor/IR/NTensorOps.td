@@ -16,7 +16,9 @@
 #define NTENSOR_OPS
 
 include "mlir/Interfaces/CopyOpInterface.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/Interfaces/ViewLikeInterface.td"
 include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/BuiltinTypeInterfaces.td"
 include "mlir/IR/EnumAttr.td"
@@ -181,6 +183,157 @@ def CopyOp : NTensor_OpBase<"copy",
 
   let assemblyFormat = [{
     $source `,` $target attr-dict `:` qualified(type($source)) `to` qualified(type($target))
+  }];
+}
+
+// Base class for ops with static/dynamic offset, sizes and strides
+// attributes/arguments.
+class NTensor_OpWithOffsetSizesAndStrides<string mnemonic,
+                                          list<Trait> traits = []>
+    : NTensor_OpBase<mnemonic, traits> {
+  code extraBaseClassDeclaration = [{
+    /// Returns the dynamic sizes for this subview operation if specified.
+    ::mlir::Operation::operand_range getDynamicSizes() { return getSizes(); }
+
+    /// Return the list of Range (i.e. offset, size, stride). Each
+    /// Range entry contains either the dynamic value or a ConstantIndexOp
+    /// constructed with `b` at location `loc`.
+    ::mlir::SmallVector<::mlir::Range, 8> getOrCreateRanges(
+        ::mlir::OpBuilder &b, ::mlir::Location loc) {
+      return ::mlir::getOrCreateRanges(*this, b, loc);
+    }
+  }];
+}
+
+def SubviewOp : NTensor_OpWithOffsetSizesAndStrides<"subview", [
+    NoSideEffect, AttrSizedOperandSegments,
+    DeclareOpInterfaceMethods<ReifyRankedShapedTypeOpInterface>,
+    OffsetSizeAndStrideOpInterface
+  ]> {
+  let summary = "array subview operation";
+  let description = [{
+    The "subview" operation converts a array type to another array type
+    which represents a reduced-size view of the original array as specified by
+    the operation's offsets, sizes and strides arguments.
+  }];
+
+  let arguments = (ins
+    NTensor_Tensor:$source,
+    Variadic<Index>:$offsets,
+    Variadic<Index>:$sizes,
+    Variadic<Index>:$strides,
+    I64ArrayAttr:$static_offsets,
+    I64ArrayAttr:$static_sizes,
+    I64ArrayAttr:$static_strides
+  );
+  let results = (outs NTensor_Tensor:$result);
+
+  let assemblyFormat = [{
+    $source ``
+    custom<DynamicIndexList>($offsets, $static_offsets,
+                             "::mlir::ShapedType::kDynamicStrideOrOffset")
+    custom<DynamicIndexList>($sizes, $static_sizes,
+                             "::mlir::ShapedType::kDynamicSize")
+    custom<DynamicIndexList>($strides, $static_strides,
+                             "::mlir::ShapedType::kDynamicStrideOrOffset")
+    attr-dict `:` qualified(type($source)) `to` qualified(type($result))
+  }];
+
+  let builders = [
+    // Build an ExtractSliceOp with mixed static and dynamic entries and
+    // inferred result type.
+    OpBuilder<(ins "::mlir::Value":$source, "::mlir::ArrayRef<::mlir::OpFoldResult>":$offsets,
+      "::mlir::ArrayRef<::mlir::OpFoldResult>":$sizes, "::mlir::ArrayRef<::mlir::OpFoldResult>":$strides,
+      CArg<"::mlir::ArrayRef<::mlir::NamedAttribute>", "{}">:$attrs)>,
+    // Build an ExtractSliceOp with mixed static and dynamic entries and custom
+    // result type. If the type passed is nullptr, it is inferred.
+    OpBuilder<(ins "NTensorType":$resultType, "::mlir::Value":$source,
+      "::mlir::ArrayRef<::mlir::OpFoldResult>":$offsets, "::mlir::ArrayRef<::mlir::OpFoldResult>":$sizes,
+      "::mlir::ArrayRef<::mlir::OpFoldResult>":$strides,
+      CArg<"::mlir::ArrayRef<::mlir::NamedAttribute>", "{}">:$attrs)>,
+    // Build an ExtractSliceOp with dynamic entries and custom result type. If
+    // the type passed is nullptr, it is inferred.
+    OpBuilder<(ins "::mlir::Value":$source, "::mlir::ValueRange":$offsets,
+      "::mlir::ValueRange":$sizes, "::mlir::ValueRange":$strides,
+      CArg<"::mlir::ArrayRef<::mlir::NamedAttribute>", "{}">:$attrs)>,
+    // Build an ExtractSliceOp with dynamic entries and inferred result type.
+    OpBuilder<(ins "NTensorType":$resultType, "::mlir::Value":$source,
+      "::mlir::ValueRange":$offsets, "::mlir::ValueRange":$sizes, "::mlir::ValueRange":$strides,
+      CArg<"::mlir::ArrayRef<::mlir::NamedAttribute>", "{}">:$attrs)>,
+    // Build an ExtractSliceOp with mixed static and dynamic entries packed in
+    // a Range vector.
+    OpBuilder<(ins "::mlir::Value":$source, "::mlir::ArrayRef<::mlir::Range>":$ranges,
+      CArg<"::mlir::ArrayRef<::mlir::NamedAttribute>", "{}">:$attrs)>,
+  ];
+
+  let extraClassDeclaration = extraBaseClassDeclaration # [{
+    /// Returns the type of the base tensor operand.
+    NTensorType getSourceType() {
+      return getSource().getType().cast<NTensorType>();
+    }
+
+    /// The result of an extract_slice is always a tensor.
+    NTensorType getType() {
+      return getResult().getType().cast<NTensorType>();
+    }
+
+    /// Compute the rank-reduction mask that can be applied to map the source
+    /// tensor type to the result tensor type by dropping unit dims.
+    llvm::Optional<llvm::SmallDenseSet<unsigned>>
+    computeRankReductionMask() {
+      return ::mlir::computeRankReductionMask(getSourceType().getShape(),
+                                              getType().getShape());
+    };
+
+    /// An extract_slice result type can be inferred, when it is not
+    /// rank-reduced, from the source type and the static representation of
+    /// offsets, sizes and strides. Special sentinels encode the dynamic case.
+    static NTensorType inferResultType(
+      ::mlir::ShapedType sourceShapedTensorType,
+      ::mlir::ArrayRef<int64_t> staticOffsets,
+      ::mlir::ArrayRef<int64_t> staticSizes,
+      ::mlir::ArrayRef<int64_t> staticStrides);
+    static NTensorType inferResultType(
+      ::mlir::ShapedType sourceShapedTensorType,
+      ::mlir::ArrayRef<::mlir::OpFoldResult> staticOffsets,
+      ::mlir::ArrayRef<::mlir::OpFoldResult> staticSizes,
+      ::mlir::ArrayRef<::mlir::OpFoldResult> staticStrides);
+
+    /// If the rank is reduced (i.e. the desiredResultRank is smaller than the
+    /// number of sizes), drop as many size 1 as needed to produce an inferred type
+    /// with the desired rank.
+    ///
+    /// Note that there may be multiple ways to compute this rank-reduced type:
+    ///   e.g. 1x6x1 can rank-reduce to either 1x6 or 6x1 2-D tensors.
+    ///
+    /// To disambiguate, this function always drops the first 1 sizes occurrences.
+    static NTensorType inferCanonicalRankReducedResultType(
+      unsigned resultRank,
+      NTensorType sourceRankedTensorType,
+      ::mlir::ArrayRef<int64_t> staticOffsets,
+      ::mlir::ArrayRef<int64_t> staticSizes,
+      ::mlir::ArrayRef<int64_t> staticStrides);
+    static NTensorType inferCanonicalRankReducedResultType(
+      unsigned resultRank,
+      NTensorType sourceRankedTensorType,
+      ::mlir::ArrayRef<::mlir::OpFoldResult> staticOffsets,
+      ::mlir::ArrayRef<::mlir::OpFoldResult> staticSizes,
+      ::mlir::ArrayRef<::mlir::OpFoldResult> staticStrides);
+
+    /// Return the expected rank of each of the`static_offsets`, `static_sizes`
+    /// and `static_strides` attributes.
+    std::array<unsigned, 3> getArrayAttrMaxRanks() {
+      unsigned rank = getSourceType().getRank();
+      return {rank, rank, rank};
+    }
+
+    /// Return the number of leading operands before the `offsets`, `sizes` and
+    /// and `strides` operands.
+    static unsigned getOffsetSizeAndStrideStartOperandIndex() { return 1; }
+
+    /// Return the dimensions of the source that are dropped in the
+    /// result when the result is rank-reduced.
+    llvm::SmallBitVector getDroppedDims();
   }];
 }
 

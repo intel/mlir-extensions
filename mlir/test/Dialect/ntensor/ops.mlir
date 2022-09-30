@@ -295,3 +295,28 @@ func.func @test() -> !ntensor.ntensor<?x?xi32> {
 //  CHECK-NEXT:   %[[VAL:.*]] = arith.constant 5 : i32
 //  CHECK-NEXT:   %[[RES:.*]] = ntensor.create(%[[D1]], %[[D2]]) = (%[[VAL]] : i32) : !ntensor.ntensor<?x?xi32>
 //  CHECK-NEXT:   return %[[RES]]
+
+// -----
+
+// CHECK-LABEL: func @test({{.*}}) {
+func.func @test(%t: !ntensor.ntensor<8x16x4xf32>, %idx : index) {
+  %c0 = arith.constant 0 : index
+  %c1 = arith.constant 1 : index
+
+  // CHECK: ntensor.subview
+  // CHECK-SAME: !ntensor.ntensor<8x16x4xf32> to !ntensor.ntensor<?x?x?xf32>
+  %1 = ntensor.subview %t[%c0, %c0, %c0][%idx, %idx, %idx][%c1, %c1, %c1]
+    : !ntensor.ntensor<8x16x4xf32> to !ntensor.ntensor<?x?x?xf32>
+
+  // CHECK: ntensor.subview
+  // CHECK-SAME: !ntensor.ntensor<8x16x4xf32> to !ntensor.ntensor<4x4x4xf32>
+  %2 = ntensor.subview %t[0, 2, 0][4, 4, 4][1, 1, 1]
+    : !ntensor.ntensor<8x16x4xf32> to !ntensor.ntensor<4x4x4xf32>
+
+  // CHECK: ntensor.subview
+  // CHECK-SAME: !ntensor.ntensor<8x16x4xf32> to !ntensor.ntensor<4x4xf32>
+  %3 = ntensor.subview %t[0, 2, 0][4, 1, 4][1, 1, 1]
+    : !ntensor.ntensor<8x16x4xf32> to !ntensor.ntensor<4x4xf32>
+
+  return
+}
