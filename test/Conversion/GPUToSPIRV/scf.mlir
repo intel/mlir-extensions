@@ -11,7 +11,7 @@ module attributes {
     // CHECK-SAME: {{%.*}}: !spv.ptr<!spv.struct<(!spv.array<10 x f32, stride=4> [0])>, StorageBuffer> {spv.interface_var_abi = #spv.interface_var_abi<(0, 0)>}
     // CHECK-SAME: {{%.*}}: !spv.ptr<!spv.struct<(!spv.array<10 x f32, stride=4> [0])>, StorageBuffer> {spv.interface_var_abi = #spv.interface_var_abi<(0, 1)>}
     // CHECK-SAME: spv.entry_point_abi = #spv.entry_point_abi<local_size = dense<[32, 4, 1]> : vector<3xi32>>
-    gpu.func @loop_kernel(%arg2 : memref<10xf32>, %arg3 : memref<10xf32>) kernel
+    gpu.func @loop_kernel(%arg2 : memref<10xf32, #spv.storage_class<StorageBuffer>>, %arg3 : memref<10xf32, #spv.storage_class<StorageBuffer>>) kernel
       attributes {spv.entry_point_abi = #spv.entry_point_abi<local_size = dense<[32, 4, 1]>: vector<3xi32>>} {
       // CHECK: spv.Branch ^bb1
       // CHECK: ^bb1:  // pred: ^bb0
@@ -47,8 +47,8 @@ module attributes {
         // CHECK:        spv.mlir.merge
         // CHECK:      }
         scf.for %arg4 = %lb to %ub step %step {
-             %1 = memref.load %arg2[%arg4] : memref<10xf32>
-            memref.store %1, %arg3[%arg4] : memref<10xf32>
+             %1 = memref.load %arg2[%arg4] : memref<10xf32, #spv.storage_class<StorageBuffer>>
+            memref.store %1, %arg3[%arg4] : memref<10xf32, #spv.storage_class<StorageBuffer>>
         }
       // CHECK: spv.Return
       gpu.return
@@ -56,12 +56,12 @@ module attributes {
   }
 
   func.func @main() {
-    %0 = "op"() : () -> (memref<10xf32>)
-    %1 = "op"() : () -> (memref<10xf32>)
+    %0 = "op"() : () -> (memref<10xf32, #spv.storage_class<StorageBuffer>>)
+    %1 = "op"() : () -> (memref<10xf32, #spv.storage_class<StorageBuffer>>)
     %cst = arith.constant 1 : index
     gpu.launch_func @kernels::@loop_kernel
         blocks in (%cst, %cst, %cst) threads in (%cst, %cst, %cst)
-        args(%0 : memref<10xf32>, %1 : memref<10xf32>)
+        args(%0 : memref<10xf32, #spv.storage_class<StorageBuffer>>, %1 : memref<10xf32, #spv.storage_class<StorageBuffer>>)
     return
   }
 }

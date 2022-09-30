@@ -52,51 +52,71 @@ namespace imex {
 /// replace it).
 ///
 /// 2) Lower the body of the spirv::ModuleOp.
-struct ConvertGPUXToSPIRVPass
-    : public ::imex::ConvertGPUXToSPIRVBase<ConvertGPUXToSPIRVPass> {
+class GPUXToSPIRVPass : public ::imex::ConvertGPUXToSPIRVBase<GPUXToSPIRVPass> {
+public:
+  explicit GPUXToSPIRVPass(bool mapMemorySpace)
+      : mapMemorySpace(mapMemorySpace) {}
+  void runOnOperation() override;
 
-  void runOnOperation() override {
-    mlir::MLIRContext *context = &getContext();
-    mlir::ModuleOp module = getOperation();
-
-    llvm::SmallVector<mlir::Operation *, 1> kernelModules;
-    mlir::OpBuilder builder(context);
-    module.walk([&builder, &kernelModules](mlir::gpu::GPUModuleOp moduleOp) {
-      // For each kernel module (should be only 1 for now, but that is not a
-      // requirement here), clone the module for conversion because the
-      // gpu.launch function still needs the kernel module.
-      builder.setInsertionPoint(moduleOp.getOperation());
-      kernelModules.push_back(builder.clone(*moduleOp.getOperation()));
-    });
-
-    auto targetAttr = mlir::spirv::lookupTargetEnvOrDefault(module);
-    std::unique_ptr<mlir::ConversionTarget> target =
-        mlir::SPIRVConversionTarget::get(targetAttr);
-
-    mlir::SPIRVTypeConverter typeConverter(targetAttr);
-    mlir::RewritePatternSet patterns(context);
-
-    //------- Upstream Conversion------------
-    mlir::populateGPUToSPIRVPatterns(typeConverter, patterns);
-    mlir::arith::populateArithmeticToSPIRVPatterns(typeConverter, patterns);
-    mlir::populateMemRefToSPIRVPatterns(typeConverter, patterns);
-    mlir::populateFuncToSPIRVPatterns(typeConverter, patterns);
-    // ---------------------------------------
-
-    // IMEX GPUToSPIRV extension
-    mlir::ScfToSPIRVContext scfToSpirvCtx;
-    mlir::populateSCFToSPIRVPatterns(typeConverter, scfToSpirvCtx, patterns);
-    mlir::cf::populateControlFlowToSPIRVPatterns(typeConverter, patterns);
-    mlir::populateMathToSPIRVPatterns(typeConverter, patterns);
-
-    if (failed(
-            applyFullConversion(kernelModules, *target, std::move(patterns))))
-      return signalPassFailure();
-  }
+private:
+  bool mapMemorySpace;
 };
 
+void GPUXToSPIRVPass::runOnOperation() {
+  mlir::MLIRContext *context = &getContext();
+  mlir::ModuleOp module = getOperation();
+
+  llvm::SmallVector<mlir::Operation *, 1> gpuModules;
+  mlir::OpBuilder builder(context);
+  module.walk([&](mlir::gpu::GPUModuleOp moduleOp) {
+    // For each kernel module (should be only 1 for now, but that is not a
+    // requirement here), clone the module for conversion because the
+    // gpu.launch function still needs the kernel module.
+    builder.setInsertionPoint(moduleOp.getOperation());
+    gpuModules.push_back(builder.clone(*moduleOp.getOperation()));
+  });
+
+  // Map MemRef memory space to SPIR-V sotrage class first if requested.
+  if (mapMemorySpace) {
+    std::unique_ptr<mlir::ConversionTarget> target =
+        mlir::spirv::getMemorySpaceToStorageClassTarget(*context);
+    mlir::spirv::MemorySpaceToStorageClassMap memorySpaceMap =
+        mlir::spirv::mapMemorySpaceToVulkanStorageClass;
+    mlir::spirv::MemorySpaceToStorageClassConverter converter(memorySpaceMap);
+
+    mlir::RewritePatternSet patterns(context);
+    mlir::spirv::populateMemorySpaceToStorageClassPatterns(converter, patterns);
+
+    if (failed(applyFullConversion(gpuModules, *target, std::move(patterns))))
+      return signalPassFailure();
+  }
+
+  auto targetAttr = mlir::spirv::lookupTargetEnvOrDefault(module);
+  std::unique_ptr<mlir::ConversionTarget> target =
+      mlir::SPIRVConversionTarget::get(targetAttr);
+
+  mlir::SPIRVTypeConverter typeConverter(targetAttr);
+  mlir::RewritePatternSet patterns(context);
+
+  //------- Upstream Conversion------------
+  mlir::populateGPUToSPIRVPatterns(typeConverter, patterns);
+  mlir::arith::populateArithmeticToSPIRVPatterns(typeConverter, patterns);
+  mlir::populateMemRefToSPIRVPatterns(typeConverter, patterns);
+  mlir::populateFuncToSPIRVPatterns(typeConverter, patterns);
+  // ---------------------------------------
+
+  // IMEX GPUToSPIRV extension
+  mlir::ScfToSPIRVContext scfToSpirvCtx;
+  mlir::populateSCFToSPIRVPatterns(typeConverter, scfToSpirvCtx, patterns);
+  mlir::cf::populateControlFlowToSPIRVPatterns(typeConverter, patterns);
+  mlir::populateMathToSPIRVPatterns(typeConverter, patterns);
+
+  if (failed(applyFullConversion(gpuModules, *target, std::move(patterns))))
+    return signalPassFailure();
+}
+
 std::unique_ptr<::mlir::OperationPass<::mlir::ModuleOp>>
-createConvertGPUXToSPIRVPass() {
-  return std::make_unique<ConvertGPUXToSPIRVPass>();
+createConvertGPUXToSPIRVPass(bool mapMemorySpace) {
+  return std::make_unique<GPUXToSPIRVPass>(mapMemorySpace);
 }
 } // namespace imex
