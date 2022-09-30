@@ -320,3 +320,16 @@ func.func @test(%t: !ntensor.ntensor<8x16x4xf32>, %idx : index) {
 
   return
 }
+
+// -----
+
+func.func @test(%arg1: !ntensor.ntensor<?xf32>) -> f32 {
+  %0 = arith.constant 0 : index
+  %1 = ntensor.load %arg1[%0] : !ntensor.ntensor<?xf32>
+  return %1 : f32
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG:.*]]: !ntensor.ntensor<?xf32>)
+//  CHECK-NEXT:   %[[IND:.*]] = arith.constant 0 : index
+//  CHECK-NEXT:   %[[RES:.*]] = ntensor.load %[[ARG]][%[[IND]]] : !ntensor.ntensor<?xf32>
+//  CHECK-NEXT:   return %[[RES]] : f32

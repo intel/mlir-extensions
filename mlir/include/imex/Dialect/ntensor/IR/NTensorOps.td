@@ -337,6 +337,35 @@ def SubviewOp : NTensor_OpWithOffsetSizesAndStrides<"subview", [
   }];
 }
 
+def LoadOp : NTensor_OpBase<"load",
+     [TypesMatchWith<"result type matches element type of 'array'",
+                     "array", "result",
+                     "$_self.cast<NTensorType>().getElementType()">]> {
+  let summary = "array element load operation";
+  let description = [{
+    The `load` op reads an element from a array specified by an index list. The
+    output of load is a new value with the same type as the elements of the
+    array. The arity of indices is the rank of the array (i.e., if the array
+    loaded from is of rank 3, then 3 indices are required for the load following
+    the array identifier).
+  }];
+
+  let arguments = (ins Arg<NTensor_Tensor, "the reference to load from",
+                           [MemRead]>:$array,
+                       Variadic<Index>:$indices);
+  let results = (outs AnyType:$result);
+
+  let builders = [
+    OpBuilder<(ins "::mlir::Value":$array, CArg<"::mlir::ValueRange", "{}">:$indices), [{
+      auto arrayType = array.getType().cast<NTensorType>();
+      $_state.addOperands(array);
+      $_state.addOperands(indices);
+      $_state.types.push_back(arrayType.getElementType());
+    }]>];
+
+  let assemblyFormat = "$array `[` $indices `]` attr-dict `:` qualified(type($array))";
+}
+
 def BuildSliceOp : NTensor_OpBase<"build_slice", [
     AttrSizedOperandSegments, NoSideEffect]> {
   let summary = "Slice creation operation.";
