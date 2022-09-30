@@ -141,15 +141,14 @@ static mlir::Value makeSubview(mlir::OpBuilder &builder, mlir::Location loc,
                                llvm::ArrayRef<mlir::OpFoldResult> sizes,
                                llvm::ArrayRef<mlir::OpFoldResult> strides,
                                llvm::ArrayRef<unsigned> dimIndices) {
-  auto srcType = src.getType().cast<mlir::MemRefType>();
+  auto srcType = src.getType().cast<imex::ntensor::NTensorType>();
   auto srcRank = static_cast<unsigned>(srcType.getRank());
   auto dstRank = dimIndices.size();
   assert(srcRank > 0);
   assert(dstRank > 0);
   assert(dstRank <= srcRank);
 
-  auto memrefType = srcType.cast<imex::ntensor::NTensorType>();
-  auto resType = imex::ntensor::SubviewOp::inferResultType(memrefType, offsets,
+  auto resType = imex::ntensor::SubviewOp::inferResultType(srcType, offsets,
                                                            sizes, strides);
 
   mlir::Value view = builder.create<imex::ntensor::SubviewOp>(
@@ -167,13 +166,6 @@ static mlir::Value makeSubview(mlir::OpBuilder &builder, mlir::Location loc,
         loc, reducedType, view, newOfsets, sizes, newStrides);
     resType = reducedType;
   }
-
-  auto flatMemrefType =
-      mlir::MemRefType::get(resType.getShape(), resType.getElementType());
-
-  if (resType != flatMemrefType)
-    view =
-        builder.create<imex::util::ChangeLayoutOp>(loc, flatMemrefType, view);
 
   return view;
 }
@@ -262,8 +254,7 @@ struct GetitemOpLowering
                   mlir::PatternRewriter &rewriter) const override {
     auto value = op.getSource();
     auto index = op.getIndex();
-    auto memrefType = value.getType().dyn_cast<imex::ntensor::NTensorType>();
-    if (!memrefType)
+    if (!value.getType().isa<imex::ntensor::NTensorType>())
       return mlir::failure();
 
     if (!isValidGetitemIndex(index.getType()))
