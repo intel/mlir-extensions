@@ -205,7 +205,7 @@ struct SetitemOpLowering
   matchAndRewrite(imex::ntensor::SetitemOp op,
                   mlir::PatternRewriter &rewriter) const override {
     auto target = op.getSource();
-    auto targetType = target.getType().dyn_cast<mlir::MemRefType>();
+    auto targetType = target.getType().dyn_cast<imex::ntensor::NTensorType>();
     if (!targetType)
       return mlir::failure();
 
@@ -214,6 +214,9 @@ struct SetitemOpLowering
       return mlir::failure();
 
     auto value = op.getValue();
+    if (value.getType() != targetType.getElementType())
+      return mlir::failure();
+
     auto loc = op.getLoc();
     llvm::SmallVector<mlir::OpFoldResult> offsets;
     llvm::SmallVector<mlir::OpFoldResult> sizes;
@@ -225,8 +228,21 @@ struct SetitemOpLowering
 
     if (!dimsIndices.empty()) {
       // Is slice
-      // TODO: Covered elsewhere
-      return mlir::failure();
+      auto dst = makeSubview(rewriter, loc, target, offsets, sizes, strides,
+                             dimsIndices);
+
+      auto dstType = dst.getType().cast<imex::ntensor::NTensorType>();
+      mlir::SmallVector<mlir::Value> dynamicDims;
+      auto rank = static_cast<unsigned>(dstType.getRank());
+      dynamicDims.reserve(rank);
+      for (auto i : llvm::seq(0u, rank)) {
+        if (dstType.isDynamicDim(i))
+          dynamicDims.emplace_back(
+              rewriter.create<imex::ntensor::DimOp>(loc, dst, i));
+      }
+      mlir::Value newArray = rewriter.create<imex::ntensor::CreateArrayOp>(
+          loc, dstType, dynamicDims, value);
+      rewriter.replaceOpWithNewOp<imex::ntensor::CopyOp>(op, newArray, dst);
     } else {
       // Is single element
       rewriter.replaceOpWithNewOp<imex::ntensor::StoreOp>(
@@ -246,7 +262,7 @@ struct GetitemOpLowering
                   mlir::PatternRewriter &rewriter) const override {
     auto value = op.getSource();
     auto index = op.getIndex();
-    auto memrefType = value.getType().dyn_cast<mlir::MemRefType>();
+    auto memrefType = value.getType().dyn_cast<imex::ntensor::NTensorType>();
     if (!memrefType)
       return mlir::failure();
 
@@ -272,6 +288,7 @@ struct GetitemOpLowering
       res = rewriter.create<imex::ntensor::LoadOp>(
           loc, value, toValues(rewriter, loc, offsets));
     }
+    assert(res.getType() == op.getResult().getType() && "Invalid result type");
     rewriter.replaceOp(op, res);
     return mlir::success();
   }

@@ -26,6 +26,7 @@
 #include "imex/Conversion/cfg_to_scf.hpp"
 #include "imex/Conversion/gpu_runtime_to_llvm.hpp"
 #include "imex/Conversion/gpu_to_gpu_runtime.hpp"
+#include "imex/Dialect/ntensor/Transforms/ResolveArrayOps.hpp"
 #include "imex/Transforms/expand_tuple.hpp"
 
 // Passes registration.
@@ -110,3 +111,9 @@ static mlir::PassPipelineRegistration<>
 static mlir::PassPipelineRegistration<> expandTuple(
     "expand-tuple", "Expand tuple into individual elements",
     [](mlir::OpPassManager &pm) { pm.addPass(imex::createExpandTuplePass()); });
+
+static mlir::PassPipelineRegistration<> ntensorResolveArrayOps(
+    "ntensor-resolve-array-ops", "Resolve ntensor array ops into primitive ops",
+    [](mlir::OpPassManager &pm) {
+      pm.addPass(imex::ntensor::createResolveArrayOpsPass());
+    });
