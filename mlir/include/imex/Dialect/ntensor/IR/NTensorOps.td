@@ -416,7 +416,7 @@ def ResolveSliceOp : NTensor_OpBase<"resolve_slice", [NoSideEffect]> {
 
   let arguments = (ins NTensor_Slice:$slice, Index:$size);
 
-  let results = (outs Index:$begin, Index:$end, Index:$step);
+  let results = (outs Index:$begin, Index:$end, Index:$step, Index:$count);
 
   let assemblyFormat = "attr-dict $slice `,` $size";
 
