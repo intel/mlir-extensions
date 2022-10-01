@@ -24,24 +24,28 @@
 #include <mlir/Transforms/DialectConversion.h>
 
 template <typename F>
-static mlir::ValueRange wrapEnvRegion(mlir::OpBuilder &builder,
-                                      mlir::Location loc, mlir::Attribute env,
-                                      mlir::TypeRange results, F &&func) {
+static llvm::SmallVector<mlir::Value>
+wrapEnvRegion(mlir::OpBuilder &builder, mlir::Location loc, mlir::Attribute env,
+              mlir::TypeRange results, F &&func) {
   if (!env) {
-    mlir::ValueRange res = func(builder, loc);
-    assert(res.getTypes() == results && "Invalid result types");
-    return res;
+    auto res = func(builder, loc);
+    mlir::ValueRange range(res);
+    assert(range.getTypes() == results && "Invalid result types");
+    return {range.begin(), range.end()};
   }
 
   auto bodyBuilder = [&](mlir::OpBuilder &b, mlir::Location l) {
-    mlir::ValueRange res = func(b, l);
-    assert(res.getTypes() == results && "Invalid result types");
-    b.create<imex::util::EnvironmentRegionYieldOp>(l, res);
+    auto res = func(b, l);
+    mlir::ValueRange range(res);
+    assert(range.getTypes() == results && "Invalid result types");
+    b.create<imex::util::EnvironmentRegionYieldOp>(l, range);
   };
 
-  auto region = builder.create<imex::util::EnvironmentRegionOp>(
-      loc, env, /*args*/ llvm::None, results, bodyBuilder);
-  return region.getResults();
+  auto res = builder
+                 .create<imex::util::EnvironmentRegionOp>(
+                     loc, env, /*args*/ llvm::None, results, bodyBuilder)
+                 .getResults();
+  return {res.begin(), res.end()};
 }
 
 namespace {
