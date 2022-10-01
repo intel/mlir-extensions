@@ -70,6 +70,57 @@ struct DimOpLowering : public mlir::OpConversionPattern<imex::ntensor::DimOp> {
     return mlir::success();
   }
 };
+
+struct SubviewOpLowering
+    : public mlir::OpConversionPattern<imex::ntensor::SubviewOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::SubviewOp op,
+                  imex::ntensor::SubviewOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto origType = op.getSource().getType().cast<imex::ntensor::NTensorType>();
+    auto src = adaptor.getSource();
+    auto srcType = src.getType().dyn_cast<mlir::MemRefType>();
+    if (!srcType)
+      return mlir::failure();
+
+    auto *converter = getTypeConverter();
+    assert(converter && "Type converter is not set");
+
+    auto dstType = converter->convertType(op.getType())
+                       .dyn_cast_or_null<mlir::MemRefType>();
+    if (!dstType)
+      return mlir::failure();
+
+    auto results = wrapEnvRegion(
+        rewriter, op->getLoc(), origType.getEnvironment(), dstType,
+        [&](mlir::OpBuilder &builder, mlir::Location loc) {
+          auto offsets = mlir::getMixedStridesOrOffsets(
+              adaptor.getStaticOffsets(), adaptor.getOffsets());
+          auto sizes =
+              mlir::getMixedSizes(adaptor.getStaticSizes(), adaptor.getSizes());
+          auto strides = mlir::getMixedStridesOrOffsets(
+              adaptor.getStaticStrides(), adaptor.getStrides());
+
+          auto resType =
+              mlir::memref::SubViewOp::inferRankReducedResultType(
+                  dstType.getShape(), srcType, offsets, sizes, strides)
+                  .cast<mlir::MemRefType>();
+
+          mlir::Value res = builder.create<mlir::memref::SubViewOp>(
+              loc, resType, src, offsets, sizes, strides);
+
+          if (resType != dstType)
+            res = builder.create<imex::util::ChangeLayoutOp>(loc, dstType, res);
+
+          return res;
+        });
+
+    rewriter.replaceOp(op, results);
+    return mlir::success();
+  }
+};
 } // namespace
 
 void imex::populateNtensorToMemrefRewritesAndTarget(
@@ -84,9 +135,9 @@ void imex::populateNtensorToMemrefRewritesAndTarget(
         return llvm::None;
       });
 
-  patterns.insert<DimOpLowering>(converter, &context);
+  patterns.insert<DimOpLowering, SubviewOpLowering>(converter, &context);
 
-  target.addIllegalOp<imex::ntensor::DimOp>();
+  target.addIllegalOp<imex::ntensor::DimOp, imex::ntensor::SubviewOp>();
 }
 
 namespace {
