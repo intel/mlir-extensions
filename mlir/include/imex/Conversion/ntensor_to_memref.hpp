@@ -25,10 +25,10 @@ class TypeConverter;
 } // namespace mlir
 
 namespace imex {
-void populateNtensorToMemrefPatterns(mlir::MLIRContext &context,
-                                     mlir::TypeConverter &converter,
-                                     mlir::RewritePatternSet &patterns,
-                                     mlir::ConversionTarget &target);
+void populateNtensorToMemrefRewritesAndTarget(mlir::MLIRContext &context,
+                                              mlir::TypeConverter &converter,
+                                              mlir::RewritePatternSet &patterns,
+                                              mlir::ConversionTarget &target);
 
 std::unique_ptr<mlir::Pass> createNtensorToMemrefPass();
 } // namespace imex
