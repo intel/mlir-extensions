@@ -125,3 +125,31 @@ func.func @test(%arg1: !ntensor.ntensor<?xf32, "test">) -> f32 {
 //  CHECK-NEXT:   imex_util.env_region_yield %[[RES1]] : f32
 //  CHECK-NEXT:   }
 //  CHECK-NEXT:   return %[[RES]] : f32
+
+// -----
+
+func.func @test(%arg1: !ntensor.ntensor<?xf32>, %arg2: f32) {
+  %0 = arith.constant 0 : index
+  ntensor.store %arg2, %arg1[%0] : !ntensor.ntensor<?xf32>
+  return
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG1:.*]]: memref<?xf32>, %[[ARG2:.*]]: f32)
+//  CHECK-NEXT:   %[[IND:.*]] = arith.constant 0 : index
+//  CHECK-NEXT:   memref.store %[[ARG2]], %[[ARG1]][%[[IND]]] : memref<?xf32>
+//  CHECK-NEXT:   return
+
+// -----
+
+func.func @test(%arg1: !ntensor.ntensor<?xf32, "test">, %arg2: f32) {
+  %0 = arith.constant 0 : index
+  ntensor.store %arg2, %arg1[%0] : !ntensor.ntensor<?xf32, "test">
+  return
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG1:.*]]: memref<?xf32>, %[[ARG2:.*]]: f32)
+//  CHECK-NEXT:   %[[IND:.*]] = arith.constant 0 : index
+//  CHECK-NEXT:   imex_util.env_region "test" {
+//  CHECK-NEXT:   memref.store %[[ARG2]], %[[ARG1]][%[[IND]]] : memref<?xf32>
+//  CHECK-NEXT:   }
+//  CHECK-NEXT:   return
