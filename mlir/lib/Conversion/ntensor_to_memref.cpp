@@ -23,6 +23,25 @@
 #include <mlir/Pass/Pass.h>
 #include <mlir/Transforms/DialectConversion.h>
 
+namespace {
+struct DimOpLowering : public mlir::OpConversionPattern<imex::ntensor::DimOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::DimOp op,
+                  imex::ntensor::DimOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto src = adaptor.getSource();
+    if (!src.getType().isa<mlir::MemRefType>())
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::memref::DimOp>(op, src,
+                                                     adaptor.getIndex());
+    return mlir::success();
+  }
+};
+} // namespace
+
 void imex::populateNtensorToMemrefRewritesAndTarget(
     mlir::MLIRContext &context, mlir::TypeConverter &converter,
     mlir::RewritePatternSet &patterns, mlir::ConversionTarget &target) {
@@ -34,6 +53,10 @@ void imex::populateNtensorToMemrefRewritesAndTarget(
 
         return llvm::None;
       });
+
+  patterns.insert<DimOpLowering>(converter, &context);
+
+  target.addIllegalOp<imex::ntensor::DimOp>();
 }
 
 namespace {
