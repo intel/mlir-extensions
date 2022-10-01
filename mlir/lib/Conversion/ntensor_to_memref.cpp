@@ -23,6 +23,27 @@
 #include <mlir/Pass/Pass.h>
 #include <mlir/Transforms/DialectConversion.h>
 
+template <typename F>
+static mlir::ValueRange wrapEnvRegion(mlir::OpBuilder &builder,
+                                      mlir::Location loc, mlir::Attribute env,
+                                      mlir::TypeRange results, F &&func) {
+  if (!env) {
+    mlir::ValueRange res = func(builder, loc);
+    assert(res.getTypes() == results && "Invalid result types");
+    return res;
+  }
+
+  auto bodyBuilder = [&](mlir::OpBuilder &b, mlir::Location l) {
+    mlir::ValueRange res = func(b, l);
+    assert(res.getTypes() == results && "Invalid result types");
+    b.create<imex::util::EnvironmentRegionYieldOp>(l, res);
+  };
+
+  auto region = builder.create<imex::util::EnvironmentRegionOp>(
+      loc, env, /*args*/ llvm::None, results, bodyBuilder);
+  return region.getResults();
+}
+
 namespace {
 struct DimOpLowering : public mlir::OpConversionPattern<imex::ntensor::DimOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -31,12 +52,21 @@ struct DimOpLowering : public mlir::OpConversionPattern<imex::ntensor::DimOp> {
   matchAndRewrite(imex::ntensor::DimOp op,
                   imex::ntensor::DimOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
+    auto origType = op.getSource().getType().cast<imex::ntensor::NTensorType>();
     auto src = adaptor.getSource();
     if (!src.getType().isa<mlir::MemRefType>())
       return mlir::failure();
 
-    rewriter.replaceOpWithNewOp<mlir::memref::DimOp>(op, src,
-                                                     adaptor.getIndex());
+    auto results = wrapEnvRegion(
+        rewriter, op->getLoc(), origType.getEnvironment(),
+        rewriter.getIndexType(),
+        [&](mlir::OpBuilder &builder, mlir::Location loc) {
+          return builder
+              .create<mlir::memref::DimOp>(loc, src, adaptor.getIndex())
+              .getResult();
+        });
+
+    rewriter.replaceOp(op, results);
     return mlir::success();
   }
 };
