@@ -57,9 +57,9 @@ struct DimOpLowering : public mlir::OpConversionPattern<imex::ntensor::DimOp> {
     if (!src.getType().isa<mlir::MemRefType>())
       return mlir::failure();
 
+    auto indexType = rewriter.getIndexType();
     auto results = wrapEnvRegion(
-        rewriter, op->getLoc(), origType.getEnvironment(),
-        rewriter.getIndexType(),
+        rewriter, op->getLoc(), origType.getEnvironment(), indexType,
         [&](mlir::OpBuilder &builder, mlir::Location loc) {
           return builder
               .create<mlir::memref::DimOp>(loc, src, adaptor.getIndex())
