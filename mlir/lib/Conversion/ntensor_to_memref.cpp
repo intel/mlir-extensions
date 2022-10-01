@@ -121,6 +121,39 @@ struct SubviewOpLowering
     return mlir::success();
   }
 };
+
+struct LoadOpLowering
+    : public mlir::OpConversionPattern<imex::ntensor::LoadOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::LoadOp op,
+                  imex::ntensor::LoadOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto origType = op.getArray().getType().cast<imex::ntensor::NTensorType>();
+    auto src = adaptor.getArray();
+    if (!src.getType().isa<mlir::MemRefType>())
+      return mlir::failure();
+
+    auto *converter = getTypeConverter();
+    assert(converter && "Type converter is not set");
+
+    auto dstType = converter->convertType(op.getType());
+    if (!dstType || dstType != origType.getElementType())
+      return mlir::failure();
+
+    auto results = wrapEnvRegion(
+        rewriter, op->getLoc(), origType.getEnvironment(), dstType,
+        [&](mlir::OpBuilder &builder, mlir::Location loc) {
+          return builder
+              .create<mlir::memref::LoadOp>(loc, src, adaptor.getIndices())
+              .getResult();
+        });
+
+    rewriter.replaceOp(op, results);
+    return mlir::success();
+  }
+};
 } // namespace
 
 void imex::populateNtensorToMemrefRewritesAndTarget(
@@ -135,9 +168,11 @@ void imex::populateNtensorToMemrefRewritesAndTarget(
         return llvm::None;
       });
 
-  patterns.insert<DimOpLowering, SubviewOpLowering>(converter, &context);
+  patterns.insert<DimOpLowering, SubviewOpLowering, LoadOpLowering>(converter,
+                                                                    &context);
 
-  target.addIllegalOp<imex::ntensor::DimOp, imex::ntensor::SubviewOp>();
+  target.addIllegalOp<imex::ntensor::DimOp, imex::ntensor::SubviewOp,
+                      imex::ntensor::LoadOp>();
 }
 
 namespace {
