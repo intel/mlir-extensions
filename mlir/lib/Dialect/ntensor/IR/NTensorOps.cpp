@@ -112,6 +112,17 @@ static mlir::Value handleSliceIndexVars(mlir::OpBuilder &builder,
                                                posIndex);
 }
 
+static mlir::Value computeCount(mlir::OpBuilder &builder, mlir::Location loc,
+                                mlir::Value begin, mlir::Value end,
+                                mlir::Value step) {
+  auto size = builder.createOrFold<mlir::arith::SubIOp>(loc, end, begin);
+  auto one = builder.create<mlir::arith::ConstantIndexOp>(loc, 1);
+  size = builder.createOrFold<mlir::arith::SubIOp>(loc, size, one);
+  size = builder.createOrFold<mlir::arith::AddIOp>(loc, size, step);
+  size = builder.createOrFold<mlir::arith::DivUIOp>(loc, size, step);
+  return size;
+}
+
 namespace {
 struct ResolveSlicePropagate
     : public mlir::OpRewritePattern<imex::ntensor::ResolveSliceOp> {
@@ -127,7 +138,7 @@ struct ResolveSlicePropagate
 
     auto loc = op->getLoc();
     auto size = op.getSize();
-    mlir::Value results[3];
+    std::array<mlir::Value, 4> results;
     if (auto begin = buildSlice.getBegin()) {
       results[0] = handleSliceIndexVars(rewriter, loc, begin, size);
     } else {
@@ -145,6 +156,9 @@ struct ResolveSlicePropagate
     } else {
       results[2] = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
     }
+
+    results[3] =
+        computeCount(rewriter, loc, results[0], results[1], results[2]);
 
     rewriter.replaceOp(op, results);
     return mlir::success();
