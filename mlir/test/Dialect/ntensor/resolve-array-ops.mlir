@@ -34,15 +34,10 @@ func.func @test(%arg1: !ntensor.ntensor<?xf32>, %arg2: !ntensor.slice) -> !ntens
 }
 // CHECK-LABEL: func @test
 //  CHECK-SAME:   (%[[ARG1:.*]]: !ntensor.ntensor<?xf32>, %[[ARG2:.*]]: !ntensor.slice)
-//  CHECK-NEXT:   %[[C1:.*]] = arith.constant 1 : index
 //  CHECK-NEXT:   %[[C0:.*]] = arith.constant 0 : index
 //  CHECK-NEXT:   %[[DIM:.*]] = ntensor.dim %[[ARG1]], %[[C0]] : !ntensor.ntensor<?xf32>
-//  CHECK-NEXT:   %[[BEGIN:.*]], %[[END:.*]], %[[STEP:.*]] = ntensor.resolve_slice %[[ARG2]], %[[DIM]]
-//  CHECK-NEXT:   %[[V1:.*]] = arith.subi %[[END]], %[[BEGIN]] : index
-//  CHECK-NEXT:   %[[V2:.*]] = arith.subi %[[V1]], %[[C1]] : index
-//  CHECK-NEXT:   %[[V3:.*]] = arith.addi %[[V2]], %[[STEP]] : index
-//  CHECK-NEXT:   %[[V4:.*]] = arith.divui %[[V3]], %[[STEP]] : index
-//  CHECK-NEXT:   %[[RES:.*]] = ntensor.subview %[[ARG1]][%[[BEGIN]]] [%[[V4]]] [%[[STEP]]] : !ntensor.ntensor<?xf32> to !ntensor.ntensor<?xf32>
+//  CHECK-NEXT:   %[[BEGIN:.*]], %[[END:.*]], %[[STEP:.*]], %[[COUNT:.*]] = ntensor.resolve_slice %[[ARG2]], %[[DIM]]
+//  CHECK-NEXT:   %[[RES:.*]] = ntensor.subview %[[ARG1]][%[[BEGIN]]] [%[[COUNT]]] [%[[STEP]]] : !ntensor.ntensor<?xf32> to !ntensor.ntensor<?xf32>
 //  CHECK-NEXT:   return %[[RES]] : !ntensor.ntensor<?xf32>
 
 // -----
@@ -53,17 +48,12 @@ func.func @test(%arg1: !ntensor.ntensor<?xf32>, %arg2: !ntensor.slice, %arg3: f3
 }
 // CHECK-LABEL: func @test
 //  CHECK-SAME:   (%[[ARG1:.*]]: !ntensor.ntensor<?xf32>, %[[ARG2:.*]]: !ntensor.slice, %[[ARG3:.*]]: f32)
-//  CHECK-NEXT:   %[[C1:.*]] = arith.constant 1 : index
 //  CHECK-NEXT:   %[[C0:.*]] = arith.constant 0 : index
 //  CHECK-NEXT:   %[[DIM:.*]] = ntensor.dim %[[ARG1]], %[[C0]] : !ntensor.ntensor<?xf32>
-//  CHECK-NEXT:   %[[BEGIN:.*]], %[[END:.*]], %[[STEP:.*]] = ntensor.resolve_slice %[[ARG2]], %[[DIM]]
-//  CHECK-NEXT:   %[[V1:.*]] = arith.subi %[[END]], %[[BEGIN]] : index
-//  CHECK-NEXT:   %[[V2:.*]] = arith.subi %[[V1]], %[[C1]] : index
-//  CHECK-NEXT:   %[[V3:.*]] = arith.addi %[[V2]], %[[STEP]] : index
-//  CHECK-NEXT:   %[[V4:.*]] = arith.divui %[[V3]], %[[STEP]] : index
-//  CHECK-NEXT:   %[[RES:.*]] = ntensor.subview %[[ARG1]][%[[BEGIN]]] [%[[V4]]] [%[[STEP]]] : !ntensor.ntensor<?xf32> to !ntensor.ntensor<?xf32>
+//  CHECK-NEXT:   %[[BEGIN:.*]], %[[END:.*]], %[[STEP:.*]], %[[COUNT:.*]] = ntensor.resolve_slice %[[ARG2]], %[[DIM]]
+//  CHECK-NEXT:   %[[RES:.*]] = ntensor.subview %[[ARG1]][%[[BEGIN]]] [%[[COUNT]]] [%[[STEP]]] : !ntensor.ntensor<?xf32> to !ntensor.ntensor<?xf32>
 //  CHECK-NEXT:   %[[DIM2:.*]] = ntensor.dim %[[RES]], %[[C0]] : !ntensor.ntensor<?xf32>
-//  CHECK-NEXT:   %[[RES2:.*]] = ntensor.create(%6) = (%arg2 : f32) : !ntensor.ntensor<?xf32>
+//  CHECK-NEXT:   %[[RES2:.*]] = ntensor.create(%[[DIM2]]) = (%[[ARG3]] : f32) : !ntensor.ntensor<?xf32>
 //  CHECK-NEXT:   ntensor.copy %[[RES2]], %[[RES]] : !ntensor.ntensor<?xf32> to !ntensor.ntensor<?xf32>
 //  CHECK-NEXT:   return
 

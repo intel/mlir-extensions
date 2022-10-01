@@ -68,17 +68,9 @@ computeIndices(mlir::OpBuilder &builder, mlir::Location loc, mlir::Value value,
           builder.create<imex::ntensor::ResolveSliceOp>(loc, indexVal, len);
 
       auto begin = resolved.getBegin();
-      auto end = resolved.getEnd();
       auto step = resolved.getStep();
-      auto size = builder.createOrFold<mlir::arith::SubIOp>(loc, end, begin);
-
-      auto constStride = mlir::getConstantIntValue(step);
-      if (!constStride || *constStride > 1 || *constStride < -1) {
-        size = builder.createOrFold<mlir::arith::SubIOp>(loc, size, one);
-        size = builder.createOrFold<mlir::arith::AddIOp>(loc, size, step);
-        size = builder.createOrFold<mlir::arith::DivUIOp>(loc, size, step);
-      }
-      return {foldConst(begin), foldConst(size), step, true};
+      auto size = resolved.getCount();
+      return {foldConst(begin), foldConst(size), foldConst(step), true};
     } else {
       mlir::Value index =
           builder.create<imex::ntensor::ResolveIndexOp>(loc, indexVal, len);
