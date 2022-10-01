@@ -67,3 +67,32 @@ func.func @test(%arg1: !ntensor.ntensor<?x?xf32, "test">, %arg2: index, %arg3: i
 //  CHECK-NEXT:   imex_util.env_region_yield %[[RES2]] : memref<?x?xf32>
 //  CHECK-NEXT:   }
 //  CHECK-NEXT:   return %[[RES]] : memref<?x?xf32>
+
+// -----
+
+func.func @test(%arg1: !ntensor.ntensor<?x?xf32>, %arg2: index, %arg3: index, %arg4: index) -> !ntensor.ntensor<?xf32> {
+  %1 = ntensor.subview %arg1[1, %arg2][1, %arg3][3, %arg4] : !ntensor.ntensor<?x?xf32> to !ntensor.ntensor<?xf32>
+  return %1 : !ntensor.ntensor<?xf32>
+}
+
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG1:.*]]: memref<?x?xf32>, %[[ARG2:.*]]: index, %[[ARG3:.*]]: index, %[[ARG4:.*]]: index)
+//  CHECK-NEXT:   %[[RES:.*]] = memref.subview %arg0[1, %[[ARG2]]] [1, %[[ARG3]]] [3, %[[ARG4]]] : memref<?x?xf32> to memref<?xf32, #map>
+//  CHECK-NEXT:   %[[RES2:.*]] = imex_util.change_layout %[[RES]] : memref<?xf32, #map> to memref<?xf32>
+//  CHECK-NEXT:   return %[[RES2]] : memref<?xf32>
+
+// -----
+
+func.func @test(%arg1: !ntensor.ntensor<?x?xf32, "test">, %arg2: index, %arg3: index, %arg4: index) -> !ntensor.ntensor<?xf32, "test"> {
+  %1 = ntensor.subview %arg1[1, %arg2][1, %arg3][3, %arg4] : !ntensor.ntensor<?x?xf32, "test"> to !ntensor.ntensor<?xf32, "test">
+  return %1 : !ntensor.ntensor<?xf32, "test">
+}
+
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG1:.*]]: memref<?x?xf32>, %[[ARG2:.*]]: index, %[[ARG3:.*]]: index, %[[ARG4:.*]]: index)
+//  CHECK-NEXT:   %[[RES:.*]] = imex_util.env_region "test" -> memref<?xf32> {
+//  CHECK-NEXT:   %[[RES1:.*]] = memref.subview %arg0[1, %[[ARG2]]] [1, %[[ARG3]]] [3, %[[ARG4]]] : memref<?x?xf32> to memref<?xf32, #map>
+//  CHECK-NEXT:   %[[RES2:.*]] = imex_util.change_layout %[[RES1]] : memref<?xf32, #map> to memref<?xf32>
+//  CHECK-NEXT:   imex_util.env_region_yield %[[RES2]] : memref<?xf32>
+//  CHECK-NEXT:   }
+//  CHECK-NEXT:   return %[[RES]] : memref<?xf32>
