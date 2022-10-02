@@ -1409,9 +1409,10 @@ public:
                                                gpu_runtime::FenceFlags::local);
 
     mlir::Value numSubgroups = [&]() {
-        mlir::OpBuilder::InsertionGuard g(rewriter);
+      mlir::OpBuilder::InsertionGuard g(rewriter);
       rewriter.setInsertionPointToStart(&launchOp.body().front());
-        return rewriter.create<mlir::gpu::NumSubgroupsOp>(rewriter.getUnknownLoc());
+      return rewriter.create<mlir::gpu::NumSubgroupsOp>(
+          rewriter.getUnknownLoc());
     }();
 
     mlir::Value zero = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
