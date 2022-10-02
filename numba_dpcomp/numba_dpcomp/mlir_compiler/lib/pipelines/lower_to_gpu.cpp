@@ -1398,12 +1398,18 @@ public:
                                             groupBuffer);
     }
 
+    mlir::Value subgroupId = [&]() {
+      mlir::OpBuilder::InsertionGuard g(rewriter);
+      rewriter.setInsertionPointToStart(&launchOp.body().front());
+      return rewriter.create<mlir::gpu::SubgroupIdOp>(rewriter.getUnknownLoc());
+    }();
+
     auto loc = op->getLoc();
     auto reduceType = static_cast<gpu_runtime::AllReduceOperation>(*op.op());
     mlir::Value sgResult = rewriter.create<gpu_runtime::GPUSubGroupReduceOp>(
         loc, op.value(), reduceType);
-    mlir::Value sgId = rewriter.create<mlir::gpu::SubgroupIdOp>(loc);
-    rewriter.create<mlir::memref::StoreOp>(loc, sgResult, groupBuffer, sgId);
+    rewriter.create<mlir::memref::StoreOp>(loc, sgResult, groupBuffer,
+                                           subgroupId);
 
     rewriter.create<gpu_runtime::GPUBarrierOp>(loc,
                                                gpu_runtime::FenceFlags::local);
@@ -1418,7 +1424,7 @@ public:
     mlir::Value zero = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
     mlir::Value one = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
     mlir::Value isFirstSg = rewriter.create<mlir::arith::CmpIOp>(
-        loc, mlir::arith::CmpIPredicate::eq, sgId, zero);
+        loc, mlir::arith::CmpIPredicate::eq, subgroupId, zero);
 
     auto ifBodyBuilder = [&](mlir::OpBuilder &ifBuilder, mlir::Location ifLoc) {
       mlir::Value init =
