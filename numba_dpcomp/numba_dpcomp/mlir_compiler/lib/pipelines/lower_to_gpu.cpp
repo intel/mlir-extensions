@@ -1378,8 +1378,12 @@ public:
           rewriter.create<mlir::arith::CeilDivSIOp>(loc, size, subgroupSize);
 
       auto elemType = op.getType();
-      auto storageClass = gpu_runtime::StorageClassAttr::get(
-          getContext(), gpu_runtime::StorageClass::local);
+
+      // TODO: Fix storage class handling upstream
+      //      auto storageClass = gpu_runtime::StorageClassAttr::get(
+      //          getContext(), gpu_runtime::StorageClass::local);
+      auto storageClass = rewriter.getI64IntegerAttr(
+          mlir::gpu::GPUDialect::getPrivateAddressSpace());
       auto memrefType = mlir::MemRefType::get(mlir::ShapedType::kDynamicSize,
                                               elemType, nullptr, storageClass);
       groupBuffer = rewriter
@@ -1493,6 +1497,7 @@ public:
     }
 
     auto type = mlir::MemRefType::get(shape, oldType.getElementType());
+
     // TODO: Fix storage class upstream
     //    auto storageClass = gpu_runtime::StorageClassAttr::get(
     //        getContext(), gpu_runtime::StorageClass::local);

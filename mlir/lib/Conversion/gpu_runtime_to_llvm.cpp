@@ -455,8 +455,13 @@ private:
 
     mlir::Value one = rewriter.create<mlir::LLVM::ConstantOp>(
         loc, llvmInt32Type, rewriter.getI32IntegerAttr(1));
-    auto localMemStorageClass = gpu_runtime::StorageClassAttr::get(
-        getContext(), gpu_runtime::StorageClass::local);
+
+    // TODO: Fix storage class handling upstream
+    //    auto localMemStorageClass = gpu_runtime::StorageClassAttr::get(
+    //        getContext(), gpu_runtime::StorageClass::local);
+    auto localMemStorageClass = rewriter.getI64IntegerAttr(
+        mlir::gpu::GPUDialect::getPrivateAddressSpace());
+
     auto computeTypeSize = [&](mlir::Type type) -> mlir::Value {
       // %Size = getelementptr %T* null, int 1
       // %SizeI = ptrtoint %T* %Size to i32
@@ -584,9 +589,12 @@ private:
 
     bool isShared = op.getHostShared();
 
-    auto localstorageClass = gpu_runtime::StorageClassAttr::get(
-        getContext(), gpu_runtime::StorageClass::local);
-    bool isLocal = memrefType.getMemorySpace() == localstorageClass;
+    // TODO: Fix storage class handling upstream
+    //    auto localstorageClass = gpu_runtime::StorageClassAttr::get(
+    //        getContext(), gpu_runtime::StorageClass::local);
+    auto localMemStorageClass = rewriter.getI64IntegerAttr(
+        mlir::gpu::GPUDialect::getPrivateAddressSpace());
+    bool isLocal = memrefType.getMemorySpace() == localMemStorageClass;
 
     if (isShared && isLocal)
       return mlir::failure();
