@@ -488,9 +488,7 @@ private:
             size = rewriter.create<mlir::LLVM::MulOp>(loc, llvmIndexType, size,
                                                       dim);
           }
-          auto null = rewriter.create<mlir::LLVM::NullOp>(
-              loc, desc.getElementPtrType());
-          return {size, null};
+          return {size, nullptr};
         }
         auto size = computeTypeSize(paramType);
         return {size, desc.alignedPtr(rewriter, loc)};
@@ -505,9 +503,15 @@ private:
 
     for (auto i : llvm::seq(0u, paramsCount)) {
       auto param = getKernelParam(i);
-      rewriter.create<mlir::LLVM::StoreOp>(loc, param.second, paramsStorage[i]);
-      auto ptr = rewriter.create<mlir::LLVM::BitcastOp>(loc, llvmPointerType,
-                                                        paramsStorage[i]);
+      mlir::Value ptr;
+      if (!param.second) {
+        ptr = rewriter.create<mlir::LLVM::NullOp>(loc, llvmPointerType);
+      } else {
+        rewriter.create<mlir::LLVM::StoreOp>(loc, param.second,
+                                             paramsStorage[i]);
+        ptr = rewriter.create<mlir::LLVM::BitcastOp>(loc, llvmPointerType,
+                                                     paramsStorage[i]);
+      }
 
       auto typeSize = param.first;
 
