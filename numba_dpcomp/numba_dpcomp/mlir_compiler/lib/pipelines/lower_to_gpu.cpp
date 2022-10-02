@@ -1408,6 +1408,12 @@ public:
     rewriter.create<gpu_runtime::GPUBarrierOp>(loc,
                                                gpu_runtime::FenceFlags::local);
 
+    mlir::Value numSubgroups = [&]() {
+        mlir::OpBuilder::InsertionGuard g(rewriter);
+      rewriter.setInsertionPointToStart(&launchOp.body().front());
+        return rewriter.create<mlir::gpu::NumSubgroupsOp>(rewriter.getUnknownLoc());
+    }();
+
     mlir::Value zero = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
     mlir::Value one = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
     mlir::Value isFirstSg = rewriter.create<mlir::arith::CmpIOp>(
@@ -1416,9 +1422,6 @@ public:
     auto ifBodyBuilder = [&](mlir::OpBuilder &ifBuilder, mlir::Location ifLoc) {
       mlir::Value init =
           ifBuilder.create<mlir::memref::LoadOp>(ifLoc, groupBuffer, zero);
-
-      mlir::Value numSubgroups =
-          ifBuilder.create<mlir::gpu::NumSubgroupsOp>(ifLoc);
 
       auto forBodyBuilder = [&](mlir::OpBuilder &forBuilder,
                                 mlir::Location forLoc, mlir::Value i,
