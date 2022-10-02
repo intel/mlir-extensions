@@ -1361,8 +1361,6 @@ public:
     auto gidY = rewriter.create<mlir::gpu::GlobalIdOp>(loc, Dim::y);
     auto gidZ = rewriter.create<mlir::gpu::GlobalIdOp>(loc, Dim::z);
 
-    auto gsX = launchOp.
-
     return mlir::failure();
   }
 };
