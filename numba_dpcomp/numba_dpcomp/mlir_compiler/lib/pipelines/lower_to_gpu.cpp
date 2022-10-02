@@ -1344,30 +1344,117 @@ public:
   }
 };
 
-class ConvertGroupOpsToSubgroup : public mlir::OpRewritePattern<mlir::gpu::AllReduceOp> {
+class ConvertGroupOpsToSubgroup
+    : public mlir::OpRewritePattern<mlir::gpu::AllReduceOp> {
 public:
   using OpRewritePattern::OpRewritePattern;
 
-      mlir::LogicalResult
-      matchAndRewrite(mlir::gpu::AllReduceOp op,
-                      mlir::PatternRewriter &rewriter) const override {
+  mlir::LogicalResult
+  matchAndRewrite(mlir::gpu::AllReduceOp op,
+                  mlir::PatternRewriter &rewriter) const override {
     auto launchOp = op->getParentOfType<mlir::gpu::LaunchOp>();
     if (!launchOp)
       return mlir::failure();
 
-    auto loc = op->getLoc();
-    using Dim = mlir::gpu::Dimension;
-    auto gidX = rewriter.create<mlir::gpu::GlobalIdOp>(loc, Dim::x);
-    auto gidY = rewriter.create<mlir::gpu::GlobalIdOp>(loc, Dim::y);
-    auto gidZ = rewriter.create<mlir::gpu::GlobalIdOp>(loc, Dim::z);
+    if (!op.op())
+      return mlir::failure();
 
+    mlir::Value groupBuffer;
+    {
+      mlir::OpBuilder::InsertionGuard g(rewriter);
+      rewriter.setInsertionPoint(launchOp);
+      auto loc = launchOp->getLoc();
+      mlir::Value size = launchOp.blockSizeX();
+      size = rewriter.create<mlir::arith::MulIOp>(loc, size,
+                                                  launchOp.blockSizeY());
+      size = rewriter.create<mlir::arith::MulIOp>(loc, size,
+                                                  launchOp.blockSizeZ());
+
+      // TODO: Subgroup size is hardcoded for now.
+      mlir::Value subgroupSize =
+          rewriter.create<mlir::arith::ConstantIndexOp>(loc, 8);
+
+      mlir::Value numSubgroups =
+          rewriter.create<mlir::arith::CeilDivSIOp>(loc, size, subgroupSize);
+
+      auto elemType = op.getType();
+      auto storageClass = gpu_runtime::StorageClassAttr::get(
+          getContext(), gpu_runtime::StorageClass::local);
+      auto memrefType = mlir::MemRefType::get(mlir::ShapedType::kDynamicSize,
+                                              elemType, nullptr, storageClass);
+      groupBuffer = rewriter
+                        .create<mlir::gpu::AllocOp>(
+                            loc, memrefType, /*asyncToken*/ mlir::Type(),
+                            /*asyncDependencies*/ llvm::None, numSubgroups,
+                            /*symbolOperands*/ llvm::None)
+                        .memref();
+      rewriter.setInsertionPointAfter(launchOp);
+      rewriter.create<mlir::gpu::DeallocOp>(loc, /*asyncToken*/ mlir::Type(),
+                                            /*asyncDependencies*/ llvm::None,
+                                            groupBuffer);
+    }
+
+    auto loc = op->getLoc();
+    auto reduceType = static_cast<gpu_runtime::AllReduceOperation>(*op.op());
+    mlir::Value sgResult = rewriter.create<gpu_runtime::GPUSubGroupReduceOp>(
+        loc, op.value(), reduceType);
+    mlir::Value sgId = rewriter.create<mlir::gpu::SubgroupIdOp>(loc);
+    rewriter.create<mlir::memref::StoreOp>(loc, sgResult, groupBuffer, sgId);
+
+    rewriter.create<gpu_runtime::GPUBarrierOp>(loc,
+                                               gpu_runtime::FenceFlags::local);
+
+    mlir::Value zero = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
+    mlir::Value one = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
+    mlir::Value isFirstSg = rewriter.create<mlir::arith::CmpIOp>(
+        loc, mlir::arith::CmpIPredicate::eq, sgId, zero);
+
+    auto ifBodyBuilder = [&](mlir::OpBuilder &ifBuilder, mlir::Location ifLoc) {
+      mlir::Value init =
+          ifBuilder.create<mlir::memref::LoadOp>(ifLoc, groupBuffer, zero);
+
+      mlir::Value numSubgroups =
+          ifBuilder.create<mlir::gpu::NumSubgroupsOp>(ifLoc);
+
+      auto forBodyBuilder = [&](mlir::OpBuilder &forBuilder,
+                                mlir::Location forLoc, mlir::Value i,
+                                mlir::ValueRange args) {
+        assert(args.size() == 1);
+        auto prev = args.front();
+        mlir::Value val =
+            forBuilder.create<mlir::memref::LoadOp>(forLoc, groupBuffer, i);
+
+        // TODO
+        mlir::Value res =
+            forBuilder.create<mlir::arith::AddIOp>(forLoc, prev, val);
+        forBuilder.create<mlir::scf::YieldOp>(forLoc, res);
+      };
+
+      mlir::Value res = ifBuilder
+                            .create<mlir::scf::ForOp>(ifLoc, one, numSubgroups,
+                                                      one, init, forBodyBuilder)
+                            .getResult(0);
+      ifBuilder.create<mlir::memref::StoreOp>(ifLoc, res, groupBuffer, zero);
+      ifBuilder.create<mlir::scf::YieldOp>(ifLoc);
+    };
+
+    rewriter.create<mlir::scf::IfOp>(loc, /*resultTypes*/ llvm::None, isFirstSg,
+                                     ifBodyBuilder);
+
+    rewriter.create<gpu_runtime::GPUBarrierOp>(loc,
+                                               gpu_runtime::FenceFlags::local);
+
+    mlir::Value result =
+        rewriter.create<mlir::memref::LoadOp>(loc, groupBuffer, zero);
+    rewriter.replaceOp(op, result);
     return mlir::failure();
   }
 };
 
 struct LowerGpuBuiltins2Pass
     : public imex::RewriteWrapperPass<LowerGpuBuiltins2Pass, void, void,
-                                      ConvertBarrierOps, ConvertGroupOps> {};
+                                      ConvertBarrierOps, ConvertGroupOps,
+                                      ConvertGroupOpsToSubgroup> {};
 
 class ConvertArrayAllocOps : public mlir::OpRewritePattern<mlir::func::CallOp> {
 public:
@@ -1682,7 +1769,6 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   funcPM.addPass(std::make_unique<RemoveKernelMarkerPass>());
   funcPM.addPass(mlir::createCanonicalizerPass());
   funcPM.addPass(gpu_runtime::createInsertGPUAllocsPass());
-  funcPM.addPass(gpu_runtime::createConvertGPUDeallocsPass());
   funcPM.addPass(mlir::createCanonicalizerPass());
   funcPM.addPass(gpu_runtime::createUnstrideMemrefsPass());
   funcPM.addPass(mlir::createLowerAffinePass());
@@ -1718,6 +1804,8 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   modulePM.addPass(mlir::spirv::createLowerABIAttributesPass());
   modulePM.addPass(mlir::spirv::createUpdateVersionCapabilityExtensionPass());
   pm.addPass(gpu_runtime::createSerializeSPIRVPass());
+  funcPM.addNestedPass<mlir::func::FuncOp>(
+      gpu_runtime::createConvertGPUDeallocsPass());
   pm.addNestedPass<mlir::func::FuncOp>(gpu_runtime::createGPUExPass());
   commonOptPasses(pm);
   pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<GPUExDeallocPass>());

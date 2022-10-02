@@ -582,6 +582,15 @@ private:
     if (!dstType)
       return mlir::failure();
 
+    bool isShared = op.getHostShared();
+
+    auto localstorageClass = gpu_runtime::StorageClassAttr::get(
+        getContext(), gpu_runtime::StorageClass::local);
+    bool isLocal = memrefType.getMemorySpace() == localstorageClass;
+
+    if (isShared && isLocal)
+      return mlir::failure();
+
     auto loc = op.getLoc();
 
     mlir::SmallVector<mlir::Value, 4> shape;
@@ -596,10 +605,16 @@ private:
     auto alignmentVar =
         rewriter.create<mlir::LLVM::ConstantOp>(loc, llvmIndexType, alignment);
 
-    bool shared = op.getHostShared();
-    auto sharedVar = rewriter.create<mlir::LLVM::ConstantOp>(
-        loc, llvmInt32Type,
-        rewriter.getI32IntegerAttr(static_cast<int>(shared)));
+    // Need to keep in sync with gpu runtime lib.
+    int memType = 0;
+    if (isShared) {
+      memType = 1;
+    } else if (isLocal) {
+      memType = 2;
+    }
+
+    auto typeVar = rewriter.create<mlir::LLVM::ConstantOp>(
+        loc, llvmInt32Type, rewriter.getI32IntegerAttr(memType));
 
     auto depsArrayPtr =
         createDepsArray(rewriter, loc, op, adaptor.getAsyncDependencies());
@@ -619,7 +634,7 @@ private:
         adaptor.getStream(),
         sizeBytes,
         alignmentVar,
-        sharedVar,
+        typeVar,
         depsArrayPtr,
         eventIndexVar,
         resultPtr,

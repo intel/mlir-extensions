@@ -1067,12 +1067,14 @@ public:
   }
 };
 
-template <typename SpirvOp>
+template <typename SpirvOp, bool Subgroup>
 static void genReduceOp(mlir::Operation *srcOp, mlir::PatternRewriter &rewriter,
                         mlir::Value arg) {
   auto type = arg.getType();
   auto ctx = srcOp->getContext();
-  auto scope = mlir::spirv::ScopeAttr::get(ctx, mlir::spirv::Scope::Workgroup);
+  auto s =
+      Subgroup ? mlir::spirv::Scope::Subgroup : mlir::spirv::Scope::Workgroup;
+  auto scope = mlir::spirv::ScopeAttr::get(ctx, s);
   auto groupOp = mlir::spirv::GroupOperationAttr::get(
       ctx, mlir::spirv::GroupOperation::Reduce);
   rewriter.replaceOpWithNewOp<SpirvOp>(srcOp, type, scope, groupOp, arg,
@@ -1109,12 +1111,58 @@ public:
 
     namespace spv = mlir::spirv;
     const Handler handlers[] = {
-        {ReduceType::ADD, &genReduceOp<spv::GroupNonUniformFAddOp>,
-         &genReduceOp<spv::GroupNonUniformIAddOp>},
+        {ReduceType::ADD, &genReduceOp<spv::GroupNonUniformFAddOp, false>,
+         &genReduceOp<spv::GroupNonUniformIAddOp, false>},
     };
 
     for (auto &h : handlers) {
       if (h.op == *reduceOp) {
+        auto func = (valType.isa<mlir::FloatType>() ? h.floatFunc : h.intFunc);
+        func(op, rewriter, val);
+        return mlir::success();
+      }
+    }
+
+    return mlir::success();
+  }
+};
+
+class ConvertSubgroupReduceOp
+    : public mlir::OpConversionPattern<gpu_runtime::GPUSubGroupReduceOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(gpu_runtime::GPUSubGroupReduceOp op,
+                  gpu_runtime::GPUSubGroupReduceOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto reduceOp = adaptor.op();
+    //    if (!reduceOp)
+    //      return mlir::failure();
+
+    auto val = adaptor.value();
+    auto valType = val.getType();
+    if (!valType.isIntOrFloat())
+      return mlir::failure();
+
+    using funcptr_t =
+        void (*)(mlir::Operation *, mlir::PatternRewriter &, mlir::Value);
+
+    using ReduceType = gpu_runtime::AllReduceOperation;
+    struct Handler {
+      ReduceType op;
+      funcptr_t floatFunc;
+      funcptr_t intFunc;
+    };
+
+    namespace spv = mlir::spirv;
+    const Handler handlers[] = {
+        {ReduceType::ADD, &genReduceOp<spv::GroupNonUniformFAddOp, true>,
+         &genReduceOp<spv::GroupNonUniformIAddOp, true>},
+    };
+
+    for (auto &h : handlers) {
+      if (h.op == reduceOp) {
         auto func = (valType.isa<mlir::FloatType>() ? h.floatFunc : h.intFunc);
         func(op, rewriter, val);
         return mlir::success();
@@ -1266,8 +1314,8 @@ struct GPUToSpirvPass
                   ConvertCastOp<mlir::memref::ReinterpretCastOp>, ConvertLoadOp,
                   ConvertStoreOp, ConvertAtomicOps, ConvertFunc, ConvertAssert,
                   ConvertBarrierOp, ConvertMemFenceOp, ConvertUndef,
-                  ConvertGlobalOp, ConvertGetGlobalOp, ConvertAllReduceOp>(
-              typeConverter, context);
+                  ConvertGlobalOp, ConvertGetGlobalOp, ConvertAllReduceOp,
+                  ConvertSubgroupReduceOp>(typeConverter, context);
 
       patterns.add<
           SingleDimLaunchConfigConversion<mlir::gpu::SubgroupIdOp,
