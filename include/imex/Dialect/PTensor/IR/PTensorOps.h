@@ -53,6 +53,7 @@ enum EWBinOpId : int {
   NOT_EQUAL,
   OR,
   POWER,
+  RSHIFT,
   SUBTRACT,
   TRUE_DIVIDE,
   XOR,
