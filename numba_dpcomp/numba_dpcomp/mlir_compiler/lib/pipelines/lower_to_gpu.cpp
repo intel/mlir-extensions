@@ -1448,6 +1448,10 @@ public:
                             .create<mlir::scf::ForOp>(ifLoc, one, numSubgroups,
                                                       one, init, forBodyBuilder)
                             .getResult(0);
+      mlir::Value isSingleSg = ifBuilder.create<mlir::arith::CmpIOp>(
+          ifLoc, mlir::arith::CmpIPredicate::eq, numSubgroups, one);
+      res =
+          ifBuilder.create<mlir::arith::SelectOp>(ifLoc, isSingleSg, init, res);
       ifBuilder.create<mlir::memref::StoreOp>(ifLoc, res, groupBuffer, zero);
       ifBuilder.create<mlir::scf::YieldOp>(ifLoc);
     };
