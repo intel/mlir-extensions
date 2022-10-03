@@ -48,6 +48,7 @@ set(SOURCES_LIST
     lib/Conversion/util_conversion.cpp
     lib/Conversion/util_to_llvm.cpp
     lib/Dialect/gpu_runtime/IR/gpu_runtime_ops.cpp
+    lib/Dialect/gpu_runtime/Transforms/MakeBarriersUniform.cpp
     lib/Dialect/imex_util/dialect.cpp
     lib/Dialect/ntensor/IR/NTensorOps.cpp
     lib/Dialect/ntensor/Transforms/ResolveArrayOps.cpp
@@ -89,6 +90,7 @@ set(HEADERS_LIST
     include/imex/Conversion/util_conversion.hpp
     include/imex/Conversion/util_to_llvm.hpp
     include/imex/Dialect/gpu_runtime/IR/gpu_runtime_ops.hpp
+    include/imex/Dialect/gpu_runtime/Transforms/MakeBarriersUniform.hpp
     include/imex/Dialect/imex_util/dialect.hpp
     include/imex/Dialect/ntensor/IR/NTensorOps.hpp
     include/imex/Dialect/ntensor/Transforms/ResolveArrayOps.hpp
