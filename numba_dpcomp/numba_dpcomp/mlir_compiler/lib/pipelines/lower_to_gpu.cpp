@@ -1344,6 +1344,27 @@ public:
   }
 };
 
+template <typename SpvOp>
+static mlir::Value reduceOp(mlir::OpBuilder &builder, mlir::Location loc,
+                            mlir::Value val1, mlir::Value val2) {
+  return builder.create<SpvOp>(loc, val1, val2);
+}
+
+using ReduceFuncType = mlir::Value (*)(mlir::OpBuilder &, mlir::Location,
+                                       mlir::Value, mlir::Value);
+static ReduceFuncType getReduceFunc(mlir::gpu::AllReduceOperation op,
+                                    bool isFloat) {
+  using ReduceOp = mlir::gpu::AllReduceOperation;
+  using HandlerType = std::tuple<ReduceOp, ReduceFuncType, ReduceFuncType>;
+  const HandlerType handers[] = {{ReduceOp::ADD, &reduceOp<mlir::arith::AddIOp>,
+                                  &reduceOp<mlir::arith::AddFOp>}};
+  for (auto handler : handers) {
+    if (std::get<0>(handler) == op)
+      return isFloat ? std::get<2>(handler) : std::get<1>(handler);
+  }
+  return nullptr;
+}
+
 class ConvertGroupOpsToSubgroup
     : public mlir::OpRewritePattern<mlir::gpu::AllReduceOp> {
 public:
@@ -1357,6 +1378,15 @@ public:
       return mlir::failure();
 
     if (!op.op())
+      return mlir::failure();
+
+    if (!op.getType().isIntOrFloat())
+      return mlir::failure();
+
+    auto isFloat = op.getType().isa<mlir::FloatType>();
+    auto reduceFunc = getReduceFunc(*op.op(), isFloat);
+
+    if (!reduceFunc)
       return mlir::failure();
 
     mlir::Value groupBuffer;
@@ -1438,9 +1468,7 @@ public:
         mlir::Value val =
             forBuilder.create<mlir::memref::LoadOp>(forLoc, groupBuffer, i);
 
-        // TODO
-        mlir::Value res =
-            forBuilder.create<mlir::arith::AddIOp>(forLoc, prev, val);
+        mlir::Value res = reduceFunc(forBuilder, forLoc, prev, val);
         forBuilder.create<mlir::scf::YieldOp>(forLoc, res);
       };
 
