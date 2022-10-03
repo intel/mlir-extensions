@@ -162,8 +162,10 @@ struct MakeBarriersUniformPass
 
     gpu_runtime::populateMakeBarriersUniformPatterns(ctx, patterns);
 
+    mlir::GreedyRewriteConfig config;
+    config.useTopDownTraversal = true; // We need to visit top barriers first
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
-                                             std::move(patterns));
+                                             std::move(patterns), config);
   }
 };
 } // namespace
