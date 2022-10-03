@@ -75,42 +75,44 @@ struct ConvertBarrierOp
     }();
 
     auto afterBlock = rewriter.splitBlock(ifBody, std::next(barrierIt));
+    auto beforeBlock = rewriter.splitBlock(ifBody, ifBody->begin());
 
     auto barrierLoc = op->getLoc();
     auto barrierFlags = op.flags();
     rewriter.eraseOp(op);
 
-    rewriter.setInsertionPointToEnd(ifBody);
+    rewriter.setInsertionPointToEnd(beforeBlock);
     rewriter.create<mlir::scf::YieldOp>(rewriter.getUnknownLoc(), yieldArgs);
 
     rewriter.setInsertionPoint(ifOp);
     auto ifLoc = ifOp->getLoc();
     auto cond = ifOp.getCondition();
 
+    auto thenBodyBuilder = [](mlir::OpBuilder & /*builder*/,
+                              mlir::Location /*loc*/) {
+      // Nothing
+    };
+
     auto elseBodyBuilder = [&](mlir::OpBuilder &builder, mlir::Location loc) {
       llvm::SmallVector<mlir::Value> results;
       results.reserve(yieldArgs.size());
-      for (auto arg : yieldArgs)
-        builder.create<imex::util::UndefOp>(loc, arg.getType());
+      for (auto arg : yieldArgs) {
+        auto val = builder.create<imex::util::UndefOp>(loc, arg.getType());
+        results.emplace_back(val);
+      }
 
       builder.create<mlir::scf::YieldOp>(loc, results);
     };
 
     mlir::ValueRange yieldArgsRange(yieldArgs);
-    auto beforeIf = rewriter.create<mlir::scf::IfOp>(
-        ifLoc, yieldArgsRange.getTypes(), cond, nullptr, elseBodyBuilder);
-    auto &beforeIfThenReg = beforeIf.getThenRegion();
-    rewriter.inlineRegionBefore(ifOp.getThenRegion(), beforeIfThenReg,
-                                beforeIfThenReg.end());
+    auto beforeIf =
+        rewriter.create<mlir::scf::IfOp>(ifLoc, yieldArgsRange.getTypes(), cond,
+                                         thenBodyBuilder, elseBodyBuilder);
+    rewriter.mergeBlocks(beforeBlock, beforeIf.thenBlock());
 
     rewriter.create<gpu_runtime::GPUBarrierOp>(barrierLoc, barrierFlags);
 
     auto beforeIfResults = beforeIf.getResults();
-
-    auto thenBodyBuilder = [](mlir::OpBuilder & /*builder*/,
-                              mlir::Location /*loc*/) {
-      // Nothing
-    };
 
     auto afterIf =
         rewriter.create<mlir::scf::IfOp>(ifLoc, cond, thenBodyBuilder);

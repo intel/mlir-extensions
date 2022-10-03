@@ -27,6 +27,7 @@
 #include "imex/Conversion/gpu_runtime_to_llvm.hpp"
 #include "imex/Conversion/gpu_to_gpu_runtime.hpp"
 #include "imex/Conversion/ntensor_to_memref.hpp"
+#include "imex/Dialect/gpu_runtime/Transforms/MakeBarriersUniform.hpp"
 #include "imex/Dialect/ntensor/Transforms/ResolveArrayOps.hpp"
 #include "imex/Transforms/expand_tuple.hpp"
 
@@ -124,3 +125,10 @@ static mlir::PassPipelineRegistration<>
                     [](mlir::OpPassManager &pm) {
                       pm.addPass(imex::createNtensorToMemrefPass());
                     });
+
+static mlir::PassPipelineRegistration<> makeBarriersUniform(
+    "gpux-make-barriers-uniform",
+    "Adapt gpu barriers to non-uniform control flow",
+    [](mlir::OpPassManager &pm) {
+      pm.addPass(gpu_runtime::createMakeBarriersUniformPass());
+    });

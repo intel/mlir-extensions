@@ -17,6 +17,7 @@
 #include <mlir/InitAllPasses.h>
 #include <mlir/Tools/mlir-opt/MlirOptMain.h>
 
+#include "imex/Dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
 #include "imex/Dialect/imex_util/dialect.hpp"
 #include "imex/Dialect/ntensor/IR/NTensorOps.hpp"
 
@@ -24,8 +25,9 @@ int main(int argc, char **argv) {
   mlir::registerAllPasses();
   mlir::DialectRegistry registry;
   mlir::registerAllDialects(registry);
-  registry.insert<imex::util::ImexUtilDialect>();
+  registry.insert<gpu_runtime::GpuRuntimeDialect>();
   registry.insert<imex::ntensor::NTensorDialect>();
+  registry.insert<imex::util::ImexUtilDialect>();
   return mlir::failed(MlirOptMain(argc, argv, "imex modular optimizer driver\n",
                                   registry,
                                   /*preloadDialectsInContext=*/false));
