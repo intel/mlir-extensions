@@ -1422,8 +1422,7 @@ static void populateLowerToLlvmPipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<LowerParallelToCFGPass>());
   pm.addPass(mlir::createConvertSCFToCFPass());
   pm.addPass(mlir::createCanonicalizerPass());
-  pm.addNestedPass<mlir::func::FuncOp>(
-      mlir::arith::createArithExpandOpsPass());
+  pm.addNestedPass<mlir::func::FuncOp>(mlir::arith::createArithExpandOpsPass());
   pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<PreLLVMLowering>());
   pm.addNestedPass<mlir::func::FuncOp>(mlir::createConvertMathToLLVMPass());
   pm.addPass(mlir::createConvertMathToLibmPass());

@@ -360,15 +360,17 @@ struct GPULowerDefaultLocalSize
     llvm::StringRef funcName("get_default_local_size");
     mlir::OpBuilder builder(&getContext());
     func.walk([&](mlir::gpu::LaunchFuncOp op) {
-      if (auto call =
-              skipCast(op.getBlockSizeX()).getDefiningOp<mlir::func::CallOp>()) {
+      if (auto call = skipCast(op.getBlockSizeX())
+                          .getDefiningOp<mlir::func::CallOp>()) {
         if (call.getCallee() != funcName || call.operands().size() != 3)
           return;
 
-        assert(skipCast(op.getBlockSizeY()).getDefiningOp<mlir::func::CallOp>() ==
-               call);
-        assert(skipCast(op.getBlockSizeZ()).getDefiningOp<mlir::func::CallOp>() ==
-               call);
+        assert(
+            skipCast(op.getBlockSizeY()).getDefiningOp<mlir::func::CallOp>() ==
+            call);
+        assert(
+            skipCast(op.getBlockSizeZ()).getDefiningOp<mlir::func::CallOp>() ==
+            call);
 
         auto loc = call.getLoc();
         auto kernel = op.getKernel();

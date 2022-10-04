@@ -47,9 +47,9 @@ struct PyBuilderContext {
 };
 
 namespace {
-template <typename C>
-static auto getTempShape(const C& container) {
-  return llvm::SmallVector<mlir::OpFoldResult>(std::begin(container), std::end(container));
+template <typename C> static auto getTempShape(const C &container) {
+  return llvm::SmallVector<mlir::OpFoldResult>(std::begin(container),
+                                               std::end(container));
 }
 
 static std::string toStr(mlir::Value val) {
@@ -602,7 +602,8 @@ static mlir::Value expandDim(mlir::OpBuilder &builder, mlir::Location loc,
     if (i == dim) {
       newShape[i] = targetShape[i];
     } else {
-      newShape[i] = builder.create<mlir::tensor::DimOp>(loc, src, i).getResult();
+      newShape[i] =
+          builder.create<mlir::tensor::DimOp>(loc, src, i).getResult();
     }
   }
   auto trueBody = [&](mlir::OpBuilder &builder, mlir::Location loc) {
@@ -614,8 +615,8 @@ static mlir::Value expandDim(mlir::OpBuilder &builder, mlir::Location loc,
     //        src).getResult();
     auto casted = src; // TODO
     auto init = builder
-                    .create<mlir::tensor::EmptyOp>(
-                        loc, newShape, srcType.getElementType())
+                    .create<mlir::tensor::EmptyOp>(loc, newShape,
+                                                   srcType.getElementType())
                     .getResult();
     llvm::SmallVector<mlir::AffineExpr> exprs(numDims);
     for (unsigned i = 0; i < numDims; ++i) {
@@ -771,7 +772,8 @@ static py::object broadcastImpl(py::capsule context, py::tuple args,
         auto numDims = static_cast<unsigned>(signlessTensorType.getRank());
         auto init = builder
                         .create<mlir::tensor::EmptyOp>(
-                            loc, getTempShape(shapeVals), signlessTensorType.getElementType())
+                            loc, getTempShape(shapeVals),
+                            signlessTensorType.getElementType())
                         .getResult();
         mlir::AffineMap maps[] = {
             mlir::AffineMap::getMinorIdentityMap(numDims, srcNumDims,
@@ -800,7 +802,8 @@ static py::object broadcastImpl(py::capsule context, py::tuple args,
         auto numDims = static_cast<unsigned>(signlessTensorType.getRank());
         auto init = builder
                         .create<mlir::tensor::EmptyOp>(
-                            loc, getTempShape(shapeVals), signlessTensorType.getElementType())
+                            loc, getTempShape(shapeVals),
+                            signlessTensorType.getElementType())
                         .getResult();
         mlir::AffineMap maps[] = {
             mlir::AffineMap::get(
@@ -851,7 +854,7 @@ static py::object initTensorImpl(py::capsule context, py::iterable shape,
 
   if (initVal.is_none()) {
     init = builder.create<mlir::tensor::EmptyOp>(loc, getTempShape(shapeVal),
-                                                      signlessElemType);
+                                                 signlessElemType);
   } else {
     auto val =
         doCast(builder, loc, ctx.context.unwrapVal(loc, builder, initVal),

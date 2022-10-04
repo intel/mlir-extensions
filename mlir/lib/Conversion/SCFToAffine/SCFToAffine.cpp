@@ -79,7 +79,8 @@ public:
       } else if (auto store = dyn_cast<memref::StoreOp>(each)) {
         rewriter.setInsertionPointAfter(store);
         rewriter.replaceOpWithNewOp<AffineStoreOp>(
-            store, store.getValueToStore(), store.getMemRef(), store.getIndices());
+            store, store.getValueToStore(), store.getMemRef(),
+            store.getIndices());
       }
     }
 

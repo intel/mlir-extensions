@@ -275,7 +275,8 @@ private:
                   gpu_runtime::DestroyGpuStreamOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    auto res = streamDestroyCallBuilder.create(loc, rewriter, adaptor.getSource());
+    auto res =
+        streamDestroyCallBuilder.create(loc, rewriter, adaptor.getSource());
     rewriter.replaceOp(op, res.getResults());
     return mlir::success();
   }
@@ -350,7 +351,8 @@ private:
                   gpu_runtime::DestroyGpuModuleOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    auto res = moduleDestroyCallBuilder.create(loc, rewriter, adaptor.getSource());
+    auto res =
+        moduleDestroyCallBuilder.create(loc, rewriter, adaptor.getSource());
     rewriter.replaceOp(op, res.getResults());
     return mlir::success();
   }
@@ -399,7 +401,8 @@ private:
                   gpu_runtime::DestroyGpuKernelOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    auto res = kernelDestroyCallBuilder.create(loc, rewriter, adaptor.getSource());
+    auto res =
+        kernelDestroyCallBuilder.create(loc, rewriter, adaptor.getSource());
     rewriter.replaceOp(op, res.getResults());
     return mlir::success();
   }
@@ -464,7 +467,8 @@ private:
 
     auto getKernelParam =
         [&](unsigned i) -> std::pair<mlir::Value, mlir::Value> {
-      auto memrefType = op.getKernelOperands()[i].getType().dyn_cast<mlir::MemRefType>();
+      auto memrefType =
+          op.getKernelOperands()[i].getType().dyn_cast<mlir::MemRefType>();
       auto paramType = paramsStorage[i].getType();
       if (memrefType) {
         mlir::MemRefDescriptor desc(kernelParams[i]);
@@ -583,8 +587,8 @@ private:
     mlir::SmallVector<mlir::Value, 4> shape;
     mlir::SmallVector<mlir::Value, 4> strides;
     mlir::Value sizeBytes;
-    getMemRefDescriptorSizes(loc, memrefType, adaptor.getDynamicSizes(), rewriter,
-                             shape, strides, sizeBytes);
+    getMemRefDescriptorSizes(loc, memrefType, adaptor.getDynamicSizes(),
+                             rewriter, shape, strides, sizeBytes);
 
     assert(shape.size() == strides.size());
 

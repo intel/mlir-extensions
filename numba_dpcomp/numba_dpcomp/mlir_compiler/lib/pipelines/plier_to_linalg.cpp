@@ -1115,7 +1115,8 @@ struct CleanupLoads : public mlir::OpRewritePattern<mlir::memref::LoadOp> {
     if (!store)
       return mlir::failure();
 
-    if (store.getMemref() != op.getMemref() || store.getIndices() != op.getIndices())
+    if (store.getMemref() != op.getMemref() ||
+        store.getIndices() != op.getIndices())
       return mlir::failure();
 
     rewriter.replaceOp(op, store.getValue());
@@ -1841,8 +1842,8 @@ struct SimplifyExpandDims
               mlir::AffineMap::get(numDims, 0, exprs, context)),
           maps[1]};
       auto newMapsAttr = mlir::ArrayAttr::get(context, newMaps);
-      rewriter.updateRootInPlace(op,
-                                 [&]() { op.setIndexingMapsAttr(newMapsAttr); });
+      rewriter.updateRootInPlace(
+          op, [&]() { op.setIndexingMapsAttr(newMapsAttr); });
     }
 
     return mlir::success(changed);
@@ -1938,7 +1939,8 @@ struct GenerateToFill
 
     auto loc = op->getLoc();
     mlir::Value init = rewriter.create<mlir::tensor::EmptyOp>(
-        loc, resType.getShape(), resType.getElementType(), op.getDynamicExtents());
+        loc, resType.getShape(), resType.getElementType(),
+        op.getDynamicExtents());
 
     rewriter.replaceOpWithNewOp<mlir::linalg::FillOp>(op, term.getValue(),
                                                       init);
@@ -1971,7 +1973,8 @@ struct SliceOfGeneric : public mlir::OpRewritePattern<mlir::linalg::GenericOp> {
     auto resType = res.getType().cast<mlir::RankedTensorType>();
     auto resRank = static_cast<unsigned>(resType.getRank());
     auto maps = [&]() {
-      auto mapsList = op.getIndexingMaps().getAsValueRange<mlir::AffineMapAttr>();
+      auto mapsList =
+          op.getIndexingMaps().getAsValueRange<mlir::AffineMapAttr>();
       return llvm::SmallVector<mlir::AffineMap>(mapsList.begin(),
                                                 mapsList.end());
     }();

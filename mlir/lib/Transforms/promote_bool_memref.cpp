@@ -140,7 +140,8 @@ public:
   matchAndRewrite(mlir::memref::DeallocOp op,
                   mlir::memref::DeallocOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<mlir::memref::DeallocOp>(op, adaptor.getMemref());
+    rewriter.replaceOpWithNewOp<mlir::memref::DeallocOp>(op,
+                                                         adaptor.getMemref());
     return mlir::success();
   }
 };
@@ -179,9 +180,9 @@ public:
     if (!resType)
       return mlir::failure();
     rewriter.replaceOpWithNewOp<mlir::memref::SubViewOp>(
-        op, resType, adaptor.getSource(), adaptor.getOffsets(), adaptor.getSizes(),
-        adaptor.getStrides(), adaptor.getStaticOffsets(), adaptor.getStaticSizes(),
-        adaptor.getStaticStrides());
+        op, resType, adaptor.getSource(), adaptor.getOffsets(),
+        adaptor.getSizes(), adaptor.getStrides(), adaptor.getStaticOffsets(),
+        adaptor.getStaticSizes(), adaptor.getStaticStrides());
     return mlir::success();
   }
 };

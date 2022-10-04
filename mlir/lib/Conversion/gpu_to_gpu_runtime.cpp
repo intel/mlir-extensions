@@ -812,8 +812,8 @@ public:
         op.getContext(), mlir::spirv::MemoryAccess::Aligned);
     auto alignment =
         rewriter.getI32IntegerAttr(memrefType.getElementTypeBitWidth() / 8);
-    rewriter.replaceOpWithNewOp<mlir::spirv::StoreOp>(op, ptr, adaptor.getValue(),
-                                                      memoryAccess, alignment);
+    rewriter.replaceOpWithNewOp<mlir::spirv::StoreOp>(
+        op, ptr, adaptor.getValue(), memoryAccess, alignment);
 
     return mlir::success();
   }
@@ -1056,8 +1056,8 @@ public:
     auto ptrType = mlir::spirv::PointerType::get(newType, *storageClass);
 
     auto loc = op->getLoc();
-    mlir::Value res =
-        rewriter.create<mlir::spirv::AddressOfOp>(loc, ptrType, adaptor.getName());
+    mlir::Value res = rewriter.create<mlir::spirv::AddressOfOp>(
+        loc, ptrType, adaptor.getName());
     if (res.getType() != resType)
       res = rewriter.create<mlir::spirv::BitcastOp>(loc, resType, res);
 
@@ -1247,7 +1247,8 @@ struct ExpandAllocOp : public mlir::OpRewritePattern<mlir::gpu::AllocOp> {
         rewriter.getStringAttr(gpu_runtime::getAllocSharedAttrName());
     auto shared = op->hasAttr(sharedAttrName);
 
-    mlir::Type token = op.getAsyncToken() ? op.getAsyncToken().getType() : nullptr;
+    mlir::Type token =
+        op.getAsyncToken() ? op.getAsyncToken().getType() : nullptr;
     auto res = rewriter.replaceOpWithNewOp<gpu_runtime::GPUAllocOp>(
         op, op.getType(), token, op.getAsyncDependencies(), *stream,
         op.getDynamicSizes(), op.getSymbolOperands());
