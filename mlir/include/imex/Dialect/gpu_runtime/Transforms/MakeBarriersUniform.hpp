@@ -26,5 +26,7 @@ namespace gpu_runtime {
 void populateMakeBarriersUniformPatterns(mlir::MLIRContext &context,
                                          mlir::RewritePatternSet &patterns);
 
+/// gpu barriers ops require uniform control flow, this pass tries to rearrange
+/// control flow in a way to satisfy this requirement.
 std::unique_ptr<mlir::Pass> createMakeBarriersUniformPass();
 } // namespace gpu_runtime
