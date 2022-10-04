@@ -1,6 +1,6 @@
 // RUN: imex-opt --gpu-to-spirv %s | FileCheck %s
 
-module attributes {gpu.container_module, spv.target_env = #spv.target_env<#spv.vce<v1.0, [Addresses, Float16Buffer, Int64, Int16, Int8, Kernel, Linkage, Vector16, GenericPointer, Groups, Float16, Float64, AtomicFloat32AddEXT, ExpectAssumeKHR], [SPV_EXT_shader_atomic_float_add, SPV_KHR_expect_assume]>, #spv.resource_limits<>>} {
+module attributes {gpu.container_module, spirv.target_env = #spirv.target_env<#spirv.vce<v1.0, [Addresses, Float16Buffer, Int64, Int16, Int8, Kernel, Linkage, Vector16, GenericPointer, Groups, Float16, Float64, AtomicFloat32AddEXT, ExpectAssumeKHR], [SPV_EXT_shader_atomic_float_add, SPV_KHR_expect_assume]>, #spirv.resource_limits<>>} {
   func.func @main() {
     %c8 = arith.constant 8 : index
     %c1 = arith.constant 1 : index
@@ -22,7 +22,7 @@ module attributes {gpu.container_module, spv.target_env = #spv.target_env<#spv.v
     return
   }
   gpu.module @main_kernel {
-    gpu.func @main_kernel(%arg0: memref<8xf32>, %arg1: memref<8xf32>, %arg2: memref<8xf32>) kernel attributes {spv.entry_point_abi = #spv.entry_point_abi<>} {
+    gpu.func @main_kernel(%arg0: memref<8xf32>, %arg1: memref<8xf32>, %arg2: memref<8xf32>) kernel attributes {spirv.entry_point_abi = #spirv.entry_point_abi<>} {
       cf.br ^bb1
     ^bb1:  // pred: ^bb0
       %0 = gpu.block_id  x
@@ -33,22 +33,22 @@ module attributes {gpu.container_module, spv.target_env = #spv.target_env<#spv.v
       gpu.return
     }
 
-    // CHECK: spv.module @__spv__main_kernel Physical64 OpenCL {
-    // CHECK: spv.GlobalVariable @__builtin_var_WorkgroupId__ built_in("WorkgroupId") : !spv.ptr<vector<3xi64>, Input>
-    // CHECK: spv.func @main_kernel(%arg0: !spv.ptr<f32, CrossWorkgroup>, %arg1: !spv.ptr<f32, CrossWorkgroup>, %arg2: !spv.ptr<f32, CrossWorkgroup>) "None" attributes {spv.entry_point_abi = #spv.entry_point_abi<>, workgroup_attributions = 0 : i64} {
-    // CHECK: spv.Branch ^bb1
+    // CHECK: spirv.module @__spv__main_kernel Physical64 OpenCL {
+    // CHECK: spirv.GlobalVariable @__builtin_var_WorkgroupId__ built_in("WorkgroupId") : !spirv.ptr<vector<3xi64>, Input>
+    // CHECK: spirv.func @main_kernel(%arg0: !spirv.ptr<f32, CrossWorkgroup>, %arg1: !spirv.ptr<f32, CrossWorkgroup>, %arg2: !spirv.ptr<f32, CrossWorkgroup>) "None" attributes {spirv.entry_point_abi = #spirv.entry_point_abi<>, workgroup_attributions = 0 : i64} {
+    // CHECK: spirv.Branch ^bb1
     // CHECK: ^bb1:  // pred: ^bb0
-    // CHECK: %__builtin_var_WorkgroupId___addr = spv.mlir.addressof @__builtin_var_WorkgroupId__ : !spv.ptr<vector<3xi64>, Input>
-    // CHECK: %[[VAR0:.*]] = spv.Load "Input" %__builtin_var_WorkgroupId___addr : vector<3xi64>
-    // CHECK: %[[VAR1:.*]] = spv.CompositeExtract %[[VAR0:.*]][0 : i32] : vector<3xi64>
-    // CHECK: %[[VAR2:.*]] = spv.InBoundsPtrAccessChain %arg0[%[[VAR1:.*]]] : !spv.ptr<f32, CrossWorkgroup>, i64
-    // CHECK: %[[VAR3:.*]] = spv.Load "CrossWorkgroup" %[[VAR2:.*]] ["Aligned", 4] : f32
-    // CHECK: %[[VAR4:.*]] = spv.InBoundsPtrAccessChain %arg1[%[[VAR1:.*]]] : !spv.ptr<f32, CrossWorkgroup>, i64
-    // CHECK: %[[VAR5:.*]] = spv.Load "CrossWorkgroup" %[[VAR4:.*]] ["Aligned", 4] : f32
-    // CHECK:  %[[VAR6:.*]] = spv.FAdd %[[VAR3:.*]], %[[VAR5:.*]] : f32
-    // CHECK:  %[[VAR7:.*]] = spv.InBoundsPtrAccessChain %arg2[%[[VAR1:.*]]] : !spv.ptr<f32, CrossWorkgroup>, i64
-    // CHECK:   spv.Store "CrossWorkgroup" %[[VAR7:.*]], %[[VAR6:.*]] ["Aligned", 4] : f32
-    // CHECK:   spv.Return
+    // CHECK: %__builtin_var_WorkgroupId___addr = spirv.mlir.addressof @__builtin_var_WorkgroupId__ : !spirv.ptr<vector<3xi64>, Input>
+    // CHECK: %[[VAR0:.*]] = spirv.Load "Input" %__builtin_var_WorkgroupId___addr : vector<3xi64>
+    // CHECK: %[[VAR1:.*]] = spirv.CompositeExtract %[[VAR0:.*]][0 : i32] : vector<3xi64>
+    // CHECK: %[[VAR2:.*]] = spirv.InBoundsPtrAccessChain %arg0[%[[VAR1:.*]]] : !spirv.ptr<f32, CrossWorkgroup>, i64
+    // CHECK: %[[VAR3:.*]] = spirv.Load "CrossWorkgroup" %[[VAR2:.*]] ["Aligned", 4] : f32
+    // CHECK: %[[VAR4:.*]] = spirv.InBoundsPtrAccessChain %arg1[%[[VAR1:.*]]] : !spirv.ptr<f32, CrossWorkgroup>, i64
+    // CHECK: %[[VAR5:.*]] = spirv.Load "CrossWorkgroup" %[[VAR4:.*]] ["Aligned", 4] : f32
+    // CHECK:  %[[VAR6:.*]] = spirv.FAdd %[[VAR3:.*]], %[[VAR5:.*]] : f32
+    // CHECK:  %[[VAR7:.*]] = spirv.InBoundsPtrAccessChain %arg2[%[[VAR1:.*]]] : !spirv.ptr<f32, CrossWorkgroup>, i64
+    // CHECK:   spirv.Store "CrossWorkgroup" %[[VAR7:.*]], %[[VAR6:.*]] ["Aligned", 4] : f32
+    // CHECK:   spirv.Return
     // CHECK:  }
     // CHECK: }
 

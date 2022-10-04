@@ -511,9 +511,9 @@ _atomic_funcs = [atomic.add, atomic.sub]
 
 def _check_atomic_ir(ir):
     return (
-        ir.count("spv.AtomicIAdd") == 1
-        or ir.count("spv.AtomicISub") == 1
-        or ir.count("spv.EXT.AtomicFAdd") == 1
+        ir.count("spirv.AtomicIAdd") == 1
+        or ir.count("spirv.AtomicISub") == 1
+        or ir.count("spirv.EXT.AtomicFAdd") == 1
     )
 
 
@@ -647,7 +647,7 @@ def test_fastmath():
         gpu_func = kernel(fastmath=False)(func)
         gpu_func[a.shape, DEFAULT_LOCAL_SIZE](a, b, c, gpu_res)
         ir = get_print_buffer()
-        assert ir.count("spv.CL.fma") == 0, ir
+        assert ir.count("spirv.CL.fma") == 0, ir
         assert_equal(gpu_res, sim_res)
 
     with print_pass_ir([], ["GPUToSpirvPass"]):
@@ -655,7 +655,7 @@ def test_fastmath():
         gpu_func = kernel(fastmath=True)(func)
         gpu_func[a.shape, DEFAULT_LOCAL_SIZE](a, b, c, gpu_res)
         ir = get_print_buffer()
-        assert ir.count("spv.CL.fma") == 1, ir
+        assert ir.count("spirv.CL.fma") == 1, ir
         assert_equal(gpu_res, sim_res)
 
 
@@ -681,7 +681,7 @@ def test_input_load_cse():
         ir = get_print_buffer()
         assert (
             ir.count(
-                'spv.Load "Input" %__builtin_var_GlobalInvocationId___addr : vector<3xi64>'
+                'spirv.Load "Input" %__builtin_var_GlobalInvocationId___addr : vector<3xi64>'
             )
             == 1
         ), ir
