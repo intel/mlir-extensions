@@ -1082,12 +1082,27 @@ public:
 
     auto converter = getTypeConverter();
     assert(converter);
-    auto dstType = converter->convertType(op.getType()).dyn_cast_or_null<mlir::spirv::PointerType>();
+    auto dstType = converter->convertType(op.getType())
+                       .dyn_cast_or_null<mlir::spirv::PointerType>();
     if (!dstType)
       return mlir::failure();
 
+    if (srcType == dstType) {
+      rewriter.replaceOp(op, src);
+      return mlir::success();
+    }
+
+    if (srcType.getPointeeType() != dstType.getPointeeType())
+      return mlir::failure();
+
+    auto genericType = mlir::spirv::PointerType::get(
+        srcType.getPointeeType(), mlir::spirv::StorageClass::Generic);
     auto loc = op->getLoc();
-    auto temp = rewriter.create<mlir::spirv::PtrCastToGenericOp>(loc, src);
+    auto temp =
+        rewriter.create<mlir::spirv::PtrCastToGenericOp>(loc, genericType, src);
+    rewriter.replaceOpWithNewOp<mlir::spirv::GenericCastToPtrOp>(op, dstType,
+                                                                 temp);
+    return mlir::success();
   }
 };
 
@@ -1231,7 +1246,8 @@ struct GPUToSpirvPass
                 ConvertCastOp<mlir::memref::ReinterpretCastOp>, ConvertLoadOp,
                 ConvertStoreOp, ConvertAtomicOps, ConvertFunc, ConvertAssert,
                 ConvertBarrierOp, ConvertMemFenceOp, ConvertUndef,
-                ConvertGlobalOp, ConvertGetGlobalOp>(typeConverter, context);
+                ConvertGlobalOp, ConvertGetGlobalOp, ConvertStorageCast>(
+            typeConverter, context);
 
     patterns.add<
         SingleDimLaunchConfigConversion<mlir::gpu::SubgroupIdOp,
