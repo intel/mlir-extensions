@@ -1331,8 +1331,11 @@ public:
     }
 
     auto type = mlir::MemRefType::get(shape, oldType.getElementType());
-    auto storageClass = gpu_runtime::StorageClassAttr::get(
-        getContext(), gpu_runtime::StorageClass::local);
+    // TODO: Fix storage class upstream
+    //    auto storageClass = gpu_runtime::StorageClassAttr::get(
+    //        getContext(), gpu_runtime::StorageClass::local);
+    auto storageClass = rewriter.getI64IntegerAttr(
+        mlir::gpu::GPUDialect::getPrivateAddressSpace());
     auto typeLocal = mlir::MemRefType::get(shape, type.getElementType(),
                                            nullptr, storageClass);
 
