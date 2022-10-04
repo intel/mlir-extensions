@@ -1090,11 +1090,11 @@ public:
   matchAndRewrite(mlir::gpu::AllReduceOp op,
                   mlir::gpu::AllReduceOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    auto reduceOp = adaptor.op();
+    auto reduceOp = adaptor.getOp();
     if (!reduceOp)
       return mlir::failure();
 
-    auto val = adaptor.value();
+    auto val = adaptor.getValue();
     auto valType = val.getType();
     if (!valType.isIntOrFloat())
       return mlir::failure();
@@ -1136,11 +1136,11 @@ public:
   matchAndRewrite(gpu_runtime::GPUSubGroupReduceOp op,
                   gpu_runtime::GPUSubGroupReduceOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    auto reduceOp = adaptor.op();
+    auto reduceOp = adaptor.getOp();
     //    if (!reduceOp)
     //      return mlir::failure();
 
-    auto val = adaptor.value();
+    auto val = adaptor.getValue();
     auto valType = val.getType();
     if (!valType.isIntOrFloat())
       return mlir::failure();

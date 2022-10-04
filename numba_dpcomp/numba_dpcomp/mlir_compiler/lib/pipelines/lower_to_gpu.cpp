@@ -1377,14 +1377,14 @@ public:
     if (!launchOp)
       return mlir::failure();
 
-    if (!op.op())
+    if (!op.getOp())
       return mlir::failure();
 
     if (!op.getType().isIntOrFloat())
       return mlir::failure();
 
     auto isFloat = op.getType().isa<mlir::FloatType>();
-    auto reduceFunc = getReduceFunc(*op.op(), isFloat);
+    auto reduceFunc = getReduceFunc(*op.getOp(), isFloat);
 
     if (!reduceFunc)
       return mlir::failure();
@@ -1394,11 +1394,11 @@ public:
       mlir::OpBuilder::InsertionGuard g(rewriter);
       rewriter.setInsertionPoint(launchOp);
       auto loc = launchOp->getLoc();
-      mlir::Value size = launchOp.blockSizeX();
+      mlir::Value size = launchOp.getBlockSizeX();
       size = rewriter.create<mlir::arith::MulIOp>(loc, size,
-                                                  launchOp.blockSizeY());
+                                                  launchOp.getBlockSizeY());
       size = rewriter.create<mlir::arith::MulIOp>(loc, size,
-                                                  launchOp.blockSizeZ());
+                                                  launchOp.getBlockSizeZ());
 
       // TODO: Subgroup size is hardcoded for now.
       mlir::Value subgroupSize =
@@ -1421,7 +1421,7 @@ public:
                             loc, memrefType, /*asyncToken*/ mlir::Type(),
                             /*asyncDependencies*/ llvm::None, numSubgroups,
                             /*symbolOperands*/ llvm::None)
-                        .memref();
+                        .getMemref();
       rewriter.setInsertionPointAfter(launchOp);
       rewriter.create<mlir::gpu::DeallocOp>(loc, /*asyncToken*/ mlir::Type(),
                                             /*asyncDependencies*/ llvm::None,
@@ -1430,14 +1430,14 @@ public:
 
     mlir::Value subgroupId = [&]() {
       mlir::OpBuilder::InsertionGuard g(rewriter);
-      rewriter.setInsertionPointToStart(&launchOp.body().front());
+      rewriter.setInsertionPointToStart(&launchOp.getBody().front());
       return rewriter.create<mlir::gpu::SubgroupIdOp>(rewriter.getUnknownLoc());
     }();
 
     auto loc = op->getLoc();
-    auto reduceType = static_cast<gpu_runtime::AllReduceOperation>(*op.op());
+    auto reduceType = static_cast<gpu_runtime::AllReduceOperation>(*op.getOp());
     mlir::Value sgResult = rewriter.create<gpu_runtime::GPUSubGroupReduceOp>(
-        loc, op.value(), reduceType);
+        loc, op.getValue(), reduceType);
     rewriter.create<mlir::memref::StoreOp>(loc, sgResult, groupBuffer,
                                            subgroupId);
 
@@ -1446,7 +1446,7 @@ public:
 
     mlir::Value numSubgroups = [&]() {
       mlir::OpBuilder::InsertionGuard g(rewriter);
-      rewriter.setInsertionPointToStart(&launchOp.body().front());
+      rewriter.setInsertionPointToStart(&launchOp.getBody().front());
       return rewriter.create<mlir::gpu::NumSubgroupsOp>(
           rewriter.getUnknownLoc());
     }();
