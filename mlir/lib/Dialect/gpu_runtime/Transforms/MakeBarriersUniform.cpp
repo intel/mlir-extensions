@@ -88,8 +88,8 @@ struct ConvertBarrierOp
     auto ifLoc = ifOp->getLoc();
     auto cond = ifOp.getCondition();
 
-    auto thenBodyBuilder = [](mlir::OpBuilder & /*builder*/,
-                              mlir::Location /*loc*/) {
+    auto thenBodyBuilder = [&](mlir::OpBuilder & /*builder*/,
+                               mlir::Location /*loc*/) {
       // Nothing
     };
 
