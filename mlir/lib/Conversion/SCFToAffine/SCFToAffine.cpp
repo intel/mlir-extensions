@@ -16,7 +16,7 @@
 
 #include "mlir/Dialect/Affine/Analysis/AffineAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/PatternMatch.h"
@@ -75,11 +75,12 @@ public:
       if (auto load = dyn_cast<memref::LoadOp>(each)) {
         rewriter.setInsertionPointAfter(load);
         rewriter.replaceOpWithNewOp<AffineLoadOp>(load, load.getMemRef(),
-                                                  load.indices());
+                                                  load.getIndices());
       } else if (auto store = dyn_cast<memref::StoreOp>(each)) {
         rewriter.setInsertionPointAfter(store);
         rewriter.replaceOpWithNewOp<AffineStoreOp>(
-            store, store.getValueToStore(), store.getMemRef(), store.indices());
+            store, store.getValueToStore(), store.getMemRef(),
+            store.getIndices());
       }
     }
 

@@ -14,7 +14,7 @@
 
 #include "imex/Transforms/index_type_propagation.hpp"
 
-#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/IR/PatternMatch.h>
 
 static bool isIndexCompatible(mlir::Type lhsType, mlir::Type rhsType) {

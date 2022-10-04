@@ -34,7 +34,6 @@ def GpuRuntime_Dialect : Dialect {
   let hasConstantMaterializer = 1;
   let useDefaultAttributePrinterParser = 1;
   let useDefaultTypePrinterParser = 1;
-  let emitAccessorPrefix = kEmitAccessorPrefix_Raw;
 }
 
 class GpuRuntime_Attr<string attrName, string attrMnemonic, list<Trait> traits = []>
@@ -123,7 +122,7 @@ def LaunchGpuKernelOp
                      GpuRuntime_OpaqueType:$kernel,
                      Index:$gridSizeX, Index:$gridSizeY, Index:$gridSizeZ,
                      Index:$blockSizeX, Index:$blockSizeY, Index:$blockSizeZ,
-                     Variadic<AnyType>:$operands);
+                     Variadic<AnyType>:$kernelOperands);
   let results = (outs Optional<GPU_AsyncToken> : $asyncToken);
 
   let skipDefaultBuilders = 1;
@@ -149,7 +148,7 @@ def GPUAllocOp
                  Optional<GPU_AsyncToken>:$asyncToken);
 
   let extraClassDeclaration = [{
-    ::mlir::MemRefType getType() { return memref().getType().cast<::mlir::MemRefType>(); }
+    ::mlir::MemRefType getType() { return getMemref().getType().cast<::mlir::MemRefType>(); }
   }];
 }
 

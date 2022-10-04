@@ -14,7 +14,7 @@
 
 #include "imex/Transforms/if_rewrites.hpp"
 
-#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
 
 mlir::LogicalResult

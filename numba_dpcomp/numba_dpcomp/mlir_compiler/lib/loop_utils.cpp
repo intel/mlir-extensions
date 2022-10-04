@@ -14,7 +14,7 @@
 
 #include "loop_utils.hpp"
 
-#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/IR/PatternMatch.h>
 
 #include "imex/Dialect/plier/dialect.hpp"

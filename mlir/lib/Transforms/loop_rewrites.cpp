@@ -15,7 +15,7 @@
 #include "imex/Transforms/loop_rewrites.hpp"
 #include "imex/Transforms/const_utils.hpp"
 
-#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
 
 namespace {

@@ -15,7 +15,7 @@
 #include "imex/Conversion/cfg_to_scf.hpp"
 #include "imex/Dialect/imex_util/dialect.hpp"
 
-#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/ControlFlow/IR/ControlFlowOps.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>

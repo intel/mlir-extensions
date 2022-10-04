@@ -22,7 +22,7 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
-#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/Math/IR/Math.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
@@ -64,19 +64,19 @@ struct SubviewLoadPropagate
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::LoadOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto src = op.memref().getDefiningOp<mlir::memref::SubViewOp>();
+    auto src = op.getMemref().getDefiningOp<mlir::memref::SubViewOp>();
     if (!src)
       return mlir::failure();
 
-    if (!isSameRank(src.source().getType(), src.getType()))
+    if (!isSameRank(src.getSource().getType(), src.getType()))
       return mlir::failure();
 
     if (!isMixedValuesEqual(src.getMixedOffsets(), 0) ||
         !isMixedValuesEqual(src.getMixedStrides(), 1))
       return mlir::failure();
 
-    rewriter.replaceOpWithNewOp<mlir::memref::LoadOp>(op, src.source(),
-                                                      op.indices());
+    rewriter.replaceOpWithNewOp<mlir::memref::LoadOp>(op, src.getSource(),
+                                                      op.getIndices());
     return mlir::success();
   }
 };
@@ -88,11 +88,11 @@ struct SubviewStorePropagate
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::StoreOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto src = op.memref().getDefiningOp<mlir::memref::SubViewOp>();
+    auto src = op.getMemref().getDefiningOp<mlir::memref::SubViewOp>();
     if (!src)
       return mlir::failure();
 
-    if (!isSameRank(src.source().getType(), src.getType()))
+    if (!isSameRank(src.getSource().getType(), src.getType()))
       return mlir::failure();
 
     if (!isMixedValuesEqual(src.getMixedOffsets(), 0) ||
@@ -100,7 +100,7 @@ struct SubviewStorePropagate
       return mlir::failure();
 
     rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(
-        op, op.value(), src.source(), op.indices());
+        op, op.getValue(), src.getSource(), op.getIndices());
     return mlir::success();
   }
 };

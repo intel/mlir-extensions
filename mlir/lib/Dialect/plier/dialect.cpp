@@ -22,7 +22,7 @@
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Transforms/InliningUtils.h>
 
-#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Bufferization/IR/Bufferization.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/GPU/IR/GPUDialect.h>

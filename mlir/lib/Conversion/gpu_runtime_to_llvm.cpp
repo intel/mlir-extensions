@@ -275,7 +275,8 @@ private:
                   gpu_runtime::DestroyGpuStreamOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    auto res = streamDestroyCallBuilder.create(loc, rewriter, adaptor.source());
+    auto res =
+        streamDestroyCallBuilder.create(loc, rewriter, adaptor.getSource());
     rewriter.replaceOp(op, res.getResults());
     return mlir::success();
   }
@@ -311,7 +312,7 @@ private:
     if (!mod)
       return mlir::failure();
 
-    auto gpuMod = mod.lookupSymbol<mlir::gpu::GPUModuleOp>(op.module());
+    auto gpuMod = mod.lookupSymbol<mlir::gpu::GPUModuleOp>(op.getModule());
     if (!gpuMod)
       return mlir::failure();
 
@@ -331,7 +332,7 @@ private:
         mlir::IntegerAttr::get(llvmIndexType,
                                static_cast<int64_t>(blob.size())));
     auto res = moduleLoadCallBuilder.create(loc, rewriter,
-                                            {adaptor.stream(), data, size});
+                                            {adaptor.getStream(), data, size});
     rewriter.replaceOp(op, res.getResults());
     return mlir::success();
   }
@@ -350,7 +351,8 @@ private:
                   gpu_runtime::DestroyGpuModuleOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    auto res = moduleDestroyCallBuilder.create(loc, rewriter, adaptor.source());
+    auto res =
+        moduleDestroyCallBuilder.create(loc, rewriter, adaptor.getSource());
     rewriter.replaceOp(op, res.getResults());
     return mlir::success();
   }
@@ -373,14 +375,14 @@ private:
       return mlir::failure();
 
     auto loc = op.getLoc();
-    llvm::SmallString<64> name = op.kernel().getLeafReference().getValue();
+    llvm::SmallString<64> name = op.getKernel().getLeafReference().getValue();
 
     auto varName = getUniqueLLVMGlobalName(mod, "kernel_name");
     name.push_back('\0');
     auto data = mlir::LLVM::createGlobalString(loc, rewriter, varName, name,
                                                mlir::LLVM::Linkage::Internal);
     auto res =
-        kernelGetCallBuilder.create(loc, rewriter, {adaptor.module(), data});
+        kernelGetCallBuilder.create(loc, rewriter, {adaptor.getModule(), data});
     rewriter.replaceOp(op, res.getResults());
     return mlir::success();
   }
@@ -399,7 +401,8 @@ private:
                   gpu_runtime::DestroyGpuKernelOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    auto res = kernelDestroyCallBuilder.create(loc, rewriter, adaptor.source());
+    auto res =
+        kernelDestroyCallBuilder.create(loc, rewriter, adaptor.getSource());
     rewriter.replaceOp(op, res.getResults());
     return mlir::success();
   }
@@ -419,17 +422,17 @@ private:
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto depsArrayPtr =
-        createDepsArray(rewriter, loc, op, adaptor.asyncDependencies());
+        createDepsArray(rewriter, loc, op, adaptor.getAsyncDependencies());
 
     imex::AllocaInsertionPoint allocaHelper(op);
-    auto kernelParams = adaptor.operands();
+    auto kernelParams = adaptor.getKernelOperands();
     auto paramsCount = static_cast<unsigned>(kernelParams.size());
     auto paramsArrayType =
         mlir::LLVM::LLVMArrayType::get(llvmRangeType, paramsCount + 1);
     auto paramsArrayPtrType = mlir::LLVM::LLVMPointerType::get(paramsArrayType);
 
     auto getKernelParamType = [&](unsigned i) -> mlir::Type {
-      if (op.operands()[i].getType().isa<mlir::MemRefType>()) {
+      if (op.getKernelOperands()[i].getType().isa<mlir::MemRefType>()) {
         mlir::MemRefDescriptor desc(kernelParams[i]);
         return desc.getElementPtrType();
       }
@@ -464,7 +467,8 @@ private:
 
     auto getKernelParam =
         [&](unsigned i) -> std::pair<mlir::Value, mlir::Value> {
-      auto memrefType = op.operands()[i].getType().dyn_cast<mlir::MemRefType>();
+      auto memrefType =
+          op.getKernelOperands()[i].getType().dyn_cast<mlir::MemRefType>();
       auto paramType = paramsStorage[i].getType();
       if (memrefType) {
         mlir::MemRefDescriptor desc(kernelParams[i]);
@@ -533,14 +537,14 @@ private:
         loc, llvmRangePointerType, paramsArrayPtr);
     mlir::Value params[] = {
         // clang-format off
-        adaptor.stream(),
-        adaptor.kernel(),
-        adaptor.gridSizeX(),
-        adaptor.gridSizeY(),
-        adaptor.gridSizeZ(),
-        adaptor.blockSizeX(),
-        adaptor.blockSizeY(),
-        adaptor.blockSizeZ(),
+        adaptor.getStream(),
+        adaptor.getKernel(),
+        adaptor.getGridSizeX(),
+        adaptor.getGridSizeY(),
+        adaptor.getGridSizeZ(),
+        adaptor.getBlockSizeX(),
+        adaptor.getBlockSizeY(),
+        adaptor.getBlockSizeZ(),
         depsArrayPtr,
         paramsArrayVoidPtr,
         eventIndexVar,
@@ -569,7 +573,7 @@ private:
   matchAndRewrite(gpu_runtime::GPUAllocOp op,
                   gpu_runtime::GPUAllocOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    if (!op.symbolOperands().empty())
+    if (!op.getSymbolOperands().empty())
       return mlir::failure();
 
     auto memrefType = op.getType();
@@ -583,8 +587,8 @@ private:
     mlir::SmallVector<mlir::Value, 4> shape;
     mlir::SmallVector<mlir::Value, 4> strides;
     mlir::Value sizeBytes;
-    getMemRefDescriptorSizes(loc, memrefType, adaptor.dynamicSizes(), rewriter,
-                             shape, strides, sizeBytes);
+    getMemRefDescriptorSizes(loc, memrefType, adaptor.getDynamicSizes(),
+                             rewriter, shape, strides, sizeBytes);
 
     assert(shape.size() == strides.size());
 
@@ -598,7 +602,7 @@ private:
         rewriter.getI32IntegerAttr(static_cast<int>(shared)));
 
     auto depsArrayPtr =
-        createDepsArray(rewriter, loc, op, adaptor.asyncDependencies());
+        createDepsArray(rewriter, loc, op, adaptor.getAsyncDependencies());
 
     auto eventIndexVar = createEventIndexVar(rewriter, loc, op);
 
@@ -612,7 +616,7 @@ private:
 
     mlir::Value params[] = {
         // clang-format off
-        adaptor.stream(),
+        adaptor.getStream(),
         sizeBytes,
         alignmentVar,
         sharedVar,
@@ -677,10 +681,10 @@ private:
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     mlir::Value pointer =
-        mlir::MemRefDescriptor(adaptor.memref()).allocatedPtr(rewriter, loc);
+        mlir::MemRefDescriptor(adaptor.getMemref()).allocatedPtr(rewriter, loc);
     auto casted =
         rewriter.create<mlir::LLVM::BitcastOp>(loc, llvmPointerType, pointer);
-    mlir::Value params[] = {adaptor.stream(), casted};
+    mlir::Value params[] = {adaptor.getStream(), casted};
     auto res = deallocCallBuilder.create(loc, rewriter, params);
     rewriter.replaceOp(op, res.getResults());
     return mlir::success();
@@ -726,7 +730,7 @@ private:
         rewriter.create<mlir::LLVM::UndefOp>(loc, sizesType);
     for (auto i : llvm::seq(0u, numDims)) {
       auto gridSize = rewriter.create<mlir::LLVM::TruncOp>(
-          loc, llvmInt32Type, adaptor.gridSize()[i]);
+          loc, llvmInt32Type, adaptor.getGridSize()[i]);
       gridArray = rewriter.create<mlir::LLVM::InsertValueOp>(loc, gridArray,
                                                              gridSize, i);
     }
@@ -738,8 +742,8 @@ private:
 
     mlir::Value params[] = {
         // clang-format off
-        adaptor.stream(),
-        adaptor.kernel(),
+        adaptor.getStream(),
+        adaptor.getKernel(),
         gridArrayPtr,
         blockArrayPtr,
         numDimsVal,

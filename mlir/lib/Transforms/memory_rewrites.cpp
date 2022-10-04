@@ -29,10 +29,10 @@ struct Meminfo {
 static llvm::Optional<Meminfo> getMeminfo(mlir::Operation *op) {
   assert(nullptr != op);
   if (auto load = mlir::dyn_cast<mlir::memref::LoadOp>(op))
-    return Meminfo{load.memref(), load.indices()};
+    return Meminfo{load.getMemref(), load.getIndices()};
 
   if (auto store = mlir::dyn_cast<mlir::memref::StoreOp>(op))
-    return Meminfo{store.memref(), store.indices()};
+    return Meminfo{store.getMemref(), store.getIndices()};
 
   return {};
 }
@@ -74,7 +74,7 @@ static mlir::LogicalResult foldLoads(imex::MemorySSAAnalysis &memSSAAnalysis) {
       assert(nullptr != op1);
       assert(nullptr != op2);
       if (MustAlias()(op1, op2)) {
-        auto val = mlir::cast<mlir::memref::StoreOp>(op2).value();
+        auto val = mlir::cast<mlir::memref::StoreOp>(op2).getValue();
         op1->replaceAllUsesWith(mlir::ValueRange(val));
         op1->erase();
         memSSA.eraseNode(&node);

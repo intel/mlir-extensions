@@ -17,7 +17,7 @@
 #include "imex/Dialect/imex_util/dialect.hpp"
 #include "imex/Transforms/rewrite_wrapper.hpp"
 
-#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/Math/IR/Math.h>
 #include <mlir/IR/PatternMatch.h>
@@ -148,7 +148,7 @@ struct UpliftMathPass
     : public imex::RewriteWrapperPass<
           UpliftMathPass, void,
           imex::DependentDialectsList<mlir::func::FuncDialect,
-                                      mlir::arith::ArithmeticDialect,
+                                      mlir::arith::ArithDialect,
                                       mlir::math::MathDialect>,
           UpliftMathCalls, UpliftFabsCalls, UpliftFma> {};
 } // namespace

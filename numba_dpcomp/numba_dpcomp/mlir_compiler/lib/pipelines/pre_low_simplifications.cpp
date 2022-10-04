@@ -22,7 +22,7 @@
 #include "imex/Transforms/type_conversion.hpp"
 #include "imex/compiler/pipeline_registry.hpp"
 
-#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/Pass/PassManager.h>

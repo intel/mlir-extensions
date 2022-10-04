@@ -15,7 +15,7 @@
 #include "mlir/Conversion/LLVMCommon/LoweringOptions.h"
 #include "mlir/Conversion/MemRefToLLVM/MemRefToLLVM.h"
 #include "mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h"
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/GPU/Transforms/Passes.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -39,14 +39,15 @@
 
 using namespace mlir;
 
-static LogicalResult runMLIRPasses(ModuleOp module) {
+static LogicalResult runMLIRPasses(mlir::Operation *op) {
+  auto module = mlir::cast<mlir::ModuleOp>(op);
   PassManager passManager(module.getContext());
   applyPassManagerCLOptions(passManager);
 
   passManager.addPass(arith::createConstantBufferizePass());
   passManager.addNestedPass<mlir::func::FuncOp>(createSCFBufferizePass());
   passManager.addNestedPass<mlir::func::FuncOp>(
-      createLinalgInitTensorToAllocTensorPass());
+      createEmptyTensorToAllocTensorPass());
   passManager.addNestedPass<mlir::func::FuncOp>(createLinalgBufferizePass());
   passManager.addNestedPass<mlir::func::FuncOp>(
       bufferization::createBufferizationBufferizePass());
@@ -93,7 +94,7 @@ static LogicalResult runMLIRPasses(ModuleOp module) {
   passManager.addPass(gpu_runtime::createGPUToLLVMPass());
   passManager.addPass(
       imex::createUtilToLLVMPass([&](MLIRContext &) { return llvmOptions; }));
-  passManager.addPass(createMemRefToLLVMPass());
+  passManager.addPass(createMemRefToLLVMConversionPass());
   passManager.addPass(createReconcileUnrealizedCastsPass());
 
   return passManager.run(module);
@@ -111,7 +112,7 @@ int main(int argc, char **argv) {
   jitRunnerConfig.mlirTransformer = runMLIRPasses;
 
   mlir::DialectRegistry registry;
-  registry.insert<mlir::arith::ArithmeticDialect, mlir::LLVM::LLVMDialect,
+  registry.insert<mlir::arith::ArithDialect, mlir::LLVM::LLVMDialect,
                   mlir::gpu::GPUDialect, mlir::spirv::SPIRVDialect,
                   mlir::func::FuncDialect, mlir::memref::MemRefDialect,
                   mlir::linalg::LinalgDialect, mlir::tensor::TensorDialect>();

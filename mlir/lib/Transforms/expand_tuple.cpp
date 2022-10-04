@@ -17,7 +17,7 @@
 #include "imex/Dialect/imex_util/dialect.hpp"
 #include "imex/Transforms/type_conversion.hpp"
 
-#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Transforms/DialectConversion.h>
 #include <mlir/Transforms/Passes.h>

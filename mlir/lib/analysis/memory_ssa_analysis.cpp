@@ -26,10 +26,10 @@ struct Meminfo {
 static llvm::Optional<Meminfo> getMeminfo(mlir::Operation *op) {
   assert(nullptr != op);
   if (auto load = mlir::dyn_cast<mlir::memref::LoadOp>(op))
-    return Meminfo{load.memref(), load.indices()};
+    return Meminfo{load.getMemref(), load.getIndices()};
 
   if (auto store = mlir::dyn_cast<mlir::memref::StoreOp>(op))
-    return Meminfo{store.memref(), store.indices()};
+    return Meminfo{store.getMemref(), store.getIndices()};
 
   return {};
 }

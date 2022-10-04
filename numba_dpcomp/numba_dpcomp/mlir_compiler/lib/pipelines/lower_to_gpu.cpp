@@ -21,7 +21,7 @@
 #include <mlir/Conversion/LLVMCommon/TypeConverter.h>
 #include <mlir/Conversion/SCFToGPU/SCFToGPUPass.h>
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
-#include <mlir/Dialect/Arithmetic/Transforms/Passes.h>
+#include <mlir/Dialect/Arith/Transforms/Passes.h>
 #include <mlir/Dialect/ControlFlow/IR/ControlFlowOps.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/GPU/Transforms/Passes.h>
@@ -262,7 +262,7 @@ struct KernelMemrefOpsMovementPass
 
     mlir::DominanceInfo dom(func);
     body.walk([&](mlir::gpu::LaunchOp launch) {
-      launch.body().walk([&](mlir::Operation *op) {
+      launch.getBody().walk([&](mlir::Operation *op) {
         if (!mlir::isa<mlir::memref::DimOp,
                        imex::util::ExtractMemrefMetadataOp>(op))
           return;
@@ -294,7 +294,7 @@ struct AssumeGpuIdRangePass
 
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<mlir::arith::ArithmeticDialect>();
+    registry.insert<mlir::arith::ArithDialect>();
     registry.insert<mlir::cf::ControlFlowDialect>();
     registry.insert<mlir::gpu::GPUDialect>();
   }
@@ -360,18 +360,20 @@ struct GPULowerDefaultLocalSize
     llvm::StringRef funcName("get_default_local_size");
     mlir::OpBuilder builder(&getContext());
     func.walk([&](mlir::gpu::LaunchFuncOp op) {
-      if (auto call =
-              skipCast(op.blockSizeX()).getDefiningOp<mlir::func::CallOp>()) {
+      if (auto call = skipCast(op.getBlockSizeX())
+                          .getDefiningOp<mlir::func::CallOp>()) {
         if (call.getCallee() != funcName || call.operands().size() != 3)
           return;
 
-        assert(skipCast(op.blockSizeY()).getDefiningOp<mlir::func::CallOp>() ==
-               call);
-        assert(skipCast(op.blockSizeZ()).getDefiningOp<mlir::func::CallOp>() ==
-               call);
+        assert(
+            skipCast(op.getBlockSizeY()).getDefiningOp<mlir::func::CallOp>() ==
+            call);
+        assert(
+            skipCast(op.getBlockSizeZ()).getDefiningOp<mlir::func::CallOp>() ==
+            call);
 
         auto loc = call.getLoc();
-        auto kernel = op.kernel();
+        auto kernel = op.getKernel();
         builder.setInsertionPoint(call);
 
         auto operands = call.operands();
@@ -416,7 +418,7 @@ struct FlattenScfIf : public mlir::OpRewritePattern<mlir::scf::IfOp> {
       return mlir::failure();
 
     auto arithDialect =
-        getContext()->getOrLoadDialect<mlir::arith::ArithmeticDialect>();
+        getContext()->getOrLoadDialect<mlir::arith::ArithDialect>();
     auto canFlatten = [&](mlir::Operation *op) {
       return op->getDialect() == arithDialect;
     };
@@ -1334,7 +1336,7 @@ public:
                                            nullptr, storageClass);
 
     auto global = [&]() -> mlir::StringRef {
-      auto *block = &mod.body().front();
+      auto *block = mod.getBody();
       llvm::SmallString<64> name;
       for (unsigned i = 0;; ++i) {
         if (i == 0) {
@@ -1356,7 +1358,7 @@ public:
           /*initial_value=*/nullptr,
           /*constant=*/false,
           /*alignment=*/nullptr);
-      return global.sym_name();
+      return global.getSymName();
     }();
 
     auto loc = op->getLoc();
@@ -1411,9 +1413,9 @@ struct SinkGpuDims : public mlir::OpRewritePattern<mlir::gpu::LaunchOp> {
   mlir::LogicalResult
   matchAndRewrite(mlir::gpu::LaunchOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    const mlir::Value dimArgs[] = {op.gridSizeX(),  op.gridSizeY(),
-                                   op.gridSizeZ(),  op.blockSizeX(),
-                                   op.blockSizeY(), op.blockSizeZ()};
+    const mlir::Value dimArgs[] = {op.getGridSizeX(),  op.getGridSizeY(),
+                                   op.getGridSizeZ(),  op.getBlockSizeX(),
+                                   op.getBlockSizeY(), op.getBlockSizeZ()};
     llvm::SmallVector<std::pair<mlir::OpOperand *, unsigned>> uses;
     for (auto it : llvm::enumerate(dimArgs)) {
       auto i = static_cast<unsigned>(it.index());
@@ -1436,7 +1438,7 @@ struct SinkGpuDims : public mlir::OpRewritePattern<mlir::gpu::LaunchOp> {
     std::array<mlir::Value, 6> dims = {}; // TODO: static vector
 
     auto loc = op->getLoc();
-    rewriter.setInsertionPointToStart(&op.body().front());
+    rewriter.setInsertionPointToStart(&op.getBody().front());
     auto getDim = [&](unsigned i, mlir::Type type) -> mlir::Value {
       assert(i < dims.size());
       auto dim = dims[i];
@@ -1551,7 +1553,7 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
 
   auto &gpuFuncPM =
       pm.nest<mlir::gpu::GPUModuleOp>().nest<mlir::gpu::GPUFuncOp>();
-  gpuFuncPM.addPass(mlir::arith::createArithmeticExpandOpsPass());
+  gpuFuncPM.addPass(mlir::arith::createArithExpandOpsPass());
   gpuFuncPM.addPass(std::make_unique<FlattenScfPass>());
   gpuFuncPM.addPass(std::make_unique<LowerGpuBuiltins3Pass>());
   commonOptPasses(gpuFuncPM);

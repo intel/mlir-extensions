@@ -21,7 +21,7 @@
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Transforms/InliningUtils.h>
 
-#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Bufferization/IR/Bufferization.h>
 #include <mlir/Dialect/GPU/IR/GPUDialect.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
@@ -197,13 +197,13 @@ void GPUSuggestBlockSizeOp::build(::mlir::OpBuilder &odsBuilder,
 }
 
 mlir::StringAttr GPUSuggestBlockSizeOp::getKernelModuleName() {
-  assert(kernelRef());
-  return kernelRef()->getRootReference();
+  assert(getKernelRef());
+  return getKernelRef()->getRootReference();
 }
 
 mlir::StringAttr GPUSuggestBlockSizeOp::getKernelName() {
-  assert(kernelRef());
-  return kernelRef()->getLeafReference();
+  assert(getKernelRef());
+  return getKernelRef()->getLeafReference();
 }
 
 mlir::StringRef getAllocSharedAttrName() { return "gpu.alloc_shared"; }
