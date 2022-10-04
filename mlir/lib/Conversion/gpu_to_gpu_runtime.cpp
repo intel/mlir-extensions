@@ -1066,6 +1066,31 @@ public:
   }
 };
 
+class ConvertStorageCast
+    : public mlir::OpConversionPattern<imex::util::SignCastOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::util::SignCastOp op,
+                  imex::util::SignCastOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto src = adaptor.getValue();
+    auto srcType = src.getType().dyn_cast<mlir::spirv::PointerType>();
+    if (!srcType)
+      return mlir::failure();
+
+    auto converter = getTypeConverter();
+    assert(converter);
+    auto dstType = converter->convertType(op.getType()).dyn_cast_or_null<mlir::spirv::PointerType>();
+    if (!dstType)
+      return mlir::failure();
+
+    auto loc = op->getLoc();
+    auto temp = rewriter.create<mlir::spirv::PtrCastToGenericOp>(loc, src);
+  }
+};
+
 // TODO: something better
 class ConvertFunc : public mlir::OpConversionPattern<mlir::func::FuncOp> {
 public:
