@@ -754,7 +754,7 @@ def test_barrier1(global_size, local_size):
 
 
 @require_gpu
-@pytest.mark.parametrize("blocksize", [1, 10, 64])
+@pytest.mark.parametrize("blocksize", [1, 10, 17, 64, 67, 101])
 def test_local_memory(blocksize):
     local_array = local.array
 
