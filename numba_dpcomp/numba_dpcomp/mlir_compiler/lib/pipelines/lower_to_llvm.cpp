@@ -14,7 +14,7 @@
 
 #include "pipelines/lower_to_llvm.hpp"
 
-#include <mlir/Conversion/ArithmeticToLLVM/ArithmeticToLLVM.h>
+#include <mlir/Conversion/ArithToLLVM/ArithToLLVM.h>
 #include <mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h>
 #include <mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h>
 #include <mlir/Conversion/LLVMCommon/ConversionTarget.h>
@@ -26,8 +26,8 @@
 #include <mlir/Conversion/MemRefToLLVM/AllocLikeConversion.h>
 #include <mlir/Conversion/MemRefToLLVM/MemRefToLLVM.h>
 #include <mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h>
-#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
-#include <mlir/Dialect/Arithmetic/Transforms/Passes.h>
+#include <mlir/Dialect/Arith/IR/Arith.h>
+#include <mlir/Dialect/Arith/Transforms/Passes.h>
 #include <mlir/Dialect/ControlFlow/IR/ControlFlowOps.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/LLVMIR/LLVMDialect.h>
@@ -818,7 +818,7 @@ struct AllocOpLowering : public mlir::AllocLikeOpLLVMLowering {
     auto allocOp = mlir::cast<mlir::memref::AllocOp>(op);
     auto memRefType = allocOp.getType();
     mlir::Value alignment;
-    if (auto alignmentAttr = allocOp.alignment()) {
+    if (auto alignmentAttr = allocOp.getAlignment()) {
       alignment = createIndexConstant(rewriter, loc, *alignmentAttr);
     } else if (!memRefType.getElementType().isSignlessIntOrIndexOrFloat()) {
       // In the case where no alignment is specified, we may want to override
@@ -909,7 +909,7 @@ struct DeallocOpLowering
     assert(mod);
     auto freeFunc = getDecrefFunc(rewriter, mod);
 
-    mlir::MemRefDescriptor memref(adaptor.memref());
+    mlir::MemRefDescriptor memref(adaptor.getMemref());
     mlir::Value casted = rewriter.create<mlir::LLVM::BitcastOp>(
         op.getLoc(), getVoidPtrType(),
         memref.allocatedPtr(rewriter, op.getLoc()));
@@ -1400,7 +1400,7 @@ struct LLVMLoweringPass
     populateMemRefToLLVMConversionPatterns(typeConverter, patterns);
     populateLinalgToLLVMConversionPatterns(typeConverter, patterns);
     cf::populateControlFlowToLLVMConversionPatterns(typeConverter, patterns);
-    arith::populateArithmeticToLLVMConversionPatterns(typeConverter, patterns);
+    arith::populateArithToLLVMConversionPatterns(typeConverter, patterns);
 
     patterns.insert<AllocOpLowering, DeallocOpLowering, LowerRetainOp>(
         typeConverter);
@@ -1423,7 +1423,7 @@ static void populateLowerToLlvmPipeline(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createConvertSCFToCFPass());
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addNestedPass<mlir::func::FuncOp>(
-      mlir::arith::createArithmeticExpandOpsPass());
+      mlir::arith::createArithExpandOpsPass());
   pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<PreLLVMLowering>());
   pm.addNestedPass<mlir::func::FuncOp>(mlir::createConvertMathToLLVMPass());
   pm.addPass(mlir::createConvertMathToLibmPass());

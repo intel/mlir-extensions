@@ -15,7 +15,7 @@
 #include "imex/Transforms/call_lowering.hpp"
 #include "imex/Dialect/imex_util/dialect.hpp"
 
-#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Arith/IR/Arith.h>
 
 static mlir::Value skipCasts(mlir::Value val) {
   auto getArg = [](mlir::Value arg) -> mlir::Value {

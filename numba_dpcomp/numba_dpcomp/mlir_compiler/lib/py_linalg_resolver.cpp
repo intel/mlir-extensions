@@ -17,7 +17,7 @@
 #include <pybind11/pybind11.h>
 
 #include <mlir/AsmParser/AsmParser.h>
-#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Bufferization/IR/Bufferization.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
@@ -47,6 +47,11 @@ struct PyBuilderContext {
 };
 
 namespace {
+template <typename C>
+static auto getTempShape(const C& container) {
+  return llvm::SmallVector<mlir::OpFoldResult>(std::begin(container), std::end(container));
+}
+
 static std::string toStr(mlir::Value val) {
   std::string ret;
   llvm::raw_string_ostream ss(ret);
@@ -592,12 +597,12 @@ static mlir::Value expandDim(mlir::OpBuilder &builder, mlir::Location loc,
   auto one = builder.create<mlir::arith::ConstantIndexOp>(loc, 1);
   mlir::Value cond = builder.create<mlir::arith::CmpIOp>(
       loc, mlir::arith::CmpIPredicate::eq, one, dimVal);
-  llvm::SmallVector<mlir::Value> newShape(numDims);
+  llvm::SmallVector<mlir::OpFoldResult> newShape(numDims);
   for (unsigned i = 0; i < numDims; ++i) {
     if (i == dim) {
       newShape[i] = targetShape[i];
     } else {
-      newShape[i] = builder.create<mlir::tensor::DimOp>(loc, src, i);
+      newShape[i] = builder.create<mlir::tensor::DimOp>(loc, src, i).getResult();
     }
   }
   auto trueBody = [&](mlir::OpBuilder &builder, mlir::Location loc) {
@@ -609,7 +614,7 @@ static mlir::Value expandDim(mlir::OpBuilder &builder, mlir::Location loc,
     //        src).getResult();
     auto casted = src; // TODO
     auto init = builder
-                    .create<mlir::linalg::InitTensorOp>(
+                    .create<mlir::tensor::EmptyOp>(
                         loc, newShape, srcType.getElementType())
                     .getResult();
     llvm::SmallVector<mlir::AffineExpr> exprs(numDims);
@@ -765,8 +770,8 @@ static py::object broadcastImpl(py::capsule context, py::tuple args,
         auto srcNumDims = static_cast<unsigned>(srcType.getRank());
         auto numDims = static_cast<unsigned>(signlessTensorType.getRank());
         auto init = builder
-                        .create<mlir::linalg::InitTensorOp>(
-                            loc, shapeVals, signlessTensorType.getElementType())
+                        .create<mlir::tensor::EmptyOp>(
+                            loc, getTempShape(shapeVals), signlessTensorType.getElementType())
                         .getResult();
         mlir::AffineMap maps[] = {
             mlir::AffineMap::getMinorIdentityMap(numDims, srcNumDims,
@@ -794,8 +799,8 @@ static py::object broadcastImpl(py::capsule context, py::tuple args,
         val = builder.create<mlir::tensor::FromElementsOp>(loc, val);
         auto numDims = static_cast<unsigned>(signlessTensorType.getRank());
         auto init = builder
-                        .create<mlir::linalg::InitTensorOp>(
-                            loc, shapeVals, signlessTensorType.getElementType())
+                        .create<mlir::tensor::EmptyOp>(
+                            loc, getTempShape(shapeVals), signlessTensorType.getElementType())
                         .getResult();
         mlir::AffineMap maps[] = {
             mlir::AffineMap::get(
@@ -845,7 +850,7 @@ static py::object initTensorImpl(py::capsule context, py::iterable shape,
   }
 
   if (initVal.is_none()) {
-    init = builder.create<mlir::linalg::InitTensorOp>(loc, shapeVal,
+    init = builder.create<mlir::tensor::EmptyOp>(loc, getTempShape(shapeVal),
                                                       signlessElemType);
   } else {
     auto val =

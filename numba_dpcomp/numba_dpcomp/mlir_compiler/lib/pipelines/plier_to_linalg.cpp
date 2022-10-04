@@ -18,8 +18,8 @@
 #include <mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h>
 #include <mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h>
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
-#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
-#include <mlir/Dialect/Arithmetic/Transforms/Passes.h>
+#include <mlir/Dialect/Arith/IR/Arith.h>
+#include <mlir/Dialect/Arith/Transforms/Passes.h>
 #include <mlir/Dialect/Bufferization/IR/Bufferization.h>
 #include <mlir/Dialect/Bufferization/Transforms/BufferViewFlowAnalysis.h>
 #include <mlir/Dialect/Bufferization/Transforms/Bufferize.h>
@@ -1115,10 +1115,10 @@ struct CleanupLoads : public mlir::OpRewritePattern<mlir::memref::LoadOp> {
     if (!store)
       return mlir::failure();
 
-    if (store.memref() != op.memref() || store.indices() != op.indices())
+    if (store.getMemref() != op.getMemref() || store.getIndices() != op.getIndices())
       return mlir::failure();
 
-    rewriter.replaceOp(op, store.value());
+    rewriter.replaceOp(op, store.getValue());
     return mlir::success();
   }
 };
@@ -1130,12 +1130,12 @@ struct ReshapeChangeLayout
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::ReshapeOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto cl = op.source().getDefiningOp<imex::util::ChangeLayoutOp>();
+    auto cl = op.getSource().getDefiningOp<imex::util::ChangeLayoutOp>();
     if (!cl)
       return mlir::failure();
 
     auto src = cl.getSource();
-    auto dstType = op.source().getType().cast<mlir::MemRefType>();
+    auto dstType = op.getSource().getType().cast<mlir::MemRefType>();
 
     auto rank = static_cast<unsigned>(dstType.getRank());
     if (rank == 0)
@@ -1229,7 +1229,7 @@ struct ReshapeChangeLayout
         rewriter.create<mlir::scf::IfOp>(loc, dstType, cmp, trueBody, falseBody)
             .getResult(0);
     rewriter.replaceOpWithNewOp<mlir::memref::ReshapeOp>(op, op.getType(), res,
-                                                         op.shape());
+                                                         op.getShape());
     return mlir::success();
   }
 };
@@ -1446,7 +1446,7 @@ struct ChangeLayoutReturn
       if (!cast)
         continue;
 
-      auto src = cast.source();
+      auto src = cast.getSource();
       auto srcType = src.getType().cast<mlir::MemRefType>();
       assert(srcType.getElementType() == retType.getElementType());
 
@@ -1650,11 +1650,11 @@ static mlir::Value convertTensorElements(mlir::OpBuilder &builder,
     src = builder.create<mlir::bufferization::ToTensorOp>(loc, src);
 
   auto rank = static_cast<unsigned>(srcType.getRank());
-  llvm::SmallVector<mlir::Value> shape(rank);
+  llvm::SmallVector<mlir::OpFoldResult> shape(rank);
   for (auto i : llvm::seq(0u, rank))
-    shape[i] = builder.create<mlir::tensor::DimOp>(loc, src, i);
+    shape[i] = builder.create<mlir::tensor::DimOp>(loc, src, i).getResult();
 
-  mlir::Value init = builder.create<mlir::linalg::InitTensorOp>(
+  mlir::Value init = builder.create<mlir::tensor::EmptyOp>(
       loc, shape, dstType.getElementType());
 
   auto affineMap =
@@ -1799,7 +1799,7 @@ struct SimplifyExpandDims
                      [&](auto attr) { return attr != parallelAttr; }))
       return mlir::failure();
 
-    auto maps = op.indexing_maps();
+    auto maps = op.getIndexingMaps();
     assert(maps.size() == 2);
     auto outMap = maps[1].cast<mlir::AffineMapAttr>().getValue();
     if (!outMap.isIdentity())
@@ -1842,7 +1842,7 @@ struct SimplifyExpandDims
           maps[1]};
       auto newMapsAttr = mlir::ArrayAttr::get(context, newMaps);
       rewriter.updateRootInPlace(op,
-                                 [&]() { op.indexing_mapsAttr(newMapsAttr); });
+                                 [&]() { op.setIndexingMapsAttr(newMapsAttr); });
     }
 
     return mlir::success(changed);
@@ -1937,9 +1937,8 @@ struct GenerateToFill
     auto resType = op.getType().cast<mlir::ShapedType>();
 
     auto loc = op->getLoc();
-    mlir::Value init = rewriter.create<mlir::linalg::InitTensorOp>(
-        loc, op.getDynamicExtents(), resType.getShape(),
-        resType.getElementType());
+    mlir::Value init = rewriter.create<mlir::tensor::EmptyOp>(
+        loc, resType.getShape(), resType.getElementType(), op.getDynamicExtents());
 
     rewriter.replaceOpWithNewOp<mlir::linalg::FillOp>(op, term.getValue(),
                                                       init);
@@ -1967,12 +1966,12 @@ struct SliceOfGeneric : public mlir::OpRewritePattern<mlir::linalg::GenericOp> {
     if (!mlir::isa<mlir::tensor::ExtractSliceOp, mlir::tensor::ExtractOp>(user))
       return mlir::failure();
 
-    auto output = op.outputs().front();
+    auto output = op.getOutputs().front();
 
     auto resType = res.getType().cast<mlir::RankedTensorType>();
     auto resRank = static_cast<unsigned>(resType.getRank());
     auto maps = [&]() {
-      auto mapsList = op.indexing_maps().getAsValueRange<mlir::AffineMapAttr>();
+      auto mapsList = op.getIndexingMaps().getAsValueRange<mlir::AffineMapAttr>();
       return llvm::SmallVector<mlir::AffineMap>(mapsList.begin(),
                                                 mapsList.end());
     }();
@@ -2026,7 +2025,7 @@ struct SliceOfGeneric : public mlir::OpRewritePattern<mlir::linalg::GenericOp> {
       llvm_unreachable("Invalid op");
     }
 
-    auto oldInputs = op.inputs();
+    auto oldInputs = op.getInputs();
     llvm::SmallVector<mlir::Value, 4> newInputs(oldInputs.size());
 
     auto ctx = getContext();
@@ -2164,9 +2163,9 @@ struct SliceOfGeneric : public mlir::OpRewritePattern<mlir::linalg::GenericOp> {
 
     auto newOp = rewriter.create<mlir::linalg::GenericOp>(
         loc, newInit.getType(), newInputs, newInit, maps, newIters);
-    auto &newRegion = newOp.region();
+    auto &newRegion = newOp.getRegion();
 
-    rewriter.inlineRegionBefore(op.region(), newRegion, newRegion.end());
+    rewriter.inlineRegionBefore(op.getRegion(), newRegion, newRegion.end());
 
     mlir::Value result = newOp.getResult(0);
     if (extractElem)
@@ -2335,8 +2334,8 @@ struct OptimizeGlobalsConstsLoad
     }
     mlir::SymbolTable symbolTable(mod);
 
-    llvm::SmallVector<uint64_t> indices(op.indices().size());
-    for (auto it : llvm::enumerate(op.indices())) {
+    llvm::SmallVector<uint64_t> indices(op.getIndices().size());
+    for (auto it : llvm::enumerate(op.getIndices())) {
       auto constIndex =
           it.value().getDefiningOp<mlir::arith::ConstantIndexOp>();
       if (!constIndex)
@@ -2348,18 +2347,18 @@ struct OptimizeGlobalsConstsLoad
 
       indices[it.index()] = static_cast<uint64_t>(val);
     }
-    auto getGlobal = op.memref().getDefiningOp<mlir::memref::GetGlobalOp>();
+    auto getGlobal = op.getMemref().getDefiningOp<mlir::memref::GetGlobalOp>();
     if (!getGlobal)
       return mlir::failure();
 
-    auto sym = symbolTable.lookup<mlir::memref::GlobalOp>(getGlobal.name());
+    auto sym = symbolTable.lookup<mlir::memref::GlobalOp>(getGlobal.getName());
     if (!sym)
       return mlir::failure();
 
-    if (!sym.constant())
+    if (!sym.getConstant())
       return mlir::failure();
 
-    auto initAttr = sym.initial_value();
+    auto initAttr = sym.getInitialValue();
     if (!initAttr)
       return mlir::failure();
 
@@ -2473,9 +2472,9 @@ struct ConvertAlloc : public mlir::OpConversionPattern<Op> {
     if (!newResType)
       return mlir::failure();
 
-    rewriter.replaceOpWithNewOp<Op>(op, newResType, adaptor.dynamicSizes(),
-                                    adaptor.symbolOperands(),
-                                    adaptor.alignmentAttr());
+    rewriter.replaceOpWithNewOp<Op>(op, newResType, adaptor.getDynamicSizes(),
+                                    adaptor.getSymbolOperands(),
+                                    adaptor.getAlignmentAttr());
     return mlir::success();
   }
 };
@@ -2724,7 +2723,7 @@ struct FixDeallocPlacement
     auto blockIt = mlir::Block::iterator(op);
     mlir::Operation *newPos = op;
     ++blockIt;
-    auto memref = op.memref();
+    auto memref = op.getMemref();
     mlir::BufferViewFlowAnalysis analysis(
         op->getParentOfType<mlir::func::FuncOp>());
     auto aliases = analysis.resolve(memref);
@@ -2971,7 +2970,7 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
 
   pm.addPass(mlir::arith::createConstantBufferizePass());
   pm.addNestedPass<mlir::func::FuncOp>(
-      mlir::createLinalgInitTensorToAllocTensorPass());
+      mlir::createEmptyTensorToAllocTensorPass());
   pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<AdditionalBufferize>());
   pm.addNestedPass<mlir::func::FuncOp>(mlir::createSCFBufferizePass());
   pm.addNestedPass<mlir::func::FuncOp>(mlir::createLinalgBufferizePass());

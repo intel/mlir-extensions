@@ -81,7 +81,7 @@ def NTensor_Tensor : NTensor_Type<"NTensor", "ntensor", [
   let parameters = (ins
     ArrayRefParameter<"int64_t">:$shape,
     "::mlir::Type":$elementType,
-    DefaultValuedParameter<"::mlir::Attribute", "">:$environment
+    OptionalParameter<"::mlir::Attribute">:$environment
   );
 
   let builders = [

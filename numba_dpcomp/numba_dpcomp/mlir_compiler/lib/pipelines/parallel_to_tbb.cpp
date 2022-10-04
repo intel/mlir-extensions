@@ -14,7 +14,7 @@
 
 #include "pipelines/parallel_to_tbb.hpp"
 
-#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
@@ -229,7 +229,7 @@ struct ParallelToTbbPass
           ParallelToTbbPass, mlir::func::FuncOp,
           imex::DependentDialectsList<
               plier::PlierDialect, imex::util::ImexUtilDialect,
-              mlir::arith::ArithmeticDialect, mlir::scf::SCFDialect>,
+              mlir::arith::ArithDialect, mlir::scf::SCFDialect>,
           ParallelToTbb> {};
 
 static void populateParallelToTbbPipeline(mlir::OpPassManager &pm) {

@@ -24,7 +24,7 @@
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Transforms/InliningUtils.h>
 
-#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Bufferization/IR/Bufferization.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/GPU/IR/GPUDialect.h>
@@ -204,7 +204,7 @@ struct FillExtractSlice
     auto fillType = fill.result().getType().cast<mlir::ShapedType>();
 
     auto loc = op->getLoc();
-    mlir::Value init = rewriter.create<mlir::linalg::InitTensorOp>(
+    mlir::Value init = rewriter.create<mlir::tensor::EmptyOp>(
         loc, newSizes, fillType.getElementType());
 
     auto fillVal = fill.value();
@@ -221,7 +221,7 @@ struct SpirvInputCSE : public mlir::OpRewritePattern<mlir::spirv::LoadOp> {
   mlir::LogicalResult
   matchAndRewrite(mlir::spirv::LoadOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto ptr = op.ptr();
+    auto ptr = op.getPtr();
     if (ptr.getType().cast<mlir::spirv::PointerType>().getStorageClass() !=
         mlir::spirv::StorageClass::Input)
       return mlir::failure();
@@ -272,7 +272,7 @@ struct GenGlobalId : public mlir::OpRewritePattern<mlir::arith::AddIOp> {
       auto arg1 = getArg(op, rev);
       auto arg2 = getArg(op, !rev);
       if (auto tid = arg1.getDefiningOp<mlir::gpu::ThreadIdOp>()) {
-        dim = tid.dimension();
+        dim = tid.getDimension();
         other = arg2.getDefiningOp<mlir::arith::MulIOp>();
         break;
       }
@@ -285,7 +285,7 @@ struct GenGlobalId : public mlir::OpRewritePattern<mlir::arith::AddIOp> {
       auto arg1 = getArg(other, rev).getDefiningOp<mlir::gpu::BlockIdOp>();
       auto arg2 = getArg(other, !rev).getDefiningOp<mlir::gpu::BlockDimOp>();
       if (arg1 && arg2) {
-        if (arg1.dimension() != dim || arg2.dimension() != dim)
+        if (arg1.getDimension() != dim || arg2.getDimension() != dim)
           return mlir::failure();
 
         rewriter.replaceOpWithNewOp<mlir::gpu::GlobalIdOp>(op, dim);
@@ -303,7 +303,7 @@ struct ReshapeAlloca : public mlir::OpRewritePattern<mlir::memref::ReshapeOp> {
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::ReshapeOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto shapeOp = op.shape().getDefiningOp<mlir::memref::AllocOp>();
+    auto shapeOp = op.getShape().getDefiningOp<mlir::memref::AllocOp>();
     if (!shapeOp)
       return mlir::failure();
 
@@ -311,7 +311,7 @@ struct ReshapeAlloca : public mlir::OpRewritePattern<mlir::memref::ReshapeOp> {
       if (!mlir::isa<mlir::memref::StoreOp, mlir::memref::ReshapeOp>(user))
         return mlir::failure();
 
-    if (!shapeOp.dynamicSizes().empty() || !shapeOp.symbolOperands().empty())
+    if (!shapeOp.getDynamicSizes().empty() || !shapeOp.getSymbolOperands().empty())
       return mlir::failure();
 
     auto func = op->getParentOfType<mlir::func::FuncOp>();
@@ -325,7 +325,7 @@ struct ReshapeAlloca : public mlir::OpRewritePattern<mlir::memref::ReshapeOp> {
     }
 
     auto type = shapeOp.getType().cast<mlir::MemRefType>();
-    auto alignment = shapeOp.alignmentAttr().cast<mlir::IntegerAttr>();
+    auto alignment = shapeOp.getAlignmentAttr().cast<mlir::IntegerAttr>();
     rewriter.replaceOpWithNewOp<mlir::memref::AllocaOp>(shapeOp, type,
                                                         alignment);
     return mlir::success();
@@ -564,12 +564,12 @@ struct ChangeLayoutDim : public mlir::OpRewritePattern<mlir::memref::DimOp> {
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::DimOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto cl = op.source().getDefiningOp<imex::util::ChangeLayoutOp>();
+    auto cl = op.getSource().getDefiningOp<imex::util::ChangeLayoutOp>();
     if (!cl)
       return mlir::failure();
 
     rewriter.replaceOpWithNewOp<mlir::memref::DimOp>(op, cl.getSource(),
-                                                     op.index());
+                                                     op.getIndex());
     return mlir::success();
   }
 };
@@ -638,7 +638,7 @@ struct ChangeLayoutCast : public mlir::OpRewritePattern<mlir::memref::CastOp> {
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::CastOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto cl = op.source().getDefiningOp<imex::util::ChangeLayoutOp>();
+    auto cl = op.getSource().getDefiningOp<imex::util::ChangeLayoutOp>();
     if (!cl)
       return mlir::failure();
 
@@ -670,7 +670,7 @@ struct ChangeLayoutFromCast
     if (!cast)
       return mlir::failure();
 
-    auto src = cast.source();
+    auto src = cast.getSource();
     auto srcType = src.getType();
     auto dstType = op.getType();
     if (srcType == dstType) {
@@ -693,12 +693,12 @@ struct ChangeLayoutLoad : public mlir::OpRewritePattern<mlir::memref::LoadOp> {
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::LoadOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto cl = op.memref().getDefiningOp<imex::util::ChangeLayoutOp>();
+    auto cl = op.getMemref().getDefiningOp<imex::util::ChangeLayoutOp>();
     if (!cl)
       return mlir::failure();
 
     rewriter.replaceOpWithNewOp<mlir::memref::LoadOp>(op, cl.getSource(),
-                                                      op.indices());
+                                                      op.getIndices());
     return mlir::success();
   }
 };
@@ -710,12 +710,12 @@ struct ChangeLayoutStore
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::StoreOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto cl = op.memref().getDefiningOp<imex::util::ChangeLayoutOp>();
+    auto cl = op.getMemref().getDefiningOp<imex::util::ChangeLayoutOp>();
     if (!cl)
       return mlir::failure();
 
     rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(
-        op, op.value(), cl.getSource(), op.indices());
+        op, op.getValue(), cl.getSource(), op.getIndices());
     return mlir::success();
   }
 };
@@ -731,7 +731,7 @@ struct ChangeLayoutSubview
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::SubViewOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto cl = op.source().getDefiningOp<imex::util::ChangeLayoutOp>();
+    auto cl = op.getSource().getDefiningOp<imex::util::ChangeLayoutOp>();
     if (!cl)
       return mlir::failure();
 
@@ -778,7 +778,7 @@ struct ChangeLayoutLinalgGeneric
     llvm::SmallVector<mlir::Value> newOperands;
 
     for (bool isInputs : {true, false}) {
-      mlir::ValueRange args = (isInputs ? op.inputs() : op.outputs());
+      mlir::ValueRange args = (isInputs ? op.getInputs() : op.getOutputs());
       auto count = static_cast<unsigned>(args.size());
       newOperands.resize(count);
       bool needUpdate = false;
@@ -798,7 +798,7 @@ struct ChangeLayoutLinalgGeneric
 
       if (needUpdate) {
         rewriter.updateRootInPlace(op, [&]() {
-          (isInputs ? op.inputsMutable() : op.outputsMutable())
+          (isInputs ? op.getInputsMutable() : op.getOutputsMutable())
               .assign(newOperands);
         });
       }
@@ -943,8 +943,8 @@ struct ChangeLayout1DReshape
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::ReshapeOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto source = op.source();
-    auto shape = op.shape();
+    auto source = op.getSource();
+    auto shape = op.getShape();
     auto srcType = source.getType().cast<mlir::MemRefType>();
     auto dstType = op.getType().cast<mlir::MemRefType>();
     if (dstType.getRank() != 1)
@@ -1011,8 +1011,8 @@ struct ChangeLayoutCopy : public mlir::OpRewritePattern<mlir::memref::CopyOp> {
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::CopyOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto input = op.source();
-    auto output = op.target();
+    auto input = op.getSource();
+    auto output = op.getTarget();
     auto clInput = input.getDefiningOp<imex::util::ChangeLayoutOp>();
     auto clOutput = output.getDefiningOp<imex::util::ChangeLayoutOp>();
     if (!clInput && !clOutput)
@@ -1036,7 +1036,7 @@ struct ChangeLayoutExpandShape
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::ExpandShapeOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto cl = op.src().getDefiningOp<imex::util::ChangeLayoutOp>();
+    auto cl = op.getSrc().getDefiningOp<imex::util::ChangeLayoutOp>();
     if (!cl)
       return mlir::failure();
 
@@ -1264,7 +1264,7 @@ struct SignCastReinterpretPropagate
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::ReinterpretCastOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto signCast = op.source().getDefiningOp<imex::util::SignCastOp>();
+    auto signCast = op.getSource().getDefiningOp<imex::util::SignCastOp>();
     if (!signCast)
       return mlir::failure();
 
@@ -1299,14 +1299,14 @@ struct SignCastLoadPropagate
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::LoadOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto signCast = op.memref().getDefiningOp<imex::util::SignCastOp>();
+    auto signCast = op.getMemref().getDefiningOp<imex::util::SignCastOp>();
     if (!signCast)
       return mlir::failure();
 
     auto loc = op.getLoc();
     auto src = signCast.getValue();
     auto newOp =
-        rewriter.createOrFold<mlir::memref::LoadOp>(loc, src, op.indices());
+        rewriter.createOrFold<mlir::memref::LoadOp>(loc, src, op.getIndices());
 
     if (newOp.getType() != op.getType())
       newOp = rewriter.create<imex::util::SignCastOp>(loc, op.getType(), newOp);
@@ -1323,19 +1323,19 @@ struct SignCastStorePropagate
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::StoreOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto signCast = op.memref().getDefiningOp<imex::util::SignCastOp>();
+    auto signCast = op.getMemref().getDefiningOp<imex::util::SignCastOp>();
     if (!signCast)
       return mlir::failure();
 
     auto src = signCast.getValue();
     auto srcElemType = src.getType().cast<mlir::MemRefType>().getElementType();
-    auto val = op.value();
+    auto val = op.getValue();
     if (val.getType() != srcElemType)
       val = rewriter.create<imex::util::SignCastOp>(op.getLoc(), srcElemType,
                                                     val);
 
     rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(op, val, src,
-                                                       op.indices());
+                                                       op.getIndices());
     return mlir::success();
   }
 };
@@ -1353,9 +1353,9 @@ struct SignCastAllocPropagate
       return mlir::failure();
 
     auto dstType = op.getType().cast<mlir::MemRefType>();
-    rewriter.replaceOpWithNewOp<Op>(op, dstType, alloc.dynamicSizes(),
-                                    alloc.symbolOperands(),
-                                    alloc.alignmentAttr());
+    rewriter.replaceOpWithNewOp<Op>(op, dstType, alloc.getDynamicSizes(),
+                                    alloc.getSymbolOperands(),
+                                    alloc.getAlignmentAttr());
     rewriter.eraseOp(alloc);
     return mlir::success();
   }
@@ -1629,13 +1629,13 @@ ExtractMemrefMetadataOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
   }
 
   if (auto cast = src.getDefiningOp<mlir::memref::CastOp>()) {
-    auto newSrc = cast.source();
+    auto newSrc = cast.getSource();
     getSourceMutable().assign(newSrc);
     return getResult();
   }
 
   if (auto cast = src.getDefiningOp<mlir::memref::CastOp>()) {
-    auto castSrc = cast.source();
+    auto castSrc = cast.getSource();
     auto castSrcType = castSrc.getType().cast<mlir::ShapedType>();
     auto srcType = src.getType().cast<mlir::ShapedType>();
     if (castSrcType.hasRank() && srcType.hasRank() &&

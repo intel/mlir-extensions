@@ -17,7 +17,7 @@
 #include "imex/Dialect/imex_util/dialect.hpp"
 #include "imex/Transforms/type_conversion.hpp"
 
-#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Pass/Pass.h>
 #include <mlir/Transforms/DialectConversion.h>
@@ -48,8 +48,8 @@ public:
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::DimOp op, mlir::memref::DimOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<mlir::memref::DimOp>(op, adaptor.source(),
-                                                     adaptor.index());
+    rewriter.replaceOpWithNewOp<mlir::memref::DimOp>(op, adaptor.getSource(),
+                                                     adaptor.getIndex());
     return mlir::success();
   }
 };
@@ -63,8 +63,8 @@ public:
                   mlir::memref::LoadOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto loc = op->getLoc();
-    auto res = rewriter.create<mlir::memref::LoadOp>(loc, adaptor.memref(),
-                                                     adaptor.indices());
+    auto res = rewriter.create<mlir::memref::LoadOp>(loc, adaptor.getMemref(),
+                                                     adaptor.getIndices());
     rewriter.replaceOpWithNewOp<mlir::arith::TruncIOp>(
         op, rewriter.getIntegerType(1), res);
     return mlir::success();
@@ -81,9 +81,9 @@ public:
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto loc = op->getLoc();
     auto val = rewriter.create<mlir::arith::ExtUIOp>(
-        loc, rewriter.getIntegerType(8), adaptor.value());
+        loc, rewriter.getIntegerType(8), adaptor.getValue());
     rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(
-        op, val, adaptor.memref(), adaptor.indices());
+        op, val, adaptor.getMemref(), adaptor.getIndices());
     return mlir::success();
   }
 };
@@ -103,8 +103,8 @@ public:
       return mlir::failure();
 
     rewriter.replaceOpWithNewOp<mlir::memref::AllocOp>(
-        op, resType, adaptor.dynamicSizes(), adaptor.symbolOperands(),
-        adaptor.alignmentAttr());
+        op, resType, adaptor.getDynamicSizes(), adaptor.getSymbolOperands(),
+        adaptor.getAlignmentAttr());
     return mlir::success();
   }
 };
@@ -125,8 +125,8 @@ public:
       return mlir::failure();
 
     rewriter.replaceOpWithNewOp<mlir::memref::AllocaOp>(
-        op, resType, adaptor.dynamicSizes(), adaptor.symbolOperands(),
-        adaptor.alignmentAttr());
+        op, resType, adaptor.getDynamicSizes(), adaptor.getSymbolOperands(),
+        adaptor.getAlignmentAttr());
     return mlir::success();
   }
 };
@@ -140,7 +140,7 @@ public:
   matchAndRewrite(mlir::memref::DeallocOp op,
                   mlir::memref::DeallocOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<mlir::memref::DeallocOp>(op, adaptor.memref());
+    rewriter.replaceOpWithNewOp<mlir::memref::DeallocOp>(op, adaptor.getMemref());
     return mlir::success();
   }
 };
@@ -159,7 +159,7 @@ public:
     if (!resType)
       return mlir::failure();
     rewriter.replaceOpWithNewOp<mlir::memref::CastOp>(op, resType,
-                                                      adaptor.source());
+                                                      adaptor.getSource());
     return mlir::success();
   }
 };
@@ -179,9 +179,9 @@ public:
     if (!resType)
       return mlir::failure();
     rewriter.replaceOpWithNewOp<mlir::memref::SubViewOp>(
-        op, resType, adaptor.source(), adaptor.offsets(), adaptor.sizes(),
-        adaptor.strides(), adaptor.static_offsets(), adaptor.static_sizes(),
-        adaptor.static_strides());
+        op, resType, adaptor.getSource(), adaptor.getOffsets(), adaptor.getSizes(),
+        adaptor.getStrides(), adaptor.getStaticOffsets(), adaptor.getStaticSizes(),
+        adaptor.getStaticStrides());
     return mlir::success();
   }
 };
@@ -235,7 +235,7 @@ struct PromoteBoolMemrefPass
 
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<mlir::arith::ArithmeticDialect>();
+    registry.insert<mlir::arith::ArithDialect>();
     registry.insert<mlir::memref::MemRefDialect>();
   }
 

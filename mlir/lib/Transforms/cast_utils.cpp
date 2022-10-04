@@ -15,7 +15,7 @@
 #include "imex/Transforms/cast_utils.hpp"
 #include "imex/Dialect/imex_util/dialect.hpp"
 
-#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Arith/IR/Arith.h>
 
 namespace {
 mlir::Type makeSignless(mlir::Type type) {

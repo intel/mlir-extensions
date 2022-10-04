@@ -82,8 +82,8 @@ static bool checkForPotentialAliases(mlir::Value value,
     }
   }
   if (!load || !store || !load->isBeforeInBlock(store) ||
-      load.indices() != store.indices() ||
-      !isOutsideBlock(load.indices(), parentBlock)) {
+      load.getIndices() != store.getIndices() ||
+      !isOutsideBlock(load.getIndices(), parentBlock)) {
     return false;
   }
   return true;
@@ -120,9 +120,9 @@ mlir::LogicalResult imex::CanonicalizeReduction::matchAndRewrite(
   llvm::SmallVector<std::pair<mlir::Value, mlir::ValueRange>> toProcess;
   for (auto &current : op.getLoopBody().front()) {
     if (auto load = mlir::dyn_cast<mlir::memref::LoadOp>(current)) {
-      auto memref = load.memref();
+      auto memref = load.getMemref();
       if (checkMemref(memref, op))
-        toProcess.push_back({memref, load.indices()});
+        toProcess.push_back({memref, load.getIndices()});
     }
   }
 
@@ -144,7 +144,7 @@ mlir::LogicalResult imex::CanonicalizeReduction::matchAndRewrite(
       for (auto &bodyOp : oldBody.without_terminator()) {
         auto invalidIndex = static_cast<unsigned>(-1);
         auto getIterIndex = [&](auto op) -> unsigned {
-          auto arg = op.memref();
+          auto arg = op.getMemref();
           for (auto it : llvm::enumerate(llvm::make_first_range(toProcess))) {
             if (arg == it.value()) {
               return static_cast<unsigned>(it.index() + prevArgsOffset);
@@ -162,7 +162,7 @@ mlir::LogicalResult imex::CanonicalizeReduction::matchAndRewrite(
         } else if (auto store = mlir::dyn_cast<mlir::memref::StoreOp>(bodyOp)) {
           auto index = getIterIndex(store);
           if (index != invalidIndex) {
-            yieldArgs[index] = mapping.lookup(store.value());
+            yieldArgs[index] = mapping.lookup(store.getValue());
           } else {
             builder.clone(bodyOp, mapping);
           }
