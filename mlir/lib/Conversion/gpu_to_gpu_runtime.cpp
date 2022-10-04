@@ -1228,7 +1228,7 @@ struct ExpandLaunchOp : public mlir::OpRewritePattern<mlir::gpu::LaunchFuncOp> {
             mlir::Value kernel) {
           return builder.create<gpu_runtime::LaunchGpuKernelOp>(
               loc, stream, kernel, op.getGridSizeOperandValues(),
-              op.getBlockSizeOperandValues(), op.getOperands());
+              op.getBlockSizeOperandValues(), op.getKernelOperands());
         });
   }
 };
