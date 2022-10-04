@@ -78,7 +78,7 @@ struct ConvertBarrierOp
     auto beforeBlock = rewriter.splitBlock(ifBody, ifBody->begin());
 
     auto barrierLoc = op->getLoc();
-    auto barrierFlags = op.flags();
+    auto barrierFlags = op.getFlags();
     rewriter.eraseOp(op);
 
     rewriter.setInsertionPointToEnd(beforeBlock);
