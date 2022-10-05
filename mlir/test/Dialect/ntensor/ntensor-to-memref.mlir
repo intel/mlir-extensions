@@ -48,8 +48,8 @@ func.func @test(%arg1: !ntensor.ntensor<?x?xf32>, %arg2: index, %arg3: index, %a
 
 // CHECK-LABEL: func @test
 //  CHECK-SAME:   (%[[ARG1:.*]]: memref<?x?xf32>, %[[ARG2:.*]]: index, %[[ARG3:.*]]: index, %[[ARG4:.*]]: index)
-//  CHECK-NEXT:   %[[RES:.*]] = memref.subview %arg0[1, %[[ARG2]]] [2, %[[ARG3]]] [3, %[[ARG4]]] : memref<?x?xf32> to memref<2x?xf32, #map>
-//  CHECK-NEXT:   %[[RES2:.*]] = imex_util.change_layout %[[RES]] : memref<2x?xf32, #map> to memref<?x?xf32>
+//  CHECK-NEXT:   %[[RES:.*]] = memref.subview %arg0[1, %[[ARG2]]] [2, %[[ARG3]]] [3, %[[ARG4]]] : memref<?x?xf32> to memref<2x?xf32, strided<[?, ?], offset: ?>>
+//  CHECK-NEXT:   %[[RES2:.*]] = imex_util.change_layout %[[RES]] : memref<2x?xf32, strided<[?, ?], offset: ?>> to memref<?x?xf32>
 //  CHECK-NEXT:   return %[[RES2]] : memref<?x?xf32>
 
 // -----
@@ -62,8 +62,8 @@ func.func @test(%arg1: !ntensor.ntensor<?x?xf32, "test">, %arg2: index, %arg3: i
 // CHECK-LABEL: func @test
 //  CHECK-SAME:   (%[[ARG1:.*]]: memref<?x?xf32>, %[[ARG2:.*]]: index, %[[ARG3:.*]]: index, %[[ARG4:.*]]: index)
 //  CHECK-NEXT:   %[[RES:.*]] = imex_util.env_region "test" -> memref<?x?xf32> {
-//  CHECK-NEXT:   %[[RES1:.*]] = memref.subview %arg0[1, %[[ARG2]]] [2, %[[ARG3]]] [3, %[[ARG4]]] : memref<?x?xf32> to memref<2x?xf32, #map>
-//  CHECK-NEXT:   %[[RES2:.*]] = imex_util.change_layout %[[RES1]] : memref<2x?xf32, #map> to memref<?x?xf32>
+//  CHECK-NEXT:   %[[RES1:.*]] = memref.subview %arg0[1, %[[ARG2]]] [2, %[[ARG3]]] [3, %[[ARG4]]] : memref<?x?xf32> to memref<2x?xf32, strided<[?, ?], offset: ?>>
+//  CHECK-NEXT:   %[[RES2:.*]] = imex_util.change_layout %[[RES1]] : memref<2x?xf32, strided<[?, ?], offset: ?>> to memref<?x?xf32>
 //  CHECK-NEXT:   imex_util.env_region_yield %[[RES2]] : memref<?x?xf32>
 //  CHECK-NEXT:   }
 //  CHECK-NEXT:   return %[[RES]] : memref<?x?xf32>
@@ -77,8 +77,8 @@ func.func @test(%arg1: !ntensor.ntensor<?x?xf32>, %arg2: index, %arg3: index, %a
 
 // CHECK-LABEL: func @test
 //  CHECK-SAME:   (%[[ARG1:.*]]: memref<?x?xf32>, %[[ARG2:.*]]: index, %[[ARG3:.*]]: index, %[[ARG4:.*]]: index)
-//  CHECK-NEXT:   %[[RES:.*]] = memref.subview %arg0[1, %[[ARG2]]] [1, %[[ARG3]]] [3, %[[ARG4]]] : memref<?x?xf32> to memref<?xf32, #map>
-//  CHECK-NEXT:   %[[RES2:.*]] = imex_util.change_layout %[[RES]] : memref<?xf32, #map> to memref<?xf32>
+//  CHECK-NEXT:   %[[RES:.*]] = memref.subview %arg0[1, %[[ARG2]]] [1, %[[ARG3]]] [3, %[[ARG4]]] : memref<?x?xf32> to memref<?xf32, strided<[?], offset: ?>>
+//  CHECK-NEXT:   %[[RES2:.*]] = imex_util.change_layout %[[RES]] : memref<?xf32, strided<[?], offset: ?>> to memref<?xf32>
 //  CHECK-NEXT:   return %[[RES2]] : memref<?xf32>
 
 // -----
@@ -91,8 +91,8 @@ func.func @test(%arg1: !ntensor.ntensor<?x?xf32, "test">, %arg2: index, %arg3: i
 // CHECK-LABEL: func @test
 //  CHECK-SAME:   (%[[ARG1:.*]]: memref<?x?xf32>, %[[ARG2:.*]]: index, %[[ARG3:.*]]: index, %[[ARG4:.*]]: index)
 //  CHECK-NEXT:   %[[RES:.*]] = imex_util.env_region "test" -> memref<?xf32> {
-//  CHECK-NEXT:   %[[RES1:.*]] = memref.subview %arg0[1, %[[ARG2]]] [1, %[[ARG3]]] [3, %[[ARG4]]] : memref<?x?xf32> to memref<?xf32, #map>
-//  CHECK-NEXT:   %[[RES2:.*]] = imex_util.change_layout %[[RES1]] : memref<?xf32, #map> to memref<?xf32>
+//  CHECK-NEXT:   %[[RES1:.*]] = memref.subview %arg0[1, %[[ARG2]]] [1, %[[ARG3]]] [3, %[[ARG4]]] : memref<?x?xf32> to memref<?xf32, strided<[?], offset: ?>>
+//  CHECK-NEXT:   %[[RES2:.*]] = imex_util.change_layout %[[RES1]] : memref<?xf32, strided<[?], offset: ?>> to memref<?xf32>
 //  CHECK-NEXT:   imex_util.env_region_yield %[[RES2]] : memref<?xf32>
 //  CHECK-NEXT:   }
 //  CHECK-NEXT:   return %[[RES]] : memref<?xf32>
