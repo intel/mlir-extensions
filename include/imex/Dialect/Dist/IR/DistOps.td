@@ -84,7 +84,7 @@ def AllReduceOp : Dist_Op<"allreduce", [NoSideEffect]> {
     let arguments = (ins AnyAttr: $op, AnyTensor: $tensor);
 
     // result is allreduced input tensor
-    let results = (outs AnyTensor: $result);
+    let results = (outs AnyType);
 }
 
 #endif // _Dist_OPS_TD_INCLUDED_
