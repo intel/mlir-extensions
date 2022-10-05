@@ -723,8 +723,8 @@ def test_barrier_ops(op, flags, global_size, local_size):
 
 
 @require_gpu
-@pytest.mark.parametrize("global_size", [1, 2, 4, 27])
-@pytest.mark.parametrize("local_size", [1, 2, 7])
+@pytest.mark.parametrize("global_size", [1, 2, 4, 27, 67, 101])
+@pytest.mark.parametrize("local_size", [1, 2, 7, 17, 33])
 def test_barrier1(global_size, local_size):
     atomic_add = atomic.add
 
