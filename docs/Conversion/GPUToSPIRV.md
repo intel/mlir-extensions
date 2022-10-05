@@ -149,4 +149,4 @@ spv.module @__spv__kernels Logical GLSL450 {
 
 ## Reason for this Custom Pass:
 Upstream pass includes limited conversion patterns and it does not add patterns conversion from SCF, arith and math ops.
-So GPUXToSPIRV pass extends updatream pass conversion.
+So GPUXToSPIRV pass extends upstream pass conversion.
