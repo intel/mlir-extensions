@@ -26,8 +26,8 @@
 #include "imex/Conversion/cfg_to_scf.hpp"
 #include "imex/Conversion/gpu_runtime_to_llvm.hpp"
 #include "imex/Conversion/gpu_to_gpu_runtime.hpp"
-#include "imex/Dialect/ntensor/Transforms/ResolveArrayOps.hpp"
 #include "imex/Conversion/ntensor_to_memref.hpp"
+#include "imex/Dialect/ntensor/Transforms/ResolveArrayOps.hpp"
 #include "imex/Transforms/expand_tuple.hpp"
 
 // Passes registration.
