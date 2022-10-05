@@ -93,7 +93,7 @@ The below set of operations accrues from the following rules:
   * `elementwise_unary_test{$euop}(rhs) : (ptensor.ptensor) -> ptensor`
     * `$euop = ['isnan', 'isinf', 'logical_not', ...]`
   * `elementwise_binary_op{$ebop}(lhs, rhs) : (ptensor.ptensor, ptensor.ptensor) -> ptensor`
-    * `$ebop = ['add', 'sub', 'greater', 'bitwise_left_shift', ...]`
+    * `$ebop = ['add', 'sub', 'bitwise_left_shift', ...]`
   * `elementwise_binary_test{$ebop}(lhs, rhs) : (ptensor.ptensor, ptensor.ptensor) -> ptensor`
     * `$ebop = ['greater', 'less', 'equal', 'logical_and', ...]`
 * Linear Algebra

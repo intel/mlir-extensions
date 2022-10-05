@@ -46,8 +46,7 @@ def ConvertPTensorToLinalg : Pass<"convert-ptensor-to-linalg", "::mlir::ModuleOp
       * FIXME iGPU::deviceRegionOps if the input tensors live on a device
   }];
   let constructor = "imex::createConvertPTensorToLinalgPass()";
-  let dependentDialects = ["::imex::dist::DistDialect",
-                           "::mlir::linalg::LinalgDialect",
+  let dependentDialects = ["::mlir::linalg::LinalgDialect",
                            "::mlir::AffineDialect",
                            "::mlir::func::FuncDialect",
                            "::mlir::tensor::TensorDialect",
