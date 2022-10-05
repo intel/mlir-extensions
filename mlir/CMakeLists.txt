@@ -44,6 +44,7 @@ set(SOURCES_LIST
     lib/Conversion/cfg_to_scf.cpp
     lib/Conversion/gpu_runtime_to_llvm.cpp
     lib/Conversion/gpu_to_gpu_runtime.cpp
+    lib/Conversion/ntensor_to_memref.cpp
     lib/Conversion/util_conversion.cpp
     lib/Conversion/util_to_llvm.cpp
     lib/Dialect/gpu_runtime/IR/gpu_runtime_ops.cpp
@@ -84,6 +85,7 @@ set(HEADERS_LIST
     include/imex/Conversion/cfg_to_scf.hpp
     include/imex/Conversion/gpu_runtime_to_llvm.hpp
     include/imex/Conversion/gpu_to_gpu_runtime.hpp
+    include/imex/Conversion/ntensor_to_memref.hpp
     include/imex/Conversion/util_conversion.hpp
     include/imex/Conversion/util_to_llvm.hpp
     include/imex/Dialect/gpu_runtime/IR/gpu_runtime_ops.hpp
