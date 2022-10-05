@@ -789,8 +789,8 @@ def test_local_memory(blocksize):
 
 @require_gpu
 @pytest.mark.parametrize("group_op", [group.reduce_add])
-@pytest.mark.parametrize("global_size", [1, 2, 4, 27])
-@pytest.mark.parametrize("local_size", [1, 2, 7])
+@pytest.mark.parametrize("global_size", [1, 2, 4, 27, 67, 101])
+@pytest.mark.parametrize("local_size", [1, 2, 7, 17, 33])
 @pytest.mark.parametrize("dtype", [np.int32, np.int64, np.float32])
 def test_group_func(group_op, global_size, local_size, dtype):
     def func(a, b):
