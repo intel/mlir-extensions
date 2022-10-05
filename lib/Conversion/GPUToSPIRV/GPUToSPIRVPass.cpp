@@ -9,7 +9,7 @@
 ///
 /// \file
 /// This file extends upstream GPUToSPIRV Pass that converts GPU ops to SPIR-V
-/// by by adding more conversion patterns like SCF, math and control flow. This
+/// by adding more conversion patterns like SCF, math and control flow. This
 /// pass only converts gpu.func ops inside gpu.module op.
 ///
 //===----------------------------------------------------------------------===//
