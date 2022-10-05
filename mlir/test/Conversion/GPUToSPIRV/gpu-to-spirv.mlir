@@ -1,4 +1,4 @@
-// RUN: imex-opt --gpu-to-spirv %s | FileCheck %s
+// RUN: imex-opt --gpux-to-spirv %s | FileCheck %s
 
 module attributes {gpu.container_module, spirv.target_env = #spirv.target_env<#spirv.vce<v1.0, [Addresses, Float16Buffer, Int64, Int16, Int8, Kernel, Linkage, Vector16, GenericPointer, Groups, Float16, Float64, AtomicFloat32AddEXT, ExpectAssumeKHR], [SPV_EXT_shader_atomic_float_add, SPV_KHR_expect_assume]>, #spirv.resource_limits<>>} {
   func.func @main() {
