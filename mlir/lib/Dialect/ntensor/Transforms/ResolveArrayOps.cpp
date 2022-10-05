@@ -17,7 +17,7 @@
 #include "imex/Dialect/imex_util/dialect.hpp"
 #include "imex/Dialect/ntensor/IR/NTensorOps.hpp"
 
-#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Pass/Pass.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 
@@ -47,8 +47,6 @@ computeIndices(mlir::OpBuilder &builder, mlir::Location loc, mlir::Value value,
   auto getDim = [&](unsigned dim) -> mlir::Value {
     return builder.create<imex::ntensor::DimOp>(loc, value, dim);
   };
-
-  auto one = builder.create<mlir::arith::ConstantIndexOp>(loc, 1);
 
   auto foldConst = [&](mlir::Value val) -> mlir::OpFoldResult {
     if (auto intVal = mlir::getConstantIntValue(val))
@@ -294,7 +292,7 @@ struct ResolveArrayOpsPass
 
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<mlir::arith::ArithmeticDialect>();
+    registry.insert<mlir::arith::ArithDialect>();
     registry.insert<imex::ntensor::NTensorDialect>();
     registry.insert<imex::util::ImexUtilDialect>();
   }
