@@ -1554,6 +1554,75 @@ struct SignCastForPropagate : public mlir::OpRewritePattern<mlir::scf::ForOp> {
   }
 };
 
+struct SignCastIfPropagate : public mlir::OpRewritePattern<mlir::scf::IfOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::scf::IfOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    if (op->getNumResults() == 0)
+      return mlir::failure();
+
+    auto thenYield = op.thenYield();
+    auto elseYield = op.elseYield();
+
+    unsigned idx;
+    imex::util::SignCastOp castOp;
+    imex::util::UndefOp undefOp;
+    for (auto [i, args] : llvm::enumerate(
+             llvm::zip(thenYield.getResults(), elseYield.getResults()))) {
+      auto [thenArg, elseArg] = args;
+      auto cast = thenArg.getDefiningOp<imex::util::SignCastOp>();
+      auto undef = elseArg.getDefiningOp<imex::util::UndefOp>();
+      if (cast && undef) {
+        idx = static_cast<unsigned>(i);
+        castOp = cast;
+        undefOp = undef;
+        break;
+      }
+    }
+
+    if (!castOp)
+      return mlir::failure();
+
+    auto dstType = castOp.getType();
+
+    auto src = castOp.getValue();
+    auto srcType = src.getType();
+
+    rewriter.updateRootInPlace(thenYield,
+                               [&]() { thenYield->setOperand(idx, src); });
+
+    mlir::OpBuilder::InsertionGuard g(rewriter);
+
+    rewriter.setInsertionPoint(elseYield);
+    auto newUndef =
+        rewriter.create<imex::util::UndefOp>(undefOp->getLoc(), srcType);
+
+    rewriter.updateRootInPlace(
+        elseYield, [&]() { elseYield->setOperand(idx, newUndef.getResult()); });
+
+    auto res = op.getResult(idx);
+
+    rewriter.setInsertionPointAfter(op);
+    auto newRes =
+        rewriter.create<imex::util::SignCastOp>(castOp->getLoc(), dstType, res);
+
+    for (auto &use : llvm::make_early_inc_range(res.getUses())) {
+      auto owner = use.getOwner();
+      if (owner == newRes)
+        continue;
+
+      rewriter.updateRootInPlace(owner, [&]() { use.set(newRes); });
+    }
+
+    rewriter.updateRootInPlace(op,
+                               [&]() { op->getResult(idx).setType(srcType); });
+
+    return mlir::success();
+  }
+};
+
 } // namespace
 
 void SignCastOp::getCanonicalizationPatterns(::mlir::RewritePatternSet &results,
@@ -1573,7 +1642,7 @@ void SignCastOp::getCanonicalizationPatterns(::mlir::RewritePatternSet &results,
       SignCastSubviewPropagate<mlir::tensor::ExtractSliceOp,
                                mlir::RankedTensorType>,
       SignCastSubviewPropagate<mlir::memref::SubViewOp, mlir::MemRefType>,
-      SignCastForPropagate>(context);
+      SignCastForPropagate, SignCastIfPropagate>(context);
 }
 
 void ExtractMemrefMetadataOp::build(::mlir::OpBuilder &odsBuilder,

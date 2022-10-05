@@ -48,6 +48,7 @@
 #include "imex/Conversion/gpu_to_gpu_runtime.hpp"
 #include "imex/Conversion/util_conversion.hpp"
 #include "imex/Dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
+#include "imex/Dialect/gpu_runtime/Transforms/MakeBarriersUniform.hpp"
 #include "imex/Dialect/imex_util/dialect.hpp"
 #include "imex/Transforms/call_lowering.hpp"
 #include "imex/Transforms/cast_utils.hpp"
@@ -1330,8 +1331,11 @@ public:
     }
 
     auto type = mlir::MemRefType::get(shape, oldType.getElementType());
-    auto storageClass = gpu_runtime::StorageClassAttr::get(
-        getContext(), gpu_runtime::StorageClass::local);
+    // TODO: Fix storage class upstream
+    //    auto storageClass = gpu_runtime::StorageClassAttr::get(
+    //        getContext(), gpu_runtime::StorageClass::local);
+    auto storageClass = rewriter.getI64IntegerAttr(
+        mlir::gpu::GPUDialect::getPrivateAddressSpace());
     auto typeLocal = mlir::MemRefType::get(shape, type.getElementType(),
                                            nullptr, storageClass);
 
@@ -1541,6 +1545,7 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   commonOptPasses(funcPM);
   funcPM.addPass(std::make_unique<KernelMemrefOpsMovementPass>());
   funcPM.addPass(std::make_unique<LowerGpuBuiltins2Pass>());
+  funcPM.addPass(gpu_runtime::createMakeBarriersUniformPass());
   funcPM.addPass(std::make_unique<SinkGpuDimsPass>());
   funcPM.addPass(std::make_unique<GpuLaunchSinkOpsPass>());
   pm.addPass(mlir::createGpuKernelOutliningPass());

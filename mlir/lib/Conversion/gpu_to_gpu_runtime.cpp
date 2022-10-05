@@ -970,13 +970,18 @@ public:
 
 static llvm::Optional<mlir::spirv::StorageClass>
 convertStorageClass(mlir::Attribute src) {
-  auto attr = src.dyn_cast_or_null<gpu_runtime::StorageClassAttr>();
-  if (!attr)
-    return llvm::None;
+  // TODO: Fix storage class upstream
+  //  auto attr = src.dyn_cast_or_null<gpu_runtime::StorageClassAttr>();
+  //  if (!attr)
+  //    return llvm::None;
 
-  auto sc = attr.getValue();
-  if (sc == gpu_runtime::StorageClass::local)
-    return mlir::spirv::StorageClass::Workgroup;
+  //  auto sc = attr.getValue();
+  //  if (sc == gpu_runtime::StorageClass::local)
+  //    return mlir::spirv::StorageClass::Workgroup;
+
+  if (auto attr = src.dyn_cast_or_null<mlir::IntegerAttr>())
+    if (attr.getInt() == mlir::gpu::GPUDialect::getPrivateAddressSpace())
+      return mlir::spirv::StorageClass::Workgroup;
 
   return llvm::None;
 }

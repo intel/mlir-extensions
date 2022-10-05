@@ -692,8 +692,8 @@ def test_input_load_cse():
 @require_gpu
 @pytest.mark.parametrize("op", [barrier, mem_fence])
 @pytest.mark.parametrize("flags", [CLK_LOCAL_MEM_FENCE, CLK_GLOBAL_MEM_FENCE])
-@pytest.mark.parametrize("global_size", [1, 2, 27])
-@pytest.mark.parametrize("local_size", [1, 2, 7])
+@pytest.mark.parametrize("global_size", [1, 2, 27, 67, 101])
+@pytest.mark.parametrize("local_size", [1, 2, 7, 17, 33])
 def test_barrier_ops(op, flags, global_size, local_size):
     atomic_add = atomic.add
 
@@ -754,7 +754,7 @@ def test_barrier1(global_size, local_size):
 
 
 @require_gpu
-@pytest.mark.parametrize("blocksize", [1, 10, 64])
+@pytest.mark.parametrize("blocksize", [1, 10, 17, 64, 67, 101])
 def test_local_memory(blocksize):
     local_array = local.array
 
