@@ -67,7 +67,7 @@ static mlir::PassPipelineRegistration<> SetSpirvCapabalities(
     });
 
 static mlir::PassPipelineRegistration<>
-    GpuToSpirv("gpu-to-spirv", "Converts Gpu to spirv module",
+    GpuToSpirv("gpux-to-spirv", "Converts Gpu to spirv module",
                [](mlir::OpPassManager &pm) {
                  pm.addPass(gpu_runtime::createGPUToSpirvPass());
                });

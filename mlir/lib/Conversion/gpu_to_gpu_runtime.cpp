@@ -1115,6 +1115,35 @@ public:
   }
 };
 
+// Upstream lowers them to i64, bu we need i32.
+template <typename SourceOp, mlir::spirv::BuiltIn builtin>
+class SingleDimLaunchConfigConversion
+    : public mlir::OpConversionPattern<SourceOp> {
+public:
+  SingleDimLaunchConfigConversion(mlir::TypeConverter &typeConverter,
+                                  mlir::MLIRContext *context)
+      : mlir::OpConversionPattern<SourceOp>(typeConverter, context,
+                                            /*benefit*/ 10) {}
+
+  mlir::LogicalResult
+  matchAndRewrite(SourceOp op, typename SourceOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto *typeConverter =
+        this->template getTypeConverter<mlir::SPIRVTypeConverter>();
+    auto indexType = typeConverter->getIndexType();
+    auto i32Type = rewriter.getI32Type();
+
+    auto spirvBuiltin =
+        mlir::spirv::getBuiltinVariableValue(op, builtin, i32Type, rewriter);
+    if (indexType != i32Type)
+      spirvBuiltin = rewriter.create<mlir::arith::ExtSIOp>(
+          op->getLoc(), indexType, spirvBuiltin);
+
+    rewriter.replaceOp(op, spirvBuiltin);
+    return mlir::success();
+  }
+};
+
 struct GPUToSpirvPass
     : public mlir::PassWrapper<GPUToSpirvPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
@@ -1178,6 +1207,15 @@ struct GPUToSpirvPass
                 ConvertStoreOp, ConvertAtomicOps, ConvertFunc, ConvertAssert,
                 ConvertBarrierOp, ConvertMemFenceOp, ConvertUndef,
                 ConvertGlobalOp, ConvertGetGlobalOp>(typeConverter, context);
+
+    patterns.add<
+        SingleDimLaunchConfigConversion<mlir::gpu::SubgroupIdOp,
+                                        mlir::spirv::BuiltIn::SubgroupId>,
+        SingleDimLaunchConfigConversion<mlir::gpu::NumSubgroupsOp,
+                                        mlir::spirv::BuiltIn::NumSubgroups>,
+        SingleDimLaunchConfigConversion<mlir::gpu::SubgroupSizeOp,
+                                        mlir::spirv::BuiltIn::SubgroupSize>>(
+        typeConverter, patterns.getContext());
 
     if (failed(
             applyFullConversion(kernelModules, *target, std::move(patterns))))
