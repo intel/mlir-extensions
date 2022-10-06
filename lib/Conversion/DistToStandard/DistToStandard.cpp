@@ -20,6 +20,7 @@
 #include <imex/internal/PassWrapper.h>
 
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/Shape/IR/Shape.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
@@ -47,67 +48,58 @@ createCallGetRankedData(::mlir::Location &loc, ::mlir::OpBuilder &builder,
   return tnsr;
 }
 
-// Declaring runtime function prototypes
-// Each pass adding calls into the runtime should instantiate a static var
-// of this type. All functions will be declared exactly once.
-struct RequiredRTFuncs {
-  // find framing module op and declare function prototypes if not done yet
-  template <typename T>
-  RequiredRTFuncs(::mlir::Location &loc, ::mlir::OpBuilder &builder, T op) {
-    mlir::ModuleOp module;
-    auto mod = op->getParentOp();
-    while (mod) {
-      if (::mlir::isa<mlir::ModuleOp>(mod)) {
-        module = ::mlir::cast<mlir::ModuleOp>(mod);
-        break;
-      }
-      mod = mod->getParentOp();
-    }
-    requireAll(loc, builder, module);
-  }
-
-  // each runtime function is prototype exactly once using static vars
-  // names and type signatures are currently hard-coded.
-  static void requireAll(::mlir::Location &loc, ::mlir::OpBuilder &builder,
-                         mlir::ModuleOp module) {
-    auto dtype = builder.getI64Type();
-    auto i64Type = builder.getI64Type();
-    auto dtypeType = builder.getIntegerType(sizeof(int) * 8);
-    auto opType =
-        builder.getIntegerType(sizeof(::imex::ptensor::ReduceOpId) * 8);
-    [[maybe_unused]] static bool _init = requireFunc(
-        loc, builder, module, "_idtr_init_dtensor",
-        {::mlir::RankedTensorType::get({-1}, dtype), i64Type}, {i64Type});
-    [[maybe_unused]] static bool _lShp = requireFunc(
-        loc, builder, module, "_idtr_local_shape",
-        {dtype, ::mlir::RankedTensorType::get({-1}, dtype), i64Type}, {});
-    [[maybe_unused]] static bool _lOffs = requireFunc(
-        loc, builder, module, "_idtr_local_offsets",
-        {dtype, ::mlir::RankedTensorType::get({-1}, dtype), i64Type}, {});
-    [[maybe_unused]] static bool _allRed = requireFunc(
-        loc, builder, module, "_idtr_reduce_all",
-        {::mlir::RankedTensorType::get({}, dtype), dtypeType, opType}, {});
-  }
-
-  // create function prototype fo given function name, arg-types and
-  // return-types
-  static bool requireFunc(::mlir::Location &loc, ::mlir::OpBuilder &builder,
-                          ::mlir::ModuleOp module, const char *fname,
-                          ::mlir::TypeRange args, ::mlir::TypeRange results) {
-    mlir::OpBuilder::InsertionGuard guard(builder);
-    // Insert before module terminator.
-    builder.setInsertionPoint(module.getBody(),
-                              std::prev(module.getBody()->end()));
-    auto funcType = builder.getFunctionType(args, results);
-    auto func = builder.create<::mlir::func::FuncOp>(loc, fname, funcType);
-    func.setPrivate();
-    return true;
-  }
-};
+// create function prototype fo given function name, arg-types and
+// return-types
+inline void requireFunc(::mlir::Location &loc, ::mlir::OpBuilder &builder,
+                        ::mlir::ModuleOp module, const char *fname,
+                        ::mlir::TypeRange args, ::mlir::TypeRange results) {
+  mlir::OpBuilder::InsertionGuard guard(builder);
+  // Insert before module terminator.
+  builder.setInsertionPoint(module.getBody(),
+                            std::prev(module.getBody()->end()));
+  auto funcType = builder.getFunctionType(args, results);
+  auto func = builder.create<::mlir::func::FuncOp>(loc, fname, funcType);
+  func.setPrivate();
+}
 
 // *******************************
 // ***** Individual patterns *****
 // *******************************
+
+// RuntimePrototypesOp -> func.func ops
+struct RuntimePrototypesOpConverter
+    : public mlir::OpRewritePattern<::imex::dist::RuntimePrototypesOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  ::mlir::LogicalResult
+  matchAndRewrite(::imex::dist::RuntimePrototypesOp op,
+                  ::mlir::PatternRewriter &rewriter) const override {
+    // get guid and rank and call runtime function
+    auto loc = op.getLoc();
+    auto mod = op->getParentOp();
+    assert(::mlir::isa<mlir::ModuleOp>(mod));
+    ::mlir::ModuleOp module = ::mlir::cast<mlir::ModuleOp>(mod);
+    auto dtype = rewriter.getI64Type();
+    auto i64Type = rewriter.getI64Type();
+    auto dtypeType = rewriter.getIntegerType(sizeof(int) * 8);
+    auto opType =
+        rewriter.getIntegerType(sizeof(::imex::ptensor::ReduceOpId) * 8);
+    requireFunc(loc, rewriter, module, "_idtr_init_dtensor",
+                {::mlir::RankedTensorType::get({-1}, dtype), i64Type},
+                {i64Type});
+    requireFunc(loc, rewriter, module, "_idtr_local_shape",
+                {i64Type, ::mlir::RankedTensorType::get({-1}, dtype), i64Type},
+                {});
+    requireFunc(loc, rewriter, module, "_idtr_local_offsets",
+                {i64Type, ::mlir::RankedTensorType::get({-1}, dtype), i64Type},
+                {});
+    requireFunc(loc, rewriter, module, "_idtr_reduce_all",
+                {::mlir::RankedTensorType::get({}, dtype), dtypeType, opType},
+                {});
+    rewriter.eraseOp(op);
+    return ::mlir::success();
+  }
+};
 
 // RegisterPTensorOp -> call into _idtr_init_dtensor
 struct RegisterPTensorOpConverter
@@ -119,9 +111,6 @@ struct RegisterPTensorOpConverter
                   ::mlir::PatternRewriter &rewriter) const override {
     // get RankedTensor and rank and call registration function
     auto loc = op.getLoc();
-    // declare our runtime funcs once (it's static)
-    static RequiredRTFuncs _rtFuncs(loc, rewriter, op);
-
     auto shape = op.getShape();
     auto rank = rewriter.create<::mlir::shape::RankOp>(loc, shape);
     auto i64Rank = rewriter.create<::mlir::arith::IndexCastOp>(
@@ -149,9 +138,6 @@ struct LocalOffsetsOpConverter
                   ::mlir::PatternRewriter &rewriter) const override {
     // get guid and rank and call runtime function
     auto loc = op.getLoc();
-    // declare our runtime funcs once (it's static)
-    static RequiredRTFuncs _rtFuncs(loc, rewriter, op);
-
     rewriter.replaceOp(
         op, createCallGetRankedData(loc, rewriter, "_idtr_local_offsets",
                                     op.getPtensor(), op.getRank()));
@@ -208,9 +194,9 @@ struct ConvertDistToStandardPass
 
   void runOnOperation() override {
     ::mlir::FrozenRewritePatternSet patterns;
-    insertPatterns<RegisterPTensorOpConverter, LocalOffsetsOpConverter,
-                   LocalShapeOpConverter, AllReduceOpConverter>(getContext(),
-                                                                patterns);
+    insertPatterns<RuntimePrototypesOpConverter, RegisterPTensorOpConverter,
+                   LocalOffsetsOpConverter, LocalShapeOpConverter,
+                   AllReduceOpConverter>(getContext(), patterns);
     (void)::mlir::applyPatternsAndFoldGreedily(this->getOperation(), patterns);
   }
 };
@@ -224,7 +210,7 @@ void populateDistToStandardConversionPatterns(
 }
 
 /// Create a pass that convert Dist to Standard
-std::unique_ptr<::mlir::OperationPass<::mlir::func::FuncOp>>
+std::unique_ptr<::mlir::OperationPass<::mlir::ModuleOp>>
 createConvertDistToStandardPass() {
   return std::make_unique<ConvertDistToStandardPass>();
 }

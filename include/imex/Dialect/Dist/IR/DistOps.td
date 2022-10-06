@@ -46,6 +46,10 @@ def Dist_Dialect : Dialect {
 class Dist_Op<string mnemonic, list<Trait> traits = []> :
     Op<Dist_Dialect, mnemonic, traits>;
 
+// Add function prototypes used for calling into distributed runtime
+def RuntimePrototypesOp : Dist_Op<"runtime_prototypes"> {
+}
+
 // Register a ptensor of given shape with a (potentially distributed) runtime.
 // Returns an id to uniquely identify the tensor instance in future interactino with the runtime.
 // The runtime does not own or manage any PTensor memory. When needed by an operation,

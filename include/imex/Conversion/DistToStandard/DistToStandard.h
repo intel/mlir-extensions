@@ -16,7 +16,6 @@
 #ifndef _DistToStandard_H_INCLUDED_
 #define _DistToStandard_H_INCLUDED_
 
-#include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Transforms/DialectConversion.h>
 
@@ -34,7 +33,7 @@ void populateDistToStandardConversionPatterns(
     ::mlir::LLVMTypeConverter &converter, ::mlir::RewritePatternSet &patterns);
 
 /// Create a pass to convert the Dist dialect to the Standard dialect.
-std::unique_ptr<::mlir::OperationPass<::mlir::func::FuncOp>>
+std::unique_ptr<::mlir::OperationPass<::mlir::ModuleOp>>
 createConvertDistToStandardPass();
 
 extern void createDistRTFuncDefs(::mlir::Location &loc,

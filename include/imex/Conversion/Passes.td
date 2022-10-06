@@ -59,7 +59,7 @@ def ConvertPTensorToLinalg : Pass<"convert-ptensor-to-linalg", "::mlir::ModuleOp
 // DistToStandard
 //===----------------------------------------------------------------------===//
 
-def ConvertDistToStandard: Pass<"convert-dist-to-standard", "::mlir::func::FuncOp"> {
+def ConvertDistToStandard: Pass<"convert-dist-to-standard", "::mlir::ModuleOp"> {
   let summary = "Convert from the Dist dialect to runtime calls.";
   let description = [{
     Convert Dist dialect operations into standard dialect operations
