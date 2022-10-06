@@ -1491,12 +1491,9 @@ struct PlierToNtensorPass
 
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<imex::ntensor::NTensorDialect>();
     registry.insert<imex::util::ImexUtilDialect>();
-    registry.insert<mlir::bufferization::BufferizationDialect>();
     registry.insert<mlir::func::FuncDialect>();
-    registry.insert<mlir::linalg::LinalgDialect>();
-    registry.insert<mlir::memref::MemRefDialect>();
-    registry.insert<mlir::tensor::TensorDialect>();
     registry.insert<plier::PlierDialect>();
   }
 
@@ -1528,6 +1525,8 @@ struct PlierToNtensorPass
     mlir::RewritePatternSet patterns(&context);
     mlir::ConversionTarget target(context);
 
+    imex::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
+                                                             patterns, target);
     imex::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
                                                        target);
 
@@ -1551,6 +1550,57 @@ struct PlierToNtensorPass
     if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
                                                   std::move(patterns))))
       signalPassFailure();
+  }
+};
+
+struct GetitemArrayOpLowering
+    : public mlir::OpRewritePattern<imex::ntensor::GetitemOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::GetitemOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto src = op.getSource();
+    if (!src.getType().isa<imex::ntensor::NTensorType>())
+      return mlir::failure();
+
+    auto index = op.getIndex();
+    if (!index.getType().isa<imex::ntensor::NTensorType>())
+      return mlir::failure();
+
+    mlir::StringRef opName = "array.__getitem__";
+    auto resType = op.getType();
+    auto args = {src, index};
+    rewriter.replaceOpWithNewOp<imex::ntensor::PrimitiveOp>(op, resType, args,
+                                                            opName);
+    return mlir::success();
+  }
+};
+
+struct ResolveNtensorPass
+    : public mlir::PassWrapper<ResolveNtensorPass,
+                               mlir::OperationPass<mlir::ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(ResolveNtensorPass)
+
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<imex::ntensor::NTensorDialect>();
+    registry.insert<imex::util::ImexUtilDialect>();
+    registry.insert<mlir::linalg::LinalgDialect>();
+    registry.insert<mlir::memref::MemRefDialect>();
+    registry.insert<mlir::tensor::TensorDialect>();
+  }
+
+  void runOnOperation() override {
+    auto &ctx = getContext();
+    mlir::RewritePatternSet patterns(&ctx);
+
+    imex::ntensor::populateResolveArrayOpsPatterns(ctx, patterns);
+
+    patterns.insert<GetitemArrayOpLowering>(&ctx);
+
+    (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
+                                             std::move(patterns));
   }
 };
 
@@ -2956,8 +3006,8 @@ static void populatePlierToLinalgGenPipeline(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::func::FuncOp>(
       std::make_unique<MarkContigiousArraysPass>());
   pm.addPass(std::make_unique<PlierToNtensorPass>());
+  pm.addPass(std::make_unique<ResolveNtensorPass>());
   pm.addPass(std::make_unique<PlierToLinalgPass>());
-  pm.addPass(imex::ntensor::createResolveArrayOpsPass());
   pm.addPass(imex::createNtensorToMemrefPass());
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(std::make_unique<NumpyCallsLoweringPass>());
