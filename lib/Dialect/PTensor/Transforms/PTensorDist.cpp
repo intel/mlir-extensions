@@ -11,6 +11,15 @@
 /// This file implements transform of the PTensor dialect to a combination of
 /// PTensor and Dist dialects.
 ///
+/// PTensor operations will stay untouched unless operands are distributed
+/// PTensors. If they are distributed necessary communication with the
+/// runtime is performed to identify the local partition (mostly for creation
+/// functions). The local tensor is extracted/created and the operation is
+/// re-issued for the local part. No deep recursion happens because the operands
+/// for the newly created ptensor operations are not distributed. Finally
+/// additional ops are added of more communication with the runtime is needed,
+/// for example to perform a final global reduction.
+///
 //===----------------------------------------------------------------------===//
 
 #include <imex/Dialect/Dist/IR/DistOps.h>
