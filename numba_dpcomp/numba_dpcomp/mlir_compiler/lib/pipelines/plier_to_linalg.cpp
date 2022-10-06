@@ -821,114 +821,6 @@ static mlir::Value makeSubview(mlir::OpBuilder &builder, mlir::Location loc,
   return view;
 }
 
-struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(plier::GetItemOp op, plier::GetItemOp::Adaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
-    auto value = adaptor.getValue();
-    auto index = adaptor.getIndex();
-    auto type = value.getType();
-    bool isMemref = type.isa<mlir::MemRefType>();
-    bool isTensor = type.isa<mlir::TensorType>();
-
-    if (!isMemref && !isTensor)
-      return mlir::failure();
-
-    if (!isValidGetitemIndex(index.getType()))
-      return mlir::failure();
-
-    auto loc = op.getLoc();
-    auto shapedType = type.cast<mlir::ShapedType>();
-    llvm::SmallVector<mlir::OpFoldResult> offsets;
-    llvm::SmallVector<mlir::OpFoldResult> sizes;
-    llvm::SmallVector<mlir::OpFoldResult> strides;
-    llvm::SmallVector<unsigned> dimsIndices;
-    if (mlir::failed(computeIndices(rewriter, loc, value, index, offsets, sizes,
-                                    strides, dimsIndices)))
-      return mlir::failure();
-
-    mlir::Value res;
-    auto elemType = shapedType.getElementType();
-    auto elemTypeSignless = imex::makeSignlessType(elemType);
-    if (elemType != elemTypeSignless) {
-      if (isMemref) {
-        auto memrefType = type.cast<mlir::MemRefType>();
-        auto signlessType = mlir::MemRefType::get(
-            memrefType.getShape(), elemTypeSignless, memrefType.getLayout());
-        value =
-            rewriter.create<imex::util::SignCastOp>(loc, signlessType, value);
-      } else if (isTensor) {
-        auto tensorType = type.cast<mlir::RankedTensorType>();
-        auto signlessType = mlir::RankedTensorType::get(
-            tensorType.getShape(), elemTypeSignless, tensorType.getEncoding());
-        value =
-            rewriter.create<imex::util::SignCastOp>(loc, signlessType, value);
-      } else {
-        llvm_unreachable("Invalid getitem");
-      }
-    }
-
-    if (!dimsIndices.empty()) {
-      // Is slice
-      res = makeSubview(rewriter, loc, value, offsets, sizes, strides,
-                        dimsIndices);
-
-      mlir::ShapedType resultTypeSignless =
-          res.getType().cast<mlir::ShapedType>();
-      mlir::Type resultType;
-      if (isMemref) {
-        resultType =
-            mlir::MemRefType::get(resultTypeSignless.getShape(), elemType);
-      } else if (isTensor) {
-        resultType = mlir::RankedTensorType::get(resultTypeSignless.getShape(),
-                                                 elemType);
-      } else {
-        llvm_unreachable("Invalid getitem");
-      }
-
-      if (resultType != resultTypeSignless)
-        res = rewriter.create<imex::util::SignCastOp>(loc, resultType, res);
-    } else {
-      // Is single element
-      auto toValues = [&](auto &vals) {
-        llvm::SmallVector<mlir::Value> ret(vals.size());
-        for (auto it : llvm::enumerate(vals)) {
-          auto i = it.index();
-          auto val = it.value();
-          if (auto attr = val.template dyn_cast<mlir::Attribute>()) {
-            ret[i] = rewriter.create<mlir::arith::ConstantIndexOp>(
-                loc, attr.template cast<mlir::IntegerAttr>()
-                         .getValue()
-                         .getSExtValue());
-          } else {
-            ret[i] = val.template get<mlir::Value>();
-          }
-        }
-
-        return ret;
-      };
-      if (isMemref) {
-        res = rewriter.create<mlir::memref::LoadOp>(loc, value,
-                                                    toValues(offsets));
-      } else if (isTensor) {
-        res = rewriter.create<mlir::tensor::ExtractOp>(loc, value,
-                                                       toValues(offsets));
-      } else {
-        llvm_unreachable("Invalid getitem");
-      }
-
-      if (elemType != elemTypeSignless)
-        res = rewriter.create<imex::util::SignCastOp>(loc, elemType, res);
-    }
-
-    rerunScfPipeline(op);
-    rewriter.replaceOp(op, res);
-    return mlir::success();
-  }
-};
-
 struct GetitemOpArrLowering
     : public mlir::OpConversionPattern<plier::GetItemOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -1781,7 +1673,6 @@ struct PlierToLinalgPass
 
     patterns.insert<
         // clang-format off
-        GetitemOpLowering,
         GetitemOpArrLowering,
         SetitemOpLowering,
         LowerTupleCasts,
