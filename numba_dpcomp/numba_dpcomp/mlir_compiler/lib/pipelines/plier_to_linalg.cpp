@@ -1648,6 +1648,8 @@ struct PlierToNtensorPass
           return llvm::None;
         });
 
+    target.addLegalDialect<imex::ntensor::NTensorDialect>();
+
     patterns.insert<
         // clang-format off
         GetitemToNtensor
