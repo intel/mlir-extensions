@@ -125,9 +125,11 @@ def ChangeLayoutOp : ImexUtil_Op<"change_layout", [ViewLikeOpInterface, NoSideEf
 def SignCastOp : ImexUtil_Op<"sign_cast", [NoSideEffect]> {
   let arguments = (ins AnyType : $value);
 
-  let results = (outs AnyType);
+  let results = (outs AnyType:$dest);
   let hasFolder = 1;
   let hasCanonicalizer = 1;
+
+  let assemblyFormat = "$value attr-dict `:` type($value) `to` type($dest)";
 }
 
 def ExtractMemrefMetadataOp
