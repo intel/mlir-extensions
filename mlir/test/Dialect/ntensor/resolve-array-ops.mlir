@@ -14,6 +14,37 @@ func.func @test(%arg1: !ntensor.ntensor<?xf32>, %arg2: index) -> f32 {
 
 // -----
 
+func.func @test(%arg1: !ntensor.ntensor<?xf32>, %arg2: i32) -> f32 {
+  %0 = ntensor.getitem(%arg1 : !ntensor.ntensor<?xf32>) [%arg2 : i32] -> f32
+  return %0 : f32
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG1:.*]]: !ntensor.ntensor<?xf32>, %[[ARG2:.*]]: i32)
+//  CHECK-NEXT:   %[[C0:.*]] = arith.constant 0 : index
+//  CHECK-NEXT:   %[[DIM:.*]] = ntensor.dim %[[ARG1]], %[[C0]] : !ntensor.ntensor<?xf32>
+//  CHECK-NEXT:   %[[IDIM:.*]] = arith.index_cast %[[ARG2]] : i32 to index
+//  CHECK-NEXT:   %[[IND:.*]] = ntensor.resolve_index %[[IDIM]], %[[DIM]]
+//  CHECK-NEXT:   %[[RES:.*]] = ntensor.load %[[ARG1]][%[[IND]]] : !ntensor.ntensor<?xf32>
+//  CHECK-NEXT:   return %[[RES]] : f32
+
+// -----
+
+func.func @test(%arg1: !ntensor.ntensor<?xf32>, %arg2: si32) -> f32 {
+  %0 = ntensor.getitem(%arg1 : !ntensor.ntensor<?xf32>) [%arg2 : si32] -> f32
+  return %0 : f32
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG1:.*]]: !ntensor.ntensor<?xf32>, %[[ARG2:.*]]: si32)
+//  CHECK-NEXT:   %[[C0:.*]] = arith.constant 0 : index
+//  CHECK-NEXT:   %[[DIM:.*]] = ntensor.dim %[[ARG1]], %[[C0]] : !ntensor.ntensor<?xf32>
+//  CHECK-NEXT:   %[[SDIM:.*]] = imex_util.sign_cast %[[ARG2]] : si32 to i32
+//  CHECK-NEXT:   %[[IDIM:.*]] = arith.index_cast %[[SDIM]] : i32 to index
+//  CHECK-NEXT:   %[[IND:.*]] = ntensor.resolve_index %[[IDIM]], %[[DIM]]
+//  CHECK-NEXT:   %[[RES:.*]] = ntensor.load %[[ARG1]][%[[IND]]] : !ntensor.ntensor<?xf32>
+//  CHECK-NEXT:   return %[[RES]] : f32
+
+// -----
+
 func.func @test(%arg1: !ntensor.ntensor<?xf32>, %arg2: index, %arg3: f32) {
   ntensor.setitem(%arg1 : !ntensor.ntensor<?xf32>) [%arg2 : index] = (%arg3 : f32)
   return
@@ -23,6 +54,37 @@ func.func @test(%arg1: !ntensor.ntensor<?xf32>, %arg2: index, %arg3: f32) {
 //  CHECK-NEXT:   %[[C0:.*]] = arith.constant 0 : index
 //  CHECK-NEXT:   %[[DIM:.*]] = ntensor.dim %[[ARG1]], %[[C0]] : !ntensor.ntensor<?xf32>
 //  CHECK-NEXT:   %[[IND:.*]] = ntensor.resolve_index %[[ARG2]], %[[DIM]]
+//  CHECK-NEXT:   ntensor.store %[[ARG3]], %[[ARG1]][%[[IND]]] : !ntensor.ntensor<?xf32>
+//  CHECK-NEXT:   return
+
+// -----
+
+func.func @test(%arg1: !ntensor.ntensor<?xf32>, %arg2: i32, %arg3: f32) {
+  ntensor.setitem(%arg1 : !ntensor.ntensor<?xf32>) [%arg2 : i32] = (%arg3 : f32)
+  return
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG1:.*]]: !ntensor.ntensor<?xf32>, %[[ARG2:.*]]: i32, %[[ARG3:.*]]: f32)
+//  CHECK-NEXT:   %[[C0:.*]] = arith.constant 0 : index
+//  CHECK-NEXT:   %[[DIM:.*]] = ntensor.dim %[[ARG1]], %[[C0]] : !ntensor.ntensor<?xf32>
+//  CHECK-NEXT:   %[[IDIM:.*]] = arith.index_cast %[[ARG2]] : i32 to index
+//  CHECK-NEXT:   %[[IND:.*]] = ntensor.resolve_index %[[IDIM]], %[[DIM]]
+//  CHECK-NEXT:   ntensor.store %[[ARG3]], %[[ARG1]][%[[IND]]] : !ntensor.ntensor<?xf32>
+//  CHECK-NEXT:   return
+
+// -----
+
+func.func @test(%arg1: !ntensor.ntensor<?xf32>, %arg2: si32, %arg3: f32) {
+  ntensor.setitem(%arg1 : !ntensor.ntensor<?xf32>) [%arg2 : si32] = (%arg3 : f32)
+  return
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG1:.*]]: !ntensor.ntensor<?xf32>, %[[ARG2:.*]]: si32, %[[ARG3:.*]]: f32)
+//  CHECK-NEXT:   %[[C0:.*]] = arith.constant 0 : index
+//  CHECK-NEXT:   %[[DIM:.*]] = ntensor.dim %[[ARG1]], %[[C0]] : !ntensor.ntensor<?xf32>
+//  CHECK-NEXT:   %[[SDIM:.*]] = imex_util.sign_cast %[[ARG2]] : si32 to i32
+//  CHECK-NEXT:   %[[IDIM:.*]] = arith.index_cast %[[SDIM]] : i32 to index
+//  CHECK-NEXT:   %[[IND:.*]] = ntensor.resolve_index %[[IDIM]], %[[DIM]]
 //  CHECK-NEXT:   ntensor.store %[[ARG3]], %[[ARG1]][%[[IND]]] : !ntensor.ntensor<?xf32>
 //  CHECK-NEXT:   return
 

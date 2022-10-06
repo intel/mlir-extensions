@@ -22,7 +22,8 @@
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 
 static bool isIndexOrSlice(mlir::Type type) {
-  return type.isa<imex::ntensor::SliceType, mlir::IndexType>();
+  return type
+      .isa<imex::ntensor::SliceType, mlir::IndexType, mlir::IntegerType>();
 }
 
 static bool isValidGetitemIndex(mlir::Type type) {
@@ -33,6 +34,23 @@ static bool isValidGetitemIndex(mlir::Type type) {
     return llvm::all_of(tupleType.getTypes(), &isIndexOrSlice);
 
   return false;
+}
+
+static mlir::Value convertIndex(mlir::OpBuilder &builder, mlir::Location loc,
+                                mlir::Value value) {
+  auto intType = value.getType().dyn_cast<mlir::IntegerType>();
+  if (intType) {
+    if (intType.getSignedness() != mlir::IntegerType::Signless) {
+      auto signlessType =
+          mlir::IntegerType::get(builder.getContext(), intType.getWidth());
+      value = builder.create<imex::util::SignCastOp>(loc, signlessType, value);
+    }
+
+    auto indexType = builder.getIndexType();
+    value = builder.create<mlir::arith::IndexCastOp>(loc, indexType, value);
+  }
+
+  return value;
 }
 
 static mlir::LogicalResult
@@ -70,8 +88,8 @@ computeIndices(mlir::OpBuilder &builder, mlir::Location loc, mlir::Value value,
       auto size = resolved.getCount();
       return {foldConst(begin), foldConst(size), foldConst(step), true};
     } else {
-      mlir::Value index =
-          builder.create<imex::ntensor::ResolveIndexOp>(loc, indexVal, len);
+      mlir::Value index = convertIndex(builder, loc, indexVal);
+      index = builder.create<imex::ntensor::ResolveIndexOp>(loc, index, len);
       return {index, builder.getIndexAttr(1), builder.getIndexAttr(1), false};
     }
   };
