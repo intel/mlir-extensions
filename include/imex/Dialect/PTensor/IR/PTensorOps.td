@@ -134,11 +134,11 @@ def ARangeOp : PTensor_Op<"arange", [NoSideEffect, SameVariadicOperandSize]> {
     let description = [{
         Returns evenly `step`-spaced values within the half-open interval [`start`, `stop`) as a ptensor of rank 1.
 
-        Optionally assigns it to device `device`, team `team` and uses pre-defined runtime-handle `rth`.
+        Optionally assigns it to device `device`, and team `team`.
     }];
 
     let arguments = (ins AnyType : $start, AnyType : $stop, AnyType : $step,
-                         Optional<AnyType>:$device, Optional<AnyType>:$team, Optional<AnyType>:$rth);
+                         Optional<AnyType>:$device, Optional<AnyType>:$team);
     // result is a ptensor
     let results = (outs PTensor_PTensor);
 }

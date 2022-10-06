@@ -39,6 +39,7 @@ namespace {
 // ***** Some helper functions ***
 // *******************************
 
+// create ::imex::dist::RegisterPTensorOp
 inline ::mlir::Value createInitWithRT(::mlir::Location &loc,
                                       ::mlir::OpBuilder &builder, uint64_t rank,
                                       ::mlir::Value gshape) {
@@ -46,21 +47,7 @@ inline ::mlir::Value createInitWithRT(::mlir::Location &loc,
       loc, builder.getI64Type(), gshape);
 }
 
-inline ::mlir::Value callGetRankedData(::mlir::Location &loc,
-                                       ::mlir::OpBuilder &builder,
-                                       const char *func, ::mlir::Value guid,
-                                       uint64_t rank) {
-  auto rankv_ = createInt(loc, builder, rank);
-  auto rankv = builder.create<::mlir::arith::IndexCastOp>(
-      loc, builder.getIndexType(), rankv_);
-  auto tnsr = builder.create<::mlir::linalg::InitTensorOp>(
-      loc, ::mlir::ValueRange({rankv}), builder.getI64Type());
-  auto fsa = builder.getStringAttr(func);
-  (void)builder.create<::mlir::func::CallOp>(
-      loc, fsa, ::mlir::TypeRange(), ::mlir::ValueRange({guid, tnsr, rankv_}));
-  return tnsr;
-}
-
+// create ::imex::dist::LocalShapeOp
 inline ::mlir::Value createGetLocalShape(::mlir::Location &loc,
                                          ::mlir::OpBuilder &builder,
                                          ::mlir::Value guid, uint64_t rank) {
@@ -70,6 +57,7 @@ inline ::mlir::Value createGetLocalShape(::mlir::Location &loc,
       rankA, guid);
 }
 
+// create ::imex::dist::LocalOffsetsOp
 inline ::mlir::Value createGetLocalOffsets(::mlir::Location &loc,
                                            ::mlir::OpBuilder &builder,
                                            ::mlir::Value guid, uint64_t rank) {
@@ -79,6 +67,7 @@ inline ::mlir::Value createGetLocalOffsets(::mlir::Location &loc,
       rankA, guid);
 }
 
+// extract RankedTensor and create ::imex::dist::AllReduceOp
 inline ::mlir::Value createAllReduce(::mlir::Location &loc,
                                      ::mlir::OpBuilder &builder,
                                      ::mlir::Attribute op,
@@ -91,6 +80,7 @@ inline ::mlir::Value createAllReduce(::mlir::Location &loc,
                                                    rTnsr);
 }
 
+// create ops to extract the local RankedTensor from PTensor
 inline ::mlir::Value createGetLocal(::mlir::Location &loc,
                                     ::mlir::OpBuilder &builder,
                                     ::mlir::Value pt) {
@@ -106,6 +96,7 @@ inline ::mlir::Value createGetLocal(::mlir::Location &loc,
   return pt;
 }
 
+// extract RankedTensor and create ::imex::ptensor::MkPTensorOp
 inline ::mlir::Value createMkTnsr(::mlir::Location &loc,
                                   ::mlir::OpBuilder &builder, ::mlir::Value pt,
                                   ::mlir::Value guid) {
@@ -122,6 +113,10 @@ inline ::mlir::Value createMkTnsr(::mlir::Location &loc,
 // ***** Individual patterns *****
 // *******************************
 
+// Baseclass for Rewriters which handle recursion
+// All our rewriters replace ops with series of ops icnluding the
+// op-type which gets rewritten. Rewriters will not rewrite (stop recursion)
+// if input PTensor operands are not distributed.
 template <typename T>
 struct RecOpRewritePattern : public ::mlir::OpRewritePattern<T> {
   using ::mlir::OpRewritePattern<T>::OpRewritePattern;
@@ -132,6 +127,11 @@ struct RecOpRewritePattern : public ::mlir::OpRewritePattern<T> {
   }
 };
 
+/// Create a distributed arange if applicable.
+/// Create global, distributed output PTensor as defined by operands.
+/// The local partition (e.g. a RankedTensor) are wrapped in a
+/// non-distributed PTensor and re-applied to arange op.
+/// op gets replaced with global PTensor
 struct DistARange : public RecOpRewritePattern<::imex::ptensor::ARangeOp> {
   using RecOpRewritePattern::RecOpRewritePattern;
 
@@ -179,9 +179,6 @@ struct DistARange : public RecOpRewritePattern<::imex::ptensor::ARangeOp> {
         loc, lSz, step); // step * lShape[0]
     auto stop = rewriter.create<::mlir::arith::AddIOp>(
         loc, start, tmp2); // start + (lShape[0] * stride)
-    // auto one = createInt(loc, rewriter, 1);
-    // auto stop = rewriter.create<::mlir::arith::AddIOp>(loc, tmp3, one); //
-    // increment by one to not miss the last
     //  get type of local tensor
     ::llvm::ArrayRef<int64_t> lShape({-1});
     auto artype = ::imex::ptensor::PTensorType::get(
@@ -190,12 +187,17 @@ struct DistARange : public RecOpRewritePattern<::imex::ptensor::ARangeOp> {
     // finally create local arange
     auto dmy = ::mlir::Value(); // createInt<1>(loc, rewriter, 0);
     auto arres = rewriter.create<::imex::ptensor::ARangeOp>(
-        loc, artype, start, stop, step, dmy, dmy, dmy);
+        loc, artype, start, stop, step, op.getDevice(), dmy);
     rewriter.replaceOp(op, createMkTnsr(loc, rewriter, arres, guid));
     return ::mlir::success();
   }
 };
 
+/// Create a distributed ewbinop if operands are distributed.
+/// Create global, distributed output PTensor with same shape as operands.
+/// The local partitions of operands (e.g. RankedTensors) are wrapped in
+/// non-distributed PTensors and re-applied to ewbinop.
+/// op gets replaced with global PTensor
 struct DistEWBinOp : public RecOpRewritePattern<::imex::ptensor::EWBinOp> {
   using RecOpRewritePattern::RecOpRewritePattern;
 
@@ -231,6 +233,12 @@ struct DistEWBinOp : public RecOpRewritePattern<::imex::ptensor::EWBinOp> {
   }
 };
 
+/// Create a distributed reduction if operand is distributed.
+/// Create global, distributed 0d output PTensor.
+/// The local partitions of operand (e.g. RankedTensors) is wrapped in
+/// non-distributed PTensor and re-applied to reduction.
+/// The result is then applied to a distributed allreduce.
+/// op gets replaced with global PTensor
 struct DistReductionOp
     : public RecOpRewritePattern<::imex::ptensor::ReductionOp> {
   using RecOpRewritePattern::RecOpRewritePattern;

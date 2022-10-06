@@ -6,29 +6,33 @@
 // FIXME sed above, for using 1 instead of true
 
 // -----
-// CHECK-LABEL: register_ptensor
 func.func @test_register_ptensor(%arg0: tensor<index>) -> i64 {
     %0 = "dist.register_ptensor"(%arg0) : (tensor<index>) -> i64
     return %0 : i64
 }
+// CHECK-LABEL: register_ptensor
+// CHECK-NEXT: dist.register_ptensor
 
 // -----
-// CHECK-LABEL: local_shape
 func.func @test_local_shape(%arg0: i64) -> tensor<index> {
-    %0 = "dist.local_shape"(%arg0) : (i64) -> tensor<index>
+    %0 = "dist.local_shape"(%arg0) {rank = 1 : i64}: (i64) -> tensor<index>
     return %0 : tensor<index>
 }
+// CHECK-LABEL: local_shape
+// CHECK-NEXT: dist.local_shape
 
 // -----
-// CHECK-LABEL: local_offsets
 func.func @test_local_offsets(%arg0: i64) -> index {
-    %0 = "dist.local_offsets"(%arg0) : (i64) -> index
+    %0 = "dist.local_offsets"(%arg0) {rank = 1 : i64} : (i64) -> index
     return %0 : index
 }
+// CHECK-LABEL: local_offsets
+// CHECK-NEXT: dist.local_offsets
 
 // -----
-// CHECK-LABEL: allreduce
 func.func @test_allreduce(%arg0: tensor<i64>) -> tensor<i64> {
     %0 = "dist.allreduce"(%arg0) {op = 4 : i32} : (tensor<i64>) -> tensor<i64>
     return %0 : tensor<i64>
 }
+// CHECK-LABEL: allreduce
+// CHECK-NEXT: dist.allreduce
