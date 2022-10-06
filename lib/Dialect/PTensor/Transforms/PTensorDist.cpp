@@ -10,11 +10,9 @@
 /// \file
 /// This file implements transform of the PTensor dialect to a combination of
 /// PTensor and Dist dialects.
-/// operation
 ///
 //===----------------------------------------------------------------------===//
 
-#include "PassDetail.h"
 #include <imex/Dialect/Dist/IR/DistOps.h>
 #include <imex/Dialect/PTensor/IR/PTensorOps.h>
 #include <imex/Dialect/PTensor/Transforms/Utils.h>
@@ -31,6 +29,8 @@
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Rewrite/FrozenRewritePatternSet.h>
 
+#include "PassDetail.h"
+
 namespace imex {
 
 namespace {
@@ -42,15 +42,6 @@ namespace {
 inline ::mlir::Value createInitWithRT(::mlir::Location &loc,
                                       ::mlir::OpBuilder &builder, uint64_t rank,
                                       ::mlir::Value gshape) {
-  /*
-    auto rankv = createInt(loc, builder, rank);
-    llvm::SmallVector<int64_t> shp(rank, -1);
-    auto fsa = builder.getStringAttr("_idtr_init_dtensor");
-    auto tnsr = builder.create<::mlir::tensor::CastOp>(loc,
-    ::mlir::RankedTensorType::get({-1}, builder.getIndexType()), gshape); auto
-    call = builder.create<::mlir::func::CallOp>(loc, fsa, builder.getI64Type(),
-    ::mlir::ValueRange({tnsr, rankv})); return call.getResult(0);
-    */
   return builder.create<::imex::dist::RegisterPTensorOp>(
       loc, builder.getI64Type(), gshape);
 }
@@ -73,18 +64,19 @@ inline ::mlir::Value callGetRankedData(::mlir::Location &loc,
 inline ::mlir::Value createGetLocalShape(::mlir::Location &loc,
                                          ::mlir::OpBuilder &builder,
                                          ::mlir::Value guid, uint64_t rank) {
-  //  return callGetRankedData(loc, builder, "_idtr_local_shape", guid, rank);
-
+  auto rankA = builder.getIntegerAttr(builder.getI64Type(), rank);
   return builder.create<::imex::dist::LocalShapeOp>(
-      loc, ::mlir::RankedTensorType::get({rank}, builder.getIndexType()), guid);
+      loc, ::mlir::RankedTensorType::get({(int64_t)rank}, builder.getI64Type()),
+      rankA, guid);
 }
 
 inline ::mlir::Value createGetLocalOffsets(::mlir::Location &loc,
                                            ::mlir::OpBuilder &builder,
                                            ::mlir::Value guid, uint64_t rank) {
-  //  return callGetRankedData(loc, builder, "_idtr_local_offsets", guid, rank);
+  auto rankA = builder.getIntegerAttr(builder.getI64Type(), rank);
   return builder.create<::imex::dist::LocalOffsetsOp>(
-      loc, ::mlir::RankedTensorType::get({rank}, builder.getIndexType()), guid);
+      loc, ::mlir::RankedTensorType::get({(int64_t)rank}, builder.getI64Type()),
+      rankA, guid);
 }
 
 inline ::mlir::Value createAllReduce(::mlir::Location &loc,
@@ -95,13 +87,6 @@ inline ::mlir::Value createAllReduce(::mlir::Location &loc,
   assert(pTnsrTyp);
   auto rTnsr = builder.create<::imex::ptensor::ExtractRTensorOp>(
       loc, pTnsrTyp.getRtensor(), pTnsr);
-  /*
-    auto opV = builder.create<::mlir::arith::ConstantOp>(loc, op);
-    auto dtype = createInt<sizeof(int)*8>(loc, builder, 5); // FIXME getDType
-    auto fsa = builder.getStringAttr("_idtr_reduce_all");
-    (void) builder.create<::mlir::func::CallOp>(loc, fsa, ::mlir::TypeRange(),
-    ::mlir::ValueRange({rTnsr, dtype, opV})); return rTnsr;
-    */
   return builder.create<::imex::dist::AllReduceOp>(loc, rTnsr.getType(), op,
                                                    rTnsr);
 }
@@ -137,8 +122,18 @@ inline ::mlir::Value createMkTnsr(::mlir::Location &loc,
 // ***** Individual patterns *****
 // *******************************
 
-struct DistARange : public ::mlir::OpRewritePattern<::imex::ptensor::ARangeOp> {
-  using OpRewritePattern::OpRewritePattern;
+template <typename T>
+struct RecOpRewritePattern : public ::mlir::OpRewritePattern<T> {
+  using ::mlir::OpRewritePattern<T>::OpRewritePattern;
+  /// Initialize the pattern.
+  void initialize() {
+    /// Signal that this pattern safely handles recursive application.
+    RecOpRewritePattern<T>::setHasBoundedRewriteRecursion();
+  }
+};
+
+struct DistARange : public RecOpRewritePattern<::imex::ptensor::ARangeOp> {
+  using RecOpRewritePattern::RecOpRewritePattern;
 
   ::mlir::LogicalResult
   matchAndRewrite(::imex::ptensor::ARangeOp op,
@@ -154,7 +149,8 @@ struct DistARange : public ::mlir::OpRewritePattern<::imex::ptensor::ARangeOp> {
     auto step = op.getStep();
     // compute global count (so we know the shape)
     auto count = createCountARange(rewriter, loc, start, op.getStop(), step);
-    auto dtype = rewriter.getI64Type();
+    auto dtype = rewriter.getI64Type(); // FIXME
+    auto i64Typ = rewriter.getI64Type();
     // result shape is 1d
     uint64_t rank = 1;
     auto gShpTnsr = rewriter.create<::mlir::linalg::InitTensorOp>(
@@ -167,16 +163,13 @@ struct DistARange : public ::mlir::OpRewritePattern<::imex::ptensor::ARangeOp> {
     // get local shape
     auto lShapeVVec_mr = createGetLocalShape(loc, rewriter, guid, rank);
     auto zero = createIndex(loc, rewriter, 0);
-    auto lSz_ = rewriter.create<::mlir::tensor::ExtractOp>(
-        loc, rewriter.getIndexType(), lShapeVVec_mr,
-        ::mlir::ValueRange({zero}));
-    auto lSz = rewriter.create<::mlir::arith::IndexCastOp>(loc, dtype, lSz_);
+    auto lSz = rewriter.create<::mlir::tensor::ExtractOp>(
+        loc, i64Typ, lShapeVVec_mr, ::mlir::ValueRange({zero}));
     // get local offsets
     auto offsets = createGetLocalOffsets(loc, rewriter, guid, rank);
     // create start from offset
-    auto off_ = rewriter.create<::mlir::tensor::ExtractOp>(
-        loc, rewriter.getIndexType(), offsets, ::mlir::ValueRange({zero}));
-    auto off = rewriter.create<::mlir::arith::IndexCastOp>(loc, dtype, off_);
+    auto off = rewriter.create<::mlir::tensor::ExtractOp>(
+        loc, i64Typ, offsets, ::mlir::ValueRange({zero}));
     auto tmp =
         rewriter.create<::mlir::arith::MulIOp>(loc, off, step); // off * step
     start = rewriter.create<::mlir::arith::AddIOp>(
@@ -203,8 +196,8 @@ struct DistARange : public ::mlir::OpRewritePattern<::imex::ptensor::ARangeOp> {
   }
 };
 
-struct DistEWBinOp : public ::mlir::OpRewritePattern<::imex::ptensor::EWBinOp> {
-  using OpRewritePattern::OpRewritePattern;
+struct DistEWBinOp : public RecOpRewritePattern<::imex::ptensor::EWBinOp> {
+  using RecOpRewritePattern::RecOpRewritePattern;
 
   ::mlir::LogicalResult
   matchAndRewrite(::imex::ptensor::EWBinOp op,
@@ -216,7 +209,7 @@ struct DistEWBinOp : public ::mlir::OpRewritePattern<::imex::ptensor::EWBinOp> {
         op.getRhs().getType().dyn_cast<::imex::ptensor::PTensorType>();
     // return success if wrong ops or not distributed
     if (!lhsPtTyp || !rhsPtTyp || !lhsPtTyp.getDist() || !lhsPtTyp.getDist()) {
-      return ::mlir::success();
+      return ::mlir::failure();
     }
 
     // result shape
@@ -239,8 +232,8 @@ struct DistEWBinOp : public ::mlir::OpRewritePattern<::imex::ptensor::EWBinOp> {
 };
 
 struct DistReductionOp
-    : public ::mlir::OpRewritePattern<::imex::ptensor::ReductionOp> {
-  using OpRewritePattern::OpRewritePattern;
+    : public RecOpRewritePattern<::imex::ptensor::ReductionOp> {
+  using RecOpRewritePattern::RecOpRewritePattern;
 
   ::mlir::LogicalResult
   matchAndRewrite(::imex::ptensor::ReductionOp op,
@@ -251,7 +244,7 @@ struct DistReductionOp
     auto inpPtTyp =
         op.getInput().getType().dyn_cast<::imex::ptensor::PTensorType>();
     if (!inpPtTyp || !inpPtTyp.getDist()) {
-      return ::mlir::success();
+      return ::mlir::failure();
     }
 
     // result shape is 0d
@@ -304,7 +297,7 @@ void populatePTensorDistPatterns(::mlir::LLVMTypeConverter &converter,
 }
 
 /// Create a pass to eliminate Dist ops
-std::unique_ptr<::mlir::OperationPass<::mlir::ModuleOp>>
+std::unique_ptr<::mlir::OperationPass<::mlir::func::FuncOp>>
 createPTensorDistPass() {
   return std::make_unique<PTensorDistPass>();
 }

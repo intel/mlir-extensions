@@ -19,6 +19,10 @@
 
 namespace imex {
 
+/// create operations computing the count of elements a
+/// arange(start, stop, step) would have.
+/// @return number of elements an arange(start, stop, step) would have
+/// (::mlir::Value)
 inline ::mlir::Value createCountARange(::mlir::OpBuilder &builder,
                                        ::mlir::Location loc,
                                        ::mlir::Value start, ::mlir::Value stop,

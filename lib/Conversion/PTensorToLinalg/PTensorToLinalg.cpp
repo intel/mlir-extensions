@@ -33,7 +33,6 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include "../PassDetail.h"
 #include <imex/Conversion/PTensorToLinalg/PTensorToLinalg.h>
 #include <imex/Dialect/PTensor/IR/PTensorOps.h>
 #include <imex/Dialect/PTensor/Transforms/Utils.h>
@@ -52,6 +51,8 @@
 #include <mlir/Pass/Pass.h>
 
 #include <iostream>
+
+#include "../PassDetail.h"
 
 namespace imex {
 

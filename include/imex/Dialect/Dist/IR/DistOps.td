@@ -62,7 +62,7 @@ def RegisterPTensorOp : Dist_Op<"register_ptensor", [NoSideEffect]> {
 // Partitionings can be N-dimensional but must cut only the first N dimensions.
 def LocalOffsetsOp : Dist_Op<"local_offsets", [NoSideEffect]> {
     // Id of tensor as returned by RegisterPTensorOp
-    let arguments = (ins I64: $ptensor);
+    let arguments = (ins I64Attr: $rank, I64: $ptensor);
 
     // result is a 1d memref
     let results = (outs AnyType);
@@ -72,7 +72,7 @@ def LocalOffsetsOp : Dist_Op<"local_offsets", [NoSideEffect]> {
 // Partitionings can be N-dimensional but must cut only the first N dimensions.
 def LocalShapeOp : Dist_Op<"local_shape", [NoSideEffect]> {
     // Id of tensor as returned by RegisterPTensorOp
-    let arguments = (ins I64: $ptensor);
+    let arguments = (ins I64Attr: $rank, I64: $ptensor);
 
     // result is a 1d memref
     let results = (outs AnyType);

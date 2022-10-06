@@ -14,14 +14,19 @@
 #ifndef _IMEX_PASSUTILS_H_
 #define _IMEX_PASSUTILS_H_
 
+#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+
 namespace imex {
 
+/// @return new integer ::mlir::Value with given Value and bitwidth W
 template <int W = 64, typename T = int64_t>
 ::mlir::Value createInt(const ::mlir::Location &loc, ::mlir::OpBuilder &builder,
                         T val) {
   auto attr = builder.getIntegerAttr(builder.getIntegerType(W), val);
   return builder.create<::mlir::arith::ConstantOp>(loc, attr);
 }
+
+/// @return new index ::mlir::Value with given Value
 inline ::mlir::Value createIndex(const ::mlir::Location &loc,
                                  ::mlir::OpBuilder &builder, uint64_t val) {
   auto attr = builder.getIndexAttr(val);

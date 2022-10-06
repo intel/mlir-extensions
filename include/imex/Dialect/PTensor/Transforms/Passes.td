@@ -21,7 +21,7 @@ include "mlir/Pass/PassBase.td"
 // PTensorDist
 //===----------------------------------------------------------------------===//
 
-def PTensorDist : Pass<"ptensor-dist", "::mlir::ModuleOp"> {
+def PTensorDist : Pass<"ptensor-dist", "::mlir::func::FuncOp"> {
   let summary = "Use Dist-Ops to enable distributed PTensor Ops";
   let description = [{
     Transforms PTensor Ops into a sequence of operations to enable compute-follows-data

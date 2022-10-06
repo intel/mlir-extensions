@@ -55,4 +55,25 @@ def ConvertPTensorToLinalg : Pass<"convert-ptensor-to-linalg", "::mlir::ModuleOp
   let options = [];
 }
 
+//===----------------------------------------------------------------------===//
+// DistToStandard
+//===----------------------------------------------------------------------===//
+
+def ConvertDistToStandard: Pass<"convert-dist-to-standard", "::mlir::func::FuncOp"> {
+  let summary = "Convert from the Dist dialect to runtime calls.";
+  let description = [{
+    Convert Dist dialect operations into standard dialect operations
+    by inserting calls into a distributed runtime.
+
+    Necessary prototypes of runtime functions will be added.
+  }];
+  let constructor = "::imex::createConvertDistToStandardPass()";
+  let dependentDialects = ["::mlir::linalg::LinalgDialect",
+                           "::mlir::func::FuncDialect",
+                           "::mlir::tensor::TensorDialect",
+                           "::mlir::arith::ArithmeticDialect",
+                           "::mlir::shape::ShapeDialect"];
+  let options = [];
+}
+
 #endif // _IMEX_CONVERSION_PASSES_TD_INCLUDED_
