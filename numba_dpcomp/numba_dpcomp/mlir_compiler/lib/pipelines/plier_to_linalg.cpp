@@ -1577,6 +1577,59 @@ struct GetitemArrayOpLowering
   }
 };
 
+static PyLinalgResolver::Values
+castRetTypes2(mlir::Location loc, mlir::PatternRewriter &rewriter,
+              mlir::Operation *op,
+              llvm::Optional<PyLinalgResolver::Values> vals) {
+  auto results = std::move(vals).value();
+  assert(results.size() == op->getNumResults());
+  for (auto it : llvm::enumerate(results)) {
+    auto i = it.index();
+    auto ret = it.value();
+    auto dstType = op->getResultTypes()[i];
+
+    auto srcType = ret.getType();
+    if (dstType != srcType) {
+      if (dstType.isa<imex::ntensor::NTensorType>() &&
+          srcType.isa<mlir::TensorType>()) {
+        results[i] =
+            rewriter.create<imex::ntensor::FromTensorOp>(loc, dstType, ret);
+      } else {
+        results[i] = rewriter.create<plier::CastOp>(loc, dstType, ret);
+      }
+    }
+  }
+  return results;
+}
+
+struct NtensorPrimitiveCallsLowering final
+    : public mlir::OpRewritePattern<imex::ntensor::PrimitiveOp> {
+  NtensorPrimitiveCallsLowering(mlir::MLIRContext *context)
+      : OpRewritePattern(context),
+        resolver("numba_dpcomp.mlir.numpy.funcs", "registry") {}
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::PrimitiveOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto opName = op.getOp();
+
+    auto loc = op->getLoc();
+    auto res =
+        resolver.rewriteFunc(opName, loc, rewriter, op.getArgs(), llvm::None);
+    if (!res)
+      return mlir::failure();
+
+    auto results = castRetTypes2(loc, rewriter, op, res);
+
+    rerunScfPipeline(op);
+    rewriter.replaceOp(op, results);
+    return mlir::success();
+  }
+
+private:
+  PyLinalgResolver resolver;
+};
+
 struct ResolveNtensorPass
     : public mlir::PassWrapper<ResolveNtensorPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
@@ -1597,7 +1650,8 @@ struct ResolveNtensorPass
 
     imex::ntensor::populateResolveArrayOpsPatterns(ctx, patterns);
 
-    patterns.insert<GetitemArrayOpLowering>(&ctx);
+    patterns.insert<GetitemArrayOpLowering, NtensorPrimitiveCallsLowering>(
+        &ctx);
 
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
                                              std::move(patterns));
@@ -3007,10 +3061,10 @@ static void populatePlierToLinalgGenPipeline(mlir::OpPassManager &pm) {
       std::make_unique<MarkContigiousArraysPass>());
   pm.addPass(std::make_unique<PlierToNtensorPass>());
   pm.addPass(std::make_unique<ResolveNtensorPass>());
-  pm.addPass(std::make_unique<PlierToLinalgPass>());
+//  pm.addPass(std::make_unique<PlierToLinalgPass>());
   pm.addPass(imex::createNtensorToMemrefPass());
   pm.addPass(mlir::createCanonicalizerPass());
-  pm.addPass(std::make_unique<NumpyCallsLoweringPass>());
+//  pm.addPass(std::make_unique<NumpyCallsLoweringPass>());
   pm.addPass(imex::createForceInlinePass());
   pm.addPass(mlir::createSymbolDCEPass());
   pm.addNestedPass<mlir::func::FuncOp>(
