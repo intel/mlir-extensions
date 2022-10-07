@@ -16,8 +16,8 @@
 #define _IMEX_CONVERSION_PASSES_H_INCLUDED_
 
 #include <imex/Conversion/DistToStandard/DistToStandard.h>
-#include <imex/Conversion/PTensorToLinalg/PTensorToLinalg.h>
 #include <imex/Conversion/GPUToSPIRV/GPUToSPIRVPass.h>
+#include <imex/Conversion/PTensorToLinalg/PTensorToLinalg.h>
 
 namespace imex {
 
