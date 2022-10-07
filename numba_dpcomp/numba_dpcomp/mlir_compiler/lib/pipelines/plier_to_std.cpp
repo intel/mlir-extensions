@@ -17,7 +17,6 @@
 
 #include "pipelines/plier_to_scf.hpp"
 #include "pipelines/plier_to_std.hpp"
-#include "pipelines/pre_low_simplifications.hpp"
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
@@ -66,26 +65,16 @@ static mlir::Type mapIntLiteralType(mlir::MLIRContext &ctx,
   int64_t value = 0;
   if (name.consume_front("Literal[int](") &&
       !name.consumeInteger<int64_t>(10, value) && name.consume_front(")")) {
-    auto type = mlir::IntegerType::get(&ctx, 64, mlir::IntegerType::Signed);
-    auto attr = mlir::IntegerAttr::get(type, value);
-    return plier::LiteralType::get(attr);
+    return mlir::IntegerType::get(&ctx, 64, mlir::IntegerType::Signed);
   }
   return nullptr;
 }
 
 static mlir::Type mapBoolLiteralType(mlir::MLIRContext &ctx,
                                      llvm::StringRef &name) {
-  if (name.consume_front("Literal[bool](")) {
-    auto type = mlir::IntegerType::get(&ctx, 1);
-    mlir::IntegerAttr attr;
-    if (name.consume_front("True") && name.consume_front(")")) {
-      attr = mlir::IntegerAttr::get(type, 1);
-    } else if (name.consume_front("False") && name.consume_front(")")) {
-      attr = mlir::IntegerAttr::get(type, 0);
-    } else {
-      return nullptr;
-    }
-    return plier::LiteralType::get(attr);
+  if (name.consume_front("Literal[bool](True)") ||
+      name.consume_front("Literal[bool](False)")) {
+    return mlir::IntegerType::get(&ctx, 1);
   }
   return nullptr;
 }
@@ -454,8 +443,15 @@ struct OmittedLowering : public mlir::OpConversionPattern<plier::CastOp> {
       if (!name.consume_front("omitted(default=") || !name.consume_back(")"))
         return {};
 
-      int64_t intVal;
-      if (dstType.isa<mlir::IntegerType>() && !name.getAsInteger(10, intVal)) {
+      if (auto intType = dstType.dyn_cast<mlir::IntegerType>()) {
+        int64_t intVal;
+        if (name.consume_front("True")) {
+          intVal = 1;
+        } else if (name.consume_front("False")) {
+          intVal = 0;
+        } else if (name.getAsInteger(10, intVal)) {
+          return {};
+        }
         return rewriter.getIntegerAttr(dstType, intVal);
       }
 
