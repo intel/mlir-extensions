@@ -1479,6 +1479,40 @@ struct GetitemToNtensor : public mlir::OpConversionPattern<plier::GetItemOp> {
   }
 };
 
+struct BuildSliceToNtensor
+    : public mlir::OpConversionPattern<plier::BuildSliceOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::BuildSliceOp op, plier::BuildSliceOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto indexType = rewriter.getIndexType();
+
+    auto loc = op->getLoc();
+    auto doCast = [&](mlir::Value val) -> mlir::Value {
+      if (val.getType() != indexType)
+        val = rewriter.create<plier::CastOp>(loc, indexType, val);
+
+      return val;
+    };
+
+    auto isNone = [](mlir::Value val) {
+      return val.getType().isa<mlir::NoneType>();
+    };
+
+    auto getVal = [&](mlir::Value orig, mlir::Value converted) {
+      return isNone(orig) ? mlir::Value() : doCast(converted);
+    };
+
+    auto begin = getVal(op.getBegin(), adaptor.getBegin());
+    auto end = getVal(op.getEnd(), adaptor.getEnd());
+    auto step = getVal(op.getStep(), adaptor.getStep());
+    rewriter.replaceOpWithNewOp<imex::ntensor::BuildSliceOp>(op, begin, end,
+                                                             step);
+    return mlir::success();
+  }
+};
+
 static bool isNtensor(mlir::TypeConverter &converter, mlir::Type type) {
   return !!converter.convertType(type)
                .dyn_cast_or_null<imex::ntensor::NTensorType>();
@@ -1507,6 +1541,10 @@ struct PlierToNtensorPass
     populateStdTypeConverter(context, typeConverter);
     imex::populateTupleTypeConverter(context, typeConverter);
     populateArrayTypeConverter(context, typeConverter);
+    typeConverter.addConversion(
+        [](plier::SliceType type) -> llvm::Optional<mlir::Type> {
+          return imex::ntensor::SliceType::get(type.getContext());
+        });
 
     auto materializeCast =
         [](mlir::OpBuilder &builder, mlir::Type type, mlir::ValueRange inputs,
@@ -1539,11 +1577,14 @@ struct PlierToNtensorPass
           return llvm::None;
         });
 
+    target.addIllegalOp<plier::BuildSliceOp>();
+
     target.addLegalDialect<imex::ntensor::NTensorDialect>();
 
     patterns.insert<
         // clang-format off
-        GetitemToNtensor
+        GetitemToNtensor,
+        BuildSliceToNtensor
         // clang-format on
         >(typeConverter, &context);
 
@@ -3061,10 +3102,10 @@ static void populatePlierToLinalgGenPipeline(mlir::OpPassManager &pm) {
       std::make_unique<MarkContigiousArraysPass>());
   pm.addPass(std::make_unique<PlierToNtensorPass>());
   pm.addPass(std::make_unique<ResolveNtensorPass>());
-//  pm.addPass(std::make_unique<PlierToLinalgPass>());
+  //  pm.addPass(std::make_unique<PlierToLinalgPass>());
   pm.addPass(imex::createNtensorToMemrefPass());
   pm.addPass(mlir::createCanonicalizerPass());
-//  pm.addPass(std::make_unique<NumpyCallsLoweringPass>());
+  //  pm.addPass(std::make_unique<NumpyCallsLoweringPass>());
   pm.addPass(imex::createForceInlinePass());
   pm.addPass(mlir::createSymbolDCEPass());
   pm.addNestedPass<mlir::func::FuncOp>(
