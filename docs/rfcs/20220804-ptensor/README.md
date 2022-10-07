@@ -20,24 +20,34 @@ We propose two new Dialects and one dialect extension:
 3. __intel_sycl.device_region__ operation in __intel_sycl__ dialect (RFC #291)
 
 Additionally we propose appropriate passes
-1. Converting __PTensor__ operations into dialects __Linalg__, __GPU__, __intel_sycl__ and __Dist__
+1. Transforming __PTensor__ operations for distributed operation by injecting operations from __Dist__
+2. Converting __PTensor__ to __Tensor__, __Linalg__  and __Shape__
 2. Converting __Dist__ operations into appropriate runtime calls
-3. Converting __intel-sycl.device_region__ to appropriate runtime calls.
+3. Converting __intel-sycl.device_region__ to appropriate runtime calls
 
 ### ptensor Type
-Since operations are expected to execute in the same location as its input tensors, it is necessary to carry the tensor-location from the point of its allocation to the point of the operation. For this, we introduce a type which logically extends the `mlir::tensor` type with the necessary location information. The location information includes:
-* the `device`: The optional `device` indicates where the tensor lives, e.g. on which device. The target device is represented as a generic type which will be forwarded to the gpu/distributed runtimes. The exact type/syntax of device-identifiers is defined by the GPU runtime. For example, SYCL runtime will accept SYCL filter strings as defined [here](https://github.com/intel/llvm/blob/sycl/sycl/doc/EnvironmentVariables.md#sycl_device_filter). The default `NoneType` which disables device support.
-* a distributed `team`:  The optional `team` indicates a team (of processes) among which the tensor is partitioned-distributed. The type of the `team` depends on the underlying runtime; for MPI and Intel's distributed runtime this would be a `int64`. It defaults to `NoneType` which disables support for distributed operation.
-* An optional runtime handle passed to/from the underlying distributed runtime.
+Since operations are expected to execute in the same location as its input tensors, it is necessary to carry the tensor-location from the point of its allocation to the point of the operation. For this, we introduce a type which logically extends the `mlir::tensor` type with two boolean attributes:
+* `device`: indicates if it should live on a device
+* `dist`: indicates if it should be distributed
+
+The actual device and distributed team can be assigned by the approriate operands of creation operations (see below).
 
 The tensors themselves are assumed to eventually lower to memrefs.
 
 Notice: By default device and distribution support is disabled and so renders conventional host operations.
 
 ### __PTensor__ Operations
-The initial set of operations matches the requirements of the core of [array-API](https://data-apis.org/array-api/latest/API_specification/index.html). Notice, since we focus on compute-follows-data, only the creation functions/operations will require the `device` and `team` attributes. The operations in the PTensor dialect operate on ptensors. To allow operations on standard tensors and memrefs the PTensor dialect provides the operation `from_ranked` to convert MemRefs and RankedTensors to ptensors with default `device` and `team`.
+The initial set of operations matches the requirements of the core of [array-API](https://data-apis.org/array-api/latest/API_specification/index.html). The operations in the PTensor dialect operate on ptensors. To allow operations on standard tensors and memrefs the PTensor dialect provides the operation `from_ranked` to convert MemRefs and RankedTensors to ptensors with default `device` and `team`.
 
 Notice: some of the operations mutate existing ptensors.
+
+Since we focus on compute-follows-data, only the creation functions/operations will require the `device` and `team` attributes:
+* the `device`: The optional `device` indicates where the tensor lives, e.g. on which device. The target device is represented as a generic type which will be forwarded to the gpu/distributed runtimes. The exact type/syntax of device-identifiers is defined by the GPU runtime. For example, SYCL runtime will accept SYCL filter strings as defined [here](https://github.com/intel/llvm/blob/sycl/sycl/doc/EnvironmentVariables.md#sycl_device_filter). The default `NoneType` which disables device support.
+* a distributed `team`:  The optional `team` indicates a team (of processes) among which the tensor is partitioned-distributed. The type of the `team` depends on the underlying runtime; for MPI and Intel's distributed runtime this would be a `int64`. It defaults to `NoneType` which disables support for distributed operation.
+
+It constitutes an error if an operation has multiple (input and output) arguments of type ptensor and their `device` attribute is not the same on all ptensor arguments. If the `device` attribute is not the default device, a region is created and populated with the input op.
+
+Similarly, it constitutes an error if an operation has multiple (input and output) arguments of type ptensor and their `team` attribute is not the same on all ptensor arguments.
 
 #### Broadcasting/Ranked Tensors
 PTensor operates on ranked tensors. In rare cases the shape of input tensor(s) needs to be known as well. Unranked tensors are not supported.
@@ -126,15 +136,13 @@ The below set of operations accrues from the following rules:
     * Initialize a ptensor value from a RankedTensor, device, team and handle:
       `init_ptensor(rtensor, device, team, handle) {onDevice : bool, dist : bool} : (RankedTensor, AnyType, AnyType, AnyType, AnyType -> ptensor.ptensor`
 
-### __Dist__ Operations
+### __Dist__ Dialect
 The Dist dialect provides operations dealing with tensors which are partitioned and distributed across multiple processes. The operations assume some kind of a runtime which handles aspects like communication and partitioning.
-- `init_dtensor(team, shape) : (int, ValueRange) -> (int64)`
-- `fini_dtensor(team, dtensor_id) : (int, int) -> void`
-- `init_view(team, dtensor_id, slice) : (int, int, slice) -> (int64)`
-- `local_shape(team, dtensor_id) : (int, int) -> shape.shape`
-- `local_slice(team, dtensor_id) : (int, int) -> slice`
-- `copy(team, from_id, to_id, from_ltensor, to_ltensor) : (int, int, int, RankedTensor, RankedTensor) -> void`
-- `finalize_reduce(team, dtensor_id, ltensor) : (int, int, RankedTensor) -> void`
+- `register_ptensor(shape) : (tensor<?xi64) -> (int64)`
+- `unregister_ptensor(dtensor_id) : (i64) -> void`
+- `local_shape(dtensor_id) : (i64) -> (tensor<?xi64)`
+- `local_offsets(dtensor_id) : (i64) -> (tensor<?xi64)`
+- `allreduce(team, op, ltensor) : (i64, i64, RankedTensor) -> void`
 
 For details watch out for a separate RFC.
 
@@ -151,27 +159,18 @@ intel_sycl.device_region('level_zero:gpu:1') {
 ```
 
 ### Passes
-All passes which consume `ptensor`s and -operations comply to compute-follows-data: Generation of GPU-, distribution-, parallelization- et al. operations depend on the `team` and `device` attributes of input tensors. For example, if a tensor has the attribute "device='GPU'" then memory allocation operations must target the GPU.
+All passes which consume `ptensor`s and -operations comply to compute-follows-data: Generation of GPU-, distribution-, parallelization- et al. operations depend on the `dist` and `device` attributes of input tensors.
 
-#### --lower-ptensor
+#### --convert-ptensor-to-linalg
 This pass completely lowers ptensor operations:
-- __Tensor__: `ptensor.ptensor` will be type-converted to `tuple(tensor, AnyType, AnyType, AnyType)` representing the tensor, the device, the team and a runtime handle
-  - the tuple elements `team`, `handle` and `device` are used to appropriately create necessary operations in __intel_sycl__ and __Dist__ dialects
-  - on function boundary (ReturnOp, callOp, functionOp) the ptensor will be expanded to 4 arguments: RankedTensor, device, team and handle.
+- __Tensor__: `ptensor.ptensor` will be type-converted to a RankedTensor
+  - Wtihin the pass each PTensor gets "instantiated" by a `init_ptensor` which also accepts `team`, `handle` and `device`. This allows accessing device and distributed runtime attributes during lowering.
+  - function boundaries are currently not handled explicitly. device and dist information will be lost and normal RankedTensors are exchanged.
 - __Linalg__: The actual functionality will be represented by one or more operations of the Linalg dialect.
 - __intel_sycl__: Appropriate `intel_sycl.device_region` will be put around operations which have inputs of type `ptensor.ptensor` with a non-null `device` attribute.
-- __Dist__: new dialect which deals with primitives to manage operations on distributed tensors. Operations from the `team` dialect will generated if input tensors have non-none `team` attributes.
 - utility dialects like __memref__, __shape__, __affine__, __func__ and __arith__
 
-Combining conversions to multiple dialects keeps analysis simple and allows effective code generation. Some operations require interleaving operations from various dialects. Separate passes would become unnecessarily complicated because they need to understand the context (which we know while we convert ptensor). For instance, distributed `arange` requires various interactions with __Dist__ interleaving process-local operation in __Linalg__; a simple wrap of the local operation is not feasible.
-
-It constitutes an error if an operation has multiple (input and output) arguments of type ptensor and their `device` attribute is not the same on all ptensor arguments. If the `device` attribute is not the default device, a region is created and populated with the input op.
-
-Similarly, it constitutes an error if an operation has multiple (input and output) arguments of type ptensor and their `team` attribute is not the same on all ptensor arguments.
-
 Complicated computation kernels might be simply replaced with a an appropriate library call to MKL or alike.
-
-Possible parameters to this pass could be flags to ignore `team` attributes.
 
 ##### Example:
 ```
@@ -189,20 +188,6 @@ If device==null and team==none this would decompose into the following high-leve
 %res = %rtensor, %device, %team, None
 ```
 
-If device==null but team!=none this would decompose into the following high-level ops:
-```
-%start = $1
-%stop = $compute_stop_index(%1, %2, %3)
-%step = $3
-%gshape = $compute_global_shape(%1, %2, %3)
-%handle = dist.init_dtensor(%gshape)
-%lshape = dist.local_shape(%handle)
-%lslice = dist.local_slice(%handle)
-%ltensor = linalg.init_tensor(%lshape)
-%rtensor = linalg.generic($compute_arange, %lslice, %lshape, %ltensor)
-%res = %rtensor, %device, %team, %handle
-```
-
 If device!=null but team==none this would decompose into the following
 ```
 %start = $1
@@ -215,6 +200,22 @@ intel_sycl.device_region(%device) {
   %rtensor = linalg.generic($compute_arange, %gslice, %gshape, %ltensor)
 }
 %res = %rtensor, %device, %team, None
+```
+
+Examples for a combination of this pass with a pass which enables distribution:
+
+If device==null but team!=none this would decompose into the following high-level ops:
+```
+%start = $1
+%stop = $compute_stop_index(%1, %2, %3)
+%step = $3
+%gshape = $compute_global_shape(%1, %2, %3)
+%handle = dist.register_ptensor(%gshape)
+%lshape = dist.local_shape(%handle)
+%lslice = dist.local_slice(%handle)
+%ltensor = linalg.init_tensor(%lshape)
+%rtensor = linalg.generic($compute_arange, %lslice, %lshape, %ltensor)
+%res = %rtensor, %device, %team, %handle
 ```
 
 If device!=null and team!=none this would become something like:
@@ -233,7 +234,11 @@ intel_sycl.device_region(%device) {
 %res = %rtensor, %device, %team, %handle
 ```
 
-#### --dist-to-intel-runtime
+#### --ptensor-dist
+Replace all operations which generate a distributed tensor or which operate on distributed tensors with operations which enable distributed computation.
+Besides the injection of calls to the __Dist__ dialect it will also (recursively) use (the same) __PTensor__ operation(s) to perform the computation on the local partition of the distributed tensor.
+
+#### --convert-dist-to-standard
 FIXME: name and flow should be similar to what happens on the GPU side
 This pass converts all operations from __Dist__ into appropriate calls to the "Intel distributed runtime for MLIR (TM)". This library provides the necessary hooks to deal with aspects like data/shape partitioning, tensor registration, GC, communication and more.
 
