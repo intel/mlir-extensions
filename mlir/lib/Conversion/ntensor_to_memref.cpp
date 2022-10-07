@@ -449,6 +449,16 @@ struct NtensorToMemrefPass
     // Convert unknown types to itself
     converter.addConversion([](mlir::Type type) { return type; });
 
+    auto addUnrealizedCast = [](mlir::OpBuilder &builder, mlir::Type type,
+                                mlir::ValueRange inputs, mlir::Location loc) {
+      auto cast =
+          builder.create<mlir::UnrealizedConversionCastOp>(loc, type, inputs);
+      return llvm::Optional<mlir::Value>(cast.getResult(0));
+    };
+    converter.addArgumentMaterialization(addUnrealizedCast);
+    converter.addSourceMaterialization(addUnrealizedCast);
+    converter.addTargetMaterialization(addUnrealizedCast);
+
     imex::populateNtensorToMemrefRewritesAndTarget(context, converter, patterns,
                                                    target);
     imex::populateControlFlowTypeConversionRewritesAndTarget(converter,
