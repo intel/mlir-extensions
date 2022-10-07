@@ -40,6 +40,8 @@ def UnstrideMemrefsPass : Pass<"unstride-memrefs", "::mlir::func::FuncOp"> {
   }];
   let constructor = "imex::createUnstrideMemrefsPass()";
   let dependentDialects = [
+    "mlir::AffineDialect",
+    "mlir::arith::ArithmeticDialect",
     "mlir::gpu::GPUDialect",
     "mlir::memref::MemRefDialect"
     ];
