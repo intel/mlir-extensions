@@ -228,10 +228,9 @@ struct ARangeLowering
       (void)builder.create<::mlir::linalg::YieldOp>(loc, ret.getResult(0));
     };
 
-    auto arange = rewriter.create<::mlir::linalg::GenericOp>(
-        loc, retRtTyp, ::llvm::None, tensor, maps, iterators, body);
-    (void)rewriter.replaceOpWithNewOp<::imex::ptensor::MkPTensorOp>(
-        op, arange.getResult(0));
+    rewriter.replaceOpWithNewOp<::mlir::linalg::GenericOp>(
+        op, retRtTyp, ::llvm::None, tensor, maps, iterators, body);
+
     return ::mlir::success();
   }
 };
@@ -408,13 +407,11 @@ struct EWBinOpLowering
             .cast<::mlir::IntegerAttr>()
             .getInt();
     auto bodyBuilder = getBodyBuilder(binOpId, elTyp);
-    auto retTnsr = rewriter
-                       .create<::mlir::linalg::GenericOp>(
-                           loc, tensor.getType(), oprnds, tensor, maps,
-                           iterators, bodyBuilder)
-                       .getResult(0);
+    rewriter
+        .replaceOpWithNewOp<::mlir::linalg::GenericOp>(
+            op, tensor.getType(), oprnds, tensor, maps, iterators, bodyBuilder)
+        .getResult(0);
 
-    rewriter.replaceOpWithNewOp<::imex::ptensor::MkPTensorOp>(op, retTnsr);
     return ::mlir::success();
   }
 };
@@ -512,92 +509,11 @@ struct ReductionOpLowering
             .cast<::mlir::IntegerAttr>()
             .getInt();
     auto bodyBuilder = getBodyBuilder(ropid, sElTyp);
-    auto retTnsr = rewriter
-                       .create<::mlir::linalg::GenericOp>(
-                           loc, tnsr.getType(0), oprnds, tnsr.getResult(0),
-                           maps, iterators, bodyBuilder)
-                       .getResult(0);
-    rewriter.replaceOpWithNewOp<::imex::ptensor::MkPTensorOp>(op, retTnsr);
-    return ::mlir::success();
-  }
-};
-
-/// Convert return operands of type ptensor to multiple operands (rtensor,
-/// device, team, handle)
-// Don't know how to use :mlir::populateReturnOpTypeConversionPattern because we
-// have to pass individual operands (e.g. not one ptensor, but rtensor, device,
-// team and handle).
-struct ReturnOpConversion
-    : public ::mlir::OpConversionPattern<::mlir::func::ReturnOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  ::mlir::LogicalResult
-  matchAndRewrite(::mlir::func::ReturnOp op,
-                  ::mlir::func::ReturnOp::Adaptor adaptor,
-                  ::mlir::ConversionPatternRewriter &rewriter) const override {
-    auto orgOprnd = op.operands().begin();
-    auto oldOprnds = adaptor.operands();
-    ::mlir::SmallVector<::mlir::Value> newOprnds;
-    for (auto o : oldOprnds) {
-      // we assume the number of operands is identical in op and adaptor
-      // -> we can check for original ptensor type which is safer than TupleType
-      // in adaptor
-      if ((*orgOprnd).getType().isa<::imex::ptensor::PTensorType>() &&
-          o.getDefiningOp()) {
-        auto defOp = o.getDefiningOp<::mlir::UnrealizedConversionCastOp>();
-        assert(defOp);
-        // ptensor operands get expanded
-        // for (auto i : defOp.getInputs()) {
-        //  newOprnds.push_back(i);
-        // }
-        newOprnds.push_back(defOp.getInputs().front());
-      } else {
-        // block args and all other types get added as-is
-        newOprnds.push_back(o);
-      }
-      ++orgOprnd; // explicitly move iterator for orig type
-    }
-    rewriter.replaceOpWithNewOp<::mlir::func::ReturnOp>(op, newOprnds);
-    return ::mlir::success();
-  }
-};
-
-/// Convert callops returning PTensors to a callop followed by a MkPTensorOp.
-/// Other result types and operands are converted using the provioded
-/// typeConverter. Currently only calls to functions with a single result are
-/// supported.
-struct CallOpConversion
-    : public ::mlir::OpConversionPattern<::mlir::func::CallOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  ::mlir::LogicalResult
-  matchAndRewrite(::mlir::func::CallOp op,
-                  ::mlir::func::CallOp::Adaptor adaptor,
-                  ::mlir::ConversionPatternRewriter &rewriter) const override {
-    auto converter = *getTypeConverter();
-    auto funcTyp = op.getCalleeType(); // result types are defined by the callee
-    assert(funcTyp.getNumResults() == 1);
-    auto orgResTyp = funcTyp.getResult(0);
-    ::mlir::SmallVector<::mlir::Type> convResTyps;
-    if (::mlir::failed(converter.convertType(orgResTyp, convResTyps))) {
-      return ::mlir::failure();
-    }
-    auto resPTTyp = orgResTyp.dyn_cast<::imex::ptensor::PTensorType>();
-    if (resPTTyp) {
-      auto convFunc = rewriter.create<::mlir::func::CallOp>(
-          op.getLoc(), adaptor.getCallee(), ::mlir::TypeRange(convResTyps),
-          adaptor.operands());
-      // if return type is a ptensor, we need to convert multiple return vals
-      // back into a ptensor which should fold into a tuple
-      rewriter.replaceOpWithNewOp<::imex::ptensor::MkPTensorOp>(
-          op, resPTTyp.getOnDevice(), resPTTyp.getDist(), convFunc.getResult(0),
-          convFunc.getResult(1), convFunc.getResult(2), convFunc.getResult(3));
-    } else {
-      // only type-conversion needed if the return type is not a ptensor
-      rewriter.replaceOpWithNewOp<::mlir::func::CallOp>(
-          op, adaptor.getCallee(), ::mlir::TypeRange(convResTyps),
-          adaptor.operands());
-    }
+    rewriter
+        .replaceOpWithNewOp<::mlir::linalg::GenericOp>(
+            op, tnsr.getType(0), oprnds, tnsr.getResult(0), maps, iterators,
+            bodyBuilder)
+        .getResult(0);
 
     return ::mlir::success();
   }
@@ -623,27 +539,10 @@ struct ConvertPTensorToLinalgPass
     auto convT2T = [](::mlir::Type type) { return type; };
     // Convert PTensorType to (RankedTensorType, device, team, handle)
     auto convPT2Tuple = [&ctxt](::imex::ptensor::PTensorType type)
-        -> ::mlir::Optional<::mlir::Type> {
-      return type.getRtensor();
-      // return ::mlir::TupleType::get(
-      //     &ctxt, {type.getRtensor(), ::mlir::IntegerType::get(&ctxt, 1),
-      //             ::mlir::IntegerType::get(&ctxt, 1),
-      //             ::mlir::IntegerType::get(&ctxt, 1)});
-    };
-    auto convPT2Multiple =
-        [&ctxt](::imex::ptensor::PTensorType type,
-                ::mlir::SmallVectorImpl<::mlir::Type> &target)
-        -> ::mlir::Optional<::mlir::LogicalResult> {
-      //  for(auto t : type.getTypes()) target.push_back(t);
-      target = ::mlir::SmallVector<::mlir::Type>({type.getRtensor()});
-      //, ::mlir::IntegerType::get(&ctxt, 1),
-      // ::mlir::IntegerType::get(&ctxt, 1),
-      // ::mlir::IntegerType::get(&ctxt, 1)});
-      return ::mlir::success();
-    };
+        -> ::mlir::Optional<::mlir::Type> { return type.getRtensor(); };
+
     typeConverter.addConversion(convT2T);
     typeConverter.addConversion(convPT2Tuple);
-    // typeConverter.addConversion(convPT2Multiple);
 
     auto materializeCast =
         [](::mlir::OpBuilder &builder, ::mlir::Type type,
@@ -666,42 +565,24 @@ struct ConvertPTensorToLinalgPass
     target.addLegalDialect<::mlir::memref::MemRefDialect>();
     target.addLegalDialect<::mlir::bufferization::BufferizationDialect>();
     target.addLegalOp<::mlir::UnrealizedConversionCastOp>(); // FIXME
+    // make sure function boundaries use RankedTensors (not PTensors)
     target.addDynamicallyLegalOp<::mlir::func::FuncOp>(
         [&](::mlir::func::FuncOp op) {
           return typeConverter.isSignatureLegal(op.getFunctionType()) &&
                  typeConverter.isLegal(&op.getBody());
         });
     target.addDynamicallyLegalOp<::mlir::func::ReturnOp>(
-        [&](::mlir::func::ReturnOp op) {
-          for (auto o : op.operands()) {
-            if (o.getType().isa<::mlir::TupleType>())
-              return false;
-          }
-          return typeConverter.isLegal(op);
-        });
-
+        [&](::mlir::func::ReturnOp op) { return typeConverter.isLegal(op); });
     target.addDynamicallyLegalOp<mlir::func::CallOp>(
         [&](mlir::func::CallOp op) { return typeConverter.isLegal(op); });
 
     ::mlir::RewritePatternSet patterns(&ctxt);
     patterns.insert<MkPTensorLowering, ExtractRTensorLowering, ARangeLowering,
-                    EWBinOpLowering, ReductionOpLowering, ReturnOpConversion>(
-        typeConverter, &ctxt);
-
-    // We use a separate type converter for converting type signatures
-    // because we do not want tuples in the signature and use separate args
-    // for the ptensor members rtensor, device, team, and handle.
-    ::mlir::TypeConverter tc2;
-    tc2.addConversion(convT2T);
-    tc2.addConversion(convPT2Multiple);
-    tc2.addArgumentMaterialization(materializeCast);
+                    EWBinOpLowering, ReductionOpLowering>(typeConverter, &ctxt);
     ::mlir::populateFunctionOpInterfaceTypeConversionPattern<
-        ::mlir::func::FuncOp>(patterns, tc2);
-    // ::mlir::populateCallOpTypeConversionPattern(patterns, tc2);
-    patterns.insert<CallOpConversion>(tc2, &ctxt);
-
-    // no :mlir::populateReturnOpTypeConversionPattern but above
-    // ReturnOpConversion
+        ::mlir::func::FuncOp>(patterns, typeConverter);
+    ::mlir::populateReturnOpTypeConversionPattern(patterns, typeConverter);
+    ::mlir::populateCallOpTypeConversionPattern(patterns, typeConverter);
 
     if (::mlir::failed(::mlir::applyPartialConversion(getOperation(), target,
                                                       ::std::move(patterns)))) {
