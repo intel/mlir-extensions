@@ -1546,19 +1546,15 @@ struct PlierToNtensorPass
           return imex::ntensor::SliceType::get(type.getContext());
         });
 
-    auto materializeCast =
-        [](mlir::OpBuilder &builder, mlir::Type type, mlir::ValueRange inputs,
-           mlir::Location loc) -> llvm::Optional<mlir::Value> {
-      if (inputs.size() == 1)
-        return builder
-            .create<mlir::UnrealizedConversionCastOp>(loc, type, inputs.front())
-            .getResult(0);
-
-      return llvm::None;
+    auto addUnrealizedCast = [](mlir::OpBuilder &builder, mlir::Type type,
+                                mlir::ValueRange inputs, mlir::Location loc) {
+      auto cast =
+          builder.create<mlir::UnrealizedConversionCastOp>(loc, type, inputs);
+      return llvm::Optional<mlir::Value>(cast.getResult(0));
     };
-    typeConverter.addArgumentMaterialization(materializeCast);
-    typeConverter.addSourceMaterialization(materializeCast);
-    typeConverter.addTargetMaterialization(materializeCast);
+    typeConverter.addArgumentMaterialization(addUnrealizedCast);
+    typeConverter.addSourceMaterialization(addUnrealizedCast);
+    typeConverter.addTargetMaterialization(addUnrealizedCast);
 
     mlir::RewritePatternSet patterns(&context);
     mlir::ConversionTarget target(context);
