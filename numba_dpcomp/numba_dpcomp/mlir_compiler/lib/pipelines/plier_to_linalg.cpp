@@ -1479,6 +1479,26 @@ struct GetitemToNtensor : public mlir::OpConversionPattern<plier::GetItemOp> {
   }
 };
 
+struct SetitemToNtensor : public mlir::OpConversionPattern<plier::SetItemOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::SetItemOp op, plier::SetItemOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto src = adaptor.getTarget();
+    auto srcType = src.getType().dyn_cast<imex::ntensor::NTensorType>();
+    if (!srcType)
+      return mlir::failure();
+
+    auto index = adaptor.getIndex();
+    auto value = adaptor.getValue();
+
+    rewriter.replaceOpWithNewOp<imex::ntensor::SetitemOp>(op, src, index,
+                                                          value);
+    return mlir::success();
+  }
+};
+
 struct BuildSliceToNtensor
     : public mlir::OpConversionPattern<plier::BuildSliceOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -1572,6 +1592,14 @@ struct PlierToNtensorPass
 
           return llvm::None;
         });
+    target.addDynamicallyLegalOp<plier::SetItemOp>(
+        [&typeConverter](plier::SetItemOp op) -> llvm::Optional<bool> {
+          auto containerType = op.getTarget().getType();
+          if (isNtensor(typeConverter, containerType))
+            return false;
+
+          return llvm::None;
+        });
 
     target.addIllegalOp<plier::BuildSliceOp>();
 
@@ -1580,6 +1608,7 @@ struct PlierToNtensorPass
     patterns.insert<
         // clang-format off
         GetitemToNtensor,
+        SetitemToNtensor,
         BuildSliceToNtensor
         // clang-format on
         >(typeConverter, &context);
