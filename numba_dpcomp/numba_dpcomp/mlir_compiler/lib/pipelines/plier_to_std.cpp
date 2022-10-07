@@ -1507,52 +1507,6 @@ void PlierToStdPass::runOnOperation() {
     signalPassFailure();
 }
 
-struct ConvertLiteralTypesPass
-    : public mlir::PassWrapper<PlierToStdPass,
-                               mlir::OperationPass<mlir::ModuleOp>> {
-  virtual void
-  getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<mlir::func::FuncDialect>();
-  }
-
-  void runOnOperation() override {
-    mlir::TypeConverter typeConverter;
-    // Convert unknown types to itself
-    typeConverter.addConversion([](mlir::Type type) { return type; });
-
-    auto context = &getContext();
-    typeConverter.addConversion([](plier::LiteralType type) {
-      return type.getValue().cast<mlir::TypedAttr>().getType();
-    });
-
-    auto materializeCast =
-        [](mlir::OpBuilder &builder, mlir::Type type, mlir::ValueRange inputs,
-           mlir::Location loc) -> llvm::Optional<mlir::Value> {
-      if (inputs.size() == 1)
-        return builder
-            .create<mlir::UnrealizedConversionCastOp>(loc, type, inputs.front())
-            .getResult(0);
-
-      return llvm::None;
-    };
-    typeConverter.addArgumentMaterialization(materializeCast);
-    typeConverter.addSourceMaterialization(materializeCast);
-    typeConverter.addTargetMaterialization(materializeCast);
-
-    mlir::RewritePatternSet patterns(context);
-    mlir::ConversionTarget target(*context);
-
-    imex::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
-                                                             patterns, target);
-    imex::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
-                                                       target);
-
-    if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
-                                                  std::move(patterns))))
-      signalPassFailure();
-  }
-};
-
 static void populatePlierToStdPipeline(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(std::make_unique<PlierToStdPass>());
@@ -1560,7 +1514,6 @@ static void populatePlierToStdPipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<BuiltinCallsLoweringPass>());
   pm.addPass(imex::createForceInlinePass());
   pm.addPass(mlir::createSymbolDCEPass());
-  pm.addPass(std::make_unique<ConvertLiteralTypesPass>());
   pm.addPass(mlir::createCanonicalizerPass());
 }
 } // namespace
