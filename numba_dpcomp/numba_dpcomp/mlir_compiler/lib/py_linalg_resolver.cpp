@@ -155,7 +155,7 @@ static bool isCompatibleType(mlir::Type type) {
 
   return type.isa<mlir::IntegerType, mlir::IndexType, mlir::FloatType,
                   mlir::RankedTensorType, mlir::MemRefType, mlir::NoneType,
-                  plier::LiteralType, plier::TypeVar>();
+                  plier::TypeVar>();
 }
 
 static bool isCompatibleTypeVal(mlir::Value val) {
@@ -400,9 +400,6 @@ private:
   llvm::Optional<py::object> makePyLiteral(py::capsule context,
                                            mlir::Value val) {
     assert(val);
-    if (auto literal = val.getType().dyn_cast<plier::LiteralType>())
-      return getPyLiteral(literal.getValue());
-
     if (auto buildTuple = val.getDefiningOp<imex::util::BuildTupleOp>()) {
       auto args = buildTuple.getArgs();
       auto count = static_cast<unsigned>(args.size());

@@ -17,7 +17,6 @@
 
 #include "pipelines/plier_to_scf.hpp"
 #include "pipelines/plier_to_std.hpp"
-#include "pipelines/pre_low_simplifications.hpp"
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
@@ -66,26 +65,16 @@ static mlir::Type mapIntLiteralType(mlir::MLIRContext &ctx,
   int64_t value = 0;
   if (name.consume_front("Literal[int](") &&
       !name.consumeInteger<int64_t>(10, value) && name.consume_front(")")) {
-    auto type = mlir::IntegerType::get(&ctx, 64, mlir::IntegerType::Signed);
-    auto attr = mlir::IntegerAttr::get(type, value);
-    return plier::LiteralType::get(attr);
+    return mlir::IntegerType::get(&ctx, 64, mlir::IntegerType::Signed);
   }
   return nullptr;
 }
 
 static mlir::Type mapBoolLiteralType(mlir::MLIRContext &ctx,
                                      llvm::StringRef &name) {
-  if (name.consume_front("Literal[bool](")) {
-    auto type = mlir::IntegerType::get(&ctx, 1);
-    mlir::IntegerAttr attr;
-    if (name.consume_front("True") && name.consume_front(")")) {
-      attr = mlir::IntegerAttr::get(type, 1);
-    } else if (name.consume_front("False") && name.consume_front(")")) {
-      attr = mlir::IntegerAttr::get(type, 0);
-    } else {
-      return nullptr;
-    }
-    return plier::LiteralType::get(attr);
+  if (name.consume_front("Literal[bool](True)") ||
+      name.consume_front("Literal[bool](False)")) {
+    return mlir::IntegerType::get(&ctx, 1);
   }
   return nullptr;
 }
@@ -299,15 +288,6 @@ static mlir::Type mapPlierType(mlir::Type type) {
   return mapPlierTypeName(*type.getContext(), name);
 }
 
-static mlir::Type dropLiteralType(mlir::Type t) {
-  assert(t);
-  if (auto literal = t.dyn_cast<plier::LiteralType>())
-    return dropLiteralType(
-        literal.getValue().cast<mlir::TypedAttr>().getType());
-
-  return t;
-}
-
 static bool isSupportedType(mlir::Type type) {
   assert(type);
   return type.isIntOrFloat();
@@ -410,20 +390,6 @@ struct LiteralLowering : public mlir::OpConversionPattern<Op> {
       return mlir::success();
     }
 
-    if (auto literal = convertedType.template dyn_cast<plier::LiteralType>()) {
-      auto loc = op.getLoc();
-      auto attrVal = literal.getValue();
-      auto dstType = attrVal.template cast<mlir::TypedAttr>().getType();
-      auto val = makeSignlessAttr(attrVal).template cast<mlir::TypedAttr>();
-      auto newVal =
-          rewriter.create<mlir::arith::ConstantOp>(loc, val).getResult();
-      if (dstType != val.getType())
-        newVal = rewriter.create<imex::util::SignCastOp>(loc, dstType, newVal);
-
-      rewriter.replaceOp(op, newVal);
-      return mlir::success();
-    }
-
     if (auto typevar = convertedType.template dyn_cast<plier::TypeVar>()) {
       rewriter.replaceOpWithNewOp<imex::util::UndefOp>(op, typevar);
       return mlir::success();
@@ -454,8 +420,15 @@ struct OmittedLowering : public mlir::OpConversionPattern<plier::CastOp> {
       if (!name.consume_front("omitted(default=") || !name.consume_back(")"))
         return {};
 
-      int64_t intVal;
-      if (dstType.isa<mlir::IntegerType>() && !name.getAsInteger(10, intVal)) {
+      if (auto intType = dstType.dyn_cast<mlir::IntegerType>()) {
+        int64_t intVal;
+        if (name.consume_front("True")) {
+          intVal = 1;
+        } else if (name.consume_front("False")) {
+          intVal = 0;
+        } else if (name.getAsInteger(10, intVal)) {
+          return {};
+        }
         return rewriter.getIntegerAttr(dstType, intVal);
       }
 
@@ -699,16 +672,6 @@ mlir::Value doCast(mlir::PatternRewriter &rewriter, mlir::Location loc,
                    mlir::Value val, mlir::Type dstType) {
   assert(dstType);
   auto srcType = val.getType();
-  if (auto literal = srcType.dyn_cast<plier::LiteralType>()) {
-    auto attr = literal.getValue().cast<mlir::TypedAttr>();
-    auto signlessAttr = makeSignlessAttr(attr).cast<mlir::TypedAttr>();
-    val = rewriter.create<mlir::arith::ConstantOp>(loc, signlessAttr);
-    if (signlessAttr.getType() != attr.getType())
-      val = rewriter.create<imex::util::SignCastOp>(loc, attr.getType(), val);
-
-    srcType = val.getType();
-  }
-
   if (srcType == dstType)
     return val;
 
@@ -857,8 +820,8 @@ struct BinOpLowering : public mlir::OpConversionPattern<plier::BinOp> {
     auto &converter = *getTypeConverter();
     auto operands = adaptor.getOperands();
     assert(operands.size() == 2);
-    auto type0 = dropLiteralType(operands[0].getType());
-    auto type1 = dropLiteralType(operands[1].getType());
+    auto type0 = operands[0].getType();
+    auto type1 = operands[1].getType();
     if (!isSupportedType(type0) || !isSupportedType(type1))
       return mlir::failure();
 
@@ -1417,8 +1380,8 @@ void PlierToStdPass::runOnOperation() {
       return false;
 
     auto res = typeConverter.convertType(t);
-    return res && res.isa<mlir::IntegerType, mlir::FloatType, mlir::IndexType,
-                          plier::LiteralType>();
+    return res &&
+           res.isa<mlir::IntegerType, mlir::FloatType, mlir::IndexType>();
   };
 
   auto isTuple = [&](mlir::Type t) -> bool {
@@ -1460,9 +1423,6 @@ void PlierToStdPass::runOnOperation() {
 
         if (type.isa<mlir::NoneType, plier::TypeVar>())
           return false;
-
-        if (auto literal = type.dyn_cast<plier::LiteralType>())
-          type = literal.getValue().cast<mlir::TypedAttr>().getType();
 
         return !type.isIntOrFloat();
       });
@@ -1511,52 +1471,6 @@ void PlierToStdPass::runOnOperation() {
     signalPassFailure();
 }
 
-struct ConvertLiteralTypesPass
-    : public mlir::PassWrapper<PlierToStdPass,
-                               mlir::OperationPass<mlir::ModuleOp>> {
-  virtual void
-  getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<mlir::func::FuncDialect>();
-  }
-
-  void runOnOperation() override {
-    mlir::TypeConverter typeConverter;
-    // Convert unknown types to itself
-    typeConverter.addConversion([](mlir::Type type) { return type; });
-
-    auto context = &getContext();
-    typeConverter.addConversion([](plier::LiteralType type) {
-      return type.getValue().cast<mlir::TypedAttr>().getType();
-    });
-
-    auto materializeCast =
-        [](mlir::OpBuilder &builder, mlir::Type type, mlir::ValueRange inputs,
-           mlir::Location loc) -> llvm::Optional<mlir::Value> {
-      if (inputs.size() == 1)
-        return builder
-            .create<mlir::UnrealizedConversionCastOp>(loc, type, inputs.front())
-            .getResult(0);
-
-      return llvm::None;
-    };
-    typeConverter.addArgumentMaterialization(materializeCast);
-    typeConverter.addSourceMaterialization(materializeCast);
-    typeConverter.addTargetMaterialization(materializeCast);
-
-    mlir::RewritePatternSet patterns(context);
-    mlir::ConversionTarget target(*context);
-
-    imex::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
-                                                             patterns, target);
-    imex::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
-                                                       target);
-
-    if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
-                                                  std::move(patterns))))
-      signalPassFailure();
-  }
-};
-
 static void populatePlierToStdPipeline(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(std::make_unique<PlierToStdPass>());
@@ -1564,7 +1478,6 @@ static void populatePlierToStdPipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<BuiltinCallsLoweringPass>());
   pm.addPass(imex::createForceInlinePass());
   pm.addPass(mlir::createSymbolDCEPass());
-  pm.addPass(std::make_unique<ConvertLiteralTypesPass>());
   pm.addPass(mlir::createCanonicalizerPass());
 }
 } // namespace
