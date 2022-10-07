@@ -11,7 +11,7 @@ func.func @test_arange(%arg0: si64, %arg1: si64, %arg2: si64) -> !ptensor.ptenso
     return %0 : !ptensor.ptensor<tensor<?xi64>>
 }
 // CHECK-LABEL: @test_arange
-// CHECK-NEXT: ptensor.arange
+// CHECK-NEXT: "ptensor.arange"(%arg0, %arg1, %arg2) {dist = true} : (si64, si64, si64) -> !ptensor.ptensor<tensor<?xi64>>
 
 // -----
 func.func @test_ewbin(%arg0: !ptensor.ptensor<tensor<?xi64>>) -> !ptensor.ptensor<tensor<?xi64>> {
@@ -19,7 +19,7 @@ func.func @test_ewbin(%arg0: !ptensor.ptensor<tensor<?xi64>>) -> !ptensor.ptenso
     return %0 : !ptensor.ptensor<tensor<?xi64>>
 }
 // CHECK-LABEL: @test_ewbin
-// CHECK-NEXT: ptensor.ewbin
+// CHECK-NEXT: "ptensor.ewbin"(%arg0, %arg0) {op = 0 : i32} : (!ptensor.ptensor<tensor<?xi64>>, !ptensor.ptensor<tensor<?xi64>>) -> !ptensor.ptensor<tensor<?xi64>>
 
 // -----
 func.func @test_reduction(%arg0: !ptensor.ptensor<tensor<?xi64>>) -> si64 {
@@ -28,4 +28,4 @@ func.func @test_reduction(%arg0: !ptensor.ptensor<tensor<?xi64>>) -> si64 {
     return %1 : si64
 }
 // CHECK-LABEL: @test_reduction
-// CHECK-NEXT: ptensor.reduction
+// CHECK-NEXT: "ptensor.reduction"(%arg0) {op = 4 : i32} : (!ptensor.ptensor<tensor<?xi64>>) -> !ptensor.ptensor<tensor<si64>>
