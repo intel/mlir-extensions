@@ -17,6 +17,7 @@
 
 #include <imex/Conversion/DistToStandard/DistToStandard.h>
 #include <imex/Conversion/PTensorToLinalg/PTensorToLinalg.h>
+#include <imex/Conversion/GPUToSPIRV/GPUToSPIRVPass.h>
 
 namespace imex {
 
