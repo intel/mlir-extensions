@@ -1,0 +1,3608 @@
+============================================================
+  Processing:  module_0000.jit_log10.0_linalg.mlir
+============================================================
+all dialect usage: 15
+arith dialect usage: 2
+  arith.constant: 1
+  arith.div*: 1
+linalg dialect usage: 9
+  linalg.generic: 3
+  linalg.init_tensor*: 3
+  linalg.yield: 3
+============================================================
+  Processing:  module_0002.jit__get_lg_age_bin_edges.1_linalg.mlir
+============================================================
+============================================================
+  Processing:  module_0005.jit__jax_get_dt_array.2_linalg.mlir
+============================================================
+============================================================
+  Processing:  module_0007.jit_fn.3_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.mul*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0009.jit__reduce_sum.4_linalg.mlir
+============================================================
+all dialect usage: 10
+arith dialect usage: 3
+  arith.addf: 1
+  arith.constant: 2
+linalg dialect usage: 4
+  linalg.fill*: 1
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0011.jit_true_divide.5_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.div*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0013.jit__get_lg_age_bin_edges.6_linalg.mlir
+============================================================
+============================================================
+  Processing:  module_0016.jit__get_lgt_birth.7_linalg.mlir
+============================================================
+all dialect usage: 52
+arith dialect usage: 10
+  arith.cmpf: 1
+  arith.constant: 6
+  arith.div*: 1
+  arith.sub*: 1
+  arith.select: 1
+linalg dialect usage: 30
+  linalg.generic: 10
+  linalg.init_tensor*: 10
+  linalg.yield: 10
+============================================================
+  Processing:  module_0018.jit__get_age_weights_from_tables.8_linalg.mlir
+============================================================
+all dialect usage: 536
+tensor dialect usage: 35
+  tensor.collapse_shape: 4
+  tensor.expand_shape: 8
+  tensor.extract*: 23
+  tensor.extract_slice: 6
+arith dialect usage: 154
+  arith.addf: 2
+  arith.addi*: 19
+  arith.andi*: 1
+  arith.bitcast: 6
+  arith.cmpf: 7
+  arith.cmpi: 16
+  arith.constant: 50
+  arith.div*: 3
+  arith.index_cast*: 8
+  arith.max*: 1
+  arith.min*: 1
+  arith.mul*: 1
+  arith.negf: 1
+  arith.ori: 2
+  arith.rem*: 1
+  arith.sh*: 2
+  arith.sub*: 11
+  arith.select: 22
+scf dialect usage: 3
+  scf.condition: 1
+  scf.while: 1
+  scf.yield: 1
+linalg dialect usage: 312
+  linalg.fill*: 1
+  linalg.generic: 101
+  linalg.index: 8
+  linalg.init_tensor*: 101
+  linalg.yield: 101
+============================================================
+  Processing:  module_0025.jit__power.9_linalg.mlir
+============================================================
+all dialect usage: 12
+arith dialect usage: 1
+  arith.sitofp: 1
+linalg dialect usage: 9
+  linalg.generic: 3
+  linalg.init_tensor*: 3
+  linalg.yield: 3
+============================================================
+  Processing:  module_0027.jit__lambda_.10_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.sub*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0029.jit_prim_fun.11_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.mul*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0031.jit__lambda_.12_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.sub*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0033.jit_fn.13_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.mul*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0035.jit__get_age_weights_from_tables.14_linalg.mlir
+============================================================
+all dialect usage: 536
+tensor dialect usage: 35
+  tensor.collapse_shape: 4
+  tensor.expand_shape: 8
+  tensor.extract*: 23
+  tensor.extract_slice: 6
+arith dialect usage: 154
+  arith.addf: 2
+  arith.addi*: 19
+  arith.andi*: 1
+  arith.bitcast: 6
+  arith.cmpf: 7
+  arith.cmpi: 16
+  arith.constant: 50
+  arith.div*: 3
+  arith.index_cast*: 8
+  arith.max*: 1
+  arith.min*: 1
+  arith.mul*: 1
+  arith.negf: 1
+  arith.ori: 2
+  arith.rem*: 1
+  arith.sh*: 2
+  arith.sub*: 11
+  arith.select: 22
+scf dialect usage: 3
+  scf.condition: 1
+  scf.while: 1
+  scf.yield: 1
+linalg dialect usage: 312
+  linalg.fill*: 1
+  linalg.generic: 101
+  linalg.index: 8
+  linalg.init_tensor*: 101
+  linalg.yield: 101
+============================================================
+  Processing:  module_0042.jit__get_sfh_tables.15_linalg.mlir
+============================================================
+============================================================
+  Processing:  module_0057.jit__get_lgt_birth.16_linalg.mlir
+============================================================
+all dialect usage: 52
+arith dialect usage: 10
+  arith.cmpf: 1
+  arith.constant: 6
+  arith.div*: 1
+  arith.sub*: 1
+  arith.select: 1
+linalg dialect usage: 30
+  linalg.generic: 10
+  linalg.init_tensor*: 10
+  linalg.yield: 10
+============================================================
+  Processing:  module_0059.jit__get_age_weights_from_tables.17_linalg.mlir
+============================================================
+all dialect usage: 536
+tensor dialect usage: 35
+  tensor.collapse_shape: 4
+  tensor.expand_shape: 8
+  tensor.extract*: 23
+  tensor.extract_slice: 6
+arith dialect usage: 154
+  arith.addf: 2
+  arith.addi*: 19
+  arith.andi*: 1
+  arith.bitcast: 6
+  arith.cmpf: 7
+  arith.cmpi: 16
+  arith.constant: 50
+  arith.div*: 3
+  arith.index_cast*: 8
+  arith.max*: 1
+  arith.min*: 1
+  arith.mul*: 1
+  arith.negf: 1
+  arith.ori: 2
+  arith.rem*: 1
+  arith.sh*: 2
+  arith.sub*: 11
+  arith.select: 22
+scf dialect usage: 3
+  scf.condition: 1
+  scf.while: 1
+  scf.yield: 1
+linalg dialect usage: 312
+  linalg.fill*: 1
+  linalg.generic: 101
+  linalg.index: 8
+  linalg.init_tensor*: 101
+  linalg.yield: 101
+============================================================
+  Processing:  module_0066.jit__reduce_sum.18_linalg.mlir
+============================================================
+all dialect usage: 10
+arith dialect usage: 3
+  arith.addf: 1
+  arith.constant: 2
+linalg dialect usage: 4
+  linalg.fill*: 1
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0068.jit_prim_fun.19_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.sh*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0070.jit_prim_fun.20_linalg.mlir
+============================================================
+all dialect usage: 5
+builtin dialect usage: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0072.jit_prim_fun.21_linalg.mlir
+============================================================
+all dialect usage: 4
+builtin dialect usage: 2
+tensor dialect usage: 1
+  tensor.expand_shape: 1
+============================================================
+  Processing:  module_0073.jit__lambda_.22_linalg.mlir
+============================================================
+all dialect usage: 9
+builtin dialect usage: 1
+arith dialect usage: 1
+  arith.andi*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0075.jit_prim_fun.23_linalg.mlir
+============================================================
+all dialect usage: 21
+builtin dialect usage: 3
+tensor dialect usage: 3
+  tensor.dim: 1
+  tensor.extract*: 2
+arith dialect usage: 6
+  arith.addi*: 1
+  arith.cmpi: 1
+  arith.constant: 2
+  arith.sub*: 2
+scf dialect usage: 3
+  scf.if: 1
+  scf.yield: 2
+linalg dialect usage: 5
+  linalg.generic: 1
+  linalg.index: 2
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0077.jit__threefry_split.24_linalg.mlir
+============================================================
+all dialect usage: 47
+mhlo dialect usage: 3
+builtin dialect usage: 8
+tensor dialect usage: 10
+  tensor.collapse_shape: 2
+  tensor.dim: 1
+  tensor.expand_shape: 1
+  tensor.extract*: 6
+  tensor.extract_slice: 4
+arith dialect usage: 7
+  arith.addi*: 1
+  arith.cmpi: 1
+  arith.constant: 2
+  arith.index_cast*: 1
+  arith.sub*: 2
+scf dialect usage: 3
+  scf.if: 1
+  scf.yield: 2
+linalg dialect usage: 15
+  linalg.generic: 4
+  linalg.index: 3
+  linalg.init_tensor*: 4
+  linalg.yield: 4
+============================================================
+  Processing:  module_0081.jit__unstack.25_linalg.mlir
+============================================================
+all dialect usage: 9
+mhlo dialect usage: 1
+builtin dialect usage: 3
+tensor dialect usage: 4
+  tensor.collapse_shape: 2
+  tensor.extract*: 2
+  tensor.extract_slice: 2
+============================================================
+  Processing:  module_0083.jit__uniform.26_linalg.mlir
+============================================================
+all dialect usage: 99
+mhlo dialect usage: 3
+builtin dialect usage: 7
+tensor dialect usage: 12
+  tensor.collapse_shape: 3
+  tensor.dim: 1
+  tensor.expand_shape: 2
+  tensor.extract*: 6
+  tensor.extract_slice: 4
+arith dialect usage: 23
+  arith.addf: 1
+  arith.addi*: 1
+  arith.bitcast: 1
+  arith.cmpi: 1
+  arith.constant: 8
+  arith.index_cast*: 1
+  arith.max*: 1
+  arith.mul*: 1
+  arith.ori: 1
+  arith.sitofp: 2
+  arith.sh*: 1
+  arith.sub*: 4
+scf dialect usage: 3
+  scf.if: 1
+  scf.yield: 2
+linalg dialect usage: 48
+  linalg.generic: 15
+  linalg.index: 3
+  linalg.init_tensor*: 15
+  linalg.yield: 15
+============================================================
+  Processing:  module_0088.jit__unstack.27_linalg.mlir
+============================================================
+all dialect usage: 6
+mhlo dialect usage: 1
+tensor dialect usage: 4
+  tensor.collapse_shape: 2
+  tensor.extract*: 2
+  tensor.extract_slice: 2
+============================================================
+  Processing:  module_0090.jit__get_bounded_mah_early_late.28_linalg.mlir
+============================================================
+all dialect usage: 39
+mhlo dialect usage: 1
+arith dialect usage: 10
+  arith.addf: 2
+  arith.constant: 3
+  arith.mul*: 2
+  arith.sitofp: 1
+  arith.sub*: 2
+linalg dialect usage: 21
+  linalg.generic: 7
+  linalg.init_tensor*: 7
+  linalg.yield: 7
+============================================================
+  Processing:  module_0092.jit_prim_fun.29_linalg.mlir
+============================================================
+all dialect usage: 1
+============================================================
+  Processing:  module_0093.jit_prim_fun.30_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.cmpf: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0095.jit_prim_fun.31_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.cmpf: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0097.jit__get_bounded_qdrop_qrejuv.32_linalg.mlir
+============================================================
+all dialect usage: 41
+mhlo dialect usage: 1
+arith dialect usage: 10
+  arith.addf: 2
+  arith.constant: 2
+  arith.mul*: 2
+  arith.sitofp: 2
+  arith.sub*: 2
+linalg dialect usage: 24
+  linalg.generic: 8
+  linalg.init_tensor*: 8
+  linalg.yield: 8
+============================================================
+  Processing:  module_0099.jit__uniform.33_linalg.mlir
+============================================================
+all dialect usage: 126
+mhlo dialect usage: 3
+builtin dialect usage: 7
+tensor dialect usage: 18
+  tensor.collapse_shape: 5
+  tensor.dim: 2
+  tensor.expand_shape: 2
+  tensor.extract*: 9
+  tensor.extract_slice: 5
+arith dialect usage: 30
+  arith.addf: 1
+  arith.addi*: 2
+  arith.bitcast: 1
+  arith.cmpi: 2
+  arith.constant: 11
+  arith.index_cast*: 1
+  arith.max*: 1
+  arith.mul*: 1
+  arith.ori: 1
+  arith.sitofp: 2
+  arith.sh*: 1
+  arith.sub*: 6
+scf dialect usage: 6
+  scf.if: 2
+  scf.yield: 4
+linalg dialect usage: 59
+  linalg.generic: 18
+  linalg.index: 5
+  linalg.init_tensor*: 18
+  linalg.yield: 18
+============================================================
+  Processing:  module_0104.jit__unstack.34_linalg.mlir
+============================================================
+all dialect usage: 28
+mhlo dialect usage: 1
+tensor dialect usage: 26
+  tensor.collapse_shape: 13
+  tensor.extract*: 13
+  tensor.extract_slice: 13
+============================================================
+  Processing:  module_0106.jit__get_bounded_param.35_linalg.mlir
+============================================================
+all dialect usage: 21
+arith dialect usage: 5
+  arith.addf: 1
+  arith.mul*: 1
+  arith.sitofp: 2
+  arith.sub*: 1
+linalg dialect usage: 15
+  linalg.generic: 5
+  linalg.init_tensor*: 5
+  linalg.yield: 5
+============================================================
+  Processing:  module_0108.jit__get_bounded_param.36_linalg.mlir
+============================================================
+all dialect usage: 13
+arith dialect usage: 3
+  arith.addf: 1
+  arith.mul*: 1
+  arith.sub*: 1
+linalg dialect usage: 9
+  linalg.generic: 3
+  linalg.init_tensor*: 3
+  linalg.yield: 3
+============================================================
+  Processing:  module_0110.jit__get_bounded_param.37_linalg.mlir
+============================================================
+all dialect usage: 25
+arith dialect usage: 6
+  arith.addf: 1
+  arith.mul*: 1
+  arith.sitofp: 3
+  arith.sub*: 1
+linalg dialect usage: 18
+  linalg.generic: 6
+  linalg.init_tensor*: 6
+  linalg.yield: 6
+============================================================
+  Processing:  module_0112.jit__get_bounded_mah_early_late.38_linalg.mlir
+============================================================
+all dialect usage: 47
+mhlo dialect usage: 1
+arith dialect usage: 12
+  arith.addf: 2
+  arith.constant: 3
+  arith.mul*: 2
+  arith.sitofp: 3
+  arith.sub*: 2
+linalg dialect usage: 27
+  linalg.generic: 9
+  linalg.init_tensor*: 9
+  linalg.yield: 9
+============================================================
+  Processing:  module_0114.jit__get_bounded_param.39_linalg.mlir
+============================================================
+all dialect usage: 17
+arith dialect usage: 4
+  arith.addf: 1
+  arith.mul*: 1
+  arith.sitofp: 1
+  arith.sub*: 1
+linalg dialect usage: 12
+  linalg.generic: 4
+  linalg.init_tensor*: 4
+  linalg.yield: 4
+============================================================
+  Processing:  module_0116.jit__get_bounded_qdrop_qrejuv.40_linalg.mlir
+============================================================
+all dialect usage: 49
+mhlo dialect usage: 1
+arith dialect usage: 12
+  arith.addf: 2
+  arith.constant: 2
+  arith.mul*: 2
+  arith.sitofp: 4
+  arith.sub*: 2
+linalg dialect usage: 30
+  linalg.generic: 10
+  linalg.init_tensor*: 10
+  linalg.yield: 10
+============================================================
+  Processing:  module_0118.jit__pred_mags_singlegal.41_linalg.mlir
+============================================================
+============================================================
+  Processing:  module_0156.jit__get_bin_edges.42_linalg.mlir
+============================================================
+============================================================
+  Processing:  module_0158.jit__get_met_weights_singlegal.43_linalg.mlir
+============================================================
+all dialect usage: 472
+tensor dialect usage: 6
+  tensor.collapse_shape: 2
+  tensor.extract*: 4
+  tensor.extract_slice: 4
+arith dialect usage: 131
+  arith.addf: 7
+  arith.andi*: 3
+  arith.cmpf: 8
+  arith.cmpi: 2
+  arith.constant: 54
+  arith.div*: 11
+  arith.index_cast*: 2
+  arith.mul*: 26
+  arith.sitofp: 4
+  arith.sub*: 5
+  arith.select: 9
+linalg dialect usage: 254
+  linalg.fill*: 2
+  linalg.generic: 84
+  linalg.index: 2
+  linalg.init_tensor*: 82
+  linalg.yield: 84
+============================================================
+  Processing:  module_0162.jit__power.44_linalg.mlir
+============================================================
+all dialect usage: 9
+arith dialect usage: 1
+  arith.sitofp: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0164.jit_diffstar_sfh.45_linalg.mlir
+============================================================
+============================================================
+  Processing:  module_0170.jit__pred_mags_singlegal.46_linalg.mlir
+============================================================
+============================================================
+  Processing:  module_0208.jit__unit_scale_traindata.47_linalg.mlir
+============================================================
+all dialect usage: 62
+tensor dialect usage: 9
+  tensor.collapse_shape: 2
+  tensor.expand_shape: 7
+arith dialect usage: 10
+  arith.cmpi: 1
+  arith.constant: 2
+  arith.div*: 1
+  arith.sitofp: 2
+  arith.sub*: 2
+  arith.select: 2
+linalg dialect usage: 30
+  linalg.generic: 10
+  linalg.init_tensor*: 10
+  linalg.yield: 10
+============================================================
+  Processing:  module_0210.jit_ravel.48_linalg.mlir
+============================================================
+all dialect usage: 2
+tensor dialect usage: 1
+  tensor.collapse_shape: 1
+============================================================
+  Processing:  module_0211.jit_prim_fun.49_linalg.mlir
+============================================================
+all dialect usage: 2
+tensor dialect usage: 1
+  tensor.expand_shape: 1
+============================================================
+  Processing:  module_0212.jit_prim_fun.50_linalg.mlir
+============================================================
+all dialect usage: 145
+tensor dialect usage: 31
+  tensor.dim: 15
+  tensor.extract*: 16
+arith dialect usage: 62
+  arith.addi*: 15
+  arith.cmpi: 15
+  arith.constant: 16
+  arith.sub*: 16
+scf dialect usage: 45
+  scf.if: 15
+  scf.yield: 30
+linalg dialect usage: 6
+  linalg.generic: 1
+  linalg.index: 3
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0214.jit_prim_fun.51_linalg.mlir
+============================================================
+all dialect usage: 37
+tensor dialect usage: 7
+  tensor.dim: 3
+  tensor.extract*: 4
+arith dialect usage: 14
+  arith.addi*: 3
+  arith.cmpi: 3
+  arith.constant: 4
+  arith.sub*: 4
+scf dialect usage: 9
+  scf.if: 3
+  scf.yield: 6
+linalg dialect usage: 6
+  linalg.generic: 1
+  linalg.index: 3
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0216.jit_prim_fun.52_linalg.mlir
+============================================================
+all dialect usage: 19
+tensor dialect usage: 3
+  tensor.dim: 1
+  tensor.extract*: 2
+arith dialect usage: 6
+  arith.addi*: 1
+  arith.cmpi: 1
+  arith.constant: 2
+  arith.sub*: 2
+scf dialect usage: 3
+  scf.if: 1
+  scf.yield: 2
+linalg dialect usage: 6
+  linalg.generic: 1
+  linalg.index: 3
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0218.jit__lambda_.53_linalg.mlir
+============================================================
+all dialect usage: 5
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0220.jit_true_divide.54_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.div*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0223.jit__truncated_normal.55_linalg.mlir
+============================================================
+all dialect usage: 851
+mhlo dialect usage: 3
+builtin dialect usage: 7
+tensor dialect usage: 19
+  tensor.collapse_shape: 5
+  tensor.dim: 2
+  tensor.expand_shape: 3
+  tensor.extract*: 9
+  tensor.extract_slice: 5
+arith dialect usage: 245
+  arith.addf: 33
+  arith.addi*: 4
+  arith.andi*: 8
+  arith.bitcast: 9
+  arith.cmpf: 6
+  arith.cmpi: 10
+  arith.constant: 83
+  arith.div*: 4
+  arith.index_cast*: 1
+  arith.max*: 4
+  arith.min*: 3
+  arith.mul*: 41
+  arith.negf: 2
+  arith.ori: 5
+  arith.sitofp: 2
+  arith.sh*: 1
+  arith.sub*: 8
+  arith.select: 21
+scf dialect usage: 6
+  scf.if: 2
+  scf.yield: 4
+linalg dialect usage: 497
+  linalg.generic: 164
+  linalg.index: 5
+  linalg.init_tensor*: 164
+  linalg.yield: 164
+============================================================
+  Processing:  module_0228.jit_fn.56_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.mul*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0231.jit__normal.57_linalg.mlir
+============================================================
+all dialect usage: 366
+mhlo dialect usage: 3
+builtin dialect usage: 7
+tensor dialect usage: 13
+  tensor.collapse_shape: 2
+  tensor.dim: 2
+  tensor.extract*: 9
+  tensor.extract_slice: 5
+arith dialect usage: 116
+  arith.addf: 9
+  arith.addi*: 2
+  arith.bitcast: 1
+  arith.cmpf: 2
+  arith.cmpi: 2
+  arith.constant: 63
+  arith.index_cast*: 1
+  arith.max*: 1
+  arith.mul*: 13
+  arith.negf: 2
+  arith.ori: 1
+  arith.sh*: 1
+  arith.sub*: 7
+  arith.select: 11
+scf dialect usage: 6
+  scf.if: 2
+  scf.yield: 4
+linalg dialect usage: 161
+  linalg.generic: 52
+  linalg.index: 5
+  linalg.init_tensor*: 52
+  linalg.yield: 52
+============================================================
+  Processing:  module_0236.jit_fn.58_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.mul*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0239.jit__truncated_normal.59_linalg.mlir
+============================================================
+all dialect usage: 832
+mhlo dialect usage: 3
+builtin dialect usage: 7
+tensor dialect usage: 15
+  tensor.collapse_shape: 5
+  tensor.dim: 1
+  tensor.expand_shape: 3
+  tensor.extract*: 6
+  tensor.extract_slice: 4
+arith dialect usage: 238
+  arith.addf: 33
+  arith.addi*: 3
+  arith.andi*: 8
+  arith.bitcast: 9
+  arith.cmpf: 6
+  arith.cmpi: 9
+  arith.constant: 80
+  arith.div*: 4
+  arith.index_cast*: 1
+  arith.max*: 4
+  arith.min*: 3
+  arith.mul*: 41
+  arith.negf: 2
+  arith.ori: 5
+  arith.sitofp: 2
+  arith.sh*: 1
+  arith.sub*: 6
+  arith.select: 21
+scf dialect usage: 3
+  scf.if: 1
+  scf.yield: 2
+linalg dialect usage: 492
+  linalg.generic: 163
+  linalg.index: 3
+  linalg.init_tensor*: 163
+  linalg.yield: 163
+============================================================
+  Processing:  module_0243.jit_fn.60_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.mul*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0246.jit__normal.61_linalg.mlir
+============================================================
+all dialect usage: 347
+mhlo dialect usage: 3
+builtin dialect usage: 7
+tensor dialect usage: 9
+  tensor.collapse_shape: 2
+  tensor.dim: 1
+  tensor.extract*: 6
+  tensor.extract_slice: 4
+arith dialect usage: 109
+  arith.addf: 9
+  arith.addi*: 1
+  arith.bitcast: 1
+  arith.cmpf: 2
+  arith.cmpi: 1
+  arith.constant: 60
+  arith.index_cast*: 1
+  arith.max*: 1
+  arith.mul*: 13
+  arith.negf: 2
+  arith.ori: 1
+  arith.sh*: 1
+  arith.sub*: 5
+  arith.select: 11
+scf dialect usage: 3
+  scf.if: 1
+  scf.yield: 2
+linalg dialect usage: 156
+  linalg.generic: 51
+  linalg.index: 3
+  linalg.init_tensor*: 51
+  linalg.yield: 51
+============================================================
+  Processing:  module_0250.jit_fn.62_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.mul*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0253.jit__truncated_normal.63_linalg.mlir
+============================================================
+all dialect usage: 832
+mhlo dialect usage: 3
+builtin dialect usage: 7
+tensor dialect usage: 15
+  tensor.collapse_shape: 5
+  tensor.dim: 1
+  tensor.expand_shape: 3
+  tensor.extract*: 6
+  tensor.extract_slice: 4
+arith dialect usage: 238
+  arith.addf: 33
+  arith.addi*: 3
+  arith.andi*: 8
+  arith.bitcast: 9
+  arith.cmpf: 6
+  arith.cmpi: 9
+  arith.constant: 80
+  arith.div*: 4
+  arith.index_cast*: 1
+  arith.max*: 4
+  arith.min*: 3
+  arith.mul*: 41
+  arith.negf: 2
+  arith.ori: 5
+  arith.sitofp: 2
+  arith.sh*: 1
+  arith.sub*: 6
+  arith.select: 21
+scf dialect usage: 3
+  scf.if: 1
+  scf.yield: 2
+linalg dialect usage: 492
+  linalg.generic: 163
+  linalg.index: 3
+  linalg.init_tensor*: 163
+  linalg.yield: 163
+============================================================
+  Processing:  module_0257.jit_fn.64_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.mul*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0260.jit__normal.65_linalg.mlir
+============================================================
+all dialect usage: 347
+mhlo dialect usage: 3
+builtin dialect usage: 7
+tensor dialect usage: 9
+  tensor.collapse_shape: 2
+  tensor.dim: 1
+  tensor.extract*: 6
+  tensor.extract_slice: 4
+arith dialect usage: 109
+  arith.addf: 9
+  arith.addi*: 1
+  arith.bitcast: 1
+  arith.cmpf: 2
+  arith.cmpi: 1
+  arith.constant: 60
+  arith.index_cast*: 1
+  arith.max*: 1
+  arith.mul*: 13
+  arith.negf: 2
+  arith.ori: 1
+  arith.sh*: 1
+  arith.sub*: 5
+  arith.select: 11
+scf dialect usage: 3
+  scf.if: 1
+  scf.yield: 2
+linalg dialect usage: 156
+  linalg.generic: 51
+  linalg.index: 3
+  linalg.init_tensor*: 51
+  linalg.yield: 51
+============================================================
+  Processing:  module_0264.jit_fn.66_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.mul*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0267.jit__truncated_normal.67_linalg.mlir
+============================================================
+all dialect usage: 832
+mhlo dialect usage: 3
+builtin dialect usage: 7
+tensor dialect usage: 15
+  tensor.collapse_shape: 5
+  tensor.dim: 1
+  tensor.expand_shape: 3
+  tensor.extract*: 6
+  tensor.extract_slice: 4
+arith dialect usage: 238
+  arith.addf: 33
+  arith.addi*: 3
+  arith.andi*: 8
+  arith.bitcast: 9
+  arith.cmpf: 6
+  arith.cmpi: 9
+  arith.constant: 80
+  arith.div*: 4
+  arith.index_cast*: 1
+  arith.max*: 4
+  arith.min*: 3
+  arith.mul*: 41
+  arith.negf: 2
+  arith.ori: 5
+  arith.sitofp: 2
+  arith.sh*: 1
+  arith.sub*: 6
+  arith.select: 21
+scf dialect usage: 3
+  scf.if: 1
+  scf.yield: 2
+linalg dialect usage: 492
+  linalg.generic: 163
+  linalg.index: 3
+  linalg.init_tensor*: 163
+  linalg.yield: 163
+============================================================
+  Processing:  module_0271.jit_fn.68_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.mul*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0274.jit__normal.69_linalg.mlir
+============================================================
+all dialect usage: 347
+mhlo dialect usage: 3
+builtin dialect usage: 7
+tensor dialect usage: 9
+  tensor.collapse_shape: 2
+  tensor.dim: 1
+  tensor.extract*: 6
+  tensor.extract_slice: 4
+arith dialect usage: 109
+  arith.addf: 9
+  arith.addi*: 1
+  arith.bitcast: 1
+  arith.cmpf: 2
+  arith.cmpi: 1
+  arith.constant: 60
+  arith.index_cast*: 1
+  arith.max*: 1
+  arith.mul*: 13
+  arith.negf: 2
+  arith.ori: 1
+  arith.sh*: 1
+  arith.sub*: 5
+  arith.select: 11
+scf dialect usage: 3
+  scf.if: 1
+  scf.yield: 2
+linalg dialect usage: 156
+  linalg.generic: 51
+  linalg.index: 3
+  linalg.init_tensor*: 51
+  linalg.yield: 51
+============================================================
+  Processing:  module_0278.jit_fn.70_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.mul*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0281.jit__truncated_normal.71_linalg.mlir
+============================================================
+all dialect usage: 832
+mhlo dialect usage: 3
+builtin dialect usage: 7
+tensor dialect usage: 15
+  tensor.collapse_shape: 5
+  tensor.dim: 1
+  tensor.expand_shape: 3
+  tensor.extract*: 6
+  tensor.extract_slice: 4
+arith dialect usage: 238
+  arith.addf: 33
+  arith.addi*: 3
+  arith.andi*: 8
+  arith.bitcast: 9
+  arith.cmpf: 6
+  arith.cmpi: 9
+  arith.constant: 80
+  arith.div*: 4
+  arith.index_cast*: 1
+  arith.max*: 4
+  arith.min*: 3
+  arith.mul*: 41
+  arith.negf: 2
+  arith.ori: 5
+  arith.sitofp: 2
+  arith.sh*: 1
+  arith.sub*: 6
+  arith.select: 21
+scf dialect usage: 3
+  scf.if: 1
+  scf.yield: 2
+linalg dialect usage: 492
+  linalg.generic: 163
+  linalg.index: 3
+  linalg.init_tensor*: 163
+  linalg.yield: 163
+============================================================
+  Processing:  module_0285.jit_fn.72_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.mul*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0288.jit__normal.73_linalg.mlir
+============================================================
+all dialect usage: 347
+mhlo dialect usage: 3
+builtin dialect usage: 7
+tensor dialect usage: 9
+  tensor.collapse_shape: 2
+  tensor.dim: 1
+  tensor.extract*: 6
+  tensor.extract_slice: 4
+arith dialect usage: 109
+  arith.addf: 9
+  arith.addi*: 1
+  arith.bitcast: 1
+  arith.cmpf: 2
+  arith.cmpi: 1
+  arith.constant: 60
+  arith.index_cast*: 1
+  arith.max*: 1
+  arith.mul*: 13
+  arith.negf: 2
+  arith.ori: 1
+  arith.sh*: 1
+  arith.sub*: 5
+  arith.select: 11
+scf dialect usage: 3
+  scf.if: 1
+  scf.yield: 2
+linalg dialect usage: 156
+  linalg.generic: 51
+  linalg.index: 3
+  linalg.init_tensor*: 51
+  linalg.yield: 51
+============================================================
+  Processing:  module_0292.jit_fn.74_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.mul*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0295.jit__truncated_normal.75_linalg.mlir
+============================================================
+all dialect usage: 832
+mhlo dialect usage: 3
+builtin dialect usage: 7
+tensor dialect usage: 15
+  tensor.collapse_shape: 5
+  tensor.dim: 1
+  tensor.expand_shape: 3
+  tensor.extract*: 6
+  tensor.extract_slice: 4
+arith dialect usage: 238
+  arith.addf: 33
+  arith.addi*: 3
+  arith.andi*: 8
+  arith.bitcast: 9
+  arith.cmpf: 6
+  arith.cmpi: 9
+  arith.constant: 80
+  arith.div*: 4
+  arith.index_cast*: 1
+  arith.max*: 4
+  arith.min*: 3
+  arith.mul*: 41
+  arith.negf: 2
+  arith.ori: 5
+  arith.sitofp: 2
+  arith.sh*: 1
+  arith.sub*: 6
+  arith.select: 21
+scf dialect usage: 3
+  scf.if: 1
+  scf.yield: 2
+linalg dialect usage: 492
+  linalg.generic: 163
+  linalg.index: 3
+  linalg.init_tensor*: 163
+  linalg.yield: 163
+============================================================
+  Processing:  module_0299.jit_fn.76_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.mul*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0302.jit__normal.77_linalg.mlir
+============================================================
+all dialect usage: 347
+mhlo dialect usage: 3
+builtin dialect usage: 7
+tensor dialect usage: 9
+  tensor.collapse_shape: 2
+  tensor.dim: 1
+  tensor.extract*: 6
+  tensor.extract_slice: 4
+arith dialect usage: 109
+  arith.addf: 9
+  arith.addi*: 1
+  arith.bitcast: 1
+  arith.cmpf: 2
+  arith.cmpi: 1
+  arith.constant: 60
+  arith.index_cast*: 1
+  arith.max*: 1
+  arith.mul*: 13
+  arith.negf: 2
+  arith.ori: 1
+  arith.sh*: 1
+  arith.sub*: 5
+  arith.select: 11
+scf dialect usage: 3
+  scf.if: 1
+  scf.yield: 2
+linalg dialect usage: 156
+  linalg.generic: 51
+  linalg.index: 3
+  linalg.init_tensor*: 51
+  linalg.yield: 51
+============================================================
+  Processing:  module_0306.jit_fn.78_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.mul*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0308.jit_prim_fun.79_linalg.mlir
+============================================================
+all dialect usage: 4
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0310.jit_prim_fun.80_linalg.mlir
+============================================================
+all dialect usage: 4
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0312.jit_prim_fun.81_linalg.mlir
+============================================================
+all dialect usage: 4
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0314.jit_prim_fun.82_linalg.mlir
+============================================================
+all dialect usage: 4
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0316.jit_prim_fun.83_linalg.mlir
+============================================================
+all dialect usage: 4
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0318.jit_prim_fun.84_linalg.mlir
+============================================================
+all dialect usage: 4
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0320.jit_prim_fun.85_linalg.mlir
+============================================================
+all dialect usage: 4
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0322.jit_prim_fun.86_linalg.mlir
+============================================================
+all dialect usage: 4
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0324.jit_prim_fun.87_linalg.mlir
+============================================================
+all dialect usage: 4
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0326.jit_prim_fun.88_linalg.mlir
+============================================================
+all dialect usage: 4
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0328.jit_prim_fun.89_linalg.mlir
+============================================================
+all dialect usage: 4
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0330.jit_prim_fun.90_linalg.mlir
+============================================================
+all dialect usage: 4
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0332.jit__net_loss.91_linalg.mlir
+============================================================
+all dialect usage: 380
+tensor dialect usage: 12
+  tensor.collapse_shape: 6
+  tensor.expand_shape: 6
+arith dialect usage: 79
+  arith.addf: 7
+  arith.cmpf: 10
+  arith.constant: 39
+  arith.div*: 1
+  arith.mul*: 11
+  arith.sub*: 1
+  arith.select: 10
+linalg dialect usage: 202
+  linalg.fill*: 7
+  linalg.generic: 61
+  linalg.init_tensor*: 67
+  linalg.yield: 61
+  linalg.matmul*: 6
+============================================================
+  Processing:  module_0346.jit_prim_fun.92_linalg.mlir
+============================================================
+all dialect usage: 73
+tensor dialect usage: 15
+  tensor.dim: 7
+  tensor.extract*: 8
+arith dialect usage: 30
+  arith.addi*: 7
+  arith.cmpi: 7
+  arith.constant: 8
+  arith.sub*: 8
+scf dialect usage: 21
+  scf.if: 7
+  scf.yield: 14
+linalg dialect usage: 6
+  linalg.generic: 1
+  linalg.index: 3
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0348.jit_prim_fun.93_linalg.mlir
+============================================================
+all dialect usage: 28
+tensor dialect usage: 5
+  tensor.dim: 2
+  tensor.extract*: 3
+arith dialect usage: 10
+  arith.addi*: 2
+  arith.cmpi: 2
+  arith.constant: 3
+  arith.sub*: 3
+scf dialect usage: 6
+  scf.if: 2
+  scf.yield: 4
+linalg dialect usage: 6
+  linalg.generic: 1
+  linalg.index: 3
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0350.jit__net_loss.94_linalg.mlir
+============================================================
+all dialect usage: 565
+mhlo dialect usage: 115
+tensor dialect usage: 12
+  tensor.collapse_shape: 6
+  tensor.expand_shape: 6
+arith dialect usage: 109
+  arith.addf: 12
+  arith.cmpf: 10
+  arith.constant: 64
+  arith.div*: 1
+  arith.mul*: 11
+  arith.sub*: 1
+  arith.select: 10
+linalg dialect usage: 217
+  linalg.fill*: 7
+  linalg.generic: 66
+  linalg.init_tensor*: 72
+  linalg.yield: 66
+  linalg.matmul*: 6
+============================================================
+  Processing:  module_0370.jit_backward_pass.95_linalg.mlir
+============================================================
+============================================================
+  Processing:  module_0382.jit_fn.96_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.mul*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0384.jit_fn.97_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.addf: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0386.jit_square.98_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.mul*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0388.jit_prim_fun.99_linalg.mlir
+============================================================
+all dialect usage: 1
+============================================================
+  Processing:  module_0389.jit__lambda_.100_linalg.mlir
+============================================================
+all dialect usage: 9
+arith dialect usage: 2
+  arith.sitofp: 1
+  arith.sub*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0391.jit_true_divide.101_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.div*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0393.jit__lambda_.102_linalg.mlir
+============================================================
+all dialect usage: 5
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0395.jit_fn.103_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.addf: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0397.jit_true_divide.104_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.div*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0399.jit__lambda_.105_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.sub*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0401.jit_fn.106_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.addf: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0403.jit_square.107_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.mul*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0405.jit_true_divide.108_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.div*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0407.jit__lambda_.109_linalg.mlir
+============================================================
+all dialect usage: 5
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0409.jit_fn.110_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.addf: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0411.jit_true_divide.111_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.div*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0413.jit__lambda_.112_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.sub*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0415.jit_fn.113_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.mul*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0417.jit_fn.114_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.addf: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0419.jit_square.115_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.mul*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0421.jit_true_divide.116_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.div*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0423.jit__lambda_.117_linalg.mlir
+============================================================
+all dialect usage: 5
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0425.jit_fn.118_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.addf: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0427.jit_true_divide.119_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.div*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0429.jit__lambda_.120_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.sub*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0431.jit_fn.121_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.addf: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0433.jit_square.122_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.mul*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0435.jit_true_divide.123_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.div*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0437.jit__lambda_.124_linalg.mlir
+============================================================
+all dialect usage: 5
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0439.jit_fn.125_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.addf: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0441.jit_true_divide.126_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.div*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0443.jit__lambda_.127_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.sub*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0445.jit_fn.128_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.mul*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0447.jit_fn.129_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.addf: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0449.jit_square.130_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.mul*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0451.jit_true_divide.131_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.div*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0453.jit__lambda_.132_linalg.mlir
+============================================================
+all dialect usage: 5
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0455.jit_fn.133_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.addf: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0457.jit_true_divide.134_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.div*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0459.jit__lambda_.135_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.sub*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0461.jit_fn.136_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.addf: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0463.jit_square.137_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.mul*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0465.jit_true_divide.138_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.div*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0467.jit__lambda_.139_linalg.mlir
+============================================================
+all dialect usage: 5
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0469.jit_fn.140_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.addf: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0471.jit_true_divide.141_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.div*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0473.jit__lambda_.142_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.sub*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0475.jit_fn.143_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.mul*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0477.jit_fn.144_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.addf: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0479.jit_square.145_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.mul*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0481.jit_true_divide.146_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.div*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0483.jit__lambda_.147_linalg.mlir
+============================================================
+all dialect usage: 5
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0485.jit_fn.148_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.addf: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0487.jit_true_divide.149_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.div*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0489.jit__lambda_.150_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.sub*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0491.jit_fn.151_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.addf: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0493.jit_square.152_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.mul*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0495.jit_true_divide.153_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.div*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0497.jit__lambda_.154_linalg.mlir
+============================================================
+all dialect usage: 5
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0499.jit_fn.155_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.addf: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0501.jit_true_divide.156_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.div*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0503.jit__lambda_.157_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.sub*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0505.jit_fn.158_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.mul*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0507.jit_fn.159_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.addf: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0509.jit_square.160_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.mul*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0511.jit_true_divide.161_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.div*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0513.jit__lambda_.162_linalg.mlir
+============================================================
+all dialect usage: 5
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0515.jit_fn.163_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.addf: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0517.jit_true_divide.164_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.div*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0519.jit__lambda_.165_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.sub*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0521.jit_fn.166_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.addf: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0523.jit_square.167_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.mul*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0525.jit_true_divide.168_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.div*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0527.jit__lambda_.169_linalg.mlir
+============================================================
+all dialect usage: 5
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0529.jit_fn.170_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.addf: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0531.jit_true_divide.171_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.div*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0533.jit__lambda_.172_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.sub*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0535.jit_fn.173_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.mul*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0537.jit_fn.174_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.addf: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0539.jit_square.175_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.mul*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0541.jit_true_divide.176_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.div*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0543.jit__lambda_.177_linalg.mlir
+============================================================
+all dialect usage: 5
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0545.jit_fn.178_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.addf: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0547.jit_true_divide.179_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.div*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0549.jit__lambda_.180_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.sub*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0551.jit_fn.181_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.addf: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0553.jit_square.182_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.mul*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0555.jit_true_divide.183_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.div*: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0557.jit__lambda_.184_linalg.mlir
+============================================================
+all dialect usage: 5
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0559.jit_fn.185_linalg.mlir
+============================================================
+all dialect usage: 8
+arith dialect usage: 1
+  arith.addf: 1
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0561.jit_true_divide.186_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.div*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0563.jit__lambda_.187_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.sub*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0565.jit_prim_fun.188_linalg.mlir
+============================================================
+all dialect usage: 109
+tensor dialect usage: 23
+  tensor.dim: 11
+  tensor.extract*: 12
+arith dialect usage: 46
+  arith.addi*: 11
+  arith.cmpi: 11
+  arith.constant: 12
+  arith.sub*: 12
+scf dialect usage: 33
+  scf.if: 11
+  scf.yield: 22
+linalg dialect usage: 6
+  linalg.generic: 1
+  linalg.index: 3
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0567.jit_prim_fun.189_linalg.mlir
+============================================================
+all dialect usage: 37
+tensor dialect usage: 7
+  tensor.dim: 3
+  tensor.extract*: 4
+arith dialect usage: 14
+  arith.addi*: 3
+  arith.cmpi: 3
+  arith.constant: 4
+  arith.sub*: 4
+scf dialect usage: 9
+  scf.if: 3
+  scf.yield: 6
+linalg dialect usage: 6
+  linalg.generic: 1
+  linalg.index: 3
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0569.jit__net_loss.190_linalg.mlir
+============================================================
+all dialect usage: 565
+mhlo dialect usage: 115
+tensor dialect usage: 12
+  tensor.collapse_shape: 6
+  tensor.expand_shape: 6
+arith dialect usage: 109
+  arith.addf: 12
+  arith.cmpf: 10
+  arith.constant: 64
+  arith.div*: 1
+  arith.mul*: 11
+  arith.sub*: 1
+  arith.select: 10
+linalg dialect usage: 217
+  linalg.fill*: 7
+  linalg.generic: 66
+  linalg.init_tensor*: 72
+  linalg.yield: 66
+  linalg.matmul*: 6
+============================================================
+  Processing:  module_0589.jit_backward_pass.191_linalg.mlir
+============================================================
+============================================================
+  Processing:  module_0601.jit_prim_fun.192_linalg.mlir
+============================================================
+all dialect usage: 5
+arith dialect usage: 1
+  arith.mul*: 1
+linalg dialect usage: 3
+  linalg.generic: 1
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0603.jit_prim_fun.193_linalg.mlir
+============================================================
+all dialect usage: 46
+tensor dialect usage: 9
+  tensor.dim: 4
+  tensor.extract*: 5
+arith dialect usage: 18
+  arith.addi*: 4
+  arith.cmpi: 4
+  arith.constant: 5
+  arith.sub*: 5
+scf dialect usage: 12
+  scf.if: 4
+  scf.yield: 8
+linalg dialect usage: 6
+  linalg.generic: 1
+  linalg.index: 3
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0605.jit__net_loss.194_linalg.mlir
+============================================================
+all dialect usage: 565
+mhlo dialect usage: 115
+tensor dialect usage: 12
+  tensor.collapse_shape: 6
+  tensor.expand_shape: 6
+arith dialect usage: 109
+  arith.addf: 12
+  arith.cmpf: 10
+  arith.constant: 64
+  arith.div*: 1
+  arith.mul*: 11
+  arith.sub*: 1
+  arith.select: 10
+linalg dialect usage: 217
+  linalg.fill*: 7
+  linalg.generic: 66
+  linalg.init_tensor*: 72
+  linalg.yield: 66
+  linalg.matmul*: 6
+============================================================
+  Processing:  module_0625.jit_backward_pass.195_linalg.mlir
+============================================================
+============================================================
+  Processing:  module_0634.jit_prim_fun.196_linalg.mlir
+============================================================
+all dialect usage: 9
+arith dialect usage: 2
+  arith.mul*: 2
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0636.jit_prim_fun.197_linalg.mlir
+============================================================
+all dialect usage: 64
+tensor dialect usage: 13
+  tensor.dim: 6
+  tensor.extract*: 7
+arith dialect usage: 26
+  arith.addi*: 6
+  arith.cmpi: 6
+  arith.constant: 7
+  arith.sub*: 7
+scf dialect usage: 18
+  scf.if: 6
+  scf.yield: 12
+linalg dialect usage: 6
+  linalg.generic: 1
+  linalg.index: 3
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0638.jit__net_loss.198_linalg.mlir
+============================================================
+all dialect usage: 565
+mhlo dialect usage: 115
+tensor dialect usage: 12
+  tensor.collapse_shape: 6
+  tensor.expand_shape: 6
+arith dialect usage: 109
+  arith.addf: 12
+  arith.cmpf: 10
+  arith.constant: 64
+  arith.div*: 1
+  arith.mul*: 11
+  arith.sub*: 1
+  arith.select: 10
+linalg dialect usage: 217
+  linalg.fill*: 7
+  linalg.generic: 66
+  linalg.init_tensor*: 72
+  linalg.yield: 66
+  linalg.matmul*: 6
+============================================================
+  Processing:  module_0658.jit_backward_pass.199_linalg.mlir
+============================================================
+============================================================
+  Processing:  module_0667.jit_prim_fun.200_linalg.mlir
+============================================================
+all dialect usage: 11
+arith dialect usage: 2
+  arith.mul*: 2
+linalg dialect usage: 6
+  linalg.generic: 2
+  linalg.init_tensor*: 2
+  linalg.yield: 2
+============================================================
+  Processing:  module_0669.jit_prim_fun.201_linalg.mlir
+============================================================
+all dialect usage: 73
+tensor dialect usage: 15
+  tensor.dim: 7
+  tensor.extract*: 8
+arith dialect usage: 30
+  arith.addi*: 7
+  arith.cmpi: 7
+  arith.constant: 8
+  arith.sub*: 8
+scf dialect usage: 21
+  scf.if: 7
+  scf.yield: 14
+linalg dialect usage: 6
+  linalg.generic: 1
+  linalg.index: 3
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0671.jit__net_loss.202_linalg.mlir
+============================================================
+all dialect usage: 565
+mhlo dialect usage: 115
+tensor dialect usage: 12
+  tensor.collapse_shape: 6
+  tensor.expand_shape: 6
+arith dialect usage: 109
+  arith.addf: 12
+  arith.cmpf: 10
+  arith.constant: 64
+  arith.div*: 1
+  arith.mul*: 11
+  arith.sub*: 1
+  arith.select: 10
+linalg dialect usage: 217
+  linalg.fill*: 7
+  linalg.generic: 66
+  linalg.init_tensor*: 72
+  linalg.yield: 66
+  linalg.matmul*: 6
+============================================================
+  Processing:  module_0691.jit_backward_pass.203_linalg.mlir
+============================================================
+============================================================
+  Processing:  module_0700.jit_prim_fun.204_linalg.mlir
+============================================================
+all dialect usage: 15
+arith dialect usage: 3
+  arith.mul*: 3
+linalg dialect usage: 9
+  linalg.generic: 3
+  linalg.init_tensor*: 3
+  linalg.yield: 3
+============================================================
+  Processing:  module_0702.jit_prim_fun.205_linalg.mlir
+============================================================
+all dialect usage: 82
+tensor dialect usage: 17
+  tensor.dim: 8
+  tensor.extract*: 9
+arith dialect usage: 34
+  arith.addi*: 8
+  arith.cmpi: 8
+  arith.constant: 9
+  arith.sub*: 9
+scf dialect usage: 24
+  scf.if: 8
+  scf.yield: 16
+linalg dialect usage: 6
+  linalg.generic: 1
+  linalg.index: 3
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0704.jit__net_loss.206_linalg.mlir
+============================================================
+all dialect usage: 565
+mhlo dialect usage: 115
+tensor dialect usage: 12
+  tensor.collapse_shape: 6
+  tensor.expand_shape: 6
+arith dialect usage: 109
+  arith.addf: 12
+  arith.cmpf: 10
+  arith.constant: 64
+  arith.div*: 1
+  arith.mul*: 11
+  arith.sub*: 1
+  arith.select: 10
+linalg dialect usage: 217
+  linalg.fill*: 7
+  linalg.generic: 66
+  linalg.init_tensor*: 72
+  linalg.yield: 66
+  linalg.matmul*: 6
+============================================================
+  Processing:  module_0724.jit_backward_pass.207_linalg.mlir
+============================================================
+============================================================
+  Processing:  module_0731.jit_prim_fun.208_linalg.mlir
+============================================================
+all dialect usage: 15
+arith dialect usage: 3
+  arith.mul*: 3
+linalg dialect usage: 9
+  linalg.generic: 3
+  linalg.init_tensor*: 3
+  linalg.yield: 3
+============================================================
+  Processing:  module_0733.jit_prim_fun.209_linalg.mlir
+============================================================
+all dialect usage: 91
+tensor dialect usage: 19
+  tensor.dim: 9
+  tensor.extract*: 10
+arith dialect usage: 38
+  arith.addi*: 9
+  arith.cmpi: 9
+  arith.constant: 10
+  arith.sub*: 10
+scf dialect usage: 27
+  scf.if: 9
+  scf.yield: 18
+linalg dialect usage: 6
+  linalg.generic: 1
+  linalg.index: 3
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0735.jit__net_loss.210_linalg.mlir
+============================================================
+all dialect usage: 565
+mhlo dialect usage: 115
+tensor dialect usage: 12
+  tensor.collapse_shape: 6
+  tensor.expand_shape: 6
+arith dialect usage: 109
+  arith.addf: 12
+  arith.cmpf: 10
+  arith.constant: 64
+  arith.div*: 1
+  arith.mul*: 11
+  arith.sub*: 1
+  arith.select: 10
+linalg dialect usage: 217
+  linalg.fill*: 7
+  linalg.generic: 66
+  linalg.init_tensor*: 72
+  linalg.yield: 66
+  linalg.matmul*: 6
+============================================================
+  Processing:  module_0755.jit_backward_pass.211_linalg.mlir
+============================================================
+============================================================
+  Processing:  module_0762.jit_prim_fun.212_linalg.mlir
+============================================================
+all dialect usage: 19
+arith dialect usage: 4
+  arith.mul*: 4
+linalg dialect usage: 12
+  linalg.generic: 4
+  linalg.init_tensor*: 4
+  linalg.yield: 4
+============================================================
+  Processing:  module_0764.jit_prim_fun.213_linalg.mlir
+============================================================
+all dialect usage: 109
+tensor dialect usage: 23
+  tensor.dim: 11
+  tensor.extract*: 12
+arith dialect usage: 46
+  arith.addi*: 11
+  arith.cmpi: 11
+  arith.constant: 12
+  arith.sub*: 12
+scf dialect usage: 33
+  scf.if: 11
+  scf.yield: 22
+linalg dialect usage: 6
+  linalg.generic: 1
+  linalg.index: 3
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0766.jit__net_loss.214_linalg.mlir
+============================================================
+all dialect usage: 565
+mhlo dialect usage: 115
+tensor dialect usage: 12
+  tensor.collapse_shape: 6
+  tensor.expand_shape: 6
+arith dialect usage: 109
+  arith.addf: 12
+  arith.cmpf: 10
+  arith.constant: 64
+  arith.div*: 1
+  arith.mul*: 11
+  arith.sub*: 1
+  arith.select: 10
+linalg dialect usage: 217
+  linalg.fill*: 7
+  linalg.generic: 66
+  linalg.init_tensor*: 72
+  linalg.yield: 66
+  linalg.matmul*: 6
+============================================================
+  Processing:  module_0786.jit_backward_pass.215_linalg.mlir
+============================================================
+============================================================
+  Processing:  module_0793.jit_prim_fun.216_linalg.mlir
+============================================================
+all dialect usage: 15
+arith dialect usage: 3
+  arith.mul*: 3
+linalg dialect usage: 9
+  linalg.generic: 3
+  linalg.init_tensor*: 3
+  linalg.yield: 3
+============================================================
+  Processing:  module_0795.jit_prim_fun.217_linalg.mlir
+============================================================
+all dialect usage: 118
+tensor dialect usage: 25
+  tensor.dim: 12
+  tensor.extract*: 13
+arith dialect usage: 50
+  arith.addi*: 12
+  arith.cmpi: 12
+  arith.constant: 13
+  arith.sub*: 13
+scf dialect usage: 36
+  scf.if: 12
+  scf.yield: 24
+linalg dialect usage: 6
+  linalg.generic: 1
+  linalg.index: 3
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0797.jit__net_loss.218_linalg.mlir
+============================================================
+all dialect usage: 565
+mhlo dialect usage: 115
+tensor dialect usage: 12
+  tensor.collapse_shape: 6
+  tensor.expand_shape: 6
+arith dialect usage: 109
+  arith.addf: 12
+  arith.cmpf: 10
+  arith.constant: 64
+  arith.div*: 1
+  arith.mul*: 11
+  arith.sub*: 1
+  arith.select: 10
+linalg dialect usage: 217
+  linalg.fill*: 7
+  linalg.generic: 66
+  linalg.init_tensor*: 72
+  linalg.yield: 66
+  linalg.matmul*: 6
+============================================================
+  Processing:  module_0817.jit_backward_pass.219_linalg.mlir
+============================================================
+============================================================
+  Processing:  module_0824.jit_prim_fun.220_linalg.mlir
+============================================================
+all dialect usage: 19
+arith dialect usage: 4
+  arith.mul*: 4
+linalg dialect usage: 12
+  linalg.generic: 4
+  linalg.init_tensor*: 4
+  linalg.yield: 4
+============================================================
+  Processing:  module_0826.jit_prim_fun.221_linalg.mlir
+============================================================
+all dialect usage: 127
+tensor dialect usage: 27
+  tensor.dim: 13
+  tensor.extract*: 14
+arith dialect usage: 54
+  arith.addi*: 13
+  arith.cmpi: 13
+  arith.constant: 14
+  arith.sub*: 14
+scf dialect usage: 39
+  scf.if: 13
+  scf.yield: 26
+linalg dialect usage: 6
+  linalg.generic: 1
+  linalg.index: 3
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0828.jit__net_loss.222_linalg.mlir
+============================================================
+all dialect usage: 565
+mhlo dialect usage: 115
+tensor dialect usage: 12
+  tensor.collapse_shape: 6
+  tensor.expand_shape: 6
+arith dialect usage: 109
+  arith.addf: 12
+  arith.cmpf: 10
+  arith.constant: 64
+  arith.div*: 1
+  arith.mul*: 11
+  arith.sub*: 1
+  arith.select: 10
+linalg dialect usage: 217
+  linalg.fill*: 7
+  linalg.generic: 66
+  linalg.init_tensor*: 72
+  linalg.yield: 66
+  linalg.matmul*: 6
+============================================================
+  Processing:  module_0848.jit_backward_pass.223_linalg.mlir
+============================================================
+============================================================
+  Processing:  module_0855.jit_prim_fun.224_linalg.mlir
+============================================================
+all dialect usage: 19
+arith dialect usage: 4
+  arith.mul*: 4
+linalg dialect usage: 12
+  linalg.generic: 4
+  linalg.init_tensor*: 4
+  linalg.yield: 4
+============================================================
+  Processing:  module_0857.jit_prim_fun.225_linalg.mlir
+============================================================
+all dialect usage: 136
+tensor dialect usage: 29
+  tensor.dim: 14
+  tensor.extract*: 15
+arith dialect usage: 58
+  arith.addi*: 14
+  arith.cmpi: 14
+  arith.constant: 15
+  arith.sub*: 15
+scf dialect usage: 42
+  scf.if: 14
+  scf.yield: 28
+linalg dialect usage: 6
+  linalg.generic: 1
+  linalg.index: 3
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0859.jit__net_loss.226_linalg.mlir
+============================================================
+all dialect usage: 565
+mhlo dialect usage: 115
+tensor dialect usage: 12
+  tensor.collapse_shape: 6
+  tensor.expand_shape: 6
+arith dialect usage: 109
+  arith.addf: 12
+  arith.cmpf: 10
+  arith.constant: 64
+  arith.div*: 1
+  arith.mul*: 11
+  arith.sub*: 1
+  arith.select: 10
+linalg dialect usage: 217
+  linalg.fill*: 7
+  linalg.generic: 66
+  linalg.init_tensor*: 72
+  linalg.yield: 66
+  linalg.matmul*: 6
+============================================================
+  Processing:  module_0879.jit_backward_pass.227_linalg.mlir
+============================================================
+============================================================
+  Processing:  module_0886.jit_prim_fun.228_linalg.mlir
+============================================================
+all dialect usage: 23
+arith dialect usage: 5
+  arith.mul*: 5
+linalg dialect usage: 15
+  linalg.generic: 5
+  linalg.init_tensor*: 5
+  linalg.yield: 5
+============================================================
+  Processing:  module_0888.jit_prim_fun.229_linalg.mlir
+============================================================
+all dialect usage: 145
+tensor dialect usage: 31
+  tensor.dim: 15
+  tensor.extract*: 16
+arith dialect usage: 62
+  arith.addi*: 15
+  arith.cmpi: 15
+  arith.constant: 16
+  arith.sub*: 16
+scf dialect usage: 45
+  scf.if: 15
+  scf.yield: 30
+linalg dialect usage: 6
+  linalg.generic: 1
+  linalg.index: 3
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0890.jit_prim_fun.230_linalg.mlir
+============================================================
+all dialect usage: 1
+============================================================
+  Processing:  module_0891.jit_prim_fun.231_linalg.mlir
+============================================================
+all dialect usage: 19
+tensor dialect usage: 3
+  tensor.dim: 1
+  tensor.extract*: 2
+arith dialect usage: 6
+  arith.addi*: 1
+  arith.cmpi: 1
+  arith.constant: 2
+  arith.sub*: 2
+scf dialect usage: 3
+  scf.if: 1
+  scf.yield: 2
+linalg dialect usage: 6
+  linalg.generic: 1
+  linalg.index: 3
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0893.jit__net_loss.232_linalg.mlir
+============================================================
+all dialect usage: 565
+mhlo dialect usage: 115
+tensor dialect usage: 12
+  tensor.collapse_shape: 6
+  tensor.expand_shape: 6
+arith dialect usage: 109
+  arith.addf: 12
+  arith.cmpf: 10
+  arith.constant: 64
+  arith.div*: 1
+  arith.mul*: 11
+  arith.sub*: 1
+  arith.select: 10
+linalg dialect usage: 217
+  linalg.fill*: 7
+  linalg.generic: 66
+  linalg.init_tensor*: 72
+  linalg.yield: 66
+  linalg.matmul*: 6
+============================================================
+  Processing:  module_0913.jit_backward_pass.233_linalg.mlir
+============================================================
+============================================================
+  Processing:  module_0920.jit_prim_fun.234_linalg.mlir
+============================================================
+all dialect usage: 19
+arith dialect usage: 4
+  arith.mul*: 4
+linalg dialect usage: 12
+  linalg.generic: 4
+  linalg.init_tensor*: 4
+  linalg.yield: 4
+============================================================
+  Processing:  module_0922.jit_prim_fun.235_linalg.mlir
+============================================================
+all dialect usage: 19
+tensor dialect usage: 3
+  tensor.dim: 1
+  tensor.extract*: 2
+arith dialect usage: 6
+  arith.addi*: 1
+  arith.cmpi: 1
+  arith.constant: 2
+  arith.sub*: 2
+scf dialect usage: 3
+  scf.if: 1
+  scf.yield: 2
+linalg dialect usage: 6
+  linalg.generic: 1
+  linalg.index: 3
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0924.jit_prim_fun.236_linalg.mlir
+============================================================
+all dialect usage: 19
+tensor dialect usage: 3
+  tensor.dim: 1
+  tensor.extract*: 2
+arith dialect usage: 6
+  arith.addi*: 1
+  arith.cmpi: 1
+  arith.constant: 2
+  arith.sub*: 2
+scf dialect usage: 3
+  scf.if: 1
+  scf.yield: 2
+linalg dialect usage: 6
+  linalg.generic: 1
+  linalg.index: 3
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0926.jit__net_loss.237_linalg.mlir
+============================================================
+all dialect usage: 565
+mhlo dialect usage: 115
+tensor dialect usage: 12
+  tensor.collapse_shape: 6
+  tensor.expand_shape: 6
+arith dialect usage: 109
+  arith.addf: 12
+  arith.cmpf: 10
+  arith.constant: 64
+  arith.div*: 1
+  arith.mul*: 11
+  arith.sub*: 1
+  arith.select: 10
+linalg dialect usage: 217
+  linalg.fill*: 7
+  linalg.generic: 66
+  linalg.init_tensor*: 72
+  linalg.yield: 66
+  linalg.matmul*: 6
+============================================================
+  Processing:  module_0946.jit_backward_pass.238_linalg.mlir
+============================================================
+============================================================
+  Processing:  module_0953.jit_prim_fun.239_linalg.mlir
+============================================================
+all dialect usage: 23
+arith dialect usage: 5
+  arith.mul*: 5
+linalg dialect usage: 15
+  linalg.generic: 5
+  linalg.init_tensor*: 5
+  linalg.yield: 5
+============================================================
+  Processing:  module_0955.jit_prim_fun.240_linalg.mlir
+============================================================
+all dialect usage: 28
+tensor dialect usage: 5
+  tensor.dim: 2
+  tensor.extract*: 3
+arith dialect usage: 10
+  arith.addi*: 2
+  arith.cmpi: 2
+  arith.constant: 3
+  arith.sub*: 3
+scf dialect usage: 6
+  scf.if: 2
+  scf.yield: 4
+linalg dialect usage: 6
+  linalg.generic: 1
+  linalg.index: 3
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0957.jit_prim_fun.241_linalg.mlir
+============================================================
+all dialect usage: 19
+tensor dialect usage: 3
+  tensor.dim: 1
+  tensor.extract*: 2
+arith dialect usage: 6
+  arith.addi*: 1
+  arith.cmpi: 1
+  arith.constant: 2
+  arith.sub*: 2
+scf dialect usage: 3
+  scf.if: 1
+  scf.yield: 2
+linalg dialect usage: 6
+  linalg.generic: 1
+  linalg.index: 3
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0959.jit__net_loss.242_linalg.mlir
+============================================================
+all dialect usage: 565
+mhlo dialect usage: 115
+tensor dialect usage: 12
+  tensor.collapse_shape: 6
+  tensor.expand_shape: 6
+arith dialect usage: 109
+  arith.addf: 12
+  arith.cmpf: 10
+  arith.constant: 64
+  arith.div*: 1
+  arith.mul*: 11
+  arith.sub*: 1
+  arith.select: 10
+linalg dialect usage: 217
+  linalg.fill*: 7
+  linalg.generic: 66
+  linalg.init_tensor*: 72
+  linalg.yield: 66
+  linalg.matmul*: 6
+============================================================
+  Processing:  module_0979.jit_backward_pass.243_linalg.mlir
+============================================================
+============================================================
+  Processing:  module_0986.jit_prim_fun.244_linalg.mlir
+============================================================
+all dialect usage: 23
+arith dialect usage: 5
+  arith.mul*: 5
+linalg dialect usage: 15
+  linalg.generic: 5
+  linalg.init_tensor*: 5
+  linalg.yield: 5
+============================================================
+  Processing:  module_0988.jit_prim_fun.245_linalg.mlir
+============================================================
+all dialect usage: 37
+tensor dialect usage: 7
+  tensor.dim: 3
+  tensor.extract*: 4
+arith dialect usage: 14
+  arith.addi*: 3
+  arith.cmpi: 3
+  arith.constant: 4
+  arith.sub*: 4
+scf dialect usage: 9
+  scf.if: 3
+  scf.yield: 6
+linalg dialect usage: 6
+  linalg.generic: 1
+  linalg.index: 3
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0990.jit_prim_fun.246_linalg.mlir
+============================================================
+all dialect usage: 19
+tensor dialect usage: 3
+  tensor.dim: 1
+  tensor.extract*: 2
+arith dialect usage: 6
+  arith.addi*: 1
+  arith.cmpi: 1
+  arith.constant: 2
+  arith.sub*: 2
+scf dialect usage: 3
+  scf.if: 1
+  scf.yield: 2
+linalg dialect usage: 6
+  linalg.generic: 1
+  linalg.index: 3
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_0992.jit__net_loss.247_linalg.mlir
+============================================================
+all dialect usage: 565
+mhlo dialect usage: 115
+tensor dialect usage: 12
+  tensor.collapse_shape: 6
+  tensor.expand_shape: 6
+arith dialect usage: 109
+  arith.addf: 12
+  arith.cmpf: 10
+  arith.constant: 64
+  arith.div*: 1
+  arith.mul*: 11
+  arith.sub*: 1
+  arith.select: 10
+linalg dialect usage: 217
+  linalg.fill*: 7
+  linalg.generic: 66
+  linalg.init_tensor*: 72
+  linalg.yield: 66
+  linalg.matmul*: 6
+============================================================
+  Processing:  module_1012.jit_backward_pass.248_linalg.mlir
+============================================================
+============================================================
+  Processing:  module_1019.jit_prim_fun.249_linalg.mlir
+============================================================
+all dialect usage: 27
+arith dialect usage: 6
+  arith.mul*: 6
+linalg dialect usage: 18
+  linalg.generic: 6
+  linalg.init_tensor*: 6
+  linalg.yield: 6
+============================================================
+  Processing:  module_1021.jit_prim_fun.250_linalg.mlir
+============================================================
+all dialect usage: 55
+tensor dialect usage: 11
+  tensor.dim: 5
+  tensor.extract*: 6
+arith dialect usage: 22
+  arith.addi*: 5
+  arith.cmpi: 5
+  arith.constant: 6
+  arith.sub*: 6
+scf dialect usage: 15
+  scf.if: 5
+  scf.yield: 10
+linalg dialect usage: 6
+  linalg.generic: 1
+  linalg.index: 3
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_1023.jit_prim_fun.251_linalg.mlir
+============================================================
+all dialect usage: 19
+tensor dialect usage: 3
+  tensor.dim: 1
+  tensor.extract*: 2
+arith dialect usage: 6
+  arith.addi*: 1
+  arith.cmpi: 1
+  arith.constant: 2
+  arith.sub*: 2
+scf dialect usage: 3
+  scf.if: 1
+  scf.yield: 2
+linalg dialect usage: 6
+  linalg.generic: 1
+  linalg.index: 3
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_1025.jit__net_loss.252_linalg.mlir
+============================================================
+all dialect usage: 565
+mhlo dialect usage: 115
+tensor dialect usage: 12
+  tensor.collapse_shape: 6
+  tensor.expand_shape: 6
+arith dialect usage: 109
+  arith.addf: 12
+  arith.cmpf: 10
+  arith.constant: 64
+  arith.div*: 1
+  arith.mul*: 11
+  arith.sub*: 1
+  arith.select: 10
+linalg dialect usage: 217
+  linalg.fill*: 7
+  linalg.generic: 66
+  linalg.init_tensor*: 72
+  linalg.yield: 66
+  linalg.matmul*: 6
+============================================================
+  Processing:  module_1045.jit_backward_pass.253_linalg.mlir
+============================================================
+============================================================
+  Processing:  module_1052.jit_prim_fun.254_linalg.mlir
+============================================================
+all dialect usage: 19
+arith dialect usage: 4
+  arith.mul*: 4
+linalg dialect usage: 12
+  linalg.generic: 4
+  linalg.init_tensor*: 4
+  linalg.yield: 4
+============================================================
+  Processing:  module_1054.jit_prim_fun.255_linalg.mlir
+============================================================
+all dialect usage: 64
+tensor dialect usage: 13
+  tensor.dim: 6
+  tensor.extract*: 7
+arith dialect usage: 26
+  arith.addi*: 6
+  arith.cmpi: 6
+  arith.constant: 7
+  arith.sub*: 7
+scf dialect usage: 18
+  scf.if: 6
+  scf.yield: 12
+linalg dialect usage: 6
+  linalg.generic: 1
+  linalg.index: 3
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_1056.jit_prim_fun.256_linalg.mlir
+============================================================
+all dialect usage: 19
+tensor dialect usage: 3
+  tensor.dim: 1
+  tensor.extract*: 2
+arith dialect usage: 6
+  arith.addi*: 1
+  arith.cmpi: 1
+  arith.constant: 2
+  arith.sub*: 2
+scf dialect usage: 3
+  scf.if: 1
+  scf.yield: 2
+linalg dialect usage: 6
+  linalg.generic: 1
+  linalg.index: 3
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_1058.jit__net_loss.257_linalg.mlir
+============================================================
+all dialect usage: 565
+mhlo dialect usage: 115
+tensor dialect usage: 12
+  tensor.collapse_shape: 6
+  tensor.expand_shape: 6
+arith dialect usage: 109
+  arith.addf: 12
+  arith.cmpf: 10
+  arith.constant: 64
+  arith.div*: 1
+  arith.mul*: 11
+  arith.sub*: 1
+  arith.select: 10
+linalg dialect usage: 217
+  linalg.fill*: 7
+  linalg.generic: 66
+  linalg.init_tensor*: 72
+  linalg.yield: 66
+  linalg.matmul*: 6
+============================================================
+  Processing:  module_1078.jit_backward_pass.258_linalg.mlir
+============================================================
+============================================================
+  Processing:  module_1085.jit_prim_fun.259_linalg.mlir
+============================================================
+all dialect usage: 23
+arith dialect usage: 5
+  arith.mul*: 5
+linalg dialect usage: 15
+  linalg.generic: 5
+  linalg.init_tensor*: 5
+  linalg.yield: 5
+============================================================
+  Processing:  module_1087.jit_prim_fun.260_linalg.mlir
+============================================================
+all dialect usage: 73
+tensor dialect usage: 15
+  tensor.dim: 7
+  tensor.extract*: 8
+arith dialect usage: 30
+  arith.addi*: 7
+  arith.cmpi: 7
+  arith.constant: 8
+  arith.sub*: 8
+scf dialect usage: 21
+  scf.if: 7
+  scf.yield: 14
+linalg dialect usage: 6
+  linalg.generic: 1
+  linalg.index: 3
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_1089.jit_prim_fun.261_linalg.mlir
+============================================================
+all dialect usage: 19
+tensor dialect usage: 3
+  tensor.dim: 1
+  tensor.extract*: 2
+arith dialect usage: 6
+  arith.addi*: 1
+  arith.cmpi: 1
+  arith.constant: 2
+  arith.sub*: 2
+scf dialect usage: 3
+  scf.if: 1
+  scf.yield: 2
+linalg dialect usage: 6
+  linalg.generic: 1
+  linalg.index: 3
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_1091.jit__net_loss.262_linalg.mlir
+============================================================
+all dialect usage: 565
+mhlo dialect usage: 115
+tensor dialect usage: 12
+  tensor.collapse_shape: 6
+  tensor.expand_shape: 6
+arith dialect usage: 109
+  arith.addf: 12
+  arith.cmpf: 10
+  arith.constant: 64
+  arith.div*: 1
+  arith.mul*: 11
+  arith.sub*: 1
+  arith.select: 10
+linalg dialect usage: 217
+  linalg.fill*: 7
+  linalg.generic: 66
+  linalg.init_tensor*: 72
+  linalg.yield: 66
+  linalg.matmul*: 6
+============================================================
+  Processing:  module_1111.jit_backward_pass.263_linalg.mlir
+============================================================
+============================================================
+  Processing:  module_1118.jit_prim_fun.264_linalg.mlir
+============================================================
+all dialect usage: 23
+arith dialect usage: 5
+  arith.mul*: 5
+linalg dialect usage: 15
+  linalg.generic: 5
+  linalg.init_tensor*: 5
+  linalg.yield: 5
+============================================================
+  Processing:  module_1120.jit_prim_fun.265_linalg.mlir
+============================================================
+all dialect usage: 82
+tensor dialect usage: 17
+  tensor.dim: 8
+  tensor.extract*: 9
+arith dialect usage: 34
+  arith.addi*: 8
+  arith.cmpi: 8
+  arith.constant: 9
+  arith.sub*: 9
+scf dialect usage: 24
+  scf.if: 8
+  scf.yield: 16
+linalg dialect usage: 6
+  linalg.generic: 1
+  linalg.index: 3
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_1122.jit_prim_fun.266_linalg.mlir
+============================================================
+all dialect usage: 19
+tensor dialect usage: 3
+  tensor.dim: 1
+  tensor.extract*: 2
+arith dialect usage: 6
+  arith.addi*: 1
+  arith.cmpi: 1
+  arith.constant: 2
+  arith.sub*: 2
+scf dialect usage: 3
+  scf.if: 1
+  scf.yield: 2
+linalg dialect usage: 6
+  linalg.generic: 1
+  linalg.index: 3
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_1124.jit__net_loss.267_linalg.mlir
+============================================================
+all dialect usage: 565
+mhlo dialect usage: 115
+tensor dialect usage: 12
+  tensor.collapse_shape: 6
+  tensor.expand_shape: 6
+arith dialect usage: 109
+  arith.addf: 12
+  arith.cmpf: 10
+  arith.constant: 64
+  arith.div*: 1
+  arith.mul*: 11
+  arith.sub*: 1
+  arith.select: 10
+linalg dialect usage: 217
+  linalg.fill*: 7
+  linalg.generic: 66
+  linalg.init_tensor*: 72
+  linalg.yield: 66
+  linalg.matmul*: 6
+============================================================
+  Processing:  module_1144.jit_backward_pass.268_linalg.mlir
+============================================================
+============================================================
+  Processing:  module_1151.jit_prim_fun.269_linalg.mlir
+============================================================
+all dialect usage: 27
+arith dialect usage: 6
+  arith.mul*: 6
+linalg dialect usage: 18
+  linalg.generic: 6
+  linalg.init_tensor*: 6
+  linalg.yield: 6
+============================================================
+  Processing:  module_1153.jit_prim_fun.270_linalg.mlir
+============================================================
+all dialect usage: 100
+tensor dialect usage: 21
+  tensor.dim: 10
+  tensor.extract*: 11
+arith dialect usage: 42
+  arith.addi*: 10
+  arith.cmpi: 10
+  arith.constant: 11
+  arith.sub*: 11
+scf dialect usage: 30
+  scf.if: 10
+  scf.yield: 20
+linalg dialect usage: 6
+  linalg.generic: 1
+  linalg.index: 3
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_1155.jit_prim_fun.271_linalg.mlir
+============================================================
+all dialect usage: 19
+tensor dialect usage: 3
+  tensor.dim: 1
+  tensor.extract*: 2
+arith dialect usage: 6
+  arith.addi*: 1
+  arith.cmpi: 1
+  arith.constant: 2
+  arith.sub*: 2
+scf dialect usage: 3
+  scf.if: 1
+  scf.yield: 2
+linalg dialect usage: 6
+  linalg.generic: 1
+  linalg.index: 3
+  linalg.init_tensor*: 1
+  linalg.yield: 1
+============================================================
+  Processing:  module_1157.jit__net_loss.272_linalg.mlir
+============================================================
+all dialect usage: 565
+mhlo dialect usage: 115
+tensor dialect usage: 12
+  tensor.collapse_shape: 6
+  tensor.expand_shape: 6
+arith dialect usage: 109
+  arith.addf: 12
+  arith.cmpf: 10
+  arith.constant: 64
+  arith.div*: 1
+  arith.mul*: 11
+  arith.sub*: 1
+  arith.select: 10
+linalg dialect usage: 217
+  linalg.fill*: 7
+  linalg.generic: 66
+  linalg.init_tensor*: 72
+  linalg.yield: 66
+  linalg.matmul*: 6
+============================================================
+  Processing:  module_1177.jit_backward_pass.273_linalg.mlir
+============================================================
+============================================================
+  Processing:  module_1184.jit_prim_fun.274_linalg.mlir
+============================================================
+all dialect usage: 23
+arith dialect usage: 5
+  arith.mul*: 5
+linalg dialect usage: 15
+  linalg.generic: 5
+  linalg.init_tensor*: 5
+  linalg.yield: 5

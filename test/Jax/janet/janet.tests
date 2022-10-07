@@ -1,0 +1,9 @@
+Module All  Linalg Name
+0016   52   30     get lgt birth
+0018   536  312    get age weights from tables
+0077   47   15     threefry split
+0158   472  254    get met weights singlegal
+0208   62   30     unit scale traindata
+0212   145  6      prim fun
+0332   380  202    net loss
+0569   565  217    net loss
