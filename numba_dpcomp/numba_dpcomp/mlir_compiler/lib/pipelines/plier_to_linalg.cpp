@@ -1454,6 +1454,18 @@ void FinalizeStridedLayoutPass::runOnOperation() {
   });
 }
 
+static mlir::Value convertScalarType(mlir::OpBuilder &builder,
+                                     mlir::Location loc, mlir::Value val,
+                                     mlir::Type dstType) {
+  auto srcType = val.getType();
+  if (srcType.isIntOrIndexOrFloat() && dstType.isIntOrIndexOrFloat()) {
+    val = builder.create<plier::CastOp>(loc, dstType, val);
+    rerunScfPipeline(val.getDefiningOp());
+  }
+
+  return val;
+}
+
 struct GetitemToNtensor : public mlir::OpConversionPattern<plier::GetItemOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -1491,7 +1503,8 @@ struct SetitemToNtensor : public mlir::OpConversionPattern<plier::SetItemOp> {
       return mlir::failure();
 
     auto index = adaptor.getIndex();
-    auto value = adaptor.getValue();
+    auto value = convertScalarType(rewriter, op->getLoc(), adaptor.getValue(),
+                                   srcType.getElementType());
 
     rewriter.replaceOpWithNewOp<imex::ntensor::SetitemOp>(op, src, index,
                                                           value);
