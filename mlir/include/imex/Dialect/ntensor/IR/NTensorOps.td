@@ -425,7 +425,7 @@ def BuildSliceOp : NTensor_OpBase<"build_slice", [
     Creates a slice to index into ntensor array.
   }];
 
-  let arguments = (ins Optional<Index>:$begin, Index:$end, Optional<Index>:$step);
+  let arguments = (ins Optional<Index>:$begin, Optional<Index>:$end, Optional<Index>:$step);
 
   let results = (outs NTensor_Slice:$result);
 

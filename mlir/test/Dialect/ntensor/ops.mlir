@@ -215,23 +215,25 @@ func.func @test(%arg1: !ntensor.ntensor<?xf32>) -> index {
 
 // -----
 
-func.func @test() -> (!ntensor.slice, !ntensor.slice, !ntensor.slice) {
+func.func @test() -> (!ntensor.slice, !ntensor.slice, !ntensor.slice, !ntensor.slice) {
   %0 = arith.constant 10 : index
   %1 = arith.constant 20 : index
   %2 = arith.constant 3 : index
-  %3 = ntensor.build_slice (:%1:)
-  %4 = ntensor.build_slice (%0:%1:)
-  %5 = ntensor.build_slice (%0:%1:%2)
-  return %3, %4, %5 : !ntensor.slice, !ntensor.slice, !ntensor.slice
+  %3 = ntensor.build_slice (::)
+  %4 = ntensor.build_slice (:%1:)
+  %5 = ntensor.build_slice (%0:%1:)
+  %6 = ntensor.build_slice (%0:%1:%2)
+  return %3, %4, %5, %6 : !ntensor.slice, !ntensor.slice, !ntensor.slice, !ntensor.slice
 }
 // CHECK-LABEL: func @test
 //  CHECK-NEXT:   %[[BEGIN:.*]] = arith.constant 10 : index
 //  CHECK-NEXT:   %[[END:.*]] = arith.constant 20 : index
 //  CHECK-NEXT:   %[[STEP:.*]] = arith.constant 3 : index
-//  CHECK-NEXT:   %[[S1:.*]] = ntensor.build_slice( : %[[END]] : )
-//  CHECK-NEXT:   %[[S2:.*]] = ntensor.build_slice(%[[BEGIN]] : %[[END]] : )
-//  CHECK-NEXT:   %[[S3:.*]] = ntensor.build_slice(%[[BEGIN]] : %[[END]] : %[[STEP]])
-//  CHECK-NEXT:   %[[S1]], %[[S2]], %[[S3]] : !ntensor.slice, !ntensor.slice, !ntensor.slice
+//  CHECK-NEXT:   %[[S1:.*]] = ntensor.build_slice( : : )
+//  CHECK-NEXT:   %[[S2:.*]] = ntensor.build_slice( : %[[END]] : )
+//  CHECK-NEXT:   %[[S3:.*]] = ntensor.build_slice(%[[BEGIN]] : %[[END]] : )
+//  CHECK-NEXT:   %[[S4:.*]] = ntensor.build_slice(%[[BEGIN]] : %[[END]] : %[[STEP]])
+//  CHECK-NEXT:   %[[S1]], %[[S2]], %[[S3]], %[[S4]] : !ntensor.slice, !ntensor.slice, !ntensor.slice, !ntensor.slice
 
 // -----
 
