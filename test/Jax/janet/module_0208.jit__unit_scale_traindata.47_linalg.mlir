@@ -95,4 +95,3 @@ module @jit__unit_scale_traindata.47 {
     return %4 : tensor<1xf32>
   }
 }
-

@@ -61,4 +61,3 @@ module @jit__threefry_split.24 {
     return %25 : tensor<2x2xui32>
   }
 }
-

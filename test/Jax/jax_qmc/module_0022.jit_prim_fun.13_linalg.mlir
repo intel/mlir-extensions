@@ -28,4 +28,3 @@ module @jit_prim_fun.13 {
     return %4 : tensor<2xui32>
   }
 }
-

@@ -59,4 +59,3 @@ module @jit_trace.340 {
     return %1 : tensor<2x2xi32>
   }
 }
-

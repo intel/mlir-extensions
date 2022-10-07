@@ -10,4 +10,3 @@ module @jit_swapaxes.304 {
     return %1 : tensor<1x2xi32>
   }
 }
-

@@ -23,4 +23,3 @@ module @jit_matmul.338 {
     return %5 : tensor<1x2x2xi32>
   }
 }
-

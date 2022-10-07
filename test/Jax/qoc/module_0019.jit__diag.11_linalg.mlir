@@ -73,4 +73,3 @@ module @jit__diag.11 {
     return %5 : tensor<2x2xf32>
   }
 }
-

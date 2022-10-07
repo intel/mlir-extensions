@@ -682,4 +682,3 @@ module @jit__net_loss.190 {
     return %9 : tuple<tensor<f32>, tensor<f32>, tensor<60x6xf32>>
   }
 }
-

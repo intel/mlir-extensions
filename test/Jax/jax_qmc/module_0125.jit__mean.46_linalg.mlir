@@ -23,4 +23,3 @@ module @jit__mean.46 {
     return %4 : tensor<1000x3xf64>
   }
 }
-

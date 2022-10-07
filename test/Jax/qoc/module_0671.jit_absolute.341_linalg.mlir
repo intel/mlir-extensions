@@ -13,4 +13,3 @@ module @jit_absolute.341 {
     return %1 : tensor<i32>
   }
 }
-

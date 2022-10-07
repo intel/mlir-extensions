@@ -73,4 +73,3 @@ module @jit__get_lgt_birth.7 {
     return %3 : tensor<95xf32>
   }
 }
-

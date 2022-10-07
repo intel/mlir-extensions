@@ -180,4 +180,3 @@ module @jit_prim_fun.50 {
     return %1 : tensor<16x6xf32>
   }
 }
-

@@ -14,4 +14,3 @@ module @jit__reduce_sum.357 {
     return %2 : tensor<i32>
   }
 }
-

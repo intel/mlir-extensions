@@ -22,4 +22,3 @@ module @jit__mean.51 {
     return %4 : tensor<f64>
   }
 }
-

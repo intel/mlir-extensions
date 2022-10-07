@@ -10,4 +10,3 @@ module @jit_real.364 {
     return %1 : tensor<2xf32>
   }
 }
-
