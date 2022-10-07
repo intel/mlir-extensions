@@ -346,10 +346,10 @@ static BodyType getBodyBuilder(::imex::ptensor::EWBinOpId bop,
   case ptensor::FLOOR_DIVIDE:
     return buildTrivial<mlir::arith::FloorDivSIOp>(typ);
   // case ptensor::LOGADDEXP] =
-  case ptensor::LSHIFT:
-    return buildTosa<mlir::tosa::LogicalLeftShiftOp, void>(typ);
-  case ptensor::RSHIFT:
-    return buildTosa<mlir::tosa::LogicalRightShiftOp, void>(typ);
+  // case ptensor::LSHIFT:
+  //  return buildTosa<mlir::tosa::LogicalLeftShiftOp, void>(typ);
+  // case ptensor::RSHIFT:
+  //  return buildTosa<mlir::tosa::LogicalRightShiftOp, void>(typ);
   case ptensor::MATMUL:
     return buildTosa<void, mlir::tosa::MatMulOp>(typ);
   case ptensor::MAXIMUM:
@@ -367,10 +367,12 @@ static BodyType getBodyBuilder(::imex::ptensor::EWBinOpId bop,
   // case ptensor::TRUE_DIVIDE] =
   case ptensor::BITWISE_AND:
     return buildTosa<mlir::tosa::BitwiseAndOp, void>(typ);
-  // case ptensor::BITWISE_LEFT_SHIFT] =
+  case ptensor::BITWISE_LEFT_SHIFT:
+    return buildTosa<mlir::tosa::LogicalLeftShiftOp, void>(typ);
   case ptensor::BITWISE_OR:
     return buildTosa<mlir::tosa::BitwiseOrOp, void>(typ);
-  // case ptensor::BITWISE_RIGHT_SHIFT] =
+  case ptensor::BITWISE_RIGHT_SHIFT:
+    return buildTosa<mlir::tosa::LogicalRightShiftOp, void>(typ);
   case ptensor::BITWISE_XOR:
     return buildTosa<mlir::tosa::BitwiseXorOp, void>(typ);
   case ptensor::EQUAL:
