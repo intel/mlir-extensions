@@ -288,15 +288,6 @@ static mlir::Type mapPlierType(mlir::Type type) {
   return mapPlierTypeName(*type.getContext(), name);
 }
 
-static mlir::Type dropLiteralType(mlir::Type t) {
-  assert(t);
-  if (auto literal = t.dyn_cast<plier::LiteralType>())
-    return dropLiteralType(
-        literal.getValue().cast<mlir::TypedAttr>().getType());
-
-  return t;
-}
-
 static bool isSupportedType(mlir::Type type) {
   assert(type);
   return type.isIntOrFloat();
@@ -396,20 +387,6 @@ struct LiteralLowering : public mlir::OpConversionPattern<Op> {
 
     if (convertedType.template isa<mlir::NoneType>()) {
       rewriter.replaceOpWithNewOp<imex::util::UndefOp>(op, convertedType);
-      return mlir::success();
-    }
-
-    if (auto literal = convertedType.template dyn_cast<plier::LiteralType>()) {
-      auto loc = op.getLoc();
-      auto attrVal = literal.getValue();
-      auto dstType = attrVal.template cast<mlir::TypedAttr>().getType();
-      auto val = makeSignlessAttr(attrVal).template cast<mlir::TypedAttr>();
-      auto newVal =
-          rewriter.create<mlir::arith::ConstantOp>(loc, val).getResult();
-      if (dstType != val.getType())
-        newVal = rewriter.create<imex::util::SignCastOp>(loc, dstType, newVal);
-
-      rewriter.replaceOp(op, newVal);
       return mlir::success();
     }
 
@@ -695,16 +672,6 @@ mlir::Value doCast(mlir::PatternRewriter &rewriter, mlir::Location loc,
                    mlir::Value val, mlir::Type dstType) {
   assert(dstType);
   auto srcType = val.getType();
-  if (auto literal = srcType.dyn_cast<plier::LiteralType>()) {
-    auto attr = literal.getValue().cast<mlir::TypedAttr>();
-    auto signlessAttr = makeSignlessAttr(attr).cast<mlir::TypedAttr>();
-    val = rewriter.create<mlir::arith::ConstantOp>(loc, signlessAttr);
-    if (signlessAttr.getType() != attr.getType())
-      val = rewriter.create<imex::util::SignCastOp>(loc, attr.getType(), val);
-
-    srcType = val.getType();
-  }
-
   if (srcType == dstType)
     return val;
 
@@ -853,8 +820,8 @@ struct BinOpLowering : public mlir::OpConversionPattern<plier::BinOp> {
     auto &converter = *getTypeConverter();
     auto operands = adaptor.getOperands();
     assert(operands.size() == 2);
-    auto type0 = dropLiteralType(operands[0].getType());
-    auto type1 = dropLiteralType(operands[1].getType());
+    auto type0 = operands[0].getType();
+    auto type1 = operands[1].getType();
     if (!isSupportedType(type0) || !isSupportedType(type1))
       return mlir::failure();
 
@@ -1413,8 +1380,8 @@ void PlierToStdPass::runOnOperation() {
       return false;
 
     auto res = typeConverter.convertType(t);
-    return res && res.isa<mlir::IntegerType, mlir::FloatType, mlir::IndexType,
-                          plier::LiteralType>();
+    return res &&
+           res.isa<mlir::IntegerType, mlir::FloatType, mlir::IndexType>();
   };
 
   auto isTuple = [&](mlir::Type t) -> bool {
@@ -1456,9 +1423,6 @@ void PlierToStdPass::runOnOperation() {
 
         if (type.isa<mlir::NoneType, plier::TypeVar>())
           return false;
-
-        if (auto literal = type.dyn_cast<plier::LiteralType>())
-          type = literal.getValue().cast<mlir::TypedAttr>().getType();
 
         return !type.isIntOrFloat();
       });

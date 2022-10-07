@@ -603,7 +603,7 @@ static bool isValidGetitemIndex(mlir::Type type) {
   if (auto tupleType = type.dyn_cast<mlir::TupleType>())
     return llvm::all_of(tupleType.getTypes(), &isValidGetitemIndex);
 
-  return type.isa<mlir::IntegerType, mlir::IndexType, plier::LiteralType>();
+  return type.isa<mlir::IntegerType, mlir::IndexType>();
 }
 
 static mlir::LogicalResult
@@ -686,9 +686,6 @@ computeIndices(mlir::OpBuilder &builder, mlir::Location loc, mlir::Value value,
         size = builder.createOrFold<mlir::arith::DivUIOp>(loc, size, stride);
       }
       return {foldConst(offset), foldConst(size), stride, true};
-    } else if (auto literal = valType.dyn_cast<plier::LiteralType>()) {
-      auto offset = foldConst(handleNegativeVal(literal.getValue()));
-      return {offset, builder.getIndexAttr(1), builder.getIndexAttr(1), false};
     } else {
       auto offset =
           foldConst(handleNegativeVal(index_cast(indexVal, loc, builder)));

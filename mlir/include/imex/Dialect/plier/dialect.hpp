@@ -32,7 +32,6 @@
 namespace plier {
 namespace detail {
 struct PyTypeStorage;
-struct LiteralTypeStorage;
 struct TypeVarStorage;
 
 struct OperatorNamePair {
@@ -83,17 +82,6 @@ public:
   static PyType getUndefined(mlir::MLIRContext *context);
 
   mlir::StringRef getName() const;
-};
-
-class LiteralType
-    : public mlir::Type::TypeBase<::plier::LiteralType, mlir::Type,
-                                  ::plier::detail::LiteralTypeStorage> {
-public:
-  using Base::Base;
-
-  static LiteralType get(mlir::Attribute value);
-
-  mlir::Attribute getValue() const;
 };
 
 class SliceType : public ::mlir::Type::TypeBase<SliceType, ::mlir::Type,
