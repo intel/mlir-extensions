@@ -28,6 +28,7 @@ include(HandleLLVMOptions)
 
 set(SOURCES_LIST
     lib/CheckGpuCaps.cpp
+    lib/NumpyResolver.cpp
     lib/loop_utils.cpp
     lib/lowering.cpp
     lib/mangle.cpp
@@ -46,6 +47,7 @@ set(SOURCES_LIST
     )
 set(HEADERS_LIST
     lib/CheckGpuCaps.hpp
+    lib/NumpyResolver.hpp
     lib/loop_utils.hpp
     lib/lowering.hpp
     lib/mangle.hpp

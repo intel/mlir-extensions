@@ -67,6 +67,7 @@
 #include "imex/Transforms/type_conversion.hpp"
 #include "imex/Transforms/uplift_math.hpp"
 
+#include "NumpyResolver.hpp"
 #include "base_pipeline.hpp"
 #include "imex/compiler/pipeline_registry.hpp"
 #include "loop_utils.hpp"
@@ -1546,15 +1547,62 @@ struct BuildSliceToNtensor
   }
 };
 
+struct NumpyCallsToNtensor : public mlir::OpConversionPattern<plier::PyCallOp> {
+  NumpyCallsToNtensor(mlir::TypeConverter &converter, mlir::MLIRContext *ctx,
+                      NumpyResolver &r)
+      : OpConversionPattern(converter, ctx), resolver(r) {}
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::PyCallOp op, plier::PyCallOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto funcName = op.getFuncName();
+    if (!resolver.getFunc(funcName))
+      return mlir::failure();
+
+    auto converter = getTypeConverter();
+    assert(converter);
+
+    llvm::SmallVector<mlir::Type> resTypes;
+    if (mlir::failed(converter->convertTypes(op->getResultTypes(), resTypes)))
+      return mlir::failure();
+
+    llvm::SmallVector<mlir::Value> args;
+    llvm::SmallVector<mlir::Attribute> argNames;
+    auto srcArgs = adaptor.getArgs();
+    auto srcKwArgs = adaptor.getKwargs();
+    auto srcKwNames = adaptor.getKwNames();
+    auto totalCount = srcArgs.size() + srcKwArgs.size();
+    args.reserve(totalCount);
+    argNames.reserve(totalCount);
+
+    args.append(srcArgs.begin(), srcArgs.end());
+    argNames.resize(srcArgs.size(), rewriter.getStringAttr(""));
+
+    args.append(srcKwArgs.begin(), srcKwArgs.end());
+    argNames.append(srcKwNames.begin(), srcKwNames.end());
+
+    auto argNamesAttr = rewriter.getArrayAttr(argNames);
+    rewriter.replaceOpWithNewOp<imex::ntensor::CallOp>(op, resTypes, args,
+                                                       argNamesAttr, funcName);
+    return mlir::success();
+  }
+
+private:
+  NumpyResolver &resolver;
+};
+
 static bool isNtensor(mlir::TypeConverter &converter, mlir::Type type) {
   return !!converter.convertType(type)
                .dyn_cast_or_null<imex::ntensor::NTensorType>();
 }
 
 struct PlierToNtensorPass
-    : public mlir::PassWrapper<PlierToNtensorPass,
-                               mlir::OperationPass<mlir::ModuleOp>> {
+    : public mlir::PassWrapper<PlierToNtensorPass, mlir::OperationPass<void>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(PlierToNtensorPass)
+
+  PlierToNtensorPass()
+      : resolver(std::make_shared<NumpyResolver>(
+            "numba_dpcomp.mlir.numpy.funcs", "_get_func")) {}
 
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
@@ -1614,6 +1662,15 @@ struct PlierToNtensorPass
           return llvm::None;
         });
 
+    target.addDynamicallyLegalOp<plier::PyCallOp>(
+        [this](plier::PyCallOp op) -> llvm::Optional<bool> {
+          auto funcName = op.getFuncName();
+          if (resolver->getFunc(funcName))
+            return false;
+
+          return llvm::None;
+        });
+
     target.addIllegalOp<plier::BuildSliceOp>();
 
     target.addLegalDialect<imex::ntensor::NTensorDialect>();
@@ -1626,10 +1683,15 @@ struct PlierToNtensorPass
         // clang-format on
         >(typeConverter, &context);
 
+    patterns.insert<NumpyCallsToNtensor>(typeConverter, &context, *resolver);
+
     if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
                                                   std::move(patterns))))
       signalPassFailure();
   }
+
+private:
+  std::shared_ptr<NumpyResolver> resolver;
 };
 
 struct GetitemArrayOpLowering

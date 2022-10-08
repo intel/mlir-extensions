@@ -39,15 +39,31 @@ add_func(prange, "numba.prange")
 
 registry = FuncRegistry()
 
+_registered_funcs = {}
+
+
+def _get_func(name):
+    global _registered_funcs
+    return _registered_funcs.get(name, None)
+
+
+def _get_wrapper(name, orig):
+    def _decorator(func):
+        global _registered_funcs
+        _registered_funcs[name] = func
+        return orig(func)
+
+    return _decorator
+
 
 def register_func(name, orig_func=None):
     global registry
-    return registry.register_func(name, orig_func)
+    return _get_wrapper(name, registry.register_func(name, orig_func))
 
 
 def register_attr(name):
     global registry
-    return registry.register_attr(name)
+    return _get_wrapper(name, registry.register_attr(name))
 
 
 def promote_int(t, b):
