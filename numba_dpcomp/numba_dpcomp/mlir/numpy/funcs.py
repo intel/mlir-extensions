@@ -34,6 +34,7 @@ from numba import prange
 
 from numba.core import types
 from numba.core.typing.templates import ConcreteTemplate, signature, infer_global
+from inspect import signature as sig
 
 add_func(prange, "numba.prange")
 
@@ -50,7 +51,11 @@ def _get_func(name):
 def _get_wrapper(name, orig):
     def _decorator(func):
         global _registered_funcs
-        _registered_funcs[name] = func
+        params = sig(func).parameters
+
+        # Get function args names and drop first `builder` param
+        paramsNames = list(params)[1:]
+        _registered_funcs[name] = [(n, params[n]) for n in paramsNames]
         return orig(func)
 
     return _decorator

@@ -15,10 +15,23 @@
 #pragma once
 
 #include <memory>
+#include <string>
+
+#include <llvm/ADT/Optional.h>
+#include <llvm/ADT/SmallVector.h>
 
 namespace llvm {
 class StringRef;
 }
+
+namespace mlir {
+class ArrayAttr;
+class Location;
+class OpBuilder;
+class Value;
+class ValueRange;
+struct LogicalResult;
+} // namespace mlir
 
 class NumpyResolver {
 public:
@@ -26,6 +39,12 @@ public:
   ~NumpyResolver();
 
   bool hasFunc(llvm::StringRef name) const;
+
+  mlir::LogicalResult
+  resolveFuncArgs(mlir::OpBuilder &builder, mlir::Location loc,
+                  llvm::StringRef name, mlir::ValueRange args,
+                  mlir::ArrayAttr argsNames,
+                  llvm::SmallVectorImpl<mlir::Value> &resultArgs);
 
 private:
   class Impl;

@@ -1771,10 +1771,39 @@ private:
   PyLinalgResolver resolver;
 };
 
+struct NumpyCallsResolver
+    : public mlir::OpRewritePattern<imex::ntensor::CallOp> {
+  NumpyCallsResolver(mlir::MLIRContext *ctx, NumpyResolver &r)
+      : OpRewritePattern(ctx), resolver(r) {}
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::CallOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto funcName = op.getOp();
+
+    llvm::SmallVector<mlir::Value> results;
+    if (mlir::failed(resolver.resolveFuncArgs(rewriter, op->getLoc(), funcName,
+                                              op.getArgs(), op.getArgsNames(),
+                                              results)))
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<imex::ntensor::PrimitiveOp>(
+        op, op->getResultTypes(), results, funcName);
+    return mlir::success();
+  }
+
+private:
+  NumpyResolver &resolver;
+};
+
 struct ResolveNtensorPass
     : public mlir::PassWrapper<ResolveNtensorPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(ResolveNtensorPass)
+
+  ResolveNtensorPass()
+      : resolver(std::make_shared<NumpyResolver>(
+            "numba_dpcomp.mlir.numpy.funcs", "_get_func")) {}
 
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
@@ -1794,9 +1823,14 @@ struct ResolveNtensorPass
     patterns.insert<GetitemArrayOpLowering, NtensorPrimitiveCallsLowering>(
         &ctx);
 
+    patterns.insert<NumpyCallsResolver>(&ctx, *resolver);
+
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
                                              std::move(patterns));
   }
+
+private:
+  std::shared_ptr<NumpyResolver> resolver;
 };
 
 static bool isShaped(mlir::TypeConverter &converter, mlir::Type type) {
