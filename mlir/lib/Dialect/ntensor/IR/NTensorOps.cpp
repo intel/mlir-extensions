@@ -407,6 +407,37 @@ llvm::SmallBitVector imex::ntensor::SubviewOp::getDroppedDims() {
   return droppedDims;
 }
 
+mlir::OpFoldResult imex::ntensor::FromTensorOp::fold(
+    llvm::ArrayRef<mlir::Attribute> /*operands*/) {
+  if (auto toTensor = getTensor().getDefiningOp<imex::ntensor::ToTensorOp>()) {
+    auto array = toTensor.getArray();
+    if (getType() == array.getType())
+      return array;
+  }
+  return nullptr;
+}
+
+mlir::OpFoldResult
+imex::ntensor::ToTensorOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
+  if (auto fromTensor =
+          getArray().getDefiningOp<imex::ntensor::FromTensorOp>()) {
+    auto tensor = fromTensor.getTensor();
+    auto haveOtherOps = [](mlir::Operation *op) -> bool {
+      for (auto user : op->getUsers()) {
+        if (!mlir::isa<ToTensorOp>(user))
+          return true;
+      }
+      return false;
+    };
+
+    // This folding only safe if we don't have writes to the other fromTensor
+    // results. Conservatively check there are no other ops except ToTensorOp.
+    if (getType() == tensor.getType() && !haveOtherOps(fromTensor))
+      return tensor;
+  }
+  return nullptr;
+}
+
 // Copypasted from upstream tensor.
 mlir::LogicalResult imex::ntensor::SubviewOp::reifyResultShapes(
     mlir::OpBuilder &builder,
