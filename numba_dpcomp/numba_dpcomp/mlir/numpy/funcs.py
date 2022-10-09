@@ -603,6 +603,15 @@ def shape_impl(builder, arg):
     return tuple(builder.cast(shape[i], builder.int64) for i in range(len(shape)))
 
 
+@register_func("len", len)
+def len_impl(builder, arg):
+    shape = arg.shape
+    if len(shape) < 1:
+        return
+
+    return builder.cast(shape[0], builder.int64)
+
+
 @register_attr("array.size")
 def size_impl(builder, arg):
     shape = arg.shape
