@@ -19,6 +19,7 @@
 #include "imex/Transforms/type_conversion.hpp"
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
+#include <mlir/Dialect/Bufferization/IR/Bufferization.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Pass/Pass.h>
 #include <mlir/Transforms/DialectConversion.h>
@@ -185,6 +186,52 @@ struct StoreOpLowering
     return mlir::success();
   }
 };
+
+struct ToTensorOpLowering
+    : public mlir::OpConversionPattern<imex::ntensor::ToTensorOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::ToTensorOp op,
+                  imex::ntensor::ToTensorOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto array = adaptor.getArray();
+    if (!array.getType().isa<mlir::MemRefType>())
+      return mlir::failure();
+
+    auto *converter = getTypeConverter();
+    assert(converter && "Type converter is not set");
+
+    auto retType = converter->convertType(op.getType())
+                       .dyn_cast_or_null<mlir::TensorType>();
+    rewriter.replaceOpWithNewOp<mlir::bufferization::ToTensorOp>(op, retType,
+                                                                 array);
+    return mlir::success();
+  }
+};
+
+struct FromTensorOpLowering
+    : public mlir::OpConversionPattern<imex::ntensor::FromTensorOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::FromTensorOp op,
+                  imex::ntensor::FromTensorOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto tensor = adaptor.getTensor();
+    if (!tensor.getType().isa<mlir::RankedTensorType>())
+      return mlir::failure();
+
+    auto *converter = getTypeConverter();
+    assert(converter && "Type converter is not set");
+
+    auto retType = converter->convertType(op.getType())
+                       .dyn_cast_or_null<mlir::MemRefType>();
+    rewriter.replaceOpWithNewOp<mlir::bufferization::ToMemrefOp>(op, retType,
+                                                                 tensor);
+    return mlir::success();
+  }
+};
 } // namespace
 
 void imex::populateNtensorToMemrefRewritesAndTarget(
@@ -200,10 +247,12 @@ void imex::populateNtensorToMemrefRewritesAndTarget(
       });
 
   patterns.insert<DimOpLowering, SubviewOpLowering, LoadOpLowering,
-                  StoreOpLowering>(converter, &context);
+                  StoreOpLowering, ToTensorOpLowering, FromTensorOpLowering>(
+      converter, &context);
 
   target.addIllegalOp<imex::ntensor::DimOp, imex::ntensor::SubviewOp,
-                      imex::ntensor::LoadOp, imex::ntensor::StoreOp>();
+                      imex::ntensor::LoadOp, imex::ntensor::StoreOp,
+                      imex::ntensor::ToTensorOp, imex::ntensor::FromTensorOp>();
 }
 
 namespace {
@@ -215,6 +264,7 @@ struct NtensorToMemrefPass
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<imex::util::ImexUtilDialect>();
     registry.insert<mlir::arith::ArithDialect>();
+    registry.insert<mlir::bufferization::BufferizationDialect>();
     registry.insert<mlir::memref::MemRefDialect>();
   }
 

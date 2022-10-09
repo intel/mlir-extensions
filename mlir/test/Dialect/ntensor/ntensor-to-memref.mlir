@@ -153,3 +153,25 @@ func.func @test(%arg1: !ntensor.ntensor<?xf32, "test">, %arg2: f32) {
 //  CHECK-NEXT:   memref.store %[[ARG2]], %[[ARG1]][%[[IND]]] : memref<?xf32>
 //  CHECK-NEXT:   }
 //  CHECK-NEXT:   return
+
+// -----
+
+func.func @test(%arg1: tensor<?xf32>) -> !ntensor.ntensor<?xf32> {
+  %0 = ntensor.from_tensor %arg1 : tensor<?xf32> to !ntensor.ntensor<?xf32>
+  return %0 : !ntensor.ntensor<?xf32>
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG:.*]]: tensor<?xf32>)
+//  CHECK-NEXT:   %[[RES:.*]] = bufferization.to_memref %[[ARG]] : memref<?xf32>
+//  CHECK-NEXT:   return %[[RES]] : memref<?xf32>
+
+// -----
+
+func.func @test(%arg1: !ntensor.ntensor<?xf32>) -> tensor<?xf32> {
+  %0 = ntensor.to_tensor %arg1 : !ntensor.ntensor<?xf32> to tensor<?xf32>
+  return %0 : tensor<?xf32>
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG:.*]]: memref<?xf32>)
+//  CHECK-NEXT:   %[[RES:.*]] = bufferization.to_tensor %[[ARG]] : memref<?xf32>
+//  CHECK-NEXT:   return %[[RES]] : tensor<?xf32>
