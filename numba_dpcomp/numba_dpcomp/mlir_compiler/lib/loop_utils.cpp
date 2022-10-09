@@ -49,8 +49,8 @@ imex::lowerRange(plier::PyCallOp op, mlir::ValueRange operands,
       return std::make_tuple(lowerBound, upperBound, step);
     };
     auto getIndex = [](mlir::OpBuilder &builder, mlir::Location loc,
-                       mlir::Type dst_type, mlir::Value index) {
-      return builder.create<plier::CastOp>(loc, dst_type, index);
+                       mlir::Type dstType, mlir::Value index) {
+      return builder.create<plier::CastOp>(loc, dstType, index);
     };
     if (!user || mlir::failed(lowerWhileToFor(user, rewriter, getBounds,
                                               getIndex, results)))
