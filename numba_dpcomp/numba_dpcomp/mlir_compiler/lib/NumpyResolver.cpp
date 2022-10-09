@@ -121,15 +121,15 @@ NumpyResolver::resolveFuncArgs(mlir::OpBuilder &builder, mlir::Location loc,
   for (auto [i, arg] : llvm::enumerate(funcArgs)) {
     assert(args.size() == argsNamesArr.size() &&
            "args and names count misnatch");
-    if (argsNamesArr.empty())
-      return mlir::failure();
 
-    auto argName = argsNamesArr.front().cast<mlir::StringAttr>().getValue();
-    if (argName.empty()) {
-      resultArgs[i] = args.front();
-      argsNamesArr = argsNamesArr.drop_front();
-      args = args.drop_front();
-      continue;
+    if (!argsNamesArr.empty()) {
+      auto argName = argsNamesArr.front().cast<mlir::StringAttr>().getValue();
+      if (argName.empty()) {
+        resultArgs[i] = args.front();
+        argsNamesArr = argsNamesArr.drop_front();
+        args = args.drop_front();
+        continue;
+      }
     }
 
     auto tup = arg.cast<py::tuple>();
@@ -151,6 +151,10 @@ NumpyResolver::resolveFuncArgs(mlir::OpBuilder &builder, mlir::Location loc,
       resultArgs[i] = *defVal;
     }
   }
+
+  // Not all arguments were processed.
+  if (!argsNamesArr.empty())
+    return mlir::failure();
 
   return mlir::success();
 }
