@@ -274,7 +274,7 @@ using func_t = mlir::LogicalResult (*)(plier::PyCallOp, mlir::ValueRange,
 static const std::pair<llvm::StringRef, func_t> builtinFuncsHandlers[] = {
     // clang-format off
     {"numba.prange", lowerPrange},
-    {"len", lowerLen},
+//    {"len", lowerLen},
     // clang-format on
 };
 
@@ -1591,6 +1591,35 @@ private:
   NumpyResolver &resolver;
 };
 
+struct BuiltinCallsToNtensor
+    : public mlir::OpConversionPattern<plier::PyCallOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::PyCallOp op, plier::PyCallOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto name = op.getFuncName();
+    for (auto &handler : builtinFuncsHandlers)
+      if (handler.first == name) {
+        auto args = adaptor.getArgs();
+        auto kwArgs = adaptor.getKwargs();
+        auto kwNames = adaptor.getKwNames();
+        assert(kwArgs.size() == kwNames.size() &&
+               "Args and names size mismatch");
+        llvm::SmallVector<std::pair<llvm::StringRef, mlir::Value>> kwArgsArray;
+        kwArgsArray.reserve(kwArgs.size());
+        for (auto [arg, nameAttr] : llvm::zip(kwArgs, kwNames)) {
+          auto argName = nameAttr.cast<mlir::StringAttr>().getValue();
+          kwArgsArray.emplace_back(argName, arg);
+        }
+
+        return handler.second(op, args, kwArgsArray, rewriter);
+      }
+
+    return mlir::failure();
+  }
+};
+
 static bool isNtensor(mlir::TypeConverter &converter, mlir::Type type) {
   return !!converter.convertType(type)
                .dyn_cast_or_null<imex::ntensor::NTensorType>();
@@ -1679,7 +1708,8 @@ struct PlierToNtensorPass
         // clang-format off
         GetitemToNtensor,
         SetitemToNtensor,
-        BuildSliceToNtensor
+        BuildSliceToNtensor,
+        BuiltinCallsToNtensor
         // clang-format on
         >(typeConverter, &context);
 
