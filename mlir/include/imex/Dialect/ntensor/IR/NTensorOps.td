@@ -554,6 +554,8 @@ def FromTensorOp : NTensor_OpBase<"from_tensor",
   let results = (outs NTensor_Tensor:$result);
 
   let assemblyFormat = "$tensor attr-dict `:` type($tensor) `to` qualified(type($result))";
+
+  let hasFolder = 1;
 }
 
 def ToTensorOp : NTensor_OpBase<"to_tensor",
@@ -568,6 +570,8 @@ def ToTensorOp : NTensor_OpBase<"to_tensor",
   let results = (outs AnyTensor:$result);
 
   let assemblyFormat = "$array attr-dict `:` qualified(type($array)) `to` type($result)";
+
+  let hasFolder = 1;
 }
 
 #endif // NTENSOR_OPS
