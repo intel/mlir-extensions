@@ -1627,8 +1627,7 @@ static py::object shapeImpl(py::capsule context, py::capsule ssaVal) {
       mlir::Value mlirDim;
       if (isTensor) {
         mlirDim = builder.create<mlir::tensor::DimOp>(loc, value, i);
-      }
-      if (isNTensor) {
+      } else if (isNTensor) {
         mlirDim = builder.create<imex::ntensor::DimOp>(loc, value, i);
       } else {
         mlirDim = builder.create<mlir::memref::DimOp>(loc, value, i);
