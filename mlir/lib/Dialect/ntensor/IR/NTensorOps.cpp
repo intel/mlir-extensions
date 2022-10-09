@@ -409,8 +409,8 @@ llvm::SmallBitVector imex::ntensor::SubviewOp::getDroppedDims() {
 
 mlir::OpFoldResult imex::ntensor::FromTensorOp::fold(
     llvm::ArrayRef<mlir::Attribute> /*operands*/) {
-  if (auto toTensor = getTensor().getDefiningOp<imex::ntensor::ToTensorOp>()) {
-    auto array = toTensor.getArray();
+  if (auto to = getTensor().getDefiningOp<imex::ntensor::ToTensorOp>()) {
+    auto array = to.getArray();
     if (getType() == array.getType())
       return array;
   }
@@ -419,9 +419,8 @@ mlir::OpFoldResult imex::ntensor::FromTensorOp::fold(
 
 mlir::OpFoldResult
 imex::ntensor::ToTensorOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
-  if (auto fromTensor =
-          getArray().getDefiningOp<imex::ntensor::FromTensorOp>()) {
-    auto tensor = fromTensor.getTensor();
+  if (auto from = getArray().getDefiningOp<imex::ntensor::FromTensorOp>()) {
+    auto val = from.getTensor();
     auto haveOtherOps = [](mlir::Operation *op) -> bool {
       for (auto user : op->getUsers()) {
         if (!mlir::isa<ToTensorOp>(user))
@@ -432,8 +431,28 @@ imex::ntensor::ToTensorOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
 
     // This folding only safe if we don't have writes to the other fromTensor
     // results. Conservatively check there are no other ops except ToTensorOp.
-    if (getType() == tensor.getType() && !haveOtherOps(fromTensor))
-      return tensor;
+    if (getType() == val.getType() && !haveOtherOps(from))
+      return val;
+  }
+  return nullptr;
+}
+
+mlir::OpFoldResult imex::ntensor::FromMemrefOp::fold(
+    llvm::ArrayRef<mlir::Attribute> /*operands*/) {
+  if (auto to = getMemref().getDefiningOp<imex::ntensor::ToMemrefOp>()) {
+    auto array = to.getArray();
+    if (getType() == array.getType())
+      return array;
+  }
+  return nullptr;
+}
+
+mlir::OpFoldResult
+imex::ntensor::ToMemrefOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
+  if (auto from = getArray().getDefiningOp<imex::ntensor::FromMemrefOp>()) {
+    auto val = from.getMemref();
+    if (getType() == val.getType())
+      return val;
   }
   return nullptr;
 }

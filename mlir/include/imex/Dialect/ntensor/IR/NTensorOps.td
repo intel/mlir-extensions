@@ -550,7 +550,7 @@ def FromTensorOp : NTensor_OpBase<"from_tensor",
     Converts from tensor to ntensor array. Shape and element type must match.
   }];
 
-  let arguments = (ins AnyTensor:$tensor);
+  let arguments = (ins AnyRankedTensor:$tensor);
   let results = (outs NTensor_Tensor:$result);
 
   let assemblyFormat = "$tensor attr-dict `:` type($tensor) `to` qualified(type($result))";
@@ -567,7 +567,37 @@ def ToTensorOp : NTensor_OpBase<"to_tensor",
 
   let arguments = (ins Arg<NTensor_Tensor,
                        "the reference to load from", [MemRead]>:$array);
-  let results = (outs AnyTensor:$result);
+  let results = (outs AnyRankedTensor:$result);
+
+  let assemblyFormat = "$array attr-dict `:` qualified(type($array)) `to` type($result)";
+
+  let hasFolder = 1;
+}
+
+def FromMemrefOp : NTensor_OpBase<"from_memref",
+    [NoSideEffect, SameOperandsShape, SameOperandsElementType]> {
+  let summary = "converts memref to ntensor array.";
+  let description = [{
+    Converts from memref to ntensor array. Shape and element type must match.
+  }];
+
+  let arguments = (ins AnyMemRef:$memref);
+  let results = (outs NTensor_Tensor:$result);
+
+  let assemblyFormat = "$memref attr-dict `:` type($memref) `to` qualified(type($result))";
+
+  let hasFolder = 1;
+}
+
+def ToMemrefOp : NTensor_OpBase<"to_memref",
+    [NoSideEffect, SameOperandsShape, SameOperandsElementType]> {
+  let summary = "converts ntensor array to memref.";
+  let description = [{
+    Converts from ntensor array to memref. Shape and element type must match.
+  }];
+
+  let arguments = (ins NTensor_Tensor:$array);
+  let results = (outs AnyMemRef:$result);
 
   let assemblyFormat = "$array attr-dict `:` qualified(type($array)) `to` type($result)";
 
