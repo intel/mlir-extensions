@@ -2043,6 +2043,26 @@ struct BuiltinCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
   }
 };
 
+struct BinOpsLowering : public mlir::OpRewritePattern<imex::ntensor::BinaryOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::BinaryOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto name = op.getOp();
+    for (auto it : plier::getOperators()) {
+      if (it.op == name) {
+        auto newName = (llvm::Twine("operator.") + it.name).str();
+        mlir::Value args[] = {op.getLhs(), op.getRhs()};
+        rewriter.replaceOpWithNewOp<imex::ntensor::PrimitiveOp>(
+            op, op->getResultTypes(), args, newName);
+        return mlir::success();
+      }
+    }
+    return mlir::failure();
+  }
+};
+
 struct ResolveNtensorPass
     : public mlir::PassWrapper<ResolveNtensorPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
@@ -2068,7 +2088,7 @@ struct ResolveNtensorPass
     imex::ntensor::populateResolveArrayOpsPatterns(ctx, patterns);
 
     patterns.insert<GetitemArrayOpLowering, NtensorPrimitiveCallsLowering,
-                    BuiltinCallsLowering>(&ctx);
+                    BuiltinCallsLowering, BinOpsLowering>(&ctx);
 
     patterns.insert<NumpyCallsResolver>(&ctx, *resolver);
 
