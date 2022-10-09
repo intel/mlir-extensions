@@ -348,3 +348,25 @@ func.func @test(%arg1: !ntensor.ntensor<?xf32>, %arg2: f32) {
 //  CHECK-NEXT:   %[[IND:.*]] = arith.constant 0 : index
 //  CHECK-NEXT:   ntensor.store %[[ARG2]], %[[ARG1]][%[[IND]]] : !ntensor.ntensor<?xf32>
 //  CHECK-NEXT:   return
+
+// -----
+
+func.func @test(%arg1: tensor<?xf32>) -> !ntensor.ntensor<?xf32> {
+  %0 = ntensor.from_tensor %arg1 : tensor<?xf32> to !ntensor.ntensor<?xf32>
+  return %0 : !ntensor.ntensor<?xf32>
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG:.*]]: tensor<?xf32>)
+//  CHECK-NEXT:   %[[RES:.*]] = ntensor.from_tensor %[[ARG]] : tensor<?xf32> to !ntensor.ntensor<?xf32>
+//  CHECK-NEXT:   return %[[RES]] : !ntensor.ntensor<?xf32>
+
+// -----
+
+func.func @test(%arg1: !ntensor.ntensor<?xf32>) -> tensor<?xf32> {
+  %0 = ntensor.to_tensor %arg1 : !ntensor.ntensor<?xf32> to tensor<?xf32>
+  return %0 : tensor<?xf32>
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG:.*]]: !ntensor.ntensor<?xf32>)
+//  CHECK-NEXT:   %[[RES:.*]] = ntensor.to_tensor %[[ARG]] : !ntensor.ntensor<?xf32> to tensor<?xf32>
+//  CHECK-NEXT:   return %[[RES]] : tensor<?xf32>

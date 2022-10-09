@@ -543,4 +543,31 @@ def CreateArrayOp : NTensor_OpBase<"create", [AttrSizedOperandSegments, NoSideEf
   let assemblyFormat = "`(`$dynamicSizes`)` (`=` `(` $initValue^ `:` type($initValue) `)`)? attr-dict `:` qualified(type($result))";
 }
 
+def FromTensorOp : NTensor_OpBase<"from_tensor",
+    [NoSideEffect, SameOperandsShape, SameOperandsElementType]> {
+  let summary = "converts tensor to ntensor array.";
+  let description = [{
+    Converts from tensor to ntensor array. Shape and element type must match.
+  }];
+
+  let arguments = (ins AnyTensor:$tensor);
+  let results = (outs NTensor_Tensor:$result);
+
+  let assemblyFormat = "$tensor attr-dict `:` type($tensor) `to` qualified(type($result))";
+}
+
+def ToTensorOp : NTensor_OpBase<"to_tensor",
+    [SameOperandsShape, SameOperandsElementType]> {
+  let summary = "converts ntensor array to tensor.";
+  let description = [{
+    Converts from ntensor array to tensor. Shape and element type must match.
+  }];
+
+  let arguments = (ins Arg<NTensor_Tensor,
+                       "the reference to load from", [MemRead]>:$array);
+  let results = (outs AnyTensor:$result);
+
+  let assemblyFormat = "$array attr-dict `:` qualified(type($array)) `to` type($result)";
+}
+
 #endif // NTENSOR_OPS
