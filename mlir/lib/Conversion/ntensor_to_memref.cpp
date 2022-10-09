@@ -204,6 +204,9 @@ struct ToTensorOpLowering
 
     auto retType = converter->convertType(op.getType())
                        .dyn_cast_or_null<mlir::TensorType>();
+    if (!retType)
+      return mlir::failure();
+
     rewriter.replaceOpWithNewOp<mlir::bufferization::ToTensorOp>(op, retType,
                                                                  array);
     return mlir::success();
@@ -227,8 +230,69 @@ struct FromTensorOpLowering
 
     auto retType = converter->convertType(op.getType())
                        .dyn_cast_or_null<mlir::MemRefType>();
+    if (!retType)
+      return mlir::failure();
+
     rewriter.replaceOpWithNewOp<mlir::bufferization::ToMemrefOp>(op, retType,
                                                                  tensor);
+    return mlir::success();
+  }
+};
+
+struct ToMemrefOpLowering
+    : public mlir::OpConversionPattern<imex::ntensor::ToMemrefOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::ToMemrefOp op,
+                  imex::ntensor::ToMemrefOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto src = adaptor.getArray();
+    auto srcType = src.getType().dyn_cast<mlir::MemRefType>();
+    if (!srcType)
+      return mlir::failure();
+
+    auto *converter = getTypeConverter();
+    assert(converter && "Type converter is not set");
+
+    auto retType = converter->convertType(op.getType())
+                       .dyn_cast_or_null<mlir::MemRefType>();
+    if (!retType)
+      return mlir::failure();
+
+    if (srcType != retType)
+      return mlir::failure();
+
+    rewriter.replaceOp(op, src);
+    return mlir::success();
+  }
+};
+
+struct FromMemrefOpLowering
+    : public mlir::OpConversionPattern<imex::ntensor::FromMemrefOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::FromMemrefOp op,
+                  imex::ntensor::FromMemrefOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto src = adaptor.getMemref();
+    auto srcType = src.getType().dyn_cast<mlir::MemRefType>();
+    if (!srcType)
+      return mlir::failure();
+
+    auto *converter = getTypeConverter();
+    assert(converter && "Type converter is not set");
+
+    auto retType = converter->convertType(op.getType())
+                       .dyn_cast_or_null<mlir::MemRefType>();
+    if (!retType)
+      return mlir::failure();
+
+    if (srcType != retType)
+      return mlir::failure();
+
+    rewriter.replaceOp(op, src);
     return mlir::success();
   }
 };
@@ -247,12 +311,14 @@ void imex::populateNtensorToMemrefRewritesAndTarget(
       });
 
   patterns.insert<DimOpLowering, SubviewOpLowering, LoadOpLowering,
-                  StoreOpLowering, ToTensorOpLowering, FromTensorOpLowering>(
-      converter, &context);
+                  StoreOpLowering, ToTensorOpLowering, FromTensorOpLowering,
+                  ToMemrefOpLowering, FromMemrefOpLowering>(converter,
+                                                            &context);
 
   target.addIllegalOp<imex::ntensor::DimOp, imex::ntensor::SubviewOp,
                       imex::ntensor::LoadOp, imex::ntensor::StoreOp,
-                      imex::ntensor::ToTensorOp, imex::ntensor::FromTensorOp>();
+                      imex::ntensor::ToTensorOp, imex::ntensor::FromTensorOp,
+                      imex::ntensor::ToMemrefOp, imex::ntensor::FromMemrefOp>();
 }
 
 namespace {
