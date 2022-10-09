@@ -1655,6 +1655,38 @@ struct BuiltinCallsToNtensor
   }
 };
 
+struct CastsToNtensor : public mlir::OpConversionPattern<plier::CastOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::CastOp op, plier::CastOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto src = adaptor.getValue();
+    auto srcType = src.getType();
+
+    auto converter = getTypeConverter();
+    assert(converter);
+
+    auto dstType = converter->convertType(op.getType());
+    if (!dstType)
+      return mlir::failure();
+
+    if (srcType == dstType) {
+      rewriter.replaceOp(op, src);
+      return mlir::success();
+    }
+
+    if (srcType.isa<mlir::RankedTensorType>() &&
+        dstType.isa<imex::ntensor::NTensorType>()) {
+      rewriter.replaceOpWithNewOp<imex::ntensor::FromTensorOp>(op, dstType,
+                                                               src);
+      return mlir::success();
+    }
+
+    return mlir::failure();
+  }
+};
+
 static bool isNtensor(mlir::TypeConverter &converter, mlir::Type type) {
   return !!converter.convertType(type)
                .dyn_cast_or_null<imex::ntensor::NTensorType>();
@@ -1744,6 +1776,17 @@ struct PlierToNtensorPass
           return llvm::None;
         });
 
+    target.addDynamicallyLegalOp<plier::CastOp>(
+        [&typeConverter](plier::CastOp op) -> llvm::Optional<bool> {
+          auto srcType = op.getValue().getType();
+          auto dstType = op.getType();
+          if (isNtensor(typeConverter, srcType) ||
+              isNtensor(typeConverter, dstType))
+            return false;
+
+          return llvm::None;
+        });
+
     target.addIllegalOp<plier::BuildSliceOp>();
 
     target.addLegalDialect<imex::ntensor::NTensorDialect>();
@@ -1753,7 +1796,8 @@ struct PlierToNtensorPass
         GetitemToNtensor,
         SetitemToNtensor,
         BuildSliceToNtensor,
-        BuiltinCallsToNtensor
+        BuiltinCallsToNtensor,
+        CastsToNtensor
         // clang-format on
         >(typeConverter, &context);
 
