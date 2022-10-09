@@ -1513,6 +1513,31 @@ struct SetitemToNtensor : public mlir::OpConversionPattern<plier::SetItemOp> {
   }
 };
 
+struct BinopToNtensor : public mlir::OpConversionPattern<plier::BinOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::BinOp op, plier::BinOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto lhs = adaptor.getLhs();
+    auto rhs = adaptor.getRhs();
+    if (!lhs.getType().isa<imex::ntensor::NTensorType>() &&
+        !rhs.getType().isa<imex::ntensor::NTensorType>())
+      return mlir::failure();
+
+    auto converter = getTypeConverter();
+    assert(converter);
+    auto resultType = converter->convertType(op.getType());
+    if (!resultType)
+      return mlir::failure();
+
+    auto opName = op.getOp();
+    rewriter.replaceOpWithNewOp<imex::ntensor::BinaryOp>(op, resultType, lhs,
+                                                         rhs, opName);
+    return mlir::success();
+  }
+};
+
 struct BuildSliceToNtensor
     : public mlir::OpConversionPattern<plier::BuildSliceOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -1807,6 +1832,16 @@ struct PlierToNtensorPass
           return llvm::None;
         });
 
+    target.addDynamicallyLegalOp<plier::BinOp>(
+        [&typeConverter](plier::BinOp op) -> llvm::Optional<bool> {
+          auto lhs = op.getLhs().getType();
+          auto rhs = op.getRhs().getType();
+          if (isNtensor(typeConverter, lhs) || isNtensor(typeConverter, rhs))
+            return false;
+
+          return llvm::None;
+        });
+
     target.addDynamicallyLegalOp<plier::PyCallOp>(
         [this, &typeConverter](plier::PyCallOp op) -> llvm::Optional<bool> {
           auto funcName = op.getFuncName();
@@ -1848,6 +1883,7 @@ struct PlierToNtensorPass
         // clang-format off
         GetitemToNtensor,
         SetitemToNtensor,
+        BinopToNtensor,
         BuildSliceToNtensor,
         BuiltinCallsToNtensor,
         CastsToNtensor
