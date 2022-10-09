@@ -1591,6 +1591,41 @@ private:
   NumpyResolver &resolver;
 };
 
+struct NumpyAttrsToNtensor
+    : public mlir::OpConversionPattern<plier::GetattrOp> {
+  NumpyAttrsToNtensor(mlir::TypeConverter &converter, mlir::MLIRContext *ctx,
+                      NumpyResolver &r)
+      : OpConversionPattern(converter, ctx), resolver(r) {}
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::GetattrOp op, plier::GetattrOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto src = adaptor.getValue();
+    if (!src.getType().isa<imex::ntensor::NTensorType>())
+      return mlir::failure();
+
+    auto funcName = ("array." + op.getName()).str();
+    if (!resolver.hasFunc(funcName))
+      return mlir::failure();
+
+    auto converter = getTypeConverter();
+    assert(converter);
+
+    auto resultType = converter->convertType(op.getType());
+    if (!resultType)
+      return mlir::failure();
+
+    auto argNamesAttr = rewriter.getArrayAttr(rewriter.getStringAttr(""));
+    rewriter.replaceOpWithNewOp<imex::ntensor::CallOp>(op, resultType, src,
+                                                       argNamesAttr, funcName);
+
+    return mlir::success();
+  }
+
+private:
+  NumpyResolver &resolver;
+};
+
 struct BuiltinCallsToNtensor
     : public mlir::OpConversionPattern<plier::PyCallOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -1700,6 +1735,15 @@ struct PlierToNtensorPass
           return llvm::None;
         });
 
+    target.addDynamicallyLegalOp<plier::GetattrOp>(
+        [&typeConverter](plier::GetattrOp op) -> llvm::Optional<bool> {
+          auto containerType = op.getValue().getType();
+          if (isNtensor(typeConverter, containerType))
+            return false;
+
+          return llvm::None;
+        });
+
     target.addIllegalOp<plier::BuildSliceOp>();
 
     target.addLegalDialect<imex::ntensor::NTensorDialect>();
@@ -1713,7 +1757,8 @@ struct PlierToNtensorPass
         // clang-format on
         >(typeConverter, &context);
 
-    patterns.insert<NumpyCallsToNtensor>(typeConverter, &context, *resolver);
+    patterns.insert<NumpyCallsToNtensor, NumpyAttrsToNtensor>(
+        typeConverter, &context, *resolver);
 
     if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
                                                   std::move(patterns))))
@@ -1785,8 +1830,19 @@ struct NtensorPrimitiveCallsLowering final
     auto opName = op.getOp();
 
     auto loc = op->getLoc();
-    auto res =
-        resolver.rewriteFunc(opName, loc, rewriter, op.getArgs(), llvm::None);
+    auto res = [&]() -> llvm::Optional<PyLinalgResolver::Values> {
+      auto args = op.getArgs();
+      auto funcRes =
+          resolver.rewriteFunc(opName, loc, rewriter, args, llvm::None);
+      if (funcRes)
+        return funcRes;
+
+      if (opName.startswith("array.") && args.size() == 1)
+        return resolver.rewriteAttr(opName, loc, rewriter, args.front());
+
+      return llvm::None;
+    }();
+
     if (!res)
       return mlir::failure();
 
