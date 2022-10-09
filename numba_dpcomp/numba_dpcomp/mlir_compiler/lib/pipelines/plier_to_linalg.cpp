@@ -1689,6 +1689,19 @@ struct CastsToNtensor : public mlir::OpConversionPattern<plier::CastOp> {
       return mlir::success();
     }
 
+    if (srcType.isa<mlir::MemRefType>() &&
+        dstType.isa<imex::ntensor::NTensorType>()) {
+      rewriter.replaceOpWithNewOp<imex::ntensor::FromMemrefOp>(op, dstType,
+                                                               src);
+      return mlir::success();
+    }
+
+    if (srcType.isa<imex::ntensor::NTensorType>() &&
+        dstType.isa<mlir::MemRefType>()) {
+      rewriter.replaceOpWithNewOp<imex::ntensor::ToMemrefOp>(op, dstType, src);
+      return mlir::success();
+    }
+
     return mlir::failure();
   }
 };
