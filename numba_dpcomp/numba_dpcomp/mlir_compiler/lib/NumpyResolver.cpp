@@ -24,6 +24,10 @@ class NumpyResolver::Impl {
 public:
   py::module mod;
   py::object map;
+
+  py::object getFuncDesc(llvm::StringRef name) {
+    return map(py::str(name.data(), name.size()));
+  }
 };
 
 NumpyResolver::NumpyResolver(const char *modName, const char *mapName)
@@ -34,7 +38,6 @@ NumpyResolver::NumpyResolver(const char *modName, const char *mapName)
 
 NumpyResolver::~NumpyResolver() {}
 
-bool NumpyResolver::getFunc(llvm::StringRef name) const {
-  auto res = impl->map(py::str(name.data(), name.size()));
-  return !res.is_none();
+bool NumpyResolver::hasFunc(llvm::StringRef name) const {
+  return !impl->getFuncDesc(name).is_none();
 }

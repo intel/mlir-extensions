@@ -25,7 +25,7 @@ public:
   NumpyResolver(const char *modName, const char *mapName);
   ~NumpyResolver();
 
-  bool getFunc(llvm::StringRef name) const;
+  bool hasFunc(llvm::StringRef name) const;
 
 private:
   class Impl;

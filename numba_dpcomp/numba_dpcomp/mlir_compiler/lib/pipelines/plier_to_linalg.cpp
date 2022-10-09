@@ -1556,7 +1556,7 @@ struct NumpyCallsToNtensor : public mlir::OpConversionPattern<plier::PyCallOp> {
   matchAndRewrite(plier::PyCallOp op, plier::PyCallOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto funcName = op.getFuncName();
-    if (!resolver.getFunc(funcName))
+    if (!resolver.hasFunc(funcName))
       return mlir::failure();
 
     auto converter = getTypeConverter();
@@ -1665,7 +1665,7 @@ struct PlierToNtensorPass
     target.addDynamicallyLegalOp<plier::PyCallOp>(
         [this](plier::PyCallOp op) -> llvm::Optional<bool> {
           auto funcName = op.getFuncName();
-          if (resolver->getFunc(funcName))
+          if (resolver->hasFunc(funcName))
             return false;
 
           return llvm::None;
