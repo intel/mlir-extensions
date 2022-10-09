@@ -1683,6 +1683,12 @@ struct CastsToNtensor : public mlir::OpConversionPattern<plier::CastOp> {
       return mlir::success();
     }
 
+    if (srcType.isa<imex::ntensor::NTensorType>() &&
+        dstType.isa<mlir::RankedTensorType>()) {
+      rewriter.replaceOpWithNewOp<imex::ntensor::ToTensorOp>(op, dstType, src);
+      return mlir::success();
+    }
+
     return mlir::failure();
   }
 };
@@ -1784,7 +1790,7 @@ struct PlierToNtensorPass
               isNtensor(typeConverter, dstType))
             return false;
 
-          return llvm::None;
+          return true;
         });
 
     target.addIllegalOp<plier::BuildSliceOp>();
