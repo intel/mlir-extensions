@@ -65,21 +65,6 @@ struct PyTypeStorage : public mlir::TypeStorage {
 
   mlir::StringRef name;
 };
-
-struct TypeVarStorage : public mlir::TypeStorage {
-  using KeyTy = mlir::Type;
-
-  TypeVarStorage(mlir::Type type) : type(type) {}
-
-  bool operator==(const KeyTy &key) const { return key == type; }
-
-  static TypeVarStorage *construct(mlir::TypeStorageAllocator &allocator,
-                                   const KeyTy &key) {
-    return new (allocator.allocate<TypeVarStorage>()) TypeVarStorage(key);
-  }
-
-  mlir::Type type;
-};
 } // namespace detail
 
 mlir::ArrayRef<detail::OperatorNamePair> getOperators() {
@@ -91,7 +76,7 @@ void PlierDialect::initialize() {
 #define GET_OP_LIST
 #include "imex/Dialect/plier/PlierOps.cpp.inc"
       >();
-  addTypes<plier::PyType, SliceType, plier::TypeVar>();
+  addTypes<plier::PyType, SliceType>();
   addInterfaces<PlierInlinerInterface>();
 }
 
@@ -106,11 +91,6 @@ void PlierDialect::printType(mlir::Type type,
       .Case<plier::PyType>(
           [&](auto t) { os << "PyType<" << t.getName() << ">"; })
       .Case<plier::SliceType>([&](auto) { os << "SliceType"; })
-      .Case<plier::TypeVar>([&](auto t) {
-        os << "TypeVar<";
-        os.printType(t.getType());
-        os << ">";
-      })
       .Default([](auto) { llvm_unreachable("unexpected type"); });
 }
 
@@ -139,13 +119,6 @@ SliceType SliceType::get(mlir::MLIRContext *context) {
   assert(context);
   return Base::get(context);
 }
-
-TypeVar TypeVar::get(mlir::Type type) {
-  assert(type);
-  return Base::get(type.getContext(), type);
-}
-
-mlir::Type TypeVar::getType() const { return getImpl()->type; }
 
 void ArgOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                   unsigned index, mlir::StringRef name) {

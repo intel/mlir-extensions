@@ -52,6 +52,21 @@ struct ImexUtilInlinerInterface : public mlir::DialectInlinerInterface {
 };
 } // namespace
 
+struct imex::util::TypeVarStorage : public mlir::TypeStorage {
+  using KeyTy = mlir::Type;
+
+  TypeVarStorage(mlir::Type type) : type(type) {}
+
+  bool operator==(const KeyTy &key) const { return key == type; }
+
+  static TypeVarStorage *construct(mlir::TypeStorageAllocator &allocator,
+                                   const KeyTy &key) {
+    return new (allocator.allocate<TypeVarStorage>()) TypeVarStorage(key);
+  }
+
+  mlir::Type type;
+};
+
 llvm::StringRef imex::util::attributes::getFastmathName() {
   return "#plier.fastmath";
 }
@@ -85,7 +100,7 @@ void ImexUtilDialect::initialize() {
 #include "imex/Dialect/imex_util/ImexUtilOps.cpp.inc"
       >();
 
-  addTypes<OpaqueType>();
+  addTypes<OpaqueType, TypeVar>();
   addInterfaces<ImexUtilInlinerInterface>();
 
   addAttributes<
@@ -103,6 +118,11 @@ void ImexUtilDialect::printType(mlir::Type type,
                                 mlir::DialectAsmPrinter &os) const {
   llvm::TypeSwitch<mlir::Type>(type)
       .Case<imex::util::OpaqueType>([&](auto) { os << "OpaqueType"; })
+      .Case<imex::util::TypeVar>([&](auto t) {
+        os << "TypeVar<";
+        os.printType(t.getType());
+        os << ">";
+      })
       .Default([](auto) { llvm_unreachable("unexpected type"); });
 }
 
@@ -346,6 +366,13 @@ OpaqueType OpaqueType::get(mlir::MLIRContext *context) {
   assert(context);
   return Base::get(context);
 }
+
+TypeVar TypeVar::get(mlir::Type type) {
+  assert(type);
+  return Base::get(type.getContext(), type);
+}
+
+mlir::Type TypeVar::getType() const { return getImpl()->type; }
 
 void EnforceShapeOp::build(mlir::OpBuilder &builder,
                            mlir::OperationState &state, mlir::Value value,
