@@ -1661,19 +1661,24 @@ struct BuiltinCallsToNtensor
     auto name = op.getFuncName();
     for (auto &handler : builtinFuncsHandlers)
       if (handler.first == name) {
+        auto func = adaptor.getFunc();
         auto args = adaptor.getArgs();
+        auto varArgs = adaptor.getVarargs();
         auto kwArgs = adaptor.getKwargs();
         auto kwNames = adaptor.getKwNames();
         assert(kwArgs.size() == kwNames.size() &&
                "Args and names size mismatch");
-        llvm::SmallVector<std::pair<llvm::StringRef, mlir::Value>> kwArgsArray;
-        kwArgsArray.reserve(kwArgs.size());
-        for (auto [arg, nameAttr] : llvm::zip(kwArgs, kwNames)) {
-          auto argName = nameAttr.cast<mlir::StringAttr>().getValue();
-          kwArgsArray.emplace_back(argName, arg);
-        }
 
-        return handler.second(op, args, kwArgsArray, rewriter);
+        auto converter = getTypeConverter();
+        assert(converter);
+
+        auto resType = converter->convertType(op.getType());
+        if (!resType)
+          return mlir::failure();
+
+        rewriter.replaceOpWithNewOp<plier::PyCallOp>(
+            op, resType, func, args, varArgs, kwArgs, name, kwNames);
+        return mlir::success();
       }
 
     return mlir::failure();
@@ -1803,10 +1808,14 @@ struct PlierToNtensorPass
         });
 
     target.addDynamicallyLegalOp<plier::PyCallOp>(
-        [this](plier::PyCallOp op) -> llvm::Optional<bool> {
+        [this, &typeConverter](plier::PyCallOp op) -> llvm::Optional<bool> {
           auto funcName = op.getFuncName();
           if (resolver->hasFunc(funcName))
             return false;
+
+          for (auto &handler : builtinFuncsHandlers)
+            if (handler.first == funcName)
+              return typeConverter.isLegal(op);
 
           return llvm::None;
         });
@@ -1970,6 +1979,34 @@ private:
   NumpyResolver &resolver;
 };
 
+struct BuiltinCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::PyCallOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto name = op.getFuncName();
+    for (auto &handler : builtinFuncsHandlers)
+      if (handler.first == name) {
+        auto args = op.getArgs();
+        auto kwArgs = op.getKwargs();
+        auto kwNames = op.getKwNames();
+        assert(kwArgs.size() == kwNames.size() &&
+               "Args and names size mismatch");
+        llvm::SmallVector<std::pair<llvm::StringRef, mlir::Value>> kwArgsArray;
+        kwArgsArray.reserve(kwArgs.size());
+        for (auto [arg, nameAttr] : llvm::zip(kwArgs, kwNames)) {
+          auto argName = nameAttr.cast<mlir::StringAttr>().getValue();
+          kwArgsArray.emplace_back(argName, arg);
+        }
+
+        return handler.second(op, args, kwArgsArray, rewriter);
+      }
+
+    return mlir::failure();
+  }
+};
+
 struct ResolveNtensorPass
     : public mlir::PassWrapper<ResolveNtensorPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
@@ -1994,8 +2031,8 @@ struct ResolveNtensorPass
 
     imex::ntensor::populateResolveArrayOpsPatterns(ctx, patterns);
 
-    patterns.insert<GetitemArrayOpLowering, NtensorPrimitiveCallsLowering>(
-        &ctx);
+    patterns.insert<GetitemArrayOpLowering, NtensorPrimitiveCallsLowering,
+                    BuiltinCallsLowering>(&ctx);
 
     patterns.insert<NumpyCallsResolver>(&ctx, *resolver);
 
