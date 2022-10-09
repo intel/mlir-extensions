@@ -32,7 +32,6 @@
 namespace plier {
 namespace detail {
 struct PyTypeStorage;
-struct TypeVarStorage;
 
 struct OperatorNamePair {
   mlir::StringRef op;
@@ -90,16 +89,6 @@ public:
   using Base::Base;
 
   static SliceType get(mlir::MLIRContext *context);
-};
-
-class TypeVar : public mlir::Type::TypeBase<::plier::TypeVar, mlir::Type,
-                                            ::plier::detail::TypeVarStorage> {
-public:
-  using Base::Base;
-
-  static TypeVar get(mlir::Type type);
-
-  mlir::Type getType() const;
 };
 
 } // namespace plier

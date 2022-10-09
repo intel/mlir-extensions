@@ -44,12 +44,24 @@ llvm::StringRef getForceInlineName();
 llvm::StringRef getOptLevelName();
 } // namespace attributes
 
+struct TypeVarStorage;
+
 class OpaqueType : public ::mlir::Type::TypeBase<OpaqueType, ::mlir::Type,
                                                  ::mlir::TypeStorage> {
 public:
   using Base::Base;
 
   static OpaqueType get(mlir::MLIRContext *context);
+};
+
+class TypeVar : public mlir::Type::TypeBase<::imex::util::TypeVar, mlir::Type,
+                                            ::imex::util::TypeVarStorage> {
+public:
+  using Base::Base;
+
+  static TypeVar get(mlir::Type type);
+
+  mlir::Type getType() const;
 };
 
 } // namespace util

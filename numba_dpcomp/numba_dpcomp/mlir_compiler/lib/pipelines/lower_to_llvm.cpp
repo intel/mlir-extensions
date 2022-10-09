@@ -53,7 +53,6 @@
 
 #include "imex/Conversion/util_to_llvm.hpp"
 #include "imex/Dialect/imex_util/dialect.hpp"
-#include "imex/Dialect/plier/dialect.hpp"
 #include "imex/Transforms/func_utils.hpp"
 #include "imex/compiler/pipeline_registry.hpp"
 #include "imex/utils.hpp"
@@ -151,7 +150,7 @@ populateToLLVMAdditionalTypeConversion(mlir::LLVMTypeConverter &converter) {
         return voidPtrType;
       });
   converter.addConversion(
-      [voidPtrType](plier::TypeVar) -> llvm::Optional<mlir::Type> {
+      [voidPtrType](imex::util::TypeVar) -> llvm::Optional<mlir::Type> {
         return voidPtrType;
       });
 }
