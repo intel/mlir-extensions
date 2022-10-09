@@ -136,3 +136,25 @@ func.func @test(%arg1: !ntensor.ntensor<?xf32>) -> !ntensor.ntensor<?xf32> {
 // CHECK-LABEL: func @test
 //  CHECK-SAME:   (%[[ARG:.*]]: !ntensor.ntensor<?xf32>)
 //  CHECK-NEXT:   return %[[ARG]] : !ntensor.ntensor<?xf32>
+
+// -----
+
+func.func @test(%arg1: memref<?xf32>) -> memref<?xf32> {
+  %0 = ntensor.from_memref %arg1 : memref<?xf32> to !ntensor.ntensor<?xf32>
+  %1 = ntensor.to_memref %0 : !ntensor.ntensor<?xf32> to memref<?xf32>
+  return %1 : memref<?xf32>
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG:.*]]: memref<?xf32>)
+//  CHECK-NEXT:   return %[[ARG]] : memref<?xf32>
+
+// -----
+
+func.func @test(%arg1: !ntensor.ntensor<?xf32>) -> !ntensor.ntensor<?xf32> {
+  %0 = ntensor.to_memref %arg1 : !ntensor.ntensor<?xf32> to memref<?xf32>
+  %1 = ntensor.from_memref %0 : memref<?xf32> to !ntensor.ntensor<?xf32>
+  return %1 : !ntensor.ntensor<?xf32>
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG:.*]]: !ntensor.ntensor<?xf32>)
+//  CHECK-NEXT:   return %[[ARG]] : !ntensor.ntensor<?xf32>

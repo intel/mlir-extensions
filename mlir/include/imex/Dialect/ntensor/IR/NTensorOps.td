@@ -585,6 +585,8 @@ def FromMemrefOp : NTensor_OpBase<"from_memref",
   let results = (outs NTensor_Tensor:$result);
 
   let assemblyFormat = "$memref attr-dict `:` type($memref) `to` qualified(type($result))";
+
+  let hasFolder = 1;
 }
 
 def ToMemrefOp : NTensor_OpBase<"to_memref",
@@ -598,6 +600,8 @@ def ToMemrefOp : NTensor_OpBase<"to_memref",
   let results = (outs AnyMemRef:$result);
 
   let assemblyFormat = "$array attr-dict `:` qualified(type($array)) `to` type($result)";
+
+  let hasFolder = 1;
 }
 
 #endif // NTENSOR_OPS
