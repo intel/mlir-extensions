@@ -1547,6 +1547,14 @@ struct BuildSliceToNtensor
   }
 };
 
+static bool isBoundFunc(mlir::Type type) {
+  if (auto pyType = type.dyn_cast<plier::PyType>()) {
+    auto name = pyType.getName();
+    return name.consume_front("BoundFunction(") && name.consume_back(")");
+  }
+  return false;
+}
+
 struct NumpyCallsToNtensor : public mlir::OpConversionPattern<plier::PyCallOp> {
   NumpyCallsToNtensor(mlir::TypeConverter &converter, mlir::MLIRContext *ctx,
                       NumpyResolver &r)
@@ -1566,17 +1574,29 @@ struct NumpyCallsToNtensor : public mlir::OpConversionPattern<plier::PyCallOp> {
     if (mlir::failed(converter->convertTypes(op->getResultTypes(), resTypes)))
       return mlir::failure();
 
+    auto func = adaptor.getFunc();
+    auto getAttr = func.getDefiningOp<plier::GetattrOp>();
+    bool isAttr = getAttr && isBoundFunc(func.getType());
+
     llvm::SmallVector<mlir::Value> args;
     llvm::SmallVector<mlir::Attribute> argNames;
     auto srcArgs = adaptor.getArgs();
     auto srcKwArgs = adaptor.getKwargs();
     auto srcKwNames = adaptor.getKwNames();
-    auto totalCount = srcArgs.size() + srcKwArgs.size();
+    auto totalCount =
+        srcArgs.size() + srcKwArgs.size() + static_cast<size_t>(isAttr);
     args.reserve(totalCount);
     argNames.reserve(totalCount);
 
+    auto emptyStrAttr = rewriter.getStringAttr("");
+    if (isAttr) {
+      auto val = rewriter.getRemappedValue(getAttr.getValue());
+      args.emplace_back(val);
+      argNames.emplace_back(emptyStrAttr);
+    }
+
     args.append(srcArgs.begin(), srcArgs.end());
-    argNames.resize(srcArgs.size(), rewriter.getStringAttr(""));
+    argNames.append(srcArgs.size(), emptyStrAttr);
 
     args.append(srcKwArgs.begin(), srcKwArgs.end());
     argNames.append(srcKwNames.begin(), srcKwNames.end());
@@ -1607,6 +1627,11 @@ struct NumpyAttrsToNtensor
     auto funcName = ("array." + op.getName()).str();
     if (!resolver.hasFunc(funcName))
       return mlir::failure();
+
+    if (isBoundFunc(op.getType())) {
+      rewriter.replaceOp(op, src);
+      return mlir::success();
+    }
 
     auto converter = getTypeConverter();
     assert(converter);
