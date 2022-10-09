@@ -1757,6 +1757,18 @@ struct CastsToNtensor : public mlir::OpConversionPattern<plier::CastOp> {
       return mlir::success();
     }
 
+    if (srcType.isIntOrIndexOrFloat() &&
+        dstType.isa<imex::ntensor::NTensorType>()) {
+      auto ntensorType = dstType.cast<imex::ntensor::NTensorType>();
+      if (srcType != ntensorType.getElementType() ||
+          !ntensorType.hasStaticShape())
+        return mlir::failure();
+
+      rewriter.replaceOpWithNewOp<imex::ntensor::CreateArrayOp>(
+          op, ntensorType, /*dynamicSizes*/ llvm::None, src);
+      return mlir::success();
+    }
+
     return mlir::failure();
   }
 };
