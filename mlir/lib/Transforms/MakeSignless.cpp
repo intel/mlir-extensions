@@ -17,6 +17,7 @@
 #include "imex/Dialect/imex_util/dialect.hpp"
 #include "imex/Transforms/type_conversion.hpp"
 
+#include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/Pass/Pass.h>
@@ -82,6 +83,27 @@ struct ConvertTensorEmpty
     return mlir::success();
   }
 };
+
+struct ConvertLinalgFill
+    : public mlir::OpConversionPattern<mlir::linalg::FillOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::linalg::FillOp op,
+                  mlir::linalg::FillOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto converter = this->getTypeConverter();
+    assert(converter);
+
+    llvm::SmallVector<mlir::Type> results;
+    if (mlir::failed(converter->convertTypes(op.getResultTypes(), results)))
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::linalg::FillOp>(
+        op, results, adaptor.getInputs(), adaptor.getOutputs());
+    return mlir::success();
+  }
+};
 } // namespace
 
 static llvm::Optional<mlir::Type> makeSignlessType(mlir::Type type) {
@@ -112,12 +134,13 @@ void imex::populateMakeSignlessRewritesAndTarget(
   converter.addTargetMaterialization(materializeSignCast);
 
   target.addDynamicallyLegalOp<mlir::memref::AllocOp, mlir::memref::AllocaOp,
-                               mlir::memref::DeallocOp, mlir::tensor::EmptyOp>(
+                               mlir::memref::DeallocOp, mlir::tensor::EmptyOp,
+                               mlir::linalg::FillOp>(
       [&](mlir::Operation *op) { return converter.isLegal(op); });
 
   patterns.insert<ConvertAlloc<mlir::memref::AllocOp>,
                   ConvertAlloc<mlir::memref::AllocaOp>, ConvertDealloc,
-                  ConvertTensorEmpty>(converter, &context);
+                  ConvertTensorEmpty, ConvertLinalgFill>(converter, &context);
 }
 
 namespace {
@@ -128,6 +151,7 @@ struct MakeSignlessPass
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<imex::util::ImexUtilDialect>();
+    registry.insert<mlir::linalg::LinalgDialect>();
     registry.insert<mlir::memref::MemRefDialect>();
     registry.insert<mlir::tensor::TensorDialect>();
   }

@@ -75,3 +75,15 @@ func.func @test(%arg: index) -> tensor<?xsi32> {
 //  CHECK-SAME:   (%[[ARG:.*]]: index)
 //  CHECK-NEXT:   %[[RES:.*]] = tensor.empty(%[[ARG]]) : tensor<?xi32>
 //  CHECK-NEXT:   return %[[RES]] : tensor<?xi32>
+
+// -----
+
+func.func @test(%arg1: tensor<?xsi32>, %arg2: si32) -> tensor<?xsi32> {
+  %0 = linalg.fill ins(%arg2 : si32) outs(%arg1 : tensor<?xsi32>) -> tensor<?xsi32>
+  return %0 : tensor<?xsi32>
+}
+
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG1:.*]]: tensor<?xi32>, %[[ARG2:.*]]: i32)
+//  CHECK-NEXT:   %[[RES:.*]] = linalg.fill ins(%[[ARG2]] : i32) outs(%[[ARG1]] : tensor<?xi32>) -> tensor<?xi32>
+//  CHECK-NEXT:   return %[[RES]] : tensor<?xi32>
