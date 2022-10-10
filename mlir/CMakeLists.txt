@@ -55,6 +55,7 @@ set(SOURCES_LIST
     lib/Dialect/ntensor/Transforms/ResolveArrayOps.cpp
     lib/Dialect/plier/dialect.cpp
     lib/ExecutionEngine/execution_engine.cpp
+    lib/Transforms/MakeSignless.cpp
     lib/Transforms/arg_lowering.cpp
     lib/Transforms/call_lowering.cpp
     lib/Transforms/canonicalize_reductions.cpp
@@ -98,6 +99,7 @@ set(HEADERS_LIST
     include/imex/Dialect/ntensor/Transforms/ResolveArrayOps.hpp
     include/imex/Dialect/plier/dialect.hpp
     include/imex/ExecutionEngine/execution_engine.hpp
+    include/imex/Transforms/MakeSignless.hpp
     include/imex/Transforms/arg_lowering.hpp
     include/imex/Transforms/call_lowering.hpp
     include/imex/Transforms/canonicalize_reductions.hpp

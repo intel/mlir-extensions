@@ -49,6 +49,7 @@
 #include "pipelines/plier_to_std.hpp"
 #include "pipelines/pre_low_simplifications.hpp"
 
+#include "imex/Transforms/MakeSignless.hpp"
 #include "imex/Transforms/call_lowering.hpp"
 #include "imex/Transforms/canonicalize_reductions.hpp"
 #include "imex/Transforms/cast_utils.hpp"
@@ -2457,83 +2458,6 @@ struct MarkContigiousArraysPass
   }
 };
 
-template <typename Op>
-struct ConvertAlloc : public mlir::OpConversionPattern<Op> {
-  using mlir::OpConversionPattern<Op>::OpConversionPattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(Op op, typename Op::Adaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
-    auto converter = this->getTypeConverter();
-    assert(converter);
-    auto oldResType = op.getType();
-    auto newResType = converter->convertType(oldResType)
-                          .template dyn_cast_or_null<mlir::MemRefType>();
-    if (!newResType)
-      return mlir::failure();
-
-    rewriter.replaceOpWithNewOp<Op>(op, newResType, adaptor.getDynamicSizes(),
-                                    adaptor.getSymbolOperands(),
-                                    adaptor.getAlignmentAttr());
-    return mlir::success();
-  }
-};
-
-struct MakeTensorsSignlessPass
-    : public mlir::PassWrapper<MakeTensorsSignlessPass,
-                               mlir::OperationPass<mlir::ModuleOp>> {
-  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(MakeTensorsSignlessPass)
-
-  void runOnOperation() override;
-};
-
-void MakeTensorsSignlessPass::runOnOperation() {
-  auto module = getOperation();
-  auto *context = &getContext();
-
-  mlir::TypeConverter typeConverter;
-  typeConverter.addConversion([](mlir::Type type) { return type; });
-  typeConverter.addConversion(
-      [](mlir::ShapedType type) -> llvm::Optional<mlir::Type> {
-        auto elemType = type.getElementType();
-        auto signless = imex::makeSignlessType(elemType);
-        if (signless != elemType)
-          return type.clone(signless);
-
-        return llvm::None;
-      });
-  imex::populateTupleTypeConverter(*context, typeConverter);
-
-  auto materializeSignCast = [](mlir::OpBuilder &builder, mlir::Type type,
-                                mlir::ValueRange inputs,
-                                mlir::Location loc) -> mlir::Value {
-    assert(inputs.size() == 1);
-    return builder.create<imex::util::SignCastOp>(loc, type, inputs[0]);
-  };
-  typeConverter.addArgumentMaterialization(materializeSignCast);
-  typeConverter.addSourceMaterialization(materializeSignCast);
-  typeConverter.addTargetMaterialization(materializeSignCast);
-
-  mlir::RewritePatternSet patterns(context);
-  mlir::ConversionTarget target(*context);
-
-  imex::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
-                                                           patterns, target);
-  imex::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
-                                                     target);
-
-  target.addLegalOp<mlir::ModuleOp, imex::util::SignCastOp>();
-
-  patterns.insert<ConvertAlloc<mlir::memref::AllocOp>,
-                  ConvertAlloc<mlir::memref::AllocaOp>>(typeConverter, context);
-
-  target.addDynamicallyLegalOp<mlir::memref::AllocOp, mlir::memref::AllocaOp>(
-      [&](mlir::Operation *op) { return typeConverter.isLegal(op); });
-
-  if (failed(applyFullConversion(module, target, std::move(patterns))))
-    signalPassFailure();
-}
-
 struct LinalgOptPass
     : public mlir::PassWrapper<LinalgOptPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
@@ -2960,7 +2884,7 @@ static void populatePlierToLinalgGenPipeline(mlir::OpPassManager &pm) {
 }
 
 static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
-  pm.addPass(std::make_unique<MakeTensorsSignlessPass>());
+  pm.addPass(imex::createMakeSignlessPass());
 
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(mlir::createReconcileUnrealizedCastsPass());
