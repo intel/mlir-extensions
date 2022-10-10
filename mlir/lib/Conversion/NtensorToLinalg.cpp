@@ -14,12 +14,38 @@
 
 #include "imex/Conversion/NtensorToLinalg.hpp"
 
+#include "imex/Dialect/imex_util/dialect.hpp"
 #include "imex/Dialect/ntensor/IR/NTensorOps.hpp"
 
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/Pass/Pass.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
+
+template <typename F>
+static llvm::SmallVector<mlir::Value>
+wrapEnvRegion(mlir::OpBuilder &builder, mlir::Location loc, mlir::Attribute env,
+              mlir::TypeRange results, F &&func) {
+  if (!env) {
+    auto res = func(builder, loc);
+    mlir::ValueRange range(res);
+    assert(range.getTypes() == results && "Invalid result types");
+    return {range.begin(), range.end()};
+  }
+
+  auto bodyBuilder = [&](mlir::OpBuilder &b, mlir::Location l) {
+    auto res = func(b, l);
+    mlir::ValueRange range(res);
+    assert(range.getTypes() == results && "Invalid result types");
+    b.create<imex::util::EnvironmentRegionYieldOp>(l, range);
+  };
+
+  auto res = builder
+                 .create<imex::util::EnvironmentRegionOp>(
+                     loc, env, /*args*/ llvm::None, results, bodyBuilder)
+                 .getResults();
+  return {res.begin(), res.end()};
+}
 
 namespace {
 struct ConvertCreateOp
@@ -38,18 +64,24 @@ struct ConvertCreateOp
     if (initValue && initValue.getType() != elemType)
       return mlir::failure();
 
-    auto tensorType = mlir::RankedTensorType::get(dstType.getShape(), elemType);
+    auto results = wrapEnvRegion(
+        rewriter, op->getLoc(), dstType.getEnvironment(), dstType,
+        [&](mlir::OpBuilder &builder, mlir::Location loc) {
+          auto tensorType =
+              mlir::RankedTensorType::get(dstType.getShape(), elemType);
+          mlir::Value result = rewriter.create<mlir::tensor::EmptyOp>(
+              loc, tensorType, op.getDynamicSizes());
+          if (initValue)
+            result =
+                rewriter.create<mlir::linalg::FillOp>(loc, initValue, result)
+                    .getResult(0);
 
-    auto loc = op->getLoc();
-    mlir::Value result = rewriter.create<mlir::tensor::EmptyOp>(
-        loc, tensorType, op.getDynamicSizes());
-    if (initValue)
-      result = rewriter.create<mlir::linalg::FillOp>(loc, initValue, result)
-                   .getResult(0);
+          result = rewriter.create<imex::ntensor::FromTensorOp>(loc, dstType,
+                                                                result);
+          return result;
+        });
 
-    result = rewriter.create<imex::ntensor::FromTensorOp>(loc, dstType, result);
-
-    rewriter.replaceOp(op, result);
+    rewriter.replaceOp(op, results);
     return mlir::success();
   }
 };
@@ -67,6 +99,7 @@ struct NtensorToLinalgPass
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<imex::ntensor::NTensorDialect>();
+    registry.insert<imex::util::ImexUtilDialect>();
     registry.insert<mlir::linalg::LinalgDialect>();
     registry.insert<mlir::tensor::TensorDialect>();
   }
