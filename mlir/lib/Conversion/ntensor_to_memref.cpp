@@ -211,7 +211,7 @@ struct ToTensorOpLowering
     auto results = wrapEnvRegion(
         rewriter, op->getLoc(), origType.getEnvironment(), retType,
         [&](mlir::OpBuilder &builder, mlir::Location loc) {
-          return rewriter
+          return builder
               .create<mlir::bufferization::ToTensorOp>(loc, retType, array)
               .getResult();
         });
@@ -245,7 +245,7 @@ struct FromTensorOpLowering
     auto results = wrapEnvRegion(
         rewriter, op->getLoc(), origType.getEnvironment(), retType,
         [&](mlir::OpBuilder &builder, mlir::Location loc) {
-          return rewriter
+          return builder
               .create<mlir::bufferization::ToMemrefOp>(loc, retType, tensor)
               .getResult();
         });

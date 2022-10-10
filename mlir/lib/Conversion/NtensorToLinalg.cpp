@@ -69,15 +69,15 @@ struct ConvertCreateOp
         [&](mlir::OpBuilder &builder, mlir::Location loc) {
           auto tensorType =
               mlir::RankedTensorType::get(dstType.getShape(), elemType);
-          mlir::Value result = rewriter.create<mlir::tensor::EmptyOp>(
+          mlir::Value result = builder.create<mlir::tensor::EmptyOp>(
               loc, tensorType, op.getDynamicSizes());
           if (initValue)
             result =
-                rewriter.create<mlir::linalg::FillOp>(loc, initValue, result)
+                builder.create<mlir::linalg::FillOp>(loc, initValue, result)
                     .getResult(0);
 
-          result = rewriter.create<imex::ntensor::FromTensorOp>(loc, dstType,
-                                                                result);
+          result =
+              builder.create<imex::ntensor::FromTensorOp>(loc, dstType, result);
           return result;
         });
 
@@ -114,16 +114,16 @@ struct ConvertCopyOp : public mlir::OpRewritePattern<imex::ntensor::CopyOp> {
 
           auto srcTensorType = mlir::RankedTensorType::get(
               srcType.getShape(), srcType.getElementType());
-          mlir::Value srcTensor = rewriter.create<imex::ntensor::ToTensorOp>(
+          mlir::Value srcTensor = builder.create<imex::ntensor::ToTensorOp>(
               loc, srcTensorType, src);
 
           auto dstMemrefType = mlir::MemRefType::get(dstType.getShape(),
                                                      dstType.getElementType());
-          mlir::Value dstMemref = rewriter.create<imex::ntensor::ToMemrefOp>(
+          mlir::Value dstMemref = builder.create<imex::ntensor::ToMemrefOp>(
               loc, dstMemrefType, dst);
 
           auto affineMap = mlir::AffineMap::getMultiDimIdentityMap(
-              rank, rewriter.getContext());
+              rank, builder.getContext());
           const mlir::AffineMap maps[] = {
               affineMap,
               affineMap,
@@ -136,8 +136,8 @@ struct ConvertCopyOp : public mlir::OpRewritePattern<imex::ntensor::CopyOp> {
             assert(args.size() == 2);
             b.create<mlir::linalg::YieldOp>(l, args.front());
           };
-          rewriter.create<mlir::linalg::GenericOp>(
-              loc, srcTensor, dstMemref, maps, iterators, bodyBuilder);
+          builder.create<mlir::linalg::GenericOp>(loc, srcTensor, dstMemref,
+                                                  maps, iterators, bodyBuilder);
           return llvm::None;
         });
 
