@@ -51,3 +51,15 @@ func.func @test(%arg: index) -> memref<?xsi32> {
 //  CHECK-SAME:   (%[[ARG:.*]]: index)
 //  CHECK-NEXT:   %[[RES:.*]] = memref.alloca(%arg0) : memref<?xi32>
 //  CHECK-NEXT:   return %[[RES]] : memref<?xi32>
+
+// -----
+
+func.func @test(%arg: memref<?xsi32>) {
+  memref.dealloc %arg : memref<?xsi32>
+  return
+}
+
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG:.*]]: memref<?xi32>)
+//  CHECK-NEXT:   memref.dealloc %[[ARG]] : memref<?xi32>
+//  CHECK-NEXT:   return

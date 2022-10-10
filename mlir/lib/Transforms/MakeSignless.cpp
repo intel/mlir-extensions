@@ -44,6 +44,20 @@ struct ConvertAlloc : public mlir::OpConversionPattern<Op> {
     return mlir::success();
   }
 };
+
+struct ConvertDealloc
+    : public mlir::OpConversionPattern<mlir::memref::DeallocOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::DeallocOp op,
+                  mlir::memref::DeallocOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<mlir::memref::DeallocOp>(op,
+                                                         adaptor.getMemref());
+    return mlir::success();
+  }
+};
 } // namespace
 
 static llvm::Optional<mlir::Type> makeSignlessType(mlir::Type type) {
@@ -73,11 +87,13 @@ void imex::populateMakeSignlessRewritesAndTarget(
   converter.addSourceMaterialization(materializeSignCast);
   converter.addTargetMaterialization(materializeSignCast);
 
-  target.addDynamicallyLegalOp<mlir::memref::AllocOp, mlir::memref::AllocaOp>(
+  target.addDynamicallyLegalOp<mlir::memref::AllocOp, mlir::memref::AllocaOp,
+                               mlir::memref::DeallocOp>(
       [&](mlir::Operation *op) { return converter.isLegal(op); });
 
   patterns.insert<ConvertAlloc<mlir::memref::AllocOp>,
-                  ConvertAlloc<mlir::memref::AllocaOp>>(converter, &context);
+                  ConvertAlloc<mlir::memref::AllocaOp>, ConvertDealloc>(
+      converter, &context);
 }
 
 namespace {
