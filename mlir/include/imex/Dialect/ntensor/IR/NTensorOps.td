@@ -15,6 +15,7 @@
 #ifndef NTENSOR_OPS
 #define NTENSOR_OPS
 
+include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/CopyOpInterface.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
@@ -602,6 +603,44 @@ def ToMemrefOp : NTensor_OpBase<"to_memref",
   let assemblyFormat = "$array attr-dict `:` qualified(type($array)) `to` type($result)";
 
   let hasFolder = 1;
+}
+
+def ElementwiseOp : NTensor_OpBase<"elementwise", [
+    SameOperandsShape,
+    SingleBlockImplicitTerminator<"::imex::ntensor::ElementwiseYieldOp">,
+    NoSideEffect]> {
+  let summary = "Elementwise operation";
+  let description = [{
+    TBD
+  }];
+
+
+  let arguments = (ins NTensor_Tensor:$source);
+  let results = (outs NTensor_Tensor:$result);
+
+  let regions = (region SizedRegion<1>:$region);
+
+  let assemblyFormat =
+      "attr-dict $source `:` qualified(type($source)) `->` qualified(type($result)) $region";
+}
+
+def ElementwiseYieldOp : NTensor_OpBase<"elementwise_yield", [
+  NoSideEffect,
+  ReturnLike,
+  Terminator,
+  HasParent<"::imex::ntensor::ElementwiseOp">
+  ]> {
+
+  let summary = "Elementwise op region yield and termination operation";
+  let description = [{
+    "elementwise_yield" yields an SSA value from the "elementwise" op region and
+    terminates it.
+  }];
+
+  let arguments = (ins AnyType:$value);
+  let builders = [OpBuilder<(ins), [{ /* nothing to do */ }]>];
+
+  let assemblyFormat = "attr-dict $value `:` type($value)";
 }
 
 #endif // NTENSOR_OPS
