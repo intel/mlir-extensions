@@ -126,3 +126,29 @@ func.func @test(%arg1: !ntensor.ntensor<?x5xf32>) -> !ntensor.ntensor<?x5xf32> {
 //  CHECK-NEXT:   } -> tensor<?x5xf32>
 //  CHECK-NEXT:   %[[RES:.*]] = ntensor.from_tensor %[[T2]] : tensor<?x5xf32> to !ntensor.ntensor<?x5xf32>
 //  CHECK-NEXT:   return %[[RES]] : !ntensor.ntensor<?x5xf32>
+
+// -----
+
+func.func @test(%arg1: !ntensor.ntensor<?x5xf32, "test">) -> !ntensor.ntensor<?x5xf32, "test"> {
+  %0 = ntensor.elementwise %arg1 : !ntensor.ntensor<?x5xf32, "test"> -> !ntensor.ntensor<?x5xf32, "test"> {
+  ^bb0(%arg2: f32):
+    ntensor.elementwise_yield %arg2 : f32
+  }
+  return %0 : !ntensor.ntensor<?x5xf32, "test">
+}
+
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG:.*]]: !ntensor.ntensor<?x5xf32, "test">)
+//  CHECK-NEXT:   %[[C0:.*]] = arith.constant 0 : index
+//  CHECK-NEXT:   %[[T0:.*]] = imex_util.env_region "test" -> !ntensor.ntensor<?x5xf32, "test"> {
+//  CHECK-NEXT:   %[[T1:.*]] = ntensor.to_tensor %[[ARG]] : !ntensor.ntensor<?x5xf32, "test"> to tensor<?x5xf32>
+//  CHECK-NEXT:   %[[D:.*]] = tensor.dim %[[T1]], %[[C0]] : tensor<?x5xf32>
+//  CHECK-NEXT:   %[[E:.*]] = tensor.empty(%[[D]]) : tensor<?x5xf32>
+//  CHECK-NEXT:   %[[T2:.*]] = linalg.generic {indexing_maps = [#map, #map], iterator_types = ["parallel", "parallel"]} ins(%[[T1]] : tensor<?x5xf32>) outs(%[[E]] : tensor<?x5xf32>) {
+//  CHECK-NEXT:   ^bb0(%[[GARG1:.*]]: f32, %[[GARG2:.*]]: f32):
+//  CHECK-NEXT:   linalg.yield %[[GARG1]] : f32
+//  CHECK-NEXT:   } -> tensor<?x5xf32>
+//  CHECK-NEXT:   %[[RES:.*]] = ntensor.from_tensor %[[T2]] : tensor<?x5xf32> to !ntensor.ntensor<?x5xf32, "test">
+//  CHECK-NEXT:   imex_util.env_region_yield %[[RES]] : !ntensor.ntensor<?x5xf32, "test">
+//  CHECK-NEXT:   }
+//  CHECK-NEXT:   return %[[T0]] : !ntensor.ntensor<?x5xf32, "test">

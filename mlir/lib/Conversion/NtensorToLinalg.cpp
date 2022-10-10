@@ -24,8 +24,8 @@
 
 template <typename F>
 static llvm::SmallVector<mlir::Value>
-wrapEnvRegion(mlir::OpBuilder &builder, mlir::Location loc, mlir::Attribute env,
-              mlir::TypeRange results, F &&func) {
+wrapEnvRegion(mlir::PatternRewriter &builder, mlir::Location loc,
+              mlir::Attribute env, mlir::TypeRange results, F &&func) {
   if (!env) {
     auto res = func(builder, loc);
     mlir::ValueRange range(res);
@@ -34,7 +34,7 @@ wrapEnvRegion(mlir::OpBuilder &builder, mlir::Location loc, mlir::Attribute env,
   }
 
   auto bodyBuilder = [&](mlir::OpBuilder &b, mlir::Location l) {
-    auto res = func(b, l);
+    auto res = func(static_cast<mlir::PatternRewriter &>(b), l);
     mlir::ValueRange range(res);
     assert(range.getTypes() == results && "Invalid result types");
     b.create<imex::util::EnvironmentRegionYieldOp>(l, range);
@@ -166,58 +166,62 @@ struct ConvertElementwiseOp
         srcType.getEnvironment() != dstType.getEnvironment())
       return mlir::failure();
 
-    auto loc = op->getLoc();
+    auto results = wrapEnvRegion(
+        rewriter, op->getLoc(), dstType.getEnvironment(), dstType,
+        [&](mlir::PatternRewriter &builder, mlir::Location loc) {
+          auto rank = static_cast<unsigned>(srcType.getRank());
 
-    auto rank = static_cast<unsigned>(srcType.getRank());
+          auto srcTensorType = mlir::RankedTensorType::get(
+              srcType.getShape(), srcType.getElementType());
+          mlir::Value srcTensor = builder.create<imex::ntensor::ToTensorOp>(
+              loc, srcTensorType, src);
 
-    auto srcTensorType = mlir::RankedTensorType::get(srcType.getShape(),
-                                                     srcType.getElementType());
-    mlir::Value srcTensor =
-        rewriter.create<imex::ntensor::ToTensorOp>(loc, srcTensorType, src);
+          auto dstTensorType = mlir::RankedTensorType::get(
+              dstType.getShape(), dstType.getElementType());
 
-    auto dstTensorType = mlir::RankedTensorType::get(dstType.getShape(),
-                                                     dstType.getElementType());
+          llvm::SmallVector<mlir::Value> dynSizes;
+          for (auto [i, dim] : llvm::enumerate(dstTensorType.getShape()))
+            if (mlir::ShapedType::isDynamic(dim))
+              dynSizes.emplace_back(
+                  builder.create<mlir::tensor::DimOp>(loc, srcTensor, i));
 
-    llvm::SmallVector<mlir::Value> dynSizes;
-    for (auto [i, dim] : llvm::enumerate(dstTensorType.getShape()))
-      if (mlir::ShapedType::isDynamic(dim))
-        dynSizes.emplace_back(
-            rewriter.create<mlir::tensor::DimOp>(loc, srcTensor, i));
+          mlir::Value empty = builder.create<mlir::tensor::EmptyOp>(
+              loc, dstTensorType, dynSizes);
 
-    mlir::Value empty =
-        rewriter.create<mlir::tensor::EmptyOp>(loc, dstTensorType, dynSizes);
+          auto affineMap = mlir::AffineMap::getMultiDimIdentityMap(
+              rank, builder.getContext());
+          const mlir::AffineMap maps[] = {
+              affineMap,
+              affineMap,
+          };
 
-    auto affineMap =
-        mlir::AffineMap::getMultiDimIdentityMap(rank, rewriter.getContext());
-    const mlir::AffineMap maps[] = {
-        affineMap,
-        affineMap,
-    };
+          llvm::SmallVector<llvm::StringRef> iterators(
+              rank, mlir::getParallelIteratorTypeName());
 
-    llvm::SmallVector<llvm::StringRef> iterators(
-        rank, mlir::getParallelIteratorTypeName());
+          auto generic = builder.create<mlir::linalg::GenericOp>(
+              loc, dstTensorType, srcTensor, empty, maps, iterators);
 
-    auto generic = rewriter.create<mlir::linalg::GenericOp>(
-        loc, dstTensorType, srcTensor, empty, maps, iterators);
+          mlir::Region &newRegion = generic.getRegion();
+          builder.inlineRegionBefore(op.getRegion(), newRegion,
+                                     newRegion.end());
 
-    mlir::Region &newRegion = generic.getRegion();
-    rewriter.inlineRegionBefore(op.getRegion(), newRegion, newRegion.end());
+          mlir::Block *block = &newRegion.front();
+          block->addArgument(dstTensorType.getElementType(), loc);
+          {
+            auto term = mlir::cast<imex::ntensor::ElementwiseYieldOp>(
+                block->getTerminator());
+            mlir::OpBuilder::InsertionGuard g(builder);
+            builder.setInsertionPoint(term);
+            auto arg = term.getValue();
+            builder.replaceOpWithNewOp<mlir::linalg::YieldOp>(term, arg);
+          }
 
-    mlir::Block *block = &newRegion.front();
-    block->addArgument(dstTensorType.getElementType(), loc);
-    {
-      auto term =
-          mlir::cast<imex::ntensor::ElementwiseYieldOp>(block->getTerminator());
-      mlir::OpBuilder::InsertionGuard g(rewriter);
-      rewriter.setInsertionPoint(term);
-      auto arg = term.getValue();
-      rewriter.replaceOpWithNewOp<mlir::linalg::YieldOp>(term, arg);
-    }
+          mlir::Value res = builder.create<imex::ntensor::FromTensorOp>(
+              loc, dstType, generic.getResult(0));
+          return res;
+        });
 
-    mlir::Value res = rewriter.create<imex::ntensor::FromTensorOp>(
-        loc, dstType, generic.getResult(0));
-
-    rewriter.replaceOp(op, res);
+    rewriter.replaceOp(op, results);
     return mlir::success();
   }
 };
