@@ -47,6 +47,7 @@
 #include "pipelines/pre_low_simplifications.hpp"
 
 #include "imex/Conversion/ntensor_to_memref.hpp"
+#include "imex/Conversion/NtensorToLinalg.hpp"
 #include "imex/Dialect/imex_util/dialect.hpp"
 #include "imex/Dialect/ntensor/IR/NTensorOps.hpp"
 #include "imex/Dialect/ntensor/Transforms/ResolveArrayOps.hpp"
@@ -3518,6 +3519,7 @@ static void populatePlierToLinalgGenPipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<ResolveNtensorPass>());
   //  pm.addPass(std::make_unique<PlierToLinalgPass>());
   pm.addPass(mlir::createCanonicalizerPass());
+  pm.addPass(imex::createNtensorToLinalgPass());
   pm.addPass(imex::createNtensorToMemrefPass());
   pm.addPass(mlir::createCanonicalizerPass());
   //  pm.addPass(std::make_unique<NumpyCallsLoweringPass>());
