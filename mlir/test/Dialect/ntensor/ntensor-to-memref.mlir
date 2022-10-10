@@ -167,6 +167,20 @@ func.func @test(%arg1: tensor<?xf32>) -> !ntensor.ntensor<?xf32> {
 
 // -----
 
+func.func @test(%arg1: tensor<?xf32>) -> !ntensor.ntensor<?xf32, "test"> {
+  %0 = ntensor.from_tensor %arg1 : tensor<?xf32> to !ntensor.ntensor<?xf32, "test">
+  return %0 : !ntensor.ntensor<?xf32, "test">
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG:.*]]: tensor<?xf32>)
+//  CHECK-NEXT:   %[[RES:.*]] = imex_util.env_region "test" -> memref<?xf32> {
+//  CHECK-NEXT:   %[[RES1:.*]] = bufferization.to_memref %[[ARG]] : memref<?xf32>
+//  CHECK-NEXT:   imex_util.env_region_yield %[[RES1]] : memref<?xf32>
+//  CHECK-NEXT:   }
+//  CHECK-NEXT:   return %[[RES]] : memref<?xf32>
+
+// -----
+
 func.func @test(%arg1: !ntensor.ntensor<?xf32>) -> tensor<?xf32> {
   %0 = ntensor.to_tensor %arg1 : !ntensor.ntensor<?xf32> to tensor<?xf32>
   return %0 : tensor<?xf32>
@@ -174,6 +188,20 @@ func.func @test(%arg1: !ntensor.ntensor<?xf32>) -> tensor<?xf32> {
 // CHECK-LABEL: func @test
 //  CHECK-SAME:   (%[[ARG:.*]]: memref<?xf32>)
 //  CHECK-NEXT:   %[[RES:.*]] = bufferization.to_tensor %[[ARG]] : memref<?xf32>
+//  CHECK-NEXT:   return %[[RES]] : tensor<?xf32>
+
+// -----
+
+func.func @test(%arg1: !ntensor.ntensor<?xf32, "test">) -> tensor<?xf32> {
+  %0 = ntensor.to_tensor %arg1 : !ntensor.ntensor<?xf32, "test"> to tensor<?xf32>
+  return %0 : tensor<?xf32>
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG:.*]]: memref<?xf32>)
+//  CHECK-NEXT:   %[[RES:.*]] = imex_util.env_region "test" -> tensor<?xf32> {
+//  CHECK-NEXT:   %[[RES1:.*]] = bufferization.to_tensor %[[ARG]] : memref<?xf32>
+//  CHECK-NEXT:   imex_util.env_region_yield %[[RES1]] : tensor<?xf32>
+//  CHECK-NEXT:   }
 //  CHECK-NEXT:   return %[[RES]] : tensor<?xf32>
 
 // -----
