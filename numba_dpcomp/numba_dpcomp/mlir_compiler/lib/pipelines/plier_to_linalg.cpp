@@ -2884,7 +2884,6 @@ static void populatePlierToLinalgGenPipeline(mlir::OpPassManager &pm) {
 }
 
 static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
-  //  pm.addPass(std::make_unique<MakeTensorsSignlessPass>());
   pm.addPass(imex::createMakeSignlessPass());
 
   pm.addPass(mlir::createCanonicalizerPass());
