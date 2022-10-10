@@ -85,10 +85,65 @@ struct ConvertCreateOp
     return mlir::success();
   }
 };
+
+struct ConvertCopyOp : public mlir::OpRewritePattern<imex::ntensor::CopyOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::CopyOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto src = op.getSource();
+    auto srcType = src.getType().dyn_cast<imex::ntensor::NTensorType>();
+    if (!srcType)
+      return mlir::failure();
+
+    auto dst = op.getTarget();
+    auto dstType = dst.getType().dyn_cast<imex::ntensor::NTensorType>();
+    if (!dstType)
+      return mlir::failure();
+
+    if (srcType.getRank() != dstType.getRank() ||
+        srcType.getElementType() != dstType.getElementType() ||
+        srcType.getEnvironment() != dstType.getEnvironment())
+      return mlir::failure();
+
+    auto loc = op->getLoc();
+    auto rank = static_cast<unsigned>(srcType.getRank());
+
+    auto srcTensorType = mlir::RankedTensorType::get(srcType.getShape(),
+                                                     srcType.getElementType());
+    mlir::Value srcTensor =
+        rewriter.create<imex::ntensor::ToTensorOp>(loc, srcTensorType, src);
+
+    auto dstMemrefType =
+        mlir::MemRefType::get(dstType.getShape(), dstType.getElementType());
+    mlir::Value dstMemref =
+        rewriter.create<imex::ntensor::ToMemrefOp>(loc, dstMemrefType, dst);
+
+    auto affineMap =
+        mlir::AffineMap::getMultiDimIdentityMap(rank, rewriter.getContext());
+    const mlir::AffineMap maps[] = {
+        affineMap,
+        affineMap,
+    };
+
+    llvm::SmallVector<llvm::StringRef> iterators(
+        rank, mlir::getParallelIteratorTypeName());
+    auto bodyBuilder = [](mlir::OpBuilder &b, mlir::Location l,
+                          mlir::ValueRange args) {
+      assert(args.size() == 2);
+      b.create<mlir::linalg::YieldOp>(l, args.front());
+    };
+    rewriter.create<mlir::linalg::GenericOp>(loc, srcTensor, dstMemref, maps,
+                                             iterators, bodyBuilder);
+    rewriter.eraseOp(op);
+    return mlir::success();
+  }
+};
 } // namespace
 void imex::populateNtensorToLinalgPatterns(mlir::MLIRContext &context,
                                            mlir::RewritePatternSet &patterns) {
-  patterns.insert<ConvertCreateOp>(&context);
+  patterns.insert<ConvertCreateOp, ConvertCopyOp>(&context);
 }
 
 namespace {
