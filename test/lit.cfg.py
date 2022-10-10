@@ -33,6 +33,7 @@ config.substitutions.append(('%PATH%', config.environment['PATH']))
 config.substitutions.append(('%shlibext', config.llvm_shlib_ext))
 config.substitutions.append(('%{mlir_shlib_dir}', config.mlir_runner_utils_dir))
 config.substitutions.append(('%{imex_tools_dir}', config.imex_tools_dir))
+config.substitutions.append(('%{python_executable}', config.python_executable))
 
 llvm_config.with_system_environment(
     ['HOME', 'INCLUDE', 'LIB', 'TMP', 'TEMP'])

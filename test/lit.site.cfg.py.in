@@ -12,7 +12,7 @@ config.llvm_shlib_dir = "@SHLIBDIR@"
 config.llvm_shlib_ext = "@SHLIBEXT@"
 config.llvm_exe_ext = "@EXEEXT@"
 config.lit_tools_dir = "@LLVM_LIT_TOOLS_DIR@"
-config.python_executable = "@PYTHON_EXECUTABLE@"
+config.python_executable = "@Python3_EXECUTABLE@"
 config.gold_executable = "@GOLD_EXECUTABLE@"
 config.ld64_executable = "@LD64_EXECUTABLE@"
 config.enable_shared = @ENABLE_SHARED@
@@ -29,8 +29,8 @@ config.llvm_use_sanitizer = "@LLVM_USE_SANITIZER@"
 config.llvm_host_triple = '@LLVM_HOST_TRIPLE@'
 config.host_arch = "@HOST_ARCH@"
 config.mlir_runner_utils_dir = "@MLIR_RUNNER_UTILS_DIR@"
-config.imex_src_root = "@CMAKE_SOURCE_DIR@"
-config.imex_obj_root = "@CMAKE_BINARY_DIR@"
+config.imex_src_root = "@IMEX_SOURCE_DIR@"
+config.imex_obj_root = "@IMEX_BINARY_DIR@"
 config.imex_tools_dir = "@IMEX_TOOLS_DIR@"
 if sys.platform.startswith('win32'):
     config.shlib_prefix = ""
@@ -53,4 +53,4 @@ import lit.llvm
 lit.llvm.initialize(lit_config, config)
 
 # Let the main config do the real work.
-lit_config.load_config(config, "@CMAKE_SOURCE_DIR@/test/lit.cfg.py")
+lit_config.load_config(config, "@IMEX_SOURCE_DIR@/test/lit.cfg.py")

@@ -40,6 +40,7 @@ def GPUX_Dialect : Dialect {
 
     // The C++ namespace that the dialect class definition resides in.
     let cppNamespace = "::imex::gpux";
+    let emitAccessorPrefix = kEmitAccessorPrefix_Raw;
 }
 
 // Base class for dialect operations. This operation inherits from the base

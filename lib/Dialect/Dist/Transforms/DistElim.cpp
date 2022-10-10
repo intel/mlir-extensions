@@ -76,9 +76,9 @@ struct ElimLocalShapeOp
   ::mlir::LogicalResult
   matchAndRewrite(::imex::dist::LocalShapeOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto x = op.ptensor().getDefiningOp<::imex::dist::RegisterPTensorOp>();
+    auto x = op.getPtensor().getDefiningOp<::imex::dist::RegisterPTensorOp>();
     assert(x);
-    rewriter.replaceOp(op, x.shape());
+    rewriter.replaceOp(op, x.getShape());
     return ::mlir::success();
   }
 };
@@ -111,7 +111,7 @@ struct ElimAllReduceOp
     auto fc = rewriter.create<::mlir::func::CallOp>(loc, fa, ::mlir::TypeRange{});
 #endif
     rewriter.replaceOpWithNewOp<::mlir::tensor::CastOp>(
-        op, op.tensor().getType(), op.tensor());
+        op, op.getTensor().getType(), op.getTensor());
     return ::mlir::success();
   }
 };
