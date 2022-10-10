@@ -104,6 +104,58 @@ struct ConvertLinalgFill
     return mlir::success();
   }
 };
+
+struct ConvertLinalgGeneric
+    : public mlir::OpConversionPattern<mlir::linalg::GenericOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::linalg::GenericOp op,
+                  mlir::linalg::GenericOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto converter = this->getTypeConverter();
+    assert(converter);
+
+    llvm::SmallVector<mlir::Type> results;
+    if (mlir::failed(converter->convertTypes(op.getResultTypes(), results)))
+      return mlir::failure();
+
+    if (mlir::failed(rewriter.convertRegionTypes(&op.getRegion(), *converter)))
+      return mlir::failure();
+
+    auto inputs = adaptor.getInputs();
+    auto outputs = adaptor.getOutputs();
+    auto maps = adaptor.getIndexingMaps();
+    auto iterators = adaptor.getIteratorTypes();
+    auto doc = adaptor.getDocAttr();
+    auto libCall = adaptor.getLibraryCallAttr();
+
+    auto loc = op->getLoc();
+    auto res = rewriter.create<mlir::linalg::GenericOp>(
+        loc, results, inputs, outputs, maps, iterators, doc, libCall);
+    mlir::Region &newRegion = res.getRegion();
+    rewriter.inlineRegionBefore(op.getRegion(), newRegion, newRegion.end());
+    rewriter.replaceOp(op, res.getResults());
+    return mlir::success();
+  }
+};
+
+struct ConvertLinalgYield
+    : public mlir::OpConversionPattern<mlir::linalg::YieldOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::linalg::YieldOp op,
+                  mlir::linalg::YieldOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto parent = op->getParentOp();
+    if (!mlir::isa<mlir::linalg::GenericOp>(parent))
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::linalg::YieldOp>(op, adaptor.getValues());
+    return mlir::success();
+  }
+};
 } // namespace
 
 static llvm::Optional<mlir::Type> makeSignlessType(mlir::Type type) {
@@ -135,12 +187,14 @@ void imex::populateMakeSignlessRewritesAndTarget(
 
   target.addDynamicallyLegalOp<mlir::memref::AllocOp, mlir::memref::AllocaOp,
                                mlir::memref::DeallocOp, mlir::tensor::EmptyOp,
-                               mlir::linalg::FillOp>(
+                               mlir::linalg::FillOp, mlir::linalg::GenericOp,
+                               mlir::linalg::YieldOp>(
       [&](mlir::Operation *op) { return converter.isLegal(op); });
 
   patterns.insert<ConvertAlloc<mlir::memref::AllocOp>,
                   ConvertAlloc<mlir::memref::AllocaOp>, ConvertDealloc,
-                  ConvertTensorEmpty, ConvertLinalgFill>(converter, &context);
+                  ConvertTensorEmpty, ConvertLinalgFill, ConvertLinalgGeneric,
+                  ConvertLinalgYield>(converter, &context);
 }
 
 namespace {
