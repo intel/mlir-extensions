@@ -107,35 +107,40 @@ struct ConvertCopyOp : public mlir::OpRewritePattern<imex::ntensor::CopyOp> {
         srcType.getEnvironment() != dstType.getEnvironment())
       return mlir::failure();
 
-    auto loc = op->getLoc();
-    auto rank = static_cast<unsigned>(srcType.getRank());
+    wrapEnvRegion(
+        rewriter, op->getLoc(), dstType.getEnvironment(), llvm::None,
+        [&](mlir::OpBuilder &builder, mlir::Location loc) {
+          auto rank = static_cast<unsigned>(srcType.getRank());
 
-    auto srcTensorType = mlir::RankedTensorType::get(srcType.getShape(),
-                                                     srcType.getElementType());
-    mlir::Value srcTensor =
-        rewriter.create<imex::ntensor::ToTensorOp>(loc, srcTensorType, src);
+          auto srcTensorType = mlir::RankedTensorType::get(
+              srcType.getShape(), srcType.getElementType());
+          mlir::Value srcTensor = rewriter.create<imex::ntensor::ToTensorOp>(
+              loc, srcTensorType, src);
 
-    auto dstMemrefType =
-        mlir::MemRefType::get(dstType.getShape(), dstType.getElementType());
-    mlir::Value dstMemref =
-        rewriter.create<imex::ntensor::ToMemrefOp>(loc, dstMemrefType, dst);
+          auto dstMemrefType = mlir::MemRefType::get(dstType.getShape(),
+                                                     dstType.getElementType());
+          mlir::Value dstMemref = rewriter.create<imex::ntensor::ToMemrefOp>(
+              loc, dstMemrefType, dst);
 
-    auto affineMap =
-        mlir::AffineMap::getMultiDimIdentityMap(rank, rewriter.getContext());
-    const mlir::AffineMap maps[] = {
-        affineMap,
-        affineMap,
-    };
+          auto affineMap = mlir::AffineMap::getMultiDimIdentityMap(
+              rank, rewriter.getContext());
+          const mlir::AffineMap maps[] = {
+              affineMap,
+              affineMap,
+          };
 
-    llvm::SmallVector<llvm::StringRef> iterators(
-        rank, mlir::getParallelIteratorTypeName());
-    auto bodyBuilder = [](mlir::OpBuilder &b, mlir::Location l,
-                          mlir::ValueRange args) {
-      assert(args.size() == 2);
-      b.create<mlir::linalg::YieldOp>(l, args.front());
-    };
-    rewriter.create<mlir::linalg::GenericOp>(loc, srcTensor, dstMemref, maps,
-                                             iterators, bodyBuilder);
+          llvm::SmallVector<llvm::StringRef> iterators(
+              rank, mlir::getParallelIteratorTypeName());
+          auto bodyBuilder = [](mlir::OpBuilder &b, mlir::Location l,
+                                mlir::ValueRange args) {
+            assert(args.size() == 2);
+            b.create<mlir::linalg::YieldOp>(l, args.front());
+          };
+          rewriter.create<mlir::linalg::GenericOp>(
+              loc, srcTensor, dstMemref, maps, iterators, bodyBuilder);
+          return llvm::None;
+        });
+
     rewriter.eraseOp(op);
     return mlir::success();
   }

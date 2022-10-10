@@ -85,3 +85,21 @@ func.func @test(%arg1: !ntensor.ntensor<?xf32>, %arg2: !ntensor.ntensor<?xf32>) 
 //  CHECK-NEXT:   linalg.yield %[[BARG1]] : f32
 //  CHECK-NEXT:   }
 //  CHECK-NEXT:   return
+
+// -----
+
+func.func @test(%arg1: !ntensor.ntensor<?xf32, "test">, %arg2: !ntensor.ntensor<?xf32, "test">) {
+  ntensor.copy %arg1, %arg2 : !ntensor.ntensor<?xf32, "test"> to !ntensor.ntensor<?xf32, "test">
+  return
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG1:.*]]: !ntensor.ntensor<?xf32, "test">, %[[ARG2:.*]]: !ntensor.ntensor<?xf32, "test">)
+//  CHECK-NEXT:   imex_util.env_region "test" {
+//  CHECK-NEXT:   %[[SRC:.*]] = ntensor.to_tensor %[[ARG1]] : !ntensor.ntensor<?xf32, "test"> to tensor<?xf32>
+//  CHECK-NEXT:   %[[DST:.*]] = ntensor.to_memref %[[ARG2]] : !ntensor.ntensor<?xf32, "test"> to memref<?xf32>
+//  CHECK-NEXT:   linalg.generic {indexing_maps = [#map, #map], iterator_types = ["parallel"]} ins(%[[SRC]] : tensor<?xf32>) outs(%[[DST]] : memref<?xf32>) {
+//  CHECK-NEXT:   ^bb0(%[[BARG1:.*]]: f32, %[[ARG2:.*]]: f32):
+//  CHECK-NEXT:   linalg.yield %[[BARG1]] : f32
+//  CHECK-NEXT:   }
+//  CHECK-NEXT:   }
+//  CHECK-NEXT:   return
