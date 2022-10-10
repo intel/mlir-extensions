@@ -37,7 +37,7 @@ func.func @test(%arg: index) -> memref<?xsi32> {
 
 // CHECK-LABEL: func @test
 //  CHECK-SAME:   (%[[ARG:.*]]: index)
-//  CHECK-NEXT:   %[[RES:.*]] = memref.alloc(%arg0) : memref<?xi32>
+//  CHECK-NEXT:   %[[RES:.*]] = memref.alloc(%[[ARG]]) : memref<?xi32>
 //  CHECK-NEXT:   return %[[RES]] : memref<?xi32>
 
 // -----
@@ -49,7 +49,7 @@ func.func @test(%arg: index) -> memref<?xsi32> {
 
 // CHECK-LABEL: func @test
 //  CHECK-SAME:   (%[[ARG:.*]]: index)
-//  CHECK-NEXT:   %[[RES:.*]] = memref.alloca(%arg0) : memref<?xi32>
+//  CHECK-NEXT:   %[[RES:.*]] = memref.alloca(%[[ARG]]) : memref<?xi32>
 //  CHECK-NEXT:   return %[[RES]] : memref<?xi32>
 
 // -----
@@ -63,3 +63,15 @@ func.func @test(%arg: memref<?xsi32>) {
 //  CHECK-SAME:   (%[[ARG:.*]]: memref<?xi32>)
 //  CHECK-NEXT:   memref.dealloc %[[ARG]] : memref<?xi32>
 //  CHECK-NEXT:   return
+
+// -----
+
+func.func @test(%arg: index) -> tensor<?xsi32> {
+  %0 = tensor.empty(%arg) : tensor<?xsi32>
+  return %0 : tensor<?xsi32>
+}
+
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG:.*]]: index)
+//  CHECK-NEXT:   %[[RES:.*]] = tensor.empty(%[[ARG]]) : tensor<?xi32>
+//  CHECK-NEXT:   return %[[RES]] : tensor<?xi32>
