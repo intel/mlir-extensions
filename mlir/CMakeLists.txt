@@ -40,6 +40,7 @@ add_subdirectory(include/imex/Dialect/gpu_runtime/IR)
 add_subdirectory(include/imex/Dialect/ntensor/IR)
 
 set(SOURCES_LIST
+    lib/Conversion/NtensorToLinalg.cpp
     lib/Conversion/SCFToAffine/SCFToAffine.cpp
     lib/Conversion/cfg_to_scf.cpp
     lib/Conversion/gpu_runtime_to_llvm.cpp
@@ -82,6 +83,7 @@ set(SOURCES_LIST
     lib/utils.cpp
     )
 set(HEADERS_LIST
+    include/imex/Conversion/NtensorToLinalg.hpp
     include/imex/Conversion/SCFToAffine/SCFToAffine.h
     include/imex/Conversion/cfg_to_scf.hpp
     include/imex/Conversion/gpu_runtime_to_llvm.hpp
