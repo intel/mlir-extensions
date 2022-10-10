@@ -207,8 +207,16 @@ struct ToTensorOpLowering
     if (!retType)
       return mlir::failure();
 
-    rewriter.replaceOpWithNewOp<mlir::bufferization::ToTensorOp>(op, retType,
-                                                                 array);
+    auto origType = op.getArray().getType().cast<imex::ntensor::NTensorType>();
+    auto results = wrapEnvRegion(
+        rewriter, op->getLoc(), origType.getEnvironment(), retType,
+        [&](mlir::OpBuilder &builder, mlir::Location loc) {
+          return rewriter
+              .create<mlir::bufferization::ToTensorOp>(loc, retType, array)
+              .getResult();
+        });
+
+    rewriter.replaceOp(op, results);
     return mlir::success();
   }
 };
@@ -228,13 +236,21 @@ struct FromTensorOpLowering
     auto *converter = getTypeConverter();
     assert(converter && "Type converter is not set");
 
-    auto retType = converter->convertType(op.getType())
-                       .dyn_cast_or_null<mlir::MemRefType>();
+    auto origType = op.getType().cast<imex::ntensor::NTensorType>();
+    auto retType =
+        converter->convertType(origType).dyn_cast_or_null<mlir::MemRefType>();
     if (!retType)
       return mlir::failure();
 
-    rewriter.replaceOpWithNewOp<mlir::bufferization::ToMemrefOp>(op, retType,
-                                                                 tensor);
+    auto results = wrapEnvRegion(
+        rewriter, op->getLoc(), origType.getEnvironment(), retType,
+        [&](mlir::OpBuilder &builder, mlir::Location loc) {
+          return rewriter
+              .create<mlir::bufferization::ToMemrefOp>(loc, retType, tensor)
+              .getResult();
+        });
+
+    rewriter.replaceOp(op, results);
     return mlir::success();
   }
 };
