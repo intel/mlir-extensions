@@ -145,10 +145,88 @@ struct ConvertCopyOp : public mlir::OpRewritePattern<imex::ntensor::CopyOp> {
     return mlir::success();
   }
 };
+
+struct ConvertElementwiseOp
+    : public mlir::OpRewritePattern<imex::ntensor::ElementwiseOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::ElementwiseOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto src = op.getSource();
+    auto srcType = src.getType().dyn_cast<imex::ntensor::NTensorType>();
+    if (!srcType)
+      return mlir::failure();
+
+    auto dstType = op.getType().dyn_cast<imex::ntensor::NTensorType>();
+    if (!dstType)
+      return mlir::failure();
+
+    if (srcType.getRank() != dstType.getRank() ||
+        srcType.getEnvironment() != dstType.getEnvironment())
+      return mlir::failure();
+
+    auto loc = op->getLoc();
+
+    auto rank = static_cast<unsigned>(srcType.getRank());
+
+    auto srcTensorType = mlir::RankedTensorType::get(srcType.getShape(),
+                                                     srcType.getElementType());
+    mlir::Value srcTensor =
+        rewriter.create<imex::ntensor::ToTensorOp>(loc, srcTensorType, src);
+
+    auto dstTensorType = mlir::RankedTensorType::get(dstType.getShape(),
+                                                     dstType.getElementType());
+
+    llvm::SmallVector<mlir::Value> dynSizes;
+    for (auto [i, dim] : llvm::enumerate(dstTensorType.getShape()))
+      if (mlir::ShapedType::isDynamic(dim))
+        dynSizes.emplace_back(
+            rewriter.create<mlir::tensor::DimOp>(loc, srcTensor, i));
+
+    mlir::Value empty =
+        rewriter.create<mlir::tensor::EmptyOp>(loc, dstTensorType, dynSizes);
+
+    auto affineMap =
+        mlir::AffineMap::getMultiDimIdentityMap(rank, rewriter.getContext());
+    const mlir::AffineMap maps[] = {
+        affineMap,
+        affineMap,
+    };
+
+    llvm::SmallVector<llvm::StringRef> iterators(
+        rank, mlir::getParallelIteratorTypeName());
+
+    auto generic = rewriter.create<mlir::linalg::GenericOp>(
+        loc, dstTensorType, srcTensor, empty, maps, iterators);
+
+    mlir::Region &newRegion = generic.getRegion();
+    rewriter.inlineRegionBefore(op.getRegion(), newRegion, newRegion.end());
+
+    mlir::Block *block = &newRegion.front();
+    block->addArgument(dstTensorType.getElementType(), loc);
+    {
+      auto term =
+          mlir::cast<imex::ntensor::ElementwiseYieldOp>(block->getTerminator());
+      mlir::OpBuilder::InsertionGuard g(rewriter);
+      rewriter.setInsertionPoint(term);
+      auto arg = term.getValue();
+      rewriter.replaceOpWithNewOp<mlir::linalg::YieldOp>(term, arg);
+    }
+
+    mlir::Value res = rewriter.create<imex::ntensor::FromTensorOp>(
+        loc, dstType, generic.getResult(0));
+
+    rewriter.replaceOp(op, res);
+    return mlir::success();
+  }
+};
 } // namespace
+
 void imex::populateNtensorToLinalgPatterns(mlir::MLIRContext &context,
                                            mlir::RewritePatternSet &patterns) {
-  patterns.insert<ConvertCreateOp, ConvertCopyOp>(&context);
+  patterns.insert<ConvertCreateOp, ConvertCopyOp, ConvertElementwiseOp>(
+      &context);
 }
 
 namespace {
