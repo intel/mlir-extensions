@@ -30,6 +30,7 @@
 #include "imex/Conversion/ntensor_to_memref.hpp"
 #include "imex/Dialect/gpu_runtime/Transforms/MakeBarriersUniform.hpp"
 #include "imex/Dialect/ntensor/Transforms/ResolveArrayOps.hpp"
+#include "imex/Transforms/MakeSignless.hpp"
 #include "imex/Transforms/expand_tuple.hpp"
 
 // Passes registration.
@@ -132,6 +133,13 @@ static mlir::PassPipelineRegistration<>
                     [](mlir::OpPassManager &pm) {
                       pm.addPass(imex::createNtensorToLinalgPass());
                     });
+
+static mlir::PassPipelineRegistration<> makeSignless(
+    "imex-make-signless",
+    "Convert types of various signedness to corresponding signless type",
+    [](mlir::OpPassManager &pm) {
+      pm.addPass(imex::createMakeSignlessPass());
+    });
 
 static mlir::PassPipelineRegistration<> makeBarriersUniform(
     "gpux-make-barriers-uniform",
