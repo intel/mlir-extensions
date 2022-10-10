@@ -21,6 +21,31 @@
 #include <mlir/Pass/Pass.h>
 #include <mlir/Transforms/DialectConversion.h>
 
+namespace {
+template <typename Op>
+struct ConvertAlloc : public mlir::OpConversionPattern<Op> {
+  using mlir::OpConversionPattern<Op>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(Op op, typename Op::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto converter = this->getTypeConverter();
+    assert(converter);
+
+    auto oldResType = op.getType();
+    auto newResType = converter->convertType(oldResType)
+                          .template dyn_cast_or_null<mlir::MemRefType>();
+    if (!newResType)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<Op>(op, newResType, adaptor.getDynamicSizes(),
+                                    adaptor.getSymbolOperands(),
+                                    adaptor.getAlignmentAttr());
+    return mlir::success();
+  }
+};
+} // namespace
+
 static llvm::Optional<mlir::Type> makeSignlessType(mlir::Type type) {
   if (auto intType = type.dyn_cast<mlir::IntegerType>()) {
     if (intType.getSignedness() != mlir::IntegerType::Signless)
@@ -47,6 +72,12 @@ void imex::populateMakeSignlessRewritesAndTarget(
   converter.addArgumentMaterialization(materializeSignCast);
   converter.addSourceMaterialization(materializeSignCast);
   converter.addTargetMaterialization(materializeSignCast);
+
+  target.addDynamicallyLegalOp<mlir::memref::AllocOp, mlir::memref::AllocaOp>(
+      [&](mlir::Operation *op) { return converter.isLegal(op); });
+
+  patterns.insert<ConvertAlloc<mlir::memref::AllocOp>,
+                  ConvertAlloc<mlir::memref::AllocaOp>>(converter, &context);
 }
 
 namespace {
