@@ -22,6 +22,7 @@
 #include <mlir/Dialect/GPU/IR/GPUDialect.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
 
+#include "imex/Conversion/NtensorToLinalg.hpp"
 #include "imex/Conversion/SCFToAffine/SCFToAffine.h"
 #include "imex/Conversion/cfg_to_scf.hpp"
 #include "imex/Conversion/gpu_runtime_to_llvm.hpp"
@@ -124,6 +125,12 @@ static mlir::PassPipelineRegistration<>
     ntensorToMemref("ntensor-to-memref", "Convert ntensor array ops to memref",
                     [](mlir::OpPassManager &pm) {
                       pm.addPass(imex::createNtensorToMemrefPass());
+                    });
+
+static mlir::PassPipelineRegistration<>
+    ntensorToLinalg("ntensor-to-linalg", "Convert ntensor array ops to linalg",
+                    [](mlir::OpPassManager &pm) {
+                      pm.addPass(imex::createNtensorToLinalgPass());
                     });
 
 static mlir::PassPipelineRegistration<> makeBarriersUniform(
