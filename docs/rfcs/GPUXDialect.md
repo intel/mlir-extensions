@@ -178,19 +178,47 @@ Ptensor Region ( Ptensor_stream ) {
                GPU.launch_func @ptensor_add_x(), (t3, t1, t2)
 }
 
-At this point, we expect there is a pass for Ptensor compiler to lower Ptensor region. With this pass, you can lower the GPU to GPUX, which allows upper-level compiler to specify stream and hook that stream in gpux dialect ops that require stream.
+At this point, we expect there is a pass for Ptensor compiler to lower Ptensor region.
+With this pass, you can lower the GPU to GPUX, which allows upper-level compiler to specify
+stream and hook that stream in gpux dialect ops that take stream as input.
 
 Region_Func_1 (Ptensor_stream, t3, t1, t2)
 
       GPUX.launch_func GPUX_stream, @ptensor_add_x(), (t3, t1, t2)
 }
 
-Now the Ptensor compiler could call GPUXToLLVM(), which will be a part of IMEX GPUX dialect implementation. We expect GPUXToLLVM() to accept a parameter which indicate the compilation target l0 runtime or sycl runtime. Now at runtime, the compiled Region_Func_1 would expect a Ptensor_stream of type StreamType.
+Now the Ptensor compiler could call createConvertGPUXToLLVMPass(Runtime runtime), which will be a part of IMEX GPUX dialect implementation.
+We expect createConvertGPUXToLLVMPass(Runtime runtime) to accept a parameter (enum as defined below) which indicate the compilation target l0 runtime or sycl runtime. Now at runtime, the compiled Region_Func_1 would expect a Ptensor_stream of type StreamType.
+
+enum Runtime {
+  sycl,
+  level_zero
+};
 
 ```
 
 ## StreamType (Custom Type):
-We will have our custom StreamType defined which will hold a opaque pointer to a Struct. We expect the user to provide us a struct which holds queue, device and context.
+We will have our custom StreamType defined which will hold a opaque pointer to a Struct. We expect the user to provide us a struct which holds queue, device and context. The Stream struct should adhere to one of these formats:
+
+For sycl:
+```
+struct Stream {
+  sycl::queue queue;
+  sycl::device device;
+  sycl::context context;
+}
+```
+
+For Level Zero:
+```
+struct Stream {
+  ze::CommandList queue;
+  ze_device_handle_t device;
+  ze::Context context;
+}
+```
+
+At runtime the Opaque pointer (of StreamType) will be casted to appropriate runtime objects using the underlying data members.
 
 ## Features to be added in subsequent PR's (either in the dialect or via a pass operating on this dialect):
 1. More ops can be added/extended to dialect going forward based on the use cases and requirements.
@@ -202,4 +230,4 @@ We intend to create an RFC for changing the upstream GPU dialect ops to include 
 
 ## Questions
 
-Do we need more operations like context & devices? What if the user wants to pass context and device as well?
+Do we need more operations like context & devices to be exposed?

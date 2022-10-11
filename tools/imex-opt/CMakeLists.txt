@@ -4,8 +4,9 @@ set(LIBS
         ${dialect_libs}
         ${conversion_libs}
 	MLIROptLib
+        IMEXTransforms
         )
 add_llvm_executable(imex-opt imex-opt.cpp)
 
 llvm_update_compile_flags(imex-opt)
-target_link_libraries(imex-opt PRIVATE ${LIBS})
+target_link_libraries(imex-opt PRIVATE ${LIBS} IMEXTransforms)
