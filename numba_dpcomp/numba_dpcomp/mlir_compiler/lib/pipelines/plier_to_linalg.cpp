@@ -1736,6 +1736,21 @@ static mlir::Value addElementConversion(mlir::OpBuilder &builder,
                                                       srcArray, bodyBuilder);
 }
 
+static mlir::Value castType(mlir::OpBuilder &builder, mlir::Location loc,
+                            mlir::Value src, mlir::Type dstType) {
+  auto srcType = src.getType();
+  assert((srcType.isa<mlir::MemRefType, mlir::RankedTensorType>()) &&
+         "Expected memref or tensor type");
+  if (srcType == dstType)
+    return src;
+
+  if (srcType.isa<mlir::MemRefType>()) {
+    return builder.create<mlir::memref::CastOp>(loc, dstType, src);
+  } else {
+    return builder.create<mlir::tensor::CastOp>(loc, dstType, src);
+  }
+}
+
 static llvm::Optional<mlir::Value> doCast(mlir::OpBuilder &builder,
                                           mlir::Location loc, mlir::Value src,
                                           mlir::Type dstType) {
@@ -1750,13 +1765,16 @@ static llvm::Optional<mlir::Value> doCast(mlir::OpBuilder &builder,
 
     mlir::Value res = addElementConversion(builder, loc, src, dstShapedType);
     if (dstShapedType.isa<mlir::MemRefType>()) {
-      res = builder.create<imex::ntensor::ToMemrefOp>(loc, dstShapedType, res);
+      auto dstMemrefType = mlir::MemRefType::get(
+          srcArrayType.getShape(), dstShapedType.getElementType());
+      res = builder.create<imex::ntensor::ToMemrefOp>(loc, dstMemrefType, res);
     } else if (dstShapedType.isa<mlir::RankedTensorType>()) {
-      res = builder.create<imex::ntensor::ToTensorOp>(loc, dstShapedType, res);
+      auto dstTensorType = mlir::RankedTensorType::get(
+          srcArrayType.getShape(), dstShapedType.getElementType());
+      res = builder.create<imex::ntensor::ToTensorOp>(loc, dstTensorType, res);
     }
-    assert(res.getType().isa<imex::ntensor::NTensorType>() &&
-           "Expected ntensor type.");
-    return res;
+
+    return castType(builder, loc, res, dstShapedType);
   } else {
     auto srcShapedType = srcType.dyn_cast<mlir::ShapedType>();
     if (!srcShapedType)
@@ -1767,13 +1785,19 @@ static llvm::Optional<mlir::Value> doCast(mlir::OpBuilder &builder,
       return llvm::None;
 
     srcArrayType = imex::ntensor::NTensorType::get(
-        srcShapedType.getShape(), srcShapedType.getElementType(),
+        dstArrayType.getShape(), srcShapedType.getElementType(),
         dstArrayType.getEnvironment());
 
     mlir::Value res;
     if (srcShapedType.isa<mlir::MemRefType>()) {
+      auto dstMemrefType = mlir::MemRefType::get(
+          dstArrayType.getShape(), srcShapedType.getElementType());
+      src = castType(builder, loc, src, dstMemrefType);
       res = builder.create<imex::ntensor::FromMemrefOp>(loc, srcArrayType, src);
     } else if (srcShapedType.isa<mlir::RankedTensorType>()) {
+      auto dstTensorType = mlir::RankedTensorType::get(
+          dstArrayType.getShape(), srcShapedType.getElementType());
+      src = castType(builder, loc, src, dstTensorType);
       res = builder.create<imex::ntensor::FromTensorOp>(loc, srcArrayType, src);
     }
     assert(res && "Expected tensor or memref type.");
