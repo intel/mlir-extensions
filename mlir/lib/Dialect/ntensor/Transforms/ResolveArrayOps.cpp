@@ -200,6 +200,18 @@ toValues(mlir::OpBuilder &builder, mlir::Location loc,
   return ret;
 }
 
+static bool isCompatibleSetitemValue(mlir::Type valueType,
+                                     imex::ntensor::NTensorType targetType) {
+  if (targetType.getElementType() == valueType)
+    return true;
+
+  if (auto valueArray = valueType.dyn_cast<imex::ntensor::NTensorType>())
+    return valueArray.getRank() == targetType.getRank() &&
+           valueArray.getElementType() == targetType.getElementType();
+
+  return false;
+}
+
 namespace {
 struct SetitemOpLowering
     : public mlir::OpRewritePattern<imex::ntensor::SetitemOp> {
@@ -218,7 +230,7 @@ struct SetitemOpLowering
       return mlir::failure();
 
     auto value = op.getValue();
-    if (value.getType() != targetType.getElementType())
+    if (!isCompatibleSetitemValue(value.getType(), targetType))
       return mlir::failure();
 
     auto loc = op.getLoc();
@@ -235,17 +247,22 @@ struct SetitemOpLowering
       auto dst = makeSubview(rewriter, loc, target, offsets, sizes, strides,
                              dimsIndices);
 
-      auto dstType = dst.getType().cast<imex::ntensor::NTensorType>();
-      mlir::SmallVector<mlir::Value> dynamicDims;
-      auto rank = static_cast<unsigned>(dstType.getRank());
-      dynamicDims.reserve(rank);
-      for (auto i : llvm::seq(0u, rank)) {
-        if (dstType.isDynamicDim(i))
-          dynamicDims.emplace_back(
-              rewriter.create<imex::ntensor::DimOp>(loc, dst, i));
-      }
-      mlir::Value newArray = rewriter.create<imex::ntensor::CreateArrayOp>(
-          loc, dstType, dynamicDims, value);
+      auto newArray = [&]() -> mlir::Value {
+        if (value.getType().isa<imex::ntensor::NTensorType>())
+          return value;
+
+        auto dstType = dst.getType().cast<imex::ntensor::NTensorType>();
+        mlir::SmallVector<mlir::Value> dynamicDims;
+        auto rank = static_cast<unsigned>(dstType.getRank());
+        dynamicDims.reserve(rank);
+        for (auto i : llvm::seq(0u, rank)) {
+          if (dstType.isDynamicDim(i))
+            dynamicDims.emplace_back(
+                rewriter.create<imex::ntensor::DimOp>(loc, dst, i));
+        }
+        return rewriter.create<imex::ntensor::CreateArrayOp>(
+            loc, dstType, dynamicDims, value);
+      }();
       rewriter.replaceOpWithNewOp<imex::ntensor::CopyOp>(op, newArray, dst);
     } else {
       // Is single element
