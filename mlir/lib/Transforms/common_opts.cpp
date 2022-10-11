@@ -18,7 +18,6 @@
 #include "imex/Transforms/if_rewrites.hpp"
 #include "imex/Transforms/index_type_propagation.hpp"
 #include "imex/Transforms/loop_rewrites.hpp"
-#include "imex/Transforms/memory_rewrites.hpp"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
