@@ -29,6 +29,7 @@ public:
   py::module mod;
   py::object map;
   py::object empty;
+  py::object vararg;
 
   py::object getFuncDesc(llvm::StringRef name) {
     return map(py::str(name.data(), name.size()));
@@ -41,7 +42,9 @@ NumpyResolver::NumpyResolver(const char *modName, const char *mapName)
   impl->map = impl->mod.attr(mapName);
 
   auto inspect = py::module::import("inspect");
-  impl->empty = inspect.attr("Parameter").attr("empty");
+  auto param = inspect.attr("Parameter");
+  impl->empty = param.attr("empty");
+  impl->vararg = param.attr("VAR_POSITIONAL");
 }
 
 NumpyResolver::~NumpyResolver() {}
@@ -117,28 +120,35 @@ NumpyResolver::resolveFuncArgs(mlir::OpBuilder &builder, mlir::Location loc,
   };
 
   auto funcArgs = res.cast<py::list>();
-  resultArgs.resize(funcArgs.size());
-  for (auto [i, arg] : llvm::enumerate(funcArgs)) {
+  resultArgs.reserve(funcArgs.size());
+  for (auto arg : funcArgs) {
     assert(args.size() == argsNamesArr.size() &&
            "args and names count misnatch");
+
+    auto tup = arg.cast<py::tuple>();
+    auto name = tup[0].cast<std::string>();
+    auto param = tup[1];
+
+    if (param.attr("kind").cast<py::object>().is(impl->vararg)) {
+      resultArgs.append(args.begin(), args.end());
+      argsNamesArr = llvm::None;
+      args = llvm::None;
+      continue;
+    }
 
     if (!argsNamesArr.empty()) {
       auto argName = argsNamesArr.front().cast<mlir::StringAttr>().getValue();
       if (argName.empty()) {
-        resultArgs[i] = args.front();
+        resultArgs.emplace_back(args.front());
         argsNamesArr = argsNamesArr.drop_front();
         args = args.drop_front();
         continue;
       }
     }
 
-    auto tup = arg.cast<py::tuple>();
-    auto name = tup[0].cast<std::string>();
-    auto param = tup[1];
-
     auto origArg = findArg(name);
     if (origArg) {
-      resultArgs[i] = *origArg;
+      resultArgs.emplace_back(*origArg);
     } else {
       auto defAttr = param.attr("default").cast<py::object>();
       if (defAttr.is(impl->empty))
@@ -148,7 +158,7 @@ NumpyResolver::resolveFuncArgs(mlir::OpBuilder &builder, mlir::Location loc,
       if (!defVal)
         return mlir::failure();
 
-      resultArgs[i] = *defVal;
+      resultArgs.emplace_back(*defVal);
     }
   }
 
