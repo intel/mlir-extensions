@@ -2094,6 +2094,86 @@ private:
   NumpyResolver &resolver;
 };
 
+struct ExternalCallsResolver final : mlir::OpRewritePattern<plier::PyCallOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+protected:
+  mlir::LogicalResult
+  matchAndRewrite(plier::PyCallOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    if (!op.getKwargs().empty())
+      return mlir::failure(); // TODO: kwargs support
+
+    auto name = op.getFuncName();
+    auto args = op.getArgs();
+
+    llvm::SmallVector<mlir::Type> types(args.size());
+    for (auto [i, arg] : llvm::enumerate(args)) {
+      arg = skipCasts(arg);
+      types[i] = arg.getType();
+    }
+
+    auto mangledName = mangle(name, types);
+    if (mangledName.empty())
+      return mlir::failure();
+
+    auto mod = op->getParentOfType<mlir::ModuleOp>();
+    assert(mod);
+
+    auto externalFunc = mod.lookupSymbol<mlir::func::FuncOp>(mangledName);
+    if (!externalFunc) {
+      externalFunc = resolver.getFunc(name, types);
+      if (externalFunc) {
+        externalFunc.setPrivate();
+        externalFunc.setName(mangledName);
+      }
+    }
+    if (!externalFunc)
+      return mlir::failure();
+
+    assert(externalFunc.getFunctionType().getNumResults() ==
+           op->getNumResults());
+
+    auto loc = op->getLoc();
+
+    llvm::SmallVector<mlir::Value> castedArgs(args.size());
+    auto funcTypes = externalFunc.getFunctionType().getInputs();
+    for (auto it : llvm::enumerate(args)) {
+      auto arg = it.value();
+      auto i = it.index();
+      auto dstType = funcTypes[i];
+      if (arg.getType() != dstType)
+        castedArgs[i] = rewriter.createOrFold<plier::CastOp>(loc, dstType, arg);
+      else
+        castedArgs[i] = arg;
+    }
+
+    auto newFuncCall =
+        rewriter.create<mlir::func::CallOp>(loc, externalFunc, castedArgs);
+
+    auto results = newFuncCall.getResults();
+    llvm::SmallVector<mlir::Value> castedResults(results.size());
+
+    for (auto it : llvm::enumerate(results)) {
+      auto i = static_cast<unsigned>(it.index());
+      auto res = it.value();
+      auto oldResType = op->getResult(i).getType();
+      if (res.getType() != oldResType)
+        castedResults[i] =
+            rewriter.createOrFold<plier::CastOp>(loc, oldResType, res);
+      else
+        castedResults[i] = res;
+    }
+
+    rerunScfPipeline(op);
+    rewriter.replaceOp(op, castedResults);
+    return mlir::success();
+  }
+
+private:
+  PyFuncResolver resolver;
+};
+
 struct BuiltinCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
   using OpRewritePattern::OpRewritePattern;
 
@@ -2166,8 +2246,10 @@ struct ResolveNtensorPass
 
     imex::ntensor::populateResolveArrayOpsPatterns(ctx, patterns);
 
-    patterns.insert<GetitemArrayOpLowering, NtensorPrimitiveCallsLowering,
-                    BuiltinCallsLowering, BinOpsLowering>(&ctx);
+    patterns
+        .insert<GetitemArrayOpLowering, NtensorPrimitiveCallsLowering,
+                BuiltinCallsLowering, BinOpsLowering, ExternalCallsResolver>(
+            &ctx);
 
     patterns.insert<NumpyCallsResolver>(&ctx, *resolver);
 
