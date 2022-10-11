@@ -1777,7 +1777,7 @@ static llvm::Optional<mlir::Value> doCast(mlir::OpBuilder &builder,
       res = builder.create<imex::ntensor::FromTensorOp>(loc, srcArrayType, src);
     }
     assert(res && "Expected tensor or memref type.");
-    return addElementConversion(builder, loc, src, dstArrayType);
+    return addElementConversion(builder, loc, res, dstArrayType);
   }
 }
 
@@ -2000,15 +2000,8 @@ castRetTypes2(mlir::Location loc, mlir::PatternRewriter &rewriter,
     auto dstType = op->getResultTypes()[i];
 
     auto srcType = ret.getType();
-    if (dstType != srcType) {
-      if (dstType.isa<imex::ntensor::NTensorType>() &&
-          srcType.isa<mlir::TensorType>()) {
-        results[i] =
-            rewriter.create<imex::ntensor::FromTensorOp>(loc, dstType, ret);
-      } else {
-        results[i] = rewriter.create<plier::CastOp>(loc, dstType, ret);
-      }
-    }
+    if (dstType != srcType)
+      results[i] = rewriter.create<plier::CastOp>(loc, dstType, ret);
   }
   return results;
 }
