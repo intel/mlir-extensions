@@ -49,7 +49,8 @@
 #include "py_linalg_resolver.hpp"
 
 namespace {
-static mlir::Type mapIntType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
+static mlir::Type mapIntType(mlir::MLIRContext &ctx, llvm::StringRef &name,
+                             mlir::TypeConverter &) {
   unsigned numBits = 0;
   if (name.consume_front("int") && !name.consumeInteger<unsigned>(10, numBits))
     return mlir::IntegerType::get(&ctx, numBits, mlir::IntegerType::Signed);
@@ -61,7 +62,8 @@ static mlir::Type mapIntType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
 }
 
 static mlir::Type mapIntLiteralType(mlir::MLIRContext &ctx,
-                                    llvm::StringRef &name) {
+                                    llvm::StringRef &name,
+                                    mlir::TypeConverter &) {
   int64_t value = 0;
   if (name.consume_front("Literal[int](") &&
       !name.consumeInteger<int64_t>(10, value) && name.consume_front(")")) {
@@ -71,7 +73,8 @@ static mlir::Type mapIntLiteralType(mlir::MLIRContext &ctx,
 }
 
 static mlir::Type mapBoolLiteralType(mlir::MLIRContext &ctx,
-                                     llvm::StringRef &name) {
+                                     llvm::StringRef &name,
+                                     mlir::TypeConverter &) {
   if (name.consume_front("Literal[bool](True)") ||
       name.consume_front("Literal[bool](False)")) {
     return mlir::IntegerType::get(&ctx, 1);
@@ -79,14 +82,16 @@ static mlir::Type mapBoolLiteralType(mlir::MLIRContext &ctx,
   return nullptr;
 }
 
-static mlir::Type mapBoolType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
+static mlir::Type mapBoolType(mlir::MLIRContext &ctx, llvm::StringRef &name,
+                              mlir::TypeConverter &) {
   if (name.consume_front("bool"))
     return mlir::IntegerType::get(&ctx, 1);
 
   return nullptr;
 }
 
-static mlir::Type mapFloatType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
+static mlir::Type mapFloatType(mlir::MLIRContext &ctx, llvm::StringRef &name,
+                               mlir::TypeConverter &) {
   unsigned numBits = 0;
   if (name.consume_front("float") &&
       !name.consumeInteger<unsigned>(10, numBits)) {
@@ -132,11 +137,13 @@ static bool consumeUntil(llvm::StringRef &name, llvm::StringRef end) {
 }
 
 static mlir::Type mapPlierTypeName(mlir::MLIRContext &ctx,
-                                   llvm::StringRef &name);
+                                   llvm::StringRef &name,
+                                   mlir::TypeConverter &);
 static bool mapTypeHelper(mlir::MLIRContext &ctx, llvm::StringRef &name,
-                          mlir::Type &ret, llvm::StringRef end) {
+                          mlir::Type &ret, llvm::StringRef end,
+                          mlir::TypeConverter &converter) {
   auto nameCopy = name;
-  auto type = mapPlierTypeName(ctx, nameCopy);
+  auto type = mapPlierTypeName(ctx, nameCopy, converter);
   if (type && nameCopy.consume_front(end)) {
     ret = type;
     name = nameCopy;
@@ -145,29 +152,36 @@ static bool mapTypeHelper(mlir::MLIRContext &ctx, llvm::StringRef &name,
   nameCopy = name;
   if (consumeUntil(nameCopy, end)) {
     auto len = name.size() - nameCopy.size() - end.size();
-    ret = plier::PyType::get(&ctx, name.take_front(len));
+    auto pyType = plier::PyType::get(&ctx, name.take_front(len));
+    if (auto converterType = converter.convertType(pyType)) {
+      ret = converterType;
+    } else {
+      ret = pyType;
+    }
     name = nameCopy;
     return true;
   }
   return false;
 }
 
-static mlir::Type mapPairType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
+static mlir::Type mapPairType(mlir::MLIRContext &ctx, llvm::StringRef &name,
+                              mlir::TypeConverter &converter) {
   mlir::Type first;
   mlir::Type second;
-  if (name.consume_front("pair<") && mapTypeHelper(ctx, name, first, ", ") &&
-      mapTypeHelper(ctx, name, second, ">")) {
+  if (name.consume_front("pair<") &&
+      mapTypeHelper(ctx, name, first, ", ", converter) &&
+      mapTypeHelper(ctx, name, second, ">", converter)) {
     return mlir::TupleType::get(&ctx, {first, second});
   }
   return nullptr;
 }
 
-static mlir::Type mapUnitupleType(mlir::MLIRContext &ctx,
-                                  llvm::StringRef &name) {
+static mlir::Type mapUnitupleType(mlir::MLIRContext &ctx, llvm::StringRef &name,
+                                  mlir::TypeConverter &converter) {
   mlir::Type type;
   unsigned count = 0;
   if (name.consume_front("UniTuple(") &&
-      mapTypeHelper(ctx, name, type, " x ") &&
+      mapTypeHelper(ctx, name, type, " x ", converter) &&
       !name.consumeInteger<unsigned>(10, count) && name.consume_front(")")) {
     llvm::SmallVector<mlir::Type> types(count, type);
     return mlir::TupleType::get(&ctx, types);
@@ -175,7 +189,8 @@ static mlir::Type mapUnitupleType(mlir::MLIRContext &ctx,
   return nullptr;
 }
 
-static mlir::Type mapTupleType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
+static mlir::Type mapTupleType(mlir::MLIRContext &ctx, llvm::StringRef &name,
+                               mlir::TypeConverter &converter) {
   if (!name.consume_front("Tuple("))
     return nullptr;
 
@@ -190,11 +205,11 @@ static mlir::Type mapTupleType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
   temp = name.take_front(len);
   while (true) {
     mlir::Type type;
-    if (mapTypeHelper(ctx, temp, type, ", ")) {
+    if (mapTypeHelper(ctx, temp, type, ", ", converter)) {
       types.push_back(type);
       continue;
     }
-    if (mapTypeHelper(ctx, temp, type, ")")) {
+    if (mapTypeHelper(ctx, temp, type, ")", converter)) {
       types.push_back(type);
       break;
     }
@@ -203,7 +218,8 @@ static mlir::Type mapTupleType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
   return mlir::TupleType::get(&ctx, types);
 }
 
-static mlir::Type mapFuncType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
+static mlir::Type mapFuncType(mlir::MLIRContext &ctx, llvm::StringRef &name,
+                              mlir::TypeConverter &) {
   if (name.consume_front("Function(") &&
       name.consume_front("<class 'bool'>") && // TODO unhardcode;
       name.consume_front(")"))
@@ -212,20 +228,22 @@ static mlir::Type mapFuncType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
   return nullptr;
 }
 
-static mlir::Type mapDtypeType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
+static mlir::Type mapDtypeType(mlir::MLIRContext &ctx, llvm::StringRef &name,
+                               mlir::TypeConverter &converter) {
   if (name.consume_front("dtype(") && name.consume_back(")")) {
-    auto innerType = mapPlierTypeName(ctx, name);
+    auto innerType = mapPlierTypeName(ctx, name, converter);
     if (innerType)
       return imex::util::TypeVar::get(innerType);
   } else if (name.consume_front("class(") && name.consume_back(")")) {
-    auto innerType = mapPlierTypeName(ctx, name);
+    auto innerType = mapPlierTypeName(ctx, name, converter);
     if (innerType)
       return imex::util::TypeVar::get(innerType);
   }
   return nullptr;
 }
 
-static mlir::Type mapNoneType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
+static mlir::Type mapNoneType(mlir::MLIRContext &ctx, llvm::StringRef &name,
+                              mlir::TypeConverter &) {
   if (name.consume_front("none"))
     return mlir::NoneType::get(&ctx);
 
@@ -233,14 +251,16 @@ static mlir::Type mapNoneType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
 }
 
 static mlir::Type mapDispatcherType(mlir::MLIRContext &ctx,
-                                    llvm::StringRef &name) {
+                                    llvm::StringRef &name,
+                                    mlir::TypeConverter &) {
   if (name.consume_front("type(CPUDispatcher(") && consumeUntil(name, "))"))
     return imex::util::OpaqueType::get(&ctx);
 
   return nullptr;
 }
 
-static mlir::Type mapSliceType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
+static mlir::Type mapSliceType(mlir::MLIRContext &ctx, llvm::StringRef &name,
+                               mlir::TypeConverter &) {
   if (name.consume_front("slice<") && consumeUntil(name, ">"))
     return plier::SliceType::get(&ctx);
 
@@ -248,9 +268,10 @@ static mlir::Type mapSliceType(mlir::MLIRContext &ctx, llvm::StringRef &name) {
 }
 
 static mlir::Type mapPlierTypeName(mlir::MLIRContext &ctx,
-                                   llvm::StringRef &name) {
-  using func_t =
-      mlir::Type (*)(mlir::MLIRContext & ctx, llvm::StringRef & name);
+                                   llvm::StringRef &name,
+                                   mlir::TypeConverter &converter) {
+  using func_t = mlir::Type (*)(mlir::MLIRContext & ctx, llvm::StringRef & name,
+                                mlir::TypeConverter & converter);
   const func_t handlers[] = {
       // clang-format off
       &mapIntType,
@@ -269,23 +290,24 @@ static mlir::Type mapPlierTypeName(mlir::MLIRContext &ctx,
       // clang-format on
   };
   for (auto h : handlers) {
-    auto temp_name = name;
-    auto t = h(ctx, temp_name);
+    auto tempName = name;
+    auto t = h(ctx, tempName, converter);
     if (static_cast<bool>(t)) {
-      name = temp_name;
+      name = tempName;
       return t;
     }
   }
   return nullptr;
 }
 
-static mlir::Type mapPlierType(mlir::Type type) {
+static mlir::Type mapPlierType(mlir::Type type,
+                               mlir::TypeConverter &converter) {
   assert(type);
   if (!type.isa<plier::PyType>())
     return type;
 
   auto name = type.cast<plier::PyType>().getName();
-  return mapPlierTypeName(*type.getContext(), name);
+  return mapPlierTypeName(*type.getContext(), name, converter);
 }
 
 static bool isSupportedType(mlir::Type type) {
@@ -1485,12 +1507,12 @@ static void populatePlierToStdPipeline(mlir::OpPassManager &pm) {
 void populateStdTypeConverter(mlir::MLIRContext & /*context*/,
                               mlir::TypeConverter &converter) {
   converter.addConversion(
-      [](mlir::Type type, llvm::SmallVectorImpl<mlir::Type> &retTypes)
+      [&converter](mlir::Type type, llvm::SmallVectorImpl<mlir::Type> &retTypes)
           -> llvm::Optional<mlir::LogicalResult> {
         if (isOmittedType(type))
           return mlir::success();
 
-        auto ret = mapPlierType(type);
+        auto ret = mapPlierType(type, converter);
         if (!ret)
           return llvm::None;
 
