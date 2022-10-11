@@ -623,6 +623,13 @@ def ElementwiseOp : NTensor_OpBase<"elementwise", [
 
   let assemblyFormat =
       "attr-dict $source `:` qualified(type($source)) `->` qualified(type($result)) $region";
+
+  let builders = [
+    OpBuilder<(ins
+      "::mlir::Type":$resultType,
+      "::mlir::Value":$source,
+      CArg<"::llvm::function_ref<void(::mlir::OpBuilder &, ::mlir::Location, ::mlir::Value)>", "nullptr">)>
+  ];
 }
 
 def ElementwiseYieldOp : NTensor_OpBase<"elementwise_yield", [

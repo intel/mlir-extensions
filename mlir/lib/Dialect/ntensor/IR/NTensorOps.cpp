@@ -497,6 +497,28 @@ bool imex::ntensor::CastOp::areCastCompatible(mlir::TypeRange inputs,
   return succeeded(mlir::verifyCompatibleShape(aT, bT));
 }
 
+void imex::ntensor::ElementwiseOp::build(
+    ::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState,
+    ::mlir::Type resultType, ::mlir::Value source,
+    ::llvm::function_ref<void(::mlir::OpBuilder &, ::mlir::Location,
+                              ::mlir::Value)>
+        bodyBuilder) {
+  assert(source.getType().isa<imex::ntensor::NTensorType>() &&
+         "Expected ntensor type");
+  build(odsBuilder, odsState, mlir::TypeRange(resultType), source);
+  if (bodyBuilder) {
+    mlir::Region *bodyRegion = odsState.regions.back().get();
+    bodyRegion->push_back(new mlir::Block);
+    mlir::Block &bodyBlock = bodyRegion->front();
+    auto srcType = source.getType().cast<imex::ntensor::NTensorType>();
+    bodyBlock.addArgument(srcType.getElementType(), odsState.location);
+
+    mlir::OpBuilder::InsertionGuard guard(odsBuilder);
+    odsBuilder.setInsertionPointToStart(&bodyBlock);
+    bodyBuilder(odsBuilder, odsState.location, bodyBlock.getArgument(0));
+  }
+}
+
 static mlir::LogicalResult
 parseShape(mlir::AsmParser &parser,
            mlir::FailureOr<llvm::SmallVector<int64_t>> &shape,

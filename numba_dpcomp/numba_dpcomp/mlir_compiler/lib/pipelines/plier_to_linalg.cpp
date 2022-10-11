@@ -46,8 +46,8 @@
 #include "pipelines/plier_to_std.hpp"
 #include "pipelines/pre_low_simplifications.hpp"
 
-#include "imex/Conversion/ntensor_to_memref.hpp"
 #include "imex/Conversion/NtensorToLinalg.hpp"
+#include "imex/Conversion/ntensor_to_memref.hpp"
 #include "imex/Dialect/imex_util/dialect.hpp"
 #include "imex/Dialect/ntensor/IR/NTensorOps.hpp"
 #include "imex/Dialect/ntensor/Transforms/ResolveArrayOps.hpp"
@@ -1711,6 +1711,76 @@ struct BuiltinCallsToNtensor
   }
 };
 
+static mlir::Value addElementConversion(mlir::OpBuilder &builder,
+                                        mlir::Location loc,
+                                        mlir::Value srcArray,
+                                        mlir::Type dstType) {
+  auto srcType = srcArray.getType().cast<imex::ntensor::NTensorType>();
+  auto dstShaped = dstType.cast<mlir::ShapedType>();
+  auto srcElementType = srcType.getElementType();
+  auto dstElementType = dstShaped.getElementType();
+  if (srcElementType == dstElementType)
+    return srcArray;
+
+  auto dstArrayTupe = imex::ntensor::NTensorType::get(
+      dstShaped.getShape(), dstElementType, srcType.getEnvironment());
+
+  rerunScfPipeline(srcArray.getParentRegion()->getParentOp());
+  auto bodyBuilder = [&](mlir::OpBuilder &b, mlir::Location l,
+                         mlir::Value val) {
+    mlir::Value res = b.create<plier::CastOp>(l, dstElementType, val);
+    b.create<imex::ntensor::ElementwiseYieldOp>(l, res);
+  };
+
+  return builder.create<imex::ntensor::ElementwiseOp>(loc, dstArrayTupe,
+                                                      srcArray, bodyBuilder);
+}
+
+static llvm::Optional<mlir::Value> doCast(mlir::OpBuilder &builder,
+                                          mlir::Location loc, mlir::Value src,
+                                          mlir::Type dstType) {
+  auto srcType = src.getType();
+  if (srcType == dstType)
+    return src;
+
+  if (auto srcArrayType = srcType.dyn_cast<imex::ntensor::NTensorType>()) {
+    auto dstShapedType = dstType.dyn_cast<mlir::ShapedType>();
+    if (!dstShapedType)
+      return llvm::None;
+
+    mlir::Value res = addElementConversion(builder, loc, src, dstShapedType);
+    if (dstShapedType.isa<mlir::MemRefType>()) {
+      res = builder.create<imex::ntensor::ToMemrefOp>(loc, dstShapedType, res);
+    } else if (dstShapedType.isa<mlir::RankedTensorType>()) {
+      res = builder.create<imex::ntensor::ToTensorOp>(loc, dstShapedType, res);
+    }
+    assert(res.getType().isa<imex::ntensor::NTensorType>() &&
+           "Expected ntensor type.");
+    return res;
+  } else {
+    auto srcShapedType = srcType.dyn_cast<mlir::ShapedType>();
+    if (!srcShapedType)
+      return llvm::None;
+
+    auto dstArrayType = dstType.dyn_cast<imex::ntensor::NTensorType>();
+    if (!dstArrayType)
+      return llvm::None;
+
+    srcArrayType = imex::ntensor::NTensorType::get(
+        srcShapedType.getShape(), srcShapedType.getElementType(),
+        dstArrayType.getEnvironment());
+
+    mlir::Value res;
+    if (srcShapedType.isa<mlir::MemRefType>()) {
+      res = builder.create<imex::ntensor::FromMemrefOp>(loc, srcArrayType, src);
+    } else if (srcShapedType.isa<mlir::RankedTensorType>()) {
+      res = builder.create<imex::ntensor::FromTensorOp>(loc, srcArrayType, src);
+    }
+    assert(res && "Expected tensor or memref type.");
+    return addElementConversion(builder, loc, src, dstArrayType);
+  }
+}
+
 struct CastsToNtensor : public mlir::OpConversionPattern<plier::CastOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -1732,32 +1802,6 @@ struct CastsToNtensor : public mlir::OpConversionPattern<plier::CastOp> {
       return mlir::success();
     }
 
-    if (srcType.isa<mlir::RankedTensorType>() &&
-        dstType.isa<imex::ntensor::NTensorType>()) {
-      rewriter.replaceOpWithNewOp<imex::ntensor::FromTensorOp>(op, dstType,
-                                                               src);
-      return mlir::success();
-    }
-
-    if (srcType.isa<imex::ntensor::NTensorType>() &&
-        dstType.isa<mlir::RankedTensorType>()) {
-      rewriter.replaceOpWithNewOp<imex::ntensor::ToTensorOp>(op, dstType, src);
-      return mlir::success();
-    }
-
-    if (srcType.isa<mlir::MemRefType>() &&
-        dstType.isa<imex::ntensor::NTensorType>()) {
-      rewriter.replaceOpWithNewOp<imex::ntensor::FromMemrefOp>(op, dstType,
-                                                               src);
-      return mlir::success();
-    }
-
-    if (srcType.isa<imex::ntensor::NTensorType>() &&
-        dstType.isa<mlir::MemRefType>()) {
-      rewriter.replaceOpWithNewOp<imex::ntensor::ToMemrefOp>(op, dstType, src);
-      return mlir::success();
-    }
-
     if (srcType.isIntOrIndexOrFloat() &&
         dstType.isa<imex::ntensor::NTensorType>()) {
       auto ntensorType = dstType.cast<imex::ntensor::NTensorType>();
@@ -1767,6 +1811,11 @@ struct CastsToNtensor : public mlir::OpConversionPattern<plier::CastOp> {
 
       rewriter.replaceOpWithNewOp<imex::ntensor::CreateArrayOp>(
           op, ntensorType, /*dynamicSizes*/ llvm::None, src);
+      return mlir::success();
+    }
+
+    if (auto res = doCast(rewriter, op->getLoc(), src, dstType)) {
+      rewriter.replaceOp(op, *res);
       return mlir::success();
     }
 
