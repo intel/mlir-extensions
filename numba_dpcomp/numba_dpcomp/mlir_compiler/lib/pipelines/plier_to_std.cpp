@@ -152,7 +152,12 @@ static bool mapTypeHelper(mlir::MLIRContext &ctx, llvm::StringRef &name,
   nameCopy = name;
   if (consumeUntil(nameCopy, end)) {
     auto len = name.size() - nameCopy.size() - end.size();
-    ret = plier::PyType::get(&ctx, name.take_front(len));
+    auto pyType = plier::PyType::get(&ctx, name.take_front(len));
+    if (auto converterType = converter.convertType(pyType)) {
+      ret = converterType;
+    } else {
+      ret = pyType;
+    }
     name = nameCopy;
     return true;
   }
