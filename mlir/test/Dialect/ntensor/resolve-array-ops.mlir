@@ -156,3 +156,18 @@ func.func @test(%arg1: !ntensor.ntensor<?x?xf32>, %arg2: tuple<index, index>, %a
 //  CHECK-NEXT:   %[[IND2:.*]] = ntensor.resolve_index %[[E2]], %[[DIM2]]
 //  CHECK-NEXT:   ntensor.store %[[ARG3]], %[[ARG1]][%[[IND1]], %[[IND2]]] : !ntensor.ntensor<?x?xf32>
 //  CHECK-NEXT:   return
+
+// -----
+
+func.func @test(%arg1: !ntensor.ntensor<?xf32>, %arg2: !ntensor.slice, %arg3: !ntensor.ntensor<?xf32>) {
+  ntensor.setitem(%arg1 : !ntensor.ntensor<?xf32>) [%arg2 : !ntensor.slice] = (%arg3 : !ntensor.ntensor<?xf32>)
+  return
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG1:.*]]: !ntensor.ntensor<?xf32>, %[[ARG2:.*]]: !ntensor.slice, %[[ARG3:.*]]: !ntensor.ntensor<?xf32>)
+//  CHECK-NEXT:   %[[C0:.*]] = arith.constant 0 : index
+//  CHECK-NEXT:   %[[DIM:.*]] = ntensor.dim %[[ARG1]], %[[C0]] : !ntensor.ntensor<?xf32>
+//  CHECK-NEXT:   %[[BEGIN:.*]], %[[END:.*]], %[[STEP:.*]], %[[COUNT:.*]] = ntensor.resolve_slice %[[ARG2]], %[[DIM]]
+//  CHECK-NEXT:   %[[RES:.*]] = ntensor.subview %[[ARG1]][%[[BEGIN]]] [%[[COUNT]]] [%[[STEP]]] : !ntensor.ntensor<?xf32> to !ntensor.ntensor<?xf32>
+//  CHECK-NEXT:   ntensor.copy %[[ARG3]], %[[RES]] : !ntensor.ntensor<?xf32> to !ntensor.ntensor<?xf32>
+//  CHECK-NEXT:   return
