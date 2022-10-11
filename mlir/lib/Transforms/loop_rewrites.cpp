@@ -13,10 +13,10 @@
 // limitations under the License.
 
 #include "imex/Transforms/loop_rewrites.hpp"
-#include "imex/Transforms/const_utils.hpp"
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
+#include <mlir/IR/PatternMatch.h>
 
 namespace {
 template <mlir::arith::CmpIPredicate SrcPred,
@@ -58,59 +58,69 @@ handlerImpl(mlir::arith::CmpIPredicate pred, mlir::Value lhs, mlir::Value rhs,
 
   return {};
 }
-} // namespace
 
-mlir::LogicalResult imex::CmpLoopBoundsSimplify::matchAndRewrite(
-    mlir::scf::ForOp op, mlir::PatternRewriter &rewriter) const {
-  auto indexVar = op.getLoopBody().front().getArgument(0);
-  bool matched = false;
-  for (auto user : llvm::make_early_inc_range(indexVar.getUsers())) {
-    auto cmp = mlir::dyn_cast<mlir::arith::CmpIOp>(user);
-    if (cmp) {
-      auto pred = cmp.getPredicate();
-      auto lhs = cmp.getLhs();
-      auto rhs = cmp.getRhs();
-      // Normalize index and predicate (index always on the left)
-      using norm_fptr_t =
-          bool (*)(mlir::arith::CmpIPredicate & pred, mlir::Value index,
-                   mlir::Value & lhs, mlir::Value & rhs);
-      using Predicate = mlir::arith::CmpIPredicate;
-      const norm_fptr_t norm_handlers[] = {
-          &normImpl<Predicate::sle, Predicate::sge>,
-          &normImpl<Predicate::slt, Predicate::sgt>,
-          &normImpl<Predicate::ule, Predicate::uge>,
-          &normImpl<Predicate::ult, Predicate::ugt>,
-          &normImpl<Predicate::eq, Predicate::eq>,
-          &normImpl<Predicate::ne, Predicate::ne>,
-      };
+struct CmpLoopBoundsSimplify : public mlir::OpRewritePattern<mlir::scf::ForOp> {
+  using OpRewritePattern::OpRewritePattern;
 
-      for (auto h : norm_handlers)
-        if (h(pred, indexVar, lhs, rhs))
-          break;
+  mlir::LogicalResult
+  matchAndRewrite(mlir::scf::ForOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto indexVar = op.getLoopBody().front().getArgument(0);
+    bool matched = false;
+    for (auto user : llvm::make_early_inc_range(indexVar.getUsers())) {
+      auto cmp = mlir::dyn_cast<mlir::arith::CmpIOp>(user);
+      if (cmp) {
+        auto pred = cmp.getPredicate();
+        auto lhs = cmp.getLhs();
+        auto rhs = cmp.getRhs();
+        // Normalize index and predicate (index always on the left)
+        using norm_fptr_t =
+            bool (*)(mlir::arith::CmpIPredicate & pred, mlir::Value index,
+                     mlir::Value & lhs, mlir::Value & rhs);
+        using Predicate = mlir::arith::CmpIPredicate;
+        const norm_fptr_t norm_handlers[] = {
+            &normImpl<Predicate::sle, Predicate::sge>,
+            &normImpl<Predicate::slt, Predicate::sgt>,
+            &normImpl<Predicate::ule, Predicate::uge>,
+            &normImpl<Predicate::ult, Predicate::ugt>,
+            &normImpl<Predicate::eq, Predicate::eq>,
+            &normImpl<Predicate::ne, Predicate::ne>,
+        };
 
-      using fptr_t = llvm::Optional<int64_t> (*)(
-          Predicate pred, mlir::Value lhs, mlir::Value rhs, mlir::Value index,
-          mlir::Value lowerBound, mlir::Value upperBound);
-      const fptr_t handlers[] = {
-          &handlerImpl<Predicate::sge, UpperBound, 0>,
-          &handlerImpl<Predicate::slt, LowerBound, 0>,
-          &handlerImpl<Predicate::sge, LowerBound, 1>,
-          &handlerImpl<Predicate::slt, UpperBound, 1>,
-      };
+        for (auto h : norm_handlers)
+          if (h(pred, indexVar, lhs, rhs))
+            break;
 
-      for (auto h : handlers) {
-        if (auto c = h(pred, lhs, rhs, indexVar, op.getLowerBound(),
-                       op.getUpperBound())) {
-          auto type = rewriter.getI1Type();
-          auto val = rewriter.getIntegerAttr(type, *c);
-          auto constVal =
-              rewriter.create<mlir::arith::ConstantOp>(cmp.getLoc(), val);
-          rewriter.replaceOp(cmp, constVal.getResult());
-          matched = true;
-          break;
+        using fptr_t = llvm::Optional<int64_t> (*)(
+            Predicate pred, mlir::Value lhs, mlir::Value rhs, mlir::Value index,
+            mlir::Value lowerBound, mlir::Value upperBound);
+        const fptr_t handlers[] = {
+            &handlerImpl<Predicate::sge, UpperBound, 0>,
+            &handlerImpl<Predicate::slt, LowerBound, 0>,
+            &handlerImpl<Predicate::sge, LowerBound, 1>,
+            &handlerImpl<Predicate::slt, UpperBound, 1>,
+        };
+
+        for (auto h : handlers) {
+          if (auto c = h(pred, lhs, rhs, indexVar, op.getLowerBound(),
+                         op.getUpperBound())) {
+            auto type = rewriter.getI1Type();
+            auto val = rewriter.getIntegerAttr(type, *c);
+            auto constVal =
+                rewriter.create<mlir::arith::ConstantOp>(cmp.getLoc(), val);
+            rewriter.replaceOp(cmp, constVal.getResult());
+            matched = true;
+            break;
+          }
         }
       }
     }
+    return mlir::success(matched);
   }
-  return mlir::success(matched);
+};
+} // namespace
+
+void imex::populateLoopRewritesPatterns(mlir::MLIRContext &context,
+                                        mlir::RewritePatternSet &patterns) {
+  patterns.insert<CmpLoopBoundsSimplify>(&context);
 }

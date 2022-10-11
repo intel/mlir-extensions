@@ -14,20 +14,13 @@
 
 #pragma once
 
-#include <mlir/IR/PatternMatch.h>
-
 namespace mlir {
-namespace scf {
-class ForOp;
-}
+class MLIRContext;
+class RewritePatternSet;
 } // namespace mlir
 
 namespace imex {
-struct CmpLoopBoundsSimplify : public mlir::OpRewritePattern<mlir::scf::ForOp> {
-  using mlir::OpRewritePattern<mlir::scf::ForOp>::OpRewritePattern;
+void populateLoopRewritesPatterns(mlir::MLIRContext &context,
+                                  mlir::RewritePatternSet &patterns);
 
-  mlir::LogicalResult
-  matchAndRewrite(mlir::scf::ForOp op,
-                  mlir::PatternRewriter &rewriter) const override;
-};
 } // namespace imex
