@@ -3,6 +3,8 @@ add_mlir_library(IMEXTransforms
   InsertGPUAllocs.cpp
   SetSPIRVCapabilities.cpp
   SetSPIRVAbiAttribute.cpp
+  TypeConversion.cpp
+  FuncUtils.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${PROJECT_SOURCE_DIR}/imex/Transforms
