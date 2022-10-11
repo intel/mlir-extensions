@@ -1550,8 +1550,10 @@ struct BuildSliceToNtensor
 
     auto loc = op->getLoc();
     auto doCast = [&](mlir::Value val) -> mlir::Value {
-      if (val.getType() != indexType)
+      if (val.getType() != indexType) {
         val = rewriter.create<plier::CastOp>(loc, indexType, val);
+        rerunScfPipeline(op);
+      }
 
       return val;
     };
