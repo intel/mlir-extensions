@@ -20,7 +20,6 @@ include "mlir/Pass/PassBase.td"
 
 include "mlir/IR/OpBase.td"
 include "mlir/IR/EnumAttr.td"
-include "mlir/Dialect/GPU/IR/GPUBase.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/LoopLikeInterface.td"
@@ -222,4 +221,25 @@ memref, arith and math.
   let constructor = "imex::createConvertGPUXToSPIRVPass()";
   let dependentDialects = ["::mlir::spirv::SPIRVDialect"];
 }
+//===----------------------------------------------------------------------===//
+// GPUToGPUX
+//===----------------------------------------------------------------------===//
+
+def ConvertGPUToGPUX: Pass<"convert-gpu-to-gpux"> {
+  let summary = "Convert from the GPU dialect to the GPUX dialect.";
+  let description = [{
+    Convert GPU dialect operations into the GPUX dialect operations.
+
+    #### Input invariant
+
+    - FIXME
+
+    #### Output IR
+
+    - FIXME
+  }];
+  let constructor = "imex::createConvertGPUToGPUXPass()";
+  let dependentDialects = ["::imex::gpux::GPUXDialect"];
+}
+
 #endif // _IMEX_CONVERSION_PASSES_TD_INCLUDED_

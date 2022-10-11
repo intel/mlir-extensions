@@ -15,9 +15,11 @@
 #include <imex/Dialect/GPUX/IR/GPUXOps.h>
 #include <llvm/ADT/TypeSwitch.h>
 #include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/GPU/IR/GPUDialect.h>
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/IR/DialectImplementation.h>
+#include <mlir/IR/OpImplementation.h>
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Transforms/InliningUtils.h>
 
@@ -25,14 +27,62 @@ namespace imex {
 namespace gpux {
 
 void GPUXDialect::initialize() {
-  addTypes<
+  addTypes<StreamType
 #define GET_TYPEDEF_LIST
 #include <imex/Dialect/GPUX/IR/GPUXOpsTypes.cpp.inc>
-      >();
+           >();
   addOperations<
 #define GET_OP_LIST
 #include <imex/Dialect/GPUX/IR/GPUXOps.cpp.inc>
       >();
+}
+
+mlir::Type GPUXDialect::parseType(mlir::DialectAsmParser &parser) const {
+  parser.emitError(parser.getNameLoc(), "unknown type");
+  return mlir::Type();
+}
+
+void GPUXDialect::printType(mlir::Type type,
+                            mlir::DialectAsmPrinter &os) const {
+  llvm::TypeSwitch<mlir::Type>(type)
+      .Case<StreamType>([&](auto) { os << "StreamType"; })
+      .Default([](auto) { llvm_unreachable("unexpected type"); });
+}
+
+void CreateStreamOp::build(::mlir::OpBuilder &odsBuilder,
+                           ::mlir::OperationState &odsState) {
+  auto ctx = odsBuilder.getContext();
+  CreateStreamOp::build(odsBuilder, odsState, StreamType::get(ctx));
+}
+
+void LaunchFuncOp::build(
+    ::mlir::OpBuilder &builder, ::mlir::OperationState &result,
+    ::mlir::Value stream, ::mlir::gpu::GPUFuncOp kernelFunc,
+    ::mlir::gpu::KernelDim3 gridSize, ::mlir::gpu::KernelDim3 blockSize,
+    ::mlir::Value dynamicSharedMemorySize, ::mlir::ValueRange kernelOperands,
+    ::mlir::Type asyncTokenType, ::mlir::ValueRange asyncDependencies) {
+  result.addOperands(asyncDependencies);
+  result.addOperands(stream);
+  if (asyncTokenType)
+    result.types.push_back(builder.getType<mlir::gpu::AsyncTokenType>());
+
+  // Add grid and block sizes as op operands, followed by the data operands.
+  result.addOperands({gridSize.x, gridSize.y, gridSize.z, blockSize.x,
+                      blockSize.y, blockSize.z});
+  if (dynamicSharedMemorySize)
+    result.addOperands(dynamicSharedMemorySize);
+  result.addOperands(kernelOperands);
+  auto kernelModule = kernelFunc->getParentOfType<mlir::gpu::GPUModuleOp>();
+  auto kernelSymbol = mlir::SymbolRefAttr::get(
+      kernelModule.getNameAttr(),
+      {mlir::SymbolRefAttr::get(kernelFunc.getNameAttr())});
+  result.addAttribute(kernelAttrName(result.name), kernelSymbol);
+  mlir::SmallVector<int32_t, 10> segmentSizes(10, 1);
+  segmentSizes.front() = asyncDependencies.size();
+  segmentSizes[segmentSizes.size() - 2] = dynamicSharedMemorySize ? 1 : 0;
+  segmentSizes.back() = static_cast<int32_t>(kernelOperands.size());
+  result.addAttribute(getOperandSegmentSizeAttr(),
+                      builder.getDenseI32ArrayAttr(segmentSizes));
 }
 
 } // namespace gpux

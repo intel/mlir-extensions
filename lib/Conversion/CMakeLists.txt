@@ -1,2 +1,3 @@
 add_subdirectory(PTensorToLinalg)
 add_subdirectory(GPUToSPIRV)
+add_subdirectory(GPUToGPUX)

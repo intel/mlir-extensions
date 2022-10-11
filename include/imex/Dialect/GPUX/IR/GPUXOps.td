@@ -41,6 +41,9 @@ def GPUX_Dialect : Dialect {
     // The C++ namespace that the dialect class definition resides in.
     let cppNamespace = "::imex::gpux";
     let emitAccessorPrefix = kEmitAccessorPrefix_Raw;
+    //  We use the default parser/printer which handles registered types
+    let useDefaultTypePrinterParser = true;
+
 }
 
 // Base class for dialect operations. This operation inherits from the base
@@ -63,6 +66,7 @@ def GPUX_CreateStreamOp : GPUX_Op<"create_stream"> {
   // Operation for creating a temporary stream on which gpu kernels
   // will be launched
   let results = (outs GPUX_StreamType : $gpux_stream);
+  let builders = [OpBuilder<(ins)>];
 }
 
 def GPUX_DestroyStreamOp : GPUX_Op<"destroy_stream"> {
@@ -90,6 +94,19 @@ def GPUX_LaunchFuncOp
                      Optional<I32>:$dynamicSharedMemorySize,
                      Variadic<AnyType>:$operands);
   let results = (outs Optional<GPU_AsyncToken> : $asyncToken);
+
+  let skipDefaultBuilders = 1;
+
+  let builders = [
+    OpBuilder<(ins "::mlir::Value" : $gpux_stream,
+                   "::mlir::gpu::GPUFuncOp":$kernelFunc,
+                   "::mlir::gpu::KernelDim3":$gridSize,
+                   "::mlir::gpu::KernelDim3":$blockSize,
+                   "::mlir::Value":$dynamicSharedMemorySize,
+                   "::mlir::ValueRange":$kernelOperands,
+                   CArg<"::mlir::Type", "nullptr">:$asyncTokenType,
+                   CArg<"::mlir::ValueRange", "{}">:$asyncDependencies)>
+  ];
 }
 
 def GPUX_AllocOp
