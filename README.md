@@ -39,7 +39,7 @@ ninja install
 
 Getting TBB
 ```Bash
-wget -O tbb.tgz "https://github.com/oneapi-src/oneTBB/releases/download/v2021.5.0/oneapi-tbb-2021.5.0-lin.tgz"
+wget -O tbb.tgz "https://github.com/oneapi-src/oneTBB/releases/download/v2021.6.0/oneapi-tbb-2021.6.0-lin.tgz"
 mkdir tbb
 tar -xf "tbb.tgz" -C tbb --strip-components=1
 ```
@@ -58,7 +58,7 @@ ninja install
 Building and testing Python package
 ```Bash
 cd numba_dpcomp
-conda create -n test-env python=3.9 numba=0.55 numpy=1.20 scikit-learn pytest-xdist ninja scipy pybind11 pytest lit tbb=2021.5.0 cmake -c conda-forge
+conda create -n test-env python=3.9 numba=0.55 numpy=1.20 scikit-learn pytest-xdist ninja scipy pybind11 pytest lit tbb=2021.6.0 cmake -c conda-forge
 conda activate test-env
 export TBB_PATH=<...>/tbb
 export LLVM_PATH=<...>/llvm-install
