@@ -234,3 +234,17 @@ func.func @test(%arg1: !ntensor.ntensor<?xf32>) -> !ntensor.ntensor<5xf32> {
 //  CHECK-SAME:   (%[[ARG:.*]]: memref<?xf32>)
 //  CHECK-NEXT:   %[[RES:.*]] = memref.cast %[[ARG]] : memref<?xf32> to memref<5xf32>
 //  CHECK-NEXT:   return %[[RES]] : memref<5xf32>
+
+// -----
+
+func.func @test(%arg1: !ntensor.ntensor<?xf32, "test">) -> !ntensor.ntensor<5xf32, "test"> {
+  %0 = ntensor.cast %arg1 : !ntensor.ntensor<?xf32, "test"> to !ntensor.ntensor<5xf32, "test">
+  return %0 : !ntensor.ntensor<5xf32, "test">
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG:.*]]: memref<?xf32>)
+//  CHECK-NEXT:   %[[RES:.*]] = imex_util.env_region "test" -> memref<5xf32> {
+//  CHECK-NEXT:   %[[RES1:.*]] = memref.cast %[[ARG]] : memref<?xf32> to memref<5xf32>
+//  CHECK-NEXT:   imex_util.env_region_yield %[[RES1]] : memref<5xf32>
+//  CHECK-NEXT:   }
+//  CHECK-NEXT:   return %[[RES]] : memref<5xf32>
