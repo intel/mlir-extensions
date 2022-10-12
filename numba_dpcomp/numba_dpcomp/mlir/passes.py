@@ -116,7 +116,8 @@ class MlirBackendBase(FunctionPass):
         unique_name = state.func_ir.func_id.unique_name
         modname = state.func_ir.func_id.func.__module__
         qualprefix = qualifying_prefix(modname, unique_name)
-        fn_name = mangler(qualprefix, state.args)
+        abi_tags = [state.flags.get_mangle_string()]
+        fn_name = mangler(qualprefix, state.args, abi_tags=abi_tags)
 
         ctx = {}
         ctx["compiler_settings"] = {
