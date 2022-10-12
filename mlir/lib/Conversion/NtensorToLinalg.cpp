@@ -47,6 +47,10 @@ wrapEnvRegion(mlir::PatternRewriter &builder, mlir::Location loc,
   return {res.begin(), res.end()};
 }
 
+static mlir::RankedTensorType toTensorType(mlir::ShapedType type) {
+  return mlir::RankedTensorType::get(type.getShape(), type.getElementType());
+}
+
 namespace {
 struct ConvertCreateOp
     : public mlir::OpRewritePattern<imex::ntensor::CreateArrayOp> {
@@ -67,8 +71,7 @@ struct ConvertCreateOp
     auto results = wrapEnvRegion(
         rewriter, op->getLoc(), dstType.getEnvironment(), dstType,
         [&](mlir::OpBuilder &builder, mlir::Location loc) {
-          auto tensorType =
-              mlir::RankedTensorType::get(dstType.getShape(), elemType);
+          auto tensorType = toTensorType(dstType);
           mlir::Value result = builder.create<mlir::tensor::EmptyOp>(
               loc, tensorType, op.getDynamicSizes());
           if (initValue)
@@ -112,8 +115,7 @@ struct ConvertCopyOp : public mlir::OpRewritePattern<imex::ntensor::CopyOp> {
         [&](mlir::OpBuilder &builder, mlir::Location loc) {
           auto rank = static_cast<unsigned>(srcType.getRank());
 
-          auto srcTensorType = mlir::RankedTensorType::get(
-              srcType.getShape(), srcType.getElementType());
+          auto srcTensorType = toTensorType(srcType);
           mlir::Value srcTensor = builder.create<imex::ntensor::ToTensorOp>(
               loc, srcTensorType, src);
 
@@ -171,13 +173,11 @@ struct ConvertElementwiseOp
         [&](mlir::PatternRewriter &builder, mlir::Location loc) {
           auto rank = static_cast<unsigned>(srcType.getRank());
 
-          auto srcTensorType = mlir::RankedTensorType::get(
-              srcType.getShape(), srcType.getElementType());
+          auto srcTensorType = toTensorType(srcType);
           mlir::Value srcTensor = builder.create<imex::ntensor::ToTensorOp>(
               loc, srcTensorType, src);
 
-          auto dstTensorType = mlir::RankedTensorType::get(
-              dstType.getShape(), dstType.getElementType());
+          auto dstTensorType = toTensorType(dstType);
 
           llvm::SmallVector<mlir::Value> dynSizes;
           for (auto [i, dim] : llvm::enumerate(dstTensorType.getShape()))
@@ -225,12 +225,43 @@ struct ConvertElementwiseOp
     return mlir::success();
   }
 };
+
+struct ConvertCastOp : public mlir::OpRewritePattern<imex::ntensor::CastOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::CastOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto src = op.getSource();
+    auto srcType = src.getType().dyn_cast<imex::ntensor::NTensorType>();
+    if (!srcType)
+      return mlir::failure();
+
+    auto dstType = op.getType().dyn_cast<imex::ntensor::NTensorType>();
+    if (!dstType)
+      return mlir::failure();
+
+    auto srcTensorType = toTensorType(srcType);
+    auto dstTensorType = toTensorType(dstType);
+
+    if (!mlir::tensor::CastOp::areCastCompatible(srcTensorType, dstTensorType))
+      return mlir::failure();
+
+    auto loc = op->getLoc();
+    auto srcTensor =
+        rewriter.create<imex::ntensor::ToTensorOp>(loc, srcTensorType, src);
+    auto cast =
+        rewriter.create<mlir::tensor::CastOp>(loc, dstTensorType, srcTensor);
+    rewriter.replaceOpWithNewOp<imex::ntensor::FromTensorOp>(op, dstType, cast);
+    return mlir::success();
+  }
+};
 } // namespace
 
 void imex::populateNtensorToLinalgPatterns(mlir::MLIRContext &context,
                                            mlir::RewritePatternSet &patterns) {
-  patterns.insert<ConvertCreateOp, ConvertCopyOp, ConvertElementwiseOp>(
-      &context);
+  patterns.insert<ConvertCreateOp, ConvertCopyOp, ConvertElementwiseOp,
+                  ConvertCastOp>(&context);
 }
 
 namespace {

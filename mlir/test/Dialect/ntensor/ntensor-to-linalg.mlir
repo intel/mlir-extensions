@@ -152,3 +152,17 @@ func.func @test(%arg1: !ntensor.ntensor<?x5xf32, "test">) -> !ntensor.ntensor<?x
 //  CHECK-NEXT:   imex_util.env_region_yield %[[RES]] : !ntensor.ntensor<?x5xf32, "test">
 //  CHECK-NEXT:   }
 //  CHECK-NEXT:   return %[[T0]] : !ntensor.ntensor<?x5xf32, "test">
+
+
+// -----
+
+func.func @test(%arg1: !ntensor.ntensor<?xf32>) -> !ntensor.ntensor<5xf32> {
+  %0 = ntensor.cast %arg1 : !ntensor.ntensor<?xf32> to !ntensor.ntensor<5xf32>
+  return %0 : !ntensor.ntensor<5xf32>
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG:.*]]: !ntensor.ntensor<?xf32>)
+//  CHECK-NEXT:   %[[VAL1:.*]] = ntensor.to_tensor %[[ARG]] : !ntensor.ntensor<?xf32> to tensor<?xf32>
+//  CHECK-NEXT:   %[[VAL2:.*]] = tensor.cast %[[VAL1]] : tensor<?xf32> to tensor<5xf32>
+//  CHECK-NEXT:   %[[VAL3:.*]] = ntensor.from_tensor %[[VAL2]] : tensor<5xf32> to !ntensor.ntensor<5xf32>
+//  CHECK-NEXT:   return %[[VAL3]] : !ntensor.ntensor<5xf32>
