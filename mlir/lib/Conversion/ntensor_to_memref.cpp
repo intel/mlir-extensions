@@ -312,6 +312,36 @@ struct FromMemrefOpLowering
     return mlir::success();
   }
 };
+
+struct CastOpLowering
+    : public mlir::OpConversionPattern<imex::ntensor::CastOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::CastOp op,
+                  imex::ntensor::CastOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto src = adaptor.getSource();
+    auto srcType = src.getType().dyn_cast<mlir::MemRefType>();
+    if (!srcType)
+      return mlir::failure();
+
+    auto *converter = getTypeConverter();
+    assert(converter && "Type converter is not set");
+
+    auto retType = converter->convertType(op.getType())
+                       .dyn_cast_or_null<mlir::MemRefType>();
+
+    if (!retType)
+      return mlir::failure();
+
+    if (!mlir::memref::CastOp::areCastCompatible(srcType, retType))
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::memref::CastOp>(op, retType, src);
+    return mlir::success();
+  }
+};
 } // namespace
 
 void imex::populateNtensorToMemrefRewritesAndTarget(
@@ -328,13 +358,14 @@ void imex::populateNtensorToMemrefRewritesAndTarget(
 
   patterns.insert<DimOpLowering, SubviewOpLowering, LoadOpLowering,
                   StoreOpLowering, ToTensorOpLowering, FromTensorOpLowering,
-                  ToMemrefOpLowering, FromMemrefOpLowering>(converter,
-                                                            &context);
+                  ToMemrefOpLowering, FromMemrefOpLowering, CastOpLowering>(
+      converter, &context);
 
   target.addIllegalOp<imex::ntensor::DimOp, imex::ntensor::SubviewOp,
                       imex::ntensor::LoadOp, imex::ntensor::StoreOp,
                       imex::ntensor::ToTensorOp, imex::ntensor::FromTensorOp,
-                      imex::ntensor::ToMemrefOp, imex::ntensor::FromMemrefOp>();
+                      imex::ntensor::ToMemrefOp, imex::ntensor::FromMemrefOp,
+                      imex::ntensor::CastOp>();
 }
 
 namespace {
