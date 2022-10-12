@@ -1849,6 +1849,32 @@ struct CastsToNtensor : public mlir::OpConversionPattern<plier::CastOp> {
   }
 };
 
+struct UnitupleExtractToNtensor
+    : public mlir::OpConversionPattern<imex::util::TupleExtractOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::util::TupleExtractOp op,
+                  imex::util::TupleExtractOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto src = adaptor.getSource();
+    if (!isUniTuple(src.getType()))
+      return mlir::failure();
+
+    auto converter = getTypeConverter();
+    assert(converter);
+
+    auto dstType = converter->convertType(op.getType());
+    if (!dstType)
+      return mlir::failure();
+
+    auto index = adaptor.getIndex();
+    rewriter.replaceOpWithNewOp<imex::ntensor::GetitemOp>(op, dstType, src,
+                                                          index);
+    return mlir::success();
+  }
+};
+
 static bool isNtensor(mlir::TypeConverter &converter, mlir::Type type) {
   return !!converter.convertType(type)
                .dyn_cast_or_null<imex::ntensor::NTensorType>();
@@ -1963,6 +1989,14 @@ struct PlierToNtensorPass
           return true;
         });
 
+    target.addDynamicallyLegalOp<imex::util::TupleExtractOp>(
+        [](imex::util::TupleExtractOp op) -> llvm::Optional<bool> {
+          if (isUniTuple(op.getSource().getType()))
+            return false;
+
+          return llvm::None;
+        });
+
     target.addIllegalOp<plier::BuildSliceOp>();
 
     target.addLegalDialect<imex::ntensor::NTensorDialect>();
@@ -1974,7 +2008,8 @@ struct PlierToNtensorPass
         BinopToNtensor,
         BuildSliceToNtensor,
         BuiltinCallsToNtensor,
-        CastsToNtensor
+        CastsToNtensor,
+        UnitupleExtractToNtensor
         // clang-format on
         >(typeConverter, &context);
 
