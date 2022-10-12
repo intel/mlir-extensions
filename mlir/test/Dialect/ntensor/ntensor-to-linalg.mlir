@@ -194,3 +194,18 @@ func.func @test(%arg1: f32, %arg2: f32, %arg3: f32) -> !ntensor.ntensor<3xf32> {
 //  CHECK-NEXT:   %[[RES:.*]] = tensor.from_elements %[[ARG1]], %[[ARG2]], %[[ARG3]] : tensor<3xf32>
 //  CHECK-NEXT:   %[[RES1:.*]] = ntensor.from_tensor %[[RES]] : tensor<3xf32> to !ntensor.ntensor<3xf32>
 //  CHECK-NEXT:   return %[[RES1]] : !ntensor.ntensor<3xf32>
+
+// -----
+
+func.func @test(%arg1: f32, %arg2: f32, %arg3: f32) -> !ntensor.ntensor<3xf32, "test"> {
+  %0 = ntensor.from_elements %arg1, %arg2, %arg3 : !ntensor.ntensor<3xf32, "test">
+  return %0 : !ntensor.ntensor<3xf32, "test">
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG1:.*]]: f32, %[[ARG2:.*]]: f32, %[[ARG3:.*]]: f32)
+//  CHECK-NEXT:   %[[RES:.*]] = imex_util.env_region "test" -> !ntensor.ntensor<3xf32, "test"> {
+//  CHECK-NEXT:   %[[RES1:.*]] = tensor.from_elements %[[ARG1]], %[[ARG2]], %[[ARG3]] : tensor<3xf32>
+//  CHECK-NEXT:   %[[RES2:.*]] = ntensor.from_tensor %[[RES1]] : tensor<3xf32> to !ntensor.ntensor<3xf32, "test">
+//  CHECK-NEXT:   imex_util.env_region_yield %[[RES2]] : !ntensor.ntensor<3xf32, "test">
+//  CHECK-NEXT:   }
+//  CHECK-NEXT:   return %[[RES]] : !ntensor.ntensor<3xf32, "test">

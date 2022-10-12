@@ -255,8 +255,8 @@ struct ConvertCastOp : public mlir::OpRewritePattern<imex::ntensor::CastOp> {
         [&](mlir::PatternRewriter &builder, mlir::Location loc) {
           auto srcTensor = builder.create<imex::ntensor::ToTensorOp>(
               loc, srcTensorType, src);
-          auto cast = rewriter.create<mlir::tensor::CastOp>(loc, dstTensorType,
-                                                            srcTensor);
+          auto cast = builder.create<mlir::tensor::CastOp>(loc, dstTensorType,
+                                                           srcTensor);
           return builder.create<imex::ntensor::FromTensorOp>(loc, dstType, cast)
               .getResult();
         });
@@ -283,9 +283,16 @@ struct ConvertFromElementsOp
       return mlir::failure();
 
     auto dstTensorType = toTensorType(dstType);
-    auto res = rewriter.create<mlir::tensor::FromElementsOp>(
-        op->getLoc(), dstTensorType, elements);
-    rewriter.replaceOpWithNewOp<imex::ntensor::FromTensorOp>(op, dstType, res);
+
+    auto results = wrapEnvRegion(
+        rewriter, op->getLoc(), dstType.getEnvironment(), dstType,
+        [&](mlir::PatternRewriter &builder, mlir::Location loc) {
+          auto res = builder.create<mlir::tensor::FromElementsOp>(
+              loc, dstTensorType, elements);
+          return builder.create<imex::ntensor::FromTensorOp>(loc, dstType, res)
+              .getResult();
+        });
+    rewriter.replaceOp(op, results);
     return mlir::success();
   }
 };
