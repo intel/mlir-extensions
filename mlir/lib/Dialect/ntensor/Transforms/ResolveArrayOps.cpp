@@ -313,11 +313,68 @@ struct GetitemOpLowering
     return mlir::success();
   }
 };
+
+static llvm::Optional<mlir::Type> isUnituple(mlir::Type type) {
+  auto tupleType = type.dyn_cast<mlir::TupleType>();
+  if (!tupleType || tupleType.size() == 0)
+    return llvm::None;
+
+  auto types = tupleType.getTypes();
+  auto ret = types.front();
+  if (llvm::any_of(types.drop_front(), [&](mlir::Type t) { return t != ret; }))
+    return llvm::None;
+
+  return ret;
+}
+
+struct GetitemUnitupleOpLowering
+    : public mlir::OpRewritePattern<imex::ntensor::GetitemOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::GetitemOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto value = op.getSource();
+    auto index = op.getIndex();
+    if (!isValidGetitemIndex(index.getType()))
+      return mlir::failure();
+
+    auto valType = value.getType();
+    auto elemType = isUnituple(valType);
+    if (!elemType || *elemType != op.getType())
+      return mlir::failure();
+
+    auto count = static_cast<int64_t>(valType.cast<mlir::TupleType>().size());
+    auto arrayType = imex::ntensor::NTensorType::get(count, *elemType);
+
+    auto loc = op->getLoc();
+
+    llvm::SmallVector<mlir::Value> elements(static_cast<size_t>(count));
+    for (auto i : llvm::seq<int64_t>(0, count)) {
+      auto idx = rewriter.create<mlir::arith::ConstantIndexOp>(loc, i);
+      elements[i] = rewriter.create<imex::util::TupleExtractOp>(loc, *elemType,
+                                                                value, idx);
+    }
+
+    auto array = rewriter.create<imex::ntensor::FromElementsOp>(loc, arrayType,
+                                                                elements);
+
+    auto dynArrayType = imex::ntensor::NTensorType::get(
+        mlir::ShapedType::kDynamicSize, *elemType);
+    auto dynArray =
+        rewriter.create<imex::ntensor::CastOp>(loc, dynArrayType, array);
+    rewriter.replaceOpWithNewOp<imex::ntensor::GetitemOp>(op, op.getType(),
+                                                          dynArray, index);
+    return mlir::success();
+  }
+};
 } // namespace
 
 void imex::ntensor::populateResolveArrayOpsPatterns(
     mlir::MLIRContext &context, mlir::RewritePatternSet &patterns) {
-  patterns.insert<SetitemOpLowering, GetitemOpLowering>(&context);
+  patterns
+      .insert<SetitemOpLowering, GetitemOpLowering, GetitemUnitupleOpLowering>(
+          &context);
 }
 
 namespace {
