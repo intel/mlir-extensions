@@ -15,6 +15,7 @@
 #ifndef NTENSOR_OPS
 #define NTENSOR_OPS
 
+include "mlir/Interfaces/CastInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/CopyOpInterface.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
@@ -641,6 +642,23 @@ def ElementwiseYieldOp : NTensor_OpBase<"elementwise_yield", [
   let builders = [OpBuilder<(ins), [{ /* nothing to do */ }]>];
 
   let assemblyFormat = "attr-dict $value `:` type($value)";
+}
+
+def CastOp : NTensor_OpBase<"cast", [
+    DeclareOpInterfaceMethods<CastOpInterface>,
+    NoSideEffect
+  ]> {
+  let summary = "array cast operation";
+  let description = [{
+    Convert a array from one type to an equivalent type without changing any
+    data elements. The source and destination types must both be array types
+    with the same element type. The operation is invalid if converting to a
+    mismatching constant dimension.
+  }];
+
+  let arguments = (ins NTensor_Tensor:$source);
+  let results = (outs NTensor_Tensor:$dest);
+  let assemblyFormat = "$source attr-dict `:` qualified(type($source)) `to` qualified(type($dest))";
 }
 
 #endif // NTENSOR_OPS

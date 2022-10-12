@@ -19,6 +19,7 @@
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/DialectImplementation.h>
 #include <mlir/IR/PatternMatch.h>
+#include <mlir/IR/TypeUtilities.h>
 #include <mlir/Transforms/InliningUtils.h>
 
 #include <llvm/ADT/TypeSwitch.h>
@@ -478,6 +479,22 @@ mlir::LogicalResult imex::ntensor::SubviewOp::reifyResultShapes(
     reifiedReturnShapes[0].push_back(size.value().get<mlir::Value>());
   }
   return mlir::success();
+}
+
+bool imex::ntensor::CastOp::areCastCompatible(mlir::TypeRange inputs,
+                                              mlir::TypeRange outputs) {
+  if (inputs.size() != 1 || outputs.size() != 1)
+    return false;
+  mlir::Type a = inputs.front(), b = outputs.front();
+  auto aT = a.dyn_cast<imex::ntensor::NTensorType>();
+  auto bT = b.dyn_cast<imex::ntensor::NTensorType>();
+  if (!aT || !bT)
+    return false;
+
+  if (aT.getElementType() != bT.getElementType())
+    return false;
+
+  return succeeded(mlir::verifyCompatibleShape(aT, bT));
 }
 
 static mlir::LogicalResult
