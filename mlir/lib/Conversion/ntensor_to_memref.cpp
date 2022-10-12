@@ -326,10 +326,22 @@ struct CastOpLowering
     if (!srcType)
       return mlir::failure();
 
+    auto origSrcType =
+        op.getSource().getType().dyn_cast<imex::ntensor::NTensorType>();
+    if (!origSrcType)
+      return mlir::failure();
+
+    auto origDstType = op.getType().dyn_cast<imex::ntensor::NTensorType>();
+    if (!origDstType)
+      return mlir::failure();
+
+    if (origSrcType.getEnvironment() != origDstType.getEnvironment())
+      return mlir::failure();
+
     auto *converter = getTypeConverter();
     assert(converter && "Type converter is not set");
 
-    auto retType = converter->convertType(op.getType())
+    auto retType = converter->convertType(origDstType)
                        .dyn_cast_or_null<mlir::MemRefType>();
 
     if (!retType)
@@ -338,7 +350,14 @@ struct CastOpLowering
     if (!mlir::memref::CastOp::areCastCompatible(srcType, retType))
       return mlir::failure();
 
-    rewriter.replaceOpWithNewOp<mlir::memref::CastOp>(op, retType, src);
+    auto results = wrapEnvRegion(
+        rewriter, op->getLoc(), origSrcType.getEnvironment(), retType,
+        [&](mlir::OpBuilder &builder, mlir::Location loc) {
+          return builder.create<mlir::memref::CastOp>(loc, retType, src)
+              .getResult();
+        });
+
+    rewriter.replaceOp(op, results);
     return mlir::success();
   }
 };
