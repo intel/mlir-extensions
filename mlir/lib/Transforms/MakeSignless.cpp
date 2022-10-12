@@ -84,6 +84,29 @@ struct ConvertTensorEmpty
   }
 };
 
+struct ConvertTensorFromElements
+    : public mlir::OpConversionPattern<mlir::tensor::FromElementsOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::tensor::FromElementsOp op,
+                  mlir::tensor::FromElementsOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto converter = this->getTypeConverter();
+    assert(converter);
+
+    auto oldResType = op.getType();
+    auto newResType = converter->convertType(oldResType)
+                          .dyn_cast_or_null<mlir::RankedTensorType>();
+    if (!newResType)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::tensor::FromElementsOp>(
+        op, newResType, adaptor.getElements());
+    return mlir::success();
+  }
+};
+
 struct ConvertLinalgFill
     : public mlir::OpConversionPattern<mlir::linalg::FillOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -185,16 +208,17 @@ void imex::populateMakeSignlessRewritesAndTarget(
   converter.addSourceMaterialization(materializeSignCast);
   converter.addTargetMaterialization(materializeSignCast);
 
-  target.addDynamicallyLegalOp<mlir::memref::AllocOp, mlir::memref::AllocaOp,
-                               mlir::memref::DeallocOp, mlir::tensor::EmptyOp,
-                               mlir::linalg::FillOp, mlir::linalg::GenericOp,
-                               mlir::linalg::YieldOp>(
-      [&](mlir::Operation *op) { return converter.isLegal(op); });
+  target.addDynamicallyLegalOp<
+      mlir::memref::AllocOp, mlir::memref::AllocaOp, mlir::memref::DeallocOp,
+      mlir::tensor::EmptyOp, mlir::tensor::FromElementsOp, mlir::linalg::FillOp,
+      mlir::linalg::GenericOp, mlir::linalg::YieldOp>(
+      [&converter](mlir::Operation *op) { return converter.isLegal(op); });
 
   patterns.insert<ConvertAlloc<mlir::memref::AllocOp>,
                   ConvertAlloc<mlir::memref::AllocaOp>, ConvertDealloc,
-                  ConvertTensorEmpty, ConvertLinalgFill, ConvertLinalgGeneric,
-                  ConvertLinalgYield>(converter, &context);
+                  ConvertTensorEmpty, ConvertTensorFromElements,
+                  ConvertLinalgFill, ConvertLinalgGeneric, ConvertLinalgYield>(
+      converter, &context);
 }
 
 namespace {
