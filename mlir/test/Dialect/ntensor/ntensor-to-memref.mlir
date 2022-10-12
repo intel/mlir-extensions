@@ -223,3 +223,14 @@ func.func @test(%arg1: !ntensor.ntensor<?xf32>) -> memref<?xf32> {
 // CHECK-LABEL: func @test
 //  CHECK-SAME:   (%[[ARG:.*]]: memref<?xf32>)
 //  CHECK-NEXT:   return %[[ARG]] : memref<?xf32>
+
+// -----
+
+func.func @test(%arg1: !ntensor.ntensor<?xf32>) -> !ntensor.ntensor<5xf32> {
+  %0 = ntensor.cast %arg1 : !ntensor.ntensor<?xf32> to !ntensor.ntensor<5xf32>
+  return %0 : !ntensor.ntensor<5xf32>
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG:.*]]: memref<?xf32>)
+//  CHECK-NEXT:   %[[RES:.*]] = memref.cast %[[ARG]] : memref<?xf32> to memref<5xf32>
+//  CHECK-NEXT:   return %[[RES]] : memref<5xf32>
