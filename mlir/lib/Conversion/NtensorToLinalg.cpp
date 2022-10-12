@@ -256,12 +256,37 @@ struct ConvertCastOp : public mlir::OpRewritePattern<imex::ntensor::CastOp> {
     return mlir::success();
   }
 };
+
+struct ConvertFromElementsOp
+    : public mlir::OpRewritePattern<imex::ntensor::FromElementsOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::FromElementsOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto dstType = op.getType().dyn_cast<imex::ntensor::NTensorType>();
+    if (!dstType)
+      return mlir::failure();
+
+    auto elements = op.getElements();
+    if (llvm::any_of(elements.getTypes(), [&](mlir::Type t) {
+          return t != dstType.getElementType();
+        }))
+      return mlir::failure();
+
+    auto dstTensorType = toTensorType(dstType);
+    auto res = rewriter.create<mlir::tensor::FromElementsOp>(
+        op->getLoc(), dstTensorType, elements);
+    rewriter.replaceOpWithNewOp<imex::ntensor::FromTensorOp>(op, dstType, res);
+    return mlir::success();
+  }
+};
 } // namespace
 
 void imex::populateNtensorToLinalgPatterns(mlir::MLIRContext &context,
                                            mlir::RewritePatternSet &patterns) {
   patterns.insert<ConvertCreateOp, ConvertCopyOp, ConvertElementwiseOp,
-                  ConvertCastOp>(&context);
+                  ConvertCastOp, ConvertFromElementsOp>(&context);
 }
 
 namespace {
