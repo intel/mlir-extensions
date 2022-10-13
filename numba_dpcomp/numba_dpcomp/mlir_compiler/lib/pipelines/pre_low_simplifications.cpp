@@ -16,78 +16,22 @@
 
 #include "pipelines/base_pipeline.hpp"
 
-#include "imex/Dialect/imex_util/dialect.hpp"
-#include "imex/Dialect/plier/dialect.hpp"
+#include "imex/Transforms/MakeSignless.hpp"
 #include "imex/Transforms/expand_tuple.hpp"
-#include "imex/Transforms/type_conversion.hpp"
 #include "imex/compiler/pipeline_registry.hpp"
 
-#include <mlir/Dialect/Arith/IR/Arith.h>
-#include <mlir/Dialect/Func/IR/FuncOps.h>
-#include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/Pass/PassManager.h>
-#include <mlir/Transforms/DialectConversion.h>
 #include <mlir/Transforms/Passes.h>
 
-namespace {
-struct MakeSignlessPass
-    : public mlir::PassWrapper<MakeSignlessPass, mlir::OperationPass<void>> {
-  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(MakeSignlessPass)
-
-  virtual void
-  getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<mlir::func::FuncDialect>();
-    registry.insert<plier::PlierDialect>();
-  }
-
-  void runOnOperation() override final {
-    auto module = getOperation();
-    auto *context = &getContext();
-
-    mlir::TypeConverter typeConverter;
-    typeConverter.addConversion([](mlir::Type type) { return type; });
-    typeConverter.addConversion(
-        [](mlir::IntegerType type) -> llvm::Optional<mlir::Type> {
-          if (!type.isSignless()) {
-            return mlir::IntegerType::get(type.getContext(), type.getWidth());
-          }
-          return llvm::None;
-        });
-    imex::populateTupleTypeConverter(*context, typeConverter);
-
-    auto materializeSignCast = [](mlir::OpBuilder &builder, mlir::Type type,
-                                  mlir::ValueRange inputs,
-                                  mlir::Location loc) -> mlir::Value {
-      assert(inputs.size() == 1);
-      return builder.create<imex::util::SignCastOp>(loc, type, inputs[0]);
-    };
-    typeConverter.addArgumentMaterialization(materializeSignCast);
-    typeConverter.addSourceMaterialization(materializeSignCast);
-    typeConverter.addTargetMaterialization(materializeSignCast);
-
-    mlir::RewritePatternSet patterns(context);
-    mlir::ConversionTarget target(*context);
-
-    imex::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
-                                                             patterns, target);
-    imex::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
-                                                       target);
-
-    if (failed(applyFullConversion(module, target, std::move(patterns))))
-      signalPassFailure();
-  }
-};
-
-void populateUntuplePipeline(mlir::OpPassManager &pm) {
+static void populateUntuplePipeline(mlir::OpPassManager &pm) {
   pm.addPass(imex::createExpandTuplePass());
   pm.addPass(mlir::createCanonicalizerPass());
 }
 
-void populateRemoveSignPipeline(mlir::OpPassManager &pm) {
-  pm.addPass(std::make_unique<MakeSignlessPass>());
+static void populateRemoveSignPipeline(mlir::OpPassManager &pm) {
+  pm.addPass(imex::createMakeSignlessPass());
   pm.addPass(mlir::createCanonicalizerPass());
 }
-} // namespace
 
 void registerPreLowSimpleficationsPipeline(imex::PipelineRegistry &registry) {
   registry.registerPipeline([](auto sink) {
