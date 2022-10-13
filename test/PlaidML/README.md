@@ -1,5 +1,4 @@
 # Test from PlaidML
-
 - elementwise : CppEdsl.EltwiseAdd.mlir
 - broadcast : OpTest.BroadcastNonNumpy.mlir
 - transpose : OpTest.Transpose.mlir
