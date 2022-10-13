@@ -108,7 +108,7 @@ static mlir::Value handleSliceIndexVars(mlir::OpBuilder &builder,
   auto posIndex =
       builder.create<mlir::arith::SelectOp>(loc, isNeg, negIndex, source);
   auto isOutOfRange = builder.create<mlir::arith::CmpIOp>(
-      loc, mlir::arith::CmpIPredicate::sgt, posIndex, size);
+      loc, mlir::arith::CmpIPredicate::sge, posIndex, size);
   return builder.create<mlir::arith::SelectOp>(loc, isOutOfRange, size,
                                                posIndex);
 }

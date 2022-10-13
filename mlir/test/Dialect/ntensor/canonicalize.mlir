@@ -77,9 +77,9 @@ func.func @resolve_slice_propagate(%arg: index) -> (index, index, index, index) 
 //  CHECK-NEXT:   %[[BEGIN:.*]] = arith.constant 10 : index
 //  CHECK-NEXT:   %[[END:.*]] = arith.constant 20 : index
 //  CHECK-NEXT:   %[[STEP:.*]] = arith.constant 3 : index
-//  CHECK-NEXT:   %[[CMP1:.*]] = arith.cmpi slt, %[[ARG]], %[[BEGIN]] : index
+//  CHECK-NEXT:   %[[CMP1:.*]] = arith.cmpi sle, %[[ARG]], %[[BEGIN]] : index
 //  CHECK-NEXT:   %[[BEGIN2:.*]] = arith.select %[[CMP1]], %[[ARG]], %[[BEGIN]] : index
-//  CHECK-NEXT:   %[[CMP2:.*]] = arith.cmpi slt, %[[ARG]], %[[END]] : index
+//  CHECK-NEXT:   %[[CMP2:.*]] = arith.cmpi sle, %[[ARG]], %[[END]] : index
 //  CHECK-NEXT:   %[[END2:.*]] = arith.select %[[CMP2]], %[[ARG]], %[[END]] : index
 //  CHECK-NEXT:   %[[V4:.*]] = arith.subi %[[END2]], %1 : index
 //  CHECK-NEXT:   %[[V5:.*]] = arith.addi %[[V4]], %[[C2]] : index
@@ -96,7 +96,7 @@ func.func @resolve_index_propagate(%arg: index) -> index{
 // CHECK-LABEL: func @resolve_index_propagate
 //  CHECK-SAME:   (%[[ARG:.*]]: index)
 //  CHECK-NEXT:   %[[BEGIN:.*]] = arith.constant 10 : index
-//  CHECK-NEXT:   %[[CMP1:.*]] = arith.cmpi slt, %[[ARG]], %[[BEGIN]] : index
+//  CHECK-NEXT:   %[[CMP1:.*]] = arith.cmpi sle, %[[ARG]], %[[BEGIN]] : index
 //  CHECK-NEXT:   %[[BEGIN2:.*]] = arith.select %[[CMP1]], %[[ARG]], %[[BEGIN]] : index
 //  CHECK-NEXT:   return %[[BEGIN2]] : index
 
