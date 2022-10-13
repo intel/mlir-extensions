@@ -1861,7 +1861,8 @@ struct UnitupleExtractToNtensor
                   imex::util::TupleExtractOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto src = adaptor.getSource();
-    if (!isUniTuple(src.getType()))
+    auto elemType = isUniTuple(src.getType());
+    if (!elemType || !imex::ntensor::NTensorType::isValidElementType(*elemType))
       return mlir::failure();
 
     auto converter = getTypeConverter();
@@ -1995,7 +1996,8 @@ struct PlierToNtensorPass
     target.addDynamicallyLegalOp<imex::util::TupleExtractOp>(
         [](imex::util::TupleExtractOp op) -> llvm::Optional<bool> {
           if (auto elemType = isUniTuple(op.getSource().getType()))
-            return !imex::ntensor::NTensorType::isValidElementType(*elemType);
+            if (imex::ntensor::NTensorType::isValidElementType(*elemType))
+              return false;
 
           return llvm::None;
         });
