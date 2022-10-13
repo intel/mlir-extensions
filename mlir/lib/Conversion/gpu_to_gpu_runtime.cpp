@@ -1174,57 +1174,59 @@ struct GPUToSpirvPass
       kernelModules.push_back(builder.clone(*moduleOp.getOperation()));
     });
 
-    auto targetAttr = mlir::spirv::lookupTargetEnvOrDefault(module);
-    auto target = mlir::SPIRVConversionTarget::get(targetAttr);
+    for (auto kernelModule : kernelModules) {
+      auto targetAttr = mlir::spirv::lookupTargetEnvOrDefault(kernelModule);
+      auto target = mlir::SPIRVConversionTarget::get(targetAttr);
 
-    mlir::SPIRVConversionOptions options;
-    options.use64bitIndex = true;
+      mlir::SPIRVConversionOptions options;
+      options.use64bitIndex = true;
 
-    mlir::SPIRVTypeConverter typeConverter(targetAttr, options);
-    mlir::RewritePatternSet patterns(context);
+      mlir::SPIRVTypeConverter typeConverter(targetAttr, options);
+      mlir::RewritePatternSet patterns(context);
 
-    typeConverter.addConversion(
-        [&typeConverter](mlir::MemRefType type) -> llvm::Optional<mlir::Type> {
-          if (!type.hasRank() || !type.getElementType().isIntOrFloat())
-            return mlir::Type(nullptr);
+      typeConverter.addConversion([&typeConverter](mlir::MemRefType type)
+                                      -> llvm::Optional<mlir::Type> {
+        if (!type.hasRank() || !type.getElementType().isIntOrFloat())
+          return mlir::Type(nullptr);
 
-          auto elemType = typeConverter.convertType(type.getElementType());
-          if (!elemType)
-            return mlir::Type(nullptr);
+        auto elemType = typeConverter.convertType(type.getElementType());
+        if (!elemType)
+          return mlir::Type(nullptr);
 
-          auto sc = convertStorageClass(
-              type.getMemorySpace(), mlir::spirv::StorageClass::CrossWorkgroup);
+        auto sc = convertStorageClass(
+            type.getMemorySpace(), mlir::spirv::StorageClass::CrossWorkgroup);
 
-          return mlir::spirv::PointerType::get(elemType, sc);
-        });
+        return mlir::spirv::PointerType::get(elemType, sc);
+      });
 
-    mlir::ScfToSPIRVContext scfToSpirvCtx;
-    mlir::populateSCFToSPIRVPatterns(typeConverter, scfToSpirvCtx, patterns);
-    mlir::populateGPUToSPIRVPatterns(typeConverter, patterns);
-    mlir::populateFuncToSPIRVPatterns(typeConverter, patterns);
-    mlir::cf::populateControlFlowToSPIRVPatterns(typeConverter, patterns);
-    mlir::arith::populateArithToSPIRVPatterns(typeConverter, patterns);
-    mlir::populateMathToSPIRVPatterns(typeConverter, patterns);
+      mlir::ScfToSPIRVContext scfToSpirvCtx;
+      mlir::populateSCFToSPIRVPatterns(typeConverter, scfToSpirvCtx, patterns);
+      mlir::populateGPUToSPIRVPatterns(typeConverter, patterns);
+      mlir::populateFuncToSPIRVPatterns(typeConverter, patterns);
+      mlir::cf::populateControlFlowToSPIRVPatterns(typeConverter, patterns);
+      mlir::arith::populateArithToSPIRVPatterns(typeConverter, patterns);
+      mlir::populateMathToSPIRVPatterns(typeConverter, patterns);
 
-    patterns
-        .insert<ConvertSubviewOp, ConvertCastOp<mlir::memref::CastOp>,
-                ConvertCastOp<mlir::memref::ReinterpretCastOp>, ConvertLoadOp,
-                ConvertStoreOp, ConvertAtomicOps, ConvertFunc, ConvertAssert,
-                ConvertBarrierOp, ConvertMemFenceOp, ConvertUndef,
-                ConvertGlobalOp, ConvertGetGlobalOp>(typeConverter, context);
+      patterns
+          .insert<ConvertSubviewOp, ConvertCastOp<mlir::memref::CastOp>,
+                  ConvertCastOp<mlir::memref::ReinterpretCastOp>, ConvertLoadOp,
+                  ConvertStoreOp, ConvertAtomicOps, ConvertFunc, ConvertAssert,
+                  ConvertBarrierOp, ConvertMemFenceOp, ConvertUndef,
+                  ConvertGlobalOp, ConvertGetGlobalOp>(typeConverter, context);
 
-    patterns.add<
-        SingleDimLaunchConfigConversion<mlir::gpu::SubgroupIdOp,
-                                        mlir::spirv::BuiltIn::SubgroupId>,
-        SingleDimLaunchConfigConversion<mlir::gpu::NumSubgroupsOp,
-                                        mlir::spirv::BuiltIn::NumSubgroups>,
-        SingleDimLaunchConfigConversion<mlir::gpu::SubgroupSizeOp,
-                                        mlir::spirv::BuiltIn::SubgroupSize>>(
-        typeConverter, patterns.getContext());
+      patterns.add<
+          SingleDimLaunchConfigConversion<mlir::gpu::SubgroupIdOp,
+                                          mlir::spirv::BuiltIn::SubgroupId>,
+          SingleDimLaunchConfigConversion<mlir::gpu::NumSubgroupsOp,
+                                          mlir::spirv::BuiltIn::NumSubgroups>,
+          SingleDimLaunchConfigConversion<mlir::gpu::SubgroupSizeOp,
+                                          mlir::spirv::BuiltIn::SubgroupSize>>(
+          typeConverter, patterns.getContext());
 
-    if (failed(
-            applyFullConversion(kernelModules, *target, std::move(patterns))))
-      return signalPassFailure();
+      if (failed(
+              applyFullConversion(kernelModule, *target, std::move(patterns))))
+        return signalPassFailure();
+    }
   }
 };
 
@@ -1370,7 +1372,7 @@ struct AbiAttrsPass
 
 struct SetSPIRVCapabilitiesPass
     : public mlir::PassWrapper<SetSPIRVCapabilitiesPass,
-                               mlir::OperationPass<mlir::ModuleOp>> {
+                               mlir::OperationPass<void>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(SetSPIRVCapabilitiesPass)
 
   virtual void
@@ -1409,8 +1411,10 @@ struct SetSPIRVCapabilitiesPass
         triple, spirv::Vendor::Unknown, spirv::DeviceType::Unknown,
         spirv::TargetEnvAttr::kUnknownDeviceID,
         spirv::getDefaultResourceLimits(context));
-    auto module = getOperation();
-    module->setAttr(spirv::getTargetEnvAttrName(), attr);
+    auto op = getOperation();
+    op->walk([&](mlir::gpu::GPUModuleOp op) {
+      op->setAttr(spirv::getTargetEnvAttrName(), attr);
+    });
   }
 };
 
