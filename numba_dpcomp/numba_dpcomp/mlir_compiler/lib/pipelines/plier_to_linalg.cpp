@@ -534,22 +534,25 @@ struct UnrankedToElementCasts
   }
 };
 
-static bool isUniTuple(mlir::TupleType type) {
+static llvm::Optional<mlir::Type> isUniTuple(mlir::TupleType type) {
   auto count = type.size();
   if (count == 0)
-    return false;
+    return llvm::None;
 
   auto elemType = type.getType(0);
   for (auto i : llvm::seq<size_t>(1, count)) {
     if (type.getType(i) != elemType)
-      return false;
+      return llvm::None;
   }
-  return true;
+  return elemType;
 }
 
-static bool isUniTuple(mlir::Type type) {
+static llvm::Optional<mlir::Type> isUniTuple(mlir::Type type) {
   auto tupleType = type.dyn_cast<mlir::TupleType>();
-  return tupleType && isUniTuple(tupleType);
+  if (!tupleType)
+    return llvm::None;
+
+  return isUniTuple(tupleType);
 }
 
 struct GetItemUniTupleConversionPattern
@@ -1991,8 +1994,8 @@ struct PlierToNtensorPass
 
     target.addDynamicallyLegalOp<imex::util::TupleExtractOp>(
         [](imex::util::TupleExtractOp op) -> llvm::Optional<bool> {
-          if (isUniTuple(op.getSource().getType()))
-            return false;
+          if (auto elemType = isUniTuple(op.getSource().getType()))
+            return !imex::ntensor::NTensorType::isValidElementType(*elemType);
 
           return llvm::None;
         });

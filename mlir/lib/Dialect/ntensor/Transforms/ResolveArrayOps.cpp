@@ -340,7 +340,8 @@ struct GetitemUnitupleOpLowering
 
     auto valType = value.getType();
     auto elemType = isUnituple(valType);
-    if (!elemType || *elemType != op.getType())
+    if (!elemType || *elemType != op.getType() ||
+        !imex::ntensor::NTensorType::isValidElementType(*elemType))
       return mlir::failure();
 
     auto count = static_cast<int64_t>(valType.cast<mlir::TupleType>().size());

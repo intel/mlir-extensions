@@ -91,6 +91,10 @@ imex::ntensor::NTensorBase imex::ntensor::NTensorBase::cloneWith(
                           t.getEnvironment());
 }
 
+bool imex::ntensor::NTensorBase::isValidElementType(Type type) {
+  return type.isIntOrIndexOrFloat();
+}
+
 mlir::Type imex::ntensor::NTensorType::replaceImmediateSubElements(
     llvm::ArrayRef<mlir::Attribute> replAttrs,
     llvm::ArrayRef<mlir::Type> replTypes) const {
