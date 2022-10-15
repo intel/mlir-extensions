@@ -529,9 +529,11 @@ ChangeLayoutOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
 }
 
 namespace {
-static bool canTransformLayoutCast(mlir::MemRefType srcType,
-                                   mlir::MemRefType dstType) {
-  if (!mlir::memref::CastOp::areCastCompatible(srcType, dstType))
+static bool canTransformLayoutCast(mlir::Type src, mlir::Type dst) {
+  auto srcType = src.dyn_cast<mlir::MemRefType>();
+  auto dstType = dst.dyn_cast<mlir::MemRefType>();
+  if (!srcType || !dstType ||
+      !mlir::memref::CastOp::areCastCompatible(srcType, dstType))
     return false;
 
   int64_t srcOffset, dstOffset;
@@ -678,7 +680,7 @@ struct ChangeLayoutCast : public mlir::OpRewritePattern<mlir::memref::CastOp> {
       return mlir::success();
     }
 
-    if (mlir::memref::CastOp::areCastCompatible(srcType, dstType)) {
+    if (canTransformLayoutCast(srcType, dstType)) {
       rewriter.replaceOpWithNewOp<mlir::memref::CastOp>(op, dstType, src);
       return mlir::success();
     }
@@ -706,7 +708,7 @@ struct ChangeLayoutFromCast
       return mlir::success();
     }
 
-    if (mlir::memref::CastOp::areCastCompatible(srcType, dstType)) {
+    if (canTransformLayoutCast(srcType, dstType)) {
       rewriter.replaceOpWithNewOp<mlir::memref::CastOp>(op, dstType, src);
       return mlir::success();
     }
@@ -894,7 +896,7 @@ struct ChangeLayoutIf : public mlir::OpRewritePattern<mlir::scf::YieldOp> {
         auto src = cl.getSource();
         auto srcType = src.getType();
 
-        if (!mlir::memref::CastOp::areCastCompatible(origType, srcType))
+        if (!canTransformLayoutCast(origType, srcType))
           continue;
 
         rewriter.updateRootInPlace(clYield,
