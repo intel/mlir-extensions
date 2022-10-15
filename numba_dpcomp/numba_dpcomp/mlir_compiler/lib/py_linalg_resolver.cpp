@@ -1676,10 +1676,26 @@ static py::object getitemImpl(py::capsule context, py::capsule ssaVal,
   auto &builder = ctx.builder;
   auto loc = ctx.loc;
   auto type = value.getType();
-  if (auto tensor = type.dyn_cast<mlir::ShapedType>()) {
+  if (auto shaped = type.dyn_cast<mlir::ShapedType>()) {
     auto indexVal = ctx.context.unwrapVal(loc, builder, index);
-    auto elemType = tensor.getElementType();
-    auto res = builder.create<plier::GetItemOp>(loc, elemType, value, indexVal);
+    auto elemType = shaped.getElementType();
+
+    mlir::Value array;
+    auto ntensorType = imex::ntensor::NTensorType::get(shaped.getShape(),
+                                                       shaped.getElementType());
+    if (shaped.isa<mlir::MemRefType>()) {
+      array =
+          builder.create<imex::ntensor::FromMemrefOp>(loc, ntensorType, value);
+    } else if (shaped.isa<mlir::RankedTensorType>()) {
+      array =
+          builder.create<imex::ntensor::FromTensorOp>(loc, ntensorType, value);
+    } else if (shaped.isa<imex::ntensor::NTensorType>()) {
+      array = value;
+    } else {
+      throw py::index_error("Invalid shaped type");
+    }
+    auto res = builder.create<imex::ntensor::GetitemOp>(loc, elemType, array,
+                                                        indexVal);
     return ctx.context.createVar(context, res.getResult());
   }
 
