@@ -1517,6 +1517,40 @@ struct SetitemToNtensor : public mlir::OpConversionPattern<plier::SetItemOp> {
   }
 };
 
+struct NtensorGetitemToNtensor
+    : public mlir::OpConversionPattern<imex::ntensor::GetitemOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::GetitemOp op,
+                  imex::ntensor::GetitemOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto converter = getTypeConverter();
+    assert(converter);
+    auto resultType = converter->convertType(op.getType());
+    if (!resultType)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<imex::ntensor::GetitemOp>(
+        op, resultType, adaptor.getSource(), adaptor.getIndex());
+    return mlir::success();
+  }
+};
+
+struct NtensorSetitemToNtensor
+    : public mlir::OpConversionPattern<imex::ntensor::SetitemOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::SetitemOp op,
+                  imex::ntensor::SetitemOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<imex::ntensor::SetitemOp>(
+        op, adaptor.getSource(), adaptor.getIndex(), adaptor.getValue());
+    return mlir::success();
+  }
+};
+
 struct BinopToNtensor : public mlir::OpConversionPattern<plier::BinOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -1908,8 +1942,8 @@ struct PlierToNtensorPass
     typeConverter.addConversion([](mlir::Type type) { return type; });
 
     populateStdTypeConverter(context, typeConverter);
-    imex::populateTupleTypeConverter(context, typeConverter);
     populateArrayTypeConverter(context, typeConverter);
+    imex::populateTupleTypeConverter(context, typeConverter);
     typeConverter.addConversion(
         [](plier::SliceType type) -> llvm::Optional<mlir::Type> {
           return imex::ntensor::SliceType::get(type.getContext());
@@ -1948,6 +1982,12 @@ struct PlierToNtensorPass
             return false;
 
           return llvm::None;
+        });
+
+    target.addDynamicallyLegalOp<imex::ntensor::GetitemOp,
+                                 imex::ntensor::SetitemOp>(
+        [&typeConverter](mlir::Operation *op) {
+          return typeConverter.isLegal(op);
         });
 
     target.addDynamicallyLegalOp<plier::BinOp>(
@@ -2010,6 +2050,8 @@ struct PlierToNtensorPass
         // clang-format off
         GetitemToNtensor,
         SetitemToNtensor,
+        NtensorGetitemToNtensor,
+        NtensorSetitemToNtensor,
         BinopToNtensor,
         BuildSliceToNtensor,
         BuiltinCallsToNtensor,
