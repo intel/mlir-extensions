@@ -1297,11 +1297,11 @@ void MakeStridedLayoutPass::runOnOperation() {
         return llvm::SmallVector<int64_t>(rank, val);
       };
       auto strideVal = mlir::ShapedType::kDynamicStrideOrOffset;
-      auto affineMap = mlir::makeStridedLinearLayoutMap(makeShape(strideVal),
-                                                        strideVal, context);
+      auto layout = mlir::StridedLayoutAttr::get(context, strideVal,
+                                                 makeShape(strideVal));
       auto newMemrefType =
           mlir::MemRefType::get(makeShape(mlir::ShapedType::kDynamicSize),
-                                memrefType.getElementType(), affineMap);
+                                memrefType.getElementType(), layout);
 
       if (newMemrefType != memrefType) {
         newArgTypes[i] = newMemrefType;
@@ -1327,11 +1327,11 @@ void MakeStridedLayoutPass::runOnOperation() {
         return llvm::SmallVector<int64_t>(rank, val);
       };
       auto strideVal = mlir::ShapedType::kDynamicStrideOrOffset;
-      auto affineMap = mlir::makeStridedLinearLayoutMap(
-          makeShape(strideVal), strideVal, builder.getContext());
+      auto layout = mlir::StridedLayoutAttr::get(context, strideVal,
+                                                 makeShape(strideVal));
       auto newmemrefType =
           mlir::MemRefType::get(makeShape(mlir::ShapedType::kDynamicSize),
-                                memrefType.getElementType(), affineMap);
+                                memrefType.getElementType(), layout);
       newResTypes[it.index()] = newmemrefType;
     }
 

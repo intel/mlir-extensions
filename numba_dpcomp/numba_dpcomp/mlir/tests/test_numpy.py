@@ -966,21 +966,16 @@ def test_contigious_layout_opt():
     a = np.array([[1, 2], [3, 4]])
     b = a.T
 
+    layoutStr = "strided<[?, ?], offset: ?>"
     with print_pass_ir([], ["MakeStridedLayoutPass"]):
         assert_equal(py_func(a), jit_func(a))
         ir = get_print_buffer()
-        assert (
-            ir.count("affine_map<(d0, d1)[s0, s1, s2] -> (d0 * s1 + s0 + d1 * s2)>")
-            == 0
-        ), ir
+        assert ir.count(layoutStr) == 0, ir
 
     with print_pass_ir([], ["MakeStridedLayoutPass"]):
         assert_equal(py_func(b), jit_func(b))
         ir = get_print_buffer()
-        assert (
-            ir.count("affine_map<(d0, d1)[s0, s1, s2] -> (d0 * s1 + s0 + d1 * s2)>")
-            == 1
-        ), ir
+        assert ir.count(layoutStr) != 0, ir
 
 
 def test_contigious_layout_return():
