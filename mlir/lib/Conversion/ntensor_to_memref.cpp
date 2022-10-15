@@ -361,6 +361,27 @@ struct CastOpLowering
     return mlir::success();
   }
 };
+
+struct CopyOpLowering
+    : public mlir::OpConversionPattern<imex::ntensor::CopyOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::CopyOp op,
+                  imex::ntensor::CopyOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto src = adaptor.getSource();
+    if (!src.getType().isa<mlir::MemRefType>())
+      return mlir::failure();
+
+    auto dst = adaptor.getTarget();
+    if (!dst.getType().isa<mlir::MemRefType>())
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::memref::CopyOp>(op, src, dst);
+    return mlir::success();
+  }
+};
 } // namespace
 
 void imex::populateNtensorToMemrefRewritesAndTarget(
@@ -375,16 +396,17 @@ void imex::populateNtensorToMemrefRewritesAndTarget(
         return llvm::None;
       });
 
-  patterns.insert<DimOpLowering, SubviewOpLowering, LoadOpLowering,
-                  StoreOpLowering, ToTensorOpLowering, FromTensorOpLowering,
-                  ToMemrefOpLowering, FromMemrefOpLowering, CastOpLowering>(
-      converter, &context);
+  patterns
+      .insert<DimOpLowering, SubviewOpLowering, LoadOpLowering, StoreOpLowering,
+              ToTensorOpLowering, FromTensorOpLowering, ToMemrefOpLowering,
+              FromMemrefOpLowering, CastOpLowering, CopyOpLowering>(converter,
+                                                                    &context);
 
   target.addIllegalOp<imex::ntensor::DimOp, imex::ntensor::SubviewOp,
                       imex::ntensor::LoadOp, imex::ntensor::StoreOp,
                       imex::ntensor::ToTensorOp, imex::ntensor::FromTensorOp,
                       imex::ntensor::ToMemrefOp, imex::ntensor::FromMemrefOp,
-                      imex::ntensor::CastOp>();
+                      imex::ntensor::CastOp, imex::ntensor::CopyOp>();
 }
 
 namespace {
