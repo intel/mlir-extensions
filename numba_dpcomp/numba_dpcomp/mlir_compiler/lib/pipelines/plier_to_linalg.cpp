@@ -3440,7 +3440,7 @@ struct BufferizeExtractSlice
             .cast<mlir::MemRefType>();
 
       return mlir::memref::SubViewOp::inferRankReducedResultType(
-                 getDynShape(dstRank), srcType, offsets, sizes, strides)
+                 dstType.getShape(), srcType, offsets, sizes, strides)
           .cast<mlir::MemRefType>();
     }();
     auto loc = op->getLoc();
@@ -3558,53 +3558,52 @@ struct AdditionalBufferize
     registry.insert<imex::util::ImexUtilDialect>();
   }
 
-  void runOnOperation() override;
-};
+  void runOnOperation() override {
+    auto *context = &getContext();
 
-void AdditionalBufferize::runOnOperation() {
-  auto *context = &getContext();
+    mlir::bufferization::BufferizeTypeConverter typeConverter;
+    imex::populateTupleTypeConverter(*context, typeConverter);
 
-  mlir::bufferization::BufferizeTypeConverter typeConverter;
-  imex::populateTupleTypeConverter(*context, typeConverter);
+    auto materializeTupleCast =
+        [](mlir::OpBuilder &builder, mlir::Type type, mlir::ValueRange inputs,
+           mlir::Location loc) -> llvm::Optional<mlir::Value> {
+      if (inputs.size() != 1)
+        return llvm::None;
 
-  auto materializeTupleCast =
-      [](mlir::OpBuilder &builder, mlir::Type type, mlir::ValueRange inputs,
-         mlir::Location loc) -> llvm::Optional<mlir::Value> {
-    if (inputs.size() != 1)
+      auto input = inputs.front();
+      if (input.getType().isa<mlir::TupleType>() || type.isa<mlir::TupleType>())
+        return builder.createOrFold<plier::CastOp>(loc, type, input);
+
       return llvm::None;
+    };
+    typeConverter.addArgumentMaterialization(materializeTupleCast);
+    typeConverter.addSourceMaterialization(materializeTupleCast);
+    typeConverter.addTargetMaterialization(materializeTupleCast);
 
-    auto input = inputs.front();
-    if (input.getType().isa<mlir::TupleType>() || type.isa<mlir::TupleType>())
-      return builder.createOrFold<plier::CastOp>(loc, type, input);
+    mlir::RewritePatternSet patterns(context);
+    mlir::ConversionTarget target(*context);
 
-    return llvm::None;
-  };
-  typeConverter.addArgumentMaterialization(materializeTupleCast);
-  typeConverter.addSourceMaterialization(materializeTupleCast);
-  typeConverter.addTargetMaterialization(materializeTupleCast);
+    imex::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
+                                                             patterns, target);
+    imex::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
+                                                       target);
+    target
+        .addIllegalOp<mlir::tensor::ReshapeOp, mlir::tensor::ExtractSliceOp>();
+    target.addIllegalOp<imex::util::ForceCopyOp>();
+    target.addLegalOp<mlir::memref::ReshapeOp>();
+    target.addDynamicallyLegalOp<imex::util::PseudoCopyOp>(
+        [](mlir::Operation *op) {
+          return !op->getResultTypes().front().isa<mlir::RankedTensorType>();
+        });
 
-  mlir::RewritePatternSet patterns(context);
-  mlir::ConversionTarget target(*context);
+    patterns.insert<BufferizeReshape, BufferizeExtractSlice, BufferizeForceCopy,
+                    BufferizePseudoCopy>(typeConverter, context);
 
-  imex::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
-                                                           patterns, target);
-  imex::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
-                                                     target);
-  target.addIllegalOp<mlir::tensor::ReshapeOp, mlir::tensor::ExtractSliceOp>();
-  target.addIllegalOp<imex::util::ForceCopyOp>();
-  target.addLegalOp<mlir::memref::ReshapeOp>();
-  target.addDynamicallyLegalOp<imex::util::PseudoCopyOp>(
-      [](mlir::Operation *op) {
-        return !op->getResultTypes().front().isa<mlir::RankedTensorType>();
-      });
-
-  patterns.insert<BufferizeReshape, BufferizeExtractSlice, BufferizeForceCopy,
-                  BufferizePseudoCopy>(typeConverter, context);
-
-  if (failed(
-          applyPartialConversion(getOperation(), target, std::move(patterns))))
-    signalPassFailure();
-}
+    if (failed(applyPartialConversion(getOperation(), target,
+                                      std::move(patterns))))
+      signalPassFailure();
+  }
+};
 
 struct RemovePseudoCopy
     : public mlir::OpRewritePattern<imex::util::PseudoCopyOp> {
