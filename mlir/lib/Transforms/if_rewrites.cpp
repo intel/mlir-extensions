@@ -16,10 +16,22 @@
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
+#include <mlir/IR/PatternMatch.h>
+
+namespace {
+struct IfOpConstCond : public mlir::OpRewritePattern<mlir::scf::IfOp> {
+  IfOpConstCond(mlir::MLIRContext *context)
+      : mlir::OpRewritePattern<mlir::scf::IfOp>(context, /*benefit*/ 1) {}
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::scf::IfOp op,
+                  mlir::PatternRewriter &rewriter) const override;
+};
+} // namespace
 
 mlir::LogicalResult
-imex::IfOpConstCond::matchAndRewrite(mlir::scf::IfOp op,
-                                     mlir::PatternRewriter &rewriter) const {
+IfOpConstCond::matchAndRewrite(mlir::scf::IfOp op,
+                               mlir::PatternRewriter &rewriter) const {
   auto cond = op.getCondition().getDefiningOp<mlir::arith::CmpIOp>();
   if (!cond)
     return mlir::failure();
@@ -64,4 +76,9 @@ imex::IfOpConstCond::matchAndRewrite(mlir::scf::IfOp op,
   }
 
   return mlir::success();
+}
+
+void imex::populateIfRewritesPatterns(mlir::MLIRContext &context,
+                                      mlir::RewritePatternSet &patterns) {
+  patterns.insert<IfOpConstCond>(&context);
 }
