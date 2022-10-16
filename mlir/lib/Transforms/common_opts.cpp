@@ -163,7 +163,6 @@ void imex::populateCommonOptsPatterns(mlir::MLIRContext &context,
   patterns.insert<
       // clang-format off
 //      LoopInvariantCodeMotion, TODO
-      imex::IfOpConstCond,
       imex::CSERewrite<mlir::func::FuncOp, /*recusive*/ false>,
       SubviewLoadPropagate,
       SubviewStorePropagate,
@@ -171,6 +170,7 @@ void imex::populateCommonOptsPatterns(mlir::MLIRContext &context,
       // clang-format on
       >(&context);
 
+  imex::populateIfRewritesPatterns(context, patterns);
   imex::populateLoopRewritesPatterns(context, patterns);
   imex::populateIndexPropagatePatterns(context, patterns);
 }

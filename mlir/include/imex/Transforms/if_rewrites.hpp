@@ -14,22 +14,13 @@
 
 #pragma once
 
-#include <mlir/IR/PatternMatch.h>
-
 namespace mlir {
-class SelectOp;
-namespace scf {
-class IfOp;
-}
+class MLIRContext;
+class RewritePatternSet;
 } // namespace mlir
 
 namespace imex {
-struct IfOpConstCond : public mlir::OpRewritePattern<mlir::scf::IfOp> {
-  IfOpConstCond(mlir::MLIRContext *context)
-      : mlir::OpRewritePattern<mlir::scf::IfOp>(context, /*benefit*/ 1) {}
+void populateIfRewritesPatterns(mlir::MLIRContext &context,
+                                mlir::RewritePatternSet &patterns);
 
-  mlir::LogicalResult
-  matchAndRewrite(mlir::scf::IfOp op,
-                  mlir::PatternRewriter &rewriter) const override;
-};
 } // namespace imex
