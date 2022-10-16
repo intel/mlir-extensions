@@ -20,8 +20,7 @@
 mlir::LogicalResult
 imex::IfOpConstCond::matchAndRewrite(mlir::scf::IfOp op,
                                      mlir::PatternRewriter &rewriter) const {
-  auto cond = mlir::dyn_cast_or_null<mlir::arith::CmpIOp>(
-      op.getCondition().getDefiningOp());
+  auto cond = op.getCondition().getDefiningOp<mlir::arith::CmpIOp>();
   if (!cond)
     return mlir::failure();
 
@@ -32,13 +31,12 @@ imex::IfOpConstCond::matchAndRewrite(mlir::scf::IfOp op,
     return false;
   };
 
-  auto replace = [&](mlir::Block &block, mlir::Value to_replace,
-                     mlir::Value new_val) {
-    for (auto &use : llvm::make_early_inc_range(to_replace.getUses())) {
+  auto replace = [&](mlir::Block &block, mlir::Value toReplace,
+                     mlir::Value newVal) {
+    for (auto &use : llvm::make_early_inc_range(toReplace.getUses())) {
       auto owner = use.getOwner();
-      if (block.findAncestorOpInBlock(*owner)) {
-        rewriter.updateRootInPlace(owner, [&]() { use.set(new_val); });
-      }
+      if (block.findAncestorOpInBlock(*owner))
+        rewriter.updateRootInPlace(owner, [&]() { use.set(newVal); });
     }
   };
 
@@ -58,9 +56,9 @@ imex::IfOpConstCond::matchAndRewrite(mlir::scf::IfOp op,
   }
 
   if (pred == mlir::arith::CmpIPredicate::eq) {
-    replace(op.getThenRegion().front(), toReplace, constVal);
-  } else if (pred == mlir::arith::CmpIPredicate::ne) {
-    replace(op.getElseRegion().front(), toReplace, constVal);
+    replace(*op.thenBlock(), toReplace, constVal);
+  } else if (pred == mlir::arith::CmpIPredicate::ne && op.elseBlock()) {
+    replace(*op.elseBlock(), toReplace, constVal);
   } else {
     return mlir::failure();
   }
