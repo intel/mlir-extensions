@@ -26,8 +26,8 @@
 
 template <typename F>
 static llvm::SmallVector<mlir::Value>
-wrapEnvRegion(mlir::OpBuilder &builder, mlir::Location loc, mlir::Attribute env,
-              mlir::TypeRange results, F &&func) {
+wrapEnvRegion(mlir::ConversionPatternRewriter &builder, mlir::Location loc,
+              mlir::Attribute env, mlir::TypeRange results, F &&func) {
   if (!env) {
     auto res = func(builder, loc);
     mlir::ValueRange range(res);
@@ -36,7 +36,7 @@ wrapEnvRegion(mlir::OpBuilder &builder, mlir::Location loc, mlir::Attribute env,
   }
 
   auto bodyBuilder = [&](mlir::OpBuilder &b, mlir::Location l) {
-    auto res = func(b, l);
+    auto res = func(static_cast<mlir::ConversionPatternRewriter &>(b), l);
     mlir::ValueRange range(res);
     assert(range.getTypes() == results && "Invalid result types");
     b.create<imex::util::EnvironmentRegionYieldOp>(l, range);
@@ -361,6 +361,45 @@ struct CastOpLowering
     return mlir::success();
   }
 };
+
+struct CopyOpLowering
+    : public mlir::OpConversionPattern<imex::ntensor::CopyOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::CopyOp op,
+                  imex::ntensor::CopyOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto src = adaptor.getSource();
+    if (!src.getType().isa<mlir::MemRefType>())
+      return mlir::failure();
+
+    auto dst = adaptor.getTarget();
+    if (!dst.getType().isa<mlir::MemRefType>())
+      return mlir::failure();
+
+    auto origSrcType =
+        op.getSource().getType().dyn_cast<imex::ntensor::NTensorType>();
+    if (!origSrcType)
+      return mlir::failure();
+
+    auto origDstType =
+        op.getTarget().getType().dyn_cast<imex::ntensor::NTensorType>();
+    if (!origDstType)
+      return mlir::failure();
+
+    if (origSrcType.getEnvironment() != origDstType.getEnvironment())
+      return mlir::failure();
+
+    wrapEnvRegion(
+        rewriter, op->getLoc(), origSrcType.getEnvironment(), llvm::None,
+        [&](mlir::ConversionPatternRewriter &builder, mlir::Location /*loc*/) {
+          builder.replaceOpWithNewOp<mlir::memref::CopyOp>(op, src, dst);
+          return llvm::None;
+        });
+    return mlir::success();
+  }
+};
 } // namespace
 
 void imex::populateNtensorToMemrefRewritesAndTarget(
@@ -375,16 +414,17 @@ void imex::populateNtensorToMemrefRewritesAndTarget(
         return llvm::None;
       });
 
-  patterns.insert<DimOpLowering, SubviewOpLowering, LoadOpLowering,
-                  StoreOpLowering, ToTensorOpLowering, FromTensorOpLowering,
-                  ToMemrefOpLowering, FromMemrefOpLowering, CastOpLowering>(
-      converter, &context);
+  patterns
+      .insert<DimOpLowering, SubviewOpLowering, LoadOpLowering, StoreOpLowering,
+              ToTensorOpLowering, FromTensorOpLowering, ToMemrefOpLowering,
+              FromMemrefOpLowering, CastOpLowering, CopyOpLowering>(converter,
+                                                                    &context);
 
   target.addIllegalOp<imex::ntensor::DimOp, imex::ntensor::SubviewOp,
                       imex::ntensor::LoadOp, imex::ntensor::StoreOp,
                       imex::ntensor::ToTensorOp, imex::ntensor::FromTensorOp,
                       imex::ntensor::ToMemrefOp, imex::ntensor::FromMemrefOp,
-                      imex::ntensor::CastOp>();
+                      imex::ntensor::CastOp, imex::ntensor::CopyOp>();
 }
 
 namespace {

@@ -248,3 +248,27 @@ func.func @test(%arg1: !ntensor.ntensor<?xf32, "test">) -> !ntensor.ntensor<5xf3
 //  CHECK-NEXT:   imex_util.env_region_yield %[[RES1]] : memref<5xf32>
 //  CHECK-NEXT:   }
 //  CHECK-NEXT:   return %[[RES]] : memref<5xf32>
+
+// -----
+
+func.func @test(%arg1: !ntensor.ntensor<?xf32>, %arg2: !ntensor.ntensor<?xf32>) {
+  ntensor.copy %arg1, %arg2 : !ntensor.ntensor<?xf32> to !ntensor.ntensor<?xf32>
+  return
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG1:.*]]: memref<?xf32>, %[[ARG2:.*]]: memref<?xf32>)
+//  CHECK-NEXT:   memref.copy %[[ARG1]], %[[ARG2]] : memref<?xf32> to memref<?xf32>
+//  CHECK-NEXT:   return
+
+// -----
+
+func.func @test(%arg1: !ntensor.ntensor<?xf32, "test">, %arg2: !ntensor.ntensor<?xf32, "test">) {
+  ntensor.copy %arg1, %arg2 : !ntensor.ntensor<?xf32, "test"> to !ntensor.ntensor<?xf32, "test">
+  return
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG1:.*]]: memref<?xf32>, %[[ARG2:.*]]: memref<?xf32>)
+//  CHECK-NEXT:   imex_util.env_region "test" {
+//  CHECK-NEXT:   memref.copy %[[ARG1]], %[[ARG2]] : memref<?xf32> to memref<?xf32>
+//  CHECK-NEXT:   }
+//  CHECK-NEXT:   return
