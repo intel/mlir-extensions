@@ -1079,19 +1079,15 @@ struct ChangeLayoutExpandShape
     if (!mlir::isStrided(srcType))
       return mlir::failure();
 
-    llvm::SmallVector<int64_t> strides(
-        dstType.getRank(), mlir::ShapedType::kDynamicStrideOrOffset);
-    auto newDstMap = mlir::makeStridedLinearLayoutMap(
-        strides, mlir::ShapedType::kDynamicStrideOrOffset, op->getContext());
-    if (!newDstMap)
+    auto reassoc = op.getReassociationIndices();
+    auto newDstType = mlir::memref::ExpandShapeOp::computeExpandedType(
+        srcType, dstType.getShape(), reassoc);
+    if (mlir::failed(newDstType))
       return mlir::failure();
-
-    auto newDstType = mlir::MemRefType::get(
-        dstType.getShape(), dstType.getElementType(), newDstMap);
 
     auto loc = op->getLoc();
     mlir::Value newOp = rewriter.create<mlir::memref::ExpandShapeOp>(
-        loc, newDstType, src, op.getReassociationIndices());
+        loc, *newDstType, src, reassoc);
     rewriter.replaceOpWithNewOp<imex::util::ChangeLayoutOp>(op, dstType, newOp);
     return mlir::success();
   }
