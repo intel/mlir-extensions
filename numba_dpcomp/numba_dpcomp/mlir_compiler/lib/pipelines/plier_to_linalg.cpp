@@ -14,10 +14,7 @@
 
 #include "pipelines/plier_to_linalg.hpp"
 
-#include <mlir/Conversion/AffineToStandard/AffineToStandard.h>
 #include <mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h>
-#include <mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h>
-#include <mlir/Dialect/Affine/IR/AffineOps.h>
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Arith/Transforms/Passes.h>
 #include <mlir/Dialect/Bufferization/IR/Bufferization.h>
@@ -53,7 +50,6 @@
 #include "imex/Dialect/ntensor/Transforms/ResolveArrayOps.hpp"
 #include "imex/Dialect/plier/dialect.hpp"
 #include "imex/Transforms/MakeSignless.hpp"
-#include "imex/Transforms/call_lowering.hpp"
 #include "imex/Transforms/canonicalize_reductions.hpp"
 #include "imex/Transforms/cast_utils.hpp"
 #include "imex/Transforms/common_opts.hpp"
@@ -1811,9 +1807,9 @@ struct GetitemArrayOpLowering
 };
 
 static PyLinalgResolver::Values
-castRetTypes2(mlir::Location loc, mlir::PatternRewriter &rewriter,
-              mlir::Operation *op,
-              llvm::Optional<PyLinalgResolver::Values> vals) {
+castRetTypes(mlir::Location loc, mlir::PatternRewriter &rewriter,
+             mlir::Operation *op,
+             llvm::Optional<PyLinalgResolver::Values> vals) {
   auto results = std::move(vals).value();
   assert(results.size() == op->getNumResults());
   for (auto it : llvm::enumerate(results)) {
@@ -1856,7 +1852,7 @@ struct NtensorPrimitiveCallsLowering final
     if (!res)
       return mlir::failure();
 
-    auto results = castRetTypes2(loc, rewriter, op, res);
+    auto results = castRetTypes(loc, rewriter, op, res);
 
     rerunScfPipeline(op);
     rewriter.replaceOp(op, results);
@@ -2457,121 +2453,6 @@ struct SliceOfGeneric : public mlir::OpRewritePattern<mlir::linalg::GenericOp> {
     return mlir::success();
   }
 };
-
-static bool isShaped(mlir::TypeConverter &converter, mlir::Type type) {
-  return !!converter.convertType(type).dyn_cast_or_null<mlir::ShapedType>();
-}
-
-void PlierToLinalgPass::runOnOperation() {
-  auto &context = getContext();
-
-  mlir::TypeConverter typeConverter;
-  // Convert unknown types to itself
-  typeConverter.addConversion([](mlir::Type type) { return type; });
-  populateStdTypeConverter(context, typeConverter);
-  imex::populateTupleTypeConverter(context, typeConverter);
-  populateArrayTypeConverter(context, typeConverter);
-
-  auto materializeCast = [](mlir::OpBuilder &builder, mlir::Type type,
-                            mlir::ValueRange inputs,
-                            mlir::Location loc) -> llvm::Optional<mlir::Value> {
-    if (inputs.size() == 1)
-      return builder
-          .create<mlir::UnrealizedConversionCastOp>(loc, type, inputs.front())
-          .getResult(0);
-
-    return llvm::None;
-  };
-  typeConverter.addArgumentMaterialization(materializeCast);
-  typeConverter.addSourceMaterialization(materializeCast);
-  typeConverter.addTargetMaterialization(materializeCast);
-
-  mlir::RewritePatternSet patterns(&context);
-  mlir::ConversionTarget target(context);
-
-  imex::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
-                                                     target);
-
-  target.addDynamicallyLegalOp<imex::util::TupleExtractOp>(
-      [](imex::util::TupleExtractOp op) -> llvm::Optional<bool> {
-        auto containerType = op.getSource().getType();
-        if (isUniTuple(containerType) &&
-            !mlir::getConstantIntValue(op.getIndex()))
-          return false;
-
-        return llvm::None;
-      });
-
-  target.addDynamicallyLegalOp<plier::GetItemOp>(
-      [&typeConverter](plier::GetItemOp op) -> llvm::Optional<bool> {
-        auto containerType = op.getValue().getType();
-        if (isShaped(typeConverter, containerType))
-          return false;
-
-        return llvm::None;
-      });
-
-  target.addDynamicallyLegalOp<plier::SetItemOp>(
-      [&typeConverter](plier::SetItemOp op) -> bool {
-        return !isShaped(typeConverter, op.getTarget().getType());
-      });
-
-  target.addDynamicallyLegalOp<plier::CastOp>([&](plier::CastOp op) -> bool {
-    auto inputType = op.getValue().getType();
-    auto srcType = typeConverter.convertType(inputType);
-    auto dstType = typeConverter.convertType(op.getType());
-    if (!srcType || !dstType)
-      return true;
-
-    if (srcType.isa<mlir::TupleType>() && dstType.isa<mlir::TupleType>()) {
-      auto srcTuple = srcType.cast<mlir::TupleType>();
-      auto dstTuple = dstType.cast<mlir::TupleType>();
-      for (auto it : llvm::zip(srcTuple.getTypes(), dstTuple.getTypes())) {
-        auto src = typeConverter.convertType(std::get<0>(it));
-        auto dst = typeConverter.convertType(std::get<1>(it));
-        if (src && dst && src != dst &&
-            src.isa<mlir::TensorType, mlir::MemRefType>() &&
-            dst.isa<mlir::TensorType, mlir::MemRefType>())
-          return false;
-      }
-      return true;
-    }
-
-    auto isZeroRank = [](mlir::Type t) -> bool {
-      auto shaped = t.dyn_cast<mlir::ShapedType>();
-      return shaped && shaped.getRank() == 0;
-    };
-
-    if ((isZeroRank(srcType) && dstType.isIntOrIndexOrFloat()) ||
-        (isZeroRank(dstType) && srcType.isIntOrIndexOrFloat()))
-      return false;
-
-    if (srcType == dstType && inputType != op.getType())
-      return false;
-
-    return srcType == dstType || !(srcType.isa<mlir::ShapedType>() &&
-                                   dstType.isa<mlir::ShapedType>());
-  });
-
-  imex::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
-                                                           patterns, target);
-
-  patterns.insert<
-      // clang-format off
-      GetitemOpLowering,
-      GetitemOpArrLowering,
-      SetitemOpLowering,
-      LowerTupleCasts,
-      LowerTensorCasts,
-      UnrankedToElementCasts,
-      GetItemUniTupleConversionPattern
-      // clang-format on
-      >(typeConverter, &context);
-
-  if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
-                                                std::move(patterns))))
-    signalPassFailure();
-}
 
 struct OptimizeGlobalsConstsLoad
     : public mlir::OpRewritePattern<mlir::memref::LoadOp> {
