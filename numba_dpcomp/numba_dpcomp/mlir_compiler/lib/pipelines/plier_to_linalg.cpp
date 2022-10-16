@@ -2768,28 +2768,6 @@ struct BufferizeForceCopy
   }
 };
 
-struct BufferizePseudoCopy
-    : public mlir::OpConversionPattern<imex::util::PseudoCopyOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(imex::util::PseudoCopyOp op,
-                  imex::util::PseudoCopyOp::Adaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
-    auto converter = getTypeConverter();
-    assert(converter);
-    auto dstType = converter->convertType(op.getType())
-                       .dyn_cast_or_null<mlir::MemRefType>();
-
-    if (!dstType)
-      return mlir::failure();
-
-    auto arg = adaptor.getSource();
-    rewriter.replaceOpWithNewOp<imex::util::PseudoCopyOp>(op, dstType, arg);
-    return mlir::success();
-  }
-};
-
 struct FixDeallocPlacement
     : public mlir::OpRewritePattern<mlir::memref::DeallocOp> {
   using mlir::OpRewritePattern<mlir::memref::DeallocOp>::OpRewritePattern;
@@ -2872,52 +2850,16 @@ struct AdditionalBufferize
         .addIllegalOp<mlir::tensor::ReshapeOp, mlir::tensor::ExtractSliceOp>();
     target.addIllegalOp<imex::util::ForceCopyOp>();
     target.addLegalOp<mlir::memref::ReshapeOp>();
-    target.addDynamicallyLegalOp<imex::util::PseudoCopyOp>(
-        [](mlir::Operation *op) {
-          return !op->getResultTypes().front().isa<mlir::RankedTensorType>();
-        });
 
-    patterns.insert<BufferizeReshape, BufferizeExtractSlice, BufferizeForceCopy,
-                    BufferizePseudoCopy>(typeConverter, context);
+    patterns
+        .insert<BufferizeReshape, BufferizeExtractSlice, BufferizeForceCopy>(
+            typeConverter, context);
 
     if (failed(applyPartialConversion(getOperation(), target,
                                       std::move(patterns))))
       signalPassFailure();
   }
 };
-
-struct RemovePseudoCopy
-    : public mlir::OpRewritePattern<imex::util::PseudoCopyOp> {
-  using OpRewritePattern::OpRewritePattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(imex::util::PseudoCopyOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto arg = op.getSource();
-    if (arg.getType() != op.getType())
-      return mlir::failure();
-
-    rewriter.replaceOp(op, arg);
-    return mlir::success();
-  }
-};
-
-struct ReplaceMemrefCopy : public mlir::OpRewritePattern<mlir::memref::CopyOp> {
-  using OpRewritePattern::OpRewritePattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(mlir::memref::CopyOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    genCopy(rewriter, op->getLoc(), op.getSource(), op.getTarget());
-    rewriter.eraseOp(op);
-    return mlir::success();
-  }
-};
-
-struct RemovePseudoCopyPass
-    : public imex::RewriteWrapperPass<RemovePseudoCopyPass, mlir::func::FuncOp,
-                                      void, RemovePseudoCopy,
-                                      ReplaceMemrefCopy> {};
 
 struct CloneArgsPass
     : public mlir::PassWrapper<CloneArgsPass,
@@ -3063,8 +3005,6 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::func::FuncOp>(
       mlir::bufferization::createFinalizingBufferizePass());
 
-  pm.addNestedPass<mlir::func::FuncOp>(
-      std::make_unique<RemovePseudoCopyPass>());
   pm.addPass(mlir::createCanonicalizerPass());
 
   pm.addNestedPass<mlir::func::FuncOp>(
