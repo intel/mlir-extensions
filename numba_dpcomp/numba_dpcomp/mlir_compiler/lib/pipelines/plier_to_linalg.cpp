@@ -2017,13 +2017,8 @@ struct BinOpsLowering : public mlir::OpRewritePattern<imex::ntensor::BinaryOp> {
 };
 
 struct ResolveNtensorPass
-    : public mlir::PassWrapper<ResolveNtensorPass,
-                               mlir::OperationPass<mlir::ModuleOp>> {
+    : public mlir::PassWrapper<ResolveNtensorPass, mlir::OperationPass<void>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(ResolveNtensorPass)
-
-  ResolveNtensorPass()
-      : resolver(std::make_shared<NumpyResolver>(
-            "numba_dpcomp.mlir.numpy.funcs", "_get_func")) {}
 
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
@@ -2044,6 +2039,31 @@ struct ResolveNtensorPass
         .insert<GetitemArrayOpLowering, NtensorPrimitiveCallsLowering,
                 BuiltinCallsLowering, BinOpsLowering, ExternalCallsResolver>(
             &ctx);
+
+    (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
+                                             std::move(patterns));
+  }
+};
+
+struct ResolveNumpyFuncsPass
+    : public mlir::PassWrapper<ResolveNumpyFuncsPass,
+                               mlir::OperationPass<void>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(ResolveNumpyFuncsPass)
+
+  ResolveNumpyFuncsPass()
+      : resolver(std::make_shared<NumpyResolver>(
+            "numba_dpcomp.mlir.numpy.funcs", "_get_func")) {}
+
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<imex::ntensor::NTensorDialect>();
+    registry.insert<imex::util::ImexUtilDialect>();
+    registry.insert<mlir::arith::ArithDialect>();
+  }
+
+  void runOnOperation() override {
+    auto &ctx = getContext();
+    mlir::RewritePatternSet patterns(&ctx);
 
     patterns.insert<NumpyCallsResolver>(&ctx, *resolver);
 
@@ -3007,6 +3027,7 @@ static void populatePlierToLinalgGenPipeline(mlir::OpPassManager &pm) {
       std::make_unique<MarkContigiousArraysPass>());
   pm.addPass(std::make_unique<PlierToNtensorPass>());
   pm.addPass(mlir::createCanonicalizerPass());
+  pm.addPass(std::make_unique<ResolveNumpyFuncsPass>());
   pm.addPass(std::make_unique<ResolveNtensorPass>());
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(imex::createNtensorToLinalgPass());
