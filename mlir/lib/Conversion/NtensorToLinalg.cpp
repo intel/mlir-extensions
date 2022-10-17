@@ -313,26 +313,32 @@ struct ConvertSubviewOp
     if (!dstType)
       return mlir::failure();
 
-    auto srcTensorType = toTensorType(srcType);
+    if (srcType.getEnvironment() != dstType.getEnvironment())
+      return mlir::failure();
 
-    auto loc = op->getLoc();
-    mlir::Value srcTensor =
-        rewriter.create<imex::ntensor::ToTensorOp>(loc, srcTensorType, src);
+    auto results = wrapEnvRegion(
+        rewriter, op->getLoc(), dstType.getEnvironment(), dstType,
+        [&](mlir::PatternRewriter &builder, mlir::Location loc) {
+          auto srcTensorType = toTensorType(srcType);
+          mlir::Value srcTensor = builder.create<imex::ntensor::ToTensorOp>(
+              loc, srcTensorType, src);
 
-    auto offsets = op.getMixedOffsets();
-    auto sizes = op.getMixedSizes();
-    auto strides = op.getMixedStrides();
+          auto offsets = op.getMixedOffsets();
+          auto sizes = op.getMixedSizes();
+          auto strides = op.getMixedStrides();
 
-    auto dstRank = static_cast<unsigned>(dstType.getRank());
-    auto viewTensorType =
-        mlir::tensor::ExtractSliceOp::inferCanonicalRankReducedResultType(
-            dstRank, srcTensorType, offsets, sizes, strides);
+          auto dstRank = static_cast<unsigned>(dstType.getRank());
+          auto viewTensorType =
+              mlir::tensor::ExtractSliceOp::inferCanonicalRankReducedResultType(
+                  dstRank, srcTensorType, offsets, sizes, strides);
 
-    mlir::Value view = rewriter.create<mlir::tensor::ExtractSliceOp>(
-        loc, viewTensorType, srcTensor, offsets, sizes, strides);
-    mlir::Value result =
-        rewriter.create<imex::ntensor::FromTensorOp>(loc, dstType, view);
-    rewriter.replaceOp(op, result);
+          mlir::Value view = builder.create<mlir::tensor::ExtractSliceOp>(
+              loc, viewTensorType, srcTensor, offsets, sizes, strides);
+          mlir::Value result =
+              builder.create<imex::ntensor::FromTensorOp>(loc, dstType, view);
+          return result;
+        });
+    rewriter.replaceOp(op, results);
     return mlir::success();
   }
 };

@@ -223,3 +223,20 @@ func.func @test(%arg1: !ntensor.ntensor<?x?xf32>, %arg2: index, %arg3: index, %a
 //  CHECK-NEXT:   %[[T2:.*]] = tensor.extract_slice %[[T1]][1, %[[ARG2]]] [2, %[[ARG3]]] [3, %[[ARG4]]] : tensor<?x?xf32> to tensor<2x?xf32>
 //  CHECK-NEXT:   %[[T3:.*]] = ntensor.from_tensor %[[T2]] : tensor<2x?xf32> to !ntensor.ntensor<?x?xf32>
 //  CHECK-NEXT:   return %[[T3]] : !ntensor.ntensor<?x?xf32>
+
+// -----
+
+func.func @test(%arg1: !ntensor.ntensor<?x?xf32, "test">, %arg2: index, %arg3: index, %arg4: index) -> !ntensor.ntensor<?x?xf32, "test"> {
+  %1 = ntensor.subview %arg1[1, %arg2][2, %arg3][3, %arg4] : !ntensor.ntensor<?x?xf32, "test"> to !ntensor.ntensor<?x?xf32, "test">
+  return %1 : !ntensor.ntensor<?x?xf32, "test">
+}
+
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG1:.*]]: !ntensor.ntensor<?x?xf32, "test">, %[[ARG2:.*]]: index, %[[ARG3:.*]]: index, %[[ARG4:.*]]: index)
+//  CHECK-NEXT:   %[[RES:.*]] = imex_util.env_region "test" -> !ntensor.ntensor<?x?xf32, "test"> {
+//  CHECK-NEXT:   %[[T1:.*]] = ntensor.to_tensor %[[ARG1]] : !ntensor.ntensor<?x?xf32, "test"> to tensor<?x?xf32>
+//  CHECK-NEXT:   %[[T2:.*]] = tensor.extract_slice %[[T1]][1, %[[ARG2]]] [2, %[[ARG3]]] [3, %[[ARG4]]] : tensor<?x?xf32> to tensor<2x?xf32>
+//  CHECK-NEXT:   %[[T3:.*]] = ntensor.from_tensor %[[T2]] : tensor<2x?xf32> to !ntensor.ntensor<?x?xf32, "test">
+//  CHECK-NEXT:   imex_util.env_region_yield %[[T3]] : !ntensor.ntensor<?x?xf32, "test">
+//  CHECK-NEXT:   }
+//  CHECK-NEXT:   return %[[RES]] : !ntensor.ntensor<?x?xf32, "test">
