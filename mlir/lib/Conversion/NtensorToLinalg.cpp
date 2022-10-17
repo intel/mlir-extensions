@@ -296,12 +296,87 @@ struct ConvertFromElementsOp
     return mlir::success();
   }
 };
+
+struct ConvertSubviewOp
+    : public mlir::OpRewritePattern<imex::ntensor::SubviewOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::SubviewOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto src = op.getSource();
+    auto srcType = src.getType().dyn_cast<imex::ntensor::NTensorType>();
+    if (!srcType)
+      return mlir::failure();
+
+    auto dstType = op.getType().dyn_cast<imex::ntensor::NTensorType>();
+    if (!dstType)
+      return mlir::failure();
+
+    if (srcType.getEnvironment() != dstType.getEnvironment())
+      return mlir::failure();
+
+    auto results = wrapEnvRegion(
+        rewriter, op->getLoc(), dstType.getEnvironment(), dstType,
+        [&](mlir::PatternRewriter &builder, mlir::Location loc) {
+          auto srcTensorType = toTensorType(srcType);
+          mlir::Value srcTensor = builder.create<imex::ntensor::ToTensorOp>(
+              loc, srcTensorType, src);
+
+          auto offsets = op.getMixedOffsets();
+          auto sizes = op.getMixedSizes();
+          auto strides = op.getMixedStrides();
+
+          auto dstRank = static_cast<unsigned>(dstType.getRank());
+          auto viewTensorType =
+              mlir::tensor::ExtractSliceOp::inferCanonicalRankReducedResultType(
+                  dstRank, srcTensorType, offsets, sizes, strides);
+
+          mlir::Value view = builder.create<mlir::tensor::ExtractSliceOp>(
+              loc, viewTensorType, srcTensor, offsets, sizes, strides);
+          mlir::Value result =
+              builder.create<imex::ntensor::FromTensorOp>(loc, dstType, view);
+          return result;
+        });
+    rewriter.replaceOp(op, results);
+    return mlir::success();
+  }
+};
+
+struct ConvertLoadOp : public mlir::OpRewritePattern<imex::ntensor::LoadOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::LoadOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto src = op.getArray();
+    auto srcType = src.getType().dyn_cast<imex::ntensor::NTensorType>();
+    if (!srcType || op.getType() != srcType.getElementType())
+      return mlir::failure();
+
+    auto results = wrapEnvRegion(
+        rewriter, op->getLoc(), srcType.getEnvironment(),
+        srcType.getElementType(),
+        [&](mlir::PatternRewriter &builder, mlir::Location loc) {
+          auto srcTensorType = toTensorType(srcType);
+          mlir::Value srcTensor = builder.create<imex::ntensor::ToTensorOp>(
+              loc, srcTensorType, src);
+
+          mlir::Value result = builder.create<mlir::tensor::ExtractOp>(
+              loc, srcTensor, op.getIndices());
+          return result;
+        });
+    rewriter.replaceOp(op, results);
+    return mlir::success();
+  }
+};
 } // namespace
 
 void imex::populateNtensorToLinalgPatterns(mlir::MLIRContext &context,
                                            mlir::RewritePatternSet &patterns) {
   patterns.insert<ConvertCreateOp, ConvertCopyOp, ConvertElementwiseOp,
-                  ConvertCastOp, ConvertFromElementsOp>(&context);
+                  ConvertCastOp, ConvertFromElementsOp, ConvertSubviewOp,
+                  ConvertLoadOp>(&context);
 }
 
 namespace {
