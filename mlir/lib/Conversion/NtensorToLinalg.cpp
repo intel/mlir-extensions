@@ -370,13 +370,40 @@ struct ConvertLoadOp : public mlir::OpRewritePattern<imex::ntensor::LoadOp> {
     return mlir::success();
   }
 };
+
+struct ConvertDimOp : public mlir::OpRewritePattern<imex::ntensor::DimOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::DimOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto src = op.getSource();
+    auto srcType = src.getType().dyn_cast<imex::ntensor::NTensorType>();
+    if (!srcType)
+      return mlir::failure();
+
+    auto results = wrapEnvRegion(
+        rewriter, op->getLoc(), srcType.getEnvironment(),
+        rewriter.getIndexType(),
+        [&](mlir::PatternRewriter &builder, mlir::Location loc) {
+          auto tensorType = toTensorType(srcType);
+          mlir::Value tensor =
+              builder.create<imex::ntensor::ToTensorOp>(loc, tensorType, src);
+          mlir::Value result =
+              builder.create<mlir::tensor::DimOp>(loc, tensor, op.getIndex());
+          return result;
+        });
+    rewriter.replaceOp(op, results);
+    return mlir::success();
+  }
+};
 } // namespace
 
 void imex::populateNtensorToLinalgPatterns(mlir::MLIRContext &context,
                                            mlir::RewritePatternSet &patterns) {
   patterns.insert<ConvertCreateOp, ConvertCopyOp, ConvertElementwiseOp,
                   ConvertCastOp, ConvertFromElementsOp, ConvertSubviewOp,
-                  ConvertLoadOp>(&context);
+                  ConvertLoadOp, ConvertDimOp>(&context);
 }
 
 namespace {
