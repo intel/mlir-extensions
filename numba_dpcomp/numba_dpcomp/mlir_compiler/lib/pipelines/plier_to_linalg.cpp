@@ -2768,6 +2768,37 @@ struct BufferizeForceCopy
   }
 };
 
+struct BufferizeMixedGeneric
+    : public mlir::OpConversionPattern<mlir::linalg::GenericOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::linalg::GenericOp op,
+                  mlir::linalg::GenericOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    if (op.hasTensorSemantics() || op.hasBufferSemantics())
+      return mlir::failure();
+
+    bool changed = false;
+    llvm::SmallVector<mlir::Value> newInputs(adaptor.getInputs().size());
+    for (auto [i, input] : llvm::enumerate(adaptor.getInputs())) {
+      auto orig = op.getInputs()[i];
+      if (orig.getType().isa<mlir::RankedTensorType>()) {
+        newInputs[i] = input;
+        changed = true;
+      } else {
+        newInputs[i] = orig;
+      }
+    }
+    if (!changed)
+      return mlir::failure();
+
+    rewriter.updateRootInPlace(
+        op, [&]() { op.getInputsMutable().assign(newInputs); });
+    return mlir::success();
+  }
+};
+
 struct FixDeallocPlacement
     : public mlir::OpRewritePattern<mlir::memref::DeallocOp> {
   using mlir::OpRewritePattern<mlir::memref::DeallocOp>::OpRewritePattern;
@@ -2851,9 +2882,13 @@ struct AdditionalBufferize
     target.addIllegalOp<imex::util::ForceCopyOp>();
     target.addLegalOp<mlir::memref::ReshapeOp>();
 
-    patterns
-        .insert<BufferizeReshape, BufferizeExtractSlice, BufferizeForceCopy>(
-            typeConverter, context);
+    target.addDynamicallyLegalOp<mlir::linalg::GenericOp>(
+        [](mlir::linalg::GenericOp op) {
+          return op.hasTensorSemantics() || op.hasBufferSemantics();
+        });
+
+    patterns.insert<BufferizeReshape, BufferizeExtractSlice, BufferizeForceCopy,
+                    BufferizeMixedGeneric>(typeConverter, context);
 
     if (failed(applyPartialConversion(getOperation(), target,
                                       std::move(patterns))))
