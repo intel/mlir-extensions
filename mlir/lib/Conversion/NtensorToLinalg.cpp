@@ -354,14 +354,19 @@ struct ConvertLoadOp : public mlir::OpRewritePattern<imex::ntensor::LoadOp> {
     if (!srcType || op.getType() != srcType.getElementType())
       return mlir::failure();
 
-    auto loc = op->getLoc();
-    auto srcTensorType = toTensorType(srcType);
-    mlir::Value srcTensor =
-        rewriter.create<imex::ntensor::ToTensorOp>(loc, srcTensorType, src);
+    auto results = wrapEnvRegion(
+        rewriter, op->getLoc(), srcType.getEnvironment(),
+        srcType.getElementType(),
+        [&](mlir::PatternRewriter &builder, mlir::Location loc) {
+          auto srcTensorType = toTensorType(srcType);
+          mlir::Value srcTensor = builder.create<imex::ntensor::ToTensorOp>(
+              loc, srcTensorType, src);
 
-    mlir::Value result = rewriter.create<mlir::tensor::ExtractOp>(
-        loc, srcTensor, op.getIndices());
-    rewriter.replaceOp(op, result);
+          mlir::Value result = builder.create<mlir::tensor::ExtractOp>(
+              loc, srcTensor, op.getIndices());
+          return result;
+        });
+    rewriter.replaceOp(op, results);
     return mlir::success();
   }
 };
