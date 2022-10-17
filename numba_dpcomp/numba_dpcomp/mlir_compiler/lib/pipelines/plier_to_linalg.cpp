@@ -3100,6 +3100,7 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::func::FuncOp>(
       mlir::createLoopInvariantCodeMotionPass());
 
+  pm.addNestedPass<mlir::func::FuncOp>(mlir::createCSEPass());
   // ToDo: This pass also tries to do some simple fusion, whic should be split
   // in separate pass
   pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<PostLinalgOptPass>());
