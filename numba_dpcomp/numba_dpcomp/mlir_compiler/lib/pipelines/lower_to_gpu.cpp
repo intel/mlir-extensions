@@ -1435,8 +1435,8 @@ public:
     }();
 
     auto loc = op->getLoc();
-    auto reduceType = static_cast<gpu_runtime::AllReduceOperation>(*op.getOp());
-    mlir::Value sgResult = rewriter.create<gpu_runtime::GPUSubGroupReduceOp>(
+    auto reduceType = *op.getOp();
+    mlir::Value sgResult = rewriter.create<mlir::gpu::SubgroupReduceOp>(
         loc, op.getValue(), reduceType);
     rewriter.create<mlir::memref::StoreOp>(loc, sgResult, groupBuffer,
                                            subgroupId);

@@ -197,36 +197,4 @@ def GPUMemFenceOp : GpuRuntime_Op<"mem_fence"> {
   let assemblyFormat = "$flags attr-dict";
 }
 
-def GPU_AllReduceOpAdd : I32EnumAttrCase<"ADD", 0, "add">;
-def GPU_AllReduceOpAnd : I32EnumAttrCase<"AND", 1, "and">;
-def GPU_AllReduceOpMax : I32EnumAttrCase<"MAX", 2, "max">;
-def GPU_AllReduceOpMin : I32EnumAttrCase<"MIN", 3, "min">;
-def GPU_AllReduceOpMul : I32EnumAttrCase<"MUL", 4, "mul">;
-def GPU_AllReduceOpOr  : I32EnumAttrCase<"OR",  5, "or">;
-def GPU_AllReduceOpXor : I32EnumAttrCase<"XOR", 6, "xor">;
-
-def GPU_AllReduceOperation : I32EnumAttr<"AllReduceOperation",
-    "built-in reduction operations supported by gpu.allreduce.",
-    [
-      GPU_AllReduceOpAdd,
-      GPU_AllReduceOpAnd,
-      GPU_AllReduceOpMax,
-      GPU_AllReduceOpMin,
-      GPU_AllReduceOpMul,
-      GPU_AllReduceOpOr,
-      GPU_AllReduceOpXor
-    ]>{
-  let genSpecializedAttr = 0;
-  let cppNamespace = "::gpu_runtime";
-}
-def GPU_AllReduceOperationAttr : EnumAttr<GpuRuntime_Dialect, GPU_AllReduceOperation,
-                                          "all_reduce_op">;
-
-def GPUSubGroupReduceOp : GpuRuntime_Op<"subgroup_reduce",
-    [SameOperandsAndResultType]>,
-    Arguments<(ins AnyType:$value,
-               GPU_AllReduceOperationAttr:$op)>,
-    Results<(outs AnyType)> {
-}
-
 #endif // GPURUNTIME_OPS

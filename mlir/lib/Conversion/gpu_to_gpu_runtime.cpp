@@ -1128,13 +1128,13 @@ public:
 };
 
 class ConvertSubgroupReduceOp
-    : public mlir::OpConversionPattern<gpu_runtime::GPUSubGroupReduceOp> {
+    : public mlir::OpConversionPattern<mlir::gpu::SubgroupReduceOp> {
 public:
   using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(gpu_runtime::GPUSubGroupReduceOp op,
-                  gpu_runtime::GPUSubGroupReduceOp::Adaptor adaptor,
+  matchAndRewrite(mlir::gpu::SubgroupReduceOp op,
+                  mlir::gpu::SubgroupReduceOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto reduceOp = adaptor.getOp();
     //    if (!reduceOp)
@@ -1148,7 +1148,7 @@ public:
     using funcptr_t =
         void (*)(mlir::Operation *, mlir::PatternRewriter &, mlir::Value);
 
-    using ReduceType = gpu_runtime::AllReduceOperation;
+    using ReduceType = mlir::gpu::AllReduceOperation;
     struct Handler {
       ReduceType op;
       funcptr_t floatFunc;
