@@ -673,8 +673,8 @@ struct ChangeLayoutCast : public mlir::OpRewritePattern<mlir::memref::CastOp> {
       return mlir::failure();
 
     auto src = cl.getSource();
-    auto srcType = src.getType();
-    auto dstType = op.getType();
+    auto srcType = src.getType().cast<mlir::MemRefType>();
+    auto dstType = op.getType().cast<mlir::MemRefType>();
     if (srcType == dstType) {
       rewriter.replaceOp(op, src);
       return mlir::success();
@@ -685,7 +685,15 @@ struct ChangeLayoutCast : public mlir::OpRewritePattern<mlir::memref::CastOp> {
       return mlir::success();
     }
 
-    return mlir::failure();
+    auto loc = op->getLoc();
+    auto newDstType =
+        mlir::MemRefType::get(dstType.getShape(), srcType.getElementType(),
+                              srcType.getLayout(), srcType.getMemorySpace());
+    mlir::Value newCast =
+        rewriter.create<mlir::memref::CastOp>(loc, newDstType, src);
+    rewriter.replaceOpWithNewOp<imex::util::ChangeLayoutOp>(op, dstType,
+                                                            newCast);
+    return mlir::success();
   }
 };
 
