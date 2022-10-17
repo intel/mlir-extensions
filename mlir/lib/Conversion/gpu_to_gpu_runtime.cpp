@@ -1370,10 +1370,49 @@ struct AbiAttrsPass
   }
 };
 
+static mlir::spirv::TargetEnvAttr defaultCapsMapper(mlir::gpu::GPUModuleOp op) {
+  auto context = op.getContext();
+  namespace spirv = mlir::spirv;
+  spirv::Capability caps[] = {
+      // clang-format off
+      spirv::Capability::Addresses,
+      spirv::Capability::Float16Buffer,
+      spirv::Capability::Int64,
+      spirv::Capability::Int16,
+      spirv::Capability::Int8,
+      spirv::Capability::Kernel,
+      spirv::Capability::Linkage,
+      spirv::Capability::Vector16,
+      spirv::Capability::GenericPointer,
+      spirv::Capability::Groups,
+      spirv::Capability::Float16,
+      spirv::Capability::Float64,
+      spirv::Capability::AtomicFloat32AddEXT,
+      spirv::Capability::ExpectAssumeKHR,
+      // clang-format on
+  };
+  spirv::Extension exts[] = {spirv::Extension::SPV_EXT_shader_atomic_float_add,
+                             spirv::Extension::SPV_KHR_expect_assume};
+  auto triple =
+      spirv::VerCapExtAttr::get(spirv::Version::V_1_0, caps, exts, context);
+  auto attr = spirv::TargetEnvAttr::get(
+      triple, spirv::Vendor::Unknown, spirv::DeviceType::Unknown,
+      spirv::TargetEnvAttr::kUnknownDeviceID,
+      spirv::getDefaultResourceLimits(context));
+  return attr;
+}
+
 struct SetSPIRVCapabilitiesPass
     : public mlir::PassWrapper<SetSPIRVCapabilitiesPass,
                                mlir::OperationPass<void>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(SetSPIRVCapabilitiesPass)
+
+  SetSPIRVCapabilitiesPass(
+      std::function<mlir::spirv::TargetEnvAttr(mlir::gpu::GPUModuleOp)> m)
+      : mapper(std::move(m)) {
+    if (!mapper)
+      mapper = &defaultCapsMapper;
+  }
 
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
@@ -1382,40 +1421,17 @@ struct SetSPIRVCapabilitiesPass
   }
 
   void runOnOperation() override {
+    assert(mapper && "Invalid mapper");
     namespace spirv = mlir::spirv;
-    auto context = &getContext();
-    spirv::Capability caps[] = {
-        // clang-format off
-        spirv::Capability::Addresses,
-        spirv::Capability::Float16Buffer,
-        spirv::Capability::Int64,
-        spirv::Capability::Int16,
-        spirv::Capability::Int8,
-        spirv::Capability::Kernel,
-        spirv::Capability::Linkage,
-        spirv::Capability::Vector16,
-        spirv::Capability::GenericPointer,
-        spirv::Capability::Groups,
-        spirv::Capability::Float16,
-        spirv::Capability::Float64,
-        spirv::Capability::AtomicFloat32AddEXT,
-        spirv::Capability::ExpectAssumeKHR,
-        // clang-format on
-    };
-    spirv::Extension exts[] = {
-        spirv::Extension::SPV_EXT_shader_atomic_float_add,
-        spirv::Extension::SPV_KHR_expect_assume};
-    auto triple =
-        spirv::VerCapExtAttr::get(spirv::Version::V_1_0, caps, exts, context);
-    auto attr = spirv::TargetEnvAttr::get(
-        triple, spirv::Vendor::Unknown, spirv::DeviceType::Unknown,
-        spirv::TargetEnvAttr::kUnknownDeviceID,
-        spirv::getDefaultResourceLimits(context));
     auto op = getOperation();
     op->walk([&](mlir::gpu::GPUModuleOp op) {
-      op->setAttr(spirv::getTargetEnvAttrName(), attr);
+      if (auto attr = mapper(op))
+        op->setAttr(spirv::getTargetEnvAttrName(), attr);
     });
   }
+
+private:
+  std::function<mlir::spirv::TargetEnvAttr(mlir::gpu::GPUModuleOp)> mapper;
 };
 
 struct SerializeSPIRVPass
@@ -1489,8 +1505,9 @@ std::unique_ptr<mlir::Pass> gpu_runtime::createAbiAttrsPass() {
   return std::make_unique<AbiAttrsPass>();
 }
 
-std::unique_ptr<mlir::Pass> gpu_runtime::createSetSPIRVCapabilitiesPass() {
-  return std::make_unique<SetSPIRVCapabilitiesPass>();
+std::unique_ptr<mlir::Pass> gpu_runtime::createSetSPIRVCapabilitiesPass(
+    std::function<mlir::spirv::TargetEnvAttr(mlir::gpu::GPUModuleOp)> mapper) {
+  return std::make_unique<SetSPIRVCapabilitiesPass>(std::move(mapper));
 }
 
 std::unique_ptr<mlir::Pass> gpu_runtime::createGPUToSpirvPass() {

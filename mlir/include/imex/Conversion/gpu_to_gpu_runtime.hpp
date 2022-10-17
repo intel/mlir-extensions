@@ -14,16 +14,25 @@
 
 #pragma once
 
+#include <functional>
 #include <memory>
 
 namespace mlir {
 class Pass;
+namespace spirv {
+class TargetEnvAttr;
 }
+namespace gpu {
+class GPUModuleOp;
+}
+} // namespace mlir
 
 namespace gpu_runtime {
 
 std::unique_ptr<mlir::Pass> createAbiAttrsPass();
-std::unique_ptr<mlir::Pass> createSetSPIRVCapabilitiesPass();
+std::unique_ptr<mlir::Pass> createSetSPIRVCapabilitiesPass(
+    std::function<mlir::spirv::TargetEnvAttr(mlir::gpu::GPUModuleOp)> mapper =
+        nullptr);
 std::unique_ptr<mlir::Pass> createGPUToSpirvPass();
 std::unique_ptr<mlir::Pass> createInsertGPUAllocsPass();
 std::unique_ptr<mlir::Pass> createConvertGPUDeallocsPass();
