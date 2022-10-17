@@ -1794,7 +1794,7 @@ struct SimplifyExpandDims
 
     auto context = op.getContext();
     auto parallelAttr = mlir::StringAttr::get(context, "parallel");
-    if (llvm::any_of(op.iterator_types(),
+    if (llvm::any_of(op.getIteratorTypes(),
                      [&](auto attr) { return attr != parallelAttr; }))
       return mlir::failure();
 
@@ -1983,7 +1983,7 @@ struct SliceOfGeneric : public mlir::OpRewritePattern<mlir::linalg::GenericOp> {
 
     auto resMap = maps.back();
 
-    auto iters = op.iterator_types();
+    auto iters = op.getIteratorTypes();
     auto parallelIter =
         rewriter.getStringAttr(mlir::getParallelIteratorTypeName());
     for (auto i : llvm::seq(0u, resRank)) {
@@ -2291,33 +2291,6 @@ void PlierToLinalgPass::runOnOperation() {
   if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
                                                 std::move(patterns))))
     signalPassFailure();
-}
-
-struct LowerLinalgPass
-    : public mlir::PassWrapper<LowerLinalgPass,
-                               mlir::OperationPass<mlir::ModuleOp>> {
-  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LowerLinalgPass)
-
-  virtual void
-  getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<mlir::AffineDialect>();
-    registry.insert<mlir::func::FuncDialect>();
-    registry.insert<mlir::linalg::LinalgDialect>();
-    registry.insert<mlir::scf::SCFDialect>();
-    registry.insert<mlir::tensor::TensorDialect>();
-  }
-
-  void runOnOperation() override;
-};
-
-void LowerLinalgPass::runOnOperation() {
-  mlir::RewritePatternSet patterns(&getContext());
-
-  patterns.insert<mlir::linalg::LinalgLoweringPattern<mlir::linalg::GenericOp>,
-                  mlir::linalg::LinalgLoweringPattern<mlir::linalg::FillOp>>(
-      &getContext(), mlir::linalg::LinalgLoweringType::ParallelLoops);
-
-  (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
 }
 
 struct OptimizeGlobalsConstsLoad
@@ -2894,7 +2867,7 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
 
   pm.addPass(mlir::arith::createConstantBufferizePass());
   pm.addNestedPass<mlir::func::FuncOp>(
-      mlir::createEmptyTensorToAllocTensorPass());
+      mlir::bufferization::createEmptyTensorToAllocTensorPass());
   pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<AdditionalBufferize>());
   pm.addNestedPass<mlir::func::FuncOp>(mlir::createSCFBufferizePass());
   pm.addNestedPass<mlir::func::FuncOp>(mlir::createLinalgBufferizePass());
@@ -2926,7 +2899,8 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::func::FuncOp>(
       mlir::bufferization::createPromoteBuffersToStackPass());
 
-  pm.addPass(std::make_unique<LowerLinalgPass>());
+  pm.addNestedPass<mlir::func::FuncOp>(
+      mlir::createConvertLinalgToParallelLoopsPass());
   pm.addPass(imex::createForceInlinePass());
   pm.addPass(mlir::createSymbolDCEPass());
 

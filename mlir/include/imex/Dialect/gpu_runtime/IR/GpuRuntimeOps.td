@@ -76,7 +76,7 @@ def GPURegionDescAttr
   let assemblyFormat = "`<` struct(params) `>`";
 }
 
-def CreateGpuStreamOp : GpuRuntime_Op<"create_gpu_stream", [NoSideEffect]> {
+def CreateGpuStreamOp : GpuRuntime_Op<"create_gpu_stream", [Pure]> {
   let results = (outs GpuRuntime_OpaqueType : $result);
 
   let hasCanonicalizer = 1;
@@ -88,7 +88,7 @@ def DestroyGpuStreamOp : GpuRuntime_Op<"destroy_gpu_stream"> {
   let arguments = (ins GpuRuntime_OpaqueType : $source);
 }
 
-def LoadGpuModuleOp : GpuRuntime_Op<"load_gpu_module", [NoSideEffect]> {
+def LoadGpuModuleOp : GpuRuntime_Op<"load_gpu_module", [Pure]> {
   let arguments = (ins GpuRuntime_OpaqueType : $stream, SymbolRefAttr : $module);
   let results = (outs GpuRuntime_OpaqueType : $result);
 
@@ -103,7 +103,7 @@ def DestroyGpuModuleOp : GpuRuntime_Op<"destroy_gpu_module"> {
   let arguments = (ins GpuRuntime_OpaqueType : $source);
 }
 
-def GetGpuKernelOp : GpuRuntime_Op<"get_gpu_kernel", [NoSideEffect]> {
+def GetGpuKernelOp : GpuRuntime_Op<"get_gpu_kernel", [Pure]> {
   let arguments = (ins GpuRuntime_OpaqueType : $module, SymbolRefAttr : $kernel);
   let results = (outs GpuRuntime_OpaqueType : $result);
 
@@ -159,7 +159,7 @@ def GPUDeallocOp : GpuRuntime_Op<"gpu_dealloc"> {
 }
 
 def GPUSuggestBlockSizeOp : GpuRuntime_Op<"suggest_block_size",
-                                     [AttrSizedOperandSegments, NoSideEffect]> {
+                                     [AttrSizedOperandSegments, Pure]> {
   let arguments = (ins Optional<GpuRuntime_OpaqueType>:$stream,
                        Optional<GpuRuntime_OpaqueType>:$kernel,
                        OptionalAttr<SymbolRefAttr>:$kernelRef,

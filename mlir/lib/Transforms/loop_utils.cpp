@@ -468,7 +468,7 @@ bool hasNoEffect(mlir::Operation *op) {
     return !interface.hasEffect<mlir::MemoryEffects::Read>() &&
            !interface.hasEffect<mlir::MemoryEffects::Write>();
 
-  return !op->hasTrait<::mlir::OpTrait::HasRecursiveSideEffects>();
+  return !op->hasTrait<::mlir::OpTrait::HasRecursiveMemoryEffects>();
 }
 
 bool hasNoEffect(mlir::scf::ParallelOp currentPloop, mlir::Operation *op) {
