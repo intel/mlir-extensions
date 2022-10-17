@@ -2476,7 +2476,7 @@ struct SliceOfGeneric : public mlir::OpRewritePattern<mlir::linalg::GenericOp> {
 
 struct OptimizeGlobalsConstsLoad
     : public mlir::OpRewritePattern<mlir::memref::LoadOp> {
-  using mlir::OpRewritePattern<mlir::memref::LoadOp>::OpRewritePattern;
+  using OpRewritePattern::OpRewritePattern;
 
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::LoadOp op,
@@ -2530,6 +2530,35 @@ struct OptimizeGlobalsConstsLoad
       return mlir::failure();
 
     rewriter.replaceOpWithNewOp<mlir::arith::ConstantOp>(op, (*vals)[indices]);
+    return mlir::success();
+  }
+};
+
+struct OptimizeSingleElemCopy
+    : public mlir::OpRewritePattern<mlir::memref::CopyOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::CopyOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto src = op.getSource();
+    auto srcType = src.getType().dyn_cast<mlir::MemRefType>();
+    if (!srcType)
+      return mlir::failure();
+
+    auto dst = op.getTarget();
+    auto dstType = src.getType().dyn_cast<mlir::MemRefType>();
+    if (!dstType)
+      return mlir::failure();
+
+    if (srcType.getRank() != 1 ||
+        (srcType.getShape()[0] != 1 && dstType.getShape()[0] != 1))
+      return mlir::failure();
+
+    auto loc = op->getLoc();
+    mlir::Value idx = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
+    mlir::Value val = rewriter.create<mlir::memref::LoadOp>(loc, src, idx);
+    rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(op, val, dst, idx);
     return mlir::success();
   }
 };
@@ -2980,9 +3009,9 @@ void PostLinalgOptPass::runOnOperation() {
 
   imex::populateCommonOptsPatterns(context, patterns);
 
-  patterns.insert<OptimizeGlobalsConstsLoad, imex::CanonicalizeReduction,
-                  imex::PromoteToParallel, imex::MergeNestedForIntoParallel>(
-      &context);
+  patterns.insert<OptimizeGlobalsConstsLoad, OptimizeSingleElemCopy,
+                  imex::CanonicalizeReduction, imex::PromoteToParallel,
+                  imex::MergeNestedForIntoParallel>(&context);
 
   auto additionalOpt = [](mlir::func::FuncOp op) {
     (void)imex::prepareForFusion(op.getRegion());
