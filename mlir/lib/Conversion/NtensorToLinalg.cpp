@@ -296,12 +296,53 @@ struct ConvertFromElementsOp
     return mlir::success();
   }
 };
+
+struct ConvertSubviewOp
+    : public mlir::OpRewritePattern<imex::ntensor::SubviewOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::SubviewOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto src = op.getSource();
+    auto srcType = src.getType().dyn_cast<imex::ntensor::NTensorType>();
+    if (!srcType)
+      return mlir::failure();
+
+    auto dstType = op.getType().dyn_cast<imex::ntensor::NTensorType>();
+    if (!dstType)
+      return mlir::failure();
+
+    auto srcTensorType = toTensorType(srcType);
+
+    auto loc = op->getLoc();
+    mlir::Value srcTensor =
+        rewriter.create<imex::ntensor::ToTensorOp>(loc, srcTensorType, src);
+
+    auto offsets = op.getMixedOffsets();
+    auto sizes = op.getMixedSizes();
+    auto strides = op.getMixedStrides();
+
+    auto dstRank = static_cast<unsigned>(dstType.getRank());
+    auto viewTensorType =
+        mlir::tensor::ExtractSliceOp::inferCanonicalRankReducedResultType(
+            dstRank, srcTensorType, offsets, sizes, strides);
+
+    mlir::Value view = rewriter.create<mlir::tensor::ExtractSliceOp>(
+        loc, viewTensorType, srcTensor, offsets, sizes, strides);
+    mlir::Value result =
+        rewriter.create<imex::ntensor::FromTensorOp>(loc, dstType, view);
+    rewriter.replaceOp(op, result);
+    return mlir::success();
+  }
+};
 } // namespace
 
 void imex::populateNtensorToLinalgPatterns(mlir::MLIRContext &context,
                                            mlir::RewritePatternSet &patterns) {
   patterns.insert<ConvertCreateOp, ConvertCopyOp, ConvertElementwiseOp,
-                  ConvertCastOp, ConvertFromElementsOp>(&context);
+                  ConvertCastOp, ConvertFromElementsOp, ConvertSubviewOp>(
+      &context);
 }
 
 namespace {
