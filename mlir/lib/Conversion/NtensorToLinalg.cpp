@@ -382,14 +382,18 @@ struct ConvertDimOp : public mlir::OpRewritePattern<imex::ntensor::DimOp> {
     if (!srcType)
       return mlir::failure();
 
-    auto loc = op->getLoc();
-
-    auto tensorType = toTensorType(srcType);
-    mlir::Value tensor =
-        rewriter.create<imex::ntensor::ToTensorOp>(loc, tensorType, src);
-    mlir::Value result =
-        rewriter.create<mlir::tensor::DimOp>(loc, tensor, op.getIndex());
-    rewriter.replaceOp(op, result);
+    auto results = wrapEnvRegion(
+        rewriter, op->getLoc(), srcType.getEnvironment(),
+        rewriter.getIndexType(),
+        [&](mlir::PatternRewriter &builder, mlir::Location loc) {
+          auto tensorType = toTensorType(srcType);
+          mlir::Value tensor =
+              builder.create<imex::ntensor::ToTensorOp>(loc, tensorType, src);
+          mlir::Value result =
+              builder.create<mlir::tensor::DimOp>(loc, tensor, op.getIndex());
+          return result;
+        });
+    rewriter.replaceOp(op, results);
     return mlir::success();
   }
 };
