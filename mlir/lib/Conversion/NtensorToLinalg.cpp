@@ -370,13 +370,36 @@ struct ConvertLoadOp : public mlir::OpRewritePattern<imex::ntensor::LoadOp> {
     return mlir::success();
   }
 };
+
+struct ConvertDimOp : public mlir::OpRewritePattern<imex::ntensor::DimOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::DimOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto src = op.getSource();
+    auto srcType = src.getType().dyn_cast<imex::ntensor::NTensorType>();
+    if (!srcType)
+      return mlir::failure();
+
+    auto loc = op->getLoc();
+
+    auto tensorType = toTensorType(srcType);
+    mlir::Value tensor =
+        rewriter.create<imex::ntensor::ToTensorOp>(loc, tensorType, src);
+    mlir::Value result =
+        rewriter.create<mlir::tensor::DimOp>(loc, tensor, op.getIndex());
+    rewriter.replaceOp(op, result);
+    return mlir::success();
+  }
+};
 } // namespace
 
 void imex::populateNtensorToLinalgPatterns(mlir::MLIRContext &context,
                                            mlir::RewritePatternSet &patterns) {
   patterns.insert<ConvertCreateOp, ConvertCopyOp, ConvertElementwiseOp,
                   ConvertCastOp, ConvertFromElementsOp, ConvertSubviewOp,
-                  ConvertLoadOp>(&context);
+                  ConvertLoadOp, ConvertDimOp>(&context);
 }
 
 namespace {

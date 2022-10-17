@@ -271,3 +271,18 @@ func.func @test(%arg1: !ntensor.ntensor<?xf32, "test">) -> f32 {
 //  CHECK-NEXT:   imex_util.env_region_yield %[[T2]] : f32
 //  CHECK-NEXT:   }
 //  CHECK-NEXT:   return %[[RES]] : f32
+
+// -----
+
+func.func @test(%arg: !ntensor.ntensor<?x?xf32>) -> index {
+  %0 = arith.constant 0 : index
+  %1 = ntensor.dim %arg, %0 : !ntensor.ntensor<?x?xf32>
+  return %1 : index
+}
+
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG:.*]]: !ntensor.ntensor<?x?xf32>)
+//  CHECK-NEXT:   %[[C0:.*]] = arith.constant 0 : index
+//  CHECK-NEXT:   %[[T0:.*]] = ntensor.to_tensor %arg0 : !ntensor.ntensor<?x?xf32> to tensor<?x?xf32>
+//  CHECK-NEXT:   %[[RES:.*]] = tensor.dim %[[T0]], %[[C0]] : tensor<?x?xf32>
+//  CHECK-NEXT:   return %[[RES]] : index
