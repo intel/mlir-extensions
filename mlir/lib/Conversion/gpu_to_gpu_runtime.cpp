@@ -1376,23 +1376,25 @@ static mlir::spirv::TargetEnvAttr defaultCapsMapper(mlir::gpu::GPUModuleOp op) {
   spirv::Capability caps[] = {
       // clang-format off
       spirv::Capability::Addresses,
+      spirv::Capability::AtomicFloat32AddEXT,
+      spirv::Capability::ExpectAssumeKHR,
+      spirv::Capability::Float16,
       spirv::Capability::Float16Buffer,
-      spirv::Capability::Int64,
+      spirv::Capability::Float64,
+      spirv::Capability::GenericPointer,
+      spirv::Capability::Groups,
       spirv::Capability::Int16,
+      spirv::Capability::Int64,
       spirv::Capability::Int8,
       spirv::Capability::Kernel,
       spirv::Capability::Linkage,
       spirv::Capability::Vector16,
-      spirv::Capability::GenericPointer,
-      spirv::Capability::Groups,
-      spirv::Capability::Float16,
-      spirv::Capability::Float64,
-      spirv::Capability::AtomicFloat32AddEXT,
-      spirv::Capability::ExpectAssumeKHR,
       // clang-format on
   };
   spirv::Extension exts[] = {spirv::Extension::SPV_EXT_shader_atomic_float_add,
                              spirv::Extension::SPV_KHR_expect_assume};
+  llvm::sort(caps);
+  llvm::sort(exts);
   auto triple =
       spirv::VerCapExtAttr::get(spirv::Version::V_1_0, caps, exts, context);
   auto attr = spirv::TargetEnvAttr::get(
