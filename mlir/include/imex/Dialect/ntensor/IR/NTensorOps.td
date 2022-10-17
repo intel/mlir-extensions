@@ -155,7 +155,7 @@ def SetitemOp : NTensor_OpBase<"setitem", []> {
   let assemblyFormat = "attr-dict `(` $source `:` type($source) `)` `[` $index `:` type($index) `]` `=` `(` $value `:` type($value) `)`";
 }
 
-def GetitemOp : NTensor_OpBase<"getitem", [NoSideEffect]> {
+def GetitemOp : NTensor_OpBase<"getitem", [Pure]> {
   let summary = "Array getitem operation.";
   let description = [{
     Ntensor array getitem operation.
@@ -208,7 +208,7 @@ class NTensor_OpWithOffsetSizesAndStrides<string mnemonic,
 }
 
 def SubviewOp : NTensor_OpWithOffsetSizesAndStrides<"subview", [
-    NoSideEffect, AttrSizedOperandSegments,
+    Pure, AttrSizedOperandSegments,
     DeclareOpInterfaceMethods<ReifyRankedShapedTypeOpInterface>,
     OffsetSizeAndStrideOpInterface
   ]> {
@@ -421,7 +421,7 @@ def StoreOp : NTensor_OpBase<"store",
 }
 
 def BuildSliceOp : NTensor_OpBase<"build_slice", [
-    AttrSizedOperandSegments, NoSideEffect]> {
+    AttrSizedOperandSegments, Pure]> {
   let summary = "Slice creation operation.";
   let description = [{
     Creates a slice to index into ntensor array.
@@ -434,7 +434,7 @@ def BuildSliceOp : NTensor_OpBase<"build_slice", [
   let assemblyFormat = "attr-dict `(` $begin `:` $end `:` $step `)`";
 }
 
-def ResolveSliceOp : NTensor_OpBase<"resolve_slice", [NoSideEffect]> {
+def ResolveSliceOp : NTensor_OpBase<"resolve_slice", [Pure]> {
   let summary = "Slice resolving operation.";
   let description = [{
     Resolves slice using specified size into `begin`, `end` and `step` values.
@@ -452,7 +452,7 @@ def ResolveSliceOp : NTensor_OpBase<"resolve_slice", [NoSideEffect]> {
   let hasCanonicalizer = 1;
 }
 
-def ResolveIndexOp : NTensor_OpBase<"resolve_index", [NoSideEffect]> {
+def ResolveIndexOp : NTensor_OpBase<"resolve_index", [Pure]> {
   let summary = "Index resolving operation.";
   let description = [{
     Resolves index into array using specified array size.
@@ -470,7 +470,7 @@ def ResolveIndexOp : NTensor_OpBase<"resolve_index", [NoSideEffect]> {
   let hasCanonicalizer = 1;
 }
 
-def DimOp : NTensor_OpBase<"dim", [NoSideEffect]> {
+def DimOp : NTensor_OpBase<"dim", [Pure]> {
   let summary = "dimension index operation";
   let description = [{
     The `dim` operation takes a array and a dimension operand of type `index`.
@@ -514,7 +514,7 @@ def CallOp : NTensor_OpBase<"call", []> {
   let assemblyFormat = "$op ` ` attr-dict custom<ArgList>($args, $args_names) (`:` type($args)^)? (`->` type($results)^)?";
 }
 
-def PrimitiveOp : NTensor_OpBase<"primitive", [NoSideEffect]> {
+def PrimitiveOp : NTensor_OpBase<"primitive", [Pure]> {
   let summary = "Primitive operation.";
   let description = [{
 
@@ -527,7 +527,7 @@ def PrimitiveOp : NTensor_OpBase<"primitive", [NoSideEffect]> {
   let assemblyFormat = "$op ` ` attr-dict `(` $args `)` (`:` type($args)^)? (`->` type($results)^)?";
 }
 
-def CreateArrayOp : NTensor_OpBase<"create", [AttrSizedOperandSegments, NoSideEffect]> {
+def CreateArrayOp : NTensor_OpBase<"create", [AttrSizedOperandSegments, Pure]> {
   let summary = "Array creation operation.";
   let description = [{
     Creates new array from provided shape;
@@ -546,7 +546,7 @@ def CreateArrayOp : NTensor_OpBase<"create", [AttrSizedOperandSegments, NoSideEf
 }
 
 def FromTensorOp : NTensor_OpBase<"from_tensor",
-    [NoSideEffect, SameOperandsShape, SameOperandsElementType]> {
+    [Pure, SameOperandsShape, SameOperandsElementType]> {
   let summary = "converts tensor to ntensor array.";
   let description = [{
     Converts from tensor to ntensor array. Shape and element type must match.
@@ -577,7 +577,7 @@ def ToTensorOp : NTensor_OpBase<"to_tensor",
 }
 
 def FromMemrefOp : NTensor_OpBase<"from_memref",
-    [NoSideEffect, SameOperandsShape, SameOperandsElementType]> {
+    [Pure, SameOperandsShape, SameOperandsElementType]> {
   let summary = "converts memref to ntensor array.";
   let description = [{
     Converts from memref to ntensor array. Shape and element type must match.
@@ -592,7 +592,7 @@ def FromMemrefOp : NTensor_OpBase<"from_memref",
 }
 
 def ToMemrefOp : NTensor_OpBase<"to_memref",
-    [NoSideEffect, SameOperandsShape, SameOperandsElementType]> {
+    [Pure, SameOperandsShape, SameOperandsElementType]> {
   let summary = "converts ntensor array to memref.";
   let description = [{
     Converts from ntensor array to memref. Shape and element type must match.
@@ -609,7 +609,7 @@ def ToMemrefOp : NTensor_OpBase<"to_memref",
 def ElementwiseOp : NTensor_OpBase<"elementwise", [
     SameOperandsShape,
     SingleBlockImplicitTerminator<"::imex::ntensor::ElementwiseYieldOp">,
-    NoSideEffect]> {
+    Pure]> {
   let summary = "Elementwise operation";
   let description = [{
     TBD
@@ -626,7 +626,7 @@ def ElementwiseOp : NTensor_OpBase<"elementwise", [
 }
 
 def ElementwiseYieldOp : NTensor_OpBase<"elementwise_yield", [
-  NoSideEffect,
+  Pure,
   ReturnLike,
   Terminator,
   HasParent<"::imex::ntensor::ElementwiseOp">
@@ -646,7 +646,7 @@ def ElementwiseYieldOp : NTensor_OpBase<"elementwise_yield", [
 
 def CastOp : NTensor_OpBase<"cast", [
     DeclareOpInterfaceMethods<CastOpInterface>,
-    NoSideEffect
+    Pure
   ]> {
   let summary = "Array cast operation";
   let description = [{
@@ -662,7 +662,7 @@ def CastOp : NTensor_OpBase<"cast", [
 }
 
 def FromElementsOp : NTensor_OpBase<"from_elements", [
-    NoSideEffect,
+    Pure,
     TypesMatchWith<"operand types match result element type",
                "result", "elements", "::llvm::SmallVector<::mlir::Type, 2>("
                "$_self.cast<::mlir::ShapedType>().getNumElements(), "

@@ -57,7 +57,7 @@ def EnforceShapeOp : ImexUtil_Op<"enforce_shape"> {
 
 def ParallelOp : ImexUtil_Op<"parallel", [
   AttrSizedOperandSegments, DeclareOpInterfaceMethods<LoopLikeOpInterface>,
-  SingleBlockImplicitTerminator<"::imex::util::YieldOp">, RecursiveSideEffects
+  SingleBlockImplicitTerminator<"::imex::util::YieldOp">, RecursiveMemoryEffects
 ]> {
 
   let arguments = (ins Variadic<Index>:$lowerBounds,
@@ -80,14 +80,14 @@ def ParallelOp : ImexUtil_Op<"parallel", [
     }];
 }
 
-def UndefOp : ImexUtil_Op<"undef", [NoSideEffect]> {
+def UndefOp : ImexUtil_Op<"undef", [Pure]> {
   let results = (outs AnyType:$result);
 
   let assemblyFormat = "attr-dict `:` type($result)";
 }
 
 def YieldOp : ImexUtil_Op<"yield", [
-  NoSideEffect, ReturnLike, Terminator, ParentOneOf<["::imex::util::ParallelOp"]>
+  Pure, ReturnLike, Terminator, ParentOneOf<["::imex::util::ParallelOp"]>
 ]> {
   let arguments = (ins Variadic<AnyType> : $results);
   let builders = [OpBuilder<(ins), [{/* nothing to do */}]>];
@@ -108,7 +108,7 @@ def RetainOp : ImexUtil_Op<"retain", [ViewLikeOpInterface]> {
   }];
 }
 
-def ChangeLayoutOp : ImexUtil_Op<"change_layout", [ViewLikeOpInterface, NoSideEffect]> {
+def ChangeLayoutOp : ImexUtil_Op<"change_layout", [ViewLikeOpInterface, Pure]> {
   let arguments = (ins AnyMemRef : $source);
 
   let results = (outs AnyMemRef : $dest);
@@ -122,7 +122,7 @@ def ChangeLayoutOp : ImexUtil_Op<"change_layout", [ViewLikeOpInterface, NoSideEf
   }];
 }
 
-def SignCastOp : ImexUtil_Op<"sign_cast", [NoSideEffect]> {
+def SignCastOp : ImexUtil_Op<"sign_cast", [Pure]> {
   let arguments = (ins AnyType : $value);
 
   let results = (outs AnyType:$dest);
@@ -133,7 +133,7 @@ def SignCastOp : ImexUtil_Op<"sign_cast", [NoSideEffect]> {
 }
 
 def ExtractMemrefMetadataOp
-    : ImexUtil_Op<"extract_memref_metadata", [NoSideEffect]> {
+    : ImexUtil_Op<"extract_memref_metadata", [Pure]> {
   let arguments = (ins AnyMemRef : $source, IndexAttr : $dimIndex);
 
   let results = (outs Index : $result);
@@ -188,7 +188,7 @@ def ReleaseContextOp : ImexUtil_Op<"release_context"> {
   let arguments = (ins ImexUtil_OpaqueType:$context);
 }
 
-def BuildTupleOp : ImexUtil_Op<"build_tuple", [NoSideEffect]> {
+def BuildTupleOp : ImexUtil_Op<"build_tuple", [Pure]> {
   let summary = "Constructs tuple from provided values";
   let description = [{
     "build_tuple" takes multiple SSA values and constructs tuple from them.
@@ -202,7 +202,7 @@ def BuildTupleOp : ImexUtil_Op<"build_tuple", [NoSideEffect]> {
   let assemblyFormat = "attr-dict ($args^ `:` type($args) `->`)? type($result)";
 }
 
-def TupleExtractOp : ImexUtil_Op<"tuple_extract", [NoSideEffect]> {
+def TupleExtractOp : ImexUtil_Op<"tuple_extract", [Pure]> {
   let summary = "Extracts value from tuple";
   let description = [{
     "tuple_extract" extracts element with specific index from tuple.
@@ -228,7 +228,7 @@ def TupleExtractOp : ImexUtil_Op<"tuple_extract", [NoSideEffect]> {
 def EnvironmentRegionOp : ImexUtil_Op<"env_region", [
     DeclareOpInterfaceMethods<RegionBranchOpInterface>,
     SingleBlockImplicitTerminator<"::imex::util::EnvironmentRegionYieldOp">,
-    RecursiveSideEffects]> {
+    RecursiveMemoryEffects]> {
   let summary = "Operation that executes its region with a specific environment";
   let description = [{
     "env_region" executes operations inside its region within a specific
@@ -269,7 +269,7 @@ def EnvironmentRegionOp : ImexUtil_Op<"env_region", [
 }
 
 def EnvironmentRegionYieldOp : ImexUtil_Op<"env_region_yield", [
-  NoSideEffect,
+  Pure,
   ReturnLike,
   Terminator,
   HasParent<"::imex::util::EnvironmentRegionOp">

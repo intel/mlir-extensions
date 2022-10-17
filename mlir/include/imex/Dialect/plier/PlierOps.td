@@ -45,7 +45,7 @@ def Plier_OpaqueType
 class Plier_Op<string mnemonic, list<Trait> traits = []>
     : Op<Plier_Dialect, mnemonic, traits>;
 
-def ArgOp : Plier_Op<"arg", [NoSideEffect]> {
+def ArgOp : Plier_Op<"arg", [Pure]> {
   let arguments = (ins UI32Attr : $index, StrAttr : $name);
 
   let results = (outs AnyType);
@@ -56,7 +56,7 @@ def ArgOp : Plier_Op<"arg", [NoSideEffect]> {
                              : $name)>];
 }
 
-def ConstOp : Plier_Op<"const", [NoSideEffect]> {
+def ConstOp : Plier_Op<"const", [Pure]> {
   let arguments = (ins AnyAttr : $val);
 
   let results = (outs AnyType);
@@ -64,7 +64,7 @@ def ConstOp : Plier_Op<"const", [NoSideEffect]> {
   let builders = [OpBuilder<(ins "::mlir::Attribute" : $val)>];
 }
 
-def GlobalOp : Plier_Op<"global", [NoSideEffect]> {
+def GlobalOp : Plier_Op<"global", [Pure]> {
   let arguments = (ins StrAttr : $name);
 
   let results = (outs AnyType);
@@ -93,7 +93,7 @@ def UnaryOp : Plier_Op<"unary", []> {
                              : $op)>];
 }
 
-def CastOp : Plier_Op<"cast", [NoSideEffect]> {
+def CastOp : Plier_Op<"cast", [Pure]> {
   let arguments = (ins AnyType : $value);
 
   let results = (outs AnyType);
@@ -124,7 +124,7 @@ def PyCallOp : Plier_Op<"call", [AttrSizedOperandSegments]> {
    ];
 }
 
-def BuildTupleOp : Plier_Op<"build_tuple", [NoSideEffect]> {
+def BuildTupleOp : Plier_Op<"build_tuple", [Pure]> {
   let arguments = (ins Variadic<AnyType> : $args);
 
   let results = (outs AnyType);
@@ -132,7 +132,7 @@ def BuildTupleOp : Plier_Op<"build_tuple", [NoSideEffect]> {
   let builders = [OpBuilder<(ins "::mlir::ValueRange" : $args)>];
 }
 
-def GetItemOp : Plier_Op<"getitem", [NoSideEffect]> {
+def GetItemOp : Plier_Op<"getitem", [Pure]> {
   let arguments = (ins AnyType : $value, AnyType : $index);
 
   let results = (outs AnyType);
@@ -148,7 +148,7 @@ def SetItemOp : Plier_Op<"setitem", []> {
   let builders = [];
 }
 
-def GetiterOp : Plier_Op<"getiter", [NoSideEffect]> {
+def GetiterOp : Plier_Op<"getiter", [Pure]> {
   let arguments = (ins AnyType : $value);
 
   let results = (outs AnyType);
@@ -164,7 +164,7 @@ def IternextOp : Plier_Op<"iternext", []> {
   let builders = [OpBuilder<(ins "::mlir::Value" : $value)>];
 }
 
-def PairfirstOp : Plier_Op<"pair_first", [NoSideEffect]> {
+def PairfirstOp : Plier_Op<"pair_first", [Pure]> {
   let arguments = (ins AnyType : $value);
 
   let results = (outs AnyType);
@@ -172,7 +172,7 @@ def PairfirstOp : Plier_Op<"pair_first", [NoSideEffect]> {
   let builders = [OpBuilder<(ins "::mlir::Value" : $value)>];
 }
 
-def PairsecondOp : Plier_Op<"pair_second", [NoSideEffect]> {
+def PairsecondOp : Plier_Op<"pair_second", [Pure]> {
   let arguments = (ins AnyType : $value);
 
   let results = (outs AnyType);
@@ -182,7 +182,7 @@ def PairsecondOp : Plier_Op<"pair_second", [NoSideEffect]> {
 
 def DelOp : Plier_Op<"del", []> { let arguments = (ins AnyType : $value); }
 
-def GetattrOp : Plier_Op<"getattr", [NoSideEffect]> {
+def GetattrOp : Plier_Op<"getattr", [Pure]> {
   let arguments = (ins AnyType : $value, StrAttr : $name);
 
   let results = (outs AnyType);
@@ -194,7 +194,7 @@ def GetattrOp : Plier_Op<"getattr", [NoSideEffect]> {
                              : $name)>];
 }
 
-def ExhaustIterOp : Plier_Op<"exhaust_iter", [NoSideEffect]> {
+def ExhaustIterOp : Plier_Op<"exhaust_iter", [Pure]> {
   let arguments = (ins AnyType : $value, I64Attr : $count);
 
   let results = (outs AnyType);
@@ -206,7 +206,7 @@ def ExhaustIterOp : Plier_Op<"exhaust_iter", [NoSideEffect]> {
                              : $count)>];
 }
 
-def BuildSliceOp : Plier_Op<"build_slice", [NoSideEffect]> {
+def BuildSliceOp : Plier_Op<"build_slice", [Pure]> {
   let arguments = (ins AnyType : $begin, AnyType : $end, AnyType : $step);
 
   let results = (outs AnyType);
@@ -217,7 +217,7 @@ def BuildSliceOp : Plier_Op<"build_slice", [NoSideEffect]> {
                              : $stride)>];
 }
 
-def SliceGetItemOp : Plier_Op<"slice_getitem", [NoSideEffect]> {
+def SliceGetItemOp : Plier_Op<"slice_getitem", [Pure]> {
   let arguments = (ins AnyType : $slice, AnyType : $array, AnyType : $index,
                    I64Attr : $dim);
 

@@ -412,7 +412,7 @@ auto hasMemEffect(mlir::Operation &op) {
 
     if (effects.hasEffect<mlir::MemoryEffects::Read>())
       ret.read = true;
-  } else if (op.hasTrait<mlir::OpTrait::HasRecursiveSideEffects>()) {
+  } else if (op.hasTrait<mlir::OpTrait::HasRecursiveMemoryEffects>()) {
     ret.write = true;
   }
   return ret;
