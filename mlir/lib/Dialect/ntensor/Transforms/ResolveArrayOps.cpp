@@ -206,8 +206,7 @@ static bool isCompatibleSetitemValue(mlir::Type valueType,
     return true;
 
   if (auto valueArray = valueType.dyn_cast<imex::ntensor::NTensorType>())
-    return valueArray.getRank() == targetType.getRank() &&
-           valueArray.getElementType() == targetType.getElementType();
+    return valueArray.getElementType() == targetType.getElementType();
 
   return false;
 }

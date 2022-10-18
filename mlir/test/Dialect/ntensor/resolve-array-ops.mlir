@@ -174,6 +174,28 @@ func.func @test(%arg1: !ntensor.ntensor<?xf32>, %arg2: !ntensor.slice, %arg3: !n
 
 // -----
 
+func.func @test(%arg1: !ntensor.ntensor<?x?xf32>, %arg2: tuple<!ntensor.slice, index>, %arg3: !ntensor.ntensor<?xf32>) {
+  ntensor.setitem(%arg1 : !ntensor.ntensor<?x?xf32>) [%arg2 : tuple<!ntensor.slice, index>] = (%arg3 : !ntensor.ntensor<?xf32>)
+  return
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG1:.*]]: !ntensor.ntensor<?x?xf32>, %[[ARG2:.*]]: tuple<!ntensor.slice, index>, %[[ARG3:.*]]: !ntensor.ntensor<?xf32>)
+//  CHECK-NEXT:   %[[C0:.*]] = arith.constant 0 : index
+//  CHECK-NEXT:   %[[C1:.*]] = arith.constant 1 : index
+//  CHECK-NEXT:   %[[IDX1:.*]] = imex_util.tuple_extract %[[ARG2]] : tuple<!ntensor.slice, index>, %[[C0]] -> !ntensor.slice
+//  CHECK-NEXT:   %[[DIM1:.*]] = ntensor.dim %[[ARG1]], %[[C0]] : !ntensor.ntensor<?x?xf32>
+//  CHECK-NEXT:   %[[BEGIN:.*]], %[[END:.*]], %[[STEP:.*]], %[[COUNT:.*]] = ntensor.resolve_slice %[[IDX1]], %[[DIM1]]
+//  CHECK-NEXT:   %[[IDX2:.*]] = imex_util.tuple_extract %[[ARG2]] : tuple<!ntensor.slice, index>, %[[C1]] -> index
+//  CHECK-NEXT:   %[[DIM2:.*]]  = ntensor.dim %[[ARG1]], %[[C1]] : !ntensor.ntensor<?x?xf32>
+//  CHECK-NEXT:   %[[IDX3:.*]] = ntensor.resolve_index %[[IDX2]], %[[DIM2]]
+//  CHECK-NEXT:   %[[RES1:.*]] = ntensor.subview %[[ARG1]][%[[BEGIN]], %[[IDX3]]] [%[[COUNT]], 1] [%[[STEP]], 1] : !ntensor.ntensor<?x?xf32> to !ntensor.ntensor<?x1xf32>
+//  CHECK-NEXT:   %[[RES2:.*]]  = ntensor.subview %[[RES1]][0, 0] [%[[COUNT]], 1] [1, 1] : !ntensor.ntensor<?x1xf32> to !ntensor.ntensor<?xf32>
+//  CHECK-NEXT:   ntensor.copy %[[ARG3]], %[[RES2]] : !ntensor.ntensor<?xf32> to !ntensor.ntensor<?xf32>
+//  CHECK-NEXT:   return
+
+
+// -----
+
 func.func @test(%arg1: tuple<f32, f32>, %arg2: index) -> f32 {
   %0 = ntensor.getitem(%arg1 : tuple<f32, f32>) [%arg2 : index] -> f32
   return %0 : f32
