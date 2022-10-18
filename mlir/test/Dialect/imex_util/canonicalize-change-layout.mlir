@@ -69,3 +69,21 @@ func.func @test_change_layout(%arg1 : memref<?xi32>, %arg2 : memref<?xi32, #map>
   %1 = arith.select %arg3, %arg1, %0 : memref<?xi32>
   return %1 : memref<?xi32>
 }
+
+// -----
+
+// CHECK-LABEL: func @test_change_layout
+//  CHECK-SAME:   (%[[ARG1:.*]]: memref<?x?xf64, strided<[1, 1], offset: ?>>, %[[ARG2:.*]]: memref<?x?xf64, strided<[1, 1], offset: ?>>, %[[ARG3:.*]]: i1)
+//       CHECK:   %[[RES1:.*]] = arith.select %[[ARG3]], %[[ARG1]], %[[ARG2]] : memref<?x?xf64, strided<[1, 1], offset: ?>>
+//       CHECK:   %[[RES2:.*]] = imex_util.change_layout %[[RES1]] : memref<?x?xf64, strided<[1, 1], offset: ?>> to memref<?x?xf64>
+//       CHECK:   return %[[RES2]] : memref<?x?xf64>
+func.func @test_change_layout(%arg1 : memref<?x?xf64, strided<[1, 1], offset: ?>>, %arg2 : memref<?x?xf64, strided<[1, 1], offset: ?>>, %arg3 : i1) -> memref<?x?xf64> {
+  %0 = scf.if %arg3 -> (memref<?x?xf64>) {
+    %1 = imex_util.change_layout %arg1 : memref<?x?xf64, strided<[1, 1], offset: ?>> to memref<?x?xf64>
+    scf.yield %1 : memref<?x?xf64>
+  } else {
+    %2 = imex_util.change_layout %arg2 : memref<?x?xf64, strided<[1, 1], offset: ?>> to memref<?x?xf64>
+    scf.yield %2 : memref<?x?xf64>
+  }
+  return %0 : memref<?x?xf64>
+}

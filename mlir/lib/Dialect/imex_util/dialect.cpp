@@ -896,21 +896,31 @@ struct ChangeLayoutIf : public mlir::OpRewritePattern<mlir::scf::YieldOp> {
         auto src = cl.getSource();
         auto srcType = src.getType();
 
-        if (!canTransformLayoutCast(origType, srcType))
-          continue;
-
-        rewriter.updateRootInPlace(clYield,
-                                   [&]() { clYield.setOperand(i, src); });
-
         auto otherArg = otherYield.getResults()[i];
-        rewriter.setInsertionPoint(otherYield);
-        auto otherRes = rewriter.createOrFold<mlir::memref::CastOp>(
-            otherYield.getLoc(), srcType, otherArg);
+        if (canTransformLayoutCast(origType, srcType)) {
 
-        rewriter.updateRootInPlace(
-            otherYield, [&]() { otherYield.setOperand(i, otherRes); });
+          rewriter.updateRootInPlace(clYield,
+                                     [&]() { clYield.setOperand(i, src); });
 
-        newType = srcType;
+          rewriter.setInsertionPoint(otherYield);
+          auto otherRes = rewriter.createOrFold<mlir::memref::CastOp>(
+              otherYield.getLoc(), srcType, otherArg);
+
+          rewriter.updateRootInPlace(
+              otherYield, [&]() { otherYield.setOperand(i, otherRes); });
+          newType = srcType;
+          break;
+        }
+        if (auto otherCl =
+                otherArg.getDefiningOp<imex::util::ChangeLayoutOp>()) {
+          auto otherSrc = otherCl.getSource();
+          if (otherSrc.getType() == srcType) {
+            rewriter.updateRootInPlace(
+                otherYield, [&]() { otherYield.setOperand(i, otherSrc); });
+            newType = srcType;
+            break;
+          }
+        }
       }
 
       if (!newType) {
