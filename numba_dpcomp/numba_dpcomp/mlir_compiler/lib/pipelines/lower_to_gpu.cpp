@@ -29,6 +29,7 @@
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/Dialect/SPIRV/IR/SPIRVOps.h>
+#include <mlir/Dialect/SPIRV/IR/TargetAndABI.h>
 #include <mlir/Dialect/SPIRV/Transforms/Passes.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 #include <mlir/IR/Dominance.h>
@@ -36,6 +37,7 @@
 #include <mlir/Transforms/DialectConversion.h>
 #include <mlir/Transforms/Passes.h>
 
+#include "CheckGpuCaps.hpp"
 #include "base_pipeline.hpp"
 #include "loop_utils.hpp"
 #include "pipelines/lower_to_llvm.hpp"
@@ -1511,6 +1513,72 @@ struct GPUToLLVMPass
   }
 };
 
+static mlir::spirv::Version mapSpirvVersion(uint16_t major, uint16_t minor) {
+  if (major == 1) {
+    const mlir::spirv::Version mapping[] = {
+        mlir::spirv::Version::V_1_0, mlir::spirv::Version::V_1_1,
+        mlir::spirv::Version::V_1_2, mlir::spirv::Version::V_1_3,
+        mlir::spirv::Version::V_1_4, mlir::spirv::Version::V_1_5,
+        mlir::spirv::Version::V_1_6,
+    };
+    if (minor < std::size(mapping))
+      return mapping[minor];
+  }
+  llvm_unreachable("Invalid spirv version");
+}
+
+static mlir::spirv::TargetEnvAttr deviceCapsMapper(mlir::gpu::GPUModuleOp op) {
+  auto deviceCapsRet = getOffloadDeviceCapabilities();
+  if (!deviceCapsRet)
+    return nullptr;
+
+  auto deviceCaps = *deviceCapsRet;
+
+  auto context = op.getContext();
+  namespace spirv = mlir::spirv;
+  spirv::Capability fixedCaps[] = {
+      // clang-format off
+      spirv::Capability::Addresses,
+      spirv::Capability::AtomicFloat32AddEXT,
+      spirv::Capability::ExpectAssumeKHR,
+      spirv::Capability::GenericPointer,
+      spirv::Capability::Groups,
+      spirv::Capability::Int16,
+      spirv::Capability::Int64,
+      spirv::Capability::Int8,
+      spirv::Capability::Kernel,
+      spirv::Capability::Linkage,
+      spirv::Capability::Vector16,
+      // clang-format on
+  };
+  spirv::Extension exts[] = {spirv::Extension::SPV_EXT_shader_atomic_float_add,
+                             spirv::Extension::SPV_KHR_expect_assume};
+
+  llvm::SmallVector<spirv::Capability, 0> caps(std::begin(fixedCaps),
+                                               std::end(fixedCaps));
+
+  if (deviceCaps.hasFP16) {
+    caps.emplace_back(spirv::Capability::Float16);
+    caps.emplace_back(spirv::Capability::Float16Buffer);
+  }
+
+  if (deviceCaps.hasFP64) {
+    caps.emplace_back(spirv::Capability::Float64);
+  }
+
+  llvm::sort(caps);
+  llvm::sort(exts);
+  auto spirvVersion = mapSpirvVersion(deviceCaps.spirvMajorVersion,
+                                      deviceCaps.spirvMinorVersion);
+
+  auto triple = spirv::VerCapExtAttr::get(spirvVersion, caps, exts, context);
+  auto attr = spirv::TargetEnvAttr::get(
+      triple, spirv::Vendor::Unknown, spirv::DeviceType::Unknown,
+      spirv::TargetEnvAttr::kUnknownDeviceID,
+      spirv::getDefaultResourceLimits(context));
+  return attr;
+}
+
 static void commonOptPasses(mlir::OpPassManager &pm) {
   pm.addPass(imex::createCommonOptsPass());
   pm.addPass(mlir::createCSEPass());
@@ -1565,7 +1633,7 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   gpuFuncPM.addPass(std::make_unique<AssumeGpuIdRangePass>());
 
   pm.addNestedPass<mlir::gpu::GPUModuleOp>(gpu_runtime::createAbiAttrsPass());
-  pm.addPass(gpu_runtime::createSetSPIRVCapabilitiesPass());
+  pm.addPass(gpu_runtime::createSetSPIRVCapabilitiesPass(&deviceCapsMapper));
   pm.addPass(gpu_runtime::createGPUToSpirvPass());
   commonOptPasses(pm);
 

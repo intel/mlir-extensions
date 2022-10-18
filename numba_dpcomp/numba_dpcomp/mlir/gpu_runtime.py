@@ -71,3 +71,7 @@ if IS_GPU_RUNTIME_AVAILABLE:
 
     _register_funcs()
     del _register_funcs
+
+    get_device_caps_addr = int(
+        ctypes.cast(runtime_lib.dpcompGetDeviceCapabilities, ctypes.c_void_p).value
+    )

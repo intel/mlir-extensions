@@ -126,7 +126,7 @@ static DeviceDesc getDevice(CheckFunc &&checkFunc) {
         return {driver, device};
     }
   }
-  throw std::runtime_error("getDevice failed");
+  return {nullptr, nullptr};
 }
 
 static DeviceDesc getDevice() {
@@ -194,6 +194,9 @@ static auto countEvents(ze_event_handle_t *events) {
 struct Stream {
   Stream(size_t eventsCount) {
     auto driverAndDevice = getDevice();
+    if (!driverAndDevice.driver || !driverAndDevice.device)
+      throw std::runtime_error("getDevice failed");
+
     driver = driverAndDevice.driver;
     device = driverAndDevice.device;
 
@@ -506,4 +509,39 @@ dpcompGpuSuggestBlockSize(void *stream, void *kernel, const uint32_t *gridSize,
     static_cast<Stream *>(stream)->suggestBlockSize(
         static_cast<ze_kernel_handle_t>(kernel), gridSize, blockSize, numDims);
   });
+}
+
+// Must be kept in sync with compiler version version.
+struct OffloadDeviceCapabilities {
+  uint16_t spirvMajorVersion;
+  uint16_t spirvMinorVersion;
+  bool hasFP16;
+  bool hasFP64;
+};
+
+// TODO: device name
+extern "C" DPCOMP_GPU_RUNTIME_EXPORT bool
+dpcompGetDeviceCapabilities(OffloadDeviceCapabilities *ret) {
+  LOG_FUNC();
+  assert(ret);
+  auto driverAndDevice = getDevice();
+  if (!driverAndDevice.driver || !driverAndDevice.device)
+    return false;
+
+  catchAll([&]() {
+    ze_device_module_properties_t props = {};
+    props.stype = ZE_STRUCTURE_TYPE_DEVICE_MODULE_PROPERTIES;
+    CHECK_ZE_RESULT(
+        zeDeviceGetModuleProperties(driverAndDevice.device, &props));
+
+    OffloadDeviceCapabilities result = {};
+    result.spirvMajorVersion =
+        static_cast<uint16_t>(ZE_MAJOR_VERSION(props.spirvVersionSupported));
+    result.spirvMinorVersion =
+        static_cast<uint16_t>(ZE_MINOR_VERSION(props.spirvVersionSupported));
+    result.hasFP16 = props.flags & ZE_DEVICE_MODULE_FLAG_FP16;
+    result.hasFP64 = props.flags & ZE_DEVICE_MODULE_FLAG_FP64;
+    *ret = result;
+  });
+  return true;
 }
