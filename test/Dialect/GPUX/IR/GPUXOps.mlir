@@ -7,8 +7,8 @@
 
 // CHECK-LABEL: gpux.create_stream
 func.func @test_create_stream() -> !imex.gpux.StreamType {
-    %0 = "imex.gpux.create_stream"() : () -> !imex.gpux.StreamType
-    return %0 : !imex.gpux.StreamType
+    %3 = "imex.gpux.create_stream"() : () -> !imex.gpux.StreamType
+    return %3 : !imex.gpux.StreamType
 }
 
 // CHECK-LABEL: gpux.destroy_stream
@@ -56,4 +56,19 @@ func.func @test_gpux_launch_func() {
 "imex.gpux.launch_func"(%0, %cst, %cst, %cst, %cst, %cst, %cst, %1, %2) {kernel = @kernels::@kernel_1}
                      : (!imex.gpux.StreamType, index, index, index, index, index, index, memref<13xf32, 1>, memref<13xf32, 1>) -> ()
 return
+}
+
+
+// CHECK-LABEL: gpux.memcpy
+func.func @test_gpux_memcpy(%dst : memref<3x7xf32>, %src : memref<3x7xf32, 1>) {
+    %0 = "imex.gpux.create_stream"() : () -> !imex.gpux.StreamType
+    "imex.gpux.memcpy"(%0, %dst, %src) : (!imex.gpux.StreamType, memref<3x7xf32>, memref<3x7xf32, 1>) -> ()
+    return
+}
+
+// CHECK-LABEL: gpux.memset
+func.func @test_gpux_memset(%dst : memref<3x7xf32>, %value : f32) {
+    %0 = "imex.gpux.create_stream"() : () -> !imex.gpux.StreamType
+    "imex.gpux.memset"(%0, %dst, %value) : (!imex.gpux.StreamType, memref<3x7xf32>, f32) -> ()
+    return
 }

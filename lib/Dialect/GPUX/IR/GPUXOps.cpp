@@ -14,7 +14,7 @@
 
 #include <imex/Dialect/GPUX/IR/GPUXOps.h>
 #include <llvm/ADT/TypeSwitch.h>
-#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/IR/DialectImplementation.h>

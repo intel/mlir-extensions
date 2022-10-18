@@ -22,14 +22,25 @@
 #include <mlir/IR/Types.h>
 #include <mlir/Interfaces/SideEffectInterfaces.h>
 
-// StreamType is a custom type which points to a struct which
-// has the information required (like device, context) to create a sycl queue
-// or level zero commandlist
+// Custom Types for Stream, Device and Context.
+// They hold opaque pointers.
 
 namespace imex {
 namespace gpux {
 class StreamType : public ::mlir::Type::TypeBase<StreamType, ::mlir::Type,
                                                  ::mlir::TypeStorage> {
+public:
+  using Base::Base;
+};
+
+class DeviceType : public ::mlir::Type::TypeBase<DeviceType, ::mlir::Type,
+                                                 ::mlir::TypeStorage> {
+public:
+  using Base::Base;
+};
+
+class ContextType : public ::mlir::Type::TypeBase<ContextType, ::mlir::Type,
+                                                  ::mlir::TypeStorage> {
 public:
   using Base::Base;
 };
