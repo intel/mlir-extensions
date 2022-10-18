@@ -376,7 +376,7 @@ namespace mlir {{
 class AffineDialect;
 
 namespace arith {{
-class ArithmeticDialect;
+class ArithDialect;
 }} // namespace arith
 
 // FIXME define other dependent MLIR dialects

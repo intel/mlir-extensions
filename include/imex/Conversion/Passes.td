@@ -61,7 +61,7 @@ def ConvertPTensorToLinalg : Pass<"convert-ptensor-to-linalg", "::mlir::ModuleOp
                            "::mlir::AffineDialect",
                            "::mlir::func::FuncDialect",
                            "::mlir::tensor::TensorDialect",
-                           "::mlir::arith::ArithmeticDialect",
+                           "::mlir::arith::ArithDialect",
                            "::mlir::shape::ShapeDialect"];
   let options = [];
 }
@@ -82,7 +82,7 @@ def ConvertDistToStandard: Pass<"convert-dist-to-standard", "::mlir::ModuleOp"> 
   let dependentDialects = ["::mlir::linalg::LinalgDialect",
                            "::mlir::func::FuncDialect",
                            "::mlir::tensor::TensorDialect",
-                           "::mlir::arith::ArithmeticDialect",
+                           "::mlir::arith::ArithDialect",
                            "::mlir::shape::ShapeDialect"];
   let options = [];
 }

@@ -19,7 +19,7 @@
 #include <imex/internal/PassUtils.h>
 #include <imex/internal/PassWrapper.h>
 
-#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/Shape/IR/Shape.h>
@@ -39,8 +39,9 @@ inline ::mlir::Value
 createCallGetRankedData(::mlir::Location &loc, ::mlir::OpBuilder &builder,
                         const char *func, ::mlir::Value guid, uint64_t rank) {
   auto rankV = createIndex(loc, builder, rank);
-  auto tnsr = builder.create<::mlir::linalg::InitTensorOp>(
-      loc, ::mlir::ValueRange({rankV}), builder.getI64Type());
+  auto tnsr = builder.create<::mlir::tensor::EmptyOp>(
+      loc, ::mlir::ArrayRef<::mlir::OpFoldResult>({rankV}),
+      builder.getI64Type());
   auto fsa = builder.getStringAttr(func);
   (void)builder.create<::mlir::func::CallOp>(
       loc, fsa, ::mlir::TypeRange(),

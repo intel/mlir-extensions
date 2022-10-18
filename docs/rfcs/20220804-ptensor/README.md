@@ -183,7 +183,7 @@ If device==null and team==none this would decompose into the following high-leve
 %stop = $compute_stop_index(%1, %2, %3)
 %step = $3
 %gshape = $compute_global_shape(%1, %2, %3)
-%ltensor = linalg.init_tensor(%gshape)
+%ltensor = tensor.empty(%gshape)
 %rtensor = linalg.generic($compute_arange, %lslice, %lshape, %ltensor)
 %res = %rtensor, %device, %team, None
 ```
@@ -196,7 +196,7 @@ If device!=null but team==none this would decompose into the following
 %gshape = $compute_global_shape(%1, %2, %3)
 %gslice = slice($start, $stop, $step)
 intel_sycl.device_region(%device) {
-  %ltensor = linalg.init_tensor(%gshape)
+  %ltensor = tensor.empty(%gshape)
   %rtensor = linalg.generic($compute_arange, %gslice, %gshape, %ltensor)
 }
 %res = %rtensor, %device, %team, None
@@ -213,7 +213,7 @@ If device==null but team!=none this would decompose into the following high-leve
 %handle = dist.register_ptensor(%gshape)
 %lshape = dist.local_shape(%handle)
 %lslice = dist.local_slice(%handle)
-%ltensor = linalg.init_tensor(%lshape)
+%ltensor = tensor.empty(%lshape)
 %rtensor = linalg.generic($compute_arange, %lslice, %lshape, %ltensor)
 %res = %rtensor, %device, %team, %handle
 ```
@@ -228,7 +228,7 @@ If device!=null and team!=none this would become something like:
 %lshape = dist.local_shape(%handle)
 %lslice = dist.local_slice(%handle)
 intel_sycl.device_region(%device) {
-  %ltensor = linalg.init_tensor(%lshape)
+  %ltensor = tensor.empty(%lshape)
   %rtensor = linalg.generic($compute_arange, %lslice, %lshape, %ltensor)
 }
 %res = %rtensor, %device, %team, %handle

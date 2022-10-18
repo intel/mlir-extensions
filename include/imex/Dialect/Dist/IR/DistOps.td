@@ -54,7 +54,7 @@ def RuntimePrototypesOp : Dist_Op<"runtime_prototypes"> {
 // Returns an id to uniquely identify the tensor instance in future interactino with the runtime.
 // The runtime does not own or manage any PTensor memory. When needed by an operation,
 // (local) data needs to be provided.
-def RegisterPTensorOp : Dist_Op<"register_ptensor", [NoSideEffect]> {
+def RegisterPTensorOp : Dist_Op<"register_ptensor", []> {
     // Global shape needed for initial registration. Views are handled by a separate op.
     let arguments = (ins AnyType: $shape);
 
@@ -64,7 +64,7 @@ def RegisterPTensorOp : Dist_Op<"register_ptensor", [NoSideEffect]> {
 
 // Get the offsets (one for each dimension) of the local partition of a distributed PTensor in number of elements.
 // Partitionings can be N-dimensional but must cut only the first N dimensions.
-def LocalOffsetsOp : Dist_Op<"local_offsets", [NoSideEffect]> {
+def LocalOffsetsOp : Dist_Op<"local_offsets", []> {
     // Id of tensor as returned by RegisterPTensorOp
     let arguments = (ins I64Attr: $rank, I64: $ptensor);
 
@@ -74,7 +74,7 @@ def LocalOffsetsOp : Dist_Op<"local_offsets", [NoSideEffect]> {
 
 // Get the shape (one size for each dimension) of the local partition of a distributed PTensor in number of elements.
 // Partitionings can be N-dimensional but must cut only the first N dimensions.
-def LocalShapeOp : Dist_Op<"local_shape", [NoSideEffect]> {
+def LocalShapeOp : Dist_Op<"local_shape", []> {
     // Id of tensor as returned by RegisterPTensorOp
     let arguments = (ins I64Attr: $rank, I64: $ptensor);
 
@@ -83,7 +83,7 @@ def LocalShapeOp : Dist_Op<"local_shape", [NoSideEffect]> {
 }
 
 // Inplace allreduce
-def AllReduceOp : Dist_Op<"allreduce", [NoSideEffect]> {
+def AllReduceOp : Dist_Op<"allreduce", []> {
     // reduction operation and and local tensor
     let arguments = (ins AnyAttr: $op, AnyTensor: $tensor);
 

@@ -28,7 +28,7 @@
 #include <imex/internal/PassWrapper.h>
 
 #include <mlir/Conversion/LLVMCommon/TypeConverter.h>
-#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/LLVMIR/LLVMDialect.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
@@ -162,8 +162,8 @@ struct DistARange : public RecOpRewritePattern<::imex::ptensor::ARangeOp> {
     auto i64Typ = rewriter.getI64Type();
     // result shape is 1d
     uint64_t rank = 1;
-    auto gShpTnsr = rewriter.create<::mlir::linalg::InitTensorOp>(
-        loc, ::mlir::ValueRange({count}), dtype);
+    auto gShpTnsr = rewriter.create<::mlir::tensor::EmptyOp>(
+        loc, ::mlir::ArrayRef<::mlir::OpFoldResult>({count}), dtype);
     auto gShape = rewriter.create<::mlir::shape::ShapeOfOp>(loc, gShpTnsr);
     // so is the local shape
     llvm::SmallVector<mlir::Value> lShapeVVec(1);

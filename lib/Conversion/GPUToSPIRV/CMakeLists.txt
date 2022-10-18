@@ -8,7 +8,7 @@ add_mlir_conversion_library(IMEXGPUToSPIRV
   IMEXConversionPassIncGen
 
   LINK_LIBS PUBLIC
-  MLIRArithmeticToSPIRV
+  MLIRArithToSPIRV
   MLIRGPUOps
   MLIRFuncToSPIRV
   MLIRIR
