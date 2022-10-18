@@ -27,34 +27,36 @@ include(AddMLIR)
 include(HandleLLVMOptions)
 
 set(SOURCES_LIST
+    lib/CheckGpuCaps.cpp
+    lib/loop_utils.cpp
+    lib/lowering.cpp
+    lib/mangle.cpp
     lib/pipelines/base_pipeline.cpp
     lib/pipelines/lower_to_gpu.cpp
     lib/pipelines/lower_to_llvm.cpp
     lib/pipelines/parallel_to_tbb.cpp
     lib/pipelines/plier_to_linalg.cpp
-    lib/pipelines/plier_to_std.cpp
     lib/pipelines/plier_to_scf.cpp
+    lib/pipelines/plier_to_std.cpp
     lib/pipelines/pre_low_simplifications.cpp
-    lib/loop_utils.cpp
-    lib/lowering.cpp
-    lib/mangle.cpp
     lib/py_func_resolver.cpp
     lib/py_linalg_resolver.cpp
     lib/py_map_types.cpp
     lib/py_module.cpp
     )
 set(HEADERS_LIST
+    lib/CheckGpuCaps.hpp
+    lib/loop_utils.hpp
+    lib/lowering.hpp
+    lib/mangle.hpp
     lib/pipelines/base_pipeline.hpp
     lib/pipelines/lower_to_gpu.hpp
     lib/pipelines/lower_to_llvm.hpp
     lib/pipelines/parallel_to_tbb.hpp
     lib/pipelines/plier_to_linalg.hpp
-    lib/pipelines/plier_to_std.hpp
     lib/pipelines/plier_to_scf.hpp
+    lib/pipelines/plier_to_std.hpp
     lib/pipelines/pre_low_simplifications.hpp
-    lib/loop_utils.hpp
-    lib/lowering.hpp
-    lib/mangle.hpp
     lib/py_func_resolver.hpp
     lib/py_linalg_resolver.hpp
     lib/py_map_types.hpp

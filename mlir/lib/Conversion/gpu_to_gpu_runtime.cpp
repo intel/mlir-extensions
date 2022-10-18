@@ -1174,57 +1174,59 @@ struct GPUToSpirvPass
       kernelModules.push_back(builder.clone(*moduleOp.getOperation()));
     });
 
-    auto targetAttr = mlir::spirv::lookupTargetEnvOrDefault(module);
-    auto target = mlir::SPIRVConversionTarget::get(targetAttr);
+    for (auto kernelModule : kernelModules) {
+      auto targetAttr = mlir::spirv::lookupTargetEnvOrDefault(kernelModule);
+      auto target = mlir::SPIRVConversionTarget::get(targetAttr);
 
-    mlir::SPIRVConversionOptions options;
-    options.use64bitIndex = true;
+      mlir::SPIRVConversionOptions options;
+      options.use64bitIndex = true;
 
-    mlir::SPIRVTypeConverter typeConverter(targetAttr, options);
-    mlir::RewritePatternSet patterns(context);
+      mlir::SPIRVTypeConverter typeConverter(targetAttr, options);
+      mlir::RewritePatternSet patterns(context);
 
-    typeConverter.addConversion(
-        [&typeConverter](mlir::MemRefType type) -> llvm::Optional<mlir::Type> {
-          if (!type.hasRank() || !type.getElementType().isIntOrFloat())
-            return mlir::Type(nullptr);
+      typeConverter.addConversion([&typeConverter](mlir::MemRefType type)
+                                      -> llvm::Optional<mlir::Type> {
+        if (!type.hasRank() || !type.getElementType().isIntOrFloat())
+          return mlir::Type(nullptr);
 
-          auto elemType = typeConverter.convertType(type.getElementType());
-          if (!elemType)
-            return mlir::Type(nullptr);
+        auto elemType = typeConverter.convertType(type.getElementType());
+        if (!elemType)
+          return mlir::Type(nullptr);
 
-          auto sc = convertStorageClass(
-              type.getMemorySpace(), mlir::spirv::StorageClass::CrossWorkgroup);
+        auto sc = convertStorageClass(
+            type.getMemorySpace(), mlir::spirv::StorageClass::CrossWorkgroup);
 
-          return mlir::spirv::PointerType::get(elemType, sc);
-        });
+        return mlir::spirv::PointerType::get(elemType, sc);
+      });
 
-    mlir::ScfToSPIRVContext scfToSpirvCtx;
-    mlir::populateSCFToSPIRVPatterns(typeConverter, scfToSpirvCtx, patterns);
-    mlir::populateGPUToSPIRVPatterns(typeConverter, patterns);
-    mlir::populateFuncToSPIRVPatterns(typeConverter, patterns);
-    mlir::cf::populateControlFlowToSPIRVPatterns(typeConverter, patterns);
-    mlir::arith::populateArithToSPIRVPatterns(typeConverter, patterns);
-    mlir::populateMathToSPIRVPatterns(typeConverter, patterns);
+      mlir::ScfToSPIRVContext scfToSpirvCtx;
+      mlir::populateSCFToSPIRVPatterns(typeConverter, scfToSpirvCtx, patterns);
+      mlir::populateGPUToSPIRVPatterns(typeConverter, patterns);
+      mlir::populateFuncToSPIRVPatterns(typeConverter, patterns);
+      mlir::cf::populateControlFlowToSPIRVPatterns(typeConverter, patterns);
+      mlir::arith::populateArithToSPIRVPatterns(typeConverter, patterns);
+      mlir::populateMathToSPIRVPatterns(typeConverter, patterns);
 
-    patterns
-        .insert<ConvertSubviewOp, ConvertCastOp<mlir::memref::CastOp>,
-                ConvertCastOp<mlir::memref::ReinterpretCastOp>, ConvertLoadOp,
-                ConvertStoreOp, ConvertAtomicOps, ConvertFunc, ConvertAssert,
-                ConvertBarrierOp, ConvertMemFenceOp, ConvertUndef,
-                ConvertGlobalOp, ConvertGetGlobalOp>(typeConverter, context);
+      patterns
+          .insert<ConvertSubviewOp, ConvertCastOp<mlir::memref::CastOp>,
+                  ConvertCastOp<mlir::memref::ReinterpretCastOp>, ConvertLoadOp,
+                  ConvertStoreOp, ConvertAtomicOps, ConvertFunc, ConvertAssert,
+                  ConvertBarrierOp, ConvertMemFenceOp, ConvertUndef,
+                  ConvertGlobalOp, ConvertGetGlobalOp>(typeConverter, context);
 
-    patterns.add<
-        SingleDimLaunchConfigConversion<mlir::gpu::SubgroupIdOp,
-                                        mlir::spirv::BuiltIn::SubgroupId>,
-        SingleDimLaunchConfigConversion<mlir::gpu::NumSubgroupsOp,
-                                        mlir::spirv::BuiltIn::NumSubgroups>,
-        SingleDimLaunchConfigConversion<mlir::gpu::SubgroupSizeOp,
-                                        mlir::spirv::BuiltIn::SubgroupSize>>(
-        typeConverter, patterns.getContext());
+      patterns.add<
+          SingleDimLaunchConfigConversion<mlir::gpu::SubgroupIdOp,
+                                          mlir::spirv::BuiltIn::SubgroupId>,
+          SingleDimLaunchConfigConversion<mlir::gpu::NumSubgroupsOp,
+                                          mlir::spirv::BuiltIn::NumSubgroups>,
+          SingleDimLaunchConfigConversion<mlir::gpu::SubgroupSizeOp,
+                                          mlir::spirv::BuiltIn::SubgroupSize>>(
+          typeConverter, patterns.getContext());
 
-    if (failed(
-            applyFullConversion(kernelModules, *target, std::move(patterns))))
-      return signalPassFailure();
+      if (failed(
+              applyFullConversion(kernelModule, *target, std::move(patterns))))
+        return signalPassFailure();
+    }
   }
 };
 
@@ -1368,10 +1370,51 @@ struct AbiAttrsPass
   }
 };
 
+static mlir::spirv::TargetEnvAttr defaultCapsMapper(mlir::gpu::GPUModuleOp op) {
+  auto context = op.getContext();
+  namespace spirv = mlir::spirv;
+  spirv::Capability caps[] = {
+      // clang-format off
+      spirv::Capability::Addresses,
+      spirv::Capability::AtomicFloat32AddEXT,
+      spirv::Capability::ExpectAssumeKHR,
+      spirv::Capability::Float16,
+      spirv::Capability::Float16Buffer,
+      spirv::Capability::Float64,
+      spirv::Capability::GenericPointer,
+      spirv::Capability::Groups,
+      spirv::Capability::Int16,
+      spirv::Capability::Int64,
+      spirv::Capability::Int8,
+      spirv::Capability::Kernel,
+      spirv::Capability::Linkage,
+      spirv::Capability::Vector16,
+      // clang-format on
+  };
+  spirv::Extension exts[] = {spirv::Extension::SPV_EXT_shader_atomic_float_add,
+                             spirv::Extension::SPV_KHR_expect_assume};
+  llvm::sort(caps);
+  llvm::sort(exts);
+  auto triple =
+      spirv::VerCapExtAttr::get(spirv::Version::V_1_0, caps, exts, context);
+  auto attr = spirv::TargetEnvAttr::get(
+      triple, spirv::Vendor::Unknown, spirv::DeviceType::Unknown,
+      spirv::TargetEnvAttr::kUnknownDeviceID,
+      spirv::getDefaultResourceLimits(context));
+  return attr;
+}
+
 struct SetSPIRVCapabilitiesPass
     : public mlir::PassWrapper<SetSPIRVCapabilitiesPass,
-                               mlir::OperationPass<mlir::ModuleOp>> {
+                               mlir::OperationPass<void>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(SetSPIRVCapabilitiesPass)
+
+  SetSPIRVCapabilitiesPass(
+      std::function<mlir::spirv::TargetEnvAttr(mlir::gpu::GPUModuleOp)> m)
+      : mapper(std::move(m)) {
+    if (!mapper)
+      mapper = &defaultCapsMapper;
+  }
 
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
@@ -1380,38 +1423,17 @@ struct SetSPIRVCapabilitiesPass
   }
 
   void runOnOperation() override {
+    assert(mapper && "Invalid mapper");
     namespace spirv = mlir::spirv;
-    auto context = &getContext();
-    spirv::Capability caps[] = {
-        // clang-format off
-        spirv::Capability::Addresses,
-        spirv::Capability::Float16Buffer,
-        spirv::Capability::Int64,
-        spirv::Capability::Int16,
-        spirv::Capability::Int8,
-        spirv::Capability::Kernel,
-        spirv::Capability::Linkage,
-        spirv::Capability::Vector16,
-        spirv::Capability::GenericPointer,
-        spirv::Capability::Groups,
-        spirv::Capability::Float16,
-        spirv::Capability::Float64,
-        spirv::Capability::AtomicFloat32AddEXT,
-        spirv::Capability::ExpectAssumeKHR,
-        // clang-format on
-    };
-    spirv::Extension exts[] = {
-        spirv::Extension::SPV_EXT_shader_atomic_float_add,
-        spirv::Extension::SPV_KHR_expect_assume};
-    auto triple =
-        spirv::VerCapExtAttr::get(spirv::Version::V_1_0, caps, exts, context);
-    auto attr = spirv::TargetEnvAttr::get(
-        triple, spirv::Vendor::Unknown, spirv::DeviceType::Unknown,
-        spirv::TargetEnvAttr::kUnknownDeviceID,
-        spirv::getDefaultResourceLimits(context));
-    auto module = getOperation();
-    module->setAttr(spirv::getTargetEnvAttrName(), attr);
+    auto op = getOperation();
+    op->walk([&](mlir::gpu::GPUModuleOp op) {
+      if (auto attr = mapper(op))
+        op->setAttr(spirv::getTargetEnvAttrName(), attr);
+    });
   }
+
+private:
+  std::function<mlir::spirv::TargetEnvAttr(mlir::gpu::GPUModuleOp)> mapper;
 };
 
 struct SerializeSPIRVPass
@@ -1485,8 +1507,9 @@ std::unique_ptr<mlir::Pass> gpu_runtime::createAbiAttrsPass() {
   return std::make_unique<AbiAttrsPass>();
 }
 
-std::unique_ptr<mlir::Pass> gpu_runtime::createSetSPIRVCapabilitiesPass() {
-  return std::make_unique<SetSPIRVCapabilitiesPass>();
+std::unique_ptr<mlir::Pass> gpu_runtime::createSetSPIRVCapabilitiesPass(
+    std::function<mlir::spirv::TargetEnvAttr(mlir::gpu::GPUModuleOp)> mapper) {
+  return std::make_unique<SetSPIRVCapabilitiesPass>(std::move(mapper));
 }
 
 std::unique_ptr<mlir::Pass> gpu_runtime::createGPUToSpirvPass() {

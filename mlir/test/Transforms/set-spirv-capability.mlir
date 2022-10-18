@@ -2,7 +2,8 @@
 
 module attributes {gpu.container_module} {
 
-// CHECK: module attributes {gpu.container_module, spirv.target_env = #spirv.target_env<#spirv.vce<v1.0, [Addresses, Float16Buffer, Int64, Int16, Int8, Kernel, Linkage, Vector16, GenericPointer, Groups, Float16, Float64, AtomicFloat32AddEXT, ExpectAssumeKHR], [SPV_EXT_shader_atomic_float_add, SPV_KHR_expect_assume]>, #spirv.resource_limits<>>} {
+// CHECK: module attributes {gpu.container_module} {
+// CHECK: gpu.module @main_kernel attributes {spirv.target_env = #spirv.target_env<#spirv.vce<v1.0, [Addresses, Linkage, Kernel, Vector16, Float16Buffer, Float16, Float64, Int64, Groups, Int16, GenericPointer, Int8, ExpectAssumeKHR, AtomicFloat32AddEXT], [SPV_KHR_expect_assume, SPV_EXT_shader_atomic_float_add]>, #spirv.resource_limits<>>} {
 
   gpu.module @main_kernel {
     gpu.func @main_kernel(%arg0: memref<8xf32>, %arg1: memref<8xf32>, %arg2: memref<8xf32>) kernel attributes {spirv.entry_point_abi = #spirv.entry_point_abi<>} {
