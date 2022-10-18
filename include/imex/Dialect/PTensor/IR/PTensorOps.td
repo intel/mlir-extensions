@@ -18,6 +18,7 @@
 include "mlir/IR/OpBase.td"
 include "mlir/IR/AttrTypeBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/Interfaces/ViewLikeInterface.td"
 
 // Provide a definition of the 'PTensor' dialect in the ODS framework so that we
 // can define our operations.
@@ -81,7 +82,7 @@ class PTensor_Op<string mnemonic, list<Trait> traits = []> :
     Op<PTensor_Dialect, mnemonic, traits>;
 
 
-def MkPTensorOp : PTensor_Op<"init_ptensor", [NoSideEffect]> {
+def MkPTensorOp : PTensor_Op<"init_ptensor", []> {
     let summary = "Create a new PTensor from RankedTensor, device, team and guid";
     let description = [{
         High-level operation to create a new PTensor.
@@ -118,7 +119,7 @@ def MkPTensorOp : PTensor_Op<"init_ptensor", [NoSideEffect]> {
     ];
 }
 
-def ExtractRTensorOp : PTensor_Op<"extract_rtensor", [NoSideEffect]> {
+def ExtractRTensorOp : PTensor_Op<"extract_rtensor", []> {
     let summary = "Extract RankedTensor from a PTensor";
     let description = [{
         High-level operation to extract the RankedTensor from the given PTensor.
@@ -129,7 +130,7 @@ def ExtractRTensorOp : PTensor_Op<"extract_rtensor", [NoSideEffect]> {
     let results = (outs AnyRankedTensor);
 }
 
-def ARangeOp : PTensor_Op<"arange", [NoSideEffect, SameVariadicOperandSize]> {
+def ARangeOp : PTensor_Op<"arange", [SameVariadicOperandSize]> {
     let summary = "Create an arange (see array-API)";
     let description = [{
         Returns evenly `step`-spaced values within the half-open interval [`start`, `stop`) as a ptensor of rank 1.
@@ -143,7 +144,7 @@ def ARangeOp : PTensor_Op<"arange", [NoSideEffect, SameVariadicOperandSize]> {
     let results = (outs PTensor_PTensor);
 }
 
-def EWBinOp : PTensor_Op<"ewbin", [NoSideEffect]> {
+def EWBinOp : PTensor_Op<"ewbin", []> {
     let summary = "Apply elementwise binary operation";
     let description = [{
         Apply the `op(lhs[i], rhs[i])` on all elements `i` and return a new ptensor.
@@ -156,7 +157,7 @@ def EWBinOp : PTensor_Op<"ewbin", [NoSideEffect]> {
     let results = (outs PTensor_PTensor);
 }
 
-def ReductionOp : PTensor_Op<"reduction", [NoSideEffect]> {
+def ReductionOp : PTensor_Op<"reduction", []> {
     let summary = "Apply reduction operation";
     let description = [{
         Apply the reduction operation `op` over all elements of `input`.

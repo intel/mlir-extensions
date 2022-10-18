@@ -14,7 +14,7 @@
 #ifndef _IMEX_PASSUTILS_H_
 #define _IMEX_PASSUTILS_H_
 
-#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Arith/IR/Arith.h>
 
 namespace imex {
 

@@ -34,7 +34,7 @@ module {
 // CHECK-NEXT: func.func private @_idtr_local_offsets(i64, tensor<?xi64>, i64)
 // CHECK-NEXT: func.func private @_idtr_reduce_all(tensor<i64>, i32, i32)
 // CHECK: func.func @test_local_shape(%arg0: i64) -> tensor<?xi64> {
-// CHECK: [[C0:%.*]] = linalg.init_tensor [{{.*}}] : tensor<?xi64>
+// CHECK: [[C0:%.*]] = tensor.empty({{.*}}) : tensor<?xi64>
 // CHECK: call @_idtr_local_shape(%arg0, [[C0]], {{.*}}) : (i64, tensor<?xi64>, i64) -> ()
 // CHECK: return [[C0]] : tensor<?xi64>
 
@@ -51,7 +51,7 @@ module {
 // CHECK-NEXT: func.func private @_idtr_local_offsets(i64, tensor<?xi64>, i64)
 // CHECK-NEXT: func.func private @_idtr_reduce_all(tensor<i64>, i32, i32)
 // CHECK: func.func @test_local_offsets(%arg0: i64) -> tensor<?xi64> {
-// CHECK: [[C0:%.*]] = linalg.init_tensor [{{.*}}] : tensor<?xi64>
+// CHECK: [[C0:%.*]] = tensor.empty({{.*}}) : tensor<?xi64>
 // CHECK: call @_idtr_local_offsets(%arg0, [[C0]], {{.*}}) : (i64, tensor<?xi64>, i64) -> ()
 // CHECK: return [[C0]] : tensor<?xi64>
 

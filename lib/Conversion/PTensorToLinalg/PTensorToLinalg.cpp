@@ -38,7 +38,7 @@
 #include <imex/Dialect/PTensor/Transforms/Utils.h>
 
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
-#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Bufferization/IR/Bufferization.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/Func/Transforms/FuncConversions.h>
@@ -201,10 +201,11 @@ struct ARangeLowering
     auto retRtTyp = retPtTyp.getRtensor();
     assert(retRtTyp);
     auto elTyp = retRtTyp.getElementType();
-    llvm::SmallVector<mlir::Value> shapeVVec(1, count);
     // init tensor
     auto tensor =
-        rewriter.create<::mlir::linalg::InitTensorOp>(loc, shapeVVec, elTyp)
+        rewriter
+            .create<::mlir::tensor::EmptyOp>(
+                loc, ::mlir::ArrayRef<::mlir::OpFoldResult>({count}), elTyp)
             .getResult();
 
     // fill with arange values
@@ -380,17 +381,18 @@ struct EWBinOpLowering
     // FIXME shape broadcasting: input tensors might have compatible but
     // different shapes
     auto rank = static_cast<unsigned>(retRtTyp.getRank());
-    llvm::SmallVector<mlir::Value> shapeVVec(rank);
+    llvm::SmallVector<::mlir::OpFoldResult> shapeVVec(rank);
     llvm::SmallVector<mlir::StringRef> iterators(rank);
     for (auto i : llvm::seq(0u, rank)) {
-      shapeVVec[i] = rewriter.create<::mlir::tensor::DimOp>(loc, lhsTnsr, i);
+      shapeVVec[i] =
+          rewriter.create<::mlir::tensor::DimOp>(loc, lhsTnsr, i).getResult();
       // iterate in parallel
       iterators[i] = "parallel";
     }
 
     // init tensor
     auto tensor =
-        rewriter.create<::mlir::linalg::InitTensorOp>(loc, shapeVVec, elTyp)
+        rewriter.create<::mlir::tensor::EmptyOp>(loc, shapeVVec, elTyp)
             .getResult();
 
     // Get signless operands into vec
@@ -481,15 +483,16 @@ struct ReductionOpLowering
     auto rank = static_cast<unsigned>(retRtTyp.getRank());
     assert(rank == 0);
     auto attr = rewriter.getIndexAttr(0);
-    auto zeroI = rewriter.create<::mlir::arith::ConstantOp>(loc, attr);
-    llvm::SmallVector<mlir::Value> shapeVVec(rank, zeroI);
+    auto zeroI =
+        rewriter.create<::mlir::arith::ConstantOp>(loc, attr).getResult();
+    llvm::SmallVector<::mlir::OpFoldResult> shapeVVec(rank, zeroI);
     // create new tensor
     auto zero =
         rewriter
             .create<mlir::arith::ConstantOp>(loc, rewriter.getI64IntegerAttr(0))
             .getResult();
     auto tensor =
-        rewriter.create<::mlir::linalg::InitTensorOp>(loc, shapeVVec, sElTyp)
+        rewriter.create<::mlir::tensor::EmptyOp>(loc, shapeVVec, sElTyp)
             .getResult();
     auto tnsr = rewriter.create<::mlir::linalg::FillOp>(loc, zero, tensor);
 
@@ -560,7 +563,7 @@ struct ConvertPTensorToLinalgPass
     target.addLegalDialect<::mlir::linalg::LinalgDialect>();
     target.addLegalDialect<::mlir::AffineDialect>();
     target.addLegalDialect<::mlir::tensor::TensorDialect>();
-    target.addLegalDialect<::mlir::arith::ArithmeticDialect>();
+    target.addLegalDialect<::mlir::arith::ArithDialect>();
     target.addLegalDialect<::mlir::shape::ShapeDialect>();
     target.addLegalDialect<::mlir::memref::MemRefDialect>();
     target.addLegalDialect<::mlir::bufferization::BufferizationDialect>();

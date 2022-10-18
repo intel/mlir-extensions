@@ -19,7 +19,7 @@ func.func @test_ewbin(%arg0: !ptensor.ptensor<tensor<?xi64>>) -> !ptensor.ptenso
 }
 // CHECK-LABEL: @test_ewbin
 // CHECK: [[C0:%.*]] = tensor.dim
-// CHECK: linalg.init_tensor [[[C0]]] : tensor<?xi64>
+// CHECK: tensor.empty([[C0]]) : tensor<?xi64>
 // CHECK: linalg.generic{{.*}}["parallel"]
 // CHECK return %{{.}} : tensor<?xi64>
 
