@@ -1742,10 +1742,16 @@ static mlir::spirv::TargetEnvAttr deviceCapsMapper(mlir::gpu::GPUModuleOp op) {
 
   auto deviceCaps = *deviceCapsRet;
 
-  auto spirvVersion = mapSpirvVersion(deviceCaps.spirvMajorVersion,
-                                      deviceCaps.spirvMinorVersion);
-  if (!spirvVersion)
+  auto spirvVersionRet = mapSpirvVersion(deviceCaps.spirvMajorVersion,
+                                         deviceCaps.spirvMinorVersion);
+  if (!spirvVersionRet)
     return nullptr;
+
+  auto spirvVersion = *spirvVersionRet;
+
+  // Pretend we are supporting 1.3 for non-uniform ops.
+  if (spirvVersion == mlir::spirv::Version::V_1_2)
+    spirvVersion = mlir::spirv::Version::V_1_3;
 
   auto context = op.getContext();
   namespace spirv = mlir::spirv;
@@ -1782,7 +1788,7 @@ static mlir::spirv::TargetEnvAttr deviceCapsMapper(mlir::gpu::GPUModuleOp op) {
   llvm::sort(caps);
   llvm::sort(exts);
 
-  auto triple = spirv::VerCapExtAttr::get(*spirvVersion, caps, exts, context);
+  auto triple = spirv::VerCapExtAttr::get(spirvVersion, caps, exts, context);
   auto attr = spirv::TargetEnvAttr::get(
       triple, spirv::Vendor::Unknown, spirv::DeviceType::Unknown,
       spirv::TargetEnvAttr::kUnknownDeviceID,
