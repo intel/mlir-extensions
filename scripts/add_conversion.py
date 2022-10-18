@@ -133,6 +133,8 @@ with open(fn, "w") as f:
 
 #include <mlir/IR/BuiltinOps.h>
 
+#include "../PassDetail.h"
+
 namespace imex {{
 
 namespace {{
@@ -141,13 +143,29 @@ namespace {{
 // *******************************
 
 // Some{args.source}Op -> Some{args.target}Op
+struct Some{args.source}OpConverter
+    : public ::mlir::OpConversionPattern<::imex::{args.source.lower()}::FIXME> {{
+  using OpConversionPattern::OpConversionPattern;
+
+  ::mlir::LogicalResult
+  matchAndRewrite(::imex::{args.source.lower()}::FIXME op,
+                  ::imex::{args.source.lower()}::FIXME::Adaptor adaptor,
+                  ::mlir::ConversionPatternRewriter &rewriter) const override {{
+
+      FIXME fill in rewriting code
+
+      return ::mlir::success();
+  }}
+}};
+
+// Some{args.source}Op -> Some{args.target}Op
 struct Some{args.source}OpRewriter
     : public mlir::OpRewritePattern<::imex::{args.source.lower()}::FIXME> {{
   using OpRewritePattern::OpRewritePattern;
 
   ::mlir::LogicalResult
-  matchAndRewrite({args.source.lower()}::FIXME op,
-                  mlir::PatternRewriter &rewriter) const override {{
+  matchAndRewrite(::imex::{args.source.lower()}::FIXME op,
+                  ::mlir::PatternRewriter &rewriter) const override {{
 
       FIXME fill in rewriting code
 
@@ -160,8 +178,8 @@ struct Some{args.source}OpRewriter
 // *******************************
 
 // Full Pass
-struct Convert{name}Pass that convert {args.source} to {args.target}
-    : public ::imex::Convert{name}PassBase<Convert{name}Pass>
+struct Convert{name}Pass // convert {args.source} to {args.target}
+    : public ::imex::Convert{name}Base<Convert{name}Pass>
 {{
   Convert{name}Pass() = default;
 
@@ -183,7 +201,7 @@ void populate{name}ConversionPatterns(::mlir::LLVMTypeConverter &converter,
 
 /// Create a pass that convert {args.source} to {args.target}
 std::unique_ptr<::mlir::OperationPass<::mlir::ModuleOp>> createConvert{name}Pass() {{
-    return std::make_unique<{name}Pass>();
+    return std::make_unique<Convert{name}Pass>();
 }}
 
 }} // namespace imex
@@ -226,7 +244,7 @@ def Convert{name}: Pass<"convert-{args.source.lower()}-to-{args.target.lower()}"
 
     - FIXME
   }}];
-  let constructor = "::imex::create{name}ConvertPass()";
+  let constructor = "::imex::createConvert{name}Pass()";
   let dependentDialects = ["::imex::{args.target.lower()}::{args.target}Dialect"];
   let options = [];
 }}

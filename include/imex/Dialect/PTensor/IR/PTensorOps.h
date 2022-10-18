@@ -15,6 +15,7 @@
 #ifndef _PTensor_OPS_H_INCLUDED_
 #define _PTensor_OPS_H_INCLUDED_
 
+#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/IR/BuiltinTypes.h>
 #include <mlir/IR/Dialect.h>
@@ -63,6 +64,16 @@ enum EWBinOpId : int {
 enum ReduceOpId : int { MAX, MEAN, MIN, PROD, SUM, STD, VAR, REDUCEOPID_LAST };
 
 } // namespace ptensor
+
+template <int W, typename T>
+::mlir::Value createSignlessInt(::mlir::OpBuilder &b,
+                                const ::mlir::Location &loc, T val) {
+  return b
+      .create<::mlir::arith::ConstantOp>(
+          loc, b.getIntegerAttr(b.getIntegerType(W), val))
+      .getResult();
+}
+
 } // namespace imex
 
 #include <imex/Dialect/PTensor/IR/PTensorOpsDialect.h.inc>
