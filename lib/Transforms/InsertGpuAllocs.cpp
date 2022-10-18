@@ -39,7 +39,7 @@ struct InsertGPUAllocs
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::memref::MemRefDialect>();
     registry.insert<mlir::gpu::GPUDialect>();
-    registry.insert<mlir::arith::ArithmeticDialect>();
+    registry.insert<mlir::arith::ArithDialect>();
   }
 
   void runOnOperation() override {
@@ -72,9 +72,9 @@ struct InsertGPUAllocs
     auto getMemReadWriteOp = [](mlir::Operation *op)
         -> llvm::Optional<mlir::SmallVector<mlir::Value, 4>> {
       if (auto load = mlir::dyn_cast<mlir::memref::LoadOp>(op)) {
-        return {{load.memref()}};
+        return {{load.getMemref()}};
       } else if (auto store = mlir::dyn_cast<mlir::memref::StoreOp>(op)) {
-        return {{store.memref()}};
+        return {{store.getMemref()}};
       }
       // This case checks if a mlir func call within the gpu.launch has
       // operands which have memref as operands.It just collects them and checks
@@ -192,10 +192,10 @@ struct InsertGPUAllocs
           }
 
           if (auto copy = mlir::dyn_cast<mlir::memref::CopyOp>(user)) {
-            if (copy.source() == mem)
+            if (copy.getSource() == mem)
               ret.hostRead = true;
 
-            if (copy.target() == mem)
+            if (copy.getTarget() == mem)
               ret.hostWrite = true;
 
             continue;
@@ -237,8 +237,8 @@ struct InsertGPUAllocs
       builder.setInsertionPoint(alloc);
       auto gpuAlloc = builder.create<mlir::gpu::AllocOp>(
           loc, alloc.getType(), /*asyncToken*/ nullptr,
-          /*asyncDependencies*/ llvm::None, alloc.dynamicSizes(),
-          alloc.symbolOperands());
+          /*asyncDependencies*/ llvm::None, alloc.getDynamicSizes(),
+          alloc.getSymbolOperands());
       auto allocResult = gpuAlloc.getResult(0);
       alloc->replaceAllUsesWith(gpuAlloc);
       alloc.erase();
