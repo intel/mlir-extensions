@@ -15,6 +15,8 @@
 #include "imex/Dialect/ntensor/IR/NTensorOps.hpp"
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
+#include <mlir/Dialect/Linalg/IR/Linalg.h>
+#include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/Dialect/Utils/StaticValueUtils.h>
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/DialectImplementation.h>
@@ -426,17 +428,26 @@ mlir::OpFoldResult
 imex::ntensor::ToTensorOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
   if (auto from = getArray().getDefiningOp<imex::ntensor::FromTensorOp>()) {
     auto val = from.getTensor();
-    auto haveOtherOps = [](mlir::Operation *op) -> bool {
+    auto haveOnlySafeUses = [](mlir::Operation *op) -> bool {
+      // Fold if we are the only user.
+      if (op->hasOneUse())
+        return true;
+
       for (auto user : op->getUsers()) {
         if (!mlir::isa<ToTensorOp>(user))
-          return true;
+          return false;
+
+        // Fold only other ops cannot create aliases.
+        for (auto tensorUser : user->getUsers())
+          if (!mlir::isa<mlir::tensor::DimOp, mlir::tensor::ExtractOp,
+                         mlir::linalg::GenericOp>(tensorUser))
+            return false;
       }
-      return false;
+
+      return true;
     };
 
-    // This folding only safe if we don't have writes to the other fromTensor
-    // results. Conservatively check there are no other ops except ToTensorOp.
-    if (getType() == val.getType() && !haveOtherOps(from))
+    if (getType() == val.getType() && haveOnlySafeUses(from))
       return val;
   }
   return nullptr;
