@@ -14,6 +14,7 @@
 
 #include <imex/Dialect/Dist/IR/DistOps.h>
 #include <llvm/ADT/TypeSwitch.h>
+#include <mlir/IR/Builders.h>
 #include <mlir/IR/DialectImplementation.h>
 
 namespace imex {

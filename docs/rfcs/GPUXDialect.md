@@ -37,10 +37,10 @@ Create the Context.
 Syntax:
 
 ```
-operation ::= gpux.create_context $context : (!gpux.ContextType) -> !gpux.ContextType
+operation ::= gpux.create_context $device : (!gpux.DeviceType) -> !gpux.ContextType
 ```
 
-The gpux.create_context op takes a pointer (opaque) to an underlying context and will return a sycl/l0 context handle.
+The gpux.create_context op takes a pointer (opaque) to an underlying device and will return a sycl/l0 context handle.
 
 
 #### gpux.create_stream (gpux::CreateStreamOp)
