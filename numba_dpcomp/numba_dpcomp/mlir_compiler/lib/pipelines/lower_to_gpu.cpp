@@ -1513,7 +1513,8 @@ struct GPUToLLVMPass
   }
 };
 
-static mlir::spirv::Version mapSpirvVersion(uint16_t major, uint16_t minor) {
+static llvm::Optional<mlir::spirv::Version> mapSpirvVersion(uint16_t major,
+                                                            uint16_t minor) {
   if (major == 1) {
     const mlir::spirv::Version mapping[] = {
         mlir::spirv::Version::V_1_0, mlir::spirv::Version::V_1_1,
@@ -1524,7 +1525,7 @@ static mlir::spirv::Version mapSpirvVersion(uint16_t major, uint16_t minor) {
     if (minor < std::size(mapping))
       return mapping[minor];
   }
-  llvm_unreachable("Invalid spirv version");
+  return llvm::None;
 }
 
 static mlir::spirv::TargetEnvAttr deviceCapsMapper(mlir::gpu::GPUModuleOp op) {
@@ -1533,6 +1534,11 @@ static mlir::spirv::TargetEnvAttr deviceCapsMapper(mlir::gpu::GPUModuleOp op) {
     return nullptr;
 
   auto deviceCaps = *deviceCapsRet;
+
+  auto spirvVersion = mapSpirvVersion(deviceCaps.spirvMajorVersion,
+                                      deviceCaps.spirvMinorVersion);
+  if (!spirvVersion)
+    return nullptr;
 
   auto context = op.getContext();
   namespace spirv = mlir::spirv;
@@ -1562,16 +1568,13 @@ static mlir::spirv::TargetEnvAttr deviceCapsMapper(mlir::gpu::GPUModuleOp op) {
     caps.emplace_back(spirv::Capability::Float16Buffer);
   }
 
-  if (deviceCaps.hasFP64) {
+  if (deviceCaps.hasFP64)
     caps.emplace_back(spirv::Capability::Float64);
-  }
 
   llvm::sort(caps);
   llvm::sort(exts);
-  auto spirvVersion = mapSpirvVersion(deviceCaps.spirvMajorVersion,
-                                      deviceCaps.spirvMinorVersion);
 
-  auto triple = spirv::VerCapExtAttr::get(spirvVersion, caps, exts, context);
+  auto triple = spirv::VerCapExtAttr::get(*spirvVersion, caps, exts, context);
   auto attr = spirv::TargetEnvAttr::get(
       triple, spirv::Vendor::Unknown, spirv::DeviceType::Unknown,
       spirv::TargetEnvAttr::kUnknownDeviceID,
