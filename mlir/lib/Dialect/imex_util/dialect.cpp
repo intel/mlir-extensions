@@ -1145,12 +1145,25 @@ struct ChangeLayoutSelect
       auto otherArg = reverse ? trueArg : falseArg;
 
       auto otherArgType = otherArg.getType().cast<mlir::MemRefType>();
-      if (!canTransformLayoutCast(otherArgType, srcType))
-        continue;
+
+      arg = cl.getSource();
+      if (!canTransformLayoutCast(otherArgType, srcType)) {
+        auto dynStride = mlir::ShapedType::kDynamicStrideOrOffset;
+        llvm::SmallVector<int64_t> strides(srcType.getRank(), dynStride);
+        auto dynStrides =
+            mlir::StridedLayoutAttr::get(op->getContext(), dynStride, strides);
+        auto dynStridesMemref =
+            mlir::MemRefType::get(srcType.getShape(), srcType.getElementType(),
+                                  dynStrides, srcType.getMemorySpace());
+        if (!canTransformLayoutCast(otherArgType, dynStridesMemref))
+          continue;
+
+        srcType = dynStridesMemref;
+        arg = rewriter.create<mlir::memref::CastOp>(op->getLoc(), srcType, arg);
+      }
 
       auto loc = op->getLoc();
       otherArg = rewriter.create<mlir::memref::CastOp>(loc, srcType, otherArg);
-      arg = cl.getSource();
 
       if (reverse) {
         trueArg = otherArg;
