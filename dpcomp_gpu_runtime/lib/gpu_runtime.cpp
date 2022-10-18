@@ -511,7 +511,7 @@ dpcompGpuSuggestBlockSize(void *stream, void *kernel, const uint32_t *gridSize,
   });
 }
 
-// Must be kept in sync with compiler version version.
+// Must be kept in sync with compiler version.
 struct OffloadDeviceCapabilities {
   uint16_t spirvMajorVersion;
   uint16_t spirvMinorVersion;
