@@ -37,19 +37,20 @@ def _gen_tests():
         return
 
     testcases = [
-        numba.tests.test_parfors.TestPrangeBasic,
-        numba.tests.test_parfors.TestPrangeSpecific,
-        numba.tests.test_parfors.TestParforsVectorizer,
         numba.tests.test_parfors.TestParforBasic,
         numba.tests.test_parfors.TestParforNumericalMisc,
         numba.tests.test_parfors.TestParforNumPy,
         numba.tests.test_parfors.TestParfors,
-        numba.tests.test_parfors.TestParforsLeaks,
-        numba.tests.test_parfors.TestParforsSlice,
-        # numba.tests.test_parfors.TestParforsOptions,
         numba.tests.test_parfors.TestParforsBitMask,
-        numba.tests.test_parfors.TestParforsMisc,
         # numba.tests.test_parfors.TestParforsDiagnostics,
+        numba.tests.test_parfors.TestParforsLeaks,
+        numba.tests.test_parfors.TestParforsMisc,
+        # numba.tests.test_parfors.TestParforsOptions,
+        # numba.tests.test_parfors.TestParforsUnsupported,
+        numba.tests.test_parfors.TestParforsSlice,
+        numba.tests.test_parfors.TestParforsVectorizer,
+        numba.tests.test_parfors.TestPrangeBasic,
+        numba.tests.test_parfors.TestPrangeSpecific,
     ]
 
     xfail_tests = {
