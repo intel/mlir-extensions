@@ -9,25 +9,21 @@
 ///
 /// \file
 /// This file implements the PTensorToLinalg conversion, converting the PTensor
-/// dialect to the Linalg and Dist dialects.
+/// dialect to the Linalg and helper dialects.
 ///
 /// Any tensor of PTensorType is expected to be initialized by MkPTensorOp.
-/// Lowering a MkPtenorTypeOp results in a unrealized_conversion_cast to
-/// tuple<RankedTensorType, devicetype, teamtype, handletype>. Since MLIR
-/// provides no Ops on tuples, extra Ops are provided to extract the members
-/// (such as ExtractRTensorOp). These extraction ops chase
-/// unrealized_conversion_cast to find the tuple-defining op and return the
-/// corresponding operand.
+/// Lowering a MkPtensorOp results in a unrealized_conversion_cast. After
+/// complete conversion the resulting value should have no use. However, during
+/// conversion its operands will serve for extracting the members (such as
+/// ExtractRTensorOp): we chase the unrealized_conversion_cast as the rooting op
+/// and return the corresponding operand.
 ///
-/// In a similar way, RTensorTypes get converted to multiple arguments on
-/// function boundaries.
+/// Currently we do not support propagating device/team data across function
+/// boundaries.
 ///
-/// Ops of the array-API get lowered mostly to Linalg. If input types are
-/// distributed (PTEnsorType.getDist()) necessary ops of the Dist dialect are
-/// created.
 /// FIXME: same for device by adding regions.
 ///
-/// The pass is based on a ConversionTarget, TypeConverters. legality checks and
+/// The pass is based on a ConversionTarget, TypeConverters, legality checks and
 /// conversion patterns.
 ///
 ///
@@ -595,7 +591,7 @@ struct ConvertPTensorToLinalgPass
 };
 } // namespace
 
-/// Create a pass to eliminate Dist ops
+/// Create a pass to convert PTensor to Linalg
 std::unique_ptr<::mlir::OperationPass<::mlir::ModuleOp>>
 createConvertPTensorToLinalgPass() {
   return std::make_unique<ConvertPTensorToLinalgPass>();
