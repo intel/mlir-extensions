@@ -130,6 +130,56 @@ def ExtractRTensorOp : PTensor_Op<"extract_rtensor", []> {
     let results = (outs AnyRankedTensor);
 }
 
+def ExtractSliceOp : PTensor_Op<"extract_slice", [AttrSizedOperandSegments, Pure]> {
+  let summary = "extract slice operation";
+  let description = [{
+    The "extract_slice" operation extract a tensor from another tensor as
+    specified by the operation's offsets, sizes and strides arguments.
+
+    The extract_slice operation is a shallow wrapper around tensor.extract_slice.
+  }];
+
+  let arguments = (ins
+    PTensor_PTensor:$source,
+    Variadic<Index>:$offsets,
+    Variadic<Index>:$sizes,
+    Variadic<Index>:$strides,
+    I64ArrayAttr:$static_offsets,
+    I64ArrayAttr:$static_sizes,
+    I64ArrayAttr:$static_strides
+  );
+  let results = (outs PTensor_PTensor:$result);
+
+  let assemblyFormat = [{
+    $source ``
+    custom<DynamicIndexList>($offsets, $static_offsets,
+                               "::mlir::ShapedType::kDynamicStrideOrOffset")
+    custom<DynamicIndexList>($sizes, $static_sizes,
+                               "::mlir::ShapedType::kDynamicSize")
+    custom<DynamicIndexList>($strides, $static_strides,
+                               "::mlir::ShapedType::kDynamicStrideOrOffset")
+    attr-dict `:` qualified(type($source)) `to` qualified(type($result))
+  }];
+
+  // tablegen does not allow defining templated builders so we make it a plain C++ extra
+  let extraClassDeclaration = [{
+    // Simply forwarding the construction to tensor::build
+    template<typename... Ts>
+    static void build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState,
+                      PTensorType resultType, ::mlir::Value source, Ts&&... args)
+    {
+        auto sourcePTensorType = source.getType().cast<PTensorType>();
+        auto resultPTensorType = source.getType().cast<PTensorType>();
+        if(sourcePTensorType && resultPTensorType) {
+            ::mlir::tensor::ExtractSliceOp::build(odsBuilder, odsState, resultPTensorType, source, std::forward<Ts>(args)...);
+        } else {
+            // FIXME
+            assert("expected PTensor(s) in ptensor.extract_slice" == nullptr);
+        }
+    }
+  }];
+}
+
 def ARangeOp : PTensor_Op<"arange", [SameVariadicOperandSize]> {
     let summary = "Create an arange (see array-API)";
     let description = [{

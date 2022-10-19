@@ -6,12 +6,24 @@
 // FIXME sed above, for using 1 instead of true
 
 // -----
+func.func @test_extract_slice(%arg0: !ptensor.ptensor<tensor<?xi64>>) -> !ptensor.ptensor<tensor<?xi64>> {
+    %c0 = arith.constant 0 : index
+    %c3 = arith.constant 3 : index
+    %0 = ptensor.extract_slice %arg0[%c0][%c3][%c3] : !ptensor.ptensor<tensor<?xi64>> to !ptensor.ptensor<tensor<?xi64>>
+    return %0 : !ptensor.ptensor<tensor<?xi64>>
+}
+// CHECK-LABEL: @test_extract_slice
+// CHECK-NEXT: [[C0:%.*]] = arith.constant
+// CHECK-NEXT: [[C1:%.*]] = arith.constant
+// CHECK-NEXT: ptensor.extract_slice %arg0[[[C0]]] [[[C1]]] [[[C1]]] : !ptensor.ptensor<tensor<?xi64>> to !ptensor.ptensor<tensor<?xi64>>
+
+// -----
 func.func @test_arange(%arg0: si64, %arg1: si64, %arg2: si64) -> !ptensor.ptensor<tensor<?xi64>> {
-    %0 = "ptensor.arange"(%arg0, %arg1, %arg2) {dist = true} : (si64, si64, si64) -> !ptensor.ptensor<tensor<?xi64>>
+    %0 = "ptensor.arange"(%arg0, %arg1, %arg2) : (si64, si64, si64) -> !ptensor.ptensor<tensor<?xi64>>
     return %0 : !ptensor.ptensor<tensor<?xi64>>
 }
 // CHECK-LABEL: @test_arange
-// CHECK-NEXT: "ptensor.arange"(%arg0, %arg1, %arg2) {dist = true} : (si64, si64, si64) -> !ptensor.ptensor<tensor<?xi64>>
+// CHECK-NEXT: "ptensor.arange"(%arg0, %arg1, %arg2) : (si64, si64, si64) -> !ptensor.ptensor<tensor<?xi64>>
 
 // -----
 func.func @test_ewbin(%arg0: !ptensor.ptensor<tensor<?xi64>>) -> !ptensor.ptensor<tensor<?xi64>> {
