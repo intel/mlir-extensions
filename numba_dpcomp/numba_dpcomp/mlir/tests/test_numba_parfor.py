@@ -68,9 +68,6 @@ def _gen_tests():
         "test_ssa_false_reduction",  # Frontend: object has no attribute 'name'
         "test_argument_alias_recarray_field",  # Record support
         "test_mutable_list_param",  # List support
-        "test_signed_vs_unsigned_vec_asm",  # Need to hook asm checks
-        "test_unsigned_refusal_to_vectorize",  # Need to hook asm checks
-        "test_vectorizer_fastmath_asm",  # Need to hook asm checks
         "test_kde_example",  # List suport
         "test_simple01",  # Empty shape not failed
         "test_kmeans",  # List suport
@@ -205,7 +202,7 @@ def _gen_tests():
                 return wrapper
 
             def get_gufunc_asm(self, func, schedule_type, *args, **kwargs):
-                assert False
+                pytest.skip()
 
             def prange_tester(self, pyfunc, *args, **kwargs):
                 patch_instance = kwargs.pop("patch_instance", None)
