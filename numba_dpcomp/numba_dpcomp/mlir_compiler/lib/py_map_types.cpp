@@ -19,8 +19,6 @@
 #include <mlir/IR/BuiltinTypes.h>
 #include <mlir/IR/TypeRange.h>
 
-#include "imex/Dialect/plier/dialect.hpp"
-
 namespace py = pybind11;
 
 namespace {

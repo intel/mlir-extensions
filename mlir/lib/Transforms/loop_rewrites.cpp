@@ -66,22 +66,36 @@ struct CmpLoopBoundsSimplify
   mlir::LogicalResult
   matchAndRewrite(mlir::arith::CmpIOp cmp,
                   mlir::PatternRewriter &rewriter) const override {
-    auto pair =
-        [&]() -> llvm::Optional<std::pair<mlir::scf::ForOp, mlir::Value>> {
+    auto res = [&]()
+        -> llvm::Optional<std::tuple<mlir::Value, mlir::Value, mlir::Value>> {
       for (auto val : {cmp.getLhs(), cmp.getRhs()}) {
-        auto block = val.getParentBlock();
-        if (block->getNumArguments() > 0 && val == block->getArgument(0))
-          if (auto forOp =
-                  mlir::dyn_cast<mlir::scf::ForOp>(block->getParentOp()))
-            return std::make_pair(forOp, val);
+        auto blockArg = val.dyn_cast<mlir::BlockArgument>();
+        if (!blockArg)
+          continue;
+
+        auto block = blockArg.getOwner();
+        auto parent = block->getParentOp();
+        if (auto forOp = mlir::dyn_cast<mlir::scf::ForOp>(parent)) {
+          mlir::Value lb = forOp.getLowerBound();
+          mlir::Value ub = forOp.getUpperBound();
+          return std::make_tuple(lb, ub, val);
+        } else if (auto parallelOp =
+                       mlir::dyn_cast<mlir::scf::ParallelOp>(parent)) {
+          auto idx = blockArg.getArgNumber();
+          if (idx < parallelOp.getUpperBound().size()) {
+            mlir::Value lb = parallelOp.getLowerBound()[idx];
+            mlir::Value ub = parallelOp.getUpperBound()[idx];
+            return std::make_tuple(lb, ub, val);
+          }
+        }
       }
       return llvm::None;
     }();
 
-    if (!pair)
+    if (!res)
       return mlir::failure();
 
-    auto [forOp, indexVar] = *pair;
+    auto [lowerBound, upperBound, indexVar] = *res;
 
     auto pred = cmp.getPredicate();
     auto lhs = cmp.getLhs();
@@ -104,9 +118,9 @@ struct CmpLoopBoundsSimplify
       if (h(pred, indexVar, lhs, rhs))
         break;
 
-    using fptr_t = llvm::Optional<int64_t> (*)(
-        Predicate pred, mlir::Value lhs, mlir::Value rhs, mlir::Value index,
-        mlir::Value lowerBound, mlir::Value upperBound);
+    using fptr_t =
+        llvm::Optional<int64_t> (*)(Predicate, mlir::Value, mlir::Value,
+                                    mlir::Value, mlir::Value, mlir::Value);
     const fptr_t handlers[] = {
         &handlerImpl<Predicate::sge, UpperBound, 0>,
         &handlerImpl<Predicate::slt, LowerBound, 0>,
@@ -115,8 +129,7 @@ struct CmpLoopBoundsSimplify
     };
 
     for (auto h : handlers) {
-      if (auto c = h(pred, lhs, rhs, indexVar, forOp.getLowerBound(),
-                     forOp.getUpperBound())) {
+      if (auto c = h(pred, lhs, rhs, indexVar, lowerBound, upperBound)) {
         auto type = rewriter.getI1Type();
         auto val = rewriter.getIntegerAttr(type, *c);
         auto constVal =

@@ -34,20 +34,41 @@ from numba import prange
 
 from numba.core import types
 from numba.core.typing.templates import ConcreteTemplate, signature, infer_global
+from inspect import signature as sig
 
 add_func(prange, "numba.prange")
 
 registry = FuncRegistry()
 
+_registered_funcs = {}
+
+
+def _get_func(name):
+    global _registered_funcs
+    return _registered_funcs.get(name, None)
+
+
+def _get_wrapper(name, orig):
+    def _decorator(func):
+        global _registered_funcs
+        params = sig(func).parameters
+
+        # Get function args names and drop first `builder` param
+        paramsNames = list(params)[1:]
+        _registered_funcs[name] = [(n, params[n]) for n in paramsNames]
+        return orig(func)
+
+    return _decorator
+
 
 def register_func(name, orig_func=None):
     global registry
-    return registry.register_func(name, orig_func)
+    return _get_wrapper(name, registry.register_func(name, orig_func))
 
 
 def register_attr(name):
     global registry
-    return registry.register_attr(name)
+    return _get_wrapper(name, registry.register_attr(name))
 
 
 def promote_int(t, b):
@@ -580,6 +601,15 @@ def outer_impl(builder, x, y):
 def shape_impl(builder, arg):
     shape = arg.shape
     return tuple(builder.cast(shape[i], builder.int64) for i in range(len(shape)))
+
+
+@register_func("len", len)
+def len_impl(builder, arg):
+    shape = arg.shape
+    if len(shape) < 1:
+        return
+
+    return builder.cast(shape[0], builder.int64)
 
 
 @register_attr("array.size")

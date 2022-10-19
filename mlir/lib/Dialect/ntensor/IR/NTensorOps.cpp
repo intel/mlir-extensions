@@ -15,6 +15,8 @@
 #include "imex/Dialect/ntensor/IR/NTensorOps.hpp"
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
+#include <mlir/Dialect/Linalg/IR/Linalg.h>
+#include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/Dialect/Utils/StaticValueUtils.h>
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/DialectImplementation.h>
@@ -89,6 +91,10 @@ imex::ntensor::NTensorBase imex::ntensor::NTensorBase::cloneWith(
   auto t = cast<NTensorType>();
   return NTensorType::get(shape.value_or(getShape()), elementType,
                           t.getEnvironment());
+}
+
+bool imex::ntensor::NTensorBase::isValidElementType(Type type) {
+  return type.isIntOrIndexOrFloat();
 }
 
 mlir::Type imex::ntensor::NTensorType::replaceImmediateSubElements(
@@ -422,17 +428,26 @@ mlir::OpFoldResult
 imex::ntensor::ToTensorOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
   if (auto from = getArray().getDefiningOp<imex::ntensor::FromTensorOp>()) {
     auto val = from.getTensor();
-    auto haveOtherOps = [](mlir::Operation *op) -> bool {
+    auto haveOnlySafeUses = [](mlir::Operation *op) -> bool {
+      // Fold if we are the only user.
+      if (op->hasOneUse())
+        return true;
+
       for (auto user : op->getUsers()) {
         if (!mlir::isa<ToTensorOp>(user))
-          return true;
+          return false;
+
+        // Fold only other ops cannot create aliases.
+        for (auto tensorUser : user->getUsers())
+          if (!mlir::isa<mlir::tensor::DimOp, mlir::tensor::ExtractOp,
+                         mlir::linalg::GenericOp>(tensorUser))
+            return false;
       }
-      return false;
+
+      return true;
     };
 
-    // This folding only safe if we don't have writes to the other fromTensor
-    // results. Conservatively check there are no other ops except ToTensorOp.
-    if (getType() == val.getType() && !haveOtherOps(from))
+    if (getType() == val.getType() && haveOnlySafeUses(from))
       return val;
   }
   return nullptr;
@@ -495,6 +510,28 @@ bool imex::ntensor::CastOp::areCastCompatible(mlir::TypeRange inputs,
     return false;
 
   return succeeded(mlir::verifyCompatibleShape(aT, bT));
+}
+
+void imex::ntensor::ElementwiseOp::build(
+    ::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState,
+    ::mlir::Type resultType, ::mlir::Value source,
+    ::llvm::function_ref<void(::mlir::OpBuilder &, ::mlir::Location,
+                              ::mlir::Value)>
+        bodyBuilder) {
+  assert(source.getType().isa<imex::ntensor::NTensorType>() &&
+         "Expected ntensor type");
+  build(odsBuilder, odsState, mlir::TypeRange(resultType), source);
+  if (bodyBuilder) {
+    mlir::Region *bodyRegion = odsState.regions.back().get();
+    bodyRegion->push_back(new mlir::Block);
+    mlir::Block &bodyBlock = bodyRegion->front();
+    auto srcType = source.getType().cast<imex::ntensor::NTensorType>();
+    bodyBlock.addArgument(srcType.getElementType(), odsState.location);
+
+    mlir::OpBuilder::InsertionGuard guard(odsBuilder);
+    odsBuilder.setInsertionPointToStart(&bodyBlock);
+    bodyBuilder(odsBuilder, odsState.location, bodyBlock.getArgument(0));
+  }
 }
 
 static mlir::LogicalResult

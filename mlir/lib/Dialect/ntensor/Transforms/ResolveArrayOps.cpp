@@ -143,10 +143,6 @@ computeIndices(mlir::OpBuilder &builder, mlir::Location loc, mlir::Value value,
   return mlir::success();
 }
 
-static auto getDynShape(size_t rank) {
-  return llvm::SmallVector<int64_t>(rank, mlir::ShapedType::kDynamicSize);
-}
-
 static mlir::Value makeSubview(mlir::OpBuilder &builder, mlir::Location loc,
                                mlir::Value src,
                                llvm::ArrayRef<mlir::OpFoldResult> offsets,
@@ -172,8 +168,19 @@ static mlir::Value makeSubview(mlir::OpBuilder &builder, mlir::Location loc,
     llvm::SmallVector<mlir::OpFoldResult> newStrides(srcRank,
                                                      builder.getIndexAttr(1));
     auto viewType = view.getType().cast<imex::ntensor::NTensorType>();
+
+    llvm::SmallVector<int64_t> dstShape(dstRank);
+    for (auto [i, ind] : llvm::enumerate(dimIndices)) {
+      auto sz = sizes[ind];
+      if (auto szVal = sz.dyn_cast<mlir::Attribute>()) {
+        dstShape[i] = szVal.cast<mlir::IntegerAttr>().getValue().getSExtValue();
+      } else {
+        dstShape[i] = mlir::ShapedType::kDynamicSize;
+      }
+    }
+
     auto reducedType = imex::ntensor::SubviewOp::inferRankReducedResultType(
-        getDynShape(dstRank), viewType, newOfsets, sizes, newStrides);
+        dstShape, viewType, newOfsets, sizes, newStrides);
     view = builder.create<imex::ntensor::SubviewOp>(
         loc, reducedType, view, newOfsets, sizes, newStrides);
     resType = reducedType;
@@ -340,7 +347,8 @@ struct GetitemUnitupleOpLowering
 
     auto valType = value.getType();
     auto elemType = isUnituple(valType);
-    if (!elemType || *elemType != op.getType())
+    if (!elemType || *elemType != op.getType() ||
+        !imex::ntensor::NTensorType::isValidElementType(*elemType))
       return mlir::failure();
 
     auto count = static_cast<int64_t>(valType.cast<mlir::TupleType>().size());

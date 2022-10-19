@@ -14,10 +14,7 @@
 
 #include "pipelines/plier_to_linalg.hpp"
 
-#include <mlir/Conversion/AffineToStandard/AffineToStandard.h>
 #include <mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h>
-#include <mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h>
-#include <mlir/Dialect/Affine/IR/AffineOps.h>
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Arith/Transforms/Passes.h>
 #include <mlir/Dialect/Bufferization/IR/Bufferization.h>
@@ -42,17 +39,18 @@
 #include <mlir/Transforms/LoopInvariantCodeMotionUtils.h>
 #include <mlir/Transforms/Passes.h>
 
-#include "imex/Dialect/imex_util/dialect.hpp"
-#include "imex/Dialect/plier/dialect.hpp"
-
 #include "pipelines/plier_to_scf.hpp"
 #include "pipelines/plier_to_std.hpp"
 #include "pipelines/pre_low_simplifications.hpp"
 
+#include "imex/Conversion/NtensorToLinalg.hpp"
+#include "imex/Conversion/ntensor_to_memref.hpp"
+#include "imex/Dialect/imex_util/dialect.hpp"
+#include "imex/Dialect/ntensor/IR/NTensorOps.hpp"
+#include "imex/Dialect/ntensor/Transforms/ResolveArrayOps.hpp"
+#include "imex/Dialect/plier/dialect.hpp"
 #include "imex/Transforms/MakeSignless.hpp"
-#include "imex/Transforms/call_lowering.hpp"
 #include "imex/Transforms/canonicalize_reductions.hpp"
-#include "imex/Transforms/cast_utils.hpp"
 #include "imex/Transforms/common_opts.hpp"
 #include "imex/Transforms/cse.hpp"
 #include "imex/Transforms/inline_utils.hpp"
@@ -65,6 +63,7 @@
 #include "imex/Transforms/type_conversion.hpp"
 #include "imex/Transforms/uplift_math.hpp"
 
+#include "NumpyResolver.hpp"
 #include "base_pipeline.hpp"
 #include "imex/compiler/pipeline_registry.hpp"
 #include "loop_utils.hpp"
@@ -179,7 +178,7 @@ static mlir::Type mapArrayType(mlir::MLIRContext &ctx,
         if (mlir::BaseMemRefType::isValidElementType(type)) {
           llvm::SmallVector<int64_t> shape(desc->dims,
                                            mlir::ShapedType::kDynamicSize);
-          return mlir::MemRefType::get(shape, type);
+          return imex::ntensor::NTensorType::get(shape, type);
         }
       }
     }
@@ -240,726 +239,35 @@ lowerPrange(plier::PyCallOp op, mlir::ValueRange operands,
   return mlir::failure();
 }
 
-static mlir::LogicalResult
-lowerLen(plier::PyCallOp op, mlir::ValueRange operands,
-         llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>> kwargs,
-         mlir::PatternRewriter &rewriter) {
-  if (operands.size() != 1 || !kwargs.empty())
-    return mlir::failure();
-
-  auto arg = skipCasts(operands.front());
-  auto argType = arg.getType().dyn_cast<mlir::ShapedType>();
-  if (!argType || !argType.hasRank())
-    return mlir::failure();
-
-  rerunScfPipeline(op);
-
-  auto loc = op.getLoc();
-  mlir::Value dim;
-  if (argType.isa<mlir::TensorType>()) {
-    dim = rewriter.createOrFold<mlir::tensor::DimOp>(loc, arg, 0);
-  } else {
-    dim = rewriter.createOrFold<mlir::memref::DimOp>(loc, arg, 0);
-  }
-  rewriter.replaceOpWithNewOp<plier::CastOp>(op, op.getType(), dim);
-  return mlir::success();
-}
-
 using kwargs_t = llvm::ArrayRef<std::pair<llvm::StringRef, mlir::Value>>;
 using func_t = mlir::LogicalResult (*)(plier::PyCallOp, mlir::ValueRange,
                                        kwargs_t, mlir::PatternRewriter &);
 static const std::pair<llvm::StringRef, func_t> builtinFuncsHandlers[] = {
     // clang-format off
     {"numba.prange", lowerPrange},
-    {"len", lowerLen},
     // clang-format on
 };
 
-static mlir::Value toTensor(mlir::Location loc, mlir::PatternRewriter &rewriter,
-                            mlir::Value val) {
-  if (auto tensorType = val.getType().dyn_cast<mlir::RankedTensorType>()) {
-    auto memrefType = mlir::MemRefType::get(tensorType.getShape(),
-                                            tensorType.getElementType());
-    return rewriter.create<mlir::bufferization::ToMemrefOp>(loc, memrefType,
-                                                            val);
-  }
-  return val;
-}
-
-static PyLinalgResolver::Values
-castRetTypes(mlir::Location loc, mlir::PatternRewriter &rewriter,
-             mlir::Operation *op,
-             llvm::Optional<PyLinalgResolver::Values> vals) {
-  auto results = std::move(vals).value();
-  assert(results.size() == op->getNumResults());
-  for (auto it : llvm::enumerate(results)) {
-    auto i = it.index();
-    auto r = toTensor(loc, rewriter, it.value());
-    auto dstType = op->getResultTypes()[i];
-
-    if (dstType != r.getType())
-      results[i] = rewriter.create<plier::CastOp>(loc, dstType, r);
-  }
-  return results;
-}
-
-struct NumpyCallsLowering final : public imex::CallOpLowering {
-  NumpyCallsLowering(mlir::MLIRContext *context)
-      : CallOpLowering(context),
-        resolver("numba_dpcomp.mlir.numpy.funcs", "registry") {}
-
-protected:
-  virtual mlir::LogicalResult
-  resolveCall(plier::PyCallOp op, mlir::StringRef name, mlir::Location loc,
-              mlir::PatternRewriter &rewriter, mlir::ValueRange args,
-              KWargs kwargs) const override {
-    for (auto &handler : builtinFuncsHandlers)
-      if (handler.first == name)
-        return handler.second(op, args, kwargs, rewriter);
-
-    auto res = resolver.rewriteFunc(name, loc, rewriter, args, kwargs);
-    if (!res)
-      return mlir::failure();
-
-    auto results = castRetTypes(loc, rewriter, op, res);
-
-    rerunScfPipeline(op);
-    rewriter.replaceOp(op, results);
-    return mlir::success();
-  }
-
-private:
-  PyLinalgResolver resolver;
-};
-
-struct NumpyAttrsLowering : public mlir::OpRewritePattern<plier::GetattrOp> {
-  NumpyAttrsLowering(mlir::MLIRContext *context)
-      : OpRewritePattern(context),
-        resolver("numba_dpcomp.mlir.numpy.funcs", "registry") {}
-
-  mlir::LogicalResult
-  matchAndRewrite(plier::GetattrOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto arg = skipCasts(op.getValue());
-
-    if (!arg.getType().isa<mlir::ShapedType>())
-      return mlir::failure();
-
-    auto loc = op.getLoc();
-    auto res = resolver.rewriteAttr(llvm::Twine("array.") + op.getName(), loc,
-                                    rewriter, arg);
-    if (!res)
-      return mlir::failure();
-
-    auto results = castRetTypes(loc, rewriter, op, res);
-
-    rerunScfPipeline(op);
-    rewriter.replaceOp(op, results);
-    return mlir::success();
-  }
-
-private:
-  PyLinalgResolver resolver;
-};
-
-struct NumpyBinOpLowering : public mlir::OpRewritePattern<plier::BinOp> {
-  NumpyBinOpLowering(mlir::MLIRContext *context)
-      : OpRewritePattern(context),
-        resolver("numba_dpcomp.mlir.numpy.funcs", "registry") {}
-
-  mlir::LogicalResult
-  matchAndRewrite(plier::BinOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto lhs = skipCasts(op.getLhs());
-    auto rhs = skipCasts(op.getRhs());
-
-    if (!lhs.getType().isa<mlir::ShapedType>() &&
-        !rhs.getType().isa<mlir::ShapedType>())
-      return mlir::failure();
-
-    auto name = op.getOp();
-
-    for (auto it : plier::getOperators()) {
-      if (it.op == name) {
-        auto loc = op->getLoc();
-        auto res = resolver.rewriteFunc(llvm::Twine("operator.") + it.name, loc,
-                                        rewriter, {lhs, rhs}, {});
-        if (!res)
-          return mlir::failure();
-
-        auto results = castRetTypes(loc, rewriter, op, res);
-
-        rerunScfPipeline(op);
-        rewriter.replaceOp(op, results);
-        return mlir::success();
-      }
-    }
-    return mlir::failure();
-  }
-
-private:
-  PyLinalgResolver resolver;
-};
-
-// TODO: remove
-struct ExternalCallsLowering final : public imex::CallOpLowering {
-  using CallOpLowering::CallOpLowering;
-
-protected:
-  virtual mlir::LogicalResult
-  resolveCall(plier::PyCallOp op, mlir::StringRef name, mlir::Location loc,
-              mlir::PatternRewriter &rewriter, mlir::ValueRange args,
-              KWargs kwargs) const override {
-    if (!kwargs.empty())
-      return mlir::failure(); // TODO: kwargs support
-
-    auto types = args.getTypes();
-    auto mangledName = mangle(name, types);
-    if (mangledName.empty())
-      return mlir::failure();
-
-    auto mod = op->getParentOfType<mlir::ModuleOp>();
-    assert(mod);
-    auto externalFunc = mod.lookupSymbol<mlir::func::FuncOp>(mangledName);
-    if (!externalFunc) {
-      externalFunc = resolver.getFunc(name, types);
-      if (externalFunc) {
-        externalFunc.setPrivate();
-        externalFunc.setName(mangledName);
-      }
-    }
-    if (!externalFunc)
-      return mlir::failure();
-
-    assert(externalFunc.getFunctionType().getNumResults() ==
-           op->getNumResults());
-
-    llvm::SmallVector<mlir::Value> castedArgs(args.size());
-    auto funcTypes = externalFunc.getFunctionType().getInputs();
-    for (auto it : llvm::enumerate(args)) {
-      auto arg = it.value();
-      auto i = it.index();
-      auto dstType = funcTypes[i];
-      if (arg.getType() != dstType)
-        castedArgs[i] = rewriter.createOrFold<plier::CastOp>(loc, dstType, arg);
-      else
-        castedArgs[i] = arg;
-    }
-
-    auto newFuncCall =
-        rewriter.create<mlir::func::CallOp>(loc, externalFunc, castedArgs);
-
-    auto results = newFuncCall.getResults();
-    llvm::SmallVector<mlir::Value> castedResults(results.size());
-
-    for (auto it : llvm::enumerate(results)) {
-      auto i = static_cast<unsigned>(it.index());
-      auto res = it.value();
-      auto oldResType = op->getResult(i).getType();
-      if (res.getType() != oldResType)
-        castedResults[i] =
-            rewriter.createOrFold<plier::CastOp>(loc, oldResType, res);
-      else
-        castedResults[i] = res;
-    }
-
-    rerunScfPipeline(op);
-    rewriter.replaceOp(op, castedResults);
-    return mlir::success();
-  }
-
-private:
-  PyFuncResolver resolver;
-};
-
-struct UnrankedToElementCasts
-    : public mlir::OpConversionPattern<plier::CastOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(plier::CastOp op, plier::CastOp::Adaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
-    auto value = adaptor.getValue();
-    auto srcType = value.getType();
-    auto converter = *getTypeConverter();
-    auto dstType = converter.convertType(op.getType());
-    if (!dstType)
-      return mlir::failure();
-
-    auto isCompatible = [](mlir::Type type, mlir::Type element) {
-      if (auto shaped = type.dyn_cast<mlir::ShapedType>())
-        return shaped.hasRank() && shaped.getRank() == 0 &&
-               shaped.getElementType() == element;
-
-      return false;
-    };
-    if (isCompatible(srcType, dstType)) {
-      if (srcType.isa<mlir::TensorType>()) {
-        rewriter.replaceOpWithNewOp<mlir::tensor::ExtractOp>(op, value);
-      } else {
-        rewriter.replaceOpWithNewOp<mlir::memref::LoadOp>(op, value);
-      }
-      return mlir::success();
-    }
-    if (isCompatible(dstType, srcType)) {
-      auto loc = op->getLoc();
-      if (dstType.isa<mlir::TensorType>()) {
-        auto singleElemTensor =
-            rewriter.create<mlir::tensor::FromElementsOp>(loc, value);
-        rewriter.replaceOpWithNewOp<mlir::tensor::CollapseShapeOp>(
-            op, dstType, singleElemTensor,
-            llvm::ArrayRef<mlir::ReassociationExprs>{});
-      } else {
-        auto memrefType = dstType.cast<mlir::MemRefType>();
-        auto signlessElemType =
-            imex::makeSignlessType(memrefType.getElementType());
-        auto signlessMemrefType =
-            memrefType.clone(signlessElemType).cast<mlir::MemRefType>();
-        mlir::Value memref =
-            rewriter.create<mlir::memref::AllocOp>(loc, signlessMemrefType);
-        if (memrefType != signlessMemrefType)
-          memref =
-              rewriter.create<imex::util::SignCastOp>(loc, memrefType, memref);
-
-        rewriter.create<mlir::memref::StoreOp>(loc, value, memref);
-        rewriter.replaceOp(op, memref);
-      }
-      return mlir::success();
-    }
-    return mlir::failure();
-  }
-};
-
-static bool isUniTuple(mlir::TupleType type) {
+static llvm::Optional<mlir::Type> isUniTuple(mlir::TupleType type) {
   auto count = type.size();
   if (count == 0)
-    return false;
+    return llvm::None;
 
   auto elemType = type.getType(0);
   for (auto i : llvm::seq<size_t>(1, count)) {
     if (type.getType(i) != elemType)
-      return false;
+      return llvm::None;
   }
-  return true;
+  return elemType;
 }
 
-static bool isUniTuple(mlir::Type type) {
+static llvm::Optional<mlir::Type> isUniTuple(mlir::Type type) {
   auto tupleType = type.dyn_cast<mlir::TupleType>();
-  return tupleType && isUniTuple(tupleType);
+  if (!tupleType)
+    return llvm::None;
+
+  return isUniTuple(tupleType);
 }
-
-struct GetItemUniTupleConversionPattern
-    : public mlir::OpConversionPattern<imex::util::TupleExtractOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(imex::util::TupleExtractOp op,
-                  imex::util::TupleExtractOp::Adaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const final {
-    auto container = adaptor.getSource();
-    auto tupleType = container.getType().dyn_cast<mlir::TupleType>();
-    if (!tupleType || !isUniTuple(tupleType))
-      return mlir::failure();
-
-    auto index = adaptor.getIndex();
-    if (mlir::getConstantIntValue(index))
-      return mlir::failure();
-
-    auto loc = op->getLoc();
-    auto elemType = tupleType.getType(0);
-    auto count = static_cast<unsigned>(tupleType.size());
-    llvm::SmallVector<mlir::Value> elems(count);
-    for (auto i : llvm::seq(0u, count)) {
-      auto idx = rewriter.create<mlir::arith::ConstantIndexOp>(loc, i);
-      elems[i] = rewriter.create<imex::util::TupleExtractOp>(loc, elemType,
-                                                             container, idx);
-    }
-
-    auto tensor = rewriter.create<mlir::tensor::FromElementsOp>(loc, elems);
-    rewriter.replaceOpWithNewOp<plier::GetItemOp>(op, elemType, tensor, index);
-    return mlir::success();
-  }
-};
-
-struct NumpyCallsLoweringPass
-    : public imex::RewriteWrapperPass<
-          NumpyCallsLoweringPass, void, void, NumpyCallsLowering,
-          NumpyAttrsLowering, NumpyBinOpLowering, ExternalCallsLowering> {};
-
-static mlir::Value index_cast(mlir::Value value, mlir::Location loc,
-                              mlir::OpBuilder &builder) {
-  if (!value.getType().isa<mlir::IndexType>()) {
-    auto indexType = builder.getIndexType();
-    auto res = builder.create<plier::CastOp>(loc, indexType, value);
-    rerunScfPipeline(res);
-    return res;
-  }
-  return value;
-}
-
-static bool isValidGetitemIndex(mlir::Type type) {
-  if (type.isa<plier::SliceType>())
-    return true;
-
-  if (auto tupleType = type.dyn_cast<mlir::TupleType>())
-    return llvm::all_of(tupleType.getTypes(), &isValidGetitemIndex);
-
-  return type.isa<mlir::IntegerType, mlir::IndexType>();
-}
-
-static mlir::LogicalResult
-computeIndices(mlir::OpBuilder &builder, mlir::Location loc, mlir::Value value,
-               mlir::Value index,
-               llvm::SmallVectorImpl<mlir::OpFoldResult> &offsets,
-               llvm::SmallVectorImpl<mlir::OpFoldResult> &sizes,
-               llvm::SmallVectorImpl<mlir::OpFoldResult> &strides,
-               llvm::SmallVectorImpl<unsigned> &dimsIndices) {
-  auto shapedType = value.getType().cast<mlir::ShapedType>();
-  auto indexType = builder.getIndexType();
-
-  bool isMemref = shapedType.isa<mlir::MemRefType>();
-  auto getDim = [&](unsigned dim) -> mlir::Value {
-    if (isMemref) {
-      return builder.createOrFold<mlir::memref::DimOp>(loc, value, dim);
-    } else {
-      return builder.createOrFold<mlir::tensor::DimOp>(loc, value, dim);
-    }
-  };
-
-  auto zero = builder.create<mlir::arith::ConstantIndexOp>(loc, 0);
-  auto one = builder.create<mlir::arith::ConstantIndexOp>(loc, 1);
-
-  auto foldConst = [&](mlir::Value val) -> mlir::OpFoldResult {
-    if (auto intVal = mlir::getConstantIntValue(val))
-      return builder.getIndexAttr(*intVal);
-
-    return val;
-  };
-
-  auto getPos =
-      [&](mlir::Value indexVal,
-          unsigned dim) -> std::tuple<mlir::OpFoldResult, mlir::OpFoldResult,
-                                      mlir::OpFoldResult, bool> {
-    auto valType = indexVal.getType();
-
-    auto len = getDim(dim);
-    bool ignoreNegativeInd = false;
-    auto handleNegativeVal = [&](mlir::OpFoldResult val) -> mlir::Value {
-      mlir::Value idx;
-      if (auto v = val.dyn_cast<mlir::Value>()) {
-        idx = v;
-      } else {
-        auto attr = val.get<mlir::Attribute>();
-        auto attrVal = attr.cast<mlir::IntegerAttr>().getValue().getSExtValue();
-        idx = builder.create<mlir::arith::ConstantIndexOp>(loc, attrVal);
-      }
-      if (ignoreNegativeInd) {
-        return idx;
-      } else {
-        auto isNeg = builder.createOrFold<mlir::arith::CmpIOp>(
-            loc, mlir::arith::CmpIPredicate::slt, idx, zero);
-        auto negIndex =
-            builder.createOrFold<mlir::arith::AddIOp>(loc, len, idx);
-        return builder.createOrFold<mlir::arith::SelectOp>(loc, isNeg, negIndex,
-                                                           idx);
-      }
-    };
-
-    if (auto sliceType = valType.dyn_cast<plier::SliceType>()) {
-      auto getItemOrConst = [&](unsigned i) -> mlir::Value {
-        assert(i < 3);
-        auto createInd = [&](int64_t i) {
-          return builder.create<mlir::arith::ConstantIndexOp>(loc, i);
-        };
-        return builder.createOrFold<plier::SliceGetItemOp>(
-            loc, indexType, indexVal, value, createInd(i), dim);
-      };
-
-      auto offset = handleNegativeVal(getItemOrConst(0));
-      auto end = handleNegativeVal(getItemOrConst(1));
-      auto stride = getItemOrConst(2);
-      auto size = builder.createOrFold<mlir::arith::SubIOp>(loc, end, offset);
-
-      auto constStride = mlir::getConstantIntValue(stride);
-      if (!constStride || *constStride > 1 || *constStride < -1) {
-        size = builder.createOrFold<mlir::arith::SubIOp>(loc, size, one);
-        size = builder.createOrFold<mlir::arith::AddIOp>(loc, size, stride);
-        size = builder.createOrFold<mlir::arith::DivUIOp>(loc, size, stride);
-      }
-      return {foldConst(offset), foldConst(size), stride, true};
-    } else {
-      auto offset =
-          foldConst(handleNegativeVal(index_cast(indexVal, loc, builder)));
-      return {offset, builder.getIndexAttr(1), builder.getIndexAttr(1), false};
-    }
-  };
-
-  auto makeFullSlice =
-      [&](unsigned dim) -> std::tuple<mlir::OpFoldResult, mlir::OpFoldResult,
-                                      mlir::OpFoldResult> {
-    auto begin = builder.getIndexAttr(0);
-    auto end = getDim(dim);
-    auto step = builder.getIndexAttr(1);
-    return {begin, end, step};
-  };
-
-  auto rank = static_cast<unsigned>(shapedType.getRank());
-  offsets.resize(rank);
-  sizes.resize(rank);
-  strides.resize(rank);
-
-  if (auto tupleType = index.getType().dyn_cast<mlir::TupleType>()) {
-    auto count = static_cast<unsigned>(tupleType.size());
-    if (count > rank)
-      return mlir::failure();
-
-    for (auto it : llvm::enumerate(tupleType)) {
-      auto i = static_cast<unsigned>(it.index());
-      auto getitemInd = builder.create<mlir::arith::ConstantIndexOp>(loc, i);
-      auto ind = builder.createOrFold<imex::util::TupleExtractOp>(
-          loc, it.value(), index, getitemInd);
-      bool isSlice = false;
-      std::tie(offsets[i], sizes[i], strides[i], isSlice) = getPos(ind, i);
-      if (isSlice)
-        dimsIndices.emplace_back(i);
-    }
-
-    for (auto i : llvm::seq(count, rank)) {
-      std::tie(offsets[i], sizes[i], strides[i]) = makeFullSlice(i);
-      dimsIndices.emplace_back(i);
-    }
-  } else {
-    bool isSlice = false;
-    std::tie(offsets[0], sizes[0], strides[0], isSlice) = getPos(index, 0);
-    if (isSlice)
-      dimsIndices.emplace_back(0);
-
-    for (auto i : llvm::seq(1u, rank)) {
-      std::tie(offsets[i], sizes[i], strides[i]) = makeFullSlice(i);
-      dimsIndices.emplace_back(i);
-    }
-  }
-
-  return mlir::success();
-}
-
-static auto getDynShape(size_t rank) {
-  return llvm::SmallVector<int64_t>(rank, mlir::ShapedType::kDynamicSize);
-}
-
-static mlir::Value makeSubview(mlir::OpBuilder &builder, mlir::Location loc,
-                               mlir::Value src,
-                               llvm::ArrayRef<mlir::OpFoldResult> offsets,
-                               llvm::ArrayRef<mlir::OpFoldResult> sizes,
-                               llvm::ArrayRef<mlir::OpFoldResult> strides,
-                               llvm::ArrayRef<unsigned> dimIndices) {
-  auto srcType = src.getType().cast<mlir::ShapedType>();
-  bool isTensor = srcType.isa<mlir::RankedTensorType>();
-  auto srcRank = static_cast<unsigned>(srcType.getRank());
-  auto dstRank = dimIndices.size();
-  assert(srcRank > 0);
-  assert(dstRank > 0);
-  assert(dstRank <= srcRank);
-
-  mlir::Value view;
-  if (isTensor) {
-    auto tensorType = srcType.cast<mlir::RankedTensorType>();
-    auto resType = mlir::tensor::ExtractSliceOp::inferResultType(
-                       tensorType, offsets, sizes, strides)
-                       .cast<mlir::RankedTensorType>();
-
-    view = builder.create<mlir::tensor::ExtractSliceOp>(
-        loc, resType, src, offsets, sizes, strides);
-
-    if (srcRank != dstRank) {
-      llvm::SmallVector<mlir::OpFoldResult> newOfsets(srcRank,
-                                                      builder.getIndexAttr(0));
-      llvm::SmallVector<mlir::OpFoldResult> newStrides(srcRank,
-                                                       builder.getIndexAttr(1));
-      auto viewType = view.getType().cast<mlir::RankedTensorType>();
-      auto reducedType =
-          mlir::tensor::ExtractSliceOp::inferCanonicalRankReducedResultType(
-              dstRank, viewType, newOfsets, sizes, newStrides)
-              .cast<mlir::RankedTensorType>();
-      view = builder.create<mlir::tensor::ExtractSliceOp>(
-          loc, reducedType, view, newOfsets, sizes, newStrides);
-    }
-  } else {
-    auto memrefType = srcType.cast<mlir::MemRefType>();
-    auto resType = mlir::memref::SubViewOp::inferResultType(memrefType, offsets,
-                                                            sizes, strides)
-                       .cast<mlir::MemRefType>();
-
-    view = builder.create<mlir::memref::SubViewOp>(loc, resType, src, offsets,
-                                                   sizes, strides);
-
-    if (srcRank != dstRank) {
-      llvm::SmallVector<mlir::OpFoldResult> newOfsets(srcRank,
-                                                      builder.getIndexAttr(0));
-      llvm::SmallVector<mlir::OpFoldResult> newStrides(srcRank,
-                                                       builder.getIndexAttr(1));
-      auto viewType = view.getType().cast<mlir::MemRefType>();
-      auto reducedType =
-          mlir::memref::SubViewOp::inferRankReducedResultType(
-              getDynShape(dstRank), viewType, newOfsets, sizes, newStrides)
-              .cast<mlir::MemRefType>();
-      view = builder.create<mlir::memref::SubViewOp>(
-          loc, reducedType, view, newOfsets, sizes, newStrides);
-      resType = reducedType;
-    }
-
-    auto flatMemrefType =
-        mlir::MemRefType::get(resType.getShape(), resType.getElementType());
-
-    if (resType != flatMemrefType)
-      view =
-          builder.create<imex::util::ChangeLayoutOp>(loc, flatMemrefType, view);
-  }
-
-  return view;
-}
-
-struct GetitemOpLowering : public mlir::OpConversionPattern<plier::GetItemOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(plier::GetItemOp op, plier::GetItemOp::Adaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
-    auto value = adaptor.getValue();
-    auto index = adaptor.getIndex();
-    auto type = value.getType();
-    bool isMemref = type.isa<mlir::MemRefType>();
-    bool isTensor = type.isa<mlir::TensorType>();
-
-    if (!isMemref && !isTensor)
-      return mlir::failure();
-
-    if (!isValidGetitemIndex(index.getType()))
-      return mlir::failure();
-
-    auto loc = op.getLoc();
-    auto shapedType = type.cast<mlir::ShapedType>();
-    llvm::SmallVector<mlir::OpFoldResult> offsets;
-    llvm::SmallVector<mlir::OpFoldResult> sizes;
-    llvm::SmallVector<mlir::OpFoldResult> strides;
-    llvm::SmallVector<unsigned> dimsIndices;
-    if (mlir::failed(computeIndices(rewriter, loc, value, index, offsets, sizes,
-                                    strides, dimsIndices)))
-      return mlir::failure();
-
-    mlir::Value res;
-    auto elemType = shapedType.getElementType();
-    auto elemTypeSignless = imex::makeSignlessType(elemType);
-    if (elemType != elemTypeSignless) {
-      if (isMemref) {
-        auto memrefType = type.cast<mlir::MemRefType>();
-        auto signlessType = mlir::MemRefType::get(
-            memrefType.getShape(), elemTypeSignless, memrefType.getLayout());
-        value =
-            rewriter.create<imex::util::SignCastOp>(loc, signlessType, value);
-      } else if (isTensor) {
-        auto tensorType = type.cast<mlir::RankedTensorType>();
-        auto signlessType = mlir::RankedTensorType::get(
-            tensorType.getShape(), elemTypeSignless, tensorType.getEncoding());
-        value =
-            rewriter.create<imex::util::SignCastOp>(loc, signlessType, value);
-      } else {
-        llvm_unreachable("Invalid getitem");
-      }
-    }
-
-    if (!dimsIndices.empty()) {
-      // Is slice
-      res = makeSubview(rewriter, loc, value, offsets, sizes, strides,
-                        dimsIndices);
-
-      mlir::ShapedType resultTypeSignless =
-          res.getType().cast<mlir::ShapedType>();
-      mlir::Type resultType;
-      if (isMemref) {
-        resultType =
-            mlir::MemRefType::get(resultTypeSignless.getShape(), elemType);
-      } else if (isTensor) {
-        resultType = mlir::RankedTensorType::get(resultTypeSignless.getShape(),
-                                                 elemType);
-      } else {
-        llvm_unreachable("Invalid getitem");
-      }
-
-      if (resultType != resultTypeSignless)
-        res = rewriter.create<imex::util::SignCastOp>(loc, resultType, res);
-    } else {
-      // Is single element
-      auto toValues = [&](auto &vals) {
-        llvm::SmallVector<mlir::Value> ret(vals.size());
-        for (auto it : llvm::enumerate(vals)) {
-          auto i = it.index();
-          auto val = it.value();
-          if (auto attr = val.template dyn_cast<mlir::Attribute>()) {
-            ret[i] = rewriter.create<mlir::arith::ConstantIndexOp>(
-                loc, attr.template cast<mlir::IntegerAttr>()
-                         .getValue()
-                         .getSExtValue());
-          } else {
-            ret[i] = val.template get<mlir::Value>();
-          }
-        }
-
-        return ret;
-      };
-      if (isMemref) {
-        res = rewriter.create<mlir::memref::LoadOp>(loc, value,
-                                                    toValues(offsets));
-      } else if (isTensor) {
-        res = rewriter.create<mlir::tensor::ExtractOp>(loc, value,
-                                                       toValues(offsets));
-      } else {
-        llvm_unreachable("Invalid getitem");
-      }
-
-      if (elemType != elemTypeSignless)
-        res = rewriter.create<imex::util::SignCastOp>(loc, elemType, res);
-    }
-
-    rerunScfPipeline(op);
-    rewriter.replaceOp(op, res);
-    return mlir::success();
-  }
-};
-
-struct GetitemOpArrLowering
-    : public mlir::OpConversionPattern<plier::GetItemOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(plier::GetItemOp op, plier::GetItemOp::Adaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
-    auto value = adaptor.getValue();
-    auto index = adaptor.getIndex();
-    auto type = value.getType().dyn_cast<mlir::ShapedType>();
-    if (!type || !type.hasRank())
-      return mlir::failure();
-
-    auto indexType = index.getType().dyn_cast<mlir::ShapedType>();
-    if (!indexType || !indexType.hasRank())
-      return mlir::failure();
-
-    auto *converter = getTypeConverter();
-    assert(converter);
-    auto resType = converter->convertType(op.getType())
-                       .dyn_cast_or_null<mlir::ShapedType>();
-    if (!resType)
-      return mlir::failure();
-
-    mlir::StringRef funcName = "array.__getitem__";
-    const mlir::Value args[] = {value, index};
-
-    rewriter.replaceOpWithNewOp<plier::PyCallOp>(op, op.getType(),
-                                                 mlir::Value{}, funcName, args,
-                                                 mlir::Value{}, llvm::None);
-    return mlir::success();
-  }
-};
 
 static void genCopy(mlir::OpBuilder &builder, mlir::Location loc,
                     mlir::Value src, mlir::Value dst) {
@@ -986,116 +294,6 @@ static void genCopy(mlir::OpBuilder &builder, mlir::Location loc,
   builder.create<mlir::linalg::GenericOp>(loc, src, dst, maps, iterators,
                                           bodyBuilder);
 }
-
-struct SetitemOpLowering : public mlir::OpConversionPattern<plier::SetItemOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(plier::SetItemOp op, plier::SetItemOp::Adaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
-    auto target = adaptor.getTarget();
-    auto targetType = target.getType().dyn_cast<mlir::MemRefType>();
-    if (!targetType)
-      return mlir::failure();
-
-    auto index = adaptor.getIndex();
-    if (!isValidGetitemIndex(index.getType()))
-      return mlir::failure();
-
-    auto elemType = targetType.getElementType();
-    auto signlessElemType = imex::makeSignlessType(elemType);
-
-    auto value = adaptor.getValue();
-    auto loc = op.getLoc();
-    llvm::SmallVector<mlir::OpFoldResult> offsets;
-    llvm::SmallVector<mlir::OpFoldResult> sizes;
-    llvm::SmallVector<mlir::OpFoldResult> strides;
-    llvm::SmallVector<unsigned> dimsIndices;
-    if (mlir::failed(computeIndices(rewriter, loc, target, index, offsets,
-                                    sizes, strides, dimsIndices)))
-      return mlir::failure();
-
-    auto castElem = [&](mlir::Value val) -> mlir::Value {
-      if (val.getType() != elemType) {
-        // TODO
-        val = rewriter.createOrFold<plier::CastOp>(loc, elemType, val);
-        rerunScfPipeline(op);
-      }
-      if (elemType != signlessElemType)
-        val =
-            rewriter.create<imex::util::SignCastOp>(loc, signlessElemType, val);
-
-      return val;
-    };
-
-    if (!dimsIndices.empty()) {
-      // Is slice
-      auto dst = makeSubview(rewriter, loc, target, offsets, sizes, strides,
-                             dimsIndices);
-
-      auto castView = [&](mlir::Value val) -> mlir::Value {
-        auto viewType = val.getType().cast<mlir::MemRefType>();
-        if (viewType.getElementType() != signlessElemType) {
-          auto signlessMemref = viewType.clone(signlessElemType);
-          val =
-              rewriter.create<imex::util::SignCastOp>(loc, signlessMemref, val);
-        }
-        return val;
-      };
-
-      auto valType = value.getType();
-      if (auto tensType = valType.dyn_cast<mlir::TensorType>()) {
-        auto memrefType = mlir::MemRefType::get(tensType.getShape(),
-                                                tensType.getElementType());
-        auto src =
-            rewriter
-                .create<mlir::bufferization::ToMemrefOp>(loc, memrefType, value)
-                .getResult();
-        genCopy(rewriter, loc, castView(src), dst);
-        rewriter.eraseOp(op);
-      } else if (valType.isa<mlir::MemRefType>()) {
-        auto srcView = castView(value);
-        auto dstView = castView(dst);
-        genCopy(rewriter, loc, srcView, dstView);
-        rewriter.eraseOp(op);
-      } else {
-        auto elem = castElem(value);
-        auto view = castView(dst);
-        rewriter.replaceOpWithNewOp<mlir::linalg::FillOp>(op, elem, view);
-      }
-    } else {
-      // Is single element
-      auto toValues = [&](auto &vals) {
-        llvm::SmallVector<mlir::Value> ret(vals.size());
-        for (auto it : llvm::enumerate(vals)) {
-          auto i = it.index();
-          auto val = it.value();
-          if (auto attr = val.template dyn_cast<mlir::Attribute>()) {
-            ret[i] = rewriter.create<mlir::arith::ConstantIndexOp>(
-                loc, attr.template cast<mlir::IntegerAttr>()
-                         .getValue()
-                         .getSExtValue());
-          } else {
-            ret[i] = val.template get<mlir::Value>();
-          }
-        }
-
-        return ret;
-      };
-
-      if (signlessElemType != elemType) {
-        auto signlessMemref = targetType.clone(signlessElemType);
-        target = rewriter.create<imex::util::SignCastOp>(loc, signlessMemref,
-                                                         target);
-      }
-
-      rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(
-          op, castElem(value), target, toValues(offsets));
-    }
-
-    return mlir::success();
-  }
-};
 
 struct CleanupLoads : public mlir::OpRewritePattern<mlir::memref::LoadOp> {
   using OpRewritePattern::OpRewritePattern;
@@ -1560,223 +758,910 @@ void FinalizeStridedLayoutPass::runOnOperation() {
   });
 }
 
-struct PlierToLinalgPass
-    : public mlir::PassWrapper<PlierToLinalgPass,
-                               mlir::OperationPass<mlir::ModuleOp>> {
-  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(PlierToLinalgPass)
-
-  virtual void
-  getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<imex::util::ImexUtilDialect>();
-    registry.insert<mlir::bufferization::BufferizationDialect>();
-    registry.insert<mlir::func::FuncDialect>();
-    registry.insert<mlir::linalg::LinalgDialect>();
-    registry.insert<mlir::memref::MemRefDialect>();
-    registry.insert<mlir::tensor::TensorDialect>();
-    registry.insert<plier::PlierDialect>();
+static mlir::Value convertScalarType(mlir::OpBuilder &builder,
+                                     mlir::Location loc, mlir::Value val,
+                                     mlir::Type dstType) {
+  auto srcType = val.getType();
+  if (srcType.isIntOrIndexOrFloat() && dstType.isIntOrIndexOrFloat()) {
+    val = builder.create<plier::CastOp>(loc, dstType, val);
+    rerunScfPipeline(val.getDefiningOp());
   }
 
-  void runOnOperation() override;
-};
-
-template <typename T> static bool hasCompatibleShape(T &&a1, T &&a2) {
-  if (a1.getRank() != a2.getRank())
-    return false;
-
-  for (auto it : llvm::zip(a1.getShape(), a2.getShape())) {
-    auto s1 = std::get<0>(it);
-    auto s2 = std::get<1>(it);
-    if (s1 != mlir::ShapedType::kDynamicSize &&
-        s2 != mlir::ShapedType::kDynamicSize && s1 != s2)
-      return false;
-  }
-  return true;
+  return val;
 }
 
-struct LowerTupleCasts : public mlir::OpConversionPattern<plier::CastOp> {
+struct GetitemToNtensor : public mlir::OpConversionPattern<plier::GetItemOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::GetItemOp op, plier::GetItemOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto src = adaptor.getValue();
+    auto srcType = src.getType().dyn_cast<imex::ntensor::NTensorType>();
+    if (!srcType)
+      return mlir::failure();
+
+    auto converter = getTypeConverter();
+    assert(converter);
+    auto resultType = converter->convertType(op.getType());
+    if (!resultType)
+      return mlir::failure();
+
+    auto index = adaptor.getIndex();
+
+    rewriter.replaceOpWithNewOp<imex::ntensor::GetitemOp>(op, resultType, src,
+                                                          index);
+    return mlir::success();
+  }
+};
+
+struct SetitemToNtensor : public mlir::OpConversionPattern<plier::SetItemOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::SetItemOp op, plier::SetItemOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto src = adaptor.getTarget();
+    auto srcType = src.getType().dyn_cast<imex::ntensor::NTensorType>();
+    if (!srcType)
+      return mlir::failure();
+
+    auto index = adaptor.getIndex();
+    auto value = convertScalarType(rewriter, op->getLoc(), adaptor.getValue(),
+                                   srcType.getElementType());
+
+    rewriter.replaceOpWithNewOp<imex::ntensor::SetitemOp>(op, src, index,
+                                                          value);
+    return mlir::success();
+  }
+};
+
+struct NtensorGetitemToNtensor
+    : public mlir::OpConversionPattern<imex::ntensor::GetitemOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::GetitemOp op,
+                  imex::ntensor::GetitemOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto converter = getTypeConverter();
+    assert(converter);
+    auto resultType = converter->convertType(op.getType());
+    if (!resultType)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<imex::ntensor::GetitemOp>(
+        op, resultType, adaptor.getSource(), adaptor.getIndex());
+    return mlir::success();
+  }
+};
+
+struct NtensorSetitemToNtensor
+    : public mlir::OpConversionPattern<imex::ntensor::SetitemOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::SetitemOp op,
+                  imex::ntensor::SetitemOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<imex::ntensor::SetitemOp>(
+        op, adaptor.getSource(), adaptor.getIndex(), adaptor.getValue());
+    return mlir::success();
+  }
+};
+
+struct BinopToNtensor : public mlir::OpConversionPattern<plier::BinOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::BinOp op, plier::BinOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto lhs = adaptor.getLhs();
+    auto rhs = adaptor.getRhs();
+    if (!lhs.getType().isa<imex::ntensor::NTensorType>() &&
+        !rhs.getType().isa<imex::ntensor::NTensorType>())
+      return mlir::failure();
+
+    auto converter = getTypeConverter();
+    assert(converter);
+    auto resultType = converter->convertType(op.getType());
+    if (!resultType)
+      return mlir::failure();
+
+    auto opName = op.getOp();
+    rewriter.replaceOpWithNewOp<imex::ntensor::BinaryOp>(op, resultType, lhs,
+                                                         rhs, opName);
+    return mlir::success();
+  }
+};
+
+struct BuildSliceToNtensor
+    : public mlir::OpConversionPattern<plier::BuildSliceOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::BuildSliceOp op, plier::BuildSliceOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto indexType = rewriter.getIndexType();
+
+    auto loc = op->getLoc();
+    auto doCast = [&](mlir::Value val) -> mlir::Value {
+      if (val.getType() != indexType) {
+        val = rewriter.create<plier::CastOp>(loc, indexType, val);
+        rerunScfPipeline(op);
+      }
+
+      return val;
+    };
+
+    auto isNone = [](mlir::Value val) {
+      return val.getType().isa<mlir::NoneType>();
+    };
+
+    auto getVal = [&](mlir::Value orig, mlir::Value converted) {
+      return isNone(orig) ? mlir::Value() : doCast(converted);
+    };
+
+    auto begin = getVal(op.getBegin(), adaptor.getBegin());
+    auto end = getVal(op.getEnd(), adaptor.getEnd());
+    auto step = getVal(op.getStep(), adaptor.getStep());
+    rewriter.replaceOpWithNewOp<imex::ntensor::BuildSliceOp>(op, begin, end,
+                                                             step);
+    return mlir::success();
+  }
+};
+
+static bool isBoundFunc(mlir::Type type) {
+  if (auto pyType = type.dyn_cast<plier::PyType>()) {
+    auto name = pyType.getName();
+    return name.consume_front("BoundFunction(") && name.consume_back(")");
+  }
+  return false;
+}
+
+struct NumpyCallsToNtensor : public mlir::OpConversionPattern<plier::PyCallOp> {
+  NumpyCallsToNtensor(mlir::TypeConverter &converter, mlir::MLIRContext *ctx,
+                      NumpyResolver &r)
+      : OpConversionPattern(converter, ctx), resolver(r) {}
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::PyCallOp op, plier::PyCallOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto funcName = op.getFuncName();
+    if (!resolver.hasFunc(funcName))
+      return mlir::failure();
+
+    auto converter = getTypeConverter();
+    assert(converter);
+
+    llvm::SmallVector<mlir::Type> resTypes;
+    if (mlir::failed(converter->convertTypes(op->getResultTypes(), resTypes)))
+      return mlir::failure();
+
+    auto func = adaptor.getFunc();
+    auto getAttr = func.getDefiningOp<plier::GetattrOp>();
+    bool isAttr = getAttr && isBoundFunc(func.getType());
+
+    llvm::SmallVector<mlir::Value> args;
+    llvm::SmallVector<mlir::Attribute> argNames;
+    auto srcArgs = adaptor.getArgs();
+    auto srcKwArgs = adaptor.getKwargs();
+    auto srcKwNames = adaptor.getKwNames();
+    auto totalCount =
+        srcArgs.size() + srcKwArgs.size() + static_cast<size_t>(isAttr);
+    args.reserve(totalCount);
+    argNames.reserve(totalCount);
+
+    auto emptyStrAttr = rewriter.getStringAttr("");
+    if (isAttr) {
+      auto val = rewriter.getRemappedValue(getAttr.getValue());
+      args.emplace_back(val);
+      argNames.emplace_back(emptyStrAttr);
+    }
+
+    args.append(srcArgs.begin(), srcArgs.end());
+    argNames.append(srcArgs.size(), emptyStrAttr);
+
+    args.append(srcKwArgs.begin(), srcKwArgs.end());
+    argNames.append(srcKwNames.begin(), srcKwNames.end());
+
+    auto argNamesAttr = rewriter.getArrayAttr(argNames);
+    rewriter.replaceOpWithNewOp<imex::ntensor::CallOp>(op, resTypes, args,
+                                                       argNamesAttr, funcName);
+    return mlir::success();
+  }
+
+private:
+  NumpyResolver &resolver;
+};
+
+struct NumpyAttrsToNtensor
+    : public mlir::OpConversionPattern<plier::GetattrOp> {
+  NumpyAttrsToNtensor(mlir::TypeConverter &converter, mlir::MLIRContext *ctx,
+                      NumpyResolver &r)
+      : OpConversionPattern(converter, ctx), resolver(r) {}
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::GetattrOp op, plier::GetattrOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto src = adaptor.getValue();
+    if (!src.getType().isa<imex::ntensor::NTensorType>())
+      return mlir::failure();
+
+    auto funcName = ("array." + op.getName()).str();
+    if (!resolver.hasFunc(funcName))
+      return mlir::failure();
+
+    if (isBoundFunc(op.getType())) {
+      rewriter.replaceOp(op, src);
+      return mlir::success();
+    }
+
+    auto converter = getTypeConverter();
+    assert(converter);
+
+    auto resultType = converter->convertType(op.getType());
+    if (!resultType)
+      return mlir::failure();
+
+    auto argNamesAttr = rewriter.getArrayAttr(rewriter.getStringAttr(""));
+    rewriter.replaceOpWithNewOp<imex::ntensor::CallOp>(op, resultType, src,
+                                                       argNamesAttr, funcName);
+
+    return mlir::success();
+  }
+
+private:
+  NumpyResolver &resolver;
+};
+
+struct BuiltinCallsToNtensor
+    : public mlir::OpConversionPattern<plier::PyCallOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::PyCallOp op, plier::PyCallOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto name = op.getFuncName();
+    for (auto &handler : builtinFuncsHandlers)
+      if (handler.first == name) {
+        auto func = adaptor.getFunc();
+        auto args = adaptor.getArgs();
+        auto varArgs = adaptor.getVarargs();
+        auto kwArgs = adaptor.getKwargs();
+        auto kwNames = adaptor.getKwNames();
+        assert(kwArgs.size() == kwNames.size() &&
+               "Args and names size mismatch");
+
+        auto converter = getTypeConverter();
+        assert(converter);
+
+        auto resType = converter->convertType(op.getType());
+        if (!resType)
+          return mlir::failure();
+
+        rewriter.replaceOpWithNewOp<plier::PyCallOp>(
+            op, resType, func, args, varArgs, kwArgs, name, kwNames);
+        return mlir::success();
+      }
+
+    return mlir::failure();
+  }
+};
+
+static mlir::Value addElementConversion(mlir::OpBuilder &builder,
+                                        mlir::Location loc,
+                                        mlir::Value srcArray,
+                                        mlir::Type dstType) {
+  auto srcType = srcArray.getType().cast<imex::ntensor::NTensorType>();
+  auto dstShaped = dstType.cast<mlir::ShapedType>();
+  auto srcElementType = srcType.getElementType();
+  auto dstElementType = dstShaped.getElementType();
+  if (srcElementType == dstElementType)
+    return srcArray;
+
+  auto dstArrayTupe = imex::ntensor::NTensorType::get(
+      dstShaped.getShape(), dstElementType, srcType.getEnvironment());
+
+  rerunScfPipeline(srcArray.getParentRegion()->getParentOp());
+  auto bodyBuilder = [&](mlir::OpBuilder &b, mlir::Location l,
+                         mlir::Value val) {
+    mlir::Value res = b.create<plier::CastOp>(l, dstElementType, val);
+    b.create<imex::ntensor::ElementwiseYieldOp>(l, res);
+  };
+
+  return builder.create<imex::ntensor::ElementwiseOp>(loc, dstArrayTupe,
+                                                      srcArray, bodyBuilder);
+}
+
+static mlir::Value castType(mlir::OpBuilder &builder, mlir::Location loc,
+                            mlir::Value src, mlir::Type dstType) {
+  auto srcType = src.getType();
+  assert((srcType.isa<mlir::MemRefType, mlir::RankedTensorType>()) &&
+         "Expected memref or tensor type");
+  if (srcType == dstType)
+    return src;
+
+  if (srcType.isa<mlir::MemRefType>()) {
+    return builder.create<mlir::memref::CastOp>(loc, dstType, src);
+  } else {
+    return builder.create<mlir::tensor::CastOp>(loc, dstType, src);
+  }
+}
+
+static llvm::Optional<mlir::Value> doCast(mlir::OpBuilder &builder,
+                                          mlir::Location loc, mlir::Value src,
+                                          mlir::Type dstType) {
+  auto srcType = src.getType();
+  if (srcType == dstType)
+    return src;
+
+  if (auto srcArrayType = srcType.dyn_cast<imex::ntensor::NTensorType>()) {
+    auto dstShapedType = dstType.dyn_cast<mlir::ShapedType>();
+    if (!dstShapedType)
+      return llvm::None;
+
+    mlir::Value res = addElementConversion(builder, loc, src, dstShapedType);
+    if (dstShapedType.isa<mlir::MemRefType>()) {
+      auto dstMemrefType = mlir::MemRefType::get(
+          srcArrayType.getShape(), dstShapedType.getElementType());
+      res = builder.create<imex::ntensor::ToMemrefOp>(loc, dstMemrefType, res);
+    } else if (dstShapedType.isa<mlir::RankedTensorType>()) {
+      auto dstTensorType = mlir::RankedTensorType::get(
+          srcArrayType.getShape(), dstShapedType.getElementType());
+      res = builder.create<imex::ntensor::ToTensorOp>(loc, dstTensorType, res);
+    }
+
+    return castType(builder, loc, res, dstShapedType);
+  } else {
+    auto srcShapedType = srcType.dyn_cast<mlir::ShapedType>();
+    if (!srcShapedType)
+      return llvm::None;
+
+    auto dstArrayType = dstType.dyn_cast<imex::ntensor::NTensorType>();
+    if (!dstArrayType)
+      return llvm::None;
+
+    srcArrayType = imex::ntensor::NTensorType::get(
+        dstArrayType.getShape(), srcShapedType.getElementType(),
+        dstArrayType.getEnvironment());
+
+    mlir::Value res;
+    if (srcShapedType.isa<mlir::MemRefType>()) {
+      auto dstMemrefType = mlir::MemRefType::get(
+          dstArrayType.getShape(), srcShapedType.getElementType());
+      src = castType(builder, loc, src, dstMemrefType);
+      res = builder.create<imex::ntensor::FromMemrefOp>(loc, srcArrayType, src);
+    } else if (srcShapedType.isa<mlir::RankedTensorType>()) {
+      auto dstTensorType = mlir::RankedTensorType::get(
+          dstArrayType.getShape(), srcShapedType.getElementType());
+      src = castType(builder, loc, src, dstTensorType);
+      res = builder.create<imex::ntensor::FromTensorOp>(loc, srcArrayType, src);
+    }
+    assert(res && "Expected tensor or memref type.");
+    return addElementConversion(builder, loc, res, dstArrayType);
+  }
+}
+
+struct CastsToNtensor : public mlir::OpConversionPattern<plier::CastOp> {
   using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
   matchAndRewrite(plier::CastOp op, plier::CastOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto src = adaptor.getValue();
-    auto srcType = src.getType().dyn_cast<mlir::TupleType>();
-    if (!srcType)
-      return mlir::failure();
+    auto srcType = src.getType();
 
-    auto converter = *getTypeConverter();
-    auto dstType =
-        converter.convertType(op.getType()).dyn_cast_or_null<mlir::TupleType>();
+    auto converter = getTypeConverter();
+    assert(converter);
+
+    auto dstType = converter->convertType(op.getType());
     if (!dstType)
       return mlir::failure();
 
-    if (srcType.size() != dstType.size())
-      return mlir::failure();
-
-    auto count = static_cast<unsigned>(srcType.size());
-
-    auto loc = op->getLoc();
-    llvm::SmallVector<mlir::Value> newArgs(count);
-    for (auto i : llvm::seq(0u, count)) {
-      auto srcElemType = srcType.getType(i);
-      auto dstElemType = dstType.getType(i);
-      auto ind = rewriter.create<mlir::arith::ConstantIndexOp>(loc, i);
-      mlir::Value val = rewriter.create<imex::util::TupleExtractOp>(
-          loc, srcElemType, src, ind);
-      if (srcElemType != dstElemType)
-        val = rewriter.create<plier::CastOp>(loc, dstElemType, val);
-
-      newArgs[i] = val;
+    if (srcType == dstType) {
+      rewriter.replaceOp(op, src);
+      return mlir::success();
     }
 
-    rewriter.replaceOpWithNewOp<imex::util::BuildTupleOp>(op, dstType, newArgs);
+    if (srcType.isIntOrIndexOrFloat() &&
+        dstType.isa<imex::ntensor::NTensorType>()) {
+      auto ntensorType = dstType.cast<imex::ntensor::NTensorType>();
+      if (srcType != ntensorType.getElementType() ||
+          !ntensorType.hasStaticShape())
+        return mlir::failure();
+
+      rewriter.replaceOpWithNewOp<imex::ntensor::CreateArrayOp>(
+          op, ntensorType, /*dynamicSizes*/ llvm::None, src);
+      return mlir::success();
+    }
+
+    if (auto res = doCast(rewriter, op->getLoc(), src, dstType)) {
+      rewriter.replaceOp(op, *res);
+      return mlir::success();
+    }
+
+    return mlir::failure();
+  }
+};
+
+struct UnitupleExtractToNtensor
+    : public mlir::OpConversionPattern<imex::util::TupleExtractOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::util::TupleExtractOp op,
+                  imex::util::TupleExtractOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto src = adaptor.getSource();
+    auto elemType = isUniTuple(src.getType());
+    if (!elemType || !imex::ntensor::NTensorType::isValidElementType(*elemType))
+      return mlir::failure();
+
+    auto converter = getTypeConverter();
+    assert(converter);
+
+    auto dstType = converter->convertType(op.getType());
+    if (!dstType)
+      return mlir::failure();
+
+    auto index = adaptor.getIndex();
+    rewriter.replaceOpWithNewOp<imex::ntensor::GetitemOp>(op, dstType, src,
+                                                          index);
     return mlir::success();
   }
 };
 
-static mlir::Value convertTensorElements(mlir::OpBuilder &builder,
-                                         mlir::Location loc, mlir::Value src,
-                                         mlir::ShapedType dstType,
-                                         mlir::Type origSrcElemType,
-                                         mlir::Type origDstElemType) {
-  assert(src.getType().isa<mlir::ShapedType>());
-  auto srcType = src.getType().cast<mlir::ShapedType>();
-  assert(srcType.getRank() == dstType.getRank());
-  if (srcType.getElementType() == dstType.getElementType())
-    return src;
-
-  if (srcType.isa<mlir::MemRefType>())
-    src = builder.create<mlir::bufferization::ToTensorOp>(loc, src);
-
-  auto rank = static_cast<unsigned>(srcType.getRank());
-  llvm::SmallVector<mlir::OpFoldResult> shape(rank);
-  for (auto i : llvm::seq(0u, rank))
-    shape[i] = builder.create<mlir::tensor::DimOp>(loc, src, i).getResult();
-
-  mlir::Value init = builder.create<mlir::tensor::EmptyOp>(
-      loc, shape, dstType.getElementType());
-
-  auto affineMap =
-      mlir::AffineMap::getMultiDimIdentityMap(rank, builder.getContext());
-  const mlir::AffineMap maps[] = {
-      affineMap,
-      affineMap,
-  };
-
-  llvm::SmallVector<mlir::StringRef> iterators(rank, "parallel");
-
-  auto bodyBuilder = [&](mlir::OpBuilder &b, mlir::Location l,
-                         mlir::ValueRange args) {
-    assert(args.size() == 2);
-    auto doSignCast = [&](mlir::Value src, mlir::Type dstType) -> mlir::Value {
-      if (src.getType() != dstType)
-        return b.create<imex::util::SignCastOp>(l, dstType, src);
-
-      return src;
-    };
-    auto arg = doSignCast(args.front(), origSrcElemType);
-    arg = b.create<plier::CastOp>(l, origDstElemType, arg);
-    arg = doSignCast(arg, dstType.getElementType());
-    b.create<mlir::linalg::YieldOp>(l, arg);
-  };
-  mlir::Value res =
-      builder
-          .create<mlir::linalg::GenericOp>(loc, init.getType(), src, init, maps,
-                                           iterators, bodyBuilder)
-          .getResult(0);
-
-  if (dstType.isa<mlir::MemRefType>()) {
-    auto memrefType =
-        mlir::MemRefType::get(dstType.getShape(), dstType.getElementType());
-    res = builder.create<mlir::bufferization::ToMemrefOp>(loc, memrefType, res);
-  }
-
-  rerunScfPipeline(res.getDefiningOp());
-  return res;
+static bool isNtensor(mlir::TypeConverter &converter, mlir::Type type) {
+  return !!converter.convertType(type)
+               .dyn_cast_or_null<imex::ntensor::NTensorType>();
 }
 
-struct LowerTensorCasts : public mlir::OpConversionPattern<plier::CastOp> {
-  using OpConversionPattern::OpConversionPattern;
+struct PlierToNtensorPass
+    : public mlir::PassWrapper<PlierToNtensorPass, mlir::OperationPass<void>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(PlierToNtensorPass)
+
+  PlierToNtensorPass()
+      : resolver(std::make_shared<NumpyResolver>(
+            "numba_dpcomp.mlir.numpy.funcs", "_get_func")) {}
+
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<imex::ntensor::NTensorDialect>();
+    registry.insert<imex::util::ImexUtilDialect>();
+    registry.insert<mlir::func::FuncDialect>();
+    registry.insert<plier::PlierDialect>();
+  }
+
+  void runOnOperation() override {
+    auto &context = getContext();
+
+    mlir::TypeConverter typeConverter;
+    // Convert unknown types to itself
+    typeConverter.addConversion([](mlir::Type type) { return type; });
+
+    populateStdTypeConverter(context, typeConverter);
+    populateArrayTypeConverter(context, typeConverter);
+    imex::populateTupleTypeConverter(context, typeConverter);
+    typeConverter.addConversion(
+        [](plier::SliceType type) -> llvm::Optional<mlir::Type> {
+          return imex::ntensor::SliceType::get(type.getContext());
+        });
+
+    auto addUnrealizedCast = [](mlir::OpBuilder &builder, mlir::Type type,
+                                mlir::ValueRange inputs, mlir::Location loc) {
+      auto cast =
+          builder.create<mlir::UnrealizedConversionCastOp>(loc, type, inputs);
+      return llvm::Optional<mlir::Value>(cast.getResult(0));
+    };
+    typeConverter.addArgumentMaterialization(addUnrealizedCast);
+    typeConverter.addSourceMaterialization(addUnrealizedCast);
+    typeConverter.addTargetMaterialization(addUnrealizedCast);
+
+    mlir::RewritePatternSet patterns(&context);
+    mlir::ConversionTarget target(context);
+
+    imex::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
+                                                             patterns, target);
+    imex::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
+                                                       target);
+
+    target.addDynamicallyLegalOp<plier::GetItemOp>(
+        [&typeConverter](plier::GetItemOp op) -> llvm::Optional<bool> {
+          auto containerType = op.getValue().getType();
+          if (isNtensor(typeConverter, containerType))
+            return false;
+
+          return llvm::None;
+        });
+    target.addDynamicallyLegalOp<plier::SetItemOp>(
+        [&typeConverter](plier::SetItemOp op) -> llvm::Optional<bool> {
+          auto containerType = op.getTarget().getType();
+          if (isNtensor(typeConverter, containerType))
+            return false;
+
+          return llvm::None;
+        });
+
+    target.addDynamicallyLegalOp<imex::ntensor::GetitemOp,
+                                 imex::ntensor::SetitemOp>(
+        [&typeConverter](mlir::Operation *op) {
+          return typeConverter.isLegal(op);
+        });
+
+    target.addDynamicallyLegalOp<plier::BinOp>(
+        [&typeConverter](plier::BinOp op) -> llvm::Optional<bool> {
+          auto lhs = op.getLhs().getType();
+          auto rhs = op.getRhs().getType();
+          if (isNtensor(typeConverter, lhs) || isNtensor(typeConverter, rhs))
+            return false;
+
+          return llvm::None;
+        });
+
+    target.addDynamicallyLegalOp<plier::PyCallOp>(
+        [this, &typeConverter](plier::PyCallOp op) -> llvm::Optional<bool> {
+          auto funcName = op.getFuncName();
+          if (resolver->hasFunc(funcName))
+            return false;
+
+          for (auto &handler : builtinFuncsHandlers)
+            if (handler.first == funcName)
+              return typeConverter.isLegal(op);
+
+          return llvm::None;
+        });
+
+    target.addDynamicallyLegalOp<plier::GetattrOp>(
+        [&typeConverter](plier::GetattrOp op) -> llvm::Optional<bool> {
+          auto containerType = op.getValue().getType();
+          if (isNtensor(typeConverter, containerType))
+            return false;
+
+          return llvm::None;
+        });
+
+    target.addDynamicallyLegalOp<plier::CastOp>(
+        [&typeConverter](plier::CastOp op) -> llvm::Optional<bool> {
+          auto srcType = op.getValue().getType();
+          auto dstType = op.getType();
+          if (isNtensor(typeConverter, srcType) ||
+              isNtensor(typeConverter, dstType))
+            return false;
+
+          return true;
+        });
+
+    target.addDynamicallyLegalOp<imex::util::TupleExtractOp>(
+        [](imex::util::TupleExtractOp op) -> llvm::Optional<bool> {
+          if (auto elemType = isUniTuple(op.getSource().getType()))
+            if (imex::ntensor::NTensorType::isValidElementType(*elemType))
+              return false;
+
+          return llvm::None;
+        });
+
+    target.addIllegalOp<plier::BuildSliceOp>();
+
+    target.addLegalDialect<imex::ntensor::NTensorDialect>();
+
+    patterns.insert<
+        // clang-format off
+        GetitemToNtensor,
+        SetitemToNtensor,
+        NtensorGetitemToNtensor,
+        NtensorSetitemToNtensor,
+        BinopToNtensor,
+        BuildSliceToNtensor,
+        BuiltinCallsToNtensor,
+        CastsToNtensor,
+        UnitupleExtractToNtensor
+        // clang-format on
+        >(typeConverter, &context);
+
+    patterns.insert<NumpyCallsToNtensor, NumpyAttrsToNtensor>(
+        typeConverter, &context, *resolver);
+
+    if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
+                                                  std::move(patterns))))
+      signalPassFailure();
+  }
+
+private:
+  std::shared_ptr<NumpyResolver> resolver;
+};
+
+struct GetitemArrayOpLowering
+    : public mlir::OpRewritePattern<imex::ntensor::GetitemOp> {
+  using OpRewritePattern::OpRewritePattern;
 
   mlir::LogicalResult
-  matchAndRewrite(plier::CastOp op, plier::CastOp::Adaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
-    auto converter = *getTypeConverter();
-
-    auto value = adaptor.getValue();
-    auto srcType = value.getType().dyn_cast<mlir::ShapedType>();
-    if (!srcType || !srcType.hasRank())
+  matchAndRewrite(imex::ntensor::GetitemOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto src = op.getSource();
+    if (!src.getType().isa<imex::ntensor::NTensorType>())
       return mlir::failure();
 
-    auto dstType = converter.convertType(op.getType())
-                       .dyn_cast_or_null<mlir::ShapedType>();
-    if (!dstType || !dstType.hasRank())
+    auto index = op.getIndex();
+    if (!index.getType().isa<imex::ntensor::NTensorType>())
       return mlir::failure();
 
-    if (srcType == dstType) {
-      rewriter.replaceOpWithNewOp<mlir::UnrealizedConversionCastOp>(op, dstType,
-                                                                    value);
-      return mlir::success();
-    }
-
-    auto srcElem = srcType.getElementType();
-    auto dstElem = dstType.getElementType();
-    if (!hasCompatibleShape(srcType, dstType))
-      return mlir::failure();
-
-    auto signlessSrcType = srcType.clone(imex::makeSignlessType(srcElem));
-    auto signlessDstType = dstType.clone(imex::makeSignlessType(dstElem));
-
-    auto loc = op.getLoc();
-    if (signlessSrcType != srcType)
-      value = rewriter.createOrFold<imex::util::SignCastOp>(
-          loc, signlessSrcType, value);
-
-    value = convertTensorElements(rewriter, loc, value, signlessDstType,
-                                  srcElem, dstElem);
-
-    bool isSrcMemref = srcType.isa<mlir::MemRefType>();
-    bool isDstMemref = dstType.isa<mlir::MemRefType>();
-
-    if (isSrcMemref && isDstMemref) {
-      value = rewriter.createOrFold<mlir::memref::CastOp>(loc, signlessDstType,
-                                                          value);
-    } else if (!isSrcMemref && !isDstMemref) {
-      value = rewriter.createOrFold<mlir::tensor::CastOp>(loc, signlessDstType,
-                                                          value);
-    } else if (isSrcMemref && !isDstMemref) {
-      auto dstMemrefType = mlir::MemRefType::get(
-          dstType.getShape(), signlessDstType.getElementType(),
-          srcType.cast<mlir::MemRefType>().getLayout());
-      value = rewriter.createOrFold<mlir::memref::CastOp>(loc, dstMemrefType,
-                                                          value);
-      auto flatMemrefType = mlir::MemRefType::get(
-          dstType.getShape(), signlessDstType.getElementType());
-      if (dstMemrefType != flatMemrefType)
-        value = rewriter.create<imex::util::ChangeLayoutOp>(loc, flatMemrefType,
-                                                            value);
-
-      value = rewriter.create<mlir::bufferization::ToTensorOp>(loc, value);
-    } else if (!isSrcMemref && isDstMemref) {
-      auto dstTensorType = mlir::RankedTensorType::get(
-          dstType.getShape(), signlessDstType.getElementType(),
-          srcType.cast<mlir::RankedTensorType>().getEncoding());
-      value = rewriter.createOrFold<mlir::tensor::CastOp>(loc, dstTensorType,
-                                                          value);
-
-      auto memrefType = mlir::MemRefType::get(dstTensorType.getShape(),
-                                              dstTensorType.getElementType());
-      value = rewriter.create<mlir::bufferization::ToMemrefOp>(loc, memrefType,
-                                                               value);
-    }
-
-    if (signlessDstType != dstType)
-      value =
-          rewriter.createOrFold<imex::util::SignCastOp>(loc, dstType, value);
-
-    rewriter.replaceOp(op, value);
+    mlir::StringRef opName = "array.__getitem__";
+    auto resType = op.getType();
+    auto args = {src, index};
+    rewriter.replaceOpWithNewOp<imex::ntensor::PrimitiveOp>(op, resType, args,
+                                                            opName);
     return mlir::success();
   }
+};
+
+static PyLinalgResolver::Values
+castRetTypes(mlir::Location loc, mlir::PatternRewriter &rewriter,
+             mlir::Operation *op,
+             llvm::Optional<PyLinalgResolver::Values> vals) {
+  auto results = std::move(vals).value();
+  assert(results.size() == op->getNumResults());
+  for (auto it : llvm::enumerate(results)) {
+    auto i = it.index();
+    auto ret = it.value();
+    auto dstType = op->getResultTypes()[i];
+
+    auto srcType = ret.getType();
+    if (dstType != srcType)
+      results[i] = rewriter.create<plier::CastOp>(loc, dstType, ret);
+  }
+  return results;
+}
+
+struct NtensorPrimitiveCallsLowering final
+    : public mlir::OpRewritePattern<imex::ntensor::PrimitiveOp> {
+  NtensorPrimitiveCallsLowering(mlir::MLIRContext *context)
+      : OpRewritePattern(context),
+        resolver("numba_dpcomp.mlir.numpy.funcs", "registry") {}
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::PrimitiveOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto opName = op.getOp();
+
+    auto loc = op->getLoc();
+    auto res = [&]() -> llvm::Optional<PyLinalgResolver::Values> {
+      auto args = op.getArgs();
+      auto funcRes =
+          resolver.rewriteFunc(opName, loc, rewriter, args, llvm::None);
+      if (funcRes)
+        return funcRes;
+
+      if (opName.startswith("array.") && args.size() == 1)
+        return resolver.rewriteAttr(opName, loc, rewriter, args.front());
+
+      return llvm::None;
+    }();
+
+    if (!res)
+      return mlir::failure();
+
+    auto results = castRetTypes(loc, rewriter, op, res);
+
+    rerunScfPipeline(op);
+    rewriter.replaceOp(op, results);
+    return mlir::success();
+  }
+
+private:
+  PyLinalgResolver resolver;
+};
+
+struct NumpyCallsResolver
+    : public mlir::OpRewritePattern<imex::ntensor::CallOp> {
+  NumpyCallsResolver(mlir::MLIRContext *ctx, NumpyResolver &r)
+      : OpRewritePattern(ctx), resolver(r) {}
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::CallOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto funcName = op.getOp();
+
+    llvm::SmallVector<mlir::Value> results;
+    if (mlir::failed(resolver.resolveFuncArgs(rewriter, op->getLoc(), funcName,
+                                              op.getArgs(), op.getArgsNames(),
+                                              results)))
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<imex::ntensor::PrimitiveOp>(
+        op, op->getResultTypes(), results, funcName);
+    return mlir::success();
+  }
+
+private:
+  NumpyResolver &resolver;
+};
+
+struct ExternalCallsResolver final : mlir::OpRewritePattern<plier::PyCallOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+protected:
+  mlir::LogicalResult
+  matchAndRewrite(plier::PyCallOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    if (!op.getKwargs().empty())
+      return mlir::failure(); // TODO: kwargs support
+
+    auto name = op.getFuncName();
+    auto args = op.getArgs();
+
+    llvm::SmallVector<mlir::Type> types(args.size());
+    for (auto [i, arg] : llvm::enumerate(args)) {
+      arg = skipCasts(arg);
+      types[i] = arg.getType();
+    }
+
+    auto mangledName = mangle(name, types);
+    if (mangledName.empty())
+      return mlir::failure();
+
+    auto mod = op->getParentOfType<mlir::ModuleOp>();
+    assert(mod);
+
+    auto externalFunc = mod.lookupSymbol<mlir::func::FuncOp>(mangledName);
+    if (!externalFunc) {
+      externalFunc = resolver.getFunc(name, types);
+      if (externalFunc) {
+        externalFunc.setPrivate();
+        externalFunc.setName(mangledName);
+      }
+    }
+    if (!externalFunc)
+      return mlir::failure();
+
+    assert(externalFunc.getFunctionType().getNumResults() ==
+           op->getNumResults());
+
+    auto loc = op->getLoc();
+
+    llvm::SmallVector<mlir::Value> castedArgs(args.size());
+    auto funcTypes = externalFunc.getFunctionType().getInputs();
+    for (auto it : llvm::enumerate(args)) {
+      auto arg = it.value();
+      auto i = it.index();
+      auto dstType = funcTypes[i];
+      if (arg.getType() != dstType)
+        castedArgs[i] = rewriter.createOrFold<plier::CastOp>(loc, dstType, arg);
+      else
+        castedArgs[i] = arg;
+    }
+
+    auto newFuncCall =
+        rewriter.create<mlir::func::CallOp>(loc, externalFunc, castedArgs);
+
+    auto results = newFuncCall.getResults();
+    llvm::SmallVector<mlir::Value> castedResults(results.size());
+
+    for (auto it : llvm::enumerate(results)) {
+      auto i = static_cast<unsigned>(it.index());
+      auto res = it.value();
+      auto oldResType = op->getResult(i).getType();
+      if (res.getType() != oldResType)
+        castedResults[i] =
+            rewriter.createOrFold<plier::CastOp>(loc, oldResType, res);
+      else
+        castedResults[i] = res;
+    }
+
+    rerunScfPipeline(op);
+    rewriter.replaceOp(op, castedResults);
+    return mlir::success();
+  }
+
+private:
+  PyFuncResolver resolver;
+};
+
+struct BuiltinCallsLowering : public mlir::OpRewritePattern<plier::PyCallOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(plier::PyCallOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto name = op.getFuncName();
+    for (auto &handler : builtinFuncsHandlers)
+      if (handler.first == name) {
+        auto args = op.getArgs();
+        auto kwArgs = op.getKwargs();
+        auto kwNames = op.getKwNames();
+        assert(kwArgs.size() == kwNames.size() &&
+               "Args and names size mismatch");
+        llvm::SmallVector<std::pair<llvm::StringRef, mlir::Value>> kwArgsArray;
+        kwArgsArray.reserve(kwArgs.size());
+        for (auto [arg, nameAttr] : llvm::zip(kwArgs, kwNames)) {
+          auto argName = nameAttr.cast<mlir::StringAttr>().getValue();
+          kwArgsArray.emplace_back(argName, arg);
+        }
+
+        return handler.second(op, args, kwArgsArray, rewriter);
+      }
+
+    return mlir::failure();
+  }
+};
+
+struct BinOpsLowering : public mlir::OpRewritePattern<imex::ntensor::BinaryOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::BinaryOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto name = op.getOp();
+    for (auto it : plier::getOperators()) {
+      if (it.op == name) {
+        auto newName = (llvm::Twine("operator.") + it.name).str();
+        mlir::Value args[] = {op.getLhs(), op.getRhs()};
+        rewriter.replaceOpWithNewOp<imex::ntensor::PrimitiveOp>(
+            op, op->getResultTypes(), args, newName);
+        return mlir::success();
+      }
+    }
+    return mlir::failure();
+  }
+};
+
+struct ResolveNtensorPass
+    : public mlir::PassWrapper<ResolveNtensorPass, mlir::OperationPass<void>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(ResolveNtensorPass)
+
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<imex::ntensor::NTensorDialect>();
+    registry.insert<imex::util::ImexUtilDialect>();
+    registry.insert<mlir::linalg::LinalgDialect>();
+    registry.insert<mlir::memref::MemRefDialect>();
+    registry.insert<mlir::tensor::TensorDialect>();
+  }
+
+  void runOnOperation() override {
+    auto &ctx = getContext();
+    mlir::RewritePatternSet patterns(&ctx);
+
+    imex::ntensor::populateResolveArrayOpsPatterns(ctx, patterns);
+
+    patterns
+        .insert<GetitemArrayOpLowering, NtensorPrimitiveCallsLowering,
+                BuiltinCallsLowering, BinOpsLowering, ExternalCallsResolver>(
+            &ctx);
+
+    (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
+                                             std::move(patterns));
+  }
+};
+
+struct ResolveNumpyFuncsPass
+    : public mlir::PassWrapper<ResolveNumpyFuncsPass,
+                               mlir::OperationPass<void>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(ResolveNumpyFuncsPass)
+
+  ResolveNumpyFuncsPass()
+      : resolver(std::make_shared<NumpyResolver>(
+            "numba_dpcomp.mlir.numpy.funcs", "_get_func")) {}
+
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<imex::ntensor::NTensorDialect>();
+    registry.insert<imex::util::ImexUtilDialect>();
+    registry.insert<mlir::arith::ArithDialect>();
+  }
+
+  void runOnOperation() override {
+    auto &ctx = getContext();
+    mlir::RewritePatternSet patterns(&ctx);
+
+    patterns.insert<NumpyCallsResolver>(&ctx, *resolver);
+
+    (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
+                                             std::move(patterns));
+  }
+
+private:
+  std::shared_ptr<NumpyResolver> resolver;
 };
 
 struct SimplifyExpandDims
@@ -2178,124 +2063,9 @@ struct SliceOfGeneric : public mlir::OpRewritePattern<mlir::linalg::GenericOp> {
   }
 };
 
-static bool isShaped(mlir::TypeConverter &converter, mlir::Type type) {
-  return !!converter.convertType(type).dyn_cast_or_null<mlir::ShapedType>();
-}
-
-void PlierToLinalgPass::runOnOperation() {
-  auto &context = getContext();
-
-  mlir::TypeConverter typeConverter;
-  // Convert unknown types to itself
-  typeConverter.addConversion([](mlir::Type type) { return type; });
-  populateStdTypeConverter(context, typeConverter);
-  imex::populateTupleTypeConverter(context, typeConverter);
-  populateArrayTypeConverter(context, typeConverter);
-
-  auto materializeCast = [](mlir::OpBuilder &builder, mlir::Type type,
-                            mlir::ValueRange inputs,
-                            mlir::Location loc) -> llvm::Optional<mlir::Value> {
-    if (inputs.size() == 1)
-      return builder
-          .create<mlir::UnrealizedConversionCastOp>(loc, type, inputs.front())
-          .getResult(0);
-
-    return llvm::None;
-  };
-  typeConverter.addArgumentMaterialization(materializeCast);
-  typeConverter.addSourceMaterialization(materializeCast);
-  typeConverter.addTargetMaterialization(materializeCast);
-
-  mlir::RewritePatternSet patterns(&context);
-  mlir::ConversionTarget target(context);
-
-  imex::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
-                                                     target);
-
-  target.addDynamicallyLegalOp<imex::util::TupleExtractOp>(
-      [](imex::util::TupleExtractOp op) -> llvm::Optional<bool> {
-        auto containerType = op.getSource().getType();
-        if (isUniTuple(containerType) &&
-            !mlir::getConstantIntValue(op.getIndex()))
-          return false;
-
-        return llvm::None;
-      });
-
-  target.addDynamicallyLegalOp<plier::GetItemOp>(
-      [&typeConverter](plier::GetItemOp op) -> llvm::Optional<bool> {
-        auto containerType = op.getValue().getType();
-        if (isShaped(typeConverter, containerType))
-          return false;
-
-        return llvm::None;
-      });
-
-  target.addDynamicallyLegalOp<plier::SetItemOp>(
-      [&typeConverter](plier::SetItemOp op) -> bool {
-        return !isShaped(typeConverter, op.getTarget().getType());
-      });
-
-  target.addDynamicallyLegalOp<plier::CastOp>([&](plier::CastOp op) -> bool {
-    auto inputType = op.getValue().getType();
-    auto srcType = typeConverter.convertType(inputType);
-    auto dstType = typeConverter.convertType(op.getType());
-    if (!srcType || !dstType)
-      return true;
-
-    if (srcType.isa<mlir::TupleType>() && dstType.isa<mlir::TupleType>()) {
-      auto srcTuple = srcType.cast<mlir::TupleType>();
-      auto dstTuple = dstType.cast<mlir::TupleType>();
-      for (auto it : llvm::zip(srcTuple.getTypes(), dstTuple.getTypes())) {
-        auto src = typeConverter.convertType(std::get<0>(it));
-        auto dst = typeConverter.convertType(std::get<1>(it));
-        if (src && dst && src != dst &&
-            src.isa<mlir::TensorType, mlir::MemRefType>() &&
-            dst.isa<mlir::TensorType, mlir::MemRefType>())
-          return false;
-      }
-      return true;
-    }
-
-    auto isZeroRank = [](mlir::Type t) -> bool {
-      auto shaped = t.dyn_cast<mlir::ShapedType>();
-      return shaped && shaped.getRank() == 0;
-    };
-
-    if ((isZeroRank(srcType) && dstType.isIntOrIndexOrFloat()) ||
-        (isZeroRank(dstType) && srcType.isIntOrIndexOrFloat()))
-      return false;
-
-    if (srcType == dstType && inputType != op.getType())
-      return false;
-
-    return srcType == dstType || !(srcType.isa<mlir::ShapedType>() &&
-                                   dstType.isa<mlir::ShapedType>());
-  });
-
-  imex::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
-                                                           patterns, target);
-
-  patterns.insert<
-      // clang-format off
-      GetitemOpLowering,
-      GetitemOpArrLowering,
-      SetitemOpLowering,
-      LowerTupleCasts,
-      LowerTensorCasts,
-      UnrankedToElementCasts,
-      GetItemUniTupleConversionPattern
-      // clang-format on
-      >(typeConverter, &context);
-
-  if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
-                                                std::move(patterns))))
-    signalPassFailure();
-}
-
 struct OptimizeGlobalsConstsLoad
     : public mlir::OpRewritePattern<mlir::memref::LoadOp> {
-  using mlir::OpRewritePattern<mlir::memref::LoadOp>::OpRewritePattern;
+  using OpRewritePattern::OpRewritePattern;
 
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::LoadOp op,
@@ -2349,6 +2119,35 @@ struct OptimizeGlobalsConstsLoad
       return mlir::failure();
 
     rewriter.replaceOpWithNewOp<mlir::arith::ConstantOp>(op, (*vals)[indices]);
+    return mlir::success();
+  }
+};
+
+struct OptimizeSingleElemCopy
+    : public mlir::OpRewritePattern<mlir::memref::CopyOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::CopyOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto src = op.getSource();
+    auto srcType = src.getType().dyn_cast<mlir::MemRefType>();
+    if (!srcType)
+      return mlir::failure();
+
+    auto dst = op.getTarget();
+    auto dstType = src.getType().dyn_cast<mlir::MemRefType>();
+    if (!dstType)
+      return mlir::failure();
+
+    if (srcType.getRank() != 1 ||
+        (srcType.getShape()[0] != 1 && dstType.getShape()[0] != 1))
+      return mlir::failure();
+
+    auto loc = op->getLoc();
+    mlir::Value idx = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
+    mlir::Value val = rewriter.create<mlir::memref::LoadOp>(loc, src, idx);
+    rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(op, val, dst, idx);
     return mlir::success();
   }
 };
@@ -2540,7 +2339,7 @@ struct BufferizeExtractSlice
             .cast<mlir::MemRefType>();
 
       return mlir::memref::SubViewOp::inferRankReducedResultType(
-                 getDynShape(dstRank), srcType, offsets, sizes, strides)
+                 dstType.getShape(), srcType, offsets, sizes, strides)
           .cast<mlir::MemRefType>();
     }();
     auto loc = op->getLoc();
@@ -2587,24 +2386,33 @@ struct BufferizeForceCopy
   }
 };
 
-struct BufferizePseudoCopy
-    : public mlir::OpConversionPattern<imex::util::PseudoCopyOp> {
+struct BufferizeMixedGeneric
+    : public mlir::OpConversionPattern<mlir::linalg::GenericOp> {
   using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(imex::util::PseudoCopyOp op,
-                  imex::util::PseudoCopyOp::Adaptor adaptor,
+  matchAndRewrite(mlir::linalg::GenericOp op,
+                  mlir::linalg::GenericOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    auto converter = getTypeConverter();
-    assert(converter);
-    auto dstType = converter->convertType(op.getType())
-                       .dyn_cast_or_null<mlir::MemRefType>();
-
-    if (!dstType)
+    if (op.hasTensorSemantics() || op.hasBufferSemantics())
       return mlir::failure();
 
-    auto arg = adaptor.getSource();
-    rewriter.replaceOpWithNewOp<imex::util::PseudoCopyOp>(op, dstType, arg);
+    bool changed = false;
+    llvm::SmallVector<mlir::Value> newInputs(adaptor.getInputs().size());
+    for (auto [i, input] : llvm::enumerate(adaptor.getInputs())) {
+      auto orig = op.getInputs()[i];
+      if (orig.getType().isa<mlir::RankedTensorType>()) {
+        newInputs[i] = input;
+        changed = true;
+      } else {
+        newInputs[i] = orig;
+      }
+    }
+    if (!changed)
+      return mlir::failure();
+
+    rewriter.updateRootInPlace(
+        op, [&]() { op.getInputsMutable().assign(newInputs); });
     return mlir::success();
   }
 };
@@ -2658,86 +2466,53 @@ struct AdditionalBufferize
     registry.insert<imex::util::ImexUtilDialect>();
   }
 
-  void runOnOperation() override;
-};
+  void runOnOperation() override {
+    auto *context = &getContext();
 
-void AdditionalBufferize::runOnOperation() {
-  auto *context = &getContext();
+    mlir::bufferization::BufferizeTypeConverter typeConverter;
+    imex::populateTupleTypeConverter(*context, typeConverter);
 
-  mlir::bufferization::BufferizeTypeConverter typeConverter;
-  imex::populateTupleTypeConverter(*context, typeConverter);
+    auto materializeTupleCast =
+        [](mlir::OpBuilder &builder, mlir::Type type, mlir::ValueRange inputs,
+           mlir::Location loc) -> llvm::Optional<mlir::Value> {
+      if (inputs.size() != 1)
+        return llvm::None;
 
-  auto materializeTupleCast =
-      [](mlir::OpBuilder &builder, mlir::Type type, mlir::ValueRange inputs,
-         mlir::Location loc) -> llvm::Optional<mlir::Value> {
-    if (inputs.size() != 1)
+      auto input = inputs.front();
+      if (input.getType().isa<mlir::TupleType>() || type.isa<mlir::TupleType>())
+        return builder.createOrFold<plier::CastOp>(loc, type, input);
+
       return llvm::None;
+    };
+    typeConverter.addArgumentMaterialization(materializeTupleCast);
+    typeConverter.addSourceMaterialization(materializeTupleCast);
+    typeConverter.addTargetMaterialization(materializeTupleCast);
 
-    auto input = inputs.front();
-    if (input.getType().isa<mlir::TupleType>() || type.isa<mlir::TupleType>())
-      return builder.createOrFold<plier::CastOp>(loc, type, input);
+    mlir::RewritePatternSet patterns(context);
+    mlir::ConversionTarget target(*context);
 
-    return llvm::None;
-  };
-  typeConverter.addArgumentMaterialization(materializeTupleCast);
-  typeConverter.addSourceMaterialization(materializeTupleCast);
-  typeConverter.addTargetMaterialization(materializeTupleCast);
+    imex::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
+                                                             patterns, target);
+    imex::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
+                                                       target);
+    target
+        .addIllegalOp<mlir::tensor::ReshapeOp, mlir::tensor::ExtractSliceOp>();
+    target.addIllegalOp<imex::util::ForceCopyOp>();
+    target.addLegalOp<mlir::memref::ReshapeOp>();
 
-  mlir::RewritePatternSet patterns(context);
-  mlir::ConversionTarget target(*context);
+    target.addDynamicallyLegalOp<mlir::linalg::GenericOp>(
+        [](mlir::linalg::GenericOp op) {
+          return op.hasTensorSemantics() || op.hasBufferSemantics();
+        });
 
-  imex::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
-                                                           patterns, target);
-  imex::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
-                                                     target);
-  target.addIllegalOp<mlir::tensor::ReshapeOp, mlir::tensor::ExtractSliceOp>();
-  target.addIllegalOp<imex::util::ForceCopyOp>();
-  target.addLegalOp<mlir::memref::ReshapeOp>();
-  target.addDynamicallyLegalOp<imex::util::PseudoCopyOp>(
-      [](mlir::Operation *op) {
-        return !op->getResultTypes().front().isa<mlir::RankedTensorType>();
-      });
+    patterns.insert<BufferizeReshape, BufferizeExtractSlice, BufferizeForceCopy,
+                    BufferizeMixedGeneric>(typeConverter, context);
 
-  patterns.insert<BufferizeReshape, BufferizeExtractSlice, BufferizeForceCopy,
-                  BufferizePseudoCopy>(typeConverter, context);
-
-  if (failed(
-          applyPartialConversion(getOperation(), target, std::move(patterns))))
-    signalPassFailure();
-}
-
-struct RemovePseudoCopy
-    : public mlir::OpRewritePattern<imex::util::PseudoCopyOp> {
-  using OpRewritePattern::OpRewritePattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(imex::util::PseudoCopyOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto arg = op.getSource();
-    if (arg.getType() != op.getType())
-      return mlir::failure();
-
-    rewriter.replaceOp(op, arg);
-    return mlir::success();
+    if (failed(applyPartialConversion(getOperation(), target,
+                                      std::move(patterns))))
+      signalPassFailure();
   }
 };
-
-struct ReplaceMemrefCopy : public mlir::OpRewritePattern<mlir::memref::CopyOp> {
-  using OpRewritePattern::OpRewritePattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(mlir::memref::CopyOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    genCopy(rewriter, op->getLoc(), op.getSource(), op.getTarget());
-    rewriter.eraseOp(op);
-    return mlir::success();
-  }
-};
-
-struct RemovePseudoCopyPass
-    : public imex::RewriteWrapperPass<RemovePseudoCopyPass, mlir::func::FuncOp,
-                                      void, RemovePseudoCopy,
-                                      ReplaceMemrefCopy> {};
 
 struct CloneArgsPass
     : public mlir::PassWrapper<CloneArgsPass,
@@ -2754,9 +2529,8 @@ struct CloneArgsPass
 
 void CloneArgsPass::runOnOperation() {
   auto func = getOperation();
-  if (func.isPrivate() || func.isDeclaration() || func.getBody().empty()) {
+  if (func.isPrivate() || func.isDeclaration() || func.getBody().empty())
     return;
-  }
 
   mlir::OpBuilder builder(&getContext());
 
@@ -2824,9 +2598,9 @@ void PostLinalgOptPass::runOnOperation() {
 
   imex::populateCommonOptsPatterns(context, patterns);
 
-  patterns.insert<OptimizeGlobalsConstsLoad, imex::CanonicalizeReduction,
-                  imex::PromoteToParallel, imex::MergeNestedForIntoParallel>(
-      &context);
+  patterns.insert<OptimizeGlobalsConstsLoad, OptimizeSingleElemCopy,
+                  imex::CanonicalizeReduction, imex::PromoteToParallel,
+                  imex::MergeNestedForIntoParallel>(&context);
 
   auto additionalOpt = [](mlir::func::FuncOp op) {
     (void)imex::prepareForFusion(op.getRegion());
@@ -2846,9 +2620,13 @@ struct FixDeallocPlacementPass
 static void populatePlierToLinalgGenPipeline(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::func::FuncOp>(
       std::make_unique<MarkContigiousArraysPass>());
-  pm.addPass(std::make_unique<PlierToLinalgPass>());
+  pm.addPass(std::make_unique<PlierToNtensorPass>());
   pm.addPass(mlir::createCanonicalizerPass());
-  pm.addPass(std::make_unique<NumpyCallsLoweringPass>());
+  pm.addPass(std::make_unique<ResolveNumpyFuncsPass>());
+  pm.addPass(std::make_unique<ResolveNtensorPass>());
+  pm.addPass(mlir::createCanonicalizerPass());
+  pm.addPass(imex::createNtensorToLinalgPass());
+  pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(imex::createForceInlinePass());
   pm.addPass(mlir::createSymbolDCEPass());
   pm.addNestedPass<mlir::func::FuncOp>(
@@ -2857,9 +2635,12 @@ static void populatePlierToLinalgGenPipeline(mlir::OpPassManager &pm) {
 }
 
 static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
-  pm.addPass(imex::createMakeSignlessPass());
-
+  pm.addPass(imex::createNtensorToMemrefPass());
   pm.addPass(mlir::createCanonicalizerPass());
+
+  pm.addPass(imex::createMakeSignlessPass());
+  pm.addPass(mlir::createCanonicalizerPass());
+
   pm.addPass(mlir::createReconcileUnrealizedCastsPass());
 
   pm.addPass(mlir::createCanonicalizerPass());
@@ -2877,8 +2658,6 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::func::FuncOp>(
       mlir::bufferization::createFinalizingBufferizePass());
 
-  pm.addNestedPass<mlir::func::FuncOp>(
-      std::make_unique<RemovePseudoCopyPass>());
   pm.addPass(mlir::createCanonicalizerPass());
 
   pm.addNestedPass<mlir::func::FuncOp>(
@@ -2910,6 +2689,7 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::func::FuncOp>(
       mlir::createLoopInvariantCodeMotionPass());
 
+  pm.addNestedPass<mlir::func::FuncOp>(mlir::createCSEPass());
   // ToDo: This pass also tries to do some simple fusion, whic should be split
   // in separate pass
   pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<PostLinalgOptPass>());

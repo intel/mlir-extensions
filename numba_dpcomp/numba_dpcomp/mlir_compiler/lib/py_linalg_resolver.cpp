@@ -32,6 +32,7 @@
 #include <mlir/Parser/Parser.h>
 
 #include "imex/Dialect/imex_util/dialect.hpp"
+#include "imex/Dialect/ntensor/IR/NTensorOps.hpp"
 #include "imex/Dialect/plier/dialect.hpp"
 #include "imex/Transforms/const_utils.hpp"
 #include "imex/Transforms/func_utils.hpp"
@@ -155,7 +156,7 @@ static bool isCompatibleType(mlir::Type type) {
 
   return type.isa<mlir::IntegerType, mlir::IndexType, mlir::FloatType,
                   mlir::RankedTensorType, mlir::MemRefType, mlir::NoneType,
-                  imex::util::TypeVar>();
+                  imex::util::TypeVar, imex::ntensor::NTensorType>();
 }
 
 static bool isCompatibleTypeVal(mlir::Value val) {
@@ -423,8 +424,15 @@ private:
 namespace {
 static mlir::Value toTensor(mlir::Location loc, mlir::OpBuilder &builder,
                             mlir::Value val) {
-  if (auto memrefType = val.getType().dyn_cast<mlir::MemRefType>())
+  auto srcType = val.getType();
+  if (auto memrefType = srcType.dyn_cast<mlir::MemRefType>())
     return builder.create<mlir::bufferization::ToTensorOp>(loc, val);
+
+  if (auto ntensorType = srcType.dyn_cast<imex::ntensor::NTensorType>()) {
+    auto tensorType = mlir::RankedTensorType::get(ntensorType.getShape(),
+                                                  ntensorType.getElementType());
+    return builder.create<imex::ntensor::ToTensorOp>(loc, tensorType, val);
+  }
 
   return val;
 }
@@ -1610,6 +1618,7 @@ static py::object shapeImpl(py::capsule context, py::capsule ssaVal) {
       imex::reportError("Unranked shaped are not supported");
 
     bool isTensor = mlirType.isa<mlir::TensorType>();
+    bool isNTensor = mlirType.isa<imex::ntensor::NTensorType>();
     auto &builder = ctx.builder;
     auto loc = ctx.loc;
     auto rank = static_cast<unsigned>(mlirType.getRank());
@@ -1618,6 +1627,8 @@ static py::object shapeImpl(py::capsule context, py::capsule ssaVal) {
       mlir::Value mlirDim;
       if (isTensor) {
         mlirDim = builder.create<mlir::tensor::DimOp>(loc, value, i);
+      } else if (isNTensor) {
+        mlirDim = builder.create<imex::ntensor::DimOp>(loc, value, i);
       } else {
         mlirDim = builder.create<mlir::memref::DimOp>(loc, value, i);
       }
@@ -1665,10 +1676,26 @@ static py::object getitemImpl(py::capsule context, py::capsule ssaVal,
   auto &builder = ctx.builder;
   auto loc = ctx.loc;
   auto type = value.getType();
-  if (auto tensor = type.dyn_cast<mlir::ShapedType>()) {
+  if (auto shaped = type.dyn_cast<mlir::ShapedType>()) {
     auto indexVal = ctx.context.unwrapVal(loc, builder, index);
-    auto elemType = tensor.getElementType();
-    auto res = builder.create<plier::GetItemOp>(loc, elemType, value, indexVal);
+    auto elemType = shaped.getElementType();
+
+    mlir::Value array;
+    auto ntensorType = imex::ntensor::NTensorType::get(shaped.getShape(),
+                                                       shaped.getElementType());
+    if (shaped.isa<mlir::MemRefType>()) {
+      array =
+          builder.create<imex::ntensor::FromMemrefOp>(loc, ntensorType, value);
+    } else if (shaped.isa<mlir::RankedTensorType>()) {
+      array =
+          builder.create<imex::ntensor::FromTensorOp>(loc, ntensorType, value);
+    } else if (shaped.isa<imex::ntensor::NTensorType>()) {
+      array = value;
+    } else {
+      throw py::index_error("Invalid shaped type");
+    }
+    auto res = builder.create<imex::ntensor::GetitemOp>(loc, elemType, array,
+                                                        indexVal);
     return ctx.context.createVar(context, res.getResult());
   }
 

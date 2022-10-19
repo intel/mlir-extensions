@@ -60,12 +60,9 @@ def _gen_tests():
         "test_list_setitem_hoisting",  # list support
         "test_list_comprehension_prange",  # list comprehension support
         "test_prange_raises_invalid_step_size",  # we actually support arbirary step in prange
-        "test_issue7501",  # invalid tensor<->memref canonicalization
         "test_parfor_race_1",  # cfg->scf conversion failure
-        "test_nested_parfor_push_call_vars",  # 'float' object has no attribute 'dtype'
         "test_record_array_setitem_yield_array",  # Record and string support
         "test_record_array_setitem",  # Record and string support
-        "test_multiple_call_getattr_object",  # 'float' object has no attribute 'dtype'
         "test_prange_two_instances_same_reduction_var",  # Non-trivial reduction
         "test_prange_conflicting_reduction_ops",  # Conflicting reduction reduction check
         "test_ssa_false_reduction",  # Frontend: object has no attribute 'name'
@@ -124,7 +121,6 @@ def _gen_tests():
         "test_parfor_bitmask5",  # setitem with mask
         "test_parfor_bitmask6",  # setitem with mask
         "test_issue3169",  # list support
-        "test_issue3748",  # unituple of literal dynamic getitem
         "test_issue5001",  # list suport
         "test_issue5167",  # np.full
         "test_issue6095_numpy_max",  # operand #1 does not dominate this use
