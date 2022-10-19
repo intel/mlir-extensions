@@ -83,6 +83,7 @@ static mlir::Value doSignCast(mlir::OpBuilder &builder, mlir::Location &loc,
 // *******************************
 
 namespace {
+
 /// Lower MkPTensorOp into a UnrealizedConversionCastOp, using the type
 /// converter to determine the target type. Operations extracting members
 /// (rtensor, device etc) are expected to chase the tuple creation back to here
@@ -148,6 +149,40 @@ struct ExtractRTensorLowering
       // inpOp.getOperands()[0].dump(); std::cerr << std::endl;
       rewriter.replaceOp(op, inpOp.getOperands()[0]);
     }
+    return ::mlir::success();
+  }
+};
+
+/// Convert PTensor's extract_slice to tensor::extract_slice.
+struct ExtractSliceLowering
+    : public ::mlir::OpConversionPattern<::imex::ptensor::ExtractSliceOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  ::mlir::LogicalResult
+  matchAndRewrite(::imex::ptensor::ExtractSliceOp op,
+                  ::imex::ptensor::ExtractSliceOp::Adaptor adaptor,
+                  ::mlir::ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+
+    // source and result are expected to be of PTensorType
+    auto srcPtTyp =
+        op.getSource().getType().dyn_cast<::imex::ptensor::PTensorType>();
+    if (!srcPtTyp)
+      return ::mlir::failure();
+    auto srcRtTyp = srcPtTyp.getRtensor();
+    auto retPtTyp = op.getType().dyn_cast<::imex::ptensor::PTensorType>();
+    if (!retPtTyp)
+      return ::mlir::failure();
+    auto retRtTyp = retPtTyp.getRtensor();
+    // extract RankedTensor
+    auto source = rewriter.create<::imex::ptensor::ExtractRTensorOp>(
+        loc, srcRtTyp, op.getSource());
+    // and simply replace with tensor::extract_slice
+    rewriter.replaceOpWithNewOp<::mlir::tensor::ExtractSliceOp>(
+        op, retRtTyp, source, adaptor.getOffsets(), adaptor.getSizes(),
+        adaptor.getStrides(), adaptor.getStaticOffsets(),
+        adaptor.getStaticSizes(), adaptor.getStaticStrides());
+
     return ::mlir::success();
   }
 };
@@ -537,11 +572,11 @@ struct ConvertPTensorToLinalgPass
     // Convert unknown types to itself
     auto convT2T = [](::mlir::Type type) { return type; };
     // Convert PTensorType to (RankedTensorType, device, team, handle)
-    auto convPT2Tuple = [&ctxt](::imex::ptensor::PTensorType type)
+    auto convPt2Rt = [&ctxt](::imex::ptensor::PTensorType type)
         -> ::mlir::Optional<::mlir::Type> { return type.getRtensor(); };
 
     typeConverter.addConversion(convT2T);
-    typeConverter.addConversion(convPT2Tuple);
+    typeConverter.addConversion(convPt2Rt);
 
     auto materializeCast =
         [](::mlir::OpBuilder &builder, ::mlir::Type type,
@@ -576,8 +611,10 @@ struct ConvertPTensorToLinalgPass
         [&](mlir::func::CallOp op) { return typeConverter.isLegal(op); });
 
     ::mlir::RewritePatternSet patterns(&ctxt);
-    patterns.insert<MkPTensorLowering, ExtractRTensorLowering, ARangeLowering,
-                    EWBinOpLowering, ReductionOpLowering>(typeConverter, &ctxt);
+    patterns
+        .insert<MkPTensorLowering, ExtractRTensorLowering, ExtractSliceLowering,
+                ARangeLowering, EWBinOpLowering, ReductionOpLowering>(
+            typeConverter, &ctxt);
     ::mlir::populateFunctionOpInterfaceTypeConversionPattern<
         ::mlir::func::FuncOp>(patterns, typeConverter);
     ::mlir::populateReturnOpTypeConversionPattern(patterns, typeConverter);
