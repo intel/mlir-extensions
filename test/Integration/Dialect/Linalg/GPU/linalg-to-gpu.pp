@@ -17,10 +17,10 @@ insert-gpu-alloc
 canonicalize
 # Adds spirv storage class attributes to memrefs based on memory space attribute
 # Need the pass to target narrower scope
-#map-memref-spirv-storage-class{client-api=opencl}
+#memref.load(map-memref-spirv-storage-class{client-api=vulkan})
 normalize-memrefs
 # Unstride memrefs does not seem to be needed.
-func.func(unstride-memrefs)
+#func.func(unstride-memrefs)
 func.func(lower-affine)
 gpu-kernel-outlining
 canonicalize
