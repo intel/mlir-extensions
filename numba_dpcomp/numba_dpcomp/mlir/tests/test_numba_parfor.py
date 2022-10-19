@@ -77,7 +77,6 @@ def _gen_tests():
         "test_min",  # min reduction
         "test_arange",  # select issue, complex
         "test_pi",  # np.random.ranf
-        "test_simple20",  # AssertionError not raised
         "test_simple24",  # getitem with array
         "test_0d_array",  # numpy prod
         "test_argmin",  # numpy.argmin
@@ -104,10 +103,8 @@ def _gen_tests():
         "test_tuple_concat",  # enumerate
         "test_two_d_array_reduction_with_float_sizes",  # np.array
         "test_parfor_array_access_lower_slice",  # plier.getitem
-        "test_size_assertion",  # AssertionError not raised
         "test_parfor_slice18",  # cast types mismatch
         "test_simple12",  # complex128
-        "test_parfor_slice2",  # AssertionError not raised
         "test_parfor_slice6",  # array.transpose
         "test_parfor_slice22",  # slice using array
         "test_simple13",  # complex128
@@ -202,6 +199,9 @@ def _gen_tests():
                 return wrapper
 
             def get_gufunc_asm(self, func, schedule_type, *args, **kwargs):
+                pytest.skip()
+
+            def assertRaises(self, a):
                 pytest.skip()
 
             def prange_tester(self, pyfunc, *args, **kwargs):
