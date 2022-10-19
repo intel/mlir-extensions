@@ -39,24 +39,54 @@ def ConvertPTensorToLinalg : Pass<"convert-ptensor-to-linalg", "::mlir::ModuleOp
 
     #### Input invariant
 
-    -   all tensors are PTensorType;
+    -   all tensors are PTensorType
 
     #### Output IR
 
-    - PTensorTypes are converted to mlir::Tensor
+    - a PTensorType will be lowered to a unrealized_conversion_cast to tuple of
+      * rtensor: RankedTensor
+      * device: device where the tensor lives (AnyType, default=None)
+      * team: a group of processes among which the tensor is distributed
+        (AnyType, default=None)
+      * rthandle: a handle for communication with the dist dialect/runtime
+        (AnyType, default=None)
+    - On function boundaries (func::callOp, func::returnOp, func::functionOp)
+      PTensorTypes get expanded into 4 separate arguments (rtensor, device, team, handle).
     - PTensor operations are converted to Linalg operations, accompaigned by
-      operations of the Dist dialect if the input tensors are distributed
+      * operations of the Dist dialect if the input tensors are distributed
+      * FIXME iGPU::deviceRegionOps if the input tensors live on a device
   }];
   let constructor = "imex::createConvertPTensorToLinalgPass()";
-  let dependentDialects = ["::imex::dist::DistDialect",
-                           "::mlir::linalg::LinalgDialect",
+  let dependentDialects = ["::mlir::linalg::LinalgDialect",
                            "::mlir::AffineDialect",
                            "::mlir::func::FuncDialect",
                            "::mlir::tensor::TensorDialect",
-                           "::mlir::arith::ArithmeticDialect",
+                           "::mlir::arith::ArithDialect",
                            "::mlir::shape::ShapeDialect"];
   let options = [];
 }
+
+//===----------------------------------------------------------------------===//
+// DistToStandard
+//===----------------------------------------------------------------------===//
+
+def ConvertDistToStandard: Pass<"convert-dist-to-standard", "::mlir::ModuleOp"> {
+  let summary = "Convert from the Dist dialect to runtime calls.";
+  let description = [{
+    Convert Dist dialect operations into standard dialect operations
+    by inserting calls into a distributed runtime.
+
+    Necessary prototypes of runtime functions will be added.
+  }];
+  let constructor = "::imex::createConvertDistToStandardPass()";
+  let dependentDialects = ["::mlir::linalg::LinalgDialect",
+                           "::mlir::func::FuncDialect",
+                           "::mlir::tensor::TensorDialect",
+                           "::mlir::arith::ArithDialect",
+                           "::mlir::shape::ShapeDialect"];
+  let options = [];
+}
+
 //===----------------------------------------------------------------------===//
 // GPUToSPIRV
 //===----------------------------------------------------------------------===//
@@ -70,7 +100,6 @@ def ConvertGPUXToSPIRV : Pass<"convert-gpux-to-spirv", "::mlir::ModuleOp"> {
 
     For more detailed documentation, refer upstream MLIR Pass -convert-gpu-to-spirv
     https://mlir.llvm.org/docs/Passes/#-convert-gpu-to-spirv-convert-gpu-dialect-to-spir-v-dialect
-
 
     Below example shows how GPU kernel module is converted to SPIRV module along with other ops conversion within gpu.func. from dialect like
 memref, arith and math.
@@ -222,4 +251,5 @@ memref, arith and math.
   let constructor = "imex::createConvertGPUXToSPIRVPass()";
   let dependentDialects = ["::mlir::spirv::SPIRVDialect"];
 }
+
 #endif // _IMEX_CONVERSION_PASSES_TD_INCLUDED_

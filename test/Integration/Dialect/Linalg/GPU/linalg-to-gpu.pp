@@ -2,7 +2,8 @@
 # Ready for vulkan runner or narrow scope l0/sycl runner starting from GPU dialect.
 convert-tensor-to-linalg
 arith-bufferize
-func.func(linalg-init-tensor-to-alloc-tensor
+func.func(empty-tensor-to-alloc-tensor
+          eliminate-alloc-tensors
           scf-bufferize
           shape-bufferize
           linalg-bufferize
@@ -17,7 +18,7 @@ insert-gpu-alloc
 canonicalize
 # Adds spirv storage class attributes to memrefs based on memory space attribute
 # Need the pass to target narrower scope
-#memref.load(map-memref-spirv-storage-class{client-api=vulkan})
+map-memref-spirv-storage-class{client-api=vulkan}
 normalize-memrefs
 # Unstride memrefs does not seem to be needed.
 #func.func(unstride-memrefs)

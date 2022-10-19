@@ -18,7 +18,7 @@
 #include "../PassDetail.h"
 
 #include "mlir/Conversion/MemRefToSPIRV/MemRefToSPIRV.h"
-#include <mlir/Conversion/ArithmeticToSPIRV/ArithmeticToSPIRV.h>
+#include <mlir/Conversion/ArithToSPIRV/ArithToSPIRV.h>
 #include <mlir/Conversion/ControlFlowToSPIRV/ControlFlowToSPIRV.h>
 #include <mlir/Conversion/FuncToSPIRV/FuncToSPIRV.h>
 #include <mlir/Conversion/GPUToSPIRV/GPUToSPIRV.h>
@@ -88,7 +88,7 @@ void GPUXToSPIRVPass::runOnOperation() {
 
   //------- Upstream Conversion------------
   mlir::populateGPUToSPIRVPatterns(typeConverter, patterns);
-  mlir::arith::populateArithmeticToSPIRVPatterns(typeConverter, patterns);
+  mlir::arith::populateArithToSPIRVPatterns(typeConverter, patterns);
   mlir::populateMemRefToSPIRVPatterns(typeConverter, patterns);
   mlir::populateFuncToSPIRVPatterns(typeConverter, patterns);
   // ---------------------------------------

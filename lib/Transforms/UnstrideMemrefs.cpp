@@ -22,7 +22,7 @@
 
 #include "PassDetail.h"
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
-#include <mlir/Dialect/Arithmetic/IR/Arithmetic.h>
+#include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/GPU/IR/GPUDialect.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
@@ -119,12 +119,12 @@ struct FlattenLoad : public mlir::OpRewritePattern<mlir::memref::LoadOp> {
     if (!op->getParentOfType<mlir::gpu::LaunchOp>())
       return mlir::failure();
 
-    auto memref = op.memref();
+    auto memref = op.getMemref();
     if (!canFlatten(memref))
       return mlir::failure();
 
     auto loc = op.getLoc();
-    auto flatIndex = getFlatIndex(rewriter, loc, memref, op.indices());
+    auto flatIndex = getFlatIndex(rewriter, loc, memref, op.getIndices());
     auto flatMemref = getFlatMemref(rewriter, loc, memref);
     rewriter.replaceOpWithNewOp<mlir::memref::LoadOp>(op, flatMemref,
                                                       flatIndex);
@@ -141,14 +141,14 @@ struct FlattenStore : public mlir::OpRewritePattern<mlir::memref::StoreOp> {
     if (!op->getParentOfType<mlir::gpu::LaunchOp>())
       return mlir::failure();
 
-    auto memref = op.memref();
+    auto memref = op.getMemref();
     if (!canFlatten(memref))
       return mlir::failure();
 
     auto loc = op.getLoc();
-    auto flatIndex = getFlatIndex(rewriter, loc, memref, op.indices());
+    auto flatIndex = getFlatIndex(rewriter, loc, memref, op.getIndices());
     auto flatMemref = getFlatMemref(rewriter, loc, memref);
-    rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(op, op.value(),
+    rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(op, op.getValue(),
                                                        flatMemref, flatIndex);
     return mlir::success();
   }

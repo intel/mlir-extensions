@@ -1,8 +1,7 @@
 convert-ptensor-to-linalg
-dist-elim
 convert-shape-to-std
 arith-bufferize
-func.func(linalg-init-tensor-to-alloc-tensor
+func.func(empty-tensor-to-alloc-tensor
           scf-bufferize
           shape-bufferize
           linalg-bufferize
