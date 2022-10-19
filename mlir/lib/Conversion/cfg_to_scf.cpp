@@ -589,6 +589,8 @@ struct BreakRewrite : public mlir::OpRewritePattern<mlir::cf::CondBranchOp> {
       auto conditionBlock = reverse ? op.getTrueDest() : op.getFalseDest();
       assert(exitBlock);
       assert(conditionBlock);
+      if (conditionBlock == bodyBlock)
+        continue;
 
       auto conditionBr = mlir::dyn_cast<mlir::cf::CondBranchOp>(
           conditionBlock->getTerminator());
