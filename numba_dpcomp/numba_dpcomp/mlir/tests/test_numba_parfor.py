@@ -37,19 +37,20 @@ def _gen_tests():
         return
 
     testcases = [
-        numba.tests.test_parfors.TestPrangeBasic,
-        numba.tests.test_parfors.TestPrangeSpecific,
-        numba.tests.test_parfors.TestParforsVectorizer,
         numba.tests.test_parfors.TestParforBasic,
         numba.tests.test_parfors.TestParforNumericalMisc,
         numba.tests.test_parfors.TestParforNumPy,
         numba.tests.test_parfors.TestParfors,
-        numba.tests.test_parfors.TestParforsLeaks,
-        numba.tests.test_parfors.TestParforsSlice,
-        # numba.tests.test_parfors.TestParforsOptions,
         numba.tests.test_parfors.TestParforsBitMask,
-        numba.tests.test_parfors.TestParforsMisc,
         # numba.tests.test_parfors.TestParforsDiagnostics,
+        numba.tests.test_parfors.TestParforsLeaks,
+        numba.tests.test_parfors.TestParforsMisc,
+        # numba.tests.test_parfors.TestParforsOptions,
+        # numba.tests.test_parfors.TestParforsUnsupported,
+        numba.tests.test_parfors.TestParforsSlice,
+        numba.tests.test_parfors.TestParforsVectorizer,
+        numba.tests.test_parfors.TestPrangeBasic,
+        numba.tests.test_parfors.TestPrangeSpecific,
     ]
 
     xfail_tests = {
@@ -68,9 +69,6 @@ def _gen_tests():
         "test_ssa_false_reduction",  # Frontend: object has no attribute 'name'
         "test_argument_alias_recarray_field",  # Record support
         "test_mutable_list_param",  # List support
-        "test_signed_vs_unsigned_vec_asm",  # Need to hook asm checks
-        "test_unsigned_refusal_to_vectorize",  # Need to hook asm checks
-        "test_vectorizer_fastmath_asm",  # Need to hook asm checks
         "test_kde_example",  # List suport
         "test_simple01",  # Empty shape not failed
         "test_kmeans",  # List suport
@@ -80,7 +78,6 @@ def _gen_tests():
         "test_min",  # min reduction
         "test_arange",  # select issue, complex
         "test_pi",  # np.random.ranf
-        "test_simple20",  # AssertionError not raised
         "test_simple24",  # getitem with array
         "test_0d_array",  # numpy prod
         "test_argmin",  # numpy.argmin
@@ -107,10 +104,8 @@ def _gen_tests():
         "test_tuple_concat",  # enumerate
         "test_two_d_array_reduction_with_float_sizes",  # np.array
         "test_parfor_array_access_lower_slice",  # plier.getitem
-        "test_size_assertion",  # AssertionError not raised
         "test_parfor_slice18",  # cast types mismatch
         "test_simple12",  # complex128
-        "test_parfor_slice2",  # AssertionError not raised
         "test_parfor_slice6",  # array.transpose
         "test_parfor_slice22",  # slice using array
         "test_simple13",  # complex128
@@ -137,7 +132,9 @@ def _gen_tests():
         "test_one_d_array_reduction",  # np.array
     }
 
-    skip_tests = {}
+    skip_tests = {
+        "test_no_warn_if_cache_set",  # Cache = True is not supported
+    }
 
     def countParfors(test_func, args, **kws):
         pytest.skip()
@@ -205,7 +202,10 @@ def _gen_tests():
                 return wrapper
 
             def get_gufunc_asm(self, func, schedule_type, *args, **kwargs):
-                assert False
+                pytest.skip()
+
+            def assertRaises(self, a):
+                pytest.skip()
 
             def prange_tester(self, pyfunc, *args, **kwargs):
                 patch_instance = kwargs.pop("patch_instance", None)
