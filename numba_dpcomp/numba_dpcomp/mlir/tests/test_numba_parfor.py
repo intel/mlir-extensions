@@ -131,7 +131,9 @@ def _gen_tests():
         "test_one_d_array_reduction",  # np.array
     }
 
-    skip_tests = {}
+    skip_tests = {
+        "test_no_warn_if_cache_set",  # Cache = True is not supported
+    }
 
     def countParfors(test_func, args, **kws):
         pytest.skip()
