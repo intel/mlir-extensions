@@ -81,6 +81,8 @@ struct Conversion {
     tupleType = mod.attr("Tuple");
     uniTupleType = mod.attr("UniTuple");
     pairType = mod.attr("Pair");
+
+    literalType = mod.attr("Literal");
   }
 
   llvm::Optional<mlir::Type> operator()(mlir::MLIRContext &context,
@@ -122,6 +124,20 @@ struct Conversion {
       return mlir::TupleType::get(&context, types);
     }
 
+    if (py::isinstance(obj, literalType)) {
+      auto value = obj.attr("literal_value");
+      if (py::isinstance<py::float_>(value))
+        return getFloat64Type(context);
+
+      if (py::isinstance<py::int_>(value))
+        return getIntType<64, true>(context);
+
+      if (py::isinstance<py::bool_>(value))
+        return getBoolType(context);
+
+      return llvm::None;
+    }
+
     return llvm::None;
   }
 
@@ -134,6 +150,8 @@ private:
   py::object tupleType;
   py::object uniTupleType;
   py::object pairType;
+
+  py::object literalType;
 };
 } // namespace
 
