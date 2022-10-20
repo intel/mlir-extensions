@@ -22,7 +22,7 @@ set(LLVM_LINK_COMPONENTS
     native
     )
 
-add_llvm_executable(level_zero_runner level_zero_runner.cpp)
+add_llvm_executable(level_zero_runner LevelZeroRunner.cpp)
 
 llvm_update_compile_flags(level_zero_runner)
 

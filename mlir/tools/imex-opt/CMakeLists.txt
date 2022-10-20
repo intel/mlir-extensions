@@ -27,8 +27,8 @@ get_property(dialect_libs GLOBAL PROPERTY MLIR_DIALECT_LIBS)
 get_property(conversion_libs GLOBAL PROPERTY MLIR_CONVERSION_LIBS)
 
 set(SOURCES_LIST
-    main.cpp
-    passes.cpp
+    Main.cpp
+    Passes.cpp
     )
 set(HEADERS_LIST
     )
