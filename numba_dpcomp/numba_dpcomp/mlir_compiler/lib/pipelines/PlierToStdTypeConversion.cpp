@@ -19,6 +19,7 @@
 #include <pybind11/pybind11.h>
 
 #include <mlir/IR/BuiltinTypes.h>
+#include <mlir/IR/TypeRange.h>
 #include <mlir/IR/Types.h>
 
 namespace py = pybind11;
@@ -69,13 +70,17 @@ static const constexpr std::pair<llvm::StringLiteral, TypeFunc>
 
 namespace {
 struct Conversion {
-  Conversion() {
+  Conversion(PyTypeConverter &conv) : converter(conv) {
     py::object mod = py::module::import("numba.core.types");
     for (auto [i, it] : llvm::enumerate(PrimitiveTypes)) {
       auto [name, func] = it;
       auto obj = mod.attr(name.data());
       primitiveTypes[i] = {obj, func};
     }
+
+    tupleType = mod.attr("Tuple");
+    uniTupleType = mod.attr("UniTuple");
+    pairType = mod.attr("Pair");
   }
 
   llvm::Optional<mlir::Type> operator()(mlir::MLIRContext &context,
@@ -84,15 +89,54 @@ struct Conversion {
       if (obj.is(cls))
         return func(context);
     }
+    if (py::isinstance(obj, tupleType)) {
+      llvm::SmallVector<mlir::Type> types;
+      for (auto elem : obj.attr("types").cast<py::tuple>()) {
+        auto type = converter.convertType(context, elem);
+        if (!type)
+          return llvm::None;
+
+        types.emplace_back(type);
+      }
+      return mlir::TupleType::get(&context, types);
+    }
+    if (py::isinstance(obj, uniTupleType)) {
+      auto type = converter.convertType(context, obj.attr("dtype"));
+      if (!type)
+        return llvm::None;
+
+      auto count = obj.attr("count").cast<size_t>();
+      llvm::SmallVector<mlir::Type> types(count, type);
+      return mlir::TupleType::get(&context, types);
+    }
+    if (py::isinstance(obj, pairType)) {
+      auto first = converter.convertType(context, obj.attr("first_type"));
+      if (!first)
+        return llvm::None;
+
+      auto second = converter.convertType(context, obj.attr("second_type"));
+      if (!second)
+        return llvm::None;
+
+      mlir::Type types[] = {first, second};
+      return mlir::TupleType::get(&context, types);
+    }
+
     return llvm::None;
   }
 
 private:
+  PyTypeConverter &converter;
+
   using TypePair = std::pair<py::object, TypeFunc>;
   std::array<TypePair, std::size(PrimitiveTypes)> primitiveTypes;
+
+  py::object tupleType;
+  py::object uniTupleType;
+  py::object pairType;
 };
 } // namespace
 
 void populateStdTypeConverter(PyTypeConverter &converter) {
-  converter.addConversion(Conversion());
+  converter.addConversion(Conversion(converter));
 }
