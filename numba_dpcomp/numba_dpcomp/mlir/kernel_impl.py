@@ -31,6 +31,7 @@ from .func_registry import add_func
 
 from ..decorators import mlir_njit
 from .kernel_base import KernelBase
+from .dpctl_interop import check_usm_ndarray_args
 
 registry = FuncRegistry()
 
@@ -173,6 +174,9 @@ class Kernel(KernelBase):
 
     def __call__(self, *args, **kwargs):
         self.check_call_args(args, kwargs)
+
+        # kwargs is not supported
+        check_usm_ndarray_args(args)
 
         local_size = self.local_size
         if len(local_size) != 0:

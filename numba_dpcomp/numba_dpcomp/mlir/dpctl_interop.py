@@ -49,9 +49,7 @@ if _is_dpctl_available:
             readonly=False,
             name=None,
             aligned=True,
-            addrspace=None,
         ):
-            self.addrspace = addrspace
             super(USMNdArrayBaseType, self).__init__(
                 dtype,
                 ndim,
@@ -61,9 +59,7 @@ if _is_dpctl_available:
                 aligned=aligned,
             )
 
-        def copy(
-            self, dtype=None, ndim=None, layout=None, readonly=None, addrspace=None
-        ):
+        def copy(self, dtype=None, ndim=None, layout=None, readonly=None):
             if dtype is None:
                 dtype = self.dtype
             if ndim is None:
@@ -72,15 +68,12 @@ if _is_dpctl_available:
                 layout = self.layout
             if readonly is None:
                 readonly = not self.mutable
-            if addrspace is None:
-                addrspace = self.addrspace
             return USMNdArrayBaseType(
                 dtype=dtype,
                 ndim=ndim,
                 layout=layout,
                 readonly=readonly,
                 aligned=self.aligned,
-                addrspace=addrspace,
             )
 
         @property
@@ -91,7 +84,6 @@ if _is_dpctl_available:
                 self.layout,
                 self.mutable,
                 self.aligned,
-                self.addrspace,
             )
 
         @property
@@ -109,10 +101,7 @@ if _is_dpctl_available:
                 ("parent", types.pyobject),
                 ("nitems", types.intp),
                 ("itemsize", types.intp),
-                (
-                    "data",
-                    types.CPointer(fe_type.dtype, addrspace=fe_type.addrspace),
-                ),
+                ("data", types.CPointer(fe_type.dtype)),
                 ("shape", types.UniTuple(types.intp, ndim)),
                 ("strides", types.UniTuple(types.intp, ndim)),
             ]
@@ -122,7 +111,7 @@ if _is_dpctl_available:
         """
         USMNdArrayType(dtype, ndim, layout, usm_type,
                         readonly=False, name=None,
-                        aligned=True, addrspace=None)
+                        aligned=True)
         creates Numba type to represent ``dpctl.tensor.usm_ndarray``.
         """
 
@@ -135,7 +124,6 @@ if _is_dpctl_available:
             readonly=False,
             name=None,
             aligned=True,
-            addrspace=None,
         ):
             self.usm_type = usm_type
             # This name defines how this type will be shown in Numba's type dumps.
@@ -146,7 +134,6 @@ if _is_dpctl_available:
                 layout,
                 readonly=readonly,
                 name=name,
-                addrspace=addrspace,
             )
 
         def copy(self, *args, **kwargs):
@@ -171,8 +158,6 @@ if _is_dpctl_available:
             layout,
             val.usm_type,
             readonly=readonly,
-            # addrspace=address_space.GLOBAL,
-            addrspace=None,
         )
 
     def adapt_sycl_array_from_python(pyapi, ary, ptr):
@@ -202,3 +187,22 @@ if _is_dpctl_available:
                 "different type",
             )
         return NativeValue(c.builder.load(aryptr), is_error=failed)
+
+    def _get_filter_string(array):
+        if isinstance(array, usm_ndarray):
+            return array.device.sycl_device.filter_string
+
+        return None
+
+    def check_usm_ndarray_args(args):
+        devs = set(s for s in map(_get_filter_string, args) if s is not None)
+        if len(devs) > 1:
+            dev_names = ", ".join(devs)
+            err_str = f"usm_ndarray arguments have incompatibe devices: {dev_names}"
+            raise ValueError(err_str)
+
+else:  # _is_dpctl_available
+
+    def check_usm_ndarray_args(args):
+        # dpctl is not loaded, nothing to do
+        pass
