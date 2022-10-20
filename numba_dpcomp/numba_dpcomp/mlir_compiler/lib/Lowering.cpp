@@ -53,6 +53,7 @@
 #include "pipelines/PlierToLinalg.hpp"
 #include "pipelines/PlierToScf.hpp"
 #include "pipelines/PlierToStd.hpp"
+#include "pipelines/PlierToStdTypeConversion.hpp"
 #include "pipelines/PreLowSimplifications.hpp"
 
 namespace py = pybind11;
@@ -690,11 +691,18 @@ static void createPipeline(imex::PipelineRegistry &registry,
       });
 
   registerBasePipeline(registry);
+
   registerLowerToLLVMPipeline(registry);
+
   registerPlierToScfPipeline(registry);
+
+  populateStdTypeConverter(converter);
   registerPlierToStdPipeline(registry);
+
   registerPlierToLinalgPipeline(registry);
+
   registerPreLowSimpleficationsPipeline(registry);
+
   registerParallelToTBBPipeline(registry);
 
   if (settings.enableGpuPipeline) {

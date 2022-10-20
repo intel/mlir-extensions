@@ -44,6 +44,7 @@ set(SOURCES_LIST
     lib/pipelines/PlierToLinalg.cpp
     lib/pipelines/PlierToScf.cpp
     lib/pipelines/PlierToStd.cpp
+    lib/pipelines/PlierToStdTypeConversion.cpp
     lib/pipelines/PreLowSimplifications.cpp
     )
 set(HEADERS_LIST
@@ -64,6 +65,7 @@ set(HEADERS_LIST
     lib/pipelines/PlierToLinalg.hpp
     lib/pipelines/PlierToScf.hpp
     lib/pipelines/PlierToStd.hpp
+    lib/pipelines/PlierToStdTypeConversion.hpp
     lib/pipelines/PreLowSimplifications.hpp
     )
 
