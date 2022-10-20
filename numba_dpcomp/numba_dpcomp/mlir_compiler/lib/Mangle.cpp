@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "mangle.hpp"
+#include "Mangle.hpp"
 
 #include <llvm/Support/Format.h>
 #include <llvm/Support/raw_ostream.h>
@@ -22,8 +22,6 @@
 #include <mlir/IR/Types.h>
 
 #include <cctype>
-
-#include "imex/Dialect/plier/Dialect.hpp"
 
 namespace {
 static const constexpr auto PREFIX = "_Z";
