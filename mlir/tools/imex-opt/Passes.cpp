@@ -27,7 +27,7 @@
 #include "imex/Conversion/GpuToGpuRuntime.hpp"
 #include "imex/Conversion/NtensorToLinalg.hpp"
 #include "imex/Conversion/NtensorToMemref.hpp"
-#include "imex/Conversion/ScftoAffine/ScftoAffine.h"
+#include "imex/Conversion/SCFToAffine/SCFToAffine.h"
 #include "imex/Dialect/gpu_runtime/Transforms/MakeBarriersUniform.hpp"
 #include "imex/Dialect/ntensor/Transforms/ResolveArrayOps.hpp"
 #include "imex/Transforms/ExpandTuple.hpp"
