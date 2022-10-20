@@ -37,14 +37,14 @@
 #include <mlir/Transforms/DialectConversion.h>
 #include <mlir/Transforms/Passes.h>
 
-#include "CheckGpuCaps.hpp"
 #include "BasePipeline.hpp"
+#include "CheckGpuCaps.hpp"
 #include "LoopUtils.hpp"
+#include "PyLinalgResolver.hpp"
 #include "pipelines/LowerToLlvm.hpp"
 #include "pipelines/PlierToLinalg.hpp"
 #include "pipelines/PlierToStd.hpp"
 #include "pipelines/PreLowSimplifications.hpp"
-#include "PyLinalgResolver.hpp"
 
 #include "imex/Compiler/PipelineRegistry.hpp"
 #include "imex/Conversion/GpuRuntimeToLlvm.hpp"

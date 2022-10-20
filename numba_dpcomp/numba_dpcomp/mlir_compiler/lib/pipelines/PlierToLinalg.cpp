@@ -64,10 +64,10 @@
 #include "imex/Transforms/TypeConversion.hpp"
 #include "imex/Transforms/UpliftMath.hpp"
 
-#include "NumpyResolver.hpp"
 #include "BasePipeline.hpp"
 #include "LoopUtils.hpp"
 #include "Mangle.hpp"
+#include "NumpyResolver.hpp"
 #include "PyFuncResolver.hpp"
 #include "PyLinalgResolver.hpp"
 
