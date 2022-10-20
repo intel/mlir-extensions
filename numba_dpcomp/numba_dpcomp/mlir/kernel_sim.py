@@ -37,7 +37,7 @@ from .kernel_impl import (
     barrier,
     mem_fence,
     local,
-    local_array,
+    group,
 )
 
 _ExecutionState = namedtuple(
@@ -51,6 +51,7 @@ _ExecutionState = namedtuple(
         "current_task",
         "local_arrays",
         "current_local_array",
+        "reduce_val",
     ],
 )
 
@@ -113,8 +114,7 @@ def _reset_local_state(state, wg_size):
     state.current_local_array[0] = 0
 
 
-def barrier_proxy(flags):
-    state = get_exec_state()
+def _barrier_impl(state):
     wg_size = state.wg_size[0]
     assert wg_size > 0
     if wg_size > 1:
@@ -126,6 +126,11 @@ def barrier_proxy(flags):
         state.current_task[0] = next_task
         state.tasks[next_task].switch()
         _restore_local_state(state, saved_state)
+
+
+def barrier_proxy(flags):
+    state = get_exec_state()
+    _barrier_impl(state)
 
 
 def mem_fence_proxy(flags):
@@ -146,6 +151,22 @@ class local_proxy:
         return arr
 
 
+def _reduce_impl(state, value, op):
+    if state.current_task[0] == 0:
+        state.reduce_val[0] = value
+    else:
+        state.reduce_val[0] = op(state.reduce_val[0], value)
+    _barrier_impl(state)
+    return state.reduce_val[0]
+
+
+class group_proxy:
+    @staticmethod
+    def reduce_add(value):
+        state = get_exec_state()
+        return _reduce_impl(state, value, lambda a, b: a + b)
+
+
 def _setup_execution_state(global_size, local_size):
     import numba_dpcomp.mlir.kernel_impl
 
@@ -161,6 +182,7 @@ def _setup_execution_state(global_size, local_size):
         current_task=[None],
         local_arrays=[],
         current_local_array=[0],
+        reduce_val=[None],
     )
     return _execution_state
 
@@ -181,7 +203,9 @@ _globals_to_replace = [
     ("barrier", barrier, barrier_proxy),
     ("mem_fence", mem_fence, mem_fence_proxy),
     ("local", local, local_proxy),
-    ("local_array", local_array, local_proxy.array),
+    ("local_array", local.array, local_proxy.array),
+    ("group", group, group_proxy),
+    ("group_reduce_add", group.reduce_add, group_proxy.reduce_add),
 ]
 
 

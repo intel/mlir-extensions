@@ -455,8 +455,13 @@ private:
 
     mlir::Value one = rewriter.create<mlir::LLVM::ConstantOp>(
         loc, llvmInt32Type, rewriter.getI32IntegerAttr(1));
-    auto localMemStorageClass = gpu_runtime::StorageClassAttr::get(
-        getContext(), gpu_runtime::StorageClass::local);
+
+    // TODO: Fix storage class handling upstream
+    //    auto localMemStorageClass = gpu_runtime::StorageClassAttr::get(
+    //        getContext(), gpu_runtime::StorageClass::local);
+    auto localMemStorageClass = rewriter.getI64IntegerAttr(
+        mlir::gpu::GPUDialect::getPrivateAddressSpace());
+
     auto computeTypeSize = [&](mlir::Type type) -> mlir::Value {
       // %Size = getelementptr %T* null, int 1
       // %SizeI = ptrtoint %T* %Size to i32
@@ -483,9 +488,7 @@ private:
             size = rewriter.create<mlir::LLVM::MulOp>(loc, llvmIndexType, size,
                                                       dim);
           }
-          auto null = rewriter.create<mlir::LLVM::NullOp>(
-              loc, desc.getElementPtrType());
-          return {size, null};
+          return {size, nullptr};
         }
         auto size = computeTypeSize(paramType);
         return {size, desc.alignedPtr(rewriter, loc)};
@@ -500,9 +503,15 @@ private:
 
     for (auto i : llvm::seq(0u, paramsCount)) {
       auto param = getKernelParam(i);
-      rewriter.create<mlir::LLVM::StoreOp>(loc, param.second, paramsStorage[i]);
-      auto ptr = rewriter.create<mlir::LLVM::BitcastOp>(loc, llvmPointerType,
-                                                        paramsStorage[i]);
+      mlir::Value ptr;
+      if (!param.second) {
+        ptr = rewriter.create<mlir::LLVM::NullOp>(loc, llvmPointerType);
+      } else {
+        rewriter.create<mlir::LLVM::StoreOp>(loc, param.second,
+                                             paramsStorage[i]);
+        ptr = rewriter.create<mlir::LLVM::BitcastOp>(loc, llvmPointerType,
+                                                     paramsStorage[i]);
+      }
 
       auto typeSize = param.first;
 
@@ -582,6 +591,18 @@ private:
     if (!dstType)
       return mlir::failure();
 
+    bool isShared = op.getHostShared();
+
+    // TODO: Fix storage class handling upstream
+    //    auto localstorageClass = gpu_runtime::StorageClassAttr::get(
+    //        getContext(), gpu_runtime::StorageClass::local);
+    auto localMemStorageClass = rewriter.getI64IntegerAttr(
+        mlir::gpu::GPUDialect::getPrivateAddressSpace());
+    bool isLocal = memrefType.getMemorySpace() == localMemStorageClass;
+
+    if (isShared && isLocal)
+      return mlir::failure();
+
     auto loc = op.getLoc();
 
     mlir::SmallVector<mlir::Value, 4> shape;
@@ -596,10 +617,16 @@ private:
     auto alignmentVar =
         rewriter.create<mlir::LLVM::ConstantOp>(loc, llvmIndexType, alignment);
 
-    bool shared = op.getHostShared();
-    auto sharedVar = rewriter.create<mlir::LLVM::ConstantOp>(
-        loc, llvmInt32Type,
-        rewriter.getI32IntegerAttr(static_cast<int>(shared)));
+    // Need to keep in sync with gpu runtime lib.
+    int memType = 0;
+    if (isShared) {
+      memType = 1;
+    } else if (isLocal) {
+      memType = 2;
+    }
+
+    auto typeVar = rewriter.create<mlir::LLVM::ConstantOp>(
+        loc, llvmInt32Type, rewriter.getI32IntegerAttr(memType));
 
     auto depsArrayPtr =
         createDepsArray(rewriter, loc, op, adaptor.getAsyncDependencies());
@@ -619,7 +646,7 @@ private:
         adaptor.getStream(),
         sizeBytes,
         alignmentVar,
-        sharedVar,
+        typeVar,
         depsArrayPtr,
         eventIndexVar,
         resultPtr,

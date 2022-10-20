@@ -191,6 +191,8 @@ static auto countEvents(ze_event_handle_t *events) {
       countUntil(events, static_cast<ze_event_handle_t>(nullptr)));
 }
 
+enum class GpuAllocType { Device = 0, Shared = 1, Local = 2 };
+
 struct Stream {
   Stream(size_t eventsCount) {
     auto driverAndDevice = getDevice();
@@ -298,7 +300,7 @@ struct Stream {
   }
 
   std::tuple<void *, void *, ze_event_handle_t>
-  allocBuffer(size_t size, size_t alignment, bool shared,
+  allocBuffer(size_t size, size_t alignment, GpuAllocType type,
               ze_event_handle_t *events, size_t eventIndex,
               AllocFuncT allocFunc) {
     // Alloc is always sync for now, synchronize
@@ -308,11 +310,11 @@ struct Stream {
     }
 
     auto dtor = [](void *ptr, size_t /*size*/, void *info) {
-      assert(ptr);
       assert(info);
       auto *stream = static_cast<Stream *>(info);
       Releaser r(stream);
-      CHECK_ZE_RESULT(zeMemFree(stream->context.get(), ptr));
+      if (ptr)
+        CHECK_ZE_RESULT(zeMemFree(stream->context.get(), ptr));
     };
 
     auto event = getEvent(eventIndex);
@@ -323,19 +325,23 @@ struct Stream {
       void *ret = nullptr;
       ze_device_mem_alloc_desc_t devDesc = {};
       devDesc.stype = ZE_STRUCTURE_TYPE_DEVICE_MEM_ALLOC_DESC;
-      if (shared) {
+      if (type == GpuAllocType::Device) {
+        devDesc.flags = ZE_DEVICE_MEM_ALLOC_FLAG_BIAS_INITIAL_PLACEMENT;
+        CHECK_ZE_RESULT(zeMemAllocDevice(context.get(), &devDesc, size,
+                                         alignment, device, &ret));
+      } else if (type == GpuAllocType::Shared) {
         ze_host_mem_alloc_desc_t hostDesc = {};
         hostDesc.stype = ZE_STRUCTURE_TYPE_HOST_MEM_ALLOC_DESC;
         CHECK_ZE_RESULT(zeMemAllocShared(context.get(), &devDesc, &hostDesc,
                                          size, alignment, device, &ret));
+      } else if (type == GpuAllocType::Local) {
+        // Local allocs are handled specially, do not allocate any pointer on
+        // host side.
       } else {
-        devDesc.flags = ZE_DEVICE_MEM_ALLOC_FLAG_BIAS_INITIAL_PLACEMENT;
-        CHECK_ZE_RESULT(zeMemAllocDevice(context.get(), &devDesc, size,
-                                         alignment, device, &ret));
+        throw std::runtime_error("Invalid allocation type");
       }
       return ret;
     }();
-    assert(mem);
 
     auto info = [&]() -> void * {
       if (allocFunc)
@@ -345,7 +351,8 @@ struct Stream {
     }();
 
     if (!info) {
-      zeMemFree(context.get(), mem);
+      if (mem)
+        zeMemFree(context.get(), mem);
       throw std::runtime_error("Failed to allocate MemInfo");
     }
 
@@ -356,7 +363,8 @@ struct Stream {
   }
 
   void deallocBuffer(void *ptr) {
-    zeMemFree(context.get(), ptr);
+    if (ptr)
+      zeMemFree(context.get(), ptr);
 
     // We are incrementing runtime refcount in alloc.
     release();
@@ -484,13 +492,13 @@ struct AllocResult {
 };
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void
-dpcompGpuAlloc(void *stream, size_t size, size_t alignment, int shared,
+dpcompGpuAlloc(void *stream, size_t size, size_t alignment, int type,
                void *events, size_t eventIndex, AllocResult *ret) {
   LOG_FUNC();
   catchAll([&]() {
     auto res = static_cast<Stream *>(stream)->allocBuffer(
-        size, alignment, shared != 0, static_cast<ze_event_handle_t *>(events),
-        eventIndex, AllocFunc);
+        size, alignment, static_cast<GpuAllocType>(type),
+        static_cast<ze_event_handle_t *>(events), eventIndex, AllocFunc);
     *ret = AllocResult{std::get<0>(res), std::get<1>(res), std::get<2>(res)};
   });
 }

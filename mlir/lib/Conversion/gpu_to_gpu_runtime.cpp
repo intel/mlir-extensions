@@ -1067,6 +1067,112 @@ public:
   }
 };
 
+template <typename SpirvOp, bool Subgroup>
+static void genReduceOp(mlir::Operation *srcOp, mlir::PatternRewriter &rewriter,
+                        mlir::Value arg) {
+  auto type = arg.getType();
+  auto ctx = srcOp->getContext();
+  auto s =
+      Subgroup ? mlir::spirv::Scope::Subgroup : mlir::spirv::Scope::Workgroup;
+  auto scope = mlir::spirv::ScopeAttr::get(ctx, s);
+  auto groupOp = mlir::spirv::GroupOperationAttr::get(
+      ctx, mlir::spirv::GroupOperation::Reduce);
+  rewriter.replaceOpWithNewOp<SpirvOp>(srcOp, type, scope, groupOp, arg,
+                                       mlir::Value{});
+}
+
+class ConvertAllReduceOp
+    : public mlir::OpConversionPattern<mlir::gpu::AllReduceOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::gpu::AllReduceOp op,
+                  mlir::gpu::AllReduceOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto reduceOp = adaptor.getOp();
+    if (!reduceOp)
+      return mlir::failure();
+
+    auto val = adaptor.getValue();
+    auto valType = val.getType();
+    if (!valType.isIntOrFloat())
+      return mlir::failure();
+
+    using funcptr_t =
+        void (*)(mlir::Operation *, mlir::PatternRewriter &, mlir::Value);
+
+    using ReduceType = mlir::gpu::AllReduceOperation;
+    struct Handler {
+      ReduceType op;
+      funcptr_t floatFunc;
+      funcptr_t intFunc;
+    };
+
+    namespace spv = mlir::spirv;
+    const Handler handlers[] = {
+        {ReduceType::ADD, &genReduceOp<spv::GroupNonUniformFAddOp, false>,
+         &genReduceOp<spv::GroupNonUniformIAddOp, false>},
+    };
+
+    for (auto &h : handlers) {
+      if (h.op == *reduceOp) {
+        auto func = (valType.isa<mlir::FloatType>() ? h.floatFunc : h.intFunc);
+        func(op, rewriter, val);
+        return mlir::success();
+      }
+    }
+
+    return mlir::success();
+  }
+};
+
+class ConvertSubgroupReduceOp
+    : public mlir::OpConversionPattern<mlir::gpu::SubgroupReduceOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::gpu::SubgroupReduceOp op,
+                  mlir::gpu::SubgroupReduceOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto reduceOp = adaptor.getOp();
+    //    if (!reduceOp)
+    //      return mlir::failure();
+
+    auto val = adaptor.getValue();
+    auto valType = val.getType();
+    if (!valType.isIntOrFloat())
+      return mlir::failure();
+
+    using funcptr_t =
+        void (*)(mlir::Operation *, mlir::PatternRewriter &, mlir::Value);
+
+    using ReduceType = mlir::gpu::AllReduceOperation;
+    struct Handler {
+      ReduceType op;
+      funcptr_t floatFunc;
+      funcptr_t intFunc;
+    };
+
+    namespace spv = mlir::spirv;
+    const Handler handlers[] = {
+        {ReduceType::ADD, &genReduceOp<spv::GroupNonUniformFAddOp, true>,
+         &genReduceOp<spv::GroupNonUniformIAddOp, true>},
+    };
+
+    for (auto &h : handlers) {
+      if (h.op == reduceOp) {
+        auto func = (valType.isa<mlir::FloatType>() ? h.floatFunc : h.intFunc);
+        func(op, rewriter, val);
+        return mlir::success();
+      }
+    }
+
+    return mlir::success();
+  }
+};
+
 // TODO: something better
 class ConvertFunc : public mlir::OpConversionPattern<mlir::func::FuncOp> {
 public:
@@ -1208,7 +1314,8 @@ struct GPUToSpirvPass
                   ConvertCastOp<mlir::memref::ReinterpretCastOp>, ConvertLoadOp,
                   ConvertStoreOp, ConvertAtomicOps, ConvertFunc, ConvertAssert,
                   ConvertBarrierOp, ConvertMemFenceOp, ConvertUndef,
-                  ConvertGlobalOp, ConvertGetGlobalOp>(typeConverter, context);
+                  ConvertGlobalOp, ConvertGetGlobalOp, ConvertAllReduceOp,
+                  ConvertSubgroupReduceOp>(typeConverter, context);
 
       patterns.add<
           SingleDimLaunchConfigConversion<mlir::gpu::SubgroupIdOp,
@@ -1372,6 +1479,7 @@ static mlir::spirv::TargetEnvAttr defaultCapsMapper(mlir::gpu::GPUModuleOp op) {
       spirv::Capability::Float16Buffer,
       spirv::Capability::Float64,
       spirv::Capability::GenericPointer,
+      spirv::Capability::GroupNonUniformArithmetic,
       spirv::Capability::Groups,
       spirv::Capability::Int16,
       spirv::Capability::Int64,

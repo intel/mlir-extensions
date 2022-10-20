@@ -33,6 +33,7 @@ from numba_dpcomp.mlir.kernel_impl import (
     CLK_LOCAL_MEM_FENCE,
     CLK_GLOBAL_MEM_FENCE,
     local,
+    group,
 )
 from numba_dpcomp.mlir.kernel_sim import kernel as kernel_sim
 from numba_dpcomp.mlir.passes import (
@@ -722,8 +723,8 @@ def test_barrier_ops(op, flags, global_size, local_size):
 
 
 @require_gpu
-@pytest.mark.parametrize("global_size", [1, 2, 27])
-@pytest.mark.parametrize("local_size", [1, 2, 7])
+@pytest.mark.parametrize("global_size", [1, 2, 4, 27, 67, 101])
+@pytest.mark.parametrize("local_size", [1, 2, 7, 17, 33])
 def test_barrier1(global_size, local_size):
     atomic_add = atomic.add
 
@@ -784,6 +785,35 @@ def test_local_memory(blocksize):
         assert ir.count("gpu.launch blocks") == 1, ir
 
     assert_allclose(sim_res, gpu_res)
+
+
+@require_gpu
+@pytest.mark.parametrize("group_op", [group.reduce_add])
+@pytest.mark.parametrize("global_size", [1, 2, 4, 27, 67, 101])
+@pytest.mark.parametrize("local_size", [1, 2, 7, 17, 33])
+@pytest.mark.parametrize("dtype", [np.int32, np.int64, np.float32])
+def test_group_func(group_op, global_size, local_size, dtype):
+    def func(a, b):
+        i = get_global_id(0)
+        v = group_op(a[i])
+        b[i] = v
+
+    sim_func = kernel_sim(func)
+    gpu_func = kernel_cached(func)
+
+    a = np.arange(global_size, dtype=dtype)
+
+    sim_res = np.zeros(global_size, a.dtype)
+    sim_func[global_size, local_size](a, sim_res)
+
+    gpu_res = np.zeros(global_size, a.dtype)
+
+    with print_pass_ir([], ["ConvertParallelLoopToGpu"]):
+        gpu_func[global_size, local_size](a, gpu_res)
+        ir = get_print_buffer()
+        assert ir.count("gpu.launch blocks") == 1, ir
+
+    assert_allclose(gpu_res, sim_res)
 
 
 @require_dpctl
