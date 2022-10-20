@@ -12,11 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "py_func_resolver.hpp"
-#include "py_map_types.hpp"
+#include "PyFuncResolver.hpp"
+
+#include "PyMapTypes.hpp"
+
+#include <pybind11/pybind11.h>
+
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/IR/BuiltinOps.h>
-#include <pybind11/pybind11.h>
 
 namespace py = pybind11;
 

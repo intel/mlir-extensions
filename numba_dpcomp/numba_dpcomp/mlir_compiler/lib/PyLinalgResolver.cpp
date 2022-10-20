@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "py_linalg_resolver.hpp"
+#include "PyLinalgResolver.hpp"
 
 #include <pybind11/pybind11.h>
 
@@ -38,7 +38,7 @@
 #include "imex/Transforms/FuncUtils.hpp"
 #include "imex/Utils.hpp"
 
-#include "py_map_types.hpp"
+#include "PyMapTypes.hpp"
 
 namespace py = pybind11;
 

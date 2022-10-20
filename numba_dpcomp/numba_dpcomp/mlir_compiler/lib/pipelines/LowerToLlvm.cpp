@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "pipelines/lower_to_llvm.hpp"
+#include "pipelines/LowerToLlvm.hpp"
 
 #include <mlir/Conversion/ArithToLLVM/ArithToLLVM.h>
 #include <mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h>
@@ -49,7 +49,7 @@
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Target/TargetMachine.h>
 
-#include "base_pipeline.hpp"
+#include "BasePipeline.hpp"
 
 #include "imex/Compiler/PipelineRegistry.hpp"
 #include "imex/Conversion/UtilToLlvm.hpp"

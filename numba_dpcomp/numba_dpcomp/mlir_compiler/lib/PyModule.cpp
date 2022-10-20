@@ -14,9 +14,9 @@
 
 #include <pybind11/pybind11.h>
 
-#include "py_module.hpp"
+#include "PyModule.hpp"
 
-#include "lowering.hpp"
+#include "Lowering.hpp"
 
 static bool is_dpnp_supported() {
 #ifdef IMEX_USE_DPNP

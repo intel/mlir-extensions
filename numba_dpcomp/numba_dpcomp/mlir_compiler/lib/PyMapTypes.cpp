@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "py_map_types.hpp"
+#include "PyMapTypes.hpp"
 
 #include <pybind11/pybind11.h>
 

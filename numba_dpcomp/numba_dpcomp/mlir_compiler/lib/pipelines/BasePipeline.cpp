@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "pipelines/base_pipeline.hpp"
+#include "pipelines/BasePipeline.hpp"
 
 #include "imex/Compiler/PipelineRegistry.hpp"
 

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "pipelines/parallel_to_tbb.hpp"
+#include "pipelines/ParallelToTbb.hpp"
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
@@ -23,8 +23,8 @@
 #include <mlir/Pass/PassManager.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 
-#include "pipelines/base_pipeline.hpp"
-#include "pipelines/lower_to_llvm.hpp"
+#include "pipelines/BasePipeline.hpp"
+#include "pipelines/LowerToLlvm.hpp"
 
 #include "imex/Compiler/PipelineRegistry.hpp"
 #include "imex/Dialect/imex_util/Dialect.hpp"

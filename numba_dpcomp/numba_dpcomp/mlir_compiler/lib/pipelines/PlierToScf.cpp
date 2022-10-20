@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "pipelines/plier_to_scf.hpp"
+#include "pipelines/PlierToScf.hpp"
 
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Pass/PassManager.h>
@@ -24,7 +24,7 @@
 #include "imex/Transforms/ArgLowering.hpp"
 #include "imex/Transforms/RewriteWrapper.hpp"
 
-#include "base_pipeline.hpp"
+#include "BasePipeline.hpp"
 
 namespace {
 

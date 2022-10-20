@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "pipelines/lower_to_gpu.hpp"
+#include "pipelines/LowerToGpu.hpp"
 
 #include <mlir/Conversion/AffineToStandard/AffineToStandard.h>
 #include <mlir/Conversion/AsyncToLLVM/AsyncToLLVM.h>
@@ -38,13 +38,13 @@
 #include <mlir/Transforms/Passes.h>
 
 #include "CheckGpuCaps.hpp"
-#include "base_pipeline.hpp"
-#include "loop_utils.hpp"
-#include "pipelines/lower_to_llvm.hpp"
-#include "pipelines/plier_to_linalg.hpp"
-#include "pipelines/plier_to_std.hpp"
-#include "pipelines/pre_low_simplifications.hpp"
-#include "py_linalg_resolver.hpp"
+#include "BasePipeline.hpp"
+#include "LoopUtils.hpp"
+#include "pipelines/LowerToLlvm.hpp"
+#include "pipelines/PlierToLinalg.hpp"
+#include "pipelines/PlierToStd.hpp"
+#include "pipelines/PreLowSimplifications.hpp"
+#include "PyLinalgResolver.hpp"
 
 #include "imex/Compiler/PipelineRegistry.hpp"
 #include "imex/Conversion/GpuRuntimeToLlvm.hpp"

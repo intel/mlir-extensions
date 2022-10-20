@@ -15,8 +15,8 @@
 #define _USE_MATH_DEFINES
 #include <cmath>
 
-#include "pipelines/plier_to_scf.hpp"
-#include "pipelines/plier_to_std.hpp"
+#include "pipelines/PlierToScf.hpp"
+#include "pipelines/PlierToStd.hpp"
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
@@ -42,11 +42,11 @@
 #include "imex/Transforms/RewriteWrapper.hpp"
 #include "imex/Transforms/TypeConversion.hpp"
 
-#include "base_pipeline.hpp"
-#include "loop_utils.hpp"
-#include "mangle.hpp"
-#include "py_func_resolver.hpp"
-#include "py_linalg_resolver.hpp"
+#include "BasePipeline.hpp"
+#include "LoopUtils.hpp"
+#include "Mangle.hpp"
+#include "PyFuncResolver.hpp"
+#include "PyLinalgResolver.hpp"
 
 namespace {
 static mlir::Type mapIntType(mlir::MLIRContext &ctx, llvm::StringRef &name,

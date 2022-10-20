@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "pipelines/plier_to_linalg.hpp"
+#include "pipelines/PlierToLinalg.hpp"
 
 #include <mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h>
 #include <mlir/Dialect/Arith/IR/Arith.h>
@@ -39,9 +39,9 @@
 #include <mlir/Transforms/LoopInvariantCodeMotionUtils.h>
 #include <mlir/Transforms/Passes.h>
 
-#include "pipelines/plier_to_scf.hpp"
-#include "pipelines/plier_to_std.hpp"
-#include "pipelines/pre_low_simplifications.hpp"
+#include "pipelines/PlierToScf.hpp"
+#include "pipelines/PlierToStd.hpp"
+#include "pipelines/PreLowSimplifications.hpp"
 
 #include "imex/Compiler/PipelineRegistry.hpp"
 #include "imex/Conversion/NtensorToLinalg.hpp"
@@ -65,11 +65,11 @@
 #include "imex/Transforms/UpliftMath.hpp"
 
 #include "NumpyResolver.hpp"
-#include "base_pipeline.hpp"
-#include "loop_utils.hpp"
-#include "mangle.hpp"
-#include "py_func_resolver.hpp"
-#include "py_linalg_resolver.hpp"
+#include "BasePipeline.hpp"
+#include "LoopUtils.hpp"
+#include "Mangle.hpp"
+#include "PyFuncResolver.hpp"
+#include "PyLinalgResolver.hpp"
 
 #include <cctype>
 

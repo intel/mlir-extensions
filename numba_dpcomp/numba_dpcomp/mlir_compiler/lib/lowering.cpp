@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "lowering.hpp"
+#include "Lowering.hpp"
 
 #include <algorithm>
 #include <array>
@@ -45,14 +45,14 @@
 #include "imex/ExecutionEngine/ExecutionEngine.hpp"
 #include "imex/Utils.hpp"
 
-#include "pipelines/base_pipeline.hpp"
-#include "pipelines/lower_to_gpu.hpp"
-#include "pipelines/lower_to_llvm.hpp"
-#include "pipelines/parallel_to_tbb.hpp"
-#include "pipelines/plier_to_linalg.hpp"
-#include "pipelines/plier_to_scf.hpp"
-#include "pipelines/plier_to_std.hpp"
-#include "pipelines/pre_low_simplifications.hpp"
+#include "pipelines/BasePipeline.hpp"
+#include "pipelines/LowerToGpu.hpp"
+#include "pipelines/LowerToLlvm.hpp"
+#include "pipelines/ParallelToTbb.hpp"
+#include "pipelines/PlierToLinalg.hpp"
+#include "pipelines/PlierToScf.hpp"
+#include "pipelines/PlierToStd.hpp"
+#include "pipelines/PreLowSimplifications.hpp"
 
 namespace py = pybind11;
 namespace {
