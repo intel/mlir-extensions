@@ -40,93 +40,93 @@ add_subdirectory(include/imex/Dialect/gpu_runtime/IR)
 add_subdirectory(include/imex/Dialect/ntensor/IR)
 
 set(SOURCES_LIST
+    lib/Analysis/MemorySsa.cpp
+    lib/Analysis/MemorySsaAnalysis.cpp
+    lib/Compiler/Compiler.cpp
+    lib/Compiler/PipelineRegistry.cpp
+    lib/Conversion/CfgToScf.cpp
+    lib/Conversion/GpuRuntimeToLlvm.cpp
+    lib/Conversion/GpuToGpuRuntime.cpp
     lib/Conversion/NtensorToLinalg.cpp
+    lib/Conversion/NtensorToMemref.cpp
     lib/Conversion/SCFToAffine/SCFToAffine.cpp
-    lib/Conversion/cfg_to_scf.cpp
-    lib/Conversion/gpu_runtime_to_llvm.cpp
-    lib/Conversion/gpu_to_gpu_runtime.cpp
-    lib/Conversion/ntensor_to_memref.cpp
-    lib/Conversion/util_conversion.cpp
-    lib/Conversion/util_to_llvm.cpp
-    lib/Dialect/gpu_runtime/IR/gpu_runtime_ops.cpp
+    lib/Conversion/UtilConversion.cpp
+    lib/Conversion/UtilToLlvm.cpp
+    lib/Dialect/gpu_runtime/IR/GpuRuntimeOps.cpp
     lib/Dialect/gpu_runtime/Transforms/MakeBarriersUniform.cpp
-    lib/Dialect/imex_util/dialect.cpp
+    lib/Dialect/imex_util/Dialect.cpp
     lib/Dialect/ntensor/IR/NTensorOps.cpp
     lib/Dialect/ntensor/Transforms/ResolveArrayOps.cpp
-    lib/Dialect/plier/dialect.cpp
-    lib/ExecutionEngine/execution_engine.cpp
+    lib/Dialect/plier/Dialect.cpp
+    lib/ExecutionEngine/ExecutionEngine.cpp
+    lib/Transforms/ArgLowering.cpp
+    lib/Transforms/CallLowering.cpp
+    lib/Transforms/CanonicalizeReductions.cpp
+    lib/Transforms/CastLowering.cpp
+    lib/Transforms/CastUtils.cpp
+    lib/Transforms/CommonOpts.cpp
+    lib/Transforms/ConstUtils.cpp
+    lib/Transforms/Cse.cpp
+    lib/Transforms/ExpandTuple.cpp
+    lib/Transforms/FuncUtils.cpp
+    lib/Transforms/IfRewrites.cpp
+    lib/Transforms/IndexTypePropagation.cpp
+    lib/Transforms/InlineUtils.cpp
+    lib/Transforms/LoopRewrites.cpp
+    lib/Transforms/LoopUtils.cpp
     lib/Transforms/MakeSignless.cpp
-    lib/Transforms/arg_lowering.cpp
-    lib/Transforms/call_lowering.cpp
-    lib/Transforms/canonicalize_reductions.cpp
-    lib/Transforms/cast_lowering.cpp
-    lib/Transforms/cast_utils.cpp
-    lib/Transforms/common_opts.cpp
-    lib/Transforms/const_utils.cpp
-    lib/Transforms/cse.cpp
-    lib/Transforms/expand_tuple.cpp
-    lib/Transforms/func_utils.cpp
-    lib/Transforms/if_rewrites.cpp
-    lib/Transforms/index_type_propagation.cpp
-    lib/Transforms/inline_utils.cpp
-    lib/Transforms/loop_rewrites.cpp
-    lib/Transforms/loop_utils.cpp
-    lib/Transforms/memory_rewrites.cpp
-    lib/Transforms/pipeline_utils.cpp
-    lib/Transforms/promote_bool_memref.cpp
-    lib/Transforms/promote_to_parallel.cpp
-    lib/Transforms/type_conversion.cpp
-    lib/Transforms/uplift_math.cpp
-    lib/analysis/memory_ssa.cpp
-    lib/analysis/memory_ssa_analysis.cpp
-    lib/compiler/compiler.cpp
-    lib/compiler/pipeline_registry.cpp
-    lib/utils.cpp
+    lib/Transforms/MemoryRewrites.cpp
+    lib/Transforms/PipelineUtils.cpp
+    lib/Transforms/PromoteBoolMemref.cpp
+    lib/Transforms/PromoteToParallel.cpp
+    lib/Transforms/TypeConversion.cpp
+    lib/Transforms/UpliftMath.cpp
+    lib/Utils.cpp
     )
 set(HEADERS_LIST
+    include/imex/Analysis/MemorySsa.hpp
+    include/imex/Analysis/MemorySsaAnalysis.hpp
+    include/imex/Compiler/Compiler.hpp
+    include/imex/Compiler/PipelineRegistry.hpp
+    include/imex/Conversion/CfgToScf.hpp
+    include/imex/Conversion/GpuRuntimeToLlvm.hpp
+    include/imex/Conversion/GpuToGpuRuntime.hpp
     include/imex/Conversion/NtensorToLinalg.hpp
+    include/imex/Conversion/NtensorToMemref.hpp
     include/imex/Conversion/SCFToAffine/SCFToAffine.h
-    include/imex/Conversion/cfg_to_scf.hpp
-    include/imex/Conversion/gpu_runtime_to_llvm.hpp
-    include/imex/Conversion/gpu_to_gpu_runtime.hpp
-    include/imex/Conversion/ntensor_to_memref.hpp
-    include/imex/Conversion/util_conversion.hpp
-    include/imex/Conversion/util_to_llvm.hpp
-    include/imex/Dialect/gpu_runtime/IR/gpu_runtime_ops.hpp
+    include/imex/Conversion/UtilConversion.hpp
+    include/imex/Conversion/UtilToLlvm.hpp
+    include/imex/Dialect/gpu_runtime/IR/GpuRuntimeOps.hpp
     include/imex/Dialect/gpu_runtime/Transforms/MakeBarriersUniform.hpp
-    include/imex/Dialect/imex_util/dialect.hpp
+    include/imex/Dialect/imex_util/Dialect.hpp
     include/imex/Dialect/ntensor/IR/NTensorOps.hpp
     include/imex/Dialect/ntensor/Transforms/ResolveArrayOps.hpp
-    include/imex/Dialect/plier/dialect.hpp
-    include/imex/ExecutionEngine/execution_engine.hpp
+    include/imex/Dialect/plier/Dialect.hpp
+    include/imex/ExecutionEngine/ExecutionEngine.hpp
+    include/imex/Transforms/ArgLowering.hpp
+    include/imex/Transforms/CallLowering.hpp
+    include/imex/Transforms/CanonicalizeReductions.hpp
+    include/imex/Transforms/CastLowering.hpp
+    include/imex/Transforms/CastUtils.hpp
+    include/imex/Transforms/CommonOpts.hpp
+    include/imex/Transforms/ConstUtils.hpp
+    include/imex/Transforms/Cse.hpp
+    include/imex/Transforms/ExpandTuple.hpp
+    include/imex/Transforms/FuncUtils.hpp
+    include/imex/Transforms/IfRewrites.hpp
+    include/imex/Transforms/IndexTypePropagation.hpp
+    include/imex/Transforms/InlineUtils.hpp
+    include/imex/Transforms/LoopRewrites.hpp
+    include/imex/Transforms/LoopUtils.hpp
     include/imex/Transforms/MakeSignless.hpp
-    include/imex/Transforms/arg_lowering.hpp
-    include/imex/Transforms/call_lowering.hpp
-    include/imex/Transforms/canonicalize_reductions.hpp
-    include/imex/Transforms/cast_lowering.hpp
-    include/imex/Transforms/cast_utils.hpp
-    include/imex/Transforms/common_opts.hpp
-    include/imex/Transforms/const_utils.hpp
-    include/imex/Transforms/cse.hpp
-    include/imex/Transforms/expand_tuple.hpp
-    include/imex/Transforms/func_utils.hpp
-    include/imex/Transforms/if_rewrites.hpp
-    include/imex/Transforms/index_type_propagation.hpp
-    include/imex/Transforms/inline_utils.hpp
-    include/imex/Transforms/loop_rewrites.hpp
-    include/imex/Transforms/loop_utils.hpp
-    include/imex/Transforms/memory_rewrites.hpp
-    include/imex/Transforms/pipeline_utils.hpp
-    include/imex/Transforms/promote_bool_memref.hpp
-    include/imex/Transforms/promote_to_parallel.hpp
-    include/imex/Transforms/rewrite_wrapper.hpp
-    include/imex/Transforms/type_conversion.hpp
-    include/imex/Transforms/uplift_math.hpp
-    include/imex/analysis/memory_ssa.hpp
-    include/imex/analysis/memory_ssa_analysis.hpp
-    include/imex/compiler/compiler.hpp
-    include/imex/compiler/pipeline_registry.hpp
-    include/imex/utils.hpp
+    include/imex/Transforms/MemoryRewrites.hpp
+    include/imex/Transforms/PipelineUtils.hpp
+    include/imex/Transforms/PromoteBoolMemref.hpp
+    include/imex/Transforms/PromoteToParallel.hpp
+    include/imex/Transforms/RewriteWrapper.hpp
+    include/imex/Transforms/TypeConversion.hpp
+    include/imex/Transforms/UpliftMath.hpp
+    include/imex/Utils.hpp
     )
 
 set(MLIR_EXTENSIONS_LIB "mlir-extensions")
@@ -139,7 +139,7 @@ include(CheckCXXCompilerFlag)
 CHECK_CXX_COMPILER_FLAG(-Winvalid-offsetof __offsetof_flag)
 if (__offsetof_flag)
     set_source_files_properties(
-        lib/analysis/memory_ssa.cpp
+        lib/Analysis/MemorySsa.cpp
         PROPERTIES
         COMPILE_FLAGS "-Wno-invalid-offsetof"
     )

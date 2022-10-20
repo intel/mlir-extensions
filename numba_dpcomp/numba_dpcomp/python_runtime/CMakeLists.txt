@@ -19,11 +19,11 @@ find_package (Python3 COMPONENTS Development REQUIRED)
 include(GenerateExportHeader)
 
 set(SOURCES_LIST
-    lib/boxing.cpp
-    lib/python-rt.cpp
+    lib/Boxing.cpp
+    lib/PythonRt.cpp
     )
 set(HEADERS_LIST
-    lib/python-rt.hpp
+    lib/PythonRt.hpp
     )
 
 add_library(${PROJECT_NAME} SHARED ${SOURCES_LIST} ${HEADERS_LIST})

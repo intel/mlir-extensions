@@ -28,41 +28,41 @@ include(HandleLLVMOptions)
 
 set(SOURCES_LIST
     lib/CheckGpuCaps.cpp
+    lib/LoopUtils.cpp
+    lib/Lowering.cpp
+    lib/Mangle.cpp
     lib/NumpyResolver.cpp
-    lib/loop_utils.cpp
-    lib/lowering.cpp
-    lib/mangle.cpp
-    lib/pipelines/base_pipeline.cpp
-    lib/pipelines/lower_to_gpu.cpp
-    lib/pipelines/lower_to_llvm.cpp
-    lib/pipelines/parallel_to_tbb.cpp
-    lib/pipelines/plier_to_linalg.cpp
-    lib/pipelines/plier_to_scf.cpp
-    lib/pipelines/plier_to_std.cpp
-    lib/pipelines/pre_low_simplifications.cpp
-    lib/py_func_resolver.cpp
-    lib/py_linalg_resolver.cpp
-    lib/py_map_types.cpp
-    lib/py_module.cpp
+    lib/PyFuncResolver.cpp
+    lib/PyLinalgResolver.cpp
+    lib/PyMapTypes.cpp
+    lib/PyModule.cpp
+    lib/pipelines/BasePipeline.cpp
+    lib/pipelines/LowerToGpu.cpp
+    lib/pipelines/LowerToLlvm.cpp
+    lib/pipelines/ParallelToTbb.cpp
+    lib/pipelines/PlierToLinalg.cpp
+    lib/pipelines/PlierToScf.cpp
+    lib/pipelines/PlierToStd.cpp
+    lib/pipelines/PreLowSimplifications.cpp
     )
 set(HEADERS_LIST
     lib/CheckGpuCaps.hpp
+    lib/LoopUtils.hpp
+    lib/Lowering.hpp
+    lib/Mangle.hpp
     lib/NumpyResolver.hpp
-    lib/loop_utils.hpp
-    lib/lowering.hpp
-    lib/mangle.hpp
-    lib/pipelines/base_pipeline.hpp
-    lib/pipelines/lower_to_gpu.hpp
-    lib/pipelines/lower_to_llvm.hpp
-    lib/pipelines/parallel_to_tbb.hpp
-    lib/pipelines/plier_to_linalg.hpp
-    lib/pipelines/plier_to_scf.hpp
-    lib/pipelines/plier_to_std.hpp
-    lib/pipelines/pre_low_simplifications.hpp
-    lib/py_func_resolver.hpp
-    lib/py_linalg_resolver.hpp
-    lib/py_map_types.hpp
-    lib/py_module.hpp
+    lib/PyFuncResolver.hpp
+    lib/PyLinalgResolver.hpp
+    lib/PyMapTypes.hpp
+    lib/PyModule.hpp
+    lib/pipelines/BasePipeline.hpp
+    lib/pipelines/LowerToGpu.hpp
+    lib/pipelines/LowerToLlvm.hpp
+    lib/pipelines/ParallelToTbb.hpp
+    lib/pipelines/PlierToLinalg.hpp
+    lib/pipelines/PlierToScf.hpp
+    lib/pipelines/PlierToStd.hpp
+    lib/pipelines/PreLowSimplifications.hpp
     )
 
 pybind11_add_module(${PROJECT_NAME} ${SOURCES_LIST} ${HEADERS_LIST})

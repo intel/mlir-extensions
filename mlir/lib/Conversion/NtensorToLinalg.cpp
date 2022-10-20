@@ -14,7 +14,7 @@
 
 #include "imex/Conversion/NtensorToLinalg.hpp"
 
-#include "imex/Dialect/imex_util/dialect.hpp"
+#include "imex/Dialect/imex_util/Dialect.hpp"
 #include "imex/Dialect/ntensor/IR/NTensorOps.hpp"
 
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
