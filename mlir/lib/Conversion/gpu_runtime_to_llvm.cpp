@@ -596,7 +596,7 @@ private:
     auto alignmentVar =
         rewriter.create<mlir::LLVM::ConstantOp>(loc, llvmIndexType, alignment);
 
-    bool shared = op->hasAttr(gpu_runtime::getAllocSharedAttrName());
+    bool shared = op.getHostShared();
     auto sharedVar = rewriter.create<mlir::LLVM::ConstantOp>(
         loc, llvmInt32Type,
         rewriter.getI32IntegerAttr(static_cast<int>(shared)));

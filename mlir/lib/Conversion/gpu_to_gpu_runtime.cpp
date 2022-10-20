@@ -316,10 +316,11 @@ struct InsertGPUAllocs
         }
       }
 
+      bool hostShared = access.hostRead || access.hostWrite;
       auto gpuAlloc = builder.create<mlir::gpu::AllocOp>(
           loc, memrefType, /*asyncToken*/ nullptr,
           /*asyncDependencies*/ llvm::None, dims,
-          /*symbolOperands*/ llvm::None);
+          /*symbolOperands*/ llvm::None, hostShared);
       auto allocResult = gpuAlloc.getMemref();
       if (access.hostWrite && access.deviceRead) {
         auto copy = builder.create<mlir::memref::CopyOp>(loc, src, allocResult);
@@ -327,9 +328,6 @@ struct InsertGPUAllocs
       }
 
       src.replaceAllUsesExcept(allocResult, filter);
-      if (access.hostRead || access.hostWrite)
-        gpuAlloc->setAttr(gpu_runtime::getAllocSharedAttrName(),
-                          builder.getUnitAttr());
 
       builder.setInsertionPoint(term);
       if (access.hostRead && access.deviceWrite)
@@ -344,15 +342,13 @@ struct InsertGPUAllocs
       auto loc = op->getLoc();
       if (auto alloc = mlir::dyn_cast<mlir::memref::AllocOp>(op)) {
         builder.setInsertionPoint(alloc);
+        bool hostShared = access.hostRead || access.hostWrite;
         auto gpuAlloc = builder.create<mlir::gpu::AllocOp>(
             loc, alloc.getType(), /*asyncToken*/ nullptr,
             /*asyncDependencies*/ llvm::None, alloc.getDynamicSizes(),
-            alloc.getSymbolOperands());
+            alloc.getSymbolOperands(), hostShared);
         alloc->replaceAllUsesWith(gpuAlloc);
         alloc.erase();
-        if (access.hostRead || access.hostWrite)
-          gpuAlloc->setAttr(gpu_runtime::getAllocSharedAttrName(),
-                            builder.getUnitAttr());
       } else if (auto getGlobal =
                      mlir::dyn_cast<mlir::memref::GetGlobalOp>(op)) {
         builder.setInsertionPointAfter(getGlobal);
@@ -1288,18 +1284,12 @@ struct ExpandAllocOp : public mlir::OpRewritePattern<mlir::gpu::AllocOp> {
     if (!stream)
       return mlir::failure();
 
-    auto sharedAttrName =
-        rewriter.getStringAttr(gpu_runtime::getAllocSharedAttrName());
-    auto shared = op->hasAttr(sharedAttrName);
-
+    auto hostShared = op.getHostShared();
     mlir::Type token =
         op.getAsyncToken() ? op.getAsyncToken().getType() : nullptr;
-    auto res = rewriter.replaceOpWithNewOp<gpu_runtime::GPUAllocOp>(
+    rewriter.replaceOpWithNewOp<gpu_runtime::GPUAllocOp>(
         op, op.getType(), token, op.getAsyncDependencies(), *stream,
-        op.getDynamicSizes(), op.getSymbolOperands());
-
-    if (shared)
-      res->setAttr(sharedAttrName, rewriter.getUnitAttr());
+        op.getDynamicSizes(), op.getSymbolOperands(), hostShared);
 
     return mlir::success();
   }
