@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "imex/Dialect/plier/dialect.hpp"
-#include "imex/Dialect/imex_util/dialect.hpp"
+#include "imex/Dialect/plier/Dialect.hpp"
+#include "imex/Dialect/imex_util/Dialect.hpp"
 
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/BuiltinOps.h>
