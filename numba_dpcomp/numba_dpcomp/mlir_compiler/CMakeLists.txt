@@ -36,6 +36,7 @@ set(SOURCES_LIST
     lib/PyLinalgResolver.cpp
     lib/PyMapTypes.cpp
     lib/PyModule.cpp
+    lib/PyTypeConverter.cpp
     lib/pipelines/BasePipeline.cpp
     lib/pipelines/LowerToGpu.cpp
     lib/pipelines/LowerToLlvm.cpp
@@ -55,6 +56,7 @@ set(HEADERS_LIST
     lib/PyLinalgResolver.hpp
     lib/PyMapTypes.hpp
     lib/PyModule.hpp
+    lib/PyTypeConverter.hpp
     lib/pipelines/BasePipeline.hpp
     lib/pipelines/LowerToGpu.hpp
     lib/pipelines/LowerToLlvm.hpp
