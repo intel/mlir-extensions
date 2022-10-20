@@ -14,7 +14,7 @@
 
 #include "imex/Transforms/MemoryRewrites.hpp"
 
-#include "imex/analysis/MemorySsaAnalysis.hpp"
+#include "imex/Analysis/MemorySsaAnalysis.hpp"
 
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/IR/BuiltinOps.h>

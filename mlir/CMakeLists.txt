@@ -139,7 +139,7 @@ include(CheckCXXCompilerFlag)
 CHECK_CXX_COMPILER_FLAG(-Winvalid-offsetof __offsetof_flag)
 if (__offsetof_flag)
     set_source_files_properties(
-        lib/analysis/memory_ssa.cpp
+        lib/Analysis/MemorySsa.cpp
         PROPERTIES
         COMPILE_FLAGS "-Wno-invalid-offsetof"
     )
