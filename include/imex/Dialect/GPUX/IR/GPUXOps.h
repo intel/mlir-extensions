@@ -8,7 +8,7 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// This file declares the GPUX dialect's StreamType.
+/// This file declares the GPUX dialect.
 ///
 //===----------------------------------------------------------------------===//
 
@@ -16,37 +16,12 @@
 #define _GPUX_OPS_H_INCLUDED_
 
 #include <mlir/Dialect/GPU/IR/GPUDialect.h>
+#include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/IR/BuiltinTypes.h>
 #include <mlir/IR/Dialect.h>
 #include <mlir/IR/OpDefinition.h>
 #include <mlir/IR/Types.h>
 #include <mlir/Interfaces/SideEffectInterfaces.h>
-
-// Custom Types for Stream, Device and Context.
-// They hold opaque pointers.
-
-namespace imex {
-namespace gpux {
-class StreamType : public ::mlir::Type::TypeBase<StreamType, ::mlir::Type,
-                                                 ::mlir::TypeStorage> {
-public:
-  using Base::Base;
-};
-
-class DeviceType : public ::mlir::Type::TypeBase<DeviceType, ::mlir::Type,
-                                                 ::mlir::TypeStorage> {
-public:
-  using Base::Base;
-};
-
-class ContextType : public ::mlir::Type::TypeBase<ContextType, ::mlir::Type,
-                                                  ::mlir::TypeStorage> {
-public:
-  using Base::Base;
-};
-
-} // namespace gpux
-} // namespace imex
 
 #include <imex/Dialect/GPUX/IR/GPUXOpsDialect.h.inc>
 #define GET_TYPEDEF_CLASSES

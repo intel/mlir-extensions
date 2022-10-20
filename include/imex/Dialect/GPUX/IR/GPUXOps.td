@@ -32,14 +32,18 @@ def GPUX_Dialect : Dialect {
 
     // A longer description of our dialect.
     let description = [{
-            GPUX Dialect provides operations for creating/destroying and launching operations
-            on a stream.
-            GPUX dialect extends the alloc, dealloc, launch_func and wait operations from
-            upstream GPU dialect and adds an additional argument for stream in those ops.
+            GPUX Dialect provides operations for creating/destroying and
+            launching operations on a stream. GPUX dialect extends the alloc,
+            dealloc, memcpy, memset, launch_func and wait operations from
+            upstream GPU dialect and adds an additional argument for stream
+            in those ops.
         }];
 
     // The C++ namespace that the dialect class definition resides in.
     let cppNamespace = "::imex::gpux";
+
+    //  We use the default parser/printer which handles registered types
+    let useDefaultTypePrinterParser = true;
 }
 
 // Base class for dialect operations. This operation inherits from the base
@@ -50,20 +54,43 @@ def GPUX_Dialect : Dialect {
 class GPUX_Op<string mnemonic, list<Trait> traits = []> :
     Op<GPUX_Dialect, mnemonic, traits>;
 
-// Provide a definition for the GPUX Stream/Device/Context Type for use in ODS. This allows for
-// using these types in a similar way to Tensor or MemRef. We use `DialectType`
-// to demarcate that these types belong to the GPUX dialect.
-def GPUX_StreamType
-    : DialectType<GPUX_Dialect, CPred<"$_self.isa<::imex::gpux::StreamType>()">,
-                  "Stream Type">;
+// common base class for types in GPUX dialect.
+class GPUX_Type<string name, string typeMnemonic, list<Trait> traits = []>
+    : TypeDef<GPUX_Dialect, name, traits> {
+    let mnemonic = typeMnemonic;
+}
 
-def GPUX_DeviceType
-    : DialectType<GPUX_Dialect, CPred<"$_self.isa<::imex::gpux::DeviceType>()">,
-                  "Device Type">;
+def GPUX_OpaqueType : GPUX_Type<"OpaqueType", "OpaqueType">
+{
+  let summary = "Custom Type for OpaqueType";
+  let description = [{
+    "GPUX_OpaqueType is a Custom Type for Opaque Pointer"
+  }];
+}
 
-def GPUX_ContextType
-    : DialectType<GPUX_Dialect, CPred<"$_self.isa<::imex::gpux::ContextType>()">,
-                  "Context Type">;
+def GPUX_StreamType : GPUX_Type<"StreamType", "StreamType">
+{
+  let summary = "Custom Type for GPUXStream";
+  let description = [{
+    "GPUX_StreamType is a Custom Type for Stream."
+  }];
+}
+
+def GPUX_DeviceType : GPUX_Type<"DeviceType", "DeviceType">
+{
+  let summary = "Custom Type for GPUXDevice";
+  let description = [{
+    "GPUX_DeviceType is a Custom Type for Device."
+  }];
+}
+
+def GPUX_ContextType : GPUX_Type<"ContextType", "ContextType">
+{
+  let summary = "Custom Type for GPUXContext";
+  let description = [{
+    "GPUX_ContextType is a Custom Type for Context."
+  }];
+}
 
 def GPUX_CreateDeviceOp : GPUX_Op<"create_device"> {
 
@@ -79,7 +106,7 @@ def GPUX_CreateContextOp : GPUX_Op<"create_context"> {
   let results = (outs GPUX_ContextType : $gpu_context);
 }
 
-def GPUX_CreateStreamOp : GPUX_Op<"create_stream", [AttrSizedOperandSegments]> {
+def GPUX_CreateStreamOp : GPUX_Op<"create_stream", [SameVariadicOperandSize]> {
 
   // Operation to create and return a stream, based on the context
   // and device. This stream is used for launching/queuing kernels
