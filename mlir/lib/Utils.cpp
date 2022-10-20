@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "imex/utils.hpp"
+#include "imex/Utils.hpp"
 
 #include <stdexcept>
 
