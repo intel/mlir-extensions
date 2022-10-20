@@ -17,7 +17,7 @@
 #include <mlir/IR/Attributes.h>
 #include <mlir/IR/BuiltinOps.h>
 
-#include "imex/Dialect/imex_util/dialect.hpp"
+#include "imex/Dialect/imex_util/Dialect.hpp"
 
 mlir::ArrayAttr imex::getPipelineJumpMarkers(mlir::ModuleOp module) {
   return module->getAttrOfType<mlir::ArrayAttr>(

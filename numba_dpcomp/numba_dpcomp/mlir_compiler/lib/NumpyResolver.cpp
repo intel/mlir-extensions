@@ -14,7 +14,7 @@
 
 #include "NumpyResolver.hpp"
 
-#include "imex/Dialect/imex_util/dialect.hpp"
+#include "imex/Dialect/imex_util/Dialect.hpp"
 
 #include <pybind11/pybind11.h>
 

@@ -16,7 +16,7 @@
 
 #include <functional>
 
-#include "imex/Dialect/plier/dialect.hpp"
+#include "imex/Dialect/plier/Dialect.hpp"
 
 #include <mlir/IR/PatternMatch.h>
 
