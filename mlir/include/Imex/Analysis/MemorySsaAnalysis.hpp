@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "imex/analysis/memory_ssa.hpp"
+#include "imex/analysis/MemorySsa.hpp"
 
 #include <mlir/Pass/AnalysisManager.h>
 

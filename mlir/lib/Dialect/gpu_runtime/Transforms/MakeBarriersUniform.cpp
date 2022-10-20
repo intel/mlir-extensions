@@ -14,8 +14,8 @@
 
 #include "imex/Dialect/gpu_runtime/Transforms/MakeBarriersUniform.hpp"
 
-#include "imex/Dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
-#include "imex/Dialect/imex_util/dialect.hpp"
+#include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOps.hpp"
+#include "imex/Dialect/imex_util/Dialect.hpp"
 
 #include <mlir/Dialect/GPU/IR/GPUDialect.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>

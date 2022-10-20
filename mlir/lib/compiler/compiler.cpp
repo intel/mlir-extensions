@@ -12,7 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "imex/compiler/compiler.hpp"
+#include "imex/Compiler/Compiler.hpp"
+
+#include "imex/Transforms/PipelineUtils.hpp"
+#include "imex/Compiler/PipelineRegistry.hpp"
+#include "imex/Utils.hpp"
 
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/IR/Diagnostics.h>
@@ -22,10 +26,6 @@
 #include <llvm/Support/raw_ostream.h>
 
 #include <unordered_map>
-
-#include "imex/Transforms/pipeline_utils.hpp"
-#include "imex/compiler/pipeline_registry.hpp"
-#include "imex/utils.hpp"
 
 namespace {
 struct PassManagerStage {

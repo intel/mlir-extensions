@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "imex/Conversion/ntensor_to_memref.hpp"
+#include "imex/Conversion/NtensorToMemref.hpp"
 
-#include "imex/Dialect/imex_util/dialect.hpp"
+#include "imex/Dialect/imex_util/Dialect.hpp"
 #include "imex/Dialect/ntensor/IR/NTensorOps.hpp"
-#include "imex/Transforms/type_conversion.hpp"
+#include "imex/Transforms/TypeConversion.hpp"
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Bufferization/IR/Bufferization.h>

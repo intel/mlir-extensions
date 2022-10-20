@@ -30,19 +30,19 @@
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 #include <mlir/Transforms/Passes.h>
 
-#include "imex/Dialect/imex_util/dialect.hpp"
-#include "imex/Dialect/plier/dialect.hpp"
+#include "imex/Dialect/imex_util/Dialect.hpp"
+#include "imex/Dialect/plier/Dialect.hpp"
 
-#include "imex/Transforms/call_lowering.hpp"
-#include "imex/Transforms/cast_utils.hpp"
-#include "imex/Transforms/const_utils.hpp"
-#include "imex/Transforms/inline_utils.hpp"
-#include "imex/Transforms/pipeline_utils.hpp"
-#include "imex/Transforms/rewrite_wrapper.hpp"
-#include "imex/Transforms/type_conversion.hpp"
+#include "imex/Transforms/CallLowering.hpp"
+#include "imex/Transforms/CastUtils.hpp"
+#include "imex/Transforms/ConstUtils.hpp"
+#include "imex/Transforms/InlineUtils.hpp"
+#include "imex/Transforms/PipelineUtils.hpp"
+#include "imex/Transforms/RewriteWrapper.hpp"
+#include "imex/Transforms/TypeConversion.hpp"
+#include "imex/Compiler/PipelineRegistry.hpp"
 
 #include "base_pipeline.hpp"
-#include "imex/compiler/pipeline_registry.hpp"
 #include "loop_utils.hpp"
 #include "mangle.hpp"
 #include "py_func_resolver.hpp"

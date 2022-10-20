@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "imex/Transforms/uplift_math.hpp"
+#include "imex/Transforms/UpliftMath.hpp"
 
-#include "imex/Dialect/imex_util/dialect.hpp"
-#include "imex/Transforms/rewrite_wrapper.hpp"
+#include "imex/Dialect/imex_util/Dialect.hpp"
+#include "imex/Transforms/RewriteWrapper.hpp"
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>

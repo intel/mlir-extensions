@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "imex/Transforms/arg_lowering.hpp"
+#include "imex/Transforms/ArgLowering.hpp"
 
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 
-#include "imex/Dialect/plier/dialect.hpp"
+#include "imex/Dialect/plier/Dialect.hpp"
 
 imex::ArgOpLowering::ArgOpLowering(mlir::MLIRContext *context)
     : OpRewritePattern(context) {}

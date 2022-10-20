@@ -18,13 +18,13 @@
 #include <mlir/Pass/PassManager.h>
 #include <mlir/Transforms/Passes.h>
 
-#include "imex/Conversion/cfg_to_scf.hpp"
-#include "imex/Dialect/plier/dialect.hpp"
-#include "imex/Transforms/arg_lowering.hpp"
-#include "imex/Transforms/rewrite_wrapper.hpp"
+#include "imex/Conversion/CfgToScf.hpp"
+#include "imex/Dialect/plier/Dialect.hpp"
+#include "imex/Transforms/ArgLowering.hpp"
+#include "imex/Transforms/RewriteWrapper.hpp"
+#include "imex/Compiler/PipelineRegistry.hpp"
 
 #include "base_pipeline.hpp"
-#include "imex/compiler/pipeline_registry.hpp"
 
 namespace {
 

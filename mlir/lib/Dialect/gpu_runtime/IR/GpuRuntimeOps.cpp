@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "imex/Dialect/gpu_runtime/IR/gpu_runtime_ops.hpp"
+#include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOps.hpp"
 
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/BuiltinOps.h>

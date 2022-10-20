@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "imex/Transforms/common_opts.hpp"
+#include "imex/Transforms/CommonOpts.hpp"
 
-#include "imex/Transforms/cse.hpp"
-#include "imex/Transforms/if_rewrites.hpp"
-#include "imex/Transforms/index_type_propagation.hpp"
-#include "imex/Transforms/loop_rewrites.hpp"
+#include "imex/Transforms/Cse.hpp"
+#include "imex/Transforms/IfRewrites.hpp"
+#include "imex/Transforms/IndexTypePropagation.hpp"
+#include "imex/Transforms/LoopRewrites.hpp"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 

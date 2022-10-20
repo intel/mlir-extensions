@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "imex/Conversion/cfg_to_scf.hpp"
-#include "imex/Dialect/imex_util/dialect.hpp"
+#include "imex/Conversion/CfgToScf.hpp"
+#include "imex/Dialect/imex_util/Dialect.hpp"
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/ControlFlow/IR/ControlFlowOps.h>

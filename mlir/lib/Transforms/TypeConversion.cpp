@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "imex/Transforms/type_conversion.hpp"
+#include "imex/Transforms/TypeConversion.hpp"
+
+#include "imex/Dialect/imex_util/Dialect.hpp"
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
@@ -20,8 +22,6 @@
 #include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/Dialect/SCF/Transforms/Transforms.h>
 #include <mlir/Transforms/DialectConversion.h>
-
-#include "imex/Dialect/imex_util/dialect.hpp"
 
 namespace {
 class ConvertSelectOp

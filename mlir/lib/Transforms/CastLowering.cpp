@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "imex/Transforms/cast_lowering.hpp"
+#include "imex/Transforms/CastLowering.hpp"
 
 #include <mlir/Transforms/DialectConversion.h>
 

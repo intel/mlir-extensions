@@ -23,15 +23,15 @@
 #include <mlir/Dialect/SCF/IR/SCF.h>
 
 #include "imex/Conversion/NtensorToLinalg.hpp"
-#include "imex/Conversion/SCFToAffine/SCFToAffine.h"
-#include "imex/Conversion/cfg_to_scf.hpp"
-#include "imex/Conversion/gpu_runtime_to_llvm.hpp"
-#include "imex/Conversion/gpu_to_gpu_runtime.hpp"
-#include "imex/Conversion/ntensor_to_memref.hpp"
+#include "imex/Conversion/ScftoAffine/ScftoAffine.h"
+#include "imex/Conversion/CfgToScf.hpp"
+#include "imex/Conversion/GpuRuntimeToLlvm.hpp"
+#include "imex/Conversion/GpuToGpuRuntime.hpp"
+#include "imex/Conversion/NtensorToMemref.hpp"
 #include "imex/Dialect/gpu_runtime/Transforms/MakeBarriersUniform.hpp"
 #include "imex/Dialect/ntensor/Transforms/ResolveArrayOps.hpp"
 #include "imex/Transforms/MakeSignless.hpp"
-#include "imex/Transforms/expand_tuple.hpp"
+#include "imex/Transforms/ExpandTuple.hpp"
 
 // Passes registration.
 

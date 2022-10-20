@@ -14,8 +14,8 @@
 
 #include "imex/Transforms/MakeSignless.hpp"
 
-#include "imex/Dialect/imex_util/dialect.hpp"
-#include "imex/Transforms/type_conversion.hpp"
+#include "imex/Dialect/imex_util/Dialect.hpp"
+#include "imex/Transforms/TypeConversion.hpp"
 
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>

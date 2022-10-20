@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "imex/Transforms/promote_to_parallel.hpp"
+#include "imex/Transforms/PromoteToParallel.hpp"
 
-#include "imex/Dialect/imex_util/dialect.hpp"
+#include "imex/Dialect/imex_util/Dialect.hpp"
 
 #include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/IR/BlockAndValueMapping.h>

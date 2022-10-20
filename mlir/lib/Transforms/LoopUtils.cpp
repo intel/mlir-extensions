@@ -12,7 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "imex/Transforms/loop_utils.hpp"
+#include "imex/Transforms/LoopUtils.hpp"
+
+#include "imex/Dialect/imex_util/Dialect.hpp"
+#include "imex/Dialect/plier/Dialect.hpp"
+#include "imex/Transforms/CastUtils.hpp"
+#include "imex/Transforms/ConstUtils.hpp"
 
 #include <llvm/ADT/SmallVector.h>
 
@@ -23,11 +28,6 @@
 #include <mlir/IR/Dominance.h>
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Support/LogicalResult.h>
-
-#include "imex/Dialect/imex_util/dialect.hpp"
-#include "imex/Dialect/plier/dialect.hpp"
-#include "imex/Transforms/cast_utils.hpp"
-#include "imex/Transforms/const_utils.hpp"
 
 namespace {
 template <typename Op>
