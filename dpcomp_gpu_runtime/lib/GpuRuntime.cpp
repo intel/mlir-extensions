@@ -24,8 +24,8 @@
 
 #include "dpcomp-gpu-runtime_export.h"
 
-#include "level_zero_printing.hpp"
-#include "level_zero_wrapper.hpp"
+#include "LevelZeroPrinting.hpp"
+#include "LevelZeroWrapper.hpp"
 
 typedef void (*MemInfoDtorFunction)(void *ptr, size_t size, void *info);
 using AllocFuncT = void *(*)(void *, size_t, MemInfoDtorFunction, void *);

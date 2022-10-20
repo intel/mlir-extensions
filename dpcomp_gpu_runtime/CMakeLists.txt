@@ -17,11 +17,11 @@ project(dpcomp-gpu-runtime LANGUAGES CXX C)
 include(GenerateExportHeader)
 
 set(SOURCES_LIST
-    lib/gpu_runtime.cpp
+    lib/GpuRuntime.cpp
 )
 set(HEADERS_LIST
-    lib/level_zero_printing.hpp
-    lib/level_zero_wrapper.hpp
+    lib/LevelZeroPrinting.hpp
+    lib/LevelZeroWrapper.hpp
 )
 
 add_library(${PROJECT_NAME} SHARED ${SOURCES_LIST} ${HEADERS_LIST})
