@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <llvm/Support/InitLLVM.h>
+#include <llvm/Support/TargetSelect.h>
 #include <mlir/Conversion/LLVMCommon/LoweringOptions.h>
 #include <mlir/Conversion/MemRefToLLVM/MemRefToLLVM.h>
 #include <mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h>
@@ -25,13 +27,11 @@
 #include <mlir/Dialect/SPIRV/IR/SPIRVOps.h>
 #include <mlir/Dialect/SPIRV/Transforms/Passes.h>
 #include <mlir/ExecutionEngine/JitRunner.h>
+#include <mlir/InitAllDialects.h>
+#include <mlir/InitAllPasses.h>
 #include <mlir/Pass/Pass.h>
 #include <mlir/Pass/PassManager.h>
 #include <mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h>
-#include <llvm/Support/InitLLVM.h>
-#include <llvm/Support/TargetSelect.h>
-#include <mlir/InitAllDialects.h>
-#include <mlir/InitAllPasses.h>
 
 #include "imex/Conversion/GpuRuntimeToLlvm.hpp"
 #include "imex/Conversion/GpuToGpuRuntime.hpp"

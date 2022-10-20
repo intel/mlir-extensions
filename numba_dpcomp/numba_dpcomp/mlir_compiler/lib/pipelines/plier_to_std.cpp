@@ -33,6 +33,7 @@
 #include "imex/Dialect/imex_util/Dialect.hpp"
 #include "imex/Dialect/plier/Dialect.hpp"
 
+#include "imex/Compiler/PipelineRegistry.hpp"
 #include "imex/Transforms/CallLowering.hpp"
 #include "imex/Transforms/CastUtils.hpp"
 #include "imex/Transforms/ConstUtils.hpp"
@@ -40,7 +41,6 @@
 #include "imex/Transforms/PipelineUtils.hpp"
 #include "imex/Transforms/RewriteWrapper.hpp"
 #include "imex/Transforms/TypeConversion.hpp"
-#include "imex/Compiler/PipelineRegistry.hpp"
 
 #include "base_pipeline.hpp"
 #include "loop_utils.hpp"

@@ -26,12 +26,12 @@
 #include "pipelines/base_pipeline.hpp"
 #include "pipelines/lower_to_llvm.hpp"
 
+#include "imex/Compiler/PipelineRegistry.hpp"
 #include "imex/Dialect/imex_util/Dialect.hpp"
 #include "imex/Dialect/plier/Dialect.hpp"
 #include "imex/Transforms/ConstUtils.hpp"
 #include "imex/Transforms/FuncUtils.hpp"
 #include "imex/Transforms/RewriteWrapper.hpp"
-#include "imex/Compiler/PipelineRegistry.hpp"
 
 namespace {
 static mlir::MemRefType getReduceType(mlir::Type type, int64_t count) {

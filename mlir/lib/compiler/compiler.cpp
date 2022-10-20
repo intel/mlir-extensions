@@ -14,8 +14,8 @@
 
 #include "imex/Compiler/Compiler.hpp"
 
-#include "imex/Transforms/PipelineUtils.hpp"
 #include "imex/Compiler/PipelineRegistry.hpp"
+#include "imex/Transforms/PipelineUtils.hpp"
 #include "imex/Utils.hpp"
 
 #include <mlir/IR/BuiltinOps.h>

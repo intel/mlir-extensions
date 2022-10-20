@@ -40,9 +40,9 @@
 #include "imex/Dialect/imex_util/Dialect.hpp"
 #include "imex/Dialect/plier/Dialect.hpp"
 
-#include "imex/ExecutionEngine/ExecutionEngine.hpp"
 #include "imex/Compiler/Compiler.hpp"
 #include "imex/Compiler/PipelineRegistry.hpp"
+#include "imex/ExecutionEngine/ExecutionEngine.hpp"
 #include "imex/Utils.hpp"
 
 #include "pipelines/base_pipeline.hpp"

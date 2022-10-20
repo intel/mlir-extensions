@@ -22,16 +22,16 @@
 #include <mlir/Dialect/GPU/IR/GPUDialect.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
 
-#include "imex/Conversion/NtensorToLinalg.hpp"
-#include "imex/Conversion/ScftoAffine/ScftoAffine.h"
 #include "imex/Conversion/CfgToScf.hpp"
 #include "imex/Conversion/GpuRuntimeToLlvm.hpp"
 #include "imex/Conversion/GpuToGpuRuntime.hpp"
+#include "imex/Conversion/NtensorToLinalg.hpp"
 #include "imex/Conversion/NtensorToMemref.hpp"
+#include "imex/Conversion/ScftoAffine/ScftoAffine.h"
 #include "imex/Dialect/gpu_runtime/Transforms/MakeBarriersUniform.hpp"
 #include "imex/Dialect/ntensor/Transforms/ResolveArrayOps.hpp"
-#include "imex/Transforms/MakeSignless.hpp"
 #include "imex/Transforms/ExpandTuple.hpp"
+#include "imex/Transforms/MakeSignless.hpp"
 
 // Passes registration.
 

@@ -51,10 +51,10 @@
 
 #include "base_pipeline.hpp"
 
+#include "imex/Compiler/PipelineRegistry.hpp"
 #include "imex/Conversion/UtilToLlvm.hpp"
 #include "imex/Dialect/imex_util/Dialect.hpp"
 #include "imex/Transforms/FuncUtils.hpp"
-#include "imex/Compiler/PipelineRegistry.hpp"
 #include "imex/Utils.hpp"
 
 namespace {

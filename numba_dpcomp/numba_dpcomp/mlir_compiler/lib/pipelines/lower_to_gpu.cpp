@@ -46,6 +46,7 @@
 #include "pipelines/pre_low_simplifications.hpp"
 #include "py_linalg_resolver.hpp"
 
+#include "imex/Compiler/PipelineRegistry.hpp"
 #include "imex/Conversion/GpuRuntimeToLlvm.hpp"
 #include "imex/Conversion/GpuToGpuRuntime.hpp"
 #include "imex/Conversion/UtilConversion.hpp"
@@ -58,7 +59,6 @@
 #include "imex/Transforms/PipelineUtils.hpp"
 #include "imex/Transforms/RewriteWrapper.hpp"
 #include "imex/Transforms/TypeConversion.hpp"
-#include "imex/Compiler/PipelineRegistry.hpp"
 
 namespace {
 static void moveOpsIntoParallel(mlir::scf::ParallelOp outer, int depth = 0) {

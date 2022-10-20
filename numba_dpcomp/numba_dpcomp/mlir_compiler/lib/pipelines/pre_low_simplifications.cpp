@@ -16,9 +16,9 @@
 
 #include "pipelines/base_pipeline.hpp"
 
-#include "imex/Transforms/MakeSignless.hpp"
-#include "imex/Transforms/ExpandTuple.hpp"
 #include "imex/Compiler/PipelineRegistry.hpp"
+#include "imex/Transforms/ExpandTuple.hpp"
+#include "imex/Transforms/MakeSignless.hpp"
 
 #include <mlir/Pass/PassManager.h>
 #include <mlir/Transforms/Passes.h>
