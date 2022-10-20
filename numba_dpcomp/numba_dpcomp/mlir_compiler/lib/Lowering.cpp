@@ -212,7 +212,8 @@ private:
     if (auto type = typeConverter.convertType(ctx, obj))
       return type;
 
-    return plier::PyType::get(&ctx, py::str(obj).cast<std::string>());
+    imex::reportError(llvm::Twine("Unhandled type: ") +
+                      py::str(obj).cast<std::string>());
   }
 
   mlir::Type getType(py::handle inst) const {
@@ -682,6 +683,11 @@ struct ModuleSettings {
 
 static void createPipeline(imex::PipelineRegistry &registry,
                            const ModuleSettings &settings) {
+  converter.addConversion(
+      [](mlir::MLIRContext &ctx, py::handle obj) -> llvm::Optional<mlir::Type> {
+        return plier::PyType::get(&ctx, py::str(obj).cast<std::string>());
+      });
+
   registerBasePipeline(registry);
   registerLowerToLLVMPipeline(registry);
   registerPlierToScfPipeline(registry);
