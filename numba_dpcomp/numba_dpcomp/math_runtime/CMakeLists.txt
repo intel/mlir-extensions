@@ -17,11 +17,11 @@ project(dpcomp-math-runtime LANGUAGES CXX C)
 include(GenerateExportHeader)
 
 set(SOURCES_LIST
-    lib/common.cpp
-    lib/numpy_linalg.cpp
+    lib/Common.cpp
+    lib/NumpyLinalg.cpp
     )
 set(HEADERS_LIST
-    lib/common.hpp
+    lib/Common.hpp
     )
 
 add_library(${PROJECT_NAME} SHARED ${SOURCES_LIST} ${HEADERS_LIST})

@@ -14,7 +14,7 @@
 
 #include <stdio.h>
 
-#include "common.hpp"
+#include "Common.hpp"
 
 #ifdef IMEX_USE_DPNP
 #include <dpnp_iface.hpp>

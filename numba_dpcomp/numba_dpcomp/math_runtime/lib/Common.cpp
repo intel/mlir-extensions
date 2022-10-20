@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "common.hpp"
+#include "Common.hpp"
 
 extern "C" {
 DPCOMP_MATH_RUNTIME_EXPORT void dpcompMathRuntimeInit() {
