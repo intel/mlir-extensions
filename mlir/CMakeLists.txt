@@ -40,6 +40,10 @@ add_subdirectory(include/imex/Dialect/gpu_runtime/IR)
 add_subdirectory(include/imex/Dialect/ntensor/IR)
 
 set(SOURCES_LIST
+    lib/Analysis/MemorySsa.cpp
+    lib/Analysis/MemorySsaAnalysis.cpp
+    lib/Compiler/Compiler.cpp
+    lib/Compiler/PipelineRegistry.cpp
     lib/Conversion/CfgToScf.cpp
     lib/Conversion/GpuRuntimeToLlvm.cpp
     lib/Conversion/GpuToGpuRuntime.cpp
@@ -78,12 +82,12 @@ set(SOURCES_LIST
     lib/Transforms/TypeConversion.cpp
     lib/Transforms/UpliftMath.cpp
     lib/Utils.cpp
-    lib/analysis/MemorySsa.cpp
-    lib/analysis/MemorySsaAnalysis.cpp
-    lib/compiler/Compiler.cpp
-    lib/compiler/PipelineRegistry.cpp
     )
 set(HEADERS_LIST
+    include/imex/Analysis/MemorySsa.hpp
+    include/imex/Analysis/MemorySsaAnalysis.hpp
+    include/imex/Compiler/Compiler.hpp
+    include/imex/Compiler/PipelineRegistry.hpp
     include/imex/Conversion/CfgToScf.hpp
     include/imex/Conversion/GpuRuntimeToLlvm.hpp
     include/imex/Conversion/GpuToGpuRuntime.hpp
@@ -123,10 +127,6 @@ set(HEADERS_LIST
     include/imex/Transforms/TypeConversion.hpp
     include/imex/Transforms/UpliftMath.hpp
     include/imex/Utils.hpp
-    include/imex/analysis/MemorySsa.hpp
-    include/imex/analysis/MemorySsaAnalysis.hpp
-    include/imex/compiler/Compiler.hpp
-    include/imex/compiler/PipelineRegistry.hpp
     )
 
 set(MLIR_EXTENSIONS_LIB "mlir-extensions")
