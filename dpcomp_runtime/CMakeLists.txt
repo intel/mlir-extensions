@@ -23,9 +23,9 @@ endif()
 find_package(MLIR REQUIRED CONFIG)
 
 set(SOURCES_LIST
-    lib/context.cpp
-    lib/tbb_parallel.cpp
-    lib/memory.cpp
+    lib/Context.cpp
+    lib/Memory.cpp
+    lib/TbbParallel.cpp
     )
 set(HEADERS_LIST
     )
