@@ -156,13 +156,13 @@ struct ArrayDesc {
 };
 
 static llvm::Optional<ArrayDesc> parseArrayDesc(llvm::StringRef &name) {
-  unsigned num_dims = 0;
+  unsigned numDims = 0;
   ArrayLayout layout = {};
   if (name.consume_front("array(") && name.consume_back(")") &&
       parseLayout(name, layout) && name.consume_back(", ") &&
-      name.consume_back("d") && consumeIntBack(name, num_dims) &&
+      name.consume_back("d") && consumeIntBack(name, numDims) &&
       name.consume_back(", ") && !name.empty()) {
-    return ArrayDesc{num_dims, layout, name};
+    return ArrayDesc{numDims, layout, name};
   }
   return {};
 }
@@ -178,7 +178,20 @@ static mlir::Type mapArrayType(mlir::MLIRContext &ctx,
         if (mlir::BaseMemRefType::isValidElementType(type)) {
           llvm::SmallVector<int64_t> shape(desc->dims,
                                            mlir::ShapedType::kDynamicSize);
-          return imex::ntensor::NTensorType::get(shape, type);
+          auto layout = [&]() -> llvm::StringRef {
+            if (desc->layout == ArrayLayout::C)
+              return "C";
+
+            if (desc->layout == ArrayLayout::A)
+              return "A";
+
+            if (desc->layout == ArrayLayout::F)
+              return "F";
+
+            llvm_unreachable("Invalid layout");
+          }();
+          return imex::ntensor::NTensorType::get(shape, type, /*env*/ {},
+                                                 layout);
         }
       }
     }
