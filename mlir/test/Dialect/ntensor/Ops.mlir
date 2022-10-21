@@ -20,6 +20,24 @@ func.func @test(%arg: !ntensor.ntensor<2x3x4xf32, "test">) -> !ntensor.ntensor<2
 
 // -----
 
+func.func @test(%arg: !ntensor.ntensor<2x3x4xf32: "C">) -> !ntensor.ntensor<2x3x4xf32: "C"> {
+  return %arg : !ntensor.ntensor<2x3x4xf32: "C">
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG:.*]]: !ntensor.ntensor<2x3x4xf32: "C">)
+//  CHECK-NEXT:   return %[[ARG]] : !ntensor.ntensor<2x3x4xf32: "C">
+
+// -----
+
+func.func @test(%arg: !ntensor.ntensor<2x3x4xf32: "C", "test">) -> !ntensor.ntensor<2x3x4xf32: "C", "test"> {
+  return %arg : !ntensor.ntensor<2x3x4xf32: "C", "test">
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG:.*]]: !ntensor.ntensor<2x3x4xf32: "C", "test">)
+//  CHECK-NEXT:   return %[[ARG]] : !ntensor.ntensor<2x3x4xf32: "C", "test">
+
+// -----
+
 func.func @test(%arg: !ntensor.ntensor<?xf32>) -> !ntensor.ntensor<?xf32> {
   %0 = ntensor.unary "-" (%arg : !ntensor.ntensor<?xf32>) -> !ntensor.ntensor<?xf32>
   return %0 : !ntensor.ntensor<?xf32>
