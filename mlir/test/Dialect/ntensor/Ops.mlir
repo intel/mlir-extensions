@@ -441,6 +441,17 @@ func.func @test(%arg1: !ntensor.ntensor<?xf32>) -> !ntensor.ntensor<5xf32> {
 
 // -----
 
+func.func @test(%arg: !ntensor.ntensor<2x3x4xf32: "C">) -> !ntensor.ntensor<2x3x4xf32: "A"> {
+  %0 = ntensor.cast %arg : !ntensor.ntensor<2x3x4xf32: "C"> to !ntensor.ntensor<2x3x4xf32: "A">
+  return %0 : !ntensor.ntensor<2x3x4xf32: "A">
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG:.*]]: !ntensor.ntensor<2x3x4xf32: "C">)
+//  CHECK-NEXT:   %[[RES:.*]] = ntensor.cast %[[ARG]] : !ntensor.ntensor<2x3x4xf32: "C"> to !ntensor.ntensor<2x3x4xf32: "A">
+//  CHECK-NEXT:   return %[[RES]] : !ntensor.ntensor<2x3x4xf32: "A">
+
+// -----
+
 func.func @test(%arg1: f32, %arg2: f32, %arg3: f32) -> !ntensor.ntensor<3xf32> {
   %0 = ntensor.from_elements %arg1, %arg2, %arg3 : !ntensor.ntensor<3xf32>
   return %0 : !ntensor.ntensor<3xf32>
