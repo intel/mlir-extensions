@@ -112,7 +112,7 @@ def NTensor_Tensor : NTensor_Type<"NTensor", "ntensor", [
     using ::mlir::ShapedType::Trait<NTensorType>::getDynamicDimIndex;
   }];
 
-  let assemblyFormat = "`<` custom<Shape>($shape, $elementType) (`:` $layout^):(``)? (`,` $environment^)? `>`";
+  let assemblyFormat = "`<` custom<Shape>($shape, $elementType) (`:` $layout^)? (`,` $environment^)? `>`";
 }
 
 def NTensor_Slice : NTensor_Type<"Slice", "slice", [], "::mlir::Type"> {
