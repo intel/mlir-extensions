@@ -83,16 +83,20 @@ def NTensor_Tensor : NTensor_Type<"NTensor", "ntensor", [
   let parameters = (ins
     ArrayRefParameter<"int64_t">:$shape,
     "::mlir::Type":$elementType,
-    OptionalParameter<"::mlir::Attribute">:$environment
+    OptionalParameter<"::mlir::Attribute">:$environment,
+    OptionalParameter<"::mlir::StringAttr">:$layout
   );
 
   let builders = [
     TypeBuilderWithInferredContext<(ins
       "::llvm::ArrayRef<int64_t>":$shape,
       "::mlir::Type":$elementType,
-      CArg<"::mlir::Attribute", "{}">:$environment
+      CArg<"::mlir::Attribute", "{}">:$environment,
+      CArg<"::llvm::Optional<::llvm::StringRef>", "::llvm::None">:$layout
     ), [{
-      return $_get(elementType.getContext(), shape, elementType, environment);
+      auto ctx = elementType.getContext();
+      auto l = layout ? ::mlir::StringAttr::get(ctx, *layout) : ::mlir::StringAttr{};
+      return $_get(ctx, shape, elementType, environment, l);
     }]>
   ];
 
@@ -108,7 +112,7 @@ def NTensor_Tensor : NTensor_Type<"NTensor", "ntensor", [
     using ::mlir::ShapedType::Trait<NTensorType>::getDynamicDimIndex;
   }];
 
-  let assemblyFormat = "`<` custom<Shape>($shape, $elementType) (`,` $environment^)? `>`";
+  let assemblyFormat = "`<` custom<Shape>($shape, $elementType) (`:` $layout^)? (`,` $environment^)? `>`";
 }
 
 def NTensor_Slice : NTensor_Type<"Slice", "slice", [], "::mlir::Type"> {
