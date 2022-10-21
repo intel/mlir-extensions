@@ -1168,7 +1168,7 @@ struct CastsToNtensor : public mlir::OpConversionPattern<plier::CastOp> {
       return mlir::success();
     }
 
-    if (srcType.isIntOrIndexOrFloat() &&
+    if (imex::ntensor::NTensorType::isValidElementType(srcType) &&
         dstType.isa<imex::ntensor::NTensorType>()) {
       auto ntensorType = dstType.cast<imex::ntensor::NTensorType>();
       if (srcType != ntensorType.getElementType() ||
