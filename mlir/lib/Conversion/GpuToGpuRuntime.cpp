@@ -316,12 +316,22 @@ struct InsertGPUAllocs
         }
       }
 
+      auto allocType = memrefType;
+      if (!allocType.getLayout().isIdentity())
+        allocType = mlir::MemRefType::get(allocType.getShape(),
+                                          allocType.getElementType(),
+                                          allocType.getMemorySpace());
+
       bool hostShared = access.hostRead || access.hostWrite;
       auto gpuAlloc = builder.create<mlir::gpu::AllocOp>(
-          loc, memrefType, /*asyncToken*/ nullptr,
+          loc, allocType, /*asyncToken*/ nullptr,
           /*asyncDependencies*/ llvm::None, dims,
           /*symbolOperands*/ llvm::None, hostShared);
       auto allocResult = gpuAlloc.getMemref();
+      if (allocType != memrefType)
+        allocResult =
+            builder.create<mlir::memref::CastOp>(loc, memrefType, allocResult);
+
       if (access.hostWrite && access.deviceRead) {
         auto copy = builder.create<mlir::memref::CopyOp>(loc, src, allocResult);
         filter.insert(copy);
