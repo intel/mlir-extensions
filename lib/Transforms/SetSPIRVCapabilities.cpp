@@ -44,11 +44,20 @@ struct SetSPIRVCapabilitiesPass
         spirv::Capability::ExpectAssumeKHR,
         // clang-format on
     };
+    spirv::Capability caps_vulkan[] = {
+        // clang-format off
+        spirv::Capability::Shader,
+        // clang-format on
+    };
     spirv::Extension exts[] = {
         spirv::Extension::SPV_EXT_shader_atomic_float_add,
         spirv::Extension::SPV_KHR_expect_assume};
+    spirv::Extension exts_vulkan[] = {
+        spirv::Extension::SPV_KHR_storage_buffer_storage_class};
+    //auto triple =
+    //    spirv::VerCapExtAttr::get(spirv::Version::V_1_0, caps, exts, context);
     auto triple =
-        spirv::VerCapExtAttr::get(spirv::Version::V_1_0, caps, exts, context);
+        spirv::VerCapExtAttr::get(spirv::Version::V_1_0, caps_vulkan, exts_vulkan, context);
     auto attr = spirv::TargetEnvAttr::get(
         triple, spirv::Vendor::Unknown, spirv::DeviceType::Unknown,
         spirv::TargetEnvAttr::kUnknownDeviceID,

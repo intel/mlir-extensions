@@ -16,6 +16,7 @@
 
 #include <imex/Transforms/Passes.h>
 
+#include "llvm/ADT/SmallVector.h"
 #include <mlir/Dialect/GPU/Transforms/Passes.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SPIRV/IR/SPIRVDialect.h>
@@ -37,7 +38,9 @@ struct SetSPIRVAbiAttribute
     auto *context = &getContext();
     auto attrName =
         mlir::StringAttr::get(context, mlir::spirv::getEntryPointABIAttrName());
-    auto abi = mlir::spirv::getEntryPointABIAttr(llvm::None, context);
+    //auto abi = mlir::spirv::getEntryPointABIAttr(llvm::None, context);
+    llvm::SmallVector<int32_t, 3> workgroupVec {1, 1, 1};
+    auto abi = mlir::spirv::getEntryPointABIAttr(workgroupVec, context);
     for (auto gpuFunc : gpuModule.getOps<mlir::gpu::GPUFuncOp>()) {
       if (!mlir::gpu::GPUDialect::isKernel(gpuFunc) ||
           gpuFunc->getAttr(attrName))

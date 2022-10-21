@@ -29,7 +29,7 @@ func.func(scf-bufferize,
           shape-bufferize)
 ```
 
-Pass pipelines privded as strings will nnot be modified.
+Pass pipelines privded as strings will not be modified.
 
 All unknown arguments will be forwarded to mlir-runner. Currently there is no
 option to forward user-provided args to imex-opt.
@@ -88,7 +88,7 @@ if args.no_mlir_runner:
     p1.wait()
 else:
     # build mlir-opt command: all unknown args will be passed to imex-opt
-    cmd = ["mlir-cpu-runner"] + unknown
+    cmd = ["mlir-vulkan-runner"] + unknown
     # get stdout from imex-opt and pipe into mlir-opt
     p2 = subprocess.Popen(cmd, stdin=p1.stdout)
     p1.wait()
