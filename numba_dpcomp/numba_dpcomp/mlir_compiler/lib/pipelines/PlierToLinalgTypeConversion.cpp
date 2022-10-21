@@ -45,10 +45,7 @@ struct Conversion {
       return imex::util::TypeVar::get(type);
     }
 
-    // TODO: Our usm_array type is derived from Array and is not yet covered
-    // yet. We do not want to handle it here so check direct type instead of
-    // isinstance.
-    if (obj.get_type().is(array)) {
+    if (py::isinstance(obj, array)) {
       auto elemType = converter.convertType(context, obj.attr("dtype"));
       if (!elemType)
         return llvm::None;
