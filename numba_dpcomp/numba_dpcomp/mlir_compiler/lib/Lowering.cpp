@@ -682,6 +682,7 @@ struct ModuleSettings {
 };
 
 static void createPipeline(imex::PipelineRegistry &registry,
+                           PyTypeConverter &converter,
                            const ModuleSettings &settings) {
   converter.addConversion(
       [](mlir::MLIRContext &ctx, py::handle obj) -> llvm::Optional<mlir::Type> {
@@ -712,7 +713,9 @@ struct Module {
   mlir::ModuleOp module;
   PyTypeConverter typeConverter;
 
-  Module(const ModuleSettings &settings) { createPipeline(registry, settings); }
+  Module(const ModuleSettings &settings) {
+    createPipeline(registry, typeConverter, settings);
+  }
 };
 
 static void runCompiler(Module &mod, const py::object &compilationContext) {
