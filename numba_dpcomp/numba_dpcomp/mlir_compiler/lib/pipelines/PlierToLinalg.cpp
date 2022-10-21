@@ -156,13 +156,13 @@ struct ArrayDesc {
 };
 
 static llvm::Optional<ArrayDesc> parseArrayDesc(llvm::StringRef &name) {
-  unsigned num_dims = 0;
+  unsigned numDims = 0;
   ArrayLayout layout = {};
   if (name.consume_front("array(") && name.consume_back(")") &&
       parseLayout(name, layout) && name.consume_back(", ") &&
-      name.consume_back("d") && consumeIntBack(name, num_dims) &&
+      name.consume_back("d") && consumeIntBack(name, numDims) &&
       name.consume_back(", ") && !name.empty()) {
-    return ArrayDesc{num_dims, layout, name};
+    return ArrayDesc{numDims, layout, name};
   }
   return {};
 }
@@ -178,7 +178,20 @@ static mlir::Type mapArrayType(mlir::MLIRContext &ctx,
         if (mlir::BaseMemRefType::isValidElementType(type)) {
           llvm::SmallVector<int64_t> shape(desc->dims,
                                            mlir::ShapedType::kDynamicSize);
-          return imex::ntensor::NTensorType::get(shape, type);
+          auto layout = [&]() -> llvm::StringRef {
+            if (desc->layout == ArrayLayout::C)
+              return "C";
+
+            if (desc->layout == ArrayLayout::A)
+              return "A";
+
+            if (desc->layout == ArrayLayout::F)
+              return "F";
+
+            llvm_unreachable("Invalid layout");
+          }();
+          return imex::ntensor::NTensorType::get(shape, type, /*env*/ {},
+                                                 layout);
         }
       }
     }
@@ -1061,7 +1074,8 @@ static mlir::Value addElementConversion(mlir::OpBuilder &builder,
     return srcArray;
 
   auto dstArrayTupe = imex::ntensor::NTensorType::get(
-      dstShaped.getShape(), dstElementType, srcType.getEnvironment());
+      dstShaped.getShape(), dstElementType, srcType.getEnvironment(),
+      srcType.getLayout());
 
   rerunScfPipeline(srcArray.getParentRegion()->getParentOp());
   auto bodyBuilder = [&](mlir::OpBuilder &b, mlir::Location l,
@@ -1077,16 +1091,19 @@ static mlir::Value addElementConversion(mlir::OpBuilder &builder,
 static mlir::Value castType(mlir::OpBuilder &builder, mlir::Location loc,
                             mlir::Value src, mlir::Type dstType) {
   auto srcType = src.getType();
-  assert((srcType.isa<mlir::MemRefType, mlir::RankedTensorType>()) &&
-         "Expected memref or tensor type");
   if (srcType == dstType)
     return src;
 
-  if (srcType.isa<mlir::MemRefType>()) {
+  if (srcType.isa<mlir::MemRefType>())
     return builder.create<mlir::memref::CastOp>(loc, dstType, src);
-  } else {
+
+  if (srcType.isa<mlir::RankedTensorType>())
     return builder.create<mlir::tensor::CastOp>(loc, dstType, src);
-  }
+
+  if (srcType.isa<imex::ntensor::NTensorType>())
+    return builder.create<imex::ntensor::CastOp>(loc, dstType, src);
+
+  llvm_unreachable("Invalid shaped type");
 }
 
 static llvm::Optional<mlir::Value> doCast(mlir::OpBuilder &builder,
@@ -1124,7 +1141,7 @@ static llvm::Optional<mlir::Value> doCast(mlir::OpBuilder &builder,
 
     srcArrayType = imex::ntensor::NTensorType::get(
         dstArrayType.getShape(), srcShapedType.getElementType(),
-        dstArrayType.getEnvironment());
+        dstArrayType.getEnvironment(), dstArrayType.getLayout());
 
     mlir::Value res;
     if (srcShapedType.isa<mlir::MemRefType>()) {
@@ -1164,7 +1181,7 @@ struct CastsToNtensor : public mlir::OpConversionPattern<plier::CastOp> {
       return mlir::success();
     }
 
-    if (srcType.isIntOrIndexOrFloat() &&
+    if (imex::ntensor::NTensorType::isValidElementType(srcType) &&
         dstType.isa<imex::ntensor::NTensorType>()) {
       auto ntensorType = dstType.cast<imex::ntensor::NTensorType>();
       if (srcType != ntensorType.getElementType() ||
@@ -2182,16 +2199,15 @@ static void visitTypeRecursive(mlir::Type type, F &&visitor) {
 }
 
 static bool isContigiousArray(mlir::Type type) {
-  auto pyType = type.dyn_cast<plier::PyType>();
-  if (!pyType)
+  auto tensor = type.dyn_cast<imex::ntensor::NTensorType>();
+  if (!tensor)
     return false;
 
-  auto name = pyType.getName();
-  auto desc = parseArrayDesc(name);
-  if (!desc)
+  auto layout = tensor.getLayout();
+  if (!layout)
     return false;
 
-  return desc->layout == ArrayLayout::C;
+  return layout.getValue() == "C";
 }
 
 struct MarkContigiousArraysPass

@@ -309,6 +309,9 @@ struct GetitemOpLowering
       // Is slice
       res = makeSubview(rewriter, loc, value, offsets, sizes, strides,
                         dimsIndices);
+      auto resType = op.getResult().getType();
+      if (res.getType() != resType)
+        res = rewriter.create<imex::ntensor::CastOp>(loc, resType, res);
     } else {
       // Is single element
       res = rewriter.create<imex::ntensor::LoadOp>(

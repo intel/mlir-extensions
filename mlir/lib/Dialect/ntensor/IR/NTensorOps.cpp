@@ -90,7 +90,7 @@ imex::ntensor::NTensorBase imex::ntensor::NTensorBase::cloneWith(
     llvm::Optional<llvm::ArrayRef<int64_t>> shape, Type elementType) const {
   auto t = cast<NTensorType>();
   return NTensorType::get(shape.value_or(getShape()), elementType,
-                          t.getEnvironment());
+                          t.getEnvironment(), t.getLayout());
 }
 
 bool imex::ntensor::NTensorBase::isValidElementType(Type type) {
@@ -219,7 +219,8 @@ imex::ntensor::NTensorType imex::ntensor::SubviewOp::inferResultType(
   assert(staticSizes.size() == rank && "staticSizes length mismatch");
   assert(staticStrides.size() == rank && "staticStrides length mismatch");
   return imex::ntensor::NTensorType::get(
-      staticSizes, sourceType.getElementType(), sourceType.getEnvironment());
+      staticSizes, sourceType.getElementType(), sourceType.getEnvironment(),
+      sourceType.getLayout());
 }
 
 imex::ntensor::NTensorType imex::ntensor::SubviewOp::inferResultType(
@@ -254,7 +255,8 @@ imex::ntensor::NTensorType imex::ntensor::SubviewOp::inferRankReducedResultType(
          "invalid rank reduction");
 
   return imex::ntensor::NTensorType::get(
-      resultShape, sourceType.getElementType(), sourceType.getEnvironment());
+      resultShape, sourceType.getElementType(), sourceType.getEnvironment(),
+      sourceType.getLayout());
 }
 
 imex::ntensor::NTensorType imex::ntensor::SubviewOp::inferRankReducedResultType(

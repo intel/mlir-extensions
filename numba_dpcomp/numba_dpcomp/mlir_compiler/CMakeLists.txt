@@ -42,6 +42,7 @@ set(SOURCES_LIST
     lib/pipelines/LowerToLlvm.cpp
     lib/pipelines/ParallelToTbb.cpp
     lib/pipelines/PlierToLinalg.cpp
+    lib/pipelines/PlierToLinalgTypeConversion.cpp
     lib/pipelines/PlierToScf.cpp
     lib/pipelines/PlierToStd.cpp
     lib/pipelines/PlierToStdTypeConversion.cpp
@@ -63,6 +64,7 @@ set(HEADERS_LIST
     lib/pipelines/LowerToLlvm.hpp
     lib/pipelines/ParallelToTbb.hpp
     lib/pipelines/PlierToLinalg.hpp
+    lib/pipelines/PlierToLinalgTypeConversion.hpp
     lib/pipelines/PlierToScf.hpp
     lib/pipelines/PlierToStd.hpp
     lib/pipelines/PlierToStdTypeConversion.hpp

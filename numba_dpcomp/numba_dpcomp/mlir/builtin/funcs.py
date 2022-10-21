@@ -45,7 +45,12 @@ def float_cast_impl(builder, arg):
 
 @register_func("len", len)
 def len_impl(builder, arg):
-    return builder.cast(len(arg), builder.int64)
+    try:
+        l = len(arg)
+    except:
+        return None
+
+    return builder.cast(l, builder.int64)
 
 
 def _get_type(builder, v):
