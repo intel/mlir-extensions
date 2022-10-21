@@ -24,7 +24,7 @@ Create the GPU Device.
 Syntax:
 
 ```
-operation ::= gpux.create_device $device : (!gpux.DeviceType) -> !gpux.DeviceType
+operation ::= gpux.create_device $device : (!gpux.OpaqueType) -> !gpux.DeviceType
 ```
 
 The gpux.create_device op takes a pointer (opaque) to an underlying device and will return a sycl/l0 device handle.
@@ -40,7 +40,7 @@ Syntax:
 operation ::= gpux.create_context $device : (!gpux.DeviceType) -> !gpux.ContextType
 ```
 
-The gpux.create_context op takes a pointer (opaque) to an underlying device and will return a sycl/l0 context handle.
+The gpux.create_context op takes a pointer to an underlying device and will return a sycl/l0 context handle.
 
 
 #### gpux.create_stream (gpux::CreateStreamOp)
