@@ -45,6 +45,7 @@
 #include "imex/ExecutionEngine/ExecutionEngine.hpp"
 #include "imex/Utils.hpp"
 
+#include "PyTypeConverter.hpp"
 #include "pipelines/BasePipeline.hpp"
 #include "pipelines/LowerToGpu.hpp"
 #include "pipelines/LowerToLlvm.hpp"
@@ -147,7 +148,8 @@ struct InstHandles {
 };
 
 struct PlierLowerer final {
-  PlierLowerer(mlir::MLIRContext &context) : ctx(context), builder(&ctx) {
+  PlierLowerer(mlir::MLIRContext &context, PyTypeConverter &conv)
+      : ctx(context), builder(&ctx), typeConverter(conv) {
     ctx.loadDialect<imex::util::ImexUtilDialect>();
     ctx.loadDialect<mlir::func::FuncDialect>();
     ctx.loadDialect<plier::PlierDialect>();
@@ -204,11 +206,17 @@ private:
 
   std::unordered_map<mlir::Block *, BlockInfo> blockInfos;
 
-  plier::PyType getObjType(py::handle obj) const {
-    return plier::PyType::get(&ctx, py::str(obj).cast<std::string>());
+  PyTypeConverter &typeConverter;
+
+  mlir::Type getObjType(py::handle obj) const {
+    if (auto type = typeConverter.convertType(ctx, obj))
+      return type;
+
+    imex::reportError(llvm::Twine("Unhandled type: ") +
+                      py::str(obj).cast<std::string>());
   }
 
-  plier::PyType getType(py::handle inst) const {
+  mlir::Type getType(py::handle inst) const {
     auto type = typemap(inst);
     return getObjType(type);
   }
@@ -674,7 +682,13 @@ struct ModuleSettings {
 };
 
 static void createPipeline(imex::PipelineRegistry &registry,
+                           PyTypeConverter &converter,
                            const ModuleSettings &settings) {
+  converter.addConversion(
+      [](mlir::MLIRContext &ctx, py::handle obj) -> llvm::Optional<mlir::Type> {
+        return plier::PyType::get(&ctx, py::str(obj).cast<std::string>());
+      });
+
   registerBasePipeline(registry);
   registerLowerToLLVMPipeline(registry);
   registerPlierToScfPipeline(registry);
@@ -697,8 +711,11 @@ struct Module {
   mlir::MLIRContext context;
   imex::PipelineRegistry registry;
   mlir::ModuleOp module;
+  PyTypeConverter typeConverter;
 
-  Module(const ModuleSettings &settings) { createPipeline(registry, settings); }
+  Module(const ModuleSettings &settings) {
+    createPipeline(registry, typeConverter, settings);
+  }
 };
 
 static void runCompiler(Module &mod, const py::object &compilationContext) {
@@ -826,7 +843,8 @@ py::capsule lowerFunction(const py::object &compilationContext,
   auto mod = static_cast<Module *>(pyMod);
   auto &context = mod->context;
   auto &module = mod->module;
-  auto func = PlierLowerer(context).lower(compilationContext, module, funcIr);
+  auto func = PlierLowerer(context, mod->typeConverter)
+                  .lower(compilationContext, module, funcIr);
   return py::capsule(func.getOperation()); // no dtor, func owned by module
 }
 
