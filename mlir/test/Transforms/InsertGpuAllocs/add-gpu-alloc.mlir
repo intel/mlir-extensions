@@ -46,9 +46,11 @@ func.func @addt(%arg0: memref<2x5xf32, strided<[?, ?], offset: ?>>, %arg1: memre
   %c1 = arith.constant 1 : index
   %c5 = arith.constant 5 : index
   // CHECK: %[[MEMREF0:.*]] = gpu.alloc host_shared () : memref<2x5xf32>
-  // CHECK: memref.copy %[[ARG2]], %[[MEMREF0]] : memref<2x5xf32> to memref<2x5xf32>
+  // CHECK: %[[CAST0:.*]] = memref.cast %[[MEMREF0]] : memref<2x5xf32> to memref<2x5xf32, strided<[?, ?], offset: ?>>
+  // CHECK: memref.copy %[[ARG2]], %[[CAST0]] : memref<2x5xf32, strided<[?, ?], offset: ?>> to memref<2x5xf32, strided<[?, ?], offset: ?>>
   // CHECK: %[[MEMREF1:.*]] = gpu.alloc host_shared () : memref<2x5xf32>
-  // CHECK: memref.copy %[[ARG1]], %[[MEMREF1]] : memref<2x5xf32> to memref<2x5xf32>
+  // CHECK: %[[CAST1:.*]] = memref.cast %[[MEMREF1]] : memref<2x5xf32> to memref<2x5xf32, strided<[?, ?], offset: ?>>
+  // CHECK: memref.copy %[[ARG1]], %[[CAST1]] : memref<2x5xf32, strided<[?, ?], offset: ?>> to memref<2x5xf32, strided<[?, ?], offset: ?>>
 
   %0 = memref.alloc() {alignment = 128 : i64} : memref<2x5xf32>
   // CHECK:  %[[MEMREF2:.*]] = gpu.alloc host_shared () : memref<2x5xf32>
@@ -61,9 +63,9 @@ func.func @addt(%arg0: memref<2x5xf32, strided<[?, ?], offset: ?>>, %arg1: memre
     %3 = affine.apply affine_map<(d0)[s0, s1] -> (d0 * s0 + s1)>(%arg2)[%c1, %c0]
     // CHECK: %[[IDX2:.*]] = affine.apply #map1(%{{.*}})[%{{.*}}, %{{.*}}]
     %4 = affine.apply affine_map<(d0)[s0, s1] -> (d0 * s0 + s1)>(%arg3)[%c1, %c0]
-    // CHECK: %[[VAL1:.*]] = memref.load %[[MEMREF1]][%[[IDX1]], %[[IDX2]]] : memref<2x5xf32>
+    // CHECK: %[[VAL1:.*]] = memref.load %[[CAST1]][%[[IDX1]], %[[IDX2]]] : memref<2x5xf32, strided<[?, ?], offset: ?>>
     %5 = memref.load %arg0[%3, %4] : memref<2x5xf32, strided<[?, ?], offset: ?>>
-    // CHECK: %[[VAL2:.*]] = memref.load %[[MEMREF0]][%[[IDX1]], %[[IDX2]]] : memref<2x5xf32>
+    // CHECK: %[[VAL2:.*]] = memref.load %[[CAST0]][%[[IDX1]], %[[IDX2]]] : memref<2x5xf32, strided<[?, ?], offset: ?>>
     %6 = memref.load %arg1[%3, %4] : memref<2x5xf32, strided<[?, ?], offset: ?>>
     // CHECK: %[[RES:.*]] = arith.addf %[[VAL1]], %[[VAL2]] : f32
     %7 = arith.addf %5, %6 : f32
