@@ -38,6 +38,7 @@
 #include <llvm/Support/TargetSelect.h>
 
 #include "imex/Dialect/imex_util/Dialect.hpp"
+#include "imex/Dialect/ntensor/IR/NTensorOps.hpp"
 #include "imex/Dialect/plier/Dialect.hpp"
 
 #include "imex/Compiler/Compiler.hpp"
@@ -152,6 +153,7 @@ struct InstHandles {
 struct PlierLowerer final {
   PlierLowerer(mlir::MLIRContext &context, PyTypeConverter &conv)
       : ctx(context), builder(&ctx), typeConverter(conv) {
+    ctx.loadDialect<imex::ntensor::NTensorDialect>();
     ctx.loadDialect<imex::util::ImexUtilDialect>();
     ctx.loadDialect<mlir::func::FuncDialect>();
     ctx.loadDialect<plier::PlierDialect>();

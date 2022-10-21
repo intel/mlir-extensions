@@ -17,6 +17,7 @@
 #include "PyTypeConverter.hpp"
 
 #include "imex/Dialect/imex_util/Dialect.hpp"
+#include "imex/Dialect/ntensor/IR/NTensorOps.hpp"
 
 #include <pybind11/pybind11.h>
 
@@ -42,6 +43,20 @@ struct Conversion {
         return llvm::None;
 
       return imex::util::TypeVar::get(type);
+    }
+
+    // TODO: Our usm_array type is derived from Array and is not yet covered
+    // yet. We do not want to handle it here so check direct type instead of
+    // isinstance.
+    if (obj.get_type().is(array)) {
+      auto elemType = converter.convertType(context, obj.attr("dtype"));
+      if (!elemType)
+        return llvm::None;
+
+      auto ndim = obj.attr("ndim").cast<size_t>();
+      llvm::SmallVector<int64_t> shape(ndim, mlir::ShapedType::kDynamicSize);
+
+      return imex::ntensor::NTensorType::get(shape, elemType);
     }
 
     return llvm::None;
