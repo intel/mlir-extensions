@@ -51,6 +51,7 @@
 #include "pipelines/LowerToLlvm.hpp"
 #include "pipelines/ParallelToTbb.hpp"
 #include "pipelines/PlierToLinalg.hpp"
+#include "pipelines/PlierToLinalgTypeConversion.hpp"
 #include "pipelines/PlierToScf.hpp"
 #include "pipelines/PlierToStd.hpp"
 #include "pipelines/PlierToStdTypeConversion.hpp"
@@ -699,6 +700,7 @@ static void createPipeline(imex::PipelineRegistry &registry,
   populateStdTypeConverter(converter);
   registerPlierToStdPipeline(registry);
 
+  populateArrayTypeConverter(converter);
   registerPlierToLinalgPipeline(registry);
 
   registerPreLowSimpleficationsPipeline(registry);
