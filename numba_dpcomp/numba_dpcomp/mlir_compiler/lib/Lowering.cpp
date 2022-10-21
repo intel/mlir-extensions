@@ -49,6 +49,7 @@
 #include "PyTypeConverter.hpp"
 #include "pipelines/BasePipeline.hpp"
 #include "pipelines/LowerToGpu.hpp"
+#include "pipelines/LowerToGpuTypeConversion.hpp"
 #include "pipelines/LowerToLlvm.hpp"
 #include "pipelines/ParallelToTbb.hpp"
 #include "pipelines/PlierToLinalg.hpp"
@@ -711,6 +712,7 @@ static void createPipeline(imex::PipelineRegistry &registry,
 
   if (settings.enableGpuPipeline) {
 #ifdef IMEX_ENABLE_IGPU_DIALECT
+    populateGpuTypeConverter(converter);
     registerLowerToGPUPipeline(registry);
     // TODO(nbpatel): Add Gpu->GpuRuntime & GpuRuntimetoLlvm Transformation
 #else

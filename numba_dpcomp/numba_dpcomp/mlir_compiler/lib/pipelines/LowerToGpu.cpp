@@ -1804,7 +1804,7 @@ static void commonOptPasses(mlir::OpPassManager &pm) {
 
 static void populateLowerToGPUPipelineHigh(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<MarkGpuArraysInputs>());
-  pm.addPass(std::make_unique<ConvertGpuArrays>());
+  //  pm.addPass(std::make_unique<ConvertGpuArrays>());
   pm.addPass(std::make_unique<LowerGpuRangePass>());
   pm.addPass(std::make_unique<LowerGpuBuiltinsPass>());
   commonOptPasses(pm);
