@@ -97,6 +97,15 @@ def NTensor_Tensor : NTensor_Type<"NTensor", "ntensor", [
       auto ctx = elementType.getContext();
       auto l = layout ? ::mlir::StringAttr::get(ctx, *layout) : ::mlir::StringAttr{};
       return $_get(ctx, shape, elementType, environment, l);
+    }]>,
+    TypeBuilderWithInferredContext<(ins
+      "::llvm::ArrayRef<int64_t>":$shape,
+      "::mlir::Type":$elementType,
+      "::mlir::Attribute":$environment,
+      "::mlir::StringAttr":$layout
+    ), [{
+      auto ctx = elementType.getContext();
+      return $_get(ctx, shape, elementType, environment, layout);
     }]>
   ];
 
