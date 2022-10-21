@@ -92,11 +92,11 @@ def NTensor_Tensor : NTensor_Type<"NTensor", "ntensor", [
       "::llvm::ArrayRef<int64_t>":$shape,
       "::mlir::Type":$elementType,
       CArg<"::mlir::Attribute", "{}">:$environment,
-      CArg<"bool", "false">:$contigious
+      CArg<"::llvm::Optional<::llvm::StringRef>", "::llvm::None">:$layout
     ), [{
       auto ctx = elementType.getContext();
-      auto c = contigious ? ::mlir::StringAttr::get(ctx, "C") : ::mlir::StringAttr{};
-      return $_get(ctx, shape, elementType, environment, c);
+      auto l = layout ? ::mlir::StringAttr::get(ctx, *layout) : ::mlir::StringAttr{};
+      return $_get(ctx, shape, elementType, environment, l);
     }]>
   ];
 
