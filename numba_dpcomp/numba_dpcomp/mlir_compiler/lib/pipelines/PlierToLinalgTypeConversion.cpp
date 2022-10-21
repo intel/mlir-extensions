@@ -53,10 +53,13 @@ struct Conversion {
       if (!elemType)
         return llvm::None;
 
+      auto layout = obj.attr("layout").cast<std::string>();
+
       auto ndim = obj.attr("ndim").cast<size_t>();
       llvm::SmallVector<int64_t> shape(ndim, mlir::ShapedType::kDynamicSize);
 
-      return imex::ntensor::NTensorType::get(shape, elemType);
+      return imex::ntensor::NTensorType::get(shape, elemType, /*env*/ {},
+                                             llvm::StringRef(layout));
     }
 
     return llvm::None;
