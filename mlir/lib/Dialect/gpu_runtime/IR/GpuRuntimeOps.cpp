@@ -103,11 +103,12 @@ struct RemoveUnusedOp : public mlir::OpRewritePattern<Op> {
 };
 } // namespace
 
-void CreateGpuStreamOp::build(::mlir::OpBuilder &odsBuilder,
-                              ::mlir::OperationState &odsState) {
+void CreateGpuStreamOp::build(mlir::OpBuilder &odsBuilder,
+                              mlir::OperationState &odsState,
+                              mlir::Attribute device) {
   auto ctx = odsBuilder.getContext();
   CreateGpuStreamOp::build(odsBuilder, odsState,
-                           gpu_runtime::StreamType::get(ctx));
+                           gpu_runtime::StreamType::get(ctx), device);
 }
 
 void CreateGpuStreamOp::getCanonicalizationPatterns(

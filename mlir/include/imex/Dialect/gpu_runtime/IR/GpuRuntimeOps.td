@@ -82,13 +82,14 @@ def GPURegionDescAttr
 }
 
 def CreateGpuStreamOp : GpuRuntime_Op<"create_gpu_stream", [Pure]> {
+  let arguments = (ins OptionalAttr<AnyAttr>:$device);
   let results = (outs GpuRuntime_StreamType:$result);
 
   let hasCanonicalizer = 1;
 
-  let builders = [OpBuilder<(ins)>];
+  let builders = [OpBuilder<(ins CArg<"::mlir::Attribute", "{}">:$device)>];
 
-  let assemblyFormat = "attr-dict";
+  let assemblyFormat = "attr-dict ( `,` $device^)?";
 }
 
 def DestroyGpuStreamOp : GpuRuntime_Op<"destroy_gpu_stream"> {
@@ -98,8 +99,8 @@ def DestroyGpuStreamOp : GpuRuntime_Op<"destroy_gpu_stream"> {
 }
 
 def LoadGpuModuleOp : GpuRuntime_Op<"load_gpu_module", [Pure]> {
-  let arguments = (ins GpuRuntime_StreamType : $stream, SymbolRefAttr : $module);
-  let results = (outs GpuRuntime_OpaqueType : $result);
+  let arguments = (ins GpuRuntime_StreamType:$stream, SymbolRefAttr:$module);
+  let results = (outs GpuRuntime_OpaqueType:$result);
 
   let hasCanonicalizer = 1;
 
