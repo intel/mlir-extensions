@@ -22,11 +22,6 @@ namespace llvm {
 class StringRef;
 }
 
-namespace mlir {
-class MLIRContext;
-class TypeConverter;
-} // namespace mlir
-
 void registerPlierToLinalgPipeline(imex::PipelineRegistry &registry);
 
 llvm::StringRef plierToLinalgGenPipelineName();

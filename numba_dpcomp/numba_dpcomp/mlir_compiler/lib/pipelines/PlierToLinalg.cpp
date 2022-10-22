@@ -1164,7 +1164,6 @@ struct PlierToNtensorPass
     // Convert unknown types to itself
     typeConverter.addConversion([](mlir::Type type) { return type; });
 
-    populateStdTypeConverter(context, typeConverter);
     imex::populateTupleTypeConverter(context, typeConverter);
     typeConverter.addConversion(
         [](plier::SliceType type) -> llvm::Optional<mlir::Type> {
