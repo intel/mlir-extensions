@@ -22,8 +22,6 @@
 
 #include <level_zero/ze_api.h>
 
-namespace {
-
 namespace ze {
 namespace detail {
 
@@ -225,4 +223,3 @@ template <typename T> auto wrapZeTypeHelper(T &&arg) {
 }
 } // namespace detail
 } // namespace ze
-} // namespace

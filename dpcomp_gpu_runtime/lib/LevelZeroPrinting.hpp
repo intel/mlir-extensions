@@ -21,8 +21,6 @@
 
 #include <level_zero/ze_api.h>
 
-namespace {
-
 template <typename T, size_t N, typename F>
 static void print(T (&array)[N], F &&printer) {
   printer("[");
@@ -212,4 +210,3 @@ static void print(ze_device_module_properties_t properties, F &&printer) {
   write("Max argument size: ", properties.maxArgumentsSize);
   write("Print buffer size: ", properties.printfBufferSize);
 }
-} // namespace
