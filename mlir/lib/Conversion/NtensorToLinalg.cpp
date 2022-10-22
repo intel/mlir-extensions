@@ -15,37 +15,13 @@
 #include "imex/Conversion/NtensorToLinalg.hpp"
 
 #include "imex/Dialect/imex_util/Dialect.hpp"
+#include "imex/Dialect/imex_util/Utils.hpp"
 #include "imex/Dialect/ntensor/IR/NTensorOps.hpp"
 
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/Pass/Pass.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
-
-template <typename F>
-static llvm::SmallVector<mlir::Value>
-wrapEnvRegion(mlir::PatternRewriter &builder, mlir::Location loc,
-              mlir::Attribute env, mlir::TypeRange results, F &&func) {
-  if (!env) {
-    auto res = func(builder, loc);
-    mlir::ValueRange range(res);
-    assert(range.getTypes() == results && "Invalid result types");
-    return {range.begin(), range.end()};
-  }
-
-  auto bodyBuilder = [&](mlir::OpBuilder &b, mlir::Location l) {
-    auto res = func(static_cast<mlir::PatternRewriter &>(b), l);
-    mlir::ValueRange range(res);
-    assert(range.getTypes() == results && "Invalid result types");
-    b.create<imex::util::EnvironmentRegionYieldOp>(l, range);
-  };
-
-  auto res = builder
-                 .create<imex::util::EnvironmentRegionOp>(
-                     loc, env, /*args*/ llvm::None, results, bodyBuilder)
-                 .getResults();
-  return {res.begin(), res.end()};
-}
 
 static mlir::RankedTensorType toTensorType(mlir::ShapedType type) {
   return mlir::RankedTensorType::get(type.getShape(), type.getElementType());
@@ -68,7 +44,7 @@ struct ConvertCreateOp
     if (initValue && initValue.getType() != elemType)
       return mlir::failure();
 
-    auto results = wrapEnvRegion(
+    auto results = imex::util::wrapEnvRegion(
         rewriter, op->getLoc(), dstType.getEnvironment(), dstType,
         [&](mlir::OpBuilder &builder, mlir::Location loc) {
           auto tensorType = toTensorType(dstType);
@@ -110,7 +86,7 @@ struct ConvertCopyOp : public mlir::OpRewritePattern<imex::ntensor::CopyOp> {
         srcType.getEnvironment() != dstType.getEnvironment())
       return mlir::failure();
 
-    wrapEnvRegion(
+    imex::util::wrapEnvRegion(
         rewriter, op->getLoc(), dstType.getEnvironment(), llvm::None,
         [&](mlir::OpBuilder &builder, mlir::Location loc) {
           auto rank = static_cast<unsigned>(srcType.getRank());
@@ -168,7 +144,7 @@ struct ConvertElementwiseOp
         srcType.getEnvironment() != dstType.getEnvironment())
       return mlir::failure();
 
-    auto results = wrapEnvRegion(
+    auto results = imex::util::wrapEnvRegion(
         rewriter, op->getLoc(), dstType.getEnvironment(), dstType,
         [&](mlir::PatternRewriter &builder, mlir::Location loc) {
           auto rank = static_cast<unsigned>(srcType.getRank());
@@ -250,7 +226,7 @@ struct ConvertCastOp : public mlir::OpRewritePattern<imex::ntensor::CastOp> {
     if (!mlir::tensor::CastOp::areCastCompatible(srcTensorType, dstTensorType))
       return mlir::failure();
 
-    auto results = wrapEnvRegion(
+    auto results = imex::util::wrapEnvRegion(
         rewriter, op->getLoc(), dstType.getEnvironment(), dstType,
         [&](mlir::PatternRewriter &builder, mlir::Location loc) {
           auto srcTensor = builder.create<imex::ntensor::ToTensorOp>(
@@ -284,7 +260,7 @@ struct ConvertFromElementsOp
 
     auto dstTensorType = toTensorType(dstType);
 
-    auto results = wrapEnvRegion(
+    auto results = imex::util::wrapEnvRegion(
         rewriter, op->getLoc(), dstType.getEnvironment(), dstType,
         [&](mlir::PatternRewriter &builder, mlir::Location loc) {
           auto res = builder.create<mlir::tensor::FromElementsOp>(
@@ -316,7 +292,7 @@ struct ConvertSubviewOp
     if (srcType.getEnvironment() != dstType.getEnvironment())
       return mlir::failure();
 
-    auto results = wrapEnvRegion(
+    auto results = imex::util::wrapEnvRegion(
         rewriter, op->getLoc(), dstType.getEnvironment(), dstType,
         [&](mlir::PatternRewriter &builder, mlir::Location loc) {
           auto srcTensorType = toTensorType(srcType);
@@ -354,7 +330,7 @@ struct ConvertLoadOp : public mlir::OpRewritePattern<imex::ntensor::LoadOp> {
     if (!srcType || op.getType() != srcType.getElementType())
       return mlir::failure();
 
-    auto results = wrapEnvRegion(
+    auto results = imex::util::wrapEnvRegion(
         rewriter, op->getLoc(), srcType.getEnvironment(),
         srcType.getElementType(),
         [&](mlir::PatternRewriter &builder, mlir::Location loc) {
@@ -382,7 +358,7 @@ struct ConvertDimOp : public mlir::OpRewritePattern<imex::ntensor::DimOp> {
     if (!srcType)
       return mlir::failure();
 
-    auto results = wrapEnvRegion(
+    auto results = imex::util::wrapEnvRegion(
         rewriter, op->getLoc(), srcType.getEnvironment(),
         rewriter.getIndexType(),
         [&](mlir::PatternRewriter &builder, mlir::Location loc) {
