@@ -1,4 +1,4 @@
-// Copyright 2021 Intel Corporation
+// Copyright 2022 Intel Corporation
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,20 +14,6 @@
 
 #pragma once
 
-namespace imex {
-class PipelineRegistry;
-}
+class PyTypeConverter;
 
-namespace llvm {
-class StringRef;
-}
-
-namespace mlir {
-class MLIRContext;
-class TypeConverter;
-} // namespace mlir
-
-void registerPlierToLinalgPipeline(imex::PipelineRegistry &registry);
-
-llvm::StringRef plierToLinalgGenPipelineName();
-llvm::StringRef plierToLinalgOptPipelineName();
+void populateGpuTypeConverter(PyTypeConverter &converter);

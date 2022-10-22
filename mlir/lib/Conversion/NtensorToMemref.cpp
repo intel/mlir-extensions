@@ -335,9 +335,6 @@ struct CastOpLowering
     if (!origDstType)
       return mlir::failure();
 
-    if (origSrcType.getEnvironment() != origDstType.getEnvironment())
-      return mlir::failure();
-
     auto *converter = getTypeConverter();
     assert(converter && "Type converter is not set");
 
@@ -345,6 +342,14 @@ struct CastOpLowering
                        .dyn_cast_or_null<mlir::MemRefType>();
 
     if (!retType)
+      return mlir::failure();
+
+    if (srcType == retType) {
+      rewriter.replaceOp(op, src);
+      return mlir::success();
+    }
+
+    if (origSrcType.getEnvironment() != origDstType.getEnvironment())
       return mlir::failure();
 
     if (!mlir::memref::CastOp::areCastCompatible(srcType, retType))

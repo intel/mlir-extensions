@@ -37,6 +37,7 @@
 #include <llvm/Support/ManagedStatic.h>
 #include <llvm/Support/TargetSelect.h>
 
+#include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOps.hpp"
 #include "imex/Dialect/imex_util/Dialect.hpp"
 #include "imex/Dialect/ntensor/IR/NTensorOps.hpp"
 #include "imex/Dialect/plier/Dialect.hpp"
@@ -49,6 +50,7 @@
 #include "PyTypeConverter.hpp"
 #include "pipelines/BasePipeline.hpp"
 #include "pipelines/LowerToGpu.hpp"
+#include "pipelines/LowerToGpuTypeConversion.hpp"
 #include "pipelines/LowerToLlvm.hpp"
 #include "pipelines/ParallelToTbb.hpp"
 #include "pipelines/PlierToLinalg.hpp"
@@ -153,6 +155,7 @@ struct InstHandles {
 struct PlierLowerer final {
   PlierLowerer(mlir::MLIRContext &context, PyTypeConverter &conv)
       : ctx(context), builder(&ctx), typeConverter(conv) {
+    ctx.loadDialect<gpu_runtime::GpuRuntimeDialect>();
     ctx.loadDialect<imex::ntensor::NTensorDialect>();
     ctx.loadDialect<imex::util::ImexUtilDialect>();
     ctx.loadDialect<mlir::func::FuncDialect>();
@@ -711,6 +714,7 @@ static void createPipeline(imex::PipelineRegistry &registry,
 
   if (settings.enableGpuPipeline) {
 #ifdef IMEX_ENABLE_IGPU_DIALECT
+    populateGpuTypeConverter(converter);
     registerLowerToGPUPipeline(registry);
     // TODO(nbpatel): Add Gpu->GpuRuntime & GpuRuntimetoLlvm Transformation
 #else

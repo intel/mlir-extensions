@@ -36,6 +36,12 @@ if _is_dpctl_available:
     from numba.core.datamodel.models import StructModel
     from numba.core.types.npytypes import Array
 
+    def _get_filter_string(array):
+        if isinstance(array, usm_ndarray):
+            return array.device.sycl_device.filter_string
+
+        return None
+
     class USMNdArrayBaseType(Array):
         """
         Type class for DPPY arrays.
@@ -49,6 +55,7 @@ if _is_dpctl_available:
             readonly=False,
             name=None,
             aligned=True,
+            filter_string=None,
         ):
             super(USMNdArrayBaseType, self).__init__(
                 dtype,
@@ -58,6 +65,8 @@ if _is_dpctl_available:
                 name=name,
                 aligned=aligned,
             )
+
+            self.filter_string = filter_string
 
         def copy(self, dtype=None, ndim=None, layout=None, readonly=None):
             if dtype is None:
@@ -84,6 +93,7 @@ if _is_dpctl_available:
                 self.layout,
                 self.mutable,
                 self.aligned,
+                self.filter_string,
             )
 
         @property
@@ -124,6 +134,7 @@ if _is_dpctl_available:
             readonly=False,
             name=None,
             aligned=True,
+            filter_string=None,
         ):
             self.usm_type = usm_type
             # This name defines how this type will be shown in Numba's type dumps.
@@ -134,6 +145,7 @@ if _is_dpctl_available:
                 layout,
                 readonly=readonly,
                 name=name,
+                filter_string=filter_string,
             )
 
         def copy(self, *args, **kwargs):
@@ -152,12 +164,15 @@ if _is_dpctl_available:
             raise ValueError("Unsupported array dtype: %s" % (val.dtype,))
         layout = "C"
         readonly = False
+        filter_string = _get_filter_string(val)
+        assert filter_string is not None
         return USMNdArrayType(
             dtype,
             val.ndim,
             layout,
             val.usm_type,
             readonly=readonly,
+            filter_string=filter_string,
         )
 
     def adapt_sycl_array_from_python(pyapi, ary, ptr):
@@ -188,12 +203,6 @@ if _is_dpctl_available:
             )
         return NativeValue(c.builder.load(aryptr), is_error=failed)
 
-    def _get_filter_string(array):
-        if isinstance(array, usm_ndarray):
-            return array.device.sycl_device.filter_string
-
-        return None
-
     def check_usm_ndarray_args(args):
         devs = set(s for s in map(_get_filter_string, args) if s is not None)
         if len(devs) > 1:
@@ -202,6 +211,8 @@ if _is_dpctl_available:
             raise ValueError(err_str)
 
 else:  # _is_dpctl_available
+
+    USMNdArrayType = None  # dummy
 
     def check_usm_ndarray_args(args):
         # dpctl is not loaded, nothing to do

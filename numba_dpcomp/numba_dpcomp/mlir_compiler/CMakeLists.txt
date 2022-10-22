@@ -39,6 +39,7 @@ set(SOURCES_LIST
     lib/PyTypeConverter.cpp
     lib/pipelines/BasePipeline.cpp
     lib/pipelines/LowerToGpu.cpp
+    lib/pipelines/LowerToGpuTypeConversion.cpp
     lib/pipelines/LowerToLlvm.cpp
     lib/pipelines/ParallelToTbb.cpp
     lib/pipelines/PlierToLinalg.cpp
@@ -61,6 +62,7 @@ set(HEADERS_LIST
     lib/PyTypeConverter.hpp
     lib/pipelines/BasePipeline.hpp
     lib/pipelines/LowerToGpu.hpp
+    lib/pipelines/LowerToGpuTypeConversion.hpp
     lib/pipelines/LowerToLlvm.hpp
     lib/pipelines/ParallelToTbb.hpp
     lib/pipelines/PlierToLinalg.hpp

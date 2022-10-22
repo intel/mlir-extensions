@@ -53,6 +53,7 @@
 #include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOps.hpp"
 #include "imex/Dialect/gpu_runtime/Transforms/MakeBarriersUniform.hpp"
 #include "imex/Dialect/imex_util/Dialect.hpp"
+#include "imex/Dialect/ntensor/IR/NTensorOps.hpp"
 #include "imex/Transforms/CallLowering.hpp"
 #include "imex/Transforms/CastUtils.hpp"
 #include "imex/Transforms/CommonOpts.hpp"
@@ -773,7 +774,42 @@ protected:
     if (name != "_gpu_range")
       return mlir::failure();
 
-    auto parent = op->getParentOp();
+    auto parent = op->getParentOfType<mlir::FunctionOpInterface>();
+    if (!parent)
+      return mlir::failure();
+
+    auto device = [&]() -> mlir::StringAttr {
+      mlir::StringAttr res;
+      auto argsTypes = parent.getArgumentTypes();
+      for (auto arg : argsTypes) {
+        auto tensor = arg.dyn_cast<imex::ntensor::NTensorType>();
+        if (!tensor)
+          continue;
+
+        auto env = tensor.getEnvironment()
+                       .dyn_cast_or_null<gpu_runtime::GPURegionDescAttr>();
+        if (!env)
+          continue;
+
+        auto name = env.getDevice();
+        assert(name && "Invalid device name");
+        if (!res) {
+          res = name;
+        } else if (res != name) {
+          return nullptr;
+        }
+      }
+
+      // TODO: remove default device.
+      if (!res)
+        res = rewriter.getStringAttr("level_zero:gpu:0");
+
+      return res;
+    }();
+
+    if (!device)
+      return mlir::failure();
+
     llvm::SmallVector<mlir::scf::ForOp> newOps;
     auto setAttr = [&](mlir::scf::ForOp op) {
       auto unitAttr = mlir::UnitAttr::get(op->getContext());
@@ -784,8 +820,7 @@ protected:
       return mlir::failure();
 
     mlir::OpBuilder::InsertionGuard g(rewriter);
-    auto envAttr = gpu_runtime::GPURegionDescAttr::get(
-        getContext(), rewriter.getStringAttr("gpu"));
+    auto envAttr = gpu_runtime::GPURegionDescAttr::get(getContext(), device);
     for (auto op : newOps) {
       auto bodyBuilder = [&](mlir::OpBuilder &builder, mlir::Location loc) {
         auto newOp = builder.clone(*op);
@@ -831,17 +866,16 @@ template <typename Op> struct ConvertOp : public mlir::OpConversionPattern<Op> {
   }
 };
 
-static bool isGpuArray(llvm::StringRef &name) {
-  return name.consume_front("USM:ndarray(") && name.consume_back(")");
-}
-
 static bool isGpuArray(mlir::Type type) {
-  auto pyType = type.dyn_cast<plier::PyType>();
-  if (!pyType)
+  auto tensor = type.dyn_cast<imex::ntensor::NTensorType>();
+  if (!tensor)
     return false;
 
-  auto name = pyType.getName();
-  return isGpuArray(name);
+  auto env = tensor.getEnvironment();
+  if (!env)
+    return false;
+
+  return env.isa<gpu_runtime::GPURegionDescAttr>();
 }
 
 struct MarkGpuArraysInputs
@@ -851,6 +885,8 @@ struct MarkGpuArraysInputs
 
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<gpu_runtime::GpuRuntimeDialect>();
+    registry.insert<imex::ntensor::NTensorDialect>();
     registry.insert<mlir::func::FuncDialect>();
   }
 
@@ -895,76 +931,6 @@ void MarkGpuArraysInputs::runOnOperation() {
     func->setAttr(attrStr, builder.getBoolArrayAttr(result));
 
   markAllAnalysesPreserved();
-}
-
-struct ConvertGpuArrays
-    : public mlir::PassWrapper<ConvertGpuArrays,
-                               mlir::OperationPass<mlir::ModuleOp>> {
-  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(ConvertGpuArrays)
-
-  virtual void
-  getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<mlir::func::FuncDialect>();
-  }
-
-  void runOnOperation() override;
-};
-
-void ConvertGpuArrays::runOnOperation() {
-  auto &context = getContext();
-
-  mlir::TypeConverter typeConverter;
-  // Convert unknown types to itself
-  typeConverter.addConversion([](mlir::Type type) { return type; });
-  populateStdTypeConverter(context, typeConverter);
-  imex::populateTupleTypeConverter(context, typeConverter);
-  typeConverter.addConversion(
-      [&](plier::PyType type) -> llvm::Optional<mlir::Type> {
-        auto name = type.getName();
-        if (isGpuArray(name)) {
-          auto newTypename = ("array(" + name + ")").str();
-          return plier::PyType::get(type.getContext(), newTypename);
-        }
-
-        return llvm::None;
-      });
-
-  auto materializeCast = [](mlir::OpBuilder &builder, mlir::Type type,
-                            mlir::ValueRange inputs,
-                            mlir::Location loc) -> llvm::Optional<mlir::Value> {
-    if (inputs.size() == 1)
-      return builder
-          .create<mlir::UnrealizedConversionCastOp>(loc, type, inputs.front())
-          .getResult(0);
-
-    return llvm::None;
-  };
-  typeConverter.addArgumentMaterialization(materializeCast);
-  typeConverter.addSourceMaterialization(materializeCast);
-  typeConverter.addTargetMaterialization(materializeCast);
-
-  mlir::RewritePatternSet patterns(&context);
-  mlir::ConversionTarget target(context);
-
-  imex::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
-                                                     target);
-
-  imex::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
-                                                           patterns, target);
-
-  target.addDynamicallyLegalOp<plier::GetItemOp, plier::SetItemOp>(
-      [&](mlir::Operation *op) { return typeConverter.isLegal(op); });
-
-  patterns.insert<
-      // clang-format off
-      ConvertOp<plier::GetItemOp>,
-      ConvertOp<plier::SetItemOp>
-      // clang-format on
-      >(typeConverter, &context);
-
-  if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
-                                                std::move(patterns))))
-    signalPassFailure();
 }
 
 struct LowerGpuRangePass
@@ -1804,7 +1770,6 @@ static void commonOptPasses(mlir::OpPassManager &pm) {
 
 static void populateLowerToGPUPipelineHigh(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<MarkGpuArraysInputs>());
-  pm.addPass(std::make_unique<ConvertGpuArrays>());
   pm.addPass(std::make_unique<LowerGpuRangePass>());
   pm.addPass(std::make_unique<LowerGpuBuiltinsPass>());
   commonOptPasses(pm);
@@ -1817,8 +1782,8 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   funcPM.addPass(mlir::createCanonicalizerPass());
   funcPM.addPass(std::make_unique<RemoveNestedParallelPass>());
   funcPM.addPass(gpu_runtime::createParallelLoopGPUMappingPass());
-  funcPM.addPass(std::make_unique<RemoveGpuRegionPass>());
   funcPM.addPass(mlir::createParallelLoopToGpuPass());
+  funcPM.addPass(std::make_unique<RemoveGpuRegionPass>());
   funcPM.addPass(std::make_unique<RemoveKernelMarkerPass>());
   funcPM.addPass(mlir::createCanonicalizerPass());
   funcPM.addPass(gpu_runtime::createInsertGPUAllocsPass());
