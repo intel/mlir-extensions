@@ -53,6 +53,7 @@
 #include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOps.hpp"
 #include "imex/Dialect/gpu_runtime/Transforms/MakeBarriersUniform.hpp"
 #include "imex/Dialect/imex_util/Dialect.hpp"
+#include "imex/Dialect/ntensor/IR/NTensorOps.hpp"
 #include "imex/Transforms/CallLowering.hpp"
 #include "imex/Transforms/CastUtils.hpp"
 #include "imex/Transforms/CommonOpts.hpp"
@@ -831,17 +832,16 @@ template <typename Op> struct ConvertOp : public mlir::OpConversionPattern<Op> {
   }
 };
 
-static bool isGpuArray(llvm::StringRef &name) {
-  return name.consume_front("USM:ndarray(") && name.consume_back(")");
-}
-
 static bool isGpuArray(mlir::Type type) {
-  auto pyType = type.dyn_cast<plier::PyType>();
-  if (!pyType)
+  auto tensor = type.dyn_cast<imex::ntensor::NTensorType>();
+  if (!tensor)
     return false;
 
-  auto name = pyType.getName();
-  return isGpuArray(name);
+  auto env = tensor.getEnvironment();
+  if (!env)
+    return false;
+
+  return env.isa<gpu_runtime::GPURegionDescAttr>();
 }
 
 struct MarkGpuArraysInputs
@@ -851,6 +851,8 @@ struct MarkGpuArraysInputs
 
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<gpu_runtime::GpuRuntimeDialect>();
+    registry.insert<imex::ntensor::NTensorDialect>();
     registry.insert<mlir::func::FuncDialect>();
   }
 
@@ -918,16 +920,16 @@ void ConvertGpuArrays::runOnOperation() {
   typeConverter.addConversion([](mlir::Type type) { return type; });
   populateStdTypeConverter(context, typeConverter);
   imex::populateTupleTypeConverter(context, typeConverter);
-  typeConverter.addConversion(
-      [&](plier::PyType type) -> llvm::Optional<mlir::Type> {
-        auto name = type.getName();
-        if (isGpuArray(name)) {
-          auto newTypename = ("array(" + name + ")").str();
-          return plier::PyType::get(type.getContext(), newTypename);
-        }
+  //  typeConverter.addConversion(
+  //      [&](plier::PyType type) -> llvm::Optional<mlir::Type> {
+  //        auto name = type.getName();
+  //        if (isGpuArray(name)) {
+  //          auto newTypename = ("array(" + name + ")").str();
+  //          return plier::PyType::get(type.getContext(), newTypename);
+  //        }
 
-        return llvm::None;
-      });
+  //        return llvm::None;
+  //      });
 
   auto materializeCast = [](mlir::OpBuilder &builder, mlir::Type type,
                             mlir::ValueRange inputs,
