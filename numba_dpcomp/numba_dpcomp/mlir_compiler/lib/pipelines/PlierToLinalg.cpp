@@ -833,7 +833,7 @@ struct BuildSliceToNtensor
 
 static bool isBoundFunc(mlir::Type type) {
   if (auto pyType = type.dyn_cast<plier::PyType>()) {
-    auto name = pyType.getName();
+    auto name = pyType.getName().getValue();
     return name.consume_front("BoundFunction(") && name.consume_back(")");
   }
   return false;

@@ -32,15 +32,37 @@ def Plier_Dialect : Dialect {
   let useDefaultTypePrinterParser = 1;
 }
 
-def Plier_PyType
-    : DialectType<Plier_Dialect, CPred<"$_self.isa<::plier::PyType>()">,
-                  "pytype">,
-      BuildableType<"$_builder.getType<::plier::PyType>()"> {}
+class Plier_Type<string name, string typeMnemonic, list<Trait> traits = [],
+                   string baseCppClass = "::mlir::Type">
+    : TypeDef<Plier_Dialect, name, traits, baseCppClass> {
+  let mnemonic = typeMnemonic;
+}
 
-def Plier_OpaqueType
-    : DialectType<Plier_Dialect, CPred<"$_self.isa<::plier::OpaqueType>()">,
-                  "opaque_type">,
-      BuildableType<"$_builder.getType<::plier::OpaqueType>()"> {}
+def Plier_SliceType : Plier_Type<"Slice", "slice", [], "::mlir::Type">;
+
+def Plier_Py : Plier_Type<"Py", "pytype", [], "::mlir::Type"> {
+
+  let parameters = (ins
+    "::mlir::StringAttr":$name
+  );
+
+  let builders = [
+    TypeBuilderWithInferredContext<(ins
+      "::mlir::MLIRContext *":$context,
+      "::llvm::StringRef":$name
+    ), [{
+      return $_get(context, ::mlir::StringAttr::get(context, name));
+    }]>
+  ];
+
+  let extraClassDeclaration = [{
+    static PyType getUndefined(::mlir::MLIRContext *context) {
+      return PyType::get(context, "");
+    }
+  }];
+
+  let assemblyFormat = "`<` $name `>`";
+}
 
 class Plier_Op<string mnemonic, list<Trait> traits = []>
     : Op<Plier_Dialect, mnemonic, traits>;

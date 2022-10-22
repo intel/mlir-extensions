@@ -49,23 +49,6 @@ struct PlierInlinerInterface : public mlir::DialectInlinerInterface {
 } // namespace
 
 namespace plier {
-namespace detail {
-struct PyTypeStorage : public mlir::TypeStorage {
-  using KeyTy = mlir::StringRef;
-
-  PyTypeStorage(mlir::StringRef name) : name(name) {}
-
-  bool operator==(const KeyTy &key) const { return key == name; }
-
-  static PyTypeStorage *construct(mlir::TypeStorageAllocator &allocator,
-                                  const KeyTy &key) {
-    return new (allocator.allocate<PyTypeStorage>())
-        PyTypeStorage(allocator.copyInto(key));
-  }
-
-  mlir::StringRef name;
-};
-} // namespace detail
 
 mlir::ArrayRef<detail::OperatorNamePair> getOperators() {
   return llvm::makeArrayRef(detail::OperatorNames);
@@ -76,22 +59,13 @@ void PlierDialect::initialize() {
 #define GET_OP_LIST
 #include "imex/Dialect/plier/PlierOps.cpp.inc"
       >();
-  addTypes<plier::PyType, SliceType>();
+
+  addTypes<
+#define GET_TYPEDEF_LIST
+#include "imex/Dialect/plier/PlierOpsTypes.cpp.inc"
+      >();
+
   addInterfaces<PlierInlinerInterface>();
-}
-
-mlir::Type PlierDialect::parseType(mlir::DialectAsmParser &parser) const {
-  parser.emitError(parser.getNameLoc(), "unknown type");
-  return mlir::Type();
-}
-
-void PlierDialect::printType(mlir::Type type,
-                             mlir::DialectAsmPrinter &os) const {
-  llvm::TypeSwitch<mlir::Type>(type)
-      .Case<plier::PyType>(
-          [&](auto t) { os << "PyType<" << t.getName() << ">"; })
-      .Case<plier::SliceType>([&](auto) { os << "SliceType"; })
-      .Default([](auto) { llvm_unreachable("unexpected type"); });
 }
 
 mlir::Operation *PlierDialect::materializeConstant(mlir::OpBuilder &builder,
@@ -102,22 +76,6 @@ mlir::Operation *PlierDialect::materializeConstant(mlir::OpBuilder &builder,
     return builder.create<mlir::arith::ConstantOp>(loc, type, value);
 
   return nullptr;
-}
-
-PyType PyType::get(mlir::MLIRContext *context, llvm::StringRef name) {
-  assert(!name.empty());
-  return Base::get(context, name);
-}
-
-PyType PyType::getUndefined(mlir::MLIRContext *context) {
-  return Base::get(context, "");
-}
-
-llvm::StringRef PyType::getName() const { return getImpl()->name; }
-
-SliceType SliceType::get(mlir::MLIRContext *context) {
-  assert(context);
-  return Base::get(context);
 }
 
 void ArgOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
@@ -432,5 +390,8 @@ void SliceGetItemOp::getCanonicalizationPatterns(
 
 #define GET_OP_CLASSES
 #include "imex/Dialect/plier/PlierOps.cpp.inc"
+
+#define GET_TYPEDEF_CLASSES
+#include "imex/Dialect/plier/PlierOpsTypes.cpp.inc"
 
 //#include "imex/Dialect/plier/PlierOpsEnums.cpp.inc"

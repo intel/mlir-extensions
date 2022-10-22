@@ -306,7 +306,7 @@ static mlir::Type mapPlierType(mlir::Type type,
   if (!type.isa<plier::PyType>())
     return type;
 
-  auto name = type.cast<plier::PyType>().getName();
+  auto name = type.cast<plier::PyType>().getName().getValue();
   return mapPlierTypeName(*type.getContext(), name, converter);
 }
 
@@ -374,10 +374,9 @@ struct ConstOpLowering : public mlir::OpConversionPattern<plier::ConstOp> {
 
 static bool isOmittedType(mlir::Type type) {
   if (auto pytype = type.dyn_cast<plier::PyType>()) {
-    auto name = pytype.getName();
-    if (name.consume_front("omitted(") && name.consume_back(")")) {
+    auto name = pytype.getName().getValue();
+    if (name.consume_front("omitted(") && name.consume_back(")"))
       return true;
-    }
   }
   return false;
 }
@@ -439,7 +438,7 @@ struct OmittedLowering : public mlir::OpConversionPattern<plier::CastOp> {
       if (!isOmittedType(type))
         return {};
 
-      auto name = type.cast<plier::PyType>().getName();
+      auto name = type.cast<plier::PyType>().getName().getValue();
       if (!name.consume_front("omitted(default=") || !name.consume_back(")"))
         return {};
 
