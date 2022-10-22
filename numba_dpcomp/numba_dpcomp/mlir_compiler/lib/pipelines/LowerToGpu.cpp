@@ -899,76 +899,6 @@ void MarkGpuArraysInputs::runOnOperation() {
   markAllAnalysesPreserved();
 }
 
-struct ConvertGpuArrays
-    : public mlir::PassWrapper<ConvertGpuArrays,
-                               mlir::OperationPass<mlir::ModuleOp>> {
-  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(ConvertGpuArrays)
-
-  virtual void
-  getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<mlir::func::FuncDialect>();
-  }
-
-  void runOnOperation() override;
-};
-
-void ConvertGpuArrays::runOnOperation() {
-  auto &context = getContext();
-
-  mlir::TypeConverter typeConverter;
-  // Convert unknown types to itself
-  typeConverter.addConversion([](mlir::Type type) { return type; });
-  populateStdTypeConverter(context, typeConverter);
-  imex::populateTupleTypeConverter(context, typeConverter);
-  //  typeConverter.addConversion(
-  //      [&](plier::PyType type) -> llvm::Optional<mlir::Type> {
-  //        auto name = type.getName();
-  //        if (isGpuArray(name)) {
-  //          auto newTypename = ("array(" + name + ")").str();
-  //          return plier::PyType::get(type.getContext(), newTypename);
-  //        }
-
-  //        return llvm::None;
-  //      });
-
-  auto materializeCast = [](mlir::OpBuilder &builder, mlir::Type type,
-                            mlir::ValueRange inputs,
-                            mlir::Location loc) -> llvm::Optional<mlir::Value> {
-    if (inputs.size() == 1)
-      return builder
-          .create<mlir::UnrealizedConversionCastOp>(loc, type, inputs.front())
-          .getResult(0);
-
-    return llvm::None;
-  };
-  typeConverter.addArgumentMaterialization(materializeCast);
-  typeConverter.addSourceMaterialization(materializeCast);
-  typeConverter.addTargetMaterialization(materializeCast);
-
-  mlir::RewritePatternSet patterns(&context);
-  mlir::ConversionTarget target(context);
-
-  imex::populateTupleTypeConversionRewritesAndTarget(typeConverter, patterns,
-                                                     target);
-
-  imex::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
-                                                           patterns, target);
-
-  target.addDynamicallyLegalOp<plier::GetItemOp, plier::SetItemOp>(
-      [&](mlir::Operation *op) { return typeConverter.isLegal(op); });
-
-  patterns.insert<
-      // clang-format off
-      ConvertOp<plier::GetItemOp>,
-      ConvertOp<plier::SetItemOp>
-      // clang-format on
-      >(typeConverter, &context);
-
-  if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
-                                                std::move(patterns))))
-    signalPassFailure();
-}
-
 struct LowerGpuRangePass
     : public mlir::PassWrapper<LowerGpuRangePass, mlir::OperationPass<void>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LowerGpuRangePass)
@@ -1806,7 +1736,6 @@ static void commonOptPasses(mlir::OpPassManager &pm) {
 
 static void populateLowerToGPUPipelineHigh(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<MarkGpuArraysInputs>());
-  //  pm.addPass(std::make_unique<ConvertGpuArrays>());
   pm.addPass(std::make_unique<LowerGpuRangePass>());
   pm.addPass(std::make_unique<LowerGpuBuiltinsPass>());
   commonOptPasses(pm);
