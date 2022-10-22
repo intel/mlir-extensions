@@ -22,14 +22,6 @@ namespace llvm {
 class StringRef;
 }
 
-namespace mlir {
-class MLIRContext;
-class TypeConverter;
-} // namespace mlir
-
-void populateStdTypeConverter(mlir::MLIRContext &context,
-                              mlir::TypeConverter &converter);
-
 void registerPlierToStdPipeline(imex::PipelineRegistry &registry);
 
 llvm::StringRef plierToStdPipelineName();

@@ -16,6 +16,9 @@
 
 #include "PyTypeConverter.hpp"
 
+#include "imex/Dialect/imex_util/Dialect.hpp"
+#include "imex/Dialect/plier/Dialect.hpp"
+
 #include <pybind11/pybind11.h>
 
 #include <mlir/IR/BuiltinTypes.h>
@@ -47,6 +50,14 @@ static mlir::Type getFloat64Type(mlir::MLIRContext &ctx) {
   return mlir::FloatType::getF64(&ctx);
 }
 
+static mlir::Type getNoneType(mlir::MLIRContext &ctx) {
+  return mlir::NoneType::get(&ctx);
+}
+
+static mlir::Type getSliceType(mlir::MLIRContext &ctx) {
+  return plier::SliceType::get(&ctx);
+}
+
 using TypeFunc = mlir::Type (*)(mlir::MLIRContext &);
 static const constexpr std::pair<llvm::StringLiteral, TypeFunc>
     PrimitiveTypes[] = {
@@ -65,6 +76,11 @@ static const constexpr std::pair<llvm::StringLiteral, TypeFunc>
         {"float16", &getFloat16Type},
         {"float32", &getFloat32Type},
         {"float64", &getFloat64Type},
+
+        {"none", &getNoneType},
+
+        {"slice2_type", &getSliceType},
+        {"slice3_type", &getSliceType},
         // clang-format on
 };
 
@@ -83,6 +99,10 @@ struct Conversion {
     pairType = mod.attr("Pair");
 
     literalType = mod.attr("Literal");
+    dispatcherType = mod.attr("Dispatcher");
+    functionType = mod.attr("Function");
+    numberClassType = mod.attr("NumberClass");
+    omittedType = mod.attr("Omitted");
   }
 
   llvm::Optional<mlir::Type> operator()(mlir::MLIRContext &context,
@@ -91,6 +111,7 @@ struct Conversion {
       if (obj.is(cls))
         return func(context);
     }
+
     if (py::isinstance(obj, tupleType)) {
       llvm::SmallVector<mlir::Type> types;
       for (auto elem : obj.attr("types").cast<py::tuple>()) {
@@ -102,6 +123,7 @@ struct Conversion {
       }
       return mlir::TupleType::get(&context, types);
     }
+
     if (py::isinstance(obj, uniTupleType)) {
       auto type = converter.convertType(context, obj.attr("dtype"));
       if (!type)
@@ -111,6 +133,7 @@ struct Conversion {
       llvm::SmallVector<mlir::Type> types(count, type);
       return mlir::TupleType::get(&context, types);
     }
+
     if (py::isinstance(obj, pairType)) {
       auto first = converter.convertType(context, obj.attr("first_type"));
       if (!first)
@@ -138,6 +161,57 @@ struct Conversion {
       return llvm::None;
     }
 
+    if (py::isinstance(obj, dispatcherType))
+      return imex::util::OpaqueType::get(&context);
+
+    if (py::isinstance(obj, functionType))
+      return mlir::FunctionType::get(&context, {}, {});
+
+    if (py::isinstance(obj, numberClassType)) {
+      auto type = converter.convertType(context, obj.attr("instance_type"));
+      if (!type)
+        return llvm::None;
+
+      return imex::util::TypeVarType::get(type);
+    }
+
+    if (py::isinstance(obj, omittedType)) {
+      auto value = obj.attr("value");
+
+      auto [type, attr] = [&]() -> std::pair<mlir::Type, mlir::Attribute> {
+        if (py::isinstance<py::float_>(value)) {
+          auto type = mlir::Float64Type::get(&context);
+          auto val = mlir::FloatAttr::get(type, value.cast<double>());
+          return {type, val};
+        }
+
+        if (py::isinstance<py::int_>(value)) {
+          auto type = mlir::IntegerType::get(&context, 64);
+          auto val = mlir::IntegerAttr::get(type, value.cast<int64_t>());
+          return {type, val};
+        }
+
+        if (py::isinstance<py::bool_>(value)) {
+          auto type = mlir::IntegerType::get(&context, 1);
+          auto val = mlir::IntegerAttr::get(
+              type, static_cast<int64_t>(value.cast<bool>()));
+          return {type, val};
+        }
+
+        if (value.is_none()) {
+          auto type = mlir::NoneType::get(&context);
+          return {type, nullptr};
+        }
+
+        return {nullptr, nullptr};
+      }();
+
+      if (!type)
+        return llvm::None;
+
+      return plier::OmittedType::get(&context, type, attr);
+    }
+
     return llvm::None;
   }
 
@@ -152,6 +226,10 @@ private:
   py::object pairType;
 
   py::object literalType;
+  py::object dispatcherType;
+  py::object functionType;
+  py::object numberClassType;
+  py::object omittedType;
 };
 } // namespace
 
