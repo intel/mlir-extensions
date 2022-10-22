@@ -1776,7 +1776,7 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   modulePM.addPass(mlir::spirv::createLowerABIAttributesPass());
   modulePM.addPass(mlir::spirv::createUpdateVersionCapabilityExtensionPass());
   pm.addPass(gpu_runtime::createSerializeSPIRVPass());
-  funcPM.addNestedPass<mlir::func::FuncOp>(
+  pm.addNestedPass<mlir::func::FuncOp>(
       gpu_runtime::createConvertGPUDeallocsPass());
   pm.addNestedPass<mlir::func::FuncOp>(gpu_runtime::createGPUExPass());
   commonOptPasses(pm);
