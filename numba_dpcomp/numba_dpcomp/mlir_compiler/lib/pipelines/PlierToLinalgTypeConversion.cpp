@@ -42,7 +42,7 @@ struct Conversion {
       if (!type)
         return llvm::None;
 
-      return imex::util::TypeVar::get(type);
+      return imex::util::TypeVarType::get(type);
     }
 
     if (py::isinstance(obj, array)) {

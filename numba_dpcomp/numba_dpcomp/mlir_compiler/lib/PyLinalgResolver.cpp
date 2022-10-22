@@ -157,7 +157,7 @@ static bool isCompatibleType(mlir::Type type) {
 
   return type.isa<mlir::IntegerType, mlir::IndexType, mlir::FloatType,
                   mlir::RankedTensorType, mlir::MemRefType, mlir::NoneType,
-                  imex::util::TypeVar, imex::ntensor::NTensorType>();
+                  imex::util::TypeVarType, imex::ntensor::NTensorType>();
 }
 
 static bool isCompatibleTypeVal(mlir::Value val) {
@@ -183,7 +183,7 @@ static auto unwrapSsaVal(py::handle obj) {
 static auto unwrapType(py::handle obj) {
   if (py::hasattr(obj, "_ssa_val")) {
     auto val = unwrapSsaVal(obj);
-    if (auto type = val.getType().dyn_cast<imex::util::TypeVar>())
+    if (auto type = val.getType().dyn_cast<imex::util::TypeVarType>())
       return type.getType();
   } else if (py::hasattr(obj, "_mlir_type")) {
     return unwrapMlir<mlir::Type>(obj.attr("_mlir_type").cast<py::capsule>());
@@ -278,7 +278,7 @@ struct PyLinalgResolver::Context {
     if (type.isa<mlir::NoneType>())
       return py::none();
 
-    if (auto typevar = type.dyn_cast<imex::util::TypeVar>())
+    if (auto typevar = type.dyn_cast<imex::util::TypeVarType>())
       return createType(typevar.getType());
 
     if (auto literal = makePyLiteral(context, value))
@@ -324,7 +324,7 @@ struct PyLinalgResolver::Context {
       return unwrapSsaVal(obj);
 
     if (py::isinstance(obj, type)) {
-      auto type = imex::util::TypeVar::get(unwrapType(obj));
+      auto type = imex::util::TypeVarType::get(unwrapType(obj));
       return builder.create<imex::util::UndefOp>(loc, type);
     }
 

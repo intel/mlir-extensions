@@ -34,10 +34,28 @@ def ImexUtil_Dialect : Dialect {
   let useDefaultTypePrinterParser = 1;
 }
 
-def ImexUtil_OpaqueType
-    : DialectType<ImexUtil_Dialect, CPred<"$_self.isa<::imex::util::OpaqueType>()">,
-                  "opaque_type">,
-      BuildableType<"$_builder.getType<::imex::util::OpaqueType>()"> {}
+class ImexUtil_Type<string name, string typeMnemonic, list<Trait> traits = [],
+                   string baseCppClass = "::mlir::Type">
+    : TypeDef<ImexUtil_Dialect, name, traits, baseCppClass> {
+  let mnemonic = typeMnemonic;
+}
+
+def ImexUtil_OpaqueType : ImexUtil_Type<"Opaque", "opaque", [], "::mlir::Type">;
+
+def ImexUtil_TypeVar : ImexUtil_Type<"TypeVar", "typevar", [], "::mlir::Type"> {
+
+  let parameters = (ins
+    "::mlir::Type":$type
+  );
+
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "::mlir::Type":$type), [{
+      return $_get(type.getContext(), type);
+    }]>
+  ];
+
+  let assemblyFormat = "`<` $type `>`";
+}
 
 class ImexUtil_Op<string mnemonic, list<Trait> traits = []>
     : Op<ImexUtil_Dialect, mnemonic, traits>;

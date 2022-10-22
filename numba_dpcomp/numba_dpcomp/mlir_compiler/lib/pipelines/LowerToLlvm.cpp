@@ -150,7 +150,7 @@ populateToLLVMAdditionalTypeConversion(mlir::LLVMTypeConverter &converter) {
         return voidPtrType;
       });
   converter.addConversion(
-      [voidPtrType](imex::util::TypeVar) -> llvm::Optional<mlir::Type> {
+      [voidPtrType](imex::util::TypeVarType) -> llvm::Optional<mlir::Type> {
         return voidPtrType;
       });
 }

@@ -25,7 +25,10 @@
 #include <mlir/Interfaces/ViewLikeInterface.h>
 
 #include "imex/Dialect/plier/PlierOpsDialect.h.inc"
-//#include "imex/Dialect/plier/PlierOpsEnums.h.inc"
+
+#define GET_TYPEDEF_CLASSES
+#include "imex/Dialect/plier/PlierOpsTypes.h.inc"
+
 #define GET_OP_CLASSES
 #include "imex/Dialect/plier/PlierOps.h.inc"
 
@@ -71,24 +74,5 @@ static const constexpr OperatorNamePair OperatorNames[] = {
 enum { OperatorsCount = std::size(detail::OperatorNames) };
 
 mlir::ArrayRef<detail::OperatorNamePair> getOperators();
-
-class PyType : public mlir::Type::TypeBase<::plier::PyType, mlir::Type,
-                                           ::plier::detail::PyTypeStorage> {
-public:
-  using Base::Base;
-
-  static PyType get(mlir::MLIRContext *context, mlir::StringRef name);
-  static PyType getUndefined(mlir::MLIRContext *context);
-
-  mlir::StringRef getName() const;
-};
-
-class SliceType : public ::mlir::Type::TypeBase<SliceType, ::mlir::Type,
-                                                ::mlir::TypeStorage> {
-public:
-  using Base::Base;
-
-  static SliceType get(mlir::MLIRContext *context);
-};
 
 } // namespace plier

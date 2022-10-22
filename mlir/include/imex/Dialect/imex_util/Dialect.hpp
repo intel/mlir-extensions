@@ -27,6 +27,9 @@
 #include "imex/Dialect/imex_util/ImexUtilOpsDialect.h.inc"
 #include "imex/Dialect/imex_util/ImexUtilOpsEnums.h.inc"
 
+#define GET_TYPEDEF_CLASSES
+#include "imex/Dialect/imex_util/ImexUtilOpsTypes.h.inc"
+
 #define GET_ATTRDEF_CLASSES
 #include "imex/Dialect/imex_util/ImexUtilOpsAttributes.h.inc"
 
@@ -43,26 +46,5 @@ llvm::StringRef getMaxConcurrencyName();
 llvm::StringRef getForceInlineName();
 llvm::StringRef getOptLevelName();
 } // namespace attributes
-
-struct TypeVarStorage;
-
-class OpaqueType : public ::mlir::Type::TypeBase<OpaqueType, ::mlir::Type,
-                                                 ::mlir::TypeStorage> {
-public:
-  using Base::Base;
-
-  static OpaqueType get(mlir::MLIRContext *context);
-};
-
-class TypeVar : public mlir::Type::TypeBase<::imex::util::TypeVar, mlir::Type,
-                                            ::imex::util::TypeVarStorage> {
-public:
-  using Base::Base;
-
-  static TypeVar get(mlir::Type type);
-
-  mlir::Type getType() const;
-};
-
 } // namespace util
 } // namespace imex

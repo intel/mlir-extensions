@@ -233,11 +233,11 @@ static mlir::Type mapDtypeType(mlir::MLIRContext &ctx, llvm::StringRef &name,
   if (name.consume_front("dtype(") && name.consume_back(")")) {
     auto innerType = mapPlierTypeName(ctx, name, converter);
     if (innerType)
-      return imex::util::TypeVar::get(innerType);
+      return imex::util::TypeVarType::get(innerType);
   } else if (name.consume_front("class(") && name.consume_back(")")) {
     auto innerType = mapPlierTypeName(ctx, name, converter);
     if (innerType)
-      return imex::util::TypeVar::get(innerType);
+      return imex::util::TypeVarType::get(innerType);
   }
   return nullptr;
 }
@@ -306,7 +306,7 @@ static mlir::Type mapPlierType(mlir::Type type,
   if (!type.isa<plier::PyType>())
     return type;
 
-  auto name = type.cast<plier::PyType>().getName();
+  auto name = type.cast<plier::PyType>().getName().getValue();
   return mapPlierTypeName(*type.getContext(), name, converter);
 }
 
@@ -374,10 +374,9 @@ struct ConstOpLowering : public mlir::OpConversionPattern<plier::ConstOp> {
 
 static bool isOmittedType(mlir::Type type) {
   if (auto pytype = type.dyn_cast<plier::PyType>()) {
-    auto name = pytype.getName();
-    if (name.consume_front("omitted(") && name.consume_back(")")) {
+    auto name = pytype.getName().getValue();
+    if (name.consume_front("omitted(") && name.consume_back(")"))
       return true;
-    }
   }
   return false;
 }
@@ -412,7 +411,8 @@ struct LiteralLowering : public mlir::OpConversionPattern<Op> {
       return mlir::success();
     }
 
-    if (auto typevar = convertedType.template dyn_cast<imex::util::TypeVar>()) {
+    if (auto typevar =
+            convertedType.template dyn_cast<imex::util::TypeVarType>()) {
       rewriter.replaceOpWithNewOp<imex::util::UndefOp>(op, typevar);
       return mlir::success();
     }
@@ -438,7 +438,7 @@ struct OmittedLowering : public mlir::OpConversionPattern<plier::CastOp> {
       if (!isOmittedType(type))
         return {};
 
-      auto name = type.cast<plier::PyType>().getName();
+      auto name = type.cast<plier::PyType>().getName().getValue();
       if (!name.consume_front("omitted(default=") || !name.consume_back(")"))
         return {};
 
@@ -1443,7 +1443,7 @@ void PlierToStdPass::runOnOperation() {
         if (!type)
           return true;
 
-        if (type.isa<mlir::NoneType, imex::util::TypeVar>())
+        if (type.isa<mlir::NoneType, imex::util::TypeVarType>())
           return false;
 
         return !type.isIntOrFloat();
