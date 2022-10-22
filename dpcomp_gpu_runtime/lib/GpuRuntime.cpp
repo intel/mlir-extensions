@@ -194,7 +194,9 @@ static auto countEvents(ze_event_handle_t *events) {
 enum class GpuAllocType { Device = 0, Shared = 1, Local = 2 };
 
 struct Stream {
-  Stream(size_t eventsCount) {
+  Stream(size_t eventsCount, const char *deviceName) {
+    assert(deviceName);
+
     auto driverAndDevice = getDevice();
     if (!driverAndDevice.driver || !driverAndDevice.device)
       throw std::runtime_error("getDevice failed");
@@ -427,9 +429,9 @@ dpcompGpuSetMemInfoAllocFunc(void *func) {
 }
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void *
-dpcompGpuStreamCreate(size_t eventsCount) {
+dpcompGpuStreamCreate(size_t eventsCount, const char *deviceName) {
   LOG_FUNC();
-  return catchAll([&]() { return new Stream(eventsCount); });
+  return catchAll([&]() { return new Stream(eventsCount, deviceName); });
 }
 
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT void dpcompGpuStreamDestroy(void *stream) {

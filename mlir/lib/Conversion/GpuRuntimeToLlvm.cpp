@@ -92,7 +92,8 @@ protected:
       "dpcompGpuStreamCreate",
       llvmPointerType, // stream
       {
-          llvmIndexType // events count
+          llvmIndexType,  // events count
+          llvmPointerType // device name
       }};
 
   FunctionCallBuilder streamDestroyCallBuilder = {"dpcompGpuStreamDestroy",
@@ -228,6 +229,20 @@ protected:
   }
 };
 
+static std::string getUniqueLLVMGlobalName(mlir::ModuleOp mod,
+                                           mlir::StringRef srcName) {
+  auto globals = mod.getOps<mlir::LLVM::GlobalOp>();
+  for (int i = 0;; ++i) {
+    auto name =
+        (i == 0 ? std::string(srcName) : (srcName + llvm::Twine(i)).str());
+    auto isSameName = [&](mlir::LLVM::GlobalOp global) {
+      return global.getName() == name;
+    };
+    if (llvm::find_if(globals, isSameName) == globals.end())
+      return name;
+  }
+}
+
 class ConvertGpuStreamCreatePattern
     : public ConvertOpToGpuRuntimeCallPattern<gpu_runtime::CreateGpuStreamOp> {
 public:
@@ -238,7 +253,7 @@ public:
 private:
   mlir::LogicalResult
   matchAndRewrite(gpu_runtime::CreateGpuStreamOp op,
-                  gpu_runtime::CreateGpuStreamOp::Adaptor /*adaptor*/,
+                  gpu_runtime::CreateGpuStreamOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto mod = op->getParentOfType<mlir::ModuleOp>();
     if (!mod)
@@ -249,14 +264,24 @@ private:
     if (!eventsCount)
       return mlir::failure();
 
+    auto device = adaptor.getDeviceAttr().dyn_cast_or_null<mlir::StringAttr>();
+    if (!device)
+      return mlir::failure();
+
+    auto eventsCountAttr = rewriter.getIntegerAttr(llvmIndexType, *eventsCount);
     auto loc = op.getLoc();
-    auto eventsCountVar =
-        rewriter
-            .create<mlir::LLVM::ConstantOp>(
-                loc, llvmIndexType,
-                rewriter.getIntegerAttr(llvmIndexType, *eventsCount))
-            .getResult();
-    auto res = streamCreateCallBuilder.create(loc, rewriter, eventsCountVar);
+    mlir::Value eventsCountVar = rewriter.create<mlir::LLVM::ConstantOp>(
+        loc, llvmIndexType, eventsCountAttr);
+
+    llvm::SmallString<64> name = device.getValue();
+    name.push_back('\0');
+
+    auto varName = getUniqueLLVMGlobalName(mod, "device_name");
+    auto data = mlir::LLVM::createGlobalString(loc, rewriter, varName, name,
+                                               mlir::LLVM::Linkage::Internal);
+
+    auto res =
+        streamCreateCallBuilder.create(loc, rewriter, {eventsCountVar, data});
     rewriter.replaceOp(op, res.getResults());
     return mlir::success();
   }
@@ -281,20 +306,6 @@ private:
     return mlir::success();
   }
 };
-
-static std::string getUniqueLLVMGlobalName(mlir::ModuleOp mod,
-                                           mlir::StringRef srcName) {
-  auto globals = mod.getOps<mlir::LLVM::GlobalOp>();
-  for (int i = 0;; ++i) {
-    auto name =
-        (i == 0 ? std::string(srcName) : (srcName + llvm::Twine(i)).str());
-    auto isSameName = [&](mlir::LLVM::GlobalOp global) {
-      return global.getName() == name;
-    };
-    if (llvm::find_if(globals, isSameName) == globals.end())
-      return name;
-  }
-}
 
 class ConvertGpuModuleLoadPattern
     : public ConvertOpToGpuRuntimeCallPattern<gpu_runtime::LoadGpuModuleOp> {
@@ -376,9 +387,9 @@ private:
 
     auto loc = op.getLoc();
     llvm::SmallString<64> name = op.getKernel().getLeafReference().getValue();
+    name.push_back('\0');
 
     auto varName = getUniqueLLVMGlobalName(mod, "kernel_name");
-    name.push_back('\0');
     auto data = mlir::LLVM::createGlobalString(loc, rewriter, varName, name,
                                                mlir::LLVM::Linkage::Internal);
     auto res =
