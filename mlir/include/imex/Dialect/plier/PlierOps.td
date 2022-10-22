@@ -64,15 +64,21 @@ def Plier_Py : Plier_Type<"Py", "pytype", [], "::mlir::Type"> {
 
 def Plier_OmittedType : Plier_Type<"Omitted", "omitted", [], "::mlir::Type"> {
 
-  let parameters = (ins "::mlir::Attribute":$value);
+  let parameters = (ins
+    "::mlir::Type":$type,
+    OptionalParameter<"::mlir::Attribute">:$value
+  );
 
   let builders = [
-    TypeBuilderWithInferredContext<(ins "::mlir::Attribute":$value), [{
-      return $_get(value.getContext(), value);
+    TypeBuilderWithInferredContext<(ins
+      "::mlir::Type":$type,
+      CArg<"::mlir::Attribute", "{}">:$value
+    ), [{
+      return $_get(type.getContext(), type, value);
     }]>
   ];
 
-  let assemblyFormat = "`<` $value `>`";
+  let assemblyFormat = "`<` $type (`,` $value^)? `>`";
 }
 
 class Plier_Op<string mnemonic, list<Trait> traits = []>

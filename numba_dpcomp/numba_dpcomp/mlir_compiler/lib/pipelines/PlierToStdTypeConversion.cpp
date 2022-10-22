@@ -178,27 +178,38 @@ struct Conversion {
     if (py::isinstance(obj, omittedType)) {
       auto value = obj.attr("value");
 
-      auto attr = [&]() -> mlir::Attribute {
-        if (py::isinstance<py::float_>(value))
-          return mlir::FloatAttr::get(mlir::Float64Type::get(&context),
-                                      value.cast<double>());
+      auto [type, attr] = [&]() -> std::pair<mlir::Type, mlir::Attribute> {
+        if (py::isinstance<py::float_>(value)) {
+          auto type = mlir::Float64Type::get(&context);
+          auto val = mlir::FloatAttr::get(type, value.cast<double>());
+          return {type, val};
+        }
 
-        if (py::isinstance<py::int_>(value))
-          return mlir::IntegerAttr::get(mlir::IntegerType::get(&context, 64),
-                                        value.cast<int64_t>());
+        if (py::isinstance<py::int_>(value)) {
+          auto type = mlir::IntegerType::get(&context, 64);
+          auto val = mlir::IntegerAttr::get(type, value.cast<int64_t>());
+          return {type, val};
+        }
 
-        if (py::isinstance<py::bool_>(value))
-          return mlir::IntegerAttr::get(
-              mlir::IntegerType::get(&context, 1),
-              static_cast<int64_t>(value.cast<bool>()));
+        if (py::isinstance<py::bool_>(value)) {
+          auto type = mlir::IntegerType::get(&context, 1);
+          auto val = mlir::IntegerAttr::get(
+              type, static_cast<int64_t>(value.cast<bool>()));
+          return {type, val};
+        }
 
-        return {};
+        if (value.is_none()) {
+          auto type = mlir::NoneType::get(&context);
+          return {type, nullptr};
+        }
+
+        return {nullptr, nullptr};
       }();
 
-      if (!attr)
+      if (!type)
         return llvm::None;
 
-      return plier::OmittedType::get(&context, attr);
+      return plier::OmittedType::get(&context, type, attr);
     }
 
     return llvm::None;
