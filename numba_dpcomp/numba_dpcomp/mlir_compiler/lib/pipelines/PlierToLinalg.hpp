@@ -27,9 +27,6 @@ class MLIRContext;
 class TypeConverter;
 } // namespace mlir
 
-void populateArrayTypeConverter(mlir::MLIRContext &context,
-                                mlir::TypeConverter &converter);
-
 void registerPlierToLinalgPipeline(imex::PipelineRegistry &registry);
 
 llvm::StringRef plierToLinalgGenPipelineName();

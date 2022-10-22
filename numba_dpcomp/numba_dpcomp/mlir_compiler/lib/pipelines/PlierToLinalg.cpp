@@ -115,99 +115,6 @@ static mlir::LogicalResult applyOptimizations(
   return mlir::success();
 }
 
-enum class ArrayLayout { C, F, A };
-
-static bool parseLayout(llvm::StringRef &name, ArrayLayout &layout) {
-  if (name.consume_back("C")) {
-    layout = ArrayLayout::C;
-    return true;
-  }
-  if (name.consume_back("F")) {
-    layout = ArrayLayout::F;
-    return true;
-  }
-  if (name.consume_back("A")) {
-    layout = ArrayLayout::A;
-    return true;
-  }
-  return false;
-}
-
-template <typename T>
-static bool consumeIntBack(llvm::StringRef &name, T &result) {
-  unsigned len = 0;
-  auto tmp_name = name;
-  while (!tmp_name.empty() && std::isdigit(tmp_name.back())) {
-    ++len;
-    tmp_name = tmp_name.drop_back();
-  }
-  tmp_name = name.substr(name.size() - len);
-  if (!tmp_name.consumeInteger<T>(10, result)) {
-    name = name.substr(0, name.size() - len);
-    return true;
-  }
-  return false;
-}
-
-struct ArrayDesc {
-  unsigned dims = 0;
-  ArrayLayout layout = {};
-  llvm::StringRef name;
-};
-
-static llvm::Optional<ArrayDesc> parseArrayDesc(llvm::StringRef &name) {
-  unsigned numDims = 0;
-  ArrayLayout layout = {};
-  if (name.consume_front("array(") && name.consume_back(")") &&
-      parseLayout(name, layout) && name.consume_back(", ") &&
-      name.consume_back("d") && consumeIntBack(name, numDims) &&
-      name.consume_back(", ") && !name.empty()) {
-    return ArrayDesc{numDims, layout, name};
-  }
-  return {};
-}
-
-static mlir::Type mapArrayType(mlir::MLIRContext &ctx,
-                               mlir::TypeConverter &conveter,
-                               llvm::StringRef &name) {
-  if (auto desc = parseArrayDesc(name)) {
-    if (desc->layout == ArrayLayout::C || desc->layout == ArrayLayout::F ||
-        desc->layout == ArrayLayout::A) {
-      if (auto type =
-              conveter.convertType(plier::PyType::get(&ctx, desc->name))) {
-        if (mlir::BaseMemRefType::isValidElementType(type)) {
-          llvm::SmallVector<int64_t> shape(desc->dims,
-                                           mlir::ShapedType::kDynamicSize);
-          auto layout = [&]() -> llvm::StringRef {
-            if (desc->layout == ArrayLayout::C)
-              return "C";
-
-            if (desc->layout == ArrayLayout::A)
-              return "A";
-
-            if (desc->layout == ArrayLayout::F)
-              return "F";
-
-            llvm_unreachable("Invalid layout");
-          }();
-          return imex::ntensor::NTensorType::get(shape, type, /*env*/ {},
-                                                 layout);
-        }
-      }
-    }
-  }
-  return nullptr;
-}
-
-static mlir::Type mapPlierType(mlir::TypeConverter &converter,
-                               mlir::Type type) {
-  if (auto pyType = type.dyn_cast<plier::PyType>()) {
-    auto name = pyType.getName();
-    return mapArrayType(*type.getContext(), converter, name);
-  }
-  return nullptr;
-}
-
 static void rerunScfPipeline(mlir::Operation *op) {
   assert(nullptr != op);
   auto marker =
@@ -1258,7 +1165,6 @@ struct PlierToNtensorPass
     typeConverter.addConversion([](mlir::Type type) { return type; });
 
     populateStdTypeConverter(context, typeConverter);
-    populateArrayTypeConverter(context, typeConverter);
     imex::populateTupleTypeConverter(context, typeConverter);
     typeConverter.addConversion(
         [](plier::SliceType type) -> llvm::Optional<mlir::Type> {
@@ -2716,18 +2622,6 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createSymbolDCEPass());
 }
 } // namespace
-
-void populateArrayTypeConverter(mlir::MLIRContext & /*context*/,
-                                mlir::TypeConverter &converter) {
-  converter.addConversion(
-      [&](plier::PyType type) -> llvm::Optional<mlir::Type> {
-        auto ret = mapPlierType(converter, type);
-        if (!ret)
-          return llvm::None;
-
-        return ret;
-      });
-}
 
 // ToDo: how does this sink stuff actually works?
 void registerPlierToLinalgPipeline(imex::PipelineRegistry &registry) {
