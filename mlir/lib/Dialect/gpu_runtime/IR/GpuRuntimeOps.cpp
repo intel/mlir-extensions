@@ -53,24 +53,18 @@ void GpuRuntimeDialect::initialize() {
 #define GET_OP_LIST
 #include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOps.cpp.inc"
       >();
+
+  addTypes<
+#define GET_TYPEDEF_LIST
+#include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOpsTypes.cpp.inc"
+      >();
+
   addAttributes<
 #define GET_ATTRDEF_LIST
 #include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOpsAttributes.cpp.inc"
       >();
-  addTypes<OpaqueType>();
+
   addInterfaces<GpuRuntimeInlinerInterface>();
-}
-
-mlir::Type GpuRuntimeDialect::parseType(mlir::DialectAsmParser &parser) const {
-  parser.emitError(parser.getNameLoc(), "unknown type");
-  return mlir::Type();
-}
-
-void GpuRuntimeDialect::printType(mlir::Type type,
-                                  mlir::DialectAsmPrinter &os) const {
-  llvm::TypeSwitch<mlir::Type>(type)
-      .Case<gpu_runtime::OpaqueType>([&](auto) { os << "OpaqueType"; })
-      .Default([](auto) { llvm_unreachable("unexpected type"); });
 }
 
 mlir::Operation *
@@ -85,11 +79,6 @@ GpuRuntimeDialect::materializeConstant(mlir::OpBuilder &builder,
       return builder.create<mlir::arith::ConstantIndexOp>(loc, *val);
 
   return nullptr;
-}
-
-OpaqueType OpaqueType::get(mlir::MLIRContext *context) {
-  assert(context);
-  return Base::get(context);
 }
 
 namespace {
@@ -257,5 +246,8 @@ using namespace mlir;
 
 #define GET_OP_CLASSES
 #include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOps.cpp.inc"
+
+#define GET_TYPEDEF_CLASSES
+#include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOpsTypes.cpp.inc"
 
 #include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOpsEnums.cpp.inc"

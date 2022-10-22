@@ -36,6 +36,14 @@ def GpuRuntime_Dialect : Dialect {
   let useDefaultTypePrinterParser = 1;
 }
 
+class GpuRuntime_Type<string name, string typeMnemonic, list<Trait> traits = [],
+                   string baseCppClass = "::mlir::Type">
+    : TypeDef<GpuRuntime_Dialect, name, traits, baseCppClass> {
+  let mnemonic = typeMnemonic;
+}
+
+def GpuRuntime_OpaqueType : GpuRuntime_Type<"Opaque", "opaque", [], "::mlir::Type">;
+
 class GpuRuntime_Attr<string attrName, string attrMnemonic, list<Trait> traits = []>
     : AttrDef<GpuRuntime_Dialect, attrName, traits> {
   let mnemonic = attrMnemonic;
@@ -43,11 +51,6 @@ class GpuRuntime_Attr<string attrName, string attrMnemonic, list<Trait> traits =
 
 class GpuRuntime_Op<string mnemonic, list<Trait> traits = []> :
       Op<GpuRuntime_Dialect, mnemonic, traits>;
-
-def GpuRuntime_OpaqueType
-    : DialectType<GpuRuntime_Dialect, CPred<"$_self.isa<::gpu_runtime::OpaqueType>()">,
-                  "opaque_type">,
-      BuildableType<"$_builder.getType<::gpu_runtime::OpaqueType>()"> {}
 
 def GpuRuntime_FenceFlags : I32EnumAttr<"FenceFlags",
     "Kernel barrier and fence flags",
