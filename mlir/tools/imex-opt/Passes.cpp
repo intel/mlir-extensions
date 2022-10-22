@@ -82,8 +82,7 @@ static mlir::PassPipelineRegistration<>
                    });
 
 static mlir::PassPipelineRegistration<> GpuToGpuRuntime(
-    "gpu-to-gpu-runtime", "Converts Gpu ops to gpu runteim",
-    [](mlir::OpPassManager &pm) {
+    "gpu-to-gpux", "Converts Gpu ops to gpux", [](mlir::OpPassManager &pm) {
       pm.addNestedPass<mlir::func::FuncOp>(gpu_runtime::createGPUExPass());
     });
 

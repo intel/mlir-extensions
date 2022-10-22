@@ -860,6 +860,10 @@ void gpu_runtime::populateGpuToLLVMPatternsAndLegality(
       [llvmPointerType](gpu_runtime::OpaqueType) -> mlir::Type {
         return llvmPointerType;
       });
+  converter.addConversion(
+      [llvmPointerType](gpu_runtime::StreamType) -> mlir::Type {
+        return llvmPointerType;
+      });
 
   patterns.insert<
       // clang-format off

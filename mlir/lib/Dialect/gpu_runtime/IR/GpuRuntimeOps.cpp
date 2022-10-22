@@ -53,24 +53,18 @@ void GpuRuntimeDialect::initialize() {
 #define GET_OP_LIST
 #include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOps.cpp.inc"
       >();
+
+  addTypes<
+#define GET_TYPEDEF_LIST
+#include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOpsTypes.cpp.inc"
+      >();
+
   addAttributes<
 #define GET_ATTRDEF_LIST
 #include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOpsAttributes.cpp.inc"
       >();
-  addTypes<OpaqueType>();
+
   addInterfaces<GpuRuntimeInlinerInterface>();
-}
-
-mlir::Type GpuRuntimeDialect::parseType(mlir::DialectAsmParser &parser) const {
-  parser.emitError(parser.getNameLoc(), "unknown type");
-  return mlir::Type();
-}
-
-void GpuRuntimeDialect::printType(mlir::Type type,
-                                  mlir::DialectAsmPrinter &os) const {
-  llvm::TypeSwitch<mlir::Type>(type)
-      .Case<gpu_runtime::OpaqueType>([&](auto) { os << "OpaqueType"; })
-      .Default([](auto) { llvm_unreachable("unexpected type"); });
 }
 
 mlir::Operation *
@@ -85,11 +79,6 @@ GpuRuntimeDialect::materializeConstant(mlir::OpBuilder &builder,
       return builder.create<mlir::arith::ConstantIndexOp>(loc, *val);
 
   return nullptr;
-}
-
-OpaqueType OpaqueType::get(mlir::MLIRContext *context) {
-  assert(context);
-  return Base::get(context);
 }
 
 namespace {
@@ -114,11 +103,12 @@ struct RemoveUnusedOp : public mlir::OpRewritePattern<Op> {
 };
 } // namespace
 
-void CreateGpuStreamOp::build(::mlir::OpBuilder &odsBuilder,
-                              ::mlir::OperationState &odsState) {
+void CreateGpuStreamOp::build(mlir::OpBuilder &odsBuilder,
+                              mlir::OperationState &odsState,
+                              mlir::Attribute device) {
   auto ctx = odsBuilder.getContext();
   CreateGpuStreamOp::build(odsBuilder, odsState,
-                           gpu_runtime::OpaqueType::get(ctx));
+                           gpu_runtime::StreamType::get(ctx), device);
 }
 
 void CreateGpuStreamOp::getCanonicalizationPatterns(
@@ -210,6 +200,46 @@ mlir::StringRef getGpuAccessibleAttrName() { return "gpu.gpu_accessible"; }
 
 } // namespace gpu_runtime
 
+// TODO: unify with upstream
+/// Parses an optional list of async operands with an optional leading keyword.
+/// (`async`)? (`[` ssa-id-list `]`)?
+///
+/// This method is used by the tablegen assembly format for async ops as well.
+static mlir::ParseResult parseAsyncDependencies(
+    mlir::OpAsmParser &parser, mlir::Type &asyncTokenType,
+    mlir::SmallVectorImpl<mlir::OpAsmParser::UnresolvedOperand>
+        &asyncDependencies) {
+  auto loc = parser.getCurrentLocation();
+  if (succeeded(parser.parseOptionalKeyword("async"))) {
+    if (parser.getNumResults() == 0)
+      return parser.emitError(loc, "needs to be named when marked 'async'");
+    asyncTokenType = parser.getBuilder().getType<mlir::gpu::AsyncTokenType>();
+  }
+  return parser.parseOperandList(asyncDependencies,
+                                 mlir::OpAsmParser::Delimiter::OptionalSquare);
+}
+
+/// Prints optional async dependencies with its leading keyword.
+///   (`async`)? (`[` ssa-id-list `]`)?
+// Used by the tablegen assembly format for several async ops.
+static void printAsyncDependencies(mlir::OpAsmPrinter &printer,
+                                   mlir::Operation *op,
+                                   mlir::Type asyncTokenType,
+                                   mlir::OperandRange asyncDependencies) {
+  if (asyncTokenType)
+    printer << "async";
+  if (asyncDependencies.empty())
+    return;
+  if (asyncTokenType)
+    printer << ' ';
+  printer << '[';
+  llvm::interleaveComma(asyncDependencies, printer);
+  printer << ']';
+}
+
+// TODO: need fix upstream.
+using namespace mlir;
+
 #include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOpsDialect.cpp.inc"
 
 #define GET_ATTRDEF_CLASSES
@@ -217,5 +247,8 @@ mlir::StringRef getGpuAccessibleAttrName() { return "gpu.gpu_accessible"; }
 
 #define GET_OP_CLASSES
 #include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOps.cpp.inc"
+
+#define GET_TYPEDEF_CLASSES
+#include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOpsTypes.cpp.inc"
 
 #include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOpsEnums.cpp.inc"

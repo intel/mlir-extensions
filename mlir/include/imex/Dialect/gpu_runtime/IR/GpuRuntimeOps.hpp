@@ -30,23 +30,15 @@
 
 #include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOpsEnums.h.inc"
 
+#define GET_TYPEDEF_CLASSES
+#include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOpsTypes.h.inc"
+
 #define GET_ATTRDEF_CLASSES
 #include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOpsAttributes.h.inc"
 
 #define GET_OP_CLASSES
 #include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOps.h.inc"
 
-// TODO: OpaqueType is not tied to gpu dialect. Move this or create separate
-// types
 namespace gpu_runtime {
-class OpaqueType : public ::mlir::Type::TypeBase<OpaqueType, ::mlir::Type,
-                                                 ::mlir::TypeStorage> {
-public:
-  using Base::Base;
-
-  static OpaqueType get(mlir::MLIRContext *context);
-};
-
 mlir::StringRef getGpuAccessibleAttrName();
-
-} // namespace gpu_runtime
+}

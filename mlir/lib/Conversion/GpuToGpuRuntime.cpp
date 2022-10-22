@@ -681,22 +681,30 @@ struct UnstrideMemrefsPass
 static llvm::Optional<mlir::Value> getGpuStream(mlir::OpBuilder &builder,
                                                 mlir::Operation *op) {
   assert(op);
-  auto func = op->getParentOfType<mlir::func::FuncOp>();
+  auto func = op->getParentOfType<mlir::FunctionOpInterface>();
   if (!func)
     return {};
 
-  if (!llvm::hasSingleElement(func.getBody()))
+  if (!llvm::hasSingleElement(func.getFunctionBody()))
     return {};
 
-  auto &block = func.getBody().front();
+  mlir::Attribute device;
+  if (auto envRegion = op->getParentOfType<imex::util::EnvironmentRegionOp>())
+    if (auto desc = envRegion.getEnvironment()
+                        .dyn_cast<gpu_runtime::GPURegionDescAttr>())
+      device = desc.getDevice();
+
+  auto &block = func.getFunctionBody().front();
   auto ops = block.getOps<gpu_runtime::CreateGpuStreamOp>();
-  if (!ops.empty())
-    return (*ops.begin()).getResult();
+  for (auto streamOp : ops)
+    if (streamOp.getDeviceAttr() == device)
+      return streamOp.getResult();
 
   mlir::OpBuilder::InsertionGuard g(builder);
   builder.setInsertionPointToStart(&block);
   auto loc = builder.getUnknownLoc();
-  auto stream = builder.create<gpu_runtime::CreateGpuStreamOp>(loc).getResult();
+  mlir::Value stream =
+      builder.create<gpu_runtime::CreateGpuStreamOp>(loc, device);
   builder.setInsertionPoint(block.getTerminator());
   builder.create<gpu_runtime::DestroyGpuStreamOp>(loc, stream);
   return stream;
@@ -1423,7 +1431,8 @@ struct ExpandDeallocOp : public mlir::OpRewritePattern<mlir::gpu::DeallocOp> {
       return mlir::failure();
 
     rewriter.replaceOpWithNewOp<gpu_runtime::GPUDeallocOp>(
-        op, op.getAsyncDependencies(), op.getMemref(), *stream);
+        op, op.getResultTypes(), op.getAsyncDependencies(), op.getMemref(),
+        *stream);
 
     return mlir::success();
   }
@@ -1594,6 +1603,7 @@ struct GPUExPass
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<gpu_runtime::GpuRuntimeDialect>();
+    registry.insert<mlir::gpu::GPUDialect>();
   }
 
   void runOnOperation() override {
