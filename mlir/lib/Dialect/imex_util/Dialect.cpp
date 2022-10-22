@@ -26,17 +26,13 @@
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Bufferization/IR/Bufferization.h>
-#include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/GPU/IR/GPUDialect.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/Dialect/SPIRV/IR/SPIRVOps.h>
 
-#include <llvm/ADT/SmallBitVector.h>
 #include <llvm/ADT/TypeSwitch.h>
-
-namespace MemoryEffects = ::mlir::MemoryEffects;
 
 namespace {
 struct ImexUtilInlinerInterface : public mlir::DialectInlinerInterface {
@@ -51,21 +47,6 @@ struct ImexUtilInlinerInterface : public mlir::DialectInlinerInterface {
   }
 };
 } // namespace
-
-struct imex::util::TypeVarStorage : public mlir::TypeStorage {
-  using KeyTy = mlir::Type;
-
-  TypeVarStorage(mlir::Type type) : type(type) {}
-
-  bool operator==(const KeyTy &key) const { return key == type; }
-
-  static TypeVarStorage *construct(mlir::TypeStorageAllocator &allocator,
-                                   const KeyTy &key) {
-    return new (allocator.allocate<TypeVarStorage>()) TypeVarStorage(key);
-  }
-
-  mlir::Type type;
-};
 
 llvm::StringRef imex::util::attributes::getFastmathName() {
   return "#plier.fastmath";
@@ -100,30 +81,17 @@ void ImexUtilDialect::initialize() {
 #include "imex/Dialect/imex_util/ImexUtilOps.cpp.inc"
       >();
 
-  addTypes<OpaqueType, TypeVar>();
   addInterfaces<ImexUtilInlinerInterface>();
+
+  addTypes<
+#define GET_TYPEDEF_LIST
+#include "imex/Dialect/imex_util/ImexUtilOpsTypes.cpp.inc"
+      >();
 
   addAttributes<
 #define GET_ATTRDEF_LIST
 #include "imex/Dialect/imex_util/ImexUtilOpsAttributes.cpp.inc"
       >();
-}
-
-mlir::Type ImexUtilDialect::parseType(mlir::DialectAsmParser &parser) const {
-  parser.emitError(parser.getNameLoc(), "unknown type");
-  return mlir::Type();
-}
-
-void ImexUtilDialect::printType(mlir::Type type,
-                                mlir::DialectAsmPrinter &os) const {
-  llvm::TypeSwitch<mlir::Type>(type)
-      .Case<imex::util::OpaqueType>([&](auto) { os << "OpaqueType"; })
-      .Case<imex::util::TypeVar>([&](auto t) {
-        os << "TypeVar<";
-        os.printType(t.getType());
-        os << ">";
-      })
-      .Default([](auto) { llvm_unreachable("unexpected type"); });
 }
 
 mlir::Operation *ImexUtilDialect::materializeConstant(mlir::OpBuilder &builder,
@@ -335,12 +303,12 @@ struct ReshapeAlloca : public mlir::OpRewritePattern<mlir::memref::ReshapeOp> {
         !shapeOp.getSymbolOperands().empty())
       return mlir::failure();
 
-    auto func = op->getParentOfType<mlir::func::FuncOp>();
-    if (!func)
+    auto func = op->getParentOfType<mlir::FunctionOpInterface>();
+    if (!func || func.isExternal())
       return mlir::failure();
 
     if (shapeOp->getParentOp() != func) {
-      rewriter.setInsertionPointToStart(&func.getBody().front());
+      rewriter.setInsertionPointToStart(&func.getBlocks().front());
     } else {
       rewriter.setInsertionPoint(shapeOp);
     }
@@ -362,18 +330,6 @@ void ImexUtilDialect::getCanonicalizationPatterns(
               ReshapeAlloca>(getContext());
 }
 
-OpaqueType OpaqueType::get(mlir::MLIRContext *context) {
-  assert(context);
-  return Base::get(context);
-}
-
-TypeVar TypeVar::get(mlir::Type type) {
-  assert(type);
-  return Base::get(type.getContext(), type);
-}
-
-mlir::Type TypeVar::getType() const { return getImpl()->type; }
-
 void EnforceShapeOp::build(mlir::OpBuilder &builder,
                            mlir::OperationState &state, mlir::Value value,
                            mlir::ValueRange shape) {
@@ -383,28 +339,29 @@ void EnforceShapeOp::build(mlir::OpBuilder &builder,
 mlir::OpFoldResult
 EnforceShapeOp::fold(llvm::ArrayRef<mlir::Attribute> operands) {
   operands = operands.drop_front();
-  auto num_dims = static_cast<unsigned>(operands.size());
-  auto src_type = getType().cast<mlir::ShapedType>();
-  llvm::SmallVector<int64_t> final_shape(num_dims, -1);
-  if (src_type.hasRank()) {
-    auto shape = src_type.getShape();
-    if (shape.size() != num_dims) {
+  auto numDims = static_cast<unsigned>(operands.size());
+  auto srcType = getType().cast<mlir::ShapedType>();
+  llvm::SmallVector<int64_t> finalShape(numDims,
+                                        mlir::ShapedType::kDynamicSize);
+  if (srcType.hasRank()) {
+    auto shape = srcType.getShape();
+    if (shape.size() != numDims) {
       return nullptr;
     }
-    final_shape.assign(shape.begin(), shape.end());
+    finalShape.assign(shape.begin(), shape.end());
   }
   bool changed = false;
-  for (unsigned i = 0; i < num_dims; ++i) {
+  for (unsigned i = 0; i < numDims; ++i) {
     if (auto attr = operands[i].dyn_cast_or_null<mlir::IntegerAttr>()) {
       auto val = attr.getInt();
       if (val != -1) {
-        if (final_shape[i] != -1) {
-          if (final_shape[i] != val) {
+        if (finalShape[i] != -1) {
+          if (finalShape[i] != val) {
             return nullptr;
           }
         } else {
           changed = true;
-          final_shape[i] = val;
+          finalShape[i] = val;
         }
       }
     }
@@ -412,7 +369,7 @@ EnforceShapeOp::fold(llvm::ArrayRef<mlir::Attribute> operands) {
 
   if (changed) {
     auto final_type =
-        mlir::RankedTensorType::get(final_shape, src_type.getElementType());
+        mlir::RankedTensorType::get(finalShape, srcType.getElementType());
     getResult().setType(final_type);
     return getResult();
   }
@@ -2107,5 +2064,8 @@ void EnvironmentRegionOp::build(
 
 #define GET_ATTRDEF_CLASSES
 #include "imex/Dialect/imex_util/ImexUtilOpsAttributes.cpp.inc"
+
+#define GET_TYPEDEF_CLASSES
+#include "imex/Dialect/imex_util/ImexUtilOpsTypes.cpp.inc"
 
 #include "imex/Dialect/imex_util/ImexUtilOpsEnums.cpp.inc"

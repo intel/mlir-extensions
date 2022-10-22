@@ -233,11 +233,11 @@ static mlir::Type mapDtypeType(mlir::MLIRContext &ctx, llvm::StringRef &name,
   if (name.consume_front("dtype(") && name.consume_back(")")) {
     auto innerType = mapPlierTypeName(ctx, name, converter);
     if (innerType)
-      return imex::util::TypeVar::get(innerType);
+      return imex::util::TypeVarType::get(innerType);
   } else if (name.consume_front("class(") && name.consume_back(")")) {
     auto innerType = mapPlierTypeName(ctx, name, converter);
     if (innerType)
-      return imex::util::TypeVar::get(innerType);
+      return imex::util::TypeVarType::get(innerType);
   }
   return nullptr;
 }
@@ -412,7 +412,8 @@ struct LiteralLowering : public mlir::OpConversionPattern<Op> {
       return mlir::success();
     }
 
-    if (auto typevar = convertedType.template dyn_cast<imex::util::TypeVar>()) {
+    if (auto typevar =
+            convertedType.template dyn_cast<imex::util::TypeVarType>()) {
       rewriter.replaceOpWithNewOp<imex::util::UndefOp>(op, typevar);
       return mlir::success();
     }
@@ -1443,7 +1444,7 @@ void PlierToStdPass::runOnOperation() {
         if (!type)
           return true;
 
-        if (type.isa<mlir::NoneType, imex::util::TypeVar>())
+        if (type.isa<mlir::NoneType, imex::util::TypeVarType>())
           return false;
 
         return !type.isIntOrFloat();
