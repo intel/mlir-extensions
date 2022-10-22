@@ -841,9 +841,16 @@ def test_dpctl_simple1():
     dgpu_res = dpt.usm_ndarray(gpu_res.shape, dtype=gpu_res.dtype, buffer="device")
     dgpu_res.usm_data.copy_from_host(gpu_res.reshape((-1)).view("|u1"))
 
+    filter_string = dgpu_res.device.sycl_device.filter_string
     with print_pass_ir([], ["ConvertParallelLoopToGpu"]):
         gpu_func[a.shape, DEFAULT_LOCAL_SIZE](da, db, dgpu_res)
         ir = get_print_buffer()
+        assert (
+            ir.count(
+                f'imex_util.env_region #gpu_runtime.region_desc<device = "{filter_string}">'
+            )
+            > 0
+        ), ir
         assert ir.count("gpu.launch blocks") == 1, ir
 
     dgpu_res.usm_data.copy_to_host(gpu_res.reshape((-1)).view("|u1"))

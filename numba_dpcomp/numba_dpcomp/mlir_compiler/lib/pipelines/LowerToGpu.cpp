@@ -774,7 +774,42 @@ protected:
     if (name != "_gpu_range")
       return mlir::failure();
 
-    auto parent = op->getParentOp();
+    auto parent = op->getParentOfType<mlir::FunctionOpInterface>();
+    if (!parent)
+      return mlir::failure();
+
+    auto device = [&]() -> mlir::StringAttr {
+      mlir::StringAttr res;
+      auto argsTypes = parent.getArgumentTypes();
+      for (auto arg : argsTypes) {
+        auto tensor = arg.dyn_cast<imex::ntensor::NTensorType>();
+        if (!tensor)
+          continue;
+
+        auto env = tensor.getEnvironment()
+                       .dyn_cast_or_null<gpu_runtime::GPURegionDescAttr>();
+        if (!env)
+          continue;
+
+        auto name = env.getDevice();
+        assert(name && "Invalid device name");
+        if (!res) {
+          res = name;
+        } else if (res != name) {
+          return nullptr;
+        }
+      }
+
+      // TODO: remove default device.
+      if (!res)
+        res = rewriter.getStringAttr("level_zero:gpu:0");
+
+      return res;
+    }();
+
+    if (!device)
+      return mlir::failure();
+
     llvm::SmallVector<mlir::scf::ForOp> newOps;
     auto setAttr = [&](mlir::scf::ForOp op) {
       auto unitAttr = mlir::UnitAttr::get(op->getContext());
@@ -785,8 +820,7 @@ protected:
       return mlir::failure();
 
     mlir::OpBuilder::InsertionGuard g(rewriter);
-    auto envAttr = gpu_runtime::GPURegionDescAttr::get(
-        getContext(), rewriter.getStringAttr("gpu"));
+    auto envAttr = gpu_runtime::GPURegionDescAttr::get(getContext(), device);
     for (auto op : newOps) {
       auto bodyBuilder = [&](mlir::OpBuilder &builder, mlir::Location loc) {
         auto newOp = builder.clone(*op);
@@ -1748,8 +1782,8 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   funcPM.addPass(mlir::createCanonicalizerPass());
   funcPM.addPass(std::make_unique<RemoveNestedParallelPass>());
   funcPM.addPass(gpu_runtime::createParallelLoopGPUMappingPass());
-  funcPM.addPass(std::make_unique<RemoveGpuRegionPass>());
   funcPM.addPass(mlir::createParallelLoopToGpuPass());
+  funcPM.addPass(std::make_unique<RemoveGpuRegionPass>());
   funcPM.addPass(std::make_unique<RemoveKernelMarkerPass>());
   funcPM.addPass(mlir::createCanonicalizerPass());
   funcPM.addPass(gpu_runtime::createInsertGPUAllocsPass());
