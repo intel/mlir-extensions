@@ -16,6 +16,7 @@
 
 #include "PyTypeConverter.hpp"
 
+#include "imex/Dialect/imex_util/Dialect.hpp"
 #include "imex/Dialect/plier/Dialect.hpp"
 
 #include <pybind11/pybind11.h>
@@ -98,6 +99,7 @@ struct Conversion {
     pairType = mod.attr("Pair");
 
     literalType = mod.attr("Literal");
+    dispatcherType = mod.attr("Dispatcher");
   }
 
   llvm::Optional<mlir::Type> operator()(mlir::MLIRContext &context,
@@ -106,6 +108,7 @@ struct Conversion {
       if (obj.is(cls))
         return func(context);
     }
+
     if (py::isinstance(obj, tupleType)) {
       llvm::SmallVector<mlir::Type> types;
       for (auto elem : obj.attr("types").cast<py::tuple>()) {
@@ -117,6 +120,7 @@ struct Conversion {
       }
       return mlir::TupleType::get(&context, types);
     }
+
     if (py::isinstance(obj, uniTupleType)) {
       auto type = converter.convertType(context, obj.attr("dtype"));
       if (!type)
@@ -126,6 +130,7 @@ struct Conversion {
       llvm::SmallVector<mlir::Type> types(count, type);
       return mlir::TupleType::get(&context, types);
     }
+
     if (py::isinstance(obj, pairType)) {
       auto first = converter.convertType(context, obj.attr("first_type"));
       if (!first)
@@ -153,6 +158,9 @@ struct Conversion {
       return llvm::None;
     }
 
+    if (py::isinstance(obj, dispatcherType))
+      return imex::util::OpaqueType::get(&context);
+
     return llvm::None;
   }
 
@@ -167,6 +175,7 @@ private:
   py::object pairType;
 
   py::object literalType;
+  py::object dispatcherType;
 };
 } // namespace
 
