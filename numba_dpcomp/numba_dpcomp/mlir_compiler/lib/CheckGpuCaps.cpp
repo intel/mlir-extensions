@@ -43,3 +43,12 @@ llvm::Optional<OffloadDeviceCapabilities> getOffloadDeviceCapabilities() {
 
   return ret;
 }
+
+llvm::Optional<std::string> getDefaultDevice() {
+  py::object mod = py::module::import("numba_dpcomp.mlir.dpctl_interop");
+  py::object res = mod.attr("get_default_device_name")();
+  if (res.is_none())
+    return llvm::None;
+
+  return res.cast<std::string>();
+}

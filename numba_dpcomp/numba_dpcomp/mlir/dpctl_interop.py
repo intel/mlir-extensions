@@ -14,6 +14,7 @@
 
 
 try:
+    import dpctl
     from dpctl.tensor import usm_ndarray
 
     _is_dpctl_available = True
@@ -210,6 +211,9 @@ if _is_dpctl_available:
             err_str = f"usm_ndarray arguments have incompatibe devices: {dev_names}"
             raise ValueError(err_str)
 
+    def get_default_device_name():
+        return dpctl.select_default_device().filter_string
+
 else:  # _is_dpctl_available
 
     USMNdArrayType = None  # dummy
@@ -217,3 +221,7 @@ else:  # _is_dpctl_available
     def check_usm_ndarray_args(args):
         # dpctl is not loaded, nothing to do
         pass
+
+    def get_default_device_name():
+        # TODO: deprecated
+        return "level_zero:gpu:0"

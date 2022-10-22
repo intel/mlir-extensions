@@ -15,6 +15,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 
 #include <llvm/ADT/Optional.h>
 
@@ -28,3 +29,5 @@ struct OffloadDeviceCapabilities {
 
 // TODO: device name
 llvm::Optional<OffloadDeviceCapabilities> getOffloadDeviceCapabilities();
+
+llvm::Optional<std::string> getDefaultDevice();
