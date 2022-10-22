@@ -23,16 +23,9 @@
 #include <mlir/Transforms/InliningUtils.h>
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
-#include <mlir/Dialect/Bufferization/IR/Bufferization.h>
-#include <mlir/Dialect/Func/IR/FuncOps.h>
-#include <mlir/Dialect/GPU/IR/GPUDialect.h>
-#include <mlir/Dialect/Linalg/IR/Linalg.h>
-#include <mlir/Dialect/MemRef/IR/MemRef.h>
-#include <mlir/Dialect/SCF/IR/SCF.h>
+#include <mlir/IR/FunctionInterfaces.h>
 
 #include <llvm/ADT/TypeSwitch.h>
-
-namespace MemoryEffects = ::mlir::MemoryEffects;
 
 namespace {
 struct PlierInlinerInterface : public mlir::DialectInlinerInterface {
@@ -85,7 +78,7 @@ void ArgOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
 }
 
 mlir::OpFoldResult ArgOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
-  auto func = getOperation()->getParentOfType<mlir::func::FuncOp>();
+  auto func = getOperation()->getParentOfType<mlir::FunctionOpInterface>();
   if (func) {
     auto ind = getIndex();
     if (ind < func.getNumArguments() &&
@@ -311,78 +304,6 @@ void BuildSliceOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                          mlir::Value stride) {
   auto type = SliceType::get(builder.getContext());
   BuildSliceOp::build(builder, state, type, begin, end, stride);
-}
-
-namespace {
-struct SliceGetitemPropagate
-    : public mlir::OpRewritePattern<plier::SliceGetItemOp> {
-  using OpRewritePattern::OpRewritePattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(plier::SliceGetItemOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    if (!op.getArray().getType().isa<mlir::ShapedType>())
-      return mlir::failure();
-
-    auto index = mlir::getConstantIntValue(op.getIndex());
-    if (!index)
-      return mlir::failure();
-
-    auto i = *index;
-    if (i < 0 || i >= 3)
-      return mlir::failure();
-
-    auto buildSlice = op.getSlice().getDefiningOp<plier::BuildSliceOp>();
-    if (!buildSlice)
-      return mlir::failure();
-
-    auto loc = op.getLoc();
-    auto getInd = [&](int64_t val) -> mlir::Value {
-      return rewriter.create<mlir::arith::ConstantIndexOp>(loc, val);
-    };
-
-    auto src = buildSlice.getOperand(static_cast<unsigned>(i));
-    auto srcType = src.getType();
-    if (srcType.isa<mlir::NoneType>()) {
-      if (i == 0) {
-        rewriter.replaceOp(op, getInd(0));
-      } else if (i == 1) {
-        auto size = [&]() -> mlir::Value {
-          if (op.getArray().getType().isa<mlir::TensorType>())
-            return rewriter.create<mlir::tensor::DimOp>(loc, op.getArray(),
-                                                        op.getDim());
-          return rewriter.create<mlir::memref::DimOp>(loc, op.getArray(),
-                                                      op.getDim());
-        }();
-        rewriter.replaceOp(op, size);
-      } else { // i == 2
-        rewriter.replaceOp(op, getInd(1));
-      }
-    } else {
-      if (auto intType = srcType.dyn_cast<mlir::IntegerType>()) {
-        if (!intType.isSignless()) {
-          auto signless =
-              mlir::IntegerType::get(intType.getContext(), intType.getWidth());
-          src = rewriter.create<imex::util::SignCastOp>(loc, signless, src);
-        }
-        auto indexType = rewriter.getIndexType();
-        src = rewriter.create<mlir::arith::IndexCastOp>(loc, indexType, src);
-      } else if (srcType.isa<mlir::IndexType>()) {
-        // Nothing
-      } else {
-        return mlir::failure();
-      }
-      rewriter.replaceOp(op, src);
-    }
-
-    return mlir::success();
-  }
-};
-} // namespace
-
-void SliceGetItemOp::getCanonicalizationPatterns(
-    ::mlir::RewritePatternSet &results, ::mlir::MLIRContext *context) {
-  results.insert<SliceGetitemPropagate>(context);
 }
 } // namespace plier
 

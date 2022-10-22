@@ -244,8 +244,6 @@ def SliceGetItemOp : Plier_Op<"slice_getitem", [Pure]> {
                    I64Attr : $dim);
 
   let results = (outs AnyType);
-
-  let hasCanonicalizer = 1;
 }
 
 #endif // PLIER_OPS
