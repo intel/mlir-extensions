@@ -47,6 +47,10 @@ static mlir::Type getFloat64Type(mlir::MLIRContext &ctx) {
   return mlir::FloatType::getF64(&ctx);
 }
 
+static mlir::Type getNoneType(mlir::MLIRContext &ctx) {
+  return mlir::NoneType::get(&ctx);
+}
+
 using TypeFunc = mlir::Type (*)(mlir::MLIRContext &);
 static const constexpr std::pair<llvm::StringLiteral, TypeFunc>
     PrimitiveTypes[] = {
@@ -65,6 +69,8 @@ static const constexpr std::pair<llvm::StringLiteral, TypeFunc>
         {"float16", &getFloat16Type},
         {"float32", &getFloat32Type},
         {"float64", &getFloat64Type},
+
+        {"none", &getNoneType},
         // clang-format on
 };
 

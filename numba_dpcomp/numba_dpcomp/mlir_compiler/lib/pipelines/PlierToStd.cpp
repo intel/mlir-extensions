@@ -284,7 +284,6 @@ static mlir::Type mapPlierTypeName(mlir::MLIRContext &ctx,
       &mapTupleType,
       &mapFuncType,
       &mapDtypeType,
-      &mapNoneType,
       &mapDispatcherType,
       &mapSliceType,
       // clang-format on
