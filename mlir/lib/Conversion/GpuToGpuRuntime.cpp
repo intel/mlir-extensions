@@ -16,6 +16,7 @@
 
 #include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOps.hpp"
 #include "imex/Dialect/imex_util/Dialect.hpp"
+#include "imex/Dialect/imex_util/Utils.hpp"
 
 #include <mlir/Conversion/ArithToSPIRV/ArithToSPIRV.h>
 #include <mlir/Conversion/ControlFlowToSPIRV/ControlFlowToSPIRV.h>
@@ -121,6 +122,7 @@ struct InsertGPUAllocs
     }
 
     struct AccessType {
+      mlir::Attribute env;
       bool hostRead = false;
       bool hostWrite = false;
       bool deviceRead = false;
@@ -237,7 +239,18 @@ struct InsertGPUAllocs
       return;
     }
 
-    auto getAccessType = [&](mlir::Value memref) {
+    auto getEnv = [](mlir::Operation *op) -> mlir::FailureOr<mlir::Attribute> {
+      assert(op && "Invalid op");
+      auto region = op->getParentOfType<imex::util::EnvironmentRegionOp>();
+      if (!region ||
+          !region.getEnvironment().isa<gpu_runtime::GPURegionDescAttr>())
+        return mlir::failure();
+
+      return region.getEnvironment();
+    };
+
+    auto getAccessType =
+        [&](mlir::Value memref) -> mlir::FailureOr<AccessType> {
       AccessType ret;
       for (auto mem : aliases.resolve(memref)) {
         for (auto user : mem.getUsers()) {
@@ -266,12 +279,41 @@ struct InsertGPUAllocs
             if (memInterface.hasEffect<mlir::MemoryEffects::Write>())
               (onDevice ? ret.deviceWrite : ret.hostWrite) = true;
 
+            if (onDevice) {
+              auto env = getEnv(user);
+              if (mlir::succeeded(env)) {
+
+                assert(*env && "Invalid device");
+                if (!ret.env) {
+                  ret.env = *env;
+                } else if (ret.env != *env) {
+                  return user->emitError("Device conflict: ")
+                         << ret.env << " and " << *env;
+                }
+              }
+            }
+
             continue;
           }
           if (mlir::isa<mlir::func::CallOp>(user)) {
             bool onDevice = user->getParentOfType<mlir::gpu::LaunchOp>();
             (onDevice ? ret.deviceRead : ret.hostRead) = true;
             (onDevice ? ret.deviceWrite : ret.hostWrite) = true;
+
+            if (onDevice) {
+              auto env = getEnv(user);
+              if (mlir::succeeded(env)) {
+
+                assert(*env && "Invalid device");
+                if (!ret.env) {
+                  ret.env = *env;
+                } else if (ret.env != *env) {
+                  return user->emitError("Device conflict: ")
+                         << ret.env << " and " << *env;
+                }
+              }
+            }
+
             continue;
           }
         }
@@ -282,7 +324,11 @@ struct InsertGPUAllocs
     for (auto &it : gpuBufferAllocs) {
       auto op = it.first;
       assert(op->getNumResults() == 1);
-      it.second = getAccessType(op->getResult(0));
+      auto access = getAccessType(op->getResult(0));
+      if (mlir::failed(access))
+        return signalPassFailure();
+
+      it.second = *access;
       if (mlir::isa<mlir::memref::GetGlobalOp>(op))
         it.second.hostWrite = true;
     }
@@ -290,7 +336,11 @@ struct InsertGPUAllocs
     auto &block = funcBody.front();
     for (auto &it : gpuBufferParams) {
       auto param = block.getArgument(it.first);
-      it.second = getAccessType(param);
+      auto access = getAccessType(param);
+      if (mlir::failed(access))
+        return signalPassFailure();
+
+      it.second = *access;
 
       it.second.hostRead = true;
       it.second.hostWrite = true;
@@ -323,41 +373,55 @@ struct InsertGPUAllocs
                                           allocType.getMemorySpace());
 
       bool hostShared = access.hostRead || access.hostWrite;
-      auto gpuAlloc = builder.create<mlir::gpu::AllocOp>(
-          loc, allocType, /*asyncToken*/ nullptr,
-          /*asyncDependencies*/ llvm::None, dims,
-          /*symbolOperands*/ llvm::None, hostShared);
-      auto allocResult = gpuAlloc.getMemref();
-      if (allocType != memrefType)
-        allocResult =
-            builder.create<mlir::memref::CastOp>(loc, memrefType, allocResult);
+      auto results = imex::util::wrapEnvRegion(
+                         builder, src.getLoc(), access.env, memrefType,
+                         [&](mlir::OpBuilder &b, mlir::Location loc) {
+                           auto gpuAlloc = builder.create<mlir::gpu::AllocOp>(
+                               loc, allocType, /*asyncToken*/ nullptr,
+                               /*asyncDependencies*/ llvm::None, dims,
+                               /*symbolOperands*/ llvm::None, hostShared);
+                           auto allocResult = gpuAlloc.getMemref();
+                           if (allocType != memrefType)
+                             allocResult = builder.create<mlir::memref::CastOp>(
+                                 loc, memrefType, allocResult);
 
-      if (access.hostWrite && access.deviceRead) {
-        auto copy = builder.create<mlir::memref::CopyOp>(loc, src, allocResult);
-        filter.insert(copy);
-      }
+                           if (access.hostWrite && access.deviceRead) {
+                             auto copy = builder.create<mlir::memref::CopyOp>(
+                                 loc, src, allocResult);
+                             filter.insert(copy);
+                           }
+                           return allocResult;
+                         })
+                         .front();
 
-      src.replaceAllUsesExcept(allocResult, filter);
+      src.replaceAllUsesExcept(results, filter);
 
       builder.setInsertionPoint(term);
-      if (access.hostRead && access.deviceWrite)
-        builder.create<mlir::memref::CopyOp>(loc, allocResult, src);
+      imex::util::wrapEnvRegion(
+          builder, src.getLoc(), access.env, llvm::None,
+          [&](mlir::OpBuilder &b, mlir::Location loc) {
+            if (access.hostRead && access.deviceWrite)
+              builder.create<mlir::memref::CopyOp>(loc, results, src);
 
-      builder.create<mlir::gpu::DeallocOp>(loc, llvm::None, allocResult);
+            builder.create<mlir::gpu::DeallocOp>(loc, llvm::None, results);
+            return llvm::None;
+          });
     };
 
-    for (auto it : gpuBufferAllocs) {
-      auto access = it.second;
-      auto op = it.first;
-      auto loc = op->getLoc();
+    for (auto [op, access] : gpuBufferAllocs) {
       if (auto alloc = mlir::dyn_cast<mlir::memref::AllocOp>(op)) {
         builder.setInsertionPoint(alloc);
         bool hostShared = access.hostRead || access.hostWrite;
-        auto gpuAlloc = builder.create<mlir::gpu::AllocOp>(
-            loc, alloc.getType(), /*asyncToken*/ nullptr,
-            /*asyncDependencies*/ llvm::None, alloc.getDynamicSizes(),
-            alloc.getSymbolOperands(), hostShared);
-        alloc->replaceAllUsesWith(gpuAlloc);
+        auto results = imex::util::wrapEnvRegion(
+            builder, op->getLoc(), access.env, alloc.getType(),
+            [&](mlir::OpBuilder &b, mlir::Location loc) {
+              auto gpuAlloc = builder.create<mlir::gpu::AllocOp>(
+                  loc, alloc.getType(), /*asyncToken*/ nullptr,
+                  /*asyncDependencies*/ llvm::None, alloc.getDynamicSizes(),
+                  alloc.getSymbolOperands(), hostShared);
+              return gpuAlloc.getResults();
+            });
+        alloc->replaceAllUsesWith(results);
         alloc.erase();
       } else if (auto getGlobal =
                      mlir::dyn_cast<mlir::memref::GetGlobalOp>(op)) {
