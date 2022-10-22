@@ -44,6 +44,8 @@ class GpuRuntime_Type<string name, string typeMnemonic, list<Trait> traits = [],
 
 def GpuRuntime_OpaqueType : GpuRuntime_Type<"Opaque", "opaque", [], "::mlir::Type">;
 
+def GpuRuntime_StreamType : GpuRuntime_Type<"Stream", "stream", [], "::mlir::Type">;
+
 class GpuRuntime_Attr<string attrName, string attrMnemonic, list<Trait> traits = []>
     : AttrDef<GpuRuntime_Dialect, attrName, traits> {
   let mnemonic = attrMnemonic;
@@ -80,7 +82,7 @@ def GPURegionDescAttr
 }
 
 def CreateGpuStreamOp : GpuRuntime_Op<"create_gpu_stream", [Pure]> {
-  let results = (outs GpuRuntime_OpaqueType : $result);
+  let results = (outs GpuRuntime_StreamType:$result);
 
   let hasCanonicalizer = 1;
 
@@ -90,13 +92,13 @@ def CreateGpuStreamOp : GpuRuntime_Op<"create_gpu_stream", [Pure]> {
 }
 
 def DestroyGpuStreamOp : GpuRuntime_Op<"destroy_gpu_stream"> {
-  let arguments = (ins GpuRuntime_OpaqueType : $source);
+  let arguments = (ins GpuRuntime_StreamType:$source);
 
   let assemblyFormat = "attr-dict $source";
 }
 
 def LoadGpuModuleOp : GpuRuntime_Op<"load_gpu_module", [Pure]> {
-  let arguments = (ins GpuRuntime_OpaqueType : $stream, SymbolRefAttr : $module);
+  let arguments = (ins GpuRuntime_StreamType : $stream, SymbolRefAttr : $module);
   let results = (outs GpuRuntime_OpaqueType : $result);
 
   let hasCanonicalizer = 1;
@@ -125,7 +127,7 @@ def LaunchGpuKernelOp
     : GpuRuntime_Op<"launch_gpu_kernel",
                [GPU_AsyncOpInterface, AttrSizedOperandSegments]> {
   let arguments = (ins Variadic<GPU_AsyncToken>:$asyncDependencies,
-                     GpuRuntime_OpaqueType:$stream,
+                     GpuRuntime_StreamType:$stream,
                      GpuRuntime_OpaqueType:$kernel,
                      Index:$gridSizeX, Index:$gridSizeY, Index:$gridSizeZ,
                      Index:$blockSizeX, Index:$blockSizeY, Index:$blockSizeZ,
@@ -148,7 +150,7 @@ def GPUAllocOp : GpuRuntime_Op<"alloc",
   [GPU_AsyncOpInterface, AttrSizedOperandSegments]> {
 
   let arguments = (ins Variadic<GPU_AsyncToken>:$asyncDependencies,
-                       GpuRuntime_OpaqueType:$stream,
+                       GpuRuntime_StreamType:$stream,
                        Variadic<Index>:$dynamicSizes,
                        Variadic<Index>:$symbolOperands,
                        UnitAttr:$hostShared);
@@ -168,7 +170,7 @@ def GPUAllocOp : GpuRuntime_Op<"alloc",
 def GPUDeallocOp : GpuRuntime_Op<"dealloc"> {
   let arguments = (ins Variadic<GPU_AsyncToken>:$asyncDependencies,
                   Res<AnyMemRef, "", [MemAlloc]>:$memref,
-                  GpuRuntime_OpaqueType : $stream);
+                  GpuRuntime_StreamType:$stream);
 
   let results = (outs Optional<GPU_AsyncToken>:$asyncToken);
 
@@ -180,7 +182,7 @@ def GPUDeallocOp : GpuRuntime_Op<"dealloc"> {
 
 def GPUSuggestBlockSizeOp : GpuRuntime_Op<"suggest_block_size",
                                      [AttrSizedOperandSegments, Pure]> {
-  let arguments = (ins Optional<GpuRuntime_OpaqueType>:$stream,
+  let arguments = (ins Optional<GpuRuntime_StreamType>:$stream,
                        Optional<GpuRuntime_OpaqueType>:$kernel,
                        OptionalAttr<SymbolRefAttr>:$kernelRef,
                        Variadic<Index>:$gridSize);

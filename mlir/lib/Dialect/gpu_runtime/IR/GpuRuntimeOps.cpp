@@ -107,7 +107,7 @@ void CreateGpuStreamOp::build(::mlir::OpBuilder &odsBuilder,
                               ::mlir::OperationState &odsState) {
   auto ctx = odsBuilder.getContext();
   CreateGpuStreamOp::build(odsBuilder, odsState,
-                           gpu_runtime::OpaqueType::get(ctx));
+                           gpu_runtime::StreamType::get(ctx));
 }
 
 void CreateGpuStreamOp::getCanonicalizationPatterns(
