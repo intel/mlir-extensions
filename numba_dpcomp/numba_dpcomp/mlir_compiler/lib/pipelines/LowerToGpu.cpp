@@ -1684,7 +1684,6 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   funcPM.addPass(gpu_runtime::createTileParallelLoopsForGPUPass());
   funcPM.addPass(gpu_runtime::createParallelLoopGPUMappingPass());
   funcPM.addPass(mlir::createParallelLoopToGpuPass());
-  funcPM.addPass(std::make_unique<RemoveGpuRegionPass>());
   funcPM.addPass(mlir::createCanonicalizerPass());
   funcPM.addPass(gpu_runtime::createInsertGPUAllocsPass());
   funcPM.addPass(mlir::createCanonicalizerPass());
@@ -1725,6 +1724,7 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::func::FuncOp>(
       gpu_runtime::createConvertGPUDeallocsPass());
   pm.addNestedPass<mlir::func::FuncOp>(gpu_runtime::createGPUExPass());
+  pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<RemoveGpuRegionPass>());
   commonOptPasses(pm);
   pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<GPUExDeallocPass>());
   pm.addPass(std::make_unique<OutlineInitPass>());
