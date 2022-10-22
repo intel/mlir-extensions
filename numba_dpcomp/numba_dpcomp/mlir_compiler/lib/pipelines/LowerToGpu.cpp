@@ -736,6 +736,36 @@ static void rerunStdPipeline(mlir::Operation *op) {
   imex::addPipelineJumpMarker(mod, marker);
 }
 
+static mlir::FailureOr<mlir::StringAttr>
+getDeviceDescFromFunc(mlir::MLIRContext *context, mlir::TypeRange argTypes) {
+  mlir::StringAttr res;
+  for (auto arg : argTypes) {
+    auto tensor = arg.dyn_cast<imex::ntensor::NTensorType>();
+    if (!tensor)
+      continue;
+
+    auto env = tensor.getEnvironment()
+                   .dyn_cast_or_null<gpu_runtime::GPURegionDescAttr>();
+    if (!env)
+      continue;
+
+    auto name = env.getDevice();
+    assert(name && "Invalid device name");
+    if (!res) {
+      res = name;
+    } else if (res != name) {
+      return mlir::failure();
+    }
+  }
+
+  // TODO: remove default device.
+  if (!res)
+    if (auto dev = getDefaultDevice())
+      res = mlir::StringAttr::get(context, *dev);
+
+  return res;
+}
+
 struct LowerGpuRange final : public imex::CallOpLowering {
   using CallOpLowering::CallOpLowering;
 
@@ -751,38 +781,10 @@ protected:
     if (!parent)
       return mlir::failure();
 
-    auto device = [&]() -> mlir::StringAttr {
-      mlir::StringAttr res;
-      auto argsTypes = parent.getArgumentTypes();
-      for (auto arg : argsTypes) {
-        auto tensor = arg.dyn_cast<imex::ntensor::NTensorType>();
-        if (!tensor)
-          continue;
+    auto device =
+        getDeviceDescFromFunc(op->getContext(), parent.getArgumentTypes());
 
-        auto env = tensor.getEnvironment()
-                       .dyn_cast_or_null<gpu_runtime::GPURegionDescAttr>();
-        if (!env)
-          continue;
-
-        auto name = env.getDevice();
-        assert(name && "Invalid device name");
-        if (!res) {
-          res = name;
-        } else if (res != name) {
-          return nullptr;
-        }
-      }
-
-      // TODO: remove default device.
-      if (!res) {
-        if (auto dev = getDefaultDevice())
-          res = rewriter.getStringAttr(*dev);
-      }
-
-      return res;
-    }();
-
-    if (!device)
+    if (mlir::failed(device))
       return mlir::failure();
 
     llvm::SmallVector<mlir::scf::ForOp> newOps;
@@ -795,7 +797,7 @@ protected:
       return mlir::failure();
 
     mlir::OpBuilder::InsertionGuard g(rewriter);
-    auto envAttr = gpu_runtime::GPURegionDescAttr::get(getContext(), device);
+    auto envAttr = gpu_runtime::GPURegionDescAttr::get(getContext(), *device);
     for (auto op : newOps) {
       auto bodyBuilder = [&](mlir::OpBuilder &builder, mlir::Location loc) {
         auto newOp = builder.clone(*op);
