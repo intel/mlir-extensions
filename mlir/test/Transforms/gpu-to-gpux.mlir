@@ -23,3 +23,31 @@ func.func @alloc() {
 
   return
 }
+
+// -----
+
+// CHECK-LABEL: func @region()
+func.func @region() -> (memref<10xf32>, memref<11xf32>, memref<12xf32>){
+// CHECK: %[[S1:.*]] = gpu_runtime.create_gpu_stream
+// CHECK: %[[S2:.*]] = gpu_runtime.create_gpu_stream, "test1"
+// CHECK: %[[S3:.*]] = gpu_runtime.create_gpu_stream, "test2"
+// CHECK: %[[A1:.*]] = gpu_runtime.alloc %[[S1]] () : memref<10xf32>
+  %0 = gpu.alloc () : memref<10xf32>
+// CHECK: %[[R1:.*]] = imex_util.env_region #gpu_runtime.region_desc<device = "test1"> -> memref<11xf32> {
+  %1 = imex_util.env_region #gpu_runtime.region_desc<device = "test1"> -> memref<11xf32> {
+// CHECK: %[[A2:.*]] = gpu_runtime.alloc %[[S2]] () : memref<11xf32>
+    %2 = gpu.alloc () : memref<11xf32>
+// CHECK: imex_util.env_region_yield %[[A2]] : memref<11xf32>
+    imex_util.env_region_yield %2: memref<11xf32>
+  }
+// CHECK: %[[R2:.*]] = imex_util.env_region #gpu_runtime.region_desc<device = "test2"> -> memref<12xf32> {
+  %3 = imex_util.env_region #gpu_runtime.region_desc<device = "test2"> -> memref<12xf32> {
+// CHECK: %[[A3:.*]] = gpu_runtime.alloc %[[S3]] () : memref<12xf32>
+    %4 = gpu.alloc () : memref<12xf32>
+// CHECK: imex_util.env_region_yield %[[A3]] : memref<12xf32>
+    imex_util.env_region_yield %4: memref<12xf32>
+  }
+
+// CHECK: return %[[A1]], %[[R1]], %[[R2]]
+  return %0, %1, %3 : memref<10xf32>, memref<11xf32>, memref<12xf32>
+}
