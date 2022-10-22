@@ -801,8 +801,10 @@ protected:
       }
 
       // TODO: remove default device.
-      if (!res)
-        res = rewriter.getStringAttr("level_zero:gpu:0");
+      if (!res) {
+        if (auto dev = getDefaultDevice())
+          res = rewriter.getStringAttr(*dev);
+      }
 
       return res;
     }();
