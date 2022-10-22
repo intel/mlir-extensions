@@ -16,6 +16,7 @@
 
 #include "PyTypeConverter.hpp"
 
+#include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOps.hpp"
 #include "imex/Dialect/ntensor/IR/NTensorOps.hpp"
 
 #include <pybind11/pybind11.h>
@@ -46,8 +47,11 @@ struct Conversion {
     auto ndim = obj.attr("ndim").cast<size_t>();
     llvm::SmallVector<int64_t> shape(ndim, mlir::ShapedType::kDynamicSize);
 
-    // TODO: environment
-    return imex::ntensor::NTensorType::get(shape, elemType, /*env*/ {},
+    auto devAttr = mlir::StringAttr::get(
+        &context, obj.attr("filter_string").cast<std::string>());
+    auto env = gpu_runtime::GPURegionDescAttr::get(&context, devAttr);
+
+    return imex::ntensor::NTensorType::get(shape, elemType, env,
                                            llvm::StringRef(layout));
   }
 

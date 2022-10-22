@@ -37,6 +37,7 @@
 #include <llvm/Support/ManagedStatic.h>
 #include <llvm/Support/TargetSelect.h>
 
+#include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOps.hpp"
 #include "imex/Dialect/imex_util/Dialect.hpp"
 #include "imex/Dialect/ntensor/IR/NTensorOps.hpp"
 #include "imex/Dialect/plier/Dialect.hpp"
@@ -154,6 +155,7 @@ struct InstHandles {
 struct PlierLowerer final {
   PlierLowerer(mlir::MLIRContext &context, PyTypeConverter &conv)
       : ctx(context), builder(&ctx), typeConverter(conv) {
+    ctx.loadDialect<gpu_runtime::GpuRuntimeDialect>();
     ctx.loadDialect<imex::ntensor::NTensorDialect>();
     ctx.loadDialect<imex::util::ImexUtilDialect>();
     ctx.loadDialect<mlir::func::FuncDialect>();
