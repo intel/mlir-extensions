@@ -15,6 +15,7 @@
 #include "imex/Conversion/NtensorToMemref.hpp"
 
 #include "imex/Dialect/imex_util/Dialect.hpp"
+#include "imex/Dialect/imex_util/Utils.hpp"
 #include "imex/Dialect/ntensor/IR/NTensorOps.hpp"
 #include "imex/Transforms/TypeConversion.hpp"
 
@@ -23,31 +24,6 @@
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Pass/Pass.h>
 #include <mlir/Transforms/DialectConversion.h>
-
-template <typename F>
-static llvm::SmallVector<mlir::Value>
-wrapEnvRegion(mlir::ConversionPatternRewriter &builder, mlir::Location loc,
-              mlir::Attribute env, mlir::TypeRange results, F &&func) {
-  if (!env) {
-    auto res = func(builder, loc);
-    mlir::ValueRange range(res);
-    assert(range.getTypes() == results && "Invalid result types");
-    return {range.begin(), range.end()};
-  }
-
-  auto bodyBuilder = [&](mlir::OpBuilder &b, mlir::Location l) {
-    auto res = func(static_cast<mlir::ConversionPatternRewriter &>(b), l);
-    mlir::ValueRange range(res);
-    assert(range.getTypes() == results && "Invalid result types");
-    b.create<imex::util::EnvironmentRegionYieldOp>(l, range);
-  };
-
-  auto res = builder
-                 .create<imex::util::EnvironmentRegionOp>(
-                     loc, env, /*args*/ llvm::None, results, bodyBuilder)
-                 .getResults();
-  return {res.begin(), res.end()};
-}
 
 namespace {
 struct DimOpLowering : public mlir::OpConversionPattern<imex::ntensor::DimOp> {
@@ -63,7 +39,7 @@ struct DimOpLowering : public mlir::OpConversionPattern<imex::ntensor::DimOp> {
       return mlir::failure();
 
     auto indexType = rewriter.getIndexType();
-    auto results = wrapEnvRegion(
+    auto results = imex::util::wrapEnvRegion(
         rewriter, op->getLoc(), origType.getEnvironment(), indexType,
         [&](mlir::OpBuilder &builder, mlir::Location loc) {
           return builder
@@ -98,7 +74,7 @@ struct SubviewOpLowering
     if (!dstType)
       return mlir::failure();
 
-    auto results = wrapEnvRegion(
+    auto results = imex::util::wrapEnvRegion(
         rewriter, op->getLoc(), origType.getEnvironment(), dstType,
         [&](mlir::OpBuilder &builder, mlir::Location loc) {
           auto offsets = mlir::getMixedStridesOrOffsets(
@@ -147,7 +123,7 @@ struct LoadOpLowering
     if (!dstType || dstType != origType.getElementType())
       return mlir::failure();
 
-    auto results = wrapEnvRegion(
+    auto results = imex::util::wrapEnvRegion(
         rewriter, op->getLoc(), origType.getEnvironment(), dstType,
         [&](mlir::OpBuilder &builder, mlir::Location loc) {
           return builder
@@ -173,7 +149,7 @@ struct StoreOpLowering
     if (!src.getType().isa<mlir::MemRefType>())
       return mlir::failure();
 
-    auto results = wrapEnvRegion(
+    auto results = imex::util::wrapEnvRegion(
         rewriter, op->getLoc(), origType.getEnvironment(), llvm::None,
         [&](mlir::OpBuilder &builder, mlir::Location loc) {
           auto val = adaptor.getValue();
@@ -208,7 +184,7 @@ struct ToTensorOpLowering
       return mlir::failure();
 
     auto origType = op.getArray().getType().cast<imex::ntensor::NTensorType>();
-    auto results = wrapEnvRegion(
+    auto results = imex::util::wrapEnvRegion(
         rewriter, op->getLoc(), origType.getEnvironment(), retType,
         [&](mlir::OpBuilder &builder, mlir::Location loc) {
           return builder
@@ -242,7 +218,7 @@ struct FromTensorOpLowering
     if (!retType)
       return mlir::failure();
 
-    auto results = wrapEnvRegion(
+    auto results = imex::util::wrapEnvRegion(
         rewriter, op->getLoc(), origType.getEnvironment(), retType,
         [&](mlir::OpBuilder &builder, mlir::Location loc) {
           return builder
@@ -355,7 +331,7 @@ struct CastOpLowering
     if (!mlir::memref::CastOp::areCastCompatible(srcType, retType))
       return mlir::failure();
 
-    auto results = wrapEnvRegion(
+    auto results = imex::util::wrapEnvRegion(
         rewriter, op->getLoc(), origSrcType.getEnvironment(), retType,
         [&](mlir::OpBuilder &builder, mlir::Location loc) {
           return builder.create<mlir::memref::CastOp>(loc, retType, src)
@@ -396,7 +372,7 @@ struct CopyOpLowering
     if (origSrcType.getEnvironment() != origDstType.getEnvironment())
       return mlir::failure();
 
-    wrapEnvRegion(
+    imex::util::wrapEnvRegion(
         rewriter, op->getLoc(), origSrcType.getEnvironment(), llvm::None,
         [&](mlir::ConversionPatternRewriter &builder, mlir::Location /*loc*/) {
           builder.replaceOpWithNewOp<mlir::memref::CopyOp>(op, src, dst);

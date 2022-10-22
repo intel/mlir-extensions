@@ -99,6 +99,7 @@ set(HEADERS_LIST
     include/imex/Dialect/gpu_runtime/IR/GpuRuntimeOps.hpp
     include/imex/Dialect/gpu_runtime/Transforms/MakeBarriersUniform.hpp
     include/imex/Dialect/imex_util/Dialect.hpp
+    include/imex/Dialect/imex_util/Utils.hpp
     include/imex/Dialect/ntensor/IR/NTensorOps.hpp
     include/imex/Dialect/ntensor/Transforms/ResolveArrayOps.hpp
     include/imex/Dialect/plier/Dialect.hpp
