@@ -102,6 +102,7 @@ struct Conversion {
     dispatcherType = mod.attr("Dispatcher");
     functionType = mod.attr("Function");
     numberClassType = mod.attr("NumberClass");
+    omittedType = mod.attr("Omitted");
   }
 
   llvm::Optional<mlir::Type> operator()(mlir::MLIRContext &context,
@@ -174,6 +175,32 @@ struct Conversion {
       return imex::util::TypeVarType::get(type);
     }
 
+    if (py::isinstance(obj, omittedType)) {
+      auto value = obj.attr("value");
+
+      auto attr = [&]() -> mlir::Attribute {
+        if (py::isinstance<py::float_>(value))
+          return mlir::FloatAttr::get(mlir::Float64Type::get(&context),
+                                      value.cast<double>());
+
+        if (py::isinstance<py::int_>(value))
+          return mlir::IntegerAttr::get(mlir::IntegerType::get(&context, 64),
+                                        value.cast<int64_t>());
+
+        if (py::isinstance<py::bool_>(value))
+          return mlir::IntegerAttr::get(
+              mlir::IntegerType::get(&context, 1),
+              static_cast<int64_t>(value.cast<bool>()));
+
+        return {};
+      }();
+
+      if (!attr)
+        return llvm::None;
+
+      return plier::OmittedType::get(&context, attr);
+    }
+
     return llvm::None;
   }
 
@@ -191,6 +218,7 @@ private:
   py::object dispatcherType;
   py::object functionType;
   py::object numberClassType;
+  py::object omittedType;
 };
 } // namespace
 

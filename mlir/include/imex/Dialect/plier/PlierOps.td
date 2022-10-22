@@ -42,9 +42,7 @@ def Plier_SliceType : Plier_Type<"Slice", "slice", [], "::mlir::Type">;
 
 def Plier_Py : Plier_Type<"Py", "pytype", [], "::mlir::Type"> {
 
-  let parameters = (ins
-    "::mlir::StringAttr":$name
-  );
+  let parameters = (ins "::mlir::StringAttr":$name);
 
   let builders = [
     TypeBuilderWithInferredContext<(ins
@@ -62,6 +60,19 @@ def Plier_Py : Plier_Type<"Py", "pytype", [], "::mlir::Type"> {
   }];
 
   let assemblyFormat = "`<` $name `>`";
+}
+
+def Plier_OmittedType : Plier_Type<"Omitted", "omitted", [], "::mlir::Type"> {
+
+  let parameters = (ins "::mlir::Attribute":$value);
+
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "::mlir::Attribute":$value), [{
+      return $_get(value.getContext(), value);
+    }]>
+  ];
+
+  let assemblyFormat = "`<` $value `>`";
 }
 
 class Plier_Op<string mnemonic, list<Trait> traits = []>

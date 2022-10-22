@@ -112,12 +112,7 @@ struct ConstOpLowering : public mlir::OpConversionPattern<plier::ConstOp> {
 };
 
 static bool isOmittedType(mlir::Type type) {
-  if (auto pytype = type.dyn_cast<plier::PyType>()) {
-    auto name = pytype.getName().getValue();
-    if (name.consume_front("omitted(") && name.consume_back(")"))
-      return true;
-  }
-  return false;
+  return type.isa<plier::OmittedType>();
 }
 
 static mlir::Attribute makeSignlessAttr(mlir::Attribute val) {
@@ -174,31 +169,8 @@ struct OmittedLowering : public mlir::OpConversionPattern<plier::CastOp> {
 
     auto getOmittedValue = [&](mlir::Type type,
                                mlir::Type dstType) -> mlir::Attribute {
-      if (!isOmittedType(type))
-        return {};
-
-      auto name = type.cast<plier::PyType>().getName().getValue();
-      if (!name.consume_front("omitted(default=") || !name.consume_back(")"))
-        return {};
-
-      if (auto intType = dstType.dyn_cast<mlir::IntegerType>()) {
-        int64_t intVal;
-        if (name.consume_front("True")) {
-          intVal = 1;
-        } else if (name.consume_front("False")) {
-          intVal = 0;
-        } else if (name.getAsInteger(10, intVal)) {
-          return {};
-        }
-        return rewriter.getIntegerAttr(dstType, intVal);
-      }
-
-      double dblVal;
-      if (dstType.isF32() && !name.getAsDouble(dblVal))
-        return rewriter.getF32FloatAttr(static_cast<float>(dblVal));
-
-      if (dstType.isF64() && !name.getAsDouble(dblVal))
-        return rewriter.getF64FloatAttr(dblVal);
+      if (auto attr = type.dyn_cast<plier::OmittedType>())
+        return attr.getValue();
 
       return {};
     };
@@ -1116,6 +1088,14 @@ void PlierToStdPass::runOnOperation() {
   typeConverter.addConversion([](mlir::Type type) { return type; });
 
   auto context = &getContext();
+  typeConverter.addConversion(
+      [](mlir::Type type, llvm::SmallVectorImpl<mlir::Type> &retTypes)
+          -> llvm::Optional<mlir::LogicalResult> {
+        if (isOmittedType(type))
+          return mlir::success();
+
+        return llvm::None;
+      });
   imex::populateTupleTypeConverter(*context, typeConverter);
 
   auto materializeCast = [](mlir::OpBuilder &builder, mlir::Type type,
