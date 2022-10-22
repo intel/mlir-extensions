@@ -52,6 +52,7 @@ parser.add_argument("--pass-pipeline", "-p", default=None, help="pass pipeline (
 parser.add_argument("--print-before-all", "-b", action='store_true', dest='before', help="print ir before all passes")
 parser.add_argument("--print-after-all", "-a", action='store_true', dest='after', help="print ir after all passes")
 parser.add_argument("--no-mlir-runner", "-n", action='store_true', dest='no_mlir_runner', help="skip mlir runner")
+parser.add_argument("--runner", "-r", default="mlir-cpu-runner", choices=['mlir-cpu-runner', 'mlir-vulkan-runner'], help="mlir runner name")
 
 args, unknown = parser.parse_known_args()
 
@@ -62,7 +63,10 @@ if args.pass_pipeline_file:
             # Strip python style single line comments and append to ppipeline
             res = l.split('#')
             l = res[0]
-            ppipeline = ','.join([ppipeline, l]) if ppipeline else l
+            # get rid of whitespaces, tabs and newlines
+            l = re.sub(r"[\s\n\t]*", "", l)
+            if len(l):
+                ppipeline = ','.join([ppipeline, l]) if ppipeline else l
         # get rid of whitespaces, tabs and newlines
         ppipeline = re.sub(r"[\s\n\t]*", "", ppipeline)
         # get rid of duplicate ','s
@@ -83,12 +87,12 @@ if args.before:
 if args.after:
     cmd.append(f'--mlir-print-ir-after-all')
 # run and feed into pipe
-p1 = subprocess.Popen(cmd, stdout=subprocess.PIPE)
 if args.no_mlir_runner:
-    p1.wait()
+    subprocess.run(cmd)
 else:
+    p1 = subprocess.Popen(cmd, stdout=subprocess.PIPE)
     # build mlir-opt command: all unknown args will be passed to imex-opt
-    cmd = ["mlir-vulkan-runner"] + unknown
+    cmd = [args.runner] + unknown
     # get stdout from imex-opt and pipe into mlir-opt
     p2 = subprocess.Popen(cmd, stdin=p1.stdout)
     p1.wait()
