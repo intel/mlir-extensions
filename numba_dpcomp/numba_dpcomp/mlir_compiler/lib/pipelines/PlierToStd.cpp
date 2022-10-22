@@ -285,7 +285,6 @@ static mlir::Type mapPlierTypeName(mlir::MLIRContext &ctx,
       &mapFuncType,
       &mapDtypeType,
       &mapDispatcherType,
-      &mapSliceType,
       // clang-format on
   };
   for (auto h : handlers) {

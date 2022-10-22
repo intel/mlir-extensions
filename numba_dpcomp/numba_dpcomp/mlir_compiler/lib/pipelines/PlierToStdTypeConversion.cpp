@@ -16,6 +16,8 @@
 
 #include "PyTypeConverter.hpp"
 
+#include "imex/Dialect/plier/Dialect.hpp"
+
 #include <pybind11/pybind11.h>
 
 #include <mlir/IR/BuiltinTypes.h>
@@ -51,6 +53,10 @@ static mlir::Type getNoneType(mlir::MLIRContext &ctx) {
   return mlir::NoneType::get(&ctx);
 }
 
+static mlir::Type getSliceType(mlir::MLIRContext &ctx) {
+  return plier::SliceType::get(&ctx);
+}
+
 using TypeFunc = mlir::Type (*)(mlir::MLIRContext &);
 static const constexpr std::pair<llvm::StringLiteral, TypeFunc>
     PrimitiveTypes[] = {
@@ -71,6 +77,9 @@ static const constexpr std::pair<llvm::StringLiteral, TypeFunc>
         {"float64", &getFloat64Type},
 
         {"none", &getNoneType},
+
+        {"slice2_type", &getSliceType},
+        {"slice3_type", &getSliceType},
         // clang-format on
 };
 
