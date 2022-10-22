@@ -100,6 +100,7 @@ struct Conversion {
 
     literalType = mod.attr("Literal");
     dispatcherType = mod.attr("Dispatcher");
+    functionType = mod.attr("Function");
   }
 
   llvm::Optional<mlir::Type> operator()(mlir::MLIRContext &context,
@@ -161,6 +162,9 @@ struct Conversion {
     if (py::isinstance(obj, dispatcherType))
       return imex::util::OpaqueType::get(&context);
 
+    if (py::isinstance(obj, functionType))
+      return mlir::FunctionType::get(&context, {}, {});
+
     return llvm::None;
   }
 
@@ -176,6 +180,7 @@ private:
 
   py::object literalType;
   py::object dispatcherType;
+  py::object functionType;
 };
 } // namespace
 
