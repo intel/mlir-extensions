@@ -82,10 +82,14 @@ def CreateGpuStreamOp : GpuRuntime_Op<"create_gpu_stream", [Pure]> {
   let hasCanonicalizer = 1;
 
   let builders = [OpBuilder<(ins)>];
+
+  let assemblyFormat = "attr-dict";
 }
 
 def DestroyGpuStreamOp : GpuRuntime_Op<"destroy_gpu_stream"> {
   let arguments = (ins GpuRuntime_OpaqueType : $source);
+
+  let assemblyFormat = "attr-dict $source";
 }
 
 def LoadGpuModuleOp : GpuRuntime_Op<"load_gpu_module", [Pure]> {
@@ -137,8 +141,8 @@ def DestroyGpuKernelOp : GpuRuntime_Op<"destroy_gpu_kernel"> {
   let arguments = (ins GpuRuntime_OpaqueType : $source);
 }
 
-def GPUAllocOp
-    : GpuRuntime_Op<"gpu_alloc", [GPU_AsyncOpInterface, AttrSizedOperandSegments]> {
+def GPUAllocOp : GpuRuntime_Op<"alloc",
+  [GPU_AsyncOpInterface, AttrSizedOperandSegments]> {
 
   let arguments = (ins Variadic<GPU_AsyncToken>:$asyncDependencies,
                        GpuRuntime_OpaqueType:$stream,
@@ -151,12 +155,24 @@ def GPUAllocOp
   let extraClassDeclaration = [{
     ::mlir::MemRefType getType() { return getMemref().getType().cast<::mlir::MemRefType>(); }
   }];
+
+  let assemblyFormat = [{ $stream
+    custom<AsyncDependencies>(type($asyncToken), $asyncDependencies) (` ` `host_shared` $hostShared^)? ` `
+    `(` $dynamicSizes `)` (`` `[` $symbolOperands^ `]`)? attr-dict `:` type($memref)
+  }];
 }
 
-def GPUDeallocOp : GpuRuntime_Op<"gpu_dealloc"> {
+def GPUDeallocOp : GpuRuntime_Op<"dealloc"> {
   let arguments = (ins Variadic<GPU_AsyncToken>:$asyncDependencies,
                   Res<AnyMemRef, "", [MemAlloc]>:$memref,
                   GpuRuntime_OpaqueType : $stream);
+
+  let results = (outs Optional<GPU_AsyncToken>:$asyncToken);
+
+  let assemblyFormat = [{ $stream
+    custom<AsyncDependencies>(type($asyncToken), $asyncDependencies)
+    $memref attr-dict `:` type($memref)
+  }];
 }
 
 def GPUSuggestBlockSizeOp : GpuRuntime_Op<"suggest_block_size",

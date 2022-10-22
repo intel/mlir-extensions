@@ -1423,7 +1423,8 @@ struct ExpandDeallocOp : public mlir::OpRewritePattern<mlir::gpu::DeallocOp> {
       return mlir::failure();
 
     rewriter.replaceOpWithNewOp<gpu_runtime::GPUDeallocOp>(
-        op, op.getAsyncDependencies(), op.getMemref(), *stream);
+        op, op.getResultTypes(), op.getAsyncDependencies(), op.getMemref(),
+        *stream);
 
     return mlir::success();
   }
@@ -1594,6 +1595,7 @@ struct GPUExPass
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<gpu_runtime::GpuRuntimeDialect>();
+    registry.insert<mlir::gpu::GPUDialect>();
   }
 
   void runOnOperation() override {
