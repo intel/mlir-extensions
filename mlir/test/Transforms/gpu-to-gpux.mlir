@@ -21,6 +21,7 @@ func.func @alloc() {
   // CHECK: gpu_runtime.dealloc %[[stream]] %[[m2]] : memref<13xf32, 1>
   gpu.dealloc %m2 : memref<13xf32, 1>
 
+  // CHECK: gpu_runtime.destroy_gpu_stream %[[stream]]
   return
 }
 
@@ -47,6 +48,10 @@ func.func @region() -> (memref<10xf32>, memref<11xf32>, memref<12xf32>){
 // CHECK: imex_util.env_region_yield %[[A3]] : memref<12xf32>
     imex_util.env_region_yield %4: memref<12xf32>
   }
+
+// CHECK: gpu_runtime.destroy_gpu_stream %[[S3]]
+// CHECK: gpu_runtime.destroy_gpu_stream %[[S2]]
+// CHECK: gpu_runtime.destroy_gpu_stream %[[S1]]
 
 // CHECK: return %[[A1]], %[[R1]], %[[R2]]
   return %0, %1, %3 : memref<10xf32>, memref<11xf32>, memref<12xf32>
