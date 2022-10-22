@@ -55,6 +55,7 @@ if _is_dpctl_available:
             readonly=False,
             name=None,
             aligned=True,
+            filter_string=None,
         ):
             super(USMNdArrayBaseType, self).__init__(
                 dtype,
@@ -64,6 +65,8 @@ if _is_dpctl_available:
                 name=name,
                 aligned=aligned,
             )
+
+            self.filter_string = filter_string
 
         def copy(self, dtype=None, ndim=None, layout=None, readonly=None):
             if dtype is None:
@@ -90,6 +93,7 @@ if _is_dpctl_available:
                 self.layout,
                 self.mutable,
                 self.aligned,
+                self.filter_string,
             )
 
         @property
@@ -141,9 +145,8 @@ if _is_dpctl_available:
                 layout,
                 readonly=readonly,
                 name=name,
+                filter_string=filter_string,
             )
-
-            self.filter_string = filter_string
 
         def copy(self, *args, **kwargs):
             return super(USMNdArrayType, self).copy(*args, **kwargs)
