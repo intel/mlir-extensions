@@ -28,6 +28,7 @@ struct OffloadDeviceCapabilities {
 };
 
 // TODO: device name
-llvm::Optional<OffloadDeviceCapabilities> getOffloadDeviceCapabilities();
+llvm::Optional<OffloadDeviceCapabilities>
+getOffloadDeviceCapabilities(const std::string &name);
 
 llvm::Optional<std::string> getDefaultDevice();

@@ -18,7 +18,7 @@
 
 namespace py = pybind11;
 
-using ResolveFptr = bool (*)(OffloadDeviceCapabilities *);
+using ResolveFptr = bool (*)(OffloadDeviceCapabilities *, const char *);
 
 static ResolveFptr getResolver() {
   static ResolveFptr resolver = []() {
@@ -29,13 +29,14 @@ static ResolveFptr getResolver() {
   return resolver;
 }
 
-llvm::Optional<OffloadDeviceCapabilities> getOffloadDeviceCapabilities() {
+llvm::Optional<OffloadDeviceCapabilities>
+getOffloadDeviceCapabilities(const std::string &name) {
   auto resolver = getResolver();
   if (!resolver)
     return llvm::None;
 
   OffloadDeviceCapabilities ret;
-  if (!resolver(&ret))
+  if (!resolver(&ret, name.c_str()))
     return llvm::None;
 
   if (ret.spirvMajorVersion == 0 && ret.spirvMinorVersion == 0)

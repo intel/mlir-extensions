@@ -565,13 +565,15 @@ struct OffloadDeviceCapabilities {
 
 // TODO: device name
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT bool
-dpcompGetDeviceCapabilities(OffloadDeviceCapabilities *ret) {
+dpcompGetDeviceCapabilities(OffloadDeviceCapabilities *ret,
+                            const char *deviceName) {
   LOG_FUNC();
   assert(ret);
+  assert(deviceName);
 
   bool result = true;
   catchAll([&]() {
-    auto driverAndDevice = getDefDevice();
+    auto driverAndDevice = getDevice(deviceName);
     if (!driverAndDevice.driver || !driverAndDevice.device) {
       result = false;
       return;

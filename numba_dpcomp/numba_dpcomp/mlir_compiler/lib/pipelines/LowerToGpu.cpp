@@ -1649,7 +1649,8 @@ static mlir::spirv::TargetEnvAttr deviceCapsMapper(mlir::gpu::GPUModuleOp op) {
   if (!deviceAttr)
     return {};
 
-  auto deviceCapsRet = getOffloadDeviceCapabilities();
+  auto deviceCapsRet =
+      getOffloadDeviceCapabilities(deviceAttr.getValue().str());
   if (!deviceCapsRet)
     return nullptr;
 
