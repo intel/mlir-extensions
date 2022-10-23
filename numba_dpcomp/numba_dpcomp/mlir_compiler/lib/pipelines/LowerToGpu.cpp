@@ -728,7 +728,7 @@ struct GenerateOutlineContextPass
   }
 };
 
-void rerunStdPipeline(mlir::Operation *op) {
+static void rerunStdPipeline(mlir::Operation *op) {
   assert(nullptr != op);
   auto marker =
       mlir::StringAttr::get(op->getContext(), plierToStdPipelineName());
