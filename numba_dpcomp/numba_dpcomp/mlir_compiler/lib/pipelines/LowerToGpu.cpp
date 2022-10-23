@@ -1488,6 +1488,47 @@ public:
   }
 };
 
+static const constexpr llvm::StringLiteral
+    kGpuModuleDeviceName("gpu_module_device");
+
+class NameGpuModulesPass
+    : public mlir::PassWrapper<NameGpuModulesPass,
+                               mlir::OperationPass<mlir::ModuleOp>> {
+public:
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(NameGpuModulesPass)
+
+  void runOnOperation() override {
+    auto mod = getOperation();
+    mod->walk([&](mlir::gpu::LaunchFuncOp launch) {
+      auto env = launch->getParentOfType<imex::util::EnvironmentRegionOp>();
+      if (!env)
+        return;
+
+      auto gpuEnv =
+          env.getEnvironment().dyn_cast<gpu_runtime::GPURegionDescAttr>();
+      if (!gpuEnv)
+        return;
+
+      auto deviceName = gpuEnv.getDevice();
+
+      auto kernel = launch.getKernel();
+      auto gpuModName = kernel.getRootReference();
+      auto gpuMod = mod.lookupSymbol<mlir::gpu::GPUModuleOp>(gpuModName);
+      if (!gpuMod)
+        return;
+
+      auto gpuModAttr =
+          gpuMod->getAttrOfType<mlir::StringAttr>(kGpuModuleDeviceName);
+      if (gpuModAttr && gpuModAttr != deviceName) {
+        gpuMod->emitError("Incompatible gpu module devices: ")
+            << gpuModAttr.getValue() << " and " << deviceName;
+        return signalPassFailure();
+      }
+      gpuMod->setAttr(kGpuModuleDeviceName, deviceName);
+    });
+  }
+};
+
 struct SinkGpuDims : public mlir::OpRewritePattern<mlir::gpu::LaunchOp> {
   using OpRewritePattern::OpRewritePattern;
 
@@ -1604,7 +1645,12 @@ static llvm::Optional<mlir::spirv::Version> mapSpirvVersion(uint16_t major,
 }
 
 static mlir::spirv::TargetEnvAttr deviceCapsMapper(mlir::gpu::GPUModuleOp op) {
-  auto deviceCapsRet = getOffloadDeviceCapabilities();
+  auto deviceAttr = op->getAttrOfType<mlir::StringAttr>(kGpuModuleDeviceName);
+  if (!deviceAttr)
+    return {};
+
+  auto deviceCapsRet =
+      getOffloadDeviceCapabilities(deviceAttr.getValue().str());
   if (!deviceCapsRet)
     return nullptr;
 
@@ -1699,6 +1745,7 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   funcPM.addPass(std::make_unique<SinkGpuDimsPass>());
   funcPM.addPass(std::make_unique<GpuLaunchSinkOpsPass>());
   pm.addPass(mlir::createGpuKernelOutliningPass());
+  pm.addPass(std::make_unique<NameGpuModulesPass>());
   pm.addPass(mlir::createSymbolDCEPass());
 
   pm.addNestedPass<mlir::func::FuncOp>(

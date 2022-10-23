@@ -17,9 +17,11 @@ project(dpcomp-gpu-runtime LANGUAGES CXX C)
 include(GenerateExportHeader)
 
 set(SOURCES_LIST
+    lib/FilterStringParser.cpp
     lib/GpuRuntime.cpp
 )
 set(HEADERS_LIST
+    lib/FilterStringParser.hpp
     lib/LevelZeroPrinting.hpp
     lib/LevelZeroWrapper.hpp
 )

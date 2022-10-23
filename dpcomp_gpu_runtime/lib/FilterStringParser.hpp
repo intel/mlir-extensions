@@ -14,21 +14,13 @@
 
 #pragma once
 
-#include <cstdint>
-#include <string>
+#include <optional>
+#include <string_view>
 
-#include <llvm/ADT/Optional.h>
-
-// Must be kept in sync with gpu_runtime version.
-struct OffloadDeviceCapabilities {
-  uint16_t spirvMajorVersion;
-  uint16_t spirvMinorVersion;
-  bool hasFP16;
-  bool hasFP64;
+struct DeviceDesc {
+  std::string_view backend;
+  std::string_view name;
+  int index = -1;
 };
 
-// TODO: device name
-llvm::Optional<OffloadDeviceCapabilities>
-getOffloadDeviceCapabilities(const std::string &name);
-
-llvm::Optional<std::string> getDefaultDevice();
+std::optional<DeviceDesc> parseFilterString(std::string_view filterString);

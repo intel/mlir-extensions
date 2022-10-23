@@ -24,6 +24,7 @@
 
 #include "dpcomp-gpu-runtime_export.h"
 
+#include "FilterStringParser.hpp"
 #include "LevelZeroPrinting.hpp"
 #include "LevelZeroWrapper.hpp"
 
@@ -77,7 +78,7 @@ template <typename F> auto catchAll(F &&func) {
 
 static AllocFuncT AllocFunc = nullptr;
 
-struct DeviceDesc {
+struct DriverAndDevice {
   ze_driver_handle_t driver = nullptr;
   ze_device_handle_t device = nullptr;
 };
@@ -103,7 +104,9 @@ template <typename T> size_t countUntil(T *ptr, T &&elem) {
 }
 
 template <typename CheckFunc>
-static DeviceDesc getDevice(CheckFunc &&checkFunc) {
+static DriverAndDevice getDeviceImpl(CheckFunc &&checkFunc) {
+  CHECK_ZE_RESULT(zeInit(0));
+
   uint32_t driverCount = 0;
   CHECK_ZE_RESULT(zeDriverGet(&driverCount, nullptr));
 
@@ -126,15 +129,42 @@ static DeviceDesc getDevice(CheckFunc &&checkFunc) {
         return {driver, device};
     }
   }
-  return {nullptr, nullptr};
+  return {};
 }
 
-static DeviceDesc getDevice() {
-  CHECK_ZE_RESULT(zeInit(0));
-  return getDevice([](ze_device_handle_t device) {
+static DriverAndDevice getDefDevice() {
+  return getDeviceImpl([](ze_device_handle_t device) {
     ze_device_properties_t props = {};
     CHECK_ZE_RESULT(zeDeviceGetProperties(device, &props));
     return props.type == ZE_DEVICE_TYPE_GPU;
+  });
+}
+
+static DriverAndDevice getDevice(std::string_view name) {
+  auto desc = parseFilterString(name);
+  if (!desc || desc->backend != "level_zero")
+    return {};
+
+  ze_device_type_t devType;
+  if (desc->name == "cpu") {
+    devType = ZE_DEVICE_TYPE_CPU;
+  } else if (desc->name == "gpu") {
+    devType = ZE_DEVICE_TYPE_GPU;
+  } else {
+    return {};
+  }
+
+  int counter = 0;
+  return getDeviceImpl([&](ze_device_handle_t device) {
+    ze_device_properties_t props = {};
+    CHECK_ZE_RESULT(zeDeviceGetProperties(device, &props));
+    if (props.type == devType) {
+      if (desc->index == counter)
+        return true;
+
+      ++counter;
+    }
+    return false;
   });
 }
 
@@ -195,10 +225,13 @@ enum class GpuAllocType { Device = 0, Shared = 1, Local = 2 };
 
 struct Stream {
   Stream(size_t eventsCount, const char *deviceName) {
-    assert(deviceName);
-    (void)deviceName;
+    DriverAndDevice driverAndDevice;
+    if (deviceName) {
+      driverAndDevice = getDevice(deviceName);
+    } else {
+      driverAndDevice = getDefDevice();
+    }
 
-    auto driverAndDevice = getDevice();
     if (!driverAndDevice.driver || !driverAndDevice.device)
       throw std::runtime_error("getDevice failed");
 
@@ -532,14 +565,19 @@ struct OffloadDeviceCapabilities {
 
 // TODO: device name
 extern "C" DPCOMP_GPU_RUNTIME_EXPORT bool
-dpcompGetDeviceCapabilities(OffloadDeviceCapabilities *ret) {
+dpcompGetDeviceCapabilities(OffloadDeviceCapabilities *ret,
+                            const char *deviceName) {
   LOG_FUNC();
   assert(ret);
-  auto driverAndDevice = getDevice();
-  if (!driverAndDevice.driver || !driverAndDevice.device)
-    return false;
+  assert(deviceName);
 
+  bool success = true;
   catchAll([&]() {
+    auto driverAndDevice = getDevice(deviceName);
+    if (!driverAndDevice.driver || !driverAndDevice.device) {
+      success = false;
+      return;
+    }
     ze_device_module_properties_t props = {};
     props.stype = ZE_STRUCTURE_TYPE_DEVICE_MODULE_PROPERTIES;
     CHECK_ZE_RESULT(
@@ -554,5 +592,5 @@ dpcompGetDeviceCapabilities(OffloadDeviceCapabilities *ret) {
     result.hasFP64 = props.flags & ZE_DEVICE_MODULE_FLAG_FP64;
     *ret = result;
   });
-  return true;
+  return success;
 }

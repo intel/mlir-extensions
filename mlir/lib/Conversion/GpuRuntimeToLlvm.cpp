@@ -265,20 +265,23 @@ private:
       return mlir::failure();
 
     auto device = adaptor.getDeviceAttr().dyn_cast_or_null<mlir::StringAttr>();
-    if (!device)
-      return mlir::failure();
 
     auto eventsCountAttr = rewriter.getIntegerAttr(llvmIndexType, *eventsCount);
     auto loc = op.getLoc();
     mlir::Value eventsCountVar = rewriter.create<mlir::LLVM::ConstantOp>(
         loc, llvmIndexType, eventsCountAttr);
 
-    llvm::SmallString<64> name = device.getValue();
-    name.push_back('\0');
+    mlir::Value data;
+    if (device) {
+      llvm::SmallString<64> name = device.getValue();
+      name.push_back('\0');
 
-    auto varName = getUniqueLLVMGlobalName(mod, "device_name");
-    auto data = mlir::LLVM::createGlobalString(loc, rewriter, varName, name,
-                                               mlir::LLVM::Linkage::Internal);
+      auto varName = getUniqueLLVMGlobalName(mod, "device_name");
+      data = mlir::LLVM::createGlobalString(loc, rewriter, varName, name,
+                                            mlir::LLVM::Linkage::Internal);
+    } else {
+      data = rewriter.create<mlir::LLVM::NullOp>(loc, llvmPointerType);
+    }
 
     auto res =
         streamCreateCallBuilder.create(loc, rewriter, {eventsCountVar, data});
