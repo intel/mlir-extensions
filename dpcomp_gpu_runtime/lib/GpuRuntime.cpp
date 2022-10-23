@@ -196,6 +196,7 @@ enum class GpuAllocType { Device = 0, Shared = 1, Local = 2 };
 struct Stream {
   Stream(size_t eventsCount, const char *deviceName) {
     assert(deviceName);
+    (void)deviceName;
 
     auto driverAndDevice = getDevice();
     if (!driverAndDevice.driver || !driverAndDevice.device)
