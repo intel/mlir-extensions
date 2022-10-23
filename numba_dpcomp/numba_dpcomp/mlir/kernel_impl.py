@@ -65,22 +65,22 @@ class _RangeId(ConcreteTemplate):
     ]
 
 
-def _get_default_local_size():
+def _set_default_local_size():
     _stub_error()
 
 
-@registry.register_func("_get_default_local_size", _get_default_local_size)
-def _get_default_local_size_impl(builder, *args):
+@registry.register_func("_set_default_local_size", _set_default_local_size)
+def _set_default_local_size_impl(builder, *args):
     index_type = builder.index
     i64 = builder.int64
     zero = builder.cast(0, index_type)
     res = (zero, zero, zero)
-    res = builder.external_call("get_default_local_size", inputs=args, outputs=res)
+    res = builder.external_call("set_default_local_size", inputs=args, outputs=res)
     return tuple(builder.cast(r, i64) for r in res)
 
 
-@infer_global(_get_default_local_size)
-class _GetDefaultLocalSizeId(ConcreteTemplate):
+@infer_global(_set_default_local_size)
+class _SetDefaultLocalSizeId(ConcreteTemplate):
     cases = [
         signature(
             types.UniTuple(types.int64, 3), types.int64, types.int64, types.int64
@@ -91,21 +91,11 @@ class _GetDefaultLocalSizeId(ConcreteTemplate):
 def _kernel_body(global_size, local_size, body, *args):
     x, y, z = global_size
     lx, ly, lz = local_size
-    gx = (x + lx - 1) // lx
-    gy = (y + ly - 1) // ly
-    gz = (z + lz - 1) // lz
-    for gi in _gpu_range(gx):
-        for gj in _gpu_range(gy):
-            for gk in _gpu_range(gz):
-                for li in _gpu_range(lx):
-                    for lj in _gpu_range(ly):
-                        for lk in _gpu_range(lz):
-                            ibx = (gi * lx + li) < x
-                            iby = (gj * ly + lj) < y
-                            ibz = (gk * lz + lk) < z
-                            in_bounds = ibx and iby and ibz
-                            if in_bounds:
-                                body(*args)
+    _set_default_local_size(lx, ly, lz)
+    for gi in _gpu_range(x):
+        for gj in _gpu_range(y):
+            for gk in _gpu_range(z):
+                body(*args)
 
 
 def _kernel_body_def_size(global_size, body, *args):

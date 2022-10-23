@@ -329,6 +329,16 @@ struct GPULowerDefaultLocalSize
       return;
     }
 
+    llvm::StringRef funcName("set_default_local_size");
+    mlir::func::CallOp setDefSize;
+    for (auto op : region.front().getOps<mlir::func::CallOp>()) {
+      if (op.getCallee() == funcName && op->getNumOperands() == 3) {
+        setDefSize = op;
+        break;
+      }
+    }
+
+    mlir::DominanceInfo dom;
     mlir::OpBuilder builder(&getContext());
     func.walk([&](mlir::gpu::LaunchFuncOp op) {
       auto bx = op.getBlockSizeX();
@@ -340,7 +350,10 @@ struct GPULowerDefaultLocalSize
         auto kernel = op.getKernel();
         builder.setInsertionPoint(call);
 
-        auto operands = call.getGridSize();
+        mlir::ValueRange operands = call.getGridSize();
+        if (setDefSize && dom.properlyDominates(setDefSize, call))
+          operands = setDefSize.getArgOperands();
+
         auto count = static_cast<unsigned>(operands.size());
         llvm::SmallVector<mlir::Value, 3> globalSize(count);
         for (auto i : llvm::seq(0u, count))
@@ -356,6 +369,17 @@ struct GPULowerDefaultLocalSize
                                            call.getResult(i).getType());
           call.getResult(i).replaceAllUsesWith(castedRes);
         }
+      }
+    });
+
+    func.walk([&](mlir::func::CallOp op) {
+      if (op.getCallee() == funcName) {
+        if (!op->use_empty()) {
+          op.emitError() << funcName << " call wasn't removed";
+          signalPassFailure();
+          return;
+        }
+        op->erase();
       }
     });
   }
