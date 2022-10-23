@@ -65,32 +65,6 @@ class _RangeId(ConcreteTemplate):
     ]
 
 
-def _kernel_marker(*args):
-    _stub_error()
-
-
-@registry.register_func("_kernel_marker", _kernel_marker)
-def _kernel_marker_impl(builder, *args):
-    if len(args) == 6:
-        res = 0  # TODO: remove
-        return builder.external_call("kernel_marker", inputs=args, outputs=res)
-
-
-@infer_global(_kernel_marker)
-class _KernelMarkerId(ConcreteTemplate):
-    cases = [
-        signature(
-            types.void,
-            types.int64,
-            types.int64,
-            types.int64,
-            types.int64,
-            types.int64,
-            types.int64,
-        ),
-    ]
-
-
 def _get_default_local_size():
     _stub_error()
 
@@ -117,7 +91,6 @@ class _GetDefaultLocalSizeId(ConcreteTemplate):
 def _kernel_body(global_size, local_size, body, *args):
     x, y, z = global_size
     lx, ly, lz = local_size
-    _kernel_marker(x, y, z, lx, ly, lz)
     gx = (x + lx - 1) // lx
     gy = (y + ly - 1) // ly
     gz = (z + lz - 1) // lz
@@ -138,7 +111,6 @@ def _kernel_body(global_size, local_size, body, *args):
 def _kernel_body_def_size(global_size, body, *args):
     x, y, z = global_size
     lx, ly, lz = _get_default_local_size(x, y, z)
-    _kernel_marker(x, y, z, lx, ly, lz)
     gx = (x + lx - 1) // lx
     gy = (y + ly - 1) // ly
     gz = (z + lz - 1) // lz

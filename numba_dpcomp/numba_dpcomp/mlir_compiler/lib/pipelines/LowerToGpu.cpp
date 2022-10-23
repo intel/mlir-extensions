@@ -221,33 +221,6 @@ struct RemoveGpuRegionPass
     : public imex::RewriteWrapperPass<RemoveGpuRegionPass, void, void,
                                       RemoveGpuRegion> {};
 
-struct RemoveKernelMarkerPass
-    : public mlir::PassWrapper<RemoveKernelMarkerPass,
-                               mlir::OperationPass<void>> {
-  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(RemoveKernelMarkerPass)
-
-  virtual void
-  getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<mlir::func::FuncDialect>();
-  }
-
-  void runOnOperation() override {
-    auto func = getOperation();
-    func->walk([&](mlir::func::CallOp op) {
-      if (op.getCallee() != "kernel_marker")
-        return;
-
-      if (!op.use_empty()) {
-        op.emitError("Cannot erase kernel_marker with uses");
-        signalPassFailure();
-        return;
-      }
-
-      op.erase();
-    });
-  }
-};
-
 struct KernelMemrefOpsMovementPass
     : public mlir::PassWrapper<KernelMemrefOpsMovementPass,
                                mlir::OperationPass<mlir::func::FuncOp>> {
@@ -1738,7 +1711,6 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   funcPM.addPass(gpu_runtime::createParallelLoopGPUMappingPass());
   funcPM.addPass(mlir::createParallelLoopToGpuPass());
   funcPM.addPass(std::make_unique<RemoveGpuRegionPass>());
-  funcPM.addPass(std::make_unique<RemoveKernelMarkerPass>());
   funcPM.addPass(mlir::createCanonicalizerPass());
   funcPM.addPass(gpu_runtime::createInsertGPUAllocsPass());
   funcPM.addPass(mlir::createCanonicalizerPass());
