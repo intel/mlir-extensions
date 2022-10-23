@@ -190,9 +190,19 @@ def GPUSuggestBlockSizeOp : GpuRuntime_Op<"suggest_block_size",
 
   let results = (outs Variadic<Index>);
 
-  let builders = [OpBuilder<(ins "::llvm::Optional<::mlir::Value>" : $stream,
-                                 "::mlir::OpFoldResult" : $kernel,
-                                 "::mlir::ValueRange" : $gridSize)>];
+  let builders = [
+    OpBuilder<(ins
+      "::llvm::Optional<::mlir::Value>":$stream,
+      "::mlir::ValueRange":$gridSize,
+      "::mlir::Value":$kernel)>,
+    OpBuilder<(ins
+      "::llvm::Optional<::mlir::Value>":$stream,
+      "::mlir::ValueRange":$gridSize,
+      "::mlir::SymbolRefAttr":$kernel)>,
+    OpBuilder<(ins
+      "::llvm::Optional<::mlir::Value>":$stream,
+      "::mlir::ValueRange":$gridSize)>
+  ];
 
   let extraClassDeclaration = [{
       /// The name of the kernel's containing module.

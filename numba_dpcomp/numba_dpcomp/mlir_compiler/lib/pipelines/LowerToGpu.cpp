@@ -362,7 +362,7 @@ struct GPULowerDefaultLocalSize
 
         auto res = builder
                        .create<gpu_runtime::GPUSuggestBlockSizeOp>(
-                           loc, /*stream*/ llvm::None, kernel, globalSize)
+                           loc, /*stream*/ llvm::None, globalSize, kernel)
                        .getResults();
 
         for (auto i : llvm::seq(0u, count)) {

@@ -1518,7 +1518,7 @@ struct ExpandSuggestBlockSizeOp
         [&](mlir::OpBuilder &builder, mlir::Location loc, mlir::Value stream,
             mlir::Value kernel) {
           return builder.create<gpu_runtime::GPUSuggestBlockSizeOp>(
-              loc, stream, kernel, op.getGridSize());
+              loc, stream, op.getGridSize(), kernel);
         });
   }
 };
