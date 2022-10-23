@@ -21,10 +21,14 @@
 
 #include <level_zero/ze_api.h>
 
-namespace {
+template <typename T, typename F>
+auto print(T val, F &&printer) ->
+    typename std::enable_if<std::is_arithmetic<T>::value>::type {
+  printer(std::to_string(val));
+}
 
 template <typename T, size_t N, typename F>
-static void print(T (&array)[N], F &&printer) {
+void print(T (&array)[N], F &&printer) {
   printer("[");
   for (size_t i = 0; i < N; ++i) {
     if (i != 0)
@@ -35,17 +39,9 @@ static void print(T (&array)[N], F &&printer) {
   printer("]");
 }
 
-template <typename T, typename F>
-static auto print(T val, F &&printer) ->
-    typename std::enable_if<std::is_arithmetic<T>::value>::type {
-  printer(std::to_string(val));
-}
+template <typename F> void print(const char *str, F &&printer) { printer(str); }
 
-template <typename F> static void print(const char *str, F &&printer) {
-  printer(str);
-}
-
-template <typename F> static void print(ze_device_type_t val, F &&printer) {
+template <typename F> void print(ze_device_type_t val, F &&printer) {
   auto index = static_cast<size_t>(val);
   std::array<const char *, 6> res;
   if (index > res.size()) {
@@ -66,8 +62,7 @@ template <typename F> static void print(ze_device_type_t val, F &&printer) {
   printer(res[index]);
 }
 
-template <typename F>
-static void print(ze_device_property_flag_t flags, F &&printer) {
+template <typename F> void print(ze_device_property_flag_t flags, F &&printer) {
   printer("[");
   bool first = true;
   auto printFlag = [&](auto val, auto name) {
@@ -89,7 +84,7 @@ static void print(ze_device_property_flag_t flags, F &&printer) {
 }
 
 template <typename F>
-static void print(const ze_device_properties_t val, F &&printer) {
+void print(const ze_device_properties_t val, F &&printer) {
   auto write = [&](auto desc, auto val) {
     printer(desc);
     print(val, printer);
@@ -123,7 +118,7 @@ static void print(const ze_device_properties_t val, F &&printer) {
 }
 
 template <typename F>
-static void print(const ze_device_compute_properties_t val, F &&printer) {
+void print(const ze_device_compute_properties_t val, F &&printer) {
   auto write = [&](auto desc, auto val) {
     printer(desc);
     print(val, printer);
@@ -143,8 +138,7 @@ static void print(const ze_device_compute_properties_t val, F &&printer) {
   printer("\n");
 }
 
-template <typename F>
-static void print(ze_device_module_flag_t flags, F &&printer) {
+template <typename F> void print(ze_device_module_flag_t flags, F &&printer) {
   printer("[");
   bool first = true;
   auto printFlag = [&](auto val, auto name) {
@@ -165,8 +159,7 @@ static void print(ze_device_module_flag_t flags, F &&printer) {
   printer("]");
 }
 
-template <typename F>
-static void print(ze_device_fp_flag_t flags, F &&printer) {
+template <typename F> void print(ze_device_fp_flag_t flags, F &&printer) {
   printer("[");
   bool first = true;
   auto printFlag = [&](auto val, auto name) {
@@ -192,7 +185,7 @@ static void print(ze_device_fp_flag_t flags, F &&printer) {
 }
 
 template <typename F>
-static void print(ze_device_module_properties_t properties, F &&printer) {
+void print(ze_device_module_properties_t properties, F &&printer) {
   auto write = [&](auto desc, auto val) {
     printer(desc);
     print(val, printer);
@@ -212,4 +205,3 @@ static void print(ze_device_module_properties_t properties, F &&printer) {
   write("Max argument size: ", properties.maxArgumentsSize);
   write("Print buffer size: ", properties.printfBufferSize);
 }
-} // namespace
