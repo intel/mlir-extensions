@@ -188,7 +188,7 @@ def GPUSuggestBlockSizeOp : GpuRuntime_Op<"suggest_block_size",
                        OptionalAttr<SymbolRefAttr>:$kernelRef,
                        Variadic<Index>:$gridSize);
 
-  let results = (outs Variadic<Index>);
+  let results = (outs Variadic<Index>:$results);
 
   let builders = [
     OpBuilder<(ins
@@ -210,6 +210,10 @@ def GPUSuggestBlockSizeOp : GpuRuntime_Op<"suggest_block_size",
 
       /// The name of the kernel.
       ::mlir::StringAttr getKernelName();
+  }];
+
+  let assemblyFormat = [{
+    attr-dict (`:` $stream^)? ($kernel^)? ($kernelRef^)? `,` $gridSize `->` type($results)
   }];
 }
 
