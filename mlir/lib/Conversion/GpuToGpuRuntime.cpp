@@ -1774,6 +1774,7 @@ struct TileParallelOp : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
     mlir::Block *originalBlock = op.getBody();
     mlir::Block *newBlock = newOp.getBody();
 
+    mlir::Value inBounds;
     llvm::SmallVector<mlir::Value> argMapping(oldLoopsCount);
     {
       mlir::OpBuilder::InsertionGuard g(rewriter);
@@ -1783,14 +1784,27 @@ struct TileParallelOp : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
           mlir::Value gridId = newBlock->getArgument(i);
           mlir::Value blockId = newBlock->getArgument(i + maxLoops);
           mlir::Value blockSize = localSize[i];
+          mlir::Value gridSize = globalSize[i];
           mlir::Value val =
               rewriter.create<mlir::arith::MulIOp>(loc, gridId, blockSize);
-          argMapping[i] =
-              rewriter.create<mlir::arith::AddIOp>(loc, val, blockId);
+          val = rewriter.create<mlir::arith::AddIOp>(loc, val, blockId);
+          argMapping[i] = val;
+          mlir::Value in = rewriter.createOrFold<mlir::arith::CmpIOp>(
+              loc, mlir::arith::CmpIPredicate::ult, val, gridSize);
+          if (0 == i) {
+            inBounds = in;
+          } else {
+            inBounds =
+                rewriter.createOrFold<mlir::arith::AndIOp>(loc, inBounds, in);
+          }
         } else {
           argMapping[i] = newBlock->getArgument(i + maxLoops * 2 - numLoops);
         }
       }
+
+      assert(inBounds);
+      auto ifOp = rewriter.create<mlir::scf::IfOp>(loc, llvm::None, inBounds);
+      newBlock = ifOp.thenBlock();
     }
     rewriter.eraseOp(newBlock->getTerminator()); // Erase exisitng yield.
     rewriter.mergeBlocks(originalBlock, newBlock, argMapping);
