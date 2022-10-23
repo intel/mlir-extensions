@@ -41,4 +41,8 @@ std::unique_ptr<mlir::Pass> createSerializeSPIRVPass();
 std::unique_ptr<mlir::Pass> createGPUExPass();
 std::unique_ptr<mlir::Pass> createParallelLoopGPUMappingPass();
 
+/// Naively tile parallel loops for gpu, using values obtained from
+/// `suggest_block_size`.
+std::unique_ptr<mlir::Pass> createTileParallelLoopsForGPUPass();
+
 } // namespace gpu_runtime
