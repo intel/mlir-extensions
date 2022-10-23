@@ -53,7 +53,6 @@
 #include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOps.hpp"
 #include "imex/Dialect/gpu_runtime/Transforms/MakeBarriersUniform.hpp"
 #include "imex/Dialect/imex_util/Dialect.hpp"
-#include "imex/Dialect/imex_util/Utils.hpp"
 #include "imex/Dialect/ntensor/IR/NTensorOps.hpp"
 #include "imex/Transforms/CallLowering.hpp"
 #include "imex/Transforms/CastUtils.hpp"
@@ -818,38 +817,6 @@ protected:
   }
 };
 
-struct WrapGetDefaultSize : public mlir::OpRewritePattern<plier::PyCallOp> {
-  using OpRewritePattern::OpRewritePattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(plier::PyCallOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    if (op.getFuncName() != "_get_default_local_size")
-      return mlir::failure();
-
-    if (op->getParentOfType<imex::util::EnvironmentRegionOp>())
-      return mlir::failure();
-
-    auto parent = op->getParentOfType<mlir::FunctionOpInterface>();
-    if (!parent)
-      return mlir::failure();
-
-    auto device =
-        getDeviceDescFromFunc(op->getContext(), parent.getArgumentTypes());
-
-    mlir::OpBuilder::InsertionGuard g(rewriter);
-    auto envAttr = gpu_runtime::GPURegionDescAttr::get(getContext(), *device);
-    auto results = imex::util::wrapEnvRegion(
-        rewriter, op.getLoc(), envAttr, op->getResultTypes(),
-        [&](mlir::OpBuilder &b, mlir::Location) {
-          auto res = b.clone(*op);
-          return res->getResults();
-        });
-    rewriter.replaceOp(op, results);
-    return mlir::success();
-  }
-};
-
 static bool isGpuArray(mlir::Type type) {
   auto tensor = type.dyn_cast<imex::ntensor::NTensorType>();
   if (!tensor)
@@ -930,7 +897,7 @@ struct LowerGpuRangePass
     auto context = &getContext();
     mlir::RewritePatternSet patterns(context);
 
-    patterns.insert<LowerGpuRange, WrapGetDefaultSize>(context);
+    patterns.insert<LowerGpuRange>(context);
 
     imex::util::EnvironmentRegionOp::getCanonicalizationPatterns(patterns,
                                                                  context);
