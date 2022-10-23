@@ -571,11 +571,11 @@ dpcompGetDeviceCapabilities(OffloadDeviceCapabilities *ret,
   assert(ret);
   assert(deviceName);
 
-  bool result = true;
+  bool success = true;
   catchAll([&]() {
     auto driverAndDevice = getDevice(deviceName);
     if (!driverAndDevice.driver || !driverAndDevice.device) {
-      result = false;
+      success = false;
       return;
     }
     ze_device_module_properties_t props = {};
@@ -592,5 +592,5 @@ dpcompGetDeviceCapabilities(OffloadDeviceCapabilities *ret,
     result.hasFP64 = props.flags & ZE_DEVICE_MODULE_FLAG_FP64;
     *ret = result;
   });
-  return result;
+  return success;
 }
