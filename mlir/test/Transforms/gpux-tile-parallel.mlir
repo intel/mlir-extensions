@@ -15,7 +15,7 @@
 // CHECK-SAME: (%[[C1]], %[[C1]], %[[C1]], %[[C1]], %[[C1]], %[[C1]])
 // CHECK: %[[IDX1:.*]] = arith.muli %[[ARG1]], %[[B]]#0 : index
 // CHECK: %[[IDX2:.*]] = arith.addi %[[IDX1]], %[[ARG4]] : index
-// CHECK: %[[IN1:.*]] = arith.cmpi ult, %[[IDX2]], %[[DIM1]] : index
+// CHECK: %[[IN1:.*]] = arith.cmpi slt, %[[IDX2]], %[[DIM1]] : index
 // CHECK: scf.if %[[IN1]] {
 // CHECK-NOT: }
 // CHECK: %[[VAL:.*]] = memref.load %[[MEM1]][%[[IDX2]]] : memref<?xf64>
@@ -58,14 +58,14 @@ func.func @check1D(%arg0: memref<?xf64>, %arg1: memref<?xf64>) {
 // CHECK-SAME: (%[[C1]], %[[C1]], %[[C1]], %[[C1]], %[[C1]], %[[C1]])
 // CHECK: %[[IDX1:.*]] = arith.muli %[[ARG1]], %[[B]]#0 : index
 // CHECK: %[[IDX2:.*]] = arith.addi %[[IDX1]], %[[ARG4]] : index
-// CHECK: %[[IN1:.*]] = arith.cmpi ult, %[[IDX2]], %[[DIM1]] : index
+// CHECK: %[[IN1:.*]] = arith.cmpi slt, %[[IDX2]], %[[DIM1]] : index
 // CHECK: %[[IDX3:.*]] = arith.muli %[[ARG2]], %[[B]]#1 : index
 // CHECK: %[[IDX4:.*]] = arith.addi %[[IDX3]], %[[ARG5]] : index
-// CHECK: %[[IN2:.*]] = arith.cmpi ult, %[[IDX4]], %[[DIM2]] : index
+// CHECK: %[[IN2:.*]] = arith.cmpi slt, %[[IDX4]], %[[DIM2]] : index
 // CHECK: %[[IN3:.*]] = arith.andi %[[IN1]], %[[IN2]] : i1
 // CHECK: %[[IDX5:.*]] = arith.muli %[[ARG3]], %[[B]]#2 : index
 // CHECK: %[[IDX6:.*]] = arith.addi %[[IDX5]], %[[ARG6]] : index
-// CHECK: %[[IN4:.*]] = arith.cmpi ult, %[[IDX6]], %[[DIM3]] : index
+// CHECK: %[[IN4:.*]] = arith.cmpi slt, %[[IDX6]], %[[DIM3]] : index
 // CHECK: %[[IN5:.*]] = arith.andi %[[IN3]], %[[IN4]] : i1
 // CHECK: scf.if %[[IN5]] {
 // CHECK-NOT: }
@@ -114,14 +114,14 @@ func.func @check3D(%arg0: memref<?x?x?xf64>, %arg1: memref<?x?x?xf64>) {
 // CHECK-SAME: (%[[C1]], %[[C1]], %[[C1]], %[[C1]], %[[C1]], %[[C1]], %[[C1]])
 // CHECK: %[[IDX1:.*]] = arith.muli %[[ARG1]], %[[B]]#0 : index
 // CHECK: %[[IDX2:.*]] = arith.addi %[[IDX1]], %[[ARG4]] : index
-// CHECK: %[[IN1:.*]] = arith.cmpi ult, %[[IDX2]], %[[DIM1]] : index
+// CHECK: %[[IN1:.*]] = arith.cmpi slt, %[[IDX2]], %[[DIM1]] : index
 // CHECK: %[[IDX3:.*]] = arith.muli %[[ARG2]], %[[B]]#1 : index
 // CHECK: %[[IDX4:.*]] = arith.addi %[[IDX3]], %[[ARG5]] : index
-// CHECK: %[[IN2:.*]] = arith.cmpi ult, %[[IDX4]], %[[DIM2]] : index
+// CHECK: %[[IN2:.*]] = arith.cmpi slt, %[[IDX4]], %[[DIM2]] : index
 // CHECK: %[[IN3:.*]] = arith.andi %[[IN1]], %[[IN2]] : i1
 // CHECK: %[[IDX5:.*]] = arith.muli %[[ARG3]], %[[B]]#2 : index
 // CHECK: %[[IDX6:.*]] = arith.addi %[[IDX5]], %[[ARG6]] : index
-// CHECK: %[[IN4:.*]] = arith.cmpi ult, %[[IDX6]], %[[DIM3]] : index
+// CHECK: %[[IN4:.*]] = arith.cmpi slt, %[[IDX6]], %[[DIM3]] : index
 // CHECK: %[[IN5:.*]] = arith.andi %[[IN3]], %[[IN4]] : i1
 // CHECK: scf.if %[[IN5]] {
 // CHECK-NOT: }

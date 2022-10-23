@@ -1790,7 +1790,7 @@ struct TileParallelOp : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
           val = rewriter.create<mlir::arith::AddIOp>(loc, val, blockId);
           argMapping[i] = val;
           mlir::Value in = rewriter.createOrFold<mlir::arith::CmpIOp>(
-              loc, mlir::arith::CmpIPredicate::ult, val, gridSize);
+              loc, mlir::arith::CmpIPredicate::slt, val, gridSize);
           if (0 == i) {
             inBounds = in;
           } else {
