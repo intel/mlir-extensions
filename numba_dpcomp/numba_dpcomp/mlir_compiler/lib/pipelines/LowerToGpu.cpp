@@ -816,32 +816,6 @@ protected:
   }
 };
 
-template <typename Op> struct ConvertOp : public mlir::OpConversionPattern<Op> {
-  using mlir::OpConversionPattern<Op>::OpConversionPattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(Op op, typename Op::Adaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
-    auto origResTypes = op->getResultTypes();
-    llvm::SmallVector<mlir::Type, 2> newResTypes;
-
-    auto typeConverter = this->getTypeConverter();
-    assert(typeConverter);
-    if (mlir::failed(typeConverter->convertTypes(origResTypes, newResTypes)))
-      return mlir::failure();
-
-    auto attrs = adaptor.getAttributes();
-    llvm::SmallVector<mlir::NamedAttribute> attrsList;
-    attrsList.reserve(attrs.size());
-    for (auto it : attrs)
-      attrsList.emplace_back(it.getName(), it.getValue());
-
-    rewriter.replaceOpWithNewOp<Op>(op, newResTypes, adaptor.getOperands(),
-                                    attrsList);
-    return mlir::success();
-  }
-};
-
 static bool isGpuArray(mlir::Type type) {
   auto tensor = type.dyn_cast<imex::ntensor::NTensorType>();
   if (!tensor)
