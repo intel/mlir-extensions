@@ -21,6 +21,12 @@
 
 #include <level_zero/ze_api.h>
 
+template <typename T, typename F>
+auto print(T val, F &&printer) ->
+    typename std::enable_if<std::is_arithmetic<T>::value>::type {
+  printer(std::to_string(val));
+}
+
 template <typename T, size_t N, typename F>
 void print(T (&array)[N], F &&printer) {
   printer("[");
@@ -31,12 +37,6 @@ void print(T (&array)[N], F &&printer) {
     print(array[i], printer);
   }
   printer("]");
-}
-
-template <typename T, typename F>
-auto print(T val, F &&printer) ->
-    typename std::enable_if<std::is_arithmetic<T>::value>::type {
-  printer(std::to_string(val));
 }
 
 template <typename F> void print(const char *str, F &&printer) { printer(str); }
