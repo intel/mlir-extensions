@@ -44,6 +44,17 @@
 #include <llvm/ADT/SmallBitVector.h>
 
 namespace {
+static mlir::gpu::Processor getProcessor(unsigned val) {
+  const mlir::gpu::Processor mapping[] = {
+      mlir::gpu::Processor::BlockX,  mlir::gpu::Processor::BlockY,
+      mlir::gpu::Processor::BlockZ,  mlir::gpu::Processor::ThreadX,
+      mlir::gpu::Processor::ThreadY, mlir::gpu::Processor::ThreadZ,
+  };
+  if (val >= std::size(mapping))
+    return mlir::gpu::Processor::Sequential;
+
+  return mapping[val];
+}
 struct ParallelLoopGPUMappingPass
     : public mlir::PassWrapper<ParallelLoopGPUMappingPass,
                                mlir::OperationPass<mlir::func::FuncOp>> {
@@ -61,18 +72,6 @@ struct ParallelLoopGPUMappingPass
         return;
 
       auto &region = envOp.getRegion();
-
-      auto getProcessor = [](unsigned val) -> mlir::gpu::Processor {
-        const mlir::gpu::Processor mapping[] = {
-            mlir::gpu::Processor::BlockX,  mlir::gpu::Processor::BlockY,
-            mlir::gpu::Processor::BlockZ,  mlir::gpu::Processor::ThreadX,
-            mlir::gpu::Processor::ThreadY, mlir::gpu::Processor::ThreadZ,
-        };
-        if (val >= std::size(mapping))
-          return mlir::gpu::Processor::Sequential;
-
-        return mapping[val];
-      };
 
       mlir::OpBuilder builder(&getContext());
       auto identityMap = builder.getDimIdentityMap();
