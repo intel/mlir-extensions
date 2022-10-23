@@ -1790,7 +1790,6 @@ struct TileParallelOp : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
     }
     rewriter.eraseOp(newBlock->getTerminator()); // Erase exisitng yield.
     rewriter.mergeBlocks(originalBlock, newBlock, argMapping);
-    newBlock->dump();
     rewriter.replaceOp(op, newOp->getResults());
 
     auto newLoopsCount = static_cast<unsigned>(newSteps.size());
