@@ -1697,6 +1697,10 @@ struct TileParallelOp : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
         op->hasAttr(mlir::gpu::getMappingAttrName()))
       return mlir::failure();
 
+    // Reductions is not supported yet.
+    if (!op.getBody()->getOps<mlir::scf::ReduceOp>().empty())
+      return mlir::failure();
+
     auto oldLowerBounds = op.getLowerBound();
     auto oldUpperBounds = op.getUpperBound();
     auto oldSteps = op.getStep();
