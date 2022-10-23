@@ -1703,7 +1703,7 @@ struct TileParallelOp : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
     auto oldLoopsCount = static_cast<unsigned>(oldSteps.size());
 
     const unsigned maxLoops = 3;
-    // Only unit step is supported and at most 3 loops.
+    // Only unit step is supported and iteration must start from 0.
     unsigned numLoops = 0;
     for (auto [start, step] : llvm::zip(oldLowerBounds.take_front(maxLoops),
                                         oldSteps.take_front(maxLoops)))
@@ -1716,8 +1716,8 @@ struct TileParallelOp : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
       return mlir::failure();
 
     auto loc = op->getLoc();
-    auto zero = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
-    auto one = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
+    mlir::Value zero = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
+    mlir::Value one = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
 
     std::array<mlir::Value, 3> globalSize;
     globalSize.fill(one);
