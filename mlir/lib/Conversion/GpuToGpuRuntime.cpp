@@ -1771,9 +1771,22 @@ struct TileParallelOp : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
     mlir::Block *newBlock = newOp.getBody();
 
     llvm::SmallVector<mlir::Value> argMapping(oldLoopsCount);
-    for (auto i : llvm::seq(0u, oldLoopsCount)) {
-      auto argIndex = (i < numLoops ? i : i + maxLoops - numLoops);
-      argMapping[i] = newBlock->getArgument(argIndex);
+    {
+      mlir::OpBuilder::InsertionGuard g(rewriter);
+      rewriter.setInsertionPointToStart(newBlock);
+      for (auto i : llvm::seq(0u, oldLoopsCount)) {
+        if (i < numLoops) {
+          mlir::Value gridId = newBlock->getArgument(i);
+          mlir::Value blockId = newBlock->getArgument(i + maxLoops);
+          mlir::Value blockSize = localSize[i];
+          mlir::Value val =
+              rewriter.create<mlir::arith::MulIOp>(loc, gridId, blockSize);
+          argMapping[i] =
+              rewriter.create<mlir::arith::AddIOp>(loc, val, blockId);
+        } else {
+          argMapping[i] = newBlock->getArgument(i + maxLoops - numLoops);
+        }
+      }
     }
     rewriter.eraseOp(newBlock->getTerminator()); // Erase exisitng yield.
     rewriter.mergeBlocks(originalBlock, newBlock, argMapping);
