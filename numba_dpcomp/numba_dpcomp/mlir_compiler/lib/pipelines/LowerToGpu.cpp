@@ -728,7 +728,7 @@ struct GenerateOutlineContextPass
   }
 };
 
-void rerun_std_pipeline(mlir::Operation *op) {
+void rerunStdPipeline(mlir::Operation *op) {
   assert(nullptr != op);
   auto marker =
       mlir::StringAttr::get(op->getContext(), plierToStdPipelineName());
@@ -811,7 +811,7 @@ protected:
       rewriter.replaceOp(op, newOp->getResults());
     }
 
-    rerun_std_pipeline(parent);
+    rerunStdPipeline(parent);
     return mlir::success();
   }
 };
@@ -956,7 +956,7 @@ protected:
         results[i] = rewriter.create<plier::CastOp>(loc, dstType, r);
     }
 
-    rerun_std_pipeline(op);
+    rerunStdPipeline(op);
     rewriter.replaceOp(op, results);
     return mlir::success();
   }
