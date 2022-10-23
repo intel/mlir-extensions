@@ -1784,7 +1784,7 @@ struct TileParallelOp : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
           argMapping[i] =
               rewriter.create<mlir::arith::AddIOp>(loc, val, blockId);
         } else {
-          argMapping[i] = newBlock->getArgument(i + maxLoops - numLoops);
+          argMapping[i] = newBlock->getArgument(i + maxLoops * 2 - numLoops);
         }
       }
     }
