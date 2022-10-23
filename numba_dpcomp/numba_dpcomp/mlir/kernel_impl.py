@@ -110,22 +110,10 @@ def _kernel_body(global_size, local_size, body, *args):
 
 def _kernel_body_def_size(global_size, body, *args):
     x, y, z = global_size
-    lx, ly, lz = _get_default_local_size(x, y, z)
-    gx = (x + lx - 1) // lx
-    gy = (y + ly - 1) // ly
-    gz = (z + lz - 1) // lz
-    for gi in _gpu_range(gx):
-        for gj in _gpu_range(gy):
-            for gk in _gpu_range(gz):
-                for li in _gpu_range(lx):
-                    for lj in _gpu_range(ly):
-                        for lk in _gpu_range(lz):
-                            ibx = (gi * lx + li) < x
-                            iby = (gj * ly + lj) < y
-                            ibz = (gk * lz + lk) < z
-                            in_bounds = ibx and iby and ibz
-                            if in_bounds:
-                                body(*args)
+    for gi in _gpu_range(x):
+        for gj in _gpu_range(y):
+            for gk in _gpu_range(z):
+                body(*args)
 
 
 def _extend_dims(dims):
