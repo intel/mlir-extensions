@@ -44,6 +44,17 @@
 #include <llvm/ADT/SmallBitVector.h>
 
 namespace {
+static mlir::gpu::Processor getProcessor(unsigned val) {
+  const mlir::gpu::Processor mapping[] = {
+      mlir::gpu::Processor::BlockX,  mlir::gpu::Processor::BlockY,
+      mlir::gpu::Processor::BlockZ,  mlir::gpu::Processor::ThreadX,
+      mlir::gpu::Processor::ThreadY, mlir::gpu::Processor::ThreadZ,
+  };
+  if (val >= std::size(mapping))
+    return mlir::gpu::Processor::Sequential;
+
+  return mapping[val];
+}
 struct ParallelLoopGPUMappingPass
     : public mlir::PassWrapper<ParallelLoopGPUMappingPass,
                                mlir::OperationPass<mlir::func::FuncOp>> {
@@ -62,24 +73,12 @@ struct ParallelLoopGPUMappingPass
 
       auto &region = envOp.getRegion();
 
-      auto getProcessor = [](unsigned val) -> mlir::gpu::Processor {
-        const mlir::gpu::Processor mapping[] = {
-            mlir::gpu::Processor::BlockX,  mlir::gpu::Processor::BlockY,
-            mlir::gpu::Processor::BlockZ,  mlir::gpu::Processor::ThreadX,
-            mlir::gpu::Processor::ThreadY, mlir::gpu::Processor::ThreadZ,
-        };
-        if (val >= std::size(mapping))
-          return mlir::gpu::Processor::Sequential;
-
-        return mapping[val];
-      };
-
       mlir::OpBuilder builder(&getContext());
       auto identityMap = builder.getDimIdentityMap();
       llvm::SmallVector<mlir::gpu::ParallelLoopDimMappingAttr> mapping;
       for (auto &op : llvm::make_early_inc_range(region.front())) {
         auto parallel = mlir::dyn_cast<mlir::scf::ParallelOp>(op);
-        if (!parallel)
+        if (!parallel || parallel->hasAttr(mlir::gpu::getMappingAttrName()))
           continue;
 
         auto numLoops = parallel.getNumLoops();
@@ -1518,7 +1517,7 @@ struct ExpandSuggestBlockSizeOp
         [&](mlir::OpBuilder &builder, mlir::Location loc, mlir::Value stream,
             mlir::Value kernel) {
           return builder.create<gpu_runtime::GPUSuggestBlockSizeOp>(
-              loc, stream, kernel, op.getGridSize());
+              loc, stream, op.getGridSize(), kernel);
         });
   }
 };
@@ -1682,6 +1681,172 @@ struct GPUExPass
   }
 };
 
+struct TileParallelOp : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::scf::ParallelOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    // Process only loops inside gpu region.
+    auto envOp = op->getParentOfType<imex::util::EnvironmentRegionOp>();
+    if (!envOp || !envOp.getEnvironment().isa<gpu_runtime::GPURegionDescAttr>())
+      return mlir::failure();
+
+    // Process only outermost loops without mappings.
+    if (op->getParentOfType<mlir::scf::ParallelOp>() ||
+        op->hasAttr(mlir::gpu::getMappingAttrName()))
+      return mlir::failure();
+
+    // Reductions is not supported yet.
+    if (!op.getBody()->getOps<mlir::scf::ReduceOp>().empty())
+      return mlir::failure();
+
+    auto oldLowerBounds = op.getLowerBound();
+    auto oldUpperBounds = op.getUpperBound();
+    auto oldSteps = op.getStep();
+    auto oldLoopsCount = static_cast<unsigned>(oldSteps.size());
+
+    const unsigned maxLoops = 3;
+    // Only unit step is supported and iteration must start from 0.
+    unsigned numLoops = 0;
+    for (auto [start, step] : llvm::zip(oldLowerBounds.take_front(maxLoops),
+                                        oldSteps.take_front(maxLoops)))
+      if (mlir::isConstantIntValue(start, 0) &&
+          mlir::isConstantIntValue(step, 1))
+        ++numLoops;
+
+    // No suitable loops.
+    if (numLoops == 0)
+      return mlir::failure();
+
+    auto loc = op->getLoc();
+    mlir::Value zero = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
+    mlir::Value one = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
+
+    std::array<mlir::Value, 3> globalSize;
+    globalSize.fill(one);
+    llvm::copy(oldUpperBounds.take_front(numLoops), globalSize.begin());
+
+    llvm::Optional<mlir::Value> stream;
+    auto localSize =
+        rewriter
+            .create<gpu_runtime::GPUSuggestBlockSizeOp>(loc, stream, globalSize)
+            ->getResults();
+
+    llvm::SmallVector<mlir::Value> newLowerBounds;
+    llvm::SmallVector<mlir::Value> newUpperBounds;
+    llvm::SmallVector<mlir::Value> newSteps;
+
+    // Insert grid vars.
+    for (auto i : llvm::seq(0u, maxLoops)) {
+      newLowerBounds.emplace_back(zero);
+      newSteps.emplace_back(one);
+      if (i < numLoops) {
+        auto oldUpperBound = oldUpperBounds[i];
+        mlir::Value newUpperBound = rewriter.create<mlir::arith::CeilDivUIOp>(
+            loc, oldUpperBound, localSize[i]);
+        newUpperBounds.emplace_back(newUpperBound);
+      } else {
+        newUpperBounds.emplace_back(one);
+      }
+    }
+
+    // Insert block vars.
+    for (auto i : llvm::seq(0u, maxLoops)) {
+      newLowerBounds.emplace_back(zero);
+      newSteps.emplace_back(one);
+      if (i < numLoops) {
+        newUpperBounds.emplace_back(localSize[i]);
+      } else {
+        newUpperBounds.emplace_back(one);
+      }
+    }
+
+    for (auto i : llvm::seq(numLoops, oldLoopsCount)) {
+      newLowerBounds.emplace_back(oldLowerBounds[i]);
+      newUpperBounds.emplace_back(oldUpperBounds[i]);
+      newSteps.emplace_back(oldSteps[i]);
+    }
+
+    auto initVals = op.getInitVals();
+    auto newOp = rewriter.create<mlir::scf::ParallelOp>(
+        loc, newLowerBounds, newUpperBounds, newSteps, initVals);
+    mlir::Block *originalBlock = op.getBody();
+    mlir::Block *newBlock = newOp.getBody();
+
+    mlir::Value inBounds;
+    llvm::SmallVector<mlir::Value> argMapping(oldLoopsCount);
+    {
+      mlir::OpBuilder::InsertionGuard g(rewriter);
+      rewriter.setInsertionPointToStart(newBlock);
+      for (auto i : llvm::seq(0u, oldLoopsCount)) {
+        if (i < numLoops) {
+          mlir::Value gridId = newBlock->getArgument(i);
+          mlir::Value blockId = newBlock->getArgument(i + maxLoops);
+          mlir::Value blockSize = localSize[i];
+          mlir::Value gridSize = globalSize[i];
+          mlir::Value val =
+              rewriter.create<mlir::arith::MulIOp>(loc, gridId, blockSize);
+          val = rewriter.create<mlir::arith::AddIOp>(loc, val, blockId);
+          argMapping[i] = val;
+          mlir::Value in = rewriter.createOrFold<mlir::arith::CmpIOp>(
+              loc, mlir::arith::CmpIPredicate::slt, val, gridSize);
+          if (0 == i) {
+            inBounds = in;
+          } else {
+            inBounds =
+                rewriter.createOrFold<mlir::arith::AndIOp>(loc, inBounds, in);
+          }
+        } else {
+          argMapping[i] = newBlock->getArgument(i + maxLoops * 2 - numLoops);
+        }
+      }
+
+      assert(inBounds);
+      auto ifOp = rewriter.create<mlir::scf::IfOp>(loc, llvm::None, inBounds);
+      newBlock = ifOp.thenBlock();
+    }
+    rewriter.eraseOp(newBlock->getTerminator()); // Erase exisitng yield.
+    rewriter.mergeBlocks(originalBlock, newBlock, argMapping);
+    rewriter.replaceOp(op, newOp->getResults());
+
+    auto newLoopsCount = static_cast<unsigned>(newSteps.size());
+    auto identityMap = rewriter.getDimIdentityMap();
+    llvm::SmallVector<mlir::gpu::ParallelLoopDimMappingAttr> mapping(
+        newLoopsCount);
+    for (auto i : llvm::seq(0u, newLoopsCount))
+      mapping[i] = rewriter.getAttr<mlir::gpu::ParallelLoopDimMappingAttr>(
+          getProcessor(i), identityMap, identityMap);
+
+    return mlir::gpu::setMappingAttr(newOp, mapping);
+  }
+};
+
+struct TileParallelLoopsForGPUPass
+    : public mlir::PassWrapper<TileParallelLoopsForGPUPass,
+                               mlir::OperationPass<mlir::func::FuncOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TileParallelLoopsForGPUPass)
+
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<gpu_runtime::GpuRuntimeDialect>();
+    registry.insert<imex::util::ImexUtilDialect>();
+    registry.insert<mlir::arith::ArithDialect>();
+    registry.insert<mlir::gpu::GPUDialect>();
+    registry.insert<mlir::scf::SCFDialect>();
+  }
+
+  void runOnOperation() override {
+    auto *ctx = &getContext();
+    mlir::RewritePatternSet patterns(ctx);
+
+    patterns.insert<TileParallelOp>(ctx);
+
+    (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
+                                             std::move(patterns));
+  }
+};
+
 } // namespace
 
 // Expose the passes to the outside world
@@ -1720,4 +1885,8 @@ std::unique_ptr<mlir::Pass> gpu_runtime::createGPUExPass() {
 
 std::unique_ptr<mlir::Pass> gpu_runtime::createParallelLoopGPUMappingPass() {
   return std::make_unique<ParallelLoopGPUMappingPass>();
+}
+
+std::unique_ptr<mlir::Pass> gpu_runtime::createTileParallelLoopsForGPUPass() {
+  return std::make_unique<TileParallelLoopsForGPUPass>();
 }

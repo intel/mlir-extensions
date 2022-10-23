@@ -168,22 +168,45 @@ void LaunchGpuKernelOp::build(::mlir::OpBuilder &builder,
 void GPUSuggestBlockSizeOp::build(::mlir::OpBuilder &odsBuilder,
                                   ::mlir::OperationState &odsState,
                                   ::llvm::Optional<::mlir::Value> stream,
-                                  ::mlir::OpFoldResult kernel,
+                                  ::mlir::ValueRange gridSize,
+                                  ::mlir::Value kernel) {
+  auto dimCount = gridSize.size();
+  assert(dimCount > 0 && dimCount <= 3);
+  llvm::SmallVector<mlir::Type, 3> resTypes(dimCount,
+                                            odsBuilder.getIndexType());
+
+  GPUSuggestBlockSizeOp::build(odsBuilder, odsState, resTypes,
+                               stream.value_or(mlir::Value{}), kernel,
+                               mlir::SymbolRefAttr{}, gridSize);
+}
+
+void GPUSuggestBlockSizeOp::build(::mlir::OpBuilder &odsBuilder,
+                                  ::mlir::OperationState &odsState,
+                                  ::llvm::Optional<::mlir::Value> stream,
+                                  ::mlir::ValueRange gridSize,
+                                  ::mlir::SymbolRefAttr kernel) {
+  auto dimCount = gridSize.size();
+  assert(dimCount > 0 && dimCount <= 3);
+  llvm::SmallVector<mlir::Type, 3> resTypes(dimCount,
+                                            odsBuilder.getIndexType());
+
+  GPUSuggestBlockSizeOp::build(odsBuilder, odsState, resTypes,
+                               stream.value_or(mlir::Value{}), mlir::Value{},
+                               kernel, gridSize);
+}
+
+void GPUSuggestBlockSizeOp::build(::mlir::OpBuilder &odsBuilder,
+                                  ::mlir::OperationState &odsState,
+                                  ::llvm::Optional<::mlir::Value> stream,
                                   ::mlir::ValueRange gridSize) {
   auto dimCount = gridSize.size();
   assert(dimCount > 0 && dimCount <= 3);
   llvm::SmallVector<mlir::Type, 3> resTypes(dimCount,
                                             odsBuilder.getIndexType());
-  mlir::Value kernVal;
-  mlir::SymbolRefAttr kernRef;
-  if (kernel.is<mlir::Value>())
-    kernVal = kernel.get<mlir::Value>();
-  else
-    kernRef = kernel.get<mlir::Attribute>().cast<mlir::SymbolRefAttr>();
 
   GPUSuggestBlockSizeOp::build(odsBuilder, odsState, resTypes,
-                               stream.value_or(mlir::Value{}), kernVal, kernRef,
-                               gridSize);
+                               stream.value_or(mlir::Value{}), mlir::Value{},
+                               mlir::SymbolRefAttr{}, gridSize);
 }
 
 mlir::StringAttr GPUSuggestBlockSizeOp::getKernelModuleName() {

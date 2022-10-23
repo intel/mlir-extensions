@@ -329,32 +329,31 @@ struct GPULowerDefaultLocalSize
       return;
     }
 
-    auto skipCast = [](mlir::Value val) -> mlir::Value {
-      if (auto parent = val.getDefiningOp<mlir::arith::IndexCastOp>())
-        return parent.getIn();
-      return val;
-    };
+    llvm::StringRef funcName("set_default_local_size");
+    mlir::func::CallOp setDefSize;
+    for (auto op : region.front().getOps<mlir::func::CallOp>()) {
+      if (op.getCallee() == funcName && op->getNumOperands() == 3) {
+        setDefSize = op;
+        break;
+      }
+    }
 
-    llvm::StringRef funcName("get_default_local_size");
+    mlir::DominanceInfo dom;
     mlir::OpBuilder builder(&getContext());
     func.walk([&](mlir::gpu::LaunchFuncOp op) {
-      if (auto call = skipCast(op.getBlockSizeX())
-                          .getDefiningOp<mlir::func::CallOp>()) {
-        if (call.getCallee() != funcName || call.operands().size() != 3)
+      auto bx = op.getBlockSizeX();
+      if (auto call = bx.getDefiningOp<gpu_runtime::GPUSuggestBlockSizeOp>()) {
+        if (call.getKernel())
           return;
-
-        assert(
-            skipCast(op.getBlockSizeY()).getDefiningOp<mlir::func::CallOp>() ==
-            call);
-        assert(
-            skipCast(op.getBlockSizeZ()).getDefiningOp<mlir::func::CallOp>() ==
-            call);
 
         auto loc = call.getLoc();
         auto kernel = op.getKernel();
         builder.setInsertionPoint(call);
 
-        auto operands = call.operands();
+        mlir::ValueRange operands = call.getGridSize();
+        if (setDefSize && dom.properlyDominates(setDefSize, call))
+          operands = setDefSize.getArgOperands();
+
         auto count = static_cast<unsigned>(operands.size());
         llvm::SmallVector<mlir::Value, 3> globalSize(count);
         for (auto i : llvm::seq(0u, count))
@@ -362,7 +361,7 @@ struct GPULowerDefaultLocalSize
 
         auto res = builder
                        .create<gpu_runtime::GPUSuggestBlockSizeOp>(
-                           loc, /*stream*/ llvm::None, kernel, globalSize)
+                           loc, /*stream*/ llvm::None, globalSize, kernel)
                        .getResults();
 
         for (auto i : llvm::seq(0u, count)) {
@@ -1682,6 +1681,7 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   funcPM.addPass(std::make_unique<PrepareForGPUPass>());
   funcPM.addPass(mlir::createCanonicalizerPass());
   funcPM.addPass(std::make_unique<RemoveNestedParallelPass>());
+  funcPM.addPass(gpu_runtime::createTileParallelLoopsForGPUPass());
   funcPM.addPass(gpu_runtime::createParallelLoopGPUMappingPass());
   funcPM.addPass(mlir::createParallelLoopToGpuPass());
   funcPM.addPass(std::make_unique<RemoveGpuRegionPass>());

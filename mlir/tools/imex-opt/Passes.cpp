@@ -146,3 +146,9 @@ static mlir::PassPipelineRegistration<> makeBarriersUniform(
     [](mlir::OpPassManager &pm) {
       pm.addPass(gpu_runtime::createMakeBarriersUniformPass());
     });
+
+static mlir::PassPipelineRegistration<> tileParallelLoopsGPU(
+    "gpux-tile-parallel-loops", "Naively tile parallel loops for gpu",
+    [](mlir::OpPassManager &pm) {
+      pm.addPass(gpu_runtime::createTileParallelLoopsForGPUPass());
+    });
