@@ -78,7 +78,7 @@ struct ParallelLoopGPUMappingPass
       llvm::SmallVector<mlir::gpu::ParallelLoopDimMappingAttr> mapping;
       for (auto &op : llvm::make_early_inc_range(region.front())) {
         auto parallel = mlir::dyn_cast<mlir::scf::ParallelOp>(op);
-        if (!parallel)
+        if (!parallel || parallel->hasAttr(mlir::gpu::getMappingAttrName()))
           continue;
 
         auto numLoops = parallel.getNumLoops();
