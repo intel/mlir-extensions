@@ -116,6 +116,7 @@ struct PrepareForGPUPass
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<gpu_runtime::GpuRuntimeDialect>();
+    registry.insert<imex::util::ImexUtilDialect>();
     registry.insert<mlir::scf::SCFDialect>();
   }
 
@@ -219,33 +220,6 @@ struct RemoveGpuRegion
 struct RemoveGpuRegionPass
     : public imex::RewriteWrapperPass<RemoveGpuRegionPass, void, void,
                                       RemoveGpuRegion> {};
-
-struct RemoveKernelMarkerPass
-    : public mlir::PassWrapper<RemoveKernelMarkerPass,
-                               mlir::OperationPass<void>> {
-  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(RemoveKernelMarkerPass)
-
-  virtual void
-  getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<mlir::func::FuncDialect>();
-  }
-
-  void runOnOperation() override {
-    auto func = getOperation();
-    func->walk([&](mlir::func::CallOp op) {
-      if (op.getCallee() != "kernel_marker")
-        return;
-
-      if (!op.use_empty()) {
-        op.emitError("Cannot erase kernel_marker with uses");
-        signalPassFailure();
-        return;
-      }
-
-      op.erase();
-    });
-  }
-};
 
 struct KernelMemrefOpsMovementPass
     : public mlir::PassWrapper<KernelMemrefOpsMovementPass,
@@ -754,7 +728,7 @@ struct GenerateOutlineContextPass
   }
 };
 
-void rerun_std_pipeline(mlir::Operation *op) {
+static void rerunStdPipeline(mlir::Operation *op) {
   assert(nullptr != op);
   auto marker =
       mlir::StringAttr::get(op->getContext(), plierToStdPipelineName());
@@ -837,33 +811,7 @@ protected:
       rewriter.replaceOp(op, newOp->getResults());
     }
 
-    rerun_std_pipeline(parent);
-    return mlir::success();
-  }
-};
-
-template <typename Op> struct ConvertOp : public mlir::OpConversionPattern<Op> {
-  using mlir::OpConversionPattern<Op>::OpConversionPattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(Op op, typename Op::Adaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
-    auto origResTypes = op->getResultTypes();
-    llvm::SmallVector<mlir::Type, 2> newResTypes;
-
-    auto typeConverter = this->getTypeConverter();
-    assert(typeConverter);
-    if (mlir::failed(typeConverter->convertTypes(origResTypes, newResTypes)))
-      return mlir::failure();
-
-    auto attrs = adaptor.getAttributes();
-    llvm::SmallVector<mlir::NamedAttribute> attrsList;
-    attrsList.reserve(attrs.size());
-    for (auto it : attrs)
-      attrsList.emplace_back(it.getName(), it.getValue());
-
-    rewriter.replaceOpWithNewOp<Op>(op, newResTypes, adaptor.getOperands(),
-                                    attrsList);
+    rerunStdPipeline(parent);
     return mlir::success();
   }
 };
@@ -982,7 +930,7 @@ protected:
         results[i] = rewriter.create<plier::CastOp>(loc, dstType, r);
     }
 
-    rerun_std_pipeline(op);
+    rerunStdPipeline(op);
     rewriter.replaceOp(op, results);
     return mlir::success();
   }
@@ -996,7 +944,6 @@ lowerGetGlobalId(mlir::func::CallOp op, mlir::ValueRange /*globalSizes*/,
                  mlir::ValueRange localSizes, mlir::ValueRange gridArgs,
                  mlir::ValueRange blockArgs, mlir::PatternRewriter &builder,
                  unsigned index) {
-  rerun_std_pipeline(op);
   auto loc = op.getLoc();
   auto indexType = builder.getIndexType();
   auto indexCast = [&](mlir::Value val) -> mlir::Value {
@@ -1012,7 +959,7 @@ lowerGetGlobalId(mlir::func::CallOp op, mlir::ValueRange /*globalSizes*/,
   res = builder.create<mlir::arith::AddIOp>(loc, res, blockArg);
   auto resType = op.getResult(0).getType();
   if (res.getType() != resType)
-    res = builder.createOrFold<plier::CastOp>(loc, resType, res);
+    res = builder.createOrFold<mlir::arith::IndexCastOp>(loc, resType, res);
 
   builder.replaceOp(op, res);
   return mlir::success();
@@ -1023,36 +970,35 @@ lowerGetLocallId(mlir::func::CallOp op, mlir::ValueRange /*globalSizes*/,
                  mlir::ValueRange /*localSizes*/, mlir::ValueRange /*gridArgs*/,
                  mlir::ValueRange blockArgs, mlir::PatternRewriter &builder,
                  unsigned index) {
-  rerun_std_pipeline(op);
   auto loc = op.getLoc();
   auto res = blockArgs[index];
   auto resType = op.getResult(0).getType();
   if (res.getType() != resType)
-    res = builder.createOrFold<plier::CastOp>(loc, resType, res);
+    res = builder.createOrFold<mlir::arith::IndexCastOp>(loc, resType, res);
 
   builder.replaceOp(op, res);
   return mlir::success();
 }
 
-static mlir::LogicalResult lowerGetGlobalSize(mlir::func::CallOp op,
-                                              mlir::ValueRange globalSizes,
-                                              mlir::ValueRange /*localSizes*/,
-                                              mlir::ValueRange /*gridArgs*/,
-                                              mlir::ValueRange /*blockArgs*/,
-                                              mlir::PatternRewriter &builder,
-                                              unsigned index) {
-  rerun_std_pipeline(op);
+static mlir::LogicalResult
+lowerGetGlobalSize(mlir::func::CallOp op, mlir::ValueRange globalSizes,
+                   mlir::ValueRange localSizes, mlir::ValueRange /*gridArgs*/,
+                   mlir::ValueRange /*blockArgs*/,
+                   mlir::PatternRewriter &builder, unsigned index) {
   auto loc = op.getLoc();
   auto indexType = builder.getIndexType();
   auto indexCast = [&](mlir::Value val) -> mlir::Value {
     if (val.getType() != indexType)
-      return builder.createOrFold<plier::CastOp>(loc, indexType, val);
+      return builder.createOrFold<mlir::arith::IndexCastOp>(loc, indexType,
+                                                            val);
     return val;
   };
-  mlir::Value res = indexCast(globalSizes[index]);
+  mlir::Value global = indexCast(globalSizes[index]);
+  mlir::Value local = indexCast(localSizes[index]);
+  mlir::Value res = builder.create<mlir::arith::MulIOp>(loc, global, local);
   auto resType = op.getResult(0).getType();
   if (res.getType() != resType)
-    res = builder.createOrFold<plier::CastOp>(loc, resType, res);
+    res = builder.createOrFold<mlir::arith::IndexCastOp>(loc, resType, res);
 
   builder.replaceOp(op, res);
   return mlir::success();
@@ -1063,21 +1009,26 @@ lowerGetLocalSize(mlir::func::CallOp op, mlir::ValueRange /*globalSizes*/,
                   mlir::ValueRange localSizes, mlir::ValueRange /*gridArgs*/,
                   mlir::ValueRange /*blockArgs*/,
                   mlir::PatternRewriter &builder, unsigned index) {
-  rerun_std_pipeline(op);
   auto loc = op.getLoc();
   auto indexType = builder.getIndexType();
   auto indexCast = [&](mlir::Value val) -> mlir::Value {
     if (val.getType() != indexType)
-      return builder.createOrFold<plier::CastOp>(loc, indexType, val);
+      return builder.createOrFold<mlir::arith::IndexCastOp>(loc, indexType,
+                                                            val);
     return val;
   };
   mlir::Value res = indexCast(localSizes[index]);
   auto resType = op.getResult(0).getType();
   if (res.getType() != resType)
-    res = builder.createOrFold<plier::CastOp>(loc, resType, res);
+    res = builder.createOrFold<mlir::arith::IndexCastOp>(loc, resType, res);
 
   builder.replaceOp(op, res);
   return mlir::success();
+}
+
+static std::array<mlir::Value, 3>
+dim3ToArray(const mlir::gpu::KernelDim3 &val) {
+  return {val.x, val.y, val.z};
 }
 
 struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::func::CallOp> {
@@ -1089,24 +1040,9 @@ struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::func::CallOp> {
     using handler_func_t = mlir::LogicalResult (*)(
         mlir::func::CallOp, mlir::ValueRange, mlir::ValueRange,
         mlir::ValueRange, mlir::ValueRange, mlir::PatternRewriter &, unsigned);
-    auto func = op->getParentOfType<mlir::func::FuncOp>();
-    if (!func || !llvm::hasSingleElement(func.getBody()))
+    auto launch = op->getParentOfType<mlir::gpu::LaunchOp>();
+    if (!launch)
       return mlir::failure();
-
-    auto kernelMarker = [&]() -> mlir::func::CallOp {
-      for (auto &funcOp : func.getBody().front()) {
-        auto call = mlir::dyn_cast<mlir::func::CallOp>(funcOp);
-        if (call && call.getCallee() == "kernel_marker")
-          return call;
-      }
-      return {};
-    }();
-
-    if (!kernelMarker || kernelMarker.getNumOperands() != 6)
-      return mlir::failure();
-
-    auto globalSize = kernelMarker.operands().take_front(3);
-    auto localSize = kernelMarker.operands().drop_front(3);
 
     auto handler = [&]() -> handler_func_t {
       static const std::pair<mlir::StringRef, handler_func_t> handlers[] = {
@@ -1131,28 +1067,7 @@ struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::func::CallOp> {
         !op.getResult(0).getType().isa<mlir::IntegerType>())
       return mlir::failure();
 
-    auto skipCasts = [](mlir::Value val) -> mlir::Value {
-      auto getParent = [](mlir::Value v) -> mlir::Value {
-        auto op = v.getDefiningOp();
-        if (!op)
-          return {};
-
-        if (auto cast = mlir::dyn_cast<imex::util::SignCastOp>(op))
-          return cast.getValue();
-        if (auto cast = mlir::dyn_cast<plier::CastOp>(op))
-          return cast.getValue();
-        if (auto cast = mlir::dyn_cast<mlir::UnrealizedConversionCastOp>(op))
-          return cast.getInputs()[0];
-
-        return {};
-      };
-      while (auto parent = getParent(val))
-        val = parent;
-
-      return val;
-    };
-
-    auto indAttr = mlir::getConstantIntValue(skipCasts(op.operands()[0]));
+    auto indAttr = mlir::getConstantIntValue(op.operands()[0]);
     if (!indAttr)
       return mlir::failure();
 
@@ -1160,37 +1075,21 @@ struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::func::CallOp> {
     if (ind < 0 || ind >= 3)
       return mlir::failure();
 
-    llvm::SmallVector<mlir::Value> indexArgs;
-    mlir::Operation *parent = op;
-    while (true) {
-      parent = parent->getParentOfType<mlir::scf::ForOp>();
-      if (!parent)
-        break;
+    auto globalSize = dim3ToArray(launch.getGridSize());
+    auto localSize = dim3ToArray(launch.getBlockSize());
 
-      auto envReg = parent->getParentOfType<imex::util::EnvironmentRegionOp>();
-      if (!envReg || !isGpuRegion(envReg))
-        break;
-
-      auto arg = mlir::cast<mlir::scf::ForOp>(parent).getBody()->getArgument(0);
-      indexArgs.emplace_back(arg);
-    }
-
-    if (indexArgs.size() < 6)
-      return mlir::failure();
-
-    std::reverse(indexArgs.begin(), indexArgs.end());
-    auto gridArgs = llvm::makeArrayRef(indexArgs).take_front(3);
-    auto blockArgs = llvm::makeArrayRef(indexArgs).drop_front(3).take_front(3);
+    auto globalArgs = dim3ToArray(launch.getBlockIds());
+    auto localArgs = dim3ToArray(launch.getThreadIds());
 
     auto uind = static_cast<unsigned>(ind);
-    return handler(op, globalSize, localSize, gridArgs, blockArgs, rewriter,
+    return handler(op, globalSize, localSize, globalArgs, localArgs, rewriter,
                    uind);
   }
 };
 
 struct LowerGpuBuiltinsPass
     : public imex::RewriteWrapperPass<LowerGpuBuiltinsPass, void, void,
-                                      LowerPlierCalls, LowerBuiltinCalls> {};
+                                      LowerPlierCalls> {};
 
 static llvm::Optional<gpu_runtime::FenceFlags>
 getFenceFlags(mlir::OpFoldResult arg) {
@@ -1466,9 +1365,9 @@ public:
 };
 
 struct LowerGpuBuiltins2Pass
-    : public imex::RewriteWrapperPass<LowerGpuBuiltins2Pass, void, void,
-                                      ConvertBarrierOps, ConvertGroupOps,
-                                      ConvertGroupOpsToSubgroup> {};
+    : public imex::RewriteWrapperPass<
+          LowerGpuBuiltins2Pass, void, void, ConvertBarrierOps, ConvertGroupOps,
+          ConvertGroupOpsToSubgroup, LowerBuiltinCalls> {};
 
 class ConvertArrayAllocOps : public mlir::OpRewritePattern<mlir::func::CallOp> {
 public:
@@ -1786,7 +1685,6 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   funcPM.addPass(gpu_runtime::createParallelLoopGPUMappingPass());
   funcPM.addPass(mlir::createParallelLoopToGpuPass());
   funcPM.addPass(std::make_unique<RemoveGpuRegionPass>());
-  funcPM.addPass(std::make_unique<RemoveKernelMarkerPass>());
   funcPM.addPass(mlir::createCanonicalizerPass());
   funcPM.addPass(gpu_runtime::createInsertGPUAllocsPass());
   funcPM.addPass(mlir::createCanonicalizerPass());
@@ -1824,7 +1722,7 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   modulePM.addPass(mlir::spirv::createLowerABIAttributesPass());
   modulePM.addPass(mlir::spirv::createUpdateVersionCapabilityExtensionPass());
   pm.addPass(gpu_runtime::createSerializeSPIRVPass());
-  funcPM.addNestedPass<mlir::func::FuncOp>(
+  pm.addNestedPass<mlir::func::FuncOp>(
       gpu_runtime::createConvertGPUDeallocsPass());
   pm.addNestedPass<mlir::func::FuncOp>(gpu_runtime::createGPUExPass());
   commonOptPasses(pm);
