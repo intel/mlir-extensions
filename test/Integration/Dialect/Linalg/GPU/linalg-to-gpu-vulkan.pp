@@ -14,8 +14,8 @@ func.func(finalizing-bufferize
           convert-linalg-to-parallel-loops
           gpu-map-parallel-loops
           convert-parallel-loops-to-gpu)
-# insert-gpu-alloc pass can have client-api = opencl or vulkan args
-insert-gpu-alloc
+# insert-gpu-allocs pass can have client-api = opencl or vulkan args
+func.func(insert-gpu-allocs)
 canonicalize
 normalize-memrefs
 func.func(lower-affine)

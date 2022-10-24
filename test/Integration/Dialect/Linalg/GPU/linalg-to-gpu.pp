@@ -14,7 +14,7 @@ func.func(finalizing-bufferize
           convert-linalg-to-parallel-loops
           gpu-map-parallel-loops
           convert-parallel-loops-to-gpu)
-insert-gpu-alloc
+func.func(insert-gpu-allocs)
 canonicalize
 # Adds spirv storage class attributes to memrefs based on memory space attribute
 # Need the pass to target narrower scope

@@ -26,6 +26,9 @@ std::unique_ptr<mlir::Pass> createSetSPIRVCapabilitiesPass();
 std::unique_ptr<mlir::Pass> createSetSPIRVAbiAttribute();
 std::unique_ptr<mlir::Pass> createUnstrideMemrefsPass();
 
+#define GEN_PASS_DECL
+#include "imex/Transforms/Passes.h.inc"
+
 //===----------------------------------------------------------------------===//
 // Registration
 //===----------------------------------------------------------------------===//

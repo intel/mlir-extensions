@@ -47,4 +47,16 @@ def UnstrideMemrefsPass : Pass<"unstride-memrefs", "::mlir::func::FuncOp"> {
     ];
 }
 
+def InsertGPUAllocs : Pass<"insert-gpu-allocs", "::mlir::func::FuncOp"> {
+  let summary = "Converts memref allocs to gpu allocs";
+  let constructor = "imex::createInsertGPUAllocsPass()";
+  let dependentDialects = ["::mlir::memref::MemRefDialect",
+                           "::mlir::gpu::GPUDialect",
+                           "::mlir::arith::ArithDialect"];
+  let options = [
+    Option<"clientAPI", "client-api", "std::string", /*default=*/"\"vulkan\"",
+           "The client API to use for inserting gpu allocs">
+  ];
+}
+
 #endif // _IMEX_TRANSFORMS_PASSES_TD_INCLUDED_

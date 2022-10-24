@@ -1,6 +1,6 @@
 add_mlir_library(IMEXTransforms
   SerializeSPIRV.cpp
-  InsertGpuAllocs.cpp
+  InsertGPUAllocs.cpp
   SetSPIRVCapabilities.cpp
   SetSPIRVAbiAttribute.cpp
   UnstrideMemrefs.cpp

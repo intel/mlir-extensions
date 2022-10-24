@@ -1,4 +1,4 @@
-//===- InsertGpuAllocs.cpp - InsertGpuAllocs Pass  -------*- C++ -*-===//
+//===- InsertGPUAllocs.cpp - InsertGPUAllocs Pass  -------*- C++ -*-===//
 //
 // Copyright 2022 Intel Corporation
 // Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -28,18 +28,36 @@
 #include <mlir/Pass/Pass.h>
 
 namespace imex {
+#define GEN_PASS_DEF_INSERTGPUALLOCS
+#include "imex/Transforms/Passes.h.inc"
+} // namespace imex
 
+namespace {
 mlir::StringRef getAllocSharedAttrName() { return "gpu.alloc_shared"; }
 
-struct InsertGPUAllocs
-    : public mlir::PassWrapper<InsertGPUAllocs,
-                               mlir::OperationPass<mlir::func::FuncOp>> {
+class InsertGPUAllocsPass final
+    : public imex::impl::InsertGPUAllocsBase<InsertGPUAllocsPass> {
 
-  virtual void
-  getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<mlir::memref::MemRefDialect>();
-    registry.insert<mlir::gpu::GPUDialect>();
-    registry.insert<mlir::arith::ArithDialect>();
+public:
+  explicit InsertGPUAllocsPass() {
+          m_clientAPI = "vulkan";
+            }
+  explicit InsertGPUAllocsPass(
+                  const mlir::StringRef &clientAPI)
+              : m_clientAPI(clientAPI) {}
+
+  mlir::LogicalResult initializeOptions(mlir::StringRef options) override {
+      if (failed(Pass::initializeOptions(options)))
+              return mlir::failure();
+
+        if (clientAPI == "opencl") {
+                m_clientAPI = "opencl";
+                  }
+
+          if (clientAPI != "vulkan" && clientAPI != "opencl")
+                  return mlir::failure();
+
+            return mlir::success();
   }
 
   void runOnOperation() override {
@@ -332,10 +350,14 @@ struct InsertGPUAllocs
       add_gpu_alloc(builder, param, access, term);
     }
   }
+private:
+  mlir::StringRef m_clientAPI;
 };
 
-} // namespace imex
+} // namespace
 
-std::unique_ptr<mlir::Pass> imex::createInsertGPUAllocsPass() {
-  return std::make_unique<InsertGPUAllocs>();
+namespace imex {
+std::unique_ptr<mlir::Pass> createInsertGPUAllocsPass() {
+  return std::make_unique<InsertGPUAllocsPass>();
 }
+} // namespace imex

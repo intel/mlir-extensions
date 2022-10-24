@@ -60,6 +60,10 @@ class SPIRVDialect;
 namespace tensor {
 class TensorDialect;
 } // namespace tensor
+
+namespace gpu {
+class GPUDialect;
+} // namespace gpu
 } // namespace mlir
 
 namespace imex {

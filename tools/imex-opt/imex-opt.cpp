@@ -40,12 +40,6 @@ int main(int argc, char **argv) {
       ::mlir::MlirOptMain(argc, argv, "Imex optimizer driver\n", registry));
 }
 
-static mlir::PassPipelineRegistration<> InsertGpuAlloc(
-    "insert-gpu-alloc", "Converts memref alloc to gpu alloc",
-    [](mlir::OpPassManager &pm) {
-      pm.addNestedPass<mlir::func::FuncOp>(imex::createInsertGPUAllocsPass());
-    });
-
 static mlir::PassPipelineRegistration<>
     SetSPIRVCapabilities("set-spirv-capablilities", "Sets Spirv capabilities",
                          [](mlir::OpPassManager &pm) {
