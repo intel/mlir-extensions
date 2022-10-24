@@ -28,6 +28,10 @@ namespace {
 struct Meminfo {
   mlir::Value memref;
   mlir::ValueRange indices;
+
+  bool operator==(const Meminfo& other) const {
+    return memref == other.memref && indices == other.indices;
+  }
 };
 
 static llvm::Optional<Meminfo> getMeminfo(mlir::Operation *op) {
@@ -37,6 +41,12 @@ static llvm::Optional<Meminfo> getMeminfo(mlir::Operation *op) {
 
   if (auto store = mlir::dyn_cast<mlir::memref::StoreOp>(op))
     return Meminfo{store.getMemref(), store.getIndices()};
+
+  if (auto load = mlir::dyn_cast<mlir::vector::LoadOp>(op))
+    return Meminfo{load.getBase(), load.getIndices()};
+
+  if (auto store = mlir::dyn_cast<mlir::vector::StoreOp>(op))
+    return Meminfo{store.getBase(), store.getIndices()};
 
   return {};
 }
@@ -51,8 +61,7 @@ struct MustAlias {
     if (!meminfo2)
       return false;
 
-    return meminfo1->memref == meminfo2->memref &&
-           meminfo1->indices == meminfo2->indices;
+    return *meminfo1 == *meminfo2;
   }
 };
 
