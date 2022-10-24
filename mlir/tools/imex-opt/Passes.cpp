@@ -32,6 +32,7 @@
 #include "imex/Dialect/ntensor/Transforms/ResolveArrayOps.hpp"
 #include "imex/Transforms/ExpandTuple.hpp"
 #include "imex/Transforms/MakeSignless.hpp"
+#include "imex/Transforms/MemoryRewrites.hpp"
 
 // Passes registration.
 
@@ -152,3 +153,7 @@ static mlir::PassPipelineRegistration<> tileParallelLoopsGPU(
     [](mlir::OpPassManager &pm) {
       pm.addPass(gpu_runtime::createTileParallelLoopsForGPUPass());
     });
+
+static mlir::PassPipelineRegistration<> memoryOpts(
+    "imex-memory-opts", "Apply memory optimizations",
+    [](mlir::OpPassManager &pm) { pm.addPass(imex::createMemoryOptPass()); });

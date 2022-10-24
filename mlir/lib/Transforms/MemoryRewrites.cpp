@@ -17,8 +17,10 @@
 #include "imex/Analysis/MemorySsaAnalysis.hpp"
 
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
+#include <mlir/Dialect/Vector/IR/VectorOps.h>
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/IR/Dominance.h>
+#include <mlir/Pass/Pass.h>
 
 namespace {
 struct Meminfo {
@@ -233,4 +235,30 @@ imex::optimizeMemoryOps(mlir::AnalysisManager &am) {
   } while (repeat);
 
   return mlir::success(changed);
+}
+
+namespace {
+struct MemoryOptPass
+    : public mlir::PassWrapper<MemoryOptPass, mlir::OperationPass<void>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(MemoryOptPass)
+
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::memref::MemRefDialect>();
+    registry.insert<mlir::vector::VectorDialect>();
+  }
+
+  void runOnOperation() override {
+    auto am = getAnalysisManager();
+    auto res = imex::optimizeMemoryOps(am);
+    if (!res) {
+      getOperation()->emitError("Failed to build memory SSA analysis");
+      return signalPassFailure();
+    }
+  }
+};
+} // namespace
+
+std::unique_ptr<mlir::Pass> imex::createMemoryOptPass() {
+  return std::make_unique<MemoryOptPass>();
 }
