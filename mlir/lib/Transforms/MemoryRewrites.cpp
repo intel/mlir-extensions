@@ -20,6 +20,7 @@
 #include <mlir/Dialect/Vector/IR/VectorOps.h>
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/IR/Dominance.h>
+#include <mlir/IR/FunctionInterfaces.h>
 #include <mlir/Pass/Pass.h>
 
 namespace {
@@ -239,7 +240,8 @@ imex::optimizeMemoryOps(mlir::AnalysisManager &am) {
 
 namespace {
 struct MemoryOptPass
-    : public mlir::PassWrapper<MemoryOptPass, mlir::OperationPass<void>> {
+    : public mlir::PassWrapper<MemoryOptPass,
+                               mlir::InterfacePass<mlir::FunctionOpInterface>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(MemoryOptPass)
 
   virtual void
