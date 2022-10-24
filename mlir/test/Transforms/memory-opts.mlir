@@ -136,3 +136,24 @@ func.func @multi_store_load(%cf1 : f32, %cf2 : f32, %cf3 : f32) {
   gpu.dealloc %m : memref<10xf32>
   return
 }
+
+// -----
+
+// CHECK-LABEL: func @vector_forwarding
+// CHECK:  scf.for %{{.*}} = %{{.*}} to %{{.*}} step %{{.*}}
+// CHECK-NEXT:   %[[LDVAL:.*]] = vector.load
+// CHECK-NEXT:   vector.store %[[LDVAL]],{{.*}}
+// CHECK-NEXT: }
+func.func @vector_forwarding(%in : memref<512xf32>, %out : memref<512xf32>) {
+%c0 = arith.constant 0 : index
+  %c1 = arith.constant 1 : index
+  %c16 = arith.constant 16 : index
+  %tmp = memref.alloc() : memref<512xf32>
+  scf.for %i = %c0 to %c16 step %c1 {
+    %ld0 = vector.load %in[%i] : memref<512xf32>, vector<32xf32>
+    vector.store %ld0, %tmp[%i] : memref<512xf32>, vector<32xf32>
+    %ld1 = vector.load %tmp[%i] : memref<512xf32>, vector<32xf32>
+    vector.store %ld1, %out[%i] : memref<512xf32>, vector<32xf32>
+  }
+  return
+}

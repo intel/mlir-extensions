@@ -51,6 +51,17 @@ static llvm::Optional<Meminfo> getMeminfo(mlir::Operation *op) {
   return {};
 }
 
+static mlir::Value getStoreValue(mlir::Operation* op) {
+  assert(op);
+  if (auto store = mlir::dyn_cast<mlir::memref::StoreOp>(op))
+    return store.getValue();
+
+  if (auto store = mlir::dyn_cast<mlir::vector::StoreOp>(op))
+    return store.getValueToStore();
+
+  llvm_unreachable("Invalid store op");
+}
+
 struct MustAlias {
   bool operator()(mlir::Operation *op1, mlir::Operation *op2) const {
     auto meminfo1 = getMeminfo(op1);
@@ -87,7 +98,7 @@ static mlir::LogicalResult foldLoads(imex::MemorySSAAnalysis &memSSAAnalysis) {
       assert(nullptr != op1);
       assert(nullptr != op2);
       if (MustAlias()(op1, op2)) {
-        auto val = mlir::cast<mlir::memref::StoreOp>(op2).getValue();
+        auto val = getStoreValue(op2);
         op1->replaceAllUsesWith(mlir::ValueRange(val));
         op1->erase();
         memSSA.eraseNode(&node);
