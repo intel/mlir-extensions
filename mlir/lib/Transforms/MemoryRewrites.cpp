@@ -22,6 +22,7 @@
 #include <mlir/IR/Dominance.h>
 #include <mlir/IR/FunctionInterfaces.h>
 #include <mlir/Pass/Pass.h>
+#include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 
 namespace {
 struct Meminfo {
@@ -251,11 +252,25 @@ struct MemoryOptPass
   }
 
   void runOnOperation() override {
+    auto *ctx = &getContext();
+    mlir::RewritePatternSet patterns(ctx);
+
+    mlir::memref::AllocOp::getCanonicalizationPatterns(patterns, ctx);
+    mlir::memref::AllocaOp::getCanonicalizationPatterns(patterns, ctx);
+    mlir::memref::ReallocOp::getCanonicalizationPatterns(patterns, ctx);
+
+    mlir::FrozenRewritePatternSet fPatterns(std::move(patterns));
     auto am = getAnalysisManager();
-    auto res = imex::optimizeMemoryOps(am);
-    if (!res) {
-      getOperation()->emitError("Failed to build memory SSA analysis");
-      return signalPassFailure();
+    while (true) {
+      (void)mlir::applyPatternsAndFoldGreedily(getOperation(), fPatterns);
+      am.invalidate({});
+      auto res = imex::optimizeMemoryOps(am);
+      if (!res) {
+        getOperation()->emitError("Failed to build memory SSA analysis");
+        return signalPassFailure();
+      }
+      if (mlir::failed(*res))
+        break;
     }
   }
 };
