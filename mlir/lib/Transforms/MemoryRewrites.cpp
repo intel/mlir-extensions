@@ -29,7 +29,7 @@ struct Meminfo {
   mlir::Value memref;
   mlir::ValueRange indices;
 
-  bool operator==(const Meminfo& other) const {
+  bool operator==(const Meminfo &other) const {
     return memref == other.memref && indices == other.indices;
   }
 };
@@ -51,7 +51,7 @@ static llvm::Optional<Meminfo> getMeminfo(mlir::Operation *op) {
   return {};
 }
 
-static mlir::Value getStoreValue(mlir::Operation* op) {
+static mlir::Value getStoreValue(mlir::Operation *op) {
   assert(op);
   if (auto store = mlir::dyn_cast<mlir::memref::StoreOp>(op))
     return store.getValue();
