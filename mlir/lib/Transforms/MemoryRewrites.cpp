@@ -240,6 +240,42 @@ imex::optimizeMemoryOps(mlir::AnalysisManager &am) {
 }
 
 namespace {
+struct RemoveDeadAllocs
+    : public mlir::OpInterfaceRewritePattern<mlir::MemoryEffectOpInterface> {
+  using OpInterfaceRewritePattern::OpInterfaceRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::MemoryEffectOpInterface op,
+                  mlir::PatternRewriter &rewriter) const override {
+    if (!op.onlyHasEffect<mlir::MemoryEffects::Allocate>() ||
+        op->getNumResults() != 1)
+      return mlir::failure();
+
+    auto res = op->getResult(0);
+    for (auto user : op->getUsers()) {
+      if (user->getNumResults() != 0)
+        return mlir::failure();
+
+      auto memInterface = mlir::dyn_cast<mlir::MemoryEffectOpInterface>(user);
+      if (!memInterface)
+        return mlir::failure();
+
+      if (!memInterface.getEffectOnValue<mlir::MemoryEffects::Free>(res) &&
+          !memInterface.getEffectOnValue<mlir::MemoryEffects::Write>(res))
+        return mlir::failure();
+
+      if (memInterface.getEffectOnValue<mlir::MemoryEffects::Read>(res))
+        return mlir::failure();
+    }
+
+    for (auto user : llvm::make_early_inc_range(op->getUsers()))
+      rewriter.eraseOp(user);
+
+    rewriter.eraseOp(op);
+    return mlir::success();
+  }
+};
+
 struct MemoryOptPass
     : public mlir::PassWrapper<MemoryOptPass,
                                mlir::InterfacePass<mlir::FunctionOpInterface>> {
@@ -255,9 +291,7 @@ struct MemoryOptPass
     auto *ctx = &getContext();
     mlir::RewritePatternSet patterns(ctx);
 
-    mlir::memref::AllocOp::getCanonicalizationPatterns(patterns, ctx);
-    mlir::memref::AllocaOp::getCanonicalizationPatterns(patterns, ctx);
-    mlir::memref::ReallocOp::getCanonicalizationPatterns(patterns, ctx);
+    patterns.insert<RemoveDeadAllocs>(ctx);
 
     mlir::FrozenRewritePatternSet fPatterns(std::move(patterns));
     auto am = getAnalysisManager();
