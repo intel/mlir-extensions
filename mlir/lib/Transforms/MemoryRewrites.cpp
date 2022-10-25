@@ -88,21 +88,27 @@ static mlir::LogicalResult foldLoads(imex::MemorySSAAnalysis &memSSAAnalysis) {
   bool changed = false;
   for (auto &node : llvm::make_early_inc_range(memSSA.getNodes())) {
     if (NodeType::Use == memSSA.getNodeType(&node)) {
+      auto op1 = memSSA.getNodeOperation(&node);
+      assert(nullptr != op1);
+      if (op1->getNumResults() != 1)
+        continue;
+
       auto def = memSSA.getNodeDef(&node);
       assert(nullptr != def);
-      if (NodeType::Def != memSSA.getNodeType(def)) {
+      if (NodeType::Def != memSSA.getNodeType(def))
         continue;
-      }
-      auto op1 = memSSA.getNodeOperation(&node);
+
       auto op2 = memSSA.getNodeOperation(def);
-      assert(nullptr != op1);
       assert(nullptr != op2);
       if (MustAlias()(op1, op2)) {
         auto val = getStoreValue(op2);
-        op1->replaceAllUsesWith(mlir::ValueRange(val));
-        op1->erase();
-        memSSA.eraseNode(&node);
-        changed = true;
+        auto res = op1->getResult(0);
+        if (val.getType() == res.getType()) {
+          res.replaceAllUsesWith(val);
+          op1->erase();
+          memSSA.eraseNode(&node);
+          changed = true;
+        }
       }
     }
   }
