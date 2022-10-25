@@ -1205,6 +1205,19 @@ def test_size_ret():
     a = np.array([[[1], [2], [3]], [[4], [5], [6]]])
     assert_equal(py_func(a, 3), jit_func(a, 3))
 
+def test_alias1():
+    def py_func():
+        a = np.zeros(7)
+        b = a[2:4]
+        b[1] = 5
+        return a
+
+    jit_func = njit(py_func)
+
+    a = np.ones(1)
+
+    assert_equal(py_func(), jit_func())
+
 
 @pytest.mark.xfail
 def test_inplace_alias():
