@@ -17,13 +17,21 @@
 #include "imex/Analysis/MemorySsaAnalysis.hpp"
 
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
+#include <mlir/Dialect/Vector/IR/VectorOps.h>
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/IR/Dominance.h>
+#include <mlir/IR/FunctionInterfaces.h>
+#include <mlir/Pass/Pass.h>
+#include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 
 namespace {
 struct Meminfo {
   mlir::Value memref;
   mlir::ValueRange indices;
+
+  bool operator==(const Meminfo &other) const {
+    return memref == other.memref && indices == other.indices;
+  }
 };
 
 static llvm::Optional<Meminfo> getMeminfo(mlir::Operation *op) {
@@ -34,7 +42,24 @@ static llvm::Optional<Meminfo> getMeminfo(mlir::Operation *op) {
   if (auto store = mlir::dyn_cast<mlir::memref::StoreOp>(op))
     return Meminfo{store.getMemref(), store.getIndices()};
 
+  if (auto load = mlir::dyn_cast<mlir::vector::LoadOp>(op))
+    return Meminfo{load.getBase(), load.getIndices()};
+
+  if (auto store = mlir::dyn_cast<mlir::vector::StoreOp>(op))
+    return Meminfo{store.getBase(), store.getIndices()};
+
   return {};
+}
+
+static mlir::Value getStoreValue(mlir::Operation *op) {
+  assert(op);
+  if (auto store = mlir::dyn_cast<mlir::memref::StoreOp>(op))
+    return store.getValue();
+
+  if (auto store = mlir::dyn_cast<mlir::vector::StoreOp>(op))
+    return store.getValueToStore();
+
+  llvm_unreachable("Invalid store op");
 }
 
 struct MustAlias {
@@ -47,8 +72,7 @@ struct MustAlias {
     if (!meminfo2)
       return false;
 
-    return meminfo1->memref == meminfo2->memref &&
-           meminfo1->indices == meminfo2->indices;
+    return *meminfo1 == *meminfo2;
   }
 };
 
@@ -64,21 +88,27 @@ static mlir::LogicalResult foldLoads(imex::MemorySSAAnalysis &memSSAAnalysis) {
   bool changed = false;
   for (auto &node : llvm::make_early_inc_range(memSSA.getNodes())) {
     if (NodeType::Use == memSSA.getNodeType(&node)) {
+      auto op1 = memSSA.getNodeOperation(&node);
+      assert(nullptr != op1);
+      if (op1->getNumResults() != 1)
+        continue;
+
       auto def = memSSA.getNodeDef(&node);
       assert(nullptr != def);
-      if (NodeType::Def != memSSA.getNodeType(def)) {
+      if (NodeType::Def != memSSA.getNodeType(def))
         continue;
-      }
-      auto op1 = memSSA.getNodeOperation(&node);
+
       auto op2 = memSSA.getNodeOperation(def);
-      assert(nullptr != op1);
       assert(nullptr != op2);
       if (MustAlias()(op1, op2)) {
-        auto val = mlir::cast<mlir::memref::StoreOp>(op2).getValue();
-        op1->replaceAllUsesWith(mlir::ValueRange(val));
-        op1->erase();
-        memSSA.eraseNode(&node);
-        changed = true;
+        auto val = getStoreValue(op2);
+        auto res = op1->getResult(0);
+        if (val.getType() == res.getType()) {
+          res.replaceAllUsesWith(val);
+          op1->erase();
+          memSSA.eraseNode(&node);
+          changed = true;
+        }
       }
     }
   }
@@ -233,4 +263,79 @@ imex::optimizeMemoryOps(mlir::AnalysisManager &am) {
   } while (repeat);
 
   return mlir::success(changed);
+}
+
+namespace {
+struct RemoveDeadAllocs
+    : public mlir::OpInterfaceRewritePattern<mlir::MemoryEffectOpInterface> {
+  using OpInterfaceRewritePattern::OpInterfaceRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::MemoryEffectOpInterface op,
+                  mlir::PatternRewriter &rewriter) const override {
+    if (!op.onlyHasEffect<mlir::MemoryEffects::Allocate>() ||
+        op->getNumResults() != 1)
+      return mlir::failure();
+
+    auto res = op->getResult(0);
+    for (auto user : op->getUsers()) {
+      if (user->getNumResults() != 0)
+        return mlir::failure();
+
+      auto memInterface = mlir::dyn_cast<mlir::MemoryEffectOpInterface>(user);
+      if (!memInterface)
+        return mlir::failure();
+
+      if (!memInterface.getEffectOnValue<mlir::MemoryEffects::Free>(res) &&
+          !memInterface.getEffectOnValue<mlir::MemoryEffects::Write>(res))
+        return mlir::failure();
+
+      if (memInterface.getEffectOnValue<mlir::MemoryEffects::Read>(res))
+        return mlir::failure();
+    }
+
+    for (auto user : llvm::make_early_inc_range(op->getUsers()))
+      rewriter.eraseOp(user);
+
+    rewriter.eraseOp(op);
+    return mlir::success();
+  }
+};
+
+struct MemoryOptPass
+    : public mlir::PassWrapper<MemoryOptPass,
+                               mlir::InterfacePass<mlir::FunctionOpInterface>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(MemoryOptPass)
+
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::memref::MemRefDialect>();
+    registry.insert<mlir::vector::VectorDialect>();
+  }
+
+  void runOnOperation() override {
+    auto *ctx = &getContext();
+    mlir::RewritePatternSet patterns(ctx);
+
+    patterns.insert<RemoveDeadAllocs>(ctx);
+
+    mlir::FrozenRewritePatternSet fPatterns(std::move(patterns));
+    auto am = getAnalysisManager();
+    while (true) {
+      (void)mlir::applyPatternsAndFoldGreedily(getOperation(), fPatterns);
+      am.invalidate({});
+      auto res = imex::optimizeMemoryOps(am);
+      if (!res) {
+        getOperation()->emitError("Failed to build memory SSA analysis");
+        return signalPassFailure();
+      }
+      if (mlir::failed(*res))
+        break;
+    }
+  }
+};
+} // namespace
+
+std::unique_ptr<mlir::Pass> imex::createMemoryOptPass() {
+  return std::make_unique<MemoryOptPass>();
 }
