@@ -94,9 +94,29 @@ func.func @test(%t: !ntensor.ntensor<?xf32>, %idx : index, %val : f32) {
   // CHECK-SAME: %{{.*}}[%{{.*}}] [%{{.*}}] [%{{.*}}] : !ntensor.ntensor<?xf32> to !ntensor.ntensor<?xf32>
   %1 = ntensor.subview %t[%c0] [%idx] [%c1] : !ntensor.ntensor<?xf32> to !ntensor.ntensor<?xf32>
 
+  // CHECK: call @use
   func.call @use(%t) : (!ntensor.ntensor<?xf32>) -> ()
 
   return
 }
 
 func.func private @use(%0: !ntensor.ntensor<?xf32>)
+
+// -----
+
+// CHECK-LABEL: func @test({{.*}}) {
+func.func @test(%t: !ntensor.ntensor<?xf32>, %idx : index, %val : f32) {
+  %c0 = arith.constant 0 : index
+  %c1 = arith.constant 1 : index
+
+  // CHECK: ntensor.subview
+  // CHECK-SAME: {ntensor_readonly}
+  %1 = ntensor.subview %t[%c0] [%idx] [%c1] : !ntensor.ntensor<?xf32> to !ntensor.ntensor<?xf32>
+
+  // CHECK: call @use
+  func.call @use() : () -> ()
+
+  return
+}
+
+func.func private @use()

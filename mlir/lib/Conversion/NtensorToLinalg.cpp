@@ -446,7 +446,12 @@ struct NtensorAliasAnalysisPass
           assert(analysis);
           for (auto writer : writers) {
             assert(writer);
-            if (analysis->getModRef(writer, tens).isMod())
+            if (auto call = mlir::dyn_cast<mlir::CallOpInterface>(writer)) {
+              for (auto arg : call.getArgOperands())
+                if (!analysis->alias(tens, arg).isNo())
+                  return;
+
+            } else if (analysis->getModRef(writer, tens).isMod())
               return;
           }
         }
