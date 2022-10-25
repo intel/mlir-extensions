@@ -1,4 +1,4 @@
-// RUN: %python_executable %imex_runner -i %s -a -b --pass-pipeline-file=%p/linalg-to-gpu-vulkan.pp --runner mlir-vulkan-runner --shared-libs=%vulkan_runtime_wrappers,%mlir_runner_utils --entry-point-result=void | FileCheck %s --check-prefix=VULKAN
+// RUN: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-gpu-vulkan.pp --runner mlir-vulkan-runner --shared-libs=%vulkan_runtime_wrappers,%mlir_runner_utils --entry-point-result=void | FileCheck %s --check-prefix=VULKAN
 
 #map = affine_map<(d0, d1) -> (d0, d1)>
 module {

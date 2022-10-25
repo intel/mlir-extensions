@@ -28,25 +28,22 @@ namespace {
 struct SetSPIRVCapabilitiesPass
     : public imex::impl::SetSPIRVCapabilitiesBase<SetSPIRVCapabilitiesPass> {
 public:
-  explicit SetSPIRVCapabilitiesPass() {
-          m_clientAPI = "vulkan";
-            }
-  explicit SetSPIRVCapabilitiesPass(
-                  const mlir::StringRef &clientAPI)
-              : m_clientAPI(clientAPI) {}
+  explicit SetSPIRVCapabilitiesPass() { m_clientAPI = "vulkan"; }
+  explicit SetSPIRVCapabilitiesPass(const mlir::StringRef &clientAPI)
+      : m_clientAPI(clientAPI) {}
 
   mlir::LogicalResult initializeOptions(mlir::StringRef options) override {
-      if (failed(Pass::initializeOptions(options)))
-              return mlir::failure();
+    if (failed(Pass::initializeOptions(options)))
+      return mlir::failure();
 
-        if (clientAPI == "opencl") {
-                m_clientAPI = "opencl";
-                  }
+    if (clientAPI == "opencl") {
+      m_clientAPI = "opencl";
+    }
 
-          if (clientAPI != "vulkan" && clientAPI != "opencl")
-                  return mlir::failure();
+    if (clientAPI != "vulkan" && clientAPI != "opencl")
+      return mlir::failure();
 
-            return mlir::success();
+    return mlir::success();
   }
 
   void runOnOperation() override {
@@ -80,26 +77,27 @@ public:
         spirv::Extension::SPV_KHR_expect_assume};
     spirv::Extension exts_vulkan[] = {
         spirv::Extension::SPV_KHR_storage_buffer_storage_class};
-    if(m_clientAPI == "opencl") {
-    auto triple =
-        spirv::VerCapExtAttr::get(spirv::Version::V_1_0, caps_opencl, exts_opencl, context);
-    auto attr = spirv::TargetEnvAttr::get(
-        triple, spirv::Vendor::Unknown, spirv::DeviceType::Unknown,
-        spirv::TargetEnvAttr::kUnknownDeviceID,
-        spirv::getDefaultResourceLimits(context));
-    auto module = getOperation();
-    module->setAttr(spirv::getTargetEnvAttrName(), attr);
+    if (m_clientAPI == "opencl") {
+      auto triple = spirv::VerCapExtAttr::get(
+          spirv::Version::V_1_0, caps_opencl, exts_opencl, context);
+      auto attr = spirv::TargetEnvAttr::get(
+          triple, spirv::Vendor::Unknown, spirv::DeviceType::Unknown,
+          spirv::TargetEnvAttr::kUnknownDeviceID,
+          spirv::getDefaultResourceLimits(context));
+      auto module = getOperation();
+      module->setAttr(spirv::getTargetEnvAttrName(), attr);
     } else if (m_clientAPI == "vulkan") {
-    auto triple =
-        spirv::VerCapExtAttr::get(spirv::Version::V_1_0, caps_vulkan, exts_vulkan, context);
-    auto attr = spirv::TargetEnvAttr::get(
-        triple, spirv::Vendor::Unknown, spirv::DeviceType::Unknown,
-        spirv::TargetEnvAttr::kUnknownDeviceID,
-        spirv::getDefaultResourceLimits(context));
-    auto module = getOperation();
-    module->setAttr(spirv::getTargetEnvAttrName(), attr);
+      auto triple = spirv::VerCapExtAttr::get(
+          spirv::Version::V_1_0, caps_vulkan, exts_vulkan, context);
+      auto attr = spirv::TargetEnvAttr::get(
+          triple, spirv::Vendor::Unknown, spirv::DeviceType::Unknown,
+          spirv::TargetEnvAttr::kUnknownDeviceID,
+          spirv::getDefaultResourceLimits(context));
+      auto module = getOperation();
+      module->setAttr(spirv::getTargetEnvAttrName(), attr);
     }
   }
+
 private:
   mlir::StringRef m_clientAPI;
 };
