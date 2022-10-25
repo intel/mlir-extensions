@@ -60,7 +60,7 @@ class GPUX_Type<string name, string typeMnemonic, list<Trait> traits = []>
     let mnemonic = typeMnemonic;
 }
 
-def GPUX_OpaqueType : GPUX_Type<"OpaqueType", "OpaqueType">
+def GPUX_OpaqueType : GPUX_Type<"Opaque", "OpaqueType">
 {
   let summary = "Custom Type for OpaqueType";
   let description = [{
@@ -68,7 +68,7 @@ def GPUX_OpaqueType : GPUX_Type<"OpaqueType", "OpaqueType">
   }];
 }
 
-def GPUX_StreamType : GPUX_Type<"StreamType", "StreamType">
+def GPUX_StreamType : GPUX_Type<"Stream", "StreamType">
 {
   let summary = "Custom Type for GPUXStream";
   let description = [{
@@ -76,7 +76,7 @@ def GPUX_StreamType : GPUX_Type<"StreamType", "StreamType">
   }];
 }
 
-def GPUX_DeviceType : GPUX_Type<"DeviceType", "DeviceType">
+def GPUX_DeviceType : GPUX_Type<"Device", "DeviceType">
 {
   let summary = "Custom Type for GPUXDevice";
   let description = [{
@@ -84,7 +84,7 @@ def GPUX_DeviceType : GPUX_Type<"DeviceType", "DeviceType">
   }];
 }
 
-def GPUX_ContextType : GPUX_Type<"ContextType", "ContextType">
+def GPUX_ContextType : GPUX_Type<"Context", "ContextType">
 {
   let summary = "Custom Type for GPUXContext";
   let description = [{
@@ -115,6 +115,8 @@ def GPUX_CreateStreamOp : GPUX_Op<"create_stream", [SameVariadicOperandSize]> {
   let arguments = (ins Optional<GPUX_DeviceType> : $device,
                        Optional<GPUX_ContextType> : $context);
   let results = (outs GPUX_StreamType : $gpux_stream);
+  let builders = [OpBuilder<(ins "::llvm::Optional<::mlir::Value>" : $device,
+                                 "::llvm::Optional<::mlir::Value>" : $context)>];
 }
 
 def GPUX_DestroyDeviceOp : GPUX_Op<"destroy_device"> {
@@ -153,6 +155,19 @@ def GPUX_LaunchFuncOp
                      Optional<I32>:$dynamicSharedMemorySize,
                      Variadic<AnyType>:$kernelOperands);
   let results = (outs Optional<GPU_AsyncToken> : $asyncToken);
+
+  let skipDefaultBuilders = 1;
+
+  let builders = [
+    OpBuilder<(ins "::mlir::Value" : $gpux_stream,
+                   "::mlir::gpu::GPUFuncOp":$kernelFunc,
+                   "::mlir::gpu::KernelDim3":$gridSize,
+                   "::mlir::gpu::KernelDim3":$blockSize,
+                   "::mlir::Value":$dynamicSharedMemorySize,
+                   "::mlir::ValueRange":$kernelOperands,
+                   CArg<"::mlir::Type", "nullptr">:$asyncTokenType,
+                   CArg<"::mlir::ValueRange", "{}">:$asyncDependencies)>
+  ];
 }
 
 def GPUX_AllocOp

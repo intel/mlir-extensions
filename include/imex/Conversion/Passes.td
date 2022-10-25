@@ -20,7 +20,6 @@ include "mlir/Pass/PassBase.td"
 
 include "mlir/IR/OpBase.td"
 include "mlir/IR/EnumAttr.td"
-include "mlir/Dialect/GPU/IR/GPUBase.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/LoopLikeInterface.td"
@@ -250,6 +249,63 @@ memref, arith and math.
   }];
   let constructor = "imex::createConvertGPUXToSPIRVPass()";
   let dependentDialects = ["::mlir::spirv::SPIRVDialect"];
+}
+
+//===----------------------------------------------------------------------===//
+// GPUToGPUX
+//===----------------------------------------------------------------------===//
+
+def ConvertGPUToGPUX: Pass<"convert-gpu-to-gpux"> {
+  let summary = "Convert from the GPU dialect to the GPUX dialect.";
+  let description = [{
+    This pass converts GPU dialect operations into the GPUX dialect operations.
+    GPUX dialect is a custom dialect. GPUX dialect ops extend the upstream GPU
+    Dialect ops and adds a stream argument to them for specifying which stream
+    to run the gpu operations on.
+
+    Below is an example of how this Pass will convert the IR from GPU to GPUX.
+
+    Input IR
+
+        func.func @main() attributes {llvm.emit_c_interface} {
+        %c8 = arith.constant 8 : index
+        %c1 = arith.constant 1 : index
+        %cst = arith.constant 2.200000e+00 : f32
+        %cst_0 = arith.constant 1.100000e+00 : f32
+        %cst_1 = arith.constant 0.000000e+00 : f32
+        %0 = gpu.alloc  () : memref<8xf32>
+        %1 = gpu.alloc  () : memref<8xf32>
+        %2 = gpu.alloc  () : memref<8xf32>
+        gpu.launch_func  @main_kernel::@main_kernel blocks in (%c8, %c1, %c1) threads in (%c1, %c1, %c1) args(%0 : memref<8xf32>, %1 : memref<8xf32>, %2 : memref<8xf32>)
+        gpu.dealloc(%0) : memref<8xf32>
+        gpu.dealloc(%1) : memref<8xf32>
+        gpu.dealloc(%2) : memref<8xf32>
+        return
+      }
+
+    Output IR
+
+        func.func @main() attributes {llvm.emit_c_interface} {
+        %c8 = arith.constant 8 : index
+        %c1 = arith.constant 1 : index
+        %cst = arith.constant 2.200000e+00 : f32
+        %cst_0 = arith.constant 1.100000e+00 : f32
+        %cst_1 = arith.constant 0.000000e+00 : f32
+        %stream = gpux.create_stream () : () -> !gpux.StreamType
+        %0 = gpux.alloc (%stream) : (!gpux.StreamType) -> memref<8xf32>
+        %1 = gpux.alloc (%stream) : (!gpux.StreamType) -> memref<8xf32>
+        %2 = gpux.alloc  (%stream) : (!gpux.StreamType) -> memref<8xf32>
+        gpux.launch_func  @main_kernel::@main_kernel blocks in (%c8, %c1, %c1) threads in (%c1, %c1, %c1) args(%stream : !gpux.StreamType, %memref : memref<8xf32>, %memref_2 : memref<8xf32>, %memref_3 : memref<8xf32>)
+        gpux.dealloc(%stream, %0) : (!gpux.StreamType, memref<8xf32>) -> ()
+        gpux.dealloc(%stream, %1) : (!gpux.StreamType, memref<8xf32>) -> ()
+        gpux.dealloc(%stream, %2) : (!gpux.StreamType, memref<8xf32>) -> ()
+        gpux.stream.destroy(%stream) : (!gpux.StreamType) -> ()
+    return
+  }
+
+  }];
+  let constructor = "imex::createConvertGPUToGPUXPass()";
+  let dependentDialects = ["::imex::gpux::GPUXDialect"];
 }
 
 #endif // _IMEX_CONVERSION_PASSES_TD_INCLUDED_
