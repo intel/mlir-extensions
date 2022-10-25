@@ -1206,6 +1206,15 @@ def test_size_ret():
     assert_equal(py_func(a, 3), jit_func(a, 3))
 
 
+def test_inplace_alias():
+    def py_func(a):
+        a += 1
+        a[:] = 3
+
+    x = np.ones(1)
+    assert_equal(py_func(a.copy()), jit_func(a.copy(), 3))
+
+
 @pytest.mark.parametrize("a", [np.array([[1, 2], [4, 5]])])
 @pytest.mark.parametrize("b", [True, False])
 def test_tensor_if(a, b):

@@ -18,10 +18,14 @@
 #include "imex/Dialect/imex_util/Utils.hpp"
 #include "imex/Dialect/ntensor/IR/NTensorOps.hpp"
 
+#include <mlir/Analysis/AliasAnalysis.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
+#include <mlir/IR/FunctionInterfaces.h>
 #include <mlir/Pass/Pass.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
+
+static const constexpr llvm::StringLiteral kReadonly("ntensor_readonly");
 
 static mlir::RankedTensorType toTensorType(mlir::ShapedType type) {
   return mlir::RankedTensorType::get(type.getShape(), type.getElementType());
@@ -383,6 +387,70 @@ void imex::populateNtensorToLinalgPatterns(mlir::MLIRContext &context,
 }
 
 namespace {
+struct NtensorAliasAnalysisPass
+    : public mlir::PassWrapper<NtensorAliasAnalysisPass,
+                               mlir::InterfacePass<mlir::FunctionOpInterface>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(NtensorAliasAnalysisPass)
+
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<imex::ntensor::NTensorDialect>();
+  }
+
+  void runOnOperation() override {
+    auto &context = getContext();
+    auto func = getOperation();
+
+    auto *ntensorDialect =
+        context.getOrLoadDialect<imex::ntensor::NTensorDialect>();
+    assert(ntensorDialect);
+
+    llvm::SmallVector<mlir::Operation *, 0> writers;
+    func->walk([&](mlir::Operation *op) {
+      if (op->getDialect() != ntensorDialect)
+        return;
+
+      auto memInterface = mlir::dyn_cast<mlir::MemoryEffectOpInterface>(op);
+      if (!memInterface || memInterface.hasEffect<mlir::MemoryEffects::Write>())
+        writers.emplace_back(op);
+    });
+
+    bool hasWriters = !writers.empty();
+    auto *analysis = [&]() -> mlir::AliasAnalysis * {
+      if (!hasWriters)
+        return nullptr;
+
+      return &getAnalysis<mlir::AliasAnalysis>();
+    }();
+
+    auto getTensor = [](mlir::Operation *op) -> mlir::Value {
+      assert(op);
+      if (auto subview = mlir::dyn_cast<imex::ntensor::SubviewOp>(op))
+        return subview.getResult();
+
+      return {};
+    };
+
+    auto attrName = mlir::StringAttr::get(&context, kReadonly);
+    auto unitAttr = mlir::UnitAttr::get(&context);
+    func->walk([&](mlir::Operation *op) {
+      if (auto tens = getTensor(op)) {
+        if (hasWriters) {
+          op->removeAttr(attrName);
+          assert(analysis);
+          for (auto writer : writers) {
+            assert(writer);
+            if (analysis->getModRef(writer, tens).isMod())
+              return;
+          }
+        }
+        op->setAttr(attrName, unitAttr);
+      }
+    });
+    markAllAnalysesPreserved();
+  }
+};
+
 struct NtensorToLinalgPass
     : public mlir::PassWrapper<NtensorToLinalgPass, mlir::OperationPass<void>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(NtensorToLinalgPass)
@@ -406,6 +474,10 @@ struct NtensorToLinalgPass
   }
 };
 } // namespace
+
+std::unique_ptr<mlir::Pass> imex::createNtensorAliasAnalysisPass() {
+  return std::make_unique<NtensorAliasAnalysisPass>();
+}
 
 std::unique_ptr<mlir::Pass> imex::createNtensorToLinalgPass() {
   return std::make_unique<NtensorToLinalgPass>();

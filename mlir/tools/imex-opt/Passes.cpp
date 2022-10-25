@@ -123,6 +123,13 @@ static mlir::PassPipelineRegistration<> ntensorResolveArrayOps(
     });
 
 static mlir::PassPipelineRegistration<>
+    ntensorAliasAnalysis("ntensor-alias-analysis",
+                         "Run alias analysis on ntensor ops",
+                         [](mlir::OpPassManager &pm) {
+                           pm.addPass(imex::createNtensorAliasAnalysisPass());
+                         });
+
+static mlir::PassPipelineRegistration<>
     ntensorToMemref("ntensor-to-memref", "Convert ntensor array ops to memref",
                     [](mlir::OpPassManager &pm) {
                       pm.addPass(imex::createNtensorToMemrefPass());
