@@ -177,7 +177,9 @@ def GPUX_AllocOp
 
   let arguments = (ins Variadic<GPU_AsyncToken>:$asyncDependencies,
                    GPUX_StreamType:$gpux_stream,
-                   Variadic<Index>:$dynamicSizes, Variadic<Index>:$symbolOperands);
+                   Variadic<Index>:$dynamicSizes,
+                   Variadic<Index>:$symbolOperands,
+                   UnitAttr:$hostShared);
   let results = (outs Res<AnyMemRef, "", [MemAlloc]>:$memref,
                  Optional<GPU_AsyncToken>:$asyncToken);
 }

@@ -66,11 +66,12 @@ struct ConvertAllocOp : public mlir::OpRewritePattern<mlir::gpu::AllocOp> {
     if (!stream)
       return mlir::failure();
 
+    auto hostShared = op.getHostShared();
     mlir::Type token =
         op.getAsyncToken() ? op.getAsyncToken().getType() : nullptr;
     rewriter.replaceOpWithNewOp<imex::gpux::AllocOp>(
         op, op.getType(), token, op.getAsyncDependencies(), stream,
-        op.getDynamicSizes(), op.getSymbolOperands());
+        op.getDynamicSizes(), op.getSymbolOperands(), hostShared);
 
     return mlir::success();
   }
