@@ -1205,6 +1205,7 @@ def test_size_ret():
     a = np.array([[[1], [2], [3]], [[4], [5], [6]]])
     assert_equal(py_func(a, 3), jit_func(a, 3))
 
+
 def test_alias1():
     def py_func():
         a = np.zeros(7)
@@ -1217,6 +1218,19 @@ def test_alias1():
     a = np.ones(1)
 
     assert_equal(py_func(), jit_func())
+
+
+def test_alias2():
+    def py_func(n):
+        b = np.zeros((n, n))
+        a = b[0]
+        for j in range(n):
+            a[j] = j + 1
+        return b.sum()
+
+    jit_func = njit(py_func)
+
+    assert_equal(py_func(4), jit_func(4))
 
 
 @pytest.mark.xfail
