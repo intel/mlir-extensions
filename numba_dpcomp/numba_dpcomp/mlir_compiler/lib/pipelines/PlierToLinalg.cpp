@@ -2560,12 +2560,14 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(std::make_unique<LinalgOptPass>());
 
+  pm.addPass(imex::createNtensorToMemrefPass());
+  pm.addPass(mlir::createCanonicalizerPass());
+
   pm.addPass(imex::createMakeSignlessPass());
   pm.addPass(mlir::createCanonicalizerPass());
 
   pm.addPass(mlir::createReconcileUnrealizedCastsPass());
 
-  pm.addPass(imex::createNtensorToMemrefPass());
   pm.addPass(mlir::arith::createConstantBufferizePass());
   pm.addNestedPass<mlir::func::FuncOp>(
       mlir::bufferization::createEmptyTensorToAllocTensorPass());
