@@ -18,12 +18,14 @@ func.func(finalizing-bufferize
 func.func(insert-gpu-allocs)
 canonicalize
 normalize-memrefs
+# Unstride memrefs does not seem to be needed.
+#func.func(unstride-memrefs)
 func.func(lower-affine)
 gpu-kernel-outlining
 canonicalize
 cse
 # The following set-spirv-* passes can have client-api = opencl or vulkan args
-set-spirv-capablilities
-set-spirv-abi-attrs
+set-spirv-capabilities
+gpu.module(set-spirv-abi-attrs)
 canonicalize
 # End

@@ -14,11 +14,9 @@ func.func(finalizing-bufferize
           convert-linalg-to-parallel-loops
           gpu-map-parallel-loops
           convert-parallel-loops-to-gpu)
-func.func(insert-gpu-allocs)
+# insert-gpu-allocs pass can have client-api = opencl or vulkan args
+func.func(insert-gpu-allocs{client-api=opencl)
 canonicalize
-# Adds spirv storage class attributes to memrefs based on memory space attribute
-# Need the pass to target narrower scope
-map-memref-spirv-storage-class{client-api=vulkan}
 normalize-memrefs
 # Unstride memrefs does not seem to be needed.
 #func.func(unstride-memrefs)
@@ -27,6 +25,7 @@ gpu-kernel-outlining
 canonicalize
 cse
 # The following set-spirv-* passes can have client-api = opencl or vulkan args
-set-spirv-capablilities
-set-spirv-abi-attrs
+set-spirv-capablilities{client-api=opencl}
+gpu.module(set-spirv-abi-attrs{client-api=opencl}
 canonicalize
+# End

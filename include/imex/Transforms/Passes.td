@@ -59,4 +59,24 @@ def InsertGPUAllocs : Pass<"insert-gpu-allocs", "::mlir::func::FuncOp"> {
   ];
 }
 
+def SetSPIRVCapabilities : Pass<"set-spirv-capabilities"> {
+  let summary = "Sets Spirv capabilities";
+  let constructor = "imex::createSetSPIRVCapabilitiesPass()";
+  let options = [
+    Option<"clientAPI", "client-api", "std::string", /*default=*/"\"vulkan\"",
+           "The client API to use for setting Spirv capabilities">
+  ];
+}
+
+def SetSPIRVAbiAttribute : Pass<"set-spirv-abi-attrs", "::mlir::gpu::GPUModuleOp"> {
+  let summary = "Sets Spirv Abi attribute";
+  let constructor = "imex::createSetSPIRVAbiAttributePass()";
+  let dependentDialects = ["::mlir::gpu::GPUDialect",
+                           "::mlir::spirv::SPIRVDialect"];
+  let options = [
+    Option<"clientAPI", "client-api", "std::string", /*default=*/"\"vulkan\"",
+           "The client API to use for setting Spirv Abi attribute">
+  ];
+}
+
 #endif // _IMEX_TRANSFORMS_PASSES_TD_INCLUDED_
