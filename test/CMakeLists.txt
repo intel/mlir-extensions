@@ -18,6 +18,12 @@ set(IMEX_TEST_DEPENDS
         mlir_runner_utils
         )
 
+if(MLIR_ENABLE_VULKAN_RUNNER)
+    list(APPEND IMEX_TEST_DEPENDS
+        vulkan-runtime-wrappers
+        )
+endif()
+
 configure_lit_site_cfg(
   ${CMAKE_CURRENT_SOURCE_DIR}/lit.site.cfg.py.in
   ${CMAKE_CURRENT_BINARY_DIR}/lit.site.cfg.py

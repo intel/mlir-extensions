@@ -50,6 +50,12 @@ else()
     list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
 endif()
 
+if (DEFINED MLIR_ENABLE_VULKAN_RUNNER)
+    set(IMEX_ENABLE_VULKAN_RUNNER ${MLIR_ENABLE_VULKAN_RUNNER})
+else ()
+    set(IMEX_ENABLE_VULKAN_RUNNER OFF)
+endif()
+
 include(TableGen)
 include(AddLLVM)
 include(AddMLIR)
