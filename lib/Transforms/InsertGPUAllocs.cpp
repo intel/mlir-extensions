@@ -33,8 +33,6 @@ namespace imex {
 } // namespace imex
 
 namespace {
-mlir::StringRef getAllocSharedAttrName() { return "gpu.alloc_shared"; }
-
 class InsertGPUAllocsPass final
     : public imex::impl::InsertGPUAllocsBase<InsertGPUAllocsPass> {
 
@@ -254,17 +252,14 @@ public:
       auto access = getAccessType(alloc);
       auto loc = alloc.getLoc();
       builder.setInsertionPoint(alloc);
+      bool hostShared = access.hostRead || access.hostWrite;
       auto gpuAlloc = builder.create<mlir::gpu::AllocOp>(
           loc, alloc.getType(), /*asyncToken*/ nullptr,
           /*asyncDependencies*/ llvm::None, alloc.getDynamicSizes(),
-          alloc.getSymbolOperands());
+          alloc.getSymbolOperands(), hostShared);
       auto allocResult = gpuAlloc.getResult(0);
       alloc->replaceAllUsesWith(gpuAlloc);
       alloc.erase();
-      if (access.hostRead || access.hostWrite)
-        gpuAlloc->setAttr(::getAllocSharedAttrName(),
-                          builder.getUnitAttr());
-
       builder.setInsertionPoint(term);
 
       builder.create<mlir::gpu::DeallocOp>(loc, llvm::None, allocResult);
@@ -293,14 +288,12 @@ public:
           memrefType.getShape(), memrefType.getElementType(),
           mlir::MemRefLayoutAttrInterface{}, memrefType.getMemorySpace());
       if(m_clientAPI == "opencl") {
+      bool hostShared = access.hostRead || access.hostWrite;
       auto gpuAlloc = builder.create<mlir::gpu::AllocOp>(
           loc, allocType, /*asyncToken*/ nullptr,
           /*asyncDependencies*/ llvm::None, dims,
-          /*symbolOperands*/ llvm::None);
+          /*symbolOperands*/ llvm::None, hostShared);
       auto allocResult = gpuAlloc.getResult(0);
-      if (access.hostRead || access.hostWrite)
-        gpuAlloc->setAttr(::getAllocSharedAttrName(),
-                          builder.getUnitAttr());
       if (access.hostWrite && access.deviceRead) {
         auto copy = builder.create<mlir::memref::CopyOp>(loc, op, allocResult);
         filter.insert(copy);
