@@ -285,6 +285,9 @@ struct ConvertSubviewOp
   mlir::LogicalResult
   matchAndRewrite(imex::ntensor::SubviewOp op,
                   mlir::PatternRewriter &rewriter) const override {
+    if (!op->hasAttr(kReadonly))
+      return mlir::failure();
+
     auto src = op.getSource();
     auto srcType = src.getType().dyn_cast<imex::ntensor::NTensorType>();
     if (!srcType)
