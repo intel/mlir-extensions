@@ -1,9 +1,7 @@
 // RUN: %python_executable %imex_runner -i %s -a -b --pass-pipeline-file=%p/linalg-to-gpu-vulkan.pp --runner mlir-vulkan-runner --shared-libs=%vulkan_runtime_wrappers,%mlir_runner_utils --entry-point-result=void | FileCheck %s --check-prefix=VULKAN
-// RUN: %python_executable %imex_runner -i %s -a -b --pass-pipeline-file=%p/linalg-to-gpu-opencl.pp -n | FileCheck %s --check-prefix=OPENCL
 
 #map = affine_map<(d0, d1) -> (d0, d1)>
 module {
-// OPENCL: func.func
 func.func @addt(%arg0: tensor<2x5xf32>, %arg1: tensor<2x5xf32>) -> tensor<2x5xf32> {
 %0 = tensor.empty() : tensor<2x5xf32>
 %1 = linalg.generic {indexing_maps = [#map, #map, #map], iterator_types = ["parallel", "parallel"]} ins(%arg0, %arg1 : tensor<2x5xf32>, tensor<2x5x
