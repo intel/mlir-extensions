@@ -12,3 +12,35 @@ func.func @test(%t: !ntensor.ntensor<8x16x4xf32>, %idx : index) {
 
   return
 }
+
+// -----
+
+// CHECK-LABEL: func @test({{.*}}) {
+func.func @test(%t: !ntensor.ntensor<?xf32>, %idx : index, %val : f32) {
+  %c0 = arith.constant 0 : index
+  %c1 = arith.constant 1 : index
+
+  // CHECK: ntensor.subview
+  // CHECK-SAME: %{{.*}}[%{{.*}}] [%{{.*}}] [%{{.*}}] : !ntensor.ntensor<?xf32> to !ntensor.ntensor<?xf32>
+  %1 = ntensor.subview %t[%c0] [%idx] [%c1] : !ntensor.ntensor<?xf32> to !ntensor.ntensor<?xf32>
+
+  ntensor.store %val, %1[%idx] : !ntensor.ntensor<?xf32>
+
+  return
+}
+
+// -----
+
+// CHECK-LABEL: func @test({{.*}}) {
+func.func @test(%t: !ntensor.ntensor<?xf32>, %idx : index, %val : f32) {
+  %c0 = arith.constant 0 : index
+  %c1 = arith.constant 1 : index
+
+  // CHECK: ntensor.subview
+  // CHECK-SAME: %{{.*}}[%{{.*}}] [%{{.*}}] [%{{.*}}] : !ntensor.ntensor<?xf32> to !ntensor.ntensor<?xf32>
+  %1 = ntensor.subview %t[%c0] [%idx] [%c1] : !ntensor.ntensor<?xf32> to !ntensor.ntensor<?xf32>
+
+  ntensor.store %val, %t[%idx] : !ntensor.ntensor<?xf32>
+
+  return
+}
