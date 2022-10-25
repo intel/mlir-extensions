@@ -1,7 +1,9 @@
-// RUN: %python_executable %imex_runner -i %s -a -b --pass-pipeline-file=%p/linalg-to-gpu-vulkan.pp --runner mlir-vulkan-runner --shared-libs=%vulkan_runtime_wrappers,%mlir_runner_utils --entry-point-result=void | FileCheck %s
+// RUN: %python_executable %imex_runner -i %s -a -b --pass-pipeline-file=%p/linalg-to-gpu-vulkan.pp --runner mlir-vulkan-runner --shared-libs=%vulkan_runtime_wrappers,%mlir_runner_utils --entry-point-result=void | FileCheck %s --check-prefix=VULKAN
+// RUN: %python_executable %imex_runner -i %s -a -b --pass-pipeline-file=%p/linalg-to-gpu-opencl.pp -n | FileCheck %s --check-prefix=OPENCL
 
 #map = affine_map<(d0, d1) -> (d0, d1)>
 module {
+// OPENCL: func.func
 func.func @addt(%arg0: tensor<2x5xf32>, %arg1: tensor<2x5xf32>) -> tensor<2x5xf32> {
 %0 = tensor.empty() : tensor<2x5xf32>
 %1 = linalg.generic {indexing_maps = [#map, #map, #map], iterator_types = ["parallel", "parallel"]} ins(%arg0, %arg1 : tensor<2x5xf32>, tensor<2x5x
@@ -20,10 +22,10 @@ func.func @main() {
 %2 = call @addt(%0, %1) : (tensor<2x5xf32>, tensor<2x5xf32>) -> tensor<2x5xf32>
 %unranked = tensor.cast %2 : tensor<2x5xf32> to tensor<*xf32>
 call @printMemrefF32(%unranked) : (tensor<*xf32>) -> ()
-//      CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
-// CHECK-SAME: rank = 2 offset = 0 sizes = [2, 5] strides = [5, 1] data =
-// CHECK-NEXT: [11, 11, 11, 11, 11]
-// CHECK-NEXT: [11, 11, 11, 11, 11]
+//      VULKAN: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
+// VULKAN-SAME: rank = 2 offset = 0 sizes = [2, 5] strides = [5, 1] data =
+// VULKAN-NEXT: [11, 11, 11, 11, 11]
+// VULKAN-NEXT: [11, 11, 11, 11, 11]
 return
 }
 

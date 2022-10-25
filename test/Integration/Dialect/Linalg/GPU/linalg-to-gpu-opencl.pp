@@ -15,7 +15,7 @@ func.func(finalizing-bufferize
           gpu-map-parallel-loops
           convert-parallel-loops-to-gpu)
 # insert-gpu-allocs pass can have client-api = opencl or vulkan args
-func.func(insert-gpu-allocs{client-api=opencl)
+func.func(insert-gpu-allocs{client-api=opencl})
 canonicalize
 normalize-memrefs
 # Unstride memrefs does not seem to be needed.
@@ -25,7 +25,7 @@ gpu-kernel-outlining
 canonicalize
 cse
 # The following set-spirv-* passes can have client-api = opencl or vulkan args
-set-spirv-capablilities{client-api=opencl}
-gpu.module(set-spirv-abi-attrs{client-api=opencl}
+set-spirv-capabilities{client-api=opencl}
+gpu.module(set-spirv-abi-attrs{client-api=opencl})
 canonicalize
 # End
