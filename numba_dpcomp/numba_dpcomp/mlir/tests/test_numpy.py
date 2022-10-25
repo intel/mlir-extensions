@@ -1206,6 +1206,7 @@ def test_size_ret():
     assert_equal(py_func(a, 3), jit_func(a, 3))
 
 
+@pytest.mark.xfail
 def test_inplace_alias():
     def py_func(a):
         a += 1
@@ -1214,7 +1215,12 @@ def test_inplace_alias():
     jit_func = njit(py_func)
 
     a = np.ones(1)
-    assert_equal(py_func(a.copy()), jit_func(a.copy()))
+
+    py_arg = a.copy()
+    jit_arg = a.copy()
+    py_func(py_arg)
+    jit_func(jit_arg)
+    assert_equal(py_arg, jit_arg)
 
 
 @pytest.mark.parametrize("a", [np.array([[1, 2], [4, 5]])])
