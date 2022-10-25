@@ -92,32 +92,31 @@ struct GPU_SYCL_QUEUE {
   sycl::device sycl_device_;
   sycl::context sycl_context_;
   sycl::queue sycl_queue_;
-  sycl::property_list propList_{sycl::property::queue::in_order()};
 
   GPU_SYCL_QUEUE() {
 
     sycl_device_ = get_default_device();
     sycl_context_ = sycl::context(sycl_device_);
-    sycl_queue_ = sycl::queue(sycl_context_, sycl_device_, propList_);
+    sycl_queue_ = sycl::queue(sycl_context_, sycl_device_);
   }
 
   GPU_SYCL_QUEUE(sycl::device *device, sycl::context *context) {
     sycl_device_ = *device;
     sycl_context_ = *context;
-    sycl_queue_ = sycl::queue(sycl_context_, sycl_device_, propList_);
+    sycl_queue_ = sycl::queue(sycl_context_, sycl_device_);
   }
   GPU_SYCL_QUEUE(sycl::device *device) {
 
     sycl_device_ = *device;
     sycl_context_ = sycl::context(sycl_device_);
-    sycl_queue_ = sycl::queue(sycl_context_, sycl_device_, propList_);
+    sycl_queue_ = sycl::queue(sycl_context_, sycl_device_);
   }
 
   GPU_SYCL_QUEUE(sycl::context *context) {
 
     sycl_device_ = get_default_device();
     sycl_context_ = *context;
-    sycl_queue_ = sycl::queue(sycl_context_, sycl_device_, propList_);
+    sycl_queue_ = sycl::queue(sycl_context_, sycl_device_);
   }
 
 }; // end of GPU_SYCL_QUEUE
