@@ -2546,8 +2546,9 @@ static void populatePlierToLinalgGenPipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<ResolveNumpyFuncsPass>());
   pm.addPass(std::make_unique<ResolveNtensorPass>());
   pm.addPass(mlir::createCanonicalizerPass());
-  pm.addPass(imex::createNtensorToLinalgPass());
-  pm.addPass(mlir::createCanonicalizerPass());
+  pm.addNestedPass<mlir::func::FuncOp>(imex::createNtensorAliasAnalysisPass());
+  pm.addNestedPass<mlir::func::FuncOp>(imex::createNtensorToLinalgPass());
+  pm.addNestedPass<mlir::func::FuncOp>(mlir::createCanonicalizerPass());
   pm.addPass(imex::createForceInlinePass());
   pm.addPass(mlir::createSymbolDCEPass());
   pm.addNestedPass<mlir::func::FuncOp>(
