@@ -22,6 +22,7 @@
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/IR/FunctionInterfaces.h>
+#include <mlir/Interfaces/CallInterfaces.h>
 #include <mlir/Pass/Pass.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 
@@ -407,6 +408,11 @@ struct NtensorAliasAnalysisPass
 
     llvm::SmallVector<mlir::Operation *, 0> writers;
     func->walk([&](mlir::Operation *op) {
+      if (mlir::isa<mlir::CallOpInterface>(op)) {
+        writers.emplace_back(op);
+        return;
+      }
+
       if (op->getDialect() != ntensorDialect)
         return;
 
