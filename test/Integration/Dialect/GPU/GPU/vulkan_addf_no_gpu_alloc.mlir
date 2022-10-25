@@ -1,4 +1,4 @@
-// RUN: mlir-vulkan-runner %s --mlir-print-ir-before-all --mlir-print-ir-after-all --shared-libs=%{mlir_shlib_dir}/libvulkan-runtime-wrappers%shlibext,%{mlir_shlib_dir}/libmlir_runner_utils%shlibext --entry-point-result=void | FileCheck %s
+// RUN: mlir-vulkan-runner %s --mlir-print-ir-before-all --mlir-print-ir-after-all --shared-libs=%vulkan_runtime_wrappers,%mlir_runner_utils --entry-point-result=void | FileCheck %s
 
 // CHECK: [11.0, 11.0, 11.0, 11.0, 11.0, 11.0, 11.0, 11.0, 11.0, 11.0]
 module attributes {

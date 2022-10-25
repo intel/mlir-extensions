@@ -1,4 +1,4 @@
-// RUN: %{python_executable} %{imex_tools_dir}/imex-runner.py -i %s -a -b --pass-pipeline-file=%p/gpu-to-spirv.pp -n | FileCheck %s
+// RUN: %python_executable %imex_runner -i %s -a -b --pass-pipeline-file=%p/gpu-to-spirv.pp -n | FileCheck %s
 
 module attributes {gpu.container_module, spirv.target_env = #spirv.target_env<#spirv.vce<v1.0, [Addresses, Float16Buffer, Int64, Int16, Int8, Kernel, Linkage, Vector16, GenericPointer, Groups, Float16, Float64, AtomicFloat32AddEXT, ExpectAssumeKHR], [SPV_EXT_shader_atomic_float_add, SPV_KHR_expect_assume]>, #spirv.resource_limits<>>} {
   memref.global "private" constant @__constant_2x5xf32_0 : memref<2x5xf32> = dense<[[1.000000e+01, 9.000000e+00, 8.000000e+00, 7.000000e+00, 6.000000e+00], [5.000000e+00, 4.000000e+00, 3.000000e+00, 2.000000e+00, 1.000000e+00]]>

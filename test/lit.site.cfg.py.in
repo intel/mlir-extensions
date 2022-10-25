@@ -36,9 +36,10 @@ if sys.platform.startswith('win32'):
     config.shlib_prefix = ""
 else:
     config.shlib_prefix = "lib"
-config.imex_runner = os.path.normpath(os.path.join(config.imex_tools_dir, "imex-runner.py"))
+config.imex_runner = os.path.normpath(os.path.join(config.imex_src_root, "tools", "imex-runner", "imex-runner.py"))
 config.mlir_runner_utils = os.path.normpath(os.path.join(config.mlir_runner_utils_dir, config.shlib_prefix + "mlir_runner_utils" + config.llvm_shlib_ext))
 config.mlir_c_runner_utils = os.path.normpath(os.path.join(config.mlir_runner_utils_dir, config.shlib_prefix + "mlir_c_runner_utils" + config.llvm_shlib_ext))
+config.vulkan_runtime_wrappers = os.path.normpath(os.path.join(config.mlir_runner_utils_dir, config.shlib_prefix + "vulkan-runtime-wrappers" + config.llvm_shlib_ext))
 
 # Support substitution of the tools_dir with user parameters. This is
 # used when we can't determine the tool dir at configuration time.

@@ -1,4 +1,4 @@
-// RUN: %{python_executable} %{imex-runner} -i %s --pass-pipeline-file=%p/ptensor.pp -e main -entry-point-result=void --shared-libs=%{mlir_c_runner_utils} --shared-libs=%{mlir_runner_utils} | FileCheck %s
+// RUN: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/ptensor.pp -e main -entry-point-result=void --shared-libs=%mlir_c_runner_utils --shared-libs=%mlir_runner_utils | FileCheck %s
 
 module {
     func.func private @printMemrefI64(%ptr : tensor<*xi64>)
