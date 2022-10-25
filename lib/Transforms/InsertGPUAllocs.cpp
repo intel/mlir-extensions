@@ -248,7 +248,7 @@ public:
 
     // This is the case where a memref.alloc op is directly converted to
     // gpu.alloc
-#if 0
+    if(m_clientAPI == "opencl") {
     for (auto it : gpuBufferAllocs) {
       auto alloc = mlir::cast<mlir::memref::AllocOp>(it.first);
       auto access = getAccessType(alloc);
@@ -262,15 +262,15 @@ public:
       alloc->replaceAllUsesWith(gpuAlloc);
       alloc.erase();
       if (access.hostRead || access.hostWrite)
-        gpuAlloc->setAttr(imex::getAllocSharedAttrName(),
+        gpuAlloc->setAttr(::getAllocSharedAttrName(),
                           builder.getUnitAttr());
 
       builder.setInsertionPoint(term);
 
       builder.create<mlir::gpu::DeallocOp>(loc, llvm::None, allocResult);
     }
-#endif
-    auto add_gpu_alloc = [](mlir::OpBuilder builder, mlir::Value op,
+    }
+    auto add_gpu_alloc = [this](mlir::OpBuilder builder, mlir::Value op,
                             AccessType access, auto term) {
       llvm::SmallVector<mlir::Value> dims;
       llvm::SmallPtrSet<mlir::Operation *, 8> filter;
@@ -292,20 +292,15 @@ public:
       auto allocType = mlir::MemRefType::get(
           memrefType.getShape(), memrefType.getElementType(),
           mlir::MemRefLayoutAttrInterface{}, memrefType.getMemorySpace());
-#if 0
+      if(m_clientAPI == "opencl") {
       auto gpuAlloc = builder.create<mlir::gpu::AllocOp>(
           loc, allocType, /*asyncToken*/ nullptr,
           /*asyncDependencies*/ llvm::None, dims,
           /*symbolOperands*/ llvm::None);
       auto allocResult = gpuAlloc.getResult(0);
-#endif
-      auto gpuAlloc = builder.create<mlir::memref::AllocOp>(loc, allocType, dims);
-      auto allocResult = gpuAlloc.getResult();
-#if 0
       if (access.hostRead || access.hostWrite)
-        gpuAlloc->setAttr(imex::getAllocSharedAttrName(),
+        gpuAlloc->setAttr(::getAllocSharedAttrName(),
                           builder.getUnitAttr());
-#endif
       if (access.hostWrite && access.deviceRead) {
         auto copy = builder.create<mlir::memref::CopyOp>(loc, op, allocResult);
         filter.insert(copy);
@@ -320,9 +315,25 @@ public:
       if (access.hostRead && access.deviceWrite) {
         builder.create<mlir::memref::CopyOp>(loc, allocResult, op);
       }
-#if 0
       builder.create<mlir::gpu::DeallocOp>(loc, llvm::None, allocResult);
-#endif
+      } else if(m_clientAPI == "vulkan") {
+      auto gpuAlloc = builder.create<mlir::memref::AllocOp>(loc, allocType, dims);
+      auto allocResult = gpuAlloc.getResult();
+      if (access.hostWrite && access.deviceRead) {
+        auto copy = builder.create<mlir::memref::CopyOp>(loc, op, allocResult);
+        filter.insert(copy);
+      }
+
+      if (allocType != memrefType)
+        allocResult =
+            builder.create<mlir::memref::CastOp>(loc, memrefType, allocResult);
+
+      op.replaceAllUsesExcept(allocResult, filter);
+      builder.setInsertionPoint(term);
+      if (access.hostRead && access.deviceWrite) {
+        builder.create<mlir::memref::CopyOp>(loc, allocResult, op);
+      }
+      }
     };
 
     // GetMemrefGlobal Op Case:
