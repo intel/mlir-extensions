@@ -1211,8 +1211,10 @@ def test_inplace_alias():
         a += 1
         a[:] = 3
 
-    x = np.ones(1)
-    assert_equal(py_func(a.copy()), jit_func(a.copy(), 3))
+    jit_func = njit(py_func)
+
+    a = np.ones(1)
+    assert_equal(py_func(a.copy()), jit_func(a.copy()))
 
 
 @pytest.mark.parametrize("a", [np.array([[1, 2], [4, 5]])])
