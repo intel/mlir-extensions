@@ -44,3 +44,20 @@ func.func @test(%t: !ntensor.ntensor<?xf32>, %idx : index, %val : f32) {
 
   return
 }
+
+// -----
+
+// CHECK-LABEL: func @test({{.*}}) {
+func.func @test(%t: !ntensor.ntensor<?xf32>, %idx : index, %val : f32) {
+  %c0 = arith.constant 0 : index
+  %c1 = arith.constant 1 : index
+
+  // CHECK: ntensor.subview
+  // CHECK-SAME: {ntensor_readonly}
+  %1 = ntensor.subview %t[%c0] [%idx] [%c1] : !ntensor.ntensor<?xf32> to !ntensor.ntensor<?xf32>
+
+  %2 = ntensor.create(%c1) : !ntensor.ntensor<?xf32>
+  ntensor.store %val, %2[%idx] : !ntensor.ntensor<?xf32>
+
+  return
+}
