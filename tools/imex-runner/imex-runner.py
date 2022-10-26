@@ -63,12 +63,12 @@ if args.pass_pipeline_file:
             # Strip python style single line comments and append to ppipeline
             res = l.split('#')
             l = res[0]
-            # get rid of whitespaces, tabs and newlines
-            l = re.sub(r"[\s\n\t]*", "", l)
+            # get rid of leading and trailing whitespaces, tabs and newlines
+            l = l.rstrip()
             if len(l):
                 ppipeline = ','.join([ppipeline, l]) if ppipeline else l
-        # get rid of whitespaces, tabs and newlines
-        ppipeline = re.sub(r"[\s\n\t]*", "", ppipeline)
+        # get rid of leading and trailing whitespaces, tabs and newlines
+        ppipeline = ppipeline.rstrip()
         # get rid of duplicate ','s
         ppipeline = re.sub(r",+", ",", ppipeline)
         # get rid of trailing ','s
