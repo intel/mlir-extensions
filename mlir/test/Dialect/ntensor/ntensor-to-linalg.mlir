@@ -1,4 +1,4 @@
-// RUN: imex-opt %s -ntensor-to-linalg --split-input-file | FileCheck %s
+// RUN: imex-opt %s -pass-pipeline='func.func(ntensor-alias-analysis,ntensor-to-linalg)' --split-input-file | FileCheck %s
 
 func.func @test() -> !ntensor.ntensor<?x?xf32> {
   %0 = arith.constant 2 : index
@@ -223,6 +223,21 @@ func.func @test(%arg1: !ntensor.ntensor<?x?xf32>, %arg2: index, %arg3: index, %a
 //  CHECK-NEXT:   %[[T2:.*]] = tensor.extract_slice %[[T1]][1, %[[ARG2]]] [2, %[[ARG3]]] [3, %[[ARG4]]] : tensor<?x?xf32> to tensor<2x?xf32>
 //  CHECK-NEXT:   %[[T3:.*]] = ntensor.from_tensor %[[T2]] : tensor<2x?xf32> to !ntensor.ntensor<?x?xf32>
 //  CHECK-NEXT:   return %[[T3]] : !ntensor.ntensor<?x?xf32>
+
+
+// -----
+
+func.func @test(%arg1: !ntensor.ntensor<?x?xf32>, %arg2: index, %arg3: index, %arg4: index, %arg5: f32) -> !ntensor.ntensor<?x?xf32> {
+  %1 = ntensor.subview %arg1[1, %arg2][2, %arg3][3, %arg4] : !ntensor.ntensor<?x?xf32> to !ntensor.ntensor<?x?xf32>
+  ntensor.store %arg5, %arg1[%arg2, %arg2] : !ntensor.ntensor<?x?xf32>
+  return %1 : !ntensor.ntensor<?x?xf32>
+}
+
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG1:.*]]: !ntensor.ntensor<?x?xf32>, %[[ARG2:.*]]: index, %[[ARG3:.*]]: index, %[[ARG4:.*]]: index, %[[ARG5:.*]]: f32)
+//  CHECK-NEXT:   %[[T:.*]] = ntensor.subview %[[ARG1]][1, %[[ARG2]]] [2, %[[ARG3]]] [3, %[[ARG4]]] : !ntensor.ntensor<?x?xf32> to !ntensor.ntensor<?x?xf32>
+//  CHECK-NEXT:   ntensor.store %[[ARG5]], %[[ARG1]][%[[ARG2]], %[[ARG2]]] : !ntensor.ntensor<?x?xf32>
+//  CHECK-NEXT:   return %[[T]] : !ntensor.ntensor<?x?xf32>
 
 // -----
 

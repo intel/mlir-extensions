@@ -223,7 +223,8 @@ class NTensor_OpWithOffsetSizesAndStrides<string mnemonic,
 def SubviewOp : NTensor_OpWithOffsetSizesAndStrides<"subview", [
     Pure, AttrSizedOperandSegments,
     DeclareOpInterfaceMethods<ReifyRankedShapedTypeOpInterface>,
-    OffsetSizeAndStrideOpInterface
+    OffsetSizeAndStrideOpInterface,
+    ViewLikeOpInterface
   ]> {
   let summary = "array subview operation";
   let description = [{
@@ -375,7 +376,9 @@ def SubviewOp : NTensor_OpWithOffsetSizesAndStrides<"subview", [
 
     /// Return the dimensions of the source that are dropped in the
     /// result when the result is rank-reduced.
-    llvm::SmallBitVector getDroppedDims();
+    ::llvm::SmallBitVector getDroppedDims();
+
+    ::mlir::Value getViewSource() { return getSource(); }
   }];
 }
 
@@ -535,7 +538,7 @@ def PrimitiveOp : NTensor_OpBase<"primitive", [Pure]> {
 
   let arguments = (ins Variadic<AnyType>:$args, StrAttr:$op);
 
-  let results = (outs Variadic<AnyType>:$results);
+  let results = (outs Res<Variadic<AnyType>, "", [MemAlloc<DefaultResource>]>:$results);
 
   let assemblyFormat = "$op ` ` attr-dict `(` $args `)` (`:` type($args)^)? (`->` type($results)^)?";
 }
@@ -553,7 +556,7 @@ def CreateArrayOp : NTensor_OpBase<"create", [AttrSizedOperandSegments, Pure]> {
 
   let arguments = (ins Variadic<Index>:$dynamicSizes, Optional<AnyType>:$initValue);
 
-  let results = (outs NTensor_Tensor:$result);
+  let results = (outs Res<NTensor_Tensor, "", [MemAlloc<DefaultResource>]>:$result);
 
   let assemblyFormat = "`(`$dynamicSizes`)` (`=` `(` $initValue^ `:` type($initValue) `)`)? attr-dict `:` qualified(type($result))";
 }
@@ -566,7 +569,7 @@ def FromTensorOp : NTensor_OpBase<"from_tensor",
   }];
 
   let arguments = (ins AnyRankedTensor:$tensor);
-  let results = (outs NTensor_Tensor:$result);
+  let results = (outs Res<NTensor_Tensor, "", [MemAlloc<DefaultResource>]>:$result);
 
   let assemblyFormat = "$tensor attr-dict `:` type($tensor) `to` qualified(type($result))";
 
@@ -590,7 +593,7 @@ def ToTensorOp : NTensor_OpBase<"to_tensor",
 }
 
 def FromMemrefOp : NTensor_OpBase<"from_memref",
-    [Pure, SameOperandsShape, SameOperandsElementType]> {
+    [Pure, SameOperandsShape, SameOperandsElementType, ViewLikeOpInterface]> {
   let summary = "converts memref to ntensor array.";
   let description = [{
     Converts from memref to ntensor array. Shape and element type must match.
@@ -602,10 +605,14 @@ def FromMemrefOp : NTensor_OpBase<"from_memref",
   let assemblyFormat = "$memref attr-dict `:` type($memref) `to` qualified(type($result))";
 
   let hasFolder = 1;
+
+  let extraClassDeclaration = [{
+      ::mlir::Value getViewSource() { return getMemref(); }
+  }];
 }
 
 def ToMemrefOp : NTensor_OpBase<"to_memref",
-    [Pure, SameOperandsShape, SameOperandsElementType]> {
+    [Pure, SameOperandsShape, SameOperandsElementType, ViewLikeOpInterface]> {
   let summary = "converts ntensor array to memref.";
   let description = [{
     Converts from ntensor array to memref. Shape and element type must match.
@@ -617,6 +624,10 @@ def ToMemrefOp : NTensor_OpBase<"to_memref",
   let assemblyFormat = "$array attr-dict `:` qualified(type($array)) `to` type($result)";
 
   let hasFolder = 1;
+
+  let extraClassDeclaration = [{
+      ::mlir::Value getViewSource() { return getArray(); }
+  }];
 }
 
 def ElementwiseOp : NTensor_OpBase<"elementwise", [
@@ -629,8 +640,8 @@ def ElementwiseOp : NTensor_OpBase<"elementwise", [
   }];
 
 
-  let arguments = (ins NTensor_Tensor:$source);
-  let results = (outs NTensor_Tensor:$result);
+  let arguments = (ins Arg<NTensor_Tensor, "", [MemRead]>:$source);
+  let results = (outs Res<NTensor_Tensor, "", [MemAlloc<DefaultResource>]>:$result);
 
   let regions = (region SizedRegion<1>:$region);
 
@@ -666,6 +677,7 @@ def ElementwiseYieldOp : NTensor_OpBase<"elementwise_yield", [
 
 def CastOp : NTensor_OpBase<"cast", [
     DeclareOpInterfaceMethods<CastOpInterface>,
+    ViewLikeOpInterface,
     Pure
   ]> {
   let summary = "Array cast operation";
@@ -679,6 +691,10 @@ def CastOp : NTensor_OpBase<"cast", [
   let arguments = (ins NTensor_Tensor:$source);
   let results = (outs NTensor_Tensor:$dest);
   let assemblyFormat = "$source attr-dict `:` qualified(type($source)) `to` qualified(type($dest))";
+
+  let extraClassDeclaration = [{
+      ::mlir::Value getViewSource() { return getSource(); }
+  }];
 }
 
 def FromElementsOp : NTensor_OpBase<"from_elements", [
@@ -696,7 +712,7 @@ def FromElementsOp : NTensor_OpBase<"from_elements", [
   }];
 
   let arguments = (ins Variadic<AnyType>:$elements);
-  let results = (outs NTensor_Tensor:$result);
+  let results = (outs Res<NTensor_Tensor, "", [MemAlloc<DefaultResource>]>:$result);
 
   let assemblyFormat = "$elements attr-dict `:` qualified(type($result))";
 }

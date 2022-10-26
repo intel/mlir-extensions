@@ -414,6 +414,11 @@ static bool fuseIfLegal(scf::ParallelOp firstPloop,
   if (!isFusionLegal(firstPloop, secondPloop, firstToSecondPloopIndices))
     return false;
 
+  mlir::DominanceInfo dom;
+  for (auto user : firstPloop->getUsers())
+    if (!dom.properlyDominates(secondPloop, user))
+      return false;
+
   auto init1 = firstPloop.getInitVals();
   auto numResults1 = init1.size();
   auto init2 = secondPloop.getInitVals();
@@ -528,17 +533,18 @@ LogicalResult imex::prepareForFusion(Region &region) {
   DominanceInfo dom(region.getParentOp());
   bool changed = false;
   for (auto &block : region) {
-    for (auto &op : llvm::make_early_inc_range(block)) {
-      for (auto &innerReg : op.getRegions())
+    for (auto &parallelOp : llvm::make_early_inc_range(block)) {
+      for (auto &innerReg : parallelOp.getRegions())
         if (succeeded(prepareForFusion(innerReg)))
           changed = true;
 
-      if (!isa<scf::ParallelOp>(op))
+      if (!isa<scf::ParallelOp>(parallelOp))
         continue;
 
-      auto it = Block::iterator(op);
+      auto it = Block::iterator(parallelOp);
       if (it == block.begin())
         continue;
+
       --it;
 
       auto terminate = false;
@@ -557,16 +563,20 @@ LogicalResult imex::prepareForFusion(Region &region) {
           if (!hasNoEffect(&currentOp))
             return false;
 
-          for (auto user : currentOp.getUsers()) {
-            if (op.isAncestor(user) || !dom.properlyDominates(&op, user))
+          for (auto arg : currentOp.getOperands())
+            if (!dom.properlyDominates(arg, &parallelOp))
               return false;
-          }
+
+          for (auto user : currentOp.getUsers())
+            if (parallelOp.isAncestor(user) ||
+                !dom.properlyDominates(&parallelOp, user))
+              return false;
 
           return true;
         }();
 
         if (canMove) {
-          currentOp.moveAfter(&op);
+          currentOp.moveAfter(&parallelOp);
           changed = true;
         }
       }

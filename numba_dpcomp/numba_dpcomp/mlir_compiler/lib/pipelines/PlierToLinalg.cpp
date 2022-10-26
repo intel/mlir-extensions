@@ -2546,8 +2546,9 @@ static void populatePlierToLinalgGenPipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<ResolveNumpyFuncsPass>());
   pm.addPass(std::make_unique<ResolveNtensorPass>());
   pm.addPass(mlir::createCanonicalizerPass());
-  pm.addPass(imex::createNtensorToLinalgPass());
-  pm.addPass(mlir::createCanonicalizerPass());
+  pm.addNestedPass<mlir::func::FuncOp>(imex::createNtensorAliasAnalysisPass());
+  pm.addNestedPass<mlir::func::FuncOp>(imex::createNtensorToLinalgPass());
+  pm.addNestedPass<mlir::func::FuncOp>(mlir::createCanonicalizerPass());
   pm.addPass(imex::createForceInlinePass());
   pm.addPass(mlir::createSymbolDCEPass());
   pm.addNestedPass<mlir::func::FuncOp>(
@@ -2556,6 +2557,9 @@ static void populatePlierToLinalgGenPipeline(mlir::OpPassManager &pm) {
 }
 
 static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
+  pm.addPass(mlir::createCanonicalizerPass());
+  pm.addPass(std::make_unique<LinalgOptPass>());
+
   pm.addPass(imex::createNtensorToMemrefPass());
   pm.addPass(mlir::createCanonicalizerPass());
 
@@ -2563,9 +2567,6 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createCanonicalizerPass());
 
   pm.addPass(mlir::createReconcileUnrealizedCastsPass());
-
-  pm.addPass(mlir::createCanonicalizerPass());
-  pm.addPass(std::make_unique<LinalgOptPass>());
 
   pm.addPass(mlir::arith::createConstantBufferizePass());
   pm.addNestedPass<mlir::func::FuncOp>(

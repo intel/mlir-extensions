@@ -1206,6 +1206,50 @@ def test_size_ret():
     assert_equal(py_func(a, 3), jit_func(a, 3))
 
 
+def test_alias1():
+    def py_func():
+        a = np.zeros(7)
+        b = a[2:4]
+        b[1] = 5
+        return a
+
+    jit_func = njit(py_func)
+
+    a = np.ones(1)
+
+    assert_equal(py_func(), jit_func())
+
+
+def test_alias2():
+    def py_func(n):
+        b = np.zeros((n, n))
+        a = b[0]
+        for j in range(n):
+            a[j] = j + 1
+        return b.sum()
+
+    jit_func = njit(py_func)
+
+    assert_equal(py_func(4), jit_func(4))
+
+
+@pytest.mark.xfail
+def test_inplace_alias():
+    def py_func(a):
+        a += 1
+        a[:] = 3
+
+    jit_func = njit(py_func)
+
+    a = np.ones(1)
+
+    py_arg = a.copy()
+    jit_arg = a.copy()
+    py_func(py_arg)
+    jit_func(jit_arg)
+    assert_equal(py_arg, jit_arg)
+
+
 @pytest.mark.parametrize("a", [np.array([[1, 2], [4, 5]])])
 @pytest.mark.parametrize("b", [True, False])
 def test_tensor_if(a, b):
