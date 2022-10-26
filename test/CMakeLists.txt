@@ -20,6 +20,7 @@ set(IMEX_TEST_DEPENDS
 
 if(MLIR_ENABLE_VULKAN_RUNNER)
     list(APPEND IMEX_TEST_DEPENDS
+        mlir-vulkan-runner
         vulkan-runtime-wrappers
         )
 endif()
