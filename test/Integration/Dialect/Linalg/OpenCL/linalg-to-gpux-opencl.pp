@@ -28,6 +28,10 @@ cse
 set-spirv-capabilities{client-api=opencl}
 gpu.module(set-spirv-abi-attrs{client-api=opencl})
 canonicalize
-convert-gpux-to-spirv
+imex-convert-gpu-to-spirv
 convert-gpu-to-gpux
+spirv.module(spirv-lower-abi-attrs
+             spirv-update-vce)
+func.func(llvm-request-c-wrappers)
+serialize-spirv
 # End

@@ -1,4 +1,4 @@
-// RUN: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-gpu-opencl.pp -n | FileCheck %s --check-prefix=OPENCL
+// RUN: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-gpux-opencl.pp -n | FileCheck %s --check-prefix=OPENCL
 
 #map = affine_map<(d0, d1) -> (d0, d1)>
 module {
