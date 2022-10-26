@@ -253,3 +253,8 @@ gpuLaunchKernel(void *queue, void *kernel, size_t gridX, size_t gridY,
                  static_cast<ParamDesc *>(params), extra);
   });
 }
+
+extern "C" SYCL_RUNTIME_EXPORT void gpuWait(void *queue) {
+
+  catchAll([&]() { static_cast<GPU_SYCL_QUEUE *>(queue)->sycl_queue_.wait(); });
+}
