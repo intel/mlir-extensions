@@ -74,8 +74,11 @@ if args.pass_pipeline_file:
         # get rid of trailing ','s
         ppipeline = re.sub(r",\)", ")", ppipeline)
 
+imex_binary_dir = '@IMEX_BINARY_DIR@'
+llvm_binary_dir = '@LLVM_BINARY_DIR@'
+
 # build imex-opt command
-cmd = ["imex-opt"]
+cmd = [os.path.normpath(os.path.join(imex_binary_dir, 'bin', 'imex-opt'))]
 if ppipeline:
     cmd.append(f'--pass-pipeline={ppipeline}')
 elif args.pass_pipeline:
@@ -92,7 +95,7 @@ if args.no_mlir_runner:
 else:
     p1 = subprocess.Popen(cmd, stdout=subprocess.PIPE)
     # build mlir-opt command: all unknown args will be passed to imex-opt
-    cmd = [args.runner] + unknown
+    cmd = [os.path.normpath(os.path.join(llvm_binary_dir, 'bin', args.runner))] + unknown
     # get stdout from imex-opt and pipe into mlir-opt
     p2 = subprocess.Popen(cmd, stdin=p1.stdout)
     p1.wait()
