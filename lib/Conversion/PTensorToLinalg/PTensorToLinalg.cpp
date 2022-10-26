@@ -270,7 +270,8 @@ static BodyType buildTrivial(::mlir::Type typ) {
               builder.create<IOP>(loc, lhs, rhs).getResult());
         return;
       } else
-        assert(0 && "Found integer type but binary op not defined for integers");
+        assert(0 &&
+               "Found integer type but binary op not defined for integers");
     } else if (lhsTyp.isIntOrIndexOrFloat()) {
       if constexpr (!std::is_same_v<FOP, void>) {
         yield(builder, loc, typ,

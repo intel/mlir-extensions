@@ -314,8 +314,7 @@ void populatePTensorDistPatterns(::mlir::LLVMTypeConverter &converter,
 }
 
 /// Create a pass to eliminate Dist ops
-std::unique_ptr<::mlir::Pass>
-createPTensorDistPass() {
+std::unique_ptr<::mlir::Pass> createPTensorDistPass() {
   return std::make_unique<PTensorDistPass>();
 }
 
