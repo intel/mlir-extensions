@@ -79,7 +79,8 @@ def ConvertDistToStandard: Pass<"convert-dist-to-standard", "::mlir::ModuleOp"> 
     Necessary prototypes of runtime functions will be added.
   }];
   let constructor = "::imex::createConvertDistToStandardPass()";
-  let dependentDialects = ["::mlir::linalg::LinalgDialect",
+  let dependentDialects = ["::imex::ptensor::PTensorDialect",
+                           "::mlir::linalg::LinalgDialect",
                            "::mlir::func::FuncDialect",
                            "::mlir::tensor::TensorDialect",
                            "::mlir::arith::ArithDialect",

@@ -18,11 +18,17 @@
 
 namespace imex {
 
+/// @return get ::mlir::IntegerAttr with given Value and bitwidth W
+template <int W = 64, typename T = int64_t>
+::mlir::IntegerAttr getIntAttr(::mlir::OpBuilder &builder, T val) {
+  return builder.getIntegerAttr(builder.getIntegerType(W), val);
+}
+
 /// @return new integer ::mlir::Value with given Value and bitwidth W
 template <int W = 64, typename T = int64_t>
 ::mlir::Value createInt(const ::mlir::Location &loc, ::mlir::OpBuilder &builder,
                         T val) {
-  auto attr = builder.getIntegerAttr(builder.getIntegerType(W), val);
+  auto attr = getIntAttr<W>(builder, val);
   return builder.create<::mlir::arith::ConstantOp>(loc, attr);
 }
 

@@ -17,13 +17,13 @@ module {
         // CHECK-SAME: rank = 1 offset = 0 sizes = [5] strides = [1] data =
         // CHECK-NEXT: [0,  2,  4,  6,  8]
 
-        %13 = "ptensor.arange"(%c0, %c10, %c2, %c0, %c10) : (i64, i64, i64, i64, i64) -> !ptensor.ptensor<tensor<?xi64>, dist = 1>
-        %14 = "ptensor.extract_rtensor"(%13) : (!ptensor.ptensor<tensor<?xi64>, dist = 1>) -> tensor<?xi64>
-        %15 = tensor.cast %14 : tensor<?xi64> to tensor<*xi64>
-        call @printMemrefI64(%15) : (tensor<*xi64>) -> ()
-        // CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
-        // CHECK-SAME: rank = 1 offset = 0 sizes = [5] strides = [1] data =
-        // CHECK-NEXT: [0,  2,  4,  6,  8]
+        // %13 = "ptensor.arange"(%c0, %c10, %c2, %c0, %c10) : (i64, i64, i64, i64, i64) -> !ptensor.ptensor<tensor<?xi64>, dist = 1>
+        // %14 = "ptensor.extract_rtensor"(%13) : (!ptensor.ptensor<tensor<?xi64>, dist = 1>) -> tensor<?xi64>
+        // %15 = tensor.cast %14 : tensor<?xi64> to tensor<*xi64>
+        // call @printMemrefI64(%15) : (tensor<*xi64>) -> ()
+        // _CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
+        // _CHECK-SAME: rank = 1 offset = 0 sizes = [5] strides = [1] data =
+        // _CHECK-NEXT: [0,  2,  4,  6,  8]
 
         %20 = ptensor.extract_slice %3[%i1][%i2][%i2] : !ptensor.ptensor<tensor<?xi64>> to !ptensor.ptensor<tensor<?xi64>>
         %21 = "ptensor.extract_rtensor"(%20) : (!ptensor.ptensor<tensor<?xi64>>) -> tensor<?xi64>

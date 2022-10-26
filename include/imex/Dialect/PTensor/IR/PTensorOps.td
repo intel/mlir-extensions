@@ -83,7 +83,7 @@ class PTensor_Op<string mnemonic, list<Trait> traits = []> :
 
 
 def MkPTensorOp : PTensor_Op<"init_ptensor", []> {
-    let summary = "Create a new PTensor from RankedTensor, device, team and guid";
+    let summary = "Create a new PTensor from RankedTensor, device, and DistInfo";
     let description = [{
         High-level operation to create a new PTensor.
         Every PTensor is expected to be created by this operation.
@@ -93,8 +93,7 @@ def MkPTensorOp : PTensor_Op<"init_ptensor", []> {
 
     let arguments = (ins AnyRankedTensor:$rtensor,
                          AnyType:$device,
-                         AnyType:$team,
-                         AnyType:$handle);
+                         Optional<AnyType>:$team);
     let results = (outs PTensor_PTensor);
     let skipDefaultBuilders = 1;
     let builders = [
@@ -102,9 +101,8 @@ def MkPTensorOp : PTensor_Op<"init_ptensor", []> {
                      "bool":$dist,
                      "::mlir::Value":$rtensor,
                      "::mlir::Value":$device,
-                     "::mlir::Value":$team,
-                     "::mlir::Value":$handle), [{
-        $_state.addOperands({rtensor, device, team, handle});
+                     "::mlir::Value":$team), [{
+        $_state.addOperands({rtensor, device, team});
         $_state.addTypes(::imex::ptensor::PTensorType::get(
             $_state.getContext(),
             rtensor.getType().dyn_cast<::mlir::RankedTensorType>(),
@@ -114,7 +112,7 @@ def MkPTensorOp : PTensor_Op<"init_ptensor", []> {
       // Default: no device, non-distributed
       OpBuilder<(ins "::mlir::Value":$rtensor), [{
         auto null = createSignlessInt<1>($_builder, $_builder.getUnknownLoc(), 0);
-        build($_builder, $_state, false, false, rtensor, null, null, null);
+        build($_builder, $_state, false, false, rtensor, null, null);
       }]>,
     ];
 }
@@ -126,7 +124,7 @@ def ExtractRTensorOp : PTensor_Op<"extract_rtensor", []> {
         Assumes that the given PTensor was created by MkPTensorOp.
     }];
 
-    let arguments = (ins PTensor_PTensor:$input);
+    let arguments = (ins AnyType:$input);
     let results = (outs AnyRankedTensor);
 }
 
@@ -202,7 +200,7 @@ def EWBinOp : PTensor_Op<"ewbin", []> {
     }];
 
     // arange takes 2 PTensorType operands: lhs and rhs
-    let arguments = (ins AnyAttr: $op, PTensor_PTensor : $lhs, PTensor_PTensor : $rhs);
+    let arguments = (ins AnyAttr: $op, AnyType:$lhs, AnyType:$rhs);
     // result is a ptensor
     let results = (outs PTensor_PTensor);
 }
@@ -215,7 +213,7 @@ def ReductionOp : PTensor_Op<"reduction", []> {
     }];
 
     // reduction takes 1 operand (PTensorType) and one attribute (reduction operation)
-    let arguments = (ins AnyAttr: $op, PTensor_PTensor : $input);
+    let arguments = (ins AnyAttr:$op, AnyType:$input);
     // result is a ptensor
     let results = (outs PTensor_PTensor);
 }

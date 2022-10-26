@@ -22,7 +22,12 @@
 #include <mlir/Interfaces/SideEffectInterfaces.h>
 
 namespace imex {
-namespace dist {} // namespace dist
+namespace ptensor {
+class PTensorType;
+} // namespace ptensor
+namespace dist {
+enum INFO : int { LSHAPE, LOFFSETS, TEAM, INFO_LAST };
+} // namespace dist
 } // namespace imex
 
 #include <imex/Dialect/Dist/IR/DistOpsDialect.h.inc>
