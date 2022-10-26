@@ -690,7 +690,8 @@ struct ApplyFastmathFlags : public mlir::OpRewritePattern<Op> {
       }
     });
     if (changed) {
-      op.setFastmathFlagsAttr(mlir::LLVM::FMFAttr::get(op.getContext(), fmf));
+      op.setFastmathFlagsAttr(
+          mlir::LLVM::FastmathFlagsAttr::get(op.getContext(), fmf));
       rewriter.finalizeRootUpdate(op);
     } else {
       rewriter.cancelRootUpdate(op);
