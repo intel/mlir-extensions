@@ -35,9 +35,9 @@ The Pass will change the IR to:
 ```
 // -----// IR Dump After {anonymous}::InsertGPUAllocs //----- //
 func.func @main() {
-  %memref = gpu.alloc  () {gpu.alloc_shared} : memref<8xf32>
-  %memref_2 = gpu.alloc  () {gpu.alloc_shared} : memref<8xf32>
-  %memref_3 = gpu.alloc  () {gpu.alloc_shared} : memref<8xf32>
+  %memref = gpu.alloc host_shared () : memref<8xf32>
+  %memref_2 = gpu.alloc host_shared () : memref<8xf32>
+  %memref_3 = gpu.alloc host_shared () : memref<8xf32>
   .
   .
   .
