@@ -1,9 +1,11 @@
 // RUN: imex-opt --set-spirv-abi-attrs='client-api=opencl' %s | FileCheck %s --check-prefix=OPENCL
+// RUN: imex-opt --set-spirv-abi-attrs='client-api=vulkan' %s | FileCheck %s --check-prefix=VULKAN
 
 gpu.module @main_kernel {
   gpu.func @main_kernel(%arg0: memref<8xf32>, %arg1: memref<8xf32>, %arg2: memref<8xf32>) kernel {
 
   // OPENCL: gpu.func @main_kernel(%arg0: memref<8xf32>, %arg1: memref<8xf32>, %arg2: memref<8xf32>) kernel attributes {spirv.entry_point_abi = #spirv.entry_point_abi<>} {
+  // VULKAN: gpu.func @main_kernel(%arg0: memref<8xf32>, %arg1: memref<8xf32>, %arg2: memref<8xf32>) kernel attributes {spirv.entry_point_abi = #spirv.entry_point_abi<local_size = dense<1> : vector<3xi32>>} {
 
     cf.br ^bb1
   ^bb1:  // pred: ^bb0
