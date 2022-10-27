@@ -55,6 +55,7 @@ include(AddLLVM)
 include(AddMLIR)
 include(HandleLLVMOptions)
 
+# Check if mlir vulkan runner was configured from mlir
 if (TARGET mlir-vulkan-runner)
     set(IMEX_ENABLE_VULKAN_RUNNER 1)
 else ()
