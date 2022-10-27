@@ -142,7 +142,7 @@ protected:
 
   // same as kernelGetCallBuilder
   FunctionCallBuilder moduleGetFunctionCallBuilder = {
-      "gpuModuleGetFunction",
+      "gpuKernelGet",
       llvmPointerType /* void *function */,
       {
           llvmPointerType, /* void *module */
@@ -167,40 +167,39 @@ protected:
       }};
 
   FunctionCallBuilder streamCreateCallBuilder = {
-      "GpuStreamCreate",
+      "gpuCreateStream",
       llvmPointerType, /* void *stream */
       {
           llvmPointerType, /* void *device */
           llvmPointerType, /* void *context */
-          llvmIntPtrType   /* intptr_t eventsCount */
       }};
 
   FunctionCallBuilder streamDestroyCallBuilder = {
-      "GpuStreamDestroy",
+      "gpuStreamDestroy",
       llvmVoidType,
       {
           llvmPointerType /* void *stream */
       }};
 
   FunctionCallBuilder DeviceCreateCallBuilder = {
-      "GpuDeviceCreate",
+      "gpuCreateDevice",
       llvmPointerType, /* void *device */
       {}};
 
   FunctionCallBuilder DeviceDestroyCallBuilder = {
-      "GpuDeviceDestroy",
+      "gpuDestroyDevice",
       llvmVoidType,
       {
           llvmPointerType /* void *device */
       }};
 
   FunctionCallBuilder ContextCreateCallBuilder = {
-      "GpuContextCreate",
+      "gpuCreateContext",
       llvmPointerType, /* void *context */
       {}};
 
   FunctionCallBuilder ContextDestroyCallBuilder = {
-      "GpuContextDestroy",
+      "gpuDestroyContext",
       llvmVoidType,
       {
           llvmPointerType /* void *context */
@@ -215,21 +214,21 @@ protected:
       }};
 
   FunctionCallBuilder kernelDestroyCallBuilder = {
-      "GpuKernelDestroy",
+      "gpuKernelDestroy",
       llvmVoidType,
       {
           llvmPointerType /* void *kernel */
       }};
 
   FunctionCallBuilder waitEventCallBuilder = {
-      "GpuWait",
+      "gpuWait",
       llvmVoidType,
       {
           llvmPointerType /* void *stream */
       }};
 
   FunctionCallBuilder allocCallBuilder = {
-      "GpuAlloc",
+      "gpuMemAlloc",
       llvmPointerType /* void * */,
       {
           llvmPointerType, /* void *stream */
@@ -237,7 +236,7 @@ protected:
       }};
 
   FunctionCallBuilder deallocCallBuilder = {
-      "GpuDeAlloc",
+      "gpuMemFree",
       llvmVoidType,
       {
           llvmPointerType, /* void *stream */
@@ -392,26 +391,16 @@ public:
 private:
   mlir::LogicalResult
   matchAndRewrite(gpux::CreateStreamOp op,
-                  gpux::CreateStreamOp::Adaptor /*adaptor*/,
+                  gpux::CreateStreamOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto mod = op->getParentOfType<mlir::ModuleOp>();
     if (!mod)
       return mlir::failure();
 
-    auto eventsCount =
-        mlir::getConstantIntValue(mod->getAttr(kEventCountAttrName));
-    if (!eventsCount)
-      return mlir::failure();
-
     auto loc = op.getLoc();
-    // auto eventsCountVar =
-    //     rewriter
-    //         .create<mlir::LLVM::ConstantOp>(
-    //             loc, llvmIntPtrType,
-    //             rewriter.getIntegerAttr(llvmIntPtrType, *eventsCount))
-    //         .getResult();
-    // auto res = streamCreateCallBuilder.create(loc, rewriter, eventsCountVar);
-    // rewriter.replaceOp(op, res.getResult());
+    auto res = streamCreateCallBuilder.create(
+        loc, rewriter, {adaptor.getDevice(), adaptor.getContext()});
+    rewriter.replaceOp(op, res.getResult());
     return mlir::success();
   }
 };
@@ -428,9 +417,9 @@ private:
                   gpux::DestroyStreamOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    // auto res =
-    //     streamDestroyCallBuilder.create(loc, rewriter, adaptor.getSrc());
-    // rewriter.replaceOp(op, res.getResult());
+    auto res = streamDestroyCallBuilder.create(loc, rewriter,
+                                               {adaptor.getGpuxStream()});
+    rewriter.replaceOp(op, res.getResult());
     return mlir::success();
   }
 };
@@ -495,20 +484,25 @@ void populateGpuxToLLVMPatternsAndLegality(mlir::LLVMTypeConverter &converter,
   converter.addConversion([llvmPointerType](gpux::StreamType) -> mlir::Type {
     return llvmPointerType;
   });
+  converter.addConversion([llvmPointerType](gpux::DeviceType) -> mlir::Type {
+    return llvmPointerType;
+  });
+  converter.addConversion([llvmPointerType](gpux::ContextType) -> mlir::Type {
+    return llvmPointerType;
+  });
 
-  // patterns.insert<
-  //     // clang-format off
-  //   ConvertGpuStreamCreatePattern,
-  //   ConvertGpuStreamDestroyPattern,
-  //   ConvertGpuModuleLoadPattern,
-  //   ConvertGpuModuleDestroyPattern,
-  //   ConvertGpuKernelGetPattern,
-  //   ConvertGpuKernelDestroyPattern,
-  //   ConvertGpuKernelLaunchPattern,
-  //   ConvertGpuAllocPattern,
-  //   ConvertGpuDeAllocPattern
-  //     // clang-format on
-  //     >(converter);
+  patterns.insert<
+      //     // clang-format off
+      ConvertGpuStreamCreatePattern, ConvertGpuStreamDestroyPattern
+      //   ConvertGpuModuleLoadPattern,
+      //   ConvertGpuModuleDestroyPattern,
+      //   ConvertGpuKernelGetPattern,
+      //   ConvertGpuKernelDestroyPattern,
+      //   ConvertGpuKernelLaunchPattern,
+      //   ConvertGpuAllocPattern,
+      //   ConvertGpuDeAllocPattern
+      //     // clang-format on
+      >(converter);
 
   target.addIllegalDialect<mlir::gpu::GPUDialect>();
   target.addIllegalDialect<gpux::GPUXDialect>();
