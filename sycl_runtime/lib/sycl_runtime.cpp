@@ -181,7 +181,7 @@ void *getKernel(void *queue, void *module, const char *name) {
 
 void launchKernel(void *queue, sycl::kernel *kernel, size_t gridX, size_t gridY,
                   size_t gridZ, size_t blockX, size_t blockY, size_t blockZ,
-                  size_t sharedMemBytes, ParamDesc *params, void *extra) {
+                  size_t sharedMemBytes, ParamDesc *params) {
   auto sycl_queue = static_cast<GPU_SYCL_QUEUE *>(queue)->sycl_queue_;
   auto sycl_global_range =
       ::sycl::range<3>(blockZ * gridZ, blockY * gridY, blockX * gridX);
@@ -246,11 +246,11 @@ extern "C" SYCL_RUNTIME_EXPORT void *gpuKernelGet(void *queue, void *module,
 extern "C" SYCL_RUNTIME_EXPORT void
 gpuLaunchKernel(void *queue, void *kernel, size_t gridX, size_t gridY,
                 size_t gridZ, size_t blockX, size_t blockY, size_t blockZ,
-                size_t sharedMemBytes, void *params, void *extra) {
+                size_t sharedMemBytes, void *params) {
   return catchAll([&]() {
     launchKernel(queue, static_cast<sycl::kernel *>(kernel), gridX, gridY,
                  gridZ, blockX, blockY, blockZ, sharedMemBytes,
-                 static_cast<ParamDesc *>(params), extra);
+                 static_cast<ParamDesc *>(params));
   });
 }
 
