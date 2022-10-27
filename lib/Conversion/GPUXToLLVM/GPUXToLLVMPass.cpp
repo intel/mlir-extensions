@@ -52,6 +52,8 @@
 
 namespace imex {
 
+static constexpr const char *kGpuBinaryStorageSuffix = "_spirv_binary";
+
 struct FunctionCallBuilder {
   FunctionCallBuilder(mlir::StringRef functionName, mlir::Type returnType,
                       mlir::ArrayRef<mlir::Type> argumentTypes)
@@ -111,14 +113,14 @@ protected:
   mlir::Type llvmInt8Type = mlir::IntegerType::get(context, 8);
   mlir::Type llvmInt32Type = mlir::IntegerType::get(context, 32);
   mlir::Type llvmInt64Type = mlir::IntegerType::get(context, 64);
-  mlir::Type llvmIntPtrType = mlir::IntegerType::get(
+  mlir::Type llvmIndexType = mlir::IntegerType::get(
       context, this->getTypeConverter()->getPointerBitwidth(0));
 
   //// ----
-  mlir::Type llvmI32PtrType = mlir::LLVM::LLVMPointerType::get(llvmIntPtrType);
+  mlir::Type llvmI32PtrType = mlir::LLVM::LLVMPointerType::get(llvmIndexType);
 
   mlir::Type llvmRangeType = mlir::LLVM::LLVMStructType::getLiteral(
-      context, {llvmPointerType, llvmIntPtrType});
+      context, {llvmPointerType, llvmIndexType});
   mlir::Type llvmRangePointerType =
       mlir::LLVM::LLVMPointerType::get(llvmRangeType);
   mlir::Type llvmAllocResType = mlir::LLVM::LLVMStructType::getLiteral(
@@ -130,9 +132,9 @@ protected:
   FunctionCallBuilder moduleLoadCallBuilder = {
       "gpuModuleLoad",
       llvmPointerType /* void *module */,
-      {
-          llvmPointerType /* void *cubin */
-      }};
+      {llvmPointerType, /* void *stream */
+       llvmPointerType, /* void *spirv*/
+       llvmIndexType /* size*/}};
   FunctionCallBuilder moduleUnloadCallBuilder = {
       "gpuModuleUnload",
       llvmVoidType,
@@ -145,6 +147,7 @@ protected:
       "gpuKernelGet",
       llvmPointerType /* void *function */,
       {
+          llvmPointerType, /* void* stream */
           llvmPointerType, /* void *module */
           llvmPointerType  /* char *name   */
       }};
@@ -153,15 +156,14 @@ protected:
       llvmVoidType,
       {
           llvmPointerType,        /* void* stream */
-          llvmPointerType,        /* void* f */
-          llvmIntPtrType,         /* intptr_t gridXDim */
-          llvmIntPtrType,         /* intptr_t gridyDim */
-          llvmIntPtrType,         /* intptr_t gridZDim */
-          llvmIntPtrType,         /* intptr_t blockXDim */
-          llvmIntPtrType,         /* intptr_t blockYDim */
-          llvmIntPtrType,         /* intptr_t blockZDim */
+          llvmPointerType,        /* void* func */
+          llvmIndexType,          /* intptr_t gridXDim */
+          llvmIndexType,          /* intptr_t gridyDim */
+          llvmIndexType,          /* intptr_t gridZDim */
+          llvmIndexType,          /* intptr_t blockXDim */
+          llvmIndexType,          /* intptr_t blockYDim */
+          llvmIndexType,          /* intptr_t blockZDim */
           llvmInt32Type,          /* unsigned int sharedMemBytes */
-          llvmPointerType,        /* void *hstream */
           llvmPointerPointerType, /* void **kernelParams */
           llvmPointerPointerType  /* void **extra */
       }};
@@ -220,19 +222,18 @@ protected:
           llvmPointerType /* void *kernel */
       }};
 
-  FunctionCallBuilder waitEventCallBuilder = {
-      "gpuWait",
-      llvmVoidType,
-      {
-          llvmPointerType /* void *stream */
-      }};
+  FunctionCallBuilder waitCallBuilder = {"gpuWait",
+                                         llvmVoidType,
+                                         {
+                                             llvmPointerType /* void *stream */
+                                         }};
 
   FunctionCallBuilder allocCallBuilder = {
       "gpuMemAlloc",
       llvmPointerType /* void * */,
       {
           llvmPointerType, /* void *stream */
-          llvmIntPtrType,  /* intptr_t sizeBytes */
+          llvmIndexType,   /* intptr_t sizeBytes */
       }};
 
   FunctionCallBuilder deallocCallBuilder = {
@@ -247,13 +248,13 @@ protected:
       "gpuMemcpy",
       llvmVoidType,
       {llvmPointerType /* void *dst */, llvmPointerType /* void *src */,
-       llvmIntPtrType /* intptr_t sizeBytes */,
+       llvmIndexType /* intptr_t sizeBytes */,
        llvmPointerType /* void *stream */}};
   FunctionCallBuilder memsetCallBuilder = {
       "gpuMemset32",
       llvmVoidType,
       {llvmPointerType /* void *dst */, llvmInt32Type /* unsigned int value */,
-       llvmIntPtrType /* intptr_t sizeBytes */,
+       llvmIndexType /* intptr_t sizeBytes */,
        llvmPointerType /* void *stream */}};
 };
 /// A rewrite pattern to convert gpux.alloc operations into a GPU runtime
@@ -285,34 +286,23 @@ private:
                   mlir::ConversionPatternRewriter &rewriter) const override;
 };
 
-/// A rewrite pattern to convert gpu.wait operations into a GPU runtime
-/// call. Currently it supports CUDA and ROCm (HIP).
-class ConvertWaitOpToGpuRuntimeCallPattern
-    : public ConvertOpToGpuRuntimeCallPattern<gpux::WaitOp> {
-public:
-  ConvertWaitOpToGpuRuntimeCallPattern(mlir::LLVMTypeConverter &typeConverter)
-      : ConvertOpToGpuRuntimeCallPattern<gpux::WaitOp>(typeConverter) {}
+mlir::Value getStream(mlir::OpBuilder &builder) {
+  auto func =
+      builder.getBlock()->getParent()->getParentOfType<mlir::func::FuncOp>();
 
-private:
-  mlir::LogicalResult
-  matchAndRewrite(gpux::WaitOp waitOp, OpAdaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override;
-};
+  if (!func)
+    return {};
 
-/// A rewrite pattern to convert gpux.wait async operations into a GPU runtime
-/// call. Currently it supports CUDA and ROCm (HIP).
-class ConvertWaitAsyncOpToGpuRuntimeCallPattern
-    : public ConvertOpToGpuRuntimeCallPattern<gpux::WaitOp> {
-public:
-  ConvertWaitAsyncOpToGpuRuntimeCallPattern(
-      mlir::LLVMTypeConverter &typeConverter)
-      : ConvertOpToGpuRuntimeCallPattern<gpux::WaitOp>(typeConverter) {}
+  if (!llvm::hasSingleElement(func.getBody()))
+    return {};
 
-private:
-  mlir::LogicalResult
-  matchAndRewrite(gpux::WaitOp waitOp, OpAdaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override;
-};
+  auto &block = func.getBody().front();
+  auto ops = block.getOps<imex::gpux::CreateStreamOp>();
+  if (!ops.empty())
+    return (*ops.begin()).getResult();
+  else
+    return {};
+}
 
 /// A rewrite patter to convert gpu.launch_func operations into a sequence of
 /// GPU runtime calls. Currently it supports CUDA and ROCm (HIP).
@@ -332,27 +322,223 @@ class ConvertLaunchFuncOpToGpuRuntimeCallPattern
 public:
   ConvertLaunchFuncOpToGpuRuntimeCallPattern(
       mlir::LLVMTypeConverter &typeConverter,
-      mlir::StringRef gpuBinaryAnnotation, bool kernelBarePtrCallConv)
+      mlir::StringRef gpuBinaryAnnotation)
       : ConvertOpToGpuRuntimeCallPattern<gpux::LaunchFuncOp>(typeConverter),
-        gpuBinaryAnnotation(gpuBinaryAnnotation),
-        kernelBarePtrCallConv(kernelBarePtrCallConv) {}
+        gpuBinaryAnnotation(gpuBinaryAnnotation) {}
 
 private:
-  mlir::Value generateParamsArray(gpux::LaunchFuncOp launchOp,
-                                  OpAdaptor adaptor,
-                                  mlir::OpBuilder &builder) const;
+  llvm::SmallString<32> gpuBinaryAnnotation;
+
   mlir::Value generateKernelNameConstant(mlir::StringRef moduleName,
                                          mlir::StringRef name,
                                          mlir::Location loc,
-                                         mlir::OpBuilder &builder) const;
+                                         mlir::OpBuilder &builder) const {
+    // Make sure the trailing zero is included in the constant.
+    std::vector<char> kernelName(name.begin(), name.end());
+    kernelName.push_back('\0');
+
+    std::string globalName =
+        std::string(llvm::formatv("{0}_{1}_kernel_name", moduleName, name));
+    return mlir::LLVM::createGlobalString(
+        loc, builder, globalName,
+        mlir::StringRef(kernelName.data(), kernelName.size()),
+        mlir::LLVM::Linkage::Internal);
+  }
 
   mlir::LogicalResult
   matchAndRewrite(gpux::LaunchFuncOp launchOp, OpAdaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override;
+                  mlir::ConversionPatternRewriter &rewriter) const override {
 
-  llvm::SmallString<32> gpuBinaryAnnotation;
-  bool kernelBarePtrCallConv;
-};
+    if (launchOp.getAsyncDependencies().size() > 1)
+      return rewriter.notifyMatchFailure(
+          launchOp, "Cannot convert with more than one async dependency.");
+
+    // Fail when the synchronous version of the op has async dependencies. The
+    // lowering destroys the stream, and we do not want to check that there is
+    // no use of the stream after this op.
+    if (!launchOp.getAsyncToken() && !launchOp.getAsyncDependencies().empty())
+      return rewriter.notifyMatchFailure(
+          launchOp, "Cannot convert non-async op with async dependencies.");
+
+    mlir::Location loc = launchOp.getLoc();
+
+    // Create an LLVM global with SPIRV extracted from the kernel annotation
+    // and obtain a pointer to the first byte in it.
+    auto kernelModule =
+        mlir::SymbolTable::lookupNearestSymbolFrom<mlir::gpu::GPUModuleOp>(
+            launchOp, launchOp.getKernelModuleName());
+    assert(kernelModule && "expected a kernel module");
+
+    auto binaryAttr =
+        kernelModule->getAttrOfType<mlir::StringAttr>(gpuBinaryAnnotation);
+    if (!binaryAttr) {
+      kernelModule.emitOpError()
+          << "missing " << gpuBinaryAnnotation << " attribute";
+      return mlir::failure();
+    }
+
+    auto blob = binaryAttr.getValue();
+    mlir::SmallString<128> nameBuffer(kernelModule.getName());
+    nameBuffer.append(kGpuBinaryStorageSuffix);
+    mlir::Value data = mlir::LLVM::createGlobalString(
+        loc, rewriter, nameBuffer.str(), binaryAttr.getValue(),
+        mlir::LLVM::Linkage::Internal);
+
+    auto size = rewriter.create<mlir::LLVM::ConstantOp>(
+        loc, llvmIndexType,
+        mlir::IntegerAttr::get(llvmIndexType,
+                               static_cast<int64_t>(blob.size())));
+
+    mlir::Value stream = getStream(rewriter);
+    if (!stream)
+      return mlir::failure();
+    auto module =
+        moduleLoadCallBuilder.create(loc, rewriter, {stream, data, size});
+    // Get the function from the module. The name corresponds to the name of
+    // the kernel function.
+    auto kernelName = generateKernelNameConstant(
+        launchOp.getKernelModuleName().getValue(),
+        launchOp.getKernelName().getValue(), loc, rewriter);
+    auto function = moduleGetFunctionCallBuilder.create(
+        loc, rewriter, {stream, module->getResult(0), kernelName});
+    // Create array of pointers to kernel arguments.
+
+    AllocaInsertionPoint allocaHelper(launchOp);
+    auto kernelParams = adaptor.getKernelOperands();
+    auto paramsCount = static_cast<unsigned>(kernelParams.size());
+    auto paramsArrayType =
+        mlir::LLVM::LLVMArrayType::get(llvmRangeType, paramsCount + 1);
+    auto paramsArrayPtrType = mlir::LLVM::LLVMPointerType::get(paramsArrayType);
+
+    auto getKernelParamType = [&](unsigned i) -> mlir::Type {
+      if (launchOp.getOperands()[i].getType().isa<mlir::MemRefType>()) {
+        mlir::MemRefDescriptor desc(kernelParams[i]);
+        return desc.getElementPtrType();
+      }
+
+      return kernelParams[i].getType();
+    };
+
+    llvm::SmallVector<mlir::Value> paramsStorage(paramsCount);
+    auto paramsArrayPtr = allocaHelper.insert(rewriter, [&]() {
+      auto size = rewriter.create<mlir::LLVM::ConstantOp>(
+          loc, llvmInt64Type, rewriter.getI64IntegerAttr(paramsCount));
+      for (auto i : llvm::seq(0u, paramsCount)) {
+        auto ptrType = mlir::LLVM::LLVMPointerType::get(getKernelParamType(i));
+        paramsStorage[i] =
+            rewriter.create<mlir::LLVM::AllocaOp>(loc, ptrType, size, 0);
+      }
+      return rewriter.create<mlir::LLVM::AllocaOp>(loc, paramsArrayPtrType,
+                                                   size, 0);
+    });
+
+    mlir::Value one = rewriter.create<mlir::LLVM::ConstantOp>(
+        loc, llvmInt32Type, rewriter.getI32IntegerAttr(1));
+    auto localMemStorageClass = rewriter.getI64IntegerAttr(
+        mlir::gpu::GPUDialect::getPrivateAddressSpace());
+    auto computeTypeSize = [&](mlir::Type type) -> mlir::Value {
+      // %Size = getelementptr %T* null, int 1
+      // %SizeI = ptrtoint %T* %Size to i32
+      auto nullPtr = rewriter.create<mlir::LLVM::NullOp>(loc, type);
+      auto gep = rewriter.create<mlir::LLVM::GEPOp>(loc, type, nullPtr, one);
+      return rewriter.create<mlir::LLVM::PtrToIntOp>(loc, llvmIndexType, gep);
+    };
+
+    auto getKernelParam =
+        [&](unsigned i) -> std::pair<mlir::Value, mlir::Value> {
+      auto memrefType = launchOp.getKernelOperands()[i]
+                            .getType()
+                            .dyn_cast<mlir::MemRefType>();
+      auto paramType = paramsStorage[i].getType();
+      if (memrefType) {
+        mlir::MemRefDescriptor desc(kernelParams[i]);
+        if (memrefType.getMemorySpace() == localMemStorageClass) {
+          auto rank = static_cast<unsigned>(memrefType.getRank());
+          auto typeSize = std::max(memrefType.getElementTypeBitWidth(), 8u) / 8;
+          mlir::Value size = rewriter.create<mlir::LLVM::ConstantOp>(
+              loc, llvmIndexType,
+              rewriter.getIntegerAttr(llvmIndexType, typeSize));
+          for (auto i : llvm::seq(0u, rank)) {
+            auto dim = desc.size(rewriter, loc, i);
+            size = rewriter.create<mlir::LLVM::MulOp>(loc, llvmIndexType, size,
+                                                      dim);
+          }
+          auto null = rewriter.create<mlir::LLVM::NullOp>(
+              loc, desc.getElementPtrType());
+          return {size, null};
+        }
+        auto size = computeTypeSize(paramType);
+        return {size, desc.alignedPtr(rewriter, loc)};
+      }
+
+      auto size = computeTypeSize(paramType);
+      return {size, kernelParams[i]};
+    };
+
+    mlir::Value paramsArray =
+        rewriter.create<mlir::LLVM::UndefOp>(loc, paramsArrayType);
+
+    for (auto i : llvm::seq(0u, paramsCount)) {
+      auto param = getKernelParam(i);
+      rewriter.create<mlir::LLVM::StoreOp>(loc, param.second, paramsStorage[i]);
+      auto ptr = rewriter.create<mlir::LLVM::BitcastOp>(loc, llvmPointerType,
+                                                        paramsStorage[i]);
+
+      auto typeSize = param.first;
+
+      mlir::Value range =
+          rewriter.create<mlir::LLVM::UndefOp>(loc, llvmRangeType);
+      range = rewriter.create<mlir::LLVM::InsertValueOp>(loc, range, ptr, 0);
+      range =
+          rewriter.create<mlir::LLVM::InsertValueOp>(loc, range, typeSize, 1);
+
+      paramsArray = rewriter.create<mlir::LLVM::InsertValueOp>(loc, paramsArray,
+                                                               range, i);
+    }
+
+    auto nullPtr = rewriter.create<mlir::LLVM::NullOp>(loc, llvmPointerType);
+    auto nullRange = [&]() {
+      auto zero = rewriter.create<mlir::LLVM::ConstantOp>(
+          loc, llvmIndexType, rewriter.getIntegerAttr(llvmIndexType, 0));
+      mlir::Value range =
+          rewriter.create<mlir::LLVM::UndefOp>(loc, llvmRangeType);
+      range =
+          rewriter.create<mlir::LLVM::InsertValueOp>(loc, range, nullPtr, 0);
+      range = rewriter.create<mlir::LLVM::InsertValueOp>(loc, range, zero, 1);
+      return range;
+    }();
+    paramsArray = rewriter.create<mlir::LLVM::InsertValueOp>(
+        loc, paramsArray, nullRange, paramsCount);
+    rewriter.create<mlir::LLVM::StoreOp>(loc, paramsArray, paramsArrayPtr);
+
+    auto paramsArrayVoidPtr = rewriter.create<mlir::LLVM::BitcastOp>(
+        loc, llvmRangePointerType, paramsArrayPtr);
+    auto nullpointer =
+        rewriter.create<mlir::LLVM::NullOp>(loc, llvmPointerPointerType);
+    launchKernelCallBuilder.create(
+        loc, rewriter,
+        {stream, function->getResult(0), adaptor.getGridSizeX(),
+         adaptor.getGridSizeY(), adaptor.getGridSizeZ(),
+         adaptor.getBlockSizeX(), adaptor.getBlockSizeY(),
+         adaptor.getBlockSizeZ(), adaptor.getDynamicSharedMemorySize(),
+         paramsArrayVoidPtr,
+         /*extra=*/nullpointer});
+
+    if (launchOp.getAsyncToken()) {
+      // Async launch: make dependent ops use the same stream.
+      rewriter.replaceOp(launchOp, {stream});
+    } else {
+      // Synchronize with host and destroy stream. This must be the stream
+      // created above (with no other uses) because we check that the
+      // synchronous version does not have any async dependencies.
+      waitCallBuilder.create(loc, rewriter, stream);
+      rewriter.eraseOp(launchOp);
+    }
+    moduleUnloadCallBuilder.create(loc, rewriter, module->getResult(0));
+
+    return mlir::success();
+  }
+}; // namespace
 
 /// A rewrite pattern to convert gpu.memcpy operations into a GPU runtime
 /// call. Currently it supports CUDA and ROCm (HIP).
@@ -423,20 +609,6 @@ private:
     return mlir::success();
   }
 };
-
-static std::string getUniqueLLVMGlobalName(mlir::ModuleOp mod,
-                                           mlir::StringRef srcName) {
-  auto globals = mod.getOps<mlir::LLVM::GlobalOp>();
-  for (int i = 0;; ++i) {
-    auto name =
-        (i == 0 ? std::string(srcName) : (srcName + llvm::Twine(i)).str());
-    auto isSameName = [&](mlir::LLVM::GlobalOp global) {
-      return global.getName() == name;
-    };
-    if (llvm::find_if(globals, isSameName) == globals.end())
-      return name;
-  }
-}
 
 class GPUXToLLVMPass : public ::imex::ConvertGPUXToLLVMBase<GPUXToLLVMPass> {
 public:

@@ -168,6 +168,14 @@ def GPUX_LaunchFuncOp
                    CArg<"::mlir::Type", "nullptr">:$asyncTokenType,
                    CArg<"::mlir::ValueRange", "{}">:$asyncDependencies)>
   ];
+
+  let extraClassDeclaration = [{
+    /// The name of the kernel's containing module.
+    mlir::StringAttr getKernelModuleName();
+
+    /// The name of the kernel.
+    mlir::StringAttr getKernelName(); }];
+
 }
 
 def GPUX_AllocOp
