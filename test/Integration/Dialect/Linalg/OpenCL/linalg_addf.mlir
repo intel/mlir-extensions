@@ -2,7 +2,7 @@
 
 #map = affine_map<(d0, d1) -> (d0, d1)>
 module {
-// OPENCL: func.func
+// OPENCL: llvm.func @addt
 func.func @addt(%arg0: tensor<2x5xf32>, %arg1: tensor<2x5xf32>) -> tensor<2x5xf32> {
 %0 = tensor.empty() : tensor<2x5xf32>
 %1 = linalg.generic {indexing_maps = [#map, #map, #map], iterator_types = ["parallel", "parallel"]} ins(%arg0, %arg1 : tensor<2x5xf32>, tensor<2x5x

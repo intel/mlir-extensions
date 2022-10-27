@@ -28,10 +28,16 @@ cse
 set-spirv-capabilities{client-api=opencl}
 gpu.module(set-spirv-abi-attrs{client-api=opencl})
 canonicalize
+fold-memref-alias-ops
 imex-convert-gpu-to-spirv
-convert-gpu-to-gpux
 spirv.module(spirv-lower-abi-attrs
              spirv-update-vce)
 func.func(llvm-request-c-wrappers)
 serialize-spirv
+convert-gpu-to-gpux
+convert-func-to-llvm
+# Passes to be enable later
+# convert-gpux-to-llvm
+# convert-memref-to-llvm
+# reconcile-unrealized-casts
 # End
