@@ -50,16 +50,16 @@ else()
     list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
 endif()
 
-if (DEFINED MLIR_ENABLE_VULKAN_RUNNER)
-    set(IMEX_ENABLE_VULKAN_RUNNER ${MLIR_ENABLE_VULKAN_RUNNER})
-else ()
-    set(IMEX_ENABLE_VULKAN_RUNNER 0)
-endif()
-
 include(TableGen)
 include(AddLLVM)
 include(AddMLIR)
 include(HandleLLVMOptions)
+
+if (TARGET mlir-vulkan-runner)
+    set(IMEX_ENABLE_VULKAN_RUNNER 1)
+else ()
+    set(IMEX_ENABLE_VULKAN_RUNNER 0)
+endif()
 
 if(NOT IMEX_EXTERNAL_PROJECT_BUILD)
     find_package(Python3 ${LLVM_MINIMUM_PYTHON_VERSION} REQUIRED

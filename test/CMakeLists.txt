@@ -18,7 +18,7 @@ set(IMEX_TEST_DEPENDS
         mlir_runner_utils
         )
 
-if(MLIR_ENABLE_VULKAN_RUNNER)
+if(IMEX_ENABLE_VULKAN_RUNNER)
     list(APPEND IMEX_TEST_DEPENDS
         mlir-vulkan-runner
         vulkan-runtime-wrappers
