@@ -1,7 +1,7 @@
 #map0 = affine_map<(d0, d1) -> (d0)>
 #map1 = affine_map<(d0, d1) -> (d0, d1)>
 module @broadcast_non_numpy {
-  func @main(%arg0: tensor<3xf32>) -> tensor<3x4xf32> {
+  func.func @main(%arg0: tensor<3xf32>) -> tensor<3x4xf32> {
     %cst = arith.constant 0.000000e+00 : f32
     %0 = linalg.init_tensor [3, 4] : tensor<3x4xf32>
     %1 = linalg.fill ins(%cst : f32) outs(%0 : tensor<3x4xf32>) -> tensor<3x4xf32>
@@ -11,4 +11,17 @@ module @broadcast_non_numpy {
     } -> tensor<3x4xf32>
     return %2 : tensor<3x4xf32>
   }
+  func.func @test() {
+    %0 = arith.constant dense<[1.0, 2.0, 3.0]> : tensor<3xf32>
+    %2 = call @main(%0) : (tensor<3xf32>) -> tensor<3x4xf32>
+    %unranked = tensor.cast %2 : tensor<3x4xf32> to tensor<*xf32>
+    call @printMemrefF32(%unranked) : (tensor<*xf32>) -> ()
+    //      CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
+    // CHECK-NEXT: [1.0, 1.0, 1.0, 1.0]
+    // CHECK-NEXT: [2.0, 2.0, 2.0, 2.0]
+    // CHECK-NEXT: [3.0, 3.0, 3.0, 3.0]
+    return
+  }
+
+  func.func private @printMemrefF32(%ptr : tensor<*xf32>)
 }
