@@ -664,16 +664,17 @@ void populateGpuxToLLVMPatternsAndLegality(mlir::LLVMTypeConverter &converter,
   });
 
   patterns.insert<
-      //     // clang-format off
-      ConvertGpuStreamCreatePattern, ConvertGpuStreamDestroyPattern
-      //   ConvertGpuModuleLoadPattern,
-      //   ConvertGpuModuleDestroyPattern,
-      //   ConvertGpuKernelGetPattern,
-      //   ConvertGpuKernelDestroyPattern,
-      //   ConvertGpuKernelLaunchPattern,
-      //   ConvertGpuAllocPattern,
-      //   ConvertGpuDeAllocPattern
-      //     // clang-format on
+      // clang-format off
+    ConvertGpuStreamCreatePattern
+  // ConvertGpuStreamDestroyPattern
+  //   ConvertGpuModuleLoadPattern,
+  //   ConvertGpuModuleDestroyPattern,
+  //   ConvertGpuKernelGetPattern,
+  //   ConvertGpuKernelDestroyPattern,
+  //   ConvertGpuKernelLaunchPattern,
+  //   ConvertGpuAllocPattern,
+  //   ConvertGpuDeAllocPattern
+      // clang-format on
       >(converter);
 
   target.addIllegalDialect<mlir::gpu::GPUDialect>();
