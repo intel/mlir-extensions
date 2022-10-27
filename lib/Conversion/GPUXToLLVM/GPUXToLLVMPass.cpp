@@ -453,17 +453,6 @@ class GPUXToLLVMPass : public ::imex::ConvertGPUXToLLVMBase<GPUXToLLVMPass> {
 public:
   explicit GPUXToLLVMPass() {}
   void runOnOperation() override;
-
-private:
-  Option<std::string> gpuBinaryAnnotation{
-      *this, "gpu-binary-annotation",
-      llvm::cl::desc("Annotation attribute string for GPU binary"),
-      llvm::cl::init(mlir::gpu::getDefaultGpuBinaryAnnotation())};
-  Option<bool> kernelBarePtrCallConv{
-      *this, "use-bare-pointers-for-kernels",
-      llvm::cl::desc("Use bare pointers to pass memref arguments to kernels. "
-                     "The kernel must use the same setting for this option."),
-      llvm::cl::init(false)};
 };
 
 void GPUXToLLVMPass::runOnOperation() {
@@ -480,8 +469,8 @@ void GPUXToLLVMPass::runOnOperation() {
   mlir::populateAsyncStructuralTypeConversionsAndLegality(converter, patterns,
                                                           target);
 
-  mlir::populateGpuToLLVMConversionPatterns(converter, patterns,
-                                            gpuBinaryAnnotation, false);
+  mlir::populateGpuToLLVMConversionPatterns(
+      converter, patterns, mlir::gpu::getDefaultGpuBinaryAnnotation());
 
   populateControlFlowTypeConversionRewritesAndTarget(converter, patterns,
                                                      target);
