@@ -25,9 +25,9 @@ func.func @test_arange(%arg0: i64, %arg1: i64, %arg2: i64) -> i64 {
 // CHECK: [[V8:%.+]] = tensor.empty([[V7]]) : tensor<?xi64>
 // CHECK: [[V9:%.+]] = shape.shape_of [[V8]] : tensor<?xi64> -> tensor<1xindex>
 // CHECK: [[V10:%.+]] = "dist.distinfo"([[V9]], [[Vc1_i64]]) {rank = 1 : i64} : (tensor<1xindex>, i64) -> !dist.info<1>
-// CHECK: [[V11:%.+]] = "dist.extract_from_info"([[V10]]) {what = 0 : i32} : (!dist.info<1>) -> tensor<1xi64>
+// CHECK: [[V11:%.+]] = "dist.extract_from_info"([[V10]]) {what = 1 : i32} : (!dist.info<1>) -> tensor<1xi64>
 // CHECK: [[Vextracted:%.+]] = tensor.extract [[V11]][[[Vc0]]] : tensor<1xi64>
-// CHECK: [[V12:%.+]] = "dist.extract_from_info"([[V10]]) {what = 1 : i32} : (!dist.info<1>) -> tensor<1xi64>
+// CHECK: [[V12:%.+]] = "dist.extract_from_info"([[V10]]) {what = 2 : i32} : (!dist.info<1>) -> tensor<1xi64>
 // CHECK: [[Vextracted_0:%.+]] = tensor.extract [[V12]][[[Vc0]]] : tensor<1xi64>
 // CHECK: [[V13:%.+]] = arith.muli [[Vextracted_0]], %arg2 : i64
 // CHECK: [[V14:%.+]] = arith.addi %arg0, [[V13]] : i64
@@ -43,7 +43,7 @@ func.func @test_arange(%arg0: i64, %arg1: i64, %arg2: i64) -> i64 {
 // CHECK: [[V24:%.+]] = "ptensor.init_ptensor"([[V23]], [[Vfalse]], [[Vfalse]]) : (tensor<?xi64>, i1, i1) -> !ptensor.ptensor<tensor<?xi64>>
 // CHECK: [[V25:%.+]] = "ptensor.ewbin"([[V21]], [[V24]]) {op = 0 : i32} : (!ptensor.ptensor<tensor<?xi64>>, !ptensor.ptensor<tensor<?xi64>>) -> !ptensor.ptensor<tensor<?xi64>>
 // CHECK: [[V26:%.+]] = "dist.get_info"([[V18]]) : (!dist.dtensor<<tensor<?xi64>>>) -> !dist.info<1>
-// CHECK: [[V27:%.+]] = "dist.extract_from_info"([[V26]]) {what = 2 : i32} : (!dist.info<1>) -> i64
+// CHECK: [[V27:%.+]] = "dist.extract_from_info"([[V26]]) {what = 3 : i32} : (!dist.info<1>) -> i64
 // CHECK: [[V28:%.+]] = "dist.distinfo"([[V0]], [[V27]]) {rank = 1 : i64} : (tensor<1xindex>, i64) -> !dist.info<1>
 // CHECK: [[V29:%.+]] = "dist.init_dist_tensor"([[V25]], [[V28]]) : (!ptensor.ptensor<tensor<?xi64>>, !dist.info<1>) -> !dist.dtensor<<tensor<?xi64>>>
 // CHECK: [[V30:%.+]] = builtin.unrealized_conversion_cast [[V29]] : !dist.dtensor<<tensor<?xi64>>> to i64

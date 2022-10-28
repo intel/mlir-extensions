@@ -210,7 +210,7 @@ struct DistInfoOpConverter
     ::mlir::SmallVector<::mlir::Value> vals(::imex::dist::INFO_LAST);
     // vals[::imex::dist::RANK] =
     // rewriter.create<::mlir::arith::ConstantOp>(loc, rank);
-    // vals[::imex::dist::GSHAPE] = gshape;
+    vals[::imex::dist::GSHAPE] = gshape;
     vals[::imex::dist::LSHAPE] = lshape;
     vals[::imex::dist::LOFFSETS] = loffsets;
     vals[::imex::dist::TEAM] = team;
