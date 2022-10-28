@@ -50,6 +50,8 @@
 #include "llvm/Support/Error.h"
 #include "llvm/Support/FormatVariadic.h"
 
+#include <iostream>
+
 namespace imex {
 
 static constexpr const char *kGpuBinaryStorageSuffix = "_spirv_binary";
@@ -171,10 +173,7 @@ protected:
   FunctionCallBuilder streamCreateCallBuilder = {
       "gpuCreateStream",
       llvmPointerType, /* void *stream */
-      {
-          llvmPointerType /* void *device */
-                          // llvmPointerType, /* void *context */
-      }};
+      {}};
 
   FunctionCallBuilder streamDestroyCallBuilder = {
       "gpuStreamDestroy",
@@ -669,32 +668,16 @@ private:
   matchAndRewrite(gpux::CreateStreamOp op,
                   gpux::CreateStreamOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
+    std::cout << "IN ConvertGpuStreamCreatePattern " << std::endl;
     auto mod = op->getParentOfType<mlir::ModuleOp>();
     if (!mod)
       return mlir::failure();
 
-    auto device = adaptor.getDevice();
-
     auto loc = op.getLoc();
 
-    mlir::Value data;
-    // if (device) {
-    //   llvm::SmallString<64> name = device.getValue();
-    //   name.push_back('\0');
-
-    //   auto varName = getUniqueLLVMGlobalName(mod, "device_name");
-    //   data = mlir::LLVM::createGlobalString(loc, rewriter, varName, name,
-    //                                         mlir::LLVM::Linkage::Internal);
-    // } else {
-    data = rewriter.create<mlir::LLVM::NullOp>(loc, llvmPointerType);
-    // }
-
-    auto res = streamCreateCallBuilder.create(loc, rewriter, {data});
+    auto res = streamCreateCallBuilder.create(loc, rewriter, {});
     rewriter.replaceOp(op, res.getResults());
-
-    // auto res = streamCreateCallBuilder.create(
-    //     loc, rewriter, {adaptor.getDevice(), adaptor.getContext()});
-    // rewriter.replaceOp(op, res.getResult());
+    std::cout << "OUT ConvertGpuStreamCreatePattern " << std::endl;
     return mlir::success();
   }
 };
@@ -711,9 +694,10 @@ private:
                   gpux::DestroyStreamOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    auto res = streamDestroyCallBuilder.create(loc, rewriter,
-                                               {adaptor.getGpuxStream()});
-    rewriter.replaceOp(op, res.getResult());
+    std::cout << "IN ConvertGpuStreamDestroyPattern " << std::endl;
+    auto res =
+        streamDestroyCallBuilder.create(loc, rewriter, adaptor.getGpuxStream());
+    rewriter.replaceOp(op, res.getResults());
     return mlir::success();
   }
 };
@@ -774,13 +758,13 @@ void populateGpuxToLLVMPatternsAndLegality(mlir::LLVMTypeConverter &converter,
   patterns.insert<
       // clang-format off
     ConvertGpuStreamCreatePattern,
-  // ConvertGpuStreamDestroyPattern
+    ConvertGpuStreamDestroyPattern
   //   ConvertGpuModuleLoadPattern,
   //   ConvertGpuModuleDestroyPattern,
   //   ConvertGpuKernelGetPattern,
   //   ConvertGpuKernelDestroyPattern,
   //   ConvertGpuKernelLaunchPattern,
-    ConvertAllocOpToGpuRuntimeCallPattern
+  //  ConvertAllocOpToGpuRuntimeCallPattern
   //   ConvertGpuDeAllocPattern
       // clang-format on
       >(converter);
