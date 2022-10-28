@@ -81,9 +81,6 @@ private:
   mlir::LLVM::LLVMFunctionType functionType;
 };
 
-static constexpr llvm::StringLiteral kEventCountAttrName("gpu.event_count");
-static constexpr llvm::StringLiteral kEventIndexAttrName("gpu.event_index");
-
 template <typename OpTy>
 class ConvertOpToGpuRuntimeCallPattern
     : public mlir::ConvertOpToLLVMPattern<OpTy> {
@@ -145,7 +142,7 @@ protected:
       }};
 
   // same as kernelGetCallBuilder
-  FunctionCallBuilder moduleGetFunctionCallBuilder = {
+  FunctionCallBuilder kernelGetCallBuilder = {
       "gpuKernelGet",
       llvmPointerType /* void *function */,
       {
@@ -157,17 +154,16 @@ protected:
       "gpuLaunchKernel",
       llvmVoidType,
       {
-          llvmPointerType,        /* void* stream */
-          llvmPointerType,        /* void* func */
-          llvmIndexType,          /* intptr_t gridXDim */
-          llvmIndexType,          /* intptr_t gridyDim */
-          llvmIndexType,          /* intptr_t gridZDim */
-          llvmIndexType,          /* intptr_t blockXDim */
-          llvmIndexType,          /* intptr_t blockYDim */
-          llvmIndexType,          /* intptr_t blockZDim */
-          llvmInt32Type,          /* unsigned int sharedMemBytes */
-          llvmPointerPointerType, /* void **kernelParams */
-          llvmPointerPointerType  /* void **extra */
+          llvmPointerType,     /* void* stream */
+          llvmPointerType,     /* void* func */
+          llvmIndexType,       /* intptr_t gridXDim */
+          llvmIndexType,       /* intptr_t gridyDim */
+          llvmIndexType,       /* intptr_t gridZDim */
+          llvmIndexType,       /* intptr_t blockXDim */
+          llvmIndexType,       /* intptr_t blockYDim */
+          llvmIndexType,       /* intptr_t blockZDim */
+          llvmInt64Type,       /* unsigned int sharedMemBytes */
+          llvmRangePointerType /* Params */
       }};
 
   FunctionCallBuilder streamCreateCallBuilder = {
@@ -368,17 +364,6 @@ private:
   matchAndRewrite(gpux::LaunchFuncOp launchOp, OpAdaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
 
-    if (launchOp.getAsyncDependencies().size() > 1)
-      return rewriter.notifyMatchFailure(
-          launchOp, "Cannot convert with more than one async dependency.");
-
-    // Fail when the synchronous version of the op has async dependencies. The
-    // lowering destroys the stream, and we do not want to check that there is
-    // no use of the stream after this op.
-    if (!launchOp.getAsyncToken() && !launchOp.getAsyncDependencies().empty())
-      return rewriter.notifyMatchFailure(
-          launchOp, "Cannot convert non-async op with async dependencies.");
-
     mlir::Location loc = launchOp.getLoc();
 
     // Create an LLVM global with SPIRV extracted from the kernel annotation
@@ -408,18 +393,16 @@ private:
         mlir::IntegerAttr::get(llvmIndexType,
                                static_cast<int64_t>(blob.size())));
 
-    mlir::Value stream = getStream(rewriter);
-    if (!stream)
-      return mlir::failure();
-    auto module =
-        moduleLoadCallBuilder.create(loc, rewriter, {stream, data, size});
+    auto module = moduleLoadCallBuilder.create(
+        loc, rewriter, {adaptor.getGpuxStream(), data, size});
     // Get the function from the module. The name corresponds to the name of
     // the kernel function.
     auto kernelName = generateKernelNameConstant(
         launchOp.getKernelModuleName().getValue(),
         launchOp.getKernelName().getValue(), loc, rewriter);
-    auto function = moduleGetFunctionCallBuilder.create(
-        loc, rewriter, {stream, module->getResult(0), kernelName});
+    auto function = kernelGetCallBuilder.create(
+        loc, rewriter,
+        {adaptor.getGpuxStream(), module->getResult(0), kernelName});
     // Create array of pointers to kernel arguments.
 
     AllocaInsertionPoint allocaHelper(launchOp);
@@ -514,7 +497,6 @@ private:
       paramsArray = rewriter.create<mlir::LLVM::InsertValueOp>(loc, paramsArray,
                                                                range, i);
     }
-
     auto nullPtr = rewriter.create<mlir::LLVM::NullOp>(loc, llvmPointerType);
     auto nullRange = [&]() {
       auto zero = rewriter.create<mlir::LLVM::ConstantOp>(
@@ -532,32 +514,31 @@ private:
 
     auto paramsArrayVoidPtr = rewriter.create<mlir::LLVM::BitcastOp>(
         loc, llvmRangePointerType, paramsArrayPtr);
-    auto nullpointer =
-        rewriter.create<mlir::LLVM::NullOp>(loc, llvmPointerPointerType);
+    auto zero = rewriter.create<mlir::LLVM::ConstantOp>(
+        loc, llvmIndexType, rewriter.getIntegerAttr(llvmIndexType, 0));
+    mlir::Value dynamicSharedMemorySize =
+        adaptor.getDynamicSharedMemorySize()
+            ? adaptor.getDynamicSharedMemorySize()
+            : zero;
+    std::cout << "IN ConvertLaunchFuncOpToGpuRuntimeCallPattern 3 "
+              << std::endl;
     launchKernelCallBuilder.create(
         loc, rewriter,
-        {stream, function->getResult(0), adaptor.getGridSizeX(),
-         adaptor.getGridSizeY(), adaptor.getGridSizeZ(),
+        {adaptor.getGpuxStream(), function->getResult(0),
+         adaptor.getGridSizeX(), adaptor.getGridSizeY(), adaptor.getGridSizeZ(),
          adaptor.getBlockSizeX(), adaptor.getBlockSizeY(),
-         adaptor.getBlockSizeZ(), adaptor.getDynamicSharedMemorySize(),
-         paramsArrayVoidPtr,
-         /*extra=*/nullpointer});
+         adaptor.getBlockSizeZ(), dynamicSharedMemorySize, paramsArrayVoidPtr});
 
-    if (launchOp.getAsyncToken()) {
-      // Async launch: make dependent ops use the same stream.
-      rewriter.replaceOp(launchOp, {stream});
-    } else {
-      // Synchronize with host and destroy stream. This must be the stream
-      // created above (with no other uses) because we check that the
-      // synchronous version does not have any async dependencies.
-      waitCallBuilder.create(loc, rewriter, stream);
-      rewriter.eraseOp(launchOp);
-    }
-    moduleUnloadCallBuilder.create(loc, rewriter, module->getResult(0));
+    std::cout << "IN ConvertLaunchFuncOpToGpuRuntimeCallPattern 4 "
+              << std::endl;
 
+    waitCallBuilder.create(loc, rewriter, adaptor.getGpuxStream());
+    rewriter.eraseOp(launchOp);
+    // moduleUnloadCallBuilder.create(loc, rewriter, module->getResult(0));
+    std::cout << "SUCCESS " << std::endl;
     return mlir::success();
   }
-}; // namespace
+}; // namespace imex
 
 class ConvertGpuStreamCreatePattern
     : public ConvertOpToGpuRuntimeCallPattern<gpux::CreateStreamOp> {
@@ -654,15 +635,20 @@ void populateGpuxToLLVMPatternsAndLegality(mlir::LLVMTypeConverter &converter,
     return llvmPointerType;
   });
 
+  // mlir::populateGpuToLLVMConversionPatterns(
+  //    converter, patterns, mlir::gpu::getDefaultGpuBinaryAnnotation());
+
   patterns.insert<
       // clang-format off
     ConvertGpuStreamCreatePattern,
     ConvertGpuStreamDestroyPattern,
     ConvertAllocOpToGpuRuntimeCallPattern,
     ConvertDeallocOpToGpuRuntimeCallPattern
-  //   ConvertGpuKernelLaunchPattern,
       // clang-format on
       >(converter);
+
+  patterns.add<ConvertLaunchFuncOpToGpuRuntimeCallPattern>(
+      converter, mlir::gpu::getDefaultGpuBinaryAnnotation());
 
   target.addIllegalDialect<mlir::gpu::GPUDialect>();
   target.addIllegalDialect<gpux::GPUXDialect>();

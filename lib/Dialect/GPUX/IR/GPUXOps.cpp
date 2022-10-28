@@ -67,6 +67,7 @@ void LaunchFuncOp::build(
   auto kernelSymbol = mlir::SymbolRefAttr::get(
       kernelModule.getNameAttr(),
       {mlir::SymbolRefAttr::get(kernelFunc.getNameAttr())});
+  // Verify this
   result.addAttribute(getKernelAttrName(result.name), kernelSymbol);
   mlir::SmallVector<int32_t, 10> segmentSizes(10, 1);
   segmentSizes.front() = asyncDependencies.size();
@@ -76,45 +77,15 @@ void LaunchFuncOp::build(
                       builder.getDenseI32ArrayAttr(segmentSizes));
 }
 
+mlir::StringAttr LaunchFuncOp::getKernelModuleName() {
+  return getKernel().getRootReference();
+}
+
+mlir::StringAttr LaunchFuncOp::getKernelName() {
+  return getKernel().getLeafReference();
+}
+
 } // namespace gpux
-
-// TODO: unify with upstream
-/// Parses an optional list of async operands with an optional leading keyword.
-/// (`async`)? (`[` ssa-id-list `]`)?
-///
-/// This method is used by the tablegen assembly format for async ops as well.
-static mlir::ParseResult parseAsyncDependencies(
-    mlir::OpAsmParser &parser, mlir::Type &asyncTokenType,
-    mlir::SmallVectorImpl<mlir::OpAsmParser::UnresolvedOperand>
-        &asyncDependencies) {
-  auto loc = parser.getCurrentLocation();
-  if (succeeded(parser.parseOptionalKeyword("async"))) {
-    if (parser.getNumResults() == 0)
-      return parser.emitError(loc, "needs to be named when marked 'async'");
-    asyncTokenType = parser.getBuilder().getType<mlir::gpu::AsyncTokenType>();
-  }
-  return parser.parseOperandList(asyncDependencies,
-                                 mlir::OpAsmParser::Delimiter::OptionalSquare);
-}
-
-/// Prints optional async dependencies with its leading keyword.
-///   (`async`)? (`[` ssa-id-list `]`)?
-// Used by the tablegen assembly format for several async ops.
-static void printAsyncDependencies(mlir::OpAsmPrinter &printer,
-                                   mlir::Operation *op,
-                                   mlir::Type asyncTokenType,
-                                   mlir::OperandRange asyncDependencies) {
-  if (asyncTokenType)
-    printer << "async";
-  if (asyncDependencies.empty())
-    return;
-  if (asyncTokenType)
-    printer << ' ';
-  printer << '[';
-  llvm::interleaveComma(asyncDependencies, printer);
-  printer << ']';
-}
-
 } // namespace imex
 
 #include <imex/Dialect/GPUX/IR/GPUXOpsDialect.cpp.inc>

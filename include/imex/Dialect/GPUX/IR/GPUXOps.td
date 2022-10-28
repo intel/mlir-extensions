@@ -170,12 +170,13 @@ def GPUX_LaunchFuncOp
   ];
 
   let extraClassDeclaration = [{
+
     /// The name of the kernel's containing module.
-    mlir::StringAttr getKernelModuleName();
+    ::mlir::StringAttr getKernelModuleName();
 
     /// The name of the kernel.
-    mlir::StringAttr getKernelName(); }];
-
+    ::mlir::StringAttr getKernelName();
+  }];
 }
 
 def GPUX_AllocOp
