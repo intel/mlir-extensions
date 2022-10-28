@@ -144,6 +144,14 @@ def GetInfoOp : Dist_Op<"get_info", [Pure]> {
     let summary = "Get the DistInfo meta information for a given DistTensor.";
     let arguments = (ins Dist_Tensor:$d_tensor);
     let results = (outs Dist_Info);
+    let builders = [
+      OpBuilder<(ins "::mlir::Value":$dtensor), [{
+            build($_builder, $_state,
+                  ::imex::dist::DistInfoType::get($_builder.getContext(),
+                                                  dtensor.getType().dyn_cast<::imex::dist::DistTensorType>().getPTensorType().getRtensor().getRank()),
+                  dtensor);
+      }]>,
+    ];
 }
 
 def ExtractFromInfoOp : Dist_Op<"extract_from_info", []> {
@@ -160,12 +168,13 @@ def ExtractFromInfoOp : Dist_Op<"extract_from_info", []> {
         auto itype = info.getType().dyn_cast<::imex::dist::DistInfoType>();
         assert(itype);
         switch(idx.getInt()) {
-            case TEAM:
-                $_state.addTypes(i64Type);
-                break;
+            case GSHAPE:
             case LSHAPE:
             case LOFFSETS:
                 $_state.addTypes(::mlir::RankedTensorType::get({itype.getRank()}, i64Type));
+                break;
+            case TEAM:
+                $_state.addTypes(i64Type);
                 break;
             default:
                 assert("Unknown element for DistInfo" == nullptr);
