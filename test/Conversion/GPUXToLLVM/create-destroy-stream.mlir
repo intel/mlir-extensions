@@ -1,4 +1,4 @@
-// RUN: imex-opt -convert-func-to-llvm -convert-gpux-to-llvm %s -o - | FileCheck %s
+// RUN: imex-opt -convert-func-to-llvm -convert-gpux-to-llvm %s | FileCheck %s
 
 module attributes {gpu.container_module}{
   // CHECK-LABEL: llvm.func @main

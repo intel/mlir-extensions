@@ -182,45 +182,6 @@ protected:
           llvmPointerType /* void *stream */
       }};
 
-  FunctionCallBuilder DeviceCreateCallBuilder = {
-      "gpuCreateDevice",
-      llvmPointerType, /* void *device */
-      {}};
-
-  FunctionCallBuilder DeviceDestroyCallBuilder = {
-      "gpuDestroyDevice",
-      llvmVoidType,
-      {
-          llvmPointerType /* void *device */
-      }};
-
-  FunctionCallBuilder ContextCreateCallBuilder = {
-      "gpuCreateContext",
-      llvmPointerType, /* void *context */
-      {}};
-
-  FunctionCallBuilder ContextDestroyCallBuilder = {
-      "gpuDestroyContext",
-      llvmVoidType,
-      {
-          llvmPointerType /* void *context */
-      }};
-
-  FunctionCallBuilder kernelGetCallBuilder = {
-      "GpuKernelGet",
-      llvmPointerType, /* void *kernel */
-      {
-          llvmPointerType, /* void *module */
-          llvmPointerType, /* char *name   */
-      }};
-
-  FunctionCallBuilder kernelDestroyCallBuilder = {
-      "gpuKernelDestroy",
-      llvmVoidType,
-      {
-          llvmPointerType /* void *kernel */
-      }};
-
   FunctionCallBuilder waitCallBuilder = {"gpuWait",
                                          llvmVoidType,
                                          {
@@ -231,16 +192,18 @@ protected:
       "gpuMemAlloc",
       llvmPointerType /* void * */,
       {
-          llvmIndexType,  /* intptr_t sizeBytes */
-          llvmPointerType /* void *stream */
+          llvmPointerType, /* void *stream */
+          llvmIndexType,   // size
+          llvmIndexType,   // alignment
+          llvmInt32Type    // shared
       }};
 
   FunctionCallBuilder deallocCallBuilder = {
       "gpuMemFree",
       llvmVoidType,
       {
-          llvmPointerType, /* void *ptr */
-          llvmPointerType  /* void *stream */
+          llvmPointerType, /* void *stream */
+          llvmPointerType  /* void *ptr */
       }};
 
   FunctionCallBuilder memcpyCallBuilder = {
@@ -256,6 +219,7 @@ protected:
        llvmIndexType /* intptr_t sizeBytes */,
        llvmPointerType /* void *stream */}};
 };
+
 /// A rewrite pattern to convert gpux.alloc operations into a GPU runtime
 /// call. Currently it supports CUDA and ROCm (HIP).
 class ConvertAllocOpToGpuRuntimeCallPattern
@@ -267,9 +231,67 @@ public:
 private:
   mlir::LogicalResult
   matchAndRewrite(gpux::AllocOp allocOp, OpAdaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override;
-};
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    if (!allocOp.getSymbolOperands().empty())
+      return mlir::failure();
 
+    mlir::MemRefType memRefType = allocOp.getType();
+    auto converter = getTypeConverter();
+    auto dstType = converter->convertType(memRefType);
+    if (!dstType)
+      return mlir::failure();
+
+    bool isShared = allocOp.getHostShared();
+
+    auto loc = allocOp.getLoc();
+
+    // Get shape of the memref as values: static sizes are constant
+    // values and dynamic sizes are passed to 'alloc' as operands.
+    mlir::SmallVector<mlir::Value, 4> shape;
+    mlir::SmallVector<mlir::Value, 4> strides;
+    mlir::Value sizeBytes;
+    getMemRefDescriptorSizes(loc, memRefType, adaptor.getDynamicSizes(),
+                             rewriter, shape, strides, sizeBytes);
+
+    assert(shape.size() == strides.size());
+
+    auto alignment = rewriter.getIntegerAttr(llvmIndexType, 64);
+    auto alignmentVar =
+        rewriter.create<mlir::LLVM::ConstantOp>(loc, llvmIndexType, alignment);
+
+    auto typeVar = rewriter.create<mlir::LLVM::ConstantOp>(
+        loc, llvmInt32Type, rewriter.getI32IntegerAttr(isShared));
+
+    mlir::Value allocatedPtr =
+        allocCallBuilder
+            .create(loc, rewriter,
+                    {adaptor.getGpuxStream(), sizeBytes, alignmentVar, typeVar})
+            ->getResult(0);
+
+    auto memrefDesc = mlir::MemRefDescriptor::undef(rewriter, loc, dstType);
+    auto elemPtrTye = memrefDesc.getElementPtrType();
+    memrefDesc.setAllocatedPtr(
+        rewriter, loc,
+        rewriter.create<mlir::LLVM::BitcastOp>(loc, elemPtrTye, allocatedPtr));
+    memrefDesc.setAlignedPtr(
+        rewriter, loc,
+        rewriter.create<mlir::LLVM::BitcastOp>(loc, elemPtrTye, allocatedPtr));
+
+    auto zero = rewriter.create<mlir::LLVM::ConstantOp>(
+        loc, llvmIndexType, rewriter.getIntegerAttr(llvmIndexType, 0));
+
+    memrefDesc.setOffset(rewriter, loc, zero);
+    for (auto i : llvm::seq(0u, static_cast<unsigned>(shape.size()))) {
+      memrefDesc.setSize(rewriter, loc, i, shape[i]);
+      memrefDesc.setStride(rewriter, loc, i, strides[i]);
+    }
+
+    mlir::Value resMemref = memrefDesc;
+    rewriter.replaceOp(allocOp, resMemref);
+
+    return mlir::success();
+  }
+};
 /// A rewrite pattern to convert gpu.dealloc operations into a GPU runtime
 /// call. Currently it supports CUDA and ROCm (HIP).
 class ConvertDeallocOpToGpuRuntimeCallPattern
@@ -282,98 +304,19 @@ public:
 private:
   mlir::LogicalResult
   matchAndRewrite(gpux::DeallocOp deallocOp, OpAdaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override;
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    mlir::Location loc = deallocOp.getLoc();
+
+    mlir::Value pointer =
+        mlir::MemRefDescriptor(adaptor.getMemref()).allocatedPtr(rewriter, loc);
+    auto casted =
+        rewriter.create<mlir::LLVM::BitcastOp>(loc, llvmPointerType, pointer);
+    auto res = deallocCallBuilder.create(loc, rewriter,
+                                         {adaptor.getGpuxStream(), casted});
+    rewriter.replaceOp(deallocOp, res.getResults());
+    return mlir::success();
+  }
 };
-
-// Returns whether all operands are of LLVM type.
-static mlir::LogicalResult
-areAllLLVMTypes(mlir::Operation *op, mlir::ValueRange operands,
-                mlir::ConversionPatternRewriter &rewriter) {
-  if (!llvm::all_of(operands, [](mlir::Value value) {
-        return mlir::LLVM::isCompatibleType(value.getType());
-      }))
-    return rewriter.notifyMatchFailure(
-        op, "Cannot convert if operands aren't of LLVM type.");
-  return mlir::success();
-}
-
-static mlir::LogicalResult
-isAsyncWithOneDependency(mlir::ConversionPatternRewriter &rewriter,
-                         mlir::gpu::AsyncOpInterface op) {
-  if (op.getAsyncDependencies().size() != 1)
-    return rewriter.notifyMatchFailure(
-        op, "Can only convert with exactly one async dependency.");
-
-  if (!op.getAsyncToken())
-    return rewriter.notifyMatchFailure(op, "Can convert only async version.");
-
-  return mlir::success();
-}
-
-mlir::LogicalResult ConvertAllocOpToGpuRuntimeCallPattern::matchAndRewrite(
-    gpux::AllocOp allocOp, OpAdaptor adaptor,
-    mlir::ConversionPatternRewriter &rewriter) const {
-  if (adaptor.getHostShared())
-    return rewriter.notifyMatchFailure(
-        allocOp, "host_shared allocation is not supported");
-
-  mlir::MemRefType memRefType = allocOp.getType();
-
-  if (failed(areAllLLVMTypes(allocOp, adaptor.getOperands(), rewriter)) ||
-      !isConvertibleAndHasIdentityMaps(memRefType) ||
-      failed(isAsyncWithOneDependency(rewriter, allocOp)))
-    return mlir::failure();
-
-  auto loc = allocOp.getLoc();
-
-  // Get shape of the memref as values: static sizes are constant
-  // values and dynamic sizes are passed to 'alloc' as operands.
-  mlir::SmallVector<mlir::Value, 4> shape;
-  mlir::SmallVector<mlir::Value, 4> strides;
-  mlir::Value sizeBytes;
-  getMemRefDescriptorSizes(loc, memRefType, adaptor.getDynamicSizes(), rewriter,
-                           shape, strides, sizeBytes);
-
-  // Allocate the underlying buffer and store a pointer to it in the MemRef
-  // descriptor.
-  mlir::Type elementPtrType = this->getElementPtrType(memRefType);
-  auto stream = adaptor.getAsyncDependencies().front();
-  mlir::Value allocatedPtr =
-      allocCallBuilder.create(loc, rewriter, {sizeBytes, stream}).getResult();
-  allocatedPtr =
-      rewriter.create<mlir::LLVM::BitcastOp>(loc, elementPtrType, allocatedPtr);
-
-  // No alignment.
-  mlir::Value alignedPtr = allocatedPtr;
-
-  // Create the MemRef descriptor.
-  auto memRefDescriptor = this->createMemRefDescriptor(
-      loc, memRefType, allocatedPtr, alignedPtr, shape, strides, rewriter);
-
-  rewriter.replaceOp(allocOp, {memRefDescriptor, stream});
-
-  return mlir::success();
-}
-
-mlir::LogicalResult ConvertDeallocOpToGpuRuntimeCallPattern::matchAndRewrite(
-    gpux::DeallocOp deallocOp, OpAdaptor adaptor,
-    mlir::ConversionPatternRewriter &rewriter) const {
-  if (failed(areAllLLVMTypes(deallocOp, adaptor.getOperands(), rewriter)) ||
-      failed(isAsyncWithOneDependency(rewriter, deallocOp)))
-    return mlir::failure();
-
-  mlir::Location loc = deallocOp.getLoc();
-
-  mlir::Value pointer =
-      mlir::MemRefDescriptor(adaptor.getMemref()).allocatedPtr(rewriter, loc);
-  auto casted =
-      rewriter.create<mlir::LLVM::BitcastOp>(loc, llvmPointerType, pointer);
-  mlir::Value stream = adaptor.getAsyncDependencies().front();
-  deallocCallBuilder.create(loc, rewriter, {casted, stream});
-
-  rewriter.replaceOp(deallocOp, {stream});
-  return mlir::success();
-}
 
 mlir::Value getStream(mlir::OpBuilder &builder) {
   auto func =
@@ -755,14 +698,14 @@ void populateGpuxToLLVMPatternsAndLegality(mlir::LLVMTypeConverter &converter,
   patterns.insert<
       // clang-format off
     ConvertGpuStreamCreatePattern,
-    ConvertGpuStreamDestroyPattern
+    ConvertGpuStreamDestroyPattern,
+    ConvertAllocOpToGpuRuntimeCallPattern,
+    ConvertDeallocOpToGpuRuntimeCallPattern
   //   ConvertGpuModuleLoadPattern,
   //   ConvertGpuModuleDestroyPattern,
   //   ConvertGpuKernelGetPattern,
   //   ConvertGpuKernelDestroyPattern,
   //   ConvertGpuKernelLaunchPattern,
-  //  ConvertAllocOpToGpuRuntimeCallPattern
-  //   ConvertGpuDeAllocPattern
       // clang-format on
       >(converter);
 
