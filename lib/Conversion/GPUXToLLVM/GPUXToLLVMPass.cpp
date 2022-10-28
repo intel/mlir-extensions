@@ -205,23 +205,10 @@ protected:
           llvmPointerType, /* void *stream */
           llvmPointerType  /* void *ptr */
       }};
-
-  FunctionCallBuilder memcpyCallBuilder = {
-      "gpuMemcpy",
-      llvmVoidType,
-      {llvmPointerType /* void *dst */, llvmPointerType /* void *src */,
-       llvmIndexType /* intptr_t sizeBytes */,
-       llvmPointerType /* void *stream */}};
-  FunctionCallBuilder memsetCallBuilder = {
-      "gpuMemset32",
-      llvmVoidType,
-      {llvmPointerType /* void *dst */, llvmInt32Type /* unsigned int value */,
-       llvmIndexType /* intptr_t sizeBytes */,
-       llvmPointerType /* void *stream */}};
 };
 
 /// A rewrite pattern to convert gpux.alloc operations into a GPU runtime
-/// call. Currently it supports CUDA and ROCm (HIP).
+/// call.
 class ConvertAllocOpToGpuRuntimeCallPattern
     : public ConvertOpToGpuRuntimeCallPattern<gpux::AllocOp> {
 public:
@@ -292,8 +279,9 @@ private:
     return mlir::success();
   }
 };
+
 /// A rewrite pattern to convert gpu.dealloc operations into a GPU runtime
-/// call. Currently it supports CUDA and ROCm (HIP).
+/// call.
 class ConvertDeallocOpToGpuRuntimeCallPattern
     : public ConvertOpToGpuRuntimeCallPattern<gpux::DeallocOp> {
 public:
@@ -337,12 +325,11 @@ mlir::Value getStream(mlir::OpBuilder &builder) {
 }
 
 /// A rewrite patter to convert gpu.launch_func operations into a sequence of
-/// GPU runtime calls. Currently it supports CUDA and ROCm (HIP).
-///
+/// GPU runtime calls.
 /// In essence, a gpu.launch_func operations gets compiled into the following
 /// sequence of runtime calls:
 ///
-/// * moduleLoad        -- loads the module given the cubin / hsaco data
+/// * moduleLoad        -- loads the module given the spirv data
 /// * moduleGetFunction -- gets a handle to the actual kernel function
 /// * getStreamHelper   -- initializes a new compute stream on GPU
 /// * launchKernel      -- launches the kernel on a stream
@@ -572,34 +559,6 @@ private:
   }
 }; // namespace
 
-/// A rewrite pattern to convert gpu.memcpy operations into a GPU runtime
-/// call. Currently it supports CUDA and ROCm (HIP).
-class ConvertMemcpyOpToGpuRuntimeCallPattern
-    : public ConvertOpToGpuRuntimeCallPattern<gpux::MemcpyOp> {
-public:
-  ConvertMemcpyOpToGpuRuntimeCallPattern(mlir::LLVMTypeConverter &typeConverter)
-      : ConvertOpToGpuRuntimeCallPattern<gpux::MemcpyOp>(typeConverter) {}
-
-private:
-  mlir::LogicalResult
-  matchAndRewrite(gpux::MemcpyOp memcpyOp, OpAdaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override;
-};
-
-/// A rewrite pattern to convert gpu.memset operations into a GPU runtime
-/// call. Currently it supports CUDA and ROCm (HIP).
-class ConvertMemsetOpToGpuRuntimeCallPattern
-    : public ConvertOpToGpuRuntimeCallPattern<gpux::MemsetOp> {
-public:
-  ConvertMemsetOpToGpuRuntimeCallPattern(mlir::LLVMTypeConverter &typeConverter)
-      : ConvertOpToGpuRuntimeCallPattern<gpux::MemsetOp>(typeConverter) {}
-
-private:
-  mlir::LogicalResult
-  matchAndRewrite(gpux::MemsetOp memsetOp, OpAdaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override;
-};
-
 class ConvertGpuStreamCreatePattern
     : public ConvertOpToGpuRuntimeCallPattern<gpux::CreateStreamOp> {
 public:
@@ -701,10 +660,6 @@ void populateGpuxToLLVMPatternsAndLegality(mlir::LLVMTypeConverter &converter,
     ConvertGpuStreamDestroyPattern,
     ConvertAllocOpToGpuRuntimeCallPattern,
     ConvertDeallocOpToGpuRuntimeCallPattern
-  //   ConvertGpuModuleLoadPattern,
-  //   ConvertGpuModuleDestroyPattern,
-  //   ConvertGpuKernelGetPattern,
-  //   ConvertGpuKernelDestroyPattern,
   //   ConvertGpuKernelLaunchPattern,
       // clang-format on
       >(converter);
