@@ -190,6 +190,10 @@ def GPUX_AllocOp
                    UnitAttr:$hostShared);
   let results = (outs Res<AnyMemRef, "", [MemAlloc]>:$memref,
                  Optional<GPU_AsyncToken>:$asyncToken);
+
+  let extraClassDeclaration = [{
+    ::mlir::MemRefType getType() { return getMemref().getType().cast<::mlir::MemRefType>(); }
+  }];
 }
 
 def GPUX_DeallocOp : GPUX_Op<"dealloc", [GPU_AsyncOpInterface]> {
@@ -200,6 +204,7 @@ def GPUX_DeallocOp : GPUX_Op<"dealloc", [GPU_AsyncOpInterface]> {
                    GPUX_StreamType:$gpux_stream,
                    Arg<AnyMemRef, "", [MemFree]>:$memref);
   let results = (outs Optional<GPU_AsyncToken>:$asyncToken);
+
 }
 
 def GPUX_WaitOp : GPUX_Op<"wait", [GPU_AsyncOpInterface]> {

@@ -172,8 +172,8 @@ protected:
       "gpuCreateStream",
       llvmPointerType, /* void *stream */
       {
-          llvmPointerType, /* void *device */
-          llvmPointerType, /* void *context */
+          llvmPointerType /* void *device */
+                          // llvmPointerType, /* void *context */
       }};
 
   FunctionCallBuilder streamDestroyCallBuilder = {
@@ -232,16 +232,16 @@ protected:
       "gpuMemAlloc",
       llvmPointerType /* void * */,
       {
-          llvmPointerType, /* void *stream */
-          llvmIndexType,   /* intptr_t sizeBytes */
+          llvmIndexType,  /* intptr_t sizeBytes */
+          llvmPointerType /* void *stream */
       }};
 
   FunctionCallBuilder deallocCallBuilder = {
       "gpuMemFree",
       llvmVoidType,
       {
-          llvmPointerType, /* void *stream */
-          llvmPointerType  /* void *ptr */
+          llvmPointerType, /* void *ptr */
+          llvmPointerType  /* void *stream */
       }};
 
   FunctionCallBuilder memcpyCallBuilder = {
@@ -285,6 +285,96 @@ private:
   matchAndRewrite(gpux::DeallocOp deallocOp, OpAdaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override;
 };
+
+// Returns whether all operands are of LLVM type.
+static mlir::LogicalResult
+areAllLLVMTypes(mlir::Operation *op, mlir::ValueRange operands,
+                mlir::ConversionPatternRewriter &rewriter) {
+  if (!llvm::all_of(operands, [](mlir::Value value) {
+        return mlir::LLVM::isCompatibleType(value.getType());
+      }))
+    return rewriter.notifyMatchFailure(
+        op, "Cannot convert if operands aren't of LLVM type.");
+  return mlir::success();
+}
+
+static mlir::LogicalResult
+isAsyncWithOneDependency(mlir::ConversionPatternRewriter &rewriter,
+                         mlir::gpu::AsyncOpInterface op) {
+  if (op.getAsyncDependencies().size() != 1)
+    return rewriter.notifyMatchFailure(
+        op, "Can only convert with exactly one async dependency.");
+
+  if (!op.getAsyncToken())
+    return rewriter.notifyMatchFailure(op, "Can convert only async version.");
+
+  return mlir::success();
+}
+
+mlir::LogicalResult ConvertAllocOpToGpuRuntimeCallPattern::matchAndRewrite(
+    gpux::AllocOp allocOp, OpAdaptor adaptor,
+    mlir::ConversionPatternRewriter &rewriter) const {
+  if (adaptor.getHostShared())
+    return rewriter.notifyMatchFailure(
+        allocOp, "host_shared allocation is not supported");
+
+  mlir::MemRefType memRefType = allocOp.getType();
+
+  if (failed(areAllLLVMTypes(allocOp, adaptor.getOperands(), rewriter)) ||
+      !isConvertibleAndHasIdentityMaps(memRefType) ||
+      failed(isAsyncWithOneDependency(rewriter, allocOp)))
+    return mlir::failure();
+
+  auto loc = allocOp.getLoc();
+
+  // Get shape of the memref as values: static sizes are constant
+  // values and dynamic sizes are passed to 'alloc' as operands.
+  mlir::SmallVector<mlir::Value, 4> shape;
+  mlir::SmallVector<mlir::Value, 4> strides;
+  mlir::Value sizeBytes;
+  getMemRefDescriptorSizes(loc, memRefType, adaptor.getDynamicSizes(), rewriter,
+                           shape, strides, sizeBytes);
+
+  // Allocate the underlying buffer and store a pointer to it in the MemRef
+  // descriptor.
+  mlir::Type elementPtrType = this->getElementPtrType(memRefType);
+  auto stream = adaptor.getAsyncDependencies().front();
+  mlir::Value allocatedPtr =
+      allocCallBuilder.create(loc, rewriter, {sizeBytes, stream}).getResult();
+  allocatedPtr =
+      rewriter.create<mlir::LLVM::BitcastOp>(loc, elementPtrType, allocatedPtr);
+
+  // No alignment.
+  mlir::Value alignedPtr = allocatedPtr;
+
+  // Create the MemRef descriptor.
+  auto memRefDescriptor = this->createMemRefDescriptor(
+      loc, memRefType, allocatedPtr, alignedPtr, shape, strides, rewriter);
+
+  rewriter.replaceOp(allocOp, {memRefDescriptor, stream});
+
+  return mlir::success();
+}
+
+mlir::LogicalResult ConvertDeallocOpToGpuRuntimeCallPattern::matchAndRewrite(
+    gpux::DeallocOp deallocOp, OpAdaptor adaptor,
+    mlir::ConversionPatternRewriter &rewriter) const {
+  if (failed(areAllLLVMTypes(deallocOp, adaptor.getOperands(), rewriter)) ||
+      failed(isAsyncWithOneDependency(rewriter, deallocOp)))
+    return mlir::failure();
+
+  mlir::Location loc = deallocOp.getLoc();
+
+  mlir::Value pointer =
+      mlir::MemRefDescriptor(adaptor.getMemref()).allocatedPtr(rewriter, loc);
+  auto casted =
+      rewriter.create<mlir::LLVM::BitcastOp>(loc, llvmPointerType, pointer);
+  mlir::Value stream = adaptor.getAsyncDependencies().front();
+  deallocCallBuilder.create(loc, rewriter, {casted, stream});
+
+  rewriter.replaceOp(deallocOp, {stream});
+  return mlir::success();
+}
 
 mlir::Value getStream(mlir::OpBuilder &builder) {
   auto func =
@@ -583,10 +673,28 @@ private:
     if (!mod)
       return mlir::failure();
 
+    auto device = adaptor.getDevice();
+
     auto loc = op.getLoc();
-    auto res = streamCreateCallBuilder.create(
-        loc, rewriter, {adaptor.getDevice(), adaptor.getContext()});
-    rewriter.replaceOp(op, res.getResult());
+
+    mlir::Value data;
+    // if (device) {
+    //   llvm::SmallString<64> name = device.getValue();
+    //   name.push_back('\0');
+
+    //   auto varName = getUniqueLLVMGlobalName(mod, "device_name");
+    //   data = mlir::LLVM::createGlobalString(loc, rewriter, varName, name,
+    //                                         mlir::LLVM::Linkage::Internal);
+    // } else {
+    data = rewriter.create<mlir::LLVM::NullOp>(loc, llvmPointerType);
+    // }
+
+    auto res = streamCreateCallBuilder.create(loc, rewriter, {data});
+    rewriter.replaceOp(op, res.getResults());
+
+    // auto res = streamCreateCallBuilder.create(
+    //     loc, rewriter, {adaptor.getDevice(), adaptor.getContext()});
+    // rewriter.replaceOp(op, res.getResult());
     return mlir::success();
   }
 };
@@ -665,14 +773,14 @@ void populateGpuxToLLVMPatternsAndLegality(mlir::LLVMTypeConverter &converter,
 
   patterns.insert<
       // clang-format off
-    ConvertGpuStreamCreatePattern
+    ConvertGpuStreamCreatePattern,
   // ConvertGpuStreamDestroyPattern
   //   ConvertGpuModuleLoadPattern,
   //   ConvertGpuModuleDestroyPattern,
   //   ConvertGpuKernelGetPattern,
   //   ConvertGpuKernelDestroyPattern,
   //   ConvertGpuKernelLaunchPattern,
-  //   ConvertGpuAllocPattern,
+    ConvertAllocOpToGpuRuntimeCallPattern
   //   ConvertGpuDeAllocPattern
       // clang-format on
       >(converter);
