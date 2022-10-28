@@ -668,7 +668,6 @@ private:
   matchAndRewrite(gpux::CreateStreamOp op,
                   gpux::CreateStreamOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    std::cout << "IN ConvertGpuStreamCreatePattern " << std::endl;
     auto mod = op->getParentOfType<mlir::ModuleOp>();
     if (!mod)
       return mlir::failure();
@@ -677,7 +676,6 @@ private:
 
     auto res = streamCreateCallBuilder.create(loc, rewriter, {});
     rewriter.replaceOp(op, res.getResults());
-    std::cout << "OUT ConvertGpuStreamCreatePattern " << std::endl;
     return mlir::success();
   }
 };
@@ -694,7 +692,6 @@ private:
                   gpux::DestroyStreamOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    std::cout << "IN ConvertGpuStreamDestroyPattern " << std::endl;
     auto res =
         streamDestroyCallBuilder.create(loc, rewriter, adaptor.getGpuxStream());
     rewriter.replaceOp(op, res.getResults());
