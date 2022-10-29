@@ -506,7 +506,7 @@ imex::ntensor::CastOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
     if (parentSource.getType() == getType())
       return parentSource;
 
-    current = parent;
+    current = parentSource;
   }
   return nullptr;
 }
