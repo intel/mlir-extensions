@@ -158,9 +158,9 @@ jobs:
             -DLLVM_ENABLE_RTTI=ON                                          \
             -DLLVM_USE_LINKER=gold                                         \
             -DLLVM_INSTALL_UTILS=ON                                        \
-            -LLVM_TARGETS_TO_BUILD=x86                                     \
-            -LLVM_ENABLE_BINDINGS=OFF                                      \
-            -LLVM_BUILD_TOOLS=OFF                                          \
+            -DLLVM_TARGETS_TO_BUILD=x86                                    \
+            -DLLVM_ENABLE_BINDINGS=OFF                                     \
+            -DLLVM_BUILD_TOOLS=OFF                                         \
             -DLLVM_ENABLE_ZSTD=OFF                                         \
             -DCMAKE_INSTALL_PREFIX=/home/runner/work/llvm-mlir/_mlir_install || exit 1
           cmake --build . -j ${np} || exit 1
