@@ -29,6 +29,7 @@
 #include "imex/Conversion/NtensorToMemref.hpp"
 #include "imex/Conversion/SCFToAffine/SCFToAffine.h"
 #include "imex/Dialect/gpu_runtime/Transforms/MakeBarriersUniform.hpp"
+#include "imex/Dialect/ntensor/Transforms/PropagateEnvironment.hpp"
 #include "imex/Dialect/ntensor/Transforms/ResolveArrayOps.hpp"
 #include "imex/Transforms/ExpandTuple.hpp"
 #include "imex/Transforms/MakeSignless.hpp"
@@ -120,6 +121,12 @@ static mlir::PassPipelineRegistration<> ntensorResolveArrayOps(
     "ntensor-resolve-array-ops", "Resolve ntensor array ops into primitive ops",
     [](mlir::OpPassManager &pm) {
       pm.addPass(imex::ntensor::createResolveArrayOpsPass());
+    });
+
+static mlir::PassPipelineRegistration<> ntensorPropagateEnv(
+    "ntensor-propagate-env", "Propagate ntensor environment",
+    [](mlir::OpPassManager &pm) {
+      pm.addPass(imex::ntensor::createPropagateEnvironmentPass());
     });
 
 static mlir::PassPipelineRegistration<>

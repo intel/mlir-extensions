@@ -1,0 +1,238 @@
+// Copyright 2022 Intel Corporation
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "imex/Dialect/ntensor/Transforms/PropagateEnvironment.hpp"
+
+#include "imex/Dialect/ntensor/IR/NTensorOps.hpp"
+
+#include <llvm/Support/Debug.h>
+#include <mlir/Analysis/DataFlow/DeadCodeAnalysis.h>
+#include <mlir/Analysis/DataFlow/SparseAnalysis.h>
+#include <mlir/Pass/Pass.h>
+
+#define DEBUG_TYPE "env-propagation"
+
+namespace {
+static bool needPropagation(mlir::Operation *op) {
+  assert(op && "Invalid op");
+  return mlir::isa<imex::ntensor::PrimitiveOp, imex::ntensor::CastOp>(op);
+}
+
+static llvm::Optional<mlir::Attribute> getTensorEnv(mlir::Value val) {
+  if (auto tensor = val.getType().dyn_cast<imex::ntensor::NTensorType>())
+    return tensor.getEnvironment();
+
+  return llvm::None;
+}
+
+class EnvValue {
+public:
+  /// Create an underlying value state with a known underlying value.
+  explicit EnvValue(mlir::Optional<mlir::Attribute> env_ = llvm::None)
+      : env(std::move(env_)) {}
+
+  /// Whether the state is uninitialized.
+  bool isUninitialized() const { return !env.has_value(); }
+
+  /// Returns the underlying value.
+  mlir::Attribute getEnv() const {
+    assert(!isUninitialized());
+    return *env;
+  }
+
+  /// Join two underlying values. If there are conflicting underlying values,
+  /// go to the pessimistic value.
+  static EnvValue join(const EnvValue &lhs, const EnvValue &rhs) {
+    if (lhs.isUninitialized())
+      return rhs;
+    if (rhs.isUninitialized())
+      return lhs;
+    if (!lhs.getEnv())
+      return rhs;
+    if (!rhs.getEnv())
+      return lhs;
+    return lhs.env == rhs.env ? lhs : EnvValue();
+  }
+
+  /// Compare underlying values.
+  bool operator==(const EnvValue &rhs) const { return env == rhs.env; }
+
+  void print(llvm::raw_ostream &os) const { os << env; }
+
+private:
+  mlir::Optional<mlir::Attribute> env;
+};
+
+inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
+                                     const EnvValue &state) {
+  state.print(os);
+  return os;
+}
+
+struct EnvValueLattice : public mlir::dataflow::Lattice<EnvValue> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(EnvValueLattice)
+  using Lattice::Lattice;
+};
+
+class EnvValueAnalysis
+    : public mlir::dataflow::SparseDataFlowAnalysis<EnvValueLattice> {
+public:
+  using SparseDataFlowAnalysis::SparseDataFlowAnalysis;
+
+  /// The underlying value of the results of an operation are not known.
+  void visitOperation(mlir::Operation *op,
+                      llvm::ArrayRef<const EnvValueLattice *> operands,
+                      llvm::ArrayRef<EnvValueLattice *> results) override {
+    LLVM_DEBUG(llvm::dbgs()
+               << "EnvValueAnalysis: Visiting operation: " << *op << "\n");
+
+    if (!needPropagation(op))
+      return setAllToEntryStates(results);
+
+    assert(operands.size() == op->getNumOperands() && "Invalid operands count");
+    EnvValue env(mlir::Attribute{});
+    for (auto [argLattice, origArg] : llvm::zip(operands, op->getOperands())) {
+      if (auto tensorEnv = getTensorEnv(origArg)) {
+        auto &latticeVal = argLattice->getValue();
+        if (!latticeVal.isUninitialized())
+          env = EnvValue::join(env, latticeVal);
+
+        env = EnvValue::join(env, EnvValue(tensorEnv));
+      }
+    }
+
+    assert(results.size() == op->getNumResults() && "Invalid results count");
+    for (auto result : op->getResults()) {
+      if (auto tensorEnv = getTensorEnv(result))
+        env = EnvValue::join(env, EnvValue(tensorEnv));
+    }
+
+    LLVM_DEBUG(llvm::dbgs()
+               << "EnvValueAnalysis: Operation deduced env: " << env << "\n");
+
+    for (auto [resultLattice, result] : llvm::zip(results, op->getResults())) {
+      if (getTensorEnv(result)) {
+        auto changed = resultLattice->join(env);
+        propagateIfChanged(resultLattice, changed);
+      }
+    }
+  }
+
+  /// At an entry point, the underlying value of a value is itself.
+  void setToEntryState(EnvValueLattice *lattice) override {
+    propagateIfChanged(lattice, lattice->join(EnvValue{}));
+  }
+};
+
+struct PropagateEnvironmentPass
+    : public mlir::PassWrapper<PropagateEnvironmentPass,
+                               mlir::OperationPass<void>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(PropagateEnvironmentPass)
+
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<imex::ntensor::NTensorDialect>();
+  }
+
+  void runOnOperation() override {
+    auto *root = getOperation();
+
+    mlir::DataFlowSolver solver;
+    solver.load<mlir::dataflow::DeadCodeAnalysis>();
+    solver.load<EnvValueAnalysis>();
+    if (mlir::failed(solver.initializeAndRun(root)))
+      return signalPassFailure();
+
+    llvm::SmallVector<std::pair<mlir::Operation *, mlir::Attribute>, 0>
+        opsToProcess;
+    root->walk([&](mlir::Operation *op) {
+      if (!needPropagation(op))
+        return;
+
+      mlir::Attribute env;
+      for (auto args : {mlir::ValueRange(op->getOperands()),
+                        mlir::ValueRange(op->getResults())}) {
+        for (auto arg : args) {
+          auto *state = solver.lookupState<EnvValueLattice>(arg);
+          assert(state && "Invalid state");
+          auto &val = state->getValue();
+          if (val.isUninitialized()) {
+            op->emitError("Cannot deduce environment type");
+            return;
+          }
+
+          if (auto newEnv = val.getEnv()) {
+            if (!env) {
+              env = newEnv;
+            } else if (env != newEnv) {
+              op->emitError("Enviroment type conflict: ")
+                  << env << " " << newEnv;
+              return;
+            }
+          }
+        }
+      }
+
+      opsToProcess.emplace_back(op, env);
+    });
+
+    mlir::OpBuilder builder(&getContext());
+    for (auto [op, env] : opsToProcess) {
+      assert(op);
+      if (mlir::isa<imex::ntensor::CastOp>(op))
+        continue;
+
+      auto loc = op->getLoc();
+      builder.setInsertionPoint(op);
+      for (auto &operand : op->getOpOperands()) {
+        auto arg = operand.get();
+        auto tensor = arg.getType().dyn_cast<imex::ntensor::NTensorType>();
+        if (!tensor)
+          continue;
+
+        if (tensor.getEnvironment() == env)
+          continue;
+
+        auto newType = imex::ntensor::NTensorType::get(tensor.getShape(),
+                                                       tensor.getElementType(),
+                                                       env, tensor.getLayout());
+        mlir::Value newVal =
+            builder.createOrFold<imex::ntensor::CastOp>(loc, newType, arg);
+        operand.set(newVal);
+      }
+
+      builder.setInsertionPointAfter(op);
+      for (auto res : op->getResults()) {
+        auto tensor = res.getType().dyn_cast<imex::ntensor::NTensorType>();
+        if (!tensor)
+          continue;
+
+        if (tensor.getEnvironment() == env)
+          continue;
+
+        auto newType = imex::ntensor::NTensorType::get(tensor.getShape(),
+                                                       tensor.getElementType(),
+                                                       env, tensor.getLayout());
+        res.setType(newType);
+        auto newRes = builder.create<imex::ntensor::CastOp>(loc, tensor, res);
+        res.replaceAllUsesExcept(newRes.getResult(), newRes);
+      }
+    }
+  }
+};
+} // namespace
+
+std::unique_ptr<mlir::Pass> imex::ntensor::createPropagateEnvironmentPass() {
+  return std::make_unique<PropagateEnvironmentPass>();
+}
