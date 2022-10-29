@@ -158,7 +158,7 @@ jobs:
             -DLLVM_ENABLE_RTTI=ON                                          \
             -DLLVM_USE_LINKER=gold                                         \
             -DLLVM_INSTALL_UTILS=ON                                        \
-            -DLLVM_TARGETS_TO_BUILD=x86                                    \
+            -DLLVM_TARGETS_TO_BUILD=X86                                    \
             -DLLVM_ENABLE_BINDINGS=OFF                                     \
             -DLLVM_BUILD_TOOLS=OFF                                         \
             -DLLVM_ENABLE_ZSTD=OFF                                         \
