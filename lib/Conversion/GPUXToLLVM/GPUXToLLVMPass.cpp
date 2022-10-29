@@ -520,8 +520,6 @@ private:
         adaptor.getDynamicSharedMemorySize()
             ? adaptor.getDynamicSharedMemorySize()
             : zero;
-    std::cout << "IN ConvertLaunchFuncOpToGpuRuntimeCallPattern 3 "
-              << std::endl;
     launchKernelCallBuilder.create(
         loc, rewriter,
         {adaptor.getGpuxStream(), function->getResult(0),
@@ -529,13 +527,8 @@ private:
          adaptor.getBlockSizeX(), adaptor.getBlockSizeY(),
          adaptor.getBlockSizeZ(), dynamicSharedMemorySize, paramsArrayVoidPtr});
 
-    std::cout << "IN ConvertLaunchFuncOpToGpuRuntimeCallPattern 4 "
-              << std::endl;
-
     waitCallBuilder.create(loc, rewriter, adaptor.getGpuxStream());
     rewriter.eraseOp(launchOp);
-    // moduleUnloadCallBuilder.create(loc, rewriter, module->getResult(0));
-    std::cout << "SUCCESS " << std::endl;
     return mlir::success();
   }
 }; // namespace imex
