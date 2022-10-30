@@ -122,10 +122,6 @@ protected:
       context, {llvmPointerType, llvmIndexType});
   mlir::Type llvmRangePointerType =
       mlir::LLVM::LLVMPointerType::get(llvmRangeType);
-  mlir::Type llvmAllocResType = mlir::LLVM::LLVMStructType::getLiteral(
-      context, {llvmPointerType, llvmPointerType, llvmPointerType});
-  mlir::Type llvmAllocResPtrType =
-      mlir::LLVM::LLVMPointerType::get(llvmAllocResType);
   //// ----
 
   FunctionCallBuilder moduleLoadCallBuilder = {
@@ -162,7 +158,7 @@ protected:
           llvmIndexType,       /* intptr_t blockXDim */
           llvmIndexType,       /* intptr_t blockYDim */
           llvmIndexType,       /* intptr_t blockZDim */
-          llvmInt64Type,       /* unsigned int sharedMemBytes */
+          llvmInt32Type,       /* unsigned int sharedMemBytes */
           llvmRangePointerType /* Params */
       }};
 
@@ -413,7 +409,7 @@ private:
     auto paramsArrayPtrType = mlir::LLVM::LLVMPointerType::get(paramsArrayType);
 
     auto getKernelParamType = [&](unsigned i) -> mlir::Type {
-      if (launchOp.getOperands()[i].getType().isa<mlir::MemRefType>()) {
+      if (launchOp.getKernelOperands()[i].getType().isa<mlir::MemRefType>()) {
         mlir::MemRefDescriptor desc(kernelParams[i]);
         return desc.getElementPtrType();
       }
@@ -515,7 +511,7 @@ private:
     auto paramsArrayVoidPtr = rewriter.create<mlir::LLVM::BitcastOp>(
         loc, llvmRangePointerType, paramsArrayPtr);
     auto zero = rewriter.create<mlir::LLVM::ConstantOp>(
-        loc, llvmIndexType, rewriter.getIntegerAttr(llvmIndexType, 0));
+        loc, llvmInt32Type, rewriter.getI32IntegerAttr(0));
     mlir::Value dynamicSharedMemorySize =
         adaptor.getDynamicSharedMemorySize()
             ? adaptor.getDynamicSharedMemorySize()
