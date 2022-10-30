@@ -64,43 +64,47 @@ void GPUXToSPIRVPass::runOnOperation() {
     gpuModules.push_back(builder.clone(*moduleOp.getOperation()));
   });
 
-  // Map MemRef memory space to SPIR-V storage class first if requested.
-  if (mapMemorySpace) {
+  for (auto gpuModule : gpuModules) {
+
+    // Map MemRef memory space to SPIR-V storage class first if requested.
+    if (mapMemorySpace) {
+      std::unique_ptr<mlir::ConversionTarget> target =
+          mlir::spirv::getMemorySpaceToStorageClassTarget(*context);
+      mlir::spirv::MemorySpaceToStorageClassMap memorySpaceMap =
+          mlir::spirv::mapMemorySpaceToVulkanStorageClass;
+      mlir::spirv::MemorySpaceToStorageClassConverter converter(memorySpaceMap);
+
+      mlir::RewritePatternSet patterns(context);
+      mlir::spirv::populateMemorySpaceToStorageClassPatterns(converter,
+                                                             patterns);
+
+      if (failed(applyFullConversion(gpuModule, *target, std::move(patterns))))
+        return signalPassFailure();
+    }
+
+    auto targetAttr = mlir::spirv::lookupTargetEnvOrDefault(gpuModule);
     std::unique_ptr<mlir::ConversionTarget> target =
-        mlir::spirv::getMemorySpaceToStorageClassTarget(*context);
-    mlir::spirv::MemorySpaceToStorageClassMap memorySpaceMap =
-        mlir::spirv::mapMemorySpaceToVulkanStorageClass;
-    mlir::spirv::MemorySpaceToStorageClassConverter converter(memorySpaceMap);
+        mlir::SPIRVConversionTarget::get(targetAttr);
 
+    mlir::SPIRVTypeConverter typeConverter(targetAttr);
     mlir::RewritePatternSet patterns(context);
-    mlir::spirv::populateMemorySpaceToStorageClassPatterns(converter, patterns);
 
-    if (failed(applyFullConversion(gpuModules, *target, std::move(patterns))))
+    //------- Upstream Conversion------------
+    mlir::populateGPUToSPIRVPatterns(typeConverter, patterns);
+    mlir::arith::populateArithToSPIRVPatterns(typeConverter, patterns);
+    mlir::populateMemRefToSPIRVPatterns(typeConverter, patterns);
+    mlir::populateFuncToSPIRVPatterns(typeConverter, patterns);
+    // ---------------------------------------
+
+    // IMEX GPUToSPIRV extension
+    mlir::ScfToSPIRVContext scfToSpirvCtx;
+    mlir::populateSCFToSPIRVPatterns(typeConverter, scfToSpirvCtx, patterns);
+    mlir::cf::populateControlFlowToSPIRVPatterns(typeConverter, patterns);
+    mlir::populateMathToSPIRVPatterns(typeConverter, patterns);
+
+    if (failed(applyFullConversion(gpuModule, *target, std::move(patterns))))
       return signalPassFailure();
   }
-
-  auto targetAttr = mlir::spirv::lookupTargetEnvOrDefault(module);
-  std::unique_ptr<mlir::ConversionTarget> target =
-      mlir::SPIRVConversionTarget::get(targetAttr);
-
-  mlir::SPIRVTypeConverter typeConverter(targetAttr);
-  mlir::RewritePatternSet patterns(context);
-
-  //------- Upstream Conversion------------
-  mlir::populateGPUToSPIRVPatterns(typeConverter, patterns);
-  mlir::arith::populateArithToSPIRVPatterns(typeConverter, patterns);
-  mlir::populateMemRefToSPIRVPatterns(typeConverter, patterns);
-  mlir::populateFuncToSPIRVPatterns(typeConverter, patterns);
-  // ---------------------------------------
-
-  // IMEX GPUToSPIRV extension
-  mlir::ScfToSPIRVContext scfToSpirvCtx;
-  mlir::populateSCFToSPIRVPatterns(typeConverter, scfToSpirvCtx, patterns);
-  mlir::cf::populateControlFlowToSPIRVPatterns(typeConverter, patterns);
-  mlir::populateMathToSPIRVPatterns(typeConverter, patterns);
-
-  if (failed(applyFullConversion(gpuModules, *target, std::move(patterns))))
-    return signalPassFailure();
 }
 
 std::unique_ptr<::mlir::OperationPass<::mlir::ModuleOp>>
