@@ -82,7 +82,7 @@ jobs:
         id: cache-llvm-mlir
         uses: actions/cache@v3
         env:
-          LLVM_CACHE_NUMBER: 2  # Increase to reset cache
+          LLVM_CACHE_NUMBER: 1  # Increase to reset cache
         with:
           path: |
             /home/runner/work/llvm-mlir/_mlir_install/**
