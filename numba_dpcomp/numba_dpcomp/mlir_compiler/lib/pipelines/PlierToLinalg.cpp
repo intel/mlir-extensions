@@ -1596,7 +1596,7 @@ struct SimplifyExpandDims
     if (!op.hasTensorSemantics())
       return mlir::failure();
 
-    if (op.getNumInputs() != 1 || op.getNumOutputs() != 1)
+    if (op.getInputs().size() != 1 || op.getOutputs().size() != 1)
       return mlir::failure();
 
     auto context = op.getContext();
@@ -1617,11 +1617,8 @@ struct SimplifyExpandDims
       return mlir::failure();
 
     bool changed = false;
-    auto outShape = op.getOutputOperand(0)
-                        ->get()
-                        .getType()
-                        .cast<mlir::RankedTensorType>()
-                        .getShape();
+    auto outShape =
+        op.getOutputs()[0].getType().cast<mlir::RankedTensorType>().getShape();
     llvm::SmallVector<mlir::AffineExpr> exprs(numDims);
     for (unsigned i = 0; i < numDims; ++i) {
       auto prevExpr = inMap.getResult(i);
