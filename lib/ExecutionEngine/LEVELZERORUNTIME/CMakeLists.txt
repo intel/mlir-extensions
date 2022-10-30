@@ -12,30 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-project(level-zero-runtime LANGUAGES CXX C)
+add_mlir_library(level-zero-runtime
+    SHARED
+    LevelZeroRuntimeWrappers.cpp
 
-include(GenerateExportHeader)
+    EXCLUDE_FROM_LIBMLIR
+  )
 
 if(NOT LEVEL_ZERO_DIR)
     message(FATAL_ERROR "LEVEL_ZERO_DIR is not set")
 endif()
 
-set(SOURCES_LIST
-    level_zero_runtime.cpp
-)
-set(HEADERS_LIST
-)
+target_compile_options (level-zero-runtime PUBLIC -fexceptions)
 
-add_library(${PROJECT_NAME} SHARED ${SOURCES_LIST} ${HEADERS_LIST})
-generate_export_header(${PROJECT_NAME})
-
-target_include_directories(${PROJECT_NAME} PRIVATE
-    ${PROJECT_BINARY_DIR}
+target_include_directories(level-zero-runtime PRIVATE
+    ${MLIR_INCLUDE_DIRS}
     ${LEVEL_ZERO_DIR}/include/
-)
+    )
 
-target_link_directories(${PROJECT_NAME} PRIVATE
+target_link_directories(level-zero-runtime PRIVATE
     ${LEVEL_ZERO_DIR}/lib
-)
+    )
 
-target_link_libraries(${PROJECT_NAME} PRIVATE ze_loader)
+target_link_libraries(level-zero-runtime PRIVATE ze_loader)

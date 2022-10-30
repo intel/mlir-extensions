@@ -22,11 +22,15 @@
 #include <tuple>
 #include <vector>
 
-#include "sycl-runtime_export.h"
-
 #include <CL/sycl.hpp>
 #include <level_zero/ze_api.h>
 #include <sycl/ext/oneapi/backend/level_zero.hpp>
+
+#ifdef _WIN32
+#define SYCL_RUNTIME_EXPORT __declspec(dllexport)
+#else
+#define SYCL_RUNTIME_EXPORT
+#endif // _WIN32
 
 namespace {
 
@@ -48,7 +52,7 @@ template <typename F> auto catchAll(F &&func) {
   {                                                                            \
     ze_result_t status = (call);                                               \
     if (status != ZE_RESULT_SUCCESS) {                                         \
-      fprintf(stdout, "L0 error  %s\n", status);                               \
+      fprintf(stdout, "L0 error  %d\n", status);                               \
       fflush(stdout);                                                          \
       abort();                                                                 \
     }                                                                          \

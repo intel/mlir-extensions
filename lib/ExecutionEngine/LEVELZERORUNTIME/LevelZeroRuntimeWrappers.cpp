@@ -23,8 +23,13 @@
 #include <tuple>
 #include <vector>
 
-#include "level-zero-runtime_export.h"
 #include <level_zero/ze_api.h>
+
+#ifdef _WIN32
+#define LEVEL_ZERO_RUNTIME_EXPORT __declspec(dllexport)
+#else
+#define LEVEL_ZERO_RUNTIME_EXPORT
+#endif // _WIN32
 
 namespace {
 

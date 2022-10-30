@@ -12,9 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-project(sycl-runtime LANGUAGES CXX C)
+add_mlir_library(sycl-runtime
+    SHARED
+    SyclRuntimeWrappers.cpp
 
-include(GenerateExportHeader)
+    EXCLUDE_FROM_LIBMLIR
+  )
 
 if(NOT SYCL_DIR)
     message(FATAL_ERROR "SYCL_DIR is not set")
@@ -24,29 +27,18 @@ if(NOT LEVEL_ZERO_DIR)
     message(FATAL_ERROR "LEVEL_ZERO_DIR is not set")
 endif()
 
-find_package(MLIR REQUIRED CONFIG)
+target_compile_options (sycl-runtime PUBLIC -fexceptions)
 
-set(SOURCES_LIST
-    sycl_runtime.cpp
-    )
-
-set(HEADERS_LIST
-    )
-
-add_library(${PROJECT_NAME} SHARED ${SOURCES_LIST} ${HEADERS_LIST})
-generate_export_header(${PROJECT_NAME})
-
-target_include_directories(${PROJECT_NAME} PRIVATE
-    ${PROJECT_BINARY_DIR}
+target_include_directories(sycl-runtime PRIVATE
     ${MLIR_INCLUDE_DIRS}
     ${SYCL_DIR}/include/
     ${SYCL_DIR}/include/sycl
     ${LEVEL_ZERO_DIR}/include/
     )
 
-target_link_directories(${PROJECT_NAME} PRIVATE
+target_link_directories(sycl-runtime PRIVATE
     ${SYCL_DIR}/lib
     ${LEVEL_ZERO_DIR}/lib
     )
 
-target_link_libraries(${PROJECT_NAME} PRIVATE ze_loader sycl)
+target_link_libraries(sycl-runtime PRIVATE ze_loader sycl)
