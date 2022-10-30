@@ -15,6 +15,8 @@
 
 #include <imex/Transforms/Passes.h>
 
+#include "mlir/Dialect/GPU/IR/GPUDialect.h"
+#include "mlir/Dialect/SPIRV/IR/SPIRVDialect.h"
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SPIRV/IR/TargetAndABI.h>
 #include <mlir/Pass/Pass.h>
@@ -53,8 +55,10 @@ struct SetSPIRVCapabilitiesPass
         triple, spirv::Vendor::Unknown, spirv::DeviceType::Unknown,
         spirv::TargetEnvAttr::kUnknownDeviceID,
         spirv::getDefaultResourceLimits(context));
-    auto module = getOperation();
-    module->setAttr(spirv::getTargetEnvAttrName(), attr);
+    auto op = getOperation();
+    op->walk([&](mlir::gpu::GPUModuleOp op) {
+      op->setAttr(spirv::getTargetEnvAttrName(), attr);
+    });
   }
 };
 
