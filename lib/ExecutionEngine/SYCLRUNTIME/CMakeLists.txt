@@ -27,7 +27,7 @@ endif()
 find_package(MLIR REQUIRED CONFIG)
 
 set(SOURCES_LIST
-    lib/sycl_runtime.cpp
+    sycl_runtime.cpp
     )
 
 set(HEADERS_LIST

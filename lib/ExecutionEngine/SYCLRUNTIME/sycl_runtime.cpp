@@ -48,8 +48,9 @@ template <typename F> auto catchAll(F &&func) {
   {                                                                            \
     ze_result_t status = (call);                                               \
     if (status != ZE_RESULT_SUCCESS) {                                         \
-      std::cout << "L0 error " << status << std::endl;                         \
-      exit(1);                                                                 \
+      fprintf(stdout, "L0 error  %s\n", status);                               \
+      fflush(stdout);                                                          \
+      abort();                                                                 \
     }                                                                          \
   }
 

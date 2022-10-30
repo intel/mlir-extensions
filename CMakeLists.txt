@@ -79,8 +79,6 @@ add_subdirectory(include)
 add_subdirectory(lib)
 add_subdirectory(tools)
 add_subdirectory(test)
-add_subdirectory(sycl_runtime)
-add_subdirectory(level_zero_runtime)
 
 option(IMEX_INCLUDE_DOCS "Generate build targets for the IMEX docs." ON)
 if (IMEX_INCLUDE_DOCS)

@@ -1,0 +1,2 @@
+add_subdirectory(LEVELZERORUNTIME)
+add_subdirectory(SYCLRUNTIME)

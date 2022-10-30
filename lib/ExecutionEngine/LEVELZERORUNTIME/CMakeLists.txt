@@ -21,7 +21,7 @@ if(NOT LEVEL_ZERO_DIR)
 endif()
 
 set(SOURCES_LIST
-    lib/level_zero_runtime.cpp
+    level_zero_runtime.cpp
 )
 set(HEADERS_LIST
 )
