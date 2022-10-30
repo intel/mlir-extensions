@@ -167,10 +167,8 @@ struct PropagateEnvironmentPass
           auto *state = solver.lookupState<EnvValueLattice>(arg);
           assert(state && "Invalid state");
           auto &val = state->getValue();
-          if (val.isUninitialized()) {
-            op->emitError("Cannot deduce environment type");
-            return;
-          }
+          if (val.isUninitialized())
+            continue;
 
           if (auto newEnv = val.getEnv()) {
             if (!env) {
@@ -178,6 +176,7 @@ struct PropagateEnvironmentPass
             } else if (env != newEnv) {
               op->emitError("Enviroment type conflict: ")
                   << env << " " << newEnv;
+              signalPassFailure();
               return;
             }
           }
