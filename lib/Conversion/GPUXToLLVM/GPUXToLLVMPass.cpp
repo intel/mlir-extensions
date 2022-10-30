@@ -164,8 +164,9 @@ protected:
 
   FunctionCallBuilder streamCreateCallBuilder = {
       "gpuCreateStream",
-      llvmPointerType, /* void *stream */
-      {}};
+      llvmPointerType,  /* void *stream */
+      {llvmPointerType, /* void *device */
+       llvmPointerType /* void *context */}};
 
   FunctionCallBuilder streamDestroyCallBuilder = {
       "gpuStreamDestroy",
@@ -546,7 +547,12 @@ private:
 
     auto loc = op.getLoc();
 
-    auto res = streamCreateCallBuilder.create(loc, rewriter, {});
+    // TODO: Pass nullptrs now for the current workflow where user is
+    // not passing device and context. Add different streambuilders
+    // later.
+    auto device = rewriter.create<mlir::LLVM::NullOp>(loc, llvmPointerType);
+    auto context = rewriter.create<mlir::LLVM::NullOp>(loc, llvmPointerType);
+    auto res = streamCreateCallBuilder.create(loc, rewriter, {device, context});
     rewriter.replaceOp(op, res.getResults());
     return mlir::success();
   }
