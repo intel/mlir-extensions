@@ -695,6 +695,8 @@ def CastOp : NTensor_OpBase<"cast", [
   let extraClassDeclaration = [{
       ::mlir::Value getViewSource() { return getSource(); }
   }];
+
+  let hasFolder = 1;
 }
 
 def FromElementsOp : NTensor_OpBase<"from_elements", [

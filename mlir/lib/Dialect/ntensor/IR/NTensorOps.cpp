@@ -498,6 +498,19 @@ mlir::LogicalResult imex::ntensor::SubviewOp::reifyResultShapes(
   return mlir::success();
 }
 
+mlir::OpFoldResult
+imex::ntensor::CastOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
+  mlir::Value current = getSource();
+  while (auto parent = current.getDefiningOp<CastOp>()) {
+    auto parentSource = parent.getSource();
+    if (parentSource.getType() == getType())
+      return parentSource;
+
+    current = parentSource;
+  }
+  return nullptr;
+}
+
 bool imex::ntensor::CastOp::areCastCompatible(mlir::TypeRange inputs,
                                               mlir::TypeRange outputs) {
   if (inputs.size() != 1 || outputs.size() != 1)

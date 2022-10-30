@@ -158,3 +158,26 @@ func.func @test(%arg1: !ntensor.ntensor<?xf32>) -> !ntensor.ntensor<?xf32> {
 // CHECK-LABEL: func @test
 //  CHECK-SAME:   (%[[ARG:.*]]: !ntensor.ntensor<?xf32>)
 //  CHECK-NEXT:   return %[[ARG]] : !ntensor.ntensor<?xf32>
+
+// -----
+
+func.func @test(%arg1: !ntensor.ntensor<?xf32>) -> !ntensor.ntensor<?xf32> {
+  %0 = ntensor.cast %arg1 : !ntensor.ntensor<?xf32> to !ntensor.ntensor<5xf32>
+  %1 = ntensor.cast %0 : !ntensor.ntensor<5xf32> to !ntensor.ntensor<?xf32>
+  return %1 : !ntensor.ntensor<?xf32>
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG:.*]]: !ntensor.ntensor<?xf32>)
+//  CHECK-NEXT:   return %[[ARG]]
+
+// -----
+
+func.func @test(%arg1: !ntensor.ntensor<?xf32>) -> !ntensor.ntensor<?xf32> {
+  %0 = ntensor.cast %arg1 : !ntensor.ntensor<?xf32> to !ntensor.ntensor<?xf32, "test1">
+  %1 = ntensor.cast %0 : !ntensor.ntensor<?xf32, "test1"> to !ntensor.ntensor<?xf32, "test2">
+  %2 = ntensor.cast %1 : !ntensor.ntensor<?xf32, "test2"> to !ntensor.ntensor<?xf32>
+  return %2 : !ntensor.ntensor<?xf32>
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG:.*]]: !ntensor.ntensor<?xf32>)
+//  CHECK-NEXT:   return %[[ARG]]
