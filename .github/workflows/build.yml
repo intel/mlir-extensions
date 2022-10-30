@@ -163,8 +163,8 @@ jobs:
             -DLLVM_BUILD_TOOLS=OFF                                         \
             -DLLVM_ENABLE_ZSTD=OFF                                         \
             -DCMAKE_INSTALL_PREFIX=/home/runner/work/llvm-mlir/_mlir_install || exit 1
-          cmake --build . -j ${np} || exit 1
-          cmake --install-distribution-stripped . || exit 1
+          cmake --build . || exit 1
+          cmake --install . || exit 1
           cp bin/FileCheck /home/runner/work/llvm-mlir/_mlir_install/bin/
           cp bin/count /home/runner/work/llvm-mlir/_mlir_install/bin/
           cp bin/not /home/runner/work/llvm-mlir/_mlir_install/bin/
