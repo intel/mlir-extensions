@@ -17,6 +17,7 @@
 #include "imex/Dialect/ntensor/IR/NTensorOps.hpp"
 
 #include <llvm/Support/Debug.h>
+#include <mlir/Analysis/DataFlow/ConstantPropagationAnalysis.h>
 #include <mlir/Analysis/DataFlow/DeadCodeAnalysis.h>
 #include <mlir/Analysis/DataFlow/SparseAnalysis.h>
 #include <mlir/Pass/Pass.h>
@@ -146,10 +147,12 @@ struct PropagateEnvironmentPass
   }
 
   void runOnOperation() override {
+    LLVM_DEBUG(llvm::dbgs() << "PropagateEnvironmentPass:\n");
     auto *root = getOperation();
 
     mlir::DataFlowSolver solver;
     solver.load<mlir::dataflow::DeadCodeAnalysis>();
+    solver.load<mlir::dataflow::SparseConstantPropagation>();
     solver.load<EnvValueAnalysis>();
     if (mlir::failed(solver.initializeAndRun(root)))
       return signalPassFailure();
