@@ -260,9 +260,6 @@ static void printAsyncDependencies(mlir::OpAsmPrinter &printer,
   printer << ']';
 }
 
-// TODO: need fix upstream.
-using namespace mlir;
-
 #include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOpsDialect.cpp.inc"
 
 #define GET_ATTRDEF_CLASSES
