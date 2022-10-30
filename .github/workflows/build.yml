@@ -145,6 +145,7 @@ jobs:
           pushd /home/runner/work/llvm-mlir
           echo "INFO: Need to rebuild LLVM-MLIR. Previous installation for MLIR not found"
           np=`nproc`
+          echo "INFO: nproc $np"
           git clone https://github.com/llvm/llvm-project || exit 1
           cd llvm-project || exit 1
           git checkout $LLVM_SHA || exit 1
@@ -162,9 +163,9 @@ jobs:
             -DLLVM_ENABLE_BINDINGS=OFF                                     \
             -DLLVM_BUILD_TOOLS=OFF                                         \
             -DLLVM_ENABLE_ZSTD=OFF                                         \
+            -DLLVM_DISTRIBUTION_COMPONENTS=llvm-headers;llvm-libraries;cmake-exports;FileCheck;count;not;mlir-headers;mlir-libraries;mlir-cmake-exports;mlir-tblgen \
             -DCMAKE_INSTALL_PREFIX=/home/runner/work/llvm-mlir/_mlir_install || exit 1
-          cmake --build . || exit 1
-          cmake --install . || exit 1
+          cmake --install-distribution-stripped . || exit 1
           cp bin/FileCheck /home/runner/work/llvm-mlir/_mlir_install/bin/
           cp bin/count /home/runner/work/llvm-mlir/_mlir_install/bin/
           cp bin/not /home/runner/work/llvm-mlir/_mlir_install/bin/
