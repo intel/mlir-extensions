@@ -25,10 +25,6 @@
 #define DEBUG_TYPE "env-propagation"
 
 namespace {
-struct alignas(8) InvalidEnv {};
-
-static const constexpr InvalidEnv invalidEnv{};
-
 static bool needPropagation(mlir::Operation *op) {
   assert(op && "Invalid op");
   return mlir::isa<imex::ntensor::PrimitiveOp, imex::ntensor::CastOp>(op);
@@ -42,18 +38,34 @@ static llvm::Optional<mlir::Attribute> getTensorEnv(mlir::Value val) {
 }
 
 class EnvValue {
+  using Storage = llvm::PointerUnion<mlir::Attribute, mlir::StringAttr>;
+
 public:
   EnvValue() = default;
 
   explicit EnvValue(mlir::Attribute env_) : env(env_) {}
 
-  explicit EnvValue(InvalidEnv) : env(&invalidEnv) {}
+  explicit EnvValue(mlir::StringAttr desc) : env(desc) {}
 
-  static EnvValue getInvalid() { return EnvValue(invalidEnv); }
+  static EnvValue getInvalid(Storage lhs, Storage rhs) {
+    auto lhsEnv = lhs.get<mlir::Attribute>();
+    assert(lhsEnv);
+    auto rhsEnv = rhs.get<mlir::Attribute>();
+    assert(rhsEnv);
+
+    std::string str;
+    llvm::raw_string_ostream os(str);
+    os << "Incompatible envs: ";
+    os << lhsEnv << " and " << rhsEnv;
+    os.flush();
+
+    auto ctx = lhsEnv.getContext();
+    return EnvValue(mlir::StringAttr::get(ctx, str));
+  }
 
   /// Whether the state is uninitialized.
   bool isUninitialized() const { return env.isNull(); }
-  bool isInvalid() const { return env.is<const InvalidEnv *>(); }
+  bool isInvalid() const { return env.is<mlir::StringAttr>(); }
 
   mlir::Attribute getEnv() const {
     assert(!isUninitialized());
@@ -61,9 +73,14 @@ public:
     return env.get<mlir::Attribute>();
   }
 
+  llvm::StringRef getInvalidReason() const {
+    assert(isInvalid());
+    return env.get<mlir::StringAttr>().getValue();
+  }
+
   static EnvValue join(const EnvValue &lhs, const EnvValue &rhs) {
     if (lhs.isInvalid() || rhs.isInvalid())
-      return getInvalid();
+      return lhs.isInvalid() ? lhs.env : rhs.env;
 
     if (lhs.isUninitialized())
       return rhs;
@@ -77,7 +94,7 @@ public:
     if (!rhs.getEnv())
       return lhs;
 
-    return lhs.env == rhs.env ? lhs : getInvalid();
+    return lhs.env == rhs.env ? lhs : getInvalid(lhs.env, rhs.env);
   }
 
   bool operator==(const EnvValue &rhs) const { return env == rhs.env; }
@@ -93,7 +110,9 @@ public:
   }
 
 private:
-  llvm::PointerUnion<mlir::Attribute, const InvalidEnv *> env;
+  EnvValue(Storage env_) : env(env_) {}
+
+  Storage env;
 };
 
 inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
@@ -196,7 +215,7 @@ struct PropagateEnvironmentPass
             continue;
 
           if (val.isInvalid()) {
-            op->emitError("Cannot infer env type");
+            op->emitError(val.getInvalidReason());
             failed = true;
             return signalPassFailure();
           }
