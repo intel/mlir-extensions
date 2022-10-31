@@ -15,6 +15,8 @@
 
 #include <imex/Transforms/Passes.h>
 
+#include "mlir/Dialect/GPU/IR/GPUDialect.h"
+#include "mlir/Dialect/SPIRV/IR/SPIRVDialect.h"
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SPIRV/IR/TargetAndABI.h>
 #include <mlir/Pass/Pass.h>
@@ -84,8 +86,10 @@ public:
           triple, spirv::Vendor::Unknown, spirv::DeviceType::Unknown,
           spirv::TargetEnvAttr::kUnknownDeviceID,
           spirv::getDefaultResourceLimits(context));
-      auto module = getOperation();
-      module->setAttr(spirv::getTargetEnvAttrName(), attr);
+      auto op = getOperation();
+      op->walk([&](mlir::gpu::GPUModuleOp op) {
+        op->setAttr(spirv::getTargetEnvAttrName(), attr);
+      });
     } else if (m_clientAPI == "vulkan") {
       auto triple = spirv::VerCapExtAttr::get(
           spirv::Version::V_1_0, caps_vulkan, exts_vulkan, context);
@@ -93,8 +97,10 @@ public:
           triple, spirv::Vendor::Unknown, spirv::DeviceType::Unknown,
           spirv::TargetEnvAttr::kUnknownDeviceID,
           spirv::getDefaultResourceLimits(context));
-      auto module = getOperation();
-      module->setAttr(spirv::getTargetEnvAttrName(), attr);
+      auto op = getOperation();
+      op->walk([&](mlir::gpu::GPUModuleOp op) {
+        op->setAttr(spirv::getTargetEnvAttrName(), attr);
+      });
     }
   }
 
