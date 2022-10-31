@@ -137,7 +137,6 @@ class EnvValueAnalysis
 public:
   using SparseDataFlowAnalysis::SparseDataFlowAnalysis;
 
-  /// The underlying value of the results of an operation are not known.
   void visitOperation(mlir::Operation *op,
                       llvm::ArrayRef<const EnvValueLattice *> operands,
                       llvm::ArrayRef<EnvValueLattice *> results) override {
