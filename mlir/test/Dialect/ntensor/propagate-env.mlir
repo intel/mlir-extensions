@@ -25,7 +25,7 @@ func.func @test(%arg1: !ntensor.ntensor<?xf32, "test">) -> !ntensor.ntensor<?xf3
 // -----
 
 // CHECK-LABEL: func @test
-//       CHECK: %[[RES1:.*]] = scf.if {{.*}} -> (!ntensor.ntensor<?xf32>)
+//       CHECK: %[[RES1:.*]] = scf.if %{{.*}} -> (!ntensor.ntensor<?xf32>)
 //       CHECK: %[[RES2:.*]] = ntensor.cast %[[RES1]] : !ntensor.ntensor<?xf32> to !ntensor.ntensor<?xf32, "test1">
 //       CHECK: %[[RES3:.*]] = ntensor.primitive "foo" (%[[RES2]]) : !ntensor.ntensor<?xf32, "test1"> -> !ntensor.ntensor<?xf32, "test1">
 //       CHECK: %[[RES4:.*]] = ntensor.cast %[[RES3]] : !ntensor.ntensor<?xf32, "test1"> to !ntensor.ntensor<?xf32>
@@ -38,6 +38,22 @@ func.func @test(%arg1: !ntensor.ntensor<?xf32, "test1">, %arg2: !ntensor.ntensor
   } else {
     scf.yield %1 : !ntensor.ntensor<?xf32>
   }
+  %4 = ntensor.primitive "foo" (%3) : !ntensor.ntensor<?xf32> -> !ntensor.ntensor<?xf32>
+  return %4 : !ntensor.ntensor<?xf32>
+}
+
+// -----
+
+// CHECK-LABEL: func @test
+//       CHECK: %[[RES1:.*]] = arith.select %{{.*}}, %{{.*}}, %{{.*}} : !ntensor.ntensor<?xf32>
+//       CHECK: %[[RES2:.*]] = ntensor.cast %[[RES1]] : !ntensor.ntensor<?xf32> to !ntensor.ntensor<?xf32, "test1">
+//       CHECK: %[[RES3:.*]] = ntensor.primitive "foo" (%[[RES2]]) : !ntensor.ntensor<?xf32, "test1"> -> !ntensor.ntensor<?xf32, "test1">
+//       CHECK: %[[RES4:.*]] = ntensor.cast %[[RES3]] : !ntensor.ntensor<?xf32, "test1"> to !ntensor.ntensor<?xf32>
+//       CHECK: return %[[RES4]]
+func.func @test(%arg1: !ntensor.ntensor<?xf32, "test1">, %arg2: !ntensor.ntensor<?xf32, "test1">, %arg3: i1) -> !ntensor.ntensor<?xf32> {
+  %0 = ntensor.cast %arg1 : !ntensor.ntensor<?xf32, "test1"> to !ntensor.ntensor<?xf32>
+  %1 = ntensor.cast %arg2 : !ntensor.ntensor<?xf32, "test1"> to !ntensor.ntensor<?xf32>
+  %3 = arith.select %arg3, %0, %1 : !ntensor.ntensor<?xf32>
   %4 = ntensor.primitive "foo" (%3) : !ntensor.ntensor<?xf32> -> !ntensor.ntensor<?xf32>
   return %4 : !ntensor.ntensor<?xf32>
 }

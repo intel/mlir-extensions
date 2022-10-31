@@ -20,14 +20,20 @@
 #include <mlir/Analysis/DataFlow/ConstantPropagationAnalysis.h>
 #include <mlir/Analysis/DataFlow/DeadCodeAnalysis.h>
 #include <mlir/Analysis/DataFlow/SparseAnalysis.h>
+#include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Pass/Pass.h>
 
 #define DEBUG_TYPE "env-propagation"
 
 namespace {
-static bool needPropagation(mlir::Operation *op) {
+static bool needUpdate(mlir::Operation *op) {
   assert(op && "Invalid op");
   return mlir::isa<imex::ntensor::PrimitiveOp, imex::ntensor::CastOp>(op);
+}
+
+static bool needPropagation(mlir::Operation *op) {
+  assert(op && "Invalid op");
+  return needUpdate(op) || mlir::isa<mlir::arith::SelectOp>(op);
 }
 
 static llvm::Optional<mlir::Attribute> getTensorEnv(mlir::Value val) {
@@ -201,7 +207,7 @@ struct PropagateEnvironmentPass
     llvm::SmallVector<std::pair<mlir::Operation *, mlir::Attribute>, 0>
         opsToProcess;
     root->walk([&](mlir::Operation *op) {
-      if (!needPropagation(op))
+      if (!needUpdate(op))
         return;
 
       mlir::Attribute env;
