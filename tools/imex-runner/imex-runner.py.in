@@ -43,6 +43,11 @@ from os.path import join as jp
 import argparse
 import subprocess
 
+imex_enable_vulkan_runner = @IMEX_ENABLE_VULKAN_RUNNER@
+runner_choices = ['mlir_cpu_runner']
+if imex_enable_vulkan_runner:
+    runner_choices += ['mlir-vulkan-runner']
+
 parser = argparse.ArgumentParser(
     description="run imex-opt and pipe into mlir-runner"
 )
@@ -52,7 +57,7 @@ parser.add_argument("--pass-pipeline", "-p", default=None, help="pass pipeline (
 parser.add_argument("--imex-print-before-all", "-b", action='store_true', dest='before', help="print ir before all passes")
 parser.add_argument("--imex-print-after-all", "-a", action='store_true', dest='after', help="print ir after all passes")
 parser.add_argument("--no-mlir-runner", "-n", action='store_true', dest='no_mlir_runner', help="skip mlir runner")
-parser.add_argument("--runner", "-r", default="mlir-cpu-runner", choices=['mlir-cpu-runner', 'mlir-vulkan-runner'], help="mlir runner name")
+parser.add_argument("--runner", "-r", default="mlir-cpu-runner", choices=runner_choices, help="mlir runner name")
 
 args, unknown = parser.parse_known_args()
 
