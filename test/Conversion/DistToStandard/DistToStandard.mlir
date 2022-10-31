@@ -35,14 +35,21 @@ module {
         %1 = "dist.distinfo"(%shape, %team) {rank = 1 : i64} : (tensor<1xindex>, i64) -> !dist.info<1>
         return %1 : !dist.info<1>
     }
+    func.func @test_distinfo2(%shape: tensor<1xindex>, %team: i64) -> !dist.info<1> {
+        %1 = "dist.distinfo"(%shape, %team, %shape, %shape) {rank = 1 : i64} : (tensor<1xindex>, i64, tensor<1xindex>, tensor<1xindex>) -> !dist.info<1>
+        return %1 : !dist.info<1>
+    }
 }
-// CHECK-LABEL: func.func private @_idtr_nprocs(i64) -> i64
-// CHECK-LABEL: func.func private @_idtr_prank() -> i64
-// CHECK-LABEL: func.func private @_idtr_reduce_all(tensor<i64>, i32, i32)
-// CHECK-LABEL: func.func @test_distinfo
+// CHECK-LABEL: func.func @test_distinfo(
 // CHECK: @_idtr_nprocs
 // CHECK: call @_idtr_prank
+// CHECK: shape.get_extent
+// CHECK: arith.divui
+// CHECK: shape.get_extent
+// CHECK: arith.muli
 // CHECK: builtin.unrealized_conversion_cast
+// CHECK-LABEL: func.func @test_distinfo2
+// CHECK: builtin.unrealized_conversion_cast %arg0, %arg0, %arg0, %arg1
 
 // -----
 module {

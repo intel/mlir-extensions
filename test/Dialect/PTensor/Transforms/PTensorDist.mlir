@@ -4,9 +4,9 @@
 func.func @test_arange(%arg0: i64, %arg1: i64, %arg2: i64) -> i64 {
     %c0 = arith.constant 0 : i64
     %c1 = arith.constant 1 : i64
-    %0 = "ptensor.arange"(%arg0, %arg1, %arg2, %c0, %c1) : (i64, i64, i64, i64, i64) -> !ptensor.ptensor<tensor<?xi64>, dist = true>
-    %1 ="ptensor.ewbin"(%0, %0) {op = 0 : i32} : (!ptensor.ptensor<tensor<?xi64>, dist = true>, !ptensor.ptensor<tensor<?xi64>, dist = true>) -> !ptensor.ptensor<tensor<?xi64>, dist = true>
-    %2 = builtin.unrealized_conversion_cast %1 : !ptensor.ptensor<tensor<?xi64>, dist = true> to i64
+    %0 = "ptensor.arange"(%arg0, %arg1, %arg2, %c0, %c1) : (i64, i64, i64, i64, i64) -> !ptensor.ptensor<tensor<?xi64>>
+    %1 ="ptensor.ewbin"(%0, %0) {op = 0 : i32} : (!ptensor.ptensor<tensor<?xi64>>, !ptensor.ptensor<tensor<?xi64>>) -> !ptensor.ptensor<tensor<?xi64>>
+    %2 = builtin.unrealized_conversion_cast %1 : !ptensor.ptensor<tensor<?xi64>> to i64
     return %2 : i64
 }
 // CHECK: [[Vc0_i64:%.+]] = arith.constant 0 : i64
@@ -37,10 +37,10 @@ func.func @test_arange(%arg0: i64, %arg1: i64, %arg2: i64) -> i64 {
 // CHECK: [[V18:%.+]] = "dist.init_dist_tensor"([[V17]], [[V10]]) : (!ptensor.ptensor<tensor<?xi64>>, !dist.info<1>) -> !dist.dtensor<<tensor<?xi64>>>
 // CHECK: [[V19:%.+]] = "dist.get_ptensor"([[V18]]) : (!dist.dtensor<<tensor<?xi64>>>) -> !ptensor.ptensor<tensor<?xi64>>
 // CHECK: [[V20:%.+]] = "ptensor.extract_rtensor"([[V19]]) : (!ptensor.ptensor<tensor<?xi64>>) -> tensor<?xi64>
-// CHECK: [[V21:%.+]] = "ptensor.init_ptensor"([[V20]], [[Vfalse]], [[Vfalse]]) : (tensor<?xi64>, i1, i1) -> !ptensor.ptensor<tensor<?xi64>>
+// CHECK: [[V21:%.+]] = "ptensor.init_ptensor"([[V20]], [[Vfalse]]) : (tensor<?xi64>, i1) -> !ptensor.ptensor<tensor<?xi64>>
 // CHECK: [[V22:%.+]] = "dist.get_ptensor"([[V18]]) : (!dist.dtensor<<tensor<?xi64>>>) -> !ptensor.ptensor<tensor<?xi64>>
 // CHECK: [[V23:%.+]] = "ptensor.extract_rtensor"([[V22]]) : (!ptensor.ptensor<tensor<?xi64>>) -> tensor<?xi64>
-// CHECK: [[V24:%.+]] = "ptensor.init_ptensor"([[V23]], [[Vfalse]], [[Vfalse]]) : (tensor<?xi64>, i1, i1) -> !ptensor.ptensor<tensor<?xi64>>
+// CHECK: [[V24:%.+]] = "ptensor.init_ptensor"([[V23]], [[Vfalse]]) : (tensor<?xi64>, i1) -> !ptensor.ptensor<tensor<?xi64>>
 // CHECK: [[V25:%.+]] = "ptensor.ewbin"([[V21]], [[V24]]) {op = 0 : i32} : (!ptensor.ptensor<tensor<?xi64>>, !ptensor.ptensor<tensor<?xi64>>) -> !ptensor.ptensor<tensor<?xi64>>
 // CHECK: [[V26:%.+]] = "dist.get_info"([[V18]]) : (!dist.dtensor<<tensor<?xi64>>>) -> !dist.info<1>
 // CHECK: [[V27:%.+]] = "dist.extract_from_info"([[V26]]) {what = 3 : i32} : (!dist.info<1>) -> i64

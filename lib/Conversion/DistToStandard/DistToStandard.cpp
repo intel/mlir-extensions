@@ -34,6 +34,46 @@
 #include "../PassDetail.h"
 
 namespace imex {
+namespace dist {
+
+::mlir::Value materializeDistInfo(::mlir::OpBuilder &builder,
+                                  ::mlir::Location loc, ::mlir::Value gshape,
+                                  ::mlir::Value lshape, ::mlir::Value loffsets,
+                                  ::mlir::Value team) {
+  // we create the same cast as a lowering of InitDistTensor creates
+  // first we need to mimic the DistInfoOp
+  ::mlir::SmallVector<::mlir::Value> vals(::imex::dist::INFO_LAST);
+  vals[::imex::dist::GSHAPE] = gshape;
+  vals[::imex::dist::LSHAPE] = lshape;
+  vals[::imex::dist::LOFFSETS] = loffsets;
+  vals[::imex::dist::TEAM] = team;
+  return builder
+      .create<::mlir::UnrealizedConversionCastOp>(loc, builder.getNoneType(),
+                                                  vals)
+      .getResult(0);
+};
+
+::mlir::Value materializeDistTensor(::mlir::OpBuilder &builder,
+                                    ::mlir::Location loc, ::mlir::Value gshape,
+                                    ::mlir::Value ltensor,
+                                    ::mlir::Value loffsets,
+                                    ::mlir::Value team) {
+  auto lshape = builder.create<::mlir::shape::ShapeOfOp>(loc, ltensor);
+  auto info = materializeDistInfo(builder, loc, gshape, lshape, loffsets, team);
+  // now we can mimic the actual InitDistTensorOp
+  auto pTnsr = builder.create<::imex::ptensor::MkPTensorOp>(loc, ltensor);
+  return builder
+      .create<::mlir::UnrealizedConversionCastOp>(
+          loc,
+          ::imex::dist::DistTensorType::get(
+              builder.getContext(),
+              ltensor.getType().dyn_cast<imex::ptensor::PTensorType>()),
+          ::mlir::ValueRange({pTnsr, info}))
+      .getResult(0);
+};
+
+} // namespace dist
+
 namespace {
 
 // create function prototype fo given function name, arg-types and
@@ -201,21 +241,25 @@ struct DistInfoOpConverter
     auto gshape = op.getShape();
     auto team = op.getTeam();
     auto rank = op.getRankAttr();
+    auto lshape = op.getLShape();
+    auto loffsets = op.getLOffsets();
     auto np = rewriter.create<::imex::dist::NProcsOp>(loc, team);
     auto prank = rewriter.create<::imex::dist::PRankOp>(loc, team);
-    auto lshape = rewriter.create<::imex::dist::LocalShapeOp>(
-        loc, rank.getInt(), np, prank, gshape);
-    auto loffsets = rewriter.create<::imex::dist::LocalOffsetsOp>(
-        loc, rank.getInt(), np, prank, gshape);
-    ::mlir::SmallVector<::mlir::Value> vals(::imex::dist::INFO_LAST);
-    // vals[::imex::dist::RANK] =
-    // rewriter.create<::mlir::arith::ConstantOp>(loc, rank);
-    vals[::imex::dist::GSHAPE] = gshape;
-    vals[::imex::dist::LSHAPE] = lshape;
-    vals[::imex::dist::LOFFSETS] = loffsets;
-    vals[::imex::dist::TEAM] = team;
-    rewriter.replaceOpWithNewOp<::mlir::UnrealizedConversionCastOp>(
-        op, converter.convertType(op.getType()), vals);
+    if (!lshape) {
+      lshape = rewriter
+                   .create<::imex::dist::LocalShapeOp>(loc, rank.getInt(), np,
+                                                       prank, gshape)
+                   .getResult();
+    }
+    if (!loffsets) {
+      loffsets = rewriter
+                     .create<::imex::dist::LocalOffsetsOp>(loc, rank.getInt(),
+                                                           np, prank, gshape)
+                     .getResult();
+    }
+
+    rewriter.replaceOp(op, ::imex::dist::materializeDistInfo(
+                               rewriter, loc, gshape, lshape, loffsets, team));
     return ::mlir::success();
   }
 };

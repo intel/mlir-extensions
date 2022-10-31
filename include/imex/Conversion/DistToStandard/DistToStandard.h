@@ -40,6 +40,16 @@ extern void createDistRTFuncDefs(::mlir::Location &loc,
                                  ::mlir::OpBuilder &builder,
                                  ::mlir::ModuleOp &module);
 
+namespace dist {
+extern ::mlir::Value
+materializeDistInfo(::mlir::OpBuilder &builder, ::mlir::Location loc,
+                    ::mlir::Value gshape, ::mlir::Value lshape,
+                    ::mlir::Value loffsets, ::mlir::Value team);
+extern ::mlir::Value
+materializeDistTensor(::mlir::OpBuilder &builder, ::mlir::Location loc,
+                      ::mlir::Value gshape, ::mlir::Value ltensor,
+                      ::mlir::Value loffsets, ::mlir::Value team);
+} // namespace dist
 } // namespace imex
 
 #endif // _DistToStandard_H_INCLUDED_

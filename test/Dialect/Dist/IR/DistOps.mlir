@@ -1,9 +1,7 @@
-// RUN: imex-opt %s | sed s/true\>/1\>/g | FileCheck %s
+// RUN: imex-opt %s | FileCheck %s
 // Verify the printed output can be parsed.
-// RUN: imex-opt %s | sed s/true\>/1\>/g | imex-opt | FileCheck %s
-// RUN: imex-opt -mlir-print-op-generic %s |  sed s/true\>/1\>/g | imex-opt | FileCheck %s
-
-// FIXME sed above, for using 1 instead of true
+// RUN: imex-opt %s | imex-opt | FileCheck %s
+// RUN: imex-opt -mlir-print-op-generic %s | imex-opt | FileCheck %s
 
 // -----
 
@@ -18,7 +16,7 @@ func.func @test_nprocs(%arg0: i64) -> i64 {
     return %1 : i64
 }
 // CHECK-LABEL: func.func @test_nprocs(%arg0: i64) -> i64 {
-// CHECK-NEXT "dist.nprocs"(%arg0) : (i64) -> i64
+// CHECK-NEXT: "dist.nprocs"(%arg0) : (i64) -> i64
 
 // -----
 func.func @test_prank(%arg0: i64) -> i64 {
@@ -26,15 +24,23 @@ func.func @test_prank(%arg0: i64) -> i64 {
     return %1 : i64
 }
 // CHECK-LABEL: func.func @test_prank(%arg0: i64) -> i64 {
-// CHECK-NEXT "dist.prank"(%arg0) : (i64) -> i64
+// CHECK-NEXT: "dist.prank"(%arg0) : (i64) -> i64
 
 // -----
 func.func @test_distinfo(%shape: tensor<1xi64>, %team: i64) -> !dist.info<1> {
     %1 = "dist.distinfo"(%shape, %team) {rank = 1 : i64} : (tensor<1xi64>, i64) -> !dist.info<1>
     return %1 : !dist.info<1>
 }
-// CHECK-LABEL: func.func @test_distinfo(%arg0: tensor<1xi64>, %arg1: i64) -> !dist.info<1> {
-// CHECK-NEXT "dist.distinfo"(%arg0, %arg1) {rank = 1 : i64} : (tensor<1xi64>, i64) -> !dist.info<1>
+// CHECK-LABEL: func.func @test_distinfo(
+// CHECK-NEXT: "dist.distinfo"(%arg0, %arg1) {rank = 1 : i64} : (tensor<1xi64>, i64) -> !dist.info<1>
+
+// -----
+func.func @test_distinfo2(%shape: tensor<1xindex>, %team: i64) -> !dist.info<1> {
+    %1 = "dist.distinfo"(%shape, %team, %shape, %shape) {rank = 1 : i64} : (tensor<1xindex>, i64, tensor<1xindex>, tensor<1xindex>) -> !dist.info<1>
+    return %1 : !dist.info<1>
+}
+// CHECK-LABEL: func.func @test_distinfo2(
+// CHECK-NEXT: "dist.distinfo"(%arg0, %arg1, %arg0, %arg0) {rank = 1 : i64} : (tensor<1xindex>, i64, tensor<1xindex>, tensor<1xindex>) -> !dist.info<1>
 
 // -----
 func.func @test_init_dist_tensor(%arg0: !ptensor.ptensor<tensor<?xi64>>, %arg1: !dist.info<1>) -> !dist.dtensor<<tensor<?xi64>>> {

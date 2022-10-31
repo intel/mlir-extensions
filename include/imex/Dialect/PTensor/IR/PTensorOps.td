@@ -67,10 +67,8 @@ def PTensor_PTensor : PTensor_Type<"PTensor", "ptensor">
   }];
   // Here we define the underlying RankedTensor
   let parameters = (ins "::mlir::RankedTensorType":$rtensor,
-                        DefaultValuedParameter<"bool", "false">:$onDevice,
-                        DefaultValuedParameter<"bool", "false">:$dist);
-
-  let assemblyFormat = "`<` $rtensor (`,` struct($onDevice, $dist)^)? `>`";
+                        DefaultValuedParameter<"bool", "false">:$onDevice);
+  let assemblyFormat = "`<` $rtensor (`,` $onDevice^)? `>`";
 }
 
 // Base class for dialect operations. This operation inherits from the base
@@ -94,11 +92,10 @@ def MkPTensorOp : PTensor_Op<"init_ptensor", []> {
     let arguments = (ins AnyRankedTensor:$rtensor,
                          AnyType:$device,
                          Optional<AnyType>:$team);
-    let results = (outs PTensor_PTensor);
+    let results = (outs PTensor_PTensor:$res);
     let skipDefaultBuilders = 1;
     let builders = [
       OpBuilder<(ins "bool":$onDevice,
-                     "bool":$dist,
                      "::mlir::Value":$rtensor,
                      "::mlir::Value":$device,
                      "::mlir::Value":$team), [{
@@ -106,13 +103,17 @@ def MkPTensorOp : PTensor_Op<"init_ptensor", []> {
         $_state.addTypes(::imex::ptensor::PTensorType::get(
             $_state.getContext(),
             rtensor.getType().dyn_cast<::mlir::RankedTensorType>(),
-            onDevice,
-            dist));
+            onDevice));
       }]>,
       // Default: no device, non-distributed
       OpBuilder<(ins "::mlir::Value":$rtensor), [{
-        auto null = createSignlessInt<1>($_builder, $_builder.getUnknownLoc(), 0);
-        build($_builder, $_state, false, false, rtensor, null, null);
+          auto dmy = createInt<1>($_builder.getUnknownLoc(), $_builder, 0);
+          $_state.addOperands({rtensor, dmy});
+          $_state.addTypes(::imex::ptensor::PTensorType::get(
+              $_state.getContext(),
+              rtensor.getType().dyn_cast<::mlir::RankedTensorType>(),
+              false)
+          );
       }]>,
     ];
 }
@@ -128,7 +129,7 @@ def ExtractRTensorOp : PTensor_Op<"extract_rtensor", []> {
     let results = (outs AnyRankedTensor);
 }
 
-def ExtractSliceOp : PTensor_Op<"extract_slice", [AttrSizedOperandSegments, Pure]> {
+def ExtractSliceOp : PTensor_Op<"extract_slice", [SameVariadicOperandSize , Pure]> {
   let summary = "extract slice operation";
   let description = [{
     The "extract_slice" operation extract a tensor from another tensor as

@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <imex/Dialect/PTensor/IR/PTensorOps.h>
+#include <imex/internal/PassUtils.h>
 #include <llvm/ADT/TypeSwitch.h>
 #include <mlir/IR/DialectImplementation.h>
 

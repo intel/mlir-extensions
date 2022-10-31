@@ -101,7 +101,7 @@ def PRankOp : Dist_Op<"prank", [Pure]> {
     ];
 }
 
-def DistInfoOp : Dist_Op<"distinfo", []> {
+def DistInfoOp : Dist_Op<"distinfo", [SameVariadicOperandSize]> {
     let summary = "Initialize distributed meta information about a new PTensor.";
     let description = [{
         The distributed meta information about a new PTensor provides
@@ -111,8 +111,13 @@ def DistInfoOp : Dist_Op<"distinfo", []> {
           - the distributed team
     }];
     // Global shape needed for initial registration. Views are handled by a separate op.
-    let arguments = (ins I64Attr:$rank, AnyType:$shape, AnyType:$team);
-    let results = (outs Dist_Info);
+    let arguments = (ins I64Attr:$rank, AnyType:$shape, AnyType:$team, Optional<AnyType>:$l_shape, Optional<AnyType>:$l_offsets);
+    let results = (outs Dist_Info:$res);
+    let builders = [
+        OpBuilder<(ins "uint64_t":$rank, "::mlir::Value":$gshape, "::mlir::Value":$team), [{
+            build($_builder, $_state, ::imex::dist::DistInfoType::get($_builder.getContext(), rank), rank, gshape, team, ::mlir::Value(), ::mlir::Value());
+        }]>,
+    ];
 }
 
 def InitDistTensorOp : Dist_Op<"init_dist_tensor", [Pure]> {

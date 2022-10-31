@@ -58,9 +58,7 @@ namespace {
 inline ::mlir::Value createDistInfo(::mlir::Location &loc,
                                     ::mlir::OpBuilder &builder, uint64_t rank,
                                     ::mlir::Value gshape, ::mlir::Value team) {
-  return builder.create<::imex::dist::DistInfoOp>(
-      loc, ::imex::dist::DistInfoType::get(builder.getContext(), rank),
-      getIntAttr<64>(builder, rank), gshape, team);
+  return builder.create<::imex::dist::DistInfoOp>(loc, rank, gshape, team);
 }
 
 // create ::imex::dist::LocalShapeOp
@@ -225,11 +223,10 @@ struct DistARangeOpRWP : public RecOpRewritePattern<::imex::ptensor::ARangeOp> {
     ::llvm::ArrayRef<int64_t> lShape({-1});
     auto artype = ::imex::ptensor::PTensorType::get(
         rewriter.getContext(), ::mlir::RankedTensorType::get({-1}, dtype),
-        false, false);
+        false);
     // finally create local arange
-    auto dmy = ::mlir::Value(); // createInt<1>(loc, rewriter, 0);
     auto arres = rewriter.create<::imex::ptensor::ARangeOp>(
-        loc, artype, start, stop, step, op.getDevice(), dmy);
+        loc, artype, start, stop, step, op.getDevice(), nullptr);
     rewriter.replaceOp(op, createMkTnsr(loc, rewriter, arres, info));
     return ::mlir::success();
   }
@@ -307,8 +304,7 @@ struct DistReductionOpRWP
     // return type 0d with same dtype as input
     auto dtype = inpDtTyp.getPTensorType().getRtensor().getElementType();
     auto retPtTyp = ::imex::ptensor::PTensorType::get(
-        rewriter.getContext(), ::mlir::RankedTensorType::get({}, dtype), false,
-        false);
+        rewriter.getContext(), ::mlir::RankedTensorType::get({}, dtype), false);
     auto redPTnsr = rewriter.create<::imex::ptensor::ReductionOp>(
         loc, retPtTyp, op.getOp(), local);
     // global reduction
@@ -316,9 +312,8 @@ struct DistReductionOpRWP
     // get the team and init our new dist tensor
     auto team = createTeamOf(loc, rewriter, op.getInput());
     auto info = createDistInfo(loc, rewriter, 1, gShape, team);
-    auto dmy = createInt<1>(loc, rewriter, 0);
     auto resPTnsr = rewriter.create<::imex::ptensor::MkPTensorOp>(
-        loc, false, true, retRTnsr, dmy, team);
+        loc, false, retRTnsr, nullptr, team);
     rewriter.replaceOp(op, createMkTnsr(loc, rewriter, resPTnsr, info));
     return ::mlir::success();
   }
