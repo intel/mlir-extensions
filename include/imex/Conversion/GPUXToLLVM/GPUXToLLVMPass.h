@@ -33,8 +33,6 @@ template <typename T> class OperationPass;
 
 namespace imex {
 
-// std::unique_ptr<mlir::Pass> createEnumerateEventsPass();
-
 /// Populates the given list with patterns that convert from GPUX dialect to
 /// LLVM.
 void populateGpuxToLLVMPatternsAndLegality(mlir::LLVMTypeConverter &converter,

@@ -135,7 +135,6 @@ protected:
           llvmPointerType /* void *module */
       }};
 
-  // same as kernelGetCallBuilder
   FunctionCallBuilder kernelGetCallBuilder = {
       "gpuKernelGet",
       llvmPointerType /* void *function */,
@@ -240,12 +239,15 @@ private:
     auto typeVar = rewriter.create<mlir::LLVM::ConstantOp>(
         loc, llvmInt32Type, rewriter.getI32IntegerAttr(isShared));
 
+    // Allocate the underlying buffer and store a pointer to it in the MemRef
+    // descriptor.
     mlir::Value allocatedPtr =
         allocCallBuilder
             .create(loc, rewriter,
                     {adaptor.getGpuxStream(), sizeBytes, alignmentVar, typeVar})
             ->getResult(0);
 
+    // Create the MemRef descriptor.
     auto memrefDesc = mlir::MemRefDescriptor::undef(rewriter, loc, dstType);
     auto elemPtrTye = memrefDesc.getElementPtrType();
     memrefDesc.setAllocatedPtr(
@@ -304,9 +306,8 @@ private:
 ///
 /// * moduleLoad        -- loads the module given the spirv data
 /// * moduleGetFunction -- gets a handle to the actual kernel function
-/// * getStreamHelper   -- initializes a new compute stream on GPU
 /// * launchKernel      -- launches the kernel on a stream
-/// * streamSynchronize -- waits for operations on the stream to finish
+/// * gpuWait           -- waits for operations on the stream to finish
 ///
 /// Intermediate data structures are allocated on the stack.
 class ConvertLaunchFuncOpToGpuRuntimeCallPattern
@@ -321,6 +322,16 @@ public:
 private:
   llvm::SmallString<32> gpuBinaryAnnotation;
 
+  // Generates an LLVM IR dialect global that contains the name of the given
+  // kernel function as a C string, and returns a pointer to its beginning.
+  // The code is essentially:
+  //
+  // llvm.global constant @kernel_name("function_name\00")
+  // func(...) {
+  //   %0 = llvm.addressof @kernel_name
+  //   %1 = llvm.constant (0 : index)
+  //   %2 = llvm.getelementptr %0[%1, %1] : !llvm<"i8*">
+  // }
   mlir::Value generateKernelNameConstant(mlir::StringRef moduleName,
                                          mlir::StringRef name,
                                          mlir::Location loc,
@@ -370,6 +381,7 @@ private:
         mlir::IntegerAttr::get(llvmIndexType,
                                static_cast<int64_t>(blob.size())));
 
+    // loads the module given the spirv data
     auto module = moduleLoadCallBuilder.create(
         loc, rewriter, {adaptor.getGpuxStream(), data, size});
     // Get the function from the module. The name corresponds to the name of
@@ -380,8 +392,8 @@ private:
     auto function = kernelGetCallBuilder.create(
         loc, rewriter,
         {adaptor.getGpuxStream(), module->getResult(0), kernelName});
-    // Create array of pointers to kernel arguments.
 
+    // Create array of pointers to kernel arguments.
     AllocaInsertionPoint allocaHelper(launchOp);
     auto kernelParams = adaptor.getKernelOperands();
     auto paramsCount = static_cast<unsigned>(kernelParams.size());
@@ -416,8 +428,6 @@ private:
     auto localMemStorageClass = rewriter.getI64IntegerAttr(
         mlir::gpu::GPUDialect::getPrivateAddressSpace());
     auto computeTypeSize = [&](mlir::Type type) -> mlir::Value {
-      // %Size = getelementptr %T* null, int 1
-      // %SizeI = ptrtoint %T* %Size to i32
       auto nullPtr = rewriter.create<mlir::LLVM::NullOp>(loc, type);
       auto gep = rewriter.create<mlir::LLVM::GEPOp>(loc, type, nullPtr, one);
       return rewriter.create<mlir::LLVM::PtrToIntOp>(loc, llvmIndexType, gep);
@@ -503,6 +513,8 @@ private:
          adaptor.getGridSizeX(), adaptor.getGridSizeY(), adaptor.getGridSizeZ(),
          adaptor.getBlockSizeX(), adaptor.getBlockSizeY(),
          adaptor.getBlockSizeZ(), dynamicSharedMemorySize, paramsArrayVoidPtr});
+
+    // waits for operations on the stream to finish
 
     waitCallBuilder.create(loc, rewriter, adaptor.getGpuxStream());
     rewriter.eraseOp(launchOp);
