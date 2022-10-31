@@ -176,7 +176,6 @@ public:
     }
   }
 
-  /// At an entry point, the underlying value of a value is itself.
   void setToEntryState(EnvValueLattice *lattice) override {
     propagateIfChanged(lattice, lattice->join(EnvValue{}));
   }

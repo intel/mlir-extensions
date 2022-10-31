@@ -22,6 +22,8 @@ class Pass;
 
 namespace imex {
 namespace ntensor {
+/// Propagate enviroment attribute through the ntensor ops using dataflow
+/// analysis.
 std::unique_ptr<mlir::Pass> createPropagateEnvironmentPass();
 } // namespace ntensor
 } // namespace imex
