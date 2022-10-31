@@ -44,9 +44,8 @@ void populateGpuxToLLVMPatternsAndLegality(mlir::LLVMTypeConverter &converter,
 /// calls.
 ///
 /// This pass does not generate code to call GPU runtime APIs directly but
-/// instead uses a small wrapper library (currently Level-zero wrapper) that
-/// exports a stable and conveniently typed ABI on top of GPU runtimes
-/// such as Level-Zero or SYCL
+/// instead uses a small wrapper library  that exports a stable and conveniently
+/// typed ABI on top of GPU runtimes such as Level-Zero or SYCL
 std::unique_ptr<::mlir::OperationPass<::mlir::ModuleOp>>
 createConvertGPUXToLLVMPass();
 

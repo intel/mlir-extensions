@@ -115,14 +115,12 @@ protected:
   mlir::Type llvmIndexType = mlir::IntegerType::get(
       context, this->getTypeConverter()->getPointerBitwidth(0));
 
-  //// ----
   mlir::Type llvmI32PtrType = mlir::LLVM::LLVMPointerType::get(llvmIndexType);
 
   mlir::Type llvmRangeType = mlir::LLVM::LLVMStructType::getLiteral(
       context, {llvmPointerType, llvmIndexType});
   mlir::Type llvmRangePointerType =
       mlir::LLVM::LLVMPointerType::get(llvmRangeType);
-  //// ----
 
   FunctionCallBuilder moduleLoadCallBuilder = {
       "gpuModuleLoad",
@@ -186,9 +184,9 @@ protected:
       llvmPointerType /* void * */,
       {
           llvmPointerType, /* void *stream */
-          llvmIndexType,   // size
-          llvmIndexType,   // alignment
-          llvmInt32Type    // shared
+          llvmIndexType,   /* intptr_t size */
+          llvmIndexType,   /* intptr_t alignment */
+          llvmInt32Type    /*unsigned int shared */
       }};
 
   FunctionCallBuilder deallocCallBuilder = {
@@ -273,7 +271,7 @@ private:
   }
 };
 
-/// A rewrite pattern to convert gpu.dealloc operations into a GPU runtime
+/// A rewrite pattern to convert gpux.dealloc operations into a GPU runtime
 /// call.
 class ConvertDeallocOpToGpuRuntimeCallPattern
     : public ConvertOpToGpuRuntimeCallPattern<gpux::DeallocOp> {
@@ -299,27 +297,9 @@ private:
   }
 };
 
-mlir::Value getStream(mlir::OpBuilder &builder) {
-  auto func =
-      builder.getBlock()->getParent()->getParentOfType<mlir::func::FuncOp>();
-
-  if (!func)
-    return {};
-
-  if (!llvm::hasSingleElement(func.getBody()))
-    return {};
-
-  auto &block = func.getBody().front();
-  auto ops = block.getOps<imex::gpux::CreateStreamOp>();
-  if (!ops.empty())
-    return (*ops.begin()).getResult();
-  else
-    return {};
-}
-
-/// A rewrite patter to convert gpu.launch_func operations into a sequence of
+/// A rewrite pattern to convert gpux.launch_func operations into a sequence of
 /// GPU runtime calls.
-/// In essence, a gpu.launch_func operations gets compiled into the following
+/// In essence, a gpux.launch_func operations gets compiled into the following
 /// sequence of runtime calls:
 ///
 /// * moduleLoad        -- loads the module given the spirv data
@@ -605,9 +585,8 @@ void GPUXToLLVMPass::runOnOperation() {
 
   populateGpuxToLLVMPatternsAndLegality(converter, patterns, target);
 
-  auto mod = getOperation();
-  if (mlir::failed(
-          mlir::applyPartialConversion(mod, target, std::move(patterns))))
+  if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
+                                                std::move(patterns))))
     signalPassFailure();
 }
 
@@ -630,15 +609,12 @@ void populateGpuxToLLVMPatternsAndLegality(mlir::LLVMTypeConverter &converter,
     return llvmPointerType;
   });
 
-  // mlir::populateGpuToLLVMConversionPatterns(
-  //    converter, patterns, mlir::gpu::getDefaultGpuBinaryAnnotation());
-
   patterns.insert<
       // clang-format off
-    ConvertGpuStreamCreatePattern,
-    ConvertGpuStreamDestroyPattern,
-    ConvertAllocOpToGpuRuntimeCallPattern,
-    ConvertDeallocOpToGpuRuntimeCallPattern
+      ConvertGpuStreamCreatePattern,
+      ConvertGpuStreamDestroyPattern,
+      ConvertAllocOpToGpuRuntimeCallPattern,
+      ConvertDeallocOpToGpuRuntimeCallPattern
       // clang-format on
       >(converter);
 
