@@ -109,7 +109,7 @@ public:
     if (isUninitialized()) {
       os << "None";
     } else if (isInvalid()) {
-      os << "Invalid";
+      os << "Invalid: " << getInvalidReason();
     } else {
       os << env.get<mlir::Attribute>();
     }
