@@ -28,7 +28,7 @@
 namespace {
 static bool needUpdate(mlir::Operation *op) {
   assert(op && "Invalid op");
-  return mlir::isa<imex::ntensor::PrimitiveOp, imex::ntensor::CastOp>(op);
+  return mlir::isa<imex::ntensor::NTensorDialect>(op->getDialect());
 }
 
 static bool needPropagation(mlir::Operation *op) {
