@@ -25,6 +25,10 @@
 #define DEBUG_TYPE "env-propagation"
 
 namespace {
+struct alignas(8) InvalidEnv {};
+
+static const constexpr InvalidEnv invalidEnv{};
+
 static bool needPropagation(mlir::Operation *op) {
   assert(op && "Invalid op");
   return mlir::isa<imex::ntensor::PrimitiveOp, imex::ntensor::CastOp>(op);
@@ -39,40 +43,57 @@ static llvm::Optional<mlir::Attribute> getTensorEnv(mlir::Value val) {
 
 class EnvValue {
 public:
-  /// Create an underlying value state with a known underlying value.
-  explicit EnvValue(mlir::Optional<mlir::Attribute> env_ = llvm::None)
-      : env(std::move(env_)) {}
+  EnvValue() = default;
+
+  explicit EnvValue(mlir::Attribute env_) : env(env_) {}
+
+  explicit EnvValue(InvalidEnv) : env(&invalidEnv) {}
+
+  static EnvValue getInvalid() { return EnvValue(invalidEnv); }
 
   /// Whether the state is uninitialized.
-  bool isUninitialized() const { return !env.has_value(); }
+  bool isUninitialized() const { return env.isNull(); }
+  bool isInvalid() const { return env.is<const InvalidEnv *>(); }
 
-  /// Returns the underlying value.
   mlir::Attribute getEnv() const {
     assert(!isUninitialized());
-    return *env;
+    assert(!isInvalid());
+    return env.get<mlir::Attribute>();
   }
 
-  /// Join two underlying values. If there are conflicting underlying values,
-  /// go to the pessimistic value.
   static EnvValue join(const EnvValue &lhs, const EnvValue &rhs) {
+    if (lhs.isInvalid() || rhs.isInvalid())
+      return getInvalid();
+
     if (lhs.isUninitialized())
       return rhs;
+
     if (rhs.isUninitialized())
       return lhs;
+
     if (!lhs.getEnv())
       return rhs;
+
     if (!rhs.getEnv())
       return lhs;
-    return lhs.env == rhs.env ? lhs : EnvValue();
+
+    return lhs.env == rhs.env ? lhs : getInvalid();
   }
 
-  /// Compare underlying values.
   bool operator==(const EnvValue &rhs) const { return env == rhs.env; }
 
-  void print(llvm::raw_ostream &os) const { os << env; }
+  void print(llvm::raw_ostream &os) const {
+    if (isUninitialized()) {
+      os << "None";
+    } else if (isInvalid()) {
+      os << "Invalid";
+    } else {
+      os << env.get<mlir::Attribute>();
+    }
+  }
 
 private:
-  mlir::Optional<mlir::Attribute> env;
+  llvm::PointerUnion<mlir::Attribute, const InvalidEnv *> env;
 };
 
 inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
@@ -109,14 +130,14 @@ public:
         if (!latticeVal.isUninitialized())
           env = EnvValue::join(env, latticeVal);
 
-        env = EnvValue::join(env, EnvValue(tensorEnv));
+        env = EnvValue::join(env, EnvValue(*tensorEnv));
       }
     }
 
     assert(results.size() == op->getNumResults() && "Invalid results count");
     for (auto result : op->getResults()) {
       if (auto tensorEnv = getTensorEnv(result))
-        env = EnvValue::join(env, EnvValue(tensorEnv));
+        env = EnvValue::join(env, EnvValue(*tensorEnv));
     }
 
     LLVM_DEBUG(llvm::dbgs()
@@ -157,6 +178,7 @@ struct PropagateEnvironmentPass
     if (mlir::failed(solver.initializeAndRun(root)))
       return signalPassFailure();
 
+    bool failed = false;
     llvm::SmallVector<std::pair<mlir::Operation *, mlir::Attribute>, 0>
         opsToProcess;
     root->walk([&](mlir::Operation *op) {
@@ -173,14 +195,20 @@ struct PropagateEnvironmentPass
           if (val.isUninitialized())
             continue;
 
+          if (val.isInvalid()) {
+            op->emitError("Cannot infer env type");
+            failed = true;
+            return signalPassFailure();
+          }
+
           if (auto newEnv = val.getEnv()) {
             if (!env) {
               env = newEnv;
             } else if (env != newEnv) {
               op->emitError("Enviroment type conflict: ")
                   << env << " " << newEnv;
-              signalPassFailure();
-              return;
+              failed = true;
+              return signalPassFailure();
             }
           }
         }
@@ -188,6 +216,9 @@ struct PropagateEnvironmentPass
 
       opsToProcess.emplace_back(op, env);
     });
+
+    if (failed)
+      return;
 
     mlir::OpBuilder builder(&getContext());
     for (auto [op, env] : opsToProcess) {
