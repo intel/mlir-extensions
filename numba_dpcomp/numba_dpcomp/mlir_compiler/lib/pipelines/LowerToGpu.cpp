@@ -1714,7 +1714,7 @@ static void populateLowerToGPUPipelineHigh(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createSymbolDCEPass());
 }
 
-static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
+static void populateLowerToGPUPipelineMed(mlir::OpPassManager &pm) {
   auto &funcPM = pm.nest<mlir::func::FuncOp>();
   funcPM.addPass(std::make_unique<PrepareForGPUPass>());
   funcPM.addPass(mlir::createCanonicalizerPass());
@@ -1770,6 +1770,9 @@ static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::func::FuncOp>(
       std::make_unique<GenerateOutlineContextPass>());
   pm.addPass(gpu_runtime::createEnumerateEventsPass());
+  commonOptPasses(pm);
+}
+static void populateLowerToGPUPipelineLow(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<GPUToLLVMPass>());
   commonOptPasses(pm);
 }
@@ -1785,11 +1788,19 @@ void registerLowerToGPUPipeline(imex::PipelineRegistry &registry) {
          &populateLowerToGPUPipelineHigh);
 
     auto lowStage = getLowerLoweringStage();
-    sink(lowerToGPUPipelineNameLow(), {lowStage.begin, untuplePipelineName()},
+    sink(lowerToGPUPipelineNameMed(), {lowStage.begin, untuplePipelineName()},
+         {lowStage.end, lowerToGPUPipelineNameLow(),
+          preLowerToLLVMPipelineName()},
+         {}, &populateLowerToGPUPipelineMed);
+
+    sink(lowerToGPUPipelineNameLow(),
+         {lowStage.begin, lowerToGPUPipelineNameMed(),
+          preLowerToLLVMPipelineName()},
          {lowStage.end, lowerToLLVMPipelineName()}, {},
          &populateLowerToGPUPipelineLow);
   });
 }
 
 llvm::StringRef lowerToGPUPipelineNameHigh() { return "lower_to_gpu_high"; }
+llvm::StringRef lowerToGPUPipelineNameMed() { return "lower_to_gpu_med"; }
 llvm::StringRef lowerToGPUPipelineNameLow() { return "lower_to_gpu_low"; }

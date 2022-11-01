@@ -1408,12 +1408,15 @@ struct LLVMLoweringPass
   }
 };
 
+static void populatePreLowerToLlvmPipeline(mlir::OpPassManager &pm) {
+  pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<PreLLVMLowering>());
+}
+
 static void populateLowerToLlvmPipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<LowerParallelToCFGPass>());
   pm.addPass(mlir::createConvertSCFToCFPass());
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addNestedPass<mlir::func::FuncOp>(mlir::arith::createArithExpandOpsPass());
-  pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<PreLLVMLowering>());
   pm.addNestedPass<mlir::func::FuncOp>(mlir::createConvertMathToLLVMPass());
   pm.addPass(mlir::createConvertMathToLibmPass());
   pm.addPass(imex::createUtilToLLVMPass(&getLLVMOptions));
@@ -1428,9 +1431,17 @@ static void populateLowerToLlvmPipeline(mlir::OpPassManager &pm) {
 void registerLowerToLLVMPipeline(imex::PipelineRegistry &registry) {
   registry.registerPipeline([](auto sink) {
     auto stage = getLowerLoweringStage();
-    sink(lowerToLLVMPipelineName(), {stage.begin}, {stage.end}, {},
-         &populateLowerToLlvmPipeline);
+    sink(preLowerToLLVMPipelineName(), {stage.begin},
+         {stage.end, lowerToLLVMPipelineName()}, {},
+         &populatePreLowerToLlvmPipeline);
+  });
+  registry.registerPipeline([](auto sink) {
+    auto stage = getLowerLoweringStage();
+    sink(lowerToLLVMPipelineName(), {stage.begin, preLowerToLLVMPipelineName()},
+         {stage.end}, {}, &populateLowerToLlvmPipeline);
   });
 }
+
+llvm::StringRef preLowerToLLVMPipelineName() { return "pre_lower_to_llvm"; }
 
 llvm::StringRef lowerToLLVMPipelineName() { return "lower_to_llvm"; }
