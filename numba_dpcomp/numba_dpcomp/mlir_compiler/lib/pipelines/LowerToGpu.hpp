@@ -15,4 +15,5 @@ class StringRef;
 void registerLowerToGPUPipeline(imex::PipelineRegistry &registry);
 
 llvm::StringRef lowerToGPUPipelineNameHigh();
+llvm::StringRef lowerToGPUPipelineNameMed();
 llvm::StringRef lowerToGPUPipelineNameLow();

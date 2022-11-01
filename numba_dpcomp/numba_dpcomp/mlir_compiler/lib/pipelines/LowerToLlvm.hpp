@@ -14,4 +14,5 @@ class StringRef;
 
 void registerLowerToLLVMPipeline(imex::PipelineRegistry &registry);
 
+llvm::StringRef preLowerToLLVMPipelineName();
 llvm::StringRef lowerToLLVMPipelineName();
