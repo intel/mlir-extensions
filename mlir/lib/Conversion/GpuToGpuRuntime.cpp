@@ -141,8 +141,6 @@ struct InsertGPUAllocs
       }
     };
 
-    auto scfDialect = getContext().getOrLoadDialect<mlir::scf::SCFDialect>();
-
     auto hasMemAccess = [](mlir::Operation *op) -> bool {
       if (auto memInterface =
               mlir::dyn_cast<mlir::MemoryEffectOpInterface>(op)) {
@@ -196,14 +194,15 @@ struct InsertGPUAllocs
                 for (auto alias : aliases.resolve(mem)) {
                   auto op = alias.getDefiningOp();
                   if (op) {
-                    if (op->getDialect() == scfDialect ||
-                        mlir::isa<mlir::ViewLikeOpInterface>(op))
+                    if (mlir::isa<mlir::scf::SCFDialect>(op->getDialect()) ||
+                        mlir::isa<mlir::ViewLikeOpInterface,
+                                  mlir::arith::SelectOp, mlir::func::CallOp>(
+                            op))
+                      // Ignore
                       continue;
                     if (mlir::isa<mlir::memref::AllocOp,
                                   mlir::memref::GetGlobalOp>(op)) {
                       gpuBufferAllocs.insert({op, {}});
-                    } else if (mlir::isa<mlir::func::CallOp>(op)) {
-                      // Ignore
                     } else {
                       op->emitError("Unhandled memref producer");
                       return mlir::WalkResult::interrupt();
