@@ -55,6 +55,15 @@ include(AddLLVM)
 include(AddMLIR)
 include(HandleLLVMOptions)
 
+# Check if mlir vulkan runner was configured from mlir
+# target mlir-vulkan-runner is only set if vulkan runner was enabled during
+# mlir configuration
+if (TARGET mlir-vulkan-runner)
+    set(IMEX_ENABLE_VULKAN_RUNNER 1)
+else ()
+    set(IMEX_ENABLE_VULKAN_RUNNER 0)
+endif()
+
 if(NOT IMEX_EXTERNAL_PROJECT_BUILD)
     find_package(Python3 ${LLVM_MINIMUM_PYTHON_VERSION} REQUIRED
         COMPONENTS Interpreter)

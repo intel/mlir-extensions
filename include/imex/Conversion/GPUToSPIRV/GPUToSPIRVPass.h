@@ -29,7 +29,7 @@ template <typename T> class OperationPass;
 namespace imex {
 /// Create a pass
 std::unique_ptr<::mlir::OperationPass<::mlir::ModuleOp>>
-createConvertGPUXToSPIRVPass(bool mapMemorySpace = false);
+createConvertGPUXToSPIRVPass(bool mapMemorySpace = true);
 
 } // namespace imex
 

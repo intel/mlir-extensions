@@ -1,5 +1,6 @@
 include(LLVMDistributionSupport)
 
+if(NOT IMEX_EXTERNAL_PROJECT_BUILD)
 # ----------- Copied over from llvm-project/cmake/Modules ---------------------#
 
 # Extend the path in `base_path` with the path in `current_segment`, returning
@@ -70,6 +71,7 @@ function(find_prefix_from_config out_var prefix_var path_to_leave)
     string(REPLACE ";" "\n" config_code "${config_code}")
     set("${out_var}" "${config_code}" PARENT_SCOPE)
 endfunction()
+endif() # if(NOT IMEX_EXTERNAL_PROJECT_BUILD)
 
 # -----------------------------------------------------------------------------#
 # We do not want to recreate the whole MLIR build infrastructure. As such the
@@ -107,12 +109,8 @@ endfunction(get_imex_libs)
 # Generate a list of CMake library targets so that other CMake projects can
 # link against them. LLVM calls its version of this file LLVMExports.cmake, but
 # the usual CMake convention seems to be ${Project}Targets.cmake.
-set(IMEX_INSTALL_PACKAGE_DIR lib/cmake)
-set(imex_cmake_builddir " ${IMEX_BINARY_DIR}/${IMEX_INSTALL_PACKAGE_DIR} ")
-
-# Keep this in sync with llvm/cmake/CMakeLists.txt!
-set(LLVM_INSTALL_PACKAGE_DIR lib${LLVM_LIBDIR_SUFFIX}/cmake/llvm)
-set(llvm_cmake_builddir " ${LLVM_BINARY_DIR}/${LLVM_INSTALL_PACKAGE_DIR} ")
+set(IMEX_INSTALL_PACKAGE_DIR lib${LLVM_LIBDIR_SUFFIX}/cmake/imex)
+set(imex_cmake_builddir "${IMEX_BINARY_DIR}/${IMEX_INSTALL_PACKAGE_DIR}")
 
 get_property(IMEX_EXPORTS GLOBAL PROPERTY IMEX_EXPORTS)
 export(TARGETS ${IMEX_EXPORTS} FILE ${imex_cmake_builddir}/IMEXTargets.cmake)
@@ -129,11 +127,11 @@ get_property(IMEX_CONVERSION_LIBS GLOBAL PROPERTY IMEX_CONVERSION_LIBS)
 get_property(IMEX_TRANSLATION_LIBS GLOBAL PROPERTY IMEX_TRANSLATION_LIBS)
 
 # Generate IMEXConfig.cmake for the build tree.
-set(IMEX_CONFIG_CMAKE_DIR " ${imex_cmake_builddir} ")
-set(IMEX_CONFIG_INCLUDE_EXPORTS " include(\"\${IMEX_CMAKE_DIR}/IMEXTargets.cmake\") ")
+set(IMEX_CONFIG_CMAKE_DIR "${imex_cmake_builddir}")
+set(IMEX_CONFIG_INCLUDE_EXPORTS "include(\"\${IMEX_CMAKE_DIR}/IMEXTargets.cmake\")")
 set(IMEX_CONFIG_INCLUDE_DIRS
-    " ${IMEX_SOURCE_DIR}/include "
-    " ${IMEX_BINARY_DIR}/include "
+    "${IMEX_SOURCE_DIR}/include"
+    "${IMEX_BINARY_DIR}/include"
 )
 
 configure_file(
@@ -155,12 +153,12 @@ file(COPY .
 message(STATUS "IMEX_INSTALL_PACKAGE_DIR ${IMEX_INSTALL_PACKAGE_DIR}")
 
 # Generate IMEXConfig.cmake for the install tree.
-find_prefix_from_config(IMEX_CONFIG_CODE IMEX_INSTALL_PREFIX " ${IMEX_INSTALL_PACKAGE_DIR} ")
-set(IMEX_CONFIG_CMAKE_DIR " \${IMEX_INSTALL_PREFIX}/${IMEX_INSTALL_PACKAGE_DIR} ")
+find_prefix_from_config(IMEX_CONFIG_CODE IMEX_INSTALL_PREFIX "${IMEX_INSTALL_PACKAGE_DIR}")
+set(IMEX_CONFIG_CMAKE_DIR "\${IMEX_INSTALL_PREFIX}/${IMEX_INSTALL_PACKAGE_DIR}")
 get_config_exports_includes(IMEX IMEX_CONFIG_INCLUDE_EXPORTS)
-extend_path(base_includedir " \${IMEX_INSTALL_PREFIX}" "${CMAKE_INSTALL_INCLUDEDIR} ")
+extend_path(base_includedir "\${IMEX_INSTALL_PREFIX}" "${CMAKE_INSTALL_INCLUDEDIR}")
 set(IMEX_CONFIG_INCLUDE_DIRS
-    " ${base_includedir} "
+    "${base_includedir}"
 )
 
 configure_file(

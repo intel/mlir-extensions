@@ -22,13 +22,36 @@
 #include <mlir/Pass/Pass.h>
 
 namespace imex {
+#define GEN_PASS_DEF_SETSPIRVCAPABILITIES
+#include "imex/Transforms/Passes.h.inc"
+} // namespace imex
+
+namespace {
 struct SetSPIRVCapabilitiesPass
-    : public mlir::PassWrapper<SetSPIRVCapabilitiesPass,
-                               mlir::OperationPass<mlir::ModuleOp>> {
+    : public imex::impl::SetSPIRVCapabilitiesBase<SetSPIRVCapabilitiesPass> {
+public:
+  explicit SetSPIRVCapabilitiesPass() { m_clientAPI = "vulkan"; }
+  explicit SetSPIRVCapabilitiesPass(const mlir::StringRef &clientAPI)
+      : m_clientAPI(clientAPI) {}
+
+  mlir::LogicalResult initializeOptions(mlir::StringRef options) override {
+    if (failed(Pass::initializeOptions(options)))
+      return mlir::failure();
+
+    if (clientAPI == "opencl") {
+      m_clientAPI = "opencl";
+    }
+
+    if (clientAPI != "vulkan" && clientAPI != "opencl")
+      return mlir::failure();
+
+    return mlir::success();
+  }
+
   void runOnOperation() override {
     namespace spirv = mlir::spirv;
     auto context = &getContext();
-    spirv::Capability caps[] = {
+    spirv::Capability caps_opencl[] = {
         // clang-format off
         spirv::Capability::Addresses,
         spirv::Capability::Float16Buffer,
@@ -46,24 +69,49 @@ struct SetSPIRVCapabilitiesPass
         spirv::Capability::ExpectAssumeKHR,
         // clang-format on
     };
-    spirv::Extension exts[] = {
+    spirv::Capability caps_vulkan[] = {
+        // clang-format off
+        spirv::Capability::Shader,
+        // clang-format on
+    };
+    spirv::Extension exts_opencl[] = {
         spirv::Extension::SPV_EXT_shader_atomic_float_add,
         spirv::Extension::SPV_KHR_expect_assume};
-    auto triple =
-        spirv::VerCapExtAttr::get(spirv::Version::V_1_0, caps, exts, context);
-    auto attr = spirv::TargetEnvAttr::get(
-        triple, spirv::Vendor::Unknown, spirv::DeviceType::Unknown,
-        spirv::TargetEnvAttr::kUnknownDeviceID,
-        spirv::getDefaultResourceLimits(context));
-    auto op = getOperation();
-    op->walk([&](mlir::gpu::GPUModuleOp op) {
-      op->setAttr(spirv::getTargetEnvAttrName(), attr);
-    });
+    spirv::Extension exts_vulkan[] = {
+        spirv::Extension::SPV_KHR_storage_buffer_storage_class};
+    if (m_clientAPI == "opencl") {
+      auto triple = spirv::VerCapExtAttr::get(
+          spirv::Version::V_1_0, caps_opencl, exts_opencl, context);
+      auto attr = spirv::TargetEnvAttr::get(
+          triple, spirv::Vendor::Unknown, spirv::DeviceType::Unknown,
+          spirv::TargetEnvAttr::kUnknownDeviceID,
+          spirv::getDefaultResourceLimits(context));
+      auto op = getOperation();
+      op->walk([&](mlir::gpu::GPUModuleOp op) {
+        op->setAttr(spirv::getTargetEnvAttrName(), attr);
+      });
+    } else if (m_clientAPI == "vulkan") {
+      auto triple = spirv::VerCapExtAttr::get(
+          spirv::Version::V_1_0, caps_vulkan, exts_vulkan, context);
+      auto attr = spirv::TargetEnvAttr::get(
+          triple, spirv::Vendor::Unknown, spirv::DeviceType::Unknown,
+          spirv::TargetEnvAttr::kUnknownDeviceID,
+          spirv::getDefaultResourceLimits(context));
+      auto op = getOperation();
+      op->walk([&](mlir::gpu::GPUModuleOp op) {
+        op->setAttr(spirv::getTargetEnvAttrName(), attr);
+      });
+    }
   }
+
+private:
+  mlir::StringRef m_clientAPI;
 };
 
-} // namespace imex
+} // namespace
 
-std::unique_ptr<mlir::Pass> imex::createSetSPIRVCapabilitiesPass() {
+namespace imex {
+std::unique_ptr<mlir::Pass> createSetSPIRVCapabilitiesPass() {
   return std::make_unique<SetSPIRVCapabilitiesPass>();
 }
+} // namespace imex

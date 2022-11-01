@@ -270,18 +270,17 @@ static BodyType buildTrivial(::mlir::Type typ) {
               builder.create<IOP>(loc, lhs, rhs).getResult());
         return;
       } else
-        assert("Found integer type but binary op not defined for integers" ==
-               nullptr);
+        assert(0 &&
+               "Found integer type but binary op not defined for integers");
     } else if (lhsTyp.isIntOrIndexOrFloat()) {
       if constexpr (!std::is_same_v<FOP, void>) {
         yield(builder, loc, typ,
               builder.create<FOP>(loc, args[0], args[1]).getResult());
         return;
       } else
-        assert("Found float type but binary op not defined for floats" ==
-               nullptr);
+        assert(0 && "Found float type but binary op not defined for floats");
     } else {
-      assert("Only integers and floats supported for binary ops" == nullptr);
+      assert(0 && "Only integers and floats supported for binary ops");
     }
   };
 }
@@ -327,7 +326,7 @@ static BodyType getBodyBuilder(::imex::ptensor::EWBinOpId binOp,
   // case ptensor::LOGICAL_XOR] =
   // case ptensor::NOT_EQUAL] =
   default:
-    assert("unsupported elementwise binary operation" == nullptr);
+    assert(0 && "unsupported elementwise binary operation");
   };
 }
 
@@ -383,7 +382,7 @@ struct EWBinOpLowering
     auto rank = static_cast<unsigned>(retRtTyp.getRank());
     llvm::SmallVector<::mlir::OpFoldResult> shapeVVec(rank);
     llvm::SmallVector<mlir::StringRef> iterators(rank);
-    for (auto i : llvm::seq(0u, rank)) {
+    for (auto i : llvm::seq<unsigned>(0u, rank)) {
       shapeVVec[i] =
           rewriter.create<::mlir::tensor::DimOp>(loc, lhsTnsr, i).getResult();
       // iterate in parallel
@@ -435,7 +434,7 @@ static BodyType getBodyBuilder(::imex::ptensor::ReduceOpId redOp,
   case ::imex::ptensor::STD:
   case ::imex::ptensor::VAR:
   default:
-    assert("unsupported reduction operation" == nullptr);
+    assert(0 && "unsupported reduction operation");
   };
 }
 

@@ -71,7 +71,7 @@ void GPUXToSPIRVPass::runOnOperation() {
       std::unique_ptr<mlir::ConversionTarget> target =
           mlir::spirv::getMemorySpaceToStorageClassTarget(*context);
       mlir::spirv::MemorySpaceToStorageClassMap memorySpaceMap =
-          mlir::spirv::mapMemorySpaceToVulkanStorageClass;
+          mlir::spirv::mapMemorySpaceToOpenCLStorageClass;
       mlir::spirv::MemorySpaceToStorageClassConverter converter(memorySpaceMap);
 
       mlir::RewritePatternSet patterns(context);
