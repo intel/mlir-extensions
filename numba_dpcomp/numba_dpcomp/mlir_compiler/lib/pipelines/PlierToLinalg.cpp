@@ -1326,6 +1326,28 @@ castRetTypes(mlir::Location loc, mlir::PatternRewriter &rewriter,
   return results;
 }
 
+static mlir::FailureOr<mlir::Attribute> getEnvAttr(mlir::Operation *op) {
+  assert(op && "Invalid op");
+
+  mlir::Attribute env;
+  for (auto types : {mlir::TypeRange(op->getOperandTypes()),
+                     mlir::TypeRange(op->getResultTypes())}) {
+    for (auto type : types) {
+      auto tensor = type.dyn_cast<imex::ntensor::NTensorType>();
+      if (!tensor)
+        continue;
+
+      if (!env) {
+        env = tensor.getEnvironment();
+      } else if (env != tensor.getEnvironment()) {
+        return mlir::failure();
+      }
+    }
+  }
+
+  return env;
+}
+
 struct NtensorPrimitiveCallsLowering final
     : public mlir::OpRewritePattern<imex::ntensor::PrimitiveOp> {
   NtensorPrimitiveCallsLowering(mlir::MLIRContext *context)
@@ -1335,10 +1357,14 @@ struct NtensorPrimitiveCallsLowering final
   mlir::LogicalResult
   matchAndRewrite(imex::ntensor::PrimitiveOp op,
                   mlir::PatternRewriter &rewriter) const override {
+    auto env = getEnvAttr(op);
+    if (mlir::failed(env))
+      return mlir::failure();
+
     auto opName = op.getOp();
 
     auto loc = op->getLoc();
-    auto res = [&]() -> llvm::Optional<PyLinalgResolver::Values> {
+    auto getRes = [&]() -> llvm::Optional<PyLinalgResolver::Values> {
       auto args = op.getArgs();
       auto funcRes =
           resolver.rewriteFunc(opName, loc, rewriter, args, llvm::None);
@@ -1349,15 +1375,39 @@ struct NtensorPrimitiveCallsLowering final
         return resolver.rewriteAttr(opName, loc, rewriter, args.front());
 
       return llvm::None;
-    }();
+    };
 
-    if (!res)
-      return mlir::failure();
+    PyLinalgResolver::Values newRes;
+    if (*env != nullptr) {
+      auto regionOp = rewriter.create<imex::util::EnvironmentRegionOp>(
+          loc, *env, /*args*/ llvm::None, op->getResultTypes());
+      auto &newBody = regionOp.getRegion().front();
+      rewriter.eraseOp(newBody.getTerminator());
 
-    auto results = castRetTypes(loc, rewriter, op, res);
+      mlir::OpBuilder::InsertionGuard g(rewriter);
+      rewriter.setInsertionPointToStart(&newBody);
+      auto res = getRes();
+      if (!res) {
+        rewriter.eraseOp(regionOp);
+        return mlir::failure();
+      }
+
+      auto results = castRetTypes(loc, rewriter, op, *res);
+      rewriter.create<imex::util::EnvironmentRegionYieldOp>(loc, results);
+
+      auto regResults = regionOp.getResults();
+      newRes.assign(regResults.begin(), regResults.end());
+    } else {
+      auto res = getRes();
+      if (!res)
+        return mlir::failure();
+
+      auto results = castRetTypes(loc, rewriter, op, *res);
+      newRes.assign(results.begin(), results.end());
+    }
 
     rerunScfPipeline(op);
-    rewriter.replaceOp(op, results);
+    rewriter.replaceOp(op, newRes);
     return mlir::success();
   }
 
