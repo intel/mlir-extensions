@@ -1612,6 +1612,9 @@ struct GPUToLLVMPass
                                                       target);
     imex::populateUtilConversionPatterns(context, converter, patterns, target);
 
+    // TODO: There were some issues with structural conversion, investigate.
+    target.addLegalOp<mlir::arith::SelectOp>();
+
     auto mod = getOperation();
     if (mlir::failed(
             mlir::applyPartialConversion(mod, target, std::move(patterns))))
