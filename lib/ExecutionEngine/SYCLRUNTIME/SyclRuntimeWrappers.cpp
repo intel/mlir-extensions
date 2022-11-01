@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <stdexcept>
 #include <tuple>
 #include <vector>
 
@@ -52,8 +53,9 @@ template <typename F> auto catchAll(F &&func) {
   {                                                                            \
     ze_result_t status = (call);                                               \
     if (status != ZE_RESULT_SUCCESS) {                                         \
-      std::cout << "L0 error " << status << std::endl;                         \
-      exit(1);                                                                 \
+      fprintf(stdout, "L0 error %d\n", status);                                \
+      fflush(stdout);                                                          \
+      abort();                                                                 \
     }                                                                          \
   }
 
@@ -127,13 +129,13 @@ struct GPUSYCLQUEUE {
 
 static void *allocDeviceMemory(GPUSYCLQUEUE *queue, size_t size,
                                size_t alignment, bool isShared) {
-  void *mem_ptr = nullptr;
+  void *memPtr = nullptr;
   if (isShared) {
-    mem_ptr = sycl::aligned_alloc_shared(alignment, size, queue->syclQueue_);
+    memPtr = sycl::aligned_alloc_shared(alignment, size, queue->syclQueue_);
   } else {
-    mem_ptr = sycl::aligned_alloc_device(alignment, size, queue->syclQueue_);
+    memPtr = sycl::aligned_alloc_device(alignment, size, queue->syclQueue_);
   }
-  return mem_ptr;
+  return memPtr;
 }
 
 static void deallocDeviceMemory(GPUSYCLQUEUE *queue, void *ptr) {

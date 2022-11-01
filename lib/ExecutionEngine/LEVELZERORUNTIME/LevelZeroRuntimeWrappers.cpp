@@ -19,7 +19,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <iostream>
+#include <stdexcept>
 #include <tuple>
 #include <vector>
 
@@ -88,20 +88,20 @@ getDriverAndDevice(ze_device_type_t deviceType = ZE_DEVICE_TYPE_GPU) {
   CHECK_ZE_RESULT(zeDriverGet(&driverCount, allDrivers.data()));
 
   // Find a driver instance with a GPU device
+  std::vector<ze_device_handle_t> devices;
   for (uint32_t i = 0; i < driverCount; ++i) {
     uint32_t deviceCount = 0;
     CHECK_ZE_RESULT(zeDeviceGet(allDrivers[i], &deviceCount, nullptr));
     if (deviceCount == 0)
       continue;
-    ze_device_handle_t *allDevices =
-        (ze_device_handle_t *)malloc(deviceCount * sizeof(ze_device_handle_t));
-    CHECK_ZE_RESULT(zeDeviceGet(allDrivers[i], &deviceCount, allDevices));
+    devices.resize(deviceCount);
+    CHECK_ZE_RESULT(zeDeviceGet(allDrivers[i], &deviceCount, devices.data()));
     for (uint32_t d = 0; d < deviceCount; ++d) {
       ze_device_properties_t device_properties;
-      CHECK_ZE_RESULT(zeDeviceGetProperties(allDevices[d], &device_properties));
+      CHECK_ZE_RESULT(zeDeviceGetProperties(devices[d], &device_properties));
       if (deviceType == device_properties.type) {
         auto driver = allDrivers[i];
-        auto device = allDevices[d];
+        auto device = devices[d];
         return {driver, device};
       }
     }
@@ -176,19 +176,17 @@ static void *allocDeviceMemory(GPUL0QUEUE *queue, size_t size, size_t alignment,
                                bool isShared) {
 
   void *ret = nullptr;
-  auto gpuL0Queue = queue;
   ze_device_mem_alloc_desc_t devDesc = {};
   devDesc.stype = ZE_STRUCTURE_TYPE_DEVICE_MEM_ALLOC_DESC;
   if (isShared) {
     ze_host_mem_alloc_desc_t hostDesc = {};
     hostDesc.stype = ZE_STRUCTURE_TYPE_HOST_MEM_ALLOC_DESC;
-    CHECK_ZE_RESULT(zeMemAllocShared(gpuL0Queue->zeContext_, &devDesc,
-                                     &hostDesc, size, alignment,
-                                     gpuL0Queue->zeDevice_, &ret));
+    CHECK_ZE_RESULT(zeMemAllocShared(queue->zeContext_, &devDesc, &hostDesc,
+                                     size, alignment, queue->zeDevice_, &ret));
   } else {
     devDesc.flags = ZE_DEVICE_MEM_ALLOC_FLAG_BIAS_INITIAL_PLACEMENT;
-    CHECK_ZE_RESULT(zeMemAllocDevice(gpuL0Queue->zeContext_, &devDesc, size,
-                                     alignment, gpuL0Queue->zeDevice_, &ret));
+    CHECK_ZE_RESULT(zeMemAllocDevice(queue->zeContext_, &devDesc, size,
+                                     alignment, queue->zeDevice_, &ret));
   }
   return ret;
 }
