@@ -805,6 +805,13 @@ def test_group_func(group_op, global_size, local_size, dtype):
 
     assert_allclose(gpu_res, sim_res)
 
+def _from_host(arr, buffer):
+    ret = dpt.usm_ndarray(arr.shape, dtype=arr.dtype, buffer=buffer)
+    ret.usm_data.copy_from_host(arr.reshape((-1)).view("|u1"))
+    return ret
+
+def _to_host(src, dst):
+    src.usm_data.copy_to_host(dst.reshape((-1)).view("|u1"))
 
 @require_dpctl
 def test_dpctl_simple1():
@@ -821,15 +828,11 @@ def test_dpctl_simple1():
     sim_res = np.zeros(a.shape, a.dtype)
     sim_func[a.shape, DEFAULT_LOCAL_SIZE](a, b, sim_res)
 
-    da = dpt.usm_ndarray(a.shape, dtype=a.dtype, buffer="device")
-    da.usm_data.copy_from_host(a.reshape((-1)).view("|u1"))
-
-    db = dpt.usm_ndarray(b.shape, dtype=b.dtype, buffer="shared")
-    db.usm_data.copy_from_host(b.reshape((-1)).view("|u1"))
+    da = _from_host(a, buffer="device")
+    db = _from_host(b, buffer="shared")
 
     gpu_res = np.zeros(a.shape, a.dtype)
-    dgpu_res = dpt.usm_ndarray(gpu_res.shape, dtype=gpu_res.dtype, buffer="device")
-    dgpu_res.usm_data.copy_from_host(gpu_res.reshape((-1)).view("|u1"))
+    dgpu_res = _from_host(gpu_res, buffer="device")
 
     filter_string = dgpu_res.device.sycl_device.filter_string
     with print_pass_ir([], ["ConvertParallelLoopToGpu"]):
@@ -843,5 +846,5 @@ def test_dpctl_simple1():
         ), ir
         assert ir.count("gpu.launch blocks") == 1, ir
 
-    dgpu_res.usm_data.copy_to_host(gpu_res.reshape((-1)).view("|u1"))
+    _to_host(dgpu_res, gpu_res)
     assert_equal(gpu_res, sim_res)
