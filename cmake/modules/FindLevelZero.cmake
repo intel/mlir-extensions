@@ -1,33 +1,6 @@
-# Copyright 2022 Intel Corporation
+# SPDX-FileCopyrightText: 2022 Intel Corporation
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
-# CMake find_package() module for level-zero
-#
-# Example usage:
-#
-# find_package(LevelZero)
-#
-# If successful, the following variables will be defined:
-# LevelZero_FOUND
-# LevelZero_INCLUDE_DIR
-# LevelZero_LIBRARY
-# LevelZero_LIBRARIES_DIR
-#
-# By default, the module searches the standard paths to locate the "ze_api.h"
-# and the ze_loader shared library. When using a custom level-zero installation,
-# the environment variable "LEVEL_ZERO_DIR" should be specified telling the
-# module to get the level-zero library and headers from that location.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 include(FindPackageHandleStandardArgs)
 

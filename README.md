@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2022 Intel Corporation
+
+SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+-->
+
 # Intel Extension for MLIR
 
 A staging ground for MLIR dialects and tools.
