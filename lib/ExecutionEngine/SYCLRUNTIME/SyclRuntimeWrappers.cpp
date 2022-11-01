@@ -52,9 +52,8 @@ template <typename F> auto catchAll(F &&func) {
   {                                                                            \
     ze_result_t status = (call);                                               \
     if (status != ZE_RESULT_SUCCESS) {                                         \
-      fprintf(stdout, "L0 error  %d\n", status);                               \
-      fflush(stdout);                                                          \
-      abort();                                                                 \
+      std::cout << "L0 error " << status << std::endl;                         \
+      exit(1);                                                                 \
     }                                                                          \
   }
 
@@ -126,15 +125,13 @@ struct GPU_SYCL_QUEUE {
 
 }; // end of GPU_SYCL_QUEUE
 
-void *alloc_device_memory(void *queue, size_t size, size_t alignment,
+void *alloc_device_memory(GPU_SYCL_QUEUE *queue, size_t size, size_t alignment,
                           bool is_shared) {
   void *mem_ptr = nullptr;
   if (is_shared) {
-    mem_ptr = sycl::aligned_alloc_shared(
-        alignment, size, static_cast<GPU_SYCL_QUEUE *>(queue)->sycl_queue_);
+    mem_ptr = sycl::aligned_alloc_shared(alignment, size, queue->sycl_queue_);
   } else {
-    mem_ptr = sycl::aligned_alloc_device(
-        alignment, size, static_cast<GPU_SYCL_QUEUE *>(queue)->sycl_queue_);
+    mem_ptr = sycl::aligned_alloc_device(alignment, size, queue->sycl_queue_);
   }
   return mem_ptr;
 }
@@ -143,9 +140,10 @@ void dealloc_device_memory(void *queue, void *ptr) {
   sycl::free(ptr, static_cast<GPU_SYCL_QUEUE *>(queue)->sycl_queue_);
 }
 
-ze_module_handle_t loadModule(void *queue, const void *data, size_t dataSize) {
+ze_module_handle_t loadModule(GPU_SYCL_QUEUE *queue, const void *data,
+                              size_t dataSize) {
   assert(data);
-  auto sycl_queue = static_cast<GPU_SYCL_QUEUE *>(queue)->sycl_queue_;
+  auto sycl_queue = queue->sycl_queue_;
   ze_module_handle_t ze_module;
   ze_module_desc_t desc = {ZE_STRUCTURE_TYPE_MODULE_DESC,
                            nullptr,
@@ -162,11 +160,11 @@ ze_module_handle_t loadModule(void *queue, const void *data, size_t dataSize) {
   return ze_module;
 }
 
-void *getKernel(void *queue, void *module, const char *name) {
-  assert(module);
+sycl::kernel *getKernel(GPU_SYCL_QUEUE *queue, ze_module_handle_t ze_module,
+                        const char *name) {
+  assert(ze_module);
   assert(name);
-  auto sycl_queue = static_cast<GPU_SYCL_QUEUE *>(queue)->sycl_queue_;
-  ze_module_handle_t ze_module = static_cast<ze_module_handle_t>(module);
+  auto sycl_queue = queue->sycl_queue_;
   ze_kernel_handle_t ze_kernel;
   sycl::kernel *sycl_kernel;
   ze_kernel_desc_t desc = {};
@@ -184,10 +182,10 @@ void *getKernel(void *queue, void *module, const char *name) {
   return sycl_kernel;
 }
 
-void launchKernel(void *queue, sycl::kernel *kernel, size_t gridX, size_t gridY,
-                  size_t gridZ, size_t blockX, size_t blockY, size_t blockZ,
-                  size_t sharedMemBytes, ParamDesc *params) {
-  auto sycl_queue = static_cast<GPU_SYCL_QUEUE *>(queue)->sycl_queue_;
+void launchKernel(GPU_SYCL_QUEUE *queue, sycl::kernel *kernel, size_t gridX,
+                  size_t gridY, size_t gridZ, size_t blockX, size_t blockY,
+                  size_t blockZ, size_t sharedMemBytes, ParamDesc *params) {
+  auto sycl_queue = queue->sycl_queue_;
   auto sycl_global_range =
       ::sycl::range<3>(blockZ * gridZ, blockY * gridY, blockX * gridX);
   auto sycl_local_range = ::sycl::range<3>(blockZ, blockY, blockX);
@@ -208,8 +206,8 @@ void launchKernel(void *queue, sycl::kernel *kernel, size_t gridX, size_t gridY,
 
 // Wrappers
 
-extern "C" SYCL_RUNTIME_EXPORT void *gpuCreateStream(void *device,
-                                                     void *context) {
+extern "C" SYCL_RUNTIME_EXPORT GPU_SYCL_QUEUE *gpuCreateStream(void *device,
+                                                               void *context) {
   return catchAll([&]() {
     if (!device && !context) {
       return new GPU_SYCL_QUEUE();
@@ -224,12 +222,13 @@ extern "C" SYCL_RUNTIME_EXPORT void *gpuCreateStream(void *device,
   });
 }
 
-extern "C" SYCL_RUNTIME_EXPORT void gpuStreamDestroy(void *queue) {
-  catchAll([&]() { delete static_cast<GPU_SYCL_QUEUE *>(queue); });
+extern "C" SYCL_RUNTIME_EXPORT void gpuStreamDestroy(GPU_SYCL_QUEUE *queue) {
+  catchAll([&]() { delete queue; });
 }
 
-extern "C" SYCL_RUNTIME_EXPORT void *
-gpuMemAlloc(void *queue, size_t size, size_t alignment, bool is_shared) {
+extern "C" SYCL_RUNTIME_EXPORT void *gpuMemAlloc(GPU_SYCL_QUEUE *queue,
+                                                 size_t size, size_t alignment,
+                                                 bool is_shared) {
   return catchAll(
       [&]() { return alloc_device_memory(queue, size, alignment, is_shared); });
 }
@@ -238,28 +237,28 @@ extern "C" SYCL_RUNTIME_EXPORT void gpuMemFree(void *queue, void *ptr) {
   catchAll([&]() { dealloc_device_memory(queue, ptr); });
 }
 
-extern "C" SYCL_RUNTIME_EXPORT void *
-gpuModuleLoad(void *queue, const void *data, size_t dataSize) {
+extern "C" SYCL_RUNTIME_EXPORT ze_module_handle_t
+gpuModuleLoad(GPU_SYCL_QUEUE *queue, const void *data, size_t dataSize) {
   return catchAll([&]() { return loadModule(queue, data, dataSize); });
 }
 
-extern "C" SYCL_RUNTIME_EXPORT void *gpuKernelGet(void *queue, void *module,
-                                                  const char *name) {
+extern "C" SYCL_RUNTIME_EXPORT sycl::kernel *
+gpuKernelGet(GPU_SYCL_QUEUE *queue, ze_module_handle_t module,
+             const char *name) {
   return catchAll([&]() { return getKernel(queue, module, name); });
 }
 
 extern "C" SYCL_RUNTIME_EXPORT void
-gpuLaunchKernel(void *queue, void *kernel, size_t gridX, size_t gridY,
-                size_t gridZ, size_t blockX, size_t blockY, size_t blockZ,
-                size_t sharedMemBytes, void *params) {
+gpuLaunchKernel(GPU_SYCL_QUEUE *queue, sycl::kernel *kernel, size_t gridX,
+                size_t gridY, size_t gridZ, size_t blockX, size_t blockY,
+                size_t blockZ, size_t sharedMemBytes, void *params) {
   return catchAll([&]() {
-    launchKernel(queue, static_cast<sycl::kernel *>(kernel), gridX, gridY,
-                 gridZ, blockX, blockY, blockZ, sharedMemBytes,
-                 static_cast<ParamDesc *>(params));
+    launchKernel(queue, kernel, gridX, gridY, gridZ, blockX, blockY, blockZ,
+                 sharedMemBytes, static_cast<ParamDesc *>(params));
   });
 }
 
-extern "C" SYCL_RUNTIME_EXPORT void gpuWait(void *queue) {
+extern "C" SYCL_RUNTIME_EXPORT void gpuWait(GPU_SYCL_QUEUE *queue) {
 
-  catchAll([&]() { static_cast<GPU_SYCL_QUEUE *>(queue)->sycl_queue_.wait(); });
+  catchAll([&]() { queue->sycl_queue_.wait(); });
 }

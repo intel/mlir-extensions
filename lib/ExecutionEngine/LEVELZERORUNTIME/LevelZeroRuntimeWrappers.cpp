@@ -172,11 +172,11 @@ struct GPU_L0_QUEUE {
   }
 };
 
-void *alloc_device_memory(void *queue, size_t size, size_t alignment,
+void *alloc_device_memory(GPU_L0_QUEUE *queue, size_t size, size_t alignment,
                           bool is_shared) {
 
   void *ret = nullptr;
-  auto gpu_l0_queue = static_cast<GPU_L0_QUEUE *>(queue);
+  auto gpu_l0_queue = queue;
   ze_device_mem_alloc_desc_t devDesc = {};
   devDesc.stype = ZE_STRUCTURE_TYPE_DEVICE_MEM_ALLOC_DESC;
   if (is_shared) {
@@ -194,13 +194,14 @@ void *alloc_device_memory(void *queue, size_t size, size_t alignment,
   return ret;
 }
 
-void dealloc_device_memory(void *queue, void *ptr) {
-  zeMemFree(static_cast<GPU_L0_QUEUE *>(queue)->ze_context_, ptr);
+void dealloc_device_memory(GPU_L0_QUEUE *queue, void *ptr) {
+  zeMemFree(queue->ze_context_, ptr);
 }
 
-ze_module_handle_t loadModule(void *queue, const void *data, size_t dataSize) {
+ze_module_handle_t loadModule(GPU_L0_QUEUE *queue, const void *data,
+                              size_t dataSize) {
   assert(data);
-  auto gpu_l0_queue = static_cast<GPU_L0_QUEUE *>(queue);
+  auto gpu_l0_queue = queue;
   ze_module_handle_t ze_module;
   ze_module_desc_t desc = {};
   desc.format = ZE_MODULE_FORMAT_IL_SPIRV;
@@ -212,18 +213,18 @@ ze_module_handle_t loadModule(void *queue, const void *data, size_t dataSize) {
   return ze_module;
 }
 
-ze_kernel_handle_t getKernel(void *queue, void *module, const char *name) {
+ze_kernel_handle_t getKernel(GPU_L0_QUEUE *queue, ze_module_handle_t module,
+                             const char *name) {
   assert(module);
   assert(name);
   ze_kernel_desc_t desc = {};
   ze_kernel_handle_t ze_kernel;
   desc.pKernelName = name;
-  CHECK_ZE_RESULT(zeKernelCreate(static_cast<ze_module_handle_t>(module), &desc,
-                                 &ze_kernel));
+  CHECK_ZE_RESULT(zeKernelCreate(module, &desc, &ze_kernel));
   return ze_kernel;
 }
 
-void launchKernel(void *queue, ze_kernel_handle_t kernel, size_t gridX,
+void launchKernel(GPU_L0_QUEUE *queue, ze_kernel_handle_t kernel, size_t gridX,
                   size_t gridY, size_t gridZ, size_t blockX, size_t blockY,
                   size_t blockZ, size_t sharedMemBytes, ParamDesc *params) {
   assert(kernel);
@@ -241,13 +242,12 @@ void launchKernel(void *queue, ze_kernel_handle_t kernel, size_t gridX,
 
   ze_group_count_t launchArgs = {castSz(gridX), castSz(gridY), castSz(gridZ)};
   CHECK_ZE_RESULT(zeCommandListAppendLaunchKernel(
-      static_cast<GPU_L0_QUEUE *>(queue)->ze_commandList_, kernel, &launchArgs,
-      nullptr, 0, nullptr));
+      queue->ze_commandList_, kernel, &launchArgs, nullptr, 0, nullptr));
 }
 
 // Wrappers
-extern "C" LEVEL_ZERO_RUNTIME_EXPORT void *gpuCreateStream(void *device,
-                                                           void *context) {
+extern "C" LEVEL_ZERO_RUNTIME_EXPORT GPU_L0_QUEUE *
+gpuCreateStream(void *device, void *context) {
   return catchAll([&]() {
     if (!device && !context) {
       return new GPU_L0_QUEUE();
@@ -262,42 +262,45 @@ extern "C" LEVEL_ZERO_RUNTIME_EXPORT void *gpuCreateStream(void *device,
   });
 }
 
-extern "C" LEVEL_ZERO_RUNTIME_EXPORT void gpuStreamDestroy(void *queue) {
-  catchAll([&]() { delete static_cast<GPU_L0_QUEUE *>(queue); });
+extern "C" LEVEL_ZERO_RUNTIME_EXPORT void
+gpuStreamDestroy(GPU_L0_QUEUE *queue) {
+  catchAll([&]() { delete queue; });
 }
 
-extern "C" LEVEL_ZERO_RUNTIME_EXPORT void *
-gpuMemAlloc(void *queue, size_t size, size_t alignment, bool is_shared) {
+extern "C" LEVEL_ZERO_RUNTIME_EXPORT void *gpuMemAlloc(GPU_L0_QUEUE *queue,
+                                                       size_t size,
+                                                       size_t alignment,
+                                                       bool is_shared) {
   return catchAll(
       [&]() { return alloc_device_memory(queue, size, alignment, is_shared); });
 }
 
-extern "C" LEVEL_ZERO_RUNTIME_EXPORT void gpuMemFree(void *queue, void *ptr) {
+extern "C" LEVEL_ZERO_RUNTIME_EXPORT void gpuMemFree(GPU_L0_QUEUE *queue,
+                                                     void *ptr) {
   catchAll([&]() { dealloc_device_memory(queue, ptr); });
 }
 
-extern "C" LEVEL_ZERO_RUNTIME_EXPORT void *
-gpuModuleLoad(void *queue, const void *data, size_t dataSize) {
+extern "C" LEVEL_ZERO_RUNTIME_EXPORT ze_module_handle_t
+gpuModuleLoad(GPU_L0_QUEUE *queue, const void *data, size_t dataSize) {
   return catchAll([&]() { return loadModule(queue, data, dataSize); });
 }
 
-extern "C" LEVEL_ZERO_RUNTIME_EXPORT void *
-gpuKernelGet(void *queue, void *module, const char *name) {
+extern "C" LEVEL_ZERO_RUNTIME_EXPORT ze_kernel_handle_t
+gpuKernelGet(GPU_L0_QUEUE *queue, ze_module_handle_t module, const char *name) {
   return catchAll([&]() { return getKernel(queue, module, name); });
 }
 
 extern "C" LEVEL_ZERO_RUNTIME_EXPORT void
-gpuLaunchKernel(void *queue, void *kernel, size_t gridX, size_t gridY,
-                size_t gridZ, size_t blockX, size_t blockY, size_t blockZ,
-                size_t sharedMemBytes, void *params) {
+gpuLaunchKernel(GPU_L0_QUEUE *queue, ze_kernel_handle_t kernel, size_t gridX,
+                size_t gridY, size_t gridZ, size_t blockX, size_t blockY,
+                size_t blockZ, size_t sharedMemBytes, void *params) {
   return catchAll([&]() {
-    launchKernel(queue, static_cast<ze_kernel_handle_t>(kernel), gridX, gridY,
-                 gridZ, blockX, blockY, blockZ, sharedMemBytes,
-                 static_cast<ParamDesc *>(params));
+    launchKernel(queue, kernel, gridX, gridY, gridZ, blockX, blockY, blockZ,
+                 sharedMemBytes, static_cast<ParamDesc *>(params));
   });
 }
 
-extern "C" LEVEL_ZERO_RUNTIME_EXPORT void gpuWait(void *queue) {
+extern "C" LEVEL_ZERO_RUNTIME_EXPORT void gpuWait(GPU_L0_QUEUE *queue) {
   catchAll([&]() {
     // TODO: Find out ze Wait for host.
     return;
