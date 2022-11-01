@@ -881,7 +881,7 @@ def test_cfd_simple1():
             )
             > 0
         ), ir
-        assert ir.count("gpu.launch blocks") == 0, ir
+        assert ir.count("gpu.launch blocks") == 1, ir
 
     _to_host(dgpu_res, gpu_res)
     assert_equal(gpu_res, sim_res)
