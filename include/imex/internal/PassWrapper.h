@@ -1,5 +1,4 @@
-//===- PassWrapper.h - -------------------------------------------*- C++
-//-*-===//
+//===- PassWrapper.h - ----------------------------------------*- C++//-*-===//
 //
 // Copyright 2022 Intel Corporation
 // Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
