@@ -78,7 +78,7 @@ template <typename T> size_t countUntil(T *ptr, T &&elem) {
 }
 
 static std::pair<ze_driver_handle_t, ze_device_handle_t>
-get_driver_and_device(ze_device_type_t device_type = ZE_DEVICE_TYPE_GPU) {
+getDriverAndDevice(ze_device_type_t deviceType = ZE_DEVICE_TYPE_GPU) {
 
   CHECK_ZE_RESULT(zeInit(ZE_INIT_FLAG_GPU_ONLY));
   uint32_t driverCount = 0;
@@ -99,7 +99,7 @@ get_driver_and_device(ze_device_type_t device_type = ZE_DEVICE_TYPE_GPU) {
     for (uint32_t d = 0; d < deviceCount; ++d) {
       ze_device_properties_t device_properties;
       CHECK_ZE_RESULT(zeDeviceGetProperties(allDevices[d], &device_properties));
-      if (device_type == device_properties.type) {
+      if (deviceType == device_properties.type) {
         auto driver = allDrivers[i];
         auto device = allDevices[d];
         return {driver, device};
@@ -109,124 +109,123 @@ get_driver_and_device(ze_device_type_t device_type = ZE_DEVICE_TYPE_GPU) {
   throw std::runtime_error("getDevice failed");
 }
 
-struct GPU_L0_QUEUE {
+struct GPUL0QUEUE {
 
-  ze_driver_handle_t ze_driver_ = nullptr;
-  ze_device_handle_t ze_device_ = nullptr;
-  ze_context_handle_t ze_context_ = nullptr;
-  ze_command_list_handle_t ze_commandList_ = nullptr;
+  ze_driver_handle_t zeDriver_ = nullptr;
+  ze_device_handle_t zeDevice_ = nullptr;
+  ze_context_handle_t zeContext_ = nullptr;
+  ze_command_list_handle_t zeCommandList_ = nullptr;
 
-  GPU_L0_QUEUE() {
-    auto driverAndDevice = get_driver_and_device();
-    ze_driver_ = driverAndDevice.first;
-    ze_device_ = driverAndDevice.second;
-
-    ze_context_desc_t contextDesc = {ZE_STRUCTURE_TYPE_CONTEXT_DESC, nullptr,
-                                     0};
-    CHECK_ZE_RESULT(zeContextCreate(ze_driver_, &contextDesc, &ze_context_));
-
-    ze_command_queue_desc_t desc = {};
-    desc.mode = ZE_COMMAND_QUEUE_MODE_ASYNCHRONOUS;
-    CHECK_ZE_RESULT(zeCommandListCreateImmediate(ze_context_, ze_device_, &desc,
-                                                 &ze_commandList_));
-  }
-  GPU_L0_QUEUE(ze_device_type_t *device_type, ze_context_handle_t context) {
-    auto driverAndDevice = get_driver_and_device(*device_type);
-    ze_driver_ = driverAndDevice.first;
-    ze_device_ = driverAndDevice.second;
-
-    ze_context_ = context;
-
-    ze_command_queue_desc_t desc = {};
-    desc.mode = ZE_COMMAND_QUEUE_MODE_ASYNCHRONOUS;
-    CHECK_ZE_RESULT(zeCommandListCreateImmediate(ze_context_, ze_device_, &desc,
-                                                 &ze_commandList_));
-  }
-  GPU_L0_QUEUE(ze_device_type_t *device_type) {
-
-    auto driverAndDevice = get_driver_and_device(*device_type);
-    ze_driver_ = driverAndDevice.first;
-    ze_device_ = driverAndDevice.second;
+  GPUL0QUEUE() {
+    auto driverAndDevice = getDriverAndDevice();
+    zeDriver_ = driverAndDevice.first;
+    zeDevice_ = driverAndDevice.second;
 
     ze_context_desc_t contextDesc = {ZE_STRUCTURE_TYPE_CONTEXT_DESC, nullptr,
                                      0};
-    CHECK_ZE_RESULT(zeContextCreate(ze_driver_, &contextDesc, &ze_context_));
+    CHECK_ZE_RESULT(zeContextCreate(zeDriver_, &contextDesc, &zeContext_));
 
     ze_command_queue_desc_t desc = {};
     desc.mode = ZE_COMMAND_QUEUE_MODE_ASYNCHRONOUS;
-    CHECK_ZE_RESULT(zeCommandListCreateImmediate(ze_context_, ze_device_, &desc,
-                                                 &ze_commandList_));
+    CHECK_ZE_RESULT(zeCommandListCreateImmediate(zeContext_, zeDevice_, &desc,
+                                                 &zeCommandList_));
   }
-  GPU_L0_QUEUE(ze_context_handle_t context) {
+  GPUL0QUEUE(ze_device_type_t *deviceType, ze_context_handle_t context) {
+    auto driverAndDevice = getDriverAndDevice(*deviceType);
+    zeDriver_ = driverAndDevice.first;
+    zeDevice_ = driverAndDevice.second;
 
-    auto driverAndDevice = get_driver_and_device();
-    ze_driver_ = driverAndDevice.first;
-    ze_device_ = driverAndDevice.second;
-    ze_context_ = context;
+    zeContext_ = context;
+
+    ze_command_queue_desc_t desc = {};
+    desc.mode = ZE_COMMAND_QUEUE_MODE_ASYNCHRONOUS;
+    CHECK_ZE_RESULT(zeCommandListCreateImmediate(zeContext_, zeDevice_, &desc,
+                                                 &zeCommandList_));
+  }
+  GPUL0QUEUE(ze_device_type_t *deviceType) {
+
+    auto driverAndDevice = getDriverAndDevice(*deviceType);
+    zeDriver_ = driverAndDevice.first;
+    zeDevice_ = driverAndDevice.second;
+
+    ze_context_desc_t contextDesc = {ZE_STRUCTURE_TYPE_CONTEXT_DESC, nullptr,
+                                     0};
+    CHECK_ZE_RESULT(zeContextCreate(zeDriver_, &contextDesc, &zeContext_));
+
+    ze_command_queue_desc_t desc = {};
+    desc.mode = ZE_COMMAND_QUEUE_MODE_ASYNCHRONOUS;
+    CHECK_ZE_RESULT(zeCommandListCreateImmediate(zeContext_, zeDevice_, &desc,
+                                                 &zeCommandList_));
+  }
+  GPUL0QUEUE(ze_context_handle_t context) {
+
+    auto driverAndDevice = getDriverAndDevice();
+    zeDriver_ = driverAndDevice.first;
+    zeDevice_ = driverAndDevice.second;
+    zeContext_ = context;
 
     ze_command_queue_desc_t desc = {};
     desc.mode = ZE_COMMAND_QUEUE_MODE_ASYNCHRONOUS;
 
-    CHECK_ZE_RESULT(zeCommandListCreateImmediate(ze_context_, ze_device_, &desc,
-                                                 &ze_commandList_));
+    CHECK_ZE_RESULT(zeCommandListCreateImmediate(zeContext_, zeDevice_, &desc,
+                                                 &zeCommandList_));
   }
 };
 
-void *alloc_device_memory(GPU_L0_QUEUE *queue, size_t size, size_t alignment,
-                          bool is_shared) {
+static void *allocDeviceMemory(GPUL0QUEUE *queue, size_t size, size_t alignment,
+                               bool isShared) {
 
   void *ret = nullptr;
-  auto gpu_l0_queue = queue;
+  auto gpuL0Queue = queue;
   ze_device_mem_alloc_desc_t devDesc = {};
   devDesc.stype = ZE_STRUCTURE_TYPE_DEVICE_MEM_ALLOC_DESC;
-  if (is_shared) {
+  if (isShared) {
     ze_host_mem_alloc_desc_t hostDesc = {};
     hostDesc.stype = ZE_STRUCTURE_TYPE_HOST_MEM_ALLOC_DESC;
-    CHECK_ZE_RESULT(zeMemAllocShared(gpu_l0_queue->ze_context_, &devDesc,
+    CHECK_ZE_RESULT(zeMemAllocShared(gpuL0Queue->zeContext_, &devDesc,
                                      &hostDesc, size, alignment,
-                                     gpu_l0_queue->ze_device_, &ret));
+                                     gpuL0Queue->zeDevice_, &ret));
   } else {
     devDesc.flags = ZE_DEVICE_MEM_ALLOC_FLAG_BIAS_INITIAL_PLACEMENT;
-    CHECK_ZE_RESULT(zeMemAllocDevice(gpu_l0_queue->ze_context_, &devDesc, size,
-                                     alignment, gpu_l0_queue->ze_device_,
-                                     &ret));
+    CHECK_ZE_RESULT(zeMemAllocDevice(gpuL0Queue->zeContext_, &devDesc, size,
+                                     alignment, gpuL0Queue->zeDevice_, &ret));
   }
   return ret;
 }
 
-void dealloc_device_memory(GPU_L0_QUEUE *queue, void *ptr) {
-  zeMemFree(queue->ze_context_, ptr);
+static void deallocDeviceMemory(GPUL0QUEUE *queue, void *ptr) {
+  zeMemFree(queue->zeContext_, ptr);
 }
 
-ze_module_handle_t loadModule(GPU_L0_QUEUE *queue, const void *data,
-                              size_t dataSize) {
+static ze_module_handle_t loadModule(GPUL0QUEUE *queue, const void *data,
+                                     size_t dataSize) {
   assert(data);
-  auto gpu_l0_queue = queue;
-  ze_module_handle_t ze_module;
+  auto gpuL0Queue = queue;
+  ze_module_handle_t zeModule;
   ze_module_desc_t desc = {};
   desc.format = ZE_MODULE_FORMAT_IL_SPIRV;
   desc.pInputModule = static_cast<const uint8_t *>(data);
   desc.inputSize = dataSize;
-  CHECK_ZE_RESULT(zeModuleCreate(gpu_l0_queue->ze_context_,
-                                 gpu_l0_queue->ze_device_, &desc, &ze_module,
-                                 nullptr));
-  return ze_module;
+  CHECK_ZE_RESULT(zeModuleCreate(gpuL0Queue->zeContext_, gpuL0Queue->zeDevice_,
+                                 &desc, &zeModule, nullptr));
+  return zeModule;
 }
 
-ze_kernel_handle_t getKernel(GPU_L0_QUEUE *queue, ze_module_handle_t module,
-                             const char *name) {
+static ze_kernel_handle_t
+getKernel(GPUL0QUEUE *queue, ze_module_handle_t module, const char *name) {
   assert(module);
   assert(name);
   ze_kernel_desc_t desc = {};
-  ze_kernel_handle_t ze_kernel;
+  ze_kernel_handle_t zeKernel;
   desc.pKernelName = name;
-  CHECK_ZE_RESULT(zeKernelCreate(module, &desc, &ze_kernel));
-  return ze_kernel;
+  CHECK_ZE_RESULT(zeKernelCreate(module, &desc, &zeKernel));
+  return zeKernel;
 }
 
-void launchKernel(GPU_L0_QUEUE *queue, ze_kernel_handle_t kernel, size_t gridX,
-                  size_t gridY, size_t gridZ, size_t blockX, size_t blockY,
-                  size_t blockZ, size_t sharedMemBytes, ParamDesc *params) {
+static void launchKernel(GPUL0QUEUE *queue, ze_kernel_handle_t kernel,
+                         size_t gridX, size_t gridY, size_t gridZ,
+                         size_t blockX, size_t blockY, size_t blockZ,
+                         size_t sharedMemBytes, ParamDesc *params) {
   assert(kernel);
   auto paramsCount = countUntil(params, ParamDesc{nullptr, 0});
 
@@ -242,56 +241,53 @@ void launchKernel(GPU_L0_QUEUE *queue, ze_kernel_handle_t kernel, size_t gridX,
 
   ze_group_count_t launchArgs = {castSz(gridX), castSz(gridY), castSz(gridZ)};
   CHECK_ZE_RESULT(zeCommandListAppendLaunchKernel(
-      queue->ze_commandList_, kernel, &launchArgs, nullptr, 0, nullptr));
+      queue->zeCommandList_, kernel, &launchArgs, nullptr, 0, nullptr));
 }
 
 // Wrappers
-extern "C" LEVEL_ZERO_RUNTIME_EXPORT GPU_L0_QUEUE *
+extern "C" LEVEL_ZERO_RUNTIME_EXPORT GPUL0QUEUE *
 gpuCreateStream(void *device, void *context) {
   return catchAll([&]() {
     if (!device && !context) {
-      return new GPU_L0_QUEUE();
+      return new GPUL0QUEUE();
     } else if (device && context) {
-      return new GPU_L0_QUEUE(static_cast<ze_device_type_t *>(device),
-                              static_cast<ze_context_handle_t>(context));
+      return new GPUL0QUEUE(static_cast<ze_device_type_t *>(device),
+                            static_cast<ze_context_handle_t>(context));
     } else if (device && !context) {
-      return new GPU_L0_QUEUE(static_cast<ze_device_type_t *>(device));
+      return new GPUL0QUEUE(static_cast<ze_device_type_t *>(device));
     } else {
-      return new GPU_L0_QUEUE(static_cast<ze_context_handle_t>(context));
+      return new GPUL0QUEUE(static_cast<ze_context_handle_t>(context));
     }
   });
 }
 
-extern "C" LEVEL_ZERO_RUNTIME_EXPORT void
-gpuStreamDestroy(GPU_L0_QUEUE *queue) {
+extern "C" LEVEL_ZERO_RUNTIME_EXPORT void gpuStreamDestroy(GPUL0QUEUE *queue) {
   catchAll([&]() { delete queue; });
 }
 
-extern "C" LEVEL_ZERO_RUNTIME_EXPORT void *gpuMemAlloc(GPU_L0_QUEUE *queue,
-                                                       size_t size,
-                                                       size_t alignment,
-                                                       bool is_shared) {
+extern "C" LEVEL_ZERO_RUNTIME_EXPORT void *
+gpuMemAlloc(GPUL0QUEUE *queue, size_t size, size_t alignment, bool isShared) {
   return catchAll(
-      [&]() { return alloc_device_memory(queue, size, alignment, is_shared); });
+      [&]() { return allocDeviceMemory(queue, size, alignment, isShared); });
 }
 
-extern "C" LEVEL_ZERO_RUNTIME_EXPORT void gpuMemFree(GPU_L0_QUEUE *queue,
+extern "C" LEVEL_ZERO_RUNTIME_EXPORT void gpuMemFree(GPUL0QUEUE *queue,
                                                      void *ptr) {
-  catchAll([&]() { dealloc_device_memory(queue, ptr); });
+  catchAll([&]() { deallocDeviceMemory(queue, ptr); });
 }
 
 extern "C" LEVEL_ZERO_RUNTIME_EXPORT ze_module_handle_t
-gpuModuleLoad(GPU_L0_QUEUE *queue, const void *data, size_t dataSize) {
+gpuModuleLoad(GPUL0QUEUE *queue, const void *data, size_t dataSize) {
   return catchAll([&]() { return loadModule(queue, data, dataSize); });
 }
 
 extern "C" LEVEL_ZERO_RUNTIME_EXPORT ze_kernel_handle_t
-gpuKernelGet(GPU_L0_QUEUE *queue, ze_module_handle_t module, const char *name) {
+gpuKernelGet(GPUL0QUEUE *queue, ze_module_handle_t module, const char *name) {
   return catchAll([&]() { return getKernel(queue, module, name); });
 }
 
 extern "C" LEVEL_ZERO_RUNTIME_EXPORT void
-gpuLaunchKernel(GPU_L0_QUEUE *queue, ze_kernel_handle_t kernel, size_t gridX,
+gpuLaunchKernel(GPUL0QUEUE *queue, ze_kernel_handle_t kernel, size_t gridX,
                 size_t gridY, size_t gridZ, size_t blockX, size_t blockY,
                 size_t blockZ, size_t sharedMemBytes, void *params) {
   return catchAll([&]() {
@@ -300,7 +296,7 @@ gpuLaunchKernel(GPU_L0_QUEUE *queue, ze_kernel_handle_t kernel, size_t gridX,
   });
 }
 
-extern "C" LEVEL_ZERO_RUNTIME_EXPORT void gpuWait(GPU_L0_QUEUE *queue) {
+extern "C" LEVEL_ZERO_RUNTIME_EXPORT void gpuWait(GPUL0QUEUE *queue) {
   catchAll([&]() {
     // TODO: Find out ze Wait for host.
     return;
