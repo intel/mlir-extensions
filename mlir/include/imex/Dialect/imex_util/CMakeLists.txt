@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2022 Intel Corporation
+#
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
 include_directories(${MLIR_INCLUDE_DIRS})
 set(dialect ImexUtilOps)
 set(dialect_namespace imex_util)

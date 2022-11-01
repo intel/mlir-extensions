@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2022 Intel Corporation
+
+SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+-->
+
 Please review these guidelines to help with the review process:
 - [ ] Have you provided a meaningful PR description?
 - [ ] Have you added a test, a reproducer, or a reference to an issue with a reproducer?

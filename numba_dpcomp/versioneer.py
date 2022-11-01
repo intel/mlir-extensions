@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2022 Intel Corporation
+#
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
 # Version: 0.21
 
 """The Versioneer - like a rocketeer, but for versions.
