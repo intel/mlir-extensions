@@ -33,6 +33,7 @@ from numba_dpcomp.mlir.passes import (
 )
 
 from .utils import JitfuncCache
+from .utils import njit_cached as njit
 
 kernel_cache = JitfuncCache(kernel)
 kernel_cached = kernel_cache.cached_decorator
@@ -805,13 +806,16 @@ def test_group_func(group_op, global_size, local_size, dtype):
 
     assert_allclose(gpu_res, sim_res)
 
+
 def _from_host(arr, buffer):
     ret = dpt.usm_ndarray(arr.shape, dtype=arr.dtype, buffer=buffer)
     ret.usm_data.copy_from_host(arr.reshape((-1)).view("|u1"))
     return ret
 
+
 def _to_host(src, dst):
     src.usm_data.copy_to_host(dst.reshape((-1)).view("|u1"))
+
 
 @require_dpctl
 def test_dpctl_simple1():
@@ -837,6 +841,41 @@ def test_dpctl_simple1():
     filter_string = dgpu_res.device.sycl_device.filter_string
     with print_pass_ir([], ["ConvertParallelLoopToGpu"]):
         gpu_func[a.shape, DEFAULT_LOCAL_SIZE](da, db, dgpu_res)
+        ir = get_print_buffer()
+        assert (
+            ir.count(
+                f'imex_util.env_region #gpu_runtime.region_desc<device = "{filter_string}">'
+            )
+            > 0
+        ), ir
+        assert ir.count("gpu.launch blocks") == 1, ir
+
+    _to_host(dgpu_res, gpu_res)
+    assert_equal(gpu_res, sim_res)
+
+
+@require_dpctl
+def test_cfd_simple1():
+    def py_func(a, b, c):
+        c[:] = a + b
+
+    jit_func = njit(py_func)
+
+    a = np.arange(1024, dtype=np.float32)
+    b = np.arange(1024, dtype=np.float32) * 3
+
+    sim_res = np.zeros(a.shape, a.dtype)
+    py_func(a, b, sim_res)
+
+    da = _from_host(a, buffer="device")
+    db = _from_host(b, buffer="shared")
+
+    gpu_res = np.zeros(a.shape, a.dtype)
+    dgpu_res = _from_host(gpu_res, buffer="device")
+
+    filter_string = dgpu_res.device.sycl_device.filter_string
+    with print_pass_ir([], ["ConvertParallelLoopToGpu"]):
+        jit_func(da, db, dgpu_res)
         ir = get_print_buffer()
         assert (
             ir.count(
