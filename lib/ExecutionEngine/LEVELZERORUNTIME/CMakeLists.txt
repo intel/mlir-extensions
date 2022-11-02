@@ -12,16 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+if(NOT LEVEL_ZERO_DIR)
+    message(FATAL_ERROR "LEVEL_ZERO_DIR is not set")
+endif()
+
 add_mlir_library(level-zero-runtime
     SHARED
     LevelZeroRuntimeWrappers.cpp
 
     EXCLUDE_FROM_LIBMLIR
   )
-
-if(NOT LEVEL_ZERO_DIR)
-    message(FATAL_ERROR "LEVEL_ZERO_DIR is not set")
-endif()
 
 target_compile_options (level-zero-runtime PUBLIC -fexceptions)
 

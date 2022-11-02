@@ -215,6 +215,8 @@ extern "C" SYCL_RUNTIME_EXPORT GPUSYCLQUEUE *gpuCreateStream(void *device,
     if (!device && !context) {
       return new GPUSYCLQUEUE();
     } else if (device && context) {
+      // TODO: Check if the pointers/address is valid and holds the correct
+      // device and context
       return new GPUSYCLQUEUE(static_cast<sycl::device *>(device),
                               static_cast<sycl::context *>(context));
     } else if (device && !context) {

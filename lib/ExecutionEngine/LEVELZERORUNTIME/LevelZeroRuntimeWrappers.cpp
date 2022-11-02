@@ -249,6 +249,8 @@ gpuCreateStream(void *device, void *context) {
     if (!device && !context) {
       return new GPUL0QUEUE();
     } else if (device && context) {
+      // TODO: Check if the pointers/address is valid and holds the correct
+      // device and context
       return new GPUL0QUEUE(static_cast<ze_device_type_t *>(device),
                             static_cast<ze_context_handle_t>(context));
     } else if (device && !context) {
