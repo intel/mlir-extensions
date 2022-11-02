@@ -2,16 +2,42 @@
 #map1 = affine_map<(d0, d1, d2, d3, d4) -> (d3, d4, d2)>
 #map2 = affine_map<(d0, d1, d2, d3, d4) -> (d0, d1, d2)>
 module @conv_1d {
-  func @main(%arg0: tensor<1x244x3xi64>, %arg1: tensor<3x3x1xi64>) -> tensor<1x242x1xi64> {
-    %c0_i64 = arith.constant 0 : i64
-    %0 = linalg.init_tensor [1, 242, 1] : tensor<1x242x1xi64>
-    %1 = linalg.fill ins(%c0_i64 : i64) outs(%0 : tensor<1x242x1xi64>) -> tensor<1x242x1xi64>
-    %2 = linalg.generic {indexing_maps = [#map0, #map1, #map2], iterator_types = ["parallel", "parallel", "parallel", "reduction", "reduction"]} ins(%arg0, %arg1 : tensor<1x244x3xi64>, tensor<3x3x1xi64>) outs(%1 : tensor<1x242x1xi64>) attrs =  {iterator_ranges = [1, 242, 1, 3, 3]} {
-    ^bb0(%arg2: i64, %arg3: i64, %arg4: i64):
-      %3 = arith.muli %arg2, %arg3 : i64
-      %4 = arith.addi %arg4, %3 : i64
-      linalg.yield %4 : i64
-    } -> tensor<1x242x1xi64>
-    return %2 : tensor<1x242x1xi64>
+  func.func @main(%arg0: tensor<1x14x3xf32>, %arg1: tensor<3x3x1xf32>) -> tensor<1x12x1xf32> {
+    %c0 = arith.constant 0.0 : f32
+    %0 = tensor.empty() : tensor<1x12x1xf32>
+    %1 = linalg.fill ins(%c0 : f32) outs(%0 : tensor<1x12x1xf32>) -> tensor<1x12x1xf32>
+    %2 = linalg.generic {indexing_maps = [#map0, #map1, #map2], iterator_types = ["parallel", "parallel", "parallel", "reduction", "reduction"]} ins(%arg0, %arg1 : tensor<1x14x3xf32>, tensor<3x3x1xf32>) outs(%1 : tensor<1x12x1xf32>) attrs =  {iterator_ranges = [1, 12, 1, 3, 3]} {
+    ^bb0(%arg2: f32, %arg3: f32, %arg4: f32):
+      %3 = arith.mulf %arg2, %arg3 : f32
+      %4 = arith.addf %arg4, %3 : f32
+      linalg.yield %4 : f32
+    } -> tensor<1x12x1xf32>
+    return %2 : tensor<1x12x1xf32>
   }
+
+  func.func @test() {
+    %0 = arith.constant dense<[[[1.0, 2.0, 3.0],
+                                [2.0, 3.0, 4.0],
+                                [3.0, 4.0, 5.0],
+                                [4.0, 5.0, 6.0],
+                                [5.0, 6.0, 7.0],
+                                [6.0, 7.0, 8.0],
+                                [7.0, 8.0, 9.0],
+                                [8.0, 9.0, 0.0],
+                                [9.0, 0.0, 1.0],
+                                [0.0, 1.0, 2.0],
+                                [1.0, 2.0, 3.0],
+                                [2.0, 3.0, 4.0],
+                                [3.0, 4.0, 5.0],
+                                [4.0, 5.0, 6.0]]]> : tensor<1x14x3xf32>
+    %1 = arith.constant dense<[[[1.0], [2.0], [1.0]], [[2.0], [4.0], [2.0]], [[3.0], [5.0], [3.0]]]> : tensor<3x3x1xf32>
+    %2 = call @main(%0, %1) : (tensor<1x14x3xf32>, tensor<3x3x1xf32>) -> tensor<1x12x1xf32>
+    %unranked = tensor.cast %2 : tensor<1x12x1xf32> to tensor<*xf32>
+    call @printMemrefF32(%unranked) : (tensor<*xf32>) -> ()
+    //      CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
+    // CHECK-NEXT: [76.0, 99.0, 122.0, 145.0, 168.0, 161.0, 114.0, 57.0, 40.0, 53.0, 76.0, 99.0]
+    return
+  }
+
+  func.func private @printMemrefF32(%ptr : tensor<*xf32>)
 }
