@@ -184,6 +184,11 @@ struct ResolveIndexPropagate
 };
 } // namespace
 
+void imex::ntensor::DimOp::getAsmResultNames(
+    llvm::function_ref<void(mlir::Value, mlir::StringRef)> setNameFn) {
+  setNameFn(getResult(), "dim");
+}
+
 void imex::ntensor::DimOp::build(mlir::OpBuilder &builder,
                                  mlir::OperationState &result,
                                  mlir::Value source, int64_t index) {
@@ -192,11 +197,42 @@ void imex::ntensor::DimOp::build(mlir::OpBuilder &builder,
   build(builder, result, source, indexValue);
 }
 
-void imex::ntensor::DimOp::build(mlir::OpBuilder &builder,
-                                 mlir::OperationState &result,
-                                 mlir::Value source, mlir::Value index) {
-  auto indexTy = builder.getIndexType();
-  build(builder, result, indexTy, source, index);
+llvm::Optional<int64_t> imex::ntensor::DimOp::getConstantIndex() {
+  if (auto constantOp = getIndex().getDefiningOp<mlir::arith::ConstantOp>())
+    return constantOp.getValue().cast<mlir::IntegerAttr>().getInt();
+  return {};
+}
+
+mlir::Speculation::Speculatability imex::ntensor::DimOp::getSpeculatability() {
+  auto constantIndex = getConstantIndex();
+  if (!constantIndex)
+    return mlir::Speculation::NotSpeculatable;
+
+  auto rankedType =
+      mlir::dyn_cast<imex::ntensor::NTensorType>(getSource().getType());
+  if (!rankedType)
+    return mlir::Speculation::NotSpeculatable;
+
+  // The verifier rejects operations that violate this assertion.
+  assert(constantIndex < rankedType.getRank());
+  return mlir::Speculation::Speculatable;
+}
+
+mlir::LogicalResult imex::ntensor::DimOp::verify() {
+  // Assume unknown index to be in range.
+  llvm::Optional<int64_t> index = getConstantIndex();
+  if (!index)
+    return mlir::success();
+
+  // Check that constant index is not knowingly out of range.
+  auto type = getSource().getType();
+  if (auto tensorType = type.dyn_cast<imex::ntensor::NTensorType>()) {
+    if (*index >= tensorType.getRank())
+      return emitOpError("index is out of range");
+  } else {
+    llvm_unreachable("expected operand with array type");
+  }
+  return mlir::success();
 }
 
 imex::ntensor::NTensorType imex::ntensor::SubviewOp::inferResultType(
