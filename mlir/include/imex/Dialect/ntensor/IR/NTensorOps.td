@@ -9,11 +9,13 @@ include "mlir/Interfaces/CastInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/CopyOpInterface.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
+include "mlir/Interfaces/ShapedOpInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/ViewLikeInterface.td"
 include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/BuiltinTypeInterfaces.td"
 include "mlir/IR/EnumAttr.td"
+include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/OpBase.td"
 include "mlir/IR/SubElementInterfaces.td"
 
@@ -476,7 +478,10 @@ def ResolveIndexOp : NTensor_OpBase<"resolve_index", [Pure]> {
   let hasCanonicalizer = 1;
 }
 
-def DimOp : NTensor_OpBase<"dim", [Pure]> {
+def DimOp : NTensor_OpBase<"dim", [
+    DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+    ConditionallySpeculatable, NoMemoryEffect,
+    ShapedDimOpInterface]> {
   let summary = "dimension index operation";
   let description = [{
     The `dim` operation takes a array and a dimension operand of type `index`.
@@ -494,13 +499,23 @@ def DimOp : NTensor_OpBase<"dim", [Pure]> {
 
   let builders = [
     OpBuilder<(ins "::mlir::Value":$source, "int64_t":$index)>,
-    OpBuilder<(ins "::mlir::Value":$source, "::mlir::Value":$index)>
   ];
 
   let extraClassDeclaration = [{
     /// Helper function to get the index as a simple integer if it is constant.
     ::llvm::Optional<int64_t> getConstantIndex();
+
+    /// Interface method of ShapedDimOpInterface: Return the source tensor.
+    ::mlir::Value getShapedValue() { return getSource(); }
+
+    /// Interface method of ShapedDimOpInterface: Return the dimension.
+    ::mlir::OpFoldResult getDimension() { return getIndex(); }
+
+    /// Interface method for ConditionallySpeculatable.
+    ::mlir::Speculation::Speculatability getSpeculatability();
   }];
+
+  let hasVerifier = 1;
 }
 
 def CallOp : NTensor_OpBase<"call", []> {
