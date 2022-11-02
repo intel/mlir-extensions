@@ -170,6 +170,17 @@ struct GPUL0QUEUE {
     CHECK_ZE_RESULT(zeCommandListCreateImmediate(zeContext_, zeDevice_, &desc,
                                                  &zeCommandList_));
   }
+
+  ~GPUL0QUEUE() {
+    // Device and Driver resource management is dony by L0.
+    // Just release context and commandList.
+    // TODO: Use unique ptrs.
+    if (zeContext_)
+      CHECK_ZE_RESULT(zeContextDestroy(zeContext_));
+
+    if (zeCommandList_)
+      CHECK_ZE_RESULT(zeCommandListDestroy(zeCommandList_));
+  }
 };
 
 static void *allocDeviceMemory(GPUL0QUEUE *queue, size_t size, size_t alignment,
