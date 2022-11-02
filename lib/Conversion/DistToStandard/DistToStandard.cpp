@@ -21,6 +21,7 @@
 #include <imex/internal/PassUtils.h>
 #include <imex/internal/PassWrapper.h>
 
+#include "mlir/Dialect/Func/Transforms/DecomposeCallGraphTypes.h"
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/Func/Transforms/FuncConversions.h>
@@ -36,6 +37,18 @@
 namespace imex {
 namespace dist {
 
+/// Put named arguments into given Vector in a well defined order,
+/// so that extraction is correct
+inline void _addVals(::mlir::Value gshape, ::mlir::Value lshape,
+                     ::mlir::Value loffsets, ::mlir::Value team,
+                     ::mlir::SmallVector<::mlir::Value> &vals) {
+  vals[::imex::dist::GSHAPE] = gshape;
+  vals[::imex::dist::LSHAPE] = lshape;
+  vals[::imex::dist::LOFFSETS] = loffsets;
+  vals[::imex::dist::TEAM] = team;
+}
+
+/// create a UnrealizedConversionCastOp from distinfo members to none
 ::mlir::Value materializeDistInfo(::mlir::OpBuilder &builder,
                                   ::mlir::Location loc, ::mlir::Value gshape,
                                   ::mlir::Value lshape, ::mlir::Value loffsets,
@@ -43,32 +56,31 @@ namespace dist {
   // we create the same cast as a lowering of InitDistTensor creates
   // first we need to mimic the DistInfoOp
   ::mlir::SmallVector<::mlir::Value> vals(::imex::dist::INFO_LAST);
-  vals[::imex::dist::GSHAPE] = gshape;
-  vals[::imex::dist::LSHAPE] = lshape;
-  vals[::imex::dist::LOFFSETS] = loffsets;
-  vals[::imex::dist::TEAM] = team;
+  _addVals(gshape, lshape, loffsets, team, vals);
   return builder
       .create<::mlir::UnrealizedConversionCastOp>(loc, builder.getNoneType(),
                                                   vals)
       .getResult(0);
 };
 
-::mlir::Value materializeDistTensor(::mlir::OpBuilder &builder,
-                                    ::mlir::Location loc, ::mlir::Value gshape,
-                                    ::mlir::Value ltensor,
-                                    ::mlir::Value loffsets,
-                                    ::mlir::Value team) {
-  auto lshape = builder.create<::mlir::shape::ShapeOfOp>(loc, ltensor);
-  auto info = materializeDistInfo(builder, loc, gshape, lshape, loffsets, team);
-  // now we can mimic the actual InitDistTensorOp
-  auto pTnsr = builder.create<::imex::ptensor::MkPTensorOp>(loc, ltensor);
+/// create a UnrealizedConversionCastOp from a DistTensor members fo a
+/// DistTensorType Value Operations extracting members (gshape, ptensor,
+/// loffsets, team) are expected to chase the creation back to here and get the
+/// respective operand of the cast. After full conversion the cast is expected
+/// ot have no use. FIXME Is there a better/cleaner way to do this?
+::mlir::Value materializeDistTensor(
+    ::mlir::OpBuilder &builder, ::mlir::Location loc, ::mlir::Value gshape,
+    ::mlir::Value ltensor, // we store the tensor at position of LSHAPE
+    ::mlir::Value loffsets, ::mlir::Value team) {
+  ::mlir::SmallVector<::mlir::Value> vals(::imex::dist::INFO_LAST);
+  _addVals(gshape, ltensor, loffsets, team, vals);
   return builder
       .create<::mlir::UnrealizedConversionCastOp>(
           loc,
           ::imex::dist::DistTensorType::get(
               builder.getContext(),
               ltensor.getType().dyn_cast<imex::ptensor::PTensorType>()),
-          ::mlir::ValueRange({pTnsr, info}))
+          vals)
       .getResult(0);
 };
 
@@ -164,12 +176,9 @@ struct PRankOpConverter
   }
 };
 
-/// Convert ::imex::dist::InitDistTensorOp into a UnrealizedConversionCastOp,
-/// using the type converter to determine the target type. Operations extracting
-/// members (info, ptensor) are expected to chase the creation back to here and
-/// get the respective operand of the cast. After full conversion the cast is
-/// expected ot have no use.
-// FIXME Is there a better/cleaner way to do this?
+/// Convert ::imex::dist::InitDistTensorOp
+/// Using materializeDistTensor to guarantee proper order in
+/// UnrealizedConversionCastOp.
 struct InitDistTensorOpConverter
     : public ::mlir::OpConversionPattern<::imex::dist::InitDistTensorOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -179,54 +188,37 @@ struct InitDistTensorOpConverter
                   ::imex::dist::InitDistTensorOp::Adaptor adaptor,
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
     auto converter = *getTypeConverter();
-    (void)rewriter.replaceOpWithNewOp<::mlir::UnrealizedConversionCastOp>(
-        op, converter.convertType(op.getType()), adaptor.getOperands());
+    rewriter.replaceOp(op, ::imex::dist::materializeDistTensor(
+                               rewriter, op.getLoc(), adaptor.getGShape(),
+                               adaptor.getPTensor(), adaptor.getLOffsets(),
+                               adaptor.getTeam()));
     return ::mlir::success();
   }
 };
 
-/// Common implementation for getting defining op of given DistTensor
-/// (assumed to be a InitDistTensorOp) and returning one of its operands
-/// Currently the operand is provided as 2 template arguments:
-/// extracting operation and operand-index-of-defining-op
-template <typename OP, int i>
-struct GetFromInitDTConverter : public ::mlir::OpConversionPattern<OP> {
-  using ::mlir::OpConversionPattern<OP>::OpConversionPattern;
-
-  ::mlir::LogicalResult
-  matchAndRewrite(OP op, typename OP::Adaptor adaptor,
-                  ::mlir::ConversionPatternRewriter &rewriter) const override {
-    auto defOp =
-        adaptor.getDTensor()
-            .template getDefiningOp<::mlir::UnrealizedConversionCastOp>();
-    if (!defOp)
-      return ::mlir::failure();
-    rewriter.replaceOp(op, defOp.getOperands()[i]);
-    return ::mlir::success();
-  }
-};
-
-/// Convert ::imex::dist::ExtractFromInfoOp into respective operand of defining
+/// Convert ::imex::dist::ExtractFromDistOp into respective operand of defining
 /// op. DistInfo is expected to be converted to a unrealized_conversion_cast.
-struct ExtractFromInfoOpConverter
-    : public mlir::OpConversionPattern<::imex::dist::ExtractFromInfoOp> {
+struct ExtractFromDistOpConverter
+    : public mlir::OpConversionPattern<::imex::dist::ExtractFromDistOp> {
   using OpConversionPattern::OpConversionPattern;
 
   ::mlir::LogicalResult
-  matchAndRewrite(::imex::dist::ExtractFromInfoOp op,
-                  ::imex::dist::ExtractFromInfoOp::Adaptor adaptor,
+  matchAndRewrite(::imex::dist::ExtractFromDistOp op,
+                  ::imex::dist::ExtractFromDistOp::Adaptor adaptor,
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
 
     auto defOp =
         adaptor.getInfo().getDefiningOp<::mlir::UnrealizedConversionCastOp>();
     assert(defOp);
-    rewriter.replaceOp(op, defOp.getOperands()[adaptor.getWhat()]);
+    auto what = adaptor.getWhat();
+    if (what == ::imex::dist::LTENSOR)
+      what = ::imex::dist::LSHAPE;
+    rewriter.replaceOp(op, defOp.getOperands()[what]);
     return ::mlir::success();
   }
 };
 
-/// Convert ::imex::dist::DistInfoOp into a unrealized_conversion_cast
-/// casting all operands to none.
+/// Convert ::imex::dist::DistInfoOp using materializeDistInfo.
 /// After full conversion the cast is expected ot have no use.
 struct DistInfoOpConverter
     : public mlir::OpConversionPattern<::imex::dist::DistInfoOp> {
@@ -291,7 +283,7 @@ struct LocalOffsetsOpConverter
     auto loc = op.getLoc();
     auto converter = *getTypeConverter();
 
-    auto sz0_ = rewriter.create<::mlir::shape::GetExtentOp>(
+    auto sz0_ = rewriter.create<::mlir::shape::DimOp>(
         loc, adaptor.getGshape(), createIndex(loc, rewriter, 0));
     auto sz0 = rewriter.create<::mlir::arith::IndexCastOp>(
         loc, rewriter.getI64Type(), sz0_);
@@ -319,7 +311,7 @@ struct LocalShapeOpConverter
     auto loc = op.getLoc();
     auto converter = *getTypeConverter();
 
-    auto sz0_ = rewriter.create<::mlir::shape::GetExtentOp>(
+    auto sz0_ = rewriter.create<::mlir::shape::DimOp>(
         loc, adaptor.getGshape(), createIndex(loc, rewriter, 0));
     auto sz0 = rewriter.create<::mlir::arith::IndexCastOp>(
         loc, rewriter.getI64Type(), sz0_);
@@ -368,6 +360,7 @@ struct ConvertDistToStandardPass
     auto &ctxt = getContext();
     ::mlir::ConversionTarget target(ctxt);
     ::mlir::TypeConverter typeConverter;
+    ::mlir::ValueDecomposer decomposer;
     // Convert unknown types to itself
     auto convT2T = [](::mlir::Type type) { return type; };
     // Convert DistInfo and DistTensor to none
@@ -376,36 +369,67 @@ struct ConvertDistToStandardPass
             ::imex::dist::DistInfoType type) -> ::mlir::Optional<::mlir::Type> {
       return ::mlir::NoneType::get(&ctxt);
     };
-    auto convDTensor = [&ctxt](::imex::dist::DistTensorType type)
-        -> ::mlir::Optional<::mlir::Type> {
-      return ::mlir::NoneType::get(&ctxt);
+    // DistTensor gets converted into its individual members
+    auto convDTensor = [&ctxt](::imex::dist::DistTensorType type,
+                               ::mlir::SmallVectorImpl<::mlir::Type> &types) {
+      auto tTyp = ::mlir::RankedTensorType::get(
+          {type.getPTensorType().getRtensor().getRank()},
+          ::mlir::IntegerType::get(&ctxt, 64));
+      types.push_back(tTyp);
+      types.push_back(type.getPTensorType());
+      types.push_back(tTyp);
+      types.push_back(::mlir::IntegerType::get(&ctxt, 64));
+      return ::mlir::success();
     };
 
     typeConverter.addConversion(convT2T);
     typeConverter.addConversion(convInfo);
     typeConverter.addConversion(convDTensor);
 
+    /// Convert multiple elements 8as converted by the above convDTensor) into a
+    /// single DistTensor
     auto materializeCast =
-        [](::mlir::OpBuilder &builder, ::mlir::Type type,
+        [](::mlir::OpBuilder &builder, ::imex::dist::DistTensorType type,
            ::mlir::ValueRange inputs,
            ::mlir::Location loc) -> ::llvm::Optional<::mlir::Value> {
       return builder
           .create<::mlir::UnrealizedConversionCastOp>(loc, type, inputs)
           .getResult(0);
     };
-    typeConverter.addSourceMaterialization(materializeCast);
 
+    typeConverter.addSourceMaterialization(materializeCast);
+    typeConverter.addArgumentMaterialization(materializeCast);
+    // the inverse of the ArgumentMaterialization splits a DistTensor into
+    // multiple return args
+    decomposer.addDecomposeValueConversion(
+        [](::mlir::OpBuilder &builder, ::mlir::Location loc,
+           ::imex::dist::DistTensorType resultType, ::mlir::Value value,
+           ::mlir::SmallVectorImpl<::mlir::Value> &values) {
+          values.push_back(builder.create<::imex::dist::ExtractFromDistOp>(
+              loc, ::imex::dist::GSHAPE, value));
+          values.push_back(builder.create<::imex::dist::ExtractFromDistOp>(
+              loc, ::imex::dist::LTENSOR, value));
+          values.push_back(builder.create<::imex::dist::ExtractFromDistOp>(
+              loc, ::imex::dist::LOFFSETS, value));
+          values.push_back(builder.create<::imex::dist::ExtractFromDistOp>(
+              loc, ::imex::dist::TEAM, value));
+          return ::mlir::success();
+        });
+
+    // make sure function bouindaries get converted
     target.addDynamicallyLegalOp<::mlir::func::FuncOp>(
         [&](::mlir::func::FuncOp op) {
           return typeConverter.isSignatureLegal(op.getFunctionType()) &&
                  typeConverter.isLegal(&op.getBody());
         });
     target.addDynamicallyLegalOp<::mlir::func::ReturnOp>(
-        [&](::mlir::func::ReturnOp op) { return typeConverter.isLegal(op); });
+        [&](::mlir::func::ReturnOp op) {
+          return typeConverter.isLegal(op.getOperandTypes());
+        });
     target.addDynamicallyLegalOp<mlir::func::CallOp>(
         [&](mlir::func::CallOp op) { return typeConverter.isLegal(op); });
 
-    // We convert all Dist stuff...
+    // No dist should remain
     target.addIllegalDialect<::imex::dist::DistDialect>();
     target.addLegalDialect<::mlir::linalg::LinalgDialect>();
     target.addLegalDialect<::mlir::tensor::TensorDialect>();
@@ -414,18 +438,17 @@ struct ConvertDistToStandardPass
     target.addLegalDialect<::imex::ptensor::PTensorDialect>();
     target.addLegalOp<::mlir::UnrealizedConversionCastOp>(); // FIXME
 
+    // All the dist conversion patterns/rewriter
     ::mlir::RewritePatternSet patterns(&ctxt);
     patterns.insert<RuntimePrototypesOpConverter, NProcsOpConverter,
                     PRankOpConverter, InitDistTensorOpConverter,
-                    GetFromInitDTConverter<::imex::dist::GetInfoOp, 1>,
-                    GetFromInitDTConverter<::imex::dist::GetPTensorOp, 0>,
-                    ExtractFromInfoOpConverter, DistInfoOpConverter,
+                    ExtractFromDistOpConverter, DistInfoOpConverter,
                     LocalOffsetsOpConverter, LocalShapeOpConverter,
                     AllReduceOpConverter>(typeConverter, &ctxt);
-    ::mlir::populateFunctionOpInterfaceTypeConversionPattern<
-        ::mlir::func::FuncOp>(patterns, typeConverter);
-    ::mlir::populateReturnOpTypeConversionPattern(patterns, typeConverter);
-    ::mlir::populateCallOpTypeConversionPattern(patterns, typeConverter);
+    // This enables the function boundary handling with the above
+    // converters/meterializations
+    populateDecomposeCallGraphTypesPatterns(&ctxt, typeConverter, decomposer,
+                                            patterns);
 
     if (::mlir::failed(::mlir::applyPartialConversion(getOperation(), target,
                                                       ::std::move(patterns)))) {

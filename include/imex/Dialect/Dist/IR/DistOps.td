@@ -122,64 +122,49 @@ def DistInfoOp : Dist_Op<"distinfo", [SameVariadicOperandSize]> {
 
 def InitDistTensorOp : Dist_Op<"init_dist_tensor", [Pure]> {
     let summary = "Bind a PTensor to a DistInfo";
-    let arguments = (ins AnyType:$ptensor, Dist_Info:$info);
+    let arguments = (ins AnyType:$g_shape, AnyType:$p_tensor, AnyType:$l_offsets, AnyType:$team);
     let results = (outs Dist_Tensor);
     let builders = [
-      OpBuilder<(ins "::mlir::Value":$ptensor, "::mlir::Value":$info), [{
+      OpBuilder<(ins "::mlir::Value":$g_shape, "::mlir::Value":$p_tensor, "::mlir::Value":$l_offsets, "::mlir::Value":$team), [{
             build($_builder, $_state,
-                  ::imex::dist::DistTensorType::get($_builder.getContext(), ptensor.getType().dyn_cast<::imex::ptensor::PTensorType>()),
-                  ptensor, info);
+                  ::imex::dist::DistTensorType::get($_builder.getContext(), p_tensor.getType().dyn_cast<::imex::ptensor::PTensorType>()),
+                  g_shape, p_tensor, l_offsets, team);
       }]>,
     ];
 }
 
-def GetPTensorOp : Dist_Op<"get_ptensor", [Pure]> {
-    let summary = "Get the PTensor from a given DistTensor.";
-    let arguments = (ins Dist_Tensor:$d_tensor);
-    let results = (outs AnyType);
-    let builders = [
-      OpBuilder<(ins "::mlir::Value":$dtensor), [{
-            build($_builder, $_state,
-                  dtensor.getType().dyn_cast<::imex::dist::DistTensorType>().getPTensorType(), dtensor);
-      }]>,
-    ];
-}
-
-def GetInfoOp : Dist_Op<"get_info", [Pure]> {
-    let summary = "Get the DistInfo meta information for a given DistTensor.";
-    let arguments = (ins Dist_Tensor:$d_tensor);
-    let results = (outs Dist_Info);
-    let builders = [
-      OpBuilder<(ins "::mlir::Value":$dtensor), [{
-            build($_builder, $_state,
-                  ::imex::dist::DistInfoType::get($_builder.getContext(),
-                                                  dtensor.getType().dyn_cast<::imex::dist::DistTensorType>().getPTensorType().getRtensor().getRank()),
-                  dtensor);
-      }]>,
-    ];
-}
-
-def ExtractFromInfoOp : Dist_Op<"extract_from_info", []> {
-    let summary = "Get one element from the DistInfo meta information.";
-    let arguments = (ins I32Attr:$what, Dist_Info:$info);
+def ExtractFromDistOp : Dist_Op<"extract_from_dist", []> {
+    let summary = "Get one element from the distributed meta information.";
+    let arguments = (ins I32Attr:$what, AnyType:$info);
     let results = (outs AnyType);
     let builders = [
       OpBuilder<(ins "::imex::dist::INFO":$what, "::mlir::Value":$info), [{
-        assert(info.getType().isa<::imex::dist::DistInfoType>());
+        // auto-deduce return type from from operands
         auto i64Type = $_builder.getI64Type();
         auto idx = getIntAttr<32>($_builder, what);
         $_state.addAttribute(getWhatAttrName(odsState.name), idx);
         $_state.addOperands(info);
+        int64_t rank = 0;
         auto itype = info.getType().dyn_cast<::imex::dist::DistInfoType>();
-        assert(itype);
+        auto ttype = info.getType().dyn_cast<::imex::dist::DistTensorType>();
+        if(itype) {
+            rank = itype.getRank();
+        } else {
+            assert(ttype);
+            rank = ttype.getPTensorType().getRtensor().getRank();
+        }
         switch(idx.getInt()) {
             case GSHAPE:
             case LSHAPE:
             case LOFFSETS:
-                $_state.addTypes(::mlir::RankedTensorType::get({itype.getRank()}, i64Type));
+                $_state.addTypes(::mlir::RankedTensorType::get({rank}, i64Type));
                 break;
             case TEAM:
                 $_state.addTypes(i64Type);
+                break;
+            case LTENSOR:
+                assert(ttype);
+                $_state.addTypes(ttype.getPTensorType());
                 break;
             default:
                 assert("Unknown element for DistInfo" == nullptr);

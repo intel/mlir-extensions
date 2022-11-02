@@ -14,17 +14,15 @@
 /// PTensor operations will stay untouched unless operands are distributed
 /// PTensors. PTensors are converted do DistTensorTypes by creation functions,
 /// for example by reacting on an input argument 'team'. When creating a
-/// DistTensor a DistInfo ist attached which provides information to preform
-/// distributed operations, such as shape and offsets of the local partition.
-/// If operations work on distributed tensors necessary communication with the
-/// runtime is performed to identify the local partition.
-/// The local tensor is extracted/created and the operation is
-/// re-issued for the local part. No deep recursion happens because the operands
-/// for the newly created ptensor operations are not distributed. Finally
-/// additional ops are added of more communication with the runtime is needed,
-/// for example to perform a final global reduction.
-///
-/// Note: distributed tensors cannot cross function boundaries (as of yet).
+/// DistTensor additional information is attached which provides information to
+/// perform distributed operations, such as shape and offsets of the local
+/// partition. If operations work on distributed tensors necessary communication
+/// with the runtime is performed to identify the local partition. The local
+/// tensor is extracted/created and the operation is re-issued for the local
+/// part. No deep recursion happens because the operands for the newly created
+/// ptensor operations are not distributed. Finally additional ops are added of
+/// more communication with the runtime is needed, for example to perform a
+/// final global reduction.
 ///
 //===----------------------------------------------------------------------===//
 
@@ -65,7 +63,8 @@ inline ::mlir::Value createDistInfo(::mlir::Location &loc,
 inline ::mlir::Value createGetLocalShape(::mlir::Location &loc,
                                          ::mlir::OpBuilder &builder,
                                          ::mlir::Value info) {
-  return builder.create<::imex::dist::ExtractFromInfoOp>(
+  assert(info.getType().isa<::imex::dist::DistInfoType>());
+  return builder.create<::imex::dist::ExtractFromDistOp>(
       loc, ::imex::dist::LSHAPE, info);
 }
 
@@ -73,7 +72,7 @@ inline ::mlir::Value createGetLocalShape(::mlir::Location &loc,
 inline ::mlir::Value createGetLocalOffsets(::mlir::Location &loc,
                                            ::mlir::OpBuilder &builder,
                                            ::mlir::Value info) {
-  return builder.create<::imex::dist::ExtractFromInfoOp>(
+  return builder.create<::imex::dist::ExtractFromDistOp>(
       loc, ::imex::dist::LOFFSETS, info);
 }
 
@@ -93,36 +92,28 @@ inline ::mlir::Value createAllReduce(::mlir::Location &loc,
 // create ops to extract the local RankedTensor from DistTensor
 inline ::mlir::Value createGetLocal(::mlir::Location &loc,
                                     ::mlir::OpBuilder &builder,
-                                    ::mlir::Value pt) {
-  auto dtTyp = pt.getType().dyn_cast<::imex::dist::DistTensorType>();
-  assert(dtTyp);
-  auto dTnsr = builder.create<::imex::dist::GetPTensorOp>(loc, pt);
-  auto ptTyp = dTnsr.getType().dyn_cast<::imex::ptensor::PTensorType>();
-  assert(ptTyp);
-  auto rtnsr = builder.create<::imex::ptensor::ExtractRTensorOp>(
-      loc, ptTyp.getRtensor(), dTnsr);
-  // FIXME: device
-  return builder.create<::imex::ptensor::MkPTensorOp>(loc, rtnsr);
+                                    ::mlir::Value dt) {
+  return builder.create<::imex::dist::ExtractFromDistOp>(
+      loc, ::imex::dist::LTENSOR, dt);
 }
 
 // Create a DistTensor from a PTensor and DistInfo
 inline ::mlir::Value createMkTnsr(::mlir::Location &loc,
-                                  ::mlir::OpBuilder &builder, ::mlir::Value pt,
-                                  ::mlir::Value info) {
-  return builder.create<::imex::dist::InitDistTensorOp>(loc, pt, info);
+                                  ::mlir::OpBuilder &builder,
+                                  ::mlir::Value gshape, ::mlir::Value pt,
+                                  ::mlir::Value loffsets, ::mlir::Value team) {
+  return builder.create<::imex::dist::InitDistTensorOp>(loc, gshape, pt,
+                                                        loffsets, team);
 }
 
 // extract team component from given DistTensor
 inline ::mlir::Value createTeamOf(::mlir::Location &loc,
                                   ::mlir::OpBuilder &builder,
-                                  ::mlir::Value pt) {
-  auto ptTyp = pt.getType().dyn_cast<::imex::dist::DistTensorType>();
-  assert(ptTyp);
-  auto rank = ptTyp.getPTensorType().getRtensor().getRank();
-  auto info = builder.create<::imex::dist::GetInfoOp>(
-      loc, ::imex::dist::DistInfoType::get(builder.getContext(), rank), pt);
-  return builder.create<::imex::dist::ExtractFromInfoOp>(
-      loc, ::imex::dist::TEAM, info);
+                                  ::mlir::Value dt) {
+  auto dtTyp = dt.getType().dyn_cast<::imex::dist::DistTensorType>();
+  assert(dtTyp);
+  return builder.create<::imex::dist::ExtractFromDistOp>(
+      loc, ::imex::dist::TEAM, dt);
 }
 
 // *******************************
@@ -159,8 +150,7 @@ struct DistExtractRTensorOpRWP
     if (!inpPtTyp) {
       return ::mlir::failure();
     }
-    auto pTnsr =
-        rewriter.create<::imex::dist::GetPTensorOp>(loc, op.getInput());
+    auto pTnsr = createGetLocal(loc, rewriter, op.getInput());
     rewriter.replaceOpWithNewOp<::imex::ptensor::ExtractRTensorOp>(
         op, inpPtTyp.getPTensorType().getRtensor(), pTnsr);
     return ::mlir::success();
@@ -227,7 +217,8 @@ struct DistARangeOpRWP : public RecOpRewritePattern<::imex::ptensor::ARangeOp> {
     // finally create local arange
     auto arres = rewriter.create<::imex::ptensor::ARangeOp>(
         loc, artype, start, stop, step, op.getDevice(), nullptr);
-    rewriter.replaceOp(op, createMkTnsr(loc, rewriter, arres, info));
+    rewriter.replaceOp(
+        op, createMkTnsr(loc, rewriter, gShape, arres, offsets, team));
     return ::mlir::success();
   }
 };
@@ -254,10 +245,6 @@ struct DistEWBinOpRWP : public RecOpRewritePattern<::imex::ptensor::EWBinOp> {
       return ::mlir::failure();
     }
 
-    // result shape
-    auto gShapeARef = lhsDtTyp.getPTensorType().getRtensor().getShape();
-    auto gShapeAttr = rewriter.getIndexVectorAttr(gShapeARef);
-    auto gShape = rewriter.create<::mlir::shape::ConstShapeOp>(loc, gShapeAttr);
     // local ewb operands
     auto lLhs = createGetLocal(loc, rewriter, op.getLhs());
     auto lRhs = createGetLocal(loc, rewriter, op.getRhs());
@@ -265,10 +252,15 @@ struct DistEWBinOpRWP : public RecOpRewritePattern<::imex::ptensor::EWBinOp> {
     auto retPtTyp = lLhs.getType(); // FIXME
     auto ewbres = rewriter.create<::imex::ptensor::EWBinOp>(
         loc, retPtTyp, op.getOp(), lLhs, lRhs);
-    // get the team and init our new dist tensor
+    // get global shape, offsets and team
+    auto gShape = rewriter.create<::imex::dist::ExtractFromDistOp>(
+        loc, ::imex::dist::GSHAPE, op.getLhs());
     auto team = createTeamOf(loc, rewriter, op.getLhs());
     auto info = createDistInfo(loc, rewriter, 1, gShape, team);
-    rewriter.replaceOp(op, createMkTnsr(loc, rewriter, ewbres, info));
+    auto lOffs = createGetLocalOffsets(loc, rewriter, info);
+    // and init our new dist tensor
+    rewriter.replaceOp(
+        op, createMkTnsr(loc, rewriter, gShape, ewbres, lOffs, team));
     return ::mlir::success();
   }
 };
@@ -296,9 +288,6 @@ struct DistReductionOpRWP
       return ::mlir::failure();
     }
 
-    // result shape is 0d
-    auto gShapeAttr = rewriter.getIndexTensorAttr({});
-    auto gShape = rewriter.create<::mlir::shape::ConstShapeOp>(loc, gShapeAttr);
     // Local reduction
     auto local = createGetLocal(loc, rewriter, op.getInput());
     // return type 0d with same dtype as input
@@ -309,12 +298,18 @@ struct DistReductionOpRWP
         loc, retPtTyp, op.getOp(), local);
     // global reduction
     auto retRTnsr = createAllReduce(loc, rewriter, op.getOp(), redPTnsr);
-    // get the team and init our new dist tensor
+    // get global shape, offsets and team
+    // result shape is 0d
+    auto gShape = rewriter.create<::imex::dist::ExtractFromDistOp>(
+        loc, ::imex::dist::GSHAPE, op.getInput());
     auto team = createTeamOf(loc, rewriter, op.getInput());
     auto info = createDistInfo(loc, rewriter, 1, gShape, team);
+    auto lOffs = createGetLocalOffsets(loc, rewriter, info);
+    // and init our new dist tensor
     auto resPTnsr = rewriter.create<::imex::ptensor::MkPTensorOp>(
         loc, false, retRTnsr, nullptr, team);
-    rewriter.replaceOp(op, createMkTnsr(loc, rewriter, resPTnsr, info));
+    rewriter.replaceOp(
+        op, createMkTnsr(loc, rewriter, gShape, resPTnsr, lOffs, team));
     return ::mlir::success();
   }
 };
