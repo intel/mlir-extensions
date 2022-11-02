@@ -34,7 +34,7 @@ def mlir_jit(
 
     pipeline = (
         mlir_compiler_gpu_pipeline
-        if options.get("enable_gpu_pipeline")
+        if options.get("enable_gpu_pipeline", True)
         else mlir_compiler_pipeline
     )
     options.pop("enable_gpu_pipeline", None)

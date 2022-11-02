@@ -28,6 +28,129 @@ public:
     return mlir::success();
   }
 };
+
+using namespace mlir;
+// Unpacks the single unrealized_conversion_cast using the list of inputs
+// e.g., return [%b, %c, %d] for %a = unrealized_conversion_cast(%b, %c, %d)
+static void unpackUnrealizedConversionCast(Value v,
+                                           SmallVectorImpl<Value> &unpacked) {
+  if (auto cast =
+          dyn_cast_or_null<UnrealizedConversionCastOp>(v.getDefiningOp())) {
+    if (cast.getInputs().size() != 1) {
+      // 1 : N type conversion.
+      unpacked.append(cast.getInputs().begin(), cast.getInputs().end());
+      return;
+    }
+  }
+  // 1 : 1 type conversion.
+  unpacked.push_back(v);
+}
+
+// Need our own copy to workaround a bug in upstream
+// https://github.com/llvm/llvm-project/issues/58742
+class ConvertForOpTypes : public OpConversionPattern<scf::ForOp> {
+public:
+  ConvertForOpTypes(TypeConverter &typeConverter, MLIRContext *context)
+      : OpConversionPattern<scf::ForOp>(typeConverter, context,
+                                        /*benefit*/ 10) {}
+
+  LogicalResult
+  matchAndRewrite(scf::ForOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    SmallVector<Type> newResultTypes;
+    SmallVector<unsigned> offsets;
+    offsets.push_back(0);
+    // Do the type conversion and record the offsets.
+    for (Type type : op.getResultTypes()) {
+      if (failed(typeConverter->convertTypes(type, newResultTypes)))
+        return rewriter.notifyMatchFailure(op, "could not convert result");
+      offsets.push_back(newResultTypes.size());
+    }
+
+    // Create a empty new op and inline the regions from the old op.
+    //
+    // This is a little bit tricky. We have two concerns here:
+    //
+    // 1. We cannot update the op in place because the dialect conversion
+    // framework does not track type changes for ops updated in place, so it
+    // won't insert appropriate materializations on the changed result types.
+    // PR47938 tracks this issue, but it seems hard to fix. Instead, we need
+    // to clone the op.
+    //
+    // 2. We need to resue the original region instead of cloning it, otherwise
+    // the dialect conversion framework thinks that we just inserted all the
+    // cloned child ops. But what we want is to "take" the child regions and let
+    // the dialect conversion framework continue recursively into ops inside
+    // those regions (which are already in its worklist; inlining them into the
+    // new op's regions doesn't remove the child ops from the worklist).
+
+    auto indexType = rewriter.getIndexType();
+    TypeRange origBlockArgs = op.getLoopBody().front().getArgumentTypes();
+    TypeConverter::SignatureConversion newSig(origBlockArgs.size());
+    newSig.addInputs(0, indexType);
+    if (failed(typeConverter->convertSignatureArgs(origBlockArgs.drop_front(),
+                                                   newSig, 1)))
+      return failure();
+
+    // convertRegionTypes already takes care of 1:N conversion.
+    if (failed(rewriter.convertRegionTypes(&op.getLoopBody(), *typeConverter,
+                                           &newSig)))
+      return failure();
+
+    auto loc = op.getLoc();
+    auto lBound = typeConverter->materializeSourceConversion(
+        rewriter, loc, indexType, adaptor.getLowerBound());
+    auto uBound = typeConverter->materializeSourceConversion(
+        rewriter, loc, indexType, adaptor.getUpperBound());
+    auto step = typeConverter->materializeSourceConversion(
+        rewriter, loc, indexType, adaptor.getStep());
+    if (!lBound || !uBound || !step)
+      return failure();
+
+    // Unpacked the iteration arguments.
+    SmallVector<Value> flatArgs;
+    for (Value arg : adaptor.getInitArgs())
+      unpackUnrealizedConversionCast(arg, flatArgs);
+
+    // We can not do clone as the number of result types after conversion might
+    // be different.
+    scf::ForOp newOp =
+        rewriter.create<scf::ForOp>(loc, lBound, uBound, step, flatArgs);
+
+    // Reserve whatever attributes in the original op.
+    newOp->setAttrs(op->getAttrs());
+
+    // We do not need the empty block created by rewriter.
+    rewriter.eraseBlock(newOp.getBody(0));
+    // Inline the type converted region from the original operation.
+    rewriter.inlineRegionBefore(op.getLoopBody(), newOp.getLoopBody(),
+                                newOp.getLoopBody().end());
+
+    // Pack the return value.
+    SmallVector<Value, 6> packedRets;
+    for (unsigned i = 1, e = offsets.size(); i < e; i++) {
+      unsigned start = offsets[i - 1], end = offsets[i];
+      unsigned len = end - start;
+      ValueRange mappedValue = newOp.getResults().slice(start, len);
+      if (len != 1) {
+        // 1 : N type conversion.
+        Type origType = op.getResultTypes()[i - 1];
+        Value mat = typeConverter->materializeSourceConversion(
+            rewriter, loc, origType, mappedValue);
+        if (!mat)
+          return rewriter.notifyMatchFailure(
+              op, "Failed to materialize 1:N type conversion");
+        packedRets.push_back(mat);
+      } else {
+        // 1 : 1 type conversion.
+        packedRets.push_back(mappedValue.front());
+      }
+    }
+
+    rewriter.replaceOp(op, packedRets);
+    return success();
+  }
+};
 } // namespace
 
 void imex::populateControlFlowTypeConversionRewritesAndTarget(
@@ -58,7 +181,8 @@ void imex::populateControlFlowTypeConversionRewritesAndTarget(
   mlir::scf::populateSCFStructuralTypeConversionsAndLegality(typeConverter,
                                                              patterns, target);
 
-  patterns.insert<ConvertSelectOp>(typeConverter, patterns.getContext());
+  patterns.insert<ConvertSelectOp, ConvertForOpTypes>(typeConverter,
+                                                      patterns.getContext());
 
   target.markUnknownOpDynamicallyLegal(
       [&](mlir::Operation *op) -> llvm::Optional<bool> {

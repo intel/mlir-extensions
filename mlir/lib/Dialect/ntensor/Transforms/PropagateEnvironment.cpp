@@ -203,7 +203,9 @@ struct PropagateEnvironmentPass
                         mlir::ValueRange(op->getResults())}) {
         for (auto arg : args) {
           auto *state = solver.lookupState<EnvValueLattice>(arg);
-          assert(state && "Invalid state");
+          if (!state)
+            continue;
+
           auto &val = state->getValue();
           if (val.isUninitialized())
             continue;
