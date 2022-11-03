@@ -44,7 +44,7 @@ import argparse
 import subprocess
 
 imex_enable_vulkan_runner = @IMEX_ENABLE_VULKAN_RUNNER@
-runner_choices = ['mlir_cpu_runner']
+runner_choices = ['mlir-cpu-runner']
 if imex_enable_vulkan_runner:
     runner_choices += ['mlir-vulkan-runner']
 
