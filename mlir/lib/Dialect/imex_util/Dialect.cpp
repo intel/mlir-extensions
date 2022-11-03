@@ -2044,6 +2044,33 @@ void EnvironmentRegionOp::build(
   ensureTerminator(*bodyRegion, odsBuilder, odsState.location);
 }
 
+mlir::LogicalResult MemrefBitcastOp::verify() {
+  auto srcType = getSource().getType().cast<mlir::MemRefType>();
+  auto dstType = getResult().getType().cast<mlir::MemRefType>();
+  if (srcType.getLayout() != dstType.getLayout())
+    return emitError("Bitcast layout mismatch.");
+  if (srcType.getMemorySpace() != dstType.getMemorySpace())
+    return emitError("Bitcast memory space mismatch.");
+
+  auto srcElem = srcType.getElementType();
+  auto dstElem = dstType.getElementType();
+  if (srcElem.isIntOrFloat() && dstElem.isIntOrFloat() &&
+      srcElem.getIntOrFloatBitWidth() != dstElem.getIntOrFloatBitWidth())
+    return emitError("Bitcast element size mismatch.");
+  return mlir::success();
+}
+
+mlir::OpFoldResult
+MemrefBitcastOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
+  auto src = getSource();
+  auto srcType = src.getType();
+  auto dstType = getResult().getType();
+  if (srcType == dstType)
+    return src;
+
+  return nullptr;
+}
+
 } // namespace util
 } // namespace imex
 

@@ -286,4 +286,21 @@ def EnvironmentRegionYieldOp : ImexUtil_Op<"env_region_yield", [
   let assemblyFormat = "attr-dict ($results^ `:` type($results))?";
 }
 
+def MemrefBitcastOp : ImexUtil_Op<"memref_bitcast", [
+    Pure, ViewLikeOpInterface, SameOperandsElementType, SameOperandsShape
+  ]> {
+  let arguments = (ins AnyMemRef:$source);
+
+  let results = (outs AnyMemRef:$result);
+
+  let extraClassDeclaration = [{
+      ::mlir::Value getViewSource() { return getSource(); }
+  }];
+
+  let hasFolder = 1;
+  let hasVerifier = 1;
+
+  let assemblyFormat = "$source attr-dict `:` type($source) `to` type($result)";
+}
+
 #endif // PLIER_UTIL_OPS
