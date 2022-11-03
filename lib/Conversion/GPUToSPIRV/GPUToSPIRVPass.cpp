@@ -40,9 +40,12 @@ namespace imex {
 /// replace it).
 ///
 /// 2) Lower the body of the spirv::ModuleOp.
-class GPUXToSPIRVPass : public ::imex::ConvertGPUXToSPIRVBase<GPUXToSPIRVPass> {
+/// This pass extends upstream GPU dialect to SPIR-V dialect pass by adding more
+/// conversion patterns like SCF, math and control flow.
+class GPUToSPIRVExtPass
+    : public ::imex::ConvertGPUToSPIRVExtBase<GPUToSPIRVExtPass> {
 public:
-  explicit GPUXToSPIRVPass(bool mapMemorySpace)
+  explicit GPUToSPIRVExtPass(bool mapMemorySpace)
       : mapMemorySpace(mapMemorySpace) {}
   void runOnOperation() override;
 
@@ -50,7 +53,7 @@ private:
   bool mapMemorySpace;
 };
 
-void GPUXToSPIRVPass::runOnOperation() {
+void GPUToSPIRVExtPass::runOnOperation() {
   mlir::MLIRContext *context = &getContext();
   mlir::ModuleOp module = getOperation();
 
@@ -108,7 +111,7 @@ void GPUXToSPIRVPass::runOnOperation() {
 }
 
 std::unique_ptr<::mlir::OperationPass<::mlir::ModuleOp>>
-createConvertGPUXToSPIRVPass(bool mapMemorySpace) {
-  return std::make_unique<GPUXToSPIRVPass>(mapMemorySpace);
+createConvertGPUToSPIRVExtPass(bool mapMemorySpace) {
+  return std::make_unique<GPUToSPIRVExtPass>(mapMemorySpace);
 }
 } // namespace imex

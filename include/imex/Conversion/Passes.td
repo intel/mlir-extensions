@@ -90,7 +90,7 @@ def ConvertDistToStandard: Pass<"convert-dist-to-standard", "::mlir::ModuleOp"> 
 // GPUToSPIRV
 //===----------------------------------------------------------------------===//
 
-def ConvertGPUXToSPIRV : Pass<"imex-convert-gpu-to-spirv", "::mlir::ModuleOp"> {
+def ConvertGPUToSPIRVExt : Pass<"imex-convert-gpu-to-spirv", "::mlir::ModuleOp"> {
   let summary = "Convert GPU dialect to SPIR-V dialect";
   let description = [{
     This pass extends upstream GPU dialect to SPIR-V dialect pass by adding more
@@ -247,7 +247,7 @@ memref, arith and math.
     }
     ```
   }];
-  let constructor = "imex::createConvertGPUXToSPIRVPass()";
+  let constructor = "imex::createConvertGPUToSPIRVExtPass()";
   let dependentDialects = ["::mlir::spirv::SPIRVDialect"];
 }
 
