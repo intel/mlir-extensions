@@ -1,4 +1,4 @@
-//===-- Passes.h - Dist pass declaration file --------------*- tablegen -*-===//
+//===-- Passes.h - PTensor pass declaration file ----------------*- C++ -*-===//
 //
 // Copyright 2022 Intel Corporation
 // Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -9,12 +9,12 @@
 ///
 /// \file
 /// This header file defines prototypes that expose pass constructors for the
-/// Dist dialect.
+/// PTensor dialect.
 ///
 //===----------------------------------------------------------------------===//
 
-#ifndef _Dist_PASSES_H_INCLUDED_
-#define _Dist_PASSES_H_INCLUDED_
+#ifndef _PTENSOR_PASSES_H_INCLUDED_
+#define _PTENSOR_PASSES_H_INCLUDED_
 
 #include <mlir/Pass/Pass.h>
 
@@ -29,15 +29,15 @@ class RewritePatternSet;
 namespace imex {
 
 //===----------------------------------------------------------------------===//
-/// Dist passes.
+/// PTensor passes.
 //===----------------------------------------------------------------------===//
 
-/// Create a DistElim pass
-std::unique_ptr<::mlir::OperationPass<::mlir::ModuleOp>> createDistElimPass();
+/// Create a PTensorDist pass
+std::unique_ptr<::mlir::Pass> createPTensorDistPass();
 
-/// Populate the given list with patterns that eliminate Dist ops
-void populateDistElimConversionPatterns(::mlir::LLVMTypeConverter &converter,
-                                        ::mlir::RewritePatternSet &patterns);
+/// Populate the given list with patterns which add Dist-Ops to PTensor ops
+void populatePTensorDistPatterns(::mlir::LLVMTypeConverter &converter,
+                                 ::mlir::RewritePatternSet &patterns);
 
 //===----------------------------------------------------------------------===//
 // Registration
@@ -45,8 +45,8 @@ void populateDistElimConversionPatterns(::mlir::LLVMTypeConverter &converter,
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
-#include <imex/Dialect/Dist/Transforms/Passes.h.inc>
+#include <imex/Dialect/PTensor/Transforms/Passes.h.inc>
 
 } // namespace imex
 
-#endif // _Dist_PASSES_H_INCLUDED_
+#endif // _PTENSOR_PASSES_H_INCLUDED_

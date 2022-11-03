@@ -55,6 +55,15 @@ include(AddLLVM)
 include(AddMLIR)
 include(HandleLLVMOptions)
 
+# Check if mlir vulkan runner was configured from mlir
+# target mlir-vulkan-runner is only set if vulkan runner was enabled during
+# mlir configuration
+if (TARGET mlir-vulkan-runner)
+    set(IMEX_ENABLE_VULKAN_RUNNER 1)
+else ()
+    set(IMEX_ENABLE_VULKAN_RUNNER 0)
+endif()
+
 if(NOT IMEX_EXTERNAL_PROJECT_BUILD)
     find_package(Python3 ${LLVM_MINIMUM_PYTHON_VERSION} REQUIRED
         COMPONENTS Interpreter)
@@ -79,6 +88,9 @@ add_subdirectory(include)
 add_subdirectory(lib)
 add_subdirectory(tools)
 add_subdirectory(test)
+
+set(IMEX_ENABLE_SYCL_RUNTIME 0 CACHE BOOL "Enable the Sycl Runtime")
+set(IMEX_ENABLE_L0_RUNTIME 0 CACHE BOOL "Enable the Level Zero Runtime")
 
 option(IMEX_INCLUDE_DOCS "Generate build targets for the IMEX docs." ON)
 if (IMEX_INCLUDE_DOCS)

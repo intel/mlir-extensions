@@ -22,7 +22,7 @@ namespace mlir {
 class AffineDialect;
 
 namespace arith {
-class ArithmeticDialect;
+class ArithDialect;
 } // namespace arith
 
 namespace func {
@@ -60,6 +60,10 @@ class SPIRVDialect;
 namespace tensor {
 class TensorDialect;
 } // namespace tensor
+
+namespace gpu {
+class GPUDialect;
+} // namespace gpu
 } // namespace mlir
 
 namespace imex {
@@ -70,6 +74,10 @@ class PTensorDialect;
 namespace dist {
 class DistDialect;
 } // namespace dist
+
+namespace gpux {
+class GPUXDialect;
+} // namespace gpux
 
 #define GEN_PASS_CLASSES
 #include <imex/Conversion/Passes.h.inc>

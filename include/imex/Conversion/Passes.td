@@ -20,7 +20,6 @@ include "mlir/Pass/PassBase.td"
 
 include "mlir/IR/OpBase.td"
 include "mlir/IR/EnumAttr.td"
-include "mlir/Dialect/GPU/IR/GPUBase.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/LoopLikeInterface.td"
@@ -39,29 +38,59 @@ def ConvertPTensorToLinalg : Pass<"convert-ptensor-to-linalg", "::mlir::ModuleOp
 
     #### Input invariant
 
-    -   all tensors are PTensorType;
+    -   all tensors are PTensorType
 
     #### Output IR
 
-    - PTensorTypes are converted to mlir::Tensor
+    - a PTensorType will be lowered to a unrealized_conversion_cast to tuple of
+      * rtensor: RankedTensor
+      * device: device where the tensor lives (AnyType, default=None)
+      * team: a group of processes among which the tensor is distributed
+        (AnyType, default=None)
+      * rthandle: a handle for communication with the dist dialect/runtime
+        (AnyType, default=None)
+    - On function boundaries (func::callOp, func::returnOp, func::functionOp)
+      PTensorTypes get expanded into 4 separate arguments (rtensor, device, team, handle).
     - PTensor operations are converted to Linalg operations, accompaigned by
-      operations of the Dist dialect if the input tensors are distributed
+      * operations of the Dist dialect if the input tensors are distributed
+      * FIXME iGPU::deviceRegionOps if the input tensors live on a device
   }];
   let constructor = "imex::createConvertPTensorToLinalgPass()";
-  let dependentDialects = ["::imex::dist::DistDialect",
-                           "::mlir::linalg::LinalgDialect",
+  let dependentDialects = ["::mlir::linalg::LinalgDialect",
                            "::mlir::AffineDialect",
                            "::mlir::func::FuncDialect",
                            "::mlir::tensor::TensorDialect",
-                           "::mlir::arith::ArithmeticDialect",
+                           "::mlir::arith::ArithDialect",
                            "::mlir::shape::ShapeDialect"];
   let options = [];
 }
+
+//===----------------------------------------------------------------------===//
+// DistToStandard
+//===----------------------------------------------------------------------===//
+
+def ConvertDistToStandard: Pass<"convert-dist-to-standard", "::mlir::ModuleOp"> {
+  let summary = "Convert from the Dist dialect to runtime calls.";
+  let description = [{
+    Convert Dist dialect operations into standard dialect operations
+    by inserting calls into a distributed runtime.
+
+    Necessary prototypes of runtime functions will be added.
+  }];
+  let constructor = "::imex::createConvertDistToStandardPass()";
+  let dependentDialects = ["::mlir::linalg::LinalgDialect",
+                           "::mlir::func::FuncDialect",
+                           "::mlir::tensor::TensorDialect",
+                           "::mlir::arith::ArithDialect",
+                           "::mlir::shape::ShapeDialect"];
+  let options = [];
+}
+
 //===----------------------------------------------------------------------===//
 // GPUToSPIRV
 //===----------------------------------------------------------------------===//
 
-def ConvertGPUXToSPIRV : Pass<"convert-gpux-to-spirv", "::mlir::ModuleOp"> {
+def ConvertGPUXToSPIRV : Pass<"imex-convert-gpu-to-spirv", "::mlir::ModuleOp"> {
   let summary = "Convert GPU dialect to SPIR-V dialect";
   let description = [{
     This pass extends upstream GPU dialect to SPIR-V dialect pass by adding more
@@ -70,7 +99,6 @@ def ConvertGPUXToSPIRV : Pass<"convert-gpux-to-spirv", "::mlir::ModuleOp"> {
 
     For more detailed documentation, refer upstream MLIR Pass -convert-gpu-to-spirv
     https://mlir.llvm.org/docs/Passes/#-convert-gpu-to-spirv-convert-gpu-dialect-to-spir-v-dialect
-
 
     Below example shows how GPU kernel module is converted to SPIRV module along with other ops conversion within gpu.func. from dialect like
 memref, arith and math.
@@ -222,4 +250,62 @@ memref, arith and math.
   let constructor = "imex::createConvertGPUXToSPIRVPass()";
   let dependentDialects = ["::mlir::spirv::SPIRVDialect"];
 }
+
+//===----------------------------------------------------------------------===//
+// GPUToGPUX
+//===----------------------------------------------------------------------===//
+
+def ConvertGPUToGPUX: Pass<"convert-gpu-to-gpux"> {
+  let summary = "Convert from the GPU dialect to the GPUX dialect.";
+  let description = [{
+    This pass converts GPU dialect operations into the GPUX dialect operations.
+    GPUX dialect is a custom dialect. GPUX dialect ops extend the upstream GPU
+    Dialect ops and adds a stream argument to them for specifying which stream
+    to run the gpu operations on.
+
+    Below is an example of how this Pass will convert the IR from GPU to GPUX.
+
+    Input IR
+
+        func.func @main() attributes {llvm.emit_c_interface} {
+        %c8 = arith.constant 8 : index
+        %c1 = arith.constant 1 : index
+        %cst = arith.constant 2.200000e+00 : f32
+        %cst_0 = arith.constant 1.100000e+00 : f32
+        %cst_1 = arith.constant 0.000000e+00 : f32
+        %0 = gpu.alloc  () : memref<8xf32>
+        %1 = gpu.alloc  () : memref<8xf32>
+        %2 = gpu.alloc  () : memref<8xf32>
+        gpu.launch_func  @main_kernel::@main_kernel blocks in (%c8, %c1, %c1) threads in (%c1, %c1, %c1) args(%0 : memref<8xf32>, %1 : memref<8xf32>, %2 : memref<8xf32>)
+        gpu.dealloc(%0) : memref<8xf32>
+        gpu.dealloc(%1) : memref<8xf32>
+        gpu.dealloc(%2) : memref<8xf32>
+        return
+      }
+
+    Output IR
+
+        func.func @main() attributes {llvm.emit_c_interface} {
+        %c8 = arith.constant 8 : index
+        %c1 = arith.constant 1 : index
+        %cst = arith.constant 2.200000e+00 : f32
+        %cst_0 = arith.constant 1.100000e+00 : f32
+        %cst_1 = arith.constant 0.000000e+00 : f32
+        %stream = gpux.create_stream () : () -> !gpux.StreamType
+        %0 = gpux.alloc (%stream) : (!gpux.StreamType) -> memref<8xf32>
+        %1 = gpux.alloc (%stream) : (!gpux.StreamType) -> memref<8xf32>
+        %2 = gpux.alloc  (%stream) : (!gpux.StreamType) -> memref<8xf32>
+        gpux.launch_func  @main_kernel::@main_kernel blocks in (%c8, %c1, %c1) threads in (%c1, %c1, %c1) args(%stream : !gpux.StreamType, %memref : memref<8xf32>, %memref_2 : memref<8xf32>, %memref_3 : memref<8xf32>)
+        gpux.dealloc(%stream, %0) : (!gpux.StreamType, memref<8xf32>) -> ()
+        gpux.dealloc(%stream, %1) : (!gpux.StreamType, memref<8xf32>) -> ()
+        gpux.dealloc(%stream, %2) : (!gpux.StreamType, memref<8xf32>) -> ()
+        gpux.stream.destroy(%stream) : (!gpux.StreamType) -> ()
+    return
+  }
+
+  }];
+  let constructor = "imex::createConvertGPUToGPUXPass()";
+  let dependentDialects = ["::imex::gpux::GPUXDialect"];
+}
+
 #endif // _IMEX_CONVERSION_PASSES_TD_INCLUDED_

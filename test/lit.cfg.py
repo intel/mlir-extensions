@@ -4,6 +4,7 @@ import os
 import platform
 import re
 import subprocess
+import sys
 import tempfile
 
 import lit.formats
@@ -31,9 +32,13 @@ config.test_exec_root = os.path.join(config.imex_obj_root, 'test')
 
 config.substitutions.append(('%PATH%', config.environment['PATH']))
 config.substitutions.append(('%shlibext', config.llvm_shlib_ext))
-config.substitutions.append(('%{mlir_shlib_dir}', config.mlir_runner_utils_dir))
-config.substitutions.append(('%{imex_tools_dir}', config.imex_tools_dir))
-config.substitutions.append(('%{python_executable}', config.python_executable))
+config.substitutions.append(('%mlir_lib_dir', config.mlir_runner_utils_dir))
+config.substitutions.append(('%imex_tools_dir', config.imex_tools_dir))
+config.substitutions.append(('%mlir_runner_utils', config.mlir_runner_utils))
+config.substitutions.append(('%mlir_c_runner_utils', config.mlir_c_runner_utils))
+config.substitutions.append(('%vulkan_runtime_wrappers', config.vulkan_runtime_wrappers))
+config.substitutions.append(('%imex_runner', config.imex_runner))
+config.substitutions.append(('%python_executable', config.python_executable))
 
 llvm_config.with_system_environment(
     ['HOME', 'INCLUDE', 'LIB', 'TMP', 'TEMP'])
@@ -47,13 +52,13 @@ config.excludes = ['Inputs', 'Examples', 'Jax', 'Models', 'CMakeLists.txt', 'REA
 
 # test_exec_root: The root path where tests should be run.
 config.test_exec_root = os.path.join(config.imex_obj_root, 'test')
-config.imex_tools_dir = os.path.join(config.imex_obj_root, 'bin')
 
 # Tweak the PATH to include the tools dir.
-llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
-llvm_config.with_environment('PATH', config.imex_tools_dir, append_path=True)
+llvm_config.with_environment('PATH', os.path.normpath(config.llvm_tools_dir), append_path=True)
+llvm_config.with_environment('PATH', os.path.normpath(config.imex_tools_dir), append_path=True)
 
-tool_dirs = [config.imex_tools_dir, config.llvm_tools_dir]
+tool_dirs = [os.path.normpath(config.imex_tools_dir),
+             os.path.normpath(config.llvm_tools_dir)]
 tools = [
     'imex-opt',
     'imex-runner.py'

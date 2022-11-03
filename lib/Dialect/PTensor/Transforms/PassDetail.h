@@ -1,4 +1,4 @@
-//===-- PassDetail.h - Dist pass details --------*- tablegen -*-===//
+//===-- PassDetail.h - PTensor pass details ----------------*- tablegen -*-===//
 //
 // Copyright 2022 Intel Corporation
 // Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -8,12 +8,12 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// This header file defines prototypes for Dist dialect passes.
+/// This header file defines prototypes for PTensor dialect passes.
 ///
 //===----------------------------------------------------------------------===//
 
-#ifndef _Dist_PASSDETAIL_H_INCLUDED_
-#define _Dist_PASSDETAIL_H_INCLUDED_
+#ifndef _PTENSOR_PASSDETAIL_H_INCLUDED_
+#define _PTENSOR_PASSDETAIL_H_INCLUDED_
 
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/IR/FunctionInterfaces.h>
@@ -24,7 +24,7 @@ namespace mlir {
 class AffineDialect;
 
 namespace arith {
-class ArithmeticDialect;
+class ArithDialect;
 } // namespace arith
 
 namespace tensor {
@@ -35,13 +35,25 @@ namespace shape {
 class ShapeDialect;
 } // namespace shape
 
+namespace linalg {
+class LinalgDialect;
+} // namespace linalg
+
 } // namespace mlir
 
 namespace imex {
 
+namespace dist {
+class DistDialect;
+} // namespace dist
+
+namespace ptensor {
+class PTensorDialect;
+} // namespace ptensor
+
 #define GEN_PASS_CLASSES
-#include <imex/Dialect/Dist/Transforms/Passes.h.inc>
+#include <imex/Dialect/PTensor/Transforms/Passes.h.inc>
 
 } // namespace imex
 
-#endif // _Dist_PASSDETAIL_H_INCLUDED_
+#endif // _PTENSOR_PASSDETAIL_H_INCLUDED_

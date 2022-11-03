@@ -1,4 +1,4 @@
-add_mlir_dialect_library(IMEXPTensor
+add_mlir_dialect_library(IMEXPTensorDialect
   PTensorOps.cpp
 
   ADDITIONAL_HEADER_DIRS

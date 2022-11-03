@@ -8,6 +8,6 @@ add_mlir_conversion_library(IMEXPTensorToLinalg
   IMEXConversionPassIncGen
 
   LINK_LIBS PUBLIC
-  IMEXPTensor
+  IMEXPTensorDialect
   MLIRLinalgDialect
 )
