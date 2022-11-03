@@ -31,31 +31,8 @@ module {
 // -----
 module {
     "dist.runtime_prototypes"() : () -> ()
-    func.func @test_distinfo(%shape: tensor<1xindex>, %team: i64) -> !dist.info<1> {
-        %1 = "dist.distinfo"(%shape, %team) {rank = 1 : i64} : (tensor<1xindex>, i64) -> !dist.info<1>
-        return %1 : !dist.info<1>
-    }
-    func.func @test_distinfo2(%shape: tensor<1xindex>, %team: i64) -> !dist.info<1> {
-        %1 = "dist.distinfo"(%shape, %team, %shape, %shape) {rank = 1 : i64} : (tensor<1xindex>, i64, tensor<1xindex>, tensor<1xindex>) -> !dist.info<1>
-        return %1 : !dist.info<1>
-    }
-}
-// CHECK-LABEL: func.func @test_distinfo(
-// CHECK: @_idtr_nprocs
-// CHECK: call @_idtr_prank
-// CHECK: shape.get_extent
-// CHECK: arith.divui
-// CHECK: shape.get_extent
-// CHECK: arith.muli
-// CHECK: builtin.unrealized_conversion_cast
-// CHECK-LABEL: func.func @test_distinfo2
-// CHECK: builtin.unrealized_conversion_cast %arg0, %arg0, %arg0, %arg1
-
-// -----
-module {
-    "dist.runtime_prototypes"() : () -> ()
-    func.func @test_init_dist_tensor(%arg0: !ptensor.ptensor<tensor<?xi64>>, %arg1: !dist.info<1>) -> !dist.dtensor<<tensor<?xi64>>> {
-        %1 = "dist.init_dist_tensor"(%arg0, %arg1) : (!ptensor.ptensor<tensor<?xi64>>, !dist.info<1>) -> !dist.dtensor<<tensor<?xi64>>>
+    func.func @test_init_dist_tensor(%gshape: tensor<1xindex>, %pt: !ptensor.ptensor<tensor<?xi64>>, %loffs: tensor<1xindex>, %team: i64) -> !dist.dtensor<<tensor<?xi64>>> {
+        %1 = "dist.init_dist_tensor"(%gshape, %pt, %loffs, %team) : (tensor<1xindex>, !ptensor.ptensor<tensor<?xi64>>, tensor<1xindex>, i64) -> !dist.dtensor<<tensor<?xi64>>>
         return %1 : !dist.dtensor<<tensor<?xi64>>>
     }
 }
@@ -77,7 +54,7 @@ module {
 // CHECK-LABEL: func.func private @_idtr_prank() -> i64
 // CHECK-LABEL: func.func private @_idtr_reduce_all(tensor<i64>, i32, i32)
 // CHECK-LABEL: func.func @test_local_offsets(%arg0: i64, %arg1: i64, %arg2: tensor<1xindex>) -> tensor<1xi64> {
-// CHECK: shape.get_extent
+// CHECK: shape.dim
 // CHECK: arith.subi
 // CHECK: arith.muli
 
@@ -93,7 +70,7 @@ module {
 // CHECK-LABEL: func.func private @_idtr_prank() -> i64
 // CHECK-LABEL: func.func private @_idtr_reduce_all(tensor<i64>, i32, i32)
 // CHECK-LABEL: func.func @test_local_shape(%arg0: i64, %arg1: i64, %arg2: tensor<1xindex>) -> tensor<1xi64> {
-// CHECK: shape.get_extent
+// CHECK: shape.dim
 // CHECK: arith.subi
 
 // -----

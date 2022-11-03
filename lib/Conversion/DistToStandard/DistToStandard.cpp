@@ -319,19 +319,26 @@ struct ConvertDistToStandardPass
     typeConverter.addConversion(convT2T);
     typeConverter.addConversion(convDTensor);
 
-    /// Convert multiple elements 8as converted by the above convDTensor) into a
+    /// Convert multiple elements (as converted by the above convDTensor) into a
     /// single DistTensor
     auto materializeCast =
-        [](::mlir::OpBuilder &builder, ::imex::dist::DistTensorType type,
+        [](::mlir::OpBuilder &builder, ::mlir::Type type,
            ::mlir::ValueRange inputs,
            ::mlir::Location loc) -> ::llvm::Optional<::mlir::Value> {
       return builder
           .create<::mlir::UnrealizedConversionCastOp>(loc, type, inputs)
           .getResult(0);
     };
+    auto materializeDTArg =
+        [materializeCast](
+            ::mlir::OpBuilder &builder, ::imex::dist::DistTensorType type,
+            ::mlir::ValueRange inputs,
+            ::mlir::Location loc) -> ::llvm::Optional<::mlir::Value> {
+      return materializeCast(builder, type, inputs, loc);
+    };
 
     typeConverter.addSourceMaterialization(materializeCast);
-    typeConverter.addArgumentMaterialization(materializeCast);
+    typeConverter.addArgumentMaterialization(materializeDTArg);
     // the inverse of the ArgumentMaterialization splits a DistTensor into
     // multiple return args
     decomposer.addDecomposeValueConversion(
