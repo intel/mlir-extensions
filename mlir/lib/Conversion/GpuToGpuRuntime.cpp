@@ -1891,6 +1891,109 @@ struct TileParallelLoopsForGPUPass
   }
 };
 
+// Some manual fp conversion, denormals and nan/infs are not supported.
+static mlir::Value f64Tof32(mlir::OpBuilder &builder, mlir::Location loc,
+                            mlir::Value src) {
+  auto i64 = builder.getI64Type();
+  auto srcI64 = builder.create<imex::util::BitcastOp>(loc, i64, src);
+
+  auto zero = builder.create<mlir::arith::ConstantIntOp>(loc, 0, i64);
+  auto absMask = builder.create<mlir::arith::ConstantIntOp>(
+      loc, static_cast<int64_t>(0x7FFFFFFFFFFFFFFFULL), i64);
+
+  mlir::Value absVal =
+      builder.create<mlir::arith::AndIOp>(loc, srcI64, absMask);
+  mlir::Value isZero = builder.create<mlir::arith::CmpIOp>(
+      loc, mlir::arith::CmpIPredicate::eq, absVal, zero);
+
+  auto signShift = builder.create<mlir::arith::ConstantIntOp>(loc, 63, i64);
+  auto expShift = builder.create<mlir::arith::ConstantIntOp>(loc, 52, i64);
+  auto expMask = builder.create<mlir::arith::ConstantIntOp>(loc, 0x7FF, i64);
+  auto manMask = builder.create<mlir::arith::ConstantIntOp>(
+      loc, static_cast<int64_t>(0x000FFFFFFFFFFFFFULL), i64);
+  auto b = builder.create<mlir::arith::ConstantIntOp>(loc, 1023 - 127, i64);
+  auto _ff = builder.create<mlir::arith::ConstantIntOp>(loc, 0xFF, i64);
+  auto _29 = builder.create<mlir::arith::ConstantIntOp>(loc, 29, i64);
+  auto _23 = builder.create<mlir::arith::ConstantIntOp>(loc, 23, i64);
+  auto _31 = builder.create<mlir::arith::ConstantIntOp>(loc, 31, i64);
+
+  mlir::Value sign =
+      builder.create<mlir::arith::ShRUIOp>(loc, srcI64, signShift);
+  mlir::Value exponent =
+      builder.create<mlir::arith::ShRUIOp>(loc, srcI64, expShift);
+  exponent = builder.create<mlir::arith::AndIOp>(loc, exponent, expMask);
+  mlir::Value mantissa =
+      builder.create<mlir::arith::AndIOp>(loc, srcI64, manMask);
+  exponent = builder.create<mlir::arith::SubIOp>(loc, exponent, b);
+
+  exponent = builder.create<mlir::arith::AndIOp>(loc, exponent, _ff);
+  mantissa = builder.create<mlir::arith::ShRUIOp>(loc, mantissa, _29);
+
+  exponent = builder.create<mlir::arith::ShLIOp>(loc, exponent, _23);
+  sign = builder.create<mlir::arith::ShLIOp>(loc, sign, _31);
+
+  mlir::Value res = mantissa;
+  res = builder.create<mlir::arith::OrIOp>(loc, res, exponent);
+  res = builder.create<mlir::arith::OrIOp>(loc, res, sign);
+
+  res = builder.create<mlir::arith::SelectOp>(loc, isZero, zero, res);
+
+  res = builder.create<mlir::arith::TruncIOp>(loc, builder.getI32Type(), res);
+  res = builder.create<mlir::arith::BitcastOp>(loc, builder.getF32Type(), res);
+  return res;
+}
+
+// Some manual fp conversion, denormals and nan/infs are not supported.
+static mlir::Value f32Tof64(mlir::OpBuilder &builder, mlir::Location loc,
+                            mlir::Value src, mlir::Type resType) {
+  auto i32 = builder.getI32Type();
+  mlir::Value srcI64 = builder.create<mlir::arith::BitcastOp>(loc, i32, src);
+
+  auto i64 = builder.getI64Type();
+  srcI64 = builder.create<mlir::arith::ExtUIOp>(loc, i64, srcI64);
+
+  auto zero = builder.create<mlir::arith::ConstantIntOp>(loc, 0, i64);
+  auto absMask = builder.create<mlir::arith::ConstantIntOp>(
+      loc, static_cast<int64_t>(0x7FFFFFFFFFFFFFFFULL), i64);
+
+  mlir::Value absVal =
+      builder.create<mlir::arith::AndIOp>(loc, srcI64, absMask);
+  mlir::Value isZero = builder.create<mlir::arith::CmpIOp>(
+      loc, mlir::arith::CmpIPredicate::eq, absVal, zero);
+
+  auto signShift = builder.create<mlir::arith::ConstantIntOp>(loc, 31, i64);
+  auto expShift = builder.create<mlir::arith::ConstantIntOp>(loc, 23, i64);
+  auto expMask = builder.create<mlir::arith::ConstantIntOp>(loc, 0xFF, i64);
+  auto manMask = builder.create<mlir::arith::ConstantIntOp>(loc, 0x7FFFFF, i64);
+  auto b = builder.create<mlir::arith::ConstantIntOp>(loc, 1023 - 127, i64);
+  auto _29 = builder.create<mlir::arith::ConstantIntOp>(loc, 29, i64);
+  auto _52 = builder.create<mlir::arith::ConstantIntOp>(loc, 52, i64);
+  auto _63 = builder.create<mlir::arith::ConstantIntOp>(loc, 63, i64);
+
+  mlir::Value sign =
+      builder.create<mlir::arith::ShRUIOp>(loc, srcI64, signShift);
+  mlir::Value exponent =
+      builder.create<mlir::arith::ShRUIOp>(loc, srcI64, expShift);
+  exponent = builder.create<mlir::arith::AndIOp>(loc, exponent, expMask);
+  mlir::Value mantissa =
+      builder.create<mlir::arith::AndIOp>(loc, srcI64, manMask);
+
+  mantissa = builder.create<mlir::arith::ShLIOp>(loc, mantissa, _29);
+  exponent = builder.create<mlir::arith::AddIOp>(loc, exponent, b);
+
+  exponent = builder.create<mlir::arith::ShLIOp>(loc, exponent, _52);
+  sign = builder.create<mlir::arith::ShLIOp>(loc, sign, _63);
+
+  mlir::Value res = mantissa;
+  res = builder.create<mlir::arith::OrIOp>(loc, res, exponent);
+  res = builder.create<mlir::arith::OrIOp>(loc, res, sign);
+
+  res = builder.create<mlir::arith::SelectOp>(loc, isZero, zero, res);
+
+  res = builder.create<imex::util::BitcastOp>(loc, resType, res);
+  return res;
+}
+
 class ConvertF64LoadOp
     : public mlir::OpConversionPattern<mlir::memref::LoadOp> {
 public:
@@ -1914,9 +2017,7 @@ public:
     auto loc = op.getLoc();
     mlir::Value result = rewriter.create<mlir::memref::LoadOp>(
         loc, adaptor.getMemref(), adaptor.getIndices());
-    result = rewriter.create<imex::util::BitcastOp>(loc, rewriter.getF64Type(),
-                                                    result);
-    result = rewriter.create<mlir::arith::TruncFOp>(loc, resType, result);
+    result = f64Tof32(rewriter, loc, result);
     rewriter.replaceOp(op, result);
     return mlir::success();
   }
@@ -1943,12 +2044,9 @@ public:
     if (!memrefType)
       return mlir::failure();
 
-    auto f64Type = rewriter.getF64Type();
     auto loc = op.getLoc();
-    mlir::Value f64val =
-        rewriter.create<mlir::arith::ExtFOp>(loc, f64Type, adaptor.getValue());
-    f64val = rewriter.create<imex::util::BitcastOp>(
-        loc, memrefType.getElementType(), f64val);
+    mlir::Value f64val = f32Tof64(rewriter, loc, adaptor.getValue(),
+                                  memrefType.getElementType());
     rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(op, f64val, memref,
                                                        adaptor.getIndices());
     return mlir::success();
