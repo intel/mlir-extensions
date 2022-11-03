@@ -825,9 +825,37 @@ public:
   }
 };
 
+class ConvertBitcastOp
+    : public mlir::OpConversionPattern<imex::util::MemrefBitcastOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::util::MemrefBitcastOp op,
+                  imex::util::MemrefBitcastOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto converter = getTypeConverter();
+    assert(converter && "Invalid type converter");
+
+    auto resType = converter->convertType(op.getResult().getType());
+    if (!resType)
+      return mlir::failure();
+
+    auto src = adaptor.getSource();
+    auto srcType = src.getType();
+    if (srcType == resType) {
+      rewriter.replaceOp(op, src);
+      return mlir::success();
+    }
+
+    rewriter.replaceOpWithNewOp<mlir::spirv::BitcastOp>(op, resType, src);
+    return mlir::success();
+  }
+};
+
 class ConvertLoadOp : public mlir::OpConversionPattern<mlir::memref::LoadOp> {
 public:
-  using mlir::OpConversionPattern<mlir::memref::LoadOp>::OpConversionPattern;
+  using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::LoadOp op,
@@ -863,7 +891,7 @@ public:
 
 class ConvertStoreOp : public mlir::OpConversionPattern<mlir::memref::StoreOp> {
 public:
-  using mlir::OpConversionPattern<mlir::memref::StoreOp>::OpConversionPattern;
+  using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::StoreOp op,
@@ -1361,10 +1389,11 @@ struct GPUToSpirvPass
 
       typeConverter.addConversion([&typeConverter](mlir::MemRefType type)
                                       -> llvm::Optional<mlir::Type> {
-        if (!type.hasRank() || !type.getElementType().isIntOrFloat())
+        auto srcElemType = type.getElementType();
+        if (!srcElemType.isIntOrFloat() && !srcElemType.isa<mlir::VectorType>())
           return mlir::Type(nullptr);
 
-        auto elemType = typeConverter.convertType(type.getElementType());
+        auto elemType = typeConverter.convertType(srcElemType);
         if (!elemType)
           return mlir::Type(nullptr);
 
@@ -1382,13 +1411,13 @@ struct GPUToSpirvPass
       mlir::arith::populateArithToSPIRVPatterns(typeConverter, patterns);
       mlir::populateMathToSPIRVPatterns(typeConverter, patterns);
 
-      patterns
-          .insert<ConvertSubviewOp, ConvertCastOp<mlir::memref::CastOp>,
-                  ConvertCastOp<mlir::memref::ReinterpretCastOp>, ConvertLoadOp,
-                  ConvertStoreOp, ConvertAtomicOps, ConvertFunc, ConvertAssert,
-                  ConvertBarrierOp, ConvertMemFenceOp, ConvertUndef,
-                  ConvertGlobalOp, ConvertGetGlobalOp, ConvertAllReduceOp,
-                  ConvertSubgroupReduceOp>(typeConverter, context);
+      patterns.insert<ConvertSubviewOp, ConvertCastOp<mlir::memref::CastOp>,
+                      ConvertCastOp<mlir::memref::ReinterpretCastOp>,
+                      ConvertBitcastOp, ConvertLoadOp, ConvertStoreOp,
+                      ConvertAtomicOps, ConvertFunc, ConvertAssert,
+                      ConvertBarrierOp, ConvertMemFenceOp, ConvertUndef,
+                      ConvertGlobalOp, ConvertGetGlobalOp, ConvertAllReduceOp,
+                      ConvertSubgroupReduceOp>(typeConverter, context);
 
       patterns.add<
           SingleDimLaunchConfigConversion<mlir::gpu::SubgroupIdOp,
