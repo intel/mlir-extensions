@@ -60,6 +60,7 @@ struct FunctionCallBuilder {
       : functionName(functionName),
         functionType(
             mlir::LLVM::LLVMFunctionType::get(returnType, argumentTypes)) {}
+
   mlir::LLVM::CallOp create(mlir::Location loc, mlir::OpBuilder &builder,
                             mlir::ArrayRef<mlir::Value> arguments) const {
     auto module =
@@ -369,7 +370,7 @@ private:
       return mlir::failure();
     }
 
-    auto blob = binaryAttr.getValue();
+    auto spirvBlob = binaryAttr.getValue();
     mlir::SmallString<128> nameBuffer(kernelModule.getName());
     nameBuffer.append(kGpuBinaryStorageSuffix);
     mlir::Value data = mlir::LLVM::createGlobalString(
@@ -379,7 +380,7 @@ private:
     auto size = rewriter.create<mlir::LLVM::ConstantOp>(
         loc, llvmIndexType,
         mlir::IntegerAttr::get(llvmIndexType,
-                               static_cast<int64_t>(blob.size())));
+                               static_cast<int64_t>(spirvBlob.size())));
 
     // loads the module given the spirv data
     auto module = moduleLoadCallBuilder.create(
