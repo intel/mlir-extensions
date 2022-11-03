@@ -853,6 +853,23 @@ public:
   }
 };
 
+static llvm::Optional<unsigned> getTypeSize(mlir::Type type) {
+  if (type.isIntOrFloat())
+    return type.getIntOrFloatBitWidth() / 8;
+
+  if (auto vec = type.dyn_cast<mlir::VectorType>()) {
+    if (!vec.hasStaticShape())
+      return llvm::None;
+
+    auto elemAlign = getTypeSize(vec.getElementType());
+    if (!elemAlign)
+      return llvm::None;
+
+    return static_cast<unsigned>(vec.getNumElements()) * *elemAlign;
+  }
+  return llvm::None;
+}
+
 class ConvertLoadOp : public mlir::OpConversionPattern<mlir::memref::LoadOp> {
 public:
   using OpConversionPattern::OpConversionPattern;
@@ -862,11 +879,14 @@ public:
                   mlir::memref::LoadOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto memrefType = op.getMemref().getType().cast<mlir::MemRefType>();
+    auto typeSize = getTypeSize(memrefType.getElementType());
+    if (!typeSize)
+      return mlir::failure();
+
     if (memrefType.getRank() == 0) {
       auto memoryAccess = mlir::spirv::MemoryAccessAttr::get(
           op.getContext(), mlir::spirv::MemoryAccess::Aligned);
-      auto alignment =
-          rewriter.getI32IntegerAttr(memrefType.getElementTypeBitWidth() / 8);
+      auto alignment = rewriter.getI32IntegerAttr(*typeSize);
       rewriter.replaceOpWithNewOp<mlir::spirv::LoadOp>(op, adaptor.getMemref(),
                                                        memoryAccess, alignment);
       return mlir::success();
@@ -877,8 +897,7 @@ public:
 
       auto memoryAccess = mlir::spirv::MemoryAccessAttr::get(
           op.getContext(), mlir::spirv::MemoryAccess::Aligned);
-      auto alignment =
-          rewriter.getI32IntegerAttr(memrefType.getElementTypeBitWidth() / 8);
+      auto alignment = rewriter.getI32IntegerAttr(*typeSize);
       rewriter.replaceOpWithNewOp<mlir::spirv::LoadOp>(op, ptr, memoryAccess,
                                                        alignment);
 
@@ -901,14 +920,17 @@ public:
     if (!memrefType.hasRank() || memrefType.getRank() != 1)
       return mlir::failure();
 
+    auto typeSize = getTypeSize(memrefType.getElementType());
+    if (!typeSize)
+      return mlir::failure();
+
     auto loc = op.getLoc();
     auto ptr = rewriter.create<mlir::spirv::InBoundsPtrAccessChainOp>(
         loc, adaptor.getMemref(), adaptor.getIndices().front(), llvm::None);
 
     auto memoryAccess = mlir::spirv::MemoryAccessAttr::get(
         op.getContext(), mlir::spirv::MemoryAccess::Aligned);
-    auto alignment =
-        rewriter.getI32IntegerAttr(memrefType.getElementTypeBitWidth() / 8);
+    auto alignment = rewriter.getI32IntegerAttr(*typeSize);
     rewriter.replaceOpWithNewOp<mlir::spirv::StoreOp>(
         op, ptr, adaptor.getValue(), memoryAccess, alignment);
 
