@@ -14,9 +14,8 @@
 
 #ifndef IMEX_GPUTOSPIRV_PASS_H_
 #define IMEX_GPUTOSPIRV_PASS_H_
+
 #include <memory>
-#include <mlir/IR/PatternMatch.h>
-#include <mlir/Transforms/DialectConversion.h>
 
 namespace mlir {
 class Pass;
