@@ -1756,6 +1756,7 @@ static void populateLowerToGPUPipelineMed(mlir::OpPassManager &pm) {
 
   pm.addNestedPass<mlir::gpu::GPUModuleOp>(gpu_runtime::createAbiAttrsPass());
   pm.addPass(gpu_runtime::createSetSPIRVCapabilitiesPass(&deviceCapsMapper));
+  pm.addPass(gpu_runtime::createTruncateF64ForGPUPass());
   pm.addPass(gpu_runtime::createGPUToSpirvPass());
   commonOptPasses(pm);
 
