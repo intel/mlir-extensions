@@ -102,6 +102,56 @@ struct LowerExtractMemrefMetadataOp
   }
 };
 
+struct LowerMemrefBitcastOp
+    : public mlir::ConvertOpToLLVMPattern<imex::util::MemrefBitcastOp> {
+  using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::util::MemrefBitcastOp op,
+                  imex::util::MemrefBitcastOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto arg = adaptor.getSource();
+    if (!arg.getType().isa<mlir::LLVM::LLVMStructType>())
+      return mlir::failure();
+
+    auto memrefType = op.getType().dyn_cast<mlir::MemRefType>();
+    if (!memrefType)
+      return mlir::failure();
+
+    auto converter = getTypeConverter();
+    assert(converter && "Invalid type converter");
+
+    auto resType = converter->convertType(memrefType);
+    if (!resType)
+      return mlir::failure();
+
+    auto loc = op.getLoc();
+    mlir::MemRefDescriptor src(arg);
+    auto dst = mlir::MemRefDescriptor::undef(rewriter, loc, resType);
+
+    auto elemPtrType = dst.getElementPtrType();
+
+    auto allocatedPtr = src.allocatedPtr(rewriter, loc);
+    allocatedPtr =
+        rewriter.create<mlir::LLVM::BitcastOp>(loc, elemPtrType, allocatedPtr);
+
+    auto alignedPtr = src.alignedPtr(rewriter, loc);
+    alignedPtr =
+        rewriter.create<mlir::LLVM::BitcastOp>(loc, elemPtrType, alignedPtr);
+
+    dst.setAllocatedPtr(rewriter, loc, allocatedPtr);
+    dst.setAlignedPtr(rewriter, loc, alignedPtr);
+
+    dst.setOffset(rewriter, loc, src.offset(rewriter, loc));
+    for (auto i : llvm::seq(0u, static_cast<unsigned>(memrefType.getRank()))) {
+      dst.setSize(rewriter, loc, i, src.size(rewriter, loc, i));
+      dst.setStride(rewriter, loc, i, src.stride(rewriter, loc, i));
+    }
+    rewriter.replaceOp(op, static_cast<mlir::Value>(dst));
+    return mlir::success();
+  }
+};
+
 struct LowerBuildTuple
     : public mlir::ConvertOpToLLVMPattern<imex::util::BuildTupleOp> {
   using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
@@ -111,6 +161,8 @@ struct LowerBuildTuple
                   imex::util::BuildTupleOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto converter = getTypeConverter();
+    assert(converter && "Invalid type converter");
+
     auto type = converter->convertType(op.getType());
     if (!type)
       return mlir::failure();
@@ -491,6 +543,7 @@ struct ImexUtilToLLVMPass
         LowerUndef,
         LowerBuildTuple,
         LowerExtractMemrefMetadataOp,
+        LowerMemrefBitcastOp,
         LowerTakeContextOp,
         LowerReleaseContextOp
         // clang-format on
