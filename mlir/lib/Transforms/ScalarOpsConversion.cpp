@@ -169,8 +169,8 @@ struct ConvertConstantOp
 } // namespace
 
 void imex::populateArithConversionRewritesAndTarget(
-    mlir::MLIRContext &context, mlir::TypeConverter &converter,
-    mlir::RewritePatternSet &patterns, mlir::ConversionTarget &target) {
+    mlir::TypeConverter &converter, mlir::RewritePatternSet &patterns,
+    mlir::ConversionTarget &target) {
   target.addDynamicallyLegalDialect<mlir::arith::ArithDialect>(
       [&converter](mlir::Operation *op) -> llvm::Optional<bool> {
         if (converter.isLegal(op))
@@ -232,12 +232,12 @@ void imex::populateArithConversionRewritesAndTarget(
       ConvertConstantOp,
       ConvertSelectOp
       // clang-format on
-      >(converter, &context);
+      >(converter, patterns.getContext());
 }
 
 void imex::populateMathConversionRewritesAndTarget(
-    mlir::MLIRContext &context, mlir::TypeConverter &converter,
-    mlir::RewritePatternSet &patterns, mlir::ConversionTarget &target) {
+    mlir::TypeConverter &converter, mlir::RewritePatternSet &patterns,
+    mlir::ConversionTarget &target) {
   target.addDynamicallyLegalDialect<mlir::math::MathDialect>(
       [&converter](mlir::Operation *op) -> llvm::Optional<bool> {
         if (converter.isLegal(op))
@@ -279,7 +279,7 @@ void imex::populateMathConversionRewritesAndTarget(
       ConvertBinaryOp<mlir::math::IPowIOp>,
       ConvertBinaryOp<mlir::math::PowFOp>,
 
-      ConvertBinaryOp<mlir::math::FmaOp>
+      ConvertTernaryOp<mlir::math::FmaOp>
       // clang-format on
-      >(converter, &context);
+      >(converter, patterns.getContext());
 }
