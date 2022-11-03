@@ -16,13 +16,10 @@
 #define IMEX_GPUXTOLLVM_PASS_H_
 
 #include <memory>
-#include <mlir/IR/PatternMatch.h>
-#include <mlir/Transforms/DialectConversion.h>
 namespace mlir {
+
 class ConversionTarget;
 class LLVMTypeConverter;
-class Location;
-struct LogicalResult;
 class Pass;
 class Operation;
 class RewritePatternSet;

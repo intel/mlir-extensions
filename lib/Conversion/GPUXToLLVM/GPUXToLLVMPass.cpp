@@ -50,9 +50,7 @@
 #include "llvm/Support/Error.h"
 #include "llvm/Support/FormatVariadic.h"
 
-#include <iostream>
-
-namespace imex {
+namespace {
 
 static constexpr const char *kGpuBinaryStorageSuffix = "_spirv_binary";
 
@@ -200,14 +198,14 @@ protected:
 /// A rewrite pattern to convert gpux.alloc operations into a GPU runtime
 /// call.
 class ConvertAllocOpToGpuRuntimeCallPattern
-    : public ConvertOpToGpuRuntimeCallPattern<gpux::AllocOp> {
+    : public ConvertOpToGpuRuntimeCallPattern<imex::gpux::AllocOp> {
 public:
   ConvertAllocOpToGpuRuntimeCallPattern(mlir::LLVMTypeConverter &typeConverter)
-      : ConvertOpToGpuRuntimeCallPattern<gpux::AllocOp>(typeConverter) {}
+      : ConvertOpToGpuRuntimeCallPattern<imex::gpux::AllocOp>(typeConverter) {}
 
 private:
   mlir::LogicalResult
-  matchAndRewrite(gpux::AllocOp allocOp, OpAdaptor adaptor,
+  matchAndRewrite(imex::gpux::AllocOp allocOp, OpAdaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     if (!allocOp.getSymbolOperands().empty())
       return mlir::failure();
@@ -276,15 +274,16 @@ private:
 /// A rewrite pattern to convert gpux.dealloc operations into a GPU runtime
 /// call.
 class ConvertDeallocOpToGpuRuntimeCallPattern
-    : public ConvertOpToGpuRuntimeCallPattern<gpux::DeallocOp> {
+    : public ConvertOpToGpuRuntimeCallPattern<imex::gpux::DeallocOp> {
 public:
   ConvertDeallocOpToGpuRuntimeCallPattern(
       mlir::LLVMTypeConverter &typeConverter)
-      : ConvertOpToGpuRuntimeCallPattern<gpux::DeallocOp>(typeConverter) {}
+      : ConvertOpToGpuRuntimeCallPattern<imex::gpux::DeallocOp>(typeConverter) {
+  }
 
 private:
   mlir::LogicalResult
-  matchAndRewrite(gpux::DeallocOp deallocOp, OpAdaptor adaptor,
+  matchAndRewrite(imex::gpux::DeallocOp deallocOp, OpAdaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     mlir::Location loc = deallocOp.getLoc();
 
@@ -311,12 +310,13 @@ private:
 ///
 /// Intermediate data structures are allocated on the stack.
 class ConvertLaunchFuncOpToGpuRuntimeCallPattern
-    : public ConvertOpToGpuRuntimeCallPattern<gpux::LaunchFuncOp> {
+    : public ConvertOpToGpuRuntimeCallPattern<imex::gpux::LaunchFuncOp> {
 public:
   ConvertLaunchFuncOpToGpuRuntimeCallPattern(
       mlir::LLVMTypeConverter &typeConverter,
       mlir::StringRef gpuBinaryAnnotation)
-      : ConvertOpToGpuRuntimeCallPattern<gpux::LaunchFuncOp>(typeConverter),
+      : ConvertOpToGpuRuntimeCallPattern<imex::gpux::LaunchFuncOp>(
+            typeConverter),
         gpuBinaryAnnotation(gpuBinaryAnnotation) {}
 
 private:
@@ -349,7 +349,7 @@ private:
   }
 
   mlir::LogicalResult
-  matchAndRewrite(gpux::LaunchFuncOp launchOp, OpAdaptor adaptor,
+  matchAndRewrite(imex::gpux::LaunchFuncOp launchOp, OpAdaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
 
     mlir::Location loc = launchOp.getLoc();
@@ -394,7 +394,7 @@ private:
         {adaptor.getGpuxStream(), module->getResult(0), kernelName});
 
     // Create array of pointers to kernel arguments.
-    AllocaInsertionPoint allocaHelper(launchOp);
+    imex::AllocaInsertionPoint allocaHelper(launchOp);
     auto kernelParams = adaptor.getKernelOperands();
     auto paramsCount = static_cast<unsigned>(kernelParams.size());
     auto paramsArrayType =
@@ -520,18 +520,19 @@ private:
     rewriter.eraseOp(launchOp);
     return mlir::success();
   }
-}; // namespace imex
+};
 
 class ConvertGpuStreamCreatePattern
-    : public ConvertOpToGpuRuntimeCallPattern<gpux::CreateStreamOp> {
+    : public ConvertOpToGpuRuntimeCallPattern<imex::gpux::CreateStreamOp> {
 public:
   ConvertGpuStreamCreatePattern(mlir::LLVMTypeConverter &converter)
-      : ConvertOpToGpuRuntimeCallPattern<gpux::CreateStreamOp>(converter) {}
+      : ConvertOpToGpuRuntimeCallPattern<imex::gpux::CreateStreamOp>(
+            converter) {}
 
 private:
   mlir::LogicalResult
-  matchAndRewrite(gpux::CreateStreamOp op,
-                  gpux::CreateStreamOp::Adaptor adaptor,
+  matchAndRewrite(imex::gpux::CreateStreamOp op,
+                  imex::gpux::CreateStreamOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto mod = op->getParentOfType<mlir::ModuleOp>();
     if (!mod)
@@ -551,15 +552,16 @@ private:
 };
 
 class ConvertGpuStreamDestroyPattern
-    : public ConvertOpToGpuRuntimeCallPattern<gpux::DestroyStreamOp> {
+    : public ConvertOpToGpuRuntimeCallPattern<imex::gpux::DestroyStreamOp> {
 public:
   ConvertGpuStreamDestroyPattern(mlir::LLVMTypeConverter &converter)
-      : ConvertOpToGpuRuntimeCallPattern<gpux::DestroyStreamOp>(converter) {}
+      : ConvertOpToGpuRuntimeCallPattern<imex::gpux::DestroyStreamOp>(
+            converter) {}
 
 private:
   mlir::LogicalResult
-  matchAndRewrite(gpux::DestroyStreamOp op,
-                  gpux::DestroyStreamOp::Adaptor adaptor,
+  matchAndRewrite(imex::gpux::DestroyStreamOp op,
+                  imex::gpux::DestroyStreamOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto res =
@@ -568,6 +570,7 @@ private:
     return mlir::success();
   }
 };
+} // namespace
 
 class GPUXToLLVMPass : public ::imex::ConvertGPUXToLLVMBase<GPUXToLLVMPass> {
 public:
@@ -592,34 +595,38 @@ void GPUXToLLVMPass::runOnOperation() {
   mlir::populateGpuToLLVMConversionPatterns(
       converter, patterns, mlir::gpu::getDefaultGpuBinaryAnnotation());
 
-  populateControlFlowTypeConversionRewritesAndTarget(converter, patterns,
-                                                     target);
+  imex::populateControlFlowTypeConversionRewritesAndTarget(converter, patterns,
+                                                           target);
 
-  populateGpuxToLLVMPatternsAndLegality(converter, patterns, target);
+  imex::populateGpuxToLLVMPatternsAndLegality(converter, patterns, target);
 
   if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
                                                 std::move(patterns))))
     signalPassFailure();
 }
 
-void populateGpuxToLLVMPatternsAndLegality(mlir::LLVMTypeConverter &converter,
-                                           mlir::RewritePatternSet &patterns,
-                                           mlir::ConversionTarget &target) {
+void imex::populateGpuxToLLVMPatternsAndLegality(
+    mlir::LLVMTypeConverter &converter, mlir::RewritePatternSet &patterns,
+    mlir::ConversionTarget &target) {
   auto context = patterns.getContext();
   auto llvmPointerType =
       mlir::LLVM::LLVMPointerType::get(mlir::IntegerType::get(context, 8));
-  converter.addConversion([llvmPointerType](gpux::OpaqueType) -> mlir::Type {
-    return llvmPointerType;
-  });
-  converter.addConversion([llvmPointerType](gpux::StreamType) -> mlir::Type {
-    return llvmPointerType;
-  });
-  converter.addConversion([llvmPointerType](gpux::DeviceType) -> mlir::Type {
-    return llvmPointerType;
-  });
-  converter.addConversion([llvmPointerType](gpux::ContextType) -> mlir::Type {
-    return llvmPointerType;
-  });
+  converter.addConversion(
+      [llvmPointerType](imex::gpux::OpaqueType) -> mlir::Type {
+        return llvmPointerType;
+      });
+  converter.addConversion(
+      [llvmPointerType](imex::gpux::StreamType) -> mlir::Type {
+        return llvmPointerType;
+      });
+  converter.addConversion(
+      [llvmPointerType](imex::gpux::DeviceType) -> mlir::Type {
+        return llvmPointerType;
+      });
+  converter.addConversion(
+      [llvmPointerType](imex::gpux::ContextType) -> mlir::Type {
+        return llvmPointerType;
+      });
 
   patterns.insert<
       // clang-format off
@@ -634,12 +641,10 @@ void populateGpuxToLLVMPatternsAndLegality(mlir::LLVMTypeConverter &converter,
       converter, mlir::gpu::getDefaultGpuBinaryAnnotation());
 
   target.addIllegalDialect<mlir::gpu::GPUDialect>();
-  target.addIllegalDialect<gpux::GPUXDialect>();
+  target.addIllegalDialect<imex::gpux::GPUXDialect>();
 }
 
 std::unique_ptr<::mlir::OperationPass<::mlir::ModuleOp>>
-createConvertGPUXToLLVMPass() {
+imex::createConvertGPUXToLLVMPass() {
   return std::make_unique<GPUXToLLVMPass>();
 }
-
-} // namespace imex
