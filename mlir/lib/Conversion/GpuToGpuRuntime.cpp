@@ -825,16 +825,15 @@ public:
   }
 };
 
-class ConvertBitcastOp
-    : public mlir::OpConversionPattern<imex::util::MemrefBitcastOp> {
+template <typename Op>
+class ConvertBitcastOp : public mlir::OpConversionPattern<Op> {
 public:
-  using OpConversionPattern::OpConversionPattern;
+  using mlir::OpConversionPattern<Op>::OpConversionPattern;
 
   mlir::LogicalResult
-  matchAndRewrite(imex::util::MemrefBitcastOp op,
-                  imex::util::MemrefBitcastOp::Adaptor adaptor,
+  matchAndRewrite(Op op, typename Op::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    auto converter = getTypeConverter();
+    auto converter = this->getTypeConverter();
     assert(converter && "Invalid type converter");
 
     auto resType = converter->convertType(op.getResult().getType());
@@ -1433,13 +1432,15 @@ struct GPUToSpirvPass
       mlir::arith::populateArithToSPIRVPatterns(typeConverter, patterns);
       mlir::populateMathToSPIRVPatterns(typeConverter, patterns);
 
-      patterns.insert<ConvertSubviewOp, ConvertCastOp<mlir::memref::CastOp>,
-                      ConvertCastOp<mlir::memref::ReinterpretCastOp>,
-                      ConvertBitcastOp, ConvertLoadOp, ConvertStoreOp,
-                      ConvertAtomicOps, ConvertFunc, ConvertAssert,
-                      ConvertBarrierOp, ConvertMemFenceOp, ConvertUndef,
-                      ConvertGlobalOp, ConvertGetGlobalOp, ConvertAllReduceOp,
-                      ConvertSubgroupReduceOp>(typeConverter, context);
+      patterns
+          .insert<ConvertSubviewOp, ConvertCastOp<mlir::memref::CastOp>,
+                  ConvertCastOp<mlir::memref::ReinterpretCastOp>,
+                  ConvertBitcastOp<imex::util::BitcastOp>,
+                  ConvertBitcastOp<imex::util::MemrefBitcastOp>, ConvertLoadOp,
+                  ConvertStoreOp, ConvertAtomicOps, ConvertFunc, ConvertAssert,
+                  ConvertBarrierOp, ConvertMemFenceOp, ConvertUndef,
+                  ConvertGlobalOp, ConvertGetGlobalOp, ConvertAllReduceOp,
+                  ConvertSubgroupReduceOp>(typeConverter, context);
 
       patterns.add<
           SingleDimLaunchConfigConversion<mlir::gpu::SubgroupIdOp,
@@ -1913,8 +1914,8 @@ public:
     auto loc = op.getLoc();
     mlir::Value result = rewriter.create<mlir::memref::LoadOp>(
         loc, adaptor.getMemref(), adaptor.getIndices());
-    result = rewriter.create<mlir::arith::BitcastOp>(loc, rewriter.getF64Type(),
-                                                     result);
+    result = rewriter.create<imex::util::BitcastOp>(loc, rewriter.getF64Type(),
+                                                    result);
     result = rewriter.create<mlir::arith::TruncFOp>(loc, resType, result);
     rewriter.replaceOp(op, result);
     return mlir::success();
@@ -1946,7 +1947,7 @@ public:
     auto loc = op.getLoc();
     mlir::Value f64val =
         rewriter.create<mlir::arith::ExtFOp>(loc, f64Type, adaptor.getValue());
-    f64val = rewriter.create<mlir::arith::BitcastOp>(
+    f64val = rewriter.create<imex::util::BitcastOp>(
         loc, memrefType.getElementType(), f64val);
     rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(op, f64val, memref,
                                                        adaptor.getIndices());
