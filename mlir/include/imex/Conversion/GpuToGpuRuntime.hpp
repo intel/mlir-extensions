@@ -35,4 +35,7 @@ std::unique_ptr<mlir::Pass> createParallelLoopGPUMappingPass();
 /// `suggest_block_size`.
 std::unique_ptr<mlir::Pass> createTileParallelLoopsForGPUPass();
 
+/// For devices without f64 support, truncate all operations to f32.
+std::unique_ptr<mlir::Pass> createTruncateF64ForGPUPass();
+
 } // namespace gpu_runtime

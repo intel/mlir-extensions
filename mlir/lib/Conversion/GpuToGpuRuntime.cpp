@@ -7,6 +7,8 @@
 #include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOps.hpp"
 #include "imex/Dialect/imex_util/Dialect.hpp"
 #include "imex/Dialect/imex_util/Utils.hpp"
+#include "imex/Transforms/ScalarOpsConversion.hpp"
+#include "imex/Transforms/TypeConversion.hpp"
 
 #include <mlir/Conversion/ArithToSPIRV/ArithToSPIRV.h>
 #include <mlir/Conversion/ControlFlowToSPIRV/ControlFlowToSPIRV.h>
@@ -20,6 +22,7 @@
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/GPU/Transforms/ParallelLoopMapper.h>
 #include <mlir/Dialect/GPU/Transforms/Passes.h>
+#include <mlir/Dialect/Math/IR/Math.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/Dialect/SPIRV/IR/SPIRVDialect.h>
@@ -1836,6 +1839,160 @@ struct TileParallelLoopsForGPUPass
   }
 };
 
+struct TruncateF64ForGPUPass
+    : public mlir::PassWrapper<TruncateF64ForGPUPass,
+                               mlir::OperationPass<mlir::ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TruncateF64ForGPUPass)
+
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::arith::ArithDialect>();
+    registry.insert<mlir::gpu::GPUDialect>();
+    registry.insert<mlir::math::MathDialect>();
+    registry.insert<mlir::memref::MemRefDialect>();
+  }
+
+  void runOnOperation() override {
+    auto *ctx = &getContext();
+    mlir::ConversionTarget target(*ctx);
+    mlir::TypeConverter converter;
+
+    // Convert unknown types to itself
+    converter.addConversion([](mlir::Type type) { return type; });
+
+    converter.addConversion([](mlir::Float64Type type) {
+      return mlir::Float32Type::get(type.getContext());
+    });
+
+    converter.addConversion(
+        [](mlir::MemRefType type) -> llvm::Optional<mlir::Type> {
+          if (!type.getElementType().isF64())
+            return llvm::None;
+
+          int64_t shape[] = {2};
+          auto elemType = mlir::IntegerType::get(type.getContext(), 32);
+          auto newType = mlir::VectorType::get(shape, elemType);
+          return type.clone(newType);
+        });
+
+    auto addCast = [](mlir::OpBuilder &builder, mlir::Type dstType,
+                      mlir::ValueRange inputs,
+                      mlir::Location loc) -> llvm::Optional<mlir::Value> {
+      if (inputs.size() != 1)
+        return llvm::None;
+
+      auto src = inputs.front();
+      auto srcType = src.getType();
+      if (srcType.isF32() && dstType.isF64())
+        return builder.create<mlir::arith::ExtFOp>(loc, dstType, src)
+            .getResult();
+
+      if (srcType.isF64() && dstType.isF32())
+        return builder.create<mlir::arith::TruncFOp>(loc, dstType, src)
+            .getResult();
+
+      return llvm::None;
+    };
+    converter.addArgumentMaterialization(addCast);
+    converter.addSourceMaterialization(addCast);
+    converter.addTargetMaterialization(addCast);
+
+    mlir::RewritePatternSet patterns(ctx);
+
+    imex::populateArithConversionRewritesAndTarget(converter, patterns, target);
+    imex::populateMathConversionRewritesAndTarget(converter, patterns, target);
+    imex::populateControlFlowTypeConversionRewritesAndTarget(converter,
+                                                             patterns, target);
+    imex::populateTupleTypeConversionRewritesAndTarget(converter, patterns,
+                                                       target);
+
+    // TODO: remove
+    mlir::populateFunctionOpInterfaceTypeConversionPattern<
+        mlir::gpu::GPUFuncOp>(patterns, converter);
+    target.addDynamicallyLegalOp<mlir::gpu::GPUFuncOp>(
+        [&](mlir::gpu::GPUFuncOp op) -> llvm::Optional<bool> {
+          if (converter.isSignatureLegal(op.getFunctionType()) &&
+              converter.isLegal(&op.getBody()))
+            return true;
+
+          return llvm::None;
+        });
+
+    mlir::FrozenRewritePatternSet frozenPatterns(std::move(patterns));
+
+    auto module = getOperation();
+
+    llvm::SmallVector<mlir::Value> newArgs;
+    mlir::OpBuilder builder(ctx);
+    for (auto gpuModule : module.getOps<mlir::gpu::GPUModuleOp>()) {
+      auto targetEnv = mlir::spirv::lookupTargetEnv(gpuModule);
+      if (!targetEnv) {
+        gpuModule->emitError("TargetEnv not found");
+        return signalPassFailure();
+      }
+
+      auto caps = targetEnv.getCapabilities();
+      if (llvm::is_contained(caps, mlir::spirv::Capability::Float64))
+        continue;
+
+      for (auto gpuFunc : gpuModule.getOps<mlir::gpu::GPUFuncOp>()) {
+        auto origSig = gpuFunc.getFunctionType();
+        if (mlir::failed(
+                mlir::applyPartialConversion(gpuFunc, target, frozenPatterns)))
+          return signalPassFailure();
+
+        auto newSig = gpuFunc.getFunctionType();
+        if (origSig == newSig)
+          continue;
+
+        auto funcUses = mlir::SymbolTable::getSymbolUses(gpuFunc, module);
+        if (!funcUses)
+          continue;
+
+        for (auto use : llvm::make_early_inc_range(*funcUses)) {
+          auto user = use.getUser();
+          if (mlir::isa<gpu_runtime::GPUSuggestBlockSizeOp>(user))
+            continue;
+
+          auto launch = mlir::dyn_cast<mlir::gpu::LaunchFuncOp>(user);
+          if (!launch) {
+            user->emitError("Unknown gpu func user");
+            return signalPassFailure();
+          }
+
+          builder.setInsertionPoint(launch);
+
+          newArgs.clear();
+          newArgs.reserve(launch.getNumKernelOperands());
+          for (auto [origArg, newType] :
+               llvm::zip(launch.getKernelOperands(), newSig.getInputs())) {
+            auto origType = origArg.getType();
+            if (newType == origType) {
+              newArgs.emplace_back(origArg);
+            } else if (origType.isF64() && newType.isF32()) {
+              auto loc = launch.getLoc();
+              mlir::Value newVal =
+                  builder.create<mlir::arith::TruncFOp>(loc, newType, origArg);
+              newArgs.emplace_back(newVal);
+            } else if (origType.isa<mlir::MemRefType>() &&
+                       newType.isa<mlir::MemRefType>()) {
+              auto loc = launch.getLoc();
+              mlir::Value newVal =
+                  builder.create<mlir::arith::BitcastOp>(loc, newType, origArg);
+              newArgs.emplace_back(newVal);
+            } else {
+              launch->emitError("Incompatible types: ")
+                  << origType << " and " << newType;
+              return signalPassFailure();
+            }
+          }
+
+          launch.getKernelOperandsMutable().assign(newArgs);
+        }
+      }
+    }
+  }
+};
 } // namespace
 
 // Expose the passes to the outside world
@@ -1878,4 +2035,8 @@ std::unique_ptr<mlir::Pass> gpu_runtime::createParallelLoopGPUMappingPass() {
 
 std::unique_ptr<mlir::Pass> gpu_runtime::createTileParallelLoopsForGPUPass() {
   return std::make_unique<TileParallelLoopsForGPUPass>();
+}
+
+std::unique_ptr<mlir::Pass> gpu_runtime::createTruncateF64ForGPUPass() {
+  return std::make_unique<TruncateF64ForGPUPass>();
 }
