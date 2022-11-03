@@ -2044,6 +2044,26 @@ void EnvironmentRegionOp::build(
   ensureTerminator(*bodyRegion, odsBuilder, odsState.location);
 }
 
+mlir::LogicalResult BitcastOp::verify() {
+  auto srcType = getSource().getType();
+  auto dstType = getResult().getType();
+  if (srcType.isIntOrFloat() && dstType.isIntOrFloat() &&
+      srcType.getIntOrFloatBitWidth() != dstType.getIntOrFloatBitWidth())
+    return emitError("Bitcast element size mismatch.");
+  return mlir::success();
+}
+
+mlir::OpFoldResult
+BitcastOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
+  auto src = getSource();
+  auto srcType = src.getType();
+  auto dstType = getResult().getType();
+  if (srcType == dstType)
+    return src;
+
+  return nullptr;
+}
+
 mlir::LogicalResult MemrefBitcastOp::verify() {
   auto srcType = getSource().getType().cast<mlir::MemRefType>();
   auto dstType = getResult().getType().cast<mlir::MemRefType>();
