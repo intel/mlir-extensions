@@ -768,7 +768,7 @@ static llvm::Optional<mlir::Value> getGpuStream(mlir::OpBuilder &builder,
 class ConvertSubviewOp
     : public mlir::OpConversionPattern<mlir::memref::SubViewOp> {
 public:
-  using mlir::OpConversionPattern<mlir::memref::SubViewOp>::OpConversionPattern;
+  using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::SubViewOp op,
@@ -1868,6 +1868,70 @@ struct TileParallelLoopsForGPUPass
   }
 };
 
+class ConvertF64LoadOp
+    : public mlir::OpConversionPattern<mlir::memref::LoadOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::LoadOp op,
+                  mlir::memref::LoadOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto converter = getTypeConverter();
+    assert(converter && "Invalid type converter");
+
+    auto origResType = op.getType();
+    if (!origResType.isF64())
+      return mlir::success();
+
+    auto resType = converter->convertType(origResType);
+    if (!resType)
+      return mlir::success();
+
+    auto loc = op.getLoc();
+    mlir::Value result = rewriter.create<mlir::memref::LoadOp>(
+        loc, adaptor.getMemref(), adaptor.getIndices());
+    result = rewriter.create<mlir::arith::BitcastOp>(loc, rewriter.getF64Type(),
+                                                     result);
+    result = rewriter.create<mlir::arith::TruncFOp>(loc, resType, result);
+    rewriter.replaceOp(op, result);
+    return mlir::success();
+  }
+};
+
+class ConvertF64StoreOp
+    : public mlir::OpConversionPattern<mlir::memref::StoreOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::StoreOp op,
+                  mlir::memref::StoreOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto converter = getTypeConverter();
+    assert(converter && "Invalid type converter");
+
+    auto origType = op.getValue().getType();
+    if (!origType.isF64())
+      return mlir::failure();
+
+    auto memref = adaptor.getMemref();
+    auto memrefType = memref.getType().dyn_cast<mlir::MemRefType>();
+    if (!memrefType)
+      return mlir::failure();
+
+    auto f64Type = rewriter.getF64Type();
+    auto loc = op.getLoc();
+    mlir::Value f64val =
+        rewriter.create<mlir::arith::ExtFOp>(loc, f64Type, adaptor.getValue());
+    f64val = rewriter.create<mlir::arith::BitcastOp>(
+        loc, memrefType.getElementType(), f64val);
+    rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(op, f64val, memref,
+                                                       adaptor.getIndices());
+    return mlir::success();
+  }
+};
+
 struct TruncateF64ForGPUPass
     : public mlir::PassWrapper<TruncateF64ForGPUPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
@@ -1920,6 +1984,10 @@ struct TruncateF64ForGPUPass
         return builder.create<mlir::arith::TruncFOp>(loc, dstType, src)
             .getResult();
 
+      if (srcType.isa<mlir::MemRefType>() && dstType.isa<mlir::MemRefType>())
+        return builder.create<imex::util::MemrefBitcastOp>(loc, dstType, src)
+            .getResult();
+
       return llvm::None;
     };
     converter.addArgumentMaterialization(addCast);
@@ -1942,6 +2010,15 @@ struct TruncateF64ForGPUPass
         [&](mlir::gpu::GPUFuncOp op) -> llvm::Optional<bool> {
           if (converter.isSignatureLegal(op.getFunctionType()) &&
               converter.isLegal(&op.getBody()))
+            return true;
+
+          return llvm::None;
+        });
+
+    patterns.insert<ConvertF64LoadOp, ConvertF64StoreOp>(converter, ctx);
+    target.addDynamicallyLegalOp<mlir::memref::LoadOp, mlir::memref::StoreOp>(
+        [&converter](mlir::Operation *op) -> llvm::Optional<bool> {
+          if (converter.isLegal(op))
             return true;
 
           return llvm::None;
@@ -2006,8 +2083,8 @@ struct TruncateF64ForGPUPass
             } else if (origType.isa<mlir::MemRefType>() &&
                        newType.isa<mlir::MemRefType>()) {
               auto loc = launch.getLoc();
-              mlir::Value newVal =
-                  builder.create<mlir::arith::BitcastOp>(loc, newType, origArg);
+              mlir::Value newVal = builder.create<imex::util::MemrefBitcastOp>(
+                  loc, newType, origArg);
               newArgs.emplace_back(newVal);
             } else {
               launch->emitError("Incompatible types: ")
