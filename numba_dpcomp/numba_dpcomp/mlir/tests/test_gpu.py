@@ -159,7 +159,8 @@ def test_simple3():
 
 @require_gpu
 @pytest.mark.parametrize("val", _test_values)
-def test_scalar(val):
+@pytest.mark.parametrize("dtype", [np.int32, np.int64, np.float32, np.float64])
+def test_scalar(val, dtype):
     get_id = get_global_id
 
     def func(a, b, c):
@@ -169,7 +170,7 @@ def test_scalar(val):
     sim_func = kernel_sim(func)
     gpu_func = kernel_cached(func)
 
-    a = np.array([1, 2, 3, 4, 5, 6], np.float32)
+    a = np.arange(-6, 6, dtype=dtype)
 
     sim_res = np.zeros(a.shape, a.dtype)
     sim_func[a.shape, DEFAULT_LOCAL_SIZE](a, val, sim_res)
