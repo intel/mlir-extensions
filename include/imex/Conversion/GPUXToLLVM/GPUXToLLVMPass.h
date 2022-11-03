@@ -32,6 +32,10 @@ namespace imex {
 
 /// Populates the given list with patterns that convert from GPUX dialect to
 /// LLVM.
+/// It performs Type conversion from illegal given GPUX types like DeviceType,
+/// ContextType, StreamType, etc. to legal mlir::Type It inserts conversion
+/// patterns to legalize GPUX ops, AllocOp, DeallocOp, StreamCreate and
+/// StreamDestroy
 void populateGpuxToLLVMPatternsAndLegality(mlir::LLVMTypeConverter &converter,
                                            mlir::RewritePatternSet &patterns,
                                            mlir::ConversionTarget &target);
