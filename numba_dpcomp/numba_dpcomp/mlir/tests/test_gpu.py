@@ -56,6 +56,26 @@ def require_dpctl(func):
     )(func)
 
 
+_test_values = [
+    True,
+    False,
+    -3,
+    -2,
+    -1,
+    0,
+    1,
+    2,
+    3,
+    -2.5,
+    -1.0,
+    -0.5 - 0.0,
+    0.0,
+    0.5,
+    1.0,
+    2.5,
+]
+
+
 @require_gpu
 def test_simple1():
     def func(a, b, c):
@@ -131,6 +151,33 @@ def test_simple3():
 
     with print_pass_ir([], ["ConvertParallelLoopToGpu"]):
         gpu_func[a.shape[0], DEFAULT_LOCAL_SIZE](a, gpu_res)
+        ir = get_print_buffer()
+        assert ir.count("gpu.launch blocks") == 1, ir
+
+    assert_equal(gpu_res, sim_res)
+
+
+@require_gpu
+@pytest.mark.parametrize("val", _test_values)
+def test_scalar(val):
+    get_id = get_global_id
+
+    def func(a, b, c):
+        i = get_id(0)
+        c[i] = a[i] + b
+
+    sim_func = kernel_sim(func)
+    gpu_func = kernel_cached(func)
+
+    a = np.array([1, 2, 3, 4, 5, 6], np.float32)
+
+    sim_res = np.zeros(a.shape, a.dtype)
+    sim_func[a.shape, DEFAULT_LOCAL_SIZE](a, val, sim_res)
+
+    gpu_res = np.zeros(a.shape, a.dtype)
+
+    with print_pass_ir([], ["ConvertParallelLoopToGpu"]):
+        gpu_func[a.shape, DEFAULT_LOCAL_SIZE](a, val, gpu_res)
         ir = get_print_buffer()
         assert ir.count("gpu.launch blocks") == 1, ir
 
