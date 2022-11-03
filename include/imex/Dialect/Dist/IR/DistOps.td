@@ -49,20 +49,13 @@ class Dist_Type<string name, string typeMnemonic, list<Trait> traits = []>
     let mnemonic = typeMnemonic;
 }
 
-def Dist_Info : Dist_Type<"DistInfo", "info">
-{
-  let summary = "A type for attaching distributed info information to a PTensor";
-  let description = [{
-    A distributed PTensor needs info information like offset and shape of local partition.
-    The DistInfo type is used to define operations to carry and extract such info data.
-  }];
-  let parameters = (ins "int32_t":$rank);
-  let assemblyFormat = "`<` $rank `>`";
-}
-
 def Dist_Tensor : Dist_Type<"DistTensor", "dtensor">
 {
   let summary = "A type used to bind distributed information to a PTensor";
+  let description = [{
+    A distributed PTensor needs information like offset and shape of local partition.
+    The DistTensor type is used to define operations to carry and extract such information.
+  }];
   let parameters = (ins "::imex::ptensor::PTensorType":$p_tensor_type);
   let assemblyFormat = "`<` $p_tensor_type `>`";
 }
@@ -101,27 +94,15 @@ def PRankOp : Dist_Op<"prank", [Pure]> {
     ];
 }
 
-def DistInfoOp : Dist_Op<"distinfo", [SameVariadicOperandSize]> {
-    let summary = "Initialize distributed meta information about a new PTensor.";
+def InitDistTensorOp : Dist_Op<"init_dist_tensor", [Pure]> {
+    let summary = "Bind a PTensor to distributed meta information";
     let description = [{
+        The attached PTensor is the local partiton of the distributed PTensor.
         The distributed meta information about a new PTensor provides
-          - the rank of the tensor
-          - the process-local shape
+          - the global shape
           - the process-local offsets
           - the distributed team
     }];
-    // Global shape needed for initial registration. Views are handled by a separate op.
-    let arguments = (ins I64Attr:$rank, AnyType:$shape, AnyType:$team, Optional<AnyType>:$l_shape, Optional<AnyType>:$l_offsets);
-    let results = (outs Dist_Info:$res);
-    let builders = [
-        OpBuilder<(ins "uint64_t":$rank, "::mlir::Value":$gshape, "::mlir::Value":$team), [{
-            build($_builder, $_state, ::imex::dist::DistInfoType::get($_builder.getContext(), rank), rank, gshape, team, ::mlir::Value(), ::mlir::Value());
-        }]>,
-    ];
-}
-
-def InitDistTensorOp : Dist_Op<"init_dist_tensor", [Pure]> {
-    let summary = "Bind a PTensor to a DistInfo";
     let arguments = (ins AnyType:$g_shape, AnyType:$p_tensor, AnyType:$l_offsets, AnyType:$team);
     let results = (outs Dist_Tensor);
     let builders = [
@@ -135,39 +116,32 @@ def InitDistTensorOp : Dist_Op<"init_dist_tensor", [Pure]> {
 
 def ExtractFromDistOp : Dist_Op<"extract_from_dist", []> {
     let summary = "Get one element from the distributed meta information.";
-    let arguments = (ins I32Attr:$what, AnyType:$info);
+    let arguments = (ins I32Attr:$what, AnyType:$d_tensor);
     let results = (outs AnyType);
     let builders = [
-      OpBuilder<(ins "::imex::dist::INFO":$what, "::mlir::Value":$info), [{
+      OpBuilder<(ins "::imex::dist::INFO":$what, "::mlir::Value":$d_tensor), [{
         // auto-deduce return type from from operands
         auto i64Type = $_builder.getI64Type();
         auto idx = getIntAttr<32>($_builder, what);
         $_state.addAttribute(getWhatAttrName(odsState.name), idx);
-        $_state.addOperands(info);
+        $_state.addOperands(d_tensor);
         int64_t rank = 0;
-        auto itype = info.getType().dyn_cast<::imex::dist::DistInfoType>();
-        auto ttype = info.getType().dyn_cast<::imex::dist::DistTensorType>();
-        if(itype) {
-            rank = itype.getRank();
-        } else {
-            assert(ttype);
-            rank = ttype.getPTensorType().getRtensor().getRank();
-        }
+        auto ttype = d_tensor.getType().dyn_cast<::imex::dist::DistTensorType>();
+        assert(ttype);
+        rank = ttype.getPTensorType().getRtensor().getRank();
         switch(idx.getInt()) {
             case GSHAPE:
-            case LSHAPE:
             case LOFFSETS:
                 $_state.addTypes(::mlir::RankedTensorType::get({rank}, i64Type));
+                break;
+            case LTENSOR:
+                $_state.addTypes(ttype.getPTensorType());
                 break;
             case TEAM:
                 $_state.addTypes(i64Type);
                 break;
-            case LTENSOR:
-                assert(ttype);
-                $_state.addTypes(ttype.getPTensorType());
-                break;
             default:
-                assert("Unknown element for DistInfo" == nullptr);
+                assert(!"Unknown distributed meta information requested");
         };
       }]>,
     ];
@@ -182,7 +156,7 @@ def LocalOffsetsOp : Dist_Op<"local_offsets", []> {
     let results = (outs AnyType);
     let builders = [
       OpBuilder<(ins "int64_t":$rank, "::mlir::Value":$num_procs, "::mlir::Value":$prank, "::mlir::Value":$gshape), [{
-            build($_builder, $_state, ::mlir::RankedTensorType::get({rank}, $_builder.getI64Type()), getIntAttr<32>($_builder, rank), num_procs, prank, gshape);
+            build($_builder, $_state, ::mlir::RankedTensorType::get({rank}, $_builder.getI64Type()), getIntAttr<64>($_builder, rank), num_procs, prank, gshape);
       }]>,
     ];
 }
@@ -196,7 +170,7 @@ def LocalShapeOp : Dist_Op<"local_shape", []> {
     let results = (outs AnyType);
     let builders = [
       OpBuilder<(ins "int32_t":$rank, "::mlir::Value":$num_procs, "::mlir::Value":$prank, "::mlir::Value":$gshape), [{
-            build($_builder, $_state, ::mlir::RankedTensorType::get({rank}, $_builder.getI64Type()), getIntAttr<32>($_builder, rank), num_procs, prank, gshape);
+            build($_builder, $_state, ::mlir::RankedTensorType::get({rank}, $_builder.getI64Type()), getIntAttr<64>($_builder, rank), num_procs, prank, gshape);
       }]>,
     ];
 }

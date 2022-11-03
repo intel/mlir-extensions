@@ -52,28 +52,12 @@ namespace {
 // ***** Some helper functions ***
 // *******************************
 
-// create ::imex::dist::DistInfoOp
-inline ::mlir::Value createDistInfo(::mlir::Location &loc,
-                                    ::mlir::OpBuilder &builder, uint64_t rank,
-                                    ::mlir::Value gshape, ::mlir::Value team) {
-  return builder.create<::imex::dist::DistInfoOp>(loc, rank, gshape, team);
-}
-
-// create ::imex::dist::LocalShapeOp
-inline ::mlir::Value createGetLocalShape(::mlir::Location &loc,
-                                         ::mlir::OpBuilder &builder,
-                                         ::mlir::Value info) {
-  assert(info.getType().isa<::imex::dist::DistInfoType>());
-  return builder.create<::imex::dist::ExtractFromDistOp>(
-      loc, ::imex::dist::LSHAPE, info);
-}
-
 // create ::imex::dist::LocalOffsetsOp
 inline ::mlir::Value createGetLocalOffsets(::mlir::Location &loc,
                                            ::mlir::OpBuilder &builder,
-                                           ::mlir::Value info) {
+                                           ::mlir::Value dt) {
   return builder.create<::imex::dist::ExtractFromDistOp>(
-      loc, ::imex::dist::LOFFSETS, info);
+      loc, ::imex::dist::LOFFSETS, dt);
 }
 
 // extract RankedTensor and create ::imex::dist::AllReduceOp
@@ -97,7 +81,7 @@ inline ::mlir::Value createGetLocal(::mlir::Location &loc,
       loc, ::imex::dist::LTENSOR, dt);
 }
 
-// Create a DistTensor from a PTensor and DistInfo
+// Create a DistTensor from a PTensor and meta data
 inline ::mlir::Value createMkTnsr(::mlir::Location &loc,
                                   ::mlir::OpBuilder &builder,
                                   ::mlir::Value gshape, ::mlir::Value pt,
@@ -181,6 +165,9 @@ struct DistARangeOpRWP : public RecOpRewritePattern<::imex::ptensor::ARangeOp> {
     auto count = createCountARange(rewriter, loc, start, op.getStop(), step);
     auto dtype = rewriter.getI64Type(); // FIXME
     auto i64Typ = rewriter.getI64Type();
+    // get number of procs and prank
+    auto nProcs = rewriter.create<::imex::dist::NProcsOp>(loc, team);
+    auto pRank = rewriter.create<::imex::dist::PRankOp>(loc, team);
     // result shape is 1d
     constexpr uint64_t rank = 1;
     auto gShpTnsr = rewriter.create<::mlir::tensor::EmptyOp>(
@@ -188,15 +175,15 @@ struct DistARangeOpRWP : public RecOpRewritePattern<::imex::ptensor::ARangeOp> {
     auto gShape = rewriter.create<::mlir::shape::ShapeOfOp>(loc, gShpTnsr);
     // so is the local shape
     llvm::SmallVector<mlir::Value> lShapeVVec(rank);
-    // get info
-    auto info = createDistInfo(loc, rewriter, rank, gShape, team);
     // get local shape
-    auto lShapeVVec_mr = createGetLocalShape(loc, rewriter, info);
+    auto lShapeVVec_mr = rewriter.create<::imex::dist::LocalShapeOp>(
+        loc, rank, nProcs, pRank, gShape);
     auto zero = createIndex(loc, rewriter, 0);
     auto lSz = rewriter.create<::mlir::tensor::ExtractOp>(
         loc, i64Typ, lShapeVVec_mr, ::mlir::ValueRange({zero}));
     // get local offsets
-    auto offsets = createGetLocalOffsets(loc, rewriter, info);
+    auto offsets = rewriter.create<::imex::dist::LocalOffsetsOp>(
+        loc, rank, nProcs, pRank, gShape);
     // create start from offset
     auto off = rewriter.create<::mlir::tensor::ExtractOp>(
         loc, i64Typ, offsets, ::mlir::ValueRange({zero}));
@@ -252,12 +239,15 @@ struct DistEWBinOpRWP : public RecOpRewritePattern<::imex::ptensor::EWBinOp> {
     auto retPtTyp = lLhs.getType(); // FIXME
     auto ewbres = rewriter.create<::imex::ptensor::EWBinOp>(
         loc, retPtTyp, op.getOp(), lLhs, lRhs);
-    // get global shape, offsets and team
+    // get rank, global shape, offsets and team
+    uint64_t rank = lhsDtTyp.getPTensorType().getRtensor().getRank();
     auto gShape = rewriter.create<::imex::dist::ExtractFromDistOp>(
         loc, ::imex::dist::GSHAPE, op.getLhs());
     auto team = createTeamOf(loc, rewriter, op.getLhs());
-    auto info = createDistInfo(loc, rewriter, 1, gShape, team);
-    auto lOffs = createGetLocalOffsets(loc, rewriter, info);
+    auto nProcs = rewriter.create<::imex::dist::NProcsOp>(loc, team);
+    auto pRank = rewriter.create<::imex::dist::PRankOp>(loc, team);
+    auto lOffs = rewriter.create<::imex::dist::LocalOffsetsOp>(
+        loc, rank, nProcs, pRank, gShape);
     // and init our new dist tensor
     rewriter.replaceOp(
         op, createMkTnsr(loc, rewriter, gShape, ewbres, lOffs, team));
@@ -291,6 +281,7 @@ struct DistReductionOpRWP
     // Local reduction
     auto local = createGetLocal(loc, rewriter, op.getInput());
     // return type 0d with same dtype as input
+    uint64_t rank = 0;
     auto dtype = inpDtTyp.getPTensorType().getRtensor().getElementType();
     auto retPtTyp = ::imex::ptensor::PTensorType::get(
         rewriter.getContext(), ::mlir::RankedTensorType::get({}, dtype), false);
@@ -303,8 +294,10 @@ struct DistReductionOpRWP
     auto gShape = rewriter.create<::imex::dist::ExtractFromDistOp>(
         loc, ::imex::dist::GSHAPE, op.getInput());
     auto team = createTeamOf(loc, rewriter, op.getInput());
-    auto info = createDistInfo(loc, rewriter, 1, gShape, team);
-    auto lOffs = createGetLocalOffsets(loc, rewriter, info);
+    auto nProcs = rewriter.create<::imex::dist::NProcsOp>(loc, team);
+    auto pRank = rewriter.create<::imex::dist::PRankOp>(loc, team);
+    auto lOffs = rewriter.create<::imex::dist::LocalOffsetsOp>(
+        loc, rank, nProcs, pRank, gShape);
     // and init our new dist tensor
     auto resPTnsr = rewriter.create<::imex::ptensor::MkPTensorOp>(
         loc, false, retRTnsr, nullptr, team);

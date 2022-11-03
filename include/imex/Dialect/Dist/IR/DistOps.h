@@ -26,7 +26,7 @@ namespace ptensor {
 class PTensorType;
 } // namespace ptensor
 namespace dist {
-enum INFO : int { GSHAPE, LSHAPE, LOFFSETS, TEAM, INFO_LAST, LTENSOR };
+enum INFO : int { GSHAPE, LTENSOR, LOFFSETS, TEAM, INFO_LAST };
 } // namespace dist
 } // namespace imex
 
