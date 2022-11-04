@@ -1,3 +1,7 @@
+// RUN: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-cpu.pp \
+//                                            --runner mlir-cpu-runner -e main \
+//                                            --shared-libs=%mlir_runner_utils \
+//                                            --entry-point-result=void | FileCheck %s
 #map0 = affine_map<(d0, d1, d2, d3, d4) -> (d0, d1 + d3, d4)>
 #map1 = affine_map<(d0, d1, d2, d3, d4) -> (d3, d4, d2)>
 #map2 = affine_map<(d0, d1, d2, d3, d4) -> (d0, d1, d2)>
