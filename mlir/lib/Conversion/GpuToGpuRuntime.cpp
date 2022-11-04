@@ -7,6 +7,8 @@
 #include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOps.hpp"
 #include "imex/Dialect/imex_util/Dialect.hpp"
 #include "imex/Dialect/imex_util/Utils.hpp"
+#include "imex/Transforms/ScalarOpsConversion.hpp"
+#include "imex/Transforms/TypeConversion.hpp"
 
 #include <mlir/Conversion/ArithToSPIRV/ArithToSPIRV.h>
 #include <mlir/Conversion/ControlFlowToSPIRV/ControlFlowToSPIRV.h>
@@ -20,6 +22,7 @@
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/GPU/Transforms/ParallelLoopMapper.h>
 #include <mlir/Dialect/GPU/Transforms/Passes.h>
+#include <mlir/Dialect/Math/IR/Math.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/Dialect/SPIRV/IR/SPIRVDialect.h>
@@ -765,7 +768,7 @@ static llvm::Optional<mlir::Value> getGpuStream(mlir::OpBuilder &builder,
 class ConvertSubviewOp
     : public mlir::OpConversionPattern<mlir::memref::SubViewOp> {
 public:
-  using mlir::OpConversionPattern<mlir::memref::SubViewOp>::OpConversionPattern;
+  using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::SubViewOp op,
@@ -822,20 +825,67 @@ public:
   }
 };
 
+template <typename Op>
+class ConvertBitcastOp : public mlir::OpConversionPattern<Op> {
+public:
+  using mlir::OpConversionPattern<Op>::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(Op op, typename Op::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto converter = this->getTypeConverter();
+    assert(converter && "Invalid type converter");
+
+    auto resType = converter->convertType(op.getResult().getType());
+    if (!resType)
+      return mlir::failure();
+
+    auto src = adaptor.getSource();
+    auto srcType = src.getType();
+    if (srcType == resType) {
+      rewriter.replaceOp(op, src);
+      return mlir::success();
+    }
+
+    rewriter.replaceOpWithNewOp<mlir::spirv::BitcastOp>(op, resType, src);
+    return mlir::success();
+  }
+};
+
+static llvm::Optional<unsigned> getTypeSize(mlir::Type type) {
+  if (type.isIntOrFloat())
+    return type.getIntOrFloatBitWidth() / 8;
+
+  if (auto vec = type.dyn_cast<mlir::VectorType>()) {
+    if (!vec.hasStaticShape())
+      return llvm::None;
+
+    auto elemSize = getTypeSize(vec.getElementType());
+    if (!elemSize)
+      return llvm::None;
+
+    return static_cast<unsigned>(vec.getNumElements()) * *elemSize;
+  }
+  return llvm::None;
+}
+
 class ConvertLoadOp : public mlir::OpConversionPattern<mlir::memref::LoadOp> {
 public:
-  using mlir::OpConversionPattern<mlir::memref::LoadOp>::OpConversionPattern;
+  using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::LoadOp op,
                   mlir::memref::LoadOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto memrefType = op.getMemref().getType().cast<mlir::MemRefType>();
+    auto typeSize = getTypeSize(memrefType.getElementType());
+    if (!typeSize)
+      return mlir::failure();
+
     if (memrefType.getRank() == 0) {
       auto memoryAccess = mlir::spirv::MemoryAccessAttr::get(
           op.getContext(), mlir::spirv::MemoryAccess::Aligned);
-      auto alignment =
-          rewriter.getI32IntegerAttr(memrefType.getElementTypeBitWidth() / 8);
+      auto alignment = rewriter.getI32IntegerAttr(*typeSize);
       rewriter.replaceOpWithNewOp<mlir::spirv::LoadOp>(op, adaptor.getMemref(),
                                                        memoryAccess, alignment);
       return mlir::success();
@@ -846,8 +896,7 @@ public:
 
       auto memoryAccess = mlir::spirv::MemoryAccessAttr::get(
           op.getContext(), mlir::spirv::MemoryAccess::Aligned);
-      auto alignment =
-          rewriter.getI32IntegerAttr(memrefType.getElementTypeBitWidth() / 8);
+      auto alignment = rewriter.getI32IntegerAttr(*typeSize);
       rewriter.replaceOpWithNewOp<mlir::spirv::LoadOp>(op, ptr, memoryAccess,
                                                        alignment);
 
@@ -860,7 +909,7 @@ public:
 
 class ConvertStoreOp : public mlir::OpConversionPattern<mlir::memref::StoreOp> {
 public:
-  using mlir::OpConversionPattern<mlir::memref::StoreOp>::OpConversionPattern;
+  using OpConversionPattern::OpConversionPattern;
 
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::StoreOp op,
@@ -870,14 +919,17 @@ public:
     if (!memrefType.hasRank() || memrefType.getRank() != 1)
       return mlir::failure();
 
+    auto typeSize = getTypeSize(memrefType.getElementType());
+    if (!typeSize)
+      return mlir::failure();
+
     auto loc = op.getLoc();
     auto ptr = rewriter.create<mlir::spirv::InBoundsPtrAccessChainOp>(
         loc, adaptor.getMemref(), adaptor.getIndices().front(), llvm::None);
 
     auto memoryAccess = mlir::spirv::MemoryAccessAttr::get(
         op.getContext(), mlir::spirv::MemoryAccess::Aligned);
-    auto alignment =
-        rewriter.getI32IntegerAttr(memrefType.getElementTypeBitWidth() / 8);
+    auto alignment = rewriter.getI32IntegerAttr(*typeSize);
     rewriter.replaceOpWithNewOp<mlir::spirv::StoreOp>(
         op, ptr, adaptor.getValue(), memoryAccess, alignment);
 
@@ -1358,10 +1410,11 @@ struct GPUToSpirvPass
 
       typeConverter.addConversion([&typeConverter](mlir::MemRefType type)
                                       -> llvm::Optional<mlir::Type> {
-        if (!type.hasRank() || !type.getElementType().isIntOrFloat())
+        auto srcElemType = type.getElementType();
+        if (!srcElemType.isIntOrFloat() && !srcElemType.isa<mlir::VectorType>())
           return mlir::Type(nullptr);
 
-        auto elemType = typeConverter.convertType(type.getElementType());
+        auto elemType = typeConverter.convertType(srcElemType);
         if (!elemType)
           return mlir::Type(nullptr);
 
@@ -1381,7 +1434,9 @@ struct GPUToSpirvPass
 
       patterns
           .insert<ConvertSubviewOp, ConvertCastOp<mlir::memref::CastOp>,
-                  ConvertCastOp<mlir::memref::ReinterpretCastOp>, ConvertLoadOp,
+                  ConvertCastOp<mlir::memref::ReinterpretCastOp>,
+                  ConvertBitcastOp<imex::util::BitcastOp>,
+                  ConvertBitcastOp<imex::util::MemrefBitcastOp>, ConvertLoadOp,
                   ConvertStoreOp, ConvertAtomicOps, ConvertFunc, ConvertAssert,
                   ConvertBarrierOp, ConvertMemFenceOp, ConvertUndef,
                   ConvertGlobalOp, ConvertGetGlobalOp, ConvertAllReduceOp,
@@ -1836,6 +1891,335 @@ struct TileParallelLoopsForGPUPass
   }
 };
 
+// Some manual fp conversion, denormals and nan/infs are not supported.
+static mlir::Value f64Tof32(mlir::OpBuilder &builder, mlir::Location loc,
+                            mlir::Value src) {
+  auto i64 = builder.getI64Type();
+  auto srcI64 = builder.create<imex::util::BitcastOp>(loc, i64, src);
+
+  auto zero = builder.create<mlir::arith::ConstantIntOp>(loc, 0, i64);
+  auto absMask = builder.create<mlir::arith::ConstantIntOp>(
+      loc, static_cast<int64_t>(0x7FFFFFFFFFFFFFFFULL), i64);
+
+  mlir::Value absVal =
+      builder.create<mlir::arith::AndIOp>(loc, srcI64, absMask);
+  mlir::Value isZero = builder.create<mlir::arith::CmpIOp>(
+      loc, mlir::arith::CmpIPredicate::eq, absVal, zero);
+
+  auto signShift = builder.create<mlir::arith::ConstantIntOp>(loc, 63, i64);
+  auto expShift = builder.create<mlir::arith::ConstantIntOp>(loc, 52, i64);
+  auto expMask = builder.create<mlir::arith::ConstantIntOp>(loc, 0x7FF, i64);
+  auto manMask = builder.create<mlir::arith::ConstantIntOp>(
+      loc, static_cast<int64_t>(0x000FFFFFFFFFFFFFULL), i64);
+  auto b = builder.create<mlir::arith::ConstantIntOp>(loc, 1023 - 127, i64);
+  auto _ff = builder.create<mlir::arith::ConstantIntOp>(loc, 0xFF, i64);
+  auto _29 = builder.create<mlir::arith::ConstantIntOp>(loc, 29, i64);
+  auto _23 = builder.create<mlir::arith::ConstantIntOp>(loc, 23, i64);
+  auto _31 = builder.create<mlir::arith::ConstantIntOp>(loc, 31, i64);
+
+  mlir::Value sign =
+      builder.create<mlir::arith::ShRUIOp>(loc, srcI64, signShift);
+  mlir::Value exponent =
+      builder.create<mlir::arith::ShRUIOp>(loc, srcI64, expShift);
+  exponent = builder.create<mlir::arith::AndIOp>(loc, exponent, expMask);
+  mlir::Value mantissa =
+      builder.create<mlir::arith::AndIOp>(loc, srcI64, manMask);
+  exponent = builder.create<mlir::arith::SubIOp>(loc, exponent, b);
+
+  exponent = builder.create<mlir::arith::AndIOp>(loc, exponent, _ff);
+  mantissa = builder.create<mlir::arith::ShRUIOp>(loc, mantissa, _29);
+
+  exponent = builder.create<mlir::arith::ShLIOp>(loc, exponent, _23);
+  sign = builder.create<mlir::arith::ShLIOp>(loc, sign, _31);
+
+  mlir::Value res = mantissa;
+  res = builder.create<mlir::arith::OrIOp>(loc, res, exponent);
+  res = builder.create<mlir::arith::OrIOp>(loc, res, sign);
+
+  res = builder.create<mlir::arith::SelectOp>(loc, isZero, srcI64, res);
+
+  res = builder.create<mlir::arith::TruncIOp>(loc, builder.getI32Type(), res);
+  res = builder.create<mlir::arith::BitcastOp>(loc, builder.getF32Type(), res);
+  return res;
+}
+
+// Some manual fp conversion, denormals and nan/infs are not supported.
+static mlir::Value f32Tof64(mlir::OpBuilder &builder, mlir::Location loc,
+                            mlir::Value src, mlir::Type resType) {
+  auto i32 = builder.getI32Type();
+  mlir::Value srcI64 = builder.create<mlir::arith::BitcastOp>(loc, i32, src);
+
+  auto i64 = builder.getI64Type();
+  srcI64 = builder.create<mlir::arith::ExtUIOp>(loc, i64, srcI64);
+
+  auto zero = builder.create<mlir::arith::ConstantIntOp>(loc, 0, i64);
+  auto absMask = builder.create<mlir::arith::ConstantIntOp>(
+      loc, static_cast<int64_t>(0x7FFFFFFFFFFFFFFFULL), i64);
+
+  mlir::Value absVal =
+      builder.create<mlir::arith::AndIOp>(loc, srcI64, absMask);
+  mlir::Value isZero = builder.create<mlir::arith::CmpIOp>(
+      loc, mlir::arith::CmpIPredicate::eq, absVal, zero);
+
+  auto signShift = builder.create<mlir::arith::ConstantIntOp>(loc, 31, i64);
+  auto expShift = builder.create<mlir::arith::ConstantIntOp>(loc, 23, i64);
+  auto expMask = builder.create<mlir::arith::ConstantIntOp>(loc, 0xFF, i64);
+  auto manMask = builder.create<mlir::arith::ConstantIntOp>(loc, 0x7FFFFF, i64);
+  auto b = builder.create<mlir::arith::ConstantIntOp>(loc, 1023 - 127, i64);
+  auto _29 = builder.create<mlir::arith::ConstantIntOp>(loc, 29, i64);
+  auto _52 = builder.create<mlir::arith::ConstantIntOp>(loc, 52, i64);
+  auto _63 = builder.create<mlir::arith::ConstantIntOp>(loc, 63, i64);
+
+  mlir::Value sign =
+      builder.create<mlir::arith::ShRUIOp>(loc, srcI64, signShift);
+  mlir::Value exponent =
+      builder.create<mlir::arith::ShRUIOp>(loc, srcI64, expShift);
+  exponent = builder.create<mlir::arith::AndIOp>(loc, exponent, expMask);
+  mlir::Value mantissa =
+      builder.create<mlir::arith::AndIOp>(loc, srcI64, manMask);
+
+  mantissa = builder.create<mlir::arith::ShLIOp>(loc, mantissa, _29);
+  exponent = builder.create<mlir::arith::AddIOp>(loc, exponent, b);
+
+  exponent = builder.create<mlir::arith::ShLIOp>(loc, exponent, _52);
+  sign = builder.create<mlir::arith::ShLIOp>(loc, sign, _63);
+
+  mlir::Value res = mantissa;
+  res = builder.create<mlir::arith::OrIOp>(loc, res, exponent);
+  res = builder.create<mlir::arith::OrIOp>(loc, res, sign);
+
+  res = builder.create<mlir::arith::SelectOp>(loc, isZero, srcI64, res);
+
+  res = builder.create<imex::util::BitcastOp>(loc, resType, res);
+  return res;
+}
+
+class ConvertF64LoadOp
+    : public mlir::OpConversionPattern<mlir::memref::LoadOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::LoadOp op,
+                  mlir::memref::LoadOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto converter = getTypeConverter();
+    assert(converter && "Invalid type converter");
+
+    auto origResType = op.getType();
+    if (!origResType.isF64())
+      return mlir::success();
+
+    auto resType = converter->convertType(origResType);
+    if (!resType)
+      return mlir::success();
+
+    auto loc = op.getLoc();
+    mlir::Value result = rewriter.create<mlir::memref::LoadOp>(
+        loc, adaptor.getMemref(), adaptor.getIndices());
+    result = f64Tof32(rewriter, loc, result);
+    rewriter.replaceOp(op, result);
+    return mlir::success();
+  }
+};
+
+class ConvertF64StoreOp
+    : public mlir::OpConversionPattern<mlir::memref::StoreOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::StoreOp op,
+                  mlir::memref::StoreOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto converter = getTypeConverter();
+    assert(converter && "Invalid type converter");
+
+    auto origType = op.getValue().getType();
+    if (!origType.isF64())
+      return mlir::failure();
+
+    auto memref = adaptor.getMemref();
+    auto memrefType = memref.getType().dyn_cast<mlir::MemRefType>();
+    if (!memrefType)
+      return mlir::failure();
+
+    auto loc = op.getLoc();
+    mlir::Value f64val = f32Tof64(rewriter, loc, adaptor.getValue(),
+                                  memrefType.getElementType());
+    rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(op, f64val, memref,
+                                                       adaptor.getIndices());
+    return mlir::success();
+  }
+};
+
+struct TruncateF64ForGPUPass
+    : public mlir::PassWrapper<TruncateF64ForGPUPass,
+                               mlir::OperationPass<mlir::ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TruncateF64ForGPUPass)
+
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::arith::ArithDialect>();
+    registry.insert<mlir::gpu::GPUDialect>();
+    registry.insert<mlir::math::MathDialect>();
+    registry.insert<mlir::memref::MemRefDialect>();
+  }
+
+  void runOnOperation() override {
+    auto *ctx = &getContext();
+    mlir::ConversionTarget target(*ctx);
+    mlir::TypeConverter converter;
+
+    // Convert unknown types to itself
+    converter.addConversion([](mlir::Type type) { return type; });
+
+    converter.addConversion([](mlir::Float64Type type) {
+      return mlir::Float32Type::get(type.getContext());
+    });
+
+    converter.addConversion(
+        [](mlir::MemRefType type) -> llvm::Optional<mlir::Type> {
+          if (!type.getElementType().isF64())
+            return llvm::None;
+
+          int64_t shape[] = {2};
+          auto elemType = mlir::IntegerType::get(type.getContext(), 32);
+          auto newType = mlir::VectorType::get(shape, elemType);
+          return type.clone(newType);
+        });
+
+    auto addCast = [](mlir::OpBuilder &builder, mlir::Type dstType,
+                      mlir::ValueRange inputs,
+                      mlir::Location loc) -> llvm::Optional<mlir::Value> {
+      if (inputs.size() != 1)
+        return llvm::None;
+
+      auto src = inputs.front();
+      auto srcType = src.getType();
+      if (srcType.isF32() && dstType.isF64())
+        return builder.create<mlir::arith::ExtFOp>(loc, dstType, src)
+            .getResult();
+
+      if (srcType.isF64() && dstType.isF32())
+        return builder.create<mlir::arith::TruncFOp>(loc, dstType, src)
+            .getResult();
+
+      if (srcType.isa<mlir::MemRefType>() && dstType.isa<mlir::MemRefType>())
+        return builder.create<imex::util::MemrefBitcastOp>(loc, dstType, src)
+            .getResult();
+
+      return llvm::None;
+    };
+    converter.addArgumentMaterialization(addCast);
+    converter.addSourceMaterialization(addCast);
+    converter.addTargetMaterialization(addCast);
+
+    mlir::RewritePatternSet patterns(ctx);
+
+    imex::populateArithConversionRewritesAndTarget(converter, patterns, target);
+    imex::populateMathConversionRewritesAndTarget(converter, patterns, target);
+    imex::populateControlFlowTypeConversionRewritesAndTarget(converter,
+                                                             patterns, target);
+    imex::populateTupleTypeConversionRewritesAndTarget(converter, patterns,
+                                                       target);
+
+    // TODO: remove
+    mlir::populateFunctionOpInterfaceTypeConversionPattern<
+        mlir::gpu::GPUFuncOp>(patterns, converter);
+    target.addDynamicallyLegalOp<mlir::gpu::GPUFuncOp>(
+        [&](mlir::gpu::GPUFuncOp op) -> llvm::Optional<bool> {
+          if (converter.isSignatureLegal(op.getFunctionType()) &&
+              converter.isLegal(&op.getBody()))
+            return true;
+
+          return llvm::None;
+        });
+
+    patterns.insert<ConvertF64LoadOp, ConvertF64StoreOp>(converter, ctx);
+    target.addDynamicallyLegalOp<mlir::memref::LoadOp, mlir::memref::StoreOp>(
+        [&converter](mlir::Operation *op) -> llvm::Optional<bool> {
+          if (converter.isLegal(op))
+            return true;
+
+          return llvm::None;
+        });
+
+    mlir::FrozenRewritePatternSet frozenPatterns(std::move(patterns));
+
+    auto module = getOperation();
+
+    llvm::SmallVector<mlir::Value> newArgs;
+    mlir::OpBuilder builder(ctx);
+    for (auto gpuModule : module.getOps<mlir::gpu::GPUModuleOp>()) {
+      auto targetEnv = mlir::spirv::lookupTargetEnv(gpuModule);
+      if (!targetEnv) {
+        gpuModule->emitError("TargetEnv not found");
+        return signalPassFailure();
+      }
+
+      auto caps = targetEnv.getCapabilities();
+      if (llvm::is_contained(caps, mlir::spirv::Capability::Float64))
+        continue;
+
+      for (auto gpuFunc : gpuModule.getOps<mlir::gpu::GPUFuncOp>()) {
+        auto origSig = gpuFunc.getFunctionType();
+        if (mlir::failed(
+                mlir::applyPartialConversion(gpuFunc, target, frozenPatterns)))
+          return signalPassFailure();
+
+        auto newSig = gpuFunc.getFunctionType();
+        if (origSig == newSig)
+          continue;
+
+        auto funcUses = mlir::SymbolTable::getSymbolUses(gpuFunc, module);
+        if (!funcUses)
+          continue;
+
+        for (auto use : llvm::make_early_inc_range(*funcUses)) {
+          auto user = use.getUser();
+          if (mlir::isa<gpu_runtime::GPUSuggestBlockSizeOp>(user))
+            continue;
+
+          auto launch = mlir::dyn_cast<mlir::gpu::LaunchFuncOp>(user);
+          if (!launch) {
+            user->emitError("Unknown gpu func user");
+            return signalPassFailure();
+          }
+
+          builder.setInsertionPoint(launch);
+
+          newArgs.clear();
+          newArgs.reserve(launch.getNumKernelOperands());
+          for (auto [origArg, newType] :
+               llvm::zip(launch.getKernelOperands(), newSig.getInputs())) {
+            auto origType = origArg.getType();
+            if (newType == origType) {
+              newArgs.emplace_back(origArg);
+            } else if (origType.isF64() && newType.isF32()) {
+              auto loc = launch.getLoc();
+              mlir::Value newVal =
+                  builder.create<mlir::arith::TruncFOp>(loc, newType, origArg);
+              newArgs.emplace_back(newVal);
+            } else if (origType.isa<mlir::MemRefType>() &&
+                       newType.isa<mlir::MemRefType>()) {
+              auto loc = launch.getLoc();
+              mlir::Value newVal = builder.create<imex::util::MemrefBitcastOp>(
+                  loc, newType, origArg);
+              newArgs.emplace_back(newVal);
+            } else {
+              launch->emitError("Incompatible types: ")
+                  << origType << " and " << newType;
+              return signalPassFailure();
+            }
+          }
+
+          launch.getKernelOperandsMutable().assign(newArgs);
+        }
+      }
+    }
+  }
+};
 } // namespace
 
 // Expose the passes to the outside world
@@ -1878,4 +2262,8 @@ std::unique_ptr<mlir::Pass> gpu_runtime::createParallelLoopGPUMappingPass() {
 
 std::unique_ptr<mlir::Pass> gpu_runtime::createTileParallelLoopsForGPUPass() {
   return std::make_unique<TileParallelLoopsForGPUPass>();
+}
+
+std::unique_ptr<mlir::Pass> gpu_runtime::createTruncateF64ForGPUPass() {
+  return std::make_unique<TruncateF64ForGPUPass>();
 }
