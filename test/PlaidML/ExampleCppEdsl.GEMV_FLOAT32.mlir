@@ -1,8 +1,7 @@
-// RUN: mlir-opt %s  -convert-elementwise-to-linalg -arith-bufferize -linalg-bufferize \
-// RUN:              -tensor-bufferize -func-bufferize -buffer-deallocation \
-// RUN:              -convert-linalg-to-loops -convert-linalg-to-llvm  \
-// RUN:              -convert-memref-to-llvm -convert-func-to-llvm \
-// RUN:              -convert-arith-to-llvm -convert-scf-to-cf -convert-cf-to-llvm
+// RUN: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-cpu.pp \
+//                                            --runner mlir-cpu-runner -e main \
+//                                            --shared-libs=%mlir_runner_utils \
+//                                            --entry-point-result=void | FileCheck %s
 #map0 = affine_map<(d0, d1) -> (d0, d1)>
 #map1 = affine_map<(d0, d1) -> (d1)>
 #map2 = affine_map<(d0, d1) -> (d0)>

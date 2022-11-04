@@ -1,3 +1,7 @@
+// RUN: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-cpu.pp \
+//                                            --runner mlir-cpu-runner -e main \
+//                                            --shared-libs=%mlir_runner_utils \
+//                                            --entry-point-result=void | FileCheck %s
 #map0 = affine_map<(d0, d1) -> (d0, d1)>
 #map1 = affine_map<(d0, d1) -> ()>
 module @sum {
@@ -28,7 +32,7 @@ module @sum {
     %unranked = tensor.cast %2 : tensor<f32> to tensor<*xf32>
     call @printMemrefF32(%unranked) : (tensor<*xf32>) -> ()
     //      CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
-    // CHECK-NEXT: 2100
+    // CHECK-NEXT: [2100]
     return
   }
   func.func private @printMemrefF32(%ptr : tensor<*xf32>)

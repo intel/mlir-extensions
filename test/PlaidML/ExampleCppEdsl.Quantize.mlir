@@ -1,3 +1,7 @@
+// RUN: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-cpu.pp \
+//                                            --runner mlir-cpu-runner -e main \
+//                                            --shared-libs=%mlir_runner_utils \
+//                                            --entry-point-result=void | FileCheck %s
 #map0 = affine_map<(d0) -> (d0)>
 #map1 = affine_map<(d0) -> ()>
 module @quantize {
