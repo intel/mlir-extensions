@@ -1,3 +1,7 @@
+// RUN: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-cpu.pp \
+//                                            --runner mlir-cpu-runner -e main \
+//                                            --shared-libs=%mlir_runner_utils \
+//                                            --entry-point-result=void | FileCheck %s
 #map0 = affine_map<(d0, d1) -> (d1, d0)>
 #map1 = affine_map<(d0, d1) -> (d0, d1)>
 module @transpose {
@@ -27,9 +31,26 @@ module @transpose {
     %unranked = tensor.cast %2 : tensor<20x10xf32> to tensor<*xf32>
     call @printMemrefF32(%unranked) : (tensor<*xf32>) -> ()
     //      CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
-    // CHECK-NEXT: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
-    // CHECK-NEXT: [2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
-    // CHECK-NEXT: [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+    // CHECK-NEXT: [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    // CHECK-NEXT:  [2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+    // CHECK-NEXT:  [3, 3, 3, 3, 3, 3, 3, 3, 3, 3],
+    // CHECK-NEXT:  [4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
+    // CHECK-NEXT:  [5, 5, 5, 5, 5, 5, 5, 5, 5, 5],
+    // CHECK-NEXT:  [6, 6, 6, 6, 6, 6, 6, 6, 6, 6],
+    // CHECK-NEXT:  [7, 7, 7, 7, 7, 7, 7, 7, 7, 7],
+    // CHECK-NEXT:  [8, 8, 8, 8, 8, 8, 8, 8, 8, 8],
+    // CHECK-NEXT:  [9, 9, 9, 9, 9, 9, 9, 9, 9, 9],
+    // CHECK-NEXT:  [10, 10, 10, 10, 10, 10, 10, 10, 10, 10],
+    // CHECK-NEXT:  [11, 11, 11, 11, 11, 11, 11, 11, 11, 11],
+    // CHECK-NEXT:  [12, 12, 12, 12, 12, 12, 12, 12, 12, 12],
+    // CHECK-NEXT:  [13, 13, 13, 13, 13, 13, 13, 13, 13, 13],
+    // CHECK-NEXT:  [14, 14, 14, 14, 14, 14, 14, 14, 14, 14],
+    // CHECK-NEXT:  [15, 15, 15, 15, 15, 15, 15, 15, 15, 15],
+    // CHECK-NEXT:  [16, 16, 16, 16, 16, 16, 16, 16, 16, 16],
+    // CHECK-NEXT:  [17, 17, 17, 17, 17, 17, 17, 17, 17, 17],
+    // CHECK-NEXT:  [18, 18, 18, 18, 18, 18, 18, 18, 18, 18],
+    // CHECK-NEXT:  [19, 19, 19, 19, 19, 19, 19, 19, 19, 19],
+    // CHECK-NEXT:  [20, 20, 20, 20, 20, 20, 20, 20, 20, 20]]
     return
   }
 
