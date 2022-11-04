@@ -23,9 +23,9 @@ module @broadcast_non_numpy {
     %unranked = tensor.cast %2 : tensor<3x4xf32> to tensor<*xf32>
     call @printMemrefF32(%unranked) : (tensor<*xf32>) -> ()
     //      CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
-    // CHECK-NEXT: [[1, 1, 1, 1],
-    // CHECK-NEXT: [2, 2, 2, 2],
-    // CHECK-NEXT: [3, 3, 3, 3]]
+    // CHECK-NEXT: [1, 1, 1, 1]
+    // CHECK-NEXT: [2, 2, 2, 2]
+    // CHECK-NEXT: [3, 3, 3, 3]
     return
   }
 
