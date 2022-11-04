@@ -125,14 +125,13 @@ def ExtractFromDistOp : Dist_Op<"extract_from_dist", []> {
         auto idx = getIntAttr<32>($_builder, what);
         $_state.addAttribute(getWhatAttrName(odsState.name), idx);
         $_state.addOperands(d_tensor);
-        int64_t rank = 0;
         auto ttype = d_tensor.getType().dyn_cast<::imex::dist::DistTensorType>();
         assert(ttype);
-        rank = ttype.getPTensorType().getRtensor().getRank();
+        int64_t rank = ttype.getPTensorType().getRtensor().getRank();
         switch(idx.getInt()) {
             case GSHAPE:
             case LOFFSETS:
-                $_state.addTypes(::mlir::RankedTensorType::get({rank}, i64Type));
+                $_state.addTypes(::mlir::RankedTensorType::get({rank ? rank : 1}, i64Type));
                 break;
             case LTENSOR:
                 $_state.addTypes(ttype.getPTensorType());

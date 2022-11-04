@@ -170,9 +170,11 @@ struct DistARangeOpRWP : public RecOpRewritePattern<::imex::ptensor::ARangeOp> {
     auto pRank = rewriter.create<::imex::dist::PRankOp>(loc, team);
     // result shape is 1d
     constexpr uint64_t rank = 1;
-    auto gShpTnsr = rewriter.create<::mlir::tensor::EmptyOp>(
-        loc, ::mlir::ArrayRef<::mlir::OpFoldResult>({count}), dtype);
-    auto gShape = rewriter.create<::mlir::shape::ShapeOfOp>(loc, gShpTnsr);
+    auto cnt = rewriter.create<::mlir::arith::IndexCastOp>(loc, i64Typ, count)
+                   .getResult();
+    auto gShape = rewriter.create<::mlir::tensor::FromElementsOp>(
+        loc, ::mlir::RankedTensorType::get({rank}, i64Typ), cnt);
+
     // so is the local shape
     llvm::SmallVector<mlir::Value> lShapeVVec(rank);
     // get local shape
@@ -189,15 +191,14 @@ struct DistARangeOpRWP : public RecOpRewritePattern<::imex::ptensor::ARangeOp> {
         loc, i64Typ, offsets, ::mlir::ValueRange({zero}));
     auto tmp =
         rewriter.create<::mlir::arith::MulIOp>(loc, off, step); // off * step
-    start = rewriter.create<::mlir::arith::AddIOp>(
-        loc, start, tmp); // start + (off * stride)
+    start = rewriter.create<::mlir::arith::AddIOp>(loc, start,
+                                                   tmp); // start + (off * step)
     // create stop
     auto tmp2 = rewriter.create<::mlir::arith::MulIOp>(
         loc, lSz, step); // step * lShape[0]
     auto stop = rewriter.create<::mlir::arith::AddIOp>(
-        loc, start, tmp2); // start + (lShape[0] * stride)
+        loc, start, tmp2); // start + (lShape[0] * step)
     //  get type of local tensor
-    ::llvm::ArrayRef<int64_t> lShape({-1});
     auto artype = ::imex::ptensor::PTensorType::get(
         rewriter.getContext(), ::mlir::RankedTensorType::get({-1}, dtype),
         false);
@@ -297,10 +298,11 @@ struct DistReductionOpRWP
     auto nProcs = rewriter.create<::imex::dist::NProcsOp>(loc, team);
     auto pRank = rewriter.create<::imex::dist::PRankOp>(loc, team);
     auto lOffs = rewriter.create<::imex::dist::LocalOffsetsOp>(
-        loc, rank, nProcs, pRank, gShape);
+        loc, rank ? rank : 1, nProcs, pRank, gShape);
     // and init our new dist tensor
+    auto dmy = ::imex::createInt<1>(loc, rewriter, 0); // FIXME
     auto resPTnsr = rewriter.create<::imex::ptensor::MkPTensorOp>(
-        loc, false, retRTnsr, nullptr, team);
+        loc, false, retRTnsr, dmy, team);
     rewriter.replaceOp(
         op, createMkTnsr(loc, rewriter, gShape, resPTnsr, lOffs, team));
     return ::mlir::success();

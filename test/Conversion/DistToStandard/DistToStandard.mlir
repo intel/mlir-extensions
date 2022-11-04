@@ -9,7 +9,7 @@ module {
     }
 }
 // CHECK-LABEL: func.func private @_idtr_nprocs(i64) -> i64
-// CHECK-LABEL: func.func private @_idtr_prank() -> i64
+// CHECK-LABEL: func.func private @_idtr_prank(i64) -> i64
 // CHECK-LABEL: func.func private @_idtr_reduce_all(tensor<i64>, i32, i32)
 // CHECK-LABEL: func.func @test_nprocs(%arg0: i64) -> i64 {
 // CHECK: @_idtr_nprocs(%arg0)
@@ -23,10 +23,10 @@ module {
     }
 }
 // CHECK-LABEL: func.func private @_idtr_nprocs(i64) -> i64
-// CHECK-LABEL: func.func private @_idtr_prank() -> i64
+// CHECK-LABEL: func.func private @_idtr_prank(i64) -> i64
 // CHECK-LABEL: func.func private @_idtr_reduce_all(tensor<i64>, i32, i32)
 // CHECK-LABEL: func.func @test_prank(%arg0: i64) -> i64 {
-// CHECK: call @_idtr_prank()
+// CHECK: call @_idtr_prank(%arg0)
 
 // -----
 module {
@@ -37,7 +37,7 @@ module {
     }
 }
 // CHECK-LABEL: func.func private @_idtr_nprocs(i64) -> i64
-// CHECK-LABEL: func.func private @_idtr_prank() -> i64
+// CHECK-LABEL: func.func private @_idtr_prank(i64) -> i64
 // CHECK-LABEL: func.func private @_idtr_reduce_all(tensor<i64>, i32, i32)
 // CHECK-LABEL: func.func @test_init_dist_tensor
 // CHECK: builtin.unrealized_conversion_cast
@@ -51,10 +51,10 @@ module {
     }
 }
 // CHECK-LABEL: func.func private @_idtr_nprocs(i64) -> i64
-// CHECK-LABEL: func.func private @_idtr_prank() -> i64
+// CHECK-LABEL: func.func private @_idtr_prank(i64) -> i64
 // CHECK-LABEL: func.func private @_idtr_reduce_all(tensor<i64>, i32, i32)
 // CHECK-LABEL: func.func @test_local_offsets(%arg0: i64, %arg1: i64, %arg2: tensor<1xindex>) -> tensor<1xi64> {
-// CHECK: shape.dim
+// CHECK: tensor.extract
 // CHECK: arith.subi
 // CHECK: arith.muli
 
@@ -67,10 +67,10 @@ module {
     }
 }
 // CHECK-LABEL: func.func private @_idtr_nprocs(i64) -> i64
-// CHECK-LABEL: func.func private @_idtr_prank() -> i64
+// CHECK-LABEL: func.func private @_idtr_prank(i64) -> i64
 // CHECK-LABEL: func.func private @_idtr_reduce_all(tensor<i64>, i32, i32)
 // CHECK-LABEL: func.func @test_local_shape(%arg0: i64, %arg1: i64, %arg2: tensor<1xindex>) -> tensor<1xi64> {
-// CHECK: shape.dim
+// CHECK: tensor.extract
 // CHECK: arith.subi
 
 // -----
@@ -82,7 +82,7 @@ module {
     }
 }
 // CHECK-LABEL: func.func private @_idtr_nprocs(i64) -> i64
-// CHECK-LABEL: func.func private @_idtr_prank() -> i64
+// CHECK-LABEL: func.func private @_idtr_prank(i64) -> i64
 // CHECK-LABEL: func.func private @_idtr_reduce_all(tensor<i64>, i32, i32)
 // CHECK-LABEL: func.func @test_allreduce(%arg0: tensor<i64>) -> tensor<i64> {
 // CHECK: @_idtr_reduce_all

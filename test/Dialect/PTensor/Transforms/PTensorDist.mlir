@@ -23,8 +23,8 @@ func.func @test_arange(%arg0: i64, %arg1: i64, %arg2: i64) -> i64 {
 // CHECK: arith.index_cast
 // CHECK: "dist.nprocs"
 // CHECK: "dist.prank"
-// CHECK: tensor.empty
-// CHECK: shape.shape_of
+// CHECK: arith.index_cast
+// CHECK: tensor.from_elements
 // CHECK: "dist.local_shape"
 // CHECK: tensor.extract
 // CHECK: "dist.local_offsets"

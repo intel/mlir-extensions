@@ -117,7 +117,7 @@ struct RuntimePrototypesOpConverter
                 {});
 #endif // if 0
     requireFunc(loc, rewriter, module, "_idtr_nprocs", {i64Type}, {i64Type});
-    requireFunc(loc, rewriter, module, "_idtr_prank", {}, {i64Type});
+    requireFunc(loc, rewriter, module, "_idtr_prank", {i64Type}, {i64Type});
     requireFunc(loc, rewriter, module, "_idtr_reduce_all",
                 {::mlir::RankedTensorType::get({}, dtype), dtypeType, opType},
                 {});
@@ -150,8 +150,8 @@ struct PRankOpConverter
   matchAndRewrite(::imex::dist::PRankOp op,
                   ::imex::dist::PRankOp::Adaptor adaptor,
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<::mlir::func::CallOp>(op, "_idtr_prank",
-                                                      rewriter.getI64Type());
+    rewriter.replaceOpWithNewOp<::mlir::func::CallOp>(
+        op, "_idtr_prank", rewriter.getI64Type(), adaptor.getTeam());
     return ::mlir::success();
   }
 };
@@ -223,10 +223,15 @@ struct LocalOffsetsOpConverter
     auto loc = op.getLoc();
     auto converter = *getTypeConverter();
 
-    auto sz0_ = rewriter.create<::mlir::shape::DimOp>(
-        loc, adaptor.getGshape(), createIndex(loc, rewriter, 0));
-    auto sz0 = rewriter.create<::mlir::arith::IndexCastOp>(
-        loc, rewriter.getI64Type(), sz0_);
+    auto sz0_ = rewriter.create<::mlir::tensor::ExtractOp>(
+        loc, adaptor.getGshape(),
+        ::mlir::ValueRange({createIndex(loc, rewriter, 0)}));
+    auto i64Typ = rewriter.getI64Type();
+    auto sz0 =
+        sz0_.getResult().getType() == i64Typ
+            ? sz0_.getResult()
+            : rewriter.create<::mlir::arith::IndexCastOp>(loc, i64Typ, sz0_)
+                  .getResult();
     auto tsz = createTileSize(loc, rewriter, sz0, adaptor.getNumProcs());
     auto off =
         rewriter.create<mlir::arith::MulIOp>(loc, adaptor.getPrank(), tsz);
@@ -251,10 +256,15 @@ struct LocalShapeOpConverter
     auto loc = op.getLoc();
     auto converter = *getTypeConverter();
 
-    auto sz0_ = rewriter.create<::mlir::shape::DimOp>(
-        loc, adaptor.getGshape(), createIndex(loc, rewriter, 0));
-    auto sz0 = rewriter.create<::mlir::arith::IndexCastOp>(
-        loc, rewriter.getI64Type(), sz0_);
+    auto sz0_ = rewriter.create<::mlir::tensor::ExtractOp>(
+        loc, adaptor.getGshape(),
+        ::mlir::ValueRange({createIndex(loc, rewriter, 0)}));
+    auto i64Typ = rewriter.getI64Type();
+    auto sz0 =
+        sz0_.getResult().getType() == i64Typ
+            ? sz0_.getResult()
+            : rewriter.create<::mlir::arith::IndexCastOp>(loc, i64Typ, sz0_)
+                  .getResult();
     auto tsz = createTileSize(loc, rewriter, sz0, adaptor.getNumProcs());
     rewriter.replaceOpWithNewOp<::mlir::tensor::FromElementsOp>(
         op, converter.convertType(op.getType()), tsz);
@@ -306,9 +316,9 @@ struct ConvertDistToStandardPass
     // DistTensor gets converted into its individual members
     auto convDTensor = [&ctxt](::imex::dist::DistTensorType type,
                                ::mlir::SmallVectorImpl<::mlir::Type> &types) {
+      auto rank = type.getPTensorType().getRtensor().getRank();
       auto tTyp = ::mlir::RankedTensorType::get(
-          {type.getPTensorType().getRtensor().getRank()},
-          ::mlir::IntegerType::get(&ctxt, 64));
+          {rank ? rank : 1}, ::mlir::IntegerType::get(&ctxt, 64));
       types.push_back(tTyp);
       types.push_back(type.getPTensorType());
       types.push_back(tTyp);

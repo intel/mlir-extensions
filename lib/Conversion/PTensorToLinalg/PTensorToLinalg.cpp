@@ -88,7 +88,9 @@ namespace {
 /// converter to determine the target type. Operations extracting members
 /// (rtensor, device etc) are expected to chase the tuple creation back to here
 /// and get the respective operand of the cast.
-// FIXME Is there a better/clener way to do this?
+// FIXME Is there a better/cleaner way to do this?
+// FIXME Right now we simply convert to the RTensor, we need proper function
+// boundary handling
 struct MkPTensorLowering
     : public ::mlir::OpConversionPattern<::imex::ptensor::MkPTensorOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -97,9 +99,10 @@ struct MkPTensorLowering
   matchAndRewrite(::imex::ptensor::MkPTensorOp op,
                   ::imex::ptensor::MkPTensorOp::Adaptor adaptor,
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
-    auto converter = *getTypeConverter();
-    (void)rewriter.replaceOpWithNewOp<::mlir::UnrealizedConversionCastOp>(
-        op, converter.convertType(op.getType()), adaptor.getOperands());
+    // auto converter = *getTypeConverter();
+    // (void)rewriter.replaceOpWithNewOp<::mlir::UnrealizedConversionCastOp>(
+    // op, converter.convertType(op.getType()), adaptor.getOperands());
+    rewriter.replaceOp(op, adaptor.getRtensor());
     return ::mlir::success();
   }
 };
