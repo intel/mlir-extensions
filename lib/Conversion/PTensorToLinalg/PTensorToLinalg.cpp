@@ -18,7 +18,7 @@
 /// ExtractRTensorOp): we chase the unrealized_conversion_cast as the rooting op
 /// and return the corresponding operand.
 ///
-/// Currently we do not support propagating device/team data across function
+/// Currently we do not support propagating device data across function
 /// boundaries.
 ///
 /// FIXME: same for device by adding regions.

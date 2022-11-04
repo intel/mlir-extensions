@@ -37,11 +37,8 @@
 namespace imex {
 namespace dist {
 
-/// Create a UnrealizedConversionCastOp from a DistTensor members fo a
-/// DistTensorType Value Operations extracting members (gshape, ptensor,
-/// loffsets, team) are expected to chase the creation back to here and get the
-/// respective operand of the cast. After full conversion the cast is expected
-/// ot have no use. FIXME Is there a better/cleaner way to do this?
+/// After full conversion the cast is expected
+/// to have no use. FIXME Is there a better/cleaner way to do this?
 ::mlir::Value materializeDistTensor(::mlir::OpBuilder &builder,
                                     ::mlir::Location loc, ::mlir::Value gshape,
                                     ::mlir::Value ltensor,

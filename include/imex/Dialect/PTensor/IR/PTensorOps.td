@@ -37,7 +37,7 @@ def PTensor_Dialect : Dialect {
 
             Generally the PTensor dialect is intended to provide high-level abstractions
             to allow compute-follows-data semantics. For this the PTensorType annotates
-            RankedTensors with information about the location (device, distrbution) of
+            RankedTensors with information about the location (device) of
             the tensor-data when PTensors are created.
 
             Initially the functional scope of the dialect is the
@@ -59,7 +59,7 @@ class PTensor_Type<string name, string typeMnemonic, list<Trait> traits = []>
 
 def PTensor_PTensor : PTensor_Type<"PTensor", "ptensor">
 {
-  let summary = "RankedTensor, optionally annoted with device and distribution info";
+  let summary = "RankedTensor, optionally annoted with device info";
   let description = [{
     The ptensor type represents a tensor to applied to and created by operations in
     the PTensor dialect. Every PTensor is expected to be created by MkPTensorOp,
@@ -81,31 +81,28 @@ class PTensor_Op<string mnemonic, list<Trait> traits = []> :
 
 
 def MkPTensorOp : PTensor_Op<"init_ptensor", []> {
-    let summary = "Create a new PTensor from RankedTensor, device, and DistInfo";
+    let summary = "Create a new PTensor from RankedTensor, device info";
     let description = [{
         High-level operation to create a new PTensor.
         Every PTensor is expected to be created by this operation.
         FIXME The resulting PTensor will be marked as living on a device if $device is not none.
-        FIXME The resulting PTensor will be marked as distributed if $team is not none.
     }];
 
     let arguments = (ins AnyRankedTensor:$rtensor,
-                         AnyType:$device,
-                         Optional<AnyType>:$team);
+                         AnyType:$device);
     let results = (outs PTensor_PTensor:$res);
     let skipDefaultBuilders = 1;
     let builders = [
       OpBuilder<(ins "bool":$onDevice,
                      "::mlir::Value":$rtensor,
-                     "::mlir::Value":$device,
-                     "::mlir::Value":$team), [{
-        $_state.addOperands({rtensor, device, team});
+                     "::mlir::Value":$device), [{
+        $_state.addOperands({rtensor, device});
         $_state.addTypes(::imex::ptensor::PTensorType::get(
             $_state.getContext(),
             rtensor.getType().dyn_cast<::mlir::RankedTensorType>(),
             onDevice));
       }]>,
-      // Default: no device, non-distributed
+      // Default: no device
       OpBuilder<(ins "::mlir::Value":$rtensor), [{
           auto dmy = createInt<1>($_builder.getUnknownLoc(), $_builder, 0);
           $_state.addOperands({rtensor, dmy});

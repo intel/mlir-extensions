@@ -32,7 +32,7 @@ def Dist_Dialect : Dialect {
     let description = [{
         The dist dialect describes interfaces for interacting with
 	    a runtime which handles distributed aspects of PTensor operations.
-        }];
+    }];
 
     let dependentDialects = [
         "::imex::ptensor::PTensorDialect"
@@ -77,6 +77,7 @@ def NProcsOp : Dist_Op<"nprocs", [Pure]> {
     let arguments = (ins AnyType:$team);
     let results = (outs I64);
     let builders = [
+        // auto-deduce return type
         OpBuilder<(ins "::mlir::Value":$team), [{
             build($_builder, $_state, $_builder.getI64Type(), team);
         }]>,
@@ -88,6 +89,7 @@ def PRankOp : Dist_Op<"prank", [Pure]> {
     let arguments = (ins AnyType:$team);
     let results = (outs I64);
     let builders = [
+        // auto-deduce return type
         OpBuilder<(ins "::mlir::Value":$team), [{
             build($_builder, $_state, $_builder.getI64Type(), team);
         }]>,
@@ -106,11 +108,12 @@ def InitDistTensorOp : Dist_Op<"init_dist_tensor", [Pure]> {
     let arguments = (ins AnyType:$g_shape, AnyType:$p_tensor, AnyType:$l_offsets, AnyType:$team);
     let results = (outs Dist_Tensor);
     let builders = [
-      OpBuilder<(ins "::mlir::Value":$g_shape, "::mlir::Value":$p_tensor, "::mlir::Value":$l_offsets, "::mlir::Value":$team), [{
+        // auto-deduce return type
+        OpBuilder<(ins "::mlir::Value":$g_shape, "::mlir::Value":$p_tensor, "::mlir::Value":$l_offsets, "::mlir::Value":$team), [{
             build($_builder, $_state,
                   ::imex::dist::DistTensorType::get($_builder.getContext(), p_tensor.getType().dyn_cast<::imex::ptensor::PTensorType>()),
                   g_shape, p_tensor, l_offsets, team);
-      }]>,
+        }]>,
     ];
 }
 
@@ -119,8 +122,8 @@ def ExtractFromDistOp : Dist_Op<"extract_from_dist", []> {
     let arguments = (ins I32Attr:$what, AnyType:$d_tensor);
     let results = (outs AnyType);
     let builders = [
+      // auto-deduce return type from from operands
       OpBuilder<(ins "::imex::dist::INFO":$what, "::mlir::Value":$d_tensor), [{
-        // auto-deduce return type from from operands
         auto i64Type = $_builder.getI64Type();
         auto idx = getIntAttr<32>($_builder, what);
         $_state.addAttribute(getWhatAttrName(odsState.name), idx);
@@ -154,9 +157,10 @@ def LocalOffsetsOp : Dist_Op<"local_offsets", []> {
     let arguments = (ins I64Attr:$rank, I64:$num_procs, I64:$prank, AnyType:$gshape);
     let results = (outs AnyType);
     let builders = [
-      OpBuilder<(ins "int64_t":$rank, "::mlir::Value":$num_procs, "::mlir::Value":$prank, "::mlir::Value":$gshape), [{
+        // auto-deduce return type
+        OpBuilder<(ins "int64_t":$rank, "::mlir::Value":$num_procs, "::mlir::Value":$prank, "::mlir::Value":$gshape), [{
             build($_builder, $_state, ::mlir::RankedTensorType::get({rank}, $_builder.getI64Type()), getIntAttr<64>($_builder, rank), num_procs, prank, gshape);
-      }]>,
+        }]>,
     ];
 }
 
@@ -168,9 +172,10 @@ def LocalShapeOp : Dist_Op<"local_shape", []> {
     let arguments = (ins I64Attr:$rank, I64:$num_procs, I64:$prank, AnyType:$gshape);
     let results = (outs AnyType);
     let builders = [
-      OpBuilder<(ins "int32_t":$rank, "::mlir::Value":$num_procs, "::mlir::Value":$prank, "::mlir::Value":$gshape), [{
+        // auto-deduce return type
+        OpBuilder<(ins "int32_t":$rank, "::mlir::Value":$num_procs, "::mlir::Value":$prank, "::mlir::Value":$gshape), [{
             build($_builder, $_state, ::mlir::RankedTensorType::get({rank}, $_builder.getI64Type()), getIntAttr<64>($_builder, rank), num_procs, prank, gshape);
-      }]>,
+        }]>,
     ];
 }
 

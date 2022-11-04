@@ -41,10 +41,10 @@ extern void createDistRTFuncDefs(::mlir::Location &loc,
                                  ::mlir::ModuleOp &module);
 
 namespace dist {
-extern ::mlir::Value
-materializeDistInfo(::mlir::OpBuilder &builder, ::mlir::Location loc,
-                    ::mlir::Value gshape, ::mlir::Value lshape,
-                    ::mlir::Value loffsets, ::mlir::Value team);
+/// Create a UnrealizedConversionCastOp from a DistTensor members.
+/// DistTensorType Value Operations extracting members (gshape, ptensor,
+/// loffsets, team) are expected to chase the creation back to here and get the
+/// respective operand of the cast.
 extern ::mlir::Value
 materializeDistTensor(::mlir::OpBuilder &builder, ::mlir::Location loc,
                       ::mlir::Value gshape, ::mlir::Value ltensor,

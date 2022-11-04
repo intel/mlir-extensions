@@ -302,7 +302,7 @@ struct DistReductionOpRWP
     // and init our new dist tensor
     auto dmy = ::imex::createInt<1>(loc, rewriter, 0); // FIXME
     auto resPTnsr = rewriter.create<::imex::ptensor::MkPTensorOp>(
-        loc, false, retRTnsr, dmy, team);
+        loc, false, retRTnsr, dmy);
     rewriter.replaceOp(
         op, createMkTnsr(loc, rewriter, gShape, resPTnsr, lOffs, team));
     return ::mlir::success();
