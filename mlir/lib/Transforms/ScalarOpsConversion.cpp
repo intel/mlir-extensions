@@ -155,7 +155,7 @@ struct ConvertConstantOp
     auto oldAttr = adaptor.getValue();
     mlir::TypedAttr newAttr;
     if (auto fpAttr = oldAttr.dyn_cast<mlir::FloatAttr>()) {
-      newAttr = rewriter.getFloatAttr(resType, fpAttr.getValue());
+      newAttr = rewriter.getFloatAttr(resType, fpAttr.getValueAsDouble());
     } else if (auto intAttr = oldAttr.dyn_cast<mlir::IntegerAttr>()) {
       newAttr = rewriter.getIntegerAttr(resType, intAttr.getValue());
     } else {
