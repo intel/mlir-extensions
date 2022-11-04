@@ -259,7 +259,10 @@ public:
         alloc.erase();
         builder.setInsertionPoint(term);
 
-        builder.create<mlir::gpu::DeallocOp>(loc, llvm::None, allocResult);
+        // TODO(nbpatel): Need a DeviceToHost copy and then free the device
+        // memory.
+        if (!access.hostWrite)
+          builder.create<mlir::gpu::DeallocOp>(loc, llvm::None, allocResult);
       }
     }
     auto add_gpu_alloc = [this](mlir::OpBuilder builder, mlir::Value op,
