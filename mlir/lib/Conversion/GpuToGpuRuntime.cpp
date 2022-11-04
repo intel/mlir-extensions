@@ -860,11 +860,11 @@ static llvm::Optional<unsigned> getTypeSize(mlir::Type type) {
     if (!vec.hasStaticShape())
       return llvm::None;
 
-    auto elemAlign = getTypeSize(vec.getElementType());
-    if (!elemAlign)
+    auto elemSize = getTypeSize(vec.getElementType());
+    if (!elemSize)
       return llvm::None;
 
-    return static_cast<unsigned>(vec.getNumElements()) * *elemAlign;
+    return static_cast<unsigned>(vec.getNumElements()) * *elemSize;
   }
   return llvm::None;
 }
