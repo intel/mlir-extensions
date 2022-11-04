@@ -1,7 +1,7 @@
 #map0 = affine_map<(d0, d1) -> (d1, d0)>
 #map1 = affine_map<(d0, d1) -> (d0, d1)>
 module @transpose {
-  func.func @main(%arg0: tensor<10x20xf32>) -> tensor<20x10xf32> {
+  func.func @test(%arg0: tensor<10x20xf32>) -> tensor<20x10xf32> {
     %cst = arith.constant 0.000000e+00 : f32
     %0 = tensor.empty() : tensor<20x10xf32>
     %1 = linalg.fill ins(%cst : f32) outs(%0 : tensor<20x10xf32>) -> tensor<20x10xf32>
@@ -11,7 +11,7 @@ module @transpose {
     } -> tensor<20x10xf32>
     return %2 : tensor<20x10xf32>
   }
-  func.func @test() {
+  func.func @main() {
     %0 = arith.constant dense<[[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0],
                                [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0],
                                [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0],
@@ -23,13 +23,13 @@ module @transpose {
                                [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0],
                                [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0]
                               ]> : tensor<10x20xf32>
-    %2 = call @main(%0) : (tensor<10x20xf32>) -> tensor<20x10xf32>
+    %2 = call @test(%0) : (tensor<10x20xf32>) -> tensor<20x10xf32>
     %unranked = tensor.cast %2 : tensor<20x10xf32> to tensor<*xf32>
     call @printMemrefF32(%unranked) : (tensor<*xf32>) -> ()
     //      CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
-    // CHECK-NEXT: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
-    // CHECK-NEXT: [2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0]
-    // CHECK-NEXT: [3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0]
+    // CHECK-NEXT: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+    // CHECK-NEXT: [2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+    // CHECK-NEXT: [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
     return
   }
 

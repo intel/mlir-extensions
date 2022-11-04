@@ -22,13 +22,13 @@ func.func @test() {
     %0= arith.constant dense<[0.1, 0.4, 0.3]>:tensor<3xf32>
     %1 = call @main(%0) : (tensor<3xf32>) -> tensor<3xi8>
     %unranked = tensor.cast %1 : tensor<3xi8>to tensor<*xi8>
-    call @printMemrefI32(%unranked) : (tensor<*xi8>) -> () 
-    return 
-  } 
+    call @printMemrefI32(%unranked) : (tensor<*xi8>) -> ()
+    return
+  }
 func.func private @printMemrefI32(tensor<*xi8>)
 }
-// CHECK: Unranked Memref base@ = {{0x[-9a-f]*}} 
-// CHECK-SAME: rank = {{.}} offset = {{.}} sizes = [3] strides = {{.*}} data = 
+// CHECK: Unranked Memref base@ = {{0x[-9a-f]*}}
+// CHECK-SAME: rank = {{.}} offset = {{.}} sizes = [3] strides = {{.*}} data =
 // CHECK:   25
 // CHECK:   102
 // CHECK:   76
