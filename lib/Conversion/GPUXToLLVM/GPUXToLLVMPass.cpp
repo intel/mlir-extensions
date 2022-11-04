@@ -414,7 +414,7 @@ private:
     llvm::SmallVector<mlir::Value> paramsStorage(paramsCount);
     auto paramsArrayPtr = allocaHelper.insert(rewriter, [&]() {
       auto size = rewriter.create<mlir::LLVM::ConstantOp>(
-          loc, llvmInt64Type, rewriter.getI64IntegerAttr(paramsCount));
+          loc, llvmInt64Type, rewriter.getI64IntegerAttr(1));
       for (auto i : llvm::seq(0u, paramsCount)) {
         auto ptrType = mlir::LLVM::LLVMPointerType::get(getKernelParamType(i));
         paramsStorage[i] =
@@ -426,8 +426,6 @@ private:
 
     mlir::Value one = rewriter.create<mlir::LLVM::ConstantOp>(
         loc, llvmInt32Type, rewriter.getI32IntegerAttr(1));
-    auto localMemStorageClass = rewriter.getI64IntegerAttr(
-        mlir::gpu::GPUDialect::getPrivateAddressSpace());
     auto computeTypeSize = [&](mlir::Type type) -> mlir::Value {
       auto nullPtr = rewriter.create<mlir::LLVM::NullOp>(loc, type);
       auto gep = rewriter.create<mlir::LLVM::GEPOp>(loc, type, nullPtr, one);
@@ -442,21 +440,6 @@ private:
       auto paramType = paramsStorage[i].getType();
       if (memrefType) {
         mlir::MemRefDescriptor desc(kernelParams[i]);
-        if (memrefType.getMemorySpace() == localMemStorageClass) {
-          auto rank = static_cast<unsigned>(memrefType.getRank());
-          auto typeSize = std::max(memrefType.getElementTypeBitWidth(), 8u) / 8;
-          mlir::Value size = rewriter.create<mlir::LLVM::ConstantOp>(
-              loc, llvmIndexType,
-              rewriter.getIntegerAttr(llvmIndexType, typeSize));
-          for (auto i : llvm::seq(0u, rank)) {
-            auto dim = desc.size(rewriter, loc, i);
-            size = rewriter.create<mlir::LLVM::MulOp>(loc, llvmIndexType, size,
-                                                      dim);
-          }
-          auto null = rewriter.create<mlir::LLVM::NullOp>(
-              loc, desc.getElementPtrType());
-          return {size, null};
-        }
         auto size = computeTypeSize(paramType);
         return {size, desc.alignedPtr(rewriter, loc)};
       }
