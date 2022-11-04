@@ -1936,7 +1936,7 @@ static mlir::Value f64Tof32(mlir::OpBuilder &builder, mlir::Location loc,
   res = builder.create<mlir::arith::OrIOp>(loc, res, exponent);
   res = builder.create<mlir::arith::OrIOp>(loc, res, sign);
 
-  res = builder.create<mlir::arith::SelectOp>(loc, isZero, zero, res);
+  res = builder.create<mlir::arith::SelectOp>(loc, isZero, srcI64, res);
 
   res = builder.create<mlir::arith::TruncIOp>(loc, builder.getI32Type(), res);
   res = builder.create<mlir::arith::BitcastOp>(loc, builder.getF32Type(), res);
@@ -1988,7 +1988,7 @@ static mlir::Value f32Tof64(mlir::OpBuilder &builder, mlir::Location loc,
   res = builder.create<mlir::arith::OrIOp>(loc, res, exponent);
   res = builder.create<mlir::arith::OrIOp>(loc, res, sign);
 
-  res = builder.create<mlir::arith::SelectOp>(loc, isZero, zero, res);
+  res = builder.create<mlir::arith::SelectOp>(loc, isZero, srcI64, res);
 
   res = builder.create<imex::util::BitcastOp>(loc, resType, res);
   return res;
