@@ -15,13 +15,13 @@ func.func @test() {
     %0= arith.constant dense<[[-1.0, -2.0, -3.0], [-4.0, -5.0, -6.0]]>:tensor<2x3xf32>
     %1 = call @main(%0) : (tensor<2x3xf32>) -> tensor<6x5xf32>
     %unranked = tensor.cast %1 : tensor<6x5xf32>to tensor<*xf32>
-    call @printMemrefF32(%unranked) : (tensor<*xf32>) -> () 
-    return 
-} 
+    call @printMemrefF32(%unranked) : (tensor<*xf32>) -> ()
+    return
+}
 func.func private @printMemrefF32(tensor<*xf32>)
 }
-// CHECK: Unranked Memref base@ = {{0x[-9a-f]*}} 
-// CHECK-SAME: rank = {{.}} offset = {{.}} sizes = [6, 5] strides = {{.*}} data = 
+// CHECK: Unranked Memref base@ = {{0x[-9a-f]*}}
+// CHECK-SAME: rank = {{.}} offset = {{.}} sizes = [6, 5] strides = {{.*}} data =
 // CHECK:   inf
 // CHECK:   inf
 // CHECK:   inf
