@@ -7,7 +7,7 @@ module @jit__logsm_from_logmhalo_jax_kern.0 {
 
   func.func private @printMemrefF32(tensor<*xf32>)
 
-  func.func @callee(%arg0: tensor<500xf32>, %arg1: tensor<5xf32>) -> tensor<500xf32> {
+  func.func private @callee(%arg0: tensor<500xf32>, %arg1: tensor<5xf32>) -> tensor<500xf32> {
     %0 = tensor.extract_slice %arg1[0] [1] [1] : tensor<5xf32> to tensor<1xf32>
     %1 = tensor.collapse_shape %0 [] : tensor<1xf32> into tensor<f32>
     %2 = tensor.extract_slice %arg1[1] [1] [1] : tensor<5xf32> to tensor<1xf32>
@@ -127,9 +127,9 @@ module @jit__logsm_from_logmhalo_jax_kern.0 {
   func.func @main() {
     %0 = arith.constant dense<1.0> : tensor<500xf32>
     %1 = arith.constant dense<[5.0, 4.0, 3.0, 2.0, 1.0]> : tensor<5xf32>
-    %2 = call @callee(%0, %1) : (tensor<500xf32>, tensor<5xf32>) -> tensor<500xf32>
+    %2 = func.call @callee(%0, %1) : (tensor<500xf32>, tensor<5xf32>) -> tensor<500xf32>
     %unranked = tensor.cast %2 : tensor<500xf32> to tensor<*xf32>
-    call @printMemrefF32(%unranked) : (tensor<*xf32>) -> ()
+    func.call @printMemrefF32(%unranked) : (tensor<*xf32>) -> ()
     //      CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
     // CHECK-SAME: rank = 1 offset = 0 sizes = [500] strides = [1] data =
     //      CHECK: [1.00002, 1.00002, 1.00002, 1.00002, 1.00002, 1.00002, 1.00002, 1.00002, 1.00002, 1.00002,
