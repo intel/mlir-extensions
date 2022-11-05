@@ -232,3 +232,21 @@ func.func @test(%arg1: !ntensor.ntensor<?xf64>, %arg2: !ntensor.slice, %arg3: !n
 //  CHECK-NEXT:   }
 //  CHECK-NEXT:   ntensor.copy %[[RES1]], %[[RES]] : !ntensor.ntensor<?xf64> to !ntensor.ntensor<?xf64>
 //  CHECK-NEXT:   return
+
+// -----
+
+func.func @test(%arg1: !ntensor.ntensor<?xf64>, %arg2: !ntensor.slice, %arg3: f32) {
+  ntensor.setitem(%arg1 : !ntensor.ntensor<?xf64>) [%arg2 : !ntensor.slice] = (%arg3 : f32)
+  return
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG1:.*]]: !ntensor.ntensor<?xf64>, %[[ARG2:.*]]: !ntensor.slice, %[[ARG3:.*]]: f32)
+//  CHECK-NEXT:   %[[C0:.*]] = arith.constant 0 : index
+//  CHECK-NEXT:   %[[DIM:.*]] = ntensor.dim %[[ARG1]], %[[C0]] : !ntensor.ntensor<?xf64>
+//  CHECK-NEXT:   %[[BEGIN:.*]], %[[END:.*]], %[[STEP:.*]], %[[COUNT:.*]] = ntensor.resolve_slice %[[ARG2]], %[[DIM]]
+//  CHECK-NEXT:   %[[RES:.*]] = ntensor.subview %[[ARG1]][%[[BEGIN]]] [%[[COUNT]]] [%[[STEP]]] : !ntensor.ntensor<?xf64> to !ntensor.ntensor<?xf64>
+//  CHECK-NEXT:   %[[DIM2:.*]] = ntensor.dim %[[RES]], %[[C0]] : !ntensor.ntensor<?xf64>
+//  CHECK-NEXT:   %[[CONV:.*]] = arith.extf %[[ARG3]] : f32 to f64
+//  CHECK-NEXT:   %[[RES2:.*]] = ntensor.create(%[[DIM2]]) = (%[[CONV]] : f64) : !ntensor.ntensor<?xf64>
+//  CHECK-NEXT:   ntensor.copy %[[RES2]], %[[RES]] : !ntensor.ntensor<?xf64> to !ntensor.ntensor<?xf64>
+//  CHECK-NEXT:   return

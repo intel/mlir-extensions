@@ -272,8 +272,11 @@ struct SetitemOpLowering
             dynamicDims.emplace_back(
                 rewriter.create<imex::ntensor::DimOp>(loc, dst, i));
         }
+        auto dstVal =
+            imex::doConvert(rewriter, loc, value, dstType.getElementType());
+        assert(dstVal);
         return rewriter.create<imex::ntensor::CreateArrayOp>(
-            loc, dstType, dynamicDims, value);
+            loc, dstType, dynamicDims, dstVal);
       }();
       rewriter.replaceOpWithNewOp<imex::ntensor::CopyOp>(op, newArray, dst);
     } else {
