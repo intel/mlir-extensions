@@ -116,3 +116,39 @@ func.func @merge_adjacent_region2() {
 //  CHECK-NEXT:   "test.test3"(%[[VAL2]]) : (i64) -> ()
 //  CHECK-NEXT:   }
 //  CHECK-NEXT:   return
+
+// -----
+
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG1:.*]]: tensor<?x?xf32>, %[[ARG2:.*]]: index, %[[ARG3:.*]]: index)
+//       CHECK:   return %[[ARG3]]
+func.func @test(%arg1: tensor<?x?xf32>, %arg2: index, %arg3: index) -> index {
+  %cst = arith.constant 1 : index
+  %0 = imex_util.enforce_shape %arg1 : tensor<?x?xf32>(%arg2, %arg3) -> tensor<?x?xf32>
+  %1 = tensor.dim %0, %cst : tensor<?x?xf32>
+  return %1: index
+}
+
+// -----
+
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG1:.*]]: memref<?x?xf32>, %[[ARG2:.*]]: index, %[[ARG3:.*]]: index)
+//       CHECK:   return %[[ARG3]]
+func.func @test(%arg1: memref<?x?xf32>, %arg2: index, %arg3: index) -> index {
+  %cst = arith.constant 1 : index
+  %0 = imex_util.enforce_shape %arg1 : memref<?x?xf32>(%arg2, %arg3) -> memref<?x?xf32>
+  %1 = memref.dim %0, %cst : memref<?x?xf32>
+  return %1: index
+}
+
+// -----
+
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG1:.*]]: !ntensor.ntensor<?x?xf32>, %[[ARG2:.*]]: index, %[[ARG3:.*]]: index)
+//       CHECK:   return %[[ARG3]]
+func.func @test(%arg1: !ntensor.ntensor<?x?xf32>, %arg2: index, %arg3: index) -> index {
+  %cst = arith.constant 1 : index
+  %0 = imex_util.enforce_shape %arg1 : !ntensor.ntensor<?x?xf32>(%arg2, %arg3) -> !ntensor.ntensor<?x?xf32>
+  %1 = ntensor.dim %0, %cst : !ntensor.ntensor<?x?xf32>
+  return %1: index
+}

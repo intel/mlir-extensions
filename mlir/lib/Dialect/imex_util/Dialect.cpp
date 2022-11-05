@@ -335,20 +335,20 @@ EnforceShapeOp::fold(llvm::ArrayRef<mlir::Attribute> operands) {
                                         mlir::ShapedType::kDynamicSize);
   if (srcType.hasRank()) {
     auto shape = srcType.getShape();
-    if (shape.size() != numDims) {
+    if (shape.size() != numDims)
       return nullptr;
-    }
+
     finalShape.assign(shape.begin(), shape.end());
   }
   bool changed = false;
   for (unsigned i = 0; i < numDims; ++i) {
     if (auto attr = operands[i].dyn_cast_or_null<mlir::IntegerAttr>()) {
       auto val = attr.getInt();
-      if (val != -1) {
-        if (finalShape[i] != -1) {
-          if (finalShape[i] != val) {
+      if (val != mlir::ShapedType::kDynamicSize) {
+        if (finalShape[i] != mlir::ShapedType::kDynamicSize) {
+          if (finalShape[i] != val)
             return nullptr;
-          }
+
         } else {
           changed = true;
           finalShape[i] = val;
@@ -358,27 +358,28 @@ EnforceShapeOp::fold(llvm::ArrayRef<mlir::Attribute> operands) {
   }
 
   if (changed) {
-    auto final_type =
+    auto finalType =
         mlir::RankedTensorType::get(finalShape, srcType.getElementType());
-    getResult().setType(final_type);
+    getResult().setType(finalType);
     return getResult();
   }
   return nullptr;
 }
 
 namespace {
-template <typename DimOp>
-struct EnforceShapeDim : public mlir::OpRewritePattern<DimOp> {
-  using mlir::OpRewritePattern<DimOp>::OpRewritePattern;
+struct EnforceShapeDim
+    : public mlir::OpInterfaceRewritePattern<mlir::ShapedDimOpInterface> {
+  using OpInterfaceRewritePattern::OpInterfaceRewritePattern;
 
   mlir::LogicalResult
-  matchAndRewrite(DimOp op, mlir::PatternRewriter &rewriter) const override {
+  matchAndRewrite(mlir::ShapedDimOpInterface op,
+                  mlir::PatternRewriter &rewriter) const override {
     auto enforceOp =
-        op.getSource().template getDefiningOp<imex::util::EnforceShapeOp>();
+        op.getShapedValue().getDefiningOp<imex::util::EnforceShapeOp>();
     if (!enforceOp)
       return mlir::failure();
 
-    auto constInd = mlir::getConstantIntValue(op.getIndex());
+    auto constInd = mlir::getConstantIntValue(op.getDimension());
     if (!constInd)
       return mlir::failure();
 
@@ -394,8 +395,7 @@ struct EnforceShapeDim : public mlir::OpRewritePattern<DimOp> {
 
 void EnforceShapeOp::getCanonicalizationPatterns(
     ::mlir::RewritePatternSet &results, ::mlir::MLIRContext *context) {
-  results.insert<EnforceShapeDim<mlir::tensor::DimOp>,
-                 EnforceShapeDim<mlir::memref::DimOp>>(context);
+  results.insert<EnforceShapeDim>(context);
 }
 
 /*
