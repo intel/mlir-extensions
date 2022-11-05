@@ -20,4 +20,8 @@ mlir::Value indexCast(mlir::OpBuilder &builder, mlir::Location loc,
 
 mlir::Type makeSignlessType(mlir::Type type);
 mlir::IntegerType makeSignlessType(mlir::IntegerType type);
+
+bool canConvert(mlir::Type srcType, mlir::Type dstType);
+mlir::Value doConvert(mlir::OpBuilder &rewriter, mlir::Location loc,
+                      mlir::Value val, mlir::Type dstType);
 } // namespace imex
