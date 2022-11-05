@@ -34,7 +34,8 @@ public:
   resolveFuncArgs(mlir::OpBuilder &builder, mlir::Location loc,
                   llvm::StringRef name, mlir::ValueRange args,
                   mlir::ArrayAttr argsNames,
-                  llvm::SmallVectorImpl<mlir::Value> &resultArgs);
+                  llvm::SmallVectorImpl<mlir::Value> &resultArgs,
+                  llvm::SmallVectorImpl<mlir::Value> &outArgs);
 
 private:
   class Impl;

@@ -25,6 +25,7 @@ from numba import prange
 from numba.core import types
 from numba.core.typing.templates import ConcreteTemplate, signature, infer_global
 from inspect import signature as sig
+from collections import namedtuple
 
 add_func(prange, "numba.prange")
 
@@ -38,22 +39,31 @@ def _get_func(name):
     return _registered_funcs.get(name, None)
 
 
-def _get_wrapper(name, orig):
+_FuncDesc = namedtuple("_FuncDesc", "params out")
+
+
+def _get_wrapper(name, orig, out=None):
+    if out is None:
+        out = ()
+    elif not isinstance(out, tuple) and not isinstance(out, list):
+        out = (out,)
+
     def _decorator(func):
         global _registered_funcs
         params = sig(func).parameters
 
         # Get function args names and drop first `builder` param
         paramsNames = list(params)[1:]
-        _registered_funcs[name] = [(n, params[n]) for n in paramsNames]
+        funcParams = [(n, params[n]) for n in paramsNames]
+        _registered_funcs[name] = _FuncDesc(funcParams, out)
         return orig(func)
 
     return _decorator
 
 
-def register_func(name, orig_func=None):
+def register_func(name, orig_func=None, out=None):
     global registry
-    return _get_wrapper(name, registry.register_func(name, orig_func))
+    return _get_wrapper(name, registry.register_func(name, orig_func), out)
 
 
 def register_attr(name):
@@ -485,7 +495,7 @@ def _matmul2d(builder, a, b, shape1, shape2):
     return builder.linalg_generic((a, b), init, iterators, maps, body)
 
 
-@register_func("numpy.dot", numpy.dot)
+@register_func("numpy.dot", numpy.dot, out="out")
 def dot_impl(builder, a, b):
     shape1 = a.shape
     shape2 = b.shape

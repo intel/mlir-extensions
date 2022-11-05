@@ -410,6 +410,30 @@ def test_dot(a, b, parallel):
     assert_equal(py_func(a, b), jit_func(a, b))
 
 
+@pytest.mark.parametrize(
+    "a,b",
+    [
+        (
+            np.array([[1, 2, 3], [4, 5, 6]], np.float32),
+            np.array([[1, 2], [3, 4], [5, 6]], np.float32),
+        ),
+    ],
+)
+def test_dot_out(a, b):
+    def py_func(a, b, c):
+        np.dot(a, b, out=c)
+
+    jit_func = njit(py_func)
+
+    tmp = np.dot(a, b)
+    res_py = np.zeros_like(tmp)
+    res_jit = np.zeros_like(tmp)
+
+    py_func(a, b, res_py)
+    jit_func(a, b, res_jit)
+    assert_equal(res_py, res_jit)
+
+
 def test_prange_lowering():
     def py_func(arr):
         res = 0

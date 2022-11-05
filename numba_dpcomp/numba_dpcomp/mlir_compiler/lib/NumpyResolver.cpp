@@ -84,54 +84,61 @@ mlir::LogicalResult
 NumpyResolver::resolveFuncArgs(mlir::OpBuilder &builder, mlir::Location loc,
                                llvm::StringRef name, mlir::ValueRange args,
                                mlir::ArrayAttr argsNames,
-                               llvm::SmallVectorImpl<mlir::Value> &resultArgs) {
+                               llvm::SmallVectorImpl<mlir::Value> &resultArgs,
+                               llvm::SmallVectorImpl<mlir::Value> &outArgs) {
   assert(args.size() == argsNames.size() && "args and names count misnatch");
   auto res = impl->getFuncDesc(name);
   if (res.is_none())
     return mlir::failure();
 
-  auto argsNamesArr = argsNames.getValue();
+  llvm::SmallVector<std::pair<mlir::Value, mlir::StringAttr>>
+      argsNamesAndValues;
+  argsNamesAndValues.reserve(args.size());
+  for (auto [val, name] : llvm::zip(args, argsNames))
+    argsNamesAndValues.emplace_back(val, name.cast<mlir::StringAttr>());
 
   auto findArg = [&](llvm::StringRef argName) -> llvm::Optional<mlir::Value> {
-    if (argsNamesArr.empty())
+    if (argsNamesAndValues.empty())
       return llvm::None;
 
-    for (auto [i, nameAttr] : llvm::enumerate(argsNamesArr)) {
-      auto origArgName = nameAttr.cast<mlir::StringAttr>().getValue();
+    for (auto [i, it] : llvm::enumerate(argsNamesAndValues)) {
+      auto origArgName = it.second.getValue();
 
       if (origArgName == argName) {
-        auto res = args[i];
-        argsNamesArr = argsNamesArr.drop_front();
-        args = args.drop_front();
+        auto res = it.first;
+        argsNamesAndValues.erase(argsNamesAndValues.begin() + i);
         return res;
       }
     }
     return llvm::None;
   };
 
-  auto funcArgs = res.cast<py::list>();
+  for (auto outName : res.attr("out")) {
+    auto nameStr = outName.cast<std::string>();
+    if (auto arg = findArg(nameStr))
+      outArgs.emplace_back(*arg);
+  }
+
+  auto funcArgs = res.attr("params").cast<py::list>();
   resultArgs.reserve(funcArgs.size());
   for (auto arg : funcArgs) {
-    assert(args.size() == argsNamesArr.size() &&
-           "args and names count misnatch");
-
     auto tup = arg.cast<py::tuple>();
     auto name = tup[0].cast<std::string>();
     auto param = tup[1];
 
     if (param.attr("kind").cast<py::object>().is(impl->vararg)) {
-      resultArgs.append(args.begin(), args.end());
-      argsNamesArr = llvm::None;
-      args = llvm::None;
+      for (auto arg : llvm::make_first_range(argsNamesAndValues))
+        resultArgs.emplace_back(arg);
+
+      argsNamesAndValues.clear();
       continue;
     }
 
-    if (!argsNamesArr.empty()) {
-      auto argName = argsNamesArr.front().cast<mlir::StringAttr>().getValue();
+    if (!argsNamesAndValues.empty()) {
+      auto argName = argsNamesAndValues.front().second.getValue();
       if (argName.empty()) {
-        resultArgs.emplace_back(args.front());
-        argsNamesArr = argsNamesArr.drop_front();
-        args = args.drop_front();
+        resultArgs.emplace_back(argsNamesAndValues.front().first);
+        argsNamesAndValues.erase(argsNamesAndValues.begin());
         continue;
       }
     }
@@ -153,7 +160,7 @@ NumpyResolver::resolveFuncArgs(mlir::OpBuilder &builder, mlir::Location loc,
   }
 
   // Not all arguments were processed.
-  if (!argsNamesArr.empty())
+  if (!argsNamesAndValues.empty())
     return mlir::failure();
 
   return mlir::success();
