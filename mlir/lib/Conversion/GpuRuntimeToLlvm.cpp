@@ -446,15 +446,15 @@ private:
 
     llvm::SmallVector<mlir::Value> paramsStorage(paramsCount);
     auto paramsArrayPtr = allocaHelper.insert(rewriter, [&]() {
-      auto size = rewriter.create<mlir::LLVM::ConstantOp>(
-          loc, llvmInt64Type, rewriter.getI64IntegerAttr(paramsCount));
+      auto one = rewriter.create<mlir::LLVM::ConstantOp>(
+          loc, llvmInt64Type, rewriter.getI64IntegerAttr(1));
       for (auto i : llvm::seq(0u, paramsCount)) {
         auto ptrType = mlir::LLVM::LLVMPointerType::get(getKernelParamType(i));
         paramsStorage[i] =
-            rewriter.create<mlir::LLVM::AllocaOp>(loc, ptrType, size, 0);
+            rewriter.create<mlir::LLVM::AllocaOp>(loc, ptrType, one, 0);
       }
-      return rewriter.create<mlir::LLVM::AllocaOp>(loc, paramsArrayPtrType,
-                                                   size, 0);
+      return rewriter.create<mlir::LLVM::AllocaOp>(loc, paramsArrayPtrType, one,
+                                                   0);
     });
 
     mlir::Value one = rewriter.create<mlir::LLVM::ConstantOp>(
