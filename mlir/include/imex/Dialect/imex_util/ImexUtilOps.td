@@ -51,16 +51,19 @@ class ImexUtil_Op<string mnemonic, list<Trait> traits = []>
     : Op<ImexUtil_Dialect, mnemonic, traits>;
 
 def EnforceShapeOp : ImexUtil_Op<"enforce_shape"> {
-  let arguments = (ins AnyRankedTensor : $value, Variadic<Index> : $sizes);
 
-  let results = (outs AnyRankedTensor : $result);
+  let arguments = (ins AnyShaped:$value, Variadic<Index>:$sizes);
+  let results = (outs AnyShaped:$result);
 
-  let builders = [OpBuilder<(ins "::mlir::Value"
-                             : $value, "::mlir::ValueRange"
-                             : $shape)>];
+  let builders = [OpBuilder<(ins
+    "::mlir::Value":$value,
+    "::mlir::ValueRange":$shape)
+  >];
 
   let hasFolder = 1;
   let hasCanonicalizer = 1;
+
+  let assemblyFormat = "attr-dict $value `:` type($value) `(` $sizes `)` `->` type($result)";
 }
 
 def ParallelOp : ImexUtil_Op<"parallel", [

@@ -114,3 +114,14 @@ func.func @test(%arg1: index) -> index {
 //  CHECK-NEXT:     imex_util.env_region_yield %[[ARG1]] : index
 //  CHECK-NEXT:   }
 //  CHECK-NEXT:   return %[[RES]] : index
+
+// -----
+
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG1:.*]]: tensor<?xf32>, %[[ARG2:.*]]: index)
+//  CHECK-NEXT:   %[[RES:.*]] = imex_util.enforce_shape %[[ARG1]] : tensor<?xf32>(%[[ARG2]]) -> tensor<?xf32>
+//  CHECK-NEXT:   return %[[RES]]
+func.func @test(%arg1: tensor<?xf32>, %arg2: index) -> tensor<?xf32> {
+  %0 = imex_util.enforce_shape %arg1 : tensor<?xf32>(%arg2) -> tensor<?xf32>
+  return %0: tensor<?xf32>
+}
