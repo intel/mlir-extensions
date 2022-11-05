@@ -1425,14 +1425,24 @@ struct NumpyCallsResolver
                   mlir::PatternRewriter &rewriter) const override {
     auto funcName = op.getOp();
 
-    llvm::SmallVector<mlir::Value> results;
-    if (mlir::failed(resolver.resolveFuncArgs(rewriter, op->getLoc(), funcName,
+    auto loc = op.getLoc();
+    llvm::SmallVector<mlir::Value> args;
+    llvm::SmallVector<mlir::Value> outResults;
+    if (mlir::failed(resolver.resolveFuncArgs(rewriter, loc, funcName,
                                               op.getArgs(), op.getArgsNames(),
-                                              results)))
+                                              args, outResults)))
       return mlir::failure();
 
-    rewriter.replaceOpWithNewOp<imex::ntensor::PrimitiveOp>(
-        op, op->getResultTypes(), results, funcName);
+    mlir::ValueRange results =
+        rewriter
+            .create<imex::ntensor::PrimitiveOp>(loc, op->getResultTypes(), args,
+                                                funcName)
+            .getResults();
+
+    for (auto [dst, src] : llvm::zip(outResults, results))
+      rewriter.create<imex::ntensor::CopyOp>(loc, src, dst);
+
+    rewriter.replaceOp(op, results);
     return mlir::success();
   }
 
