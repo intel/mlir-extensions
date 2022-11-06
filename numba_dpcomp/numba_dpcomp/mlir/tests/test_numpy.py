@@ -1013,6 +1013,7 @@ def test_contigious_layout_opt():
         assert ir.count(layoutStr) != 0, ir
 
 
+@pytest.mark.skip(reason="Layout type inference need rework")
 def test_contigious_layout_return():
     def py_func1():
         return np.ones((2, 3), np.float32).T
