@@ -22,6 +22,7 @@
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/Dialect/Tensor/Transforms/Passes.h>
 #include <mlir/IR/Dialect.h>
+#include <mlir/IR/Dominance.h>
 #include <mlir/Pass/Pass.h>
 #include <mlir/Pass/PassManager.h>
 #include <mlir/Transforms/DialectConversion.h>
@@ -1820,6 +1821,11 @@ struct SliceOfGeneric : public mlir::OpRewritePattern<mlir::linalg::GenericOp> {
     mlir::Operation *user = *(res.getUsers().begin());
     if (!mlir::isa<mlir::tensor::ExtractSliceOp, mlir::tensor::ExtractOp>(user))
       return mlir::failure();
+
+    mlir::DominanceInfo dom;
+    for (auto arg : user->getOperands())
+      if (!dom.dominates(arg, op))
+        return mlir::failure();
 
     auto output = op.getOutputs().front();
 

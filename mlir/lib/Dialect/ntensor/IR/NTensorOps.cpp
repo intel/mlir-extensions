@@ -6,6 +6,7 @@
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
+#include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/Dialect/Utils/StaticValueUtils.h>
 #include <mlir/IR/Builders.h>
@@ -233,6 +234,114 @@ mlir::LogicalResult imex::ntensor::DimOp::verify() {
     llvm_unreachable("expected operand with array type");
   }
   return mlir::success();
+}
+
+namespace {
+struct FromTensorDimPropagate
+    : public mlir::OpRewritePattern<imex::ntensor::DimOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::DimOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto src = op.getSource().getDefiningOp<imex::ntensor::FromTensorOp>();
+    if (!src)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::tensor::DimOp>(op, src.getTensor(),
+                                                     op.getIndex());
+    return mlir::success();
+  }
+};
+
+struct ToTensorDimPropagate
+    : public mlir::OpRewritePattern<mlir::tensor::DimOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::tensor::DimOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto src = op.getSource().getDefiningOp<imex::ntensor::ToTensorOp>();
+    if (!src)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<imex::ntensor::DimOp>(op, src.getArray(),
+                                                      op.getIndex());
+    return mlir::success();
+  }
+};
+
+// TODO: upstream
+struct LinalgGenericDimPropagate
+    : public mlir::OpRewritePattern<mlir::tensor::DimOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::tensor::DimOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto src = op.getSource();
+    auto generic = src.getDefiningOp<mlir::linalg::GenericOp>();
+    if (!generic)
+      return mlir::failure();
+
+    assert(generic.getOutputs().size() == generic.getResults().size());
+    auto outIndex = [&]() -> size_t {
+      for (auto [i, out] : llvm::enumerate(generic.getResults())) {
+        if (out == src)
+          return i;
+      }
+      llvm_unreachable("Invalid result");
+    }();
+
+    auto out = generic.getOutputs()[outIndex];
+
+    rewriter.replaceOpWithNewOp<mlir::tensor::DimOp>(op, out, op.getIndex());
+    return mlir::success();
+  }
+};
+
+// TODO: upstream
+struct ExtractSliceDimPropagate
+    : public mlir::OpRewritePattern<mlir::tensor::DimOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::tensor::DimOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto src = op.getSource();
+    auto extract = src.getDefiningOp<mlir::tensor::ExtractSliceOp>();
+    if (!extract)
+      return mlir::failure();
+
+    auto idx = op.getConstantIndex();
+    if (!idx || *idx < 0)
+      return mlir::failure();
+
+    auto droppedDims = extract.getDroppedDims();
+    auto srcDims = extract.getMixedSizes();
+    llvm::SmallVector<mlir::OpFoldResult> dims;
+    for (auto [i, dim] : llvm::enumerate(srcDims))
+      if (!droppedDims[i])
+        dims.emplace_back(dim);
+
+    if (*idx >= static_cast<int64_t>(dims.size()))
+      return mlir::failure();
+
+    auto srcDim = dims[static_cast<size_t>(*idx)];
+    if (auto constIdx = mlir::getConstantIntValue(srcDim)) {
+      rewriter.replaceOpWithNewOp<mlir::arith::ConstantIndexOp>(op, *constIdx);
+    } else {
+      rewriter.replaceOp(op, srcDim.get<mlir::Value>());
+    }
+    return mlir::success();
+  }
+};
+} // namespace
+
+void imex::ntensor::DimOp::getCanonicalizationPatterns(
+    ::mlir::RewritePatternSet &results, ::mlir::MLIRContext *context) {
+  results.insert<FromTensorDimPropagate, ToTensorDimPropagate,
+                 LinalgGenericDimPropagate, ExtractSliceDimPropagate>(context);
 }
 
 imex::ntensor::NTensorType imex::ntensor::SubviewOp::inferResultType(
