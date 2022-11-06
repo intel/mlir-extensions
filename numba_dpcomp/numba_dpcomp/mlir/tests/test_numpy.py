@@ -538,6 +538,19 @@ def test_copy_fusion():
         assert ir.count("scf.parallel") == 1, ir
 
 
+def test_broadcast_fusion():
+    def py_func(a):
+        return a + a * a
+
+    jit_func = njit(py_func)
+    a = np.arange(13)
+
+    with print_pass_ir([], ["PostLinalgOptPass"]):
+        assert_equal(py_func(a), jit_func(a))
+        ir = get_print_buffer()
+        assert ir.count("scf.parallel") == 1, ir
+
+
 @pytest.mark.parametrize("dtype", [np.int32, np.int64, np.float32])
 def test_np_reduce(dtype):
     def py_func(arr):

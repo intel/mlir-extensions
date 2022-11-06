@@ -572,9 +572,12 @@ static mlir::Value broadcastDim(mlir::OpBuilder &builder, mlir::Location loc,
   assert(val1.getType().isa<mlir::IndexType>());
   assert(val2.getType().isa<mlir::IndexType>());
   auto one = builder.create<mlir::arith::ConstantIndexOp>(loc, 1);
-  auto cond = builder.create<mlir::arith::CmpIOp>(
+  auto isOne = builder.create<mlir::arith::CmpIOp>(
       loc, mlir::arith::CmpIPredicate::eq, val1, one);
-  return builder.create<mlir::arith::SelectOp>(loc, cond, val2, val1);
+  auto tmp = builder.create<mlir::arith::SelectOp>(loc, isOne, val2, val1);
+  auto isSame = builder.create<mlir::arith::CmpIOp>(
+      loc, mlir::arith::CmpIPredicate::eq, val1, val2);
+  return builder.create<mlir::arith::SelectOp>(loc, isSame, val1, tmp);
 }
 
 static mlir::Value expandDim(mlir::OpBuilder &builder, mlir::Location loc,
@@ -593,6 +596,9 @@ static mlir::Value expandDim(mlir::OpBuilder &builder, mlir::Location loc,
   auto one = builder.create<mlir::arith::ConstantIndexOp>(loc, 1);
   mlir::Value cond = builder.create<mlir::arith::CmpIOp>(
       loc, mlir::arith::CmpIPredicate::eq, one, dimVal);
+  mlir::Value cond2 = builder.create<mlir::arith::CmpIOp>(
+      loc, mlir::arith::CmpIPredicate::ne, targetShape[dim], dimVal);
+  cond = builder.create<mlir::arith::AndIOp>(loc, cond, cond2);
   llvm::SmallVector<mlir::OpFoldResult> newShape(numDims);
   for (unsigned i = 0; i < numDims; ++i) {
     if (i == dim) {
@@ -605,10 +611,6 @@ static mlir::Value expandDim(mlir::OpBuilder &builder, mlir::Location loc,
   auto trueBody = [&](mlir::OpBuilder &builder, mlir::Location loc) {
     assert(dim < shape.size());
     shape[dim] = 1;
-    //        mlir::Type casted_type = mlir::RankedTensorType::get(shape,
-    //        src_type.getElementType()); auto casted =
-    //        builder.create<mlir::tensor::CastOp>(loc, casted_type,
-    //        src).getResult();
     auto casted = src; // TODO
     auto init = builder
                     .create<mlir::tensor::EmptyOp>(loc, newShape,
