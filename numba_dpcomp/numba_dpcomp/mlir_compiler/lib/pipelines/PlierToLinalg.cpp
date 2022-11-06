@@ -2170,6 +2170,9 @@ struct MarkContigiousArraysPass
 
   void runOnOperation() override {
     auto func = getOperation();
+    if (func.isPrivate())
+      return;
+
     auto funcType = func.getFunctionType();
 
     mlir::OpBuilder builder(&getContext());
@@ -2232,26 +2235,6 @@ void LinalgOptPass::runOnOperation() {
 
   (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
 }
-
-struct LoopInvariantCodeMotion
-    : public mlir::OpRewritePattern<mlir::scf::ForOp> {
-  using mlir::OpRewritePattern<mlir::scf::ForOp>::OpRewritePattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(mlir::scf::ForOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto parentOp = op->getParentOp();
-    rewriter.startRootUpdate(parentOp);
-    auto res =
-        mlir::LogicalResult::success((bool)mlir::moveLoopInvariantCode(op));
-    if (mlir::succeeded(res)) {
-      rewriter.finalizeRootUpdate(parentOp);
-    } else {
-      rewriter.cancelRootUpdate(parentOp);
-    }
-    return res;
-  }
-};
 
 struct BufferizeReshape
     : public mlir::OpConversionPattern<mlir::tensor::ReshapeOp> {
