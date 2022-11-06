@@ -44,7 +44,9 @@ def NTensor_Dialect : Dialect {
   }];
 
   let dependentDialects = [
-    "::mlir::memref::MemRefDialect", "::mlir::tensor::TensorDialect"];
+    "::mlir::memref::MemRefDialect",
+    "::mlir::tensor::TensorDialect",
+    "::mlir::linalg::LinalgDialect"];
 
   let hasConstantMaterializer = 1;
   let useDefaultTypePrinterParser = 1;

@@ -270,11 +270,41 @@ struct ToTensorDimPropagate
     return mlir::success();
   }
 };
+
+// TODO: upstream
+struct LinalgGenericDimPropagate
+    : public mlir::OpRewritePattern<mlir::tensor::DimOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::tensor::DimOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto src = op.getSource();
+    auto generic = src.getDefiningOp<mlir::linalg::GenericOp>();
+    if (!generic)
+      return mlir::failure();
+
+    assert(generic.getOutputs().size() == generic.getResults().size());
+    auto outIndex = [&]() -> size_t {
+      for (auto [i, out] : llvm::enumerate(generic.getResults())) {
+        if (out == src)
+          return i;
+      }
+      llvm_unreachable("Invalid result");
+    }();
+
+    auto out = generic.getOutputs()[outIndex];
+
+    rewriter.replaceOpWithNewOp<mlir::tensor::DimOp>(op, out, op.getIndex());
+    return mlir::success();
+  }
+};
 } // namespace
 
 void imex::ntensor::DimOp::getCanonicalizationPatterns(
     ::mlir::RewritePatternSet &results, ::mlir::MLIRContext *context) {
-  results.insert<FromTensorDimPropagate, ToTensorDimPropagate>(context);
+  results.insert<FromTensorDimPropagate, ToTensorDimPropagate,
+                 LinalgGenericDimPropagate>(context);
 }
 
 imex::ntensor::NTensorType imex::ntensor::SubviewOp::inferResultType(
