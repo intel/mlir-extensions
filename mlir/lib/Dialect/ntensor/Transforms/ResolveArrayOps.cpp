@@ -6,6 +6,7 @@
 
 #include "imex/Dialect/imex_util/Dialect.hpp"
 #include "imex/Dialect/ntensor/IR/NTensorOps.hpp"
+#include "imex/Transforms/CastUtils.hpp"
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Pass/Pass.h>
@@ -199,11 +200,12 @@ toValues(mlir::OpBuilder &builder, mlir::Location loc,
 
 static bool isCompatibleSetitemValue(mlir::Type valueType,
                                      imex::ntensor::NTensorType targetType) {
-  if (targetType.getElementType() == valueType)
+  if (imex::canConvert(targetType.getElementType(), valueType))
     return true;
 
   if (auto valueArray = valueType.dyn_cast<imex::ntensor::NTensorType>())
-    return valueArray.getElementType() == targetType.getElementType();
+    return imex::canConvert(valueArray.getElementType(),
+                            targetType.getElementType());
 
   return false;
 }
@@ -244,8 +246,22 @@ struct SetitemOpLowering
                              dimsIndices);
 
       auto newArray = [&]() -> mlir::Value {
-        if (value.getType().isa<imex::ntensor::NTensorType>())
+        if (auto srcType =
+                value.getType().dyn_cast<imex::ntensor::NTensorType>()) {
+          auto dstElementType = targetType.getElementType();
+          if (srcType.getElementType() != dstElementType) {
+            auto bodyBuilder = [&](mlir::OpBuilder &b, mlir::Location l,
+                                   mlir::Value val) {
+              auto res = imex::doConvert(b, l, val, dstElementType);
+              assert(res);
+              b.create<imex::ntensor::ElementwiseYieldOp>(l, res);
+            };
+
+            return rewriter.create<imex::ntensor::ElementwiseOp>(
+                loc, targetType, value, bodyBuilder);
+          }
           return value;
+        }
 
         auto dstType = dst.getType().cast<imex::ntensor::NTensorType>();
         mlir::SmallVector<mlir::Value> dynamicDims;
@@ -256,8 +272,11 @@ struct SetitemOpLowering
             dynamicDims.emplace_back(
                 rewriter.create<imex::ntensor::DimOp>(loc, dst, i));
         }
+        auto dstVal =
+            imex::doConvert(rewriter, loc, value, dstType.getElementType());
+        assert(dstVal);
         return rewriter.create<imex::ntensor::CreateArrayOp>(
-            loc, dstType, dynamicDims, value);
+            loc, dstType, dynamicDims, dstVal);
       }();
       rewriter.replaceOpWithNewOp<imex::ntensor::CopyOp>(op, newArray, dst);
     } else {
