@@ -43,6 +43,9 @@ def NTensor_Dialect : Dialect {
     translated to `setitem` calls on tensor.
   }];
 
+  let dependentDialects = [
+    "::mlir::memref::MemRefDialect", "::mlir::tensor::TensorDialect"];
+
   let hasConstantMaterializer = 1;
   let useDefaultTypePrinterParser = 1;
 }
@@ -516,6 +519,7 @@ def DimOp : NTensor_OpBase<"dim", [
   }];
 
   let hasVerifier = 1;
+  let hasCanonicalizer = 1;
 }
 
 def CallOp : NTensor_OpBase<"call", []> {

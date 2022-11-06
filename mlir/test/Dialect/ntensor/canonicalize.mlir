@@ -181,3 +181,31 @@ func.func @test(%arg1: !ntensor.ntensor<?xf32>) -> !ntensor.ntensor<?xf32> {
 // CHECK-LABEL: func @test
 //  CHECK-SAME:   (%[[ARG:.*]]: !ntensor.ntensor<?xf32>)
 //  CHECK-NEXT:   return %[[ARG]]
+
+// -----
+
+func.func @test(%arg1: tensor<?x?xf32>) -> index {
+  %0 = arith.constant 1 : index
+  %1 = ntensor.from_tensor %arg1 : tensor<?x?xf32> to !ntensor.ntensor<?x?xf32>
+  %2 = ntensor.dim %1, %0 : !ntensor.ntensor<?x?xf32>
+  return %2 : index
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG:.*]]: tensor<?x?xf32>)
+//       CHECK:   %[[IND:.*]] = arith.constant 1 : index
+//       CHECK:   %[[DIM:.*]] = tensor.dim %[[ARG]], %[[IND]] : tensor<?x?xf32>
+//       CHECK:   return %[[DIM]] : index
+
+// -----
+
+func.func @test(%arg1: !ntensor.ntensor<?x?xf32>) -> index {
+  %0 = arith.constant 1 : index
+  %1 = ntensor.to_tensor %arg1 : !ntensor.ntensor<?x?xf32> to tensor<?x?xf32>
+  %2 = tensor.dim %1, %0 : tensor<?x?xf32>
+  return %2 : index
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG:.*]]: !ntensor.ntensor<?x?xf32>)
+//       CHECK:   %[[IND:.*]] = arith.constant 1 : index
+//       CHECK:   %[[DIM:.*]] = ntensor.dim %[[ARG]], %[[IND]] : !ntensor.ntensor<?x?xf32>
+//       CHECK:   return %[[DIM]] : index

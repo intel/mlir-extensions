@@ -6,6 +6,7 @@
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
+#include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/Dialect/Utils/StaticValueUtils.h>
 #include <mlir/IR/Builders.h>
@@ -233,6 +234,47 @@ mlir::LogicalResult imex::ntensor::DimOp::verify() {
     llvm_unreachable("expected operand with array type");
   }
   return mlir::success();
+}
+
+namespace {
+struct FromTensorDimPropagate
+    : public mlir::OpRewritePattern<imex::ntensor::DimOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::DimOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto src = op.getSource().getDefiningOp<imex::ntensor::FromTensorOp>();
+    if (!src)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::tensor::DimOp>(op, src.getTensor(),
+                                                     op.getIndex());
+    return mlir::success();
+  }
+};
+
+struct ToTensorDimPropagate
+    : public mlir::OpRewritePattern<mlir::tensor::DimOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::tensor::DimOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto src = op.getSource().getDefiningOp<imex::ntensor::ToTensorOp>();
+    if (!src)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<imex::ntensor::DimOp>(op, src.getArray(),
+                                                      op.getIndex());
+    return mlir::success();
+  }
+};
+} // namespace
+
+void imex::ntensor::DimOp::getCanonicalizationPatterns(
+    ::mlir::RewritePatternSet &results, ::mlir::MLIRContext *context) {
+  results.insert<FromTensorDimPropagate, ToTensorDimPropagate>(context);
 }
 
 imex::ntensor::NTensorType imex::ntensor::SubviewOp::inferResultType(
