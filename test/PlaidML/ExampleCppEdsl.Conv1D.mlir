@@ -6,7 +6,7 @@
 #map1 = affine_map<(d0, d1, d2, d3, d4) -> (d3, d4, d2)>
 #map2 = affine_map<(d0, d1, d2, d3, d4) -> (d0, d1, d2)>
 module @conv_1d {
-  func.func @main(%arg0: tensor<1x14x3xf32>, %arg1: tensor<3x3x1xf32>) -> tensor<1x12x1xf32> {
+  func.func @test(%arg0: tensor<1x14x3xf32>, %arg1: tensor<3x3x1xf32>) -> tensor<1x12x1xf32> {
     %c0 = arith.constant 0.0 : f32
     %0 = tensor.empty() : tensor<1x12x1xf32>
     %1 = linalg.fill ins(%c0 : f32) outs(%0 : tensor<1x12x1xf32>) -> tensor<1x12x1xf32>
@@ -19,7 +19,7 @@ module @conv_1d {
     return %2 : tensor<1x12x1xf32>
   }
 
-  func.func @test() {
+  func.func @main() {
     %0 = arith.constant dense<[[[1.0, 2.0, 3.0],
                                 [2.0, 3.0, 4.0],
                                 [3.0, 4.0, 5.0],
@@ -35,13 +35,24 @@ module @conv_1d {
                                 [3.0, 4.0, 5.0],
                                 [4.0, 5.0, 6.0]]]> : tensor<1x14x3xf32>
     %1 = arith.constant dense<[[[1.0], [2.0], [1.0]], [[2.0], [4.0], [2.0]], [[3.0], [5.0], [3.0]]]> : tensor<3x3x1xf32>
-    %2 = call @main(%0, %1) : (tensor<1x14x3xf32>, tensor<3x3x1xf32>) -> tensor<1x12x1xf32>
+    %2 = call @test(%0, %1) : (tensor<1x14x3xf32>, tensor<3x3x1xf32>) -> tensor<1x12x1xf32>
     %unranked = tensor.cast %2 : tensor<1x12x1xf32> to tensor<*xf32>
     call @printMemrefF32(%unranked) : (tensor<*xf32>) -> ()
-    //      CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
-    // CHECK-NEXT: [76.0, 99.0, 122.0, 145.0, 168.0, 161.0, 114.0, 57.0, 40.0, 53.0, 76.0, 99.0]
     return
   }
 
   func.func private @printMemrefF32(%ptr : tensor<*xf32>)
 }
+//      CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
+// CHECK-NEXT: 76
+// CHECK-NEXT: 99
+// CHECK-NEXT: 122
+// CHECK-NEXT: 145
+// CHECK-NEXT: 168
+// CHECK-NEXT: 161
+// CHECK-NEXT: 114
+// CHECK-NEXT: 57
+// CHECK-NEXT: 40
+// CHECK-NEXT: 53
+// CHECK-NEXT: 76
+// CHECK-NEXT: 99
