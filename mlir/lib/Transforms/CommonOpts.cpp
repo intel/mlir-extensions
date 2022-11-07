@@ -143,7 +143,7 @@ void imex::populateCanonicalizationPatterns(mlir::RewritePatternSet &patterns) {
   for (auto *dialect : context->getLoadedDialects())
     dialect->getCanonicalizationPatterns(patterns);
   for (auto op : context->getRegisteredOperations())
-    op.getCanonicalizationPatterns(patterns, patterns.getContext());
+    op.getCanonicalizationPatterns(patterns, context);
 }
 
 void imex::populateCommonOptsPatterns(mlir::RewritePatternSet &patterns) {
