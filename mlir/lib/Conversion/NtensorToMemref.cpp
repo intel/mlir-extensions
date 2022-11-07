@@ -4,6 +4,7 @@
 
 #include "imex/Conversion/NtensorToMemref.hpp"
 
+#include "imex/Conversion/UtilConversion.hpp"
 #include "imex/Dialect/imex_util/Dialect.hpp"
 #include "imex/Dialect/imex_util/Utils.hpp"
 #include "imex/Dialect/ntensor/IR/NTensorOps.hpp"
@@ -437,6 +438,7 @@ struct NtensorToMemrefPass
     imex::populateControlFlowTypeConversionRewritesAndTarget(converter,
                                                              patterns, target);
     imex::populateNtensorToMemrefRewritesAndTarget(converter, patterns, target);
+    imex::populateUtilConversionPatterns(converter, patterns, target);
 
     auto op = getOperation();
     if (mlir::failed(

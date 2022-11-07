@@ -35,6 +35,51 @@ struct ConvertTakeContext
     return mlir::success();
   }
 };
+
+struct ConvertEnvRegion
+    : public mlir::OpConversionPattern<imex::util::EnvironmentRegionOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::util::EnvironmentRegionOp op,
+                  imex::util::EnvironmentRegionOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto converter = getTypeConverter();
+    assert(converter && "Invalid type converter");
+
+    llvm::SmallVector<mlir::Type> resultTypes;
+    if (mlir::failed(
+            converter->convertTypes(op->getResultTypes(), resultTypes)))
+      return mlir::failure();
+
+    auto loc = op.getLoc();
+    auto newOp = rewriter.create<imex::util::EnvironmentRegionOp>(
+        loc, adaptor.getEnvironment(), adaptor.getArgs(), resultTypes);
+    auto &newRegion = newOp.getRegion();
+
+    // Erase block created by builder.
+    rewriter.eraseBlock(&newRegion.front());
+
+    auto &oldRegion = op.getRegion();
+    rewriter.inlineRegionBefore(oldRegion, newRegion, newRegion.end());
+    rewriter.replaceOp(op, newOp.getResults());
+    return mlir::success();
+  }
+};
+
+struct ConvertEnvRegionYield
+    : public mlir::OpConversionPattern<imex::util::EnvironmentRegionYieldOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::util::EnvironmentRegionYieldOp op,
+                  imex::util::EnvironmentRegionYieldOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<imex::util::EnvironmentRegionYieldOp>(
+        op, adaptor.getOperands());
+    return mlir::success();
+  }
+};
 } // namespace
 
 void imex::populateUtilConversionPatterns(mlir::TypeConverter &converter,
@@ -49,6 +94,18 @@ void imex::populateUtilConversionPatterns(mlir::TypeConverter &converter,
           for (auto type : range)
             if (converter.isLegal(type))
               return true;
+
+        return llvm::None;
+      });
+
+  patterns.insert<ConvertEnvRegion, ConvertEnvRegionYield>(
+      converter, patterns.getContext());
+
+  target.addDynamicallyLegalOp<imex::util::EnvironmentRegionOp,
+                               imex::util::EnvironmentRegionYieldOp>(
+      [&](mlir::Operation *op) -> llvm::Optional<bool> {
+        if (converter.isLegal(op))
+          return true;
 
         return llvm::None;
       });
