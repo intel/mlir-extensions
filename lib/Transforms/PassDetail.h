@@ -29,6 +29,13 @@ class SPIRVDialect;
 
 } // end namespace mlir
 
+#include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/GPU/IR/GPUDialect.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SPIRV/IR/SPIRVDialect.h"
+
 namespace imex {
 #define GEN_PASS_CLASSES
 #include "imex/Transforms/Passes.h.inc"

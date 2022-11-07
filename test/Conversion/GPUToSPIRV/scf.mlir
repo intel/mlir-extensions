@@ -1,4 +1,4 @@
-// RUN: imex-opt -allow-unregistered-dialect -convert-gpux-to-spirv -verify-diagnostics %s -o - | FileCheck %s
+// RUN: imex-opt -allow-unregistered-dialect -imex-convert-gpu-to-spirv -verify-diagnostics %s -o - | FileCheck %s
 
 module attributes {
     gpu.container_module,

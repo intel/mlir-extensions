@@ -39,22 +39,3 @@ int main(int argc, char **argv) {
   return ::mlir::asMainReturnCode(
       ::mlir::MlirOptMain(argc, argv, "Imex optimizer driver\n", registry));
 }
-
-static mlir::PassPipelineRegistration<> InsertGpuAlloc(
-    "insert-gpu-alloc", "Converts memref alloc to gpu alloc",
-    [](mlir::OpPassManager &pm) {
-      pm.addNestedPass<mlir::func::FuncOp>(imex::createInsertGPUAllocsPass());
-    });
-
-static mlir::PassPipelineRegistration<>
-    SetSPIRVCapabilities("set-spirv-capablilities", "Sets Spirv capabilities",
-                         [](mlir::OpPassManager &pm) {
-                           pm.addPass(imex::createSetSPIRVCapabilitiesPass());
-                         });
-
-static mlir::PassPipelineRegistration<>
-    SetSPIRVAbiAttribute("set-spirv-abi-attrs", "Create AbiAttrs Pass",
-                         [](mlir::OpPassManager &pm) {
-                           pm.addNestedPass<mlir::gpu::GPUModuleOp>(
-                               imex::createSetSPIRVAbiAttribute());
-                         });

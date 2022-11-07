@@ -33,8 +33,7 @@ namespace imex {
 //===----------------------------------------------------------------------===//
 
 /// Create a PTensorDist pass
-std::unique_ptr<::mlir::OperationPass<::mlir::ModuleOp>>
-createPTensorDistPass();
+std::unique_ptr<::mlir::Pass> createPTensorDistPass();
 
 /// Populate the given list with patterns which add Dist-Ops to PTensor ops
 void populatePTensorDistPatterns(::mlir::LLVMTypeConverter &converter,
