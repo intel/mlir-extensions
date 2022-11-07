@@ -408,7 +408,6 @@ private:
     // 4. llvm.store parameters[i], %fieldPtr
     //    %elementPtr = llvm.getelementptr %array[i]
     // 5. llvm.store %fieldPtr, %elementPtr
-    // return %array
 
     imex::AllocaInsertionPoint allocaHelper(launchOp);
     auto kernelParams = adaptor.getKernelOperands();
