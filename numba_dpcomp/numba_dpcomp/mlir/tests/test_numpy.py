@@ -419,10 +419,14 @@ def test_dot(a, b, parallel):
         ),
     ],
 )
-def test_dot_out(a, b):
-    def py_func(a, b, c):
-        np.dot(a, b, out=c)
-
+@parametrize_function_variants(
+    "py_func",
+    [
+        "lambda a, b, c: np.dot(a, b, c)",
+        "lambda a, b, c: np.dot(a, b, out=c)",
+    ],
+)
+def test_dot_out(a, b, py_func):
     jit_func = njit(py_func)
 
     tmp = np.dot(a, b)

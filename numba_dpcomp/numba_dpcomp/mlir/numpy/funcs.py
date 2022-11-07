@@ -54,8 +54,12 @@ def _get_wrapper(name, orig, out=None):
 
         # Get function args names and drop first `builder` param
         paramsNames = list(params)[1:]
+
+        # For now assume out parameters are always last
+        paramCount = len(paramsNames)
+        outParams = tuple((name, i + paramCount) for i, name in enumerate(out))
         funcParams = [(n, params[n]) for n in paramsNames]
-        _registered_funcs[name] = _FuncDesc(funcParams, out)
+        _registered_funcs[name] = _FuncDesc(funcParams, outParams)
         return orig(func)
 
     return _decorator
