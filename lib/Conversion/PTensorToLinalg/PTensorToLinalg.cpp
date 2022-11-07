@@ -99,7 +99,7 @@ struct MkPTensorLowering
   matchAndRewrite(::imex::ptensor::MkPTensorOp op,
                   ::imex::ptensor::MkPTensorOp::Adaptor adaptor,
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
-    // auto converter = *getTypeConverter();
+    // auto & converter = *getTypeConverter();
     // (void)rewriter.replaceOpWithNewOp<::mlir::UnrealizedConversionCastOp>(
     // op, converter.convertType(op.getType()), adaptor.getOperands());
     rewriter.replaceOp(op, adaptor.getRtensor());
@@ -201,7 +201,6 @@ struct ARangeLowering
                   ::imex::ptensor::ARangeOp::Adaptor adaptor,
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    auto converter = *getTypeConverter();
 
     // Get Operands
     auto start = adaptor.getStart();
@@ -387,7 +386,6 @@ struct EWBinOpLowering
       // fail if not, will be retried if operands get converted elsewhere
       return ::mlir::failure();
     }
-    auto converter = *getTypeConverter();
     // we expect RankedTensorType as operands
     auto lhsRtTyp = lhsPtTyp.getRtensor();
     auto rhsRtTyp = rhsPtTyp.getRtensor();
@@ -495,7 +493,6 @@ struct ReductionOpLowering
       return ::mlir::failure();
     }
 
-    auto converter = *getTypeConverter();
     // we expect RankedTensorType as operands
     auto inpRtTyp = inpPtTyp.getRtensor();
     auto inpTnsr = rewriter.create<::imex::ptensor::ExtractRTensorOp>(

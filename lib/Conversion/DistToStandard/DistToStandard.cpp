@@ -30,6 +30,7 @@
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/IR/BuiltinOps.h>
 
+#include <array>
 #include <iostream>
 
 #include "../PassDetail.h"
@@ -46,7 +47,7 @@ namespace dist {
                                     ::mlir::Value team) {
   // Put named arguments into given Vector in a well defined order,
   // so that extraction is correct
-  ::mlir::SmallVector<::mlir::Value> vals(::imex::dist::INFO_LAST);
+  ::std::array<::mlir::Value, ::imex::dist::INFO_LAST> vals;
   vals[::imex::dist::GSHAPE] = gshape;
   vals[::imex::dist::LTENSOR] = ltensor;
   vals[::imex::dist::LOFFSETS] = loffsets;
@@ -164,7 +165,6 @@ struct InitDistTensorOpConverter
   matchAndRewrite(::imex::dist::InitDistTensorOp op,
                   ::imex::dist::InitDistTensorOp::Adaptor adaptor,
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
-    auto converter = *getTypeConverter();
     rewriter.replaceOp(op, ::imex::dist::materializeDistTensor(
                                rewriter, op.getLoc(), adaptor.getGShape(),
                                adaptor.getPTensor(), adaptor.getLOffsets(),
@@ -218,7 +218,7 @@ struct LocalOffsetsOpConverter
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
     // FIXME: non-even partitions, ndims
     auto loc = op.getLoc();
-    auto converter = *getTypeConverter();
+    auto &converter = *getTypeConverter();
 
     auto sz0_ = rewriter.create<::mlir::tensor::ExtractOp>(
         loc, adaptor.getGshape(),
@@ -251,7 +251,7 @@ struct LocalShapeOpConverter
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
     // FIXME: non-even partitions, ndims
     auto loc = op.getLoc();
-    auto converter = *getTypeConverter();
+    auto &converter = *getTypeConverter();
 
     auto sz0_ = rewriter.create<::mlir::tensor::ExtractOp>(
         loc, adaptor.getGshape(),
