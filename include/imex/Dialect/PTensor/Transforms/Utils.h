@@ -15,7 +15,7 @@
 #ifndef _PTENSOR_UTILS_H_INCLUDED_
 #define _PTENSOR_UTILS_H_INCLUDED_
 
-#include <imex/internal/PassUtils.h>
+#include <imex/Util/PassUtils.h>
 
 namespace imex {
 

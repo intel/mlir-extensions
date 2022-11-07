@@ -8,7 +8,8 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-///
+/// This file defines utility function to find insertion point for Op
+/// into the body of given builder/module.
 ///
 
 #pragma once
@@ -32,8 +33,6 @@ class StringRef;
 }
 
 namespace imex {
-mlir::func::FuncOp addFunction(mlir::OpBuilder &builder, mlir::ModuleOp module,
-                               llvm::StringRef name, mlir::FunctionType type);
 
 struct AllocaInsertionPoint {
   AllocaInsertionPoint(mlir::Operation *inst);

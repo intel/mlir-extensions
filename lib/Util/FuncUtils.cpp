@@ -8,30 +8,22 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-///
+/// This file defines a utility function to find insertion point for given
+/// Op (for instance LaunchOp) having specific trait
 ///
 
-#include "imex/Transforms/FuncUtils.hpp"
+#include "imex/Util/FuncUtils.hpp"
 
 #include <llvm/ADT/StringRef.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/BuiltinOps.h>
 
-mlir::func::FuncOp imex::addFunction(mlir::OpBuilder &builder,
-                                     mlir::ModuleOp module,
-                                     llvm::StringRef name,
-                                     mlir::FunctionType type) {
-  mlir::OpBuilder::InsertionGuard guard(builder);
-  // Insert before module terminator.
-  builder.setInsertionPoint(module.getBody(),
-                            std::prev(module.getBody()->end()));
-  auto func =
-      builder.create<mlir::func::FuncOp>(builder.getUnknownLoc(), name, type);
-  func.setPrivate();
-  return func;
-}
-
+/// Gets isolated region/block with IsolatedFromAbove trait for a given
+/// operation and sets that location as insertion point into the module.
+/// Isolated here refers to the regions of operations are known to be isolated
+/// from above and will not capture, or reference, SSA values defined above the
+/// region scope.
 imex::AllocaInsertionPoint::AllocaInsertionPoint(mlir::Operation *inst) {
   assert(nullptr != inst);
   auto parent = inst->getParentWithTrait<mlir::OpTrait::IsIsolatedFromAbove>();

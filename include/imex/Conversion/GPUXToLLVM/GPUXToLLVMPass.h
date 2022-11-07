@@ -8,7 +8,7 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// This file defines the GPUXToLLVM conversion,
+/// This file defines conversion of GPUX dialect ops into LLVM IR operations.
 ///
 //===----------------------------------------------------------------------===//
 

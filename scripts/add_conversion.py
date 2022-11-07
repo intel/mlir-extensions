@@ -129,7 +129,7 @@ with open(fn, "w") as f:
 #include <imex/Conversion/{name}/{name}.h>
 #include <imex/Dialect/{args.source}/IR/{args.source}Ops.h>
 #include <imex/Dialect/{args.target}/IR/{args.target}Ops.h>
-#include <imex/internal/PassWrapper.h>
+#include <imex/Util/PassWrapper.h>
 
 #include <mlir/IR/BuiltinOps.h>
 

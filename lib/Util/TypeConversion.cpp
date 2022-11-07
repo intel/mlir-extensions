@@ -8,11 +8,13 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-///
+/// This file defines conversion patterns for lowering ControlFlow related ops
+/// like func call, branch, return Ops by adding dynamic legality rules and
+/// applying them while rewriting.
 ///
 //===----------------------------------------------------------------------===//
 
-#include "imex/Transforms/TypeConversion.hpp"
+#include "imex/Util/TypeConversion.hpp"
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
@@ -45,6 +47,10 @@ void imex::populateControlFlowTypeConversionRewritesAndTarget(
     mlir::ConversionTarget &target) {
   mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::func::FuncOp>(
       patterns, typeConverter);
+
+  // Dynamic rules below accept new function, call, branch, return operations
+  // as legal output of the rewriting and then populates and apply rewriting
+  // rules
   target.addDynamicallyLegalOp<mlir::func::FuncOp>(
       [&](mlir::func::FuncOp op) -> llvm::Optional<bool> {
         if (typeConverter.isSignatureLegal(op.getFunctionType()) &&

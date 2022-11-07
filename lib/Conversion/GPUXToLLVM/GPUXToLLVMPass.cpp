@@ -1,4 +1,4 @@
-//===- GPUToSPIRVPass.cpp -  --------------*- C++ -*-===//
+//===- GPUToLLVMPass.cpp -  --------------*- C++ -*-===//
 //
 // Copyright 2022 Intel Corporation
 // Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -8,16 +8,17 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// This file extends upstream GPUToSPIRV Pass that converts GPU ops to SPIR-V
-/// by adding more conversion patterns like SCF, math and control flow. This
-/// pass only converts gpu.func ops inside gpu.module op.
+/// This file implements a pass to convert GPUX dialect ops into LLVM IR dialect
+/// operations via sequence of GPU runtime wrapper API calls from a library.
+/// This wrapper library exports API calls on top of GPU runtimes such as
+/// Level-zero and SYCL.
 ///
 //===----------------------------------------------------------------------===//
 #include "imex/Conversion/GPUXToLLVM/GPUXToLLVMPass.h"
 #include "imex/Dialect/GPUX/IR/GPUXOps.h"
 
-#include "imex/Transforms/FuncUtils.hpp"
-#include "imex/Transforms/TypeConversion.hpp"
+#include "imex/Util/FuncUtils.hpp"
+#include "imex/Util/TypeConversion.hpp"
 
 #include "../PassDetail.h"
 
@@ -80,6 +81,7 @@ private:
   mlir::LLVM::LLVMFunctionType functionType;
 };
 
+/// converts GPUX operation to LLVM dialect.
 template <typename OpTy>
 class ConvertOpToGpuRuntimeCallPattern
     : public mlir::ConvertOpToLLVMPattern<OpTy> {
@@ -124,9 +126,12 @@ protected:
   FunctionCallBuilder moduleLoadCallBuilder = {
       "gpuModuleLoad",
       llvmPointerType /* void *module */,
-      {llvmPointerType, /* void *stream */
-       llvmPointerType, /* void *spirv*/
-       llvmIndexType /* size*/}};
+      {
+          llvmPointerType, /* void *stream */
+          llvmPointerType, /* void *spirv*/
+          llvmIndexType    /* size*/
+      }};
+
   FunctionCallBuilder moduleUnloadCallBuilder = {
       "gpuModuleUnload",
       llvmVoidType,
@@ -142,6 +147,7 @@ protected:
           llvmPointerType, /* void *module */
           llvmPointerType  /* char *name   */
       }};
+
   FunctionCallBuilder launchKernelCallBuilder = {
       "gpuLaunchKernel",
       llvmVoidType,
@@ -160,9 +166,11 @@ protected:
 
   FunctionCallBuilder streamCreateCallBuilder = {
       "gpuCreateStream",
-      llvmPointerType,  /* void *stream */
-      {llvmPointerType, /* void *device */
-       llvmPointerType /* void *context */}};
+      llvmPointerType, /* void *stream */
+      {
+          llvmPointerType, /* void *device */
+          llvmPointerType  /* void *context */
+      }};
 
   FunctionCallBuilder streamDestroyCallBuilder = {
       "gpuStreamDestroy",
@@ -184,7 +192,7 @@ protected:
           llvmPointerType, /* void *stream */
           llvmIndexType,   /* intptr_t size */
           llvmIndexType,   /* intptr_t alignment */
-          llvmInt32Type    /*unsigned int shared */
+          llvmInt32Type    /* unsigned int shared */
       }};
 
   FunctionCallBuilder deallocCallBuilder = {
@@ -305,7 +313,7 @@ private:
 /// sequence of runtime calls:
 ///
 /// * moduleLoad        -- loads the module given the spirv data
-/// * moduleGetFunction -- gets a handle to the actual kernel function
+/// * KernelGetFunction -- gets a handle to the actual kernel function
 /// * launchKernel      -- launches the kernel on a stream
 /// * gpuWait           -- waits for operations on the stream to finish
 ///
@@ -382,9 +390,10 @@ private:
         mlir::IntegerAttr::get(llvmIndexType,
                                static_cast<int64_t>(spirvBlob.size())));
 
-    // loads the module given the spirv data
+    // loads the GPU module given the spirv data
     auto module = moduleLoadCallBuilder.create(
         loc, rewriter, {adaptor.getGpuxStream(), data, size});
+
     // Get the function from the module. The name corresponds to the name of
     // the kernel function.
     auto kernelName = generateKernelNameConstant(
@@ -394,7 +403,21 @@ private:
         loc, rewriter,
         {adaptor.getGpuxStream(), module->getResult(0), kernelName});
 
-    // Create array of pointers to kernel arguments.
+    /////////////////////////////////////////////////////////////////////////
+    // Create an array of struct containing all kernel parameters and inserts
+    // these type-erased pointers to the fields of the struct. The array of
+    // struct is then passed to Runtime wrapper Kernel launch call. Generated
+    // code is essentially as follows:
+    //
+    // 1. %struct = alloca(sizeof(struct { Parameters... }))
+    // 2. %array = alloca(NumParameters * sizeof(void *))
+    // 3.  for (i : [0, NumParameters))
+    //    %fieldPtr = llvm.getelementptr %struct[0, i]
+    // 4. llvm.store parameters[i], %fieldPtr
+    //    %elementPtr = llvm.getelementptr %array[i]
+    // 5. llvm.store %fieldPtr, %elementPtr
+    // return %array
+
     imex::AllocaInsertionPoint allocaHelper(launchOp);
     auto kernelParams = adaptor.getKernelOperands();
     auto paramsCount = static_cast<unsigned>(kernelParams.size());
@@ -468,6 +491,7 @@ private:
       paramsArray = rewriter.create<mlir::LLVM::InsertValueOp>(loc, paramsArray,
                                                                range, i);
     }
+
     auto nullPtr = rewriter.create<mlir::LLVM::NullOp>(loc, llvmPointerType);
     auto nullRange = [&]() {
       auto zero = rewriter.create<mlir::LLVM::ConstantOp>(
@@ -483,6 +507,9 @@ private:
         loc, paramsArray, nullRange, paramsCount);
     rewriter.create<mlir::LLVM::StoreOp>(loc, paramsArray, paramsArrayPtr);
 
+    /////////////////////////////////////////////////////////////////////
+
+    // Get pointer to array of kernel parameters and call launch kernel
     auto paramsArrayVoidPtr = rewriter.create<mlir::LLVM::BitcastOp>(
         loc, llvmRangePointerType, paramsArrayPtr);
     auto zero = rewriter.create<mlir::LLVM::ConstantOp>(

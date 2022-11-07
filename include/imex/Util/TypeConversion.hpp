@@ -9,7 +9,7 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-///
+/// This file defines conversion function to find insertion point for given Op
 ///
 //===----------------------------------------------------------------------===//
 
@@ -26,11 +26,4 @@ namespace imex {
 void populateControlFlowTypeConversionRewritesAndTarget(
     mlir::TypeConverter &typeConverter, mlir::RewritePatternSet &patterns,
     mlir::ConversionTarget &target);
-
-// void populateTupleTypeConverter(mlir::MLIRContext &context,
-//                                 mlir::TypeConverter &typeConverter);
-
-// void populateTupleTypeConversionRewritesAndTarget(
-//     mlir::TypeConverter &typeConverter, mlir::RewritePatternSet &patterns,
-//     mlir::ConversionTarget &target);
 } // namespace imex
