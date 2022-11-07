@@ -169,6 +169,7 @@ def GPUX_LaunchFuncOp
                    CArg<"::mlir::ValueRange", "{}">:$asyncDependencies)>
   ];
 
+  // Below methods will be literally copied into generated C++ Dialect class.
   let extraClassDeclaration = [{
 
     /// The name of the kernel's containing module.

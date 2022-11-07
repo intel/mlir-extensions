@@ -17,8 +17,8 @@
 #include "imex/Conversion/GPUXToLLVM/GPUXToLLVMPass.h"
 #include "imex/Dialect/GPUX/IR/GPUXOps.h"
 
-#include "imex/Util/FuncUtils.hpp"
-#include "imex/Util/TypeConversion.hpp"
+#include "imex/Utils/FuncUtils.hpp"
+#include "imex/Utils/TypeConversion.hpp"
 
 #include "../PassDetail.h"
 

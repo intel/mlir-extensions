@@ -3,7 +3,7 @@ add_mlir_library(IMEXUtil
     TypeConversion.cpp
 
   ADDITIONAL_HEADER_DIRS
-  ${PROJECT_SOURCE_DIR}/imex/Util
+  ${PROJECT_SOURCE_DIR}/imex/Utils
 
   LINK_LIBS PUBLIC
   MLIRGPUOps

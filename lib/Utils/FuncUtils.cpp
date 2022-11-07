@@ -12,7 +12,7 @@
 /// Op (for instance LaunchOp) having specific trait
 ///
 
-#include "imex/Util/FuncUtils.hpp"
+#include "imex/Utils/FuncUtils.hpp"
 
 #include <llvm/ADT/StringRef.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>

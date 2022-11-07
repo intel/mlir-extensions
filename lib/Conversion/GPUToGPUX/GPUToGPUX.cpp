@@ -16,7 +16,7 @@
 #include "../PassDetail.h"
 #include <imex/Conversion/GPUToGPUX/GPUToGPUX.h>
 #include <imex/Dialect/GPUX/IR/GPUXOps.h>
-#include <imex/Util/PassWrapper.h>
+#include <imex/Utils/PassWrapper.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/GPU/IR/GPUDialect.h>
 
