@@ -11,7 +11,9 @@ module @broadcast_non_numpy {
     %1 = linalg.fill ins(%cst : f32) outs(%0 : tensor<3x4xf32>) -> tensor<3x4xf32>
     %2 = linalg.generic {indexing_maps = [#map0, #map1], iterator_types = ["parallel", "parallel"]} ins(%arg0 : tensor<3xf32>) outs(%1 : tensor<3x4xf32>) attrs =  {iterator_ranges = [3, 4], name = "broadcast"} {
     ^bb0(%arg1: f32, %arg2: f32):
-      linalg.yield %arg1 : f32
+      %e = arith.addf %arg1, %arg2: f32 
+      // linalg.yield %arg1 : f32
+      linalg.yield %e: f32
     } -> tensor<3x4xf32>
     return %2 : tensor<3x4xf32>
   }
