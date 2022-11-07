@@ -81,7 +81,12 @@ private:
   mlir::LLVM::LLVMFunctionType functionType;
 };
 
-/// converts GPUX operation to LLVM dialect.
+/// This class defines function call builders to call into GPU runtime wrapper
+/// APIs.
+//  These runtime API can be Level-zero or SYCL that would perform converstion
+//  to LLVM dialect ops.
+/// This class gets extended further for GPUX dialect ops like Alloc, dealloc,
+/// createStream, destroystream, LaunchFunc to perform op specific conversion.
 template <typename OpTy>
 class ConvertOpToGpuRuntimeCallPattern
     : public mlir::ConvertOpToLLVMPattern<OpTy> {
@@ -90,19 +95,6 @@ public:
       : mlir::ConvertOpToLLVMPattern<OpTy>(converter) {}
 
 protected:
-  mlir::Value getNumElements(mlir::ConversionPatternRewriter &rewriter,
-                             mlir::Location loc, mlir::MemRefType type,
-                             mlir::MemRefDescriptor desc) const {
-    return type.hasStaticShape()
-               ? mlir::ConvertToLLVMPattern::createIndexConstant(
-                     rewriter, loc, type.getNumElements())
-               // For identity maps (verified by caller), the
-               // number of elements is stride[0] * size[0].
-               : rewriter.create<mlir::LLVM::MulOp>(
-                     loc, desc.stride(rewriter, loc, 0),
-                     desc.size(rewriter, loc, 0));
-  }
-
   mlir::MLIRContext *context = &this->getTypeConverter()->getContext();
 
   mlir::Type llvmVoidType = mlir::LLVM::LLVMVoidType::get(context);
@@ -533,6 +525,8 @@ private:
   }
 };
 
+/// A rewrite pattern to convert gpux.create_stream operations into a GPU
+/// runtime call.
 class ConvertGpuStreamCreatePattern
     : public ConvertOpToGpuRuntimeCallPattern<imex::gpux::CreateStreamOp> {
 public:
@@ -562,6 +556,8 @@ private:
   }
 };
 
+/// A rewrite pattern to convert gpux.destroy_stream operations into a GPU
+/// runtime call.
 class ConvertGpuStreamDestroyPattern
     : public ConvertOpToGpuRuntimeCallPattern<imex::gpux::DestroyStreamOp> {
 public:
