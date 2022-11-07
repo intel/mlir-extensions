@@ -13,8 +13,7 @@ class TypeConverter;
 
 namespace imex {
 /// Convert util ops according to provided type converter.
-void populateUtilConversionPatterns(mlir::MLIRContext &context,
-                                    mlir::TypeConverter &converter,
+void populateUtilConversionPatterns(mlir::TypeConverter &converter,
                                     mlir::RewritePatternSet &patterns,
                                     mlir::ConversionTarget &target);
 } // namespace imex

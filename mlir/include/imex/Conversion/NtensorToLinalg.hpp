@@ -13,8 +13,7 @@ class RewritePatternSet;
 } // namespace mlir
 
 namespace imex {
-void populateNtensorToLinalgPatterns(mlir::MLIRContext &context,
-                                     mlir::RewritePatternSet &patterns);
+void populateNtensorToLinalgPatterns(mlir::RewritePatternSet &patterns);
 
 /// Creates a pass for ntensor alias analysis, required by ntensor-to-linalg.
 std::unique_ptr<mlir::Pass> createNtensorAliasAnalysisPass();

@@ -1610,7 +1610,7 @@ struct GPUToLLVMPass
 
     gpu_runtime::populateGpuToLLVMPatternsAndLegality(converter, patterns,
                                                       target);
-    imex::populateUtilConversionPatterns(context, converter, patterns, target);
+    imex::populateUtilConversionPatterns(converter, patterns, target);
 
     // TODO: There were some issues with structural conversion, investigate.
     target.addLegalOp<mlir::arith::SelectOp>();

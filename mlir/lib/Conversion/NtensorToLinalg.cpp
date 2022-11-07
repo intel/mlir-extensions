@@ -373,11 +373,10 @@ struct ConvertDimOp : public mlir::OpRewritePattern<imex::ntensor::DimOp> {
 };
 } // namespace
 
-void imex::populateNtensorToLinalgPatterns(mlir::MLIRContext &context,
-                                           mlir::RewritePatternSet &patterns) {
+void imex::populateNtensorToLinalgPatterns(mlir::RewritePatternSet &patterns) {
   patterns.insert<ConvertCreateOp, ConvertCopyOp, ConvertElementwiseOp,
                   ConvertCastOp, ConvertFromElementsOp, ConvertSubviewOp,
-                  ConvertLoadOp, ConvertDimOp>(&context);
+                  ConvertLoadOp, ConvertDimOp>(patterns.getContext());
 }
 
 namespace {
@@ -471,7 +470,7 @@ struct NtensorToLinalgPass
     auto &ctx = getContext();
     mlir::RewritePatternSet patterns(&ctx);
 
-    imex::populateNtensorToLinalgPatterns(ctx, patterns);
+    imex::populateNtensorToLinalgPatterns(patterns);
 
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
                                              std::move(patterns));

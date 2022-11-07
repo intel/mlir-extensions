@@ -390,10 +390,10 @@ struct GetitemUnitupleOpLowering
 } // namespace
 
 void imex::ntensor::populateResolveArrayOpsPatterns(
-    mlir::MLIRContext &context, mlir::RewritePatternSet &patterns) {
+    mlir::RewritePatternSet &patterns) {
   patterns
       .insert<SetitemOpLowering, GetitemOpLowering, GetitemUnitupleOpLowering>(
-          &context);
+          patterns.getContext());
 }
 
 namespace {
@@ -412,7 +412,7 @@ struct ResolveArrayOpsPass
     auto &ctx = getContext();
     mlir::RewritePatternSet patterns(&ctx);
 
-    imex::ntensor::populateResolveArrayOpsPatterns(ctx, patterns);
+    imex::ntensor::populateResolveArrayOpsPatterns(patterns);
 
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
                                              std::move(patterns));

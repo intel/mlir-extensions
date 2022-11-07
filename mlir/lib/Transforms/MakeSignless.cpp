@@ -184,8 +184,8 @@ static llvm::Optional<mlir::Type> makeSignlessType(mlir::Type type) {
 }
 
 void imex::populateMakeSignlessRewritesAndTarget(
-    mlir::MLIRContext &context, mlir::TypeConverter &converter,
-    mlir::RewritePatternSet &patterns, mlir::ConversionTarget &target) {
+    mlir::TypeConverter &converter, mlir::RewritePatternSet &patterns,
+    mlir::ConversionTarget &target) {
   converter.addConversion(&makeSignlessType);
 
   auto materializeSignCast = [](mlir::OpBuilder &builder, mlir::Type type,
@@ -208,7 +208,7 @@ void imex::populateMakeSignlessRewritesAndTarget(
                   ConvertAlloc<mlir::memref::AllocaOp>, ConvertDealloc,
                   ConvertTensorEmpty, ConvertTensorFromElements,
                   ConvertLinalgFill, ConvertLinalgGeneric, ConvertLinalgYield>(
-      converter, &context);
+      converter, patterns.getContext());
 }
 
 namespace {
@@ -233,10 +233,9 @@ struct MakeSignlessPass
     // Convert unknown types to itself
     converter.addConversion([](mlir::Type type) { return type; });
 
-    imex::populateTupleTypeConverter(context, converter);
+    imex::populateTupleTypeConverter(converter);
 
-    imex::populateMakeSignlessRewritesAndTarget(context, converter, patterns,
-                                                target);
+    imex::populateMakeSignlessRewritesAndTarget(converter, patterns, target);
 
     imex::populateTupleTypeConversionRewritesAndTarget(converter, patterns,
                                                        target);

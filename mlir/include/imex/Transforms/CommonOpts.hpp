@@ -13,11 +13,9 @@ class Pass;
 } // namespace mlir
 
 namespace imex {
-void populateCanonicalizationPatterns(mlir::MLIRContext &context,
-                                      mlir::RewritePatternSet &patterns);
+void populateCanonicalizationPatterns(mlir::RewritePatternSet &patterns);
 
-void populateCommonOptsPatterns(mlir::MLIRContext &context,
-                                mlir::RewritePatternSet &patterns);
+void populateCommonOptsPatterns(mlir::RewritePatternSet &patterns);
 
 std::unique_ptr<mlir::Pass> createCommonOptsPass();
 } // namespace imex

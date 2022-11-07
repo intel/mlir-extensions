@@ -37,11 +37,10 @@ struct ConvertTakeContext
 };
 } // namespace
 
-void imex::populateUtilConversionPatterns(mlir::MLIRContext &context,
-                                          mlir::TypeConverter &converter,
+void imex::populateUtilConversionPatterns(mlir::TypeConverter &converter,
                                           mlir::RewritePatternSet &patterns,
                                           mlir::ConversionTarget &target) {
-  patterns.insert<ConvertTakeContext>(converter, &context);
+  patterns.insert<ConvertTakeContext>(converter, patterns.getContext());
 
   target.addDynamicallyLegalOp<imex::util::TakeContextOp>(
       [&](mlir::Operation *op) -> llvm::Optional<bool> {

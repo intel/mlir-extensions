@@ -10,7 +10,6 @@ class RewritePatternSet;
 } // namespace mlir
 
 namespace imex {
-void populateLoopRewritesPatterns(mlir::MLIRContext &context,
-                                  mlir::RewritePatternSet &patterns);
+void populateLoopRewritesPatterns(mlir::RewritePatternSet &patterns);
 
 } // namespace imex

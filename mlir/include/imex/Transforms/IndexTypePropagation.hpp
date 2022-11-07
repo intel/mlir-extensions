@@ -10,6 +10,5 @@ class MLIRContext;
 } // namespace mlir
 
 namespace imex {
-void populateIndexPropagatePatterns(mlir::MLIRContext &context,
-                                    mlir::RewritePatternSet &patterns);
+void populateIndexPropagatePatterns(mlir::RewritePatternSet &patterns);
 }

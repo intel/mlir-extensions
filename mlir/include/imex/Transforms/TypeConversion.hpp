@@ -16,8 +16,7 @@ void populateControlFlowTypeConversionRewritesAndTarget(
     mlir::TypeConverter &typeConverter, mlir::RewritePatternSet &patterns,
     mlir::ConversionTarget &target);
 
-void populateTupleTypeConverter(mlir::MLIRContext &context,
-                                mlir::TypeConverter &typeConverter);
+void populateTupleTypeConverter(mlir::TypeConverter &typeConverter);
 
 void populateTupleTypeConversionRewritesAndTarget(
     mlir::TypeConverter &typeConverter, mlir::RewritePatternSet &patterns,

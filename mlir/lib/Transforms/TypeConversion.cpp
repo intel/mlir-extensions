@@ -267,8 +267,7 @@ struct GetItemTupleConversionPattern
 };
 } // namespace
 
-void imex::populateTupleTypeConverter(mlir::MLIRContext & /*context*/,
-                                      mlir::TypeConverter &typeConverter) {
+void imex::populateTupleTypeConverter(mlir::TypeConverter &typeConverter) {
   typeConverter.addConversion(
       [&typeConverter](mlir::TupleType type) -> llvm::Optional<mlir::Type> {
         auto count = static_cast<unsigned>(type.size());
