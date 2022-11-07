@@ -19,7 +19,7 @@ convert-math-to-llvm
 convert-complex-to-llvm
 convert-index-to-llvm
 convert-memref-to-llvm
+lower-affine
 convert-func-to-llvm
-reconcile-unrealized-casts
 reconcile-unrealized-casts
 # End
