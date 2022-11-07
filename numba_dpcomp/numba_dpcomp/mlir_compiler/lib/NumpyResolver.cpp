@@ -86,7 +86,7 @@ NumpyResolver::resolveFuncArgs(mlir::OpBuilder &builder, mlir::Location loc,
                                mlir::ArrayAttr argsNames,
                                llvm::SmallVectorImpl<mlir::Value> &resultArgs,
                                llvm::SmallVectorImpl<mlir::Value> &outArgs) {
-  assert(args.size() == argsNames.size() && "args and names count misnatch");
+  assert(args.size() == argsNames.size() && "args and names count mismatch");
   auto res = impl->getFuncDesc(name);
   if (res.is_none())
     return mlir::failure();
@@ -113,10 +113,15 @@ NumpyResolver::resolveFuncArgs(mlir::OpBuilder &builder, mlir::Location loc,
     return llvm::None;
   };
 
-  for (auto outName : res.attr("out")) {
+  auto outTuple = res.attr("out").cast<py::tuple>();
+  llvm::SmallBitVector outProcessed(outTuple.size(), false);
+  for (auto [i, out] : llvm::enumerate(outTuple)) {
+    auto outName = out.cast<py::tuple>()[0];
     auto nameStr = outName.cast<std::string>();
-    if (auto arg = findArg(nameStr))
+    if (auto arg = findArg(nameStr)) {
       outArgs.emplace_back(*arg);
+      outProcessed[i] = true;
+    }
   }
 
   auto funcArgs = res.attr("params").cast<py::list>();
@@ -157,6 +162,18 @@ NumpyResolver::resolveFuncArgs(mlir::OpBuilder &builder, mlir::Location loc,
 
       resultArgs.emplace_back(*defVal);
     }
+  }
+
+  for (auto [i, out] : llvm::enumerate(outTuple)) {
+    if (argsNamesAndValues.empty())
+      break;
+
+    if (outProcessed[i])
+      continue;
+
+    auto outIdx = out.cast<py::tuple>()[1];
+    outArgs.emplace_back(argsNamesAndValues.front().first);
+    argsNamesAndValues.erase(argsNamesAndValues.begin());
   }
 
   // Not all arguments were processed.
