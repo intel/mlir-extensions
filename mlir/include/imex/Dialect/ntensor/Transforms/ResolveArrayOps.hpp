@@ -14,8 +14,7 @@ class RewritePatternSet;
 
 namespace imex {
 namespace ntensor {
-void populateResolveArrayOpsPatterns(mlir::MLIRContext &context,
-                                     mlir::RewritePatternSet &patterns);
+void populateResolveArrayOpsPatterns(mlir::RewritePatternSet &patterns);
 
 /// This pass translates high level array manipulation ops into primitive
 /// ops like `resolve_index`, `subview`, `load`, `store` etc.

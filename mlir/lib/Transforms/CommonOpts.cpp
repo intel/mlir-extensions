@@ -130,7 +130,7 @@ struct CommonOptsPass
     auto *ctx = &getContext();
     mlir::RewritePatternSet patterns(ctx);
 
-    imex::populateCommonOptsPatterns(*ctx, patterns);
+    imex::populateCommonOptsPatterns(patterns);
 
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
                                              std::move(patterns));
@@ -138,17 +138,16 @@ struct CommonOptsPass
 };
 } // namespace
 
-void imex::populateCanonicalizationPatterns(mlir::MLIRContext &context,
-                                            mlir::RewritePatternSet &patterns) {
-  for (auto *dialect : context.getLoadedDialects())
+void imex::populateCanonicalizationPatterns(mlir::RewritePatternSet &patterns) {
+  auto context = patterns.getContext();
+  for (auto *dialect : context->getLoadedDialects())
     dialect->getCanonicalizationPatterns(patterns);
-  for (auto op : context.getRegisteredOperations())
-    op.getCanonicalizationPatterns(patterns, &context);
+  for (auto op : context->getRegisteredOperations())
+    op.getCanonicalizationPatterns(patterns, patterns.getContext());
 }
 
-void imex::populateCommonOptsPatterns(mlir::MLIRContext &context,
-                                      mlir::RewritePatternSet &patterns) {
-  populateCanonicalizationPatterns(context, patterns);
+void imex::populateCommonOptsPatterns(mlir::RewritePatternSet &patterns) {
+  populateCanonicalizationPatterns(patterns);
 
   patterns.insert<
       // clang-format off
@@ -158,11 +157,11 @@ void imex::populateCommonOptsPatterns(mlir::MLIRContext &context,
       SubviewStorePropagate,
       PowSimplify
       // clang-format on
-      >(&context);
+      >(patterns.getContext());
 
-  imex::populateIfRewritesPatterns(context, patterns);
-  imex::populateLoopRewritesPatterns(context, patterns);
-  imex::populateIndexPropagatePatterns(context, patterns);
+  imex::populateIfRewritesPatterns(patterns);
+  imex::populateLoopRewritesPatterns(patterns);
+  imex::populateIndexPropagatePatterns(patterns);
 }
 
 std::unique_ptr<mlir::Pass> imex::createCommonOptsPass() {

@@ -936,7 +936,7 @@ void PlierToStdPass::runOnOperation() {
 
         return llvm::None;
       });
-  imex::populateTupleTypeConverter(*context, typeConverter);
+  imex::populateTupleTypeConverter(typeConverter);
 
   auto materializeCast = [](mlir::OpBuilder &builder, mlir::Type type,
                             mlir::ValueRange inputs,

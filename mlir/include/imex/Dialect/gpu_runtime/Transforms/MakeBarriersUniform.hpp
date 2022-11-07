@@ -13,8 +13,7 @@ class RewritePatternSet;
 } // namespace mlir
 
 namespace gpu_runtime {
-void populateMakeBarriersUniformPatterns(mlir::MLIRContext &context,
-                                         mlir::RewritePatternSet &patterns);
+void populateMakeBarriersUniformPatterns(mlir::RewritePatternSet &patterns);
 
 /// gpu barriers ops require uniform control flow, this pass tries to rearrange
 /// control flow in a way to satisfy this requirement.

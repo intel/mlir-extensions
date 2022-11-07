@@ -143,9 +143,8 @@ struct UpliftMathPass
           UpliftMathCalls, UpliftFabsCalls, UpliftFma> {};
 } // namespace
 
-void imex::populateUpliftmathPatterns(mlir::MLIRContext &context,
-                                      mlir::RewritePatternSet &patterns) {
-  patterns.insert<UpliftMathCalls>(&context);
+void imex::populateUpliftmathPatterns(mlir::RewritePatternSet &patterns) {
+  patterns.insert<UpliftMathCalls>(patterns.getContext());
 }
 
 std::unique_ptr<mlir::Pass> imex::createUpliftMathPass() {

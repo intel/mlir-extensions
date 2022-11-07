@@ -374,8 +374,8 @@ struct CopyOpLowering
 } // namespace
 
 void imex::populateNtensorToMemrefRewritesAndTarget(
-    mlir::MLIRContext &context, mlir::TypeConverter &converter,
-    mlir::RewritePatternSet &patterns, mlir::ConversionTarget &target) {
+    mlir::TypeConverter &converter, mlir::RewritePatternSet &patterns,
+    mlir::ConversionTarget &target) {
   converter.addConversion(
       [](imex::ntensor::NTensorType type) -> llvm::Optional<mlir::Type> {
         auto elemType = type.getElementType();
@@ -388,8 +388,8 @@ void imex::populateNtensorToMemrefRewritesAndTarget(
   patterns
       .insert<DimOpLowering, SubviewOpLowering, LoadOpLowering, StoreOpLowering,
               ToTensorOpLowering, FromTensorOpLowering, ToMemrefOpLowering,
-              FromMemrefOpLowering, CastOpLowering, CopyOpLowering>(converter,
-                                                                    &context);
+              FromMemrefOpLowering, CastOpLowering, CopyOpLowering>(
+          converter, patterns.getContext());
 
   target.addIllegalOp<imex::ntensor::DimOp, imex::ntensor::SubviewOp,
                       imex::ntensor::LoadOp, imex::ntensor::StoreOp,
@@ -420,7 +420,7 @@ struct NtensorToMemrefPass
     // Convert unknown types to itself
     converter.addConversion([](mlir::Type type) { return type; });
 
-    imex::populateTupleTypeConverter(context, converter);
+    imex::populateTupleTypeConverter(converter);
 
     auto addUnrealizedCast = [](mlir::OpBuilder &builder, mlir::Type type,
                                 mlir::ValueRange inputs, mlir::Location loc) {
@@ -436,8 +436,7 @@ struct NtensorToMemrefPass
                                                        target);
     imex::populateControlFlowTypeConversionRewritesAndTarget(converter,
                                                              patterns, target);
-    imex::populateNtensorToMemrefRewritesAndTarget(context, converter, patterns,
-                                                   target);
+    imex::populateNtensorToMemrefRewritesAndTarget(converter, patterns, target);
 
     auto op = getOperation();
     if (mlir::failed(

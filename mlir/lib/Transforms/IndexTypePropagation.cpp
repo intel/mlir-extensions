@@ -137,8 +137,7 @@ struct CmpIndexCastSimplify
 };
 } // namespace
 
-void imex::populateIndexPropagatePatterns(mlir::MLIRContext &context,
-                                          mlir::RewritePatternSet &patterns) {
+void imex::populateIndexPropagatePatterns(mlir::RewritePatternSet &patterns) {
   patterns
       .insert<CmpIndexCastSimplify, ArithIndexCastSimplify<mlir::arith::SubIOp>,
               ArithIndexCastSimplify<mlir::arith::AddIOp>,
@@ -146,5 +145,6 @@ void imex::populateIndexPropagatePatterns(mlir::MLIRContext &context,
               ArithIndexCastSimplify<mlir::arith::DivSIOp>,
               ArithIndexCastSimplify<mlir::arith::DivUIOp>,
               ArithIndexCastSimplify<mlir::arith::RemSIOp>,
-              ArithIndexCastSimplify<mlir::arith::RemUIOp>>(&context);
+              ArithIndexCastSimplify<mlir::arith::RemUIOp>>(
+          patterns.getContext());
 }

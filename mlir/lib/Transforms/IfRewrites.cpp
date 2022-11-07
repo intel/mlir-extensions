@@ -68,7 +68,6 @@ IfOpConstCond::matchAndRewrite(mlir::scf::IfOp op,
   return mlir::success();
 }
 
-void imex::populateIfRewritesPatterns(mlir::MLIRContext &context,
-                                      mlir::RewritePatternSet &patterns) {
-  patterns.insert<IfOpConstCond>(&context);
+void imex::populateIfRewritesPatterns(mlir::RewritePatternSet &patterns) {
+  patterns.insert<IfOpConstCond>(patterns.getContext());
 }

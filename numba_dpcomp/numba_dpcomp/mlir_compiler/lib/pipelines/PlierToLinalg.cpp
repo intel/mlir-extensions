@@ -638,7 +638,7 @@ struct OptimizeStridedLayoutPass
     auto *context = &getContext();
     mlir::RewritePatternSet patterns(context);
 
-    imex::populateCanonicalizationPatterns(*context, patterns);
+    imex::populateCanonicalizationPatterns(patterns);
 
     patterns.insert<ChangeLayoutReturn>(context);
 
@@ -1156,7 +1156,7 @@ struct PlierToNtensorPass
     // Convert unknown types to itself
     typeConverter.addConversion([](mlir::Type type) { return type; });
 
-    imex::populateTupleTypeConverter(context, typeConverter);
+    imex::populateTupleTypeConverter(typeConverter);
     typeConverter.addConversion(
         [](plier::SliceType type) -> llvm::Optional<mlir::Type> {
           return imex::ntensor::SliceType::get(type.getContext());
@@ -1596,7 +1596,7 @@ struct ResolveNtensorPass
     auto &ctx = getContext();
     mlir::RewritePatternSet patterns(&ctx);
 
-    imex::ntensor::populateResolveArrayOpsPatterns(ctx, patterns);
+    imex::ntensor::populateResolveArrayOpsPatterns(patterns);
 
     patterns
         .insert<GetitemArrayOpLowering, NtensorPrimitiveCallsLowering,
@@ -2140,7 +2140,7 @@ void PostPlierToLinalgPass::runOnOperation() {
   auto &context = getContext();
   mlir::RewritePatternSet patterns(&context);
 
-  imex::populateCommonOptsPatterns(context, patterns);
+  imex::populateCommonOptsPatterns(patterns);
 
   patterns.insert<SimplifyExpandDims>(&context);
 
@@ -2224,7 +2224,7 @@ void LinalgOptPass::runOnOperation() {
   auto &context = getContext();
   mlir::RewritePatternSet patterns(&context);
 
-  imex::populateCommonOptsPatterns(context, patterns);
+  imex::populateCommonOptsPatterns(patterns);
 
   patterns.insert<
       // clang-format off
@@ -2428,7 +2428,7 @@ struct AdditionalBufferize
     auto *context = &getContext();
 
     mlir::bufferization::BufferizeTypeConverter typeConverter;
-    imex::populateTupleTypeConverter(*context, typeConverter);
+    imex::populateTupleTypeConverter(typeConverter);
 
     auto materializeTupleCast =
         [](mlir::OpBuilder &builder, mlir::Type type, mlir::ValueRange inputs,
@@ -2554,7 +2554,7 @@ void PostLinalgOptPass::runOnOperation() {
   auto &context = getContext();
   mlir::RewritePatternSet patterns(&context);
 
-  imex::populateCommonOptsPatterns(context, patterns);
+  imex::populateCommonOptsPatterns(patterns);
 
   patterns.insert<OptimizeGlobalsConstsLoad, OptimizeSingleElemCopy,
                   imex::CanonicalizeReduction, imex::PromoteToParallel,

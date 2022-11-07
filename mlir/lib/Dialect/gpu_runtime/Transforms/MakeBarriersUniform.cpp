@@ -128,8 +128,8 @@ struct ConvertBarrierOp
 } // namespace
 
 void gpu_runtime::populateMakeBarriersUniformPatterns(
-    mlir::MLIRContext &context, mlir::RewritePatternSet &patterns) {
-  patterns.insert<ConvertBarrierOp>(&context);
+    mlir::RewritePatternSet &patterns) {
+  patterns.insert<ConvertBarrierOp>(patterns.getContext());
 }
 
 namespace {
@@ -150,7 +150,7 @@ struct MakeBarriersUniformPass
     auto &ctx = getContext();
     mlir::RewritePatternSet patterns(&ctx);
 
-    gpu_runtime::populateMakeBarriersUniformPatterns(ctx, patterns);
+    gpu_runtime::populateMakeBarriersUniformPatterns(patterns);
 
     mlir::GreedyRewriteConfig config;
     config.useTopDownTraversal = true; // We need to visit top barriers first

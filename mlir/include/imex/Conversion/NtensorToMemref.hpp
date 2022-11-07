@@ -15,8 +15,7 @@ class TypeConverter;
 } // namespace mlir
 
 namespace imex {
-void populateNtensorToMemrefRewritesAndTarget(mlir::MLIRContext &context,
-                                              mlir::TypeConverter &converter,
+void populateNtensorToMemrefRewritesAndTarget(mlir::TypeConverter &converter,
                                               mlir::RewritePatternSet &patterns,
                                               mlir::ConversionTarget &target);
 

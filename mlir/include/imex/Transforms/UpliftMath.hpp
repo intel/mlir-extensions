@@ -13,8 +13,7 @@ class Pass;
 } // namespace mlir
 
 namespace imex {
-void populateUpliftmathPatterns(mlir::MLIRContext &context,
-                                mlir::RewritePatternSet &patterns);
+void populateUpliftmathPatterns(mlir::RewritePatternSet &patterns);
 
 std::unique_ptr<mlir::Pass> createUpliftMathPass();
 } // namespace imex
