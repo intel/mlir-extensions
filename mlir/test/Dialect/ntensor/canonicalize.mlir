@@ -209,3 +209,13 @@ func.func @test(%arg1: !ntensor.ntensor<?x?xf32>) -> index {
 //       CHECK:   %[[IND:.*]] = arith.constant 1 : index
 //       CHECK:   %[[DIM:.*]] = ntensor.dim %[[ARG]], %[[IND]] : !ntensor.ntensor<?x?xf32>
 //       CHECK:   return %[[DIM]] : index
+
+// -----
+
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG1:.*]]: !ntensor.ntensor<?x?xf32>)
+//  CHECK-NEXT:   return %[[ARG1]] : !ntensor.ntensor<?x?xf32>
+func.func @test(%arg1: !ntensor.ntensor<?x?xf32>) -> (!ntensor.ntensor<?x?xf32>) {
+  %0 = ntensor.broadcast (%arg1) : !ntensor.ntensor<?x?xf32> -> !ntensor.ntensor<?x?xf32>
+  return %0#0 : !ntensor.ntensor<?x?xf32>
+}

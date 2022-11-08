@@ -744,6 +744,8 @@ def BroadcastOp : NTensor_OpBase<"broadcast", [
 
   let assemblyFormat =
     "attr-dict `(` $inputs `)` `:`  qualified(type($inputs)) `->` qualified(type($results))";
+
+  let hasFolder = 1;
 }
 
 

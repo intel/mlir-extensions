@@ -684,6 +684,22 @@ void imex::ntensor::ElementwiseOp::build(
   }
 }
 
+mlir::LogicalResult imex::ntensor::BroadcastOp::fold(
+    mlir::ArrayRef<mlir::Attribute> /*operands*/,
+    llvm::SmallVectorImpl<mlir::OpFoldResult> &results) {
+  assert(getInputs().size() == getResults().size());
+  if (getInputs().size() == 1) {
+    if (getInputs().front().getType().cast<mlir::ShapedType>().getShape() !=
+        getResultTypes().front().cast<mlir::ShapedType>().getShape())
+      return mlir::failure();
+
+    results.emplace_back(getInputs().front());
+    return mlir::success();
+  }
+
+  return mlir::failure();
+}
+
 static mlir::LogicalResult
 parseShape(mlir::AsmParser &parser,
            mlir::FailureOr<llvm::SmallVector<int64_t>> &shape,
