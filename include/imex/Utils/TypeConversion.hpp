@@ -1,4 +1,5 @@
-//===- GPUToSPIRVPass.h - GPUToSPIRV conversion  ---------------*- C++ -*-===//
+//===- TypeConversion.hpp - ------------------------------------*-*- C++
+//-*-===//
 //
 // Copyright 2022 Intel Corporation
 // Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -8,28 +9,21 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// This file defines the GPUToSPIRV conversion,
+/// This file defines conversion function to find insertion point for given Op
 ///
 //===----------------------------------------------------------------------===//
 
-#ifndef IMEX_GPUTOSPIRV_PASS_H_
-#define IMEX_GPUTOSPIRV_PASS_H_
-
-#include <memory>
+#pragma once
 
 namespace mlir {
-class Pass;
-struct ScfToSPIRVContextImpl;
-class ModuleOp;
-template <typename T> class OperationPass;
-
+class ConversionTarget;
+class MLIRContext;
+class RewritePatternSet;
+class TypeConverter;
 } // namespace mlir
 
 namespace imex {
-/// Create a pass
-std::unique_ptr<::mlir::OperationPass<::mlir::ModuleOp>>
-createConvertGPUXToSPIRVPass(bool mapMemorySpace = true);
-
+void populateControlFlowTypeConversionRewritesAndTarget(
+    mlir::TypeConverter &typeConverter, mlir::RewritePatternSet &patterns,
+    mlir::ConversionTarget &target);
 } // namespace imex
-
-#endif // IMEX_GPUTOSPIRV_PASS_H_

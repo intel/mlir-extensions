@@ -36,7 +36,6 @@ func.func(llvm-request-c-wrappers)
 serialize-spirv
 convert-gpu-to-gpux
 convert-func-to-llvm
-# Passes to be enable later
 convert-gpux-to-llvm
 convert-memref-to-llvm
 reconcile-unrealized-casts

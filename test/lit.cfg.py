@@ -39,6 +39,8 @@ config.substitutions.append(('%mlir_c_runner_utils', config.mlir_c_runner_utils)
 config.substitutions.append(('%vulkan_runtime_wrappers', config.vulkan_runtime_wrappers))
 config.substitutions.append(('%imex_runner', config.imex_runner))
 config.substitutions.append(('%python_executable', config.python_executable))
+config.substitutions.append(('%sycl_runtime', config.sycl_runtime))
+config.substitutions.append(('%levelzero_runtime', config.levelzero_runtime))
 
 llvm_config.with_system_environment(
     ['HOME', 'INCLUDE', 'LIB', 'TMP', 'TEMP'])

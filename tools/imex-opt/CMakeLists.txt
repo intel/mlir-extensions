@@ -5,6 +5,7 @@ set(LIBS
         ${conversion_libs}
 	MLIROptLib
         IMEXTransforms
+        IMEXUtil
         )
 add_llvm_executable(imex-opt imex-opt.cpp)
 

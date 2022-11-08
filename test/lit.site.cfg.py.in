@@ -33,6 +33,7 @@ config.mlir_runner_utils_dir = "@MLIR_RUNNER_UTILS_DIR@"
 config.imex_src_root = "@IMEX_SOURCE_DIR@"
 config.imex_obj_root = "@IMEX_BINARY_DIR@"
 config.imex_tools_dir = "@IMEX_TOOLS_DIR@"
+config.imex_lib_dir = "@IMEX_LIB_DIR@"
 if sys.platform.startswith('win32'):
     config.shlib_prefix = ""
 else:
@@ -41,6 +42,8 @@ config.imex_runner = os.path.normpath(os.path.join(config.imex_tools_dir, "imex-
 config.mlir_runner_utils = os.path.normpath(os.path.join(config.mlir_runner_utils_dir, config.shlib_prefix + "mlir_runner_utils" + config.llvm_shlib_ext))
 config.mlir_c_runner_utils = os.path.normpath(os.path.join(config.mlir_runner_utils_dir, config.shlib_prefix + "mlir_c_runner_utils" + config.llvm_shlib_ext))
 config.vulkan_runtime_wrappers = os.path.normpath(os.path.join(config.mlir_runner_utils_dir, config.shlib_prefix + "vulkan-runtime-wrappers" + config.llvm_shlib_ext))
+config.sycl_runtime = os.path.normpath(os.path.join(config.imex_lib_dir, config.shlib_prefix + "sycl-runtime" + config.llvm_shlib_ext))
+config.levelzero_runtime = os.path.normpath(os.path.join(config.imex_lib_dir, config.shlib_prefix + "level-zero-runtime" + config.llvm_shlib_ext))
 
 # Support substitution of the tools_dir with user parameters. This is
 # used when we can't determine the tool dir at configuration time.

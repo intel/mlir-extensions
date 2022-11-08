@@ -2,6 +2,9 @@
 //                                            --runner mlir-cpu-runner -e main \
 //                                            --shared-libs=%mlir_runner_utils \
 //                                            --entry-point-result=void | FileCheck %s
+// RUN: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-llvm.pp \
+//                                            -e main -entry-point-result=void \
+//                                            --shared-libs=%mlir_runner_utils,%sycl_runtime | FileCheck %s
 #map0 = affine_map<(d0, d1, d2, d3, d4) -> (d0, d1 + d3, d4)>
 #map1 = affine_map<(d0, d1, d2, d3, d4) -> (d3, d4, d2)>
 #map2 = affine_map<(d0, d1, d2, d3, d4) -> (d0, d1, d2)>
@@ -10,14 +13,20 @@ module @conv_1d {
     %c0 = arith.constant 0.0 : f32
     %0 = tensor.empty() : tensor<1x12x1xf32>
     %1 = linalg.fill ins(%c0 : f32) outs(%0 : tensor<1x12x1xf32>) -> tensor<1x12x1xf32>
-    %2 = linalg.generic {indexing_maps = [#map0, #map1, #map2], iterator_types = ["parallel", "parallel", "parallel", "reduction", "reduction"]} ins(%arg0, %arg1 : tensor<1x14x3xf32>, tensor<3x3x1xf32>) outs(%1 : tensor<1x12x1xf32>) attrs =  {iterator_ranges = [1, 12, 1, 3, 3]} {
-    ^bb0(%arg2: f32, %arg3: f32, %arg4: f32):
-      %3 = arith.mulf %arg2, %arg3 : f32
-      %4 = arith.addf %arg4, %3 : f32
-      linalg.yield %4 : f32
-    } -> tensor<1x12x1xf32>
+    %2 = linalg.generic {
+            indexing_maps = [#map0, #map1, #map2], 
+            iterator_types = ["parallel", "parallel", "parallel", "reduction", "reduction"]
+          } 
+          ins(%arg0, %arg1 : tensor<1x14x3xf32>, tensor<3x3x1xf32>) 
+          outs(%1 : tensor<1x12x1xf32>) 
+          attrs =  {iterator_ranges = [1, 12, 1, 3, 3]} {
+            ^bb0(%arg2: f32, %arg3: f32, %arg4: f32):
+              %3 = arith.mulf %arg2, %arg3 : f32
+              %4 = arith.addf %arg4, %3 : f32
+              linalg.yield %4 : f32
+          } -> tensor<1x12x1xf32>
     return %2 : tensor<1x12x1xf32>
-  }
+    }
 
   func.func @main() {
     %0 = arith.constant dense<[[[1.0, 2.0, 3.0],
