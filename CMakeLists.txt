@@ -95,6 +95,7 @@ set(LLVM_LIT_ARGS "-sv" CACHE STRING "lit default options")
 set(IMEX_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 # LLVM_EXTERNAL_PROJECTS build puts library, executables and tools in LLVM's CMAKE_BINARY_DIR
 set(IMEX_BINARY_DIR ${CMAKE_BINARY_DIR})
+set(IMEX_LIB_DIR ${IMEX_BINARY_DIR}/lib)
 
 include(sanitizers)
 
