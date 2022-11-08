@@ -465,7 +465,7 @@ func.func @test(%arg1: f32, %arg2: f32, %arg3: f32) -> !ntensor.ntensor<3xf32> {
 
 // CHECK-LABEL: func @test
 //  CHECK-SAME:   (%[[ARG1:.*]]: !ntensor.ntensor<?x?xf32>, %[[ARG2:.*]]: !ntensor.ntensor<?x?xf32>)
-//  CHECK-NEXT:   %[[RES]]:2 = ntensor.broadcast(%[[ARG1]], %[[ARG2]]) : !ntensor.ntensor<?x?xf32>, !ntensor.ntensor<?x?xf32> -> !ntensor.ntensor<?x?xf32>, !ntensor.ntensor<?x?xf32>
+//  CHECK-NEXT:   %[[RES:.*]]:2 = ntensor.broadcast(%[[ARG1]], %[[ARG2]]) : !ntensor.ntensor<?x?xf32>, !ntensor.ntensor<?x?xf32> -> !ntensor.ntensor<?x?xf32>, !ntensor.ntensor<?x?xf32>
 //  CHECK-NEXT:   return %[[RES]]#0, %[[RES]]#1 : !ntensor.ntensor<?x?xf32>, !ntensor.ntensor<?x?xf32>
 func.func @test(%arg1: !ntensor.ntensor<?x?xf32>, %arg2: !ntensor.ntensor<?x?xf32>) -> (!ntensor.ntensor<?x?xf32>, !ntensor.ntensor<?x?xf32>) {
   %0:2 = ntensor.broadcast (%arg1, %arg2) : !ntensor.ntensor<?x?xf32>, !ntensor.ntensor<?x?xf32> -> !ntensor.ntensor<?x?xf32>, !ntensor.ntensor<?x?xf32>
