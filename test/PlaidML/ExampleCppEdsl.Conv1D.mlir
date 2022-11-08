@@ -15,11 +15,11 @@ module @conv_1d {
     %0 = tensor.empty() : tensor<1x12x1xf32>
     %1 = linalg.fill ins(%c0 : f32) outs(%0 : tensor<1x12x1xf32>) -> tensor<1x12x1xf32>
     %2 = linalg.generic {
-            indexing_maps = [#map0, #map1, #map2], 
+            indexing_maps = [#map0, #map1, #map2],
             iterator_types = ["parallel", "parallel", "parallel", "reduction", "reduction"]
-          } 
-          ins(%arg0, %arg1 : tensor<1x14x3xf32>, tensor<3x3x1xf32>) 
-          outs(%1 : tensor<1x12x1xf32>) 
+          }
+          ins(%arg0, %arg1 : tensor<1x14x3xf32>, tensor<3x3x1xf32>)
+          outs(%1 : tensor<1x12x1xf32>)
           attrs =  {iterator_ranges = [1, 12, 1, 3, 3]} {
             ^bb0(%arg2: f32, %arg3: f32, %arg4: f32):
               %3 = arith.mulf %arg2, %arg3 : f32

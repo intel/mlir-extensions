@@ -32,11 +32,11 @@ func.func @test(%arg0: tensor<10x20xf32>)->tensor<10x20xf32>{
     %0 = tensor.empty() : tensor<10x1xf32>
     %1 = linalg.fill ins(%cst_0 : f32) outs(%0 : tensor<10x1xf32>) -> tensor<10x1xf32>
     %2 = linalg.generic {
-            indexing_maps = [#map0, #map1], 
+            indexing_maps = [#map0, #map1],
             iterator_types = ["parallel", "reduction"]
-          } 
-          ins(%arg0 : tensor<10x20xf32>) 
-          outs(%1 : tensor<10x1xf32>) 
+          }
+          ins(%arg0 : tensor<10x20xf32>)
+          outs(%1 : tensor<10x1xf32>)
           attrs =  {iterator_ranges = [10, 20], name = "softmax"} {
             ^bb0(%arg1: f32, %arg2: f32):
               %12 = arith.cmpf ogt, %arg2, %arg1 : f32
@@ -45,10 +45,10 @@ func.func @test(%arg0: tensor<10x20xf32>)->tensor<10x20xf32>{
          } -> tensor<10x1xf32>
     %3 = tensor.empty() : tensor<10x20xf32>
     %4 = linalg.generic {
-            indexing_maps = [#map0, #map1, #map0], 
+            indexing_maps = [#map0, #map1, #map0],
             iterator_types = ["parallel", "parallel"]
-          } 
-          ins(%arg0, %2 : tensor<10x20xf32>, tensor<10x1xf32>) 
+          }
+          ins(%arg0, %2 : tensor<10x20xf32>, tensor<10x1xf32>)
           outs(%3 : tensor<10x20xf32>) {
             ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
               %12 = arith.subf %arg1, %arg2 : f32
@@ -56,9 +56,9 @@ func.func @test(%arg0: tensor<10x20xf32>)->tensor<10x20xf32>{
           } -> tensor<10x20xf32>
     %5 = tensor.empty() : tensor<10x20xf32>
     %6 = linalg.generic {
-            indexing_maps = [#map0, #map0], 
+            indexing_maps = [#map0, #map0],
             iterator_types = ["parallel", "parallel"]
-          } 
+          }
           ins(%4 : tensor<10x20xf32>) outs(%5 : tensor<10x20xf32>) {
             ^bb0(%arg1: f32, %arg2: f32):
               %12 = math.exp %arg1 : f32
@@ -67,11 +67,11 @@ func.func @test(%arg0: tensor<10x20xf32>)->tensor<10x20xf32>{
     %7 = tensor.empty() : tensor<10x1xf32>
     %8 = linalg.fill ins(%cst : f32) outs(%7 : tensor<10x1xf32>) -> tensor<10x1xf32>
     %9 = linalg.generic {
-            indexing_maps = [#map0, #map1], 
+            indexing_maps = [#map0, #map1],
             iterator_types = ["parallel", "reduction"]
-          } 
-          ins(%6 : tensor<10x20xf32>) 
-          outs(%8 : tensor<10x1xf32>) 
+          }
+          ins(%6 : tensor<10x20xf32>)
+          outs(%8 : tensor<10x1xf32>)
           attrs = {iterator_ranges = [10, 20], name = "softmax"} {
             ^bb0(%arg1: f32, %arg2: f32):
               %12 = arith.addf %arg2, %arg1 : f32
@@ -79,10 +79,10 @@ func.func @test(%arg0: tensor<10x20xf32>)->tensor<10x20xf32>{
           } -> tensor<10x1xf32>
     %10 = tensor.empty() : tensor<10x20xf32>
     %11 = linalg.generic {
-            indexing_maps = [#map0, #map1, #map0], 
+            indexing_maps = [#map0, #map1, #map0],
             iterator_types = ["parallel", "parallel"]
-          } 
-          ins(%6, %9 : tensor<10x20xf32>, tensor<10x1xf32>) 
+          }
+          ins(%6, %9 : tensor<10x20xf32>, tensor<10x1xf32>)
           outs(%10 : tensor<10x20xf32>) {
             ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
               %12 = arith.divf %arg1, %arg2 : f32
@@ -91,10 +91,10 @@ func.func @test(%arg0: tensor<10x20xf32>)->tensor<10x20xf32>{
     return %11 : tensor<10x20xf32>
   }
 }
-// CHECK: Unranked Memref base@ = {{0x[-9a-f]*}} 
-// CHECK-SAME: rank = {{.}} offset = {{.}} sizes = [10, 20] strides = {{.*}} data = 
-// CHECK-NEXT:  [0.0715685, 0.0321578, 0.0434085, 0.0715685, 0.0321578, 0.0434085, 0.0715685, 0.0321578, 0.0585954, 0.0434085, 0.0715685, 0.0321578, 0.0434085, 0.0715685, 0.0321578, 0.0434085, 0.0715685, 0.0321578, 0.0585954, 0.0434085] 
-// CHECK-NEXT:  [0.0794463, 0.0239288, 0.0394519, 0.0794463, 0.0239288, 0.0394519, 0.0794463, 0.0216516, 0.0532544, 0.0588553, 0.0794463, 0.0239288, 0.0394519, 0.0794463, 0.0239288, 0.0394519, 0.0794463, 0.0239288, 0.0532544, 0.0588553] 
+// CHECK: Unranked Memref base@ = {{0x[-9a-f]*}}
+// CHECK-SAME: rank = {{.}} offset = {{.}} sizes = [10, 20] strides = {{.*}} data =
+// CHECK-NEXT:  [0.0715685, 0.0321578, 0.0434085, 0.0715685, 0.0321578, 0.0434085, 0.0715685, 0.0321578, 0.0585954, 0.0434085, 0.0715685, 0.0321578, 0.0434085, 0.0715685, 0.0321578, 0.0434085, 0.0715685, 0.0321578, 0.0585954, 0.0434085]
+// CHECK-NEXT:  [0.0794463, 0.0239288, 0.0394519, 0.0794463, 0.0239288, 0.0394519, 0.0794463, 0.0216516, 0.0532544, 0.0588553, 0.0794463, 0.0239288, 0.0394519, 0.0794463, 0.0239288, 0.0394519, 0.0794463, 0.0239288, 0.0532544, 0.0588553]
 // CHECK-NEXT:  [0.0417064, 0.0187399, 0.0252962, 0.0417064, 0.0187399, 0.0252962, 0.0417064, 0.0187399, 0.0341463, 0.0252962, 0.11337,   0.0341463, 0.0562978, 0.11337,   0.0308969, 0.0562978, 0.11337,   0.0308969, 0.0759941, 0.0839865]
 // CHECK-NEXT:  [0.0798098, 0.0217507, 0.0396324, 0.0798098, 0.0240382, 0.0396324, 0.0798098, 0.0240382, 0.0534981, 0.0591245, 0.0798098, 0.0217507, 0.0396324, 0.0798098, 0.0217507, 0.0396324, 0.0798098, 0.0240382, 0.0534981, 0.0591245]
 // CHECK-NEXT:  [0.0417064, 0.0187399, 0.0252962, 0.0417064, 0.0187399, 0.0252962, 0.0417064, 0.0187399, 0.0341463, 0.0252962, 0.11337,   0.0308969, 0.0562978, 0.11337,   0.0341463, 0.0562978, 0.11337,   0.0308969, 0.0759941, 0.0839865]
