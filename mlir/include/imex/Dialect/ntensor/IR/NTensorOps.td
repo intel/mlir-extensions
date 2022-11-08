@@ -746,6 +746,7 @@ def BroadcastOp : NTensor_OpBase<"broadcast", [
     "attr-dict `(` $inputs `)` `:`  qualified(type($inputs)) `->` qualified(type($results))";
 
   let hasFolder = 1;
+  let hasCanonicalizer = 1;
 }
 
 

@@ -700,6 +700,54 @@ mlir::LogicalResult imex::ntensor::BroadcastOp::fold(
   return mlir::failure();
 }
 
+namespace {
+struct BroadcastSameStaticShape
+    : public mlir::OpRewritePattern<imex::ntensor::BroadcastOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::BroadcastOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto inputs = op.getInputs();
+    if (inputs.size() < 2)
+      return mlir::failure();
+
+    auto firstType = inputs.front().getType().cast<mlir::ShapedType>();
+    if (!firstType.hasStaticShape())
+      return mlir::failure();
+
+    auto shape = firstType.getShape();
+    for (auto arg : inputs.drop_front())
+      if (arg.getType().cast<mlir::ShapedType>().getShape() != shape)
+        return mlir::failure();
+
+    auto loc = op.getLoc();
+    llvm::SmallVector<mlir::Value> newResults(inputs.size());
+    for (auto [i, it] :
+         llvm::enumerate(llvm::zip(op.getInputs(), op.getResults()))) {
+      auto [src, res] = it;
+      auto srcType = src.getType();
+      auto dstType = res.getType();
+
+      if (srcType != dstType) {
+        newResults[i] =
+            rewriter.create<imex::ntensor::CastOp>(loc, dstType, src);
+      } else {
+        newResults[i] = src;
+      }
+    }
+
+    rewriter.replaceOp(op, newResults);
+    return mlir::success();
+  }
+};
+} // namespace
+
+void imex::ntensor::BroadcastOp::getCanonicalizationPatterns(
+    ::mlir::RewritePatternSet &results, ::mlir::MLIRContext *context) {
+  results.insert<BroadcastSameStaticShape>(context);
+}
+
 static mlir::LogicalResult
 parseShape(mlir::AsmParser &parser,
            mlir::FailureOr<llvm::SmallVector<int64_t>> &shape,
