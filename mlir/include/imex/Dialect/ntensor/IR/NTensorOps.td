@@ -730,5 +730,21 @@ def FromElementsOp : NTensor_OpBase<"from_elements", [
   let assemblyFormat = "$elements attr-dict `:` qualified(type($result))";
 }
 
+def BroadcastOp : NTensor_OpBase<"broadcast", [
+    Pure, SameVariadicOperandSize]> {
+  let summary = "Array broadcast operation";
+  let description = [{
+    Broadcast multiple arrays according to numpy broadcast rules. Single-array
+    input is also allowed and it is no-op.
+  }];
+
+
+  let arguments = (ins Arg<Variadic<NTensor_Tensor>, "", [MemRead]>:$inputs);
+  let results = (outs Res<Variadic<NTensor_Tensor>, "", [MemAlloc<DefaultResource>]>:$results);
+
+  let assemblyFormat =
+    "attr-dict `(` $inputs `)` `:`  qualified(type($inputs)) `->` qualified(type($results))";
+}
+
 
 #endif // NTENSOR_OPS
