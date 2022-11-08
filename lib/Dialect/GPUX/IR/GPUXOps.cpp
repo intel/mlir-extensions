@@ -67,6 +67,7 @@ void LaunchFuncOp::build(
   auto kernelSymbol = mlir::SymbolRefAttr::get(
       kernelModule.getNameAttr(),
       {mlir::SymbolRefAttr::get(kernelFunc.getNameAttr())});
+  // Verify this
   result.addAttribute(getKernelAttrName(result.name), kernelSymbol);
   mlir::SmallVector<int32_t, 10> segmentSizes(10, 1);
   segmentSizes.front() = asyncDependencies.size();
@@ -76,10 +77,19 @@ void LaunchFuncOp::build(
                       builder.getDenseI32ArrayAttr(segmentSizes));
 }
 
+mlir::StringAttr LaunchFuncOp::getKernelModuleName() {
+  return getKernel().getRootReference();
+}
+
+mlir::StringAttr LaunchFuncOp::getKernelName() {
+  return getKernel().getLeafReference();
+}
+
 } // namespace gpux
 } // namespace imex
 
 #include <imex/Dialect/GPUX/IR/GPUXOpsDialect.cpp.inc>
+
 #define GET_TYPEDEF_CLASSES
 #include <imex/Dialect/GPUX/IR/GPUXOpsTypes.cpp.inc>
 #define GET_OP_CLASSES
