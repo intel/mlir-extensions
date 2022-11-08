@@ -23,9 +23,22 @@ else()
     list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/modules")
 endif()
 
+# Expected LLVM SHA
+file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/build_tools/llvm_version.txt EXPECTED_LLVM_SHA)
+message(STATUS "Expected llvm sha: \"${EXPECTED_LLVM_SHA}\"")
 
 if(IMEX_EXTERNAL_PROJECT_BUILD)
     message(STATUS "Building IMEX with LLVM_EXTERNAL_PROJECTS")
+    # Check if the llvm SHA is consistent with llvm_version.txt
+    list(APPEND CMAKE_MODULE_PATH "${LLVM_MAIN_SRC_DIR}/cmake/modules")
+    include(VersionFromVCS)
+    get_source_info(${LLVM_MAIN_SRC_DIR}/.. LLVM_SHA repository)
+    message(STATUS "Actual llvm sha:   \"${LLVM_SHA}\"")
+
+    if (NOT EXPECTED_LLVM_SHA STREQUAL LLVM_SHA)
+        message(FATAL_ERROR "Invalid llvm version")
+    endif()
+
     set(MLIR_MAIN_SRC_DIR ${LLVM_MAIN_SRC_DIR}/../mlir )
     set(MLIR_INCLUDE_DIR ${MLIR_MAIN_SRC_DIR}/include )
     set(MLIR_GENERATED_INCLUDE_DIR ${LLVM_BINARY_DIR}/tools/mlir/include)
@@ -38,6 +51,17 @@ if(IMEX_EXTERNAL_PROJECT_BUILD)
 else()
     message(STATUS "Building IMEX with external MLIR")
     find_package(MLIR REQUIRED CONFIG)
+
+    # Check if the llvm SHA is consistent with llvm_version.txt
+    file(STRINGS ${LLVM_INCLUDE_DIR}/llvm/Support/VCSRevision.h REVISION_FILE_DATA)
+    message(DEBUG "VCSRevision: ${REVISION_FILE_DATA}")
+    string(REGEX MATCH "\"([^\"]*)\"" LLVM_SHA ${REVISION_FILE_DATA})
+    string(REPLACE "\"" "" LLVM_SHA ${LLVM_SHA})
+    message(STATUS "llvm sha: \"${LLVM_SHA}\"")
+
+    if (NOT EXPECTED_LLVM_SHA STREQUAL LLVM_SHA)
+        message(FATAL_ERROR "Invalid llvm version")
+    endif()
 
     message(STATUS "Using MLIRConfig.cmake in: ${MLIR_DIR}")
     message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")

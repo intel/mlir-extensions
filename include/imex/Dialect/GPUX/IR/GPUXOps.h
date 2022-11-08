@@ -24,8 +24,10 @@
 #include <mlir/Interfaces/SideEffectInterfaces.h>
 
 #include <imex/Dialect/GPUX/IR/GPUXOpsDialect.h.inc>
+
 #define GET_TYPEDEF_CLASSES
 #include <imex/Dialect/GPUX/IR/GPUXOpsTypes.h.inc>
+
 #define GET_OP_CLASSES
 #include <imex/Dialect/GPUX/IR/GPUXOps.h.inc>
 

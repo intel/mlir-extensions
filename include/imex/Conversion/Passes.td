@@ -308,4 +308,25 @@ def ConvertGPUToGPUX: Pass<"convert-gpu-to-gpux"> {
   let dependentDialects = ["::imex::gpux::GPUXDialect"];
 }
 
+
+//===----------------------------------------------------------------------===//
+// GPUXToLLVM
+//===----------------------------------------------------------------------===//
+
+def ConvertGPUXToLLVM : Pass<"convert-gpux-to-llvm", "::mlir::ModuleOp"> {
+  let summary = "Convert from the GPUX dialect to LLVM dialect with GPU runtime calls";
+  let description = [{
+    Converts gpux dialect operations into the LLVM IR dialect operations.
+
+    #### Input invariant
+
+    #### Output IR
+
+  }];
+  let constructor = "imex::createConvertGPUXToLLVMPass()";
+  let dependentDialects = [];
+  let options = [];
+}
+
+
 #endif // _IMEX_CONVERSION_PASSES_TD_INCLUDED_
