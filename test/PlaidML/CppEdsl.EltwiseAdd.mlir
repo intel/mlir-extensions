@@ -10,13 +10,19 @@
 module @eltwise_add {
   func.func @test(%arg0: tensor<10x20xf32>, %arg1: tensor<10x20xf32>) -> tensor<10x20xf32> {
     %0 = tensor.empty() : tensor<10x20xf32>
-    %1 = linalg.generic {indexing_maps = [#map, #map, #map], iterator_types = ["parallel", "parallel"]} ins(%arg0, %arg1 : tensor<10x20xf32>, tensor<10x20xf32>) outs(%0 : tensor<10x20xf32>) {
-    ^bb0(%arg2: f32, %arg3: f32, %arg4: f32):
-      %2 = arith.addf %arg2, %arg3 : f32
-      linalg.yield %2 : f32
-    } -> tensor<10x20xf32>
+    %1 = linalg.generic {
+            indexing_maps = [#map, #map, #map], 
+            iterator_types = ["parallel", "parallel"]
+         } 
+         ins(%arg0, %arg1 : tensor<10x20xf32>, tensor<10x20xf32>) 
+         outs(%0 : tensor<10x20xf32>) {
+            ^bb0(%arg2: f32, %arg3: f32, %arg4: f32):
+              %2 = arith.addf %arg2, %arg3 : f32
+              linalg.yield %2 : f32
+         } -> tensor<10x20xf32>
     return %1 : tensor<10x20xf32>
   }
+
   func.func @main() {
     %0 = arith.constant dense<[[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0],
                                [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0],
