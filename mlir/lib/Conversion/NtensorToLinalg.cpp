@@ -374,6 +374,8 @@ struct ConvertDimOp : public mlir::OpRewritePattern<imex::ntensor::DimOp> {
   }
 };
 
+/// Get broadcasted dimension value from 2 values, if v1 value is equal to 1
+/// or dims are equal then select val2 otherwise val1.
 static mlir::Value broadcastDim(mlir::OpBuilder &builder, mlir::Location loc,
                                 mlir::Value val1, mlir::Value val2) {
   assert(val1.getType().isa<mlir::IndexType>());
@@ -387,6 +389,9 @@ static mlir::Value broadcastDim(mlir::OpBuilder &builder, mlir::Location loc,
   return builder.create<mlir::arith::SelectOp>(loc, tmp, val2, val1);
 }
 
+/// Generate code for expanding specified dim of value src to corresponding
+/// value in targetShape. Assume src dimension is either 1 or equal to the
+/// target shape.
 static mlir::Value expandDim(mlir::OpBuilder &builder, mlir::Location loc,
                              mlir::Value initial, mlir::Value src, unsigned dim,
                              mlir::ValueRange targetShape) {
@@ -395,7 +400,7 @@ static mlir::Value expandDim(mlir::OpBuilder &builder, mlir::Location loc,
   auto context = builder.getContext();
   auto srcType = src.getType().cast<mlir::ShapedType>();
   auto numDims = static_cast<unsigned>(srcType.getRank());
-  auto shape = llvm::to_vector<8>(srcType.getShape());
+  auto shape = llvm::to_vector(srcType.getShape());
   shape[dim] = mlir::ShapedType::kDynamicSize;
   mlir::Type targetType =
       mlir::RankedTensorType::get(shape, srcType.getElementType());
@@ -418,7 +423,6 @@ static mlir::Value expandDim(mlir::OpBuilder &builder, mlir::Location loc,
   auto trueBody = [&](mlir::OpBuilder &builder, mlir::Location loc) {
     assert(dim < shape.size());
     shape[dim] = 1;
-    auto casted = src; // TODO
     auto init = builder
                     .create<mlir::tensor::EmptyOp>(loc, newShape,
                                                    srcType.getElementType())
@@ -444,7 +448,7 @@ static mlir::Value expandDim(mlir::OpBuilder &builder, mlir::Location loc,
     };
 
     auto expanded = builder.create<mlir::linalg::GenericOp>(
-        loc, init.getType(), casted, init, maps, iterators, body);
+        loc, init.getType(), src, init, maps, iterators, body);
     auto res = builder.createOrFold<mlir::tensor::CastOp>(
         loc, targetType, expanded.getResult(0));
     builder.create<mlir::scf::YieldOp>(loc, res);
@@ -460,6 +464,7 @@ static mlir::Value expandDim(mlir::OpBuilder &builder, mlir::Location loc,
       .getResult(0);
 }
 
+/// Expand all dims of val to targetShape.
 static mlir::Value expandDims(mlir::OpBuilder &builder, mlir::Location loc,
                               mlir::Value val, unsigned numDims,
                               mlir::ValueRange targetShape) {
