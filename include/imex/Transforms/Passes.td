@@ -63,4 +63,17 @@ def SetSPIRVAbiAttribute : Pass<"set-spirv-abi-attrs", "::mlir::gpu::GPUModuleOp
   ];
 }
 
+def AddOuterParallelLoop : Pass<"imex-add-outer-parallel-loop", "::mlir::func::FuncOp"> {
+  let summary = "add an outer parallel loop when there is not";
+  let description = [{
+    When the original func does not have an outer parallel loop, this pass adds
+    one so that the immediately followed pass gpu-map-parallel-loops can work.
+  }];
+  let constructor = "imex::createAddOuterParallelLoopPass()";
+  let dependentDialects = [
+    "::mlir::gpu::GPUDialect",
+    "::mlir::scf::SCFDialect"
+    ];
+}
+
 #endif // _IMEX_TRANSFORMS_PASSES_TD_INCLUDED_
