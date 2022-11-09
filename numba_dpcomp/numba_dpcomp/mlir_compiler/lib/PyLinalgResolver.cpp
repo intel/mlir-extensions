@@ -445,16 +445,7 @@ static mlir::Value toNTensor(mlir::Location loc, mlir::OpBuilder &builder,
     return builder.create<imex::ntensor::FromTensorOp>(
         loc, toNTensorType(tensorType), val);
 
-  if (srcType.isa<imex::ntensor::NTensorType>())
-    return val;
-
-  if (imex::ntensor::NTensorType::isValidElementType(srcType)) {
-    auto retType = imex::ntensor::NTensorType::get(llvm::None, srcType);
-    return builder.create<imex::ntensor::FromElementsOp>(loc, retType, val);
-  }
-
-  imex::reportError(llvm::Twine("toNTensor: invalid source type ") +
-                    toStr(srcType));
+  return val;
 }
 
 static py::object
@@ -608,17 +599,28 @@ static py::object broadcastImpl(py::capsule context, py::tuple args,
 
   llvm::SmallVector<mlir::Value> mlirArgs(args.size());
 
-  int64_t rank = 0;
+  int64_t rank = -1;
   for (auto [i, obj] : llvm::enumerate(args)) {
     auto val =
         toNTensor(loc, builder, ctx.context.unwrapVal(loc, builder, obj));
 
-    rank = std::max(rank, val.getType().cast<mlir::ShapedType>().getRank());
+    auto srcType = val.getType();
+    if (!srcType.isa<imex::ntensor::NTensorType>()) {
+      if (!imex::ntensor::NTensorType::isValidElementType(srcType))
+        imex::reportError(llvm::Twine("broadcast: invalid source type ") +
+                          toStr(srcType));
+
+      auto retType = imex::ntensor::NTensorType::get(llvm::None, srcType);
+      val = builder.create<imex::ntensor::FromElementsOp>(loc, retType, val);
+    } else {
+      rank = std::max(rank, srcType.cast<mlir::ShapedType>().getRank());
+    }
+
     mlirArgs[i] = val;
   }
 
   llvm::SmallVector<mlir::Type> resTypes(args.size());
-  llvm::SmallVector<int64_t> resShape(static_cast<size_t>(rank),
+  llvm::SmallVector<int64_t> resShape(rank >= 0 ? static_cast<size_t>(rank) : 0,
                                       mlir::ShapedType::kDynamicSize);
   for (auto [i, arg] : llvm::enumerate(mlirArgs))
     resTypes[i] = arg.getType().cast<mlir::ShapedType>().clone(resShape);
@@ -661,7 +663,11 @@ static py::object broadcastImpl(py::capsule context, py::tuple args,
     auto srcType = res.getType().cast<mlir::ShapedType>();
     auto dstType = mlir::RankedTensorType::get(srcType.getShape(),
                                                srcType.getElementType());
-    res = builder.create<imex::ntensor::ToTensorOp>(loc, dstType, res);
+    if (rank >= 0) {
+      res = builder.create<imex::ntensor::ToTensorOp>(loc, dstType, res);
+    } else {
+      res = builder.create<imex::ntensor::LoadOp>(loc, res);
+    }
     ret[i] = ctx.context.createVar(context, res);
   }
 
