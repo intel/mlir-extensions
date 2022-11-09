@@ -589,10 +589,6 @@ static auto genericOpBodyResultTypes(mlir::ValueRange outputs) {
 
 static py::object broadcastImpl(py::capsule context, py::tuple args,
                                 py::handle resultType) {
-  // TODO: remove this
-  if (1 == args.size())
-    return args[0];
-
   auto &ctx = getPyContext(context);
   auto loc = ctx.loc;
   auto &builder = ctx.builder;
