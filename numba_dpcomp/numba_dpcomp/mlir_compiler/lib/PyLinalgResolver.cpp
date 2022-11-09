@@ -24,6 +24,7 @@
 #include "imex/Dialect/imex_util/Dialect.hpp"
 #include "imex/Dialect/ntensor/IR/NTensorOps.hpp"
 #include "imex/Dialect/plier/Dialect.hpp"
+#include "imex/Transforms/CastUtils.hpp"
 #include "imex/Transforms/ConstUtils.hpp"
 #include "imex/Transforms/FuncUtils.hpp"
 #include "imex/Utils.hpp"
@@ -428,6 +429,25 @@ static mlir::Value toTensor(mlir::Location loc, mlir::OpBuilder &builder,
   return val;
 }
 
+static mlir::Type toNTensorType(mlir::ShapedType type) {
+  return imex::ntensor::NTensorType::get(type.getShape(),
+                                         type.getElementType());
+}
+
+static mlir::Value toNTensor(mlir::Location loc, mlir::OpBuilder &builder,
+                             mlir::Value val) {
+  auto srcType = val.getType();
+  if (auto memrefType = srcType.dyn_cast<mlir::MemRefType>())
+    return builder.create<imex::ntensor::FromMemrefOp>(
+        loc, toNTensorType(memrefType), val);
+
+  if (auto tensorType = srcType.dyn_cast<mlir::RankedTensorType>())
+    return builder.create<imex::ntensor::FromTensorOp>(
+        loc, toNTensorType(tensorType), val);
+
+  return val;
+}
+
 static py::object
 getArgs(py::handle inspect, py::handle func,
         llvm::function_ref<py::object(mlir::Value)> createVar,
@@ -567,264 +587,86 @@ static auto genericOpBodyResultTypes(mlir::ValueRange outputs) {
   return ret;
 }
 
-static mlir::Value broadcastDim(mlir::OpBuilder &builder, mlir::Location loc,
-                                mlir::Value val1, mlir::Value val2) {
-  assert(val1.getType().isa<mlir::IndexType>());
-  assert(val2.getType().isa<mlir::IndexType>());
-  auto one = builder.create<mlir::arith::ConstantIndexOp>(loc, 1);
-  auto isOne = builder.create<mlir::arith::CmpIOp>(
-      loc, mlir::arith::CmpIPredicate::eq, val1, one);
-  auto tmp = builder.create<mlir::arith::SelectOp>(loc, isOne, val2, val1);
-  auto isSame = builder.create<mlir::arith::CmpIOp>(
-      loc, mlir::arith::CmpIPredicate::eq, val1, val2);
-  return builder.create<mlir::arith::SelectOp>(loc, isSame, val1, tmp);
-}
-
-static mlir::Value expandDim(mlir::OpBuilder &builder, mlir::Location loc,
-                             mlir::Value initial, mlir::Value src, unsigned dim,
-                             mlir::ValueRange targetShape) {
-  assert(initial.getType().isa<mlir::RankedTensorType>());
-  assert(src.getType().isa<mlir::RankedTensorType>());
-  auto context = builder.getContext();
-  auto srcType = src.getType().cast<mlir::ShapedType>();
-  auto numDims = static_cast<unsigned>(srcType.getRank());
-  auto shape = llvm::to_vector<8>(srcType.getShape());
-  shape[dim] = mlir::ShapedType::kDynamicSize;
-  mlir::Type targetType =
-      mlir::RankedTensorType::get(shape, srcType.getElementType());
-  auto dimVal = builder.create<mlir::tensor::DimOp>(loc, initial, dim);
-  auto one = builder.create<mlir::arith::ConstantIndexOp>(loc, 1);
-  mlir::Value cond = builder.create<mlir::arith::CmpIOp>(
-      loc, mlir::arith::CmpIPredicate::eq, one, dimVal);
-  mlir::Value cond2 = builder.create<mlir::arith::CmpIOp>(
-      loc, mlir::arith::CmpIPredicate::ne, targetShape[dim], dimVal);
-  cond = builder.create<mlir::arith::AndIOp>(loc, cond, cond2);
-  llvm::SmallVector<mlir::OpFoldResult> newShape(numDims);
-  for (unsigned i = 0; i < numDims; ++i) {
-    if (i == dim) {
-      newShape[i] = targetShape[i];
-    } else {
-      newShape[i] =
-          builder.create<mlir::tensor::DimOp>(loc, src, i).getResult();
-    }
-  }
-  auto trueBody = [&](mlir::OpBuilder &builder, mlir::Location loc) {
-    assert(dim < shape.size());
-    shape[dim] = 1;
-    auto casted = src; // TODO
-    auto init = builder
-                    .create<mlir::tensor::EmptyOp>(loc, newShape,
-                                                   srcType.getElementType())
-                    .getResult();
-    llvm::SmallVector<mlir::AffineExpr> exprs(numDims);
-    for (unsigned i = 0; i < numDims; ++i) {
-      if (i == dim) {
-        exprs[i] = mlir::getAffineConstantExpr(0, context);
-      } else {
-        exprs[i] = mlir::getAffineDimExpr(i, context);
-      }
-    }
-    const mlir::AffineMap maps[] = {
-        mlir::AffineMap::get(numDims, 0, exprs, context),
-        mlir::AffineMap::getMultiDimIdentityMap(numDims, context),
-    };
-    llvm::SmallVector<mlir::StringRef> iterators(numDims, "parallel");
-
-    auto body = [&](mlir::OpBuilder &builder, mlir::Location loc,
-                    mlir::ValueRange values) {
-      assert(values.size() == 2);
-      builder.create<mlir::linalg::YieldOp>(loc, values[0]);
-    };
-
-    auto expanded = builder.create<mlir::linalg::GenericOp>(
-        loc, init.getType(), casted, init, maps, iterators, body);
-    auto res = builder.createOrFold<mlir::tensor::CastOp>(
-        loc, targetType, expanded.getResult(0));
-    builder.create<mlir::scf::YieldOp>(loc, res);
-  };
-  auto falseBody = [&](mlir::OpBuilder &builder, mlir::Location loc) {
-    auto res = builder.create<mlir::tensor::CastOp>(loc, targetType, src);
-    builder.create<mlir::scf::YieldOp>(loc, res.getResult());
-  };
-  return builder
-      .create<mlir::scf::IfOp>(loc, targetType, cond, trueBody, falseBody)
-      .getResult(0);
-}
-
-static mlir::Value expandDims(mlir::OpBuilder &builder, mlir::Location loc,
-                              mlir::Value val, unsigned numDims,
-                              mlir::ValueRange targetShape) {
-  assert(numDims <= targetShape.size());
-  if (numDims < targetShape.size())
-    targetShape = targetShape.drop_front(targetShape.size() - numDims);
-
-  mlir::Value current = val;
-  for (unsigned i = 0; i < numDims; ++i)
-    current = expandDim(builder, loc, val, current, i, targetShape);
-
-  current =
-      builder.create<imex::util::EnforceShapeOp>(loc, current, targetShape);
-  return current;
-}
-
 static py::object broadcastImpl(py::capsule context, py::tuple args,
                                 py::handle resultType) {
-  if (1 == args.size())
-    return args[0];
-
   auto &ctx = getPyContext(context);
   auto loc = ctx.loc;
   auto &builder = ctx.builder;
 
   llvm::SmallVector<mlir::Value> mlirArgs(args.size());
-  for (auto it : llvm::enumerate(args)) {
+
+  int64_t rank = -1;
+  for (auto [i, obj] : llvm::enumerate(args)) {
     auto val =
-        toTensor(loc, builder, ctx.context.unwrapVal(loc, builder, it.value()));
-    mlirArgs[it.index()] = val;
-  }
-  using shape_t = llvm::SmallVector<mlir::Value>;
-  auto getShape =
-      [&](mlir::Value val) -> llvm::Optional<std::pair<shape_t, mlir::Type>> {
-    auto type = val.getType();
-    if (auto shaped = type.dyn_cast<mlir::ShapedType>()) {
-      if (!shaped.hasRank())
-        return {};
+        toNTensor(loc, builder, ctx.context.unwrapVal(loc, builder, obj));
 
-      shape_t ret(static_cast<size_t>(shaped.getRank()));
-      for (auto it : llvm::enumerate(ret)) {
-        auto dim = builder.create<mlir::tensor::DimOp>(loc, val, it.index());
-        ret[it.index()] = dim;
-      }
-      return std::make_pair(ret, shaped.getElementType());
+    auto srcType = val.getType();
+    if (!srcType.isa<imex::ntensor::NTensorType>()) {
+      if (!imex::ntensor::NTensorType::isValidElementType(srcType))
+        imex::reportError(llvm::Twine("broadcast: invalid source type ") +
+                          toStr(srcType));
+
+      auto retType = imex::ntensor::NTensorType::get(llvm::None, srcType);
+      val = builder.create<imex::ntensor::FromElementsOp>(loc, retType, val);
+    } else {
+      rank = std::max(rank, srcType.cast<mlir::ShapedType>().getRank());
     }
-    if (type.isa<mlir::IntegerType, mlir::IndexType, mlir::FloatType>())
-      return std::make_pair(shape_t{}, type);
 
-    return {};
-  };
-  mlir::SmallVector<mlir::Value> shapeVals;
-  if (auto shapeAndType = getShape(mlirArgs.front())) {
-    shapeVals = shapeAndType->first;
+    mlirArgs[i] = val;
+  }
+
+  llvm::SmallVector<mlir::Type> resTypes(args.size());
+  llvm::SmallVector<int64_t> resShape(rank >= 0 ? static_cast<size_t>(rank) : 0,
+                                      mlir::ShapedType::kDynamicSize);
+  for (auto [i, arg] : llvm::enumerate(mlirArgs))
+    resTypes[i] = arg.getType().cast<mlir::ShapedType>().clone(resShape);
+
+  auto broadcast =
+      builder.create<imex::ntensor::BroadcastOp>(loc, resTypes, mlirArgs);
+
+  llvm::SmallVector<mlir::Value> results(broadcast->getNumResults());
+  if (!resultType.is_none()) {
+    auto resType = unwrapType(resultType);
+    for (auto [i, res] :
+         llvm::enumerate(mlir::ValueRange(broadcast.getResults()))) {
+      auto srcType = res.getType().cast<mlir::ShapedType>();
+      auto dstType = srcType.clone(resType);
+      if (srcType != dstType) {
+        if (!imex::canConvert(srcType.getElementType(), resType))
+          imex::reportError(llvm::Twine("Cannont convert from ") +
+                            toStr(srcType.getElementType()) + " to " +
+                            toStr(resType));
+
+        auto bodyBuilder = [&](mlir::OpBuilder &b, mlir::Location l,
+                               mlir::Value val) {
+          auto res = imex::doConvert(b, l, val, resType);
+          assert(res);
+          b.create<imex::ntensor::ElementwiseYieldOp>(l, res);
+        };
+
+        res = builder.create<imex::ntensor::ElementwiseOp>(loc, dstType, res,
+                                                           bodyBuilder);
+      }
+      results[i] = res;
+    }
   } else {
-    return py::none();
+    auto res = broadcast.getResults();
+    results.assign(res.begin(), res.end());
   }
 
-  for (auto arg : llvm::drop_begin(mlirArgs)) {
-    auto shapeAndType = getShape(arg);
-    if (!shapeAndType)
-      return py::none();
-
-    auto newShapeVals = shapeAndType->first;
-    for (auto it :
-         llvm::zip(llvm::reverse(shapeVals), llvm::reverse(newShapeVals))) {
-      auto &oldVal = std::get<0>(it);
-      auto newVal = std::get<1>(it);
-      oldVal = broadcastDim(builder, loc, oldVal, newVal);
+  py::tuple ret(results.size());
+  for (auto [i, res] : llvm::enumerate(results)) {
+    auto srcType = res.getType().cast<mlir::ShapedType>();
+    auto dstType = mlir::RankedTensorType::get(srcType.getShape(),
+                                               srcType.getElementType());
+    if (rank >= 0) {
+      res = builder.create<imex::ntensor::ToTensorOp>(loc, dstType, res);
+    } else {
+      res = builder.create<imex::ntensor::LoadOp>(loc, res);
     }
-    if (newShapeVals.size() > shapeVals.size()) {
-      auto front = llvm::makeArrayRef(newShapeVals).drop_back(shapeVals.size());
-      assert(!front.empty());
-      shapeVals.insert(shapeVals.begin(), front.begin(), front.end());
-    }
+    ret[i] = ctx.context.createVar(context, res);
   }
 
-  mlir::Type resType;
-  auto haveResultType = !resultType.is_none();
-  if (haveResultType)
-    resType = unwrapType(resultType);
-
-  py::tuple ret(mlirArgs.size());
-  if (shapeVals.empty()) {
-    for (auto it : llvm::enumerate(mlirArgs)) {
-      mlir::Value val = it.value();
-      if (haveResultType && val.getType() != resType)
-        val = builder.create<plier::CastOp>(loc, resType, val);
-
-      ret[it.index()] = ctx.context.createVar(context, val);
-    }
-    return std::move(ret);
-  }
-
-  llvm::SmallVector<int64_t> shape(static_cast<size_t>(shapeVals.size()),
-                                   mlir::ShapedType::kDynamicSize);
-  for (auto it : llvm::enumerate(mlirArgs)) {
-    mlir::Value val = it.value();
-    auto i = it.index();
-    auto tensorElemType =
-        haveResultType ? resType : getShape(mlirArgs[i])->second;
-    auto tensorType = mlir::RankedTensorType::get(shape, tensorElemType);
-    auto signlessResType = makeSignlessType(tensorElemType);
-    auto signlessTensorType =
-        mlir::RankedTensorType::get(shape, signlessResType);
-    val = doSignCast(builder, loc, val);
-    if (auto srcType = val.getType().dyn_cast<mlir::ShapedType>()) {
-      assert(srcType.hasRank());
-      val = expandDims(builder, loc, val,
-                       static_cast<unsigned>(srcType.getRank()), shapeVals);
-    }
-    if (val.getType() != signlessTensorType) {
-      auto type = val.getType();
-      if (auto srcType = type.dyn_cast<mlir::ShapedType>()) {
-        assert(srcType.hasRank());
-        auto srcNumDims = static_cast<unsigned>(srcType.getRank());
-        auto numDims = static_cast<unsigned>(signlessTensorType.getRank());
-        auto init = builder
-                        .create<mlir::tensor::EmptyOp>(
-                            loc, getTempShape(shapeVals),
-                            signlessTensorType.getElementType())
-                        .getResult();
-        mlir::AffineMap maps[] = {
-            mlir::AffineMap::getMinorIdentityMap(numDims, srcNumDims,
-                                                 builder.getContext()),
-            mlir::AffineMap::getMultiDimIdentityMap(numDims,
-                                                    builder.getContext()),
-        };
-        llvm::SmallVector<llvm::StringRef> iterators(numDims, "parallel");
-        auto body = [&](mlir::OpBuilder &builder, mlir::Location loc,
-                        mlir::ValueRange values) {
-          assert(values.size() == 2);
-          auto res = builder.create<plier::CastOp>(
-              loc, signlessTensorType.getElementType(), values[0]);
-          builder.create<mlir::linalg::YieldOp>(loc, res.getResult());
-        };
-        val = builder
-                  .create<mlir::linalg::GenericOp>(loc, signlessTensorType, val,
-                                                   init, maps, iterators, body)
-                  .getResult(0);
-      } else {
-        if (signlessTensorType.getElementType() != type)
-          val = builder.create<plier::CastOp>(
-              loc, signlessTensorType.getElementType(), val);
-
-        val = builder.create<mlir::tensor::FromElementsOp>(loc, val);
-        auto numDims = static_cast<unsigned>(signlessTensorType.getRank());
-        auto init = builder
-                        .create<mlir::tensor::EmptyOp>(
-                            loc, getTempShape(shapeVals),
-                            signlessTensorType.getElementType())
-                        .getResult();
-        mlir::AffineMap maps[] = {
-            mlir::AffineMap::get(
-                numDims, 0,
-                mlir::getAffineConstantExpr(0, builder.getContext())),
-            mlir::AffineMap::getMultiDimIdentityMap(numDims,
-                                                    builder.getContext()),
-        };
-        llvm::SmallVector<llvm::StringRef> iterators(numDims, "parallel");
-        auto body = [&](mlir::OpBuilder &builder, mlir::Location loc,
-                        mlir::ValueRange values) {
-          assert(values.size() == 2);
-          builder.create<mlir::linalg::YieldOp>(loc, values[0]);
-        };
-        val = builder
-                  .create<mlir::linalg::GenericOp>(loc, signlessTensorType, val,
-                                                   init, maps, iterators, body)
-                  .getResult(0);
-      }
-    }
-    val = doSignCast(builder, loc, val, tensorType);
-    ret[i] = ctx.context.createVar(context, val);
-  }
   return std::move(ret);
 }
 
