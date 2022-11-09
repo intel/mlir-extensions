@@ -166,7 +166,7 @@ jobs:
             -DLLVM_TARGETS_TO_BUILD=X86                                    \
             -DLLVM_ENABLE_BINDINGS=OFF                                     \
             -DLLVM_ENABLE_ZSTD=OFF                                         \
-            -DLLVM_DISTRIBUTION_COMPONENTS="llvm-headers;llvm-libraries;cmake-exports;FileCheck;count;not;mlir-headers;mlir-libraries;mlir-cmake-exports;mlir-tblgen" \
+            -DLLVM_DISTRIBUTION_COMPONENTS="llvm-headers;llvm-libraries;cmake-exports;FileCheck;count;not;mlir-headers;mlir-libraries;mlir-cmake-exports;mlir-tblgen;mlir-cpu-runner" \
             -DCMAKE_INSTALL_PREFIX=/home/runner/work/llvm-mlir/_mlir_install || exit 1
           ninja install-distribution-stripped || exit 1
           cp bin/FileCheck /home/runner/work/llvm-mlir/_mlir_install/bin/
