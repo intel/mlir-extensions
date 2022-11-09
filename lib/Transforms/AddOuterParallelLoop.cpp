@@ -28,6 +28,7 @@ public:
   void runOnOperation() override {
     auto func = getOperation();
     llvm::SmallVector<scf::ForOp, 4> ops;
+    // populate the top level for-loop
     func.walk<WalkOrder::PreOrder>([&](scf::ForOp op) {
       if (op->getParentOp() == func) {
         ops.push_back(op);
@@ -36,6 +37,7 @@ public:
       return WalkResult::advance();
     });
     mlir::OpBuilder builder(func.getContext());
+    // move the for-loop inside the newly created parallel-loop
     for (scf::ForOp op : ops) {
       builder.setInsertionPoint(op);
       mlir::Value cst0 = builder.create<arith::ConstantOp>(
