@@ -5,7 +5,7 @@ module @jit_prim_fun.50 {
 
   func.func private @printMemrefF32(tensor<*xf32>)
 
-  func.func @callee(%arg0: tensor<1x6xf32>, %arg1: tensor<1x6xf32>, %arg2: tensor<1x6xf32>, %arg3: tensor<1x6xf32>, %arg4: tensor<1x6xf32>, %arg5: tensor<1x6xf32>, %arg6: tensor<1x6xf32>, %arg7: tensor<1x6xf32>, %arg8: tensor<1x6xf32>, %arg9: tensor<1x6xf32>, %arg10: tensor<1x6xf32>, %arg11: tensor<1x6xf32>, %arg12: tensor<1x6xf32>, %arg13: tensor<1x6xf32>, %arg14: tensor<1x6xf32>, %arg15: tensor<1x6xf32>) -> tensor<16x6xf32> {
+  func.func private @callee(%arg0: tensor<1x6xf32>, %arg1: tensor<1x6xf32>, %arg2: tensor<1x6xf32>, %arg3: tensor<1x6xf32>, %arg4: tensor<1x6xf32>, %arg5: tensor<1x6xf32>, %arg6: tensor<1x6xf32>, %arg7: tensor<1x6xf32>, %arg8: tensor<1x6xf32>, %arg9: tensor<1x6xf32>, %arg10: tensor<1x6xf32>, %arg11: tensor<1x6xf32>, %arg12: tensor<1x6xf32>, %arg13: tensor<1x6xf32>, %arg14: tensor<1x6xf32>, %arg15: tensor<1x6xf32>) -> tensor<16x6xf32> {
     %c0 = arith.constant 0 : index
     %0 = tensor.empty() : tensor<16x6xf32>
     %1 = linalg.generic {indexing_maps = [#map], iterator_types = ["parallel", "parallel"]} outs(%0 : tensor<16x6xf32>) {

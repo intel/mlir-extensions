@@ -6,7 +6,7 @@ module @jit_swapaxes.304 {
 
   func.func private @printMemrefI32(tensor<*xi32>)
 
-  func.func @callee(%arg0: tensor<2x1xi32>) -> tensor<1x2xi32> {
+  func.func private @callee(%arg0: tensor<2x1xi32>) -> tensor<1x2xi32> {
     %0 = tensor.empty() : tensor<1x2xi32>
     %1 = linalg.generic {indexing_maps = [#map0, #map1], iterator_types = ["parallel", "parallel"]} ins(%arg0 : tensor<2x1xi32>) outs(%0 : tensor<1x2xi32>) attrs =  {xla_shape = "s32[1,2]{0,1}"} {
     ^bb0(%arg1: i32, %arg2: i32):

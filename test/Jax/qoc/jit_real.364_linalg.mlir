@@ -5,7 +5,7 @@ module @jit_real.364 {
 
   func.func private @printMemrefF32(tensor<*xf32>)
 
-  func.func @callee(%arg0: tensor<2xcomplex<f32>>) -> tensor<2xf32> {
+  func.func private @callee(%arg0: tensor<2xcomplex<f32>>) -> tensor<2xf32> {
     %0 = tensor.empty() : tensor<2xf32>
     %1 = linalg.generic {indexing_maps = [#map, #map], iterator_types = ["parallel"]} ins(%arg0 : tensor<2xcomplex<f32>>) outs(%0 : tensor<2xf32>) {
     ^bb0(%arg1: complex<f32>, %arg2: f32):

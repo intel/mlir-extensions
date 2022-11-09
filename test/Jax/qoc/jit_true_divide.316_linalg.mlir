@@ -2,7 +2,7 @@
 
 #map = affine_map<() -> ()>
 module @jit_true_divide.316 {
-  func.func @callee(%arg0: tensor<complex<f32>>, %arg1: tensor<i32>) -> tensor<complex<f32>> {
+  func.func private @callee(%arg0: tensor<complex<f32>>, %arg1: tensor<i32>) -> tensor<complex<f32>> {
     %0 = tensor.empty() : tensor<complex<f32>>
     %1 = linalg.generic {indexing_maps = [#map, #map], iterator_types = []} ins(%arg1 : tensor<i32>) outs(%0 : tensor<complex<f32>>) {
     ^bb0(%arg2: i32, %arg3: complex<f32>):

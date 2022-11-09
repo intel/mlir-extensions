@@ -8,7 +8,7 @@ module @jit__diag.11 {
 
   func.func private @printMemrefF32(tensor<*xf32>)
 
-  func.func @callee(%arg0: tensor<1xf32>) -> tensor<2x2xf32> {
+  func.func private @callee(%arg0: tensor<1xf32>) -> tensor<2x2xf32> {
     %0 = tensor.empty() : tensor<2xi32>
     %1 = linalg.generic {indexing_maps = [#map0], iterator_types = ["parallel"]} outs(%0 : tensor<2xi32>) {
     ^bb0(%arg1: i32):

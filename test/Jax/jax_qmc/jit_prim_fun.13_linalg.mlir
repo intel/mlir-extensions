@@ -5,7 +5,7 @@ module @jit_prim_fun.13 {
 
   func.func private @printMemrefI32(tensor<*xi32>)
 
-  func.func @callee(%arg0: tensor<1xi32>, %arg1: tensor<1xi32>) -> tensor<2xi32> {
+  func.func private @callee(%arg0: tensor<1xi32>, %arg1: tensor<1xi32>) -> tensor<2xi32> {
     %c0 = arith.constant 0 : index
     %2 = tensor.empty() : tensor<2xi32>
     %3 = linalg.generic {indexing_maps = [#map], iterator_types = ["parallel"]} outs(%2 : tensor<2xi32>) {

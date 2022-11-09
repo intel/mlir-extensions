@@ -8,7 +8,7 @@ module @jit_pionless_2b_lo.41 {
 
   func.func private @printMemrefF64(tensor<*xf64>)
 
-  func.func @callee(%arg0: tensor<f64>) -> tensor<6xf64> {
+  func.func private @callee(%arg0: tensor<f64>) -> tensor<6xf64> {
     %cst = arith.constant dense<0.000000e+00> : tensor<f64>
     %cst_0 = arith.constant dense<0.000000e+00> : tensor<6xf64>
     %cst_1 = arith.constant dense<0> : tensor<1xi32>

@@ -5,7 +5,7 @@ module @jit_absolute.341 {
 
   func.func private @printMemrefI32(tensor<*xi32>)
 
-  func.func @callee(%arg0: tensor<i32>) -> tensor<i32> {
+  func.func private @callee(%arg0: tensor<i32>) -> tensor<i32> {
     %0 = tensor.empty() : tensor<i32>
     %1 = linalg.generic {indexing_maps = [#map, #map], iterator_types = []} ins(%arg0 : tensor<i32>) outs(%0 : tensor<i32>) {
     ^bb0(%arg1: i32, %arg2: i32):

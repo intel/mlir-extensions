@@ -9,7 +9,7 @@ module @jit_matmul.338 {
 
   func.func private @printMemrefI32(tensor<*xi32>)
 
-  func.func @callee(%arg0: tensor<1x2x2xi32>, %arg1: tensor<1x2x2xi32>) -> tensor<1x2x2xi32> {
+  func.func private @callee(%arg0: tensor<1x2x2xi32>, %arg1: tensor<1x2x2xi32>) -> tensor<1x2x2xi32> {
     %0 = tensor.collapse_shape %arg0 [[0, 1], [2]] : tensor<1x2x2xi32> into tensor<2x2xi32>
     %c0_i32 = arith.constant 0 : i32
     %1 = tensor.empty() : tensor<2x1x2xi32>

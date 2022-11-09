@@ -7,7 +7,7 @@ module @jit__mean.51 {
 
   func.func private @printMemrefF64(tensor<*xf64>)
 
-  func.func @callee(%arg0: tensor<1000x16xf64>) -> tensor<f64> {
+  func.func private @callee(%arg0: tensor<1000x16xf64>) -> tensor<f64> {
     %cst = arith.constant dense<0.000000e+00> : tensor<f64>
     %cst_0 = arith.constant 0.000000e+00 : f64
     %0 = tensor.empty() : tensor<f64>

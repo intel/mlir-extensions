@@ -7,7 +7,7 @@ module @jit__linspace.39 {
 
   func.func private @printMemrefF64(tensor<*xf64>)
 
-  func.func @callee(%arg0: tensor<i64>, %arg1: tensor<i64>) -> tensor<100xf64> {
+  func.func private @callee(%arg0: tensor<i64>, %arg1: tensor<i64>) -> tensor<100xf64> {
     %0 = tensor.empty() : tensor<f64>
     %1 = linalg.generic {indexing_maps = [#map0, #map0], iterator_types = []} ins(%arg0 : tensor<i64>) outs(%0 : tensor<f64>) {
     ^bb0(%arg2: i64, %arg3: f64):

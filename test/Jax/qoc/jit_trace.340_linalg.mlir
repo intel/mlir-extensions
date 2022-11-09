@@ -9,7 +9,7 @@ module @jit_trace.340 {
 
   func.func private @printMemrefI32(tensor<*xi32>)
 
-  func.func @callee(%arg0: tensor<2x2xi32>) -> tensor<i32> {
+  func.func private @callee(%arg0: tensor<2x2xi32>) -> tensor<i32> {
     %0 = tensor.empty() : tensor<2xi32>
     %1 = linalg.generic {indexing_maps = [#map0], iterator_types = ["parallel"]} outs(%0 : tensor<2xi32>) {
     ^bb0(%arg1: i32):

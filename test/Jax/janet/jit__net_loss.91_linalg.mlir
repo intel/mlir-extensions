@@ -8,7 +8,7 @@ module @jit__net_loss.91 {
 
   func.func private @printMemrefF32(tensor<*xf32>)
 
-  func.func @callee(%arg0: tensor<13x13xf32>, %arg1: tensor<13xf32>, %arg2: tensor<13x32xf32>, %arg3: tensor<32xf32>, %arg4: tensor<32x16xf32>, %arg5: tensor<16xf32>, %arg6: tensor<16x8xf32>, %arg7: tensor<8xf32>, %arg8: tensor<8x4xf32>, %arg9: tensor<4xf32>, %arg10: tensor<4x6xf32>, %arg11: tensor<6xf32>, %arg12: tensor<20x13xf32>, %arg13: tensor<20x6xf32>) -> tensor<f32> {
+  func.func private @callee(%arg0: tensor<13x13xf32>, %arg1: tensor<13xf32>, %arg2: tensor<13x32xf32>, %arg3: tensor<32xf32>, %arg4: tensor<32x16xf32>, %arg5: tensor<16xf32>, %arg6: tensor<16x8xf32>, %arg7: tensor<8xf32>, %arg8: tensor<8x4xf32>, %arg9: tensor<4xf32>, %arg10: tensor<4x6xf32>, %arg11: tensor<6xf32>, %arg12: tensor<20x13xf32>, %arg13: tensor<20x6xf32>) -> tensor<f32> {
     %cst = arith.constant 0.000000e+00 : f32
     %0 = tensor.empty() : tensor<20x13xf32>
     %1 = linalg.fill ins(%cst : f32) outs(%0 : tensor<20x13xf32>) -> tensor<20x13xf32>

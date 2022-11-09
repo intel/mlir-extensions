@@ -6,7 +6,7 @@ module @jit__reduce_sum.357 {
 
   func.func private @printMemrefI32(tensor<*xi32>)
 
-  func.func @callee(%arg0: tensor<1xi32>) -> tensor<i32> {
+  func.func private @callee(%arg0: tensor<1xi32>) -> tensor<i32> {
     %cst = arith.constant dense<0> : tensor<i32>
     %c0_i32 = arith.constant 0 : i32
     %0 = tensor.empty() : tensor<i32>

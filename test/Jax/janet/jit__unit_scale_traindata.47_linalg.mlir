@@ -7,7 +7,7 @@ module @jit__unit_scale_traindata.47 {
 
   func.func private @printMemrefF32(tensor<*xf32>)
 
-  func.func @callee(%arg0: tensor<6xf32>, %arg1: tensor<i32>, %arg2: tensor<i32>) -> tensor<1x6xf32> {
+  func.func private @callee(%arg0: tensor<6xf32>, %arg1: tensor<i32>, %arg2: tensor<i32>) -> tensor<1x6xf32> {
     %0 = func.call @atleast_2d.6(%arg0) : (tensor<6xf32>) -> tensor<1x6xf32>
     %1 = func.call @atleast_1d.10(%arg1) : (tensor<i32>) -> tensor<1xi32>
     %2 = func.call @atleast_1d_0.14(%arg2) : (tensor<i32>) -> tensor<1xi32>
