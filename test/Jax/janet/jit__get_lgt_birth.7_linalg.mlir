@@ -83,18 +83,11 @@ module @jit__get_lgt_birth.7 {
     %3 = func.call @callee(%0, %1) : (tensor<f32>, tensor<95xf32>) -> tensor<95xf32>
     %unranked = tensor.cast %3 : tensor<95xf32> to tensor<*xf32>
     func.call @printMemrefF32(%unranked) : (tensor<*xf32>) -> ()
-    //      CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
-    // CHECK-SAME: rank = 1 offset = 0 sizes = [95] strides = [1] data =
-    //      CHECK: [-3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
-    //      CHECK:  -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
-    //      CHECK:  -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
-    //      CHECK:  -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
-    //      CHECK:  -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
-    //      CHECK:  -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
-    //      CHECK:  -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
-    //      CHECK:  -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
-    //      CHECK:  -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
-    //      CHECK:  -3, -3, -3, -3, -3]
+    //         CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
+    //    CHECK-SAME: rank = 1 offset = 0 sizes = [95] strides = [1] data =
+    //         CHECK: [-3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+    // CHECK-COUNT-8:  -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+    //         CHECK:  -3, -3, -3, -3, -3]
     return
   }
 }
