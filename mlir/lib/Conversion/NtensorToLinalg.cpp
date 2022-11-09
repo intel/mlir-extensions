@@ -494,11 +494,11 @@ struct ConvertBroadcastOp
   mlir::LogicalResult
   matchAndRewrite(imex::ntensor::BroadcastOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto inputs = op.getInputs();
+    mlir::ValueRange inputs = op.getInputs();
     if (inputs.empty())
       return mlir::failure();
 
-    auto results = op.getResults();
+    mlir::ValueRange results = op.getResults();
     assert(inputs.size() == results.size());
 
     for (auto [src, dst] : llvm::zip(inputs, results))
@@ -506,86 +506,104 @@ struct ConvertBroadcastOp
           dst.getType().cast<mlir::ShapedType>().getElementType())
         return mlir::failure();
 
-    auto loc = op.getLoc();
-    llvm::SmallVector<mlir::Value> tensorInputs(inputs.size());
-    for (auto [i, input] : llvm::enumerate(inputs)) {
-      auto tensorType =
-          toTensorType(input.getType().cast<imex::ntensor::NTensorType>());
-      tensorInputs[i] =
-          rewriter.create<imex::ntensor::ToTensorOp>(loc, tensorType, input);
-    }
+    auto env = inputs.front()
+                   .getType()
+                   .cast<imex::ntensor::NTensorType>()
+                   .getEnvironment();
+    for (auto args : {inputs.drop_front(), results})
+      for (auto arg : args)
+        if (arg.getType().cast<imex::ntensor::NTensorType>().getEnvironment() !=
+            env)
+          return mlir::failure();
 
-    using ShapeT = llvm::SmallVector<mlir::Value>;
-    auto getShape = [&](mlir::Value val) -> ShapeT {
-      auto tensorType = val.getType().cast<mlir::RankedTensorType>();
+    mlir::TypeRange resultTypes = op->getResultTypes();
 
-      auto rank = static_cast<unsigned>(tensorType.getRank());
-      ShapeT retShape(rank);
-      for (auto i : llvm::seq(0u, rank))
-        retShape[i] = rewriter.create<mlir::tensor::DimOp>(loc, val, i);
+    auto newResults = imex::util::wrapEnvRegion(
+        rewriter, op.getLoc(), env, resultTypes,
+        [&](mlir::OpBuilder &rewriter, mlir::Location loc) {
+          llvm::SmallVector<mlir::Value> tensorInputs(inputs.size());
+          for (auto [i, input] : llvm::enumerate(inputs)) {
+            auto tensorType = toTensorType(
+                input.getType().cast<imex::ntensor::NTensorType>());
+            tensorInputs[i] = rewriter.create<imex::ntensor::ToTensorOp>(
+                loc, tensorType, input);
+          }
 
-      return retShape;
-    };
+          using ShapeT = llvm::SmallVector<mlir::Value>;
+          auto getShape = [&](mlir::Value val) -> ShapeT {
+            auto tensorType = val.getType().cast<mlir::RankedTensorType>();
 
-    // Compute resulting size
-    auto retShape = getShape(tensorInputs.front());
+            auto rank = static_cast<unsigned>(tensorType.getRank());
+            ShapeT retShape(rank);
+            for (auto i : llvm::seq(0u, rank))
+              retShape[i] = rewriter.create<mlir::tensor::DimOp>(loc, val, i);
 
-    for (auto input : llvm::makeArrayRef(tensorInputs).drop_front()) {
-      auto newShape = getShape(input);
+            return retShape;
+          };
 
-      for (auto &&[dim, newDim] :
-           llvm::zip(llvm::reverse(retShape), llvm::reverse(newShape))) {
-        dim = broadcastDim(rewriter, loc, dim, newDim);
-      }
-      if (newShape.size() > retShape.size()) {
-        auto front = llvm::makeArrayRef(newShape).drop_back(retShape.size());
-        assert(!front.empty());
-        retShape.insert(retShape.begin(), front.begin(), front.end());
-      }
-    }
+          // Compute resulting size
+          auto retShape = getShape(tensorInputs.front());
 
-    auto context = getContext();
-    auto dstRank = static_cast<unsigned>(retShape.size());
+          for (auto input : llvm::makeArrayRef(tensorInputs).drop_front()) {
+            auto newShape = getShape(input);
 
-    // Broadcast individual arrays
-    llvm::SmallVector<mlir::Value> newResults(tensorInputs.size());
-    for (auto [i, input] : llvm::enumerate(tensorInputs)) {
-      auto srcType = input.getType().cast<mlir::ShapedType>();
-      auto srcRank = static_cast<unsigned>(srcType.getRank());
-      auto result = expandDims(rewriter, loc, input, srcRank, retShape);
+            for (auto &&[dim, newDim] :
+                 llvm::zip(llvm::reverse(retShape), llvm::reverse(newShape))) {
+              dim = broadcastDim(rewriter, loc, dim, newDim);
+            }
+            if (newShape.size() > retShape.size()) {
+              auto front =
+                  llvm::makeArrayRef(newShape).drop_back(retShape.size());
+              assert(!front.empty());
+              retShape.insert(retShape.begin(), front.begin(), front.end());
+            }
+          }
 
-      auto resultType = results[i].getType().cast<mlir::ShapedType>();
-      if (srcRank != dstRank) {
-        auto elementType = srcType.getElementType();
-        auto resultTensorType = toTensorType(resultType);
-        auto init = rewriter
-                        .create<mlir::tensor::EmptyOp>(
-                            loc, getTempShape(retShape), elementType)
-                        .getResult();
+          auto context = getContext();
+          auto dstRank = static_cast<unsigned>(retShape.size());
 
-        const mlir::AffineMap maps[] = {
-            mlir::AffineMap::getMinorIdentityMap(dstRank, srcRank, context),
-            mlir::AffineMap::getMultiDimIdentityMap(dstRank, context),
-        };
-        llvm::SmallVector<llvm::StringRef> iterators(
-            dstRank, mlir::getParallelIteratorTypeName());
-        auto body = [&](mlir::OpBuilder &builder, mlir::Location loc,
-                        mlir::ValueRange values) {
-          assert(values.size() == 2);
-          auto res = values[0];
-          builder.create<mlir::linalg::YieldOp>(loc, res);
-        };
-        result =
-            rewriter
-                .create<mlir::linalg::GenericOp>(loc, resultTensorType, result,
-                                                 init, maps, iterators, body)
-                .getResult(0);
-      }
+          // Broadcast individual arrays
+          llvm::SmallVector<mlir::Value> newResults(tensorInputs.size());
+          for (auto [i, input] : llvm::enumerate(tensorInputs)) {
+            auto srcType = input.getType().cast<mlir::ShapedType>();
+            auto srcRank = static_cast<unsigned>(srcType.getRank());
+            auto result = expandDims(rewriter, loc, input, srcRank, retShape);
 
-      result =
-          rewriter.create<imex::ntensor::FromTensorOp>(loc, resultType, result);
-      newResults[i] = result;
-    }
+            auto resultType = results[i].getType().cast<mlir::ShapedType>();
+            if (srcRank != dstRank) {
+              auto elementType = srcType.getElementType();
+              auto resultTensorType = toTensorType(resultType);
+              auto init = rewriter
+                              .create<mlir::tensor::EmptyOp>(
+                                  loc, getTempShape(retShape), elementType)
+                              .getResult();
+
+              const mlir::AffineMap maps[] = {
+                  mlir::AffineMap::getMinorIdentityMap(dstRank, srcRank,
+                                                       context),
+                  mlir::AffineMap::getMultiDimIdentityMap(dstRank, context),
+              };
+              llvm::SmallVector<llvm::StringRef> iterators(
+                  dstRank, mlir::getParallelIteratorTypeName());
+              auto body = [&](mlir::OpBuilder &builder, mlir::Location loc,
+                              mlir::ValueRange values) {
+                assert(values.size() == 2);
+                auto res = values[0];
+                builder.create<mlir::linalg::YieldOp>(loc, res);
+              };
+              result = rewriter
+                           .create<mlir::linalg::GenericOp>(
+                               loc, resultTensorType, result, init, maps,
+                               iterators, body)
+                           .getResult(0);
+            }
+
+            result = rewriter.create<imex::ntensor::FromTensorOp>(
+                loc, resultType, result);
+            newResults[i] = result;
+          }
+          return newResults;
+        });
 
     rewriter.replaceOp(op, newResults);
     return mlir::success();

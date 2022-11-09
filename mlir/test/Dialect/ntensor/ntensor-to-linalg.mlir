@@ -475,3 +475,47 @@ func.func @test(%arg1: !ntensor.ntensor<?x?xf32>, %arg2: !ntensor.ntensor<f32>) 
 //       CHECK:   } -> tensor<?x?xf32>
 //       CHECK:   %[[RES4:.*]] = ntensor.from_tensor %[[RES3]] : tensor<?x?xf32> to !ntensor.ntensor<?x?xf32>
 //       CHECK:   return %[[RES2]], %[[RES4]]
+
+// -----
+
+func.func @test(%arg1: !ntensor.ntensor<?x?xf32, "test">, %arg2: !ntensor.ntensor<f32, "test">) -> (!ntensor.ntensor<?x?xf32, "test">, !ntensor.ntensor<?x?xf32, "test">) {
+  %0:2 = ntensor.broadcast (%arg1, %arg2) : !ntensor.ntensor<?x?xf32, "test">, !ntensor.ntensor<f32, "test"> -> !ntensor.ntensor<?x?xf32, "test">, !ntensor.ntensor<?x?xf32, "test">
+  return %0#0, %0#1 : !ntensor.ntensor<?x?xf32, "test">, !ntensor.ntensor<?x?xf32, "test">
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG1:.*]]: !ntensor.ntensor<?x?xf32, "test">, %[[ARG2:.*]]: !ntensor.ntensor<f32, "test">)
+//       CHECK:   %[[RET:.*]]:2 = imex_util.env_region "test" -> !ntensor.ntensor<?x?xf32, "test">, !ntensor.ntensor<?x?xf32, "test"> {
+//       CHECK:   %[[SRC1:.*]] = ntensor.to_tensor %[[ARG1]] : !ntensor.ntensor<?x?xf32, "test"> to tensor<?x?xf32>
+//       CHECK:   %[[SRC2:.*]] = ntensor.to_tensor %[[ARG2]] : !ntensor.ntensor<f32, "test"> to tensor<f32>
+
+//       CHECK:   %[[SRC1D1:.*]] = scf.if %{{.*}} -> (tensor<?x?xf32>) {
+//       CHECK:     %[[TMP1:.*]] = tensor.empty(%{{.*}}, %{{.*}}) : tensor<?x?xf32>
+//       CHECK:     %[[TMP2:.*]] = linalg.generic {indexing_maps = [#map, #map1], iterator_types = ["parallel", "parallel"]} ins(%[[SRC1]] : tensor<?x?xf32>) outs(%[[TMP1]] : tensor<?x?xf32>) {
+//       CHECK:     ^bb0(%in: f32, %out: f32):
+//       CHECK:       linalg.yield %in : f32
+//       CHECK:     } -> tensor<?x?xf32>
+//       CHECK:     scf.yield %[[TMP2]] : tensor<?x?xf32>
+//       CHECK:   } else {
+//       CHECK:     scf.yield %[[SRC1]] : tensor<?x?xf32>
+//       CHECK:   }
+
+//       CHECK:   %[[SRC1D2:.*]] = scf.if %{{.*}} -> (tensor<?x?xf32>) {
+//       CHECK:     %[[TMP3:.*]] = tensor.empty(%{{.*}}, %{{.*}}) : tensor<?x?xf32>
+//       CHECK:     %[[TMP4:.*]] = linalg.generic {indexing_maps = [#map2, #map1], iterator_types = ["parallel", "parallel"]} ins(%[[SRC1D1]] : tensor<?x?xf32>) outs(%[[TMP3]] : tensor<?x?xf32>) {
+//       CHECK:     ^bb0(%in: f32, %out: f32):
+//       CHECK:       linalg.yield %in : f32
+//       CHECK:     } -> tensor<?x?xf32>
+//       CHECK:     scf.yield %[[TMP4]] : tensor<?x?xf32>
+//       CHECK:   } else {
+//       CHECK:     scf.yield %[[SRC1D1]] : tensor<?x?xf32>
+//       CHECK:   }
+//       CHECK:   %[[RES1:.*]] = imex_util.enforce_shape %[[SRC1D2]] : tensor<?x?xf32>(%{{.*}}, %{{.*}}) -> tensor<?x?xf32>
+//       CHECK:   %[[RES2:.*]] = ntensor.from_tensor %[[RES1]] : tensor<?x?xf32> to !ntensor.ntensor<?x?xf32, "test">
+
+//       CHECK:   %[[RES3:.*]] = linalg.generic {indexing_maps = [#map3, #map1], iterator_types = ["parallel", "parallel"]} ins(%[[SRC2]] : tensor<f32>) outs(%{{.*}} : tensor<?x?xf32>) {
+//       CHECK:   ^bb0(%in: f32, %out: f32):
+//       CHECK:     linalg.yield %in : f32
+//       CHECK:   } -> tensor<?x?xf32>
+//       CHECK:   %[[RES4:.*]] = ntensor.from_tensor %[[RES3]] : tensor<?x?xf32> to !ntensor.ntensor<?x?xf32, "test">
+//       CHECK:   imex_util.env_region_yield %[[RES2]], %[[RES4]] : !ntensor.ntensor<?x?xf32, "test">, !ntensor.ntensor<?x?xf32, "test">
+//       CHECK:   return %[[RET]]#0, %[[RET]]#1
