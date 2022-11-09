@@ -319,3 +319,63 @@ func.func @test(%arg: !ntensor.ntensor<?x?xf32, "test">) -> index {
 //  CHECK-NEXT:   imex_util.env_region_yield %[[D]] : index
 //  CHECK-NEXT:   }
 //  CHECK-NEXT:   return %[[RES]] : index
+
+// -----
+
+func.func @test(%arg1: !ntensor.ntensor<?x?xf32>, %arg2: !ntensor.ntensor<?x?xf32>) -> (!ntensor.ntensor<?x?xf32>, !ntensor.ntensor<?x?xf32>) {
+  %0:2 = ntensor.broadcast (%arg1, %arg2) : !ntensor.ntensor<?x?xf32>, !ntensor.ntensor<?x?xf32> -> !ntensor.ntensor<?x?xf32>, !ntensor.ntensor<?x?xf32>
+  return %0#0, %0#1 : !ntensor.ntensor<?x?xf32>, !ntensor.ntensor<?x?xf32>
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG1:.*]]: !ntensor.ntensor<?x?xf32>, %[[ARG2:.*]]: !ntensor.ntensor<?x?xf32>)
+//       CHECK:   %[[SRC1:.*]] = ntensor.to_tensor %[[ARG1]] : !ntensor.ntensor<?x?xf32> to tensor<?x?xf32>
+//       CHECK:   %[[SRC2:.*]] = ntensor.to_tensor %[[ARG2]] : !ntensor.ntensor<?x?xf32> to tensor<?x?xf32>
+
+//       CHECK:   %[[SRC1D1:.*]] = scf.if %{{.*}} -> (tensor<?x?xf32>) {
+//       CHECK:     %[[TMP1:.*]] = tensor.empty(%{{.*}}, %{{.*}}) : tensor<?x?xf32>
+//       CHECK:     %[[TMP2:.*]] = linalg.generic {indexing_maps = [#map, #map1], iterator_types = ["parallel", "parallel"]} ins(%[[SRC1]] : tensor<?x?xf32>) outs(%[[TMP1]] : tensor<?x?xf32>) {
+//       CHECK:     ^bb0(%in: f32, %out: f32):
+//       CHECK:       linalg.yield %in : f32
+//       CHECK:     } -> tensor<?x?xf32>
+//       CHECK:     scf.yield %[[TMP2]] : tensor<?x?xf32>
+//       CHECK:   } else {
+//       CHECK:     scf.yield %[[SRC1]] : tensor<?x?xf32>
+//       CHECK:   }
+
+//       CHECK:   %[[SRC1D2:.*]] = scf.if %{{.*}} -> (tensor<?x?xf32>) {
+//       CHECK:     %[[TMP3:.*]] = tensor.empty(%{{.*}}, %{{.*}}) : tensor<?x?xf32>
+//       CHECK:     %[[TMP4:.*]] = linalg.generic {indexing_maps = [#map2, #map1], iterator_types = ["parallel", "parallel"]} ins(%[[SRC1D1]] : tensor<?x?xf32>) outs(%[[TMP3]] : tensor<?x?xf32>) {
+//       CHECK:     ^bb0(%in: f32, %out: f32):
+//       CHECK:       linalg.yield %in : f32
+//       CHECK:     } -> tensor<?x?xf32>
+//       CHECK:     scf.yield %[[TMP4]] : tensor<?x?xf32>
+//       CHECK:   } else {
+//       CHECK:     scf.yield %[[SRC1D1]] : tensor<?x?xf32>
+//       CHECK:   }
+//       CHECK:   %[[RES1:.*]] = imex_util.enforce_shape %[[SRC1D2]] : tensor<?x?xf32>(%{{.*}}, %{{.*}}) -> tensor<?x?xf32>
+//       CHECK:   %[[RES2:.*]] = ntensor.from_tensor %[[RES1]] : tensor<?x?xf32> to !ntensor.ntensor<?x?xf32>
+
+//       CHECK:   %[[SRC2D1:.*]] = scf.if %{{.*}} -> (tensor<?x?xf32>) {
+//       CHECK:     %[[TMP1:.*]] = tensor.empty(%{{.*}}, %{{.*}}) : tensor<?x?xf32>
+//       CHECK:     %[[TMP2:.*]] = linalg.generic {indexing_maps = [#map, #map1], iterator_types = ["parallel", "parallel"]} ins(%[[SRC2]] : tensor<?x?xf32>) outs(%[[TMP1]] : tensor<?x?xf32>) {
+//       CHECK:     ^bb0(%in: f32, %out: f32):
+//       CHECK:       linalg.yield %in : f32
+//       CHECK:     } -> tensor<?x?xf32>
+//       CHECK:     scf.yield %[[TMP2]] : tensor<?x?xf32>
+//       CHECK:   } else {
+//       CHECK:     scf.yield %[[SRC2]] : tensor<?x?xf32>
+//       CHECK:   }
+
+//       CHECK:   %[[SRC2D2:.*]] = scf.if %{{.*}} -> (tensor<?x?xf32>) {
+//       CHECK:     %[[TMP3:.*]] = tensor.empty(%{{.*}}, %{{.*}}) : tensor<?x?xf32>
+//       CHECK:     %[[TMP4:.*]] = linalg.generic {indexing_maps = [#map2, #map1], iterator_types = ["parallel", "parallel"]} ins(%[[SRC2D1]] : tensor<?x?xf32>) outs(%[[TMP3]] : tensor<?x?xf32>) {
+//       CHECK:     ^bb0(%in: f32, %out: f32):
+//       CHECK:       linalg.yield %in : f32
+//       CHECK:     } -> tensor<?x?xf32>
+//       CHECK:     scf.yield %[[TMP4]] : tensor<?x?xf32>
+//       CHECK:   } else {
+//       CHECK:     scf.yield %[[SRC2D1]] : tensor<?x?xf32>
+//       CHECK:   }
+//       CHECK:   %[[RES3:.*]] = imex_util.enforce_shape %[[SRC2D2]] : tensor<?x?xf32>(%{{.*}}, %{{.*}}) -> tensor<?x?xf32>
+//       CHECK:   %[[RES4:.*]] = ntensor.from_tensor %[[RES3]] : tensor<?x?xf32> to !ntensor.ntensor<?x?xf32>
+//       CHECK:   return %[[RES2]], %[[RES4]]

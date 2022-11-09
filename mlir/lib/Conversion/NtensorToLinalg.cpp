@@ -450,8 +450,10 @@ static mlir::Value expandDim(mlir::OpBuilder &builder, mlir::Location loc,
     builder.create<mlir::scf::YieldOp>(loc, res);
   };
   auto falseBody = [&](mlir::OpBuilder &builder, mlir::Location loc) {
-    auto res = builder.create<mlir::tensor::CastOp>(loc, targetType, src);
-    builder.create<mlir::scf::YieldOp>(loc, res.getResult());
+    mlir::Value res = src;
+    if (res.getType() != targetType)
+      res = builder.create<mlir::tensor::CastOp>(loc, targetType, src);
+    builder.create<mlir::scf::YieldOp>(loc, res);
   };
   return builder
       .create<mlir::scf::IfOp>(loc, targetType, cond, trueBody, falseBody)
