@@ -77,6 +77,7 @@ public:
     llvm::SmallMapVector<unsigned, AccessType, 8> gpuBufferParams;
     llvm::SmallMapVector<mlir::Operation *, AccessType, 8>
         gpuGetMemrefGlobalParams;
+    llvm::SmallMapVector<mlir::Operation *, AccessType, 8> callOpReturnedBuffer;
     auto &aliases = getAnalysis<mlir::BufferViewFlowAnalysis>();
 
     // This lamda function checks the type of memref operation and
@@ -167,6 +168,9 @@ public:
                     // TODO (nbpatel): Support these ops in the future.
                     if (mlir::isa<mlir::memref::AllocOp>(op)) {
                       gpuBufferAllocs.insert({op, {}});
+                    } else if (mlir::isa<mlir::func::CallOp>(op)) {
+                      callOpReturnedBuffer.insert({op, {}});
+                      continue;
                     } else {
                       op->emitError("Unhandled memref producer");
                       return mlir::WalkResult::interrupt();
@@ -265,6 +269,7 @@ public:
           builder.create<mlir::gpu::DeallocOp>(loc, llvm::None, allocResult);
       }
     }
+
     auto add_gpu_alloc = [this](mlir::OpBuilder builder, mlir::Value op,
                                 AccessType access, auto term) {
       llvm::SmallVector<mlir::Value> dims;
@@ -355,6 +360,22 @@ public:
       access.hostWrite = true;
       builder.setInsertionPointToStart(&block);
       add_gpu_alloc(builder, param, access, term);
+    }
+
+    // CallOp Case: This is the case where the memref producer is coming
+    // from a callOp. This code will add the IR for memory allocation on
+    // the device with gpu.alloc and insert a memref.copy from the result
+    // of that call op to device.
+    for (auto &it : callOpReturnedBuffer) {
+      auto op = mlir::cast<mlir::func::CallOp>(it.first);
+      mlir::Value callOp = op.getResult(0);
+      AccessType access;
+      access.deviceRead = true;
+      access.deviceWrite = false;
+      access.hostRead = true;
+      access.hostWrite = true;
+      builder.setInsertionPointAfter(op);
+      add_gpu_alloc(builder, callOp, access, term);
     }
   }
 
