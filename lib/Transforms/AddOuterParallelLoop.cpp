@@ -15,8 +15,10 @@
 
 #include "PassDetail.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "llvm/ADT/SetVector.h"
 
 using namespace mlir;
 using namespace imex;
@@ -27,27 +29,69 @@ struct AddOuterParallelLoopPass
 public:
   void runOnOperation() override {
     auto func = getOperation();
-    llvm::SmallVector<scf::ForOp, 4> ops;
+    std::vector<llvm::SmallVector<Operation *, 4>> groupedOps;
     // populate the top level for-loop
-    func.walk<WalkOrder::PreOrder>([&](scf::ForOp op) {
-      if (op->getParentOp() == func) {
-        ops.push_back(op);
-        return WalkResult::skip();
+    for (auto topIt = func.getBody().front().begin();
+         topIt != func.getBody().front().end();) {
+      scf::ForOp forOp = dyn_cast<scf::ForOp>(*topIt++);
+      if (!forOp) {
+        continue;
       }
-      return WalkResult::advance();
-    });
+      // populate forOp w/o iter_args
+      if (forOp.getNumIterOperands() == 0) {
+        groupedOps.push_back({forOp});
+        continue;
+      }
+      // populate forOp with iter_args
+      llvm::SetVector<Value> topUsers{forOp.getResults().begin(),
+                                      forOp.getResults().end()};
+      Operation *endOp = forOp;
+      bool hasReturnOp = false;
+      for (auto it = topUsers.begin(); it != topUsers.end();) {
+        if (hasReturnOp) {
+          break;
+        }
+        for (auto *user : it->getUsers()) {
+          if (isa<func::ReturnOp>(user)) {
+            hasReturnOp = true;
+            break;
+          }
+          while (user->getParentOp() != func) {
+            user = user->getParentOp();
+          }
+          topUsers.insert(user->getResults().begin(), user->getResults().end());
+          if (endOp->isBeforeInBlock(user)) {
+            endOp = user;
+          }
+        }
+        it = std::next(it);
+      }
+      if (!hasReturnOp) {
+        Block::iterator endIt = ++endOp->getIterator();
+        topIt = endIt;
+        llvm::SmallVector<Operation *, 4> ops; // (forOp->getIterator(), endIt);
+        for (auto it = forOp->getIterator(); it != endIt; it++) {
+          ops.push_back(&*it);
+        }
+        groupedOps.push_back(ops);
+      }
+    }
+    // move the for-loop and its users into the newly created parallel-loop
     mlir::OpBuilder builder(func.getContext());
-    // move the for-loop inside the newly created parallel-loop
-    for (scf::ForOp op : ops) {
+    for (auto ops : groupedOps) {
+      auto op = ops.front();
       builder.setInsertionPoint(op);
-      auto loc = op.getLoc();
+      auto loc = op->getLoc();
       mlir::Value cst0 =
           builder.create<arith::ConstantOp>(loc, builder.getIndexAttr(0));
       mlir::Value cst1 =
           builder.create<arith::ConstantOp>(loc, builder.getIndexAttr(1));
       scf::ParallelOp outer =
           builder.create<scf::ParallelOp>(loc, cst0, cst1, cst1);
-      op->moveBefore(&outer.getBody()->front());
+      auto yieldOp = outer.getBody()->getTerminator();
+      for (auto op : ops) {
+        op->moveBefore(yieldOp);
+      }
     }
   }
 };
