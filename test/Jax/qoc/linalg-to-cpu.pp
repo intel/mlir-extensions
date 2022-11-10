@@ -19,6 +19,7 @@ convert-cf-to-llvm
 convert-arith-to-llvm
 convert-math-to-llvm
 convert-complex-to-llvm
+convert-vector-to-llvm
 convert-index-to-llvm
 convert-memref-to-llvm
 convert-func-to-llvm

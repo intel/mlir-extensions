@@ -1,8 +1,13 @@
+// RUN: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-cpu.pp --runner mlir-cpu-runner -e main --shared-libs=%mlir_runner_utils --entry-point-result=void | FileCheck %s
+
 #map = affine_map<(d0, d1) -> (d0, d1)>
 module @jit_prim_fun.50 {
-  func @main(%arg0: tensor<1x6xf32>, %arg1: tensor<1x6xf32>, %arg2: tensor<1x6xf32>, %arg3: tensor<1x6xf32>, %arg4: tensor<1x6xf32>, %arg5: tensor<1x6xf32>, %arg6: tensor<1x6xf32>, %arg7: tensor<1x6xf32>, %arg8: tensor<1x6xf32>, %arg9: tensor<1x6xf32>, %arg10: tensor<1x6xf32>, %arg11: tensor<1x6xf32>, %arg12: tensor<1x6xf32>, %arg13: tensor<1x6xf32>, %arg14: tensor<1x6xf32>, %arg15: tensor<1x6xf32>) -> tensor<16x6xf32> {
+
+  func.func private @printMemrefF32(tensor<*xf32>)
+
+  func.func private @callee(%arg0: tensor<1x6xf32>, %arg1: tensor<1x6xf32>, %arg2: tensor<1x6xf32>, %arg3: tensor<1x6xf32>, %arg4: tensor<1x6xf32>, %arg5: tensor<1x6xf32>, %arg6: tensor<1x6xf32>, %arg7: tensor<1x6xf32>, %arg8: tensor<1x6xf32>, %arg9: tensor<1x6xf32>, %arg10: tensor<1x6xf32>, %arg11: tensor<1x6xf32>, %arg12: tensor<1x6xf32>, %arg13: tensor<1x6xf32>, %arg14: tensor<1x6xf32>, %arg15: tensor<1x6xf32>) -> tensor<16x6xf32> {
     %c0 = arith.constant 0 : index
-    %0 = linalg.init_tensor [16, 6] : tensor<16x6xf32>
+    %0 = tensor.empty() : tensor<16x6xf32>
     %1 = linalg.generic {indexing_maps = [#map], iterator_types = ["parallel", "parallel"]} outs(%0 : tensor<16x6xf32>) {
     ^bb0(%arg16: f32):
       %2 = linalg.index 0 : index
@@ -178,5 +183,45 @@ module @jit_prim_fun.50 {
       linalg.yield %8 : f32
     } -> tensor<16x6xf32>
     return %1 : tensor<16x6xf32>
+  }
+  func.func @main() {
+    %0 = arith.constant dense<0.01>: tensor<1x6xf32>
+    %1 = arith.constant dense<-0.001>: tensor<1x6xf32>
+    %2 = arith.constant dense<0.02>: tensor<1x6xf32>
+    %3 = arith.constant dense<0.001>: tensor<1x6xf32>
+    %4 = arith.constant dense<0.03>: tensor<1x6xf32>
+    %5 = arith.constant dense<-0.001>: tensor<1x6xf32>
+    %6 = arith.constant dense<-0.04>: tensor<1x6xf32>
+    %7 = arith.constant dense<0.001>: tensor<1x6xf32>
+    %8 = arith.constant dense<-0.05>: tensor<1x6xf32>
+    %9 = arith.constant dense<-0.001>: tensor<1x6xf32>
+    %10 = arith.constant dense<-0.06>: tensor<1x6xf32>
+    %11 = arith.constant dense<0.001>: tensor<1x6xf32>
+    %12 = arith.constant dense<0.02>: tensor<1x6xf32>
+    %13 = arith.constant dense<-0.01>: tensor<1x6xf32>
+    %14 = arith.constant dense<0.01>: tensor<1x6xf32>
+    %15 = arith.constant dense<-0.02>: tensor<1x6xf32>
+    %16 = func.call @callee(%0, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15) : (tensor<1x6xf32>, tensor<1x6xf32>, tensor<1x6xf32>, tensor<1x6xf32>, tensor<1x6xf32>, tensor<1x6xf32>, tensor<1x6xf32>, tensor<1x6xf32>, tensor<1x6xf32>, tensor<1x6xf32>, tensor<1x6xf32>, tensor<1x6xf32>, tensor<1x6xf32>, tensor<1x6xf32>, tensor<1x6xf32>, tensor<1x6xf32>) -> tensor<16x6xf32>
+    %unranked = tensor.cast %16 : tensor<16x6xf32> to tensor<*xf32>
+    func.call @printMemrefF32(%unranked) : (tensor<*xf32>) -> ()
+    //      CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
+    // CHECK-SAME: rank = 2 offset = 0 sizes = [16, 6] strides = [6, 1] data =
+    //      CHECK: [0.01, 0.01, 0.01, 0.01, 0.01, 0.01],
+    // CHECK-NEXT: [-0.001, -0.001, -0.001, -0.001, -0.001, -0.001],
+    // CHECK-NEXT: [0.02, 0.02, 0.02, 0.02, 0.02, 0.02],
+    // CHECK-NEXT: [0.001, 0.001, 0.001, 0.001, 0.001, 0.001],
+    // CHECK-NEXT: [0.03, 0.03, 0.03, 0.03, 0.03, 0.03],
+    // CHECK-NEXT: [-0.001, -0.001, -0.001, -0.001, -0.001, -0.001],
+    // CHECK-NEXT: [-0.04, -0.04, -0.04, -0.04, -0.04, -0.04],
+    // CHECK-NEXT: [0.001, 0.001, 0.001, 0.001, 0.001, 0.001],
+    // CHECK-NEXT: [-0.05, -0.05, -0.05, -0.05, -0.05, -0.05],
+    // CHECK-NEXT: [-0.001, -0.001, -0.001, -0.001, -0.001, -0.001],
+    // CHECK-NEXT: [-0.06, -0.06, -0.06, -0.06, -0.06, -0.06],
+    // CHECK-NEXT: [0.001, 0.001, 0.001, 0.001, 0.001, 0.001],
+    // CHECK-NEXT: [0.02, 0.02, 0.02, 0.02, 0.02, 0.02],
+    // CHECK-NEXT: [-0.01, -0.01, -0.01, -0.01, -0.01, -0.01],
+    // CHECK-NEXT: [0.01, 0.01, 0.01, 0.01, 0.01, 0.01],
+    // CHECK-NEXT: [-0.02, -0.02, -0.02, -0.02, -0.02, -0.02]
+    return
   }
 }

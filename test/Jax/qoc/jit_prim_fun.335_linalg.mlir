@@ -1,8 +1,13 @@
+// RUN: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-cpu.pp --runner mlir-cpu-runner -e main --shared-libs=%mlir_runner_utils --entry-point-result=void | FileCheck %s
+
 #map = affine_map<(d0) -> (d0)>
 module @jit_prim_fun.335 {
-  func @main(%arg0: tensor<1xi32>, %arg1: tensor<1xi32>) -> tensor<2xi32> {
+
+  func.func private @printMemrefI32(tensor<*xi32>)
+
+  func.func private @callee(%arg0: tensor<1xi32>, %arg1: tensor<1xi32>) -> tensor<2xi32> {
     %c0 = arith.constant 0 : index
-    %0 = linalg.init_tensor [2] : tensor<2xi32>
+    %0 = tensor.empty() : tensor<2xi32>
     %1 = linalg.generic {indexing_maps = [#map], iterator_types = ["parallel"]} outs(%0 : tensor<2xi32>) {
     ^bb0(%arg2: i32):
       %2 = linalg.index 0 : index
@@ -23,5 +28,16 @@ module @jit_prim_fun.335 {
       linalg.yield %7 : i32
     } -> tensor<2xi32>
     return %1 : tensor<2xi32>
+  }
+  func.func @main() {
+    %0 = arith.constant dense<11> : tensor<1xi32>
+    %1 = arith.constant dense<41> : tensor<1xi32>
+    %3 = func.call @callee(%0, %1) : (tensor<1xi32>, tensor<1xi32>) -> tensor<2xi32>
+    %unranked = tensor.cast %3 : tensor<2xi32> to tensor<*xi32>
+    func.call @printMemrefI32(%unranked) : (tensor<*xi32>) -> ()
+    //      CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
+    // CHECK-SAME: rank = 1 offset = 0 sizes = [2] strides = [1] data =
+    //      CHECK: [11, 41]
+    return
   }
 }
