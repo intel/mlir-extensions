@@ -40,13 +40,13 @@ public:
     // move the for-loop inside the newly created parallel-loop
     for (scf::ForOp op : ops) {
       builder.setInsertionPoint(op);
-      mlir::Value cst0 = builder.create<arith::ConstantOp>(
-          op.getLoc(), builder.getIndexAttr(0));
-      mlir::Value cst1 = builder.create<arith::ConstantOp>(
-          op.getLoc(), builder.getIndexAttr(1));
-      scf::ParallelOp outer = builder.create<scf::ParallelOp>(
-          op.getLoc(), SmallVector<Value, 2>{cst0}, SmallVector<Value, 2>{cst1},
-          SmallVector<Value, 2>{cst1});
+      auto loc = op.getLoc();
+      mlir::Value cst0 =
+          builder.create<arith::ConstantOp>(loc, builder.getIndexAttr(0));
+      mlir::Value cst1 =
+          builder.create<arith::ConstantOp>(loc, builder.getIndexAttr(1));
+      scf::ParallelOp outer =
+          builder.create<scf::ParallelOp>(loc, cst0, cst1, cst1);
       op->moveBefore(&outer.getBody()->front());
     }
   }

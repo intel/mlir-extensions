@@ -71,7 +71,6 @@ def AddOuterParallelLoop : Pass<"imex-add-outer-parallel-loop", "::mlir::func::F
   }];
   let constructor = "imex::createAddOuterParallelLoopPass()";
   let dependentDialects = [
-    "::mlir::gpu::GPUDialect",
     "::mlir::scf::SCFDialect"
     ];
 }
