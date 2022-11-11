@@ -206,6 +206,9 @@ struct PropagateEnvironmentPass
           if (!state)
             continue;
 
+          if (auto srcEnv = getTensorEnv(arg))
+            env = *srcEnv;
+
           auto &val = state->getValue();
           if (val.isUninitialized())
             continue;

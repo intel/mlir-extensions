@@ -196,7 +196,8 @@ static void genCopy(mlir::OpBuilder &builder, mlir::Location loc,
       affineMap,
   };
 
-  llvm::SmallVector<mlir::StringRef> iterators(rank, "parallel");
+  llvm::SmallVector<mlir::StringRef> iterators(
+      rank, mlir::getParallelIteratorTypeName());
 
   auto bodyBuilder = [](mlir::OpBuilder &b, mlir::Location l,
                         mlir::ValueRange args) {
@@ -1608,6 +1609,85 @@ struct ResolveNtensorPass
   }
 };
 
+struct WrapParforRegions
+    : public mlir::PassWrapper<WrapParforRegions, mlir::OperationPass<void>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(WrapParforRegions)
+
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<imex::ntensor::NTensorDialect>();
+    registry.insert<imex::util::ImexUtilDialect>();
+    registry.insert<mlir::scf::SCFDialect>();
+  }
+
+  void runOnOperation() override {
+    auto op = getOperation();
+
+    auto getOpEnv = [](mlir::Operation *op) -> llvm::Optional<mlir::Attribute> {
+      if (auto load = mlir::dyn_cast<imex::ntensor::LoadOp>(op))
+        return load.getArray().getType().getEnvironment();
+
+      if (auto store = mlir::dyn_cast<imex::ntensor::LoadOp>(op))
+        return store.getArray().getType().getEnvironment();
+
+      return llvm::None;
+    };
+
+    mlir::OpBuilder builder(&getContext());
+    auto attrName =
+        builder.getStringAttr(imex::util::attributes::getParallelName());
+    llvm::SmallVector<std::pair<mlir::scf::ForOp, mlir::Attribute>>
+        opsToProcess;
+
+    auto visitor = [&](mlir::scf::ForOp forOp) -> mlir::WalkResult {
+      if (!forOp->hasAttr(attrName))
+        return mlir::WalkResult::advance();
+
+      llvm::Optional<mlir::Attribute> env;
+      auto innerVisitor = [&](mlir::Operation *innerOp) -> mlir::WalkResult {
+        auto opEnv = getOpEnv(innerOp);
+        if (!opEnv)
+          return mlir::WalkResult::advance();
+
+        if (!env) {
+          env = *opEnv;
+        } else if (*env != *opEnv) {
+          forOp->emitError("Incompatible envs: ") << *env << " and " << *opEnv;
+          return mlir::WalkResult::interrupt();
+        }
+        return mlir::WalkResult::advance();
+      };
+      if (forOp->walk(innerVisitor).wasInterrupted())
+        return mlir::WalkResult::interrupt();
+
+      if (env && *env)
+        opsToProcess.emplace_back(forOp, *env);
+
+      return mlir::WalkResult::advance();
+    };
+    if (op->walk(visitor).wasInterrupted())
+      return signalPassFailure();
+
+    if (opsToProcess.empty())
+      return markAllAnalysesPreserved();
+
+    for (auto [forOp, env] : opsToProcess) {
+      auto resultTypes = forOp.getResultTypes();
+      builder.setInsertionPoint(forOp);
+      auto envRegion = builder.create<imex::util::EnvironmentRegionOp>(
+          forOp.getLoc(), env, /*args*/ llvm::None, resultTypes);
+      auto &envRegionBlock = envRegion.getRegion().front();
+      auto term = envRegionBlock.getTerminator();
+      forOp->moveBefore(term);
+      forOp->replaceAllUsesWith(envRegion.getResults());
+      builder.setInsertionPoint(term);
+      builder.create<imex::util::EnvironmentRegionYieldOp>(term->getLoc(),
+                                                           forOp.getResults());
+      term->erase();
+    }
+  }
+};
+
 struct ResolveNumpyFuncsPass
     : public mlir::PassWrapper<ResolveNumpyFuncsPass,
                                mlir::OperationPass<void>> {
@@ -1652,7 +1732,8 @@ struct SimplifyExpandDims
       return mlir::failure();
 
     auto context = op.getContext();
-    auto parallelAttr = mlir::StringAttr::get(context, "parallel");
+    auto parallelAttr =
+        mlir::StringAttr::get(context, mlir::getParallelIteratorTypeName());
     if (llvm::any_of(op.getIteratorTypes(),
                      [&](auto attr) { return attr != parallelAttr; }))
       return mlir::failure();
@@ -2583,6 +2664,7 @@ static void populatePlierToLinalgGenPipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<ResolveNumpyFuncsPass>());
   pm.addPass(imex::ntensor::createPropagateEnvironmentPass());
   pm.addPass(std::make_unique<ResolveNtensorPass>());
+  pm.addPass(std::make_unique<WrapParforRegions>());
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addNestedPass<mlir::func::FuncOp>(imex::createNtensorAliasAnalysisPass());
   pm.addNestedPass<mlir::func::FuncOp>(imex::createNtensorToLinalgPass());

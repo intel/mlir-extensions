@@ -57,3 +57,15 @@ func.func @test(%arg1: !ntensor.ntensor<?xf32, "test1">, %arg2: !ntensor.ntensor
   %4 = ntensor.primitive "foo" (%3) : !ntensor.ntensor<?xf32> -> !ntensor.ntensor<?xf32>
   return %4 : !ntensor.ntensor<?xf32>
 }
+
+// -----
+
+// CHECK-LABEL: func @test
+//  CHECK-SAME: (%[[ARG:.*]]: !ntensor.ntensor<?xf32, "test">)
+//       CHECK: %[[RES:.*]] = ntensor.load %[[ARG]][%{{.*}}] : !ntensor.ntensor<?xf32, "test">
+//       CHECK: return %[[RES]]
+func.func @test(%arg1: !ntensor.ntensor<?xf32, "test">) -> f32 {
+  %0 = arith.constant 0 : index
+  %1 = ntensor.load %arg1[%0] : !ntensor.ntensor<?xf32, "test">
+  return %1 : f32
+}
