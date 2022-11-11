@@ -7,6 +7,7 @@ import pytest
 from numpy.testing import assert_equal, assert_allclose
 import numpy as np
 import math
+import numba
 
 from numba_dpcomp.mlir.settings import _readenv
 from numba_dpcomp.mlir.kernel_impl import (
@@ -890,6 +891,42 @@ def test_dpctl_simple1():
     filter_string = dgpu_res.device.sycl_device.filter_string
     with print_pass_ir([], ["ConvertParallelLoopToGpu"]):
         gpu_func[a.shape, DEFAULT_LOCAL_SIZE](da, db, dgpu_res)
+        ir = get_print_buffer()
+        assert (
+            ir.count(
+                f'imex_util.env_region #gpu_runtime.region_desc<device = "{filter_string}">'
+            )
+            > 0
+        ), ir
+        assert ir.count("gpu.launch blocks") == 1, ir
+
+    _to_host(dgpu_res, gpu_res)
+    assert_equal(gpu_res, sim_res)
+
+
+@require_dpctl
+def test_parfor_simple1():
+    def py_func(a, b, c):
+        for i in numba.prange(len(a)):
+            c[i] = a[i] + b[i]
+
+    gpu_func = njit(py_func)
+
+    a = np.arange(1024, dtype=np.float32)
+    b = np.arange(1024, dtype=np.float32) * 3
+
+    sim_res = np.zeros(a.shape, a.dtype)
+    py_func(a, b, sim_res)
+
+    da = _from_host(a, buffer="device")
+    db = _from_host(b, buffer="shared")
+
+    gpu_res = np.zeros(a.shape, a.dtype)
+    dgpu_res = _from_host(gpu_res, buffer="device")
+
+    filter_string = dgpu_res.device.sycl_device.filter_string
+    with print_pass_ir([], ["ConvertParallelLoopToGpu"]):
+        gpu_func(da, db, dgpu_res)
         ir = get_print_buffer()
         assert (
             ir.count(
