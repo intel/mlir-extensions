@@ -12,6 +12,7 @@ func.func(empty-tensor-to-alloc-tensor
 func-bufferize
 func.func(finalizing-bufferize
           convert-linalg-to-parallel-loops
+          imex-add-outer-parallel-loop
           gpu-map-parallel-loops
           convert-parallel-loops-to-gpu)
 # insert-gpu-allocs pass can have client-api = opencl or vulkan args

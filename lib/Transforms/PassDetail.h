@@ -27,6 +27,9 @@ namespace spirv {
 class SPIRVDialect;
 }
 
+namespace scf {
+class SCFDialect;
+}
 } // end namespace mlir
 
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
