@@ -29,6 +29,8 @@ struct AddOuterParallelLoopPass
 public:
   void runOnOperation() override {
     auto func = getOperation();
+    if (func.getBody().empty())
+      return;
     std::vector<llvm::SmallVector<Operation *, 4>> groupedOps;
     // populate the top level for-loop
     for (auto topIt = func.getBody().front().begin();
