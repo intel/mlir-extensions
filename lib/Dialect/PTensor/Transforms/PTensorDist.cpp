@@ -141,6 +141,111 @@ struct DistExtractRTensorOpRWP
   }
 };
 
+/// Rewriting ::imex::ptensor::ExtractSliceOp
+/// 1. Convert given global slice into local slice
+/// 2. Get PTensor from DistTensor and apply to ExtractTensorOp.
+struct DistExtractSliceOpRWP
+    : public RecOpRewritePattern<::imex::ptensor::ExtractSliceOp> {
+  using RecOpRewritePattern::RecOpRewritePattern;
+
+  ::mlir::LogicalResult
+  matchAndRewrite(::imex::ptensor::ExtractSliceOp op,
+                  ::mlir::PatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    auto src = op.getSource();
+    // get input
+    auto inpPtTyp = src.getType().dyn_cast<::imex::dist::DistTensorType>();
+    if (!inpPtTyp) {
+      return ::mlir::failure();
+    }
+    auto indexTyp = rewriter.getIndexType();
+    // Get the local part of the global slice, team, rank, offsets
+    uint64_t rank = inpPtTyp.getPTensorType().getRtensor().getRank();
+    assert(rank == 1);
+    auto team = createTeamOf(loc, rewriter, src);
+    auto lOffs = createGetLocalOffsets(loc, rewriter, src);
+    auto lPTnsr = createGetLocal(loc, rewriter, src);
+    auto lRTnsr = rewriter.create<::imex::ptensor::ExtractRTensorOp>(
+        loc, inpPtTyp.getPTensorType().getRtensor(), lPTnsr);
+
+    auto slcOffs = op.getOffsets();
+    auto slcSizes = op.getSizes();
+    auto slcStrides = op.getStrides();
+    auto zeroIdx = createIndex(loc, rewriter, 0);
+    // number of elements in slice
+    auto slcExtent =
+        rewriter.create<::mlir::arith::MulIOp>(loc, slcSizes[0], slcStrides[0]);
+    // last index of slice
+    auto slcEnd =
+        rewriter.create<::mlir::arith::AddIOp>(loc, slcOffs[0], slcExtent);
+    // local shape
+    auto lShape = rewriter.create<::mlir::shape::ShapeOfOp>(loc, lRTnsr);
+    // local extent/size
+    auto lExtent =
+        rewriter.create<::mlir::shape::GetExtentOp>(loc, lShape, zeroIdx);
+    // local offset (dim 0)
+    auto lOff = rewriter.create<::mlir::tensor::ExtractOp>(
+        loc, indexTyp, lOffs, ::mlir::ValueRange{zeroIdx});
+    // last index of local partition
+    auto lEnd =
+        rewriter.create<::mlir::arith::AddIOp>(loc, slcOffs[0], lExtent);
+    // check if requested slice fully before local partition
+    auto beforeLocal = rewriter.create<mlir::arith::CmpIOp>(
+        loc, ::mlir::arith::CmpIPredicate::ule, slcEnd, lOff);
+    // check if requested slice fully behind local partition
+    auto behindLocal = rewriter.create<mlir::arith::CmpIOp>(
+        loc, ::mlir::arith::CmpIPredicate::ule, lEnd, slcOffs[0]);
+    // check is requested slice start before local partition
+    auto startsBefore = rewriter.create<mlir::arith::CmpIOp>(
+        loc, ::mlir::arith::CmpIPredicate::ult, slcOffs[0], lOff);
+
+    auto lDiff1 = rewriter.create<::mlir::arith::SubIOp>(loc, lOff, slcOffs[0]);
+    auto lDiff2 = rewriter.create<::mlir::arith::SubIOp>(loc, slcOffs[0], lOff);
+    auto mod =
+        rewriter.create<::mlir::arith::RemUIOp>(loc, lDiff1, slcStrides[0]);
+    // case slc starts before partition: local start is (lOff - slcOff) % stride
+    auto viewOff =
+        rewriter.create<mlir::arith::SelectOp>(loc, startsBefore, mod, lDiff2);
+    viewOff = rewriter.create<mlir::arith::SelectOp>(loc, beforeLocal, zeroIdx,
+                                                     viewOff);
+    viewOff = rewriter.create<mlir::arith::SelectOp>(loc, behindLocal, zeroIdx,
+                                                     viewOff);
+    // range between local views start and partition's end
+    auto lRange = rewriter.create<::mlir::arith::SubIOp>(loc, lExtent, viewOff);
+    // number of elements in local view
+    auto viewSize1 =
+        rewriter.create<::mlir::arith::DivUIOp>(loc, lRange, slcStrides[0]);
+    auto viewSize = rewriter.create<mlir::arith::SelectOp>(loc, beforeLocal,
+                                                           zeroIdx, viewSize1);
+    viewSize = rewriter.create<mlir::arith::SelectOp>(loc, behindLocal, zeroIdx,
+                                                      viewSize);
+
+    auto lView = rewriter.create<::imex::ptensor::ExtractSliceOp>(
+        loc, inpPtTyp.getPTensorType(), lPTnsr, ::mlir::ValueRange{viewOff},
+        ::mlir::ValueRange{viewSize}, slcStrides);
+
+    // offset of local partition in new tensor/view
+    auto oViewOff = rewriter.create<::mlir::arith::AddIOp>(loc, lOff, viewOff);
+    auto lViewOff1 =
+        rewriter.create<::mlir::arith::SubIOp>(loc, oViewOff, slcOffs[0]);
+    auto lViewOff = rewriter.create<mlir::arith::SelectOp>(
+        loc, beforeLocal, slcOffs[0], lViewOff1);
+    lViewOff = rewriter.create<mlir::arith::SelectOp>(loc, behindLocal, slcEnd,
+                                                      lViewOff1);
+    // create global shape from slice sizes
+    auto gShape = rewriter.create<::mlir::tensor::FromElementsOp>(
+        loc, ::mlir::RankedTensorType::get({rank}, indexTyp), slcSizes);
+    // create local offsets from above computed
+    auto lViewOffs = rewriter.create<::mlir::tensor::FromElementsOp>(
+        loc, ::mlir::RankedTensorType::get({rank}, indexTyp),
+        lViewOff.getResult());
+    // init our new dist tensor
+    rewriter.replaceOp(
+        op, createMkTnsr(loc, rewriter, gShape, lView, lViewOffs, team));
+    return ::mlir::success();
+  }
+};
+
 /// Rewriting ::imex::ptensor::ARangeOp to get a distributed arange if
 /// applicable. Create global, distributed output Tensor as defined by operands.
 /// The local partition (e.g. a RankedTensor) are wrapped in a
@@ -159,21 +264,20 @@ struct DistARangeOpRWP : public RecOpRewritePattern<::imex::ptensor::ARangeOp> {
       return ::mlir::failure();
 
     // get operands
-    auto start = op.getStart();
-    auto step = op.getStep();
+    auto start = createMakeIndex(loc, rewriter, op.getStart());
+    auto stop = createMakeIndex(loc, rewriter, op.getStop());
+    auto step = createMakeIndex(loc, rewriter, op.getStep());
     // compute global count (so we know the shape)
-    auto count = createCountARange(rewriter, loc, start, op.getStop(), step);
-    auto dtype = rewriter.getI64Type(); // FIXME
-    auto i64Typ = rewriter.getI64Type();
+    auto count = createCountARange(rewriter, loc, start, stop, step);
+    auto dtype = rewriter.getIndexType(); // FIXME
+    auto indexTyp = rewriter.getIndexType();
     // get number of procs and prank
     auto nProcs = rewriter.create<::imex::dist::NProcsOp>(loc, team);
     auto pRank = rewriter.create<::imex::dist::PRankOp>(loc, team);
     // result shape is 1d
     constexpr uint64_t rank = 1;
-    auto cnt = rewriter.create<::mlir::arith::IndexCastOp>(loc, i64Typ, count)
-                   .getResult();
     auto gShape = rewriter.create<::mlir::tensor::FromElementsOp>(
-        loc, ::mlir::RankedTensorType::get({rank}, i64Typ), cnt);
+        loc, ::mlir::RankedTensorType::get({rank}, indexTyp), count);
 
     // so is the local shape
     llvm::SmallVector<mlir::Value> lShapeVVec(rank);
@@ -182,13 +286,13 @@ struct DistARangeOpRWP : public RecOpRewritePattern<::imex::ptensor::ARangeOp> {
         loc, rank, nProcs, pRank, gShape);
     auto zero = createIndex(loc, rewriter, 0);
     auto lSz = rewriter.create<::mlir::tensor::ExtractOp>(
-        loc, i64Typ, lShapeVVec_mr, ::mlir::ValueRange({zero}));
+        loc, indexTyp, lShapeVVec_mr, ::mlir::ValueRange({zero}));
     // get local offsets
     auto offsets = rewriter.create<::imex::dist::LocalOffsetsOp>(
         loc, rank, nProcs, pRank, gShape);
     // create start from offset
     auto off = rewriter.create<::mlir::tensor::ExtractOp>(
-        loc, i64Typ, offsets, ::mlir::ValueRange({zero}));
+        loc, indexTyp, offsets, ::mlir::ValueRange({zero}));
     auto tmp =
         rewriter.create<::mlir::arith::MulIOp>(loc, off, step); // off * step
     start = rewriter.create<::mlir::arith::AddIOp>(loc, start,
@@ -196,8 +300,8 @@ struct DistARangeOpRWP : public RecOpRewritePattern<::imex::ptensor::ARangeOp> {
     // create stop
     auto tmp2 = rewriter.create<::mlir::arith::MulIOp>(
         loc, lSz, step); // step * lShape[0]
-    auto stop = rewriter.create<::mlir::arith::AddIOp>(
-        loc, start, tmp2); // start + (lShape[0] * step)
+    stop = rewriter.create<::mlir::arith::AddIOp>(loc, start, tmp2)
+               .getResult(); // start + (lShape[0] * step)
     //  get type of local tensor
     auto artype = ::imex::ptensor::PTensorType::get(
         rewriter.getContext(), ::mlir::RankedTensorType::get({-1}, dtype),
@@ -321,7 +425,8 @@ struct PTensorDistPass : public ::imex::PTensorDistBase<PTensorDistPass> {
   void runOnOperation() override {
     ::mlir::FrozenRewritePatternSet patterns;
     insertPatterns<DistARangeOpRWP, DistEWBinOpRWP, DistReductionOpRWP,
-                   DistExtractRTensorOpRWP>(getContext(), patterns);
+                   DistExtractRTensorOpRWP, DistExtractSliceOpRWP>(getContext(),
+                                                                   patterns);
     (void)::mlir::applyPatternsAndFoldGreedily(this->getOperation(), patterns);
   }
 };

@@ -15,6 +15,8 @@
 #include <imex/Dialect/PTensor/IR/PTensorOps.h>
 #include <imex/internal/PassUtils.h>
 #include <llvm/ADT/TypeSwitch.h>
+#include <mlir/Dialect/Shape/IR/Shape.h>
+#include <mlir/Dialect/Utils/StaticValueUtils.h>
 #include <mlir/IR/DialectImplementation.h>
 
 namespace imex {
@@ -39,3 +41,27 @@ void PTensorDialect::initialize() {
 #include <imex/Dialect/PTensor/IR/PTensorOpsTypes.cpp.inc>
 #define GET_OP_CLASSES
 #include <imex/Dialect/PTensor/IR/PTensorOps.cpp.inc>
+
+#if 0
+void imex::ptensor::ExtractSliceOp::build(
+    ::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState,
+    ::mlir::Type resultType, ::mlir::Value source,
+    ::mlir::ArrayRef<::mlir::OpFoldResult> offsets,
+    ::mlir::ArrayRef<::mlir::OpFoldResult> sizes,
+    ::mlir::ArrayRef<::mlir::OpFoldResult> strides,
+    ::mlir::ArrayRef<::mlir::NamedAttribute> attrs)
+{
+    ::mlir::SmallVector<int64_t> staticOffsets, staticSizes, staticStrides;
+    ::mlir::SmallVector<::mlir::Value> dynamicOffsets, dynamicSizes, dynamicStrides;
+    dispatchIndexOpFoldResults(offsets, dynamicOffsets, staticOffsets,
+                                ::mlir::ShapedType::kDynamicStrideOrOffset);
+    dispatchIndexOpFoldResults(sizes, dynamicSizes, staticSizes,
+                                ::mlir::ShapedType::kDynamicSize);
+    dispatchIndexOpFoldResults(strides, dynamicStrides, staticStrides,
+                                ::mlir::ShapedType::kDynamicStrideOrOffset);
+    build(odsBuilder, odsState, resultType, source, dynamicOffsets, dynamicSizes,
+          dynamicStrides, odsBuilder.getI64ArrayAttr(staticOffsets),
+          odsBuilder.getI64ArrayAttr(staticSizes), odsBuilder.getI64ArrayAttr(staticStrides));
+    odsState.addAttributes(attrs);
+}
+#endif

@@ -3,41 +3,41 @@
 // -----
 module {
     "dist.runtime_prototypes"() : () -> ()
-    func.func @test_nprocs(%arg0: i64) -> i64 {
-        %1 = "dist.nprocs"(%arg0) : (i64) -> i64
-        return %1 : i64
+    func.func @test_nprocs(%arg0: index) -> index {
+        %1 = "dist.nprocs"(%arg0) : (index) -> index
+        return %1 : index
     }
 }
-// CHECK-LABEL: func.func private @_idtr_nprocs(i64) -> i64
-// CHECK-LABEL: func.func private @_idtr_prank(i64) -> i64
+// CHECK-LABEL: func.func private @_idtr_nprocs(index) -> index
+// CHECK-LABEL: func.func private @_idtr_prank(index) -> index
 // CHECK-LABEL: func.func private @_idtr_reduce_all(tensor<i64>, i32, i32)
-// CHECK-LABEL: func.func @test_nprocs(%arg0: i64) -> i64 {
+// CHECK-LABEL: func.func @test_nprocs(%arg0: index) -> index {
 // CHECK: @_idtr_nprocs(%arg0)
 
 // -----
 module {
     "dist.runtime_prototypes"() : () -> ()
-    func.func @test_prank(%arg0: i64) -> i64 {
-        %1 = "dist.prank"(%arg0) : (i64) -> i64
-        return %1 : i64
+    func.func @test_prank(%arg0: index) -> index {
+        %1 = "dist.prank"(%arg0) : (index) -> index
+        return %1 : index
     }
 }
-// CHECK-LABEL: func.func private @_idtr_nprocs(i64) -> i64
-// CHECK-LABEL: func.func private @_idtr_prank(i64) -> i64
+// CHECK-LABEL: func.func private @_idtr_nprocs(index) -> index
+// CHECK-LABEL: func.func private @_idtr_prank(index) -> index
 // CHECK-LABEL: func.func private @_idtr_reduce_all(tensor<i64>, i32, i32)
-// CHECK-LABEL: func.func @test_prank(%arg0: i64) -> i64 {
+// CHECK-LABEL: func.func @test_prank(%arg0: index) -> index {
 // CHECK: call @_idtr_prank(%arg0)
 
 // -----
 module {
     "dist.runtime_prototypes"() : () -> ()
-    func.func @test_init_dist_tensor(%gshape: tensor<1xindex>, %pt: !ptensor.ptensor<tensor<?xi64>>, %loffs: tensor<1xindex>, %team: i64) -> !dist.dtensor<<tensor<?xi64>>> {
-        %1 = "dist.init_dist_tensor"(%gshape, %pt, %loffs, %team) : (tensor<1xindex>, !ptensor.ptensor<tensor<?xi64>>, tensor<1xindex>, i64) -> !dist.dtensor<<tensor<?xi64>>>
+    func.func @test_init_dist_tensor(%gshape: tensor<1xindex>, %pt: !ptensor.ptensor<tensor<?xi64>>, %loffs: tensor<1xindex>, %team: index) -> !dist.dtensor<<tensor<?xi64>>> {
+        %1 = "dist.init_dist_tensor"(%gshape, %pt, %loffs, %team) : (tensor<1xindex>, !ptensor.ptensor<tensor<?xi64>>, tensor<1xindex>, index) -> !dist.dtensor<<tensor<?xi64>>>
         return %1 : !dist.dtensor<<tensor<?xi64>>>
     }
 }
-// CHECK-LABEL: func.func private @_idtr_nprocs(i64) -> i64
-// CHECK-LABEL: func.func private @_idtr_prank(i64) -> i64
+// CHECK-LABEL: func.func private @_idtr_nprocs(index) -> index
+// CHECK-LABEL: func.func private @_idtr_prank(index) -> index
 // CHECK-LABEL: func.func private @_idtr_reduce_all(tensor<i64>, i32, i32)
 // CHECK-LABEL: func.func @test_init_dist_tensor
 // CHECK: builtin.unrealized_conversion_cast
@@ -45,15 +45,15 @@ module {
 // -----
 module {
     "dist.runtime_prototypes"() : () -> ()
-    func.func @test_local_offsets(%np : i64, %prank: i64, %shape: tensor<1xindex>) -> tensor<1xi64> {
-        %0 = "dist.local_offsets"(%np, %prank, %shape) {rank = 1 : i64} : (i64, i64, tensor<1xindex>) -> tensor<1xi64>
-        return %0 : tensor<1xi64>
+    func.func @test_local_offsets(%np : index, %prank: index, %shape: tensor<1xindex>) -> tensor<1xindex> {
+        %0 = "dist.local_offsets"(%np, %prank, %shape) {rank = 1 : index} : (index, index, tensor<1xindex>) -> tensor<1xindex>
+        return %0 : tensor<1xindex>
     }
 }
-// CHECK-LABEL: func.func private @_idtr_nprocs(i64) -> i64
-// CHECK-LABEL: func.func private @_idtr_prank(i64) -> i64
+// CHECK-LABEL: func.func private @_idtr_nprocs(index) -> index
+// CHECK-LABEL: func.func private @_idtr_prank(index) -> index
 // CHECK-LABEL: func.func private @_idtr_reduce_all(tensor<i64>, i32, i32)
-// CHECK-LABEL: func.func @test_local_offsets(%arg0: i64, %arg1: i64, %arg2: tensor<1xindex>) -> tensor<1xi64> {
+// CHECK-LABEL: func.func @test_local_offsets(%arg0: index, %arg1: index, %arg2: tensor<1xindex>) -> tensor<1xindex> {
 // CHECK: tensor.extract
 // CHECK: arith.subi
 // CHECK: arith.muli
@@ -61,15 +61,15 @@ module {
 // -----
 module {
     "dist.runtime_prototypes"() : () -> ()
-    func.func @test_local_shape(%np : i64, %prank: i64, %shape: tensor<1xindex>) -> tensor<1xi64> {
-        %0 = "dist.local_shape"(%np, %prank, %shape) {rank = 1 : i64} : (i64, i64, tensor<1xindex>) -> tensor<1xi64>
-        return %0 : tensor<1xi64>
+    func.func @test_local_shape(%np : index, %prank: index, %shape: tensor<1xindex>) -> tensor<1xindex> {
+        %0 = "dist.local_shape"(%np, %prank, %shape) {rank = 1 : index} : (index, index, tensor<1xindex>) -> tensor<1xindex>
+        return %0 : tensor<1xindex>
     }
 }
-// CHECK-LABEL: func.func private @_idtr_nprocs(i64) -> i64
-// CHECK-LABEL: func.func private @_idtr_prank(i64) -> i64
+// CHECK-LABEL: func.func private @_idtr_nprocs(index) -> index
+// CHECK-LABEL: func.func private @_idtr_prank(index) -> index
 // CHECK-LABEL: func.func private @_idtr_reduce_all(tensor<i64>, i32, i32)
-// CHECK-LABEL: func.func @test_local_shape(%arg0: i64, %arg1: i64, %arg2: tensor<1xindex>) -> tensor<1xi64> {
+// CHECK-LABEL: func.func @test_local_shape(%arg0: index, %arg1: index, %arg2: tensor<1xindex>) -> tensor<1xindex> {
 // CHECK: tensor.extract
 // CHECK: arith.subi
 
@@ -81,8 +81,8 @@ module {
         return %0 : tensor<i64>
     }
 }
-// CHECK-LABEL: func.func private @_idtr_nprocs(i64) -> i64
-// CHECK-LABEL: func.func private @_idtr_prank(i64) -> i64
+// CHECK-LABEL: func.func private @_idtr_nprocs(index) -> index
+// CHECK-LABEL: func.func private @_idtr_prank(index) -> index
 // CHECK-LABEL: func.func private @_idtr_reduce_all(tensor<i64>, i32, i32)
 // CHECK-LABEL: func.func @test_allreduce(%arg0: tensor<i64>) -> tensor<i64> {
 // CHECK: @_idtr_reduce_all

@@ -28,9 +28,9 @@ inline ::mlir::Value createCountARange(::mlir::OpBuilder &builder,
                                        ::mlir::Value start, ::mlir::Value stop,
                                        ::mlir::Value step) {
   // Create constants 0, 1, -1 for later
-  auto zero = createInt(loc, builder, 0);
-  auto one = createInt(loc, builder, 1);
-  auto mone = createInt(loc, builder, -1);
+  auto zero = createIndex(loc, builder, 0);
+  auto one = createIndex(loc, builder, 1);
+  auto mone = createIndex(loc, builder, -1);
 
   // Compute number of elements as
   //   (stop - start + step + (step < 0 ? 1 : -1)) / step
@@ -40,11 +40,7 @@ inline ::mlir::Value createCountARange(::mlir::OpBuilder &builder,
   auto tmp1 = builder.create<mlir::arith::AddIOp>(loc, stop, step);
   auto tmp2 = builder.create<mlir::arith::AddIOp>(loc, tmp1, increment);
   auto tmp3 = builder.create<mlir::arith::SubIOp>(loc, tmp2, start);
-  auto count =
-      builder.create<mlir::arith::DivUIOp>(loc, tmp3, step).getResult();
-  return builder
-      .create<::mlir::arith::IndexCastOp>(loc, builder.getIndexType(), count)
-      .getResult();
+  return builder.create<mlir::arith::DivUIOp>(loc, tmp3, step).getResult();
 }
 
 } // namespace imex

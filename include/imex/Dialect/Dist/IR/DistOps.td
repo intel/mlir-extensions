@@ -75,11 +75,11 @@ def RuntimePrototypesOp : Dist_Op<"runtime_prototypes"> {
 def NProcsOp : Dist_Op<"nprocs", [Pure]> {
     let summary = "Number of processes for given team";
     let arguments = (ins AnyType:$team);
-    let results = (outs I64);
+    let results = (outs Index);
     let builders = [
         // auto-deduce return type
         OpBuilder<(ins "::mlir::Value":$team), [{
-            build($_builder, $_state, $_builder.getI64Type(), team);
+            build($_builder, $_state, $_builder.getIndexType(), team);
         }]>,
     ];
 }
@@ -87,11 +87,11 @@ def NProcsOp : Dist_Op<"nprocs", [Pure]> {
 def PRankOp : Dist_Op<"prank", [Pure]> {
     let summary = "Process rank in team";
     let arguments = (ins AnyType:$team);
-    let results = (outs I64);
+    let results = (outs Index);
     let builders = [
         // auto-deduce return type
         OpBuilder<(ins "::mlir::Value":$team), [{
-            build($_builder, $_state, $_builder.getI64Type(), team);
+            build($_builder, $_state, $_builder.getIndexType(), team);
         }]>,
     ];
 }
@@ -124,7 +124,7 @@ def ExtractFromDistOp : Dist_Op<"extract_from_dist", []> {
     let builders = [
       // auto-deduce return type from from operands
       OpBuilder<(ins "::imex::dist::INFO":$what, "::mlir::Value":$d_tensor), [{
-        auto i64Type = $_builder.getI64Type();
+        auto IndexType = $_builder.getIndexType();
         auto idx = getIntAttr<32>($_builder, what);
         $_state.addAttribute(getWhatAttrName(odsState.name), idx);
         $_state.addOperands(d_tensor);
@@ -134,13 +134,13 @@ def ExtractFromDistOp : Dist_Op<"extract_from_dist", []> {
         switch(idx.getInt()) {
             case GSHAPE:
             case LOFFSETS:
-                $_state.addTypes(::mlir::RankedTensorType::get({rank ? rank : 1}, i64Type));
+                $_state.addTypes(::mlir::RankedTensorType::get({rank ? rank : 1}, IndexType));
                 break;
             case LTENSOR:
                 $_state.addTypes(ttype.getPTensorType());
                 break;
             case TEAM:
-                $_state.addTypes(i64Type);
+                $_state.addTypes(IndexType);
                 break;
             default:
                 assert(!"Unknown distributed meta information requested");
@@ -154,12 +154,12 @@ def LocalOffsetsOp : Dist_Op<"local_offsets", []> {
     let description = [{
         Result is a 1d memref.
     }];
-    let arguments = (ins I64Attr:$rank, I64:$num_procs, I64:$prank, AnyType:$gshape);
+    let arguments = (ins IndexAttr:$rank, Index:$num_procs, Index:$prank, AnyType:$gshape);
     let results = (outs AnyType);
     let builders = [
         // auto-deduce return type
         OpBuilder<(ins "int64_t":$rank, "::mlir::Value":$num_procs, "::mlir::Value":$prank, "::mlir::Value":$gshape), [{
-            build($_builder, $_state, ::mlir::RankedTensorType::get({rank}, $_builder.getI64Type()), getIntAttr<64>($_builder, rank), num_procs, prank, gshape);
+            build($_builder, $_state, ::mlir::RankedTensorType::get({rank}, $_builder.getIndexType()), $_builder.getIndexAttr(rank), num_procs, prank, gshape);
         }]>,
     ];
 }
@@ -169,12 +169,12 @@ def LocalShapeOp : Dist_Op<"local_shape", []> {
     let description = [{
         Result is a 1d memref.
     }];
-    let arguments = (ins I64Attr:$rank, I64:$num_procs, I64:$prank, AnyType:$gshape);
+    let arguments = (ins IndexAttr:$rank, Index:$num_procs, Index:$prank, AnyType:$gshape);
     let results = (outs AnyType);
     let builders = [
         // auto-deduce return type
-        OpBuilder<(ins "int32_t":$rank, "::mlir::Value":$num_procs, "::mlir::Value":$prank, "::mlir::Value":$gshape), [{
-            build($_builder, $_state, ::mlir::RankedTensorType::get({rank}, $_builder.getI64Type()), getIntAttr<64>($_builder, rank), num_procs, prank, gshape);
+        OpBuilder<(ins "int64_t":$rank, "::mlir::Value":$num_procs, "::mlir::Value":$prank, "::mlir::Value":$gshape), [{
+            build($_builder, $_state, ::mlir::RankedTensorType::get({rank}, $_builder.getIndexType()), $_builder.getIndexAttr(rank), num_procs, prank, gshape);
         }]>,
     ];
 }

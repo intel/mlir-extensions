@@ -183,8 +183,7 @@ struct ExtractSliceLowering
     // and simply replace with tensor::extract_slice
     rewriter.replaceOpWithNewOp<::mlir::tensor::ExtractSliceOp>(
         op, retRtTyp, source, adaptor.getOffsets(), adaptor.getSizes(),
-        adaptor.getStrides(), adaptor.getStaticOffsets(),
-        adaptor.getStaticSizes(), adaptor.getStaticStrides());
+        adaptor.getStrides());
 
     return ::mlir::success();
   }
@@ -203,31 +202,14 @@ struct ARangeLowering
     auto loc = op.getLoc();
 
     // Get Operands
-    auto start = adaptor.getStart();
-    auto stop = adaptor.getStop();
-    auto step = adaptor.getStep();
+    auto start = createMakeIndex(loc, rewriter, adaptor.getStart());
+    auto stop = createMakeIndex(loc, rewriter, adaptor.getStop());
+    auto step = createMakeIndex(loc, rewriter, adaptor.getStep());
     auto retPtTyp = op.getType().dyn_cast<::imex::ptensor::PTensorType>();
     assert(retPtTyp);
 
-    // we operate on signless integers
-    auto intTyp = rewriter.getI64Type();
-    if (start.getType() != intTyp) {
-      start =
-          rewriter
-              .create<::mlir::UnrealizedConversionCastOp>(loc, intTyp, start)
-              .getResult(0);
-    }
-    if (stop.getType() != intTyp) {
-      stop =
-          rewriter.create<::mlir::UnrealizedConversionCastOp>(loc, intTyp, stop)
-              .getResult(0);
-    }
-    if (step.getType() != intTyp) {
-      step =
-          rewriter.create<::mlir::UnrealizedConversionCastOp>(loc, intTyp, step)
-              .getResult(0);
-    }
-
+    // we operate on index type
+    auto intTyp = rewriter.getIndexType();
     auto count = createCountARange(rewriter, loc, start, stop, step);
 
     // create shape vector
@@ -251,10 +233,9 @@ struct ARangeLowering
     auto body = [&start, &step, &elTyp, &intTyp](::mlir::OpBuilder &builder,
                                                  ::mlir::Location loc,
                                                  ::mlir::ValueRange args) {
-      auto dim = builder.getI64IntegerAttr(0);
+      auto dim = getIntAttr<64>(builder, 0);
       auto idx = builder.create<::mlir::linalg::IndexOp>(loc, dim);
-      auto _idx = builder.create<::mlir::arith::IndexCastOp>(loc, intTyp, idx);
-      auto tmp = builder.create<::mlir::arith::MulIOp>(loc, step, _idx);
+      auto tmp = builder.create<::mlir::arith::MulIOp>(loc, step, idx);
       auto val = builder.create<::mlir::arith::AddIOp>(loc, start, tmp);
       auto ret = builder.create<::mlir::UnrealizedConversionCastOp>(
           loc, elTyp, val.getResult());

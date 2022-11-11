@@ -136,44 +136,25 @@ def ExtractSliceOp : PTensor_Op<"extract_slice", [SameVariadicOperandSize , Pure
   }];
 
   let arguments = (ins
-    PTensor_PTensor:$source,
+    AnyType:$source,
     Variadic<Index>:$offsets,
     Variadic<Index>:$sizes,
-    Variadic<Index>:$strides,
-    I64ArrayAttr:$static_offsets,
-    I64ArrayAttr:$static_sizes,
-    I64ArrayAttr:$static_strides
+    Variadic<Index>:$strides
   );
   let results = (outs PTensor_PTensor:$result);
 
   let assemblyFormat = [{
-    $source ``
-    custom<DynamicIndexList>($offsets, $static_offsets,
-                               "::mlir::ShapedType::kDynamicStrideOrOffset")
-    custom<DynamicIndexList>($sizes, $static_sizes,
-                               "::mlir::ShapedType::kDynamicSize")
-    custom<DynamicIndexList>($strides, $static_strides,
-                               "::mlir::ShapedType::kDynamicStrideOrOffset")
-    attr-dict `:` qualified(type($source)) `to` qualified(type($result))
+    $source `[` $offsets `]``[` $sizes `]``[` $strides `]` attr-dict `:` qualified(type($source)) `to` qualified(type($result))
   }];
 
   // tablegen does not allow defining templated builders so we make it a plain C++ extra
-  let extraClassDeclaration = [{
-    // Simply forwarding the construction to tensor::build
-    template<typename... Ts>
-    static void build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState,
-                      PTensorType resultType, ::mlir::Value source, Ts&&... args)
-    {
-        auto sourcePTensorType = source.getType().cast<PTensorType>();
-        auto resultPTensorType = source.getType().cast<PTensorType>();
-        if(sourcePTensorType && resultPTensorType) {
-            ::mlir::tensor::ExtractSliceOp::build(odsBuilder, odsState, resultPTensorType, source, std::forward<Ts>(args)...);
-        } else {
-            // FIXME
-            assert("expected PTensor(s) in ptensor.extract_slice" == nullptr);
-        }
-    }
-  }];
+  // let builders = [
+    // Build an ExtractSliceOp with mixed static and dynamic entries and
+    // inferred result type.
+    // OpBuilder<(ins "::mlir::Type":$resultType, "::mlir::Value":$source, "::mlir::ArrayRef<::mlir::OpFoldResult>":$offsets,
+    //   "::mlir::ArrayRef<::mlir::OpFoldResult>":$sizes, "::mlir::ArrayRef<::mlir::OpFoldResult>":$strides,
+    //   CArg<"::mlir::ArrayRef<::mlir::NamedAttribute>", "{}">:$attrs)>,
+  // ];
 }
 
 def ARangeOp : PTensor_Op<"arange", [SameVariadicOperandSize]> {
