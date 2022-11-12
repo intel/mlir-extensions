@@ -2304,7 +2304,6 @@ struct InsertGPUGlobalReduce
                                              newReduce.getResult(), array);
 
       auto &newRegion = newReduce.getRegion();
-      //      rewriter.eraseBlock(&newRegion.front());
       rewriter.inlineRegionBefore(reduceRegion, newRegion, newRegion.end());
 
       rewriter.setInsertionPoint(term);
