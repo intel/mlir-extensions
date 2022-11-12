@@ -161,3 +161,11 @@ static mlir::PassPipelineRegistration<> tileParallelLoopsGPU(
 static mlir::PassPipelineRegistration<> memoryOpts(
     "imex-memory-opts", "Apply memory optimizations",
     [](mlir::OpPassManager &pm) { pm.addPass(imex::createMemoryOptPass()); });
+
+static mlir::PassPipelineRegistration<> insertGPUGlobalReduce(
+    "gpux-insert-global-reduce",
+    "Update scf.parallel loops with reductions to use "
+    "gpu_runtime.global_reduce",
+    [](mlir::OpPassManager &pm) {
+      pm.addPass(gpu_runtime::createInsertGPUGlobalReducePass());
+    });

@@ -38,4 +38,8 @@ std::unique_ptr<mlir::Pass> createTileParallelLoopsForGPUPass();
 /// For devices without f64 support, truncate all operations to f32.
 std::unique_ptr<mlir::Pass> createTruncateF64ForGPUPass();
 
+/// Update scf.parallel loops with reductions to use gpu_runtime.global_reduce.
+/// This pass is intended to be run right before scf-to-gpu.
+std::unique_ptr<mlir::Pass> createInsertGPUGlobalReducePass();
+
 } // namespace gpu_runtime

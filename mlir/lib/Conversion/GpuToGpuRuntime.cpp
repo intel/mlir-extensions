@@ -2220,6 +2220,137 @@ struct TruncateF64ForGPUPass
     }
   }
 };
+
+struct InsertGPUGlobalReduce
+    : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::scf::ParallelOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    // Process only outermost loops with mappings.
+    if (op->getParentOfType<mlir::scf::ParallelOp>() ||
+        !op->hasAttr(mlir::gpu::getMappingAttrName()))
+      return mlir::failure();
+
+    // Check if there any reductions.
+    if (op.getInitVals().empty())
+      return mlir::failure();
+
+    auto reductionOps = op.getLoopBody().front().getOps<mlir::scf::ReduceOp>();
+    assert(static_cast<size_t>(
+               std::distance(reductionOps.begin(), reductionOps.end())) ==
+           op.getInitVals().size());
+
+    llvm::SmallVector<mlir::scf::ReduceOp> reductionOpsVec(reductionOps.begin(),
+                                                           reductionOps.end());
+
+    llvm::SmallVector<mlir::Value> results;
+    results.reserve(op.getInitVals().size());
+
+    auto loc = op.getLoc();
+    mlir::BlockAndValueMapping mapper;
+    mlir::OpBuilder::InsertionGuard g(rewriter);
+
+    auto &loopBlock = op.getLoopBody().front();
+    rewriter.setInsertionPointToStart(&loopBlock);
+    mlir::Value cond;
+    for (auto [lb, arg] :
+         llvm::zip(op.getLowerBound(), loopBlock.getArguments())) {
+      mlir::Value eq = rewriter.create<mlir::arith::CmpIOp>(
+          loc, mlir::arith::CmpIPredicate::eq, arg, lb);
+      if (!cond) {
+        cond = eq;
+      } else {
+        cond = rewriter.create<mlir::arith::AndIOp>(loc, cond, eq);
+      }
+    }
+
+    for (auto [reduce, init] : llvm::zip(reductionOpsVec, op.getInitVals())) {
+      auto reduceType = init.getType();
+      auto memrefType = mlir::MemRefType::get(llvm::None, reduceType);
+
+      rewriter.setInsertionPoint(op);
+      mlir::Value array =
+          rewriter.create<mlir::memref::AllocOp>(loc, memrefType);
+
+      auto &reduceRegion = reduce.getReductionOperator();
+
+      rewriter.setInsertionPointAfter(op);
+      mlir::Value res = rewriter.create<mlir::memref::LoadOp>(loc, array);
+      rewriter.create<mlir::memref::DeallocOp>(loc, array);
+
+      auto &reduceBlock = reduceRegion.front();
+      mapper.clear();
+      mapper.map(reduceBlock.getArgument(0), res);
+      mapper.map(reduceBlock.getArgument(1), init);
+      for (auto &innerOp : reduceBlock.without_terminator())
+        rewriter.clone(innerOp, mapper);
+
+      auto term =
+          mlir::cast<mlir::scf::ReduceReturnOp>(reduceBlock.getTerminator());
+      auto termResult = term.getResult();
+      results.emplace_back(mapper.lookupOrNull(termResult));
+      assert(results.back());
+
+      rewriter.setInsertionPoint(reduce);
+      auto newReduce = rewriter.create<gpu_runtime::GPUGlobalReduceOp>(
+          reduce.getLoc(), reduceType, reduce.getOperand());
+
+      auto ifOp =
+          rewriter.create<mlir::scf::IfOp>(reduce.getLoc(), cond, false);
+      rewriter.setInsertionPointToStart(ifOp.thenBlock());
+      rewriter.create<mlir::memref::StoreOp>(reduce.getLoc(),
+                                             newReduce.getResult(), array);
+
+      auto &newRegion = newReduce.getRegion();
+      //      rewriter.eraseBlock(&newRegion.front());
+      rewriter.inlineRegionBefore(reduceRegion, newRegion, newRegion.end());
+
+      rewriter.setInsertionPoint(term);
+      rewriter.create<gpu_runtime::GPUGlobalReduceYieldOp>(term.getLoc(),
+                                                           termResult);
+
+      rewriter.eraseOp(term);
+      rewriter.eraseOp(reduce);
+    }
+
+    rewriter.setInsertionPoint(op);
+    auto newParallel = rewriter.create<mlir::scf::ParallelOp>(
+        loc, op.getLowerBound(), op.getUpperBound(), op.getStep());
+    auto &newParallelRegion = newParallel.getLoopBody();
+    rewriter.eraseBlock(&newParallelRegion.front());
+    rewriter.inlineRegionBefore(op.getLoopBody(), newParallelRegion,
+                                newParallelRegion.end());
+
+    rewriter.replaceOp(op, results);
+    return mlir::success();
+  }
+};
+
+struct InsertGPUGlobalReducePass
+    : public mlir::PassWrapper<InsertGPUGlobalReducePass,
+                               mlir::OperationPass<mlir::ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(InsertGPUGlobalReducePass)
+
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<gpu_runtime::GpuRuntimeDialect>();
+    registry.insert<mlir::arith::ArithDialect>();
+    registry.insert<mlir::memref::MemRefDialect>();
+    registry.insert<mlir::scf::SCFDialect>();
+  }
+
+  void runOnOperation() override {
+    auto *ctx = &getContext();
+    mlir::RewritePatternSet patterns(ctx);
+
+    patterns.insert<InsertGPUGlobalReduce>(ctx);
+
+    (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
+                                             std::move(patterns));
+  }
+};
 } // namespace
 
 // Expose the passes to the outside world
@@ -2266,4 +2397,8 @@ std::unique_ptr<mlir::Pass> gpu_runtime::createTileParallelLoopsForGPUPass() {
 
 std::unique_ptr<mlir::Pass> gpu_runtime::createTruncateF64ForGPUPass() {
   return std::make_unique<TruncateF64ForGPUPass>();
+}
+
+std::unique_ptr<mlir::Pass> gpu_runtime::createInsertGPUGlobalReducePass() {
+  return std::make_unique<InsertGPUGlobalReducePass>();
 }
