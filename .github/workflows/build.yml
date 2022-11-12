@@ -178,7 +178,7 @@ jobs:
 
       - name: Run lit tests
         shell: bash -l {0}
-        timeout-minutes: 3
+        timeout-minutes: 5
         run: |
           cd /home/runner/work/mlir-extensions/mlir-extensions/_build || exit 1
           cmake --build . --target check-imex || exit 1
