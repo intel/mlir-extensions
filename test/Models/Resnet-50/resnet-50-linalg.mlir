@@ -5,7 +5,6 @@
 #map2 = affine_map<(d0, d1, d2, d3) -> (d0, d1)>
 #map3 = affine_map<(d0, d1) -> (d0, d1)>
 #map4 = affine_map<(d0, d1) -> (d0)>
-
 module{
 func.func @main() {
 
@@ -13,11 +12,10 @@ func.func @main() {
   %2 = call @predict(%0) : (tensor<1x224x224x3xf32>) -> tensor<1x1000xf32>
   %unranked = tensor.cast %2 : tensor<1x1000xf32> to tensor<*xf32>
   call @printMemrefF32(%unranked) : (tensor<*xf32>) -> ()
-  //          CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
-  //     CHECK-SAME: rank = 2 offset = 0 sizes = [1, 1000] strides = [1000, 1] data =
-  //          CHECK: [0.001,   0.001,   0.001,   0.001,   0.001,   0.001,   0.001,   0.001,   0.001,   0.001,
-  // CHECK-COUNT-98:  0.001,   0.001,   0.001,   0.001,   0.001,   0.001,   0.001,   0.001,   0.001,   0.001,
-  //          CHECK:  0.001,   0.001,   0.001,   0.001,   0.001,   0.001,   0.001,   0.001,   0.001,   0.001]
+    //  CHECK: rank = 2 offset = 0 sizes = [1, 1000] strides = [1000, 1] data =
+    //  CHECK:           [0.001,   0.001,   0.001,   0.001,   0.001,   0.001,   0.001,   0.001,   0.001,   0.001,
+    //  CHECK-COUNT-98:   0.001,   0.001,   0.001,   0.001,   0.001,   0.001,   0.001,   0.001,   0.001,   0.001,
+    //  CHECK:            0.001,   0.001,   0.001,   0.001,   0.001,   0.001,   0.001,   0.001,   0.001,   0.001]
 
   return
 }
