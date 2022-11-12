@@ -1,4 +1,4 @@
-# linalg dialect to gpu dialect lowering pipeline
+# linalg dialect to cpu lowering pipeline
 inline
 convert-tensor-to-linalg
 convert-elementwise-to-linalg
