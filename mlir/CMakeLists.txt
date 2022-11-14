@@ -71,6 +71,7 @@ set(SOURCES_LIST
     lib/Transforms/PromoteBoolMemref.cpp
     lib/Transforms/PromoteToParallel.cpp
     lib/Transforms/ScalarOpsConversion.cpp
+    lib/Transforms/ShapeIntegerRangePropagation.cpp
     lib/Transforms/TypeConversion.cpp
     lib/Transforms/UpliftMath.cpp
     lib/Utils.cpp
@@ -119,6 +120,7 @@ set(HEADERS_LIST
     include/imex/Transforms/PromoteToParallel.hpp
     include/imex/Transforms/RewriteWrapper.hpp
     include/imex/Transforms/ScalarOpsConversion.hpp
+    include/imex/Transforms/ShapeIntegerRangePropagation.hpp
     include/imex/Transforms/TypeConversion.hpp
     include/imex/Transforms/UpliftMath.hpp
     include/imex/Utils.hpp

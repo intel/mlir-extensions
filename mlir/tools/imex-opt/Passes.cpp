@@ -24,6 +24,7 @@
 #include "imex/Transforms/ExpandTuple.hpp"
 #include "imex/Transforms/MakeSignless.hpp"
 #include "imex/Transforms/MemoryRewrites.hpp"
+#include "imex/Transforms/ShapeIntegerRangePropagation.hpp"
 
 // Passes registration.
 
@@ -168,4 +169,10 @@ static mlir::PassPipelineRegistration<> insertGPUGlobalReduce(
     "gpu_runtime.global_reduce",
     [](mlir::OpPassManager &pm) {
       pm.addPass(gpu_runtime::createInsertGPUGlobalReducePass());
+    });
+
+static mlir::PassPipelineRegistration<> shapeIntegerRangePropagation(
+    "imex-shape-int-range-opts", "Shape integer range optimizations",
+    [](mlir::OpPassManager &pm) {
+      pm.addPass(imex::createShapeIntegerRangePropagationPass());
     });
