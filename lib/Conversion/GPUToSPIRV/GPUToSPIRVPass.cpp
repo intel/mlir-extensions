@@ -86,8 +86,11 @@ void GPUXToSPIRVPass::runOnOperation() {
     std::unique_ptr<mlir::ConversionTarget> target =
         mlir::SPIRVConversionTarget::get(targetAttr);
 
-    mlir::SPIRVTypeConverter typeConverter(targetAttr);
     mlir::RewritePatternSet patterns(context);
+    mlir::SPIRVConversionOptions options;
+    options.use64bitIndex = true;
+
+    mlir::SPIRVTypeConverter typeConverter(targetAttr, options);
 
     //------- Upstream Conversion------------
     mlir::populateGPUToSPIRVPatterns(typeConverter, patterns);
