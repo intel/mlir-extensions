@@ -212,16 +212,30 @@ public:
         if (!shaped)
           continue;
 
-        auto attr = func.getArgAttrOfType<mlir::ArrayAttr>(
-            static_cast<unsigned>(i), attrName);
-        if (!attr)
+        auto ind = static_cast<unsigned>(i);
+        auto newRange = [&]() -> llvm::Optional<ShapeValue> {
+          auto attr = func.getArgAttrOfType<mlir::ArrayAttr>(ind, attrName);
+          if (attr)
+            return ShapeValue::intersect({shaped}, {attr});
+
+          auto mod = func->getParentOfType<mlir::ModuleOp>();
+          if (!mod)
+            return llvm::None;
+
+          auto uses = mlir::SymbolTable::getSymbolUses(func, mod);
+          if (!uses || !uses->empty())
+            return llvm::None;
+
+          return ShapeValue{shaped};
+        }();
+
+        if (!newRange)
           continue;
 
-        auto newRange = ShapeValue::intersect({shaped}, {attr});
         auto *lattice = getLatticeElement(arg);
         assert(lattice);
         assert(lattice->getValue().isUninitialized());
-        propagateIfChanged(lattice, lattice->join(newRange));
+        propagateIfChanged(lattice, lattice->join(*newRange));
       }
     });
 
