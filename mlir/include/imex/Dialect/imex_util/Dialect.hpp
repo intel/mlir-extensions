@@ -35,6 +35,7 @@ llvm::StringRef getParallelName();
 llvm::StringRef getMaxConcurrencyName();
 llvm::StringRef getForceInlineName();
 llvm::StringRef getOptLevelName();
+llvm::StringRef getShapeRangeName();
 } // namespace attributes
 } // namespace util
 } // namespace imex

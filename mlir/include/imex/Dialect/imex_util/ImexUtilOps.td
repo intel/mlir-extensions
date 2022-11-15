@@ -21,6 +21,7 @@ def ImexUtil_Dialect : Dialect {
 
   let hasCanonicalizer = 1;
   let hasConstantMaterializer = 1;
+  let useDefaultAttributePrinterParser = 1;
   let useDefaultTypePrinterParser = 1;
 }
 
@@ -30,10 +31,17 @@ class ImexUtil_Type<string name, string typeMnemonic, list<Trait> traits = [],
   let mnemonic = typeMnemonic;
 }
 
+class ImexUtil_Attr<string attrName, string attrMnemonic, list<Trait> traits = []>
+    : AttrDef<ImexUtil_Dialect, attrName, traits> {
+  let mnemonic = attrMnemonic;
+}
+
+class ImexUtil_Op<string mnemonic, list<Trait> traits = []>
+    : Op<ImexUtil_Dialect, mnemonic, traits>;
+
 def ImexUtil_OpaqueType : ImexUtil_Type<"Opaque", "opaque", [], "::mlir::Type">;
 
 def ImexUtil_TypeVar : ImexUtil_Type<"TypeVar", "typevar", [], "::mlir::Type"> {
-
   let parameters = (ins
     "::mlir::Type":$type
   );
@@ -47,8 +55,14 @@ def ImexUtil_TypeVar : ImexUtil_Type<"TypeVar", "typevar", [], "::mlir::Type"> {
   let assemblyFormat = "`<` $type `>`";
 }
 
-class ImexUtil_Op<string mnemonic, list<Trait> traits = []>
-    : Op<ImexUtil_Dialect, mnemonic, traits>;
+def IndexRangeAttr
+    : ImexUtil_Attr<"IndexRange", "index_range"> {
+  let parameters = (ins
+    "int64_t":$min,
+    "int64_t":$max
+    );
+  let assemblyFormat = "`<` `[` $min `,` $max `]` `>`";
+}
 
 def EnforceShapeOp : ImexUtil_Op<"enforce_shape"> {
 

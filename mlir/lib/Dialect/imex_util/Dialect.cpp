@@ -39,27 +39,31 @@ struct ImexUtilInlinerInterface : public mlir::DialectInlinerInterface {
 } // namespace
 
 llvm::StringRef imex::util::attributes::getFastmathName() {
-  return "#plier.fastmath";
+  return "imex.fastmath";
 }
 
 llvm::StringRef imex::util::attributes::getJumpMarkersName() {
-  return "#plier.pipeline_jump_markers";
+  return "imex.pipeline_jump_markers";
 }
 
 llvm::StringRef imex::util::attributes::getParallelName() {
-  return "#plier.parallel";
+  return "imex.parallel";
 }
 
 llvm::StringRef imex::util::attributes::getMaxConcurrencyName() {
-  return "#plier.max_concurrency";
+  return "imex.max_concurrency";
 }
 
 llvm::StringRef imex::util::attributes::getForceInlineName() {
-  return "#plier.force_inline";
+  return "imex.force_inline";
 }
 
 llvm::StringRef imex::util::attributes::getOptLevelName() {
-  return "#plier.opt_level";
+  return "imex.opt_level";
+}
+
+llvm::StringRef imex::util::attributes::getShapeRangeName() {
+  return "imex.shape_range";
 }
 
 namespace imex {
