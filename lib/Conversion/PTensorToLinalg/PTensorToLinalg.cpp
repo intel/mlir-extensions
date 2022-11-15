@@ -202,9 +202,9 @@ struct ARangeLowering
     auto loc = op.getLoc();
 
     // Get Operands
-    auto start = createMakeIndex(loc, rewriter, adaptor.getStart());
-    auto stop = createMakeIndex(loc, rewriter, adaptor.getStop());
-    auto step = createMakeIndex(loc, rewriter, adaptor.getStep());
+    auto start = createIndexCast(loc, rewriter, adaptor.getStart());
+    auto stop = createIndexCast(loc, rewriter, adaptor.getStop());
+    auto step = createIndexCast(loc, rewriter, adaptor.getStep());
     auto retPtTyp = op.getType().dyn_cast<::imex::ptensor::PTensorType>();
     assert(retPtTyp);
 
@@ -237,10 +237,9 @@ struct ARangeLowering
       auto idx = builder.create<::mlir::linalg::IndexOp>(loc, dim);
       auto tmp = builder.create<::mlir::arith::MulIOp>(loc, step, idx);
       auto val = builder.create<::mlir::arith::AddIOp>(loc, start, tmp);
-      auto ret = builder.create<::mlir::UnrealizedConversionCastOp>(
-          loc, elTyp, val.getResult());
       // auto _val = builder.create<mlir::arith::SIToFPOp>(loc, elTyp, val);
-      (void)builder.create<::mlir::linalg::YieldOp>(loc, ret.getResult(0));
+      (void)builder.create<::mlir::linalg::YieldOp>(
+          loc, createIndexCast(loc, builder, val.getResult(), elTyp));
     };
 
     rewriter.replaceOpWithNewOp<::mlir::linalg::GenericOp>(

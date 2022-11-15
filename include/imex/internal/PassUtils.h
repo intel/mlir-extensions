@@ -39,14 +39,17 @@ inline ::mlir::Value createIndex(const ::mlir::Location &loc,
   return builder.create<::mlir::arith::ConstantOp>(loc, attr);
 }
 
-inline ::mlir::Value createMakeIndex(const ::mlir::Location &loc,
+inline ::mlir::Value createIndexCast(const ::mlir::Location &loc,
                                      ::mlir::OpBuilder &builder,
-                                     ::mlir::Value val) {
-  auto intTyp = builder.getIndexType();
+                                     ::mlir::Value val,
+                                     ::mlir::Type intTyp = ::mlir::Type()) {
+  if (!intTyp)
+    intTyp = builder.getIndexType();
   return val.getType() == intTyp
              ? val
              : builder.create<::mlir::arith::IndexCastOp>(loc, intTyp, val)
                    .getResult();
 }
+
 } // namespace imex
 #endif // _IMEX_PASSUTILS_H_

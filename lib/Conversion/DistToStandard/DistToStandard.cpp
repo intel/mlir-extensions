@@ -178,7 +178,27 @@ struct ExtractFromDistOpConverter
 
     auto defOp = adaptor.getDTensor()
                      .getDefiningOp<::mlir::UnrealizedConversionCastOp>();
-    assert(defOp);
+    // This can be a chain of casts, originating from type conversion like
+    // type materialization for function arguments. This requires chasing the
+    // chain of casts. We cannot chase casts with more than one operand
+    // without getting into realms of unclear semantics.
+    while (defOp && defOp.getOperands().size() == 1 &&
+           defOp.getOperands()
+               .front()
+               .getType()
+               .isa<::imex::dist::DistTensorType>()) {
+      std::cerr << "defOp: ";
+      defOp.dump();
+      std::cerr << std::endl;
+      std::cerr << "oprnd: ";
+      defOp.getOperands().front().dump();
+      std::cerr << std::endl;
+      defOp = defOp.getOperands()
+                  .front()
+                  .getDefiningOp<::mlir::UnrealizedConversionCastOp>();
+    }
+    if (!defOp)
+      return ::mlir::failure();
     rewriter.replaceOp(op, defOp.getOperands()[adaptor.getWhat()]);
     return ::mlir::success();
   }
@@ -211,7 +231,7 @@ struct LocalOffsetsOpConverter
     auto loc = op.getLoc();
     auto &converter = *getTypeConverter();
 
-    auto sz0 = createMakeIndex(
+    auto sz0 = createIndexCast(
         loc, rewriter,
         rewriter.create<::mlir::tensor::ExtractOp>(
             loc, adaptor.getGshape(),
@@ -240,7 +260,7 @@ struct LocalShapeOpConverter
     auto loc = op.getLoc();
     auto &converter = *getTypeConverter();
 
-    auto sz0 = createMakeIndex(
+    auto sz0 = createIndexCast(
         loc, rewriter,
         rewriter.create<::mlir::tensor::ExtractOp>(
             loc, adaptor.getGshape(),

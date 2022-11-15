@@ -172,49 +172,64 @@ struct DistExtractSliceOpRWP
     auto slcSizes = op.getSizes();
     auto slcStrides = op.getStrides();
     auto zeroIdx = createIndex(loc, rewriter, 0);
-    // number of elements in slice
-    auto slcExtent =
-        rewriter.create<::mlir::arith::MulIOp>(loc, slcSizes[0], slcStrides[0]);
+    auto oneIdx = createIndex(loc, rewriter, 1);
+
     // last index of slice
-    auto slcEnd =
-        rewriter.create<::mlir::arith::AddIOp>(loc, slcOffs[0], slcExtent);
+    auto slcEnd = rewriter.create<::mlir::arith::AddIOp>(
+        loc, slcOffs[0],
+        rewriter.create<::mlir::arith::MulIOp>(loc, slcSizes[0],
+                                               slcStrides[0]));
     // local shape
-    auto lShape = rewriter.create<::mlir::shape::ShapeOfOp>(loc, lRTnsr);
+    // auto lShape = rewriter.create<::mlir::shape::ShapeOfOp>(loc, lRTnsr);
     // local extent/size
-    auto lExtent =
-        rewriter.create<::mlir::shape::GetExtentOp>(loc, lShape, zeroIdx);
+    auto lExtent = rewriter.create<::mlir::tensor::DimOp>(loc, lRTnsr, zeroIdx);
     // local offset (dim 0)
     auto lOff = rewriter.create<::mlir::tensor::ExtractOp>(
         loc, indexTyp, lOffs, ::mlir::ValueRange{zeroIdx});
     // last index of local partition
-    auto lEnd =
-        rewriter.create<::mlir::arith::AddIOp>(loc, slcOffs[0], lExtent);
+    auto lEnd = rewriter.create<::mlir::arith::AddIOp>(loc, lOff, lExtent);
     // check if requested slice fully before local partition
     auto beforeLocal = rewriter.create<mlir::arith::CmpIOp>(
-        loc, ::mlir::arith::CmpIPredicate::ule, slcEnd, lOff);
+        loc, ::mlir::arith::CmpIPredicate::ult, slcEnd, lOff);
     // check if requested slice fully behind local partition
     auto behindLocal = rewriter.create<mlir::arith::CmpIOp>(
         loc, ::mlir::arith::CmpIPredicate::ule, lEnd, slcOffs[0]);
-    // check is requested slice start before local partition
+    // check if requested slice start before local partition
     auto startsBefore = rewriter.create<mlir::arith::CmpIOp>(
         loc, ::mlir::arith::CmpIPredicate::ult, slcOffs[0], lOff);
-
-    auto lDiff1 = rewriter.create<::mlir::arith::SubIOp>(loc, lOff, slcOffs[0]);
+    // (lOff / stride) * stride
+    auto nextMultiple = rewriter.create<::mlir::arith::MulIOp>(
+        loc, rewriter.create<::mlir::arith::DivSIOp>(loc, lOff, slcStrides[0]),
+        slcStrides[0]);
+    // Check if local start is on a multiple of the new slice
+    auto isMultiple = rewriter.create<mlir::arith::CmpIOp>(
+        loc, ::mlir::arith::CmpIPredicate::eq, nextMultiple, lOff);
+    // stride - (lOff - nextMultiple)
+    auto off = rewriter.create<::mlir::arith::SubIOp>(
+        loc, slcStrides[0],
+        rewriter.create<::mlir::arith::SubIOp>(loc, lOff, nextMultiple));
+    // offset is either 0 if multiple or off
+    auto lDiff1 =
+        rewriter.create<mlir::arith::SelectOp>(loc, isMultiple, zeroIdx, off);
+    // if view starts within our partition: (start-lOff)
     auto lDiff2 = rewriter.create<::mlir::arith::SubIOp>(loc, slcOffs[0], lOff);
-    auto mod =
-        rewriter.create<::mlir::arith::RemUIOp>(loc, lDiff1, slcStrides[0]);
-    // case slc starts before partition: local start is (lOff - slcOff) % stride
-    auto viewOff =
-        rewriter.create<mlir::arith::SelectOp>(loc, startsBefore, mod, lDiff2);
+    auto viewOff = rewriter.create<mlir::arith::SelectOp>(loc, startsBefore,
+                                                          lDiff1, lDiff2);
+    // except if slice/view before or behind local partition
     viewOff = rewriter.create<mlir::arith::SelectOp>(loc, beforeLocal, zeroIdx,
                                                      viewOff);
     viewOff = rewriter.create<mlir::arith::SelectOp>(loc, behindLocal, zeroIdx,
                                                      viewOff);
-    // range between local views start and partition's end
-    auto lRange = rewriter.create<::mlir::arith::SubIOp>(loc, lExtent, viewOff);
-    // number of elements in local view
+    // min of lEnd and slice's end
+    auto viewEnd = rewriter.create<::mlir::arith::MinSIOp>(loc, lEnd, slcEnd);
+    // range between local views start and end
+    auto lRange = rewriter.create<::mlir::arith::SubIOp>(loc, viewEnd, viewOff);
+    // number of elements in local view (range+stride-1)/stride
+    auto tmp0 =
+        rewriter.create<::mlir::arith::SubIOp>(loc, slcStrides[0], oneIdx);
+    auto tmp1 = rewriter.create<::mlir::arith::AddIOp>(loc, lRange, tmp0);
     auto viewSize1 =
-        rewriter.create<::mlir::arith::DivUIOp>(loc, lRange, slcStrides[0]);
+        rewriter.create<::mlir::arith::DivSIOp>(loc, tmp1, slcStrides[0]);
     auto viewSize = rewriter.create<mlir::arith::SelectOp>(loc, beforeLocal,
                                                            zeroIdx, viewSize1);
     viewSize = rewriter.create<mlir::arith::SelectOp>(loc, behindLocal, zeroIdx,
@@ -264,12 +279,12 @@ struct DistARangeOpRWP : public RecOpRewritePattern<::imex::ptensor::ARangeOp> {
       return ::mlir::failure();
 
     // get operands
-    auto start = createMakeIndex(loc, rewriter, op.getStart());
-    auto stop = createMakeIndex(loc, rewriter, op.getStop());
-    auto step = createMakeIndex(loc, rewriter, op.getStep());
+    auto start = createIndexCast(loc, rewriter, op.getStart());
+    auto stop = createIndexCast(loc, rewriter, op.getStop());
+    auto step = createIndexCast(loc, rewriter, op.getStep());
     // compute global count (so we know the shape)
     auto count = createCountARange(rewriter, loc, start, stop, step);
-    auto dtype = rewriter.getIndexType(); // FIXME
+    auto dtype = rewriter.getI64Type(); // FIXME
     auto indexTyp = rewriter.getIndexType();
     // get number of procs and prank
     auto nProcs = rewriter.create<::imex::dist::NProcsOp>(loc, team);
