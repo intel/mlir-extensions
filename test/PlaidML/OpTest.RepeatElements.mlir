@@ -2,14 +2,14 @@
 // RUN:                                       --runner mlir-cpu-runner -e main \
 // RUN:                                       --shared-libs=%mlir_runner_utils \
 // RUN:                                       --entry-point-result=void | FileCheck %s
-// RUN: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-llvm.pp \
-// RUN:                                       --runner mlir-cpu-runner -e main \
-// RUN:                                       --entry-point-result=void \
-// RUN:                                       --shared-libs=%mlir_runner_utils,%sycl_runtime | FileCheck %s
-#map0 = affine_map<(d0, d1, d2, d3) -> (d0, d1, d3)>
-#map1 = affine_map<(d0, d1, d2, d3) -> (d0, d1 * 3 + d2, d3)>
+// RUN-GPU: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-llvm.pp \
+// RUN-GPU:                                       --runner mlir-cpu-runner -e main \
+// RUN-GPU:                                       --entry-point-result=void \
+// RUN-GPU:                                       --shared-libs=%mlir_runner_utils,%sycl_runtime | FileCheck %s
+#map0 = affine_map<(d0, d1, d2) -> (d0, d1 floordiv 3, d2)>
+#map1 = affine_map<(d0, d1, d2) -> (d0, d1, d2)>
 module @repeat_elts {
-func.func @main() {
+  func.func @main() {
     %0= arith.constant dense<[[[7., 3., 5., 4., 2., 0., 5., 2., 3., 7.], [2., 4., 2., 5., 0., 1., 0., 0., 0., 4.],
                                [3., 3., 7., 5., 0., 2., 0., 3., 5., 0.], [0., 6., 1., 7., 1., 2., 5., 0., 4., 4.],
                                [6., 2., 2., 4., 2., 7., 3., 4., 6., 6.], [2., 5., 0., 6., 0., 0., 1., 5., 1., 2.],
@@ -62,15 +62,15 @@ func.func @main() {
                                [2., 5., 0., 6., 2., 1., 6., 5., 1., 6.], [2., 2., 4., 4., 3., 4., 3., 1., 7., 3.]]]>:tensor<10x10x10xf32>
     %1 = call @test(%0) : (tensor<10x10x10xf32>) -> tensor<10x30x10xf32>
     %unranked = tensor.cast %1 : tensor<10x30x10xf32>to tensor<*xf32>
-    call @printMemrefF32(%unranked) : (tensor<*xf32>) -> ()
-    return
-}
-func.func private @printMemrefF32(tensor<*xf32>)
+    call @printMemrefF32(%unranked) : (tensor<*xf32>) -> () 
+    return 
+  } 
+  func.func private @printMemrefF32(tensor<*xf32>)
   func.func @test(%arg0: tensor<10x10x10xf32>) -> tensor<10x30x10xf32> {
     %cst = arith.constant 0.000000e+00 : f32
     %0 = tensor.empty() : tensor<10x30x10xf32>
     %1 = linalg.fill ins(%cst : f32) outs(%0 : tensor<10x30x10xf32>) -> tensor<10x30x10xf32>
-    %2 = linalg.generic {indexing_maps = [#map0, #map1], iterator_types = ["parallel", "parallel", "reduction", "parallel"]} ins(%arg0 : tensor<10x10x10xf32>) outs(%1 : tensor<10x30x10xf32>) attrs =  {iterator_ranges = [10, 10, 3, 10]} {
+    %2 = linalg.generic {indexing_maps = [#map0, #map1], iterator_types = ["parallel", "parallel", "parallel"]} ins(%arg0 : tensor<10x10x10xf32>) outs(%1 : tensor<10x30x10xf32>) attrs =  {iterator_ranges = [10, 30, 10]} {
     ^bb0(%arg1: f32, %arg2: f32):
       linalg.yield %arg1 : f32
     } -> tensor<10x30x10xf32>
