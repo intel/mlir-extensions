@@ -15,9 +15,9 @@ func.func @main() {
     %0= arith.constant dense<[[[[9.0, 8.0, 0.0], [1.0, 5.0, 0.0], [1.0, 1.0, 7.0], [8.0, 2.0, 2.0]], [[8.0, 0.0, 4.0], [7.0, 5.0, 5.0], [8.0, 2.0, 0.0], [0.0, 9.0, 5.0]], [[4.0, 7.0, 2.0], [4.0, 5.0, 1.0], [3.0, 3.0, 6.0], [8.0, 0.0, 1.0]], [[2.0, 8.0, 4.0], [0.0, 5.0, 5.0], [6.0, 1.0, 1.0], [3.0, 3.0, 1.0]]]]>:tensor<1x4x4x3xf32>
     %1 = call @test(%0) : (tensor<1x4x4x3xf32>) -> tensor<i32>
     %unranked = tensor.cast %1 : tensor<i32>to tensor<*xi32>
-    call @printMemrefI32(%unranked) : (tensor<*xi32>) -> () 
-    return 
-} 
+    call @printMemrefI32(%unranked) : (tensor<*xi32>) -> ()
+    return
+}
 func.func private @printMemrefI32(tensor<*xi32>)
 func.func @test(%arg0: tensor<1x4x4x3xf32>)->tensor<i32>{
     %c0_i32 = arith.constant 0 : i32
@@ -56,6 +56,6 @@ func.func @test(%arg0: tensor<1x4x4x3xf32>)->tensor<i32>{
     return %9 : tensor<i32>
   }
 }
-// CHECK: Unranked Memref base@ = {{0x[-9a-f]*}} 
-// CHECK-SAME: rank = {{.}} offset = {{.}} sizes = [] strides = {{.*}} data = 
+// CHECK: Unranked Memref base@ = {{0x[-9a-f]*}}
+// CHECK-SAME: rank = {{.}} offset = {{.}} sizes = [] strides = {{.*}} data =
 // CHECK:   0

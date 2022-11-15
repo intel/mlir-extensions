@@ -34,9 +34,9 @@ module @mnist_cnn {
     %8 = arith.constant dense<4.0> : tensor<100xf32>
     %9 = call @test(%0,%1,%2,%3,%4,%5,%6,%7,%8) : (tensor<1x224x224x1xf32>, tensor<3x3x1x32xf32>, tensor<32xf32>, tensor<3x3x32x64xf32>, tensor<64xf32>, tensor<802816x128xf32>, tensor<128xf32>, tensor<128x100xf32>, tensor<100xf32>) -> tensor<1x100xf32>
     %unranked = tensor.cast %9 : tensor<1x100xf32>to tensor<*xf32>
-    call @printMemrefF32(%unranked) : (tensor<*xf32>) -> () 
-    return 
-  } 
+    call @printMemrefF32(%unranked) : (tensor<*xf32>) -> ()
+    return
+  }
   func.func private @printMemrefF32(tensor<*xf32>)
   func.func @test(%arg0: tensor<1x224x224x1xf32>, %arg1: tensor<3x3x1x32xf32>, %arg2: tensor<32xf32>, %arg3: tensor<3x3x32x64xf32>, %arg4: tensor<64xf32>, %arg5: tensor<802816x128xf32>, %arg6: tensor<128xf32>, %arg7: tensor<128x100xf32>, %arg8: tensor<100xf32>) -> tensor<1x100xf32> {
     %cst = arith.constant 0xFF800000 : f32

@@ -15,9 +15,9 @@ func.func @main() {
     %3= arith.constant dense<[0.3]>:tensor<1xf32>
     %4 = call @test(%0,%1,%2,%3) : (tensor<1xf32>,tensor<1xf32>,tensor<1xf32>,tensor<1xf32>) -> tensor<1xf32>
     %unranked = tensor.cast %4 : tensor<1xf32>to tensor<*xf32>
-    call @printMemrefF32(%unranked) : (tensor<*xf32>) -> () 
-    return 
-} 
+    call @printMemrefF32(%unranked) : (tensor<*xf32>) -> ()
+    return
+}
 func.func private @printMemrefF32(tensor<*xf32>)
 func.func @test(%arg0: tensor<1xf32>, %arg1: tensor<1xf32>, %arg2: tensor<1xf32>, %arg3: tensor<1xf32>)->tensor<1xf32>{
     %0 = tensor.empty() : tensor<1xf32>
@@ -41,6 +41,6 @@ func.func @test(%arg0: tensor<1xf32>, %arg1: tensor<1xf32>, %arg2: tensor<1xf32>
     return %5 : tensor<1xf32>
   }
 }
-// CHECK: Unranked Memref base@ = {{0x[-9a-f]*}} 
-// CHECK-SAME: rank = {{.}} offset = {{.}} sizes = [1] strides = {{.*}} data = 
+// CHECK: Unranked Memref base@ = {{0x[-9a-f]*}}
+// CHECK-SAME: rank = {{.}} offset = {{.}} sizes = [1] strides = {{.*}} data =
 // CHECK:   0.9

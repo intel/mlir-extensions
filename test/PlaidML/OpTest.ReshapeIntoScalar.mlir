@@ -12,9 +12,9 @@ func.func @main() {
     %0= arith.constant dense<[[[2]]]>:tensor<1x1x1xi32>
     %1 = call @test(%0) : (tensor<1x1x1xi32>) -> tensor<i32>
     %unranked = tensor.cast %1 : tensor<i32>to tensor<*xi32>
-    call @printMemrefI32(%unranked) : (tensor<*xi32>) -> () 
-    return 
-} 
+    call @printMemrefI32(%unranked) : (tensor<*xi32>) -> ()
+    return
+}
 func.func private @printMemrefI32(tensor<*xi32>)
 func.func @test(%arg0: tensor<1x1x1xi32>)->tensor<i32>{
     %0 = tensor.collapse_shape %arg0 [] : tensor<1x1x1xi32> into tensor<i32>
@@ -26,6 +26,6 @@ func.func @test(%arg0: tensor<1x1x1xi32>)->tensor<i32>{
     return %2 : tensor<i32>
   }
 }
-// CHECK: Unranked Memref base@ = {{0x[0-9a-f]*}} 
-// CHECK-SAME: rank = {{.}} offset = {{.}} sizes = {{.*}} strides = {{.*}} data = 
+// CHECK: Unranked Memref base@ = {{0x[0-9a-f]*}}
+// CHECK-SAME: rank = {{.}} offset = {{.}} sizes = {{.*}} strides = {{.*}} data =
 // CHECK:   2
