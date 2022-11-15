@@ -1,6 +1,3 @@
-#map0 = affine_map<(d0, d1, d2, d3, d4) -> (d0, d1, d2, d3, d4)>
-#map1 = affine_map<(d0, d1, d2, d3, d4, d5, d6, d7) -> (d0, d1 * 2 + d5 * 3, d2 * 2 + d6 * 3, d3, d7)>
-#map2 = affine_map<(d0, d1, d2, d3, d4, d5, d6, d7) -> (d5, d6, d3, d7, d4)>
 // RUN: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-cpu.pp \
 // RUN:                                       --runner mlir-cpu-runner -e main \
 // RUN:                                       --shared-libs=%mlir_runner_utils,%mlir_c_runner_utils \
@@ -10,6 +7,9 @@
 // RUN-GPU:                                       --entry-point-result=void \
 // RUN-GPU:                                       --shared-libs=%mlir_runner_utils,%sycl_runtime | FileCheck %s
 
+#map0 = affine_map<(d0, d1, d2, d3, d4) -> (d0, d1, d2, d3, d4)>
+#map1 = affine_map<(d0, d1, d2, d3, d4, d5, d6, d7) -> (d0, d1 * 2 + d5 * 3, d2 * 2 + d6 * 3, d3, d7)>
+#map2 = affine_map<(d0, d1, d2, d3, d4, d5, d6, d7) -> (d5, d6, d3, d7, d4)>
 #map3 = affine_map<(d0, d1, d2, d3, d4, d5, d6, d7) -> (d0, d1, d2, d3, d4)>
 module @complex_conv_2d {
 func.func @main() {
