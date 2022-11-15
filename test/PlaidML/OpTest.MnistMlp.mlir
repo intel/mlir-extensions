@@ -24,9 +24,9 @@ module @mnist_mlp {
     %6 = arith.constant dense<0.3> : tensor<10xf32>
     %7 = call @test(%0,%1,%2,%3,%4,%5,%6) : (tensor<1x784xf32>, tensor<784x512xf32>, tensor<512xf32>, tensor<512x512xf32>, tensor<512xf32>, tensor<512x10xf32>, tensor<10xf32>) -> tensor<1x10xf32>
     %unranked = tensor.cast %7 : tensor<1x10xf32>to tensor<*xf32>
-    call @printMemrefF32(%unranked) : (tensor<*xf32>) -> () 
-    return 
-  } 
+    call @printMemrefF32(%unranked) : (tensor<*xf32>) -> ()
+    return
+  }
   func.func private @printMemrefF32(tensor<*xf32>)
   func.func @test(%arg0: tensor<1x784xf32>, %arg1: tensor<784x512xf32>, %arg2: tensor<512xf32>, %arg3: tensor<512x512xf32>, %arg4: tensor<512xf32>, %arg5: tensor<512x10xf32>, %arg6: tensor<10xf32>) -> tensor<1x10xf32> {
     %cst = arith.constant 0xFF800000 : f32
@@ -124,8 +124,8 @@ module @mnist_mlp {
     return %28 : tensor<1x10xf32>
   }
 }
-// CHECK: Unranked Memref base@ = {{0x[-9a-f]*}} 
-// CHECK-SAME: rank = {{.}} offset = {{.}} sizes = [1, 10] strides = {{.*}} data = 
+// CHECK: Unranked Memref base@ = {{0x[-9a-f]*}}
+// CHECK-SAME: rank = {{.}} offset = {{.}} sizes = [1, 10] strides = {{.*}} data =
 // CHECK: 0.1
 // CHECK: 0.1
 // CHECK: 0.1

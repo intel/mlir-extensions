@@ -62,9 +62,9 @@ func.func @main() {
                                [2., 5., 0., 6., 2., 1., 6., 5., 1., 6.], [2., 2., 4., 4., 3., 4., 3., 1., 7., 3.]]]>:tensor<10x10x10xf32>
     %1 = call @test(%0) : (tensor<10x10x10xf32>) -> tensor<10x30x10xf32>
     %unranked = tensor.cast %1 : tensor<10x30x10xf32>to tensor<*xf32>
-    call @printMemrefF32(%unranked) : (tensor<*xf32>) -> () 
-    return 
-} 
+    call @printMemrefF32(%unranked) : (tensor<*xf32>) -> ()
+    return
+}
 func.func private @printMemrefF32(tensor<*xf32>)
   func.func @test(%arg0: tensor<10x10x10xf32>) -> tensor<10x30x10xf32> {
     %cst = arith.constant 0.000000e+00 : f32
