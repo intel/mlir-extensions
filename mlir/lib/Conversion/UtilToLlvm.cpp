@@ -519,6 +519,59 @@ struct LowerReleaseContextOp
   }
 };
 
+struct LowerApplyOffsetOp
+    : public mlir::ConvertOpToLLVMPattern<imex::util::MemrefApplyOffsetOp> {
+  using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::util::MemrefApplyOffsetOp op,
+                  imex::util::MemrefApplyOffsetOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto arg = adaptor.getSource();
+    if (!arg.getType().isa<mlir::LLVM::LLVMStructType>())
+      return mlir::failure();
+
+    auto memrefType = op.getType().dyn_cast<mlir::MemRefType>();
+    if (!memrefType)
+      return mlir::failure();
+
+    auto converter = getTypeConverter();
+    assert(converter && "Invalid type converter");
+
+    auto resType = converter->convertType(memrefType);
+    if (!resType)
+      return mlir::failure();
+
+    auto loc = op.getLoc();
+    mlir::MemRefDescriptor src(arg);
+    auto dst = mlir::MemRefDescriptor::undef(rewriter, loc, resType);
+
+    auto elemPtrType = dst.getElementPtrType();
+
+    auto allocatedPtr = src.allocatedPtr(rewriter, loc);
+    allocatedPtr =
+        rewriter.create<mlir::LLVM::BitcastOp>(loc, elemPtrType, allocatedPtr);
+
+    auto alignedPtr = src.alignedPtr(rewriter, loc);
+    auto srcOffset = src.offset(rewriter, loc);
+    alignedPtr = rewriter.create<mlir::LLVM::GEPOp>(loc, elemPtrType,
+                                                    alignedPtr, srcOffset);
+
+    dst.setAllocatedPtr(rewriter, loc, allocatedPtr);
+    dst.setAlignedPtr(rewriter, loc, alignedPtr);
+
+    auto zeroAttr = rewriter.getIntegerAttr(dst.getIndexType(), 0);
+    auto dstOffset = rewriter.create<mlir::LLVM::ConstantOp>(loc, zeroAttr);
+    dst.setOffset(rewriter, loc, dstOffset);
+    for (auto i : llvm::seq(0u, static_cast<unsigned>(memrefType.getRank()))) {
+      dst.setSize(rewriter, loc, i, src.size(rewriter, loc, i));
+      dst.setStride(rewriter, loc, i, src.stride(rewriter, loc, i));
+    }
+    rewriter.replaceOp(op, static_cast<mlir::Value>(dst));
+    return mlir::success();
+  }
+};
+
 /// Convert operations from the imex_util dialect to the LLVM dialect.
 struct ImexUtilToLLVMPass
     : public mlir::PassWrapper<ImexUtilToLLVMPass,
@@ -545,7 +598,8 @@ struct ImexUtilToLLVMPass
         LowerExtractMemrefMetadataOp,
         LowerMemrefBitcastOp,
         LowerTakeContextOp,
-        LowerReleaseContextOp
+        LowerReleaseContextOp,
+        LowerApplyOffsetOp
         // clang-format on
         >(typeConverter);
 

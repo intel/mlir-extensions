@@ -245,7 +245,10 @@ struct ReshapeChangeLayout
       return mlir::failure();
 
     auto src = cl.getSource();
+    auto srcType = src.getType().cast<mlir::MemRefType>();
     auto dstType = op.getSource().getType().cast<mlir::MemRefType>();
+    if (srcType.getRank() != dstType.getRank())
+      return mlir::failure();
 
     auto rank = static_cast<unsigned>(dstType.getRank());
     if (rank == 0)
@@ -273,7 +276,8 @@ struct ReshapeChangeLayout
       int64_t size = dstType.getShape()[i];
       if (size == 0)
         continue;
-      bool useSizeAsStride = stride == 1;
+
+      bool useSizeAsStride = (stride == 1);
       if (size == mlir::ShapedType::kDynamicSize)
         stride = mlir::ShapedType::kDynamicSize;
       if (stride != mlir::ShapedType::kDynamicSize)
@@ -296,8 +300,8 @@ struct ReshapeChangeLayout
         rewriter.create<mlir::arith::ConstantIndexOp>(loc, offset);
     auto actualOffset =
         rewriter.createOrFold<imex::util::ExtractMemrefMetadataOp>(loc, src);
-    auto cmp = rewriter.createOrFold<mlir::arith::CmpIOp>(
-        loc, mlir::arith::CmpIPredicate::eq, offsetConst, actualOffset);
+
+    mlir::Value cmp;
     for (auto i : llvm::seq(0u, rank)) {
       if (mlir::ShapedType::isDynamicStrideOrOffset(strides[i])) {
         stridesVals[i] = expectedStrides[i];
@@ -307,18 +311,24 @@ struct ReshapeChangeLayout
       auto actualStride =
           rewriter.createOrFold<imex::util::ExtractMemrefMetadataOp>(loc, src,
                                                                      i);
-      auto strideVal =
-          rewriter.create<mlir::arith::ConstantIndexOp>(loc, strides[i]);
+
       auto cmpTemp = rewriter.createOrFold<mlir::arith::CmpIOp>(
-          loc, mlir::arith::CmpIPredicate::eq, strideVal, actualStride);
-      cmp = rewriter.createOrFold<mlir::arith::AndIOp>(loc, cmp, cmpTemp);
+          loc, mlir::arith::CmpIPredicate::eq, expectedStrides[i],
+          actualStride);
+
+      if (i == 0) {
+        cmp = cmpTemp;
+      } else {
+        cmp = rewriter.createOrFold<mlir::arith::AndIOp>(loc, cmp, cmpTemp);
+      }
     }
 
     auto trueBody = [&](mlir::OpBuilder &builder, mlir::Location loc) {
-      auto res = builder
-                     .create<mlir::memref::ReinterpretCastOp>(
-                         loc, dstType, src, offsetVal, sizesVals, stridesVals)
-                     .getResult();
+      mlir::Value flat = builder.create<imex::util::MemrefApplyOffsetOp>(
+          loc, src.getType(), src);
+
+      mlir::Value res = builder.create<mlir::memref::ReinterpretCastOp>(
+          loc, dstType, flat, offsetVal, sizesVals, stridesVals);
       builder.create<mlir::scf::YieldOp>(loc, res);
     };
     auto falseBody = [&](mlir::OpBuilder &builder, mlir::Location loc) {

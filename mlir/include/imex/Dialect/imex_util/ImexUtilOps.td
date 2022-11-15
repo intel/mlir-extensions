@@ -289,6 +289,26 @@ def EnvironmentRegionYieldOp : ImexUtil_Op<"env_region_yield", [
   let assemblyFormat = "attr-dict ($results^ `:` type($results))?";
 }
 
+def MemrefApplyOffsetOp : ImexUtil_Op<"memref_apply_offset", [
+    Pure, ViewLikeOpInterface
+  ]> {
+
+  let summary = "Applies memref offset to the underlying data pointer";
+  let description = [{
+    "memref_apply_offset" applies memref offset to the underlying data pointer.
+    Returned memref will always have dynamic offset of 0.
+  }];
+
+  let arguments = (ins AnyMemRef:$source);
+  let results = (outs AnyMemRef:$result);
+
+  let extraClassDeclaration = [{
+      ::mlir::Value getViewSource() { return getSource(); }
+  }];
+
+  let assemblyFormat = "$source attr-dict `:` type($source) `to` type($result)";
+}
+
 // TODO: Upstream arith.bitcast doesnt suuport casting between vectors and
 // non-vectors
 def BitcastOp : ImexUtil_Op<"bitcast", [Pure]> {
