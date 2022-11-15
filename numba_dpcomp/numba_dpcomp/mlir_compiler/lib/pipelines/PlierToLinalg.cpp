@@ -245,7 +245,10 @@ struct ReshapeChangeLayout
       return mlir::failure();
 
     auto src = cl.getSource();
+    auto srcType = src.getType().cast<mlir::MemRefType>();
     auto dstType = op.getSource().getType().cast<mlir::MemRefType>();
+    if (srcType.getRank() != dstType.getRank())
+      return mlir::failure();
 
     auto rank = static_cast<unsigned>(dstType.getRank());
     if (rank == 0)
