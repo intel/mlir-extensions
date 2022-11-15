@@ -76,6 +76,15 @@ module @repeat_elts {
     } -> tensor<10x30x10xf32>
     return %2 : tensor<10x30x10xf32>
   }
-
-
 }
+// CHECK: Unranked Memref base@ = {{0x[-9a-f]*}}
+// CHECK-SAME: rank = {{.}} offset = {{.}} sizes = [10, 30, 10] strides = [300, 10, 1] data =
+// CHECK: [7, 3, 5, 4, 2, 0, 5, 2, 3, 7]
+// CHECK: [7, 3, 5, 4, 2, 0, 5, 2, 3, 7]
+// CHECK: [7, 3, 5, 4, 2, 0, 5, 2, 3, 7]
+// CHECK: [2, 4, 2, 5, 0, 1, 0, 0, 0, 4]
+// CHECK: [2, 4, 2, 5, 0, 1, 0, 0, 0, 4]
+// CHECK: [2, 4, 2, 5, 0, 1, 0, 0, 0, 4]
+// CHECK: [3, 3, 7, 5, 0, 2, 0, 3, 5, 0]
+// CHECK: [3, 3, 7, 5, 0, 2, 0, 3, 5, 0]
+// CHECK: [3, 3, 7, 5, 0, 2, 0, 3, 5, 0]

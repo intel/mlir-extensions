@@ -13,15 +13,9 @@ func.func @main() {
     %0= arith.constant dense<[1, 2, 3]>:tensor<3xi64>
     %1 = call @test(%0) : (tensor<3xi64>) -> tensor<1xi64>
     %unranked = tensor.cast %1 : tensor<1xi64>to tensor<*xi64>
-<<<<<<< HEAD
     call @printMemrefI64(%unranked) : (tensor<*xi64>) -> ()
     return
 }
-=======
-    call @printMemrefI64(%unranked) : (tensor<*xi64>) -> ()
-    return
-}
->>>>>>> ac987e426dd0e5caf2971b9e7fac473e80c64e00
 func.func private @printMemrefI64(tensor<*xi64>)
 func.func @test(%arg0: tensor<3xi64>)->tensor<1xi64>{
     %c0_i64 = arith.constant 0 : i64
