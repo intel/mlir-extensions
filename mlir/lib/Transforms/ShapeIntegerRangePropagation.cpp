@@ -4,6 +4,8 @@
 
 #include "imex/Transforms/ShapeIntegerRangePropagation.hpp"
 
+#include "imex/Dialect/imex_util/Dialect.hpp"
+
 #include <llvm/Support/Debug.h>
 #include <mlir/Analysis/DataFlow/DeadCodeAnalysis.h>
 #include <mlir/Analysis/DataFlow/IntegerRangeAnalysis.h>
@@ -17,10 +19,10 @@
 #define DEBUG_TYPE "imex-shape-range-propagation"
 
 namespace {
-static auto getIndexRange(int64_t umin, int64_t umax) {
+static auto getIndexRange(int64_t smin, int64_t smax) {
   unsigned width = mlir::IndexType::kInternalStorageBitWidth;
-  return mlir::ConstantIntRanges::fromSigned(llvm::APInt(width, umin),
-                                             llvm::APInt(width, umax));
+  return mlir::ConstantIntRanges::fromSigned(llvm::APInt(width, smin),
+                                             llvm::APInt(width, smax));
 }
 
 static auto getDefaultDimRange() {
@@ -38,6 +40,13 @@ public:
       shapeRanges->emplace_back(mlir::ShapedType::isDynamic(dim)
                                     ? getDefaultDimRange()
                                     : getFixedDimRange(dim));
+  }
+  ShapeValue(mlir::ArrayAttr attr) : shapeRanges(std::in_place) {
+    shapeRanges->reserve(attr.size());
+    for (auto elem : attr) {
+      auto range = elem.cast<imex::util::IndexRangeAttr>();
+      shapeRanges->emplace_back(getIndexRange(range.getMin(), range.getMax()));
+    }
   }
 
   /// Whether the state is uninitialized.
@@ -140,8 +149,30 @@ public:
       res = ShapeValue::intersect(operands.front()->getValue(),
                                   ShapeValue{dstShaped});
 
+      LLVM_DEBUG(llvm::dbgs()
+                 << "ShapeValueAnalysis: Shaped cast: " << res << "\n");
+
       auto *resultLattice = results.front();
       auto changed = resultLattice->join(res);
+      propagateIfChanged(resultLattice, changed);
+      return;
+    }
+
+    if (auto select = mlir::dyn_cast<mlir::arith::SelectOp>(op)) {
+      if (!mlir::isa<mlir::ShapedType>(select.getResult().getType()))
+        return;
+
+      assert(operands.size() == 3);
+      assert(results.size() == 1);
+      auto lhs = operands[1];
+      auto rhs = operands[2];
+      auto newVal = ShapeValue::join(lhs->getValue(), rhs->getValue());
+
+      LLVM_DEBUG(llvm::dbgs()
+                 << "ShapeValueAnalysis: select: " << newVal << "\n");
+
+      auto resultLattice = results.front();
+      auto changed = resultLattice->join(newVal);
       propagateIfChanged(resultLattice, changed);
       return;
     }
@@ -168,8 +199,30 @@ public:
     if (mlir::failed(SparseDataFlowAnalysis::initialize(top)))
       return mlir::failure();
 
+    auto attrName = mlir::StringAttr::get(
+        top->getContext(), imex::util::attributes::getShapeRangeName());
     top->walk([&](mlir::FunctionOpInterface func) {
-      // TODO: check attribute
+      if (func.isExternal())
+        return;
+
+      auto &body = func.getFunctionBody();
+      assert(!body.empty());
+      for (auto [i, arg] : llvm::enumerate(body.front().getArguments())) {
+        auto shaped = arg.getType().dyn_cast<mlir::ShapedType>();
+        if (!shaped)
+          continue;
+
+        auto attr = func.getArgAttrOfType<mlir::ArrayAttr>(
+            static_cast<unsigned>(i), attrName);
+        if (!attr)
+          continue;
+
+        auto newRange = ShapeValue::intersect({shaped}, {attr});
+        auto *lattice = getLatticeElement(arg);
+        assert(lattice);
+        assert(lattice->getValue().isUninitialized());
+        propagateIfChanged(lattice, lattice->join(newRange));
+      }
     });
 
     return mlir::success();
@@ -185,35 +238,41 @@ public:
       llvm::ArrayRef<const mlir::dataflow::IntegerValueRangeLattice *> operands,
       llvm::ArrayRef<mlir::dataflow::IntegerValueRangeLattice *> results)
       override {
+    LLVM_DEBUG(llvm::dbgs() << "IntegerRangeAnalysisEx: Visiting operation: "
+                            << *op << "\n");
+
     if (auto dim = mlir::dyn_cast<mlir::ShapedDimOpInterface>(op)) {
       assert(op->getNumResults() == 1);
       assert(results.size() == 1);
 
       auto *lattice = results.front();
-      auto oldRange = lattice->getValue();
-      auto newRange = [&]() -> mlir::ConstantIntRanges {
-        auto state = getOrCreate<ShapeValueLattice>(dim.getShapedValue());
+      auto newRange = [&]() -> llvm::Optional<mlir::ConstantIntRanges> {
+        auto state =
+            getOrCreateFor<ShapeValueLattice>(op, dim.getShapedValue());
         if (!state)
-          return getDefaultDimRange();
+          return llvm::None;
 
         auto &shapeVal = state->getValue();
         if (shapeVal.isUninitialized())
-          return getDefaultDimRange();
+          return llvm::None;
 
-        auto index = dim.getDimension().dyn_cast<mlir::Attribute>();
+        auto index = mlir::getConstantIntValue(dim.getDimension());
         if (!index)
-          return getDefaultDimRange();
+          return llvm::None;
 
         auto shape = shapeVal.getShape();
-        auto indexVal =
-            index.cast<mlir::IntegerAttr>().getValue().getSExtValue();
+        auto indexVal = *index;
         if (indexVal < 0 || indexVal >= static_cast<int64_t>(shape.size()))
-          return getDefaultDimRange();
+          return llvm::None;
 
         return shape[indexVal];
       }();
-      auto changed = lattice->join(mlir::dataflow::IntegerValueRange{newRange});
-      propagateIfChanged(lattice, changed);
+
+      if (newRange) {
+        auto changed =
+            lattice->join(mlir::dataflow::IntegerValueRange{newRange});
+        propagateIfChanged(lattice, changed);
+      }
       return;
     }
 
@@ -223,8 +282,8 @@ public:
 
 static bool intersects(mlir::ConstantIntRanges lhs,
                        mlir::ConstantIntRanges rhs) {
-  if ((lhs.smax().sle(rhs.smin()) || lhs.smin().sge(rhs.smax())) &&
-      (lhs.umax().ule(rhs.umin()) || lhs.umin().uge(rhs.umax())))
+  if ((lhs.smax().slt(rhs.smin()) || lhs.smin().sgt(rhs.smax())) &&
+      (lhs.umax().ult(rhs.umin()) || lhs.umin().ugt(rhs.umax())))
     return false;
 
   return true;
@@ -327,7 +386,7 @@ struct ConvertCmpOp : public mlir::OpRewritePattern<mlir::arith::CmpIOp> {
     auto *rhsResult =
         solver.lookupState<mlir::dataflow::IntegerValueRangeLattice>(
             op.getRhs());
-    if (!lhsResult || rhsResult->getValue().isUninitialized())
+    if (!rhsResult || rhsResult->getValue().isUninitialized())
       return mlir::failure();
 
     using HandlerFunc = llvm::Optional<bool> (*)(mlir::ConstantIntRanges,
@@ -375,11 +434,12 @@ struct ShapeIntegerRangePropagationPass
   }
 
   void runOnOperation() override {
+    LLVM_DEBUG(llvm::dbgs() << "ShapeIntegerRangePropagationPass:\n");
     auto op = getOperation();
     mlir::DataFlowSolver solver;
     solver.load<mlir::dataflow::DeadCodeAnalysis>();
-    solver.load<IntegerRangeAnalysisEx>();
     solver.load<ShapeValueAnalysis>();
+    solver.load<IntegerRangeAnalysisEx>();
     if (failed(solver.initializeAndRun(op)))
       return signalPassFailure();
 
