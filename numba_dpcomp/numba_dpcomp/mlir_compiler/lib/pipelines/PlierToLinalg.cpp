@@ -300,8 +300,8 @@ struct ReshapeChangeLayout
         rewriter.create<mlir::arith::ConstantIndexOp>(loc, offset);
     auto actualOffset =
         rewriter.createOrFold<imex::util::ExtractMemrefMetadataOp>(loc, src);
-    auto cmp = rewriter.createOrFold<mlir::arith::CmpIOp>(
-        loc, mlir::arith::CmpIPredicate::eq, offsetConst, actualOffset);
+
+    mlir::Value cmp;
     for (auto i : llvm::seq(0u, rank)) {
       if (mlir::ShapedType::isDynamicStrideOrOffset(strides[i])) {
         stridesVals[i] = expectedStrides[i];
@@ -315,14 +315,20 @@ struct ReshapeChangeLayout
       auto cmpTemp = rewriter.createOrFold<mlir::arith::CmpIOp>(
           loc, mlir::arith::CmpIPredicate::eq, expectedStrides[i],
           actualStride);
-      cmp = rewriter.createOrFold<mlir::arith::AndIOp>(loc, cmp, cmpTemp);
+
+      if (i == 0) {
+        cmp = cmpTemp;
+      } else {
+        cmp = rewriter.createOrFold<mlir::arith::AndIOp>(loc, cmp, cmpTemp);
+      }
     }
 
     auto trueBody = [&](mlir::OpBuilder &builder, mlir::Location loc) {
-      auto res = builder
-                     .create<mlir::memref::ReinterpretCastOp>(
-                         loc, dstType, src, offsetVal, sizesVals, stridesVals)
-                     .getResult();
+      mlir::Value flat = builder.create<imex::util::MemrefApplyOffsetOp>(
+          loc, src.getType(), src);
+
+      mlir::Value res = builder.create<mlir::memref::ReinterpretCastOp>(
+          loc, dstType, flat, offsetVal, sizesVals, stridesVals);
       builder.create<mlir::scf::YieldOp>(loc, res);
     };
     auto falseBody = [&](mlir::OpBuilder &builder, mlir::Location loc) {
