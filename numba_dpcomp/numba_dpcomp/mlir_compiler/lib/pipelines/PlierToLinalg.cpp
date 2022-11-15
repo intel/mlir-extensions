@@ -273,7 +273,8 @@ struct ReshapeChangeLayout
       int64_t size = dstType.getShape()[i];
       if (size == 0)
         continue;
-      bool useSizeAsStride = stride == 1;
+
+      bool useSizeAsStride = (stride == 1);
       if (size == mlir::ShapedType::kDynamicSize)
         stride = mlir::ShapedType::kDynamicSize;
       if (stride != mlir::ShapedType::kDynamicSize)
@@ -307,10 +308,10 @@ struct ReshapeChangeLayout
       auto actualStride =
           rewriter.createOrFold<imex::util::ExtractMemrefMetadataOp>(loc, src,
                                                                      i);
-      auto strideVal =
-          rewriter.create<mlir::arith::ConstantIndexOp>(loc, strides[i]);
+
       auto cmpTemp = rewriter.createOrFold<mlir::arith::CmpIOp>(
-          loc, mlir::arith::CmpIPredicate::eq, strideVal, actualStride);
+          loc, mlir::arith::CmpIPredicate::eq, expectedStrides[i],
+          actualStride);
       cmp = rewriter.createOrFold<mlir::arith::AndIOp>(loc, cmp, cmpTemp);
     }
 
