@@ -223,4 +223,42 @@ def GPUMemFenceOp : GpuRuntime_Op<"mem_fence"> {
   let assemblyFormat = "$flags attr-dict";
 }
 
+def GPUGlobalReduceOp : GpuRuntime_Op<"global_reduce", [
+    SameOperandsAndResultType,
+    IsolatedFromAbove,
+    SingleBlockImplicitTerminator<"::gpu_runtime::GPUGlobalReduceYieldOp">,
+    RecursiveMemoryEffects
+  ]> {
+  let summary = "Reduce values among global exectuion space.";
+  let description = [{
+    The `global_reduce` op reduces the value of every work item. The result is
+    equal for all work items.
+  }];
+
+  let arguments = (ins AnyType:$value);
+  let results = (outs AnyType:$result);
+
+  let regions = (region AnyRegion:$region);
+  let assemblyFormat = "attr-dict $value `:` type($value) $region";
+}
+
+def GPUGlobalReduceYieldOp : GpuRuntime_Op<"global_reduce_yield", [
+    Pure,
+    ReturnLike,
+    Terminator,
+    HasParent<"::gpu_runtime::GPUGlobalReduceOp">
+  ]> {
+
+  let summary = "Global reduce yield and termination operation";
+  let description = [{
+    "global_reduce_yield" yields an SSA value from the "global_reduce" op region
+    and terminates it.
+  }];
+
+  let arguments = (ins AnyType:$result);
+  let builders = [OpBuilder<(ins), [{ /* nothing to do */ }]>];
+
+  let assemblyFormat = "attr-dict $result `:` type($result)";
+}
+
 #endif // GPURUNTIME_OPS
