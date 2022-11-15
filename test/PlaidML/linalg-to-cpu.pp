@@ -16,6 +16,7 @@ convert-linalg-to-llvm
 convert-cf-to-llvm
 convert-arith-to-llvm
 convert-math-to-llvm
+convert-math-to-libm
 convert-complex-to-llvm
 convert-index-to-llvm
 convert-memref-to-llvm
