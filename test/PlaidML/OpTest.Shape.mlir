@@ -2,10 +2,10 @@
 // RUN:                                       --runner mlir-cpu-runner -e main \
 // RUN:                                       --shared-libs=%mlir_runner_utils \
 // RUN:                                       --entry-point-result=void | FileCheck %s
-// RUN: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-llvm.pp \
-// RUN:                                       --runner mlir-cpu-runner -e main \
-// RUN:                                       --entry-point-result=void \
-// RUN:                                       --shared-libs=%mlir_runner_utils,%sycl_runtime | FileCheck %s
+// RUN-GPU: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-llvm.pp \
+// RUN-GPU:                                       --runner mlir-cpu-runner -e main \
+// RUN-GPU:                                       --entry-point-result=void \
+// RUN-GPU:                                       --shared-libs=%mlir_runner_utils,%sycl_runtime | FileCheck %s
 module @shape {
 func.func @main() {
     %0= arith.constant dense<[[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]]>:tensor<2x3xf32>
