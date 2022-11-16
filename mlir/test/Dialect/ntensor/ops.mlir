@@ -1,6 +1,6 @@
 // RUN: imex-opt %s -split-input-file | FileCheck %s
 // Verify the printed output can be parsed.
-// RUN: imex-opt %s -split-input-file | imex-opt | FileCheck %s
+// RUN: imex-opt %s -split-input-file | imex-opt -split-input-file | FileCheck %s
 
 func.func @test(%arg: !ntensor.ntensor<2x3x4xf32>) -> !ntensor.ntensor<2x3x4xf32> {
   return %arg : !ntensor.ntensor<2x3x4xf32>

@@ -116,7 +116,7 @@ struct SCFToAffinePass
 
         // check for supported memory operations
         for (auto &each : pOp.getRegion().getOps())
-          if (!MemoryEffectOpInterface::hasNoEffect(&each))
+          if (!mlir::isMemoryEffectFree(&each))
             if (!isa<memref::LoadOp, memref::StoreOp>(&each))
               return;
 

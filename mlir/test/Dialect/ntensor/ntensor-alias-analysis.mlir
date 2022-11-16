@@ -1,4 +1,4 @@
-// RUN: imex-opt %s -pass-pipeline='func.func(ntensor-alias-analysis)' --split-input-file | FileCheck %s
+// RUN: imex-opt %s -pass-pipeline='builtin.module(func.func(ntensor-alias-analysis))' --split-input-file | FileCheck %s
 
 // CHECK-LABEL: func @test({{.*}}) {
 func.func @test(%t: !ntensor.ntensor<8x16x4xf32>, %idx : index) {

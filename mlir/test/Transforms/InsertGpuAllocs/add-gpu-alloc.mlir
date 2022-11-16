@@ -19,9 +19,9 @@ func.func @addt(%arg0: memref<2x5xf32>, %arg1: memref<2x5xf32>) -> memref<2x5xf3
   %1 = affine.apply affine_map<(d0)[s0, s1] -> ((d0 - s0) ceildiv s1)>(%c2)[%c0, %c1]
   %2 = affine.apply affine_map<(d0)[s0, s1] -> ((d0 - s0) ceildiv s1)>(%c5)[%c0, %c1]
   gpu.launch blocks(%arg2, %arg3, %arg4) in (%arg8 = %1, %arg9 = %2, %arg10 = %c1_0) threads(%arg5, %arg6, %arg7) in (%arg11 = %c1_0, %arg12 = %c1_0, %arg13 = %c1_0) {
-    // CHECK: %[[IDX1:.*]] = affine.apply #map1(%{{.*}})[%{{.*}}, %{{.*}}]
+    // CHECK: %[[IDX1:.*]] = affine.apply #map2(%{{.*}})[%{{.*}}, %{{.*}}]
     %3 = affine.apply affine_map<(d0)[s0, s1] -> (d0 * s0 + s1)>(%arg2)[%c1, %c0]
-    // CHECK: %[[IDX2:.*]] = affine.apply #map1(%{{.*}})[%{{.*}}, %{{.*}}]
+    // CHECK: %[[IDX2:.*]] = affine.apply #map2(%{{.*}})[%{{.*}}, %{{.*}}]
     %4 = affine.apply affine_map<(d0)[s0, s1] -> (d0 * s0 + s1)>(%arg3)[%c1, %c0]
     // CHECK: %[[VAL1:.*]] = memref.load %[[MEMREF1]][%[[IDX1]], %[[IDX2]]] : memref<2x5xf32>
     %5 = memref.load %arg0[%3, %4] : memref<2x5xf32>
@@ -59,9 +59,9 @@ func.func @addt(%arg0: memref<2x5xf32, strided<[?, ?], offset: ?>>, %arg1: memre
   %1 = affine.apply affine_map<(d0)[s0, s1] -> ((d0 - s0) ceildiv s1)>(%c2)[%c0, %c1]
   %2 = affine.apply affine_map<(d0)[s0, s1] -> ((d0 - s0) ceildiv s1)>(%c5)[%c0, %c1]
   gpu.launch blocks(%arg2, %arg3, %arg4) in (%arg8 = %1, %arg9 = %2, %arg10 = %c1_0) threads(%arg5, %arg6, %arg7) in (%arg11 = %c1_0, %arg12 = %c1_0, %arg13 = %c1_0) {
-    // CHECK: %[[IDX1:.*]] = affine.apply #map1(%{{.*}})[%{{.*}}, %{{.*}}]
+    // CHECK: %[[IDX1:.*]] = affine.apply #map2(%{{.*}})[%{{.*}}, %{{.*}}]
     %3 = affine.apply affine_map<(d0)[s0, s1] -> (d0 * s0 + s1)>(%arg2)[%c1, %c0]
-    // CHECK: %[[IDX2:.*]] = affine.apply #map1(%{{.*}})[%{{.*}}, %{{.*}}]
+    // CHECK: %[[IDX2:.*]] = affine.apply #map2(%{{.*}})[%{{.*}}, %{{.*}}]
     %4 = affine.apply affine_map<(d0)[s0, s1] -> (d0 * s0 + s1)>(%arg3)[%c1, %c0]
     // CHECK: %[[VAL1:.*]] = memref.load %[[CAST1]][%[[IDX1]], %[[IDX2]]] : memref<2x5xf32, strided<[?, ?], offset: ?>>
     %5 = memref.load %arg0[%3, %4] : memref<2x5xf32, strided<[?, ?], offset: ?>>
@@ -107,9 +107,9 @@ func.func @addt(%arg0: memref<2x5xf32>, %arg1: memref<2x5xf32>) -> memref<2x5xf3
 
   imex_util.env_region #gpu_runtime.region_desc<device = "test"> {
     gpu.launch blocks(%arg2, %arg3, %arg4) in (%arg8 = %1, %arg9 = %2, %arg10 = %c1_0) threads(%arg5, %arg6, %arg7) in (%arg11 = %c1_0, %arg12 = %c1_0, %arg13 = %c1_0) {
-      // CHECK: %[[IDX1:.*]] = affine.apply #map1(%{{.*}})[%{{.*}}, %{{.*}}]
+      // CHECK: %[[IDX1:.*]] = affine.apply #map2(%{{.*}})[%{{.*}}, %{{.*}}]
       %3 = affine.apply affine_map<(d0)[s0, s1] -> (d0 * s0 + s1)>(%arg2)[%c1, %c0]
-      // CHECK: %[[IDX2:.*]] = affine.apply #map1(%{{.*}})[%{{.*}}, %{{.*}}]
+      // CHECK: %[[IDX2:.*]] = affine.apply #map2(%{{.*}})[%{{.*}}, %{{.*}}]
       %4 = affine.apply affine_map<(d0)[s0, s1] -> (d0 * s0 + s1)>(%arg3)[%c1, %c0]
       // CHECK: %[[VAL1:.*]] = memref.load %[[RES1]][%[[IDX1]], %[[IDX2]]] : memref<2x5xf32>
       %5 = memref.load %arg0[%3, %4] : memref<2x5xf32>

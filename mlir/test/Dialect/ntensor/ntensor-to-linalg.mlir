@@ -1,4 +1,4 @@
-// RUN: imex-opt %s -pass-pipeline='func.func(ntensor-alias-analysis,ntensor-to-linalg)' --split-input-file | FileCheck %s
+// RUN: imex-opt %s -pass-pipeline='builtin.module(func.func(ntensor-alias-analysis,ntensor-to-linalg))' --split-input-file | FileCheck %s
 
 func.func @test() -> !ntensor.ntensor<?x?xf32> {
   %0 = arith.constant 2 : index
