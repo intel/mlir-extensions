@@ -1,5 +1,7 @@
-# linalg dialect to gpu dialect lowering pipeline
+# linalg dialect to cpu lowering pipeline
+inline
 convert-tensor-to-linalg
+convert-elementwise-to-linalg
 arith-bufferize
 func.func(empty-tensor-to-alloc-tensor
           eliminate-alloc-tensors
@@ -16,8 +18,8 @@ convert-linalg-to-llvm
 convert-cf-to-llvm
 convert-arith-to-llvm
 convert-math-to-llvm
-convert-math-to-libm
 convert-complex-to-llvm
+convert-vector-to-llvm
 convert-index-to-llvm
 convert-memref-to-llvm
 lower-affine
