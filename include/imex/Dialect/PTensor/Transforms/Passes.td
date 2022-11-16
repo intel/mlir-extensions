@@ -39,6 +39,8 @@ def PTensorDist : Pass<"ptensor-dist", "::mlir::func::FuncOp"> {
                            "::imex::dist::DistDialect",
                            "::mlir::arith::ArithDialect",
                            "::mlir::linalg::LinalgDialect",
+                           "::mlir::tensor::TensorDialect",
+                           "::mlir::memref::MemRefDialect",
                            "::mlir::shape::ShapeDialect"];
   let options = [];
 }

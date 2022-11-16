@@ -24,11 +24,12 @@ func.func @test_arange(%arg0: i64, %arg1: i64, %arg2: i64) -> i64 {
 // CHECK: arith.divui
 // CHECK: "dist.nprocs"
 // CHECK: "dist.prank"
-// CHECK: tensor.from_elements
+// CHECK: memref.alloc
+// CHECK: memref.store
 // CHECK: "dist.local_shape"
-// CHECK: tensor.extract
+// CHECK: memref.load
 // CHECK: "dist.local_offsets"
-// CHECK: tensor.extract
+// CHECK: memref.load
 // CHECK: arith.muli
 // CHECK: arith.addi
 // CHECK: arith.muli

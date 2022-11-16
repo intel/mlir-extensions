@@ -134,7 +134,7 @@ def ExtractFromDistOp : Dist_Op<"extract_from_dist", []> {
         switch(idx.getInt()) {
             case GSHAPE:
             case LOFFSETS:
-                $_state.addTypes(::mlir::RankedTensorType::get({rank ? rank : 1}, IndexType));
+                $_state.addTypes(::mlir::MemRefType::get({rank ? rank : 1}, IndexType));
                 break;
             case LTENSOR:
                 $_state.addTypes(ttype.getPTensorType());
@@ -154,12 +154,12 @@ def LocalOffsetsOp : Dist_Op<"local_offsets", []> {
     let description = [{
         Result is a 1d memref.
     }];
-    let arguments = (ins IndexAttr:$rank, Index:$num_procs, Index:$prank, AnyType:$gshape);
+    let arguments = (ins I64Attr:$rank, Index:$num_procs, Index:$prank, AnyType:$gshape);
     let results = (outs AnyType);
     let builders = [
         // auto-deduce return type
         OpBuilder<(ins "int64_t":$rank, "::mlir::Value":$num_procs, "::mlir::Value":$prank, "::mlir::Value":$gshape), [{
-            build($_builder, $_state, ::mlir::RankedTensorType::get({rank}, $_builder.getIndexType()), $_builder.getIndexAttr(rank), num_procs, prank, gshape);
+            build($_builder, $_state, ::mlir::MemRefType::get({rank}, $_builder.getIndexType()), $_builder.getI64IntegerAttr(rank), num_procs, prank, gshape);
         }]>,
     ];
 }
@@ -169,12 +169,12 @@ def LocalShapeOp : Dist_Op<"local_shape", []> {
     let description = [{
         Result is a 1d memref.
     }];
-    let arguments = (ins IndexAttr:$rank, Index:$num_procs, Index:$prank, AnyType:$gshape);
+    let arguments = (ins I64Attr:$rank, Index:$num_procs, Index:$prank, AnyType:$gshape);
     let results = (outs AnyType);
     let builders = [
         // auto-deduce return type
         OpBuilder<(ins "int64_t":$rank, "::mlir::Value":$num_procs, "::mlir::Value":$prank, "::mlir::Value":$gshape), [{
-            build($_builder, $_state, ::mlir::RankedTensorType::get({rank}, $_builder.getIndexType()), $_builder.getIndexAttr(rank), num_procs, prank, gshape);
+            build($_builder, $_state, ::mlir::MemRefType::get({rank}, $_builder.getIndexType()), $_builder.getI64IntegerAttr(rank), num_procs, prank, gshape);
         }]>,
     ];
 }

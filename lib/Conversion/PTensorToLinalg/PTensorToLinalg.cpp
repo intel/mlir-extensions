@@ -35,7 +35,6 @@
 
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
 #include <mlir/Dialect/Arith/IR/Arith.h>
-#include <mlir/Dialect/Bufferization/IR/Bufferization.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/Func/Transforms/FuncConversions.h>
 #include <mlir/Dialect/LLVMIR/LLVMDialect.h>
@@ -576,7 +575,6 @@ struct ConvertPTensorToLinalgPass
     target.addLegalDialect<::mlir::arith::ArithDialect>();
     target.addLegalDialect<::mlir::shape::ShapeDialect>();
     target.addLegalDialect<::mlir::memref::MemRefDialect>();
-    target.addLegalDialect<::mlir::bufferization::BufferizationDialect>();
     target.addLegalOp<::mlir::UnrealizedConversionCastOp>(); // FIXME
     // make sure function boundaries use RankedTensors (not PTensors)
     target.addDynamicallyLegalOp<::mlir::func::FuncOp>(

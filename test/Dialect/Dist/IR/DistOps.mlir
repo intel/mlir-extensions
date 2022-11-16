@@ -50,18 +50,18 @@ func.func @test_extract_from_dist(%arg0: !dist.dtensor<<tensor<?xi64>>>) -> inde
 
 // -----
 func.func @test_local_offsets(%np : index, %prank: index, %shape: tensor<1xindex>) -> tensor<1xindex> {
-    %0 = "dist.local_offsets"(%np, %prank, %shape) {rank = 1 : index} : (index, index, tensor<1xindex>) -> tensor<1xindex>
+    %0 = "dist.local_offsets"(%np, %prank, %shape) {rank = 1 : i64} : (index, index, tensor<1xindex>) -> tensor<1xindex>
     return %0 : tensor<1xindex>
 }
 // CHECK-LABEL: func.func @test_local_offsets(%arg0: index, %arg1: index, %arg2: tensor<1xindex>) -> tensor<1xindex> {
-// CHECK-NEXT: "dist.local_offsets"(%arg0, %arg1, %arg2) {rank = 1 : index} : (index, index, tensor<1xindex>) -> tensor<1xindex>
+// CHECK-NEXT: "dist.local_offsets"(%arg0, %arg1, %arg2) {rank = 1 : i64} : (index, index, tensor<1xindex>) -> tensor<1xindex>
 
 func.func @test_local_shape(%np : index, %prank: index, %shape: tensor<1xindex>) -> tensor<1xindex> {
-    %0 = "dist.local_shape"(%np, %prank, %shape) {rank = 1 : index} : (index, index, tensor<1xindex>) -> tensor<1xindex>
+    %0 = "dist.local_shape"(%np, %prank, %shape) {rank = 1 : i64} : (index, index, tensor<1xindex>) -> tensor<1xindex>
     return %0 : tensor<1xindex>
 }
 // CHECK-LABEL: func.func @test_local_shape(%arg0: index, %arg1: index, %arg2: tensor<1xindex>) -> tensor<1xindex> {
-// CHECK-NEXT: "dist.local_shape"(%arg0, %arg1, %arg2) {rank = 1 : index} : (index, index, tensor<1xindex>) -> tensor<1xindex>
+// CHECK-NEXT: "dist.local_shape"(%arg0, %arg1, %arg2) {rank = 1 : i64} : (index, index, tensor<1xindex>) -> tensor<1xindex>
 
 // -----
 func.func @test_allreduce(%arg0: tensor<i64>) -> tensor<i64> {

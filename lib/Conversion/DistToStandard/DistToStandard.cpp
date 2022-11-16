@@ -17,15 +17,17 @@
 
 #include <imex/Conversion/DistToStandard/DistToStandard.h>
 #include <imex/Dialect/Dist/IR/DistOps.h>
+#include <imex/Dialect/Dist/Utils/Utils.h>
 #include <imex/Dialect/PTensor/IR/PTensorOps.h>
 #include <imex/internal/PassUtils.h>
 #include <imex/internal/PassWrapper.h>
 
-#include "mlir/Dialect/Func/Transforms/DecomposeCallGraphTypes.h"
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
+#include <mlir/Dialect/Func/Transforms/DecomposeCallGraphTypes.h>
 #include <mlir/Dialect/Func/Transforms/FuncConversions.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
+#include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/Shape/IR/Shape.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/IR/BuiltinOps.h>
@@ -229,19 +231,20 @@ struct LocalOffsetsOpConverter
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
     // FIXME: non-even partitions, ndims
     auto loc = op.getLoc();
-    auto &converter = *getTypeConverter();
+    // auto &converter = *getTypeConverter();
+    // int64_t rank = (int64_t)op.getRank();
 
     auto sz0 = createIndexCast(
         loc, rewriter,
-        rewriter.create<::mlir::tensor::ExtractOp>(
+        rewriter.create<::mlir::memref::LoadOp>(
             loc, adaptor.getGshape(),
             ::mlir::ValueRange({createIndex(loc, rewriter, 0)})));
     auto tsz = createTileSize(loc, rewriter, sz0, adaptor.getNumProcs());
     auto off =
         rewriter.create<mlir::arith::MulIOp>(loc, adaptor.getPrank(), tsz);
-    rewriter.replaceOpWithNewOp<::mlir::tensor::FromElementsOp>(
-        op, converter.convertType(op.getType()), off.getResult());
-
+    rewriter.replaceOp(op, createMemRefFromElements(rewriter, loc,
+                                                    rewriter.getIndexType(),
+                                                    {off.getResult()}));
     return ::mlir::success();
   }
 };
@@ -258,17 +261,17 @@ struct LocalShapeOpConverter
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
     // FIXME: non-even partitions, ndims
     auto loc = op.getLoc();
-    auto &converter = *getTypeConverter();
+    // auto &converter = *getTypeConverter();
+    // int64_t rank = (int64_t)op.getRank();
 
     auto sz0 = createIndexCast(
         loc, rewriter,
-        rewriter.create<::mlir::tensor::ExtractOp>(
+        rewriter.create<::mlir::memref::LoadOp>(
             loc, adaptor.getGshape(),
             ::mlir::ValueRange({createIndex(loc, rewriter, 0)})));
     auto tsz = createTileSize(loc, rewriter, sz0, adaptor.getNumProcs());
-    rewriter.replaceOpWithNewOp<::mlir::tensor::FromElementsOp>(
-        op, converter.convertType(op.getType()), tsz);
-
+    rewriter.replaceOp(op, createMemRefFromElements(
+                               rewriter, loc, rewriter.getIndexType(), {tsz}));
     return ::mlir::success();
   }
 };
@@ -317,11 +320,11 @@ struct ConvertDistToStandardPass
     auto convDTensor = [&ctxt](::imex::dist::DistTensorType type,
                                ::mlir::SmallVectorImpl<::mlir::Type> &types) {
       auto rank = type.getPTensorType().getRtensor().getRank();
-      auto tTyp = ::mlir::RankedTensorType::get({rank ? rank : 1},
-                                                ::mlir::IndexType::get(&ctxt));
-      types.push_back(tTyp);
+      auto mrTyp = ::mlir::MemRefType::get({rank ? rank : 1},
+                                           ::mlir::IndexType::get(&ctxt));
+      types.push_back(mrTyp);
       types.push_back(type.getPTensorType());
-      types.push_back(tTyp);
+      types.push_back(mrTyp);
       types.push_back(::mlir::IndexType::get(&ctxt));
       return ::mlir::success();
     };
@@ -386,6 +389,7 @@ struct ConvertDistToStandardPass
     target.addLegalDialect<::mlir::arith::ArithDialect>();
     target.addLegalDialect<::mlir::shape::ShapeDialect>();
     target.addLegalDialect<::imex::ptensor::PTensorDialect>();
+    target.addLegalDialect<::mlir::memref::MemRefDialect>();
     target.addLegalOp<::mlir::UnrealizedConversionCastOp>(); // FIXME
 
     // All the dist conversion patterns/rewriter
