@@ -1,8 +1,8 @@
 // RUN: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-cpu.pp --runner mlir-cpu-runner -e main --shared-libs=%mlir_runner_utils --entry-point-result=void | FileCheck %s
-// RUN-GPU: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-llvm.pp \
-// RUN-GPU:                                        --runner mlir-cpu-runner -e main \
-// RUN-GPU:                                        --entry-point-result=void \
-// RUN-GPU:                                        --shared-libs=%mlir_runner_utils,%sycl_runtime | FileCheck %s
+// RUN: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-llvm.pp \
+// RUN:                                        --runner mlir-cpu-runner -e main \
+// RUN:                                        --entry-point-result=void \
+// RUN:                                        --shared-libs=%mlir_runner_utils,%sycl_runtime | FileCheck %s
 
 #map0 = affine_map<(d0, d1) -> (d1)>
 #map1 = affine_map<(d0, d1) -> (d0, d1)>
@@ -539,7 +539,7 @@ module @jit__net_loss.91 {
     func.call @printMemrefF32(%unranked) : (tensor<*xf32>) -> ()
     //      CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
     // CHECK-SAME: rank = 0 offset = 0 sizes = [] strides = [] data =
-    //      CHECK: [0.000133295]
+    //      CHECK: [0.00013329{{.*}}]
     return
   }
 }
