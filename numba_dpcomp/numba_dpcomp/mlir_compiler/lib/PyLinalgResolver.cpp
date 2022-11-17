@@ -23,7 +23,6 @@
 
 #include "imex/Dialect/imex_util/Dialect.hpp"
 #include "imex/Dialect/ntensor/IR/NTensorOps.hpp"
-#include "imex/Dialect/plier/Dialect.hpp"
 #include "imex/Transforms/CastUtils.hpp"
 #include "imex/Transforms/ConstUtils.hpp"
 #include "imex/Transforms/FuncUtils.hpp"
@@ -955,8 +954,8 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
       for (size_t i = 0; i < dimsCount; ++i) {
         auto ind = builder.create<mlir::arith::ConstantIndexOp>(loc, i);
         auto elemType = tupleType.getType(i);
-        auto item =
-            builder.createOrFold<plier::GetItemOp>(loc, elemType, dims, ind);
+        auto item = builder.createOrFold<imex::util::TupleExtractOp>(
+            loc, elemType, dims, ind);
         item = doSignCast(builder, loc, item);
         ret[i] = dimCast(item);
       }
@@ -1313,7 +1312,7 @@ py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
       ret.resize(tupleType.size());
       for (auto i : llvm::seq(size_t(0), tupleType.size())) {
         auto ind = builder.create<mlir::arith::ConstantIndexOp>(loc, i);
-        ret[i] = indexCast(builder.createOrFold<plier::GetItemOp>(
+        ret[i] = indexCast(builder.createOrFold<imex::util::TupleExtractOp>(
             loc, tupleType.getType(i), val, ind));
       }
     } else {
@@ -1575,7 +1574,8 @@ static py::object getitemImpl(py::capsule context, py::capsule ssaVal,
 
     auto elemType = tupleType.getType(static_cast<size_t>(indexVal));
     auto ind = builder.create<mlir::arith::ConstantIndexOp>(loc, indexVal);
-    auto item = builder.create<plier::GetItemOp>(loc, elemType, value, ind);
+    auto item =
+        builder.create<imex::util::TupleExtractOp>(loc, elemType, value, ind);
     return ctx.context.createVar(context, item.getResult());
   } else {
     throw py::index_error("Invalid getitem");
