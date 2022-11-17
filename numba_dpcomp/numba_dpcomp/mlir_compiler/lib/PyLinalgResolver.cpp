@@ -283,7 +283,8 @@ struct PyLinalgResolver::Context {
   py::object compileFunc;
   py::object lookupFunc;
 
-  py::object createVar(py::capsule context, mlir::Value value) {
+  py::object createVar(py::capsule context, mlir::Value value,
+                       bool makeLiteral = false) {
     assert(value);
     auto type = value.getType();
     if (type.isa<mlir::NoneType>())
@@ -292,8 +293,10 @@ struct PyLinalgResolver::Context {
     if (auto typevar = type.dyn_cast<imex::util::TypeVarType>())
       return createType(typevar.getType());
 
-    if (auto literal = makePyLiteral(context, value))
-      return *literal;
+    if (makeLiteral) {
+      if (auto literal = makePyLiteral(context, value))
+        return *literal;
+    }
 
     auto ret = var(context, wrapMlir(value));
     setupPyVar(ret);
@@ -1719,6 +1722,12 @@ static py::object strImpl(py::capsule /*context*/, py::capsule ssaVal) {
   return py::str("Var: \"" + toStr(unwrapMlir<mlir::Value>(ssaVal)) + "\"");
 }
 
+static py::object literalImpl(py::capsule context, py::capsule ssaVal) {
+  auto &ctx = getPyContext(context);
+  auto value = unwrapMlir<mlir::Value>(ssaVal);
+  return ctx.context.createVar(context, value, /*makeLiteral*/ true);
+}
+
 static void setupPyVar(pybind11::handle var) {
   py::setattr(var, "_shape", py::cpp_function(&shapeImpl));
   py::setattr(var, "_dtype", py::cpp_function(&dtypeImpl));
@@ -1728,6 +1737,7 @@ static void setupPyVar(pybind11::handle var) {
   py::setattr(var, "_binop", py::cpp_function(&binopImpl));
   py::setattr(var, "_unop", py::cpp_function(&unopImpl));
   py::setattr(var, "_str", py::cpp_function(&strImpl));
+  py::setattr(var, "_literal", py::cpp_function(&literalImpl));
 }
 
 static PyLinalgResolver::Values unpackResults(PyBuilderContext &ctx,

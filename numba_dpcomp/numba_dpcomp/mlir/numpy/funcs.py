@@ -3,17 +3,18 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from ..linalg_builder import (
-    FuncRegistry,
-    is_literal,
+    asarray,
     broadcast_type_arrays,
+    convert_array,
+    dtype_str,
+    eltwise,
+    FuncRegistry,
     get_array_type,
     get_val_type,
-    eltwise,
-    convert_array,
-    asarray,
-    is_int,
     is_float,
-    dtype_str,
+    is_int,
+    is_literal,
+    literal,
     DYNAMIC_DIM,
 )
 from ..func_registry import add_func
@@ -104,6 +105,7 @@ def _fix_axis(axis, num_dims):
 
 
 def _array_reduce(builder, arg, axis, body, get_init_value):
+    axis = literal(axis)
     if axis is None:
         shape = arg.shape
         num_dims = len(shape)
@@ -658,12 +660,14 @@ def dtype_impl(builder, arg):
 @register_func("array.reshape")
 @register_func("numpy.reshape", numpy.reshape)
 def reshape_impl(builder, arg, *new_shape):
+    new_shape = literal(new_shape)
     if len(new_shape) == 1:
         new_shape = new_shape[0]
 
     if isinstance(new_shape, tuple):
         neg_index = None
         for i, s in enumerate(new_shape):
+            s = literal(s)
             if isinstance(s, int) and s < 0:
                 assert neg_index is None
                 neg_index = i
