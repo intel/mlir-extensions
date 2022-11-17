@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.13.4)
+cmake_minimum_required(VERSION 3.13.4...3.18)
 
 # CMP0116: Ninja generators transform `DEPFILE`s from `add_custom_command()`
 # New in CMake 3.20. https://cmake.org/cmake/help/latest/policy/CMP0116.html
@@ -23,9 +23,22 @@ else()
     list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/modules")
 endif()
 
+# Expected LLVM SHA
+file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/build_tools/llvm_version.txt EXPECTED_LLVM_SHA)
+message(STATUS "Expected llvm sha: \"${EXPECTED_LLVM_SHA}\"")
 
 if(IMEX_EXTERNAL_PROJECT_BUILD)
     message(STATUS "Building IMEX with LLVM_EXTERNAL_PROJECTS")
+    # Check if the llvm SHA is consistent with llvm_version.txt
+    list(APPEND CMAKE_MODULE_PATH "${LLVM_MAIN_SRC_DIR}/cmake/modules")
+    include(VersionFromVCS)
+    get_source_info(${LLVM_MAIN_SRC_DIR}/.. LLVM_SHA repository)
+    message(STATUS "Actual llvm sha:   \"${LLVM_SHA}\"")
+
+    if (NOT EXPECTED_LLVM_SHA STREQUAL LLVM_SHA)
+        message(FATAL_ERROR "Invalid llvm version")
+    endif()
+
     set(MLIR_MAIN_SRC_DIR ${LLVM_MAIN_SRC_DIR}/../mlir )
     set(MLIR_INCLUDE_DIR ${MLIR_MAIN_SRC_DIR}/include )
     set(MLIR_GENERATED_INCLUDE_DIR ${LLVM_BINARY_DIR}/tools/mlir/include)
@@ -40,9 +53,6 @@ else()
     find_package(MLIR REQUIRED CONFIG)
 
     # Check if the llvm SHA is consistent with llvm_version.txt
-    file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/build_tools/llvm_version.txt EXPECTED_LLVM_SHA)
-    message(STATUS "Expected llvm sha: \"${EXPECTED_LLVM_SHA}\"")
-
     file(STRINGS ${LLVM_INCLUDE_DIR}/llvm/Support/VCSRevision.h REVISION_FILE_DATA)
     message(DEBUG "VCSRevision: ${REVISION_FILE_DATA}")
     string(REGEX MATCH "\"([^\"]*)\"" LLVM_SHA ${REVISION_FILE_DATA})
@@ -95,6 +105,7 @@ set(LLVM_LIT_ARGS "-sv" CACHE STRING "lit default options")
 set(IMEX_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 # LLVM_EXTERNAL_PROJECTS build puts library, executables and tools in LLVM's CMAKE_BINARY_DIR
 set(IMEX_BINARY_DIR ${CMAKE_BINARY_DIR})
+set(IMEX_LIB_DIR ${IMEX_BINARY_DIR}/lib)
 
 include(sanitizers)
 

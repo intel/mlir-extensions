@@ -19,8 +19,8 @@
 #include <imex/Dialect/Dist/IR/DistOps.h>
 #include <imex/Dialect/Dist/Utils/Utils.h>
 #include <imex/Dialect/PTensor/IR/PTensorOps.h>
-#include <imex/internal/PassUtils.h>
-#include <imex/internal/PassWrapper.h>
+#include <imex/Utils/PassUtils.h>
+#include <imex/Utils/PassWrapper.h>
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>

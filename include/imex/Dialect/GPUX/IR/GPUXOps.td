@@ -168,6 +168,16 @@ def GPUX_LaunchFuncOp
                    CArg<"::mlir::Type", "nullptr">:$asyncTokenType,
                    CArg<"::mlir::ValueRange", "{}">:$asyncDependencies)>
   ];
+
+  // Below methods will be literally copied into generated C++ Dialect class.
+  let extraClassDeclaration = [{
+
+    /// The name of the kernel's containing module.
+    ::mlir::StringAttr getKernelModuleName();
+
+    /// The name of the kernel.
+    ::mlir::StringAttr getKernelName();
+  }];
 }
 
 def GPUX_AllocOp
@@ -182,6 +192,10 @@ def GPUX_AllocOp
                    UnitAttr:$hostShared);
   let results = (outs Res<AnyMemRef, "", [MemAlloc]>:$memref,
                  Optional<GPU_AsyncToken>:$asyncToken);
+
+  let extraClassDeclaration = [{
+    ::mlir::MemRefType getType() { return getMemref().getType().cast<::mlir::MemRefType>(); }
+  }];
 }
 
 def GPUX_DeallocOp : GPUX_Op<"dealloc", [GPU_AsyncOpInterface]> {
@@ -192,6 +206,7 @@ def GPUX_DeallocOp : GPUX_Op<"dealloc", [GPU_AsyncOpInterface]> {
                    GPUX_StreamType:$gpux_stream,
                    Arg<AnyMemRef, "", [MemFree]>:$memref);
   let results = (outs Optional<GPU_AsyncToken>:$asyncToken);
+
 }
 
 def GPUX_WaitOp : GPUX_Op<"wait", [GPU_AsyncOpInterface]> {
