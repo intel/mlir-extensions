@@ -43,6 +43,7 @@
 #include "imex/Dialect/ntensor/Transforms/ResolveArrayOps.hpp"
 #include "imex/Dialect/plier/Dialect.hpp"
 #include "imex/Transforms/CanonicalizeReductions.hpp"
+#include "imex/Transforms/CastUtils.hpp"
 #include "imex/Transforms/CommonOpts.hpp"
 #include "imex/Transforms/Cse.hpp"
 #include "imex/Transforms/InlineUtils.hpp"
@@ -681,10 +682,8 @@ static mlir::Value convertScalarType(mlir::OpBuilder &builder,
                                      mlir::Location loc, mlir::Value val,
                                      mlir::Type dstType) {
   auto srcType = val.getType();
-  if (srcType.isIntOrIndexOrFloat() && dstType.isIntOrIndexOrFloat()) {
-    val = builder.create<plier::CastOp>(loc, dstType, val);
-    rerunScfPipeline(val.getDefiningOp());
-  }
+  if (imex::canConvert(srcType, dstType))
+    val = imex::doConvert(builder, loc, val, dstType);
 
   return val;
 }
@@ -1019,6 +1018,9 @@ static llvm::Optional<mlir::Value> doCast(mlir::OpBuilder &builder,
   if (srcType == dstType)
     return src;
 
+  if (imex::canConvert(srcType, dstType))
+    return imex::doConvert(builder, loc, src, dstType);
+
   if (auto srcArrayType = srcType.dyn_cast<imex::ntensor::NTensorType>()) {
     auto dstShapedType = dstType.dyn_cast<mlir::ShapedType>();
     if (!dstShapedType)
@@ -1328,8 +1330,11 @@ castRetTypes(mlir::Location loc, mlir::PatternRewriter &rewriter,
     auto dstType = op->getResultTypes()[i];
 
     auto srcType = ret.getType();
-    if (dstType != srcType)
-      results[i] = rewriter.create<plier::CastOp>(loc, dstType, ret);
+    if (dstType != srcType) {
+      auto castRes = doCast(rewriter, loc, ret, dstType);
+      assert(*castRes);
+      results[i] = *castRes;
+    }
   }
   return results;
 }
@@ -1506,10 +1511,13 @@ protected:
       auto arg = it.value();
       auto i = it.index();
       auto dstType = funcTypes[i];
-      if (arg.getType() != dstType)
-        castedArgs[i] = rewriter.createOrFold<plier::CastOp>(loc, dstType, arg);
-      else
+      if (arg.getType() != dstType) {
+        auto castRes = doCast(rewriter, loc, arg, dstType);
+        assert(castRes);
+        castedArgs[i] = *castRes;
+      } else {
         castedArgs[i] = arg;
+      }
     }
 
     auto newFuncCall =
@@ -1522,11 +1530,13 @@ protected:
       auto i = static_cast<unsigned>(it.index());
       auto res = it.value();
       auto oldResType = op->getResult(i).getType();
-      if (res.getType() != oldResType)
-        castedResults[i] =
-            rewriter.createOrFold<plier::CastOp>(loc, oldResType, res);
-      else
+      if (res.getType() != oldResType) {
+        auto castRes = doCast(rewriter, loc, res, oldResType);
+        assert(castRes);
+        castedResults[i] = *castRes;
+      } else {
         castedResults[i] = res;
+      }
     }
 
     rerunScfPipeline(op);
