@@ -712,7 +712,6 @@ static py::object initTensorImpl(py::capsule context, py::iterable shape,
   auto loc = ctx.loc;
   auto &builder = ctx.builder;
   auto elemType = unwrapType(dtype);
-  auto signlessElemType = makeSignlessType(elemType);
   mlir::Value init;
   auto indexType = builder.getIndexType();
   auto count = py::len(shape);
@@ -730,28 +729,24 @@ static py::object initTensorImpl(py::capsule context, py::iterable shape,
 
   if (initVal.is_none()) {
     init = builder.create<mlir::tensor::EmptyOp>(loc, getTempShape(shapeVal),
-                                                 signlessElemType);
+                                                 elemType);
   } else {
-    auto val =
-        doCast(builder, loc, ctx.context.unwrapVal(loc, builder, initVal),
-               signlessElemType);
+    auto val = doCast(builder, loc,
+                      ctx.context.unwrapVal(loc, builder, initVal), elemType);
     llvm::SmallVector<int64_t> shape(count, mlir::ShapedType::kDynamicSize);
-    auto type = mlir::RankedTensorType::get(shape, signlessElemType);
+    auto type = mlir::RankedTensorType::get(shape, elemType);
     auto body = [&](mlir::OpBuilder &builder, mlir::Location loc,
                     mlir::ValueRange /*indices*/) {
       builder.create<mlir::tensor::YieldOp>(loc, val);
     };
     init = builder.create<mlir::tensor::GenerateOp>(loc, type, shapeVal, body);
   }
+
   if (llvm::any_of(staticShape, [](auto val) { return val >= 0; })) {
-    auto newType = mlir::RankedTensorType::get(staticShape, signlessElemType);
+    auto newType = mlir::RankedTensorType::get(staticShape, elemType);
     init = builder.create<mlir::tensor::CastOp>(loc, newType, init);
   }
-  auto resTensorTypeSigness = init.getType().cast<mlir::RankedTensorType>();
-  auto resTensorType =
-      mlir::RankedTensorType::get(resTensorTypeSigness.getShape(), elemType,
-                                  resTensorTypeSigness.getEncoding());
-  init = doSignCast(builder, loc, init, resTensorType);
+
   return ctx.context.createVar(context, init);
 }
 
