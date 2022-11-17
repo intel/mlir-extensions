@@ -1089,7 +1089,7 @@ _test_reshape_test_arrays = [
         "lambda a: a.reshape((1, a.size, 1))",
         # "lambda a: a.reshape((-1, a.size, 1))",
         # "lambda a: a.reshape((1, -1, 1))",
-        "lambda a: a.reshape((1, a.size, -1))",
+        # "lambda a: a.reshape((1, a.size, -1))",
         "lambda a: a.reshape(1, a.size, 1)",
         # "lambda a: a.reshape(-1, a.size, 1)",
         # "lambda a: a.reshape(1, -1, 1)",
