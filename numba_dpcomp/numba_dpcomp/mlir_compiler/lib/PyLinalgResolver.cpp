@@ -868,17 +868,13 @@ static py::object fromElementsImpl(py::capsule context, py::handle values,
   auto resTensorType =
       mlir::RankedTensorType::get(mlir::ShapedType::kDynamicSize, type);
   for (auto &val : vals)
-    val = doSignCast(builder, loc, doCast(builder, loc, val, type));
+    val = doCast(builder, loc, val, type);
 
   auto res =
       builder.create<mlir::tensor::FromElementsOp>(loc, vals).getResult();
-  auto sizelessTensorType = mlir::RankedTensorType::get(
-      mlir::ShapedType::kDynamicSize, makeSignlessType(type));
-  res =
-      builder.createOrFold<mlir::tensor::CastOp>(loc, sizelessTensorType, res);
+  res = builder.createOrFold<mlir::tensor::CastOp>(loc, resTensorType, res);
 
-  return ctx.context.createVar(context,
-                               doSignCast(builder, loc, res, resTensorType));
+  return ctx.context.createVar(context, res);
 }
 
 static py::object extractImpl(py::capsule context, py::handle value,
