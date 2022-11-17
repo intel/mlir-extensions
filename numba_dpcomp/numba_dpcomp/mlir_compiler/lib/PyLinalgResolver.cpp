@@ -1153,8 +1153,6 @@ static py::object insertImpl(py::capsule context, py::handle src,
   };
   auto srcTensor = unwrapVal(src);
   auto dstTensor = unwrapVal(dst);
-  auto signlessSrc = doSignCast(builder, loc, srcTensor);
-  auto signlessDst = doSignCast(builder, loc, dstTensor);
   auto offsetsVec = unwrapList(offsets);
   auto stridesVec = unwrapList(strides);
 
@@ -1164,10 +1162,9 @@ static py::object insertImpl(py::capsule context, py::handle src,
 
   auto res =
       builder
-          .create<mlir::tensor::InsertSliceOp>(loc, signlessSrc, signlessDst,
+          .create<mlir::tensor::InsertSliceOp>(loc, srcTensor, dstTensor,
                                                offsetsVec, sizesVec, stridesVec)
           .getResult();
-  res = doSignCast(builder, loc, res, dstTensor.getType());
   return ctx.context.createVar(context, res);
 }
 
