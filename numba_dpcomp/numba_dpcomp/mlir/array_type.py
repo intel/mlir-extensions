@@ -77,6 +77,10 @@ def _ol_array_allocate(cls, allocsize, align):
     return impl
 
 
+def get_fixed_dims(shape):
+    return tuple(d if (d == 0 or d == 1) else None for d in shape)
+
+
 @typeof_impl.register(np.ndarray)
 def _typeof_ndarray(val, c):
     try:
@@ -85,5 +89,5 @@ def _typeof_ndarray(val, c):
         raise errors.NumbaValueError(f"Unsupported array dtype: {val.dtype}")
     layout = numpy_support.map_layout(val)
     readonly = not val.flags.writeable
-    fixed_dims = tuple(d if d == 1 else None for d in val.shape)
+    fixed_dims = get_fixed_dims(val.shape)
     return FixedArray(dtype, val.ndim, layout, fixed_dims=fixed_dims, readonly=readonly)

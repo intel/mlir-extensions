@@ -154,7 +154,7 @@ if _is_dpctl_available:
         readonly = False
         filter_string = _get_filter_string(val)
         assert filter_string is not None
-        fixed_dims = tuple(d if d == 1 else None for d in val.shape)
+        fixed_dims = array_type.get_fixed_dims(val.shape)
         return USMNdArrayType(
             dtype,
             val.ndim,
