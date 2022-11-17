@@ -39,7 +39,7 @@ class FixedArray(Array):
             dtype=dtype,
             ndim=ndim,
             layout=layout,
-            fixed_dims=self.fixed_dims,
+            fixed_dims=(None,) * ndim,
             readonly=readonly,
             aligned=self.aligned,
         )
