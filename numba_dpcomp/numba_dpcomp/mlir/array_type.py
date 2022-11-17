@@ -4,9 +4,10 @@
 
 import numpy as np
 
-from numba.extending import typeof_impl
-from numba.core.types.npytypes import Array
+from numba.extending import register_model, typeof_impl
 from numba.core import errors
+from numba.core.types.npytypes import Array
+from numba.core.datamodel.models import ArrayModel
 from numba.np import numpy_support
 
 
@@ -46,6 +47,9 @@ class FixedArray(Array):
         return super().key + (self.fixed_dims,)
 
 
+register_model(FixedArray)(ArrayModel)
+
+
 @typeof_impl.register(np.ndarray)
 def _typeof_ndarray(val, c):
     try:
@@ -55,6 +59,4 @@ def _typeof_ndarray(val, c):
     layout = numpy_support.map_layout(val)
     readonly = not val.flags.writeable
     fixed_dims = tuple(d if d == 1 else None for d in val.shape)
-    return FixedArray(
-        dtype, val.ndim, layout, fixed_dims=fixed_dims, readonly=readonly
-    )
+    return FixedArray(dtype, val.ndim, layout, fixed_dims=fixed_dims, readonly=readonly)
