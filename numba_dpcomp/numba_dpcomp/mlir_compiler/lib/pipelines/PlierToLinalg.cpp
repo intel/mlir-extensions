@@ -1068,6 +1068,15 @@ static llvm::Optional<mlir::Value> doCast(mlir::OpBuilder &builder,
   }
 }
 
+static mlir::Value doSafeCast(mlir::OpBuilder &builder, mlir::Location loc,
+                              mlir::Value src, mlir::Type dstType) {
+  auto res = doCast(builder, loc, src, dstType);
+  if (res)
+    return *res;
+
+  return builder.create<plier::CastOp>(loc, dstType, src);
+}
+
 struct CastsToNtensor : public mlir::OpConversionPattern<plier::CastOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -1330,11 +1339,8 @@ castRetTypes(mlir::Location loc, mlir::PatternRewriter &rewriter,
     auto dstType = op->getResultTypes()[i];
 
     auto srcType = ret.getType();
-    if (dstType != srcType) {
-      auto castRes = doCast(rewriter, loc, ret, dstType);
-      assert(*castRes);
-      results[i] = *castRes;
-    }
+    if (dstType != srcType)
+      results[i] = doSafeCast(rewriter, loc, ret, dstType);
   }
   return results;
 }
@@ -1511,13 +1517,7 @@ protected:
       auto arg = it.value();
       auto i = it.index();
       auto dstType = funcTypes[i];
-      if (arg.getType() != dstType) {
-        auto castRes = doCast(rewriter, loc, arg, dstType);
-        assert(castRes);
-        castedArgs[i] = *castRes;
-      } else {
-        castedArgs[i] = arg;
-      }
+      castedArgs[i] = doSafeCast(rewriter, loc, arg, dstType);
     }
 
     auto newFuncCall =
@@ -1530,13 +1530,7 @@ protected:
       auto i = static_cast<unsigned>(it.index());
       auto res = it.value();
       auto oldResType = op->getResult(i).getType();
-      if (res.getType() != oldResType) {
-        auto castRes = doCast(rewriter, loc, res, oldResType);
-        assert(castRes);
-        castedResults[i] = *castRes;
-      } else {
-        castedResults[i] = res;
-      }
+      castedResults[i] = doSafeCast(rewriter, loc, res, oldResType);
     }
 
     rerunScfPipeline(op);
