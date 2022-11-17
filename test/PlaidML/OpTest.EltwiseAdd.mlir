@@ -5,7 +5,7 @@
 // RUN: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-llvm.pp \
 // RUN:                                       --runner mlir-cpu-runner -e main \
 // RUN:                                       --entry-point-result=void \
-// RUN:                                       --shared-libs=%mlir_runner_utils,%sycl_runtime | FileCheck %s
+// RUN:                                       --shared-libs=%mlir_runner_utils,%levelzero_runtime | FileCheck %s
 #map = affine_map<(d0, d1) -> (d0, d1)>
 module @eltwise_add {
   func.func @test(%arg0: tensor<10x20xf32>, %arg1: tensor<10x20xf32>) -> tensor<10x20xf32> {
