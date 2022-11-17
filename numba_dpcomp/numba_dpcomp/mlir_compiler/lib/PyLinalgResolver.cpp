@@ -944,19 +944,13 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
         auto elemType = tupleType.getType(i);
         auto item = builder.createOrFold<imex::util::TupleExtractOp>(
             loc, elemType, dims, ind);
-        item = doSignCast(builder, loc, item);
         ret[i] = dimCast(item);
       }
     } else {
-      dims = doSignCast(builder, loc, dims);
       ret.emplace_back(dimCast(dims));
     }
     return ret;
   }();
-
-  auto elemType = srcType.getElementType();
-  auto signlessElemType = makeSignlessType(elemType);
-  srcVal = doSignCast(builder, loc, srcVal);
 
   auto srcRank = static_cast<unsigned>(srcType.getRank());
   auto dstRank = static_cast<unsigned>(newDimsVals.size());
@@ -968,8 +962,6 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
 
     mlir::Value slice = builder.create<mlir::tensor::ExtractSliceOp>(
         loc, srcVal, offset, size, stride);
-    auto dstType = slice.getType().cast<mlir::ShapedType>().clone(elemType);
-    slice = doSignCast(builder, loc, slice, dstType);
     return ctx.context.createVar(context, slice);
   }
 
@@ -990,9 +982,7 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
 
   llvm::SmallVector<int64_t> shape(dstRank, mlir::ShapedType::kDynamicSize);
 
-  auto resultType =
-      mlir::RankedTensorType::get(shape, elemType, srcType.getEncoding());
-  auto resultTypeSignless = srcType.clone(shape, signlessElemType);
+  auto resultType = srcType.clone(shape);
 
   // TODO: Limit to 1D case for now
   if ((srcRank == 1) && (dstRank == (srcRank + unitDimsCount)) &&
@@ -1011,14 +1001,13 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
       reassoc[std::max(0, currInd)].emplace_back(i);
     }
 
-    auto expandType = resultTypeSignless.clone(expandShape);
+    auto expandType = resultType.clone(expandShape);
     mlir::Value res = builder.create<mlir::tensor::ExpandShapeOp>(
         loc, expandType, srcVal, reassoc);
-    if (expandType != resultTypeSignless)
-      res = builder.create<mlir::tensor::CastOp>(loc, resultTypeSignless, res);
+    if (expandType != resultType)
+      res = builder.create<mlir::tensor::CastOp>(loc, resultType, res);
 
-    return ctx.context.createVar(context,
-                                 doSignCast(builder, loc, res, resultType));
+    return ctx.context.createVar(context, res);
   }
 
   auto toValues = [&](mlir::ArrayRef<mlir::OpFoldResult> src) {
@@ -1043,8 +1032,7 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
       builder.create<mlir::tensor::FromElementsOp>(loc, toValues(newDimsVals));
 
   mlir::Value reshaped = builder.create<mlir::tensor::ReshapeOp>(
-      loc, resultTypeSignless, srcVal, shapeTensor);
-  reshaped = doSignCast(builder, loc, reshaped, resultType);
+      loc, resultType, srcVal, shapeTensor);
 
   return ctx.context.createVar(context, reshaped);
 }
