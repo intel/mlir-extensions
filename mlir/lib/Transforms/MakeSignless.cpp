@@ -143,6 +143,26 @@ struct ConvertTensorReshape
   }
 };
 
+struct ConvertTensorInserSlice
+    : public mlir::OpConversionPattern<mlir::tensor::InsertSliceOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::tensor::InsertSliceOp op,
+                  mlir::tensor::InsertSliceOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto offsets = mlir::getMixedStridesOrOffsets(adaptor.getStaticOffsets(),
+                                                  adaptor.getOffsets());
+    auto sizes =
+        mlir::getMixedSizes(adaptor.getStaticSizes(), adaptor.getSizes());
+    auto strides = mlir::getMixedStridesOrOffsets(adaptor.getStaticStrides(),
+                                                  adaptor.getStrides());
+    rewriter.replaceOpWithNewOp<mlir::tensor::InsertSliceOp>(
+        op, adaptor.getSource(), adaptor.getDest(), offsets, sizes, strides);
+    return mlir::success();
+  }
+};
+
 struct ConvertLinalgFill
     : public mlir::OpConversionPattern<mlir::linalg::FillOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -248,14 +268,15 @@ void imex::populateMakeSignlessRewritesAndTarget(
       mlir::memref::AllocOp, mlir::memref::AllocaOp, mlir::memref::DeallocOp,
       mlir::tensor::EmptyOp, mlir::tensor::FromElementsOp,
       mlir::tensor::ExpandShapeOp, mlir::tensor::ReshapeOp,
-      mlir::linalg::FillOp, mlir::linalg::GenericOp, mlir::linalg::YieldOp>(
+      mlir::tensor::InsertSliceOp, mlir::linalg::FillOp,
+      mlir::linalg::GenericOp, mlir::linalg::YieldOp>(
       [&converter](mlir::Operation *op) { return converter.isLegal(op); });
 
-  patterns.insert<ConvertAlloc<mlir::memref::AllocOp>,
-                  ConvertAlloc<mlir::memref::AllocaOp>, ConvertDealloc,
-                  ConvertTensorEmpty, ConvertTensorFromElements,
-                  ConvertTensorExpandShape, ConvertTensorReshape,
-                  ConvertLinalgFill, ConvertLinalgGeneric, ConvertLinalgYield>(
+  patterns.insert<
+      ConvertAlloc<mlir::memref::AllocOp>, ConvertAlloc<mlir::memref::AllocaOp>,
+      ConvertDealloc, ConvertTensorEmpty, ConvertTensorFromElements,
+      ConvertTensorExpandShape, ConvertTensorReshape, ConvertTensorInserSlice,
+      ConvertLinalgFill, ConvertLinalgGeneric, ConvertLinalgYield>(
       converter, patterns.getContext());
 }
 
