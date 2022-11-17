@@ -18,6 +18,18 @@ func.func @test_extract_slice(%arg0: !ptensor.ptensor<1 x i64>) -> !ptensor.pten
 // CHECK-NEXT: ptensor.extract_slice %arg0[[[C0]]] [[[C1]]] [[[C1]]] : !ptensor.ptensor<1 x i64> to !ptensor.ptensor<1 x i64>
 
 // -----
+func.func @test_insert_slice(%arg0: !ptensor.ptensor<1 x i64>, %arg1: !ptensor.ptensor<1 x i64>) -> !ptensor.ptensor<1 x i64> {
+    %c0 = arith.constant 0 : index
+    %c3 = arith.constant 3 : index
+    ptensor.insert_slice %arg1 into %arg0[%c0] [%c3] [%c3] : !ptensor.ptensor<1 x i64> into !ptensor.ptensor<1 x i64>
+    return %arg0 : !ptensor.ptensor<1 x i64>
+}
+// CHECK-LABEL: @test_insert_slice
+// CHECK-NEXT: [[C0:%.*]] = arith.constant
+// CHECK-NEXT: [[C1:%.*]] = arith.constant
+// CHECK-NEXT: ptensor.insert_slice %arg1 into %arg0[[[C0]]] [[[C1]]] [[[C1]]] : !ptensor.ptensor<1 x i64> into !ptensor.ptensor<1 x i64>
+
+// -----
 func.func @test_arange(%arg0: si64, %arg1: si64, %arg2: si64) -> !ptensor.ptensor<1 x i64> {
     %0 = "ptensor.arange"(%arg0, %arg1, %arg2) : (si64, si64, si64) -> !ptensor.ptensor<1 x i64>
     return %0 : !ptensor.ptensor<1 x i64>

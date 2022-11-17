@@ -135,7 +135,7 @@ def ExtractTensorOp : PTensor_Op<"extract_tensor", []> {
     let results = (outs AnyRankedTensor);
 }
 
-def ExtractSliceOp : PTensor_Op<"extract_slice", [SameVariadicOperandSize , Pure]> {
+def ExtractSliceOp : PTensor_Op<"extract_slice", [SameVariadicOperandSize, Pure]> {
   let summary = "extract slice operation";
   let description = [{
     The "extract_slice" operation extract a tensor from another tensor as
@@ -154,6 +154,25 @@ def ExtractSliceOp : PTensor_Op<"extract_slice", [SameVariadicOperandSize , Pure
 
   let assemblyFormat = [{
     $source `[` $offsets `]``[` $sizes `]``[` $strides `]` attr-dict `:` qualified(type($source)) `to` qualified(type($result))
+  }];
+}
+
+def InsertSliceOp : PTensor_Op<"insert_slice", [SameVariadicOperandSize]> {
+  let summary = "Copy values from a tensor into a slice of another.";
+  let description = [{
+    Copy values from a tensor into a slice of another.
+  }];
+
+  let arguments = (ins
+    AnyType:$destination,
+    AnyType:$source,
+    Variadic<Index>:$offsets,
+    Variadic<Index>:$sizes,
+    Variadic<Index>:$strides
+  );
+
+  let assemblyFormat = [{
+    $source `into` $destination `[` $offsets `]``[` $sizes `]``[` $strides `]` attr-dict `:` qualified(type($destination)) `into` qualified(type($source))
   }];
 }
 
