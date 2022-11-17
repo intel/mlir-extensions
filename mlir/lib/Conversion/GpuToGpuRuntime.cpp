@@ -2124,18 +2124,6 @@ struct TruncateF64ForGPUPass
     imex::populateTupleTypeConversionRewritesAndTarget(converter, patterns,
                                                        target);
 
-    // TODO: remove
-    mlir::populateFunctionOpInterfaceTypeConversionPattern<
-        mlir::gpu::GPUFuncOp>(patterns, converter);
-    target.addDynamicallyLegalOp<mlir::gpu::GPUFuncOp>(
-        [&](mlir::gpu::GPUFuncOp op) -> llvm::Optional<bool> {
-          if (converter.isSignatureLegal(op.getFunctionType()) &&
-              converter.isLegal(&op.getBody()))
-            return true;
-
-          return llvm::None;
-        });
-
     patterns.insert<ConvertF64LoadOp, ConvertF64StoreOp>(converter, ctx);
     target.addDynamicallyLegalOp<mlir::memref::LoadOp, mlir::memref::StoreOp>(
         [&converter](mlir::Operation *op) -> llvm::Optional<bool> {

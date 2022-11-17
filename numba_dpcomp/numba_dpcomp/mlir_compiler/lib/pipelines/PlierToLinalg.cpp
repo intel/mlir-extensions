@@ -296,10 +296,6 @@ struct ReshapeChangeLayout
     mlir::OpFoldResult offsetVal = rewriter.getIndexAttr(offset);
 
     llvm::SmallVector<mlir::OpFoldResult> stridesVals(rank);
-    auto offsetConst =
-        rewriter.create<mlir::arith::ConstantIndexOp>(loc, offset);
-    auto actualOffset =
-        rewriter.createOrFold<imex::util::ExtractMemrefMetadataOp>(loc, src);
 
     mlir::Value cmp;
     for (auto i : llvm::seq(0u, rank)) {

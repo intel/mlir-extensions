@@ -7,10 +7,11 @@
 #include "imex/Dialect/imex_util/Dialect.hpp"
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
-#include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/Func/Transforms/FuncConversions.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/Dialect/SCF/Transforms/Transforms.h>
+#include <mlir/IR/FunctionInterfaces.h>
+#include <mlir/Interfaces/CallInterfaces.h>
 #include <mlir/Transforms/DialectConversion.h>
 
 namespace {
@@ -156,19 +157,30 @@ public:
 void imex::populateControlFlowTypeConversionRewritesAndTarget(
     mlir::TypeConverter &typeConverter, mlir::RewritePatternSet &patterns,
     mlir::ConversionTarget &target) {
-  mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::func::FuncOp>(
-      patterns, typeConverter);
-  target.addDynamicallyLegalOp<mlir::func::FuncOp>(
-      [&](mlir::func::FuncOp op) -> llvm::Optional<bool> {
-        if (typeConverter.isSignatureLegal(op.getFunctionType()) &&
-            typeConverter.isLegal(&op.getBody()))
+  mlir::populateAnyFunctionOpInterfaceTypeConversionPattern(patterns,
+                                                            typeConverter);
+  target.markUnknownOpDynamicallyLegal(
+      [&](mlir::Operation *op) -> llvm::Optional<bool> {
+        if (auto func = mlir::dyn_cast<mlir::FunctionOpInterface>(op)) {
+          if (typeConverter.isSignatureLegal(
+                  func.getFunctionType().cast<mlir::FunctionType>()) &&
+              typeConverter.isLegal(&func.getFunctionBody()))
+            return true;
+        } else if (auto call = mlir::dyn_cast<mlir::CallOpInterface>(op)) {
+          if (typeConverter.isLegal(call))
+            return true;
+        } else if (mlir::isNotBranchOpInterfaceOrReturnLikeOp(op) ||
+                   mlir::isLegalForBranchOpInterfaceTypeConversionPattern(
+                       op, typeConverter) ||
+                   mlir::isLegalForReturnOpTypeConversionPattern(op,
+                                                                 typeConverter))
           return true;
 
         return llvm::None;
       });
 
   mlir::populateCallOpTypeConversionPattern(patterns, typeConverter);
-  target.addDynamicallyLegalOp<mlir::arith::SelectOp, mlir::func::CallOp>(
+  target.addDynamicallyLegalOp<mlir::arith::SelectOp>(
       [&](mlir::Operation *op) -> llvm::Optional<bool> {
         if (typeConverter.isLegal(op))
           return true;
@@ -183,17 +195,6 @@ void imex::populateControlFlowTypeConversionRewritesAndTarget(
 
   patterns.insert<ConvertSelectOp, ConvertForOpTypes>(typeConverter,
                                                       patterns.getContext());
-
-  target.markUnknownOpDynamicallyLegal(
-      [&](mlir::Operation *op) -> llvm::Optional<bool> {
-        if (mlir::isNotBranchOpInterfaceOrReturnLikeOp(op) ||
-            mlir::isLegalForBranchOpInterfaceTypeConversionPattern(
-                op, typeConverter) ||
-            mlir::isLegalForReturnOpTypeConversionPattern(op, typeConverter))
-          return true;
-
-        return llvm::None;
-      });
 }
 
 namespace {
