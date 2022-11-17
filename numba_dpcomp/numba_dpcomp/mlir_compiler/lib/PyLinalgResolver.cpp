@@ -235,11 +235,32 @@ static llvm::Optional<py::object> getPyLiteral(mlir::Attribute attr) {
 }
 
 static mlir::Value doCast(mlir::OpBuilder &builder, mlir::Location loc,
-                          mlir::Value val, mlir::Type type) {
-  if (val.getType() != type)
-    return builder.createOrFold<plier::CastOp>(loc, type, val);
+                          mlir::Value val, mlir::Type dstType) {
+  auto srcType = val.getType();
+  if (srcType == dstType)
+    return val;
 
-  return val;
+  if (imex::canConvert(srcType, dstType))
+    return imex::doConvert(builder, loc, val, dstType);
+
+  if (srcType.isa<mlir::MemRefType>() &&
+      dstType.isa<imex::ntensor::NTensorType>())
+    return builder.createOrFold<imex::ntensor::FromMemrefOp>(loc, dstType, val);
+
+  if (srcType.isa<imex::ntensor::NTensorType>() &&
+      dstType.isa<mlir::MemRefType>())
+    return builder.createOrFold<imex::ntensor::ToMemrefOp>(loc, dstType, val);
+
+  if (srcType.isa<mlir::RankedTensorType>() &&
+      dstType.isa<imex::ntensor::NTensorType>())
+    return builder.createOrFold<imex::ntensor::FromTensorOp>(loc, dstType, val);
+
+  if (srcType.isa<imex::ntensor::NTensorType>() &&
+      dstType.isa<mlir::RankedTensorType>())
+    return builder.createOrFold<imex::ntensor::ToTensorOp>(loc, dstType, val);
+
+  imex::reportError(llvm::Twine("Cannot cast types :") + toStr(srcType) +
+                    " to " + toStr(dstType));
 }
 
 static bool cmpCapsule(py::capsule a1, py::capsule a2) {
@@ -736,12 +757,8 @@ static py::object fillTensorImpl(py::capsule context, py::handle tensor,
   auto tensorVal = ctx.context.unwrapVal(loc, builder, tensor);
   auto tensorType = tensorVal.getType().cast<mlir::ShapedType>();
   auto initVal = ctx.context.unwrapVal(loc, builder, value);
-  if (initVal.getType() != tensorType.getElementType())
-    initVal = builder.create<plier::CastOp>(loc, tensorType.getElementType(),
-                                            initVal);
+  initVal = doCast(builder, loc, initVal, tensorType.getElementType());
 
-  //    auto val = builder.create<mlir::linalg::FillOp>(loc, tensor_type,
-  //    tensor_val, init_val);
   auto rank = static_cast<unsigned>(tensorType.getRank());
   mlir::AffineMap affine_maps[] = {
       mlir::AffineMap::getMultiDimIdentityMap(rank, builder.getContext()),
@@ -1240,7 +1257,7 @@ static py::object castImpl(py::capsule context, py::handle src,
   };
   auto val = unwrapVal(src);
   auto type = unwrapType(dtype);
-  auto ret = builder.createOrFold<plier::CastOp>(loc, type, val);
+  auto ret = doCast(builder, loc, val, type);
   return ctx.context.createVar(context, ret);
 }
 
