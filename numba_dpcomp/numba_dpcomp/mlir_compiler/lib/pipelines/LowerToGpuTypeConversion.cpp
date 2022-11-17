@@ -35,7 +35,19 @@ struct Conversion {
     auto layout = obj.attr("layout").cast<std::string>();
 
     auto ndim = obj.attr("ndim").cast<size_t>();
-    llvm::SmallVector<int64_t> shape(ndim, mlir::ShapedType::kDynamicSize);
+
+    auto fixedDims = obj.attr("fixed_dims").cast<py::tuple>();
+    if (fixedDims.size() != ndim)
+      return llvm::None;
+
+    llvm::SmallVector<int64_t> shape(ndim);
+    for (auto [i, dim] : llvm::enumerate(fixedDims)) {
+      if (dim.is_none()) {
+        shape[i] = mlir::ShapedType::kDynamicSize;
+      } else {
+        shape[i] = dim.cast<int64_t>();
+      }
+    }
 
     auto devAttr = mlir::StringAttr::get(
         &context, obj.attr("filter_string").cast<std::string>());
