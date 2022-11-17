@@ -1,4 +1,4 @@
-// RUN: imex-opt -allow-unregistered-dialect -pass-pipeline='func.func(imex-memory-opts)' --split-input-file %s | FileCheck %s
+// RUN: imex-opt -allow-unregistered-dialect -pass-pipeline='builtin.module(func.func(imex-memory-opts))' --split-input-file %s | FileCheck %s
 
 // CHECK-LABEL: func @dead_store1()
 func.func @dead_store1() -> memref<10xf32> {

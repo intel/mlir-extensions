@@ -104,8 +104,8 @@ struct ConvertCopyOp : public mlir::OpRewritePattern<imex::ntensor::CopyOp> {
               affineMap,
           };
 
-          llvm::SmallVector<llvm::StringRef> iterators(
-              rank, mlir::getParallelIteratorTypeName());
+          llvm::SmallVector<mlir::utils::IteratorType> iterators(
+              rank, mlir::utils::IteratorType::parallel);
           auto bodyBuilder = [](mlir::OpBuilder &b, mlir::Location l,
                                 mlir::ValueRange args) {
             assert(args.size() == 2);
@@ -168,8 +168,8 @@ struct ConvertElementwiseOp
               affineMap,
           };
 
-          llvm::SmallVector<llvm::StringRef> iterators(
-              rank, mlir::getParallelIteratorTypeName());
+          llvm::SmallVector<mlir::utils::IteratorType> iterators(
+              rank, mlir::utils::IteratorType::parallel);
 
           auto generic = builder.create<mlir::linalg::GenericOp>(
               loc, dstTensorType, srcTensor, empty, maps, iterators);
@@ -439,7 +439,8 @@ static mlir::Value expandDim(mlir::OpBuilder &builder, mlir::Location loc,
         mlir::AffineMap::get(numDims, 0, exprs, context),
         mlir::AffineMap::getMultiDimIdentityMap(numDims, context),
     };
-    llvm::SmallVector<mlir::StringRef> iterators(numDims, "parallel");
+    llvm::SmallVector<mlir::utils::IteratorType> iterators(
+        numDims, mlir::utils::IteratorType::parallel);
 
     auto body = [&](mlir::OpBuilder &builder, mlir::Location loc,
                     mlir::ValueRange values) {
@@ -583,8 +584,8 @@ struct ConvertBroadcastOp
                                                        context),
                   mlir::AffineMap::getMultiDimIdentityMap(dstRank, context),
               };
-              llvm::SmallVector<llvm::StringRef> iterators(
-                  dstRank, mlir::getParallelIteratorTypeName());
+              llvm::SmallVector<mlir::utils::IteratorType> iterators(
+                  dstRank, mlir::utils::IteratorType::parallel);
               auto body = [&](mlir::OpBuilder &builder, mlir::Location loc,
                               mlir::ValueRange values) {
                 assert(values.size() == 2);

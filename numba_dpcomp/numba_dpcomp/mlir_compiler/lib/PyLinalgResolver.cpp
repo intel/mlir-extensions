@@ -537,10 +537,19 @@ getAgrsFromTuple(py::handle args,
 }
 
 static auto getIterators(py::list iterators, mlir::MLIRContext &ctx) {
-  llvm::SmallVector<llvm::StringRef> ret(iterators.size());
-  for (auto it : llvm::enumerate(iterators))
-    ret[it.index()] =
-        mlir::StringAttr::get(&ctx, it.value().cast<std::string>()).getValue();
+  llvm::SmallVector<mlir::utils::IteratorType> ret(iterators.size());
+  for (auto [i, iter] : llvm::enumerate(iterators)) {
+    auto str = iter.cast<std::string>();
+    ret[i] = [&]() -> mlir::utils::IteratorType {
+      if (str == "parallel")
+        return mlir::utils::IteratorType::parallel;
+
+      if (str == "reduction")
+        return mlir::utils::IteratorType::reduction;
+
+      imex::reportError(llvm::Twine("Invalid linalg iterator type: ") + str);
+    }();
+  }
 
   return ret;
 }
@@ -737,7 +746,8 @@ static py::object fillTensorImpl(py::capsule context, py::handle tensor,
   mlir::AffineMap affine_maps[] = {
       mlir::AffineMap::getMultiDimIdentityMap(rank, builder.getContext()),
   };
-  llvm::SmallVector<llvm::StringRef> iterators(rank, "parallel");
+  llvm::SmallVector<mlir::utils::IteratorType> iterators(
+      rank, mlir::utils::IteratorType::parallel);
   auto body = [&](mlir::OpBuilder &builder, mlir::Location loc,
                   mlir::ValueRange values) {
     assert(values.size() == 1);

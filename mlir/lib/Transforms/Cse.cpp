@@ -52,12 +52,12 @@ mlir::LogicalResult simplifyRegion(ScopedMapTy &map, mlir::Region &region,
 
   bool success = false;
   for (auto &inst : llvm::make_early_inc_range(region.front())) {
-    if (inst.hasTrait<mlir::OpTrait::IsTerminator>()) {
+    if (inst.hasTrait<mlir::OpTrait::IsTerminator>())
       break;
-    }
-    if (!mlir::MemoryEffectOpInterface::hasNoEffect(&inst)) {
+
+    if (!mlir::isMemoryEffectFree(&inst))
       continue;
-    }
+
     if (!inst.getRegions().empty()) {
       if (Recursive && !inst.hasTrait<mlir::OpTrait::IsIsolatedFromAbove>()) {
         for (auto &reg : inst.getRegions()) {

@@ -75,8 +75,7 @@ static void moveOpsIntoParallel(mlir::scf::ParallelOp outer, int depth = 0) {
       return false;
     };
 
-    if (!mlir::MemoryEffectOpInterface::hasNoEffect(&op) ||
-        isParallelOpOperand(op))
+    if (!mlir::isMemoryEffectFree(&op) || isParallelOpOperand(op))
       break;
 
     if (first) {

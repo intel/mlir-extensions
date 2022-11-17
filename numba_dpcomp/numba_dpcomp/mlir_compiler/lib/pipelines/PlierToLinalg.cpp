@@ -196,8 +196,8 @@ static void genCopy(mlir::OpBuilder &builder, mlir::Location loc,
       affineMap,
   };
 
-  llvm::SmallVector<mlir::StringRef> iterators(
-      rank, mlir::getParallelIteratorTypeName());
+  llvm::SmallVector<mlir::utils::IteratorType> iterators(
+      rank, mlir::utils::IteratorType::parallel);
 
   auto bodyBuilder = [](mlir::OpBuilder &b, mlir::Location l,
                         mlir::ValueRange args) {
@@ -1742,8 +1742,9 @@ struct SimplifyExpandDims
       return mlir::failure();
 
     auto context = op.getContext();
-    auto parallelAttr =
-        mlir::StringAttr::get(context, mlir::getParallelIteratorTypeName());
+    auto parallelAttr = mlir::linalg::IteratorTypeAttr::get(
+        context, mlir::utils::IteratorType::parallel);
+
     if (llvm::any_of(op.getIteratorTypes(),
                      [&](auto attr) { return attr != parallelAttr; }))
       return mlir::failure();
@@ -1936,8 +1937,8 @@ struct SliceOfGeneric : public mlir::OpRewritePattern<mlir::linalg::GenericOp> {
     auto resMap = maps.back();
 
     auto iters = op.getIteratorTypes();
-    auto parallelIter =
-        rewriter.getStringAttr(mlir::getParallelIteratorTypeName());
+    auto parallelIter = mlir::linalg::IteratorTypeAttr::get(
+        rewriter.getContext(), mlir::utils::IteratorType::parallel);
     for (auto i : llvm::seq(0u, resRank)) {
       auto dim = resMap.getDimPosition(i);
       assert(dim < iters.size());
@@ -2007,13 +2008,14 @@ struct SliceOfGeneric : public mlir::OpRewritePattern<mlir::linalg::GenericOp> {
     auto numLoops = static_cast<unsigned>(iters.size());
     auto ErasedLoop = static_cast<unsigned>(-1);
     llvm::SmallVector<unsigned, 4> loopsMapping(numLoops, ErasedLoop);
-    llvm::SmallVector<mlir::StringRef, 4> newIters;
+    llvm::SmallVector<mlir::utils::IteratorType, 4> newIters;
     newIters.reserve(numLoops);
     for (auto d : llvm::seq(0u, numLoops)) {
       if (!isDroppedDim(d)) {
         auto i = newIters.size();
         assert(i != ErasedLoop);
-        newIters.emplace_back(iters[d].cast<mlir::StringAttr>().getValue());
+        newIters.emplace_back(
+            iters[d].cast<mlir::linalg::IteratorTypeAttr>().getValue());
         loopsMapping[d] = i;
       }
     }
@@ -2329,6 +2331,7 @@ void LinalgOptPass::runOnOperation() {
 
   mlir::linalg::populateElementwiseOpsFusionPatterns(patterns,
                                                      defaultControlFusionFn);
+  mlir::linalg::populateEraseUnusedOperandsAndResultsPatterns(patterns);
 
   (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
 }

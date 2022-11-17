@@ -29,7 +29,8 @@
 
 using namespace mlir;
 
-static LogicalResult runMLIRPasses(mlir::Operation *op) {
+static LogicalResult runMLIRPasses(mlir::Operation *op,
+                                   mlir::JitRunnerOptions & /*options*/) {
   auto module = mlir::cast<mlir::ModuleOp>(op);
   PassManager passManager(module.getContext());
   applyPassManagerCLOptions(passManager);

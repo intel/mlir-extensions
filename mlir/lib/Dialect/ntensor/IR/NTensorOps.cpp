@@ -63,14 +63,6 @@ mlir::Operation *imex::ntensor::NTensorDialect::materializeConstant(
   return nullptr;
 }
 
-void imex::ntensor::NTensorType::walkImmediateSubElements(
-    llvm::function_ref<void(mlir::Attribute)> walkAttrsFn,
-    llvm::function_ref<void(mlir::Type)> walkTypesFn) const {
-  walkTypesFn(getElementType());
-  if (mlir::Attribute env = getEnvironment())
-    walkAttrsFn(env);
-}
-
 bool imex::ntensor::NTensorBase::hasRank() const { return true; }
 
 llvm::ArrayRef<int64_t> imex::ntensor::NTensorBase::getShape() const {
@@ -86,13 +78,6 @@ imex::ntensor::NTensorBase imex::ntensor::NTensorBase::cloneWith(
 
 bool imex::ntensor::NTensorBase::isValidElementType(Type type) {
   return type.isIntOrIndexOrFloat();
-}
-
-mlir::Type imex::ntensor::NTensorType::replaceImmediateSubElements(
-    llvm::ArrayRef<mlir::Attribute> replAttrs,
-    llvm::ArrayRef<mlir::Type> replTypes) const {
-  return get(getShape(), replTypes.front(),
-             replAttrs.empty() ? mlir::Attribute() : replAttrs.back());
 }
 
 static mlir::Value handleSliceIndexVars(mlir::OpBuilder &builder,
