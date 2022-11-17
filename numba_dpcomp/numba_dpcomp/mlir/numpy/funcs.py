@@ -93,6 +93,7 @@ class _LinalgIndexId(ConcreteTemplate):
 
 @register_func("_linalg_index", _linalg_index)
 def linalg_index_impl(builder, dim):
+    dim = literal(dim)
     if isinstance(dim, int):
         return builder.linalg_index(dim)
 
@@ -435,6 +436,10 @@ def _get_numpy_long(builder):
 
 @register_func("numpy.arange", numpy.arange)
 def arange_impl(builder, start, stop=None, step=None, dtype=None):
+    start = literal(start)
+    stop = literal(stop)
+    step = literal(step)
+
     if stop is None:
         stop = start
         start = 0
