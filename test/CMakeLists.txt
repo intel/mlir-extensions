@@ -38,4 +38,12 @@ add_lit_testsuite(check-imex "Running the IMEX regression tests"
         )
 set_target_properties(check-imex PROPERTIES FOLDER "Tests")
 
+add_lit_testsuite(check-ptensor "Running the IMEX/ptensor regression tests"
+        ${CMAKE_CURRENT_BINARY_DIR}/*/*PTensor*
+        ${CMAKE_CURRENT_BINARY_DIR}/*/*Dist*
+        ${CMAKE_CURRENT_BINARY_DIR}/imex-runner
+        DEPENDS ${IMEX_TEST_DEPENDS}
+        )
+set_target_properties(check-ptensor PROPERTIES FOLDER "Tests")
+
 add_lit_testsuites(IMEX ${CMAKE_CURRENT_SOURCE_DIR} DEPENDS ${IMEX_TEST_DEPENDS})
