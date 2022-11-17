@@ -114,27 +114,6 @@ static mlir::Value doSignCast(mlir::OpBuilder &builder, mlir::Location &loc,
   return val;
 }
 
-static auto doSignCast(mlir::OpBuilder &builder, mlir::Location &loc,
-                       mlir::ValueRange vals) {
-  llvm::SmallVector<mlir::Value> ret(vals.size());
-  for (auto it : llvm::enumerate(vals))
-    ret[it.index()] = doSignCast(builder, loc, it.value());
-
-  return ret;
-}
-
-static auto doSignCast(mlir::OpBuilder &builder, mlir::Location &loc,
-                       mlir::ValueRange vals, mlir::TypeRange dstTypes) {
-  assert(vals.size() == dstTypes.size());
-  llvm::SmallVector<mlir::Value> ret(vals.size());
-  for (auto it : llvm::enumerate(llvm::zip(vals, dstTypes))) {
-    auto val = std::get<0>(it.value());
-    auto type = std::get<1>(it.value());
-    ret[it.index()] = doSignCast(builder, loc, val, type);
-  }
-  return ret;
-}
-
 static auto getTypes(mlir::ValueRange values) {
   auto types = values.getTypes();
   llvm::SmallVector<mlir::Type> ret(types.begin(), types.end());
@@ -1356,13 +1335,10 @@ py::object forceCopyImpl(py::capsule context, py::handle src) {
   auto &ctx = getPyContext(context);
   auto &builder = ctx.builder;
   auto loc = ctx.loc;
-  auto origSrcVal =
+  auto srcVal =
       toTensor(loc, builder, ctx.context.unwrapVal(loc, builder, src));
-  auto origSrcType = origSrcVal.getType();
-  auto srcVal = doSignCast(builder, loc, origSrcVal);
   auto res = builder.create<imex::util::ForceCopyOp>(loc, srcVal);
-  return ctx.context.createVar(context,
-                               doSignCast(builder, loc, res, origSrcType));
+  return ctx.context.createVar(context, res);
 }
 
 py::object selectImpl(py::capsule context, py::handle cond, py::handle trueV,
