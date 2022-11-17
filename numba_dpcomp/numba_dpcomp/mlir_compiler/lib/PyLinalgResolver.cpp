@@ -895,12 +895,8 @@ static py::object extractImpl(py::capsule context, py::handle value,
     imex::reportError(llvm::Twine("extract: invalid source type ") +
                       toStr(tensor.getType()));
 
-  auto origElement = tensorType.getElementType();
-  auto res = builder
-                 .create<mlir::tensor::ExtractOp>(
-                     loc, doSignCast(builder, loc, tensor), ind)
-                 .getResult();
-  res = doSignCast(builder, loc, res, origElement);
+  auto res =
+      builder.create<mlir::tensor::ExtractOp>(loc, tensor, ind).getResult();
   return ctx.context.createVar(context, res);
 }
 
