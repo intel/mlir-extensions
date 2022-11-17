@@ -1252,9 +1252,7 @@ py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
     return toTensor(loc, builder, ctx.context.unwrapVal(loc, builder, obj));
   };
 
-  auto origSrcVal = unwrapVal(src);
-  auto origSrcType = origSrcVal.getType().cast<mlir::ShapedType>();
-  auto srcVal = doSignCast(builder, loc, origSrcVal);
+  auto srcVal = unwrapVal(src);
   auto srcType = srcVal.getType().cast<mlir::RankedTensorType>();
 
   auto indexType = builder.getIndexType();
@@ -1301,7 +1299,7 @@ py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
       ValsArray ret(offsetVals.size());
       for (auto i : llvm::seq(size_t(0), ret.size())) {
         auto dim = builder.createOrFold<mlir::tensor::DimOp>(
-            loc, origSrcVal, static_cast<int64_t>(i));
+            loc, srcVal, static_cast<int64_t>(i));
         auto offset = [&]() -> mlir::Value {
           auto off = offsetVals[i];
           if (off.is<mlir::Value>())
@@ -1348,12 +1346,10 @@ py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
   };
 
   auto resType = view.getType().cast<mlir::ShapedType>();
-  auto resSignlessType = resType.clone(getDynShape(resType.getRank()));
-  if (resSignlessType != resType)
-    view = builder.create<mlir::tensor::CastOp>(loc, resSignlessType, view);
-  auto resSignedType = resSignlessType.clone(origSrcType.getElementType());
-  return ctx.context.createVar(context,
-                               doSignCast(builder, loc, view, resSignedType));
+  auto resDynamicType = resType.clone(getDynShape(resType.getRank()));
+  if (resDynamicType != resType)
+    view = builder.create<mlir::tensor::CastOp>(loc, resDynamicType, view);
+  return ctx.context.createVar(context, view);
 }
 
 py::object forceCopyImpl(py::capsule context, py::handle src) {
