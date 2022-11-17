@@ -149,6 +149,7 @@ def sum_impl(builder, arg, axis=None):
 def flip_impl(builder, arg, axis=None):
     shape = arg.shape
     num_dims = len(shape)
+    axis = literal(axis)
     if axis is None:
         axis = (True,) * num_dims
     elif isinstance(axis, int):
@@ -749,6 +750,7 @@ def atleast2d_impl(builder, arr):
 
 @register_func("numpy.concatenate", numpy.concatenate)
 def concat_impl(builder, arrays, axis=0):
+    axis = literal(axis)
     if isinstance(axis, int):
         shapes = [a.shape for a in arrays]
         num_dims = len(shapes[0])
