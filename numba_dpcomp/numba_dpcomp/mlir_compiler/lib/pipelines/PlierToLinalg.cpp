@@ -2861,6 +2861,8 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::func::FuncOp>(
       mlir::createLoopInvariantCodeMotionPass());
 
+  pm.addPass(imex::createShapeIntegerRangePropagationPass());
+  pm.addNestedPass<mlir::func::FuncOp>(mlir::createCanonicalizerPass());
   pm.addNestedPass<mlir::func::FuncOp>(mlir::createCSEPass());
   // ToDo: This pass also tries to do some simple fusion, whic should be split
   // in separate pass
