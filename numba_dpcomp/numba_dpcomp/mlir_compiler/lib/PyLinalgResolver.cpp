@@ -1142,6 +1142,14 @@ static py::object insertImpl(py::capsule context, py::handle src,
   for (auto i : llvm::seq<size_t>(0, sizesVec.size()))
     sizesVec[i] = builder.createOrFold<mlir::tensor::DimOp>(loc, srcTensor, i);
 
+  auto srcShapedType = srcTensor.getType().cast<mlir::ShapedType>();
+  auto rank = static_cast<unsigned>(srcShapedType.getRank());
+  llvm::SmallVector<int64_t> dynShape(rank, mlir::ShapedType::kDynamicSize);
+  auto newShapedType = srcShapedType.clone(dynShape);
+  if (srcShapedType != newShapedType)
+    srcTensor =
+        builder.create<mlir::tensor::CastOp>(loc, newShapedType, srcTensor);
+
   auto res =
       builder
           .create<mlir::tensor::InsertSliceOp>(loc, srcTensor, dstTensor,
