@@ -3,17 +3,18 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from ..linalg_builder import (
-    FuncRegistry,
-    is_literal,
+    asarray,
     broadcast_type_arrays,
+    convert_array,
+    dtype_str,
+    eltwise,
+    FuncRegistry,
     get_array_type,
     get_val_type,
-    eltwise,
-    convert_array,
-    asarray,
-    is_int,
     is_float,
-    dtype_str,
+    is_int,
+    is_literal,
+    literal,
     DYNAMIC_DIM,
 )
 from ..func_registry import add_func
@@ -92,6 +93,7 @@ class _LinalgIndexId(ConcreteTemplate):
 
 @register_func("_linalg_index", _linalg_index)
 def linalg_index_impl(builder, dim):
+    dim = literal(dim)
     if isinstance(dim, int):
         return builder.linalg_index(dim)
 
@@ -104,6 +106,7 @@ def _fix_axis(axis, num_dims):
 
 
 def _array_reduce(builder, arg, axis, body, get_init_value):
+    axis = literal(axis)
     if axis is None:
         shape = arg.shape
         num_dims = len(shape)
@@ -146,6 +149,7 @@ def sum_impl(builder, arg, axis=None):
 def flip_impl(builder, arg, axis=None):
     shape = arg.shape
     num_dims = len(shape)
+    axis = literal(axis)
     if axis is None:
         axis = (True,) * num_dims
     elif isinstance(axis, int):
@@ -433,6 +437,10 @@ def _get_numpy_long(builder):
 
 @register_func("numpy.arange", numpy.arange)
 def arange_impl(builder, start, stop=None, step=None, dtype=None):
+    start = literal(start)
+    stop = literal(stop)
+    step = literal(step)
+
     if stop is None:
         stop = start
         start = 0
@@ -658,12 +666,14 @@ def dtype_impl(builder, arg):
 @register_func("array.reshape")
 @register_func("numpy.reshape", numpy.reshape)
 def reshape_impl(builder, arg, *new_shape):
+    new_shape = literal(new_shape)
     if len(new_shape) == 1:
         new_shape = new_shape[0]
 
     if isinstance(new_shape, tuple):
         neg_index = None
         for i, s in enumerate(new_shape):
+            s = literal(s)
             if isinstance(s, int) and s < 0:
                 assert neg_index is None
                 neg_index = i
@@ -740,6 +750,7 @@ def atleast2d_impl(builder, arr):
 
 @register_func("numpy.concatenate", numpy.concatenate)
 def concat_impl(builder, arrays, axis=0):
+    axis = literal(axis)
     if isinstance(axis, int):
         shapes = [a.shape for a in arrays]
         num_dims = len(shapes[0])

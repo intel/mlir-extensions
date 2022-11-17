@@ -332,41 +332,41 @@ void EnforceShapeOp::build(mlir::OpBuilder &builder,
 
 mlir::OpFoldResult
 EnforceShapeOp::fold(llvm::ArrayRef<mlir::Attribute> operands) {
-  operands = operands.drop_front();
-  auto numDims = static_cast<unsigned>(operands.size());
-  auto srcType = getType().cast<mlir::ShapedType>();
-  llvm::SmallVector<int64_t> finalShape(numDims,
-                                        mlir::ShapedType::kDynamicSize);
-  if (srcType.hasRank()) {
-    auto shape = srcType.getShape();
-    if (shape.size() != numDims)
-      return nullptr;
+  //  operands = operands.drop_front();
+  //  auto numDims = static_cast<unsigned>(operands.size());
+  //  auto srcType = getType().cast<mlir::ShapedType>();
+  //  llvm::SmallVector<int64_t> finalShape(numDims,
+  //                                        mlir::ShapedType::kDynamicSize);
+  //  if (srcType.hasRank()) {
+  //    auto shape = srcType.getShape();
+  //    if (shape.size() != numDims)
+  //      return nullptr;
 
-    finalShape.assign(shape.begin(), shape.end());
-  }
-  bool changed = false;
-  for (unsigned i = 0; i < numDims; ++i) {
-    if (auto attr = operands[i].dyn_cast_or_null<mlir::IntegerAttr>()) {
-      auto val = attr.getInt();
-      if (val != mlir::ShapedType::kDynamicSize) {
-        if (finalShape[i] != mlir::ShapedType::kDynamicSize) {
-          if (finalShape[i] != val)
-            return nullptr;
+  //    finalShape.assign(shape.begin(), shape.end());
+  //  }
+  //  bool changed = false;
+  //  for (unsigned i = 0; i < numDims; ++i) {
+  //    if (auto attr = operands[i].dyn_cast_or_null<mlir::IntegerAttr>()) {
+  //      auto val = attr.getInt();
+  //      if (val != mlir::ShapedType::kDynamicSize) {
+  //        if (finalShape[i] != mlir::ShapedType::kDynamicSize) {
+  //          if (finalShape[i] != val)
+  //            return nullptr;
 
-        } else {
-          changed = true;
-          finalShape[i] = val;
-        }
-      }
-    }
-  }
+  //        } else {
+  //          changed = true;
+  //          finalShape[i] = val;
+  //        }
+  //      }
+  //    }
+  //  }
 
-  if (changed) {
-    auto finalType =
-        mlir::RankedTensorType::get(finalShape, srcType.getElementType());
-    getResult().setType(finalType);
-    return getResult();
-  }
+  //  if (changed) {
+  //    auto finalType =
+  //        mlir::RankedTensorType::get(finalShape, srcType.getElementType());
+  //    getResult().setType(finalType);
+  //    return getResult();
+  //  }
   return nullptr;
 }
 

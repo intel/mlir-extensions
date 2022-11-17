@@ -88,6 +88,16 @@ class Var:
     def __repr__(self):
         return self._str(self._context, self._ssa_val)
 
+    def literal(self):
+        return self._literal(self._context, self._ssa_val)
+
+
+def literal(obj):
+    if isinstance(obj, Var):
+        return obj.literal()
+
+    return obj
+
 
 class Type:
     def __init__(self, mlir_type, eq, printer):

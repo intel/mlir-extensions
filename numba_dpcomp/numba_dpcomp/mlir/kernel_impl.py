@@ -157,8 +157,8 @@ def _define_api_funcs():
 
     def get_func(func_name):
         def api_func_impl(builder, axis):
-            if isinstance(axis, int) or is_int(axis):
-                res = 0
+            if isinstance(axis, int) or is_int(axis.type, builder):
+                res = builder.cast(0, builder.int64)
                 return builder.external_call(func_name, axis, res)
 
         return api_func_impl

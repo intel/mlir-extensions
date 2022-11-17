@@ -97,6 +97,72 @@ struct ConvertTensorFromElements
   }
 };
 
+struct ConvertTensorExpandShape
+    : public mlir::OpConversionPattern<mlir::tensor::ExpandShapeOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::tensor::ExpandShapeOp op,
+                  mlir::tensor::ExpandShapeOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto converter = this->getTypeConverter();
+    assert(converter);
+
+    auto oldResType = op.getType();
+    auto newResType = converter->convertType(oldResType)
+                          .dyn_cast_or_null<mlir::RankedTensorType>();
+    if (!newResType)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::tensor::ExpandShapeOp>(
+        op, newResType, adaptor.getSrc(), adaptor.getReassociation());
+    return mlir::success();
+  }
+};
+
+struct ConvertTensorReshape
+    : public mlir::OpConversionPattern<mlir::tensor::ReshapeOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::tensor::ReshapeOp op,
+                  mlir::tensor::ReshapeOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto converter = this->getTypeConverter();
+    assert(converter);
+
+    auto oldResType = op.getType();
+    auto newResType = converter->convertType(oldResType)
+                          .dyn_cast_or_null<mlir::RankedTensorType>();
+    if (!newResType)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::tensor::ReshapeOp>(
+        op, newResType, adaptor.getSource(), adaptor.getShape());
+    return mlir::success();
+  }
+};
+
+struct ConvertTensorInserSlice
+    : public mlir::OpConversionPattern<mlir::tensor::InsertSliceOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::tensor::InsertSliceOp op,
+                  mlir::tensor::InsertSliceOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto offsets = mlir::getMixedStridesOrOffsets(adaptor.getStaticOffsets(),
+                                                  adaptor.getOffsets());
+    auto sizes =
+        mlir::getMixedSizes(adaptor.getStaticSizes(), adaptor.getSizes());
+    auto strides = mlir::getMixedStridesOrOffsets(adaptor.getStaticStrides(),
+                                                  adaptor.getStrides());
+    rewriter.replaceOpWithNewOp<mlir::tensor::InsertSliceOp>(
+        op, adaptor.getSource(), adaptor.getDest(), offsets, sizes, strides);
+    return mlir::success();
+  }
+};
+
 struct ConvertLinalgFill
     : public mlir::OpConversionPattern<mlir::linalg::FillOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -169,6 +235,28 @@ struct ConvertLinalgYield
     return mlir::success();
   }
 };
+
+struct ConvertForceCopy
+    : public mlir::OpConversionPattern<imex::util::ForceCopyOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::util::ForceCopyOp op,
+                  imex::util::ForceCopyOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto converter = this->getTypeConverter();
+    assert(converter);
+
+    auto oldResType = op.getType();
+    auto newResType = converter->convertType(oldResType);
+    if (!newResType)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<imex::util::ForceCopyOp>(op, newResType,
+                                                         adaptor.getSource());
+    return mlir::success();
+  }
+};
 } // namespace
 
 static llvm::Optional<mlir::Type> makeSignlessType(mlir::Type type) {
@@ -200,14 +288,18 @@ void imex::populateMakeSignlessRewritesAndTarget(
 
   target.addDynamicallyLegalOp<
       mlir::memref::AllocOp, mlir::memref::AllocaOp, mlir::memref::DeallocOp,
-      mlir::tensor::EmptyOp, mlir::tensor::FromElementsOp, mlir::linalg::FillOp,
-      mlir::linalg::GenericOp, mlir::linalg::YieldOp>(
+      mlir::tensor::EmptyOp, mlir::tensor::FromElementsOp,
+      mlir::tensor::ExpandShapeOp, mlir::tensor::ReshapeOp,
+      mlir::tensor::InsertSliceOp, mlir::linalg::FillOp,
+      mlir::linalg::GenericOp, mlir::linalg::YieldOp, imex::util::ForceCopyOp>(
       [&converter](mlir::Operation *op) { return converter.isLegal(op); });
 
   patterns.insert<ConvertAlloc<mlir::memref::AllocOp>,
                   ConvertAlloc<mlir::memref::AllocaOp>, ConvertDealloc,
                   ConvertTensorEmpty, ConvertTensorFromElements,
-                  ConvertLinalgFill, ConvertLinalgGeneric, ConvertLinalgYield>(
+                  ConvertTensorExpandShape, ConvertTensorReshape,
+                  ConvertTensorInserSlice, ConvertLinalgFill,
+                  ConvertLinalgGeneric, ConvertLinalgYield, ConvertForceCopy>(
       converter, patterns.getContext());
 }
 
