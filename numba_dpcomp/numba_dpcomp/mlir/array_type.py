@@ -6,6 +6,8 @@ import numpy as np
 
 from numba.extending import typeof_impl
 from numba.core.types.npytypes import Array
+from numba.core import errors
+from numba.np import numpy_support
 
 
 class FixedArray(Array):
@@ -53,6 +55,6 @@ def _typeof_ndarray(val, c):
     layout = numpy_support.map_layout(val)
     readonly = not val.flags.writeable
     fixed_dims = tuple(d if d == 1 else None for d in val.shape)
-    return types.FixedArray(
+    return FixedArray(
         dtype, val.ndim, layout, fixed_dims=fixed_dims, readonly=readonly
     )
