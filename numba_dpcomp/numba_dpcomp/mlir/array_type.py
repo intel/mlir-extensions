@@ -4,11 +4,12 @@
 
 import numpy as np
 
-from numba.extending import register_model, typeof_impl
+from numba.extending import overload_classmethod, register_model, typeof_impl
 from numba.core import errors
 from numba.core.types.npytypes import Array
 from numba.core.datamodel.models import ArrayModel
 from numba.np import numpy_support
+from numba.np.arrayobj import intrin_alloc
 
 
 class FixedArray(Array):
@@ -48,6 +49,16 @@ class FixedArray(Array):
 
 
 register_model(FixedArray)(ArrayModel)
+
+
+@overload_classmethod(FixedArray, "_allocate")
+def _ol_array_allocate(cls, allocsize, align):
+    """Implements a Numba-only default target (cpu) classmethod on the array type."""
+
+    def impl(cls, allocsize, align):
+        return intrin_alloc(allocsize, align)
+
+    return impl
 
 
 @typeof_impl.register(np.ndarray)
