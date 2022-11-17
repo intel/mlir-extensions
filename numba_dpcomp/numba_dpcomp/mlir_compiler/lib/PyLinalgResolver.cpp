@@ -983,6 +983,12 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
       reassoc[std::max(0, currInd)].emplace_back(i);
     }
 
+    shape.resize(static_cast<unsigned>(srcType.getRank()),
+                 mlir::ShapedType::kDynamicSize);
+    auto dynShapeType = srcType.clone(shape);
+    if (dynShapeType != srcType)
+      srcVal = builder.create<mlir::tensor::CastOp>(loc, dynShapeType, srcVal);
+
     auto expandType = resultType.clone(expandShape);
     mlir::Value res = builder.create<mlir::tensor::ExpandShapeOp>(
         loc, expandType, srcVal, reassoc);
