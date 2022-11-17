@@ -1,0 +1,58 @@
+# SPDX-FileCopyrightText: 2022 Intel Corporation
+#
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+import numpy as np
+
+from numba.extending import typeof_impl
+from numba.core.types.npytypes import Array
+
+
+class FixedArray(Array):
+    """
+    Type class for Numpy arrays.
+    """
+
+    def __init__(
+        self, dtype, ndim, layout, fixed_dims, readonly=False, name=None, aligned=True
+    ):
+        self.fixed_dims = fixed_dims
+        super(FixedArray, self).__init__(
+            dtype, ndim, layout, readonly=readonly, name=name, aligned=aligned
+        )
+
+    def copy(self, dtype=None, ndim=None, layout=None, readonly=None):
+        if dtype is None:
+            dtype = self.dtype
+        if ndim is None:
+            ndim = self.ndim
+        if layout is None:
+            layout = self.layout
+        if readonly is None:
+            readonly = not self.mutable
+        return FixedArray(
+            dtype=dtype,
+            ndim=ndim,
+            layout=layout,
+            fixed_dims=self.fixed_dims,
+            readonly=readonly,
+            aligned=self.aligned,
+        )
+
+    @property
+    def key(self):
+        return super().key + (self.fixed_dims,)
+
+
+@typeof_impl.register(np.ndarray)
+def _typeof_ndarray(val, c):
+    try:
+        dtype = numpy_support.from_dtype(val.dtype)
+    except errors.NumbaNotImplementedError:
+        raise errors.NumbaValueError(f"Unsupported array dtype: {val.dtype}")
+    layout = numpy_support.map_layout(val)
+    readonly = not val.flags.writeable
+    fixed_dims = tuple(d if d == 1 else None for d in val.shape)
+    return types.FixedArray(
+        dtype, val.ndim, layout, fixed_dims=fixed_dims, readonly=readonly
+    )
