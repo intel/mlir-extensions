@@ -808,25 +808,19 @@ static py::object genericImpl(py::capsule context, py::handle inputs,
   auto bodyBuilder = [&](mlir::OpBuilder &builder, mlir::Location loc,
                          mlir::ValueRange args) {
     auto funcType = bodyFunc.getFunctionType();
-    auto newArgs = castValues(doSignCast(builder, loc, args, bodyTypes),
-                              funcType.getInputs());
+    auto newArgs = castValues(args, funcType.getInputs());
     auto call = builder.create<mlir::func::CallOp>(loc, bodyFunc, newArgs);
-    auto newResults = doSignCast(
-        builder, loc,
-        castValues(call.getResults(), genericOpBodyResultTypes(outputArgs)));
+    auto newResults =
+        castValues(call.getResults(), genericOpBodyResultTypes(outputArgs));
     builder.create<mlir::linalg::YieldOp>(loc, newResults);
   };
 
-  auto inputsArgsSignless = doSignCast(builder, loc, inputsArgs);
-  auto outputArgsSignless = doSignCast(builder, loc, outputArgs);
-  auto retTypes = getTypes(outputArgsSignless);
+  auto retTypes = getTypes(outputArgs);
 
   auto genericOp = builder.create<mlir::linalg::GenericOp>(
-      loc, retTypes, inputsArgsSignless, outputArgsSignless, affineMaps,
-      mlirIterators, bodyBuilder);
-  auto results =
-      doSignCast(builder, loc, genericOp.getResults(), getTypes(outputArgs));
-  return ctx.context.wrapResult(context, results);
+      loc, retTypes, inputsArgs, outputArgs, affineMaps, mlirIterators,
+      bodyBuilder);
+  return ctx.context.wrapResult(context, genericOp.getResults());
 }
 
 static py::object indexImpl(py::capsule context, py::int_ dimObj) {
