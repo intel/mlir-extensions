@@ -14,7 +14,7 @@
 
 #include <imex/Dialect/Dist/Utils/Utils.h>
 #include <imex/Dialect/PTensor/IR/PTensorOps.h>
-#include <imex/internal/PassUtils.h>
+#include <imex/Utils/PassUtils.h>
 #include <llvm/ADT/TypeSwitch.h>
 #include <mlir/Dialect/Utils/StaticValueUtils.h>
 #include <mlir/IR/DialectImplementation.h>

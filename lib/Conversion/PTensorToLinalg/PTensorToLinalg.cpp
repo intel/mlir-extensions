@@ -236,7 +236,7 @@ struct ARangeLowering
           loc, createIndexCast(loc, builder, val.getResult(), elTyp));
     };
 
-    auto res = rewriter.replaceOpWithNewOp<::mlir::linalg::GenericOp>(
+    rewriter.replaceOpWithNewOp<::mlir::linalg::GenericOp>(
         op, retPtTyp.getTensorType(), ::llvm::None, tensor, maps, iterators,
         body);
     return ::mlir::success();
