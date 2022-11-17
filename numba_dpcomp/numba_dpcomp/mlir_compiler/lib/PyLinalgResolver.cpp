@@ -258,6 +258,10 @@ static mlir::Value doCast(mlir::OpBuilder &builder, mlir::Location loc,
       dstType.isa<mlir::RankedTensorType>())
     return builder.createOrFold<imex::ntensor::ToTensorOp>(loc, dstType, val);
 
+  if (srcType.isa<imex::ntensor::NTensorType>() &&
+      dstType.isa<imex::ntensor::NTensorType>())
+    return builder.createOrFold<imex::ntensor::CastOp>(loc, dstType, val);
+
   imex::reportError(llvm::Twine("Cannot cast types :") + toStr(srcType) +
                     " to " + toStr(dstType));
 }
