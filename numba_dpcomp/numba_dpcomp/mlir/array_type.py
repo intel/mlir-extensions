@@ -10,6 +10,7 @@ from numba.core.types.npytypes import Array
 from numba.core.datamodel.models import ArrayModel
 from numba.np import numpy_support
 from numba.np.arrayobj import intrin_alloc
+from numba.core.imputils import lower_cast
 
 
 class FixedArray(Array):
@@ -49,6 +50,21 @@ class FixedArray(Array):
 
 
 register_model(FixedArray)(ArrayModel)
+
+
+@lower_cast(FixedArray, Array)
+def array_to_array(context, builder, fromty, toty, val):
+    return val
+
+
+@lower_cast(Array, FixedArray)
+def array_to_array(context, builder, fromty, toty, val):
+    return val
+
+
+@lower_cast(FixedArray, FixedArray)
+def array_to_array(context, builder, fromty, toty, val):
+    return val
 
 
 @overload_classmethod(FixedArray, "_allocate")
