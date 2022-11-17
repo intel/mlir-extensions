@@ -43,7 +43,7 @@ def ConvertPTensorToLinalg : Pass<"convert-ptensor-to-linalg", "::mlir::ModuleOp
     #### Output IR
 
     - a PTensorType will be lowered to a unrealized_conversion_cast to tuple of
-      * rtensor: RankedTensor
+      * tensor: RankedTensor
       * device: device where the tensor lives (AnyType, default=None)
       * team: a group of processes among which the tensor is distributed
         (AnyType, default=None)
@@ -59,9 +59,9 @@ def ConvertPTensorToLinalg : Pass<"convert-ptensor-to-linalg", "::mlir::ModuleOp
   let dependentDialects = ["::mlir::linalg::LinalgDialect",
                            "::mlir::AffineDialect",
                            "::mlir::func::FuncDialect",
-                           "::mlir::tensor::TensorDialect",
                            "::mlir::arith::ArithDialect",
-                           "::mlir::shape::ShapeDialect"];
+                           "::mlir::tensor::TensorDialect",
+                           "::mlir::bufferization::BufferizationDialect"];
   let options = [];
 }
 
@@ -81,10 +81,8 @@ def ConvertDistToStandard: Pass<"convert-dist-to-standard", "::mlir::ModuleOp"> 
   let dependentDialects = ["::imex::ptensor::PTensorDialect",
                            "::mlir::linalg::LinalgDialect",
                            "::mlir::func::FuncDialect",
-                           "::mlir::tensor::TensorDialect",
                            "::mlir::memref::MemRefDialect",
-                           "::mlir::arith::ArithDialect",
-                           "::mlir::shape::ShapeDialect"];
+                           "::mlir::arith::ArithDialect"];
   let options = [];
 }
 

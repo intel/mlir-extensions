@@ -31,7 +31,6 @@ def PTensorDist : Pass<"ptensor-dist", "::mlir::func::FuncOp"> {
     - Dist dialect
     - PTensor dialect
     - Linalg dialect
-    - Shape dialect
     - Arith dialect
   }];
   let constructor = "imex::createPTensorDistPass()";
@@ -40,8 +39,7 @@ def PTensorDist : Pass<"ptensor-dist", "::mlir::func::FuncOp"> {
                            "::mlir::arith::ArithDialect",
                            "::mlir::linalg::LinalgDialect",
                            "::mlir::tensor::TensorDialect",
-                           "::mlir::memref::MemRefDialect",
-                           "::mlir::shape::ShapeDialect"];
+                           "::mlir::memref::MemRefDialect"];
   let options = [];
 }
 

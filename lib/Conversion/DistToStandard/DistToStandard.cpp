@@ -28,8 +28,6 @@
 #include <mlir/Dialect/Func/Transforms/FuncConversions.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
-#include <mlir/Dialect/Shape/IR/Shape.h>
-#include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/IR/BuiltinOps.h>
 
 #include <array>
@@ -109,9 +107,10 @@ struct RuntimePrototypesOpConverter
     requireFunc(loc, rewriter, module, "_idtr_nprocs", {indexType},
                 {indexType});
     requireFunc(loc, rewriter, module, "_idtr_prank", {indexType}, {indexType});
-    requireFunc(loc, rewriter, module, "_idtr_reduce_all",
-                {::mlir::RankedTensorType::get({}, dtype), dtypeType, opType},
-                {});
+    requireFunc(
+        loc, rewriter, module, "_idtr_reduce_all",
+        {getTensorType(rewriter.getContext(), 0, dtype), dtypeType, opType},
+        {});
     rewriter.eraseOp(op);
     return ::mlir::success();
   }
@@ -290,7 +289,7 @@ struct AllReduceOpConverter
     // get guid and rank and call runtime function
     auto loc = op.getLoc();
     auto opV = rewriter.create<::mlir::arith::ConstantOp>(loc, op.getOp());
-    auto rTnsr = adaptor.getTensor();
+    auto rTnsr = adaptor.getData();
     auto dtype = createInt<sizeof(int) * 8>(loc, rewriter, 5); // FIXME getDType
     auto fsa = rewriter.getStringAttr("_idtr_reduce_all");
     rewriter.create<::mlir::func::CallOp>(
@@ -319,9 +318,9 @@ struct ConvertDistToStandardPass
     // DistTensor gets converted into its individual members
     auto convDTensor = [&ctxt](::imex::dist::DistTensorType type,
                                ::mlir::SmallVectorImpl<::mlir::Type> &types) {
-      auto rank = type.getPTensorType().getRtensor().getRank();
-      auto mrTyp = ::mlir::MemRefType::get({rank ? rank : 1},
-                                           ::mlir::IndexType::get(&ctxt));
+      auto rank = type.getPTensorType().getRank();
+      auto mrTyp = getMemRefType(&ctxt, {rank ? rank : 1},
+                                 ::mlir::IndexType::get(&ctxt));
       types.push_back(mrTyp);
       types.push_back(type.getPTensorType());
       types.push_back(mrTyp);
@@ -385,9 +384,7 @@ struct ConvertDistToStandardPass
     // No dist should remain
     target.addIllegalDialect<::imex::dist::DistDialect>();
     target.addLegalDialect<::mlir::linalg::LinalgDialect>();
-    target.addLegalDialect<::mlir::tensor::TensorDialect>();
     target.addLegalDialect<::mlir::arith::ArithDialect>();
-    target.addLegalDialect<::mlir::shape::ShapeDialect>();
     target.addLegalDialect<::imex::ptensor::PTensorDialect>();
     target.addLegalDialect<::mlir::memref::MemRefDialect>();
     target.addLegalOp<::mlir::UnrealizedConversionCastOp>(); // FIXME

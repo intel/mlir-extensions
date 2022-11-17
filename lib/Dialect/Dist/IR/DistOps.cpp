@@ -13,10 +13,10 @@
 //===----------------------------------------------------------------------===//
 
 #include <imex/Dialect/Dist/IR/DistOps.h>
+#include <imex/Dialect/Dist/Utils/Utils.h>
 #include <imex/Dialect/PTensor/IR/PTensorOps.h>
 #include <imex/internal/PassUtils.h>
 #include <llvm/ADT/TypeSwitch.h>
-#include <mlir/Dialect/Shape/IR/Shape.h>
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/DialectImplementation.h>
 

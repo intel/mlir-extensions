@@ -65,10 +65,15 @@ def PTensor_PTensor : PTensor_Type<"PTensor", "ptensor">
     the PTensor dialect. Every PTensor is expected to be created by MkPTensorOp,
     either explicitly or implicitly by creation operations in the PTensor dialect.
   }];
-  // Here we define the underlying RankedTensor
-  let parameters = (ins "::mlir::RankedTensorType":$rtensor,
+  // Here we define the underlying Tensor
+  let parameters = (ins "int64_t":$rank,
+                        "::mlir::Type":$element_type,
                         DefaultValuedParameter<"bool", "false">:$onDevice);
-  let assemblyFormat = "`<` $rtensor (`,` $onDevice^)? `>`";
+  let assemblyFormat = "`<` $rank `x` $element_type (`,` $onDevice^)? `>`";
+  let extraClassDeclaration = [{
+    ::mlir::MemRefType getMemRefType();
+    ::mlir::RankedTensorType getTensorType();
+  }];
 }
 
 // Base class for dialect operations. This operation inherits from the base
@@ -81,41 +86,45 @@ class PTensor_Op<string mnemonic, list<Trait> traits = []> :
 
 
 def MkPTensorOp : PTensor_Op<"init_ptensor", []> {
-    let summary = "Create a new PTensor from RankedTensor, device info";
+    let summary = "Create a new PTensor from tensor, device info";
     let description = [{
         High-level operation to create a new PTensor.
         Every PTensor is expected to be created by this operation.
         FIXME The resulting PTensor will be marked as living on a device if $device is not none.
     }];
 
-    let arguments = (ins AnyRankedTensor:$rtensor,
+    let arguments = (ins AnyRankedTensor:$tensor,
                          AnyType:$device);
     let results = (outs PTensor_PTensor:$res);
     let skipDefaultBuilders = 1;
     let builders = [
       OpBuilder<(ins "bool":$onDevice,
-                     "::mlir::Value":$rtensor,
+                     "::mlir::Value":$mem_ref,
                      "::mlir::Value":$device), [{
-        $_state.addOperands({rtensor, device});
+        $_state.addOperands({mem_ref, device});
+        auto mr = mem_ref.getType().dyn_cast<::mlir::MemRefType>();
         $_state.addTypes(::imex::ptensor::PTensorType::get(
             $_state.getContext(),
-            rtensor.getType().dyn_cast<::mlir::RankedTensorType>(),
+            mr.getShape().size(),
+            mr.getElementType(),
             onDevice));
       }]>,
       // Default: no device
-      OpBuilder<(ins "::mlir::Value":$rtensor), [{
-          auto dmy = createInt<1>($_builder.getUnknownLoc(), $_builder, 0);
-          $_state.addOperands({rtensor, dmy});
-          $_state.addTypes(::imex::ptensor::PTensorType::get(
-              $_state.getContext(),
-              rtensor.getType().dyn_cast<::mlir::RankedTensorType>(),
-              false)
-          );
+      OpBuilder<(ins "::mlir::Value":$mem_ref), [{
+        auto dmy = createInt<1>($_builder.getUnknownLoc(), $_builder, 0);
+        $_state.addOperands({mem_ref, dmy});
+        auto mr = mem_ref.getType().dyn_cast<::mlir::MemRefType>();
+        $_state.addTypes(::imex::ptensor::PTensorType::get(
+            $_state.getContext(),
+            mr.getShape().size(),
+            mr.getElementType(),
+            false)
+        );
       }]>,
     ];
 }
 
-def ExtractRTensorOp : PTensor_Op<"extract_rtensor", []> {
+def ExtractTensorOp : PTensor_Op<"extract_tensor", []> {
     let summary = "Extract RankedTensor from a PTensor";
     let description = [{
         High-level operation to extract the RankedTensor from the given PTensor.
@@ -146,15 +155,6 @@ def ExtractSliceOp : PTensor_Op<"extract_slice", [SameVariadicOperandSize , Pure
   let assemblyFormat = [{
     $source `[` $offsets `]``[` $sizes `]``[` $strides `]` attr-dict `:` qualified(type($source)) `to` qualified(type($result))
   }];
-
-  // tablegen does not allow defining templated builders so we make it a plain C++ extra
-  // let builders = [
-    // Build an ExtractSliceOp with mixed static and dynamic entries and
-    // inferred result type.
-    // OpBuilder<(ins "::mlir::Type":$resultType, "::mlir::Value":$source, "::mlir::ArrayRef<::mlir::OpFoldResult>":$offsets,
-    //   "::mlir::ArrayRef<::mlir::OpFoldResult>":$sizes, "::mlir::ArrayRef<::mlir::OpFoldResult>":$strides,
-    //   CArg<"::mlir::ArrayRef<::mlir::NamedAttribute>", "{}">:$attrs)>,
-  // ];
 }
 
 def ARangeOp : PTensor_Op<"arange", [SameVariadicOperandSize]> {

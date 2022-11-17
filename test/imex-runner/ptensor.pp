@@ -1,11 +1,10 @@
 convert-ptensor-to-linalg
-convert-shape-to-std
 arith-bufferize
 func.func(empty-tensor-to-alloc-tensor
           scf-bufferize
-          shape-bufferize
           linalg-bufferize
-          tensor-bufferize)
+          tensor-bufferize
+          bufferization-bufferize)
 func-bufferize
 func.func(finalizing-bufferize
           convert-linalg-to-parallel-loops)

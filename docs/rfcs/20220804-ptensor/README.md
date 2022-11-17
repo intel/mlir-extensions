@@ -26,9 +26,7 @@ Additionally we propose appropriate passes
 3. Converting __intel-sycl.device_region__ to appropriate runtime calls
 
 ### ptensor Type
-Since operations are expected to execute in the same location as its input tensors, it is necessary to carry the tensor-location from the point of its allocation to the point of the operation. For this, we introduce a type which logically extends the `mlir::tensor` type with two boolean attributes:
-* `device`: indicates if it should live on a device
-* `dist`: indicates if it should be distributed
+Since operations are expected to execute in the same location as its input tensors, it is necessary to carry the tensor-location from the point of its allocation to the point of the operation. For this, we introduce a type which logically extends the `mlir::RankedTensorType` with a boolean attribute `device`, indicateing if it should live on a device.
 
 The actual device and distributed team can be assigned by the approriate operands of creation operations (see below).
 

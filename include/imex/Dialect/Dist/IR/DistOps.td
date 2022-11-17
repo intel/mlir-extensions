@@ -130,11 +130,12 @@ def ExtractFromDistOp : Dist_Op<"extract_from_dist", []> {
         $_state.addOperands(d_tensor);
         auto ttype = d_tensor.getType().dyn_cast<::imex::dist::DistTensorType>();
         assert(ttype);
-        int64_t rank = ttype.getPTensorType().getRtensor().getRank();
+        int64_t rank = ttype.getPTensorType().getRank();
+        rank = rank ? rank : 1;
         switch(idx.getInt()) {
             case GSHAPE:
             case LOFFSETS:
-                $_state.addTypes(::mlir::MemRefType::get({rank ? rank : 1}, IndexType));
+                $_state.addTypes(::imex::getMemRefType($_builder.getContext(), rank, IndexType));
                 break;
             case LTENSOR:
                 $_state.addTypes(ttype.getPTensorType());
@@ -159,7 +160,13 @@ def LocalOffsetsOp : Dist_Op<"local_offsets", []> {
     let builders = [
         // auto-deduce return type
         OpBuilder<(ins "int64_t":$rank, "::mlir::Value":$num_procs, "::mlir::Value":$prank, "::mlir::Value":$gshape), [{
-            build($_builder, $_state, ::mlir::MemRefType::get({rank}, $_builder.getIndexType()), $_builder.getI64IntegerAttr(rank), num_procs, prank, gshape);
+            build($_builder,
+                  $_state,
+                  ::imex::getMemRefType($_builder.getContext(), rank, $_builder.getIndexType()),
+                  $_builder.getI64IntegerAttr(rank),
+                  num_procs,
+                  prank,
+                  gshape);
         }]>,
     ];
 }
@@ -174,7 +181,13 @@ def LocalShapeOp : Dist_Op<"local_shape", []> {
     let builders = [
         // auto-deduce return type
         OpBuilder<(ins "int64_t":$rank, "::mlir::Value":$num_procs, "::mlir::Value":$prank, "::mlir::Value":$gshape), [{
-            build($_builder, $_state, ::mlir::MemRefType::get({rank}, $_builder.getIndexType()), $_builder.getI64IntegerAttr(rank), num_procs, prank, gshape);
+            build($_builder,
+                  $_state,
+                  ::imex::getMemRefType($_builder.getContext(), rank, $_builder.getIndexType()),
+                  $_builder.getI64IntegerAttr(rank),
+                  num_procs,
+                  prank,
+                  gshape);
         }]>,
     ];
 }
@@ -185,7 +198,7 @@ def AllReduceOp : Dist_Op<"allreduce", []> {
         Result is the allreduced input tensor.
     }];
     // reduction operation and local tensor
-    let arguments = (ins AnyAttr:$op, AnyTensor:$tensor);
+    let arguments = (ins AnyAttr:$op, AnyRankedTensor:$data);
     let results = (outs AnyType);
 }
 

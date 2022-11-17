@@ -15,7 +15,7 @@
 /// Lowering a MkPtensorOp results in a unrealized_conversion_cast. After
 /// complete conversion the resulting value should have no use. However, during
 /// conversion its operands will serve for extracting the members (such as
-/// ExtractRTensorOp): we chase the unrealized_conversion_cast as the rooting op
+/// ExtractTensorOp): we chase the unrealized_conversion_cast as the rooting op
 /// and return the corresponding operand.
 ///
 /// Currently we do not support propagating device data across function
@@ -30,6 +30,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <imex/Conversion/PTensorToLinalg/PTensorToLinalg.h>
+#include <imex/Dialect/Dist/Utils/Utils.h>
 #include <imex/Dialect/PTensor/IR/PTensorOps.h>
 #include <imex/Dialect/PTensor/Transforms/Utils.h>
 
@@ -39,8 +40,8 @@
 #include <mlir/Dialect/Func/Transforms/FuncConversions.h>
 #include <mlir/Dialect/LLVMIR/LLVMDialect.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
-#include <mlir/Dialect/MemRef/IR/MemRef.h>
-#include <mlir/Dialect/Shape/IR/Shape.h>
+// #include <mlir/Dialect/memref/IR/MemRef.h>
+#include <mlir/Dialect/Bufferization/IR/Bufferization.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/Pass/Pass.h>
@@ -53,10 +54,7 @@ namespace imex {
 
 /// @return type without a sign
 static mlir::Type makeSignlessType(mlir::Type type) {
-  if (auto retRtTyp = type.dyn_cast<::mlir::ShapedType>()) {
-    auto origElemType = retRtTyp.getElementType();
-    return makeSignlessType(origElemType);
-  } else if (auto intType = type.dyn_cast<mlir::IntegerType>()) {
+  if (auto intType = type.dyn_cast<mlir::IntegerType>()) {
     if (!intType.isSignless())
       return mlir::IntegerType::get(intType.getContext(), intType.getWidth());
   }
@@ -85,10 +83,10 @@ namespace {
 
 /// Lower MkPTensorOp into a UnrealizedConversionCastOp, using the type
 /// converter to determine the target type. Operations extracting members
-/// (rtensor, device etc) are expected to chase the tuple creation back to here
+/// (tensor, device etc) are expected to chase the tuple creation back to here
 /// and get the respective operand of the cast.
 // FIXME Is there a better/cleaner way to do this?
-// FIXME Right now we simply convert to the RTensor, we need proper function
+// FIXME Right now we simply convert to the tensor, we need proper function
 // boundary handling
 struct MkPTensorLowering
     : public ::mlir::OpConversionPattern<::imex::ptensor::MkPTensorOp> {
@@ -100,21 +98,21 @@ struct MkPTensorLowering
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
     // auto & converter = *getTypeConverter();
     // (void)rewriter.replaceOpWithNewOp<::mlir::UnrealizedConversionCastOp>(
-    // op, converter.convertType(op.getType()), adaptor.getOperands());
-    rewriter.replaceOp(op, adaptor.getRtensor());
+    // op, converter.conveMRType(op.getType()), adaptor.getOperands());
+    rewriter.replaceOp(op, adaptor.getTensor());
     return ::mlir::success();
   }
 };
 
 /// Lower to the input operand of the defining op. We assume this to ultimately
 /// be the UnrealizedConversionCast created by MkPTensorLowering.
-struct ExtractRTensorLowering
-    : public ::mlir::OpConversionPattern<::imex::ptensor::ExtractRTensorOp> {
+struct ExtracttensorLowering
+    : public ::mlir::OpConversionPattern<::imex::ptensor::ExtractTensorOp> {
   using OpConversionPattern::OpConversionPattern;
 
   ::mlir::LogicalResult
-  matchAndRewrite(::imex::ptensor::ExtractRTensorOp op,
-                  ::imex::ptensor::ExtractRTensorOp::Adaptor adaptor,
+  matchAndRewrite(::imex::ptensor::ExtractTensorOp op,
+                  ::imex::ptensor::ExtractTensorOp::Adaptor adaptor,
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
     // std::cerr << "op: "; op.dump(); std::cerr << std::endl;
     // std::cerr << "oinput: "; op.getInput().dump(); std::cerr << std::endl;
@@ -171,17 +169,21 @@ struct ExtractSliceLowering
         op.getSource().getType().dyn_cast<::imex::ptensor::PTensorType>();
     if (!srcPtTyp)
       return ::mlir::failure();
-    auto srcRtTyp = srcPtTyp.getRtensor();
+    auto srcTnsrTyp = srcPtTyp.getTensorType();
     auto retPtTyp = op.getType().dyn_cast<::imex::ptensor::PTensorType>();
     if (!retPtTyp)
       return ::mlir::failure();
-    auto retRtTyp = retPtTyp.getRtensor();
-    // extract RankedTensor
-    auto source = rewriter.create<::imex::ptensor::ExtractRTensorOp>(
-        loc, srcRtTyp, op.getSource());
-    // and simply replace with tensor::extract_slice
+    // extract tensor
+    auto source = rewriter.create<::imex::ptensor::ExtractTensorOp>(
+        loc, srcTnsrTyp, op.getSource());
+    // and replace with tensor::extract_slice
+    // auto viewTensorType =
+    // ::mlir::tensor::ExtractSliceOp::inferCanonicalRankReducedResultType(
+    // retPtTyp.getRank(), srcTnsrTyp, offsets, sizes, strides);
+    // mlir::Value view = builder.create<mlir::tensor::ExtractSliceOp>(
+    // loc, viewTensorType, srcTensor, offsets, sizes, strides);
     rewriter.replaceOpWithNewOp<::mlir::tensor::ExtractSliceOp>(
-        op, retRtTyp, source, adaptor.getOffsets(), adaptor.getSizes(),
+        op, source, adaptor.getOffsets(), adaptor.getSizes(),
         adaptor.getStrides());
 
     return ::mlir::success();
@@ -211,16 +213,9 @@ struct ARangeLowering
     auto intTyp = rewriter.getIndexType();
     auto count = createCountARange(rewriter, loc, start, stop, step);
 
-    // create shape vector
-    auto retRtTyp = retPtTyp.getRtensor();
-    assert(retRtTyp);
-    auto elTyp = retRtTyp.getElementType();
     // init tensor
-    auto tensor =
-        rewriter
-            .create<::mlir::tensor::EmptyOp>(
-                loc, ::mlir::ArrayRef<::mlir::OpFoldResult>({count}), elTyp)
-            .getResult();
+    auto elTyp = retPtTyp.getElementType();
+    auto tensor = createEmptyTensor(rewriter, loc, elTyp, {count}).getResult();
 
     // fill with arange values
     // map needed for output only (we have no input tensor)
@@ -241,9 +236,9 @@ struct ARangeLowering
           loc, createIndexCast(loc, builder, val.getResult(), elTyp));
     };
 
-    rewriter.replaceOpWithNewOp<::mlir::linalg::GenericOp>(
-        op, retRtTyp, ::llvm::None, tensor, maps, iterators, body);
-
+    auto res = rewriter.replaceOpWithNewOp<::mlir::linalg::GenericOp>(
+        op, retPtTyp.getTensorType(), ::llvm::None, tensor, maps, iterators,
+        body);
     return ::mlir::success();
   }
 };
@@ -364,9 +359,9 @@ struct EWBinOpLowering
       // fail if not, will be retried if operands get converted elsewhere
       return ::mlir::failure();
     }
-    // we expect RankedTensorType as operands
-    auto lhsRtTyp = lhsPtTyp.getRtensor();
-    auto rhsRtTyp = rhsPtTyp.getRtensor();
+    // we expect tensorType as operands
+    auto lhsTnsrTyp = lhsPtTyp.getTensorType();
+    auto rhsTnsrTyp = rhsPtTyp.getTensorType();
     // input tensors might have compatible but different types
     assert(adaptor.getLhs().getType() == adaptor.getRhs().getType());
 
@@ -376,22 +371,22 @@ struct EWBinOpLowering
     auto retPtTyp =
         op.getResult().getType().dyn_cast<::imex::ptensor::PTensorType>();
     assert(retPtTyp);
-    auto retRtTyp = retPtTyp.getRtensor();
-    auto elTyp = retRtTyp.getElementType();
+    auto retTyp = retPtTyp.getTensorType();
+    auto elTyp = retTyp.getElementType();
 
-    // get the input as RankedTensors
-    auto lhsTnsr = rewriter.create<::imex::ptensor::ExtractRTensorOp>(
-        loc, lhsRtTyp, op.getLhs());
-    auto rhsTnsr = rewriter.create<::imex::ptensor::ExtractRTensorOp>(
-        loc, rhsRtTyp, op.getRhs());
+    // get the input as tensors
+    auto lhsTnsr = rewriter.create<::imex::ptensor::ExtractTensorOp>(
+        loc, lhsTnsrTyp, op.getLhs());
+    auto rhsTnsr = rewriter.create<::imex::ptensor::ExtractTensorOp>(
+        loc, rhsTnsrTyp, op.getRhs());
 
     // build tensor using the resulting element type
     // the shape is not statically known, we need to retrieve it (it's the same
     // as the input shapes)
     // FIXME shape broadcasting: input tensors might have compatible but
     // different shapes
-    auto rank = static_cast<unsigned>(retRtTyp.getRank());
-    llvm::SmallVector<::mlir::OpFoldResult> shapeVVec(rank);
+    auto rank = static_cast<unsigned>(retTyp.getRank());
+    llvm::SmallVector<::mlir::Value> shapeVVec(rank);
     llvm::SmallVector<mlir::StringRef> iterators(rank);
     for (auto i : llvm::seq<unsigned>(0u, rank)) {
       shapeVVec[i] =
@@ -402,8 +397,7 @@ struct EWBinOpLowering
 
     // init tensor
     auto tensor =
-        rewriter.create<::mlir::tensor::EmptyOp>(loc, shapeVVec, elTyp)
-            .getResult();
+        createEmptyTensor(rewriter, loc, elTyp, shapeVVec).getResult();
 
     // Get signless operands into vec
     llvm::SmallVector<mlir::Value, 2> oprnds = {lhsTnsr, rhsTnsr};
@@ -471,10 +465,10 @@ struct ReductionOpLowering
       return ::mlir::failure();
     }
 
-    // we expect RankedTensorType as operands
-    auto inpRtTyp = inpPtTyp.getRtensor();
-    auto inpTnsr = rewriter.create<::imex::ptensor::ExtractRTensorOp>(
-        loc, inpRtTyp, op.getInput());
+    // we expect tensorType as operands
+    auto inpTnsrTyp = inpPtTyp.getTensorType();
+    auto inpTnsr = rewriter.create<::imex::ptensor::ExtractTensorOp>(
+        loc, inpTnsrTyp, op.getInput());
 
     // Get signless operands into vec
     llvm::SmallVector<mlir::Value, 1> oprnds = {inpTnsr};
@@ -483,30 +477,29 @@ struct ReductionOpLowering
     auto retPtTyp =
         op.getResult().getType().dyn_cast<::imex::ptensor::PTensorType>();
     assert(retPtTyp);
-    auto retRtTyp = retPtTyp.getRtensor();
-    auto elTyp = retRtTyp.getElementType();
+    auto retTyp = retPtTyp.getTensorType();
+    auto elTyp = retTyp.getElementType();
     auto sElTyp = makeSignlessType(elTyp);
 
     // build tensor using the resulting element type and shape
     // FIXME support reduction dimensions
-    auto rank = static_cast<unsigned>(retRtTyp.getRank());
+    auto rank = static_cast<unsigned>(retTyp.getRank());
     assert(rank == 0);
     auto attr = rewriter.getIndexAttr(0);
     auto zeroI =
         rewriter.create<::mlir::arith::ConstantOp>(loc, attr).getResult();
-    llvm::SmallVector<::mlir::OpFoldResult> shapeVVec(rank, zeroI);
+    llvm::SmallVector<::mlir::Value> shapeVVec(rank, zeroI);
     // create new tensor
     auto zero =
         rewriter
             .create<mlir::arith::ConstantOp>(loc, rewriter.getI64IntegerAttr(0))
             .getResult();
     auto tensor =
-        rewriter.create<::mlir::tensor::EmptyOp>(loc, shapeVVec, sElTyp)
-            .getResult();
+        createEmptyTensor(rewriter, loc, sElTyp, shapeVVec).getResult();
     auto tnsr = rewriter.create<::mlir::linalg::FillOp>(loc, zero, tensor);
 
     // rank/num-dims of input
-    auto inpRank = static_cast<unsigned>(inpRtTyp.getRank());
+    auto inpRank = static_cast<unsigned>(inpTnsrTyp.getRank());
     // input maps are identity maps
     auto inpMap = ::mlir::AffineMap::getMultiDimIdentityMap(
         inpRank, rewriter.getContext());
@@ -549,9 +542,9 @@ struct ConvertPTensorToLinalgPass
     ::mlir::TypeConverter typeConverter;
     // Convert unknown types to itself
     auto convT2T = [](::mlir::Type type) { return type; };
-    // Convert PTensorType to (RankedTensorType, device, team, handle)
+    // Convert PTensorType to (tensorType, device, team, handle)
     auto convPt2Rt = [&ctxt](::imex::ptensor::PTensorType type)
-        -> ::mlir::Optional<::mlir::Type> { return type.getRtensor(); };
+        -> ::mlir::Optional<::mlir::Type> { return type.getTensorType(); };
 
     typeConverter.addConversion(convT2T);
     typeConverter.addConversion(convPt2Rt);
@@ -565,18 +558,18 @@ struct ConvertPTensorToLinalgPass
           .getResult(0);
     };
     typeConverter.addSourceMaterialization(materializeCast);
+    typeConverter.addTargetMaterialization(materializeCast);
 
     // We convert all PTensor stuff...
     target.addIllegalDialect<::imex::ptensor::PTensorDialect>();
     // ...into Linalg, Affine, Tensor, Arith
     target.addLegalDialect<::mlir::linalg::LinalgDialect>();
     target.addLegalDialect<::mlir::AffineDialect>();
-    target.addLegalDialect<::mlir::tensor::TensorDialect>();
     target.addLegalDialect<::mlir::arith::ArithDialect>();
-    target.addLegalDialect<::mlir::shape::ShapeDialect>();
-    target.addLegalDialect<::mlir::memref::MemRefDialect>();
+    target.addLegalDialect<::mlir::tensor::TensorDialect>();
+    target.addLegalDialect<::mlir::bufferization::BufferizationDialect>();
     target.addLegalOp<::mlir::UnrealizedConversionCastOp>(); // FIXME
-    // make sure function boundaries use RankedTensors (not PTensors)
+    // make sure function boundaries use tensors (not PTensors)
     target.addDynamicallyLegalOp<::mlir::func::FuncOp>(
         [&](::mlir::func::FuncOp op) {
           return typeConverter.isSignatureLegal(op.getFunctionType()) &&
@@ -589,7 +582,7 @@ struct ConvertPTensorToLinalgPass
 
     ::mlir::RewritePatternSet patterns(&ctxt);
     patterns
-        .insert<MkPTensorLowering, ExtractRTensorLowering, ExtractSliceLowering,
+        .insert<MkPTensorLowering, ExtracttensorLowering, ExtractSliceLowering,
                 ARangeLowering, EWBinOpLowering, ReductionOpLowering>(
             typeConverter, &ctxt);
     ::mlir::populateFunctionOpInterfaceTypeConversionPattern<

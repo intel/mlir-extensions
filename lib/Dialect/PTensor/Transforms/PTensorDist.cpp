@@ -38,7 +38,6 @@
 #include <mlir/Dialect/LLVMIR/LLVMDialect.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
-#include <mlir/Dialect/Shape/IR/Shape.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/IR/PatternMatch.h>
@@ -69,13 +68,13 @@ inline ::mlir::Value createAllReduce(::mlir::Location &loc,
                                      ::mlir::Value pTnsr) {
   auto pTnsrTyp = pTnsr.getType().dyn_cast<::imex::ptensor::PTensorType>();
   assert(pTnsrTyp);
-  auto rTnsr = builder.create<::imex::ptensor::ExtractRTensorOp>(
-      loc, pTnsrTyp.getRtensor(), pTnsr);
+  auto rTnsr = builder.create<::imex::ptensor::ExtractTensorOp>(
+      loc, pTnsrTyp.getTensorType(), pTnsr);
   return builder.create<::imex::dist::AllReduceOp>(loc, rTnsr.getType(), op,
                                                    rTnsr);
 }
 
-// create ops to extract the local RankedTensor from DistTensor
+// create ops to extract the local Tensor from DistTensor
 inline ::mlir::Value createGetLocal(::mlir::Location &loc,
                                     ::mlir::OpBuilder &builder,
                                     ::mlir::Value dt) {
@@ -120,14 +119,14 @@ struct RecOpRewritePattern : public ::mlir::OpRewritePattern<T> {
   }
 };
 
-/// Rewriting ::imex::ptensor::ExtractRTensorOp
+/// Rewriting ::imex::ptensor::ExtractTensorOp
 /// Get PTensor from DistTensor and apply to ExtractTensorOp.
-struct DistExtractRTensorOpRWP
-    : public RecOpRewritePattern<::imex::ptensor::ExtractRTensorOp> {
+struct DistExtractTensorOpRWP
+    : public RecOpRewritePattern<::imex::ptensor::ExtractTensorOp> {
   using RecOpRewritePattern::RecOpRewritePattern;
 
   ::mlir::LogicalResult
-  matchAndRewrite(::imex::ptensor::ExtractRTensorOp op,
+  matchAndRewrite(::imex::ptensor::ExtractTensorOp op,
                   ::mlir::PatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     // get input
@@ -137,8 +136,8 @@ struct DistExtractRTensorOpRWP
       return ::mlir::failure();
     }
     auto pTnsr = createGetLocal(loc, rewriter, op.getInput());
-    rewriter.replaceOpWithNewOp<::imex::ptensor::ExtractRTensorOp>(
-        op, inpPtTyp.getPTensorType().getRtensor(), pTnsr);
+    rewriter.replaceOpWithNewOp<::imex::ptensor::ExtractTensorOp>(
+        op, inpPtTyp.getPTensorType().getTensorType(), pTnsr);
     return ::mlir::success();
   }
 };
@@ -162,13 +161,13 @@ struct DistExtractSliceOpRWP
     }
     auto indexTyp = rewriter.getIndexType();
     // Get the local part of the global slice, team, rank, offsets
-    int64_t rank = (int64_t)inpPtTyp.getPTensorType().getRtensor().getRank();
+    int64_t rank = (int64_t)inpPtTyp.getPTensorType().getRank();
     assert(rank == 1);
     auto team = createTeamOf(loc, rewriter, src);
     auto lOffs = createGetLocalOffsets(loc, rewriter, src);
     auto lPTnsr = createGetLocal(loc, rewriter, src);
-    auto lRTnsr = rewriter.create<::imex::ptensor::ExtractRTensorOp>(
-        loc, inpPtTyp.getPTensorType().getRtensor(), lPTnsr);
+    auto lRTnsr = rewriter.create<::imex::ptensor::ExtractTensorOp>(
+        loc, inpPtTyp.getPTensorType().getTensorType(), lPTnsr);
 
     auto slcOffs = op.getOffsets();
     auto slcSizes = op.getSizes();
@@ -181,8 +180,6 @@ struct DistExtractSliceOpRWP
         loc, slcOffs[0],
         rewriter.create<::mlir::arith::MulIOp>(loc, slcSizes[0],
                                                slcStrides[0]));
-    // local shape
-    // auto lShape = rewriter.create<::mlir::shape::ShapeOfOp>(loc, lRTnsr);
     // local extent/size
     auto lExtent = rewriter.create<::mlir::tensor::DimOp>(loc, lRTnsr, zeroIdx);
     // local offset (dim 0)
@@ -322,9 +319,8 @@ struct DistARangeOpRWP : public RecOpRewritePattern<::imex::ptensor::ARangeOp> {
     stop = rewriter.create<::mlir::arith::AddIOp>(loc, start, tmp2)
                .getResult(); // start + (lShape[0] * step)
     //  get type of local tensor
-    auto artype = ::imex::ptensor::PTensorType::get(
-        rewriter.getContext(), ::mlir::RankedTensorType::get({-1}, dtype),
-        false);
+    auto artype = ::imex::ptensor::PTensorType::get(rewriter.getContext(), rank,
+                                                    dtype, false);
     // finally create local arange
     auto arres = rewriter.create<::imex::ptensor::ARangeOp>(
         loc, artype, start, stop, step, op.getDevice(), nullptr);
@@ -337,7 +333,7 @@ struct DistARangeOpRWP : public RecOpRewritePattern<::imex::ptensor::ARangeOp> {
 /// Rewrite ::imex::ptensor::EWBinOp to get a distributed ewbinop
 /// if operands are distributed.
 /// Create global, distributed output tensor with same shape as operands.
-/// The local partitions of operands (e.g. RankedTensors) are wrapped in
+/// The local partitions of operands (e.g. RankedTensor) are wrapped in
 /// non-distributed PTensors and re-applied to ewbinop.
 /// op gets replaced with global DistTensor
 struct DistEWBinOpRWP : public RecOpRewritePattern<::imex::ptensor::EWBinOp> {
@@ -364,7 +360,7 @@ struct DistEWBinOpRWP : public RecOpRewritePattern<::imex::ptensor::EWBinOp> {
     auto ewbres = rewriter.create<::imex::ptensor::EWBinOp>(
         loc, retPtTyp, op.getOp(), lLhs, lRhs);
     // get rank, global shape, offsets and team
-    int64_t rank = (int64_t)lhsDtTyp.getPTensorType().getRtensor().getRank();
+    int64_t rank = (int64_t)lhsDtTyp.getPTensorType().getRank();
     auto gShape = rewriter.create<::imex::dist::ExtractFromDistOp>(
         loc, ::imex::dist::GSHAPE, op.getLhs());
     auto team = createTeamOf(loc, rewriter, op.getLhs());
@@ -382,7 +378,7 @@ struct DistEWBinOpRWP : public RecOpRewritePattern<::imex::ptensor::EWBinOp> {
 /// Rewrite ::imex::ptensor::ReductionOp to get a distributed
 /// reduction if operand is distributed.
 /// Create global, distributed 0d output tensor.
-/// The local partitions of operand (e.g. RankedTensors) is wrapped in
+/// The local partitions of operand (e.g. RankedTensor) is wrapped in
 /// non-distributed PTensor and re-applied to reduction.
 /// The result is then applied to a distributed allreduce.
 /// op gets replaced with global DistTensor
@@ -406,9 +402,9 @@ struct DistReductionOpRWP
     auto local = createGetLocal(loc, rewriter, op.getInput());
     // return type 0d with same dtype as input
     int64_t rank = 0;
-    auto dtype = inpDtTyp.getPTensorType().getRtensor().getElementType();
-    auto retPtTyp = ::imex::ptensor::PTensorType::get(
-        rewriter.getContext(), ::mlir::RankedTensorType::get({}, dtype), false);
+    auto dtype = inpDtTyp.getPTensorType().getElementType();
+    auto retPtTyp = ::imex::ptensor::PTensorType::get(rewriter.getContext(), 0,
+                                                      dtype, false);
     auto redPTnsr = rewriter.create<::imex::ptensor::ReductionOp>(
         loc, retPtTyp, op.getOp(), local);
     // global reduction
@@ -444,8 +440,8 @@ struct PTensorDistPass : public ::imex::PTensorDistBase<PTensorDistPass> {
   void runOnOperation() override {
     ::mlir::FrozenRewritePatternSet patterns;
     insertPatterns<DistARangeOpRWP, DistEWBinOpRWP, DistReductionOpRWP,
-                   DistExtractRTensorOpRWP, DistExtractSliceOpRWP>(getContext(),
-                                                                   patterns);
+                   DistExtractTensorOpRWP, DistExtractSliceOpRWP>(getContext(),
+                                                                  patterns);
     (void)::mlir::applyPatternsAndFoldGreedily(this->getOperation(), patterns);
   }
 };

@@ -16,7 +16,6 @@
 #define _PTensor_OPS_H_INCLUDED_
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
-#include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/IR/BuiltinTypes.h>
 #include <mlir/IR/Dialect.h>
 #include <mlir/IR/OpDefinition.h>

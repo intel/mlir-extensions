@@ -27,26 +27,26 @@ func.func @test_prank(%arg0: index) -> index {
 // CHECK-NEXT: "dist.prank"(%arg0) : (index) -> index
 
 // -----
-func.func @test_init_dist_tensor(%gshape: tensor<1xindex>, %pt: !ptensor.ptensor<tensor<?xi64>>, %loffs: tensor<1xindex>, %team: i64) -> !dist.dtensor<<tensor<?xi64>>> {
-    %1 = "dist.init_dist_tensor"(%gshape, %pt, %loffs, %team) : (tensor<1xindex>, !ptensor.ptensor<tensor<?xi64>>, tensor<1xindex>, i64) -> !dist.dtensor<<tensor<?xi64>>>
-    return %1 : !dist.dtensor<<tensor<?xi64>>>
+func.func @test_init_dist_tensor(%gshape: tensor<1xindex>, %pt: !ptensor.ptensor<1 x i64>, %loffs: tensor<1xindex>, %team: i64) -> !dist.dtensor<<1 x i64>> {
+    %1 = "dist.init_dist_tensor"(%gshape, %pt, %loffs, %team) : (tensor<1xindex>, !ptensor.ptensor<1 x i64>, tensor<1xindex>, i64) -> !dist.dtensor<<1 x i64>>
+    return %1 : !dist.dtensor<<1 x i64>>
 }
-// CHECK-LABEL: func.func @test_init_dist_tensor(%arg0: tensor<1xindex>, %arg1: !ptensor.ptensor<tensor<?xi64>>, %arg2: tensor<1xindex>, %arg3: i64) -> !dist.dtensor<<tensor<?xi64>>> {
+// CHECK-LABEL: func.func @test_init_dist_tensor(%arg0: tensor<1xindex>, %arg1: !ptensor.ptensor<1 x i64>, %arg2: tensor<1xindex>, %arg3: i64) -> !dist.dtensor<<1 x i64>> {
 // CHECK-NEXT: dist.init_dist_tensor
 
 // -----
-func.func @test_extract_from_dist(%arg0: !dist.dtensor<<tensor<?xi64>>>) -> index {
-    %1 = "dist.extract_from_dist"(%arg0) {what = 0 : i32} : (!dist.dtensor<<tensor<?xi64>>>) -> tensor<1xindex>
-    %2 = "dist.extract_from_dist"(%arg0) {what = 1 : i32} : (!dist.dtensor<<tensor<?xi64>>>) -> !ptensor.ptensor<tensor<?xi64>>
-    %3 = "dist.extract_from_dist"(%arg0) {what = 2 : i32} : (!dist.dtensor<<tensor<?xi64>>>) -> tensor<1xindex>
-    %4 = "dist.extract_from_dist"(%arg0) {what = 3 : i32} : (!dist.dtensor<<tensor<?xi64>>>) -> index
+func.func @test_extract_from_dist(%arg0: !dist.dtensor<<1 x i64>>) -> index {
+    %1 = "dist.extract_from_dist"(%arg0) {what = 0 : i32} : (!dist.dtensor<<1 x i64>>) -> tensor<1xindex>
+    %2 = "dist.extract_from_dist"(%arg0) {what = 1 : i32} : (!dist.dtensor<<1 x i64>>) -> !ptensor.ptensor<1 x i64>
+    %3 = "dist.extract_from_dist"(%arg0) {what = 2 : i32} : (!dist.dtensor<<1 x i64>>) -> tensor<1xindex>
+    %4 = "dist.extract_from_dist"(%arg0) {what = 3 : i32} : (!dist.dtensor<<1 x i64>>) -> index
     return %4 : index
 }
-// CHECK-LABEL: func.func @test_extract_from_dist(%arg0: !dist.dtensor<<tensor<?xi64>>>) -> index {
-// CHECK-NEXT: "dist.extract_from_dist"(%arg0) {what = 0 : i32} : (!dist.dtensor<<tensor<?xi64>>>) -> tensor<1xindex>
-// CHECK-NEXT: "dist.extract_from_dist"(%arg0) {what = 1 : i32} : (!dist.dtensor<<tensor<?xi64>>>) -> !ptensor.ptensor<tensor<?xi64>>
-// CHECK-NEXT: "dist.extract_from_dist"(%arg0) {what = 2 : i32} : (!dist.dtensor<<tensor<?xi64>>>) -> tensor<1xindex>
-// CHECK-NEXT: "dist.extract_from_dist"(%arg0) {what = 3 : i32} : (!dist.dtensor<<tensor<?xi64>>>) -> index
+// CHECK-LABEL: func.func @test_extract_from_dist(%arg0: !dist.dtensor<<1 x i64>>) -> index {
+// CHECK-NEXT: "dist.extract_from_dist"(%arg0) {what = 0 : i32} : (!dist.dtensor<<1 x i64>>) -> tensor<1xindex>
+// CHECK-NEXT: "dist.extract_from_dist"(%arg0) {what = 1 : i32} : (!dist.dtensor<<1 x i64>>) -> !ptensor.ptensor<1 x i64>
+// CHECK-NEXT: "dist.extract_from_dist"(%arg0) {what = 2 : i32} : (!dist.dtensor<<1 x i64>>) -> tensor<1xindex>
+// CHECK-NEXT: "dist.extract_from_dist"(%arg0) {what = 3 : i32} : (!dist.dtensor<<1 x i64>>) -> index
 
 // -----
 func.func @test_local_offsets(%np : index, %prank: index, %shape: tensor<1xindex>) -> tensor<1xindex> {

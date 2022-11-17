@@ -31,9 +31,9 @@ module {
 // -----
 module {
     "dist.runtime_prototypes"() : () -> ()
-    func.func @test_init_dist_tensor(%gshape: memref<1xindex>, %pt: !ptensor.ptensor<tensor<?xi64>>, %loffs: memref<1xindex>, %team: index) -> !dist.dtensor<<tensor<?xi64>>> {
-        %1 = "dist.init_dist_tensor"(%gshape, %pt, %loffs, %team) : (memref<1xindex>, !ptensor.ptensor<tensor<?xi64>>, memref<1xindex>, index) -> !dist.dtensor<<tensor<?xi64>>>
-        return %1 : !dist.dtensor<<tensor<?xi64>>>
+    func.func @test_init_dist_tensor(%gshape: tensor<1xindex>, %pt: !ptensor.ptensor<1 x i64>, %loffs: tensor<1xindex>, %team: index) -> !dist.dtensor<<1 x i64>> {
+        %1 = "dist.init_dist_tensor"(%gshape, %pt, %loffs, %team) : (tensor<1xindex>, !ptensor.ptensor<1 x i64>, tensor<1xindex>, index) -> !dist.dtensor<<1 x i64>>
+        return %1 : !dist.dtensor<<1 x i64>>
     }
 }
 // CHECK-LABEL: func.func private @_idtr_nprocs(index) -> index
