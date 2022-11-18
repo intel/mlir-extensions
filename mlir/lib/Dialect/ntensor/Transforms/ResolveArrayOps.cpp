@@ -341,7 +341,6 @@ struct SetitemMaskOpLowering
 
     auto bodyBuilder = [&](mlir::OpBuilder &b, mlir::Location l,
                            mlir::ValueRange vals) {
-      llvm::errs() << "asdasdas " << vals.size() << "'n";
       assert(vals.size() == 3);
       auto cond = vals[0];
       auto val = vals[1];
