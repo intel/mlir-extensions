@@ -11,7 +11,6 @@ except ImportError:
     _is_dpctl_available = False
 
 if _is_dpctl_available:
-    import llvmlite.llvmpy.core as lc
     import numba
     import numpy as np
     from llvmlite import ir
@@ -167,10 +166,10 @@ if _is_dpctl_available:
 
     def adapt_sycl_array_from_python(pyapi, ary, ptr):
         assert pyapi.context.enable_nrt
-        fnty = lc.Type.function(lc.Type.int(), [pyapi.pyobj, pyapi.voidptr])
+        fnty = ir.FunctionType(ir.IntType(32), [pyapi.pyobj, pyapi.voidptr])
         fn = pyapi._get_function(fnty, name="dpcompUnboxSyclInterface")
-        fn.args[0].add_attribute(lc.ATTR_NO_CAPTURE)
-        fn.args[1].add_attribute(lc.ATTR_NO_CAPTURE)
+        fn.args[0].add_attribute("nocapture")
+        fn.args[1].add_attribute("nocapture")
         return pyapi.builder.call(fn, (ary, ptr))
 
     @unbox(USMNdArrayType)
