@@ -94,13 +94,10 @@ def _gen_tests():
         "test_tuple_concat",  # enumerate
         "test_two_d_array_reduction_with_float_sizes",  # np.array
         "test_parfor_array_access_lower_slice",  # plier.getitem
-        "test_parfor_slice18",  # cast types mismatch
         "test_simple12",  # complex128
         "test_parfor_slice6",  # array.transpose
         "test_parfor_slice22",  # slice using array
         "test_simple13",  # complex128
-        "test_parfor_bitmask1",  # setitem with mask
-        "test_parfor_bitmask2",  # setitem with mask
         "test_parfor_bitmask3",  # setitem with mask
         "test_parfor_bitmask4",  # setitem with mask
         "test_parfor_bitmask5",  # setitem with mask
