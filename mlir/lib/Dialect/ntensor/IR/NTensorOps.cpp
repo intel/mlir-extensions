@@ -666,7 +666,7 @@ void imex::ntensor::ElementwiseOp::build(
 
     mlir::OpBuilder::InsertionGuard guard(odsBuilder);
     odsBuilder.setInsertionPointToStart(&bodyBlock);
-    bodyBuilder(odsBuilder, odsState.location, bodyBlock.getArgument(0));
+    bodyBuilder(odsBuilder, odsState.location, bodyBlock.getArguments());
   }
 }
 
