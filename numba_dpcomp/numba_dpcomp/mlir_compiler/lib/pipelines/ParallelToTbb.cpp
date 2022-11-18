@@ -348,8 +348,11 @@ struct HoistBufferAllocs
               .cast<mlir::MemRefType>();
       view = rewriter.create<mlir::memref::SubViewOp>(loc, newType, newMemref,
                                                       offsets, sizes, strides);
-      if (view.getType() != oldType)
-        view = rewriter.create<imex::util::ChangeLayoutOp>(loc, oldType, view);
+      if (view.getType() != oldType) {
+        view = rewriter.create<imex::util::MemrefApplyOffsetOp>(loc, oldType,
+                                                                view);
+        view = rewriter.create<mlir::memref::CastOp>(loc, oldType, view);
+      }
     }
 
     rewriter.replaceOp(op, view);
