@@ -267,9 +267,14 @@ static bool canResultEscape(mlir::Operation *op, bool original = true) {
       continue;
 
     if (auto view = mlir::dyn_cast<mlir::ViewLikeOpInterface>(user)) {
-      if (canResultEscape(user, false))
+      if (canResultEscape(user, false)) {
         return true;
+      } else {
+        continue;
+      }
     }
+
+    return true;
   }
 
   return false;
