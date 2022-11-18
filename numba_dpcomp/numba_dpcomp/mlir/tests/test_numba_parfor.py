@@ -98,10 +98,6 @@ def _gen_tests():
         "test_parfor_slice6",  # array.transpose
         "test_parfor_slice22",  # slice using array
         "test_simple13",  # complex128
-        "test_parfor_bitmask3",  # setitem with mask
-        "test_parfor_bitmask4",  # setitem with mask
-        "test_parfor_bitmask5",  # setitem with mask
-        "test_parfor_bitmask6",  # setitem with mask
         "test_issue3169",  # list support
         "test_issue5001",  # list suport
         "test_issue5167",  # np.full

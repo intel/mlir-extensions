@@ -312,32 +312,26 @@ struct SetitemMaskOpLowering
       return mlir::failure();
 
     auto val = op.getValue();
-    auto valType = val.getType().dyn_cast<imex::ntensor::NTensorType>();
-    if (!imex::ntensor::NTensorType::isValidElementType(val.getType()) &&
-        (!valType || valType.getElementType() != targetType.getElementType() ||
-         valType.getRank() != targetType.getRank() ||
-         valType.getEnvironment() != targetType.getEnvironment()))
+    if (!imex::ntensor::NTensorType::isValidElementType(val.getType()))
+      return mlir::failure();
+
+    auto elemType = targetType.getElementType();
+    if (!imex::canConvert(val.getType(), elemType))
       return mlir::failure();
 
     auto loc = op.getLoc();
-    auto elemType = targetType.getElementType();
-    if (!valType) {
-      if (!imex::canConvert(val.getType(), elemType))
-        return mlir::failure();
-
-      mlir::SmallVector<mlir::Value> dynamicDims;
-      auto rank = static_cast<unsigned>(targetType.getRank());
-      dynamicDims.reserve(rank);
-      for (auto i : llvm::seq(0u, rank)) {
-        if (targetType.isDynamicDim(i))
-          dynamicDims.emplace_back(
-              rewriter.create<imex::ntensor::DimOp>(loc, target, i));
-      }
-      auto dstVal = imex::doConvert(rewriter, loc, val, elemType);
-      assert(dstVal);
-      val = rewriter.create<imex::ntensor::CreateArrayOp>(loc, targetType,
-                                                          dynamicDims, dstVal);
+    mlir::SmallVector<mlir::Value> dynamicDims;
+    auto rank = static_cast<unsigned>(targetType.getRank());
+    dynamicDims.reserve(rank);
+    for (auto i : llvm::seq(0u, rank)) {
+      if (targetType.isDynamicDim(i))
+        dynamicDims.emplace_back(
+            rewriter.create<imex::ntensor::DimOp>(loc, target, i));
     }
+    auto dstVal = imex::doConvert(rewriter, loc, val, elemType);
+    assert(dstVal);
+    val = rewriter.create<imex::ntensor::CreateArrayOp>(loc, targetType,
+                                                        dynamicDims, dstVal);
 
     auto bodyBuilder = [&](mlir::OpBuilder &b, mlir::Location l,
                            mlir::ValueRange vals) {
