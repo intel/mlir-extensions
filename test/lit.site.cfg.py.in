@@ -34,6 +34,16 @@ config.imex_src_root = "@IMEX_SOURCE_DIR@"
 config.imex_obj_root = "@IMEX_BINARY_DIR@"
 config.imex_tools_dir = "@IMEX_TOOLS_DIR@"
 config.imex_lib_dir = "@IMEX_LIB_DIR@"
+config.imex_enable_l0_runtime = @IMEX_ENABLE_L0_RUNTIME@
+config.imex_enable_sycl_runtime = @IMEX_ENABLE_SYCL_RUNTIME@
+
+if config.imex_enable_l0_runtime:
+    config.gpu_skip = "false"
+else:
+    config.gpu_skip = "true"
+
+print(config.gpu_skip)
+
 if sys.platform.startswith('win32'):
     config.shlib_prefix = ""
 else:
