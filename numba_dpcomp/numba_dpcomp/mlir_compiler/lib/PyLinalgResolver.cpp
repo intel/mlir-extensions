@@ -653,14 +653,17 @@ static py::object broadcastImpl(py::capsule context, py::tuple args,
                             toStr(resType));
 
         auto bodyBuilder = [&](mlir::OpBuilder &b, mlir::Location l,
-                               mlir::Value val) {
-          auto res = imex::doConvert(b, l, val, resType);
+                               mlir::ValueRange vals) {
+          assert(vals.size() == 1);
+          auto res = imex::doConvert(b, l, vals.front(), resType);
           assert(res);
           b.create<imex::ntensor::ElementwiseYieldOp>(l, res);
         };
 
-        res = builder.create<imex::ntensor::ElementwiseOp>(loc, dstType, res,
-                                                           bodyBuilder);
+        res = builder
+                  .create<imex::ntensor::ElementwiseOp>(loc, dstType, res,
+                                                        bodyBuilder)
+                  .getResult(0);
       }
       results[i] = res;
     }

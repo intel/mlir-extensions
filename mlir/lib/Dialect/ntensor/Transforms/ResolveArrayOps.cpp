@@ -251,14 +251,17 @@ struct SetitemOpLowering
           auto dstElementType = targetType.getElementType();
           if (srcType.getElementType() != dstElementType) {
             auto bodyBuilder = [&](mlir::OpBuilder &b, mlir::Location l,
-                                   mlir::Value val) {
-              auto res = imex::doConvert(b, l, val, dstElementType);
+                                   mlir::ValueRange vals) {
+              assert(vals.size() == 1);
+              auto res = imex::doConvert(b, l, vals.front(), dstElementType);
               assert(res);
               b.create<imex::ntensor::ElementwiseYieldOp>(l, res);
             };
 
-            return rewriter.create<imex::ntensor::ElementwiseOp>(
-                loc, targetType, value, bodyBuilder);
+            return rewriter
+                .create<imex::ntensor::ElementwiseOp>(loc, targetType, value,
+                                                      bodyBuilder)
+                .getResult(0);
           }
           return value;
         }

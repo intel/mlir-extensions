@@ -984,13 +984,16 @@ static mlir::Value addElementConversion(mlir::OpBuilder &builder,
 
   rerunScfPipeline(srcArray.getParentRegion()->getParentOp());
   auto bodyBuilder = [&](mlir::OpBuilder &b, mlir::Location l,
-                         mlir::Value val) {
-    mlir::Value res = b.create<plier::CastOp>(l, dstElementType, val);
+                         mlir::ValueRange vals) {
+    assert(vals.size() == 1);
+    mlir::Value res = b.create<plier::CastOp>(l, dstElementType, vals.front());
     b.create<imex::ntensor::ElementwiseYieldOp>(l, res);
   };
 
-  return builder.create<imex::ntensor::ElementwiseOp>(loc, dstArrayTupe,
-                                                      srcArray, bodyBuilder);
+  return builder
+      .create<imex::ntensor::ElementwiseOp>(loc, dstArrayTupe, srcArray,
+                                            bodyBuilder)
+      .getResult(0);
 }
 
 static mlir::Value castType(mlir::OpBuilder &builder, mlir::Location loc,
