@@ -12,13 +12,13 @@
 #include <mlir/Pass/Pass.h>
 #include <mlir/Pass/PassManager.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
+#include <mlir/Transforms/Passes.h>
 
 #include "pipelines/BasePipeline.hpp"
 #include "pipelines/LowerToLlvm.hpp"
 
 #include "imex/Compiler/PipelineRegistry.hpp"
 #include "imex/Dialect/imex_util/Dialect.hpp"
-#include "imex/Dialect/plier/Dialect.hpp"
 #include "imex/Transforms/ConstUtils.hpp"
 #include "imex/Transforms/FuncUtils.hpp"
 #include "imex/Transforms/RewriteWrapper.hpp"
@@ -50,7 +50,7 @@ static mlir::Attribute getReduceInitVal(mlir::Type type,
 }
 
 struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
-  using mlir::OpRewritePattern<mlir::scf::ParallelOp>::OpRewritePattern;
+  using OpRewritePattern::OpRewritePattern;
 
   mlir::LogicalResult
   matchAndRewrite(mlir::scf::ParallelOp op,
@@ -66,6 +66,8 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
 
     int64_t maxConcurrency = 0;
     auto mod = op->getParentOfType<mlir::ModuleOp>();
+    if (!mod)
+      return mlir::failure();
     if (auto mc = mod->getAttrOfType<mlir::IntegerAttr>(
             imex::util::attributes::getMaxConcurrencyName()))
       maxConcurrency = mc.getInt();
@@ -214,16 +216,173 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
   }
 };
 
+static bool
+isAnyArgDefinedInsideRegions(llvm::MutableArrayRef<mlir::Region> regs,
+                             mlir::Operation *op) {
+  assert(op);
+  for (auto arg : op->getOperands())
+    for (auto &reg : regs)
+      if (reg.isAncestor(arg.getParentRegion()))
+        return true;
+
+  return false;
+}
+
+struct LoopInfo {
+  mlir::Operation *outermostLoop = nullptr;
+  imex::util::ParallelOp innermostParallel;
+};
+
+static llvm::Optional<LoopInfo> getLoopInfo(mlir::Operation *op) {
+  assert(op);
+
+  LoopInfo ret;
+  auto parent = op->getParentOp();
+  while (parent) {
+    if (isAnyArgDefinedInsideRegions(parent->getRegions(), op))
+      break;
+
+    if (mlir::isa<mlir::scf::WhileOp, mlir::scf::ForOp, mlir::scf::ParallelOp,
+                  imex::util::ParallelOp>(parent))
+      ret.outermostLoop = parent;
+
+    if (!ret.innermostParallel && mlir::isa<imex::util::ParallelOp>(parent))
+      ret.innermostParallel = mlir::cast<imex::util::ParallelOp>(parent);
+
+    parent = parent->getParentOp();
+  }
+
+  if (!ret.outermostLoop)
+    return llvm::None;
+
+  return ret;
+}
+
+static bool canResultEscape(mlir::Operation *op, bool original = true) {
+  for (auto user : op->getUsers()) {
+    if (mlir::isa<mlir::memref::LoadOp, mlir::memref::StoreOp>(user))
+      continue;
+
+    if (original && mlir::isa<mlir::memref::DeallocOp>(user))
+      continue;
+
+    if (auto view = mlir::dyn_cast<mlir::ViewLikeOpInterface>(user)) {
+      if (canResultEscape(user, false))
+        return true;
+    }
+  }
+
+  return false;
+}
+
+struct HoistBufferAllocs
+    : public mlir::OpRewritePattern<mlir::memref::AllocOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::AllocOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    if (!op.getSymbolOperands().empty())
+      return mlir::failure();
+
+    if (canResultEscape(op))
+      return mlir::failure();
+
+    auto loopInfo = getLoopInfo(op);
+    if (!loopInfo)
+      return mlir::failure();
+
+    auto mod = op->getParentOfType<mlir::ModuleOp>();
+    if (!mod)
+      return mlir::failure();
+
+    auto mc = mod->getAttrOfType<mlir::IntegerAttr>(
+        imex::util::attributes::getMaxConcurrencyName());
+    if (loopInfo->innermostParallel && !mc)
+      return mlir::failure();
+
+    bool needParallel =
+        loopInfo->innermostParallel && mc.getValue().getSExtValue() > 0;
+
+    auto oldType = op.getType().cast<mlir::MemRefType>();
+    auto memrefType = [&]() -> mlir::MemRefType {
+      if (needParallel) {
+        llvm::SmallVector<int64_t> newShape;
+        newShape.emplace_back(mc.getValue().getSExtValue());
+        auto oldShape = oldType.getShape();
+        newShape.append(oldShape.begin(), oldShape.end());
+      }
+      return oldType;
+    }();
+
+    for (auto user : llvm::make_early_inc_range(op->getUsers()))
+      if (mlir::isa<mlir::memref::DeallocOp>(user))
+        rewriter.eraseOp(user);
+
+    auto loc = op.getLoc();
+    mlir::OpBuilder::InsertionGuard g(rewriter);
+    rewriter.setInsertionPoint(loopInfo->outermostLoop);
+    mlir::Value newMemref = rewriter.create<mlir::memref::AllocOp>(
+        loc, memrefType, op.getDynamicSizes(), op.getAlignmentAttr());
+    mlir::Value view = newMemref;
+    if (needParallel) {
+      auto zero = rewriter.getIndexAttr(0);
+      auto one = rewriter.getIndexAttr(1);
+
+      auto rank = static_cast<unsigned>(memrefType.getRank());
+      rewriter.setInsertionPointToStart(
+          loopInfo->innermostParallel.getBodyBlock());
+      llvm::SmallVector<mlir::OpFoldResult> offsets(rank, zero);
+      llvm::SmallVector<mlir::OpFoldResult> sizes(rank, one);
+      llvm::SmallVector<mlir::OpFoldResult> strides(rank, one);
+
+      auto threadIndex = loopInfo->innermostParallel.getBodyThreadIndex();
+      offsets[0] = threadIndex;
+      for (auto i : llvm::seq(0u, rank - 1))
+        sizes[i + 1] =
+            rewriter.createOrFold<mlir::memref::DimOp>(loc, newMemref, i + 1);
+
+      auto newType =
+          mlir::memref::SubViewOp::inferRankReducedResultType(
+              oldType.getShape(), memrefType, offsets, sizes, strides)
+              .cast<mlir::MemRefType>();
+      view = rewriter.create<mlir::memref::SubViewOp>(loc, newType, newMemref,
+                                                      offsets, sizes, strides);
+      if (view.getType() != oldType)
+        view = rewriter.create<imex::util::ChangeLayoutOp>(loc, oldType, view);
+    }
+
+    rewriter.replaceOp(op, view);
+
+    rewriter.setInsertionPointAfter(loopInfo->outermostLoop);
+    rewriter.create<mlir::memref::DeallocOp>(loc, newMemref);
+    return mlir::success();
+  }
+};
+
 struct ParallelToTbbPass
     : public imex::RewriteWrapperPass<
           ParallelToTbbPass, mlir::func::FuncOp,
-          imex::DependentDialectsList<
-              plier::PlierDialect, imex::util::ImexUtilDialect,
-              mlir::arith::ArithDialect, mlir::scf::SCFDialect>,
+          imex::DependentDialectsList<imex::util::ImexUtilDialect,
+                                      mlir::arith::ArithDialect,
+                                      mlir::scf::SCFDialect>,
           ParallelToTbb> {};
 
+struct HoistBufferAllocsPass
+    : public imex::RewriteWrapperPass<
+          ParallelToTbbPass, mlir::func::FuncOp,
+          imex::DependentDialectsList<imex::util::ImexUtilDialect,
+                                      mlir::scf::SCFDialect,
+                                      mlir::memref::MemRefDialect>,
+          HoistBufferAllocs> {};
+
 static void populateParallelToTbbPipeline(mlir::OpPassManager &pm) {
+  pm.addNestedPass<mlir::func::FuncOp>(
+      mlir::createLoopInvariantCodeMotionPass());
   pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<ParallelToTbbPass>());
+  pm.addNestedPass<mlir::func::FuncOp>(
+      std::make_unique<HoistBufferAllocsPass>());
+  pm.addNestedPass<mlir::func::FuncOp>(mlir::createCanonicalizerPass());
 }
 } // namespace
 
