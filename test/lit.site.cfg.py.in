@@ -42,8 +42,6 @@ if config.imex_enable_l0_runtime:
 else:
     config.gpu_skip = "true"
 
-print(config.gpu_skip)
-
 if sys.platform.startswith('win32'):
     config.shlib_prefix = ""
 else:
