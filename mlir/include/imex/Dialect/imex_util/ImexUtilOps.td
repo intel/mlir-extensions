@@ -102,6 +102,19 @@ def ParallelOp : ImexUtil_Op<"parallel", [
 
     let extraClassDeclaration = [{
         unsigned getNumLoops() { return getSteps().size(); }
+
+        ::mlir::Block *getBodyBlock() { return &getLoopBody().front(); }
+
+        ::mlir::ValueRange getBodyLowerBounds() {
+          return getBodyBlock()->getArguments().take_front(getNumLoops());
+        }
+
+        ::mlir::ValueRange getBodyUpperBounds() {
+          auto count = getNumLoops();
+          return getBodyBlock()->getArguments().drop_front(count).take_front(count);
+        }
+
+        ::mlir::Value getBodyThreadIndex() { return getBodyBlock()->getArguments().back(); }
     }];
 }
 
