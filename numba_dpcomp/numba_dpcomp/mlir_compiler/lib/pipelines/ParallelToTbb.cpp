@@ -311,6 +311,8 @@ struct HoistBufferAllocs
         newShape.emplace_back(mc.getValue().getSExtValue());
         auto oldShape = oldType.getShape();
         newShape.append(oldShape.begin(), oldShape.end());
+        return mlir::MemRefType::get(newShape, oldType.getElementType(),
+                                     oldType.getMemorySpace());
       }
       return oldType;
     }();
@@ -373,7 +375,7 @@ struct ParallelToTbbPass
 
 struct HoistBufferAllocsPass
     : public imex::RewriteWrapperPass<
-          ParallelToTbbPass, mlir::func::FuncOp,
+          HoistBufferAllocsPass, mlir::func::FuncOp,
           imex::DependentDialectsList<imex::util::ImexUtilDialect,
                                       mlir::scf::SCFDialect,
                                       mlir::memref::MemRefDialect>,
