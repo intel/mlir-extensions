@@ -58,12 +58,12 @@ runner_choices = ['mlir-cpu-runner']
 enabled_features = []
 all_features = ['vulkan-runner', 'l0-runtime', 'sycl-runtime']
 if imex_enable_vulkan_runner:
-    runner_choices += ['mlir-vulkan-runner']
-    enabled_features += ['vulkan-runner']
+    runner_choices.append('mlir-vulkan-runner')
+    enabled_features.append('vulkan-runner')
 if imex_enable_l0_runtime:
-    enabled_features += ['l0-runtime']
+    enabled_features.append('l0-runtime')
 if imex_enable_sycl_runtime:
-    enabled_features += ['sycl-runtime']
+    enabled_features.append('sycl-runtime')
 
 class SplitArgs(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
