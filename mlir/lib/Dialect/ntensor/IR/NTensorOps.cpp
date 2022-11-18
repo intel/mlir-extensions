@@ -649,23 +649,24 @@ bool imex::ntensor::CastOp::areCastCompatible(mlir::TypeRange inputs,
 
 void imex::ntensor::ElementwiseOp::build(
     ::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState,
-    ::mlir::Type resultType, ::mlir::Value source,
+    ::mlir::TypeRange resultTypes, ::mlir::ValueRange inputs,
     ::llvm::function_ref<void(::mlir::OpBuilder &, ::mlir::Location,
-                              ::mlir::Value)>
+                              ::mlir::ValueRange)>
         bodyBuilder) {
-  assert(source.getType().isa<imex::ntensor::NTensorType>() &&
-         "Expected ntensor type");
-  build(odsBuilder, odsState, mlir::TypeRange(resultType), source);
+  build(odsBuilder, odsState, resultTypes, inputs);
   if (bodyBuilder) {
     mlir::Region *bodyRegion = odsState.regions.back().get();
     bodyRegion->push_back(new mlir::Block);
     mlir::Block &bodyBlock = bodyRegion->front();
-    auto srcType = source.getType().cast<imex::ntensor::NTensorType>();
-    bodyBlock.addArgument(srcType.getElementType(), odsState.location);
+
+    for (auto input : inputs) {
+      auto srcType = input.getType().cast<imex::ntensor::NTensorType>();
+      bodyBlock.addArgument(srcType.getElementType(), odsState.location);
+    }
 
     mlir::OpBuilder::InsertionGuard guard(odsBuilder);
     odsBuilder.setInsertionPointToStart(&bodyBlock);
-    bodyBuilder(odsBuilder, odsState.location, bodyBlock.getArgument(0));
+    bodyBuilder(odsBuilder, odsState.location, bodyBlock.getArguments());
   }
 }
 

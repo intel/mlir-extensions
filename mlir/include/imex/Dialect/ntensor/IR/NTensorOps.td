@@ -651,19 +651,19 @@ def ElementwiseOp : NTensor_OpBase<"elementwise", [
   }];
 
 
-  let arguments = (ins Arg<NTensor_Tensor, "", [MemRead]>:$source);
-  let results = (outs Res<NTensor_Tensor, "", [MemAlloc<DefaultResource>]>:$result);
+  let arguments = (ins Arg<Variadic<NTensor_Tensor>, "", [MemRead]>:$inputs);
+  let results = (outs Res<Variadic<NTensor_Tensor>, "", [MemAlloc<DefaultResource>]>:$results);
 
   let regions = (region SizedRegion<1>:$region);
 
   let assemblyFormat =
-      "attr-dict $source `:` qualified(type($source)) `->` qualified(type($result)) $region";
+      "attr-dict $inputs `:` qualified(type($inputs)) `->` qualified(type($results)) $region";
 
   let builders = [
     OpBuilder<(ins
-      "::mlir::Type":$resultType,
-      "::mlir::Value":$source,
-      CArg<"::llvm::function_ref<void(::mlir::OpBuilder &, ::mlir::Location, ::mlir::Value)>", "nullptr">)>
+      "::mlir::TypeRange":$resultTypes,
+      "::mlir::ValueRange":$inputs,
+      CArg<"::llvm::function_ref<void(::mlir::OpBuilder &, ::mlir::Location, ::mlir::ValueRange)>">)>
   ];
 }
 
@@ -680,10 +680,10 @@ def ElementwiseYieldOp : NTensor_OpBase<"elementwise_yield", [
     terminates it.
   }];
 
-  let arguments = (ins AnyType:$value);
+  let arguments = (ins Variadic<AnyType>:$values);
   let builders = [OpBuilder<(ins), [{ /* nothing to do */ }]>];
 
-  let assemblyFormat = "attr-dict $value `:` type($value)";
+  let assemblyFormat = "attr-dict $values `:` type($values)";
 }
 
 def CastOp : NTensor_OpBase<"cast", [

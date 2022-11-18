@@ -251,14 +251,17 @@ struct SetitemOpLowering
           auto dstElementType = targetType.getElementType();
           if (srcType.getElementType() != dstElementType) {
             auto bodyBuilder = [&](mlir::OpBuilder &b, mlir::Location l,
-                                   mlir::Value val) {
-              auto res = imex::doConvert(b, l, val, dstElementType);
+                                   mlir::ValueRange vals) {
+              assert(vals.size() == 1);
+              auto res = imex::doConvert(b, l, vals.front(), dstElementType);
               assert(res);
               b.create<imex::ntensor::ElementwiseYieldOp>(l, res);
             };
 
-            return rewriter.create<imex::ntensor::ElementwiseOp>(
-                loc, targetType, value, bodyBuilder);
+            return rewriter
+                .create<imex::ntensor::ElementwiseOp>(loc, targetType, value,
+                                                      bodyBuilder)
+                .getResult(0);
           }
           return value;
         }
@@ -285,6 +288,76 @@ struct SetitemOpLowering
           op, value, target, toValues(rewriter, loc, offsets));
     }
 
+    return mlir::success();
+  }
+};
+
+struct SetitemMaskOpLowering
+    : public mlir::OpRewritePattern<imex::ntensor::SetitemOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::SetitemOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto target = op.getSource();
+    auto targetType = target.getType().dyn_cast<imex::ntensor::NTensorType>();
+    if (!targetType)
+      return mlir::failure();
+
+    auto mask = op.getIndex();
+    auto maskType = mask.getType().dyn_cast<imex::ntensor::NTensorType>();
+    if (!maskType || maskType.getElementType() != rewriter.getI1Type() ||
+        maskType.getRank() != targetType.getRank() ||
+        maskType.getEnvironment() != targetType.getEnvironment())
+      return mlir::failure();
+
+    auto val = op.getValue();
+    auto valType = val.getType().dyn_cast<imex::ntensor::NTensorType>();
+    if (!imex::ntensor::NTensorType::isValidElementType(val.getType()) &&
+        (!valType || valType.getElementType() != targetType.getElementType() ||
+         valType.getRank() != targetType.getRank() ||
+         valType.getEnvironment() != targetType.getEnvironment()))
+      return mlir::failure();
+
+    auto loc = op.getLoc();
+    auto elemType = targetType.getElementType();
+    if (!valType) {
+      if (!imex::canConvert(val.getType(), elemType))
+        return mlir::failure();
+
+      mlir::SmallVector<mlir::Value> dynamicDims;
+      auto rank = static_cast<unsigned>(targetType.getRank());
+      dynamicDims.reserve(rank);
+      for (auto i : llvm::seq(0u, rank)) {
+        if (targetType.isDynamicDim(i))
+          dynamicDims.emplace_back(
+              rewriter.create<imex::ntensor::DimOp>(loc, target, i));
+      }
+      auto dstVal = imex::doConvert(rewriter, loc, val, elemType);
+      assert(dstVal);
+      val = rewriter.create<imex::ntensor::CreateArrayOp>(loc, targetType,
+                                                          dynamicDims, dstVal);
+    }
+
+    auto bodyBuilder = [&](mlir::OpBuilder &b, mlir::Location l,
+                           mlir::ValueRange vals) {
+      llvm::errs() << "asdasdas " << vals.size() << "'n";
+      assert(vals.size() == 3);
+      auto cond = vals[0];
+      auto val = vals[1];
+      auto src = vals[2];
+      mlir::Value res = b.create<mlir::arith::SelectOp>(l, cond, val, src);
+      b.create<imex::ntensor::ElementwiseYieldOp>(l, res);
+    };
+
+    mlir::Value args[] = {mask, val, target};
+    auto res = rewriter
+                   .create<imex::ntensor::ElementwiseOp>(loc, targetType, args,
+                                                         bodyBuilder)
+                   .getResult(0);
+
+    rewriter.create<imex::ntensor::CopyOp>(loc, res, target);
+    rewriter.eraseOp(op);
     return mlir::success();
   }
 };
@@ -391,9 +464,8 @@ struct GetitemUnitupleOpLowering
 
 void imex::ntensor::populateResolveArrayOpsPatterns(
     mlir::RewritePatternSet &patterns) {
-  patterns
-      .insert<SetitemOpLowering, GetitemOpLowering, GetitemUnitupleOpLowering>(
-          patterns.getContext());
+  patterns.insert<SetitemOpLowering, SetitemMaskOpLowering, GetitemOpLowering,
+                  GetitemUnitupleOpLowering>(patterns.getContext());
 }
 
 namespace {
