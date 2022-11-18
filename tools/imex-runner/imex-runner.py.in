@@ -85,13 +85,15 @@ parser.add_argument('--requires', default=enabled_features, action=SplitArgs, he
 
 args, unknown = parser.parse_known_args()
 
+# Check if requirements are valid
 required_features = args.requires
-
 if not set(required_features) <= set(all_features):
     print('Invalid option passed to --requires')
     print('your options were: ', *required_features)
     print('valid options are: ', *all_features)
     exit(1)
+
+# Skip runner if requirements are not met be enabled features
 if not set(required_features) <= set(enabled_features):
     exit(0)
 
@@ -118,7 +120,9 @@ llvm_binary_dir = '@LLVM_BINARY_DIR@'
 
 def run_pipeline(cmds):
     """
-    Run commands in PIPE, return the last process in chain
+    Run commands in PIPE, return the last process in chain.
+    stdout of intermediate commands are sent to PIPE.
+    stdout of last command is not sent to PIPE.
     """
     first_cmd, *rest_cmds = cmds
     if len(cmds) == 1:
@@ -175,6 +179,9 @@ if args.run_filecheck:
     cmd.append(args.input_file)
     cmds.append(cmd)
 
+# Run command pipeline
 last_proc = run_pipeline(cmds)
+
+# Wait for last command completion and exit with returncode
 last_proc.wait()
 exit(last_proc.returncode)
