@@ -294,6 +294,21 @@ def test_getitem_mask(arr, mask):
     assert_equal(py_func(arr, mask), jit_func(arr, mask))
 
 
+@pytest.mark.parametrize("arr", _test_arrays, ids=_test_arrays_ids)
+@pytest.mark.parametrize("offset", [[], [0], [1, 2, 3], [3, 2, 1]])
+def test_getitem_offset(arr, offset):
+    if arr.ndim > 1:
+        pytest.xfail()
+
+    def py_func(a, m):
+        return a[m]
+
+    offset = np.array(offset, np.int32)
+
+    jit_func = njit(py_func)
+    assert_equal(py_func(arr, offset), jit_func(arr, offset))
+
+
 def test_array_len():
     def py_func(a):
         return len(a)

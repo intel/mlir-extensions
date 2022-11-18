@@ -700,23 +700,33 @@ def flatten_impl(builder, arg):
 
 @register_func("array.__getitem__")
 def getitem_impl(builder, arr, index):
-    if index.dtype != builder.bool:
-        return
+    if index.dtype == builder.bool:
+        arr = flatten_impl(builder, arr)
+        index = flatten_impl(builder, index)
 
-    arr = flatten_impl(builder, arr)
-    index = flatten_impl(builder, index)
+        def func(a, ind):
+            s = a.size
+            res = numpy.empty((s,), a.dtype)
+            curr = 0
+            for i in range(s):
+                if ind[i]:
+                    res[curr] = a[i]
+                    curr += 1
+            return res[0:curr]
 
-    def func(a, ind):
-        s = a.size
-        res = numpy.empty((s,), a.dtype)
-        curr = 0
-        for i in range(s):
-            if ind[i]:
-                res[curr] = a[i]
-                curr += 1
-        return res[0:curr]
+        return builder.inline_func(func, arr.type, arr, index)
+    elif is_int(index.dtype, builder):
+        arr = flatten_impl(builder, arr)
+        index = flatten_impl(builder, index)
 
-    return builder.inline_func(func, arr.type, arr, index)
+        def func(a, ind):
+            s = ind.size
+            res = numpy.empty((s,), a.dtype)
+            for i in range(s):
+                res[i] = a[ind[i]]
+            return res
+
+        return builder.inline_func(func, arr.type, arr, index)
 
 
 @register_func("array.__setitem__")
