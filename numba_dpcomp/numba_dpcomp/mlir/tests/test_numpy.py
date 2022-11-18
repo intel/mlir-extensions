@@ -469,6 +469,34 @@ def test_prange_lowering():
         assert ir.count("imex_util.parallel") == 1, ir
 
 
+def test_prange_lowering_indirect():
+    def py_func1(arr):
+        res = 0
+        for i in numba.prange(len(arr)):
+            res += arr[i]
+
+        return res
+
+    jit_func1 = njit(py_func1, parallel=True)
+
+    def py_func2(arr):
+        return jit_func1(arr)
+
+    jit_func2 = njit(py_func2)
+
+    with print_pass_ir([], ["ParallelToTbbPass"]):
+        arr = np.arange(10000, dtype=np.float32)
+        assert_equal(py_func1(arr), jit_func1(arr))
+        ir = get_print_buffer()
+        assert ir.count("imex_util.parallel") == 1, ir
+
+    with print_pass_ir([], ["ParallelToTbbPass"]):
+        arr = np.arange(10000, dtype=np.float32)
+        assert_equal(py_func2(arr), jit_func2(arr))
+        ir = get_print_buffer()
+        assert ir.count("imex_util.parallel") == 1, ir
+
+
 def test_loop_fusion1():
     def py_func(arr):
         l = len(arr)

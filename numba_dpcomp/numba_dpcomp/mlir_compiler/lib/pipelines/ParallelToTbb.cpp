@@ -65,10 +65,10 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
       return mlir::failure();
 
     int64_t maxConcurrency = 0;
-    auto mod = op->getParentOfType<mlir::ModuleOp>();
-    if (!mod)
+    auto func = op->getParentOfType<mlir::func::FuncOp>();
+    if (!func)
       return mlir::failure();
-    if (auto mc = mod->getAttrOfType<mlir::IntegerAttr>(
+    if (auto mc = func->getAttrOfType<mlir::IntegerAttr>(
             imex::util::attributes::getMaxConcurrencyName()))
       maxConcurrency = mc.getInt();
 
@@ -292,11 +292,11 @@ struct HoistBufferAllocs
     if (!loopInfo)
       return mlir::failure();
 
-    auto mod = op->getParentOfType<mlir::ModuleOp>();
-    if (!mod)
+    auto func = op->getParentOfType<mlir::func::FuncOp>();
+    if (!func)
       return mlir::failure();
 
-    auto mc = mod->getAttrOfType<mlir::IntegerAttr>(
+    auto mc = func->getAttrOfType<mlir::IntegerAttr>(
         imex::util::attributes::getMaxConcurrencyName());
     if (loopInfo->innermostParallel && !mc)
       return mlir::failure();
