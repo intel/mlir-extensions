@@ -1,28 +1,28 @@
 # linalg dialect to cpu lowering pipeline
-inline
-convert-tensor-to-linalg
-convert-elementwise-to-linalg
-arith-bufferize
-func.func(empty-tensor-to-alloc-tensor
-          eliminate-alloc-tensors
+builtin.module(inline
+    convert-tensor-to-linalg
+    convert-elementwise-to-linalg
+    arith-bufferize
+    func.func(empty-tensor-to-alloc-tensor
+          eliminate-empty-tensors
           scf-bufferize
           shape-bufferize
           linalg-bufferize
           bufferization-bufferize
           tensor-bufferize)
-func-bufferize
-func.func(finalizing-bufferize
+    func-bufferize
+    func.func(finalizing-bufferize
           convert-linalg-to-loops)
-convert-scf-to-cf
-convert-linalg-to-llvm
-convert-cf-to-llvm
-convert-arith-to-llvm
-convert-math-to-llvm
-convert-complex-to-llvm
-convert-vector-to-llvm
-convert-index-to-llvm
-convert-memref-to-llvm
-lower-affine
-convert-func-to-llvm
-reconcile-unrealized-casts
+    convert-scf-to-cf
+    convert-linalg-to-llvm
+    convert-cf-to-llvm
+    convert-arith-to-llvm
+    convert-math-to-llvm
+    convert-complex-to-llvm
+    convert-vector-to-llvm
+    convert-index-to-llvm
+    convert-memref-to-llvm
+    lower-affine
+    convert-func-to-llvm
+    reconcile-unrealized-casts)
 # End
