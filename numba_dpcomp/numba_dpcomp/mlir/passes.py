@@ -97,6 +97,11 @@ class MlirBackendBase(FunctionPass):
             inline_type = obj.dispatcher.targetoptions.get("inline", None)
             if inline_type is not None:
                 flags.inline._inline = inline_type
+
+            parallel_type = obj.dispatcher.targetoptions.get("parallel", None)
+            if parallel_type is not None:
+                flags.auto_parallel = parallel_type
+
             return (func.__module__ + "." + func.__qualname__, func, flags)
         return (None, None, None)
 

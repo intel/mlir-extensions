@@ -173,8 +173,8 @@ struct PlierLowerer final {
                       compilationContext["opt_level"]().cast<int64_t>()));
     auto maxConcurrency = compilationContext["max_concurrency"]().cast<int>();
     if (maxConcurrency > 0)
-      mod->setAttr(imex::util::attributes::getMaxConcurrencyName(),
-                   builder.getI64IntegerAttr(maxConcurrency));
+      func->setAttr(imex::util::attributes::getMaxConcurrencyName(),
+                    builder.getI64IntegerAttr(maxConcurrency));
 
     lowerFuncBody(funcIr);
     mod.push_back(func);
