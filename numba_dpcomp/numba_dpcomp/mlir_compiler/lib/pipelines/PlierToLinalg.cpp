@@ -1323,9 +1323,44 @@ struct GetitemArrayOpLowering
 
     mlir::StringRef opName = "array.__getitem__";
     auto resType = op.getType();
-    auto args = {src, index};
+    mlir::Value args[] = {src, index};
     rewriter.replaceOpWithNewOp<imex::ntensor::PrimitiveOp>(op, resType, args,
                                                             opName);
+    return mlir::success();
+  }
+};
+
+struct SetitemArrayOpLowering
+    : public mlir::OpRewritePattern<imex::ntensor::SetitemOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::SetitemOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto src = op.getSource();
+    auto srcType = src.getType().dyn_cast<imex::ntensor::NTensorType>();
+    if (!srcType || srcType.getRank() != 1)
+      return mlir::failure();
+
+    auto index = op.getIndex();
+    auto indexType = index.getType().dyn_cast<imex::ntensor::NTensorType>();
+    if (!indexType || indexType.getRank() != 1)
+      return mlir::failure();
+
+    auto val = op.getValue();
+    auto valueType = val.getType().dyn_cast<imex::ntensor::NTensorType>();
+    if (!valueType || valueType.getRank() != 1)
+      return mlir::failure();
+
+    mlir::StringRef opName = "array.__setitem__";
+    mlir::Value args[] = {src, index, val};
+
+    auto loc = op.getLoc();
+    auto res =
+        rewriter.create<imex::ntensor::PrimitiveOp>(loc, srcType, args, opName)
+            .getResult(0);
+    rewriter.create<imex::ntensor::CopyOp>(loc, res, src);
+    rewriter.eraseOp(op);
     return mlir::success();
   }
 };
@@ -1612,10 +1647,9 @@ struct ResolveNtensorPass
 
     imex::ntensor::populateResolveArrayOpsPatterns(patterns);
 
-    patterns
-        .insert<GetitemArrayOpLowering, NtensorPrimitiveCallsLowering,
-                BuiltinCallsLowering, BinOpsLowering, ExternalCallsResolver>(
-            &ctx);
+    patterns.insert<GetitemArrayOpLowering, SetitemArrayOpLowering,
+                    NtensorPrimitiveCallsLowering, BuiltinCallsLowering,
+                    BinOpsLowering, ExternalCallsResolver>(&ctx);
 
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
                                              std::move(patterns));

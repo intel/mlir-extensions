@@ -269,19 +269,3 @@ func.func @test(%arg1: !ntensor.ntensor<?xf32>, %arg2: !ntensor.ntensor<?xi1>, %
 //  CHECK-NEXT:   }
 //  CHECK-NEXT:   ntensor.copy %[[TMP]], %[[ARG1]] : !ntensor.ntensor<?xf32> to !ntensor.ntensor<?xf32>
 //  CHECK-NEXT:   return
-
-// -----
-
-func.func @test(%arg1: !ntensor.ntensor<?xf32>, %arg2: !ntensor.ntensor<?xi1>, %arg3: !ntensor.ntensor<?xf32>) {
-  ntensor.setitem(%arg1 : !ntensor.ntensor<?xf32>) [%arg2 : !ntensor.ntensor<?xi1>] = (%arg3 : !ntensor.ntensor<?xf32>)
-  return
-}
-// CHECK-LABEL: func @test
-//  CHECK-SAME:   (%[[ARG1:.*]]: !ntensor.ntensor<?xf32>, %[[ARG2:.*]]: !ntensor.ntensor<?xi1>, %[[ARG3:.*]]: !ntensor.ntensor<?xf32>)
-//  CHECK-NEXT:   %[[TMP:.*]] = ntensor.elementwise %[[ARG2]], %[[ARG3]], %[[ARG1]] : !ntensor.ntensor<?xi1>, !ntensor.ntensor<?xf32>, !ntensor.ntensor<?xf32> -> !ntensor.ntensor<?xf32> {
-//  CHECK-NEXT:   ^bb0(%[[ARG4:.*]]: i1, %[[ARG5:.*]]: f32, %[[ARG6:.*]]: f32):
-//  CHECK-NEXT:   %[[YIELD:.*]] = arith.select %[[ARG4]], %[[ARG5]], %[[ARG6]] : f32
-//  CHECK-NEXT:   ntensor.elementwise_yield %[[YIELD]]  : f32
-//  CHECK-NEXT:   }
-//  CHECK-NEXT:   ntensor.copy %[[TMP]], %[[ARG1]] : !ntensor.ntensor<?xf32> to !ntensor.ntensor<?xf32>
-//  CHECK-NEXT:   return

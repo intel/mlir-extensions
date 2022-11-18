@@ -719,6 +719,31 @@ def getitem_impl(builder, arr, index):
     return builder.inline_func(func, arr.type, arr, index)
 
 
+@register_func("array.__setitem__")
+def getitem_impl(builder, arr, index, val):
+    if index.dtype != builder.bool:
+        return
+
+    arr = flatten_impl(builder, arr)
+    index = flatten_impl(builder, index)
+    val = flatten_impl(builder, val)
+
+    def func(a, ind, val):
+        a = a.copy()  # TODO: investigate
+        s = a.size
+        res = numpy.empty((s,), a.dtype)
+        curr = 0
+        for i in range(s):
+            if ind[i]:
+                res[i] = val[curr]
+                curr += 1
+            else:
+                res[i] = a[i]
+        return res
+
+    return builder.inline_func(func, arr.type, arr, index, val)
+
+
 @register_func("numpy.linalg.eig", numpy.linalg.eig)
 def eig_impl(builder, arg):
     shape = arg.shape
