@@ -2,25 +2,25 @@
 # Ready for vulkan runner or narrow scope l0/sycl runner starting from GPU dialect.
 convert-tensor-to-linalg
 arith-bufferize
-func.func(empty-tensor-to-alloc-tensor
+builtin.module(func.func(empty-tensor-to-alloc-tensor
           eliminate-alloc-tensors
           scf-bufferize
           shape-bufferize
           linalg-bufferize
           bufferization-bufferize
-          tensor-bufferize)
+          tensor-bufferize))
 func-bufferize
-func.func(finalizing-bufferize
+builtin.module(func.func(finalizing-bufferize
           convert-linalg-to-parallel-loops
           gpu-map-parallel-loops
-          convert-parallel-loops-to-gpu)
+          convert-parallel-loops-to-gpu))
 # insert-gpu-allocs pass can have client-api = opencl or vulkan args
-func.func(insert-gpu-allocs{client-api=opencl})
+builtin.module(func.func(insert-gpu-allocs{client-api=opencl}))
 canonicalize
 normalize-memrefs
 # Unstride memrefs does not seem to be needed.
 #func.func(unstride-memrefs)
-func.func(lower-affine)
+builtin.module(func.func(lower-affine))
 gpu-kernel-outlining
 canonicalize
 cse
@@ -32,7 +32,7 @@ fold-memref-alias-ops
 imex-convert-gpu-to-spirv
 spirv.module(spirv-lower-abi-attrs
              spirv-update-vce)
-func.func(llvm-request-c-wrappers)
+builtin.module(func.func(llvm-request-c-wrappers))
 serialize-spirv
 convert-gpu-to-gpux
 convert-func-to-llvm

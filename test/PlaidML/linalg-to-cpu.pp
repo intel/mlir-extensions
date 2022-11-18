@@ -1,16 +1,16 @@
 # linalg dialect to gpu dialect lowering pipeline
 convert-tensor-to-linalg
 arith-bufferize
-func.func(empty-tensor-to-alloc-tensor
+builtin.module(func.func(empty-tensor-to-alloc-tensor
           eliminate-alloc-tensors
           scf-bufferize
           shape-bufferize
           linalg-bufferize
           bufferization-bufferize
-          tensor-bufferize)
+          tensor-bufferize))
 func-bufferize
-func.func(finalizing-bufferize
-          convert-linalg-to-loops)
+builtin.module(func.func(finalizing-bufferize
+          convert-linalg-to-loops))
 convert-scf-to-cf
 convert-linalg-to-llvm
 convert-cf-to-llvm
