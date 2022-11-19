@@ -147,3 +147,18 @@ func.func @test(%arg1: tensor<?xf32>, %arg2: tensor<?xf32> {imex.shape_range = [
   %3 = arith.cmpi eq, %2, %cst1 : index
   return %3: i1
 }
+
+// -----
+
+// CHECK-LABEL: func @test
+//       CHECK:   %[[C:.*]] = arith.constant false
+//       CHECK:   return %[[C]]
+func.func @test(%arg1: tensor<?xf32>, %arg2: tensor<?xf32> {imex.shape_range = [#imex_util.index_range<[2,10]>]}) -> i1 {
+  %cst0 = arith.constant 0 : index
+  %cst1 = arith.constant 1 : index
+  %0 = tensor.dim %arg2, %cst0 : tensor<?xf32>
+  %1 = imex_util.enforce_shape %arg1 : tensor<?xf32>(%0) -> tensor<?xf32>
+  %2 = tensor.dim %1, %cst0 : tensor<?xf32>
+  %3 = arith.cmpi eq, %2, %cst1 : index
+  return %3: i1
+}

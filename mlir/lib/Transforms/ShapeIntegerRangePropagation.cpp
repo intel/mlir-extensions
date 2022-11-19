@@ -282,6 +282,49 @@ public:
       return;
     }
 
+    if (auto enforceShape = mlir::dyn_cast<imex::util::EnforceShapeOp>(op)) {
+      auto srcShaped =
+          enforceShape.getValue().getType().dyn_cast<mlir::ShapedType>();
+      if (!srcShaped)
+        return;
+
+      auto dstShaped =
+          enforceShape.getResult().getType().dyn_cast<mlir::ShapedType>();
+      if (!dstShaped)
+        return;
+
+      auto args = enforceShape.getSizes();
+
+      llvm::SmallVector<mlir::ConstantIntRanges> ranges;
+      ranges.reserve(args.size());
+      for (auto arg : args) {
+        auto state =
+            getOrCreateFor<mlir::dataflow::IntegerValueRangeLattice>(op, arg);
+
+        if (!state)
+          return;
+
+        auto value = state->getValue();
+        if (value.isUninitialized())
+          return;
+
+        ranges.emplace_back(value.getValue());
+      }
+
+      ShapeValue newVal(ranges);
+      newVal = ShapeValue::intersect(newVal, {srcShaped});
+      newVal = ShapeValue::intersect(newVal, {dstShaped});
+
+      LLVM_DEBUG(llvm::dbgs()
+                 << "ShapeValueAnalysis: New enforce shape result: " << newVal
+                 << "\n");
+
+      auto resultLattice = results.front();
+      auto changed = resultLattice->join(newVal);
+      propagateIfChanged(resultLattice, changed);
+      return;
+    }
+
     if (isShapedCast(op)) {
       assert(operands.size() == 1);
       assert(results.size() == 1);
@@ -588,6 +631,7 @@ struct ShapeIntegerRangePropagationPass
 
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<imex::util::ImexUtilDialect>();
     registry.insert<mlir::arith::ArithDialect>();
     registry.insert<mlir::tensor::TensorDialect>();
   }
