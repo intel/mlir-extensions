@@ -11,7 +11,10 @@
 #include <mlir/Analysis/DataFlow/DeadCodeAnalysis.h>
 #include <mlir/Analysis/DataFlow/SparseAnalysis.h>
 #include <mlir/Dialect/Arith/IR/Arith.h>
+#include <mlir/IR/FunctionInterfaces.h>
+#include <mlir/Interfaces/CallInterfaces.h>
 #include <mlir/Pass/Pass.h>
+#include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 
 #define DEBUG_TYPE "env-propagation"
 
@@ -280,6 +283,96 @@ struct PropagateEnvironmentPass
         res.replaceAllUsesExcept(newRes.getResult(), newRes);
       }
     }
+
+    root->walk([&](mlir::FunctionOpInterface func) {
+      if (func.isExternal())
+        return;
+
+      auto funcType = func.getFunctionType().cast<mlir::FunctionType>();
+      auto argsTypes = funcType.getInputs();
+
+      llvm::SmallVector<mlir::Type> newArgsTypes(argsTypes.begin(),
+                                                 argsTypes.end());
+
+      auto &entryBlock = func.getFunctionBody().front();
+
+      bool changed = false;
+      builder.setInsertionPointToStart(&entryBlock);
+      for (auto [i, arg] : llvm::enumerate(entryBlock.getArguments())) {
+        auto oldType = arg.getType().dyn_cast<imex::ntensor::NTensorType>();
+        if (!oldType)
+          continue;
+
+        auto *state = solver.lookupState<EnvValueLattice>(arg);
+        if (!state)
+          continue;
+
+        auto &val = state->getValue();
+        if (val.isUninitialized())
+          continue;
+
+        if (val.isInvalid()) {
+          func->emitError(val.getInvalidReason());
+          return signalPassFailure();
+        }
+
+        auto newEnv = val.getEnv();
+        if (newEnv == getTensorEnv(arg))
+          continue;
+
+        auto newType = imex::ntensor::NTensorType::get(
+            oldType.getShape(), oldType.getElementType(), newEnv,
+            oldType.getLayout());
+
+        auto cast =
+            builder.create<imex::ntensor::CastOp>(arg.getLoc(), oldType, arg);
+        arg.replaceAllUsesExcept(cast.getResult(), cast);
+        arg.setType(newType);
+        newArgsTypes[i] = newType;
+        changed = true;
+      }
+
+      if (!changed)
+        return;
+
+      auto newFuncType = mlir::FunctionType::get(&getContext(), newArgsTypes,
+                                                 funcType.getResults());
+      func.setType(newFuncType);
+
+      auto uses = mlir::SymbolTable::getSymbolUses(func, root);
+      if (!uses)
+        return;
+
+      for (auto use : *uses) {
+        auto user = use.getUser();
+        auto callOp = mlir::dyn_cast<mlir::CallOpInterface>(user);
+        if (!callOp) {
+          user->emitError("Not a call op");
+          return signalPassFailure();
+          failed = true;
+        }
+
+        auto loc = user->getLoc();
+        builder.setInsertionPoint(user);
+        for (auto [i, arg] : llvm::enumerate(callOp.getArgOperands())) {
+          auto oldType = arg.getType();
+          auto newType = newArgsTypes[i];
+          if (oldType == newType)
+            continue;
+
+          auto cast = builder.create<imex::ntensor::CastOp>(loc, newType, arg);
+          callOp->setOperand(i, cast.getResult());
+        }
+      }
+    });
+
+    if (failed)
+      return;
+
+    // Run some cleanup
+    mlir::RewritePatternSet patterns(&getContext());
+    imex::ntensor::CastOp::getCanonicalizationPatterns(patterns, &getContext());
+    (void)mlir::applyPatternsAndFoldGreedily(root, std::move(patterns));
   }
 };
 } // namespace

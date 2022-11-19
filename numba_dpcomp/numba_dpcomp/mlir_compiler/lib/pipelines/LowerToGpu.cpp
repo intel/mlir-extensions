@@ -849,10 +849,8 @@ void MarkGpuArraysInputs::runOnOperation() {
 
   mlir::OpBuilder builder(&getContext());
   auto attrStr = builder.getStringAttr(gpu_runtime::getGpuAccessibleAttrName());
-  if (func->hasAttr(attrStr)) {
-    markAllAnalysesPreserved();
-    return;
-  }
+  if (func->hasAttr(attrStr))
+    return markAllAnalysesPreserved();
 
   bool needAttr = false;
   llvm::SmallVector<bool> result;
@@ -864,7 +862,7 @@ void MarkGpuArraysInputs::runOnOperation() {
     needAttr = needAttr || res;
   };
 
-  for (auto type : (func.getFunctionType().getInputs()))
+  for (auto type : func.getFunctionType().getInputs())
     visitTypeRecursive(type, visitor);
 
   if (needAttr)
