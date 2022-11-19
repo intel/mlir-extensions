@@ -162,3 +162,42 @@ func.func @test(%arg1: tensor<?xf32>, %arg2: tensor<?xf32> {imex.shape_range = [
   %3 = arith.cmpi eq, %2, %cst1 : index
   return %3: i1
 }
+
+// -----
+
+// CHECK-LABEL: func @test
+//       CHECK:   %[[C:.*]] = arith.constant false
+//       CHECK:   return %[[C]]
+func.func @test(%arg1: tensor<?xf32> {imex.shape_range = [#imex_util.index_range<[2,10]>]}) -> i1 {
+  %cst0 = arith.constant 0 : index
+  %cst1 = arith.constant 1 : index
+  %0 = tensor.dim %arg1, %cst0 : tensor<?xf32>
+  %1 = tensor.empty(%0) : tensor<?xf32>
+  %2 = tensor.dim %1, %cst0 : tensor<?xf32>
+  %3 = arith.cmpi eq, %2, %cst1 : index
+  return %3: i1
+}
+
+// -----
+
+// Negative testm as it not yet possble to make linalg.generic work.
+// CHECK-LABEL: func @test
+//   CHECK-NOT:   %[[C:.*]] = arith.constant false
+//   CHECK-NOT:   return %[[C]]
+
+#map0 = affine_map<(d0) -> (d0)>
+func.func @test(%arg1: tensor<?xf32>, %arg2: tensor<?xf32> {imex.shape_range = [#imex_util.index_range<[2,10]>]}) -> i1 {
+  %cst0 = arith.constant 0 : index
+  %cst1 = arith.constant 1 : index
+  %1 = linalg.generic {
+      indexing_maps = [#map0, #map0],
+      iterator_types = ["parallel"]}
+      ins(%arg1 : tensor<?xf32>)
+      outs(%arg2 : tensor<?xf32>) {
+        ^bb0(%arg3: f32, %arg4: f32):
+          linalg.yield %arg3 : f32
+      } -> tensor<?xf32>
+  %2 = tensor.dim %1, %cst0 : tensor<?xf32>
+  %3 = arith.cmpi eq, %2, %cst1 : index
+  return %3: i1
+}
