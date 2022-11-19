@@ -10,6 +10,7 @@
 #include <mlir/Analysis/DataFlow/DeadCodeAnalysis.h>
 #include <mlir/Analysis/DataFlow/IntegerRangeAnalysis.h>
 #include <mlir/Dialect/Arith/IR/Arith.h>
+#include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/IR/FunctionInterfaces.h>
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Interfaces/ShapedOpInterfaces.h>
@@ -47,6 +48,10 @@ public:
       auto range = elem.cast<imex::util::IndexRangeAttr>();
       shapeRanges->emplace_back(getIndexRange(range.getMin(), range.getMax()));
     }
+  }
+  ShapeValue(mlir::ArrayRef<mlir::ConstantIntRanges> values)
+      : shapeRanges(std::in_place) {
+    shapeRanges->assign(values.begin(), values.end());
   }
 
   /// Whether the state is uninitialized.
@@ -115,6 +120,63 @@ inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
   return os;
 }
 
+struct TensorValueLattice : public mlir::dataflow::Lattice<ShapeValue> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TensorValueLattice)
+  using Lattice::Lattice;
+};
+
+class TensorValueAnalysis
+    : public mlir::dataflow::SparseDataFlowAnalysis<TensorValueLattice> {
+public:
+  using SparseDataFlowAnalysis::SparseDataFlowAnalysis;
+
+  void visitOperation(mlir::Operation *op,
+                      llvm::ArrayRef<const TensorValueLattice *> /*operands*/,
+                      llvm::ArrayRef<TensorValueLattice *> results) override {
+    LLVM_DEBUG(llvm::dbgs()
+               << "TensorValueAnalysis: Visiting operation: " << *op << "\n");
+
+    if (auto fromElements = mlir::dyn_cast<mlir::tensor::FromElementsOp>(op)) {
+      assert(results.size() == 1);
+      auto tensorType =
+          fromElements.getResult().getType().cast<mlir::RankedTensorType>();
+      if (tensorType.getRank() != 1 ||
+          mlir::ShapedType::isDynamic(tensorType.getShape().front()))
+        return;
+
+      auto args = fromElements.getElements();
+      llvm::SmallVector<mlir::ConstantIntRanges> ranges;
+      ranges.reserve(args.size());
+      for (auto arg : args) {
+        auto state =
+            getOrCreateFor<mlir::dataflow::IntegerValueRangeLattice>(op, arg);
+
+        if (!state)
+          return;
+
+        auto val = state->getValue();
+        if (val.isUninitialized())
+          return;
+
+        ranges.emplace_back(val.getValue());
+      }
+
+      ShapeValue newVal(ranges);
+      LLVM_DEBUG(llvm::dbgs()
+                 << "TensorValueAnalysis: New result val: " << newVal << "\n");
+
+      auto resultLattice = results.front();
+      auto changed = resultLattice->join(newVal);
+      propagateIfChanged(resultLattice, changed);
+      return;
+    }
+  }
+
+  void setToEntryState(TensorValueLattice *lattice) override {
+    propagateIfChanged(lattice, lattice->join(ShapeValue{}));
+  }
+};
+
 struct ShapeValueLattice : public mlir::dataflow::Lattice<ShapeValue> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(ShapeValueLattice)
   using Lattice::Lattice;
@@ -137,6 +199,25 @@ public:
                       llvm::ArrayRef<ShapeValueLattice *> results) override {
     LLVM_DEBUG(llvm::dbgs()
                << "ShapeValueAnalysis: Visiting operation: " << *op << "\n");
+
+    if (auto reshape = mlir::dyn_cast<mlir::tensor::ReshapeOp>(op)) {
+      assert(results.size() == 1);
+      auto state = getOrCreateFor<TensorValueLattice>(op, reshape.getShape());
+      if (!state)
+        return;
+
+      auto val = state->getValue();
+      if (val.isUninitialized())
+        return;
+
+      LLVM_DEBUG(llvm::dbgs()
+                 << "ShapeValueAnalysis: New reshape result: " << val << "\n");
+
+      auto resultLattice = results.front();
+      auto changed = resultLattice->join(val);
+      propagateIfChanged(resultLattice, changed);
+      return;
+    }
 
     if (isShapedCast(op)) {
       assert(operands.size() == 1);
@@ -445,6 +526,7 @@ struct ShapeIntegerRangePropagationPass
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::arith::ArithDialect>();
+    registry.insert<mlir::tensor::TensorDialect>();
   }
 
   void runOnOperation() override {
@@ -452,6 +534,7 @@ struct ShapeIntegerRangePropagationPass
     auto op = getOperation();
     mlir::DataFlowSolver solver;
     solver.load<mlir::dataflow::DeadCodeAnalysis>();
+    solver.load<TensorValueAnalysis>();
     solver.load<ShapeValueAnalysis>();
     solver.load<IntegerRangeAnalysisEx>();
     if (failed(solver.initializeAndRun(op)))
