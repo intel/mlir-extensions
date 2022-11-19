@@ -273,7 +273,6 @@ struct InsertGPUAllocs
             if (onDevice) {
               auto env = getEnv(user);
               if (mlir::succeeded(env)) {
-
                 assert(*env && "Invalid device");
                 if (!ret.env) {
                   ret.env = *env;

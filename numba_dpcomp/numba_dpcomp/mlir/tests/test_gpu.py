@@ -1006,3 +1006,41 @@ def test_cfd_simple2():
 
     _to_host(dgpu_res, gpu_res)
     assert_equal(gpu_res, sim_res)
+
+
+@require_dpctl
+def test_cfd_indirect():
+    def py_func1(a, b):
+        b[:] = a * 2
+
+    jit_func1 = njit(py_func1)
+
+    def py_func2(a, b):
+        jit_func1(a, b)
+
+    jit_func2 = njit(py_func2)
+
+    a = np.arange(1024, dtype=np.float32)
+
+    sim_res = np.zeros(a.shape, a.dtype)
+    py_func2(a, sim_res)
+
+    da = _from_host(a, buffer="device")
+
+    gpu_res = np.zeros(a.shape, a.dtype)
+    dgpu_res = _from_host(gpu_res, buffer="device")
+
+    filter_string = dgpu_res.device.sycl_device.filter_string
+    with print_pass_ir([], ["ConvertParallelLoopToGpu"]):
+        jit_func2(da, dgpu_res)
+        ir = get_print_buffer()
+        assert (
+            ir.count(
+                f'imex_util.env_region #gpu_runtime.region_desc<device = "{filter_string}">'
+            )
+            > 0
+        ), ir
+        assert ir.count("gpu.launch blocks") > 0, ir
+
+    _to_host(dgpu_res, gpu_res)
+    assert_equal(gpu_res, sim_res)

@@ -69,3 +69,23 @@ func.func @test(%arg1: !ntensor.ntensor<?xf32, "test">) -> f32 {
   %1 = ntensor.load %arg1[%0] : !ntensor.ntensor<?xf32, "test">
   return %1 : f32
 }
+
+// -----
+
+// CHECK-LABEL: func private @inner
+//  CHECK-SAME: (%[[ARG:.*]]: !ntensor.ntensor<?xf32, "test">)
+//       CHECK: %[[RES:.*]] = ntensor.cast %[[ARG]] : !ntensor.ntensor<?xf32, "test"> to !ntensor.ntensor<?xf32>
+//       CHECK: return %[[RES]]
+func.func private @inner(%arg1: !ntensor.ntensor<?xf32>) -> !ntensor.ntensor<?xf32> {
+  return %arg1 : !ntensor.ntensor<?xf32>
+}
+
+// CHECK-LABEL: func @test
+//  CHECK-SAME: (%[[ARG:.*]]: !ntensor.ntensor<?xf32, "test">)
+//       CHECK: %[[RES:.*]] = call @inner(%[[ARG]]) : (!ntensor.ntensor<?xf32, "test">) -> !ntensor.ntensor<?xf32>
+//       CHECK: return %[[RES]]
+func.func @test(%arg1: !ntensor.ntensor<?xf32, "test">) -> !ntensor.ntensor<?xf32> {
+  %0 = ntensor.cast %arg1 : !ntensor.ntensor<?xf32, "test"> to !ntensor.ntensor<?xf32>
+  %1 = call @inner(%0) : (!ntensor.ntensor<?xf32>) -> !ntensor.ntensor<?xf32>
+  return %1 : !ntensor.ntensor<?xf32>
+}
