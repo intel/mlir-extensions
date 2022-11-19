@@ -10,6 +10,7 @@
 #include <mlir/Analysis/DataFlow/DeadCodeAnalysis.h>
 #include <mlir/Analysis/DataFlow/IntegerRangeAnalysis.h>
 #include <mlir/Dialect/Arith/IR/Arith.h>
+#include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/IR/FunctionInterfaces.h>
 #include <mlir/IR/PatternMatch.h>
@@ -315,6 +316,9 @@ public:
       newVal = ShapeValue::intersect(newVal, {srcShaped});
       newVal = ShapeValue::intersect(newVal, {dstShaped});
 
+      auto inputLattice = operands.front();
+      newVal = ShapeValue::intersect(newVal, inputLattice->getValue());
+
       LLVM_DEBUG(llvm::dbgs()
                  << "ShapeValueAnalysis: New enforce shape result: " << newVal
                  << "\n");
@@ -322,6 +326,85 @@ public:
       auto resultLattice = results.front();
       auto changed = resultLattice->join(newVal);
       propagateIfChanged(resultLattice, changed);
+      return;
+    }
+
+    if (auto empty = mlir::dyn_cast<mlir::tensor::EmptyOp>(op)) {
+      assert(results.size() == 1);
+      auto mixedSizes = empty.getMixedSizes();
+
+      llvm::SmallVector<mlir::ConstantIntRanges> ranges;
+      ranges.reserve(mixedSizes.size());
+      for (auto size : mixedSizes) {
+        if (auto val = mlir::getConstantIntValue(size)) {
+          ranges.emplace_back(getFixedDimRange(*val));
+        } else {
+          assert(size.is<mlir::Value>());
+          auto state = getOrCreateFor<mlir::dataflow::IntegerValueRangeLattice>(
+              op, size.get<mlir::Value>());
+
+          if (!state)
+            return;
+
+          auto value = state->getValue();
+          if (value.isUninitialized())
+            return;
+
+          ranges.emplace_back(value.getValue());
+        }
+      }
+
+      ShapeValue newVal(ranges);
+
+      auto shaped = empty.getResult().getType().cast<mlir::ShapedType>();
+      newVal = ShapeValue::intersect(newVal, {shaped});
+
+      LLVM_DEBUG(llvm::dbgs()
+                 << "ShapeValueAnalysis: New tensor empty shape result: "
+                 << newVal << "\n");
+
+      auto resultLattice = results.front();
+      auto changed = resultLattice->join(newVal);
+      propagateIfChanged(resultLattice, changed);
+      return;
+    }
+
+    // TODO: not yet possible due to gow BranchOpInterface works.
+    if (auto generic = mlir::dyn_cast<mlir::linalg::GenericOp>(op)) {
+      if (generic->getNumResults() == 0)
+        return;
+
+      if (!llvm::all_of(generic.getIndexingMaps(), [](mlir::Attribute map) {
+            return map.cast<mlir::AffineMapAttr>().getValue().isIdentity();
+          }))
+        return;
+
+      if (!llvm::all_of(generic.getIteratorTypes(), [](mlir::Attribute map) {
+            return map.cast<mlir::linalg::IteratorTypeAttr>().getValue() ==
+                   mlir::utils::IteratorType::parallel;
+          }))
+
+        return;
+
+      ShapeValue newVal;
+      for (auto arg : op->getOperands())
+        newVal = ShapeValue::intersect(
+            newVal, {arg.getType().cast<mlir::ShapedType>()});
+
+      for (auto result : op->getResults())
+        newVal = ShapeValue::intersect(
+            newVal, {result.getType().cast<mlir::ShapedType>()});
+
+      for (auto input : operands)
+        newVal = ShapeValue::intersect(newVal, input->getValue());
+
+      LLVM_DEBUG(llvm::dbgs() << "ShapeValueAnalysis: Shaped linalg generic: "
+                              << newVal << "\n");
+
+      for (auto resultLattice : results) {
+        auto changed = resultLattice->join(newVal);
+        propagateIfChanged(resultLattice, changed);
+      }
       return;
     }
 
@@ -634,6 +717,7 @@ struct ShapeIntegerRangePropagationPass
     registry.insert<imex::util::ImexUtilDialect>();
     registry.insert<mlir::arith::ArithDialect>();
     registry.insert<mlir::tensor::TensorDialect>();
+    registry.insert<mlir::linalg::LinalgDialect>();
   }
 
   void runOnOperation() override {
