@@ -122,6 +122,46 @@ struct PowSimplify : public mlir::OpRewritePattern<mlir::math::PowFOp> {
   }
 };
 
+struct AndConflictSimplify
+    : public mlir::OpRewritePattern<mlir::arith::AndIOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::arith::AndIOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto lhs = op.getLhs().getDefiningOp<mlir::arith::CmpIOp>();
+    if (!lhs)
+      return mlir::failure();
+
+    auto rhs = op.getRhs().getDefiningOp<mlir::arith::CmpIOp>();
+    if (!rhs)
+      return mlir::failure();
+
+    if (lhs.getLhs() != rhs.getLhs() || lhs.getRhs() != rhs.getRhs())
+      return mlir::failure();
+
+    using Pred = mlir::arith::CmpIPredicate;
+    std::array<Pred, mlir::arith::getMaxEnumValForCmpIPredicate() + 1>
+        handlers{};
+    handlers[static_cast<size_t>(Pred::eq)] = Pred::ne;
+    handlers[static_cast<size_t>(Pred::ne)] = Pred::eq;
+    handlers[static_cast<size_t>(Pred::slt)] = Pred::sge;
+    handlers[static_cast<size_t>(Pred::sle)] = Pred::sgt;
+    handlers[static_cast<size_t>(Pred::sgt)] = Pred::sle;
+    handlers[static_cast<size_t>(Pred::sge)] = Pred::slt;
+    handlers[static_cast<size_t>(Pred::ult)] = Pred::uge;
+    handlers[static_cast<size_t>(Pred::ule)] = Pred::ugt;
+    handlers[static_cast<size_t>(Pred::ugt)] = Pred::ule;
+    handlers[static_cast<size_t>(Pred::uge)] = Pred::ult;
+    if (handlers[static_cast<size_t>(lhs.getPredicate())] != rhs.getPredicate())
+      return mlir::failure();
+
+    auto val = rewriter.getIntegerAttr(op.getType(), 0);
+    rewriter.replaceOpWithNewOp<mlir::arith::ConstantOp>(op, val);
+    return mlir::success();
+  }
+};
+
 struct CommonOptsPass
     : public mlir::PassWrapper<CommonOptsPass, mlir::OperationPass<void>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(CommonOptsPass)
@@ -155,7 +195,8 @@ void imex::populateCommonOptsPatterns(mlir::RewritePatternSet &patterns) {
       imex::CSERewrite<mlir::func::FuncOp, /*recusive*/ false>,
       SubviewLoadPropagate,
       SubviewStorePropagate,
-      PowSimplify
+      PowSimplify,
+      AndConflictSimplify
       // clang-format on
       >(patterns.getContext());
 
