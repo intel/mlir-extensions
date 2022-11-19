@@ -219,6 +219,112 @@ public:
       return;
     }
 
+    if (auto sizesInterface =
+            mlir::dyn_cast<mlir::OffsetSizeAndStrideOpInterface>(op)) {
+      if (op->getNumResults() != 1)
+        return;
+
+      auto result = op->getResult(0);
+      auto shaped = result.getType().dyn_cast<mlir::ShapedType>();
+      if (!shaped)
+        return;
+
+      auto resultShape = shaped.getShape();
+      auto mixedSizes = sizesInterface.getMixedSizes();
+
+      llvm::SmallBitVector droppedDims(mixedSizes.size());
+      unsigned shapePos = 0;
+      for (const auto &size : enumerate(mixedSizes)) {
+        auto sizeVal = getConstantIntValue(size.value());
+        // If the size is not 1, or if the current matched dimension of the
+        // result is the same static shape as the size value (which is 1), then
+        // the dimension is preserved.
+        if (!sizeVal || *sizeVal != 1 ||
+            (shapePos < resultShape.size() && resultShape[shapePos] == 1)) {
+          shapePos++;
+          continue;
+        }
+        droppedDims.set(size.index());
+      }
+
+      llvm::SmallVector<mlir::ConstantIntRanges> ranges;
+      ranges.reserve(mixedSizes.size());
+      for (auto [i, size] : llvm::enumerate(mixedSizes)) {
+        if (droppedDims[i])
+          continue;
+
+        if (auto val = mlir::getConstantIntValue(size)) {
+          ranges.emplace_back(getFixedDimRange(*val));
+        } else {
+          assert(size.is<mlir::Value>());
+          auto state = getOrCreateFor<mlir::dataflow::IntegerValueRangeLattice>(
+              op, size.get<mlir::Value>());
+
+          if (!state)
+            return;
+
+          auto value = state->getValue();
+          if (value.isUninitialized())
+            return;
+
+          ranges.emplace_back(value.getValue());
+        }
+      }
+
+      auto newVal = ShapeValue::intersect({shaped}, {ranges});
+
+      LLVM_DEBUG(llvm::dbgs()
+                 << "ShapeValueAnalysis: New view result: " << newVal << "\n");
+
+      auto resultLattice = results.front();
+      auto changed = resultLattice->join(newVal);
+      propagateIfChanged(resultLattice, changed);
+      return;
+    }
+
+    if (auto enforceShape = mlir::dyn_cast<imex::util::EnforceShapeOp>(op)) {
+      auto srcShaped =
+          enforceShape.getValue().getType().dyn_cast<mlir::ShapedType>();
+      if (!srcShaped)
+        return;
+
+      auto dstShaped =
+          enforceShape.getResult().getType().dyn_cast<mlir::ShapedType>();
+      if (!dstShaped)
+        return;
+
+      auto args = enforceShape.getSizes();
+
+      llvm::SmallVector<mlir::ConstantIntRanges> ranges;
+      ranges.reserve(args.size());
+      for (auto arg : args) {
+        auto state =
+            getOrCreateFor<mlir::dataflow::IntegerValueRangeLattice>(op, arg);
+
+        if (!state)
+          return;
+
+        auto value = state->getValue();
+        if (value.isUninitialized())
+          return;
+
+        ranges.emplace_back(value.getValue());
+      }
+
+      ShapeValue newVal(ranges);
+      newVal = ShapeValue::intersect(newVal, {srcShaped});
+      newVal = ShapeValue::intersect(newVal, {dstShaped});
+
+      LLVM_DEBUG(llvm::dbgs()
+                 << "ShapeValueAnalysis: New enforce shape result: " << newVal
+                 << "\n");
+
+      auto resultLattice = results.front();
+      auto changed = resultLattice->join(newVal);
+      propagateIfChanged(resultLattice, changed);
+      return;
+    }
+
     if (isShapedCast(op)) {
       assert(operands.size() == 1);
       assert(results.size() == 1);
@@ -525,6 +631,7 @@ struct ShapeIntegerRangePropagationPass
 
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<imex::util::ImexUtilDialect>();
     registry.insert<mlir::arith::ArithDialect>();
     registry.insert<mlir::tensor::TensorDialect>();
   }
