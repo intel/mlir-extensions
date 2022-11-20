@@ -241,7 +241,7 @@ jobs:
           export LLVM_PATH=/home/runner/work/llvm-mlir/_mlir_install
           export LEVEL_ZERO_DIR=/home/runner/work/level-zero/level-zero/level_zero_install
           export LEVEL_ZERO_VERSION_CHECK_OFF=1
-          pip wheel --no-deps ../numba_dpcomp
+          pip wheel --no-deps --use-feature=in-tree-build ../numba_dpcomp
           ls -l --block-size=M
 
       - name: Test wheels
