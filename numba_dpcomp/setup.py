@@ -26,7 +26,7 @@ else:
 
 if int(os.environ.get("DPCOMP_SETUP_RUN_CMAKE", 1)):
     cwd = os.getcwd()
-    root_dir = os.path.dirname(cwd)
+    root_dir = os.path.dirname(os.path.abspath(__file__))
 
     LLVM_PATH = os.environ["LLVM_PATH"]
     LLVM_DIR = os.path.join(LLVM_PATH, "lib", "cmake", "llvm")
@@ -45,7 +45,7 @@ if int(os.environ.get("DPCOMP_SETUP_RUN_CMAKE", 1)):
     NUMPY_INCLUDE_DIR = numpy.get_include()
 
     cmake_cmd += [
-        "..",
+        os.path.join(root_dir, ".."),
         "-DCMAKE_BUILD_TYPE=Release",
         "-DLLVM_DIR=" + LLVM_DIR,
         "-DMLIR_DIR=" + MLIR_DIR,
