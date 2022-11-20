@@ -130,8 +130,10 @@ endif()
 
 get_filename_component(_tmp_path1 "${CMAKE_SOURCE_DIR}" REALPATH)
 get_filename_component(_tmp_path2 "${CMAKE_INSTALL_PREFIX}" REALPATH)
+cmake_path(IS_PREFIX _tmp_path1 ${_tmp_path2} NORMALIZE _result)
 
-if (NOT _tmp_path1 STREQUAL _tmp_path2)
+if (NOT ${_result})
+    message(STATUS "Copy python files")
     install(
         DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../../
         DESTINATION ./numba_dpcomp

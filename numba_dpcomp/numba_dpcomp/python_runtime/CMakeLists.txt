@@ -24,7 +24,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE Python3::Python)
 if (NOT Python3_NumPy_INCLUDE_DIRS)
     message(FATAL_ERROR "Python3_NumPy_INCLUDE_DIRS is not set")
 endif()
-message("Python3_NumPy_INCLUDE_DIRS ${Python3_NumPy_INCLUDE_DIRS}")
+message(STATUS "Python3_NumPy_INCLUDE_DIRS ${Python3_NumPy_INCLUDE_DIRS}")
 
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${PROJECT_BINARY_DIR}
