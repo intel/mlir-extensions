@@ -229,3 +229,17 @@ jobs:
           source $CONDA/bin/activate test-env
           export NUMBA_DISABLE_PERFORMANCE_WARNINGS=1
           pytest -n${np} -vv --capture=tee-sys -rXF
+
+      - name: Build wheels
+        shell: bash -l {0}
+
+        run: |
+          mkdir numba_dpcomp_wheels
+          cd numba_dpcomp_wheels
+          source $CONDA/bin/activate test-env
+          export TBB_PATH=/home/runner/work/tbb/oneapi-tbb-${TBB_VER}
+          export LLVM_PATH=/home/runner/work/llvm-mlir/_mlir_install
+          export LEVEL_ZERO_DIR=/home/runner/work/level-zero/level-zero/level_zero_install
+          export LEVEL_ZERO_VERSION_CHECK_OFF=1
+          pip wheel ../numba_dpcomp
+          ls -l --block-size=M
