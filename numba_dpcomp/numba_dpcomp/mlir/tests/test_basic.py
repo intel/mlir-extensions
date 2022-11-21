@@ -99,6 +99,7 @@ def test_inplace_op(a, b):
     assert_equal(py_func(a, b), jit_func(a, b))
 
 
+@pytest.mark.smoke
 @parametrize_function_variants(
     "py_func",
     [

@@ -114,6 +114,7 @@ _test_binary_test_arrays_ids = [
 ]
 
 
+@pytest.mark.smoke
 @parametrize_function_variants(
     "py_func",
     [

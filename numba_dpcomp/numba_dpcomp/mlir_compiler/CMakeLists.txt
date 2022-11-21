@@ -138,5 +138,6 @@ if (NOT ${_result})
         PATTERN "*.py"
         PATTERN "*.cfg"
         PATTERN "*.in"
+        PATTERN "*.ini"
         )
 endif()

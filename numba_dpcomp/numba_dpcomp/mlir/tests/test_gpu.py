@@ -78,6 +78,7 @@ _test_values = [
 ]
 
 
+@pytest.mark.smoke
 @require_gpu
 def test_simple1():
     def func(a, b, c):
@@ -105,6 +106,7 @@ def test_simple1():
     assert_equal(gpu_res, sim_res)
 
 
+@pytest.mark.smoke
 @require_gpu
 def test_simple2():
     get_id = get_global_id
@@ -867,6 +869,7 @@ def _to_host(src, dst):
     src.usm_data.copy_to_host(dst.reshape((-1)).view("|u1"))
 
 
+@pytest.mark.smoke
 @require_dpctl
 def test_dpctl_simple1():
     def func(a, b, c):
@@ -904,6 +907,7 @@ def test_dpctl_simple1():
     assert_equal(gpu_res, sim_res)
 
 
+@pytest.mark.smoke
 @require_dpctl
 def test_parfor_simple1():
     def py_func(a, b, c):
@@ -940,6 +944,7 @@ def test_parfor_simple1():
     assert_equal(gpu_res, sim_res)
 
 
+@pytest.mark.smoke
 @require_dpctl
 def test_cfd_simple1():
     def py_func(a, b):
@@ -973,6 +978,7 @@ def test_cfd_simple1():
     assert_equal(gpu_res, sim_res)
 
 
+@pytest.mark.smoke
 @require_dpctl
 def test_cfd_simple2():
     def py_func(a, b, c):
