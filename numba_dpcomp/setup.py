@@ -25,7 +25,6 @@ else:
 # CMAKE =======================================================================
 
 if int(os.environ.get("DPCOMP_SETUP_RUN_CMAKE", 1)):
-    cwd = os.getcwd()
     root_dir = os.path.dirname(os.path.abspath(__file__))
 
     LLVM_PATH = os.environ["LLVM_PATH"]
