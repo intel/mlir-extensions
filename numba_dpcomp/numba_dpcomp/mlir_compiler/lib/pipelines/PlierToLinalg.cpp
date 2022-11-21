@@ -2653,7 +2653,7 @@ void CloneArgsPass::runOnOperation() {
 
 struct ReplaceClones
     : public mlir::OpRewritePattern<mlir::bufferization::CloneOp> {
-  using mlir::OpRewritePattern<mlir::bufferization::CloneOp>::OpRewritePattern;
+  using OpRewritePattern::OpRewritePattern;
 
   mlir::LogicalResult
   matchAndRewrite(mlir::bufferization::CloneOp op,
@@ -2665,8 +2665,25 @@ struct ReplaceClones
 };
 
 struct LowerCloneOpsPass
-    : public imex::RewriteWrapperPass<LowerCloneOpsPass, mlir::func::FuncOp,
-                                      void, ReplaceClones> {};
+    : public imex::RewriteWrapperPass<LowerCloneOpsPass, void, void,
+                                      ReplaceClones> {};
+
+struct ReplaceMemrefCopy : public mlir::OpRewritePattern<mlir::memref::CopyOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::CopyOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    mlir::linalg::makeMemRefCopyOp(rewriter, op.getLoc(), op.getSource(),
+                                   op.getTarget());
+    rewriter.eraseOp(op);
+    return mlir::success();
+  }
+};
+
+struct LowerCopyOpsPass
+    : public imex::RewriteWrapperPass<LowerCopyOpsPass, void, void,
+                                      ReplaceMemrefCopy> {};
 
 struct PostLinalgOptPass
     : public mlir::PassWrapper<PostLinalgOptPass,
@@ -2767,6 +2784,8 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createCanonicalizerPass());
 
   pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<LowerCloneOpsPass>());
+  pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<LowerCopyOpsPass>());
+  pm.addPass(mlir::createCanonicalizerPass());
   //  pm.addNestedPass<mlir::func::FuncOp>(
   //      mlir::bufferization::createPromoteBuffersToStackPass());
 
