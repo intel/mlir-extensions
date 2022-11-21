@@ -179,7 +179,7 @@ CMakeLists.txt.user
 
 # Build dir
 /cmake_build
-/numba_dpcomp/cmake_build
+/dpcomp_cmake_build
 _build
 _install
 
