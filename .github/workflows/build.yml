@@ -206,7 +206,7 @@ jobs:
 
         run: |
           cd numba_dpcomp
-          conda create -y -n test-env python=${{ matrix.python }} numba=0.56 numpy=1.20 scikit-learn pytest-xdist ninja scipy pybind11 pytest lit tbb=${TBB_VER} cmake -c conda-forge
+          conda create -y -n test-env python=${{ matrix.python }} "pip>=22"numba=0.56 numpy=1.20 scikit-learn pytest-xdist ninja scipy pybind11 pytest lit tbb=${TBB_VER} cmake -c conda-forge
           conda info
           source $CONDA/bin/activate test-env
           conda list
@@ -241,7 +241,7 @@ jobs:
           export LLVM_PATH=/home/runner/work/llvm-mlir/_mlir_install
           export LEVEL_ZERO_DIR=/home/runner/work/level-zero/level-zero/level_zero_install
           export LEVEL_ZERO_VERSION_CHECK_OFF=1
-          pip wheel --no-deps --use-feature=in-tree-build -v ../numba_dpcomp
+          pip wheel --no-deps -v ../numba_dpcomp
           ls -l --block-size=M
 
       - name: Test wheels
