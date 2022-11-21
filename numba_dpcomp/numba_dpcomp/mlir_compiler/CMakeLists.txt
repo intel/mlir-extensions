@@ -114,24 +114,22 @@ if(IMEX_ENABLE_IGPU_DIALECT)
     target_compile_definitions(${PROJECT_NAME} PRIVATE IMEX_ENABLE_IGPU_DIALECT=1)
 endif()
 
-set(CMAKE_INSTALL_BINDIR ./numba_dpcomp/numba_dpcomp)
-set(CMAKE_INSTALL_LIBDIR ./numba_dpcomp/numba_dpcomp)
-set(CMAKE_INSTALL_INCLUDEDIR ./numba_dpcomp/numba_dpcomp)
-
 install(TARGETS dpcomp-runtime dpcomp-math-runtime dpcomp-python-runtime mlir_compiler
-        LIBRARY DESTINATION numba_dpcomp/numba_dpcomp
+        DESTINATION "${CMAKE_INSTALL_PREFIX}/numba_dpcomp/numba_dpcomp"
         )
 
 if(IMEX_ENABLE_IGPU_DIALECT)
     install(TARGETS dpcomp-gpu-runtime
-            LIBRARY DESTINATION numba_dpcomp/numba_dpcomp
+            DESTINATION "${CMAKE_INSTALL_PREFIX}/numba_dpcomp/numba_dpcomp"
             )
 endif()
 
 get_filename_component(_tmp_path1 "${CMAKE_SOURCE_DIR}" REALPATH)
 get_filename_component(_tmp_path2 "${CMAKE_INSTALL_PREFIX}" REALPATH)
+cmake_path(IS_PREFIX _tmp_path1 ${_tmp_path2} NORMALIZE _result)
 
-if (NOT _tmp_path1 STREQUAL _tmp_path2)
+if (NOT ${_result})
+    message(STATUS "Copy python files")
     install(
         DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../../
         DESTINATION ./numba_dpcomp
@@ -140,5 +138,6 @@ if (NOT _tmp_path1 STREQUAL _tmp_path2)
         PATTERN "*.py"
         PATTERN "*.cfg"
         PATTERN "*.in"
+        PATTERN "*.ini"
         )
 endif()

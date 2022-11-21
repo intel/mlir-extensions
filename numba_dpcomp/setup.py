@@ -25,16 +25,15 @@ else:
 # CMAKE =======================================================================
 
 if int(os.environ.get("DPCOMP_SETUP_RUN_CMAKE", 1)):
-    cwd = os.getcwd()
-    root_dir = os.path.dirname(cwd)
+    root_dir = os.path.dirname(os.path.abspath(__file__))
 
     LLVM_PATH = os.environ["LLVM_PATH"]
     LLVM_DIR = os.path.join(LLVM_PATH, "lib", "cmake", "llvm")
     MLIR_DIR = os.path.join(LLVM_PATH, "lib", "cmake", "mlir")
     TBB_DIR = os.path.join(os.environ["TBB_PATH"], "lib", "cmake", "tbb")
-    CMAKE_INSTALL_PREFIX = root_dir
+    CMAKE_INSTALL_PREFIX = os.path.join(root_dir, "..")
 
-    cmake_build_dir = os.path.join(root_dir, "cmake_build")
+    cmake_build_dir = os.path.join(CMAKE_INSTALL_PREFIX, "dpcomp_cmake_build")
     cmake_cmd = [
         "cmake",
         root_dir,
@@ -45,7 +44,7 @@ if int(os.environ.get("DPCOMP_SETUP_RUN_CMAKE", 1)):
     NUMPY_INCLUDE_DIR = numpy.get_include()
 
     cmake_cmd += [
-        "..",
+        CMAKE_INSTALL_PREFIX,
         "-DCMAKE_BUILD_TYPE=Release",
         "-DLLVM_DIR=" + LLVM_DIR,
         "-DMLIR_DIR=" + MLIR_DIR,
@@ -100,7 +99,7 @@ if int(os.environ.get("DPCOMP_SETUP_RUN_CMAKE", 1)):
 
 # =============================================================================
 
-packages = find_packages(include=["numba_dpcomp", "numba_dpcomp.*"])
+packages = find_packages(where=root_dir, include=["numba_dpcomp", "numba_dpcomp.*"])
 
 metadata = dict(
     name="numba-dpcomp",
