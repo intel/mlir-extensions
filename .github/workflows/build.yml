@@ -258,4 +258,4 @@ jobs:
           np=`nproc`
           echo "INFO: nproc $np"
           export NUMBA_DISABLE_PERFORMANCE_WARNINGS=1
-          pytest -n${np} -vv --capture=tee-sys -rXF --pyargs numba_dpcomp.mlir.tests
+          pytest -n${np} -vv --capture=tee-sys -rXF --pyargs numba_dpcomp.mlir.tests -m smoke
