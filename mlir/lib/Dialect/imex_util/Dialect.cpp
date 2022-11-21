@@ -873,6 +873,8 @@ struct ChangeLayoutIf : public mlir::OpRewritePattern<mlir::scf::YieldOp> {
         auto srcType = src.getType();
 
         auto otherArg = otherYield.getResults()[i];
+
+        bool outerBreak = false;
         for (auto dstType : {srcType, getFullyDynamicType(srcType)}) {
           if (!dstType)
             continue;
@@ -894,9 +896,13 @@ struct ChangeLayoutIf : public mlir::OpRewritePattern<mlir::scf::YieldOp> {
             rewriter.updateRootInPlace(
                 otherYield, [&]() { otherYield.setOperand(i, otherRes); });
             newType = dstType;
+            outerBreak = true;
             break;
           }
         }
+
+        if (outerBreak)
+          break;
 
         if (auto otherCl =
                 otherArg.getDefiningOp<imex::util::ChangeLayoutOp>()) {
