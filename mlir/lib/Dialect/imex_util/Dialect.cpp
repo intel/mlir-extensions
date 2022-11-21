@@ -874,6 +874,17 @@ struct ChangeLayoutIf : public mlir::OpRewritePattern<mlir::scf::YieldOp> {
 
         auto otherArg = otherYield.getResults()[i];
 
+        if (auto otherCl =
+            otherArg.getDefiningOp<imex::util::ChangeLayoutOp>()) {
+          auto otherSrc = otherCl.getSource();
+          if (otherSrc.getType() == srcType) {
+            rewriter.updateRootInPlace(
+                otherYield, [&]() { otherYield.setOperand(i, otherSrc); });
+            newType = srcType;
+            break;
+          }
+        }
+
         bool outerBreak = false;
         for (auto dstType : {srcType, getFullyDynamicType(srcType)}) {
           if (!dstType)
@@ -903,17 +914,6 @@ struct ChangeLayoutIf : public mlir::OpRewritePattern<mlir::scf::YieldOp> {
 
         if (outerBreak)
           break;
-
-        if (auto otherCl =
-                otherArg.getDefiningOp<imex::util::ChangeLayoutOp>()) {
-          auto otherSrc = otherCl.getSource();
-          if (otherSrc.getType() == srcType) {
-            rewriter.updateRootInPlace(
-                otherYield, [&]() { otherYield.setOperand(i, otherSrc); });
-            newType = srcType;
-            break;
-          }
-        }
       }
 
       if (!newType) {
