@@ -1,0 +1,181 @@
+name: Cross-compile IMEX on CPUs [REFACTOR]
+
+on:
+  schedule:
+    - cron: '0 */12 * * *' # run daily at midnight
+  pull_request:
+    branches:
+      - refactor
+  workflow_dispatch:
+
+jobs:
+  build:
+    if: github.repository == 'intel-innersource/frameworks.ai.mlir.mlir-extensions'
+    runs-on: gpu
+    defaults:
+      run:
+        shell: bash
+    container:
+      image: ubuntu:latest
+      options: --rm --user root --entrypoint bash --privileged
+    
+    timeout-minutes: 450
+    
+    env:
+      TBB_VER: 2021.6.0
+      LEVEL_ZERO_VER: v1.6.2
+      HOME_DIR: /__w/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions
+      GITHUB_HOME: /__w
+      HOME: /github/home
+      TBB_URL_PREFIX: https://github.com/oneapi-src/oneTBB/releases/download/
+      LLVM_SHA_FILE: llvm_version.txt
+
+    steps:
+      - name: Clear home dir
+        run: |
+          cd $HOME_DIR
+          rm -rf *
+
+      - name: LS HOME
+        run: |
+          cd $HOME
+          rm -rf *
+      - uses: actions/checkout@v3
+        with:
+          repository: intel-innersource/frameworks.ai.mlir.mlir-extensions
+          token: ${{secrets.WORKFLOW_TOKEN}}
+          path: ${{env.HOME_DIR}}/frameworks.ai.mlir.mlir-extensions
+
+      - name: Prepare Docker
+        run: |
+          export http_proxy=http://proxy-dmz.intel.com:911
+          export https_proxy=http://proxy-dmz.intel.com:912
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get -y install tzdata
+          apt-get upgrade -y
+          apt-get install -y wget gnupg curl ca-certificates apt-transport-https
+          apt-get install -y vim ninja-build cmake g++ python3 python3-pip ninja-build
+          apt-get install -y git
+          apt-get install -y cmake
+          apt-get install -y wget
+          apt-get install -y libssl-dev
+          apt-get install -y libssl11*
+          apt-get install -y openssl
+          apt-get install -y netcat
+          apt-get install -y mesa-utils
+          apt-get install -y software-properties-common
+          apt-get install -y pciutils
+          pip install pytest
+          wget https://github.com/Kitware/CMake/releases/download/v3.20.0/cmake-3.20.0.tar.gz
+          tar -zvxf cmake-3.20.0.tar.gz
+          cd cmake-3.20.0 && ./bootstrap && make -j64 && make install && cmake --version
+          wget https://repo.anaconda.com/archive/Anaconda3-2020.02-Linux-x86_64.sh
+          bash -x Anaconda3-2020.02-Linux-x86_64.sh -b -p $HOME/miniconda -f 
+          bash Anaconda3-2020.02-Linux-x86_64.sh -b
+          rm Anaconda3-2020.02-Linux-x86_64.sh
+
+      - name: Install Build tools onto Conda
+        shell: bash -l {0}
+        run: |
+          export PATH="$HOME/miniconda:$PATH"
+          source $HOME/miniconda/bin/activate
+          conda install cmake ninja graphviz conda-forge::lit conda-forge::doxygen
+          conda list
+
+      - name: Setup TBB
+        run: |
+          export HOME_DIR=`pwd`
+          export TBB_VER='2021.6.0'
+          export LEVEL_ZERO_VER='v1.6.2'
+          export TBB_URL_PREFIX='https://github.com/oneapi-src/oneTBB/releases/download/'
+          cd $HOME_DIR
+          mkdir -p tbb
+          cd tbb
+          echo "INFO: Downloading TBB ${TBB_VER}"
+          rm -rf *
+          export TBB_FN=oneapi-tbb-${TBB_VER}-lin.tgz
+          wget ${TBB_URL_PREFIX}/v${TBB_VER}/${TBB_FN} || exit 1
+          tar xf ${TBB_FN} -C . || exit 1
+          cat $(find . -name tbb.pc) | grep Version: | cut -d " " -f 2 > bundle_id.txt || rm -rf bundle_id.txt
+          [ -f bundle_id.txt ] || exit 1
+          cd ../
+          cd $HOME_DIR
+
+      - name: Setup Level Zero
+        run: |
+          cd $HOME_DIR
+          mkdir -p level-zero
+          pushd level-zero
+          if [[ -f bundle_id.txt && ( "$(cat bundle_id.txt)" == "${LEVEL_ZERO_VER}" ) ]]; then
+              echo "INFO: Using cached build of Level-Zero ${LEVEL_ZERO_VER}"
+          else
+              echo "INFO: Downloading and building Level-Zero ${LEVEL_ZERO_VER}"
+              rm -rf *
+              echo ${LEVEL_ZERO_VER} > bundle_id.txt || rm -rf bundle_id.txt
+              cat bundle_id.txt || exit 1
+              [ -f bundle_id.txt ] || exit 1
+              git clone https://github.com/oneapi-src/level-zero.git || exit 1
+              pushd level-zero || exit 1
+              git checkout ${LEVEL_ZERO_VER} || exit 1
+              mkdir level_zero_install || exit 1
+              mkdir build || exit 1
+              cd build || exit 1
+              cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=../level_zero_install .. || exit 1
+              make install || exit 1
+              popd
+          fi
+          popd
+
+      - name: Build LLVM MLIR
+        run: |
+          mkdir -p $HOME_DIR/llvm-mlir
+          cd $HOME_DIR/llvm-mlir
+          echo "INFO: Need to rebuild LLVM-MLIR. Previous installation for MLIR not found"
+          np=`nproc`
+          if [ -d "llvm-project" ]; then rm -rf llvm-project; fi
+          git clone https://github.com/llvm/llvm-project || exit 1
+          export LLVM_SHA=`cat ../frameworks.ai.mlir.mlir-extensions/build_tools/llvm_version.txt`
+          cd llvm-project || exit 1
+          git checkout $LLVM_SHA || exit 1
+          mkdir _build || exit 1
+          cd _build || exit 1
+          cmake ../llvm  -GNinja  -DCMAKE_BUILD_TYPE=Release  -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_ENABLE_RTTI=ON  -DLLVM_USE_LINKER=gold -DLLVM_INSTALL_UTILS=ON -DLLVM_ENABLE_ZSTD=OFF -DCMAKE_INSTALL_PREFIX=$HOME_DIR/llvm-mlir/_mlir_install || exit 1
+          cmake --build . -j ${np} || exit 1
+          cmake --install . || exit 1
+          cp bin/FileCheck $HOME_DIR/llvm-mlir/_mlir_install/bin/
+          cp bin/count $HOME_DIR/llvm-mlir/_mlir_install/bin/
+          cp bin/not $HOME_DIR/llvm-mlir/_mlir_install/bin/
+
+      - name: Setup IMEX
+        run: |
+          source $HOME/miniconda/bin/activate
+          set -e
+          set -x
+          
+          echo "SET EXTERNAL LIT"
+          external_lit=`which lit`
+          echo $external_lit
+          export LEVEL_ZERO_DIR=$HOME_DIR/level-zero/level-zero/level_zero_install/
+          export LEVEL_ZERO_VERSION_CHECK_OFF=1
+          export TBB_PATH=$HOME_DIR/tbb/oneapi-tbb-${TBB_VER}
+          
+          
+          mkdir -p $HOME_DIR/tmpdir
+          cd $HOME_DIR/frameworks.ai.mlir.mlir-extensions
+          
+          python build_tools/build_imex.py                                     \
+            --working-dir $HOME_DIR/tmpdir                           \
+            --llvm-install $HOME_DIR/llvm-mlir/_mlir_install           \
+            --external-lit ${external_lit}
+
+      - name: Run lit tests
+        shell: bash -l {0}
+        run: |
+          cd $HOME_DIR/frameworks.ai.mlir.mlir-extensions/_build || exit 1
+          cmake --build . --target check-imex || exit 1
+
+      - name: Build doxygen docs
+        shell: bash -l {0}
+        run: |
+          cd $HOME_DIR/frameworks.ai.mlir.mlir-extensions/_build || exit 1
+          cmake --build . --target doc_doxygen || exit 1
