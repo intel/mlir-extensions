@@ -248,7 +248,6 @@ jobs:
         shell: bash -l {0}
 
         run: |
-          mkdir numba_dpcomp_wheels
           cd numba_dpcomp_wheels
           conda create -y -n wheels-test-env python=${{ matrix.python }} numba=0.56 numpy=1.20 scikit-learn pytest-xdist ninja scipy pybind11 pytest lit tbb=${TBB_VER} cmake -c conda-forge
           conda info
