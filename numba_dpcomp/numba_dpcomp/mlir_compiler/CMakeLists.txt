@@ -114,8 +114,6 @@ if(IMEX_ENABLE_IGPU_DIALECT)
     target_compile_definitions(${PROJECT_NAME} PRIVATE IMEX_ENABLE_IGPU_DIALECT=1)
 endif()
 
-message("CMAKE_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX}")
-
 install(TARGETS dpcomp-runtime dpcomp-math-runtime dpcomp-python-runtime mlir_compiler
         DESTINATION "${CMAKE_INSTALL_PREFIX}/numba_dpcomp/numba_dpcomp"
         )
