@@ -875,7 +875,7 @@ struct ChangeLayoutIf : public mlir::OpRewritePattern<mlir::scf::YieldOp> {
         auto otherArg = otherYield.getResults()[i];
 
         if (auto otherCl =
-            otherArg.getDefiningOp<imex::util::ChangeLayoutOp>()) {
+                otherArg.getDefiningOp<imex::util::ChangeLayoutOp>()) {
           auto otherSrc = otherCl.getSource();
           if (otherSrc.getType() == srcType) {
             rewriter.updateRootInPlace(
