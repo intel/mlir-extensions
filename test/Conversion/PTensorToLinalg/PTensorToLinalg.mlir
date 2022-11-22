@@ -10,8 +10,8 @@ func.func @test_extract_slice(%arg0: !ptensor.ptensor<1 x i64>) -> !ptensor.pten
 // CHECK-LABEL: @test_extract_slice
 // CHECK-NEXT: [[C0:%.*]] = arith.constant
 // CHECK-NEXT: [[C1:%.*]] = arith.constant
-// CHECK-NEXT: [[V0:%.*]] = tensor.extract_slice %arg0[[[C0]]] [[[C1]]] [[[C1]]] : tensor<?xi64> to tensor<?xi64>
-// CHECK-NEXT: return [[V0]] : tensor<?xi64>
+// CHECK-NEXT: [[V0:%.*]] = memref.subview %arg0[[[C0]]] [[[C1]]] [[[C1]]] : memref<?xi64, strided<[?], offset: ?>> to memref<?xi64, strided<[?], offset: ?>>
+// CHECK-NEXT: return [[V0]] : memref<?xi64, strided<[?], offset: ?>>
 
 // -----
 func.func @test_arange(%arg0: i64, %arg1: i64, %arg2: i64) -> !ptensor.ptensor<1 x index> {
@@ -31,7 +31,7 @@ func.func @test_ewbin(%arg0: !ptensor.ptensor<1 x i64>) -> !ptensor.ptensor<1 x 
     return %0 : !ptensor.ptensor<1 x i64>
 }
 // CHECK-LABEL: @test_ewbin
-// CHECK: [[C0:%.*]] = tensor.dim
+// CHECK: [[C0:%.*]] = memref.dim
 // CHECK: tensor.empty([[C0]]) : tensor<?xi64>
 // CHECK: linalg.generic{{.*}}["parallel"]
 // CHECK return %{{.}} : tensor<?xi64>

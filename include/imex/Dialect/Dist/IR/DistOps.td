@@ -135,7 +135,7 @@ def ExtractFromDistOp : Dist_Op<"extract_from_dist", []> {
         switch(idx.getInt()) {
             case GSHAPE:
             case LOFFSETS:
-                $_state.addTypes(::imex::getMemRefType($_builder.getContext(), rank, IndexType));
+                $_state.addTypes(::imex::getMemRefType($_builder.getContext(), rank, IndexType, false));
                 break;
             case LTENSOR:
                 $_state.addTypes(ttype.getPTensorType());
@@ -162,7 +162,7 @@ def LocalOffsetsOp : Dist_Op<"local_offsets", []> {
         OpBuilder<(ins "int64_t":$rank, "::mlir::Value":$num_procs, "::mlir::Value":$prank, "::mlir::Value":$gshape), [{
             build($_builder,
                   $_state,
-                  ::imex::getMemRefType($_builder.getContext(), rank, $_builder.getIndexType()),
+                  ::imex::getMemRefType($_builder.getContext(), rank, $_builder.getIndexType(), false),
                   $_builder.getI64IntegerAttr(rank),
                   num_procs,
                   prank,
@@ -183,7 +183,7 @@ def LocalShapeOp : Dist_Op<"local_shape", []> {
         OpBuilder<(ins "int64_t":$rank, "::mlir::Value":$num_procs, "::mlir::Value":$prank, "::mlir::Value":$gshape), [{
             build($_builder,
                   $_state,
-                  ::imex::getMemRefType($_builder.getContext(), rank, $_builder.getIndexType()),
+                  ::imex::getMemRefType($_builder.getContext(), rank, $_builder.getIndexType(), false),
                   $_builder.getI64IntegerAttr(rank),
                   num_procs,
                   prank,
@@ -198,7 +198,7 @@ def AllReduceOp : Dist_Op<"allreduce", []> {
         Result is the allreduced input tensor.
     }];
     // reduction operation and local tensor
-    let arguments = (ins AnyAttr:$op, AnyRankedTensor:$data);
+    let arguments = (ins AnyAttr:$op, AnyMemRef:$data);
     let results = (outs AnyType);
 }
 

@@ -26,7 +26,7 @@ Additionally we propose appropriate passes
 3. Converting __intel-sycl.device_region__ to appropriate runtime calls
 
 ### ptensor Type
-Since operations are expected to execute in the same location as its input tensors, it is necessary to carry the tensor-location from the point of its allocation to the point of the operation. For this, we introduce a type which logically extends the `mlir::RankedTensorType` with a boolean attribute `device`, indicateing if it should live on a device.
+Since operations are expected to execute in the same location as its input tensors, it is necessary to carry the tensor-location from the point of its allocation to the point of the operation. For this, we introduce a type which logically extends the `mlir::MemRefType` with a boolean attribute `device`, indicateing if it should live on a device.
 
 The actual device and distributed team can be assigned by the approriate operands of creation operations (see below).
 
@@ -35,7 +35,7 @@ The tensors themselves are assumed to eventually lower to memrefs.
 Notice: By default device and distribution support is disabled and so renders conventional host operations.
 
 ### __PTensor__ Operations
-The initial set of operations matches the requirements of the core of [array-API](https://data-apis.org/array-api/latest/API_specification/index.html). The operations in the PTensor dialect operate on ptensors. To allow operations on standard tensors and memrefs the PTensor dialect provides the operation `from_ranked` to convert MemRefs and RankedTensors to ptensors with default `device` and `team`.
+The initial set of operations matches the requirements of the core of [array-API](https://data-apis.org/array-api/latest/API_specification/index.html). The operations in the PTensor dialect operate on ptensors. To allow operations on standard tensors and memrefs the PTensor dialect provides the operation `from_ranked` to convert MemRefs and MemRefs to ptensors with default `device` and `team`.
 
 Notice: some of the operations mutate existing ptensors.
 
@@ -48,7 +48,7 @@ It constitutes an error if an operation has multiple (input and output) argument
 Similarly, it constitutes an error if an operation has multiple (input and output) arguments of type ptensor and their `team` attribute is not the same on all ptensor arguments.
 
 #### Broadcasting/Ranked Tensors
-PTensor operates on ranked tensors. In rare cases the shape of input tensor(s) needs to be known as well. Unranked tensors are not supported.
+PTensor operates on MemRefs. In rare cases the shape of input tensor(s) needs to be known as well. Unranked memrefs are not supported.
 
 PTensor operations follow the [broadcasting semantics of the array-API](https://data-apis.org/array-api/latest/API_specification/broadcasting.html).
 
@@ -74,7 +74,7 @@ The below set of operations accrues from the following rules:
     * `$side = ['lower', 'upper']`
   * `delete(tensor) : (ptensor) -> void`
   * `from_dlpack(obj) : (ptr) -> ptensor.ptensor`
-  * `from_ranked(ranked) : (Memref|RankedTensor) -> ptensor.ptensor`
+  * `from_ranked(ranked) : (Memref|MemRef) -> ptensor.ptensor`
 * Tensor attributes
   * `shape(rhs) : (ptensor.ptensor) -> shape.shape`
   * `rank(rhs) : (ptensor.ptensor) -> int64`
@@ -129,10 +129,10 @@ The below set of operations accrues from the following rules:
   * `test{$top}(rhs, axis) : (ptensor.ptensor, int) -> ptensor.ptensor`
     * `$rop = ['any', 'all']`
   * Utility functions not part of the array-API
-    * Get the (local) ranked tensor from a ptensor:
-      `extract_rtensor(tensor) : (ptensor.ptensor) -> RankedTensor`
-    * Initialize a ptensor value from a RankedTensor, device, team and handle:
-      `init_ptensor(rtensor, device, team, handle) {onDevice : bool, dist : bool} : (RankedTensor, AnyType, AnyType, AnyType, AnyType -> ptensor.ptensor`
+    * Get the (local) memref from a ptensor:
+      `extract_memref(tensor) : (ptensor.ptensor) -> MemRef`
+    * Initialize a ptensor value from a MemRef, device, team and handle:
+      `init_ptensor(memref, device, team, handle) {onDevice : bool, dist : bool} : (MemRef, AnyType, AnyType, AnyType, AnyType -> ptensor.ptensor`
 
 ### __Dist__ Dialect
 The Dist dialect provides operations dealing with tensors which are partitioned and distributed across multiple processes. The operations assume some kind of a runtime which handles aspects like communication and partitioning.
@@ -140,7 +140,7 @@ The Dist dialect provides operations dealing with tensors which are partitioned 
 - `unregister_ptensor(dtensor_id) : (i64) -> void`
 - `local_shape(dtensor_id) : (i64) -> (tensor<?xi64)`
 - `local_offsets(dtensor_id) : (i64) -> (tensor<?xi64)`
-- `allreduce(team, op, ltensor) : (i64, i64, RankedTensor) -> void`
+- `allreduce(team, op, ltensor) : (i64, i64, MemRef) -> void`
 
 For details watch out for a separate RFC.
 
@@ -161,9 +161,9 @@ All passes which consume `ptensor`s and -operations comply to compute-follows-da
 
 #### --convert-ptensor-to-linalg
 This pass completely lowers ptensor operations:
-- __Tensor__: `ptensor.ptensor` will be type-converted to a RankedTensor
+- __Tensor__: `ptensor.ptensor` will be type-converted to a MemRef
   - Wtihin the pass each PTensor gets "instantiated" by a `init_ptensor` which also accepts `team`, `handle` and `device`. This allows accessing device and distributed runtime attributes during lowering.
-  - function boundaries are currently not handled explicitly. device and dist information will be lost and normal RankedTensors are exchanged.
+  - function boundaries are currently not handled explicitly. device and dist information will be lost and normal MemRefs are exchanged.
 - __Linalg__: The actual functionality will be represented by one or more operations of the Linalg dialect.
 - __intel_sycl__: Appropriate `intel_sycl.device_region` will be put around operations which have inputs of type `ptensor.ptensor` with a non-null `device` attribute.
 - utility dialects like __memref__, __shape__, __affine__, __func__ and __arith__

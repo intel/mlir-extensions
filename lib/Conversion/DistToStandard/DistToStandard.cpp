@@ -109,7 +109,7 @@ struct RuntimePrototypesOpConverter
     requireFunc(loc, rewriter, module, "_idtr_prank", {indexType}, {indexType});
     requireFunc(
         loc, rewriter, module, "_idtr_reduce_all",
-        {getTensorType(rewriter.getContext(), 0, dtype), dtypeType, opType},
+        {getMemRefType(rewriter.getContext(), 0, dtype), dtypeType, opType},
         {});
     rewriter.eraseOp(op);
     return ::mlir::success();
@@ -320,7 +320,7 @@ struct ConvertDistToStandardPass
                                ::mlir::SmallVectorImpl<::mlir::Type> &types) {
       auto rank = type.getPTensorType().getRank();
       auto mrTyp = getMemRefType(&ctxt, {rank ? rank : 1},
-                                 ::mlir::IndexType::get(&ctxt));
+                                 ::mlir::IndexType::get(&ctxt), false);
       types.push_back(mrTyp);
       types.push_back(type.getPTensorType());
       types.push_back(mrTyp);

@@ -68,8 +68,8 @@ inline ::mlir::Value createAllReduce(::mlir::Location &loc,
                                      ::mlir::Value pTnsr) {
   auto pTnsrTyp = pTnsr.getType().dyn_cast<::imex::ptensor::PTensorType>();
   assert(pTnsrTyp);
-  auto rTnsr = builder.create<::imex::ptensor::ExtractTensorOp>(
-      loc, pTnsrTyp.getTensorType(), pTnsr);
+  auto rTnsr = builder.create<::imex::ptensor::ExtractMemRefOp>(
+      loc, pTnsrTyp.getMemRefType(), pTnsr);
   return builder.create<::imex::dist::AllReduceOp>(loc, rTnsr.getType(), op,
                                                    rTnsr);
 }
@@ -119,14 +119,14 @@ struct RecOpRewritePattern : public ::mlir::OpRewritePattern<T> {
   }
 };
 
-/// Rewriting ::imex::ptensor::ExtractTensorOp
-/// Get PTensor from DistTensor and apply to ExtractTensorOp.
-struct DistExtractTensorOpRWP
-    : public RecOpRewritePattern<::imex::ptensor::ExtractTensorOp> {
+/// Rewriting ::imex::ptensor::ExtractMemRefOp
+/// Get PTensor from DistTensor and apply to ExtractMemRefOp.
+struct DistExtractMemRefOpRWP
+    : public RecOpRewritePattern<::imex::ptensor::ExtractMemRefOp> {
   using RecOpRewritePattern::RecOpRewritePattern;
 
   ::mlir::LogicalResult
-  matchAndRewrite(::imex::ptensor::ExtractTensorOp op,
+  matchAndRewrite(::imex::ptensor::ExtractMemRefOp op,
                   ::mlir::PatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     // get input
@@ -136,15 +136,15 @@ struct DistExtractTensorOpRWP
       return ::mlir::failure();
     }
     auto pTnsr = createGetLocal(loc, rewriter, op.getInput());
-    rewriter.replaceOpWithNewOp<::imex::ptensor::ExtractTensorOp>(
-        op, inpPtTyp.getPTensorType().getTensorType(), pTnsr);
+    rewriter.replaceOpWithNewOp<::imex::ptensor::ExtractMemRefOp>(
+        op, inpPtTyp.getPTensorType().getMemRefType(), pTnsr);
     return ::mlir::success();
   }
 };
 
 /// Rewriting ::imex::ptensor::ExtractSliceOp
 /// 1. Convert given global slice into local slice
-/// 2. Get PTensor from DistTensor and apply to ExtractTensorOp.
+/// 2. Get PTensor from DistTensor and apply to ExtractMemRefOp.
 struct DistExtractSliceOpRWP
     : public RecOpRewritePattern<::imex::ptensor::ExtractSliceOp> {
   using RecOpRewritePattern::RecOpRewritePattern;
@@ -166,8 +166,8 @@ struct DistExtractSliceOpRWP
     auto team = createTeamOf(loc, rewriter, src);
     auto lOffs = createGetLocalOffsets(loc, rewriter, src);
     auto lPTnsr = createGetLocal(loc, rewriter, src);
-    auto lRTnsr = rewriter.create<::imex::ptensor::ExtractTensorOp>(
-        loc, inpPtTyp.getPTensorType().getTensorType(), lPTnsr);
+    auto lMemRef = rewriter.create<::imex::ptensor::ExtractMemRefOp>(
+        loc, inpPtTyp.getPTensorType().getMemRefType(), lPTnsr);
 
     auto slcOffs = op.getOffsets();
     auto slcSizes = op.getSizes();
@@ -181,7 +181,8 @@ struct DistExtractSliceOpRWP
         rewriter.create<::mlir::arith::MulIOp>(loc, slcSizes[0],
                                                slcStrides[0]));
     // local extent/size
-    auto lExtent = rewriter.create<::mlir::tensor::DimOp>(loc, lRTnsr, zeroIdx);
+    auto lExtent =
+        rewriter.create<::mlir::memref::DimOp>(loc, lMemRef, zeroIdx);
     // local offset (dim 0)
     auto lOff = rewriter.create<::mlir::memref::LoadOp>(
         loc, lOffs, ::mlir::ValueRange{zeroIdx});
@@ -440,7 +441,7 @@ struct PTensorDistPass : public ::imex::PTensorDistBase<PTensorDistPass> {
   void runOnOperation() override {
     ::mlir::FrozenRewritePatternSet patterns;
     insertPatterns<DistARangeOpRWP, DistEWBinOpRWP, DistReductionOpRWP,
-                   DistExtractTensorOpRWP, DistExtractSliceOpRWP>(getContext(),
+                   DistExtractMemRefOpRWP, DistExtractSliceOpRWP>(getContext(),
                                                                   patterns);
     (void)::mlir::applyPatternsAndFoldGreedily(this->getOperation(), patterns);
   }

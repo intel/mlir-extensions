@@ -8,7 +8,7 @@ func.func @test_arange(%arg0: i64, %arg1: i64, %arg2: i64) -> i64 {
     %0 = "ptensor.arange"(%arg0, %arg1, %arg2, %c0, %c1) : (i64, i64, i64, index, index) -> !ptensor.ptensor<1 x i64>
     %1 = ptensor.extract_slice %0[%c0][%c3][%c3] : !ptensor.ptensor<1 x i64> to !ptensor.ptensor<1 x i64>
     %2 ="ptensor.ewbin"(%1, %1) {op = 0 : i32} : (!ptensor.ptensor<1 x i64>, !ptensor.ptensor<1 x i64>) -> !ptensor.ptensor<1 x i64>
-    %3 = builtin.unrealized_conversion_cast %1 : !ptensor.ptensor<1 x i64> to i64
+    %3 = builtin.unrealized_conversion_cast %2 : !ptensor.ptensor<1 x i64> to i64
     return %3 : i64
 }
 // CHECK-LABEL: func.func @test_arange

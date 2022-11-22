@@ -27,9 +27,9 @@ namespace imex {
 
 inline auto getTensorType(::mlir::MLIRContext *ctxt, int64_t rank,
                           ::mlir::Type elType) {
-  // auto dynStride = mlir::ShapedType::kDynamicStrideOrOffset;
-  // auto layout = mlir::StridedLayoutAttr::get(ctxt, dynStride,
-  // ::mlir::SmallVector<int64_t>(rank, dynStride));
+  //   static auto dynStride = mlir::ShapedType::kDynamicStrideOrOffset;
+  //   auto layout = mlir::StridedLayoutAttr::get(ctxt, dynStride,
+  //   ::mlir::SmallVector<int64_t>(rank, dynStride));
   return ::mlir::RankedTensorType::get(std::vector<int64_t>(rank, -1),
                                        elType); //, layout);
 }
@@ -41,19 +41,21 @@ inline auto createEmptyTensor(::mlir::OpBuilder &builder, ::mlir::Location loc,
 }
 
 inline auto getMemRefType(::mlir::MLIRContext *ctxt, int64_t rank,
-                          ::mlir::Type elType) {
-  // auto dynStride = mlir::ShapedType::kDynamicStrideOrOffset;
-  // auto layout = mlir::StridedLayoutAttr::get(ctxt, dynStride,
-  // ::mlir::SmallVector<int64_t>(rank, dynStride));
-  return ::mlir::MemRefType::get(std::vector<int64_t>(rank, -1),
-                                 elType); //, layout);
+                          ::mlir::Type elType, bool strided = true) {
+  static auto dynStride = ::mlir::ShapedType::kDynamicStrideOrOffset;
+  auto layout = ::mlir::StridedLayoutAttr::get(
+      ctxt, dynStride, ::mlir::SmallVector<int64_t>(rank, dynStride));
+  return ::mlir::MemRefType::get(std::vector<int64_t>(rank, -1), elType,
+                                 strided ? layout
+                                         : ::mlir::StridedLayoutAttr{});
 }
 
 inline auto createAllocMR(::mlir::OpBuilder &builder, ::mlir::Location loc,
-                          ::mlir::Type elType, ::mlir::ValueRange shp) {
+                          ::mlir::Type elType, ::mlir::ValueRange shp,
+                          bool strided = true) {
   return builder.create<::mlir::memref::AllocOp>(
-      loc, getMemRefType(builder.getContext(), shp.size(), elType), shp,
-      builder.getI64IntegerAttr(8));
+      loc, getMemRefType(builder.getContext(), shp.size(), elType, strided),
+      shp, builder.getI64IntegerAttr(8));
 }
 
 inline ::mlir::Value createMemRefFromElements(::mlir::OpBuilder &builder,
@@ -62,7 +64,7 @@ inline ::mlir::Value createMemRefFromElements(::mlir::OpBuilder &builder,
                                               ::mlir::ValueRange elts) {
   int64_t N = elts.size();
   auto n = createIndex(loc, builder, N);
-  auto mr = createAllocMR(builder, loc, elType, {n});
+  auto mr = createAllocMR(builder, loc, elType, {n}, false);
   for (auto i = 0; i < N; ++i) {
     auto idx = createIndex(loc, builder, i);
     (void)builder.create<::mlir::memref::StoreOp>(loc, elts[i], mr, idx);

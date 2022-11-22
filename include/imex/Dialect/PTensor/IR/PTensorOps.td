@@ -93,7 +93,7 @@ def MkPTensorOp : PTensor_Op<"init_ptensor", []> {
         FIXME The resulting PTensor will be marked as living on a device if $device is not none.
     }];
 
-    let arguments = (ins AnyRankedTensor:$tensor,
+    let arguments = (ins AnyMemRef:$tensor,
                          AnyType:$device);
     let results = (outs PTensor_PTensor:$res);
     let skipDefaultBuilders = 1;
@@ -124,15 +124,15 @@ def MkPTensorOp : PTensor_Op<"init_ptensor", []> {
     ];
 }
 
-def ExtractTensorOp : PTensor_Op<"extract_tensor", []> {
-    let summary = "Extract RankedTensor from a PTensor";
+def ExtractMemRefOp : PTensor_Op<"extract_tensor", []> {
+    let summary = "Extract MemRef from a PTensor";
     let description = [{
-        High-level operation to extract the RankedTensor from the given PTensor.
+        High-level operation to extract the MemRef from the given PTensor.
         Assumes that the given PTensor was created by MkPTensorOp.
     }];
 
     let arguments = (ins AnyType:$input);
-    let results = (outs AnyRankedTensor);
+    let results = (outs AnyMemRef);
 }
 
 def ExtractSliceOp : PTensor_Op<"extract_slice", [SameVariadicOperandSize, Pure]> {

@@ -64,9 +64,9 @@ func.func @test_local_shape(%np : index, %prank: index, %shape: tensor<1xindex>)
 // CHECK-NEXT: "dist.local_shape"(%arg0, %arg1, %arg2) {rank = 1 : i64} : (index, index, tensor<1xindex>) -> tensor<1xindex>
 
 // -----
-func.func @test_allreduce(%arg0: tensor<i64>) -> tensor<i64> {
-    %0 = "dist.allreduce"(%arg0) {op = 4 : i32} : (tensor<i64>) -> tensor<i64>
-    return %0 : tensor<i64>
+func.func @test_allreduce(%arg0: memref<i64>) -> memref<i64> {
+    %0 = "dist.allreduce"(%arg0) {op = 4 : i32} : (memref<i64>) -> memref<i64>
+    return %0 : memref<i64>
 }
-// CHECK-LABEL: func.func @test_allreduce(%arg0: tensor<i64>) -> tensor<i64> {
-// CHECK-NEXT: "dist.allreduce"(%arg0) {op = 4 : i32} : (tensor<i64>) -> tensor<i64>
+// CHECK-LABEL: func.func @test_allreduce(%arg0: memref<i64>) -> memref<i64> {
+// CHECK-NEXT: "dist.allreduce"(%arg0) {op = 4 : i32} : (memref<i64>) -> memref<i64>
