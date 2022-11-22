@@ -54,6 +54,7 @@
 #include "imex/Transforms/PromoteBoolMemref.hpp"
 #include "imex/Transforms/PromoteToParallel.hpp"
 #include "imex/Transforms/RewriteWrapper.hpp"
+#include "imex/Transforms/ShapeIntegerRangePropagation.hpp"
 #include "imex/Transforms/TypeConversion.hpp"
 #include "imex/Transforms/UpliftMath.hpp"
 
@@ -1735,6 +1736,64 @@ struct WrapParforRegions
   }
 };
 
+struct MarkInputShapesRanges
+    : public mlir::PassWrapper<MarkInputShapesRanges,
+                               mlir::OperationPass<mlir::ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(MarkInputShapesRanges)
+
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<imex::util::ImexUtilDialect>();
+  }
+
+  void runOnOperation() override {
+    auto mod = getOperation();
+
+    auto getRange = [&](int64_t min, int64_t max) {
+      return imex::util::IndexRangeAttr::get(&getContext(), min, max);
+    };
+
+    auto attrName = mlir::StringAttr::get(
+        mod.getContext(), imex::util::attributes::getShapeRangeName());
+    mod.walk([&](mlir::FunctionOpInterface func) {
+      if (func.isExternal())
+        return;
+
+      auto &body = func.getFunctionBody();
+      assert(!body.empty());
+      for (auto [i, arg] : llvm::enumerate(body.front().getArguments())) {
+        auto shaped = arg.getType().dyn_cast<mlir::ShapedType>();
+        if (!shaped)
+          continue;
+
+        auto newRange = [&]() -> llvm::Optional<mlir::ArrayAttr> {
+          auto uses = mlir::SymbolTable::getSymbolUses(func, mod);
+          if (!uses || !uses->empty())
+            return llvm::None;
+
+          auto rank = static_cast<unsigned>(shaped.getRank());
+          llvm::SmallVector<mlir::Attribute> shapeRanges(rank);
+
+          for (auto [i, dim] : llvm::enumerate(shaped.getShape())) {
+            if (mlir::ShapedType::isDynamic(dim)) {
+              shapeRanges[i] = getRange(2, std::numeric_limits<int64_t>::max());
+            } else {
+              shapeRanges[i] = getRange(dim, dim);
+            }
+          }
+
+          return mlir::ArrayAttr::get(&getContext(), shapeRanges);
+        }();
+
+        if (!newRange)
+          continue;
+
+        func.setArgAttr(static_cast<unsigned>(i), attrName, *newRange);
+      }
+    });
+  }
+};
+
 struct ResolveNumpyFuncsPass
     : public mlir::PassWrapper<ResolveNumpyFuncsPass,
                                mlir::OperationPass<void>> {
@@ -2738,6 +2797,8 @@ static void populatePlierToLinalgGenPipeline(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::func::FuncOp>(mlir::createCanonicalizerPass());
   pm.addPass(imex::createForceInlinePass());
   pm.addPass(mlir::createSymbolDCEPass());
+  pm.addPass(std::make_unique<MarkInputShapesRanges>());
+  pm.addPass(imex::createShapeIntegerRangePropagationPass());
   pm.addNestedPass<mlir::func::FuncOp>(
       std::make_unique<PostPlierToLinalgPass>());
   pm.addNestedPass<mlir::func::FuncOp>(mlir::createCSEPass());
@@ -2800,6 +2861,8 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::func::FuncOp>(
       mlir::createLoopInvariantCodeMotionPass());
 
+  pm.addPass(imex::createShapeIntegerRangePropagationPass());
+  pm.addNestedPass<mlir::func::FuncOp>(mlir::createCanonicalizerPass());
   pm.addNestedPass<mlir::func::FuncOp>(mlir::createCSEPass());
   // ToDo: This pass also tries to do some simple fusion, whic should be split
   // in separate pass

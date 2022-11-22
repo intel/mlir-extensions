@@ -521,6 +521,27 @@ static bool canTransformLayoutCast(mlir::Type src, mlir::Type dst) {
   return true;
 }
 
+static mlir::MemRefType getFullyDynamicType(mlir::Type type) {
+  auto memrefType = type.dyn_cast<mlir::MemRefType>();
+  if (!memrefType)
+    return {};
+
+  auto layout = memrefType.getLayout().dyn_cast<mlir::StridedLayoutAttr>();
+  if (!layout)
+    return {};
+
+  int64_t offset = mlir::ShapedType::kDynamicStrideOrOffset;
+  llvm::SmallVector<int64_t> strides(layout.getStrides().size(), offset);
+  auto dynLayout =
+      mlir::StridedLayoutAttr::get(type.getContext(), offset, strides);
+  if (layout == dynLayout)
+    return {};
+
+  return mlir::MemRefType::get(memrefType.getShape(),
+                               memrefType.getElementType(), dynLayout,
+                               memrefType.getMemorySpace());
+}
+
 struct ChangeLayoutIdentity
     : public mlir::OpRewritePattern<imex::util::ChangeLayoutOp> {
   using OpRewritePattern::OpRewritePattern;
@@ -852,20 +873,7 @@ struct ChangeLayoutIf : public mlir::OpRewritePattern<mlir::scf::YieldOp> {
         auto srcType = src.getType();
 
         auto otherArg = otherYield.getResults()[i];
-        if (canTransformLayoutCast(origType, srcType)) {
 
-          rewriter.updateRootInPlace(clYield,
-                                     [&]() { clYield.setOperand(i, src); });
-
-          rewriter.setInsertionPoint(otherYield);
-          auto otherRes = rewriter.createOrFold<mlir::memref::CastOp>(
-              otherYield.getLoc(), srcType, otherArg);
-
-          rewriter.updateRootInPlace(
-              otherYield, [&]() { otherYield.setOperand(i, otherRes); });
-          newType = srcType;
-          break;
-        }
         if (auto otherCl =
                 otherArg.getDefiningOp<imex::util::ChangeLayoutOp>()) {
           auto otherSrc = otherCl.getSource();
@@ -876,6 +884,36 @@ struct ChangeLayoutIf : public mlir::OpRewritePattern<mlir::scf::YieldOp> {
             break;
           }
         }
+
+        bool outerBreak = false;
+        for (auto dstType : {srcType, getFullyDynamicType(srcType)}) {
+          if (!dstType)
+            continue;
+
+          if (canTransformLayoutCast(origType, dstType)) {
+            if (srcType != dstType) {
+              rewriter.setInsertionPoint(clYield);
+              src = rewriter.create<mlir::memref::CastOp>(clYield.getLoc(),
+                                                          dstType, src);
+            }
+
+            rewriter.updateRootInPlace(clYield,
+                                       [&]() { clYield.setOperand(i, src); });
+
+            rewriter.setInsertionPoint(otherYield);
+            auto otherRes = rewriter.createOrFold<mlir::memref::CastOp>(
+                otherYield.getLoc(), dstType, otherArg);
+
+            rewriter.updateRootInPlace(
+                otherYield, [&]() { otherYield.setOperand(i, otherRes); });
+            newType = dstType;
+            outerBreak = true;
+            break;
+          }
+        }
+
+        if (outerBreak)
+          break;
       }
 
       if (!newType) {

@@ -416,8 +416,7 @@ public:
       auto dstShaped = op->getResult(0).getType().cast<mlir::ShapedType>();
       auto res =
           ShapeValue::intersect(ShapeValue{srcShaped}, ShapeValue{dstShaped});
-      res = ShapeValue::intersect(operands.front()->getValue(),
-                                  ShapeValue{dstShaped});
+      res = ShapeValue::intersect(operands.front()->getValue(), res);
 
       LLVM_DEBUG(llvm::dbgs()
                  << "ShapeValueAnalysis: Shaped cast: " << res << "\n");

@@ -983,6 +983,12 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
       reassoc[std::max(0, currInd)].emplace_back(i);
     }
 
+    shape.resize(static_cast<unsigned>(srcType.getRank()),
+                 mlir::ShapedType::kDynamicSize);
+    auto dynShapeType = srcType.clone(shape);
+    if (dynShapeType != srcType)
+      srcVal = builder.create<mlir::tensor::CastOp>(loc, dynShapeType, srcVal);
+
     auto expandType = resultType.clone(expandShape);
     mlir::Value res = builder.create<mlir::tensor::ExpandShapeOp>(
         loc, expandType, srcVal, reassoc);
@@ -1141,6 +1147,14 @@ static py::object insertImpl(py::capsule context, py::handle src,
   llvm::SmallVector<mlir::Value> sizesVec(offsetsVec.size());
   for (auto i : llvm::seq<size_t>(0, sizesVec.size()))
     sizesVec[i] = builder.createOrFold<mlir::tensor::DimOp>(loc, srcTensor, i);
+
+  auto srcShapedType = srcTensor.getType().cast<mlir::ShapedType>();
+  auto rank = static_cast<unsigned>(srcShapedType.getRank());
+  llvm::SmallVector<int64_t> dynShape(rank, mlir::ShapedType::kDynamicSize);
+  auto newShapedType = srcShapedType.clone(dynShape);
+  if (srcShapedType != newShapedType)
+    srcTensor =
+        builder.create<mlir::tensor::CastOp>(loc, newShapedType, srcTensor);
 
   auto res =
       builder

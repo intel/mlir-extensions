@@ -587,7 +587,7 @@ def test_copy_fusion():
         assert ir.count("scf.parallel") == 1, ir
 
 
-def test_broadcast_fusion():
+def test_broadcast_fusion1():
     def py_func(a):
         return a + a * a
 
@@ -598,6 +598,32 @@ def test_broadcast_fusion():
         assert_equal(py_func(a), jit_func(a))
         ir = get_print_buffer()
         assert ir.count("scf.parallel") == 1, ir
+
+
+_broadcast_fusion_shapes = [
+    (1, 1),
+    (1, 7),
+    (7, 1),
+    (7, 7),
+]
+
+
+@pytest.mark.parametrize("a_shape", _broadcast_fusion_shapes)
+@pytest.mark.parametrize("b_shape", _broadcast_fusion_shapes)
+@pytest.mark.parametrize("c_shape", _broadcast_fusion_shapes)
+def test_broadcast_fusion2(a_shape, b_shape, c_shape):
+    def py_func(a, b, c):
+        return a + b * c
+
+    jit_func = njit(py_func)
+    a = np.arange(math.prod(a_shape)).reshape(a_shape)
+    b = np.arange(math.prod(b_shape)).reshape(b_shape)
+    c = np.arange(math.prod(c_shape)).reshape(c_shape)
+
+    with print_pass_ir([], ["PostLinalgOptPass"]):
+        assert_equal(py_func(a, b, c), jit_func(a, b, c))
+        ir = get_print_buffer()
+        assert ir.count("scf.parallel") <= 1, ir
 
 
 @pytest.mark.parametrize("dtype", [np.int32, np.int64, np.float32])

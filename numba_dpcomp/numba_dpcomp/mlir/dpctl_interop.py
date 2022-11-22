@@ -23,7 +23,8 @@ if _is_dpctl_available:
     from numba.np import numpy_support
 
     from numba.core.datamodel.models import StructModel
-    from numba.core.types.npytypes import Array
+
+    from . import array_type
 
     def _get_filter_string(array):
         if isinstance(array, usm_ndarray):
@@ -31,7 +32,7 @@ if _is_dpctl_available:
 
         return None
 
-    class USMNdArrayBaseType(Array):
+    class USMNdArrayBaseType(array_type.FixedArray):
         """
         Type class for DPPY arrays.
         """
@@ -41,6 +42,7 @@ if _is_dpctl_available:
             dtype,
             ndim,
             layout,
+            fixed_dims,
             readonly=False,
             name=None,
             aligned=True,
@@ -50,6 +52,7 @@ if _is_dpctl_available:
                 dtype,
                 ndim,
                 layout,
+                fixed_dims,
                 readonly=readonly,
                 name=name,
                 aligned=aligned,
@@ -70,20 +73,14 @@ if _is_dpctl_available:
                 dtype=dtype,
                 ndim=ndim,
                 layout=layout,
+                fixed_dims=(None,) * ndim,
                 readonly=readonly,
                 aligned=self.aligned,
             )
 
         @property
         def key(self):
-            return (
-                self.dtype,
-                self.ndim,
-                self.layout,
-                self.mutable,
-                self.aligned,
-                self.filter_string,
-            )
+            return super().key + (self.filter_string,)
 
         @property
         def box_type(self):
@@ -120,6 +117,7 @@ if _is_dpctl_available:
             ndim,
             layout,
             usm_type,
+            fixed_dims,
             readonly=False,
             name=None,
             aligned=True,
@@ -132,6 +130,7 @@ if _is_dpctl_available:
                 dtype,
                 ndim,
                 layout,
+                fixed_dims,
                 readonly=readonly,
                 name=name,
                 filter_string=filter_string,
@@ -151,15 +150,17 @@ if _is_dpctl_available:
             dtype = numpy_support.from_dtype(val.dtype)
         except NotImplementedError:
             raise ValueError("Unsupported array dtype: %s" % (val.dtype,))
-        layout = "C"
+        layout = "A"  # TODO: infer layout
         readonly = False
         filter_string = _get_filter_string(val)
         assert filter_string is not None
+        fixed_dims = array_type.get_fixed_dims(val.shape)
         return USMNdArrayType(
             dtype,
             val.ndim,
             layout,
             val.usm_type,
+            fixed_dims,
             readonly=readonly,
             filter_string=filter_string,
         )
