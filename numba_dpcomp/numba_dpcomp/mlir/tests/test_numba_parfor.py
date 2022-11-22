@@ -303,6 +303,7 @@ def _gen_tests():
                 func = getattr(inst, func_name)
                 if callable(func):
                     func = _gen_test_func(func)
+                    func = pytest.mark.numba_parfor(func)
                     if func_name in xfail_tests:
                         func = pytest.mark.xfail(func)
                     elif func_name in skip_tests:
