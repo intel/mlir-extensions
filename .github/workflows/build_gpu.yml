@@ -89,4 +89,4 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: tests.txt
-          path: mlir-extensions/build/tests.txt
+          path: ${{env.HOME_DIR}}/mlir-extensions/build/tests.txt
