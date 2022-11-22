@@ -22,6 +22,7 @@
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/GPU/Transforms/ParallelLoopMapper.h>
 #include <mlir/Dialect/GPU/Transforms/Passes.h>
+#include <mlir/Dialect/Linalg/Utils/Utils.h>
 #include <mlir/Dialect/Math/IR/Math.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
@@ -1740,9 +1741,23 @@ struct TileParallelOp : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
         op->hasAttr(mlir::gpu::getMappingAttrName()))
       return mlir::failure();
 
-    // Reductions is not supported yet.
-    if (!op.getBody()->getOps<mlir::scf::ReduceOp>().empty())
-      return mlir::failure();
+    auto reductionOps =
+        llvm::to_vector(op.getBody()->getOps<mlir::scf::ReduceOp>());
+    mlir::ValueRange initVals = op.getInitVals();
+    assert(reductionOps.size() == initVals.size());
+
+    llvm::SmallVector<mlir::Attribute> neutralValues;
+    for (auto reduction : reductionOps) {
+      auto body = reduction.getRegion().front().without_terminator();
+      if (!llvm::hasSingleElement(body))
+        return mlir::failure();
+
+      auto neutralValue = mlir::linalg::getNeutralElement(&(*body.begin()));
+      if (!neutralValue)
+        return mlir::failure();
+
+      neutralValues.emplace_back(*neutralValue);
+    }
 
     auto oldLowerBounds = op.getLowerBound();
     auto oldUpperBounds = op.getUpperBound();
@@ -1811,7 +1826,6 @@ struct TileParallelOp : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
       newSteps.emplace_back(oldSteps[i]);
     }
 
-    auto initVals = op.getInitVals();
     auto newOp = rewriter.create<mlir::scf::ParallelOp>(
         loc, newLowerBounds, newUpperBounds, newSteps, initVals);
     mlir::Block *originalBlock = op.getBody();
@@ -1819,6 +1833,7 @@ struct TileParallelOp : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
 
     mlir::Value inBounds;
     llvm::SmallVector<mlir::Value> argMapping(oldLoopsCount);
+    mlir::scf::IfOp ifOp;
     {
       mlir::OpBuilder::InsertionGuard g(rewriter);
       rewriter.setInsertionPointToStart(newBlock);
@@ -1844,12 +1859,53 @@ struct TileParallelOp : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
           argMapping[i] = newBlock->getArgument(i + maxLoops * 2 - numLoops);
         }
       }
-
       assert(inBounds);
-      auto ifOp = rewriter.create<mlir::scf::IfOp>(loc, llvm::None, inBounds);
+
+      ifOp = [&]() -> mlir::scf::IfOp {
+        if (!reductionOps.empty()) {
+          auto thenBuilder = &mlir::scf::buildTerminatedBody;
+          auto elseBuilder = [&](mlir::OpBuilder &b, mlir::Location l) {
+            llvm::SmallVector<mlir::Value> results;
+            for (auto [i, val] : llvm::enumerate(initVals)) {
+              auto constVal =
+                  b.create<mlir::arith::ConstantOp>(l, neutralValues[i]);
+              results.emplace_back(constVal);
+            }
+            b.create<mlir::scf::YieldOp>(l, results);
+          };
+          return rewriter.create<mlir::scf::IfOp>(
+              loc, initVals.getTypes(), inBounds, thenBuilder, elseBuilder);
+        } else {
+          return rewriter.create<mlir::scf::IfOp>(loc, llvm::None, inBounds);
+        }
+      }();
+
       newBlock = ifOp.thenBlock();
     }
     rewriter.eraseOp(newBlock->getTerminator()); // Erase exisitng yield.
+    if (!reductionOps.empty()) {
+      mlir::BlockAndValueMapping mapper;
+      mapper.map(originalBlock->getArguments(), argMapping);
+      mlir::OpBuilder::InsertionGuard g(rewriter);
+      auto loc = originalBlock->getTerminator()->getLoc();
+      rewriter.eraseOp(originalBlock->getTerminator());
+      rewriter.setInsertionPointToEnd(originalBlock);
+      llvm::SmallVector<mlir::Value> results;
+      for (auto [i, val] : llvm::enumerate(initVals)) {
+        auto reductionArg =
+            mapper.lookupOrDefault(reductionOps[i].getOperand());
+        results.emplace_back(reductionArg);
+      }
+      rewriter.create<mlir::scf::YieldOp>(loc, results);
+
+      rewriter.setInsertionPointAfter(ifOp);
+      auto ifResults = ifOp.getResults();
+      for (auto [i, reductionOp] : llvm::enumerate(reductionOps)) {
+        mapper.map(reductionOp.getOperand(), ifResults[i]);
+        rewriter.clone(*reductionOp, mapper);
+        rewriter.eraseOp(reductionOp);
+      }
+    }
     rewriter.mergeBlocks(originalBlock, newBlock, argMapping);
     rewriter.replaceOp(op, newOp->getResults());
 
