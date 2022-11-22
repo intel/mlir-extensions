@@ -5,7 +5,7 @@
 // RUN-GPU: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-llvm.pp \
 // RUN-GPU:                                       --runner mlir-cpu-runner -e main \
 // RUN-GPU:                                       --entry-point-result=void \
-// RUN-GPU:                                       --shared-libs=%mlir_runner_utils,%sycl_runtime | FileCheck %s
+// RUN-GPU:                                       --shared-libs=%mlir_runner_utils,%levelzero_runtime | FileCheck %s
 
 module @linalg_matmul{
 func.func @matmul(%arg0: tensor<5x3xf32>, %arg1: tensor<3x2xf32>) -> (tensor<5x2xf32>) {
