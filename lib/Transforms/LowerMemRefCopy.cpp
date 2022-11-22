@@ -1,5 +1,4 @@
-//===- LowerMemRefCopy.cpp - lower memref.copy pass --------------*- C++
-//-*-===//
+//===- LowerMemRefCopy.cpp - lower memref.copy pass --------*- C++ -*-===//
 //
 // Copyright 2022 Intel Corporation
 // Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -45,14 +44,14 @@ struct LowerMemRefCopy
             return WalkResult::skip();
           auto src = op.getSource();
           auto dst = op.getTarget();
-          // supposed to work on memref type
+          // supposed to work on same memref type
           auto srcType = src.getType().cast<MemRefType>();
           auto dstType = dst.getType().cast<MemRefType>();
-          if (!srcType || !dstType || srcType != dstType)
+          if (srcType != dstType)
             return WalkResult::skip();
           // supposed to work on memref.alloc
-          auto srcOp = cast<memref::AllocOp>(src.getDefiningOp());
-          auto dstOp = cast<memref::AllocOp>(dst.getDefiningOp());
+          auto srcOp = src.getDefiningOp<memref::AllocOp>();
+          auto dstOp = dst.getDefiningOp<memref::AllocOp>();
           if (!srcOp || !dstOp)
             return WalkResult::skip();
           // check use of src after this copyOp, being conservative
@@ -72,12 +71,11 @@ struct LowerMemRefCopy
           if (hasSubsequentUse) {
             OpBuilder builder(op);
             linalg::makeMemRefCopyOp(builder, op.getLoc(), src, dst);
-            op.erase();
           } else {
             // coalesce buffer
             dst.replaceAllUsesWith(src);
-            op.erase();
           }
+          op.erase();
           return WalkResult::advance();
         });
   }
