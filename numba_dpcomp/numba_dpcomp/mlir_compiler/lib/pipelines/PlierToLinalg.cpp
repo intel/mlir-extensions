@@ -78,6 +78,54 @@ static int64_t getOptLevel(mlir::Operation *op) {
   return std::max(static_cast<int64_t>(0), attr.getInt());
 }
 
+static bool optimizeSimpleLoads(mlir::Operation *op) {
+  bool changed = false;
+
+  mlir::DominanceInfo dom;
+  op->walk([&](mlir::memref::LoadOp load) {
+    auto memref = load.getMemRef();
+    auto src = memref.getDefiningOp();
+    if (!mlir::isa_and_nonnull<mlir::memref::AllocOp, mlir::memref::AllocaOp>(
+            src))
+      return;
+
+    mlir::memref::StoreOp store;
+    for (auto user : src->getUsers()) {
+      if (mlir::isa<mlir::memref::DeallocOp, mlir::memref::LoadOp>(user))
+        continue;
+
+      auto reshape = mlir::dyn_cast<mlir::memref::ReshapeOp>(user);
+      if (reshape && reshape.getShape() == memref)
+        continue;
+
+      if (mlir::isa<mlir::memref::DeallocOp, mlir::memref::LoadOp>(user))
+        continue;
+
+      auto newStore = mlir::dyn_cast<mlir::memref::StoreOp>(user);
+      if (!newStore || !dom.properlyDominates(newStore, load))
+        return;
+
+      if (load.getType() != newStore.getValueToStore().getType() ||
+          load.getIndices() != newStore.getIndices())
+        continue;
+
+      if (store && dom.properlyDominates(store, newStore))
+        continue;
+
+      store = newStore;
+    }
+
+    if (!store)
+      return;
+
+    load.getResult().replaceAllUsesWith(store.getValueToStore());
+    load->erase();
+    changed = true;
+  });
+
+  return changed;
+}
+
 static mlir::LogicalResult applyOptimizations(
     mlir::func::FuncOp op, const mlir::FrozenRewritePatternSet &patterns,
     mlir::AnalysisManager am,
@@ -91,20 +139,21 @@ static mlir::LogicalResult applyOptimizations(
       repeat = true;
 
     auto memOptRes = imex::optimizeMemoryOps(am);
-    if (!memOptRes) {
-      op.emitError() << "Failed to build memssa analysis";
-      return mlir::failure();
-    }
-    if (mlir::succeeded(*memOptRes)) {
-      repeat = true;
-    }
+    if (!memOptRes)
+      return op.emitError() << "Failed to build memssa analysis";
 
-    if (additionalOpts && mlir::succeeded(additionalOpts(op))) {
+    if (mlir::succeeded(*memOptRes))
       repeat = true;
-    }
-    if (repeat) {
+
+    if (optimizeSimpleLoads(op))
+      repeat = true;
+
+    if (additionalOpts && mlir::succeeded(additionalOpts(op)))
+      repeat = true;
+
+    if (repeat)
       am.invalidate({});
-    }
+
   } while (repeat);
   return mlir::success();
 }
