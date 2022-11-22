@@ -172,7 +172,13 @@ jobs:
         shell: bash -l {0}
         run: |
           cd $HOME_DIR/frameworks.ai.mlir.mlir-extensions/_build || exit 1
-          cmake --build . --target check-imex || exit 1
+          cmake --build . --target check-imex > tests.txt
+
+      - name: Upload tests.txt
+        uses: actions/upload-artifact@v2
+        with:
+          name: tests.txt
+          path: frameworks.ai.mlir.mlir-extensions/_build/tests.txt
 
       - name: Build doxygen docs
         shell: bash -l {0}
