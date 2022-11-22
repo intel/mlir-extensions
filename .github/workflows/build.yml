@@ -206,7 +206,7 @@ jobs:
 
         run: |
           cd numba_dpcomp
-          conda create -y -n test-env python=${{ matrix.python }} "pip>=22" numba=0.56 numpy=1.20 scikit-learn pytest-xdist ninja scipy pybind11 pytest lit tbb=${TBB_VER} cmake -c conda-forge
+          conda create -y -n test-env python=${{ matrix.python }} "pip>=22" numba=0.56 numpy scikit-learn pytest-xdist ninja scipy pybind11 pytest lit tbb=${TBB_VER} cmake -c conda-forge
           conda info
           source $CONDA/bin/activate test-env
           conda list
@@ -249,7 +249,7 @@ jobs:
 
         run: |
           cd numba_dpcomp_wheels
-          conda create -y -n wheels-test-env python=${{ matrix.python }} numba=0.56 numpy=1.20 scikit-learn pytest-xdist ninja scipy pybind11 pytest lit tbb=${TBB_VER} cmake -c conda-forge
+          conda create -y -n wheels-test-env python=${{ matrix.python }} numba=0.56 numpy scikit-learn pytest-xdist ninja scipy pybind11 pytest lit tbb=${TBB_VER} cmake -c conda-forge
           conda info
           source $CONDA/bin/activate wheels-test-env
           conda list
