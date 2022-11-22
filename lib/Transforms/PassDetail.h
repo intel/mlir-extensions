@@ -30,6 +30,10 @@ class SPIRVDialect;
 namespace scf {
 class SCFDialect;
 }
+
+namespace linalg {
+class LinalgDialect;
+}
 } // end namespace mlir
 
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
