@@ -64,7 +64,7 @@ ninja install
 Building and testing Python package
 ```Bash
 cd numba_dpcomp
-conda create -n test-env python=3.9 numba=0.56 numpy=1.20 scikit-learn pytest-xdist ninja scipy pybind11 pytest lit tbb=2021.6.0 cmake -c conda-forge
+conda create -n test-env python=3.9 numba=0.56 numpy=1.22 "setuptools<65.6" scikit-learn pytest-xdist ninja scipy pybind11 pytest lit tbb=2021.6.0 cmake -c conda-forge
 conda activate test-env
 export TBB_PATH=<...>/tbb
 export LLVM_PATH=<...>/llvm-install
