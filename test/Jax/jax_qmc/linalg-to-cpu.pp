@@ -1,10 +1,10 @@
 # linalg dialect to gpu dialect lowering pipeline
-inline
+builtin.module(inline
 convert-tensor-to-linalg
 convert-elementwise-to-linalg
 arith-bufferize
 func.func(empty-tensor-to-alloc-tensor
-          eliminate-alloc-tensors
+          eliminate-empty-tensors
           scf-bufferize
           shape-bufferize
           linalg-bufferize
@@ -22,5 +22,5 @@ convert-complex-to-llvm
 convert-index-to-llvm
 convert-memref-to-llvm
 convert-func-to-llvm
-reconcile-unrealized-casts
+reconcile-unrealized-casts)
 # End
