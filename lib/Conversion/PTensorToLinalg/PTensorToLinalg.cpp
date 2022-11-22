@@ -512,7 +512,9 @@ struct ReductionOpLowering
         loc, inpTnsrTyp, op.getInput());
 
     // Get signless operands into vec
-    llvm::SmallVector<mlir::Value, 1> oprnds = {inpTnsr};
+    llvm::SmallVector<mlir::Value, 1> oprnds = {
+        rewriter.create<::mlir::bufferization::ToTensorOp>(
+            loc, inpPtTyp.getTensorType(), inpTnsr)};
 
     // determine resulting element type from converted op-type
     auto retPtTyp =
