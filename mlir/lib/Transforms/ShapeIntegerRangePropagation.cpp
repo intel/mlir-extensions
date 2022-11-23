@@ -5,6 +5,7 @@
 #include "imex/Transforms/ShapeIntegerRangePropagation.hpp"
 
 #include "imex/Dialect/imex_util/Dialect.hpp"
+#include "imex/Dialect/ntensor/IR/NTensorOps.hpp"
 
 #include <llvm/Support/Debug.h>
 #include <mlir/Analysis/DataFlow/DeadCodeAnalysis.h>
@@ -184,6 +185,10 @@ struct ShapeValueLattice : public mlir::dataflow::Lattice<ShapeValue> {
 };
 
 static bool isShapedCast(mlir::Operation *op) {
+  if (mlir::isa<imex::ntensor::FromTensorOp, imex::ntensor::ToTensorOp,
+                imex::ntensor::FromMemrefOp, imex::ntensor::ToMemrefOp>(op))
+    return true;
+
   return mlir::isa<mlir::CastOpInterface>(op) && op->getNumOperands() == 1 &&
          op->getNumResults() == 1 &&
          mlir::isa<mlir::ShapedType>(op->getOperand(0).getType()) &&
@@ -714,6 +719,7 @@ struct ShapeIntegerRangePropagationPass
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<imex::util::ImexUtilDialect>();
+    registry.insert<imex::ntensor::NTensorDialect>();
     registry.insert<mlir::arith::ArithDialect>();
     registry.insert<mlir::tensor::TensorDialect>();
     registry.insert<mlir::linalg::LinalgDialect>();
