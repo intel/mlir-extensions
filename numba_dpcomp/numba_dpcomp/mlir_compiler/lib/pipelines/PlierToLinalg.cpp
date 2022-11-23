@@ -2317,15 +2317,15 @@ struct OptimizeSingleElemCopy
   }
 };
 
-struct PostPlierToLinalgPass
-    : public mlir::PassWrapper<PostPlierToLinalgPass,
+struct PostPlierToLinalgInnerPass
+    : public mlir::PassWrapper<PostPlierToLinalgInnerPass,
                                mlir::OperationPass<void>> {
-  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(PostPlierToLinalgPass)
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(PostPlierToLinalgInnerPass)
 
   void runOnOperation() override;
 };
 
-void PostPlierToLinalgPass::runOnOperation() {
+void PostPlierToLinalgInnerPass::runOnOperation() {
   auto &context = getContext();
   mlir::RewritePatternSet patterns(&context);
 
@@ -2854,10 +2854,13 @@ static void populatePlierToLinalgGenPipeline(mlir::OpPassManager &pm) {
   pm.addPass(imex::createForceInlinePass());
   pm.addPass(mlir::createSymbolDCEPass());
   pm.addPass(std::make_unique<MarkInputShapesRanges>());
-  pm.addPass(imex::createShapeIntegerRangePropagationPass());
-  pm.addNestedPass<mlir::func::FuncOp>(
-      std::make_unique<PostPlierToLinalgPass>());
-  pm.addNestedPass<mlir::func::FuncOp>(mlir::createCSEPass());
+  pm.addPass(
+      createCompositePass("PostPlierToLinalgPass", [](mlir::OpPassManager &p) {
+        p.addPass(imex::createShapeIntegerRangePropagationPass());
+        p.addNestedPass<mlir::func::FuncOp>(mlir::createCSEPass());
+        p.addNestedPass<mlir::func::FuncOp>(
+            std::make_unique<PostPlierToLinalgInnerPass>());
+      }));
 }
 
 static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
