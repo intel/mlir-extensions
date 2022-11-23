@@ -2502,10 +2502,9 @@ struct MarkContigiousArraysPass
   }
 };
 
-struct LinalgOptPass
-    : public mlir::PassWrapper<LinalgOptPass,
-                               mlir::OperationPass<mlir::ModuleOp>> {
-  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LinalgOptPass)
+struct LinalgOptInnerPass
+    : public mlir::PassWrapper<LinalgOptInnerPass, mlir::OperationPass<void>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LinalgOptInnerPass)
 
   void runOnOperation() override;
 };
@@ -2514,7 +2513,7 @@ static bool defaultControlFusionFn(mlir::OpOperand * /*fusedOperand*/) {
   return true;
 }
 
-void LinalgOptPass::runOnOperation() {
+void LinalgOptInnerPass::runOnOperation() {
   auto &context = getContext();
   mlir::RewritePatternSet patterns(&context);
 
@@ -2913,8 +2912,11 @@ static void populatePlierToLinalgGenPipeline(mlir::OpPassManager &pm) {
 }
 
 static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
-  pm.addPass(mlir::createCanonicalizerPass());
-  pm.addPass(std::make_unique<LinalgOptPass>());
+  pm.addPass(createCompositePass("LinalgOptPass", [](mlir::OpPassManager &p) {
+    p.addPass(imex::createShapeIntegerRangePropagationPass());
+    p.addNestedPass<mlir::func::FuncOp>(mlir::createCSEPass());
+    p.addNestedPass<mlir::func::FuncOp>(std::make_unique<LinalgOptInnerPass>());
+  }));
 
   pm.addPass(imex::createNtensorToMemrefPass());
   pm.addPass(mlir::createCanonicalizerPass());
