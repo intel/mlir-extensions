@@ -2800,15 +2800,15 @@ struct LowerCopyOpsPass
     : public imex::RewriteWrapperPass<LowerCopyOpsPass, void, void,
                                       ReplaceMemrefCopy> {};
 
-struct PostLinalgOptPass
-    : public mlir::PassWrapper<PostLinalgOptPass,
+struct PostLinalgOptInnerPass
+    : public mlir::PassWrapper<PostLinalgOptInnerPass,
                                mlir::OperationPass<mlir::func::FuncOp>> {
-  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(PostLinalgOptPass)
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(PostLinalgOptInnerPass)
 
   void runOnOperation() override;
 };
 
-void PostLinalgOptPass::runOnOperation() {
+void PostLinalgOptInnerPass::runOnOperation() {
   auto func = getOperation();
   auto optLevel = getOptLevel(func);
   if (0 == optLevel)
@@ -2919,10 +2919,14 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
 
   pm.addPass(imex::createShapeIntegerRangePropagationPass());
   pm.addNestedPass<mlir::func::FuncOp>(mlir::createCanonicalizerPass());
-  pm.addNestedPass<mlir::func::FuncOp>(mlir::createCSEPass());
-  // ToDo: This pass also tries to do some simple fusion, whic should be split
-  // in separate pass
-  pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<PostLinalgOptPass>());
+  pm.addPass(
+      createCompositePass("PostLinalgOptPass", [](mlir::OpPassManager &p) {
+        p.addNestedPass<mlir::func::FuncOp>(mlir::createCSEPass());
+        // ToDo: This pass also tries to do some simple fusion, whic should be
+        // split in separate pass
+        p.addNestedPass<mlir::func::FuncOp>(
+            std::make_unique<PostLinalgOptInnerPass>());
+      }));
 
   pm.addNestedPass<mlir::func::FuncOp>(
       std::make_unique<FixDeallocPlacementPass>());
