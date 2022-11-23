@@ -103,6 +103,7 @@ static void runOptimizationPasses(llvm::Module &M, llvm::TargetMachine &TM) {
         });
   }
 
+  // Register all the basic analyses with the managers.
   pb.registerModuleAnalyses(mam);
   pb.registerCGSCCAnalyses(cgam);
   pb.registerFunctionAnalyses(fam);
