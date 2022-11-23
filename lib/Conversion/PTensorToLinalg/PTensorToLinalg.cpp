@@ -40,6 +40,7 @@
 #include <mlir/Dialect/Func/Transforms/FuncConversions.h>
 #include <mlir/Dialect/LLVMIR/LLVMDialect.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
+#include <mlir/Dialect/Linalg/Utils/Utils.h>
 // #include <mlir/Dialect/memref/IR/MemRef.h>
 #include <mlir/Dialect/Bufferization/IR/Bufferization.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
@@ -219,7 +220,9 @@ struct InsertSliceLowering
     // rewriter.create<::mlir::bufferization::ToMemrefOp>(loc, srcMRTyp, src);
     // auto viewMR = rewriter.create<::mlir::bufferization::ToMemrefOp>(loc,
     // viewMRTyp, view);
-    rewriter.replaceOpWithNewOp<::mlir::memref::CopyOp>(op, src, view);
+    rewriter.replaceOp(
+        op, ::mlir::linalg::makeMemRefCopyOp(rewriter, loc, src, view)
+                .getResults());
     return ::mlir::success();
   }
 };

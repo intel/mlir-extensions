@@ -9,8 +9,8 @@ func-bufferize
 func.func(finalizing-bufferize
           convert-linalg-to-parallel-loops)
 canonicalize
-func.func(lower-affine)
 fold-memref-alias-ops
+lower-affine
 convert-scf-to-cf
 convert-memref-to-llvm
 convert-func-to-llvm

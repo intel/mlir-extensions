@@ -8,7 +8,7 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// This file declares the utils for the ist dialect.
+/// This file declares the utils for the dist dialect.
 ///
 //===----------------------------------------------------------------------===//
 
@@ -25,21 +25,22 @@
 
 namespace imex {
 
+/// get dyn-sized mlir::RankedTensorType for given rank and elType
 inline auto getTensorType(::mlir::MLIRContext *ctxt, int64_t rank,
                           ::mlir::Type elType) {
-  //   static auto dynStride = mlir::ShapedType::kDynamicStrideOrOffset;
-  //   auto layout = mlir::StridedLayoutAttr::get(ctxt, dynStride,
-  //   ::mlir::SmallVector<int64_t>(rank, dynStride));
   return ::mlir::RankedTensorType::get(std::vector<int64_t>(rank, -1),
                                        elType); //, layout);
 }
 
+/// create an empty RankedTensor with tiven shape and elType
 inline auto createEmptyTensor(::mlir::OpBuilder &builder, ::mlir::Location loc,
                               ::mlir::Type elType, ::mlir::ValueRange shp) {
   return builder.create<::mlir::tensor::EmptyOp>(
       loc, getTensorType(builder.getContext(), shp.size(), elType), shp);
 }
 
+/// get dyn-sized mlir::RankedTensorType for given rank and elType
+/// if strided==true make it a strided layout
 inline auto getMemRefType(::mlir::MLIRContext *ctxt, int64_t rank,
                           ::mlir::Type elType, bool strided = true) {
   static auto dynStride = ::mlir::ShapedType::kDynamicStrideOrOffset;
@@ -50,33 +51,25 @@ inline auto getMemRefType(::mlir::MLIRContext *ctxt, int64_t rank,
                                          : ::mlir::StridedLayoutAttr{});
 }
 
+/// Create a 1d MemRef alloc with given size and elType
 inline auto createAllocMR(::mlir::OpBuilder &builder, ::mlir::Location loc,
-                          ::mlir::Type elType, ::mlir::ValueRange shp,
-                          bool strided = true) {
+                          ::mlir::Type elType, int64_t sz) {
   return builder.create<::mlir::memref::AllocOp>(
-      loc, getMemRefType(builder.getContext(), shp.size(), elType, strided),
-      shp, builder.getI64IntegerAttr(8));
+      loc, ::mlir::MemRefType::get({sz}, elType), builder.getI64IntegerAttr(8));
 }
 
+/// Create a 1d MemRef from given elements and elType
 inline ::mlir::Value createMemRefFromElements(::mlir::OpBuilder &builder,
                                               ::mlir::Location loc,
                                               ::mlir::Type elType,
                                               ::mlir::ValueRange elts) {
   int64_t N = elts.size();
-  auto n = createIndex(loc, builder, N);
-  auto mr = createAllocMR(builder, loc, elType, {n}, false);
+  auto mr = createAllocMR(builder, loc, elType, N);
   for (auto i = 0; i < N; ++i) {
     auto idx = createIndex(loc, builder, i);
     (void)builder.create<::mlir::memref::StoreOp>(loc, elts[i], mr, idx);
   }
-  // auto dynStride = mlir::ShapedType::kDynamicStrideOrOffset;
-  // auto layout = mlir::StridedLayoutAttr::get(builder.getContext(), dynStride,
-  // ::mlir::SmallVector<int64_t>(N, dynStride));
-  return builder
-      .create<::mlir::UnrealizedConversionCastOp>(
-          loc, ::mlir::MemRefType::get({N}, elType /*, layout*/),
-          mr.getResult())
-      .getResult(0);
+  return mr;
 }
 
 } // namespace imex
