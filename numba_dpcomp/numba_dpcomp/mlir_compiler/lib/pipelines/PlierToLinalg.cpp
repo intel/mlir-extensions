@@ -2359,9 +2359,9 @@ struct CompositePass
         return signalPassFailure();
 
       if (currentIter++ >= maxIters) {
-        op->emitError("Composite pass didn't converge in " +
-                      llvm::Twine(maxIters) + " iterations");
-        return signalPassFailure();
+        op->emitWarning("Composite pass didn't converge in " +
+                        llvm::Twine(maxIters) + " iterations");
+        break;
       }
 
       mlir::OperationFingerPrint newFp(op);
