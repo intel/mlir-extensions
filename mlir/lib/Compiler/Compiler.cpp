@@ -26,12 +26,12 @@ struct PassManagerStage {
       : pm(&ctx) {
     pm.enableVerifier(settings.verify);
 
-    if (settings.passStatistics) {
+    if (settings.passStatistics)
       pm.enableStatistics();
-    }
-    if (settings.passTimings) {
+
+    if (settings.passTimings)
       pm.enableTiming();
-    }
+
     if (settings.irDumpStderr) {
       ctx.disableMultithreading();
       pm.enableIRPrinting();
@@ -73,9 +73,8 @@ struct PassManagerStage {
       for (auto &it : jumps) {
         for (auto name : names) {
           auto str = name.cast<mlir::StringAttr>();
-          if (it.first == str) {
+          if (it.first == str)
             return {it.second, str};
-          }
         }
       }
     }
@@ -113,15 +112,15 @@ struct PassManagerSchedule {
       llvm::SmallVector<StageDesc, 64> stagesTemp;
       std::unordered_map<const void *, PassManagerStage *> stages_map;
 
-      auto add_stage = [&](llvm::StringRef name,
-                           llvm::ArrayRef<llvm::StringRef> jumps,
-                           auto pm_init_func) {
+      auto addStage = [&](llvm::StringRef name,
+                          llvm::ArrayRef<llvm::StringRef> jumps,
+                          auto pmInitFunc) {
         assert(!name.empty());
         auto prevStage =
             (stages_map.empty() ? nullptr : stagesTemp.back().stage.get());
         stagesTemp.push_back(
             {name, jumps,
-             std::make_unique<PassManagerStage>(ctx, settings, pm_init_func)});
+             std::make_unique<PassManagerStage>(ctx, settings, pmInitFunc)});
         assert(stages_map.count(name.data()) == 0);
         stages_map.insert({name.data(), stagesTemp.back().stage.get()});
         if (nullptr != prevStage) {
@@ -129,7 +128,7 @@ struct PassManagerSchedule {
         }
       };
 
-      sink(add_stage);
+      sink(addStage);
 
       for (auto &stage : stagesTemp) {
         for (auto jump : stage.jumps) {
@@ -156,9 +155,9 @@ struct PassManagerSchedule {
     auto current = stages[0].get();
     do {
       assert(nullptr != current);
-      if (mlir::failed(current->run(module))) {
+      if (mlir::failed(current->run(module)))
         return mlir::failure();
-      }
+
       auto markers = imex::getPipelineJumpMarkers(module);
       auto jumpTarget = current->get_jump(markers);
       if (nullptr != jumpTarget.first) {
