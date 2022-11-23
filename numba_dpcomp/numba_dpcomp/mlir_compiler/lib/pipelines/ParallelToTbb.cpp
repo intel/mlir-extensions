@@ -345,9 +345,15 @@ struct HoistBufferAllocs
 
       auto threadIndex = loopInfo->innermostParallel.getBodyThreadIndex();
       offsets[0] = threadIndex;
-      for (auto i : llvm::seq(0u, rank - 1))
-        sizes[i + 1] =
+      for (auto i : llvm::seq(0u, rank - 1)) {
+        auto val =
             rewriter.createOrFold<mlir::memref::DimOp>(loc, newMemref, i + 1);
+        if (auto fixed = mlir::getConstantIntValue(val)) {
+          sizes[i + 1] = rewriter.getIndexAttr(*fixed);
+        } else {
+          sizes[i + 1] = val;
+        }
+      }
 
       auto newType =
           mlir::memref::SubViewOp::inferRankReducedResultType(
@@ -355,6 +361,7 @@ struct HoistBufferAllocs
               .cast<mlir::MemRefType>();
       view = rewriter.create<mlir::memref::SubViewOp>(loc, newType, newMemref,
                                                       offsets, sizes, strides);
+
       if (view.getType() != oldType) {
         view = rewriter.create<imex::util::MemrefApplyOffsetOp>(loc, oldType,
                                                                 view);
