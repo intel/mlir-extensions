@@ -833,3 +833,26 @@ def test_builtin_funcs3(func, a, b, c):
     jit_func = njit(py_func)
 
     assert_equal(py_func(a, b, c), jit_func(a, b, c))
+
+
+def test_fastmath_indirect():
+    def py_func1(a, b, c):
+        return a + b * c
+
+    jit_func1 = njit(py_func1, fastmath=True)
+
+    def py_func2(a, b, c):
+        return jit_func1(a, b, c)
+
+    jit_func2 = njit(py_func2)
+
+    a, b, c = (2.0, 3.5, 4.7)
+    with print_pass_ir([], ["UpliftMathPass"]):
+        assert_equal(py_func1(a, b, c), jit_func1(a, b, c))
+        ir = get_print_buffer()
+        assert ir.count("math.fma") > 0, ir
+
+    with print_pass_ir([], ["UpliftMathPass"]):
+        assert_equal(py_func2(a, b, c), jit_func2(a, b, c))
+        ir = get_print_buffer()
+        assert ir.count("math.fma") > 0, ir

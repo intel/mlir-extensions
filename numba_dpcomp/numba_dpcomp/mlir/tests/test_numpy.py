@@ -1068,7 +1068,7 @@ def test_vectorize_indirect(arr):
     "arr",
     [
         np.array([[1, 2], [3, 4]]),
-        # np.array([[1,2],[3,4]]).T,
+        np.array([[1, 2], [3, 4]]).T,
     ],
 )
 def test_fortran_layout(arr):
