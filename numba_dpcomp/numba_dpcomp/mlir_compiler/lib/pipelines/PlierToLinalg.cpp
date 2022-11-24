@@ -367,7 +367,7 @@ struct ReshapeChangeLayout
     if (mlir::failed(mlir::getStridesAndOffset(dstType, strides, offset)))
       return mlir::failure();
 
-    auto loc = cl.getLoc();
+    auto loc = op.getLoc();
     auto sizesVals = getSizes(rewriter, loc, src);
     auto expectedStrides =
         computeIdentityStrides(rewriter, loc, srcType.getShape(), sizesVals);
