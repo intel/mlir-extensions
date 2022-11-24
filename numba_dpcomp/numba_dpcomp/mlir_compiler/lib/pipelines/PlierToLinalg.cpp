@@ -368,7 +368,6 @@ struct ReshapeChangeLayout
       return mlir::failure();
 
     auto loc = cl.getLoc();
-
     auto sizesVals = getSizes(rewriter, loc, src);
     auto expectedStrides =
         computeIdentityStrides(rewriter, loc, srcType.getShape(), sizesVals);
