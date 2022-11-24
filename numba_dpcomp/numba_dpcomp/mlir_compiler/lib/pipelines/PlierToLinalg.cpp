@@ -284,9 +284,66 @@ struct CleanupLoads : public mlir::OpRewritePattern<mlir::memref::LoadOp> {
   }
 };
 
+static auto getSizes(mlir::OpBuilder &builder, mlir::Location loc,
+                     mlir::Value src) {
+  auto shape = src.getType().cast<mlir::ShapedType>().getShape();
+
+  llvm::SmallVector<mlir::OpFoldResult> sizes(shape.size());
+  for (auto [i, dim] : llvm::enumerate(shape)) {
+    if (mlir::ShapedType::isDynamic(dim)) {
+      sizes[i] = builder.createOrFold<mlir::memref::DimOp>(loc, src, i);
+    } else {
+      sizes[i] = builder.getIndexAttr(dim);
+    }
+  }
+  return sizes;
+}
+
+static auto
+computeIdentityStrides(mlir::OpBuilder &builder, mlir::Location loc,
+                       llvm::ArrayRef<int64_t> shape,
+                       llvm::ArrayRef<mlir::OpFoldResult> dynamicSizes) {
+  auto rank = shape.size();
+  assert(dynamicSizes.size() == rank);
+
+  int64_t stride = 1;
+  llvm::SmallVector<mlir::OpFoldResult> expectedStrides(rank);
+  mlir::Value runningStride =
+      builder.create<mlir::arith::ConstantIndexOp>(loc, 1);
+  for (auto ii = rank; ii-- > 0;) {
+    auto i = static_cast<unsigned>(ii);
+    expectedStrides[i] = runningStride;
+
+    int64_t size = shape[i];
+    if (size == 0)
+      continue;
+
+    bool useSizeAsStride = (stride == 1);
+    if (size == mlir::ShapedType::kDynamicSize)
+      stride = mlir::ShapedType::kDynamicSize;
+    if (stride != mlir::ShapedType::kDynamicSize)
+      stride *= size;
+
+    auto sizeVal = dynamicSizes[i].get<mlir::Value>();
+    if (useSizeAsStride)
+      runningStride = sizeVal;
+    else if (stride == mlir::ShapedType::kDynamicSize)
+      runningStride =
+          builder.create<mlir::arith::MulIOp>(loc, runningStride, sizeVal);
+    else
+      runningStride = builder.create<mlir::arith::ConstantIndexOp>(loc, 1);
+  }
+
+  return expectedStrides;
+}
+
 struct ReshapeChangeLayout
     : public mlir::OpRewritePattern<mlir::memref::ReshapeOp> {
-  using OpRewritePattern::OpRewritePattern;
+
+  // Set high benefit, so it will run earlier than ReshapeToReinterpret.
+  ReshapeChangeLayout(mlir::MLIRContext *context)
+      : mlir::OpRewritePattern<mlir::memref::ReshapeOp>(context,
+                                                        /*benefit*/ 10) {}
 
   mlir::LogicalResult
   matchAndRewrite(mlir::memref::ReshapeOp op,
@@ -310,39 +367,10 @@ struct ReshapeChangeLayout
     if (mlir::failed(mlir::getStridesAndOffset(dstType, strides, offset)))
       return mlir::failure();
 
-    auto loc = cl.getLoc();
-
-    llvm::SmallVector<mlir::OpFoldResult> sizesVals(rank);
-    for (auto i : llvm::seq(0u, rank))
-      sizesVals[i] = rewriter.createOrFold<mlir::memref::DimOp>(loc, src, i);
-
-    int64_t stride = 1;
-    llvm::SmallVector<mlir::Value> expectedStrides(rank);
-    mlir::Value runningStride =
-        rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
-    for (auto ii = rank; ii-- > 0;) {
-      auto i = static_cast<unsigned>(ii);
-      expectedStrides[i] = runningStride;
-
-      int64_t size = dstType.getShape()[i];
-      if (size == 0)
-        continue;
-
-      bool useSizeAsStride = (stride == 1);
-      if (size == mlir::ShapedType::kDynamicSize)
-        stride = mlir::ShapedType::kDynamicSize;
-      if (stride != mlir::ShapedType::kDynamicSize)
-        stride *= size;
-
-      auto sizeVal = sizesVals[i].get<mlir::Value>();
-      if (useSizeAsStride)
-        runningStride = sizeVal;
-      else if (stride == mlir::ShapedType::kDynamicSize)
-        runningStride =
-            rewriter.create<mlir::arith::MulIOp>(loc, runningStride, sizeVal);
-      else
-        runningStride = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
-    }
+    auto loc = op.getLoc();
+    auto sizesVals = getSizes(rewriter, loc, src);
+    auto expectedStrides =
+        computeIdentityStrides(rewriter, loc, srcType.getShape(), sizesVals);
 
     mlir::OpFoldResult offsetVal = rewriter.getIndexAttr(offset);
 
@@ -351,7 +379,7 @@ struct ReshapeChangeLayout
     mlir::Value cmp;
     for (auto i : llvm::seq(0u, rank)) {
       if (mlir::ShapedType::isDynamicStrideOrOffset(strides[i])) {
-        stridesVals[i] = expectedStrides[i];
+        stridesVals[i] = expectedStrides[i].get<mlir::Value>();
       } else {
         stridesVals[i] = rewriter.getIndexAttr(strides[i]);
       }
@@ -360,8 +388,8 @@ struct ReshapeChangeLayout
                                                                      i);
 
       auto cmpTemp = rewriter.createOrFold<mlir::arith::CmpIOp>(
-          loc, mlir::arith::CmpIPredicate::eq, expectedStrides[i],
-          actualStride);
+          loc, mlir::arith::CmpIPredicate::eq,
+          expectedStrides[i].get<mlir::Value>(), actualStride);
 
       if (i == 0) {
         cmp = cmpTemp;
@@ -397,6 +425,48 @@ struct ReshapeChangeLayout
             .getResult(0);
     rewriter.replaceOpWithNewOp<mlir::memref::ReshapeOp>(op, op.getType(), res,
                                                          op.getShape());
+    return mlir::success();
+  }
+};
+
+struct ReshapeToReinterpret
+    : public mlir::OpRewritePattern<mlir::memref::ReshapeOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::ReshapeOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto src = op.getSource();
+    auto srcType = src.getType().cast<mlir::MemRefType>();
+    if (!srcType.getLayout().isIdentity())
+      return mlir::failure();
+
+    auto dstType = op.getResult().getType().cast<mlir::MemRefType>();
+    if (!dstType.getLayout().isIdentity())
+      return mlir::failure();
+
+    auto shape = op.getShape();
+    auto shapeType = shape.getType().cast<mlir::MemRefType>();
+    if (!shapeType.getElementType().isIndex())
+      return mlir::failure();
+
+    auto loc = op.getLoc();
+
+    auto dstRank = static_cast<unsigned>(dstType.getRank());
+
+    mlir::OpFoldResult offset = rewriter.getIndexAttr(0);
+    llvm::SmallVector<mlir::OpFoldResult> sizes(dstRank);
+    for (auto i : llvm::seq(0u, dstRank)) {
+      mlir::Value idx = rewriter.create<mlir::arith::ConstantIndexOp>(loc, i);
+      mlir::Value val = rewriter.create<mlir::memref::LoadOp>(loc, shape, idx);
+      sizes[i] = val;
+    }
+
+    auto strides =
+        computeIdentityStrides(rewriter, loc, dstType.getShape(), sizes);
+
+    rewriter.replaceOpWithNewOp<mlir::memref::ReinterpretCastOp>(
+        op, dstType, src, offset, sizes, strides);
     return mlir::success();
   }
 };
@@ -718,7 +788,8 @@ void FinalizeStridedLayoutPass::runOnOperation() {
   auto op = getOperation();
   mlir::RewritePatternSet patterns(context);
 
-  patterns.insert<ReshapeChangeLayout, CleanupLoads>(context);
+  patterns.insert<ReshapeChangeLayout, ReshapeToReinterpret, CleanupLoads>(
+      context);
 
   (void)mlir::applyPatternsAndFoldGreedily(op, std::move(patterns));
 
