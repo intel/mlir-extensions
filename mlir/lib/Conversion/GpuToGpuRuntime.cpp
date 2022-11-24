@@ -2450,7 +2450,6 @@ struct LowerGPUGlobalReduce
 
     mlir::gpu::KernelDim3 threadIds = launch.getThreadIds();
     mlir::Value zero = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
-    mlir::Value one = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
 
     mlir::Value eq = rewriter.create<mlir::arith::CmpIOp>(
         loc, mlir::arith::CmpIPredicate::eq, threadIds.x, zero);
@@ -2475,12 +2474,23 @@ struct LowerGPUGlobalReduce
     numWorkGroups = rewriter.create<mlir::arith::MulIOp>(
         launchLoc, numWorkGroups, gridSizes.z);
 
+    auto reduceIndexType = rewriter.getI32Type();
+    mlir::Value zeroInt =
+        rewriter.create<mlir::arith::ConstantIntOp>(loc, 0, reduceIndexType);
+    mlir::Value oneInt =
+        rewriter.create<mlir::arith::ConstantIntOp>(loc, 1, reduceIndexType);
+
+    mlir::Value numWorkGroupsInt = rewriter.create<mlir::arith::IndexCastOp>(
+        loc, reduceIndexType, numWorkGroups);
+    mlir::Value linearBlockIdInt = rewriter.create<mlir::arith::IndexCastOp>(
+        loc, reduceIndexType, linearBlockId);
+
     auto beforeBuilder = [&](mlir::OpBuilder &b, mlir::Location l,
                              mlir::ValueRange values) {
       assert(values.size() == 1);
       mlir::Value val = values.front();
       mlir::Value cmp = b.create<mlir::arith::CmpIOp>(
-          l, mlir::arith::CmpIPredicate::sgt, val, zero);
+          l, mlir::arith::CmpIPredicate::sgt, val, zeroInt);
       b.create<mlir::scf::ConditionOp>(l, cmp, val);
     };
     auto afterBuilder = [&](mlir::OpBuilder &b, mlir::Location l,
@@ -2488,15 +2498,17 @@ struct LowerGPUGlobalReduce
       assert(values.size() == 1);
       mlir::Value val = values.front();
       mlir::Value cmp = b.create<mlir::arith::CmpIOp>(
-          l, mlir::arith::CmpIPredicate::sgt, linearBlockId, val);
+          l, mlir::arith::CmpIPredicate::sgt, linearBlockIdInt, val);
 
       b.create<gpu_runtime::GPUBarrierOp>(l, gpu_runtime::FenceFlags::global);
 
       auto condReduceBuilder = [&](mlir::OpBuilder &b, mlir::Location l) {
+        mlir::Value indexVal = rewriter.create<mlir::arith::IndexCastOp>(
+            loc, rewriter.getIndexType(), val);
         mlir::Value val1 =
             b.create<mlir::memref::LoadOp>(l, reduceArray, linearBlockId);
         mlir::Value offset =
-            b.create<mlir::arith::AddIOp>(l, linearBlockId, val);
+            b.create<mlir::arith::AddIOp>(l, linearBlockId, indexVal);
         mlir::Value val2 =
             b.create<mlir::memref::LoadOp>(l, reduceArray, offset);
         auto args = reduceBlock.getArguments();
@@ -2515,15 +2527,14 @@ struct LowerGPUGlobalReduce
       };
 
       rewriter.create<mlir::scf::IfOp>(loc, cmp, condReduceBuilder);
-      val = rewriter.create<mlir::arith::ShRUIOp>(loc, val, one);
+      val = rewriter.create<mlir::arith::ShRUIOp>(loc, val, oneInt);
       b.create<mlir::scf::YieldOp>(l, val);
     };
 
-    mlir::Type indexType = rewriter.getIndexType();
     mlir::Value init =
-        rewriter.create<mlir::arith::ShRUIOp>(loc, numWorkGroups, one);
-    rewriter.create<mlir::scf::WhileOp>(loc, indexType, init, beforeBuilder,
-                                        afterBuilder);
+        rewriter.create<mlir::arith::ShRUIOp>(loc, numWorkGroupsInt, oneInt);
+    rewriter.create<mlir::scf::WhileOp>(loc, reduceIndexType, init,
+                                        beforeBuilder, afterBuilder);
 
     mlir::Value result =
         rewriter.create<mlir::memref::LoadOp>(loc, reduceArray, zero);
