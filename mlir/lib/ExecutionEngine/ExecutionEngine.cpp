@@ -25,7 +25,101 @@
 #include <mlir/Support/FileUtilities.h>
 #include <mlir/Target/LLVMIR/Export.h>
 
-#define DEBUG_TYPE "execution-engine"
+#include <llvm/IR/PassManager.h>
+#include <llvm/IR/Verifier.h>
+#include <llvm/Passes/PassBuilder.h>
+#include <llvm/Passes/StandardInstrumentations.h>
+
+#define DEBUG_TYPE "imex-execution-engine"
+
+static llvm::OptimizationLevel mapToLevel(llvm::CodeGenOpt::Level level) {
+  unsigned optimizeSize = 0; // TODO: unhardcode
+
+  switch (level) {
+  default:
+    llvm_unreachable("Invalid optimization level!");
+
+  case 0:
+    return llvm::OptimizationLevel::O0;
+
+  case 1:
+    return llvm::OptimizationLevel::O1;
+
+  case 2:
+    switch (optimizeSize) {
+    default:
+      llvm_unreachable("Invalid optimization level for size!");
+
+    case 0:
+      return llvm::OptimizationLevel::O2;
+
+    case 1:
+      return llvm::OptimizationLevel::Os;
+
+    case 2:
+      return llvm::OptimizationLevel::Oz;
+    }
+
+  case 3:
+    return llvm::OptimizationLevel::O3;
+  }
+}
+
+static llvm::PipelineTuningOptions
+getPipelineTuningOptions(llvm::CodeGenOpt::Level optLevelVal) {
+  llvm::PipelineTuningOptions pto;
+
+  pto.LoopUnrolling = optLevelVal > 0;
+  pto.LoopVectorization = optLevelVal > 1;
+  pto.SLPVectorization = optLevelVal > 1;
+  return pto;
+}
+
+static void runOptimizationPasses(llvm::Module &M, llvm::TargetMachine &TM) {
+  llvm::CodeGenOpt::Level optLevelVal = TM.getOptLevel();
+
+  llvm::LoopAnalysisManager lam;
+  llvm::FunctionAnalysisManager fam;
+  llvm::CGSCCAnalysisManager cgam;
+  llvm::ModuleAnalysisManager mam;
+
+  llvm::PassInstrumentationCallbacks pic;
+  llvm::PrintPassOptions ppo;
+  ppo.Indent = false;
+  ppo.SkipAnalyses = false;
+  llvm::StandardInstrumentations si(/*debugLogging*/ false, /*verifyEach*/ true,
+                                    ppo);
+
+  si.registerCallbacks(pic, &fam);
+
+  llvm::PassBuilder pb(&TM, getPipelineTuningOptions(optLevelVal));
+
+  llvm::ModulePassManager mpm;
+
+  if (/*verify*/ true) {
+    pb.registerPipelineStartEPCallback(
+        [&](llvm::ModulePassManager &mpm, llvm::OptimizationLevel level) {
+          mpm.addPass(createModuleToFunctionPassAdaptor(llvm::VerifierPass()));
+        });
+  }
+
+  // Register all the basic analyses with the managers.
+  pb.registerModuleAnalyses(mam);
+  pb.registerCGSCCAnalyses(cgam);
+  pb.registerFunctionAnalyses(fam);
+  pb.registerLoopAnalyses(lam);
+  pb.crossRegisterProxies(lam, fam, cgam, mam);
+
+  llvm::OptimizationLevel level = mapToLevel(optLevelVal);
+
+  if (optLevelVal == 0) {
+    mpm = pb.buildO0DefaultPipeline(level);
+  } else {
+    mpm = pb.buildPerModuleDefaultPipeline(level);
+  }
+
+  mpm.run(M, mam);
+}
 
 /// A simple object cache following Lang's LLJITWithObjectCache example.
 class imex::ExecutionEngine::SimpleObjectCache : public llvm::ObjectCache {
@@ -78,34 +172,19 @@ static llvm::Error makeStringError(const llvm::Twine &message) {
 }
 
 // Setup LLVM target triple from the current machine.
-static bool setupTargetTriple(llvm::Module *llvmModule) {
-  // Setup the machine properties from the current architecture.
-  auto targetTriple = llvm::sys::getDefaultTargetTriple();
-  std::string errorMessage;
-  const auto *target =
-      llvm::TargetRegistry::lookupTarget(targetTriple, errorMessage);
-  if (!target) {
-    llvm::errs() << "NO target: " << errorMessage << "\n";
-    return true;
+static void setupModule(llvm::Module &M, llvm::TargetMachine &TM) {
+  M.setDataLayout(TM.createDataLayout());
+  M.setTargetTriple(TM.getTargetTriple().normalize());
+  for (auto &&func : M.functions()) {
+    if (!func.hasFnAttribute("target-cpu"))
+      func.addFnAttr("target-cpu", TM.getTargetCPU());
+
+    if (!func.hasFnAttribute("target-features")) {
+      auto featStr = TM.getTargetFeatureString();
+      if (!featStr.empty())
+        func.addFnAttr("target-features", featStr);
+    }
   }
-
-  std::string cpu(llvm::sys::getHostCPUName());
-  llvm::SubtargetFeatures features;
-  llvm::StringMap<bool> hostFeatures;
-
-  if (llvm::sys::getHostCPUFeatures(hostFeatures))
-    for (auto &f : hostFeatures)
-      features.AddFeature(f.first(), f.second);
-
-  std::unique_ptr<llvm::TargetMachine> machine(target->createTargetMachine(
-      targetTriple, cpu, features.getString(), {}, {}));
-  if (!machine) {
-    llvm::errs() << "Unable to create target machine\n";
-    return true;
-  }
-  llvmModule->setDataLayout(machine->createDataLayout());
-  llvmModule->setTargetTriple(targetTriple);
-  return false;
 }
 
 namespace {
@@ -126,6 +205,9 @@ public:
       if (err)
         return err;
     }
+
+    setupModule(M, *TM);
+    runOptimizationPasses(M, *TM);
 
     if (printer) {
       llvm::SmallVector<char, 0> buffer;
@@ -207,10 +289,14 @@ imex::ExecutionEngine::ExecutionEngine(ExecutionEngineOptions options)
                                             std::move(*tm), cache.get());
   };
 
+  auto tmBuilder =
+      llvm::cantFail(llvm::orc::JITTargetMachineBuilder::detectHost());
+
   // Create the LLJIT by calling the LLJITBuilder with 2 callbacks.
   jit = cantFail(llvm::orc::LLJITBuilder()
                      .setCompileFunctionCreator(compileFunctionCreator)
                      .setObjectLinkingLayerCreator(objectLinkingLayerCreator)
+                     .setJITTargetMachineBuilder(tmBuilder)
                      .create());
 
   symbolMap = std::move(options.symbolMap);
@@ -227,9 +313,6 @@ imex::ExecutionEngine::loadModule(mlir::ModuleOp m) {
   auto llvmModule = mlir::translateModuleToLLVMIR(m, *ctx);
   if (!llvmModule)
     return makeStringError("could not convert to LLVM IR");
-
-  if (setupTargetTriple(llvmModule.get()))
-    return makeStringError("Failed to setup module targetTriple");
 
   // Add a ThreadSafemodule to the engine and return.
   llvm::orc::ThreadSafeModule tsm(std::move(llvmModule), std::move(ctx));
