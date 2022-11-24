@@ -429,6 +429,48 @@ struct ReshapeChangeLayout
   }
 };
 
+struct ReshapeToReinterpret
+    : public mlir::OpRewritePattern<mlir::memref::ReshapeOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::ReshapeOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto src = op.getSource();
+    auto srcType = src.getType().cast<mlir::MemRefType>();
+    if (!srcType.getLayout().isIdentity())
+      return mlir::failure();
+
+    auto dstType = op.getResult().getType().cast<mlir::MemRefType>();
+    if (!dstType.getLayout().isIdentity())
+      return mlir::failure();
+
+    auto shape = op.getShape();
+    auto shapeType = shape.getType().cast<mlir::MemRefType>();
+    if (!shapeType.getElementType().isIndex())
+      return mlir::failure();
+
+    auto loc = op.getLoc();
+
+    auto dstRank = static_cast<unsigned>(dstType.getRank());
+
+    mlir::OpFoldResult offset = rewriter.getIndexAttr(0);
+    llvm::SmallVector<mlir::OpFoldResult> sizes(dstRank);
+    for (auto i : llvm::seq(0u, dstRank)) {
+      mlir::Value idx = rewriter.create<mlir::arith::ConstantIndexOp>(loc, i);
+      mlir::Value val = rewriter.create<mlir::memref::LoadOp>(loc, shape, idx);
+      sizes[i] = val;
+    }
+
+    auto strides =
+        computeIdentityStrides(rewriter, loc, dstType.getShape(), sizes);
+
+    rewriter.replaceOpWithNewOp<mlir::memref::ReinterpretCastOp>(
+        op, dstType, src, offset, sizes, strides);
+    return mlir::success();
+  }
+};
+
 static constexpr llvm::StringLiteral
     kContigiousArraysAttr("plier.contigious_arrays");
 
@@ -746,7 +788,8 @@ void FinalizeStridedLayoutPass::runOnOperation() {
   auto op = getOperation();
   mlir::RewritePatternSet patterns(context);
 
-  patterns.insert<ReshapeChangeLayout, CleanupLoads>(context);
+  patterns.insert<ReshapeChangeLayout, ReshapeToReinterpret, CleanupLoads>(
+      context);
 
   (void)mlir::applyPatternsAndFoldGreedily(op, std::move(patterns));
 
