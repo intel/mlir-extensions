@@ -2650,21 +2650,35 @@ struct BufferizeMixedGeneric
       return mlir::failure();
 
     bool changed = false;
-    llvm::SmallVector<mlir::Value> newInputs(adaptor.getInputs().size());
-    for (auto [i, input] : llvm::enumerate(adaptor.getInputs())) {
+    mlir::ValueRange inputs = adaptor.getInputs();
+    for (auto [i, input] : llvm::enumerate(inputs)) {
       auto orig = op.getInputs()[i];
-      if (orig.getType().isa<mlir::RankedTensorType>()) {
-        newInputs[i] = input;
+      if (orig.getType().isa<mlir::RankedTensorType>())
         changed = true;
-      } else {
-        newInputs[i] = orig;
+    }
+
+    mlir::ValueRange outputs = adaptor.getOutputs();
+    llvm::SmallVector<mlir::Value> newResults;
+    for (auto [i, output] : llvm::enumerate(outputs)) {
+      auto orig = op.getOutputs()[i];
+      if (orig.getType().isa<mlir::RankedTensorType>()) {
+        changed = true;
+        newResults.emplace_back(output);
       }
     }
+
     if (!changed)
       return mlir::failure();
 
-    rewriter.updateRootInPlace(
-        op, [&]() { op.getInputsMutable().assign(newInputs); });
+    auto newOp = rewriter.create<mlir::linalg::GenericOp>(
+        op.getLoc(), llvm::None, inputs, outputs, adaptor.getIndexingMaps(),
+        adaptor.getIteratorTypes(), nullptr, nullptr);
+
+    auto &newRegion = newOp.getRegion();
+
+    auto &srcRegion = op.getRegion();
+    rewriter.inlineRegionBefore(srcRegion, newRegion, newRegion.end());
+    rewriter.replaceOp(op, newResults);
     return mlir::success();
   }
 };
