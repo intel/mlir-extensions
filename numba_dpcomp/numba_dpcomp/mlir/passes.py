@@ -102,6 +102,10 @@ class MlirBackendBase(FunctionPass):
             if parallel_type is not None:
                 flags.auto_parallel = parallel_type
 
+            fastmath_type = obj.dispatcher.targetoptions.get("fastmath", None)
+            if fastmath_type is not None:
+                flags.fastmath = fastmath_type
+
             return (func.__module__ + "." + func.__qualname__, func, flags)
         return (None, None, None)
 
