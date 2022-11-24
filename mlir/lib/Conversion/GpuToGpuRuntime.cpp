@@ -1550,10 +1550,9 @@ struct ExpandSuggestBlockSizeOp
   mlir::LogicalResult
   matchAndRewrite(gpu_runtime::GPUSuggestBlockSizeOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    if (op.getKernel())
+    if (op.getKernel() || !op.getKernelRef())
       return mlir::failure();
 
-    assert(op.getKernelRef());
     return createGpuKernelLoad(
         rewriter, op,
         [&](mlir::OpBuilder &builder, mlir::Location loc, mlir::Value stream,
