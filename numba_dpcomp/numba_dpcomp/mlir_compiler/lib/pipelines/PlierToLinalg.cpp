@@ -307,7 +307,7 @@ computeIdentityStrides(mlir::OpBuilder &builder, mlir::Location loc,
   assert(dynamicSizes.size() == rank);
 
   int64_t stride = 1;
-  llvm::SmallVector<mlir::Value> expectedStrides(rank);
+  llvm::SmallVector<mlir::OpFoldResult> expectedStrides(rank);
   mlir::Value runningStride =
       builder.create<mlir::arith::ConstantIndexOp>(loc, 1);
   for (auto ii = rank; ii-- > 0;) {
@@ -379,7 +379,7 @@ struct ReshapeChangeLayout
     mlir::Value cmp;
     for (auto i : llvm::seq(0u, rank)) {
       if (mlir::ShapedType::isDynamicStrideOrOffset(strides[i])) {
-        stridesVals[i] = expectedStrides[i];
+        stridesVals[i] = expectedStrides[i].get<mlir::Value>();
       } else {
         stridesVals[i] = rewriter.getIndexAttr(strides[i]);
       }
@@ -388,8 +388,8 @@ struct ReshapeChangeLayout
                                                                      i);
 
       auto cmpTemp = rewriter.createOrFold<mlir::arith::CmpIOp>(
-          loc, mlir::arith::CmpIPredicate::eq, expectedStrides[i],
-          actualStride);
+          loc, mlir::arith::CmpIPredicate::eq,
+          expectedStrides[i].get<mlir::Value>(), actualStride);
 
       if (i == 0) {
         cmp = cmpTemp;
