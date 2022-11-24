@@ -914,7 +914,7 @@ public:
                   mlir::memref::StoreOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto memrefType = op.getMemref().getType().cast<mlir::MemRefType>();
-    if (!memrefType.hasRank() || memrefType.getRank() != 1)
+    if (memrefType.getRank() > 1)
       return mlir::failure();
 
     auto typeSize = getTypeSize(memrefType.getElementType());
@@ -922,8 +922,10 @@ public:
       return mlir::failure();
 
     auto loc = op.getLoc();
-    auto ptr = rewriter.create<mlir::spirv::InBoundsPtrAccessChainOp>(
-        loc, adaptor.getMemref(), adaptor.getIndices().front(), llvm::None);
+    auto ptr = adaptor.getMemref();
+    if (memrefType.getRank() != 0)
+      ptr = rewriter.create<mlir::spirv::InBoundsPtrAccessChainOp>(
+          loc, ptr, adaptor.getIndices().front(), llvm::None);
 
     auto memoryAccess = mlir::spirv::MemoryAccessAttr::get(
         op.getContext(), mlir::spirv::MemoryAccess::Aligned);
