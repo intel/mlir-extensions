@@ -1086,6 +1086,33 @@ def test_cfd_reshape():
             > 0
         ), ir
         assert ir.count("gpu.launch blocks") > 0, ir
+    _to_host(dgpu_res, gpu_res)
+    assert_equal(gpu_res, sim_res)
+
+
+@pytest.mark.smoke
+@require_dpctl
+def test_cfd_reduce():
+    def py_func(a):
+        return a.sum()
+
+    jit_func = njit(py_func)
+
+    a = np.arange(1024, dtype=np.float32)
+
+    da = _from_host(a, buffer="device")
+
+    filter_string = da.device.sycl_device.filter_string
+    with print_pass_ir([], ["ConvertParallelLoopToGpu"]):
+        assert_equal(jit_func(da), py_func(a))
+        ir = get_print_buffer()
+        assert (
+            ir.count(
+                f'imex_util.env_region #gpu_runtime.region_desc<device = "{filter_string}">'
+            )
+            > 0
+        ), ir
+        assert ir.count("gpu.launch blocks") == 1, ir
 
     _to_host(dgpu_res, gpu_res)
     assert_equal(gpu_res, sim_res)
