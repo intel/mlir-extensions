@@ -2369,7 +2369,7 @@ struct InsertGPUGlobalReduce
 
 struct InsertGPUGlobalReducePass
     : public mlir::PassWrapper<InsertGPUGlobalReducePass,
-                               mlir::OperationPass<mlir::ModuleOp>> {
+                               mlir::OperationPass<void>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(InsertGPUGlobalReducePass)
 
   virtual void
