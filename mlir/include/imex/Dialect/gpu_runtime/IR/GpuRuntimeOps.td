@@ -224,10 +224,11 @@ def GPUMemFenceOp : GpuRuntime_Op<"mem_fence"> {
 }
 
 def GPUGlobalReduceOp : GpuRuntime_Op<"global_reduce", [
-    SameOperandsAndResultType,
     IsolatedFromAbove,
     SingleBlockImplicitTerminator<"::gpu_runtime::GPUGlobalReduceYieldOp">,
-    RecursiveMemoryEffects
+    TypesMatchWith<"type of 'value' matches element type of 'target'",
+                   "target", "value",
+                   "$_self.cast<::mlir::MemRefType>().getElementType()">
   ]> {
   let summary = "Reduce values among global exectuion space.";
   let description = [{
@@ -235,11 +236,10 @@ def GPUGlobalReduceOp : GpuRuntime_Op<"global_reduce", [
     equal for all work items.
   }];
 
-  let arguments = (ins AnyType:$value);
-  let results = (outs AnyType:$result);
+  let arguments = (ins AnyType:$value, Arg<AnyMemRef, "", [MemWrite]>:$target);
 
   let regions = (region AnyRegion:$region);
-  let assemblyFormat = "attr-dict $value `:` type($value) $region";
+  let assemblyFormat = "attr-dict $value `,` $target `:` type($target) $region";
 }
 
 def GPUGlobalReduceYieldOp : GpuRuntime_Op<"global_reduce_yield", [

@@ -2337,13 +2337,7 @@ struct InsertGPUGlobalReduce
 
       rewriter.setInsertionPoint(reduce);
       auto newReduce = rewriter.create<gpu_runtime::GPUGlobalReduceOp>(
-          reduce.getLoc(), reduceType, reduce.getOperand());
-
-      auto ifOp =
-          rewriter.create<mlir::scf::IfOp>(reduce.getLoc(), cond, false);
-      rewriter.setInsertionPointToStart(ifOp.thenBlock());
-      rewriter.create<mlir::memref::StoreOp>(reduce.getLoc(),
-                                             newReduce.getResult(), array);
+          reduce.getLoc(), reduce.getOperand(), array);
 
       auto &newRegion = newReduce.getRegion();
       rewriter.inlineRegionBefore(reduceRegion, newRegion, newRegion.end());

@@ -24,19 +24,11 @@ func.func @test(%lb: index, %ub: index, %s: index) {
 //       CHECK: %[[INIT:.*]] = "test.init"() : () -> f32
 //       CHECK: %[[ARRAY:.*]] = memref.alloc() : memref<f32>
 //       CHECK: scf.parallel (%[[ARG1:.*]], %[[ARG2:.*]], %[[ARG3:.*]]) = (%[[LB]], %[[LB]], %[[LB]]) to (%[[UB]], %[[UB]], %[[UB]]) step (%[[S]], %[[S]], %[[S]]) {
-//       CHECK: %[[COND1:.*]] = arith.cmpi eq, %[[ARG1]], %[[LB]] : index
-//       CHECK: %[[COND2:.*]] = arith.cmpi eq, %[[ARG2]], %[[LB]] : index
-//       CHECK: %[[COND3:.*]] = arith.andi %[[COND1]], %[[COND2]] : i1
-//       CHECK: %[[COND4:.*]] = arith.cmpi eq, %[[ARG3]], %[[LB]] : index
-//       CHECK: %[[COND5:.*]] = arith.andi %[[COND3]], %[[COND4]] : i1
 //       CHECK: %[[PROD:.*]] = "test.produce"() : () -> f32
-//       CHECK: %[[RED:.*]] = gpu_runtime.global_reduce %[[PROD]] : f32 {
+//       CHECK: gpu_runtime.global_reduce %[[PROD]], %[[ARRAY]] : memref<f32> {
 //       CHECK: ^bb0(%[[ARG4:.*]]: f32, %[[ARG5:.*]]: f32):
 //       CHECK: %[[VAL:.*]] = "test.transform"(%[[ARG4]], %[[ARG5]]) : (f32, f32) -> f32
 //       CHECK: gpu_runtime.global_reduce_yield %[[VAL]] : f32
-//       CHECK: }
-//       CHECK: scf.if %[[COND5]] {
-//       CHECK: memref.store %[[RED]], %[[ARRAY]][] : memref<f32>
 //       CHECK: }
 //       CHECK: scf.yield
 //       CHECK: }
