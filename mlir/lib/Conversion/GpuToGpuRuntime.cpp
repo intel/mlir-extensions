@@ -2536,7 +2536,7 @@ struct LowerGPUGlobalReduce
       assert(values.size() == 1);
       mlir::Value val = values.front();
       mlir::Value cmp = b.create<mlir::arith::CmpIOp>(
-          l, mlir::arith::CmpIPredicate::sgt, linearBlockIdInt, val);
+          l, mlir::arith::CmpIPredicate::slt, linearBlockIdInt, val);
 
       b.create<gpu_runtime::GPUBarrierOp>(l, gpu_runtime::FenceFlags::global);
 
