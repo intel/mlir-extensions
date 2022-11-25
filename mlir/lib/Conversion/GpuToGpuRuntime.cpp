@@ -488,10 +488,10 @@ static mlir::Value getFlatIndex(mlir::OpBuilder &builder, mlir::Location loc,
       mlir::Value size;
       for (auto i : llvm::seq(0u, rank - 1)) {
         auto dimInd = rank - i - 1;
-        auto dim =
-            builder.createOrFold<mlir::memref::DimOp>(loc, memref, dimInd);
+        mlir::Value dim =
+            builder.create<mlir::memref::DimOp>(loc, memref, dimInd);
         if (i != 0) {
-          size = builder.createOrFold<mlir::arith::MulIOp>(loc, size, dim);
+          size = builder.create<mlir::arith::MulIOp>(loc, size, dim);
         } else {
           size = dim;
         }
@@ -502,8 +502,7 @@ static mlir::Value getFlatIndex(mlir::OpBuilder &builder, mlir::Location loc,
     auto affineMap = mlir::AffineMap::get(
         rank, static_cast<unsigned>(applyOperands.size()) - rank, expr);
     assert(affineMap.getNumDims() == indices.size());
-    return builder.createOrFold<mlir::AffineApplyOp>(loc, affineMap,
-                                                     applyOperands);
+    return builder.create<mlir::AffineApplyOp>(loc, affineMap, applyOperands);
   } else {
     auto affineMap = memrefType.getLayout().getAffineMap();
     assert(affineMap.getNumDims() == indices.size());
@@ -517,19 +516,17 @@ static mlir::Value getFlatIndex(mlir::OpBuilder &builder, mlir::Location loc,
       auto numSymbols = affineMap.getNumSymbols();
       if (numSymbols > 0) {
         applyOperands.emplace_back(
-            builder.createOrFold<imex::util::ExtractMemrefMetadataOp>(loc,
-                                                                      memref));
+            builder.create<imex::util::ExtractMemrefMetadataOp>(loc, memref));
         --numSymbols;
         assert(numSymbols <= rank);
         for (auto i : llvm::seq(0u, numSymbols)) {
           applyOperands.emplace_back(
-              builder.createOrFold<imex::util::ExtractMemrefMetadataOp>(
-                  loc, memref, i));
+              builder.create<imex::util::ExtractMemrefMetadataOp>(loc, memref,
+                                                                  i));
         }
       }
     }
-    return builder.createOrFold<mlir::AffineApplyOp>(loc, affineMap,
-                                                     applyOperands);
+    return builder.create<mlir::AffineApplyOp>(loc, affineMap, applyOperands);
   }
 }
 
@@ -557,11 +554,11 @@ static mlir::Value getFlatMemref(mlir::OpBuilder &builder, mlir::Location loc,
                                           memrefType.getElementType());
   mlir::OpBuilder::InsertionGuard g(builder);
   setInsertionPointToStart(builder, memref);
-  mlir::OpFoldResult offset = builder.getIndexAttr(0);
-  mlir::OpFoldResult size =
-      builder.createOrFold<imex::util::UndefOp>(loc, builder.getIndexType());
-  mlir::OpFoldResult stride = builder.getIndexAttr(1);
-  return builder.createOrFold<mlir::memref::ReinterpretCastOp>(
+  mlir::Value offset = builder.create<mlir::arith::ConstantIndexOp>(loc, 0);
+  mlir::Value size =
+      builder.create<imex::util::UndefOp>(loc, builder.getIndexType());
+  mlir::Value stride = builder.create<mlir::arith::ConstantIndexOp>(loc, 1);
+  return builder.create<mlir::memref::ReinterpretCastOp>(
       loc, resultType, memref, offset, size, stride);
 }
 
@@ -651,12 +648,12 @@ struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
     auto flatMemref = getFlatMemref(rewriter, loc, memref);
     auto flatMemrefType = flatMemref.getType().cast<mlir::MemRefType>();
     assert(flatMemrefType.getLayout().isIdentity());
-    auto flatSubview = rewriter.createOrFold<mlir::memref::SubViewOp>(
+    mlir::Value flatSubview = rewriter.create<mlir::memref::SubViewOp>(
         loc, flatMemref, flatIndex, flatSize, flatStride);
     auto dstFlatType = flatSubview.getType();
     if (dstFlatType != flatMemrefType)
-      flatSubview = rewriter.createOrFold<mlir::memref::CastOp>(
-          loc, dstFlatType, flatSubview);
+      flatSubview =
+          rewriter.create<mlir::memref::CastOp>(loc, dstFlatType, flatSubview);
 
     auto offset = rewriter.getIndexAttr(0);
 
@@ -668,13 +665,13 @@ struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
           stride = rewriter.create<mlir::arith::ConstantIndexOp>(loc, *val)
                        .getResult();
 
-        auto origStride = [&]() {
+        auto origStride = [&]() -> mlir::Value {
           mlir::OpBuilder::InsertionGuard g(rewriter);
           setInsertionPointToStart(rewriter, memref);
-          return rewriter.createOrFold<imex::util::ExtractMemrefMetadataOp>(
+          return rewriter.create<imex::util::ExtractMemrefMetadataOp>(
               loc, memref, i);
         }();
-        auto newStride = rewriter.createOrFold<mlir::arith::MulIOp>(
+        mlir::Value newStride = rewriter.create<mlir::arith::MulIOp>(
             loc, stride.get<mlir::Value>(), origStride);
         strides[i] = newStride;
       }
@@ -685,7 +682,7 @@ struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
     auto resultRank = static_cast<unsigned>(resultType.getRank());
     mlir::Value result;
     if (srcRank == resultRank) {
-      result = rewriter.createOrFold<mlir::memref::ReinterpretCastOp>(
+      result = rewriter.create<mlir::memref::ReinterpretCastOp>(
           loc, resultType, flatSubview, offset, sizes, strides);
     } else {
       assert(resultRank < srcRank);
@@ -701,7 +698,7 @@ struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
           filteredStrides.emplace_back(strides[i]);
         }
       }
-      result = rewriter.createOrFold<mlir::memref::ReinterpretCastOp>(
+      result = rewriter.create<mlir::memref::ReinterpretCastOp>(
           loc, resultType, flatSubview, offset, filteredSizes, filteredStrides);
     }
 
