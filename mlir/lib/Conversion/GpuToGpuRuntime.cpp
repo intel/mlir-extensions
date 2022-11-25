@@ -660,14 +660,13 @@ struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
 
     auto offset = rewriter.getIndexAttr(0);
 
+    assert(resultStrides.size() == strides.size());
     for (auto i : llvm::seq<size_t>(0, strides.size())) {
       if (mlir::ShapedType::isDynamicStrideOrOffset(resultStrides[i])) {
         auto stride = strides[i];
-        if (auto c = stride.dyn_cast<mlir::Attribute>()) {
-          auto val = c.dyn_cast<mlir::IntegerAttr>().getValue().getSExtValue();
-          stride = rewriter.create<mlir::arith::ConstantIndexOp>(loc, val)
+        if (auto val = mlir::getConstantIntValue(stride))
+          stride = rewriter.create<mlir::arith::ConstantIndexOp>(loc, *val)
                        .getResult();
-        }
 
         auto origStride = [&]() {
           mlir::OpBuilder::InsertionGuard g(rewriter);
