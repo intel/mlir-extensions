@@ -2483,6 +2483,9 @@ struct LowerGPUGlobalReduce
     auto &newRegion = allReduce.getRegion();
     rewriter.inlineRegionBefore(op.getRegion(), newRegion, newRegion.end());
 
+    // TODO: remove
+    allReduce->setAttr(gpu_runtime::getNonUniformAttrName(), rewriter.getUnitAttr());
+
     auto &reduceBlock = newRegion.front();
     {
       mlir::OpBuilder::InsertionGuard g1(rewriter);
@@ -2577,6 +2580,7 @@ struct LowerGPUGlobalReduce
     mlir::Value zero = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
     mlir::Value result =
         rewriter.create<mlir::memref::LoadOp>(loc, reduceArray, zero);
+
     rewriter.replaceOp(op, result);
 
     rewriter.setInsertionPointAfter(launch);
