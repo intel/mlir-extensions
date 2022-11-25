@@ -1740,12 +1740,6 @@ ExtractMemrefMetadataOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
   }
 
   if (auto cast = src.getDefiningOp<mlir::memref::CastOp>()) {
-    auto newSrc = cast.getSource();
-    getSourceMutable().assign(newSrc);
-    return getResult();
-  }
-
-  if (auto cast = src.getDefiningOp<mlir::memref::CastOp>()) {
     auto castSrc = cast.getSource();
     auto castSrcType = castSrc.getType().cast<mlir::ShapedType>();
     auto srcType = src.getType().cast<mlir::ShapedType>();
