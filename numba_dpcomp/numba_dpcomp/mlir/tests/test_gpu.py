@@ -1093,9 +1093,7 @@ def test_cfd_reshape():
 
 @pytest.mark.smoke
 @require_dpctl
-@pytest.mark.parametrize(
-    "size", [1, 7, 16, 64, 65, 256, 512, 1024 * 1024]
-)
+@pytest.mark.parametrize("size", [1, 7, 16, 64, 65, 256, 512, 1024 * 1024])
 def test_cfd_reduce1(size):
     py_func = lambda a: a.sum()
     jit_func = njit(py_func)
