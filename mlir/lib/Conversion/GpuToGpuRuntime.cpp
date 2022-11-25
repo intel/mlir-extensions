@@ -1724,6 +1724,14 @@ struct GPUExPass
   }
 };
 
+static llvm::Optional<mlir::Attribute> getNeutralValue(mlir::Block &block) {
+  auto body = block.without_terminator();
+  if (!llvm::hasSingleElement(body))
+    return llvm::None;
+
+  return mlir::linalg::getNeutralElement(&(*body.begin()));
+}
+
 struct TileParallelOp : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
   using OpRewritePattern::OpRewritePattern;
 
@@ -1747,11 +1755,7 @@ struct TileParallelOp : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
 
     llvm::SmallVector<mlir::Attribute> neutralValues;
     for (auto reduction : reductionOps) {
-      auto body = reduction.getRegion().front().without_terminator();
-      if (!llvm::hasSingleElement(body))
-        return mlir::failure();
-
-      auto neutralValue = mlir::linalg::getNeutralElement(&(*body.begin()));
+      auto neutralValue = getNeutralValue(reduction.getRegion().front());
       if (!neutralValue)
         return mlir::failure();
 
