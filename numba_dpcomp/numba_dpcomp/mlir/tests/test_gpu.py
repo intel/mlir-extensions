@@ -8,6 +8,7 @@ from numpy.testing import assert_equal, assert_allclose
 import numpy as np
 import math
 import numba
+import itertools
 
 from numba_dpcomp.mlir.settings import _readenv
 from numba_dpcomp.mlir.kernel_impl import (
@@ -33,7 +34,7 @@ from numba_dpcomp.mlir.passes import (
     is_print_buffer_empty,
 )
 
-from .utils import JitfuncCache
+from .utils import JitfuncCache, parametrize_function_variants
 from .utils import njit_cached as njit
 
 kernel_cache = JitfuncCache(kernel)
@@ -1092,13 +1093,43 @@ def test_cfd_reshape():
 
 @pytest.mark.smoke
 @require_dpctl
-def test_cfd_reduce():
-    def py_func(a):
-        return a.sum()
-
+@pytest.mark.parametrize("size", [1, 7, 16, 64, 65, 1024 * 1024])
+def test_cfd_reduce1(size):
+    py_func = lambda a: a.sum()
     jit_func = njit(py_func)
 
-    a = np.arange(1024, dtype=np.float32)
+    a = np.arange(size, dtype=np.float32)
+
+    da = _from_host(a, buffer="device")
+
+    filter_string = da.device.sycl_device.filter_string
+    with print_pass_ir([], ["ConvertParallelLoopToGpu"]):
+        assert_equal(jit_func(da), py_func(a))
+        ir = get_print_buffer()
+        assert (
+            ir.count(
+                f'imex_util.env_region #gpu_runtime.region_desc<device = "{filter_string}">'
+            )
+            > 0
+        ), ir
+        assert ir.count("gpu.launch blocks") == 1, ir
+
+
+_shapes = (1, 7, 16, 25, 64, 65)
+
+
+@require_dpctl
+@parametrize_function_variants(
+    "py_func",
+    [
+        "lambda a: a.sum()",
+    ],
+)
+@pytest.mark.parametrize("shape", itertools.product(_shapes, _shapes))
+def test_cfd_reduce2(py_func, shape):
+    jit_func = njit(py_func)
+
+    a = np.arange(math.prod(shape), dtype=np.float32).reshape(shape).copy()
 
     da = _from_host(a, buffer="device")
 
