@@ -1093,7 +1093,9 @@ def test_cfd_reshape():
 
 @pytest.mark.smoke
 @require_dpctl
-@pytest.mark.parametrize("size", [1, 7, 16, 64, 65, 1024 * 1024])
+@pytest.mark.parametrize(
+    "size", [1, 7, 16, 64, 65, 256, 512, 1024 * 1024]
+)
 def test_cfd_reduce1(size):
     py_func = lambda a: a.sum()
     jit_func = njit(py_func)
@@ -1104,7 +1106,7 @@ def test_cfd_reduce1(size):
 
     filter_string = da.device.sycl_device.filter_string
     with print_pass_ir([], ["ConvertParallelLoopToGpu"]):
-        assert_equal(jit_func(da), py_func(a))
+        assert_allclose(jit_func(da), py_func(a), rtol=1e-5)
         ir = get_print_buffer()
         assert (
             ir.count(
@@ -1126,24 +1128,11 @@ _shapes = (1, 7, 16, 25, 64, 65)
     ],
 )
 @pytest.mark.parametrize("shape", itertools.product(_shapes, _shapes))
-def test_cfd_reduce2(py_func, shape):
+@pytest.mark.parametrize("dtype", [np.int32, np.int64, np.float32])
+def test_cfd_reduce2(py_func, shape, dtype):
     jit_func = njit(py_func)
 
-    a = np.arange(math.prod(shape), dtype=np.float32).reshape(shape).copy()
+    a = np.arange(math.prod(shape), dtype=dtype).reshape(shape).copy()
 
     da = _from_host(a, buffer="device")
-
-    filter_string = da.device.sycl_device.filter_string
-    with print_pass_ir([], ["ConvertParallelLoopToGpu"]):
-        assert_equal(jit_func(da), py_func(a))
-        ir = get_print_buffer()
-        assert (
-            ir.count(
-                f'imex_util.env_region #gpu_runtime.region_desc<device = "{filter_string}">'
-            )
-            > 0
-        ), ir
-        assert ir.count("gpu.launch blocks") == 1, ir
-
-    _to_host(dgpu_res, gpu_res)
-    assert_equal(gpu_res, sim_res)
+    assert_allclose(jit_func(da), py_func(a), rtol=1e-5)

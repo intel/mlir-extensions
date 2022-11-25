@@ -2398,12 +2398,6 @@ static mlir::Value computeGPUDimsProd(mlir::OpBuilder &builder,
   return builder.create<mlir::arith::MulIOp>(loc, tmp, z);
 }
 
-static mlir::Value computeGPUDimsProd(mlir::OpBuilder &builder,
-                                      mlir::Location loc,
-                                      const mlir::gpu::KernelDim3 &dims) {
-  return computeGPUDimsProd(builder, loc, dims.x, dims.y, dims.z);
-}
-
 static mlir::Value isZeroIds(mlir::OpBuilder &builder, mlir::Location loc,
                              const mlir::gpu::KernelDim3 &ids) {
   mlir::Value zero = builder.create<mlir::arith::ConstantIndexOp>(loc, 0);
@@ -2417,35 +2411,16 @@ static mlir::Value isZeroIds(mlir::OpBuilder &builder, mlir::Location loc,
   return builder.create<mlir::arith::AndIOp>(loc, tmp, eq);
 }
 
-static mlir::Value computeLinearId(mlir::OpBuilder &builder, mlir::Location loc,
-                                   const mlir::gpu::KernelDim3 &gridSizes,
-                                   const mlir::gpu::KernelDim3 &blockSizes,
-                                   const mlir::gpu::KernelDim3 &blockIds,
-                                   const mlir::gpu::KernelDim3 &threadIds) {
-  std::array<mlir::Value, 3> linearIds;
-  auto get3 = [](const mlir::gpu::KernelDim3 &val) {
-    return std::array<mlir::Value, 3>{val.x, val.y, val.z};
-  };
-  for (auto [i, it] : llvm::enumerate(
-           llvm::zip(get3(blockSizes), get3(blockIds), get3(threadIds)))) {
-    auto [blockSize, blockId, threadId] = it;
-    mlir::Value res =
-        builder.create<mlir::arith::MulIOp>(loc, blockId, blockSize);
-    res = builder.create<mlir::arith::AddIOp>(loc, res, threadId);
-    linearIds[i] = res;
-  }
-
-  mlir::Value res = linearIds[0];
-
+static mlir::Value computeLinearBlockId(mlir::OpBuilder &builder,
+                                        mlir::Location loc,
+                                        const mlir::gpu::KernelDim3 &gridSizes,
+                                        const mlir::gpu::KernelDim3 &blockIds) {
   mlir::Value tmp =
-      builder.create<mlir::arith::MulIOp>(loc, linearIds[1], gridSizes.x);
-  res = builder.create<mlir::arith::AddIOp>(loc, res, tmp);
-
+      builder.create<mlir::arith::MulIOp>(loc, gridSizes.x, blockIds.y);
+  mlir::Value ret = builder.create<mlir::arith::AddIOp>(loc, blockIds.x, tmp);
   tmp = builder.create<mlir::arith::MulIOp>(loc, gridSizes.x, gridSizes.y);
-  tmp = builder.create<mlir::arith::MulIOp>(loc, linearIds[2], tmp);
-
-  res = builder.create<mlir::arith::AddIOp>(loc, res, tmp);
-  return res;
+  tmp = builder.create<mlir::arith::MulIOp>(loc, tmp, blockIds.z);
+  return builder.create<mlir::arith::AddIOp>(loc, ret, tmp);
 }
 
 struct LowerGPUGlobalReduce
@@ -2474,7 +2449,7 @@ struct LowerGPUGlobalReduce
         computeGPUDimsProd(rewriter, launchLoc, launch.getGridSizeX(),
                            launch.getGridSizeY(), launch.getGridSizeZ());
 
-    const int64_t shape[] = {mlir::ShapedType::kDynamicSize};
+    const int64_t shape[] = {mlir::ShapedType::kDynamic};
     auto arrayType = mlir::MemRefType::get(shape, op.getValue().getType());
     mlir::Value reduceArray = rewriter.create<mlir::memref::AllocOp>(
         launchLoc, arrayType, numWorkGroupsExternal);
@@ -2502,17 +2477,16 @@ struct LowerGPUGlobalReduce
 
     mlir::gpu::KernelDim3 threadIds = launch.getThreadIds();
     mlir::gpu::KernelDim3 blockIds = launch.getBlockIds();
-    mlir::gpu::KernelDim3 blockSizes = launch.getBlockSize();
     mlir::gpu::KernelDim3 gridSizes = launch.getGridSize();
 
-    mlir::Value linearBlockId = computeLinearId(
-        rewriter, loc, gridSizes, blockSizes, blockIds, threadIds);
+    mlir::Value linearBlockId =
+        computeLinearBlockId(rewriter, loc, gridSizes, blockIds);
 
     mlir::Value isZeroThread = isZeroIds(rewriter, loc, threadIds);
 
     auto condWriteBuilder = [&](mlir::OpBuilder &b, mlir::Location l) {
-      b.create<mlir::memref::StoreOp>(l, allReduce.getResult(), reduceArray,
-                                      linearBlockId);
+      mlir::Value result = allReduce.getResult();
+      b.create<mlir::memref::StoreOp>(l, result, reduceArray, linearBlockId);
       b.create<mlir::scf::YieldOp>(l);
     };
 
