@@ -2460,16 +2460,22 @@ struct LowerGPUGlobalReduce
     if (!launch)
       return mlir::failure();
 
+    auto initAttr = getNeutralValue(op.getRegion().front());
+    if (!initAttr)
+      return mlir::failure();
+
     auto launchLoc = launch.getLoc();
     mlir::OpBuilder::InsertionGuard g(rewriter);
     rewriter.setInsertionPoint(launch);
+
+    mlir::Value resultArray = op.getTarget();
 
     mlir::Value numWorkGroupsExternal =
         computeGPUDimsProd(rewriter, launchLoc, launch.getGridSizeX(),
                            launch.getGridSizeY(), launch.getGridSizeZ());
 
     const int64_t shape[] = {mlir::ShapedType::kDynamicSize};
-    auto arrayType = mlir::MemRefType::get(shape, op.getType());
+    auto arrayType = mlir::MemRefType::get(shape, op.getValue().getType());
     mlir::Value reduceArray = rewriter.create<mlir::memref::AllocOp>(
         launchLoc, arrayType, numWorkGroupsExternal);
 
@@ -2482,7 +2488,8 @@ struct LowerGPUGlobalReduce
     rewriter.inlineRegionBefore(op.getRegion(), newRegion, newRegion.end());
 
     // TODO: remove
-    allReduce->setAttr(gpu_runtime::getNonUniformAttrName(), rewriter.getUnitAttr());
+    allReduce->setAttr(gpu_runtime::getNonUniformAttrName(),
+                       rewriter.getUnitAttr());
 
     auto &reduceBlock = newRegion.front();
     {
@@ -2511,78 +2518,48 @@ struct LowerGPUGlobalReduce
 
     rewriter.create<mlir::scf::IfOp>(loc, isZeroThread, condWriteBuilder);
 
-    mlir::Value numWorkGroups = computeGPUDimsProd(rewriter, loc, gridSizes);
+    rewriter.setInsertionPointAfter(launch);
+    mlir::Value zero =
+        rewriter.create<mlir::arith::ConstantIndexOp>(launchLoc, 0);
+    mlir::Value one =
+        rewriter.create<mlir::arith::ConstantIndexOp>(launchLoc, 1);
 
-    auto reduceIndexType = rewriter.getI32Type();
-    mlir::Value zeroInt =
-        rewriter.create<mlir::arith::ConstantIntOp>(loc, 0, reduceIndexType);
-    mlir::Value oneInt =
-        rewriter.create<mlir::arith::ConstantIntOp>(loc, 1, reduceIndexType);
+    auto finalReduceBodyBuilder = [&](mlir::OpBuilder &b, mlir::Location l,
+                                      mlir::ValueRange iters,
+                                      mlir::ValueRange) {
+      assert(iters.size() == 1);
+      mlir::Value value =
+          b.create<mlir::memref::LoadOp>(l, reduceArray, iters.front());
+      auto reduce = b.create<mlir::scf::ReduceOp>(l, value);
+      auto &finalReduceBlock = reduce.getRegion().front();
 
-    mlir::Value numWorkGroupsInt = rewriter.create<mlir::arith::IndexCastOp>(
-        loc, reduceIndexType, numWorkGroups);
-    mlir::Value linearBlockIdInt = rewriter.create<mlir::arith::IndexCastOp>(
-        loc, reduceIndexType, linearBlockId);
+      mlir::BlockAndValueMapping mapper;
+      mapper.map(reduceBlock.getArguments(), finalReduceBlock.getArguments());
 
-    auto beforeBuilder = [&](mlir::OpBuilder &b, mlir::Location l,
-                             mlir::ValueRange values) {
-      assert(values.size() == 1);
-      mlir::Value val = values.front();
-      mlir::Value cmp = b.create<mlir::arith::CmpIOp>(
-          l, mlir::arith::CmpIPredicate::sgt, val, zeroInt);
-      b.create<mlir::scf::ConditionOp>(l, cmp, val);
-    };
-    auto afterBuilder = [&](mlir::OpBuilder &b, mlir::Location l,
-                            mlir::ValueRange values) {
-      assert(values.size() == 1);
-      mlir::Value val = values.front();
-      mlir::Value cmp = b.create<mlir::arith::CmpIOp>(
-          l, mlir::arith::CmpIPredicate::slt, linearBlockIdInt, val);
-
-      b.create<gpu_runtime::GPUBarrierOp>(l, gpu_runtime::FenceFlags::global);
-
-      auto condReduceBuilder = [&](mlir::OpBuilder &b, mlir::Location l) {
-        mlir::Value indexVal = rewriter.create<mlir::arith::IndexCastOp>(
-            loc, rewriter.getIndexType(), val);
-        mlir::Value val1 =
-            b.create<mlir::memref::LoadOp>(l, reduceArray, linearBlockId);
-        mlir::Value offset =
-            b.create<mlir::arith::AddIOp>(l, linearBlockId, indexVal);
-        mlir::Value val2 =
-            b.create<mlir::memref::LoadOp>(l, reduceArray, offset);
-        auto args = reduceBlock.getArguments();
-        assert(args.size() == 2);
-        mlir::BlockAndValueMapping mapper;
-        mapper.map(args[0], val1);
-        mapper.map(args[1], val2);
-        for (auto &innerOp : reduceBlock.without_terminator())
-          b.clone(innerOp, mapper);
+      {
+        mlir::OpBuilder::InsertionGuard g1(b);
+        b.setInsertionPointToStart(&finalReduceBlock);
+        for (auto &op : reduceBlock.without_terminator())
+          b.clone(op, mapper);
 
         auto term = mlir::cast<mlir::gpu::YieldOp>(reduceBlock.getTerminator());
-        assert(term.getValues().size() == 1);
-        mlir::Value res = mapper.lookupOrDefault(term.getValues().front());
-        b.create<mlir::memref::StoreOp>(l, res, reduceArray, linearBlockId);
-        b.create<mlir::scf::YieldOp>(l);
-      };
-
-      rewriter.create<mlir::scf::IfOp>(loc, cmp, condReduceBuilder);
-      val = rewriter.create<mlir::arith::ShRUIOp>(loc, val, oneInt);
-      b.create<mlir::scf::YieldOp>(l, val);
+        auto result = mapper.lookupOrDefault(term.getValues().front());
+        b.create<mlir::scf::ReduceReturnOp>(l, result);
+      }
+      b.create<mlir::scf::YieldOp>(l);
     };
 
-    mlir::Value init =
-        rewriter.create<mlir::arith::ShRUIOp>(loc, numWorkGroupsInt, oneInt);
-    rewriter.create<mlir::scf::WhileOp>(loc, reduceIndexType, init,
-                                        beforeBuilder, afterBuilder);
+    mlir::Value initVal = rewriter.create<mlir::arith::ConstantOp>(
+        launchLoc, initAttr->cast<mlir::TypedAttr>());
+    auto loopOp = rewriter.create<mlir::scf::ParallelOp>(
+        launchLoc, zero, numWorkGroupsExternal, one, initVal,
+        finalReduceBodyBuilder);
 
-    mlir::Value zero = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
-    mlir::Value result =
-        rewriter.create<mlir::memref::LoadOp>(loc, reduceArray, zero);
+    rewriter.create<mlir::memref::StoreOp>(launchLoc, loopOp->getResult(0),
+                                           resultArray);
 
-    rewriter.replaceOp(op, result);
-
-    rewriter.setInsertionPointAfter(launch);
     rewriter.create<mlir::memref::DeallocOp>(launchLoc, reduceArray);
+    rewriter.eraseOp(op);
     return mlir::success();
   }
 };
@@ -2639,9 +2616,15 @@ struct AllReduceRemoveRegion
     if (!result)
       return mlir::failure();
 
+    auto attrName =
+        rewriter.getStringAttr(gpu_runtime::getNonUniformAttrName());
+    auto nonUniform = op->hasAttr(attrName);
     auto attr = mlir::gpu::AllReduceOperationAttr::get(getContext(), *result);
-    rewriter.replaceOpWithNewOp<mlir::gpu::AllReduceOp>(op, op.getValue(),
-                                                        attr);
+    auto res = rewriter.replaceOpWithNewOp<mlir::gpu::AllReduceOp>(
+        op, op.getValue(), attr);
+    if (nonUniform)
+      res->setAttr(attrName, rewriter.getUnitAttr());
+
     return mlir::success();
   }
 };
