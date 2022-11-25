@@ -18,10 +18,10 @@ func.func @test_arange(%arg0: i64, %arg1: i64, %arg2: i64) -> i64 {
 // CHECK: arith.constant
 // CHECK: arith.cmpi
 // CHECK: arith.select
-// CHECK: arith.addi
-// CHECK: arith.addi
 // CHECK: arith.subi
-// CHECK: arith.divui
+// CHECK: arith.addi
+// CHECK: arith.addi
+// CHECK: arith.divsi
 // CHECK: "dist.nprocs"
 // CHECK: "dist.prank"
 // CHECK: memref.alloc

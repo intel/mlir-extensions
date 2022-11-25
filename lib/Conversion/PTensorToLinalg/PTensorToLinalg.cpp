@@ -33,6 +33,7 @@
 #include <imex/Dialect/Dist/Utils/Utils.h>
 #include <imex/Dialect/PTensor/IR/PTensorOps.h>
 #include <imex/Dialect/PTensor/Transforms/Utils.h>
+#include <imex/Utils/ArithUtils.h>
 
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
 #include <mlir/Dialect/Arith/IR/Arith.h>
@@ -240,19 +241,19 @@ struct ARangeLowering
     auto loc = op.getLoc();
 
     // Get Operands
-    auto start = createIndexCast(loc, rewriter, adaptor.getStart());
-    auto stop = createIndexCast(loc, rewriter, adaptor.getStop());
-    auto step = createIndexCast(loc, rewriter, adaptor.getStep());
+    auto start = ::imex::EasyInt(loc, rewriter, adaptor.getStart(), true);
+    auto stop = ::imex::EasyInt(loc, rewriter, adaptor.getStop(), true);
+    auto step = ::imex::EasyInt(loc, rewriter, adaptor.getStep(), true);
     auto retPtTyp = op.getType().dyn_cast<::imex::ptensor::PTensorType>();
     assert(retPtTyp);
 
-    // we operate on index type
-    auto intTyp = rewriter.getIndexType();
+    // get arange count
     auto count = createCountARange(rewriter, loc, start, stop, step);
 
     // init tensor
     auto elTyp = retPtTyp.getElementType();
-    auto tensor = createEmptyTensor(rewriter, loc, elTyp, {count}).getResult();
+    auto tensor =
+        createEmptyTensor(rewriter, loc, elTyp, {count.get()}).getResult();
 
     // fill with arange values
     // map needed for output only (we have no input tensor)
@@ -261,16 +262,16 @@ struct ARangeLowering
     llvm::SmallVector<::mlir::StringRef> iterators(1, "parallel");
 
     // The body; accepting no input, the lambda simply captures start and step
-    auto body = [&start, &step, &elTyp, &intTyp](::mlir::OpBuilder &builder,
-                                                 ::mlir::Location loc,
-                                                 ::mlir::ValueRange args) {
+    auto body = [&start, &step, &elTyp](::mlir::OpBuilder &builder,
+                                        ::mlir::Location loc,
+                                        ::mlir::ValueRange args) {
       auto dim = getIntAttr<64>(builder, 0);
-      auto idx = builder.create<::mlir::linalg::IndexOp>(loc, dim);
-      auto tmp = builder.create<::mlir::arith::MulIOp>(loc, step, idx);
-      auto val = builder.create<::mlir::arith::AddIOp>(loc, start, tmp);
+      auto idx = ::imex::EasyInt(
+          loc, builder, builder.create<::mlir::linalg::IndexOp>(loc, dim));
+      auto val = start + (step * idx);
       // auto _val = builder.create<mlir::arith::SIToFPOp>(loc, elTyp, val);
       (void)builder.create<::mlir::linalg::YieldOp>(
-          loc, createIndexCast(loc, builder, val.getResult(), elTyp));
+          loc, createIndexCast(loc, builder, val.get(), elTyp));
     };
 
     auto resTnsr = rewriter.create<::mlir::linalg::GenericOp>(
@@ -531,15 +532,10 @@ struct ReductionOpLowering
     // FIXME support reduction dimensions
     auto rank = static_cast<unsigned>(retTyp.getRank());
     assert(rank == 0);
-    auto attr = rewriter.getIndexAttr(0);
-    auto zeroI =
-        rewriter.create<::mlir::arith::ConstantOp>(loc, attr).getResult();
+    auto zeroI = createIndex(loc, rewriter, 0);
     llvm::SmallVector<::mlir::Value> shapeVVec(rank, zeroI);
     // create new tensor
-    auto zero =
-        rewriter
-            .create<mlir::arith::ConstantOp>(loc, rewriter.getI64IntegerAttr(0))
-            .getResult();
+    auto zero = createInt(loc, rewriter, 0);
     auto tensor =
         createEmptyTensor(rewriter, loc, sElTyp, shapeVVec).getResult();
     auto tnsr = rewriter.create<::mlir::linalg::FillOp>(loc, zero, tensor);

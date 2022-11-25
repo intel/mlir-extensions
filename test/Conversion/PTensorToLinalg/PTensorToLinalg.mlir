@@ -20,6 +20,7 @@ func.func @test_arange(%arg0: i64, %arg1: i64, %arg2: i64) -> !ptensor.ptensor<1
 }
 // CHECK-LABEL: @test_arange
 // CHECK: [[C0:%.*]] = arith.select
+// CHECK-NEXT: [[C01:%.*]] = arith.subi
 // CHECK-NEXT: [[C1:%.*]] = arith.addi
 // CHECK-NEXT: [[C2:%.*]] = arith.addi [[C1]], [[C0]] : index
 // CHECK: linalg.generic{{.*}}["parallel"]
