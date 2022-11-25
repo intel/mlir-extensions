@@ -1152,7 +1152,9 @@ static void genGroupOp(mlir::Operation *srcOp, mlir::PatternRewriter &rewriter,
                        mlir::Value arg) {
   auto ctx = srcOp->getContext();
   auto reduceAttr = mlir::gpu::AllReduceOperationAttr::get(ctx, ReduceType);
-  rewriter.replaceOpWithNewOp<mlir::gpu::AllReduceOp>(srcOp, arg, reduceAttr);
+  auto op = rewriter.replaceOpWithNewOp<mlir::gpu::AllReduceOp>(srcOp, arg,
+                                                                reduceAttr);
+  op->setAttr(gpu_runtime::getNonUniformAttrName(), rewriter.getUnitAttr());
 }
 
 class ConvertGroupOps : public mlir::OpRewritePattern<mlir::func::CallOp> {
@@ -1233,6 +1235,9 @@ public:
       return mlir::failure();
 
     if (!op.getOp())
+      return mlir::failure();
+
+    if (!op->hasAttr(gpu_runtime::getNonUniformAttrName()))
       return mlir::failure();
 
     if (!op.getType().isIntOrFloat())

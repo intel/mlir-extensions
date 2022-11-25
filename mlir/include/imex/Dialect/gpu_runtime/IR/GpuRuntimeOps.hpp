@@ -31,4 +31,7 @@
 
 namespace gpu_runtime {
 mlir::StringRef getGpuAccessibleAttrName();
-}
+
+/// Flag to mark gpu reduction ops non-uniform. TODO: upstream.
+mlir::StringRef getNonUniformAttrName();
+} // namespace gpu_runtime

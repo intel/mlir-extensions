@@ -209,7 +209,10 @@ mlir::StringAttr GPUSuggestBlockSizeOp::getKernelName() {
   return getKernelRef()->getLeafReference();
 }
 
-mlir::StringRef getGpuAccessibleAttrName() { return "gpu.gpu_accessible"; }
+mlir::StringRef getGpuAccessibleAttrName() {
+  return "gpu_runtime.gpu_accessible";
+}
+mlir::StringRef getNonUniformAttrName() { return "gpu_runtime.non_uniform"; }
 
 } // namespace gpu_runtime
 
