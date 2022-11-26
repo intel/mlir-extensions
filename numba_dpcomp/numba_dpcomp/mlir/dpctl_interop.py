@@ -60,24 +60,6 @@ if _is_dpctl_available:
 
             self.filter_string = filter_string
 
-        def copy(self, dtype=None, ndim=None, layout=None, readonly=None):
-            if dtype is None:
-                dtype = self.dtype
-            if ndim is None:
-                ndim = self.ndim
-            if layout is None:
-                layout = self.layout
-            if readonly is None:
-                readonly = not self.mutable
-            return USMNdArrayBaseType(
-                dtype=dtype,
-                ndim=ndim,
-                layout=layout,
-                fixed_dims=(None,) * ndim,
-                readonly=readonly,
-                aligned=self.aligned,
-            )
-
         @property
         def key(self):
             return super().key + (self.filter_string,)
@@ -136,8 +118,25 @@ if _is_dpctl_available:
                 filter_string=filter_string,
             )
 
-        def copy(self, *args, **kwargs):
-            return super(USMNdArrayType, self).copy(*args, **kwargs)
+        def copy(self, dtype=None, ndim=None, layout=None, readonly=None):
+            if dtype is None:
+                dtype = self.dtype
+            if ndim is None:
+                ndim = self.ndim
+            if layout is None:
+                layout = self.layout
+            if readonly is None:
+                readonly = not self.mutable
+            return USMNdArrayType(
+                dtype=dtype,
+                ndim=ndim,
+                layout=layout,
+                usm_type=self.usm_type,
+                fixed_dims=(None,) * ndim,
+                readonly=readonly,
+                aligned=self.aligned,
+                filter_string=self.filter_string,
+            )
 
     register_model(USMNdArrayType)(USMNdArrayModel)
 
@@ -150,7 +149,7 @@ if _is_dpctl_available:
             dtype = numpy_support.from_dtype(val.dtype)
         except NotImplementedError:
             raise ValueError("Unsupported array dtype: %s" % (val.dtype,))
-        layout = "A"  # TODO: infer layout
+        layout = "C"  # TODO: infer layout
         readonly = False
         filter_string = _get_filter_string(val)
         assert filter_string is not None
