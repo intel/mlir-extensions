@@ -219,20 +219,6 @@ protected:
   }
 };
 
-static std::string getUniqueLLVMGlobalName(mlir::ModuleOp mod,
-                                           mlir::StringRef srcName) {
-  auto globals = mod.getOps<mlir::LLVM::GlobalOp>();
-  for (int i = 0;; ++i) {
-    auto name =
-        (i == 0 ? std::string(srcName) : (srcName + llvm::Twine(i)).str());
-    auto isSameName = [&](mlir::LLVM::GlobalOp global) {
-      return global.getName() == name;
-    };
-    if (llvm::find_if(globals, isSameName) == globals.end())
-      return name;
-  }
-}
-
 class ConvertGpuStreamCreatePattern
     : public ConvertOpToGpuRuntimeCallPattern<gpu_runtime::CreateGpuStreamOp> {
 public:
@@ -266,7 +252,7 @@ private:
       llvm::SmallString<64> name = device.getValue();
       name.push_back('\0');
 
-      auto varName = getUniqueLLVMGlobalName(mod, "device_name");
+      auto varName = imex::getUniqueLLVMGlobalName(mod, "device_name");
       data = mlir::LLVM::createGlobalString(loc, rewriter, varName, name,
                                             mlir::LLVM::Linkage::Internal);
     } else {
@@ -328,7 +314,7 @@ private:
     auto blob = blobAttr.getValue();
 
     auto loc = op.getLoc();
-    auto name = getUniqueLLVMGlobalName(mod, "gpu_blob");
+    auto name = imex::getUniqueLLVMGlobalName(mod, "gpu_blob");
     auto data = mlir::LLVM::createGlobalString(loc, rewriter, name, blob,
                                                mlir::LLVM::Linkage::Internal);
     auto size = rewriter.create<mlir::LLVM::ConstantOp>(
@@ -382,7 +368,7 @@ private:
     llvm::SmallString<64> name = op.getKernel().getLeafReference().getValue();
     name.push_back('\0');
 
-    auto varName = getUniqueLLVMGlobalName(mod, "kernel_name");
+    auto varName = imex::getUniqueLLVMGlobalName(mod, "kernel_name");
     auto data = mlir::LLVM::createGlobalString(loc, rewriter, varName, name,
                                                mlir::LLVM::Linkage::Internal);
     auto res =

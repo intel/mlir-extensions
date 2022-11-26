@@ -5,6 +5,7 @@
 #include "imex/Conversion/UtilToLlvm.hpp"
 
 #include "imex/Dialect/imex_util/Dialect.hpp"
+#include "imex/Transforms/FuncUtils.hpp"
 
 #include <mlir/Conversion/LLVMCommon/ConversionTarget.h>
 #include <mlir/Conversion/LLVMCommon/Pattern.h>
@@ -417,7 +418,7 @@ struct LowerTakeContextOp
     auto ctxHandle = [&]() {
       mlir::OpBuilder::InsertionGuard g(rewriter);
       rewriter.setInsertionPointToStart(mod.getBody());
-      llvm::StringRef name("context_handle"); // TODO: unique name
+      auto name = imex::getUniqueLLVMGlobalName(mod, "context_handle");
       auto handle = rewriter.create<mlir::LLVM::GlobalOp>(
           unknownLoc, ctxType, /*isConstant*/ false,
           mlir::LLVM::Linkage::Internal, name, mlir::Attribute());
