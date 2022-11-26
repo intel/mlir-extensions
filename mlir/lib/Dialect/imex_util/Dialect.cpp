@@ -1171,6 +1171,61 @@ struct ChangeLayoutSelect
   }
 };
 
+struct ChangeLayoutEnvRegion
+    : public mlir::OpRewritePattern<imex::util::EnvironmentRegionYieldOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::util::EnvironmentRegionYieldOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto args = op.getResults();
+    llvm::SmallVector<mlir::Value> updatedArgs(args.begin(), args.end());
+
+    bool changed = false;
+    for (auto [i, arg] : llvm::enumerate(args)) {
+      auto cl = arg.getDefiningOp<imex::util::ChangeLayoutOp>();
+      if (!cl)
+        continue;
+
+      updatedArgs[i] = cl.getSource();
+      changed = true;
+    }
+
+    if (!changed)
+      return mlir::failure();
+
+    auto region =
+        mlir::cast<imex::util::EnvironmentRegionOp>(op->getParentOp());
+    rewriter.updateRootInPlace(
+        op, [&]() { op.getResultsMutable().assign(updatedArgs); });
+
+    rewriter.updateRootInPlace(region, [&]() {
+      auto loc = region.getLoc();
+      mlir::OpBuilder::InsertionGuard g(rewriter);
+      rewriter.setInsertionPointAfter(region);
+      for (auto [arg, result] : llvm::zip(updatedArgs, region.getResults())) {
+        auto oldType = result.getType();
+        auto newType = arg.getType();
+        if (newType == oldType)
+          continue;
+
+        auto cast =
+            rewriter.create<imex::util::ChangeLayoutOp>(loc, oldType, result);
+        mlir::Value newResult = cast.getResult();
+        for (auto &use : llvm::make_early_inc_range(result.getUses())) {
+          auto owner = use.getOwner();
+          if (owner == cast)
+            continue;
+
+          rewriter.updateRootInPlace(owner, [&]() { use.set(newResult); });
+        }
+        result.setType(newType);
+      }
+    });
+    return mlir::success();
+  }
+};
+
 } // namespace
 
 void ChangeLayoutOp::getCanonicalizationPatterns(
@@ -1181,7 +1236,8 @@ void ChangeLayoutOp::getCanonicalizationPatterns(
       ChangeLayoutFromCast, ChangeLayoutLoad, ChangeLayoutStore,
       ChangeLayoutSubview, ChangeLayoutLinalgGeneric, ChangeLayoutLinalgFill,
       ChangeLayoutIf, ChangeLayout1DReshape, ChangeLayoutSliceGetItem,
-      ChangeLayoutCopy, ChangeLayoutExpandShape, ChangeLayoutSelect>(context);
+      ChangeLayoutCopy, ChangeLayoutExpandShape, ChangeLayoutSelect,
+      ChangeLayoutEnvRegion>(context);
 }
 
 static mlir::Value propagateCasts(mlir::Value val, mlir::Type thisType);
@@ -1724,25 +1780,28 @@ ExtractMemrefMetadataOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
   }
 
   if (auto reintr = src.getDefiningOp<mlir::memref::ReinterpretCastOp>()) {
+    auto toIndex = [&](mlir::OpFoldResult src) -> mlir::OpFoldResult {
+      if (auto val = mlir::getConstantIntValue(src)) {
+        mlir::Builder builder(getContext());
+        return builder.getIndexAttr(*val);
+      }
+      return src;
+    };
+
     if (idx == -1) {
       auto offsets = reintr.getMixedOffsets();
-      if (offsets.size() == 1)
-        return offsets.front();
+      if (offsets.size() == 1) {
+        return toIndex(offsets.front());
+      }
 
       return nullptr;
     }
 
     auto strides = reintr.getMixedStrides();
     if (static_cast<unsigned>(idx) < strides.size())
-      return strides[static_cast<unsigned>(idx)];
+      return toIndex(strides[static_cast<unsigned>(idx)]);
 
     return nullptr;
-  }
-
-  if (auto cast = src.getDefiningOp<mlir::memref::CastOp>()) {
-    auto newSrc = cast.getSource();
-    getSourceMutable().assign(newSrc);
-    return getResult();
   }
 
   if (auto cast = src.getDefiningOp<mlir::memref::CastOp>()) {

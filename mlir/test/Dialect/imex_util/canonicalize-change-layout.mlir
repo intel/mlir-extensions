@@ -1,4 +1,4 @@
-// RUN: imex-opt %s -canonicalize --split-input-file | FileCheck %s
+// RUN: imex-opt %s -allow-unregistered-dialect -canonicalize --split-input-file | FileCheck %s
 
 
 // CHECK-LABEL: func @test_change_layout
@@ -86,4 +86,22 @@ func.func @test_change_layout(%arg1 : memref<?x?xf64, strided<[1, 1], offset: ?>
     scf.yield %2 : memref<?x?xf64>
   }
   return %0 : memref<?x?xf64>
+}
+
+// -----
+
+// CHECK-LABEL: func @test_change_layout
+//       CHECK:   %[[RES1:.*]] = imex_util.env_region "test" -> memref<?xi32, strided<[?], offset: ?>> {
+//       CHECK:   %[[VAL:.*]] = "test.test"() : () -> memref<?xi32, strided<[?], offset: ?>>
+//       CHECK:   imex_util.env_region_yield %[[VAL]] : memref<?xi32, strided<[?], offset: ?>>
+//       CHECK:   }
+//       CHECK:   %[[RES2:.*]] = imex_util.change_layout %[[RES1]] : memref<?xi32, strided<[?], offset: ?>> to memref<?xi32>
+//       CHECK:   return %[[RES2]] : memref<?xi32>
+func.func @test_change_layout() -> memref<?xi32> {
+  %0 = imex_util.env_region "test" -> memref<?xi32> {
+    %1 = "test.test"() : () -> memref<?xi32, strided<[?], offset: ?>>
+    %2 = imex_util.change_layout %1 : memref<?xi32, strided<[?], offset: ?>> to memref<?xi32>
+    imex_util.env_region_yield %2: memref<?xi32>
+  }
+  return %0 : memref<?xi32>
 }
