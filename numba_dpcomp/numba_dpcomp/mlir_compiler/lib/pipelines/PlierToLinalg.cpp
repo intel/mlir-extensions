@@ -2914,23 +2914,31 @@ struct FixDeallocPlacementPass
                                       mlir::func::FuncOp, void,
                                       FixDeallocPlacement> {};
 
+static void populateCommonOptPass(mlir::OpPassManager &pm) {
+  pm.addPass(imex::createCompositePass(
+      "PlierToLinalgCommonOptPass", [](mlir::OpPassManager &p) {
+        p.addNestedPass<mlir::func::FuncOp>(mlir::createCSEPass());
+        p.addNestedPass<mlir::func::FuncOp>(mlir::createCanonicalizerPass());
+      }));
+}
+
 static void populatePlierToLinalgGenPipeline(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::func::FuncOp>(
       std::make_unique<MarkContigiousArraysPass>());
   pm.addPass(std::make_unique<PlierToNtensorPass>());
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(std::make_unique<ResolveNumpyFuncsPass>());
+  populateCommonOptPass(pm);
   pm.addPass(imex::ntensor::createPropagateEnvironmentPass());
   pm.addPass(std::make_unique<ResolveNtensorPass>());
-  pm.addNestedPass<mlir::func::FuncOp>(mlir::createCanonicalizerPass());
+  pm.addPass(imex::createForceInlinePass());
+  pm.addPass(mlir::createSymbolDCEPass());
+  populateCommonOptPass(pm);
   pm.addNestedPass<mlir::func::FuncOp>(
       std::make_unique<WrapParforRegionsPass>());
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addNestedPass<mlir::func::FuncOp>(imex::createNtensorAliasAnalysisPass());
   pm.addNestedPass<mlir::func::FuncOp>(imex::createNtensorToLinalgPass());
-  pm.addNestedPass<mlir::func::FuncOp>(mlir::createCanonicalizerPass());
-  pm.addPass(imex::createForceInlinePass());
-  pm.addPass(mlir::createSymbolDCEPass());
   pm.addPass(std::make_unique<MarkInputShapesRanges>());
   pm.addPass(imex::createCompositePass(
       "PostPlierToLinalgPass", [](mlir::OpPassManager &p) {
