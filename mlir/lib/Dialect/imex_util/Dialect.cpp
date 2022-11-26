@@ -1724,17 +1724,26 @@ ExtractMemrefMetadataOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
   }
 
   if (auto reintr = src.getDefiningOp<mlir::memref::ReinterpretCastOp>()) {
+    auto toIndex = [&](mlir::OpFoldResult src) -> mlir::OpFoldResult {
+      if (auto val = mlir::getConstantIntValue(src)) {
+        mlir::Builder builder(getContext());
+        return builder.getIndexAttr(*val);
+      }
+      return src;
+    };
+
     if (idx == -1) {
       auto offsets = reintr.getMixedOffsets();
-      if (offsets.size() == 1)
-        return offsets.front();
+      if (offsets.size() == 1) {
+        return toIndex(offsets.front());
+      }
 
       return nullptr;
     }
 
     auto strides = reintr.getMixedStrides();
     if (static_cast<unsigned>(idx) < strides.size())
-      return strides[static_cast<unsigned>(idx)];
+      return toIndex(strides[static_cast<unsigned>(idx)]);
 
     return nullptr;
   }
