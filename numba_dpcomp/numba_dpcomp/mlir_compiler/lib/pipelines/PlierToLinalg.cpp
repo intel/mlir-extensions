@@ -45,6 +45,7 @@
 #include "imex/Transforms/CanonicalizeReductions.hpp"
 #include "imex/Transforms/CastUtils.hpp"
 #include "imex/Transforms/CommonOpts.hpp"
+#include "imex/Transforms/CompositePass.hpp"
 #include "imex/Transforms/InlineUtils.hpp"
 #include "imex/Transforms/LoopUtils.hpp"
 #include "imex/Transforms/MakeSignless.hpp"
@@ -2454,62 +2455,6 @@ void PostPlierToLinalgInnerPass::runOnOperation() {
   (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
 }
 
-struct CompositePass
-    : public mlir::PassWrapper<CompositePass, mlir::OperationPass<void>> {
-  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(CompositePass)
-
-  CompositePass(std::string name_,
-                std::function<void(mlir::OpPassManager &)> func)
-      : name(std::move(name_)), populateFunc(std::move(func)) {}
-
-  void runOnOperation() override {
-    assert(populateFunc);
-    auto op = getOperation();
-    mlir::OperationFingerPrint fp(op);
-
-    int currentIter = 0;
-    int maxIters = 10;
-
-    mlir::OpPassManager dynamicPM(op->getName());
-    populateFunc(dynamicPM);
-    while (true) {
-      if (mlir::failed(runPipeline(dynamicPM, op)))
-        return signalPassFailure();
-
-      if (currentIter++ >= maxIters) {
-        //        op->emitWarning("Composite pass didn't converge in " +
-        //                        llvm::Twine(maxIters) + " iterations");
-        break;
-      }
-
-      mlir::OperationFingerPrint newFp(op);
-      if (newFp == fp)
-        break;
-
-      fp = newFp;
-    }
-  }
-
-protected:
-  llvm::StringRef getName() const override {
-    assert(!name.empty());
-    return name;
-  }
-
-private:
-  std::string name;
-  std::function<void(mlir::OpPassManager &)> populateFunc;
-};
-
-static std::unique_ptr<mlir::Pass>
-createCompositePass(std::string name,
-                    std::function<void(mlir::OpPassManager &)> populateFunc) {
-  assert(!name.empty());
-  assert(populateFunc);
-  return std::make_unique<CompositePass>(std::move(name),
-                                         std::move(populateFunc));
-}
-
 template <typename F>
 static void visitTypeRecursive(mlir::Type type, F &&visitor) {
   if (auto tupleType = type.dyn_cast<mlir::TupleType>()) {
@@ -2987,8 +2932,8 @@ static void populatePlierToLinalgGenPipeline(mlir::OpPassManager &pm) {
   pm.addPass(imex::createForceInlinePass());
   pm.addPass(mlir::createSymbolDCEPass());
   pm.addPass(std::make_unique<MarkInputShapesRanges>());
-  pm.addPass(
-      createCompositePass("PostPlierToLinalgPass", [](mlir::OpPassManager &p) {
+  pm.addPass(imex::createCompositePass(
+      "PostPlierToLinalgPass", [](mlir::OpPassManager &p) {
         p.addPass(imex::createShapeIntegerRangePropagationPass());
         p.addNestedPass<mlir::func::FuncOp>(mlir::createCSEPass());
         p.addNestedPass<mlir::func::FuncOp>(
@@ -2997,11 +2942,13 @@ static void populatePlierToLinalgGenPipeline(mlir::OpPassManager &pm) {
 }
 
 static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
-  pm.addPass(createCompositePass("LinalgOptPass", [](mlir::OpPassManager &p) {
-    p.addPass(imex::createShapeIntegerRangePropagationPass());
-    p.addNestedPass<mlir::func::FuncOp>(mlir::createCSEPass());
-    p.addNestedPass<mlir::func::FuncOp>(std::make_unique<LinalgOptInnerPass>());
-  }));
+  pm.addPass(
+      imex::createCompositePass("LinalgOptPass", [](mlir::OpPassManager &p) {
+        p.addPass(imex::createShapeIntegerRangePropagationPass());
+        p.addNestedPass<mlir::func::FuncOp>(mlir::createCSEPass());
+        p.addNestedPass<mlir::func::FuncOp>(
+            std::make_unique<LinalgOptInnerPass>());
+      }));
 
   pm.addPass(imex::createNtensorToMemrefPass());
   pm.addPass(mlir::createCanonicalizerPass());
@@ -3058,8 +3005,8 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
 
   pm.addPass(imex::createShapeIntegerRangePropagationPass());
   pm.addNestedPass<mlir::func::FuncOp>(mlir::createCanonicalizerPass());
-  pm.addPass(
-      createCompositePass("PostLinalgOptPass", [](mlir::OpPassManager &p) {
+  pm.addPass(imex::createCompositePass(
+      "PostLinalgOptPass", [](mlir::OpPassManager &p) {
         p.addNestedPass<mlir::func::FuncOp>(mlir::createCSEPass());
         // ToDo: This pass also tries to do some simple fusion, whic should be
         // split in separate pass
