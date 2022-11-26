@@ -1777,9 +1777,10 @@ struct ResolveNtensorPass
   }
 };
 
-struct WrapParforRegions
-    : public mlir::PassWrapper<WrapParforRegions, mlir::OperationPass<void>> {
-  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(WrapParforRegions)
+struct WrapParforRegionsPass
+    : public mlir::PassWrapper<WrapParforRegionsPass,
+                               mlir::OperationPass<void>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(WrapParforRegionsPass)
 
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
@@ -2979,7 +2980,9 @@ static void populatePlierToLinalgGenPipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<ResolveNumpyFuncsPass>());
   pm.addPass(imex::ntensor::createPropagateEnvironmentPass());
   pm.addPass(std::make_unique<ResolveNtensorPass>());
-  pm.addPass(std::make_unique<WrapParforRegions>());
+  pm.addNestedPass<mlir::func::FuncOp>(mlir::createCanonicalizerPass());
+  pm.addNestedPass<mlir::func::FuncOp>(
+      std::make_unique<WrapParforRegionsPass>());
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addNestedPass<mlir::func::FuncOp>(imex::createNtensorAliasAnalysisPass());
   pm.addNestedPass<mlir::func::FuncOp>(imex::createNtensorToLinalgPass());
