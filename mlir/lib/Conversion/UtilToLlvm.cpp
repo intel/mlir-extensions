@@ -231,21 +231,6 @@ static void addToGlobalDtors(mlir::ConversionPatternRewriter &rewriter,
   rewriter.eraseOp(dtorOp);
 }
 
-// TODO: move to common place
-static std::string getUniqueLLVMGlobalName(mlir::ModuleOp mod,
-                                           mlir::StringRef srcName) {
-  auto globals = mod.getOps<mlir::LLVM::GlobalOp>();
-  for (int i = 0;; ++i) {
-    auto name =
-        (i == 0 ? std::string(srcName) : (srcName + llvm::Twine(i)).str());
-    auto isSameName = [&](mlir::LLVM::GlobalOp global) {
-      return global.getName() == name;
-    };
-    if (llvm::find_if(globals, isSameName) == globals.end())
-      return name;
-  }
-}
-
 struct LowerTakeContextOp
     : public mlir::ConvertOpToLLVMPattern<imex::util::TakeContextOp> {
   using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
