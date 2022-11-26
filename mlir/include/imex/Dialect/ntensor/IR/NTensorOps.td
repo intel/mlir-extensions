@@ -525,6 +525,7 @@ def DimOp : NTensor_OpBase<"dim", [
   }];
 
   let hasVerifier = 1;
+  let hasFolder = 1;
   let hasCanonicalizer = 1;
 }
 

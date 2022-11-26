@@ -247,8 +247,9 @@ void imex::ntensor::DimOp::build(mlir::OpBuilder &builder,
 }
 
 llvm::Optional<int64_t> imex::ntensor::DimOp::getConstantIndex() {
-  if (auto constantOp = getIndex().getDefiningOp<mlir::arith::ConstantOp>())
-    return constantOp.getValue().cast<mlir::IntegerAttr>().getInt();
+  if (auto val = mlir::getConstantIntValue(getIndex()))
+    return *val;
+
   return {};
 }
 
@@ -390,6 +391,31 @@ void imex::ntensor::DimOp::getCanonicalizationPatterns(
     ::mlir::RewritePatternSet &results, ::mlir::MLIRContext *context) {
   results.insert<FromTensorDimPropagate, ToTensorDimPropagate,
                  LinalgGenericDimPropagate, ExtractSliceDimPropagate>(context);
+}
+
+mlir::OpFoldResult
+imex::ntensor::DimOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
+  auto idxVal = getConstantIndex();
+  if (!idxVal || *idxVal < 0)
+    return nullptr;
+
+  auto idx = static_cast<size_t>(*idxVal);
+
+  auto getIndexVal = [&](int64_t val) {
+    return mlir::IntegerAttr::get(mlir::IndexType::get(getContext()), val);
+  };
+
+  mlir::Value src = getSource();
+  auto shape = src.getType().cast<mlir::ShapedType>().getShape();
+  if (idx < shape.size() && !mlir::ShapedType::isDynamic(shape[idx]))
+    return getIndexVal(shape[idx]);
+
+  if (auto cast = src.getDefiningOp<imex::ntensor::CastOp>()) {
+    getSourceMutable().assign(cast.getSource());
+    return getResult();
+  }
+
+  return nullptr;
 }
 
 imex::ntensor::NTensorType imex::ntensor::SubviewOp::inferResultType(
