@@ -407,6 +407,7 @@ def LoadOp : NTensor_OpBase<"load",
 
   let assemblyFormat = "$array `[` $indices `]` attr-dict `:` qualified(type($array))";
 
+  let hasFolder = 1;
   let hasCanonicalizer = 1;
 }
 

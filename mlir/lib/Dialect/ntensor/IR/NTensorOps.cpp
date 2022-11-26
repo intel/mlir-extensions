@@ -185,6 +185,39 @@ void imex::ntensor::LoadOp::getCanonicalizationPatterns(
   results.insert<LoadCastFold>(context);
 }
 
+static llvm::Optional<mlir::Value>
+foldLoadFromElements(mlir::Value src, mlir::ValueRange indices) {
+  auto fromElements = src.getDefiningOp<imex::ntensor::FromElementsOp>();
+  if (!fromElements)
+    return llvm::None;
+
+  if (indices.size() != 1)
+    return llvm::None;
+
+  auto idxVal = mlir::getConstantIntValue(indices.front());
+  if (!idxVal || *idxVal < 0)
+    return llvm::None;
+
+  auto idx = static_cast<size_t>(*idxVal);
+  auto args = fromElements.getElements();
+  if (idx >= args.size())
+    return llvm::None;
+
+  for (auto user : fromElements.getResult().getUsers())
+    if (!mlir::isa<imex::ntensor::LoadOp, imex::ntensor::DimOp>(user))
+      return llvm::None;
+
+  return args[idx];
+}
+
+mlir::OpFoldResult
+imex::ntensor::LoadOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
+  if (auto result = foldLoadFromElements(getArray(), getIndices()))
+    return *result;
+
+  return nullptr;
+}
+
 namespace {
 struct StoreCastFold : public mlir::OpRewritePattern<imex::ntensor::StoreOp> {
   using OpRewritePattern::OpRewritePattern;
