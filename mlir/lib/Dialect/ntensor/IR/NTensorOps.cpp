@@ -155,6 +155,69 @@ void imex::ntensor::ResolveSliceOp::getCanonicalizationPatterns(
 }
 
 namespace {
+struct LoadCastFold : public mlir::OpRewritePattern<imex::ntensor::LoadOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::LoadOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto array = op.getArray();
+    auto src = array.getDefiningOp<imex::ntensor::CastOp>();
+    if (!src)
+      return mlir::failure();
+
+    auto srcArray = src.getSource();
+    auto srcArrayType = srcArray.getType().cast<imex::ntensor::NTensorType>();
+    auto dstArrayType = array.getType().cast<imex::ntensor::NTensorType>();
+    if (srcArrayType.getElementType() != dstArrayType.getElementType() ||
+        srcArrayType.getEnvironment() != dstArrayType.getEnvironment())
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<imex::ntensor::LoadOp>(op, srcArray,
+                                                       op.getIndices());
+    return mlir::success();
+  }
+};
+} // namespace
+
+void imex::ntensor::LoadOp::getCanonicalizationPatterns(
+    ::mlir::RewritePatternSet &results, ::mlir::MLIRContext *context) {
+  results.insert<LoadCastFold>(context);
+}
+
+namespace {
+struct StoreCastFold : public mlir::OpRewritePattern<imex::ntensor::StoreOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::StoreOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto array = op.getArray();
+    auto src = array.getDefiningOp<imex::ntensor::CastOp>();
+    if (!src)
+      return mlir::failure();
+
+    auto srcArray = src.getSource();
+    auto srcArrayType = srcArray.getType().cast<imex::ntensor::NTensorType>();
+    auto dstArrayType = array.getType().cast<imex::ntensor::NTensorType>();
+    if (srcArrayType.getElementType() != dstArrayType.getElementType() ||
+        srcArrayType.getEnvironment() != dstArrayType.getEnvironment())
+      return mlir::failure();
+
+    auto val = op.getValue();
+    rewriter.replaceOpWithNewOp<imex::ntensor::StoreOp>(op, val, srcArray,
+                                                        op.getIndices());
+    return mlir::success();
+  }
+};
+} // namespace
+
+void imex::ntensor::StoreOp::getCanonicalizationPatterns(
+    ::mlir::RewritePatternSet &results, ::mlir::MLIRContext *context) {
+  results.insert<StoreCastFold>(context);
+}
+
+namespace {
 struct ResolveIndexPropagate
     : public mlir::OpRewritePattern<imex::ntensor::ResolveIndexOp> {
   using OpRewritePattern::OpRewritePattern;

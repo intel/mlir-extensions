@@ -406,6 +406,8 @@ def LoadOp : NTensor_OpBase<"load",
     }]>];
 
   let assemblyFormat = "$array `[` $indices `]` attr-dict `:` qualified(type($array))";
+
+  let hasCanonicalizer = 1;
 }
 
 def StoreOp : NTensor_OpBase<"store",
@@ -431,6 +433,8 @@ def StoreOp : NTensor_OpBase<"store",
     }]>];
 
   let assemblyFormat = "$value `,` $array `[` $indices `]` attr-dict `:` qualified(type($array))";
+
+  let hasCanonicalizer = 1;
 }
 
 def BuildSliceOp : NTensor_OpBase<"build_slice", [
