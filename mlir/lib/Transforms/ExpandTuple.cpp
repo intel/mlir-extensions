@@ -50,19 +50,37 @@ struct ExpandTupleReturn
   }
 };
 
+class ExpandEnvRegionYield
+    : public mlir::OpConversionPattern<imex::util::EnvironmentRegionYieldOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::util::EnvironmentRegionYieldOp op,
+                  imex::util::EnvironmentRegionYieldOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    llvm::SmallVector<mlir::Value> newOperands;
+    auto loc = op.getLoc();
+    flattenTuple(rewriter, loc, adaptor.getResults(), newOperands);
+
+    rewriter.replaceOpWithNewOp<imex::util::EnvironmentRegionYieldOp>(
+        op, newOperands);
+    return mlir::success();
+  }
+};
+
 static mlir::Value reconstructTuple(mlir::OpBuilder &builder,
                                     mlir::Location loc,
                                     mlir::TupleType tupleType,
                                     mlir::ValueRange &values) {
   llvm::SmallVector<mlir::Value, 4> vals(tupleType.size());
-  for (auto it : llvm::enumerate(tupleType.getTypes())) {
-    auto i = it.index();
-    auto type = it.value();
+  for (auto [i, type] : llvm::enumerate(tupleType.getTypes())) {
     if (auto innerTuple = type.dyn_cast<mlir::TupleType>()) {
       vals[i] = reconstructTuple(builder, loc, innerTuple, values);
     } else {
       if (values.empty())
         return {};
+
       vals[i] = values.front();
       values = values.drop_front();
     }
@@ -114,7 +132,8 @@ struct ExpandTuplePass
     imex::populateControlFlowTypeConversionRewritesAndTarget(typeConverter,
                                                              patterns, target);
 
-    patterns.insert<ExpandTupleReturn>(typeConverter, context);
+    patterns.insert<ExpandTupleReturn, ExpandEnvRegionYield>(typeConverter,
+                                                             context);
 
     if (failed(applyPartialConversion(module, target, std::move(patterns))))
       signalPassFailure();

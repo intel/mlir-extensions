@@ -18,7 +18,8 @@ namespace {
 class ConvertSelectOp
     : public mlir::OpConversionPattern<mlir::arith::SelectOp> {
 public:
-  using mlir::OpConversionPattern<mlir::arith::SelectOp>::OpConversionPattern;
+  using OpConversionPattern::OpConversionPattern;
+
   mlir::LogicalResult
   matchAndRewrite(mlir::arith::SelectOp op,
                   mlir::arith::SelectOp::Adaptor adaptor,
@@ -26,6 +27,111 @@ public:
     rewriter.replaceOpWithNewOp<mlir::arith::SelectOp>(
         op, adaptor.getCondition(), adaptor.getTrueValue(),
         adaptor.getFalseValue());
+    return mlir::success();
+  }
+};
+
+static void
+unpackUnrealizedConversionCast(mlir::Value v,
+                               mlir::SmallVectorImpl<mlir::Value> &unpacked);
+
+static llvm::SmallVector<mlir::Value>
+unpackUnrealizedConversionCast(mlir::ValueRange values) {
+  llvm::SmallVector<mlir::Value> ret;
+  for (auto value : values)
+    unpackUnrealizedConversionCast(value, ret);
+
+  return ret;
+}
+
+static llvm::Optional<llvm::SmallVector<mlir::Value>>
+packResults(mlir::OpBuilder &rewriter, mlir::Location loc,
+            mlir::TypeConverter &typeConverter, mlir::TypeRange resTypes,
+            mlir::ValueRange newResults) {
+  llvm::SmallVector<mlir::Type> newResultTypes;
+  llvm::SmallVector<unsigned> offsets;
+  offsets.push_back(0);
+  // Do the type conversion and record the offsets.
+  for (auto type : resTypes) {
+    if (mlir::failed(typeConverter.convertTypes(type, newResultTypes)))
+      return llvm::None;
+
+    offsets.push_back(newResultTypes.size());
+  }
+
+  llvm::SmallVector<mlir::Value> packedRets;
+  for (unsigned i = 1, e = offsets.size(); i < e; i++) {
+    unsigned start = offsets[i - 1], end = offsets[i];
+    unsigned len = end - start;
+    mlir::ValueRange mappedValue = newResults.slice(start, len);
+    if (len != 1) {
+      // 1 : N type conversion.
+      auto origType = resTypes[i - 1];
+      auto mat = typeConverter.materializeSourceConversion(
+          rewriter, loc, origType, mappedValue);
+      if (!mat)
+        return llvm::None;
+
+      packedRets.push_back(mat);
+    } else {
+      // 1 : 1 type conversion.
+      packedRets.push_back(mappedValue.front());
+    }
+  }
+
+  return packedRets;
+}
+
+class ConvertEnvRegionYield
+    : public mlir::OpConversionPattern<imex::util::EnvironmentRegionYieldOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::util::EnvironmentRegionYieldOp op,
+                  imex::util::EnvironmentRegionYieldOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<imex::util::EnvironmentRegionYieldOp>(
+        op, unpackUnrealizedConversionCast(adaptor.getResults()));
+    return mlir::success();
+  }
+};
+
+class ConvertEnvRegion
+    : public mlir::OpConversionPattern<imex::util::EnvironmentRegionOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::util::EnvironmentRegionOp op,
+                  imex::util::EnvironmentRegionOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto *converter = getTypeConverter();
+    assert(converter && "Invalid type converter");
+
+    llvm::SmallVector<mlir::Type> resultTypes;
+    if (mlir::failed(converter->convertTypes(op.getResultTypes(), resultTypes)))
+      return mlir::failure();
+
+    auto args = unpackUnrealizedConversionCast(adaptor.getArgs());
+
+    auto loc = op.getLoc();
+    auto newRegOp = rewriter.create<imex::util::EnvironmentRegionOp>(
+        loc, adaptor.getEnvironment(), args, resultTypes);
+
+    auto &newRegion = newRegOp.getRegion();
+    rewriter.eraseBlock(&newRegion.front());
+
+    auto &oldRegion = op.getRegion();
+    rewriter.inlineRegionBefore(oldRegion, newRegion, newRegion.end());
+
+    auto newResults = packResults(rewriter, loc, *typeConverter,
+                                  op.getResultTypes(), newRegOp.getResults());
+    if (!newResults)
+      return mlir::failure();
+
+    rewriter.replaceOp(op, *newResults);
+
     return mlir::success();
   }
 };
@@ -188,13 +294,30 @@ void imex::populateControlFlowTypeConversionRewritesAndTarget(
         return llvm::None;
       });
 
+  target.addDynamicallyLegalOp<imex::util::EnvironmentRegionOp>(
+      [&](imex::util::EnvironmentRegionOp op) -> llvm::Optional<bool> {
+        if (typeConverter.isLegal(op.getArgs().getTypes()) &&
+            typeConverter.isLegal(op.getResults().getTypes()))
+          return true;
+
+        return llvm::None;
+      });
+
+  target.addDynamicallyLegalOp<imex::util::EnvironmentRegionYieldOp>(
+      [&](imex::util::EnvironmentRegionYieldOp op) -> llvm::Optional<bool> {
+        if (typeConverter.isLegal(op.getResults().getTypes()))
+          return true;
+
+        return llvm::None;
+      });
+
   mlir::populateBranchOpInterfaceTypeConversionPattern(patterns, typeConverter);
   mlir::populateReturnOpTypeConversionPattern(patterns, typeConverter);
   mlir::scf::populateSCFStructuralTypeConversionsAndLegality(typeConverter,
                                                              patterns, target);
 
-  patterns.insert<ConvertSelectOp, ConvertForOpTypes>(typeConverter,
-                                                      patterns.getContext());
+  patterns.insert<ConvertSelectOp, ConvertEnvRegionYield, ConvertEnvRegion,
+                  ConvertForOpTypes>(typeConverter, patterns.getContext());
 }
 
 namespace {
