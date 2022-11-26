@@ -11,11 +11,13 @@
 
 #include <llvm/ADT/SmallVector.h>
 
+#include <mlir/Analysis/AliasAnalysis.h>
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 #include <mlir/IR/Dominance.h>
+#include <mlir/IR/FunctionInterfaces.h>
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Support/LogicalResult.h>
 
@@ -325,10 +327,13 @@ static bool equalIterationSpaces(scf::ParallelOp firstPloop,
 /// loop reads.
 static bool haveNoReadsAfterWriteExceptSameIndex(
     scf::ParallelOp firstPloop, scf::ParallelOp secondPloop,
-    const BlockAndValueMapping &firstToSecondPloopIndices) {
+    const BlockAndValueMapping &firstToSecondPloopIndices,
+    llvm::function_ref<mlir::AliasAnalysis &()> getAnalysis) {
   DenseMap<Value, SmallVector<ValueRange, 1>> bufferStores;
+  SmallVector<Value> bufferStoresVec;
   firstPloop.getBody()->walk([&](memref::StoreOp store) {
     bufferStores[store.getMemRef()].push_back(store.getIndices());
+    bufferStoresVec.emplace_back(store.getMemRef());
   });
   auto walkResult = secondPloop.getBody()->walk([&](memref::LoadOp load) {
     // Stop if the memref is defined in secondPloop body. Careful alias analysis
@@ -337,9 +342,18 @@ static bool haveNoReadsAfterWriteExceptSameIndex(
     if (memrefDef && memrefDef->getBlock() == load->getBlock())
       return WalkResult::interrupt();
 
-    auto write = bufferStores.find(load.getMemRef());
-    if (write == bufferStores.end())
+    if (bufferStores.empty())
       return WalkResult::advance();
+
+    auto write = bufferStores.find(load.getMemRef());
+    if (write == bufferStores.end()) {
+      auto &analysis = getAnalysis();
+      for (auto store : bufferStoresVec)
+        if (!analysis.alias(store, load.getMemRef()).isNo())
+          return WalkResult::interrupt();
+
+      return WalkResult::advance();
+    }
 
     // Allow only single write access per buffer.
     if (write->second.size() != 1)
@@ -365,7 +379,8 @@ static bool haveNoReadsAfterWriteExceptSameIndex(
 /// write patterns.
 static LogicalResult
 verifyDependencies(scf::ParallelOp firstPloop, scf::ParallelOp secondPloop,
-                   const BlockAndValueMapping &firstToSecondPloopIndices) {
+                   const BlockAndValueMapping &firstToSecondPloopIndices,
+                   llvm::function_ref<mlir::AliasAnalysis &()> getAnalysis) {
   for (auto res : firstPloop.getResults()) {
     for (auto user : res.getUsers()) {
       if (secondPloop->isAncestor(user))
@@ -373,35 +388,39 @@ verifyDependencies(scf::ParallelOp firstPloop, scf::ParallelOp secondPloop,
     }
   }
 
-  if (!haveNoReadsAfterWriteExceptSameIndex(firstPloop, secondPloop,
-                                            firstToSecondPloopIndices))
+  if (!haveNoReadsAfterWriteExceptSameIndex(
+          firstPloop, secondPloop, firstToSecondPloopIndices, getAnalysis))
     return failure();
 
   BlockAndValueMapping secondToFirstPloopIndices;
   secondToFirstPloopIndices.map(secondPloop.getBody()->getArguments(),
                                 firstPloop.getBody()->getArguments());
   return success(haveNoReadsAfterWriteExceptSameIndex(
-      secondPloop, firstPloop, secondToFirstPloopIndices));
+      secondPloop, firstPloop, secondToFirstPloopIndices, getAnalysis));
 }
 
 static bool
 isFusionLegal(scf::ParallelOp firstPloop, scf::ParallelOp secondPloop,
-              const BlockAndValueMapping &firstToSecondPloopIndices) {
+              const BlockAndValueMapping &firstToSecondPloopIndices,
+              llvm::function_ref<mlir::AliasAnalysis &()> getAnalysis) {
   return !hasNestedParallelOp(firstPloop) &&
          !hasNestedParallelOp(secondPloop) &&
          equalIterationSpaces(firstPloop, secondPloop) &&
          succeeded(verifyDependencies(firstPloop, secondPloop,
-                                      firstToSecondPloopIndices));
+                                      firstToSecondPloopIndices, getAnalysis));
 }
 
 /// Prepends operations of firstPloop's body into secondPloop's body.
-static bool fuseIfLegal(scf::ParallelOp firstPloop,
-                        scf::ParallelOp &secondPloop, OpBuilder &b) {
+static bool
+fuseIfLegal(scf::ParallelOp firstPloop, scf::ParallelOp &secondPloop,
+            OpBuilder &b,
+            llvm::function_ref<mlir::AliasAnalysis &()> getAnalysis) {
   BlockAndValueMapping firstToSecondPloopIndices;
   firstToSecondPloopIndices.map(firstPloop.getBody()->getArguments(),
                                 secondPloop.getBody()->getArguments());
 
-  if (!isFusionLegal(firstPloop, secondPloop, firstToSecondPloopIndices))
+  if (!isFusionLegal(firstPloop, secondPloop, firstToSecondPloopIndices,
+                     getAnalysis))
     return false;
 
   mlir::DominanceInfo dom;
@@ -479,6 +498,14 @@ bool hasNoEffect(mlir::scf::ParallelOp currentPloop, mlir::Operation *op) {
 } // namespace
 
 mlir::LogicalResult imex::naivelyFuseParallelOps(Region &region) {
+  std::unique_ptr<mlir::AliasAnalysis> analysis;
+  auto getAnalysis = [&]() -> mlir::AliasAnalysis & {
+    if (!analysis)
+      analysis = std::make_unique<mlir::AliasAnalysis>(
+          region.getParentOfType<mlir::FunctionOpInterface>());
+
+    return *analysis;
+  };
   OpBuilder b(region);
   // Consider every single block and attempt to fuse adjacent loops.
   bool changed = false;
@@ -512,7 +539,7 @@ mlir::LogicalResult imex::naivelyFuseParallelOps(Region &region) {
     }
     for (llvm::MutableArrayRef<scf::ParallelOp> ploops : ploopChains) {
       for (size_t i = 0, e = ploops.size(); i + 1 < e; ++i)
-        if (fuseIfLegal(ploops[i], ploops[i + 1], b))
+        if (fuseIfLegal(ploops[i], ploops[i + 1], b, getAnalysis))
           changed = true;
     }
   }
