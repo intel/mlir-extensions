@@ -45,7 +45,6 @@
 #include "imex/Transforms/CanonicalizeReductions.hpp"
 #include "imex/Transforms/CastUtils.hpp"
 #include "imex/Transforms/CommonOpts.hpp"
-#include "imex/Transforms/Cse.hpp"
 #include "imex/Transforms/InlineUtils.hpp"
 #include "imex/Transforms/LoopUtils.hpp"
 #include "imex/Transforms/MakeSignless.hpp"
@@ -135,8 +134,6 @@ static mlir::LogicalResult applyOptimizations(
   do {
     repeat = false;
     (void)mlir::applyPatternsAndFoldGreedily(op, patterns);
-    if (mlir::succeeded(imex::applyCSE(op.getRegion(), false)))
-      repeat = true;
 
     auto memOptRes = imex::optimizeMemoryOps(am);
     if (!memOptRes)

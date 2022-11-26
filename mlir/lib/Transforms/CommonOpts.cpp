@@ -4,7 +4,6 @@
 
 #include "imex/Transforms/CommonOpts.hpp"
 
-#include "imex/Transforms/Cse.hpp"
 #include "imex/Transforms/IfRewrites.hpp"
 #include "imex/Transforms/IndexTypePropagation.hpp"
 #include "imex/Transforms/LoopRewrites.hpp"
@@ -224,8 +223,6 @@ void imex::populateCommonOptsPatterns(mlir::RewritePatternSet &patterns) {
 
   patterns.insert<
       // clang-format off
-//      LoopInvariantCodeMotion, TODO
-      imex::CSERewrite<mlir::func::FuncOp, /*recusive*/ false>,
       SubviewLoadPropagate,
       SubviewStorePropagate,
       PowSimplify,

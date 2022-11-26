@@ -57,7 +57,6 @@ set(SOURCES_LIST
     lib/Transforms/CastUtils.cpp
     lib/Transforms/CommonOpts.cpp
     lib/Transforms/ConstUtils.cpp
-    lib/Transforms/Cse.cpp
     lib/Transforms/ExpandTuple.cpp
     lib/Transforms/FuncUtils.cpp
     lib/Transforms/IfRewrites.cpp
@@ -105,7 +104,6 @@ set(HEADERS_LIST
     include/imex/Transforms/CastUtils.hpp
     include/imex/Transforms/CommonOpts.hpp
     include/imex/Transforms/ConstUtils.hpp
-    include/imex/Transforms/Cse.hpp
     include/imex/Transforms/ExpandTuple.hpp
     include/imex/Transforms/FuncUtils.hpp
     include/imex/Transforms/IfRewrites.hpp
