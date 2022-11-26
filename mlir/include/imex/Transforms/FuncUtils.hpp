@@ -42,4 +42,8 @@ struct AllocaInsertionPoint {
 private:
   mlir::Operation *insertionPoint = nullptr;
 };
+
+/// Generate unique name for llvm global based on provided srcName.
+std::string getUniqueLLVMGlobalName(mlir::ModuleOp mod,
+                                    mlir::StringRef srcName);
 } // namespace imex

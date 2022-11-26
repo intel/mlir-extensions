@@ -6,6 +6,7 @@
 
 #include <llvm/ADT/StringRef.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
+#include <mlir/Dialect/LLVMIR/LLVMDialect.h>
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/BuiltinOps.h>
 
@@ -31,4 +32,18 @@ imex::AllocaInsertionPoint::AllocaInsertionPoint(mlir::Operation *inst) {
   auto &block = parent->getRegions().front().front();
   assert(!block.empty());
   insertionPoint = &block.front();
+}
+
+std::string imex::getUniqueLLVMGlobalName(mlir::ModuleOp mod,
+                                          mlir::StringRef srcName) {
+  auto globals = mod.getOps<mlir::LLVM::GlobalOp>();
+  for (int i = 0;; ++i) {
+    auto name =
+        (i == 0 ? std::string(srcName) : (srcName + llvm::Twine(i)).str());
+    auto isSameName = [&](mlir::LLVM::GlobalOp global) {
+      return global.getName() == name;
+    };
+    if (llvm::find_if(globals, isSameName) == globals.end())
+      return name;
+  }
 }
