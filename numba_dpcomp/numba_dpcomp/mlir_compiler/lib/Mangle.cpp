@@ -39,13 +39,12 @@ bool mangleFloat(llvm::raw_ostream &res, mlir::Type type) {
   return false;
 }
 
-static void mangleMemrefImpl(llvm::raw_ostream &res, mlir::ShapedType type);
+static bool mangleMemrefImpl(llvm::raw_ostream &res, mlir::ShapedType type);
 
 static bool mangleMemref(llvm::raw_ostream &res, mlir::Type type) {
-  if (auto m = type.dyn_cast<mlir::ShapedType>()) {
-    mangleMemrefImpl(res, m);
-    return true;
-  }
+  if (auto m = type.dyn_cast<mlir::ShapedType>())
+    return mangleMemrefImpl(res, m);
+
   return false;
 }
 
@@ -122,7 +121,7 @@ static std::string escapeString(llvm::StringRef str) {
 }
 
 template <typename F>
-static void mangleIdentImpl(llvm::raw_ostream &res, llvm::StringRef ident,
+static bool mangleIdentImpl(llvm::raw_ostream &res, llvm::StringRef ident,
                             F &&templateParams) {
   assert(!ident.empty());
   llvm::SmallVector<llvm::StringRef> parts;
@@ -136,55 +135,65 @@ static void mangleIdentImpl(llvm::raw_ostream &res, llvm::StringRef ident,
       res << escaped.size() << escaped;
     }
   };
+  bool sucess;
   if (parts.size() == 1) {
     writePart(parts.front());
-    templateParams(res);
+    sucess = templateParams(res);
   } else {
     res << 'N';
-    for (auto &part : parts) {
+    for (auto &part : parts)
       writePart(part);
-    }
-    templateParams(res);
+
+    sucess = templateParams(res);
     res << 'E';
   }
+  return sucess;
 }
 
 static void mangleIdent(llvm::raw_ostream &res, llvm::StringRef ident) {
-  auto dummy = [](auto &) {};
-  mangleIdentImpl(res, ident, dummy);
+  auto dummy = [](auto &) { return true; };
+  auto success = mangleIdentImpl(res, ident, dummy);
+  (void)success;
+  assert(success);
 }
 
 template <typename F>
-static void mangleIdent(llvm::raw_ostream &res, llvm::StringRef ident,
+static bool mangleIdent(llvm::raw_ostream &res, llvm::StringRef ident,
                         F &&templateParams) {
-  auto wrapTemplate = [&](llvm::raw_ostream &s) {
+  auto wrapTemplate = [&](llvm::raw_ostream &s) -> bool {
     s << 'I';
-    templateParams(s);
+    auto ret = templateParams(s);
     s << 'E';
+    return ret;
   };
-  mangleIdentImpl(res, ident, wrapTemplate);
+  return mangleIdentImpl(res, ident, wrapTemplate);
 }
 
-static void mangleType(llvm::raw_ostream &res, mlir::Type type) {
+static bool mangleType(llvm::raw_ostream &res, mlir::Type type) {
   for (auto m : typeManglers)
     if (m(res, type))
-      return;
+      return true;
 
-  llvm_unreachable("Cannot mangle type");
+  return false;
 }
 
-static void mangleMemrefImpl(llvm::raw_ostream &res, mlir::ShapedType type) {
-  auto params = [&](llvm::raw_ostream &s) {
-    mangleType(s, type.getElementType());
+static bool mangleMemrefImpl(llvm::raw_ostream &res, mlir::ShapedType type) {
+  auto params = [&](llvm::raw_ostream &s) -> bool {
+    if (!mangleType(s, type.getElementType()))
+      return false;
     s << "Li" << type.getRank() << "E";
     mangleIdent(s, "C");
+    return true;
   };
-  mangleIdent(res, "array", params);
+  return mangleIdent(res, "array", params);
 }
 
 static void mangleTypes(llvm::raw_ostream &res, mlir::TypeRange types) {
-  for (auto type : types)
-    mangleType(res, type);
+  for (auto type : types) {
+    auto success = mangleType(res, type);
+    (void)success;
+    assert(success);
+  }
 }
 
 } // namespace
