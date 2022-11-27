@@ -587,6 +587,35 @@ def test_copy_fusion():
         assert ir.count("scf.parallel") == 1, ir
 
 
+@pytest.mark.xfail(reason="Need to improve Alias analysis")
+def test_fusion_conflict1():
+    def py_func(a):
+        a[:] = np.flip(a)
+        return a
+
+    jit_func = njit(py_func)
+    a = np.arange(13)
+
+    with print_pass_ir([], ["PostLinalgOptPass"]):
+        assert_equal(py_func(a.copy()), jit_func(a.copy()))
+        ir = get_print_buffer()
+        assert ir.count("scf.parallel") == 2, ir
+
+
+def test_fusion_conflict2():
+    def py_func(a):
+        a[:] = np.flip(a + 1)
+        return a
+
+    jit_func = njit(py_func)
+    a = np.arange(13)
+
+    with print_pass_ir([], ["PostLinalgOptPass"]):
+        assert_equal(py_func(a.copy()), jit_func(a.copy()))
+        ir = get_print_buffer()
+        assert ir.count("scf.parallel") == 2, ir
+
+
 def test_broadcast_fusion1():
     def py_func(a):
         return a + a * a
