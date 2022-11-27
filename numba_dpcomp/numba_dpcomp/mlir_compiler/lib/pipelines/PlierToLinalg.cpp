@@ -34,6 +34,7 @@
 #include "pipelines/PlierToStd.hpp"
 #include "pipelines/PreLowSimplifications.hpp"
 
+#include "imex/Analysis/AliasAnalysis.hpp"
 #include "imex/Compiler/PipelineRegistry.hpp"
 #include "imex/Conversion/NtensorToLinalg.hpp"
 #include "imex/Conversion/NtensorToMemref.hpp"
@@ -2794,6 +2795,24 @@ struct AdditionalBufferize
   }
 };
 
+struct MarkArgsRestrictPass
+    : public mlir::PassWrapper<MarkArgsRestrictPass,
+                               mlir::OperationPass<void>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(MarkArgsRestrictPass)
+
+  void runOnOperation() override {
+    mlir::OpBuilder builder(&getContext());
+    auto attrName = builder.getStringAttr(imex::getRestrictArgName());
+    auto attr = builder.getUnitAttr();
+    getOperation()->walk([&](mlir::FunctionOpInterface func) {
+      auto numArgs = func.getNumArguments();
+      for (auto i : llvm::seq(0u, numArgs)) {
+        func.setArgAttr(i, attrName, attr);
+      }
+    });
+  }
+};
+
 struct CloneArgsPass
     : public mlir::PassWrapper<CloneArgsPass,
                                mlir::OperationPass<mlir::func::FuncOp>> {
@@ -2914,23 +2933,31 @@ struct FixDeallocPlacementPass
                                       mlir::func::FuncOp, void,
                                       FixDeallocPlacement> {};
 
+static void populateCommonOptPass(mlir::OpPassManager &pm) {
+  pm.addPass(imex::createCompositePass(
+      "PlierToLinalgCommonOptPass", [](mlir::OpPassManager &p) {
+        p.addNestedPass<mlir::func::FuncOp>(mlir::createCSEPass());
+        p.addNestedPass<mlir::func::FuncOp>(mlir::createCanonicalizerPass());
+      }));
+}
+
 static void populatePlierToLinalgGenPipeline(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::func::FuncOp>(
       std::make_unique<MarkContigiousArraysPass>());
   pm.addPass(std::make_unique<PlierToNtensorPass>());
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(std::make_unique<ResolveNumpyFuncsPass>());
+  populateCommonOptPass(pm);
   pm.addPass(imex::ntensor::createPropagateEnvironmentPass());
   pm.addPass(std::make_unique<ResolveNtensorPass>());
-  pm.addNestedPass<mlir::func::FuncOp>(mlir::createCanonicalizerPass());
+  pm.addPass(imex::createForceInlinePass());
+  pm.addPass(mlir::createSymbolDCEPass());
+  populateCommonOptPass(pm);
   pm.addNestedPass<mlir::func::FuncOp>(
       std::make_unique<WrapParforRegionsPass>());
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addNestedPass<mlir::func::FuncOp>(imex::createNtensorAliasAnalysisPass());
   pm.addNestedPass<mlir::func::FuncOp>(imex::createNtensorToLinalgPass());
-  pm.addNestedPass<mlir::func::FuncOp>(mlir::createCanonicalizerPass());
-  pm.addPass(imex::createForceInlinePass());
-  pm.addPass(mlir::createSymbolDCEPass());
   pm.addPass(std::make_unique<MarkInputShapesRanges>());
   pm.addPass(imex::createCompositePass(
       "PostPlierToLinalgPass", [](mlir::OpPassManager &p) {
@@ -3004,7 +3031,7 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
       mlir::createLoopInvariantCodeMotionPass());
 
   pm.addPass(imex::createShapeIntegerRangePropagationPass());
-  pm.addNestedPass<mlir::func::FuncOp>(mlir::createCanonicalizerPass());
+  pm.addPass(std::make_unique<MarkArgsRestrictPass>());
   pm.addPass(imex::createCompositePass(
       "PostLinalgOptPass", [](mlir::OpPassManager &p) {
         p.addNestedPass<mlir::func::FuncOp>(mlir::createCSEPass());

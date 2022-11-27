@@ -30,6 +30,7 @@ add_subdirectory(include/imex/Dialect/gpu_runtime/IR)
 add_subdirectory(include/imex/Dialect/ntensor/IR)
 
 set(SOURCES_LIST
+    lib/Analysis/AliasAnalysis.cpp
     lib/Analysis/MemorySsa.cpp
     lib/Analysis/MemorySsaAnalysis.cpp
     lib/Compiler/Compiler.cpp
@@ -77,6 +78,7 @@ set(SOURCES_LIST
     lib/Utils.cpp
     )
 set(HEADERS_LIST
+    include/imex/Analysis/AliasAnalysis.hpp
     include/imex/Analysis/MemorySsa.hpp
     include/imex/Analysis/MemorySsaAnalysis.hpp
     include/imex/Compiler/Compiler.hpp
