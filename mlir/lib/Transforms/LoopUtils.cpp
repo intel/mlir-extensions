@@ -4,6 +4,7 @@
 
 #include "imex/Transforms/LoopUtils.hpp"
 
+#include "imex/Analysis/AliasAnalysis.hpp"
 #include "imex/Dialect/imex_util/Dialect.hpp"
 #include "imex/Dialect/plier/Dialect.hpp"
 #include "imex/Transforms/CastUtils.hpp"
@@ -500,9 +501,11 @@ bool hasNoEffect(mlir::scf::ParallelOp currentPloop, mlir::Operation *op) {
 mlir::LogicalResult imex::naivelyFuseParallelOps(Region &region) {
   std::unique_ptr<mlir::AliasAnalysis> analysis;
   auto getAnalysis = [&]() -> mlir::AliasAnalysis & {
-    if (!analysis)
-      analysis = std::make_unique<mlir::AliasAnalysis>(
-          region.getParentOfType<mlir::FunctionOpInterface>());
+    if (!analysis) {
+      auto parent = region.getParentOfType<mlir::FunctionOpInterface>();
+      analysis = std::make_unique<mlir::AliasAnalysis>(parent);
+      analysis->addAnalysisImplementation(imex::LocalAliasAnalysis());
+    }
 
     return *analysis;
   };
