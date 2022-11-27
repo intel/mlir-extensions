@@ -3009,18 +3009,22 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<OptimizeStridedLayoutPass>());
   pm.addNestedPass<mlir::func::FuncOp>(
       std::make_unique<FinalizeStridedLayoutPass>());
-  pm.addNestedPass<mlir::func::FuncOp>(
-      mlir::bufferization::createBufferDeallocationPass());
-  pm.addPass(mlir::createCanonicalizerPass());
 
-  pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<LowerCloneOpsPass>());
-  pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<LowerCopyOpsPass>());
-  pm.addPass(mlir::createCanonicalizerPass());
+  pm.addNestedPass<mlir::func::FuncOp>(mlir::createCanonicalizerPass());
+
   //  pm.addNestedPass<mlir::func::FuncOp>(
   //      mlir::bufferization::createPromoteBuffersToStackPass());
 
   pm.addNestedPass<mlir::func::FuncOp>(
       mlir::createConvertLinalgToParallelLoopsPass());
+  pm.addNestedPass<mlir::func::FuncOp>(mlir::createCanonicalizerPass());
+  pm.addNestedPass<mlir::func::FuncOp>(
+      mlir::bufferization::createBufferDeallocationPass());
+  pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<LowerCloneOpsPass>());
+  pm.addNestedPass<mlir::func::FuncOp>(std::make_unique<LowerCopyOpsPass>());
+  pm.addNestedPass<mlir::func::FuncOp>(
+      mlir::createConvertLinalgToParallelLoopsPass());
+  pm.addNestedPass<mlir::func::FuncOp>(mlir::createCanonicalizerPass());
   pm.addPass(imex::createForceInlinePass());
   pm.addPass(mlir::createSymbolDCEPass());
 
