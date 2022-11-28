@@ -82,6 +82,19 @@ include(HandleLLVMOptions)
 set(IMEX_ENABLE_SYCL_RUNTIME 0 CACHE BOOL "Enable the Sycl Runtime")
 set(IMEX_ENABLE_L0_RUNTIME 0 CACHE BOOL "Enable the Level Zero Runtime")
 
+# Normalize IMEX_ENABLE_SYCL_RUNTIME and IMEX_ENABLE_L0_RUNTIME
+# These values are expected to be passed as 0 or 1 to imex-runner.py
+if (IMEX_ENABLE_SYCL_RUNTIME)
+    set(IMEX_ENABLE_SYCL_RUNTIME 1)
+else ()
+    set(IMEX_ENABLE_SYCL_RUNTIME 0)
+endif()
+
+if (IMEX_ENABLE_L0_RUNTIME)
+    set(IMEX_ENABLE_L0_RUNTIME 1)
+else ()
+    set(IMEX_ENABLE_L0_RUNTIME 0)
+endif()
 
 # Check if mlir vulkan runner was configured from mlir
 # target mlir-vulkan-runner is only set if vulkan runner was enabled during
