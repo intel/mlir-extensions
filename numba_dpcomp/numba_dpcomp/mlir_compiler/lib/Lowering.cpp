@@ -708,7 +708,7 @@ static void createPipeline(imex::PipelineRegistry &registry,
     registerLowerToGPUPipeline(registry);
     // TODO(nbpatel): Add Gpu->GpuRuntime & GpuRuntimetoLlvm Transformation
 #else
-    plier::reportError("DPCOMP was compiled without GPU support");
+    imex::reportError("DPCOMP was compiled without GPU support");
 #endif
   }
 }
