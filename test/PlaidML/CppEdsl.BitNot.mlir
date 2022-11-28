@@ -30,7 +30,7 @@ func.func @castI8toI32(%arg0: tensor<3x3xi8>) -> tensor<3x3xi32> {
   return %2: tensor<3x3xi32>
 }
 
-func.func private @printMemrefI32(tensor<*xi8>)
+func.func private @printMemrefI32(tensor<*xi32>)
 func.func @test(%arg0: tensor<3x3xi8>)->tensor<3x3xi8>{
     %0 = tensor.empty() : tensor<3x3xi8>
     %1 = linalg.generic {indexing_maps = [#map, #map], iterator_types = ["parallel", "parallel"]} ins(%arg0 : tensor<3x3xi8>) outs(%0 : tensor<3x3xi8>) {

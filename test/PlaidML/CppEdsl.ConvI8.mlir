@@ -11,7 +11,7 @@
 #map2 = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d4, d5, d6, d3)>
 #map3 = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d0, d1, d2, d3)>
 module @convolution {
-func.func @test(%arg0: tensor<1x224x224x3xi8>, %arg1: tensor<3x3x3x32xi8>) -> tensor<1x224x224x32xi8> {
+  func.func @test(%arg0: tensor<1x224x224x3xi8>, %arg1: tensor<3x3x3x32xi8>) -> tensor<1x224x224x32xi8> {
     %c0_i8 = arith.constant 0 : i8
     %0 = tensor.empty() : tensor<1x224x224x3xi8>
     %1 = linalg.generic {indexing_maps = [#map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%arg0 : tensor<1x224x224x3xi8>) outs(%0 : tensor<1x224x224x3xi8>) {
@@ -33,15 +33,31 @@ func.func @test(%arg0: tensor<1x224x224x3xi8>, %arg1: tensor<3x3x3x32xi8>) -> te
     } -> tensor<1x224x224x32xi8>
     return %5 : tensor<1x224x224x32xi8>
   }
+
   func.func @main() {
     %0 = arith.constant dense<1> : tensor<1x224x224x3xi8>
     %1 = arith.constant dense<1> : tensor<3x3x3x32xi8>
     %2 = call @test(%0, %1) : (tensor<1x224x224x3xi8>, tensor<3x3x3x32xi8>) -> tensor<1x224x224x32xi8>
-    %unranked = tensor.cast %2 : tensor<1x224x224x32xi8> to tensor<*xi8>
-    call @printMemrefI8(%unranked) : (tensor<*xi8>) -> ()
+    %3 = call @castI8toI32(%2): (tensor<1x224x224x32xi8>) -> tensor<1x224x224x32xi32>
+    %unranked = tensor.cast %3 : tensor<1x224x224x32xi32> to tensor<*xi32>
+    call @printMemrefI32(%unranked) : (tensor<*xi32>) -> ()
     return
   }
-    //      CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
-    // CHECK-NEXT:
-  func.func private @printMemrefI8(tensor<*xi8>)
+
+  func.func @castI8toI32(%arg0: tensor<1x224x224x32xi8>) -> tensor<1x224x224x32xi32> {
+  %1 = tensor.empty() : tensor<1x224x224x32xi32> 
+  %2 = linalg.generic {indexing_maps = [#map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} 
+       ins(%arg0: tensor<1x224x224x32xi8>) 
+       outs(%1 : tensor<1x224x224x32xi32>) 
+       attrs =  {iterator_ranges = [1, 224, 224, 32]} {
+  ^bb0(%arg1: i8, %arg2: i32):
+    %3 = arith.extui %arg1: i8 to i32
+    linalg.yield %3 : i32
+  } -> tensor<1x224x224x32xi32>
+  return %2: tensor<1x224x224x32xi32>
+}
+
+  //      CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
+  // CHECK-NEXT: [12, 12]
+  func.func private @printMemrefI32(tensor<*xi32>)
 }

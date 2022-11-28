@@ -2,18 +2,10 @@
 // RUN:                                        --runner mlir-cpu-runner -e main \
 // RUN:                                        --shared-libs=%mlir_runner_utils \
 // RUN:                                        --entry-point-result=void | FileCheck %s
-<<<<<<< HEAD
 // RUN: %gpu_skip || %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-llvm.pp \
 // RUN:                                        --runner mlir-cpu-runner -e main \
 // RUN:                                        --entry-point-result=void \
 // RUN:                                        --shared-libs=%mlir_runner_utils,%levelzero_runtime | FileCheck %s
-=======
-// RUN-GPU: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-llvm.pp \
-// RUN-GPU:                                        --runner mlir-cpu-runner -e main \
-// RUN-GPU:                                        --entry-point-result=void \
-// RUN-GPU:                                        --shared-libs=%mlir_runner_utils,%sycl_runtime | FileCheck %s
-
->>>>>>> de2c4a4 (add int8to32 cast)
 #map0 = affine_map<(d0, d1, d2) -> (d0, d2)>
 #map1 = affine_map<(d0, d1, d2) -> (d2, d1)>
 #map2 = affine_map<(d0, d1, d2) -> (d0, d1)>
