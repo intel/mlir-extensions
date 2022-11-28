@@ -109,7 +109,11 @@ set(LLVM_LIT_ARGS "-sv" CACHE STRING "lit default options")
 set(IMEX_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 # LLVM_EXTERNAL_PROJECTS build puts library, executables and tools in LLVM's CMAKE_BINARY_DIR
 set(IMEX_BINARY_DIR ${CMAKE_BINARY_DIR})
-set(IMEX_LIB_DIR ${IMEX_BINARY_DIR}/lib)
+if(WIN32)
+    set(IMEX_LIB_DIR ${IMEX_BINARY_DIR}/bin)
+else()
+    set(IMEX_LIB_DIR ${IMEX_BINARY_DIR}/lib)
+endif()
 
 include(sanitizers)
 
@@ -120,7 +124,7 @@ add_subdirectory(test)
 
 option(IMEX_INCLUDE_DOCS "Generate build targets for the IMEX docs." ON)
 if (IMEX_INCLUDE_DOCS)
-  add_subdirectory(docs)
+    add_subdirectory(docs)
 endif()
 
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/include/mlir
