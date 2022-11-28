@@ -75,4 +75,19 @@ def AddOuterParallelLoop : Pass<"imex-add-outer-parallel-loop", "::mlir::func::F
     ];
 }
 
+def LowerMemRefCopy : Pass<"imex-lower-memref-copy", "::mlir::func::FuncOp"> {
+  let summary = "lower memref.copy to linalg.generic";
+  let description = [{
+    This Pass transforms memref.copy to linalg.generic with identity index map and
+    parallel iterator. If satisfied, this pass also does memref.copy canonicalization.
+
+    This pass is supposed to work after bufferization and before linalg-lowering.
+  }];
+  let constructor = "imex::createLowerMemRefCopyPass()";
+  let dependentDialects = [
+    "::mlir::linalg::LinalgDialect",
+    "::mlir::memref::MemRefDialect"
+    ];
+}
+
 #endif // _IMEX_TRANSFORMS_PASSES_TD_INCLUDED_
