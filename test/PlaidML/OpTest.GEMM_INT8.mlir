@@ -28,10 +28,10 @@ func.func @main() {
 }
 
 func.func @castI8toI32(%arg0: tensor<3x3xi8>) -> tensor<3x3xi32> {
-  %1 = tensor.empty() : tensor<3x3xi32> 
-  %2 = linalg.generic {indexing_maps = [#map3, #map3], iterator_types = ["parallel", "parallel"]} 
-       ins(%arg0: tensor<3x3xi8>) 
-       outs(%1 : tensor<3x3xi32>) 
+  %1 = tensor.empty() : tensor<3x3xi32>
+  %2 = linalg.generic {indexing_maps = [#map3, #map3], iterator_types = ["parallel", "parallel"]}
+       ins(%arg0: tensor<3x3xi8>)
+       outs(%1 : tensor<3x3xi32>)
        attrs =  {iterator_ranges = [3, 3]} {
   ^bb0(%arg1: i8, %arg2: i32):
     %3 = arith.extui %arg1: i8 to i32

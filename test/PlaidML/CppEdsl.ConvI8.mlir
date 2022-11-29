@@ -45,10 +45,10 @@ module @convolution {
   }
 
   func.func @castI8toI32(%arg0: tensor<1x224x224x32xi8>) -> tensor<1x224x224x32xi32> {
-  %1 = tensor.empty() : tensor<1x224x224x32xi32> 
-  %2 = linalg.generic {indexing_maps = [#map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} 
-       ins(%arg0: tensor<1x224x224x32xi8>) 
-       outs(%1 : tensor<1x224x224x32xi32>) 
+  %1 = tensor.empty() : tensor<1x224x224x32xi32>
+  %2 = linalg.generic {indexing_maps = [#map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]}
+       ins(%arg0: tensor<1x224x224x32xi8>)
+       outs(%1 : tensor<1x224x224x32xi32>)
        attrs =  {iterator_ranges = [1, 224, 224, 32]} {
   ^bb0(%arg1: i8, %arg2: i32):
     %3 = arith.extui %arg1: i8 to i32
