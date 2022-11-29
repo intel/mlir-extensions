@@ -50,7 +50,7 @@ struct EasyExpr {
 
 /// Generic operation with an eval method which creates MLIR operations
 /// the eval method is called by the binding template expression
-/// Paramter arg is currently casted to CmpIPredicate (required by comparison
+/// Parameter arg is currently casted to CmpIPredicate (required by comparison
 /// ops only)
 template <typename T, typename OP, uint64_t arg = ULLONG_MAX> struct EasyOp {
   using ElType = T;
@@ -111,14 +111,37 @@ easyCompare(LHS const &l, RHS const &r) {
   return {l, r};
 }
 
+/// equal
+template <typename LHS, typename RHS> auto easyEQ(LHS const &l, RHS const &r) {
+  return easyCompare<::mlir::arith::CmpIPredicate::eq>(l, r);
+}
+/// non-equal
+template <typename LHS, typename RHS> auto easyNE(LHS const &l, RHS const &r) {
+  return easyCompare<::mlir::arith::CmpIPredicate::ne>(l, r);
+}
+/// signed-lower-than comparison of expressions
+template <typename LHS, typename RHS> auto easySLT(LHS const &l, RHS const &r) {
+  return easyCompare<::mlir::arith::CmpIPredicate::slt>(l, r);
+}
 /// unsigned-lower-than comparison of expressions
 template <typename LHS, typename RHS> auto easyULT(LHS const &l, RHS const &r) {
   return easyCompare<::mlir::arith::CmpIPredicate::ult>(l, r);
 }
-
-/// signed-lower-than comparison of expressions
-template <typename LHS, typename RHS> auto easySLT(LHS const &l, RHS const &r) {
-  return easyCompare<::mlir::arith::CmpIPredicate::slt>(l, r);
+/// signed greater-than
+template <typename LHS, typename RHS> auto easySGT(LHS const &l, RHS const &r) {
+  return easyCompare<::mlir::arith::CmpIPredicate::sgt>(l, r);
+}
+/// unsigned greater-than
+template <typename LHS, typename RHS> auto easyUGT(LHS const &l, RHS const &r) {
+  return easyCompare<::mlir::arith::CmpIPredicate::ugt>(l, r);
+}
+/// signed greater-equal
+template <typename LHS, typename RHS> auto easySGE(LHS const &l, RHS const &r) {
+  return easyCompare<::mlir::arith::CmpIPredicate::sge>(l, r);
+}
+/// unsigned greater-equal
+template <typename LHS, typename RHS> auto easyUGE(LHS const &l, RHS const &r) {
+  return easyCompare<::mlir::arith::CmpIPredicate::uge>(l, r);
 }
 
 /// select lhs or rhs dependent on comparison
@@ -164,102 +187,6 @@ struct EasyIdx : public EasyVal<int64_t> {
           int64_t value)
       : EasyVal<int64_t>(createIndex(loc, builder, value)) {}
 };
-
-#if 0
-class EasyInt {
-  const ::mlir::Location *_loc;
-  ::mlir::OpBuilder *_builder;
-  ::mlir::Value _value;
-
-public:
-  EasyInt(const ::mlir::Location &loc, ::mlir::OpBuilder &builder,
-          const ::mlir::Value &value, bool idx = false)
-      : _loc(&loc), _builder(&builder) {
-    if (idx) {
-      _value = createIndexCast(loc, builder, value);
-    } else {
-      _value = value;
-    }
-  }
-
-  template <int W = 64>
-  static EasyInt create(const ::mlir::Location &loc, ::mlir::OpBuilder &builder,
-                        uint64_t value, bool idx = false) {
-    if (idx) {
-      return {loc, builder, createIndex(loc, builder, value)};
-    } else {
-      // if constexpr(::std::is_integral_v<T>) {
-      return {loc, builder, createInt<W>(loc, builder, value)};
-    }
-    assert(!"Only ints supported as EasyValues");
-    return {loc, builder, ::mlir::Value()};
-  }
-
-  ::mlir::Value get() const { return _value; }
-
-  EasyInt operator+(const EasyInt &rhs) const {
-    return {*_loc, *_builder,
-            _builder->create<::mlir::arith::AddIOp>(*_loc, _value, rhs.get())};
-  }
-  EasyInt operator-(const EasyInt &rhs) const {
-    return {*_loc, *_builder,
-            _builder->create<::mlir::arith::SubIOp>(*_loc, _value, rhs.get())};
-  }
-  EasyInt operator*(const EasyInt &rhs) const {
-    return {*_loc, *_builder,
-            _builder->create<::mlir::arith::MulIOp>(*_loc, _value, rhs.get())};
-  }
-  EasyInt operator/(const EasyInt &rhs) const {
-    return {*_loc, *_builder,
-            _builder->create<::mlir::arith::DivSIOp>(*_loc, _value, rhs.get())};
-  }
-  EasyInt eq(const EasyInt &rhs) const {
-    return {*_loc, *_builder,
-            _builder->create<::mlir::arith::CmpIOp>(
-                *_loc, ::mlir::arith::CmpIPredicate::eq, _value, rhs.get())};
-  }
-  EasyInt ne(const EasyInt &rhs) const {
-    return {*_loc, *_builder,
-            _builder->create<::mlir::arith::CmpIOp>(
-                *_loc, ::mlir::arith::CmpIPredicate::ne, _value, rhs.get())};
-  }
-  EasyInt slt(const EasyInt &rhs) const {
-    return {*_loc, *_builder,
-            _builder->create<::mlir::arith::CmpIOp>(
-                *_loc, ::mlir::arith::CmpIPredicate::slt, _value, rhs.get())};
-  }
-  EasyInt ult(const EasyInt &rhs) const {
-    return {*_loc, *_builder,
-            _builder->create<::mlir::arith::CmpIOp>(
-                *_loc, ::mlir::arith::CmpIPredicate::ult, _value, rhs.get())};
-  }
-  EasyInt sgt(const EasyInt &rhs) const {
-    return {*_loc, *_builder,
-            _builder->create<::mlir::arith::CmpIOp>(
-                *_loc, ::mlir::arith::CmpIPredicate::sgt, _value, rhs.get())};
-  }
-  EasyInt ugt(const EasyInt &rhs) const {
-    return {*_loc, *_builder,
-            _builder->create<::mlir::arith::CmpIOp>(
-                *_loc, ::mlir::arith::CmpIPredicate::ugt, _value, rhs.get())};
-  }
-  EasyInt sge(const EasyInt &rhs) const {
-    return {*_loc, *_builder,
-            _builder->create<::mlir::arith::CmpIOp>(
-                *_loc, ::mlir::arith::CmpIPredicate::sge, _value, rhs.get())};
-  }
-  EasyInt uge(const EasyInt &rhs) const {
-    return {*_loc, *_builder,
-            _builder->create<::mlir::arith::CmpIOp>(
-                *_loc, ::mlir::arith::CmpIPredicate::uge, _value, rhs.get())};
-  }
-  EasyInt select(const EasyInt &lhs, const EasyInt &rhs) {
-    return {*_loc, *_builder,
-            _builder->create<::mlir::arith::SelectOp>(*_loc, _value, lhs.get(),
-                                                      rhs.get())};
-  }
-};
-#endif // if 0
 
 } // namespace imex
 
