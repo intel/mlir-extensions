@@ -103,14 +103,22 @@ operator/(LHS const &l, RHS const &r) {
   return {l, r};
 }
 
-/// unsigned-lower-than comparison of expressions
-template <typename LHS, typename RHS>
-EasyExpr<LHS,
-         EasyOp<typename LHS::ElType, ::mlir::arith::CmpIOp,
-                (uint64_t)::mlir::arith::CmpIPredicate::ult>,
+/// generic comparison of expressions
+template <::mlir::arith::CmpIPredicate CP, typename LHS, typename RHS>
+EasyExpr<LHS, EasyOp<typename LHS::ElType, ::mlir::arith::CmpIOp, (uint64_t)CP>,
          RHS>
-easyULT(LHS const &l, RHS const &r) {
+easyCompare(LHS const &l, RHS const &r) {
   return {l, r};
+}
+
+/// unsigned-lower-than comparison of expressions
+template <typename LHS, typename RHS> auto easyULT(LHS const &l, RHS const &r) {
+  return easyCompare<::mlir::arith::CmpIPredicate::ult>(l, r);
+}
+
+/// signed-lower-than comparison of expressions
+template <typename LHS, typename RHS> auto easySLT(LHS const &l, RHS const &r) {
+  return easyCompare<::mlir::arith::CmpIPredicate::slt>(l, r);
 }
 
 /// select lhs or rhs dependent on comparison
