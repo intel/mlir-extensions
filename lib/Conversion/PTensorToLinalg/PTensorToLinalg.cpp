@@ -241,9 +241,9 @@ struct ARangeLowering
     auto loc = op.getLoc();
 
     // Get Operands
-    auto start = ::imex::EasyInt(loc, rewriter, adaptor.getStart(), true);
-    auto stop = ::imex::EasyInt(loc, rewriter, adaptor.getStop(), true);
-    auto step = ::imex::EasyInt(loc, rewriter, adaptor.getStep(), true);
+    EasyIdx start(loc, rewriter, adaptor.getStart());
+    EasyIdx stop(loc, rewriter, adaptor.getStop());
+    EasyIdx step(loc, rewriter, adaptor.getStep());
     auto retPtTyp = op.getType().dyn_cast<::imex::ptensor::PTensorType>();
     assert(retPtTyp);
 
@@ -252,8 +252,7 @@ struct ARangeLowering
 
     // init tensor
     auto elTyp = retPtTyp.getElementType();
-    auto tensor =
-        createEmptyTensor(rewriter, loc, elTyp, {count.get()}).getResult();
+    auto tensor = createEmptyTensor(rewriter, loc, elTyp, {count}).getResult();
 
     // fill with arange values
     // map needed for output only (we have no input tensor)
@@ -266,12 +265,11 @@ struct ARangeLowering
                                         ::mlir::Location loc,
                                         ::mlir::ValueRange args) {
       auto dim = getIntAttr<64>(builder, 0);
-      auto idx = ::imex::EasyInt(
-          loc, builder, builder.create<::mlir::linalg::IndexOp>(loc, dim));
+      EasyVal<int64_t> idx(builder.create<::mlir::linalg::IndexOp>(loc, dim));
       auto val = start + (step * idx);
       // auto _val = builder.create<mlir::arith::SIToFPOp>(loc, elTyp, val);
       (void)builder.create<::mlir::linalg::YieldOp>(
-          loc, createIndexCast(loc, builder, val.get(), elTyp));
+          loc, createIndexCast(loc, builder, val.get(loc, builder), elTyp));
     };
 
     auto resTnsr = rewriter.create<::mlir::linalg::GenericOp>(

@@ -19,6 +19,7 @@
 #include <imex/Dialect/Dist/IR/DistOps.h>
 #include <imex/Dialect/Dist/Utils/Utils.h>
 #include <imex/Dialect/PTensor/IR/PTensorOps.h>
+#include <imex/Utils/ArithUtils.h>
 #include <imex/Utils/PassUtils.h>
 #include <imex/Utils/PassWrapper.h>
 
@@ -233,17 +234,15 @@ struct LocalOffsetsOpConverter
     // auto &converter = *getTypeConverter();
     // int64_t rank = (int64_t)op.getRank();
 
-    auto sz0 = createIndexCast(
-        loc, rewriter,
-        rewriter.create<::mlir::memref::LoadOp>(
-            loc, adaptor.getGshape(),
-            ::mlir::ValueRange({createIndex(loc, rewriter, 0)})));
-    auto tsz = createTileSize(loc, rewriter, sz0, adaptor.getNumProcs());
-    auto off =
-        rewriter.create<mlir::arith::MulIOp>(loc, adaptor.getPrank(), tsz);
+    EasyIdx sz0(rewriter.create<::mlir::memref::LoadOp>(
+        loc, adaptor.getGshape(),
+        ::mlir::ValueRange({createIndex(loc, rewriter, 0)})));
+    EasyIdx tsz(
+        createTileSize(loc, rewriter, sz0.get(), adaptor.getNumProcs()));
+    auto off = sz0 * tsz;
     rewriter.replaceOp(op, createMemRefFromElements(rewriter, loc,
                                                     rewriter.getIndexType(),
-                                                    {off.getResult()}));
+                                                    {off.get(loc, rewriter)}));
     return ::mlir::success();
   }
 };

@@ -368,9 +368,9 @@ struct DistARangeOpRWP : public RecOpRewritePattern<::imex::ptensor::ARangeOp> {
       return ::mlir::failure();
 
     // get operands
-    auto start = ::imex::EasyInt(loc, rewriter, op.getStart(), true);
-    auto stop = ::imex::EasyInt(loc, rewriter, op.getStop(), true);
-    auto step = ::imex::EasyInt(loc, rewriter, op.getStep(), true);
+    EasyIdx start(loc, rewriter, op.getStart());
+    EasyIdx stop(loc, rewriter, op.getStop());
+    EasyIdx step(loc, rewriter, op.getStep());
     // compute global count (so we know the shape)
     auto count = createCountARange(rewriter, loc, start, stop, step);
     auto dtype = rewriter.getI64Type(); // FIXME
@@ -380,8 +380,7 @@ struct DistARangeOpRWP : public RecOpRewritePattern<::imex::ptensor::ARangeOp> {
     auto pRank = rewriter.create<::imex::dist::PRankOp>(loc, team);
     // result shape is 1d
     constexpr int64_t rank = 1;
-    auto gShape =
-        createMemRefFromElements(rewriter, loc, indexTyp, {count.get()});
+    auto gShape = createMemRefFromElements(rewriter, loc, indexTyp, {count});
 
     // so is the local shape
     llvm::SmallVector<mlir::Value> lShapeVVec(rank);
@@ -389,19 +388,18 @@ struct DistARangeOpRWP : public RecOpRewritePattern<::imex::ptensor::ARangeOp> {
     auto lShapeVVec_mr = rewriter.create<::imex::dist::LocalShapeOp>(
         loc, rank, nProcs, pRank, gShape);
     auto zero = createIndex(loc, rewriter, 0);
-    EasyInt lSz(loc, rewriter,
-                rewriter.create<::mlir::memref::LoadOp>(
-                    loc, lShapeVVec_mr, ::mlir::ValueRange({zero})));
+    EasyIdx lSz(rewriter.create<::mlir::memref::LoadOp>(
+        loc, lShapeVVec_mr, ::mlir::ValueRange({zero})));
     // get local offsets
     auto offsets = rewriter.create<::imex::dist::LocalOffsetsOp>(
         loc, rank, nProcs, pRank, gShape);
     // create start from offset
-    EasyInt off(loc, rewriter,
-                rewriter.create<::mlir::memref::LoadOp>(
-                    loc, offsets, ::mlir::ValueRange({zero})));
-    start = start + (off * step);
+    EasyIdx off(rewriter.create<::mlir::memref::LoadOp>(
+        loc, offsets, ::mlir::ValueRange({zero})));
+    start = (start + (off * step)).get(loc, rewriter);
     // create stop
-    stop = start + (step * lSz); // start + (lShape[0] * step)
+    stop =
+        (start + (step * lSz)).get(loc, rewriter); // start + (lShape[0] * step)
     //  get type of local tensor
     auto artype = ::imex::ptensor::PTensorType::get(rewriter.getContext(), rank,
                                                     dtype, false);

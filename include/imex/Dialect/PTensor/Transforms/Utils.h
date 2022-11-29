@@ -23,18 +23,21 @@ namespace imex {
 /// arange(start, stop, step) would have.
 /// @return number of elements an arange(start, stop, step) would have
 /// (::mlir::Value)
-inline EasyInt createCountARange(::mlir::OpBuilder &builder,
-                                 ::mlir::Location loc, const EasyInt &start,
-                                 const EasyInt &stop, const EasyInt &step) {
+inline ::mlir::Value createCountARange(::mlir::OpBuilder &builder,
+                                       ::mlir::Location loc,
+                                       const EasyIdx &start,
+                                       const EasyIdx &stop,
+                                       const EasyIdx &step) {
   // Create constants 0, 1, -1 for later
-  auto zero = ::imex::EasyInt::create(loc, builder, 0, true);
-  auto one = ::imex::EasyInt::create(loc, builder, 1, true);
-  auto mone = ::imex::EasyInt::create(loc, builder, -1, true);
+  EasyIdx zero(loc, builder, 0);
+  EasyIdx one(loc, builder, 1);
+  EasyIdx mone(loc, builder, -1);
 
   // Compute number of elements as
   //   (stop - start + step + (step < 0 ? 1 : -1)) / step
-  auto increment = step.ult(zero).select(one, mone);
-  return (stop - start + step + increment) / step;
+  return ((stop - start + step + easySelect(easyULT(step, zero), one, mone)) /
+          step)
+      .get(loc, builder);
 }
 
 } // namespace imex
