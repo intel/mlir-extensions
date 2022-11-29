@@ -16,6 +16,7 @@
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/Linalg/Passes.h>
 #include <mlir/Dialect/Linalg/Transforms/Transforms.h>
+#include <mlir/Dialect/Math/IR/Math.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/Dialect/SCF/Transforms/Passes.h>
@@ -2928,6 +2929,60 @@ void PostLinalgOptInnerPass::runOnOperation() {
     signalPassFailure();
 }
 
+struct MoveArithIntoRegionPass
+    : public mlir::PassWrapper<MoveArithIntoRegionPass,
+                               mlir::OperationPass<void>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(MoveArithIntoRegionPass)
+
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<imex::util::ImexUtilDialect>();
+    registry.insert<mlir::arith::ArithDialect>();
+    registry.insert<mlir::math::MathDialect>();
+  }
+
+  void runOnOperation() override {
+    auto root = getOperation();
+
+    llvm::SmallVector<mlir::Operation *> opsToCheck;
+    root->walk([&](mlir::Operation *op) {
+      auto dialect = op->getDialect();
+      if (!mlir::isa<mlir::arith::ArithDialect, mlir::math::MathDialect>(
+              dialect))
+        return;
+
+      opsToCheck.emplace_back(op);
+    });
+
+    for (auto *op : llvm::reverse(opsToCheck)) {
+      assert(op);
+
+      auto block = op->getBlock();
+      auto iter = op->getIterator();
+      if (iter == block->end())
+        continue;
+
+      auto region = mlir::dyn_cast<imex::util::EnvironmentRegionOp>(*(++iter));
+      if (!region)
+        continue;
+
+      bool isUsedOutside = false;
+      for (auto user : op->getUsers()) {
+        if (!region->isProperAncestor(user)) {
+          isUsedOutside = true;
+          break;
+        }
+      }
+
+      if (isUsedOutside)
+        continue;
+
+      mlir::Operation &firstOp = region.getRegion().front().front();
+      op->moveBefore(&firstOp);
+    }
+  }
+};
+
 struct FixDeallocPlacementPass
     : public imex::RewriteWrapperPass<FixDeallocPlacementPass,
                                       mlir::func::FuncOp, void,
@@ -3038,6 +3093,8 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<MarkArgsRestrictPass>());
   pm.addPass(imex::createCompositePass(
       "PostLinalgOptPass", [](mlir::OpPassManager &p) {
+        p.addNestedPass<mlir::func::FuncOp>(
+            std::make_unique<MoveArithIntoRegionPass>());
         p.addNestedPass<mlir::func::FuncOp>(mlir::createCSEPass());
         // ToDo: This pass also tries to do some simple fusion, whic should be
         // split in separate pass

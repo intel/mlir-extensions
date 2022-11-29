@@ -564,8 +564,7 @@ struct OutlineInitPass
       auto funcName = func.getName();
       initOps.clear();
       deinitOps.clear();
-      for (auto &op : body.front())
-        tryOutlineOp(op);
+      func->walk([&](mlir::Operation *op) { tryOutlineOp(*op); });
 
       if (!initOps.empty()) {
         builder.setInsertionPointToStart(mod.getBody());

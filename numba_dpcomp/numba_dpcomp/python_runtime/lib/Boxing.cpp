@@ -116,7 +116,7 @@ dpcompUnboxSyclInterface(PyObject *obj, arystruct_t *arystruct) {
     npy_intp stride = itemsize;
     for (decltype(ndim) i = 0; i < ndim; i++) {
       strides[ndim - i - 1] = stride;
-      stride *= dims[i];
+      stride *= dims[ndim - i - 1];
     }
   } else {
     for (decltype(ndim) i = 0; i < ndim; i++) {
