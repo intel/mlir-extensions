@@ -35,7 +35,7 @@ inline ::mlir::Value createCountARange(::mlir::OpBuilder &builder,
 
   // Compute number of elements as
   //   (stop - start + step + (step < 0 ? 1 : -1)) / step
-  return ((stop - start + step + step.slt(zero).select(one, mone)) / step)
+  return (((stop - start) + step + step.slt(zero).select(one, mone)) / step)
       .get();
 }
 

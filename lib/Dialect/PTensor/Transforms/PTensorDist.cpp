@@ -183,7 +183,7 @@ struct DistExtractMemRefOpRWP
                rewriter.create<::mlir::memref::LoadOp>(
                    loc, lOffs, ::mlir::ValueRange{zeroIdx.get()}));
   // last index of local partition
-  auto lEnd = lOff * lExtent;
+  auto lEnd = lOff + lExtent;
   // check if requested slice fully before local partition
   auto beforeLocal = slcEnd.ult(lOff);
   // check if requested slice fully behind local partition
@@ -196,7 +196,7 @@ struct DistExtractMemRefOpRWP
   // Check if local start is on a multiple of the new slice
   auto isMultiple = nextMultiple.eq(strOff);
   // stride - (strOff - nextMultiple)
-  auto off = slcStrides0 - strOff - nextMultiple;
+  auto off = slcStrides0 - (strOff - nextMultiple);
   // offset is either 0 if multiple or off
   auto lDiff1 = isMultiple.select(zeroIdx, off);
   // if view starts within our partition: (start-lOff)
@@ -208,9 +208,9 @@ struct DistExtractMemRefOpRWP
   // min of lEnd and slice's end
   auto theEnd = lEnd.min(slcEnd);
   // range between local views start and end
-  auto lRange = theEnd - viewOff - lOff;
+  auto lRange = (theEnd - viewOff) - lOff;
   // number of elements in local view (range+stride-1)/stride
-  auto viewSize1 = (lRange + slcStrides0 - oneIdx) / slcStrides0;
+  auto viewSize1 = (lRange + (slcStrides0 - oneIdx)) / slcStrides0;
   auto viewSize0 = beforeLocal.select(zeroIdx, viewSize1);
   auto viewSize = behindLocal.select(zeroIdx, viewSize0);
 
@@ -224,7 +224,7 @@ struct DistExtractMemRefOpRWP
 
   if (doOffs) {
     // offset of local partition in new tensor/view
-    auto lViewOff1 = (lOff + viewOff - slcOffs0) / slcStrides0;
+    auto lViewOff1 = ((lOff + viewOff) - slcOffs0) / slcStrides0;
     auto lViewOff0 = beforeLocal.select(slcOffs0, lViewOff1);
     auto lViewOff = behindLocal.select(slcEnd, lViewOff0);
     // create local offsets from above computed
