@@ -265,11 +265,12 @@ struct ARangeLowering
                                         ::mlir::Location loc,
                                         ::mlir::ValueRange args) {
       auto dim = getIntAttr<64>(builder, 0);
-      EasyVal<int64_t> idx(builder.create<::mlir::linalg::IndexOp>(loc, dim));
+      EasyIdx idx(loc, builder,
+                  builder.create<::mlir::linalg::IndexOp>(loc, dim));
       auto val = start + (step * idx);
       // auto _val = builder.create<mlir::arith::SIToFPOp>(loc, elTyp, val);
       (void)builder.create<::mlir::linalg::YieldOp>(
-          loc, createIndexCast(loc, builder, val.get(loc, builder), elTyp));
+          loc, createIndexCast(loc, builder, val.get(), elTyp));
     };
 
     auto resTnsr = rewriter.create<::mlir::linalg::GenericOp>(

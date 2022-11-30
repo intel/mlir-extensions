@@ -234,15 +234,17 @@ struct LocalOffsetsOpConverter
     // auto &converter = *getTypeConverter();
     // int64_t rank = (int64_t)op.getRank();
 
-    EasyIdx sz0(rewriter.create<::mlir::memref::LoadOp>(
-        loc, adaptor.getGshape(),
-        ::mlir::ValueRange({createIndex(loc, rewriter, 0)})));
+    EasyIdx sz0(loc, rewriter,
+                rewriter.create<::mlir::memref::LoadOp>(
+                    loc, adaptor.getGshape(),
+                    ::mlir::ValueRange({createIndex(loc, rewriter, 0)})));
     EasyIdx tsz(
+        loc, rewriter,
         createTileSize(loc, rewriter, sz0.get(), adaptor.getNumProcs()));
     auto off = sz0 * tsz;
     rewriter.replaceOp(op, createMemRefFromElements(rewriter, loc,
                                                     rewriter.getIndexType(),
-                                                    {off.get(loc, rewriter)}));
+                                                    {off.get()}));
     return ::mlir::success();
   }
 };

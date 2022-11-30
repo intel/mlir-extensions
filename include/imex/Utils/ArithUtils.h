@@ -20,187 +20,181 @@
 
 namespace imex {
 
-/// type to indicate no comparison value
-struct NoCmp {};
-
-/// Generic expression template representing a binary operation, optionally
-/// enriched with a comparison.
-template <typename LHS, typename OP, typename RHS, typename CMP = NoCmp>
-struct EasyExpr {
-  using ElType = typename OP::ElType;
-  using CType = typename LHS::CType;
-
-  EasyExpr(LHS const &lhs, RHS const &rhs, CMP const &cmp = {})
-      : _lhs(lhs), _rhs(rhs), _cmp(cmp) {}
-
-  /// triggers evaluation of template expression(s)
-  ElType get(const ::mlir::Location &loc, ::mlir::OpBuilder &builder) const {
-    if constexpr (std::is_same_v<CMP, NoCmp>) {
-      return OP::eval(loc, builder, _lhs.get(loc, builder),
-                      _rhs.get(loc, builder));
-    } else if constexpr (!std::is_same_v<CMP, NoCmp>) {
-      return OP::eval(loc, builder, _lhs.get(loc, builder),
-                      _rhs.get(loc, builder), _cmp.get(loc, builder));
-    }
-  }
-
-  LHS const &_lhs;
-  RHS const &_rhs;
-  CMP const &_cmp;
-};
-
-using NoPred = bool;
-
-/// Generic operation with an eval method which creates MLIR operations
-/// the eval method is called by the binding template expression
-template <typename T, typename OP, typename P = NoPred, P arg = {}>
-struct EasyOp {
-  using ElType = T;
-  /// eval generic binary ops
-  static ElType eval(const ::mlir::Location &loc, ::mlir::OpBuilder &builder,
-                     T const &l, T const &r) {
-    if constexpr (std::is_same_v<P, NoPred>) {
-      return builder.create<OP>(loc, l, r);
-    } else if constexpr (!std::is_same_v<P, NoPred>) {
-      return builder.create<OP>(loc, arg, l, r);
-    }
-  }
-  /// eval comparison op
-  template <typename A>
-  static ElType eval(const ::mlir::Location &loc, ::mlir::OpBuilder &builder,
-                     T const &l, T const &r, A const &a) {
-    if constexpr (std::is_same_v<P, NoPred>) {
-      return builder.create<OP>(loc, a, l, r);
-    } else if constexpr (!std::is_same_v<P, NoPred>) {
-      return builder.create<OP>(loc, arg, a, l, r);
-    }
-  }
-};
-
-/// addition of the expressions
-template <typename LHS, typename RHS,
-          typename std::enable_if<
-              std::is_integral<typename LHS::CType>::value>::type * = nullptr>
-EasyExpr<LHS, EasyOp<typename LHS::ElType, ::mlir::arith::AddIOp>, RHS>
-operator+(LHS const &l, RHS const &r) {
-  return {l, r};
-}
-
-/// subtraction of the expressions
-template <typename LHS, typename RHS,
-          typename std::enable_if<
-              std::is_integral<typename LHS::CType>::value>::type * = nullptr>
-EasyExpr<LHS, EasyOp<typename LHS::ElType, ::mlir::arith::SubIOp>, RHS>
-operator-(LHS const &l, RHS const &r) {
-  return {l, r};
-}
-
-// multiplication of the expressions
-template <typename LHS, typename RHS,
-          typename std::enable_if<
-              std::is_integral<typename LHS::CType>::value>::type * = nullptr>
-EasyExpr<LHS, EasyOp<typename LHS::ElType, ::mlir::arith::MulIOp>, RHS>
-operator*(LHS const &l, RHS const &r) {
-  return {l, r};
-}
-
-/// division of the expressions
-template <typename LHS, typename RHS,
-          typename std::enable_if<
-              std::is_integral<typename LHS::CType>::value>::type * = nullptr>
-EasyExpr<LHS, EasyOp<typename LHS::ElType, ::mlir::arith::DivSIOp>, RHS>
-operator/(LHS const &l, RHS const &r) {
-  return {l, r};
-}
-
-/// generic comparison of expressions for integral types
-template <::mlir::arith::CmpIPredicate CP, typename LHS, typename RHS,
-          typename std::enable_if<
-              std::is_integral<typename LHS::CType>::value>::type * = nullptr>
-EasyExpr<LHS,
-         EasyOp<typename LHS::ElType, ::mlir::arith::CmpIOp,
-                ::mlir::arith::CmpIPredicate, CP>,
-         RHS>
-easyCompare(LHS const &l, RHS const &r) {
-  return {l, r};
-}
-
-/// integral type equal
-template <typename LHS, typename RHS> auto easyEQ(LHS const &l, RHS const &r) {
-  return easyCompare<::mlir::arith::CmpIPredicate::eq>(l, r);
-}
-/// integral type non-equal
-template <typename LHS, typename RHS> auto easyNE(LHS const &l, RHS const &r) {
-  return easyCompare<::mlir::arith::CmpIPredicate::ne>(l, r);
-}
-/// integral type signed-lower-than comparison of expressions
-template <typename LHS, typename RHS> auto easySLT(LHS const &l, RHS const &r) {
-  return easyCompare<::mlir::arith::CmpIPredicate::slt>(l, r);
-}
-/// integral type unsigned-lower-than comparison of expressions
-template <typename LHS, typename RHS> auto easyULT(LHS const &l, RHS const &r) {
-  return easyCompare<::mlir::arith::CmpIPredicate::ult>(l, r);
-}
-/// integral type signed greater-than
-template <typename LHS, typename RHS> auto easySGT(LHS const &l, RHS const &r) {
-  return easyCompare<::mlir::arith::CmpIPredicate::sgt>(l, r);
-}
-/// integral type unsigned greater-than
-template <typename LHS, typename RHS> auto easyUGT(LHS const &l, RHS const &r) {
-  return easyCompare<::mlir::arith::CmpIPredicate::ugt>(l, r);
-}
-/// integral type signed greater-equal
-template <typename LHS, typename RHS> auto easySGE(LHS const &l, RHS const &r) {
-  return easyCompare<::mlir::arith::CmpIPredicate::sge>(l, r);
-}
-/// integral type unsigned greater-equal
-template <typename LHS, typename RHS> auto easyUGE(LHS const &l, RHS const &r) {
-  return easyCompare<::mlir::arith::CmpIPredicate::uge>(l, r);
-}
-
-/// select lhs or rhs dependent on comparison
-template <typename CMP, typename LHS, typename RHS>
-EasyExpr<LHS, EasyOp<typename LHS::ElType, ::mlir::arith::SelectOp>, RHS, CMP>
-easySelect(CMP const &cmp, LHS const &l, RHS const &r) {
-  return {l, r, cmp};
-}
-
 /// Generic Value class, simply wrapping a mlir::Value
 /// Get actual mlir::Value through get()
-/// Also provides get(loc, builder) to allow mix of expressions and Values
 template <typename T> struct EasyVal {
   using ElType = ::mlir::Value;
   using CType = T;
   ElType _value;
+  const ::mlir::Location *_loc;
+  ::mlir::OpBuilder *_builder;
 
   /// Create Value by wrapping existing mlir::Value
-  EasyVal(const ElType &value) : _value(value) {}
+  EasyVal(const ::mlir::Location &loc, ::mlir::OpBuilder &builder,
+          const ElType &value)
+      : _value(value), _loc(&loc), _builder(&builder) {}
   /// Create Value from C++ value
-  EasyVal(const ::mlir::Location &loc, ::mlir::OpBuilder &builder, T value)
-      : _value(createInt<sizeof(T) * 8>(loc, builder, value)) {
+  template <typename X = T, typename std::enable_if<
+                                std::is_integral<X>::value>::type * = nullptr>
+  EasyVal(const ::mlir::Location &loc, ::mlir::OpBuilder &builder, X value)
+      : _value(createInt<sizeof(T) * 8>(loc, builder, value)), _loc(&loc),
+        _builder(&builder) {
     static_assert(std::is_integral_v<T>);
   }
 
   /// @return wrapped mlir::Value
   ElType get() const { return _value; };
-  /// @return wrapped mlir::Value
-  ElType get(const ::mlir::Location &, ::mlir::OpBuilder &) const {
-    return _value;
-  };
+
+  /// addition of the expressions
+  template <typename X = T, typename std::enable_if<
+                                std::is_integral<X>::value>::type * = nullptr>
+  EasyVal<X> operator+(EasyVal<X> const &r) const {
+    return {*_loc, *_builder,
+            _builder->create<::mlir::arith::AddIOp>(*_loc, _value, r.get())};
+  }
+
+  /// subtraction of the expressions
+  template <typename X = T, typename std::enable_if<
+                                std::is_integral<X>::value>::type * = nullptr>
+  EasyVal<X> operator-(EasyVal<X> const &r) const {
+    return {*_loc, *_builder,
+            _builder->create<::mlir::arith::SubIOp>(*_loc, _value, r.get())};
+  }
+
+  // multiplication of the expressions
+  template <typename X = T, typename std::enable_if<
+                                std::is_integral<X>::value>::type * = nullptr>
+  EasyVal<X> operator*(EasyVal<X> const &r) const {
+    return {*_loc, *_builder,
+            _builder->create<::mlir::arith::MulIOp>(*_loc, _value, r.get())};
+  }
+
+  /// division of the expressions
+  template <typename X = T, typename std::enable_if<
+                                std::is_integral<X>::value>::type * = nullptr>
+  EasyVal<X> operator/(EasyVal<X> const &r) const {
+    return {*_loc, *_builder,
+            _builder->create<::mlir::arith::DivSIOp>(*_loc, _value, r.get())};
+  }
+
+  /// min of the expressions
+  template <typename X = T, typename std::enable_if<
+                                std::is_integral<X>::value>::type * = nullptr>
+  EasyVal<X> min(EasyVal<X> const &r) const {
+    return {*_loc, *_builder,
+            _builder->create<::mlir::arith::MinSIOp>(*_loc, _value, r.get())};
+  }
+
+  /// max of the expressions
+  template <typename X = T, typename std::enable_if<
+                                std::is_integral<X>::value>::type * = nullptr>
+  EasyVal<X> max(EasyVal<X> const &r) const {
+    return {*_loc, *_builder,
+            _builder->create<::mlir::arith::MaxSIOp>(*_loc, _value, r.get())};
+  }
+
+  /// generic comparison of expressions for integral types
+  EasyVal<bool> easyCompare(::mlir::arith::CmpIPredicate cmp,
+                            EasyVal<T> const &r) const {
+    return {
+        *_loc, *_builder,
+        _builder->create<::mlir::arith::CmpIOp>(*_loc, cmp, _value, r.get())};
+  }
+
+  /// integral type equal
+  template <typename X = T, typename std::enable_if<
+                                std::is_integral<X>::value>::type * = nullptr>
+  auto eq(EasyVal<X> const &r) const {
+    return easyCompare(::mlir::arith::CmpIPredicate::eq, r);
+  }
+  /// integral type non-equal
+  template <typename X = T, typename std::enable_if<
+                                std::is_integral<X>::value>::type * = nullptr>
+  auto ne(EasyVal<X> const &r) const {
+    return easyCompare(::mlir::arith::CmpIPredicate::ne, r);
+  }
+  /// integral type signed-lower-than comparison of expressions
+  template <typename X = T, typename std::enable_if<
+                                std::is_integral<X>::value>::type * = nullptr>
+  auto slt(EasyVal<X> const &r) const {
+    return easyCompare(::mlir::arith::CmpIPredicate::slt, r);
+  }
+  /// integral type unsigned-lower-than comparison of expressions
+  template <typename X = T, typename std::enable_if<
+                                std::is_integral<X>::value>::type * = nullptr>
+  auto ult(EasyVal<X> const &r) const {
+    return easyCompare(::mlir::arith::CmpIPredicate::ult, r);
+  }
+  /// integral type signed-lower-equal comparison of expressions
+  template <typename X = T, typename std::enable_if<
+                                std::is_integral<X>::value>::type * = nullptr>
+  auto sle(EasyVal<X> const &r) const {
+    return easyCompare(::mlir::arith::CmpIPredicate::sle, r);
+  }
+  /// integral type unsigned-lower-equal comparison of expressions
+  template <typename X = T, typename std::enable_if<
+                                std::is_integral<X>::value>::type * = nullptr>
+  auto ule(EasyVal<X> const &r) const {
+    return easyCompare(::mlir::arith::CmpIPredicate::ule, r);
+  }
+  /// integral type signed greater-than
+  template <typename X = T, typename std::enable_if<
+                                std::is_integral<X>::value>::type * = nullptr>
+  auto sgt(EasyVal<X> const &r) const {
+    return easyCompare(::mlir::arith::CmpIPredicate::sgt, r);
+  }
+  /// integral type unsigned greater-than
+  template <typename X = T, typename std::enable_if<
+                                std::is_integral<X>::value>::type * = nullptr>
+  auto ugt(EasyVal<X> const &r) const {
+    return easyCompare(::mlir::arith::CmpIPredicate::ugt, r);
+  }
+  /// integral type signed greater-equal
+  template <typename X = T, typename std::enable_if<
+                                std::is_integral<X>::value>::type * = nullptr>
+  auto sge(EasyVal<X> const &r) const {
+    return easyCompare(::mlir::arith::CmpIPredicate::sge, r);
+  }
+  /// integral type unsigned greater-equal
+  template <typename X = T, typename std::enable_if<
+                                std::is_integral<X>::value>::type * = nullptr>
+  auto uge(EasyVal<X> const &r) const {
+    return easyCompare(::mlir::arith::CmpIPredicate::uge, r);
+  }
+
+  /// select lhs or rhs dependent on comparison
+  template <
+      typename LHS, typename RHS, typename X = T,
+      typename std::enable_if<std::is_same<X, bool>::value>::type * = nullptr>
+  EasyVal<typename LHS::CType> select(RHS const &l, LHS const &r) const {
+    return {*_loc, *_builder,
+            _builder->create<::mlir::arith::SelectOp>(*_loc, _value, l.get(),
+                                                      r.get())};
+  }
 };
 
 /// Special EasyVal representing an mlir::Index
 struct EasyIdx : public EasyVal<int64_t> {
-  /// Create Value by wrapping existing mlir::Value of index-type
-  EasyIdx(const ElType &value) : EasyVal<int64_t>(value) {}
   /// Potentially cast to Index
   EasyIdx(const ::mlir::Location &loc, ::mlir::OpBuilder &builder,
           const ElType &value)
-      : EasyVal<int64_t>(createIndexCast(loc, builder, value)) {}
+      : EasyVal<int64_t>(loc, builder, createIndexCast(loc, builder, value)) {}
   /// Create Value from C++ value
   EasyIdx(const ::mlir::Location &loc, ::mlir::OpBuilder &builder,
           int64_t value)
-      : EasyVal<int64_t>(createIndex(loc, builder, value)) {}
+      : EasyVal<int64_t>(loc, builder, createIndex(loc, builder, value)) {}
+  EasyIdx &operator=(const EasyVal<int64_t> &r) {
+    _loc = r._loc;
+    _builder = r._builder;
+    _value = r.get();
+    return *this;
+  }
+  EasyIdx &operator=(const EasyIdx &r) {
+    _loc = r._loc;
+    _builder = r._builder;
+    _value = r.get();
+    return *this;
+  }
 };
 
 } // namespace imex
