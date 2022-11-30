@@ -1,18 +1,18 @@
-convert-ptensor-to-linalg
-convert-shape-to-std
-arith-bufferize
-func.func(empty-tensor-to-alloc-tensor
+builtin.module(convert-ptensor-to-linalg
+    convert-shape-to-std
+    arith-bufferize
+    func.func(empty-tensor-to-alloc-tensor
           scf-bufferize
           shape-bufferize
           linalg-bufferize
           tensor-bufferize)
-func-bufferize
-func.func(finalizing-bufferize
+    func-bufferize
+    func.func(finalizing-bufferize
           convert-linalg-to-parallel-loops)
-canonicalize
-func.func(lower-affine)
-fold-memref-alias-ops
-convert-scf-to-cf
-convert-memref-to-llvm
-convert-func-to-llvm
-reconcile-unrealized-casts
+    canonicalize
+    func.func(lower-affine)
+    fold-memref-alias-ops
+    convert-scf-to-cf
+    convert-memref-to-llvm
+    convert-func-to-llvm
+    reconcile-unrealized-casts)

@@ -212,7 +212,8 @@ struct ARangeLowering
     // map needed for output only (we have no input tensor)
     const ::mlir::AffineMap maps[] = {
         ::mlir::AffineMap::getMultiDimIdentityMap(1, rewriter.getContext())};
-    llvm::SmallVector<::mlir::StringRef> iterators(1, "parallel");
+    llvm::SmallVector<mlir::utils::IteratorType> iterators(
+        1, mlir::utils::IteratorType::parallel);
 
     // The body; accepting no input, the lambda simply captures start and step
     auto body = [&start, &step, &elTyp, &intTyp](::mlir::OpBuilder &builder,
@@ -381,12 +382,12 @@ struct EWBinOpLowering
     // different shapes
     auto rank = static_cast<unsigned>(retRtTyp.getRank());
     llvm::SmallVector<::mlir::OpFoldResult> shapeVVec(rank);
-    llvm::SmallVector<mlir::StringRef> iterators(rank);
+    llvm::SmallVector<mlir::utils::IteratorType> iterators(rank);
     for (auto i : llvm::seq<unsigned>(0u, rank)) {
       shapeVVec[i] =
           rewriter.create<::mlir::tensor::DimOp>(loc, lhsTnsr, i).getResult();
       // iterate in parallel
-      iterators[i] = "parallel";
+      iterators[i] = mlir::utils::IteratorType::parallel;
     }
 
     // init tensor
@@ -503,7 +504,8 @@ struct ReductionOpLowering
     // output map is "*->()"
     auto omap = ::mlir::AffineMap::get(inpRank, 0, rewriter.getContext());
     const ::mlir::AffineMap maps[] = {inpMap, omap};
-    llvm::SmallVector<mlir::StringRef> iterators(inpRank, "reduction");
+    llvm::SmallVector<mlir::utils::IteratorType> iterators(
+        inpRank, mlir::utils::IteratorType::reduction);
 
     // create reduction op as linalg::generic
     const ::imex::ptensor::ReduceOpId ropid =

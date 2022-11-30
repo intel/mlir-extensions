@@ -18,7 +18,7 @@ func.func @main() {
     %3 = call @test(%0,%1,%2) : (tensor<3x3xi32>,tensor<3x3xi32>,tensor<3x3xi32>) -> tensor<3x3xi32>
     %unranked = tensor.cast %3 : tensor<3x3xi32>to tensor<*xi32>
     call @printMemrefI32(%unranked) : (tensor<*xi32>) -> ()
-     // CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
+    // CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
     // CHECK-NEXT: [40,   43,   46]
     // CHECK-NEXT: [56,   60,   64]
     // CHECK-NEXT: [118,   127,   136]
