@@ -1,4 +1,4 @@
-# linalg dialect to gpu dialect lowering pipeline
+// linalg dialect to gpu dialect lowering pipeline
 builtin.module(inline
     convert-tensor-to-linalg
     convert-elementwise-to-linalg
@@ -24,4 +24,4 @@ builtin.module(inline
     convert-memref-to-llvm
     convert-func-to-llvm
     reconcile-unrealized-casts)
-# End
+// End
