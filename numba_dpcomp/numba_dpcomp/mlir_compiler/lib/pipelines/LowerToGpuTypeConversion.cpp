@@ -43,7 +43,7 @@ struct Conversion {
     llvm::SmallVector<int64_t> shape(ndim);
     for (auto [i, dim] : llvm::enumerate(fixedDims)) {
       if (dim.is_none()) {
-        shape[i] = mlir::ShapedType::kDynamicSize;
+        shape[i] = mlir::ShapedType::kDynamic;
       } else {
         shape[i] = dim.cast<int64_t>();
       }

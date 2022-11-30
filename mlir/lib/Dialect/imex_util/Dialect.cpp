@@ -494,9 +494,7 @@ static bool canTransformLayoutCast(mlir::Type src, mlir::Type dst) {
     return false;
 
   auto isStrideCompatible = [](int64_t src, int64_t dst) {
-    auto isStatic = [](int64_t v) {
-      return !mlir::ShapedType::isDynamicStrideOrOffset(v);
-    };
+    auto isStatic = [](int64_t v) { return !mlir::ShapedType::isDynamic(v); };
     if (isStatic(src) && isStatic(dst)) {
       return src == dst;
     } else if (isStatic(src)) {
@@ -530,7 +528,7 @@ static mlir::MemRefType getFullyDynamicType(mlir::Type type) {
   if (!layout)
     return {};
 
-  int64_t offset = mlir::ShapedType::kDynamicStrideOrOffset;
+  int64_t offset = mlir::ShapedType::kDynamic;
   llvm::SmallVector<int64_t> strides(layout.getStrides().size(), offset);
   auto dynLayout =
       mlir::StridedLayoutAttr::get(type.getContext(), offset, strides);
@@ -953,7 +951,7 @@ static llvm::Optional<unsigned> getSingleDynamicDim(mlir::ShapedType type) {
   for (auto it : llvm::enumerate(type.getShape())) {
     auto i = static_cast<int>(it.index());
     auto dim = it.value();
-    if (dim == mlir::ShapedType::kDynamicSize) {
+    if (dim == mlir::ShapedType::kDynamic) {
       if (dimIndex != -1)
         return llvm::None;
 
@@ -1133,7 +1131,7 @@ struct ChangeLayoutSelect
 
       arg = cl.getSource();
       if (!canTransformLayoutCast(otherArgType, srcType)) {
-        auto dynStride = mlir::ShapedType::kDynamicStrideOrOffset;
+        auto dynStride = mlir::ShapedType::kDynamic;
         llvm::SmallVector<int64_t> strides(srcType.getRank(), dynStride);
         auto dynStrides =
             mlir::StridedLayoutAttr::get(op->getContext(), dynStride, strides);
@@ -1770,10 +1768,10 @@ ExtractMemrefMetadataOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
   if (mlir::succeeded(mlir::getStridesAndOffset(
           src.getType().cast<mlir::MemRefType>(), strides, offset))) {
     mlir::Builder builder(getContext());
-    if (idx == -1 && !mlir::ShapedType::isDynamicStrideOrOffset(offset)) {
+    if (idx == -1 && !mlir::ShapedType::isDynamic(offset)) {
       return builder.getIndexAttr(offset);
     } else if (idx >= 0 && idx < static_cast<int64_t>(strides.size()) &&
-               !mlir::ShapedType::isDynamicStrideOrOffset(
+               !mlir::ShapedType::isDynamic(
                    strides[static_cast<unsigned>(idx)])) {
       return builder.getIndexAttr(strides[static_cast<unsigned>(idx)]);
     }

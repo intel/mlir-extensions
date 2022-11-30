@@ -55,7 +55,7 @@ struct Conversion {
       llvm::SmallVector<int64_t> shape(ndim);
       for (auto [i, dim] : llvm::enumerate(fixedDims)) {
         if (dim.is_none()) {
-          shape[i] = mlir::ShapedType::kDynamicSize;
+          shape[i] = mlir::ShapedType::kDynamic;
         } else {
           shape[i] = dim.cast<int64_t>();
         }
@@ -73,7 +73,7 @@ struct Conversion {
       auto layout = obj.attr("layout").cast<std::string>();
 
       auto ndim = obj.attr("ndim").cast<size_t>();
-      llvm::SmallVector<int64_t> shape(ndim, mlir::ShapedType::kDynamicSize);
+      llvm::SmallVector<int64_t> shape(ndim, mlir::ShapedType::kDynamic);
 
       return imex::ntensor::NTensorType::get(shape, elemType, /*env*/ {},
                                              llvm::StringRef(layout));

@@ -87,8 +87,8 @@ static void runOptimizationPasses(llvm::Module &M, llvm::TargetMachine &TM) {
   llvm::PrintPassOptions ppo;
   ppo.Indent = false;
   ppo.SkipAnalyses = false;
-  llvm::StandardInstrumentations si(/*debugLogging*/ false, /*verifyEach*/ true,
-                                    ppo);
+  llvm::StandardInstrumentations si(M.getContext(), /*debugLogging*/ false,
+                                    /*verifyEach*/ true, ppo);
 
   si.registerCallbacks(pic, &fam);
 

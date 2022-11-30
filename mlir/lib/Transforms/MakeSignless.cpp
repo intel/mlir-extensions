@@ -151,12 +151,12 @@ struct ConvertTensorInserSlice
   matchAndRewrite(mlir::tensor::InsertSliceOp op,
                   mlir::tensor::InsertSliceOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    auto offsets = mlir::getMixedStridesOrOffsets(adaptor.getStaticOffsets(),
-                                                  adaptor.getOffsets());
-    auto sizes =
-        mlir::getMixedSizes(adaptor.getStaticSizes(), adaptor.getSizes());
-    auto strides = mlir::getMixedStridesOrOffsets(adaptor.getStaticStrides(),
-                                                  adaptor.getStrides());
+    auto offsets = mlir::getMixedValues(adaptor.getStaticOffsets(),
+                                        adaptor.getOffsets(), rewriter);
+    auto sizes = mlir::getMixedValues(adaptor.getStaticSizes(),
+                                      adaptor.getSizes(), rewriter);
+    auto strides = mlir::getMixedValues(adaptor.getStaticStrides(),
+                                        adaptor.getStrides(), rewriter);
     rewriter.replaceOpWithNewOp<mlir::tensor::InsertSliceOp>(
         op, adaptor.getSource(), adaptor.getDest(), offsets, sizes, strides);
     return mlir::success();

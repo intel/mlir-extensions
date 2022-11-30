@@ -473,11 +473,11 @@ imex::ntensor::NTensorType imex::ntensor::SubviewOp::inferResultType(
   mlir::SmallVector<int64_t> staticOffsets, staticSizes, staticStrides;
   mlir::SmallVector<mlir::Value> dynamicOffsets, dynamicSizes, dynamicStrides;
   dispatchIndexOpFoldResults(offsets, dynamicOffsets, staticOffsets,
-                             mlir::ShapedType::kDynamicStrideOrOffset);
+                             mlir::ShapedType::kDynamic);
   dispatchIndexOpFoldResults(sizes, dynamicSizes, staticSizes,
-                             mlir::ShapedType::kDynamicSize);
+                             mlir::ShapedType::kDynamic);
   dispatchIndexOpFoldResults(strides, dynamicStrides, staticStrides,
-                             mlir::ShapedType::kDynamicStrideOrOffset);
+                             mlir::ShapedType::kDynamic);
   return SubviewOp::inferResultType(sourceShapedTensorType, staticOffsets,
                                     staticSizes, staticStrides);
 }
@@ -509,11 +509,11 @@ imex::ntensor::NTensorType imex::ntensor::SubviewOp::inferRankReducedResultType(
   mlir::SmallVector<int64_t> staticOffsets, staticSizes, staticStrides;
   mlir::SmallVector<mlir::Value> dynamicOffsets, dynamicSizes, dynamicStrides;
   dispatchIndexOpFoldResults(offsets, dynamicOffsets, staticOffsets,
-                             mlir::ShapedType::kDynamicStrideOrOffset);
+                             mlir::ShapedType::kDynamic);
   dispatchIndexOpFoldResults(sizes, dynamicSizes, staticSizes,
-                             mlir::ShapedType::kDynamicSize);
+                             mlir::ShapedType::kDynamic);
   dispatchIndexOpFoldResults(strides, dynamicStrides, staticStrides,
-                             mlir::ShapedType::kDynamicStrideOrOffset);
+                             mlir::ShapedType::kDynamic);
   return SubviewOp::inferRankReducedResultType(
       resultShape, sourceType, staticOffsets, staticSizes, staticStrides);
 }
@@ -530,11 +530,11 @@ void imex::ntensor::SubviewOp::build(
   mlir::SmallVector<int64_t> staticOffsets, staticSizes, staticStrides;
   mlir::SmallVector<mlir::Value> dynamicOffsets, dynamicSizes, dynamicStrides;
   dispatchIndexOpFoldResults(offsets, dynamicOffsets, staticOffsets,
-                             mlir::ShapedType::kDynamicStrideOrOffset);
+                             mlir::ShapedType::kDynamic);
   dispatchIndexOpFoldResults(sizes, dynamicSizes, staticSizes,
-                             mlir::ShapedType::kDynamicSize);
+                             mlir::ShapedType::kDynamic);
   dispatchIndexOpFoldResults(strides, dynamicStrides, staticStrides,
-                             mlir::ShapedType::kDynamicStrideOrOffset);
+                             mlir::ShapedType::kDynamic);
   auto sourceType = source.getType().cast<imex::ntensor::NTensorType>();
   // Structuring implementation this way avoids duplication between builders.
   if (!resultType) {
@@ -542,8 +542,9 @@ void imex::ntensor::SubviewOp::build(
         sourceType, staticOffsets, staticSizes, staticStrides);
   }
   build(b, result, resultType, source, dynamicOffsets, dynamicSizes,
-        dynamicStrides, b.getI64ArrayAttr(staticOffsets),
-        b.getI64ArrayAttr(staticSizes), b.getI64ArrayAttr(staticStrides));
+        dynamicStrides, b.getDenseI64ArrayAttr(staticOffsets),
+        b.getDenseI64ArrayAttr(staticSizes),
+        b.getDenseI64ArrayAttr(staticStrides));
   result.addAttributes(attrs);
 }
 

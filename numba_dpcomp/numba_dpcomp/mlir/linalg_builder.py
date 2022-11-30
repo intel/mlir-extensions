@@ -119,7 +119,7 @@ def is_literal(val):
     return not isinstance(val, Var)
 
 
-DYNAMIC_DIM = -1
+DYNAMIC_DIM = numpy.iinfo(numpy.int64).min
 
 
 class Builder:

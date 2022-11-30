@@ -166,7 +166,7 @@ static mlir::Value makeSubview(mlir::OpBuilder &builder, mlir::Location loc,
       if (auto szVal = sz.dyn_cast<mlir::Attribute>()) {
         dstShape[i] = szVal.cast<mlir::IntegerAttr>().getValue().getSExtValue();
       } else {
-        dstShape[i] = mlir::ShapedType::kDynamicSize;
+        dstShape[i] = mlir::ShapedType::kDynamic;
       }
     }
 
@@ -444,8 +444,8 @@ struct GetitemUnitupleOpLowering
     auto array = rewriter.create<imex::ntensor::FromElementsOp>(loc, arrayType,
                                                                 elements);
 
-    auto dynArrayType = imex::ntensor::NTensorType::get(
-        mlir::ShapedType::kDynamicSize, *elemType);
+    auto dynArrayType =
+        imex::ntensor::NTensorType::get(mlir::ShapedType::kDynamic, *elemType);
     auto dynArray =
         rewriter.create<imex::ntensor::CastOp>(loc, dynArrayType, array);
     rewriter.replaceOpWithNewOp<imex::ntensor::GetitemOp>(op, op.getType(),

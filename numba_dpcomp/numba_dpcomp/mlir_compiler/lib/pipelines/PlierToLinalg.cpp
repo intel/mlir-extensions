@@ -319,15 +319,15 @@ computeIdentityStrides(mlir::OpBuilder &builder, mlir::Location loc,
       continue;
 
     bool useSizeAsStride = (stride == 1);
-    if (size == mlir::ShapedType::kDynamicSize)
-      stride = mlir::ShapedType::kDynamicSize;
-    if (stride != mlir::ShapedType::kDynamicSize)
+    if (size == mlir::ShapedType::kDynamic)
+      stride = mlir::ShapedType::kDynamic;
+    if (stride != mlir::ShapedType::kDynamic)
       stride *= size;
 
     auto sizeVal = dynamicSizes[i].get<mlir::Value>();
     if (useSizeAsStride)
       runningStride = sizeVal;
-    else if (stride == mlir::ShapedType::kDynamicSize)
+    else if (stride == mlir::ShapedType::kDynamic)
       runningStride =
           builder.create<mlir::arith::MulIOp>(loc, runningStride, sizeVal);
     else
@@ -378,7 +378,7 @@ struct ReshapeChangeLayout
 
     mlir::Value cmp;
     for (auto i : llvm::seq(0u, rank)) {
-      if (mlir::ShapedType::isDynamicStrideOrOffset(strides[i])) {
+      if (mlir::ShapedType::isDynamic(strides[i])) {
         stridesVals[i] = expectedStrides[i].get<mlir::Value>();
       } else {
         stridesVals[i] = rewriter.getIndexAttr(strides[i]);
@@ -534,11 +534,11 @@ void MakeStridedLayoutPass::runOnOperation() {
       auto makeShape = [&](int64_t val) {
         return llvm::SmallVector<int64_t>(rank, val);
       };
-      auto strideVal = mlir::ShapedType::kDynamicStrideOrOffset;
+      auto strideVal = mlir::ShapedType::kDynamic;
       auto layout = mlir::StridedLayoutAttr::get(context, strideVal,
                                                  makeShape(strideVal));
       auto newMemrefType =
-          mlir::MemRefType::get(makeShape(mlir::ShapedType::kDynamicSize),
+          mlir::MemRefType::get(makeShape(mlir::ShapedType::kDynamic),
                                 memrefType.getElementType(), layout);
 
       if (newMemrefType != memrefType) {
@@ -564,11 +564,11 @@ void MakeStridedLayoutPass::runOnOperation() {
       auto makeShape = [&](int64_t val) {
         return llvm::SmallVector<int64_t>(rank, val);
       };
-      auto strideVal = mlir::ShapedType::kDynamicStrideOrOffset;
+      auto strideVal = mlir::ShapedType::kDynamic;
       auto layout = mlir::StridedLayoutAttr::get(context, strideVal,
                                                  makeShape(strideVal));
       auto newmemrefType =
-          mlir::MemRefType::get(makeShape(mlir::ShapedType::kDynamicSize),
+          mlir::MemRefType::get(makeShape(mlir::ShapedType::kDynamic),
                                 memrefType.getElementType(), layout);
       newResTypes[it.index()] = newmemrefType;
     }
@@ -699,7 +699,7 @@ struct ChangeLayoutReturn
         } else if (!mlir::ShapedType::isDynamic(srcShape[j])) {
           shape[j] = srcShape[j];
         } else {
-          shape[j] = mlir::ShapedType::kDynamicSize;
+          shape[j] = mlir::ShapedType::kDynamic;
         }
       }
 
@@ -2593,12 +2593,12 @@ struct BufferizeExtractSlice
     auto srcType = src.getType().cast<mlir::MemRefType>();
 
     auto dstRank = dstType.getRank();
-    auto offsets = mlir::getMixedStridesOrOffsets(adaptor.getStaticOffsets(),
-                                                  adaptor.getOffsets());
-    auto sizes =
-        mlir::getMixedSizes(adaptor.getStaticSizes(), adaptor.getSizes());
-    auto strides = mlir::getMixedStridesOrOffsets(adaptor.getStaticStrides(),
-                                                  adaptor.getStrides());
+    auto offsets = mlir::getMixedValues(adaptor.getStaticOffsets(),
+                                        adaptor.getOffsets(), rewriter);
+    auto sizes = mlir::getMixedValues(adaptor.getStaticSizes(),
+                                      adaptor.getSizes(), rewriter);
+    auto strides = mlir::getMixedValues(adaptor.getStaticStrides(),
+                                        adaptor.getStrides(), rewriter);
 
     auto viewType = [&]() {
       if (srcType.getRank() == dstRank)

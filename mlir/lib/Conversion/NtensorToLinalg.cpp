@@ -430,7 +430,7 @@ static mlir::Value expandDim(mlir::OpBuilder &builder, mlir::Location loc,
   auto srcType = src.getType().cast<mlir::ShapedType>();
   auto numDims = static_cast<unsigned>(srcType.getRank());
   auto shape = llvm::to_vector(srcType.getShape());
-  shape[dim] = mlir::ShapedType::kDynamicSize;
+  shape[dim] = mlir::ShapedType::kDynamic;
   mlir::Type targetType =
       mlir::RankedTensorType::get(shape, srcType.getElementType());
   auto dimVal = builder.create<mlir::tensor::DimOp>(loc, initial, dim);

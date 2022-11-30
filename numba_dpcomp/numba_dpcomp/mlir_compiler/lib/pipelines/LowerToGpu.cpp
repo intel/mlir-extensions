@@ -1273,7 +1273,7 @@ public:
       //          getContext(), gpu_runtime::StorageClass::local);
       auto storageClass = rewriter.getI64IntegerAttr(
           mlir::gpu::GPUDialect::getPrivateAddressSpace());
-      auto memrefType = mlir::MemRefType::get(mlir::ShapedType::kDynamicSize,
+      auto memrefType = mlir::MemRefType::get(mlir::ShapedType::kDynamic,
                                               elemType, nullptr, storageClass);
       groupBuffer = rewriter
                         .create<mlir::gpu::AllocOp>(
@@ -1698,9 +1698,9 @@ static mlir::spirv::TargetEnvAttr deviceCapsMapper(mlir::gpu::GPUModuleOp op) {
 
   auto triple = spirv::VerCapExtAttr::get(spirvVersion, caps, exts, context);
   auto attr = spirv::TargetEnvAttr::get(
-      triple, spirv::Vendor::Unknown, spirv::DeviceType::Unknown,
-      spirv::TargetEnvAttr::kUnknownDeviceID,
-      spirv::getDefaultResourceLimits(context));
+      triple, spirv::getDefaultResourceLimits(context),
+      spirv::ClientAPI::OpenCL, spirv::Vendor::Unknown,
+      spirv::DeviceType::Unknown, spirv::TargetEnvAttr::kUnknownDeviceID);
   return attr;
 }
 

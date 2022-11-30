@@ -632,7 +632,7 @@ static py::object broadcastImpl(py::capsule context, py::tuple args,
 
   llvm::SmallVector<mlir::Type> resTypes(args.size());
   llvm::SmallVector<int64_t> resShape(rank >= 0 ? static_cast<size_t>(rank) : 0,
-                                      mlir::ShapedType::kDynamicSize);
+                                      mlir::ShapedType::kDynamic);
   for (auto [i, arg] : llvm::enumerate(mlirArgs))
     resTypes[i] = arg.getType().cast<mlir::ShapedType>().clone(resShape);
 
@@ -698,7 +698,7 @@ static py::object initTensorImpl(py::capsule context, py::iterable shape,
   auto indexType = builder.getIndexType();
   auto count = py::len(shape);
   llvm::SmallVector<mlir::Value> shapeVal(count);
-  llvm::SmallVector<int64_t> staticShape(count, mlir::ShapedType::kDynamicSize);
+  llvm::SmallVector<int64_t> staticShape(count, mlir::ShapedType::kDynamic);
   for (auto it : llvm::enumerate(shape)) {
     auto i = it.index();
     auto elem = it.value();
@@ -715,7 +715,7 @@ static py::object initTensorImpl(py::capsule context, py::iterable shape,
   } else {
     auto val = doCast(builder, loc,
                       ctx.context.unwrapVal(loc, builder, initVal), elemType);
-    llvm::SmallVector<int64_t> shape(count, mlir::ShapedType::kDynamicSize);
+    llvm::SmallVector<int64_t> shape(count, mlir::ShapedType::kDynamic);
     auto type = mlir::RankedTensorType::get(shape, elemType);
     auto body = [&](mlir::OpBuilder &builder, mlir::Location loc,
                     mlir::ValueRange /*indices*/) {
@@ -848,7 +848,7 @@ static py::object fromElementsImpl(py::capsule context, py::handle values,
     imex::reportError("Invalid from_elemets size");
 
   auto resTensorType =
-      mlir::RankedTensorType::get(mlir::ShapedType::kDynamicSize, type);
+      mlir::RankedTensorType::get(mlir::ShapedType::kDynamic, type);
   for (auto &val : vals)
     val = doCast(builder, loc, val, type);
 
@@ -962,7 +962,7 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
     return ret;
   }();
 
-  llvm::SmallVector<int64_t> shape(dstRank, mlir::ShapedType::kDynamicSize);
+  llvm::SmallVector<int64_t> shape(dstRank, mlir::ShapedType::kDynamic);
 
   auto resultType = srcType.clone(shape);
 
@@ -970,8 +970,7 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
   if ((srcRank == 1) && (dstRank == (srcRank + unitDimsCount)) &&
       (unitDimsCount != 0)) {
     llvm::SmallVector<mlir::ReassociationIndices> reassoc(srcRank);
-    llvm::SmallVector<int64_t> expandShape(dstRank,
-                                           mlir::ShapedType::kDynamicSize);
+    llvm::SmallVector<int64_t> expandShape(dstRank, mlir::ShapedType::kDynamic);
     int currInd = -1;
     for (auto i : llvm::seq(0u, dstRank)) {
       if (!isUnitDim(newDimsVals[i])) {
@@ -984,7 +983,7 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
     }
 
     shape.resize(static_cast<unsigned>(srcType.getRank()),
-                 mlir::ShapedType::kDynamicSize);
+                 mlir::ShapedType::kDynamic);
     auto dynShapeType = srcType.clone(shape);
     if (dynShapeType != srcType)
       srcVal = builder.create<mlir::tensor::CastOp>(loc, dynShapeType, srcVal);
@@ -1150,7 +1149,7 @@ static py::object insertImpl(py::capsule context, py::handle src,
 
   auto srcShapedType = srcTensor.getType().cast<mlir::ShapedType>();
   auto rank = static_cast<unsigned>(srcShapedType.getRank());
-  llvm::SmallVector<int64_t> dynShape(rank, mlir::ShapedType::kDynamicSize);
+  llvm::SmallVector<int64_t> dynShape(rank, mlir::ShapedType::kDynamic);
   auto newShapedType = srcShapedType.clone(dynShape);
   if (srcShapedType != newShapedType)
     srcTensor =
@@ -1338,7 +1337,7 @@ py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
       loc, viewType, srcVal, offsetVals, sizeVals, strideVals);
 
   auto getDynShape = [](int64_t r) {
-    return llvm::SmallVector<int64_t>(r, mlir::ShapedType::kDynamicSize);
+    return llvm::SmallVector<int64_t>(r, mlir::ShapedType::kDynamic);
   };
 
   auto resType = view.getType().cast<mlir::ShapedType>();

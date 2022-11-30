@@ -550,7 +550,7 @@ static mlir::Value getFlatIndex(mlir::OpBuilder &builder, mlir::Location loc,
 static mlir::Value getFlatMemref(mlir::OpBuilder &builder, mlir::Location loc,
                                  mlir::Value memref) {
   auto memrefType = memref.getType().cast<mlir::MemRefType>();
-  auto resultType = mlir::MemRefType::get(mlir::ShapedType::kDynamicSize,
+  auto resultType = mlir::MemRefType::get(mlir::ShapedType::kDynamic,
                                           memrefType.getElementType());
   mlir::OpBuilder::InsertionGuard g(builder);
   setInsertionPointToStart(builder, memref);
@@ -659,7 +659,7 @@ struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
 
     assert(resultStrides.size() == strides.size());
     for (auto i : llvm::seq<size_t>(0, strides.size())) {
-      if (mlir::ShapedType::isDynamicStrideOrOffset(resultStrides[i])) {
+      if (mlir::ShapedType::isDynamic(resultStrides[i])) {
         auto stride = strides[i];
         if (auto val = mlir::getConstantIntValue(stride))
           stride = rewriter.create<mlir::arith::ConstantIndexOp>(loc, *val)
@@ -787,14 +787,16 @@ public:
       return rewriter.create<mlir::spirv::ConstantOp>(loc, intType, attr);
     };
 
-    auto offset =
-        getValue(op.isDynamicOffset(0)
-                     ? mlir::OpFoldResult(adaptor.getOffsets()[0])
-                     : mlir::OpFoldResult(adaptor.getStaticOffsets()[0]));
-    auto stride =
-        getValue(op.isDynamicStride(0)
-                     ? mlir::OpFoldResult(adaptor.getStrides()[0])
-                     : mlir::OpFoldResult(adaptor.getStaticStrides()[0]));
+    auto getStaticVal = [&](int64_t v) -> mlir::OpFoldResult {
+      return rewriter.getI64IntegerAttr(v);
+    };
+
+    auto offset = getValue(op.isDynamicOffset(0)
+                               ? mlir::OpFoldResult(adaptor.getOffsets()[0])
+                               : getStaticVal(adaptor.getStaticOffsets()[0]));
+    auto stride = getValue(op.isDynamicStride(0)
+                               ? mlir::OpFoldResult(adaptor.getStrides()[0])
+                               : getStaticVal(adaptor.getStaticStrides()[0]));
     auto finalOffset = rewriter.createOrFold<mlir::spirv::IMulOp>(
         loc, intType, offset, stride);
 
@@ -1618,9 +1620,9 @@ static mlir::spirv::TargetEnvAttr defaultCapsMapper(mlir::gpu::GPUModuleOp op) {
   auto triple =
       spirv::VerCapExtAttr::get(spirv::Version::V_1_0, caps, exts, context);
   auto attr = spirv::TargetEnvAttr::get(
-      triple, spirv::Vendor::Unknown, spirv::DeviceType::Unknown,
-      spirv::TargetEnvAttr::kUnknownDeviceID,
-      spirv::getDefaultResourceLimits(context));
+      triple, spirv::getDefaultResourceLimits(context),
+      spirv::ClientAPI::OpenCL, spirv::Vendor::Unknown,
+      spirv::DeviceType::Unknown, spirv::TargetEnvAttr::kUnknownDeviceID);
   return attr;
 }
 
