@@ -2594,11 +2594,11 @@ struct BufferizeExtractSlice
 
     auto dstRank = dstType.getRank();
     auto offsets = mlir::getMixedValues(adaptor.getStaticOffsets(),
-                                                  adaptor.getOffsets(), rewriter);
-    auto sizes =
-        mlir::getMixedValues(adaptor.getStaticSizes(), adaptor.getSizes(), rewriter);
+                                        adaptor.getOffsets(), rewriter);
+    auto sizes = mlir::getMixedValues(adaptor.getStaticSizes(),
+                                      adaptor.getSizes(), rewriter);
     auto strides = mlir::getMixedValues(adaptor.getStaticStrides(),
-                                                  adaptor.getStrides(), rewriter);
+                                        adaptor.getStrides(), rewriter);
 
     auto viewType = [&]() {
       if (srcType.getRank() == dstRank)

@@ -444,8 +444,8 @@ struct GetitemUnitupleOpLowering
     auto array = rewriter.create<imex::ntensor::FromElementsOp>(loc, arrayType,
                                                                 elements);
 
-    auto dynArrayType = imex::ntensor::NTensorType::get(
-        mlir::ShapedType::kDynamic, *elemType);
+    auto dynArrayType =
+        imex::ntensor::NTensorType::get(mlir::ShapedType::kDynamic, *elemType);
     auto dynArray =
         rewriter.create<imex::ntensor::CastOp>(loc, dynArrayType, array);
     rewriter.replaceOpWithNewOp<imex::ntensor::GetitemOp>(op, op.getType(),

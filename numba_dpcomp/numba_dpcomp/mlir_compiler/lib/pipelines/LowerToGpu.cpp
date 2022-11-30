@@ -1698,8 +1698,9 @@ static mlir::spirv::TargetEnvAttr deviceCapsMapper(mlir::gpu::GPUModuleOp op) {
 
   auto triple = spirv::VerCapExtAttr::get(spirvVersion, caps, exts, context);
   auto attr = spirv::TargetEnvAttr::get(
-      triple, spirv::getDefaultResourceLimits(context), spirv::ClientAPI::OpenCL, spirv::Vendor::Unknown, spirv::DeviceType::Unknown,
-      spirv::TargetEnvAttr::kUnknownDeviceID);
+      triple, spirv::getDefaultResourceLimits(context),
+      spirv::ClientAPI::OpenCL, spirv::Vendor::Unknown,
+      spirv::DeviceType::Unknown, spirv::TargetEnvAttr::kUnknownDeviceID);
   return attr;
 }
 

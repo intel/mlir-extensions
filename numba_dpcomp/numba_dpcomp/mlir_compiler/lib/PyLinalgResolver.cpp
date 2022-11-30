@@ -970,8 +970,7 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
   if ((srcRank == 1) && (dstRank == (srcRank + unitDimsCount)) &&
       (unitDimsCount != 0)) {
     llvm::SmallVector<mlir::ReassociationIndices> reassoc(srcRank);
-    llvm::SmallVector<int64_t> expandShape(dstRank,
-                                           mlir::ShapedType::kDynamic);
+    llvm::SmallVector<int64_t> expandShape(dstRank, mlir::ShapedType::kDynamic);
     int currInd = -1;
     for (auto i : llvm::seq(0u, dstRank)) {
       if (!isUnitDim(newDimsVals[i])) {

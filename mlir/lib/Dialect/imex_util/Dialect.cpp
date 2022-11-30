@@ -494,9 +494,7 @@ static bool canTransformLayoutCast(mlir::Type src, mlir::Type dst) {
     return false;
 
   auto isStrideCompatible = [](int64_t src, int64_t dst) {
-    auto isStatic = [](int64_t v) {
-      return !mlir::ShapedType::isDynamic(v);
-    };
+    auto isStatic = [](int64_t v) { return !mlir::ShapedType::isDynamic(v); };
     if (isStatic(src) && isStatic(dst)) {
       return src == dst;
     } else if (isStatic(src)) {

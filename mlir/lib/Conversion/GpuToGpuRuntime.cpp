@@ -791,14 +791,12 @@ public:
       return rewriter.getI64IntegerAttr(v);
     };
 
-    auto offset =
-        getValue(op.isDynamicOffset(0)
-                     ? mlir::OpFoldResult(adaptor.getOffsets()[0])
-                     : getStaticVal(adaptor.getStaticOffsets()[0]));
-    auto stride =
-        getValue(op.isDynamicStride(0)
-                     ? mlir::OpFoldResult(adaptor.getStrides()[0])
-                     : getStaticVal(adaptor.getStaticStrides()[0]));
+    auto offset = getValue(op.isDynamicOffset(0)
+                               ? mlir::OpFoldResult(adaptor.getOffsets()[0])
+                               : getStaticVal(adaptor.getStaticOffsets()[0]));
+    auto stride = getValue(op.isDynamicStride(0)
+                               ? mlir::OpFoldResult(adaptor.getStrides()[0])
+                               : getStaticVal(adaptor.getStaticStrides()[0]));
     auto finalOffset = rewriter.createOrFold<mlir::spirv::IMulOp>(
         loc, intType, offset, stride);
 
@@ -1622,8 +1620,9 @@ static mlir::spirv::TargetEnvAttr defaultCapsMapper(mlir::gpu::GPUModuleOp op) {
   auto triple =
       spirv::VerCapExtAttr::get(spirv::Version::V_1_0, caps, exts, context);
   auto attr = spirv::TargetEnvAttr::get(
-      triple, spirv::getDefaultResourceLimits(context), spirv::ClientAPI::OpenCL, spirv::Vendor::Unknown, spirv::DeviceType::Unknown,
-      spirv::TargetEnvAttr::kUnknownDeviceID);
+      triple, spirv::getDefaultResourceLimits(context),
+      spirv::ClientAPI::OpenCL, spirv::Vendor::Unknown,
+      spirv::DeviceType::Unknown, spirv::TargetEnvAttr::kUnknownDeviceID);
   return attr;
 }
 
