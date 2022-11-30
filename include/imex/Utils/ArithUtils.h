@@ -27,7 +27,8 @@ struct NoCmp {};
 /// enriched with a comparison.
 template <typename LHS, typename OP, typename RHS, typename CMP = NoCmp>
 struct EasyExpr {
-  typedef typename OP::ElType ElType;
+  using ElType = typename OP::ElType;
+  using CType = typename LHS::CType;
 
   EasyExpr(LHS const &lhs, RHS const &rhs, CMP const &cmp = {})
       : _lhs(lhs), _rhs(rhs), _cmp(cmp) {}
@@ -48,98 +49,111 @@ struct EasyExpr {
   CMP const &_cmp;
 };
 
+using NoPred = bool;
+
 /// Generic operation with an eval method which creates MLIR operations
 /// the eval method is called by the binding template expression
-/// Parameter arg is currently casted to CmpIPredicate (required by comparison
-/// ops only)
-template <typename T, typename OP, uint64_t arg = ULLONG_MAX> struct EasyOp {
+template <typename T, typename OP, typename P = NoPred, P arg = {}>
+struct EasyOp {
   using ElType = T;
   /// eval generic binary ops
   static ElType eval(const ::mlir::Location &loc, ::mlir::OpBuilder &builder,
                      T const &l, T const &r) {
-    if constexpr (arg < ULLONG_MAX) {
-      return builder.create<OP>(loc, (::mlir::arith::CmpIPredicate)arg, l, r);
-    } else if constexpr (arg >= ULLONG_MAX) {
+    if constexpr (std::is_same_v<P, NoPred>) {
       return builder.create<OP>(loc, l, r);
+    } else if constexpr (!std::is_same_v<P, NoPred>) {
+      return builder.create<OP>(loc, arg, l, r);
     }
   }
   /// eval comparison op
   template <typename A>
   static ElType eval(const ::mlir::Location &loc, ::mlir::OpBuilder &builder,
                      T const &l, T const &r, A const &a) {
-    if constexpr (arg < ULLONG_MAX) {
-      return builder.create<OP>(loc, arg, a, l, r);
-    } else if constexpr (arg >= ULLONG_MAX) {
+    if constexpr (std::is_same_v<P, NoPred>) {
       return builder.create<OP>(loc, a, l, r);
+    } else if constexpr (!std::is_same_v<P, NoPred>) {
+      return builder.create<OP>(loc, arg, a, l, r);
     }
   }
 };
 
 /// addition of the expressions
-template <typename LHS, typename RHS>
+template <typename LHS, typename RHS,
+          typename std::enable_if<
+              std::is_integral<typename LHS::CType>::value>::type * = nullptr>
 EasyExpr<LHS, EasyOp<typename LHS::ElType, ::mlir::arith::AddIOp>, RHS>
 operator+(LHS const &l, RHS const &r) {
   return {l, r};
 }
 
 /// subtraction of the expressions
-template <typename LHS, typename RHS>
+template <typename LHS, typename RHS,
+          typename std::enable_if<
+              std::is_integral<typename LHS::CType>::value>::type * = nullptr>
 EasyExpr<LHS, EasyOp<typename LHS::ElType, ::mlir::arith::SubIOp>, RHS>
 operator-(LHS const &l, RHS const &r) {
   return {l, r};
 }
 
 // multiplication of the expressions
-template <typename LHS, typename RHS>
+template <typename LHS, typename RHS,
+          typename std::enable_if<
+              std::is_integral<typename LHS::CType>::value>::type * = nullptr>
 EasyExpr<LHS, EasyOp<typename LHS::ElType, ::mlir::arith::MulIOp>, RHS>
 operator*(LHS const &l, RHS const &r) {
   return {l, r};
 }
 
 /// division of the expressions
-template <typename LHS, typename RHS>
+template <typename LHS, typename RHS,
+          typename std::enable_if<
+              std::is_integral<typename LHS::CType>::value>::type * = nullptr>
 EasyExpr<LHS, EasyOp<typename LHS::ElType, ::mlir::arith::DivSIOp>, RHS>
 operator/(LHS const &l, RHS const &r) {
   return {l, r};
 }
 
-/// generic comparison of expressions
-template <::mlir::arith::CmpIPredicate CP, typename LHS, typename RHS>
-EasyExpr<LHS, EasyOp<typename LHS::ElType, ::mlir::arith::CmpIOp, (uint64_t)CP>,
+/// generic comparison of expressions for integral types
+template <::mlir::arith::CmpIPredicate CP, typename LHS, typename RHS,
+          typename std::enable_if<
+              std::is_integral<typename LHS::CType>::value>::type * = nullptr>
+EasyExpr<LHS,
+         EasyOp<typename LHS::ElType, ::mlir::arith::CmpIOp,
+                ::mlir::arith::CmpIPredicate, CP>,
          RHS>
 easyCompare(LHS const &l, RHS const &r) {
   return {l, r};
 }
 
-/// equal
+/// integral type equal
 template <typename LHS, typename RHS> auto easyEQ(LHS const &l, RHS const &r) {
   return easyCompare<::mlir::arith::CmpIPredicate::eq>(l, r);
 }
-/// non-equal
+/// integral type non-equal
 template <typename LHS, typename RHS> auto easyNE(LHS const &l, RHS const &r) {
   return easyCompare<::mlir::arith::CmpIPredicate::ne>(l, r);
 }
-/// signed-lower-than comparison of expressions
+/// integral type signed-lower-than comparison of expressions
 template <typename LHS, typename RHS> auto easySLT(LHS const &l, RHS const &r) {
   return easyCompare<::mlir::arith::CmpIPredicate::slt>(l, r);
 }
-/// unsigned-lower-than comparison of expressions
+/// integral type unsigned-lower-than comparison of expressions
 template <typename LHS, typename RHS> auto easyULT(LHS const &l, RHS const &r) {
   return easyCompare<::mlir::arith::CmpIPredicate::ult>(l, r);
 }
-/// signed greater-than
+/// integral type signed greater-than
 template <typename LHS, typename RHS> auto easySGT(LHS const &l, RHS const &r) {
   return easyCompare<::mlir::arith::CmpIPredicate::sgt>(l, r);
 }
-/// unsigned greater-than
+/// integral type unsigned greater-than
 template <typename LHS, typename RHS> auto easyUGT(LHS const &l, RHS const &r) {
   return easyCompare<::mlir::arith::CmpIPredicate::ugt>(l, r);
 }
-/// signed greater-equal
+/// integral type signed greater-equal
 template <typename LHS, typename RHS> auto easySGE(LHS const &l, RHS const &r) {
   return easyCompare<::mlir::arith::CmpIPredicate::sge>(l, r);
 }
-/// unsigned greater-equal
+/// integral type unsigned greater-equal
 template <typename LHS, typename RHS> auto easyUGE(LHS const &l, RHS const &r) {
   return easyCompare<::mlir::arith::CmpIPredicate::uge>(l, r);
 }
@@ -156,6 +170,7 @@ easySelect(CMP const &cmp, LHS const &l, RHS const &r) {
 /// Also provides get(loc, builder) to allow mix of expressions and Values
 template <typename T> struct EasyVal {
   using ElType = ::mlir::Value;
+  using CType = T;
   ElType _value;
 
   /// Create Value by wrapping existing mlir::Value
