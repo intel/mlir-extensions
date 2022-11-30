@@ -68,12 +68,10 @@ struct SubviewOpLowering
     auto results = imex::util::wrapEnvRegion(
         rewriter, op->getLoc(), origType.getEnvironment(), dstType,
         [&](mlir::OpBuilder &builder, mlir::Location loc) {
-          auto offsets = mlir::getMixedStridesOrOffsets(
-              adaptor.getStaticOffsets(), adaptor.getOffsets());
+          auto offsets = mlir::getMixedValues(adaptor.getStaticOffsets(), adaptor.getOffsets(), rewriter);
           auto sizes =
-              mlir::getMixedSizes(adaptor.getStaticSizes(), adaptor.getSizes());
-          auto strides = mlir::getMixedStridesOrOffsets(
-              adaptor.getStaticStrides(), adaptor.getStrides());
+              mlir::getMixedValues(adaptor.getStaticSizes(), adaptor.getSizes(), rewriter);
+          auto strides = mlir::getMixedValues(adaptor.getStaticStrides(), adaptor.getStrides(), rewriter);
 
           auto resType =
               mlir::memref::SubViewOp::inferRankReducedResultType(

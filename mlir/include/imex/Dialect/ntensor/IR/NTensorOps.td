@@ -235,20 +235,17 @@ def SubviewOp : NTensor_OpWithOffsetSizesAndStrides<"subview", [
     Variadic<Index>:$offsets,
     Variadic<Index>:$sizes,
     Variadic<Index>:$strides,
-    I64ArrayAttr:$static_offsets,
-    I64ArrayAttr:$static_sizes,
-    I64ArrayAttr:$static_strides
+    DenseI64ArrayAttr:$static_offsets,
+    DenseI64ArrayAttr:$static_sizes,
+    DenseI64ArrayAttr:$static_strides
   );
   let results = (outs NTensor_Tensor:$result);
 
   let assemblyFormat = [{
     $source ``
-    custom<DynamicIndexList>($offsets, $static_offsets,
-                             "::mlir::ShapedType::kDynamicStrideOrOffset")
-    custom<DynamicIndexList>($sizes, $static_sizes,
-                             "::mlir::ShapedType::kDynamicSize")
-    custom<DynamicIndexList>($strides, $static_strides,
-                             "::mlir::ShapedType::kDynamicStrideOrOffset")
+    custom<DynamicIndexList>($offsets, $static_offsets)
+    custom<DynamicIndexList>($sizes, $static_sizes)
+    custom<DynamicIndexList>($strides, $static_strides)
     attr-dict `:` qualified(type($source)) `to` qualified(type($result))
   }];
 
