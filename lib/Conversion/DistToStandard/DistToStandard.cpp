@@ -276,6 +276,127 @@ struct LocalShapeOpConverter
   }
 };
 
+// Compute local slice in dim 0, all other dims are not partitioned (yet)
+// return local memref of src
+struct LocalOfSliceOpConverter
+    : public mlir::OpConversionPattern<::imex::dist::LocalOfSliceOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  ::mlir::LogicalResult
+  matchAndRewrite(::imex::dist::LocalOfSliceOp op,
+                  ::imex::dist::LocalOfSliceOp::Adaptor adaptor,
+                  ::mlir::ConversionPatternRewriter &rewriter) const override {
+
+    auto loc = op.getLoc();
+    auto src = op.getDTensor();
+    auto inpPtTyp = src.getType().dyn_cast<::imex::dist::DistTensorType>();
+    if (!inpPtTyp)
+      return ::mlir::failure();
+    auto slcOffs = adaptor.getOffsets();
+    auto slcSizes = adaptor.getSizes();
+    auto slcStrides = adaptor.getStrides();
+
+    EasyIdx zeroIdx(loc, rewriter, 0);
+    EasyIdx oneIdx(loc, rewriter, 1);
+
+    // Get the local part of the global slice, team, rank, offsets
+    int64_t rank = (int64_t)inpPtTyp.getPTensorType().getRank();
+    auto lPTnsr = rewriter.create<::imex::dist::ExtractFromDistOp>(
+        loc, ::imex::dist::LTENSOR, src);
+    auto lMemRef = rewriter.create<::imex::ptensor::ExtractMemRefOp>(
+        loc, inpPtTyp.getPTensorType().getMemRefType(), lPTnsr);
+    auto lOffs = rewriter.create<::imex::dist::ExtractFromDistOp>(
+        loc, ::imex::dist::LOFFSETS, src);
+    EasyIdx slcOffs0(loc, rewriter, slcOffs[0]);
+    EasyIdx slcSizes0(loc, rewriter, slcSizes[0]);
+    EasyIdx slcStrides0(loc, rewriter, slcStrides[0]);
+
+    // last index of slice
+    auto slcEnd = slcOffs0 + slcSizes0 * slcStrides0;
+    // local extent/size
+    EasyIdx lExtent(
+        loc, rewriter,
+        rewriter.create<::mlir::memref::DimOp>(loc, lMemRef, zeroIdx.get()));
+    // local offset (dim 0)
+    EasyIdx lOff(loc, rewriter,
+                 rewriter.create<::mlir::memref::LoadOp>(
+                     loc, lOffs, ::mlir::ValueRange{zeroIdx.get()}));
+    // last index of local partition
+    auto lEnd = lOff + lExtent;
+    // check if requested slice fully before local partition
+    auto beforeLocal = slcEnd.ult(lOff);
+    // check if requested slice fully behind local partition
+    auto behindLocal = lEnd.ule(slcOffs0);
+    // check if requested slice start before local partition
+    auto startsBefore = slcOffs0.ult(lOff);
+    auto strOff = lOff - slcOffs0;
+    // (strOff / stride) * stride
+    auto nextMultiple = (strOff / slcStrides0) * slcStrides0;
+    // Check if local start is on a multiple of the new slice
+    auto isMultiple = nextMultiple.eq(strOff);
+    // stride - (strOff - nextMultiple)
+    auto off = slcStrides0 - (strOff - nextMultiple);
+    // offset is either 0 if multiple or off
+    auto lDiff1 = isMultiple.select(zeroIdx, off);
+    // if view starts within our partition: (start-lOff)
+    auto lDiff2 = slcOffs0 - lOff;
+    auto viewOff1 = startsBefore.select(lDiff1, lDiff2);
+    // except if slice/view before or behind local partition
+    auto viewOff0 = beforeLocal.select(zeroIdx, viewOff1);
+    auto viewOff = behindLocal.select(zeroIdx, viewOff0);
+    // min of lEnd and slice's end
+    auto theEnd = lEnd.min(slcEnd);
+    // range between local views start and end
+    auto lRange = (theEnd - viewOff) - lOff;
+    // number of elements in local view (range+stride-1)/stride
+    auto viewSize1 = (lRange + (slcStrides0 - oneIdx)) / slcStrides0;
+    auto viewSize0 = beforeLocal.select(zeroIdx, viewSize1);
+    auto viewSize = behindLocal.select(zeroIdx, viewSize0);
+
+    // and store in output
+    ::mlir::SmallVector<::mlir::Value> results(3 * rank);
+    results[0 * rank] = viewOff.get();
+    results[1 * rank] = viewSize.get();
+    results[2 * rank] = (lOff + viewOff).get();
+    for (auto i = 1; i < rank; ++i) {
+      results[0 * rank] = slcOffs[i];
+      results[1 * rank] = slcSizes[i];
+      results[2 * rank] = slcOffs[i];
+    }
+
+    rewriter.replaceOp(op, results);
+    return ::mlir::success();
+  }
+};
+
+#if 0
+  // if requested, also store global offsets
+  if(gOffsets) {
+    (*gOffsets)[0] = (lOff + viewOff).get();
+    for (auto i = 1; i < rank; ++i) {
+      (*gOffsets)[i] = slcOffs[i];
+    }
+  }
+
+  if (doOffs) {
+    // offset of local partition in new tensor/view
+    auto lViewOff1 = ((lOff + viewOff) - slcOffs0) / slcStrides0;
+    auto lViewOff0 = beforeLocal.select(slcOffs0, lViewOff1);
+    auto lViewOff = behindLocal.select(slcEnd, lViewOff0);
+    // create local offsets from above computed
+    auto lViewOffs =
+        createAllocMR(rewriter, loc, rewriter.getIndexType(), rank);
+    if (rank > 1)
+      (void)::mlir::linalg::makeMemRefCopyOp(rewriter, loc, lOffs, lViewOffs);
+    rewriter.create<::mlir::memref::StoreOp>(loc, lViewOff.get(), lViewOffs,
+                                             zeroIdx.get());
+
+    return lViewOffs;
+  }
+  return ::mlir::Value();
+}
+#endif // if 0
+
 /// Convert ::imex::dist::AllReduceOp into runtime call to "_idtr_reduce_all".
 /// Pass local RankedTensor as argument.
 /// Replaces op with new DistTensor.
@@ -395,8 +516,8 @@ struct ConvertDistToStandardPass
     patterns.insert<RuntimePrototypesOpConverter, NProcsOpConverter,
                     PRankOpConverter, InitDistTensorOpConverter,
                     ExtractFromDistOpConverter, LocalOffsetsOpConverter,
-                    LocalShapeOpConverter, AllReduceOpConverter>(typeConverter,
-                                                                 &ctxt);
+                    LocalShapeOpConverter, LocalOfSliceOpConverter,
+                    AllReduceOpConverter>(typeConverter, &ctxt);
     // This enables the function boundary handling with the above
     // converters/meterializations
     populateDecomposeCallGraphTypesPatterns(&ctxt, typeConverter, decomposer,

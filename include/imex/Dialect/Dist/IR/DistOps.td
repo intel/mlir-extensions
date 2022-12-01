@@ -192,6 +192,51 @@ def LocalShapeOp : Dist_Op<"local_shape", []> {
     ];
 }
 
+def LocalOfSliceOp : Dist_Op<"local_of_slice",
+    [SameVariadicOperandSize, SameVariadicResultSize, Pure]> {
+    let summary = "Compute local overlap of a distributed tensor and slice";
+    let description = [{
+        Slice and tensor operate on the global index space. This operation computes the
+        local part of the slice as owned by the local partition of the tensor. The operation
+        returns local offsets and sizes (e.g. relative to the local memref). Additionally,
+        it computes and returns the offsets of the resulting local slice relative to the global input slice.
+    }];
+
+    let arguments = (ins
+        AnyType:$d_tensor,
+        Variadic<Index>:$offsets,
+        Variadic<Index>:$sizes,
+        Variadic<Index>:$strides
+    );
+    let results = (outs Variadic<Index>:$l_offsets, Variadic<Index>:$l_sizes, Variadic<Index>:$g_offsets);
+
+    let assemblyFormat = [{
+        $d_tensor `[` $offsets `]``[` $sizes `]``[` $strides `]` attr-dict `:` qualified(type($d_tensor)) `to` `(`qualified(type(results))`)`
+    }];
+
+    let builders = [
+        // auto-deduce return type
+        OpBuilder<(ins "::mlir::Value":$d_tensor, "::mlir::ValueRange":$offsets, "::mlir::ValueRange":$sizes, "::mlir::ValueRange":$strides), [{
+            auto IndexType = $_builder.getIndexType();
+            build($_builder, $_state, ::mlir::TypeRange{IndexType, IndexType, IndexType}, d_tensor, offsets, sizes, strides);
+        }]>,
+    ];
+}
+
+def LocalToGlobalOp : Dist_Op<"local_to_global", [Pure]> {
+  let summary = "Translate local inidices into global indices";
+  let description = [{
+    Input inidices are interprete as relative to the local part of the given DTensor.
+  }];
+
+  let arguments = (ins AnyType:$d_tensor, Variadic<Index>:$l_indices);
+  let results = (outs Variadic<Index>:$g_indices);
+
+//   let assemblyFormat = [{
+//     $d_tensor attr-dict `:` qualified(type($source)) `to` `(`qualified(type(results))`)`
+//   }];
+}
+
 def AllReduceOp : Dist_Op<"allreduce", []> {
     let summary = "Inplace allreduce";
     let description = [{

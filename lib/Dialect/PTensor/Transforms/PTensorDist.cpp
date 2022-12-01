@@ -144,102 +144,6 @@ struct DistExtractMemRefOpRWP
   }
 };
 
-// Compute local slice in dim 0, all other dims are not partitioned (yet)
-// return local memref of src
-::mlir::Value createGetLocalSlice(::mlir::Location &loc,
-                                  ::mlir::PatternRewriter &rewriter,
-                                  const ::mlir::Value &src,
-                                  const ::mlir::OperandRange &slcOffs,
-                                  const ::mlir::OperandRange &slcSizes,
-                                  const ::mlir::OperandRange &slcStrides,
-                                  ::mlir::SmallVector<::mlir::Value> &lOffsets,
-                                  ::mlir::SmallVector<::mlir::Value> &lSizes,
-                                  bool doOffs = true) {
-  // get input
-  auto inpPtTyp = src.getType().dyn_cast<::imex::dist::DistTensorType>();
-  assert(inpPtTyp);
-
-  EasyIdx zeroIdx(loc, rewriter, 0);
-  EasyIdx oneIdx(loc, rewriter, 1);
-
-  // Get the local part of the global slice, team, rank, offsets
-  int64_t rank = (int64_t)inpPtTyp.getPTensorType().getRank();
-  auto lPTnsr = createGetLocal(loc, rewriter, src);
-  auto lMemRef = rewriter.create<::imex::ptensor::ExtractMemRefOp>(
-      loc, inpPtTyp.getPTensorType().getMemRefType(), lPTnsr);
-  auto lOffs = createGetLocalOffsets(loc, rewriter, src);
-  EasyIdx slcOffs0(loc, rewriter, slcOffs[0]);
-  EasyIdx slcSizes0(loc, rewriter, slcSizes[0]);
-  EasyIdx slcStrides0(loc, rewriter, slcStrides[0]);
-
-  // last index of slice
-  auto slcEnd = slcOffs0 + slcSizes0 * slcStrides0;
-  // local extent/size
-  EasyIdx lExtent(
-      loc, rewriter,
-      rewriter.create<::mlir::memref::DimOp>(loc, lMemRef, zeroIdx.get()));
-  // local offset (dim 0)
-  EasyIdx lOff(loc, rewriter,
-               rewriter.create<::mlir::memref::LoadOp>(
-                   loc, lOffs, ::mlir::ValueRange{zeroIdx.get()}));
-  // last index of local partition
-  auto lEnd = lOff + lExtent;
-  // check if requested slice fully before local partition
-  auto beforeLocal = slcEnd.ult(lOff);
-  // check if requested slice fully behind local partition
-  auto behindLocal = lEnd.ule(slcOffs0);
-  // check if requested slice start before local partition
-  auto startsBefore = slcOffs0.ult(lOff);
-  auto strOff = lOff - slcOffs0;
-  // (strOff / stride) * stride
-  auto nextMultiple = (strOff / slcStrides0) * slcStrides0;
-  // Check if local start is on a multiple of the new slice
-  auto isMultiple = nextMultiple.eq(strOff);
-  // stride - (strOff - nextMultiple)
-  auto off = slcStrides0 - (strOff - nextMultiple);
-  // offset is either 0 if multiple or off
-  auto lDiff1 = isMultiple.select(zeroIdx, off);
-  // if view starts within our partition: (start-lOff)
-  auto lDiff2 = slcOffs0 - lOff;
-  auto viewOff1 = startsBefore.select(lDiff1, lDiff2);
-  // except if slice/view before or behind local partition
-  auto viewOff0 = beforeLocal.select(zeroIdx, viewOff1);
-  auto viewOff = behindLocal.select(zeroIdx, viewOff0);
-  // min of lEnd and slice's end
-  auto theEnd = lEnd.min(slcEnd);
-  // range between local views start and end
-  auto lRange = (theEnd - viewOff) - lOff;
-  // number of elements in local view (range+stride-1)/stride
-  auto viewSize1 = (lRange + (slcStrides0 - oneIdx)) / slcStrides0;
-  auto viewSize0 = beforeLocal.select(zeroIdx, viewSize1);
-  auto viewSize = behindLocal.select(zeroIdx, viewSize0);
-
-  // and store in output arguments
-  lOffsets[0] = viewOff.get();
-  lSizes[0] = viewSize.get();
-  for (auto i = 1; i < rank; ++i) {
-    lOffsets[i] = slcOffs[i];
-    lSizes[i] = slcSizes[i];
-  }
-
-  if (doOffs) {
-    // offset of local partition in new tensor/view
-    auto lViewOff1 = ((lOff + viewOff) - slcOffs0) / slcStrides0;
-    auto lViewOff0 = beforeLocal.select(slcOffs0, lViewOff1);
-    auto lViewOff = behindLocal.select(slcEnd, lViewOff0);
-    // create local offsets from above computed
-    auto lViewOffs =
-        createAllocMR(rewriter, loc, rewriter.getIndexType(), rank);
-    if (rank > 1)
-      (void)::mlir::linalg::makeMemRefCopyOp(rewriter, loc, lOffs, lViewOffs);
-    rewriter.create<::mlir::memref::StoreOp>(loc, lViewOff.get(), lViewOffs,
-                                             zeroIdx.get());
-
-    return lViewOffs;
-  }
-  return ::mlir::Value();
-}
-
 /// Rewriting ::imex::ptensor::ExtractSliceOp
 /// 1. Compute local slice and offsets of dst
 /// 2. Apply ExtractSliceOp to subslice and local partition
@@ -260,17 +164,16 @@ struct DistExtractSliceOpRWP
     }
 
     // Get the local part of the global slice, team, rank, offsets
-    int64_t rank = (int64_t)inpPtTyp.getPTensorType().getRank();
     auto slcOffs = op.getOffsets();
     auto slcSizes = op.getSizes();
     auto slcStrides = op.getStrides();
 
     // Compute local part of slice
-    ::mlir::SmallVector<::mlir::Value> lSlcOffsets(rank);
-    ::mlir::SmallVector<::mlir::Value> lSlcSizes(rank);
-    auto lViewOffsets =
-        createGetLocalSlice(loc, rewriter, src, slcOffs, slcSizes, slcStrides,
-                            lSlcOffsets, lSlcSizes);
+    auto lSlice = rewriter.create<::imex::dist::LocalOfSliceOp>(
+        loc, src, slcOffs, slcSizes, slcStrides);
+    auto lSlcOffsets = lSlice.getLOffsets();
+    auto lSlcSizes = lSlice.getLSizes();
+    auto gOffsets = lSlice.getGOffsets();
 
     // create local view
     auto lPTnsr = createGetLocal(loc, rewriter, src);
@@ -280,11 +183,13 @@ struct DistExtractSliceOpRWP
 
     // create global shape from slice sizes
     auto gShape = createMemRefFromElements(rewriter, loc,
-                                           rewriter.getIndexType(), {slcSizes});
-    auto team = createTeamOf(loc, rewriter, src);
+                                           rewriter.getIndexType(), slcSizes);
+    auto gVOffs = createMemRefFromElements(rewriter, loc,
+                                           rewriter.getIndexType(), gOffsets);
     // init our new dist tensor
+    auto team = createTeamOf(loc, rewriter, src);
     rewriter.replaceOp(
-        op, createMkTnsr(loc, rewriter, gShape, lView, lViewOffsets, team));
+        op, createMkTnsr(loc, rewriter, gShape, lView, gVOffs, team));
     return ::mlir::success();
   }
 };
@@ -311,15 +216,16 @@ struct DistInsertSliceOpRWP
       return ::mlir::failure();
     }
 
-    // get slice info and create distributed view
-    int64_t rank = (int64_t)dstPTTyp.getPTensorType().getRank();
     auto slcOffs = op.getOffsets();
     auto slcSizes = op.getSizes();
     auto slcStrides = op.getStrides();
-    ::mlir::SmallVector<::mlir::Value> lSlcOffsets(rank);
-    ::mlir::SmallVector<::mlir::Value> lSlcSizes(rank);
-    (void)createGetLocalSlice(loc, rewriter, dst, slcOffs, slcSizes, slcStrides,
-                              lSlcOffsets, lSlcSizes, false);
+
+    // get slice info and create distributed view
+    auto lSlice = rewriter.create<::imex::dist::LocalOfSliceOp>(
+        loc, dst, slcOffs, slcSizes, slcStrides);
+    auto lSlcOffsets = lSlice.getLOffsets();
+    auto lSlcSizes = lSlice.getLSizes();
+    // don't need lSlice.getGOffsets();
 
     // get local ptensors and apply to InsertSliceOp
     auto lDst = createGetLocal(loc, rewriter, dst);

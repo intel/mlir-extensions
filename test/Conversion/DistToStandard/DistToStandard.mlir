@@ -86,3 +86,27 @@ module {
 // CHECK-LABEL: func.func private @_idtr_reduce_all(memref<i64, strided<[], offset: ?>>, i32, i32)
 // CHECK-LABEL: func.func @test_allreduce(%arg0: memref<i64, strided<[], offset: ?>>) -> memref<i64, strided<[], offset: ?>> {
 // CHECK: @_idtr_reduce_all
+
+// -----
+module {
+    func.func @test_local_of_slice(%arg0: !dist.dtensor<<1 x i64>>) -> (index, index, index) {
+        %c0 = arith.constant 0 : index
+        %c3 = arith.constant 3 : index
+        %l_offsets, %l_sizes, %g_offsets = dist.local_of_slice %arg0[%c0] [%c3] [%c3] : !dist.dtensor<<1 x i64>> to (index, index, index)
+        return %l_offsets, %l_sizes, %g_offsets : index, index, index
+    }
+}
+// CHECK-LABEL: func.func @test_local_of_slice(%arg0: memref<?xindex>, %arg1: !ptensor.ptensor<1 x i64>, %arg2: memref<?xindex>, %arg3: index) -> (index, index, index) {
+// CHECK: "ptensor.extract_tensor"(%arg1) : (!ptensor.ptensor<1 x i64>) -> memref<?xi64, strided<[?], offset: ?>>
+// CHECK: memref.dim %0, %c0_0 : memref<?xi64, strided<[?], offset: ?>>
+// CHECK: memref.load %arg2[%c0_0] : memref<?xindex>
+// CHECK: arith.cmpi ult
+// CHECK: arith.cmpi ule
+// CHECK: arith.select
+// CHECK: arith.select
+// CHECK: arith.select
+// CHECK: [[V1:%.*]] = arith.select
+// CHECK: arith.select
+// CHECK: [[V2:%.*]] = arith.select
+// CHECK: [[V3:%.*]] = arith.addi
+// CHECK: return [[V1]], [[V2]], [[V3]] : index, index, index
