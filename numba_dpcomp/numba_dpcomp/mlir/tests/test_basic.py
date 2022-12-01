@@ -197,7 +197,9 @@ def test_cast(py_func, val):
 
 
 @pytest.mark.parametrize("val", [1, 5, 5.5])
-@pytest.mark.parametrize("name", ["sqrt", "log", "exp", "sin", "cos", "erf", "tanh"])
+@pytest.mark.parametrize(
+    "name", ["sqrt", "log", "exp", "sin", "cos", "erf", "tanh", "floor"]
+)
 def test_math_uplifting1(val, name):
     py_func = eval(f"lambda a: math.{name}(a)")
 

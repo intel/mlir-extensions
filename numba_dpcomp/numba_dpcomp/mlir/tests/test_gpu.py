@@ -329,7 +329,7 @@ def _test_binary(func, dtype, ir_pass, ir_check):
 
 
 @require_gpu
-@pytest.mark.parametrize("op", ["sqrt", "log", "sin", "cos"])
+@pytest.mark.parametrize("op", ["sqrt", "log", "sin", "cos", "floor"])
 def test_math_funcs_unary(op):
     f = eval(f"math.{op}")
 
