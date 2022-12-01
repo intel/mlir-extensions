@@ -54,6 +54,7 @@ struct UpliftMathCalls : public mlir::OpRewritePattern<mlir::func::CallOp> {
     using func_t = mlir::Operation *(*)(mlir::OpBuilder &, mlir::Location,
                                         mlir::ValueRange);
     const std::pair<llvm::StringRef, func_t> handlers[] = {
+        {"floor", &replaceOp1<mlir::math::FloorOp>},
         {"log", &replaceOp1<mlir::math::LogOp>},
         {"sqrt", &replaceOp1<mlir::math::SqrtOp>},
         {"exp", &replaceOp1<mlir::math::ExpOp>},
