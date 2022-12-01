@@ -1,4 +1,4 @@
-# linalg dialect to gpu dialect lowering pipeline
+// linalg dialect to gpu dialect lowering pipeline
 builtin.module(convert-tensor-to-linalg
     arith-bufferize
     func.func(empty-tensor-to-alloc-tensor
@@ -23,4 +23,4 @@ builtin.module(convert-tensor-to-linalg
     lower-affine
     convert-func-to-llvm
     reconcile-unrealized-casts)
-# End
+// End

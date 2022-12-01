@@ -1,4 +1,4 @@
-# linalg dialect to cpu lowering pipeline
+// linalg dialect to cpu lowering pipeline
 builtin.module(inline
     convert-tensor-to-linalg
     convert-elementwise-to-linalg
@@ -25,4 +25,4 @@ builtin.module(inline
     lower-affine
     convert-func-to-llvm
     reconcile-unrealized-casts)
-# End
+// End

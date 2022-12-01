@@ -101,19 +101,22 @@ ppipeline = None
 if args.pass_pipeline_file:
     with open(args.pass_pipeline_file, 'r') as infile:
         for l in infile:
-            # Strip python style single line comments and append to ppipeline
-            res = l.split('#')
-            l = res[0]
+            # Strip C++ style single line comments and append to ppipeline
+            l = re.sub('//.*?\n', '', l)
             # get rid of leading and trailing whitespaces, tabs and newlines
-            l = l.rstrip()
+            l = l.strip()
             if len(l):
                 ppipeline = ','.join([ppipeline, l]) if ppipeline else l
         # get rid of leading and trailing whitespaces, tabs and newlines
-        ppipeline = ppipeline.rstrip()
+        ppipeline = ppipeline.strip()
         # get rid of duplicate ','s
         ppipeline = re.sub(r",+", ",", ppipeline)
-        # get rid of trailing ','s
+        # replace "(," with "("
+        ppipeline = re.sub(r"\(,", "(", ppipeline)
+        # replace ",)" with ")"
         ppipeline = re.sub(r",\)", ")", ppipeline)
+        # get rid of trailing ','s
+        ppipeline = ppipeline.rstrip(',')
 
 imex_binary_dir = '@IMEX_BINARY_DIR@'
 llvm_binary_dir = '@LLVM_BINARY_DIR@'
