@@ -85,15 +85,23 @@ struct RuntimePrototypesOpConverter
     auto dtypeType = rewriter.getIntegerType(sizeof(int) * 8);
     auto opType =
         rewriter.getIntegerType(sizeof(::imex::ptensor::ReduceOpId) * 8);
-    requireFunc(loc, rewriter, module, "_idtr_init_dtensor",
-                {::mlir::RankedTensorType::get({-1}, dtype), i64Type},
-                {i64Type});
-    requireFunc(loc, rewriter, module, "_idtr_local_shape",
-                {i64Type, ::mlir::RankedTensorType::get({-1}, dtype), i64Type},
-                {});
-    requireFunc(loc, rewriter, module, "_idtr_local_offsets",
-                {i64Type, ::mlir::RankedTensorType::get({-1}, dtype), i64Type},
-                {});
+    requireFunc(
+        loc, rewriter, module, "_idtr_init_dtensor",
+        {::mlir::RankedTensorType::get({::mlir::ShapedType::kDynamic}, dtype),
+         i64Type},
+        {i64Type});
+    requireFunc(
+        loc, rewriter, module, "_idtr_local_shape",
+        {i64Type,
+         ::mlir::RankedTensorType::get({::mlir::ShapedType::kDynamic}, dtype),
+         i64Type},
+        {});
+    requireFunc(
+        loc, rewriter, module, "_idtr_local_offsets",
+        {i64Type,
+         ::mlir::RankedTensorType::get({::mlir::ShapedType::kDynamic}, dtype),
+         i64Type},
+        {});
     requireFunc(loc, rewriter, module, "_idtr_reduce_all",
                 {::mlir::RankedTensorType::get({}, dtype), dtypeType, opType},
                 {});
@@ -117,10 +125,14 @@ struct RegisterPTensorOpConverter
     auto i64Rank = rewriter.create<::mlir::arith::IndexCastOp>(
         loc, rewriter.getI64Type(), rank);
     auto shapeTnsr = rewriter.create<::mlir::tensor::CastOp>(
-        loc, ::mlir::RankedTensorType::get({-1}, rewriter.getIndexType()),
+        loc,
+        ::mlir::RankedTensorType::get({::mlir::ShapedType::kDynamic},
+                                      rewriter.getIndexType()),
         shape);
     auto i64Tnsr = rewriter.create<::mlir::arith::IndexCastOp>(
-        loc, ::mlir::RankedTensorType::get({-1}, rewriter.getI64Type()),
+        loc,
+        ::mlir::RankedTensorType::get({::mlir::ShapedType::kDynamic},
+                                      rewriter.getI64Type()),
         shapeTnsr);
     auto fsa = rewriter.getStringAttr("_idtr_init_dtensor");
     rewriter.replaceOpWithNewOp<::mlir::func::CallOp>(
