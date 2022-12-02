@@ -2988,6 +2988,80 @@ struct FixDeallocPlacementPass
                                       mlir::func::FuncOp, void,
                                       FixDeallocPlacement> {};
 
+/// Move reduction iterators to the left to help later reduction simplification
+/// passes.
+struct MakeGenericReduceInnermost
+    : public mlir::OpRewritePattern<mlir::linalg::GenericOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::linalg::GenericOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto iters = op.getIteratorTypesArray();
+
+    auto numDims = static_cast<unsigned>(iters.size());
+    llvm::SmallBitVector reductions(iters.size());
+    bool seenReduction = false;
+    bool needChange = false;
+    for (auto [i, iter] : llvm::enumerate(iters)) {
+      if (iter == mlir::utils::IteratorType::reduction) {
+        reductions[i] = true;
+        seenReduction = true;
+      } else {
+        if (seenReduction)
+          needChange = true;
+      }
+    }
+
+    if (!needChange)
+      return mlir::failure();
+
+    llvm::SmallVector<mlir::Attribute> remappedIters;
+    remappedIters.reserve(numDims);
+
+    llvm::SmallVector<mlir::AffineExpr> remappedDims;
+    remappedDims.reserve(numDims);
+
+    for (auto i : llvm::seq(0u, numDims)) {
+      if (!reductions[i]) {
+        remappedIters.emplace_back(
+            mlir::linalg::IteratorTypeAttr::get(getContext(), iters[i]));
+        remappedDims.emplace_back(mlir::getAffineDimExpr(i, getContext()));
+      }
+    }
+
+    for (auto i : llvm::seq(0u, numDims)) {
+      if (reductions[i]) {
+        remappedIters.emplace_back(
+            mlir::linalg::IteratorTypeAttr::get(getContext(), iters[i]));
+        remappedDims.emplace_back(mlir::getAffineDimExpr(i, getContext()));
+      }
+    }
+
+    auto maps = op.getIndexingMaps();
+    llvm::SmallVector<mlir::Attribute> newMaps;
+    newMaps.reserve(maps.size());
+
+    for (auto attr : maps.getAsRange<mlir::AffineMapAttr>()) {
+      auto map = attr.getAffineMap();
+      auto newMap =
+          map.replaceDimsAndSymbols(remappedDims, llvm::None, numDims, 0);
+      newMaps.emplace_back(mlir::AffineMapAttr::get(newMap));
+    }
+
+    rewriter.updateRootInPlace(op, [&]() {
+      op.setIndexingMapsAttr(rewriter.getArrayAttr(newMaps));
+      op.setIteratorTypesAttr(rewriter.getArrayAttr(remappedIters));
+    });
+
+    return mlir::success();
+  }
+};
+
+struct MakeGenericReduceInnermostPass
+    : public imex::RewriteWrapperPass<MakeGenericReduceInnermostPass, void,
+                                      void, MakeGenericReduceInnermost> {};
+
 static void populateCommonOptPass(mlir::OpPassManager &pm) {
   pm.addPass(imex::createCompositePass(
       "PlierToLinalgCommonOptPass", [](mlir::OpPassManager &p) {
@@ -3070,6 +3144,8 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
   //  pm.addNestedPass<mlir::func::FuncOp>(
   //      mlir::bufferization::createPromoteBuffersToStackPass());
 
+  pm.addNestedPass<mlir::func::FuncOp>(
+      std::make_unique<MakeGenericReduceInnermostPass>());
   pm.addNestedPass<mlir::func::FuncOp>(
       mlir::createConvertLinalgToParallelLoopsPass());
   pm.addNestedPass<mlir::func::FuncOp>(mlir::createCanonicalizerPass());
