@@ -1127,12 +1127,14 @@ _shapes = (1, 7, 16, 25, 64, 65)
     "py_func",
     [
         "lambda a: a.sum()",
+        "lambda a: a.sum(axis=0)",
+        "lambda a: a.sum(axis=1)",
     ],
 )
 @pytest.mark.parametrize("shape", itertools.product(_shapes, _shapes))
 @pytest.mark.parametrize("dtype", [np.int32, np.int64, np.float32])
 def test_cfd_reduce2(py_func, shape, dtype):
-    if shape == (1, 1):
+    if shape[0] == 1 or shape[1] == 1:
         # TODO: Handle gpu array access outside the loops
         pytest.xfail()
 
