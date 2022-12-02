@@ -2988,7 +2988,7 @@ struct FixDeallocPlacementPass
                                       mlir::func::FuncOp, void,
                                       FixDeallocPlacement> {};
 
-/// Move reduction iterators to the left to help later reduction simplification
+/// Move reduction iterators to the right to help later reduction simplification
 /// passes.
 struct MakeGenericReduceInnermost
     : public mlir::OpRewritePattern<mlir::linalg::GenericOp> {
