@@ -8,6 +8,7 @@ from numpy.testing import assert_equal, assert_allclose
 import numpy as np
 import math
 import numba
+import itertools
 
 from numba_dpcomp.mlir.settings import _readenv
 from numba_dpcomp.mlir.kernel_impl import (
@@ -33,7 +34,7 @@ from numba_dpcomp.mlir.passes import (
     is_print_buffer_empty,
 )
 
-from .utils import JitfuncCache
+from .utils import JitfuncCache, parametrize_function_variants
 from .utils import njit_cached as njit
 
 kernel_cache = JitfuncCache(kernel)
@@ -1086,6 +1087,58 @@ def test_cfd_reshape():
             > 0
         ), ir
         assert ir.count("gpu.launch blocks") > 0, ir
-
     _to_host(dgpu_res, gpu_res)
     assert_equal(gpu_res, sim_res)
+
+
+@pytest.mark.smoke
+@require_dpctl
+@pytest.mark.parametrize("size", [1, 7, 16, 64, 65, 256, 512, 1024 * 1024])
+def test_cfd_reduce1(size):
+    if size == 1:
+        # TODO: Handle gpu array access outside the loops
+        pytest.xfail()
+
+    py_func = lambda a: a.sum()
+    jit_func = njit(py_func)
+
+    a = np.arange(size, dtype=np.float32)
+
+    da = _from_host(a, buffer="device")
+
+    filter_string = da.device.sycl_device.filter_string
+    with print_pass_ir([], ["ConvertParallelLoopToGpu"]):
+        assert_allclose(jit_func(da), py_func(a), rtol=1e-5)
+        ir = get_print_buffer()
+        assert (
+            ir.count(
+                f'imex_util.env_region #gpu_runtime.region_desc<device = "{filter_string}">'
+            )
+            > 0
+        ), ir
+        assert ir.count("gpu.launch blocks") == 1, ir
+
+
+_shapes = (1, 7, 16, 25, 64, 65)
+
+
+@require_dpctl
+@parametrize_function_variants(
+    "py_func",
+    [
+        "lambda a: a.sum()",
+    ],
+)
+@pytest.mark.parametrize("shape", itertools.product(_shapes, _shapes))
+@pytest.mark.parametrize("dtype", [np.int32, np.int64, np.float32])
+def test_cfd_reduce2(py_func, shape, dtype):
+    if shape == (1, 1):
+        # TODO: Handle gpu array access outside the loops
+        pytest.xfail()
+
+    jit_func = njit(py_func)
+
+    a = np.arange(math.prod(shape), dtype=dtype).reshape(shape).copy()
+
+    da = _from_host(a, buffer="device")
+    assert_allclose(jit_func(da), py_func(a), rtol=1e-5)

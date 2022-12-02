@@ -914,7 +914,7 @@ public:
                   mlir::memref::StoreOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto memrefType = op.getMemref().getType().cast<mlir::MemRefType>();
-    if (!memrefType.hasRank() || memrefType.getRank() != 1)
+    if (memrefType.getRank() > 1)
       return mlir::failure();
 
     auto typeSize = getTypeSize(memrefType.getElementType());
@@ -922,8 +922,10 @@ public:
       return mlir::failure();
 
     auto loc = op.getLoc();
-    auto ptr = rewriter.create<mlir::spirv::InBoundsPtrAccessChainOp>(
-        loc, adaptor.getMemref(), adaptor.getIndices().front(), llvm::None);
+    auto ptr = adaptor.getMemref();
+    if (memrefType.getRank() != 0)
+      ptr = rewriter.create<mlir::spirv::InBoundsPtrAccessChainOp>(
+          loc, ptr, adaptor.getIndices().front(), llvm::None);
 
     auto memoryAccess = mlir::spirv::MemoryAccessAttr::get(
         op.getContext(), mlir::spirv::MemoryAccess::Aligned);
@@ -1197,6 +1199,20 @@ static void genReduceOp(mlir::Operation *srcOp, mlir::PatternRewriter &rewriter,
   auto scope = mlir::spirv::ScopeAttr::get(ctx, s);
   auto groupOp = mlir::spirv::GroupOperationAttr::get(
       ctx, mlir::spirv::GroupOperation::Reduce);
+  rewriter.replaceOpWithNewOp<SpirvOp>(srcOp, type, scope, groupOp, arg);
+}
+
+template <typename SpirvOp, bool Subgroup>
+static void genNonUniformReduceOp(mlir::Operation *srcOp,
+                                  mlir::PatternRewriter &rewriter,
+                                  mlir::Value arg) {
+  auto type = arg.getType();
+  auto ctx = srcOp->getContext();
+  auto s =
+      Subgroup ? mlir::spirv::Scope::Subgroup : mlir::spirv::Scope::Workgroup;
+  auto scope = mlir::spirv::ScopeAttr::get(ctx, s);
+  auto groupOp = mlir::spirv::GroupOperationAttr::get(
+      ctx, mlir::spirv::GroupOperation::Reduce);
   rewriter.replaceOpWithNewOp<SpirvOp>(srcOp, type, scope, groupOp, arg,
                                        mlir::Value{});
 }
@@ -1231,8 +1247,8 @@ public:
 
     namespace spv = mlir::spirv;
     const Handler handlers[] = {
-        {ReduceType::ADD, &genReduceOp<spv::GroupNonUniformFAddOp, false>,
-         &genReduceOp<spv::GroupNonUniformIAddOp, false>},
+        {ReduceType::ADD, &genReduceOp<spv::GroupFAddOp, false>,
+         &genReduceOp<spv::GroupIAddOp, false>},
     };
 
     for (auto &h : handlers) {
@@ -1277,8 +1293,9 @@ public:
 
     namespace spv = mlir::spirv;
     const Handler handlers[] = {
-        {ReduceType::ADD, &genReduceOp<spv::GroupNonUniformFAddOp, true>,
-         &genReduceOp<spv::GroupNonUniformIAddOp, true>},
+        {ReduceType::ADD,
+         &genNonUniformReduceOp<spv::GroupNonUniformFAddOp, true>,
+         &genNonUniformReduceOp<spv::GroupNonUniformIAddOp, true>},
     };
 
     for (auto &h : handlers) {
@@ -1550,10 +1567,9 @@ struct ExpandSuggestBlockSizeOp
   mlir::LogicalResult
   matchAndRewrite(gpu_runtime::GPUSuggestBlockSizeOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    if (op.getKernel())
+    if (op.getKernel() || !op.getKernelRef())
       return mlir::failure();
 
-    assert(op.getKernelRef());
     return createGpuKernelLoad(
         rewriter, op,
         [&](mlir::OpBuilder &builder, mlir::Location loc, mlir::Value stream,
@@ -1723,6 +1739,14 @@ struct GPUExPass
   }
 };
 
+static llvm::Optional<mlir::Attribute> getNeutralValue(mlir::Block &block) {
+  auto body = block.without_terminator();
+  if (!llvm::hasSingleElement(body))
+    return llvm::None;
+
+  return mlir::linalg::getNeutralElement(&(*body.begin()));
+}
+
 struct TileParallelOp : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
   using OpRewritePattern::OpRewritePattern;
 
@@ -1746,11 +1770,7 @@ struct TileParallelOp : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
 
     llvm::SmallVector<mlir::Attribute> neutralValues;
     for (auto reduction : reductionOps) {
-      auto body = reduction.getRegion().front().without_terminator();
-      if (!llvm::hasSingleElement(body))
-        return mlir::failure();
-
-      auto neutralValue = mlir::linalg::getNeutralElement(&(*body.begin()));
+      auto neutralValue = getNeutralValue(reduction.getRegion().front());
       if (!neutralValue)
         return mlir::failure();
 
@@ -2336,13 +2356,7 @@ struct InsertGPUGlobalReduce
 
       rewriter.setInsertionPoint(reduce);
       auto newReduce = rewriter.create<gpu_runtime::GPUGlobalReduceOp>(
-          reduce.getLoc(), reduceType, reduce.getOperand());
-
-      auto ifOp =
-          rewriter.create<mlir::scf::IfOp>(reduce.getLoc(), cond, false);
-      rewriter.setInsertionPointToStart(ifOp.thenBlock());
-      rewriter.create<mlir::memref::StoreOp>(reduce.getLoc(),
-                                             newReduce.getResult(), array);
+          reduce.getLoc(), reduce.getOperand(), array);
 
       auto &newRegion = newReduce.getRegion();
       rewriter.inlineRegionBefore(reduceRegion, newRegion, newRegion.end());
@@ -2370,7 +2384,7 @@ struct InsertGPUGlobalReduce
 
 struct InsertGPUGlobalReducePass
     : public mlir::PassWrapper<InsertGPUGlobalReducePass,
-                               mlir::OperationPass<mlir::ModuleOp>> {
+                               mlir::OperationPass<void>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(InsertGPUGlobalReducePass)
 
   virtual void
@@ -2386,6 +2400,239 @@ struct InsertGPUGlobalReducePass
     mlir::RewritePatternSet patterns(ctx);
 
     patterns.insert<InsertGPUGlobalReduce>(ctx);
+
+    (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
+                                             std::move(patterns));
+  }
+};
+
+static mlir::Value computeGPUDimsProd(mlir::OpBuilder &builder,
+                                      mlir::Location loc, mlir::Value x,
+                                      mlir::Value y, mlir::Value z) {
+  mlir::Value tmp = builder.create<mlir::arith::MulIOp>(loc, x, y);
+  return builder.create<mlir::arith::MulIOp>(loc, tmp, z);
+}
+
+static mlir::Value isZeroIds(mlir::OpBuilder &builder, mlir::Location loc,
+                             const mlir::gpu::KernelDim3 &ids) {
+  mlir::Value zero = builder.create<mlir::arith::ConstantIndexOp>(loc, 0);
+  mlir::Value eq = builder.create<mlir::arith::CmpIOp>(
+      loc, mlir::arith::CmpIPredicate::eq, ids.x, zero);
+  mlir::Value tmp = builder.create<mlir::arith::CmpIOp>(
+      loc, mlir::arith::CmpIPredicate::eq, ids.y, zero);
+  tmp = builder.create<mlir::arith::AndIOp>(loc, tmp, eq);
+  eq = builder.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::eq,
+                                           ids.z, zero);
+  return builder.create<mlir::arith::AndIOp>(loc, tmp, eq);
+}
+
+static mlir::Value computeLinearBlockId(mlir::OpBuilder &builder,
+                                        mlir::Location loc,
+                                        const mlir::gpu::KernelDim3 &gridSizes,
+                                        const mlir::gpu::KernelDim3 &blockIds) {
+  mlir::Value tmp =
+      builder.create<mlir::arith::MulIOp>(loc, gridSizes.x, blockIds.y);
+  mlir::Value ret = builder.create<mlir::arith::AddIOp>(loc, blockIds.x, tmp);
+  tmp = builder.create<mlir::arith::MulIOp>(loc, gridSizes.x, gridSizes.y);
+  tmp = builder.create<mlir::arith::MulIOp>(loc, tmp, blockIds.z);
+  return builder.create<mlir::arith::AddIOp>(loc, ret, tmp);
+}
+
+struct LowerGPUGlobalReduce
+    : public mlir::OpRewritePattern<gpu_runtime::GPUGlobalReduceOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(gpu_runtime::GPUGlobalReduceOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    // Launch op must be a direct parent.
+    auto launch = mlir::dyn_cast<mlir::gpu::LaunchOp>(op->getParentOp());
+    if (!launch)
+      return mlir::failure();
+
+    auto initAttr = getNeutralValue(op.getRegion().front());
+    if (!initAttr)
+      return mlir::failure();
+
+    auto launchLoc = launch.getLoc();
+    mlir::OpBuilder::InsertionGuard g(rewriter);
+    rewriter.setInsertionPoint(launch);
+
+    mlir::Value resultArray = op.getTarget();
+
+    mlir::Value numWorkGroupsExternal =
+        computeGPUDimsProd(rewriter, launchLoc, launch.getGridSizeX(),
+                           launch.getGridSizeY(), launch.getGridSizeZ());
+
+    const int64_t shape[] = {mlir::ShapedType::kDynamic};
+    auto arrayType = mlir::MemRefType::get(shape, op.getValue().getType());
+    mlir::Value reduceArray = rewriter.create<mlir::memref::AllocOp>(
+        launchLoc, arrayType, numWorkGroupsExternal);
+
+    auto loc = op.getLoc();
+
+    rewriter.setInsertionPoint(op);
+    auto allReduce =
+        rewriter.create<mlir::gpu::AllReduceOp>(loc, op.getValue());
+    auto &newRegion = allReduce.getRegion();
+    rewriter.inlineRegionBefore(op.getRegion(), newRegion, newRegion.end());
+
+    auto &reduceBlock = newRegion.front();
+    {
+      mlir::OpBuilder::InsertionGuard g1(rewriter);
+      auto term = mlir::cast<gpu_runtime::GPUGlobalReduceYieldOp>(
+          reduceBlock.getTerminator());
+      rewriter.setInsertionPoint(term);
+      rewriter.replaceOpWithNewOp<mlir::gpu::YieldOp>(term, term.getResult());
+    }
+
+    mlir::gpu::KernelDim3 threadIds = launch.getThreadIds();
+    mlir::gpu::KernelDim3 blockIds = launch.getBlockIds();
+    mlir::gpu::KernelDim3 gridSizes = launch.getGridSize();
+
+    mlir::Value linearBlockId =
+        computeLinearBlockId(rewriter, loc, gridSizes, blockIds);
+
+    mlir::Value isZeroThread = isZeroIds(rewriter, loc, threadIds);
+
+    auto condWriteBuilder = [&](mlir::OpBuilder &b, mlir::Location l) {
+      mlir::Value result = allReduce.getResult();
+      b.create<mlir::memref::StoreOp>(l, result, reduceArray, linearBlockId);
+      b.create<mlir::scf::YieldOp>(l);
+    };
+
+    rewriter.create<mlir::scf::IfOp>(loc, isZeroThread, condWriteBuilder);
+
+    rewriter.setInsertionPointAfter(launch);
+    mlir::Value zero =
+        rewriter.create<mlir::arith::ConstantIndexOp>(launchLoc, 0);
+    mlir::Value one =
+        rewriter.create<mlir::arith::ConstantIndexOp>(launchLoc, 1);
+
+    auto finalReduceBodyBuilder = [&](mlir::OpBuilder &b, mlir::Location l,
+                                      mlir::ValueRange iters,
+                                      mlir::ValueRange) {
+      assert(iters.size() == 1);
+      mlir::Value value =
+          b.create<mlir::memref::LoadOp>(l, reduceArray, iters.front());
+      auto reduce = b.create<mlir::scf::ReduceOp>(l, value);
+      auto &finalReduceBlock = reduce.getRegion().front();
+
+      mlir::BlockAndValueMapping mapper;
+      mapper.map(reduceBlock.getArguments(), finalReduceBlock.getArguments());
+
+      {
+        mlir::OpBuilder::InsertionGuard g1(b);
+        b.setInsertionPointToStart(&finalReduceBlock);
+        for (auto &op : reduceBlock.without_terminator())
+          b.clone(op, mapper);
+
+        auto term = mlir::cast<mlir::gpu::YieldOp>(reduceBlock.getTerminator());
+        auto result = mapper.lookupOrDefault(term.getValues().front());
+        b.create<mlir::scf::ReduceReturnOp>(l, result);
+      }
+      b.create<mlir::scf::YieldOp>(l);
+    };
+
+    mlir::Value initVal = rewriter.create<mlir::arith::ConstantOp>(
+        launchLoc, initAttr->cast<mlir::TypedAttr>());
+    auto loopOp = rewriter.create<mlir::scf::ParallelOp>(
+        launchLoc, zero, numWorkGroupsExternal, one, initVal,
+        finalReduceBodyBuilder);
+
+    rewriter.create<mlir::memref::StoreOp>(launchLoc, loopOp->getResult(0),
+                                           resultArray);
+
+    rewriter.create<mlir::memref::DeallocOp>(launchLoc, reduceArray);
+    rewriter.eraseOp(op);
+    return mlir::success();
+  }
+};
+
+template <typename Op, mlir::gpu::AllReduceOperation ReduceOp>
+static llvm::Optional<mlir::gpu::AllReduceOperation>
+convertAllReduceOp(mlir::Operation *op) {
+  if (mlir::isa<Op>(op))
+    return ReduceOp;
+
+  return llvm::None;
+}
+
+struct AllReduceRemoveRegion
+    : public mlir::OpRewritePattern<mlir::gpu::AllReduceOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::gpu::AllReduceOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto &region = op.getBody();
+    if (region.empty())
+      return mlir::failure();
+
+    auto &block = region.front();
+    auto ops = block.without_terminator();
+    if (!llvm::hasSingleElement(ops))
+      return mlir::failure();
+
+    using RedOp = mlir::gpu::AllReduceOperation;
+    using Handler = llvm::Optional<RedOp> (*)(mlir::Operation *);
+    const Handler handlers[] = {
+        &convertAllReduceOp<mlir::arith::AddIOp, RedOp::ADD>,
+        &convertAllReduceOp<mlir::arith::AddFOp, RedOp::ADD>,
+        &convertAllReduceOp<mlir::arith::AndIOp, RedOp::AND>,
+        &convertAllReduceOp<mlir::arith::XOrIOp, RedOp::XOR>,
+        &convertAllReduceOp<mlir::arith::OrIOp, RedOp::OR>,
+        &convertAllReduceOp<mlir::arith::MulIOp, RedOp::MUL>,
+        &convertAllReduceOp<mlir::arith::MulFOp, RedOp::MUL>,
+        &convertAllReduceOp<mlir::arith::MaxSIOp, RedOp::MAX>,
+        &convertAllReduceOp<mlir::arith::MaxFOp, RedOp::MAX>,
+        &convertAllReduceOp<mlir::arith::MinSIOp, RedOp::MIN>,
+        &convertAllReduceOp<mlir::arith::MinFOp, RedOp::MIN>,
+    };
+
+    auto result = [&]() -> llvm::Optional<RedOp> {
+      auto &reduceOp = *ops.begin();
+      for (auto h : handlers)
+        if (auto res = h(&reduceOp))
+          return *res;
+
+      return llvm::None;
+    }();
+    if (!result)
+      return mlir::failure();
+
+    auto attrName =
+        rewriter.getStringAttr(gpu_runtime::getNonUniformAttrName());
+    auto nonUniform = op->hasAttr(attrName);
+    auto attr = mlir::gpu::AllReduceOperationAttr::get(getContext(), *result);
+    auto res = rewriter.replaceOpWithNewOp<mlir::gpu::AllReduceOp>(
+        op, op.getValue(), attr);
+    if (nonUniform)
+      res->setAttr(attrName, rewriter.getUnitAttr());
+
+    return mlir::success();
+  }
+};
+
+struct LowerGPUGlobalReducePass
+    : public mlir::PassWrapper<LowerGPUGlobalReducePass,
+                               mlir::OperationPass<void>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LowerGPUGlobalReducePass)
+
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<gpu_runtime::GpuRuntimeDialect>();
+    registry.insert<mlir::arith::ArithDialect>();
+    registry.insert<mlir::gpu::GPUDialect>();
+    registry.insert<mlir::memref::MemRefDialect>();
+    registry.insert<mlir::scf::SCFDialect>();
+  }
+
+  void runOnOperation() override {
+    auto *ctx = &getContext();
+    mlir::RewritePatternSet patterns(ctx);
+
+    patterns.insert<LowerGPUGlobalReduce, AllReduceRemoveRegion>(ctx);
 
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
                                              std::move(patterns));
@@ -2441,4 +2688,8 @@ std::unique_ptr<mlir::Pass> gpu_runtime::createTruncateF64ForGPUPass() {
 
 std::unique_ptr<mlir::Pass> gpu_runtime::createInsertGPUGlobalReducePass() {
   return std::make_unique<InsertGPUGlobalReducePass>();
+}
+
+std::unique_ptr<mlir::Pass> gpu_runtime::createLowerGPUGlobalReducePass() {
+  return std::make_unique<LowerGPUGlobalReducePass>();
 }

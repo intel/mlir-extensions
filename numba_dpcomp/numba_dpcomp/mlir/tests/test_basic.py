@@ -837,6 +837,7 @@ def test_builtin_funcs3(func, a, b, c):
     assert_equal(py_func(a, b, c), jit_func(a, b, c))
 
 
+@pytest.mark.skip()
 def test_fastmath_indirect():
     def py_func1(a, b, c):
         return a + b * c

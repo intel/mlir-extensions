@@ -42,4 +42,8 @@ std::unique_ptr<mlir::Pass> createTruncateF64ForGPUPass();
 /// This pass is intended to be run right before scf-to-gpu.
 std::unique_ptr<mlir::Pass> createInsertGPUGlobalReducePass();
 
+/// Lowers `global_reduce` op to trhe series of workgroup reduces, barriers and
+/// global memory accesses. Intended to be run before gpu kernel outlining.
+std::unique_ptr<mlir::Pass> createLowerGPUGlobalReducePass();
+
 } // namespace gpu_runtime
