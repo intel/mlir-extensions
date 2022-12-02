@@ -1820,6 +1820,7 @@ struct ResolveNtensorPass
     registry.insert<mlir::linalg::LinalgDialect>();
     registry.insert<mlir::memref::MemRefDialect>();
     registry.insert<mlir::tensor::TensorDialect>();
+    registry.insert<mlir::bufferization::BufferizationDialect>();
   }
 
   void runOnOperation() override {

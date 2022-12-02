@@ -5,6 +5,7 @@
 import ctypes
 import atexit
 from .utils import load_lib, mlir_func_name, register_cfunc
+from .settings import MKL_AVAILABLE
 
 runtime_lib = load_lib("dpcomp-math-runtime")
 
@@ -21,6 +22,8 @@ def load_function_variants(func_name, suffixes):
 
 
 load_function_variants("dpcompLinalgEig_", ["float32", "float64"])
+if MKL_AVAILABLE:
+    load_function_variants("mkl_gemm_", ["float32", "float64"])
 
 _finalize_func = runtime_lib.dpcompMathRuntimeFinalize
 

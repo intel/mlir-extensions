@@ -64,6 +64,12 @@ option(IMEX_USE_DPNP
     "Use the dpnp Python NumPy-like library for some math functions"
     OFF
 )
+
+option(IMEX_USE_MKL
+    "Enable mkl support"
+    ON
+)
+
 option(IMEX_ENABLE_IGPU_DIALECT
     "Enable GPU codegen"
     OFF
@@ -81,7 +87,8 @@ option(IMEX_ENABLE_TESTS
     OFF
 )
 
-message(STATUS "IMEX_USE_DPNP ${DPNIMEX_USE_DPNPP_ENABLE}")
+message(STATUS "IMEX_USE_DPNP ${IMEX_USE_DPNP}")
+message(STATUS "IMEX_USE_MKL ${IMEX_USE_MKL}")
 message(STATUS "IMEX_ENABLE_IGPU_DIALECT ${IMEX_ENABLE_IGPU_DIALECT}")
 message(STATUS "IMEX_ENABLE_TESTS ${IMEX_ENABLE_TESTS}")
 message(STATUS "IMEX_ENABLE_NUMBA_FE ${IMEX_ENABLE_NUMBA_FE}")
