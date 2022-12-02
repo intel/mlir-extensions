@@ -189,9 +189,10 @@ struct DistARange : public RecOpRewritePattern<::imex::ptensor::ARangeOp> {
     auto stop = rewriter.create<::mlir::arith::AddIOp>(
         loc, start, tmp2); // start + (lShape[0] * stride)
     //  get type of local tensor
-    ::llvm::ArrayRef<int64_t> lShape({-1});
+    ::llvm::ArrayRef<int64_t> lShape({::mlir::ShapedType::kDynamic});
     auto artype = ::imex::ptensor::PTensorType::get(
-        rewriter.getContext(), ::mlir::RankedTensorType::get({-1}, dtype),
+        rewriter.getContext(),
+        ::mlir::RankedTensorType::get({::mlir::ShapedType::kDynamic}, dtype),
         false, false);
     // finally create local arange
     auto dmy = ::mlir::Value(); // createInt<1>(loc, rewriter, 0);
