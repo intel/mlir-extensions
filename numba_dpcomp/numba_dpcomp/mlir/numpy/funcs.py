@@ -492,20 +492,29 @@ def eye_impl(builder, N, M=None, k=0, dtype=None):
 
 
 def _matmul2d(builder, a, b, shape1, shape2):
-    iterators = ["parallel", "parallel", "reduction"]
-    expr1 = "(d0,d1,d2) -> (d0,d2)"
-    expr2 = "(d0,d1,d2) -> (d2,d1)"
-    expr3 = "(d0,d1,d2) -> (d0,d1)"
-    maps = [expr1, expr2, expr3]
+    # iterators = ["parallel", "parallel", "reduction"]
+    # expr1 = "(d0,d1,d2) -> (d0,d2)"
+    # expr2 = "(d0,d1,d2) -> (d2,d1)"
+    # expr3 = "(d0,d1,d2) -> (d0,d1)"
+    # maps = [expr1, expr2, expr3]
+    # res_shape = (shape1[0], shape2[1])
+    # dtype = broadcast_type_arrays(builder, (a, b))
+    # init = builder.init_tensor(res_shape, dtype, 0)
+
+    # def body(a, b, c):
+    #     return a * b + c
+
+    # return builder.linalg_generic((a, b), init, iterators, maps, body)
+    # shape = arg.shape
+    # if len(shape) == 2:
+    dtype = a.dtype
+    func_name = f"mkl_gemm_{dtype_str(builder, dtype)}"
     res_shape = (shape1[0], shape2[1])
-    dtype = broadcast_type_arrays(builder, (a, b))
-    init = builder.init_tensor(res_shape, dtype, 0)
+    c = builder.init_tensor(res_shape, dtype, 0)
 
-    def body(a, b, c):
-        return a * b + c
-
-    return builder.linalg_generic((a, b), init, iterators, maps, body)
-
+    # return builder.external_call(func_name, (a, b, 1, 0), c)
+    # return builder.external_call(func_name, (a, b), c)
+    return builder.external_call(func_name, (a, b), c)
 
 @register_func("numpy.dot", numpy.dot, out="out")
 def dot_impl(builder, a, b):

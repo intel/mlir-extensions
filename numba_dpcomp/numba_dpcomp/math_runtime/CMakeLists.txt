@@ -14,12 +14,18 @@ set(HEADERS_LIST
     lib/Common.hpp
     )
 
+find_package(MKL CONFIG REQUIRED)
+
 add_library(${PROJECT_NAME} SHARED ${SOURCES_LIST} ${HEADERS_LIST})
 generate_export_header(${PROJECT_NAME})
 
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${PROJECT_BINARY_DIR}
+    $<TARGET_PROPERTY:MKL::MKL,INTERFACE_INCLUDE_DIRECTORIES>
     )
+
+target_link_libraries(${PROJECT_NAME} PUBLIC $<LINK_ONLY:MKL::MKL> ${MKL_SYCL})
+target_compile_options(${PROJECT_NAME} PUBLIC $<TARGET_PROPERTY:MKL::MKL,INTERFACE_COMPILE_OPTIONS>)
 
 if(IMEX_USE_DPNP)
     target_include_directories(${PROJECT_NAME} PRIVATE

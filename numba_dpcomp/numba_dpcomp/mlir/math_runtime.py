@@ -21,6 +21,7 @@ def load_function_variants(func_name, suffixes):
 
 
 load_function_variants("dpcompLinalgEig_", ["float32", "float64"])
+load_function_variants("mkl_gemm_", ["float32", "float64"])
 
 _finalize_func = runtime_lib.dpcompMathRuntimeFinalize
 
