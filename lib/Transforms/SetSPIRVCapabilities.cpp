@@ -83,9 +83,9 @@ public:
       auto triple = spirv::VerCapExtAttr::get(
           spirv::Version::V_1_0, caps_opencl, exts_opencl, context);
       auto attr = spirv::TargetEnvAttr::get(
-          triple, spirv::Vendor::Unknown, spirv::DeviceType::Unknown,
-          spirv::TargetEnvAttr::kUnknownDeviceID,
-          spirv::getDefaultResourceLimits(context));
+          triple, spirv::getDefaultResourceLimits(context),
+          spirv::ClientAPI::OpenCL, spirv::Vendor::Unknown,
+          spirv::DeviceType::Unknown, spirv::TargetEnvAttr::kUnknownDeviceID);
       auto op = getOperation();
       op->walk([&](mlir::gpu::GPUModuleOp op) {
         op->setAttr(spirv::getTargetEnvAttrName(), attr);
@@ -94,9 +94,9 @@ public:
       auto triple = spirv::VerCapExtAttr::get(
           spirv::Version::V_1_0, caps_vulkan, exts_vulkan, context);
       auto attr = spirv::TargetEnvAttr::get(
-          triple, spirv::Vendor::Unknown, spirv::DeviceType::Unknown,
-          spirv::TargetEnvAttr::kUnknownDeviceID,
-          spirv::getDefaultResourceLimits(context));
+          triple, spirv::getDefaultResourceLimits(context),
+          spirv::ClientAPI::Vulkan, spirv::Vendor::Unknown,
+          spirv::DeviceType::Unknown, spirv::TargetEnvAttr::kUnknownDeviceID);
       auto op = getOperation();
       op->walk([&](mlir::gpu::GPUModuleOp op) {
         op->setAttr(spirv::getTargetEnvAttrName(), attr);
