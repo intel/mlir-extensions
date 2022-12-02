@@ -1,8 +1,6 @@
-name: Build GPU [REFACTOR]
+name: GPU Build
 
 on:
-  schedule:
-    - cron: '0 */12 * * *' # run daily at midnight
   pull_request:
     branches:
       - refactor
