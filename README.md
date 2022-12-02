@@ -150,3 +150,8 @@ Add '-v' to the above command-line to get verbose output.
 ## License
 This code is made available under the Apache License 2.0 with LLVM Exceptions.
 See the `LICENSE.txt` file for more details.
+
+## Profiling kernel execute time
+```sh
+export IMEX_ENABLE_PROFILING=ON
+```

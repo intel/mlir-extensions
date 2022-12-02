@@ -99,30 +99,31 @@ struct GPUSYCLQUEUE {
   sycl::context syclContext_;
   sycl::queue syclQueue_;
 
-  GPUSYCLQUEUE() {
+  GPUSYCLQUEUE(sycl::property_list propList) {
 
     syclDevice_ = getDefaultDevice();
     syclContext_ = sycl::context(syclDevice_);
-    syclQueue_ = sycl::queue(syclContext_, syclDevice_);
+    syclQueue_ = sycl::queue(syclContext_, syclDevice_, propList);
   }
 
-  GPUSYCLQUEUE(sycl::device *device, sycl::context *context) {
+  GPUSYCLQUEUE(sycl::device *device, sycl::context *context,
+               sycl::property_list propList) {
     syclDevice_ = *device;
     syclContext_ = *context;
-    syclQueue_ = sycl::queue(syclContext_, syclDevice_);
+    syclQueue_ = sycl::queue(syclContext_, syclDevice_, propList);
   }
-  GPUSYCLQUEUE(sycl::device *device) {
+  GPUSYCLQUEUE(sycl::device *device, sycl::property_list propList) {
 
     syclDevice_ = *device;
     syclContext_ = sycl::context(syclDevice_);
-    syclQueue_ = sycl::queue(syclContext_, syclDevice_);
+    syclQueue_ = sycl::queue(syclContext_, syclDevice_, propList);
   }
 
-  GPUSYCLQUEUE(sycl::context *context) {
+  GPUSYCLQUEUE(sycl::context *context, sycl::property_list propList) {
 
     syclDevice_ = getDefaultDevice();
     syclContext_ = *context;
-    syclQueue_ = sycl::queue(syclContext_, syclDevice_);
+    syclQueue_ = sycl::queue(syclContext_, syclDevice_, propList);
   }
 
 }; // end of GPUSYCLQUEUE
@@ -197,7 +198,7 @@ static void launchKernel(GPUSYCLQUEUE *queue, sycl::kernel *kernel,
 
   auto paramsCount = countUntil(params, ParamDesc{nullptr, 0});
 
-  syclQueue.submit([&](sycl::handler &cgh) {
+  sycl::event event = syclQueue.submit([&](sycl::handler &cgh) {
     for (size_t i = 0; i < paramsCount; i++) {
       auto param = params[i];
       cgh.set_arg(static_cast<uint32_t>(i),
@@ -205,24 +206,41 @@ static void launchKernel(GPUSYCLQUEUE *queue, sycl::kernel *kernel,
     }
     cgh.parallel_for(syclNdRange, *kernel);
   });
+  if (getenv("IMEX_ENABLE_PROFILING")) {
+    // auto submitTime = event.get_profiling_info<
+    //     cl::sycl::info::event_profiling::command_submit>();
+    auto startTime = event.get_profiling_info<
+        cl::sycl::info::event_profiling::command_start>();
+    auto endTime =
+        event
+            .get_profiling_info<cl::sycl::info::event_profiling::command_end>();
+    // auto submissionTime = float(startTime - submitTime) / 1000000.0f;
+    // fprintf(stdout, "the kernel submission time is %f ms\n", submissionTime);
+    auto executionTime = float(endTime - startTime) / 1000000.0f;
+    fprintf(stdout, "the kernel execution time is %f ms\n", executionTime);
+  }
 }
 
 // Wrappers
 
 extern "C" SYCL_RUNTIME_EXPORT GPUSYCLQUEUE *gpuCreateStream(void *device,
                                                              void *context) {
+  auto propList = sycl::property_list{};
+  if (getenv("IMEX_ENABLE_PROFILING")) {
+    propList = sycl::property_list{sycl::property::queue::enable_profiling()};
+  }
   return catchAll([&]() {
     if (!device && !context) {
-      return new GPUSYCLQUEUE();
+      return new GPUSYCLQUEUE(propList);
     } else if (device && context) {
       // TODO: Check if the pointers/address is valid and holds the correct
       // device and context
       return new GPUSYCLQUEUE(static_cast<sycl::device *>(device),
-                              static_cast<sycl::context *>(context));
+                              static_cast<sycl::context *>(context), propList);
     } else if (device && !context) {
-      return new GPUSYCLQUEUE(static_cast<sycl::device *>(device));
+      return new GPUSYCLQUEUE(static_cast<sycl::device *>(device), propList);
     } else {
-      return new GPUSYCLQUEUE(static_cast<sycl::context *>(context));
+      return new GPUSYCLQUEUE(static_cast<sycl::context *>(context), propList);
     }
   });
 }
