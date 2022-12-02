@@ -1199,6 +1199,20 @@ static void genReduceOp(mlir::Operation *srcOp, mlir::PatternRewriter &rewriter,
   auto scope = mlir::spirv::ScopeAttr::get(ctx, s);
   auto groupOp = mlir::spirv::GroupOperationAttr::get(
       ctx, mlir::spirv::GroupOperation::Reduce);
+  rewriter.replaceOpWithNewOp<SpirvOp>(srcOp, type, scope, groupOp, arg);
+}
+
+template <typename SpirvOp, bool Subgroup>
+static void genNonUniformReduceOp(mlir::Operation *srcOp,
+                                  mlir::PatternRewriter &rewriter,
+                                  mlir::Value arg) {
+  auto type = arg.getType();
+  auto ctx = srcOp->getContext();
+  auto s =
+      Subgroup ? mlir::spirv::Scope::Subgroup : mlir::spirv::Scope::Workgroup;
+  auto scope = mlir::spirv::ScopeAttr::get(ctx, s);
+  auto groupOp = mlir::spirv::GroupOperationAttr::get(
+      ctx, mlir::spirv::GroupOperation::Reduce);
   rewriter.replaceOpWithNewOp<SpirvOp>(srcOp, type, scope, groupOp, arg,
                                        mlir::Value{});
 }
@@ -1233,8 +1247,8 @@ public:
 
     namespace spv = mlir::spirv;
     const Handler handlers[] = {
-        {ReduceType::ADD, &genReduceOp<spv::GroupNonUniformFAddOp, false>,
-         &genReduceOp<spv::GroupNonUniformIAddOp, false>},
+        {ReduceType::ADD, &genReduceOp<spv::GroupFAddOp, false>,
+         &genReduceOp<spv::GroupIAddOp, false>},
     };
 
     for (auto &h : handlers) {
@@ -1279,8 +1293,9 @@ public:
 
     namespace spv = mlir::spirv;
     const Handler handlers[] = {
-        {ReduceType::ADD, &genReduceOp<spv::GroupNonUniformFAddOp, true>,
-         &genReduceOp<spv::GroupNonUniformIAddOp, true>},
+        {ReduceType::ADD,
+         &genNonUniformReduceOp<spv::GroupNonUniformFAddOp, true>,
+         &genNonUniformReduceOp<spv::GroupNonUniformIAddOp, true>},
     };
 
     for (auto &h : handlers) {
@@ -2461,10 +2476,6 @@ struct LowerGPUGlobalReduce
         rewriter.create<mlir::gpu::AllReduceOp>(loc, op.getValue());
     auto &newRegion = allReduce.getRegion();
     rewriter.inlineRegionBefore(op.getRegion(), newRegion, newRegion.end());
-
-    // TODO: remove
-    allReduce->setAttr(gpu_runtime::getNonUniformAttrName(),
-                       rewriter.getUnitAttr());
 
     auto &reduceBlock = newRegion.front();
     {
