@@ -1334,6 +1334,98 @@ struct PreLLVMLowering
   }
 };
 
+struct FixLLVMStructABIPass
+    : public mlir::PassWrapper<FixLLVMStructABIPass,
+                               mlir::OperationPass<mlir::ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(FixLLVMStructABIPass)
+
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::LLVM::LLVMDialect>();
+  }
+
+  void runOnOperation() override final {
+    // LLVM structs should always be passes as pointers to external calls
+
+    auto mod = getOperation();
+
+    mlir::OpBuilder builder(&getContext());
+
+    auto unknownLoc = builder.getUnknownLoc();
+    llvm::SmallVector<mlir::Type> newFuncTypes;
+    llvm::SmallVector<mlir::Value> newArgs;
+    mod->walk([&](mlir::LLVM::LLVMFuncOp func) -> mlir::WalkResult {
+      if (!func.isExternal())
+        return mlir::WalkResult::advance();
+
+      auto funcType = func.getFunctionType();
+
+      bool changed = false;
+      newFuncTypes.clear();
+      for (auto type : funcType.getParams()) {
+        if (type.isa<mlir::LLVM::LLVMStructType>()) {
+          changed = true;
+          newFuncTypes.emplace_back(mlir::LLVM::LLVMPointerType::get(type));
+        } else {
+          newFuncTypes.emplace_back(type);
+        }
+      }
+
+      if (!changed)
+        return mlir::WalkResult::advance();
+
+      auto newFuncType = mlir::LLVM::LLVMFunctionType::get(
+          funcType.getReturnType(), newFuncTypes, funcType.isVarArg());
+      func.setFunctionType(newFuncType);
+
+      auto uses = mlir::SymbolTable::getSymbolUses(func, mod);
+      if (!uses)
+        return mlir::WalkResult::advance();
+
+      for (auto use : *uses) {
+        auto user = mlir::dyn_cast<mlir::LLVM::CallOp>(use.getUser());
+        if (!user) {
+          user->emitError("Unsupported functions user");
+          signalPassFailure();
+          return mlir::WalkResult::interrupt();
+        }
+
+        newArgs.clear();
+        imex::AllocaInsertionPoint allocaHelper(user);
+        allocaHelper.insert(builder, [&] {
+          for (auto [arg, newType] :
+               llvm::zip(user->getOperands(), newFuncTypes)) {
+            auto origType = arg.getType();
+            if (origType == newType) {
+              newArgs.emplace_back(arg);
+              continue;
+            }
+
+            auto one = builder.create<mlir::LLVM::ConstantOp>(
+                unknownLoc, builder.getI32Type(), builder.getI32IntegerAttr(1));
+            mlir::Value res = builder.create<mlir::LLVM::AllocaOp>(
+                unknownLoc, newType, one, 0);
+            newArgs.emplace_back(res);
+          }
+        });
+        auto loc = user.getLoc();
+        builder.setInsertionPoint(user);
+        for (auto [arg, newArg] : llvm::zip(user->getOperands(), newArgs)) {
+          auto origType = arg.getType();
+          auto newType = newArg.getType();
+          if (origType == newType)
+            continue;
+
+          builder.create<mlir::LLVM::StoreOp>(loc, arg, newArg);
+        }
+        user->setOperands(newArgs);
+      }
+
+      return mlir::WalkResult::advance();
+    });
+  }
+};
+
 struct PostLLVMLowering
     : public mlir::PassWrapper<PostLLVMLowering, LLVMFunctionPass> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(PostLLVMLowering)
@@ -1421,6 +1513,7 @@ static void populateLowerToLlvmPipeline(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createConvertMathToLibmPass());
   pm.addPass(imex::createUtilToLLVMPass(&getLLVMOptions));
   pm.addPass(std::make_unique<LLVMLoweringPass>());
+  pm.addPass(std::make_unique<FixLLVMStructABIPass>());
   pm.addNestedPass<mlir::LLVM::LLVMFuncOp>(
       std::make_unique<PostLLVMLowering>());
   pm.addNestedPass<mlir::LLVM::LLVMFuncOp>(mlir::createCSEPass());
