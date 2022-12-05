@@ -227,18 +227,21 @@ def _gen_unary_ops():
     def bool_type(builder, t):
         return builder.bool
 
+    def reg_func(name, func):
+        return register_func(name, func, out="out")
+
     unary_ops = [
-        (register_func("numpy.sqrt", numpy.sqrt), f64_type, lambda a, b: math.sqrt(a)),
-        (register_func("numpy.square", numpy.square), None, lambda a, b: a * a),
-        (register_func("numpy.log", numpy.log), f64_type, lambda a, b: math.log(a)),
-        (register_func("numpy.sin", numpy.sin), f64_type, lambda a, b: math.sin(a)),
-        (register_func("numpy.cos", numpy.cos), f64_type, lambda a, b: math.cos(a)),
-        (register_func("numpy.exp", numpy.exp), f64_type, lambda a, b: math.exp(a)),
-        (register_func("numpy.tanh", numpy.tanh), f64_type, lambda a, b: math.tanh(a)),
-        (register_func("numpy.abs", numpy.abs), None, lambda a, b: abs(a)),
-        (register_func("numpy.negative", numpy.negative), None, lambda a, b: -a),
+        (reg_func("numpy.sqrt", numpy.sqrt), f64_type, lambda a, b: math.sqrt(a)),
+        (reg_func("numpy.square", numpy.square), None, lambda a, b: a * a),
+        (reg_func("numpy.log", numpy.log), f64_type, lambda a, b: math.log(a)),
+        (reg_func("numpy.sin", numpy.sin), f64_type, lambda a, b: math.sin(a)),
+        (reg_func("numpy.cos", numpy.cos), f64_type, lambda a, b: math.cos(a)),
+        (reg_func("numpy.exp", numpy.exp), f64_type, lambda a, b: math.exp(a)),
+        (reg_func("numpy.tanh", numpy.tanh), f64_type, lambda a, b: math.tanh(a)),
+        (reg_func("numpy.abs", numpy.abs), None, lambda a, b: abs(a)),
+        (reg_func("numpy.negative", numpy.negative), None, lambda a, b: -a),
         (
-            register_func("numpy.logical_not", numpy.logical_not),
+            reg_func("numpy.logical_not", numpy.logical_not),
             bool_type,
             lambda a, b: not bool(a),
         ),
@@ -288,80 +291,83 @@ def _gen_binary_ops():
             return db
         return builder.float64
 
+    def reg_func(name, func=None):
+        return register_func(name, func, out="out")
+
     binary_ops = [
         (
-            register_func("numpy.add", numpy.add),
+            reg_func("numpy.add", numpy.add),
             _select_float_type,
             lambda a, b, c: a + b,
         ),
-        (register_func("operator.add"), _select_float_type, lambda a, b, c: a + b),
+        (reg_func("operator.add"), _select_float_type, lambda a, b, c: a + b),
         (
-            register_func("numpy.subtract", numpy.subtract),
+            reg_func("numpy.subtract", numpy.subtract),
             _select_float_type,
             lambda a, b, c: a - b,
         ),
-        (register_func("operator.sub"), _select_float_type, lambda a, b, c: a - b),
+        (reg_func("operator.sub"), _select_float_type, lambda a, b, c: a - b),
         (
             register_func("numpy.multiply", numpy.multiply),
             _select_float_type,
             lambda a, b, c: a * b,
         ),
-        (register_func("operator.mul"), _select_float_type, lambda a, b, c: a * b),
+        (reg_func("operator.mul"), _select_float_type, lambda a, b, c: a * b),
         (
-            register_func("numpy.true_divide", numpy.true_divide),
+            reg_func("numpy.true_divide", numpy.true_divide),
             select_float_type_f64,
             lambda a, b, c: a / b,
         ),
         (
-            register_func("operator.truediv"),
+            reg_func("operator.truediv"),
             select_float_type_f64,
             lambda a, b, c: a / b,
         ),
         (
-            register_func("numpy.power", numpy.power),
+            reg_func("numpy.power", numpy.power),
             _select_float_type,
             lambda a, b, c: a**b,
         ),
-        (register_func("operator.pow"), _select_float_type, lambda a, b, c: a**b),
+        (reg_func("operator.pow"), _select_float_type, lambda a, b, c: a**b),
         (
-            register_func("numpy.arctan2", numpy.arctan2),
+            reg_func("numpy.arctan2", numpy.arctan2),
             select_float_type_f64,
             lambda a, b, c: math.atan2(a, b),
         ),
         (
-            register_func("numpy.minimum", numpy.minimum),
+            reg_func("numpy.minimum", numpy.minimum),
             _select_float_type,
             lambda a, b, c: min(a, b),
         ),
         (
-            register_func("numpy.maximum", numpy.maximum),
+            reg_func("numpy.maximum", numpy.maximum),
             _select_float_type,
             lambda a, b, c: max(a, b),
         ),
         (
-            register_func("numpy.logical_and", numpy.logical_and),
+            reg_func("numpy.logical_and", numpy.logical_and),
             bool_type,
             lambda a, b, c: a and b,
         ),
-        (register_func("operator.and"), bool_type, lambda a, b, c: a and b),
+        (reg_func("operator.and"), bool_type, lambda a, b, c: a and b),
         (
-            register_func("numpy.logical_or", numpy.logical_or),
+            reg_func("numpy.logical_or", numpy.logical_or),
             bool_type,
             lambda a, b, c: a or b,
         ),
-        (register_func("operator.or"), bool_type, lambda a, b, c: a or b),
+        (reg_func("operator.or"), bool_type, lambda a, b, c: a or b),
         (
-            register_func("numpy.logical_xor", numpy.logical_xor),
+            reg_func("numpy.logical_xor", numpy.logical_xor),
             bool_type,
             lambda a, b, c: bool(a) != bool(b),
         ),
-        (register_func("operator.xor"), bool_type, lambda a, b, c: bool(a) != bool(b)),
-        (register_func("operator.lt"), bool_type, lambda a, b, c: a < b),
-        (register_func("operator.le"), bool_type, lambda a, b, c: a <= b),
-        (register_func("operator.gt"), bool_type, lambda a, b, c: a > b),
-        (register_func("operator.ge"), bool_type, lambda a, b, c: a >= b),
-        (register_func("operator.eq"), bool_type, lambda a, b, c: a == b),
-        (register_func("operator.ne"), bool_type, lambda a, b, c: a != b),
+        (reg_func("operator.xor"), bool_type, lambda a, b, c: bool(a) != bool(b)),
+        (reg_func("operator.lt"), bool_type, lambda a, b, c: a < b),
+        (reg_func("operator.le"), bool_type, lambda a, b, c: a <= b),
+        (reg_func("operator.gt"), bool_type, lambda a, b, c: a > b),
+        (reg_func("operator.ge"), bool_type, lambda a, b, c: a >= b),
+        (reg_func("operator.eq"), bool_type, lambda a, b, c: a == b),
+        (reg_func("operator.ne"), bool_type, lambda a, b, c: a != b),
     ]
 
     def make_func(init, body):
