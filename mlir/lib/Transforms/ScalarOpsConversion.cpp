@@ -224,8 +224,8 @@ void imex::populateArithConversionRewritesAndTarget(
       ConvertCastOp<mlir::arith::TruncFOp>,
       ConvertCastOp<mlir::arith::TruncIOp>,
 
-      ConvertCastOp<mlir::arith::CmpIOp>,
-      ConvertCastOp<mlir::arith::CmpFOp>,
+      ConvertCmpOp<mlir::arith::CmpIOp>,
+      ConvertCmpOp<mlir::arith::CmpFOp>,
 
       ConvertUnaryFMOp<mlir::arith::NegFOp>,
 
