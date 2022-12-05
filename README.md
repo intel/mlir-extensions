@@ -54,9 +54,6 @@ make -j 12
 You can also build IMEX as an LLVM external project.
 ```
 git clone https://github.com/intel/mlir-extensions.git
-cd mlir-extensions
-git checkout refactor
-cd ..
 git clone https://github.com/llvm/llvm-project.git
 cd llvm-project
 git checkout `cat ../mlir-extensions/build_tools/llvm_version.txt`
