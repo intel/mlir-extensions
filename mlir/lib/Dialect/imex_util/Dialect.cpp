@@ -1924,14 +1924,16 @@ struct EnvRegionPropagateOutsideValues
       rewriter.replaceOpWithNewOp<EnvironmentRegionYieldOp>(term, newYieldArgs);
     }
 
+    mlir::ValueRange newOpResults = newOp.getResults();
+
     // Fill results that weren't propagated with results of new op.
     for (auto i : llvm::seq(0u, count)) {
       if (!newResults[i]) {
-        newResults[i] = newYieldArgsRange.front();
-        newYieldArgsRange = newYieldArgsRange.drop_front();
+        newResults[i] = newOpResults.front();
+        newOpResults = newOpResults.drop_front();
       }
     }
-    assert(newYieldArgsRange.empty() &&
+    assert(newOpResults.empty() &&
            "Some values weren't consumed - yield args count mismatch?");
 
     rewriter.replaceOp(op, newResults);
