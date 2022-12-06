@@ -24,7 +24,19 @@ func.func @test_arange(%arg0: i64, %arg1: i64, %arg2: i64) -> !ptensor.ptensor<1
 // CHECK-NEXT: [[C1:%.*]] = arith.addi
 // CHECK-NEXT: [[C2:%.*]] = arith.addi [[C1]], [[C0]] : index
 // CHECK: linalg.generic{{.*}}["parallel"]
-// CHECK return %{{.}} : tensor<?xindex>
+// CHECK: return %{{[0-9]+}} : memref<?xindex, strided<[?], offset: ?>>
+
+func.func @test_create(%arg0: index, %arg1: index, %arg2: i64) -> !ptensor.ptensor<2 x i64> {
+    %0 = ptensor.create %arg0, %arg1 value %arg2 {d_type = 2} : (index, index, i64) -> !ptensor.ptensor<2 x i64>
+    return %0 : !ptensor.ptensor<2 x i64>
+}
+// CHECK-LABEL: @test_create
+// CHECK: tensor.empty
+// CHECK: linalg.generic
+// CHECK-NEXT: bb
+// CHECK-NEXT: linalg.yield
+// CHECK-NEXT: } -> tensor<?x?xi64>
+// CHECK: return %{{[0-9]+}} : memref<?x?xi64, strided<[?, ?], offset: ?>>
 
 // -----
 func.func @test_ewbin(%arg0: !ptensor.ptensor<1 x i64>) -> !ptensor.ptensor<1 x i64> {

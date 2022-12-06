@@ -198,8 +198,8 @@ def CreateOp : PTensor_Op<"create", [AttrSizedOperandSegments]> {
         Optionally assigns it to device `device`, and team `team`.
     }];
 
-    let arguments = (ins Variadic<Index>:$shape, AnyAttr:$dtype, Optional<AnyType>:$value,
-                     Optional<AnyType>:$device, Optional<AnyType>:$team);
+    let arguments = (ins Variadic<Index>:$shape, I64Attr:$d_type, Optional<AnyType>:$value,
+                         Optional<AnyType>:$device, Optional<AnyType>:$team);
     // result is a ptensor
     let results = (outs PTensor_PTensor);
 

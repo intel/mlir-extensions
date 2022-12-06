@@ -77,6 +77,20 @@ static mlir::Value doSignCast(mlir::OpBuilder &builder, mlir::Location &loc,
   return val;
 }
 
+/// Create a linalg generic op from given output, input and body
+template <typename V, typename B>
+auto createParFor(mlir::Location &loc, mlir::OpBuilder &builder, uint64_t rank,
+                  ::mlir::Value out, const V &inputs, B bBuilder) {
+  // map for output and input
+  const ::mlir::AffineMap map =
+      ::mlir::AffineMap::getMultiDimIdentityMap(rank, builder.getContext());
+  llvm::SmallVector<::mlir::AffineMap> maps(1 + inputs.size(), map);
+  llvm::SmallVector<::mlir::StringRef> iterators(rank, "parallel");
+
+  return builder.create<::mlir::linalg::GenericOp>(
+      loc, out.getType(), inputs, out, maps, iterators, bBuilder);
+}
+
 // *******************************
 // ***** Individual patterns *****
 // *******************************
@@ -245,22 +259,19 @@ struct ARangeLowering
     EasyIdx stop(loc, rewriter, adaptor.getStop());
     EasyIdx step(loc, rewriter, adaptor.getStep());
     auto retPtTyp = op.getType().dyn_cast<::imex::ptensor::PTensorType>();
-    assert(retPtTyp);
+    if (!retPtTyp)
+      return ::mlir::failure();
 
     // get arange count
     auto count = createCountARange(rewriter, loc, start, stop, step);
 
     // init tensor
     auto elTyp = retPtTyp.getElementType();
+    auto rank = retPtTyp.getRank();
     auto tensor = createEmptyTensor(rewriter, loc, elTyp, {count}).getResult();
 
-    // fill with arange values
-    // map needed for output only (we have no input tensor)
-    const ::mlir::AffineMap maps[] = {
-        ::mlir::AffineMap::getMultiDimIdentityMap(1, rewriter.getContext())};
-    llvm::SmallVector<::mlir::StringRef> iterators(1, "parallel");
-
-    // The body; accepting no input, the lambda simply captures start and step
+    // The loop body fills with arange values
+    // accepting no input, the lambda simply captures start and step
     auto body = [&start, &step, &elTyp](::mlir::OpBuilder &builder,
                                         ::mlir::Location loc,
                                         ::mlir::ValueRange args) {
@@ -273,11 +284,48 @@ struct ARangeLowering
           loc, createIndexCast(loc, builder, val.get(), elTyp));
     };
 
-    auto resTnsr = rewriter.create<::mlir::linalg::GenericOp>(
-        loc, retPtTyp.getTensorType(), ::llvm::None, tensor, maps, iterators,
-        body);
+    auto res =
+        createParFor(loc, rewriter, rank, tensor, ::mlir::ValueRange(), body);
     rewriter.replaceOpWithNewOp<::mlir::bufferization::ToMemrefOp>(
-        op, retPtTyp.getMemRefType(), resTnsr.getResult(0));
+        op, retPtTyp.getMemRefType(), res.getResult(0));
+
+    return ::mlir::success();
+  }
+};
+
+/// Convert PTensor's createOp and its return type to Linalg/tensor.
+/// Also needs some arith and affine (for linalg::genericop).
+struct CreateLowering
+    : public ::mlir::OpConversionPattern<::imex::ptensor::CreateOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  ::mlir::LogicalResult
+  matchAndRewrite(::imex::ptensor::CreateOp op,
+                  ::imex::ptensor::CreateOp::Adaptor adaptor,
+                  ::mlir::ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+
+    // check output type and get operands
+    auto retPtTyp = op.getType().dyn_cast<::imex::ptensor::PTensorType>();
+    if (!retPtTyp)
+      return ::mlir::failure();
+    auto value = adaptor.getValue();
+    auto dtype = static_cast<::imex::ptensor::DType>(adaptor.getDType());
+    auto rank = retPtTyp.getRank();
+
+    // init tensor
+    auto elTyp = ::imex::ptensor::toMLIR(rewriter, dtype);
+    auto tensor =
+        createEmptyTensor(rewriter, loc, elTyp, adaptor.getShape()).getResult();
+
+    auto res = createParFor(
+        loc, rewriter, rank, tensor, ::mlir::ValueRange(),
+        [&value](::mlir::OpBuilder &builder, ::mlir::Location loc,
+                 ::mlir::ValueRange args) {
+          (void)builder.create<::mlir::linalg::YieldOp>(loc, value);
+        });
+    rewriter.replaceOpWithNewOp<::mlir::bufferization::ToMemrefOp>(
+        op, retPtTyp.getMemRefType(), res.getResult(0));
 
     return ::mlir::success();
   }
@@ -625,7 +673,8 @@ struct ConvertPTensorToLinalgPass
     ::mlir::RewritePatternSet patterns(&ctxt);
     patterns.insert<MkPTensorLowering, ExtractTensorLowering,
                     ExtractSliceLowering, InsertSliceLowering, ARangeLowering,
-                    EWBinOpLowering, ReductionOpLowering>(typeConverter, &ctxt);
+                    CreateLowering, EWBinOpLowering, ReductionOpLowering>(
+        typeConverter, &ctxt);
     ::mlir::populateFunctionOpInterfaceTypeConversionPattern<
         ::mlir::func::FuncOp>(patterns, typeConverter);
     ::mlir::populateReturnOpTypeConversionPattern(patterns, typeConverter);
