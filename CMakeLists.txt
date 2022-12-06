@@ -85,7 +85,6 @@ else()
     set(LLVM_LIBRARY_OUTPUT_INTDIR ${CMAKE_BINARY_DIR}/lib)
 
     # LLVM_INCLUDE_DIRS is the same as MLIR_INCLUDE_DIRS in an MLIR install tree
-    message(STATUS "MLIR_INCLUDE_DIRS: ${MLIR_INCLUDE_DIRS}")
     include_directories(SYSTEM ${MLIR_INCLUDE_DIRS})
 
     list(APPEND CMAKE_MODULE_PATH "${MLIR_CMAKE_DIR}")
@@ -99,7 +98,10 @@ include(TableGen)
 include(AddLLVM)
 include(AddMLIR)
 
-# Redefine some functions included from include(AddMLIR)
+# Instead of creating a separate AddIMEX,
+# redefine some functions included from include(AddMLIR)
+# and change the behavior of add_mlir_* functions to
+# properly generate IMEXConfig.cmake and IMEXTargets.cmake
 function(add_mlir_library_install name)
   if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
       get_target_export_arg(${name} IMEX export_to_mlirtargets UMBRELLA imex-libraries)
