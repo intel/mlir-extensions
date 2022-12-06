@@ -1,9 +1,13 @@
-get_property(dialect_libs GLOBAL PROPERTY MLIR_DIALECT_LIBS)
-get_property(conversion_libs GLOBAL PROPERTY MLIR_CONVERSION_LIBS)
+get_property(mlir_dialect_libs GLOBAL PROPERTY MLIR_DIALECT_LIBS)
+get_property(mlir_conversion_libs GLOBAL PROPERTY MLIR_CONVERSION_LIBS)
+get_property(imex_dialect_libs GLOBAL PROPERTY IMEX_DIALECT_LIBS)
+get_property(imex_conversion_libs GLOBAL PROPERTY IMEX_CONVERSION_LIBS)
 set(LIBS
-        ${dialect_libs}
-        ${conversion_libs}
-	MLIROptLib
+        ${mlir_dialect_libs}
+        ${mlir_conversion_libs}
+        ${imex_dialect_libs}
+        ${imex_conversion_libs}
+        MLIROptLib
         IMEXTransforms
         IMEXUtil
         )
