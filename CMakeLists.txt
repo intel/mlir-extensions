@@ -43,11 +43,23 @@ if(IMEX_EXTERNAL_PROJECT_BUILD)
     set(MLIR_MAIN_SRC_DIR ${LLVM_MAIN_SRC_DIR}/../mlir )
     set(MLIR_INCLUDE_DIR ${MLIR_MAIN_SRC_DIR}/include )
 
-    # Various locations for MLIR header files
+    set(LLVM_INCLUDE_DIR ${LLVM_MAIN_SRC_DIR}/include )
+
+    # LLVM and MLIR headers in source tree are already included as local headers
+    # as part of LLVM_EXTERNAL_PROJECTS build but adding them again as SYSTEM
+    # to be consistent with external MLIR build. So we can include header files
+    # like the following.
+    # #include <mlir/...>
+    # #include <llvm/...>
+    # #include "imex/..."
+
+    # LLVM headers in source tree
+    include_directories(SYSTEM ${LLVM_INCLUDE_DIR})
+    # MLIR headers in source tree
     include_directories(SYSTEM ${MLIR_INCLUDE_DIR})
+    # Generated MLIR headers
     set(MLIR_GENERATED_INCLUDE_DIR ${LLVM_BINARY_DIR}/tools/mlir/include)
     include_directories(SYSTEM ${MLIR_GENERATED_INCLUDE_DIR})
-    include_directories(SYSTEM ${MLIR_TABLEGEN_OUTPUT_DIR})
 
     list(APPEND CMAKE_MODULE_PATH "${MLIR_MAIN_SRC_DIR}/cmake/modules")
 else()
@@ -71,6 +83,10 @@ else()
     # For redirecting llvm_add_library() to IMEX's bin and lib folders
     set(LLVM_RUNTIME_OUTPUT_INTDIR ${CMAKE_BINARY_DIR}/bin)
     set(LLVM_LIBRARY_OUTPUT_INTDIR ${CMAKE_BINARY_DIR}/lib)
+
+    # LLVM_INCLUDE_DIRS is the same as MLIR_INCLUDE_DIRS in an MLIR install tree
+    message(STATUS "MLIR_INCLUDE_DIRS: ${MLIR_INCLUDE_DIRS}")
+    include_directories(SYSTEM ${MLIR_INCLUDE_DIRS})
 
     list(APPEND CMAKE_MODULE_PATH "${MLIR_CMAKE_DIR}")
     list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
@@ -160,11 +176,11 @@ if(NOT IMEX_EXTERNAL_PROJECT_BUILD)
         COMPONENTS Interpreter)
 endif()
 
-include_directories(${LLVM_INCLUDE_DIRS})
-include_directories(${MLIR_INCLUDE_DIRS})
+# IMEX headers in source tree
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
+# Generated IMEX headers
 include_directories(${CMAKE_CURRENT_BINARY_DIR}/include)
-link_directories(${LLVM_BUILD_LIBRARY_DIR})
+message(STATUS "LLVM_DEFINITIONS: ${LLVM_DEFINITIONS}")
 add_definitions(${LLVM_DEFINITIONS})
 
 set(LLVM_LIT_ARGS "-sv" CACHE STRING "lit default options")
