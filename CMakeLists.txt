@@ -103,8 +103,7 @@ include(AddMLIR)
 # and change the behavior of add_mlir_* functions to
 # properly generate IMEXConfig.cmake and IMEXTargets.cmake
 function(add_mlir_library_install name)
-  if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
-      get_target_export_arg(${name} IMEX export_to_mlirtargets UMBRELLA imex-libraries)
+  get_target_export_arg(${name} IMEX export_to_mlirtargets UMBRELLA imex-libraries)
   install(TARGETS ${name}
     COMPONENT ${name}
     ${export_to_mlirtargets}
@@ -117,13 +116,10 @@ function(add_mlir_library_install name)
     OBJECTS DESTINATION lib${LLVM_LIBDIR_SUFFIX}
   )
 
-  if (NOT LLVM_ENABLE_IDE)
-    add_llvm_install_targets(install-${name}
-                            DEPENDS ${name}
-                            COMPONENT ${name})
-  endif()
+  add_llvm_install_targets(install-${name}
+                           DEPENDS ${name}
+                           COMPONENT ${name})
   set_property(GLOBAL APPEND PROPERTY IMEX_ALL_LIBS ${name})
-  endif()
   set_property(GLOBAL APPEND PROPERTY IMEX_EXPORTS ${name})
 endfunction()
 
