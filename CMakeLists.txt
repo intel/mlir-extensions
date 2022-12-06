@@ -79,6 +79,23 @@ include(AddLLVM)
 include(AddMLIR)
 include(HandleLLVMOptions)
 
+set(IMEX_ENABLE_SYCL_RUNTIME 0 CACHE BOOL "Enable the Sycl Runtime")
+set(IMEX_ENABLE_L0_RUNTIME 0 CACHE BOOL "Enable the Level Zero Runtime")
+
+# Normalize IMEX_ENABLE_SYCL_RUNTIME and IMEX_ENABLE_L0_RUNTIME
+# These values are expected to be passed as 0 or 1 to imex-runner.py
+if (IMEX_ENABLE_SYCL_RUNTIME)
+    set(IMEX_ENABLE_SYCL_RUNTIME 1)
+else ()
+    set(IMEX_ENABLE_SYCL_RUNTIME 0)
+endif()
+
+if (IMEX_ENABLE_L0_RUNTIME)
+    set(IMEX_ENABLE_L0_RUNTIME 1)
+else ()
+    set(IMEX_ENABLE_L0_RUNTIME 0)
+endif()
+
 # Check if mlir vulkan runner was configured from mlir
 # target mlir-vulkan-runner is only set if vulkan runner was enabled during
 # mlir configuration
@@ -105,7 +122,11 @@ set(LLVM_LIT_ARGS "-sv" CACHE STRING "lit default options")
 set(IMEX_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 # LLVM_EXTERNAL_PROJECTS build puts library, executables and tools in LLVM's CMAKE_BINARY_DIR
 set(IMEX_BINARY_DIR ${CMAKE_BINARY_DIR})
-set(IMEX_LIB_DIR ${IMEX_BINARY_DIR}/lib)
+if(WIN32)
+    set(IMEX_LIB_DIR ${IMEX_BINARY_DIR}/bin)
+else()
+    set(IMEX_LIB_DIR ${IMEX_BINARY_DIR}/lib)
+endif()
 
 include(sanitizers)
 
@@ -114,12 +135,9 @@ add_subdirectory(lib)
 add_subdirectory(tools)
 add_subdirectory(test)
 
-set(IMEX_ENABLE_SYCL_RUNTIME 0 CACHE BOOL "Enable the Sycl Runtime")
-set(IMEX_ENABLE_L0_RUNTIME 0 CACHE BOOL "Enable the Level Zero Runtime")
-
 option(IMEX_INCLUDE_DOCS "Generate build targets for the IMEX docs." ON)
 if (IMEX_INCLUDE_DOCS)
-  add_subdirectory(docs)
+    add_subdirectory(docs)
 endif()
 
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/include/mlir

@@ -2,20 +2,35 @@
 // RUN:                                       --runner mlir-cpu-runner -e main \
 // RUN:                                       --shared-libs=%mlir_runner_utils \
 // RUN:                                       --entry-point-result=void | FileCheck %s
-// RUN-GPU: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-llvm.pp \
-// RUN-GPU:                                        --runner mlir-cpu-runner -e main \
-// RUN-GPU:                                        --entry-point-result=void \
-// RUN-GPU:                                        --shared-libs=%mlir_runner_utils,%sycl_runtime | FileCheck %s
+// RUN: %gpu_skip || %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-llvm.pp \
+// RUN:                                        --runner mlir-cpu-runner -e main \
+// RUN:                                        --entry-point-result=void \
+// RUN:                                        --shared-libs=%mlir_runner_utils,%levelzero_runtime | FileCheck %s
 #map = affine_map<(d0, d1) -> (d0, d1)>
 module @bit_not {
 func.func @main() {
     %0= arith.constant dense<[[0, 1, 2], [16, 17, 34], [240, 15, 255]]>:tensor<3x3xi8>
     %1 = call @test(%0) : (tensor<3x3xi8>) -> tensor<3x3xi8>
-    %unranked = tensor.cast %1 : tensor<3x3xi8>to tensor<*xi8>
-    call @printMemrefI32(%unranked) : (tensor<*xi8>) -> ()
+    %2 = call @castI8toI32(%1): (tensor<3x3xi8>) -> tensor<3x3xi32>
+    %unranked = tensor.cast %2 : tensor<3x3xi32> to tensor<*xi32>
+    call @printMemrefI32(%unranked) : (tensor<*xi32>) -> ()
     return
 }
-func.func private @printMemrefI32(tensor<*xi8>)
+
+func.func @castI8toI32(%arg0: tensor<3x3xi8>) -> tensor<3x3xi32> {
+  %1 = tensor.empty() : tensor<3x3xi32>
+  %2 = linalg.generic {indexing_maps = [#map, #map], iterator_types = ["parallel", "parallel"]}
+       ins(%arg0: tensor<3x3xi8>)
+       outs(%1 : tensor<3x3xi32>)
+       attrs =  {iterator_ranges = [3, 3]} {
+  ^bb0(%arg1: i8, %arg2: i32):
+    %3 = arith.extui %arg1: i8 to i32
+    linalg.yield %3 : i32
+  } -> tensor<3x3xi32>
+  return %2: tensor<3x3xi32>
+}
+
+func.func private @printMemrefI32(tensor<*xi32>)
 func.func @test(%arg0: tensor<3x3xi8>)->tensor<3x3xi8>{
     %0 = tensor.empty() : tensor<3x3xi8>
     %1 = linalg.generic {indexing_maps = [#map, #map], iterator_types = ["parallel", "parallel"]} ins(%arg0 : tensor<3x3xi8>) outs(%0 : tensor<3x3xi8>) {

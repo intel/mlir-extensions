@@ -20,6 +20,7 @@
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/BuiltinOps.h>
+#include <mlir/IR/BuiltinTypeInterfaces.h>
 
 #include <vector>
 
@@ -28,8 +29,9 @@ namespace imex {
 /// get dyn-sized mlir::RankedTensorType for given rank and elType
 inline auto getTensorType(::mlir::MLIRContext *ctxt, int64_t rank,
                           ::mlir::Type elType) {
-  return ::mlir::RankedTensorType::get(std::vector<int64_t>(rank, -1),
-                                       elType); //, layout);
+  return ::mlir::RankedTensorType::get(
+      std::vector<int64_t>(rank, ::mlir::ShapedType::kDynamic),
+      elType); //, layout);
 }
 
 /// create an empty RankedTensor with tiven shape and elType
@@ -43,10 +45,10 @@ inline auto createEmptyTensor(::mlir::OpBuilder &builder, ::mlir::Location loc,
 /// if strided==true make it a strided layout
 inline auto getMemRefType(::mlir::MLIRContext *ctxt, int64_t rank,
                           ::mlir::Type elType, bool strided = true) {
-  static auto dynStride = ::mlir::ShapedType::kDynamicStrideOrOffset;
+  static auto kDynamic = ::mlir::ShapedType::kDynamic;
   auto layout = ::mlir::StridedLayoutAttr::get(
-      ctxt, dynStride, ::mlir::SmallVector<int64_t>(rank, dynStride));
-  return ::mlir::MemRefType::get(std::vector<int64_t>(rank, -1), elType,
+      ctxt, kDynamic, ::mlir::SmallVector<int64_t>(rank, kDynamic));
+  return ::mlir::MemRefType::get(std::vector<int64_t>(rank, kDynamic), elType,
                                  strided ? layout
                                          : ::mlir::StridedLayoutAttr{});
 }

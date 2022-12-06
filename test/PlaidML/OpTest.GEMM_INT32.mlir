@@ -2,10 +2,10 @@
 // RUN:                                        --runner mlir-cpu-runner -e main \
 // RUN:                                        --shared-libs=%mlir_runner_utils \
 // RUN:                                        --entry-point-result=void | FileCheck %s
-// RUN-GPU: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-llvm.pp \
-// RUN-GPU:                                        --runner mlir-cpu-runner -e main \
-// RUN-GPU:                                        --entry-point-result=void \
-// RUN-GPU:                                        --shared-libs=%mlir_runner_utils,%sycl_runtime | FileCheck %s
+// RUN: %gpu_skip || %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-llvm.pp \
+// RUN:                                        --runner mlir-cpu-runner -e main \
+// RUN:                                        --entry-point-result=void \
+// RUN:                                        --shared-libs=%mlir_runner_utils,%levelzero_runtime | FileCheck %s
 #map0 = affine_map<(d0, d1, d2) -> (d0, d2)>
 #map1 = affine_map<(d0, d1, d2) -> (d2, d1)>
 #map2 = affine_map<(d0, d1, d2) -> (d0, d1)>
@@ -18,7 +18,7 @@ func.func @main() {
     %3 = call @test(%0,%1,%2) : (tensor<3x3xi32>,tensor<3x3xi32>,tensor<3x3xi32>) -> tensor<3x3xi32>
     %unranked = tensor.cast %3 : tensor<3x3xi32>to tensor<*xi32>
     call @printMemrefI32(%unranked) : (tensor<*xi32>) -> ()
-     // CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
+    // CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
     // CHECK-NEXT: [40,   43,   46]
     // CHECK-NEXT: [56,   60,   64]
     // CHECK-NEXT: [118,   127,   136]

@@ -85,7 +85,8 @@ auto createParFor(mlir::Location &loc, mlir::OpBuilder &builder, uint64_t rank,
   const ::mlir::AffineMap map =
       ::mlir::AffineMap::getMultiDimIdentityMap(rank, builder.getContext());
   llvm::SmallVector<::mlir::AffineMap> maps(1 + inputs.size(), map);
-  llvm::SmallVector<::mlir::StringRef> iterators(rank, "parallel");
+  llvm::SmallVector<::mlir::utils::IteratorType> iterators(
+      rank, mlir::utils::IteratorType::parallel);
 
   return builder.create<::mlir::linalg::GenericOp>(
       loc, out.getType(), inputs, out, maps, iterators, bBuilder);
@@ -475,12 +476,12 @@ struct EWBinOpLowering
     // different shapes
     auto rank = static_cast<unsigned>(retTyp.getRank());
     llvm::SmallVector<::mlir::Value> shapeVVec(rank);
-    llvm::SmallVector<mlir::StringRef> iterators(rank);
+    llvm::SmallVector<mlir::utils::IteratorType> iterators(rank);
     for (auto i : llvm::seq<unsigned>(0u, rank)) {
       shapeVVec[i] =
           rewriter.create<::mlir::memref::DimOp>(loc, lhsTnsr, i).getResult();
       // iterate in parallel
-      iterators[i] = "parallel";
+      iterators[i] = mlir::utils::IteratorType::parallel;
     }
 
     // init tensor
@@ -595,7 +596,8 @@ struct ReductionOpLowering
     // output map is "*->()"
     auto omap = ::mlir::AffineMap::get(inpRank, 0, rewriter.getContext());
     const ::mlir::AffineMap maps[] = {inpMap, omap};
-    llvm::SmallVector<mlir::StringRef> iterators(inpRank, "reduction");
+    llvm::SmallVector<mlir::utils::IteratorType> iterators(
+        inpRank, mlir::utils::IteratorType::reduction);
 
     // create reduction op as linalg::generic
     const ::imex::ptensor::ReduceOpId ropid =
