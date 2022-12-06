@@ -24,6 +24,38 @@
 namespace imex {
 namespace ptensor {
 
+enum DType : int { F64, F32, I64, U64, I32, U32, I16, U16, I8, U8, I1 };
+
+inline ::mlir::Type toMLIR(::mlir::OpBuilder &b, DType dt) {
+  switch (dt) {
+  case F64:
+    return b.getF64Type();
+  case F32:
+    return b.getF32Type();
+  case I64:
+    return b.getI64Type();
+  case U64:
+    return b.getI64Type();
+  case I32:
+    return b.getI32Type();
+  case U32:
+    return b.getI32Type();
+  case I16:
+    return b.getI16Type();
+  case U16:
+    return b.getI16Type();
+  case I8:
+    return b.getI8Type();
+  case U8:
+    return b.getI8Type();
+  case I1:
+    return b.getI1Type();
+  default:
+    std::runtime_error("Cannot handle unknown DType");
+  };
+  return {};
+}
+
 /// The set of supported elementwise binary operations
 enum EWBinOpId : int {
   ADD,

@@ -53,7 +53,7 @@ def PTensor_Dialect : Dialect {
 
 // common base classes for types in PTensor dialect
 class PTensor_Type<string name, string typeMnemonic, list<Trait> traits = []>
-    : TypeDef<PTensor_Dialect, name, traits> {
+  : TypeDef<PTensor_Dialect, name, traits> {
     let mnemonic = typeMnemonic;
 }
 
@@ -184,10 +184,38 @@ def ARangeOp : PTensor_Op<"arange", [SameVariadicOperandSize]> {
         Optionally assigns it to device `device`, and team `team`.
     }];
 
-    let arguments = (ins AnyType : $start, AnyType : $stop, AnyType : $step,
+    let arguments = (ins AnyType:$start, AnyType:$stop, AnyType:$step,
                          Optional<AnyType>:$device, Optional<AnyType>:$team);
     // result is a ptensor
     let results = (outs PTensor_PTensor);
+}
+
+def CreateOp : PTensor_Op<"create", [AttrSizedOperandSegments]> {
+    let summary = "Returns a new PTensor having a specified shape and type and optionally filled with a value.";
+    let description = [{
+        Returns a new PTensor having a specified shape and type and optionally filled with a value.
+
+        Optionally assigns it to device `device`, and team `team`.
+    }];
+
+    let arguments = (ins Variadic<Index>:$shape, AnyAttr:$dtype, Optional<AnyType>:$value,
+                     Optional<AnyType>:$device, Optional<AnyType>:$team);
+    // result is a ptensor
+    let results = (outs PTensor_PTensor);
+
+    let assemblyFormat = [{
+      $shape oilist(`value` $value | `device` $device | `team` $team) attr-dict `:` `(` type(operands) `)` `->` qualified(type(results))
+    }];
+
+    let builders = [
+        // auto-deduce return type
+        OpBuilder<(ins "::mlir::ValueRange":$shape, "::imex::ptensor::DType":$dtype, "::mlir::Value":$value, "::mlir::Value":$device, "::mlir::Value":$team), [{
+            auto dt = toMLIR($_builder, dtype);
+            build($_builder, $_state, ::imex::ptensor::PTensorType::get(
+                $_state.getContext(), shape.size(), dt, device ? true : false),
+                shape, $_builder.getI32IntegerAttr(dtype), value, device, team);
+        }]>,
+    ];
 }
 
 def EWBinOp : PTensor_Op<"ewbin", []> {
@@ -198,7 +226,7 @@ def EWBinOp : PTensor_Op<"ewbin", []> {
     }];
 
     // arange takes 2 PTensorType operands: lhs and rhs
-    let arguments = (ins AnyAttr: $op, AnyType:$lhs, AnyType:$rhs);
+    let arguments = (ins AnyAttr:$op, AnyType:$lhs, AnyType:$rhs);
     // result is a ptensor
     let results = (outs PTensor_PTensor);
 }
