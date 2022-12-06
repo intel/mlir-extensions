@@ -39,14 +39,16 @@ if(IMEX_EXTERNAL_PROJECT_BUILD)
         message(FATAL_ERROR "Invalid llvm version")
     endif()
 
+    # Variables needed for mlir_tablegen() to function
     set(MLIR_MAIN_SRC_DIR ${LLVM_MAIN_SRC_DIR}/../mlir )
     set(MLIR_INCLUDE_DIR ${MLIR_MAIN_SRC_DIR}/include )
-    set(MLIR_GENERATED_INCLUDE_DIR ${LLVM_BINARY_DIR}/tools/mlir/include)
+
+    # Various locations for MLIR header files
     include_directories(SYSTEM ${MLIR_INCLUDE_DIR})
+    set(MLIR_GENERATED_INCLUDE_DIR ${LLVM_BINARY_DIR}/tools/mlir/include)
     include_directories(SYSTEM ${MLIR_GENERATED_INCLUDE_DIR})
     include_directories(SYSTEM ${MLIR_TABLEGEN_OUTPUT_DIR})
 
-    set(BACKEND_PACKAGE_STRING "${PACKAGE_STRING}")
     list(APPEND CMAKE_MODULE_PATH "${MLIR_MAIN_SRC_DIR}/cmake/modules")
 else()
     message(STATUS "Building IMEX with external MLIR")
@@ -66,13 +68,16 @@ else()
     message(STATUS "Using MLIRConfig.cmake in: ${MLIR_DIR}")
     message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
+    # For redirecting llvm_add_library() to IMEX's bin and lib folders
     set(LLVM_RUNTIME_OUTPUT_INTDIR ${CMAKE_BINARY_DIR}/bin)
     set(LLVM_LIBRARY_OUTPUT_INTDIR ${CMAKE_BINARY_DIR}/lib)
-    set(MLIR_BINARY_DIR ${CMAKE_BINARY_DIR})
 
     list(APPEND CMAKE_MODULE_PATH "${MLIR_CMAKE_DIR}")
     list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
 endif()
+
+# For redirecting add_mlir_doc() to IMEX's doc folder
+set(MLIR_BINARY_DIR ${CMAKE_BINARY_DIR})
 
 include(TableGen)
 include(AddLLVM)
