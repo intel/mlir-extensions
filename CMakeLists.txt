@@ -130,6 +130,12 @@ endif()
 
 include(sanitizers)
 
+# IMPORTANT!: Clear global property MLIR_EXPORTS before adding any sub-directory.
+# IMEX uses functions like add_mlir_library that populates MLIR_EXPORTS
+# Need to clear MLIR_EXPORTS here so that MLIR_EXPORTS will contain only IMEX targets
+# MLIR_EXPORTS will be used to populate IMEXTargets.cmake
+set_property(GLOBAL PROPERTY MLIR_EXPORTS "")
+
 add_subdirectory(include)
 add_subdirectory(lib)
 add_subdirectory(tools)

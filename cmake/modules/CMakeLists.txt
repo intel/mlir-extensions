@@ -112,7 +112,8 @@ endfunction(get_imex_libs)
 set(IMEX_INSTALL_PACKAGE_DIR lib${LLVM_LIBDIR_SUFFIX}/cmake/imex)
 set(imex_cmake_builddir "${IMEX_BINARY_DIR}/${IMEX_INSTALL_PACKAGE_DIR}")
 
-get_property(IMEX_EXPORTS GLOBAL PROPERTY IMEX_EXPORTS)
+# NOTE: This is not a typo. MLIR_EXPORTS contains only and all IMEX targets at this point.
+get_property(IMEX_EXPORTS GLOBAL PROPERTY MLIR_EXPORTS)
 export(TARGETS ${IMEX_EXPORTS} FILE ${imex_cmake_builddir}/IMEXTargets.cmake)
 
 # Get the list of the IMEX libs
