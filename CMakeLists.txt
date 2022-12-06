@@ -141,6 +141,21 @@ function(add_mlir_translation_library name)
   add_mlir_library(${ARGV} DEPENDS mlir-headers)
 endfunction(add_mlir_translation_library)
 
+macro(add_imex_tool name)
+    add_llvm_executable(${name} ${ARGN})
+    get_target_export_arg(${name} IMEX export_to_imexexports)
+    install(TARGETS ${name}
+            ${export_to_imexexports}
+            RUNTIME DESTINATION ${IMEX_TOOLS_INSTALL_DIR}
+            COMPONENT ${name})
+
+    add_llvm_install_targets(install-${name}
+                             DEPENDS ${name}
+                             COMPONENT ${name})
+    set_property(GLOBAL APPEND PROPERTY IMEX_EXPORTS ${name})
+    set_target_properties(${name} PROPERTIES FOLDER "Tools")
+endmacro()
+
 include(HandleLLVMOptions)
 
 set(IMEX_ENABLE_SYCL_RUNTIME 0 CACHE BOOL "Enable the Sycl Runtime")
@@ -191,6 +206,9 @@ if(WIN32)
 else()
     set(IMEX_LIB_DIR ${IMEX_BINARY_DIR}/lib)
 endif()
+
+set(IMEX_TOOLS_INSTALL_DIR "${CMAKE_INSTALL_BINDIR}" CACHE STRING
+    "Path for binary subdirectory (defaults to '${CMAKE_INSTALL_BINDIR}')")
 
 include(sanitizers)
 
