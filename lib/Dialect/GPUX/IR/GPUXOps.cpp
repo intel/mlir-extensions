@@ -13,7 +13,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "imex/Dialect/GPUX/IR/GPUXOps.h"
-#include "llvm/ADT/TypeSwitch.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/IR/Builders.h"
@@ -22,6 +21,7 @@
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Transforms/InliningUtils.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 namespace imex {
 namespace gpux {

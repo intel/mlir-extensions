@@ -13,8 +13,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "imex/Dialect/PTensor/IR/PTensorOps.h"
-#include "llvm/ADT/TypeSwitch.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 namespace imex {
 namespace ptensor {

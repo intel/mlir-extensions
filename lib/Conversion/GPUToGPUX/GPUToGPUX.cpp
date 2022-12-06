@@ -13,8 +13,8 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include "../PassDetail.h"
 #include "imex/Conversion/GPUToGPUX/GPUToGPUX.h"
+#include "../PassDetail.h"
 #include "imex/Dialect/GPUX/IR/GPUXOps.h"
 #include "imex/Utils/PassWrapper.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
