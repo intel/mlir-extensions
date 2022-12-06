@@ -12,10 +12,10 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include <imex/Dialect/Dist/IR/DistOps.h>
-#include <llvm/ADT/TypeSwitch.h>
-#include <mlir/IR/Builders.h>
-#include <mlir/IR/DialectImplementation.h>
+#include "imex/Dialect/Dist/IR/DistOps.h"
+#include "llvm/ADT/TypeSwitch.h"
+#include "mlir/IR/Builders.h"
+#include "mlir/IR/DialectImplementation.h"
 
 namespace imex {
 namespace dist {
@@ -23,19 +23,19 @@ namespace dist {
 void DistDialect::initialize() {
   addTypes<
 #define GET_TYPEDEF_LIST
-#include <imex/Dialect/Dist/IR/DistOpsTypes.cpp.inc>
+#include "imex/Dialect/Dist/IR/DistOpsTypes.cpp.inc"
       >();
   addOperations<
 #define GET_OP_LIST
-#include <imex/Dialect/Dist/IR/DistOps.cpp.inc>
+#include "imex/Dialect/Dist/IR/DistOps.cpp.inc"
       >();
 }
 
 } // namespace dist
 } // namespace imex
 
-#include <imex/Dialect/Dist/IR/DistOpsDialect.cpp.inc>
+#include "imex/Dialect/Dist/IR/DistOpsDialect.cpp.inc"
 #define GET_TYPEDEF_CLASSES
-#include <imex/Dialect/Dist/IR/DistOpsTypes.cpp.inc>
+#include "imex/Dialect/Dist/IR/DistOpsTypes.cpp.inc"
 #define GET_OP_CLASSES
-#include <imex/Dialect/Dist/IR/DistOps.cpp.inc>
+#include "imex/Dialect/Dist/IR/DistOps.cpp.inc"

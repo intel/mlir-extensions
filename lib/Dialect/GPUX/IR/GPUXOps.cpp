@@ -12,16 +12,16 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include <imex/Dialect/GPUX/IR/GPUXOps.h>
-#include <llvm/ADT/TypeSwitch.h>
-#include <mlir/Dialect/Arith/IR/Arith.h>
-#include <mlir/Dialect/GPU/IR/GPUDialect.h>
-#include <mlir/IR/Builders.h>
-#include <mlir/IR/BuiltinOps.h>
-#include <mlir/IR/DialectImplementation.h>
-#include <mlir/IR/OpImplementation.h>
-#include <mlir/IR/PatternMatch.h>
-#include <mlir/Transforms/InliningUtils.h>
+#include "imex/Dialect/GPUX/IR/GPUXOps.h"
+#include "llvm/ADT/TypeSwitch.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/GPU/IR/GPUDialect.h"
+#include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/DialectImplementation.h"
+#include "mlir/IR/OpImplementation.h"
+#include "mlir/IR/PatternMatch.h"
+#include "mlir/Transforms/InliningUtils.h"
 
 namespace imex {
 namespace gpux {
@@ -29,11 +29,11 @@ namespace gpux {
 void GPUXDialect::initialize() {
   addTypes<
 #define GET_TYPEDEF_LIST
-#include <imex/Dialect/GPUX/IR/GPUXOpsTypes.cpp.inc>
+#include "imex/Dialect/GPUX/IR/GPUXOpsTypes.cpp.inc"
       >();
   addOperations<
 #define GET_OP_LIST
-#include <imex/Dialect/GPUX/IR/GPUXOps.cpp.inc>
+#include "imex/Dialect/GPUX/IR/GPUXOps.cpp.inc"
       >();
 }
 
@@ -88,9 +88,9 @@ mlir::StringAttr LaunchFuncOp::getKernelName() {
 } // namespace gpux
 } // namespace imex
 
-#include <imex/Dialect/GPUX/IR/GPUXOpsDialect.cpp.inc>
+#include "imex/Dialect/GPUX/IR/GPUXOpsDialect.cpp.inc"
 
 #define GET_TYPEDEF_CLASSES
-#include <imex/Dialect/GPUX/IR/GPUXOpsTypes.cpp.inc>
+#include "imex/Dialect/GPUX/IR/GPUXOpsTypes.cpp.inc"
 #define GET_OP_CLASSES
-#include <imex/Dialect/GPUX/IR/GPUXOps.cpp.inc>
+#include "imex/Dialect/GPUX/IR/GPUXOps.cpp.inc"

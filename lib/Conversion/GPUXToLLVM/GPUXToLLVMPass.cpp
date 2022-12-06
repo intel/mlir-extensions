@@ -23,8 +23,8 @@
 #include "../PassDetail.h"
 
 // TODO: remove
-#include <mlir/Dialect/Func/IR/FuncOps.h>
-#include <mlir/Dialect/Func/Transforms/FuncConversions.h>
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/Func/Transforms/FuncConversions.h"
 //
 
 #include "mlir/Conversion/GPUCommon/GPUCommonPass.h"

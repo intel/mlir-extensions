@@ -33,22 +33,22 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include <imex/Conversion/PTensorToLinalg/PTensorToLinalg.h>
-#include <imex/Dialect/PTensor/IR/PTensorOps.h>
-#include <imex/Dialect/PTensor/Transforms/Utils.h>
+#include "imex/Conversion/PTensorToLinalg/PTensorToLinalg.h"
+#include "imex/Dialect/PTensor/IR/PTensorOps.h"
+#include "imex/Dialect/PTensor/Transforms/Utils.h"
 
-#include <mlir/Dialect/Affine/IR/AffineOps.h>
-#include <mlir/Dialect/Arith/IR/Arith.h>
-#include <mlir/Dialect/Bufferization/IR/Bufferization.h>
-#include <mlir/Dialect/Func/IR/FuncOps.h>
-#include <mlir/Dialect/Func/Transforms/FuncConversions.h>
-#include <mlir/Dialect/LLVMIR/LLVMDialect.h>
-#include <mlir/Dialect/Linalg/IR/Linalg.h>
-#include <mlir/Dialect/MemRef/IR/MemRef.h>
-#include <mlir/Dialect/Shape/IR/Shape.h>
-#include <mlir/Dialect/Tensor/IR/Tensor.h>
-#include <mlir/IR/BuiltinOps.h>
-#include <mlir/Pass/Pass.h>
+#include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Bufferization/IR/Bufferization.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/Func/Transforms/FuncConversions.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/Linalg/IR/Linalg.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/Shape/IR/Shape.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/Pass/Pass.h"
 
 #include <iostream>
 

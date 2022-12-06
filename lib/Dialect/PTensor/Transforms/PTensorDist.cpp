@@ -22,21 +22,21 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include <imex/Dialect/Dist/IR/DistOps.h>
-#include <imex/Dialect/PTensor/IR/PTensorOps.h>
-#include <imex/Dialect/PTensor/Transforms/Utils.h>
-#include <imex/Utils/PassWrapper.h>
+#include "imex/Dialect/Dist/IR/DistOps.h"
+#include "imex/Dialect/PTensor/IR/PTensorOps.h"
+#include "imex/Dialect/PTensor/Transforms/Utils.h"
+#include "imex/Utils/PassWrapper.h"
 
-#include <mlir/Conversion/LLVMCommon/TypeConverter.h>
-#include <mlir/Dialect/Arith/IR/Arith.h>
-#include <mlir/Dialect/Func/IR/FuncOps.h>
-#include <mlir/Dialect/LLVMIR/LLVMDialect.h>
-#include <mlir/Dialect/Linalg/IR/Linalg.h>
-#include <mlir/Dialect/Shape/IR/Shape.h>
-#include <mlir/Dialect/Tensor/IR/Tensor.h>
-#include <mlir/IR/BuiltinOps.h>
-#include <mlir/IR/PatternMatch.h>
-#include <mlir/Rewrite/FrozenRewritePatternSet.h>
+#include "mlir/Conversion/LLVMCommon/TypeConverter.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/Linalg/IR/Linalg.h"
+#include "mlir/Dialect/Shape/IR/Shape.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/PatternMatch.h"
+#include "mlir/Rewrite/FrozenRewritePatternSet.h"
 
 #include "PassDetail.h"
 

@@ -14,10 +14,10 @@
 
 #include "imex/Utils/FuncUtils.hpp"
 
-#include <llvm/ADT/StringRef.h>
-#include <mlir/Dialect/Func/IR/FuncOps.h>
-#include <mlir/IR/Builders.h>
-#include <mlir/IR/BuiltinOps.h>
+#include "llvm/ADT/StringRef.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinOps.h"
 
 /// Gets isolated region/block with IsolatedFromAbove trait for a given
 /// operation and sets that location as insertion point into the module.

@@ -12,9 +12,9 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include <imex/Dialect/PTensor/IR/PTensorOps.h>
-#include <llvm/ADT/TypeSwitch.h>
-#include <mlir/IR/DialectImplementation.h>
+#include "imex/Dialect/PTensor/IR/PTensorOps.h"
+#include "llvm/ADT/TypeSwitch.h"
+#include "mlir/IR/DialectImplementation.h"
 
 namespace imex {
 namespace ptensor {
@@ -22,19 +22,19 @@ namespace ptensor {
 void PTensorDialect::initialize() {
   addTypes<
 #define GET_TYPEDEF_LIST
-#include <imex/Dialect/PTensor/IR/PTensorOpsTypes.cpp.inc>
+#include "imex/Dialect/PTensor/IR/PTensorOpsTypes.cpp.inc"
       >();
   addOperations<
 #define GET_OP_LIST
-#include <imex/Dialect/PTensor/IR/PTensorOps.cpp.inc>
+#include "imex/Dialect/PTensor/IR/PTensorOps.cpp.inc"
       >();
 }
 
 } // namespace ptensor
 } // namespace imex
 
-#include <imex/Dialect/PTensor/IR/PTensorOpsDialect.cpp.inc>
+#include "imex/Dialect/PTensor/IR/PTensorOpsDialect.cpp.inc"
 #define GET_TYPEDEF_CLASSES
-#include <imex/Dialect/PTensor/IR/PTensorOpsTypes.cpp.inc>
+#include "imex/Dialect/PTensor/IR/PTensorOpsTypes.cpp.inc"
 #define GET_OP_CLASSES
-#include <imex/Dialect/PTensor/IR/PTensorOps.cpp.inc>
+#include "imex/Dialect/PTensor/IR/PTensorOps.cpp.inc"

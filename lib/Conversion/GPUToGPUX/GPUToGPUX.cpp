@@ -14,13 +14,13 @@
 //===----------------------------------------------------------------------===//
 
 #include "../PassDetail.h"
-#include <imex/Conversion/GPUToGPUX/GPUToGPUX.h>
-#include <imex/Dialect/GPUX/IR/GPUXOps.h>
-#include <imex/Utils/PassWrapper.h>
-#include <mlir/Dialect/Func/IR/FuncOps.h>
-#include <mlir/Dialect/GPU/IR/GPUDialect.h>
+#include "imex/Conversion/GPUToGPUX/GPUToGPUX.h"
+#include "imex/Dialect/GPUX/IR/GPUXOps.h"
+#include "imex/Utils/PassWrapper.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/GPU/IR/GPUDialect.h"
 
-#include <mlir/IR/BuiltinOps.h>
+#include "mlir/IR/BuiltinOps.h"
 
 namespace imex {
 
