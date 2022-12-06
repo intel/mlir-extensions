@@ -1,4 +1,5 @@
-//===- sample-opt.cpp ---------------------------------------------*- C++ -*-===//
+//===- sample-opt.cpp ---------------------------------------------*- C++
+//-*-===//
 //
 // Copyright 2022 Intel Corporation
 // This file is licensed under the Apache License v2.0 with LLVM Exceptions.
@@ -36,6 +37,8 @@ int main(int argc, char **argv) {
   ::mlir::registerAllDialects(registry);
   ::imex::registerAllDialects(registry);
 
-  return ::mlir::asMainReturnCode(
-      ::mlir::MlirOptMain(argc, argv, "IMEX integration example: out of tree IMEX optimizer driver\n", registry));
+  return ::mlir::asMainReturnCode(::mlir::MlirOptMain(
+      argc, argv,
+      "IMEX integration example: out of tree IMEX optimizer driver\n",
+      registry));
 }
