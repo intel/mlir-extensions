@@ -45,21 +45,14 @@ if(IMEX_EXTERNAL_PROJECT_BUILD)
 
     set(LLVM_INCLUDE_DIR ${LLVM_MAIN_SRC_DIR}/include )
 
-    # LLVM and MLIR headers in source tree are already included as local headers
-    # as part of LLVM_EXTERNAL_PROJECTS build but adding them again as SYSTEM
-    # to be consistent with external MLIR build. So we can include header files
-    # like the following.
-    # #include <mlir/...>
-    # #include <llvm/...>
-    # #include "imex/..."
+    # LLVM headers in source tree are already included
+    # as part of LLVM_EXTERNAL_PROJECTS build
 
-    # LLVM headers in source tree
-    include_directories(SYSTEM ${LLVM_INCLUDE_DIR})
     # MLIR headers in source tree
-    include_directories(SYSTEM ${MLIR_INCLUDE_DIR})
+    include_directories(${MLIR_INCLUDE_DIR})
     # Generated MLIR headers
     set(MLIR_GENERATED_INCLUDE_DIR ${LLVM_BINARY_DIR}/tools/mlir/include)
-    include_directories(SYSTEM ${MLIR_GENERATED_INCLUDE_DIR})
+    include_directories(${MLIR_GENERATED_INCLUDE_DIR})
 
     list(APPEND CMAKE_MODULE_PATH "${MLIR_MAIN_SRC_DIR}/cmake/modules")
 else()
@@ -85,7 +78,7 @@ else()
     set(LLVM_LIBRARY_OUTPUT_INTDIR ${CMAKE_BINARY_DIR}/lib)
 
     # LLVM_INCLUDE_DIRS is the same as MLIR_INCLUDE_DIRS in an MLIR install tree
-    include_directories(SYSTEM ${MLIR_INCLUDE_DIRS})
+    include_directories(${MLIR_INCLUDE_DIRS})
 
     list(APPEND CMAKE_MODULE_PATH "${MLIR_CMAKE_DIR}")
     list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
