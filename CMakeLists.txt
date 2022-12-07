@@ -8,7 +8,7 @@ endif()
 
 set(IMEX_EXTERNAL_PROJECT_BUILD OFF)
 
-if(NOT (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR) AND NOT MLIR_BINARY_DIR)
+if(NOT (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR) AND NOT DEFINED MLIR_BINARY_DIR)
     # Building as part of LLVM via the external project mechanism.
     set(IMEX_EXTERNAL_PROJECT_BUILD ON)
     list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
@@ -39,14 +39,21 @@ if(IMEX_EXTERNAL_PROJECT_BUILD)
         message(FATAL_ERROR "Invalid llvm version")
     endif()
 
+    # Variables needed for mlir_tablegen() to function
     set(MLIR_MAIN_SRC_DIR ${LLVM_MAIN_SRC_DIR}/../mlir )
     set(MLIR_INCLUDE_DIR ${MLIR_MAIN_SRC_DIR}/include )
-    set(MLIR_GENERATED_INCLUDE_DIR ${LLVM_BINARY_DIR}/tools/mlir/include)
-    include_directories(SYSTEM ${MLIR_INCLUDE_DIR})
-    include_directories(SYSTEM ${MLIR_GENERATED_INCLUDE_DIR})
-    include_directories(SYSTEM ${MLIR_TABLEGEN_OUTPUT_DIR})
 
-    set(BACKEND_PACKAGE_STRING "${PACKAGE_STRING}")
+    set(LLVM_INCLUDE_DIR ${LLVM_MAIN_SRC_DIR}/include )
+
+    # LLVM headers in source tree are already included
+    # as part of LLVM_EXTERNAL_PROJECTS build
+
+    # MLIR headers in source tree
+    include_directories(${MLIR_INCLUDE_DIR})
+    # Generated MLIR headers
+    set(MLIR_GENERATED_INCLUDE_DIR ${LLVM_BINARY_DIR}/tools/mlir/include)
+    include_directories(${MLIR_GENERATED_INCLUDE_DIR})
+
     list(APPEND CMAKE_MODULE_PATH "${MLIR_MAIN_SRC_DIR}/cmake/modules")
 else()
     message(STATUS "Building IMEX with external MLIR")
@@ -66,17 +73,82 @@ else()
     message(STATUS "Using MLIRConfig.cmake in: ${MLIR_DIR}")
     message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
+    # For redirecting llvm_add_library() to IMEX's bin and lib folders
     set(LLVM_RUNTIME_OUTPUT_INTDIR ${CMAKE_BINARY_DIR}/bin)
+    set(LLVM_LIBRARY_OUTPUT_INTDIR ${CMAKE_BINARY_DIR}/lib)
 
-    set(MLIR_BINARY_DIR ${CMAKE_BINARY_DIR})
+    # LLVM_INCLUDE_DIRS is the same as MLIR_INCLUDE_DIRS in an MLIR install tree
+    include_directories(${MLIR_INCLUDE_DIRS})
 
     list(APPEND CMAKE_MODULE_PATH "${MLIR_CMAKE_DIR}")
     list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
 endif()
 
+# For redirecting add_mlir_doc() to IMEX's doc folder
+set(MLIR_BINARY_DIR ${CMAKE_BINARY_DIR})
+
 include(TableGen)
 include(AddLLVM)
 include(AddMLIR)
+
+# Instead of creating a separate AddIMEX,
+# redefine some functions included from include(AddMLIR)
+# and change the behavior of add_mlir_* functions to
+# properly generate IMEXConfig.cmake and IMEXTargets.cmake
+function(add_mlir_library_install name)
+  get_target_export_arg(${name} IMEX export_to_mlirtargets UMBRELLA imex-libraries)
+  install(TARGETS ${name}
+    COMPONENT ${name}
+    ${export_to_mlirtargets}
+    LIBRARY DESTINATION lib${LLVM_LIBDIR_SUFFIX}
+    ARCHIVE DESTINATION lib${LLVM_LIBDIR_SUFFIX}
+    RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+    # Note that CMake will create a directory like:
+    #   objects-${CMAKE_BUILD_TYPE}/obj.LibName
+    # and put object files there.
+    OBJECTS DESTINATION lib${LLVM_LIBDIR_SUFFIX}
+  )
+
+  add_llvm_install_targets(install-${name}
+                           DEPENDS ${name}
+                           COMPONENT ${name})
+  set_property(GLOBAL APPEND PROPERTY IMEX_ALL_LIBS ${name})
+  set_property(GLOBAL APPEND PROPERTY IMEX_EXPORTS ${name})
+endfunction()
+
+# Declare the library associated with a dialect.
+function(add_mlir_dialect_library name)
+  set_property(GLOBAL APPEND PROPERTY IMEX_DIALECT_LIBS ${name})
+  add_mlir_library(${ARGV} DEPENDS mlir-headers)
+endfunction(add_mlir_dialect_library)
+
+# Declare the library associated with a conversion.
+function(add_mlir_conversion_library name)
+  set_property(GLOBAL APPEND PROPERTY IMEX_CONVERSION_LIBS ${name})
+  add_mlir_library(${ARGV} DEPENDS mlir-headers)
+endfunction(add_mlir_conversion_library)
+
+# Declare the library associated with a translation.
+function(add_mlir_translation_library name)
+  set_property(GLOBAL APPEND PROPERTY IMEX_TRANSLATION_LIBS ${name})
+  add_mlir_library(${ARGV} DEPENDS mlir-headers)
+endfunction(add_mlir_translation_library)
+
+macro(add_imex_tool name)
+    add_llvm_executable(${name} ${ARGN})
+    get_target_export_arg(${name} IMEX export_to_imexexports)
+    install(TARGETS ${name}
+            ${export_to_imexexports}
+            RUNTIME DESTINATION ${IMEX_TOOLS_INSTALL_DIR}
+            COMPONENT ${name})
+
+    add_llvm_install_targets(install-${name}
+                             DEPENDS ${name}
+                             COMPONENT ${name})
+    set_property(GLOBAL APPEND PROPERTY IMEX_EXPORTS ${name})
+    set_target_properties(${name} PROPERTIES FOLDER "Tools")
+endmacro()
+
 include(HandleLLVMOptions)
 
 set(IMEX_ENABLE_SYCL_RUNTIME 0 CACHE BOOL "Enable the Sycl Runtime")
@@ -110,11 +182,11 @@ if(NOT IMEX_EXTERNAL_PROJECT_BUILD)
         COMPONENTS Interpreter)
 endif()
 
-include_directories(${LLVM_INCLUDE_DIRS})
-include_directories(${MLIR_INCLUDE_DIRS})
+# IMEX headers in source tree
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
+# Generated IMEX headers
 include_directories(${CMAKE_CURRENT_BINARY_DIR}/include)
-link_directories(${LLVM_BUILD_LIBRARY_DIR})
+message(STATUS "LLVM_DEFINITIONS: ${LLVM_DEFINITIONS}")
 add_definitions(${LLVM_DEFINITIONS})
 
 set(LLVM_LIT_ARGS "-sv" CACHE STRING "lit default options")
@@ -128,6 +200,9 @@ else()
     set(IMEX_LIB_DIR ${IMEX_BINARY_DIR}/lib)
 endif()
 
+set(IMEX_TOOLS_INSTALL_DIR "${CMAKE_INSTALL_BINDIR}" CACHE STRING
+    "Path for binary subdirectory (defaults to '${CMAKE_INSTALL_BINDIR}')")
+
 include(sanitizers)
 
 add_subdirectory(include)
@@ -140,9 +215,14 @@ if (IMEX_INCLUDE_DOCS)
     add_subdirectory(docs)
 endif()
 
-install(DIRECTORY ${PROJECT_SOURCE_DIR}/include/mlir
+# Custom target to install all imex headers
+add_custom_target(imex-headers)
+set_target_properties(imex-headers PROPERTIES FOLDER "Misc")
+
+# Headers in source tree
+install(DIRECTORY include/imex
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
-    COMPONENT mlir-headers
+    COMPONENT imex-headers
     FILES_MATCHING
     PATTERN "*.def"
     PATTERN "*.h"
@@ -151,9 +231,10 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/include/mlir
     PATTERN "LICENSE.TXT"
 )
 
-install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include
+# Generated headers
+install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include/imex
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
-    COMPONENT mlir-headers
+    COMPONENT imex-headers
     FILES_MATCHING
     PATTERN "*.def"
     PATTERN "*.h"
@@ -163,5 +244,27 @@ install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include
     PATTERN "CMakeFiles" EXCLUDE
     PATTERN "config.h" EXCLUDE
 )
+
+add_llvm_install_targets(install-imex-headers
+                         DEPENDS imex-headers
+                         COMPONENT imex-headers)
+
+
+# Custom target to install all imex libraries
+add_custom_target(imex-libraries)
+set_target_properties(imex-libraries PROPERTIES FOLDER "Misc")
+
+add_llvm_install_targets(install-imex-libraries
+                         DEPENDS imex-libraries
+                         COMPONENT imex-libraries)
+
+get_property(IMEX_LIBS GLOBAL PROPERTY IMEX_ALL_LIBS)
+if(IMEX_LIBS)
+  list(REMOVE_DUPLICATES IMEX_LIBS)
+  foreach(lib ${IMEX_LIBS})
+    add_dependencies(imex-libraries ${lib})
+    add_dependencies(install-imex-libraries install-${lib})
+  endforeach()
+endif()
 
 add_subdirectory(cmake/modules)

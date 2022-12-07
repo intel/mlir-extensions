@@ -2,7 +2,8 @@
 
 @IMEX_CONFIG_CODE@
 
-find_package(LLVM REQUIRED CONFIG)
+# MLIRConfig.cmake calls find_package(LLVM REQUIRED CONFIG)
+# so no need to call that here.
 find_package(MLIR REQUIRED CONFIG)
 
 set(IMEX_EXPORTED_TARGETS "@IMEX_EXPORTS@")
