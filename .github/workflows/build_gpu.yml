@@ -32,6 +32,7 @@ jobs:
         with:
           repository: intel-innersource/frameworks.ai.mlir.mlir-extensions
           token: ${{secrets.WORKFLOW_TOKEN}}
+          fetch-depth: 0
           path: ${{env.HOME_DIR}}/mlir-extensions
 
       - name: Setup Latest Level Zero
