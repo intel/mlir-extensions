@@ -151,6 +151,7 @@ def _define_api_funcs():
     kernel_api_funcs = [
         "get_global_id",
         "get_local_id",
+        "get_group_id",
         "get_global_size",
         "get_local_size",
     ]

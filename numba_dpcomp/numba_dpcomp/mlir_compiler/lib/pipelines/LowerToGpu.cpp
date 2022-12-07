@@ -968,6 +968,21 @@ lowerGetLocallId(mlir::func::CallOp op, mlir::ValueRange /*globalSizes*/,
 }
 
 static mlir::LogicalResult
+lowerGetGroupId(mlir::func::CallOp op, mlir::ValueRange /*globalSizes*/,
+                mlir::ValueRange /*localSizes*/, mlir::ValueRange gridArgs,
+                mlir::ValueRange /*blockArgs*/, mlir::PatternRewriter &builder,
+                unsigned index) {
+  auto loc = op.getLoc();
+  auto res = gridArgs[index];
+  auto resType = op.getResult(0).getType();
+  if (res.getType() != resType)
+    res = builder.createOrFold<mlir::arith::IndexCastOp>(loc, resType, res);
+
+  builder.replaceOp(op, res);
+  return mlir::success();
+}
+
+static mlir::LogicalResult
 lowerGetGlobalSize(mlir::func::CallOp op, mlir::ValueRange globalSizes,
                    mlir::ValueRange localSizes, mlir::ValueRange /*gridArgs*/,
                    mlir::ValueRange /*blockArgs*/,
@@ -1035,6 +1050,7 @@ struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::func::CallOp> {
       static const std::pair<mlir::StringRef, handler_func_t> handlers[] = {
           {"get_global_id", &lowerGetGlobalId},
           {"get_local_id", &lowerGetLocallId},
+          {"get_group_id", &lowerGetGroupId},
           {"get_global_size", &lowerGetGlobalSize},
           {"get_local_size", &lowerGetLocalSize},
       };
