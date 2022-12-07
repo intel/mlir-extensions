@@ -19,6 +19,7 @@ from .kernel_base import KernelBase
 from .kernel_impl import (
     get_global_id,
     get_local_id,
+    get_group_id,
     get_global_size,
     get_local_size,
     atomic,
@@ -61,6 +62,11 @@ def get_global_id_proxy(index):
 def get_local_id_proxy(index):
     state = get_exec_state()
     return state.indices[index] % state.local_size[index]
+
+
+def get_group_id_proxy(index):
+    state = get_exec_state()
+    return state.indices[index] // state.local_size[index]
 
 
 def get_global_size_proxy(index):
@@ -185,6 +191,7 @@ def _destroy_execution_state():
 _globals_to_replace = [
     ("get_global_id", get_global_id, get_global_id_proxy),
     ("get_local_id", get_local_id, get_local_id_proxy),
+    ("get_group_id", get_local_id, get_group_id_proxy),
     ("get_global_size", get_global_size, get_global_size_proxy),
     ("get_local_size", get_local_size, get_local_size_proxy),
     ("atomic", atomic, atomic_proxy),

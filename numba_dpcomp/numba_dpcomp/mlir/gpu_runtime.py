@@ -32,6 +32,7 @@ if IS_GPU_RUNTIME_AVAILABLE:
             "dpcompGpuAlloc",
             mlir_func_name("get_global_id"),
             mlir_func_name("get_local_id"),
+            mlir_func_name("get_group_id"),
             mlir_func_name("get_global_size"),
             mlir_func_name("get_local_size"),
             mlir_func_name("kernel_barrier"),
