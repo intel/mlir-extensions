@@ -21,6 +21,7 @@
 #map12 = affine_map<(d0, d1, d2) -> (d0, d1)>
 #map13 = affine_map<(d0, d1) -> ()>
 #map14 = affine_map<(d0, d1) -> (d0, 0)>
+#map15 = affine_map<(d0, d1, d2, d3, d4, d5) -> (d4, d5)>
 module @mnist_cnn {
   func.func @main() {
     %0 = arith.constant dense<1.0> : tensor<1x224x224x1xf32>
@@ -103,9 +104,12 @@ module @mnist_cnn {
       linalg.yield %44 : f32
     } -> tensor<1x224x224x64xf32>
     %18 = tensor.empty() : tensor<1x112x112x64xf32>
+    %fake = tensor.empty(): tensor<2x2xf32>
     %19 = linalg.fill ins(%cst : f32) outs(%18 : tensor<1x112x112x64xf32>) -> tensor<1x112x112x64xf32>
-    %20 = linalg.generic {indexing_maps = [#map6, #map7], iterator_types = ["parallel", "parallel", "parallel", "parallel", "reduction", "reduction"]} ins(%17 : tensor<1x224x224x64xf32>) outs(%19 : tensor<1x112x112x64xf32>) attrs =  {iterator_ranges = [1, 112, 112, 64, 2, 2]} {
-    ^bb0(%arg9: f32, %arg10: f32):
+    %20 = linalg.generic {indexing_maps = [#map6, #map15, #map7], iterator_types = ["parallel", "parallel", "parallel", "parallel", "reduction", "reduction"]} 
+                         ins(%17, %fake : tensor<1x224x224x64xf32>, tensor<2x2xf32>) 
+                         outs(%19 : tensor<1x112x112x64xf32>) attrs =  {iterator_ranges = [1, 112, 112, 64, 2, 2]} {
+    ^bb0(%arg9: f32, %arg_f: f32, %arg10: f32):
       %44 = arith.cmpf ogt, %arg10, %arg9 : f32
       %45 = arith.select %44, %arg10, %arg9 : f32
       linalg.yield %45 : f32
@@ -181,3 +185,8 @@ module @mnist_cnn {
     return %43 : tensor<1x100xf32>
   }
 }
+
+// CHECK: Unranked Memref base@ = {{0x[-9a-f]*}}
+// CHECK-SAME: rank = {{.}} offset = {{.}} sizes = [1, 100] strides = {{.*}} data =
+// CHECK: 0.01
+// CHECK-COUNT-99: 0.01
