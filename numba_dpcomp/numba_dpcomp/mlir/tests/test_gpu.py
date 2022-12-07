@@ -897,7 +897,9 @@ def test_private_memory(blocksize):
     gpu_func = kernel_cached(func)
 
     arr = np.zeros(blocksize).astype(np.float32)
-    orig = np.arange(blocksize).astype(np.float32)
+
+    sim_res = arr.copy()
+    sim_func[blocksize, blocksize](sim_res)
 
     with print_pass_ir([], ["ConvertParallelLoopToGpu"]):
         gpu_res = arr.copy()

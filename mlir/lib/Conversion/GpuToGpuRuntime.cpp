@@ -1034,6 +1034,57 @@ public:
   }
 };
 
+// TODO: use upstream memref conversion
+/// Returns true if the allocations of memref `type` generated from `allocOp`
+/// can be lowered to SPIR-V.
+static bool isAllocationSupported(mlir::Operation *allocOp,
+                                  mlir::MemRefType type) {
+  if (mlir::isa<mlir::memref::AllocOp, mlir::memref::DeallocOp>(allocOp)) {
+    auto sc =
+        type.getMemorySpace().dyn_cast_or_null<mlir::spirv::StorageClassAttr>();
+    if (!sc || sc.getValue() != mlir::spirv::StorageClass::Workgroup)
+      return false;
+  } else if (mlir::isa<mlir::memref::AllocaOp>(allocOp)) {
+    auto sc = type.getMemorySpace().dyn_cast_or_null<mlir::IntegerAttr>();
+    if (!sc || sc.getValue() != mlir::gpu::GPUDialect::getPrivateAddressSpace())
+      return false;
+  } else {
+    return false;
+  }
+
+  // Currently only support static shape and int or float or vector of int or
+  // float element type.
+  if (!type.hasStaticShape())
+    return false;
+
+  mlir::Type elementType = type.getElementType();
+  if (auto vecType = elementType.dyn_cast<mlir::VectorType>())
+    elementType = vecType.getElementType();
+  return elementType.isIntOrFloat();
+}
+
+/// Converts memref.alloca to SPIR-V Function variables.
+class AllocaOpPattern final
+    : public mlir::OpConversionPattern<mlir::memref::AllocaOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::AllocaOp allocaOp, OpAdaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    mlir::MemRefType allocType = allocaOp.getType();
+    if (!isAllocationSupported(allocaOp, allocType))
+      return rewriter.notifyMatchFailure(allocaOp, "unhandled allocation type");
+
+    // Get the SPIR-V type for the allocation.
+    mlir::Type spirvType = getTypeConverter()->convertType(allocType);
+    rewriter.replaceOpWithNewOp<mlir::spirv::VariableOp>(
+        allocaOp, spirvType, mlir::spirv::StorageClass::Function,
+        /*initializer=*/nullptr);
+    return mlir::success();
+  }
+};
+
 class ConvertBarrierOp
     : public mlir::OpConversionPattern<gpu_runtime::GPUBarrierOp> {
 public:
@@ -1451,15 +1502,15 @@ struct GPUToSpirvPass
       mlir::arith::populateArithToSPIRVPatterns(typeConverter, patterns);
       mlir::populateMathToSPIRVPatterns(typeConverter, patterns);
 
-      patterns
-          .insert<ConvertSubviewOp, ConvertCastOp<mlir::memref::CastOp>,
-                  ConvertCastOp<mlir::memref::ReinterpretCastOp>,
-                  ConvertBitcastOp<imex::util::BitcastOp>,
-                  ConvertBitcastOp<imex::util::MemrefBitcastOp>, ConvertLoadOp,
-                  ConvertStoreOp, ConvertAtomicOps, ConvertFunc, ConvertAssert,
-                  ConvertBarrierOp, ConvertMemFenceOp, ConvertUndef,
-                  ConvertGlobalOp, ConvertGetGlobalOp, ConvertAllReduceOp,
-                  ConvertSubgroupReduceOp>(typeConverter, context);
+      patterns.insert<ConvertSubviewOp, ConvertCastOp<mlir::memref::CastOp>,
+                      ConvertCastOp<mlir::memref::ReinterpretCastOp>,
+                      ConvertBitcastOp<imex::util::BitcastOp>,
+                      ConvertBitcastOp<imex::util::MemrefBitcastOp>,
+                      ConvertLoadOp, ConvertStoreOp, ConvertAtomicOps,
+                      AllocaOpPattern, ConvertFunc, ConvertAssert,
+                      ConvertBarrierOp, ConvertMemFenceOp, ConvertUndef,
+                      ConvertGlobalOp, ConvertGetGlobalOp, ConvertAllReduceOp,
+                      ConvertSubgroupReduceOp>(typeConverter, context);
 
       patterns.add<
           SingleDimLaunchConfigConversion<mlir::gpu::SubgroupIdOp,
