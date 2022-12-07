@@ -27,41 +27,34 @@ func.func @test_prank(%arg0: index) -> index {
 // CHECK-NEXT: "dist.prank"(%arg0) : (index) -> index
 
 // -----
-func.func @test_init_dist_tensor(%gshape: tensor<1xindex>, %pt: !ptensor.ptensor<1 x i64>, %loffs: tensor<1xindex>, %team: i64) -> !dist.dtensor<<1 x i64>> {
-    %1 = "dist.init_dist_tensor"(%gshape, %pt, %loffs, %team) : (tensor<1xindex>, !ptensor.ptensor<1 x i64>, tensor<1xindex>, i64) -> !dist.dtensor<<1 x i64>>
+func.func @test_init_dist_tensor(%gshape: index, %pt: !ptensor.ptensor<1 x i64>, %loffs: index, %team: i64) -> !dist.dtensor<<1 x i64>> {
+    %1 = "dist.init_dist_tensor"(%gshape, %pt, %loffs, %team) : (index, !ptensor.ptensor<1 x i64>, index, i64) -> !dist.dtensor<<1 x i64>>
     return %1 : !dist.dtensor<<1 x i64>>
 }
-// CHECK-LABEL: func.func @test_init_dist_tensor(%arg0: tensor<1xindex>, %arg1: !ptensor.ptensor<1 x i64>, %arg2: tensor<1xindex>, %arg3: i64) -> !dist.dtensor<<1 x i64>> {
+// CHECK-LABEL: func.func @test_init_dist_tensor(%arg0: index, %arg1: !ptensor.ptensor<1 x i64>, %arg2: index, %arg3: i64) -> !dist.dtensor<<1 x i64>> {
 // CHECK-NEXT: dist.init_dist_tensor
 
 // -----
 func.func @test_extract_from_dist(%arg0: !dist.dtensor<<1 x i64>>) -> index {
-    %1 = "dist.extract_from_dist"(%arg0) {what = 0 : i32} : (!dist.dtensor<<1 x i64>>) -> tensor<1xindex>
-    %2 = "dist.extract_from_dist"(%arg0) {what = 1 : i32} : (!dist.dtensor<<1 x i64>>) -> !ptensor.ptensor<1 x i64>
-    %3 = "dist.extract_from_dist"(%arg0) {what = 2 : i32} : (!dist.dtensor<<1 x i64>>) -> tensor<1xindex>
-    %4 = "dist.extract_from_dist"(%arg0) {what = 3 : i32} : (!dist.dtensor<<1 x i64>>) -> index
+    %1 = "dist.global_shape_of"(%arg0) : (!dist.dtensor<<1 x i64>>) -> index
+    %2 = "dist.local_tensor_of"(%arg0) : (!dist.dtensor<<1 x i64>>) -> !ptensor.ptensor<1 x i64>
+    %3 = "dist.local_offsets_of"(%arg0) : (!dist.dtensor<<1 x i64>>) -> index
+    %4 = "dist.team_of"(%arg0) : (!dist.dtensor<<1 x i64>>) -> index
     return %4 : index
 }
 // CHECK-LABEL: func.func @test_extract_from_dist(%arg0: !dist.dtensor<<1 x i64>>) -> index {
-// CHECK-NEXT: "dist.extract_from_dist"(%arg0) {what = 0 : i32} : (!dist.dtensor<<1 x i64>>) -> tensor<1xindex>
-// CHECK-NEXT: "dist.extract_from_dist"(%arg0) {what = 1 : i32} : (!dist.dtensor<<1 x i64>>) -> !ptensor.ptensor<1 x i64>
-// CHECK-NEXT: "dist.extract_from_dist"(%arg0) {what = 2 : i32} : (!dist.dtensor<<1 x i64>>) -> tensor<1xindex>
-// CHECK-NEXT: "dist.extract_from_dist"(%arg0) {what = 3 : i32} : (!dist.dtensor<<1 x i64>>) -> index
+// CHECK-NEXT: "dist.global_shape_of"(%arg0) : (!dist.dtensor<<1 x i64>>) -> index
+// CHECK-NEXT: "dist.local_tensor_of"(%arg0) : (!dist.dtensor<<1 x i64>>) -> !ptensor.ptensor<1 x i64>
+// CHECK-NEXT: "dist.local_offsets_of"(%arg0) : (!dist.dtensor<<1 x i64>>) -> index
+// CHECK-NEXT: "dist.team_of"(%arg0) : (!dist.dtensor<<1 x i64>>) -> index
 
 // -----
-func.func @test_local_offsets(%np : index, %prank: index, %shape: tensor<1xindex>) -> tensor<1xindex> {
-    %0 = "dist.local_offsets"(%np, %prank, %shape) {rank = 1 : i64} : (index, index, tensor<1xindex>) -> tensor<1xindex>
-    return %0 : tensor<1xindex>
+func.func @test_local_partition(%np : index, %prank: index, %shape: index) -> (index, index) {
+    %0, %1 = "dist.local_partition"(%np, %prank, %shape) {rank = 1 : i64} : (index, index, index) -> (index, index)
+    return %0, %1 : index, index
 }
-// CHECK-LABEL: func.func @test_local_offsets(%arg0: index, %arg1: index, %arg2: tensor<1xindex>) -> tensor<1xindex> {
-// CHECK-NEXT: "dist.local_offsets"(%arg0, %arg1, %arg2) {rank = 1 : i64} : (index, index, tensor<1xindex>) -> tensor<1xindex>
-
-func.func @test_local_shape(%np : index, %prank: index, %shape: tensor<1xindex>) -> tensor<1xindex> {
-    %0 = "dist.local_shape"(%np, %prank, %shape) {rank = 1 : i64} : (index, index, tensor<1xindex>) -> tensor<1xindex>
-    return %0 : tensor<1xindex>
-}
-// CHECK-LABEL: func.func @test_local_shape(%arg0: index, %arg1: index, %arg2: tensor<1xindex>) -> tensor<1xindex> {
-// CHECK-NEXT: "dist.local_shape"(%arg0, %arg1, %arg2) {rank = 1 : i64} : (index, index, tensor<1xindex>) -> tensor<1xindex>
+// CHECK-LABEL: func.func @test_local_partition(%arg0: index, %arg1: index, %arg2: index) -> (index, index) {
+// CHECK-NEXT: "dist.local_partition"(%arg0, %arg1, %arg2) {rank = 1 : i64} : (index, index, index) -> (index, index)
 
 // -----
 func.func @test_allreduce(%arg0: memref<i64>) -> memref<i64> {

@@ -15,6 +15,7 @@
 #ifndef _DIST_UTILS_H_INCLUDED_
 #define _DIST_UTILS_H_INCLUDED_
 
+#include <imex/Dialect/Dist/IR/DistOps.h>
 #include <imex/Utils/PassUtils.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
@@ -25,6 +26,40 @@
 #include <vector>
 
 namespace imex {
+
+// *******************************
+// ***** Some helper functions ***
+// *******************************
+
+namespace dist {
+// create operation returning global shape of DistTensor
+inline ::mlir::ValueRange createGlobalShapeOf(::mlir::Location &loc,
+                                              ::mlir::OpBuilder &builder,
+                                              ::mlir::Value dt) {
+  return builder.create<::imex::dist::GlobalShapeOfOp>(loc, dt).getGShape();
+}
+
+// create operation returning local offsets of DistTensor
+inline ::mlir::ValueRange createLocalOffsetsOf(::mlir::Location &loc,
+                                               ::mlir::OpBuilder &builder,
+                                               ::mlir::Value dt) {
+  return builder.create<::imex::dist::LocalOffsetsOfOp>(loc, dt).getLOffsets();
+}
+
+// create returning the local Tensor of DistTensor
+inline ::mlir::Value createLocalTnsrOf(::mlir::Location &loc,
+                                       ::mlir::OpBuilder &builder,
+                                       ::mlir::Value dt) {
+  return builder.create<::imex::dist::LocalTensorOfOp>(loc, dt).getLTensor();
+}
+
+// create returning the team of DistTensor
+inline ::mlir::Value createTeamOf(::mlir::Location &loc,
+                                  ::mlir::OpBuilder &builder,
+                                  ::mlir::Value dt) {
+  return builder.create<::imex::dist::TeamOfOp>(loc, dt).getTeam();
+}
+} // namespace dist
 
 /// get dyn-sized mlir::RankedTensorType for given rank and elType
 inline auto getTensorType(::mlir::MLIRContext *ctxt, int64_t rank,

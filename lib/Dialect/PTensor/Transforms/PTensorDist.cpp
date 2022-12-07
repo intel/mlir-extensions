@@ -48,20 +48,13 @@
 #include "PassDetail.h"
 
 namespace imex {
+namespace dist {
 
 namespace {
 
 // *******************************
 // ***** Some helper functions ***
 // *******************************
-
-// create ::imex::dist::LocalOffsetsOp
-inline ::mlir::Value createGetLocalOffsets(::mlir::Location &loc,
-                                           ::mlir::OpBuilder &builder,
-                                           ::mlir::Value dt) {
-  return builder.create<::imex::dist::ExtractFromDistOp>(
-      loc, ::imex::dist::LOFFSETS, dt);
-}
 
 // extract RankedTensor and create ::imex::dist::AllReduceOp
 inline ::mlir::Value createAllReduce(::mlir::Location &loc,
@@ -76,31 +69,20 @@ inline ::mlir::Value createAllReduce(::mlir::Location &loc,
                                                    rTnsr);
 }
 
-// create ops to extract the local Tensor from DistTensor
-inline ::mlir::Value createGetLocal(::mlir::Location &loc,
-                                    ::mlir::OpBuilder &builder,
-                                    ::mlir::Value dt) {
-  return builder.create<::imex::dist::ExtractFromDistOp>(
-      loc, ::imex::dist::LTENSOR, dt);
-}
-
 // Create a DistTensor from a PTensor and meta data
-inline ::mlir::Value createMkTnsr(::mlir::Location &loc,
-                                  ::mlir::OpBuilder &builder,
-                                  ::mlir::Value gshape, ::mlir::Value pt,
-                                  ::mlir::Value loffsets, ::mlir::Value team) {
+inline ::mlir::Value createDistTnsr(::mlir::Location &loc,
+                                    ::mlir::OpBuilder &builder,
+                                    ::mlir::ValueRange gshape, ::mlir::Value pt,
+                                    ::mlir::ValueRange loffsets,
+                                    ::mlir::Value team) {
+#if 0
+  auto gShape = createMemRefFromElements(builder, loc,
+                                         builder.getIndexType(), gshape);
+  auto lOffsets = createMemRefFromElements(builder, loc,
+                                           builder.getIndexType(), loffsets);
+#endif
   return builder.create<::imex::dist::InitDistTensorOp>(loc, gshape, pt,
                                                         loffsets, team);
-}
-
-// extract team component from given DistTensor
-inline ::mlir::Value createTeamOf(::mlir::Location &loc,
-                                  ::mlir::OpBuilder &builder,
-                                  ::mlir::Value dt) {
-  auto dtTyp = dt.getType().dyn_cast<::imex::dist::DistTensorType>();
-  assert(dtTyp);
-  return builder.create<::imex::dist::ExtractFromDistOp>(
-      loc, ::imex::dist::TEAM, dt);
 }
 
 // *******************************
@@ -137,7 +119,7 @@ struct DistExtractMemRefOpRWP
     if (!inpPtTyp) {
       return ::mlir::failure();
     }
-    auto pTnsr = createGetLocal(loc, rewriter, op.getInput());
+    auto pTnsr = createLocalTnsrOf(loc, rewriter, op.getInput());
     rewriter.replaceOpWithNewOp<::imex::ptensor::ExtractMemRefOp>(
         op, inpPtTyp.getPTensorType().getMemRefType(), pTnsr);
     return ::mlir::success();
@@ -173,23 +155,18 @@ struct DistExtractSliceOpRWP
         loc, src, slcOffs, slcSizes, slcStrides);
     auto lSlcOffsets = lSlice.getLOffsets();
     auto lSlcSizes = lSlice.getLSizes();
-    auto gOffsets = lSlice.getGOffsets();
+    // auto gOffsets = lSlice.getGOffsets();
 
     // create local view
-    auto lPTnsr = createGetLocal(loc, rewriter, src);
+    auto lPTnsr = createLocalTnsrOf(loc, rewriter, src);
     auto lView = rewriter.create<::imex::ptensor::ExtractSliceOp>(
         loc, inpPtTyp.getPTensorType(), lPTnsr, lSlcOffsets, lSlcSizes,
         slcStrides);
 
-    // create global shape from slice sizes
-    auto gShape = createMemRefFromElements(rewriter, loc,
-                                           rewriter.getIndexType(), slcSizes);
-    auto gVOffs = createMemRefFromElements(rewriter, loc,
-                                           rewriter.getIndexType(), gOffsets);
     // init our new dist tensor
     auto team = createTeamOf(loc, rewriter, src);
     rewriter.replaceOp(
-        op, createMkTnsr(loc, rewriter, gShape, lView, gVOffs, team));
+        op, createDistTnsr(loc, rewriter, slcSizes, lView, lSlcOffsets, team));
     return ::mlir::success();
   }
 };
@@ -228,8 +205,8 @@ struct DistInsertSliceOpRWP
     // don't need lSlice.getGOffsets();
 
     // get local ptensors and apply to InsertSliceOp
-    auto lDst = createGetLocal(loc, rewriter, dst);
-    auto lSrc = createGetLocal(loc, rewriter, src);
+    auto lDst = createLocalTnsrOf(loc, rewriter, dst);
+    auto lSrc = createLocalTnsrOf(loc, rewriter, src);
     rewriter.replaceOpWithNewOp<::imex::ptensor::InsertSliceOp>(
         op, lDst, lSrc, lSlcOffsets, lSlcSizes, slcStrides);
 
@@ -261,30 +238,21 @@ struct DistARangeOpRWP : public RecOpRewritePattern<::imex::ptensor::ARangeOp> {
     // compute global count (so we know the shape)
     auto count = createCountARange(rewriter, loc, start, stop, step);
     auto dtype = rewriter.getI64Type(); // FIXME
-    auto indexTyp = rewriter.getIndexType();
     // get number of procs and prank
     auto nProcs = rewriter.create<::imex::dist::NProcsOp>(loc, team);
     auto pRank = rewriter.create<::imex::dist::PRankOp>(loc, team);
     // result shape is 1d
     constexpr int64_t rank = 1;
-    auto gShape = createMemRefFromElements(rewriter, loc, indexTyp, {count});
 
-    // so is the local shape
-    llvm::SmallVector<mlir::Value> lShapeVVec(rank);
-    // get local shape
-    auto lShapeVVec_mr = rewriter.create<::imex::dist::LocalShapeOp>(
-        loc, rank, nProcs, pRank, gShape);
-    auto zero = createIndex(loc, rewriter, 0);
-    EasyIdx lSz(loc, rewriter,
-                rewriter.create<::mlir::memref::LoadOp>(
-                    loc, lShapeVVec_mr, ::mlir::ValueRange({zero})));
-    // get local offsets
-    auto offsets = rewriter.create<::imex::dist::LocalOffsetsOp>(
-        loc, rank, nProcs, pRank, gShape);
-    // create start from offset
-    EasyIdx off(loc, rewriter,
-                rewriter.create<::mlir::memref::LoadOp>(
-                    loc, offsets, ::mlir::ValueRange({zero})));
+    // get local shape and offsets
+    auto lPart = rewriter.create<::imex::dist::LocalPartitionOp>(
+        loc, rank, nProcs, pRank, ::mlir::ValueRange{count});
+    auto lShape = lPart.getLShape();
+    auto lOffs = lPart.getLOffsets();
+
+    // we can now compute local arange
+    EasyIdx lSz(loc, rewriter, lShape[0]);
+    EasyIdx off(loc, rewriter, lOffs[0]);
     start = start + (off * step);
     // create stop
     stop = start + (step * lSz); // start + (lShape[0] * step)
@@ -295,11 +263,44 @@ struct DistARangeOpRWP : public RecOpRewritePattern<::imex::ptensor::ARangeOp> {
     auto arres = rewriter.create<::imex::ptensor::ARangeOp>(
         loc, artype, start.get(), stop.get(), step.get(), op.getDevice(),
         nullptr);
+
     rewriter.replaceOp(
-        op, createMkTnsr(loc, rewriter, gShape, arres, offsets, team));
+        op, createDistTnsr(loc, rewriter, {count}, arres, lOffs, team));
     return ::mlir::success();
   }
 };
+
+#if 0
+/// Rewriting ::imex::ptensor::CreateOp to get a distributed CreateOp if
+/// applicable. Create global, distributed output Tensor as defined by operands.
+/// The local partition (e.g. a RankedTensor) are wrapped in a
+/// non-distributed PTensor and re-applied to CreateOp.
+/// op gets replaced with global DistTensor
+// struct DistCreateOpRWP : public RecOpRewritePattern<::imex::ptensor::CreateOp> {
+//   using RecOpRewritePattern::RecOpRewritePattern;
+
+//   ::mlir::LogicalResult
+//   matchAndRewrite(::imex::ptensor::CreateOp op,
+//                   ::mlir::PatternRewriter &rewriter) const override {
+//     auto loc = op.getLoc();
+//     // nothing to do if no team
+//     auto team = op.getTeam();
+//     if (!team)
+//       return ::mlir::failure();
+
+//     auto shape = op.getShape();
+//     int64_t rank = shape.size();
+//     // global shape is identical to operand
+//     auto gShape = createMemRefFromElements(rewriter, loc, indexTyp, shape);
+//     // get number of procs and prank
+//     auto nProcs = rewriter.create<::imex::dist::NProcsOp>(loc, team);
+//     auto pRank = rewriter.create<::imex::dist::PRankOp>(loc, team);
+//     // get local shape
+//     auto lShape = rewriter.create<::imex::dist::ComputeLocalShapeOp>(
+//         loc, rank, nProcs, pRank, gShape);
+
+// }
+#endif
 
 /// Rewrite ::imex::ptensor::EWBinOp to get a distributed ewbinop
 /// if operands are distributed.
@@ -324,24 +325,23 @@ struct DistEWBinOpRWP : public RecOpRewritePattern<::imex::ptensor::EWBinOp> {
     }
 
     // local ewb operands
-    auto lLhs = createGetLocal(loc, rewriter, op.getLhs());
-    auto lRhs = createGetLocal(loc, rewriter, op.getRhs());
+    auto lLhs = createLocalTnsrOf(loc, rewriter, op.getLhs());
+    auto lRhs = createLocalTnsrOf(loc, rewriter, op.getRhs());
     // return type same as lhs for now
     auto retPtTyp = lLhs.getType(); // FIXME
     auto ewbres = rewriter.create<::imex::ptensor::EWBinOp>(
         loc, retPtTyp, op.getOp(), lLhs, lRhs);
     // get rank, global shape, offsets and team
     int64_t rank = (int64_t)lhsDtTyp.getPTensorType().getRank();
-    auto gShape = rewriter.create<::imex::dist::ExtractFromDistOp>(
-        loc, ::imex::dist::GSHAPE, op.getLhs());
     auto team = createTeamOf(loc, rewriter, op.getLhs());
+    auto gShape = createGlobalShapeOf(loc, rewriter, op.getLhs());
     auto nProcs = rewriter.create<::imex::dist::NProcsOp>(loc, team);
     auto pRank = rewriter.create<::imex::dist::PRankOp>(loc, team);
-    auto lOffs = rewriter.create<::imex::dist::LocalOffsetsOp>(
+    auto lPart = rewriter.create<::imex::dist::LocalPartitionOp>(
         loc, rank, nProcs, pRank, gShape);
     // and init our new dist tensor
-    rewriter.replaceOp(
-        op, createMkTnsr(loc, rewriter, gShape, ewbres, lOffs, team));
+    rewriter.replaceOp(op, createDistTnsr(loc, rewriter, gShape, ewbres,
+                                          lPart.getLOffsets(), team));
     return ::mlir::success();
   }
 };
@@ -370,7 +370,7 @@ struct DistReductionOpRWP
     }
 
     // Local reduction
-    auto local = createGetLocal(loc, rewriter, op.getInput());
+    auto local = createLocalTnsrOf(loc, rewriter, op.getInput());
     // return type 0d with same dtype as input
     int64_t rank = 0;
     auto dtype = inpDtTyp.getPTensorType().getElementType();
@@ -382,19 +382,18 @@ struct DistReductionOpRWP
     auto retRTnsr = createAllReduce(loc, rewriter, op.getOp(), redPTnsr);
     // get global shape, offsets and team
     // result shape is 0d
-    auto gShape = rewriter.create<::imex::dist::ExtractFromDistOp>(
-        loc, ::imex::dist::GSHAPE, op.getInput());
+    auto gShape = createGlobalShapeOf(loc, rewriter, op.getInput());
     auto team = createTeamOf(loc, rewriter, op.getInput());
     auto nProcs = rewriter.create<::imex::dist::NProcsOp>(loc, team);
     auto pRank = rewriter.create<::imex::dist::PRankOp>(loc, team);
-    auto lOffs = rewriter.create<::imex::dist::LocalOffsetsOp>(
+    auto lPart = rewriter.create<::imex::dist::LocalPartitionOp>(
         loc, rank ? rank : 1, nProcs, pRank, gShape);
     // and init our new dist tensor
     auto dmy = ::imex::createInt<1>(loc, rewriter, 0); // FIXME
     auto resPTnsr = rewriter.create<::imex::ptensor::MkPTensorOp>(
         loc, false, retRTnsr, dmy);
-    rewriter.replaceOp(
-        op, createMkTnsr(loc, rewriter, gShape, resPTnsr, lOffs, team));
+    rewriter.replaceOp(op, createDistTnsr(loc, rewriter, gShape, resPTnsr,
+                                          lPart.getLOffsets(), team));
     return ::mlir::success();
   }
 };
@@ -418,6 +417,7 @@ struct PTensorDistPass : public ::imex::PTensorDistBase<PTensorDistPass> {
 };
 
 } // namespace
+} // namespace dist
 
 /// Populate the given list with patterns that eliminate Dist ops
 void populatePTensorDistPatterns(::mlir::LLVMTypeConverter &converter,
@@ -427,7 +427,7 @@ void populatePTensorDistPatterns(::mlir::LLVMTypeConverter &converter,
 
 /// Create a pass to eliminate Dist ops
 std::unique_ptr<::mlir::Pass> createPTensorDistPass() {
-  return std::make_unique<PTensorDistPass>();
+  return std::make_unique<::imex::dist::PTensorDistPass>();
 }
 
 } // namespace imex

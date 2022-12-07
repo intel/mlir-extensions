@@ -31,8 +31,8 @@ module {
 // -----
 module {
     "dist.runtime_prototypes"() : () -> ()
-    func.func @test_init_dist_tensor(%gshape: memref<1xindex>, %pt: !ptensor.ptensor<1 x i64>, %loffs: memref<1xindex>, %team: index) -> !dist.dtensor<<1 x i64>> {
-        %1 = "dist.init_dist_tensor"(%gshape, %pt, %loffs, %team) : (memref<1xindex>, !ptensor.ptensor<1 x i64>, memref<1xindex>, index) -> !dist.dtensor<<1 x i64>>
+    func.func @test_init_dist_tensor(%gshape: index, %pt: !ptensor.ptensor<1 x i64>, %loffs: index, %team: index) -> !dist.dtensor<<1 x i64>> {
+        %1 = "dist.init_dist_tensor"(%gshape, %pt, %loffs, %team) : (index, !ptensor.ptensor<1 x i64>, index, index) -> !dist.dtensor<<1 x i64>>
         return %1 : !dist.dtensor<<1 x i64>>
     }
 }
@@ -45,33 +45,17 @@ module {
 // -----
 module {
     "dist.runtime_prototypes"() : () -> ()
-    func.func @test_local_offsets(%np : index, %prank: index, %shape: memref<1xindex>) -> memref<1xindex> {
-        %0 = "dist.local_offsets"(%np, %prank, %shape) {rank = 1 : i64} : (index, index, memref<1xindex>) -> memref<1xindex>
-        return %0 : memref<1xindex>
+    func.func @test_local_partition(%np : index, %prank: index, %shape: index) -> (index, index) {
+        %0, %1 = "dist.local_partition"(%np, %prank, %shape) {rank = 1 : i64} : (index, index, index) -> (index, index)
+        return %0, %1 : index, index
     }
 }
 // CHECK-LABEL: func.func private @_idtr_nprocs(index) -> index
 // CHECK-LABEL: func.func private @_idtr_prank(index) -> index
 // CHECK-LABEL: func.func private @_idtr_reduce_all(memref<*xi64>, i32, i32)
-// CHECK-LABEL: func.func @test_local_offsets(%arg0: index, %arg1: index, %arg2: memref<1xindex>) -> memref<1xindex> {
-// CHECK: memref.load
+// CHECK-LABEL: func.func @test_local_partition(%arg0: index, %arg1: index, %arg2: index) -> (index, index) {
 // CHECK: arith.subi
 // CHECK: arith.muli
-
-// -----
-module {
-    "dist.runtime_prototypes"() : () -> ()
-    func.func @test_local_shape(%np : index, %prank: index, %shape: memref<1xindex>) -> memref<1xindex> {
-        %0 = "dist.local_shape"(%np, %prank, %shape) {rank = 1 : i64} : (index, index, memref<1xindex>) -> memref<1xindex>
-        return %0 : memref<1xindex>
-    }
-}
-// CHECK-LABEL: func.func private @_idtr_nprocs(index) -> index
-// CHECK-LABEL: func.func private @_idtr_prank(index) -> index
-// CHECK-LABEL: func.func private @_idtr_reduce_all(memref<*xi64>, i32, i32)
-// CHECK-LABEL: func.func @test_local_shape(%arg0: index, %arg1: index, %arg2: memref<1xindex>) -> memref<1xindex> {
-// CHECK: memref.load
-// CHECK: arith.subi
 
 // -----
 module {
@@ -96,10 +80,9 @@ module {
         return %l_offsets, %l_sizes, %g_offsets : index, index, index
     }
 }
-// CHECK-LABEL: func.func @test_local_of_slice(%arg0: memref<?xindex>, %arg1: !ptensor.ptensor<1 x i64>, %arg2: memref<?xindex>, %arg3: index) -> (index, index, index) {
+// CHECK-LABEL: func.func @test_local_of_slice(%arg0: memref<1xindex>, %arg1: !ptensor.ptensor<1 x i64>, %arg2: memref<1xindex>, %arg3: index) -> (index, index, index) {
 // CHECK: "ptensor.extract_tensor"(%arg1) : (!ptensor.ptensor<1 x i64>) -> memref<?xi64, strided<[?], offset: ?>>
 // CHECK: memref.dim %0, %c0_0 : memref<?xi64, strided<[?], offset: ?>>
-// CHECK: memref.load %arg2[%c0_0] : memref<?xindex>
 // CHECK: arith.cmpi ult
 // CHECK: arith.cmpi ule
 // CHECK: arith.select

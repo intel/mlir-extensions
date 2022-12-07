@@ -41,17 +41,21 @@ namespace dist {
 
 /// After full conversion the cast is expected
 /// to have no use. FIXME Is there a better/cleaner way to do this?
-::mlir::Value materializeDistTensor(::mlir::OpBuilder &builder,
-                                    ::mlir::Location loc, ::mlir::Value gshape,
-                                    ::mlir::Value ltensor,
-                                    ::mlir::Value loffsets,
-                                    ::mlir::Value team) {
+::mlir::Value
+materializeDistTensor(::mlir::OpBuilder &builder, ::mlir::Location loc,
+                      ::mlir::ValueRange gshape, ::mlir::Value ltensor,
+                      ::mlir::ValueRange loffsets, ::mlir::Value team) {
+  // materialize gshape and loffsets into memrefs
+  auto gShape =
+      createMemRefFromElements(builder, loc, builder.getIndexType(), gshape);
+  auto lOffsets =
+      createMemRefFromElements(builder, loc, builder.getIndexType(), loffsets);
   // Put named arguments into given Vector in a well defined order,
   // so that extraction is correct
   ::std::array<::mlir::Value, ::imex::dist::INFO_LAST> vals;
-  vals[::imex::dist::GSHAPE] = gshape;
+  vals[::imex::dist::GSHAPE] = gShape;
   vals[::imex::dist::LTENSOR] = ltensor;
-  vals[::imex::dist::LOFFSETS] = loffsets;
+  vals[::imex::dist::LOFFSETS] = lOffsets;
   vals[::imex::dist::TEAM] = team;
   return builder
       .create<::mlir::UnrealizedConversionCastOp>(
@@ -62,8 +66,6 @@ namespace dist {
           vals)
       .getResult(0);
 };
-
-} // namespace dist
 
 namespace {
 
@@ -87,8 +89,9 @@ inline void requireFunc(::mlir::Location &loc, ::mlir::OpBuilder &builder,
 
 // RuntimePrototypesOp -> func.func ops
 struct RuntimePrototypesOpConverter
-    : public mlir::OpConversionPattern<::imex::dist::RuntimePrototypesOp> {
-  using OpConversionPattern::OpConversionPattern;
+    : public ::mlir::OpConversionPattern<::imex::dist::RuntimePrototypesOp> {
+  using ::mlir::OpConversionPattern<
+      ::imex::dist::RuntimePrototypesOp>::OpConversionPattern;
 
   ::mlir::LogicalResult
   matchAndRewrite(::imex::dist::RuntimePrototypesOp op,
@@ -119,8 +122,9 @@ struct RuntimePrototypesOpConverter
 
 /// Convert ::imex::dist::NProcsOp into runtime call to _idtr_nprocs
 struct NProcsOpConverter
-    : public mlir::OpConversionPattern<::imex::dist::NProcsOp> {
-  using OpConversionPattern::OpConversionPattern;
+    : public ::mlir::OpConversionPattern<::imex::dist::NProcsOp> {
+  using ::mlir::OpConversionPattern<
+      ::imex::dist::NProcsOp>::OpConversionPattern;
 
   ::mlir::LogicalResult
   matchAndRewrite(::imex::dist::NProcsOp op,
@@ -134,8 +138,8 @@ struct NProcsOpConverter
 
 // Convert ::imex::dist::PRankOp into runtime call to _idtr_prank
 struct PRankOpConverter
-    : public mlir::OpConversionPattern<::imex::dist::PRankOp> {
-  using OpConversionPattern::OpConversionPattern;
+    : public ::mlir::OpConversionPattern<::imex::dist::PRankOp> {
+  using ::mlir::OpConversionPattern<::imex::dist::PRankOp>::OpConversionPattern;
 
   ::mlir::LogicalResult
   matchAndRewrite(::imex::dist::PRankOp op,
@@ -152,7 +156,8 @@ struct PRankOpConverter
 /// UnrealizedConversionCastOp.
 struct InitDistTensorOpConverter
     : public ::mlir::OpConversionPattern<::imex::dist::InitDistTensorOp> {
-  using OpConversionPattern::OpConversionPattern;
+  using ::mlir::OpConversionPattern<
+      ::imex::dist::InitDistTensorOp>::OpConversionPattern;
 
   ::mlir::LogicalResult
   matchAndRewrite(::imex::dist::InitDistTensorOp op,
@@ -169,17 +174,16 @@ struct InitDistTensorOpConverter
 /// Convert ::imex::dist::ExtractFromDistOp into respective operand of defining
 /// op. InitDistTensorOpConverter is expected to be converted to a
 /// unrealized_conversion_cast.
-struct ExtractFromDistOpConverter
-    : public mlir::OpConversionPattern<::imex::dist::ExtractFromDistOp> {
-  using OpConversionPattern::OpConversionPattern;
+template <typename OP>
+struct ExtractFromDistOpConverter : public ::mlir::OpConversionPattern<OP> {
+  using ::mlir::OpConversionPattern<OP>::OpConversionPattern;
 
   ::mlir::LogicalResult
-  matchAndRewrite(::imex::dist::ExtractFromDistOp op,
-                  ::imex::dist::ExtractFromDistOp::Adaptor adaptor,
+  matchAndRewrite(OP op, typename OP::Adaptor adaptor,
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
-
-    auto defOp = adaptor.getDTensor()
-                     .getDefiningOp<::mlir::UnrealizedConversionCastOp>();
+    auto defOp =
+        adaptor.getDTensor()
+            .template getDefiningOp<::mlir::UnrealizedConversionCastOp>();
     // This can be a chain of casts, originating from type conversion like
     // type materialization for function arguments. This requires chasing the
     // chain of casts. We cannot chase casts with more than one operand
@@ -188,7 +192,7 @@ struct ExtractFromDistOpConverter
            defOp.getOperands()
                .front()
                .getType()
-               .isa<::imex::dist::DistTensorType>()) {
+               .template isa<::imex::dist::DistTensorType>()) {
       std::cerr << "defOp: ";
       defOp.dump();
       std::cerr << std::endl;
@@ -197,14 +201,31 @@ struct ExtractFromDistOpConverter
       std::cerr << std::endl;
       defOp = defOp.getOperands()
                   .front()
-                  .getDefiningOp<::mlir::UnrealizedConversionCastOp>();
+                  .template getDefiningOp<::mlir::UnrealizedConversionCastOp>();
     }
     if (!defOp)
       return ::mlir::failure();
-    rewriter.replaceOp(op, defOp.getOperands()[adaptor.getWhat()]);
+
+    if constexpr (std::is_same_v<OP, ::imex::dist::GlobalShapeOfOp>) {
+      rewriter.replaceOp(op, defOp.getOperands()[GSHAPE]);
+    } else if constexpr (std::is_same_v<OP, ::imex::dist::LocalTensorOfOp>) {
+      rewriter.replaceOp(op, defOp.getOperands()[LTENSOR]);
+    } else if constexpr (std::is_same_v<OP, ::imex::dist::LocalOffsetsOfOp>) {
+      rewriter.replaceOp(op, defOp.getOperands()[LOFFSETS]);
+    } else if constexpr (std::is_same_v<OP, ::imex::dist::TeamOfOp>) {
+      rewriter.replaceOp(op, defOp.getOperands()[TEAM]);
+    }
     return ::mlir::success();
   }
 };
+
+using GlobalShapeOfOpConverter =
+    ExtractFromDistOpConverter<::imex::dist::GlobalShapeOfOp>;
+using LocalTensorOfOpConverter =
+    ExtractFromDistOpConverter<::imex::dist::LocalTensorOfOp>;
+using LocalOffsetsOfOpConverter =
+    ExtractFromDistOpConverter<::imex::dist::LocalOffsetsOfOp>;
+using TeamOfOpConverter = ExtractFromDistOpConverter<::imex::dist::TeamOfOp>;
 
 /// compute tile-size from global shape and #procs
 static ::mlir::Value createTileSize(const ::mlir::Location &loc,
@@ -219,59 +240,37 @@ static ::mlir::Value createTileSize(const ::mlir::Location &loc,
       np);
 }
 
-/// Convert ::imex::dist::LocalOffsetsOp into shape and arith calls.
+/// Convert ::imex::dist::LocalPartitionOp into shape and arith calls.
 /// We currently assume evenly split data.
-struct LocalOffsetsOpConverter
-    : public mlir::OpConversionPattern<::imex::dist::LocalOffsetsOp> {
-  using OpConversionPattern::OpConversionPattern;
+struct LocalPartitionOpConverter
+    : public ::mlir::OpConversionPattern<::imex::dist::LocalPartitionOp> {
+  using ::mlir::OpConversionPattern<
+      ::imex::dist::LocalPartitionOp>::OpConversionPattern;
 
   ::mlir::LogicalResult
-  matchAndRewrite(::imex::dist::LocalOffsetsOp op,
-                  ::imex::dist::LocalOffsetsOp::Adaptor adaptor,
+  matchAndRewrite(::imex::dist::LocalPartitionOp op,
+                  ::imex::dist::LocalPartitionOp::Adaptor adaptor,
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
     // FIXME: non-even partitions, ndims
     auto loc = op.getLoc();
-    // auto &converter = *getTypeConverter();
-    // int64_t rank = (int64_t)op.getRank();
+    int64_t rank = (int64_t)op.getRank();
 
-    auto sz0 = createIndexCast(
-        loc, rewriter,
-        rewriter.create<::mlir::memref::LoadOp>(
-            loc, adaptor.getGshape(),
-            ::mlir::ValueRange({createIndex(loc, rewriter, 0)})));
-    auto tsz = createTileSize(loc, rewriter, sz0, adaptor.getNumProcs());
-    auto off =
-        rewriter.create<mlir::arith::MulIOp>(loc, adaptor.getPrank(), tsz);
-    rewriter.replaceOp(op, createMemRefFromElements(rewriter, loc,
-                                                    rewriter.getIndexType(),
-                                                    {off.getResult()}));
-    return ::mlir::success();
-  }
-};
+    auto gShape = adaptor.getGShape();
+    auto lSz =
+        createTileSize(loc, rewriter, gShape.front(), adaptor.getNumProcs());
+    auto lOff =
+        rewriter.create<mlir::arith::MulIOp>(loc, adaptor.getPRank(), lSz);
 
-/// Convert ::imex::dist::LocalShapeOp into shape and arith calls.
-/// We currently assume evenly split data.
-struct LocalShapeOpConverter
-    : public mlir::OpConversionPattern<::imex::dist::LocalShapeOp> {
-  using OpConversionPattern::OpConversionPattern;
+    // store in result range
+    auto zero = createIndex(loc, rewriter, 0);
+    ::mlir::SmallVector<::mlir::Value> res(2 * rank, zero);
+    res[0] = lOff;
+    res[rank] = lSz;
+    for (int64_t i = 1; i < rank; ++i) {
+      res[rank + i] = gShape[i];
+    }
 
-  ::mlir::LogicalResult
-  matchAndRewrite(::imex::dist::LocalShapeOp op,
-                  ::imex::dist::LocalShapeOp::Adaptor adaptor,
-                  ::mlir::ConversionPatternRewriter &rewriter) const override {
-    // FIXME: non-even partitions, ndims
-    auto loc = op.getLoc();
-    // auto &converter = *getTypeConverter();
-    // int64_t rank = (int64_t)op.getRank();
-
-    auto sz0 = createIndexCast(
-        loc, rewriter,
-        rewriter.create<::mlir::memref::LoadOp>(
-            loc, adaptor.getGshape(),
-            ::mlir::ValueRange({createIndex(loc, rewriter, 0)})));
-    auto tsz = createTileSize(loc, rewriter, sz0, adaptor.getNumProcs());
-    rewriter.replaceOp(op, createMemRefFromElements(
-                               rewriter, loc, rewriter.getIndexType(), {tsz}));
+    rewriter.replaceOp(op, res);
     return ::mlir::success();
   }
 };
@@ -279,8 +278,9 @@ struct LocalShapeOpConverter
 // Compute local slice in dim 0, all other dims are not partitioned (yet)
 // return local memref of src
 struct LocalOfSliceOpConverter
-    : public mlir::OpConversionPattern<::imex::dist::LocalOfSliceOp> {
-  using OpConversionPattern::OpConversionPattern;
+    : public ::mlir::OpConversionPattern<::imex::dist::LocalOfSliceOp> {
+  using ::mlir::OpConversionPattern<
+      ::imex::dist::LocalOfSliceOp>::OpConversionPattern;
 
   ::mlir::LogicalResult
   matchAndRewrite(::imex::dist::LocalOfSliceOp op,
@@ -301,12 +301,10 @@ struct LocalOfSliceOpConverter
 
     // Get the local part of the global slice, team, rank, offsets
     int64_t rank = (int64_t)inpPtTyp.getPTensorType().getRank();
-    auto lPTnsr = rewriter.create<::imex::dist::ExtractFromDistOp>(
-        loc, ::imex::dist::LTENSOR, src);
+    auto lPTnsr = createLocalTnsrOf(loc, rewriter, src);
     auto lMemRef = rewriter.create<::imex::ptensor::ExtractMemRefOp>(
         loc, inpPtTyp.getPTensorType().getMemRefType(), lPTnsr);
-    auto lOffs = rewriter.create<::imex::dist::ExtractFromDistOp>(
-        loc, ::imex::dist::LOFFSETS, src);
+    auto lOffs = createLocalOffsetsOf(loc, rewriter, src);
     EasyIdx slcOffs0(loc, rewriter, slcOffs[0]);
     EasyIdx slcSizes0(loc, rewriter, slcSizes[0]);
     EasyIdx slcStrides0(loc, rewriter, slcStrides[0]);
@@ -318,9 +316,7 @@ struct LocalOfSliceOpConverter
         loc, rewriter,
         rewriter.create<::mlir::memref::DimOp>(loc, lMemRef, zeroIdx.get()));
     // local offset (dim 0)
-    EasyIdx lOff(loc, rewriter,
-                 rewriter.create<::mlir::memref::LoadOp>(
-                     loc, lOffs, ::mlir::ValueRange{zeroIdx.get()}));
+    EasyIdx lOff(loc, rewriter, lOffs[0]);
     // last index of local partition
     auto lEnd = lOff + lExtent;
     // check if requested slice fully before local partition
@@ -359,9 +355,9 @@ struct LocalOfSliceOpConverter
     results[1 * rank] = viewSize.get();
     results[2 * rank] = (lOff + viewOff).get();
     for (auto i = 1; i < rank; ++i) {
-      results[0 * rank] = slcOffs[i];
-      results[1 * rank] = slcSizes[i];
-      results[2 * rank] = slcOffs[i];
+      results[0 * rank + i] = slcOffs[i];
+      results[1 * rank + i] = slcSizes[i];
+      results[2 * rank + i] = slcOffs[i];
     }
 
     rewriter.replaceOp(op, results);
@@ -401,8 +397,9 @@ struct LocalOfSliceOpConverter
 /// Pass local RankedTensor as argument.
 /// Replaces op with new DistTensor.
 struct AllReduceOpConverter
-    : public mlir::OpConversionPattern<::imex::dist::AllReduceOp> {
-  using OpConversionPattern::OpConversionPattern;
+    : public ::mlir::OpConversionPattern<::imex::dist::AllReduceOp> {
+  using ::mlir::OpConversionPattern<
+      ::imex::dist::AllReduceOp>::OpConversionPattern;
 
   ::mlir::LogicalResult
   matchAndRewrite(::imex::dist::AllReduceOp op,
@@ -444,8 +441,9 @@ struct ConvertDistToStandardPass
     auto convDTensor = [&ctxt](::imex::dist::DistTensorType type,
                                ::mlir::SmallVectorImpl<::mlir::Type> &types) {
       auto rank = type.getPTensorType().getRank();
-      auto mrTyp = getMemRefType(&ctxt, {rank ? rank : 1},
-                                 ::mlir::IndexType::get(&ctxt), false);
+      std::cerr << "rankrankrankarrnkarnkrakrnakrn rank: " << rank << std::endl;
+      auto mrTyp = ::mlir::MemRefType::get(::std::array<int64_t, 1>{rank},
+                                           ::mlir::IndexType::get(&ctxt));
       types.push_back(mrTyp);
       types.push_back(type.getPTensorType());
       types.push_back(mrTyp);
@@ -482,14 +480,14 @@ struct ConvertDistToStandardPass
         [](::mlir::OpBuilder &builder, ::mlir::Location loc,
            ::imex::dist::DistTensorType resultType, ::mlir::Value value,
            ::mlir::SmallVectorImpl<::mlir::Value> &values) {
-          values.push_back(builder.create<::imex::dist::ExtractFromDistOp>(
-              loc, ::imex::dist::GSHAPE, value));
-          values.push_back(builder.create<::imex::dist::ExtractFromDistOp>(
-              loc, ::imex::dist::LTENSOR, value));
-          values.push_back(builder.create<::imex::dist::ExtractFromDistOp>(
-              loc, ::imex::dist::LOFFSETS, value));
-          values.push_back(builder.create<::imex::dist::ExtractFromDistOp>(
-              loc, ::imex::dist::TEAM, value));
+          values.push_back(createMemRefFromElements(
+              builder, loc, builder.getIndexType(),
+              createGlobalShapeOf(loc, builder, value)));
+          values.push_back(createLocalTnsrOf(loc, builder, value));
+          values.push_back(createMemRefFromElements(
+              builder, loc, builder.getIndexType(),
+              createLocalOffsetsOf(loc, builder, value)));
+          values.push_back(createTeamOf(loc, builder, value));
           return ::mlir::success();
         });
 
@@ -518,8 +516,9 @@ struct ConvertDistToStandardPass
     ::mlir::RewritePatternSet patterns(&ctxt);
     patterns.insert<RuntimePrototypesOpConverter, NProcsOpConverter,
                     PRankOpConverter, InitDistTensorOpConverter,
-                    ExtractFromDistOpConverter, LocalOffsetsOpConverter,
-                    LocalShapeOpConverter, LocalOfSliceOpConverter,
+                    LocalPartitionOpConverter, LocalOfSliceOpConverter,
+                    GlobalShapeOfOpConverter, LocalTensorOfOpConverter,
+                    LocalOffsetsOfOpConverter, TeamOfOpConverter,
                     AllReduceOpConverter>(typeConverter, &ctxt);
     // This enables the function boundary handling with the above
     // converters/meterializations
@@ -534,6 +533,7 @@ struct ConvertDistToStandardPass
 };
 
 } // namespace
+} // namespace dist
 
 /// Populate the given list with patterns that convert Dist to Standard
 void populateDistToStandardConversionPatterns(
@@ -544,7 +544,7 @@ void populateDistToStandardConversionPatterns(
 /// Create a pass that convert Dist to Standard
 std::unique_ptr<::mlir::OperationPass<::mlir::ModuleOp>>
 createConvertDistToStandardPass() {
-  return std::make_unique<ConvertDistToStandardPass>();
+  return std::make_unique<::imex::dist::ConvertDistToStandardPass>();
 }
 
 } // namespace imex

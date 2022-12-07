@@ -96,7 +96,7 @@ def PRankOp : Dist_Op<"prank", [Pure]> {
     ];
 }
 
-def InitDistTensorOp : Dist_Op<"init_dist_tensor", [Pure]> {
+def InitDistTensorOp : Dist_Op<"init_dist_tensor", [SameVariadicOperandSize, Pure]> {
     let summary = "Bind a PTensor to distributed meta information";
     let description = [{
         The attached PTensor is the local partiton of the distributed PTensor.
@@ -105,11 +105,11 @@ def InitDistTensorOp : Dist_Op<"init_dist_tensor", [Pure]> {
           - the process-local offsets
           - the distributed team
     }];
-    let arguments = (ins AnyType:$g_shape, AnyType:$p_tensor, AnyType:$l_offsets, AnyType:$team);
+    let arguments = (ins Variadic<Index>:$g_shape, AnyType:$p_tensor, Variadic<Index>:$l_offsets, AnyType:$team);
     let results = (outs Dist_Tensor);
     let builders = [
         // auto-deduce return type
-        OpBuilder<(ins "::mlir::Value":$g_shape, "::mlir::Value":$p_tensor, "::mlir::Value":$l_offsets, "::mlir::Value":$team), [{
+        OpBuilder<(ins "::mlir::ValueRange":$g_shape, "::mlir::Value":$p_tensor, "::mlir::ValueRange":$l_offsets, "::mlir::Value":$team), [{
             build($_builder, $_state,
                   ::imex::dist::DistTensorType::get($_builder.getContext(), p_tensor.getType().dyn_cast<::imex::ptensor::PTensorType>()),
                   g_shape, p_tensor, l_offsets, team);
@@ -117,73 +117,66 @@ def InitDistTensorOp : Dist_Op<"init_dist_tensor", [Pure]> {
     ];
 }
 
-def ExtractFromDistOp : Dist_Op<"extract_from_dist", []> {
-    let summary = "Get one element from the distributed meta information.";
-    let arguments = (ins I32Attr:$what, AnyType:$d_tensor);
-    let results = (outs AnyType);
+def GlobalShapeOfOp : Dist_Op<"global_shape_of", []> {
+    let summary = "Get global shape of distributed tensor.";
+    let arguments = (ins AnyType:$d_tensor);
+    let results = (outs Variadic<Index>:$g_shape);
     let builders = [
       // auto-deduce return type from from operands
-      OpBuilder<(ins "::imex::dist::INFO":$what, "::mlir::Value":$d_tensor), [{
-        auto IndexType = $_builder.getIndexType();
-        auto idx = getIntAttr<32>($_builder, what);
-        $_state.addAttribute(getWhatAttrName(odsState.name), idx);
-        $_state.addOperands(d_tensor);
-        auto ttype = d_tensor.getType().dyn_cast<::imex::dist::DistTensorType>();
-        assert(ttype);
-        int64_t rank = ttype.getPTensorType().getRank();
-        rank = rank ? rank : 1;
-        switch(idx.getInt()) {
-            case GSHAPE:
-            case LOFFSETS:
-                $_state.addTypes(::imex::getMemRefType($_builder.getContext(), rank, IndexType, false));
-                break;
-            case LTENSOR:
-                $_state.addTypes(ttype.getPTensorType());
-                break;
-            case TEAM:
-                $_state.addTypes(IndexType);
-                break;
-            default:
-                assert(!"Unknown distributed meta information requested");
-        };
+      OpBuilder<(ins "::mlir::Value":$d_tensor), [{
+        build($_builder, $_state, $_builder.getIndexType(), d_tensor);
       }]>,
     ];
 }
 
-def LocalOffsetsOp : Dist_Op<"local_offsets", []> {
-    let summary = "Compute the offsets (one for each dimension) of the local partition in number of elements.";
-    let description = [{
-        Result is a 1d memref.
-    }];
-    let arguments = (ins I64Attr:$rank, Index:$num_procs, Index:$prank, AnyType:$gshape);
-    let results = (outs AnyType);
+def LocalOffsetsOfOp : Dist_Op<"local_offsets_of", []> {
+    let summary = "Get local offsets of distributed tensor.";
+    let arguments = (ins AnyType:$d_tensor);
+    let results = (outs Variadic<Index>:$l_offsets);
     let builders = [
-        // auto-deduce return type
-        OpBuilder<(ins "int64_t":$rank, "::mlir::Value":$num_procs, "::mlir::Value":$prank, "::mlir::Value":$gshape), [{
-            build($_builder,
-                  $_state,
-                  ::imex::getMemRefType($_builder.getContext(), rank, $_builder.getIndexType(), false),
-                  $_builder.getI64IntegerAttr(rank),
-                  num_procs,
-                  prank,
-                  gshape);
-        }]>,
+      // auto-deduce return type from from operands
+      OpBuilder<(ins "::mlir::Value":$d_tensor), [{
+        build($_builder, $_state, $_builder.getIndexType(), d_tensor);
+      }]>,
     ];
 }
 
-def LocalShapeOp : Dist_Op<"local_shape", []> {
-    let summary = "Compute the shape (one for each dimension) of the local partition in number of elements.";
-    let description = [{
-        Result is a 1d memref.
-    }];
-    let arguments = (ins I64Attr:$rank, Index:$num_procs, Index:$prank, AnyType:$gshape);
-    let results = (outs AnyType);
+def LocalTensorOfOp : Dist_Op<"local_tensor_of", []> {
+    let summary = "Get local tensor of distributed tensor.";
+    let arguments = (ins AnyType:$d_tensor);
+    let results = (outs AnyType:$l_tensor);
+    let builders = [
+      // auto-deduce return type from from operands
+      OpBuilder<(ins "::mlir::Value":$d_tensor), [{
+        auto ttype = d_tensor.getType().dyn_cast<::imex::dist::DistTensorType>();
+        build($_builder, $_state, ttype.getPTensorType(), d_tensor);
+      }]>,
+    ];
+}
+
+def TeamOfOp : Dist_Op<"team_of", []> {
+    let summary = "Get team of distributed tensor.";
+    let arguments = (ins AnyType:$d_tensor);
+    let results = (outs AnyType:$team);
+    let builders = [
+      // auto-deduce return type from from operands
+      OpBuilder<(ins "::mlir::Value":$d_tensor), [{
+        build($_builder, $_state, $_builder.getIndexType(), d_tensor);
+      }]>,
+    ];
+}
+
+def LocalPartitionOp : Dist_Op<"local_partition", [SameVariadicResultSize, Pure]> {
+    let summary = "Compute the shape and offsets of the local partition in number of elements (one for each dimension).";
+    let arguments = (ins I64Attr:$rank, Index:$num_procs, Index:$p_rank, Variadic<Index>:$g_shape);
+    let results = (outs Variadic<Index>:$l_offsets, Variadic<Index>:$l_shape);
     let builders = [
         // auto-deduce return type
-        OpBuilder<(ins "int64_t":$rank, "::mlir::Value":$num_procs, "::mlir::Value":$prank, "::mlir::Value":$gshape), [{
+        OpBuilder<(ins "int64_t":$rank, "::mlir::Value":$num_procs, "::mlir::Value":$prank, "::mlir::ValueRange":$gshape), [{
+            auto IndexType = $_builder.getIndexType();
             build($_builder,
                   $_state,
-                  ::imex::getMemRefType($_builder.getContext(), rank, $_builder.getIndexType(), false),
+                  ::mlir::TypeRange{IndexType, IndexType},
                   $_builder.getI64IntegerAttr(rank),
                   num_procs,
                   prank,
