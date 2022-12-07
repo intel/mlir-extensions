@@ -1377,7 +1377,8 @@ struct LowerGpuBuiltins2Pass
           LowerGpuBuiltins2Pass, void, void, ConvertBarrierOps, ConvertGroupOps,
           ConvertGroupOpsToSubgroup, LowerBuiltinCalls> {};
 
-class ConvertArrayAllocOps : public mlir::OpRewritePattern<mlir::func::CallOp> {
+class ConvertLocalArrayAllocOps
+    : public mlir::OpRewritePattern<mlir::func::CallOp> {
 public:
   using OpRewritePattern::OpRewritePattern;
 
@@ -1386,14 +1387,8 @@ public:
                   mlir::PatternRewriter &rewriter) const override {
     auto name = op.getCallee();
 
-    bool isLocal; // Otherwise private.
-    if (name.startswith("local_array_")) {
-      isLocal = true;
-    } else if (name.startswith("private_array_")) {
-      isLocal = false;
-    } else {
+    if (!name.startswith("local_array_"))
       return mlir::failure();
-    }
 
     if (op->getNumResults() != 1)
       return mlir::failure();
@@ -1426,8 +1421,7 @@ public:
     //    auto storageClass = gpu_runtime::StorageClassAttr::get(
     //        getContext(), gpu_runtime::StorageClass::local);
 
-    auto addrSpace = isLocal ? mlir::gpu::GPUDialect::getWorkgroupAddressSpace()
-                             : mlir::gpu::GPUDialect::getPrivateAddressSpace();
+    auto addrSpace = mlir::gpu::GPUDialect::getWorkgroupAddressSpace();
 
     auto storageClass = rewriter.getI64IntegerAttr(addrSpace);
     auto typeLocal = mlir::MemRefType::get(shape, type.getElementType(),
@@ -1475,7 +1469,7 @@ public:
 
 struct LowerGpuBuiltins3Pass
     : public imex::RewriteWrapperPass<LowerGpuBuiltins3Pass, void, void,
-                                      ConvertArrayAllocOps> {};
+                                      ConvertLocalArrayAllocOps> {};
 
 class GpuLaunchSinkOpsPass
     : public mlir::PassWrapper<GpuLaunchSinkOpsPass,
