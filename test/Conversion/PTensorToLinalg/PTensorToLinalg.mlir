@@ -47,7 +47,20 @@ func.func @test_ewbin(%arg0: !ptensor.ptensor<1 x i64>) -> !ptensor.ptensor<1 x 
 // CHECK: [[C0:%.*]] = memref.dim
 // CHECK: tensor.empty([[C0]]) : tensor<?xi64>
 // CHECK: linalg.generic{{.*}}["parallel"]
-// CHECK return %{{.}} : tensor<?xi64>
+// CHECK: return %{{.}} : memref<?xi64, strided<[?], offset: ?>>
+
+// -----
+func.func @test_ewbin_3d(%arg0: !ptensor.ptensor<3 x i64>) -> !ptensor.ptensor<3 x i64> {
+    %0 = "ptensor.ewbin"(%arg0, %arg0) {op = 0 : i32} : (!ptensor.ptensor<3 x i64>, !ptensor.ptensor<3 x i64>) -> !ptensor.ptensor<3 x i64>
+    return %0 : !ptensor.ptensor<3 x i64>
+}
+// CHECK-LABEL: @test_ewbin
+// CHECK: [[C0:%.*]] = memref.dim
+// CHECK: [[C1:%.*]] = memref.dim
+// CHECK: [[C2:%.*]] = memref.dim
+// CHECK: tensor.empty([[C0]], [[C1]], [[C2]]) : tensor<?x?x?xi64>
+// CHECK: linalg.generic{{.*}}["parallel", "parallel", "parallel"]
+// CHECK: return %{{.}} : memref<?x?x?xi64, strided<[?, ?, ?], offset: ?>>
 
 // -----
 func.func @test_reduction(%arg0: !ptensor.ptensor<1 x i64>) -> i64 {
@@ -58,4 +71,15 @@ func.func @test_reduction(%arg0: !ptensor.ptensor<1 x i64>) -> i64 {
 // CHECK-LABEL: @test_reduction
 // CHECK: [[C0:%.*]] = linalg.fill
 // CHECK: linalg.generic{{.*}}["reduction"]}{{.*}}outs([[C0]]
+// CHECK: return %{{.}} : i64
+
+// -----
+func.func @test_reduction_3d(%arg0: !ptensor.ptensor<3 x i64>) -> i64 {
+    %0 = "ptensor.reduction"(%arg0) {op = 4 : i32} : (!ptensor.ptensor<3 x i64>) -> !ptensor.ptensor<0 x i64>
+    %1 = builtin.unrealized_conversion_cast %0 : !ptensor.ptensor<0 x i64> to i64
+    return %1 : i64
+}
+// CHECK-LABEL: @test_reduction
+// CHECK: [[C0:%.*]] = linalg.fill
+// CHECK: linalg.generic{{.*}}["reduction", "reduction", "reduction"]}{{.*}}outs([[C0]]
 // CHECK: return %{{.}} : i64

@@ -10,7 +10,7 @@ module {
 }
 // CHECK-LABEL: func.func private @_idtr_nprocs(index) -> index
 // CHECK-LABEL: func.func private @_idtr_prank(index) -> index
-// CHECK-LABEL: func.func private @_idtr_reduce_all(memref<i64, strided<[], offset: ?>>, i32, i32)
+// CHECK-LABEL: func.func private @_idtr_reduce_all(memref<*xi64>, i32, i32)
 // CHECK-LABEL: func.func @test_nprocs(%arg0: index) -> index {
 // CHECK: @_idtr_nprocs(%arg0)
 
@@ -24,7 +24,7 @@ module {
 }
 // CHECK-LABEL: func.func private @_idtr_nprocs(index) -> index
 // CHECK-LABEL: func.func private @_idtr_prank(index) -> index
-// CHECK-LABEL: func.func private @_idtr_reduce_all(memref<i64, strided<[], offset: ?>>, i32, i32)
+// CHECK-LABEL: func.func private @_idtr_reduce_all(memref<*xi64>, i32, i32)
 // CHECK-LABEL: func.func @test_prank(%arg0: index) -> index {
 // CHECK: call @_idtr_prank(%arg0)
 
@@ -38,7 +38,7 @@ module {
 }
 // CHECK-LABEL: func.func private @_idtr_nprocs(index) -> index
 // CHECK-LABEL: func.func private @_idtr_prank(index) -> index
-// CHECK-LABEL: func.func private @_idtr_reduce_all(memref<i64, strided<[], offset: ?>>, i32, i32)
+// CHECK-LABEL: func.func private @_idtr_reduce_all(memref<*xi64>, i32, i32)
 // CHECK-LABEL: func.func @test_init_dist_tensor
 // CHECK: builtin.unrealized_conversion_cast
 
@@ -52,7 +52,7 @@ module {
 }
 // CHECK-LABEL: func.func private @_idtr_nprocs(index) -> index
 // CHECK-LABEL: func.func private @_idtr_prank(index) -> index
-// CHECK-LABEL: func.func private @_idtr_reduce_all(memref<i64, strided<[], offset: ?>>, i32, i32)
+// CHECK-LABEL: func.func private @_idtr_reduce_all(memref<*xi64>, i32, i32)
 // CHECK-LABEL: func.func @test_local_offsets(%arg0: index, %arg1: index, %arg2: memref<1xindex>) -> memref<1xindex> {
 // CHECK: memref.load
 // CHECK: arith.subi
@@ -68,7 +68,7 @@ module {
 }
 // CHECK-LABEL: func.func private @_idtr_nprocs(index) -> index
 // CHECK-LABEL: func.func private @_idtr_prank(index) -> index
-// CHECK-LABEL: func.func private @_idtr_reduce_all(memref<i64, strided<[], offset: ?>>, i32, i32)
+// CHECK-LABEL: func.func private @_idtr_reduce_all(memref<*xi64>, i32, i32)
 // CHECK-LABEL: func.func @test_local_shape(%arg0: index, %arg1: index, %arg2: memref<1xindex>) -> memref<1xindex> {
 // CHECK: memref.load
 // CHECK: arith.subi
@@ -83,7 +83,7 @@ module {
 }
 // CHECK-LABEL: func.func private @_idtr_nprocs(index) -> index
 // CHECK-LABEL: func.func private @_idtr_prank(index) -> index
-// CHECK-LABEL: func.func private @_idtr_reduce_all(memref<i64, strided<[], offset: ?>>, i32, i32)
+// CHECK-LABEL: func.func private @_idtr_reduce_all(memref<*xi64>, i32, i32)
 // CHECK-LABEL: func.func @test_allreduce(%arg0: memref<i64, strided<[], offset: ?>>) -> memref<i64, strided<[], offset: ?>> {
 // CHECK: @_idtr_reduce_all
 

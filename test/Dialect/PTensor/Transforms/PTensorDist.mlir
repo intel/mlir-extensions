@@ -1,20 +1,17 @@
 // RUN: imex-opt --split-input-file --ptensor-dist %s -verify-diagnostics -o -| FileCheck %s
 
-// -----
-
 module {
     "dist.runtime_prototypes"() : () -> ()
-func.func @test_arange(%arg0: i64, %arg1: i64, %arg2: i64) -> i64 {
-    %c0 = arith.constant 0 : index
-    %c1 = arith.constant 1 : index
-    %c3 = arith.constant 3 : index
-    %0 = "ptensor.arange"(%arg0, %arg1, %arg2, %c0, %c1) : (i64, i64, i64, index, index) -> !ptensor.ptensor<1 x i64>
-    %1 = ptensor.extract_slice %0[%c0][%c3][%c3] : !ptensor.ptensor<1 x i64> to !ptensor.ptensor<1 x i64>
-    %2 ="ptensor.ewbin"(%1, %1) {op = 0 : i32} : (!ptensor.ptensor<1 x i64>, !ptensor.ptensor<1 x i64>) -> !ptensor.ptensor<1 x i64>
-    %3 = builtin.unrealized_conversion_cast %2 : !ptensor.ptensor<1 x i64> to i64
-    return %3 : i64
-}
-}
+    func.func @test_arange(%arg0: i64, %arg1: i64, %arg2: i64) -> i64 {
+        %c0 = arith.constant 0 : index
+        %c1 = arith.constant 1 : index
+        %c3 = arith.constant 3 : index
+        %0 = "ptensor.arange"(%arg0, %arg1, %arg2, %c0, %c1) : (i64, i64, i64, index, index) -> !ptensor.ptensor<1 x i64>
+        %1 = ptensor.extract_slice %0[%c0][%c3][%c3] : !ptensor.ptensor<1 x i64> to !ptensor.ptensor<1 x i64>
+        %2 ="ptensor.ewbin"(%1, %1) {op = 0 : i32} : (!ptensor.ptensor<1 x i64>, !ptensor.ptensor<1 x i64>) -> !ptensor.ptensor<1 x i64>
+        %3 = builtin.unrealized_conversion_cast %2 : !ptensor.ptensor<1 x i64> to i64
+        return %3 : i64
+    }
 // CHECK-LABEL: func.func @test_arange
 // CHECK: arith.constant
 // CHECK: arith.constant
@@ -49,3 +46,4 @@ func.func @test_arange(%arg0: i64, %arg1: i64, %arg2: i64) -> i64 {
 // CHECK: "dist.prank"
 // CHECK: "dist.local_offsets"
 // CHECK: builtin.unrealized_conversion_cast
+}

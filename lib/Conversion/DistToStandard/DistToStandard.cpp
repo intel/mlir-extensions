@@ -110,8 +110,8 @@ struct RuntimePrototypesOpConverter
     requireFunc(loc, rewriter, module, "_idtr_prank", {indexType}, {indexType});
     requireFunc(
         loc, rewriter, module, "_idtr_reduce_all",
-        {getMemRefType(rewriter.getContext(), 0, dtype), dtypeType, opType},
-        {});
+        // {getMemRefType(rewriter.getContext(), 0, dtype), dtypeType, opType},
+        {::mlir::UnrankedMemRefType::get(dtype, {}), dtypeType, opType}, {});
     rewriter.eraseOp(op);
     return ::mlir::success();
   }
@@ -414,8 +414,11 @@ struct AllReduceOpConverter
     auto rTnsr = adaptor.getData();
     auto dtype = createInt<sizeof(int) * 8>(loc, rewriter, 5); // FIXME getDType
     auto fsa = rewriter.getStringAttr("_idtr_reduce_all");
+    auto uMemRef = rewriter.create<::mlir::memref::CastOp>(
+        loc, ::mlir::UnrankedMemRefType::get(rewriter.getI64Type(), {}), rTnsr);
     rewriter.create<::mlir::func::CallOp>(
-        loc, fsa, ::mlir::TypeRange(), ::mlir::ValueRange({rTnsr, dtype, opV}));
+        loc, fsa, ::mlir::TypeRange(),
+        ::mlir::ValueRange({uMemRef, dtype, opV}));
     rewriter.replaceOp(op, rTnsr);
     return ::mlir::success();
   }
