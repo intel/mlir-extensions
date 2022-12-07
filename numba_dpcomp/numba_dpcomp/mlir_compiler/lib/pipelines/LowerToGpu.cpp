@@ -1288,7 +1288,7 @@ public:
       //      auto storageClass = gpu_runtime::StorageClassAttr::get(
       //          getContext(), gpu_runtime::StorageClass::local);
       auto storageClass = rewriter.getI64IntegerAttr(
-          mlir::gpu::GPUDialect::getPrivateAddressSpace());
+          mlir::gpu::GPUDialect::getWorkgroupAddressSpace());
       auto memrefType = mlir::MemRefType::get(mlir::ShapedType::kDynamic,
                                               elemType, nullptr, storageClass);
       groupBuffer = rewriter
@@ -1385,8 +1385,15 @@ public:
   matchAndRewrite(mlir::func::CallOp op,
                   mlir::PatternRewriter &rewriter) const override {
     auto name = op.getCallee();
-    if (!name.startswith("local_array_"))
+
+    bool isLocal; // Otherwise private.
+    if (name.startswith("local_array_")) {
+      isLocal = true;
+    } else if (name.startswith("private_array_")) {
+      isLocal = false;
+    } else {
       return mlir::failure();
+    }
 
     if (op->getNumResults() != 1)
       return mlir::failure();
@@ -1418,8 +1425,11 @@ public:
     // TODO: Fix storage class upstream
     //    auto storageClass = gpu_runtime::StorageClassAttr::get(
     //        getContext(), gpu_runtime::StorageClass::local);
-    auto storageClass = rewriter.getI64IntegerAttr(
-        mlir::gpu::GPUDialect::getPrivateAddressSpace());
+
+    auto addrSpace = isLocal ? mlir::gpu::GPUDialect::getWorkgroupAddressSpace()
+                             : mlir::gpu::GPUDialect::getPrivateAddressSpace();
+
+    auto storageClass = rewriter.getI64IntegerAttr(addrSpace);
     auto typeLocal = mlir::MemRefType::get(shape, type.getElementType(),
                                            nullptr, storageClass);
 

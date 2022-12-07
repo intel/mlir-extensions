@@ -324,6 +324,43 @@ def _local_array_impl(builder, shape, dtype):
     )
 
 
+class private(Stub):
+    pass
+
+
+def private_array(shape, dtype):
+    _stub_error()
+
+
+setattr(private, "array", private_array)
+
+
+@infer_global(private_array)
+class _PrivateId(AbstractTemplate):
+    def generic(self, args, kws):
+        shape = kws["shape"] if "shape" in kws else args[0]
+        dtype = kws["dtype"] if "dtype" in kws else args[1]
+
+        ndim = parse_shape(shape)
+        dtype = parse_dtype(dtype)
+        arr_type = Array(dtype=dtype, ndim=ndim, layout="C")
+        return signature(arr_type, shape, dtype)
+
+
+@registry.register_func("private_array", private_array)
+def _private_array_impl(builder, shape, dtype):
+    try:
+        len(shape)  # will raise if not available
+    except:
+        shape = (shape,)
+
+    func_name = f"private_array_{dtype_str(builder, dtype)}_{len(shape)}"
+    res = builder.init_tensor(shape, dtype)
+    return builder.external_call(
+        func_name, inputs=shape, outputs=res, return_tensor=True
+    )
+
+
 class group(Stub):
     pass
 

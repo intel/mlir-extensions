@@ -1097,9 +1097,13 @@ convertStorageClass(mlir::Attribute src) {
   //  if (sc == gpu_runtime::StorageClass::local)
   //    return mlir::spirv::StorageClass::Workgroup;
 
-  if (auto attr = src.dyn_cast_or_null<mlir::IntegerAttr>())
-    if (attr.getInt() == mlir::gpu::GPUDialect::getPrivateAddressSpace())
+  if (auto attr = src.dyn_cast_or_null<mlir::IntegerAttr>()) {
+    if (attr.getInt() == mlir::gpu::GPUDialect::getWorkgroupAddressSpace())
       return mlir::spirv::StorageClass::Workgroup;
+
+    if (attr.getInt() == mlir::gpu::GPUDialect::getPrivateAddressSpace())
+      return mlir::spirv::StorageClass::Function;
+  }
 
   return llvm::None;
 }
