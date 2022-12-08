@@ -1,11 +1,11 @@
 // RUN: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-cpu.pp \
 // RUN:                                       --runner mlir-cpu-runner -e main \
-// RUN:                                       --shared-libs=%mlir_runner_utils \
+// RUN:                                       --shared-libs=%mlir_runner_utils,%mlir_c_runner_utils \
 // RUN:                                       --entry-point-result=void | FileCheck %s
 // RUN: %gpu_skip || %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-llvm.pp \
 // RUN:                                       --runner mlir-cpu-runner -e main \
 // RUN:                                       --entry-point-result=void \
-// RUN:                                       --shared-libs=%mlir_runner_utils,%levelzero_runtime | FileCheck %s
+// RUN:                                       --shared-libs=%mlir_runner_utils,%mlir_c_runner_utils,%levelzero_runtime | FileCheck %s
 #map0 = affine_map<(d0, d1, d2, d3) -> (d0, d1, d2, d3)>
 #map1 = affine_map<(d0, d1, d2, d3) -> (d3)>
 #map2 = affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d0, d1 + d4, d2 + d5, d6)>
@@ -189,4 +189,5 @@ module @mnist_cnn {
 // CHECK: Unranked Memref base@ = {{0x[-9a-f]*}}
 // CHECK-SAME: rank = {{.}} offset = {{.}} sizes = [1, 100] strides = {{.*}} data =
 // CHECK: 0.01
-// CHECK-COUNT-99: 0.01
+// CHECK: 0.01
+// CHECK: 0.01
