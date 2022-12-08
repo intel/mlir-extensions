@@ -1,9 +1,6 @@
 name: bisect
 
 on:
-  pull_request:
-    branches:
-      - refactor
   workflow_dispatch:
     inputs:
       last_good_commit:
