@@ -450,7 +450,7 @@ private:
     //    auto localMemStorageClass = gpu_runtime::StorageClassAttr::get(
     //        getContext(), gpu_runtime::StorageClass::local);
     auto localMemStorageClass = rewriter.getI64IntegerAttr(
-        mlir::gpu::GPUDialect::getPrivateAddressSpace());
+        mlir::gpu::GPUDialect::getWorkgroupAddressSpace());
 
     auto computeTypeSize = [&](mlir::Type type) -> mlir::Value {
       // %Size = getelementptr %T* null, int 1
@@ -587,7 +587,7 @@ private:
     //    auto localstorageClass = gpu_runtime::StorageClassAttr::get(
     //        getContext(), gpu_runtime::StorageClass::local);
     auto localMemStorageClass = rewriter.getI64IntegerAttr(
-        mlir::gpu::GPUDialect::getPrivateAddressSpace());
+        mlir::gpu::GPUDialect::getWorkgroupAddressSpace());
     bool isLocal = memrefType.getMemorySpace() == localMemStorageClass;
 
     if (isShared && isLocal)

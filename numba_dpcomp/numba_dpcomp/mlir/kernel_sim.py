@@ -28,6 +28,7 @@ from .kernel_impl import (
     barrier,
     mem_fence,
     local,
+    private,
     group,
 )
 
@@ -147,6 +148,12 @@ class local_proxy:
         return arr
 
 
+class private_proxy:
+    @staticmethod
+    def array(shape, dtype):
+        return np.zeros(shape, dtype)
+
+
 def _reduce_impl(state, value, op):
     if state.current_task[0] == 0:
         state.reduce_val[0] = value
@@ -201,6 +208,8 @@ _globals_to_replace = [
     ("mem_fence", mem_fence, mem_fence_proxy),
     ("local", local, local_proxy),
     ("local_array", local.array, local_proxy.array),
+    ("private", private, private_proxy),
+    ("private_array", private.array, private_proxy.array),
     ("group", group, group_proxy),
     ("group_reduce_add", group.reduce_add, group_proxy.reduce_add),
 ]
