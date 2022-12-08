@@ -32,6 +32,16 @@ namespace imex {
 // *******************************
 
 namespace dist {
+
+// Create a DistTensor from a PTensor and meta data
+inline ::mlir::Value
+createDistTensor(::mlir::Location &loc, ::mlir::OpBuilder &builder,
+                 ::mlir::ValueRange gshape, ::mlir::Value pt,
+                 ::mlir::ValueRange loffsets, ::mlir::Value team) {
+  return builder.create<::imex::dist::InitDistTensorOp>(loc, gshape, pt,
+                                                        loffsets, team);
+}
+
 // create operation returning global shape of DistTensor
 inline ::mlir::ValueRange createGlobalShapeOf(::mlir::Location &loc,
                                               ::mlir::OpBuilder &builder,
@@ -47,9 +57,9 @@ inline ::mlir::ValueRange createLocalOffsetsOf(::mlir::Location &loc,
 }
 
 // create returning the local Tensor of DistTensor
-inline ::mlir::Value createLocalTnsrOf(::mlir::Location &loc,
-                                       ::mlir::OpBuilder &builder,
-                                       ::mlir::Value dt) {
+inline ::mlir::Value createLocalTensorOf(::mlir::Location &loc,
+                                         ::mlir::OpBuilder &builder,
+                                         ::mlir::Value dt) {
   return builder.create<::imex::dist::LocalTensorOfOp>(loc, dt).getLTensor();
 }
 
@@ -107,6 +117,20 @@ inline ::mlir::Value createMemRefFromElements(::mlir::OpBuilder &builder,
     (void)builder.create<::mlir::memref::StoreOp>(loc, elts[i], mr, idx);
   }
   return mr;
+}
+
+/// @return members of given 1d memref as individual values
+inline auto createValuesFromMemRef(::mlir::OpBuilder &builder,
+                                   ::mlir::Location loc, ::mlir::Value mr) {
+  auto mrTyp = mr.getType().dyn_cast<::mlir::MemRefType>();
+  assert(mrTyp && mrTyp.getShape().size() == 1);
+  auto rank = mrTyp.getShape()[0];
+  ::mlir::SmallVector<::mlir::Value> vals(rank);
+  for (auto i = 0; i < rank; ++i) {
+    auto _i = createIndex(loc, builder, i);
+    vals[i] = builder.create<::mlir::memref::LoadOp>(loc, mr, _i).getResult();
+  }
+  return vals;
 }
 
 } // namespace imex

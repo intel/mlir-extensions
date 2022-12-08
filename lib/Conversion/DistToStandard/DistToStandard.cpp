@@ -41,31 +41,15 @@ namespace dist {
 
 /// After full conversion the cast is expected
 /// to have no use. FIXME Is there a better/cleaner way to do this?
-::mlir::Value
-materializeDistTensor(::mlir::OpBuilder &builder, ::mlir::Location loc,
-                      ::mlir::ValueRange gshape, ::mlir::Value ltensor,
-                      ::mlir::ValueRange loffsets, ::mlir::Value team) {
-  // materialize gshape and loffsets into memrefs
-  auto gShape =
-      createMemRefFromElements(builder, loc, builder.getIndexType(), gshape);
-  auto lOffsets =
-      createMemRefFromElements(builder, loc, builder.getIndexType(), loffsets);
-  // Put named arguments into given Vector in a well defined order,
-  // so that extraction is correct
-  ::std::array<::mlir::Value, ::imex::dist::INFO_LAST> vals;
-  vals[::imex::dist::GSHAPE] = gShape;
-  vals[::imex::dist::LTENSOR] = ltensor;
-  vals[::imex::dist::LOFFSETS] = lOffsets;
-  vals[::imex::dist::TEAM] = team;
-  return builder
-      .create<::mlir::UnrealizedConversionCastOp>(
-          loc,
-          ::imex::dist::DistTensorType::get(
-              builder.getContext(),
-              ltensor.getType().dyn_cast<imex::ptensor::PTensorType>()),
-          vals)
-      .getResult(0);
-};
+// ::mlir::Value
+// materializeDistTensor(::mlir::OpBuilder &builder, ::mlir::Location loc,
+//                       ::mlir::Value gshape, ::mlir::Value ltensor,
+//                       ::mlir::Value loffsets, ::mlir::Value team) {
+//   // materialize gshape and loffsets into memrefs
+//   auto gShape = createValuesFromMemRef(builder, loc, gshape);
+//   auto lOffsets = createValuesFromMemRef(builder, loc, loffsets);
+//   return createDistTensor(loc, builder, gShape, ltensor, lOffsets, team);
+// };
 
 namespace {
 
@@ -151,9 +135,7 @@ struct PRankOpConverter
   }
 };
 
-/// Convert ::imex::dist::InitDistTensorOp
-/// Using materializeDistTensor to guarantee proper order in
-/// UnrealizedConversionCastOp.
+/// Erase ::imex::dist::InitDistTensorOp; it is a dummy op
 struct InitDistTensorOpConverter
     : public ::mlir::OpConversionPattern<::imex::dist::InitDistTensorOp> {
   using ::mlir::OpConversionPattern<
@@ -163,17 +145,14 @@ struct InitDistTensorOpConverter
   matchAndRewrite(::imex::dist::InitDistTensorOp op,
                   ::imex::dist::InitDistTensorOp::Adaptor adaptor,
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOp(op, ::imex::dist::materializeDistTensor(
-                               rewriter, op.getLoc(), adaptor.getGShape(),
-                               adaptor.getPTensor(), adaptor.getLOffsets(),
-                               adaptor.getTeam()));
+    rewriter.eraseOp(op);
     return ::mlir::success();
   }
 };
 
 /// Convert ::imex::dist::ExtractFromDistOp into respective operand of defining
-/// op. InitDistTensorOpConverter is expected to be converted to a
-/// unrealized_conversion_cast.
+/// op. We assume the defining op is either InitDistTensorOp or it is an
+/// block-argument which was converted by a unrealized_conversion_cast.
 template <typename OP>
 struct ExtractFromDistOpConverter : public ::mlir::OpConversionPattern<OP> {
   using ::mlir::OpConversionPattern<OP>::OpConversionPattern;
@@ -181,39 +160,44 @@ struct ExtractFromDistOpConverter : public ::mlir::OpConversionPattern<OP> {
   ::mlir::LogicalResult
   matchAndRewrite(OP op, typename OP::Adaptor adaptor,
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
-    auto defOp =
-        adaptor.getDTensor()
-            .template getDefiningOp<::mlir::UnrealizedConversionCastOp>();
-    // This can be a chain of casts, originating from type conversion like
-    // type materialization for function arguments. This requires chasing the
-    // chain of casts. We cannot chase casts with more than one operand
-    // without getting into realms of unclear semantics.
-    while (defOp && defOp.getOperands().size() == 1 &&
-           defOp.getOperands()
-               .front()
-               .getType()
-               .template isa<::imex::dist::DistTensorType>()) {
-      std::cerr << "defOp: ";
-      defOp.dump();
-      std::cerr << std::endl;
-      std::cerr << "oprnd: ";
-      defOp.getOperands().front().dump();
-      std::cerr << std::endl;
-      defOp = defOp.getOperands()
-                  .front()
-                  .template getDefiningOp<::mlir::UnrealizedConversionCastOp>();
-    }
-    if (!defOp)
-      return ::mlir::failure();
+    auto defOp = op.getDTensor()
+                     .template getDefiningOp<::imex::dist::InitDistTensorOp>();
+    if (defOp) {
+      // here this is from a normal InitDistTensorOp; we can extract operands
+      // from it
+      if constexpr (std::is_same_v<OP, ::imex::dist::GlobalShapeOfOp>) {
+        rewriter.replaceOp(op, defOp.getGShape());
+      } else if constexpr (std::is_same_v<OP, ::imex::dist::LocalTensorOfOp>) {
+        rewriter.replaceOp(op, defOp.getPTensor());
+      } else if constexpr (std::is_same_v<OP, ::imex::dist::LocalOffsetsOfOp>) {
+        rewriter.replaceOp(op, defOp.getLOffsets());
+      } else if constexpr (std::is_same_v<OP, ::imex::dist::TeamOfOp>) {
+        rewriter.replaceOp(op, defOp.getTeam());
+      }
+    } else {
+      // disttensor block args get type-converted into
+      // UnrealizedConversionCastOp
+      auto castOp =
+          adaptor.getDTensor()
+              .template getDefiningOp<::mlir::UnrealizedConversionCastOp>();
+      if (!castOp)
+        return ::mlir::failure();
 
-    if constexpr (std::is_same_v<OP, ::imex::dist::GlobalShapeOfOp>) {
-      rewriter.replaceOp(op, defOp.getOperands()[GSHAPE]);
-    } else if constexpr (std::is_same_v<OP, ::imex::dist::LocalTensorOfOp>) {
-      rewriter.replaceOp(op, defOp.getOperands()[LTENSOR]);
-    } else if constexpr (std::is_same_v<OP, ::imex::dist::LocalOffsetsOfOp>) {
-      rewriter.replaceOp(op, defOp.getOperands()[LOFFSETS]);
-    } else if constexpr (std::is_same_v<OP, ::imex::dist::TeamOfOp>) {
-      rewriter.replaceOp(op, defOp.getOperands()[TEAM]);
+      // here this is from a block arg; we can extract operands from the
+      // inserted cast
+      if constexpr (std::is_same_v<OP, ::imex::dist::GlobalShapeOfOp>) {
+        rewriter.replaceOp(op,
+                           createValuesFromMemRef(rewriter, op.getLoc(),
+                                                  castOp.getInputs()[GSHAPE]));
+      } else if constexpr (std::is_same_v<OP, ::imex::dist::LocalTensorOfOp>) {
+        rewriter.replaceOp(op, castOp.getInputs()[LTENSOR]);
+      } else if constexpr (std::is_same_v<OP, ::imex::dist::LocalOffsetsOfOp>) {
+        rewriter.replaceOp(
+            op, createValuesFromMemRef(rewriter, op.getLoc(),
+                                       castOp.getInputs()[LOFFSETS]));
+      } else if constexpr (std::is_same_v<OP, ::imex::dist::TeamOfOp>) {
+        rewriter.replaceOp(op, castOp.getInputs()[TEAM]);
+      }
     }
     return ::mlir::success();
   }
@@ -301,7 +285,7 @@ struct LocalOfSliceOpConverter
 
     // Get the local part of the global slice, team, rank, offsets
     int64_t rank = (int64_t)inpPtTyp.getPTensorType().getRank();
-    auto lPTnsr = createLocalTnsrOf(loc, rewriter, src);
+    auto lPTnsr = createLocalTensorOf(loc, rewriter, src);
     auto lMemRef = rewriter.create<::imex::ptensor::ExtractMemRefOp>(
         loc, inpPtTyp.getPTensorType().getMemRefType(), lPTnsr);
     auto lOffs = createLocalOffsetsOf(loc, rewriter, src);
@@ -441,9 +425,9 @@ struct ConvertDistToStandardPass
     auto convDTensor = [&ctxt](::imex::dist::DistTensorType type,
                                ::mlir::SmallVectorImpl<::mlir::Type> &types) {
       auto rank = type.getPTensorType().getRank();
-      std::cerr << "rankrankrankarrnkarnkrakrnakrn rank: " << rank << std::endl;
-      auto mrTyp = ::mlir::MemRefType::get(::std::array<int64_t, 1>{rank},
-                                           ::mlir::IndexType::get(&ctxt));
+      auto mrTyp =
+          ::mlir::MemRefType::get(::std::array<int64_t, 1>{rank ? rank : 1},
+                                  ::mlir::IndexType::get(&ctxt));
       types.push_back(mrTyp);
       types.push_back(type.getPTensorType());
       types.push_back(mrTyp);
@@ -464,16 +448,18 @@ struct ConvertDistToStandardPass
           .create<::mlir::UnrealizedConversionCastOp>(loc, type, inputs)
           .getResult(0);
     };
-    auto materializeDTArg =
-        [materializeCast](
-            ::mlir::OpBuilder &builder, ::imex::dist::DistTensorType type,
-            ::mlir::ValueRange inputs,
-            ::mlir::Location loc) -> ::llvm::Optional<::mlir::Value> {
-      return materializeCast(builder, type, inputs, loc);
-    };
+    // auto materializeDTArg =
+    //     [](
+    //         ::mlir::OpBuilder &builder, ::imex::dist::DistTensorType type,
+    //         ::mlir::ValueRange inputs,
+    //         ::mlir::Location loc) -> ::llvm::Optional<::mlir::Value> {
+    //   assert(inputs.size() == 4);
+    //   return materializeDistTensor(builder, loc, inputs[0], inputs[1],
+    //   inputs[2], inputs[3]);
+    // };
 
+    // typeConverter.addArgumentMaterialization(materializeDTArg);
     typeConverter.addSourceMaterialization(materializeCast);
-    typeConverter.addArgumentMaterialization(materializeDTArg);
     // the inverse of the ArgumentMaterialization splits a DistTensor into
     // multiple return args
     decomposer.addDecomposeValueConversion(
@@ -483,7 +469,7 @@ struct ConvertDistToStandardPass
           values.push_back(createMemRefFromElements(
               builder, loc, builder.getIndexType(),
               createGlobalShapeOf(loc, builder, value)));
-          values.push_back(createLocalTnsrOf(loc, builder, value));
+          values.push_back(createLocalTensorOf(loc, builder, value));
           values.push_back(createMemRefFromElements(
               builder, loc, builder.getIndexType(),
               createLocalOffsetsOf(loc, builder, value)));

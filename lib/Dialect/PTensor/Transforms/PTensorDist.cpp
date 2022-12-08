@@ -69,22 +69,6 @@ inline ::mlir::Value createAllReduce(::mlir::Location &loc,
                                                    rTnsr);
 }
 
-// Create a DistTensor from a PTensor and meta data
-inline ::mlir::Value createDistTnsr(::mlir::Location &loc,
-                                    ::mlir::OpBuilder &builder,
-                                    ::mlir::ValueRange gshape, ::mlir::Value pt,
-                                    ::mlir::ValueRange loffsets,
-                                    ::mlir::Value team) {
-#if 0
-  auto gShape = createMemRefFromElements(builder, loc,
-                                         builder.getIndexType(), gshape);
-  auto lOffsets = createMemRefFromElements(builder, loc,
-                                           builder.getIndexType(), loffsets);
-#endif
-  return builder.create<::imex::dist::InitDistTensorOp>(loc, gshape, pt,
-                                                        loffsets, team);
-}
-
 // *******************************
 // ***** Individual patterns *****
 // *******************************
@@ -119,7 +103,7 @@ struct DistExtractMemRefOpRWP
     if (!inpPtTyp) {
       return ::mlir::failure();
     }
-    auto pTnsr = createLocalTnsrOf(loc, rewriter, op.getInput());
+    auto pTnsr = createLocalTensorOf(loc, rewriter, op.getInput());
     rewriter.replaceOpWithNewOp<::imex::ptensor::ExtractMemRefOp>(
         op, inpPtTyp.getPTensorType().getMemRefType(), pTnsr);
     return ::mlir::success();
@@ -158,15 +142,15 @@ struct DistExtractSliceOpRWP
     // auto gOffsets = lSlice.getGOffsets();
 
     // create local view
-    auto lPTnsr = createLocalTnsrOf(loc, rewriter, src);
+    auto lPTnsr = createLocalTensorOf(loc, rewriter, src);
     auto lView = rewriter.create<::imex::ptensor::ExtractSliceOp>(
         loc, inpPtTyp.getPTensorType(), lPTnsr, lSlcOffsets, lSlcSizes,
         slcStrides);
 
     // init our new dist tensor
     auto team = createTeamOf(loc, rewriter, src);
-    rewriter.replaceOp(
-        op, createDistTnsr(loc, rewriter, slcSizes, lView, lSlcOffsets, team));
+    rewriter.replaceOp(op, createDistTensor(loc, rewriter, slcSizes, lView,
+                                            lSlcOffsets, team));
     return ::mlir::success();
   }
 };
@@ -205,8 +189,8 @@ struct DistInsertSliceOpRWP
     // don't need lSlice.getGOffsets();
 
     // get local ptensors and apply to InsertSliceOp
-    auto lDst = createLocalTnsrOf(loc, rewriter, dst);
-    auto lSrc = createLocalTnsrOf(loc, rewriter, src);
+    auto lDst = createLocalTensorOf(loc, rewriter, dst);
+    auto lSrc = createLocalTensorOf(loc, rewriter, src);
     rewriter.replaceOpWithNewOp<::imex::ptensor::InsertSliceOp>(
         op, lDst, lSrc, lSlcOffsets, lSlcSizes, slcStrides);
 
@@ -265,7 +249,7 @@ struct DistARangeOpRWP : public RecOpRewritePattern<::imex::ptensor::ARangeOp> {
         nullptr);
 
     rewriter.replaceOp(
-        op, createDistTnsr(loc, rewriter, {count}, arres, lOffs, team));
+        op, createDistTensor(loc, rewriter, {count}, arres, lOffs, team));
     return ::mlir::success();
   }
 };
@@ -325,8 +309,8 @@ struct DistEWBinOpRWP : public RecOpRewritePattern<::imex::ptensor::EWBinOp> {
     }
 
     // local ewb operands
-    auto lLhs = createLocalTnsrOf(loc, rewriter, op.getLhs());
-    auto lRhs = createLocalTnsrOf(loc, rewriter, op.getRhs());
+    auto lLhs = createLocalTensorOf(loc, rewriter, op.getLhs());
+    auto lRhs = createLocalTensorOf(loc, rewriter, op.getRhs());
     // return type same as lhs for now
     auto retPtTyp = lLhs.getType(); // FIXME
     auto ewbres = rewriter.create<::imex::ptensor::EWBinOp>(
@@ -340,8 +324,8 @@ struct DistEWBinOpRWP : public RecOpRewritePattern<::imex::ptensor::EWBinOp> {
     auto lPart = rewriter.create<::imex::dist::LocalPartitionOp>(
         loc, rank, nProcs, pRank, gShape);
     // and init our new dist tensor
-    rewriter.replaceOp(op, createDistTnsr(loc, rewriter, gShape, ewbres,
-                                          lPart.getLOffsets(), team));
+    rewriter.replaceOp(op, createDistTensor(loc, rewriter, gShape, ewbres,
+                                            lPart.getLOffsets(), team));
     return ::mlir::success();
   }
 };
@@ -370,7 +354,7 @@ struct DistReductionOpRWP
     }
 
     // Local reduction
-    auto local = createLocalTnsrOf(loc, rewriter, op.getInput());
+    auto local = createLocalTensorOf(loc, rewriter, op.getInput());
     // return type 0d with same dtype as input
     int64_t rank = 0;
     auto dtype = inpDtTyp.getPTensorType().getElementType();
@@ -392,8 +376,8 @@ struct DistReductionOpRWP
     auto dmy = ::imex::createInt<1>(loc, rewriter, 0); // FIXME
     auto resPTnsr = rewriter.create<::imex::ptensor::MkPTensorOp>(
         loc, false, retRTnsr, dmy);
-    rewriter.replaceOp(op, createDistTnsr(loc, rewriter, gShape, resPTnsr,
-                                          lPart.getLOffsets(), team));
+    rewriter.replaceOp(op, createDistTensor(loc, rewriter, gShape, resPTnsr,
+                                            lPart.getLOffsets(), team));
     return ::mlir::success();
   }
 };

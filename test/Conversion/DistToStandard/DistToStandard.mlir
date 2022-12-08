@@ -40,7 +40,8 @@ module {
 // CHECK-LABEL: func.func private @_idtr_prank(index) -> index
 // CHECK-LABEL: func.func private @_idtr_reduce_all(memref<*xi64>, i32, i32)
 // CHECK-LABEL: func.func @test_init_dist_tensor
-// CHECK: builtin.unrealized_conversion_cast
+// CHECK: memref.store
+// CHECK: memref.store
 
 // -----
 module {
@@ -73,16 +74,15 @@ module {
 
 // -----
 module {
-    func.func @test_local_of_slice(%arg0: !dist.dtensor<<1 x i64>>) -> (index, index, index) {
-        %c0 = arith.constant 0 : index
-        %c3 = arith.constant 3 : index
+    func.func @test_local_of_slice(%arg0: !dist.dtensor<<1 x i64>>, %c0 : index, %c3 : index) -> (index, index, index) {
         %l_offsets, %l_sizes, %g_offsets = dist.local_of_slice %arg0[%c0] [%c3] [%c3] : !dist.dtensor<<1 x i64>> to (index, index, index)
         return %l_offsets, %l_sizes, %g_offsets : index, index, index
     }
 }
-// CHECK-LABEL: func.func @test_local_of_slice(%arg0: memref<1xindex>, %arg1: !ptensor.ptensor<1 x i64>, %arg2: memref<1xindex>, %arg3: index) -> (index, index, index) {
+// CHECK-LABEL: func.func @test_local_of_slice(%arg0: memref<1xindex>, %arg1: !ptensor.ptensor<1 x i64>, %arg2: memref<1xindex>, %arg3: index, %arg4: index, %arg5: index) -> (index, index, index) {
 // CHECK: "ptensor.extract_tensor"(%arg1) : (!ptensor.ptensor<1 x i64>) -> memref<?xi64, strided<[?], offset: ?>>
-// CHECK: memref.dim %0, %c0_0 : memref<?xi64, strided<[?], offset: ?>>
+// CHECK: memref.load
+// CHECK: memref.dim
 // CHECK: arith.cmpi ult
 // CHECK: arith.cmpi ule
 // CHECK: arith.select
