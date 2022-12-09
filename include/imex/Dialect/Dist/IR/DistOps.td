@@ -124,7 +124,10 @@ def GlobalShapeOfOp : Dist_Op<"global_shape_of", []> {
     let builders = [
       // auto-deduce return type from from operands
       OpBuilder<(ins "::mlir::Value":$d_tensor), [{
-        build($_builder, $_state, $_builder.getIndexType(), d_tensor);
+        auto rank = d_tensor.getType().dyn_cast<::imex::dist::DistTensorType>().getPTensorType().getRank();
+        auto IndexType = $_builder.getIndexType();
+        ::mlir::SmallVector<::mlir::Type> rt(rank, IndexType);
+        build($_builder, $_state, ::mlir::TypeRange(rt), d_tensor);
       }]>,
     ];
 }
@@ -136,7 +139,10 @@ def LocalOffsetsOfOp : Dist_Op<"local_offsets_of", []> {
     let builders = [
       // auto-deduce return type from from operands
       OpBuilder<(ins "::mlir::Value":$d_tensor), [{
-        build($_builder, $_state, $_builder.getIndexType(), d_tensor);
+        auto rank = d_tensor.getType().dyn_cast<::imex::dist::DistTensorType>().getPTensorType().getRank();
+        auto IndexType = $_builder.getIndexType();
+        ::mlir::SmallVector<::mlir::Type> rt(rank, IndexType);
+        build($_builder, $_state, ::mlir::TypeRange(rt), d_tensor);
       }]>,
     ];
 }
@@ -174,9 +180,10 @@ def LocalPartitionOp : Dist_Op<"local_partition", [SameVariadicResultSize, Pure]
         // auto-deduce return type
         OpBuilder<(ins "::mlir::Value":$num_procs, "::mlir::Value":$prank, "::mlir::ValueRange":$gshape), [{
             auto IndexType = $_builder.getIndexType();
+            ::mlir::SmallVector<::mlir::Type> rt(gshape.size()*2, IndexType);
             build($_builder,
                   $_state,
-                  ::mlir::TypeRange{IndexType, IndexType},
+                  ::mlir::TypeRange(rt),
                   num_procs,
                   prank,
                   gshape);
@@ -210,23 +217,32 @@ def LocalOfSliceOp : Dist_Op<"local_of_slice",
         // auto-deduce return type
         OpBuilder<(ins "::mlir::Value":$d_tensor, "::mlir::ValueRange":$offsets, "::mlir::ValueRange":$sizes, "::mlir::ValueRange":$strides), [{
             auto IndexType = $_builder.getIndexType();
-            build($_builder, $_state, ::mlir::TypeRange{IndexType, IndexType, IndexType}, d_tensor, offsets, sizes, strides);
+            ::mlir::SmallVector<::mlir::Type> rt(offsets.size()*3, IndexType);
+            build($_builder, $_state, ::mlir::TypeRange(rt), d_tensor, offsets, sizes, strides);
         }]>,
     ];
 }
 
 def LocalToGlobalOp : Dist_Op<"local_to_global", [Pure]> {
-  let summary = "Translate local inidices into global indices";
-  let description = [{
-    Input inidices are interprete as relative to the local part of the given DTensor.
-  }];
+    let summary = "Translate local indices into global indices";
+    let description = [{
+        Input indices are interprete as relative to the local part of the given DTensor.
+    }];
 
-  let arguments = (ins AnyType:$d_tensor, Variadic<Index>:$l_indices);
-  let results = (outs Variadic<Index>:$g_indices);
+    let arguments = (ins AnyType:$d_tensor, Variadic<Index>:$l_indices);
+    let results = (outs Variadic<Index>:$g_indices);
 
-//   let assemblyFormat = [{
-//     $d_tensor attr-dict `:` qualified(type($source)) `to` `(`qualified(type(results))`)`
-//   }];
+    let builders = [
+        // auto-deduce return type
+        OpBuilder<(ins "::mlir::Value":$d_tensor, "::mlir::ValueRange":$lindices), [{
+            auto IndexType = $_builder.getIndexType();
+            ::mlir::SmallVector<::mlir::Type> rt(lindices.size(), IndexType);
+            build($_builder, $_state, ::mlir::TypeRange(rt), d_tensor, lindices);
+        }]>,
+    ];
+    //   let assemblyFormat = [{
+    //     $d_tensor attr-dict `:` qualified(type($source)) `to` `(`qualified(type(results))`)`
+    //   }];
 }
 
 def AllReduceOp : Dist_Op<"allreduce", []> {

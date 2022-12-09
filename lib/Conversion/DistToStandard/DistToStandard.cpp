@@ -211,19 +211,6 @@ using LocalOffsetsOfOpConverter =
     ExtractFromDistOpConverter<::imex::dist::LocalOffsetsOfOp>;
 using TeamOfOpConverter = ExtractFromDistOpConverter<::imex::dist::TeamOfOp>;
 
-/// compute tile-size from global shape and #procs
-static ::mlir::Value createTileSize(const ::mlir::Location &loc,
-                                    ::mlir::OpBuilder &builder,
-                                    ::mlir::Value sz, ::mlir::Value np) {
-  return builder.create<mlir::arith::DivUIOp>(
-      loc,
-      builder.create<mlir::arith::AddIOp>(
-          loc, sz,
-          builder.create<mlir::arith::SubIOp>(loc, np,
-                                              createIndex(loc, builder, 1))),
-      np);
-}
-
 /// Convert ::imex::dist::LocalPartitionOp into shape and arith calls.
 /// We currently assume evenly split data.
 struct LocalPartitionOpConverter
@@ -240,16 +227,21 @@ struct LocalPartitionOpConverter
     auto gShape = adaptor.getGShape();
     int64_t rank = (int64_t)gShape.size();
 
-    auto lSz =
-        createTileSize(loc, rewriter, gShape.front(), adaptor.getNumProcs());
-    auto lOff =
-        rewriter.create<mlir::arith::MulIOp>(loc, adaptor.getPRank(), lSz);
+    EasyIdx sz(loc, rewriter, gShape.front());
+    EasyIdx np(loc, rewriter, adaptor.getNumProcs());
+    EasyIdx pr(loc, rewriter, adaptor.getPRank());
+    EasyIdx one(loc, rewriter, 1);
+    EasyIdx zero(loc, rewriter, 0);
+
+    // compute tile size and local size (which can be smaller)
+    auto tSz = (sz + np - one) / np;
+    auto lOff = sz.min(tSz * pr);
+    auto lSz = sz.min(lOff + tSz) - lOff;
 
     // store in result range
-    auto zero = createIndex(loc, rewriter, 0);
-    ::mlir::SmallVector<::mlir::Value> res(2 * rank, zero);
-    res[0] = lOff;
-    res[rank] = lSz;
+    ::mlir::SmallVector<::mlir::Value> res(2 * rank, zero.get());
+    res[0] = lOff.get();
+    res[rank] = lSz.get();
     for (int64_t i = 1; i < rank; ++i) {
       res[rank + i] = gShape[i];
     }
