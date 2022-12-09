@@ -256,9 +256,9 @@ struct ARangeLowering
     auto loc = op.getLoc();
 
     // Get Operands
-    EasyIdx start(loc, rewriter, adaptor.getStart());
-    EasyIdx stop(loc, rewriter, adaptor.getStop());
-    EasyIdx step(loc, rewriter, adaptor.getStep());
+    auto start = easyIdx(loc, rewriter, adaptor.getStart());
+    auto stop = easyIdx(loc, rewriter, adaptor.getStop());
+    auto step = easyIdx(loc, rewriter, adaptor.getStep());
     auto retPtTyp = op.getType().dyn_cast<::imex::ptensor::PTensorType>();
     if (!retPtTyp)
       return ::mlir::failure();
@@ -277,8 +277,8 @@ struct ARangeLowering
                                         ::mlir::Location loc,
                                         ::mlir::ValueRange args) {
       auto dim = getIntAttr<64>(builder, 0);
-      EasyIdx idx(loc, builder,
-                  builder.create<::mlir::linalg::IndexOp>(loc, dim));
+      auto idx = easyIdx(loc, builder,
+                         builder.create<::mlir::linalg::IndexOp>(loc, dim));
       auto val = start + (step * idx);
       // auto _val = builder.create<mlir::arith::SIToFPOp>(loc, elTyp, val);
       (void)builder.create<::mlir::linalg::YieldOp>(

@@ -216,9 +216,9 @@ struct DistARangeOpRWP : public RecOpRewritePattern<::imex::ptensor::ARangeOp> {
       return ::mlir::failure();
 
     // get operands
-    EasyIdx start(loc, rewriter, op.getStart());
-    EasyIdx stop(loc, rewriter, op.getStop());
-    EasyIdx step(loc, rewriter, op.getStep());
+    auto start = easyIdx(loc, rewriter, op.getStart());
+    auto stop = easyIdx(loc, rewriter, op.getStop());
+    auto step = easyIdx(loc, rewriter, op.getStep());
     // compute global count (so we know the shape)
     auto count = createCountARange(rewriter, loc, start, stop, step);
     auto dtype = rewriter.getI64Type(); // FIXME
@@ -235,8 +235,8 @@ struct DistARangeOpRWP : public RecOpRewritePattern<::imex::ptensor::ARangeOp> {
     auto lOffs = lPart.getLOffsets();
 
     // we can now compute local arange
-    EasyIdx lSz(loc, rewriter, lShape[0]);
-    EasyIdx off(loc, rewriter, lOffs[0]);
+    auto lSz = easyIdx(loc, rewriter, lShape[0]);
+    auto off = easyIdx(loc, rewriter, lOffs[0]);
     start = start + (off * step);
     // create stop
     stop = start + (step * lSz); // start + (lShape[0] * step)
@@ -359,7 +359,6 @@ struct DistReductionOpRWP
     // Local reduction
     auto local = createLocalTensorOf(loc, rewriter, op.getInput());
     // return type 0d with same dtype as input
-    int64_t rank = 0;
     auto dtype = inpDtTyp.getPTensorType().getElementType();
     auto retPtTyp = ::imex::ptensor::PTensorType::get(rewriter.getContext(), 0,
                                                       dtype, false);

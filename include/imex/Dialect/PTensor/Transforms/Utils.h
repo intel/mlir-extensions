@@ -29,9 +29,9 @@ inline ::mlir::Value createCountARange(::mlir::OpBuilder &builder,
                                        const EasyIdx &stop,
                                        const EasyIdx &step) {
   // Create constants 0, 1, -1 for later
-  EasyIdx zero(loc, builder, 0);
-  EasyIdx one(loc, builder, 1);
-  EasyIdx mone(loc, builder, -1);
+  auto zero = easyIdx(loc, builder, 0);
+  auto one = easyIdx(loc, builder, 1);
+  auto mone = easyIdx(loc, builder, -1);
 
   // Compute number of elements as
   //   (stop - start + step + (step < 0 ? 1 : -1)) / step

@@ -227,11 +227,11 @@ struct LocalPartitionOpConverter
     auto gShape = adaptor.getGShape();
     int64_t rank = (int64_t)gShape.size();
 
-    EasyIdx sz(loc, rewriter, gShape.front());
-    EasyIdx np(loc, rewriter, adaptor.getNumProcs());
-    EasyIdx pr(loc, rewriter, adaptor.getPRank());
-    EasyIdx one(loc, rewriter, 1);
-    EasyIdx zero(loc, rewriter, 0);
+    auto sz = easyIdx(loc, rewriter, gShape.front());
+    auto np = easyIdx(loc, rewriter, adaptor.getNumProcs());
+    auto pr = easyIdx(loc, rewriter, adaptor.getPRank());
+    auto one = easyIdx(loc, rewriter, 1);
+    auto zero = easyIdx(loc, rewriter, 0);
 
     // compute tile size and local size (which can be smaller)
     auto tSz = (sz + np - one) / np;
@@ -272,8 +272,8 @@ struct LocalOfSliceOpConverter
     auto slcSizes = adaptor.getSizes();
     auto slcStrides = adaptor.getStrides();
 
-    EasyIdx zeroIdx(loc, rewriter, 0);
-    EasyIdx oneIdx(loc, rewriter, 1);
+    auto zeroIdx = easyIdx(loc, rewriter, 0);
+    auto oneIdx = easyIdx(loc, rewriter, 1);
 
     // Get the local part of the global slice, team, rank, offsets
     int64_t rank = (int64_t)inpPtTyp.getPTensorType().getRank();
@@ -281,18 +281,18 @@ struct LocalOfSliceOpConverter
     auto lMemRef = rewriter.create<::imex::ptensor::ExtractMemRefOp>(
         loc, inpPtTyp.getPTensorType().getMemRefType(), lPTnsr);
     auto lOffs = createLocalOffsetsOf(loc, rewriter, src);
-    EasyIdx slcOffs0(loc, rewriter, slcOffs[0]);
-    EasyIdx slcSizes0(loc, rewriter, slcSizes[0]);
-    EasyIdx slcStrides0(loc, rewriter, slcStrides[0]);
+    auto slcOffs0 = easyIdx(loc, rewriter, slcOffs[0]);
+    auto slcSizes0 = easyIdx(loc, rewriter, slcSizes[0]);
+    auto slcStrides0 = easyIdx(loc, rewriter, slcStrides[0]);
 
     // last index of slice
     auto slcEnd = slcOffs0 + slcSizes0 * slcStrides0;
     // local extent/size
-    EasyIdx lExtent(
+    auto lExtent = easyIdx(
         loc, rewriter,
         rewriter.create<::mlir::memref::DimOp>(loc, lMemRef, zeroIdx.get()));
     // local offset (dim 0)
-    EasyIdx lOff(loc, rewriter, lOffs[0]);
+    auto lOff = easyIdx(loc, rewriter, lOffs[0]);
     // last index of local partition
     auto lEnd = lOff + lExtent;
     // check if requested slice fully before local partition

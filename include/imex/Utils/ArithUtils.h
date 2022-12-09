@@ -174,28 +174,19 @@ template <typename T> struct EasyVal {
 };
 
 /// Special EasyVal representing an mlir::Index
-struct EasyIdx : public EasyVal<int64_t> {
-  /// Potentially cast to Index
-  EasyIdx(const ::mlir::Location &loc, ::mlir::OpBuilder &builder,
-          const ElType &value)
-      : EasyVal<int64_t>(loc, builder, createIndexCast(loc, builder, value)) {}
-  /// Create Value from C++ value
-  EasyIdx(const ::mlir::Location &loc, ::mlir::OpBuilder &builder,
-          int64_t value)
-      : EasyVal<int64_t>(loc, builder, createIndex(loc, builder, value)) {}
-  EasyIdx &operator=(const EasyVal<int64_t> &r) {
-    _loc = r._loc;
-    _builder = r._builder;
-    _value = r.get();
-    return *this;
-  }
-  EasyIdx &operator=(const EasyIdx &r) {
-    _loc = r._loc;
-    _builder = r._builder;
-    _value = r.get();
-    return *this;
-  }
-};
+/// Do not use constructors, use easyIdx(...) below.
+using EasyIdx = EasyVal<int64_t>;
+
+/// Create Index Value from MLIR value, potentially by casting
+inline EasyIdx easyIdx(const ::mlir::Location &loc, ::mlir::OpBuilder &builder,
+                       const EasyIdx::ElType &value) {
+  return EasyIdx(loc, builder, createIndexCast(loc, builder, value));
+}
+/// Create Index Value from C++ value
+inline EasyIdx easyIdx(const ::mlir::Location &loc, ::mlir::OpBuilder &builder,
+                       int64_t value) {
+  return EasyIdx(loc, builder, createIndex(loc, builder, value));
+}
 
 } // namespace imex
 
