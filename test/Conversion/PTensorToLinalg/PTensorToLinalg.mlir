@@ -27,7 +27,7 @@ func.func @test_arange(%arg0: i64, %arg1: i64, %arg2: i64) -> !ptensor.ptensor<1
 // CHECK: return %{{[0-9]+}} : memref<?xindex, strided<[?], offset: ?>>
 
 func.func @test_create(%arg0: index, %arg1: index, %arg2: i64) -> !ptensor.ptensor<2 x i64> {
-    %0 = ptensor.create %arg0, %arg1 value %arg2 {d_type = 2} : (index, index, i64) -> !ptensor.ptensor<2 x i64>
+    %0 = ptensor.create %arg0, %arg1 value %arg2 {dtype = 2 : i8} : (index, index, i64) -> !ptensor.ptensor<2 x i64>
     return %0 : !ptensor.ptensor<2 x i64>
 }
 // CHECK-LABEL: @test_create

@@ -237,9 +237,9 @@ struct LocalPartitionOpConverter
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
     // FIXME: non-even partitions, ndims
     auto loc = op.getLoc();
-    int64_t rank = (int64_t)op.getRank();
-
     auto gShape = adaptor.getGShape();
+    int64_t rank = (int64_t)gShape.size();
+
     auto lSz =
         createTileSize(loc, rewriter, gShape.front(), adaptor.getNumProcs());
     auto lOff =

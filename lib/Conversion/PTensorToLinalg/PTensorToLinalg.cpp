@@ -311,16 +311,14 @@ struct CreateLowering
     if (!retPtTyp)
       return ::mlir::failure();
     auto value = adaptor.getValue();
-    auto dtype = static_cast<::imex::ptensor::DType>(adaptor.getDType());
-    auto rank = retPtTyp.getRank();
 
     // init tensor
-    auto elTyp = ::imex::ptensor::toMLIR(rewriter, dtype);
+    auto elTyp = ::imex::ptensor::toMLIR(rewriter, op.getDType());
     auto tensor =
         createEmptyTensor(rewriter, loc, elTyp, adaptor.getShape()).getResult();
 
     auto res = createParFor(
-        loc, rewriter, rank, tensor, ::mlir::ValueRange(),
+        loc, rewriter, retPtTyp.getRank(), tensor, ::mlir::ValueRange(),
         [&value](::mlir::OpBuilder &builder, ::mlir::Location loc,
                  ::mlir::ValueRange args) {
           (void)builder.create<::mlir::linalg::YieldOp>(loc, value);

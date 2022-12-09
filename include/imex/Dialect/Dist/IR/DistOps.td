@@ -168,16 +168,15 @@ def TeamOfOp : Dist_Op<"team_of", []> {
 
 def LocalPartitionOp : Dist_Op<"local_partition", [SameVariadicResultSize, Pure]> {
     let summary = "Compute the shape and offsets of the local partition in number of elements (one for each dimension).";
-    let arguments = (ins I64Attr:$rank, Index:$num_procs, Index:$p_rank, Variadic<Index>:$g_shape);
+    let arguments = (ins Index:$num_procs, Index:$p_rank, Variadic<Index>:$g_shape);
     let results = (outs Variadic<Index>:$l_offsets, Variadic<Index>:$l_shape);
     let builders = [
         // auto-deduce return type
-        OpBuilder<(ins "int64_t":$rank, "::mlir::Value":$num_procs, "::mlir::Value":$prank, "::mlir::ValueRange":$gshape), [{
+        OpBuilder<(ins "::mlir::Value":$num_procs, "::mlir::Value":$prank, "::mlir::ValueRange":$gshape), [{
             auto IndexType = $_builder.getIndexType();
             build($_builder,
                   $_state,
                   ::mlir::TypeRange{IndexType, IndexType},
-                  $_builder.getI64IntegerAttr(rank),
                   num_procs,
                   prank,
                   gshape);

@@ -198,7 +198,7 @@ def CreateOp : PTensor_Op<"create", [AttrSizedOperandSegments]> {
         Optionally assigns it to device `device`, and team `team`.
     }];
 
-    let arguments = (ins Variadic<Index>:$shape, I64Attr:$d_type, Optional<AnyType>:$value,
+    let arguments = (ins Variadic<Index>:$shape, I8Attr:$dtype, Optional<AnyType>:$value,
                          Optional<AnyType>:$device, Optional<AnyType>:$team);
     // result is a ptensor
     let results = (outs PTensor_PTensor);
@@ -213,9 +213,15 @@ def CreateOp : PTensor_Op<"create", [AttrSizedOperandSegments]> {
             auto dt = toMLIR($_builder, dtype);
             build($_builder, $_state, ::imex::ptensor::PTensorType::get(
                 $_state.getContext(), shape.size(), dt, device ? true : false),
-                shape, $_builder.getI32IntegerAttr(dtype), value, device, team);
+                shape, $_builder.getI8IntegerAttr(dtype), value, device, team);
         }]>,
     ];
+
+    let extraClassDeclaration = [{
+      ::imex::ptensor::DType getDType() {
+        return static_cast<::imex::ptensor::DType>(getDtype());
+      }
+    }];
 }
 
 def EWBinOp : PTensor_Op<"ewbin", []> {

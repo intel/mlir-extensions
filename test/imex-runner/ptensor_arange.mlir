@@ -48,7 +48,7 @@ module {
         // CHECK-NEXT: [0,  0,  4,  1,  8]
 
 
-        %40 = ptensor.create %i2, %i2, %i2 value %c5 {d_type = 2} : (index, index, index, i64) -> !ptensor.ptensor<3 x i64>
+        %40 = ptensor.create %i2, %i2, %i2 value %c5 {dtype = 2 : i8} : (index, index, index, i64) -> !ptensor.ptensor<3 x i64>
         %41 = "ptensor.ewbin"(%40, %40) {op = 0 : i32} : (!ptensor.ptensor<3 x i64>, !ptensor.ptensor<3 x i64>) -> !ptensor.ptensor<3 x i64>
         %44 = builtin.unrealized_conversion_cast %41 : !ptensor.ptensor<3 x i64> to memref<?x?x?xi64>
         %45 = bufferization.to_tensor %44 : memref<?x?x?xi64>

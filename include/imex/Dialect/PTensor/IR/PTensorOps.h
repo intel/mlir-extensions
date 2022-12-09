@@ -24,7 +24,7 @@
 namespace imex {
 namespace ptensor {
 
-enum DType : int { F64, F32, I64, U64, I32, U32, I16, U16, I8, U8, I1 };
+enum DType : int8_t { F64, F32, I64, U64, I32, U32, I16, U16, I8, U8, I1 };
 
 inline ::mlir::Type toMLIR(::mlir::OpBuilder &b, DType dt) {
   switch (dt) {
