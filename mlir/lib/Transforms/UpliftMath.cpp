@@ -8,6 +8,7 @@
 #include "imex/Transforms/RewriteWrapper.hpp"
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
+#include <mlir/Dialect/Complex/IR/Complex.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/Math/IR/Math.h>
 #include <mlir/IR/PatternMatch.h>
@@ -103,7 +104,35 @@ struct UpliftFabsCalls : public mlir::OpRewritePattern<mlir::func::CallOp> {
         llvm::any_of(op.getResultTypes(), isNotValidType))
       return mlir::failure();
 
-    rewriter.replaceOpWithNewOp<mlir::math::AbsFOp>(op, op.operands()[0]);
+    rewriter.replaceOpWithNewOp<mlir::math::AbsFOp>(op, op.operands().front());
+    return mlir::success();
+  }
+};
+
+struct UpliftCabsCalls : public mlir::OpRewritePattern<mlir::func::CallOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::func::CallOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto funcName = op.getCallee();
+    if (funcName.empty())
+      return mlir::failure();
+
+    if (funcName != "cabs" && funcName != "cabsf")
+      return mlir::failure();
+
+    if (op.getNumResults() != 1 || op.getNumOperands() != 1)
+      return mlir::failure();
+
+    auto val = op.operands().front();
+    auto srcType = val.getType().dyn_cast<mlir::ComplexType>();
+
+    if (!srcType || srcType.getElementType() != op.getResult(0).getType())
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::complex::AbsOp>(
+        op, srcType.getElementType(), val);
     return mlir::success();
   }
 };
@@ -138,10 +167,10 @@ struct UpliftFma : public mlir::OpRewritePattern<mlir::arith::AddFOp> {
 struct UpliftMathPass
     : public imex::RewriteWrapperPass<
           UpliftMathPass, void,
-          imex::DependentDialectsList<mlir::func::FuncDialect,
-                                      mlir::arith::ArithDialect,
-                                      mlir::math::MathDialect>,
-          UpliftMathCalls, UpliftFabsCalls, UpliftFma> {};
+          imex::DependentDialectsList<
+              mlir::func::FuncDialect, mlir::arith::ArithDialect,
+              mlir::math::MathDialect, mlir::complex::ComplexDialect>,
+          UpliftMathCalls, UpliftFabsCalls, UpliftCabsCalls, UpliftFma> {};
 } // namespace
 
 void imex::populateUpliftmathPatterns(mlir::RewritePatternSet &patterns) {

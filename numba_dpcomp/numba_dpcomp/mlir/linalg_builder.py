@@ -372,6 +372,10 @@ def is_float(t, b):
     return t == b.float16 or t == b.float32 or t == b.float64
 
 
+def is_complex(t, b):
+    return t == b.complex64 or t == b.complex128
+
+
 def dtype_str(builder, dtype):
     names = [
         (builder.int8, "int8"),

@@ -125,8 +125,9 @@ static bool isCompatibleType(mlir::Type type) {
     return llvm::all_of(tupleType, &isCompatibleType);
 
   return type.isa<mlir::IntegerType, mlir::IndexType, mlir::FloatType,
-                  mlir::RankedTensorType, mlir::MemRefType, mlir::NoneType,
-                  imex::util::TypeVarType, imex::ntensor::NTensorType>();
+                  mlir::ComplexType, mlir::RankedTensorType, mlir::MemRefType,
+                  mlir::NoneType, imex::util::TypeVarType,
+                  imex::ntensor::NTensorType>();
 }
 
 static bool isCompatibleTypeVal(mlir::Value val) {
@@ -1430,6 +1431,9 @@ setupPyBuilder(py::handle builder, mlir::OpBuilder &b,
   addType("float16", b.getF16Type());
   addType("float32", b.getF32Type());
   addType("float64", b.getF64Type());
+
+  addType("complex64", mlir::ComplexType::get(b.getF32Type()));
+  addType("complex128", mlir::ComplexType::get(b.getF64Type()));
 }
 
 static py::object shapeImpl(py::capsule context, py::capsule ssaVal) {
