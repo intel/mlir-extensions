@@ -6,6 +6,7 @@
 #include "imex/Dialect/imex_util/Dialect.hpp"
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
+#include <mlir/Dialect/Complex/IR/Complex.h>
 
 namespace {
 mlir::Type makeSignless(mlir::Type type) {
@@ -70,6 +71,12 @@ static bool isFloat(mlir::Type type) {
 static bool isIndex(mlir::Type type) {
   assert(type);
   return type.isa<mlir::IndexType>();
+}
+
+static bool isFloatComplex(mlir::Type type) {
+  assert(type);
+  return type.isa<mlir::ComplexType>() &&
+         type.cast<mlir::ComplexType>().getElementType().isa<mlir::FloatType>();
 }
 
 static mlir::Value intCast(mlir::OpBuilder &rewriter, mlir::Location loc,
@@ -185,6 +192,40 @@ static mlir::Value floatCastImpl(mlir::OpBuilder &rewriter, mlir::Location loc,
   }
 }
 
+static mlir::Value complexFromReal(mlir::OpBuilder &rewriter,
+                                   mlir::Location loc, mlir::Value val,
+                                   mlir::ComplexType complexType) {
+  auto elemType = complexType.getElementType();
+  mlir::Value imag = rewriter.create<mlir::arith::ConstantOp>(
+      loc, rewriter.getFloatAttr(elemType, 0.0));
+  return rewriter.create<mlir::complex::CreateOp>(loc, complexType, val, imag);
+}
+
+static mlir::Value floatFloatComplexCast(mlir::OpBuilder &rewriter,
+                                         mlir::Location loc, mlir::Value val,
+                                         mlir::Type dstType) {
+  auto complexType = dstType.cast<mlir::ComplexType>();
+  assert(val.getType().isa<mlir::FloatType>());
+  auto elemType = complexType.getElementType();
+  assert(elemType.isa<mlir::FloatType>());
+  if (val.getType() != elemType)
+    val = floatCastImpl(rewriter, loc, val, elemType);
+
+  return complexFromReal(rewriter, loc, val, complexType);
+}
+
+static mlir::Value intFloatComplexCast(mlir::OpBuilder &rewriter,
+                                       mlir::Location loc, mlir::Value val,
+                                       mlir::Type dstType) {
+  auto complexType = dstType.cast<mlir::ComplexType>();
+  assert(val.getType().isa<mlir::IntegerType>());
+  auto elemType = complexType.getElementType();
+  assert(elemType.isa<mlir::FloatType>());
+  val = intFloatCast(rewriter, loc, val, elemType);
+
+  return complexFromReal(rewriter, loc, val, complexType);
+}
+
 struct CastHandler {
   using selector_t = bool (*)(mlir::Type);
   using cast_op_t = mlir::Value (*)(mlir::OpBuilder &, mlir::Location,
@@ -195,10 +236,18 @@ struct CastHandler {
 };
 
 static const CastHandler castHandlers[] = {
-    {&isInt, &isInt, &intCast},           {&isInt, &isFloat, &intFloatCast},
-    {&isFloat, &isInt, &floatIntCast},    {&isIndex, &isInt, &indexCastImpl},
-    {&isInt, &isIndex, &indexCastImpl},   {&isFloat, &isFloat, &floatCastImpl},
-    {&isIndex, &isFloat, &indexCastImpl}, {&isFloat, &isIndex, &indexCastImpl},
+    // clang-format off
+    {&isInt, &isInt, &intCast},
+    {&isInt, &isFloat, &intFloatCast},
+    {&isFloat, &isInt, &floatIntCast},
+    {&isIndex, &isInt, &indexCastImpl},
+    {&isInt, &isIndex, &indexCastImpl},
+    {&isFloat, &isFloat, &floatCastImpl},
+    {&isIndex, &isFloat, &indexCastImpl},
+    {&isFloat, &isIndex, &indexCastImpl},
+    {&isInt, &isFloatComplex, &intFloatComplexCast},
+    {&isFloat, &isFloatComplex, &floatFloatComplexCast},
+    // clang-format on
 };
 
 bool imex::canConvert(mlir::Type srcType, mlir::Type dstType) {
