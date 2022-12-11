@@ -40,6 +40,14 @@ static mlir::Type getFloat64Type(mlir::MLIRContext &ctx) {
   return mlir::FloatType::getF64(&ctx);
 }
 
+static mlir::Type getComplex64Type(mlir::MLIRContext &ctx) {
+  return mlir::ComplexType::get(getFloat32Type(ctx));
+}
+
+static mlir::Type getComplex128Type(mlir::MLIRContext &ctx) {
+  return mlir::ComplexType::get(getFloat64Type(ctx));
+}
+
 static mlir::Type getNoneType(mlir::MLIRContext &ctx) {
   return mlir::NoneType::get(&ctx);
 }
@@ -66,6 +74,9 @@ static const constexpr std::pair<llvm::StringLiteral, TypeFunc>
         {"float16", &getFloat16Type},
         {"float32", &getFloat32Type},
         {"float64", &getFloat64Type},
+
+        {"complex64", &getComplex64Type},
+        {"complex128", &getComplex128Type},
 
         {"none", &getNoneType},
 

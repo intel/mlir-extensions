@@ -9,9 +9,11 @@
 #include <unordered_map>
 #include <vector>
 
+#include <pybind11/complex.h>
 #include <pybind11/pybind11.h>
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
+#include <mlir/Dialect/Complex/IR/Complex.h>
 #include <mlir/Dialect/ControlFlow/IR/ControlFlowOps.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/IR/Builders.h>
@@ -52,6 +54,13 @@
 
 namespace py = pybind11;
 namespace {
+
+class dummy_complex : public py::object {
+public:
+  static bool check_(py::handle h) {
+    return h.ptr() != nullptr && PyComplex_Check(h.ptr());
+  }
+};
 
 class CallbackOstream : public llvm::raw_ostream {
 public:
@@ -559,8 +568,16 @@ private:
       auto attr = builder.getIntegerAttr(type, val.cast<int64_t>());
       return getVal(attr);
     }
+
     if (py::isinstance<py::float_>(val))
       return getVal(builder.getF64FloatAttr(val.cast<double>()));
+
+    if (py::isinstance<dummy_complex>(val)) {
+      auto c = val.cast<std::complex<double>>();
+      auto type = mlir::ComplexType::get(builder.getF64Type());
+      auto attr = mlir::complex::NumberAttr::get(type, c.real(), c.imag());
+      return getVal(attr);
+    }
 
     if (py::isinstance<py::none>(val))
       return getVal(builder.getUnitAttr());

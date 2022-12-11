@@ -9,6 +9,7 @@
 #include "pipelines/PlierToStd.hpp"
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
+#include <mlir/Dialect/Complex/IR/Complex.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/Math/IR/Math.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
@@ -41,7 +42,7 @@
 namespace {
 static bool isSupportedType(mlir::Type type) {
   assert(type);
-  return type.isIntOrFloat();
+  return type.isa<mlir::IntegerType, mlir::FloatType, mlir::ComplexType>();
 }
 
 static bool isInt(mlir::Type type) {
@@ -81,11 +82,29 @@ struct ConstOpLowering : public mlir::OpConversionPattern<plier::ConstOp> {
             res = rewriter.create<plier::CastOp>(loc, expectedType, res);
 
           rewriter.replaceOp(op, res);
-          return mlir::success();
+        } else {
+          rewriter.replaceOpWithNewOp<mlir::arith::ConstantOp>(op, value);
         }
+        return mlir::success();
       }
-      rewriter.replaceOpWithNewOp<mlir::arith::ConstantOp>(op, value);
-      return mlir::success();
+
+      if (value.isa<mlir::FloatAttr>()) {
+        rewriter.replaceOpWithNewOp<mlir::arith::ConstantOp>(op, value);
+        return mlir::success();
+      }
+
+      if (auto complexAttr = value.dyn_cast<mlir::complex::NumberAttr>()) {
+        const double vals[] = {
+            complexAttr.getReal().convertToDouble(),
+            complexAttr.getImag().convertToDouble(),
+        };
+        auto arr = rewriter.getF64ArrayAttr(vals);
+        rewriter.replaceOpWithNewOp<mlir::complex::ConstantOp>(
+            op, complexAttr.getType(), arr);
+        return mlir::success();
+      }
+
+      return mlir::failure();
     }
 
     if (expectedType.isa<mlir::NoneType>()) {
@@ -868,6 +887,7 @@ struct PlierToStdPass
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<imex::util::ImexUtilDialect>();
+    registry.insert<mlir::complex::ComplexDialect>();
     registry.insert<mlir::func::FuncDialect>();
     registry.insert<mlir::math::MathDialect>();
     registry.insert<mlir::scf::SCFDialect>();
@@ -960,8 +980,8 @@ void PlierToStdPass::runOnOperation() {
       return false;
 
     auto res = typeConverter.convertType(t);
-    return res &&
-           res.isa<mlir::IntegerType, mlir::FloatType, mlir::IndexType>();
+    return res.isa_and_nonnull<mlir::IntegerType, mlir::FloatType,
+                               mlir::IndexType, mlir::ComplexType>();
   };
 
   auto isTuple = [&](mlir::Type t) -> bool {
@@ -1004,7 +1024,7 @@ void PlierToStdPass::runOnOperation() {
         if (type.isa<mlir::NoneType, imex::util::TypeVarType>())
           return false;
 
-        return !type.isIntOrFloat();
+        return !isSupportedType(type);
       });
   target.addDynamicallyLegalOp<imex::util::UndefOp>(
       [&](imex::util::UndefOp op) {
