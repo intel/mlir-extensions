@@ -222,6 +222,8 @@ def _get_numpy_types(builder):
         (builder.uint64, numpy.uint64),
         (builder.float32, numpy.float32),
         (builder.float64, numpy.float64),
+        (builder.complex64, numpy.complex64),
+        (builder.complex128, numpy.complex128),
     ]
 
 

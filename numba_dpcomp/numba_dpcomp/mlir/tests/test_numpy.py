@@ -131,6 +131,8 @@ _test_binary_test_arrays_ids = [
         "lambda a, b: np.arctan2(a, b)",
         "lambda a, b: np.minimum(a, b)",
         "lambda a, b: np.maximum(a, b)",
+        "lambda a, b: np.less(a, b)",
+        "lambda a, b: np.greater(a, b)",
         "lambda a, b: a < b",
         "lambda a, b: a <= b",
         "lambda a, b: a > b",
