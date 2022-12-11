@@ -5,6 +5,8 @@
 #include "pipelines/LowerToLlvm.hpp"
 
 #include <mlir/Conversion/ArithToLLVM/ArithToLLVM.h>
+#include <mlir/Conversion/ComplexToLLVM/ComplexToLLVM.h>
+#include <mlir/Conversion/ComplexToStandard/ComplexToStandard.h>
 #include <mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h>
 #include <mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h>
 #include <mlir/Conversion/LLVMCommon/ConversionTarget.h>
@@ -326,10 +328,15 @@ static unsigned itemSize(mlir::Type type) {
     assert((inttype.getWidth() % 8) == 0);
     return inttype.getWidth() / 8;
   }
+
   if (auto floattype = type.dyn_cast<mlir::FloatType>()) {
     assert((floattype.getWidth() % 8) == 0);
     return floattype.getWidth() / 8;
   }
+
+  if (auto complexType = type.dyn_cast<mlir::ComplexType>())
+    return itemSize(complexType.getElementType()) * 2;
+
   llvm_unreachable("item_size: invalid type");
 }
 
@@ -829,8 +836,11 @@ struct AllocOpLowering : public mlir::AllocLikeOpLLVMLowering {
                         {sizeBytes, alignment}, mod, rewriter);
     auto dataPtr = getDataPtr(loc, rewriter, meminfoPtr);
 
-    auto elemPtrType =
-        mlir::LLVM::LLVMPointerType::get(memRefType.getElementType());
+    auto elemType =
+        getTypeConverter()->convertType(memRefType.getElementType());
+    assert(elemType);
+
+    auto elemPtrType = mlir::LLVM::LLVMPointerType::get(elemType);
     auto bitcast = [&](mlir::Value val) {
       return rewriter.create<mlir::LLVM::BitcastOp>(loc, elemPtrType, val);
     };
@@ -1483,6 +1493,7 @@ struct LLVMLoweringPass
     populateLinalgToLLVMConversionPatterns(typeConverter, patterns);
     cf::populateControlFlowToLLVMConversionPatterns(typeConverter, patterns);
     arith::populateArithToLLVMConversionPatterns(typeConverter, patterns);
+    populateComplexToLLVMConversionPatterns(typeConverter, patterns);
 
     patterns.insert<AllocOpLowering, DeallocOpLowering, LowerRetainOp>(
         typeConverter);
@@ -1508,6 +1519,7 @@ static void populateLowerToLlvmPipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<LowerParallelToCFGPass>());
   pm.addPass(mlir::createConvertSCFToCFPass());
   pm.addPass(mlir::createCanonicalizerPass());
+  pm.addPass(mlir::createConvertComplexToStandardPass());
   pm.addNestedPass<mlir::func::FuncOp>(mlir::arith::createArithExpandOpsPass());
   pm.addNestedPass<mlir::func::FuncOp>(mlir::createConvertMathToLLVMPass());
   pm.addPass(mlir::createConvertMathToLibmPass());

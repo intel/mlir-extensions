@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from ..linalg_builder import FuncRegistry, is_int, is_float, broadcast_type
+from ..linalg_builder import FuncRegistry, is_int, is_float, is_complex, broadcast_type
 from ..func_registry import add_func
 
 import math
@@ -145,4 +145,13 @@ def abs_impl(builder, arg):
             fname = fname + "f"
 
         res = builder.cast(0, t)
+        return builder.external_call(fname, arg, res, decorate=False)
+    if is_complex(t, builder):
+        fname = "cabs"
+        rest = builder.float64
+        if t == builder.complex64:
+            rest = builder.float32
+            fname = fname + "f"
+
+        res = builder.cast(0, rest)
         return builder.external_call(fname, arg, res, decorate=False)

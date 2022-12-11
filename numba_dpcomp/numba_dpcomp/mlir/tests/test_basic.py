@@ -28,7 +28,7 @@ def _skip_python_errors(func):
 
 # TODO: nans and infs not tested yet, we are not sure if want exactly follow
 # interpreted python rules
-_test_values = [
+_test_values_no_complex = [
     True,
     False,
     -3,
@@ -47,6 +47,8 @@ _test_values = [
     1.0,
     2.5,
 ]
+
+_test_values = _test_values_no_complex + [7j, 11 + 0j, 3 + 5j, -3 + 5j, 3 - 5j, -3 - 5j]
 
 
 @pytest.mark.parametrize("val", _test_values)
@@ -130,7 +132,9 @@ def test_unary_ops(py_func, val, request):
         "lambda a, b: a if a != b else b",
     ],
 )
-@pytest.mark.parametrize("a, b", itertools.product(_test_values, _test_values))
+@pytest.mark.parametrize(
+    "a, b", itertools.product(_test_values_no_complex, _test_values_no_complex)
+)
 def test_cmp_ops(py_func, a, b):
     jit_func = njit(py_func)
     assert_equal(py_func(a, b), jit_func(a, b))
@@ -190,7 +194,7 @@ def test_var(val):
         # TODO: str
     ],
 )
-@pytest.mark.parametrize("val", _test_values)
+@pytest.mark.parametrize("val", _test_values_no_complex)
 def test_cast(py_func, val):
     jit_func = njit(py_func)
     assert_equal(py_func(val), jit_func(val))
@@ -398,7 +402,9 @@ def test_ret_none():
     assert_equal(py_func2(), jit_func2())
 
 
-@pytest.mark.parametrize("a, b", itertools.product(_test_values, _test_values))
+@pytest.mark.parametrize(
+    "a, b", itertools.product(_test_values_no_complex, _test_values_no_complex)
+)
 def test_if1(a, b):
     def py_func(a, b):
         c = 3
@@ -411,7 +417,9 @@ def test_if1(a, b):
     assert_equal(py_func(a, b), jit_func(a, b))
 
 
-@pytest.mark.parametrize("a, b", itertools.product(_test_values, _test_values))
+@pytest.mark.parametrize(
+    "a, b", itertools.product(_test_values_no_complex, _test_values_no_complex)
+)
 def test_if2(a, b):
     def py_func(a, b):
         if a > b:
@@ -801,7 +809,9 @@ def test_omitted_args_none():
 
 
 @pytest.mark.parametrize("func", [min, max])
-@pytest.mark.parametrize("a, b", itertools.product(_test_values, _test_values))
+@pytest.mark.parametrize(
+    "a, b", itertools.product(_test_values_no_complex, _test_values_no_complex)
+)
 def test_builtin_funcs2(func, a, b):
     # TODO: Skip bools and negative zeros, need investigation
     if (

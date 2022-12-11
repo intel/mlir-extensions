@@ -72,7 +72,6 @@ def _gen_tests():
         "test_0d_array",  # numpy prod
         "test_argmin",  # numpy.argmin
         "test_argmax",  # numpy.argmax
-        "test_simple07",  # complex128 support
         "test_ndarray_fill2d",  # array.fill
         "test_simple18",  # np.linalg.svd
         "test_linspace",  # np.linspace
