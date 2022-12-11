@@ -48,7 +48,7 @@ _test_values_no_complex = [
     2.5,
 ]
 
-_test_values = _test_values_no_complex + [3 + 5j]
+_test_values = _test_values_no_complex + [7j, 11 + 0j, 3 + 5j, -3 + 5j, 3 - 5j, -3 - 5j]
 
 
 @pytest.mark.parametrize("val", _test_values)
