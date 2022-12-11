@@ -328,10 +328,15 @@ static unsigned itemSize(mlir::Type type) {
     assert((inttype.getWidth() % 8) == 0);
     return inttype.getWidth() / 8;
   }
+
   if (auto floattype = type.dyn_cast<mlir::FloatType>()) {
     assert((floattype.getWidth() % 8) == 0);
     return floattype.getWidth() / 8;
   }
+
+  if (auto complexType = type.dyn_cast<mlir::ComplexType>())
+    return itemSize(complexType.getElementType()) * 2;
+
   llvm_unreachable("item_size: invalid type");
 }
 
@@ -831,8 +836,11 @@ struct AllocOpLowering : public mlir::AllocLikeOpLLVMLowering {
                         {sizeBytes, alignment}, mod, rewriter);
     auto dataPtr = getDataPtr(loc, rewriter, meminfoPtr);
 
-    auto elemPtrType =
-        mlir::LLVM::LLVMPointerType::get(memRefType.getElementType());
+    auto elemType =
+        getTypeConverter()->convertType(memRefType.getElementType());
+    assert(elemType);
+
+    auto elemPtrType = mlir::LLVM::LLVMPointerType::get(elemType);
     auto bitcast = [&](mlir::Value val) {
       return rewriter.create<mlir::LLVM::BitcastOp>(loc, elemPtrType, val);
     };
