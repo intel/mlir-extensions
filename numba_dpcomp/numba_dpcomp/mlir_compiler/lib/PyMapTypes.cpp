@@ -29,6 +29,19 @@ template <unsigned Width> bool isFloat(mlir::Type type) {
   return false;
 }
 
+template <unsigned Width> bool isFloatComplex(mlir::Type type) {
+  if (auto c = type.dyn_cast<mlir::ComplexType>()) {
+    auto f = c.dyn_cast<mlir::FloatType>();
+    if (!f)
+      return false;
+
+    if (f.getWidth() == Width)
+      return true;
+  }
+
+  return false;
+}
+
 bool isNone(mlir::Type type) { return type.isa<mlir::NoneType>(); }
 
 py::object mapType(const py::handle &types_mod, mlir::Type type) {
@@ -56,6 +69,9 @@ py::object mapType(const py::handle &types_mod, mlir::Type type) {
 
       {&isFloat<32>, "float32"},
       {&isFloat<64>, "float64"},
+
+      {&isFloatComplex<32>, "complex64"},
+      {&isFloatComplex<64>, "complex128"},
 
       {&isNone, "none"},
   };
