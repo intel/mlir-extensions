@@ -13,7 +13,7 @@ namespace py = pybind11;
 
 namespace {
 template <unsigned Width, mlir::IntegerType::SignednessSemantics Signed>
-bool isInt(mlir::Type type) {
+static bool isInt(mlir::Type type) {
   if (auto t = type.dyn_cast<mlir::IntegerType>())
     if (t.getWidth() == Width && t.getSignedness() == Signed)
       return true;
@@ -29,9 +29,9 @@ template <unsigned Width> bool isFloat(mlir::Type type) {
   return false;
 }
 
-template <unsigned Width> bool isFloatComplex(mlir::Type type) {
+template <unsigned Width> static bool isFloatComplex(mlir::Type type) {
   if (auto c = type.dyn_cast<mlir::ComplexType>()) {
-    auto f = c.dyn_cast<mlir::FloatType>();
+    auto f = c.getElementType().dyn_cast<mlir::FloatType>();
     if (!f)
       return false;
 
@@ -42,11 +42,11 @@ template <unsigned Width> bool isFloatComplex(mlir::Type type) {
   return false;
 }
 
-bool isNone(mlir::Type type) { return type.isa<mlir::NoneType>(); }
+static bool isNone(mlir::Type type) { return type.isa<mlir::NoneType>(); }
 
-py::object mapType(const py::handle &types_mod, mlir::Type type) {
+static py::object mapType(const py::handle &typesMod, mlir::Type type) {
   using fptr_t = bool (*)(mlir::Type);
-  const std::pair<fptr_t, llvm::StringRef> primitive_types[] = {
+  const std::pair<fptr_t, llvm::StringRef> primitiveTypes[] = {
       {&isInt<1, mlir::IntegerType::Signed>, "boolean"},
       {&isInt<1, mlir::IntegerType::Signless>, "boolean"},
       {&isInt<1, mlir::IntegerType::Unsigned>, "boolean"},
@@ -76,27 +76,27 @@ py::object mapType(const py::handle &types_mod, mlir::Type type) {
       {&isNone, "none"},
   };
 
-  for (auto h : primitive_types) {
+  for (auto h : primitiveTypes) {
     if (h.first(type)) {
       auto name = h.second;
-      return types_mod.attr(py::str(name.data(), name.size()));
+      return typesMod.attr(py::str(name.data(), name.size()));
     }
   }
 
   if (auto m = type.dyn_cast<mlir::ShapedType>()) {
-    auto elem_type = mapType(types_mod, m.getElementType());
-    if (!elem_type)
+    auto elemType = mapType(typesMod, m.getElementType());
+    if (!elemType)
       return {};
 
     auto ndims = py::int_(m.getRank());
-    auto array_type = types_mod.attr("Array");
-    return array_type(elem_type, ndims, py::str("C"));
+    auto arrayType = typesMod.attr("Array");
+    return arrayType(elemType, ndims, py::str("C"));
   }
 
   if (auto t = type.dyn_cast<mlir::TupleType>()) {
     py::tuple ret(t.size());
     for (auto it : llvm::enumerate(t.getTypes())) {
-      auto inner = mapType(types_mod, it.value());
+      auto inner = mapType(typesMod, it.value());
       if (!inner)
         return {};
       ret[it.index()] = std::move(inner);
