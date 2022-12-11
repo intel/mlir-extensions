@@ -55,6 +55,11 @@ static bool isFloat(mlir::Type type) {
   return type.isa<mlir::FloatType>();
 }
 
+static bool isComplex(mlir::Type type) {
+  assert(type);
+  return type.isa<mlir::ComplexType>();
+}
+
 struct ConstOpLowering : public mlir::OpConversionPattern<plier::ConstOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -262,25 +267,38 @@ struct UndefOpLowering : public mlir::OpConversionPattern<imex::util::UndefOp> {
   }
 };
 
+static unsigned getBitsCount(mlir::Type type) {
+  assert(type);
+  if (type.isa<mlir::IntegerType>())
+    return type.cast<mlir::IntegerType>().getWidth();
+
+  if (type.isa<mlir::Float16Type>())
+    return 11;
+
+  if (type.isa<mlir::Float32Type>())
+    return 24;
+
+  if (type.isa<mlir::Float64Type>())
+    return 53;
+
+  if (auto c = type.dyn_cast<mlir::ComplexType>()) {
+    return getBitsCount(c.getElementType());
+  }
+
+  llvm_unreachable("Unhandled type");
+};
+
 static mlir::Type coerce(mlir::Type type0, mlir::Type type1) {
   // TODO: proper rules
   assert(type0 != type1);
-  auto get_bits_count = [](mlir::Type type) -> unsigned {
-    assert(type);
-    if (type.isa<mlir::IntegerType>())
-      return type.cast<mlir::IntegerType>().getWidth();
+  auto c0 = isComplex(type0);
+  auto c1 = isComplex(type1);
+  if (c0 && !c1)
+    return type0;
 
-    if (type.isa<mlir::Float16Type>())
-      return 11;
+  if (!c0 && c1)
+    return type1;
 
-    if (type.isa<mlir::Float32Type>())
-      return 24;
-
-    if (type.isa<mlir::Float64Type>())
-      return 53;
-
-    llvm_unreachable("Unhandled type");
-  };
   auto f0 = isFloat(type0);
   auto f1 = isFloat(type1);
   if (f0 && !f1)
@@ -289,7 +307,7 @@ static mlir::Type coerce(mlir::Type type0, mlir::Type type1) {
   if (!f0 && f1)
     return type1;
 
-  return get_bits_count(type0) < get_bits_count(type1) ? type1 : type0;
+  return getBitsCount(type0) < getBitsCount(type1) ? type1 : type0;
 }
 
 static mlir::Value invalidReplaceOp(mlir::PatternRewriter & /*rewriter*/,
@@ -450,42 +468,53 @@ struct BinOpLowering : public mlir::OpConversionPattern<plier::BinOp> {
       llvm::StringRef type;
       func_t iop;
       func_t fop;
+      func_t cop;
     };
 
     const OpDesc handlers[] = {
-        {"+", &replaceOp<mlir::arith::AddIOp>, &replaceOp<mlir::arith::AddFOp>},
-        {"-", &replaceOp<mlir::arith::SubIOp>, &replaceOp<mlir::arith::SubFOp>},
-        {"*", &replaceOp<mlir::arith::MulIOp>, &replaceOp<mlir::arith::MulFOp>},
-        {"**", &replaceIpowOp, &replaceOp<mlir::math::PowFOp>},
-        {"/", &replaceItruedivOp, &replaceOp<mlir::arith::DivFOp>},
-        {"//", &replaceIfloordivOp, &replaceFfloordivOp},
-        {"%", &replaceImodOp, &replaceFmodOp},
-        {"&", &replaceOp<mlir::arith::AndIOp>, &invalidReplaceOp},
-        {"|", &replaceOp<mlir::arith::OrIOp>, &invalidReplaceOp},
-        {"^", &replaceOp<mlir::arith::XOrIOp>, &invalidReplaceOp},
-        {">>", &replaceOp<mlir::arith::ShRSIOp>, &invalidReplaceOp},
-        {"<<", &replaceOp<mlir::arith::ShLIOp>, &invalidReplaceOp},
+        {"+", &replaceOp<mlir::arith::AddIOp>, &replaceOp<mlir::arith::AddFOp>,
+         &replaceOp<mlir::complex::AddOp>},
+        {"-", &replaceOp<mlir::arith::SubIOp>, &replaceOp<mlir::arith::SubFOp>,
+         &replaceOp<mlir::complex::SubOp>},
+        {"*", &replaceOp<mlir::arith::MulIOp>, &replaceOp<mlir::arith::MulFOp>,
+         &replaceOp<mlir::complex::MulOp>},
+        {"**", &replaceIpowOp, &replaceOp<mlir::math::PowFOp>,
+         &replaceOp<mlir::complex::PowOp>},
+        {"/", &replaceItruedivOp, &replaceOp<mlir::arith::DivFOp>,
+         &replaceOp<mlir::complex::DivOp>},
+        {"//", &replaceIfloordivOp, &replaceFfloordivOp, &invalidReplaceOp},
+        {"%", &replaceImodOp, &replaceFmodOp, &invalidReplaceOp},
+        {"&", &replaceOp<mlir::arith::AndIOp>, &invalidReplaceOp,
+         &invalidReplaceOp},
+        {"|", &replaceOp<mlir::arith::OrIOp>, &invalidReplaceOp,
+         &invalidReplaceOp},
+        {"^", &replaceOp<mlir::arith::XOrIOp>, &invalidReplaceOp,
+         &invalidReplaceOp},
+        {">>", &replaceOp<mlir::arith::ShRSIOp>, &invalidReplaceOp,
+         &invalidReplaceOp},
+        {"<<", &replaceOp<mlir::arith::ShLIOp>, &invalidReplaceOp,
+         &invalidReplaceOp},
 
         {">",
          &replaceCmpiOp<mlir::arith::CmpIPredicate::sgt,
                         mlir::arith::CmpIPredicate::ugt>,
-         &replaceCmpfOp<mlir::arith::CmpFPredicate::OGT>},
+         &replaceCmpfOp<mlir::arith::CmpFPredicate::OGT>, &invalidReplaceOp},
         {">=",
          &replaceCmpiOp<mlir::arith::CmpIPredicate::sge,
                         mlir::arith::CmpIPredicate::uge>,
-         &replaceCmpfOp<mlir::arith::CmpFPredicate::OGE>},
+         &replaceCmpfOp<mlir::arith::CmpFPredicate::OGE>, &invalidReplaceOp},
         {"<",
          &replaceCmpiOp<mlir::arith::CmpIPredicate::slt,
                         mlir::arith::CmpIPredicate::ult>,
-         &replaceCmpfOp<mlir::arith::CmpFPredicate::OLT>},
+         &replaceCmpfOp<mlir::arith::CmpFPredicate::OLT>, &invalidReplaceOp},
         {"<=",
          &replaceCmpiOp<mlir::arith::CmpIPredicate::sle,
                         mlir::arith::CmpIPredicate::ule>,
-         &replaceCmpfOp<mlir::arith::CmpFPredicate::OLE>},
+         &replaceCmpfOp<mlir::arith::CmpFPredicate::OLE>, &invalidReplaceOp},
         {"!=", &replaceCmpiOp<mlir::arith::CmpIPredicate::ne>,
-         &replaceCmpfOp<mlir::arith::CmpFPredicate::ONE>},
+         &replaceCmpfOp<mlir::arith::CmpFPredicate::ONE>, &invalidReplaceOp},
         {"==", &replaceCmpiOp<mlir::arith::CmpIPredicate::eq>,
-         &replaceCmpfOp<mlir::arith::CmpFPredicate::OEQ>},
+         &replaceCmpfOp<mlir::arith::CmpFPredicate::OEQ>, &invalidReplaceOp},
     };
 
     using membptr_t = func_t OpDesc::*;
@@ -507,6 +536,8 @@ struct BinOpLowering : public mlir::OpConversionPattern<plier::BinOp> {
       return callHandler(&OpDesc::iop);
     } else if (isFloat(finalType)) {
       return callHandler(&OpDesc::fop);
+    } else if (isComplex(finalType)) {
+      return callHandler(&OpDesc::cop);
     }
     return mlir::failure();
   }
@@ -576,8 +607,12 @@ static mlir::Value negate(mlir::PatternRewriter &rewriter, mlir::Location loc,
 
     return res;
   }
+
   if (resType.isa<mlir::FloatType>())
     return rewriter.create<mlir::arith::NegFOp>(loc, val);
+
+  if (resType.isa<mlir::ComplexType>())
+    return rewriter.create<mlir::complex::NegOp>(loc, val);
 
   llvm_unreachable("negate: unsupported type");
 }
@@ -1043,6 +1078,8 @@ void PlierToStdPass::runOnOperation() {
       });
   target.addIllegalOp<plier::BuildTupleOp>();
   target.addLegalOp<imex::util::BuildTupleOp, imex::util::TupleExtractOp>();
+  target.addLegalDialect<mlir::arith::ArithDialect>();
+  target.addLegalDialect<mlir::complex::ComplexDialect>();
 
   patterns.insert<
       // clang-format off

@@ -84,6 +84,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     LLVMOrcJIT
     LLVMTarget
     MLIRComplexToLLVM
+    MLIRComplexToStandard
     MLIRFuncTransforms
     MLIRGPUToGPURuntimeTransforms
     MLIRGPUToSPIRV
