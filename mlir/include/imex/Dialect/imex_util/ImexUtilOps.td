@@ -286,8 +286,8 @@ def EnvironmentRegionOp : ImexUtil_Op<"env_region", [
 
   let builders = [
     OpBuilder<(ins "::mlir::Attribute":$environment,
-      CArg<"::mlir::ValueRange", "llvm::None">:$args,
-      CArg<"::mlir::TypeRange", "llvm::None">:$results,
+      CArg<"::mlir::ValueRange", "std::nullopt">:$args,
+      CArg<"::mlir::TypeRange", "std::nullopt">:$results,
       CArg<"::llvm::function_ref<void(::mlir::OpBuilder &, ::mlir::Location)>", "nullptr">)>
   ];
 
