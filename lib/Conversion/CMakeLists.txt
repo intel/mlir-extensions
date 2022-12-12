@@ -1,5 +1,6 @@
-add_subdirectory(PTensorToLinalg)
 add_subdirectory(DistToStandard)
-add_subdirectory(GPUToSPIRV)
 add_subdirectory(GPUToGPUX)
+add_subdirectory(GPUToSPIRV)
 add_subdirectory(GPUXToLLVM)
+add_subdirectory(LinalgToSPIRV)
+add_subdirectory(PTensorToLinalg)
