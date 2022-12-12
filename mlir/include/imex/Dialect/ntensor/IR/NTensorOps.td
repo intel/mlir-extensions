@@ -147,7 +147,7 @@ def BinaryOp : NTensor_OpBase<"binary", []> {
     Binary ntesor operation.
   }];
 
-  let arguments = (ins AnyType:$lhs, AnyType:$rhs, StrAttr:$op);
+  let arguments = (ins Arg<AnyType, "", [MemRead]>:$lhs, Arg<AnyType, "", [MemRead]>:$rhs, StrAttr:$op);
 
   let results = (outs AnyType:$result);
 
