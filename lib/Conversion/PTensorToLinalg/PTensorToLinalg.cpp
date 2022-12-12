@@ -231,7 +231,7 @@ struct ARangeLowering
     };
 
     rewriter.replaceOpWithNewOp<::mlir::linalg::GenericOp>(
-        op, retRtTyp, ::llvm::None, tensor, maps, iterators, body);
+        op, retRtTyp, ::std::nullopt, tensor, maps, iterators, body);
 
     return ::mlir::success();
   }
