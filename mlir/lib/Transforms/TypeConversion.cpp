@@ -54,7 +54,7 @@ packResults(mlir::OpBuilder &rewriter, mlir::Location loc,
   // Do the type conversion and record the offsets.
   for (auto type : resTypes) {
     if (mlir::failed(typeConverter.convertTypes(type, newResultTypes)))
-      return llvm::None;
+      return std::nullopt;
 
     offsets.push_back(newResultTypes.size());
   }
@@ -70,7 +70,7 @@ packResults(mlir::OpBuilder &rewriter, mlir::Location loc,
       auto mat = typeConverter.materializeSourceConversion(
           rewriter, loc, origType, mappedValue);
       if (!mat)
-        return llvm::None;
+        return std::nullopt;
 
       packedRets.push_back(mat);
     } else {
@@ -282,7 +282,7 @@ void imex::populateControlFlowTypeConversionRewritesAndTarget(
                                                                  typeConverter))
           return true;
 
-        return llvm::None;
+        return std::nullopt;
       });
 
   mlir::populateCallOpTypeConversionPattern(patterns, typeConverter);
@@ -291,7 +291,7 @@ void imex::populateControlFlowTypeConversionRewritesAndTarget(
         if (typeConverter.isLegal(op))
           return true;
 
-        return llvm::None;
+        return std::nullopt;
       });
 
   target.addDynamicallyLegalOp<imex::util::EnvironmentRegionOp>(
@@ -300,7 +300,7 @@ void imex::populateControlFlowTypeConversionRewritesAndTarget(
             typeConverter.isLegal(op.getResults().getTypes()))
           return true;
 
-        return llvm::None;
+        return std::nullopt;
       });
 
   target.addDynamicallyLegalOp<imex::util::EnvironmentRegionYieldOp>(
@@ -308,7 +308,7 @@ void imex::populateControlFlowTypeConversionRewritesAndTarget(
         if (typeConverter.isLegal(op.getResults().getTypes()))
           return true;
 
-        return llvm::None;
+        return std::nullopt;
       });
 
   mlir::populateBranchOpInterfaceTypeConversionPattern(patterns, typeConverter);
@@ -401,13 +401,13 @@ void imex::populateTupleTypeConverter(mlir::TypeConverter &typeConverter) {
           auto oldType = type.getType(i);
           auto newType = typeConverter.convertType(oldType);
           if (!newType)
-            return llvm::None;
+            return std::nullopt;
 
           changed = changed || (newType != oldType);
           newTypes[i] = newType;
         }
         if (!changed)
-          return llvm::None;
+          return std::nullopt;
 
         auto ret = mlir::TupleType::get(type.getContext(), newTypes);
         assert(ret != type);
@@ -432,7 +432,7 @@ void imex::populateTupleTypeConversionRewritesAndTarget(
         auto tupleType = typeConverter.convertType(inputType)
                              .dyn_cast_or_null<mlir::TupleType>();
         if (!tupleType)
-          return llvm::None;
+          return std::nullopt;
 
         auto srcType = [&]() -> mlir::Type {
           if (auto index = mlir::getConstantIntValue(op.getIndex())) {
@@ -446,7 +446,7 @@ void imex::populateTupleTypeConversionRewritesAndTarget(
           return {};
         }();
         if (!srcType)
-          return llvm::None;
+          return std::nullopt;
 
         auto dstType = op.getType();
         return inputType == tupleType && srcType == dstType &&

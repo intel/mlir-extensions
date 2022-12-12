@@ -268,7 +268,7 @@ static llvm::Optional<mlir::Type> makeSignlessType(mlir::Type type) {
       return shapedType.clone(*signlessElem);
   }
 
-  return llvm::None;
+  return std::nullopt;
 }
 
 void imex::populateMakeSignlessRewritesAndTarget(

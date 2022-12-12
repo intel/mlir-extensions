@@ -622,7 +622,7 @@ static py::object broadcastImpl(py::capsule context, py::tuple args,
         imex::reportError(llvm::Twine("broadcast: invalid source type ") +
                           toStr(srcType));
 
-      auto retType = imex::ntensor::NTensorType::get(llvm::None, srcType);
+      auto retType = imex::ntensor::NTensorType::get(std::nullopt, srcType);
       val = builder.create<imex::ntensor::FromElementsOp>(loc, retType, val);
     } else {
       rank = std::max(rank, srcType.cast<mlir::ShapedType>().getRank());
@@ -755,7 +755,7 @@ static py::object fillTensorImpl(py::capsule context, py::handle tensor,
     builder.create<mlir::linalg::YieldOp>(loc, initVal);
   };
   auto val = builder.create<mlir::linalg::GenericOp>(
-      loc, tensorType, llvm::None, tensorVal, affine_maps, iterators, body);
+      loc, tensorType, std::nullopt, tensorVal, affine_maps, iterators, body);
   return ctx.context.createVar(context, val.getResult(0));
 }
 

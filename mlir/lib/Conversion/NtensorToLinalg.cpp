@@ -84,7 +84,7 @@ struct ConvertCopyOp : public mlir::OpRewritePattern<imex::ntensor::CopyOp> {
       return mlir::failure();
 
     imex::util::wrapEnvRegion(
-        rewriter, op->getLoc(), dstType.getEnvironment(), llvm::None,
+        rewriter, op->getLoc(), dstType.getEnvironment(), std::nullopt,
         [&](mlir::OpBuilder &builder, mlir::Location loc) {
           auto rank = static_cast<unsigned>(srcType.getRank());
 
@@ -113,7 +113,7 @@ struct ConvertCopyOp : public mlir::OpRewritePattern<imex::ntensor::CopyOp> {
           };
           builder.create<mlir::linalg::GenericOp>(loc, srcTensor, dstMemref,
                                                   maps, iterators, bodyBuilder);
-          return llvm::None;
+          return std::nullopt;
         });
 
     rewriter.eraseOp(op);

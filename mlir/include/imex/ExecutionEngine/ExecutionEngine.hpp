@@ -30,7 +30,7 @@ namespace imex {
 struct ExecutionEngineOptions {
   /// `jitCodeGenOptLevel`, when provided, is used as the optimization level for
   /// target code generation.
-  llvm::Optional<llvm::CodeGenOpt::Level> jitCodeGenOptLevel = llvm::None;
+  llvm::Optional<llvm::CodeGenOpt::Level> jitCodeGenOptLevel = std::nullopt;
 
   /// If `enableObjectCache` is set, the JIT compiler will create one to store
   /// the object generated for the given module. The contents of the cache can

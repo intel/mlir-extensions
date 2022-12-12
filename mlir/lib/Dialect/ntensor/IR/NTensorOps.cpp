@@ -189,23 +189,23 @@ static llvm::Optional<mlir::Value>
 foldLoadFromElements(mlir::Value src, mlir::ValueRange indices) {
   auto fromElements = src.getDefiningOp<imex::ntensor::FromElementsOp>();
   if (!fromElements)
-    return llvm::None;
+    return std::nullopt;
 
   if (indices.size() != 1)
-    return llvm::None;
+    return std::nullopt;
 
   auto idxVal = mlir::getConstantIntValue(indices.front());
   if (!idxVal || *idxVal < 0)
-    return llvm::None;
+    return std::nullopt;
 
   auto idx = static_cast<size_t>(*idxVal);
   auto args = fromElements.getElements();
   if (idx >= args.size())
-    return llvm::None;
+    return std::nullopt;
 
   for (auto user : fromElements.getResult().getUsers())
     if (!mlir::isa<imex::ntensor::LoadOp, imex::ntensor::DimOp>(user))
-      return llvm::None;
+      return std::nullopt;
 
   return args[idx];
 }

@@ -34,7 +34,7 @@ struct Conversion {
     if (py::isinstance(obj, dtype)) {
       auto type = converter.convertType(context, obj.attr("dtype"));
       if (!type)
-        return llvm::None;
+        return std::nullopt;
 
       return imex::util::TypeVarType::get(type);
     }
@@ -42,7 +42,7 @@ struct Conversion {
     if (py::isinstance(obj, fixedArray)) {
       auto elemType = converter.convertType(context, obj.attr("dtype"));
       if (!elemType)
-        return llvm::None;
+        return std::nullopt;
 
       auto layout = obj.attr("layout").cast<std::string>();
 
@@ -50,7 +50,7 @@ struct Conversion {
 
       auto fixedDims = obj.attr("fixed_dims").cast<py::tuple>();
       if (fixedDims.size() != ndim)
-        return llvm::None;
+        return std::nullopt;
 
       llvm::SmallVector<int64_t> shape(ndim);
       for (auto [i, dim] : llvm::enumerate(fixedDims)) {
@@ -68,7 +68,7 @@ struct Conversion {
     if (py::isinstance(obj, array)) {
       auto elemType = converter.convertType(context, obj.attr("dtype"));
       if (!elemType)
-        return llvm::None;
+        return std::nullopt;
 
       auto layout = obj.attr("layout").cast<std::string>();
 
@@ -79,7 +79,7 @@ struct Conversion {
                                              llvm::StringRef(layout));
     }
 
-    return llvm::None;
+    return std::nullopt;
   }
 
 private:

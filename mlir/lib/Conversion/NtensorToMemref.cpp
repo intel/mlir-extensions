@@ -141,12 +141,12 @@ struct StoreOpLowering
       return mlir::failure();
 
     auto results = imex::util::wrapEnvRegion(
-        rewriter, op->getLoc(), origType.getEnvironment(), llvm::None,
+        rewriter, op->getLoc(), origType.getEnvironment(), std::nullopt,
         [&](mlir::OpBuilder &builder, mlir::Location loc) {
           auto val = adaptor.getValue();
           builder.create<mlir::memref::StoreOp>(loc, val, src,
                                                 adaptor.getIndices());
-          return llvm::None;
+          return std::nullopt;
         });
 
     rewriter.replaceOp(op, results);
@@ -364,10 +364,10 @@ struct CopyOpLowering
       return mlir::failure();
 
     imex::util::wrapEnvRegion(
-        rewriter, op->getLoc(), origSrcType.getEnvironment(), llvm::None,
+        rewriter, op->getLoc(), origSrcType.getEnvironment(), std::nullopt,
         [&](mlir::ConversionPatternRewriter &builder, mlir::Location /*loc*/) {
           builder.replaceOpWithNewOp<mlir::memref::CopyOp>(op, src, dst);
-          return llvm::None;
+          return std::nullopt;
         });
     return mlir::success();
   }
@@ -383,7 +383,7 @@ void imex::populateNtensorToMemrefRewritesAndTarget(
         if (mlir::MemRefType::isValidElementType(elemType))
           return mlir::MemRefType::get(type.getShape(), elemType);
 
-        return llvm::None;
+        return std::nullopt;
       });
 
   patterns

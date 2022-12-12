@@ -61,7 +61,7 @@ static mlir::LowerToLLVMOptions getLLVMOptions(mlir::MLIRContext &context) {
 
     llvm::TargetOptions target_opts;
     std::unique_ptr<llvm::TargetMachine> machine(target->createTargetMachine(
-        triple, llvm::sys::getHostCPUName(), "", target_opts, llvm::None));
+        triple, llvm::sys::getHostCPUName(), "", target_opts, std::nullopt));
     return machine->createDataLayout();
   }();
   mlir::LowerToLLVMOptions opts(&context);
@@ -84,7 +84,7 @@ static mlir::Type convertTupleTypes(mlir::MLIRContext &context,
                                     mlir::TypeConverter &converter,
                                     mlir::TypeRange types) {
   if (types.empty())
-    return mlir::LLVM::LLVMStructType::getLiteral(&context, llvm::None);
+    return mlir::LLVM::LLVMStructType::getLiteral(&context, std::nullopt);
 
   auto unitupleType = [&]() -> mlir::Type {
     assert(!types.empty());
@@ -128,7 +128,7 @@ populateToLLVMAdditionalTypeConversion(mlir::LLVMTypeConverter &converter) {
       [&converter](mlir::TupleType type) -> llvm::Optional<mlir::Type> {
         auto res = convertTuple(*type.getContext(), converter, type);
         if (!res)
-          return llvm::None;
+          return std::nullopt;
         return res;
       });
   auto voidPtrType = mlir::LLVM::LLVMPointerType::get(
@@ -648,7 +648,7 @@ struct ReturnOpLowering : public mlir::OpRewritePattern<mlir::func::ReturnOp> {
       auto resType =
           getFunctionResType(*ctx, typeConverter, op.getOperandTypes());
       auto val = rewriter.create<mlir::LLVM::UndefOp>(loc, resType).getResult();
-      for (auto it : llvm::enumerate(op.operands())) {
+      for (auto it : llvm::enumerate(op.getOperands())) {
         auto arg = convertVal(it.value());
         if (!arg)
           return mlir::failure();

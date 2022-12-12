@@ -28,7 +28,7 @@ wrapEnvRegion(Builder &builder, mlir::Location loc, mlir::Attribute env,
 
   auto res = builder
                  .template create<imex::util::EnvironmentRegionOp>(
-                     loc, env, /*args*/ llvm::None, results, bodyBuilder)
+                     loc, env, /*args*/ std::nullopt, results, bodyBuilder)
                  .getResults();
   return {res.begin(), res.end()};
 }

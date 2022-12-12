@@ -118,7 +118,7 @@ struct Conversion {
       for (auto elem : obj.attr("types").cast<py::tuple>()) {
         auto type = converter.convertType(context, elem);
         if (!type)
-          return llvm::None;
+          return std::nullopt;
 
         types.emplace_back(type);
       }
@@ -128,7 +128,7 @@ struct Conversion {
     if (py::isinstance(obj, uniTupleType)) {
       auto type = converter.convertType(context, obj.attr("dtype"));
       if (!type)
-        return llvm::None;
+        return std::nullopt;
 
       auto count = obj.attr("count").cast<size_t>();
       llvm::SmallVector<mlir::Type> types(count, type);
@@ -138,11 +138,11 @@ struct Conversion {
     if (py::isinstance(obj, pairType)) {
       auto first = converter.convertType(context, obj.attr("first_type"));
       if (!first)
-        return llvm::None;
+        return std::nullopt;
 
       auto second = converter.convertType(context, obj.attr("second_type"));
       if (!second)
-        return llvm::None;
+        return std::nullopt;
 
       mlir::Type types[] = {first, second};
       return mlir::TupleType::get(&context, types);
@@ -159,7 +159,7 @@ struct Conversion {
       if (py::isinstance<py::bool_>(value))
         return getBoolType(context);
 
-      return llvm::None;
+      return std::nullopt;
     }
 
     if (py::isinstance(obj, dispatcherType))
@@ -171,7 +171,7 @@ struct Conversion {
     if (py::isinstance(obj, numberClassType)) {
       auto type = converter.convertType(context, obj.attr("instance_type"));
       if (!type)
-        return llvm::None;
+        return std::nullopt;
 
       return imex::util::TypeVarType::get(type);
     }
@@ -208,12 +208,12 @@ struct Conversion {
       }();
 
       if (!type)
-        return llvm::None;
+        return std::nullopt;
 
       return plier::OmittedType::get(&context, type, attr);
     }
 
-    return llvm::None;
+    return std::nullopt;
   }
 
 private:

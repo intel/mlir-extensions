@@ -401,12 +401,12 @@ struct GetitemOpLowering
 static llvm::Optional<mlir::Type> isUnituple(mlir::Type type) {
   auto tupleType = type.dyn_cast<mlir::TupleType>();
   if (!tupleType || tupleType.size() == 0)
-    return llvm::None;
+    return std::nullopt;
 
   auto types = tupleType.getTypes();
   auto ret = types.front();
   if (llvm::any_of(types.drop_front(), [&](mlir::Type t) { return t != ret; }))
-    return llvm::None;
+    return std::nullopt;
 
   return ret;
 }

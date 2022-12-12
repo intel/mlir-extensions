@@ -42,7 +42,7 @@ struct ExpandTupleReturn
                   mlir::ConversionPatternRewriter &rewriter) const override {
     llvm::SmallVector<mlir::Value> newOperands;
     auto loc = op.getLoc();
-    flattenTuple(rewriter, loc, adaptor.operands(), newOperands);
+    flattenTuple(rewriter, loc, adaptor.getOperands(), newOperands);
     auto *operation = op.getOperation();
     rewriter.updateRootInPlace(op,
                                [&]() { operation->setOperands(newOperands); });
@@ -109,7 +109,7 @@ struct ExpandTuplePass
                          llvm::SmallVectorImpl<mlir::Type> &ret)
             -> llvm::Optional<mlir::LogicalResult> {
           if (mlir::failed(typeConverter.convertTypes(type.getTypes(), ret)))
-            return llvm::None;
+            return std::nullopt;
           return mlir::success();
         });
 
@@ -120,7 +120,7 @@ struct ExpandTuplePass
       if (auto ret = reconstructTuple(builder, loc, type, inputs))
         return ret;
 
-      return llvm::None;
+      return std::nullopt;
     };
     typeConverter.addArgumentMaterialization(materializeTupleCast);
     typeConverter.addSourceMaterialization(materializeTupleCast);

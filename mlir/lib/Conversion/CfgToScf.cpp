@@ -124,7 +124,7 @@ struct ScfIfRewriteOneExit
         auto operands = [&]() {
           auto term = block.getTerminator();
           if (postBlock == returnBlock) {
-            return mlir::cast<mlir::func::ReturnOp>(term).operands();
+            return mlir::cast<mlir::func::ReturnOp>(term).getOperands();
           } else {
             return mlir::cast<mlir::cf::BranchOp>(term).getDestOperands();
           }
@@ -145,7 +145,7 @@ struct ScfIfRewriteOneExit
       auto resTypes = [&]() {
         auto term = trueBlock->getTerminator();
         if (postBlock == returnBlock) {
-          return mlir::cast<mlir::func::ReturnOp>(term).operands().getTypes();
+          return mlir::cast<mlir::func::ReturnOp>(term).getOperands().getTypes();
         } else {
           return mlir::cast<mlir::cf::BranchOp>(term)
               .getDestOperands()

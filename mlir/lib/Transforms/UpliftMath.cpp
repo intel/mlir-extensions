@@ -69,7 +69,7 @@ struct UpliftMathCalls : public mlir::OpRewritePattern<mlir::func::CallOp> {
     for (auto &handler : handlers) {
       auto name = handler.first;
       if (name == funcName || name == funcNameF) {
-        auto res = handler.second(rewriter, op.getLoc(), op.operands());
+        auto res = handler.second(rewriter, op.getLoc(), op.getOperands());
         if (!res)
           return mlir::failure();
 
@@ -104,7 +104,7 @@ struct UpliftFabsCalls : public mlir::OpRewritePattern<mlir::func::CallOp> {
         llvm::any_of(op.getResultTypes(), isNotValidType))
       return mlir::failure();
 
-    rewriter.replaceOpWithNewOp<mlir::math::AbsFOp>(op, op.operands().front());
+    rewriter.replaceOpWithNewOp<mlir::math::AbsFOp>(op, op.getOperands().front());
     return mlir::success();
   }
 };
@@ -125,7 +125,7 @@ struct UpliftCabsCalls : public mlir::OpRewritePattern<mlir::func::CallOp> {
     if (op.getNumResults() != 1 || op.getNumOperands() != 1)
       return mlir::failure();
 
-    auto val = op.operands().front();
+    auto val = op.getOperands().front();
     auto srcType = val.getType().dyn_cast<mlir::ComplexType>();
 
     if (!srcType || srcType.getElementType() != op.getResult(0).getType())

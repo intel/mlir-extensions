@@ -215,12 +215,11 @@ static const std::pair<llvm::StringRef, func_t> builtinFuncsHandlers[] = {
 static llvm::Optional<mlir::Type> isUniTuple(mlir::TupleType type) {
   auto count = type.size();
   if (count == 0)
-    return llvm::None;
-
+    return std::nullopt;
   auto elemType = type.getType(0);
   for (auto i : llvm::seq<size_t>(1, count)) {
     if (type.getType(i) != elemType)
-      return llvm::None;
+      return std::nullopt;
   }
   return elemType;
 }
@@ -228,7 +227,7 @@ static llvm::Optional<mlir::Type> isUniTuple(mlir::TupleType type) {
 static llvm::Optional<mlir::Type> isUniTuple(mlir::Type type) {
   auto tupleType = type.dyn_cast<mlir::TupleType>();
   if (!tupleType)
-    return llvm::None;
+    return std::nullopt;
 
   return isUniTuple(tupleType);
 }
@@ -600,11 +599,11 @@ void MakeStridedLayoutPass::runOnOperation() {
           auto loc = call.getLoc();
 
           builder.setInsertionPoint(call);
-          assert(newArgTypes.size() == call.operands().size());
+          assert(newArgTypes.size() == call.getOperands().size());
           auto argsCount = static_cast<unsigned>(newArgTypes.size());
           newOperands.resize(argsCount);
           for (auto i : llvm::seq(0u, argsCount)) {
-            auto arg = call.operands()[i];
+            auto arg = call.getOperands()[i];
             auto oldType = arg.getType();
             auto newType = newArgTypes[i];
             if (oldType != newType) {
@@ -618,7 +617,7 @@ void MakeStridedLayoutPass::runOnOperation() {
               newOperands[i] = arg;
             }
           }
-          call.operandsMutable().assign(newOperands);
+          call.getOperandsMutable().assign(newOperands);
 
           builder.setInsertionPointAfter(call);
           assert(newResTypes.size() == call.getNumResults());
@@ -649,7 +648,7 @@ struct ChangeLayoutReturn
   mlir::LogicalResult
   matchAndRewrite(mlir::func::ReturnOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    if (op.operands().empty())
+    if (op.getOperands().empty())
       return mlir::failure();
 
     auto func = op->getParentOfType<mlir::func::FuncOp>();
@@ -668,7 +667,7 @@ struct ChangeLayoutReturn
         return mlir::failure();
 
     auto loc = op->getLoc();
-    auto args = op.operands();
+    auto args = op.getOperands();
     auto count = static_cast<unsigned>(args.size());
     llvm::SmallVector<mlir::Value> newArgs(args.begin(), args.end());
     llvm::SmallVector<int64_t> shape;
@@ -741,7 +740,7 @@ struct ChangeLayoutReturn
       auto callLoc = call->getLoc();
       auto oldResults = call.getResults();
       auto newResults =
-          rewriter.create<mlir::func::CallOp>(callLoc, func, call.operands())
+          rewriter.create<mlir::func::CallOp>(callLoc, func, call.getOperands())
               .getResults();
       newArgs.assign(newResults.begin(), newResults.end());
       for (auto i : llvm::seq(0u, count)) {
@@ -1149,7 +1148,7 @@ static llvm::Optional<mlir::Value> doCast(mlir::OpBuilder &builder,
   if (auto srcArrayType = srcType.dyn_cast<imex::ntensor::NTensorType>()) {
     auto dstShapedType = dstType.dyn_cast<mlir::ShapedType>();
     if (!dstShapedType)
-      return llvm::None;
+      return std::nullopt;
 
     mlir::Value res = addElementConversion(builder, loc, src, dstShapedType);
     if (dstShapedType.isa<mlir::MemRefType>()) {
@@ -1166,11 +1165,11 @@ static llvm::Optional<mlir::Value> doCast(mlir::OpBuilder &builder,
   } else {
     auto srcShapedType = srcType.dyn_cast<mlir::ShapedType>();
     if (!srcShapedType)
-      return llvm::None;
+      return std::nullopt;
 
     auto dstArrayType = dstType.dyn_cast<imex::ntensor::NTensorType>();
     if (!dstArrayType)
-      return llvm::None;
+      return std::nullopt;
 
     srcArrayType = imex::ntensor::NTensorType::get(
         dstArrayType.getShape(), srcShapedType.getElementType(),
@@ -1231,7 +1230,7 @@ struct CastsToNtensor : public mlir::OpConversionPattern<plier::CastOp> {
         return mlir::failure();
 
       rewriter.replaceOpWithNewOp<imex::ntensor::CreateArrayOp>(
-          op, ntensorType, /*dynamicSizes*/ llvm::None, src);
+          op, ntensorType, /*dynamicSizes*/ std::nullopt, src);
       return mlir::success();
     }
 
@@ -1329,7 +1328,7 @@ struct PlierToNtensorPass
           if (isNtensor(typeConverter, containerType))
             return false;
 
-          return llvm::None;
+          return std::nullopt;
         });
     target.addDynamicallyLegalOp<plier::SetItemOp>(
         [&typeConverter](plier::SetItemOp op) -> llvm::Optional<bool> {
@@ -1337,7 +1336,7 @@ struct PlierToNtensorPass
           if (isNtensor(typeConverter, containerType))
             return false;
 
-          return llvm::None;
+          return std::nullopt;
         });
 
     target.addDynamicallyLegalOp<imex::ntensor::GetitemOp,
@@ -1353,7 +1352,7 @@ struct PlierToNtensorPass
           if (isNtensor(typeConverter, lhs) || isNtensor(typeConverter, rhs))
             return false;
 
-          return llvm::None;
+          return std::nullopt;
         });
 
     target.addDynamicallyLegalOp<plier::PyCallOp>(
@@ -1366,7 +1365,7 @@ struct PlierToNtensorPass
             if (handler.first == funcName)
               return typeConverter.isLegal(op);
 
-          return llvm::None;
+          return std::nullopt;
         });
 
     target.addDynamicallyLegalOp<plier::GetattrOp>(
@@ -1375,7 +1374,7 @@ struct PlierToNtensorPass
           if (isNtensor(typeConverter, containerType))
             return false;
 
-          return llvm::None;
+          return std::nullopt;
         });
 
     target.addDynamicallyLegalOp<plier::CastOp>(
@@ -1395,7 +1394,7 @@ struct PlierToNtensorPass
             if (imex::ntensor::NTensorType::isValidElementType(*elemType))
               return false;
 
-          return llvm::None;
+          return std::nullopt;
         });
 
     target.addIllegalOp<plier::BuildSliceOp>();
@@ -1546,20 +1545,20 @@ struct NtensorPrimitiveCallsLowering final
     auto getRes = [&]() -> llvm::Optional<PyLinalgResolver::Values> {
       auto args = op.getArgs();
       auto funcRes =
-          resolver.rewriteFunc(opName, loc, rewriter, args, llvm::None);
+          resolver.rewriteFunc(opName, loc, rewriter, args, std::nullopt);
       if (funcRes)
         return funcRes;
 
       if (opName.startswith("array.") && args.size() == 1)
         return resolver.rewriteAttr(opName, loc, rewriter, args.front());
 
-      return llvm::None;
+      return std::nullopt;
     };
 
     PyLinalgResolver::Values newRes;
     if (*env != nullptr) {
       auto regionOp = rewriter.create<imex::util::EnvironmentRegionOp>(
-          loc, *env, /*args*/ llvm::None, op->getResultTypes());
+          loc, *env, /*args*/ std::nullopt, op->getResultTypes());
       auto &newBody = regionOp.getRegion().front();
       rewriter.eraseOp(newBody.getTerminator());
 
@@ -1800,7 +1799,7 @@ struct WrapParforRegionsPass
       if (auto store = mlir::dyn_cast<imex::ntensor::LoadOp>(op))
         return store.getArray().getType().getEnvironment();
 
-      return llvm::None;
+      return std::nullopt;
     };
 
     mlir::OpBuilder builder(&getContext());
@@ -1845,7 +1844,7 @@ struct WrapParforRegionsPass
       auto resultTypes = forOp.getResultTypes();
       builder.setInsertionPoint(forOp);
       auto envRegion = builder.create<imex::util::EnvironmentRegionOp>(
-          forOp.getLoc(), env, /*args*/ llvm::None, resultTypes);
+          forOp.getLoc(), env, /*args*/ std::nullopt, resultTypes);
       auto &envRegionBlock = envRegion.getRegion().front();
       auto term = envRegionBlock.getTerminator();
       forOp->moveBefore(term);
@@ -1891,7 +1890,7 @@ struct MarkInputShapesRanges
         auto newRange = [&]() -> llvm::Optional<mlir::ArrayAttr> {
           auto uses = mlir::SymbolTable::getSymbolUses(func, mod);
           if (!uses || !uses->empty())
-            return llvm::None;
+            return std::nullopt;
 
           auto rank = static_cast<unsigned>(shaped.getRank());
           llvm::SmallVector<mlir::Attribute> shapeRanges(rank);
@@ -2212,7 +2211,7 @@ struct SliceOfGeneric : public mlir::OpRewritePattern<mlir::linalg::GenericOp> {
         if (resMap.getDimPosition(d) == inputDim)
           return d;
       }
-      return llvm::None;
+      return std::nullopt;
     };
     auto isDroppedDim = [&](unsigned d) -> bool {
       if (auto indVal = findResDim(d)) {
@@ -2688,7 +2687,7 @@ struct BufferizeMixedGeneric
       return mlir::failure();
 
     auto newOp = rewriter.create<mlir::linalg::GenericOp>(
-        op.getLoc(), llvm::None, inputs, outputs, adaptor.getIndexingMaps(),
+        op.getLoc(), std::nullopt, inputs, outputs, adaptor.getIndexingMaps(),
         adaptor.getIteratorTypes(), nullptr, nullptr);
 
     auto &newRegion = newOp.getRegion();
@@ -2759,13 +2758,13 @@ struct AdditionalBufferize
         [](mlir::OpBuilder &builder, mlir::Type type, mlir::ValueRange inputs,
            mlir::Location loc) -> llvm::Optional<mlir::Value> {
       if (inputs.size() != 1)
-        return llvm::None;
+        return std::nullopt;
 
       auto input = inputs.front();
       if (input.getType().isa<mlir::TupleType>() || type.isa<mlir::TupleType>())
         return builder.createOrFold<plier::CastOp>(loc, type, input);
 
-      return llvm::None;
+      return std::nullopt;
     };
     typeConverter.addArgumentMaterialization(materializeTupleCast);
     typeConverter.addSourceMaterialization(materializeTupleCast);
@@ -2843,9 +2842,9 @@ void CloneArgsPass::runOnOperation() {
 
     auto loc = ret.getLoc();
     bool needReplace = false;
-    llvm::SmallVector<mlir::Value> newArgs(ret.operands().size());
+    llvm::SmallVector<mlir::Value> newArgs(ret.getOperands().size());
     builder.setInsertionPoint(ret);
-    for (auto it : llvm::enumerate(ret.operands())) {
+    for (auto it : llvm::enumerate(ret.getOperands())) {
       auto i = it.index();
       auto arg = it.value();
       if (arg.getType().isa<mlir::MemRefType>()) {
@@ -3046,7 +3045,7 @@ struct MakeGenericReduceInnermost
     for (auto attr : maps.getAsRange<mlir::AffineMapAttr>()) {
       auto map = attr.getAffineMap();
       auto newMap =
-          map.replaceDimsAndSymbols(remappedDims, llvm::None, numDims, 0);
+          map.replaceDimsAndSymbols(remappedDims, std::nullopt, numDims, 0);
       newMaps.emplace_back(mlir::AffineMapAttr::get(newMap));
     }
 

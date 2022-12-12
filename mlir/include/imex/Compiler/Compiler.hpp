@@ -12,6 +12,10 @@
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/ADT/StringRef.h>
 
+namespace llvm {
+class raw_ostream;
+}
+
 namespace mlir {
 class MLIRContext;
 class ModuleOp;

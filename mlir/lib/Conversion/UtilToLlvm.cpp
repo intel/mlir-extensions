@@ -18,7 +18,7 @@ static mlir::Type convertTupleTypes(mlir::MLIRContext &context,
                                     mlir::TypeConverter &converter,
                                     mlir::TypeRange types) {
   if (types.empty())
-    return mlir::LLVM::LLVMStructType::getLiteral(&context, llvm::None);
+    return mlir::LLVM::LLVMStructType::getLiteral(&context, std::nullopt);
 
   auto unitupleType = [&]() -> mlir::Type {
     assert(!types.empty());
@@ -60,7 +60,7 @@ populateToLLVMAdditionalTypeConversion(mlir::LLVMTypeConverter &converter) {
       [&converter](mlir::TupleType type) -> llvm::Optional<mlir::Type> {
         auto res = convertTuple(*type.getContext(), converter, type);
         if (!res)
-          return llvm::None;
+          return std::nullopt;
         return res;
       });
   auto voidPtrType = mlir::LLVM::LLVMPointerType::get(
@@ -336,7 +336,7 @@ struct LowerTakeContextOp
         auto ptr = rewriter.create<mlir::LLVM::BitcastOp>(
             unknownLoc, ctxStructPtrType, block->getArgument(0));
         rewriter.create<mlir::LLVM::StoreOp>(unknownLoc, ctxStruct, ptr);
-        rewriter.create<mlir::LLVM::ReturnOp>(unknownLoc, llvm::None);
+        rewriter.create<mlir::LLVM::ReturnOp>(unknownLoc, std::nullopt);
         return func;
       }();
 
@@ -384,8 +384,8 @@ struct LowerTakeContextOp
         }
 
         rewriter.create<mlir::func::CallOp>(unknownLoc, deinitFuncSym,
-                                            llvm::None, args);
-        rewriter.create<mlir::LLVM::ReturnOp>(unknownLoc, llvm::None);
+                                            std::nullopt, args);
+        rewriter.create<mlir::LLVM::ReturnOp>(unknownLoc, std::nullopt);
         return func;
       }();
 
@@ -428,12 +428,12 @@ struct LowerTakeContextOp
           mod.lookupSymbol<mlir::LLVM::LLVMFuncOp>(cleanupFuncName);
       if (!cleanupFunc) {
         auto cleanupFuncType =
-            mlir::LLVM::LLVMFunctionType::get(getVoidType(), llvm::None);
+            mlir::LLVM::LLVMFunctionType::get(getVoidType(), std::nullopt);
         cleanupFunc = rewriter.create<mlir::LLVM::LLVMFuncOp>(
             unknownLoc, cleanupFuncName, cleanupFuncType);
         auto block = rewriter.createBlock(&cleanupFunc.getBody());
         rewriter.setInsertionPointToStart(block);
-        rewriter.create<mlir::LLVM::ReturnOp>(unknownLoc, llvm::None);
+        rewriter.create<mlir::LLVM::ReturnOp>(unknownLoc, std::nullopt);
 
         addToGlobalDtors(rewriter, mod, mlir::SymbolRefAttr::get(cleanupFunc),
                          0);
