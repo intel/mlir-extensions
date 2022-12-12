@@ -19,6 +19,7 @@
 #include "imex/Conversion/NtensorToMemref.hpp"
 #include "imex/Conversion/SCFToAffine/SCFToAffine.h"
 #include "imex/Dialect/gpu_runtime/Transforms/MakeBarriersUniform.hpp"
+#include "imex/Dialect/ntensor/Transforms/CopyRemoval.hpp"
 #include "imex/Dialect/ntensor/Transforms/PropagateEnvironment.hpp"
 #include "imex/Dialect/ntensor/Transforms/ResolveArrayOps.hpp"
 #include "imex/Transforms/ExpandTuple.hpp"
@@ -119,6 +120,13 @@ static mlir::PassPipelineRegistration<> ntensorPropagateEnv(
     [](mlir::OpPassManager &pm) {
       pm.addPass(imex::ntensor::createPropagateEnvironmentPass());
     });
+
+static mlir::PassPipelineRegistration<>
+    ntensorCopyRemoval("ntensor-copy-removal",
+                       "This pass tries to remove redundant `ntensor.copy` ops",
+                       [](mlir::OpPassManager &pm) {
+                         pm.addPass(imex::ntensor::createCopyRemovalPass());
+                       });
 
 static mlir::PassPipelineRegistration<>
     ntensorAliasAnalysis("ntensor-alias-analysis",
