@@ -41,6 +41,7 @@
 #include "imex/Conversion/NtensorToMemref.hpp"
 #include "imex/Dialect/imex_util/Dialect.hpp"
 #include "imex/Dialect/ntensor/IR/NTensorOps.hpp"
+#include "imex/Dialect/ntensor/Transforms/CopyRemoval.hpp"
 #include "imex/Dialect/ntensor/Transforms/PropagateEnvironment.hpp"
 #include "imex/Dialect/ntensor/Transforms/ResolveArrayOps.hpp"
 #include "imex/Dialect/plier/Dialect.hpp"
@@ -3076,6 +3077,7 @@ static void populatePlierToLinalgGenPipeline(mlir::OpPassManager &pm) {
   pm.addPass(std::make_unique<PlierToNtensorPass>());
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(std::make_unique<ResolveNumpyFuncsPass>());
+  pm.addNestedPass<mlir::func::FuncOp>(imex::ntensor::createCopyRemovalPass());
   populateCommonOptPass(pm);
   pm.addPass(imex::ntensor::createPropagateEnvironmentPass());
   pm.addPass(std::make_unique<ResolveNtensorPass>());

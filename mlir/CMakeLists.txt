@@ -47,6 +47,7 @@ set(SOURCES_LIST
     lib/Dialect/gpu_runtime/Transforms/MakeBarriersUniform.cpp
     lib/Dialect/imex_util/Dialect.cpp
     lib/Dialect/ntensor/IR/NTensorOps.cpp
+    lib/Dialect/ntensor/Transforms/CopyRemoval.cpp
     lib/Dialect/ntensor/Transforms/PropagateEnvironment.cpp
     lib/Dialect/ntensor/Transforms/ResolveArrayOps.cpp
     lib/Dialect/plier/Dialect.cpp
@@ -96,6 +97,7 @@ set(HEADERS_LIST
     include/imex/Dialect/imex_util/Dialect.hpp
     include/imex/Dialect/imex_util/Utils.hpp
     include/imex/Dialect/ntensor/IR/NTensorOps.hpp
+    include/imex/Dialect/ntensor/Transforms/CopyRemoval.hpp
     include/imex/Dialect/ntensor/Transforms/PropagateEnvironment.hpp
     include/imex/Dialect/ntensor/Transforms/ResolveArrayOps.hpp
     include/imex/Dialect/plier/Dialect.hpp
