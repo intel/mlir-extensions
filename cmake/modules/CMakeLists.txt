@@ -74,37 +74,6 @@ endfunction()
 endif() # if(NOT IMEX_EXTERNAL_PROJECT_BUILD)
 
 # -----------------------------------------------------------------------------#
-# We do not want to recreate the whole MLIR build infrastructure. As such the
-
-# helper function extracts the IMEX dialect, conversion, and transform libs from
-# the global MLIR properties.
-function(get_imex_libs lib_type)
-    if(${lib_type} STREQUAL "ALL")
-        get_property(LIBS GLOBAL PROPERTY MLIR_ALL_LIBS)
-        set(target_property_name "IMEX_ALL_LIBS")
-    elseif(${lib_type} STREQUAL "CONVERSION")
-        get_property(LIBS GLOBAL PROPERTY MLIR_CONVERSION_LIBS)
-        set(target_property_name "IMEX_CONVERSION_LIBS")
-    elseif(${lib_type} STREQUAL "DIALECT")
-        get_property(LIBS GLOBAL PROPERTY MLIR_DIALECT_LIBS)
-        set(target_property_name "IMEX_DIALECT_LIBS")
-    elseif(${lib_type} STREQUAL "TRANSLATION")
-        get_property(LIBS GLOBAL PROPERTY MLIR_TRANSLATION_LIBS)
-        set(target_property_name "IMEX_TRANSLATION_LIBS")
-    else()
-        message(FATAL_ERROR "Unknown category of library type")
-    endif()
-
-    foreach(LIB ${LIBS})
-        string(FIND ${LIB} "IMEX" starts_with_imex)
-
-        if(starts_with_imex GREATER -1)
-            set_property(GLOBAL APPEND PROPERTY ${target_property_name} ${LIB})
-        endif()
-    endforeach(LIB ${LIBS})
-endfunction(get_imex_libs)
-
-# -----------------------------------------------------------------------------#
 
 # Generate a list of CMake library targets so that other CMake projects can
 # link against them. LLVM calls its version of this file LLVMExports.cmake, but
@@ -112,14 +81,9 @@ endfunction(get_imex_libs)
 set(IMEX_INSTALL_PACKAGE_DIR lib${LLVM_LIBDIR_SUFFIX}/cmake/imex)
 set(imex_cmake_builddir "${IMEX_BINARY_DIR}/${IMEX_INSTALL_PACKAGE_DIR}")
 
+# Export build tree targets
 get_property(IMEX_EXPORTS GLOBAL PROPERTY IMEX_EXPORTS)
 export(TARGETS ${IMEX_EXPORTS} FILE ${imex_cmake_builddir}/IMEXTargets.cmake)
-
-# Get the list of the IMEX libs
-get_imex_libs("ALL")
-get_imex_libs("CONVERSION")
-get_imex_libs("DIALECT")
-get_imex_libs("TRANSLATION")
 
 get_property(IMEX_ALL_LIBS GLOBAL PROPERTY IMEX_ALL_LIBS)
 get_property(IMEX_DIALECT_LIBS GLOBAL PROPERTY IMEX_DIALECT_LIBS)
