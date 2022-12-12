@@ -104,7 +104,8 @@ struct UpliftFabsCalls : public mlir::OpRewritePattern<mlir::func::CallOp> {
         llvm::any_of(op.getResultTypes(), isNotValidType))
       return mlir::failure();
 
-    rewriter.replaceOpWithNewOp<mlir::math::AbsFOp>(op, op.getOperands().front());
+    rewriter.replaceOpWithNewOp<mlir::math::AbsFOp>(op,
+                                                    op.getOperands().front());
     return mlir::success();
   }
 };

@@ -1359,8 +1359,8 @@ public:
       ifBuilder.create<mlir::scf::YieldOp>(ifLoc);
     };
 
-    rewriter.create<mlir::scf::IfOp>(loc, /*resultTypes*/ std::nullopt, isFirstSg,
-                                     ifBodyBuilder);
+    rewriter.create<mlir::scf::IfOp>(loc, /*resultTypes*/ std::nullopt,
+                                     isFirstSg, ifBodyBuilder);
 
     rewriter.create<gpu_runtime::GPUBarrierOp>(loc,
                                                gpu_runtime::FenceFlags::local);
