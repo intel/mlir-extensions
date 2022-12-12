@@ -329,4 +329,27 @@ def ConvertGPUXToLLVM : Pass<"convert-gpux-to-llvm", "::mlir::ModuleOp"> {
 }
 
 
+//===----------------------------------------------------------------------===//
+// LinalgToSPIRV
+//===----------------------------------------------------------------------===//
+
+def ConvertLinalgToSPIRV: Pass<"convert-linalg-to-spirv", "::mlir::ModuleOp"> {
+  let summary = "Convert from the Linalg dialect to the SPIRV dialect.";
+  let description = [{
+    Convert Linalg dialect operations into the SPIRV dialect operations.
+
+    #### Input invariant
+
+    - FIXME
+
+    #### Output IR
+
+    - FIXME
+  }];
+  let constructor = "::imex::createConvertLinalgToSPIRVPass()";
+  let dependentDialects = ["::mlir::linalg::LinalgDialect",
+                           "::mlir::spirv::SPIRVDialect"];
+  let options = [];
+}
+
 #endif // _IMEX_CONVERSION_PASSES_TD_INCLUDED_
