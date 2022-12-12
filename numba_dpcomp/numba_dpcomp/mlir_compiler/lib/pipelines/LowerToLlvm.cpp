@@ -4,6 +4,7 @@
 
 #include "pipelines/LowerToLlvm.hpp"
 
+#include <mlir/Conversion/AffineToStandard/AffineToStandard.h>
 #include <mlir/Conversion/ArithToLLVM/ArithToLLVM.h>
 #include <mlir/Conversion/ComplexToLLVM/ComplexToLLVM.h>
 #include <mlir/Conversion/ComplexToStandard/ComplexToStandard.h>
@@ -24,6 +25,7 @@
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/LLVMIR/LLVMDialect.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
+#include <mlir/Dialect/MemRef/Transforms/Passes.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 #include <mlir/IR/Builders.h>
@@ -61,7 +63,7 @@ static mlir::LowerToLLVMOptions getLLVMOptions(mlir::MLIRContext &context) {
 
     llvm::TargetOptions target_opts;
     std::unique_ptr<llvm::TargetMachine> machine(target->createTargetMachine(
-        triple, llvm::sys::getHostCPUName(), "", target_opts, llvm::None));
+        triple, llvm::sys::getHostCPUName(), "", target_opts, std::nullopt));
     return machine->createDataLayout();
   }();
   mlir::LowerToLLVMOptions opts(&context);
@@ -84,7 +86,7 @@ static mlir::Type convertTupleTypes(mlir::MLIRContext &context,
                                     mlir::TypeConverter &converter,
                                     mlir::TypeRange types) {
   if (types.empty())
-    return mlir::LLVM::LLVMStructType::getLiteral(&context, llvm::None);
+    return mlir::LLVM::LLVMStructType::getLiteral(&context, std::nullopt);
 
   auto unitupleType = [&]() -> mlir::Type {
     assert(!types.empty());
@@ -128,7 +130,7 @@ populateToLLVMAdditionalTypeConversion(mlir::LLVMTypeConverter &converter) {
       [&converter](mlir::TupleType type) -> llvm::Optional<mlir::Type> {
         auto res = convertTuple(*type.getContext(), converter, type);
         if (!res)
-          return llvm::None;
+          return std::nullopt;
         return res;
       });
   auto voidPtrType = mlir::LLVM::LLVMPointerType::get(
@@ -648,7 +650,7 @@ struct ReturnOpLowering : public mlir::OpRewritePattern<mlir::func::ReturnOp> {
       auto resType =
           getFunctionResType(*ctx, typeConverter, op.getOperandTypes());
       auto val = rewriter.create<mlir::LLVM::UndefOp>(loc, resType).getResult();
-      for (auto it : llvm::enumerate(op.operands())) {
+      for (auto it : llvm::enumerate(op.getOperands())) {
         auto arg = convertVal(it.value());
         if (!arg)
           return mlir::failure();
@@ -1520,6 +1522,9 @@ static void populateLowerToLlvmPipeline(mlir::OpPassManager &pm) {
   pm.addPass(mlir::createConvertSCFToCFPass());
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(mlir::createConvertComplexToStandardPass());
+  pm.addNestedPass<mlir::func::FuncOp>(
+      mlir::memref::createExpandStridedMetadataPass());
+  pm.addNestedPass<mlir::func::FuncOp>(mlir::createLowerAffinePass());
   pm.addNestedPass<mlir::func::FuncOp>(mlir::arith::createArithExpandOpsPass());
   pm.addNestedPass<mlir::func::FuncOp>(mlir::createConvertMathToLLVMPass());
   pm.addPass(mlir::createConvertMathToLibmPass());

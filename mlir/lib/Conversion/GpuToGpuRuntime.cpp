@@ -134,14 +134,14 @@ struct InsertGPUAllocs
         return {{store.getMemref()}};
       } else if (auto call = mlir::dyn_cast<mlir::func::CallOp>(op)) {
         mlir::SmallVector<mlir::Value, 4> ret;
-        for (auto arg : call.operands()) {
+        for (auto arg : call.getOperands()) {
           if (arg.getType().isa<mlir::MemRefType>())
             ret.emplace_back(arg);
         }
         return std::move(ret);
       } else {
         op->emitError("Uhhandled mem op in gpu region");
-        return llvm::None;
+        return std::nullopt;
       }
     };
 
@@ -153,7 +153,7 @@ struct InsertGPUAllocs
           return true;
       }
       if (auto call = mlir::dyn_cast<mlir::func::CallOp>(op)) {
-        for (auto arg : call.operands()) {
+        for (auto arg : call.getOperands()) {
           if (arg.getType().isa<mlir::MemRefType>())
             return true;
         }
@@ -369,8 +369,8 @@ struct InsertGPUAllocs
                          [&](mlir::OpBuilder &b, mlir::Location loc) {
                            auto gpuAlloc = builder.create<mlir::gpu::AllocOp>(
                                loc, allocType, /*asyncToken*/ nullptr,
-                               /*asyncDependencies*/ llvm::None, dims,
-                               /*symbolOperands*/ llvm::None, hostShared);
+                               /*asyncDependencies*/ std::nullopt, dims,
+                               /*symbolOperands*/ std::nullopt, hostShared);
                            auto allocResult = gpuAlloc.getMemref();
                            if (allocType != memrefType)
                              allocResult = builder.create<mlir::memref::CastOp>(
@@ -389,13 +389,13 @@ struct InsertGPUAllocs
 
       builder.setInsertionPoint(term);
       imex::util::wrapEnvRegion(
-          builder, src.getLoc(), access.env, llvm::None,
+          builder, src.getLoc(), access.env, std::nullopt,
           [&](mlir::OpBuilder &b, mlir::Location loc) {
             if (access.hostRead && access.deviceWrite)
               builder.create<mlir::memref::CopyOp>(loc, results, src);
 
-            builder.create<mlir::gpu::DeallocOp>(loc, llvm::None, results);
-            return llvm::None;
+            builder.create<mlir::gpu::DeallocOp>(loc, std::nullopt, results);
+            return std::nullopt;
           });
     };
 
@@ -408,7 +408,7 @@ struct InsertGPUAllocs
             [&](mlir::OpBuilder &b, mlir::Location loc) {
               auto gpuAlloc = builder.create<mlir::gpu::AllocOp>(
                   loc, alloc.getType(), /*asyncToken*/ nullptr,
-                  /*asyncDependencies*/ llvm::None, alloc.getDynamicSizes(),
+                  /*asyncDependencies*/ std::nullopt, alloc.getDynamicSizes(),
                   alloc.getSymbolOperands(), hostShared);
               return gpuAlloc.getResults();
             });
@@ -802,7 +802,7 @@ public:
 
     auto ptr = rewriter
                    .create<mlir::spirv::InBoundsPtrAccessChainOp>(
-                       loc, adaptor.getSource(), finalOffset, llvm::None)
+                       loc, adaptor.getSource(), finalOffset, std::nullopt)
                    .getResult();
 
     rewriter.replaceOp(op, ptr);
@@ -856,15 +856,15 @@ static llvm::Optional<unsigned> getTypeSize(mlir::Type type) {
 
   if (auto vec = type.dyn_cast<mlir::VectorType>()) {
     if (!vec.hasStaticShape())
-      return llvm::None;
+      return std::nullopt;
 
     auto elemSize = getTypeSize(vec.getElementType());
     if (!elemSize)
-      return llvm::None;
+      return std::nullopt;
 
     return static_cast<unsigned>(vec.getNumElements()) * *elemSize;
   }
-  return llvm::None;
+  return std::nullopt;
 }
 
 class ConvertLoadOp : public mlir::OpConversionPattern<mlir::memref::LoadOp> {
@@ -890,7 +890,7 @@ public:
     } else if (memrefType.hasRank() && memrefType.getRank() == 1) {
       auto loc = op.getLoc();
       auto ptr = rewriter.create<mlir::spirv::InBoundsPtrAccessChainOp>(
-          loc, adaptor.getMemref(), adaptor.getIndices().front(), llvm::None);
+          loc, adaptor.getMemref(), adaptor.getIndices().front(), std::nullopt);
 
       auto memoryAccess = mlir::spirv::MemoryAccessAttr::get(
           op.getContext(), mlir::spirv::MemoryAccess::Aligned);
@@ -925,7 +925,7 @@ public:
     auto ptr = adaptor.getMemref();
     if (memrefType.getRank() != 0)
       ptr = rewriter.create<mlir::spirv::InBoundsPtrAccessChainOp>(
-          loc, ptr, adaptor.getIndices().front(), llvm::None);
+          loc, ptr, adaptor.getIndices().front(), std::nullopt);
 
     auto memoryAccess = mlir::spirv::MemoryAccessAttr::get(
         op.getContext(), mlir::spirv::MemoryAccess::Aligned);
@@ -971,7 +971,7 @@ public:
   mlir::LogicalResult
   matchAndRewrite(mlir::func::CallOp op, mlir::func::CallOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    auto operands = adaptor.operands();
+    auto operands = adaptor.getOperands();
     if (operands.size() != 2)
       return mlir::failure();
 
@@ -1142,7 +1142,7 @@ convertStorageClass(mlir::Attribute src) {
   // TODO: Fix storage class upstream
   //  auto attr = src.dyn_cast_or_null<gpu_runtime::StorageClassAttr>();
   //  if (!attr)
-  //    return llvm::None;
+  //    return std::nullopt;
 
   //  auto sc = attr.getValue();
   //  if (sc == gpu_runtime::StorageClass::local)
@@ -1156,7 +1156,7 @@ convertStorageClass(mlir::Attribute src) {
       return mlir::spirv::StorageClass::Function;
   }
 
-  return llvm::None;
+  return std::nullopt;
 }
 
 static mlir::spirv::StorageClass
@@ -1651,7 +1651,7 @@ struct AbiAttrsPass
     auto *context = &getContext();
     auto attrName =
         mlir::StringAttr::get(context, mlir::spirv::getEntryPointABIAttrName());
-    auto abi = mlir::spirv::getEntryPointABIAttr(llvm::None, context);
+    auto abi = mlir::spirv::getEntryPointABIAttr(context);
     for (auto gpuFunc : gpuModule.getOps<mlir::gpu::GPUFuncOp>()) {
       if (!mlir::gpu::GPUDialect::isKernel(gpuFunc) ||
           gpuFunc->getAttr(attrName))
@@ -1797,7 +1797,7 @@ struct GPUExPass
 static llvm::Optional<mlir::Attribute> getNeutralValue(mlir::Block &block) {
   auto body = block.without_terminator();
   if (!llvm::hasSingleElement(body))
-    return llvm::None;
+    return std::nullopt;
 
   return mlir::linalg::getNeutralElement(&(*body.begin()));
 }
@@ -1949,7 +1949,7 @@ struct TileParallelOp : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
           return rewriter.create<mlir::scf::IfOp>(
               loc, initVals.getTypes(), inBounds, thenBuilder, elseBuilder);
         } else {
-          return rewriter.create<mlir::scf::IfOp>(loc, llvm::None, inBounds);
+          return rewriter.create<mlir::scf::IfOp>(loc, std::nullopt, inBounds);
         }
       }();
 
@@ -2209,7 +2209,7 @@ struct TruncateF64ForGPUPass
     converter.addConversion(
         [](mlir::MemRefType type) -> llvm::Optional<mlir::Type> {
           if (!type.getElementType().isF64())
-            return llvm::None;
+            return std::nullopt;
 
           int64_t shape[] = {2};
           auto elemType = mlir::IntegerType::get(type.getContext(), 32);
@@ -2221,7 +2221,7 @@ struct TruncateF64ForGPUPass
                       mlir::ValueRange inputs,
                       mlir::Location loc) -> llvm::Optional<mlir::Value> {
       if (inputs.size() != 1)
-        return llvm::None;
+        return std::nullopt;
 
       auto src = inputs.front();
       auto srcType = src.getType();
@@ -2237,7 +2237,7 @@ struct TruncateF64ForGPUPass
         return builder.create<imex::util::MemrefBitcastOp>(loc, dstType, src)
             .getResult();
 
-      return llvm::None;
+      return std::nullopt;
     };
     converter.addArgumentMaterialization(addCast);
     converter.addSourceMaterialization(addCast);
@@ -2258,7 +2258,7 @@ struct TruncateF64ForGPUPass
           if (converter.isLegal(op))
             return true;
 
-          return llvm::None;
+          return std::nullopt;
         });
 
     mlir::FrozenRewritePatternSet frozenPatterns(std::move(patterns));
@@ -2384,7 +2384,7 @@ struct InsertGPUGlobalReduce
 
     for (auto [reduce, init] : llvm::zip(reductionOpsVec, op.getInitVals())) {
       auto reduceType = init.getType();
-      auto memrefType = mlir::MemRefType::get(llvm::None, reduceType);
+      auto memrefType = mlir::MemRefType::get(std::nullopt, reduceType);
 
       rewriter.setInsertionPoint(op);
       mlir::Value array =
@@ -2610,7 +2610,7 @@ convertAllReduceOp(mlir::Operation *op) {
   if (mlir::isa<Op>(op))
     return ReduceOp;
 
-  return llvm::None;
+  return std::nullopt;
 }
 
 struct AllReduceRemoveRegion
@@ -2651,7 +2651,7 @@ struct AllReduceRemoveRegion
         if (auto res = h(&reduceOp))
           return *res;
 
-      return llvm::None;
+      return std::nullopt;
     }();
     if (!result)
       return mlir::failure();

@@ -95,7 +95,7 @@ void imex::populateUtilConversionPatterns(mlir::TypeConverter &converter,
             if (converter.isLegal(type))
               return true;
 
-        return llvm::None;
+        return std::nullopt;
       });
 
   patterns.insert<ConvertEnvRegion, ConvertEnvRegionYield>(
@@ -107,6 +107,6 @@ void imex::populateUtilConversionPatterns(mlir::TypeConverter &converter,
         if (converter.isLegal(op))
           return true;
 
-        return llvm::None;
+        return std::nullopt;
       });
 }

@@ -176,13 +176,12 @@ void imex::populateArithConversionRewritesAndTarget(
         if (converter.isLegal(op))
           return true;
 
-        return llvm::None;
+        return std::nullopt;
       });
 
   patterns.insert<
       // clang-format off
       ConvertBinaryOp<mlir::arith::AddIOp>,
-      ConvertBinaryOp<mlir::arith::AddUICarryOp>,
       ConvertBinaryOp<mlir::arith::AndIOp>,
       ConvertBinaryOp<mlir::arith::CeilDivSIOp>,
       ConvertBinaryOp<mlir::arith::CeilDivUIOp>,
@@ -243,7 +242,7 @@ void imex::populateMathConversionRewritesAndTarget(
         if (converter.isLegal(op))
           return true;
 
-        return llvm::None;
+        return std::nullopt;
       });
 
   patterns.insert<

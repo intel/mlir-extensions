@@ -79,7 +79,7 @@ struct CmpLoopBoundsSimplify
           }
         }
       }
-      return llvm::None;
+      return std::nullopt;
     }();
 
     if (!res)

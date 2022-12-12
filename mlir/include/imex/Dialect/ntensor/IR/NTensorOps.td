@@ -89,7 +89,7 @@ def NTensor_Tensor : NTensor_Type<"NTensor", "ntensor", [
       "::llvm::ArrayRef<int64_t>":$shape,
       "::mlir::Type":$elementType,
       CArg<"::mlir::Attribute", "{}">:$environment,
-      CArg<"::llvm::Optional<::llvm::StringRef>", "::llvm::None">:$layout
+      CArg<"::llvm::Optional<::llvm::StringRef>", "std::nullopt">:$layout
     ), [{
       auto ctx = elementType.getContext();
       auto l = layout ? ::mlir::StringAttr::get(ctx, *layout) : ::mlir::StringAttr{};

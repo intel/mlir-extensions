@@ -208,7 +208,7 @@ void imex::populatePromoteBoolMemrefConversionRewritesAndTarget(
         if (isI1(elemType))
           return type.clone(i8);
 
-        return llvm::None;
+        return std::nullopt;
       });
 
   target.addDynamicallyLegalDialect<mlir::memref::MemRefDialect>(&checkOp);

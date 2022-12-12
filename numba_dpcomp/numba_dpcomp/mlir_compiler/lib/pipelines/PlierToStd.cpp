@@ -989,7 +989,7 @@ void PlierToStdPass::runOnOperation() {
         if (isOmittedType(type))
           return mlir::success();
 
-        return llvm::None;
+        return std::nullopt;
       });
   imex::populateTupleTypeConverter(typeConverter);
 
@@ -1001,7 +1001,7 @@ void PlierToStdPass::runOnOperation() {
           .create<mlir::UnrealizedConversionCastOp>(loc, type, inputs.front())
           .getResult(0);
 
-    return llvm::None;
+    return std::nullopt;
   };
   typeConverter.addArgumentMaterialization(materializeCast);
   typeConverter.addSourceMaterialization(materializeCast);
@@ -1074,7 +1074,7 @@ void PlierToStdPass::runOnOperation() {
         if (type.isa_and_nonnull<mlir::TupleType>())
           return false;
 
-        return llvm::None;
+        return std::nullopt;
       });
   target.addIllegalOp<plier::BuildTupleOp>();
   target.addLegalOp<imex::util::BuildTupleOp, imex::util::TupleExtractOp>();

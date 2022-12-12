@@ -494,11 +494,11 @@ public:
 
           auto mod = func->getParentOfType<mlir::ModuleOp>();
           if (!mod)
-            return llvm::None;
+            return std::nullopt;
 
           auto uses = mlir::SymbolTable::getSymbolUses(func, mod);
           if (!uses || !uses->empty())
-            return llvm::None;
+            return std::nullopt;
 
           return ShapeValue{shaped};
         }();
@@ -538,20 +538,20 @@ public:
         auto state =
             getOrCreateFor<ShapeValueLattice>(op, dim.getShapedValue());
         if (!state)
-          return llvm::None;
+          return std::nullopt;
 
         auto &shapeVal = state->getValue();
         if (shapeVal.isUninitialized())
-          return llvm::None;
+          return std::nullopt;
 
         auto index = mlir::getConstantIntValue(dim.getDimension());
         if (!index)
-          return llvm::None;
+          return std::nullopt;
 
         auto shape = shapeVal.getShape();
         auto indexVal = *index;
         if (indexVal < 0 || indexVal >= static_cast<int64_t>(shape.size()))
-          return llvm::None;
+          return std::nullopt;
 
         return shape[indexVal];
       }();
@@ -582,7 +582,7 @@ static llvm::Optional<bool> handleEq(mlir::ConstantIntRanges lhs,
   if (!intersects(lhs, rhs))
     return false;
 
-  return llvm::None;
+  return std::nullopt;
 }
 
 static llvm::Optional<bool> handleNe(mlir::ConstantIntRanges lhs,
@@ -590,7 +590,7 @@ static llvm::Optional<bool> handleNe(mlir::ConstantIntRanges lhs,
   if (!intersects(lhs, rhs))
     return true;
 
-  return llvm::None;
+  return std::nullopt;
 }
 
 static llvm::Optional<bool> handleSlt(mlir::ConstantIntRanges lhs,
@@ -601,7 +601,7 @@ static llvm::Optional<bool> handleSlt(mlir::ConstantIntRanges lhs,
   if (lhs.smin().sge(rhs.smax()))
     return false;
 
-  return llvm::None;
+  return std::nullopt;
 }
 
 static llvm::Optional<bool> handleSle(mlir::ConstantIntRanges lhs,
@@ -612,7 +612,7 @@ static llvm::Optional<bool> handleSle(mlir::ConstantIntRanges lhs,
   if (lhs.smin().sgt(rhs.smax()))
     return false;
 
-  return llvm::None;
+  return std::nullopt;
 }
 
 static llvm::Optional<bool> handleSgt(mlir::ConstantIntRanges lhs,
@@ -633,7 +633,7 @@ static llvm::Optional<bool> handleUlt(mlir::ConstantIntRanges lhs,
   if (lhs.umin().uge(rhs.umax()))
     return false;
 
-  return llvm::None;
+  return std::nullopt;
 }
 
 static llvm::Optional<bool> handleUle(mlir::ConstantIntRanges lhs,
@@ -644,7 +644,7 @@ static llvm::Optional<bool> handleUle(mlir::ConstantIntRanges lhs,
   if (lhs.umin().ugt(rhs.umax()))
     return false;
 
-  return llvm::None;
+  return std::nullopt;
 }
 
 static llvm::Optional<bool> handleUgt(mlir::ConstantIntRanges lhs,

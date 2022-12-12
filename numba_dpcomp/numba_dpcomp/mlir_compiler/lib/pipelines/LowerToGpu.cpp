@@ -350,7 +350,7 @@ struct GPULowerDefaultLocalSize
 
         auto res = builder
                        .create<gpu_runtime::GPUSuggestBlockSizeOp>(
-                           loc, /*stream*/ llvm::None, globalSize, kernel)
+                           loc, /*stream*/ std::nullopt, globalSize, kernel)
                        .getResults();
 
         for (auto i : llvm::seq(0u, count)) {
@@ -573,7 +573,7 @@ struct OutlineInitPass
           for (auto type : op->getResultTypes())
             types.emplace_back(type);
 
-        auto funcType = builder.getFunctionType(llvm::None, types);
+        auto funcType = builder.getFunctionType(std::nullopt, types);
         auto func = builder.create<mlir::func::FuncOp>(
             builder.getUnknownLoc(), (funcName + "outlined_init").str(),
             funcType);
@@ -609,7 +609,7 @@ struct OutlineInitPass
         assert(!initOps.empty());
         builder.setInsertionPointToStart(mod.getBody());
         assert(!types.empty());
-        auto funcType = builder.getFunctionType(types, llvm::None);
+        auto funcType = builder.getFunctionType(types, std::nullopt);
         auto func = builder.create<mlir::func::FuncOp>(
             builder.getUnknownLoc(), (funcName + "outlined_deinit").str(),
             funcType);
@@ -795,7 +795,7 @@ protected:
       auto opResults = op.getResults();
       rewriter.setInsertionPoint(op);
       auto newOp = rewriter.create<imex::util::EnvironmentRegionOp>(
-          op->getLoc(), envAttr, /*args*/ llvm::None, opResults.getTypes(),
+          op->getLoc(), envAttr, /*args*/ std::nullopt, opResults.getTypes(),
           bodyBuilder);
       rewriter.replaceOp(op, newOp->getResults());
     }
@@ -1070,7 +1070,7 @@ struct LowerBuiltinCalls : public mlir::OpRewritePattern<mlir::func::CallOp> {
         !op.getResult(0).getType().isa<mlir::IntegerType>())
       return mlir::failure();
 
-    auto indAttr = mlir::getConstantIntValue(op.operands()[0]);
+    auto indAttr = mlir::getConstantIntValue(op.getOperands()[0]);
     if (!indAttr)
       return mlir::failure();
 
@@ -1098,7 +1098,7 @@ static llvm::Optional<gpu_runtime::FenceFlags>
 getFenceFlags(mlir::OpFoldResult arg) {
   auto val = mlir::getConstantIntValue(arg);
   if (!val)
-    return llvm::None;
+    return std::nullopt;
 
   auto v = *val;
   if (v == 1)
@@ -1107,7 +1107,7 @@ getFenceFlags(mlir::OpFoldResult arg) {
   if (v == 2)
     return gpu_runtime::FenceFlags::global;
 
-  return llvm::None;
+  return std::nullopt;
 }
 
 template <typename Op>
@@ -1132,7 +1132,7 @@ public:
     if (!op->getParentOfType<mlir::gpu::LaunchOp>())
       return mlir::failure();
 
-    auto operands = op.operands();
+    auto operands = op.getOperands();
     if (operands.size() != 1)
       return mlir::failure();
 
@@ -1182,7 +1182,7 @@ public:
     if (!op->getParentOfType<mlir::gpu::LaunchOp>())
       return mlir::failure();
 
-    auto operands = op.operands();
+    auto operands = op.getOperands();
     if (operands.size() != 1)
       return mlir::failure();
 
@@ -1294,12 +1294,12 @@ public:
       groupBuffer = rewriter
                         .create<mlir::gpu::AllocOp>(
                             loc, memrefType, /*asyncToken*/ mlir::Type(),
-                            /*asyncDependencies*/ llvm::None, numSubgroups,
-                            /*symbolOperands*/ llvm::None)
+                            /*asyncDependencies*/ std::nullopt, numSubgroups,
+                            /*symbolOperands*/ std::nullopt)
                         .getMemref();
       rewriter.setInsertionPointAfter(launchOp);
       rewriter.create<mlir::gpu::DeallocOp>(loc, /*asyncToken*/ mlir::Type(),
-                                            /*asyncDependencies*/ llvm::None,
+                                            /*asyncDependencies*/ std::nullopt,
                                             groupBuffer);
     }
 
@@ -1359,8 +1359,8 @@ public:
       ifBuilder.create<mlir::scf::YieldOp>(ifLoc);
     };
 
-    rewriter.create<mlir::scf::IfOp>(loc, /*resultTypes*/ llvm::None, isFirstSg,
-                                     ifBodyBuilder);
+    rewriter.create<mlir::scf::IfOp>(loc, /*resultTypes*/ std::nullopt,
+                                     isFirstSg, ifBodyBuilder);
 
     rewriter.create<gpu_runtime::GPUBarrierOp>(loc,
                                                gpu_runtime::FenceFlags::local);
@@ -1401,7 +1401,7 @@ public:
     if (!oldType)
       return mlir::failure();
 
-    auto operands = op.operands();
+    auto operands = op.getOperands();
     auto operandsCount = static_cast<unsigned>(operands.size());
     if (operandsCount != static_cast<unsigned>(oldType.getRank()))
       return mlir::failure();
@@ -1491,7 +1491,7 @@ public:
     if (!oldType)
       return mlir::failure();
 
-    auto operands = op.operands();
+    auto operands = op.getOperands();
     auto operandsCount = static_cast<unsigned>(operands.size());
     if (operandsCount != static_cast<unsigned>(oldType.getRank()))
       return mlir::failure();
@@ -1720,7 +1720,7 @@ static llvm::Optional<mlir::spirv::Version> mapSpirvVersion(uint16_t major,
     if (minor < std::size(mapping))
       return mapping[minor];
   }
-  return llvm::None;
+  return std::nullopt;
 }
 
 static mlir::spirv::TargetEnvAttr deviceCapsMapper(mlir::gpu::GPUModuleOp op) {

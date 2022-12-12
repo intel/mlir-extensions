@@ -33,7 +33,7 @@ static llvm::Optional<mlir::Attribute> getTensorEnv(mlir::Value val) {
   if (auto tensor = val.getType().dyn_cast<imex::ntensor::NTensorType>())
     return tensor.getEnvironment();
 
-  return llvm::None;
+  return std::nullopt;
 }
 
 class EnvValue {

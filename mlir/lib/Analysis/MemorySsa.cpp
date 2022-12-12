@@ -460,7 +460,7 @@ imex::MemorySSA::Node *memSSAProcessRegion(mlir::Region &region,
         };
 
         llvm::SmallVector<mlir::RegionSuccessor> successorsTemp;
-        branchReg.getSuccessorRegions(/*index*/ llvm::None, successorsTemp);
+        branchReg.getSuccessorRegions(/*index*/ std::nullopt, successorsTemp);
         for (auto &successor : successorsTemp) {
           auto ind = getRegionIndex(successor.getSuccessor());
           if (ind) {

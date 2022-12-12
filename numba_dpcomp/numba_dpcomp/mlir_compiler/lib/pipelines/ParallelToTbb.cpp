@@ -139,7 +139,7 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
         rewriter.create<mlir::arith::ConstantIndexOp>(loc, maxConcurrency);
     auto reduceStep = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
     rewriter.create<mlir::scf::ForOp>(loc, reduceLowerBound, reduceUpperBound,
-                                      reduceStep, llvm::None,
+                                      reduceStep, std::nullopt,
                                       reduceInitBodyBuilder);
 
     auto &oldBody = op.getLoopBody().front();
@@ -253,7 +253,7 @@ static llvm::Optional<LoopInfo> getLoopInfo(mlir::Operation *op) {
   }
 
   if (!ret.outermostLoop)
-    return llvm::None;
+    return std::nullopt;
 
   return ret;
 }

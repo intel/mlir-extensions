@@ -12,6 +12,10 @@
 #include <llvm/ADT/simple_ilist.h>
 #include <llvm/Support/Allocator.h>
 
+namespace llvm {
+class raw_ostream;
+}
+
 namespace mlir {
 struct LogicalResult;
 class Operation;

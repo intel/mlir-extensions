@@ -129,7 +129,7 @@ struct DimExpandShape : public mlir::OpRewritePattern<DimOp> {
           if (i == dstIndex)
             return it.index();
 
-      return llvm::None;
+      return std::nullopt;
     }();
 
     if (!srcIndexAttr)
@@ -945,7 +945,7 @@ struct ChangeLayoutIf : public mlir::OpRewritePattern<mlir::scf::YieldOp> {
 
 static llvm::Optional<unsigned> getSingleDynamicDim(mlir::ShapedType type) {
   if (!type.hasRank())
-    return llvm::None;
+    return std::nullopt;
 
   int dimIndex = -1;
   for (auto it : llvm::enumerate(type.getShape())) {
@@ -953,18 +953,18 @@ static llvm::Optional<unsigned> getSingleDynamicDim(mlir::ShapedType type) {
     auto dim = it.value();
     if (dim == mlir::ShapedType::kDynamic) {
       if (dimIndex != -1)
-        return llvm::None;
+        return std::nullopt;
 
       dimIndex = i;
     } else if (dim != 1) {
-      return llvm::None;
+      return std::nullopt;
     }
   }
 
   if (dimIndex != -1)
     return static_cast<unsigned>(dimIndex);
 
-  return llvm::None;
+  return std::nullopt;
 }
 
 struct ChangeLayout1DReshape

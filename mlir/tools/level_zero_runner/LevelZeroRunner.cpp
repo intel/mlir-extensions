@@ -85,6 +85,8 @@ static LogicalResult runMLIRPasses(mlir::Operation *op,
   passManager.addPass(gpu_runtime::createGPUToLLVMPass());
   passManager.addPass(
       imex::createUtilToLLVMPass([&](MLIRContext &) { return llvmOptions; }));
+  passManager.addPass(mlir::memref::createExpandStridedMetadataPass());
+  passManager.addPass(mlir::createLowerAffinePass());
   passManager.addPass(createMemRefToLLVMConversionPass());
   passManager.addPass(createReconcileUnrealizedCastsPass());
 

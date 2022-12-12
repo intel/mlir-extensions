@@ -24,8 +24,8 @@ func.func @test(%arg: !ntensor.ntensor<2x3x4xf32: "C">) -> !ntensor.ntensor<2x3x
   return %arg : !ntensor.ntensor<2x3x4xf32: "C">
 }
 // CHECK-LABEL: func @test
-//  CHECK-SAME:   (%[[ARG:.*]]: !ntensor.ntensor<2x3x4xf32: "C">)
-//  CHECK-NEXT:   return %[[ARG]] : !ntensor.ntensor<2x3x4xf32: "C">
+//  CHECK-SAME:   (%[[ARG:.*]]: !ntensor.ntensor<2x3x4xf32 : "C">)
+//  CHECK-NEXT:   return %[[ARG]] : !ntensor.ntensor<2x3x4xf32 : "C">
 
 // -----
 
@@ -33,8 +33,8 @@ func.func @test(%arg: !ntensor.ntensor<2x3x4xf32: "C", "test">) -> !ntensor.nten
   return %arg : !ntensor.ntensor<2x3x4xf32: "C", "test">
 }
 // CHECK-LABEL: func @test
-//  CHECK-SAME:   (%[[ARG:.*]]: !ntensor.ntensor<2x3x4xf32: "C", "test">)
-//  CHECK-NEXT:   return %[[ARG]] : !ntensor.ntensor<2x3x4xf32: "C", "test">
+//  CHECK-SAME:   (%[[ARG:.*]]: !ntensor.ntensor<2x3x4xf32 : "C", "test">)
+//  CHECK-NEXT:   return %[[ARG]] : !ntensor.ntensor<2x3x4xf32 : "C", "test">
 
 // -----
 
@@ -446,9 +446,9 @@ func.func @test(%arg: !ntensor.ntensor<2x3x4xf32: "C">) -> !ntensor.ntensor<2x3x
   return %0 : !ntensor.ntensor<2x3x4xf32: "A">
 }
 // CHECK-LABEL: func @test
-//  CHECK-SAME:   (%[[ARG:.*]]: !ntensor.ntensor<2x3x4xf32: "C">)
-//  CHECK-NEXT:   %[[RES:.*]] = ntensor.cast %[[ARG]] : !ntensor.ntensor<2x3x4xf32: "C"> to !ntensor.ntensor<2x3x4xf32: "A">
-//  CHECK-NEXT:   return %[[RES]] : !ntensor.ntensor<2x3x4xf32: "A">
+//  CHECK-SAME:   (%[[ARG:.*]]: !ntensor.ntensor<2x3x4xf32 : "C">)
+//  CHECK-NEXT:   %[[RES:.*]] = ntensor.cast %[[ARG]] : !ntensor.ntensor<2x3x4xf32 : "C"> to !ntensor.ntensor<2x3x4xf32 : "A">
+//  CHECK-NEXT:   return %[[RES]] : !ntensor.ntensor<2x3x4xf32 : "A">
 
 // -----
 

@@ -555,7 +555,7 @@ private:
 
   void jump(py::handle target) {
     auto block = blocksMap.find(target.cast<int>())->second;
-    builder.create<mlir::cf::BranchOp>(getCurrentLoc(), mlir::None, block);
+    builder.create<mlir::cf::BranchOp>(getCurrentLoc(), std::nullopt, block);
   }
 
   mlir::Value getConstOrNull(py::handle val) {

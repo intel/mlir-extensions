@@ -67,7 +67,7 @@ parseDefault(mlir::OpBuilder &builder, mlir::Location loc, py::handle obj) {
     for (auto [i, elem] : llvm::enumerate(val)) {
       auto elemVal = parseDefault(builder, loc, elem);
       if (!elemVal)
-        return llvm::None;
+        return std::nullopt;
 
       elems[i] = *elemVal;
     }
@@ -77,7 +77,7 @@ parseDefault(mlir::OpBuilder &builder, mlir::Location loc, py::handle obj) {
         .getResult();
   }
 
-  return llvm::None;
+  return std::nullopt;
 }
 
 mlir::LogicalResult
@@ -99,7 +99,7 @@ NumpyResolver::resolveFuncArgs(mlir::OpBuilder &builder, mlir::Location loc,
 
   auto findArg = [&](llvm::StringRef argName) -> llvm::Optional<mlir::Value> {
     if (argsNamesAndValues.empty())
-      return llvm::None;
+      return std::nullopt;
 
     for (auto [i, it] : llvm::enumerate(argsNamesAndValues)) {
       auto origArgName = it.second.getValue();
@@ -110,7 +110,7 @@ NumpyResolver::resolveFuncArgs(mlir::OpBuilder &builder, mlir::Location loc,
         return res;
       }
     }
-    return llvm::None;
+    return std::nullopt;
   };
 
   auto outTuple = res.attr("out").cast<py::tuple>();
