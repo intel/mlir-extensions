@@ -220,6 +220,28 @@ func.func @test(%arg1: !ntensor.ntensor<?xf32>, %arg2: index) {
 
 // -----
 
+func.func @test(%arg1: !ntensor.ntensor<?xf32>) -> !ntensor.ntensor<?xf32> {
+  %0 = ntensor.view_primitive "foo" (%arg1) : !ntensor.ntensor<?xf32> -> !ntensor.ntensor<?xf32>
+  return %0 : !ntensor.ntensor<?xf32>
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG1:.*]]: !ntensor.ntensor<?xf32>)
+//  CHECK-NEXT:   %[[RES:.*]] = ntensor.view_primitive "foo" (%[[ARG1]]) : !ntensor.ntensor<?xf32> -> !ntensor.ntensor<?xf32>
+//  CHECK-NEXT:   return %[[RES]] : !ntensor.ntensor<?xf32>
+
+// -----
+
+func.func @test(%arg1: !ntensor.ntensor<?xf32>, %arg2: index) -> !ntensor.ntensor<?xf32> {
+  %0 = ntensor.view_primitive "foo" (%arg1, %arg2) : !ntensor.ntensor<?xf32>, index -> !ntensor.ntensor<?xf32>
+  return %0 : !ntensor.ntensor<?xf32>
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG1:.*]]: !ntensor.ntensor<?xf32>, %[[ARG2:.*]]: index)
+//  CHECK-NEXT:   %[[RES:.*]] = ntensor.view_primitive "foo" (%[[ARG1]], %[[ARG2]]) : !ntensor.ntensor<?xf32>, index -> !ntensor.ntensor<?xf32>
+//  CHECK-NEXT:   return %[[RES]] : !ntensor.ntensor<?xf32>
+
+// -----
+
 func.func @test(%arg1: !ntensor.ntensor<?xf32>) -> index {
   %0 = arith.constant 0 : index
   %1 = ntensor.dim %arg1, %0 : !ntensor.ntensor<?xf32>
