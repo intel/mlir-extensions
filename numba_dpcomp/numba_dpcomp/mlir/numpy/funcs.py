@@ -647,6 +647,7 @@ def shape_impl(builder, arg):
 
 
 @register_attr("array.T")
+@register_func("numpy.transpose", numpy.transpose)
 def transpose_impl(builder, arg):
     shape = arg.shape
     dims = len(shape)
