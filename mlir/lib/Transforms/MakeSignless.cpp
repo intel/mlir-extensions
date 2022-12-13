@@ -7,6 +7,7 @@
 #include "imex/Dialect/imex_util/Dialect.hpp"
 #include "imex/Transforms/TypeConversion.hpp"
 
+#include <mlir/Dialect/Bufferization/IR/Bufferization.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
@@ -14,6 +15,75 @@
 #include <mlir/Transforms/DialectConversion.h>
 
 namespace {
+struct ConvertChangeLayout
+    : public mlir::OpConversionPattern<imex::util::ChangeLayoutOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::util::ChangeLayoutOp op,
+                  imex::util::ChangeLayoutOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto converter = getTypeConverter();
+    assert(converter);
+
+    auto oldResType = op.getType();
+    auto newResType =
+        converter->convertType(oldResType).dyn_cast_or_null<mlir::MemRefType>();
+    if (!newResType)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<imex::util::ChangeLayoutOp>(
+        op, newResType, adaptor.getSource());
+    return mlir::success();
+  }
+};
+
+struct ConvertToMemref
+    : public mlir::OpConversionPattern<mlir::bufferization::ToMemrefOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::bufferization::ToMemrefOp op,
+                  mlir::bufferization::ToMemrefOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto converter = getTypeConverter();
+    assert(converter);
+
+    auto oldResType = op.getType();
+    auto newResType =
+        converter->convertType(oldResType).dyn_cast_or_null<mlir::MemRefType>();
+    if (!newResType)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::bufferization::ToMemrefOp>(
+        op, newResType, adaptor.getTensor());
+    return mlir::success();
+  }
+};
+
+struct ConvertToTensor
+    : public mlir::OpConversionPattern<mlir::bufferization::ToTensorOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::bufferization::ToTensorOp op,
+                  mlir::bufferization::ToTensorOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto converter = getTypeConverter();
+    assert(converter);
+
+    auto oldResType = op.getType();
+    auto newResType = converter->convertType(oldResType)
+                          .dyn_cast_or_null<mlir::RankedTensorType>();
+    if (!newResType)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::bufferization::ToTensorOp>(
+        op, newResType, adaptor.getMemref());
+    return mlir::success();
+  }
+};
+
 template <typename Op>
 struct ConvertAlloc : public mlir::OpConversionPattern<Op> {
   using mlir::OpConversionPattern<Op>::OpConversionPattern;
@@ -317,15 +387,17 @@ void imex::populateMakeSignlessRewritesAndTarget(
   converter.addTargetMaterialization(materializeSignCast);
 
   target.addDynamicallyLegalOp<
-      mlir::memref::AllocOp, mlir::memref::AllocaOp, mlir::memref::DeallocOp,
-      mlir::memref::SubViewOp, mlir::tensor::EmptyOp,
-      mlir::tensor::FromElementsOp, mlir::tensor::ExpandShapeOp,
-      mlir::tensor::ReshapeOp, mlir::tensor::ExtractSliceOp,
-      mlir::tensor::InsertSliceOp, mlir::linalg::FillOp,
-      mlir::linalg::GenericOp, mlir::linalg::YieldOp>(
+      imex::util::ChangeLayoutOp, mlir::bufferization::ToMemrefOp,
+      mlir::bufferization::ToTensorOp, mlir::memref::AllocOp,
+      mlir::memref::AllocaOp, mlir::memref::DeallocOp, mlir::memref::SubViewOp,
+      mlir::tensor::EmptyOp, mlir::tensor::FromElementsOp,
+      mlir::tensor::ExpandShapeOp, mlir::tensor::ReshapeOp,
+      mlir::tensor::ExtractSliceOp, mlir::tensor::InsertSliceOp,
+      mlir::linalg::FillOp, mlir::linalg::GenericOp, mlir::linalg::YieldOp>(
       [&converter](mlir::Operation *op) { return converter.isLegal(op); });
 
-  patterns.insert<ConvertAlloc<mlir::memref::AllocOp>,
+  patterns.insert<ConvertChangeLayout, ConvertToMemref, ConvertToTensor,
+                  ConvertAlloc<mlir::memref::AllocOp>,
                   ConvertAlloc<mlir::memref::AllocaOp>, ConvertDealloc,
                   ConvertSubview, ConvertTensorEmpty, ConvertTensorFromElements,
                   ConvertTensorExpandShape, ConvertTensorReshape,
@@ -342,6 +414,7 @@ struct MakeSignlessPass
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<imex::util::ImexUtilDialect>();
+    registry.insert<mlir::bufferization::BufferizationDialect>();
     registry.insert<mlir::linalg::LinalgDialect>();
     registry.insert<mlir::memref::MemRefDialect>();
     registry.insert<mlir::tensor::TensorDialect>();
