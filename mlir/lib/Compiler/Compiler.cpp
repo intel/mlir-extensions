@@ -22,7 +22,7 @@ struct PassManagerStage {
   template <typename F>
   PassManagerStage(mlir::MLIRContext &ctx,
                    const imex::CompilerContext::Settings &settings,
-                   F &&init_func)
+                   F &&initFunc)
       : pm(&ctx) {
     pm.enableVerifier(settings.verify);
 
@@ -58,17 +58,17 @@ struct PassManagerStage {
                           *(settings.irPrinting->out));
     }
 
-    init_func(pm);
+    initFunc(pm);
   }
 
-  void add_jump(mlir::StringAttr name, PassManagerStage *stage) {
+  void addJump(mlir::StringAttr name, PassManagerStage *stage) {
     assert(!name.getValue().empty());
     assert(nullptr != stage);
     jumps.emplace_back(name, stage);
   }
 
   std::pair<PassManagerStage *, mlir::StringAttr>
-  get_jump(mlir::ArrayAttr names) const {
+  getJump(mlir::ArrayAttr names) const {
     if (names) {
       for (auto &it : jumps) {
         for (auto name : names) {
@@ -81,20 +81,20 @@ struct PassManagerStage {
     return {nullptr, nullptr};
   }
 
-  void set_next_stage(PassManagerStage *stage) {
-    assert(nullptr == next_stage);
+  void setNextStage(PassManagerStage *stage) {
+    assert(nullptr == nextStage);
     assert(nullptr != stage);
-    next_stage = stage;
+    nextStage = stage;
   }
 
-  PassManagerStage *get_next_stage() const { return next_stage; }
+  PassManagerStage *getNextStage() const { return nextStage; }
 
   mlir::LogicalResult run(mlir::ModuleOp op) { return pm.run(op); }
 
 private:
   mlir::PassManager pm;
   llvm::SmallVector<std::pair<mlir::StringAttr, PassManagerStage *>, 1> jumps;
-  PassManagerStage *next_stage = nullptr;
+  PassManagerStage *nextStage = nullptr;
 };
 
 struct PassManagerSchedule {
@@ -110,22 +110,21 @@ struct PassManagerSchedule {
 
       assert(nullptr == stages);
       llvm::SmallVector<StageDesc, 64> stagesTemp;
-      std::unordered_map<const void *, PassManagerStage *> stages_map;
+      std::unordered_map<const void *, PassManagerStage *> stagesMap;
 
       auto addStage = [&](llvm::StringRef name,
                           llvm::ArrayRef<llvm::StringRef> jumps,
                           auto pmInitFunc) {
         assert(!name.empty());
         auto prevStage =
-            (stages_map.empty() ? nullptr : stagesTemp.back().stage.get());
+            (stagesMap.empty() ? nullptr : stagesTemp.back().stage.get());
         stagesTemp.push_back(
             {name, jumps,
              std::make_unique<PassManagerStage>(ctx, settings, pmInitFunc)});
-        assert(stages_map.count(name.data()) == 0);
-        stages_map.insert({name.data(), stagesTemp.back().stage.get()});
-        if (nullptr != prevStage) {
-          prevStage->set_next_stage(stagesTemp.back().stage.get());
-        }
+        assert(stagesMap.count(name.data()) == 0);
+        stagesMap.insert({name.data(), stagesTemp.back().stage.get()});
+        if (nullptr != prevStage)
+          prevStage->setNextStage(stagesTemp.back().stage.get());
       };
 
       sink(addStage);
@@ -133,11 +132,11 @@ struct PassManagerSchedule {
       for (auto &stage : stagesTemp) {
         for (auto jump : stage.jumps) {
           assert(!jump.empty());
-          auto it = stages_map.find(jump.data());
-          assert(it != stages_map.end());
+          auto it = stagesMap.find(jump.data());
+          assert(it != stagesMap.end());
           assert(nullptr != it->second);
           auto name = mlir::StringAttr::get(&ctx, jump);
-          stage.stage->add_jump(name, it->second);
+          stage.stage->addJump(name, it->second);
         }
       }
 
@@ -159,12 +158,12 @@ struct PassManagerSchedule {
         return mlir::failure();
 
       auto markers = imex::getPipelineJumpMarkers(module);
-      auto jumpTarget = current->get_jump(markers);
+      auto jumpTarget = current->getJump(markers);
       if (nullptr != jumpTarget.first) {
         imex::removePipelineJumpMarker(module, jumpTarget.second);
         current = jumpTarget.first;
       } else {
-        current = current->get_next_stage();
+        current = current->getNextStage();
       }
     } while (nullptr != current);
     return mlir::success();
