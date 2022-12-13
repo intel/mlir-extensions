@@ -659,6 +659,52 @@ llvm::SmallBitVector imex::ntensor::SubviewOp::getDroppedDims() {
   return droppedDims;
 }
 
+static bool isIdentitySubview(imex::ntensor::SubviewOp op) {
+  auto srcType = op.getSource().getType().cast<imex::ntensor::NTensorType>();
+  if (srcType != op.getResult().getType())
+    return false;
+
+  for (auto val : op.getMixedOffsets())
+    if (!mlir::isConstantIntValue(val, 0))
+      return false;
+
+  auto srcShape = srcType.getShape();
+  for (auto [i, val] : llvm::enumerate(op.getMixedSizes())) {
+    assert(i < srcShape.size());
+    auto shapeVal = srcShape[i];
+    if (mlir::ShapedType::isDynamic(shapeVal)) {
+      auto dim = val.dyn_cast<mlir::Value>();
+      if (!dim)
+        return false;
+
+      auto dimOp = dim.getDefiningOp<imex::ntensor::DimOp>();
+      if (!dimOp)
+        return false;
+
+      auto dimInd = dimOp.getConstantIndex();
+      if (!dimInd || *dimInd != static_cast<int64_t>(i))
+        return false;
+    } else {
+      if (!mlir::isConstantIntValue(val, shapeVal))
+        return false;
+    }
+  }
+
+  for (auto val : op.getMixedStrides())
+    if (!mlir::isConstantIntValue(val, 1))
+      return false;
+
+  return true;
+}
+
+mlir::OpFoldResult
+imex::ntensor::SubviewOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
+  if (isIdentitySubview(*this))
+    return getSource();
+
+  return nullptr;
+}
+
 mlir::OpFoldResult imex::ntensor::FromTensorOp::fold(
     llvm::ArrayRef<mlir::Attribute> /*operands*/) {
   if (auto to = getTensor().getDefiningOp<imex::ntensor::ToTensorOp>()) {

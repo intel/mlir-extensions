@@ -374,6 +374,8 @@ def SubviewOp : NTensor_OpWithOffsetSizesAndStrides<"subview", [
 
     ::mlir::Value getViewSource() { return getSource(); }
   }];
+
+  let hasFolder = 1;
 }
 
 def LoadOp : NTensor_OpBase<"load",
