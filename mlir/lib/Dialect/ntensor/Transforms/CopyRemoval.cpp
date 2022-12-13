@@ -110,7 +110,7 @@ struct CopyRemovalPass
         auto memInterface =
             mlir::dyn_cast<mlir::MemoryEffectOpInterface>(owner);
         if (!memInterface ||
-            memInterface.getEffectOnValue<mlir::MemoryEffects::Write>(dst))
+            !memInterface.getEffectOnValue<mlir::MemoryEffects::Read>(dst))
           continue;
 
         mlir::Value newArg = src;

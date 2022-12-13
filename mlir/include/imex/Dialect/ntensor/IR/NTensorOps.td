@@ -550,7 +550,7 @@ def PrimitiveOp : NTensor_OpBase<"primitive", [Pure]> {
 
   }];
 
-  let arguments = (ins Variadic<AnyType>:$args, StrAttr:$op);
+  let arguments = (ins Arg<Variadic<AnyType>, "", [MemRead]>:$args, StrAttr:$op);
 
   let results = (outs Res<Variadic<AnyType>, "", [MemAlloc<DefaultResource>]>:$results);
 
