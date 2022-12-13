@@ -20,6 +20,8 @@ builtin.module(inline
     convert-math-to-llvm
     convert-complex-to-llvm
     convert-index-to-llvm
+    expand-strided-metadata
+    lower-affine
     convert-memref-to-llvm
     convert-func-to-llvm
     reconcile-unrealized-casts)
