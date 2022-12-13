@@ -30,7 +30,6 @@ namespace {
 struct SetSPIRVCapabilitiesPass
     : public imex::impl::SetSPIRVCapabilitiesBase<SetSPIRVCapabilitiesPass> {
 public:
-  explicit SetSPIRVCapabilitiesPass() { m_clientAPI = "vulkan"; }
   explicit SetSPIRVCapabilitiesPass(const mlir::StringRef &clientAPI)
       : m_clientAPI(clientAPI) {}
 
@@ -38,12 +37,9 @@ public:
     if (failed(Pass::initializeOptions(options)))
       return mlir::failure();
 
-    if (clientAPI == "opencl") {
-      m_clientAPI = "opencl";
-    }
-
     if (clientAPI != "vulkan" && clientAPI != "opencl")
       return mlir::failure();
+    m_clientAPI = clientAPI;
 
     return mlir::success();
   }
@@ -111,7 +107,11 @@ private:
 } // namespace
 
 namespace imex {
+std::unique_ptr<mlir::Pass>
+createSetSPIRVCapabilitiesPass(mlir::StringRef api) {
+  return std::make_unique<SetSPIRVCapabilitiesPass>(api);
+}
 std::unique_ptr<mlir::Pass> createSetSPIRVCapabilitiesPass() {
-  return std::make_unique<SetSPIRVCapabilitiesPass>();
+  return createSetSPIRVCapabilitiesPass("opencl");
 }
 } // namespace imex
