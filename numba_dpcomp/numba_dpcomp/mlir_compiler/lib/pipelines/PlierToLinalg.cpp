@@ -2686,38 +2686,6 @@ struct BufferizeExtractSlice
   }
 };
 
-struct BufferizeForceCopy
-    : public mlir::OpConversionPattern<imex::util::ForceCopyOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(imex::util::ForceCopyOp op,
-                  imex::util::ForceCopyOp::Adaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
-    auto converter = getTypeConverter();
-    assert(converter);
-    auto dstType = converter->convertType(op.getType())
-                       .dyn_cast_or_null<mlir::MemRefType>();
-
-    if (!dstType)
-      return mlir::failure();
-
-    auto src = adaptor.getSource();
-    auto srcType = src.getType().cast<mlir::MemRefType>();
-    auto rank = static_cast<unsigned>(srcType.getRank());
-
-    auto loc = op->getLoc();
-    llvm::SmallVector<mlir::Value> sizes(rank);
-    for (auto i : llvm::seq(0u, rank))
-      sizes[i] = rewriter.create<mlir::memref::DimOp>(loc, src, i);
-
-    auto dst = rewriter.create<mlir::memref::AllocOp>(loc, dstType, sizes);
-    genCopy(rewriter, loc, src, dst);
-    rewriter.replaceOp(op, dst.getResult());
-    return mlir::success();
-  }
-};
-
 struct BufferizeMixedGeneric
     : public mlir::OpConversionPattern<mlir::linalg::GenericOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -2843,7 +2811,6 @@ struct AdditionalBufferize
                                                        target);
     target
         .addIllegalOp<mlir::tensor::ReshapeOp, mlir::tensor::ExtractSliceOp>();
-    target.addIllegalOp<imex::util::ForceCopyOp>();
     target.addLegalOp<mlir::memref::ReshapeOp>();
 
     target.addDynamicallyLegalOp<mlir::linalg::GenericOp>(
@@ -2851,8 +2818,9 @@ struct AdditionalBufferize
           return op.hasTensorSemantics() || op.hasBufferSemantics();
         });
 
-    patterns.insert<BufferizeReshape, BufferizeExtractSlice, BufferizeForceCopy,
-                    BufferizeMixedGeneric>(typeConverter, context);
+    patterns
+        .insert<BufferizeReshape, BufferizeExtractSlice, BufferizeMixedGeneric>(
+            typeConverter, context);
 
     if (failed(applyPartialConversion(getOperation(), target,
                                       std::move(patterns))))

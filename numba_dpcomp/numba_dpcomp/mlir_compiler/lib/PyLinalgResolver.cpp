@@ -1238,8 +1238,9 @@ static py::object undefImpl(py::capsule context, py::handle dtype) {
   return ctx.context.createVar(context, ret);
 }
 
-py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
-                       py::handle sizes, py::handle strides, py::handle rank) {
+static py::object subviewImpl(py::capsule context, py::handle src,
+                              py::handle offsets, py::handle sizes,
+                              py::handle strides, py::handle rank) {
   auto &ctx = getPyContext(context);
   auto &builder = ctx.builder;
   auto loc = ctx.loc;
@@ -1348,18 +1349,31 @@ py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
   return ctx.context.createVar(context, view);
 }
 
-py::object forceCopyImpl(py::capsule context, py::handle src) {
+static py::object forceCopyImpl(py::capsule context, py::handle src) {
   auto &ctx = getPyContext(context);
   auto &builder = ctx.builder;
   auto loc = ctx.loc;
   auto srcVal =
-      toTensor(loc, builder, ctx.context.unwrapVal(loc, builder, src));
-  auto res = builder.create<imex::util::ForceCopyOp>(loc, srcVal);
+      toNTensor(loc, builder, ctx.context.unwrapVal(loc, builder, src));
+
+  auto valType = srcVal.getType().cast<imex::ntensor::NTensorType>();
+  llvm::SmallVector<mlir::Value> dynamicSizes;
+  for (auto [i, dim] : llvm::enumerate(valType.getShape())) {
+    if (mlir::ShapedType::isDynamic(dim)) {
+      mlir::Value dimVal = builder.create<imex::ntensor::DimOp>(
+          loc, srcVal, static_cast<int64_t>(i));
+      dynamicSizes.emplace_back(dimVal);
+    }
+  }
+
+  mlir::Value res = builder.create<imex::ntensor::CreateArrayOp>(
+      loc, valType, dynamicSizes, /*initVal*/ mlir::Value{});
+  builder.create<imex::ntensor::CopyOp>(loc, srcVal, res);
   return ctx.context.createVar(context, res);
 }
 
-py::object selectImpl(py::capsule context, py::handle cond, py::handle trueV,
-                      py::handle falseV) {
+static py::object selectImpl(py::capsule context, py::handle cond,
+                             py::handle trueV, py::handle falseV) {
   auto &ctx = getPyContext(context);
   auto &builder = ctx.builder;
   auto loc = ctx.loc;

@@ -235,28 +235,6 @@ struct ConvertLinalgYield
     return mlir::success();
   }
 };
-
-struct ConvertForceCopy
-    : public mlir::OpConversionPattern<imex::util::ForceCopyOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(imex::util::ForceCopyOp op,
-                  imex::util::ForceCopyOp::Adaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
-    auto converter = this->getTypeConverter();
-    assert(converter);
-
-    auto oldResType = op.getType();
-    auto newResType = converter->convertType(oldResType);
-    if (!newResType)
-      return mlir::failure();
-
-    rewriter.replaceOpWithNewOp<imex::util::ForceCopyOp>(op, newResType,
-                                                         adaptor.getSource());
-    return mlir::success();
-  }
-};
 } // namespace
 
 static llvm::Optional<mlir::Type> makeSignlessType(mlir::Type type) {
@@ -291,15 +269,14 @@ void imex::populateMakeSignlessRewritesAndTarget(
       mlir::tensor::EmptyOp, mlir::tensor::FromElementsOp,
       mlir::tensor::ExpandShapeOp, mlir::tensor::ReshapeOp,
       mlir::tensor::InsertSliceOp, mlir::linalg::FillOp,
-      mlir::linalg::GenericOp, mlir::linalg::YieldOp, imex::util::ForceCopyOp>(
+      mlir::linalg::GenericOp, mlir::linalg::YieldOp>(
       [&converter](mlir::Operation *op) { return converter.isLegal(op); });
 
-  patterns.insert<ConvertAlloc<mlir::memref::AllocOp>,
-                  ConvertAlloc<mlir::memref::AllocaOp>, ConvertDealloc,
-                  ConvertTensorEmpty, ConvertTensorFromElements,
-                  ConvertTensorExpandShape, ConvertTensorReshape,
-                  ConvertTensorInserSlice, ConvertLinalgFill,
-                  ConvertLinalgGeneric, ConvertLinalgYield, ConvertForceCopy>(
+  patterns.insert<
+      ConvertAlloc<mlir::memref::AllocOp>, ConvertAlloc<mlir::memref::AllocaOp>,
+      ConvertDealloc, ConvertTensorEmpty, ConvertTensorFromElements,
+      ConvertTensorExpandShape, ConvertTensorReshape, ConvertTensorInserSlice,
+      ConvertLinalgFill, ConvertLinalgGeneric, ConvertLinalgYield>(
       converter, patterns.getContext());
 }
 

@@ -1818,11 +1818,6 @@ ExtractMemrefMetadataOp::fold(llvm::ArrayRef<mlir::Attribute> /*operands*/) {
   return nullptr;
 }
 
-void ForceCopyOp::build(mlir::OpBuilder &b, mlir::OperationState &result,
-                        mlir::Value source) {
-  build(b, result, source.getType(), source);
-}
-
 void TakeContextOp::build(mlir::OpBuilder &b, mlir::OperationState &result,
                           mlir::SymbolRefAttr initFunc,
                           mlir::SymbolRefAttr releaseFunc,
