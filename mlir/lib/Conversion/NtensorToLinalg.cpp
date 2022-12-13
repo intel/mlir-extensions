@@ -32,6 +32,9 @@ struct ConvertCreateOp
   mlir::LogicalResult
   matchAndRewrite(imex::ntensor::CreateArrayOp op,
                   mlir::PatternRewriter &rewriter) const override {
+    if (!op->hasAttr(kReadonly))
+      return mlir::failure();
+
     auto dstType = op.getType().dyn_cast<imex::ntensor::NTensorType>();
     if (!dstType)
       return mlir::failure();
@@ -694,6 +697,9 @@ struct NtensorAliasAnalysisPass
       assert(op);
       if (auto subview = mlir::dyn_cast<imex::ntensor::SubviewOp>(op))
         return subview.getResult();
+
+      if (auto create = mlir::dyn_cast<imex::ntensor::CreateArrayOp>(op))
+        return create.getResult();
 
       return {};
     };
