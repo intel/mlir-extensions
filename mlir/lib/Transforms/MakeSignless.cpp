@@ -51,6 +51,32 @@ struct ConvertDealloc
   }
 };
 
+struct ConvertSubview
+    : public mlir::OpConversionPattern<mlir::memref::SubViewOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::SubViewOp op,
+                  mlir::memref::SubViewOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto converter = getTypeConverter();
+    assert(converter);
+
+    auto oldResType = op.getType();
+    auto newResType =
+        converter->convertType(oldResType).dyn_cast_or_null<mlir::MemRefType>();
+    if (!newResType)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::memref::SubViewOp>(
+        op, newResType, adaptor.getSource(), adaptor.getOffsets(),
+        adaptor.getSizes(), adaptor.getStrides(),
+        adaptor.getStaticOffsetsAttr(), adaptor.getStaticSizesAttr(),
+        adaptor.getStaticStridesAttr());
+    return mlir::success();
+  }
+};
+
 struct ConvertTensorEmpty
     : public mlir::OpConversionPattern<mlir::tensor::EmptyOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -139,6 +165,32 @@ struct ConvertTensorReshape
 
     rewriter.replaceOpWithNewOp<mlir::tensor::ReshapeOp>(
         op, newResType, adaptor.getSource(), adaptor.getShape());
+    return mlir::success();
+  }
+};
+
+struct ConvertTensorExtractSlice
+    : public mlir::OpConversionPattern<mlir::tensor::ExtractSliceOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::tensor::ExtractSliceOp op,
+                  mlir::tensor::ExtractSliceOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto converter = getTypeConverter();
+    assert(converter);
+
+    auto oldResType = op.getType();
+    auto newResType = converter->convertType(oldResType)
+                          .dyn_cast_or_null<mlir::RankedTensorType>();
+    if (!newResType)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::tensor::ExtractSliceOp>(
+        op, newResType, adaptor.getSource(), adaptor.getOffsets(),
+        adaptor.getSizes(), adaptor.getStrides(),
+        adaptor.getStaticOffsetsAttr(), adaptor.getStaticSizesAttr(),
+        adaptor.getStaticStridesAttr());
     return mlir::success();
   }
 };
@@ -266,17 +318,19 @@ void imex::populateMakeSignlessRewritesAndTarget(
 
   target.addDynamicallyLegalOp<
       mlir::memref::AllocOp, mlir::memref::AllocaOp, mlir::memref::DeallocOp,
-      mlir::tensor::EmptyOp, mlir::tensor::FromElementsOp,
-      mlir::tensor::ExpandShapeOp, mlir::tensor::ReshapeOp,
+      mlir::memref::SubViewOp, mlir::tensor::EmptyOp,
+      mlir::tensor::FromElementsOp, mlir::tensor::ExpandShapeOp,
+      mlir::tensor::ReshapeOp, mlir::tensor::ExtractSliceOp,
       mlir::tensor::InsertSliceOp, mlir::linalg::FillOp,
       mlir::linalg::GenericOp, mlir::linalg::YieldOp>(
       [&converter](mlir::Operation *op) { return converter.isLegal(op); });
 
-  patterns.insert<
-      ConvertAlloc<mlir::memref::AllocOp>, ConvertAlloc<mlir::memref::AllocaOp>,
-      ConvertDealloc, ConvertTensorEmpty, ConvertTensorFromElements,
-      ConvertTensorExpandShape, ConvertTensorReshape, ConvertTensorInserSlice,
-      ConvertLinalgFill, ConvertLinalgGeneric, ConvertLinalgYield>(
+  patterns.insert<ConvertAlloc<mlir::memref::AllocOp>,
+                  ConvertAlloc<mlir::memref::AllocaOp>, ConvertDealloc,
+                  ConvertSubview, ConvertTensorEmpty, ConvertTensorFromElements,
+                  ConvertTensorExpandShape, ConvertTensorReshape,
+                  ConvertTensorExtractSlice, ConvertTensorInserSlice,
+                  ConvertLinalgFill, ConvertLinalgGeneric, ConvertLinalgYield>(
       converter, patterns.getContext());
 }
 
