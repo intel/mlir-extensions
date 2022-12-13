@@ -40,10 +40,10 @@ def _get_func(name):
     return _registered_funcs.get(name, None)
 
 
-_FuncDesc = namedtuple("_FuncDesc", "params out")
+_FuncDesc = namedtuple("_FuncDesc", "params out view_like")
 
 
-def _get_wrapper(name, orig, out=None):
+def _get_wrapper(name, orig, out=None, view_like=False):
     if out is None:
         out = ()
     elif not isinstance(out, tuple) and not isinstance(out, list):
@@ -60,20 +60,20 @@ def _get_wrapper(name, orig, out=None):
         paramCount = len(paramsNames)
         outParams = tuple((name, i + paramCount) for i, name in enumerate(out))
         funcParams = [(n, params[n]) for n in paramsNames]
-        _registered_funcs[name] = _FuncDesc(funcParams, outParams)
+        _registered_funcs[name] = _FuncDesc(funcParams, outParams, view_like)
         return orig(func)
 
     return _decorator
 
 
-def register_func(name, orig_func=None, out=None):
+def register_func(name, orig_func=None, out=None, view_like=False):
     global registry
-    return _get_wrapper(name, registry.register_func(name, orig_func), out)
+    return _get_wrapper(name, registry.register_func(name, orig_func), out, view_like)
 
 
-def register_attr(name):
+def register_attr(name, view_like=False):
     global registry
-    return _get_wrapper(name, registry.register_attr(name))
+    return _get_wrapper(name, registry.register_attr(name), None, view_like)
 
 
 def promote_int(t, b):
@@ -671,8 +671,8 @@ def dtype_impl(builder, arg):
     return arg.dtype
 
 
-@register_func("array.reshape")
-@register_func("numpy.reshape", numpy.reshape)
+@register_func("array.reshape", view_like=True)
+@register_func("numpy.reshape", numpy.reshape, view_like=True)
 def reshape_impl(builder, arg, *new_shape):
     new_shape = literal(new_shape)
     if len(new_shape) == 1:

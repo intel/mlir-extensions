@@ -1606,16 +1606,35 @@ struct NumpyCallsResolver
     auto loc = op.getLoc();
     llvm::SmallVector<mlir::Value> args;
     llvm::SmallVector<mlir::Value> outResults;
+    bool viewLike;
     if (mlir::failed(resolver.resolveFuncArgs(rewriter, loc, funcName,
                                               op.getArgs(), op.getArgsNames(),
-                                              args, outResults)))
+                                              args, outResults, viewLike)))
       return mlir::failure();
 
-    mlir::ValueRange results =
-        rewriter
+    if (viewLike) {
+      if (op.getNumResults() != 1 || args.size() < 1)
+        return mlir::failure();
+
+      if (!op.getResult(0).getType().isa<imex::ntensor::NTensorType>() ||
+          !args[0].getType().isa<imex::ntensor::NTensorType>())
+        return mlir::failure();
+    }
+
+    auto results = [&]() -> mlir::ValueRange {
+      if (viewLike) {
+        return rewriter
+            .create<imex::ntensor::ViewPrimitiveOp>(
+                loc, op.getResult(0).getType(), args.front(),
+                llvm::makeArrayRef(args).drop_front(), funcName)
+            ->getResults();
+      } else {
+        return rewriter
             .create<imex::ntensor::PrimitiveOp>(loc, op->getResultTypes(), args,
                                                 funcName)
             .getResults();
+      }
+    }();
 
     for (auto [dst, src] : llvm::zip(outResults, results))
       rewriter.create<imex::ntensor::CopyOp>(loc, src, dst);

@@ -35,7 +35,7 @@ public:
                   llvm::StringRef name, mlir::ValueRange args,
                   mlir::ArrayAttr argsNames,
                   llvm::SmallVectorImpl<mlir::Value> &resultArgs,
-                  llvm::SmallVectorImpl<mlir::Value> &outArgs);
+                  llvm::SmallVectorImpl<mlir::Value> &outArgs, bool &viewLike);
 
 private:
   class Impl;
