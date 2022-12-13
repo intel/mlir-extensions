@@ -3138,8 +3138,9 @@ static void populatePlierToLinalgGenPipeline(mlir::OpPassManager &pm) {
   pm.addNestedPass<mlir::func::FuncOp>(
       std::make_unique<MarkContigiousArraysPass>());
   pm.addPass(std::make_unique<PlierToNtensorPass>());
-  pm.addPass(mlir::createCanonicalizerPass());
+  pm.addNestedPass<mlir::func::FuncOp>(mlir::createCanonicalizerPass());
   pm.addPass(std::make_unique<ResolveNumpyFuncsPass>());
+  pm.addNestedPass<mlir::func::FuncOp>(mlir::createCanonicalizerPass());
   pm.addNestedPass<mlir::func::FuncOp>(imex::ntensor::createCopyRemovalPass());
   populateCommonOptPass(pm);
   pm.addPass(imex::ntensor::createPropagateEnvironmentPass());
