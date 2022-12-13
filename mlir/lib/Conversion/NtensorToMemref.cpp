@@ -43,6 +43,47 @@ struct DimOpLowering : public mlir::OpConversionPattern<imex::ntensor::DimOp> {
   }
 };
 
+struct CreateOpLowering
+    : public mlir::OpConversionPattern<imex::ntensor::CreateArrayOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::CreateArrayOp op,
+                  imex::ntensor::CreateArrayOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto srcType = op.getType().dyn_cast<imex::ntensor::NTensorType>();
+    if (!srcType)
+      return mlir::failure();
+
+    if (adaptor.getInitValue())
+      return mlir::failure();
+
+    auto *converter = getTypeConverter();
+    assert(converter && "Type converter is not set");
+
+    auto dstType = converter->convertType(op.getType())
+                       .dyn_cast_or_null<mlir::MemRefType>();
+    if (!dstType)
+      return mlir::failure();
+
+    auto elemType = dstType.getElementType();
+    auto initValue = adaptor.getInitValue();
+    if (initValue && initValue.getType() != elemType)
+      return mlir::failure();
+
+    auto results = imex::util::wrapEnvRegion(
+        rewriter, op->getLoc(), srcType.getEnvironment(), dstType,
+        [&](mlir::OpBuilder &builder, mlir::Location loc) {
+          mlir::Value result = builder.create<mlir::memref::AllocOp>(
+              loc, dstType, adaptor.getDynamicSizes());
+          return result;
+        });
+
+    rewriter.replaceOp(op, results);
+    return mlir::success();
+  }
+};
+
 struct SubviewOpLowering
     : public mlir::OpConversionPattern<imex::ntensor::SubviewOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -386,17 +427,18 @@ void imex::populateNtensorToMemrefRewritesAndTarget(
         return std::nullopt;
       });
 
-  patterns
-      .insert<DimOpLowering, SubviewOpLowering, LoadOpLowering, StoreOpLowering,
-              ToTensorOpLowering, FromTensorOpLowering, ToMemrefOpLowering,
-              FromMemrefOpLowering, CastOpLowering, CopyOpLowering>(
-          converter, patterns.getContext());
+  patterns.insert<DimOpLowering, CreateOpLowering, SubviewOpLowering,
+                  LoadOpLowering, StoreOpLowering, ToTensorOpLowering,
+                  FromTensorOpLowering, ToMemrefOpLowering,
+                  FromMemrefOpLowering, CastOpLowering, CopyOpLowering>(
+      converter, patterns.getContext());
 
-  target.addIllegalOp<imex::ntensor::DimOp, imex::ntensor::SubviewOp,
-                      imex::ntensor::LoadOp, imex::ntensor::StoreOp,
-                      imex::ntensor::ToTensorOp, imex::ntensor::FromTensorOp,
-                      imex::ntensor::ToMemrefOp, imex::ntensor::FromMemrefOp,
-                      imex::ntensor::CastOp, imex::ntensor::CopyOp>();
+  target.addIllegalOp<imex::ntensor::DimOp, imex::ntensor::CreateArrayOp,
+                      imex::ntensor::SubviewOp, imex::ntensor::LoadOp,
+                      imex::ntensor::StoreOp, imex::ntensor::ToTensorOp,
+                      imex::ntensor::FromTensorOp, imex::ntensor::ToMemrefOp,
+                      imex::ntensor::FromMemrefOp, imex::ntensor::CastOp,
+                      imex::ntensor::CopyOp>();
 }
 
 namespace {
