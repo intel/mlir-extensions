@@ -121,6 +121,28 @@ struct ConvertDealloc
   }
 };
 
+struct ConvertCastOp : public mlir::OpConversionPattern<mlir::memref::CastOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::CastOp op,
+                  mlir::memref::CastOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto converter = getTypeConverter();
+    assert(converter);
+
+    auto oldResType = op.getType();
+    auto newResType =
+        converter->convertType(oldResType).dyn_cast_or_null<mlir::MemRefType>();
+    if (!newResType)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::memref::CastOp>(op, newResType,
+                                                      adaptor.getSource());
+    return mlir::success();
+  }
+};
+
 struct ConvertSubview
     : public mlir::OpConversionPattern<mlir::memref::SubViewOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -389,21 +411,22 @@ void imex::populateMakeSignlessRewritesAndTarget(
   target.addDynamicallyLegalOp<
       imex::util::ChangeLayoutOp, mlir::bufferization::ToMemrefOp,
       mlir::bufferization::ToTensorOp, mlir::memref::AllocOp,
-      mlir::memref::AllocaOp, mlir::memref::DeallocOp, mlir::memref::SubViewOp,
-      mlir::tensor::EmptyOp, mlir::tensor::FromElementsOp,
-      mlir::tensor::ExpandShapeOp, mlir::tensor::ReshapeOp,
-      mlir::tensor::ExtractSliceOp, mlir::tensor::InsertSliceOp,
-      mlir::linalg::FillOp, mlir::linalg::GenericOp, mlir::linalg::YieldOp>(
+      mlir::memref::AllocaOp, mlir::memref::DeallocOp, mlir::memref::CastOp,
+      mlir::memref::SubViewOp, mlir::tensor::EmptyOp,
+      mlir::tensor::FromElementsOp, mlir::tensor::ExpandShapeOp,
+      mlir::tensor::ReshapeOp, mlir::tensor::ExtractSliceOp,
+      mlir::tensor::InsertSliceOp, mlir::linalg::FillOp,
+      mlir::linalg::GenericOp, mlir::linalg::YieldOp>(
       [&converter](mlir::Operation *op) { return converter.isLegal(op); });
 
-  patterns.insert<ConvertChangeLayout, ConvertToMemref, ConvertToTensor,
-                  ConvertAlloc<mlir::memref::AllocOp>,
-                  ConvertAlloc<mlir::memref::AllocaOp>, ConvertDealloc,
-                  ConvertSubview, ConvertTensorEmpty, ConvertTensorFromElements,
-                  ConvertTensorExpandShape, ConvertTensorReshape,
-                  ConvertTensorExtractSlice, ConvertTensorInserSlice,
-                  ConvertLinalgFill, ConvertLinalgGeneric, ConvertLinalgYield>(
-      converter, patterns.getContext());
+  patterns.insert<
+      ConvertChangeLayout, ConvertToMemref, ConvertToTensor,
+      ConvertAlloc<mlir::memref::AllocOp>, ConvertAlloc<mlir::memref::AllocaOp>,
+      ConvertDealloc, ConvertCastOp, ConvertSubview, ConvertTensorEmpty,
+      ConvertTensorFromElements, ConvertTensorExpandShape, ConvertTensorReshape,
+      ConvertTensorExtractSlice, ConvertTensorInserSlice, ConvertLinalgFill,
+      ConvertLinalgGeneric, ConvertLinalgYield>(converter,
+                                                patterns.getContext());
 }
 
 namespace {
