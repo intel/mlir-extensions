@@ -293,3 +293,35 @@ func.func @test(%arg1: f32, %arg2: f32, %arg3: f32) -> f32 {
 // CHECK-LABEL: func @test
 //  CHECK-SAME:   (%[[ARG1:.*]]: f32, %[[ARG2:.*]]: f32, %[[ARG3:.*]]: f32)
 //  CHECK-NEXT:   return %[[ARG2]] : f32
+
+// -----
+
+func.func @test(%t: !ntensor.ntensor<?x?xf32>) -> !ntensor.ntensor<?x?xf32> {
+  %c0 = arith.constant 0 : index
+  %c1 = arith.constant 1 : index
+
+  %1 = ntensor.dim %t, %c0 : !ntensor.ntensor<?x?xf32>
+  %2 = ntensor.dim %t, %c1 : !ntensor.ntensor<?x?xf32>
+
+  %3 = ntensor.subview %t[%c0, %c0][%1, %2][%c1, %c1] : !ntensor.ntensor<?x?xf32> to !ntensor.ntensor<?x?xf32>
+  return %3 : !ntensor.ntensor<?x?xf32>
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG:.*]]: !ntensor.ntensor<?x?xf32>)
+//       CHECK:   return %[[ARG]] : !ntensor.ntensor<?x?xf32>
+
+// -----
+
+func.func @test(%t: !ntensor.ntensor<?x2xf32>) -> !ntensor.ntensor<?x2xf32> {
+  %c0 = arith.constant 0 : index
+  %c1 = arith.constant 1 : index
+  %c2 = arith.constant 2 : index
+
+  %1 = ntensor.dim %t, %c0 : !ntensor.ntensor<?x2xf32>
+
+  %3 = ntensor.subview %t[%c0, %c0][%1, 2][%c1, %c1] : !ntensor.ntensor<?x2xf32>  to !ntensor.ntensor<?x2xf32>
+  return %3 : !ntensor.ntensor<?x2xf32>
+}
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG:.*]]: !ntensor.ntensor<?x2xf32>)
+//       CHECK:   return %[[ARG]] : !ntensor.ntensor<?x2xf32>
