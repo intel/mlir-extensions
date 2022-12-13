@@ -1826,12 +1826,9 @@ struct ResolveNtensorPass
     auto &ctx = getContext();
     mlir::RewritePatternSet patterns(&ctx);
 
-    imex::ntensor::populateResolveArrayOpsPatterns(patterns);
-
-    patterns.insert<GetitemArrayOpLowering, SetitemArrayOpLowering,
-                    NtensorPrimitiveCallsLowering,
+    patterns.insert<NtensorPrimitiveCallsLowering,
                     NtensorViewPrimitiveCallsLowering, BuiltinCallsLowering,
-                    BinOpsLowering, ExternalCallsResolver>(&ctx);
+                    ExternalCallsResolver>(&ctx);
 
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
                                              std::move(patterns));
@@ -1996,7 +1993,13 @@ struct ResolveNumpyFuncsPass
     auto &ctx = getContext();
     mlir::RewritePatternSet patterns(&ctx);
 
+    imex::ntensor::populateResolveArrayOpsPatterns(patterns);
+
     patterns.insert<NumpyCallsResolver>(&ctx, *resolver);
+
+    patterns
+        .insert<GetitemArrayOpLowering, SetitemArrayOpLowering, BinOpsLowering>(
+            &ctx);
 
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
                                              std::move(patterns));
