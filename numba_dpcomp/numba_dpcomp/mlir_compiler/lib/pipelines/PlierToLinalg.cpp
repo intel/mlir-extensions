@@ -1488,14 +1488,14 @@ struct SetitemArrayOpLowering
 
 static PyLinalgResolver::Values
 castRetTypes(mlir::Location loc, mlir::PatternRewriter &rewriter,
-             mlir::Operation *op,
+             mlir::TypeRange resultTypes,
              llvm::Optional<PyLinalgResolver::Values> vals) {
   auto results = std::move(vals).value();
-  assert(results.size() == op->getNumResults());
+  assert(results.size() == resultTypes.size());
   for (auto it : llvm::enumerate(results)) {
     auto i = it.index();
     auto ret = it.value();
-    auto dstType = op->getResultTypes()[i];
+    auto dstType = resultTypes[i];
 
     auto srcType = ret.getType();
     if (dstType != srcType)
@@ -1526,6 +1526,55 @@ static mlir::FailureOr<mlir::Attribute> getEnvAttr(mlir::Operation *op) {
   return env;
 }
 
+static mlir::FailureOr<PyLinalgResolver::Values>
+rewritePrimitiveFunc(mlir::PatternRewriter &rewriter, mlir::Location loc,
+                     const PyLinalgResolver &resolver, mlir::ValueRange args,
+                     mlir::TypeRange resultTypes, mlir::Attribute env,
+                     llvm::StringRef opName) {
+  auto getRes = [&]() -> llvm::Optional<PyLinalgResolver::Values> {
+    auto funcRes =
+        resolver.rewriteFunc(opName, loc, rewriter, args, std::nullopt);
+    if (funcRes)
+      return funcRes;
+
+    if (opName.startswith("array.") && args.size() == 1)
+      return resolver.rewriteAttr(opName, loc, rewriter, args.front());
+
+    return std::nullopt;
+  };
+
+  PyLinalgResolver::Values newRes;
+  if (env != nullptr) {
+    auto regionOp = rewriter.create<imex::util::EnvironmentRegionOp>(
+        loc, env, /*args*/ std::nullopt, resultTypes);
+    auto &newBody = regionOp.getRegion().front();
+    rewriter.eraseOp(newBody.getTerminator());
+
+    mlir::OpBuilder::InsertionGuard g(rewriter);
+    rewriter.setInsertionPointToStart(&newBody);
+    auto res = getRes();
+    if (!res) {
+      rewriter.eraseOp(regionOp);
+      return mlir::failure();
+    }
+
+    auto results = castRetTypes(loc, rewriter, resultTypes, *res);
+    rewriter.create<imex::util::EnvironmentRegionYieldOp>(loc, results);
+
+    auto regResults = regionOp.getResults();
+    newRes.assign(regResults.begin(), regResults.end());
+  } else {
+    auto res = getRes();
+    if (!res)
+      return mlir::failure();
+
+    auto results = castRetTypes(loc, rewriter, resultTypes, *res);
+    newRes.assign(results.begin(), results.end());
+  }
+
+  return newRes;
+}
+
 struct NtensorPrimitiveCallsLowering final
     : public mlir::OpRewritePattern<imex::ntensor::PrimitiveOp> {
   NtensorPrimitiveCallsLowering(mlir::MLIRContext *context)
@@ -1540,52 +1589,44 @@ struct NtensorPrimitiveCallsLowering final
       return mlir::failure();
 
     auto opName = op.getOp();
-
-    auto loc = op->getLoc();
-    auto getRes = [&]() -> llvm::Optional<PyLinalgResolver::Values> {
-      auto args = op.getArgs();
-      auto funcRes =
-          resolver.rewriteFunc(opName, loc, rewriter, args, std::nullopt);
-      if (funcRes)
-        return funcRes;
-
-      if (opName.startswith("array.") && args.size() == 1)
-        return resolver.rewriteAttr(opName, loc, rewriter, args.front());
-
-      return std::nullopt;
-    };
-
-    PyLinalgResolver::Values newRes;
-    if (*env != nullptr) {
-      auto regionOp = rewriter.create<imex::util::EnvironmentRegionOp>(
-          loc, *env, /*args*/ std::nullopt, op->getResultTypes());
-      auto &newBody = regionOp.getRegion().front();
-      rewriter.eraseOp(newBody.getTerminator());
-
-      mlir::OpBuilder::InsertionGuard g(rewriter);
-      rewriter.setInsertionPointToStart(&newBody);
-      auto res = getRes();
-      if (!res) {
-        rewriter.eraseOp(regionOp);
-        return mlir::failure();
-      }
-
-      auto results = castRetTypes(loc, rewriter, op, *res);
-      rewriter.create<imex::util::EnvironmentRegionYieldOp>(loc, results);
-
-      auto regResults = regionOp.getResults();
-      newRes.assign(regResults.begin(), regResults.end());
-    } else {
-      auto res = getRes();
-      if (!res)
-        return mlir::failure();
-
-      auto results = castRetTypes(loc, rewriter, op, *res);
-      newRes.assign(results.begin(), results.end());
-    }
+    auto loc = op.getLoc();
+    auto newRes = rewritePrimitiveFunc(rewriter, loc, resolver, op.getArgs(),
+                                       op.getResultTypes(), *env, opName);
+    if (mlir::failed(newRes))
+      return mlir::failure();
 
     rerunScfPipeline(op);
-    rewriter.replaceOp(op, newRes);
+    rewriter.replaceOp(op, *newRes);
+    return mlir::success();
+  }
+
+private:
+  PyLinalgResolver resolver;
+};
+
+struct NtensorViewPrimitiveCallsLowering final
+    : public mlir::OpRewritePattern<imex::ntensor::ViewPrimitiveOp> {
+  NtensorViewPrimitiveCallsLowering(mlir::MLIRContext *context)
+      : OpRewritePattern(context),
+        resolver("numba_dpcomp.mlir.numpy.funcs", "registry") {}
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::ViewPrimitiveOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto env = getEnvAttr(op);
+    if (mlir::failed(env))
+      return mlir::failure();
+
+    auto opName = op.getOp();
+    auto loc = op.getLoc();
+    auto newRes =
+        rewritePrimitiveFunc(rewriter, loc, resolver, op.getOperands(),
+                             op->getResultTypes(), *env, opName);
+    if (mlir::failed(newRes))
+      return mlir::failure();
+
+    rerunScfPipeline(op);
+    rewriter.replaceOp(op, *newRes);
     return mlir::success();
   }
 
@@ -1788,7 +1829,8 @@ struct ResolveNtensorPass
     imex::ntensor::populateResolveArrayOpsPatterns(patterns);
 
     patterns.insert<GetitemArrayOpLowering, SetitemArrayOpLowering,
-                    NtensorPrimitiveCallsLowering, BuiltinCallsLowering,
+                    NtensorPrimitiveCallsLowering,
+                    NtensorViewPrimitiveCallsLowering, BuiltinCallsLowering,
                     BinOpsLowering, ExternalCallsResolver>(&ctx);
 
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
