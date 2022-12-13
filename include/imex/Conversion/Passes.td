@@ -334,7 +334,7 @@ def ConvertGPUXToLLVM : Pass<"convert-gpux-to-llvm", "::mlir::ModuleOp"> {
 // LinalgToSPIRV
 //===----------------------------------------------------------------------===//
 
-def ConvertLinalgToSPIRV: Pass<"convert-linalg-to-spirv", "::mlir::ModuleOp"> {
+def ConvertLinalgToSPIRV: Pass<"imex-convert-linalg-to-spirv", "::mlir::ModuleOp"> {
   let summary = "Convert from the Linalg dialect to the SPIRV dialect.";
   let description = [{
     Convert Linalg dialect operations into the SPIRV dialect operations.
