@@ -80,12 +80,11 @@ parseDefault(mlir::OpBuilder &builder, mlir::Location loc, py::handle obj) {
   return std::nullopt;
 }
 
-mlir::LogicalResult
-NumpyResolver::resolveFuncArgs(mlir::OpBuilder &builder, mlir::Location loc,
-                               llvm::StringRef name, mlir::ValueRange args,
-                               mlir::ArrayAttr argsNames,
-                               llvm::SmallVectorImpl<mlir::Value> &resultArgs,
-                               llvm::SmallVectorImpl<mlir::Value> &outArgs) {
+mlir::LogicalResult NumpyResolver::resolveFuncArgs(
+    mlir::OpBuilder &builder, mlir::Location loc, llvm::StringRef name,
+    mlir::ValueRange args, mlir::ArrayAttr argsNames,
+    llvm::SmallVectorImpl<mlir::Value> &resultArgs,
+    llvm::SmallVectorImpl<mlir::Value> &outArgs, bool &viewLike) {
   assert(args.size() == argsNames.size() && "args and names count mismatch");
   auto res = impl->getFuncDesc(name);
   if (res.is_none())
@@ -180,5 +179,6 @@ NumpyResolver::resolveFuncArgs(mlir::OpBuilder &builder, mlir::Location loc,
   if (!argsNamesAndValues.empty())
     return mlir::failure();
 
+  viewLike = res.attr("view_like").cast<bool>();
   return mlir::success();
 }

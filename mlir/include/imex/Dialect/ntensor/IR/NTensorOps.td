@@ -550,11 +550,33 @@ def PrimitiveOp : NTensor_OpBase<"primitive", [Pure]> {
 
   }];
 
-  let arguments = (ins Variadic<AnyType>:$args, StrAttr:$op);
+  let arguments = (ins Arg<Variadic<AnyType>, "", [MemRead]>:$args, StrAttr:$op);
 
   let results = (outs Res<Variadic<AnyType>, "", [MemAlloc<DefaultResource>]>:$results);
 
   let assemblyFormat = "$op ` ` attr-dict `(` $args `)` (`:` type($args)^)? (`->` type($results)^)?";
+}
+
+def ViewPrimitiveOp : NTensor_OpBase<"view_primitive", [
+    Pure, ViewLikeOpInterface
+  ]> {
+  let summary = "Primitive operation with view semantics.";
+  let description = [{
+
+  }];
+
+  let arguments = (ins
+    NTensor_Tensor:$array,
+    Variadic<AnyType>:$args,
+    StrAttr:$op);
+
+  let results = (outs NTensor_Tensor:$result);
+
+  let assemblyFormat = "$op ` ` attr-dict `(` $array ( `,` $args^)? `)` `:` qualified(type($array)) ( `,` type($args)^)? `->` qualified(type($result))";
+
+  let extraClassDeclaration = [{
+      ::mlir::Value getViewSource() { return getArray(); }
+  }];
 }
 
 def CreateArrayOp : NTensor_OpBase<"create", [AttrSizedOperandSegments, Pure]> {
