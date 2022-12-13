@@ -12,6 +12,7 @@
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Bufferization/IR/Bufferization.h>
+#include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Pass/Pass.h>
 #include <mlir/Transforms/DialectConversion.h>
@@ -55,9 +56,6 @@ struct CreateOpLowering
     if (!srcType)
       return mlir::failure();
 
-    if (adaptor.getInitValue())
-      return mlir::failure();
-
     auto *converter = getTypeConverter();
     assert(converter && "Type converter is not set");
 
@@ -76,6 +74,8 @@ struct CreateOpLowering
         [&](mlir::OpBuilder &builder, mlir::Location loc) {
           mlir::Value result = builder.create<mlir::memref::AllocOp>(
               loc, dstType, adaptor.getDynamicSizes());
+          if (initValue)
+            builder.create<mlir::linalg::FillOp>(loc, initValue, result);
           return result;
         });
 
@@ -451,6 +451,7 @@ struct NtensorToMemrefPass
     registry.insert<imex::util::ImexUtilDialect>();
     registry.insert<mlir::arith::ArithDialect>();
     registry.insert<mlir::bufferization::BufferizationDialect>();
+    registry.insert<mlir::linalg::LinalgDialect>();
     registry.insert<mlir::memref::MemRefDialect>();
   }
 
