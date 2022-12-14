@@ -1,0 +1,200 @@
+name: Generate Report
+on:
+  workflow_dispatch:
+  # add input for email address
+    inputs:
+      email:
+        description: 'Email address to send report to'
+        required: true
+        default: 'severin.field@intel.com'
+jobs:
+  build:
+    runs-on: gpu
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Clear dir
+        run: rm -rf *
+
+      - name: Checkout CI REPO
+        uses: actions/checkout@v3
+        with:
+          repository: 'intel-sandbox/libraries.llvm.mlir-extensions.ci.git'
+          ref: main
+          token: ${{ secrets.WORKFLOW_TOKEN }}
+          fetch-depth: 0      
+
+      - name: (MAIN) Get status of last run of sync.yml
+        uses: actions/github-script@v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { data: { workflow_runs: [run] } } = await github.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'sync.yml',
+              per_page: 1
+            })
+            console.log(run.conclusion)
+            const fs = require('fs')
+            let data = run.conclusion
+            fs.writeFile('sync.txt', data, (err) => {
+                if (err) throw err;
+            })
+      - name: Download artifact (CPU Build main)
+        uses: intel-innersource/frameworks.actions.thirdparty.download-workflow-artifact@v2
+        with:
+          github_token: ${{secrets.WORKFLOW_TOKEN}}
+          workflow: build_cpu.yml
+          artifact: tests.txt
+          branch: main
+          path: refactor_cpu
+
+      - name: Download artifact (GPU Build main) 
+        uses: intel-innersource/frameworks.actions.thirdparty.download-workflow-artifact@v2
+        with:
+          github_token: ${{secrets.WORKFLOW_TOKEN}}
+          workflow: build_gpu.yml
+          branch: main
+          artifact: tests.txt
+          path: refactor_gpu
+
+      - name: Download artifact (GPU Build numba_dev)
+        uses: intel-innersource/frameworks.actions.thirdparty.download-workflow-artifact@v2
+        with:
+          github_token: ${{secrets.WORKFLOW_TOKEN}}
+          workflow: build_gpu.yml
+          branch: numba_dev
+          artifact: tests.txt
+          path: main_gpu
+
+      - name: Download artifact (CPU Build numba-dev)
+        uses: intel-innersource/frameworks.actions.thirdparty.download-workflow-artifact@v2
+        with:
+          github_token: ${{secrets.WORKFLOW_TOKEN}}
+          workflow: build_cpu.yml
+          branch: numba-dev
+          artifact: tests.txt
+          path: main_cpu
+
+      - name: (numba-dev) Get status of last run of build_cpu.yml
+        uses: actions/github-script@v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { data: { workflow_runs: [run] } } = await github.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              branch: 'numba-dev',
+              workflow_id: 'build_cpu.yml',
+              per_page: 1
+            })
+            console.log(run.conclusion)
+            const fs = require('fs')
+            let data = run.conclusion
+            fs.writeFile('build.txt', data, (err) => {
+                if (err) throw err;
+            })
+      - name: (numba-dev) Get status of last run of build_gpu.yml
+        uses: actions/github-script@v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { data: { workflow_runs: [run] } } = await github.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              branch: 'numba-dev',
+              workflow_id: 'build_gpu.yml',
+              per_page: 1
+            })
+            console.log(run.conclusion)
+            const fs = require('fs')
+            let data = run.conclusion
+            fs.writeFile('build_gpu.txt', data, (err) => {
+                if (err) throw err;
+            })
+      - name: (Main) Get status of last run of build_cpu.yml
+        uses: actions/github-script@v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { data: { workflow_runs: [run] } } = await github.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              branch: 'main',
+              workflow_id: 'build_cpu.yml',
+              per_page: 1
+            })
+            console.log(run.conclusion)
+            const fs = require('fs')
+            let data = run.conclusion
+            fs.writeFile('build_refactor.txt', data, (err) => {
+                if (err) throw err;
+            })
+      - name: (Main) Get status of last run of build_gpu.yml
+        uses: actions/github-script@v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { data: { workflow_runs: [run] } } = await github.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              branch: 'main',
+              workflow_id: 'build_gpu.yml',
+              per_page: 1
+            })
+            console.log(run.conclusion)
+            
+            
+            const fs = require('fs')
+            let data = run.conclusion
+            fs.writeFile('build_gpu_refactor.txt', data, (err) => {
+                if (err) throw err;
+            })
+            
+      - name: Generate Report
+        run: |
+          cp jenkins_slave/nightly_report.html .
+          declare -a arr=("Sync Job" "numba-dev CPU Build" "numba-dev GPU Build" "main CPU build" "main GPU Build")
+          declare -a arr2=("https://github.com/intel-innersource/frameworks.ai.mlir.mlir-extensions/actions/workflows/sync.yml" "https://github.com/intel-innersource/frameworks.ai.mlir.mlir-extensions/actions/workflows/build_cpu.yml" "https://github.com/intel-innersource/frameworks.ai.mlir.mlir-extensions/actions/workflows/build_gpu.yml" "https://github.com/intel-innersource/frameworks.ai.mlir.mlir-extensions/actions/workflows/build_cpu.yml" "https://github.com/intel-innersource/frameworks.ai.mlir.mlir-extensions/actions/workflows/build_gpu.yml")
+          declare -a arr3=("date.txt" "main_cpu/tests.txt/tests.txt" "main_gpu/tests.txt/tests.txt" "refactor_cpu/tests.txt/tests.txt" "refactor_gpu/tests.txt/tests.txt")
+          count=0
+          for file in sync.txt build.txt build_gpu.txt build_refactor.txt build_gpu_refactor.txt
+          do
+            status=$(cat $file)
+            if [ "$status" = "success" ]; then
+              # set status to arr2 at count index
+              status="<tr><td><a href=${arr2[$count]}>${arr[$count]}</a></td>  <td><span style='color:#72B01D'>Success</span></td>"
+            elif [ "$status" = "failure" ]; then
+              status="<tr><td><a href=${arr2[$count]}>${arr[$count]}</a></td>  <td><span style='color:#FF0000'>Failure</span></td>"
+            else
+              status="<tr><td><a href=${arr2[$count]}>${arr[$count]}</a></td>  <td><span style='color:#FFA500'>In Progress</span></td>"
+            fi
+            echo $status >> nightly_report.html
+            echo "<td style='color: rgb(156, 156, 156);'>" >> nightly_report.html
+            if [ $count = 0 ]; then
+              echo "<a href='https://github.com/intel-sandbox/libraries.llvm.mlir-extensions.ci/blob/main/jenkins_slave/syncfailemail.html'>Sync Failing? ReadME</a>" >> nightly_report.html
+            else
+              cat ${arr3[$count]} | grep -a -A 2 "Testing Time" >> nightly_report.html
+            fi
+            echo "</td></tr>" >> nightly_report.html
+            count=$((count+1))
+          done
+          echo "</table></body>" >> nightly_report.html
+          date=$(date)
+          echo "<b>$date</b><br>" >> nightly_report.html
+  
+         
+
+      - name: Send Report
+      # run this only if workflow dispatch is not called
+        if: ${{ github.event_name != 'workflow_dispatch' }}
+        run: |
+          cp jenkins_slave/send_email.py .
+          # Add email adresses to the end of the next line to send to them as well
+          python3 send_email.py "severin.field@intel.com" ${{ secrets.EMAILAPPPASSWORD }} "mlir_extensions@intel.com" 'nightly_report.html' "severin.field@intel.com" aia.core.mlir.compiler@intel.com
+      - name: Send Report
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          cp jenkins_slave/send_email.py .
+          python3 send_email.py "severin.field@intel.com" ${{ secrets.EMAILAPPPASSWORD }} "mlir_extensions@intel.com" 'nightly_report.html' "severin.field@intel.com" ${{ github.event.inputs.email }}

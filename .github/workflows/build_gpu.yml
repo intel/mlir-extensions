@@ -3,7 +3,7 @@ name: GPU Build
 on:
   pull_request:
     branches:
-      - refactor
+      - main
   workflow_dispatch:
 
 jobs:

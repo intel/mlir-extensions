@@ -1,0 +1,88 @@
+# create a GHA workflow to run the bisect.py script and upload the results to artifact
+
+name: Find LLVM SHA
+on:
+# workflow dispatch and add inputs: last good commit, first known bad commit, branch, repo
+  workflow_dispatch:
+    inputs:
+      last_good_commit:
+        description: 'The llvm-project git commit number known to be good.'
+        required: true
+        default: 'd74f078'
+      first_bad_commit:
+        description: 'First known bad commit, default HEAD'
+        required: false
+        default: 'HEAD'
+      branch:
+        description: 'MLIR Extensions BRANCH'
+        required: true
+        default: 'main'
+      repo:
+        description: 'MLIR Extensions REPO'
+        required: false
+        default: 'intel-innersource/frameworks.ai.mlir.mlir-extensions.git'
+      host_volume_loc:
+        description: 'Host volume location'
+        required: false
+        default: '/home/gta/actions-runner/_work/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions'
+
+jobs:
+  bisect:
+    runs-on: gpu
+    steps:
+      - name: Echo bad commit, good commit, repo
+        run: |
+          echo "bad commit:"
+          echo ${{ inputs.first_bad_commit }}
+          
+
+          echo "good commit"
+          echo ${{ github.event.inputs.first_bad_commit}}
+
+          # echo all inputs
+          echo "all inputs:"
+          echo ${{ github.event.inputs }}
+
+
+          echo "github repo running workflow"
+          echo $GITHUB_REPOSITORY
+      # !Checkout CI Repo
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          repository: 'intel-sandbox/libraries.llvm.mlir-extensions.ci.git'
+          ref: main
+          path: ${{ github.event.inputs.host_volume_loc }}/libraries.llvm.mlir-extensions.ci
+          token: ${{ secrets.WORKFLOW_TOKEN }}
+          fetch-depth: 0
+
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ github.event.inputs.branch }}
+          repository: ${{ github.event.inputs.repo }}
+          path: ${{ github.event.inputs.host_volume_loc }}/mlir-extensions
+          token: ${{ secrets.WORKFLOW_TOKEN }}
+          fetch-depth: 0
+
+      # - name: Copy docker_build script into repo
+      - name: Run bisect
+        run: |
+          cd ${{ github.event.inputs.host_volume_loc }}/mlir-extensions
+
+          set -e
+          set -x
+
+          HOST_VOLUME_LOC=${{ github.event.inputs.host_volume_loc }} MLIR_EXTENSIONS_REPO=${{ github.event.inputs.repo }} MLIR_EXTENSIONS_BRANCH=${{ github.event.inputs.branch }} IMEX_ENABLE_GPU_E2E_TESTS=0 START_BAD_COMMIT=${{ github.event.inputs.first_bad_commit}} START_GOOD_COMMIT=${{github.event.inputs.last_good_commit}} bash -x ${{ github.event.inputs.host_volume_loc }}/libraries.llvm.mlir-extensions.ci/jenkins_slave/docker_build_LLVM_SHA.sh
+
+      - name: Upload the full log
+        uses: actions/upload-artifact@v3.1.1
+        with:
+          name: bisect-results
+          path: /home/gta/actions-runner/_work/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions/mlir-extensions/output.out
+
+      - name: Upload the bad commit
+        uses: actions/upload-artifact@v3.1.1
+        with:
+          name: bisect-results
+          path: /home/gta/actions-runner/_work/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions/mlir-extensions/badcommit.log

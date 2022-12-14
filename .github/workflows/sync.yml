@@ -1,0 +1,71 @@
+# Sync innersouce repo to upstream mlir-extensions
+
+name: Sync to Upstream Public Repo
+
+on:
+  # Triggers the workflow on push or pull request events but only for the "main" branch
+  schedule:
+    - cron: '0 */12 * * *' #every 12 hours
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+ sync-main:
+ ###
+ # Syncs main branch of this repo to open source intel/mlir-extensions
+ ###
+   runs-on: gpu
+   steps:
+     - name: Checkout
+       uses: actions/checkout@v2
+       with:
+         token: ${{ secrets.WORKFLOW_TOKEN }}
+         ref: main
+         fetch-depth: 0
+     - name: Remove Upstream
+       run: |
+        if git remote | grep upstream; then
+          git remote remove upstream
+        else
+          echo "upstream does not exist"
+        fi
+     - name: Add Upstream
+       run: git remote add upstream https://github.com/intel/mlir-extensions.git
+     - name: Fetch Upstream
+       run: git fetch upstream
+     - name: Merge Upstream with git merge
+       run: git merge upstream/main
+     - name: Push
+       run: |
+        git push -f origin main
+
+ sync-numba-dev:
+  ###
+  # Syncs main branch of this repo to open source intel/mlir-extensions
+  ###
+   runs-on: gpu
+   needs: sync-main
+   steps:
+     - name: Checkout
+       uses: actions/checkout@v2
+       with:
+         ref: numba-dev
+         token: ${{ secrets.WORKFLOW_TOKEN }}
+         fetch-depth: 0
+     - name: Remove Upstream
+       run: |
+        if git remote | grep upstream; then
+          git remote remove upstream
+        else
+          echo "upstream does not exist"
+        fi
+     - name: Add Upstream
+       run: git remote add upstream https://github.com/intel/mlir-extensions.git
+     - name: Checkout numba-dev
+       run: git checkout numba-dev
+     - name: Fetch Upstream
+       run: git fetch upstream
+     - name: Merge Upstream with git merge
+       run: git merge upstream/numba-dev
+     - name: Push
+       run: git push -f origin numba-dev

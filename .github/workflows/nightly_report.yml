@@ -1,0 +1,79 @@
+name: Nightly Report
+on:
+  workflow_dispatch:
+  # add input for email address
+    inputs:
+      email:
+        description: 'Email address to send report to'
+        required: true
+        default: 'severin.field@intel.com'
+  schedule:
+    - cron: '0 0 * * *' # every 24 hrs
+jobs:
+  invoke-sync:
+    runs-on: gpu
+    steps:
+      - name: Invoke Sync
+        uses: intel-innersource/frameworks.actions.thirdparty.workflow-dispatch@v1
+        with:
+          workflow: Sync to Upstream Public Repo
+          token: ${{ secrets.WORKFLOW_TOKEN }}
+          
+  invoke-cpu-tests:
+    runs-on: gpu
+    needs: invoke-sync
+    steps:
+      - name: Invoke main Build_CPU Workflow
+        uses: intel-innersource/frameworks.actions.thirdparty.workflow-dispatch@v1
+        with:
+          workflow: CPU Build
+          token: ${{ secrets.WORKFLOW_TOKEN }}
+
+      - name: Invoke numba-dev Build_CPU Workflow
+        uses: intel-innersource/frameworks.actions.thirdparty.workflow-dispatch@v1
+        with:
+          workflow: CPU Build
+          ref: numba-dev
+          token: ${{ secrets.WORKFLOW_TOKEN }}
+          
+  invoke-gpu-tests:
+    runs-on: gpu
+    needs: invoke-cpu-tests
+    steps:
+      - name: Invoke numba-dev Build_GPU Workflow
+        uses: intel-innersource/frameworks.actions.thirdparty.workflow-dispatch@v1
+        with:
+          workflow: GPU Build
+          ref: numba-dev
+          token: ${{ secrets.WORKFLOW_TOKEN }}
+
+      - name: Invoke main Build_GPU Workflow
+        uses: intel-innersource/frameworks.actions.thirdparty.workflow-dispatch@v1
+        with:
+          workflow: GPU Build
+          token: ${{ secrets.WORKFLOW_TOKEN }}
+
+  generate_report:
+    runs-on: gpu
+    needs: invoke-gpu-tests
+    steps:
+      - name: Echo Report info
+        run: echo "sending to severin.field@intel.com by default trigger."
+
+      - name: Send Report
+      # run this only if workflow dispatch is not called
+        if: ${{ github.event_name != 'workflow_dispatch' }}
+        uses: intel-innersource/frameworks.actions.thirdparty.workflow-dispatch@v1
+        with:
+          workflow: Generate Report
+          inputs: '{ "email": "aia.core.mlir.compiler@intel.com"}'
+          token: ${{ secrets.WORKFLOW_TOKEN }}
+
+      - name: Send Report
+        # send report using this if workflow dispatch is called
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        uses: intel-innersource/frameworks.actions.thirdparty.workflow-dispatch@v1
+        with:
+          workflow: Generate Report
+          inputs: '{ "email": "${{ github.event.inputs.email }}"}'
+          token: ${{ secrets.WORKFLOW_TOKEN }}
