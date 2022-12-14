@@ -73,6 +73,7 @@ parser = argparse.ArgumentParser(
     description="Run imex-opt, optionally pipe result into selected mlir runner (default: mlir-cpu-runner) and then optionally pipe output into FileCheck"
 )
 parser.add_argument("--input-file", "-i", default=None, help="input MLIR file")
+parser.add_argument("--output-file", "-o", default=None, help="output MLIR file")
 parser.add_argument("--pass-pipeline-file", "-f", default=None, help="file defining pass pipeline")
 parser.add_argument("--pass-pipeline", "-p", default=None, help="pass pipeline (string)")
 parser.add_argument("--imex-print-before-all", "-b", action='store_true', dest='before', help="print ir before all passes")
@@ -163,6 +164,12 @@ if args.before:
     cmd.append(f'--mlir-print-ir-before-all')
 if args.after:
     cmd.append(f'--mlir-print-ir-after-all')
+cmds.append(cmd)
+
+# output to a file
+if args.output_file:
+    cmd=['tee']
+    cmd.append(args.output_file)
 cmds.append(cmd)
 
 # build runner command
