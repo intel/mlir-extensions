@@ -695,42 +695,30 @@ static py::object initTensorImpl(py::capsule context, py::iterable shape,
   auto loc = ctx.loc;
   auto &builder = ctx.builder;
   auto elemType = unwrapType(dtype);
-  mlir::Value init;
+
   auto indexType = builder.getIndexType();
   auto count = py::len(shape);
-  llvm::SmallVector<mlir::Value> shapeVal(count);
+  llvm::SmallVector<mlir::Value> dynamicShape;
   llvm::SmallVector<int64_t> staticShape(count, mlir::ShapedType::kDynamic);
-  for (auto it : llvm::enumerate(shape)) {
-    auto i = it.index();
-    auto elem = it.value();
+  for (auto [i, elem] : llvm::enumerate(shape)) {
     auto elemVal = ctx.context.unwrapVal(loc, builder, elem, indexType);
-    if (auto constVal = mlir::getConstantIntValue(elemVal))
+    if (auto constVal = mlir::getConstantIntValue(elemVal)) {
       staticShape[i] = *constVal;
-
-    shapeVal[i] = elemVal;
+    } else {
+      dynamicShape.emplace_back(elemVal);
+    }
   }
 
-  if (initVal.is_none()) {
-    init = builder.create<mlir::tensor::EmptyOp>(loc, getTempShape(shapeVal),
-                                                 elemType);
-  } else {
-    auto val = doCast(builder, loc,
-                      ctx.context.unwrapVal(loc, builder, initVal), elemType);
-    llvm::SmallVector<int64_t> shape(count, mlir::ShapedType::kDynamic);
-    auto type = mlir::RankedTensorType::get(shape, elemType);
-    auto body = [&](mlir::OpBuilder &builder, mlir::Location loc,
-                    mlir::ValueRange /*indices*/) {
-      builder.create<mlir::tensor::YieldOp>(loc, val);
-    };
-    init = builder.create<mlir::tensor::GenerateOp>(loc, type, shapeVal, body);
+  mlir::Value init;
+  if (!initVal.is_none()) {
+    init = doCast(builder, loc, ctx.context.unwrapVal(loc, builder, initVal),
+                  elemType);
   }
 
-  if (llvm::any_of(staticShape, [](auto val) { return val >= 0; })) {
-    auto newType = mlir::RankedTensorType::get(staticShape, elemType);
-    init = builder.create<mlir::tensor::CastOp>(loc, newType, init);
-  }
-
-  return ctx.context.createVar(context, init);
+  auto resType = imex::ntensor::NTensorType::get(staticShape, elemType);
+  mlir::Value res = builder.create<imex::ntensor::CreateArrayOp>(
+      loc, resType, dynamicShape, init);
+  return ctx.context.createVar(context, res);
 }
 
 static py::object fillTensorImpl(py::capsule context, py::handle tensor,
@@ -1238,8 +1226,9 @@ static py::object undefImpl(py::capsule context, py::handle dtype) {
   return ctx.context.createVar(context, ret);
 }
 
-py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
-                       py::handle sizes, py::handle strides, py::handle rank) {
+static py::object subviewImpl(py::capsule context, py::handle src,
+                              py::handle offsets, py::handle sizes,
+                              py::handle strides, py::handle rank) {
   auto &ctx = getPyContext(context);
   auto &builder = ctx.builder;
   auto loc = ctx.loc;
@@ -1348,18 +1337,31 @@ py::object subviewImpl(py::capsule context, py::handle src, py::handle offsets,
   return ctx.context.createVar(context, view);
 }
 
-py::object forceCopyImpl(py::capsule context, py::handle src) {
+static py::object forceCopyImpl(py::capsule context, py::handle src) {
   auto &ctx = getPyContext(context);
   auto &builder = ctx.builder;
   auto loc = ctx.loc;
   auto srcVal =
-      toTensor(loc, builder, ctx.context.unwrapVal(loc, builder, src));
-  auto res = builder.create<imex::util::ForceCopyOp>(loc, srcVal);
+      toNTensor(loc, builder, ctx.context.unwrapVal(loc, builder, src));
+
+  auto valType = srcVal.getType().cast<imex::ntensor::NTensorType>();
+  llvm::SmallVector<mlir::Value> dynamicSizes;
+  for (auto [i, dim] : llvm::enumerate(valType.getShape())) {
+    if (mlir::ShapedType::isDynamic(dim)) {
+      mlir::Value dimVal = builder.create<imex::ntensor::DimOp>(
+          loc, srcVal, static_cast<int64_t>(i));
+      dynamicSizes.emplace_back(dimVal);
+    }
+  }
+
+  mlir::Value res = builder.create<imex::ntensor::CreateArrayOp>(
+      loc, valType, dynamicSizes, /*initVal*/ mlir::Value{});
+  builder.create<imex::ntensor::CopyOp>(loc, srcVal, res);
   return ctx.context.createVar(context, res);
 }
 
-py::object selectImpl(py::capsule context, py::handle cond, py::handle trueV,
-                      py::handle falseV) {
+static py::object selectImpl(py::capsule context, py::handle cond,
+                             py::handle trueV, py::handle falseV) {
   auto &ctx = getPyContext(context);
   auto &builder = ctx.builder;
   auto loc = ctx.loc;

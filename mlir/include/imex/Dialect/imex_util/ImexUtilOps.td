@@ -184,18 +184,6 @@ def ExtractMemrefMetadataOp
   ];
 }
 
-def ForceCopyOp : ImexUtil_Op<"force_copy", [ViewLikeOpInterface]> {
-  let arguments = (ins AnyRankedTensor : $source);
-
-  let results = (outs AnyRankedTensor);
-
-  let builders = [OpBuilder<(ins "::mlir::Value" : $value)>];
-
-  let extraClassDeclaration = [{
-      ::mlir::Value getViewSource() { return getSource(); }
-  }];
-}
-
 def TakeContextOp : ImexUtil_Op<"take_context"> {
   let arguments = (ins OptionalAttr<SymbolRefAttr>:$initFunc,
                        OptionalAttr<SymbolRefAttr>:$releaseFunc);

@@ -739,7 +739,7 @@ def getitem_impl(builder, arr, index):
 
 
 @register_func("array.__setitem__")
-def getitem_impl(builder, arr, index, val):
+def setitem_impl(builder, arr, index, val):
     if index.dtype != builder.bool:
         return
 
@@ -748,7 +748,6 @@ def getitem_impl(builder, arr, index, val):
     val = flatten_impl(builder, val)
 
     def func(a, ind, val):
-        a = a.copy()  # TODO: investigate
         s = a.size
         res = numpy.empty((s,), a.dtype)
         curr = 0

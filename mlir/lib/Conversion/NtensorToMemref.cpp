@@ -12,6 +12,7 @@
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Bufferization/IR/Bufferization.h>
+#include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Pass/Pass.h>
 #include <mlir/Transforms/DialectConversion.h>
@@ -36,6 +37,46 @@ struct DimOpLowering : public mlir::OpConversionPattern<imex::ntensor::DimOp> {
           return builder
               .create<mlir::memref::DimOp>(loc, src, adaptor.getIndex())
               .getResult();
+        });
+
+    rewriter.replaceOp(op, results);
+    return mlir::success();
+  }
+};
+
+struct CreateOpLowering
+    : public mlir::OpConversionPattern<imex::ntensor::CreateArrayOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(imex::ntensor::CreateArrayOp op,
+                  imex::ntensor::CreateArrayOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto srcType = op.getType().dyn_cast<imex::ntensor::NTensorType>();
+    if (!srcType)
+      return mlir::failure();
+
+    auto *converter = getTypeConverter();
+    assert(converter && "Type converter is not set");
+
+    auto dstType = converter->convertType(op.getType())
+                       .dyn_cast_or_null<mlir::MemRefType>();
+    if (!dstType)
+      return mlir::failure();
+
+    auto elemType = dstType.getElementType();
+    auto initValue = adaptor.getInitValue();
+    if (initValue && initValue.getType() != elemType)
+      return mlir::failure();
+
+    auto results = imex::util::wrapEnvRegion(
+        rewriter, op->getLoc(), srcType.getEnvironment(), dstType,
+        [&](mlir::OpBuilder &builder, mlir::Location loc) {
+          mlir::Value result = builder.create<mlir::memref::AllocOp>(
+              loc, dstType, adaptor.getDynamicSizes());
+          if (initValue)
+            builder.create<mlir::linalg::FillOp>(loc, initValue, result);
+          return result;
         });
 
     rewriter.replaceOp(op, results);
@@ -386,17 +427,18 @@ void imex::populateNtensorToMemrefRewritesAndTarget(
         return std::nullopt;
       });
 
-  patterns
-      .insert<DimOpLowering, SubviewOpLowering, LoadOpLowering, StoreOpLowering,
-              ToTensorOpLowering, FromTensorOpLowering, ToMemrefOpLowering,
-              FromMemrefOpLowering, CastOpLowering, CopyOpLowering>(
-          converter, patterns.getContext());
+  patterns.insert<DimOpLowering, CreateOpLowering, SubviewOpLowering,
+                  LoadOpLowering, StoreOpLowering, ToTensorOpLowering,
+                  FromTensorOpLowering, ToMemrefOpLowering,
+                  FromMemrefOpLowering, CastOpLowering, CopyOpLowering>(
+      converter, patterns.getContext());
 
-  target.addIllegalOp<imex::ntensor::DimOp, imex::ntensor::SubviewOp,
-                      imex::ntensor::LoadOp, imex::ntensor::StoreOp,
-                      imex::ntensor::ToTensorOp, imex::ntensor::FromTensorOp,
-                      imex::ntensor::ToMemrefOp, imex::ntensor::FromMemrefOp,
-                      imex::ntensor::CastOp, imex::ntensor::CopyOp>();
+  target.addIllegalOp<imex::ntensor::DimOp, imex::ntensor::CreateArrayOp,
+                      imex::ntensor::SubviewOp, imex::ntensor::LoadOp,
+                      imex::ntensor::StoreOp, imex::ntensor::ToTensorOp,
+                      imex::ntensor::FromTensorOp, imex::ntensor::ToMemrefOp,
+                      imex::ntensor::FromMemrefOp, imex::ntensor::CastOp,
+                      imex::ntensor::CopyOp>();
 }
 
 namespace {
@@ -409,6 +451,7 @@ struct NtensorToMemrefPass
     registry.insert<imex::util::ImexUtilDialect>();
     registry.insert<mlir::arith::ArithDialect>();
     registry.insert<mlir::bufferization::BufferizationDialect>();
+    registry.insert<mlir::linalg::LinalgDialect>();
     registry.insert<mlir::memref::MemRefDialect>();
   }
 
