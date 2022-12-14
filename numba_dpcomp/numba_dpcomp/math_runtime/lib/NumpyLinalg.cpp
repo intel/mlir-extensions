@@ -69,24 +69,28 @@ void cpu_gemm(GemmFunc<T> Gemm, const Memref<2, T> *a, const Memref<2, T> *b,
   auto transA = is_rowm(a) == is_rowm(c) ? CblasNoTrans : CblasTrans;
   auto transB = is_rowm(b) == is_rowm(c) ? CblasNoTrans : CblasTrans;
 
-  auto lda = is_rowm(a) ? a->strides[0] : a->strides[1];
-  auto ldb = is_rowm(b) ? b->strides[0] : b->strides[1];
-  auto ldc = is_rowm(c) ? c->strides[0] : c->strides[1];
+  auto m = static_cast<MKL_INT>(a->dims[0]);
+  auto n = static_cast<MKL_INT>(b->dims[1]);
+  auto k = static_cast<MKL_INT>(a->dims[1]);
 
-  Gemm(layout,     /*layout*/
-       transA,     /*transa*/
-       transB,     /*transb*/
-       a->dims[0], /*m*/
-       b->dims[1], /*n*/
-       a->dims[1], /*k*/
-       alpha,      /*alpha*/
-       a->data,    /*a*/
-       lda,        /*lda*/
-       b->data,    /*b*/
-       ldb,        /*ldb*/
-       beta,       /*beta*/
-       c->data,    /*c*/
-       ldc         /*ldc*/
+  auto lda = static_cast<MKL_INT>(is_rowm(a) ? a->strides[0] : a->strides[1]);
+  auto ldb = static_cast<MKL_INT>(is_rowm(b) ? b->strides[0] : b->strides[1]);
+  auto ldc = static_cast<MKL_INT>(is_rowm(c) ? c->strides[0] : c->strides[1]);
+
+  Gemm(layout,  /*layout*/
+       transA,  /*transa*/
+       transB,  /*transb*/
+       m,       /*m*/
+       n,       /*n*/
+       k,       /*k*/
+       alpha,   /*alpha*/
+       a->data, /*a*/
+       lda,     /*lda*/
+       b->data, /*b*/
+       ldb,     /*ldb*/
+       beta,    /*beta*/
+       c->data, /*c*/
+       ldc      /*ldc*/
   );
 }
 #endif
