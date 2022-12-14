@@ -173,3 +173,18 @@ Add '-v' to the above command-line to get verbose output.
 ## License
 This code is made available under the Apache License 2.0 with LLVM Exceptions.
 See the `LICENSE.txt` file for more details.
+
+## Profiling kernel execute time
+### sycl event
+```sh
+export IMEX_ENABLE_PROFILING=ON
+run the test
+```
+### trace tools
+```sh
+python {your_path}/imex_runner.py xxx -o test.mlir
+mlir-translate test.mlir -mlir-to-llvmir -o test.ll
+llc test.ll -filetype=obj -o test.o
+clang++ test.o {path}/libmlir_runner_utils.so {path}/libmlir_c_runner_utils.so {path}/libsycl-runtime.so -no-pie -o test
+ze_tracer ./test
+```

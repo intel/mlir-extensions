@@ -46,6 +46,7 @@ def InsertGPUAllocs : Pass<"insert-gpu-allocs", "::mlir::func::FuncOp"> {
 def SetSPIRVCapabilities : Pass<"set-spirv-capabilities"> {
   let summary = "Sets Spirv capabilities";
   let constructor = "imex::createSetSPIRVCapabilitiesPass()";
+  let dependentDialects = ["::mlir::spirv::SPIRVDialect"];
   let options = [
     Option<"clientAPI", "client-api", "std::string", /*default=*/"\"opencl\"",
            "The client API to use for setting Spirv capabilities">
