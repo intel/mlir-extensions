@@ -95,14 +95,14 @@ public:
       // for its origin later in the code
       else if (auto call = mlir::dyn_cast<mlir::func::CallOp>(op)) {
         mlir::SmallVector<mlir::Value, 4> ret;
-        for (auto arg : call.operands()) {
+        for (auto arg : call.getOperands()) {
           if (arg.getType().isa<mlir::MemRefType>())
             ret.emplace_back(arg);
         }
         return std::move(ret);
       } else {
         op->emitError("Uhhandled mem op in gpu region");
-        return llvm::None;
+        return std::nullopt;
       }
     };
 
@@ -120,7 +120,7 @@ public:
           return true;
       }
       if (auto call = mlir::dyn_cast<mlir::func::CallOp>(op)) {
-        for (auto arg : call.operands()) {
+        for (auto arg : call.getOperands()) {
           if (arg.getType().isa<mlir::MemRefType>())
             return true;
         }
@@ -256,7 +256,7 @@ public:
         bool hostShared = access.hostRead || access.hostWrite;
         auto gpuAlloc = builder.create<mlir::gpu::AllocOp>(
             loc, alloc.getType(), /*asyncToken*/ nullptr,
-            /*asyncDependencies*/ llvm::None, alloc.getDynamicSizes(),
+            /*asyncDependencies*/ std::nullopt, alloc.getDynamicSizes(),
             alloc.getSymbolOperands(), hostShared);
         auto allocResult = gpuAlloc.getResult(0);
         alloc->replaceAllUsesWith(gpuAlloc);
@@ -266,7 +266,7 @@ public:
         // TODO(nbpatel): Need a DeviceToHost copy and then free the device
         // memory.
         if (!access.hostWrite)
-          builder.create<mlir::gpu::DeallocOp>(loc, llvm::None, allocResult);
+          builder.create<mlir::gpu::DeallocOp>(loc, std::nullopt, allocResult);
       }
     }
 
@@ -296,8 +296,8 @@ public:
         bool hostShared = access.hostRead || access.hostWrite;
         auto gpuAlloc = builder.create<mlir::gpu::AllocOp>(
             loc, allocType, /*asyncToken*/ nullptr,
-            /*asyncDependencies*/ llvm::None, dims,
-            /*symbolOperands*/ llvm::None, hostShared);
+            /*asyncDependencies*/ std::nullopt, dims,
+            /*symbolOperands*/ std::nullopt, hostShared);
         auto allocResult = gpuAlloc.getResult(0);
         if (access.hostWrite && access.deviceRead) {
           auto copy =
@@ -314,7 +314,7 @@ public:
         if (access.hostRead && access.deviceWrite) {
           builder.create<mlir::memref::CopyOp>(loc, allocResult, op);
         }
-        builder.create<mlir::gpu::DeallocOp>(loc, llvm::None, allocResult);
+        builder.create<mlir::gpu::DeallocOp>(loc, std::nullopt, allocResult);
       } else if (m_clientAPI == "vulkan") {
         auto gpuAlloc =
             builder.create<mlir::memref::AllocOp>(loc, allocType, dims);

@@ -19,6 +19,8 @@ builtin.module(convert-tensor-to-linalg
     convert-math-to-libm
     convert-complex-to-llvm
     convert-index-to-llvm
+    expand-strided-metadata
+    lower-affine
     convert-memref-to-llvm
     lower-affine
     convert-func-to-llvm

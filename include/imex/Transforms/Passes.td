@@ -38,7 +38,7 @@ def InsertGPUAllocs : Pass<"insert-gpu-allocs", "::mlir::func::FuncOp"> {
                            "::mlir::gpu::GPUDialect",
                            "::mlir::arith::ArithDialect"];
   let options = [
-    Option<"clientAPI", "client-api", "std::string", /*default=*/"\"vulkan\"",
+    Option<"clientAPI", "client-api", "std::string", /*default=*/"\"opencl\"",
            "The client API to use for inserting gpu allocs">
   ];
 }
@@ -47,7 +47,7 @@ def SetSPIRVCapabilities : Pass<"set-spirv-capabilities"> {
   let summary = "Sets Spirv capabilities";
   let constructor = "imex::createSetSPIRVCapabilitiesPass()";
   let options = [
-    Option<"clientAPI", "client-api", "std::string", /*default=*/"\"vulkan\"",
+    Option<"clientAPI", "client-api", "std::string", /*default=*/"\"opencl\"",
            "The client API to use for setting Spirv capabilities">
   ];
 }
@@ -58,7 +58,7 @@ def SetSPIRVAbiAttribute : Pass<"set-spirv-abi-attrs", "::mlir::gpu::GPUModuleOp
   let dependentDialects = ["::mlir::gpu::GPUDialect",
                            "::mlir::spirv::SPIRVDialect"];
   let options = [
-    Option<"clientAPI", "client-api", "std::string", /*default=*/"\"vulkan\"",
+    Option<"clientAPI", "client-api", "std::string", /*default=*/"\"opencl\"",
            "The client API to use for setting Spirv Abi attribute">
   ];
 }

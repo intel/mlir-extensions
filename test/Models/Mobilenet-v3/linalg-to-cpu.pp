@@ -21,8 +21,9 @@ builtin.module(inline
     convert-complex-to-llvm
     convert-vector-to-llvm
     convert-index-to-llvm
-    convert-memref-to-llvm
+    expand-strided-metadata
     lower-affine
+    convert-memref-to-llvm
     convert-func-to-llvm
     reconcile-unrealized-casts)
 // End

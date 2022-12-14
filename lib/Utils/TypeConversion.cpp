@@ -57,7 +57,7 @@ void imex::populateControlFlowTypeConversionRewritesAndTarget(
             typeConverter.isLegal(&op.getBody()))
           return true;
 
-        return llvm::None;
+        return std::nullopt;
       });
 
   mlir::populateCallOpTypeConversionPattern(patterns, typeConverter);
@@ -66,7 +66,7 @@ void imex::populateControlFlowTypeConversionRewritesAndTarget(
         if (typeConverter.isLegal(op))
           return true;
 
-        return llvm::None;
+        return std::nullopt;
       });
 
   mlir::populateBranchOpInterfaceTypeConversionPattern(patterns, typeConverter);
@@ -84,6 +84,6 @@ void imex::populateControlFlowTypeConversionRewritesAndTarget(
             mlir::isLegalForReturnOpTypeConversionPattern(op, typeConverter))
           return true;
 
-        return llvm::None;
+        return std::nullopt;
       });
 }
