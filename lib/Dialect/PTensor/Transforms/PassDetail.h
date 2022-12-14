@@ -27,6 +27,10 @@ namespace arith {
 class ArithDialect;
 } // namespace arith
 
+namespace memref {
+class MemRefDialect;
+} // namespace memref
+
 namespace tensor {
 class TensorDialect;
 } // namespace tensor

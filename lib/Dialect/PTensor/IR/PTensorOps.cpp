@@ -12,8 +12,11 @@
 ///
 //===----------------------------------------------------------------------===//
 
+#include <imex/Dialect/Dist/Utils/Utils.h>
 #include <imex/Dialect/PTensor/IR/PTensorOps.h>
+#include <imex/Utils/PassUtils.h>
 #include <llvm/ADT/TypeSwitch.h>
+#include <mlir/Dialect/Utils/StaticValueUtils.h>
 #include <mlir/IR/DialectImplementation.h>
 
 namespace imex {
@@ -38,3 +41,17 @@ void PTensorDialect::initialize() {
 #include <imex/Dialect/PTensor/IR/PTensorOpsTypes.cpp.inc>
 #define GET_OP_CLASSES
 #include <imex/Dialect/PTensor/IR/PTensorOps.cpp.inc>
+
+namespace imex {
+namespace ptensor {
+
+::mlir::MemRefType PTensorType::getMemRefType() {
+  return ::imex::getMemRefType(getContext(), getRank(), getElementType());
+}
+
+::mlir::RankedTensorType PTensorType::getTensorType() {
+  return ::imex::getTensorType(getContext(), getRank(), getElementType());
+}
+
+} // namespace ptensor
+} // namespace imex

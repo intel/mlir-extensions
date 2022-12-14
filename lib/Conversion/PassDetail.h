@@ -45,6 +45,10 @@ namespace memref {
 class MemRefDialect;
 } // namespace memref
 
+namespace bufferization {
+class BufferizationDialect;
+} // namespace bufferization
+
 namespace scf {
 class SCFDialect;
 } // namespace scf

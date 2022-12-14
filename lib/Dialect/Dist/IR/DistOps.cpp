@@ -13,6 +13,9 @@
 //===----------------------------------------------------------------------===//
 
 #include <imex/Dialect/Dist/IR/DistOps.h>
+#include <imex/Dialect/Dist/Utils/Utils.h>
+#include <imex/Dialect/PTensor/IR/PTensorOps.h>
+#include <imex/Utils/PassUtils.h>
 #include <llvm/ADT/TypeSwitch.h>
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/DialectImplementation.h>
@@ -39,3 +42,16 @@ void DistDialect::initialize() {
 #include <imex/Dialect/Dist/IR/DistOpsTypes.cpp.inc>
 #define GET_OP_CLASSES
 #include <imex/Dialect/Dist/IR/DistOps.cpp.inc>
+
+namespace imex {
+namespace dist {
+::imex::ptensor::PTensorType getPTensorType(::mlir::Value t) {
+  auto dtTyp = t.getType().dyn_cast<::imex::dist::DistTensorType>();
+  if (dtTyp) {
+    return dtTyp.getPTensorType();
+  } else {
+    return t.getType().dyn_cast<::imex::ptensor::PTensorType>();
+  }
+}
+} // namespace dist
+} // namespace imex
