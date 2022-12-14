@@ -64,7 +64,7 @@ jobs:
         with:
           github_token: ${{secrets.WORKFLOW_TOKEN}}
           workflow: build_gpu.yml
-          branch: numba_dev
+          branch: numba-dev
           artifact: tests.txt
           path: main_gpu
 
