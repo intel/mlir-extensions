@@ -18,11 +18,18 @@
 #include <mlir/IR/BuiltinTypes.h>
 #include <mlir/IR/Dialect.h>
 #include <mlir/IR/OpDefinition.h>
+#include <mlir/IR/OpImplementation.h>
 #include <mlir/IR/Types.h>
 #include <mlir/Interfaces/SideEffectInterfaces.h>
 
 namespace imex {
-namespace dist {} // namespace dist
+namespace ptensor {
+class PTensorType;
+} // namespace ptensor
+namespace dist {
+enum INFO : int { GSHAPE, LTENSOR, LOFFSETS, TEAM, INFO_LAST };
+extern ::imex::ptensor::PTensorType getPTensorType(::mlir::Value t);
+} // namespace dist
 } // namespace imex
 
 #include <imex/Dialect/Dist/IR/DistOpsDialect.h.inc>

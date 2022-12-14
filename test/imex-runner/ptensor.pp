@@ -2,16 +2,17 @@ builtin.module(convert-ptensor-to-linalg
     convert-shape-to-std
     arith-bufferize
     func.func(empty-tensor-to-alloc-tensor
-          scf-bufferize
-          shape-bufferize
-          linalg-bufferize
-          tensor-bufferize)
+            scf-bufferize
+            linalg-bufferize
+            tensor-bufferize
+            bufferization-bufferize)
     func-bufferize
     func.func(finalizing-bufferize
-          convert-linalg-to-parallel-loops)
+            convert-linalg-to-parallel-loops)
     canonicalize
-    func.func(lower-affine)
     fold-memref-alias-ops
+    expand-strided-metadata
+    lower-affine
     convert-scf-to-cf
     convert-memref-to-llvm
     convert-func-to-llvm

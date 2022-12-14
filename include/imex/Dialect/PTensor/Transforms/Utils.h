@@ -15,7 +15,7 @@
 #ifndef _PTENSOR_UTILS_H_INCLUDED_
 #define _PTENSOR_UTILS_H_INCLUDED_
 
-#include <imex/Utils/PassUtils.h>
+#include <imex/Utils/ArithUtils.h>
 
 namespace imex {
 
@@ -25,26 +25,18 @@ namespace imex {
 /// (::mlir::Value)
 inline ::mlir::Value createCountARange(::mlir::OpBuilder &builder,
                                        ::mlir::Location loc,
-                                       ::mlir::Value start, ::mlir::Value stop,
-                                       ::mlir::Value step) {
+                                       const EasyIdx &start,
+                                       const EasyIdx &stop,
+                                       const EasyIdx &step) {
   // Create constants 0, 1, -1 for later
-  auto zero = createInt(loc, builder, 0);
-  auto one = createInt(loc, builder, 1);
-  auto mone = createInt(loc, builder, -1);
+  auto zero = easyIdx(loc, builder, 0);
+  auto one = easyIdx(loc, builder, 1);
+  auto mone = easyIdx(loc, builder, -1);
 
   // Compute number of elements as
   //   (stop - start + step + (step < 0 ? 1 : -1)) / step
-  auto cond = builder.create<mlir::arith::CmpIOp>(
-      loc, ::mlir::arith::CmpIPredicate::ult, step, zero);
-  auto increment = builder.create<mlir::arith::SelectOp>(loc, cond, one, mone);
-  auto tmp1 = builder.create<mlir::arith::AddIOp>(loc, stop, step);
-  auto tmp2 = builder.create<mlir::arith::AddIOp>(loc, tmp1, increment);
-  auto tmp3 = builder.create<mlir::arith::SubIOp>(loc, tmp2, start);
-  auto count =
-      builder.create<mlir::arith::DivUIOp>(loc, tmp3, step).getResult();
-  return builder
-      .create<::mlir::arith::IndexCastOp>(loc, builder.getIndexType(), count)
-      .getResult();
+  return (((stop - start) + step + step.slt(zero).select(one, mone)) / step)
+      .get();
 }
 
 } // namespace imex
