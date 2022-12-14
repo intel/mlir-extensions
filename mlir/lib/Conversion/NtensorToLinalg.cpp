@@ -11,6 +11,7 @@
 #include <mlir/Analysis/AliasAnalysis.h>
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
+#include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/IR/FunctionInterfaces.h>
@@ -666,10 +667,6 @@ struct NtensorAliasAnalysisPass
     auto &context = getContext();
     auto func = getOperation();
 
-    auto *ntensorDialect =
-        context.getOrLoadDialect<imex::ntensor::NTensorDialect>();
-    assert(ntensorDialect);
-
     llvm::SmallVector<mlir::Operation *, 0> writers;
     func->walk([&](mlir::Operation *op) {
       if (mlir::isa<mlir::CallOpInterface>(op)) {
@@ -677,7 +674,8 @@ struct NtensorAliasAnalysisPass
         return;
       }
 
-      if (op->getDialect() != ntensorDialect)
+      if (!mlir::isa<mlir::memref::MemRefDialect, mlir::linalg::LinalgDialect,
+                     imex::ntensor::NTensorDialect>(op->getDialect()))
         return;
 
       auto memInterface = mlir::dyn_cast<mlir::MemoryEffectOpInterface>(op);
