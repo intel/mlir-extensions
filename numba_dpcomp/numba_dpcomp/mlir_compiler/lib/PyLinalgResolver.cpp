@@ -455,6 +455,24 @@ static mlir::Value toNTensor(mlir::Location loc, mlir::OpBuilder &builder,
   return val;
 }
 
+static mlir::Value toMemref(mlir::Location loc, mlir::OpBuilder &builder,
+                            mlir::Value val) {
+  auto srcType = val.getType();
+  if (auto tensorType = srcType.dyn_cast<mlir::RankedTensorType>()) {
+    auto type = mlir::MemRefType::get(tensorType.getShape(),
+                                      tensorType.getElementType());
+    return builder.create<mlir::bufferization::ToMemrefOp>(loc, type, val);
+  }
+
+  if (auto ntensorType = srcType.dyn_cast<imex::ntensor::NTensorType>()) {
+    auto type = mlir::MemRefType::get(ntensorType.getShape(),
+                                      ntensorType.getElementType());
+    return builder.create<imex::ntensor::ToMemrefOp>(loc, type, val);
+  }
+
+  return val;
+}
+
 static py::object
 getArgs(py::handle inspect, py::handle func,
         llvm::function_ref<py::object(mlir::Value)> createVar,
@@ -1013,6 +1031,11 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
   return ctx.context.createVar(context, reshaped);
 }
 
+static auto getDynShape(int64_t r) {
+  return llvm::SmallVector<int64_t>(static_cast<size_t>(r),
+                                    mlir::ShapedType::kDynamic);
+};
+
 static py::object externalCallImpl(py::capsule context, py::str funcName,
                                    py::handle inputs, py::handle outputs,
                                    py::bool_ decorate, py::bool_ returnTensor) {
@@ -1020,7 +1043,16 @@ static py::object externalCallImpl(py::capsule context, py::str funcName,
   auto &builder = ctx.builder;
   auto loc = ctx.loc;
   auto unwrapVal = [&](py::handle obj) {
-    return toTensor(loc, builder, ctx.context.unwrapVal(loc, builder, obj));
+    auto tensor =
+        toNTensor(loc, builder, ctx.context.unwrapVal(loc, builder, obj));
+    auto tensorType = tensor.getType().dyn_cast<imex::ntensor::NTensorType>();
+    if (tensorType) {
+      auto commonType = imex::ntensor::NTensorType::get(
+          getDynShape(tensorType.getRank()), tensorType.getElementType());
+      if (commonType != tensorType)
+        tensor = builder.create<imex::ntensor::CastOp>(loc, commonType, tensor);
+    }
+    return tensor;
   };
   auto inputVals = toValues(inputs, unwrapVal);
   auto outputVals = toValues(outputs, unwrapVal);
@@ -1032,12 +1064,9 @@ static py::object externalCallImpl(py::capsule context, py::str funcName,
     auto type = val.getType();
     auto shapedType = type.dyn_cast<mlir::ShapedType>();
     if (!returnTensor && shapedType) {
-      if (!shapedType.isa<mlir::MemRefType>()) {
-        auto memrefType = mlir::MemRefType::get(shapedType.getShape(),
-                                                shapedType.getElementType());
-        val = builder.create<mlir::bufferization::ToMemrefOp>(loc, memrefType,
-                                                              val);
-      }
+      if (!shapedType.isa<mlir::MemRefType>())
+        val = toMemref(loc, builder, val);
+
       inputVals.emplace_back(val);
     } else {
       retTypes.emplace_back(type);
@@ -1055,10 +1084,12 @@ static py::object externalCallImpl(py::capsule context, py::str funcName,
     assert(mod);
     auto f = mod.lookupSymbol<mlir::func::FuncOp>(name);
     if (f) {
-      if (f.getFunctionType() != funcType) {
+      auto existingType = f.getFunctionType();
+      if (existingType != funcType) {
         imex::reportError(llvm::Twine("linalg_builder::external_call: "
                                       "invalid function redefinition: ") +
-                          name);
+                          name + " " + toStr(existingType) + " and " +
+                          toStr(funcType));
       }
     } else {
       f = imex::addFunction(builder, mod, name, funcType);
@@ -1325,10 +1356,6 @@ static py::object subviewImpl(py::capsule context, py::handle src,
   }();
   auto view = builder.createOrFold<mlir::tensor::ExtractSliceOp>(
       loc, viewType, srcVal, offsetVals, sizeVals, strideVals);
-
-  auto getDynShape = [](int64_t r) {
-    return llvm::SmallVector<int64_t>(r, mlir::ShapedType::kDynamic);
-  };
 
   auto resType = view.getType().cast<mlir::ShapedType>();
   auto resDynamicType = resType.clone(getDynShape(resType.getRank()));
