@@ -11,6 +11,7 @@ builtin.module(convert-ptensor-to-linalg
             convert-linalg-to-parallel-loops)
     canonicalize
     fold-memref-alias-ops
+    expand-strided-metadata
     lower-affine
     convert-scf-to-cf
     convert-memref-to-llvm

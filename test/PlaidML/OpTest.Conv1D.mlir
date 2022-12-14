@@ -54,7 +54,7 @@ module @conv_1d {
   func.func private @printMemrefF32(%ptr : tensor<*xf32>)
 }
 //      CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
-// CHECK-NEXT: 76
+// CHECK-NEXT: [76
 // CHECK-NEXT: 99
 // CHECK-NEXT: 122
 // CHECK-NEXT: 145

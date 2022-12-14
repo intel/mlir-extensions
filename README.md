@@ -48,15 +48,18 @@ mkdir build
 cd build
 CC=gcc-9 CXX=g++-9 MLIR_DIR=<llvm-install-directory> cmake ..
 make -j 12
+
+
+For GPU support, pass the cmake variables to enable the required runtime libraries
+
+CC=gcc-9 CXX=g++-9 MLIR_DIR=<llvm-install-directory> cmake .. -DSYCL_DIR=/PATH_TO/intel/oneapi/compiler/latest/linux/ -DLEVEL_ZERO_DIR=/PATH_TO/level-zero-install/ -DIMEX_ENABLE_L0_RUNTIME=1 -DIMEX_ENABLE_SYCL_RUNTIME=1
+make -j 12
 ```
 
 #### Building as an LLVM external project
 You can also build IMEX as an LLVM external project.
 ```
 git clone https://github.com/intel/mlir-extensions.git
-cd mlir-extensions
-git checkout refactor
-cd ..
 git clone https://github.com/llvm/llvm-project.git
 cd llvm-project
 git checkout `cat ../mlir-extensions/build_tools/llvm_version.txt`
@@ -138,6 +141,26 @@ You will now have to
 will be extracted and a file `doc/Conversions.md` will be generated automatically.
 * Write your Pattern rewriters
 
+
+## Getting Level Zero loader (Optional, needed for GPU support with Level zero runtime)
+```Bash
+git clone https://github.com/oneapi-src/level-zero.git
+cd level-zero
+mkdir build
+cd build
+cmake ../level-zero -GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=../level-zero-install
+ninja install
+```
+
+## Getting DPC++ compiler (Optional, needed for GPU support with Sycl runtime)
+```
+Install DPC++ compiler : Instructions here
+https://www.intel.com/content/www/us/en/developer/articles/tool/oneapi-standalone-components.html#dpcpp-cpp
+
+Once DPC++ is installed source the compiler vars:
+source /PATH_TO/intel/oneapi/compiler/latest/env/vars.sh
+```
+
 ## Run the lit tests
 To run the FileCheck based tests, follow the following steps:
 
@@ -150,3 +173,18 @@ Add '-v' to the above command-line to get verbose output.
 ## License
 This code is made available under the Apache License 2.0 with LLVM Exceptions.
 See the `LICENSE.txt` file for more details.
+
+## Profiling kernel execute time
+### sycl event
+```sh
+export IMEX_ENABLE_PROFILING=ON
+run the test
+```
+### trace tools
+```sh
+python {your_path}/imex_runner.py xxx -o test.mlir
+mlir-translate test.mlir -mlir-to-llvmir -o test.ll
+llc test.ll -filetype=obj -o test.o
+clang++ test.o {path}/libmlir_runner_utils.so {path}/libmlir_c_runner_utils.so {path}/libsycl-runtime.so -no-pie -o test
+ze_tracer ./test
+```
