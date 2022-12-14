@@ -112,6 +112,10 @@ if(IMEX_USE_DPNP)
     target_compile_definitions(${PROJECT_NAME} PRIVATE IMEX_USE_DPNP=1)
 endif()
 
+if(IMEX_USE_MKL)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE IMEX_USE_MKL=1)
+endif()
+
 if(IMEX_ENABLE_IGPU_DIALECT)
     target_compile_definitions(${PROJECT_NAME} PRIVATE IMEX_ENABLE_IGPU_DIALECT=1)
 endif()

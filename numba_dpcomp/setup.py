@@ -31,6 +31,7 @@ if int(os.environ.get("DPCOMP_SETUP_RUN_CMAKE", 1)):
     LLVM_DIR = os.path.join(LLVM_PATH, "lib", "cmake", "llvm")
     MLIR_DIR = os.path.join(LLVM_PATH, "lib", "cmake", "mlir")
     TBB_DIR = os.path.join(os.environ["TBB_PATH"], "lib", "cmake", "tbb")
+    IMEX_USE_MKL = os.environ.get("IMEX_USE_MKL")
     CMAKE_INSTALL_PREFIX = os.path.join(root_dir, "..")
 
     cmake_build_dir = os.path.join(CMAKE_INSTALL_PREFIX, "dpcomp_cmake_build")
@@ -56,6 +57,9 @@ if int(os.environ.get("DPCOMP_SETUP_RUN_CMAKE", 1)):
         "-DIMEX_ENABLE_TBB_SUPPORT=ON",
         "-DLLVM_ENABLE_ZSTD=OFF",
     ]
+
+    if IMEX_USE_MKL is not None:
+        cmake_cmd += ["-DIMEX_USE_MKL=" + IMEX_USE_MKL]
 
     # DPNP
     try:

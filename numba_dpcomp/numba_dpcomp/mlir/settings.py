@@ -5,7 +5,7 @@
 from os import environ
 import warnings
 
-from ..mlir_compiler import is_dpnp_supported
+from ..mlir_compiler import is_dpnp_supported, is_mkl_supported
 
 
 def _readenv(name, ctor, default):
@@ -33,4 +33,5 @@ DEBUG_TYPE = list(filter(None, _readenv("DPCOMP_DEBUG_TYPE", str, "").split(",")
 DPNP_AVAILABLE = (
     is_dpnp_supported()
 )  # TODO: check if dpnp library is available at runtime
+MKL_AVAILABLE = is_mkl_supported()
 OPT_LEVEL = _readenv("DPCOMP_OPT_LEVEL", int, 3)

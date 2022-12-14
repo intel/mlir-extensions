@@ -28,6 +28,26 @@ from numba.core.typing.templates import ConcreteTemplate, signature, infer_globa
 from inspect import signature as sig
 from collections import namedtuple
 
+from ..settings import MKL_AVAILABLE
+
+
+def performance_warning(message):
+    pass
+
+
+def _mkl_func(func):
+    if not MKL_AVAILABLE:
+
+        def mkl_failure(*args, **kwargs):
+            raise Exception(
+                "Attempt to call mkl function, but DPCOMP runtime built without mkl"
+            )
+
+        return mkl_failure
+
+    return func
+
+
 add_func(prange, "numba.prange")
 
 registry = FuncRegistry()
@@ -499,7 +519,17 @@ def eye_impl(builder, N, M=None, k=0, dtype=None):
     return builder.linalg_generic(idx, init, iterators, maps, body)
 
 
-def _matmul2d(builder, a, b, shape1, shape2):
+@_mkl_func
+def _mkl_gemm(builder, a, b, alpha, beta, shape1, shape2):
+    dtype = a.dtype
+    func_name = f"mkl_gemm_{dtype_str(builder, dtype)}"
+    res_shape = (shape1[0], shape2[1])
+    c = builder.init_tensor(res_shape, dtype)
+
+    return builder.external_call(func_name, (a, b), c)
+
+
+def _linalg_matmul2d(builder, a, b, shape1, shape2):
     iterators = ["parallel", "parallel", "reduction"]
     expr1 = "(d0,d1,d2) -> (d0,d2)"
     expr2 = "(d0,d1,d2) -> (d2,d1)"
@@ -513,6 +543,13 @@ def _matmul2d(builder, a, b, shape1, shape2):
         return a * b + c
 
     return builder.linalg_generic((a, b), init, iterators, maps, body)
+
+
+def _matmul2d(builder, a, b, shape1, shape2):
+    if MKL_AVAILABLE:
+        return _mkl_gemm(builder, a, b, 1, 0, shape1, shape2)
+    else:
+        return _linalg_matmul2d(builder, a, b, shape1, shape2)
 
 
 @register_func("numpy.dot", numpy.dot, out="out")
