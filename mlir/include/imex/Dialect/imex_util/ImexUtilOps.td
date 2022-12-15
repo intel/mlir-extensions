@@ -5,13 +5,14 @@
 #ifndef PLIER_UTIL_OPS
 #define PLIER_UTIL_OPS
 
-include "mlir/IR/OpBase.td"
-include "mlir/IR/EnumAttr.td"
+include "mlir/Interfaces/CastInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/LoopLikeInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/ViewLikeInterface.td"
+include "mlir/IR/EnumAttr.td"
+include "mlir/IR/OpBase.td"
 
 def ImexUtil_Dialect : Dialect {
   let name = "imex_util";
@@ -146,7 +147,10 @@ def RetainOp : ImexUtil_Op<"retain", [ViewLikeOpInterface]> {
   }];
 }
 
-def ChangeLayoutOp : ImexUtil_Op<"change_layout", [ViewLikeOpInterface, Pure]> {
+def ChangeLayoutOp : ImexUtil_Op<"change_layout", [
+  DeclareOpInterfaceMethods<CastOpInterface>,
+  ViewLikeOpInterface,
+  Pure]> {
   let arguments = (ins AnyMemRef : $source);
 
   let results = (outs AnyMemRef : $dest);

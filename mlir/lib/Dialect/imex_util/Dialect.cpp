@@ -1238,6 +1238,25 @@ void ChangeLayoutOp::getCanonicalizationPatterns(
       ChangeLayoutEnvRegion>(context);
 }
 
+bool ChangeLayoutOp::areCastCompatible(mlir::TypeRange inputs,
+                                       mlir::TypeRange outputs) {
+  if (inputs.size() != 1 || outputs.size() != 1)
+    return false;
+
+  mlir::Type a = inputs.front(), b = outputs.front();
+  auto aT = a.dyn_cast<mlir::MemRefType>();
+  auto bT = b.dyn_cast<mlir::MemRefType>();
+  if (!aT || !bT)
+    return false;
+
+  if (aT.getElementType() != bT.getElementType() ||
+      mlir::failed(mlir::verifyCompatibleShape(aT, bT)) ||
+      aT.getMemorySpace() != bT.getMemorySpace())
+    return false;
+
+  return true;
+}
+
 static mlir::Value propagateCasts(mlir::Value val, mlir::Type thisType);
 
 template <typename T>
@@ -1344,9 +1363,11 @@ struct SignCastCastPropagate : public mlir::OpRewritePattern<CastOp> {
     auto finalElemType = finalType.getElementType();
 
     auto newDstType = dstType.clone(finalElemType);
+    if (!CastOp::areCastCompatible(src.getType(), newDstType))
+      return mlir::failure();
 
     auto loc = op.getLoc();
-    auto cast = rewriter.createOrFold<CastOp>(loc, newDstType, src);
+    mlir::Value cast = rewriter.create<CastOp>(loc, newDstType, src);
     rewriter.replaceOpWithNewOp<imex::util::SignCastOp>(op, dstType, cast);
 
     return mlir::success();
