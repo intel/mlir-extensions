@@ -534,7 +534,8 @@ static mlir::Value getFlatMemref(mlir::OpBuilder &builder, mlir::Location loc,
                                  mlir::Value memref, mlir::Value offset) {
   auto memrefType = memref.getType().cast<mlir::MemRefType>();
   auto resultType = mlir::MemRefType::get(
-      std::nullopt, memrefType.getElementType(), memrefType.getMemorySpace());
+      std::nullopt, memrefType.getElementType(),
+      mlir::MemRefLayoutAttrInterface{}, memrefType.getMemorySpace());
   return builder.create<mlir::memref::ReinterpretCastOp>(
       loc, resultType, memref, offset, /*size*/ std::nullopt,
       /*stride*/ std::nullopt);
