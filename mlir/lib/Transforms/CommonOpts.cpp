@@ -195,6 +195,34 @@ struct CmpiOfSelect : public mlir::OpRewritePattern<mlir::arith::CmpIOp> {
 };
 
 // TODO: upstream
+struct ExtractStridedMetadataUnused
+    : public mlir::OpRewritePattern<mlir::memref::ExtractStridedMetadataOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::ExtractStridedMetadataOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto buffer = op.getBaseBuffer();
+    if (buffer.use_empty())
+      return mlir::failure();
+
+    if (!op.getOffset().use_empty() ||
+        llvm::any_of(op.getStrides(), [](auto s) { return !s.use_empty(); }))
+      return mlir::failure();
+
+    auto loc = op.getLoc();
+    auto src = op.getSource();
+    auto dstType = buffer.getType().cast<mlir::MemRefType>();
+    mlir::Value offset = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
+    mlir::Value newRes = rewriter.create<mlir::memref::ReinterpretCastOp>(
+        loc, dstType, src, offset, std::nullopt, std::nullopt);
+    rewriter.replaceAllUsesWith(buffer, newRes);
+    rewriter.eraseOp(op);
+    return mlir::success();
+  }
+};
+
+// TODO: upstream
 struct ExtractStridedMetadataConstStrides
     : public mlir::OpRewritePattern<mlir::memref::ExtractStridedMetadataOp> {
   // Set benefit higher than ExtractStridedMetadataCast
@@ -219,12 +247,11 @@ struct ExtractStridedMetadataConstStrides
         return;
 
       changed = true;
-      mlir::Value constVal = rewriter.create<mlir::arith::ConstantIndexOp>(loc, val);
+      mlir::Value constVal =
+          rewriter.create<mlir::arith::ConstantIndexOp>(loc, val);
       for (auto &use : llvm::make_early_inc_range(res.getUses())) {
         mlir::Operation *owner = use.getOwner();
-        rewriter.updateRootInPlace(owner, [&] {
-          use.set(constVal);
-        });
+        rewriter.updateRootInPlace(owner, [&] { use.set(constVal); });
       }
     };
 
@@ -288,6 +315,7 @@ void imex::populateCommonOptsPatterns(mlir::RewritePatternSet &patterns) {
       PowSimplify,
       AndConflictSimplify,
       CmpiOfSelect,
+      ExtractStridedMetadataUnused,
       ExtractStridedMetadataConstStrides,
       ExtractStridedMetadataCast
       // clang-format on
