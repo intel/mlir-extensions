@@ -530,6 +530,21 @@ static mlir::Value getFlatIndex(mlir::OpBuilder &builder, mlir::Location loc,
   }
 }
 
+static mlir::Value getFlatIndex(mlir::OpBuilder &builder, mlir::Location loc,
+                                mlir::Value memref,
+                                llvm::ArrayRef<mlir::OpFoldResult> indices) {
+  llvm::SmallVector<mlir::Value> vals(indices.size());
+  for (auto [i, val] : llvm::enumerate(indices)) {
+    if (auto attr = val.dyn_cast<mlir::Attribute>()) {
+      auto ind = attr.cast<mlir::IntegerAttr>().getValue().getSExtValue();
+      vals[i] = builder.create<mlir::arith::ConstantIndexOp>(loc, ind);
+    } else {
+      vals[i] = val.get<mlir::Value>();
+    }
+  }
+  return getFlatIndex(builder, loc, memref, vals);
+}
+
 static mlir::Value getFlatMemref(mlir::OpBuilder &builder, mlir::Location loc,
                                  mlir::Value memref, mlir::Value offset) {
   auto memrefType = memref.getType().cast<mlir::MemRefType>();
@@ -589,6 +604,29 @@ struct FlattenStore : public mlir::OpRewritePattern<mlir::memref::StoreOp> {
   }
 };
 
+struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::SubViewOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    if (!op->getParentOfType<mlir::gpu::LaunchOp>())
+      return mlir::failure();
+
+    auto memref = op.getSource();
+    if (!needFlatten(memref))
+      return mlir::failure();
+
+    auto resultType = op.getType().cast<mlir::MemRefType>();
+    auto loc = op.getLoc();
+    auto flatIndex = getFlatIndex(rewriter, loc, memref, op.getMixedOffsets());
+    rewriter.replaceOpWithNewOp<mlir::memref::ReinterpretCastOp>(
+        op, resultType, memref, flatIndex, op.getMixedSizes(),
+        op.getMixedStrides());
+    return mlir::success();
+  }
+};
+
 struct UnstrideMemrefsPass
     : public mlir::PassWrapper<UnstrideMemrefsPass, mlir::OperationPass<void>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(UnstrideMemrefsPass)
@@ -604,7 +642,7 @@ struct UnstrideMemrefsPass
     auto *ctx = &getContext();
     mlir::RewritePatternSet patterns(ctx);
 
-    patterns.insert<FlattenLoad, FlattenStore>(ctx);
+    patterns.insert<FlattenLoad, FlattenStore, FlattenSubview>(ctx);
 
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
                                              std::move(patterns));
@@ -682,11 +720,10 @@ public:
       return mlir::success();
     }
 
-    auto dstType = op.getType().cast<mlir::MemRefType>();
-    if (dstType.getRank() > 1)
-      return mlir::failure();
+    auto converter = getTypeConverter();
+    assert(converter && "Invalid type converter");
 
-    auto intType = getTypeConverter()->convertType(rewriter.getIndexType());
+    auto intType = converter->convertType(rewriter.getIndexType());
     if (!intType)
       return mlir::failure();
 
