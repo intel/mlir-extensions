@@ -1297,7 +1297,7 @@ mlir::OpFoldResult SignCastOp::fold(llvm::ArrayRef<mlir::Attribute> operands) {
   if (attrOperand && attrOperand.getType() == thisType)
     return attrOperand;
 
-  auto arg = getValue();
+  auto arg = getSource();
   if (arg.getType() == thisType)
     return arg;
 
@@ -1319,7 +1319,7 @@ struct SignCastDimPropagate : public mlir::OpRewritePattern<Op> {
     if (!castOp)
       return mlir::failure();
 
-    auto val = castOp.getValue();
+    auto val = castOp.getSource();
     rewriter.replaceOpWithNewOp<Op>(op, val, op.getIndex());
     return mlir::success();
   }
@@ -1332,7 +1332,7 @@ struct SignCastUndefPropagate
   mlir::LogicalResult
   matchAndRewrite(imex::util::SignCastOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto undefOp = op.getValue().getDefiningOp<imex::util::UndefOp>();
+    auto undefOp = op.getSource().getDefiningOp<imex::util::UndefOp>();
     if (!undefOp)
       return mlir::failure();
 
@@ -1358,7 +1358,7 @@ struct SignCastCastPropagate : public mlir::OpRewritePattern<CastOp> {
         !srcType.hasRank() || !dstType.hasRank())
       return mlir::failure();
 
-    auto src = signCast.getValue();
+    auto src = signCast.getSource();
     auto finalType = src.getType().template cast<mlir::ShapedType>();
     auto finalElemType = finalType.getElementType();
 
@@ -1390,7 +1390,7 @@ struct SignCastReinterpretPropagate
     if (srcType.getElementType() != dstType.getElementType())
       return mlir::failure();
 
-    auto src = signCast.getValue();
+    auto src = signCast.getSource();
     auto finalType = src.getType().cast<mlir::MemRefType>();
 
     auto newDstType =
@@ -1421,7 +1421,7 @@ struct SignCastLoadPropagate
       return mlir::failure();
 
     auto loc = op.getLoc();
-    auto src = signCast.getValue();
+    auto src = signCast.getSource();
     auto newOp =
         rewriter.createOrFold<mlir::memref::LoadOp>(loc, src, op.getIndices());
 
@@ -1444,7 +1444,7 @@ struct SignCastStorePropagate
     if (!signCast)
       return mlir::failure();
 
-    auto src = signCast.getValue();
+    auto src = signCast.getSource();
     auto srcElemType = src.getType().cast<mlir::MemRefType>().getElementType();
     auto val = op.getValue();
     if (val.getType() != srcElemType)
@@ -1465,7 +1465,7 @@ struct SignCastAllocPropagate
   mlir::LogicalResult
   matchAndRewrite(imex::util::SignCastOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto alloc = op.getValue().getDefiningOp<Op>();
+    auto alloc = op.getSource().getDefiningOp<Op>();
     if (!alloc || !alloc->hasOneUse())
       return mlir::failure();
 
@@ -1486,7 +1486,7 @@ struct SignCastTensorFromElementsPropagate
   matchAndRewrite(imex::util::SignCastOp op,
                   mlir::PatternRewriter &rewriter) const override {
     auto fromElements =
-        op.getValue().getDefiningOp<mlir::tensor::FromElementsOp>();
+        op.getSource().getDefiningOp<mlir::tensor::FromElementsOp>();
     if (!fromElements)
       return mlir::failure();
 
@@ -1512,7 +1512,7 @@ struct SignCastTensorCollapseShapePropagate
   mlir::LogicalResult
   matchAndRewrite(imex::util::SignCastOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto prevOp = op.getValue().getDefiningOp<mlir::tensor::CollapseShapeOp>();
+    auto prevOp = op.getSource().getDefiningOp<mlir::tensor::CollapseShapeOp>();
     if (!prevOp)
       return mlir::failure();
 
@@ -1542,12 +1542,12 @@ struct SignCastBuferizationPropagate : public mlir::OpRewritePattern<BuffOp> {
     if (!signCast)
       return mlir::failure();
 
-    auto src = signCast.getValue();
+    auto src = signCast.getSource();
     auto srcType = src.getType().template cast<mlir::ShapedType>();
     auto dstType = op.getType().template cast<mlir::ShapedType>();
     auto newDstType = dstType.clone(srcType.getElementType());
 
-    auto loc = op->getLoc();
+    auto loc = op.getLoc();
     auto res = rewriter.create<BuffOp>(loc, newDstType, src);
     rewriter.replaceOpWithNewOp<imex::util::SignCastOp>(op, dstType, res);
     return mlir::success();
@@ -1565,13 +1565,13 @@ struct SignCastSubviewPropagate : public mlir::OpRewritePattern<ViewOp> {
     if (!signCast)
       return mlir::failure();
 
-    auto src = signCast.getValue();
+    auto src = signCast.getSource();
     auto srcType = src.getType().template cast<ArrType>();
     auto dstType = op.getType().template cast<ArrType>();
     auto newDstType =
         dstType.clone(srcType.getElementType()).template cast<ArrType>();
 
-    auto loc = op->getLoc();
+    auto loc = op.getLoc();
     auto res =
         rewriter.create<ViewOp>(loc, newDstType, src, op.getMixedOffsets(),
                                 op.getMixedSizes(), op.getMixedStrides());
@@ -1602,7 +1602,7 @@ struct SignCastForPropagate : public mlir::OpRewritePattern<mlir::scf::ForOp> {
       assert(initArg.getType() == yieldArg.getType());
       auto yieldCast = yieldArg.getDefiningOp<imex::util::SignCastOp>();
       if (yieldCast) {
-        auto newType = yieldCast.getValue().getType();
+        auto newType = yieldCast.getSource().getType();
         newInitArgs[i] =
             rewriter.create<imex::util::SignCastOp>(loc, newType, initArg);
         needUpdate = true;
@@ -1641,7 +1641,7 @@ struct SignCastForPropagate : public mlir::OpRewritePattern<mlir::scf::ForOp> {
         auto val = mapping.lookupOrDefault(termResults[i]);
         auto newType = newInitArgs[i].getType();
         if (val.getType() != newType)
-          val = val.getDefiningOp<imex::util::SignCastOp>().getValue();
+          val = val.getDefiningOp<imex::util::SignCastOp>().getSource();
 
         assert(val.getType() == newType);
         newYieldArgs[i] = val;
@@ -1670,6 +1670,7 @@ struct SignCastForPropagate : public mlir::OpRewritePattern<mlir::scf::ForOp> {
   }
 };
 
+template <typename CastOp>
 struct SignCastIfPropagate : public mlir::OpRewritePattern<mlir::scf::IfOp> {
   using OpRewritePattern::OpRewritePattern;
 
@@ -1683,13 +1684,13 @@ struct SignCastIfPropagate : public mlir::OpRewritePattern<mlir::scf::IfOp> {
     auto elseYield = op.elseYield();
 
     unsigned idx;
-    imex::util::SignCastOp castOp;
+    CastOp castOp;
     imex::util::UndefOp undefOp;
     for (auto [i, args] : llvm::enumerate(
              llvm::zip(thenYield.getResults(), elseYield.getResults()))) {
       auto [thenArg, elseArg] = args;
-      auto cast = thenArg.getDefiningOp<imex::util::SignCastOp>();
-      auto undef = elseArg.getDefiningOp<imex::util::UndefOp>();
+      auto cast = thenArg.template getDefiningOp<CastOp>();
+      auto undef = elseArg.template getDefiningOp<imex::util::UndefOp>();
       if (cast && undef) {
         idx = static_cast<unsigned>(i);
         castOp = cast;
@@ -1703,7 +1704,7 @@ struct SignCastIfPropagate : public mlir::OpRewritePattern<mlir::scf::IfOp> {
 
     auto dstType = castOp.getType();
 
-    auto src = castOp.getValue();
+    auto src = castOp.getSource();
     auto srcType = src.getType();
 
     rewriter.updateRootInPlace(thenYield,
@@ -1721,8 +1722,7 @@ struct SignCastIfPropagate : public mlir::OpRewritePattern<mlir::scf::IfOp> {
     auto res = op.getResult(idx);
 
     rewriter.setInsertionPointAfter(op);
-    auto newRes =
-        rewriter.create<imex::util::SignCastOp>(castOp->getLoc(), dstType, res);
+    auto newRes = rewriter.create<CastOp>(castOp->getLoc(), dstType, res);
 
     for (auto &use : llvm::make_early_inc_range(res.getUses())) {
       auto owner = use.getOwner();
@@ -1758,7 +1758,8 @@ void SignCastOp::getCanonicalizationPatterns(::mlir::RewritePatternSet &results,
       SignCastSubviewPropagate<mlir::tensor::ExtractSliceOp,
                                mlir::RankedTensorType>,
       SignCastSubviewPropagate<mlir::memref::SubViewOp, mlir::MemRefType>,
-      SignCastForPropagate, SignCastIfPropagate>(context);
+      SignCastForPropagate, SignCastIfPropagate<imex::util::SignCastOp>,
+      SignCastIfPropagate<mlir::memref::CastOp>>(context);
 }
 
 void ExtractMemrefMetadataOp::build(::mlir::OpBuilder &odsBuilder,

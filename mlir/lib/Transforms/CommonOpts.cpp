@@ -194,6 +194,101 @@ struct CmpiOfSelect : public mlir::OpRewritePattern<mlir::arith::CmpIOp> {
   }
 };
 
+// TODO: upstream
+struct ExtractStridedMetadataUnused
+    : public mlir::OpRewritePattern<mlir::memref::ExtractStridedMetadataOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::ExtractStridedMetadataOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto buffer = op.getBaseBuffer();
+    if (buffer.use_empty())
+      return mlir::failure();
+
+    if (!op.getOffset().use_empty() ||
+        llvm::any_of(op.getStrides(), [](auto s) { return !s.use_empty(); }))
+      return mlir::failure();
+
+    auto loc = op.getLoc();
+    auto src = op.getSource();
+    auto dstType = buffer.getType().cast<mlir::MemRefType>();
+    mlir::Value offset = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
+    mlir::Value newRes = rewriter.create<mlir::memref::ReinterpretCastOp>(
+        loc, dstType, src, offset, std::nullopt, std::nullopt);
+    rewriter.replaceAllUsesWith(buffer, newRes);
+    for (auto [i, size] : llvm::enumerate(op.getSizes())) {
+      if (size.use_empty())
+        continue;
+
+      mlir::Value newSize = rewriter.create<mlir::memref::DimOp>(
+          loc, src, static_cast<int64_t>(i));
+      rewriter.replaceAllUsesWith(size, newSize);
+    }
+    rewriter.eraseOp(op);
+    return mlir::success();
+  }
+};
+
+// TODO: upstream
+struct ExtractStridedMetadataConstStrides
+    : public mlir::OpRewritePattern<mlir::memref::ExtractStridedMetadataOp> {
+  // Set benefit higher than ExtractStridedMetadataCast
+  ExtractStridedMetadataConstStrides(mlir::MLIRContext *context)
+      : mlir::OpRewritePattern<mlir::memref::ExtractStridedMetadataOp>(
+            context, /*benefit*/ 10) {}
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::ExtractStridedMetadataOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto srcType = op.getSource().getType().cast<mlir::MemRefType>();
+
+    int64_t offset;
+    llvm::SmallVector<int64_t> strides;
+    if (mlir::failed(mlir::getStridesAndOffset(srcType, strides, offset)))
+      return mlir::failure();
+
+    bool changed = false;
+    auto loc = op.getLoc();
+    auto replaceUses = [&](mlir::Value res, int64_t val) {
+      if (mlir::ShapedType::isDynamic(val) || res.use_empty())
+        return;
+
+      changed = true;
+      mlir::Value constVal =
+          rewriter.create<mlir::arith::ConstantIndexOp>(loc, val);
+      for (auto &use : llvm::make_early_inc_range(res.getUses())) {
+        mlir::Operation *owner = use.getOwner();
+        rewriter.updateRootInPlace(owner, [&] { use.set(constVal); });
+      }
+    };
+
+    replaceUses(op.getOffset(), offset);
+    for (auto [strideRes, strideVal] : llvm::zip(op.getStrides(), strides))
+      replaceUses(strideRes, strideVal);
+
+    return mlir::success(changed);
+  }
+};
+
+// TODO: upstream
+struct ExtractStridedMetadataCast
+    : public mlir::OpRewritePattern<mlir::memref::ExtractStridedMetadataOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::ExtractStridedMetadataOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto cast = op.getSource().getDefiningOp<mlir::memref::CastOp>();
+    if (!cast)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::memref::ExtractStridedMetadataOp>(
+        op, cast.getSource());
+    return mlir::success();
+  }
+};
+
 struct CommonOptsPass
     : public mlir::PassWrapper<CommonOptsPass, mlir::OperationPass<void>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(CommonOptsPass)
@@ -227,7 +322,10 @@ void imex::populateCommonOptsPatterns(mlir::RewritePatternSet &patterns) {
       SubviewStorePropagate,
       PowSimplify,
       AndConflictSimplify,
-      CmpiOfSelect
+      CmpiOfSelect,
+      ExtractStridedMetadataUnused,
+      ExtractStridedMetadataConstStrides,
+      ExtractStridedMetadataCast
       // clang-format on
       >(patterns.getContext());
 

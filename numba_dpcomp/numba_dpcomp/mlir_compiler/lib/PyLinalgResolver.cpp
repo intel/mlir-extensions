@@ -411,7 +411,7 @@ private:
     }
 
     if (auto cast = val.getDefiningOp<imex::util::SignCastOp>())
-      val = cast.getValue();
+      val = cast.getSource();
 
     if (auto attr = imex::getConstVal<mlir::Attribute>(val))
       return getPyLiteral(attr);
@@ -1274,7 +1274,7 @@ static py::object subviewImpl(py::capsule context, py::handle src,
   auto indexType = builder.getIndexType();
   auto indexCast = [&](mlir::Value val) -> mlir::OpFoldResult {
     while (auto parent = val.getDefiningOp<imex::util::SignCastOp>())
-      val = parent.getValue();
+      val = parent.getSource();
 
     if (auto constVal = mlir::getConstantIntValue(val))
       return builder.getIndexAttr(*constVal);
