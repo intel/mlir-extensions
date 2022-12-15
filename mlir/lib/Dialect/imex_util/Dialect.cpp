@@ -1250,7 +1250,7 @@ bool ChangeLayoutOp::areCastCompatible(mlir::TypeRange inputs,
     return false;
 
   if (aT.getElementType() != bT.getElementType() ||
-      aT.getShape() != bT.getShape() ||
+      mlir::failed(mlir::verifyCompatibleShape(aT, bT)) ||
       aT.getMemorySpace() != bT.getMemorySpace())
     return false;
 
