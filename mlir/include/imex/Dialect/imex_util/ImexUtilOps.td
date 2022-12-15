@@ -165,13 +165,13 @@ def ChangeLayoutOp : ImexUtil_Op<"change_layout", [
 }
 
 def SignCastOp : ImexUtil_Op<"sign_cast", [Pure]> {
-  let arguments = (ins AnyType : $value);
+  let arguments = (ins AnyType:$source);
 
   let results = (outs AnyType:$dest);
   let hasFolder = 1;
   let hasCanonicalizer = 1;
 
-  let assemblyFormat = "$value attr-dict `:` type($value) `to` type($dest)";
+  let assemblyFormat = "$source attr-dict `:` type($source) `to` type($dest)";
 }
 
 def ExtractMemrefMetadataOp
@@ -182,8 +182,9 @@ def ExtractMemrefMetadataOp
   let hasFolder = 1;
 
   let builders = [
-    OpBuilder<(ins "::mlir::Value" : $src,
-                 "int64_t" : $dim)>,
+    OpBuilder<(ins
+      "::mlir::Value" : $src,
+       "int64_t" : $dim)>,
     OpBuilder<(ins "::mlir::Value" : $src)>
   ];
 }
