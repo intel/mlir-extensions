@@ -4,6 +4,8 @@
 
 #include "imex/Analysis/MemorySsa.hpp"
 
+#include <mlir/IR/BuiltinTypes.h>
+#include <mlir/Interfaces/CallInterfaces.h>
 #include <mlir/Interfaces/ControlFlowInterfaces.h>
 #include <mlir/Interfaces/LoopLikeInterface.h>
 #include <mlir/Interfaces/SideEffectInterfaces.h>
@@ -404,6 +406,14 @@ auto hasMemEffect(mlir::Operation &op) {
       ret.read = true;
   } else if (op.hasTrait<mlir::OpTrait::HasRecursiveMemoryEffects>()) {
     ret.write = true;
+  } else if (mlir::isa<mlir::CallOpInterface>(op)) {
+    for (auto arg : op.getOperands()) {
+      if (arg.getType().isa<mlir::MemRefType>()) {
+        ret.read = true;
+        ret.write = true;
+        break;
+      }
+    }
   }
   return ret;
 }
