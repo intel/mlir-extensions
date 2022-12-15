@@ -604,48 +604,51 @@ struct FlattenStore : public mlir::OpRewritePattern<mlir::memref::StoreOp> {
   }
 };
 
-struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
-  using OpRewritePattern::OpRewritePattern;
+// TODO: investigate
+// struct FlattenSubview : public
+// mlir::OpRewritePattern<mlir::memref::SubViewOp> {
+//  using OpRewritePattern::OpRewritePattern;
 
-  mlir::LogicalResult
-  matchAndRewrite(mlir::memref::SubViewOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    if (!op->getParentOfType<mlir::gpu::LaunchOp>())
-      return mlir::failure();
+//  mlir::LogicalResult
+//  matchAndRewrite(mlir::memref::SubViewOp op,
+//                  mlir::PatternRewriter &rewriter) const override {
+//    if (!op->getParentOfType<mlir::gpu::LaunchOp>())
+//      return mlir::failure();
 
-    auto memref = op.getSource();
-    if (!needFlatten(memref))
-      return mlir::failure();
+//    auto memref = op.getSource();
+//    if (!needFlatten(memref))
+//      return mlir::failure();
 
-    auto srcType = memref.getType().cast<mlir::MemRefType>();
-    auto resultType = op.getType().cast<mlir::MemRefType>();
-    auto loc = op.getLoc();
-    auto flatIndex = getFlatIndex(rewriter, loc, memref, op.getMixedOffsets());
+//    auto srcType = memref.getType().cast<mlir::MemRefType>();
+//    auto resultType = op.getType().cast<mlir::MemRefType>();
+//    auto loc = op.getLoc();
+//    auto flatIndex = getFlatIndex(rewriter, loc, memref,
+//    op.getMixedOffsets());
 
-    unsigned subRank = static_cast<unsigned>(resultType.getRank());
-    auto subSizes = op.getMixedSizes();
-    auto subStrides = op.getMixedStrides();
-    auto droppedDims = op.getDroppedDims();
+//    unsigned subRank = static_cast<unsigned>(resultType.getRank());
+//    auto subSizes = op.getMixedSizes();
+//    auto subStrides = op.getMixedStrides();
+//    auto droppedDims = op.getDroppedDims();
 
-    llvm::SmallVector<mlir::OpFoldResult> finalSizes;
-    finalSizes.reserve(subRank);
+//    llvm::SmallVector<mlir::OpFoldResult> finalSizes;
+//    finalSizes.reserve(subRank);
 
-    llvm::SmallVector<mlir::OpFoldResult> finalStrides;
-    finalStrides.reserve(subRank);
+//    llvm::SmallVector<mlir::OpFoldResult> finalStrides;
+//    finalStrides.reserve(subRank);
 
-    for (auto i : llvm::seq(0u, static_cast<unsigned>(srcType.getRank()))) {
-      if (droppedDims.test(i))
-        continue;
+//    for (auto i : llvm::seq(0u, static_cast<unsigned>(srcType.getRank()))) {
+//      if (droppedDims.test(i))
+//        continue;
 
-      finalSizes.push_back(subSizes[i]);
-      finalStrides.push_back(subStrides[i]);
-    }
+//      finalSizes.push_back(subSizes[i]);
+//      finalStrides.push_back(subStrides[i]);
+//    }
 
-    rewriter.replaceOpWithNewOp<mlir::memref::ReinterpretCastOp>(
-        op, resultType, memref, flatIndex, finalSizes, finalStrides);
-    return mlir::success();
-  }
-};
+//    rewriter.replaceOpWithNewOp<mlir::memref::ReinterpretCastOp>(
+//        op, resultType, memref, flatIndex, finalSizes, finalStrides);
+//    return mlir::success();
+//  }
+//};
 
 struct UnstrideMemrefsPass
     : public mlir::PassWrapper<UnstrideMemrefsPass, mlir::OperationPass<void>> {
@@ -662,7 +665,7 @@ struct UnstrideMemrefsPass
     auto *ctx = &getContext();
     mlir::RewritePatternSet patterns(ctx);
 
-    patterns.insert<FlattenLoad, FlattenStore, FlattenSubview>(ctx);
+    patterns.insert<FlattenLoad, FlattenStore /*, FlattenSubview*/>(ctx);
 
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
                                              std::move(patterns));
