@@ -17,6 +17,7 @@
 #include <mlir/Dialect/GPU/Transforms/Passes.h>
 #include <mlir/Dialect/GPU/Transforms/Utils.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
+#include <mlir/Dialect/MemRef/Transforms/Passes.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/Dialect/SPIRV/IR/SPIRVOps.h>
 #include <mlir/Dialect/SPIRV/IR/TargetAndABI.h>
@@ -231,6 +232,7 @@ struct KernelMemrefOpsMovementPass
     body.walk([&](mlir::gpu::LaunchOp launch) {
       launch.getBody().walk([&](mlir::Operation *op) {
         if (!mlir::isa<mlir::memref::DimOp,
+                       mlir::memref::ExtractStridedMetadataOp,
                        imex::util::ExtractMemrefMetadataOp>(op))
           return;
 
@@ -1822,6 +1824,7 @@ static void populateLowerToGPUPipelineMed(mlir::OpPassManager &pm) {
 
   funcPM.addPass(std::make_unique<LowerGpuBuiltins2Pass>());
   commonOptPasses(funcPM);
+  funcPM.addPass(mlir::memref::createExpandStridedMetadataPass());
   funcPM.addPass(std::make_unique<KernelMemrefOpsMovementPass>());
   funcPM.addPass(gpu_runtime::createMakeBarriersUniformPass());
   funcPM.addPass(std::make_unique<SinkGpuDimsPass>());
