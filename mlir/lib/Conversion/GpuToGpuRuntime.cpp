@@ -515,35 +515,35 @@ static mlir::Value getFlatIndex(mlir::OpBuilder &builder, mlir::Location loc,
 
       auto numSymbols = affineMap.getNumSymbols();
       if (numSymbols > 0) {
-        applyOperands.emplace_back(
-            builder.create<imex::util::ExtractMemrefMetadataOp>(loc, memref));
+        auto metadata =
+            builder.create<mlir::memref::ExtractStridedMetadataOp>(loc, memref);
+        applyOperands.emplace_back(metadata.getOffset());
         --numSymbols;
         assert(numSymbols <= rank);
-        for (auto i : llvm::seq(0u, numSymbols)) {
-          applyOperands.emplace_back(
-              builder.create<imex::util::ExtractMemrefMetadataOp>(loc, memref,
-                                                                  i));
-        }
+        auto strides = metadata.getStrides();
+        assert(numSymbols <= strides.size());
+        for (auto i : llvm::seq(0u, numSymbols))
+          applyOperands.emplace_back(strides[i]);
       }
     }
     return builder.create<mlir::AffineApplyOp>(loc, affineMap, applyOperands);
   }
 }
 
-static mlir::Value getFlatIndex(mlir::OpBuilder &builder, mlir::Location loc,
-                                mlir::Value memref,
-                                llvm::ArrayRef<mlir::OpFoldResult> indices) {
-  llvm::SmallVector<mlir::Value> vals(indices.size());
-  for (auto [i, val] : llvm::enumerate(indices)) {
-    if (auto attr = val.dyn_cast<mlir::Attribute>()) {
-      auto ind = attr.cast<mlir::IntegerAttr>().getValue().getSExtValue();
-      vals[i] = builder.create<mlir::arith::ConstantIndexOp>(loc, ind);
-    } else {
-      vals[i] = val.get<mlir::Value>();
-    }
-  }
-  return getFlatIndex(builder, loc, memref, vals);
-}
+// static mlir::Value getFlatIndex(mlir::OpBuilder &builder, mlir::Location loc,
+//                                 mlir::Value memref,
+//                                 llvm::ArrayRef<mlir::OpFoldResult> indices) {
+//   llvm::SmallVector<mlir::Value> vals(indices.size());
+//   for (auto [i, val] : llvm::enumerate(indices)) {
+//     if (auto attr = val.dyn_cast<mlir::Attribute>()) {
+//       auto ind = attr.cast<mlir::IntegerAttr>().getValue().getSExtValue();
+//       vals[i] = builder.create<mlir::arith::ConstantIndexOp>(loc, ind);
+//     } else {
+//       vals[i] = val.get<mlir::Value>();
+//     }
+//   }
+//   return getFlatIndex(builder, loc, memref, vals);
+// }
 
 static mlir::Value getFlatMemref(mlir::OpBuilder &builder, mlir::Location loc,
                                  mlir::Value memref, mlir::Value offset) {
