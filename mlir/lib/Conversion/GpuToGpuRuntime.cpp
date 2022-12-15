@@ -530,41 +530,19 @@ static mlir::Value getFlatIndex(mlir::OpBuilder &builder, mlir::Location loc,
   }
 }
 
-static mlir::Value getFlatIndex(mlir::OpBuilder &builder, mlir::Location loc,
-                                mlir::Value memref,
-                                llvm::ArrayRef<mlir::OpFoldResult> indices) {
-  llvm::SmallVector<mlir::Value> vals(indices.size());
-  for (auto it : llvm::enumerate(indices)) {
-    auto i = it.index();
-    auto val = it.value();
-    if (auto attr = val.dyn_cast<mlir::Attribute>()) {
-      auto ind = attr.cast<mlir::IntegerAttr>().getValue().getSExtValue();
-      vals[i] = builder.create<mlir::arith::ConstantIndexOp>(loc, ind);
-    } else {
-      vals[i] = val.get<mlir::Value>();
-    }
-  }
-  return getFlatIndex(builder, loc, memref, vals);
-}
-
 static mlir::Value getFlatMemref(mlir::OpBuilder &builder, mlir::Location loc,
-                                 mlir::Value memref) {
+                                 mlir::Value memref, mlir::Value offset) {
   auto memrefType = memref.getType().cast<mlir::MemRefType>();
-  auto resultType = mlir::MemRefType::get(mlir::ShapedType::kDynamic,
-                                          memrefType.getElementType());
-  mlir::OpBuilder::InsertionGuard g(builder);
-  setInsertionPointToStart(builder, memref);
-  mlir::Value offset = builder.create<mlir::arith::ConstantIndexOp>(loc, 0);
-  mlir::Value size =
-      builder.create<imex::util::UndefOp>(loc, builder.getIndexType());
-  mlir::Value stride = builder.create<mlir::arith::ConstantIndexOp>(loc, 1);
+  auto resultType = mlir::MemRefType::get(
+      std::nullopt, memrefType.getElementType(), memrefType.getMemorySpace());
   return builder.create<mlir::memref::ReinterpretCastOp>(
-      loc, resultType, memref, offset, size, stride);
+      loc, resultType, memref, offset, /*size*/ std::nullopt,
+      /*stride*/ std::nullopt);
 }
 
 static bool needFlatten(mlir::Value val) {
   auto type = val.getType().cast<mlir::MemRefType>();
-  return !type.getLayout().isIdentity() || (type.getRank() > 1);
+  return type.getRank() != 0;
 }
 
 struct FlattenLoad : public mlir::OpRewritePattern<mlir::memref::LoadOp> {
@@ -582,9 +560,8 @@ struct FlattenLoad : public mlir::OpRewritePattern<mlir::memref::LoadOp> {
 
     auto loc = op.getLoc();
     auto flatIndex = getFlatIndex(rewriter, loc, memref, op.getIndices());
-    auto flatMemref = getFlatMemref(rewriter, loc, memref);
-    rewriter.replaceOpWithNewOp<mlir::memref::LoadOp>(op, flatMemref,
-                                                      flatIndex);
+    auto flatMemref = getFlatMemref(rewriter, loc, memref, flatIndex);
+    rewriter.replaceOpWithNewOp<mlir::memref::LoadOp>(op, flatMemref);
     return mlir::success();
   }
 };
@@ -604,105 +581,9 @@ struct FlattenStore : public mlir::OpRewritePattern<mlir::memref::StoreOp> {
 
     auto loc = op.getLoc();
     auto flatIndex = getFlatIndex(rewriter, loc, memref, op.getIndices());
-    auto flatMemref = getFlatMemref(rewriter, loc, memref);
-    rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(op, op.getValue(),
-                                                       flatMemref, flatIndex);
-    return mlir::success();
-  }
-};
-
-struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
-  using OpRewritePattern::OpRewritePattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(mlir::memref::SubViewOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    if (!op->getParentOfType<mlir::gpu::LaunchOp>())
-      return mlir::failure();
-
-    auto memref = op.getSource();
-    if (!needFlatten(memref))
-      return mlir::failure();
-
-    auto offsets = op.getMixedOffsets();
-    auto sizes = op.getMixedSizes();
-    auto strides = op.getMixedStrides();
-
-    auto srcType = memref.getType().cast<mlir::MemRefType>();
-    auto dstType = mlir::memref::SubViewOp::inferResultType(srcType, offsets,
-                                                            sizes, strides)
-                       .cast<mlir::MemRefType>();
-
-    int64_t resultOffset; // TODO: remove
-    llvm::SmallVector<int64_t, 4> resultStrides;
-    if (mlir::failed(
-            mlir::getStridesAndOffset(dstType, resultStrides, resultOffset)))
-      return mlir::failure();
-
-    auto loc = op.getLoc();
-    mlir::OpFoldResult flatIndex = getFlatIndex(rewriter, loc, memref, offsets);
-    mlir::OpFoldResult flatSize =
-        rewriter.create<imex::util::UndefOp>(loc, rewriter.getIndexType())
-            .getResult();
-    mlir::OpFoldResult flatStride = rewriter.getIndexAttr(1);
-    auto flatMemref = getFlatMemref(rewriter, loc, memref);
-    auto flatMemrefType = flatMemref.getType().cast<mlir::MemRefType>();
-    assert(flatMemrefType.getLayout().isIdentity());
-    mlir::Value flatSubview = rewriter.create<mlir::memref::SubViewOp>(
-        loc, flatMemref, flatIndex, flatSize, flatStride);
-    auto dstFlatType = flatSubview.getType();
-    if (dstFlatType != flatMemrefType)
-      flatSubview =
-          rewriter.create<mlir::memref::CastOp>(loc, dstFlatType, flatSubview);
-
-    auto offset = rewriter.getIndexAttr(0);
-
-    assert(resultStrides.size() == strides.size());
-    for (auto i : llvm::seq<size_t>(0, strides.size())) {
-      if (mlir::ShapedType::isDynamic(resultStrides[i])) {
-        auto stride = strides[i];
-        if (auto val = mlir::getConstantIntValue(stride))
-          stride = rewriter.create<mlir::arith::ConstantIndexOp>(loc, *val)
-                       .getResult();
-
-        auto origStride = [&]() -> mlir::Value {
-          mlir::OpBuilder::InsertionGuard g(rewriter);
-          setInsertionPointToStart(rewriter, memref);
-          return rewriter.create<imex::util::ExtractMemrefMetadataOp>(
-              loc, memref, i);
-        }();
-        mlir::Value newStride = rewriter.create<mlir::arith::MulIOp>(
-            loc, stride.get<mlir::Value>(), origStride);
-        strides[i] = newStride;
-      }
-    }
-
-    auto resultType = op.getType().cast<mlir::MemRefType>();
-    auto srcRank = static_cast<unsigned>(srcType.getRank());
-    auto resultRank = static_cast<unsigned>(resultType.getRank());
-    mlir::Value result;
-    if (srcRank == resultRank) {
-      result = rewriter.create<mlir::memref::ReinterpretCastOp>(
-          loc, resultType, flatSubview, offset, sizes, strides);
-    } else {
-      assert(resultRank < srcRank);
-      llvm::SmallVector<mlir::OpFoldResult> filteredSizes;
-      llvm::SmallVector<mlir::OpFoldResult> filteredStrides;
-      filteredSizes.reserve(resultRank);
-      filteredStrides.reserve(resultRank);
-
-      auto droppedDims = op.getDroppedDims();
-      for (auto i : llvm::seq(0u, srcRank)) {
-        if (!droppedDims[i]) {
-          filteredSizes.emplace_back(sizes[i]);
-          filteredStrides.emplace_back(strides[i]);
-        }
-      }
-      result = rewriter.create<mlir::memref::ReinterpretCastOp>(
-          loc, resultType, flatSubview, offset, filteredSizes, filteredStrides);
-    }
-
-    rewriter.replaceOp(op, result);
+    auto flatMemref = getFlatMemref(rewriter, loc, memref, flatIndex);
+    auto value = op.getValue();
+    rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(op, value, flatMemref);
     return mlir::success();
   }
 };
@@ -722,7 +603,7 @@ struct UnstrideMemrefsPass
     auto *ctx = &getContext();
     mlir::RewritePatternSet patterns(ctx);
 
-    patterns.insert<FlattenLoad, FlattenStore, FlattenSubview>(ctx);
+    patterns.insert<FlattenLoad, FlattenStore>(ctx);
 
     (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
                                              std::move(patterns));
@@ -761,54 +642,22 @@ static llvm::Optional<mlir::Value> getGpuStream(mlir::OpBuilder &builder,
   return stream;
 }
 
-class ConvertSubviewOp
-    : public mlir::OpConversionPattern<mlir::memref::SubViewOp> {
-public:
-  using OpConversionPattern::OpConversionPattern;
+static llvm::Optional<unsigned> getTypeSize(mlir::Type type) {
+  if (type.isIntOrFloat())
+    return type.getIntOrFloatBitWidth() / 8;
 
-  mlir::LogicalResult
-  matchAndRewrite(mlir::memref::SubViewOp op,
-                  mlir::memref::SubViewOp::Adaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
-    auto dstType = op.getType().cast<mlir::MemRefType>();
-    if (!dstType.hasRank() || dstType.getRank() != 1)
-      return mlir::failure();
+  if (auto vec = type.dyn_cast<mlir::VectorType>()) {
+    if (!vec.hasStaticShape())
+      return std::nullopt;
 
-    auto intType = getTypeConverter()->convertType(rewriter.getIndexType());
-    if (!intType)
-      return mlir::failure();
+    auto elemSize = getTypeSize(vec.getElementType());
+    if (!elemSize)
+      return std::nullopt;
 
-    auto loc = op.getLoc();
-    auto getValue = [&](mlir::OpFoldResult src) -> mlir::Value {
-      if (auto val = src.dyn_cast<mlir::Value>())
-        return val;
-
-      auto attr = src.get<mlir::Attribute>();
-      return rewriter.create<mlir::spirv::ConstantOp>(loc, intType, attr);
-    };
-
-    auto getStaticVal = [&](int64_t v) -> mlir::OpFoldResult {
-      return rewriter.getI64IntegerAttr(v);
-    };
-
-    auto offset = getValue(op.isDynamicOffset(0)
-                               ? mlir::OpFoldResult(adaptor.getOffsets()[0])
-                               : getStaticVal(adaptor.getStaticOffsets()[0]));
-    auto stride = getValue(op.isDynamicStride(0)
-                               ? mlir::OpFoldResult(adaptor.getStrides()[0])
-                               : getStaticVal(adaptor.getStaticStrides()[0]));
-    auto finalOffset = rewriter.createOrFold<mlir::spirv::IMulOp>(
-        loc, intType, offset, stride);
-
-    auto ptr = rewriter
-                   .create<mlir::spirv::InBoundsPtrAccessChainOp>(
-                       loc, adaptor.getSource(), finalOffset, std::nullopt)
-                   .getResult();
-
-    rewriter.replaceOp(op, ptr);
-    return mlir::success();
+    return static_cast<unsigned>(vec.getNumElements()) * *elemSize;
   }
-};
+  return std::nullopt;
+}
 
 class ConvertReinterpretCastOp
     : public mlir::OpConversionPattern<mlir::memref::ReinterpretCastOp> {
@@ -833,7 +682,7 @@ public:
     }
 
     auto dstType = op.getType().cast<mlir::MemRefType>();
-    if (!dstType.hasRank() || dstType.getRank() != 1)
+    if (dstType.getRank() != 0)
       return mlir::failure();
 
     auto intType = getTypeConverter()->convertType(rewriter.getIndexType());
@@ -849,11 +698,7 @@ public:
       return rewriter.create<mlir::spirv::ConstantOp>(loc, intType, attr);
     };
 
-    auto stride = getValue(op.isDynamicStride(0)
-                               ? mlir::OpFoldResult(adaptor.getStrides()[0])
-                               : getStaticVal(adaptor.getStaticStrides()[0]));
-    auto finalOffset = rewriter.createOrFold<mlir::spirv::IMulOp>(
-        loc, intType, getValue(offset), stride);
+    auto finalOffset = getValue(offset);
 
     auto ptr = rewriter
                    .create<mlir::spirv::InBoundsPtrAccessChainOp>(
@@ -905,23 +750,6 @@ public:
   }
 };
 
-static llvm::Optional<unsigned> getTypeSize(mlir::Type type) {
-  if (type.isIntOrFloat())
-    return type.getIntOrFloatBitWidth() / 8;
-
-  if (auto vec = type.dyn_cast<mlir::VectorType>()) {
-    if (!vec.hasStaticShape())
-      return std::nullopt;
-
-    auto elemSize = getTypeSize(vec.getElementType());
-    if (!elemSize)
-      return std::nullopt;
-
-    return static_cast<unsigned>(vec.getNumElements()) * *elemSize;
-  }
-  return std::nullopt;
-}
-
 class ConvertLoadOp : public mlir::OpConversionPattern<mlir::memref::LoadOp> {
 public:
   using OpConversionPattern::OpConversionPattern;
@@ -931,32 +759,20 @@ public:
                   mlir::memref::LoadOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto memrefType = op.getMemref().getType().cast<mlir::MemRefType>();
+    if (memrefType.getRank() != 0)
+      return mlir::failure();
+
     auto typeSize = getTypeSize(memrefType.getElementType());
     if (!typeSize)
       return mlir::failure();
 
-    if (memrefType.getRank() == 0) {
-      auto memoryAccess = mlir::spirv::MemoryAccessAttr::get(
-          op.getContext(), mlir::spirv::MemoryAccess::Aligned);
-      auto alignment = rewriter.getI32IntegerAttr(*typeSize);
-      rewriter.replaceOpWithNewOp<mlir::spirv::LoadOp>(op, adaptor.getMemref(),
-                                                       memoryAccess, alignment);
-      return mlir::success();
-    } else if (memrefType.hasRank() && memrefType.getRank() == 1) {
-      auto loc = op.getLoc();
-      auto ptr = rewriter.create<mlir::spirv::InBoundsPtrAccessChainOp>(
-          loc, adaptor.getMemref(), adaptor.getIndices().front(), std::nullopt);
-
-      auto memoryAccess = mlir::spirv::MemoryAccessAttr::get(
-          op.getContext(), mlir::spirv::MemoryAccess::Aligned);
-      auto alignment = rewriter.getI32IntegerAttr(*typeSize);
-      rewriter.replaceOpWithNewOp<mlir::spirv::LoadOp>(op, ptr, memoryAccess,
-                                                       alignment);
-
-      return mlir::success();
-    } else {
-      return mlir::failure();
-    }
+    auto ptr = adaptor.getMemref();
+    auto memoryAccess = mlir::spirv::MemoryAccessAttr::get(
+        op.getContext(), mlir::spirv::MemoryAccess::Aligned);
+    auto alignment = rewriter.getI32IntegerAttr(*typeSize);
+    rewriter.replaceOpWithNewOp<mlir::spirv::LoadOp>(op, ptr, memoryAccess,
+                                                     alignment);
+    return mlir::success();
   }
 };
 
@@ -969,19 +785,14 @@ public:
                   mlir::memref::StoreOp::Adaptor adaptor,
                   mlir::ConversionPatternRewriter &rewriter) const override {
     auto memrefType = op.getMemref().getType().cast<mlir::MemRefType>();
-    if (memrefType.getRank() > 1)
+    if (memrefType.getRank() != 0)
       return mlir::failure();
 
     auto typeSize = getTypeSize(memrefType.getElementType());
     if (!typeSize)
       return mlir::failure();
 
-    auto loc = op.getLoc();
     auto ptr = adaptor.getMemref();
-    if (memrefType.getRank() != 0)
-      ptr = rewriter.create<mlir::spirv::InBoundsPtrAccessChainOp>(
-          loc, ptr, adaptor.getIndices().front(), std::nullopt);
-
     auto memoryAccess = mlir::spirv::MemoryAccessAttr::get(
         op.getContext(), mlir::spirv::MemoryAccess::Aligned);
     auto alignment = rewriter.getI32IntegerAttr(*typeSize);
@@ -1557,15 +1368,14 @@ struct GPUToSpirvPass
       mlir::arith::populateArithToSPIRVPatterns(typeConverter, patterns);
       mlir::populateMathToSPIRVPatterns(typeConverter, patterns);
 
-      patterns.insert<ConvertSubviewOp, ConvertReinterpretCastOp,
-                      ConvertCastOp<mlir::memref::CastOp>,
-                      ConvertBitcastOp<imex::util::BitcastOp>,
-                      ConvertBitcastOp<imex::util::MemrefBitcastOp>,
-                      ConvertLoadOp, ConvertStoreOp, ConvertAtomicOps,
-                      AllocaOpPattern, ConvertFunc, ConvertAssert,
-                      ConvertBarrierOp, ConvertMemFenceOp, ConvertUndef,
-                      ConvertGlobalOp, ConvertGetGlobalOp, ConvertAllReduceOp,
-                      ConvertSubgroupReduceOp>(typeConverter, context);
+      patterns.insert<
+          ConvertReinterpretCastOp, ConvertCastOp<mlir::memref::CastOp>,
+          ConvertBitcastOp<imex::util::BitcastOp>,
+          ConvertBitcastOp<imex::util::MemrefBitcastOp>, ConvertLoadOp,
+          ConvertStoreOp, ConvertAtomicOps, AllocaOpPattern, ConvertFunc,
+          ConvertAssert, ConvertBarrierOp, ConvertMemFenceOp, ConvertUndef,
+          ConvertGlobalOp, ConvertGetGlobalOp, ConvertAllReduceOp,
+          ConvertSubgroupReduceOp>(typeConverter, context);
 
       patterns.add<
           SingleDimLaunchConfigConversion<mlir::gpu::SubgroupIdOp,
