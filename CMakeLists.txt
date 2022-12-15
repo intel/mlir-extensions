@@ -77,8 +77,15 @@ else()
     set(LLVM_RUNTIME_OUTPUT_INTDIR ${CMAKE_BINARY_DIR}/bin)
     set(LLVM_LIBRARY_OUTPUT_INTDIR ${CMAKE_BINARY_DIR}/lib)
 
-    # LLVM_INCLUDE_DIRS is the same as MLIR_INCLUDE_DIRS in an MLIR install tree
     include_directories(${MLIR_INCLUDE_DIRS})
+    if(DEFINED LLVM_BUILD_BINARY_DIR)
+        message(STATUS "Building IMEX with external MLIR build tree")
+        # LLVM_INCLUDE_DIRS needs to added if MLIR build tree is used.
+        include_directories(${LLVM_INCLUDE_DIRS})
+    else()
+        message(STATUS "Building IMEX with external MLIR install tree")
+        # LLVM_INCLUDE_DIRS is the same as MLIR_INCLUDE_DIRS in an MLIR install tree
+    endif()
 
     list(APPEND CMAKE_MODULE_PATH "${MLIR_CMAKE_DIR}")
     list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
