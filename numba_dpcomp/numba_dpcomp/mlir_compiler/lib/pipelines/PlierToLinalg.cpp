@@ -376,6 +376,10 @@ struct ReshapeChangeLayout
 
     llvm::SmallVector<mlir::OpFoldResult> stridesVals(rank);
 
+    auto metadata =
+        rewriter.create<mlir::memref::ExtractStridedMetadataOp>(loc, src);
+    auto actualStrides = metadata.getStrides();
+
     mlir::Value cmp;
     for (auto i : llvm::seq(0u, rank)) {
       if (mlir::ShapedType::isDynamic(strides[i])) {
@@ -383,13 +387,10 @@ struct ReshapeChangeLayout
       } else {
         stridesVals[i] = rewriter.getIndexAttr(strides[i]);
       }
-      auto actualStride =
-          rewriter.createOrFold<imex::util::ExtractMemrefMetadataOp>(loc, src,
-                                                                     i);
 
       auto cmpTemp = rewriter.createOrFold<mlir::arith::CmpIOp>(
           loc, mlir::arith::CmpIPredicate::eq,
-          expectedStrides[i].get<mlir::Value>(), actualStride);
+          expectedStrides[i].get<mlir::Value>(), actualStrides[i]);
 
       if (i == 0) {
         cmp = cmpTemp;

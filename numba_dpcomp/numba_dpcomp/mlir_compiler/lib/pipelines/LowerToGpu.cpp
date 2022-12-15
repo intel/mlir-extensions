@@ -232,8 +232,7 @@ struct KernelMemrefOpsMovementPass
     body.walk([&](mlir::gpu::LaunchOp launch) {
       launch.getBody().walk([&](mlir::Operation *op) {
         if (!mlir::isa<mlir::memref::DimOp,
-                       mlir::memref::ExtractStridedMetadataOp,
-                       imex::util::ExtractMemrefMetadataOp>(op))
+                       mlir::memref::ExtractStridedMetadataOp>(op))
           return;
 
         for (auto &arg : op->getOpOperands()) {
