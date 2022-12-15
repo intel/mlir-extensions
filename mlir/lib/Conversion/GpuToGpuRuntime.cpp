@@ -2047,6 +2047,36 @@ public:
   }
 };
 
+class ConvertF64ReinterpretCastOp
+    : public mlir::OpConversionPattern<mlir::memref::ReinterpretCastOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::ReinterpretCastOp op,
+                  mlir::memref::ReinterpretCastOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto converter = getTypeConverter();
+    assert(converter && "Invalid type converter");
+
+    auto resType = converter->convertType(op.getType())
+                       .dyn_cast_or_null<mlir::MemRefType>();
+    if (!resType)
+      return mlir::failure();
+
+    auto offsets = mlir::getMixedValues(adaptor.getStaticOffsets(),
+                                        adaptor.getOffsets(), rewriter);
+    auto sizes = mlir::getMixedValues(adaptor.getStaticSizes(),
+                                      adaptor.getSizes(), rewriter);
+    auto strides = mlir::getMixedValues(adaptor.getStaticStrides(),
+                                        adaptor.getStrides(), rewriter);
+
+    rewriter.replaceOpWithNewOp<mlir::memref::ReinterpretCastOp>(
+        op, resType, adaptor.getSource(), offsets.front(), sizes, strides);
+    return mlir::success();
+  }
+};
+
 struct TruncateF64ForGPUPass
     : public mlir::PassWrapper<TruncateF64ForGPUPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
@@ -2118,8 +2148,11 @@ struct TruncateF64ForGPUPass
     imex::populateTupleTypeConversionRewritesAndTarget(converter, patterns,
                                                        target);
 
-    patterns.insert<ConvertF64LoadOp, ConvertF64StoreOp>(converter, ctx);
-    target.addDynamicallyLegalOp<mlir::memref::LoadOp, mlir::memref::StoreOp>(
+    patterns.insert<ConvertF64LoadOp, ConvertF64StoreOp,
+                    ConvertF64ReinterpretCastOp>(converter, ctx);
+
+    target.addDynamicallyLegalOp<mlir::memref::LoadOp, mlir::memref::StoreOp,
+                                 mlir::memref::ReinterpretCastOp>(
         [&converter](mlir::Operation *op) -> llvm::Optional<bool> {
           if (converter.isLegal(op))
             return true;
