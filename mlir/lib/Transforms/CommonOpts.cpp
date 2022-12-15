@@ -195,6 +195,48 @@ struct CmpiOfSelect : public mlir::OpRewritePattern<mlir::arith::CmpIOp> {
 };
 
 // TODO: upstream
+struct ExtractStridedMetadataConstStrides
+    : public mlir::OpRewritePattern<mlir::memref::ExtractStridedMetadataOp> {
+  // Set benefit higher than ExtractStridedMetadataCast
+  ExtractStridedMetadataConstStrides(mlir::MLIRContext *context)
+      : mlir::OpRewritePattern<mlir::memref::ExtractStridedMetadataOp>(
+            context, /*benefit*/ 10) {}
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::ExtractStridedMetadataOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto srcType = op.getSource().getType().cast<mlir::MemRefType>();
+
+    int64_t offset;
+    llvm::SmallVector<int64_t> strides;
+    if (mlir::failed(mlir::getStridesAndOffset(srcType, strides, offset)))
+      return mlir::failure();
+
+    bool changed = false;
+    auto loc = op.getLoc();
+    auto replaceUses = [&](mlir::Value res, int64_t val) {
+      if (mlir::ShapedType::isDynamic(val) || res.use_empty())
+        return;
+
+      changed = true;
+      mlir::Value constVal = rewriter.create<mlir::arith::ConstantIndexOp>(loc, val);
+      for (auto &use : llvm::make_early_inc_range(res.getUses())) {
+        mlir::Operation *owner = use.getOwner();
+        rewriter.updateRootInPlace(owner, [&] {
+          use.set(constVal);
+        });
+      }
+    };
+
+    replaceUses(op.getOffset(), offset);
+    for (auto [strideRes, strideVal] : llvm::zip(op.getStrides(), strides))
+      replaceUses(strideRes, strideVal);
+
+    return mlir::success(changed);
+  }
+};
+
+// TODO: upstream
 struct ExtractStridedMetadataCast
     : public mlir::OpRewritePattern<mlir::memref::ExtractStridedMetadataOp> {
   using OpRewritePattern::OpRewritePattern;
@@ -246,6 +288,7 @@ void imex::populateCommonOptsPatterns(mlir::RewritePatternSet &patterns) {
       PowSimplify,
       AndConflictSimplify,
       CmpiOfSelect,
+      ExtractStridedMetadataConstStrides,
       ExtractStridedMetadataCast
       // clang-format on
       >(patterns.getContext());
