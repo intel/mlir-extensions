@@ -194,6 +194,24 @@ struct CmpiOfSelect : public mlir::OpRewritePattern<mlir::arith::CmpIOp> {
   }
 };
 
+// TODO: upstream
+struct ExtractStridedMetadataCast
+    : public mlir::OpRewritePattern<mlir::memref::ExtractStridedMetadataOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::ExtractStridedMetadataOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto cast = op.getSource().getDefiningOp<mlir::memref::CastOp>();
+    if (!cast)
+      return mlir::failure();
+
+    rewriter.replaceOpWithNewOp<mlir::memref::ExtractStridedMetadataOp>(
+        op, cast.getSource());
+    return mlir::success();
+  }
+};
+
 struct CommonOptsPass
     : public mlir::PassWrapper<CommonOptsPass, mlir::OperationPass<void>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(CommonOptsPass)
@@ -227,7 +245,8 @@ void imex::populateCommonOptsPatterns(mlir::RewritePatternSet &patterns) {
       SubviewStorePropagate,
       PowSimplify,
       AndConflictSimplify,
-      CmpiOfSelect
+      CmpiOfSelect,
+      ExtractStridedMetadataCast
       // clang-format on
       >(patterns.getContext());
 
