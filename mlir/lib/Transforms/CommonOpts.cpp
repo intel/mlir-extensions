@@ -217,6 +217,14 @@ struct ExtractStridedMetadataUnused
     mlir::Value newRes = rewriter.create<mlir::memref::ReinterpretCastOp>(
         loc, dstType, src, offset, std::nullopt, std::nullopt);
     rewriter.replaceAllUsesWith(buffer, newRes);
+    for (auto [i, size] : llvm::enumerate(op.getSizes())) {
+      if (size.use_empty())
+        continue;
+
+      mlir::Value newSize = rewriter.create<mlir::memref::DimOp>(
+          loc, src, static_cast<int64_t>(i));
+      rewriter.replaceAllUsesWith(size, newSize);
+    }
     rewriter.eraseOp(op);
     return mlir::success();
   }
