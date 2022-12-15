@@ -174,21 +174,6 @@ def SignCastOp : ImexUtil_Op<"sign_cast", [Pure]> {
   let assemblyFormat = "$source attr-dict `:` type($source) `to` type($dest)";
 }
 
-def ExtractMemrefMetadataOp
-    : ImexUtil_Op<"extract_memref_metadata", [Pure]> {
-  let arguments = (ins AnyMemRef : $source, IndexAttr : $dimIndex);
-
-  let results = (outs Index : $result);
-  let hasFolder = 1;
-
-  let builders = [
-    OpBuilder<(ins
-      "::mlir::Value" : $src,
-       "int64_t" : $dim)>,
-    OpBuilder<(ins "::mlir::Value" : $src)>
-  ];
-}
-
 def TakeContextOp : ImexUtil_Op<"take_context"> {
   let arguments = (ins OptionalAttr<SymbolRefAttr>:$initFunc,
                        OptionalAttr<SymbolRefAttr>:$releaseFunc);

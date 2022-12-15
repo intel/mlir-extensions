@@ -76,33 +76,6 @@ populateToLLVMAdditionalTypeConversion(mlir::LLVMTypeConverter &converter) {
 }
 
 namespace {
-struct LowerExtractMemrefMetadataOp
-    : public mlir::ConvertOpToLLVMPattern<imex::util::ExtractMemrefMetadataOp> {
-  using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(imex::util::ExtractMemrefMetadataOp op,
-                  imex::util::ExtractMemrefMetadataOp::Adaptor adaptor,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
-    auto arg = adaptor.getSource();
-    if (!arg.getType().isa<mlir::LLVM::LLVMStructType>())
-      return mlir::failure();
-
-    auto loc = op.getLoc();
-    mlir::MemRefDescriptor src(arg);
-    auto val = [&]() -> mlir::Value {
-      auto index = op.getDimIndex().getSExtValue();
-      if (index == -1)
-        return src.offset(rewriter, loc);
-
-      return src.stride(rewriter, loc, static_cast<unsigned>(index));
-    }();
-
-    rewriter.replaceOp(op, static_cast<mlir::Value>(val));
-    return mlir::success();
-  }
-};
-
 struct LowerMemrefBitcastOp
     : public mlir::ConvertOpToLLVMPattern<imex::util::MemrefBitcastOp> {
   using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
@@ -596,7 +569,6 @@ struct ImexUtilToLLVMPass
         // clang-format off
         LowerUndef,
         LowerBuildTuple,
-        LowerExtractMemrefMetadataOp,
         LowerMemrefBitcastOp,
         LowerTakeContextOp,
         LowerReleaseContextOp,
