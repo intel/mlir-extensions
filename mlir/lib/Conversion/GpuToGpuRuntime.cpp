@@ -683,7 +683,7 @@ public:
     }
 
     auto dstType = op.getType().cast<mlir::MemRefType>();
-    if (dstType.getRank() != 0)
+    if (dstType.getRank() > 1)
       return mlir::failure();
 
     auto intType = getTypeConverter()->convertType(rewriter.getIndexType());
