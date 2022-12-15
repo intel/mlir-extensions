@@ -1829,6 +1829,7 @@ static void populateLowerToGPUPipelineMed(mlir::OpPassManager &pm) {
   funcPM.addPass(gpu_runtime::createMakeBarriersUniformPass());
   funcPM.addPass(std::make_unique<SinkGpuDimsPass>());
   funcPM.addPass(std::make_unique<GpuLaunchSinkOpsPass>());
+  funcPM.addPass(mlir::createCanonicalizerPass());
   pm.addPass(mlir::createGpuKernelOutliningPass());
   pm.addPass(std::make_unique<NameGpuModulesPass>());
   pm.addPass(mlir::createSymbolDCEPass());
