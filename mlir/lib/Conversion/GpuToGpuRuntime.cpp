@@ -810,6 +810,61 @@ public:
   }
 };
 
+class ConvertReinterpretCastOp
+    : public mlir::OpConversionPattern<mlir::memref::ReinterpretCastOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::memref::ReinterpretCastOp op,
+                  mlir::memref::ReinterpretCastOp::Adaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto getStaticVal = [&](int64_t v) -> mlir::OpFoldResult {
+      return rewriter.getI64IntegerAttr(v);
+    };
+
+    auto src = op.getSource();
+    auto offset = op.isDynamicOffset(0)
+                      ? mlir::OpFoldResult(adaptor.getOffsets()[0])
+                      : getStaticVal(adaptor.getStaticOffsets()[0]);
+    if (mlir::isConstantIntValue(offset, 0)) {
+      rewriter.replaceOp(op, src);
+      return mlir::success();
+    }
+
+    auto dstType = op.getType().cast<mlir::MemRefType>();
+    if (!dstType.hasRank() || dstType.getRank() != 1)
+      return mlir::failure();
+
+    auto intType = getTypeConverter()->convertType(rewriter.getIndexType());
+    if (!intType)
+      return mlir::failure();
+
+    auto loc = op.getLoc();
+    auto getValue = [&](mlir::OpFoldResult src) -> mlir::Value {
+      if (auto val = src.dyn_cast<mlir::Value>())
+        return val;
+
+      auto attr = src.get<mlir::Attribute>();
+      return rewriter.create<mlir::spirv::ConstantOp>(loc, intType, attr);
+    };
+
+    auto stride = getValue(op.isDynamicStride(0)
+                               ? mlir::OpFoldResult(adaptor.getStrides()[0])
+                               : getStaticVal(adaptor.getStaticStrides()[0]));
+    auto finalOffset = rewriter.createOrFold<mlir::spirv::IMulOp>(
+        loc, intType, getValue(offset), stride);
+
+    auto ptr = rewriter
+                   .create<mlir::spirv::InBoundsPtrAccessChainOp>(
+                       loc, adaptor.getSource(), finalOffset, std::nullopt)
+                   .getResult();
+
+    rewriter.replaceOp(op, ptr);
+    return mlir::success();
+  }
+};
+
 template <typename T>
 class ConvertCastOp : public mlir::OpConversionPattern<T> {
 public:
@@ -1502,8 +1557,8 @@ struct GPUToSpirvPass
       mlir::arith::populateArithToSPIRVPatterns(typeConverter, patterns);
       mlir::populateMathToSPIRVPatterns(typeConverter, patterns);
 
-      patterns.insert<ConvertSubviewOp, ConvertCastOp<mlir::memref::CastOp>,
-                      ConvertCastOp<mlir::memref::ReinterpretCastOp>,
+      patterns.insert<ConvertSubviewOp, ConvertReinterpretCastOp,
+                      ConvertCastOp<mlir::memref::CastOp>,
                       ConvertBitcastOp<imex::util::BitcastOp>,
                       ConvertBitcastOp<imex::util::MemrefBitcastOp>,
                       ConvertLoadOp, ConvertStoreOp, ConvertAtomicOps,
