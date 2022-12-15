@@ -1689,8 +1689,8 @@ struct SignCastIfPropagate : public mlir::OpRewritePattern<mlir::scf::IfOp> {
     for (auto [i, args] : llvm::enumerate(
              llvm::zip(thenYield.getResults(), elseYield.getResults()))) {
       auto [thenArg, elseArg] = args;
-      auto cast = thenArg.getDefiningOp<CastOp>();
-      auto undef = elseArg.getDefiningOp<imex::util::UndefOp>();
+      auto cast = thenArg.template getDefiningOp<CastOp>();
+      auto undef = elseArg.template getDefiningOp<imex::util::UndefOp>();
       if (cast && undef) {
         idx = static_cast<unsigned>(i);
         castOp = cast;
