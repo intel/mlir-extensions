@@ -1819,11 +1819,11 @@ static void populateLowerToGPUPipelineMed(mlir::OpPassManager &pm) {
   commonOptPasses(funcPM);
   funcPM.addPass(gpu_runtime::createInsertGPUAllocsPass());
   funcPM.addPass(mlir::createCanonicalizerPass());
+  funcPM.addPass(std::make_unique<LowerGpuBuiltins2Pass>());
   funcPM.addPass(gpu_runtime::createUnstrideMemrefsPass());
   funcPM.addPass(mlir::memref::createExpandStridedMetadataPass());
   funcPM.addPass(mlir::createLowerAffinePass());
 
-  funcPM.addPass(std::make_unique<LowerGpuBuiltins2Pass>());
   commonOptPasses(funcPM);
   funcPM.addPass(std::make_unique<KernelMemrefOpsMovementPass>());
   funcPM.addPass(gpu_runtime::createMakeBarriersUniformPass());
