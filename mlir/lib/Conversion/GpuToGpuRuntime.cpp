@@ -617,12 +617,32 @@ struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
     if (!needFlatten(memref))
       return mlir::failure();
 
+    auto srcType = memref.getType().cast<mlir::MemRefType>();
     auto resultType = op.getType().cast<mlir::MemRefType>();
     auto loc = op.getLoc();
     auto flatIndex = getFlatIndex(rewriter, loc, memref, op.getMixedOffsets());
+
+    unsigned subRank = static_cast<unsigned>(resultType.getRank());
+    auto subSizes = op.getMixedSizes();
+    auto subStrides = op.getMixedStrides();
+    auto droppedDims = op.getDroppedDims();
+
+    llvm::SmallVector<mlir::OpFoldResult> finalSizes;
+    finalSizes.reserve(subRank);
+
+    llvm::SmallVector<mlir::OpFoldResult> finalStrides;
+    finalStrides.reserve(subRank);
+
+    for (auto i : llvm::seq(0u, static_cast<unsigned>(srcType.getRank()))) {
+      if (droppedDims.test(i))
+        continue;
+
+      finalSizes.push_back(subSizes[i]);
+      finalStrides.push_back(subStrides[i]);
+    }
+
     rewriter.replaceOpWithNewOp<mlir::memref::ReinterpretCastOp>(
-        op, resultType, memref, flatIndex, op.getMixedSizes(),
-        op.getMixedStrides());
+        op, resultType, memref, flatIndex, finalSizes, finalStrides);
     return mlir::success();
   }
 };
