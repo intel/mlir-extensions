@@ -470,77 +470,21 @@ static void setInsertionPointToStart(mlir::OpBuilder &builder,
   }
 }
 
-static mlir::Value getFlatIndex(mlir::OpBuilder &builder, mlir::Location loc,
-                                mlir::Value memref, mlir::ValueRange indices) {
-  auto memrefType = memref.getType().cast<mlir::MemRefType>();
-  auto rank = static_cast<unsigned>(memrefType.getRank());
-  assert(indices.size() == rank);
-  if (memrefType.getLayout().isIdentity()) {
-    auto shape = memrefType.getShape();
-    auto expr =
-        mlir::makeCanonicalStridedLayoutExpr(shape, builder.getContext());
-    llvm::SmallVector<mlir::Value> applyOperands;
-    if (rank != 0) {
-      applyOperands.reserve(rank * 2);
-      applyOperands.assign(indices.begin(), indices.end());
-      mlir::OpBuilder::InsertionGuard g(builder);
-      setInsertionPointToStart(builder, memref);
-      mlir::Value size;
-      for (auto i : llvm::seq(0u, rank - 1)) {
-        auto dimInd = rank - i - 1;
-        mlir::Value dim =
-            builder.create<mlir::memref::DimOp>(loc, memref, dimInd);
-        if (i != 0) {
-          size = builder.create<mlir::arith::MulIOp>(loc, size, dim);
-        } else {
-          size = dim;
-        }
-
-        applyOperands.emplace_back(size);
-      }
-    }
-    auto affineMap = mlir::AffineMap::get(
-        rank, static_cast<unsigned>(applyOperands.size()) - rank, expr);
-    assert(affineMap.getNumDims() == indices.size());
-    return builder.create<mlir::AffineApplyOp>(loc, affineMap, applyOperands);
-  } else {
-    auto affineMap = memrefType.getLayout().getAffineMap();
-    assert(affineMap.getNumDims() == indices.size());
-    llvm::SmallVector<mlir::Value> applyOperands;
-    if (rank != 0) {
-      mlir::OpBuilder::InsertionGuard g(builder);
-      setInsertionPointToStart(builder, memref);
-      applyOperands.reserve(rank * 2 + 1);
-      applyOperands.assign(indices.begin(), indices.end());
-
-      auto numSymbols = affineMap.getNumSymbols();
-      if (numSymbols > 0) {
-        auto metadata =
-            builder.create<mlir::memref::ExtractStridedMetadataOp>(loc, memref);
-        applyOperands.emplace_back(metadata.getOffset());
-        --numSymbols;
-        assert(numSymbols <= rank);
-        auto strides = metadata.getStrides();
-        assert(numSymbols <= strides.size());
-        for (auto i : llvm::seq(0u, numSymbols))
-          applyOperands.emplace_back(strides[i]);
-      }
-    }
-    return builder.create<mlir::AffineApplyOp>(loc, affineMap, applyOperands);
-  }
-}
-
 // TODO: copypasted from upstream.
-static std::pair<mlir::OpFoldResult, llvm::SmallVector<mlir::OpFoldResult>>
-getFlatOffsetAndStrides(mlir::OpBuilder &rewriter, mlir::Location loc,
-                        mlir::Value source,
-                        llvm::ArrayRef<mlir::OpFoldResult> subOffsets,
-                        llvm::ArrayRef<mlir::OpFoldResult> subStrides) {
+static std::tuple<mlir::Value, mlir::OpFoldResult,
+                  llvm::SmallVector<mlir::OpFoldResult>>
+getFlatOffsetAndStrides(
+    mlir::OpBuilder &rewriter, mlir::Location loc, mlir::Value source,
+    llvm::ArrayRef<mlir::OpFoldResult> subOffsets,
+    llvm::ArrayRef<mlir::OpFoldResult> subStrides = std::nullopt) {
   auto sourceType = source.getType().cast<mlir::MemRefType>();
   unsigned sourceRank = sourceType.getRank();
 
-  auto newExtractStridedMetadata =
-      rewriter.create<mlir::memref::ExtractStridedMetadataOp>(loc, source);
+  auto newExtractStridedMetadata = [&]() {
+    mlir::OpBuilder::InsertionGuard g(rewriter);
+    setInsertionPointToStart(rewriter, source);
+    return rewriter.create<mlir::memref::ExtractStridedMetadataOp>(loc, source);
+  }();
 
   auto [sourceStrides, sourceOffset] = getStridesAndOffset(sourceType);
 
@@ -568,8 +512,11 @@ getFlatOffsetAndStrides(mlir::OpBuilder &rewriter, mlir::Location loc,
         mlir::ShapedType::isDynamic(sourceStrides[i])
             ? origStrides[i]
             : mlir::OpFoldResult(rewriter.getIndexAttr(sourceStrides[i]));
-    strides.push_back(makeComposedFoldedAffineApply(
-        rewriter, loc, s0 * s1, {subStrides[i], origStride}));
+
+    if (!subStrides.empty()) {
+      strides.push_back(makeComposedFoldedAffineApply(
+          rewriter, loc, s0 * s1, {subStrides[i], origStride}));
+    }
 
     // Build up the computation of the offset.
     unsigned baseIdxForDim = 1 + 2 * i;
@@ -584,33 +531,17 @@ getFlatOffsetAndStrides(mlir::OpBuilder &rewriter, mlir::Location loc,
   mlir::OpFoldResult finalOffset =
       makeComposedFoldedAffineApply(rewriter, loc, expr, values);
 
-  return {finalOffset, strides};
+  return {newExtractStridedMetadata.getBaseBuffer(), finalOffset, strides};
 }
 
-// static mlir::Value getFlatIndex(mlir::OpBuilder &builder, mlir::Location loc,
-//                                 mlir::Value memref,
-//                                 llvm::ArrayRef<mlir::OpFoldResult> indices) {
-//   llvm::SmallVector<mlir::Value> vals(indices.size());
-//   for (auto [i, val] : llvm::enumerate(indices)) {
-//     if (auto attr = val.dyn_cast<mlir::Attribute>()) {
-//       auto ind = attr.cast<mlir::IntegerAttr>().getValue().getSExtValue();
-//       vals[i] = builder.create<mlir::arith::ConstantIndexOp>(loc, ind);
-//     } else {
-//       vals[i] = val.get<mlir::Value>();
-//     }
-//   }
-//   return getFlatIndex(builder, loc, memref, vals);
-// }
-
-static mlir::Value getFlatMemref(mlir::OpBuilder &builder, mlir::Location loc,
-                                 mlir::Value memref, mlir::Value offset) {
-  auto memrefType = memref.getType().cast<mlir::MemRefType>();
-  auto resultType = mlir::MemRefType::get(
-      std::nullopt, memrefType.getElementType(),
-      mlir::MemRefLayoutAttrInterface{}, memrefType.getMemorySpace());
-  return builder.create<mlir::memref::ReinterpretCastOp>(
-      loc, resultType, memref, offset, /*size*/ std::nullopt,
-      /*stride*/ std::nullopt);
+static mlir::Value getFlatMemref(mlir::OpBuilder &rewriter, mlir::Location loc,
+                                 mlir::Value source, mlir::ValueRange offsets) {
+  auto offsetsTemp = mlir::getAsOpFoldResult(offsets);
+  auto [base, offset, ignore] =
+      getFlatOffsetAndStrides(rewriter, loc, source, offsetsTemp);
+  auto retType = base.getType().cast<mlir::MemRefType>();
+  return rewriter.create<mlir::memref::ReinterpretCastOp>(
+      loc, retType, base, offset, std::nullopt, std::nullopt);
 }
 
 static bool needFlatten(mlir::Value val) {
@@ -632,8 +563,7 @@ struct FlattenLoad : public mlir::OpRewritePattern<mlir::memref::LoadOp> {
       return mlir::failure();
 
     auto loc = op.getLoc();
-    auto flatIndex = getFlatIndex(rewriter, loc, memref, op.getIndices());
-    auto flatMemref = getFlatMemref(rewriter, loc, memref, flatIndex);
+    auto flatMemref = getFlatMemref(rewriter, loc, memref, op.getIndices());
     rewriter.replaceOpWithNewOp<mlir::memref::LoadOp>(op, flatMemref);
     return mlir::success();
   }
@@ -653,8 +583,7 @@ struct FlattenStore : public mlir::OpRewritePattern<mlir::memref::StoreOp> {
       return mlir::failure();
 
     auto loc = op.getLoc();
-    auto flatIndex = getFlatIndex(rewriter, loc, memref, op.getIndices());
-    auto flatMemref = getFlatMemref(rewriter, loc, memref, flatIndex);
+    auto flatMemref = getFlatMemref(rewriter, loc, memref, op.getIndices());
     auto value = op.getValue();
     rewriter.replaceOpWithNewOp<mlir::memref::StoreOp>(op, value, flatMemref);
     return mlir::success();
@@ -678,7 +607,7 @@ struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
     auto subOffsets = op.getMixedOffsets();
     auto subSizes = op.getMixedSizes();
     auto subStrides = op.getMixedStrides();
-    auto [finalOffset, strides] =
+    auto [base, finalOffset, strides] =
         getFlatOffsetAndStrides(rewriter, loc, memref, subOffsets, subStrides);
 
     auto srcType = memref.getType().cast<mlir::MemRefType>();
@@ -702,7 +631,7 @@ struct FlattenSubview : public mlir::OpRewritePattern<mlir::memref::SubViewOp> {
     }
 
     rewriter.replaceOpWithNewOp<mlir::memref::ReinterpretCastOp>(
-        op, resultType, memref, finalOffset, finalSizes, finalStrides);
+        op, resultType, base, finalOffset, finalSizes, finalStrides);
     return mlir::success();
   }
 };
