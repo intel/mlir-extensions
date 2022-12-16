@@ -21,6 +21,11 @@
     abort();                                                                   \
   } while (0)
 
+template <size_t NumDims, typename T>
+static T *getMemrefData(const Memref<NumDims, T> *src) {
+  return src->data + src->offset;
+}
+
 namespace {
 
 template <typename T>
@@ -47,9 +52,9 @@ using GemmFunc = void(const CBLAS_LAYOUT, const CBLAS_TRANSPOSE,
                       const T *, const MKL_INT, const T, T *, const MKL_INT);
 
 template <typename T>
-void cpu_gemm(GemmFunc<T> Gemm, const Memref<2, T> *a, const Memref<2, T> *b,
-              Memref<2, T> *c, T alpha, T beta) {
-  auto is_contiguous = [](const Memref<2, T> *arr, char arr_name) {
+static void cpuGemm(GemmFunc<T> Gemm, const Memref<2, T> *a,
+                    const Memref<2, T> *b, Memref<2, T> *c, T alpha, T beta) {
+  auto isContiguous = [](const Memref<2, T> *arr, char arr_name) {
     if (arr->strides[0] != 1 && arr->strides[1] != 1) {
       fatal_failure(
           "mkl gemm suports only arrays contiguous on inner dimension.\n"
@@ -59,38 +64,42 @@ void cpu_gemm(GemmFunc<T> Gemm, const Memref<2, T> *a, const Memref<2, T> *b,
     }
   };
 
-  is_contiguous(a, 'a');
-  is_contiguous(b, 'b');
-  is_contiguous(c, 'c');
+  isContiguous(a, 'a');
+  isContiguous(b, 'b');
+  isContiguous(c, 'c');
 
-  auto is_rowm = [](const Memref<2, T> *arr) { return arr->strides[1] == 1; };
+  auto isRowm = [](const Memref<2, T> *arr) { return arr->strides[1] == 1; };
 
-  auto layout = is_rowm(c) ? CblasRowMajor : CblasColMajor;
-  auto transA = is_rowm(a) == is_rowm(c) ? CblasNoTrans : CblasTrans;
-  auto transB = is_rowm(b) == is_rowm(c) ? CblasNoTrans : CblasTrans;
+  auto layout = isRowm(c) ? CblasRowMajor : CblasColMajor;
+  auto transA = isRowm(a) == isRowm(c) ? CblasNoTrans : CblasTrans;
+  auto transB = isRowm(b) == isRowm(c) ? CblasNoTrans : CblasTrans;
 
   auto m = static_cast<MKL_INT>(a->dims[0]);
   auto n = static_cast<MKL_INT>(b->dims[1]);
   auto k = static_cast<MKL_INT>(a->dims[1]);
 
-  auto lda = static_cast<MKL_INT>(is_rowm(a) ? a->strides[0] : a->strides[1]);
-  auto ldb = static_cast<MKL_INT>(is_rowm(b) ? b->strides[0] : b->strides[1]);
-  auto ldc = static_cast<MKL_INT>(is_rowm(c) ? c->strides[0] : c->strides[1]);
+  auto lda = static_cast<MKL_INT>(isRowm(a) ? a->strides[0] : a->strides[1]);
+  auto ldb = static_cast<MKL_INT>(isRowm(b) ? b->strides[0] : b->strides[1]);
+  auto ldc = static_cast<MKL_INT>(isRowm(c) ? c->strides[0] : c->strides[1]);
 
-  Gemm(layout,  /*layout*/
-       transA,  /*transa*/
-       transB,  /*transb*/
-       m,       /*m*/
-       n,       /*n*/
-       k,       /*k*/
-       alpha,   /*alpha*/
-       a->data, /*a*/
-       lda,     /*lda*/
-       b->data, /*b*/
-       ldb,     /*ldb*/
-       beta,    /*beta*/
-       c->data, /*c*/
-       ldc      /*ldc*/
+  auto aData = getMemrefData(a);
+  auto bData = getMemrefData(b);
+  auto cData = getMemrefData(c);
+
+  Gemm(layout, /*layout*/
+       transA, /*transa*/
+       transB, /*transb*/
+       m,      /*m*/
+       n,      /*n*/
+       k,      /*k*/
+       alpha,  /*alpha*/
+       aData,  /*a*/
+       lda,    /*lda*/
+       bData,  /*b*/
+       ldb,    /*ldb*/
+       beta,   /*beta*/
+       cData,  /*c*/
+       ldc     /*ldc*/
   );
 }
 #endif
@@ -123,7 +132,7 @@ static inline void ALL_UNUSED(int dummy, ...) { (void)dummy; }
 #define GEMM_VARIANT(T, Prefix, Suff)                                          \
   DPCOMP_MATH_RUNTIME_EXPORT void mkl_gemm_##Suff(                             \
       const Memref<2, T> *a, const Memref<2, T> *b, Memref<2, T> *c) {         \
-    MKL_CALL(cpu_gemm<T>, MKL_GEMM(Prefix), a, b, c, 1, 0);                    \
+    MKL_CALL(cpuGemm<T>, MKL_GEMM(Prefix), a, b, c, 1, 0);                     \
   }
 
 GEMM_VARIANT(float, s, float32)
