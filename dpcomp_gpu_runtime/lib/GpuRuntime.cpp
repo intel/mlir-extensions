@@ -223,7 +223,8 @@ enum class GpuAllocType { Device = 0, Shared = 1, Local = 2 };
 
 class Stream : public StreamInterface {
 public:
-  Stream(size_t eventsCount, const char *deviceName) : deviceName(deviceName) {
+  Stream(size_t eventsCount, const char *deviceName)
+      : deviceName(deviceName ? deviceName : "") {
     DriverAndDevice driverAndDevice;
     if (deviceName) {
       driverAndDevice = getDevice(deviceName);
