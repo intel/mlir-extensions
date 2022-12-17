@@ -7,6 +7,7 @@
 #include "imex/Dialect/gpu_runtime/IR/GpuRuntimeOps.hpp"
 #include "imex/Dialect/imex_util/Dialect.hpp"
 #include "imex/Dialect/imex_util/Utils.hpp"
+#include "imex/Transforms/FuncUtils.hpp"
 #include "imex/Transforms/ScalarOpsConversion.hpp"
 #include "imex/Transforms/TypeConversion.hpp"
 
@@ -1706,6 +1707,89 @@ struct GPUExPass
   }
 };
 
+struct ExpandDeviceFuncCallOp
+    : public mlir::OpRewritePattern<mlir::func::CallOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::func::CallOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto region = op->getParentOfType<imex::util::EnvironmentRegionOp>();
+    if (!region || !region.getEnvironment()
+                        .isa_and_nonnull<gpu_runtime::GPURegionDescAttr>())
+      return mlir::failure();
+
+    auto mod = op->getParentOfType<mlir::ModuleOp>();
+    if (!mod)
+      return mlir::failure();
+
+    auto funcName = op.getCallee();
+    auto origFunc = mod.lookupSymbol<mlir::func::FuncOp>(funcName);
+    if (!origFunc)
+      return mlir::failure();
+
+    auto deviceFuncAttr =
+        origFunc->getAttrOfType<mlir::StringAttr>("device_func");
+    if (!deviceFuncAttr)
+      return mlir::failure();
+
+    auto stream = getGpuStream(rewriter, op);
+    if (!stream)
+      return mlir::failure();
+
+    auto deviceFunc = [&]() -> mlir::func::FuncOp {
+      auto deviceFuncName = deviceFuncAttr.getValue();
+      auto func = mod.lookupSymbol<mlir::func::FuncOp>(deviceFuncName);
+      if (!func) {
+        auto origFuncType = origFunc.getFunctionType();
+        llvm::SmallVector<mlir::Type> newInputs;
+        newInputs.emplace_back(stream->getType());
+        auto inputs = origFuncType.getInputs();
+        newInputs.append(inputs.begin(), inputs.end());
+
+        auto funcType =
+            rewriter.getFunctionType(newInputs, origFuncType.getResults());
+
+        func = imex::addFunction(rewriter, mod, deviceFuncName, funcType);
+        auto cifaceName = rewriter.getStringAttr("llvm.emit_c_interface");
+
+        if (origFunc->hasAttr(cifaceName))
+          func->setAttr(cifaceName, mlir::UnitAttr::get(rewriter.getContext()));
+      }
+      return func;
+    }();
+
+    auto oldArgs = op.getOperands();
+    llvm::SmallVector<mlir::Value> newArgs;
+    newArgs.emplace_back(*stream);
+    newArgs.append(oldArgs.begin(), oldArgs.end());
+
+    rewriter.replaceOpWithNewOp<mlir::func::CallOp>(op, deviceFunc, newArgs);
+    return mlir::success();
+  }
+};
+
+struct GenDeviceFuncsPass
+    : public mlir::PassWrapper<GenDeviceFuncsPass,
+                               mlir::OperationPass<mlir::ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(GenDeviceFuncsPass)
+
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::func::FuncDialect>();
+  }
+
+  void runOnOperation() override {
+    auto *ctx = &getContext();
+    mlir::RewritePatternSet patterns(ctx);
+
+    patterns.insert<ExpandDeviceFuncCallOp>(ctx);
+
+    (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
+                                             std::move(patterns));
+  }
+};
+
 static llvm::Optional<mlir::Attribute> getNeutralValue(mlir::Block &block) {
   auto body = block.without_terminator();
   if (!llvm::hasSingleElement(body))
@@ -2672,6 +2756,10 @@ std::unique_ptr<mlir::Pass> gpu_runtime::createSerializeSPIRVPass() {
 
 std::unique_ptr<mlir::Pass> gpu_runtime::createGPUExPass() {
   return std::make_unique<GPUExPass>();
+}
+
+std::unique_ptr<mlir::Pass> gpu_runtime::createGenDeviceFuncsPass() {
+  return std::make_unique<GenDeviceFuncsPass>();
 }
 
 std::unique_ptr<mlir::Pass> gpu_runtime::createParallelLoopGPUMappingPass() {

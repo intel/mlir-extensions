@@ -18,6 +18,14 @@
 #include "LevelZeroPrinting.hpp"
 #include "LevelZeroWrapper.hpp"
 
+/// Stream interface, must be in sync with math runtime.
+/// TODO: move to common place.
+class StreamInterface {
+public:
+  virtual ~StreamInterface() = default;
+  virtual std::string_view getDeviceName() = 0;
+};
+
 typedef void (*MemInfoDtorFunction)(void *ptr, size_t size, void *info);
 using AllocFuncT = void *(*)(void *, size_t, MemInfoDtorFunction, void *);
 
@@ -213,8 +221,10 @@ static auto countEvents(ze_event_handle_t *events) {
 
 enum class GpuAllocType { Device = 0, Shared = 1, Local = 2 };
 
-struct Stream {
-  Stream(size_t eventsCount, const char *deviceName) {
+class Stream : public StreamInterface {
+public:
+  Stream(size_t eventsCount, const char *deviceName)
+      : deviceName(deviceName ? deviceName : "") {
     DriverAndDevice driverAndDevice;
     if (deviceName) {
       driverAndDevice = getDevice(deviceName);
@@ -247,6 +257,8 @@ struct Stream {
       events = std::make_unique<ze::Event[]>(eventsCount);
     }
   }
+
+  std::string_view getDeviceName() override { return deviceName; }
 
   void retain() { ++refcout; }
 
@@ -420,6 +432,7 @@ private:
 
   ze::EventPool eventPool;
   std::unique_ptr<ze::Event[]> events;
+  std::string deviceName;
 
   static const constexpr size_t NoEvent = static_cast<size_t>(-1);
 

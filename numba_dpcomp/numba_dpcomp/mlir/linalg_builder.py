@@ -152,9 +152,11 @@ class Builder:
     def reshape(self, src, dims):
         return self._reshape(self._context, src, dims)
 
-    def external_call(self, name, inputs, outputs, decorate=True, return_tensor=False):
+    def external_call(
+        self, name, inputs, outputs, decorate=True, return_tensor=False, attrs=None
+    ):
         return self._external_call(
-            self._context, name, inputs, outputs, decorate, return_tensor
+            self._context, name, inputs, outputs, decorate, return_tensor, attrs
         )
 
     def insert(self, src, dst, offsets, strides):

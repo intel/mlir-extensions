@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include <stdio.h>
+#include <string_view>
 
 #include "Common.hpp"
 
@@ -25,6 +26,14 @@ template <size_t NumDims, typename T>
 static T *getMemrefData(const Memref<NumDims, T> *src) {
   return src->data + src->offset;
 }
+
+/// Stream interface, must be in sync with gpu runtime.
+/// TODO: move to common place.
+class StreamInterface {
+public:
+  virtual ~StreamInterface() = default;
+  virtual std::string_view getDeviceName() = 0;
+};
 
 namespace {
 
@@ -59,7 +68,7 @@ static void cpuGemm(GemmFunc<T> Gemm, const Memref<2, T> *a,
       fatal_failure(
           "mkl gemm suports only arrays contiguous on inner dimension.\n"
           "stride for at least one dimension should be equal to 1.\n"
-          "'%c' parameter is not contiguous. '%c' strides are %d and %d.",
+          "'%c' parameter is not contiguous. '%c' strides are %d and %d.\n",
           arr_name, arr_name, int(arr->strides[0]), int(arr->strides[1]));
     }
   };
@@ -102,6 +111,15 @@ static void cpuGemm(GemmFunc<T> Gemm, const Memref<2, T> *a,
        ldc     /*ldc*/
   );
 }
+
+template <typename T>
+static void deviceGemm(void *stream, const Memref<2, T> *a,
+                       const Memref<2, T> *b, Memref<2, T> *c, T alpha,
+                       T beta) {
+  auto streamIface = static_cast<StreamInterface *>(stream);
+  fatal_failure("Not implemented, deviceName %s\n",
+                streamIface->getDeviceName().data());
+}
 #endif
 } // namespace
 
@@ -133,6 +151,11 @@ static inline void ALL_UNUSED(int dummy, ...) { (void)dummy; }
   DPCOMP_MATH_RUNTIME_EXPORT void mkl_gemm_##Suff(                             \
       const Memref<2, T> *a, const Memref<2, T> *b, Memref<2, T> *c) {         \
     MKL_CALL(cpuGemm<T>, MKL_GEMM(Prefix), a, b, c, 1, 0);                     \
+  }                                                                            \
+  DPCOMP_MATH_RUNTIME_EXPORT void mkl_gemm_##Suff##_device(                    \
+      void *stream, const Memref<2, T> *a, const Memref<2, T> *b,              \
+      Memref<2, T> *c) {                                                       \
+    MKL_CALL(deviceGemm<T>, stream, a, b, c, 1, 0);                            \
   }
 
 GEMM_VARIANT(float, s, float32)

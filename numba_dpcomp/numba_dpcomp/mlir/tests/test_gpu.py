@@ -1223,3 +1223,49 @@ def test_cfd_reduce2(py_func, shape, dtype):
 
     da = _from_host(a, buffer="device")
     assert_allclose(jit_func(da), py_func(a), rtol=1e-5)
+
+
+@require_dpctl
+@pytest.mark.skip(reason="Not implemented")
+@pytest.mark.parametrize(
+    "a,b",
+    [
+        (
+            np.array([[1, 2, 3], [4, 5, 6]], np.float32),
+            np.array([[1, 2], [3, 4], [5, 6]], np.float32),
+        ),
+    ],
+)
+@parametrize_function_variants(
+    "py_func",
+    [
+        "lambda a, b, c: np.dot(a, b, c)",
+        "lambda a, b, c: np.dot(a, b, out=c)",
+    ],
+)
+def test_cfd_dot(a, b, py_func):
+    jit_func = njit(py_func)
+
+    tmp = np.dot(a, b)
+    res_py = np.zeros_like(tmp)
+    gpu_res = np.zeros_like(tmp)
+
+    py_func(a, b, res_py)
+
+    da = _from_host(a, buffer="device")
+    db = _from_host(b, buffer="device")
+    dgpu_res = _from_host(gpu_res, buffer="device")
+
+    with print_pass_ir([], ["ConvertParallelLoopToGpu"]):
+        jit_func(da, db, dgpu_res)
+        ir = get_print_buffer()
+        assert (
+            ir.count(
+                f'imex_util.env_region #gpu_runtime.region_desc<device = "{filter_string}">'
+            )
+            > 0
+        ), ir
+        assert ir.count("gpu.launch blocks") == 1, ir
+
+    _to_host(dgpu_res, gpu_res)
+    assert_equal(res_py, gpu_res)
