@@ -29,6 +29,11 @@ std::unique_ptr<mlir::Pass> createConvertGPUDeallocsPass();
 std::unique_ptr<mlir::Pass> createUnstrideMemrefsPass();
 std::unique_ptr<mlir::Pass> createSerializeSPIRVPass();
 std::unique_ptr<mlir::Pass> createGPUExPass();
+
+/// This pass replaces calls to host functions with calls to device functions
+/// inside env regions;
+std::unique_ptr<mlir::Pass> createGenDeviceFuncsPass();
+
 std::unique_ptr<mlir::Pass> createParallelLoopGPUMappingPass();
 
 /// Naively tile parallel loops for gpu, using values obtained from
