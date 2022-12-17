@@ -1097,32 +1097,33 @@ static py::object externalCallImpl(py::capsule context, py::str funcName,
       if (decorate)
         f->setAttr("llvm.emit_c_interface",
                    mlir::UnitAttr::get(builder.getContext()));
+
+      if (!attrs.is_none()) {
+        auto attrDict = attrs.cast<py::dict>();
+        for (auto [name, val] : attrDict) {
+          auto nameStr = name.cast<std::string>();
+          auto attrVal = [&, v = val]() -> mlir::Attribute {
+            if (py::isinstance<py::int_>(v))
+              return builder.getI64IntegerAttr(v.cast<int64_t>());
+
+            if (py::isinstance<py::float_>(v))
+              return builder.getF64FloatAttr(v.cast<double>());
+
+            if (py::isinstance<py::str>(v))
+              return builder.getStringAttr(v.cast<std::string>());
+
+            imex::reportError(llvm::Twine("Unsupported attr type: ") +
+                              py::str(v).cast<std::string>());
+          }();
+
+          f->setAttr(nameStr, attrVal);
+        }
+      }
     }
     return f;
   }();
 
   auto call = builder.create<mlir::func::CallOp>(loc, func, inputVals);
-  if (!attrs.is_none()) {
-    auto attrDict = attrs.cast<py::dict>();
-    for (auto [name, val] : attrDict) {
-      auto nameStr = name.cast<std::string>();
-      auto attrVal = [&, v = val]() -> mlir::Attribute {
-        if (py::isinstance<py::int_>(v))
-          return builder.getI64IntegerAttr(v.cast<int64_t>());
-
-        if (py::isinstance<py::float_>(v))
-          return builder.getF64FloatAttr(v.cast<double>());
-
-        if (py::isinstance<py::str>(v))
-          return builder.getStringAttr(v.cast<std::string>());
-
-        imex::reportError(llvm::Twine("Unsupported attr type: ") +
-                          py::str(v).cast<std::string>());
-      }();
-
-      call->setAttr(nameStr, attrVal);
-    }
-  }
 
   auto res = call->getResults();
 
