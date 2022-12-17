@@ -523,10 +523,14 @@ def eye_impl(builder, N, M=None, k=0, dtype=None):
 def _mkl_gemm(builder, a, b, alpha, beta, shape1, shape2):
     dtype = a.dtype
     func_name = f"mkl_gemm_{dtype_str(builder, dtype)}"
+    device_func_name = func_name + "_device"
+
     res_shape = (shape1[0], shape2[1])
     c = builder.init_tensor(res_shape, dtype)
 
-    return builder.external_call(func_name, (a, b), c)
+    return builder.external_call(
+        func_name, (a, b), c, attrs={"device_func": device_func_name}
+    )
 
 
 def _linalg_matmul2d(builder, a, b, shape1, shape2):
