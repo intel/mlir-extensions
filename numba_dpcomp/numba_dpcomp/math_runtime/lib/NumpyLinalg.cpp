@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include <stdio.h>
+#include <string_view>
 
 #include "Common.hpp"
 
@@ -25,6 +26,14 @@ template <size_t NumDims, typename T>
 static T *getMemrefData(const Memref<NumDims, T> *src) {
   return src->data + src->offset;
 }
+
+/// Stream interface, must be in sync with gpu runtime.
+/// TODO: move to common place.
+class StreamInterface {
+public:
+  virtual ~StreamInterface() = default;
+  virtual std::string_view getDeviceName() = 0;
+};
 
 namespace {
 
@@ -102,11 +111,14 @@ static void cpuGemm(GemmFunc<T> Gemm, const Memref<2, T> *a,
        ldc     /*ldc*/
   );
 }
+
 template <typename T>
 static void deviceGemm(void *stream, const Memref<2, T> *a,
                        const Memref<2, T> *b, Memref<2, T> *c, T alpha,
                        T beta) {
-  fatal_failure("Not implemented\n");
+  auto streamIface = static_cast<StreamInterface *>(stream);
+  fatal_failure("Not implemented, deviceName %s\n",
+                streamIface->getDeviceName().data());
 }
 #endif
 } // namespace
