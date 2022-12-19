@@ -2,7 +2,8 @@
 // RUN:                                       --runner mlir-cpu-runner -e main \
 // RUN:                                       --shared-libs=%mlir_runner_utils \
 // RUN:                                       --entry-point-result=void | FileCheck %s
-// RUN: %gpu_skip || %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-llvm.pp \
+// RUN: %python_executable %imex_runner -i %s --requires=l0-runtime \
+// RUN:                                       --pass-pipeline-file=%p/linalg-to-llvm.pp \
 // RUN:                                       --runner mlir-cpu-runner -e main \
 // RUN:                                       --entry-point-result=void \
 // RUN:                                       --shared-libs=%mlir_runner_utils,%levelzero_runtime | FileCheck %s

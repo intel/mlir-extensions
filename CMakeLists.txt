@@ -6,6 +6,17 @@ if(POLICY CMP0116)
     cmake_policy(SET CMP0116 OLD)
 endif()
 
+if(${CMAKE_VERSION} VERSION_LESS 3.25)
+	# CMake starting with version 3.25 sets var LINUX to true if target system is linux
+    if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+	    set(LINUX TRUE)
+    endif()
+endif()
+message(STATUS "CMAKE_SYSTEM_NAME: ${CMAKE_SYSTEM_NAME}")
+if(LINUX)
+	message(STATUS "Building for target: LINUX")
+endif()
+
 set(IMEX_EXTERNAL_PROJECT_BUILD OFF)
 
 if(NOT (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR) AND NOT DEFINED MLIR_BINARY_DIR)
@@ -158,15 +169,20 @@ endmacro()
 
 include(HandleLLVMOptions)
 
-set(IMEX_ENABLE_SYCL_RUNTIME 0 CACHE BOOL "Enable the Sycl Runtime")
+# Sycl runtime only supports linux for now
+if(LINUX)
+    set(IMEX_ENABLE_SYCL_RUNTIME 0 CACHE BOOL "Enable the Sycl Runtime")
+endif()
 set(IMEX_ENABLE_L0_RUNTIME 0 CACHE BOOL "Enable the Level Zero Runtime")
 
 # Normalize IMEX_ENABLE_SYCL_RUNTIME and IMEX_ENABLE_L0_RUNTIME
 # These values are expected to be passed as 0 or 1 to imex-runner.py
-if (IMEX_ENABLE_SYCL_RUNTIME)
-    set(IMEX_ENABLE_SYCL_RUNTIME 1)
-else ()
-    set(IMEX_ENABLE_SYCL_RUNTIME 0)
+if(LINUX)
+    if (IMEX_ENABLE_SYCL_RUNTIME)
+        set(IMEX_ENABLE_SYCL_RUNTIME 1)
+    else ()
+        set(IMEX_ENABLE_SYCL_RUNTIME 0)
+    endif()
 endif()
 
 if (IMEX_ENABLE_L0_RUNTIME)
