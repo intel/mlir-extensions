@@ -6,7 +6,7 @@
 // RUN:                                       --pass-pipeline-file=%p/linalg-to-llvm.pp \
 // RUN:                                       --runner mlir-cpu-runner -e main \
 // RUN:                                       --entry-point-result=void \
-// RUN:                                       --shared-libs=%mlir_runner_utils,%levelzero_runtime | FileCheck %s
+// RUN:                                       --shared-libs=%mlir_runner_utils,%levelzero_runtime --filecheck
 #map = affine_map<(d0, d1) -> (d0, d1)>
 module @logical_not {
 func.func @main() {

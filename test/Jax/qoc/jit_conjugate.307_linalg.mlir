@@ -2,7 +2,7 @@
 // RUN-GPU: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-llvm.pp \
 // RUN-GPU:                                        --runner mlir-cpu-runner -e main \
 // RUN-GPU:                                        --entry-point-result=void \
-// RUN-GPU:                                        --shared-libs=%mlir_runner_utils,%levelzero_runtime | FileCheck %s
+// RUN-GPU:                                        --shared-libs=%mlir_runner_utils,%levelzero_runtime --filecheck
 
 #map = affine_map<(d0, d1) -> (d0, d1)>
 module @jit_conjugate.307 {

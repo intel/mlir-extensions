@@ -6,7 +6,7 @@
 // RUN: %python_executable %imex_runner --requires=l0-runtime -i %s --pass-pipeline-file=%p/linalg-to-llvm.pp \
 // RUN:                                        --runner mlir-cpu-runner -e main \
 // RUN:                                        --entry-point-result=void \
-// RUN:                                        --shared-libs=%mlir_runner_utils,%levelzero_runtime | FileCheck %s
+// RUN:                                        --shared-libs=%mlir_runner_utils,%levelzero_runtime --filecheck
 #map = affine_map<(d0) -> (d0)>
 module @const_add {
 func.func @test(%arg0: tensor<4xi32> {stdx.const}, %arg1: tensor<4xi32> {stdx.const}) -> tensor<4xi32> {

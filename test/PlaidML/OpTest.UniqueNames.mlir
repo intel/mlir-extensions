@@ -5,7 +5,7 @@
 // RUN: %python_executable %imex_runner --requires=l0-runtime -i %s --pass-pipeline-file=%p/linalg-to-llvm.pp \
 // RUN:                                       --runner mlir-cpu-runner -e main \
 // RUN:                                       --entry-point-result=void \
-// RUN:                                       --shared-libs=%mlir_runner_utils,%levelzero_runtime | FileCheck %s
+// RUN:                                       --shared-libs=%mlir_runner_utils,%levelzero_runtime --filecheck
 #map = affine_map<(d0) -> (d0)>
 module @unique_names {
 func.func @main() {
