@@ -1,5 +1,5 @@
 // RUN: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-cpu.pp --runner mlir-cpu-runner -e main --shared-libs=%mlir_runner_utils --entry-point-result=void | FileCheck %s
-// RUN-GPU: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-llvm.pp \
+// RUN-GPU: %python_executable %imex_runner --requires=l0-runtime,igpu-fp64 %igpu_fp64 -i %s --pass-pipeline-file=%p/linalg-to-llvm.pp \
 // RUN-GPU:                                        --runner mlir-cpu-runner -e main \
 // RUN-GPU:                                        --entry-point-result=void \
 // RUN-GPU:                                        --shared-libs=%mlir_runner_utils,%levelzero_runtime --filecheck

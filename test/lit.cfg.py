@@ -44,6 +44,8 @@ if config.imex_enable_sycl_runtime:
     config.substitutions.append(('%sycl_runtime', config.sycl_runtime))
 if config.imex_enable_l0_runtime:
     config.substitutions.append(('%levelzero_runtime', config.levelzero_runtime))
+if config.imex_enable_igpu:
+    config.substitutions.append(('%igpu_fp64', config.igpu_fp64))
 
 llvm_config.with_system_environment(
     ['HOME', 'INCLUDE', 'LIB', 'TMP', 'TEMP'])

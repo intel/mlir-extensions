@@ -1,6 +1,7 @@
 @LIT_SITE_CFG_IN_HEADER@
 
 import sys
+import subprocess
 
 config.host_triple = "@LLVM_HOST_TRIPLE@"
 config.target_triple = "@TARGET_TRIPLE@"
@@ -50,6 +51,14 @@ if config.imex_enable_sycl_runtime:
     config.sycl_runtime = os.path.normpath(os.path.join(config.imex_lib_dir, config.shlib_prefix + "sycl-runtime" + config.llvm_shlib_ext))
 if config.imex_enable_l0_runtime:
     config.levelzero_runtime = os.path.normpath(os.path.join(config.imex_lib_dir, config.shlib_prefix + "level-zero-runtime" + config.llvm_shlib_ext))
+config.imex_enable_igpu = config.imex_enable_l0_runtime or config.imex_enable_sycl_runtime
+if config.imex_enable_igpu:
+    config.l0_fp64_checker = os.path.normpath(os.path.join(config.imex_tools_dir, "l0_fp64_checker"))
+    p = subprocess.run( [ config.l0_fp64_checker ] )
+    if p.returncode == 0:
+        config.igpu_fp64 = "--igpu-fp64"
+    else:
+        config.igpu_fp64 = "--no-igpu-fp64"
 
 # Support substitution of the tools_dir with user parameters. This is
 # used when we can't determine the tool dir at configuration time.
