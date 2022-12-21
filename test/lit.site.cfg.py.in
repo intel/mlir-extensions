@@ -53,7 +53,7 @@ if config.imex_enable_l0_runtime:
     config.levelzero_runtime = os.path.normpath(os.path.join(config.imex_lib_dir, config.shlib_prefix + "level-zero-runtime" + config.llvm_shlib_ext))
 config.imex_enable_igpu = config.imex_enable_l0_runtime or config.imex_enable_sycl_runtime
 if config.imex_enable_igpu:
-    config.l0_fp64_checker = os.path.normpath(os.path.join(config.imex_tools_dir, "l0_fp64_checker"))
+    config.l0_fp64_checker = os.path.normpath(os.path.join(config.imex_tools_dir, "l0-fp64-checker"))
     p = subprocess.run( [ config.l0_fp64_checker ] )
     if p.returncode == 0:
         config.igpu_fp64 = "--igpu-fp64"
