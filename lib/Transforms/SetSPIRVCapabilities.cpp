@@ -72,7 +72,8 @@ public:
     };
     spirv::Extension exts_opencl[] = {
         spirv::Extension::SPV_EXT_shader_atomic_float_add,
-        spirv::Extension::SPV_KHR_expect_assume};
+        spirv::Extension::SPV_KHR_expect_assume,
+        spirv::Extension::SPV_AMD_shader_ballot};
     spirv::Extension exts_vulkan[] = {
         spirv::Extension::SPV_KHR_storage_buffer_storage_class};
     if (m_clientAPI == "opencl") {
