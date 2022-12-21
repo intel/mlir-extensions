@@ -6,17 +6,6 @@ if(POLICY CMP0116)
     cmake_policy(SET CMP0116 OLD)
 endif()
 
-if(${CMAKE_VERSION} VERSION_LESS 3.25)
-	# CMake starting with version 3.25 sets var LINUX to true if target system is linux
-    if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-	    set(LINUX TRUE)
-    endif()
-endif()
-message(STATUS "CMAKE_SYSTEM_NAME: ${CMAKE_SYSTEM_NAME}")
-if(LINUX)
-	message(STATUS "Building for target: LINUX")
-endif()
-
 set(IMEX_EXTERNAL_PROJECT_BUILD OFF)
 
 if(NOT (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR) AND NOT DEFINED MLIR_BINARY_DIR)
@@ -32,6 +21,18 @@ else()
 
     set(CMAKE_CXX_STANDARD 17 CACHE STRING "C++ standard to conform to")
     list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/modules")
+endif()
+
+# CMAKE_SYSTEM_NAME needs to be checked after "project"
+if(${CMAKE_VERSION} VERSION_LESS 3.25)
+    # CMake starting with version 3.25 sets var LINUX to true if target system is linux
+    if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+        set(LINUX TRUE)
+    endif()
+endif()
+message(STATUS "CMAKE_SYSTEM_NAME: ${CMAKE_SYSTEM_NAME}")
+if(LINUX)
+    message(STATUS "Building for target: LINUX")
 endif()
 
 # Expected LLVM SHA
