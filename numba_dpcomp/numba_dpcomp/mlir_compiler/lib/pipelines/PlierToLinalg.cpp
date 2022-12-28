@@ -3215,6 +3215,10 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
             std::make_unique<PostLinalgOptInnerPass>());
       }));
 
+  // Uplifting FMAs con interfere with other optimizations, like loop reduction
+  // uplifting. Move it after main optimization pass.
+  pm.addNestedPass<mlir::func::FuncOp>(imex::createUpliftFMAPass());
+  pm.addNestedPass<mlir::func::FuncOp>(mlir::createCanonicalizerPass());
   pm.addNestedPass<mlir::func::FuncOp>(
       std::make_unique<FixDeallocPlacementPass>());
 

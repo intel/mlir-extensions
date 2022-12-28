@@ -245,14 +245,14 @@ def test_math_uplifting_fma(py_func):
     y = 3.0
     z = 4.0
 
-    with print_pass_ir([], ["UpliftMathPass"]):
+    with print_pass_ir([], ["UpliftFMAPass"]):
         jit_func = njit(py_func, fastmath=False)
 
         assert_equal(py_func(x, y, z), jit_func(x, y, z))
         ir = get_print_buffer()
         assert ir.count(f"math.fma") == 0, ir
 
-    with print_pass_ir([], ["UpliftMathPass"]):
+    with print_pass_ir([], ["UpliftFMAPass"]):
         jit_func = njit(py_func, fastmath=True)
 
         assert_equal(py_func(x, y, z), jit_func(x, y, z))
@@ -860,12 +860,12 @@ def test_fastmath_indirect():
     jit_func2 = njit(py_func2)
 
     a, b, c = (2.0, 3.5, 4.7)
-    with print_pass_ir([], ["UpliftMathPass"]):
+    with print_pass_ir([], ["UpliftFMAPass"]):
         assert_equal(py_func1(a, b, c), jit_func1(a, b, c))
         ir = get_print_buffer()
         assert ir.count("math.fma") > 0, ir
 
-    with print_pass_ir([], ["UpliftMathPass"]):
+    with print_pass_ir([], ["UpliftFMAPass"]):
         assert_equal(py_func2(a, b, c), jit_func2(a, b, c))
         ir = get_print_buffer()
         assert ir.count("math.fma") > 0, ir
