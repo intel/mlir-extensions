@@ -5,13 +5,14 @@
 #include "imex/Transforms/UpliftMath.hpp"
 
 #include "imex/Dialect/imex_util/Dialect.hpp"
-#include "imex/Transforms/RewriteWrapper.hpp"
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Complex/IR/Complex.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/Math/IR/Math.h>
 #include <mlir/IR/PatternMatch.h>
+#include <mlir/Pass/Pass.h>
+#include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 
 template <typename Op>
 static mlir::Operation *replaceOp1(mlir::OpBuilder &builder, mlir::Location loc,
@@ -166,18 +167,57 @@ struct UpliftFma : public mlir::OpRewritePattern<mlir::arith::AddFOp> {
 };
 
 struct UpliftMathPass
-    : public imex::RewriteWrapperPass<
-          UpliftMathPass, void,
-          imex::DependentDialectsList<
-              mlir::func::FuncDialect, mlir::arith::ArithDialect,
-              mlir::math::MathDialect, mlir::complex::ComplexDialect>,
-          UpliftMathCalls, UpliftFabsCalls, UpliftCabsCalls, UpliftFma> {};
+    : public mlir::PassWrapper<UpliftMathPass, mlir::OperationPass<>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(UpliftMathPass)
+
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::arith::ArithDialect>();
+    registry.insert<mlir::complex::ComplexDialect>();
+    registry.insert<mlir::func::FuncDialect>();
+    registry.insert<mlir::math::MathDialect>();
+  }
+
+  void runOnOperation() override {
+    mlir::RewritePatternSet patterns(&getContext());
+    imex::populateUpliftMathPatterns(patterns);
+    (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
+                                             std::move(patterns));
+  }
+};
+
+struct UpliftFMAPass
+    : public mlir::PassWrapper<UpliftFMAPass, mlir::OperationPass<>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(UpliftFMAPass)
+
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::arith::ArithDialect>();
+    registry.insert<mlir::math::MathDialect>();
+  }
+
+  void runOnOperation() override {
+    mlir::RewritePatternSet patterns(&getContext());
+    imex::populateUpliftFMAPatterns(patterns);
+    (void)mlir::applyPatternsAndFoldGreedily(getOperation(),
+                                             std::move(patterns));
+  }
+};
 } // namespace
 
-void imex::populateUpliftmathPatterns(mlir::RewritePatternSet &patterns) {
-  patterns.insert<UpliftMathCalls>(patterns.getContext());
+void imex::populateUpliftMathPatterns(mlir::RewritePatternSet &patterns) {
+  patterns.insert<UpliftMathCalls, UpliftFabsCalls, UpliftCabsCalls>(
+      patterns.getContext());
+}
+
+void imex::populateUpliftFMAPatterns(mlir::RewritePatternSet &patterns) {
+  patterns.insert<UpliftFma>(patterns.getContext());
 }
 
 std::unique_ptr<mlir::Pass> imex::createUpliftMathPass() {
   return std::make_unique<UpliftMathPass>();
+}
+
+std::unique_ptr<mlir::Pass> imex::createUpliftFMAPass() {
+  return std::make_unique<UpliftFMAPass>();
 }
