@@ -25,6 +25,18 @@ if(IMEX_ENABLE_VULKAN_RUNNER)
         )
 endif()
 
+if(IMEX_ENABLE_SYCL_RUNTIME)
+    list(APPEND IMEX_TEST_DEPENDS
+        sycl-runtime
+        )
+endif()
+
+if(IMEX_ENABLE_L0_RUNTIME)
+    list(APPEND IMEX_TEST_DEPENDS
+        level-zero-runtime
+        )
+endif()
+
 configure_lit_site_cfg(
   ${CMAKE_CURRENT_SOURCE_DIR}/lit.site.cfg.py.in
   ${CMAKE_CURRENT_BINARY_DIR}/lit.site.cfg.py
