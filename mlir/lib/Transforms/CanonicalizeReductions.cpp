@@ -206,6 +206,7 @@ struct CanonicalizeReduction : public mlir::OpRewritePattern<mlir::scf::ForOp> {
       bool aliasing = false;
 
       bool isValid() const { return !aliasing && !loads.empty(); }
+      mlir::ValueRange getIndices() { return store.getIndices(); }
     };
 
     llvm::SmallVector<StoreDesc> stores;
@@ -238,10 +239,11 @@ struct CanonicalizeReduction : public mlir::OpRewritePattern<mlir::scf::ForOp> {
       if (desc.aliasing)
         continue;
 
-      auto store = desc.store;
-      if (!store.getIndices().empty())
+      if (llvm::any_of(desc.getIndices(),
+                       [](auto v) { return !mlir::getConstantIntValue(v); }))
         continue;
 
+      auto store = desc.store;
       auto memref = store.getMemRef();
 
       bool aliasing = false;
@@ -300,7 +302,8 @@ struct CanonicalizeReduction : public mlir::OpRewritePattern<mlir::scf::ForOp> {
 
       auto store = desc.store;
       auto memref = store.getMemRef();
-      mlir::Value init = rewriter.create<mlir::memref::LoadOp>(loc, memref);
+      mlir::Value init =
+          rewriter.create<mlir::memref::LoadOp>(loc, memref, desc.getIndices());
       inits.emplace_back(init);
     }
 
@@ -349,7 +352,8 @@ struct CanonicalizeReduction : public mlir::OpRewritePattern<mlir::scf::ForOp> {
       auto newVal = newOp.getResult(idx);
       auto store = desc.store;
       auto memref = store.getMemRef();
-      rewriter.create<mlir::memref::StoreOp>(loc, newVal, memref);
+      rewriter.create<mlir::memref::StoreOp>(loc, newVal, memref,
+                                             desc.getIndices());
       rewriter.eraseOp(store);
 
       ++idx;
