@@ -9,6 +9,7 @@
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/IR/BlockAndValueMapping.h>
+#include <mlir/IR/Dominance.h>
 #include <mlir/Pass/Pass.h>
 #include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 
@@ -212,24 +213,34 @@ struct CanonicalizeReduction : public mlir::OpRewritePattern<mlir::scf::ForOp> {
     llvm::SmallVector<StoreDesc> stores;
 
     auto &loopBlock = op.getLoopBody().front();
-    for (auto &bodyOp : loopBlock.without_terminator()) {
+
+    auto visitor = [&](mlir::Operation *bodyOp) -> mlir::WalkResult {
       if (auto load = mlir::dyn_cast<mlir::memref::LoadOp>(bodyOp)) {
         loads.emplace_back(load);
-        continue;
+        return mlir::WalkResult::advance();
       }
 
       if (auto store = mlir::dyn_cast<mlir::memref::StoreOp>(bodyOp)) {
+        if (store->getParentOp() != op)
+          return mlir::WalkResult::interrupt();
+
         stores.emplace_back(store);
-        continue;
+        return mlir::WalkResult::advance();
       }
 
-      if (bodyOp.getNumRegions() != 0)
-        return mlir::failure();
+      if (bodyOp->hasTrait<mlir::OpTrait::HasRecursiveMemoryEffects>() ||
+          bodyOp->hasTrait<mlir::OpTrait::IsTerminator>())
+        return mlir::WalkResult::advance();
 
       auto memEffects = mlir::dyn_cast<mlir::MemoryEffectOpInterface>(bodyOp);
       if (!memEffects || !memEffects.hasNoEffect())
-        return mlir::failure();
-    }
+        return mlir::WalkResult::interrupt();
+
+      return mlir::WalkResult::advance();
+    };
+
+    if (loopBlock.walk(visitor).wasInterrupted())
+      return mlir::failure();
 
     if (stores.empty())
       return mlir::failure();
@@ -261,11 +272,12 @@ struct CanonicalizeReduction : public mlir::OpRewritePattern<mlir::scf::ForOp> {
       if (aliasing)
         continue;
 
+      mlir::DominanceInfo dom;
       for (auto load : loads) {
         auto loadMemref = load.getMemRef();
         if (loadMemref == memref) {
           if (load.getIndices() != store.getIndices() ||
-              !load->isBeforeInBlock(store)) {
+              !dom.properlyDominates(load.getOperation(), store)) {
             desc.aliasing = true;
             aliasing = true;
             break;
