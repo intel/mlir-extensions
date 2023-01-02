@@ -309,10 +309,10 @@ struct CanonicalizeReduction : public mlir::OpRewritePattern<mlir::scf::ForOp> {
 
     auto &newRegion = newOp.getLoopBody();
     assert(llvm::hasSingleElement(newRegion));
-    rewriter.eraseBlock(&newRegion.front());
-    rewriter.inlineRegionBefore(op.getLoopBody(), newRegion, newRegion.end());
-
     auto &newBlock = newRegion.front();
+    rewriter.mergeBlocks(
+        &loopBlock, &newBlock,
+        newBlock.getArguments().take_front(origBlockArgsCount));
 
     auto oldYield = mlir::cast<mlir::scf::YieldOp>(newBlock.getTerminator());
 
@@ -325,10 +325,10 @@ struct CanonicalizeReduction : public mlir::OpRewritePattern<mlir::scf::ForOp> {
       if (!desc.isValid())
         continue;
 
-      auto init = newBlock.getArgument(origBlockArgsCount + idx);
+      mlir::Value init = newBlock.getArgument(origBlockArgsCount + idx);
 
       assert(!desc.loads.empty());
-      for (auto load : loads)
+      for (auto load : desc.loads)
         rewriter.replaceOp(load, init);
 
       auto store = desc.store;
