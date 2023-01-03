@@ -22,6 +22,12 @@ import argparse
 import shutil
 
 
+def check_sha(arg):
+    check_string = ['|', '||', '&', '&&', ';']
+    if any([x in arg for x in check_string]):
+        raise RuntimeError("Invalid LLVM SHA")
+    return arg
+
 def _get_llvm_sha():
     """Reads the SHA value from build_tools/llvm_version.txt
 
@@ -35,7 +41,7 @@ def _get_llvm_sha():
     sha = ""
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     with open(base_dir + "/build_tools/llvm_version.txt", "r") as fd:
-        sha = fd.readline().strip()
+        sha = check_sha(fd.readline().strip())
     if len(sha) == 0:
         raise RuntimeError("sha cannot be empty")
     return sha
@@ -303,6 +309,12 @@ def _checkout_sha_in_source_dir(llvm_source_dir, llvm_sha):
     except subprocess.CalledProcessError:
         raise RuntimeError(f"Could not checkout the sha: {llvm_sha}", llvm_sha)
 
+def check_args(args):
+    check_string = ['|', '||', '&', '&&', ';']
+    for arg in vars(args):
+        if any([x in arg for x in check_string]):
+            raise RuntimeError("Invalid Input args")
+    return args
 
 def _build_imex(
     build_dir,
@@ -482,7 +494,7 @@ if __name__ == "__main__":
         dest="external_lit",
     )
 
-    args = parser.parse_args()
+    args = check_args(parser.parse_args())
 
     # Check if one of llvm_install or llvm_sources is provided.
     # Both flags are optional, but they cannot both be set.
@@ -491,6 +503,7 @@ if __name__ == "__main__":
     g_working_dir = getattr(args, "working_dir", None)
     g_tbb_dir = getattr(args, "tbb_dir", None)
     # Get the llvm SHA as hard coded in build_tools/llvm_version.txt
+
     llvm_sha = _get_llvm_sha()
 
     # If a working directory is provided, check if it was previously used
