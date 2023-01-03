@@ -22,6 +22,7 @@
 #include "imex/Dialect/ntensor/Transforms/CopyRemoval.hpp"
 #include "imex/Dialect/ntensor/Transforms/PropagateEnvironment.hpp"
 #include "imex/Dialect/ntensor/Transforms/ResolveArrayOps.hpp"
+#include "imex/Transforms/CanonicalizeReductions.hpp"
 #include "imex/Transforms/ExpandTuple.hpp"
 #include "imex/Transforms/MakeSignless.hpp"
 #include "imex/Transforms/MemoryRewrites.hpp"
@@ -170,6 +171,13 @@ static mlir::PassPipelineRegistration<> tileParallelLoopsGPU(
 static mlir::PassPipelineRegistration<> memoryOpts(
     "imex-memory-opts", "Apply memory optimizations",
     [](mlir::OpPassManager &pm) { pm.addPass(imex::createMemoryOptPass()); });
+
+static mlir::PassPipelineRegistration<> canonicalizeReductions(
+    "imex-canonicalize-reductions",
+    "Tries to promote loads/stores in scf.for to loop-carried variables",
+    [](mlir::OpPassManager &pm) {
+      pm.addPass(imex::createCanonicalizeReductionsPass());
+    });
 
 static mlir::PassPipelineRegistration<> insertGPUGlobalReduce(
     "gpux-insert-global-reduce",

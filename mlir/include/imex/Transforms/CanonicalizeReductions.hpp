@@ -4,20 +4,13 @@
 
 #pragma once
 
-#include <mlir/IR/PatternMatch.h>
+#include <memory>
 
 namespace mlir {
-namespace scf {
-class ForOp;
+class Pass;
 }
-} // namespace mlir
 
 namespace imex {
-struct CanonicalizeReduction : public mlir::OpRewritePattern<mlir::scf::ForOp> {
-  using mlir::OpRewritePattern<mlir::scf::ForOp>::OpRewritePattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(mlir::scf::ForOp op,
-                  mlir::PatternRewriter &rewriter) const override;
-};
+/// Tries to promote loads/stores in scf.for to loop-carried variables.
+std::unique_ptr<mlir::Pass> createCanonicalizeReductionsPass();
 } // namespace imex
