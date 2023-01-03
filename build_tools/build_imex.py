@@ -303,6 +303,12 @@ def _checkout_sha_in_source_dir(llvm_source_dir, llvm_sha):
     except subprocess.CalledProcessError:
         raise RuntimeError(f"Could not checkout the sha: {llvm_sha}", llvm_sha)
 
+def is_valid_arg(arg):
+    check_string = ['|', '||', '&', '&&', ';']
+    if any([x in arg for x in check_string]):
+        return ''
+    else:
+        return arg
 
 def _build_imex(
     build_dir,
@@ -486,10 +492,10 @@ if __name__ == "__main__":
 
     # Check if one of llvm_install or llvm_sources is provided.
     # Both flags are optional, but they cannot both be set.
-    g_llvm_install_dir = getattr(args, "llvm_install", None)
-    g_llvm_source_dir = getattr(args, "llvm_sources", None)
-    g_working_dir = getattr(args, "working_dir", None)
-    g_tbb_dir = getattr(args, "tbb_dir", None)
+    g_llvm_install_dir = is_valid_arg(getattr(args, "llvm_install", None))
+    g_llvm_source_dir = is_valid_arg(getattr(args, "llvm_sources", None))
+    g_working_dir = is_valid_arg(getattr(args, "working_dir", None))
+    g_tbb_dir = is_valid_arg(getattr(args, "tbb_dir", None))
     # Get the llvm SHA as hard coded in build_tools/llvm_version.txt
     llvm_sha = _get_llvm_sha()
 
