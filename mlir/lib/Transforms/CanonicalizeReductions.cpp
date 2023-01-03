@@ -294,7 +294,8 @@ struct CanonicalizeReduction : public mlir::OpRewritePattern<mlir::scf::ForOp> {
       if (aliasing)
         continue;
 
-      changed = true;
+      if (!desc.loads.empty())
+        changed = true;
     }
 
     if (!changed)
