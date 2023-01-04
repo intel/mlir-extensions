@@ -400,6 +400,20 @@ def validate_filename_arg(
     filename,
     argname
 ):
+    """Validates if an optional filename passed as a user argument is a valid file name.
+
+    Args:
+        filename (str): filename
+        argname (str): Argument name
+
+    Raises:
+        RuntimeError: filename is not a valid file name
+
+    Returns:
+        str: file name
+    """
+    if filename is None:
+        return None
     try:
         PurePath(filename)
     except:
@@ -410,14 +424,23 @@ def validate_filename_arg(
 def validate_filepath_arg(
     filepath,
     argname,
-    **kwargs
 ):
+    """Validates if an optional filepath passed as a user argument is a valid file path name.
+
+    Args:
+        filepath (str): file path
+        argname (str): Argument name
+
+    Raises:
+        RuntimeError: file path does not exist
+
+    Returns:
+        str: file path
+    """
+    if filepath is None:
+        return None
     if not Path(filepath).is_file():
         raise RuntimeError("Invalid value for argument " + argname + " : " + filepath)
-    expected_filename = kwargs.get('expected_filename', None)
-    if expected_filename is not None:
-        if Path(filepath).name is not expected_filename:
-            raise RuntimeError("Invalid filename in argument " + argname + " : " + Path(filepath).name)
     return filepath
 
 
@@ -425,6 +448,20 @@ def validate_targetpath_arg(
     targetpath,
     argname
 ):
+    """Validates if an optional target directory path  passed as a user argument is a valid directory path.
+
+    Args:
+        targetpath (str): path to target directory
+        argname (str): Argument name
+
+    Raises:
+        RuntimeError: target directory is not valid
+
+    Returns:
+        str: directory path
+    """
+    if targetpath is None:
+        return None
     try:
         Path(targetpath)
     except:
@@ -436,6 +473,20 @@ def validate_sourcepath_arg(
     sourcepath,
     argname
 ):
+    """Validates if an optional source directory path  passed as a user argument is an existing directory path.
+
+    Args:
+        sourcepath (str): path to source directory
+        argname (str): Argument name
+
+    Raises:
+        RuntimeError: source directory does not exist
+
+    Returns:
+        str: directory path
+    """
+    if sourcepath is None:
+        return None
     if not Path(sourcepath).is_dir():
         raise RuntimeError("Invalid source directory for argument " + argname + " : " + sourcepath)
     return sourcepath
@@ -533,7 +584,7 @@ if __name__ == "__main__":
     # Check if one of llvm_install or llvm_sources is provided.
     # Both flags are optional, but they cannot both be set.
     g_llvm_install_dir = validate_targetpath_arg(getattr(args, "llvm_install", None), '--llvm-install')
-    g_llvm_source_dir = validate_sourcepath_arg(getattr(args, "llvm_sources", None), '--llvm-sources')
+    g_llvm_source_dir = validate_targetpath_arg(getattr(args, "llvm_sources", None), '--llvm-sources')
     g_working_dir = validate_targetpath_arg(getattr(args, "working_dir", None), '--working-dir')
     g_tbb_dir = validate_sourcepath_arg(getattr(args, "tbb_dir", None), '--tbb-dir')
 
