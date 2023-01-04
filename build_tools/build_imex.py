@@ -20,6 +20,7 @@ import uuid
 import warnings
 import argparse
 import shutil
+from pathlib import Path
 
 
 def _get_llvm_sha():
@@ -395,6 +396,51 @@ def _build_imex(
     )
 
 
+def validate_filename_arg(
+    filename,
+    argname
+):
+    try:
+        PurePath(filename)
+    except:
+        raise RuntimeError("Invalid filename for argument " + argname + " : " + filename)
+    return filename
+
+
+def validate_filepath_arg(
+    filepath,
+    argname,
+    **kwargs
+):
+    if not Path(filepath).is_file():
+        raise RuntimeError("Invalid value for argument " + argname + " : " + filepath)
+    expected_filename = kwargs.get('expected_filename', None)
+    if expected_filename is not None:
+        if Path(filepath).name is not expected_filename:
+            raise RuntimeError("Invalid filename in argument " + argname + " : " + Path(filepath).name)
+    return filepath
+
+
+def validate_targetpath_arg(
+    targetpath,
+    argname
+):
+    try:
+        Path(targetpath)
+    except:
+        raise RuntimeError("Invalid target directory for argument " + argname + " : " + targetpath)
+    return targetpath
+
+
+def validate_sourcepath_arg(
+    sourcepath,
+    argname
+):
+    if not Path(sourcepath).is_dir():
+        raise RuntimeError("Invalid source directory for argument " + argname + " : " + sourcepath)
+    return sourcepath
+
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(
@@ -486,10 +532,15 @@ if __name__ == "__main__":
 
     # Check if one of llvm_install or llvm_sources is provided.
     # Both flags are optional, but they cannot both be set.
-    g_llvm_install_dir = getattr(args, "llvm_install", None)
-    g_llvm_source_dir = getattr(args, "llvm_sources", None)
-    g_working_dir = getattr(args, "working_dir", None)
-    g_tbb_dir = getattr(args, "tbb_dir", None)
+    g_llvm_install_dir = validate_targetpath_arg(getattr(args, "llvm_install", None), '--llvm-install')
+    g_llvm_source_dir = validate_sourcepath_arg(getattr(args, "llvm_sources", None), '--llvm-sources')
+    g_working_dir = validate_targetpath_arg(getattr(args, "working_dir", None), '--working-dir')
+    g_tbb_dir = validate_sourcepath_arg(getattr(args, "tbb_dir", None), '--tbb-dir')
+
+    g_c_compiler = validate_filename_arg(args.c_compiler, '--c-compiler')
+    g_cxx_compiler = validate_filename_arg(args.cxx_compiler, '--cxx-compiler')
+    g_cmake_executable = validate_filename_arg(args.cmake_executable, '--cmake-executable')
+
     # Get the llvm SHA as hard coded in build_tools/llvm_version.txt
     llvm_sha = _get_llvm_sha()
 
@@ -540,9 +591,9 @@ if __name__ == "__main__":
                     llvm_src_dir=g_llvm_source_dir,
                     mlir_install_dir=g_working_dir + "/_mlir_install",
                     enable_assertions=args.assertion_setting,
-                    c_compiler=args.c_compiler,
-                    cxx_compiler=args.cxx_compiler,
-                    cmake_executable=args.cmake_executable,
+                    c_compiler=g_c_compiler,
+                    cxx_compiler=g_cxx_compiler,
+                    cmake_executable=g_cmake_executable,
                     save_llvm_build_dir=args.save_llvm_build_dir,
                 )
             else:
@@ -557,9 +608,9 @@ if __name__ == "__main__":
             llvm_src_dir=g_llvm_source_dir,
             mlir_install_dir=g_working_dir + "/_mlir_install",
             enable_assertions=args.assertion_setting,
-            c_compiler=args.c_compiler,
-            cxx_compiler=args.cxx_compiler,
-            cmake_executable=args.cmake_executable,
+            c_compiler=g_c_compiler,
+            cxx_compiler=g_cxx_compiler,
+            cmake_executable=g_cmake_executable,
             save_llvm_build_dir=args.save_llvm_build_dir,
         )
     else:
@@ -569,9 +620,9 @@ if __name__ == "__main__":
             llvm_src_dir=llvm_src,
             mlir_install_dir=g_working_dir + "/_mlir_install",
             enable_assertions=args.assertion_setting,
-            c_compiler=args.c_compiler,
-            cxx_compiler=args.cxx_compiler,
-            cmake_executable=args.cmake_executable,
+            c_compiler=g_c_compiler,
+            cxx_compiler=g_cxx_compiler,
+            cmake_executable=g_cmake_executable,
             save_llvm_build_dir=args.save_llvm_build_dir,
         )
 
@@ -587,12 +638,14 @@ if __name__ == "__main__":
         else:
             shutil.rmtree(imex_build_dir)
     os.mkdir(imex_build_dir)
-    print(args.imex_install_dir)
+    g_imex_install_dir = validate_targetpath_arg(args.imex_install_dir, '--imex-install-dir')
+    g_external_lit = validate_filepath_arg(args.external_lit, '--external-lit')
+    print(g_imex_install_dir)
     _build_imex(
         build_dir=imex_build_dir,
         imex_source_dir=setup_dir,
         llvm_install_dir=g_llvm_install_dir,
-        imex_install_prefix=args.imex_install_dir,
+        imex_install_prefix=g_imex_install_dir,
         external_lit=args.external_lit,
     )
 
