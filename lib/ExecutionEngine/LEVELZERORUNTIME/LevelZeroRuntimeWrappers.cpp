@@ -22,6 +22,7 @@
 #include <stdexcept>
 #include <tuple>
 #include <vector>
+#include <memory>
 
 #include <level_zero/ze_api.h>
 
@@ -80,34 +81,35 @@ template <typename T> size_t countUntil(T *ptr, T &&elem) {
 static std::pair<ze_driver_handle_t, ze_device_handle_t>
 getDriverAndDevice(ze_device_type_t deviceType = ZE_DEVICE_TYPE_GPU) {
 
-  CHECK_ZE_RESULT(zeInit(ZE_INIT_FLAG_GPU_ONLY));
+  CHECK_ZE_RESULT(zeInit(0));
   uint32_t driverCount = 0;
   CHECK_ZE_RESULT(zeDriverGet(&driverCount, nullptr));
 
-  std::vector<ze_driver_handle_t> allDrivers{driverCount};
-  CHECK_ZE_RESULT(zeDriverGet(&driverCount, allDrivers.data()));
+  auto drivers = std::make_unique<ze_driver_handle_t[]>(driverCount);
+  CHECK_ZE_RESULT(zeDriverGet(&driverCount, drivers.get()));
 
-  // Find a driver instance with a GPU device
-  std::vector<ze_device_handle_t> devices;
+  std::vector<ze_device_handle_t>
+      devices; // vector here so we can reuse memory between iterations
   for (uint32_t i = 0; i < driverCount; ++i) {
+    auto driver = drivers[i];
+    assert(driver);
     uint32_t deviceCount = 0;
-    CHECK_ZE_RESULT(zeDeviceGet(allDrivers[i], &deviceCount, nullptr));
-    if (deviceCount == 0)
-      continue;
+    CHECK_ZE_RESULT(zeDeviceGet(driver, &deviceCount, nullptr));
     devices.resize(deviceCount);
-    CHECK_ZE_RESULT(zeDeviceGet(allDrivers[i], &deviceCount, devices.data()));
-    for (uint32_t d = 0; d < deviceCount; ++d) {
-      ze_device_properties_t device_properties;
-      CHECK_ZE_RESULT(zeDeviceGetProperties(devices[d], &device_properties));
-      if (deviceType == device_properties.type) {
-        auto driver = allDrivers[i];
-        auto device = devices[d];
+    CHECK_ZE_RESULT(zeDeviceGet(driver, &deviceCount, devices.data()));
+    for (uint32_t i = 0; i < deviceCount; ++i) {
+      ze_device_properties_t props = {};
+      CHECK_ZE_RESULT(zeDeviceGetProperties(devices[i], &props));
+      auto device = devices[i];
+      assert(device);
+      if (deviceType == props.type) {
         return {driver, device};
-      }
     }
   }
   throw std::runtime_error("getDevice failed");
+  }
 }
+
 
 struct GPUL0QUEUE {
 
