@@ -164,12 +164,9 @@ if args.before:
     cmd.append(f'--mlir-print-ir-before-all')
 if args.after:
     cmd.append(f'--mlir-print-ir-after-all')
-cmds.append(cmd)
-
-# output to a file
 if args.output_file:
-    cmd=['tee']
-    cmd.append(args.output_file)
+    cmd.append(f'-o')
+    cmd.append(f'{args.output_file}')
 cmds.append(cmd)
 
 # build runner command
