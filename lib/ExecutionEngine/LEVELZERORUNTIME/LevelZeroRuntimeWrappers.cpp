@@ -97,7 +97,7 @@ getDriverAndDevice(ze_device_type_t deviceType = ZE_DEVICE_TYPE_GPU) {
     devices.resize(deviceCount);
     CHECK_ZE_RESULT(zeDeviceGet(allDrivers[i], &deviceCount, devices.data()));
     for (uint32_t d = 0; d < deviceCount; ++d) {
-      ze_device_properties_t device_properties;
+      ze_device_properties_t device_properties = {};
       CHECK_ZE_RESULT(zeDeviceGetProperties(devices[d], &device_properties));
       if (deviceType == device_properties.type) {
         auto driver = allDrivers[i];
