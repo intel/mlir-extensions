@@ -7,6 +7,7 @@ set(LIBS
         ${mlir_conversion_libs}
         ${imex_dialect_libs}
         ${imex_conversion_libs}
+        MLIRLinalgTestPasses
         MLIROptLib
         IMEXTransforms
         IMEXUtil
