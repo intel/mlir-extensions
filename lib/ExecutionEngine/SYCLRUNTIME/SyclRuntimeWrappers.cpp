@@ -190,34 +190,51 @@ static void launchKernel(GPUSYCLQUEUE *queue, sycl::kernel *kernel,
                          size_t blockX, size_t blockY, size_t blockZ,
                          size_t sharedMemBytes, ParamDesc *params) {
   auto syclQueue = queue->syclQueue_;
-  auto syclGlobalRange =
-      ::sycl::range<3>(blockZ * gridZ, blockY * gridY, blockX * gridX);
+  auto syclGlobalRange = ::sycl::range<3>(blockZ * gridZ, blockY * gridY, blockX * gridX);
   auto syclLocalRange = ::sycl::range<3>(blockZ, blockY, blockX);
-  sycl::nd_range<3> syclNdRange(
-      sycl::nd_range<3>(syclGlobalRange, syclLocalRange));
-
+  sycl::nd_range<3> syclNdRange(sycl::nd_range<3>(syclGlobalRange, syclLocalRange));
+  
   auto paramsCount = countUntil(params, ParamDesc{nullptr, 0});
 
-  sycl::event event = syclQueue.submit([&](sycl::handler &cgh) {
-    for (size_t i = 0; i < paramsCount; i++) {
-      auto param = params[i];
-      cgh.set_arg(static_cast<uint32_t>(i),
-                  *(static_cast<void **>(param.data)));
-    }
-    cgh.parallel_for(syclNdRange, *kernel);
-  });
   if (getenv("IMEX_ENABLE_PROFILING")) {
-    // auto submitTime = event.get_profiling_info<
-    //     cl::sycl::info::event_profiling::command_submit>();
-    auto startTime = event.get_profiling_info<
-        cl::sycl::info::event_profiling::command_start>();
-    auto endTime =
-        event
-            .get_profiling_info<cl::sycl::info::event_profiling::command_end>();
-    // auto submissionTime = float(startTime - submitTime) / 1000000.0f;
-    // fprintf(stdout, "the kernel submission time is %f ms\n", submissionTime);
-    auto executionTime = float(endTime - startTime) / 1000000.0f;
-    fprintf(stdout, "the kernel execution time is %f ms\n", executionTime);
+    auto executionTime = 0.0f;
+    auto maxTime = 0.0f;
+    auto minTime = 10000.0f;
+    auto rounds = 1000;
+
+    if (getenv("IMEX_PROFILING_RUNS")) {
+      auto runs = strtol(getenv("IMEX_PROFILING_RUNS"), NULL, 10L);
+      if (runs) rounds = runs;
+    }
+
+    for (int r = 0; r < rounds; r++) {
+      sycl::event event = syclQueue.submit([&](sycl::handler &cgh) {
+        for (size_t i = 0; i < paramsCount; i++) {
+          auto param = params[i];
+          cgh.set_arg(static_cast<uint32_t>(i),
+                      *(static_cast<void **>(param.data)));
+        }
+        cgh.parallel_for(syclNdRange, *kernel);
+      });
+
+      auto startTime = event.get_profiling_info<cl::sycl::info::event_profiling::command_start>();
+      auto endTime = event.get_profiling_info<cl::sycl::info::event_profiling::command_end>();
+      auto gap = float(endTime - startTime) / 1000000.0f;
+      executionTime += gap;
+      if (gap > maxTime) maxTime = gap;
+      if (gap < minTime) minTime = gap;
+    }
+    fprintf(stdout, "the kernel execution time is (ms): avg: %.4f, min: %.4f, max: %.4f (over %ld runs)\n", \
+                    executionTime/rounds, minTime, maxTime, rounds);
+  } else {
+    syclQueue.submit([&](sycl::handler &cgh) {
+      for (size_t i = 0; i < paramsCount; i++) {
+        auto param = params[i];
+        cgh.set_arg(static_cast<uint32_t>(i),
+                  *(static_cast<void **>(param.data)));
+      }
+      cgh.parallel_for(syclNdRange, *kernel);
+    });
   }
 }
 
