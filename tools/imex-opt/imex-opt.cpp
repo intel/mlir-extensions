@@ -11,6 +11,10 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <llvm/Support/CommandLine.h>
+#include <llvm/Support/InitLLVM.h>
+#include <llvm/Support/SourceMgr.h>
+#include <llvm/Support/ToolOutputFile.h>
 #include <mlir/IR/AsmState.h>
 #include <mlir/IR/Dialect.h>
 #include <mlir/IR/MLIRContext.h>
@@ -20,10 +24,6 @@
 #include <mlir/Pass/PassManager.h>
 #include <mlir/Support/FileUtilities.h>
 #include <mlir/Tools/mlir-opt/MlirOptMain.h>
-#include <llvm/Support/CommandLine.h>
-#include <llvm/Support/InitLLVM.h>
-#include <llvm/Support/SourceMgr.h>
-#include <llvm/Support/ToolOutputFile.h>
 
 #include <imex/InitIMEXDialects.h>
 #include <imex/InitIMEXPasses.h>
@@ -31,7 +31,7 @@
 
 namespace mlir {
 namespace test {
-  void registerTestLinalgElementwiseFusion();
+void registerTestLinalgElementwiseFusion();
 } // namespace test
 } // namespace mlir
 
@@ -44,6 +44,6 @@ int main(int argc, char **argv) {
   ::mlir::registerAllDialects(registry);
   ::imex::registerAllDialects(registry);
 
-  return ::mlir::asMainReturnCode(
-      ::mlir::MlirOptMain(argc, argv, "Imex optimizer driver\n", registry, false));
+  return ::mlir::asMainReturnCode(::mlir::MlirOptMain(
+      argc, argv, "Imex optimizer driver\n", registry, false));
 }
