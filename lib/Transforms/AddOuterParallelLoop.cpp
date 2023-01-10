@@ -75,7 +75,9 @@ public:
         for (auto it = forOp->getIterator(); it != endIt; it++) {
           ops.push_back(&*it);
         }
-        groupedOps.push_back(ops);
+        if (!ops.empty()) {
+          groupedOps.push_back(ops);
+        }
       }
     }
     // move the for-loop and its users into the newly created parallel-loop
