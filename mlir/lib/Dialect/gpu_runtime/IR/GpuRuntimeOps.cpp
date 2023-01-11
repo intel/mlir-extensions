@@ -212,8 +212,6 @@ mlir::StringAttr GPUSuggestBlockSizeOp::getKernelName() {
 mlir::StringRef getGpuAccessibleAttrName() {
   return "gpu_runtime.gpu_accessible";
 }
-mlir::StringRef getNonUniformAttrName() { return "gpu_runtime.non_uniform"; }
-
 } // namespace gpu_runtime
 
 // TODO: unify with upstream
