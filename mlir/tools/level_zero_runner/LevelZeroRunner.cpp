@@ -69,8 +69,8 @@ static LogicalResult runMLIRPasses(mlir::Operation *op,
 
   passManager.addPass(gpu_runtime::createGPUToSpirvPass());
   OpPassManager &modulePM = passManager.nest<spirv::ModuleOp>();
-  modulePM.addPass(spirv::createLowerABIAttributesPass());
-  modulePM.addPass(spirv::createUpdateVersionCapabilityExtensionPass());
+  modulePM.addPass(spirv::createSPIRVLowerABIAttributesPass());
+  modulePM.addPass(spirv::createSPIRVUpdateVCEPass());
   LowerToLLVMOptions llvmOptions(module.getContext(), DataLayout(module));
   passManager.nest<func::FuncOp>().addPass(LLVM::createRequestCWrappersPass());
 

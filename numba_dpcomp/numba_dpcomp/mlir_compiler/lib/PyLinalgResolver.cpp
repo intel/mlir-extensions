@@ -1131,7 +1131,7 @@ static py::object externalCallImpl(py::capsule context, py::str funcName,
   results.reserve(outputVals.size() + res.size());
 
   for (auto it : llvm::enumerate(
-           llvm::makeArrayRef(inputVals).take_back(outputVals.size()))) {
+           llvm::ArrayRef(inputVals).take_back(outputVals.size()))) {
     auto val = it.value();
     auto i = it.index();
     if (!returnTensor && outputVals[i].getType().isa<mlir::ShapedType>()) {

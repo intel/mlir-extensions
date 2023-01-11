@@ -1168,9 +1168,8 @@ static void genGroupOp(mlir::Operation *srcOp, mlir::PatternRewriter &rewriter,
                        mlir::Value arg) {
   auto ctx = srcOp->getContext();
   auto reduceAttr = mlir::gpu::AllReduceOperationAttr::get(ctx, ReduceType);
-  auto op = rewriter.replaceOpWithNewOp<mlir::gpu::AllReduceOp>(srcOp, arg,
-                                                                reduceAttr);
-  op->setAttr(gpu_runtime::getNonUniformAttrName(), rewriter.getUnitAttr());
+  rewriter.replaceOpWithNewOp<mlir::gpu::AllReduceOp>(srcOp, arg, reduceAttr,
+                                                      /*uniform*/ false);
 }
 
 class ConvertGroupOps : public mlir::OpRewritePattern<mlir::func::CallOp> {
@@ -1253,7 +1252,7 @@ public:
     if (!op.getOp())
       return mlir::failure();
 
-    if (!op->hasAttr(gpu_runtime::getNonUniformAttrName()))
+    if (op.getUniform())
       return mlir::failure();
 
     if (!op.getType().isIntOrFloat())
@@ -1853,8 +1852,8 @@ static void populateLowerToGPUPipelineMed(mlir::OpPassManager &pm) {
   commonOptPasses(pm);
 
   auto &modulePM = pm.nest<mlir::spirv::ModuleOp>();
-  modulePM.addPass(mlir::spirv::createLowerABIAttributesPass());
-  modulePM.addPass(mlir::spirv::createUpdateVersionCapabilityExtensionPass());
+  modulePM.addPass(mlir::spirv::createSPIRVLowerABIAttributesPass());
+  modulePM.addPass(mlir::spirv::createSPIRVUpdateVCEPass());
   pm.addPass(gpu_runtime::createSerializeSPIRVPass());
   pm.addPass(gpu_runtime::createGenDeviceFuncsPass());
   pm.addNestedPass<mlir::func::FuncOp>(

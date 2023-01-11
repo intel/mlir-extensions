@@ -46,9 +46,9 @@ public:
     auto affineMap = AffineMap::getMultiDimIdentityMap(dims, op.getContext());
     AffineParallelOp newPloop = rewriter.create<AffineParallelOp>(
         op.getLoc(), reducedValueTypes, reductionKinds,
-        llvm::makeArrayRef(affineMap), op.getLowerBound(),
-        llvm::makeArrayRef(affineMap), op.getUpperBound(),
-        llvm::makeArrayRef(newSteps));
+        llvm::ArrayRef(affineMap), op.getLowerBound(),
+        llvm::ArrayRef(affineMap), op.getUpperBound(),
+        llvm::ArrayRef(newSteps));
 
     // Steal the body of the old affine for op.
     newPloop.getRegion().takeBody(op.getRegion());

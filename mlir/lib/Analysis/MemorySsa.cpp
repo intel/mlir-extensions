@@ -20,7 +20,7 @@ struct imex::MemorySSA::Node : public llvm::ilist_node<Node> {
   unsigned getNumArguments() const { return argCount; }
 
   auto getArguments() {
-    return llvm::map_range(llvm::makeArrayRef(&args[0], argCount),
+    return llvm::map_range(llvm::ArrayRef(&args[0], argCount),
                            [](auto &a) -> Node * { return a.arg; });
   }
 

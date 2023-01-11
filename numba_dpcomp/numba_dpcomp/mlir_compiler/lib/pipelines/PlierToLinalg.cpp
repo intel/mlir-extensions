@@ -1668,7 +1668,7 @@ struct NumpyCallsResolver
         return rewriter
             .create<imex::ntensor::ViewPrimitiveOp>(
                 loc, op.getResult(0).getType(), args.front(),
-                llvm::makeArrayRef(args).drop_front(), funcName)
+                llvm::ArrayRef(args).drop_front(), funcName)
             ->getResults();
       } else {
         return rewriter
