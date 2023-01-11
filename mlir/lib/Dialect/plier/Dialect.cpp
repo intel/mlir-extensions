@@ -34,7 +34,7 @@ struct PlierInlinerInterface : public mlir::DialectInlinerInterface {
 namespace plier {
 
 mlir::ArrayRef<detail::OperatorNamePair> getOperators() {
-  return llvm::makeArrayRef(detail::OperatorNames);
+  return llvm::ArrayRef(detail::OperatorNames);
 }
 
 void PlierDialect::initialize() {

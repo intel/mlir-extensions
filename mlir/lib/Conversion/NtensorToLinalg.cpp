@@ -578,7 +578,7 @@ struct ConvertBroadcastOp
           // Compute resulting size
           auto retShape = getShape(tensorInputs.front());
 
-          for (auto input : llvm::makeArrayRef(tensorInputs).drop_front()) {
+          for (auto input : llvm::ArrayRef(tensorInputs).drop_front()) {
             auto newShape = getShape(input);
 
             for (auto &&[dim, newDim] :
@@ -586,8 +586,7 @@ struct ConvertBroadcastOp
               dim = broadcastDim(rewriter, loc, dim, newDim);
             }
             if (newShape.size() > retShape.size()) {
-              auto front =
-                  llvm::makeArrayRef(newShape).drop_back(retShape.size());
+              auto front = llvm::ArrayRef(newShape).drop_back(retShape.size());
               assert(!front.empty());
               retShape.insert(retShape.begin(), front.begin(), front.end());
             }
