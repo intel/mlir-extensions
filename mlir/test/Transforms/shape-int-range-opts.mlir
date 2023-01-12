@@ -232,6 +232,23 @@ func.func @test(%arg1: tensor<?xf32> {imex.shape_range = [#imex_util.index_range
   return
 }
 
+// -----
+
+// CHECK-LABEL: func @test
+//       CHECK:   %[[C:.*]] = arith.constant false
+//       CHECK:   "test.test"(%[[C]]) : (i1) -> ()
+func.func @test(%arg1: tensor<?xf32> {imex.shape_range = [#imex_util.index_range<[1,10]>]}, %arg2: f32) {
+  %cst = arith.constant 0 : index
+  %cst1 = arith.constant 0 : i32
+  %1 = llvm.fptosi %arg2 : f32 to i32
+  %2 = arith.cmpi eq, %1, %cst1 : i32
+  scf.if %2 {
+    %3 = tensor.dim %arg1, %cst : tensor<?xf32>
+    %4 = arith.cmpi eq, %3, %cst : index
+    "test.test"(%4) : (i1) -> ()
+  }
+  return
+}
 
 // -----
 

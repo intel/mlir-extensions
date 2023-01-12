@@ -572,6 +572,19 @@ public:
       return;
     }
 
+    // TODO: upstream
+    if (!mlir::isa<mlir::InferIntRangeInterface>(op)) {
+      for (auto [lattice, value] : llvm::zip(results, op->getResults())) {
+        if (value.getType().isIntOrIndex()) {
+          propagateIfChanged(
+              lattice,
+              lattice->join(
+                  mlir::dataflow::IntegerValueRange::getMaxRange(value)));
+        }
+      }
+      return setAllToEntryStates(results);
+    }
+
     mlir::dataflow::IntegerRangeAnalysis::visitOperation(op, operands, results);
   }
 };
