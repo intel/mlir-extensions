@@ -109,7 +109,9 @@ public:
     if (isUninitialized()) {
       os << "None";
     } else {
+      os << "[";
       llvm::interleaveComma(*shapeRanges, os);
+      os << "]";
     }
   }
 
@@ -507,6 +509,9 @@ public:
         if (!newRange)
           continue;
 
+        LLVM_DEBUG(llvm::dbgs() << "ShapeValueAnalysis: initialize: " << arg
+                                << " " << *newRange << "\n");
+
         auto *lattice = getLatticeElement(arg);
         assert(lattice);
         assert(lattice->getValue().isUninitialized());
@@ -558,6 +563,8 @@ public:
       }();
 
       if (newRange) {
+        LLVM_DEBUG(llvm::dbgs() << "IntegerRangeAnalysisEx: New dim val: "
+                                << newRange << "\n");
         auto changed =
             lattice->join(mlir::dataflow::IntegerValueRange{newRange});
         propagateIfChanged(lattice, changed);

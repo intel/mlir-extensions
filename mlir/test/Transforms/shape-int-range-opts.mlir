@@ -180,7 +180,28 @@ func.func @test(%arg1: tensor<?xf32> {imex.shape_range = [#imex_util.index_range
 
 // -----
 
-// Negative testm as it not yet possble to make linalg.generic work.
+// CHECK-LABEL: func private @test_nested(
+//       CHECK:   %[[C:.*]] = arith.constant false
+//       CHECK:   return %[[C]]
+// CHECK-LABEL: func @test(
+func.func private @test_nested(%arg1: tensor<?xf32>) -> i1 {
+  %cst0 = arith.constant 0 : index
+  %cst1 = arith.constant 1 : index
+  %0 = tensor.dim %arg1, %cst0 : tensor<?xf32>
+  %1 = tensor.empty(%0) : tensor<?xf32>
+  %2 = tensor.dim %1, %cst0 : tensor<?xf32>
+  %3 = arith.cmpi eq, %2, %cst1 : index
+  return %3: i1
+}
+
+func.func @test(%arg1: tensor<?xf32> {imex.shape_range = [#imex_util.index_range<[2,10]>]}) -> i1 {
+  %0 = func.call @test_nested(%arg1) : (tensor<?xf32>) -> i1
+  return %0: i1
+}
+
+// -----
+
+// Negative test, as it not yet possble to make linalg.generic work.
 // CHECK-LABEL: func @test
 //   CHECK-NOT:   %[[C:.*]] = arith.constant false
 //   CHECK-NOT:   return %[[C]]
