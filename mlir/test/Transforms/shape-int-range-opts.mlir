@@ -213,6 +213,28 @@ func.func @test(%arg1: tensor<?xf32> {imex.shape_range = [#imex_util.index_range
 
 // -----
 
+// CHECK-LABEL: func private @test_nested(
+//       CHECK:   %[[C:.*]] = arith.constant false
+//       CHECK:   "test.test"(%[[C]]) : (i1) -> ()
+// CHECK-LABEL: func @test(
+func.func private @test_nested(%arg1: tensor<?xf32>, %arg2: i1) {
+  %cst = arith.constant 0 : index
+  scf.if %arg2 {
+    %0 = tensor.dim %arg1, %cst : tensor<?xf32>
+    %1 = arith.cmpi eq, %0, %cst : index
+    "test.test"(%1) : (i1) -> ()
+  }
+  return
+}
+
+func.func @test(%arg1: tensor<?xf32> {imex.shape_range = [#imex_util.index_range<[2,10]>]}, %arg2: i1) {
+  func.call @test_nested(%arg1, %arg2) : (tensor<?xf32>, i1) -> ()
+  return
+}
+
+
+// -----
+
 // Negative test, as it not yet possble to make linalg.generic work.
 // CHECK-LABEL: func @test
 //   CHECK-NOT:   %[[C:.*]] = arith.constant false
