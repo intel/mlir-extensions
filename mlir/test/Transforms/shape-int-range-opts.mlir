@@ -1,4 +1,4 @@
-// RUN: imex-opt --imex-shape-int-range-opts --split-input-file %s | FileCheck %s
+// RUN: imex-opt --imex-shape-int-range-opts --allow-unregistered-dialect --split-input-file %s | FileCheck %s
 
 // CHECK-LABEL: func @test
 //       CHECK:   %[[C:.*]] = arith.constant false
@@ -185,18 +185,30 @@ func.func @test(%arg1: tensor<?xf32> {imex.shape_range = [#imex_util.index_range
 //       CHECK:   return %[[C]]
 // CHECK-LABEL: func @test(
 func.func private @test_nested(%arg1: tensor<?xf32>) -> i1 {
-  %cst0 = arith.constant 0 : index
-  %cst1 = arith.constant 1 : index
-  %0 = tensor.dim %arg1, %cst0 : tensor<?xf32>
-  %1 = tensor.empty(%0) : tensor<?xf32>
-  %2 = tensor.dim %1, %cst0 : tensor<?xf32>
-  %3 = arith.cmpi eq, %2, %cst1 : index
-  return %3: i1
+  %cst = arith.constant 0 : index
+  %0 = tensor.dim %arg1, %cst : tensor<?xf32>
+  %1 = arith.cmpi eq, %0, %cst : index
+  return %1: i1
 }
 
 func.func @test(%arg1: tensor<?xf32> {imex.shape_range = [#imex_util.index_range<[2,10]>]}) -> i1 {
   %0 = func.call @test_nested(%arg1) : (tensor<?xf32>) -> i1
   return %0: i1
+}
+
+// -----
+
+// CHECK-LABEL: func @test
+//       CHECK:   %[[C:.*]] = arith.constant false
+//       CHECK:   "test.test"(%[[C]]) : (i1) -> ()
+func.func @test(%arg1: tensor<?xf32> {imex.shape_range = [#imex_util.index_range<[1,10]>]}, %arg2: i1) {
+  %cst = arith.constant 0 : index
+  scf.if %arg2 {
+    %0 = tensor.dim %arg1, %cst : tensor<?xf32>
+    %1 = arith.cmpi eq, %0, %cst : index
+    "test.test"(%1) : (i1) -> ()
+  }
+  return
 }
 
 // -----
