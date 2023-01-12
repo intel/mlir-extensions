@@ -69,13 +69,14 @@ public:
         it = std::next(it);
       }
       if (!hasReturnOp) {
-        Block::iterator endIt = ++endOp->getIterator();
+        Block::iterator endIt = std::next(endOp->getIterator());
         topIt = endIt;
-        llvm::SmallVector<Operation *, 4> ops; // (forOp->getIterator(), endIt);
-        for (auto it = forOp->getIterator(); it != endIt; it++) {
+        llvm::SmallVector<Operation *, 4> ops;
+        for (auto it = forOp->getIterator(); it != endIt; it = std::next(it)) {
           ops.push_back(&*it);
         }
-        groupedOps.push_back(ops);
+        if (!ops.empty())
+          groupedOps.push_back(ops);
       }
     }
     // move the for-loop and its users into the newly created parallel-loop
