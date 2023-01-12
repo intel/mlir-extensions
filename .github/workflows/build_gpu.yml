@@ -48,8 +48,24 @@ jobs:
           cmake ../level-zero -GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=../level-zero-install
           ninja install
 
+      - name: Setup Cache Vars
+        run: |
+          echo 'LLVM_SHA<<EOF' >> $GITHUB_ENV
+          cat ${{env.HOME_DIR}}/mlir-extensions/build_tools/llvm_version.txt >> $GITHUB_ENV
+          echo 'EOF' >> $GITHUB_ENV
+      - name: Echo LLVM Sha file
+        run: echo ${{env.LLVM_SHA }}
+      - name: Cache LLLVM-MLIR
+        id: cache-llvm-mlir
+        uses: actions/cache@v3
+        env:
+          LLVM_CACHE_NUMBER: 1  # Increase to reset cache
+        with:
+          path: ${{env.HOME_DIR}}/llvm-mlir/_mlir_install/**
+          key: ${{ runner.os }}-build-llvm-${{ env.LLVM_CACHE_NUMBER }}-${{ env.LLVM_SHA }}
 
       - name: Build LLVM MLIR
+        if: steps.cache-llvm-mlir.outputs.cache-hit != 'true'
         run: |
           mkdir -p $HOME_DIR/llvm-mlir
           cd $HOME_DIR/llvm-mlir

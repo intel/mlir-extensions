@@ -38,11 +38,6 @@ jobs:
         run: |
           cd $HOME
           rm -rf *
-      - uses: actions/checkout@v3
-        with:
-          repository: intel-innersource/frameworks.ai.mlir.mlir-extensions
-          token: ${{secrets.WORKFLOW_TOKEN}}
-          path: ${{env.HOME_DIR}}/frameworks.ai.mlir.mlir-extensions
 
       - name: Prepare Docker
         run: |
@@ -71,6 +66,12 @@ jobs:
           bash -x Anaconda3-2020.02-Linux-x86_64.sh -b -p $HOME/miniconda -f 
           bash Anaconda3-2020.02-Linux-x86_64.sh -b
           rm Anaconda3-2020.02-Linux-x86_64.sh
+
+      - uses: actions/checkout@v3
+        with:
+          repository: intel-innersource/frameworks.ai.mlir.mlir-extensions
+          token: ${{secrets.WORKFLOW_TOKEN}}
+          path: ${{env.HOME_DIR}}/frameworks.ai.mlir.mlir-extensions
 
       - name: Install Build tools onto Conda
         shell: bash -l {0}
@@ -124,7 +125,24 @@ jobs:
           fi
           popd
 
+      - name: Setup Cache Vars
+        run: |
+          echo 'LLVM_SHA<<EOF' >> $GITHUB_ENV
+          cat frameworks.ai.mlir.mlir-extensions/build_tools/llvm_version.txt >> $GITHUB_ENV
+          echo 'EOF' >> $GITHUB_ENV
+      - name: Echo LLVM Sha file
+        run: echo ${{env.LLVM_SHA }}
+      - name: Cache LLLVM-MLIR
+        id: cache-llvm-mlir
+        uses: actions/cache@v3
+        env:
+          LLVM_CACHE_NUMBER: 1  # Increase to reset cache
+        with:
+          path: llvm-mlir/_mlir_install/**
+          key: ${{ runner.os }}-build-llvm-${{ env.LLVM_CACHE_NUMBER }}-${{ env.LLVM_SHA }}
+
       - name: Build LLVM MLIR
+        if: steps.cache-llvm-mlir.outputs.cache-hit != 'true'
         run: |
           mkdir -p $HOME_DIR/llvm-mlir
           cd $HOME_DIR/llvm-mlir
