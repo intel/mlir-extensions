@@ -1,30 +1,234 @@
-# This is a basic workflow to help you get started with Actions
-
-name: SDL Scans
-
-# Controls when the workflow will run
+name: SDL Process
 on:
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
-
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+    inputs:
+      Snyk:
+        description: 'Run Snyk Scan'
+        required: true
+        default: 'false'
+      Bandit:
+        description: 'Run Bandit Scan'
+        required: true
+        default: 'false'
+      Coverity:
+        description: 'Run Coverity Scan'
+        required: true
+        default: 'false'
 jobs:
-  # This workflow contains a single job called "build"
-  build:
-    # The type of runner that the job will run on
-    runs-on: ubuntu-latest
+  Bandit:
+    uses: intel-innersource/frameworks.ai.infrastructure.code-scan-tools/.github/workflows/Scanner_Bandit.yml@one-ci-cd 
+    with:   
+      repos: ${{ github.event.repository.name }} 
+      refs: ${{ github.ref_name }}
+#       excludes: '-x folder_path' # This is optional, write the folders path you want to skip scan.
+    secrets:
+      token: ${{ secrets.WORKFLOW_TOKEN }}
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
+
+  SNYK:
+    runs-on: gasp
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v3
+    - name: Checkout project code
+      uses: actions/checkout@v3
+    - name: Run Snyk 
+      uses: intel-innersource/frameworks.ai.infrastructure.code-scan-tools/snyk@one-ci-cd
+      with:
+        repos: ${{ github.event.repository.name }} 
+        refs: ${{ github.ref_name }}
+        scan_type: 'test' # Options: monitor or test
+        # This workflow runs Scan monitor by default (reports will be uploaded to snyk portal), but user can also
+        # select 'test' in order to generate reports locally.
+        snyk_org: AIPG_Modivius
+        token: ${{ secrets.WORKFLOW_TOKEN }}
+        SNYK_API_TOKEN: "${{ secrets.SNYK_API_TOKEN }}"
 
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: echo Hello, world!
+  Coverity:
+    runs-on: gpu
+    defaults:
+      run:
+        shell: bash
+    container:
+      image: ubuntu:latest
+      options: --rm --user root --entrypoint bash --privileged
+    
+    timeout-minutes: 450
+    
+    env:
+      TBB_VER: 2021.6.0
+      LEVEL_ZERO_VER: v1.6.2
+      HOME_DIR: /__w/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions
+      GITHUB_HOME: /__w
+      HOME: /github/home
+      TBB_URL_PREFIX: https://github.com/oneapi-src/oneTBB/releases/download/
+      LLVM_SHA_FILE: llvm_version.txt
 
-      # Runs a set of commands using the runners shell
-      - name: Run a multi-line script
+    steps:
+      - name: Clear home dir
         run: |
-          echo Add other actions to build,
-          echo test, and deploy your project.
+          cd $HOME_DIR
+          rm -rf *
+          cd $HOME
+          rm -rf *
+          
+      - name: Prepare Docker
+        run: |
+          export http_proxy=http://proxy-dmz.intel.com:911
+          export https_proxy=http://proxy-dmz.intel.com:912
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get -y install tzdata
+          apt-get upgrade -y
+          apt-get install -y wget gnupg curl ca-certificates apt-transport-https
+          apt-get install -y vim ninja-build cmake g++ python3 python3-pip ninja-build
+          apt-get install -y git
+          apt-get install -y cmake
+          apt-get install -y wget
+          apt-get install -y libssl-dev
+          apt-get install -y libssl11*
+          apt-get install -y openssl
+          apt-get install -y netcat
+          apt-get install -y mesa-utils
+          apt-get install -y software-properties-common
+          apt-get install -y pciutils
+          pip install pytest
+          wget https://github.com/Kitware/CMake/releases/download/v3.20.0/cmake-3.20.0.tar.gz
+          tar -zvxf cmake-3.20.0.tar.gz
+          cd cmake-3.20.0 && ./bootstrap && make -j64 && make install && cmake --version
+          wget https://repo.anaconda.com/archive/Anaconda3-2020.02-Linux-x86_64.sh
+          bash -x Anaconda3-2020.02-Linux-x86_64.sh -b -p $HOME/miniconda -f 
+          bash Anaconda3-2020.02-Linux-x86_64.sh -b
+          rm Anaconda3-2020.02-Linux-x86_64.sh
+
+      - uses: actions/checkout@v3
+        with:
+          repository: intel-innersource/frameworks.ai.mlir.mlir-extensions
+          token: ${{secrets.WORKFLOW_TOKEN}}
+          path: ${{env.HOME_DIR}}/frameworks.ai.mlir.mlir-extensions
+
+      - name: Install Build tools onto Conda
+        shell: bash -l {0}
+        run: |
+          export PATH="$HOME/miniconda:$PATH"
+          source $HOME/miniconda/bin/activate
+          conda install cmake ninja graphviz conda-forge::lit conda-forge::doxygen
+          conda list
+
+      - name: Setup TBB
+        run: |
+          export HOME_DIR=`pwd`
+          export TBB_VER='2021.6.0'
+          export LEVEL_ZERO_VER='v1.6.2'
+          export TBB_URL_PREFIX='https://github.com/oneapi-src/oneTBB/releases/download/'
+          cd $HOME_DIR
+          mkdir -p tbb
+          cd tbb
+          echo "INFO: Downloading TBB ${TBB_VER}"
+          rm -rf *
+          export TBB_FN=oneapi-tbb-${TBB_VER}-lin.tgz
+          wget ${TBB_URL_PREFIX}/v${TBB_VER}/${TBB_FN} || exit 1
+          tar xf ${TBB_FN} -C . || exit 1
+          cat $(find . -name tbb.pc) | grep Version: | cut -d " " -f 2 > bundle_id.txt || rm -rf bundle_id.txt
+          [ -f bundle_id.txt ] || exit 1
+          cd ../
+          cd $HOME_DIR
+
+      - name: Setup Level Zero
+        run: |
+          cd $HOME_DIR
+          mkdir -p level-zero
+          pushd level-zero
+          if [[ -f bundle_id.txt && ( "$(cat bundle_id.txt)" == "${LEVEL_ZERO_VER}" ) ]]; then
+              echo "INFO: Using cached build of Level-Zero ${LEVEL_ZERO_VER}"
+          else
+              echo "INFO: Downloading and building Level-Zero ${LEVEL_ZERO_VER}"
+              rm -rf *
+              echo ${LEVEL_ZERO_VER} > bundle_id.txt || rm -rf bundle_id.txt
+              cat bundle_id.txt || exit 1
+              [ -f bundle_id.txt ] || exit 1
+              git clone https://github.com/oneapi-src/level-zero.git || exit 1
+              pushd level-zero || exit 1
+              git checkout ${LEVEL_ZERO_VER} || exit 1
+              mkdir level_zero_install || exit 1
+              mkdir build || exit 1
+              cd build || exit 1
+              cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=../level_zero_install .. || exit 1
+              make install || exit 1
+              popd
+          fi
+          popd
+
+      - name: Build LLVM MLIR
+        run: |
+          mkdir -p $HOME_DIR/llvm-mlir
+          cd $HOME_DIR/llvm-mlir
+          echo "INFO: Need to rebuild LLVM-MLIR. Previous installation for MLIR not found"
+          np=`nproc`
+          if [ -d "llvm-project" ]; then rm -rf llvm-project; fi
+          git clone https://github.com/llvm/llvm-project || exit 1
+          export LLVM_SHA=`cat ../frameworks.ai.mlir.mlir-extensions/build_tools/llvm_version.txt`
+          cd llvm-project || exit 1
+          git checkout $LLVM_SHA || exit 1
+          mkdir _build || exit 1
+          cd _build || exit 1
+          cmake ../llvm  -GNinja  -DCMAKE_BUILD_TYPE=Release  -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_ENABLE_RTTI=ON  -DLLVM_USE_LINKER=gold -DLLVM_INSTALL_UTILS=ON -DLLVM_ENABLE_ZSTD=OFF -DCMAKE_INSTALL_PREFIX=$HOME_DIR/llvm-mlir/_mlir_install || exit 1
+          cmake --build . -j ${np} || exit 1
+          cmake --install . || exit 1
+          cp bin/FileCheck $HOME_DIR/llvm-mlir/_mlir_install/bin/
+          cp bin/count $HOME_DIR/llvm-mlir/_mlir_install/bin/
+          cp bin/not $HOME_DIR/llvm-mlir/_mlir_install/bin/
+
+      - uses: intel-innersource/frameworks.actions.setup-coverity@v1
+        env:
+          https_proxy: proxy-dmz.intel.com:912 # If the self-hosted runner has issues with the proxy
+        with:
+          version: '2022.3.1'
+
+      - name: Check Coverity version
+        run: coverity --version 
+
+      - name: Coverity configure for compilers
+        run: |
+          cov-configure --gcc
+          cov-configure --python
+      - name: Setup IMEX and Coverity Build
+        run: |
+          source $HOME/miniconda/bin/activate
+          set -e
+          set -x
+          
+          echo "SET EXTERNAL LIT"
+          external_lit=`which lit`
+          echo $external_lit
+          export LEVEL_ZERO_DIR=$HOME_DIR/level-zero/level-zero/level_zero_install/
+          export LEVEL_ZERO_VERSION_CHECK_OFF=1
+          export TBB_PATH=$HOME_DIR/tbb/oneapi-tbb-${TBB_VER}
+          
+          
+          mkdir -p $HOME_DIR/tmpdir
+          cd $HOME_DIR/frameworks.ai.mlir.mlir-extensions
+          
+          echo "============Building the app===================="
+          cov-build --dir cov_dir python3 build_tools/build_imex.py --working-dir $HOME_DIR/tmpdir --llvm-install $HOME_DIR/llvm-mlir/_mlir_install --external-lit ${external_lit}
+          #echo "============Build done===================="    
+          
+            #python build_tools/build_imex.py                                     \
+           # --working-dir $HOME_DIR/tmpdir                           \
+           # --llvm-install $HOME_DIR/llvm-mlir/_mlir_install           \
+            #--external-lit ${external_lit}
+
+      - name: Coverity Analysis
+        run: |
+          cov-analyze --dir frameworks.ai.mlir.mlir-extensions/cov_dir
+          echo "Analysis is done"
+          cov-format-errors --dir frameworks.ai.mlir.mlir-extensions/cov_dir --json-output-v7 coverity_dir_result.json
+      
+      - name: Upload Coverity Scan results
+        uses: actions/upload-artifact@v2
+        with:
+          name: coverity_dir_result.json 
+          path: coverity_dir_result.json 
+
+      - name: coverity UI transfer
+        env: 
+          no_proxy: coverityent.devtools.intel.com, intel.com
+        run: |
+          cov-commit-defects --dir frameworks.ai.mlir.mlir-extensions/cov_dir --url https://coverityent.devtools.intel.com/prod5 --user sfield --password ${{ secrets.EMAILAPPPASSWORD }} --stream "MLIR_Prod_main"
