@@ -137,6 +137,8 @@ static void *allocDeviceMemory(GPUSYCLQUEUE *queue, size_t size,
     memPtr = sycl::aligned_alloc_device(alignment, size, queue->syclQueue_);
   }
   if (memPtr == nullptr) {
+    throw std::runtime_error(
+        "aligned_alloc_shared() failed to allocate memory!");
   }
   return memPtr;
 }
