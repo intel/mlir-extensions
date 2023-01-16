@@ -1632,11 +1632,11 @@ struct SignCastForPropagate : public mlir::OpRewritePattern<mlir::scf::ForOp> {
       builder.create<mlir::scf::YieldOp>(loc, newYieldArgs);
     };
 
-    auto newResults = rewriter
-                          .create<mlir::scf::ForOp>(
-                              loc, op.getLowerBound(), op.getUpperBound(),
-                              op.getStep(), newInitArgs, bodyBuilder)
-                          ->getResults();
+    auto newOp = rewriter.create<mlir::scf::ForOp>(
+        loc, op.getLowerBound(), op.getUpperBound(), op.getStep(), newInitArgs,
+        bodyBuilder);
+    newOp->setAttrs(op->getAttrs());
+    auto newResults = newOp.getResults();
 
     for (auto i : llvm::seq(0u, count)) {
       auto oldRersultType = initArgs[i].getType();
