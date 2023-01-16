@@ -6,7 +6,11 @@
 Define @jit and related decorators.
 """
 
-from .mlir.compiler import mlir_compiler_pipeline, mlir_compiler_gpu_pipeline
+from .mlir.compiler import (
+    mlir_compiler_pipeline,
+    mlir_compiler_gpu_pipeline,
+    mlir_compiler_replace_parfors_pipeline,
+)
 from .mlir.vectorize import vectorize as mlir_vectorize
 from .mlir.settings import USE_MLIR
 
@@ -32,11 +36,14 @@ def mlir_jit(
             **options
         )
 
-    pipeline = (
-        mlir_compiler_gpu_pipeline
-        if options.get("enable_gpu_pipeline", True)
-        else mlir_compiler_pipeline
-    )
+    if options.get("replace_parfors", False):
+        pipeline = mlir_compiler_replace_parfors_pipeline
+    elif options.get("enable_gpu_pipeline", True):
+        pipeline = mlir_compiler_gpu_pipeline
+    else:
+        pipeline = mlir_compiler_pipeline
+
+    options.pop("replace_parfors", None)
     options.pop("enable_gpu_pipeline", None)
     options.pop(
         "access_types", None

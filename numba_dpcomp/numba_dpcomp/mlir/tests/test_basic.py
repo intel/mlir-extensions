@@ -885,3 +885,14 @@ def test_fastmath_indirect():
         assert_equal(py_func2(a, b, c), jit_func2(a, b, c))
         ir = get_print_buffer()
         assert ir.count("math.fma") > 0, ir
+
+
+def test_replace_parfor():
+    def py_func(a):
+        res = 0
+        for i in numba.prange(a):
+            res = res + i
+        return res
+
+    jit_func = njit(py_func, parallel=True, replace_parfors=True)
+    assert_equal(py_func(10), jit_func(10))

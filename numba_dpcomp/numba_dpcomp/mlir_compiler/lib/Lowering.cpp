@@ -16,6 +16,7 @@
 #include <mlir/Dialect/Complex/IR/Complex.h>
 #include <mlir/Dialect/ControlFlow/IR/ControlFlowOps.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
+#include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/IR/BuiltinTypes.h>
@@ -161,6 +162,7 @@ struct PlierLowerer final {
     ctx.loadDialect<imex::ntensor::NTensorDialect>();
     ctx.loadDialect<imex::util::ImexUtilDialect>();
     ctx.loadDialect<mlir::func::FuncDialect>();
+    ctx.loadDialect<mlir::scf::SCFDialect>();
     ctx.loadDialect<plier::PlierDialect>();
   }
 
@@ -168,6 +170,14 @@ struct PlierLowerer final {
                            mlir::ModuleOp mod, const py::object &funcIr) {
     auto newFunc = createFunc(compilationContext, mod);
     lowerFuncBody(funcIr);
+    return newFunc;
+  }
+
+  mlir::func::FuncOp lowerParfor(const py::object &compilationContext,
+                                 mlir::ModuleOp mod,
+                                 const py::object &parforInst) {
+    auto newFunc = createFunc(compilationContext, mod);
+    lowerParforBody(parforInst);
     return newFunc;
   }
 
@@ -251,6 +261,158 @@ private:
       lowerBlock(blocks[i], irBlock.second);
 
     fixupPhis();
+  }
+
+  void lowerParforBody(py::handle parforInst) {
+    auto block = func.addEntryBlock();
+    blocks.emplace_back(block);
+    mlir::ValueRange blockArgs = block->getArguments();
+
+    auto getNextBlockArg = [&]() -> mlir::Value {
+      assert(!blockArgs.empty());
+      auto res = blockArgs.front();
+      blockArgs = blockArgs.drop_front();
+      return res;
+    };
+
+    for (auto param : parforInst.attr("params")) {
+      auto name = param.cast<std::string>();
+      varsMap[name] = getNextBlockArg();
+    }
+
+    builder.setInsertionPointToStart(block);
+    auto indexType = builder.getIndexType();
+    auto getIndexVal = [&](py::handle obj) -> mlir::Value {
+      auto loc = getCurrentLoc();
+      if (py::isinstance<py::int_>(obj)) {
+        auto val = obj.cast<int64_t>();
+        return builder.create<mlir::arith::ConstantIndexOp>(loc, val);
+      }
+
+      auto var = getNextBlockArg();
+      return builder.create<plier::CastOp>(loc, indexType, var);
+    };
+
+    llvm::SmallVector<mlir::Value, 4> begins;
+    llvm::SmallVector<mlir::Value, 4> ends;
+    llvm::SmallVector<mlir::Value, 4> steps;
+
+    for (auto loop : parforInst.attr("loop_nests")) {
+      begins.emplace_back(getIndexVal(loop.attr("start")));
+      ends.emplace_back(getIndexVal(loop.attr("stop")));
+      steps.emplace_back(getIndexVal(loop.attr("step")));
+    }
+
+    lowerBlock(block, parforInst.attr("init_block"));
+
+    llvm::SmallVector<mlir::Value> reductionInits;
+    std::unordered_map<std::string, unsigned> reductionIndices;
+    for (auto [i, redvar] : llvm::enumerate(parforInst.attr("redvars"))) {
+      auto name = redvar.cast<std::string>();
+      assert(varsMap.count(name));
+      reductionInits.emplace_back(varsMap.find(name)->second);
+      reductionIndices[name] = static_cast<unsigned>(i);
+    }
+
+    llvm::SmallVector<mlir::Value> reductionsRet(reductionInits.size());
+    auto bodyBuilder = [&](mlir::OpBuilder &b, mlir::Location l,
+                           mlir::ValueRange indices,
+                           mlir::ValueRange iterVars) -> mlir::ValueRange {
+      assert(!indices.empty());
+      mlir::Value index;
+      if (indices.size() == 1) {
+        index = indices.front();
+      } else {
+        auto resType = b.getTupleType(indices.getTypes());
+        index = b.create<imex::util::BuildTupleOp>(l, resType, indices);
+      }
+
+      auto indexVar = parforInst.attr("index_var");
+      auto indexType = getObjType(indexVar);
+      index = b.create<plier::CastOp>(l, indexType, index);
+      auto indexVarName = indexVar.attr("name").cast<std::string>();
+      varsMap[indexVarName] = index;
+
+      auto blocks = py::list(parforInst.attr("loop_body").attr("values")());
+      auto loopBlock = blocks[0];
+      for (auto inst : getBody(loopBlock)) {
+        if (py::isinstance(inst, insts.Assign)) {
+          auto target = inst.attr("target");
+          auto name = target.attr("name").cast<std::string>();
+          auto it = reductionIndices.find(name);
+          if (reductionIndices.end() != it) {
+            assert(it->second < reductionsRet.size());
+            auto val = lowerAssign(inst, target);
+            reductionsRet[it->second] = val;
+          }
+        }
+
+        lowerInst(inst);
+      }
+
+      return reductionsRet;
+    };
+
+    auto results = buildNestedParallelLoop(begins, ends, steps, reductionInits,
+                                           bodyBuilder);
+
+    mlir::Value result;
+    auto loc = getCurrentLoc();
+    if (results.empty()) {
+      result = builder.create<imex::util::UndefOp>(loc, builder.getNoneType());
+    } else if (results.size() == 1) {
+      result = results.front();
+    } else {
+      auto resType = builder.getTupleType(results.getTypes());
+      result = builder.create<imex::util::BuildTupleOp>(loc, resType, results);
+    }
+
+    builder.create<mlir::func::ReturnOp>(loc, result);
+  }
+
+  mlir::ValueRange buildNestedParallelLoop(
+      mlir::ValueRange begins, mlir::ValueRange ends, mlir::ValueRange steps,
+      mlir::ValueRange iterArgs,
+      llvm::function_ref<mlir::ValueRange(mlir::OpBuilder &, mlir::Location l,
+                                          mlir::ValueRange, mlir::ValueRange)>
+          bodyBuilder) {
+    assert(!begins.empty());
+    assert(begins.size() == ends.size());
+    assert(begins.size() == steps.size());
+
+    llvm::SmallVector<mlir::Value> indices;
+    indices.reserve(begins.size());
+    auto loc = getCurrentLoc();
+    return buildNestedParallelLoopImpl(builder, loc, begins, ends, steps,
+                                       iterArgs, bodyBuilder, indices);
+  }
+
+  mlir::ValueRange buildNestedParallelLoopImpl(
+      mlir::OpBuilder &loopBuilder, mlir::Location loc, mlir::ValueRange begins,
+      mlir::ValueRange ends, mlir::ValueRange steps, mlir::ValueRange iterArgs,
+      llvm::function_ref<mlir::ValueRange(mlir::OpBuilder &, mlir::Location l,
+                                          mlir::ValueRange, mlir::ValueRange)>
+          bodyBuilder,
+      llvm::SmallVectorImpl<mlir::Value> &indices) {
+    auto forBodyBuilder = [&](mlir::OpBuilder &b, mlir::Location l,
+                              mlir::Value index, mlir::ValueRange vars) {
+      indices.emplace_back(index);
+      mlir::ValueRange res;
+      if (llvm::hasSingleElement(begins)) {
+        res = bodyBuilder(b, l, indices, vars);
+      } else {
+        res = buildNestedParallelLoopImpl(b, l, begins.drop_front(),
+                                          ends.drop_front(), steps.drop_front(),
+                                          vars, bodyBuilder, indices);
+      }
+      b.create<mlir::scf::YieldOp>(l, res);
+    };
+    auto loop = loopBuilder.create<mlir::scf::ForOp>(
+        loc, begins.front(), ends.front(), steps.front(), iterArgs,
+        forBodyBuilder);
+    loop->setAttr(imex::util::attributes::getParallelName(),
+                  builder.getUnitAttr());
+    return loop.getResults();
   }
 
   void lowerBlock(mlir::Block *bb, py::handle irBlock) {
@@ -875,6 +1037,18 @@ py::capsule lowerFunction(const py::object &compilationContext,
   auto &module = mod->module;
   auto func = PlierLowerer(context, mod->typeConverter)
                   .lower(compilationContext, module, funcIr);
+  return py::capsule(func.getOperation()); // no dtor, func owned by the module.
+}
+
+py::capsule lowerParfor(const pybind11::object &compilationContext,
+                        const pybind11::capsule &pyMod,
+                        const pybind11::object &parforInst) {
+  auto mod = static_cast<Module *>(pyMod);
+  auto &context = mod->context;
+  auto &module = mod->module;
+  auto func = PlierLowerer(context, mod->typeConverter)
+                  .lowerParfor(compilationContext, module, parforInst);
+  func->dump();
   return py::capsule(func.getOperation()); // no dtor, func owned by the module.
 }
 

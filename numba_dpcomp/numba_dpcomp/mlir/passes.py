@@ -8,6 +8,7 @@ from numba.core.compiler_machinery import FunctionPass, register_pass
 from numba.core.funcdesc import qualifying_prefix
 from numba.np.ufunc.parallel import get_thread_count
 import numba.core.types.functions
+import numba.parfors.parfor
 from contextlib import contextmanager
 
 from .settings import DUMP_IR, OPT_LEVEL, DUMP_DIAGNOSTICS
@@ -228,3 +229,85 @@ class MlirBackendInner(MlirBackendBase):
         )
         state.cr = compile_result()
         return True
+
+
+@register_pass(mutates_CFG=True, analysis_only=False)
+class MlirReplaceParfors(MlirBackendBase):
+
+    _name = "mlir_replace_parfors"
+
+    def __init__(self):
+        FunctionPass.__init__(self)
+
+    def run_pass(self, state):
+        print("-=-=-=-=-=- MlirReplaceParfors -=-=-=-=-=-")
+        ir = state.func_ir
+        ir.dump()
+        module = None
+        parfor_funcs = {}
+        for _, block in ir.blocks.items():
+            for inst in block.body:
+                if not isinstance(inst, numba.parfors.parfor.Parfor):
+                    continue
+
+                inst.dump()
+                if module is None:
+                    mod_settings = {"enable_gpu_pipeline": True}
+                    module = mlir_compiler.create_module(mod_settings)
+
+                fn_name = f"parfor_impl{inst.id}"
+                arg_types = self._get_parfor_args_types(state, inst)
+                res_type = self._get_parfor_return_type(state, inst)
+
+                ctx = self._get_func_context(state)
+                ctx["fnname"] = lambda: fn_name
+                ctx["fnargs"] = lambda: arg_types
+                ctx["restype"] = lambda: res_type
+
+                mlir_compiler.lower_parfor(ctx, module, inst)
+                parfor_funcs[inst] = fn_name
+
+        if not module:
+            return False
+
+        compiled_mod = mlir_compiler.compile_module(
+            global_compiler_context, ctx, module
+        )
+
+        for inst, func_name in parfor_funcs.items():
+            func_ptr = mlir_compiler.get_function_pointer(
+                global_compiler_context, compiled_mod, func_name
+            )
+            # TODO: replace inst with call to func_ptr
+
+        return True
+
+    def _get_parfor_args_types(self, state, parfor):
+        typemap = state.typemap
+        ret = []
+        for param in parfor.params:
+            ret.append(typemap[param])
+
+        for loop in parfor.loop_nests:
+            for v in (loop.start, loop.stop, loop.step):
+                if isinstance(v, int):
+                    continue
+
+                ret.append(typemap[v.name])
+
+        return ret
+
+    def _get_parfor_return_type(self, state, parfor):
+        typemap = state.typemap
+        ret = []
+        for param in parfor.redvars:
+            ret.append(typemap[param])
+
+        count = len(ret)
+        if count == 0:
+            return types.none
+
+        if count == 1:
+            return ret[0]
+
+        return types.Tuple(ret)

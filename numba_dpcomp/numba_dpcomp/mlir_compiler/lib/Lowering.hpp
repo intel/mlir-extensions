@@ -21,6 +21,10 @@ pybind11::capsule lowerFunction(const pybind11::object &compilationContext,
                                 const pybind11::capsule &pyMod,
                                 const pybind11::object &funcIr);
 
+pybind11::capsule lowerParfor(const pybind11::object &compilationContext,
+                              const pybind11::capsule &pyMod,
+                              const pybind11::object &parforInst);
+
 pybind11::capsule compileModule(const pybind11::capsule &compiler,
                                 const pybind11::object &compilationContext,
                                 const pybind11::capsule &pyMod);

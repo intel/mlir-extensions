@@ -28,6 +28,7 @@ PYBIND11_MODULE(mlir_compiler, m) {
   m.def("init_compiler", &initCompiler, "No docs");
   m.def("create_module", &createModule, "No docs");
   m.def("lower_function", &lowerFunction, "No docs");
+  m.def("lower_parfor", &lowerParfor, "No docs");
   m.def("compile_module", &compileModule, "No docs");
   m.def("register_symbol", &registerSymbol, "No docs");
   m.def("get_function_pointer", &getFunctionPointer, "No docs");
