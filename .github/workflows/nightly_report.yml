@@ -1,4 +1,4 @@
-name: Nightly Report
+name: Nightly CI
 on:
   workflow_dispatch:
   # add input for email address
