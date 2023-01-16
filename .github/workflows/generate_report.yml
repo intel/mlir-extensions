@@ -1,4 +1,4 @@
-name: Generate Report
+name: Send Report
 on:
   workflow_dispatch:
   # add input for email address
