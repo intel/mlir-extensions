@@ -6,6 +6,7 @@
 #include <string_view>
 
 #include "Common.hpp"
+#include "dpcomp-math-runtime_export.h"
 
 #ifdef IMEX_USE_DPNP
 #include <dpnp_iface.hpp>
@@ -14,13 +15,6 @@
 #ifdef IMEX_USE_MKL
 #include "mkl.h"
 #endif
-
-#define fatal_failure(format, ...)                                             \
-  do {                                                                         \
-    fprintf(stderr, format, ##__VA_ARGS__);                                    \
-    fflush(stderr);                                                            \
-    abort();                                                                   \
-  } while (0)
 
 template <size_t NumDims, typename T>
 static T *getMemrefData(const Memref<NumDims, T> *src) {
@@ -112,14 +106,6 @@ static void cpuGemm(GemmFunc<T> Gemm, const Memref<2, T> *a,
   );
 }
 
-template <typename T>
-static void deviceGemm(void *stream, const Memref<2, T> *a,
-                       const Memref<2, T> *b, Memref<2, T> *c, T alpha,
-                       T beta) {
-  auto streamIface = static_cast<StreamInterface *>(stream);
-  fatal_failure("Not implemented, deviceName %s\n",
-                streamIface->getDeviceName().data());
-}
 #endif
 } // namespace
 
@@ -151,11 +137,6 @@ static inline void ALL_UNUSED(int dummy, ...) { (void)dummy; }
   DPCOMP_MATH_RUNTIME_EXPORT void mkl_gemm_##Suff(                             \
       const Memref<2, T> *a, const Memref<2, T> *b, Memref<2, T> *c) {         \
     MKL_CALL(cpuGemm<T>, MKL_GEMM(Prefix), a, b, c, 1, 0);                     \
-  }                                                                            \
-  DPCOMP_MATH_RUNTIME_EXPORT void mkl_gemm_##Suff##_device(                    \
-      void *stream, const Memref<2, T> *a, const Memref<2, T> *b,              \
-      Memref<2, T> *c) {                                                       \
-    MKL_CALL(deviceGemm<T>, stream, a, b, c, 1, 0);                            \
   }
 
 GEMM_VARIANT(float, s, float32)

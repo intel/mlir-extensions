@@ -24,6 +24,56 @@ else:
 
 # CMAKE =======================================================================
 
+
+def buildSyclMathRuntime(root_path, build_prefix, install_prefix, use_mkl, use_sycl):
+    IMEX_USE_MKL = use_mkl
+    IMEX_USE_SYCL = use_sycl
+    MATH_SYCL_RUNTIME_INSTALL_PATH = install_prefix
+
+    cmake_build_dir_parent = os.path.join(build_prefix)
+    cmake_build_dir = os.path.join(build_prefix, "sycl/math_runtime")
+    sycl_math_runtime_path = os.path.join(root_path, "numba_dpcomp/math_runtime/sycl")
+    cmake_cmd = [
+        "cmake",
+        sycl_math_runtime_path,
+    ]
+
+    cmake_cmd += ["-GNinja"]
+
+    cmake_cmd += [
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DMATH_SYCL_RUNTIME_INSTALL_PATH=" + MATH_SYCL_RUNTIME_INSTALL_PATH,
+    ]
+
+    if IMEX_USE_MKL is not None:
+        cmake_cmd += ["-DIMEX_USE_MKL=" + IMEX_USE_MKL]
+
+    if IMEX_USE_SYCL is not None:
+        cmake_cmd += ["-DIMEX_USE_SYCL=" + IMEX_USE_SYCL]
+
+    try:
+        os.makedirs(cmake_build_dir)
+    except FileExistsError:
+        pass
+
+    env = os.environ.copy()
+
+    env["CC"] = "icx"
+    env["CXX"] = "dpcpp"
+    print(cmake_cmd)
+    subprocess.check_call(
+        cmake_cmd, stderr=subprocess.STDOUT, shell=False, cwd=cmake_build_dir, env=env
+    )
+    subprocess.check_call(
+        ["cmake", "--build", ".", "--config", "Release"], cwd=cmake_build_dir
+    )
+    subprocess.check_call(
+        ["cmake", "--install", ".", "--config", "Release"], cwd=cmake_build_dir
+    )
+
+    return ["dpcomp-math-sycl-runtime"], [MATH_SYCL_RUNTIME_INSTALL_PATH]
+
+
 if int(os.environ.get("DPCOMP_SETUP_RUN_CMAKE", 1)):
     root_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -32,12 +82,22 @@ if int(os.environ.get("DPCOMP_SETUP_RUN_CMAKE", 1)):
     MLIR_DIR = os.path.join(LLVM_PATH, "lib", "cmake", "mlir")
     TBB_DIR = os.path.join(os.environ["TBB_PATH"], "lib", "cmake", "tbb")
     IMEX_USE_MKL = os.environ.get("IMEX_USE_MKL")
+    IMEX_USE_SYCL = os.environ.get("IMEX_USE_SYCL")
     CMAKE_INSTALL_PREFIX = os.path.join(root_dir, "..")
 
     cmake_build_dir = os.path.join(CMAKE_INSTALL_PREFIX, "dpcomp_cmake_build")
+
+    extraLibs = []
+    extraLibsPath = []
+
+    install_dir = os.path.join(CMAKE_INSTALL_PREFIX, "numba_dpcomp/numba_dpcomp")
+    buildSyclMathRuntime(
+        root_dir, cmake_build_dir, install_dir, IMEX_USE_MKL, IMEX_USE_SYCL
+    )
+
     cmake_cmd = [
         "cmake",
-        root_dir,
+        CMAKE_INSTALL_PREFIX,
     ]
 
     cmake_cmd += ["-GNinja"]
@@ -45,7 +105,6 @@ if int(os.environ.get("DPCOMP_SETUP_RUN_CMAKE", 1)):
     NUMPY_INCLUDE_DIR = numpy.get_include()
 
     cmake_cmd += [
-        CMAKE_INSTALL_PREFIX,
         "-DCMAKE_BUILD_TYPE=Release",
         "-DLLVM_DIR=" + LLVM_DIR,
         "-DMLIR_DIR=" + MLIR_DIR,

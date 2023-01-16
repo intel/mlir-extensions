@@ -11,14 +11,14 @@ set(SOURCES_LIST
     lib/NumpyLinalg.cpp
     )
 set(HEADERS_LIST
-    lib/Common.hpp
+    include/Common.hpp
     )
 
 add_library(${PROJECT_NAME} SHARED ${SOURCES_LIST} ${HEADERS_LIST})
 generate_export_header(${PROJECT_NAME})
 
 target_include_directories(${PROJECT_NAME} PRIVATE
-    ${PROJECT_BINARY_DIR})
+    ${PROJECT_BINARY_DIR} "include")
 
 target_link_libraries(${PROJECT_NAME})
 

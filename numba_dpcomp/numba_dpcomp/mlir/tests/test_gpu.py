@@ -1226,7 +1226,6 @@ def test_cfd_reduce2(py_func, shape, dtype):
 
 
 @require_dpctl
-@pytest.mark.skip(reason="Not implemented")
 @pytest.mark.parametrize(
     "a,b",
     [
@@ -1256,6 +1255,7 @@ def test_cfd_dot(a, b, py_func):
     db = _from_host(b, buffer="device")
     dgpu_res = _from_host(gpu_res, buffer="device")
 
+    filter_string = dgpu_res.device.sycl_device.filter_string
     with print_pass_ir([], ["ConvertParallelLoopToGpu"]):
         jit_func(da, db, dgpu_res)
         ir = get_print_buffer()

@@ -207,7 +207,7 @@ jobs:
 
         run: |
           cd numba_dpcomp
-          conda create -y -n test-env python=${{ matrix.python }} "pip>=22" numba=0.56 numpy=1.22 "setuptools<65.6" scikit-learn pytest-xdist ninja scipy pybind11 pytest lit tbb=${TBB_VER} cmake mkl-devel-dpcpp -c conda-forge -c intel
+          conda create -y -n test-env python=${{ matrix.python }} "pip>=22" numba=0.56 numpy=1.22 "setuptools<65.6" scikit-learn pytest-xdist ninja scipy pybind11 pytest lit tbb=${TBB_VER} cmake mkl-devel-dpcpp dpcpp_linux-64 -c conda-forge -c intel
           conda info
           source $CONDA/bin/activate test-env
           conda list
@@ -218,6 +218,7 @@ jobs:
           export LLVM_PATH=/home/runner/work/llvm-mlir/_mlir_install
           export LEVEL_ZERO_DIR=/home/runner/work/level-zero/level-zero/level_zero_install
           export LEVEL_ZERO_VERSION_CHECK_OFF=1
+          export IMEX_USE_SYCL=1
           python setup.py develop
 
       - name: Test Python frontend
@@ -242,6 +243,7 @@ jobs:
           export LLVM_PATH=/home/runner/work/llvm-mlir/_mlir_install
           export LEVEL_ZERO_DIR=/home/runner/work/level-zero/level-zero/level_zero_install
           export LEVEL_ZERO_VERSION_CHECK_OFF=1
+          export IMEX_USE_SYCL=1
           pip wheel --no-deps -v ../numba_dpcomp
           ls -l --block-size=M
 
@@ -250,7 +252,7 @@ jobs:
 
         run: |
           cd numba_dpcomp_wheels
-          conda create -y -n wheels-test-env python=${{ matrix.python }} numba=0.56 numpy=1.22 "setuptools<65.6" scikit-learn pytest-xdist ninja scipy pybind11 pytest lit tbb=${TBB_VER} cmake mkl-devel-dpcpp -c conda-forge -c intel
+          conda create -y -n wheels-test-env python=${{ matrix.python }} numba=0.56 numpy=1.22 "setuptools<65.6" scikit-learn pytest-xdist ninja scipy pybind11 pytest lit tbb=${TBB_VER} cmake mkl-devel-dpcpp dpcpp_linux-64 -c conda-forge -c intel
           conda info
           source $CONDA/bin/activate wheels-test-env
           conda list
