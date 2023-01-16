@@ -328,7 +328,7 @@ private:
       }
 
       auto indexVar = parforInst.attr("index_var");
-      auto indexType = getObjType(indexVar);
+      auto indexType = getObjType(typemap(indexVar));
       index = b.create<plier::CastOp>(l, indexType, index);
       auto indexVarName = indexVar.attr("name").cast<std::string>();
       varsMap[indexVarName] = index;
