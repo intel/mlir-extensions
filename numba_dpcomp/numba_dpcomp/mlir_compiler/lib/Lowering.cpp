@@ -86,13 +86,12 @@ private:
   uint64_t pos;
 };
 
-static std::vector<std::pair<int, py::handle>>
-getBlocks(const py::object &func) {
-  std::vector<std::pair<int, py::handle>> ret;
+static std::vector<std::pair<int, py::object>> getBlocks(py::handle func) {
+  std::vector<std::pair<int, py::object>> ret;
   auto blocks = func.attr("blocks").cast<py::dict>();
   ret.reserve(blocks.size());
   for (auto it : blocks)
-    ret.push_back({it.first.cast<int>(), it.second});
+    ret.emplace_back(it.first.cast<int>(), it.second.cast<py::object>());
 
   return ret;
 }
@@ -163,31 +162,9 @@ struct PlierLowerer final {
 
   mlir::func::FuncOp lower(const py::object &compilationContext,
                            mlir::ModuleOp mod, const py::object &funcIr) {
-    typemap = compilationContext["typemap"];
-    funcNameResolver = compilationContext["resolve_func"];
-    auto name = compilationContext["fnname"]().cast<std::string>();
-    auto typ = getFuncType(compilationContext["fnargs"],
-                           compilationContext["restype"]);
-    func = mlir::func::FuncOp::create(builder.getUnknownLoc(), name, typ);
-    if (compilationContext["fastmath"]().cast<bool>())
-      func->setAttr(imex::util::attributes::getFastmathName(),
-                    mlir::UnitAttr::get(&ctx));
-
-    if (compilationContext["force_inline"]().cast<bool>())
-      func->setAttr(imex::util::attributes::getForceInlineName(),
-                    mlir::UnitAttr::get(&ctx));
-
-    func->setAttr(imex::util::attributes::getOptLevelName(),
-                  builder.getI64IntegerAttr(
-                      compilationContext["opt_level"]().cast<int64_t>()));
-    auto maxConcurrency = compilationContext["max_concurrency"]().cast<int>();
-    if (maxConcurrency > 0)
-      func->setAttr(imex::util::attributes::getMaxConcurrencyName(),
-                    builder.getI64IntegerAttr(maxConcurrency));
-
+    auto newFunc = createFunc(compilationContext, mod);
     lowerFuncBody(funcIr);
-    mod.push_back(func);
-    return func;
+    return newFunc;
   }
 
 private:
@@ -214,6 +191,35 @@ private:
 
   PyTypeConverter &typeConverter;
 
+  mlir::func::FuncOp createFunc(const py::object &compilationContext,
+                                mlir::ModuleOp mod) {
+    assert(!func);
+    typemap = compilationContext["typemap"];
+    funcNameResolver = compilationContext["resolve_func"];
+    auto name = compilationContext["fnname"]().cast<std::string>();
+    auto typ = getFuncType(compilationContext["fnargs"],
+                           compilationContext["restype"]);
+    func = mlir::func::FuncOp::create(builder.getUnknownLoc(), name, typ);
+    if (compilationContext["fastmath"]().cast<bool>())
+      func->setAttr(imex::util::attributes::getFastmathName(),
+                    builder.getUnitAttr());
+
+    if (compilationContext["force_inline"]().cast<bool>())
+      func->setAttr(imex::util::attributes::getForceInlineName(),
+                    builder.getUnitAttr());
+
+    func->setAttr(imex::util::attributes::getOptLevelName(),
+                  builder.getI64IntegerAttr(
+                      compilationContext["opt_level"]().cast<int64_t>()));
+    auto maxConcurrency = compilationContext["max_concurrency"]().cast<int>();
+    if (maxConcurrency > 0)
+      func->setAttr(imex::util::attributes::getMaxConcurrencyName(),
+                    builder.getI64IntegerAttr(maxConcurrency));
+
+    mod.push_back(func);
+    return func;
+  }
+
   mlir::Type getObjType(py::handle obj) const {
     if (auto type = typeConverter.convertType(ctx, obj))
       return type;
@@ -227,7 +233,7 @@ private:
     return getObjType(type);
   }
 
-  void lowerFuncBody(const py::object &funcIr) {
+  void lowerFuncBody(py::handle funcIr) {
     auto irBlocks = getBlocks(funcIr);
     assert(!irBlocks.empty());
     blocks.reserve(irBlocks.size());
@@ -246,14 +252,12 @@ private:
   void lowerBlock(mlir::Block *bb, py::handle irBlock) {
     assert(nullptr != bb);
     builder.setInsertionPointToEnd(bb);
-    for (auto it : getBody(irBlock)) {
-      currentInstr = it;
+    for (auto it : getBody(irBlock))
       lowerInst(it);
-      currentInstr = nullptr;
-    }
   }
 
   void lowerInst(py::handle inst) {
+    currentInstr = inst;
     if (py::isinstance(inst, insts.Assign)) {
       auto target = inst.attr("target");
       auto val = lowerAssign(inst, target);
@@ -275,6 +279,7 @@ private:
       imex::reportError(llvm::Twine("lower_inst not handled: \"") +
                         py::str(inst.get_type()).cast<std::string>() + "\"");
     }
+    currentInstr = nullptr;
   }
 
   mlir::Value lowerAssign(py::handle inst, py::handle target) {
@@ -868,7 +873,7 @@ py::capsule lowerFunction(const py::object &compilationContext,
   auto &module = mod->module;
   auto func = PlierLowerer(context, mod->typeConverter)
                   .lower(compilationContext, module, funcIr);
-  return py::capsule(func.getOperation()); // no dtor, func owned by module
+  return py::capsule(func.getOperation()); // no dtor, func owned by the module.
 }
 
 py::capsule compileModule(const py::capsule &compiler,
