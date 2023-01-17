@@ -237,7 +237,7 @@ class MlirReplaceParfors(MlirBackendBase):
     _name = "mlir_replace_parfors"
 
     def __init__(self):
-        FunctionPass.__init__(self)
+        MlirBackendBase.__init__(self, push_func_stack=False)
 
     def run_pass(self, state):
         print("-=-=-=-=-=- MlirReplaceParfors -=-=-=-=-=-")
