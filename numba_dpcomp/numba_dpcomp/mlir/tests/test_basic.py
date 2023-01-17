@@ -891,7 +891,8 @@ def test_replace_parfor():
     def py_func(c):
         res = 0
         for i in numba.prange(len(c)):
-            res = res + c[i]
+            ind = 2 if i == 4 else i
+            res = res + c[ind]
         return res
 
     import numpy as np
