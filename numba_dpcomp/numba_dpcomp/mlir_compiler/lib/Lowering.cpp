@@ -265,7 +265,6 @@ private:
 
   void lowerParforBody(py::handle parforInst) {
     auto block = func.addEntryBlock();
-    //    blocks.emplace_back(block);
     mlir::ValueRange blockArgs = block->getArguments();
 
     auto getNextBlockArg = [&]() -> mlir::Value {
@@ -341,7 +340,7 @@ private:
 
       blocks.reserve(irBlocks.size());
       mlir::OpBuilder::InsertionGuard g(b);
-      for (auto [i, irBlock] : llvm::enumerate(irBlocks)) {
+      for (auto irBlock : irBlocks) {
         auto block = b.createBlock(&region, region.end());
         blocks.emplace_back(block);
         blocksMap[irBlock.first] = block;
