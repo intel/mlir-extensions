@@ -86,13 +86,17 @@ private:
   uint64_t pos;
 };
 
-static std::vector<std::pair<int, py::object>> getBlocks(py::handle func) {
-  std::vector<std::pair<int, py::object>> ret;
-  auto blocks = func.attr("blocks").cast<py::dict>();
+static llvm::SmallVector<std::pair<int, py::object>>
+getBlocks(py::handle func) {
+  llvm::SmallVector<std::pair<int, py::object>> ret;
+  auto blocks = func.cast<py::dict>();
   ret.reserve(blocks.size());
   for (auto it : blocks)
     ret.emplace_back(it.first.cast<int>(), it.second.cast<py::object>());
 
+  auto pred = [](auto lhs, auto rhs) { return lhs.first < rhs.first; };
+
+  llvm::sort(ret, pred);
   return ret;
 }
 
@@ -234,17 +238,17 @@ private:
   }
 
   void lowerFuncBody(py::handle funcIr) {
-    auto irBlocks = getBlocks(funcIr);
+    auto irBlocks = getBlocks(funcIr.attr("blocks"));
     assert(!irBlocks.empty());
     blocks.reserve(irBlocks.size());
-    for (auto i : llvm::seq<size_t>(0, irBlocks.size())) {
+    for (auto [i, irBlock] : llvm::enumerate(irBlocks)) {
       auto block = (0 == i ? func.addEntryBlock() : func.addBlock());
-      blocks.push_back(block);
-      blocksMap[irBlocks[i].first] = block;
+      blocks.emplace_back(block);
+      blocksMap[irBlock.first] = block;
     }
 
-    for (auto i : llvm::seq<size_t>(0, irBlocks.size()))
-      lowerBlock(blocks[i], irBlocks[i].second);
+    for (auto [i, irBlock] : llvm::enumerate(irBlocks))
+      lowerBlock(blocks[i], irBlock.second);
 
     fixupPhis();
   }
@@ -629,15 +633,15 @@ private:
         }
       }
     };
-    for (auto &bb : func) {
-      auto it = blockInfos.find(&bb);
+    for (auto bb : blocks) {
+      auto it = blockInfos.find(bb);
       if (blockInfos.end() != it) {
         auto &info = it->second;
-        auto term = bb.getTerminator();
+        auto term = bb->getTerminator();
         if (nullptr == term)
           imex::reportError("broken ir: block without terminator");
 
-        builder.setInsertionPointToEnd(&bb);
+        builder.setInsertionPointToEnd(bb);
 
         if (auto op = mlir::dyn_cast<mlir::cf::BranchOp>(term)) {
           auto dest = op.getDest();
