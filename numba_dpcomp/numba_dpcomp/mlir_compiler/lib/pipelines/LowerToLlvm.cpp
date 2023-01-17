@@ -1212,9 +1212,7 @@ struct LowerParallel : public mlir::OpRewritePattern<imex::util::ParallelOp> {
           loc, contextPtrType, entry->getArgument(2));
       auto zero = rewriter.create<mlir::LLVM::ConstantOp>(
           loc, llvmI32Type, rewriter.getI32IntegerAttr(0));
-      for (auto it : llvm::enumerate(contextVars)) {
-        auto index = it.index();
-        auto oldVal = it.value();
+      for (auto [index, oldVal] : llvm::enumerate(contextVars)) {
         const mlir::Value indices[] = {
             zero, rewriter.create<mlir::LLVM::ConstantOp>(
                       loc, llvmI32Type,

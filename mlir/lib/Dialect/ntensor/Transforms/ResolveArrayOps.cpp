@@ -104,11 +104,10 @@ computeIndices(mlir::OpBuilder &builder, mlir::Location loc, mlir::Value value,
     if (count > rank)
       return mlir::failure();
 
-    for (auto it : llvm::enumerate(tupleType)) {
-      auto i = static_cast<unsigned>(it.index());
+    for (auto [i, val] : llvm::enumerate(tupleType)) {
       auto getitemInd = builder.create<mlir::arith::ConstantIndexOp>(loc, i);
       auto ind = builder.createOrFold<imex::util::TupleExtractOp>(
-          loc, it.value(), index, getitemInd);
+          loc, val, index, getitemInd);
       bool isSlice = false;
       std::tie(offsets[i], sizes[i], strides[i], isSlice) = getPos(ind, i);
       if (isSlice)
@@ -184,14 +183,12 @@ static llvm::SmallVector<mlir::Value>
 toValues(mlir::OpBuilder &builder, mlir::Location loc,
          mlir::ArrayRef<mlir::OpFoldResult> vals) {
   llvm::SmallVector<mlir::Value> ret(vals.size());
-  for (auto it : llvm::enumerate(vals)) {
-    auto i = it.index();
-    auto val = it.value();
+  for (auto [i, val] : llvm::enumerate(vals)) {
     if (auto attr = val.dyn_cast<mlir::Attribute>()) {
       ret[i] = builder.create<mlir::arith::ConstantIndexOp>(
           loc, attr.cast<mlir::IntegerAttr>().getValue().getSExtValue());
     } else {
-      ret[i] = val.template get<mlir::Value>();
+      ret[i] = val.get<mlir::Value>();
     }
   }
 

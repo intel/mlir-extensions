@@ -159,10 +159,8 @@ llvm::SmallVector<mlir::scf::ForOp, 2> imex::lowerWhileToFor(
         assert(afterBlock.getNumArguments() == beforeTerm.getArgs().size());
         mapper.map(beforeBlock.getArguments(), iterargs);
 
-        for (auto it :
+        for (auto [blockArg, termArg] :
              llvm::zip(afterBlock.getArguments(), beforeTerm.getArgs())) {
-          auto blockArg = std::get<0>(it);
-          auto termArg = std::get<1>(it);
           if (pairfirst && skipCasts(termArg) == pairfirst) {
             // iter arg
             auto iterVal = getIterVal(builder, loc, pairfirst.getType(), iv);
@@ -227,14 +225,12 @@ llvm::SmallVector<mlir::scf::ForOp, 2> imex::lowerWhileToFor(
   assert(whileOp.getNumResults() >= loopResults.size());
   builder.updateRootInPlace(whileOp, [&]() {
     assert(whileOp.getNumResults() == beforeTerm.getArgs().size());
-    for (auto it : llvm::zip(whileOp.getResults(), beforeTerm.getArgs())) {
-      auto oldRes = std::get<0>(it);
-      auto operand = std::get<1>(it);
-      for (auto it2 : llvm::enumerate(beforeBlock.getArguments())) {
-        auto arg = it2.value();
+    for (auto [oldRes, operand] :
+         llvm::zip(whileOp.getResults(), beforeTerm.getArgs())) {
+      for (auto [i, arg] : llvm::enumerate(beforeBlock.getArguments())) {
         if (arg == operand) {
-          assert(it2.index() < loopResults.size());
-          auto newRes = loopResults[static_cast<unsigned>(it2.index())];
+          assert(i < loopResults.size());
+          auto newRes = loopResults[static_cast<unsigned>(i)];
           newRes = builder.createOrFold<plier::CastOp>(loc, oldRes.getType(),
                                                        newRes);
           oldRes.replaceAllUsesWith(newRes);

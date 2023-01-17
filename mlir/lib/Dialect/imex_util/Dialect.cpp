@@ -179,9 +179,9 @@ struct FillExtractSlice
     llvm::SmallVector<mlir::OpFoldResult> newSizes;
     newSizes.reserve(sizes.size());
     auto droppedDims = op.getDroppedDims();
-    for (auto it : llvm::enumerate(sizes))
-      if (!droppedDims[it.index()])
-        newSizes.emplace_back(it.value());
+    for (auto [i, val] : llvm::enumerate(sizes))
+      if (!droppedDims[i])
+        newSizes.emplace_back(val);
 
     auto fillType = fill.result().getType().cast<mlir::ShapedType>();
 
@@ -931,14 +931,12 @@ static llvm::Optional<unsigned> getSingleDynamicDim(mlir::ShapedType type) {
     return std::nullopt;
 
   int dimIndex = -1;
-  for (auto it : llvm::enumerate(type.getShape())) {
-    auto i = static_cast<int>(it.index());
-    auto dim = it.value();
+  for (auto [i, dim] : llvm::enumerate(type.getShape())) {
     if (dim == mlir::ShapedType::kDynamic) {
       if (dimIndex != -1)
         return std::nullopt;
 
-      dimIndex = i;
+      dimIndex = static_cast<int>(i);
     } else if (dim != 1) {
       return std::nullopt;
     }

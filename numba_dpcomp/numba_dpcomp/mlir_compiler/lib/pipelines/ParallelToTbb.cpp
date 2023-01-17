@@ -108,15 +108,13 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
     auto loc = op.getLoc();
     mlir::BlockAndValueMapping mapping;
     llvm::SmallVector<mlir::Value> reduceVars(op.getNumResults());
-    for (auto it : llvm::enumerate(op.getResultTypes())) {
-      auto type = it.value();
+    for (auto [i, type] : llvm::enumerate(op.getResultTypes())) {
       auto reduceType = getReduceType(type, maxConcurrency);
       assert(reduceType);
       auto reduce = allocaIP.insert(rewriter, [&]() {
         return rewriter.create<mlir::memref::AllocaOp>(loc, reduceType);
       });
-      auto index = static_cast<unsigned>(it.index());
-      reduceVars[index] = reduce;
+      reduceVars[i] = reduce;
     }
 
     auto reduceInitBodyBuilder = [&](mlir::OpBuilder &builder,
@@ -124,9 +122,8 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
                                      mlir::ValueRange args) {
       assert(args.empty());
       (void)args;
-      for (auto it : llvm::enumerate(reduceVars)) {
-        auto reduce = it.value();
-        auto initVal = initVals[it.index()];
+      for (auto [i, reduce] : llvm::enumerate(reduceVars)) {
+        auto initVal = initVals[i];
         auto init = builder.create<mlir::arith::ConstantOp>(loc, initVal);
         builder.create<mlir::memref::StoreOp>(loc, init, reduce, index);
       }
@@ -164,10 +161,9 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
       newOp.getLowerBoundMutable().assign(lowerBound);
       newOp.getUpperBoundMutable().assign(upperBound);
       newOp.getInitValsMutable().assign(initVals);
-      for (auto it : llvm::enumerate(newOp->getResults())) {
-        auto reduce_var = reduceVars[it.index()];
-        builder.create<mlir::memref::StoreOp>(loc, it.value(), reduce_var,
-                                              threadIndex);
+      for (auto [i, val] : llvm::enumerate(newOp->getResults())) {
+        auto reduceVar = reduceVars[i];
+        builder.create<mlir::memref::StoreOp>(loc, val, reduceVar, threadIndex);
       }
     };
 

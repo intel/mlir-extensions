@@ -15,6 +15,6 @@ class Type;
 class TypeRange;
 } // namespace mlir
 
-pybind11::object mapTypeToNumba(pybind11::handle types_mod, mlir::Type type);
-pybind11::object mapTypesToNumba(pybind11::handle types_mod,
+pybind11::object mapTypeToNumba(pybind11::handle typesMod, mlir::Type type);
+pybind11::object mapTypesToNumba(pybind11::handle typesMod,
                                  mlir::TypeRange types);

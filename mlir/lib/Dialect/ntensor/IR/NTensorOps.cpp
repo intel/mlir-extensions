@@ -961,18 +961,16 @@ static bool parseArgList(
 
 static void printArgList(mlir::OpAsmPrinter &printer,
                          imex::ntensor::CallOp call, mlir::ValueRange args,
-                         mlir::ArrayAttr args_names) {
-  assert(args.size() == args_names.size());
+                         mlir::ArrayAttr argsNames) {
+  assert(args.size() == argsNames.size());
   printer << '(';
   bool first = true;
-  for (auto it : llvm::zip(args, args_names)) {
+  for (auto [arg, name] : llvm::zip(args, argsNames)) {
     if (first) {
       first = false;
     } else {
       printer << ", ";
     }
-    auto arg = std::get<0>(it);
-    auto name = std::get<1>(it);
     auto nameStr =
         (name ? name.cast<mlir::StringAttr>().getValue() : llvm::StringRef());
     if (!nameStr.empty())

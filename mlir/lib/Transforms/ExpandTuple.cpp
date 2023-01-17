@@ -18,9 +18,7 @@ static void flattenTuple(mlir::OpBuilder &builder, mlir::Location loc,
                          llvm::SmallVectorImpl<mlir::Value> &ret) {
   for (auto arg : values) {
     if (auto tupleType = arg.getType().dyn_cast<mlir::TupleType>()) {
-      for (auto it : llvm::enumerate(tupleType.getTypes())) {
-        auto i = it.index();
-        auto argType = it.value();
+      for (auto [i, argType] : llvm::enumerate(tupleType.getTypes())) {
         auto ind = builder.createOrFold<mlir::arith::ConstantIndexOp>(loc, i);
         auto res = builder.createOrFold<imex::util::TupleExtractOp>(
             loc, argType, arg, ind);

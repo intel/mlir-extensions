@@ -36,10 +36,9 @@ static void eraseBlocks(mlir::PatternRewriter &rewriter,
 }
 
 static bool isBlocksDifferent(llvm::ArrayRef<mlir::Block *> blocks) {
-  for (auto it : llvm::enumerate(blocks)) {
-    auto block1 = it.value();
+  for (auto [i, block1] : llvm::enumerate(blocks)) {
     assert(nullptr != block1);
-    for (auto block2 : blocks.drop_front(it.index() + 1)) {
+    for (auto block2 : blocks.drop_front(i + 1)) {
       assert(nullptr != block2);
       if (block1 == block2)
         return false;
@@ -460,9 +459,10 @@ struct ScfWhileRewrite : public mlir::OpRewritePattern<mlir::cf::BranchOp> {
           auto newOp = builder.clone(op, mapper);
           for (auto user : op.getUsers()) {
             if (!isInsideBlock(user, beforeBlock)) {
-              for (auto it : llvm::zip(op.getResults(), newOp->getResults())) {
-                origVars.emplace_back(std::get<0>(it));
-                yieldVars.emplace_back(std::get<1>(it));
+              for (auto [orig, yield] :
+                   llvm::zip(op.getResults(), newOp->getResults())) {
+                origVars.emplace_back(orig);
+                yieldVars.emplace_back(yield);
               }
               break;
             }
