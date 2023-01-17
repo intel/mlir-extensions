@@ -265,7 +265,7 @@ private:
 
   void lowerParforBody(py::handle parforInst) {
     auto block = func.addEntryBlock();
-    blocks.emplace_back(block);
+    //    blocks.emplace_back(block);
     mlir::ValueRange blockArgs = block->getArguments();
 
     auto getNextBlockArg = [&]() -> mlir::Value {
@@ -314,7 +314,6 @@ private:
       reductionIndices[name] = static_cast<unsigned>(i);
     }
 
-    llvm::SmallVector<mlir::Value> reductionsRet(reductionInits.size());
     auto bodyBuilder = [&](mlir::OpBuilder &b, mlir::Location l,
                            mlir::ValueRange indices,
                            mlir::ValueRange iterVars) -> mlir::ValueRange {
@@ -333,24 +332,47 @@ private:
       auto indexVarName = indexVar.attr("name").cast<std::string>();
       varsMap[indexVarName] = index;
 
-      auto blocks = py::list(parforInst.attr("loop_body").attr("values")());
-      auto loopBlock = blocks[0];
-      for (auto inst : getBody(loopBlock)) {
-        if (py::isinstance(inst, insts.Assign)) {
-          auto target = inst.attr("target");
-          auto name = target.attr("name").cast<std::string>();
-          auto it = reductionIndices.find(name);
-          if (reductionIndices.end() != it) {
-            assert(it->second < reductionsRet.size());
-            auto val = lowerAssign(inst, target);
-            reductionsRet[it->second] = val;
-          }
-        }
+      mlir::ValueRange reductionInitsTmp(reductionInits);
+      auto regionOp =
+          b.create<mlir::scf::ExecuteRegionOp>(l, reductionInitsTmp.getTypes());
+      auto &region = regionOp.getRegion();
 
-        lowerInst(inst);
+      auto irBlocks = getBlocks(parforInst.attr("loop_body"));
+
+      blocks.reserve(irBlocks.size());
+      mlir::OpBuilder::InsertionGuard g(b);
+      for (auto [i, irBlock] : llvm::enumerate(irBlocks)) {
+        auto block = b.createBlock(&region, region.end());
+        blocks.emplace_back(block);
+        blocksMap[irBlock.first] = block;
       }
 
-      return reductionsRet;
+      llvm::SmallVector<mlir::Value> reductionsRet(reductionInits.size());
+      for (auto [i, irBlock] : llvm::enumerate(irBlocks)) {
+        auto bb = blocks[i];
+        builder.setInsertionPointToEnd(bb);
+        for (auto inst : getBody(irBlock.second)) {
+          if (py::isinstance(inst, insts.Assign)) {
+            auto target = inst.attr("target");
+            auto name = target.attr("name").cast<std::string>();
+            auto it = reductionIndices.find(name);
+            if (reductionIndices.end() != it) {
+              assert(it->second < reductionsRet.size());
+              auto val = lowerAssign(inst, target);
+              reductionsRet[it->second] = val;
+            }
+          }
+
+          lowerInst(inst);
+        }
+
+        bool hasTerminator =
+            !bb->empty() && bb->back().hasTrait<mlir::OpTrait::IsTerminator>();
+        if (!hasTerminator)
+          b.create<mlir::scf::YieldOp>(l, reductionsRet);
+      }
+
+      return regionOp.getResults();
     };
 
     auto results = buildNestedParallelLoop(begins, ends, steps, reductionInits,
@@ -368,6 +390,7 @@ private:
     }
 
     builder.create<mlir::func::ReturnOp>(loc, result);
+    fixupPhis();
   }
 
   mlir::ValueRange buildNestedParallelLoop(
