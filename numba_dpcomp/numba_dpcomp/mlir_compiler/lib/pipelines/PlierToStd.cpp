@@ -323,9 +323,8 @@ static mlir::Value replaceOp(mlir::PatternRewriter &rewriter,
                              mlir::Type newType) {
   auto signlessType = imex::makeSignlessType(newType);
   llvm::SmallVector<mlir::Value> newOperands(operands.size());
-  for (auto it : llvm::enumerate(operands))
-    newOperands[it.index()] =
-        imex::doConvert(rewriter, loc, it.value(), signlessType);
+  for (auto [i, val] : llvm::enumerate(operands))
+    newOperands[i] = imex::doConvert(rewriter, loc, val, signlessType);
 
   auto res = rewriter.createOrFold<T>(loc, newOperands);
   return imex::doConvert(rewriter, loc, res, newType);
@@ -822,9 +821,7 @@ protected:
 
     auto results = std::move(res).value();
     assert(results.size() == op->getNumResults());
-    for (auto it : llvm::enumerate(results)) {
-      auto i = it.index();
-      auto r = it.value();
+    for (auto [i, r] : llvm::enumerate(results)) {
       auto dstType = op->getResultTypes()[i];
       if (dstType != r.getType())
         results[i] = rewriter.create<plier::CastOp>(loc, dstType, r);
@@ -873,9 +870,7 @@ protected:
 
     llvm::SmallVector<mlir::Value> castedArgs(args.size());
     auto funcTypes = externalFunc.getFunctionType().getInputs();
-    for (auto it : llvm::enumerate(args)) {
-      auto arg = it.value();
-      auto i = it.index();
+    for (auto [i, arg] : llvm::enumerate(args)) {
       auto dstType = funcTypes[i];
       if (arg.getType() != dstType)
         castedArgs[i] = rewriter.createOrFold<plier::CastOp>(loc, dstType, arg);
@@ -889,9 +884,8 @@ protected:
     auto results = newFuncCall.getResults();
     llvm::SmallVector<mlir::Value> castedResults(results.size());
 
-    for (auto it : llvm::enumerate(results)) {
-      auto i = static_cast<unsigned>(it.index());
-      auto res = it.value();
+    for (auto [ind, res] : llvm::enumerate(results)) {
+      auto i = static_cast<unsigned>(ind);
       auto oldResType = op->getResult(i).getType();
       if (res.getType() != oldResType)
         castedResults[i] =

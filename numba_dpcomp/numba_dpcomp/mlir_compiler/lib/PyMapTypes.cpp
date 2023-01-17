@@ -95,11 +95,12 @@ static py::object mapType(const py::handle &typesMod, mlir::Type type) {
 
   if (auto t = type.dyn_cast<mlir::TupleType>()) {
     py::tuple ret(t.size());
-    for (auto it : llvm::enumerate(t.getTypes())) {
-      auto inner = mapType(typesMod, it.value());
+    for (auto [i, val] : llvm::enumerate(t.getTypes())) {
+      auto inner = mapType(typesMod, val);
       if (!inner)
         return {};
-      ret[it.index()] = std::move(inner);
+
+      ret[i] = std::move(inner);
     }
     return std::move(ret);
   }
@@ -107,22 +108,22 @@ static py::object mapType(const py::handle &typesMod, mlir::Type type) {
 }
 } // namespace
 
-py::object mapTypeToNumba(py::handle types_mod, mlir::Type type) {
-  auto elem = mapType(types_mod, type);
+py::object mapTypeToNumba(py::handle typesMod, mlir::Type type) {
+  auto elem = mapType(typesMod, type);
   if (!elem)
     return py::none();
 
   return elem;
 }
 
-py::object mapTypesToNumba(py::handle types_mod, mlir::TypeRange types) {
+py::object mapTypesToNumba(py::handle typesMod, mlir::TypeRange types) {
   py::list ret(types.size());
-  for (auto it : llvm::enumerate(types)) {
-    auto type = mapTypeToNumba(types_mod, it.value());
+  for (auto [i, val] : llvm::enumerate(types)) {
+    auto type = mapTypeToNumba(typesMod, val);
     if (type.is_none())
       return py::none();
 
-    ret[it.index()] = std::move(type);
+    ret[i] = std::move(type);
   }
   return std::move(ret);
 }

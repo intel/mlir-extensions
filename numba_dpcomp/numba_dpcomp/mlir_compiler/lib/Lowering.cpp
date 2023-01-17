@@ -91,8 +91,8 @@ getBlocks(py::handle func) {
   llvm::SmallVector<std::pair<int, py::object>> ret;
   auto blocks = func.cast<py::dict>();
   ret.reserve(blocks.size());
-  for (auto it : blocks)
-    ret.emplace_back(it.first.cast<int>(), it.second.cast<py::object>());
+  for (auto [id, block] : blocks)
+    ret.emplace_back(id.cast<int>(), block.cast<py::object>());
 
   auto pred = [](auto lhs, auto rhs) { return lhs.first < rhs.first; };
 
@@ -379,9 +379,8 @@ private:
       auto len = py::len(obj);
       llvm::SmallVector<mlir::Value> args(len);
       llvm::SmallVector<mlir::Type> types(len);
-      for (auto it : llvm::enumerate(obj)) {
-        auto i = it.index();
-        auto arg = lowerStaticIndex(loc, it.value());
+      for (auto [i, val] : llvm::enumerate(obj)) {
+        auto arg = lowerStaticIndex(loc, val);
         args[i] = arg;
         types[i] = arg.getType();
       }
@@ -403,9 +402,9 @@ private:
   mlir::Value lowerBuildTuple(py::handle inst) {
     auto items = inst.attr("items").cast<py::list>();
     mlir::SmallVector<mlir::Value> args;
-    for (auto item : items) {
+    for (auto item : items)
       args.push_back(loadvar(item));
-    }
+
     return builder.create<plier::BuildTupleOp>(getCurrentLoc(), args);
   }
 
@@ -686,9 +685,9 @@ imex::CompilerContext::Settings getSettings(py::handle settings,
     auto callback = settings["print_callback"].cast<py::function>();
     auto getList = [](py::list src) {
       llvm::SmallVector<std::string, 1> res(src.size());
-      for (auto it : llvm::enumerate(src)) {
-        res[it.index()] = py::str(it.value()).cast<std::string>();
-      }
+      for (auto [i, val] : llvm::enumerate(src))
+        res[i] = py::str(val).cast<std::string>();
+
       return res;
     };
     os.setCallback([callback](llvm::StringRef text) {
@@ -798,9 +797,7 @@ private:
     opts.symbolMap =
         [this](llvm::orc::MangleAndInterner m) -> llvm::orc::SymbolMap {
       llvm::orc::SymbolMap ret;
-      for (auto it : symbolList) {
-        auto name = it.first;
-        auto ptr = it.second;
+      for (auto [name, ptr] : symbolList) {
         auto jitPtr = llvm::JITEvaluatedSymbol::fromPointer(ptr);
         ret.insert({m(name), jitPtr});
       }

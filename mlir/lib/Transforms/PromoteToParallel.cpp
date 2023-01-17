@@ -53,10 +53,7 @@ mlir::LogicalResult imex::PromoteToParallel::matchAndRewrite(
   llvm::SmallVector<llvm::SmallVector<mlir::Operation *, 1>> reduce_bodies(
       reduceArgs.size());
   llvm::DenseSet<mlir::Operation *> reduceOps;
-  for (auto it : llvm::enumerate(reduceArgs)) {
-    auto reduceArg = it.value();
-    auto reduceIndex = it.index();
-
+  for (auto [reduceIndex, reduceArg] : llvm::enumerate(reduceArgs)) {
     auto reduceOp = getSingleUser(reduceArg);
     if (!reduceOp)
       return mlir::failure();
@@ -155,12 +152,9 @@ mlir::LogicalResult imex::MergeNestedForIntoParallel::matchAndRewrite(
 
   auto yield = mlir::cast<mlir::scf::YieldOp>(block.getTerminator());
   assert(yield.getNumOperands() == op.getNumResults());
-  for (auto it : llvm::zip(block.getArguments().drop_front(), op.getInitVals(),
-                           op.getResults(), yield.getOperands())) {
-    auto arg = std::get<0>(it);
-    auto initVal = std::get<1>(it);
-    auto result = std::get<2>(it);
-    auto yieldOp = std::get<3>(it);
+  for (auto [arg, initVal, result, yieldOp] :
+       llvm::zip(block.getArguments().drop_front(), op.getInitVals(),
+                 op.getResults(), yield.getOperands())) {
     if (!arg.hasOneUse() || arg != initVal || result != yieldOp)
       return mlir::failure();
   }

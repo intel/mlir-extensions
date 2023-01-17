@@ -523,9 +523,8 @@ void MakeStridedLayoutPass::runOnOperation() {
     if (hasBody)
       builder.setInsertionPointToStart(&body.front());
 
-    for (auto it : llvm::enumerate(argTypes)) {
-      auto i = static_cast<unsigned>(it.index());
-      auto type = it.value();
+    for (auto [ind, type] : llvm::enumerate(argTypes)) {
+      auto i = static_cast<unsigned>(ind);
       auto memrefType = type.dyn_cast<mlir::MemRefType>();
       if (!memrefType || isContigiousArrayArg(i) ||
           !memrefType.getLayout().isIdentity())
@@ -555,8 +554,7 @@ void MakeStridedLayoutPass::runOnOperation() {
       }
     }
 
-    for (auto it : llvm::enumerate(resTypes)) {
-      auto type = it.value();
+    for (auto [i, type] : llvm::enumerate(resTypes)) {
       auto memrefType = type.dyn_cast<mlir::MemRefType>();
       if (!memrefType || !memrefType.getLayout().isIdentity())
         continue;
@@ -571,7 +569,7 @@ void MakeStridedLayoutPass::runOnOperation() {
       auto newmemrefType =
           mlir::MemRefType::get(makeShape(mlir::ShapedType::kDynamic),
                                 memrefType.getElementType(), layout);
-      newResTypes[it.index()] = newmemrefType;
+      newResTypes[i] = newmemrefType;
     }
 
     auto newFuncType =
@@ -1493,9 +1491,7 @@ castRetTypes(mlir::Location loc, mlir::PatternRewriter &rewriter,
              llvm::Optional<PyLinalgResolver::Values> vals) {
   auto results = std::move(vals).value();
   assert(results.size() == resultTypes.size());
-  for (auto it : llvm::enumerate(results)) {
-    auto i = it.index();
-    auto ret = it.value();
+  for (auto [i, ret] : llvm::enumerate(results)) {
     auto dstType = resultTypes[i];
 
     auto srcType = ret.getType();
@@ -1729,13 +1725,11 @@ protected:
     assert(externalFunc.getFunctionType().getNumResults() ==
            op->getNumResults());
 
-    auto loc = op->getLoc();
+    auto loc = op.getLoc();
 
     llvm::SmallVector<mlir::Value> castedArgs(args.size());
     auto funcTypes = externalFunc.getFunctionType().getInputs();
-    for (auto it : llvm::enumerate(args)) {
-      auto arg = it.value();
-      auto i = it.index();
+    for (auto [i, arg] : llvm::enumerate(args)) {
       auto dstType = funcTypes[i];
       castedArgs[i] = doSafeCast(rewriter, loc, arg, dstType);
     }
@@ -1746,9 +1740,8 @@ protected:
     auto results = newFuncCall.getResults();
     llvm::SmallVector<mlir::Value> castedResults(results.size());
 
-    for (auto it : llvm::enumerate(results)) {
-      auto i = static_cast<unsigned>(it.index());
-      auto res = it.value();
+    for (auto [ind, res] : llvm::enumerate(results)) {
+      auto i = static_cast<unsigned>(ind);
       auto oldResType = op->getResult(i).getType();
       castedResults[i] = doSafeCast(rewriter, loc, res, oldResType);
     }
@@ -2878,9 +2871,7 @@ void CloneArgsPass::runOnOperation() {
     bool needReplace = false;
     llvm::SmallVector<mlir::Value> newArgs(ret.getOperands().size());
     builder.setInsertionPoint(ret);
-    for (auto it : llvm::enumerate(ret.getOperands())) {
-      auto i = it.index();
-      auto arg = it.value();
+    for (auto [i, arg] : llvm::enumerate(ret.getOperands())) {
       if (arg.getType().isa<mlir::MemRefType>()) {
         newArgs[i] = builder.create<mlir::bufferization::CloneOp>(loc, arg);
         needReplace = true;

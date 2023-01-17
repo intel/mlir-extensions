@@ -424,9 +424,8 @@ struct InsertGPUAllocs
       }
     }
 
-    for (auto it : gpuBufferParams) {
-      auto param = block.getArgument(it.first);
-      auto access = it.second;
+    for (auto [i, access] : gpuBufferParams) {
+      auto param = block.getArgument(i);
       builder.setInsertionPointToStart(&block);
       createGpuAlloc(param, access);
     }

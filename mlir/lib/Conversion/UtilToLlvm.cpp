@@ -143,11 +143,10 @@ struct LowerBuildTuple
 
     auto loc = op.getLoc();
     mlir::Value init = rewriter.create<mlir::LLVM::UndefOp>(loc, type);
-    for (auto it : llvm::enumerate(adaptor.getArgs())) {
-      auto arg = it.value();
+    for (auto [i, arg] : llvm::enumerate(adaptor.getArgs())) {
       auto newType = arg.getType();
       assert(newType);
-      auto index = static_cast<int64_t>(it.index());
+      auto index = static_cast<int64_t>(i);
       init = rewriter.create<mlir::LLVM::InsertValueOp>(loc, init, arg, index);
     }
 

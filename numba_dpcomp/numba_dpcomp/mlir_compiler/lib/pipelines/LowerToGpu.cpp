@@ -408,11 +408,12 @@ struct FlattenScfIf : public mlir::OpRewritePattern<mlir::scf::IfOp> {
     llvm::SmallVector<mlir::Value> results;
     results.reserve(op->getNumResults());
 
-    auto loc = op->getLoc();
+    auto loc = op.getLoc();
     auto cond = op.getCondition();
-    for (auto it : llvm::zip(trueYield.getResults(), falseYield.getResults())) {
-      auto trueVal = mapper.lookupOrDefault(std::get<0>(it));
-      auto falseVal = mapper.lookupOrDefault(std::get<1>(it));
+    for (auto [origTrueVal, origFalseVal] :
+         llvm::zip(trueYield.getResults(), falseYield.getResults())) {
+      auto trueVal = mapper.lookupOrDefault(origTrueVal);
+      auto falseVal = mapper.lookupOrDefault(origFalseVal);
       auto res =
           rewriter.create<mlir::arith::SelectOp>(loc, cond, trueVal, falseVal);
       results.emplace_back(res);
@@ -910,9 +911,7 @@ protected:
 
     auto results = std::move(res).value();
     assert(results.size() == op->getNumResults());
-    for (auto it : llvm::enumerate(results)) {
-      auto i = it.index();
-      auto r = it.value();
+    for (auto [i, r] : llvm::enumerate(results)) {
       auto dstType = op->getResultTypes()[i];
       if (dstType != r.getType())
         results[i] = rewriter.create<plier::CastOp>(loc, dstType, r);
@@ -1615,13 +1614,13 @@ struct SinkGpuDims : public mlir::OpRewritePattern<mlir::gpu::LaunchOp> {
                                    op.getGridSizeZ(),  op.getBlockSizeX(),
                                    op.getBlockSizeY(), op.getBlockSizeZ()};
     llvm::SmallVector<std::pair<mlir::OpOperand *, unsigned>> uses;
-    for (auto it : llvm::enumerate(dimArgs)) {
-      auto i = static_cast<unsigned>(it.index());
+    for (auto [ind, val] : llvm::enumerate(dimArgs)) {
+      auto i = static_cast<unsigned>(ind);
       auto addUse = [&](mlir::OpOperand &use) {
         if (op->isProperAncestor(use.getOwner()))
           uses.emplace_back(&use, i);
       };
-      auto val = it.value();
+
       for (auto &use : val.getUses())
         addUse(use);
 

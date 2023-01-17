@@ -95,12 +95,10 @@ private:
     operation = op;
     argCount = static_cast<unsigned>(a.size());
     type = t;
-    for (auto it : llvm::enumerate(a)) {
-      auto i = it.index();
+    for (auto [i, arg] : llvm::enumerate(a)) {
       if (i >= 1)
         new (&args[i]) Arg();
 
-      auto arg = it.value();
       args[i].index = static_cast<unsigned>(i);
       if (nullptr != arg) {
         args[i].arg = arg;
@@ -461,11 +459,10 @@ imex::MemorySSA::Node *memSSAProcessRegion(mlir::Region &region,
           if (nullptr == reg)
             return {};
 
-          for (auto it : llvm::enumerate(op.getRegions())) {
-            auto &r = it.value();
+          for (auto [i, r] : llvm::enumerate(op.getRegions()))
             if (&r == reg)
-              return static_cast<unsigned>(it.index());
-          }
+              return static_cast<unsigned>(i);
+
           llvm_unreachable("Invalid region");
         };
 
@@ -541,13 +538,12 @@ imex::MemorySSA::Node *memSSAProcessRegion(mlir::Region &region,
                 return nullptr;
 
               _regResults[i] = res;
-              for (auto it : llvm::enumerate(pred)) {
-                auto ind = it.value();
+              for (auto [i, ind] : llvm::enumerate(pred)) {
                 auto prevNode = visit(ind);
                 if (prevNode == nullptr)
                   return nullptr;
 
-                phi->setArgument(static_cast<unsigned>(it.index()), prevNode);
+                phi->setArgument(static_cast<unsigned>(i), prevNode);
               }
               return res;
             }
@@ -566,12 +562,12 @@ imex::MemorySSA::Node *memSSAProcessRegion(mlir::Region &region,
         } else {
           llvm::SmallVector<imex::MemorySSA::Node *> prevNodes(
               parentPredecessors.size());
-          for (auto it : llvm::enumerate(parentPredecessors)) {
-            auto prev = visitor.visit(it.value());
+          for (auto [i, val] : llvm::enumerate(parentPredecessors)) {
+            auto prev = visitor.visit(val);
             if (prev == nullptr)
               return nullptr;
 
-            prevNodes[it.index()] = prev;
+            prevNodes[i] = prev;
           }
           auto phi = memSSA.createPhi(&op, prevNodes);
           phi->setDominator(currentNode); // TODO: not very robust
