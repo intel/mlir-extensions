@@ -2939,10 +2939,9 @@ void PostLinalgOptInnerPass::runOnOperation() {
   mlir::RewritePatternSet patterns(&context);
 
   imex::populateCommonOptsPatterns(patterns);
+  imex::populatePromoteToParallelPatterns(patterns);
 
-  patterns.insert<OptimizeGlobalsConstsLoad, OptimizeSingleElemCopy,
-                  imex::PromoteToParallel, imex::MergeNestedForIntoParallel>(
-      &context);
+  patterns.insert<OptimizeGlobalsConstsLoad, OptimizeSingleElemCopy>(&context);
 
   auto additionalOpt = [](mlir::func::FuncOp op) {
     (void)imex::prepareForFusion(op.getRegion());
