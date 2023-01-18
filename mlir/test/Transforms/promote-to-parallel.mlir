@@ -294,3 +294,55 @@ func.func @test(%arg: f32, %val: f32) -> f32 {
   }
   return %0 : f32
 }
+
+// -----
+
+// CHECK-LABEL: func @test
+//  CHECK-SAME:  (%[[INIT:.*]]: i32, %[[VAL:.*]]: i32)
+//       CHECK:  %[[ZERO:.*]] = arith.constant 0 : i32
+//       CHECK:  %[[RES:.*]] = scf.parallel (%{{.*}}) = (%{{.*}}) to (%{{.*}}) step (%{{.*}}) init (%[[INIT]]) -> i32 {
+//       CHECK:  %[[T:.*]] = arith.subi %[[ZERO]], %[[VAL]] : i32
+//       CHECK:  scf.reduce(%[[T]]) : i32 {
+//       CHECK:  ^bb0(%[[ARG1:.*]]: i32, %[[ARG2:.*]]: i32):
+//       CHECK:  %[[R:.*]] = arith.addi %[[ARG1]], %[[ARG2]] : i32
+//       CHECK:  scf.reduce.return %[[R]] : i32
+//       CHECK:  }
+//       CHECK:  scf.yield
+//       CHECK:  }
+//       CHECK:  return %[[RES]] : i32
+func.func @test(%arg: i32, %val: i32) -> i32 {
+  %c0 = arith.constant 0 : index
+  %c1 = arith.constant 1 : index
+  %c10 = arith.constant 10 : index
+  %0 = scf.for %i0 = %c0 to %c10 step %c1 iter_args(%arg1 = %arg) -> (i32) {
+    %1 = arith.subi %arg1, %val : i32
+    scf.yield %1 : i32
+  }
+  return %0 : i32
+}
+
+// -----
+
+// CHECK-LABEL: func @test
+//  CHECK-SAME:  (%[[INIT:.*]]: f32, %[[VAL:.*]]: f32)
+//       CHECK:  %[[ZERO:.*]] = arith.constant 0.000000e+00 : f32
+//       CHECK:  %[[RES:.*]] = scf.parallel (%{{.*}}) = (%{{.*}}) to (%{{.*}}) step (%{{.*}}) init (%[[INIT]]) -> f32 {
+//       CHECK:  %[[T:.*]] = arith.subf %[[ZERO]], %[[VAL]] : f32
+//       CHECK:  scf.reduce(%[[T]]) : f32 {
+//       CHECK:  ^bb0(%[[ARG1:.*]]: f32, %[[ARG2:.*]]: f32):
+//       CHECK:  %[[R:.*]] = arith.addf %[[ARG1]], %[[ARG2]] : f32
+//       CHECK:  scf.reduce.return %[[R]] : f32
+//       CHECK:  }
+//       CHECK:  scf.yield
+//       CHECK:  }
+//       CHECK:  return %[[RES]] : f32
+func.func @test(%arg: f32, %val: f32) -> f32 {
+  %c0 = arith.constant 0 : index
+  %c1 = arith.constant 1 : index
+  %c10 = arith.constant 10 : index
+  %0 = scf.for %i0 = %c0 to %c10 step %c1 iter_args(%arg1 = %arg) -> (f32) {
+    %1 = arith.subf %arg1, %val : f32
+    scf.yield %1 : f32
+  }
+  return %0 : f32
+}

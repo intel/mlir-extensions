@@ -5,6 +5,7 @@
 #include "imex/Transforms/PromoteToParallel.hpp"
 
 #include "imex/Dialect/imex_util/Dialect.hpp"
+#include "imex/Transforms/ConstUtils.hpp"
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
@@ -74,26 +75,45 @@ static void simpleLower(mlir::OpBuilder &builder, mlir::Location loc,
   builder.create<mlir::scf::ReduceOp>(loc, val, bodyBuilder);
 }
 
+template <typename SubOp, typename AddOp>
+static void subLower(mlir::OpBuilder &builder, mlir::Location loc,
+                     mlir::Value val, mlir::Operation *origOp) {
+  auto type = val.getType();
+  auto zeroAttr = imex::getConstAttr(type, 0.0);
+  auto zero = builder.create<mlir::arith::ConstantOp>(loc, zeroAttr, type);
+  val = builder.create<SubOp>(loc, zero, val);
+  auto bodyBuilder = [&](mlir::OpBuilder &b, mlir::Location l, mlir::Value lhs,
+                         mlir::Value rhs) {
+    mlir::Value res = b.create<AddOp>(l, lhs, rhs);
+    b.create<mlir::scf::ReduceReturnOp>(l, res);
+  };
+  builder.create<mlir::scf::ReduceOp>(loc, val, bodyBuilder);
+}
+
 template <typename Op>
 static constexpr std::pair<CheckFunc, LowerFunc> getSimpleHandler() {
   return {&simpleCheck<Op>, &simpleLower<Op>};
 }
 
+namespace arith = mlir::arith;
 static const constexpr std::pair<CheckFunc, LowerFunc> promoteHandlers[] = {
     // clang-format off
-    getSimpleHandler<mlir::arith::AddIOp>(),
-    getSimpleHandler<mlir::arith::AddFOp>(),
+    getSimpleHandler<arith::AddIOp>(),
+    getSimpleHandler<arith::AddFOp>(),
 
-    getSimpleHandler<mlir::arith::MulIOp>(),
-    getSimpleHandler<mlir::arith::MulFOp>(),
+    getSimpleHandler<arith::MulIOp>(),
+    getSimpleHandler<arith::MulFOp>(),
 
-    getSimpleHandler<mlir::arith::MinSIOp>(),
-    getSimpleHandler<mlir::arith::MinUIOp>(),
-    getSimpleHandler<mlir::arith::MinFOp>(),
+    getSimpleHandler<arith::MinSIOp>(),
+    getSimpleHandler<arith::MinUIOp>(),
+    getSimpleHandler<arith::MinFOp>(),
 
-    getSimpleHandler<mlir::arith::MaxSIOp>(),
-    getSimpleHandler<mlir::arith::MaxUIOp>(),
-    getSimpleHandler<mlir::arith::MaxFOp>(),
+    getSimpleHandler<arith::MaxSIOp>(),
+    getSimpleHandler<arith::MaxUIOp>(),
+    getSimpleHandler<arith::MaxFOp>(),
+
+    {&lhsArgCheck<arith::SubIOp>, &subLower<arith::SubIOp, arith::AddIOp>},
+    {&lhsArgCheck<arith::SubFOp>, &subLower<arith::SubFOp, arith::AddFOp>},
     // clang-format on
 };
 
