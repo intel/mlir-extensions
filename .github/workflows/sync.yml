@@ -31,7 +31,7 @@ jobs:
      - name: Fetch Upstream
        run: git fetch upstream
      - name: Merge Upstream with git merge
-       run: git merge upstream/main
+       run: git merge upstream/main --no-commit
      - name: Push
        run: |
         git push -f origin main
