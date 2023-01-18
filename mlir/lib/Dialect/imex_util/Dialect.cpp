@@ -2054,10 +2054,10 @@ void EnvironmentRegionOp::build(
         bodyBuilder) {
   build(odsBuilder, odsState, results, environment, args);
   mlir::Region *bodyRegion = odsState.regions.back().get();
-  if (bodyBuilder) {
-    bodyRegion->push_back(new mlir::Block);
-    mlir::Block &bodyBlock = bodyRegion->front();
 
+  bodyRegion->push_back(new mlir::Block);
+  mlir::Block &bodyBlock = bodyRegion->front();
+  if (bodyBuilder) {
     mlir::OpBuilder::InsertionGuard guard(odsBuilder);
     odsBuilder.setInsertionPointToStart(&bodyBlock);
     bodyBuilder(odsBuilder, odsState.location);
