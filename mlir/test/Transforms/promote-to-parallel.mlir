@@ -346,3 +346,29 @@ func.func @test(%arg: f32, %val: f32) -> f32 {
   }
   return %0 : f32
 }
+
+// -----
+
+// CHECK-LABEL: func @test
+//  CHECK-SAME:  (%[[INIT:.*]]: f32, %[[VAL:.*]]: f32)
+//       CHECK:  %[[ONE:.*]] = arith.constant 1.000000e+00 : f32
+//       CHECK:  %[[RES:.*]] = scf.parallel (%{{.*}}) = (%{{.*}}) to (%{{.*}}) step (%{{.*}}) init (%[[INIT]]) -> f32 {
+//       CHECK:  %[[T:.*]] = arith.divf %[[ONE]], %[[VAL]] : f32
+//       CHECK:  scf.reduce(%[[T]]) : f32 {
+//       CHECK:  ^bb0(%[[ARG1:.*]]: f32, %[[ARG2:.*]]: f32):
+//       CHECK:  %[[R:.*]] = arith.mulf %[[ARG1]], %[[ARG2]] : f32
+//       CHECK:  scf.reduce.return %[[R]] : f32
+//       CHECK:  }
+//       CHECK:  scf.yield
+//       CHECK:  }
+//       CHECK:  return %[[RES]] : f32
+func.func @test(%arg: f32, %val: f32) -> f32 {
+  %c0 = arith.constant 0 : index
+  %c1 = arith.constant 1 : index
+  %c10 = arith.constant 10 : index
+  %0 = scf.for %i0 = %c0 to %c10 step %c1 iter_args(%arg1 = %arg) -> (f32) {
+    %1 = arith.divf %arg1, %val : f32
+    scf.yield %1 : f32
+  }
+  return %0 : f32
+}

@@ -90,6 +90,21 @@ static void subLower(mlir::OpBuilder &builder, mlir::Location loc,
   builder.create<mlir::scf::ReduceOp>(loc, val, bodyBuilder);
 }
 
+template <typename DivOp, typename MulOp>
+static void divLower(mlir::OpBuilder &builder, mlir::Location loc,
+                     mlir::Value val, mlir::Operation *origOp) {
+  auto type = val.getType();
+  auto oneAttr = imex::getConstAttr(type, 1.0);
+  auto one = builder.create<mlir::arith::ConstantOp>(loc, oneAttr, type);
+  val = builder.create<DivOp>(loc, one, val);
+  auto bodyBuilder = [&](mlir::OpBuilder &b, mlir::Location l, mlir::Value lhs,
+                         mlir::Value rhs) {
+    mlir::Value res = b.create<MulOp>(l, lhs, rhs);
+    b.create<mlir::scf::ReduceReturnOp>(l, res);
+  };
+  builder.create<mlir::scf::ReduceOp>(loc, val, bodyBuilder);
+}
+
 template <typename Op>
 static constexpr std::pair<CheckFunc, LowerFunc> getSimpleHandler() {
   return {&simpleCheck<Op>, &simpleLower<Op>};
@@ -114,6 +129,8 @@ static const constexpr std::pair<CheckFunc, LowerFunc> promoteHandlers[] = {
 
     {&lhsArgCheck<arith::SubIOp>, &subLower<arith::SubIOp, arith::AddIOp>},
     {&lhsArgCheck<arith::SubFOp>, &subLower<arith::SubFOp, arith::AddFOp>},
+
+    {&lhsArgCheck<arith::DivFOp>, &divLower<arith::DivFOp, arith::MulFOp>},
     // clang-format on
 };
 
