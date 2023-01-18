@@ -2939,7 +2939,6 @@ void PostLinalgOptInnerPass::runOnOperation() {
   mlir::RewritePatternSet patterns(&context);
 
   imex::populateCommonOptsPatterns(patterns);
-  imex::populatePromoteToParallelPatterns(patterns);
 
   patterns.insert<OptimizeGlobalsConstsLoad, OptimizeSingleElemCopy>(&context);
 
@@ -3201,6 +3200,8 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
         p.addNestedPass<mlir::func::FuncOp>(mlir::createCSEPass());
         p.addNestedPass<mlir::func::FuncOp>(
             imex::createCanonicalizeReductionsPass());
+        p.addNestedPass<mlir::func::FuncOp>(
+            imex::createPromoteToParallelPass());
         // ToDo: This pass also tries to do some simple fusion, whic should be
         // split in separate pass
         p.addNestedPass<mlir::func::FuncOp>(
