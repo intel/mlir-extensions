@@ -72,3 +72,33 @@ func.func @test(%arg: f32, %val: f32) -> f32 {
   }
   return %0 : f32
 }
+
+// -----
+
+// CHECK-LABEL: func @test
+//  CHECK-SAME:  (%[[INIT1:.*]]: i32, %[[VAL1:.*]]: i32, %[[INIT2:.*]]: f32, %[[VAL2:.*]]: f32)
+//       CHECK:  %[[RES:.*]]:2 = scf.parallel (%{{.*}}) = (%{{.*}}) to (%{{.*}}) step (%{{.*}}) init (%[[INIT1]], %[[INIT2]]) -> (i32, f32) {
+//       CHECK:  scf.reduce(%[[VAL1]]) : i32 {
+//       CHECK:  ^bb0(%[[ARG1:.*]]: i32, %[[ARG2:.*]]: i32):
+//       CHECK:  %[[R1:.*]] = arith.addi %[[ARG1]], %[[ARG2]] : i32
+//       CHECK:  scf.reduce.return %[[R1]] : i32
+//       CHECK:  }
+//       CHECK:  scf.reduce(%[[VAL2]]) : f32 {
+//       CHECK:  ^bb0(%[[ARG1:.*]]: f32, %[[ARG2:.*]]: f32):
+//       CHECK:  %[[R2:.*]] = arith.addf %[[ARG1]], %[[ARG2]] : f32
+//       CHECK:  scf.reduce.return %[[R2]] : f32
+//       CHECK:  }
+//       CHECK:  scf.yield
+//       CHECK:  }
+//       CHECK:  return %[[RES]]#0, %[[RES]]#1 : i32, f32
+func.func @test(%arg1: i32, %val1: i32, %arg2: f32, %val2: f32) -> (i32, f32) {
+  %c0 = arith.constant 0 : index
+  %c1 = arith.constant 1 : index
+  %c10 = arith.constant 10 : index
+  %0:2 = scf.for %i0 = %c0 to %c10 step %c1 iter_args(%arg3 = %arg1, %arg4 = %arg2) -> (i32, f32) {
+    %1 = arith.addi %arg3, %val1 : i32
+    %2 = arith.addf %arg4, %val2 : f32
+    scf.yield %1, %2 : i32, f32
+  }
+  return %0#0, %0#1 : i32, f32
+}
