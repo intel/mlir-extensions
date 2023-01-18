@@ -255,6 +255,7 @@ private:
 
   void lowerBlock(mlir::Block *bb, py::handle irBlock) {
     assert(nullptr != bb);
+    mlir::OpBuilder::InsertionGuard g(builder);
     builder.setInsertionPointToEnd(bb);
     for (auto it : getBody(irBlock))
       lowerInst(it);
