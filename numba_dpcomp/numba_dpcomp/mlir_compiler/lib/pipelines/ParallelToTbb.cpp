@@ -6,6 +6,7 @@
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
+#include <mlir/Dialect/Linalg/Utils/Utils.h>
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/IR/BlockAndValueMapping.h>
@@ -31,22 +32,12 @@ static mlir::MemRefType getReduceType(mlir::Type type, int64_t count) {
   return {};
 }
 
-static mlir::Attribute getReduceInitVal(mlir::Type type,
-                                        mlir::Block &reduceBlock) {
+static llvm::Optional<mlir::Attribute>
+getReduceInitVal(mlir::Type type, mlir::Block &reduceBlock) {
   if (!llvm::hasSingleElement(reduceBlock.without_terminator()))
-    return {};
+    return std::nullopt;
 
-  auto &reduceOp = reduceBlock.front();
-  double reduceInit;
-  if (mlir::isa<mlir::arith::AddFOp, mlir::arith::AddIOp, mlir::arith::SubFOp,
-                mlir::arith::SubIOp>(reduceOp)) {
-    reduceInit = 0.0;
-  } else if (mlir::isa<mlir::arith::MulFOp, mlir::arith::MulIOp>(reduceOp)) {
-    reduceInit = 1.0;
-  } else {
-    return {};
-  }
-  return imex::getConstAttr(type, reduceInit);
+  return mlir::linalg::getNeutralElement(&(*reduceBlock.begin()));
 }
 
 struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
@@ -96,7 +87,7 @@ struct ParallelToTbb : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
         if (!reduceInitVal)
           return mlir::failure();
 
-        initVals.emplace_back(reduceInitVal);
+        initVals.emplace_back(*reduceInitVal);
       }
     }
 

@@ -139,6 +139,58 @@ struct UpliftCabsCalls : public mlir::OpRewritePattern<mlir::func::CallOp> {
   }
 };
 
+struct UpliftMinMax : public mlir::OpRewritePattern<mlir::arith::SelectOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::arith::SelectOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto type = op.getType();
+    if (!type.isIntOrIndexOrFloat())
+      return mlir::failure();
+
+    auto lhs = op.getTrueValue();
+    auto rhs = op.getFalseValue();
+    auto cond = op.getCondition();
+    if (mlir::isa<mlir::FloatType>(type)) {
+      // TODO: clarify mlir minf/maxf wrt nans and singed zeros semantics
+
+      auto cmp = cond.getDefiningOp<mlir::arith::CmpFOp>();
+      if (!cmp || cmp.getLhs() != lhs || cmp.getRhs() != rhs)
+        return mlir::failure();
+
+      using Pred = mlir::arith::CmpFPredicate;
+      auto pred = cmp.getPredicate();
+      if (pred == Pred::OLT || pred == Pred::ULT) {
+        rewriter.replaceOpWithNewOp<mlir::arith::MinFOp>(op, lhs, rhs);
+      } else if (pred == Pred::OGT || pred == Pred::UGT) {
+        rewriter.replaceOpWithNewOp<mlir::arith::MaxFOp>(op, lhs, rhs);
+      } else {
+        return mlir::failure();
+      }
+    } else {
+      auto cmp = cond.getDefiningOp<mlir::arith::CmpIOp>();
+      if (!cmp || cmp.getLhs() != lhs || cmp.getRhs() != rhs)
+        return mlir::failure();
+
+      using Pred = mlir::arith::CmpIPredicate;
+      auto pred = cmp.getPredicate();
+      if (pred == Pred::slt) {
+        rewriter.replaceOpWithNewOp<mlir::arith::MinSIOp>(op, lhs, rhs);
+      } else if (pred == Pred::ult) {
+        rewriter.replaceOpWithNewOp<mlir::arith::MinUIOp>(op, lhs, rhs);
+      } else if (pred == Pred::sgt) {
+        rewriter.replaceOpWithNewOp<mlir::arith::MaxSIOp>(op, lhs, rhs);
+      } else if (pred == Pred::ugt) {
+        rewriter.replaceOpWithNewOp<mlir::arith::MaxUIOp>(op, lhs, rhs);
+      } else {
+        return mlir::failure();
+      }
+    }
+    return mlir::success();
+  }
+};
+
 struct UpliftFma : public mlir::OpRewritePattern<mlir::arith::AddFOp> {
   using OpRewritePattern::OpRewritePattern;
 
@@ -206,8 +258,9 @@ struct UpliftFMAPass
 } // namespace
 
 void imex::populateUpliftMathPatterns(mlir::RewritePatternSet &patterns) {
-  patterns.insert<UpliftMathCalls, UpliftFabsCalls, UpliftCabsCalls>(
-      patterns.getContext());
+  patterns
+      .insert<UpliftMathCalls, UpliftFabsCalls, UpliftCabsCalls, UpliftMinMax>(
+          patterns.getContext());
 }
 
 void imex::populateUpliftFMAPatterns(mlir::RewritePatternSet &patterns) {

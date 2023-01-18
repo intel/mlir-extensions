@@ -214,7 +214,7 @@ def _get_max_init_value(builder, dtype):
 @register_func("numpy.amax", numpy.amax)
 def min_impl(builder, arg, axis=None):
     return _array_reduce(
-        builder, arg, axis, lambda a, b: a if a > b else b, _get_max_init_value
+        builder, arg, axis, lambda a, b: max(a, b), _get_max_init_value
     )
 
 
@@ -228,7 +228,7 @@ def _get_min_init_value(builder, dtype):
 @register_func("numpy.amin", numpy.amin)
 def min_impl(builder, arg, axis=None):
     return _array_reduce(
-        builder, arg, axis, lambda a, b: a if a < b else b, _get_min_init_value
+        builder, arg, axis, lambda a, b: min(a, b), _get_min_init_value
     )
 
 
