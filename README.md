@@ -1,5 +1,5 @@
-# Intel MLIR Extensions (IMEX)
-IMEX is collection of MLIR dialects and passes from Intel for improving upstream MLIR.
+# Intel® Extension for MLIR
+Intel® Extension for MLIR (IMEX) is collection of MLIR dialects and passes from Intel for improving upstream MLIR.
 Current extensions covers.
 * Dialects and passes needed to lower and execute Linalg dialect on Intel GPU.
 * Wrapper libraries to inteface with level zero runtime and sycl runtime supporting Intel GPU.
