@@ -65,7 +65,7 @@ jobs:
         if: ${{ github.event_name != 'workflow_dispatch' }}
         uses: intel-innersource/frameworks.actions.thirdparty.workflow-dispatch@v1
         with:
-          workflow: Generate Report
+          workflow: Send Report
           inputs: '{ "email": "aia.core.mlir.compiler@intel.com"}'
           token: ${{ secrets.WORKFLOW_TOKEN }}
 
