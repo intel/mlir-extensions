@@ -153,9 +153,7 @@ struct UpliftMinMax : public mlir::OpRewritePattern<mlir::arith::SelectOp> {
     auto rhs = op.getFalseValue();
     auto cond = op.getCondition();
     if (mlir::isa<mlir::FloatType>(type)) {
-      auto func = op->getParentOfType<mlir::func::FuncOp>();
-      if (!func || !func->hasAttr(imex::util::attributes::getFastmathName()))
-        return mlir::failure();
+      // TODO: clarify mlir minf/maxf wrt nans and singed zeros semantics
 
       auto cmp = cond.getDefiningOp<mlir::arith::CmpFOp>();
       if (!cmp || cmp.getLhs() != lhs || cmp.getRhs() != rhs)
