@@ -17,7 +17,8 @@ static bool hasSideEffects(mlir::Operation *op) {
   assert(op);
   for (auto &region : op->getRegions()) {
     auto visitor = [](mlir::Operation *bodyOp) -> mlir::WalkResult {
-      if (bodyOp->hasTrait<mlir::OpTrait::HasRecursiveMemoryEffects>() ||
+      if (mlir::isa<mlir::scf::ReduceOp>(bodyOp) ||
+          bodyOp->hasTrait<mlir::OpTrait::HasRecursiveMemoryEffects>() ||
           bodyOp->hasTrait<mlir::OpTrait::IsTerminator>())
         return mlir::WalkResult::advance();
 
