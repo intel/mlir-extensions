@@ -325,6 +325,12 @@ private:
         index = b.create<imex::util::BuildTupleOp>(l, resType, indices);
       }
 
+      for (auto [i, redvar] : llvm::enumerate(parforInst.attr("redvars"))) {
+        assert(i < iterVars.size());
+        auto name = redvar.cast<std::string>();
+        varsMap[name] = iterVars[i];
+      }
+
       auto indexVar = parforInst.attr("index_var");
       auto indexType = getObjType(typemap(indexVar));
       index = b.create<plier::CastOp>(l, indexType, index);
