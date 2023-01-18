@@ -327,9 +327,11 @@ private:
       assert(llvm::hasSingleElement(regionBlock));
       regionBlock.getTerminator()->erase();
       builder.setInsertionPointToStart(&regionBlock);
-    }
 
-    lowerBlock(block, parforInst.attr("init_block"));
+      lowerBlock(&regionBlock, parforInst.attr("init_block"));
+    } else {
+      lowerBlock(block, parforInst.attr("init_block"));
+    }
 
     auto bodyBuilder = [&](mlir::OpBuilder &b, mlir::Location l,
                            mlir::ValueRange indices,
