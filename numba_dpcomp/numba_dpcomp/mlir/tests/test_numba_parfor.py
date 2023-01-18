@@ -61,8 +61,6 @@ def _gen_tests():
         "test_kmeans",  # List suport
         "test_ndarray_fill",  # array.fill
         "test_fuse_argmin_argmax_max_min",  # numpy argmin, argmax
-        "test_max",  # max reduction
-        "test_min",  # min reduction
         "test_arange",  # select issue, complex
         "test_pi",  # np.random.ranf
         "test_simple24",  # getitem with array
