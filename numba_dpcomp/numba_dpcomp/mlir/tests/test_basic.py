@@ -233,6 +233,22 @@ def test_math_uplifting2(val, name):
         assert ir.count(f"math.{name}") == 1, ir
 
 
+@pytest.mark.parametrize("a", [-2, 0, 1, -2.5, 0.0, 3.5])
+@pytest.mark.parametrize("b", [-2, 0, 1, -2.5, 0.0, 3.5])
+@pytest.mark.parametrize(
+    "body, op", [("a if a < b else b", "arith.min"), ("a if a > b else b", "arith.max")]
+)
+def test_math_uplifting_minmax(a, b, body, op):
+    py_func = eval(f"lambda a, b: {body}")
+    jit_func = njit(py_func, fastmath=True)
+
+    with print_pass_ir([], ["UpliftMathPass"]):
+
+        assert_equal(py_func(a, b), jit_func(a, b))
+        ir = get_print_buffer()
+        assert ir.count(op) == 1, ir
+
+
 @parametrize_function_variants(
     "py_func",
     [
