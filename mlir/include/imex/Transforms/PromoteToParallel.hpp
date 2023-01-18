@@ -4,30 +4,16 @@
 
 #pragma once
 
-#include <mlir/IR/PatternMatch.h>
+#include <memory>
 
 namespace mlir {
-namespace scf {
-class ForOp;
-class ParallelOp;
-} // namespace scf
+class Pass;
+class RewritePatternSet;
 } // namespace mlir
 
 namespace imex {
-struct PromoteToParallel : public mlir::OpRewritePattern<mlir::scf::ForOp> {
-  using mlir::OpRewritePattern<mlir::scf::ForOp>::OpRewritePattern;
+void populatePromoteToParallelPatterns(mlir::RewritePatternSet &patterns);
 
-  mlir::LogicalResult
-  matchAndRewrite(mlir::scf::ForOp op,
-                  mlir::PatternRewriter &rewriter) const override;
-};
-
-struct MergeNestedForIntoParallel
-    : public mlir::OpRewritePattern<mlir::scf::ParallelOp> {
-  using mlir::OpRewritePattern<mlir::scf::ParallelOp>::OpRewritePattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(mlir::scf::ParallelOp op,
-                  mlir::PatternRewriter &rewriter) const override;
-};
+/// This pass tries to promote `scf.for` ops to `scf.parallel`.
+std::unique_ptr<mlir::Pass> createPromoteToParallelPass();
 } // namespace imex

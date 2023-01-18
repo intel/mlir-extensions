@@ -2940,9 +2940,7 @@ void PostLinalgOptInnerPass::runOnOperation() {
 
   imex::populateCommonOptsPatterns(patterns);
 
-  patterns.insert<OptimizeGlobalsConstsLoad, OptimizeSingleElemCopy,
-                  imex::PromoteToParallel, imex::MergeNestedForIntoParallel>(
-      &context);
+  patterns.insert<OptimizeGlobalsConstsLoad, OptimizeSingleElemCopy>(&context);
 
   auto additionalOpt = [](mlir::func::FuncOp op) {
     (void)imex::prepareForFusion(op.getRegion());
@@ -3202,6 +3200,8 @@ static void populatePlierToLinalgOptPipeline(mlir::OpPassManager &pm) {
         p.addNestedPass<mlir::func::FuncOp>(mlir::createCSEPass());
         p.addNestedPass<mlir::func::FuncOp>(
             imex::createCanonicalizeReductionsPass());
+        p.addNestedPass<mlir::func::FuncOp>(
+            imex::createPromoteToParallelPass());
         // ToDo: This pass also tries to do some simple fusion, whic should be
         // split in separate pass
         p.addNestedPass<mlir::func::FuncOp>(
