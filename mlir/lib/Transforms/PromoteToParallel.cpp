@@ -9,6 +9,8 @@
 #include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 #include <mlir/Interfaces/CallInterfaces.h>
+#include <mlir/Pass/Pass.h>
+#include <mlir/Transforms/GreedyPatternRewriteDriver.h>
 
 static bool hasSideEffects(mlir::Operation *op) {
   return op
@@ -221,10 +223,36 @@ struct MergeNestedForIntoParallel
     return mlir::success();
   }
 };
+
+struct PromoteToParallelPass
+    : public mlir::PassWrapper<PromoteToParallelPass,
+                               mlir::OperationPass<void>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(PromoteToParallelPass)
+
+  virtual void
+  getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::scf::SCFDialect>();
+  }
+
+  void runOnOperation() override {
+    auto context = &getContext();
+
+    mlir::RewritePatternSet patterns(context);
+    imex::populatePromoteToParallelPatterns(patterns);
+
+    if (mlir::failed(mlir::applyPatternsAndFoldGreedily(getOperation(),
+                                                        std::move(patterns))))
+      signalPassFailure();
+  }
+};
 } // namespace
 
 void imex::populatePromoteToParallelPatterns(
     mlir::RewritePatternSet &patterns) {
   patterns.insert<PromoteToParallel, MergeNestedForIntoParallel>(
       patterns.getContext());
+}
+
+std::unique_ptr<mlir::Pass> imex::createPromoteToParallelPass() {
+  return std::make_unique<PromoteToParallelPass>();
 }
