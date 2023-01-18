@@ -158,7 +158,7 @@ struct UpliftMinMax : public mlir::OpRewritePattern<mlir::arith::SelectOp> {
         return mlir::failure();
 
       auto cmp = cond.getDefiningOp<mlir::arith::CmpFOp>();
-      if (cmp.getLhs() != lhs || cmp.getRhs() != rhs)
+      if (!cmp || cmp.getLhs() != lhs || cmp.getRhs() != rhs)
         return mlir::failure();
 
       using Pred = mlir::arith::CmpFPredicate;
@@ -172,7 +172,7 @@ struct UpliftMinMax : public mlir::OpRewritePattern<mlir::arith::SelectOp> {
       }
     } else {
       auto cmp = cond.getDefiningOp<mlir::arith::CmpIOp>();
-      if (cmp.getLhs() != lhs || cmp.getRhs() != rhs)
+      if (!cmp || cmp.getLhs() != lhs || cmp.getRhs() != rhs)
         return mlir::failure();
 
       using Pred = mlir::arith::CmpIPredicate;
