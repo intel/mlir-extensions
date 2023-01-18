@@ -203,7 +203,7 @@ static void *allocDeviceMemory(GPUL0QUEUE *queue, size_t size, size_t alignment,
 }
 
 static void deallocDeviceMemory(GPUL0QUEUE *queue, void *ptr) {
-  zeMemFree(queue->zeContext_, ptr);
+  CHECK_ZE_RESULT(zeMemFree(queue->zeContext_, ptr));
 }
 
 static ze_module_handle_t loadModule(GPUL0QUEUE *queue, const void *data,

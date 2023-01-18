@@ -136,6 +136,10 @@ static void *allocDeviceMemory(GPUSYCLQUEUE *queue, size_t size,
   } else {
     memPtr = sycl::aligned_alloc_device(alignment, size, queue->syclQueue_);
   }
+  if (memPtr == nullptr) {
+    throw std::runtime_error(
+        "aligned_alloc_shared() failed to allocate memory!");
+  }
   return memPtr;
 }
 
@@ -277,22 +281,37 @@ extern "C" SYCL_RUNTIME_EXPORT void gpuStreamDestroy(GPUSYCLQUEUE *queue) {
 
 extern "C" SYCL_RUNTIME_EXPORT void *
 gpuMemAlloc(GPUSYCLQUEUE *queue, size_t size, size_t alignment, bool isShared) {
-  return catchAll(
-      [&]() { return allocDeviceMemory(queue, size, alignment, isShared); });
+  return catchAll([&]() {
+    if (queue) {
+      return allocDeviceMemory(queue, size, alignment, isShared);
+    }
+  });
 }
 
 extern "C" SYCL_RUNTIME_EXPORT void gpuMemFree(GPUSYCLQUEUE *queue, void *ptr) {
-  catchAll([&]() { deallocDeviceMemory(queue, ptr); });
+  catchAll([&]() {
+    if (queue && ptr) {
+      deallocDeviceMemory(queue, ptr);
+    }
+  });
 }
 
 extern "C" SYCL_RUNTIME_EXPORT ze_module_handle_t
 gpuModuleLoad(GPUSYCLQUEUE *queue, const void *data, size_t dataSize) {
-  return catchAll([&]() { return loadModule(queue, data, dataSize); });
+  return catchAll([&]() {
+    if (queue) {
+      return loadModule(queue, data, dataSize);
+    }
+  });
 }
 
 extern "C" SYCL_RUNTIME_EXPORT sycl::kernel *
 gpuKernelGet(GPUSYCLQUEUE *queue, ze_module_handle_t module, const char *name) {
-  return catchAll([&]() { return getKernel(queue, module, name); });
+  return catchAll([&]() {
+    if (queue) {
+      return getKernel(queue, module, name);
+    }
+  });
 }
 
 extern "C" SYCL_RUNTIME_EXPORT void
@@ -300,12 +319,18 @@ gpuLaunchKernel(GPUSYCLQUEUE *queue, sycl::kernel *kernel, size_t gridX,
                 size_t gridY, size_t gridZ, size_t blockX, size_t blockY,
                 size_t blockZ, size_t sharedMemBytes, void *params) {
   return catchAll([&]() {
-    launchKernel(queue, kernel, gridX, gridY, gridZ, blockX, blockY, blockZ,
-                 sharedMemBytes, static_cast<ParamDesc *>(params));
+    if (queue) {
+      launchKernel(queue, kernel, gridX, gridY, gridZ, blockX, blockY, blockZ,
+                   sharedMemBytes, static_cast<ParamDesc *>(params));
+    }
   });
 }
 
 extern "C" SYCL_RUNTIME_EXPORT void gpuWait(GPUSYCLQUEUE *queue) {
 
-  catchAll([&]() { queue->syclQueue_.wait(); });
+  catchAll([&]() {
+    if (queue) {
+      queue->syclQueue_.wait();
+    }
+  });
 }
