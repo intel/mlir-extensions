@@ -44,10 +44,7 @@ def _gen_tests():
     ]
 
     xfail_tests = {
-        "test_prange03sub",  # sub reduction
-        "test_prange03div",  # div reduction
         "test_prange25",  # list support
-        "test_prange18",  # memssa failure
         "test_list_setitem_hoisting",  # list support
         "test_list_comprehension_prange",  # list comprehension support
         "test_prange_raises_invalid_step_size",  # we actually support arbirary step in prange
