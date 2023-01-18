@@ -302,16 +302,34 @@ private:
       steps.emplace_back(getIndexVal(loop.attr("step")));
     }
 
-    lowerBlock(block, parforInst.attr("init_block"));
+    std::string deviceName = "level_zero:gpu:0"; // TODO: get from parfor node
+    bool hasDevice = !deviceName.empty();
 
     llvm::SmallVector<mlir::Value> reductionInits;
+    llvm::SmallVector<mlir::Type> reductionTypes;
     std::unordered_map<std::string, unsigned> reductionIndices;
     for (auto [i, redvar] : llvm::enumerate(parforInst.attr("redvars"))) {
       auto name = redvar.cast<std::string>();
       assert(varsMap.count(name));
       reductionInits.emplace_back(varsMap.find(name)->second);
+      reductionTypes.emplace_back(reductionInits.back().getType());
       reductionIndices[name] = static_cast<unsigned>(i);
     }
+
+    imex::util::EnvironmentRegionOp regionOp;
+    if (hasDevice) {
+      auto devNameAttr = builder.getStringAttr(deviceName);
+      auto attr = gpu_runtime::GPURegionDescAttr::get(&ctx, devNameAttr);
+      auto loc = getCurrentLoc();
+      regionOp = builder.create<imex::util::EnvironmentRegionOp>(
+          loc, attr, /*args*/ std::nullopt, reductionTypes);
+      mlir::Block &regionBlock = regionOp.getRegion().front();
+      assert(llvm::hasSingleElement(regionBlock));
+      regionBlock.getTerminator()->erase();
+      builder.setInsertionPointToStart(&regionBlock);
+    }
+
+    lowerBlock(block, parforInst.attr("init_block"));
 
     auto bodyBuilder = [&](mlir::OpBuilder &b, mlir::Location l,
                            mlir::ValueRange indices,
@@ -337,9 +355,7 @@ private:
       auto indexVarName = indexVar.attr("name").cast<std::string>();
       varsMap[indexVarName] = index;
 
-      mlir::ValueRange reductionInitsTmp(reductionInits);
-      auto regionOp =
-          b.create<mlir::scf::ExecuteRegionOp>(l, reductionInitsTmp.getTypes());
+      auto regionOp = b.create<mlir::scf::ExecuteRegionOp>(l, reductionTypes);
       auto &region = regionOp.getRegion();
 
       auto irBlocks = getBlocks(parforInst.attr("loop_body"));
@@ -380,11 +396,17 @@ private:
       return regionOp.getResults();
     };
 
-    auto results = buildNestedParallelLoop(begins, ends, steps, reductionInits,
-                                           bodyBuilder);
+    mlir::ValueRange results = buildNestedParallelLoop(
+        begins, ends, steps, reductionInits, bodyBuilder);
+    auto loc = getCurrentLoc();
+
+    if (hasDevice) {
+      builder.create<imex::util::EnvironmentRegionYieldOp>(loc, results);
+      results = regionOp.getResults();
+      builder.setInsertionPointToEnd(block);
+    }
 
     mlir::Value result;
-    auto loc = getCurrentLoc();
     if (results.empty()) {
       result = builder.create<imex::util::UndefOp>(loc, builder.getNoneType());
     } else if (results.size() == 1) {
