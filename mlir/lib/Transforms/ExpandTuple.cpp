@@ -75,11 +75,11 @@ static llvm::Optional<mlir::Value> reconstructTuple(mlir::OpBuilder &builder,
   for (auto [i, type] : llvm::enumerate(tupleType.getTypes())) {
     if (auto innerTuple = type.dyn_cast<mlir::TupleType>()) {
       auto val = reconstructTuple(builder, loc, innerTuple, values);
-      ;
       if (!val)
         return std::nullopt;
 
       vals[i] = *val;
+      values = values.drop_front(innerTuple.size());
     } else {
       if (values.empty())
         return std::nullopt;
