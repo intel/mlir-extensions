@@ -455,18 +455,30 @@ static mlir::Value toNTensor(mlir::Location loc, mlir::OpBuilder &builder,
   return val;
 }
 
+static mlir::MemRefType getMemrefType(mlir::ShapedType srcType, bool strided) {
+  if (strided) {
+    auto ctx = srcType.getContext();
+    auto dyn = mlir::ShapedType::kDynamic;
+    llvm::SmallVector<int64_t> strides(static_cast<unsigned>(srcType.getRank()),
+                                       dyn);
+    auto layout = mlir::StridedLayoutAttr::get(ctx, dyn, strides);
+    return mlir::MemRefType::get(srcType.getShape(), srcType.getElementType(),
+                                 layout);
+  } else {
+    return mlir::MemRefType::get(srcType.getShape(), srcType.getElementType());
+  }
+}
+
 static mlir::Value toMemref(mlir::Location loc, mlir::OpBuilder &builder,
-                            mlir::Value val) {
+                            mlir::Value val, float strided = false) {
   auto srcType = val.getType();
   if (auto tensorType = srcType.dyn_cast<mlir::RankedTensorType>()) {
-    auto type = mlir::MemRefType::get(tensorType.getShape(),
-                                      tensorType.getElementType());
+    auto type = getMemrefType(tensorType, strided);
     return builder.create<mlir::bufferization::ToMemrefOp>(loc, type, val);
   }
 
   if (auto ntensorType = srcType.dyn_cast<imex::ntensor::NTensorType>()) {
-    auto type = mlir::MemRefType::get(ntensorType.getShape(),
-                                      ntensorType.getElementType());
+    auto type = getMemrefType(ntensorType, strided);
     return builder.create<imex::ntensor::ToMemrefOp>(loc, type, val);
   }
 
@@ -1512,7 +1524,32 @@ static py::object shapeImpl(py::capsule context, py::capsule ssaVal) {
         builder.create<imex::util::BuildTupleOp>(loc, shapeType, shapeVals);
     return ctx.context.createVar(context, shapeVar.getResult());
   }
-  return py::list();
+  return py::tuple();
+}
+
+static py::object stridesImpl(py::capsule context, py::capsule ssaVal) {
+  auto &ctx = getPyContext(context);
+  auto value = unwrapMlir<mlir::Value>(ssaVal);
+  if (auto mlirType = value.getType().dyn_cast<mlir::ShapedType>()) {
+    if (!mlirType.hasRank())
+      imex::reportError("Unranked strides are not supported");
+
+    auto &builder = ctx.builder;
+    auto loc = ctx.loc;
+
+    auto memref = toMemref(loc, builder, value, /*strided*/ true);
+
+    auto metadata =
+        builder.create<mlir::memref::ExtractStridedMetadataOp>(loc, memref);
+
+    auto rank = static_cast<unsigned>(mlirType.getRank());
+    llvm::SmallVector<mlir::Type> shapeTypes(rank, builder.getIndexType());
+    auto shapeType = mlir::TupleType::get(builder.getContext(), shapeTypes);
+    auto shapeVar = builder.create<imex::util::BuildTupleOp>(
+        loc, shapeType, metadata.getStrides());
+    return ctx.context.createVar(context, shapeVar.getResult());
+  }
+  return py::tuple();
 }
 
 static py::object dtypeImpl(py::capsule context, py::capsule ssaVal) {
@@ -1744,6 +1781,7 @@ static py::object literalImpl(py::capsule context, py::capsule ssaVal) {
 
 static void setupPyVar(pybind11::handle var) {
   py::setattr(var, "_shape", py::cpp_function(&shapeImpl));
+  py::setattr(var, "_strides", py::cpp_function(&stridesImpl));
   py::setattr(var, "_dtype", py::cpp_function(&dtypeImpl));
   py::setattr(var, "_type", py::cpp_function(&typeImpl));
   py::setattr(var, "_len", py::cpp_function(&lenImpl));

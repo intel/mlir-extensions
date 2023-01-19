@@ -667,9 +667,19 @@ def shape_impl(builder, arg):
 
 
 @register_attr("array.itemsize")
-def shape_itemsize(builder, arg):
-    size = dtype_size(builder, arg.dtype)
-    return builder.cast(size, builder.int64)
+def itemsize_impl(builder, arg):
+    itemsize = dtype_size(builder, arg.dtype)
+    return builder.cast(itemsize, builder.int64)
+
+
+@register_attr("array.strides")
+def strides_impl(builder, arg):
+    strides = arg.strides
+    count = len(strides)
+    itemsize = dtype_size(builder, arg.dtype)
+    return tuple(
+        builder.cast(strides[i] * itemsize, builder.int64) for i in range(count)
+    )
 
 
 @register_func("len", len)

@@ -17,6 +17,10 @@ class Var:
         return self._shape(self._context, self._ssa_val)
 
     @property
+    def strides(self):
+        return self._strides(self._context, self._ssa_val)
+
+    @property
     def dtype(self):
         return self._dtype(self._context, self._ssa_val)
 
