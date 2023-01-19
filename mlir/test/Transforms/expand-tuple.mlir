@@ -9,6 +9,27 @@ func.func @test(%arg1: tuple<index, i64>) -> tuple<index, i64> {
 
 // -----
 
+func.func @test(%arg1: tuple<i64>) -> tuple<i64> {
+  return %arg1 : tuple<i64>
+}
+
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG:.*]]: i64)
+//  CHECK-NEXT:   return %[[ARG]] : i64
+
+// -----
+
+func.func @test(%arg1: i64) -> tuple<i64> {
+  %0 = imex_util.build_tuple %arg1 : i64 -> tuple<i64>
+  return %0 : tuple<i64>
+}
+
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG:.*]]: i64)
+//  CHECK-NEXT:   return %[[ARG]] : i64
+
+// -----
+
 func.func @test() -> tuple<index, i64> {
   %0 = imex_util.env_region "test" -> tuple<index, i64> {
     %1 = "test.test"() : () -> tuple<index, i64>

@@ -872,13 +872,12 @@ def test_array_bounds4():
         assert ir.count("cmpi") == 0, ir
 
 
-def test_array_shape():
+@pytest.mark.parametrize("arr", _test_arrays, ids=_test_arrays_ids)
+def test_array_shape(arr):
     def py_func(a):
-        shape = a.shape
-        return shape[0] + shape[1] * 10
+        return a.shape
 
     jit_func = njit(py_func)
-    arr = np.array([[1, 2, 3], [4, 5, 6]])
     assert_equal(py_func(arr), jit_func(arr))
 
 

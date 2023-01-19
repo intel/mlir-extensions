@@ -661,7 +661,8 @@ def outer_impl(builder, x, y):
 @register_attr("array.shape")
 def shape_impl(builder, arg):
     shape = arg.shape
-    return tuple(builder.cast(shape[i], builder.int64) for i in range(len(shape)))
+    count = len(shape)
+    return tuple(builder.cast(shape[i], builder.int64) for i in range(count))
 
 
 @register_func("len", len)

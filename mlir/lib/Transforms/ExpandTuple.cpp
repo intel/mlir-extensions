@@ -67,23 +67,46 @@ public:
   }
 };
 
-static mlir::Value reconstructTuple(mlir::OpBuilder &builder,
-                                    mlir::Location loc,
-                                    mlir::TupleType tupleType,
-                                    mlir::ValueRange &values) {
+static llvm::Optional<mlir::Value> reconstructTuple(mlir::OpBuilder &builder,
+                                                    mlir::Location loc,
+                                                    mlir::TupleType tupleType,
+                                                    mlir::ValueRange values) {
   llvm::SmallVector<mlir::Value, 4> vals(tupleType.size());
   for (auto [i, type] : llvm::enumerate(tupleType.getTypes())) {
     if (auto innerTuple = type.dyn_cast<mlir::TupleType>()) {
-      vals[i] = reconstructTuple(builder, loc, innerTuple, values);
+      auto val = reconstructTuple(builder, loc, innerTuple, values);
+      if (!val)
+        return std::nullopt;
+
+      vals[i] = *val;
+      values = values.drop_front(innerTuple.size());
     } else {
       if (values.empty())
-        return {};
+        return std::nullopt;
 
       vals[i] = values.front();
       values = values.drop_front();
     }
   }
   return builder.create<imex::util::BuildTupleOp>(loc, tupleType, vals);
+}
+
+static llvm::Optional<mlir::Value> tupleToElem(mlir::OpBuilder &builder,
+                                               mlir::Location loc,
+                                               mlir::Type type,
+                                               mlir::ValueRange values) {
+  if (values.size() != 1)
+    return std::nullopt;
+
+  mlir::Value value = values.front();
+  auto tupleType = value.getType().dyn_cast<mlir::TupleType>();
+  if (!tupleType || tupleType.size() != 1 || tupleType.getType(0) != type)
+    return std::nullopt;
+
+  mlir::Value index = builder.create<mlir::arith::ConstantIndexOp>(loc, 0);
+  mlir::Value result =
+      builder.create<imex::util::TupleExtractOp>(loc, type, value, index);
+  return result;
 }
 
 struct ExpandTuplePass
@@ -93,6 +116,7 @@ struct ExpandTuplePass
   virtual void
   getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<imex::util::ImexUtilDialect>();
+    registry.insert<mlir::arith::ArithDialect>();
   }
 
   void runOnOperation() override {
@@ -108,15 +132,18 @@ struct ExpandTuplePass
             -> llvm::Optional<mlir::LogicalResult> {
           if (mlir::failed(typeConverter.convertTypes(type.getTypes(), ret)))
             return std::nullopt;
+
           return mlir::success();
         });
 
     auto materializeTupleCast =
-        [](mlir::OpBuilder &builder, mlir::TupleType type,
-           mlir::ValueRange inputs,
+        [](mlir::OpBuilder &builder, mlir::Type type, mlir::ValueRange inputs,
            mlir::Location loc) -> llvm::Optional<mlir::Value> {
-      if (auto ret = reconstructTuple(builder, loc, type, inputs))
-        return ret;
+      if (auto tupleType = type.dyn_cast<mlir::TupleType>())
+        return reconstructTuple(builder, loc, tupleType, inputs);
+
+      if (auto elem = tupleToElem(builder, loc, type, inputs))
+        return *elem;
 
       return std::nullopt;
     };
