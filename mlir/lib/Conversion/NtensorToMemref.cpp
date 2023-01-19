@@ -285,7 +285,7 @@ struct ToMemrefOpLowering
       return mlir::failure();
 
     if (srcType != retType)
-      return mlir::failure();
+      src = rewriter.create<mlir::memref::CastOp>(op.getLoc(), retType, src);
 
     rewriter.replaceOp(op, src);
     return mlir::success();
