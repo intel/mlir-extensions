@@ -1,9 +1,9 @@
 # Intel® Extension for MLIR
-Intel® Extension for MLIR (IMEX) is collection of MLIR dialects and passes from Intel for improving upstream MLIR.
-Current extensions covers.
-* Dialects and passes needed to lower and execute Linalg dialect on Intel GPU.
+Intel® Extension for MLIR (IMEX) is a collection of MLIR dialects and passes from Intel for improving upstream MLIR.
+Current extension covers.
+* Dialects and passes needed to lower and execute MLIR entry dialect (linalg, CFG, and etc) on Intel GPU.
 * Wrapper libraries to inteface with level zero runtime and sycl runtime supporting Intel GPU.
-* PTensor: A high-level dialect for tensors and (numpy-like) tensor-operations allowing passes to create parallelism for GPU, OpenMP but also distributed memory while following the compute-follows-data concept.
+* Other experimental dialects: PTensor, Dist
 
 ## Requirements for building and development
 ### For build
@@ -24,7 +24,7 @@ conda activate imex-dev
 
 ### Setting up pre-commit
 ```
-pre-commit install -f -c ./scripts/.pre-commit-config.yaml
+pre-commit install -f -c .pre-commit-config.yaml
 ```
 
 ## Building IMEX
@@ -48,8 +48,8 @@ cmake -G Ninja -B build -S llvm \
 cmake --build build --target check-imex
 ```
 **Note**: `-DLLVM_INSTALL_UTILS=ON` is not needed for this build since all tests
-will run using `FileCheck` utility is available in the build tree.
-External `lit` is not needed as well since all tests will run using `llvm-lit`
+will run using the `FileCheck` utility that is available in the build tree.
+An external `lit` is not needed as well, since all tests will run using `llvm-lit`
 in the build tree.
 
 ### Option 2: Build IMEX with a separately built and installed LLVM
