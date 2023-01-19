@@ -455,7 +455,7 @@ static mlir::Value toNTensor(mlir::Location loc, mlir::OpBuilder &builder,
   return val;
 }
 
-static auto getDynShape(int64_t r) {
+template <typename T> static auto getDynShape(T r) {
   return llvm::SmallVector<int64_t>(static_cast<size_t>(r),
                                     mlir::ShapedType::kDynamic);
 };
@@ -732,7 +732,7 @@ static py::object initTensorImpl(py::capsule context, py::iterable shape,
   auto indexType = builder.getIndexType();
   auto count = py::len(shape);
   llvm::SmallVector<mlir::Value> dynamicShape;
-  llvm::SmallVector<int64_t> staticShape(count, mlir::ShapedType::kDynamic);
+  auto staticShape = getDynShape(count);
   for (auto [i, elem] : llvm::enumerate(shape)) {
     auto elemVal = ctx.context.unwrapVal(loc, builder, elem, indexType);
     if (auto constVal = mlir::getConstantIntValue(elemVal)) {
@@ -981,7 +981,7 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
     return ret;
   }();
 
-  llvm::SmallVector<int64_t> shape(dstRank, mlir::ShapedType::kDynamic);
+  auto shape = getDynShape(dstRank);
 
   auto resultType = srcType.clone(shape);
 
@@ -989,7 +989,7 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
   if ((srcRank == 1) && (dstRank == (srcRank + unitDimsCount)) &&
       (unitDimsCount != 0)) {
     llvm::SmallVector<mlir::ReassociationIndices> reassoc(srcRank);
-    llvm::SmallVector<int64_t> expandShape(dstRank, mlir::ShapedType::kDynamic);
+    llvm::SmallVector<int64_t> expandShape = shape;
     int currInd = -1;
     for (auto i : llvm::seq(0u, dstRank)) {
       if (!isUnitDim(newDimsVals[i])) {
@@ -1196,7 +1196,7 @@ static py::object insertImpl(py::capsule context, py::handle src,
 
   auto srcShapedType = srcTensor.getType().cast<mlir::ShapedType>();
   auto rank = static_cast<unsigned>(srcShapedType.getRank());
-  llvm::SmallVector<int64_t> dynShape(rank, mlir::ShapedType::kDynamic);
+  auto dynShape = getDynShape(rank);
   auto newShapedType = srcShapedType.clone(dynShape);
   if (srcShapedType != newShapedType)
     srcTensor =
