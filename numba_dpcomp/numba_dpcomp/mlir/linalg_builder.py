@@ -382,6 +382,7 @@ def is_complex(t, b):
 
 def dtype_str(builder, dtype):
     names = [
+        (builder.bool, "bool"),
         (builder.int8, "int8"),
         (builder.int16, "int16"),
         (builder.int32, "int32"),
@@ -400,4 +401,30 @@ def dtype_str(builder, dtype):
     for t, name in names:
         if t == dtype:
             return name
+
     assert False, f"dtype_str unhandled type: {dtype}"
+
+
+def dtype_size(builder, dtype):
+    sizes = [
+        (builder.bool, 1),
+        (builder.int8, 1),
+        (builder.int16, 2),
+        (builder.int32, 4),
+        (builder.int64, 8),
+        (builder.uint8, 1),
+        (builder.uint16, 2),
+        (builder.uint32, 4),
+        (builder.uint64, 8),
+        (builder.int8_signless, 1),
+        (builder.int16_signless, 2),
+        (builder.int32_signless, 4),
+        (builder.int64_signless, 8),
+        (builder.float32, 4),
+        (builder.float64, 8),
+    ]
+    for t, size in sizes:
+        if t == dtype:
+            return size
+
+    assert False, f"dtype_size unhandled type: {dtype}"
