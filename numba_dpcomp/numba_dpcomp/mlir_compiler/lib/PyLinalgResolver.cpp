@@ -455,13 +455,16 @@ static mlir::Value toNTensor(mlir::Location loc, mlir::OpBuilder &builder,
   return val;
 }
 
+static auto getDynShape(int64_t r) {
+  return llvm::SmallVector<int64_t>(static_cast<size_t>(r),
+                                    mlir::ShapedType::kDynamic);
+};
+
 static mlir::MemRefType getMemrefType(mlir::ShapedType srcType, bool strided) {
   if (strided) {
     auto ctx = srcType.getContext();
-    auto dyn = mlir::ShapedType::kDynamic;
-    llvm::SmallVector<int64_t> strides(static_cast<unsigned>(srcType.getRank()),
-                                       dyn);
-    auto layout = mlir::StridedLayoutAttr::get(ctx, dyn, strides);
+    auto layout = mlir::StridedLayoutAttr::get(ctx, mlir::ShapedType::kDynamic,
+                                               getDynShape(srcType.getRank()));
     return mlir::MemRefType::get(srcType.getShape(), srcType.getElementType(),
                                  layout);
   } else {
@@ -1039,11 +1042,6 @@ static py::object reshapeImpl(py::capsule context, py::handle src,
 
   return ctx.context.createVar(context, reshaped);
 }
-
-static auto getDynShape(int64_t r) {
-  return llvm::SmallVector<int64_t>(static_cast<size_t>(r),
-                                    mlir::ShapedType::kDynamic);
-};
 
 static py::object externalCallImpl(py::capsule context, py::str funcName,
                                    py::handle inputs, py::handle outputs,
