@@ -6,6 +6,7 @@ from ..linalg_builder import (
     asarray,
     broadcast_type_arrays,
     convert_array,
+    dtype_size,
     dtype_str,
     eltwise,
     FuncRegistry,
@@ -663,6 +664,22 @@ def shape_impl(builder, arg):
     shape = arg.shape
     count = len(shape)
     return tuple(builder.cast(shape[i], builder.int64) for i in range(count))
+
+
+@register_attr("array.itemsize")
+def itemsize_impl(builder, arg):
+    itemsize = dtype_size(builder, arg.dtype)
+    return builder.cast(itemsize, builder.int64)
+
+
+@register_attr("array.strides")
+def strides_impl(builder, arg):
+    strides = arg.strides
+    count = len(strides)
+    itemsize = dtype_size(builder, arg.dtype)
+    return tuple(
+        builder.cast(strides[i] * itemsize, builder.int64) for i in range(count)
+    )
 
 
 @register_func("len", len)

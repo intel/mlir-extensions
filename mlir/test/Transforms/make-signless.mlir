@@ -126,3 +126,15 @@ func.func @test(%arg0: tensor<2x3xsi32>, %arg1 : tensor<2x3xsi32>) -> tensor<2x3
 //  CHECK-NEXT:   linalg.yield %[[RES2]] : i32
 //  CHECK-NEXT:   } -> tensor<2x3xi32>
 //  CHECK-NEXT:   return %[[RES1]] : tensor<2x3xi32>
+
+// -----
+
+func.func @test(%arg: memref<?xsi32, strided<[?], offset: ?>>) -> memref<si32> {
+  %base_buffer, %offset, %sizes, %strides = memref.extract_strided_metadata %arg : memref<?xsi32, strided<[?], offset: ?>> -> memref<si32>, index, index, index
+  return %base_buffer : memref<si32>
+}
+
+// CHECK-LABEL: func @test
+//  CHECK-SAME:   (%[[ARG:.*]]: memref<?xi32, strided<[?], offset: ?>>)
+//  CHECK-NEXT:   %[[BASE:.*]], %{{.*}}, %{{.*}}, %{{.*}} = memref.extract_strided_metadata %[[ARG]] : memref<?xi32, strided<[?], offset: ?>> -> memref<i32>, index, index, index
+//  CHECK-NEXT:   return %[[BASE]] : memref<i32>
