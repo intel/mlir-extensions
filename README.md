@@ -1,5 +1,5 @@
 # Intel® Extension for MLIR
-Intel® Extension for MLIR (IMEX) is collection of MLIR dialects and passes from Intel for improving upstream MLIR.
+Intel® Extension for MLIR (IMEX) is a collection of MLIR dialects and passes from Intel for improving upstream MLIR.
 Current extensions covers.
 * Dialects and passes needed to lower and execute Linalg dialect on Intel GPU.
 * Wrapper libraries to inteface with level zero runtime and sycl runtime supporting Intel GPU.
@@ -48,8 +48,8 @@ cmake -G Ninja -B build -S llvm \
 cmake --build build --target check-imex
 ```
 **Note**: `-DLLVM_INSTALL_UTILS=ON` is not needed for this build since all tests
-will run using `FileCheck` utility is available in the build tree.
-External `lit` is not needed as well since all tests will run using `llvm-lit`
+will run using the `FileCheck` utility that is available in the build tree.
+An external `lit` is not needed as well, since all tests will run using `llvm-lit`
 in the build tree.
 
 ### Option 2: Build IMEX with a separately built and installed LLVM
