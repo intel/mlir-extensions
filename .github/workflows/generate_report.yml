@@ -192,7 +192,7 @@ jobs:
         run: |
           cp jenkins_slave/send_email.py .
           # Add email adresses to the end of the next line to send to them as well
-          python3 send_email.py "severin.field@intel.com" ${{ secrets.EMAILAPPPASSWORD }} "mlir_extensions@intel.com" 'nightly_report.html' "severin.field@intel.com" aia.core.mlir.compiler@intel.com "xinyue.fan@intel.com"
+          python3 send_email.py "severin.field@intel.com" ${{ secrets.EMAILAPPPASSWORD }} "mlir_extensions@intel.com" 'nightly_report.html' "severin.field@intel.com" "aia.core.mlir.compiler@intel.com" "xinyue.fan@intel.com"
       - name: Send Report
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
