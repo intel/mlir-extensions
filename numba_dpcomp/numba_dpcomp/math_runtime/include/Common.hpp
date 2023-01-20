@@ -21,3 +21,8 @@ template <size_t NumDims, typename T> struct Memref {
   std::array<size_t, NumDims> dims;
   std::array<size_t, NumDims> strides;
 };
+
+template <size_t NumDims, typename T>
+static T *getMemrefData(const Memref<NumDims, T> *src) {
+  return src->data + src->offset;
+}

@@ -3,6 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 import os
+import shutil
+import tempfile
 import sys
 import subprocess
 from setuptools import find_packages, setup
@@ -25,7 +27,9 @@ else:
 # CMAKE =======================================================================
 
 
-def buildSyclMathRuntime(root_path, build_prefix, install_prefix, use_mkl, use_sycl):
+def buildSyclMathRuntime(
+    root_path, build_prefix, install_prefix, use_mkl, use_sycl, tbb_dir
+):
     IMEX_USE_MKL = use_mkl
     IMEX_USE_SYCL = use_sycl
     MATH_SYCL_RUNTIME_INSTALL_PATH = install_prefix
@@ -43,6 +47,7 @@ def buildSyclMathRuntime(root_path, build_prefix, install_prefix, use_mkl, use_s
     cmake_cmd += [
         "-DCMAKE_BUILD_TYPE=Release",
         "-DMATH_SYCL_RUNTIME_INSTALL_PATH=" + MATH_SYCL_RUNTIME_INSTALL_PATH,
+        "-DTBB_DIR=" + TBB_DIR,
     ]
 
     if IMEX_USE_MKL is not None:
@@ -59,8 +64,8 @@ def buildSyclMathRuntime(root_path, build_prefix, install_prefix, use_mkl, use_s
     env = os.environ.copy()
 
     env["CC"] = "icx"
-    env["CXX"] = "dpcpp"
-    print(cmake_cmd)
+    env["CXX"] = "icpx"
+
     subprocess.check_call(
         cmake_cmd, stderr=subprocess.STDOUT, shell=False, cwd=cmake_build_dir, env=env
     )
@@ -92,7 +97,7 @@ if int(os.environ.get("DPCOMP_SETUP_RUN_CMAKE", 1)):
 
     install_dir = os.path.join(CMAKE_INSTALL_PREFIX, "numba_dpcomp/numba_dpcomp")
     buildSyclMathRuntime(
-        root_dir, cmake_build_dir, install_dir, IMEX_USE_MKL, IMEX_USE_SYCL
+        root_dir, cmake_build_dir, install_dir, IMEX_USE_MKL, IMEX_USE_SYCL, TBB_DIR
     )
 
     cmake_cmd = [
@@ -150,15 +155,39 @@ if int(os.environ.get("DPCOMP_SETUP_RUN_CMAKE", 1)):
     except FileExistsError:
         pass
 
-    subprocess.check_call(
-        cmake_cmd, stderr=subprocess.STDOUT, shell=False, cwd=cmake_build_dir
-    )
-    subprocess.check_call(
-        ["cmake", "--build", ".", "--config", "Release"], cwd=cmake_build_dir
-    )
-    subprocess.check_call(
-        ["cmake", "--install", ".", "--config", "Release"], cwd=cmake_build_dir
-    )
+    # dpcpp conda package installs it's own includes to conda/include folders
+    # breaking every other compiler. So, if dpcpp is installed we need to temporaly move
+    # complex file and then restore it
+    conda_prefix = os.getenv("CONDA_PREFIX", None)
+    orig_path_to_complex = None
+    tmp_path = None
+    tmp_path_to_complex = None
+
+    try:
+        if conda_prefix is not None:
+            orig_path_to_complex = os.path.join(conda_prefix, "include/complex")
+            if os.path.isfile(orig_path_to_complex):
+                tf = tempfile.NamedTemporaryFile(delete=False)
+                tf.close()
+                tmp_path = tf.name
+                shutil.move(orig_path_to_complex, tmp_path)
+                tmp_path_to_complex, tmp_path = tmp_path, None
+
+        subprocess.check_call(
+            cmake_cmd, stderr=subprocess.STDOUT, shell=False, cwd=cmake_build_dir
+        )
+        subprocess.check_call(
+            ["cmake", "--build", ".", "--config", "Release"], cwd=cmake_build_dir
+        )
+        subprocess.check_call(
+            ["cmake", "--install", ".", "--config", "Release"], cwd=cmake_build_dir
+        )
+    finally:
+        if tmp_path_to_complex is not None:
+            shutil.move(tmp_path_to_complex, orig_path_to_complex)
+
+        if tmp_path is not None:
+            os.remove(tmp_path)
 
 # =============================================================================
 

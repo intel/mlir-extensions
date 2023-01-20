@@ -64,15 +64,19 @@ ninja install
 Building and testing Python package
 ```Bash
 cd numba_dpcomp
-conda create -n test-env python=3.9 numba=0.56 numpy=1.22 "setuptools<65.6" scikit-learn pytest-xdist ninja scipy pybind11 pytest lit tbb=2021.6.0 cmake "mkl-devel-dpcpp>=2022.2" -c conda-forge -c intel
+conda create -n test-env python=3.9 numba=0.56 numpy=1.22 "setuptools<65.6" scikit-learn pytest-xdist ninja scipy pybind11 pytest lit tbb=2021.6.0 cmake "mkl-devel-dpcpp>=2022.2" dpcpp_linux-64 -c conda-forge -c intel
 conda activate test-env
 export TBB_PATH=<...>/tbb
 export LLVM_PATH=<...>/llvm-install
 export LEVEL_ZERO_DIR=<...>/level-zero-install # Optional
 export LEVEL_ZERO_VERSION_CHECK_OFF=1 # Optional
+export IMEX_USE_SYCL=ON #Optional
 python setup.py develop
 pytest -n8 --capture=tee-sys -rXF
 ```
+`
+Note: Installing dpcpp conda package may break other C++ compilers. Do not use the same environment to build numba_dpcomp and llvm.
+`
 
 ### Windows
 

@@ -2,8 +2,8 @@
 //
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <memory>
 #include <mutex>
-#include <stdio.h>
 #include <string_view>
 #include <unordered_map>
 
@@ -14,11 +14,6 @@
 #include "CL/sycl.hpp"
 #include "oneapi/mkl.hpp"
 #endif
-
-template <size_t NumDims, typename T>
-static T *getMemrefData(const Memref<NumDims, T> *src) {
-  return src->data + src->offset;
-}
 
 /// Stream interface, must be in sync with gpu runtime.
 /// TODO: move to common place.
@@ -35,9 +30,9 @@ namespace {
 #ifdef IMEX_USE_SYCL_MKL
 
 struct QueueMap {
-  static std::unordered_map<std::string, cl::sycl::queue> map;
-  static std::mutex m;
-  static cl::sycl::queue getQueue(std::string device) {
+  std::unordered_map<std::string, cl::sycl::queue> map;
+  std::mutex m;
+  cl::sycl::queue getQueue(std::string device) {
     std::lock_guard<std::mutex> guard(m);
     auto device_queue_iter = map.find(device);
     if (device_queue_iter == map.end()) {
@@ -60,8 +55,7 @@ struct QueueMap {
   }
 };
 
-std::unordered_map<std::string, sycl::queue> QueueMap::map;
-std::mutex QueueMap::m;
+static std::unique_ptr<QueueMap> qMapPtr;
 
 template <typename T>
 using GemmFunc = sycl::event (*)(cl::sycl::queue &, oneapi::mkl::transpose,
@@ -119,7 +113,7 @@ static void deviceGemm(void *stream, const Memref<2, T> *a,
   auto bData = getMemrefData(b);
   auto cData = getMemrefData(c);
 
-  auto queue = QueueMap::getQueue(std::string(streamIface->getDeviceName()));
+  auto queue = qMapPtr->getQueue(std::string(streamIface->getDeviceName()));
 
   Gemm(queue,  /*queue*/
        transA, /*transa*/
@@ -140,6 +134,19 @@ static void deviceGemm(void *stream, const Memref<2, T> *a,
       .wait();
 }
 #endif
+
+void initMap() {
+#ifdef IMEX_USE_SYCL_MKL
+  qMapPtr.reset(new QueueMap());
+#endif
+}
+
+void finilizeMap() {
+#ifdef IMEX_USE_SYCL_MKL
+  qMapPtr.reset();
+#endif
+}
+
 } // namespace
 
 extern "C" {
@@ -157,11 +164,10 @@ GEMM_VARIANT(double, float64)
 #undef GEMM_VARIANT
 #endif
 
-DPCOMP_MATH_SYCL_RUNTIME_EXPORT void dpcompMathRuntimeInit() {
-  // Nothing
-}
+// Not thread safe
+DPCOMP_MATH_SYCL_RUNTIME_EXPORT void dpcompMathRuntimeInit() { initMap(); }
 
 DPCOMP_MATH_SYCL_RUNTIME_EXPORT void dpcompMathRuntimeFinalize() {
-  // Nothing
+  finilizeMap();
 }
 }

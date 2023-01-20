@@ -16,11 +16,6 @@
 #include "mkl.h"
 #endif
 
-template <size_t NumDims, typename T>
-static T *getMemrefData(const Memref<NumDims, T> *src) {
-  return src->data + src->offset;
-}
-
 /// Stream interface, must be in sync with gpu runtime.
 /// TODO: move to common place.
 class StreamInterface {

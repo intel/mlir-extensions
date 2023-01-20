@@ -218,7 +218,7 @@ jobs:
           export LLVM_PATH=/home/runner/work/llvm-mlir/_mlir_install
           export LEVEL_ZERO_DIR=/home/runner/work/level-zero/level-zero/level_zero_install
           export LEVEL_ZERO_VERSION_CHECK_OFF=1
-          export IMEX_USE_SYCL=1
+          export IMEX_USE_SYCL=ON
           python setup.py develop
 
       - name: Test Python frontend
@@ -243,7 +243,7 @@ jobs:
           export LLVM_PATH=/home/runner/work/llvm-mlir/_mlir_install
           export LEVEL_ZERO_DIR=/home/runner/work/level-zero/level-zero/level_zero_install
           export LEVEL_ZERO_VERSION_CHECK_OFF=1
-          export IMEX_USE_SYCL=1
+          export IMEX_USE_SYCL=ON
           pip wheel --no-deps -v ../numba_dpcomp
           ls -l --block-size=M
 

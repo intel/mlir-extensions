@@ -23,8 +23,20 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_17)
 
+option(IMEX_USE_MKL
+    "Enable mkl support"
+    ON
+)
+
+option(IMEX_USE_SYCL
+    "Enable sycl support"
+    OFF
+)
+
+message(STATUS "IMEX_USE_SYCL ${IMEX_USE_SYCL}")
+message(STATUS "IMEX_USE_MKL ${IMEX_USE_MKL}")
+
 if(IMEX_USE_SYCL AND IMEX_USE_MKL)
-    message(INFO "IMEX_USE_MKL " ${IMEX_USE_MKL})
     find_package(IntelDPCPP REQUIRED)
     if (NOT DEFINED(MKL_THREADING))
         set(MKL_THREADING tbb_thread)
