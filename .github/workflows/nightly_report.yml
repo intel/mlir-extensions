@@ -8,7 +8,8 @@ on:
         required: true
         default: 'severin.field@intel.com'
   schedule:
-    - cron: '0 0 * * *' # every 24 hrs
+#   - cron: '0 0 * * *' # every 24 hrs
+    - cron: '30 19 * * *' # runs every day at 19:30 pm UTC which is 11:30 am PST
 jobs:
   invoke-sync:
     runs-on: gpu
