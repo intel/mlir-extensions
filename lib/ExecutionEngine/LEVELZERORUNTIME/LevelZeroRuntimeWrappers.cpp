@@ -126,7 +126,7 @@ struct GPUL0QUEUE {
     CHECK_ZE_RESULT(zeContextCreate(zeDriver_, &contextDesc, &zeContext_));
 
     ze_command_queue_desc_t desc = {};
-    desc.mode = ZE_COMMAND_QUEUE_MODE_ASYNCHRONOUS;
+    desc.mode = ZE_COMMAND_QUEUE_MODE_SYNCHRONOUS;
     CHECK_ZE_RESULT(zeCommandListCreateImmediate(zeContext_, zeDevice_, &desc,
                                                  &zeCommandList_));
   }
@@ -138,7 +138,7 @@ struct GPUL0QUEUE {
     zeContext_ = context;
 
     ze_command_queue_desc_t desc = {};
-    desc.mode = ZE_COMMAND_QUEUE_MODE_ASYNCHRONOUS;
+    desc.mode = ZE_COMMAND_QUEUE_MODE_SYNCHRONOUS;
     CHECK_ZE_RESULT(zeCommandListCreateImmediate(zeContext_, zeDevice_, &desc,
                                                  &zeCommandList_));
   }
@@ -153,7 +153,7 @@ struct GPUL0QUEUE {
     CHECK_ZE_RESULT(zeContextCreate(zeDriver_, &contextDesc, &zeContext_));
 
     ze_command_queue_desc_t desc = {};
-    desc.mode = ZE_COMMAND_QUEUE_MODE_ASYNCHRONOUS;
+    desc.mode = ZE_COMMAND_QUEUE_MODE_SYNCHRONOUS;
     CHECK_ZE_RESULT(zeCommandListCreateImmediate(zeContext_, zeDevice_, &desc,
                                                  &zeCommandList_));
   }
@@ -165,7 +165,7 @@ struct GPUL0QUEUE {
     zeContext_ = context;
 
     ze_command_queue_desc_t desc = {};
-    desc.mode = ZE_COMMAND_QUEUE_MODE_ASYNCHRONOUS;
+    desc.mode = ZE_COMMAND_QUEUE_MODE_SYNCHRONOUS;
 
     CHECK_ZE_RESULT(zeCommandListCreateImmediate(zeContext_, zeDevice_, &desc,
                                                  &zeCommandList_));

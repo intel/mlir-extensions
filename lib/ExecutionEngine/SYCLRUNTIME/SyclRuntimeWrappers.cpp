@@ -237,7 +237,7 @@ static void launchKernel(GPUSYCLQUEUE *queue, sycl::kernel *kernel,
     }
     fprintf(stdout,
             "the kernel execution time is (ms):"
-            "avg: %.4f, min: %.4f, max: %.4f (over %ld runs)\n",
+            "avg: %.4f, min: %.4f, max: %.4f (over %d runs)\n",
             executionTime / rounds, minTime, maxTime, rounds);
   } else {
     syclQueue.submit([&](sycl::handler &cgh) {
