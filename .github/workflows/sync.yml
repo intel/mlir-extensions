@@ -75,4 +75,7 @@ jobs:
      - name: Merge Upstream with git merge
        run: git merge upstream/numba-dev
      - name: Push
-       run: git push -f origin numba-dev
+       run: |
+        git config --list
+        git push -f origin numba-dev
+        
