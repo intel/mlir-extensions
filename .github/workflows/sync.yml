@@ -13,12 +13,22 @@ jobs:
  ###
    runs-on: gpu
    steps:
+     ### 
+     # Test debug1
+     ###
+     - name: test_code1
+       run: echo "test1"
      - name: Checkout
        uses: actions/checkout@v2
        with:
          token: ${{ secrets.WORKFLOW_TOKEN }}
          ref: main
          fetch-depth: 0
+     ### 
+     # Test debug2
+     ###
+     - name: test_code2
+       run: echo "test2"
      - name: Remove Upstream
        run: |
         if git remote | grep upstream; then
