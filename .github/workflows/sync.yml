@@ -74,8 +74,8 @@ jobs:
        run: git fetch upstream
      - name: Merge Upstream with git merge
        run: git merge upstream/numba-dev
+     - name: Print git user
+       run: res=$(git config --list); echo $res
      - name: Push
-       run: |
-        git config --list
-        git push -f origin numba-dev
+       run: git push -f origin numba-dev
         
