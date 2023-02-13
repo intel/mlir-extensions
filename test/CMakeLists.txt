@@ -44,10 +44,19 @@ configure_lit_site_cfg(
   ${CMAKE_CURRENT_SOURCE_DIR}/lit.cfg.py
   )
 
-add_lit_testsuite(check-imex "Running the IMEX regression tests"
+# limit number of workers for lit test when gpu test is enabled
+if(IMEX_ENABLE_L0_RUNTIME OR IMEX_ENABLE_SYCL_RUNTIME OR IMEX_ENABLE_VULKAN_RUNNER)
+    add_lit_testsuite(check-imex "Running the IMEX regression tests"
+        ${CMAKE_CURRENT_BINARY_DIR}
+        DEPENDS ${IMEX_TEST_DEPENDS}
+        ARGS "--workers=1"
+        )
+else()
+    add_lit_testsuite(check-imex "Running the IMEX regression tests"
         ${CMAKE_CURRENT_BINARY_DIR}
         DEPENDS ${IMEX_TEST_DEPENDS}
         )
+endif()
 set_target_properties(check-imex PROPERTIES FOLDER "Tests")
 
 add_lit_testsuite(check-ptensor "Running the IMEX/ptensor regression tests"

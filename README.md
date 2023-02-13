@@ -1,18 +1,62 @@
-## Setting up development environment
+# Intel® Extension for MLIR
+Intel® Extension for MLIR (IMEX) is a collection of MLIR dialects and passes from Intel for improving upstream MLIR.
+Current extension covers.
+* Dialects and passes needed to lower and execute MLIR entry dialect (linalg, CFG, and etc) on Intel GPU.
+* Wrapper libraries to inteface with level zero runtime and sycl runtime supporting Intel GPU.
+* Other experimental dialects: PTensor, Dist
+
+## Requirements for building and development
+### For build
+* CMake > 3.14.3 (3.18 if using Conda)
+* Ninja
+* doxygen (Optional for building docs)
+### Additionals for development
+* pre-commit
+* clang-format
+* lit (If set up as an out-of-tree build of LLVM)
+
+### Example: Setting up requirements using Conda
 ```sh
-conda create -n imex-dev -c intel -c defaults -c conda-forge pip">=21.2.4" pre-commit cmake clang-format tbb-devel lit doxygen
+conda create -n imex-dev -c intel -c defaults -c conda-forge pip">=21.2.4" pre-commit cmake clang-format lit doxygen
 
 conda activate imex-dev
-pre-commit install -f -c ./scripts/.pre-commit-config.yaml
 ```
-Or make sure you have a working c++ compiler, python, clang-format and cmake>3.16 in your path.
 
-## Building
-### Linux
+### Setting up pre-commit
+```
+pre-commit install -f -c .pre-commit-config.yaml
+```
+
+## Building IMEX
+IMEX supports three different ways of building depending on how LLVM is set up.
+### Option 1: Build IMEX together with LLVM source as an LLVM external project
+IMEX can be treated like a sub-project of LLVM and built as part of LLVM by using an LLVM config option called LLVM_EXTERNAL_PROJECTS.
+```
+git clone https://github.com/intel/mlir-extensions.git
+git clone https://github.com/llvm/llvm-project.git
+cd llvm-project
+git checkout `cat ../mlir-extensions/build_tools/llvm_version.txt`
+cmake -G Ninja -B build -S llvm \
+   -DLLVM_ENABLE_PROJECTS=mlir \
+   -DLLVM_BUILD_EXAMPLES=ON \
+   -DLLVM_TARGETS_TO_BUILD="X86" \
+   -DCMAKE_BUILD_TYPE=Release \
+   -DLLVM_ENABLE_ASSERTIONS=ON \
+   -DLLVM_EXTERNAL_PROJECTS="Imex" \
+   -DLLVM_EXTERNAL_IMEX_SOURCE_DIR=../mlir-extensions
+
+cmake --build build --target check-imex
+```
+**Note**: `-DLLVM_INSTALL_UTILS=ON` is not needed for this build since all tests
+will run using the `FileCheck` utility that is available in the build tree.
+An external `lit` is not needed as well, since all tests will run using `llvm-lit`
+in the build tree.
+
+### Option 2: Build IMEX with a separately built and installed LLVM
 **Note**: Make sure to pass `-DLLVM_INSTALL_UTILS=ON` when building LLVM with
 CMake so that it installs `FileCheck` to the chosen installation prefix.
 
-#### Convenience Building LLVM/MLIR + IMEX
+#### Using bundled build script
 
 The script `build_tools/build_imex.py` can build both LLVM/MLIR and IMEX for you. Use
 `build_imex.py -h` to look at all the options provided by the script. It is
@@ -56,30 +100,10 @@ CC=gcc-9 CXX=g++-9 MLIR_DIR=<llvm-install-directory> cmake .. -DSYCL_DIR=/PATH_T
 make -j 12
 ```
 
-#### Building as an LLVM external project
-You can also build IMEX as an LLVM external project.
-```
-git clone https://github.com/intel/mlir-extensions.git
-git clone https://github.com/llvm/llvm-project.git
-cd llvm-project
-git checkout `cat ../mlir-extensions/build_tools/llvm_version.txt`
-cmake -G Ninja -B build -S llvm \
-   -DLLVM_ENABLE_PROJECTS=mlir \
-   -DLLVM_BUILD_EXAMPLES=ON \
-   -DLLVM_TARGETS_TO_BUILD="X86" \
-   -DCMAKE_BUILD_TYPE=Release \
-   -DLLVM_ENABLE_ASSERTIONS=ON \
-   -DLLVM_EXTERNAL_PROJECTS="Imex" \
-   -DLLVM_EXTERNAL_IMEX_SOURCE_DIR=../mlir-extensions
+### Option 3: Build IMEX with LLVM build tree
+This is similar to Option 2. Instead of building and installing LLVM. Just build LLVM and set "MLIR_DIR" to the sub-directory in the LLVM build tree that has generated file MLIRConfig.cmake. Rest of the step is the same as Option 2.
 
-cmake --build build --target check-imex
-```
-**Note**: `-DLLVM_INSTALL_UTILS=ON` is not needed for this build since all tests
-will run using `FileCheck` utility in LLVM built tree.
-External `lit` is not needed as well since all tests will run using `llvm-lit`
-in the LLVM build tree.
-
-#### Building docs
+### Building docs
 To build user documentation do
 ```sh
 cd build
@@ -170,10 +194,6 @@ cmake --build . --target check-imex
 ```
 Add '-v' to the above command-line to get verbose output.
 
-## License
-This code is made available under the Apache License 2.0 with LLVM Exceptions.
-See the `LICENSE.txt` file for more details.
-
 ## Profiling kernel execute time
 ### sycl event
 ```sh
@@ -188,3 +208,7 @@ llc test.ll -filetype=obj -o test.o
 clang++ test.o {path}/libmlir_runner_utils.so {path}/libmlir_c_runner_utils.so {path}/libsycl-runtime.so -no-pie -o test
 ze_tracer ./test
 ```
+
+## License
+This code is made available under the Apache License 2.0 with LLVM Exceptions.
+See the `LICENSE.txt` file for more details.

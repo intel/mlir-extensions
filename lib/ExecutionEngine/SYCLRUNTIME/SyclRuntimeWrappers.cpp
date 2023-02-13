@@ -136,6 +136,10 @@ static void *allocDeviceMemory(GPUSYCLQUEUE *queue, size_t size,
   } else {
     memPtr = sycl::aligned_alloc_device(alignment, size, queue->syclQueue_);
   }
+  if (memPtr == nullptr) {
+    throw std::runtime_error(
+        "aligned_alloc_shared() failed to allocate memory!");
+  }
   return memPtr;
 }
 
@@ -198,26 +202,52 @@ static void launchKernel(GPUSYCLQUEUE *queue, sycl::kernel *kernel,
 
   auto paramsCount = countUntil(params, ParamDesc{nullptr, 0});
 
-  sycl::event event = syclQueue.submit([&](sycl::handler &cgh) {
-    for (size_t i = 0; i < paramsCount; i++) {
-      auto param = params[i];
-      cgh.set_arg(static_cast<uint32_t>(i),
-                  *(static_cast<void **>(param.data)));
-    }
-    cgh.parallel_for(syclNdRange, *kernel);
-  });
   if (getenv("IMEX_ENABLE_PROFILING")) {
-    // auto submitTime = event.get_profiling_info<
-    //     cl::sycl::info::event_profiling::command_submit>();
-    auto startTime = event.get_profiling_info<
-        cl::sycl::info::event_profiling::command_start>();
-    auto endTime =
-        event
-            .get_profiling_info<cl::sycl::info::event_profiling::command_end>();
-    // auto submissionTime = float(startTime - submitTime) / 1000000.0f;
-    // fprintf(stdout, "the kernel submission time is %f ms\n", submissionTime);
-    auto executionTime = float(endTime - startTime) / 1000000.0f;
-    fprintf(stdout, "the kernel execution time is %f ms\n", executionTime);
+    auto executionTime = 0.0f;
+    auto maxTime = 0.0f;
+    auto minTime = 10000.0f;
+    auto rounds = 1000;
+
+    if (getenv("IMEX_PROFILING_RUNS")) {
+      auto runs = strtol(getenv("IMEX_PROFILING_RUNS"), NULL, 10L);
+      if (runs)
+        rounds = runs;
+    }
+
+    for (int r = 0; r < rounds; r++) {
+      sycl::event event = syclQueue.submit([&](sycl::handler &cgh) {
+        for (size_t i = 0; i < paramsCount; i++) {
+          auto param = params[i];
+          cgh.set_arg(static_cast<uint32_t>(i),
+                      *(static_cast<void **>(param.data)));
+        }
+        cgh.parallel_for(syclNdRange, *kernel);
+      });
+
+      auto startTime = event.get_profiling_info<
+          cl::sycl::info::event_profiling::command_start>();
+      auto endTime = event.get_profiling_info<
+          cl::sycl::info::event_profiling::command_end>();
+      auto gap = float(endTime - startTime) / 1000000.0f;
+      executionTime += gap;
+      if (gap > maxTime)
+        maxTime = gap;
+      if (gap < minTime)
+        minTime = gap;
+    }
+    fprintf(stdout,
+            "the kernel execution time is (ms):"
+            "avg: %.4f, min: %.4f, max: %.4f (over %d runs)\n",
+            executionTime / rounds, minTime, maxTime, rounds);
+  } else {
+    syclQueue.submit([&](sycl::handler &cgh) {
+      for (size_t i = 0; i < paramsCount; i++) {
+        auto param = params[i];
+        cgh.set_arg(static_cast<uint32_t>(i),
+                    *(static_cast<void **>(param.data)));
+      }
+      cgh.parallel_for(syclNdRange, *kernel);
+    });
   }
 }
 
@@ -251,22 +281,37 @@ extern "C" SYCL_RUNTIME_EXPORT void gpuStreamDestroy(GPUSYCLQUEUE *queue) {
 
 extern "C" SYCL_RUNTIME_EXPORT void *
 gpuMemAlloc(GPUSYCLQUEUE *queue, size_t size, size_t alignment, bool isShared) {
-  return catchAll(
-      [&]() { return allocDeviceMemory(queue, size, alignment, isShared); });
+  return catchAll([&]() {
+    if (queue) {
+      return allocDeviceMemory(queue, size, alignment, isShared);
+    }
+  });
 }
 
 extern "C" SYCL_RUNTIME_EXPORT void gpuMemFree(GPUSYCLQUEUE *queue, void *ptr) {
-  catchAll([&]() { deallocDeviceMemory(queue, ptr); });
+  catchAll([&]() {
+    if (queue && ptr) {
+      deallocDeviceMemory(queue, ptr);
+    }
+  });
 }
 
 extern "C" SYCL_RUNTIME_EXPORT ze_module_handle_t
 gpuModuleLoad(GPUSYCLQUEUE *queue, const void *data, size_t dataSize) {
-  return catchAll([&]() { return loadModule(queue, data, dataSize); });
+  return catchAll([&]() {
+    if (queue) {
+      return loadModule(queue, data, dataSize);
+    }
+  });
 }
 
 extern "C" SYCL_RUNTIME_EXPORT sycl::kernel *
 gpuKernelGet(GPUSYCLQUEUE *queue, ze_module_handle_t module, const char *name) {
-  return catchAll([&]() { return getKernel(queue, module, name); });
+  return catchAll([&]() {
+    if (queue) {
+      return getKernel(queue, module, name);
+    }
+  });
 }
 
 extern "C" SYCL_RUNTIME_EXPORT void
@@ -274,12 +319,18 @@ gpuLaunchKernel(GPUSYCLQUEUE *queue, sycl::kernel *kernel, size_t gridX,
                 size_t gridY, size_t gridZ, size_t blockX, size_t blockY,
                 size_t blockZ, size_t sharedMemBytes, void *params) {
   return catchAll([&]() {
-    launchKernel(queue, kernel, gridX, gridY, gridZ, blockX, blockY, blockZ,
-                 sharedMemBytes, static_cast<ParamDesc *>(params));
+    if (queue) {
+      launchKernel(queue, kernel, gridX, gridY, gridZ, blockX, blockY, blockZ,
+                   sharedMemBytes, static_cast<ParamDesc *>(params));
+    }
   });
 }
 
 extern "C" SYCL_RUNTIME_EXPORT void gpuWait(GPUSYCLQUEUE *queue) {
 
-  catchAll([&]() { queue->syclQueue_.wait(); });
+  catchAll([&]() {
+    if (queue) {
+      queue->syclQueue_.wait();
+    }
+  });
 }
