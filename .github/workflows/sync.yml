@@ -30,10 +30,8 @@ jobs:
      - name: test_code2
        run: |
         echo "test2"
-        res=$(git config --list)
-        echo "$res"
      - name: Print git user
-       run: res=$(git config --list); echo $res
+       run: echo "test3"
      - name: Remove Upstream
        run: |
         if git remote | grep upstream; then
