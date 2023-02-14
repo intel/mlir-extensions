@@ -47,6 +47,7 @@ jobs:
        run: git merge upstream/main --no-commit
      - name: Get pwd output
        run: pwd > $GITHUB_OUTPUT
+       shell: bash
        id: run_pwd
      - name: print pwd output
        run: echo ${{join(steps.run_pwd.outputs.*, '\n')}}
