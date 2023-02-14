@@ -48,6 +48,7 @@ jobs:
 
      - name: Push
        run: |
+        pwd > test_loc 
         git push -f origin main
 
  sync-numba-dev:
