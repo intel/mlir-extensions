@@ -45,10 +45,13 @@ jobs:
        run: git fetch upstream
      - name: Merge Upstream with git merge
        run: git merge upstream/main --no-commit
-
+     - name: Get pwd output
+       run: pwd > $GITHUB_OUTPUT
+       id: run_pwd
+     - name: print pwd output
+       run: echo ${{join(steps.run_pwd.outputs.*, '\n')}}
      - name: Push
        run: |
-        pwd > test_loc 
         git push -f origin main
 
  sync-numba-dev:
