@@ -14,6 +14,9 @@ jobs:
   invoke-sync:
     runs-on: gpu
     steps:
+      - name: Retrieve version
+        run: |
+          echo "TAG_NAME=$(pwd)" >> $GITHUB_OUTPUT
       - name: Invoke Sync
         uses: intel-innersource/frameworks.actions.thirdparty.workflow-dispatch@v1
         with:
