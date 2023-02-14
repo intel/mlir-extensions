@@ -6,7 +6,7 @@ on:
       email:
         description: 'Email address to send report to'
         required: true
-        default: 'severin.field@intel.com'
+        default: 'ravi1.gupta@intel.com'
   schedule:
 #   - cron: '0 0 * * *' # every 24 hrs
     - cron: '30 19 * * *' # runs every day at 19:30 pm UTC which is 11:30 am PST
