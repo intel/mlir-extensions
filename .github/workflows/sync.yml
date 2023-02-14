@@ -47,8 +47,7 @@ jobs:
        run: git merge upstream/main --no-commit
      - name: Get pwd output
        run: |
-        res=pwd 
-        echo "$res" >> $GITHUB_OUTPUT
+        `pwd` >> $GITHUB_OUTPUT
        shell: bash
        id: run_pwd
      - name: print pwd output
