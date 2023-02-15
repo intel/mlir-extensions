@@ -89,9 +89,9 @@ jobs:
        run: git fetch upstream
      - name: Merge Upstream with git merge
        run: git merge upstream/numba-dev
-     - name: Update PAT
-       run: sed -i '7s/github/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@github/' .git/config
-       shell: bash
+     #- name: Update PAT
+     #  run: sed -i '7s/github/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@github/' .git/config
+     #  shell: bash
      - name: Push
        run: git push -f origin numba-dev
         
