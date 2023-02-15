@@ -32,14 +32,14 @@ jobs:
         uses: intel-innersource/frameworks.actions.thirdparty.workflow-dispatch@v1
         with:
           workflow: CPU Build
-          token: ${{ secrets.WORKFLOW_TOKEN }}
+          token: ${{ secrets.IMEX_CI_RAVI_GH}}
 
       - name: Invoke numba-dev Build_CPU Workflow
         uses: intel-innersource/frameworks.actions.thirdparty.workflow-dispatch@v1
         with:
           workflow: CPU Build
           ref: numba-dev
-          token: ${{ secrets.WORKFLOW_TOKEN }}
+          token: ${{ secrets.IMEX_CI_RAVI_GH }}
           
   invoke-gpu-tests:
     runs-on: gpu
@@ -50,20 +50,20 @@ jobs:
         with:
           workflow: GPU Build
           ref: numba-dev
-          token: ${{ secrets.WORKFLOW_TOKEN }}
+          token: ${{ secrets.IMEX_CI_RAVI_GH }}
 
       - name: Invoke main Build_GPU Workflow
         uses: intel-innersource/frameworks.actions.thirdparty.workflow-dispatch@v1
         with:
           workflow: GPU Build
-          token: ${{ secrets.WORKFLOW_TOKEN }}
+          token: ${{ secrets.IMEX_CI_RAVI_GH }}
 
   generate_report:
     runs-on: gpu
     needs: invoke-gpu-tests
     steps:
       - name: Echo Report info
-        run: echo "sending to severin.field@intel.com by default trigger."
+        run: echo "sending to ravi1.gupta@intel.com by default trigger."
 
       - name: Send Report
       # run this only if workflow dispatch is not called
@@ -72,7 +72,7 @@ jobs:
         with:
           workflow: Send Report
           inputs: '{ "email": "aia.core.mlir.compiler@intel.com"}'
-          token: ${{ secrets.WORKFLOW_TOKEN }}
+          token: ${{ secrets.IMEX_CI_RAVI_GH }}
 
       - name: Send Report
         # send report using this if workflow dispatch is called
@@ -81,4 +81,4 @@ jobs:
         with:
           workflow: Send Report
           inputs: '{ "email": "${{ github.event.inputs.email }}"}'
-          token: ${{ secrets.WORKFLOW_TOKEN }}
+          token: ${{ secrets.IMEX_CI_RAVI_GH }}
