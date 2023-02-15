@@ -9,7 +9,8 @@ on:
 jobs:
   build:
     if: github.repository == 'intel-innersource/frameworks.ai.mlir.mlir-extensions'
-    runs-on: gpu
+#     runs-on: gpu
+    runs-on: cpu1
     defaults:
       run:
         shell: bash
