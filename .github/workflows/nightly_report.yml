@@ -21,7 +21,8 @@ jobs:
         uses: intel-innersource/frameworks.actions.thirdparty.workflow-dispatch@v1
         with:
           workflow: Sync to Upstream Public Repo
-          token: ${{ secrets.WORKFLOW_TOKEN }}
+#           token: ${{ secrets.WORKFLOW_TOKEN }}
+          token: ${{ secrets.IMEX_CI_RAVI_GH }}
           
   invoke-cpu-tests:
     runs-on: gpu
