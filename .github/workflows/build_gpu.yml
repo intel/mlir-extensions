@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - main
+      - upstream
   workflow_dispatch:
 
 jobs:
@@ -14,7 +15,7 @@ jobs:
 
     env:
       TBB_VER: 2021.6.0
-      LEVEL_ZERO_VER: v1.6.2
+      LEVEL_ZERO_VER: v1.8.1
       HOME_DIR: /home/gta/actions-runner/_work/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions/gpurefactorbuild
       HOME: /github/home
       TBB_URL_PREFIX: https://github.com/oneapi-src/oneTBB/releases/download/

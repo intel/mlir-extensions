@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - main
+      - upstream
   workflow_dispatch:
 
 jobs:
@@ -22,7 +23,7 @@ jobs:
     
     env:
       TBB_VER: 2021.6.0
-      LEVEL_ZERO_VER: v1.6.2
+      LEVEL_ZERO_VER: v1.8.1
       HOME_DIR: /__w/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions
       GITHUB_HOME: /__w
       HOME: /github/home
@@ -86,7 +87,7 @@ jobs:
         run: |
           export HOME_DIR=`pwd`
           export TBB_VER='2021.6.0'
-          export LEVEL_ZERO_VER='v1.6.2'
+          export LEVEL_ZERO_VER='v1.8.1'
           export TBB_URL_PREFIX='https://github.com/oneapi-src/oneTBB/releases/download/'
           cd $HOME_DIR
           mkdir -p tbb
