@@ -16,9 +16,11 @@
 #include <array>
 #include <atomic>
 #include <cassert>
+#include <cfloat>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <memory>
 #include <stdexcept>
 #include <tuple>
 #include <vector>
@@ -109,6 +111,92 @@ getDriverAndDevice(ze_device_type_t deviceType = ZE_DEVICE_TYPE_GPU) {
   throw std::runtime_error("getDevice failed");
 }
 
+#define _IMEX_PROFILING_TRAITS_SPEC(Desc)                                      \
+  struct Desc {};
+
+namespace imex {
+namespace profiling {
+// defining two types representing kernel start and kernel end
+_IMEX_PROFILING_TRAITS_SPEC(command_start);
+_IMEX_PROFILING_TRAITS_SPEC(command_end);
+} // namespace profiling
+} // namespace imex
+
+// A Timestamp event pool management class. It currently simply represents
+// a event pool with fixed 256 slots. Currently for each run we just need
+// one timing event, but we definity need a sophisticated event system in
+// the future for programs with multiple kernels.
+struct EventPool {
+  ze_event_pool_handle_t zeEventPool;
+
+  EventPool(ze_context_handle_t zeContext_) {
+    ze_event_pool_desc_t tsEventPoolDesc = {
+        ZE_STRUCTURE_TYPE_EVENT_POOL_DESC, nullptr,
+        ZE_EVENT_POOL_FLAG_KERNEL_TIMESTAMP, 256};
+    CHECK_ZE_RESULT(zeEventPoolCreate(zeContext_, &tsEventPoolDesc, 0, nullptr,
+                                      &zeEventPool));
+  }
+
+  ~EventPool() { CHECK_ZE_RESULT(zeEventPoolDestroy(zeEventPool)); }
+};
+
+// A wrapper to ze_event_handle_t providing timestamp queries
+class Event {
+private:
+  uint64_t zeTimestampMaxValue_;
+  uint64_t zeTimerResolution_;
+
+public:
+  ze_event_handle_t zeEvent;
+
+  Event(ze_context_handle_t zeContext_, ze_device_handle_t zeDevice_) {
+    static EventPool pool(zeContext_);
+
+    // timestamp and timer resolution is a device properties.
+    // They are required to compute the final wall time.
+    ze_device_properties_t deviceProperties{};
+    deviceProperties.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
+    CHECK_ZE_RESULT(zeDeviceGetProperties(zeDevice_, &deviceProperties));
+    zeTimestampMaxValue_ =
+        ((1ULL << deviceProperties.kernelTimestampValidBits) - 1ULL);
+    zeTimerResolution_ = deviceProperties.timerResolution;
+
+    ze_event_desc_t eventDesc = {
+        ZE_STRUCTURE_TYPE_EVENT_DESC, nullptr,
+        0, // index
+        0, // no additional memory/cache coherency required on signal
+        0  // no additional memory/cache coherency required on wait
+    };
+    CHECK_ZE_RESULT(zeEventCreate(pool.zeEventPool, &eventDesc, &zeEvent));
+  }
+
+  // query the kernel start or end (specified via Param) timestamp
+  template <typename Param> uint64_t get_profiling_info() {
+    ze_kernel_timestamp_result_t tsResult;
+    CHECK_ZE_RESULT(zeEventQueryKernelTimestamp(zeEvent, &tsResult));
+
+    if constexpr (std::is_same_v<Param, imex::profiling::command_start>) {
+      uint64_t startTime =
+          (tsResult.global.kernelStart & zeTimestampMaxValue_) *
+          zeTimerResolution_;
+      return startTime;
+    }
+
+    if constexpr (std::is_same_v<Param, imex::profiling::command_end>) {
+      uint64_t startTime = tsResult.global.kernelStart & zeTimestampMaxValue_;
+      uint64_t endTime = tsResult.global.kernelEnd & zeTimestampMaxValue_;
+
+      if (endTime < startTime)
+        endTime += zeTimestampMaxValue_;
+
+      endTime *= zeTimerResolution_;
+      return endTime;
+    }
+  }
+
+  ~Event() { CHECK_ZE_RESULT(zeEventDestroy(zeEvent)); }
+};
+
 struct GPUL0QUEUE {
 
   ze_driver_handle_t zeDriver_ = nullptr;
@@ -130,6 +218,7 @@ struct GPUL0QUEUE {
     CHECK_ZE_RESULT(zeCommandListCreateImmediate(zeContext_, zeDevice_, &desc,
                                                  &zeCommandList_));
   }
+
   GPUL0QUEUE(ze_device_type_t *deviceType, ze_context_handle_t context) {
     auto driverAndDevice = getDriverAndDevice(*deviceType);
     zeDriver_ = driverAndDevice.first;
@@ -142,6 +231,7 @@ struct GPUL0QUEUE {
     CHECK_ZE_RESULT(zeCommandListCreateImmediate(zeContext_, zeDevice_, &desc,
                                                  &zeCommandList_));
   }
+
   GPUL0QUEUE(ze_device_type_t *deviceType) {
 
     auto driverAndDevice = getDriverAndDevice(*deviceType);
@@ -157,6 +247,7 @@ struct GPUL0QUEUE {
     CHECK_ZE_RESULT(zeCommandListCreateImmediate(zeContext_, zeDevice_, &desc,
                                                  &zeCommandList_));
   }
+
   GPUL0QUEUE(ze_context_handle_t context) {
 
     auto driverAndDevice = getDriverAndDevice();
@@ -231,26 +322,83 @@ getKernel(GPUL0QUEUE *queue, ze_module_handle_t module, const char *name) {
   return zeKernel;
 }
 
-static void launchKernel(GPUL0QUEUE *queue, ze_kernel_handle_t kernel,
-                         size_t gridX, size_t gridY, size_t gridZ,
-                         size_t blockX, size_t blockY, size_t blockZ,
-                         size_t sharedMemBytes, ParamDesc *params) {
-  assert(kernel);
+static void enqueueKernel(ze_command_list_handle_t zeCommandList,
+                          ze_kernel_handle_t kernel,
+                          const ze_group_count_t *pLaunchArgs,
+                          ParamDesc *params, ze_event_handle_t event = nullptr,
+                          uint32_t numWaitEvents = 0,
+                          ze_event_handle_t *phWaitEvents = nullptr) {
   auto paramsCount = countUntil(params, ParamDesc{nullptr, 0});
-
-  auto castSz = [](size_t val) { return static_cast<uint32_t>(val); };
-
-  CHECK_ZE_RESULT(zeKernelSetGroupSize(kernel, castSz(blockX), castSz(blockY),
-                                       castSz(blockZ)));
   for (size_t i = 0; i < paramsCount; ++i) {
     auto param = params[i];
     CHECK_ZE_RESULT(zeKernelSetArgumentValue(kernel, static_cast<uint32_t>(i),
                                              param.size, param.data));
   }
 
-  ze_group_count_t launchArgs = {castSz(gridX), castSz(gridY), castSz(gridZ)};
   CHECK_ZE_RESULT(zeCommandListAppendLaunchKernel(
-      queue->zeCommandList_, kernel, &launchArgs, nullptr, 0, nullptr));
+      zeCommandList, kernel, pLaunchArgs, event, numWaitEvents, phWaitEvents));
+}
+
+static void launchKernel(GPUL0QUEUE *queue, ze_kernel_handle_t kernel,
+                         size_t gridX, size_t gridY, size_t gridZ,
+                         size_t blockX, size_t blockY, size_t blockZ,
+                         size_t sharedMemBytes, ParamDesc *params) {
+  assert(kernel);
+
+  auto castSz = [](size_t val) { return static_cast<uint32_t>(val); };
+
+  CHECK_ZE_RESULT(zeKernelSetGroupSize(kernel, castSz(blockX), castSz(blockY),
+                                       castSz(blockZ)));
+  ze_group_count_t launchArgs = {castSz(gridX), castSz(gridY), castSz(gridZ)};
+
+  if (getenv("IMEX_ENABLE_PROFILING")) {
+    auto executionTime = 0.0f;
+    auto maxTime = 0.0f;
+    auto minTime = FLT_MAX;
+    auto rounds = 1000;
+    auto warmups = 3;
+
+    if (getenv("IMEX_PROFILING_RUNS")) {
+      auto runs = strtol(getenv("IMEX_PROFILING_RUNS"), NULL, 10L);
+      if (runs)
+        rounds = runs;
+    }
+
+    if (getenv("IMEX_PROFILING_WARMUPS")) {
+      auto runs = strtol(getenv("IMEX_PROFILING_WARMUPS"), NULL, 10L);
+      if (warmups)
+        warmups = runs;
+    }
+
+    // warmup
+    for (int r = 0; r < warmups; r++)
+      enqueueKernel(queue->zeCommandList_, kernel, &launchArgs, params, nullptr,
+                    0, nullptr);
+
+    // profiling using timestamp event privided by level-zero
+    for (int r = 0; r < rounds; r++) {
+      Event event(queue->zeContext_, queue->zeDevice_);
+      enqueueKernel(queue->zeCommandList_, kernel, &launchArgs, params,
+                    event.zeEvent, 0, nullptr);
+
+      auto startTime =
+          event.get_profiling_info<imex::profiling::command_start>();
+      auto endTime = event.get_profiling_info<imex::profiling::command_end>();
+      auto duration = float(endTime - startTime) / 1000000.0f;
+      executionTime += duration;
+      if (duration > maxTime)
+        maxTime = duration;
+      if (duration < minTime)
+        minTime = duration;
+    }
+    fprintf(stdout,
+            "the kernel execution time is (ms, on L0 runtime):"
+            "avg: %.4f, min: %.4f, max: %.4f (over %d runs)\n",
+            executionTime / rounds, minTime, maxTime, rounds);
+  } else {
+    enqueueKernel(queue->zeCommandList_, kernel, &launchArgs, params, nullptr,
+                  0, nullptr);
+  }
 }
 
 // Wrappers
