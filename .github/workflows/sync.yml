@@ -13,25 +13,12 @@ jobs:
  ###
    runs-on: gpu
    steps:
-     ### 
-     # Test debug1
-     ###
-     - name: test_code1
-       run: echo "test1"
      - name: Checkout
        uses: actions/checkout@v2
        with:
          token: ${{ secrets.IMEX_CI_RAVI_GH }}
          ref: main
          fetch-depth: 0
-     ### 
-     # Test debug2
-     ###
-     - name: test_code2
-       run: |
-        echo "test2"
-     - name: Print git user
-       run: echo "test3"
      - name: Remove Upstream
        run: |
         if git remote | grep upstream; then
@@ -45,18 +32,6 @@ jobs:
        run: git fetch upstream
      - name: Merge Upstream with git merge
        run: git merge upstream/main --no-commit
-     #- name: Update PAT
-     #  run: sed -i '7s/github/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@github/' .git/config
-     #  shell: bash
-   ######
-   #  - name: Get pwd output
-   #    run: |
-   #     echo "$(pwd)" >> $GITHUB_OUTPUT
-   #    shell: bash
-   #    id: run_pwd
-   #  - name: print pwd output
-   #    run: echo ${{join(steps.run_pwd.outputs.*, '\n')}}
-   #######
      - name: Push
        run: |
         git push -f origin main
@@ -89,9 +64,6 @@ jobs:
        run: git fetch upstream
      - name: Merge Upstream with git merge
        run: git merge upstream/numba-dev
-     #- name: Update PAT
-     #  run: sed -i '7s/github/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@github/' .git/config
-     #  shell: bash
      - name: Push
        run: git push -f origin numba-dev
         
