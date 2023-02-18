@@ -1,0 +1,45 @@
+// NUMPLACEHOLDERS 3 NUMVARIANTS 3
+// PLACEHOLDER DTYPE f32 f16 bf16
+// PLACEHOLDER PRINTDTYPE @printMemrefF32 @printMemrefF16 @printMemrefBF16
+// PLACEHOLDER CHECKDTYPE @printAllcloseF32 @printAllcloseF16 @printAllcloseBF16
+// RUN: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-cpu.pp \
+// RUN:                                       --runner mlir-cpu-runner -e main \
+// RUN:                                       --shared-libs=%mlir_runner_utils,%irunner_utils \
+// RUN:                                       --entry-point-result=void | FileCheck %s
+// RUN: %gpu_skip || %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-llvm.pp \
+// RUN:                                       --runner mlir-cpu-runner -e main \
+// RUN:                                       --entry-point-result=void \
+// RUN:                                       --shared-libs=%mlir_runner_utils,%irunner_utils,%levelzero_runtime | FileCheck %s
+#map0 = affine_map<(d0, d1) -> (d0, d1)>
+#map1 = affine_map<(d0, d1) -> ()>
+module @relu {
+func.func @main() {
+    %0= arith.constant dense<[[-0.125, -0.25, -0.375, 0.375, 0.5], [0.125, -0.25, 0.375, -0.375, 0.5], [0.125, 0.25, 0.375, -0.375, -0.5], [0.125, 0.25, 0.375, 0.375, 0.5]]>:tensor<4x5x@DTYPE@>
+    %2= arith.constant dense<[[0.0, 0.0, 0.0, 0.375, 0.5], [0.125, 0.0, 0.375, 0.0, 0.5], [0.125, 0.25, 0.375, 0.0, 0.0], [0.125, 0.25, 0.375, 0.375, 0.5]]>:tensor<4x5xf32>
+    %1 = call @test(%0) : (tensor<4x5x@DTYPE@>) -> tensor<4x5x@DTYPE@>
+    %unranked = tensor.cast %1 : tensor<4x5x@DTYPE@>to tensor<*x@DTYPE@>
+    %unranked_ref = tensor.cast %2 : tensor<4x5xf32>to tensor<*xf32>
+    call @CHECKDTYPE@(%unranked, %unranked_ref) : (tensor<*x@DTYPE@>, tensor<*xf32>) -> ()
+    call @PRINTDTYPE@(%unranked) : (tensor<*x@DTYPE@>) -> ()
+    return
+}
+func.func private @PRINTDTYPE@(tensor<*x@DTYPE@>)
+func.func private @CHECKDTYPE@(tensor<*x@DTYPE@>, tensor<*xf32>)
+func.func @test(%arg0: tensor<4x5x@DTYPE@>)->tensor<4x5x@DTYPE@>{
+    %cst = arith.constant 0.000000e+00 : @DTYPE@
+    %0 = tensor.empty() : tensor<4x5xi1>
+    %1 = linalg.generic {indexing_maps = [#map0, #map1, #map0], iterator_types = ["parallel", "parallel"]} ins(%arg0, %cst : tensor<4x5x@DTYPE@>, @DTYPE@) outs(%0 : tensor<4x5xi1>) {
+    ^bb0(%arg1: @DTYPE@, %arg2: @DTYPE@, %arg3: i1):
+      %4 = arith.cmpf olt, %arg1, %arg2 : @DTYPE@
+      linalg.yield %4 : i1
+    } -> tensor<4x5xi1>
+    %2 = tensor.empty() : tensor<4x5x@DTYPE@>
+    %3 = linalg.generic {indexing_maps = [#map0, #map1, #map0, #map0], iterator_types = ["parallel", "parallel"]} ins(%1, %cst, %arg0 : tensor<4x5xi1>, @DTYPE@, tensor<4x5x@DTYPE@>) outs(%2 : tensor<4x5x@DTYPE@>) {
+    ^bb0(%arg1: i1, %arg2: @DTYPE@, %arg3: @DTYPE@, %arg4: @DTYPE@):
+      %4 = arith.select %arg1, %arg2, %arg3 : @DTYPE@
+      linalg.yield %4 : @DTYPE@
+    } -> tensor<4x5x@DTYPE@>
+    return %3 : tensor<4x5x@DTYPE@>
+  }
+}
+// CHECK:   [ALLCLOSE: TRUE]

@@ -52,6 +52,7 @@ config.mlir_c_runner_utils = os.path.normpath(os.path.join(config.mlir_runner_ut
 config.vulkan_runtime_wrappers = os.path.normpath(os.path.join(config.mlir_runner_utils_dir, config.shlib_prefix + "vulkan-runtime-wrappers" + config.llvm_shlib_ext))
 config.sycl_runtime = os.path.normpath(os.path.join(config.imex_lib_dir, config.shlib_prefix + "sycl-runtime" + config.llvm_shlib_ext))
 config.levelzero_runtime = os.path.normpath(os.path.join(config.imex_lib_dir, config.shlib_prefix + "level-zero-runtime" + config.llvm_shlib_ext))
+config.imex_runner_utils = os.path.normpath(os.path.join(config.imex_lib_dir, config.shlib_prefix + "imex_runner_utils" + config.llvm_shlib_ext))
 
 # Support substitution of the tools_dir with user parameters. This is
 # used when we can't determine the tool dir at configuration time.
@@ -69,4 +70,4 @@ import lit.llvm
 lit.llvm.initialize(lit_config, config)
 
 # Let the main config do the real work.
-lit_config.load_config(config, "@IMEX_SOURCE_DIR@/test/lit.cfg.py")
+lit_config.load_config(config, "@IMEX_LIT_CFG_PY@")
