@@ -16,7 +16,7 @@ jobs:
      - name: Checkout
        uses: actions/checkout@v2
        with:
-         token: ${{ secrets.IMEX_CI_RAVI_GH }}
+         token: ${{ secrets.WORKFLOW_TOKEN }}
          ref: main
          fetch-depth: 0
      - name: Remove Upstream
@@ -47,7 +47,7 @@ jobs:
        uses: actions/checkout@v2
        with:
          ref: numba-dev
-         token: ${{ secrets.IMEX_CI_RAVI_GH }}
+         token: ${{ secrets.WORKFLOW_TOKEN }}
          fetch-depth: 0
      - name: Remove Upstream
        run: |
