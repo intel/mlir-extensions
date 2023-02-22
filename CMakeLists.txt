@@ -160,6 +160,7 @@ include(HandleLLVMOptions)
 
 set(IMEX_ENABLE_SYCL_RUNTIME 0 CACHE BOOL "Enable the Sycl Runtime")
 set(IMEX_ENABLE_L0_RUNTIME 0 CACHE BOOL "Enable the Level Zero Runtime")
+set(IMEX_ENABLE_BENCHMARK 0 CACHE BOOL "Enable the IMEX Benchmark (Depending on SYCL Runtime)")
 
 # Normalize IMEX_ENABLE_SYCL_RUNTIME and IMEX_ENABLE_L0_RUNTIME
 # These values are expected to be passed as 0 or 1 to imex-runner.py
@@ -174,6 +175,13 @@ if (IMEX_ENABLE_L0_RUNTIME)
 else ()
     set(IMEX_ENABLE_L0_RUNTIME 0)
 endif()
+
+if (IMEX_ENABLE_BENCHMARK)
+    set(IMEX_ENABLE_BENCHMARK 1)
+else ()
+    set(IMEX_ENABLE_BENCHMARK 0)
+endif()
+
 
 # Check if mlir vulkan runner was configured from mlir
 # target mlir-vulkan-runner is only set if vulkan runner was enabled during
@@ -216,6 +224,10 @@ add_subdirectory(include)
 add_subdirectory(lib)
 add_subdirectory(tools)
 add_subdirectory(test)
+
+if((IMEX_ENABLE_BENCHMARK) AND (IMEX_ENABLE_SYCL_RUNTIME OR IMEX_ENABLE_L0_RUNTIME))
+    add_subdirectory(benchmarks)
+endif()
 
 option(IMEX_INCLUDE_DOCS "Generate build targets for the IMEX docs." ON)
 if (IMEX_INCLUDE_DOCS)

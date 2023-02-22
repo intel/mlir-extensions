@@ -1,0 +1,18 @@
+--reset
+--alg=SOFTMAX
+--dir=FWD_I
+--engine=gpu
+--mode=PO                           # performance mode
+--stag=axb
+--dtag=axb
+--perf-template=%alg%,%desc%,%engine%,%dt%,%0time%
+
+# fp16
+--sdt=f16
+--ddt=f16
+1x2000 16x2000 64x2000 256x2000 1024x2000
+
+# fp32
+--sdt=f32
+--ddt=f32
+1x2000 16x2000 64x2000 256x2000 1024x2000

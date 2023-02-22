@@ -1,0 +1,26 @@
+#map = affine_map<(@affine_map@) -> (@affine_map@)>
+module attributes {torch.debug_module_name = "SiLU"} {
+  func.func @forward(%arg0: tensor<@shape@x@dtype@>) -> tensor<@shape@x@dtype@> {
+    %cst = arith.constant 1.000000e+00 : @dtype@
+    %0 = tensor.empty() : tensor<@shape@x@dtype@>
+    %1 = linalg.generic {indexing_maps = [#map, #map], iterator_types = [@iterator_types@]} ins(%arg0 : tensor<@shape@x@dtype@>) outs(%0 : tensor<@shape@x@dtype@>) {
+    ^bb0(%in: @dtype@, %out: @dtype@):
+      %3 = arith.negf %in : @dtype@
+      %4 = math.exp %3 : @dtype@
+      %5 = arith.addf %4, %cst : @dtype@
+      %6 = arith.divf %cst, %5 : @dtype@
+      linalg.yield %6 : @dtype@
+    } -> tensor<@shape@x@dtype@>
+    %2 = linalg.generic {indexing_maps = [#map, #map, #map], iterator_types = [@iterator_types@]} ins(%1, %arg0 : tensor<@shape@x@dtype@>, tensor<@shape@x@dtype@>) outs(%0 : tensor<@shape@x@dtype@>) {
+    ^bb0(%in: @dtype@, %in_0: @dtype@, %out: @dtype@):
+      %3 = arith.mulf %in, %in_0 : @dtype@
+      linalg.yield %3 : @dtype@
+    } -> tensor<@shape@x@dtype@>
+    return %2 : tensor<@shape@x@dtype@>
+  }
+  func.func @main() {
+    %0= arith.constant dense<1.3>:tensor<@shape@x@dtype@>
+    %1 = call @forward(%0) : (tensor<@shape@x@dtype@>) -> tensor<@shape@x@dtype@>
+    return
+  }
+}

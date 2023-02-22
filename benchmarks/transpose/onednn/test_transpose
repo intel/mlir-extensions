@@ -1,0 +1,29 @@
+--reset
+--engine=gpu
+--mode=PO                           # performance mode
+--perf-template=%driver%,%desc%,%engine%,%sdt%,%0time%
+--allow-enum-tags-only=0
+
+# fp16
+--sdt=f16
+--ddt=f16
+
+--stag=ab
+--dtag=ba
+128x136 1024x1024
+
+--stag=abc
+--dtag=cba
+16x96x96 96x7x96
+
+# fp32
+--sdt=f32
+--ddt=f32
+
+--stag=ab
+--dtag=ba
+128x136 1024x1024
+
+--stag=abc
+--dtag=cba
+16x96x96 96x7x96

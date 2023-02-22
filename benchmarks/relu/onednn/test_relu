@@ -1,0 +1,15 @@
+--reset
+--alg=RELU
+--dir=FWD_I
+--engine=gpu
+--mode=PO                           # performance mode
+--tag=axb
+--perf-template=%alg%,%desc%,%engine%,%dt%,%0time%
+
+# fp16
+--dt=f16
+1x160x160x120 50x640x20x15 512x640x20x15
+
+# fp32
+--dt=f32
+1x160x160x120 50x640x20x15 512x640x20x15
