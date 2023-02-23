@@ -96,6 +96,7 @@ jobs:
       - name: Run Level Zero Runtime Tests
         shell: bash -l {0}
         run: |
+          source /opt/intel/oneapi/setvars.sh
           cd $HOME_DIR/mlir-extensions/build
           cmake --build . --target check-imex > tests.txt
 
