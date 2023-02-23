@@ -1,0 +1,22 @@
+
+file(STRINGS transpose.shapes.in test_shapes)
+file(STRINGS transpose.dtypes.in test_dtypes)
+
+foreach(in_shape ${test_shapes})
+    unset(sizes)
+    string(STRIP ${in_shape} in_shape )
+    string(REPLACE "x" ";" sizes ${in_shape} )
+    list(LENGTH sizes dims)
+    list(REVERSE sizes)
+    list(JOIN sizes "x" out_shape)
+
+    foreach(dtype ${test_dtypes})
+        if (dims EQUAL 2)
+            configure_file(transpose2d.mlir.in ${IMEX_BINARY_DIR}/benchmarks/transpose/transpose_${in_shape}_${dtype}.mlir @ONLY)
+        elseif(dims EQUAL 3)
+            configure_file(transpose3d.mlir.in ${IMEX_BINARY_DIR}/benchmarks/transpose/transpose_${in_shape}_${dtype}.mlir @ONLY)
+        else()
+            message(NOTICE "Unsupported shape for transpose ${in_shape}")
+        endif()
+    endforeach()
+endforeach()

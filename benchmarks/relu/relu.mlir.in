@@ -1,0 +1,19 @@
+#map = affine_map<(@affine_map@) -> (@affine_map@)>
+module attributes {torch.debug_module_name = "ReLU"} {
+  func.func @forward(%arg0: tensor<@shape@x@dtype@>) -> tensor<@shape@x@dtype@> {
+    %cst = arith.constant 0.000000e+00 : @dtype@
+    %0 = tensor.empty() : tensor<@shape@x@dtype@>
+    %1 = linalg.generic {indexing_maps = [#map, #map], iterator_types = [@iterator_types@]} ins(%arg0 : tensor<@shape@x@dtype@>) outs(%0 : tensor<@shape@x@dtype@>) {
+    ^bb0(%in: @dtype@, %out: @dtype@):
+      %2 = arith.cmpf ugt, %in, %cst : @dtype@
+      %3 = arith.select %2, %in, %cst : @dtype@
+      linalg.yield %3 : @dtype@
+    } -> tensor<@shape@x@dtype@>
+    return %1 : tensor<@shape@x@dtype@>
+  }
+  func.func @main() {
+    %0= arith.constant dense<1.3>:tensor<@shape@x@dtype@>
+    %1 = call @forward(%0) : (tensor<@shape@x@dtype@>) -> tensor<@shape@x@dtype@>
+     return
+  }
+}
