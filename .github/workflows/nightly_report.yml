@@ -33,23 +33,23 @@ jobs:
           workflow: CPU Build
           token: ${{secrets.WORKFLOW_TOKEN}}
 
-      - name: Invoke numba-dev Build_CPU Workflow
-        uses: intel-innersource/frameworks.actions.thirdparty.workflow-dispatch@v1
-        with:
-          workflow: CPU Build
-          ref: numba-dev
-          token: ${{secrets.WORKFLOW_TOKEN}}
+#       - name: Invoke numba-dev Build_CPU Workflow
+#         uses: intel-innersource/frameworks.actions.thirdparty.workflow-dispatch@v1
+#         with:
+#           workflow: CPU Build
+#           ref: numba-dev
+#           token: ${{secrets.WORKFLOW_TOKEN}}
           
   invoke-gpu-tests:
     runs-on: gpu
     needs: invoke-cpu-tests
     steps:
-      - name: Invoke numba-dev Build_GPU Workflow
-        uses: intel-innersource/frameworks.actions.thirdparty.workflow-dispatch@v1
-        with:
-          workflow: GPU Build
-          ref: numba-dev
-          token: ${{secrets.WORKFLOW_TOKEN}}
+#       - name: Invoke numba-dev Build_GPU Workflow
+#         uses: intel-innersource/frameworks.actions.thirdparty.workflow-dispatch@v1
+#         with:
+#           workflow: GPU Build
+#           ref: numba-dev
+#           token: ${{secrets.WORKFLOW_TOKEN}}
 
       - name: Invoke main Build_GPU Workflow
         uses: intel-innersource/frameworks.actions.thirdparty.workflow-dispatch@v1
