@@ -71,7 +71,7 @@ for i in $TESTS; do
     echo -n "${test_name}: " >&2
     output=$(@Python3_EXECUTABLE@ $IMEX_RUNNER \
        --pass-pipeline-file=$BENCHMARK_ROOT/pipelines/linalg-to-gpu.pp \
-       --runner mlir-cpu-runner -e main \
+       --runner imex-cpu-runner -e main \
        --shared-libs=$MLIR_RUNNER_UTILS,$MLIR_C_RUNNER_UTILS,$RUNTIME\
        --entry-point-result=void -i $i)
     echo $output

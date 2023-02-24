@@ -12,6 +12,5 @@ set(LIBS
         IMEXUtil
         )
 add_imex_tool(imex-opt imex-opt.cpp)
-
 llvm_update_compile_flags(imex-opt)
 target_link_libraries(imex-opt PRIVATE ${LIBS} IMEXTransforms)

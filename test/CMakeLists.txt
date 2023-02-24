@@ -6,7 +6,7 @@ endif()
 set(IMEX_TEST_DEPENDS
         FileCheck count not
         imex-opt
-        mlir-cpu-runner
+        imex-cpu-runner
         mlir_c_runner_utils
         mlir_runner_utils
         imex_runner_utils

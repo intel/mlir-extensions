@@ -89,16 +89,16 @@ jobs:
           mkdir build
           cd build
           export MLIR_DIR=$HOME_DIR/llvm-mlir/_mlir_install
-          cmake .. -DIMEX_ENABLE_SYCL_RUNTIME=1 -DIMEX_ENABLE_L0_RUNTIME=1 -DSYCL_DIR=/opt/intel/oneapi/compiler/latest/linux/ -DLEVEL_ZERO_DIR=$HOME_DIR/level-zero/level-zero-install/
+          cmake .. -DIMEX_ENABLE_SYCL_RUNTIME=1 -DIMEX_ENABLE_L0_RUNTIME=1 -DSYCL_DIR=/home/nbpatel/intel/oneapi/compiler/2023.0.0/linux -DLEVEL_ZERO_DIR=$HOME_DIR/level-zero/level-zero-install/
           make -j64
           cp /home/gta/actions-runner/_work/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions/gpurefactorbuild/llvm-mlir/llvm-project/_build/bin/llvm-lit /home/gta/actions-runner/_work/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions/gpurefactorbuild/mlir-extensions/build/bin
 
-      - name: Run Level Zero Runtime Tests
+      - name: Run Level Zero & Sycl Runtime Tests
         shell: bash -l {0}
         run: |
           source /opt/intel/oneapi/setvars.sh
           cd $HOME_DIR/mlir-extensions/build
-          cmake --build . --target check-imex > tests.txt
+          cmake --build . --target check-imex
 
           # /home/gta/anaconda3/envs/imex-dev/bin/python $HOME_DIR/mlir-extensions/build/bin/imex-runner.py -i $HOME_DIR/mlir-extensions/test/Integration/Dialect/Linalg/OpenCL/linalg_addf.mlir -e main --pass-pipeline-file=$HOME_DIR/mlir-extensions/test/Integration/Dialect/Linalg/OpenCL/linalg-to-gpux-opencl.pp -entry-point-result=void --shared-libs=$HOME_DIR/llvm-mlir/_mlir_install/lib/libmlir_runner_utils.so,$HOME_DIR/mlir-extensions/build/lib/liblevel-zero-runtime.so
       #- name: Run perf script
