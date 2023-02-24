@@ -1,11 +1,11 @@
 // RUN: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-cpu.pp \
-// RUN:                                       --runner mlir-cpu-runner -e main \
+// RUN:                                       --runner imex-cpu-runner -e main \
 // RUN:                                       --shared-libs=%mlir_runner_utils \
 // RUN:                                       --entry-point-result=void | FileCheck %s
 // RUN: %gpu_skip || %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-llvm.pp \
-// RUN:                                       --runner mlir-cpu-runner -e main \
+// RUN:                                       --runner imex-cpu-runner -e main \
 // RUN:                                       --entry-point-result=void \
-// RUN:                                       --shared-libs=%mlir_runner_utils,%levelzero_runtime | FileCheck %s
+// RUN:                                       --shared-libs=%mlir_runner_utils,%sycl_runtime | FileCheck %s
 #map = affine_map<(d0, d1) -> (d0, d1)>
 module @logical_and {
 func.func @main() {
