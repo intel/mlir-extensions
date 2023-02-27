@@ -1,6 +1,6 @@
 # Intel® Extension for MLIR
-Intel® Extension for MLIR (IMEX) is a collection of MLIR dialects and passes from Intel for improving upstream MLIR.
-Current extension covers.
+Intel® Extension for MLIR (IMEX) is a collection of MLIR dialects and passes from Intel for supporting MLIR lowering to Intel silicon (CPU, GPU, …). Goal of this project is to support development of MLIR enhancements for upstream contribution, and to provide a sandbox for validation independent of front end frameworks. Current project scope includes:
+
 * Dialects and passes needed to lower and execute MLIR entry dialect (linalg, CFG, and etc) on Intel GPU.
 * Wrapper libraries to inteface with level zero runtime and sycl runtime supporting Intel GPU.
 * Other experimental dialects: PTensor, Dist
