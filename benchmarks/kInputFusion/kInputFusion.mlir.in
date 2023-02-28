@@ -1,0 +1,50 @@
+#map = affine_map<(d0) -> (d0)>
+#map1 = affine_map<(d0, d1) -> (d0, d1)>
+#map2 = affine_map<(d0, d1) -> (d1, d0)>
+#map3 = affine_map<(d0, d1) -> (d0)>
+module {
+func.func @fusion(%arg4: tensor<512x1024x@dtype@>, %arg5: tensor<512x1024x@dtype@>) -> (tensor<1024x@dtype@> {lmhlo.written}) {
+  %0 = tensor.empty() : tensor<512x1024x@dtype@>
+  %1 = linalg.generic {indexing_maps = [#map1, #map1], iterator_types = ["parallel", "parallel"]} ins(%arg5 : tensor<512x1024x@dtype@>) outs(%0 : tensor<512x1024x@dtype@>) {
+  ^bb0(%in: @dtype@, %out: @dtype@):
+    %9 = math.log %in : @dtype@
+    linalg.yield %9 : @dtype@
+  } -> tensor<512x1024x@dtype@>
+  %2 = tensor.empty() : tensor<512x1024x@dtype@>
+  %3 = linalg.generic {indexing_maps = [#map1, #map1], iterator_types = ["parallel", "parallel"]} ins(%arg4 : tensor<512x1024x@dtype@>) outs(%2 : tensor<512x1024x@dtype@>) {
+  ^bb0(%in: @dtype@, %out: @dtype@):
+    %9 = math.absf %in : @dtype@
+    linalg.yield %9 : @dtype@
+  } -> tensor<512x1024x@dtype@>
+  %4 = tensor.empty() : tensor<512x1024x@dtype@>
+  %5 = linalg.generic {indexing_maps = [#map1, #map1, #map1], iterator_types = ["parallel", "parallel"]} ins(%1, %3 : tensor<512x1024x@dtype@>, tensor<512x1024x@dtype@>) outs(%4 : tensor<512x1024x@dtype@>) {
+  ^bb0(%in: @dtype@, %in_7: @dtype@, %out: @dtype@):
+    %9 = arith.addf %in, %in_7 : @dtype@
+    linalg.yield %9 : @dtype@
+  } -> tensor<512x1024x@dtype@>
+  %cst = arith.constant dense<0.000000e+00> : tensor<@dtype@>
+  %cst_6 = arith.constant 0.000000e+00 : @dtype@
+  %6 = tensor.empty() : tensor<1024x@dtype@>
+  %7 = linalg.fill ins(%cst_6 : @dtype@) outs(%6 : tensor<1024x@dtype@>) -> tensor<1024x@dtype@>
+  %8 = linalg.generic {indexing_maps = [#map2, #map3], iterator_types = ["parallel", "reduction"]} ins(%5 : tensor<512x1024x@dtype@>) outs(%7 : tensor<1024x@dtype@>) {
+  ^bb0(%in: @dtype@, %out: @dtype@):
+    %from_elements = tensor.from_elements %out : tensor<@dtype@>
+    %from_elements_7 = tensor.from_elements %in : tensor<@dtype@>
+    %extracted = tensor.extract %from_elements[] : tensor<@dtype@>
+    %extracted_8 = tensor.extract %from_elements_7[] : tensor<@dtype@>
+    %9 = arith.addf %extracted, %extracted_8 : @dtype@
+    %from_elements_9 = tensor.from_elements %9 : tensor<@dtype@>
+    %extracted_10 = tensor.extract %from_elements_9[] : tensor<@dtype@>
+    linalg.yield %extracted_10 : @dtype@
+  } -> tensor<1024x@dtype@>
+  return %8 : tensor<1024x@dtype@>
+  //%expanded = tensor.expand_shape %8 [[0, 1]] : tensor<1024x@dtype@> into tensor<1x1024x@dtype@>
+  //return %expanded : tensor<1x1024x@dtype@>
+}
+  func.func @main() {
+    %0 = arith.constant dense<3.3> : tensor<512x1024x@dtype@>
+    %1 = arith.constant dense<1.0> : tensor<512x1024x@dtype@>
+    %2 = call @fusion(%0, %1) : (tensor<512x1024x@dtype@>, tensor<512x1024x@dtype@>) -> tensor<1024x@dtype@>
+    return
+  }
+}

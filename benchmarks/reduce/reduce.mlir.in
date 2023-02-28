@@ -1,0 +1,28 @@
+#map4 = affine_map<(d0, d1, d2, d3) -> (d3, d0, d1, d2)>
+#map5 = affine_map<(d0, d1, d2, d3) -> (d0, d1, d2)>
+module {
+      func.func @fusion(%arg4: tensor<32x16x512x512x@dtype@>, %arg5: tensor<@dtype@>) -> (tensor<1x16x512x512x@dtype@> {lmhlo.written}) {
+        %extracted = tensor.extract %arg5[] : tensor<@dtype@>
+        %1 = tensor.empty() : tensor<16x512x512x@dtype@>
+        %2 = linalg.fill ins(%extracted : @dtype@) outs(%1 : tensor<16x512x512x@dtype@>) -> tensor<16x512x512x@dtype@>
+        %3 = linalg.generic {indexing_maps = [#map4, #map5], iterator_types = ["parallel", "parallel", "parallel", "reduction"]} ins(%arg4 : tensor<32x16x512x512x@dtype@>) outs(%2 : tensor<16x512x512x@dtype@>) {
+        ^bb0(%in: @dtype@, %out: @dtype@):
+          %from_elements = tensor.from_elements %out : tensor<@dtype@>
+          %from_elements_4 = tensor.from_elements %in : tensor<@dtype@>
+          %extracted_5 = tensor.extract %from_elements[] : tensor<@dtype@>
+          %extracted_6 = tensor.extract %from_elements_4[] : tensor<@dtype@>
+          %4 = arith.addf %extracted_5, %extracted_6 : @dtype@
+          %from_elements_7 = tensor.from_elements %4 : tensor<@dtype@>
+          %extracted_8 = tensor.extract %from_elements_7[] : tensor<@dtype@>
+          linalg.yield %extracted_8 : @dtype@
+        } -> tensor<16x512x512x@dtype@>
+        %expanded = tensor.expand_shape %3 [[0, 1], [2], [3]] : tensor<16x512x512x@dtype@> into tensor<1x16x512x512x@dtype@>
+        return %expanded : tensor<1x16x512x512x@dtype@>
+      }
+  func.func @main() {
+    %0 = arith.constant dense<3.3>:tensor<32x16x512x512x@dtype@>
+    %1 = arith.constant dense<0.0> : tensor<@dtype@>
+    %2 = call @fusion(%0, %1) : (tensor<32x16x512x512x@dtype@>, tensor<@dtype@>) -> tensor<1x16x512x512x@dtype@>
+    return
+  }
+}
