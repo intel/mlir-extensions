@@ -140,7 +140,6 @@ add_subdirectory(PlaidML)
 add_lit_testsuite(check-gen "Running the IMEX generated regression tests in ${GEN_TEST_SRC_ROOT}"
     ${GEN_TEST_BIN_ROOT}
     DEPENDS ${IMEX_TEST_DEPENDS}
-    ARGS "--workers=1"
     )
 set_target_properties(check-gen PROPERTIES FOLDER "Tests")
 

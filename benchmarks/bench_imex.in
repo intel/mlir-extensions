@@ -11,12 +11,12 @@ case "${platform}" in
     *)          echo "UNKNOWN platform:${platform}" && exit -1
 esac
 
-MLIR_RUNNER_UTILS=/home/cchen/.local/lib/libmlir_runner_utils.so
-MLIR_C_RUNNER_UTILS=/home/cchen/.local/lib/libmlir_c_runner_utils.so
-IMEX_SYCL_RUNTIME=/home/cchen/imex/frameworks.ai.mlir.mlir-extensions/build/lib/libsycl-runtime.so
-IMEX_L0_RUNTIME=/home/cchen/imex/frameworks.ai.mlir.mlir-extensions/build/lib/liblevel-zero-runtime.so
-BENCHMARK_ROOT=/home/cchen/imex/frameworks.ai.mlir.mlir-extensions/build/benchmarks
-IMEX_RUNNER=/home/cchen/imex/frameworks.ai.mlir.mlir-extensions/build/bin/imex-runner.py
+MLIR_RUNNER_UTILS=@LLVM_LIBRARY_DIR@/libmlir_runner_utils.so
+MLIR_C_RUNNER_UTILS=@LLVM_LIBRARY_DIR@/libmlir_c_runner_utils.so
+IMEX_SYCL_RUNTIME=@IMEX_LIB_DIR@/libsycl-runtime.so
+IMEX_L0_RUNTIME=@IMEX_LIB_DIR@/liblevel-zero-runtime.so
+BENCHMARK_ROOT=@IMEX_BINARY_DIR@/benchmarks
+IMEX_RUNNER=@IMEX_BINARY_DIR@/bin/imex-runner.py
 
 # -l: using level-zero runtime
 # -s: using sycl runtime

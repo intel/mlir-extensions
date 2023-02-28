@@ -1,0 +1,37 @@
+#map = affine_map<(d0) -> (d0)>
+#map1 = affine_map<(d0, d1) -> (d0, d1)>
+module {
+      func.func @fusion(%arg3: tensor<512x1024x@dtype@>, %arg4: tensor<512x1024x@dtype@>) -> (tensor<512x1024x@dtype@> {lmhlo.written}) {
+        %0 = tensor.empty() : tensor<512x1024x@dtype@>
+        %1 = linalg.generic {indexing_maps = [#map1, #map1], iterator_types = ["parallel", "parallel"]} ins(%arg3 : tensor<512x1024x@dtype@>) outs(%0 : tensor<512x1024x@dtype@>) {
+        ^bb0(%in: @dtype@, %out: @dtype@):
+          %8 = math.log %in : @dtype@
+          linalg.yield %8 : @dtype@
+        } -> tensor<512x1024x@dtype@>
+        %2 = tensor.empty() : tensor<512x1024x@dtype@>
+        %3 = linalg.generic {indexing_maps = [#map1, #map1], iterator_types = ["parallel", "parallel"]} ins(%arg4 : tensor<512x1024x@dtype@>) outs(%2 : tensor<512x1024x@dtype@>) {
+        ^bb0(%in: @dtype@, %out: @dtype@):
+          %8 = math.absf %in : @dtype@
+          linalg.yield %8 : @dtype@
+        } -> tensor<512x1024x@dtype@>
+        %4 = tensor.empty() : tensor<512x1024x@dtype@>
+        %5 = linalg.generic {indexing_maps = [#map1, #map1, #map1], iterator_types = ["parallel", "parallel"]} ins(%1, %3 : tensor<512x1024x@dtype@>, tensor<512x1024x@dtype@>) outs(%4 : tensor<512x1024x@dtype@>) {
+        ^bb0(%in: @dtype@, %in_4: @dtype@, %out: @dtype@):
+          %8 = arith.addf %in, %in_4 : @dtype@
+          linalg.yield %8 : @dtype@
+        } -> tensor<512x1024x@dtype@>
+        %6 = tensor.empty() : tensor<512x1024x@dtype@>
+        %7 = linalg.generic {indexing_maps = [#map1, #map1, #map1], iterator_types = ["parallel", "parallel"]} ins(%5, %arg3 : tensor<512x1024x@dtype@>, tensor<512x1024x@dtype@>) outs(%6 : tensor<512x1024x@dtype@>) {
+        ^bb0(%in: @dtype@, %in_4: @dtype@, %out: @dtype@):
+          %8 = arith.subf %in, %in_4 : @dtype@
+          linalg.yield %8 : @dtype@
+        } -> tensor<512x1024x@dtype@>
+        return %7 : tensor<512x1024x@dtype@>
+      }
+  func.func @main() {
+    %0 = arith.constant dense<3.3> : tensor<512x1024x@dtype@>
+    %1 = arith.constant dense<1.0> : tensor<512x1024x@dtype@>
+    %2 = call @fusion(%0, %1) : (tensor<512x1024x@dtype@>, tensor<512x1024x@dtype@>) -> tensor<512x1024x@dtype@>
+    return
+  }
+}
