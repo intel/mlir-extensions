@@ -31,6 +31,12 @@ if(IMEX_ENABLE_L0_RUNTIME)
         )
 endif()
 
+if(IMEX_ENABLE_L0_RUNTIME OR IMEX_ENABLE_SYCL_RUNTIME)
+    list(APPEND IMEX_TEST_DEPENDS
+        l0-fp64-checker
+        )
+endif()
+
 # "Gen" is the root of all generated test cases
 add_subdirectory(Gen)
 

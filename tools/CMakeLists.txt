@@ -1,4 +1,7 @@
 add_subdirectory(imex-runner)
 add_subdirectory(imex-opt)
+if(IMEX_ENABLE_L0_RUNTIME OR IMEX_ENABLE_SYCL_RUNTIME)
+    add_subdirectory(l0-fp64-checker)
+endif()
 add_subdirectory(imex-cpu-runner)
 set(IMEX_TOOLS_DIR ${IMEX_BINARY_DIR}/bin PARENT_SCOPE)
