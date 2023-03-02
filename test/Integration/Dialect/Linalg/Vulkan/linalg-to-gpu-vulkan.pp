@@ -19,7 +19,7 @@ builtin.module(
         convert-parallel-loops-to-gpu
         )
 // insert-gpu-allocs pass can have client-api = opencl or vulkan args
-    func.func(insert-gpu-allocs)
+    func.func(insert-gpu-allocs{client-api=vulkan})
     canonicalize
     normalize-memrefs
 // Unstride memrefs does not seem to be needed.
@@ -30,8 +30,8 @@ builtin.module(
     cse
 
 // The following set-spirv-* passes can have client-api = opencl or vulkan args
-    set-spirv-capabilities
-    gpu.module(set-spirv-abi-attrs)
+    set-spirv-capabilities{client-api=vulkan}
+    gpu.module(set-spirv-abi-attrs{client-api=vulkan})
     canonicalize
     )
 // End

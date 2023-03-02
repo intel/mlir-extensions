@@ -23,6 +23,18 @@ else()
     list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/modules")
 endif()
 
+# CMAKE_SYSTEM_NAME needs to be checked after "project"
+if(${CMAKE_VERSION} VERSION_LESS 3.25)
+    # CMake starting with version 3.25 sets var LINUX to true if target system is linux
+    if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+        set(LINUX TRUE)
+    endif()
+endif()
+message(STATUS "CMAKE_SYSTEM_NAME: ${CMAKE_SYSTEM_NAME}")
+if(LINUX)
+    message(STATUS "Building for target: LINUX")
+endif()
+
 # Expected LLVM SHA
 file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/build_tools/llvm_version.txt EXPECTED_LLVM_SHA)
 message(STATUS "Expected llvm sha: \"${EXPECTED_LLVM_SHA}\"")
