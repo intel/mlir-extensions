@@ -26,6 +26,8 @@
 
 #include <CL/sycl.hpp>
 #include <level_zero/ze_api.h>
+#include <map>
+#include <mutex>
 #include <sycl/ext/oneapi/backend/level_zero.hpp>
 
 #ifdef _WIN32
@@ -61,6 +63,21 @@ template <typename F> auto catchAll(F &&func) {
   }
 
 } // namespace
+
+struct SpirvModule {
+  ze_module_handle_t module = nullptr;
+  ~SpirvModule();
+};
+
+namespace {
+// Create a Map for the spirv module lookup
+std::map<void *, SpirvModule> moduleCache;
+std::mutex mutexLock;
+} // namespace
+
+SpirvModule::~SpirvModule() {
+  L0_SAFE_CALL(zeModuleDestroy(SpirvModule::module));
+}
 
 struct ParamDesc {
   void *data;
@@ -153,6 +170,13 @@ static ze_module_handle_t loadModule(GPUSYCLQUEUE *queue, const void *data,
   assert(data);
   auto syclQueue = queue->syclQueue_;
   ze_module_handle_t zeModule;
+
+  auto it = moduleCache.find((void *)data);
+  // Check the map if the module is present/cached.
+  if (it != moduleCache.end()) {
+    return it->second.module;
+  }
+
   ze_module_desc_t desc = {ZE_STRUCTURE_TYPE_MODULE_DESC,
                            nullptr,
                            ZE_MODULE_FORMAT_IL_SPIRV,
@@ -165,6 +189,8 @@ static ze_module_handle_t loadModule(GPUSYCLQUEUE *queue, const void *data,
   auto zeContext = sycl::get_native<sycl::backend::ext_oneapi_level_zero>(
       syclQueue.get_context());
   L0_SAFE_CALL(zeModuleCreate(zeContext, zeDevice, &desc, &zeModule, nullptr));
+  std::lock_guard<std::mutex> entryLock(mutexLock);
+  moduleCache[(void *)data].module = zeModule;
   return zeModule;
 }
 
@@ -177,8 +203,8 @@ static sycl::kernel *getKernel(GPUSYCLQUEUE *queue, ze_module_handle_t zeModule,
   sycl::kernel *syclKernel;
   ze_kernel_desc_t desc = {};
   desc.pKernelName = name;
-  L0_SAFE_CALL(zeKernelCreate(zeModule, &desc, &zeKernel));
 
+  L0_SAFE_CALL(zeKernelCreate(zeModule, &desc, &zeKernel));
   sycl::kernel_bundle<sycl::bundle_state::executable> kernelBundle =
       sycl::make_kernel_bundle<sycl::backend::ext_oneapi_level_zero,
                                sycl::bundle_state::executable>(
