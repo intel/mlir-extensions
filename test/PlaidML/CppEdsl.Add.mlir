@@ -2,11 +2,11 @@
 // RUN:                                       --runner imex-cpu-runner -e main \
 // RUN:                                       --shared-libs=%mlir_runner_utils,%mlir_c_runner_utils \
 // RUN:                                       --entry-point-result=void --filecheck
-// RUN: %python_executable %imex_runner --requires=l0-runtime -i %s --pass-pipeline-file=%p/linalg-to-llvm.pp \
+// RUN: %python_executable %imex_runner --requires=l0-runtime -i %s --pass-pipeline-file=%p/linalg-to-llvm-caching.pp \
 // RUN:                                       --runner imex-cpu-runner -e main \
 // RUN:                                       --entry-point-result=void \
 // RUN:                                       --shared-libs=%mlir_runner_utils,%mlir_c_runner_utils,%levelzero_runtime --filecheck
-// RUN: %python_executable %imex_runner --requires=sycl-runtime -i %s --pass-pipeline-file=%p/linalg-to-llvm.pp \
+// RUN: %python_executable %imex_runner --requires=sycl-runtime -i %s --pass-pipeline-file=%p/linalg-to-llvm-caching.pp \
 // RUN:                                        --runner imex-cpu-runner -e main \
 // RUN:                                        --entry-point-result=void \
 // RUN:                                        --shared-libs=%mlir_runner_utils,%mlir_c_runner_utils,%sycl_runtime --filecheck
@@ -15,9 +15,14 @@ module @add {
 func.func @main() {
     %0= arith.constant dense<[[1, 2, 3], [4, 5, 4102], [16777223, 4294967304, 1099511627785]]>:tensor<3x3xi64>
     %1= arith.constant dense<[[1, 4098, 3], [16777220, 5, 4294967302], [7, 1099511627784, 9]]>:tensor<3x3xi64>
-    %2 = call @test(%0,%1) : (tensor<3x3xi64>,tensor<3x3xi64>) -> tensor<3x3xi64>
-    %unranked = tensor.cast %2 : tensor<3x3xi64>to tensor<*xi64>
-    call @printMemrefI64(%unranked) : (tensor<*xi64>) -> ()
+    %lb = arith.constant 0 : index
+    %ub = arith.constant 100 : index
+    %step = arith.constant 1 : index
+    scf.for %temp = %lb to %ub step %step {
+      %2 = func.call @test(%0,%1) : (tensor<3x3xi64>,tensor<3x3xi64>) -> tensor<3x3xi64>
+      %unranked = tensor.cast %2 : tensor<3x3xi64> to tensor<*xi64>
+      func.call @printMemrefI64(%unranked) : (tensor<*xi64>) -> ()
+    }
     return
 }
 func.func private @printMemrefI64(tensor<*xi64>)
