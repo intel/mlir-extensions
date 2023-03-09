@@ -1,0 +1,119 @@
+// NUMPLACEHOLDERS 4 NUMVARIANTS 3
+// PLACEHOLDER DTYPE f32 f16 bf16
+// PLACEHOLDER PRINTDTYPE @printMemrefF32 @printMemrefF16 @printMemrefBF16
+// PLACEHOLDER CHECKDTYPE @printAllcloseF32 @printAllcloseF16 @printAllcloseBF16
+// PLACEHOLDER NEGINF 0xFF800000 0xFC00 0xFF80
+// RUN: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-cpu.pp \
+// RUN:                                       --runner imex-cpu-runner -e main \
+// RUN:                                       --shared-libs=%mlir_runner_utils,%irunner_utils \
+// RUN:                                       --entry-point-result=void --filecheck
+// RUN: %python_executable %imex_runner --requires=l0-runtime -i %s --pass-pipeline-file=%p/linalg-to-llvm.pp \
+// RUN:                                       --runner imex-cpu-runner -e main \
+// RUN:                                       --entry-point-result=void \
+// RUN:                                       --shared-libs=%mlir_runner_utils,%irunner_utils,%levelzero_runtime --filecheck
+// RUN: %python_executable %imex_runner --requires=sycl-runtime -i %s --pass-pipeline-file=%p/linalg-to-llvm.pp \
+// RUN:                                        --runner imex-cpu-runner -e main \
+// RUN:                                        --entry-point-result=void \
+// RUN:                                        --shared-libs=%mlir_runner_utils,%irunner_utils,%sycl_runtime --filecheck
+#map0 = affine_map<(d0, d1) -> (d0, d1)>
+#map1 = affine_map<(d0, d1) -> (d0, 0)>
+module @softmax {
+func.func @main() {
+    %0= arith.constant dense<[[0.9, 0.1, 0.4, 0.9, 0.1, 0.4, 0.9, 0.1, 0.7, 0.4, 0.9, 0.1, 0.4, 0.9, 0.1, 0.4, 0.9, 0.1, 0.7, 0.4],
+                              [1.9, 0.7, 1.2, 1.9, 0.7, 1.2, 1.9, 0.6, 1.5, 1.6, 1.9, 0.7, 1.2, 1.9, 0.7, 1.2, 1.9, 0.7, 1.5, 1.6],
+                              [0.9, 0.1, 0.4, 0.9, 0.1, 0.4, 0.9, 0.1, 0.7, 0.4, 1.9, 0.7, 1.2, 1.9, 0.6, 1.2, 1.9, 0.6, 1.5, 1.6],
+                              [1.9, 0.6, 1.2, 1.9, 0.7, 1.2, 1.9, 0.7, 1.5, 1.6, 1.9, 0.6, 1.2, 1.9, 0.6, 1.2, 1.9, 0.7, 1.5, 1.6],
+                              [0.9, 0.1, 0.4, 0.9, 0.1, 0.4, 0.9, 0.1, 0.7, 0.4, 1.9, 0.6, 1.2, 1.9, 0.7, 1.2, 1.9, 0.6, 1.5, 1.6],
+                              [1.9, 0.7, 1.2, 1.9, 0.7, 1.2, 1.9, 0.7, 1.5, 1.6, 1.9, 0.7, 1.2, 1.9, 0.7, 1.2, 1.9, 0.7, 1.5, 1.6],
+                              [0.9, 0.1, 0.4, 0.9, 0.1, 0.4, 0.9, 0.1, 0.7, 0.4, 1.9, 0.6, 1.2, 1.9, 0.6, 1.2, 1.9, 0.6, 1.5, 1.6],
+                              [1.9, 0.6, 1.2, 1.9, 0.7, 1.2, 1.9, 0.7, 1.5, 1.6, 1.9, 0.7, 1.2, 1.9, 0.7, 1.2, 1.9, 0.7, 1.5, 1.6],
+                              [0.9, 0.1, 0.4, 0.9, 0.1, 0.4, 0.9, 0.1, 0.7, 0.4, 1.9, 0.6, 1.2, 1.9, 0.6, 1.2, 1.9, 0.6, 1.5, 1.6],
+                              [1.9, 0.7, 1.2, 1.9, 0.7, 1.2, 1.9, 0.6, 1.5, 1.6, 1.9, 0.7, 1.2, 1.9, 0.7, 1.2, 1.9, 0.7, 1.5, 1.6]]>:tensor<10x20x@DTYPE@>
+    %1 = call @test(%0) : (tensor<10x20x@DTYPE@>) -> tensor<10x20x@DTYPE@>
+    %unranked = tensor.cast %1 : tensor<10x20x@DTYPE@>to tensor<*x@DTYPE@>
+    %ref = arith.constant dense<[
+[0.0715685, 0.0321578, 0.0434085, 0.0715685, 0.0321578, 0.0434085, 0.0715685, 0.0321578, 0.0585954, 0.0434085, 0.0715685, 0.0321578, 0.0434085, 0.0715685, 0.0321578, 0.0434085, 0.0715685, 0.0321578, 0.0585954, 0.0434085],
+[0.0794463, 0.0239288, 0.0394519, 0.0794463, 0.0239288, 0.0394519, 0.0794463, 0.0216516, 0.0532544, 0.0588553, 0.0794463, 0.0239288, 0.0394519, 0.0794463, 0.0239288, 0.0394519, 0.0794463, 0.0239288, 0.0532544, 0.0588553],
+[0.0417064, 0.0187399, 0.0252962, 0.0417064, 0.0187399, 0.0252962, 0.0417064, 0.0187399, 0.0341463, 0.0252962, 0.11337,   0.0341463, 0.0562978, 0.11337,   0.0308969, 0.0562978, 0.11337,   0.0308969, 0.0759941, 0.0839865],
+[0.0798098, 0.0217507, 0.0396324, 0.0798098, 0.0240382, 0.0396324, 0.0798098, 0.0240382, 0.0534981, 0.0591245, 0.0798098, 0.0217507, 0.0396324, 0.0798098, 0.0217507, 0.0396324, 0.0798098, 0.0240382, 0.0534981, 0.0591245],
+[0.0417064, 0.0187399, 0.0252962, 0.0417064, 0.0187399, 0.0252962, 0.0417064, 0.0187399, 0.0341463, 0.0252962, 0.11337,   0.0308969, 0.0562978, 0.11337,   0.0341463, 0.0562978, 0.11337,   0.0308969, 0.0759941, 0.0839865],
+[0.0792658, 0.0238744, 0.0393622, 0.0792658, 0.0238744, 0.0393622, 0.0792658, 0.0238744, 0.0531335, 0.0587215, 0.0792658, 0.0238744, 0.0393622, 0.0792658, 0.0238744, 0.0393622, 0.0792658, 0.0238744, 0.0531335, 0.0587215],
+[0.0418424, 0.018801,  0.0253787, 0.0418424, 0.018801,  0.0253787, 0.0418424, 0.018801,  0.0342577, 0.0253787, 0.113739,  0.0309976, 0.0564813, 0.113739,  0.0309976, 0.0564813, 0.113739,  0.0309976, 0.0762418, 0.0842603],
+[0.0794463, 0.0216516, 0.0394519, 0.0794463, 0.0239288, 0.0394519, 0.0794463, 0.0239288, 0.0532544, 0.0588553, 0.0794463, 0.0239288, 0.0394519, 0.0794463, 0.0239288, 0.0394519, 0.0794463, 0.0239288, 0.0532544, 0.0588553],
+[0.0418424, 0.018801,  0.0253787, 0.0418424, 0.018801,  0.0253787, 0.0418424, 0.018801,  0.0342577, 0.0253787, 0.113739,  0.0309976, 0.0564813, 0.113739,  0.0309976, 0.0564813, 0.113739,  0.0309976, 0.0762418, 0.0842603],
+[0.0794463, 0.0239288, 0.0394519, 0.0794463, 0.0239288, 0.0394519, 0.0794463, 0.0216516, 0.0532544, 0.0588553, 0.0794463, 0.0239288, 0.0394519, 0.0794463, 0.0239288, 0.0394519, 0.0794463, 0.0239288, 0.0532544, 0.0588553]
+                                ]>:tensor<10x20xf32>
+    %unranked_ref = tensor.cast %ref : tensor<10x20xf32>to tensor<*xf32>
+    call @CHECKDTYPE@(%unranked, %unranked_ref) : (tensor<*x@DTYPE@>, tensor<*xf32>) -> ()
+    call @PRINTDTYPE@(%unranked) : (tensor<*x@DTYPE@>) -> ()
+    return
+    // CHECK:   [ALLCLOSE: TRUE]
+}
+func.func private @PRINTDTYPE@(tensor<*x@DTYPE@>)
+func.func private @CHECKDTYPE@(tensor<*x@DTYPE@>, tensor<*xf32>)
+
+func.func @test(%arg0: tensor<10x20x@DTYPE@>)->tensor<10x20x@DTYPE@>{
+    %cst = arith.constant 0.000000e+00 : @DTYPE@
+    %cst_0 = arith.constant @NEGINF@ : @DTYPE@
+    %0 = tensor.empty() : tensor<10x1x@DTYPE@>
+    %1 = linalg.fill ins(%cst_0 : @DTYPE@) outs(%0 : tensor<10x1x@DTYPE@>) -> tensor<10x1x@DTYPE@>
+    %2 = linalg.generic {
+            indexing_maps = [#map0, #map1],
+            iterator_types = ["parallel", "reduction"]
+          }
+          ins(%arg0 : tensor<10x20x@DTYPE@>)
+          outs(%1 : tensor<10x1x@DTYPE@>)
+          attrs =  {iterator_ranges = [10, 20], name = "softmax"} {
+            ^bb0(%arg1: @DTYPE@, %arg2: @DTYPE@):
+              %12 = arith.cmpf ogt, %arg2, %arg1 : @DTYPE@
+              %13 = arith.select %12, %arg2, %arg1 : @DTYPE@
+              linalg.yield %13 : @DTYPE@
+         } -> tensor<10x1x@DTYPE@>
+    %3 = tensor.empty() : tensor<10x20x@DTYPE@>
+    %4 = linalg.generic {
+            indexing_maps = [#map0, #map1, #map0],
+            iterator_types = ["parallel", "parallel"]
+          }
+          ins(%arg0, %2 : tensor<10x20x@DTYPE@>, tensor<10x1x@DTYPE@>)
+          outs(%3 : tensor<10x20x@DTYPE@>) {
+            ^bb0(%arg1: @DTYPE@, %arg2: @DTYPE@, %arg3: @DTYPE@):
+              %12 = arith.subf %arg1, %arg2 : @DTYPE@
+              linalg.yield %12 : @DTYPE@
+          } -> tensor<10x20x@DTYPE@>
+    %5 = tensor.empty() : tensor<10x20x@DTYPE@>
+    %6 = linalg.generic {
+            indexing_maps = [#map0, #map0],
+            iterator_types = ["parallel", "parallel"]
+          }
+          ins(%4 : tensor<10x20x@DTYPE@>) outs(%5 : tensor<10x20x@DTYPE@>) {
+            ^bb0(%arg1: @DTYPE@, %arg2: @DTYPE@):
+              %12 = math.exp %arg1 : @DTYPE@
+              linalg.yield %12 : @DTYPE@
+          } -> tensor<10x20x@DTYPE@>
+    %7 = tensor.empty() : tensor<10x1x@DTYPE@>
+    %8 = linalg.fill ins(%cst : @DTYPE@) outs(%7 : tensor<10x1x@DTYPE@>) -> tensor<10x1x@DTYPE@>
+    %9 = linalg.generic {
+            indexing_maps = [#map0, #map1],
+            iterator_types = ["parallel", "reduction"]
+          }
+          ins(%6 : tensor<10x20x@DTYPE@>)
+          outs(%8 : tensor<10x1x@DTYPE@>)
+          attrs = {iterator_ranges = [10, 20], name = "softmax"} {
+            ^bb0(%arg1: @DTYPE@, %arg2: @DTYPE@):
+              %12 = arith.addf %arg2, %arg1 : @DTYPE@
+              linalg.yield %12 : @DTYPE@
+          } -> tensor<10x1x@DTYPE@>
+    %10 = tensor.empty() : tensor<10x20x@DTYPE@>
+    %11 = linalg.generic {
+            indexing_maps = [#map0, #map1, #map0],
+            iterator_types = ["parallel", "parallel"]
+          }
+          ins(%6, %9 : tensor<10x20x@DTYPE@>, tensor<10x1x@DTYPE@>)
+          outs(%10 : tensor<10x20x@DTYPE@>) {
+            ^bb0(%arg1: @DTYPE@, %arg2: @DTYPE@, %arg3: @DTYPE@):
+              %12 = arith.divf %arg1, %arg2 : @DTYPE@
+              linalg.yield %12 : @DTYPE@
+          } -> tensor<10x20x@DTYPE@>
+    return %11 : tensor<10x20x@DTYPE@>
+  }
+}

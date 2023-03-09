@@ -1,0 +1,44 @@
+// NUMPLACEHOLDERS 2 NUMVARIANTS 4
+// PLACEHOLDER DTYPE i64 i32 i16 i8
+// PLACEHOLDER PRINTDTYPE @printMemrefI64 @printMemrefI32 @printMemrefI16 @printMemrefI8
+// RUN: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-cpu.pp \
+// RUN:                                       --runner imex-cpu-runner -e main \
+// RUN:                                       --shared-libs=%mlir_runner_utils,%irunner_utils \
+// RUN:                                       --entry-point-result=void --filecheck
+// RUN: %python_executable %imex_runner --requires=l0-runtime -i %s --pass-pipeline-file=%p/linalg-to-llvm.pp \
+// RUN:                                       --runner imex-cpu-runner -e main \
+// RUN:                                       --entry-point-result=void \
+// RUN:                                       --shared-libs=%mlir_runner_utils,%irunner_utils,%levelzero_runtime --filecheck
+// RUN: %python_executable %imex_runner --requires=sycl-runtime -i %s --pass-pipeline-file=%p/linalg-to-llvm.pp \
+// RUN:                                        --runner imex-cpu-runner -e main \
+// RUN:                                        --entry-point-result=void \
+// RUN:                                        --shared-libs=%mlir_runner_utils,%irunner_utils,%sycl_runtime --filecheck
+#map0 = affine_map<(d0, d1) -> (d1)>
+#map1 = affine_map<(d0, d1) -> (d0)>
+module @max_pool_1d {
+func.func @main() {
+    %0= arith.constant dense<[1, 2, 3]>:tensor<3x@DTYPE@>
+    %1 = call @test(%0) : (tensor<3x@DTYPE@>) -> tensor<1x@DTYPE@>
+    %unranked = tensor.cast %1 : tensor<1x@DTYPE@>to tensor<*x@DTYPE@>
+    call @PRINTDTYPE@(%unranked) : (tensor<*x@DTYPE@>) -> ()
+    %ref = arith.constant dense<3> : tensor<i32>
+    %unranked_ref = tensor.cast %ref : tensor<i32>to tensor<*xi32>
+    return
+    // CHECK: Unranked Memref base@ = {{0x[-9a-f]*}}
+    // CHECK:   3
+  }
+func.func private @PRINTDTYPE@(tensor<*x@DTYPE@>)
+
+func.func @test(%arg0: tensor<3x@DTYPE@>)->tensor<1x@DTYPE@>{
+    %c0_@DTYPE@ = arith.constant 0 : @DTYPE@
+    %0 = tensor.empty() : tensor<1x@DTYPE@>
+    %1 = linalg.fill ins(%c0_@DTYPE@ : @DTYPE@) outs(%0 : tensor<1x@DTYPE@>) -> tensor<1x@DTYPE@>
+    %2 = linalg.generic {indexing_maps = [#map0, #map1], iterator_types = ["parallel", "reduction"]} ins(%arg0 : tensor<3x@DTYPE@>) outs(%1 : tensor<1x@DTYPE@>) attrs = {iterator_ranges = [1, 3]} {
+    ^bb0(%arg1: @DTYPE@, %arg2: @DTYPE@):
+      %3 = arith.cmpi ugt, %arg2, %arg1 : @DTYPE@
+      %4 = arith.select %3, %arg2, %arg1 : @DTYPE@
+      linalg.yield %4 : @DTYPE@
+    } -> tensor<1x@DTYPE@>
+    return %2 : tensor<1x@DTYPE@>
+  }
+}
