@@ -8,6 +8,7 @@ _install/
 .idea/
 cmake-build-debug/
 cmake-build-release/
+.github/
 
 compile_commands.json
 *~

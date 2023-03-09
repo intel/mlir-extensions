@@ -1,0 +1,74 @@
+// NUMPLACEHOLDERS 3 NUMVARIANTS 3
+// PLACEHOLDER DTYPE f32 f16 bf16
+// PLACEHOLDER PRINTDTYPE @printMemrefF32 @printMemrefF16 @printMemrefBF16
+// PLACEHOLDER CHECKDTYPE @printAllcloseF32 @printAllcloseF16 @printAllcloseBF16
+// RUN: %python_executable %imex_runner -i %s --pass-pipeline-file=%p/linalg-to-cpu.pp \
+// RUN:                                       --runner imex-cpu-runner -e main \
+// RUN:                                       --shared-libs=%mlir_runner_utils,%irunner_utils \
+// RUN:                                       --entry-point-result=void --filecheck
+// RUN: %python_executable %imex_runner --requires=l0-runtime -i %s --pass-pipeline-file=%p/linalg-to-llvm.pp \
+// RUN:                                       --runner imex-cpu-runner -e main \
+// RUN:                                       --entry-point-result=void \
+// RUN:                                       --shared-libs=%mlir_runner_utils,%irunner_utils,%levelzero_runtime --filecheck
+// RUN: %python_executable %imex_runner --requires=sycl-runtime -i %s --pass-pipeline-file=%p/linalg-to-llvm.pp \
+// RUN:                                        --runner imex-cpu-runner -e main \
+// RUN:                                        --entry-point-result=void \
+// RUN:                                        --shared-libs=%mlir_runner_utils,%irunner_utils,%sycl_runtime --filecheck
+#map0 = affine_map<(d0, d1) -> (d1, d0)>
+#map1 = affine_map<(d0, d1) -> (d0, d1)>
+module @transpose {
+  func.func @test(%arg0: tensor<10x20x@DTYPE@>) -> tensor<20x10x@DTYPE@> {
+    %cst = arith.constant 0.000000e+00 : @DTYPE@
+    %0 = tensor.empty() : tensor<20x10x@DTYPE@>
+    %1 = linalg.fill ins(%cst : @DTYPE@) outs(%0 : tensor<20x10x@DTYPE@>) -> tensor<20x10x@DTYPE@>
+    %2 = linalg.generic {indexing_maps = [#map0, #map1], iterator_types = ["parallel", "parallel"]} ins(%arg0 : tensor<10x20x@DTYPE@>) outs(%1 : tensor<20x10x@DTYPE@>) attrs =  {iterator_ranges = [20, 10], name = "transpose"} {
+    ^bb0(%arg1: @DTYPE@, %arg2: @DTYPE@):
+      linalg.yield %arg1 : @DTYPE@
+    } -> tensor<20x10x@DTYPE@>
+    return %2 : tensor<20x10x@DTYPE@>
+  }
+  func.func @main() {
+    %0 = arith.constant dense<[[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0],
+                               [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0],
+                               [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0],
+                               [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0],
+                               [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0],
+                               [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0],
+                               [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0],
+                               [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0],
+                               [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0],
+                               [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0]
+                              ]> : tensor<10x20x@DTYPE@>
+    %2 = call @test(%0) : (tensor<10x20x@DTYPE@>) -> tensor<20x10x@DTYPE@>
+    %unranked = tensor.cast %2 : tensor<20x10x@DTYPE@> to tensor<*x@DTYPE@>
+    %ref = arith.constant dense<[
+                                 [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+                                 [2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0],
+                                 [3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0],
+                                 [4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0],
+                                 [5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0],
+                                 [6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0],
+                                 [7.0, 7.0, 7.0, 7.0, 7.0, 7.0, 7.0, 7.0, 7.0, 7.0],
+                                 [8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0],
+                                 [9.0, 9.0, 9.0, 9.0, 9.0, 9.0, 9.0, 9.0, 9.0, 9.0],
+                                 [10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0],
+                                 [11.0, 11.0, 11.0, 11.0, 11.0, 11.0, 11.0, 11.0, 11.0, 11.0],
+                                 [12.0, 12.0, 12.0, 12.0, 12.0, 12.0, 12.0, 12.0, 12.0, 12.0],
+                                 [13.0, 13.0, 13.0, 13.0, 13.0, 13.0, 13.0, 13.0, 13.0, 13.0],
+                                 [14.0, 14.0, 14.0, 14.0, 14.0, 14.0, 14.0, 14.0, 14.0, 14.0],
+                                 [15.0, 15.0, 15.0, 15.0, 15.0, 15.0, 15.0, 15.0, 15.0, 15.0],
+                                 [16.0, 16.0, 16.0, 16.0, 16.0, 16.0, 16.0, 16.0, 16.0, 16.0],
+                                 [17.0, 17.0, 17.0, 17.0, 17.0, 17.0, 17.0, 17.0, 17.0, 17.0],
+                                 [18.0, 18.0, 18.0, 18.0, 18.0, 18.0, 18.0, 18.0, 18.0, 18.0],
+                                 [19.0, 19.0, 19.0, 19.0, 19.0, 19.0, 19.0, 19.0, 19.0, 19.0],
+                                 [20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0]
+                                ]>:tensor<20x10xf32>
+    %unranked_ref = tensor.cast %ref : tensor<20x10xf32>to tensor<*xf32>
+    call @CHECKDTYPE@(%unranked, %unranked_ref) : (tensor<*x@DTYPE@>, tensor<*xf32>) -> ()
+    call @PRINTDTYPE@(%unranked) : (tensor<*x@DTYPE@>) -> ()
+    return
+    // CHECK:   [ALLCLOSE: TRUE]
+}
+func.func private @PRINTDTYPE@(tensor<*x@DTYPE@>)
+func.func private @CHECKDTYPE@(tensor<*x@DTYPE@>, tensor<*xf32>)
+}
