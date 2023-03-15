@@ -16,6 +16,7 @@ if(NOT LEVEL_ZERO_DIR)
     message(FATAL_ERROR "LEVEL_ZERO_DIR is not set")
 endif()
 
+set(CMAKE_INSTALL_RPATH ${LEVEL_ZERO_DIR}/lib)
 add_mlir_library(level-zero-runtime
     SHARED
     LevelZeroRuntimeWrappers.cpp
