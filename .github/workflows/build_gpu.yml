@@ -74,13 +74,14 @@ jobs:
           if [ -d "llvm-project" ]; then rm -rf llvm-project; fi
           git clone https://github.com/llvm/llvm-project
           export LLVM_SHA=`cat ../mlir-extensions/build_tools/llvm_version.txt`
-          cd llvm-project 
+          cd llvm-project
           git checkout $LLVM_SHA
+          if [ -d "$HOME_DIR/mlir-extensions/build_tools/patches" ]; then git apply $HOME_DIR/mlir-extensions/build_tools/patches/*.patch; fi
           mkdir _build
           cd _build
           cmake ../llvm  -GNinja  -DCMAKE_BUILD_TYPE=Release  -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_ENABLE_RTTI=ON  -DLLVM_USE_LINKER=gold -DLLVM_INSTALL_UTILS=ON -DLLVM_ENABLE_ZSTD=OFF -DCMAKE_INSTALL_PREFIX=$HOME_DIR/llvm-mlir/_mlir_install
-          cmake --build . -j ${np} 
-          cmake --install . 
+          cmake --build . -j ${np}
+          cmake --install .
 
       - name: Setup IMEX
         run: |
