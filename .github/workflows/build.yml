@@ -146,7 +146,6 @@ jobs:
           git clone https://github.com/llvm/llvm-project --branch main --single-branch || exit 1
           cd llvm-project || exit 1
           git checkout ${LLVM_SHA} || exit 1
-          /home/runner/work/mlir-extensions/mlir-extensions
           if [ -d "/home/runner/work/mlir-extensions/mlir-extensions/build_tools/patches" ]; then git apply /home/runner/work/mlir-extensions/mlir-extensions/build_tools/patches/*.patch; fi
           mkdir _build || exit 1
           cd _build || exit 1
