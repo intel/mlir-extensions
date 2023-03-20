@@ -305,16 +305,25 @@ public:
           filter.insert(copy);
         }
 
-        if (allocType != memrefType)
-          allocResult = builder.create<mlir::memref::CastOp>(loc, memrefType,
-                                                             allocResult);
+        if (allocType != memrefType) {
+          mlir::Value castedAllocResult = builder.create<mlir::memref::CastOp>(
+              loc, memrefType, allocResult);
 
-        op.replaceAllUsesExcept(allocResult, filter);
-        builder.setInsertionPoint(term);
-        if (access.hostRead && access.deviceWrite) {
-          builder.create<mlir::memref::CopyOp>(loc, allocResult, op);
+          op.replaceAllUsesExcept(castedAllocResult, filter);
+          builder.setInsertionPoint(term);
+          if (access.hostRead && access.deviceWrite) {
+            builder.create<mlir::memref::CopyOp>(loc, castedAllocResult, op);
+          }
+          builder.create<mlir::gpu::DeallocOp>(loc, std::nullopt,
+                                               castedAllocResult);
+        } else {
+          op.replaceAllUsesExcept(allocResult, filter);
+          builder.setInsertionPoint(term);
+          if (access.hostRead && access.deviceWrite) {
+            builder.create<mlir::memref::CopyOp>(loc, allocResult, op);
+          }
+          builder.create<mlir::gpu::DeallocOp>(loc, std::nullopt, allocResult);
         }
-        builder.create<mlir::gpu::DeallocOp>(loc, std::nullopt, allocResult);
       } else if (m_clientAPI == "vulkan") {
         auto gpuAlloc =
             builder.create<mlir::memref::AllocOp>(loc, allocType, dims);
@@ -325,14 +334,21 @@ public:
           filter.insert(copy);
         }
 
-        if (allocType != memrefType)
-          allocResult = builder.create<mlir::memref::CastOp>(loc, memrefType,
-                                                             allocResult);
+        if (allocType != memrefType) {
+          mlir::Value castedAllocResult = builder.create<mlir::memref::CastOp>(
+              loc, memrefType, allocResult);
 
-        op.replaceAllUsesExcept(allocResult, filter);
-        builder.setInsertionPoint(term);
-        if (access.hostRead && access.deviceWrite) {
-          builder.create<mlir::memref::CopyOp>(loc, allocResult, op);
+          op.replaceAllUsesExcept(castedAllocResult, filter);
+          builder.setInsertionPoint(term);
+          if (access.hostRead && access.deviceWrite) {
+            builder.create<mlir::memref::CopyOp>(loc, castedAllocResult, op);
+          }
+        } else {
+          op.replaceAllUsesExcept(allocResult, filter);
+          builder.setInsertionPoint(term);
+          if (access.hostRead && access.deviceWrite) {
+            builder.create<mlir::memref::CopyOp>(loc, allocResult, op);
+          }
         }
       }
     };

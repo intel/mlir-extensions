@@ -4,7 +4,7 @@ builtin.module(inline
     convert-elementwise-to-linalg
     arith-bufferize
     func.func(empty-tensor-to-alloc-tensor
-          eliminate-empty-tensors
+          //eliminate-empty-tensors
           scf-bufferize
           shape-bufferize
           linalg-bufferize
@@ -21,7 +21,7 @@ builtin.module(inline
     convert-complex-to-llvm
     convert-vector-to-llvm
     convert-index-to-llvm
-    convert-memref-to-llvm
+    finalize-memref-to-llvm
     lower-affine
     convert-func-to-llvm
     reconcile-unrealized-casts)
