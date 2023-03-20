@@ -5,7 +5,7 @@ builtin.module(
     arith-bufferize
     func.func(
         empty-tensor-to-alloc-tensor
-        eliminate-empty-tensors
+        //eliminate-empty-tensors
         scf-bufferize
         shape-bufferize
         linalg-bufferize

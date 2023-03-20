@@ -346,7 +346,7 @@ private:
     return mlir::LLVM::createGlobalString(
         loc, builder, globalName,
         mlir::StringRef(kernelName.data(), kernelName.size()),
-        mlir::LLVM::Linkage::Internal);
+        mlir::LLVM::Linkage::Internal, false);
   }
 
   mlir::LogicalResult
@@ -375,7 +375,7 @@ private:
     nameBuffer.append(kGpuBinaryStorageSuffix);
     mlir::Value data = mlir::LLVM::createGlobalString(
         loc, rewriter, nameBuffer.str(), binaryAttr.getValue(),
-        mlir::LLVM::Linkage::Internal);
+        mlir::LLVM::Linkage::Internal, false);
 
     auto size = rewriter.create<mlir::LLVM::ConstantOp>(
         loc, llvmIndexType,
@@ -593,7 +593,7 @@ void GPUXToLLVMPass::runOnOperation() {
   mlir::arith::populateArithToLLVMConversionPatterns(converter, patterns);
   mlir::cf::populateControlFlowToLLVMConversionPatterns(converter, patterns);
   mlir::populateVectorToLLVMConversionPatterns(converter, patterns);
-  mlir::populateMemRefToLLVMConversionPatterns(converter, patterns);
+  mlir::populateFinalizeMemRefToLLVMConversionPatterns(converter, patterns);
   mlir::populateFuncToLLVMConversionPatterns(converter, patterns);
   mlir::populateAsyncStructuralTypeConversionsAndLegality(converter, patterns,
                                                           target);

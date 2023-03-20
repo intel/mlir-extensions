@@ -4,7 +4,7 @@ convert-tensor-to-linalg
 convert-elementwise-to-linalg
 arith-bufferize
 func.func(empty-tensor-to-alloc-tensor
-          eliminate-empty-tensors
+          //eliminate-empty-tensors
           scf-bufferize
           shape-bufferize
           linalg-bufferize
@@ -20,7 +20,7 @@ convert-arith-to-llvm
 convert-math-to-llvm
 convert-complex-to-llvm
 convert-index-to-llvm
-convert-memref-to-llvm
+finalize-memref-to-llvm
 convert-func-to-llvm
 reconcile-unrealized-casts)
 // End
