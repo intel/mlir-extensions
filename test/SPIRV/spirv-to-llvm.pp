@@ -11,6 +11,6 @@ builtin.module(
     convert-gpux-to-llvm
     expand-strided-metadata
     lower-affine
-    convert-memref-to-llvm
+    finalize-memref-to-llvm
     reconcile-unrealized-casts)
 // End
