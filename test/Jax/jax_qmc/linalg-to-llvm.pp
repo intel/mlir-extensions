@@ -3,7 +3,7 @@
 builtin.module(convert-tensor-to-linalg
     arith-bufferize
     func.func(empty-tensor-to-alloc-tensor
-          eliminate-empty-tensors
+          //eliminate-empty-tensors
           scf-bufferize
           shape-bufferize
           linalg-bufferize
@@ -39,6 +39,6 @@ builtin.module(convert-tensor-to-linalg
     convert-func-to-llvm
     convert-math-to-llvm
     convert-gpux-to-llvm
-    convert-memref-to-llvm
+    finalize-memref-to-llvm
     reconcile-unrealized-casts)
 // End

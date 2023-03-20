@@ -14,6 +14,6 @@ builtin.module(convert-ptensor-to-linalg
     expand-strided-metadata
     lower-affine
     convert-scf-to-cf
-    convert-memref-to-llvm
+    finalize-memref-to-llvm
     convert-func-to-llvm
     reconcile-unrealized-casts)
