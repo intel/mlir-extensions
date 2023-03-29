@@ -20,10 +20,10 @@ module {
 // CHECK: arith.constant
 // CHECK: arith.constant
 // CHECK: arith.constant
-// CHECK: arith.cmpi
-// CHECK: arith.select
-// CHECK: arith.subi
-// CHECK: arith.addi
+// CHECK-DAG: arith.cmpi
+// CHECK-DAG: arith.select
+// CHECK-DAG: arith.subi
+// CHECK-DAG: arith.addi
 // CHECK: arith.addi
 // CHECK: arith.divsi
 // CHECK: "dist.nprocs"

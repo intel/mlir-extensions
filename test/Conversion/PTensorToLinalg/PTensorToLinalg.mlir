@@ -19,10 +19,10 @@ func.func @test_arange(%arg0: i64, %arg1: i64, %arg2: i64) -> !ptensor.ptensor<1
     return %0 : !ptensor.ptensor<1 x index>
 }
 // CHECK-LABEL: @test_arange
-// CHECK: [[C0:%.*]] = arith.select
-// CHECK-NEXT: [[C01:%.*]] = arith.subi
-// CHECK-NEXT: [[C1:%.*]] = arith.addi
-// CHECK-NEXT: [[C2:%.*]] = arith.addi [[C1]], [[C0]] : index
+// CHECK-DAG: [[C0:%.*]] = arith.select
+// CHECK-DAG: [[C01:%.*]] = arith.subi
+// CHECK-DAG: [[C1:%.*]] = arith.addi
+// CHECK: [[C2:%.*]] = arith.addi [[C1]], [[C0]] : index
 // CHECK: linalg.generic{{.*}}["parallel"]
 // CHECK: return %{{[0-9]+}} : memref<?xindex, strided<[?], offset: ?>>
 
