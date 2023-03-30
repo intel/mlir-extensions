@@ -20,7 +20,9 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <map>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <tuple>
 #include <vector>
@@ -58,6 +60,21 @@ inline void checkResult(ze_result_t res, const char *func) {
 #define CHECK_ZE_RESULT(expr) checkResult((expr), #expr)
 
 } // namespace
+
+struct SpirvModule {
+  ze_module_handle_t module = nullptr;
+  ~SpirvModule();
+};
+
+namespace {
+// Create a Map for the spirv module lookup
+std::map<const void *, SpirvModule> moduleCache;
+std::mutex mutexLock;
+} // namespace
+
+SpirvModule::~SpirvModule() {
+  CHECK_ZE_RESULT(zeModuleDestroy(SpirvModule::module));
+}
 
 struct ParamDesc {
   void *data;
@@ -213,8 +230,23 @@ struct GPUL0QUEUE {
                                      0};
     CHECK_ZE_RESULT(zeContextCreate(zeDriver_, &contextDesc, &zeContext_));
 
+    uint32_t numQueueGroups = 0;
+    CHECK_ZE_RESULT(zeDeviceGetCommandQueueGroupProperties(
+        zeDevice_, &numQueueGroups, nullptr));
+
+    std::vector<ze_command_queue_group_properties_t> queueProperties(
+        numQueueGroups);
+    CHECK_ZE_RESULT(zeDeviceGetCommandQueueGroupProperties(
+        zeDevice_, &numQueueGroups, queueProperties.data()));
+
     ze_command_queue_desc_t desc = {};
     desc.mode = ZE_COMMAND_QUEUE_MODE_SYNCHRONOUS;
+    for (uint32_t i = 0; i < numQueueGroups; i++) {
+      if (queueProperties[i].flags &
+          ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COMPUTE) {
+        desc.ordinal = i;
+      }
+    }
     CHECK_ZE_RESULT(zeCommandListCreateImmediate(zeContext_, zeDevice_, &desc,
                                                  &zeCommandList_));
   }
@@ -226,8 +258,23 @@ struct GPUL0QUEUE {
 
     zeContext_ = context;
 
+    uint32_t numQueueGroups = 0;
+    CHECK_ZE_RESULT(zeDeviceGetCommandQueueGroupProperties(
+        zeDevice_, &numQueueGroups, nullptr));
+
+    std::vector<ze_command_queue_group_properties_t> queueProperties(
+        numQueueGroups);
+    CHECK_ZE_RESULT(zeDeviceGetCommandQueueGroupProperties(
+        zeDevice_, &numQueueGroups, queueProperties.data()));
+
     ze_command_queue_desc_t desc = {};
     desc.mode = ZE_COMMAND_QUEUE_MODE_SYNCHRONOUS;
+    for (uint32_t i = 0; i < numQueueGroups; i++) {
+      if (queueProperties[i].flags &
+          ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COMPUTE) {
+        desc.ordinal = i;
+      }
+    }
     CHECK_ZE_RESULT(zeCommandListCreateImmediate(zeContext_, zeDevice_, &desc,
                                                  &zeCommandList_));
   }
@@ -242,8 +289,23 @@ struct GPUL0QUEUE {
                                      0};
     CHECK_ZE_RESULT(zeContextCreate(zeDriver_, &contextDesc, &zeContext_));
 
+    uint32_t numQueueGroups = 0;
+    CHECK_ZE_RESULT(zeDeviceGetCommandQueueGroupProperties(
+        zeDevice_, &numQueueGroups, nullptr));
+
+    std::vector<ze_command_queue_group_properties_t> queueProperties(
+        numQueueGroups);
+    CHECK_ZE_RESULT(zeDeviceGetCommandQueueGroupProperties(
+        zeDevice_, &numQueueGroups, queueProperties.data()));
+
     ze_command_queue_desc_t desc = {};
     desc.mode = ZE_COMMAND_QUEUE_MODE_SYNCHRONOUS;
+    for (uint32_t i = 0; i < numQueueGroups; i++) {
+      if (queueProperties[i].flags &
+          ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COMPUTE) {
+        desc.ordinal = i;
+      }
+    }
     CHECK_ZE_RESULT(zeCommandListCreateImmediate(zeContext_, zeDevice_, &desc,
                                                  &zeCommandList_));
   }
@@ -255,9 +317,23 @@ struct GPUL0QUEUE {
     zeDevice_ = driverAndDevice.second;
     zeContext_ = context;
 
+    uint32_t numQueueGroups = 0;
+    CHECK_ZE_RESULT(zeDeviceGetCommandQueueGroupProperties(
+        zeDevice_, &numQueueGroups, nullptr));
+
+    std::vector<ze_command_queue_group_properties_t> queueProperties(
+        numQueueGroups);
+    CHECK_ZE_RESULT(zeDeviceGetCommandQueueGroupProperties(
+        zeDevice_, &numQueueGroups, queueProperties.data()));
+
     ze_command_queue_desc_t desc = {};
     desc.mode = ZE_COMMAND_QUEUE_MODE_SYNCHRONOUS;
-
+    for (uint32_t i = 0; i < numQueueGroups; i++) {
+      if (queueProperties[i].flags &
+          ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COMPUTE) {
+        desc.ordinal = i;
+      }
+    }
     CHECK_ZE_RESULT(zeCommandListCreateImmediate(zeContext_, zeDevice_, &desc,
                                                  &zeCommandList_));
   }
@@ -302,12 +378,20 @@ static ze_module_handle_t loadModule(GPUL0QUEUE *queue, const void *data,
   assert(data);
   auto gpuL0Queue = queue;
   ze_module_handle_t zeModule;
+
+  auto it = moduleCache.find((const void *)data);
+  // Check the map if the module is present/cached.
+  if (it != moduleCache.end()) {
+    return it->second.module;
+  }
   ze_module_desc_t desc = {};
   desc.format = ZE_MODULE_FORMAT_IL_SPIRV;
   desc.pInputModule = static_cast<const uint8_t *>(data);
   desc.inputSize = dataSize;
   CHECK_ZE_RESULT(zeModuleCreate(gpuL0Queue->zeContext_, gpuL0Queue->zeDevice_,
                                  &desc, &zeModule, nullptr));
+  std::lock_guard<std::mutex> entryLock(mutexLock);
+  moduleCache[(const void *)data].module = zeModule;
   return zeModule;
 }
 
@@ -322,12 +406,11 @@ getKernel(GPUL0QUEUE *queue, ze_module_handle_t module, const char *name) {
   return zeKernel;
 }
 
-static void enqueueKernel(ze_command_list_handle_t zeCommandList,
-                          ze_kernel_handle_t kernel,
-                          const ze_group_count_t *pLaunchArgs,
-                          ParamDesc *params, ze_event_handle_t event = nullptr,
-                          uint32_t numWaitEvents = 0,
-                          ze_event_handle_t *phWaitEvents = nullptr) {
+static void
+enqueueKernel(ze_command_list_handle_t zeCommandList, ze_kernel_handle_t kernel,
+              const ze_group_count_t *pLaunchArgs, ParamDesc *params,
+              ze_event_handle_t waitEvent = nullptr, uint32_t numWaitEvents = 0,
+              ze_event_handle_t *phWaitEvents = nullptr) {
   auto paramsCount = countUntil(params, ParamDesc{nullptr, 0});
   for (size_t i = 0; i < paramsCount; ++i) {
     auto param = params[i];
@@ -335,8 +418,9 @@ static void enqueueKernel(ze_command_list_handle_t zeCommandList,
                                              param.size, param.data));
   }
 
-  CHECK_ZE_RESULT(zeCommandListAppendLaunchKernel(
-      zeCommandList, kernel, pLaunchArgs, event, numWaitEvents, phWaitEvents));
+  CHECK_ZE_RESULT(zeCommandListAppendLaunchKernel(zeCommandList, kernel,
+                                                  pLaunchArgs, waitEvent,
+                                                  numWaitEvents, phWaitEvents));
 }
 
 static void launchKernel(GPUL0QUEUE *queue, ze_kernel_handle_t kernel,
