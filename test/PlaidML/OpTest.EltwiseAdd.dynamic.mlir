@@ -15,7 +15,7 @@ module @eltwise_add {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %d0 = tensor.dim %arg0, %c0 :tensor<?x?xf32>
-    %d1 = tensor.dim %arg0, %c1 :tensor<?x?xf32> 
+    %d1 = tensor.dim %arg0, %c1 :tensor<?x?xf32>
     %0 = tensor.empty(%d0, %d1) : tensor<?x?xf32>
     %1 = linalg.generic {
             indexing_maps = [#map, #map, #map],
