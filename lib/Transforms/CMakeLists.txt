@@ -5,6 +5,7 @@ add_mlir_library(IMEXTransforms
   SetSPIRVAbiAttribute.cpp
   AddOuterParallelLoop.cpp
   LowerMemRefCopy.cpp
+  BF16ToGPU.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${PROJECT_SOURCE_DIR}/imex/Transforms

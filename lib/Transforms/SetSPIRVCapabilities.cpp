@@ -17,6 +17,7 @@
 
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/SPIRV/IR/SPIRVDialect.h"
+#include "mlir/Dialect/SPIRV/IR/SPIRVEnums.h"
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Dialect/SPIRV/IR/TargetAndABI.h>
 #include <mlir/Pass/Pass.h>
@@ -54,6 +55,7 @@ public:
         spirv::Capability::Int64,
         spirv::Capability::Int16,
         spirv::Capability::Int8,
+        spirv::Capability::Bfloat16ConversionINTEL,
         spirv::Capability::Kernel,
         spirv::Capability::Linkage,
         spirv::Capability::Vector16,
@@ -71,6 +73,7 @@ public:
         // clang-format on
     };
     spirv::Extension exts_opencl[] = {
+        spirv::Extension::SPV_INTEL_bfloat16_conversion,
         spirv::Extension::SPV_EXT_shader_atomic_float_add,
         spirv::Extension::SPV_KHR_expect_assume};
     spirv::Extension exts_vulkan[] = {
