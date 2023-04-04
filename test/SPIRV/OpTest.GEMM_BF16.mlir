@@ -57,7 +57,7 @@ module @gemm attributes {gpu.container_module} {
     %memref_kernel_result_i8 = gpu.alloc  host_shared () : memref<18xi8>
     %memref_kernel_result_bf16 = memref.view %memref_kernel_result_i8[%c0][] : memref<18xi8> to memref<3x3xbf16>
     %memref_kernel_result_i16 = memref.view %memref_kernel_result_i8[%c0][] : memref<18xi8> to memref<3x3xi16>
-    
+
     memref.copy %arg2, %memref_kernel_result_bf16 : memref<3x3xbf16> to memref<3x3xbf16>
     gpu.launch_func  @gemm_kernel::@test_kernel blocks in (%c3, %c3, %c1) threads in (%c1, %c1, %c1) args(%memref_kernel_arg0_i16 : memref<3x3xi16>, %memref_kernel_arg1_i16 : memref<3x3xi16>, %memref_kernel_result_i16 : memref<3x3xi16>, %c0 : index, %c3 : index, %c1 : index)
     gpu.dealloc  %memref_kernel_arg0_i16 : memref<3x3xi16>
@@ -141,7 +141,7 @@ module @gemm attributes {gpu.container_module} {
       %1 = gpu.block_id  y
       scf.for %arg6 = %arg3 to %arg4 step %arg5 {
         %c0 = arith.constant 0 : index
-       
+
         %2 = memref.load %arg0[%0, %arg6] : memref<3x3xi16>
         %3 = memref.load %arg1[%arg6, %1] : memref<3x3xi16>
 

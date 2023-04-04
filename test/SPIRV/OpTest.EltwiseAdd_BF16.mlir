@@ -39,9 +39,9 @@ func.func @main() attributes {llvm.emit_c_interface} {
     %c0 = arith.constant 0 : index
     %memref_arg0_bf16 = gpu.alloc  host_shared () : memref<10x20xbf16>
     %memref_arg1_bf16 = gpu.alloc  host_shared () : memref<10x20xbf16>
-    
+
     %memref_result_i8 = gpu.alloc  host_shared () : memref<400xi8>
-    
+
     // Copy the args to gpu memory
     memref.copy %arg0, %memref_arg0_bf16 : memref<10x20xbf16> to memref<10x20xbf16>
     memref.copy %arg1, %memref_arg1_bf16 : memref<10x20xbf16> to memref<10x20xbf16>
@@ -50,7 +50,7 @@ func.func @main() attributes {llvm.emit_c_interface} {
     // Only convert the kernel parameters
     // Way to do it:
     // 1. Create i8 memrefs for all kernel args that uses bf16,
-    // 2. Create a view of the args as bf16, 
+    // 2. Create a view of the args as bf16,
     // 3. Copy the original args to that view using memref.copy
     // 4. Create a view of the args as i16
     // 5. Pass the newly allocated i8/i16 args to the kernel
@@ -73,7 +73,7 @@ func.func @main() attributes {llvm.emit_c_interface} {
     %memref_kernel_result_i16 = memref.view %memref_result_i8[%c0][] : memref<400xi8> to memref<10x20xi16>
 
     gpu.launch_func  @test_kernel::@test_kernel blocks in (%c10, %c20, %c1) threads in (%c1, %c1, %c1) args(%memref_kernel_arg0_i16 : memref<10x20xi16>, %memref_kernel_arg1_i16 : memref<10x20xi16>, %memref_kernel_result_i16 : memref<10x20xi16>)
-    
+
     gpu.dealloc  %memref_kernel_arg0_i16 : memref<10x20xi16>
     gpu.dealloc  %memref_kernel_arg1_i16 : memref<10x20xi16>
     return %memref_kernel_result_bf16 : memref<10x20xbf16>
@@ -104,9 +104,9 @@ func.func @main() attributes {llvm.emit_c_interface} {
       // Do an FADD on the operands
       %f32_12 = spirv.FAdd %f32_7, %f32_11 : f32
       // Convert the result back to i16 for storing
-      %12 = spirv.INTEL.ConvertFToBF16 %f32_12 : f32 to i16      
+      %12 = spirv.INTEL.ConvertFToBF16 %f32_12 : f32 to i16
       // *************************************** //
-      
+
       %13 = spirv.IMul %1, %cst20_i64 : i64
       %14 = spirv.IAdd %13, %3 : i64
       %15 = spirv.AccessChain %arg2[%14] : !spirv.ptr<!spirv.array<200 x i16>, CrossWorkgroup>, i64
@@ -138,5 +138,5 @@ func.func @main() attributes {llvm.emit_c_interface} {
       gpu.return
     }
   }
-  
+
 }
