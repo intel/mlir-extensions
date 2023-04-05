@@ -11,9 +11,10 @@ module attributes {torch.debug_module_name = "ReLU"} {
     } -> tensor<@shape@x@dtype@>
     return %1 : tensor<@shape@x@dtype@>
   }
+
   func.func @main() {
     %0= arith.constant dense<1.3>:tensor<@shape@x@dtype@>
-    %1 = call @forward(%0) : (tensor<@shape@x@dtype@>) -> tensor<@shape@x@dtype@>
-     return
+    %1 = func.call @forward(%0) : (tensor<@shape@x@dtype@>) -> tensor<@shape@x@dtype@>
+    return
   }
 }

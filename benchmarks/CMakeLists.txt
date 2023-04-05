@@ -13,4 +13,6 @@ else()
 endif()
 
 configure_file(bench_imex.in ${IMEX_BINARY_DIR}/benchmarks/bench_imex @ONLY)
+
 file(COPY pipelines/linalg-to-gpu.pp DESTINATION ${IMEX_BINARY_DIR}/benchmarks/pipelines)
+file(COPY pipelines/linalg-to-cpu.pp DESTINATION ${IMEX_BINARY_DIR}/benchmarks/pipelines)

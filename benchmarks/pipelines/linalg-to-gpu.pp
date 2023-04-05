@@ -3,7 +3,7 @@
 builtin.module(convert-tensor-to-linalg
     arith-bufferize
     func.func(empty-tensor-to-alloc-tensor
-          eliminate-empty-tensors
+          // eliminate-empty-tensors
           scf-bufferize
           shape-bufferize
           linalg-bufferize
@@ -36,9 +36,11 @@ builtin.module(convert-tensor-to-linalg
     func.func(llvm-request-c-wrappers)
     serialize-spirv
     convert-gpu-to-gpux
+    convert-scf-to-cf
     convert-func-to-llvm
     convert-math-to-llvm
     convert-gpux-to-llvm
+    convert-cf-to-llvm
     expand-strided-metadata
     lower-affine
     finalize-memref-to-llvm

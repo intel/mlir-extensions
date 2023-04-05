@@ -1,0 +1,74 @@
+#map = affine_map<(@affine_map@) -> (@affine_map@)>
+module attributes {torch.debug_module_name = "SiLU"} {
+  llvm.mlir.global internal constant @str_global("the average kernel execution time (ms) over 100 runs: ")
+  llvm.func @printCString(!llvm.ptr<i8>)
+  llvm.func @printF64(f64)
+  llvm.func @printNewline()
+  llvm.func @rtclock() -> f64
+
+  func.func @forward(%arg0: tensor<@shape@x@dtype@>) -> tensor<@shape@x@dtype@> {
+    %cst = arith.constant 1.000000e+00 : @dtype@
+    %0 = tensor.empty() : tensor<@shape@x@dtype@>
+    %1 = linalg.generic {indexing_maps = [#map, #map], iterator_types = [@iterator_types@]} ins(%arg0 : tensor<@shape@x@dtype@>) outs(%0 : tensor<@shape@x@dtype@>) {
+    ^bb0(%in: @dtype@, %out: @dtype@):
+      %3 = arith.negf %in : @dtype@
+      %4 = math.exp %3 : @dtype@
+      %5 = arith.addf %4, %cst : @dtype@
+      %6 = arith.divf %cst, %5 : @dtype@
+      linalg.yield %6 : @dtype@
+    } -> tensor<@shape@x@dtype@>
+    %2 = linalg.generic {indexing_maps = [#map, #map, #map], iterator_types = [@iterator_types@]} ins(%1, %arg0 : tensor<@shape@x@dtype@>, tensor<@shape@x@dtype@>) outs(%0 : tensor<@shape@x@dtype@>) {
+    ^bb0(%in: @dtype@, %in_0: @dtype@, %out: @dtype@):
+      %3 = arith.mulf %in, %in_0 : @dtype@
+      linalg.yield %3 : @dtype@
+    } -> tensor<@shape@x@dtype@>
+    return %2 : tensor<@shape@x@dtype@>
+  }
+
+  func.func @imex_cpu_profiler(%arg0: tensor<@shape@x@dtype@>) {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %cM = arith.constant 5 : index
+    %cN = arith.constant 100 : index
+    %cNF = arith.constant 0.1 : f64
+    %time_0 = arith.constant 0.0 : f64
+
+    // Warm-up
+    scf.for %i = %c0 to %cM step %c1 {
+      %0 = func.call @forward(%arg0) : (tensor<@shape@x@dtype@>) -> tensor<@shape@x@dtype@>
+      %tmp = bufferization.to_memref %0 : memref<@shape@x@dtype@>
+      memref.dealloc %tmp: memref<@shape@x@dtype@>
+    }
+
+    // Profiling
+    %time = scf.for %i = %c0 to %cN step %c1 
+            iter_args(%iter = %time_0) -> (f64) {
+      %t0 = llvm.call @rtclock() : () -> f64
+      %1 = func.call @forward(%arg0) : (tensor<@shape@x@dtype@>) -> tensor<@shape@x@dtype@>
+      %t1 = llvm.call @rtclock() : () -> f64
+      %d = arith.subf %t1, %t0: f64 
+      %mem = bufferization.to_memref %1 : memref<@shape@x@dtype@>
+      memref.dealloc %mem: memref<@shape@x@dtype@>
+      %time_next = arith.addf %iter, %d: f64
+      scf.yield %time_next: f64
+    }
+
+    %avg = arith.divf %time, %cNF: f64
+
+    %2 = llvm.mlir.addressof @str_global : !llvm.ptr<array<54 x i8>>
+    %3 = llvm.mlir.constant(0 : index) : i64
+    %4 = llvm.getelementptr %2[%3, %3] : (!llvm.ptr<array<54 x i8>>, i64, i64) -> !llvm.ptr<i8>
+
+    llvm.call @printCString(%4) : (!llvm.ptr<i8>) -> ()
+    llvm.call @printF64(%avg): (f64) -> ()
+    llvm.call @printNewline(): () -> ()
+    return
+  }
+
+  func.func @main() {
+    %0= arith.constant dense<1.3>:tensor<@shape@x@dtype@>
+    %1 = call @forward(%0) : (tensor<@shape@x@dtype@>) -> tensor<@shape@x@dtype@>
+    func.call @imex_cpu_profiler(%0) : (tensor<@shape@x@dtype@>) -> ()
+    return
+  }
+}

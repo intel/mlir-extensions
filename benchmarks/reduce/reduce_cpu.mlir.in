@@ -1,0 +1,71 @@
+#map4 = affine_map<(d0, d1, d2, d3) -> (d3, d0, d1, d2)>
+#map5 = affine_map<(d0, d1, d2, d3) -> (d0, d1, d2)>
+module {
+  llvm.mlir.global internal constant @str_global("the average kernel execution time (ms) over 200 runs: ")
+  llvm.func @printCString(!llvm.ptr<i8>)
+  llvm.func @printF64(f64)
+  llvm.func @printNewline()
+  llvm.func @rtclock() -> f64
+
+  func.func @fusion(%arg4: tensor<32x16x512x512x@dtype@>, %arg5: tensor<@dtype@>) -> (tensor<1x16x512x512x@dtype@> {lmhlo.written}) {
+    %extracted = tensor.extract %arg5[] : tensor<@dtype@>
+    %1 = tensor.empty() : tensor<16x512x512x@dtype@>
+    %2 = linalg.fill ins(%extracted : @dtype@) outs(%1 : tensor<16x512x512x@dtype@>) -> tensor<16x512x512x@dtype@>
+    %3 = linalg.generic {indexing_maps = [#map4, #map5], iterator_types = ["parallel", "parallel", "parallel", "reduction"]} ins(%arg4 : tensor<32x16x512x512x@dtype@>) outs(%2 : tensor<16x512x512x@dtype@>) {
+    ^bb0(%in: @dtype@, %out: @dtype@):
+      %from_elements = tensor.from_elements %out : tensor<@dtype@>
+      %from_elements_4 = tensor.from_elements %in : tensor<@dtype@>
+      %extracted_5 = tensor.extract %from_elements[] : tensor<@dtype@>
+      %extracted_6 = tensor.extract %from_elements_4[] : tensor<@dtype@>
+      %4 = arith.addf %extracted_5, %extracted_6 : @dtype@
+      %from_elements_7 = tensor.from_elements %4 : tensor<@dtype@>
+      %extracted_8 = tensor.extract %from_elements_7[] : tensor<@dtype@>
+      linalg.yield %extracted_8 : @dtype@
+    } -> tensor<16x512x512x@dtype@>
+    %expanded = tensor.expand_shape %3 [[0, 1], [2], [3]] : tensor<16x512x512x@dtype@> into tensor<1x16x512x512x@dtype@>
+    return %expanded : tensor<1x16x512x512x@dtype@>
+  }
+
+  func.func @imex_cpu_profiler(%arg0: tensor<32x16x512x512x@dtype@>, %arg1: tensor<@dtype@>) {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %cM = arith.constant 5 : index
+    %cN = arith.constant 200 : index
+    %cNF = arith.constant 0.2 : f64
+
+    scf.for %i = %c0 to %cM step %c1 {
+      %0 = func.call @fusion(%arg0, %arg1) : (tensor<32x16x512x512x@dtype@>, tensor<@dtype@>) -> tensor<1x16x512x512x@dtype@>
+    }
+
+    %time = scf.for %i = %c0 to %cN step %c1 
+            iter_args(%iter = %time_0) -> (f64) {
+      %t0 = llvm.call @rtclock() : () -> f64
+      %1 = func.call @fusion(%arg0, %arg1) : (tensor<32x16x512x512x@dtype@>, tensor<@dtype@>) -> tensor<1x16x512x512x@dtype@>
+      %t1 = llvm.call @rtclock() : () -> f64
+      %d = arith.subf %t1, %t0: f64 
+      %mem = bufferization.to_memref %1 : memref<@out_shape@x@dtype@>
+      memref.dealloc %mem: memref<@out_shape@x@dtype@>
+      %time_next = arith.addf %iter, %d: f64
+      scf.yield %time_next: f64
+    }
+
+    %avg = arith.divf %time, %cNF: f64
+
+    %2 = llvm.mlir.addressof @str_global : !llvm.ptr<array<54 x i8>>
+    %3 = llvm.mlir.constant(0 : index) : i64
+    %4 = llvm.getelementptr %2[%3, %3] : (!llvm.ptr<array<54 x i8>>, i64, i64) -> !llvm.ptr<i8>
+
+    llvm.call @printCString(%4) : (!llvm.ptr<i8>) -> ()
+    llvm.call @printF64(%avg): (f64) -> ()
+    llvm.call @printNewline(): () -> ()
+    return
+  }
+
+  func.func @main() {
+    %0 = arith.constant dense<3.3>:tensor<32x16x512x512x@dtype@>
+    %1 = arith.constant dense<0.0> : tensor<@dtype@>
+    %2 = call @fusion(%0, %1) : (tensor<32x16x512x512x@dtype@>, tensor<@dtype@>) -> tensor<1x16x512x512x@dtype@>
+    func.call @imex_cpu_profiler(%0, %1) : (tensor<32x16x512x512x@dtype@>, tensor<@dtype@>) -> ()
+    return
+  }
+}

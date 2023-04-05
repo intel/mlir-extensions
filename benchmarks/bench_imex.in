@@ -20,21 +20,30 @@ IMEX_RUNNER=@IMEX_BINARY_DIR@/bin/imex-runner.py
 
 # -l: using level-zero runtime
 # -s: using sycl runtime
-while getopts ':lsh' opt; do
+while getopts ':clsh' opt; do
   case "$opt" in
+    c)
+      echo "Running on CPU"
+      RUNTIME="${IMEX_L0_RUNTIME}"
+      RUNTIMENAME="CPU"
+      PIPELINE="linalg-to-cpu.pp"
+      ;;
     l)
-      echo "Running with level-zero runtime"
+      echo "Running on GPU using level-zero runtime"
       RUNTIME="${IMEX_L0_RUNTIME}"
       RUNTIMENAME="L0"
+      PIPELINE="linalg-to-gpu.pp"
       ;;
 
     s)
-      echo "Running with sycl runtime"
+      echo "Running on GPU using sycl runtime"
       RUNTIME="${IMEX_SYCL_RUNTIME}"
       RUNTIMENAME="SYCL"
+      PIPELINE="linalg-to-gpu.pp"
       ;;
     ?|h)
       echo "Usage: $(basename $0) [-l] [-s] arg"
+      echo "                -c: using cpu runtime"
       echo "                -s: using sycl runtime"
       echo "                -l: using level-zero runtime"
       echo "                arg: path to a folder containing .mlir files or path to an mlir file"
@@ -52,7 +61,7 @@ elif [ "$#" -eq 1 ] && [ -d "$1" ]; then
     TESTS=`find ${BENCHMARK_ROOT}/$1 -type f -name '*.mlir' | sort -n`
 elif [ "$#" -eq 1 ] && [ -f "$1" ]; then
     FILE=$1
-    EXT=${FILE#*.}
+    EXT=${FILE##*.}
     if [[ "$EXT" -ne "mlir" ]]; then
         echo "Only take .mlir file" && exit -1
     fi
@@ -63,21 +72,21 @@ echo "Run the following Tests:"
 echo -e "${TESTS}\n"
 
 # clean up old results/reports first
-rm report.txt
+rm -f report.txt
 echo -e "\n================ Imex Perf ($RUNTIMENAME) @ $(date) ================\n" >> report.txt
 
 for i in $TESTS; do
     test_name=$(basename -- "$i")
     echo -n "${test_name}: " >&2
     output=$(@Python3_EXECUTABLE@ $IMEX_RUNNER \
-       --pass-pipeline-file=$BENCHMARK_ROOT/pipelines/linalg-to-gpu.pp \
+       --pass-pipeline-file=$BENCHMARK_ROOT/pipelines/$PIPELINE \
        --runner imex-cpu-runner -e main \
        --shared-libs=$MLIR_RUNNER_UTILS,$MLIR_C_RUNNER_UTILS,$RUNTIME\
        --entry-point-result=void -i $i)
     echo $output
     while IFS= read -r line; do
-      if [[ $line == *"the kernel execution time"* ]]; then
-        echo "${test_name}: $line"
+      if [[ $line == *"execution time"* ]]; then
+        echo -e "${test_name}: $line"
       fi
     done <<< $output >> report.txt
 done
