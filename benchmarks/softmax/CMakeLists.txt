@@ -15,6 +15,7 @@ foreach(shape ${test_shapes})
     list(GET sizes 0 batch_size)
 
     foreach(dtype ${test_dtypes})
-        configure_file(softmax.mlir.in ${IMEX_BINARY_DIR}/benchmarks/softmax/softmax_${shape}_${dtype}.mlir @ONLY)
+        configure_file(softmax_cpu.mlir.in ${IMEX_BINARY_DIR}/benchmarks/softmax/cpu/softmax_${shape}_${dtype}.mlir @ONLY)
+        configure_file(softmax_gpu.mlir.in ${IMEX_BINARY_DIR}/benchmarks/softmax/gpu/softmax_${shape}_${dtype}.mlir @ONLY)
     endforeach()
 endforeach()

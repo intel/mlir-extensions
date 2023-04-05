@@ -23,6 +23,7 @@ foreach(shape ${test_shapes})
     list(JOIN iterators ", " iterator_types)
 
     foreach(dtype ${test_dtypes})
-        configure_file(silu.mlir.in ${IMEX_BINARY_DIR}/benchmarks/silu/silu_${shape}_${dtype}.mlir @ONLY)
+        configure_file(silu_cpu.mlir.in ${IMEX_BINARY_DIR}/benchmarks/silu/cpu/silu_${shape}_${dtype}.mlir @ONLY)
+        configure_file(silu_gpu.mlir.in ${IMEX_BINARY_DIR}/benchmarks/silu/gpu/silu_${shape}_${dtype}.mlir @ONLY)
     endforeach()
 endforeach()

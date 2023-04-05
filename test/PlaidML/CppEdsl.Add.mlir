@@ -15,14 +15,9 @@ module @add {
 func.func @main() {
     %0= arith.constant dense<[[1, 2, 3], [4, 5, 4102], [16777223, 4294967304, 1099511627785]]>:tensor<3x3xi64>
     %1= arith.constant dense<[[1, 4098, 3], [16777220, 5, 4294967302], [7, 1099511627784, 9]]>:tensor<3x3xi64>
-    %lb = arith.constant 0 : index
-    %ub = arith.constant 100 : index
-    %step = arith.constant 1 : index
-    scf.for %temp = %lb to %ub step %step {
-      %2 = func.call @test(%0,%1) : (tensor<3x3xi64>,tensor<3x3xi64>) -> tensor<3x3xi64>
-      %unranked = tensor.cast %2 : tensor<3x3xi64> to tensor<*xi64>
-      func.call @printMemrefI64(%unranked) : (tensor<*xi64>) -> ()
-    }
+    %2 = func.call @test(%0,%1) : (tensor<3x3xi64>,tensor<3x3xi64>) -> tensor<3x3xi64>
+    %unranked = tensor.cast %2 : tensor<3x3xi64> to tensor<*xi64>
+    func.call @printMemrefI64(%unranked) : (tensor<*xi64>) -> ()
     return
 }
 func.func private @printMemrefI64(tensor<*xi64>)
