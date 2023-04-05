@@ -12,7 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #ifndef _IMEX_CONVERSION_PASSDETAIL_H_
-#define _IMEXCONVERSION_PASSDETAIL_H_
+#define _IMEX_CONVERSION_PASSDETAIL_H_
 
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/IR/FunctionInterfaces.h>
@@ -88,4 +88,4 @@ class GPUXDialect;
 
 } // namespace imex
 
-#endif // _IMEXCONVERSION_PASSDETAIL_H_
+#endif // _IMEX_CONVERSION_PASSDETAIL_H_

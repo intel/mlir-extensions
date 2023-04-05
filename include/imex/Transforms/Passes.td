@@ -91,4 +91,22 @@ def LowerMemRefCopy : Pass<"imex-lower-memref-copy", "::mlir::func::FuncOp"> {
     ];
 }
 
+def BF16ToGPU : Pass<"bf16-to-gpu", "::mlir::ModuleOp"> {
+  let summary = "transform GPU dialect with bf16 to a form that can be lowered to spirv with Intel spirv extension ops.";
+  let description = [{
+    This pass transforms gpu dialect with bf16 dtype to a form that uses i16
+    and f32 dtype that can be lowered to spirv dialect with Intel spirv extension ops.
+    bf16 is bitcast to a bitwidth equal type i16 as bf16 is not a supported type
+    in spirv.
+    Computation is replace by first extending bf16 to f32, do the compute in f32
+    and truncate result back to bf16.
+  }];
+  let constructor = "imex::createBF16ToGPUPass()";
+  let dependentDialects = [
+    "::mlir::gpu::GPUDialect",
+    "::mlir::memref::MemRefDialect",
+    "::mlir::arith::ArithDialect"
+    ];
+}
+
 #endif // _IMEX_TRANSFORMS_PASSES_TD_INCLUDED_

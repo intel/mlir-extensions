@@ -18,6 +18,7 @@
 ///
 //===----------------------------------------------------------------------===//
 
+#include "llvm/Support/Threading.h"
 #include <imex/Transforms/Passes.h>
 
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
@@ -259,14 +260,20 @@ public:
             /*asyncDependencies*/ std::nullopt, alloc.getDynamicSizes(),
             alloc.getSymbolOperands(), hostShared);
         auto allocResult = gpuAlloc.getResult(0);
-        alloc->replaceAllUsesWith(gpuAlloc);
-        alloc.erase();
         builder.setInsertionPoint(term);
-
-        // TODO(nbpatel): Need a DeviceToHost copy and then free the device
-        // memory.
-        if (!access.hostWrite)
-          builder.create<mlir::gpu::DeallocOp>(loc, std::nullopt, allocResult);
+        for (mlir::OpOperand &use : alloc.getResult().getUses()) {
+          if (use.getOwner() == term) {
+            auto newAlloc = builder.create<mlir::memref::AllocOp>(
+                loc, alloc.getType(), alloc.getDynamicSizes(),
+                alloc.getSymbolOperands());
+            builder.create<mlir::memref::CopyOp>(loc, allocResult,
+                                                 newAlloc.getResult());
+            use.set(newAlloc.getResult());
+          }
+        }
+        alloc.replaceAllUsesWith(allocResult);
+        builder.create<mlir::gpu::DeallocOp>(loc, std::nullopt, allocResult);
+        alloc.erase();
       }
     }
 

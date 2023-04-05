@@ -36,7 +36,7 @@ module @convolution attributes {gpu.container_module} {
 
     %memref_kernel_arg0_bf16 = memref.view %memref_kernel_arg0_i8[%c0][] : memref<401408xi8> to memref<1x56x56x64xbf16>
     %memref_kernel_arg1_bf16 = memref.view %memref_kernel_arg1_i8[%c0][] : memref<73728xi8> to memref<3x3x64x64xbf16>
-    
+
     %memref_kernel_arg0_i16 = memref.view %memref_kernel_arg0_i8[%c0][] : memref<401408xi8> to memref<1x56x56x64xi16>
     %memref_kernel_arg1_i16 = memref.view %memref_kernel_arg1_i8[%c0][] : memref<73728xi8> to memref<3x3x64x64xi16>
 
@@ -60,11 +60,11 @@ module @convolution attributes {gpu.container_module} {
     %memref_3_i8 = gpu.alloc  host_shared () : memref<430592xi8>
     %memref_3_bf16 = memref.view %memref_3_i8[%c0][] : memref<430592xi8> to memref<1x58x58x64xbf16>
     %memref_3_i16 = memref.view %memref_3_i8[%c0][] : memref<430592xi8> to memref<1x58x58x64xi16>
-    
+
     memref.copy %memref_2_bf16, %memref_3_bf16 : memref<1x58x58x64xbf16> to memref<1x58x58x64xbf16>
     %subview = memref.subview %memref_3_bf16[0, 1, 1, 0] [1, 56, 56, 64] [1, 1, 1, 1] : memref<1x58x58x64xbf16> to memref<1x56x56x64xbf16, strided<[215296, 3712, 64, 1], offset: 3776>>
     memref.copy %memref_1_bf16, %subview : memref<1x56x56x64xbf16> to memref<1x56x56x64xbf16, strided<[215296, 3712, 64, 1], offset: 3776>>
-     
+
     %memref_4_i8 = gpu.alloc  host_shared () : memref<401408xi8>
     %memref_4_bf16 = memref.view %memref_4_i8[%c0][] : memref<401408xi8> to memref<1x56x56x64xbf16>
     %memref_4_i16 = memref.view %memref_4_i8[%c0][] : memref<401408xi8> to memref<1x56x56x64xi16>
@@ -308,12 +308,12 @@ spirv.module @__spv__conv_kernel Physical64 OpenCL requires #spirv.vce<v1.0, [In
 
             %47 = spirv.FMul %f32_26, %f32_36 : f32
 
-            %477 = spirv.INTEL.ConvertFToBF16 %47 : f32 to i16    
+            %477 = spirv.INTEL.ConvertFToBF16 %47 : f32 to i16
             %478= spirv.INTEL.ConvertBF16ToF %477 : i16 to f32
 
             %48 = spirv.FAdd %f32_46, %478 : f32
-      
-            %bf16_48 = spirv.INTEL.ConvertFToBF16 %48 : f32 to i16      
+
+            %bf16_48 = spirv.INTEL.ConvertFToBF16 %48 : f32 to i16
 
             %cst0_i64_7 = spirv.Constant 0 : i64
             %cst200704_i64_8 = spirv.Constant 200704 : i64

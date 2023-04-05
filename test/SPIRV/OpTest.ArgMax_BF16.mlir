@@ -9,7 +9,7 @@
 
 module @argmax attributes {gpu.container_module} {
   memref.global "private" constant @__constant_1x4x4x3xbf16 : memref<1x4x4x3xbf16> = dense<[[[[9.000000e+00, 8.000000e+00, 0.000000e+00], [1.000000e+00, 5.000000e+00, 0.000000e+00], [1.000000e+00, 1.000000e+00, 7.000000e+00], [8.000000e+00, 2.000000e+00, 2.000000e+00]], [[8.000000e+00, 0.000000e+00, 4.000000e+00], [7.000000e+00, 5.000000e+00, 5.000000e+00], [8.000000e+00, 2.000000e+00, 0.000000e+00], [0.000000e+00, 9.000000e+00, 5.000000e+00]], [[4.000000e+00, 7.000000e+00, 2.000000e+00], [4.000000e+00, 5.000000e+00, 1.000000e+00], [3.000000e+00, 3.000000e+00, 6.000000e+00], [8.000000e+00, 0.000000e+00, 1.000000e+00]], [[2.000000e+00, 8.000000e+00, 4.000000e+00], [0.000000e+00, 5.000000e+00, 5.000000e+00], [6.000000e+00, 1.000000e+00, 1.000000e+00], [3.000000e+00, 3.000000e+00, 1.000000e+00]]]]>
-  
+
   func.func @main() attributes {llvm.emit_c_interface} {
     %0 = memref.get_global @__constant_1x4x4x3xbf16 : memref<1x4x4x3xbf16>
     %1 = call @test(%0) : (memref<1x4x4x3xbf16>) -> memref<i32>
@@ -50,10 +50,10 @@ module @argmax attributes {gpu.container_module} {
     %memref_0_kernel_i16 = memref.view %memref_0_kernel_i8[%c0][] : memref<2xi8> to memref<i16>
 
     gpu.launch_func  @cmpf_kernel::@test_kernel blocks in (%c1, %c1, %c1) threads in (%c1, %c1, %c1) args(%memref_kernel_arg0_i16 : memref<1x4x4x3xi16>, %c0 : index, %memref_0_kernel_i16 : memref<i16>, %c3 : index, %c1 : index, %c4 : index)
-    
+
     %memref_1 = gpu.alloc  () : memref<1x4x4x3xi32>
     gpu.launch_func  @store_i32_kernel::@test_kernel blocks in (%c1, %c4, %c4) threads in (%c1, %c1, %c1) args(%c0_i32 : i32, %memref_1 : memref<1x4x4x3xi32>, %c0 : index, %c3 : index, %c1 : index)
-   
+
 
     %alloc_2 = memref.alloc() {alignment = 64 : i64} : memref<i32>
     memref.store %c0_i32, %alloc_2[] : memref<i32>
@@ -329,6 +329,3 @@ module @argmax attributes {gpu.container_module} {
     }
   }
 }
-
-
-

@@ -25,7 +25,14 @@
 #include <mlir/Conversion/MathToSPIRV/MathToSPIRV.h>
 #include <mlir/Conversion/SCFToSPIRV/SCFToSPIRV.h>
 
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
+#include "mlir/Dialect/SPIRV/IR/SPIRVOps.h"
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/Matchers.h"
+#include "mlir/Support/LLVM.h"
+#include "mlir/Transforms/DialectConversion.h"
+#include "llvm/ADT/ArrayRef.h"
 #include <mlir/Dialect/SPIRV/IR/SPIRVDialect.h>
 #include <mlir/Dialect/SPIRV/Transforms/SPIRVConversion.h>
 
@@ -91,6 +98,61 @@ void GPUXToSPIRVPass::runOnOperation() {
     options.use64bitIndex = true;
 
     mlir::SPIRVTypeConverter typeConverter(targetAttr, options);
+
+    /// Walk gpu.func and collect root ops for these two special patterns
+    /// 1. Pattern to convert arith.truncf (f32 -> bf16) followed by
+    ///    arith.bitcast (bf16 -> i16)
+    ///    into a SPIR-V convert op.
+    /// 2. Pattern to convert arith.bitcast (i16 -> bf16) followed by
+    ///    arith.extf (bf16 -> f32)
+    ///    into a SPIR-V convert op.
+    /// And convert the patterns into spirv bf16<->f32 conversion ops.
+    mlir::OpBuilder builder(gpuModule);
+    llvm::SmallVector<mlir::Operation *, 16> eraseOps;
+    gpuModule->walk([&](mlir::gpu::GPUFuncOp fop) {
+      fop->walk([&](mlir::arith::BitcastOp bop) {
+        if (bop.getType().isInteger(16)) {
+          mlir::arith::TruncFOp inputOp = llvm::dyn_cast<mlir::arith::TruncFOp>(
+              bop.getOperand().getDefiningOp());
+          if (inputOp) {
+            if (inputOp.getType().isBF16() &&
+                inputOp.getOperand().getType().isF32()) {
+              builder.setInsertionPoint(inputOp);
+              auto narrow = builder.create<mlir::spirv::INTELConvertFToBF16Op>(
+                  inputOp.getLoc(), builder.getI16Type(), inputOp.getOperand());
+              bop->getResult(0).replaceAllUsesWith(narrow);
+              eraseOps.push_back(bop);
+              eraseOps.push_back(inputOp);
+            }
+          }
+        }
+      });
+      fop->walk([&](mlir::arith::ExtFOp eop) {
+        if (eop.getType().isF32()) {
+          mlir::arith::BitcastOp inputOp =
+              llvm::dyn_cast<mlir::arith::BitcastOp>(
+                  eop.getOperand().getDefiningOp());
+          if (inputOp) {
+            if (inputOp.getType().isBF16() &&
+                inputOp.getOperand().getType().isInteger(16)) {
+              builder.setInsertionPoint(inputOp);
+              auto widen = builder.create<mlir::spirv::INTELConvertBF16ToFOp>(
+                  inputOp.getLoc(), builder.getF32Type(), inputOp.getOperand());
+              eop->getResult(0).replaceAllUsesWith(widen);
+              eraseOps.push_back(eop);
+              eraseOps.push_back(inputOp);
+            }
+          }
+        }
+      });
+    });
+    target->addDynamicallyLegalOp<mlir::spirv::INTELConvertBF16ToFOp>(
+        [](mlir::spirv::INTELConvertBF16ToFOp) { return true; });
+    target->addDynamicallyLegalOp<mlir::spirv::INTELConvertFToBF16Op>(
+        [](mlir::spirv::INTELConvertFToBF16Op) { return true; });
+    for (auto eraseOp : eraseOps) {
+      eraseOp->erase();
+    }
 
     //------- Upstream Conversion------------
     mlir::populateGPUToSPIRVPatterns(typeConverter, patterns);
