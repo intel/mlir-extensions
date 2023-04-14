@@ -30,7 +30,7 @@ public:
   void runOnOperation() override {
     auto mod = getOperation();
     llvm::SmallVector<uint32_t, 0> spvBinary;
-    for (auto gpuMod : mod.getOps<gpu::GPUModuleOp>()) {
+    for (mlir::gpu::GPUModuleOp gpuMod : mod.getOps<gpu::GPUModuleOp>()) {
       auto name = gpuMod.getName();
       // check that the spv module has the same name with gpu module except the
       // prefix "__spv__"

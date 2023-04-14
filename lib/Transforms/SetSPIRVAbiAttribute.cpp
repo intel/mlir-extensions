@@ -57,7 +57,7 @@ public:
         mlir::StringAttr::get(context, mlir::spirv::getEntryPointABIAttrName());
     if (m_clientAPI == "opencl") {
       auto abi = mlir::spirv::getEntryPointABIAttr(context);
-      for (auto gpuFunc : gpuModule.getOps<mlir::gpu::GPUFuncOp>()) {
+      for (const auto &gpuFunc : gpuModule.getOps<mlir::gpu::GPUFuncOp>()) {
         if (!mlir::gpu::GPUDialect::isKernel(gpuFunc) ||
             gpuFunc->getAttr(attrName))
           continue;
@@ -66,7 +66,7 @@ public:
       }
     } else if (m_clientAPI == "vulkan") {
       auto abi = mlir::spirv::getEntryPointABIAttr(context);
-      for (auto gpuFunc : gpuModule.getOps<mlir::gpu::GPUFuncOp>()) {
+      for (const auto &gpuFunc : gpuModule.getOps<mlir::gpu::GPUFuncOp>()) {
         if (!mlir::gpu::GPUDialect::isKernel(gpuFunc) ||
             gpuFunc->getAttr(attrName))
           continue;

@@ -81,7 +81,7 @@ public:
     }
     // move the for-loop and its users into the newly created parallel-loop
     mlir::OpBuilder builder(func.getContext());
-    for (auto ops : groupedOps) {
+    for (const auto &ops : groupedOps) {
       auto op = ops.front();
       builder.setInsertionPoint(op);
       auto loc = op->getLoc();
