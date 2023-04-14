@@ -1,7 +1,7 @@
 # This file may be used to create an environment using:
 # $ conda create --name <env> --file <this file>
 # platform: linux-64
-_ipyw_jlab_nb_ext_conf=0.1.0=py39h06a4308_1
+_ipyw_jlab_nb_ext_conf==0.1.0
 _libgcc_mutex=0.1=main
 _openmp_mutex=5.1=1_gnu
 alabaster=0.7.12=pyhd3eb1b0_0
