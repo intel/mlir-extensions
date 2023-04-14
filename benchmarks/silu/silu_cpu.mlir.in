@@ -41,12 +41,12 @@ module attributes {torch.debug_module_name = "SiLU"} {
     }
 
     // Profiling
-    %time = scf.for %i = %c0 to %cN step %c1 
+    %time = scf.for %i = %c0 to %cN step %c1
             iter_args(%iter = %time_0) -> (f64) {
       %t0 = llvm.call @rtclock() : () -> f64
       %1 = func.call @forward(%arg0) : (tensor<@shape@x@dtype@>) -> tensor<@shape@x@dtype@>
       %t1 = llvm.call @rtclock() : () -> f64
-      %d = arith.subf %t1, %t0: f64 
+      %d = arith.subf %t1, %t0: f64
       %mem = bufferization.to_memref %1 : memref<@shape@x@dtype@>
       memref.dealloc %mem: memref<@shape@x@dtype@>
       %time_next = arith.addf %iter, %d: f64

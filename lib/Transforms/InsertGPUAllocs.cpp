@@ -96,7 +96,7 @@ public:
       // for its origin later in the code
       else if (auto call = mlir::dyn_cast<mlir::func::CallOp>(op)) {
         mlir::SmallVector<mlir::Value, 4> ret;
-        for (auto arg : call.getOperands()) {
+        for (mlir::Value arg : call.getOperands()) {
           if (arg.getType().isa<mlir::MemRefType>())
             ret.emplace_back(arg);
         }
@@ -121,7 +121,7 @@ public:
           return true;
       }
       if (auto call = mlir::dyn_cast<mlir::func::CallOp>(op)) {
-        for (auto arg : call.getOperands()) {
+        for (const auto &arg : call.getOperands()) {
           if (arg.getType().isa<mlir::MemRefType>())
             return true;
         }
@@ -147,12 +147,12 @@ public:
               if (!memref)
                 return mlir::WalkResult::interrupt();
 
-              for (auto mem : *memref) {
-                while (auto parentView =
+              for (mlir::Value mem : *memref) {
+                while (mlir::ViewLikeOpInterface parentView =
                            mem.getDefiningOp<mlir::ViewLikeOpInterface>())
                   mem = parentView.getViewSource();
 
-                for (auto alias : aliases.resolve(mem)) {
+                for (mlir::Value alias : aliases.resolve(mem)) {
                   auto op = alias.getDefiningOp();
                   if (op) {
                     if (mlir::isa<mlir::memref::GetGlobalOp>(op)) {
@@ -201,7 +201,7 @@ public:
     // Checks the access type of the OP under consideration.
     auto getAccessType = [&](mlir::Value memref) {
       AccessType ret;
-      for (auto mem : aliases.resolve(memref)) {
+      for (const auto &mem : aliases.resolve(memref)) {
         for (auto user : mem.getUsers()) {
           if (mlir::isa<mlir::func::ReturnOp>(user)) {
             ret.hostRead = true;
@@ -249,7 +249,7 @@ public:
     // This is the case where a memref.alloc op is directly converted to
     // gpu.alloc
     if (m_clientAPI == "opencl") {
-      for (auto it : gpuBufferAllocs) {
+      for (const auto &it : gpuBufferAllocs) {
         auto alloc = mlir::cast<mlir::memref::AllocOp>(it.first);
         auto access = getAccessType(alloc);
         auto loc = alloc.getLoc();
@@ -376,7 +376,7 @@ public:
     // This is the case where the inputs are passed as arguments to the
     // function. This code will add the IR for memory allocation on the device
     // with gpu.alloc and insert a memref.copy from host to device
-    for (auto it : gpuBufferParams) {
+    for (const auto &it : gpuBufferParams) {
       auto param = block.getArgument(it.first);
       auto access = getAccessType(param);
       access.hostRead = true;

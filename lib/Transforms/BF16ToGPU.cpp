@@ -81,7 +81,7 @@ public:
                   // Skip bitcast operation as we cannot change width of operand
                   if (!oname.startswith("arith.bitcast")) {
                     bool needWidening = false;
-                    for (auto oper : lop->getOperands()) {
+                    for (const auto &oper : lop->getOperands()) {
                       if (oper.getType().isBF16()) {
                         needWidening = true;
                       }
@@ -96,7 +96,7 @@ public:
           for (Operation *o : widenOps) {
             builder.setInsertionPoint(o);
             unsigned int idx = 0;
-            for (auto oper : o->getOperands()) {
+            for (const auto &oper : o->getOperands()) {
               if (oper.getType().isBF16()) {
                 auto newOp = builder.create<arith::ExtFOp>(
                     o->getLoc(), builder.getF32Type(), oper);
@@ -104,7 +104,7 @@ public:
               }
               idx++;
             }
-            for (auto res : o->getResults()) {
+            for (mlir::OpResult res : o->getResults()) {
               if (res.getType().isBF16()) {
                 res.setType(builder.getF32Type());
                 builder.setInsertionPointAfter(o);
@@ -116,7 +116,7 @@ public:
           }
           //  1-3: Change element type of entry block arguments
           Block &eblock = op.getBlocks().front();
-          for (auto arg : eblock.getArguments()) {
+          for (mlir::BlockArgument arg : eblock.getArguments()) {
             Type argt = arg.getType();
             MemRefType mt = dyn_cast<MemRefType>(argt);
             if (mt) {
@@ -168,7 +168,7 @@ public:
     SmallVector<Operation *, 8> replacedAllocOps;
     WalkResult result2 = mod.walk<WalkOrder::PreOrder>([&](gpu::LaunchFuncOp op)
                                                            -> WalkResult {
-      for (auto kop : op.getKernelOperands()) {
+      for (const auto &kop : op.getKernelOperands()) {
         auto mem = kop;
         Type memt = mem.getType();
         MemRefType mft = dyn_cast<MemRefType>(memt);
@@ -287,7 +287,7 @@ public:
             auto i16Mt = mt.cloneWith(mt.getShape(), builder.getI16Type());
             auto operands = bf16ViewOp->getOperands();
             SmallVector<Value, 4> newOperands;
-            for (auto operand : operands) {
+            for (Value operand : operands) {
               if (operand.getDefiningOp() == oldChainOp) {
                 newOperands.push_back(newChainOp->getResult(0));
               } else {

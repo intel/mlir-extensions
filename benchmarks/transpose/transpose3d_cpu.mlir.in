@@ -6,7 +6,7 @@ module attributes {torch.debug_module_name = "Transpose"} {
   llvm.func @printF64(f64)
   llvm.func @printNewline()
   llvm.func @rtclock() -> f64
-  
+
   func.func @forward(%arg0: tensor<@in_shape@x@dtype@>) -> tensor<@out_shape@x@dtype@> {
     %0 = tensor.empty() : tensor<@out_shape@x@dtype@>
     %1 = linalg.generic {indexing_maps = [#map, #map1], iterator_types = ["parallel", "parallel", "parallel"]} ins(%arg0 : tensor<@in_shape@x@dtype@>) outs(%0 : tensor<@out_shape@x@dtype@>) {
@@ -33,12 +33,12 @@ module attributes {torch.debug_module_name = "Transpose"} {
     }
 
     // Profiling
-    %time = scf.for %i = %c0 to %cN step %c1 
+    %time = scf.for %i = %c0 to %cN step %c1
             iter_args(%iter = %time_0) -> (f64) {
       %t0 = llvm.call @rtclock() : () -> f64
       %1 = func.call @forward(%arg0) : (tensor<@in_shape@x@dtype@>) -> tensor<@out_shape@x@dtype@>
       %t1 = llvm.call @rtclock() : () -> f64
-      %d = arith.subf %t1, %t0: f64 
+      %d = arith.subf %t1, %t0: f64
       %mem = bufferization.to_memref %1 : memref<@out_shape@x@dtype@>
       memref.dealloc %mem: memref<@out_shape@x@dtype@>
       %time_next = arith.addf %iter, %d: f64
