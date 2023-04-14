@@ -22,7 +22,7 @@ module @gemm attributes {gpu.container_module} {
     %2 = memref.get_global @__constant_3x3xf32 : memref<3x3xf32>
     %ref_result = memref.get_global @__constant_3x3xf32_ref_result : memref<3x3xf32>
     %unranked_ref_result = memref.cast %ref_result : memref<3x3xf32> to memref<*xf32>
-    
+
     scf.for %arg0 = %c0 to %c100 step %c1 {
       %3 = func.call @test(%0, %1, %2) : (memref<3x3xbf16>, memref<3x3xbf16>, memref<3x3xf32>) -> memref<3x3xf32>
       %cast = memref.cast %3 : memref<3x3xf32> to memref<*xf32>
@@ -44,7 +44,7 @@ module @gemm attributes {gpu.container_module} {
     %memref_0_i16 = memref.view %memref_0_i8[%c0][] : memref<18xi8> to memref<3x3xi16>
     memref.copy %arg0, %memref_0_bf16 : memref<3x3xbf16> to memref<3x3xbf16>
 
-    
+
     %memref_1_i8 = gpu.alloc host_shared () : memref<18xi8>
     %memref_1_bf16 = memref.view %memref_1_i8[%c0][] : memref<18xi8> to memref<3x3xbf16>
     %memref_1_i16 = memref.view %memref_1_i8[%c0][] : memref<18xi8> to memref<3x3xi16>
