@@ -22,7 +22,7 @@ jobs:
         with:
           workflow: Sync to Upstream Public Repo
           token: ${{secrets.IMEX_CI_RAVI_GH}}
-          
+
   invoke-cpu-tests:
     runs-on: gpu
     needs: invoke-sync
@@ -39,7 +39,7 @@ jobs:
           workflow: CPU Build
           ref: numba-dev
           token: ${{secrets.WORKFLOW_TOKEN}}
-          
+
   invoke-gpu-tests:
     runs-on: gpu
     needs: invoke-cpu-tests

@@ -22,7 +22,7 @@ jobs:
           repository: 'intel-sandbox/libraries.llvm.mlir-extensions.ci.git'
           ref: main
           token: ${{ secrets.WORKFLOW_TOKEN }}
-          fetch-depth: 0      
+          fetch-depth: 0
 
       - name: (MAIN) Get status of last run of sync.yml
         uses: actions/github-script@v3
@@ -50,7 +50,7 @@ jobs:
           branch: main
           path: refactor_cpu
 
-      - name: Download artifact (GPU Build main) 
+      - name: Download artifact (GPU Build main)
         uses: intel-innersource/frameworks.actions.thirdparty.download-workflow-artifact@v2
         with:
           github_token: ${{secrets.WORKFLOW_TOKEN}}
@@ -144,14 +144,14 @@ jobs:
               per_page: 1
             })
             console.log(run.conclusion)
-            
-            
+
+
             const fs = require('fs')
             let data = run.conclusion
             fs.writeFile('build_gpu_refactor.txt', data, (err) => {
                 if (err) throw err;
             })
-            
+
       - name: Generate Report
         run: |
           cp jenkins_slave/nightly_report.html .
@@ -183,8 +183,8 @@ jobs:
           echo "</table></body>" >> nightly_report.html
           date=$(date)
           echo "<b>$date</b><br>" >> nightly_report.html
-  
-         
+
+
 
       - name: Send Report
       # run this only if workflow dispatch is not called

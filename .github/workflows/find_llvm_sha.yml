@@ -34,7 +34,7 @@ jobs:
         run: |
           echo "bad commit:"
           echo ${{ inputs.first_bad_commit }}
-          
+
 
           echo "good commit"
           echo ${{ github.event.inputs.first_bad_commit}}
