@@ -194,6 +194,57 @@ cmake --build . --target check-imex
 ```
 Add '-v' to the above command-line to get verbose output.
 
+## Benchmarking
+IMEX provides an initial set of benchmarks for studying its performance. To build these benchmarks, users need 
+to manually add `-DIMEX_ENABLE_BENCHMARK=ON` option when building the IMEX. The benchmark testcases and the 
+script for running them will be generated under the `build/benchmarks` folder. 
+
+Currently, IMEX provides benchmarks for the following 4 categories of operations: 
+| Operation                             | CPU    | GPU    | 
+| :---:                                 | :---:  | :---:  |
+| elementwise (relu and silu)           | Yes    | Yes    |
+| reduction (softmax)                   | Yes    | Yes    |
+| transpose (transpose)                 | Yes    | Yes    |
+| fusion (kInputFusion and kLoopFusion) | No     | Yes    |
+
+These test cases are mainly implemented using linalg dialect, and the spriv test cases for 
+relu are also provided. Each testcase is named following the pattern of `opname_shape_dtype.mlir`
+
+### How to run ?
+For simplicity, the `bench_imex` script is provided to run the benchmark. It can take a mlir file or a folder as input.
+for the later case, it will simply run all test cases inside the folder. In addition, it also has to choose a runtime 
+based on the option. It accepts one of the following three options:
+- `-c` for cpu runtime
+- `-l` for level-zero runtime (for INTEL GPU)
+- `-s` for sycl runtime (for INTEL GPU)
+
+
+#### Example
+```sh
+# run a specific test case on CPU
+ ./bench_imex -c relu/cpu/relu_1x160x160x120_f16.mlir
+
+# run a set of test cases on GPU using sycl runtime
+ ./bench_imex -s relu/gpu/
+```
+> **NOTE**: if you are using `-c`, please use testcases under `cpu` subfolder; similarly, if you are using `-s` or `-l`, 
+> please use testcases under `gpu` subfolder. Otherwise, it may have unspecified errors or behaviors. 
+
+
+### How to customize the benchmark ?
+IMEX benchmark suite is implemented using CMAKE template, and initially provides limited set of shapes extraced from some production models, e.g., BERT, and AlexNet.
+- ReLU: 1x160x160x120, 50x640x20x15, 512x640x20x15
+- SiLU: 1x1024x40x30, 50x20x3072, 512x640x20x15
+- Softmax: 1x2000, 16x2000, 64x2000, 256x2000, 1024x2000
+- Transpose: 128x136, 1024x1024, 16x96x96, 96x7x96
+- Reduce: 32x16x512x512
+
+Users can extend it to evaluate more shapes by editing the, e.g, `relu.shapes.in` file, in each subfolder, and then 
+rebuild the imex. User can also add new data types, but it is currently only limited to basic data types including 
+fp32, fp16, int32 etc.
+
+
+
 ## Profiling kernel execute time
 ### sycl event
 ```sh
