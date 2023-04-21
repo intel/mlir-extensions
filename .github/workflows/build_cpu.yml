@@ -192,7 +192,8 @@ jobs:
         shell: bash -l {0}
         run: |
           cd $HOME_DIR/frameworks.ai.mlir.mlir-extensions/_build || exit 1
-          cmake --build . --target check-imex > tests.txt
+          set -o pipefail
+          cmake --build . --target check-imex | tee tests.txt
 
       - name: Upload tests.txt
         uses: actions/upload-artifact@v2
