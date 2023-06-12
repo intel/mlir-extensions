@@ -88,10 +88,11 @@ jobs:
         run: |
           cd $HOME_DIR/mlir-extensions
           source /home/gta/anaconda3/bin/activate imex-dev
+          source /opt/intel/oneapi/setvars.sh
           mkdir build
           cd build
           export MLIR_DIR=$HOME_DIR/llvm-mlir/_mlir_install
-          cmake .. -DIMEX_ENABLE_SYCL_RUNTIME=1 -DIMEX_ENABLE_L0_RUNTIME=1 -DSYCL_DIR=/home/nbpatel/intel/oneapi/compiler/2023.0.0/linux -DLEVEL_ZERO_DIR=$HOME_DIR/level-zero/level-zero-install/
+          cmake .. -DIMEX_ENABLE_SYCL_RUNTIME=1 -DIMEX_ENABLE_L0_RUNTIME=1 -DLEVEL_ZERO_DIR=$HOME_DIR/level-zero-install/
           make -j64
           cp /home/gta/actions-runner/_work/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions/gpurefactorbuild/llvm-mlir/llvm-project/_build/bin/llvm-lit /home/gta/actions-runner/_work/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions/gpurefactorbuild/mlir-extensions/build/bin
 
