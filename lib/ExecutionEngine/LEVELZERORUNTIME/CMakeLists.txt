@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-if(NOT LEVEL_ZERO_DIR)
-    message(FATAL_ERROR "LEVEL_ZERO_DIR is not set")
+find_package(LevelZero)
+
+if(NOT LevelZero_FOUND)
+    message(FATAL_ERROR "LevelZero not found. Please set LEVEL_ZERO_DIR.")
 endif()
 
-set(CMAKE_INSTALL_RPATH ${LEVEL_ZERO_DIR}/lib)
 add_mlir_library(level-zero-runtime
     SHARED
     LevelZeroRuntimeWrappers.cpp
@@ -26,13 +27,6 @@ add_mlir_library(level-zero-runtime
 
 target_compile_options (level-zero-runtime PUBLIC -fexceptions)
 
-target_include_directories(level-zero-runtime PRIVATE
-    ${MLIR_INCLUDE_DIRS}
-    ${LEVEL_ZERO_DIR}/include/
-    )
+target_link_libraries(level-zero-runtime PRIVATE LevelZero::LevelZero)
 
-target_link_directories(level-zero-runtime PRIVATE
-    ${LEVEL_ZERO_DIR}/lib
-    )
-
-target_link_libraries(level-zero-runtime PRIVATE ze_loader)
+set_property(TARGET level-zero-runtime APPEND PROPERTY BUILD_RPATH "${LevelZero_LIBRARIES_DIR}")

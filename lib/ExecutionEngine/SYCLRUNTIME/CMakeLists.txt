@@ -12,15 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-if(NOT SYCL_DIR)
-    message(FATAL_ERROR "SYCL_DIR is not set")
+find_package(SyclRuntime)
+
+if(NOT SyclRuntime_FOUND)
+    message(FATAL_ERROR "syclRuntime not found. Please set check oneapi installation and run setvars.sh.")
 endif()
 
-if(NOT LEVEL_ZERO_DIR)
-    message(FATAL_ERROR "LEVEL_ZERO_DIR is not set")
+find_package(LevelZero)
+
+if(NOT LevelZero_FOUND)
+    message(FATAL_ERROR "LevelZero not found. Please set LEVEL_ZERO_DIR.")
 endif()
 
-set(CMAKE_INSTALL_RPATH "${LEVEL_ZERO_DIR}/lib;${SYCL_DIR}/lib")
 add_mlir_library(sycl-runtime
     SHARED
     SyclRuntimeWrappers.cpp
@@ -36,14 +39,8 @@ target_compile_options (sycl-runtime PUBLIC -fexceptions -frtti)
 
 target_include_directories(sycl-runtime PRIVATE
     ${MLIR_INCLUDE_DIRS}
-    ${SYCL_DIR}/include/
-    ${SYCL_DIR}/include/sycl
-    ${LEVEL_ZERO_DIR}/include/
     )
 
-target_link_directories(sycl-runtime PRIVATE
-    ${SYCL_DIR}/lib
-    ${LEVEL_ZERO_DIR}/lib
-    )
+target_link_libraries(sycl-runtime PRIVATE LevelZero::LevelZero SyclRuntime::SyclRuntime)
 
-target_link_libraries(sycl-runtime PRIVATE ze_loader sycl)
+set_property(TARGET sycl-runtime APPEND PROPERTY BUILD_RPATH "${LevelZero_LIBRARIES_DIR}" "${SyclRuntime_LIBRARIES_DIR}")

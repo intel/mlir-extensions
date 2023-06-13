@@ -12,8 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-if(NOT LEVEL_ZERO_DIR)
-    message(FATAL_ERROR "LEVEL_ZERO_DIR is not set")
+find_package(LevelZero)
+
+if(NOT LevelZero_FOUND)
+    message(FATAL_ERROR "LevelZero not found. Please set LEVEL_ZERO_DIR.")
 endif()
 
 set(CMAKE_INSTALL_RPATH ${LEVEL_ZERO_DIR}/lib)
@@ -21,12 +23,4 @@ add_imex_tool(l0-fp64-checker l0-fp64-checker.cpp)
 
 target_compile_options (l0-fp64-checker PUBLIC -fexceptions)
 
-target_include_directories(l0-fp64-checker PRIVATE
-    ${LEVEL_ZERO_DIR}/include/
-    )
-
-target_link_directories(l0-fp64-checker PRIVATE
-    ${LEVEL_ZERO_DIR}/lib
-    )
-
-target_link_libraries(l0-fp64-checker PRIVATE ze_loader)
+target_link_libraries(l0-fp64-checker PRIVATE LevelZero::LevelZero)
