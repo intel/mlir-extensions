@@ -6,8 +6,8 @@ Short description of proposed solution.
 ## Motivation
 Explain motivation for the proposed idea.
 If you are proposing an optimization pass, please explain the applicable scenario and expected performance gain. It needs to address below criteria:
-- The new dialect needs to introduce unique features which we don’t think upstream dialect has interests to cover.
-- The new dialect should facilitate certain compile-time optimizations which otherwise cannot or very hard to achieve. In other words, there should be compile-time optimizations which requires the computation graph to be represented using the new dialects. If there is no compile-time optimization required, the functions could be represented  as a standardized MLIR module to facilitate code reuse.
+- The new dialect needs to introduce unique features which we don’t think upstream dialect has interests to cover, and we believe that it could be up-streamed to core MLIR in the future.  
+- The new dialect should facilitate certain compile-time optimizations which otherwise cannot or very hard to achieve. In other words, there should be compile-time optimizations which requires the computation to be represented using the new dialects. If there is no compile-time optimization required, the new capability introduced by dialect could be represented  as functions in a standardized MLIR module to facilitate code reuse.
 
 ## Proposal
 A Full and detailed description of proposal.
