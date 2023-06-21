@@ -48,73 +48,73 @@ Since there are existing dialects operating on vector data type, including vecto
 
 The XeTile dialect exploits the hardware features to do the auto-padding, which provides a simple and efficient generated code than the software padding. Using the tile dialect, user don’t need to detect the out-of-boundary case, and also the dialect takes care of unaligned shape, so the same code runs for the unaligned use case.  Users can focus on high-level optimization like software pipelining, cooperative prefetch, and K-slicing. 
 
-To create a 2D Tile memory descriptor, user needs to set up a tile with memref and its “base tile” information. The memref and its “base tile” must be 2D and must be contiguous. With the tile abstraction, XeTile does load_tile, prefetch_tile, and store_tile.  The XeTile only takes the base memref, offsets, sizes, and stride. Offsets and sizes describe the tile along the row and column, in the number of elements. Stride describe the number of elements between the two elements along the leading dimension.  The innermost dimension must be contiguous. The current version only supports the 2D memref has row-major layout.  
+To create a 2D Tile memory descriptor, user needs to set up a tile with a subview of memref. The subview has it parent memref, also called as “base tile” information. The “base tile” must be 2D and must be contiguous. With the tile abstraction, XeTile does load_tile, prefetch_tile, and store_tile.  The XeTile only takes the base memref, offsets, sizes, and stride. Offsets and sizes describe the tile along the row and column, in the number of elements. Stride describe the number of elements between the two elements along the leading dimension.  The innermost dimension must be contiguous. The current version only supports the 2D memref has row-major layout.  
+```mlir 
+  %tile = XeTile.init_tile %memref_subview
+     memref<64x64xbf16, strided<[1, 1], offset: 128> into tile<64x64xbf16>
+```
+The lowering pass could initiate a tile with a memref subview.  Tile is similar to memref.subview in terms of setting up a memory region out of a larger memory region. However, the memref subveiw is designed to support individual element access, and tile is to support tile load and mma. The memref.subview can cause out-of-bound access and leaves the handling of out-of-bounds access to the user, but the tile hides the details from the user. 
 
 ```mlir 
-  %tile = XeTile.init_tile %base_memref, %offset:2, %sizes:2, %stride
-     memref<64x64xbf16>, index, index, index, index, index
-     into tile<64x64xbf16, index, index, index, index, index>
-```
-init_tile is similar to memref.subview in terms of setting up a memory region out of a larger memory region. However, the subveiw leaves the handling of out-of-bounds access to the user to handle, but the tile hides the details from the user. The lowering pass could lower the subview to init_tile using the base tile info extracted “extract_strided_metadata”. 
-Init_ccop_tile splits a tile into multiple smaller tile so that the current thread can cooperatively work on the tile with the neighbour subgroup thread within the same workgroup. This can be used by cooperative prefetch and load on matrix A and B, where subgroup shares the memory access with its peer subgroups.  
+%3 = memref.subview %2[0, 128][32, 64][1, 1] :
+  memref<1024x1024xbf16> to memref<32x64xbf16, strided<[1, 1], offset: 128>
 
+%tile XeTile.init_tile %3 :
+	memref<32x64xbf16, strided<[1, 1], offset: 128> into tile<32x64xbf16>
+```
+
+Init_ccop_tile splits a tile into multiple smaller tile so that the current thread can cooperatively work on the tile with the neighbour subgroup thread within the same workgroup. This can be used by cooperative prefetch and load on matrix A and B, where subgroup shares the memory access with its peer subgroups.   
 ```mlir 
   %tile = XeTile.init_coop_tile %tile, %coop_id, %coop_size
-     tile<64x64xbf16, index, index, index, index, index>, uint_32, uint_32
-     into tile<8x8xbf16, index, index, index, index, index>
+     tile<64x64xbf16>, uint_32, uint_32 into tile<8x8xbf16>
 ```
 
 load_tile loads a tile to register region. Optionally with blocked layout, which was represented with the high dimension vector.  The blocking don’t changes the order of the outer dimension, so for vector [m, n] with blockfactor [MB, NB], the register region has layout as [m/MB, n/NB, MB, NB].  
 
 ```mlir 
   %vector_a = XeTile.load_tile %tile_a   inner_blocks = [8, 16]
-     tile<64x64xbf16, index, index, index, index, index> 
-		into vector <8x4x8x16xb16>
+     tile<64x64xbf16> into vector <8x4x8x16xb16>
 ```
 
 load_tile supports transpose. The inner_blocks describe the memory layout before the transpose. On the backward path, one of input matrices needs to be transposed for matmul operation. 
 ```mlir 
   %vector_a = XeTile.load_tile %tile_a   inner_blocks = [8, 16] Transpose = TRUE
-     tile<64x64xbf16, index, index, index, index, index> 
-		into vector <4x8x16x8xbf16>
+     tile<64x64xbf16> into vector <4x8x16x8xbf16>
 ```
 
 These load_tile variants need to be used together with the tile_mma.  The VNNI layout transformation is not exposed to tile dialect users.  A lowering pass will add the VNNI transformation at the XeGPU dialect. 
 store_tile stores the blocked register region back to memory in plain layout. VNNI_transform and transpose are not supported. 
 ```mlir 
   XeTile.store_tile %tile_a  %vector_a  inner_blocks = [8, 16]  
-	   vector <8x4x8x16> 
-     into tile<64x64xbf16, index, index, index, index, index> 
+	   vector <8x4x8x16> into tile<64x64xbf16> 
 ```
 
 coop_prefetch_tile prefetches the tile to cache.  
 
 ```mlir 
   XeTile.prefetch_tile %coop_tile_a  
-     tile<8x8xbf16, index, index, index, index, index> 
+     tile<8x8xbf16> 
 ```
 
 load_tile can be used to load the tile to registers in a cooperative flavor. The coop_tile is created out of tile and is a tile with a smaller size. So the load operation is the same.  
 
 ```mlir 
   %a = XeTile.load_tile %coop_tile_a  
-     tile<16x16xbf16, index, index, index, index, index>  
-	   into Vector <16x16xbf16>
+     tile<16x16xbf16> into Vector <16x16xbf16>
 ```
 
 Once with the block-layout register region, tile_mma represents the matrix multiplication on 4 D vectors. The semantics can be represented by vector.contract, so tile_mma works like a syntax sugar. This also means that the code can be mapped to HW without DPAS support nicely.  
 
 ```mlir 
   %vector_c = XeTile.tile_mma %vector_a, %vector_b   
-     vector <8x4x8x8xbf16>, vector<4x8x8x16xbf16>
-	   into vector <8x8x8x16float>  
+     vector <8x4x8x8xbf16>, vector<4x8x8x16xbf16> into vector <8x8x8x16float>  
 ```
 
 Tile can be updated using the offset_x and offset_y.  These operations are used when one tile is being processed and moved to a new tile. Usually only one value is needed to update since the tile is only moving along the K dimension. 
 
 ```mlir
   XeTile.update_tile_offset %tile, %offset_x, offset_y
-		tile<64x64xbf16, index, index, index, index, index>, index
+		tile<64x64xbf16>, index, index
 ```
 
 ### XeGPU dialect
@@ -126,16 +126,14 @@ Instead of load, store, and prefetch tile, the XeGPU dialect offers load_2D, sto
 
 ```mlir
   %block = XeGPU.init_tile %base_memref, %offset:2, %sizes:2, %strides
-     memref<8x16xbf16>, index, index, index, index, index
-     into tile<8x16xbf16, index, index, index, index, index>
+     memref<8x16xbf16> into tile<8x16xbf16>
 ```
 
 load_2D loads a 2D block from global memory, represented by tile, to registers, represented by a vector. The vector data used in the XeGPU is expected to exactly describe the data layout and establish exact mapping to physical registers. The vector data used in the XeTile is a conceptual vector, which doesn’t reflect the exact data layout in the physical registers. For example, the vector A[4, 8, 16, 8] used in the XeTile would be lowered to 32 separate smaller vectors with a VNNI data layout, like a_vnni[8, 8, 2]. The a_vnni would be mapped to registers and used exactly as is to feed to DPAS instruction. 
 
 ```mlir 
   %a = XeGPU.load_2D %block 
-     tile<8x16xbf16, index, index, index, index, index> 
-		into vector<8x16xbf16>
+     tile<8x16xbf16> into vector<8x16xbf16>
 ```
 
 load_2D supports VNNI transform for low-precision data type like fp16, bf16, int8, and int4. VNNI transformation takes a number of low-precision data and fits them into 32-bit data. For example, it takes 2 bf16 or 4 int8 values from matrix A’s row dimension, or B’s column dimension and puts them into the innermost dimension.  The VNNI transformation doesn’t change the overall size but splits the dimension to 3. 
@@ -143,12 +141,10 @@ Load_2D doesn’t support converting the VNNI layout back to a non-VNNI layout. 
 
 ```mlir
   %bt = XeGPU.load_2D %block_b   VNNI_AXIS = 1 
-     tile<16x16xbf16, index, index, index, index, index> 
-		into vector <8x16x2xbf16>
+     tile<16x16xbf16> into vector <8x16x2xbf16>
 
   %at = XeGPU.load_2D %block_a   VNNI_AXIS = 0 (default)
-     tile<8x16xbf16, index, index, index, index, index> 
-		into vector <8x8x2xbf16>
+     tile<8x16xbf16> into vector <8x8x2xbf16>
 ```
 
 The variant of VNNI transformation has no impact on the physical data layout, so it can be optimized away from code sequence. However, it does contribute to the code readability, since it is much easier to understand that A[8, 8, 2]  x B[8, 16, 2], vs. A[8, 16] x B[8, 16, 2]. 
@@ -157,39 +153,35 @@ There is a use case to transpose a low-precision matrix on the backward path. In
 
 ```mlir
   %at = XeGPU.load_2D %block_a   Transpose = TRUE
-     tile<8x16xf32, index, index, index, index, index> 
-		into vector <16x8xf32>
+     tile<8x16xf32> into vector <16x8xf32>
 ```
 
 load_2d supports VNNI transformation and transpose combined for low-precision data type like fp16, bf16, int8, and int4. The operation definition supports VNNI_AXIS to be both row and column, but it is only supported when VNNI_AXIS = 1 along column dimension on PVC. The example below shows that a bf16 matrix [8row, 16col] is transposed to [16col, 8row], and then VNNI transform to [8col, 8row, 2col]. In PVC hardware, it is fulfilled by a hardware transpose on DW data type, the bf16 [8row, 16col] is viewed as DW [8row, 8col], and transpose to DW[8col, 8row], and then can be viewed as [8col, 8row, 2col]. 
 
 ```mlir
   %at = XeGPU.load_2D %block_a   Transpose = TRUE   VNNI_AXIS = 1
-     tile<8x16xbf16, index, index, index, index, index> 
-		into vector <8x8x2bf16>
+     tile<8x16xbf16> into vector <8x8x2bf16>
 ```
 
 Dpas operation. The dimension of the vector is reduced to 3 dimensions and fits the hardware directly.  When the input matrix is lowa -precision data type (lower than 32bit), the matrix B must be in VNNI layout, meaning the reduction axis needs to be split into 2 axis and the inner dimension has multiple data elements fitting the 32bit. 
 
 ```mlir
   %vector_c = XeGPU.dpas %vector_a, %vector_b   
-     vector <8x8x2xbf16>, vector<8x16x2xbf16>
-	   into vector <8x16xfloat>   
+     vector <8x8x2xbf16>, vector<8x16x2xbf16> into vector <8x16xfloat>   
 ```
 
 store_2D stores the blocked register region back to memory in plain layout. VNNI_transform and transpose are not supported. 
 
 ```mlir
   XeGPU.store_2D %tile_a  %vector_a 
-	   vector <8x16> 
-     into tile<8x16xbf16, index, index, index, index, index> 
+	   vector <8x16> into tile<8x16xbf16> 
 ```
 
 prefetch_2D prefetches a 2D block to cache.  
 
 ```mlir
   XeTile.prefetch_2D %block_a  
-     tile<64x64xbf16, index, index, index, index, index> 
+     tile<64x64xbf16> 
 ```
 
 Due to hardware limitation, XeGPU’s load_2D operation can’t fully support XeTile to load arbitrary 2D matrix size, the lowering pass maps the XeTile’s load_tile to load_1d and load_scalar. 
