@@ -28,6 +28,8 @@
 #include <mlir/Dialect/MemRef/IR/MemRef.h>
 #include <mlir/Pass/Pass.h>
 
+#include <optional>
+
 namespace imex {
 #define GEN_PASS_DEF_INSERTGPUALLOCS
 #include "imex/Transforms/Passes.h.inc"
@@ -85,7 +87,7 @@ public:
     // returns the reference to it.
 
     auto getMemReadWriteOp = [](mlir::Operation *op)
-        -> llvm::Optional<mlir::SmallVector<mlir::Value, 4>> {
+        -> std::optional<mlir::SmallVector<mlir::Value, 4>> {
       if (auto load = mlir::dyn_cast<mlir::memref::LoadOp>(op)) {
         return {{load.getMemref()}};
       } else if (auto store = mlir::dyn_cast<mlir::memref::StoreOp>(op)) {

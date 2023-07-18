@@ -8,7 +8,7 @@ add_mlir_conversion_library(IMEXGPUXToLLVM
   IMEXConversionPassIncGen
 
   LINK_LIBS PUBLIC
-  MLIRGPUOps
+  MLIRGPUDialect
   MLIRIR
   MLIRPass
   MLIRSCFToSPIRV

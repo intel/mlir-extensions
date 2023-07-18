@@ -37,6 +37,7 @@ config.imex_tools_dir = "@IMEX_TOOLS_DIR@"
 config.imex_lib_dir = "@IMEX_LIB_DIR@"
 config.imex_enable_l0_runtime = @IMEX_ENABLE_L0_RUNTIME@
 config.imex_enable_sycl_runtime = @IMEX_ENABLE_SYCL_RUNTIME@
+config.imex_enable_bf16_tests = @IMEX_ENABLE_BF16_TESTS@
 
 if sys.platform.startswith('win32'):
     config.shlib_prefix = ""

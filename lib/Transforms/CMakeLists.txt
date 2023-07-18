@@ -12,7 +12,7 @@ add_mlir_library(IMEXTransforms
 
   LINK_LIBS PUBLIC
   MLIRSCFDialect
-  MLIRGPUOps
+  MLIRGPUDialect
   MLIRSPIRVDialect
   MLIRFuncDialect
   MLIRPass

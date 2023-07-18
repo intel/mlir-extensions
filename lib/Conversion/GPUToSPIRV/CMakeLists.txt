@@ -9,7 +9,7 @@ add_mlir_conversion_library(IMEXGPUToSPIRV
 
   LINK_LIBS PUBLIC
   MLIRArithToSPIRV
-  MLIRGPUOps
+  MLIRGPUDialect
   MLIRFuncToSPIRV
   MLIRIR
   MLIRPass

@@ -25,6 +25,8 @@
 
 // #include "imex/Dialect/imex_util/dialect.hpp"
 
+#include <optional>
+
 namespace {
 class ConvertSelectOp
     : public mlir::OpConversionPattern<mlir::arith::SelectOp> {
@@ -52,7 +54,7 @@ void imex::populateControlFlowTypeConversionRewritesAndTarget(
   // as legal output of the rewriting and then populates and apply rewriting
   // rules
   target.addDynamicallyLegalOp<mlir::func::FuncOp>(
-      [&](mlir::func::FuncOp op) -> llvm::Optional<bool> {
+      [&](mlir::func::FuncOp op) -> std::optional<bool> {
         if (typeConverter.isSignatureLegal(op.getFunctionType()) &&
             typeConverter.isLegal(&op.getBody()))
           return true;
@@ -62,7 +64,7 @@ void imex::populateControlFlowTypeConversionRewritesAndTarget(
 
   mlir::populateCallOpTypeConversionPattern(patterns, typeConverter);
   target.addDynamicallyLegalOp<mlir::arith::SelectOp, mlir::func::CallOp>(
-      [&](mlir::Operation *op) -> llvm::Optional<bool> {
+      [&](mlir::Operation *op) -> std::optional<bool> {
         if (typeConverter.isLegal(op))
           return true;
 
@@ -77,7 +79,7 @@ void imex::populateControlFlowTypeConversionRewritesAndTarget(
   patterns.insert<ConvertSelectOp>(typeConverter, patterns.getContext());
 
   target.markUnknownOpDynamicallyLegal(
-      [&](mlir::Operation *op) -> llvm::Optional<bool> {
+      [&](mlir::Operation *op) -> std::optional<bool> {
         if (mlir::isNotBranchOpInterfaceOrReturnLikeOp(op) ||
             mlir::isLegalForBranchOpInterfaceTypeConversionPattern(
                 op, typeConverter) ||

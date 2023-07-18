@@ -27,7 +27,7 @@ func.func @main() {
     %9 = memref.load %1[%7] : memref<8xf32>
     %10 = func.call @addf(%8, %9) : (f32, f32) -> f32
     memref.store %10, %2[%7] : memref<8xf32>
-    %11 = func.call @cast(%2) : (memref<8xf32>) -> memref<?xf32>
+    //%11 = func.call @cast(%2) : (memref<8xf32>) -> memref<?xf32>
     gpu.terminator
     // OPENCL: gpu.terminator
     // VULKAN: gpu.terminator

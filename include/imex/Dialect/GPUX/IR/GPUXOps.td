@@ -115,8 +115,8 @@ def GPUX_CreateStreamOp : GPUX_Op<"create_stream", [SameVariadicOperandSize]> {
   let arguments = (ins Optional<GPUX_DeviceType> : $device,
                        Optional<GPUX_ContextType> : $context);
   let results = (outs GPUX_StreamType : $gpux_stream);
-  let builders = [OpBuilder<(ins "::llvm::Optional<::mlir::Value>" : $device,
-                                 "::llvm::Optional<::mlir::Value>" : $context)>];
+  let builders = [OpBuilder<(ins "std::optional<::mlir::Value>" : $device,
+                                 "std::optional<::mlir::Value>" : $context)>];
 }
 
 def GPUX_DestroyDeviceOp : GPUX_Op<"destroy_device"> {

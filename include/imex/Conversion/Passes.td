@@ -57,7 +57,7 @@ def ConvertPTensorToLinalg : Pass<"convert-ptensor-to-linalg", "::mlir::ModuleOp
   }];
   let constructor = "imex::createConvertPTensorToLinalgPass()";
   let dependentDialects = ["::mlir::linalg::LinalgDialect",
-                           "::mlir::AffineDialect",
+                           "::mlir::affine::AffineDialect",
                            "::mlir::func::FuncDialect",
                            "::mlir::arith::ArithDialect",
                            "::mlir::tensor::TensorDialect",

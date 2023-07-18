@@ -49,6 +49,7 @@
 #include <mlir/Pass/Pass.h>
 
 #include <iostream>
+#include <optional>
 
 #include "../PassDetail.h"
 
@@ -633,7 +634,7 @@ struct ConvertPTensorToLinalgPass
     auto convT2T = [](::mlir::Type type) { return type; };
     // Convert PTensorType to (tensorType, device, team, handle)
     auto convPt2Rt = [&ctxt](::imex::ptensor::PTensorType type)
-        -> ::mlir::Optional<::mlir::Type> { return type.getMemRefType(); };
+        -> std::optional<::mlir::Type> { return type.getMemRefType(); };
 
     typeConverter.addConversion(convT2T);
     typeConverter.addConversion(convPt2Rt);
@@ -641,7 +642,7 @@ struct ConvertPTensorToLinalgPass
     auto materializeCast =
         [](::mlir::OpBuilder &builder, ::mlir::Type type,
            ::mlir::ValueRange inputs,
-           ::mlir::Location loc) -> ::llvm::Optional<::mlir::Value> {
+           ::mlir::Location loc) -> std::optional<::mlir::Value> {
       return builder
           .create<::mlir::UnrealizedConversionCastOp>(loc, type, inputs)
           .getResult(0);
@@ -653,7 +654,7 @@ struct ConvertPTensorToLinalgPass
     target.addIllegalDialect<::imex::ptensor::PTensorDialect>();
     // ...into Linalg, Affine, Tensor, Arith
     target.addLegalDialect<::mlir::linalg::LinalgDialect>();
-    target.addLegalDialect<::mlir::AffineDialect>();
+    target.addLegalDialect<::mlir::affine::AffineDialect>();
     target.addLegalDialect<::mlir::arith::ArithDialect>();
     target.addLegalDialect<::mlir::memref::MemRefDialect>();
     target.addLegalDialect<::mlir::tensor::TensorDialect>();

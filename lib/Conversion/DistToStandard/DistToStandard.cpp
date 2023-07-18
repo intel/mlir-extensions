@@ -33,6 +33,7 @@
 
 #include <array>
 #include <iostream>
+#include <optional>
 
 #include "../PassDetail.h"
 
@@ -383,7 +384,8 @@ struct AllReduceOpConverter
                   ::mlir::ConversionPatternRewriter &rewriter) const override {
     // get guid and rank and call runtime function
     auto loc = op.getLoc();
-    auto opV = rewriter.create<::mlir::arith::ConstantOp>(loc, op.getOp());
+    auto opV = rewriter.create<::mlir::arith::ConstantOp>(
+        loc, ::llvm::cast<::mlir::TypedAttr>(op.getOp()));
     auto rTnsr = adaptor.getData();
     auto dtype = createInt<sizeof(int) * 8>(loc, rewriter, 5); // FIXME getDType
     auto fsa = rewriter.getStringAttr("_idtr_reduce_all");
@@ -435,7 +437,7 @@ struct ConvertDistToStandardPass
     auto materializeCast =
         [](::mlir::OpBuilder &builder, ::mlir::Type type,
            ::mlir::ValueRange inputs,
-           ::mlir::Location loc) -> ::llvm::Optional<::mlir::Value> {
+           ::mlir::Location loc) -> std::optional<::mlir::Value> {
       return builder
           .create<::mlir::UnrealizedConversionCastOp>(loc, type, inputs)
           .getResult(0);
@@ -444,7 +446,7 @@ struct ConvertDistToStandardPass
     //     [](
     //         ::mlir::OpBuilder &builder, ::imex::dist::DistTensorType type,
     //         ::mlir::ValueRange inputs,
-    //         ::mlir::Location loc) -> ::llvm::Optional<::mlir::Value> {
+    //         ::mlir::Location loc) -> std::optional<::mlir::Value> {
     //   assert(inputs.size() == 4);
     //   return materializeDistTensor(builder, loc, inputs[0], inputs[1],
     //   inputs[2], inputs[3]);

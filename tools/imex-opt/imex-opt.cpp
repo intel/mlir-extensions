@@ -11,6 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "mlir/Dialect/Func/Extensions/AllExtensions.h"
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/InitLLVM.h>
 #include <llvm/Support/SourceMgr.h>
@@ -18,6 +19,7 @@
 #include <mlir/IR/Dialect.h>
 #include <mlir/IR/MLIRContext.h>
 #include <mlir/InitAllDialects.h>
+#include <mlir/InitAllExtensions.h>
 #include <mlir/InitAllPasses.h>
 #include <mlir/Pass/Pass.h>
 #include <mlir/Pass/PassManager.h>
@@ -34,6 +36,7 @@ int main(int argc, char **argv) {
 
   ::mlir::DialectRegistry registry;
   ::mlir::registerAllDialects(registry);
+  ::mlir::registerAllExtensions(registry);
   ::imex::registerAllDialects(registry);
 
   return ::mlir::asMainReturnCode(

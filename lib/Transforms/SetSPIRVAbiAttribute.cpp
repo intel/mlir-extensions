@@ -65,7 +65,7 @@ public:
         gpuFunc->setAttr(attrName, abi);
       }
     } else if (m_clientAPI == "vulkan") {
-      auto abi = mlir::spirv::getEntryPointABIAttr(context);
+      auto abi = mlir::spirv::getEntryPointABIAttr(context, {1, 1, 1});
       for (const auto &gpuFunc : gpuModule.getOps<mlir::gpu::GPUFuncOp>()) {
         if (!mlir::gpu::GPUDialect::isKernel(gpuFunc) ||
             gpuFunc->getAttr(attrName))
