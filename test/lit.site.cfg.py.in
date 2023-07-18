@@ -54,10 +54,13 @@ if config.imex_enable_l0_runtime:
 config.imex_enable_igpu = config.imex_enable_l0_runtime or config.imex_enable_sycl_runtime
 if config.imex_enable_igpu:
     config.l0_fp64_checker = os.path.normpath(os.path.join(config.imex_tools_dir, "l0-fp64-checker"))
-    p = subprocess.run( [ config.l0_fp64_checker ] )
-    if p.returncode == 0:
-        config.igpu_fp64 = "--igpu-fp64"
-    else:
+    try:
+        p = subprocess.run( [ config.l0_fp64_checker ], timeout=5 )
+        if p.returncode == 0:
+            config.igpu_fp64 = "--igpu-fp64"
+        else:
+            config.igpu_fp64 = "--no-igpu-fp64"
+    except subprocess.TimeoutExpired:
         config.igpu_fp64 = "--no-igpu-fp64"
 config.imex_runner_utils = os.path.normpath(os.path.join(config.imex_lib_dir, config.shlib_prefix + "imex_runner_utils" + config.llvm_shlib_ext))
 
