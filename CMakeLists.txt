@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.13.4...3.18)
+cmake_minimum_required(VERSION 3.20.0)
 
 # CMP0116: Ninja generators transform `DEPFILE`s from `add_custom_command()`
 # New in CMake 3.20. https://cmake.org/cmake/help/latest/policy/CMP0116.html
@@ -194,6 +194,15 @@ else ()
     set(IMEX_ENABLE_BENCHMARK 0)
 endif()
 
+# Using flags to control bf16 tests since we don't have a good way to test
+# if GPU supports bf16
+set(IMEX_ENABLE_BF16_TESTS 1 CACHE BOOL "Enable bf16 execution tests")
+
+if (IMEX_ENABLE_BF16_TESTS)
+    set(IMEX_ENABLE_BF16_TESTS 1)
+else ()
+    set(IMEX_ENABLE_BF16_TESTS 0)
+endif()
 
 # Check if mlir vulkan runner was configured from mlir
 # target mlir-vulkan-runner is only set if vulkan runner was enabled during

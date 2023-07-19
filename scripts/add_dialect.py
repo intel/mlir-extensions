@@ -373,7 +373,9 @@ with open(fn, "w") as f:
 
 namespace mlir {{
 
+namespace affine {{
 class AffineDialect;
+}} // namespace affine
 
 namespace arith {{
 class ArithDialect;

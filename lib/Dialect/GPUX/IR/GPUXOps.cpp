@@ -23,6 +23,8 @@
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Transforms/InliningUtils.h>
 
+#include <optional>
+
 namespace imex {
 namespace gpux {
 
@@ -39,8 +41,8 @@ void GPUXDialect::initialize() {
 
 void CreateStreamOp::build(::mlir::OpBuilder &odsBuilder,
                            ::mlir::OperationState &odsState,
-                           ::llvm::Optional<::mlir::Value> device,
-                           ::llvm::Optional<::mlir::Value> context) {
+                           std::optional<::mlir::Value> device,
+                           std::optional<::mlir::Value> context) {
   CreateStreamOp::build(odsBuilder, odsState, odsBuilder.getType<StreamType>(),
                         device.value_or(mlir::Value{}),
                         context.value_or(mlir::Value{}));

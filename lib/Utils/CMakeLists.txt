@@ -6,7 +6,7 @@ add_mlir_library(IMEXUtil
   ${PROJECT_SOURCE_DIR}/imex/Utils
 
   LINK_LIBS PUBLIC
-  MLIRGPUOps
+  MLIRGPUDialect
   MLIRSPIRVDialect
   MLIRFuncDialect
   MLIRPass
