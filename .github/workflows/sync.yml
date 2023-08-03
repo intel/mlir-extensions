@@ -16,7 +16,7 @@ jobs:
      - name: Checkout
        uses: actions/checkout@v2
        with:
-         token: ${{ secrets.WORKFLOW_TOKEN }}
+         token: ${{ secrets.IMEX_GHA_TOKEN }}
          ref: main
          fetch-depth: 0
      - name: Remove Upstream
