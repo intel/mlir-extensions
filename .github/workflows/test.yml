@@ -18,7 +18,7 @@ jobs:
         run: |
           echo "TAG_NAME=$(pwd)" >> $GITHUB_OUTPUT
       - name: Invoke Sync
-        uses: intel-innersource/frameworks.actions.thirdparty.workflow-dispatch@v1
+        uses: benc-uk/workflow-dispatch@v1
         with:
           workflow: Sync to Upstream Public Repo
           token: ${{secrets.IMEX_GHA_TOKEN}}
