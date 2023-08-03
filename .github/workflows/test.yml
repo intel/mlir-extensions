@@ -21,4 +21,4 @@ jobs:
         uses: intel-innersource/frameworks.actions.thirdparty.workflow-dispatch@v1
         with:
           workflow: Sync to Upstream Public Repo
-          token: ${{secrets.IMEX_CI_RAVI_GH}}
+          token: ${{secrets.GITHUB_TOKEN}}
