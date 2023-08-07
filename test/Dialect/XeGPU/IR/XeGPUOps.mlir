@@ -43,8 +43,8 @@ func.func @test_load_2d(%src: memref<8x16xf32>, %idx : index) {
   // CHECK-SAME: !xegpu.tile<4x4xf32> -> vector<4x4xf32>
   %2 = xegpu.load_2d %1 : !xegpu.tile<4x4xf32> -> vector<4x4xf32>
 
-  // CHECK: xegpu.load_2d %0 VNNI_AXIS %[[CONST1:.*]]
-  %3 = xegpu.load_2d %1 VNNI_AXIS %c1 : !xegpu.tile<4x4xf32> -> vector<4x2x2xf32>
+  // CHECK: xegpu.load_2d %0 {VNNI_AXIS = 1 : i32} : !xegpu.tile<4x4xf32> -> vector<4x2x2xf32>
+  %3 = xegpu.load_2d %1 {VNNI_AXIS = 1: i32} : !xegpu.tile<4x4xf32> -> vector<4x2x2xf32>
 
   // CHECK: xegpu.init_tile
   // CHECK-SAME: memref<8x16xf32> -> !xegpu.tile<4x8xf32>
@@ -56,8 +56,8 @@ func.func @test_load_2d(%src: memref<8x16xf32>, %idx : index) {
   %5 = xegpu.load_2d %4 {TRANSPOSE=true}: !xegpu.tile<4x8xf32> -> vector<8x4xf32>
 
   // CHECK: xegpu.load_2d %3
-  // CHECK-SAME: {TRANSPOSE = true} : !xegpu.tile<4x8xf32> -> vector<4x4x2xf32>
-  %6 = xegpu.load_2d %4 VNNI_AXIS %c1 {TRANSPOSE=true}: !xegpu.tile<4x8xf32> -> vector<4x4x2xf32>
+  // CHECK-SAME: {TRANSPOSE = true, VNNI_AXIS = 1 : i32} : !xegpu.tile<4x8xf32> -> vector<4x4x2xf32>
+  %6 = xegpu.load_2d %4 {VNNI_AXIS=1: i32, TRANSPOSE=true}: !xegpu.tile<4x8xf32> -> vector<4x4x2xf32>
 
    return
 }

@@ -33,6 +33,24 @@
 #include "mlir/ExecutionEngine/Float16bits.h"
 #include "mlir/ExecutionEngine/RunnerUtils.h"
 
+template <typename T, int N> struct MemRefDescriptor {
+  T *allocated;
+  T *aligned;
+  int64_t offset;
+  int64_t sizes[N];
+  int64_t strides[N];
+};
+
+extern "C" IMEX_RUNNERUTILS_EXPORT void
+_mlir_ciface_fillResource1DBF16(MemRefDescriptor<bf16, 1> *ptr, // NOLINT
+                                float value);
+extern "C" IMEX_RUNNERUTILS_EXPORT void
+_mlir_ciface_fillResource1DF16(MemRefDescriptor<f16, 1> *ptr, // NOLINT
+                               float value);
+extern "C" IMEX_RUNNERUTILS_EXPORT void
+_mlir_ciface_fillResource1DF32(MemRefDescriptor<float, 1> *ptr, // NOLINT
+                               float value);
+
 extern "C" IMEX_RUNNERUTILS_EXPORT void
 _mlir_ciface_printMemrefBF16(UnrankedMemRefType<bf16> *m);
 extern "C" IMEX_RUNNERUTILS_EXPORT void

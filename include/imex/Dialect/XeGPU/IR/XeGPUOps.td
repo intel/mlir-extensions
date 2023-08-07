@@ -259,7 +259,7 @@ def XeGPU_Load2DOp
         let summary = "loads a 2D block from global memory (represented by tile) to registers (represented by vector)";
         let arguments = (ins
           XeGPU_Tile: $tile,
-          Optional<I32>: $vnni_axis,
+          OptionalAttr<I32Attr>: $vnni_axis,
           OptionalAttr<BoolAttr>: $transpose
         );
         let results = (outs Builtin_Vector: $result);
@@ -276,12 +276,12 @@ def XeGPU_Store2DOp
     : XeGPU_Op<"store_2d", []> {
         let summary = "stores a 2D block register region back to memory";
         let arguments = (ins
-          XeGPU_Tile: $dst,
+          XeGPU_Tile: $tile,
           Builtin_Vector: $value
         );
 
         let assemblyFormat = [{
-           $dst`,`` `$value attr-dict `:` `(` qualified(type($dst)) `,` qualified(type($value)) `)`
+           $tile`,`` `$value attr-dict `:` `(` qualified(type($tile)) `,` qualified(type($value)) `)`
         }];
 
         let hasVerifier = 1;

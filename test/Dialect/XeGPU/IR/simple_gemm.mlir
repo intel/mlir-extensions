@@ -36,11 +36,11 @@ func.func @test_gemm(%a : memref<1024x1024xf16>, %b: memref<1024x1024xf16>, %c: 
 
         // CHECK: xegpu.load_2d
         // CHECK-SAME: !xegpu.tile<8x16xf16> -> vector<8x8x2xf16>
-        %4 = xegpu.load_2d %1 VNNI_AXIS %c0_1 : !xegpu.tile<8x16xf16> -> vector<8x8x2xf16>
+        %4 = xegpu.load_2d %1 {VNNI_AXIS = 0: i32} : !xegpu.tile<8x16xf16> -> vector<8x8x2xf16>
 
         // CHECK: xegpu.load_2d
         // CHECK-SAME: !xegpu.tile<16x16xf16> -> vector<8x16x2xf16>
-        %5 = xegpu.load_2d %2 VNNI_AXIS %c1_1 : !xegpu.tile<16x16xf16> -> vector<8x16x2xf16>
+        %5 = xegpu.load_2d %2 {VNNI_AXIS = 1: i32} : !xegpu.tile<16x16xf16> -> vector<8x16x2xf16>
 
         // CHECK: xegpu.dpas
         // CHECK-SAME: (vector<8x8x2xf16>, vector<8x16x2xf16>) -> vector<8x16xf32>
