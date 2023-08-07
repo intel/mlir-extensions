@@ -21,6 +21,29 @@
 
 // NOLINTBEGIN(*-identifier-naming)
 
+/// Fills the given 1D bf16 memref with the given float value.
+extern "C" void
+_mlir_ciface_fillResource1DBF16(MemRefDescriptor<bf16, 1> *ptr, // NOLINT
+                                float value) {
+  bf16 bf16_val(value);
+  std::fill_n(ptr->allocated, ptr->sizes[0], bf16_val);
+}
+
+/// Fills the given 1D f16 memref with the given float value.
+extern "C" void
+_mlir_ciface_fillResource1DF16(MemRefDescriptor<f16, 1> *ptr, // NOLINT
+                               float value) {
+  f16 f16_val(value);
+  std::fill_n(ptr->allocated, ptr->sizes[0], f16_val);
+}
+
+/// Fills the given 1D float (f32) memref with the given float value.
+extern "C" void
+_mlir_ciface_fillResource1DF32(MemRefDescriptor<float, 1> *ptr, // NOLINT
+                               float value) {
+  std::fill_n(ptr->allocated, ptr->sizes[0], value);
+}
+
 extern "C" void _mlir_ciface_printMemrefBF16(UnrankedMemRefType<bf16> *M) {
   impl::printMemRef(*M);
 }
