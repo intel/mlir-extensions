@@ -37,17 +37,25 @@ jobs:
           path: ${{env.HOME_DIR}}/frameworks.ai.mlir.mlir-extensions
       - name: Remove Upstream
         run: |
+          cd $HOME_DIR/frameworks.ai.mlir.mlir-extensions
           if git remote | grep upstream; then
             git remote remove upstream
           else
             echo "upstream does not exist"
           fi
       - name: Add Upstream
-        run: git remote add upstream https://github.com/intel/mlir-extensions.git
+        run: |
+          cd $HOME_DIR/frameworks.ai.mlir.mlir-extensions
+          git remote add upstream https://github.com/intel/mlir-extensions.git
       - name: Fetch Upstream
-        run: git fetch upstream
+        run: |
+          cd $HOME_DIR/frameworks.ai.mlir.mlir-extensions
+          git fetch upstream
       - name: Merge Upstream with git merge
-        run: git merge upstream/main --no-edit
+        run: |
+          cd $HOME_DIR/frameworks.ai.mlir.mlir-extensions
+          git merge upstream/main --no-edit
       - name: Push
         run: |
+          cd $HOME_DIR/frameworks.ai.mlir.mlir-extensions
           git push -f origin main
