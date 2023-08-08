@@ -9,32 +9,9 @@ inputs:
     description: 'home_dir'
     required: false
     default: /home/gta/actions-runner/_work/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions/build_cpu/home
-  token:  # id of input
-    description: 'token'
-    required: true
-    default: 'token'
 runs:
   using: "composite"
   steps:
-    - name: Check build root
-      shell: bash
-      run: |
-        if [ ! -d ${{ inputs.build_root }} ]; then mkdir -p ${{ inputs.build_root }}; fi
-
-    - name: Clear home dir
-      shell: bash
-      run: |
-        mkdir -p ${{ inputs.home_dir }}
-        cd ${{ inputs.home_dir }}
-        rm -rf *
-
-    - uses: actions/checkout@v3
-      with:
-        repository: intel-innersource/frameworks.ai.mlir.mlir-extensions
-        token: ${{ inputs.token }}
-        fetch-depth: 0
-        path: ${{ inputs.home_dir}}/frameworks.ai.mlir.mlir-extensions
-
     - name: Checkout MLIR
       shell: bash
       run: |
@@ -53,11 +30,11 @@ runs:
         cd ${{ inputs.home_dir }}/frameworks.ai.mlir.mlir-extensions || exit 1
         cmake -S ${{ inputs.build_root }}/llvm-project/llvm -B build -GNinja  -DCMAKE_BUILD_TYPE=Release  -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_USE_LINKER=gold -DLLVM_ENABLE_ZSTD=OFF -DLLVM_EXTERNAL_PROJECTS="Imex" -DLLVM_EXTERNAL_IMEX_SOURCE_DIR=. || exit 1
         set -o pipefail
-        cmake --build build --target check-imex | tee tests.txt
+        cmake --build build --target check-imex | tee build/tests.txt
 
     - name: Upload tests.txt
       if: ${{ always() }}
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: tests.txt
         path: ${{ inputs.home_dir }}/frameworks.ai.mlir.mlir-extensions/build/tests.txt
