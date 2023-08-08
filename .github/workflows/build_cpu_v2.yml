@@ -28,4 +28,4 @@ jobs:
         with:
           token: ${{secrets.WORKFLOW_TOKEN}}
           path: ${{env.HOME}}/frameworks.ai.mlir.mlir-extensions
-      - uses: ./.github/workflows/build-cpu-composite-action
+      - uses: ./build_cpu_v2/home/frameworks.ai.mlir.mlir-extensions/.github/workflows/build-cpu-composite-action
