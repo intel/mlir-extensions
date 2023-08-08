@@ -43,6 +43,7 @@ jobs:
           cd $BUILD_ROOT
           if [ ! -d "llvm-project" ]; then git clone https://github.com/llvm/llvm-project; fi
           cd $BUILD_ROOT/llvm-project
+          git reset --hard HEAD
           export LLVM_SHA=`cat $HOME_DIR/frameworks.ai.mlir.mlir-extensions/build_tools/llvm_version.txt`
           git fetch --prune
           git checkout $LLVM_SHA || exit 1
