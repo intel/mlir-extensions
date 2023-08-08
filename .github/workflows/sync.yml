@@ -7,62 +7,47 @@ on:
   workflow_dispatch:
 
 jobs:
- sync-main:
- ###
- # Syncs main branch of this repo to open source intel/mlir-extensions
- ###
-   runs-on: gpu
-   steps:
-     - name: Checkout
-       uses: actions/checkout@v2
-       with:
-         token: ${{ secrets.IMEX_GHA_TOKEN }}
-         ref: main
-         fetch-depth: 0
-     - name: Remove Upstream
-       run: |
-        if git remote | grep upstream; then
-          git remote remove upstream
-        else
-          echo "upstream does not exist"
-        fi
-     - name: Add Upstream
-       run: git remote add upstream https://github.com/intel/mlir-extensions.git
-     - name: Fetch Upstream
-       run: git fetch upstream
-     - name: Merge Upstream with git merge
-       run: git merge upstream/main --no-edit
-     - name: Push
-       run: |
-        git push -f origin main
+  sync-main:
+  ###
+  # Syncs main branch of this repo to open source intel/mlir-extensions
+  ###
+    runs-on: gpu
 
-#  sync-numba-dev:
-#   ###
-#   # Syncs main branch of this repo to open source intel/mlir-extensions
-#   ###
-#    runs-on: gpu
-#    needs: sync-main
-#    steps:
-#      - name: Checkout
-#        uses: actions/checkout@v2
-#        with:
-#          ref: numba-dev
-#          token: ${{ secrets.WORKFLOW_TOKEN }}
-#          fetch-depth: 0
-#      - name: Remove Upstream
-#        run: |
-#         if git remote | grep upstream; then
-#           git remote remove upstream
-#         else
-#           echo "upstream does not exist"
-#         fi
-#      - name: Add Upstream
-#        run: git remote add upstream https://github.com/intel/mlir-extensions.git
-#      - name: Checkout numba-dev
-#        run: git checkout numba-dev
-#      - name: Fetch Upstream
-#        run: git fetch upstream
-#      - name: Merge Upstream with git merge
-#        run: git merge upstream/numba-dev
-#      - name: Push
-#        run: git push -f origin numba-dev
+    env:
+      BUILD_ROOT: /home/gta/actions-runner/_work/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions/sync
+      HOME_DIR: /home/gta/actions-runner/_work/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions/sync/home
+
+    steps:
+      - name: Check build root
+        run: |
+          if [ ! -d "$BUILD_ROOT" ]; then mkdir -p $BUILD_ROOT; fi
+
+      - name: Clear home dir
+        run: |
+          mkdir -p $HOME_DIR
+          cd $HOME_DIR
+          rm -rf *
+
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.WORKFLOW_TOKEN }}
+          ref: main
+          fetch-depth: 0
+          path: ${{env.HOME_DIR}}/frameworks.ai.mlir.mlir-extensions
+      - name: Remove Upstream
+        run: |
+          if git remote | grep upstream; then
+            git remote remove upstream
+          else
+            echo "upstream does not exist"
+          fi
+      - name: Add Upstream
+        run: git remote add upstream https://github.com/intel/mlir-extensions.git
+      - name: Fetch Upstream
+        run: git fetch upstream
+      - name: Merge Upstream with git merge
+        run: git merge upstream/main --no-edit
+      - name: Push
+        run: |
+          git push -f origin main
