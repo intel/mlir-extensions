@@ -4,8 +4,6 @@ on:
   pull_request:
     branches:
       - main
-      - upstream
-      - 'dist-ndarray'
   workflow_dispatch:
 
 jobs:
