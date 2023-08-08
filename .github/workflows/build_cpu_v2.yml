@@ -15,17 +15,17 @@ jobs:
     timeout-minutes: 450
 
     env:
-      HOME_DIR: /home/gta/actions-runner/_work/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions/build_cpu_v2/home
+      HOME: /home/gta/actions-runner/_work/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions/build_cpu_v2/home
 
     steps:
       - name: Clear home dir
         run: |
-          mkdir -p $HOME_DIR
-          cd $HOME_DIR
+          mkdir -p $HOME
+          cd $HOME
           rm -rf *
 
       - uses: actions/checkout@v3
         with:
           token: ${{secrets.WORKFLOW_TOKEN}}
           path: ${{env.HOME_DIR}}/frameworks.ai.mlir.mlir-extensions
-      - uses: ${{env.HOME_DIR}}/frameworks,ai.mlir.mlir-extensions/.github/workflows/build-cpu-composite-action
+      - uses: ./frameworks,ai.mlir.mlir-extensions/.github/workflows/build-cpu-composite-action
