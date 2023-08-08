@@ -27,5 +27,5 @@ jobs:
       - uses: actions/checkout@v3
         with:
           token: ${{secrets.WORKFLOW_TOKEN}}
-          path: ${{env.HOME_DIR}}/frameworks.ai.mlir.mlir-extensions
+          path: ${{env.HOME}}/frameworks.ai.mlir.mlir-extensions
       - uses: ./frameworks,ai.mlir.mlir-extensions/.github/workflows/build-cpu-composite-action
