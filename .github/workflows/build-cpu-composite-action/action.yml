@@ -1,23 +1,25 @@
 name: "CPU Build composite action"
 description: "Checks out repo, build and run cpu tests"
+inputs:
+  build_root:  # id of input
+    description: 'build_root'
+    required: false
+    default: /home/gta/actions-runner/_work/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions/build_cpu
+  home_dir:  # id of input
+    description: 'home_dir'
+    required: false
+    default: /home/gta/actions-runner/_work/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions/build_cpu/home
 runs:
   using: "composite"
-
-  env:
-    BUILD_ROOT: /home/gta/actions-runner/_work/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions/build_cpu
-    HOME_DIR: /home/gta/actions-runner/_work/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions/build_cpu/home
-    HOME: /github/home
-    LLVM_SHA_FILE: llvm_version.txt
-
   steps:
     - name: Check build root
       run: |
-        if [ ! -d "$BUILD_ROOT" ]; then mkdir -p $BUILD_ROOT; fi
+        if [ ! -d ${{ inputs.build_root }} ]; then mkdir -p ${{ inputs.build_root }}; fi
 
     - name: Clear home dir
       run: |
-        mkdir -p $HOME_DIR
-        cd $HOME_DIR
+        mkdir -p ${{ inputs.home_dir }}
+        cd ${{ inputs.home_dir }}
         rm -rf *
 
     - uses: actions/checkout@v3
@@ -25,23 +27,23 @@ runs:
         repository: intel-innersource/frameworks.ai.mlir.mlir-extensions
         token: ${{secrets.WORKFLOW_TOKEN}}
         fetch-depth: 0
-        path: ${{env.HOME_DIR}}/frameworks.ai.mlir.mlir-extensions
+        path: ${{ inputs.home_dir}}/frameworks.ai.mlir.mlir-extensions
 
     - name: Checkout MLIR
       run: |
-        cd $BUILD_ROOT
+        cd ${{ inputs.build_root }}
         if [ ! -d "llvm-project" ]; then git clone https://github.com/llvm/llvm-project; fi
-        cd $BUILD_ROOT/llvm-project
+        cd ${{ inputs.build_root }}/llvm-project
         git reset --hard HEAD
-        export LLVM_SHA=`cat $HOME_DIR/frameworks.ai.mlir.mlir-extensions/build_tools/llvm_version.txt`
+        export LLVM_SHA=`cat ${{ inputs.home_dir }}/frameworks.ai.mlir.mlir-extensions/build_tools/llvm_version.txt`
         git fetch --prune
         git checkout $LLVM_SHA || exit 1
-        if [ -d "$HOME_DIR/frameworks.ai.mlir.mlir-extensions/build_tools/patches" ]; then git apply $HOME_DIR/frameworks.ai.mlir.mlir-extensions/build_tools/patches/*.patch; fi
+        if [ -d "${{ inputs.home_dir }}/frameworks.ai.mlir.mlir-extensions/build_tools/patches" ]; then git apply ${{ inputs.home_dir }}/frameworks.ai.mlir.mlir-extensions/build_tools/patches/*.patch; fi
 
     - name: Setup IMEX and run tests
       run: |
-        cd $HOME_DIR/frameworks.ai.mlir.mlir-extensions || exit 1
-        cmake -S $BUILD_ROOT/llvm-project/llvm -B build -GNinja  -DCMAKE_BUILD_TYPE=Release  -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_USE_LINKER=gold -DLLVM_ENABLE_ZSTD=OFF -DLLVM_EXTERNAL_PROJECTS="Imex" -DLLVM_EXTERNAL_IMEX_SOURCE_DIR=. || exit 1
+        cd ${{ inputs.home_dir }}/frameworks.ai.mlir.mlir-extensions || exit 1
+        cmake -S ${{ inputs.build_root }}/llvm-project/llvm -B build -GNinja  -DCMAKE_BUILD_TYPE=Release  -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_USE_LINKER=gold -DLLVM_ENABLE_ZSTD=OFF -DLLVM_EXTERNAL_PROJECTS="Imex" -DLLVM_EXTERNAL_IMEX_SOURCE_DIR=. || exit 1
         set -o pipefail
         cmake --build build --target check-imex | tee tests.txt
 
@@ -50,4 +52,4 @@ runs:
       uses: actions/upload-artifact@v2
       with:
         name: tests.txt
-        path: ${{env.HOME_DIR}}/frameworks.ai.mlir.mlir-extensions/build/tests.txt
+        path: ${{ inputs.home_dir }}/frameworks.ai.mlir.mlir-extensions/build/tests.txt
