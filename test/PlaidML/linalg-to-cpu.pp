@@ -12,7 +12,6 @@ builtin.module(convert-tensor-to-linalg
     func.func(finalizing-bufferize
           convert-linalg-to-loops)
     convert-scf-to-cf
-    convert-linalg-to-llvm
     convert-cf-to-llvm
     convert-arith-to-llvm
     convert-math-to-llvm

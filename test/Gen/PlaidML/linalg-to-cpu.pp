@@ -13,7 +13,6 @@ builtin.module(convert-tensor-to-linalg
           convert-linalg-to-loops)
     func.func(llvm-request-c-wrappers)
     convert-scf-to-cf
-    convert-linalg-to-llvm
     convert-cf-to-llvm
     convert-arith-to-llvm
     convert-math-to-llvm
