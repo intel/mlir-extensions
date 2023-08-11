@@ -15,6 +15,7 @@
 #ifndef _IMEX_INITALLDIALECTS_H_
 #define _IMEX_INITALLDIALECTS_H_
 
+#include "imex/Dialect/XeTile/IR/XeTileOps.h"
 #include <mlir/IR/DialectRegistry.h>
 #include <mlir/IR/MLIRContext.h>
 
@@ -30,6 +31,7 @@ inline void registerAllDialects(::mlir::DialectRegistry &registry) {
   // clang-format off
     registry.insert<::imex::ptensor::PTensorDialect,
                     ::imex::dist::DistDialect,
+                    ::imex::xetile::XeTileDialect,
                     ::imex::gpux::GPUXDialect,
                     ::imex::xegpu::XeGPUDialect>();
   // clang-format on
