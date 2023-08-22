@@ -406,16 +406,28 @@ getKernel(GPUL0QUEUE *queue, ze_module_handle_t module, const char *name) {
   return zeKernel;
 }
 
-static void
-enqueueKernel(ze_command_list_handle_t zeCommandList, ze_kernel_handle_t kernel,
-              const ze_group_count_t *pLaunchArgs, ParamDesc *params,
-              ze_event_handle_t waitEvent = nullptr, uint32_t numWaitEvents = 0,
-              ze_event_handle_t *phWaitEvents = nullptr) {
+static void enqueueKernel(ze_command_list_handle_t zeCommandList,
+                          ze_kernel_handle_t kernel,
+                          const ze_group_count_t *pLaunchArgs,
+                          ParamDesc *params, size_t sharedMemBytes,
+                          ze_event_handle_t waitEvent = nullptr,
+                          uint32_t numWaitEvents = 0,
+                          ze_event_handle_t *phWaitEvents = nullptr) {
   auto paramsCount = countUntil(params, ParamDesc{nullptr, 0});
+
+  if (sharedMemBytes) {
+    paramsCount = paramsCount - 1;
+  }
+
   for (size_t i = 0; i < paramsCount; ++i) {
     auto param = params[i];
     CHECK_ZE_RESULT(zeKernelSetArgumentValue(kernel, static_cast<uint32_t>(i),
                                              param.size, param.data));
+  }
+
+  if (sharedMemBytes) {
+    CHECK_ZE_RESULT(
+        zeKernelSetArgumentValue(kernel, paramsCount, sharedMemBytes, nullptr));
   }
 
   CHECK_ZE_RESULT(zeCommandListAppendLaunchKernel(zeCommandList, kernel,
@@ -456,14 +468,14 @@ static void launchKernel(GPUL0QUEUE *queue, ze_kernel_handle_t kernel,
 
     // warmup
     for (int r = 0; r < warmups; r++)
-      enqueueKernel(queue->zeCommandList_, kernel, &launchArgs, params, nullptr,
-                    0, nullptr);
+      enqueueKernel(queue->zeCommandList_, kernel, &launchArgs, params,
+                    sharedMemBytes, nullptr, 0, nullptr);
 
     // profiling using timestamp event privided by level-zero
     for (int r = 0; r < rounds; r++) {
       Event event(queue->zeContext_, queue->zeDevice_);
       enqueueKernel(queue->zeCommandList_, kernel, &launchArgs, params,
-                    event.zeEvent, 0, nullptr);
+                    sharedMemBytes, event.zeEvent, 0, nullptr);
 
       auto startTime =
           event.get_profiling_info<imex::profiling::command_start>();
@@ -480,8 +492,8 @@ static void launchKernel(GPUL0QUEUE *queue, ze_kernel_handle_t kernel,
             "avg: %.4f, min: %.4f, max: %.4f (over %d runs)\n",
             executionTime / rounds, minTime, maxTime, rounds);
   } else {
-    enqueueKernel(queue->zeCommandList_, kernel, &launchArgs, params, nullptr,
-                  0, nullptr);
+    enqueueKernel(queue->zeCommandList_, kernel, &launchArgs, params,
+                  sharedMemBytes, nullptr, 0, nullptr);
   }
 }
 

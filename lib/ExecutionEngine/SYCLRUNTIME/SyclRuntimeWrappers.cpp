@@ -217,15 +217,32 @@ static sycl::kernel *getKernel(GPUSYCLQUEUE *queue, ze_module_handle_t zeModule,
 }
 
 static sycl::event enqueueKernel(sycl::queue queue, sycl::kernel *kernel,
-                                 sycl::nd_range<3> NdRange, ParamDesc *params) {
+                                 sycl::nd_range<3> NdRange, ParamDesc *params,
+                                 size_t sharedMemBytes) {
   auto paramsCount = countUntil(params, ParamDesc{nullptr, 0});
+  // The assumption is, if there is a param for the shared local memory,
+  // then that will always be the last argument.
+  if (sharedMemBytes) {
+    paramsCount = paramsCount - 1;
+  }
   sycl::event event = queue.submit([&](sycl::handler &cgh) {
     for (size_t i = 0; i < paramsCount; i++) {
       auto param = params[i];
       cgh.set_arg(static_cast<uint32_t>(i),
                   *(static_cast<void **>(param.data)));
     }
-    cgh.parallel_for(NdRange, *kernel);
+    if (sharedMemBytes) {
+      // TODO: Handle other data types
+      using share_mem_t =
+          sycl::accessor<float, 1, sycl::access::mode::read_write,
+                         sycl::access::target::local>;
+      share_mem_t local_buffer =
+          share_mem_t(sharedMemBytes / sizeof(float), cgh);
+      cgh.set_arg(paramsCount, local_buffer);
+      cgh.parallel_for(NdRange, *kernel);
+    } else {
+      cgh.parallel_for(NdRange, *kernel);
+    }
   });
   return event;
 }
@@ -262,11 +279,12 @@ static void launchKernel(GPUSYCLQUEUE *queue, sycl::kernel *kernel,
 
     // warmups
     for (int r = 0; r < warmups; r++) {
-      enqueueKernel(syclQueue, kernel, syclNdRange, params);
+      enqueueKernel(syclQueue, kernel, syclNdRange, params, sharedMemBytes);
     }
 
     for (int r = 0; r < rounds; r++) {
-      sycl::event event = enqueueKernel(syclQueue, kernel, syclNdRange, params);
+      sycl::event event =
+          enqueueKernel(syclQueue, kernel, syclNdRange, params, sharedMemBytes);
 
       auto startTime = event.get_profiling_info<
           cl::sycl::info::event_profiling::command_start>();
@@ -285,7 +303,7 @@ static void launchKernel(GPUSYCLQUEUE *queue, sycl::kernel *kernel,
             "avg: %.4f, min: %.4f, max: %.4f (over %d runs)\n",
             executionTime / rounds, minTime, maxTime, rounds);
   } else {
-    enqueueKernel(syclQueue, kernel, syclNdRange, params);
+    enqueueKernel(syclQueue, kernel, syclNdRange, params, sharedMemBytes);
   }
 }
 
