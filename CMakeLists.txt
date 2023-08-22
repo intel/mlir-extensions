@@ -174,6 +174,9 @@ set(IMEX_INCLUDE_TESTS 1 CACHE BOOL "Include targets for IMEX tests")
 set(IMEX_ENABLE_SYCL_RUNTIME 0 CACHE BOOL "Enable the Sycl Runtime")
 set(IMEX_ENABLE_L0_RUNTIME 0 CACHE BOOL "Enable the Level Zero Runtime")
 set(IMEX_ENABLE_BENCHMARK 0 CACHE BOOL "Enable the IMEX Benchmark (Depending on SYCL Runtime)")
+# Useful when building IMEX as an LLVM external project.
+# LLVM Debug build is huge. This option override IMEX build type to Debug.
+set(IMEX_ENABLE_DEBUG_BUILD 0 CACHE BOOL "Override CMAKE_BUILD_TYPE if not set to Debug")
 
 if (IMEX_INCLUDE_TESTS)
     set(IMEX_INCLUDE_TESTS 1)
@@ -199,6 +202,12 @@ if (IMEX_ENABLE_BENCHMARK)
     set(IMEX_ENABLE_BENCHMARK 1)
 else ()
     set(IMEX_ENABLE_BENCHMARK 0)
+endif()
+
+if (IMEX_ENABLE_DEBUG_BUILD)
+    set(IMEX_ENABLE_DEBUG_BUILD 1)
+else ()
+    set(IMEX_ENABLE_DEBUG_BUILD 0)
 endif()
 
 # Using flags to control bf16 tests since we don't have a good way to test
@@ -227,6 +236,12 @@ if (TARGET mlir-vulkan-runner)
     set(IMEX_ENABLE_VULKAN_RUNNER 1)
 else ()
     set(IMEX_ENABLE_VULKAN_RUNNER 0)
+endif()
+
+if (NOT (CMAKE_BUILD_TYPE MATCHES Debug))
+    if (IMEX_ENABLE_DEBUG_BUILD)
+        set (CMAKE_BUILD_TYPE Debug)
+    endif()
 endif()
 
 if(NOT IMEX_EXTERNAL_PROJECT_BUILD)
