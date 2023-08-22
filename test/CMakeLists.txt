@@ -48,11 +48,15 @@ configure_lit_site_cfg(
   ${IMEX_LIT_CFG_PY}
   )
 
-add_lit_testsuite(check-imex "Running the IMEX regression tests"
+add_lit_testsuite(check-static "Running the IMEX regression tests"
         ${CMAKE_CURRENT_BINARY_DIR}
-        DEPENDS ${IMEX_TEST_DEPENDS} check-gen
+        DEPENDS ${IMEX_TEST_DEPENDS}
         )
-set_target_properties(check-imex PROPERTIES FOLDER "Tests")
+set_target_properties(check-static PROPERTIES FOLDER "Tests")
+
+add_custom_target(check-imex
+        DEPENDS check-gen check-static
+        )
 
 add_lit_testsuite(check-ptensor "Running the IMEX/ptensor regression tests"
         ${CMAKE_CURRENT_BINARY_DIR}/*/*PTensor*
