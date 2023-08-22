@@ -170,9 +170,16 @@ endmacro()
 
 include(HandleLLVMOptions)
 
+set(IMEX_INCLUDE_TESTS 1 CACHE BOOL "Include targets for IMEX tests")
 set(IMEX_ENABLE_SYCL_RUNTIME 0 CACHE BOOL "Enable the Sycl Runtime")
 set(IMEX_ENABLE_L0_RUNTIME 0 CACHE BOOL "Enable the Level Zero Runtime")
 set(IMEX_ENABLE_BENCHMARK 0 CACHE BOOL "Enable the IMEX Benchmark (Depending on SYCL Runtime)")
+
+if (IMEX_INCLUDE_TESTS)
+    set(IMEX_INCLUDE_TESTS 1)
+else ()
+    set(IMEX_INCLUDE_TESTS 0)
+endif()
 
 # Normalize IMEX_ENABLE_SYCL_RUNTIME and IMEX_ENABLE_L0_RUNTIME
 # These values are expected to be passed as 0 or 1 to imex-runner.py
@@ -253,7 +260,9 @@ include(sanitizers)
 add_subdirectory(include)
 add_subdirectory(lib)
 add_subdirectory(tools)
-add_subdirectory(test)
+if(IMEX_INCLUDE_TESTS)
+    add_subdirectory(test)
+endif()
 
 if((IMEX_ENABLE_BENCHMARK) AND (IMEX_ENABLE_SYCL_RUNTIME OR IMEX_ENABLE_L0_RUNTIME))
     add_subdirectory(benchmarks)

@@ -4,13 +4,40 @@ else()
     set(MLIR_RUNNER_UTILS_DIR ${LLVM_LIBRARY_DIR})
 endif()
 set(IMEX_TEST_DEPENDS
-        FileCheck count not
         imex-opt
         imex-cpu-runner
         mlir_c_runner_utils
         mlir_runner_utils
         imex_runner_utils
         )
+
+if(IMEX_EXTERNAL_PROJECT_BUILD)
+    # llvm external project has targets FileCheck count and not
+    list(APPEND IMEX_TEST_DEPENDS
+        FileCheck
+        count
+        not
+    )
+elseif(DEFINED LLVM_BUILD_BINARY_DIR)
+    # separate LLVM build tree
+    # make sure that targets FileCheck count and not are exported
+    if(TARGET FileCheck AND TARGET count AND TARGET not)
+        list(APPEND IMEX_TEST_DEPENDS
+            FileCheck
+            count
+            not
+        )
+    else()
+        message(FATAL_ERROR "Targets FileCheck, not and count missing. Please build LLVM with -DLLVM_INSTALL_UTILS=ON")
+    endif()
+else()
+    # separate LLVM install
+    # make sure that LLVM_EXTERNAL_LIT is set or found
+    if(NOT DEFINED LLVM_EXTERNAL_LIT)
+        find_program (LLVM_EXTERNAL_LIT NAMES llvm-lit lit PATHS ${LLVM_TOOLS_BINARY_DIR} REQUIRED)
+    endif()
+    message(STATUS "IMEX using LLVM_EXTERNAL_LIT: ${LLVM_EXTERNAL_LIT}")
+endif()
 
 if(IMEX_ENABLE_VULKAN_RUNNER)
     list(APPEND IMEX_TEST_DEPENDS
