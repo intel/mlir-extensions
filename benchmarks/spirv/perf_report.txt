@@ -1,0 +1,29 @@
+onednn
+MESA: warning: Driver does not support the 0x20a PCI ID.
+Output template: perf,%engine%,%impl%,%name%,%prb%,%Gops%,%-time%,%-Gflops%,%0time%,%0Gflops%
+perf,gpu,ocl:gen9:any,,--mode=P --eltwise --engine=gpu --dir=FWD_I --tag=axb --alg=relu --alpha=0 --beta=0 512x640x20x15,0,2.26288,0,2.42245,0
+tests:1 passed:1 skipped:0 mistrusted:0 unimplemented:0 invalid_arguments:0 failed:0 listed:0
+total perf: min(ms):2.26288 avg(ms):2.42245
+
+
+relu.tile.seq1.simd16.spirv.block.mlir
+MESA: warning: Driver does not support the 0x20a PCI ID.
+the kernel execution time is (ms):avg: 1.8140, min: 1.7814, max: 3.6022 (over 100 runs)
+relu.tile.seq1.simd16.spirv.mlir
+MESA: warning: Driver does not support the 0x20a PCI ID.
+the kernel execution time is (ms):avg: 2.7702, min: 2.6317, max: 5.5091 (over 100 runs)
+relu.tile.seq1.simd32.spirv.mlir
+MESA: warning: Driver does not support the 0x20a PCI ID.
+the kernel execution time is (ms):avg: 2.2354, min: 2.1802, max: 4.4122 (over 100 runs)
+relu.tile.seq2.simd16.spirv.mlir
+MESA: warning: Driver does not support the 0x20a PCI ID.
+the kernel execution time is (ms):avg: 2.4374, min: 2.3429, max: 4.9346 (over 100 runs)
+relu.tile.seq2.simd32.spirv.mlir
+MESA: warning: Driver does not support the 0x20a PCI ID.
+the kernel execution time is (ms):avg: 2.2564, min: 2.1682, max: 4.4366 (over 100 runs)
+relu.tile.seq4.simd32.spirv.mlir
+MESA: warning: Driver does not support the 0x20a PCI ID.
+the kernel execution time is (ms):avg: 2.3925, min: 2.3198, max: 4.8013 (over 100 runs)
+relu.tile.seq4.simd16.spirv.mlir
+MESA: warning: Driver does not support the 0x20a PCI ID.
+the kernel execution time is (ms):avg: 2.3121, min: 2.2325, max: 4.5760 (over 100 runs)
