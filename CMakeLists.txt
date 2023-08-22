@@ -204,6 +204,15 @@ else ()
     set(IMEX_ENABLE_BF16_TESTS 0)
 endif()
 
+# Using flags to control running tests that are excluded for various reasons
+set(IMEX_ENABLE_EXCLUDED_TESTS 0 CACHE BOOL "Enable excluded tests")
+
+if (IMEX_ENABLE_EXCLUDED_TESTS)
+    set(IMEX_ENABLE_EXCLUDED_TESTS 1)
+else ()
+    set(IMEX_ENABLE_EXCLUDED_TESTS 0)
+endif()
+
 # Check if mlir vulkan runner was configured from mlir
 # target mlir-vulkan-runner is only set if vulkan runner was enabled during
 # mlir configuration
