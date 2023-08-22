@@ -206,8 +206,8 @@ mlir::LogicalResult Load2DOp::verify() {
 }
 
 mlir::LogicalResult Store2DOp::verify() {
-  auto dst = getTile();   // Tile
-  auto val = getValue();  // Vector
+  auto dst = getTile();  // Tile
+  auto val = getValue(); // Vector
 
   if (dst.getType().getShape() != val.getType().getShape()) {
     return emitOpError(

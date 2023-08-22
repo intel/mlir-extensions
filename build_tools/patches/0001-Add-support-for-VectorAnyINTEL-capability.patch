@@ -60,16 +60,16 @@ index 1e61aa747967..6f0f728f811e 100644
  // dialect-specific types so we use "Any" here.
 @@ -4186,10 +4191,10 @@ class SPIRV_JointMatrixOfType<list<Type> allowedTypes> :
      "Joint Matrix">;
- 
+
  class SPIRV_ScalarOrVectorOf<Type type> :
 -    AnyTypeOf<[type, VectorOfLengthAndType<[2, 3, 4, 8, 16], [type]>]>;
 +    AnyTypeOf<[type, VectorOfLengthRangeAndType<[2, 0x7FFFFFFFFFFFFFFF], [type]>]>;
- 
+
  class SPIRV_ScalarOrVectorOrCoopMatrixOf<Type type> :
 -    AnyTypeOf<[type, VectorOfLengthAndType<[2, 3, 4, 8, 16], [type]>,
 +    AnyTypeOf<[type, VectorOfLengthRangeAndType<[2, 0x7FFFFFFFFFFFFFFF], [type]>,
                 SPIRV_CoopMatrixOfType<[type]>, SPIRV_CoopMatrixNVOfType<[type]>]>;
- 
+
  class SPIRV_MatrixOrCoopMatrixOf<Type type> :
 diff --git a/mlir/include/mlir/IR/OpBase.td b/mlir/include/mlir/IR/OpBase.td
 index 940588b7c0f9..917a79ea65c0 100644
@@ -78,14 +78,14 @@ index 940588b7c0f9..917a79ea65c0 100644
 @@ -838,6 +838,92 @@ class ScalableVectorOfLengthAndType<list<int> allowedLengths,
    ScalableVectorOfLength<allowedLengths>.summary,
    "::mlir::VectorType">;
- 
+
 +// Whether the number of elements of a vector is from the given
 +// `allowedRanges` list, the list has two values, start and end of the range (inclusive)
 +class IsVectorOfLengthRangePred<list<int> allowedRanges> :
 +  And<[IsVectorTypePred,
 +       And<[CPred<[{$_self.cast<::mlir::VectorType>().getNumElements()
 +                           >= }]
-+                         # allowedRanges[0]>, 
++                         # allowedRanges[0]>,
 +                        CPred<[{$_self.cast<::mlir::VectorType>().getNumElements()
 +                           <= }]
 +                         # allowedRanges[1]>]>]>;
@@ -96,7 +96,7 @@ index 940588b7c0f9..917a79ea65c0 100644
 +  And<[IsFixedVectorTypePred,
 +       And<[CPred<[{$_self.cast<::mlir::VectorType>().getNumElements()
 +                           >= }]
-+                         # allowedRanges[0]>, 
++                         # allowedRanges[0]>,
 +                        CPred<[{$_self.cast<::mlir::VectorType>().getNumElements()
 +                           <= }]
 +                         # allowedRanges[1]>]>]>;
@@ -107,7 +107,7 @@ index 940588b7c0f9..917a79ea65c0 100644
 +  And<[IsScalableVectorTypePred,
 +       And<[CPred<[{$_self.cast<::mlir::VectorType>().getNumElements()
 +                           >= }]
-+                         # allowedRanges[0]>, 
++                         # allowedRanges[0]>,
 +                        CPred<[{$_self.cast<::mlir::VectorType>().getNumElements()
 +                           <= }]
 +                         # allowedRanges[1]>]>]>;
@@ -193,7 +193,7 @@ index 01c694de08a9..741d8069471d 100644
 +++ b/mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp
 @@ -101,17 +101,11 @@ bool CompositeType::classof(Type type) {
  }
- 
+
  bool CompositeType::isValid(VectorType type) {
 -  switch (type.getNumElements()) {
 -  case 2:
@@ -212,7 +212,7 @@ index 01c694de08a9..741d8069471d 100644
 +  return type.getRank() == 1 && type.getElementType().isa<ScalarType>() &&
 +         type.getNumElements() >= 2;
  }
- 
+
  Type CompositeType::getElementType(unsigned index) const {
 @@ -179,7 +173,21 @@ void CompositeType::getCapabilities(
        .Case<VectorType>([&](VectorType type) {
@@ -255,7 +255,7 @@ index c8d7aef89642..f7c5a72841af 100644
 +          return llvm::is_contained(ors, elidedExt);
 +        }))
        continue;
- 
+
      LLVM_DEBUG({
 @@ -70,9 +74,13 @@ static LogicalResult checkExtensionRequirements(
  template <typename LabelT>
@@ -271,12 +271,12 @@ index c8d7aef89642..f7c5a72841af 100644
 +          return llvm::is_contained(ors, elidedCap);
 +        }))
        continue;
- 
+
      LLVM_DEBUG({
 @@ -89,8 +97,57 @@ static LogicalResult checkCapabilityRequirements(
    return success();
  }
- 
+
 -/// Returns true if the given `storageClass` needs explicit layout when used in
 -/// Shader environments.
 +/// Check capabilities and extensions requirements,
@@ -336,7 +336,7 @@ index c8d7aef89642..f7c5a72841af 100644
 @@ -246,12 +303,15 @@ convertScalarType(const spirv::TargetEnv &targetEnv,
      return nullptr;
    }
- 
+
 -  if (auto floatType = dyn_cast<FloatType>(type)) {
 +  // Convert to 32-bit float and remove floatType related capability
 +  // restriction
@@ -344,7 +344,7 @@ index c8d7aef89642..f7c5a72841af 100644
      LLVM_DEBUG(llvm::dbgs() << type << " converted to 32-bit for SPIR-V\n");
      return Builder(targetEnv.getContext()).getF32Type();
    }
- 
+
 -  auto intType = cast<IntegerType>(type);
 +  // Convert to 32-bit int and remove intType related capability restriction
 +  auto intType = type.cast<IntegerType>();
@@ -354,7 +354,7 @@ index c8d7aef89642..f7c5a72841af 100644
 @@ -322,16 +382,40 @@ convertVectorType(const spirv::TargetEnv &targetEnv,
    cast<spirv::CompositeType>(type).getExtensions(extensions, storageClass);
    cast<spirv::CompositeType>(type).getCapabilities(capabilities, storageClass);
- 
+
 -  // If all requirements are met, then we can accept this type as-is.
 -  if (succeeded(checkCapabilityRequirements(type, targetEnv, capabilities)) &&
 -      succeeded(checkExtensionRequirements(type, targetEnv, extensions)))
@@ -397,7 +397,7 @@ index c8d7aef89642..f7c5a72841af 100644
 +    return nullptr;
 +  }
  }
- 
+
  static Type
 @@ -1118,16 +1202,18 @@ bool SPIRVConversionTarget::isLegalOp(Operation *op) {
    SmallVector<ArrayRef<spirv::Extension>, 4> typeExtensions;
@@ -426,7 +426,7 @@ index c8d7aef89642..f7c5a72841af 100644
 +            op->getName(), this->targetEnv, typeCapabilities, typeExtensions)))
        return false;
    }
- 
+
 diff --git a/mlir/test/Conversion/ArithToSPIRV/arith-to-spirv-unsupported.mlir b/mlir/test/Conversion/ArithToSPIRV/arith-to-spirv-unsupported.mlir
 index 0d92a8e676d8..d61ace8d6876 100644
 --- a/mlir/test/Conversion/ArithToSPIRV/arith-to-spirv-unsupported.mlir
@@ -434,7 +434,7 @@ index 0d92a8e676d8..d61ace8d6876 100644
 @@ -11,9 +11,9 @@ module attributes {
      #spirv.vce<v1.0, [Int8, Int16, Int64, Float16, Float64, Shader], []>, #spirv.resource_limits<>>
  } {
- 
+
 -func.func @unsupported_5elem_vector(%arg0: vector<5xi32>) {
 +func.func @unsupported_5elem_vector(%arg0: vector<5xi32>, %arg1: vector<5xi32>) {
    // expected-error@+1 {{failed to legalize operation 'arith.subi'}}
@@ -442,14 +442,14 @@ index 0d92a8e676d8..d61ace8d6876 100644
 +  %1 = arith.subi %arg0, %arg1: vector<5xi32>
    return
  }
- 
+
 diff --git a/mlir/test/Conversion/ArithToSPIRV/arith-to-spirv.mlir b/mlir/test/Conversion/ArithToSPIRV/arith-to-spirv.mlir
 index d70df982c366..a9a8237e53d4 100644
 --- a/mlir/test/Conversion/ArithToSPIRV/arith-to-spirv.mlir
 +++ b/mlir/test/Conversion/ArithToSPIRV/arith-to-spirv.mlir
 @@ -1298,3 +1298,35 @@ func.func @float_scalar(%arg0: f16) {
  }
- 
+
  } // end module
 +
 +// -----
@@ -490,7 +490,7 @@ index ef1ee00b709f..b2abd7504b6d 100644
 @@ -348,8 +348,21 @@ module attributes {
    spirv.target_env = #spirv.target_env<#spirv.vce<v1.0, [], []>, #spirv.resource_limits<>>
  } {
- 
+
 -// CHECK-NOT: spirv.func @large_vector
 -func.func @large_vector(%arg0: vector<1024xi32>) { return }
 +// CHECK-NOT: spirv.func @large_vector_unsupported
@@ -508,16 +508,16 @@ index ef1ee00b709f..b2abd7504b6d 100644
 +
 +// CHECK: spirv.func @large_any_vector
 +func.func @large_any_vector(%arg0: vector<1024xi32>) { return }
- 
+
  } // end module
- 
+
 diff --git a/mlir/test/Dialect/SPIRV/IR/bit-ops.mlir b/mlir/test/Dialect/SPIRV/IR/bit-ops.mlir
 index eeaa607b5604..78e2fffda755 100644
 --- a/mlir/test/Dialect/SPIRV/IR/bit-ops.mlir
 +++ b/mlir/test/Dialect/SPIRV/IR/bit-ops.mlir
 @@ -97,7 +97,7 @@ func.func @bitwise_or_vector(%arg: vector<4xi32>) -> vector<4xi32> {
  // -----
- 
+
  func.func @bitwise_or_float(%arg0: f16, %arg1: f16) -> f16 {
 -  // expected-error @+1 {{operand #0 must be 8/16/32/64-bit integer or vector of 8/16/32/64-bit integer values of length 2/3/4}}
 +  // expected-error @+1 {{operand #0 must be 8/16/32/64-bit integer or vector of 8/16/32/64-bit integer values of length 2-9223372036854775807}}
@@ -526,7 +526,7 @@ index eeaa607b5604..78e2fffda755 100644
  }
 @@ -123,7 +123,7 @@ func.func @bitwise_xor_vector(%arg: vector<4xi32>) -> vector<4xi32> {
  // -----
- 
+
  func.func @bitwise_xor_float(%arg0: f16, %arg1: f16) -> f16 {
 -  // expected-error @+1 {{operand #0 must be 8/16/32/64-bit integer or vector of 8/16/32/64-bit integer values of length 2/3/4}}
 +  // expected-error @+1 {{operand #0 must be 8/16/32/64-bit integer or vector of 8/16/32/64-bit integer values of length 2-9223372036854775807}}
@@ -535,7 +535,7 @@ index eeaa607b5604..78e2fffda755 100644
  }
 @@ -149,7 +149,7 @@ func.func @bitwise_and_vector(%arg: vector<4xi32>) -> vector<4xi32> {
  // -----
- 
+
  func.func @bitwise_and_float(%arg0: f16, %arg1: f16) -> f16 {
 -  // expected-error @+1 {{operand #0 must be 8/16/32/64-bit integer or vector of 8/16/32/64-bit integer values of length 2/3/4}}
 +  // expected-error @+1 {{operand #0 must be 8/16/32/64-bit integer or vector of 8/16/32/64-bit integer values of length 2-9223372036854775807}}
@@ -548,7 +548,7 @@ index 3683e5b469b1..a95a6001fd20 100644
 +++ b/mlir/test/Dialect/SPIRV/IR/gl-ops.mlir
 @@ -27,7 +27,7 @@ func.func @exp(%arg0 : i32) -> () {
  // -----
- 
+
  func.func @exp(%arg0 : vector<5xf32>) -> () {
 -  // expected-error @+1 {{op operand #0 must be 16/32-bit float or vector of 16/32-bit float values of length 2/3/4}}
 +  // CHECK: spirv.GL.Exp {{%.*}} : vector<5xf32
@@ -560,7 +560,7 @@ index 7dc0bd99f54b..5dd9901828cd 100644
 --- a/mlir/test/Dialect/SPIRV/IR/logical-ops.mlir
 +++ b/mlir/test/Dialect/SPIRV/IR/logical-ops.mlir
 @@ -166,7 +166,7 @@ func.func @logicalUnary(%arg0 : i1)
- 
+
  func.func @logicalUnary(%arg0 : i32)
  {
 -  // expected-error @+1 {{'operand' must be bool or vector of bool values of length 2/3/4/8/16, but got 'i32'}}
@@ -573,9 +573,9 @@ index 29a4a4613615..24fe2f945841 100644
 --- a/mlir/test/Dialect/SPIRV/IR/ocl-ops.mlir
 +++ b/mlir/test/Dialect/SPIRV/IR/ocl-ops.mlir
 @@ -18,17 +18,17 @@ func.func @expvec(%arg0 : vector<3xf16>) -> () {
- 
+
  // -----
- 
+
 -func.func @exp(%arg0 : i32) -> () {
 -  // expected-error @+1 {{op operand #0 must be 16/32/64-bit float or vector of 16/32/64-bit float values}}
 -  %2 = spirv.CL.exp %arg0 : i32
@@ -584,9 +584,9 @@ index 29a4a4613615..24fe2f945841 100644
 +  %2 = spirv.CL.exp %arg0 : vector<5xf32>
    return
  }
- 
+
  // -----
- 
+
 -func.func @exp(%arg0 : vector<5xf32>) -> () {
 -  // expected-error @+1 {{op operand #0 must be 16/32/64-bit float or vector of 16/32/64-bit float values of length 2/3/4}}
 -  %2 = spirv.CL.exp %arg0 : vector<5xf32>
@@ -595,11 +595,11 @@ index 29a4a4613615..24fe2f945841 100644
 +  %2 = spirv.CL.exp %arg0 : i32
    return
  }
- 
+
 @@ -66,6 +66,14 @@ func.func @fabsvec(%arg0 : vector<3xf16>) -> () {
    return
  }
- 
+
 +// -----
 +
 +func.func @fabs_any_vec(%arg0 : vector<5xf32>) -> () {
@@ -612,9 +612,9 @@ index 29a4a4613615..24fe2f945841 100644
    // CHECK: spirv.CL.fabs {{%.*}} : f64
    %2 = spirv.CL.fabs %arg0 : f64
 @@ -82,14 +90,6 @@ func.func @fabs(%arg0 : i32) -> () {
- 
+
  // -----
- 
+
 -func.func @fabs(%arg0 : vector<5xf32>) -> () {
 -  // expected-error @+1 {{op operand #0 must be 16/32/64-bit float or vector of 16/32/64-bit float values of length 2/3/4}}
 -  %2 = spirv.CL.fabs %arg0 : vector<5xf32>
@@ -629,7 +629,7 @@ index 29a4a4613615..24fe2f945841 100644
 @@ -122,6 +122,14 @@ func.func @sabsvec(%arg0 : vector<3xi16>) -> () {
    return
  }
- 
+
 +// -----
 +
 +func.func @sabs_any_vec(%arg0 : vector<5xi32>) -> () {
@@ -644,17 +644,17 @@ index 29a4a4613615..24fe2f945841 100644
 @@ -142,13 +150,7 @@ func.func @sabs(%arg0 : f32) -> () {
    return
  }
- 
+
 -// -----
- 
+
 -func.func @sabs(%arg0 : vector<5xi32>) -> () {
 -  // expected-error @+1 {{op operand #0 must be 8/16/32/64-bit integer or vector of 8/16/32/64-bit integer values of length 2/3/4}}
 -  %2 = spirv.CL.s_abs %arg0 : vector<5xi32>
 -  return
 -}
- 
+
  // -----
- 
+
 diff --git a/mlir/test/Target/SPIRV/arithmetic-ops.mlir b/mlir/test/Target/SPIRV/arithmetic-ops.mlir
 index b1ea13c6854f..90144afc6f3a 100644
 --- a/mlir/test/Target/SPIRV/arithmetic-ops.mlir
@@ -679,7 +679,7 @@ index 9a2e4cf62e37..31a7f616d648 100644
 @@ -39,6 +39,12 @@ spirv.module Physical64 OpenCL requires #spirv.vce<v1.0, [Kernel, Addresses], []
      spirv.Return
    }
- 
+
 +  spirv.func @vector_anysize(%arg0 : vector<5000xf32>) "None" {
 +    // CHECK: {{%.*}} = spirv.CL.fabs {{%.*}} : vector<5000xf32>
 +    %0 = spirv.CL.fabs %arg0 : vector<5000xf32>
@@ -689,6 +689,5 @@ index 9a2e4cf62e37..31a7f616d648 100644
    spirv.func @fma(%arg0 : f32, %arg1 : f32, %arg2 : f32) "None" {
      // CHECK: spirv.CL.fma {{%[^,]*}}, {{%[^,]*}}, {{%[^,]*}} : f32
      %13 = spirv.CL.fma %arg0, %arg1, %arg2 : f32
--- 
+--
 2.34.1
-
