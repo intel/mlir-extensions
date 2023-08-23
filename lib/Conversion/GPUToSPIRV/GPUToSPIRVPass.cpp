@@ -14,15 +14,17 @@
 ///
 //===----------------------------------------------------------------------===//
 #include "imex/Conversion/GPUToSPIRV/GPUToSPIRVPass.h"
+#include "imex/Conversion/XeGPUToSPIRV/XeGPUToSPIRV.h"
+#include "imex/Dialect/XeGPU/IR/XeGPUOps.h"
 
 #include "../PassDetail.h"
 
-#include "mlir/Conversion/MemRefToSPIRV/MemRefToSPIRV.h"
 #include <mlir/Conversion/ArithToSPIRV/ArithToSPIRV.h>
 #include <mlir/Conversion/ControlFlowToSPIRV/ControlFlowToSPIRV.h>
 #include <mlir/Conversion/FuncToSPIRV/FuncToSPIRV.h>
 #include <mlir/Conversion/GPUToSPIRV/GPUToSPIRV.h>
 #include <mlir/Conversion/MathToSPIRV/MathToSPIRV.h>
+#include <mlir/Conversion/MemRefToSPIRV/MemRefToSPIRV.h>
 #include <mlir/Conversion/SCFToSPIRV/SCFToSPIRV.h>
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -153,6 +155,28 @@ void GPUXToSPIRVPass::runOnOperation() {
     for (auto eraseOp : eraseOps) {
       eraseOp->erase();
     }
+    target->addIllegalDialect<imex::xegpu::XeGPUDialect>();
+    typeConverter.addConversion([&](xegpu::TileType type) -> ::mlir::Type {
+      return ::mlir::IntegerType::get(context, 64);
+    });
+    typeConverter.addConversion([&](::mlir::VectorType type) -> ::mlir::Type {
+      unsigned rank = type.getRank();
+      auto elemType = type.getElementType();
+      if (rank < 1)
+        return type;
+      else {
+        // load2d/store2d is vnni format with 3 dims
+        if (rank == 3 && elemType.getIntOrFloatBitWidth() < 32) {
+          elemType = ::mlir::IntegerType::get(context, 32);
+          rank--;
+        }
+        unsigned sum = 1;
+        for (unsigned i = 0; i < rank; i++) {
+          sum *= type.getShape()[i];
+        }
+        return ::mlir::VectorType::get(sum, elemType);
+      }
+    });
 
     //------- Upstream Conversion------------
     mlir::populateGPUToSPIRVPatterns(typeConverter, patterns);
@@ -166,6 +190,7 @@ void GPUXToSPIRVPass::runOnOperation() {
     mlir::populateSCFToSPIRVPatterns(typeConverter, scfToSpirvCtx, patterns);
     mlir::cf::populateControlFlowToSPIRVPatterns(typeConverter, patterns);
     mlir::populateMathToSPIRVPatterns(typeConverter, patterns);
+    imex::populateXeGPUToVCIntrinsicsPatterns(typeConverter, patterns);
 
     if (failed(applyFullConversion(gpuModule, *target, std::move(patterns))))
       return signalPassFailure();
