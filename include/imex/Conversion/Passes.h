@@ -20,6 +20,7 @@
 #include <imex/Conversion/GPUToSPIRV/GPUToSPIRVPass.h>
 #include <imex/Conversion/GPUXToLLVM/GPUXToLLVMPass.h>
 #include <imex/Conversion/PTensorToLinalg/PTensorToLinalg.h>
+#include <imex/Conversion/XeGPUToSPIRV/XeGPUToSPIRV.h>
 
 namespace imex {
 
