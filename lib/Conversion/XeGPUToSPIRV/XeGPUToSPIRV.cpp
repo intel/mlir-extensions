@@ -137,10 +137,10 @@ public:
     std::string funcName;
     constexpr bool isLoad = std::is_same_v<OpType, Load2DOp>;
     if constexpr (isLoad) {
-      vecType = cast<VectorType>(op.template getResult().getType());
+      vecType = cast<VectorType>(op.getResult().getType());
       funcName = "llvm_genx_lsc_load2d_stateless_";
     } else {
-      vecType = cast<VectorType>(op.template getValue().getType());
+      vecType = cast<VectorType>(op.getValue().getType());
       funcName = "llvm_genx_lsc_store2d_stateless_i1_i64_";
     }
     auto createIntConstant = [&](Type type, unsigned value) {
@@ -188,7 +188,7 @@ public:
     VectorType newType;
     std::tie(typeStr, newType) = encodeVectorType(rewriter, vecType);
     if constexpr (!isLoad) {
-      args.push_back(adaptor.template getValue());
+      args.push_back(adaptor.getValue());
     }
     funcName += typeStr;
     if constexpr (isLoad) {
