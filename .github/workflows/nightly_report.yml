@@ -6,7 +6,7 @@ on:
       email:
         description: 'Email address to send report to'
         required: true
-        default: 'ravi1.gupta@intel.com'
+        default: 'dimpalben.r.prajapati@intel.com'
   schedule:
 #   - cron: '0 0 * * *' # every 24 hrs
     - cron: '30 19 * * *' # runs every day at 19:30 pm UTC which is 11:30 am PST
@@ -62,7 +62,7 @@ jobs:
     needs: invoke-gpu-tests
     steps:
       - name: Echo Report info
-        run: echo "sending to ravi1.gupta@intel.com by default trigger."
+        run: echo "sending to dimpalben.r.prajapati@intel.com by default trigger."
 
       - name: Send Report
       # run this only if workflow dispatch is not called
