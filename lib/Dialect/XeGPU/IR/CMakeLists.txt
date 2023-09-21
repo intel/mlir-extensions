@@ -1,4 +1,5 @@
 add_mlir_dialect_library(IMEXXeGPUDialect
+  XeGPUDialect.cpp
   XeGPUOps.cpp
 
   ADDITIONAL_HEADER_DIRS
@@ -6,6 +7,7 @@ add_mlir_dialect_library(IMEXXeGPUDialect
 
   DEPENDS
   MLIRXeGPUOpsIncGen
+  XeGPUOpsAttrsIncGen
 
   LINK_LIBS PUBLIC
   MLIRIR
