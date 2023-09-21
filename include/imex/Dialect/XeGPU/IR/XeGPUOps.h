@@ -41,7 +41,7 @@ SmallVector<Range, 8> getOrCreateRanges(OffsetSizeAndStrideOpInterface op,
 namespace imex {
 namespace xegpu {
 
-class TileType;
+class TensorDescType;
 
 } // namespace xegpu
 } // namespace imex
@@ -49,7 +49,8 @@ class TileType;
 namespace imex {
 namespace xegpu {
 
-class TileBase : public mlir::Type, public mlir::ShapedType::Trait<TileBase> {
+class BaseTensorDescType : public mlir::Type,
+                           public mlir::ShapedType::Trait<BaseTensorDescType> {
 public:
   using Type::Type;
 
@@ -64,8 +65,8 @@ public:
 
   /// Clone this type with the given shape and element type. If the
   /// provided shape is `None`, the current shape of the type is used.
-  TileBase cloneWith(std::optional<llvm::ArrayRef<int64_t>> shape,
-                     mlir::Type elementType) const;
+  BaseTensorDescType cloneWith(std::optional<llvm::ArrayRef<int64_t>> shape,
+                               mlir::Type elementType) const;
 
   /// Return true if the specified element type is ok in a tensor.
   static bool isValidElementType(Type type);
@@ -81,6 +82,9 @@ public:
 } // namespace imex
 
 #include <imex/Dialect/XeGPU/IR/XeGPUOpsDialect.h.inc>
+#include <imex/Dialect/XeGPU/IR/XeGPUOpsEnums.h.inc>
+#define GET_ATTRDEF_CLASSES
+#include <imex/Dialect/XeGPU/IR/XeGPUOpsAttrs.h.inc>
 #define GET_TYPEDEF_CLASSES
 #include <imex/Dialect/XeGPU/IR/XeGPUOpsTypes.h.inc>
 #define GET_OP_CLASSES
