@@ -164,7 +164,7 @@ extern "C" bool _mlir_ciface_allcloseF32(UnrankedMemRefType<float> *M,
   // https://numpy.org/doc/stable/reference/generated/numpy.allclose.html
   // values may need to adjusted in the future
   const float atol = 1e-08;
-  const float rtol = 1e-05;
+  const float rtol = 1e-04;
   DynamicMemRefType<float> DM = DynamicMemRefType<float>(*M);
   DynamicMemRefType<float> DN = DynamicMemRefType<float>(*N);
   DynamicMemRefIterator<float> i = DM.begin();

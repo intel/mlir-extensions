@@ -156,9 +156,10 @@ void GPUXToSPIRVPass::runOnOperation() {
       eraseOp->erase();
     }
     target->addIllegalDialect<imex::xegpu::XeGPUDialect>();
-    typeConverter.addConversion([&](xegpu::TileType type) -> ::mlir::Type {
-      return ::mlir::IntegerType::get(context, 64);
-    });
+    typeConverter.addConversion(
+        [&](xegpu::TensorDescType type) -> ::mlir::Type {
+          return ::mlir::IntegerType::get(context, 64);
+        });
     typeConverter.addConversion([&](::mlir::VectorType type) -> ::mlir::Type {
       unsigned rank = type.getRank();
       auto elemType = type.getElementType();

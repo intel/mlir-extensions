@@ -1,0 +1,49 @@
+commit c64e2cf1aaae2f9c41c4f9ccf932695417027432
+Author: Dewei Wang <dewei.wang@intel.com>
+Date:   Thu Sep 7 00:18:12 2023 +0800
+
+    [mlir][spirv] fix linkage_name StringAttr
+
+diff --git a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVAttributes.td b/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVAttributes.td
+index 259a96651abb..7eaa6c10ae6e 100644
+--- a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVAttributes.td
++++ b/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVAttributes.td
+@@ -48,7 +48,7 @@ def SPIRV_CapabilityArrayAttr : TypedArrayAttrBase<
+
+ def SPIRV_LinkageAttributesAttr : SPIRV_Attr<"LinkageAttributes", "linkage_attributes"> {
+   let parameters = (ins
+-    "std::string":$linkage_name,
++    "StringAttr":$linkage_name,
+     "mlir::spirv::LinkageTypeAttr":$linkage_type
+   );
+   let assemblyFormat = "`<` struct(params) `>`";
+diff --git a/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp b/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
+index 4598dc608034..3c74ab5fb5d8 100644
+--- a/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
++++ b/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
+@@ -282,10 +282,11 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
+     // 3 + ceildiv(strlen(name), 4).
+     unsigned wordIndex = 2;
+     auto linkageName = spirv::decodeStringLiteral(words, wordIndex).str();
++    auto linkageNameAttr = opBuilder.getStringAttr(linkageName);
+     auto linkageTypeAttr = opBuilder.getAttr<::mlir::spirv::LinkageTypeAttr>(
+         static_cast<::mlir::spirv::LinkageType>(words[wordIndex++]));
+     auto linkageAttr = opBuilder.getAttr<::mlir::spirv::LinkageAttributesAttr>(
+-        linkageName, linkageTypeAttr);
++        linkageNameAttr, linkageTypeAttr);
+     decorations[words[0]].set(symbol, llvm::dyn_cast<Attribute>(linkageAttr));
+     break;
+   }
+diff --git a/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp b/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
+index b6ec58648d72..893d0a609a9a 100644
+--- a/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
++++ b/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
+@@ -224,7 +224,7 @@ LogicalResult Serializer::processDecoration(Location loc, uint32_t resultID,
+     // e.g., LinkageAttributes=["linkageName", linkageType].
+     auto linkageAttr =
+         llvm::dyn_cast<spirv::LinkageAttributesAttr>(attr.getValue());
+-    auto linkageName = linkageAttr.getLinkageName();
++    auto linkageName = linkageAttr.getLinkageName().getValue();
+     auto linkageType = linkageAttr.getLinkageType().getValue();
+     // Encode the Linkage Name (string literal to uint32_t).
+     spirv::encodeStringLiteralInto(args, linkageName);
