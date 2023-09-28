@@ -31,7 +31,7 @@ def XeGPU_CacheReadAttr : I32EnumAttr<
     "CacheReadHint", "", [ I32EnumAttrCase<"UNCACHED", 0, "uncached">,
                            I32EnumAttrCase<"CACHED", 1, "cached">,
                            I32EnumAttrCase<"STREAMING", 2, "streaming">,
-                           I32EnumAttrCase<"READ_INVALDIATE", 3, "read_invalidiate"> ]> {
+                           I32EnumAttrCase<"READ_INVALIDATE", 3, "read_invalidate"> ]> {
 
     let cppNamespace = "::imex::xegpu";
 }

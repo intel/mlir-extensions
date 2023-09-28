@@ -29,6 +29,8 @@
 
 #include "imex/Utils/XeUtils.h"
 
+#define DEBUG_TYPE "xegpu"
+
 namespace imex {
 namespace xegpu {
 
@@ -344,9 +346,9 @@ void CreateNdDescOp::print(::mlir::OpAsmPrinter &printer) {
 }
 
 mlir::LogicalResult CreateNdDescOp::verify() {
-  llvm::dbgs() << "Op: " << getValueAsString(*this)
-               << "\n\tstatic offsets: " << makeString(getStaticOffsets())
-               << "\n\n";
+  LLVM_DEBUG(llvm::dbgs() << "Op: " << getValueAsString(*this)
+                          << "\n\tstatic offsets: "
+                          << makeString(getStaticOffsets()) << "\n\n");
   // it is invalid to have both dynamic and static shape
   if (!(hasDynamicShape() ^ hasStaticShape()))
     return emitOpError("It is invalid to have both or none of dynamic shape "
@@ -1097,27 +1099,6 @@ void StoreScatterOp::print(::mlir::OpAsmPrinter &printer) {
   }
   return ::mlir::success();
 }
-
-// =========================== begin for dewei ============================== //
-// the following code block is pending removal by Dewei. It is from old
-// definition, and is used to temporary avoid XeGPUToSPIRV compiling error.
-bool BaseTensorDescType::hasRank() const { return true; }
-
-llvm::ArrayRef<int64_t> BaseTensorDescType::getShape() const {
-  return cast<TileType>().getShape();
-}
-
-BaseTensorDescType
-BaseTensorDescType::cloneWith(std::optional<llvm::ArrayRef<int64_t>> shape,
-                              Type elementType) const {
-  return TileType::get(shape.value_or(getShape()), elementType);
-}
-
-bool BaseTensorDescType::isValidElementType(Type type) {
-  return type.isIntOrIndexOrFloat() || type.isa<mlir::ComplexType>();
-}
-// =========================== end for dewei ============================== //
-
 } // namespace xegpu
 } // namespace imex
 
