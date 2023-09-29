@@ -6,8 +6,8 @@ module attributes {gpu.container_module, spirv.target_env = #spirv.target_env<#s
   func.func @main() attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %c8 = arith.constant 8 : index
-    // CHECK: %[[DEVICE:.*]] =  llvm.mlir.null : !llvm.ptr<i8>
-    // CHECK: %[[CONTEXT:.*]] =  llvm.mlir.null : !llvm.ptr<i8>
+    // CHECK: %[[DEVICE:.*]] =  llvm.mlir.zero : !llvm.ptr<i8>
+    // CHECK: %[[CONTEXT:.*]] =  llvm.mlir.zero : !llvm.ptr<i8>
     // CHECK: %[[STREAM:.*]] = llvm.call @gpuCreateStream(%[[DEVICE:.*]], %[[CONTEXT:.*]]) : (!llvm.ptr<i8>, !llvm.ptr<i8>) -> !llvm.ptr<i8>
     %0 = "gpux.create_stream"() : () -> !gpux.StreamType
     %memref = "gpux.alloc"(%0) {operandSegmentSizes = array<i32: 0, 1, 0, 0>} : (!gpux.StreamType) -> memref<8xf32>

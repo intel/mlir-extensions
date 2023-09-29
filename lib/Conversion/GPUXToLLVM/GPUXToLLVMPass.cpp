@@ -441,7 +441,7 @@ private:
     mlir::Value one = rewriter.create<mlir::LLVM::ConstantOp>(
         loc, llvmInt32Type, rewriter.getI32IntegerAttr(1));
     auto computeTypeSize = [&](mlir::Type type) -> mlir::Value {
-      auto nullPtr = rewriter.create<mlir::LLVM::NullOp>(loc, type);
+      auto nullPtr = rewriter.create<mlir::LLVM::ZeroOp>(loc, type);
       auto gep = rewriter.create<mlir::LLVM::GEPOp>(loc, type, nullPtr, one);
       return rewriter.create<mlir::LLVM::PtrToIntOp>(loc, llvmIndexType, gep);
     };
@@ -483,7 +483,7 @@ private:
                                                                range, i);
     }
 
-    auto nullPtr = rewriter.create<mlir::LLVM::NullOp>(loc, llvmPointerType);
+    auto nullPtr = rewriter.create<mlir::LLVM::ZeroOp>(loc, llvmPointerType);
     auto nullRange = [&]() {
       auto zero = rewriter.create<mlir::LLVM::ConstantOp>(
           loc, llvmIndexType, rewriter.getIntegerAttr(llvmIndexType, 0));
@@ -547,8 +547,8 @@ private:
     // TODO: Pass nullptrs now for the current workflow where user is
     // not passing device and context. Add different streambuilders
     // later.
-    auto device = rewriter.create<mlir::LLVM::NullOp>(loc, llvmPointerType);
-    auto context = rewriter.create<mlir::LLVM::NullOp>(loc, llvmPointerType);
+    auto device = rewriter.create<mlir::LLVM::ZeroOp>(loc, llvmPointerType);
+    auto context = rewriter.create<mlir::LLVM::ZeroOp>(loc, llvmPointerType);
     auto res = streamCreateCallBuilder.create(loc, rewriter, {device, context});
     rewriter.replaceOp(op, res.getResults());
     return mlir::success();

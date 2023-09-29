@@ -15,6 +15,7 @@
 #ifndef _Dist_OPS_H_INCLUDED_
 #define _Dist_OPS_H_INCLUDED_
 
+#include <mlir/Bytecode/BytecodeOpInterface.h>
 #include <mlir/IR/BuiltinTypes.h>
 #include <mlir/IR/Dialect.h>
 #include <mlir/IR/OpDefinition.h>

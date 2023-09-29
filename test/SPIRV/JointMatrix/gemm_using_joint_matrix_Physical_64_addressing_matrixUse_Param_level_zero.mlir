@@ -1,3 +1,12 @@
+// RUN: %python_executable %imex_runner --requires=l0-runtime -i %s --pass-pipeline-file=%p/spirv-to-llvm.pp \
+// RUN:                                       --runner imex-cpu-runner -e main \
+// RUN:                                       --entry-point-result=void \
+// RUN:                                       --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%levelzero_runtime --filecheck
+// RUN: %python_executable %imex_runner --requires=sycl-runtime -i %s --pass-pipeline-file=%p/spirv-to-llvm.pp \
+// RUN:                                        --runner imex-cpu-runner -e main \
+// RUN:                                        --entry-point-result=void \
+// RUN:                                        --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%sycl_runtime --filecheck
+// CHECK-COUNT-4194304: 4970.23
 module @gemm_using_jointmatrix_module attributes {gpu.container_module} {
   memref.global "private" constant @__constant_A_2048x2048xbf16 : memref<2048x2048xbf16> = dense<1.100000e+00>
   memref.global "private" constant @__constant_B_1024x2048x2xbf16 : memref<1024x2048x2xbf16> = dense<2.200000e+00>

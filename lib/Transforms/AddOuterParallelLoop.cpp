@@ -40,7 +40,7 @@ public:
         continue;
       }
       // populate forOp w/o iter_args
-      if (forOp.getNumIterOperands() == 0) {
+      if (forOp.getInitArgs().size() == 0) {
         groupedOps.push_back({forOp});
         continue;
       }

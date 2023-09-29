@@ -62,7 +62,7 @@ func.func @test_allreduce(%arg0: memref<i64>) -> memref<i64> {
     return %0 : memref<i64>
 }
 // CHECK-LABEL: func.func @test_allreduce(%arg0: memref<i64>) -> memref<i64> {
-// CHECK-NEXT: "dist.allreduce"(%arg0) {op = 4 : i32} : (memref<i64>) -> memref<i64>
+// CHECK-NEXT: "dist.allreduce"(%arg0) <{op = 4 : i32}> : (memref<i64>) -> memref<i64>
 
 // -----
 func.func @test_local_of_slice(%arg0: !dist.dtensor<<1 x i64>>) -> (index, index, index) {

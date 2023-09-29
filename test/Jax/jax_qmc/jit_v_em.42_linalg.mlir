@@ -21,7 +21,7 @@ module @jit_v_em.42 {
     %0 = tensor.empty() : tensor<f64>
     %1 = linalg.generic {indexing_maps = [#map, #map, #map], iterator_types = []} ins(%arg0, %cst_0 : tensor<f64>, tensor<f64>) outs(%0 : tensor<f64>) {
     ^bb0(%arg1: f64, %arg2: f64, %arg3: f64):
-      %38 = arith.maxf %arg1, %arg2 : f64
+      %38 = arith.maximumf %arg1, %arg2 : f64
       linalg.yield %38 : f64
     } -> tensor<f64>
     %cst_1 = arith.constant dense<4.270000e+00> : tensor<f64>

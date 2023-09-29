@@ -1,26 +1,25 @@
-From 810eccbbbb872402391a0f01a53aaf0205ea10c4 Mon Sep 17 00:00:00 2001
+From 9837f33f72569d59c0ebef542e3647ec554f369c Mon Sep 17 00:00:00 2001
 From: Md Abdullah Shahneous Bari <md.abdullah.shahneous.bari@intel.com>
-Date: Tue, 8 Aug 2023 00:28:31 +0000
-Subject: [PATCH] Update the Joint Matrix support to match Spec supported by
- IGC
+Date: Tue, 26 Sep 2023 19:07:40 +0000
+Subject: [PATCH] Update the Joint Matrix support to match IGC spec
 
 Update the Joint Matrix support to match the following spec:
 https://github.com/MrSidims/llvm/blob/private/MrSidims/add-matrix-use/sycl/doc/design/spirv-extensions/SPV_INTEL_joint_matrix.asciidoc
 ---
- .../mlir/Dialect/SPIRV/IR/SPIRVBase.td        | 30 ++++++++++++++-----
+ .../mlir/Dialect/SPIRV/IR/SPIRVBase.td        | 31 +++++++++++++------
  .../mlir/Dialect/SPIRV/IR/SPIRVTypes.h        |  6 +++-
- mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp    | 12 ++++++--
- mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp      | 20 +++++++++----
- .../SPIRV/Deserialization/Deserializer.cpp    | 17 +++++++----
- .../Target/SPIRV/Serialization/Serializer.cpp |  5 +++-
- mlir/tools/mlir-tblgen/SPIRVUtilsGen.cpp      | 16 +++++-----
- 7 files changed, 75 insertions(+), 31 deletions(-)
+ mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp    | 12 +++++--
+ mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp      | 20 ++++++++----
+ .../SPIRV/Deserialization/Deserializer.cpp    | 17 +++++++---
+ .../Target/SPIRV/Serialization/Serializer.cpp |  2 ++
+ mlir/tools/mlir-tblgen/SPIRVUtilsGen.cpp      | 10 +++---
+ 7 files changed, 70 insertions(+), 28 deletions(-)
 
 diff --git a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td b/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td
-index 6f0f728f811e..c2ad6ff24bea 100644
+index 1013cbc8ca56..4a374e713e3c 100644
 --- a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td
 +++ b/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVBase.td
-@@ -4039,16 +4039,30 @@ def SPIRV_SamplerUseAttr: SPIRV_I32EnumAttr<
+@@ -4038,15 +4038,28 @@ def SPIRV_SamplerUseAttr: SPIRV_I32EnumAttr<
    "image_sampler_use_info",
    [SPIRV_ISUI_SamplerUnknown, SPIRV_ISUI_NeedSampler, SPIRV_ISUI_NoSampler]>;
 
@@ -32,6 +31,7 @@ index 6f0f728f811e..c2ad6ff24bea 100644
 -def SPIRV_MatrixLayoutAttr :
 -    SPIRV_I32EnumAttr<"MatrixLayout", "valid SPIR-V MatrixLayout", "matrixLayout", [
 -      SPIRV_ML_ColumnMajor, SPIRV_ML_RowMajor, SPIRV_ML_PackedA, SPIRV_ML_PackedB
+-    ]>;
 +// Change the layout parameter to IGC spec, the currnet MLIR version
 +// does not match the IGC spec, IGC spec has been updated
 +// https://github.com/MrSidims/llvm/blob/private/MrSidims/add-matrix-use/sycl/doc/design/spirv-extensions/SPV_INTEL_joint_matrix.asciidoc
@@ -44,8 +44,8 @@ index 6f0f728f811e..c2ad6ff24bea 100644
 + def SPIRV_MatrixLayoutAttr  :
 +     SPIRV_I32EnumAttr<"MatrixLayout", "valid SPIR-V MatrixLayout", "matrixLayout", [
 +     SPIRV_ML_RowMajor, SPIRV_ML_ColumnMajor, SPIRV_ML_Packed, SPIRV_ML_Unused
-     ]>;
-
++     ]>;
++
 +def SPIRV_ML_MATRIX_A     : I32EnumAttrCase<"MatrixA", 0>;
 +def SPIRV_ML_MATRIX_B     : I32EnumAttrCase<"MatrixB", 1>;
 +def SPIRV_ML_MATRIX_ACC   : I32EnumAttrCase<"Accumulator", 2>;
@@ -54,11 +54,9 @@ index 6f0f728f811e..c2ad6ff24bea 100644
 +    SPIRV_I32EnumAttr<"MatrixUse", "valid SPIR-V MatrixUse", "matrixUse", [
 +      SPIRV_ML_MATRIX_A, SPIRV_ML_MATRIX_B, SPIRV_ML_MATRIX_ACC
 +     ]>;
-+
-+
+
  // Cooperative Matrix Use for the SPV_KHR_cooperative_matrix extension.
  def SPIRV_KHR_CMU_MatrixA   : I32EnumAttrCase<"MatrixA", 0>;
- def SPIRV_KHR_CMU_MatrixB   : I32EnumAttrCase<"MatrixB", 1>;
 diff --git a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVTypes.h b/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVTypes.h
 index 07f2f158ecab..e0b3c5448a44 100644
 --- a/mlir/include/mlir/Dialect/SPIRV/IR/SPIRVTypes.h
@@ -84,10 +82,10 @@ index 07f2f158ecab..e0b3c5448a44 100644
                       std::optional<StorageClass> storage = std::nullopt);
    void getCapabilities(SPIRVType::CapabilityArrayRefVector &capabilities,
 diff --git a/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp b/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp
-index 9188f8b699b4..4c099bf77a88 100644
+index a51d77dda78b..fa4cd8dc8447 100644
 --- a/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp
 +++ b/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp
-@@ -394,7 +394,8 @@ static Type parseCooperativeMatrixNVType(SPIRVDialect const &dialect,
+@@ -392,7 +392,8 @@ static Type parseCooperativeMatrixNVType(SPIRVDialect const &dialect,
 
  // joint-matrix-type ::= `!spirv.jointmatrix` `<`rows `x` columns `x`
  // element-type
@@ -97,7 +95,7 @@ index 9188f8b699b4..4c099bf77a88 100644
  static Type parseJointMatrixType(SPIRVDialect const &dialect,
                                   DialectAsmParser &parser) {
    if (parser.parseLess())
-@@ -421,10 +422,14 @@ static Type parseJointMatrixType(SPIRVDialect const &dialect,
+@@ -419,10 +420,14 @@ static Type parseJointMatrixType(SPIRVDialect const &dialect,
    if (parser.parseComma() ||
        spirv::parseEnumKeywordAttr(scope, parser, "scope <id>"))
      return Type();
@@ -113,7 +111,7 @@ index 9188f8b699b4..4c099bf77a88 100644
  }
 
  // TODO: Reorder methods to be utilities first and parse*Type
-@@ -952,7 +957,8 @@ static void print(JointMatrixINTELType type, DialectAsmPrinter &os) {
+@@ -926,7 +931,8 @@ static void print(JointMatrixINTELType type, DialectAsmPrinter &os) {
    os << "jointmatrix<" << type.getRows() << "x" << type.getColumns() << "x";
    os << type.getElementType() << ", "
       << stringifyMatrixLayout(type.getMatrixLayout());
@@ -124,10 +122,10 @@ index 9188f8b699b4..4c099bf77a88 100644
 
  static void print(MatrixType type, DialectAsmPrinter &os) {
 diff --git a/mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp b/mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp
-index 741d8069471d..49ded5c60951 100644
+index 39d6603a46f9..57e4d5c8fb81 100644
 --- a/mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp
 +++ b/mlir/lib/Dialect/SPIRV/IR/SPIRVTypes.cpp
-@@ -352,7 +352,8 @@ void CooperativeMatrixNVType::getCapabilities(
+@@ -336,7 +336,8 @@ void CooperativeMatrixNVType::getCapabilities(
  //===----------------------------------------------------------------------===//
 
  struct spirv::detail::JointMatrixTypeStorage : public TypeStorage {
@@ -137,7 +135,7 @@ index 741d8069471d..49ded5c60951 100644
 
    static JointMatrixTypeStorage *construct(TypeStorageAllocator &allocator,
                                             const KeyTy &key) {
-@@ -361,26 +362,29 @@ struct spirv::detail::JointMatrixTypeStorage : public TypeStorage {
+@@ -345,26 +346,29 @@ struct spirv::detail::JointMatrixTypeStorage : public TypeStorage {
    }
 
    bool operator==(const KeyTy &key) const {
@@ -172,7 +170,7 @@ index 741d8069471d..49ded5c60951 100644
  }
 
  Type JointMatrixINTELType::getElementType() const {
-@@ -397,6 +401,10 @@ MatrixLayout JointMatrixINTELType::getMatrixLayout() const {
+@@ -381,6 +385,10 @@ MatrixLayout JointMatrixINTELType::getMatrixLayout() const {
    return getImpl()->matrixLayout;
  }
 
@@ -184,10 +182,10 @@ index 741d8069471d..49ded5c60951 100644
      SPIRVType::ExtensionArrayRefVector &extensions,
      std::optional<StorageClass> storage) {
 diff --git a/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp b/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
-index 90416289134b..4598dc608034 100644
+index ce8b3ab38946..a253d69c5267 100644
 --- a/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
 +++ b/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
-@@ -939,7 +939,7 @@ spirv::Deserializer::processCooperativeMatrixType(ArrayRef<uint32_t> operands) {
+@@ -977,7 +977,7 @@ LogicalResult spirv::Deserializer::processCooperativeMatrixTypeNV(
 
  LogicalResult
  spirv::Deserializer::processJointMatrixType(ArrayRef<uint32_t> operands) {
@@ -196,11 +194,10 @@ index 90416289134b..4598dc608034 100644
      return emitError(unknownLoc, "OpTypeJointMatrix must have element "
                                   "type and row x column parameters");
    }
-@@ -949,7 +949,13 @@ spirv::Deserializer::processJointMatrixType(ArrayRef<uint32_t> operands) {
-     return emitError(unknownLoc, "OpTypeJointMatrix references undefined <id> ")
+@@ -988,6 +988,14 @@ spirv::Deserializer::processJointMatrixType(ArrayRef<uint32_t> operands) {
             << operands[1];
    }
--
+
 +  auto matrixUse =
 +      spirv::symbolizeMatrixUse(getConstantInt(operands[6]).getInt());
 +  if (!matrixUse) {
@@ -208,10 +205,11 @@ index 90416289134b..4598dc608034 100644
 +                     "OpTypeJointMatrix references undefined Use <id> ")
 +           << operands[6];
 +  }
++
    auto scope = spirv::symbolizeScope(getConstantInt(operands[5]).getInt());
    if (!scope) {
      return emitError(unknownLoc,
-@@ -960,14 +966,15 @@ spirv::Deserializer::processJointMatrixType(ArrayRef<uint32_t> operands) {
+@@ -998,14 +1006,15 @@ spirv::Deserializer::processJointMatrixType(ArrayRef<uint32_t> operands) {
        spirv::symbolizeMatrixLayout(getConstantInt(operands[4]).getInt());
    if (!matrixLayout) {
      return emitError(unknownLoc,
@@ -231,20 +229,10 @@ index 90416289134b..4598dc608034 100644
  }
 
 diff --git a/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp b/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
-index 988e60d08edf..b6ec58648d72 100644
+index dad085e21b42..e030eb3767ad 100644
 --- a/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
 +++ b/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
-@@ -222,7 +222,8 @@ LogicalResult Serializer::processDecoration(Location loc, uint32_t resultID,
-   case spirv::Decoration::LinkageAttributes: {
-     // Get the value of the Linkage Attributes
-     // e.g., LinkageAttributes=["linkageName", linkageType].
--    auto linkageAttr = llvm::dyn_cast<spirv::LinkageAttributesAttr>(attr.getValue());
-+    auto linkageAttr =
-+        llvm::dyn_cast<spirv::LinkageAttributesAttr>(attr.getValue());
-     auto linkageName = linkageAttr.getLinkageName();
-     auto linkageType = linkageAttr.getLinkageType().getValue();
-     // Encode the Linkage Name (string literal to uint32_t).
-@@ -639,6 +640,8 @@ LogicalResult Serializer::prepareBasicType(
+@@ -653,6 +653,8 @@ LogicalResult Serializer::prepareBasicType(
          static_cast<uint32_t>(jointMatrixType.getMatrixLayout())));
      operands.push_back(
          getConstantOp(static_cast<uint32_t>(jointMatrixType.getScope())));
@@ -254,52 +242,17 @@ index 988e60d08edf..b6ec58648d72 100644
    }
 
 diff --git a/mlir/tools/mlir-tblgen/SPIRVUtilsGen.cpp b/mlir/tools/mlir-tblgen/SPIRVUtilsGen.cpp
-index ccf4240f8e56..a793564e0477 100644
+index 9aeb14d14eec..4b273aa0f04a 100644
 --- a/mlir/tools/mlir-tblgen/SPIRVUtilsGen.cpp
 +++ b/mlir/tools/mlir-tblgen/SPIRVUtilsGen.cpp
-@@ -396,10 +396,9 @@ static void emitAvailabilityQueryForBitEnum(const Record &enumDef,
-                   avail.getMergeInstanceType(), avail.getQueryFnName(),
-                   enumName);
+@@ -523,7 +523,7 @@ static mlir::GenRegistration
+ constexpr llvm::StringLiteral constantIdEnumAttrs[] = {
+     "SPIRV_ScopeAttr", "SPIRV_KHR_CooperativeMatrixUseAttr",
+     "SPIRV_KHR_CooperativeMatrixLayoutAttr", "SPIRV_MemorySemanticsAttr",
+-    "SPIRV_MatrixLayoutAttr"};
++    "SPIRV_MatrixLayoutAttr", "SPIRV_MatrixUseAttr"};
 
--    os << formatv(
--        "  assert(::llvm::popcount(static_cast<{0}>(value)) <= 1"
--        " && \"cannot have more than one bit set\");\n",
--        underlyingType);
-+    os << formatv("  assert(::llvm::popcount(static_cast<{0}>(value)) <= 1"
-+                  " && \"cannot have more than one bit set\");\n",
-+                  underlyingType);
-
-     os << "  switch (value) {\n";
-     for (const auto &caseSpecPair : classCasePair.getValue()) {
-@@ -523,7 +522,8 @@ static void emitAttributeSerialization(const Attribute &attr,
-      << formatv("if (auto attr = {0}->getAttr(\"{1}\")) {{\n", opVar, attrName);
-   if (attr.getAttrDefName() == "SPIRV_ScopeAttr" ||
-       attr.getAttrDefName() == "SPIRV_MemorySemanticsAttr" ||
--      attr.getAttrDefName() == "SPIRV_MatrixLayoutAttr") {
-+      attr.getAttrDefName() == "SPIRV_MatrixLayoutAttr" ||
-+      attr.getAttrDefName() == "SPIRV_MatrixUseAttr") {
-     // These two enums are encoded as <id> to constant values in SPIR-V blob,
-     // but we directly use the constant value as attribute in SPIR-V dialect. So
-     // need to handle them separately from normal enum attributes.
-@@ -818,7 +818,8 @@ static void emitAttributeDeserialization(const Attribute &attr,
-                                          raw_ostream &os) {
-   if (attr.getAttrDefName() == "SPIRV_ScopeAttr" ||
-       attr.getAttrDefName() == "SPIRV_MemorySemanticsAttr" ||
--      attr.getAttrDefName() == "SPIRV_MatrixLayoutAttr") {
-+      attr.getAttrDefName() == "SPIRV_MatrixLayoutAttr" ||
-+      attr.getAttrDefName() == "SPIRV_MatrixUseAttr") {
-     // These two enums are encoded as <id> to constant values in SPIR-V blob,
-     // but we directly use the constant value as attribute in SPIR-V dialect. So
-     // need to handle them separately from normal enum attributes.
-@@ -926,7 +927,8 @@ static void emitOperandDeserialization(const Operator &op, ArrayRef<SMLoc> loc,
-   // Process operands/attributes
-   for (unsigned i = 0, e = op.getNumArgs(); i < e; ++i) {
-     auto argument = op.getArg(i);
--    if (auto *valueArg = llvm::dyn_cast_if_present<NamedTypeConstraint *>(argument)) {
-+    if (auto *valueArg =
-+            llvm::dyn_cast_if_present<NamedTypeConstraint *>(argument)) {
-       if (valueArg->isVariableLength()) {
-         if (i != e - 1) {
-           PrintFatalError(loc, "SPIR-V ops can have Variadic<..> or "
+ /// Generates code to serialize attributes of a SPIRV_Op `op` into `os`. The
+ /// generates code extracts the attribute with name `attrName` from
 --
 2.34.1

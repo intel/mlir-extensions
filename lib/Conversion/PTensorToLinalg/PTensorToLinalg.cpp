@@ -394,9 +394,9 @@ static BodyType getBodyBuilder(::imex::ptensor::EWBinOpId binOp,
   // case ptensor::LSHIFT] =
   // case ptensor::MATMUL] =
   case ptensor::MAXIMUM:
-    return buildTrivial<mlir::arith::MaxSIOp, mlir::arith::MaxFOp>(typ);
+    return buildTrivial<mlir::arith::MaxSIOp, mlir::arith::MaximumFOp>(typ);
   case ptensor::MINIMUM:
-    return buildTrivial<mlir::arith::MinSIOp, mlir::arith::MinFOp>(typ);
+    return buildTrivial<mlir::arith::MinSIOp, mlir::arith::MinimumFOp>(typ);
   case ptensor::MODULO:
     return buildTrivial<mlir::arith::RemSIOp, mlir::arith::RemFOp>(typ);
   case ptensor::MULTIPLY:
