@@ -25,7 +25,7 @@ func.func @test(%arg0: tensor<2x3xf32>)->tensor<6x5xf32>{
          ins(%arg0 : tensor<2x3xf32>) outs(%1 : tensor<6x5xf32>)
          attrs = {iterator_ranges = [2, 3], name = "explicit_padding"} {
             ^bb0(%arg1: f32, %arg2: f32):
-              %m = arith.minf %zero, %arg2: f32
+              %m = arith.minimumf %zero, %arg2: f32
               %o = arith.addf %m, %arg1: f32
               linalg.yield %o : f32
          } -> tensor<6x5xf32>

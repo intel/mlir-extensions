@@ -16,7 +16,7 @@
 #define _XeGPU_PASSDETAIL_H_INCLUDED_
 
 #include <mlir/IR/BuiltinOps.h>
-#include <mlir/IR/FunctionInterfaces.h>
+#include <mlir/Interfaces/FunctionInterfaces.h>
 #include <mlir/Pass/Pass.h>
 
 namespace mlir {

@@ -369,7 +369,7 @@ with open(fn, "w") as f:
 
 #include <mlir/Pass/Pass.h>
 #include <mlir/IR/BuiltinOps.h>
-#include <mlir/IR/FunctionInterfaces.h>
+#include <mlir/Interfaces/FunctionInterfaces.h>
 
 namespace mlir {{
 

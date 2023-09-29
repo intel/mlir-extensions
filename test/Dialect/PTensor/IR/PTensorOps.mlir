@@ -53,17 +53,17 @@ func.func @test_create2(%arg0: index, %arg1: index, %arg2: index, %arg3: i64) ->
 
 // -----
 func.func @test_ewbin(%arg0: !ptensor.ptensor<1 x i64>) -> !ptensor.ptensor<1 x i64> {
-    %0 = "ptensor.ewbin"(%arg0, %arg0) {op = 0 : i32} : (!ptensor.ptensor<1 x i64>, !ptensor.ptensor<1 x i64>) -> !ptensor.ptensor<1 x i64>
+    %0 = "ptensor.ewbin"(%arg0, %arg0) <{op = 0 : i32}> : (!ptensor.ptensor<1 x i64>, !ptensor.ptensor<1 x i64>) -> !ptensor.ptensor<1 x i64>
     return %0 : !ptensor.ptensor<1 x i64>
 }
 // CHECK-LABEL: @test_ewbin
-// CHECK-NEXT: "ptensor.ewbin"(%arg0, %arg0) {op = 0 : i32} : (!ptensor.ptensor<1 x i64>, !ptensor.ptensor<1 x i64>) -> !ptensor.ptensor<1 x i64>
+// CHECK-NEXT: "ptensor.ewbin"(%arg0, %arg0) <{op = 0 : i32}> : (!ptensor.ptensor<1 x i64>, !ptensor.ptensor<1 x i64>) -> !ptensor.ptensor<1 x i64>
 
 // -----
 func.func @test_reduction(%arg0: !ptensor.ptensor<1 x i64>) -> si64 {
-    %0 = "ptensor.reduction"(%arg0) {op = 4 : i32} : (!ptensor.ptensor<1 x i64>) -> !ptensor.ptensor<0 x si64>
+    %0 = "ptensor.reduction"(%arg0) <{op = 4 : i32}> : (!ptensor.ptensor<1 x i64>) -> !ptensor.ptensor<0 x si64>
     %1 = builtin.unrealized_conversion_cast %0 : !ptensor.ptensor<0 x si64> to si64
     return %1 : si64
 }
 // CHECK-LABEL: @test_reduction
-// CHECK-NEXT: "ptensor.reduction"(%arg0) {op = 4 : i32} : (!ptensor.ptensor<1 x i64>) -> !ptensor.ptensor<0 x si64>
+// CHECK-NEXT: "ptensor.reduction"(%arg0) <{op = 4 : i32}> : (!ptensor.ptensor<1 x i64>) -> !ptensor.ptensor<0 x si64>

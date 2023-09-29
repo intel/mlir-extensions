@@ -407,7 +407,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %14 = tensor.empty() : tensor<1x112x112x64xf32>
   %15 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%13, %cst_265 : tensor<1x112x112x64xf32>, tensor<1x112x112x64xf32>) outs(%14 : tensor<1x112x112x64xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x112x112x64xf32>
   %cst_333 = arith.constant 0.000000e+00 : f32
@@ -491,7 +491,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %48 = tensor.empty() : tensor<1x56x56x64xf32>
   %49 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%47, %cst_266 : tensor<1x56x56x64xf32>, tensor<1x56x56x64xf32>) outs(%48 : tensor<1x56x56x64xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x56x56x64xf32>
   %50 = tensor.empty() : tensor<1x56x56x64xf32>
@@ -537,7 +537,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %64 = tensor.empty() : tensor<1x56x56x64xf32>
   %65 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%63, %cst_266 : tensor<1x56x56x64xf32>, tensor<1x56x56x64xf32>) outs(%64 : tensor<1x56x56x64xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x56x56x64xf32>
   %66 = tensor.empty() : tensor<1x56x56x256xf32>
@@ -583,7 +583,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %81 = tensor.empty() : tensor<1x56x56x256xf32>
   %82 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%80, %cst_267 : tensor<1x56x56x256xf32>, tensor<1x56x56x256xf32>) outs(%81 : tensor<1x56x56x256xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x56x56x256xf32>
   %83 = tensor.empty() : tensor<1x56x56x64xf32>
@@ -623,7 +623,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %96 = tensor.empty() : tensor<1x56x56x64xf32>
   %97 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%95, %cst_266 : tensor<1x56x56x64xf32>, tensor<1x56x56x64xf32>) outs(%96 : tensor<1x56x56x64xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x56x56x64xf32>
   %98 = tensor.empty() : tensor<1x56x56x64xf32>
@@ -669,7 +669,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %112 = tensor.empty() : tensor<1x56x56x64xf32>
   %113 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%111, %cst_266 : tensor<1x56x56x64xf32>, tensor<1x56x56x64xf32>) outs(%112 : tensor<1x56x56x64xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x56x56x64xf32>
   %114 = tensor.empty() : tensor<1x56x56x256xf32>
@@ -715,7 +715,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %129 = tensor.empty() : tensor<1x56x56x256xf32>
   %130 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%128, %cst_267 : tensor<1x56x56x256xf32>, tensor<1x56x56x256xf32>) outs(%129 : tensor<1x56x56x256xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x56x56x256xf32>
   %131 = tensor.empty() : tensor<1x56x56x64xf32>
@@ -755,7 +755,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %144 = tensor.empty() : tensor<1x56x56x64xf32>
   %145 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%143, %cst_266 : tensor<1x56x56x64xf32>, tensor<1x56x56x64xf32>) outs(%144 : tensor<1x56x56x64xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x56x56x64xf32>
   %146 = tensor.empty() : tensor<1x56x56x64xf32>
@@ -801,7 +801,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %160 = tensor.empty() : tensor<1x56x56x64xf32>
   %161 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%159, %cst_266 : tensor<1x56x56x64xf32>, tensor<1x56x56x64xf32>) outs(%160 : tensor<1x56x56x64xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x56x56x64xf32>
   %162 = tensor.empty() : tensor<1x56x56x256xf32>
@@ -847,7 +847,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %177 = tensor.empty() : tensor<1x56x56x256xf32>
   %178 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%176, %cst_267 : tensor<1x56x56x256xf32>, tensor<1x56x56x256xf32>) outs(%177 : tensor<1x56x56x256xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x56x56x256xf32>
   %179 = tensor.empty() : tensor<1x28x28x512xf32>
@@ -921,7 +921,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %205 = tensor.empty() : tensor<1x28x28x128xf32>
   %206 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%204, %cst_268 : tensor<1x28x28x128xf32>, tensor<1x28x28x128xf32>) outs(%205 : tensor<1x28x28x128xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x28x28x128xf32>
   %207 = tensor.empty() : tensor<1x28x28x128xf32>
@@ -967,7 +967,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %221 = tensor.empty() : tensor<1x28x28x128xf32>
   %222 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%220, %cst_268 : tensor<1x28x28x128xf32>, tensor<1x28x28x128xf32>) outs(%221 : tensor<1x28x28x128xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x28x28x128xf32>
   %223 = tensor.empty() : tensor<1x28x28x512xf32>
@@ -1013,7 +1013,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %238 = tensor.empty() : tensor<1x28x28x512xf32>
   %239 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%237, %cst_269 : tensor<1x28x28x512xf32>, tensor<1x28x28x512xf32>) outs(%238 : tensor<1x28x28x512xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x28x28x512xf32>
   %240 = tensor.empty() : tensor<1x28x28x128xf32>
@@ -1053,7 +1053,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %253 = tensor.empty() : tensor<1x28x28x128xf32>
   %254 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%252, %cst_268 : tensor<1x28x28x128xf32>, tensor<1x28x28x128xf32>) outs(%253 : tensor<1x28x28x128xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x28x28x128xf32>
   %255 = tensor.empty() : tensor<1x28x28x128xf32>
@@ -1099,7 +1099,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %269 = tensor.empty() : tensor<1x28x28x128xf32>
   %270 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%268, %cst_268 : tensor<1x28x28x128xf32>, tensor<1x28x28x128xf32>) outs(%269 : tensor<1x28x28x128xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x28x28x128xf32>
   %271 = tensor.empty() : tensor<1x28x28x512xf32>
@@ -1145,7 +1145,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %286 = tensor.empty() : tensor<1x28x28x512xf32>
   %287 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%285, %cst_269 : tensor<1x28x28x512xf32>, tensor<1x28x28x512xf32>) outs(%286 : tensor<1x28x28x512xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x28x28x512xf32>
   %288 = tensor.empty() : tensor<1x28x28x128xf32>
@@ -1185,7 +1185,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %301 = tensor.empty() : tensor<1x28x28x128xf32>
   %302 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%300, %cst_268 : tensor<1x28x28x128xf32>, tensor<1x28x28x128xf32>) outs(%301 : tensor<1x28x28x128xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x28x28x128xf32>
   %303 = tensor.empty() : tensor<1x28x28x128xf32>
@@ -1231,7 +1231,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %317 = tensor.empty() : tensor<1x28x28x128xf32>
   %318 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%316, %cst_268 : tensor<1x28x28x128xf32>, tensor<1x28x28x128xf32>) outs(%317 : tensor<1x28x28x128xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x28x28x128xf32>
   %319 = tensor.empty() : tensor<1x28x28x512xf32>
@@ -1277,7 +1277,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %334 = tensor.empty() : tensor<1x28x28x512xf32>
   %335 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%333, %cst_269 : tensor<1x28x28x512xf32>, tensor<1x28x28x512xf32>) outs(%334 : tensor<1x28x28x512xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x28x28x512xf32>
   %336 = tensor.empty() : tensor<1x28x28x128xf32>
@@ -1317,7 +1317,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %349 = tensor.empty() : tensor<1x28x28x128xf32>
   %350 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%348, %cst_268 : tensor<1x28x28x128xf32>, tensor<1x28x28x128xf32>) outs(%349 : tensor<1x28x28x128xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x28x28x128xf32>
   %351 = tensor.empty() : tensor<1x28x28x128xf32>
@@ -1363,7 +1363,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %365 = tensor.empty() : tensor<1x28x28x128xf32>
   %366 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%364, %cst_268 : tensor<1x28x28x128xf32>, tensor<1x28x28x128xf32>) outs(%365 : tensor<1x28x28x128xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x28x28x128xf32>
   %367 = tensor.empty() : tensor<1x28x28x512xf32>
@@ -1409,7 +1409,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %382 = tensor.empty() : tensor<1x28x28x512xf32>
   %383 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%381, %cst_269 : tensor<1x28x28x512xf32>, tensor<1x28x28x512xf32>) outs(%382 : tensor<1x28x28x512xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x28x28x512xf32>
   %384 = tensor.empty() : tensor<1x14x14x1024xf32>
@@ -1483,7 +1483,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %410 = tensor.empty() : tensor<1x14x14x256xf32>
   %411 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%409, %cst_270 : tensor<1x14x14x256xf32>, tensor<1x14x14x256xf32>) outs(%410 : tensor<1x14x14x256xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x14x14x256xf32>
   %412 = tensor.empty() : tensor<1x14x14x256xf32>
@@ -1529,7 +1529,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %426 = tensor.empty() : tensor<1x14x14x256xf32>
   %427 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%425, %cst_270 : tensor<1x14x14x256xf32>, tensor<1x14x14x256xf32>) outs(%426 : tensor<1x14x14x256xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x14x14x256xf32>
   %428 = tensor.empty() : tensor<1x14x14x1024xf32>
@@ -1575,7 +1575,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %443 = tensor.empty() : tensor<1x14x14x1024xf32>
   %444 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%442, %cst_271 : tensor<1x14x14x1024xf32>, tensor<1x14x14x1024xf32>) outs(%443 : tensor<1x14x14x1024xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x14x14x1024xf32>
   %445 = tensor.empty() : tensor<1x14x14x256xf32>
@@ -1615,7 +1615,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %458 = tensor.empty() : tensor<1x14x14x256xf32>
   %459 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%457, %cst_270 : tensor<1x14x14x256xf32>, tensor<1x14x14x256xf32>) outs(%458 : tensor<1x14x14x256xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x14x14x256xf32>
   %460 = tensor.empty() : tensor<1x14x14x256xf32>
@@ -1661,7 +1661,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %474 = tensor.empty() : tensor<1x14x14x256xf32>
   %475 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%473, %cst_270 : tensor<1x14x14x256xf32>, tensor<1x14x14x256xf32>) outs(%474 : tensor<1x14x14x256xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x14x14x256xf32>
   %476 = tensor.empty() : tensor<1x14x14x1024xf32>
@@ -1707,7 +1707,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %491 = tensor.empty() : tensor<1x14x14x1024xf32>
   %492 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%490, %cst_271 : tensor<1x14x14x1024xf32>, tensor<1x14x14x1024xf32>) outs(%491 : tensor<1x14x14x1024xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x14x14x1024xf32>
   %493 = tensor.empty() : tensor<1x14x14x256xf32>
@@ -1747,7 +1747,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %506 = tensor.empty() : tensor<1x14x14x256xf32>
   %507 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%505, %cst_270 : tensor<1x14x14x256xf32>, tensor<1x14x14x256xf32>) outs(%506 : tensor<1x14x14x256xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x14x14x256xf32>
   %508 = tensor.empty() : tensor<1x14x14x256xf32>
@@ -1793,7 +1793,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %522 = tensor.empty() : tensor<1x14x14x256xf32>
   %523 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%521, %cst_270 : tensor<1x14x14x256xf32>, tensor<1x14x14x256xf32>) outs(%522 : tensor<1x14x14x256xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x14x14x256xf32>
   %524 = tensor.empty() : tensor<1x14x14x1024xf32>
@@ -1839,7 +1839,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %539 = tensor.empty() : tensor<1x14x14x1024xf32>
   %540 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%538, %cst_271 : tensor<1x14x14x1024xf32>, tensor<1x14x14x1024xf32>) outs(%539 : tensor<1x14x14x1024xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x14x14x1024xf32>
   %541 = tensor.empty() : tensor<1x14x14x256xf32>
@@ -1879,7 +1879,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %554 = tensor.empty() : tensor<1x14x14x256xf32>
   %555 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%553, %cst_270 : tensor<1x14x14x256xf32>, tensor<1x14x14x256xf32>) outs(%554 : tensor<1x14x14x256xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x14x14x256xf32>
   %556 = tensor.empty() : tensor<1x14x14x256xf32>
@@ -1925,7 +1925,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %570 = tensor.empty() : tensor<1x14x14x256xf32>
   %571 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%569, %cst_270 : tensor<1x14x14x256xf32>, tensor<1x14x14x256xf32>) outs(%570 : tensor<1x14x14x256xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x14x14x256xf32>
   %572 = tensor.empty() : tensor<1x14x14x1024xf32>
@@ -1971,7 +1971,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %587 = tensor.empty() : tensor<1x14x14x1024xf32>
   %588 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%586, %cst_271 : tensor<1x14x14x1024xf32>, tensor<1x14x14x1024xf32>) outs(%587 : tensor<1x14x14x1024xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x14x14x1024xf32>
   %589 = tensor.empty() : tensor<1x14x14x256xf32>
@@ -2011,7 +2011,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %602 = tensor.empty() : tensor<1x14x14x256xf32>
   %603 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%601, %cst_270 : tensor<1x14x14x256xf32>, tensor<1x14x14x256xf32>) outs(%602 : tensor<1x14x14x256xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x14x14x256xf32>
   %604 = tensor.empty() : tensor<1x14x14x256xf32>
@@ -2057,7 +2057,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %618 = tensor.empty() : tensor<1x14x14x256xf32>
   %619 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%617, %cst_270 : tensor<1x14x14x256xf32>, tensor<1x14x14x256xf32>) outs(%618 : tensor<1x14x14x256xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x14x14x256xf32>
   %620 = tensor.empty() : tensor<1x14x14x1024xf32>
@@ -2103,7 +2103,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %635 = tensor.empty() : tensor<1x14x14x1024xf32>
   %636 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%634, %cst_271 : tensor<1x14x14x1024xf32>, tensor<1x14x14x1024xf32>) outs(%635 : tensor<1x14x14x1024xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x14x14x1024xf32>
   %637 = tensor.empty() : tensor<1x14x14x256xf32>
@@ -2143,7 +2143,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %650 = tensor.empty() : tensor<1x14x14x256xf32>
   %651 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%649, %cst_270 : tensor<1x14x14x256xf32>, tensor<1x14x14x256xf32>) outs(%650 : tensor<1x14x14x256xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x14x14x256xf32>
   %652 = tensor.empty() : tensor<1x14x14x256xf32>
@@ -2189,7 +2189,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %666 = tensor.empty() : tensor<1x14x14x256xf32>
   %667 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%665, %cst_270 : tensor<1x14x14x256xf32>, tensor<1x14x14x256xf32>) outs(%666 : tensor<1x14x14x256xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x14x14x256xf32>
   %668 = tensor.empty() : tensor<1x14x14x1024xf32>
@@ -2235,7 +2235,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %683 = tensor.empty() : tensor<1x14x14x1024xf32>
   %684 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%682, %cst_271 : tensor<1x14x14x1024xf32>, tensor<1x14x14x1024xf32>) outs(%683 : tensor<1x14x14x1024xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x14x14x1024xf32>
   %685 = tensor.empty() : tensor<1x7x7x2048xf32>
@@ -2309,7 +2309,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %711 = tensor.empty() : tensor<1x7x7x512xf32>
   %712 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%710, %cst_272 : tensor<1x7x7x512xf32>, tensor<1x7x7x512xf32>) outs(%711 : tensor<1x7x7x512xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x7x7x512xf32>
   %713 = tensor.empty() : tensor<1x7x7x512xf32>
@@ -2355,7 +2355,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %727 = tensor.empty() : tensor<1x7x7x512xf32>
   %728 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%726, %cst_272 : tensor<1x7x7x512xf32>, tensor<1x7x7x512xf32>) outs(%727 : tensor<1x7x7x512xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x7x7x512xf32>
   %729 = tensor.empty() : tensor<1x7x7x2048xf32>
@@ -2401,7 +2401,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %744 = tensor.empty() : tensor<1x7x7x2048xf32>
   %745 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%743, %cst_273 : tensor<1x7x7x2048xf32>, tensor<1x7x7x2048xf32>) outs(%744 : tensor<1x7x7x2048xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x7x7x2048xf32>
   %746 = tensor.empty() : tensor<1x7x7x512xf32>
@@ -2441,7 +2441,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %759 = tensor.empty() : tensor<1x7x7x512xf32>
   %760 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%758, %cst_272 : tensor<1x7x7x512xf32>, tensor<1x7x7x512xf32>) outs(%759 : tensor<1x7x7x512xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x7x7x512xf32>
   %761 = tensor.empty() : tensor<1x7x7x512xf32>
@@ -2487,7 +2487,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %775 = tensor.empty() : tensor<1x7x7x512xf32>
   %776 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%774, %cst_272 : tensor<1x7x7x512xf32>, tensor<1x7x7x512xf32>) outs(%775 : tensor<1x7x7x512xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x7x7x512xf32>
   %777 = tensor.empty() : tensor<1x7x7x2048xf32>
@@ -2533,7 +2533,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %792 = tensor.empty() : tensor<1x7x7x2048xf32>
   %793 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%791, %cst_273 : tensor<1x7x7x2048xf32>, tensor<1x7x7x2048xf32>) outs(%792 : tensor<1x7x7x2048xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x7x7x2048xf32>
   %794 = tensor.empty() : tensor<1x7x7x512xf32>
@@ -2573,7 +2573,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %807 = tensor.empty() : tensor<1x7x7x512xf32>
   %808 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%806, %cst_272 : tensor<1x7x7x512xf32>, tensor<1x7x7x512xf32>) outs(%807 : tensor<1x7x7x512xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x7x7x512xf32>
   %809 = tensor.empty() : tensor<1x7x7x512xf32>
@@ -2619,7 +2619,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %823 = tensor.empty() : tensor<1x7x7x512xf32>
   %824 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%822, %cst_272 : tensor<1x7x7x512xf32>, tensor<1x7x7x512xf32>) outs(%823 : tensor<1x7x7x512xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x7x7x512xf32>
   %825 = tensor.empty() : tensor<1x7x7x2048xf32>
@@ -2665,7 +2665,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %840 = tensor.empty() : tensor<1x7x7x2048xf32>
   %841 = linalg.generic {indexing_maps = [#map0, #map0, #map0], iterator_types = ["parallel", "parallel", "parallel", "parallel"]} ins(%839, %cst_273 : tensor<1x7x7x2048xf32>, tensor<1x7x7x2048xf32>) outs(%840 : tensor<1x7x7x2048xf32>) {
   ^bb0(%arg1: f32, %arg2: f32, %arg3: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1x7x7x2048xf32>
   %cst_418 = arith.constant 0.000000e+00 : f32
@@ -2697,7 +2697,7 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> {
   %853 = linalg.fill ins(%cst_420 : f32) outs(%852 : tensor<1xf32>) -> tensor<1xf32>
   %854 = linalg.generic {indexing_maps = [#map3, #map4], iterator_types = ["parallel", "reduction"]} ins(%851 : tensor<1x1000xf32>) outs(%853 : tensor<1xf32>) {
   ^bb0(%arg1: f32, %arg2: f32):
-    %868 = arith.maxf %arg1, %arg2 : f32
+    %868 = arith.maximumf %arg1, %arg2 : f32
     linalg.yield %868 : f32
   } -> tensor<1xf32>
   %855 = tensor.empty() : tensor<1x1000xf32>
