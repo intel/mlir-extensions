@@ -12,8 +12,10 @@
 ///
 //===----------------------------------------------------------------------===//
 
+#include "mlir/IR/Attributes.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/ValueRange.h"
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/raw_ostream.h"
@@ -67,41 +69,104 @@ static void printShape(mlir::AsmPrinter &printer, llvm::ArrayRef<int64_t> shape,
 }
 
 mlir::LogicalResult InitTileOp::verify() {
-  auto baseTy = getBaseType();
 
-  // base memref must either have a static shape or a strided layout
-  // otherwise, we can not get the shape info to create the tile
-  auto stridedLayout =
-      ::llvm::dyn_cast<::mlir::StridedLayoutAttr>(baseTy.getLayout());
-  if (!baseTy.hasStaticShape() && !stridedLayout) {
-    return emitOpError("base memref does not have a static shape or stride "
-                       "layout information.");
+  // number of offsets must be 2 because init_tile creates 2D tiles
+  // dynamic_offsets is always a subset of offsets, so checking this is
+  // sufficient
+  if (getStaticOffsets().size() != 2) {
+    return emitOpError("number of offsets must be 2");
   }
 
-  // offsets must be 2D.
-  int numOffsets = getNumOfStaticOffsets() + getOffsets().size();
-  if (numOffsets != 2) {
-    return emitOpError("offsets of the init_tile must be 2D.");
+  // if the source is a memref and has static shape, then dynamic shape and
+  // strides arguments must not be present
+  if (isSourceMemRef() && sourceMemRefHasStaticShape() &&
+      (hasDynamicStrides() || hasDynamicShape())) {
+    return emitOpError("dynamic shape or strides are not allowed with a static "
+                       "shaped memref as source");
+  }
+
+  // if the source is a memref with dynamic shape, then a 2D dynamic shape
+  // argument must be present
+  if (isSourceMemRef() && !sourceMemRefHasStaticShape() &&
+      getDynamicShape().size() != 2) {
+    return emitOpError("memref with a dynamic shape is used as source but "
+                       "dynamic shape argument missing or it is not 2D");
+  }
+
+  // if the source is a memref with dynamic shape, then a 2D dynamic strides
+  // argument must be present
+  if (isSourceMemRef() && !sourceMemRefHasStaticShape() &&
+      getDynamicStrides().size() != 2) {
+    return emitOpError("memref with a dynamic shape is used as source but "
+                       "dynamic strides argument missing or it is not 2D");
+  }
+
+  // if the source is an address, the dynamic shape must be 2D
+  if (isSourceInteger() && getDynamicShape().size() != 2) {
+    return emitOpError("address is used as source but dynamic shape argument "
+                       "is missing or it is not 2D");
+  }
+
+  // if the source is an address, dynamic strides must be 2D
+  if (isSourceInteger() && getDynamicStrides().size() != 2) {
+    return emitOpError("address is used as source but dynamic strides argument "
+                       "is missing or it is not 2D");
   }
 
   return mlir::success();
 }
 
+void InitTileOp::build(::mlir::OpBuilder &builder,
+                       ::mlir::OperationState &state,
+                       xetile::TileType resultType, ::mlir::Value source,
+                       ::llvm::ArrayRef<::mlir::OpFoldResult> offsets,
+                       ::llvm::ArrayRef<::mlir::NamedAttribute> attrs) {
+  ::llvm::SmallVector<int64_t> staticOffsets;
+  ::llvm::SmallVector<::mlir::Value> dynamicOffsets;
+  dispatchIndexOpFoldResults(offsets, dynamicOffsets, staticOffsets);
+
+  build(builder, state, resultType, source, dynamicOffsets, staticOffsets,
+        ::mlir::ValueRange({}),  /* empty dynamic shape*/
+        ::mlir::ValueRange({})); /* empty dynamic strides*/
+  state.addAttributes(attrs);
+}
+
+void InitTileOp::build(::mlir::OpBuilder &builder,
+                       ::mlir::OperationState &state,
+                       xetile::TileType resultType, ::mlir::Value source,
+                       ::llvm::ArrayRef<::mlir::OpFoldResult> offsets,
+                       ::llvm::ArrayRef<::mlir::Value> dynamic_shape,
+                       ::llvm::ArrayRef<::mlir::Value> dynamic_strides,
+                       ::llvm::ArrayRef<::mlir::NamedAttribute> attrs) {
+  ::llvm::SmallVector<int64_t> staticOffsets;
+  ::llvm::SmallVector<::mlir::Value> dynamicOffsets;
+  dispatchIndexOpFoldResults(offsets, dynamicOffsets, staticOffsets);
+
+  build(builder, state, resultType, source, dynamicOffsets, staticOffsets,
+        dynamic_shape, dynamic_strides);
+  state.addAttributes(attrs);
+}
+
 mlir::LogicalResult LoadTileOp::verify() {
   int64_t outputRank =
-      llvm::cast<mlir::VectorType>(getResult().getType()).getRank();
+      llvm::cast<mlir::VectorType>(getValue().getType()).getRank();
 
   auto innerBlocks = getInnerBlocksAttr();
+  auto transpose = getTransposeAttr();
 
   // if load_tile operation in blocked format only support 2D blocks
   if (innerBlocks && innerBlocks.size() != 2) {
-    return emitOpError("inner_blocks must be two dimensional if specified");
+    return emitOpError("inner_blocks must be two dimensional");
   }
 
   // if blocked load_tile load is specified output must be 4-dimensional
   if (innerBlocks && outputRank != 4) {
     return emitOpError(
         "output must be 4-dimensional if inner_blocks is specified");
+  }
+
+  if (transpose && transpose.size() != 2) {
+    return emitOpError("transpose must be two dimensional");
   }
 
   return mlir::success();
