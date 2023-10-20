@@ -31,7 +31,7 @@ static std::string getValueAsString(::mlir::Value op, bool asOperand = false) {
   return buf;
 }
 
-template <typename T> static std::string makeString(llvm::ArrayRef<T> array) {
+template <typename T> static std::string makeString(T array) {
   std::string buf;
   buf.clear();
   llvm::raw_string_ostream os(buf);
