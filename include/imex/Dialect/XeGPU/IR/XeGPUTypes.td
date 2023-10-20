@@ -26,10 +26,15 @@ def XeGPU_IntType: AnyTypeOf<[I1, I8, I16, I32, I64, SI1, SI8, SI16, SI32, SI64,
 def XeGPU_FloatType: AnyTypeOf<[F16, F32, F64, BF16, F8E4M3FN, F8E5M2, F8E4M3FNUZ, F8E4M3B11FNUZ, F8E5M2FNUZ]>;
 def XeGPU_ScalarType: AnyTypeOf<[XeGPU_IntType, XeGPU_FloatType]>;
 def XeGPU_BaseAddrType: AnyTypeOf<[MemRefRankOf<[XeGPU_ScalarType], [1, 2]>, UI64]>;
-def XeGPU_VectorType: VectorOfRankAndType<[1,2,3], [XeGPU_ScalarType]>;
-def XeGPU_Vector3DType: VectorOfRankAndType<[3], [XeGPU_ScalarType]>;
+def XeGPU_DpasOpType: VectorOfRankAndType<[2, 3], [XeGPU_ScalarType]>;
+def XeGPU_OffsetType: AnyTypeOf<[VectorOfRankAndType<[1], [Index]>, Index]>;
+def XeGPU_MaskType: AnyTypeOf<[VectorOfRankAndType<[1,2], [I1]>, I1]>;
+def XeGPU_ValueType: AnyTypeOf<[VectorOfRankAndType<[1,2,3], [XeGPU_ScalarType]>, XeGPU_ScalarType]>;
+
+// def XeGPU_VectorType: VectorOfRankAndType<[1,2,3], [XeGPU_ScalarType]>;
+// def XeGPU_Vector3DType: VectorOfRankAndType<[3], [XeGPU_ScalarType]>;
 def XeGPU_Vector2DType: VectorOfRankAndType<[2], [XeGPU_ScalarType]>;
-def XeGPU_Vector1DType: VectorOfRankAndType<[1], [XeGPU_ScalarType]>;
+// def XeGPU_Vector1DType: VectorOfRankAndType<[1], [XeGPU_ScalarType]>;
 
 // common base class for types in XeGPU dialect
 class XeGPUTypeDef<string name, string typeMnemonic,
@@ -95,7 +100,8 @@ def XeGPU_TensorDesc: XeGPUTypeDef<"TensorDesc", "tensor_desc",
     }
   }];
 
-  let assemblyFormat = "`<` custom<ShapeAndType>($shape, $elementType) (`,` $encoding^)? `>`";
+  // let assemblyFormat = "`<` custom<ShapeAndType>($shape, $elementType) (`,` custom<TensorDescAttr>($encoding)^)? `>`";
+  let assemblyFormat = "`<` custom<ShapeAndType>($shape, $elementType) (`,` $encoding^)? `>`";  
 }
 
 #endif // _XEGPU_TYPES_TD_INCLUDED_

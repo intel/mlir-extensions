@@ -6,12 +6,12 @@ include "imex/Dialect/XeGPU/IR/XeGPUDialect.td"
 
 include "mlir/IR/EnumAttr.td"
 
-class XeGPUAttrDef<string name, string attrMnemonic, list<Trait> traits = [], string baseCppClass = "::mlir::Attribute">
+class XeGPUAttr<string name, string attrMnemonic, list<Trait> traits = [], string baseCppClass = "::mlir::Attribute">
     : AttrDef<XeGPUDialect, name, traits, baseCppClass> {
   let mnemonic = attrMnemonic;
 }
 
-def XeGPU_ScatteredAttr : XeGPUAttrDef<"Scattered", "scattered", []> {
+def XeGPU_ScatteredAttr : XeGPUAttr<"Scattered", "scattered"> {
   let summary = "Scattered attribute for scattered read and write operation.";
   let description = [{An attribute represent scattered read and write operation.
     It does not (need to) have meaningful input values. The existence of itself
@@ -20,10 +20,49 @@ def XeGPU_ScatteredAttr : XeGPUAttrDef<"Scattered", "scattered", []> {
   let assemblyFormat = "";
 }
 
+def XeGPU_SgMapAttr: XeGPUAttr<"SgMap", "sg_map"> {
+  let parameters = (ins 
+        ArrayRefParameter<"unsigned">:$mmaBlockSize,
+        ArrayRefParameter<"unsigned">:$wiLayout,
+        ArrayRefParameter<"unsigned">:$wiData);
+  
+  // In format of #xegpu.sg_map<{mma_block_size = [2, 4], wi_layout = [2, 4], wi_data = [2, 4]}>
+  let assemblyFormat = "`<` custom<SgMapAttrElements>($mmaBlockSize, $wiLayout, $wiData) `>`";
+}
+
+def XeGPU_WgMapAttr: XeGPUAttr<"WgMap", "wg_map"> {
+  let parameters = (ins 
+        ArrayRefParameter<"unsigned">:$sgLayout,
+        ArrayRefParameter<"unsigned">:$sgData);
+        
+  // In format of #xegpu.wg_map<{sg_layout = [2, 4], sg_data = [2, 4]}>
+  let assemblyFormat = "`<` custom<WgMapAttrElements>($sgLayout, $sgData) `>`";
+}
+
+def XeGPU_XeMapAttr: XeGPUAttr<"XeMap", "xe_map"> {
+  let parameters = (ins 
+        XeGPU_WgMapAttr: $wg,
+        XeGPU_SgMapAttr: $sg);
+
+  // In format of #xegpu.xe_map<wg = {sg_layout = [2, 4], sg_data = [2, 4]}, sg = {sg_layout = [2, 4], sg_data = [2, 4]}>
+  let hasCustomAssemblyFormat = 1;
+}
+
+def XeGPU_ArgTypeAttr : I32EnumAttr<
+    "ArgType", "", [ I32EnumAttrCase<"Vector", 0, "vector">,
+                  I32EnumAttrCase<"Scalar", 1, "scalar"> ]> {
+    let cppNamespace = "::imex::xegpu";
+}
+
+def XeGPU_ModeAttr : I32EnumAttr<
+    "Mode", "", [ I32EnumAttrCase<"SIMT", 0, "simt">,
+                  I32EnumAttrCase<"VC", 1, "vc"> ]> {
+    let cppNamespace = "::imex::xegpu";
+}
 
 def XeGPU_MemoryScopeAttr : I32EnumAttr<
-    "MemoryScope", "", [ I32EnumAttrCase<"GLOBAL", 1, "global">,
-                         I32EnumAttrCase<"SLM", 2, "slm"> ]> {
+    "MemoryScope", "", [ I32EnumAttrCase<"GLOBAL", 0, "global">,
+                         I32EnumAttrCase<"SLM", 1, "slm"> ]> {
     let cppNamespace = "::imex::xegpu";
 }
 

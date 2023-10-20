@@ -34,18 +34,18 @@ module @gemm attributes {gpu.container_module} {
       %1 = gpu.block_id  y
       %2 = arith.muli %0, %c8 : index
       %3 = arith.muli %1, %c16 : index
-      %4 = xegpu.create_nd_tdesc %arg2[%2, %3] : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
-      %5 = xegpu.load_nd %4  : !xegpu.tensor_desc<8x16xf32> -> vector<8x16xf32>
+      %4 = xegpu.create_nd_tdesc %arg2[%2, %3] {mode = vc} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+      %5 = xegpu.load_nd %4 {mode = vc} : !xegpu.tensor_desc<8x16xf32> -> vector<8x16xf32>
       // each work-group has 1 subgroup. the subgroup caculates a [8x16 = 8x1024 * 1024x16] block
       %6 = scf.for %arg3 = %c0 to %c1024 step %c16 iter_args(%arg4 = %5) -> (vector<8x16xf32>) {
-        %7 = xegpu.create_nd_tdesc %arg0[%2, %arg3] : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
-        %8 = xegpu.create_nd_tdesc %arg1[%arg3, %3]  : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
-        %9 = xegpu.load_nd %7  {vnni_axis = 1}: !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
-        %10 = xegpu.load_nd %8  {vnni_axis = 0} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
-        %11 = xegpu.dpas %9, %10, %arg4 : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
+        %7 = xegpu.create_nd_tdesc %arg0[%2, %arg3] {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+        %8 = xegpu.create_nd_tdesc %arg1[%arg3, %3] {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
+        %9 = xegpu.load_nd %7  {mode = vc, vnni_axis = 1}: !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
+        %10 = xegpu.load_nd %8  {mode = vc, vnni_axis = 0} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
+        %11 = xegpu.dpas %9, %10, %arg4 {mode = vc} : vector<8x8x2xf16>, vector<8x16x2xf16>, vector<8x16xf32> -> vector<8x16xf32>
         scf.yield %11 : vector<8x16xf32>
       }
-      xegpu.store_nd %6, %4 : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
+      xegpu.store_nd %6, %4 {mode = vc} : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
       gpu.return
     }
   }

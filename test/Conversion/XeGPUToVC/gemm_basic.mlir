@@ -29,16 +29,16 @@ module @gemm attributes {gpu.container_module} {
       // CHECK: spirv.FunctionCall @llvm_genx_raw_send2_v128i32_i1_v8i32
       // CHECK: spirv.FunctionCall @llvm_genx_dpas_nosrc0_v128f32_v128i32_v64i32
       // CHECK: spirv.FunctionCall @llvm_genx_raw_sends2_noresult_i1_v8i32_v128f32
-      %0 = xegpu.create_nd_tdesc %arg0[0, 0] : memref<8x16xf16> -> !xegpu.tensor_desc<8x16xf16>
-      %1 = xegpu.create_nd_tdesc %arg1[0, 0] : memref<16x16xf16> -> !xegpu.tensor_desc<16x16xf16>
-      %2 = xegpu.create_nd_tdesc %arg2[0, 0] : memref<8x16xf32> -> !xegpu.tensor_desc<8x16xf32>
-      xegpu.prefetch_nd %0 : !xegpu.tensor_desc<8x16xf16>
-      xegpu.prefetch_nd %1 : !xegpu.tensor_desc<16x16xf16>
+      %0 = xegpu.create_nd_tdesc %arg0[0, 0] {mode = vc} : memref<8x16xf16> -> !xegpu.tensor_desc<8x16xf16>
+      %1 = xegpu.create_nd_tdesc %arg1[0, 0] {mode = vc} : memref<16x16xf16> -> !xegpu.tensor_desc<16x16xf16>
+      %2 = xegpu.create_nd_tdesc %arg2[0, 0] {mode = vc} : memref<8x16xf32> -> !xegpu.tensor_desc<8x16xf32>
+      xegpu.prefetch_nd %0 {mode = vc} : !xegpu.tensor_desc<8x16xf16>
+      xegpu.prefetch_nd %1 {mode = vc} : !xegpu.tensor_desc<16x16xf16>
 
-      %3 = xegpu.load_nd %0  {vnni_axis = 1} : !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
-      %4 = xegpu.load_nd %1  {vnni_axis = 0} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
-      %5 = xegpu.dpas %3, %4 : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
-      xegpu.store_nd %5, %2 : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
+      %3 = xegpu.load_nd %0  {mode = vc, vnni_axis = 1} : !xegpu.tensor_desc<8x16xf16> -> vector<8x8x2xf16>
+      %4 = xegpu.load_nd %1  {mode = vc, vnni_axis = 0} : !xegpu.tensor_desc<16x16xf16> -> vector<8x16x2xf16>
+      %5 = xegpu.dpas %3, %4 {mode = vc} : vector<8x8x2xf16>, vector<8x16x2xf16> -> vector<8x16xf32>
+      xegpu.store_nd %5, %2 {mode = vc} : vector<8x16xf32>, !xegpu.tensor_desc<8x16xf32>
       gpu.return
     }
   }

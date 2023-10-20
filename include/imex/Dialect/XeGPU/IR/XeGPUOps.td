@@ -83,8 +83,8 @@ def XeGPU_CreateNdDescOp : XeGPU_Op<"create_nd_tdesc", [Pure, AttrSizedOperandSe
                        Variadic<Index>: $strides,
                        DenseI64ArrayAttr: $static_offsets,
                        DefaultValuedAttr<XeGPU_MemoryScopeAttr, "xegpu::MemoryScope::GLOBAL">: $memory_scope,
-                       DefaultValuedAttr<BoolAttr, "true">: $boundary_check
-                       );
+                       DefaultValuedAttr<BoolAttr, "true">: $boundary_check,
+                       DefaultValuedAttr<XeGPU_ModeAttr, "imex::xegpu::Mode::SIMT">: $mode);
 
   let results = (outs XeGPU_TensorDesc:$TensorDesc);
 
@@ -96,7 +96,7 @@ def XeGPU_CreateNdDescOp : XeGPU_Op<"create_nd_tdesc", [Pure, AttrSizedOperandSe
     OpBuilder<(ins "::mlir::Type": $TensorDesc, "::mlir::Value": $source, "::mlir::ValueRange": $offsets,
                    "::mlir::ValueRange": $shape, "::mlir::ValueRange": $strides, "::llvm::ArrayRef<int64_t>": $static_offsets,
                    CArg<"::imex::xegpu::MemoryScope", "xegpu::MemoryScope::GLOBAL">: $memory_scope,
-                   CArg<"bool", "true">: $boundary_check),
+                   CArg<"bool", "true">: $boundary_check, CArg<"::imex::xegpu::Mode", "imex::xegpu::Mode::SIMT">: $mode),
     [{  $_state.addOperands(source);
         $_state.addOperands(offsets);
         $_state.addOperands(shape);
@@ -105,11 +105,12 @@ def XeGPU_CreateNdDescOp : XeGPU_Op<"create_nd_tdesc", [Pure, AttrSizedOperandSe
         $_state.addAttribute(getStaticOffsetsAttrName($_state.name), $_builder.getDenseI64ArrayAttr(static_offsets));
         $_state.addAttribute(getMemoryScopeAttrName($_state.name), ::imex::xegpu::MemoryScopeAttr::get($_builder.getContext(), memory_scope));
         $_state.addAttribute(getBoundaryCheckAttrName($_state.name), $_builder.getBoolAttr(boundary_check));
+        $_state.addAttribute(getBoundaryCheckAttrName($_state.name), ::imex::xegpu::ModeAttr::get($_builder.getContext(), mode));
         $_state.addTypes(TensorDesc); }]>,
 
     OpBuilder<(ins "::mlir::Type": $tdesc, "::mlir::Value": $source, "::llvm::ArrayRef<mlir::OpFoldResult>": $offsets,
                   CArg<"::imex::xegpu::MemoryScope", "::imex::xegpu::MemoryScope::GLOBAL">:$memory_scope,
-                  CArg<"bool", "true">:$boundary_check),
+                  CArg<"bool", "true">:$boundary_check, CArg<"::imex::xegpu::Mode", "imex::xegpu::Mode::SIMT">: $mode),
     [{  assert(offsets.size() == getRankOf(source));
         llvm::SmallVector<int64_t> staticOffsets;
         llvm::SmallVector<mlir::Value> dynamicOffsets;
@@ -120,13 +121,14 @@ def XeGPU_CreateNdDescOp : XeGPU_Op<"create_nd_tdesc", [Pure, AttrSizedOperandSe
                                              ::mlir::ValueRange({})     /* empty dynamic strides */,
                                              staticOffsets              /* static offsets        */,
                                              memory_scope,
-                                             boundary_check); }]>,
+                                             boundary_check,
+                                             mode); }]>,
 
 
     OpBuilder<(ins "::mlir::Type": $tdesc, "::mlir::Value": $source, "::llvm::ArrayRef<mlir::OpFoldResult>": $offsets,
                    "::mlir::ValueRange": $shape, "::mlir::ValueRange": $stride,
                    CArg<"::imex::xegpu::MemoryScope", "xegpu::MemoryScope::GLOBAL">:$memory_scope,
-                   CArg<"bool", "true">:$boundary_check),
+                   CArg<"bool", "true">:$boundary_check, CArg<"::imex::xegpu::Mode", "imex::xegpu::Mode::SIMT">: $mode),
     [{  assert((!isMemRef(source) || getRankOf(source) == offsets.size()) && shape.size() == stride.size() &&
                offsets.size() == shape.size() && isIntegerOrDynamicShapedMemref(source));
 
@@ -140,7 +142,8 @@ def XeGPU_CreateNdDescOp : XeGPU_Op<"create_nd_tdesc", [Pure, AttrSizedOperandSe
                                              stride             /* empty dynamic strides */,
                                              staticOffsets      /* static offsets        */,
                                              memory_scope,
-                                             boundary_check); }]>
+                                             boundary_check,
+                                             mode); }]>
   ];
 
   let extraClassDeclaration = [{
@@ -252,7 +255,10 @@ def XeGPU_CreateDescOp
     (scattered) subviews. It accepts the following parameters:
 
     * source: a 1D memref or pointer (uint64_t) represents the memory object.
-    * offsets: a 1D vector containing offsets of each access point, the size is aligned with supportted group size, e.g., vector<16xindex>.
+    * offsets: In VectorCompute (VC) mode, it is a 1D vector containing offsets of each access point, the size is aligned with 
+               supportted group size, e.g., vector<16xindex>. And each element in the vector corresponds to a 
+               work item (SIMT lane) in the subgroup. 
+               In SIMT mode (default), it is an index scalar representing the offset of the access point.
     * memory_scope: [optional attribute] indicates where the memory is located, "global" for global memory (default), and "slm" for shared memory.
     * chunk_size_per_lane: [optional attribute] indicates number of continious elements accessed for each offset, default is 1.
 
@@ -261,35 +267,45 @@ def XeGPU_CreateDescOp
     %c0 = arith.constant dense<0, 16, 32, 64> : vector<4xindex>
     %1 = xegpu.create_tdesc %a, %c0: memref<1024xf32> -> TensorDesc<4xf32>
 
-    Example 2. It assumes subgroup size is 4, and each workitem access 8 elements. It will access totally 32 data elements: a[0:7], a[16:23], a[32:39], a[64:71]
+    Example 2. It assumes subgroup size is 4, and each workitem access 8 elements. 
+               It will access totally 32 data elements: a[0:7], a[16:23], a[32:39], a[64:71]
     %0 = memref.alloc() : memref<1024xf32>
     %c0 = arith.constant dense<0, 16, 32, 64> : vector<4xindex>
-    %1 = xegpu.create_nd_tdesc %0, %c0 {{chunk_size_per_lane = 8}}: memref<1024xf32> -> TensorDesc<4x8xf32>
+    %1 = xegpu.create_tdesc %0, %c0 {chunk_size_per_lane = 8}: memref<1024xf32> -> TensorDesc<4x8xf32>
+
+    Example 3. an SIMT mode example, accessing a[16].
+    %a = memref.alloc() : memref<1024xf32>
+    %c0 = arith.constant 16 : index
+    %1 = xegpu.create_tdesc %a, %c0: memref<1024xf32> -> TensorDesc<1xf32>
 
 
   }];
 
   let arguments = (ins XeGPU_BaseAddrType: $source,
-                       VectorOfRankAndType<[1], [Index]>: $offsets,
+                       XeGPU_OffsetType: $offsets,
                        DefaultValuedAttr<XeGPU_MemoryScopeAttr, "imex::xegpu::MemoryScope::GLOBAL">: $memory_scope,
-                       DefaultValuedAttr<I32Attr, "1">: $chunk_size_per_lane);
+                       DefaultValuedAttr<I32Attr, "1">: $chunk_size_per_lane,
+                       DefaultValuedAttr<XeGPU_ModeAttr, "imex::xegpu::Mode::SIMT">: $mode);
 
   let results = (outs XeGPU_TensorDesc:$TensorDesc);
 
   let extraClassDeclaration = [{
 
     static size_t getRankOf(mlir::Value value) {
-      if (llvm::isa<::mlir::IntegerType>(value.getType()))
+      if (value.getType().isIntOrIndexOrFloat())
         return 0;
-      if (llvm::isa<::mlir::MemRefType>(value.getType()))
-        return llvm::cast<::mlir::MemRefType>(value.getType()).getRank();
+      if (llvm::isa<mlir::MemRefType>(value.getType()))
+        return llvm::cast<mlir::MemRefType>(value.getType()).getRank();
+      if (llvm::isa<mlir::VectorType>(value.getType()))
+        return llvm::cast<mlir::VectorType>(value.getType()).getRank();
       assert(0 && "Unreachable");
     }
 
   }];
 
+  // Format: xegpu.create_tdesc %src, %offsets {mode=simt, memory_scope=slm, chunk_size_per_lane=1}
+  //                   : ui64, vector<16 x index> -> !xegpu.tensor_desc<16xf32, #xegpu.scattered>
   let hasCustomAssemblyFormat = 1;
-
   let hasVerifier = 1;
 }
 
@@ -310,20 +326,12 @@ def XeGPU_LoadNDOp : XeGPU_Op<"load_nd"> {
     OptionalAttr<DenseI64ArrayAttr>: $transpose,
     OptionalAttr<XeGPU_CacheReadAttr>: $l1_hint,
     OptionalAttr<XeGPU_CacheReadAttr>: $l2_hint,
-    OptionalAttr<XeGPU_CacheReadAttr>: $l3_hint
-  );
-  let results = (outs XeGPU_VectorType: $value);
+    OptionalAttr<XeGPU_CacheReadAttr>: $l3_hint,
+    DefaultValuedAttr<XeGPU_ModeAttr, "imex::xegpu::Mode::SIMT">: $mode);
+  let results = (outs XeGPU_ValueType: $value);
 
-  // let assemblyFormat = [{
-  //    $TensorDesc
-  //    (`vnni_axis` $vnni_axis^)?
-  //    (`transpose` $transpose^)?
-  //    (`l1_hint` $l1_hint^)?
-  //    (`l2_hint` $l2_hint^)?
-  //    (`l3_hint` $l3_hint^)?
-  //    attr-dict `:` qualified(type($TensorDesc)) `->` qualified(type($value))
-  // }];
-
+  // Format: xegpu.load_nd %1 {transpose = [1, 0], l1_hint = cached, l2_hint = uncached, l3_hint=streaming} 
+  //                          : !xegpu.tensor_desc<8x16xf32> -> vector<16x8xf32>
   let hasCustomAssemblyFormat = 1;
 
   let hasVerifier = 1;
@@ -333,20 +341,15 @@ def XeGPU_StoreNDOp : XeGPU_Op<"store_nd", []> {
   let summary = "stores a n-D block register region back to memory, currently only supports 2D";
   let arguments = (ins
     XeGPU_TensorDesc: $TensorDesc,
-    XeGPU_Vector2DType: $value,
+    XeGPU_ValueType: $value,
     OptionalAttr<XeGPU_CacheWriteAttr>: $l1_hint,
     OptionalAttr<XeGPU_CacheWriteAttr>: $l2_hint,
-    OptionalAttr<XeGPU_CacheWriteAttr>: $l3_hint
-  );
+    OptionalAttr<XeGPU_CacheWriteAttr>: $l3_hint,
+    DefaultValuedAttr<XeGPU_ModeAttr, "imex::xegpu::Mode::SIMT">: $mode
+    );
 
-  // let assemblyFormat = [{
-  //    $TensorDesc `,`` `$value
-  //    (`l1_hint` $l1_hint^)?
-  //    (`l2_hint` $l2_hint^)?
-  //    (`l3_hint` $l3_hint^)?
-  //    attr-dict `:` `(` qualified(type($TensorDesc)) `,` qualified(type($value)) `)`
-  // }];
-
+  // Format: xegpu.store_nd %3, %2 {l1_hint = write_back, l2_hint = uncached}
+  //                        : vector<8x16xf16>, !xegpu.tensor_desc<8x16xf16>
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
 }
@@ -356,30 +359,26 @@ def XeGPU_PrefetchNDOp : XeGPU_Op<"prefetch_nd", []> {
   let arguments = (ins XeGPU_TensorDesc: $TensorDesc,
             OptionalAttr<XeGPU_CacheReadAttr>: $l1_hint,
             OptionalAttr<XeGPU_CacheReadAttr>: $l2_hint,
-            OptionalAttr<XeGPU_CacheReadAttr>: $l3_hint
+            OptionalAttr<XeGPU_CacheReadAttr>: $l3_hint,
+            DefaultValuedAttr<XeGPU_ModeAttr, "imex::xegpu::Mode::SIMT">: $mode
   );
 
-  // let assemblyFormat = [{
-  //    $TensorDesc
-  //    (`l1_hint` $l1_hint^)?
-  //    (`l2_hint` $l2_hint^)?
-  //    (`l3_hint` $l3_hint^)?
-  //    attr-dict `:` qualified(type($TensorDesc))
-  // }];
-
+  // In format of: xegpu.prefetch_nd %tdesc {l1_hint = cached, l2_hint = uncached}: 
+  //                                    !xegpu.tensor_desc<8x16xf16>
   let hasCustomAssemblyFormat = 1;
 }
 
 def XeGPU_DpasOp : XeGPU_Op<"dpas"> {
   let summary = "performs dpas computation";
   let arguments = (ins
-    XeGPU_Vector3DType : $lhs,
-    XeGPU_Vector3DType : $rhs,
-    Optional<XeGPU_Vector2DType>: $acc
+    XeGPU_DpasOpType : $lhs,
+    XeGPU_DpasOpType : $rhs,
+    Optional<XeGPU_Vector2DType>: $acc,
+    DefaultValuedAttr<XeGPU_ModeAttr, "imex::xegpu::Mode::SIMT">: $mode
   );
   let results = (outs XeGPU_Vector2DType: $result);
   let assemblyFormat = [{
-     $lhs `,` $rhs (`,` $acc^)? attr-dict `:`
+     $lhs `,` $rhs (`,` $acc^)? (`{` `mode` `=` $mode^ `}`)? attr-dict `:`
      qualified(type($lhs)) `,` qualified(type($rhs)) (`,` qualified(type($acc))^)? `->` qualified(type($result))
   }];
 
@@ -407,23 +406,19 @@ def XeGPU_LoadGatherOp : XeGPU_Op<"load"> {
 
   let arguments = (ins
     XeGPU_TensorDesc: $TensorDesc,
-    VectorOfRankAndType<[1, 2], [I1]>: $mask,
+    XeGPU_MaskType: $mask,
     OptionalAttr<I32Attr>: $vnni_axis,
     OptionalAttr<XeGPU_IntArrayAttr2>: $transpose,
     OptionalAttr<XeGPU_CacheReadAttr>: $l1_hint,
     OptionalAttr<XeGPU_CacheReadAttr>: $l2_hint,
-    OptionalAttr<XeGPU_CacheReadAttr>: $l3_hint
+    OptionalAttr<XeGPU_CacheReadAttr>: $l3_hint,
+    DefaultValuedAttr<XeGPU_ModeAttr, "imex::xegpu::Mode::SIMT">: $mode
   );
 
-  let results = (outs XeGPU_VectorType: $value);
+  let results = (outs XeGPU_ValueType: $value);
 
-  // let assemblyFormat = [{
-  //   $TensorDesc
-  //   (`l1_hint` $l1_hint^)?
-  //   (`l2_hint` $l2_hint^)?
-  //   (`l3_hint` $l3_hint^)?
-  //   attr-dict `:` qualified(type($TensorDesc)) `->` qualified(type($value))
-  // }];
+  // In format of: %2 = xegpu.load %1, %0 {transpose = [1, 0], l1_hint = cached, l2_hint = uncached} 
+  //                 : !xegpu.tensor_desc<16x8xf32, #xegpu.scattered>, vector<16x8xi1> -> vector<8x16xf32>
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
 }
@@ -432,21 +427,17 @@ def XeGPU_StoreScatterOp : XeGPU_Op<"store", []> {
   let summary = "store a scalar to source[offset].";
 
   let arguments = (ins
-    XeGPU_VectorType: $value,
+    XeGPU_ValueType: $value,
     XeGPU_TensorDesc: $TensorDesc,
-    VectorOfRankAndType<[1, 2], [I1]>: $mask,
+    XeGPU_MaskType: $mask,
     OptionalAttr<XeGPU_CacheWriteAttr>: $l1_hint,
     OptionalAttr<XeGPU_CacheWriteAttr>: $l2_hint,
-    OptionalAttr<XeGPU_CacheWriteAttr>: $l3_hint
+    OptionalAttr<XeGPU_CacheWriteAttr>: $l3_hint,
+    DefaultValuedAttr<XeGPU_ModeAttr, "imex::xegpu::Mode::SIMT">: $mode
   );
 
-  // let assemblyFormat = [{
-  //   $value `,` $TensorDesc, `,` $mask
-  //   (`l1_hint` $l1_hint^)?
-  //   (`l2_hint` $l2_hint^)?
-  //   (`l3_hint` $l3_hint^)?
-  //   attr-dict `:` `(` qualified(type($value)) `,` qualified(type($TensorDesc)) `,` qualified(type($mask)) `)`
-  // }];
+  // Format: %3 = xegpu.load %1, %0 {l1_hint = cached, l2_hint = uncached}
+  //                      : !xegpu.tensor_desc<16xf32, #xegpu.scattered>, vector<16xi1> -> vector<16xf32>
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
 }
@@ -456,12 +447,13 @@ def XeGPU_UpdateNDOffsetOp : XeGPU_Op<"update_nd_offset", []> {
 
   let arguments = (ins
     XeGPU_TensorDesc: $TensorDesc,
-    Variadic<Index>: $offsets);
+    Variadic<Index>: $offsets,
+    DefaultValuedAttr<XeGPU_ModeAttr, "imex::xegpu::Mode::SIMT">: $mode);
 
   let results = (outs XeGPU_TensorDesc: $result);
 
   let assemblyFormat = [{
-    $TensorDesc `,` (`[` $offsets^ `]`)?
+    $TensorDesc `,` (`[` $offsets^ `]`)? (`{` `mode` `=` $mode^ `}`)?
     attr-dict `:` qualified(type($TensorDesc)) `->` qualified(type($result))
   }];
 
@@ -474,17 +466,51 @@ def XeGPU_UpdateOffsetOp
 
       let arguments = (ins
         XeGPU_TensorDesc: $TensorDesc,
-        VectorOfRankAndType<[1], [Index]> : $offsets
+        XeGPU_OffsetType: $offsets,
+        DefaultValuedAttr<XeGPU_ModeAttr, "imex::xegpu::Mode::SIMT">: $mode
       );
 
       let results = (outs XeGPU_TensorDesc: $result);
 
       let assemblyFormat = [{
-        $TensorDesc `,` $offsets attr-dict `:` qualified(type($TensorDesc)) `,` qualified(type($offsets)) `->`  qualified(type($result))
+        $TensorDesc `,` $offsets (`{` `mode` `=` $mode^ `}`)?
+        attr-dict `:` qualified(type($TensorDesc)) `,` qualified(type($offsets)) `->`  qualified(type($result))
       }];
 
       let hasVerifier = 1;
   }
+
+def XeGPU_InvokeSIMDOp : XeGPU_Op<"invoke_SIMD", []> {
+    let summary = "Invoke_SIMD operation";
+    let description = [{
+      The `xegpu.invoke_SIMD` operation works similar to a direct call to a function. But it is 
+      special to Intel GPU.
+    }];
+
+  let arguments = (ins FlatSymbolRefAttr:$callee, 
+                       Variadic<AnyType>:$operands,
+                       XeGPU_ArgTypeAttr: $argType);
+  let results = (outs Variadic<AnyType>);
+
+  let builders = [
+    OpBuilder<(ins "mlir::SymbolRefAttr":$callee, "mlir::TypeRange":$results,
+      "imex::xegpu::ArgTypeAttr":$argType, CArg<"mlir::ValueRange", "{}">:$operands), [{
+      $_state.addOperands(operands);
+      $_state.addAttribute("argType", argType);
+      $_state.addAttribute("callee", callee);
+      $_state.addTypes(results);
+    }]>,
+    OpBuilder<(ins "mlir::StringAttr":$callee, "mlir::TypeRange":$results,
+      "imex::xegpu::ArgTypeAttr":$argType, CArg<"mlir::ValueRange", "{}">:$operands), [{
+      build($_builder, $_state, mlir::SymbolRefAttr::get(callee), results, argType, operands);
+    }]>,
+    OpBuilder<(ins "llvm::StringRef":$callee, "mlir::TypeRange":$results,
+      "imex::xegpu::ArgTypeAttr":$argType, CArg<"mlir::ValueRange", "{}">:$operands), [{
+      build($_builder, $_state, mlir::StringAttr::get($_builder.getContext(), callee),
+            results, argType, operands);
+    }]>];
+
+}
 
 def XeGPU_AtomicRMWOp
   : XeGPU_Op<"atomic_rmw", []> {
@@ -494,11 +520,13 @@ def XeGPU_AtomicRMWOp
       XeGPU_AtomicRMWKindAttr:$kind,
       XeGPU_Vector2DType:$value,
       XeGPU_TensorDesc:$tensorDesc,
-      XeGPU_Vector1DType:$mask
+      XeGPU_MaskType:$mask,
+      DefaultValuedAttr<XeGPU_ModeAttr, "imex::xegpu::Mode::SIMT">: $mode
     );
 
     let assemblyFormat = [{
-      $kind $value `,` $tensorDesc `,` $mask attr-dict
+      $kind $value `,` $tensorDesc `,` $mask (`{` `mode` `=` $mode^ `}`)?
+      attr-dict
         `:` `(` qualified(type($value)) `,` qualified(type($tensorDesc)) `,` qualified(type($mask)) `)`
     }];
   }
@@ -525,16 +553,19 @@ def XeGPU_CreateNbarrierOp
         I8: $nbarrier_id,
         I8: $nbarrier_role,
         I8Attr: $num_producers,
-        I8Attr: $num_consumers
+        I8Attr: $num_consumers,
+        DefaultValuedAttr<XeGPU_ModeAttr, "imex::xegpu::Mode::SIMT">: $mode
       );
 
       let results = (outs Builtin_Vector: $result);
 
       let assemblyFormat = [{
-        $nbarrier_id `,` $nbarrier_role attr-dict `:`
-        `(` qualified(type($nbarrier_id)) `,` qualified(type($nbarrier_role)) `)`
+        $nbarrier_id `,` $nbarrier_role 
+        attr-dict `:` `(` qualified(type($nbarrier_id)) `,` qualified(type($nbarrier_role)) `)`
         `->` qualified(type($result))
       }];
+
+      // let hasVerifier = 1;
   }
 
 def XeGPU_NbarrierArriveOp
