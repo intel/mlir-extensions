@@ -1,4 +1,4 @@
-//===- XeTileOps.h - XeTile dialect  -------*- C++ -*-===//
+//===---------------------- XeTileOps.h - XeTile dialect  -------*- C++ -*-===//
 //
 // Copyright 2022 Intel Corporation
 // Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -12,8 +12,8 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#ifndef _XeTile_OPS_H_INCLUDED_
-#define _XeTile_OPS_H_INCLUDED_
+#ifndef _XETILE_OPS_H_INCLUDED_
+#define _XETILE_OPS_H_INCLUDED_
 
 #include <mlir/IR/BuiltinTypeInterfaces.h>
 #include <mlir/IR/BuiltinTypes.h>
@@ -54,16 +54,18 @@ public:
   /// Clone this type with the given shape and element type. If the
   /// provided shape is `None`, the current shape of the type is used.
   TileBase cloneWith(std::optional<llvm::ArrayRef<int64_t>> shape,
-                     mlir::Type elementType) const;
+                     mlir::Type elementType, mlir::Attribute encoding) const;
 };
 
 } // namespace xetile
 } // namespace imex
 
 #include <imex/Dialect/XeTile/IR/XeTileOpsDialect.h.inc>
+#define GET_ATTRDEF_CLASSES
+#include <imex/Dialect/XeTile/IR/XeTileOpsAttrs.h.inc>
 #define GET_TYPEDEF_CLASSES
 #include <imex/Dialect/XeTile/IR/XeTileOpsTypes.h.inc>
 #define GET_OP_CLASSES
 #include <imex/Dialect/XeTile/IR/XeTileOps.h.inc>
 
-#endif // _XeTile_OPS_H_INCLUDED_
+#endif // _XETILE_OPS_H_INCLUDED_

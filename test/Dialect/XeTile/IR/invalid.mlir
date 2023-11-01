@@ -56,14 +56,6 @@ func.func @init_tile_address_with_invalid_dynamic_strides(%source : i64, %dim0_s
 }
 
 // -----
-func.func @load_tile_with_invalid_inner_blocks(%tile : !xetile.tile<64x64xf32>) {
-    // INNER_BLOCKS must be 2D
-    // expected-error@+1 {{inner_blocks must be two dimensional}}
-    %1 = xetile.load_tile %tile { inner_blocks = [8,16,4] }
-        : !xetile.tile<64x64xf32> -> vector<8x4x8x16xf32>
-}
-
-// -----
 func.func @load_tile_with_invalid_transpose(%tile : !xetile.tile<64x32xf32>) {
     // TRANSPOSE must be 2D
     // expected-error@+1 {{transpose must be two dimensional}}
@@ -71,29 +63,67 @@ func.func @load_tile_with_invalid_transpose(%tile : !xetile.tile<64x32xf32>) {
         : !xetile.tile<64x32xf32> -> vector<32x64xf32>
 }
 
-// -----
-func.func @load_tile_with_invalid_output_rank(%tile : !xetile.tile<64x64xf32>) {
-    // if the INNER_BLOCKS is specified in tile_load output must be 4D
-    // expected-error@+1 {{output must be 4-dimensional if inner_blocks is specified}}
-    %1 = xetile.load_tile %tile { inner_blocks = [8,16] }
-        : !xetile.tile<64x64xf32> -> vector<8x4xf32>
-
-}
 
 // -----
-func.func @tile_mma_input_rank_mismatch(%a_vec : vector<8x8x8x8xf32>,
-    %b_vec : vector<8x8x8xf32>, %c_vec : vector<8x8x8x8xf32>) {
+func.func @tile_mma_incompatible_ranks(%a_vec : vector<8x8x8x8xf32>,
+    %b_vec : vector<8x8xf32>, %c_vec : vector<8x8x8x8xf32>) {
     // the two input vectors must have the same rank
-    // expected-error@+1 {{rank mismatch in tile mma inputs}}
-    %c_new = xetile.tile_mma %a_vec, %b_vec, %c_vec {a_inner_blocks = [8, 8], b_inner_blocks = [8, 8]}
-    : (vector<8x8x8x8xf32>, vector<8x8x8xf32>, vector<8x8x8x8xf32>) -> vector<8x8x8x8xf32>
+    // expected-error@+1 {{A and B inputs must have the same rank.}}
+    %c_new = xetile.tile_mma %a_vec, %b_vec, %c_vec : vector<8x8x8x8xf32>, vector<8x8xf32>, vector<8x8x8x8xf32>
+        -> vector<8x8x8x8xf32>
 }
 
 // -----
-func.func @tile_mma_input_elem_type_mismatch(%a_vec : vector<8x8x8x8xf16>,
-    %b_vec : vector<8x8x8x8xf32>, %c_vec : vector<8x8x8x8xf32>) {
-    // the two input vectors must have the same element type
-    // expected-error@+1 {{element type mismatch in tile mma inputs}}
-    %c_new = xetile.tile_mma %a_vec, %b_vec, %c_vec {a_inner_blocks = [8, 8], b_inner_blocks = [8, 8]}
-    : (vector<8x8x8x8xf16>, vector<8x8x8x8xf32>, vector<8x8x8x8xf32>) -> vector<8x8x8x8xf32>
+func.func @tile_mma_input_elem_type_mismatch(%a_vec : vector<8x8xf32>,
+    %b_vec : vector<8x8xf16>, %c_vec : vector<8x8xf32>) {
+    // the two input vectors must have the same rank
+    // expected-error@+1 {{A and B inputs must have the same type.}}
+    %c_new = xetile.tile_mma %a_vec, %b_vec, %c_vec : vector<8x8xf32>, vector<8x8xf16>, vector<8x8xf32> -> vector<8x8xf32>
 }
+
+// -----
+func.func @tile_mma_output_elem_type_mismatch(%a_vec : vector<8x8xf32>,
+    %b_vec : vector<8x8xf32>, %c_vec : vector<8x8xf16>) {
+    // the two input vectors must have the same rank
+    // expected-error@+1 {{C and output vector must have the same type.}}
+    %c_new = xetile.tile_mma %a_vec, %b_vec, %c_vec : vector<8x8xf32>, vector<8x8xf32>, vector<8x8xf16> -> vector<8x8xf32>
+}
+
+// -----
+func.func @tile_mma_incompatible_mma_shapes_4d(%a_vec : vector<8x16x8x32xf16>,
+    %b_vec : vector<16x8x8x8xf16>, %c_vec : vector<8x8x8x8xf32>) {
+    // the two input vectors must have the same element type
+    // expected-error@+1 {{incompatible A, B and output sizes for 4D tile mma op. 4D tile mma should have the shape (m x k x Bm x Bk) x (k x n x Bk x Bn) = (m x n x Bm x Bn).}}
+    %c_new = xetile.tile_mma %a_vec, %b_vec, %c_vec
+    : vector<8x16x8x32xf16>, vector<16x8x8x8xf16>, vector<8x8x8x8xf32> -> vector<8x8x8x8xf32>
+}
+
+// -----
+func.func @tile_mma_incompatible_mma_shapes_2d(%a_vec : vector<8x16xf16>,
+    %b_vec : vector<8x8xf16>, %c_vec : vector<8x8xf32>) {
+    // the two input vectors must have the same element type
+    // expected-error@+1 {{incompatible A, B and output sizes for 2D tile mma op. 2D tile mma should have the shape (m x k) x (k x n) = (m x n).}}
+    %c_new = xetile.tile_mma %a_vec, %b_vec, %c_vec : vector<8x16xf16>, vector<8x8xf16>, vector<8x8xf32> -> vector<8x8xf32>
+}
+
+// -----
+func.func @tile_mma_input_c_shape_mismatch(%a_vec : vector<8x16xf16>,
+    %b_vec : vector<16x8xf16>, %c_vec : vector<16x8xf32>) {
+    // the two input vectors must have the same element type
+    // expected-error@+1 {{input C must have the same shape as output.}}
+    %c_new = xetile.tile_mma %a_vec, %b_vec, %c_vec : vector<8x16xf16>, vector<16x8xf16>, vector<16x8xf32> -> vector<8x8xf32>
+}
+
+// -----
+// expected-error@+1 {{expect integer array of size 2 for mma_block_size}}
+#sg_map_1 = #xetile.sg_map<mma_block_size = [8, 16, 4], wi_layout = [2, 8], wi_data = [1, 2]>
+// expected-error@+1 {{expect integer array of size 2 for wi_layout}}
+#sg_map_2 = #xetile.sg_map<mma_block_size = [8, 16], wi_layout = [2, 8, 2], wi_data = [1, 2]>
+// expected-error@+1 {{expect integer array of size 2 for wi_data}}
+#sg_map_3 = #xetile.sg_map<mma_block_size = [8, 16], wi_layout = [2, 8], wi_data = [1, 2, 1]>
+// expected-error@+1 {{expect integer array of size 2 for sg_layout}}
+#wg_map_1 = #xetile.wg_map<sg_layout = [4], sg_data = [32, 128]>
+// expected-error@+1 {{expect integer array of size 2 for sg_data}}
+#wg_map_2 = #xetile.wg_map<sg_layout = [2, 2], sg_data = [32, 128, 32]>
+// expected-error@+1 {{expect integer array of size 2 for inner_blocks}}
+#tile1 = !xetile.tile<64x64xf16, inner_blocks = [8, 16, 8]>
