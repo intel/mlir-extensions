@@ -101,7 +101,7 @@ def XeGPU_TensorDesc: XeGPUTypeDef<"TensorDesc", "tensor_desc",
   }];
 
   // let assemblyFormat = "`<` custom<ShapeAndType>($shape, $elementType) (`,` custom<TensorDescAttr>($encoding)^)? `>`";
-  let assemblyFormat = "`<` custom<ShapeAndType>($shape, $elementType) (`,` $encoding^)? `>`";  
+  let assemblyFormat = "`<` custom<ShapeAndType>($shape, $elementType) (`,` $encoding^)? `>`";
 }
 
 #endif // _XEGPU_TYPES_TD_INCLUDED_

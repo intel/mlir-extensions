@@ -21,26 +21,26 @@ def XeGPU_ScatteredAttr : XeGPUAttr<"Scattered", "scattered"> {
 }
 
 def XeGPU_SgMapAttr: XeGPUAttr<"SgMap", "sg_map"> {
-  let parameters = (ins 
+  let parameters = (ins
         ArrayRefParameter<"unsigned">:$mmaBlockSize,
         ArrayRefParameter<"unsigned">:$wiLayout,
         ArrayRefParameter<"unsigned">:$wiData);
-  
+
   // In format of #xegpu.sg_map<{mma_block_size = [2, 4], wi_layout = [2, 4], wi_data = [2, 4]}>
   let assemblyFormat = "`<` custom<SgMapAttrElements>($mmaBlockSize, $wiLayout, $wiData) `>`";
 }
 
 def XeGPU_WgMapAttr: XeGPUAttr<"WgMap", "wg_map"> {
-  let parameters = (ins 
+  let parameters = (ins
         ArrayRefParameter<"unsigned">:$sgLayout,
         ArrayRefParameter<"unsigned">:$sgData);
-        
+
   // In format of #xegpu.wg_map<{sg_layout = [2, 4], sg_data = [2, 4]}>
   let assemblyFormat = "`<` custom<WgMapAttrElements>($sgLayout, $sgData) `>`";
 }
 
 def XeGPU_XeMapAttr: XeGPUAttr<"XeMap", "xe_map"> {
-  let parameters = (ins 
+  let parameters = (ins
         XeGPU_WgMapAttr: $wg,
         XeGPU_SgMapAttr: $sg);
 
