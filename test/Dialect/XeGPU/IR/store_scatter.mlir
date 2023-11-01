@@ -61,4 +61,3 @@ func.func @test_store_scatter(%src: ui64, %offsets : index, %dst: ui64) {
                   : f32, !xegpu.tensor_desc<1xf32, #xegpu.scattered>, i1
   return
 }
-

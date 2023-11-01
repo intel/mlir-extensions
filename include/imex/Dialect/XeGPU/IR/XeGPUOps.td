@@ -255,9 +255,9 @@ def XeGPU_CreateDescOp
     (scattered) subviews. It accepts the following parameters:
 
     * source: a 1D memref or pointer (uint64_t) represents the memory object.
-    * offsets: In VectorCompute (VC) mode, it is a 1D vector containing offsets of each access point, the size is aligned with 
-               supportted group size, e.g., vector<16xindex>. And each element in the vector corresponds to a 
-               work item (SIMT lane) in the subgroup. 
+    * offsets: In VectorCompute (VC) mode, it is a 1D vector containing offsets of each access point, the size is aligned with
+               supportted group size, e.g., vector<16xindex>. And each element in the vector corresponds to a
+               work item (SIMT lane) in the subgroup.
                In SIMT mode (default), it is an index scalar representing the offset of the access point.
     * memory_scope: [optional attribute] indicates where the memory is located, "global" for global memory (default), and "slm" for shared memory.
     * chunk_size_per_lane: [optional attribute] indicates number of continious elements accessed for each offset, default is 1.
@@ -267,7 +267,7 @@ def XeGPU_CreateDescOp
     %c0 = arith.constant dense<0, 16, 32, 64> : vector<4xindex>
     %1 = xegpu.create_tdesc %a, %c0: memref<1024xf32> -> TensorDesc<4xf32>
 
-    Example 2. It assumes subgroup size is 4, and each workitem access 8 elements. 
+    Example 2. It assumes subgroup size is 4, and each workitem access 8 elements.
                It will access totally 32 data elements: a[0:7], a[16:23], a[32:39], a[64:71]
     %0 = memref.alloc() : memref<1024xf32>
     %c0 = arith.constant dense<0, 16, 32, 64> : vector<4xindex>
@@ -330,7 +330,7 @@ def XeGPU_LoadNDOp : XeGPU_Op<"load_nd"> {
     DefaultValuedAttr<XeGPU_ModeAttr, "imex::xegpu::Mode::SIMT">: $mode);
   let results = (outs XeGPU_ValueType: $value);
 
-  // Format: xegpu.load_nd %1 {transpose = [1, 0], l1_hint = cached, l2_hint = uncached, l3_hint=streaming} 
+  // Format: xegpu.load_nd %1 {transpose = [1, 0], l1_hint = cached, l2_hint = uncached, l3_hint=streaming}
   //                          : !xegpu.tensor_desc<8x16xf32> -> vector<16x8xf32>
   let hasCustomAssemblyFormat = 1;
 
@@ -363,7 +363,7 @@ def XeGPU_PrefetchNDOp : XeGPU_Op<"prefetch_nd", []> {
             DefaultValuedAttr<XeGPU_ModeAttr, "imex::xegpu::Mode::SIMT">: $mode
   );
 
-  // In format of: xegpu.prefetch_nd %tdesc {l1_hint = cached, l2_hint = uncached}: 
+  // In format of: xegpu.prefetch_nd %tdesc {l1_hint = cached, l2_hint = uncached}:
   //                                    !xegpu.tensor_desc<8x16xf16>
   let hasCustomAssemblyFormat = 1;
 }
@@ -417,7 +417,7 @@ def XeGPU_LoadGatherOp : XeGPU_Op<"load"> {
 
   let results = (outs XeGPU_ValueType: $value);
 
-  // In format of: %2 = xegpu.load %1, %0 {transpose = [1, 0], l1_hint = cached, l2_hint = uncached} 
+  // In format of: %2 = xegpu.load %1, %0 {transpose = [1, 0], l1_hint = cached, l2_hint = uncached}
   //                 : !xegpu.tensor_desc<16x8xf32, #xegpu.scattered>, vector<16x8xi1> -> vector<8x16xf32>
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
@@ -483,11 +483,11 @@ def XeGPU_UpdateOffsetOp
 def XeGPU_InvokeSIMDOp : XeGPU_Op<"invoke_SIMD", []> {
     let summary = "Invoke_SIMD operation";
     let description = [{
-      The `xegpu.invoke_SIMD` operation works similar to a direct call to a function. But it is 
+      The `xegpu.invoke_SIMD` operation works similar to a direct call to a function. But it is
       special to Intel GPU.
     }];
 
-  let arguments = (ins FlatSymbolRefAttr:$callee, 
+  let arguments = (ins FlatSymbolRefAttr:$callee,
                        Variadic<AnyType>:$operands,
                        XeGPU_ArgTypeAttr: $argType);
   let results = (outs Variadic<AnyType>);
@@ -560,7 +560,7 @@ def XeGPU_CreateNbarrierOp
       let results = (outs Builtin_Vector: $result);
 
       let assemblyFormat = [{
-        $nbarrier_id `,` $nbarrier_role 
+        $nbarrier_id `,` $nbarrier_role
         attr-dict `:` `(` qualified(type($nbarrier_id)) `,` qualified(type($nbarrier_role)) `)`
         `->` qualified(type($result))
       }];

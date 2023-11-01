@@ -63,7 +63,7 @@ const int TK_SIZE_FOR_D8 = 32;
 //   return isValid;
 // }
 
-static void transpose(llvm::ArrayRef<int64_t> trans, 
+static void transpose(llvm::ArrayRef<int64_t> trans,
                       std::vector<int64_t> &shape) {
   std::vector<int64_t> old = shape;
   for (size_t i = 0; i < trans.size(); i++)
@@ -73,15 +73,16 @@ static void transpose(llvm::ArrayRef<int64_t> trans,
 static void dropOnes(std::vector<int64_t> &array) {
   std::vector<int64_t> old = array;
   array.clear();
-  for(auto v: old) {
-    if (v != 1) array.push_back(v);
+  for (auto v : old) {
+    if (v != 1)
+      array.push_back(v);
   }
 };
 
 static bool isMappingAttr(mlir::Attribute attr) {
-  return attr && (llvm::isa<imex::xegpu::SgMapAttr>(attr) 
-               || llvm::isa<imex::xegpu::WgMapAttr>(attr) 
-               || llvm::isa<imex::xegpu::XeMapAttr>(attr));
+  return attr && (llvm::isa<imex::xegpu::SgMapAttr>(attr) ||
+                  llvm::isa<imex::xegpu::WgMapAttr>(attr) ||
+                  llvm::isa<imex::xegpu::XeMapAttr>(attr));
 }
 
 bool dpasSupportedTypes(mlir::Type type, bool isResult) {
@@ -200,7 +201,7 @@ parseOptionalAttrDict(mlir::OpAsmParser &parser, mlir::OperationState &result,
     }
 
     if (nameId == "mode") {
-        return parseCustomEnumAttr<Mode, ModeAttr>(parser, result, nameId);
+      return parseCustomEnumAttr<Mode, ModeAttr>(parser, result, nameId);
     }
 
     if (nameId == "chunk_size_per_lane" || nameId == "vnni_axis")
@@ -295,7 +296,8 @@ mlir::ParseResult CreateNdDescOp::parse(mlir::OpAsmParser &parser,
       return ::mlir::failure();
   }
 
-  if (parseOptionalAttrDict(parser, result, {"memory_scope", "boundary_check", "mode"}))
+  if (parseOptionalAttrDict(parser, result,
+                            {"memory_scope", "boundary_check", "mode"}))
     return mlir::failure();
 
   if (parser.parseColon())
@@ -375,7 +377,8 @@ mlir::LogicalResult CreateNdDescOp::verify() {
   auto encoding = getTensorDesc().getType().getEncoding();
 
   if (mode == imex::xegpu::Mode::SIMT && !isMappingAttr(encoding)) {
-    return emitOpError("Expecting either SgMap, WgMap or XeMap attribute for SIMT mode operators.\n");
+    return emitOpError("Expecting either SgMap, WgMap or XeMap attribute for "
+                       "SIMT mode operators.\n");
   }
 
   // it is invalid to have both dynamic and static shape
@@ -489,7 +492,8 @@ mlir::LogicalResult CreateDescOp::verify() {
   if (llvm::isa<mlir::VectorType>(offsetTy)) {
     shape = llvm::dyn_cast<mlir::VectorType>(offsetTy).getShape().vec();
     if (shape.size() != 1)
-      return emitOpError("Expecting the offset is either a 1D vector (for VC) or scalar (for SIMT).");
+      return emitOpError("Expecting the offset is either a 1D vector (for VC) "
+                         "or scalar (for SIMT).");
   }
 
   if (offsetTy.isIndex() || chunkSize != 1) {
@@ -501,9 +505,10 @@ mlir::LogicalResult CreateDescOp::verify() {
                        "tensor descriptor, or one less than.");
   }
 
-  if (!tdescTy.getEncoding()) 
-    return emitOpError("Expecting the presence of scattered attribute for tensor descriptor.");
- 
+  if (!tdescTy.getEncoding())
+    return emitOpError(
+        "Expecting the presence of scattered attribute for tensor descriptor.");
+
   return mlir::success();
 }
 
@@ -585,10 +590,11 @@ void LoadNDOp::print(::mlir::OpAsmPrinter &printer) {
 
 mlir::LogicalResult LoadNDOp::verify() {
   auto tdescTy = getTensorDesc().getType();
-  auto valueTy = llvm::dyn_cast<mlir::VectorType>(getValue().getType()); 
+  auto valueTy = llvm::dyn_cast<mlir::VectorType>(getValue().getType());
 
   if (tdescTy.getRank() != 2)
-    return emitOpError("The TensorDesc for LoadNDOp should be a 2D TensorDesc.");
+    return emitOpError(
+        "The TensorDesc for LoadNDOp should be a 2D TensorDesc.");
 
   if (!valueTy)
     return emitOpError("Invalid result, it should be a VectorType.\n");
@@ -597,9 +603,11 @@ mlir::LogicalResult LoadNDOp::verify() {
   auto valueElemTy = valueTy.getElementType();
 
   if (tdescElemTy != valueElemTy)
-    return emitOpError("Value should have the same element type as TensorDesc.");
+    return emitOpError(
+        "Value should have the same element type as TensorDesc.");
 
-  { // TODO: The following logic are architecture dependent, pending to be moved out
+  { // TODO: The following logic are architecture dependent, pending to be moved
+    // out
     auto width = tdescTy.getShape()[1];
     auto height = tdescTy.getShape()[0];
     auto elemTyByteWidth = tdescElemTy.getIntOrFloatBitWidth() / 8;
@@ -615,12 +623,11 @@ mlir::LogicalResult LoadNDOp::verify() {
 
     if (height < MIN_2D_BLOCK_HEIGHT_IN_ELEMENTS ||
         height > MAX_2D_BLOCK_HEIGHT_IN_ELEMENTS) {
-      return emitOpError(
-          "Invalid height size for 2D block load. The specification expects the "
-          "value to be in range [1, 32].\n");
+      return emitOpError("Invalid height size for 2D block load. The "
+                         "specification expects the "
+                         "value to be in range [1, 32].\n");
     }
   }
-
 
   auto mode = getMode();
   auto tdescShape = tdescTy.getShape().vec();
@@ -632,7 +639,8 @@ mlir::LogicalResult LoadNDOp::verify() {
 
     auto encoding = tdescTy.getEncoding();
     if (!isMappingAttr(encoding)) {
-      return emitOpError("Expecting either SgMap, WgMap or XeMap attribute for SIMT mode operators.\n");
+      return emitOpError("Expecting either SgMap, WgMap or XeMap attribute for "
+                         "SIMT mode operators.\n");
     }
 
     if (auto xeMapAttr = llvm::dyn_cast<imex::xegpu::XeMapAttr>(encoding)) {
@@ -646,14 +654,14 @@ mlir::LogicalResult LoadNDOp::verify() {
     if (wgMap) {
       auto sgData = wgMap.getSgData();
       auto sgLayout = wgMap.getSgLayout();
-      for(size_t i = 0; i < sgData.size(); i++) {
-        if (tdescShape[i] % sgLayout[i] != 0 || 
-            tdescShape[i] % sgData[i] != 0 || 
-            tdescShape[i] % sgData[i] != 0)
-          return emitOpError("Invalid WgMapAttr. It should meet the following conditions: "
-                             "tdescShape[i] % sgLayout[i] == 0 && "
-                             "tdescShape[i] % sgData[i] == 0 && "
-                             "tdescShape[i] % sgData[i] == 0");
+      for (size_t i = 0; i < sgData.size(); i++) {
+        if (tdescShape[i] % sgLayout[i] != 0 ||
+            tdescShape[i] % sgData[i] != 0 || tdescShape[i] % sgData[i] != 0)
+          return emitOpError(
+              "Invalid WgMapAttr. It should meet the following conditions: "
+              "tdescShape[i] % sgLayout[i] == 0 && "
+              "tdescShape[i] % sgData[i] == 0 && "
+              "tdescShape[i] % sgData[i] == 0");
         tdescShape[i] /= sgLayout[i];
       }
       // dropOnes(tdescShape);
@@ -664,29 +672,29 @@ mlir::LogicalResult LoadNDOp::verify() {
       auto wiLayout = sgMap.getWiLayout();
       auto wiData = sgMap.getWiData();
       for (size_t i = 0; i < blockSize.size(); i++) {
-        if (tdescShape[i] % blockSize[i] != 0 || 
-            blockSize[i] % wiLayout[i] != 0 ||
-            blockSize[i] % wiData[i] != 0 || 
+        if (tdescShape[i] % blockSize[i] != 0 ||
+            blockSize[i] % wiLayout[i] != 0 || blockSize[i] % wiData[i] != 0 ||
             blockSize[i] % (wiLayout[i] * wiData[i]) != 0) {
-          return emitOpError("Invalid SgMapAttr. It should meet the following conditions: "
-                             "blockSize[i] % wiLayout[i] == 0 && "
-                             "blockSize[i] % wiData[i] == 0 && "
-                             "blockSize[i] % wiData[i] == 0 && "
-                             "tdescShape[i] % blockSize[i] == 0");
-
+          return emitOpError(
+              "Invalid SgMapAttr. It should meet the following conditions: "
+              "blockSize[i] % wiLayout[i] == 0 && "
+              "blockSize[i] % wiData[i] == 0 && "
+              "blockSize[i] % wiData[i] == 0 && "
+              "tdescShape[i] % blockSize[i] == 0");
         }
-        auto tmp = blockSize[i]/wiLayout[i];
+        auto tmp = blockSize[i] / wiLayout[i];
         tdescShape[i] /= blockSize[i];
         tdescShape[i] *= tmp;
       }
-    } 
+    }
   }
 
   if (getTranspose()) {
     auto trans = getTranspose().value();
-    if (tdescShape.size() >= trans.size()) 
+    if (tdescShape.size() >= trans.size())
       transpose(trans, tdescShape);
-    else emitWarning("Invalid transpose attr. It is ignored.");
+    else
+      emitWarning("Invalid transpose attr. It is ignored.");
   }
 
   if (getVnniAxis()) {
@@ -697,16 +705,25 @@ mlir::LogicalResult LoadNDOp::verify() {
     dropOnes(tdescShape);
   }
   if (tdescShape != valueShape)
-    return emitOpError("Result shape doesn't match TensorDesc shape." 
-                       "The expected shape is " + makeString(tdescShape) + ", while "
-                       "the given shape is " + makeString(valueShape) + ". " 
-                       "In VC mode, when VNNI is not enabled, the result should have the same " 
-                       "shape (or transposed shape if transpose is also enabled) as TensorDesc; "
-                       "when VNNI is enabled, the result should have one more dimention than the " 
-                       "TensorDesc, with last dimention having vnni factor, but having same number "
-                       "of total data elements. The vnni factor are typically calculated as simd_lane_width / elementTypeBitWidth. "
-                       "For element type having more than 32 bits, vnni shouldn't be used. "
-                       "In SIMT mode, the shape is derived from the mapping attributes.\n"); 
+    return emitOpError(
+        "Result shape doesn't match TensorDesc shape."
+        "The expected shape is " +
+        makeString(tdescShape) +
+        ", while "
+        "the given shape is " +
+        makeString(valueShape) +
+        ". "
+        "In VC mode, when VNNI is not enabled, the result should have the same "
+        "shape (or transposed shape if transpose is also enabled) as "
+        "TensorDesc; "
+        "when VNNI is enabled, the result should have one more dimention than "
+        "the "
+        "TensorDesc, with last dimention having vnni factor, but having same "
+        "number "
+        "of total data elements. The vnni factor are typically calculated as "
+        "simd_lane_width / elementTypeBitWidth. "
+        "For element type having more than 32 bits, vnni shouldn't be used. "
+        "In SIMT mode, the shape is derived from the mapping attributes.\n");
   return mlir::success();
 }
 
@@ -729,8 +746,8 @@ mlir::LogicalResult LoadNDOp::verify() {
   if (parser.parseOperand(TensorDescRawOperands[0]))
     return mlir::failure();
 
-  if (parseOptionalAttrDict(parser, result, {"mode", "l1_hint", "l2_hint", "l3_hint"},
-                            true))
+  if (parseOptionalAttrDict(parser, result,
+                            {"mode", "l1_hint", "l2_hint", "l3_hint"}, true))
     return mlir::failure();
 
   if (parser.parseColon())
@@ -781,12 +798,12 @@ void StoreNDOp::print(::mlir::OpAsmPrinter &printer) {
 }
 
 mlir::LogicalResult StoreNDOp::verify() {
-  auto dstTy = getTensorDesc().getType(); // Tile
-  auto valTy = llvm::dyn_cast<mlir::VectorType>(getValue().getType());      // Vector
-
+  auto dstTy = getTensorDesc().getType();                              // Tile
+  auto valTy = llvm::dyn_cast<mlir::VectorType>(getValue().getType()); // Vector
 
   if (dstTy.getRank() != 2)
-    return emitOpError("The TensorDesc for StoreNdOp should be a 2D TensorDesc.");
+    return emitOpError(
+        "The TensorDesc for StoreNdOp should be a 2D TensorDesc.");
 
   if (!valTy)
     return emitOpError("Invalid value operand, it should be a VectorType.\n");
@@ -799,8 +816,8 @@ mlir::LogicalResult StoreNDOp::verify() {
                        "the elem type of memory (dst) shape.\n");
   }
 
-
-  { // TODO: The following logic are architecture dependent, pending to be moved out
+  { // TODO: The following logic are architecture dependent, pending to be moved
+    // out
     auto width = dstTy.getShape()[1];
     auto height = dstTy.getShape()[0];
     auto elemTyByteWidth = dstElemTy.getIntOrFloatBitWidth() / 8;
@@ -815,8 +832,9 @@ mlir::LogicalResult StoreNDOp::verify() {
 
     if (height < MIN_2D_BLOCK_HEIGHT_IN_ELEMENTS ||
         height > MAX_2D_BLOCK_HEIGHT_IN_ELEMENTS) {
-      return emitOpError("Invalid height size for 2D block write. The specification" 
-                         "expects the value to be in range [1, 32].\n");
+      return emitOpError(
+          "Invalid height size for 2D block write. The specification"
+          "expects the value to be in range [1, 32].\n");
     }
   }
 
@@ -824,11 +842,13 @@ mlir::LogicalResult StoreNDOp::verify() {
 
   if (mode == imex::xegpu::Mode::VC) { // for VC mode, no attr attached
     if (dstTy.getShape() != valTy.getShape())
-      return emitOpError("In VC mode, the value (vector) shape doesn't match the memory (dst) shape.\n");
+      return emitOpError("In VC mode, the value (vector) shape doesn't match "
+                         "the memory (dst) shape.\n");
   } else {
     auto encoding = dstTy.getEncoding();
     if (!isMappingAttr(encoding)) {
-      return emitOpError("Expecting either SgMap, WgMap or XeMap attribute for SIMT mode operators.\n");
+      return emitOpError("Expecting either SgMap, WgMap or XeMap attribute for "
+                         "SIMT mode operators.\n");
     }
 
     imex::xegpu::WgMapAttr wgMap;
@@ -846,7 +866,7 @@ mlir::LogicalResult StoreNDOp::verify() {
     if (wgMap) {
       auto sgData = wgMap.getSgData();
       auto sgLayout = wgMap.getSgLayout();
-      for(size_t i = 0; i < sgData.size(); i++) {
+      for (size_t i = 0; i < sgData.size(); i++) {
         assert(shape[i] % sgLayout[i] == 0);
         assert(shape[i] % sgData[i] == 0);
         assert(shape[i] % (sgLayout[i] * sgData[i]) == 0);
@@ -863,15 +883,16 @@ mlir::LogicalResult StoreNDOp::verify() {
         assert(blockSize[i] % wiLayout[i] == 0);
         assert(blockSize[i] % wiData[i] == 0);
         assert(shape[i] % blockSize[i] == 0);
-        auto tmp = blockSize[i]/wiLayout[i];
+        auto tmp = blockSize[i] / wiLayout[i];
         shape[i] /= blockSize[i];
         shape[i] *= tmp;
       }
     }
 
     if (shape != valTy.getShape().vec())
-      return emitOpError("In SIMT mode, the value (vector) shape doesn't match the memory" 
-                         "(dst) shape as derived according to the mapping rule.\n");
+      return emitOpError(
+          "In SIMT mode, the value (vector) shape doesn't match the memory"
+          "(dst) shape as derived according to the mapping rule.\n");
   }
 
   return mlir::success();
@@ -890,7 +911,8 @@ mlir::LogicalResult StoreNDOp::verify() {
   if (parser.parseOperand(TensorDescRawOperands[0]))
     return ::mlir::failure();
 
-  if (parseOptionalAttrDict(parser, result, {"mode", "l1_hint", "l2_hint", "l3_hint"}))
+  if (parseOptionalAttrDict(parser, result,
+                            {"mode", "l1_hint", "l2_hint", "l3_hint"}))
     return mlir::failure();
 
   if (parser.parseColon())
@@ -944,11 +966,12 @@ mlir::LogicalResult DpasOp::verify() {
 
   if (getAcc()) {
     if (getAccType() != getResultType())
-      return emitOpError("Accumulator and Result for dpas op should have the same type (both shape and element type).");
+      return emitOpError("Accumulator and Result for dpas op should have the "
+                         "same type (both shape and element type).");
   }
 
-  // TODO: SIMT makes it harder to check semantic errors for DPAS op. 
-  // the only thing we can check seems to be vnni factor. But it 
+  // TODO: SIMT makes it harder to check semantic errors for DPAS op.
+  // the only thing we can check seems to be vnni factor. But it
   // depends on hardware though.
   // if (!dpasSupportedShapes(*this)) {
   //   return emitOpError("Incorrect shapes for dpas op");
@@ -990,7 +1013,8 @@ mlir::LogicalResult DpasOp::verify() {
   if (parser.parseOperand(maskRawOperands[0]))
     return mlir::failure();
 
-  if (parseOptionalAttrDict(parser, result,
+  if (parseOptionalAttrDict(
+          parser, result,
           {"mode", "vnni_axis", "transpose", "l1_hint", "l2_hint", "l3_hint"}))
     return mlir::failure();
 
@@ -1034,9 +1058,8 @@ void LoadGatherOp::print(mlir::OpAsmPrinter &printer) {
     printer << ' ' << "{";
 
     printer << "mode = " << getMode();
-    if (getVnniAxisAttr()) 
+    if (getVnniAxisAttr())
       printer << ", vnni_axis = " << getVnniAxis().value();
-    
 
     if (getTransposeAttr()) {
       printer << ", transpose = ";
@@ -1076,16 +1099,17 @@ mlir::LogicalResult LoadGatherOp::verify() {
   };
 
   auto tdescElemTy = getElementType(tdescTy);
-  auto valueElemTy = getElementType(valueTy); 
+  auto valueElemTy = getElementType(valueTy);
   if (tdescElemTy != valueElemTy)
-    return emitOpError("Value should have the same element type as TensorDesc.");
+    return emitOpError(
+        "Value should have the same element type as TensorDesc.");
 
   auto getShape = [&](mlir::Type type, std::vector<int64_t> &shape) -> void {
     if (type.isIntOrIndexOrFloat())
       shape.push_back(1);
     else if (llvm::isa<mlir::VectorType>(type))
       shape = llvm::dyn_cast<mlir::VectorType>(type).getShape().vec();
-    else 
+    else
       assert(0 && "Unreachable !!!");
   };
 
@@ -1099,9 +1123,10 @@ mlir::LogicalResult LoadGatherOp::verify() {
 
   if (getTranspose()) {
     auto trans = getTranspose().value();
-    if (tdescShape.size() >= trans.size()) 
+    if (tdescShape.size() >= trans.size())
       transpose(trans, tdescShape);
-    else emitWarning("Invalid transpose attr. It is ignored.");
+    else
+      emitWarning("Invalid transpose attr. It is ignored.");
   }
 
   if (getVnniAxis()) {
@@ -1113,13 +1138,18 @@ mlir::LogicalResult LoadGatherOp::verify() {
   }
 
   if (valueShape != tdescShape)
-      return emitOpError("Result shape doesn't match TensorDesc shape. when VNNI is not enabled,"
-                         "the result should have the same shape (or transposed shape if transpose" 
-                         "is also enabled) as TensorDesc. When VNNI is enabled, the result should" 
-                         "have one more dimention than the TensorDesc, with last dimention having"
-                         "vnni factor, but having same number of total data elements. The vnni "
-                         "factor are typically calculated as simd_lane_width / elementTypeBitWidth."
-                         "For element type having more than 32 bits, vnni shouldn't be used.\n");
+    return emitOpError(
+        "Result shape doesn't match TensorDesc shape. when VNNI is not enabled,"
+        "the result should have the same shape (or transposed shape if "
+        "transpose"
+        "is also enabled) as TensorDesc. When VNNI is enabled, the result "
+        "should"
+        "have one more dimention than the TensorDesc, with last dimention "
+        "having"
+        "vnni factor, but having same number of total data elements. The vnni "
+        "factor are typically calculated as simd_lane_width / "
+        "elementTypeBitWidth."
+        "For element type having more than 32 bits, vnni shouldn't be used.\n");
 
   return ::mlir::success();
 }
@@ -1168,8 +1198,8 @@ mlir::LogicalResult LoadGatherOp::verify() {
   if (parser.parseOperand(maskRawOperands[0]))
     return mlir::failure();
 
-  if (parseOptionalAttrDict(parser, result, {"mode", "l1_hint", "l2_hint", "l3_hint"},
-                            true))
+  if (parseOptionalAttrDict(parser, result,
+                            {"mode", "l1_hint", "l2_hint", "l3_hint"}, true))
     return mlir::failure();
 
   if (parser.parseColon())
@@ -1242,51 +1272,57 @@ void StoreScatterOp::print(::mlir::OpAsmPrinter &printer) {
       shape.push_back(1);
     else if (llvm::isa<mlir::VectorType>(type))
       shape = llvm::dyn_cast<mlir::VectorType>(type).getShape().vec();
-    else 
+    else
       assert(0 && "Unreachable !!!");
   };
 
   getShape(valueTy, valueShape);
   getShape(maskTy, maskShape);
 
-  if (tdescTy.getShape().vec() != maskShape || valueShape != maskShape ) {
-    return emitOpError("Mask and value should have the same shape/size as TensorDesc." 
-           "Mask and Value can be scalar if TensorDesc is in form of TensorDesc<1xf16>.");
+  if (tdescTy.getShape().vec() != maskShape || valueShape != maskShape) {
+    return emitOpError(
+        "Mask and value should have the same shape/size as TensorDesc."
+        "Mask and Value can be scalar if TensorDesc is in form of "
+        "TensorDesc<1xf16>.");
   }
   return ::mlir::success();
 }
 
 ::mlir::LogicalResult UpdateOffsetOp::verify() {
   auto srcTy = getTensorDesc().getType();
-  auto offTy = getOffsets().getType(); 
+  auto offTy = getOffsets().getType();
   auto resTy = getResult().getType();
 
   if (srcTy != resTy)
-    return emitOpError("The result should have the same type" 
-                       "(shape and encoding attribute) as the input TensorDesc.");
+    return emitOpError(
+        "The result should have the same type"
+        "(shape and encoding attribute) as the input TensorDesc.");
 
   auto shape = srcTy.getShape();
   auto encoding = srcTy.getEncoding();
 
   if (!encoding || !llvm::isa<imex::xegpu::ScatteredAttr>(encoding)) {
-    return emitOpError("Invalid TensorDesc, it should have a scattered attribute.");
+    return emitOpError(
+        "Invalid TensorDesc, it should have a scattered attribute.");
   }
 
-  // For VC mode with chunkSize > 1. For chunkSize == 1, it is hard to distinguish 
-  // between VC and SIMT mode by only looking at updateOffsetOp itself. So current 
-  // verifier skipped these two cases. 
+  // For VC mode with chunkSize > 1. For chunkSize == 1, it is hard to
+  // distinguish between VC and SIMT mode by only looking at updateOffsetOp
+  // itself. So current verifier skipped these two cases.
   if (shape.size() == 2) {
     if (!llvm::isa<mlir::VectorType>(offTy))
-      return emitOpError("Based on TensorDesc shape, it is an VC tensor descriptor, " 
-                         "in which the offset should be an 1D vector.");
+      return emitOpError(
+          "Based on TensorDesc shape, it is an VC tensor descriptor, "
+          "in which the offset should be an 1D vector.");
 
     auto vecTy = llvm::dyn_cast<mlir::VectorType>(offTy);
     if (vecTy.getRank() != 1)
-      return emitOpError("The index should be an 1D vector Type for VC mode tensor descriptor.");
+      return emitOpError("The index should be an 1D vector Type for VC mode "
+                         "tensor descriptor.");
 
     if (shape[0] != vecTy.getShape()[0])
-      return emitOpError("For VC Mode TensorDesc. The offset should have same" 
-                         "length as the dim-0 of TensorDesc."); 
+      return emitOpError("For VC Mode TensorDesc. The offset should have same"
+                         "length as the dim-0 of TensorDesc.");
   }
 
   return ::mlir::success();
