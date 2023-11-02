@@ -67,8 +67,9 @@ func.func @test_create_nd_tdesc_vc_5(%src: memref<?x?xf32>, %w : index, %h : ind
   %c1 = arith.constant 1 : index
   // CHECK: xegpu.create_nd_tdesc
   // CHECK-SAME: %arg0[%arg3, %arg4], [%arg2, %arg1], [%arg1, %c1]
-  // CHECK-SAME: memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
-  %1 = xegpu.create_nd_tdesc %src[%x, %y], [%h, %w], [%w, %c1] {mode = vc, memory_scope = slm} : memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
+  // CHECK-SAME: memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32, memory_scope = slm>
+  %1 = xegpu.create_nd_tdesc %src[%x, %y], [%h, %w], [%w, %c1] {mode = vc}
+                                  : memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32, memory_scope = slm>
   return
 }
 
@@ -77,8 +78,9 @@ func.func @test_create_nd_tdesc_vc_6(%src: memref<?x?xf32>, %w : index, %h : ind
   %c1 = arith.constant 1 : index
   // CHECK: xegpu.create_nd_tdesc
   // CHECK-SAME: %arg0[%arg3, %arg4], [%arg2, %arg1], [%arg1, %c1]
-  // CHECK-SAME: memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
-  %1 = xegpu.create_nd_tdesc %src[%x, %y], [%h, %w], [%w, %c1] {mode = vc, memory_scope = slm, boundary_check = true} : memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
+  // CHECK-SAME: memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32, memory_scope = slm>
+  %1 = xegpu.create_nd_tdesc %src[%x, %y], [%h, %w], [%w, %c1] {mode = vc, boundary_check = true}
+                            : memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32, memory_scope = slm>
   return
 }
 
@@ -96,8 +98,9 @@ func.func @test_create_nd_tdesc_vc_7(%src: memref<1024xf32>, %offset : index) {
 func.func @test_create_nd_tdesc_vc_8(%src: memref<?x?xf32>, %w : index, %h : index, %x : index) {
   %c1 = arith.constant 1 : index
   // CHECK: xegpu.create_nd_tdesc
-  // CHECK-SAME: memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
-  %1 = xegpu.create_nd_tdesc %src[8, %x], [%h, %w], [%w, %c1] {mode = vc, memory_scope = slm, boundary_check = true} : memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
+  // CHECK-SAME: memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32, memory_scope = slm>
+  %1 = xegpu.create_nd_tdesc %src[8, %x], [%h, %w], [%w, %c1] {mode = vc, boundary_check = true}
+                                    : memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32, memory_scope = slm>
   return
 }
 
@@ -105,9 +108,9 @@ func.func @test_create_nd_tdesc_vc_8(%src: memref<?x?xf32>, %w : index, %h : ind
 func.func @test_create_nd_tdesc_vc_9(%src: memref<?x?xf32>, %w : index, %h : index, %x : index) {
   %c1 = arith.constant 1 : index
   // CHECK: xegpu.create_nd_tdesc
-  // CHECK-SAME: {mode = simt, memory_scope = slm, boundary_check = true}
-  // CHECK-SAME: !xegpu.tensor_desc<64x128xf32, #xegpu.xe_map<wg = {sg_layout = [2, 2], sg_data = [32, 64]}, sg = {mma_block_size = [8, 16], wi_layout = [1, 16], wi_data = [8, 1]}>>
-  %1 = xegpu.create_nd_tdesc %src[8, %x], [%h, %w], [%w, %c1] {memory_scope = slm, boundary_check = true} : memref<?x?xf32>
-                            -> !xegpu.tensor_desc<64x128xf32, #xegpu.xe_map<wg = {sg_layout=[2, 2], sg_data=[32, 64]}, sg = {mma_block_size=[8, 16], wi_layout=[1, 16], wi_data=[8, 1]}>>
+  // CHECK-SAME: {mode = simt, boundary_check = true}
+  // CHECK-SAME: !xegpu.tensor_desc<64x128xf32, memory_scope = slm, #xegpu.xe_map<wg = {sg_layout = [2, 2], sg_data = [32, 64]}, sg = {mma_block_size = [8, 16], wi_layout = [1, 16], wi_data = [8, 1]}>>
+  %1 = xegpu.create_nd_tdesc %src[8, %x], [%h, %w], [%w, %c1] {boundary_check = true} : memref<?x?xf32>
+            -> !xegpu.tensor_desc<64x128xf32, memory_scope = slm, #xegpu.xe_map<wg = {sg_layout=[2, 2], sg_data=[32, 64]}, sg = {mma_block_size=[8, 16], wi_layout=[1, 16], wi_data=[8, 1]}>>
   return
 }

@@ -19,7 +19,7 @@ func.func @test_prefetch_nd_tdesc_vc_0(%src: memref<24x32xf32>) {
 // CHECK-LABEL: func @test_prefetch_nd_tdesc_vc_1({{.*}}) {
 func.func @test_prefetch_nd_tdesc_vc_1(%src: memref<24x32xf16>, %x : index, %y : index) {
   // CHECK: xegpu.create_nd_tdesc
-  // CHECK-SAME: {mode = vc, memory_scope = global, boundary_check = true}
+  // CHECK-SAME: {mode = vc, boundary_check = true}
   // CHECK-SAME: memref<24x32xf16> -> !xegpu.tensor_desc<8x16xf16>
   %1 = xegpu.create_nd_tdesc %src[%x, %y] {mode = vc}
       : memref<24x32xf16> -> !xegpu.tensor_desc<8x16xf16>

@@ -22,18 +22,53 @@ def XeGPU_ScatteredAttr : XeGPUAttr<"Scattered", "scattered"> {
 
 def XeGPU_SgMapAttr: XeGPUAttr<"SgMap", "sg_map"> {
   let parameters = (ins
-        ArrayRefParameter<"unsigned">:$mmaBlockSize,
         ArrayRefParameter<"unsigned">:$wiLayout,
-        ArrayRefParameter<"unsigned">:$wiData);
+        ArrayRefParameter<"unsigned">:$wiData,
+        ArrayRefParameter<"unsigned">:$mmaBlockSize);
 
   // In format of #xegpu.sg_map<{mma_block_size = [2, 4], wi_layout = [2, 4], wi_data = [2, 4]}>
-  let assemblyFormat = "`<` custom<SgMapAttrElements>($mmaBlockSize, $wiLayout, $wiData) `>`";
+  let assemblyFormat = "`<` custom<SgMapAttrElements>($wiLayout, $wiData, $mmaBlockSize) `>`";
+
+  let genVerifyDecl = true;
+
+  let extraClassDeclaration = [{
+    bool hasMMABlockSizeAttr() {
+      return getMmaBlockSize().size() == 2;
+    }
+  }];
+
+  let builders = [
+    AttrBuilder<(ins
+      "::llvm::ArrayRef<unsigned>":$wiLayout,
+      "::llvm::ArrayRef<unsigned>":$wiData,
+      CArg<"::llvm::ArrayRef<unsigned>", "{}">:$mmaBlockSize
+    ), [{
+      assert(wiLayout.size() == 2 && wiData.size() == 2 && "wiLayout and wiData should be 2D arrays.\n");
+      assert((mmaBlockSize.size() == 2 || mmaBlockSize.size() == 0) && "mmaBlockSize can be either empty or a 2D array.\n");
+      return $_get($_ctxt, wiLayout, wiData, mmaBlockSize);
+    }]>
+  ];
+
+  let skipDefaultBuilders = 1;
 }
 
 def XeGPU_WgMapAttr: XeGPUAttr<"WgMap", "wg_map"> {
   let parameters = (ins
         ArrayRefParameter<"unsigned">:$sgLayout,
         ArrayRefParameter<"unsigned">:$sgData);
+
+  let builders = [
+    AttrBuilder<(ins
+      "::llvm::ArrayRef<unsigned>":$sgLayout,
+      "::llvm::ArrayRef<unsigned>":$sgData
+    ), [{
+      assert(sgLayout.size() == 2 && sgData.size() == 2 && "sgLayout and sgData should be 2D arrays.\n");
+      return $_get($_ctxt, sgLayout, sgData);
+    }]>
+  ];
+
+  let genVerifyDecl = true;
+  let skipDefaultBuilders = 1;
 
   // In format of #xegpu.wg_map<{sg_layout = [2, 4], sg_data = [2, 4]}>
   let assemblyFormat = "`<` custom<WgMapAttrElements>($sgLayout, $sgData) `>`";
@@ -44,7 +79,24 @@ def XeGPU_XeMapAttr: XeGPUAttr<"XeMap", "xe_map"> {
         XeGPU_WgMapAttr: $wg,
         XeGPU_SgMapAttr: $sg);
 
-  // In format of #xegpu.xe_map<wg = {sg_layout = [2, 4], sg_data = [2, 4]}, sg = {sg_layout = [2, 4], sg_data = [2, 4]}>
+  let builders = [
+    AttrBuilder<(ins
+      "::llvm::ArrayRef<unsigned>":$sgLayout,
+      "::llvm::ArrayRef<unsigned>":$sgData,
+      "::llvm::ArrayRef<unsigned>":$wiLayout,
+      "::llvm::ArrayRef<unsigned>":$wiData,
+      CArg<"::llvm::ArrayRef<unsigned>", "{}">:$mmaBlockSize
+    ), [{
+      assert(sgLayout.size() == 2 && sgData.size() == 2 && "sgLayout and sgData should be 2D arrays.\n");
+      assert(wiLayout.size() == 2 && wiData.size() == 2 && "wiLayout and wiData should be 2D arrays.\n");
+      assert((mmaBlockSize.size() == 2 || mmaBlockSize.size() == 0) && "mmaBlockSize can be either empty or a 2D array.\n");
+      auto wg = WgMapAttr::get($_ctxt, sgLayout, sgData);
+      auto sg = SgMapAttr::get($_ctxt, wiLayout, wiData, mmaBlockSize);
+      return $_get($_ctxt, wg, sg);
+    }]>
+  ];
+
+  // In format of #xegpu.xe_map<wg = {sg_layout = [2, 4], sg_data = [2, 4]}, sg = {mma_block_size = [2, 4], sg_layout = [2, 4], sg_data = [2, 4]}>
   let hasCustomAssemblyFormat = 1;
 }
 

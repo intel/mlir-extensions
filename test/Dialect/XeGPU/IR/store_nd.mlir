@@ -9,13 +9,13 @@ func.func @test_store_nd_vc_0(%src: memref<24x32xf16>, %dst: memref<24x32xf16>) 
   %c1 = arith.constant 4 : index
 
   // CHECK: xegpu.create_nd_tdesc
-  // CHECK-SAME: {mode = vc, memory_scope = global, boundary_check = true}
+  // CHECK-SAME: {mode = vc, boundary_check = true}
   // CHECK-SAME: memref<24x32xf16> -> !xegpu.tensor_desc<8x16xf16>
   %1 = xegpu.create_nd_tdesc %src[%c0, %c1] {mode = vc}
       : memref<24x32xf16> -> !xegpu.tensor_desc<8x16xf16>
 
   // CHECK: xegpu.create_nd_tdesc
-  // CHECK-SAME: {mode = vc, memory_scope = global, boundary_check = true}
+  // CHECK-SAME: {mode = vc, boundary_check = true}
   // CHECK-SAME: memref<24x32xf16> -> !xegpu.tensor_desc<8x16xf16>
   %2 = xegpu.create_nd_tdesc %dst[%c0, %c1] {mode = vc}
       : memref<24x32xf16> -> !xegpu.tensor_desc<8x16xf16>
