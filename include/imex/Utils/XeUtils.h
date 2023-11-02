@@ -38,8 +38,7 @@ template <typename T> static std::string makeString(T array) {
   os << "[";
   for (auto i = 1; i < array.size(); i++)
     os << array[i - 1] << ", ";
-  if (array.size()) os << array[array.size() - 1] ;
-  os << "]";
+  os << array[array.size() - 1] << "]";
   os.flush();
   return buf;
 }

@@ -9,7 +9,7 @@ func.func @test_update_nd_offset_vc_0(%src: memref<24x32xf32>) {
   %c1 = arith.constant 4 : index
 
   // CHECK: xegpu.create_nd_tdesc
-  // CHECK-SAME: {mode = vc, boundary_check = true}
+  // CHECK-SAME: {mode = vc, memory_scope = global, boundary_check = true}
   // CHECK-SAME: memref<24x32xf32> -> !xegpu.tensor_desc<8x16xf32>
   %1 = xegpu.create_nd_tdesc %src[%c0, %c1] {mode = vc}
       : memref<24x32xf32> -> !xegpu.tensor_desc<8x16xf32>
