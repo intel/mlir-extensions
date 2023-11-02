@@ -54,8 +54,7 @@ def XeGPU_CreateNdDescOp : XeGPU_Op<"create_nd_tdesc", [Pure, AttrSizedOperandSe
     both shape and strides are required to to carry the respect information. Otherwise,
     the operator is invalid.
 
-    The operation also supports two attributes:
-    * memory_scope (MemoryScopeAttr): indicates where the memory is located, "global" for global memory (default), and "slm" for shared memory.
+    The operation also supports the following attribute:
     * boundary_check (BoolAttr): indicates whether the operation detects the boundary and pads with zero for out-of-boundary access (default)
 
     Example 1 (suppose the tensor shape inferred by the compiler is 8x16):
@@ -82,7 +81,6 @@ def XeGPU_CreateNdDescOp : XeGPU_Op<"create_nd_tdesc", [Pure, AttrSizedOperandSe
                        Variadic<Index>: $shape,
                        Variadic<Index>: $strides,
                        DenseI64ArrayAttr: $static_offsets,
-                       DefaultValuedAttr<XeGPU_MemoryScopeAttr, "xegpu::MemoryScope::GLOBAL">: $memory_scope,
                        DefaultValuedAttr<BoolAttr, "true">: $boundary_check,
                        DefaultValuedAttr<XeGPU_ModeAttr, "imex::xegpu::Mode::SIMT">: $mode);
 
@@ -95,23 +93,40 @@ def XeGPU_CreateNdDescOp : XeGPU_Op<"create_nd_tdesc", [Pure, AttrSizedOperandSe
   let builders = [
     OpBuilder<(ins "::mlir::Type": $TensorDesc, "::mlir::Value": $source, "::mlir::ValueRange": $offsets,
                    "::mlir::ValueRange": $shape, "::mlir::ValueRange": $strides, "::llvm::ArrayRef<int64_t>": $static_offsets,
-                   CArg<"::imex::xegpu::MemoryScope", "xegpu::MemoryScope::GLOBAL">: $memory_scope,
                    CArg<"bool", "true">: $boundary_check, CArg<"::imex::xegpu::Mode", "imex::xegpu::Mode::SIMT">: $mode),
-    [{  $_state.addOperands(source);
+    [{  
+        auto staticDims = std::count_if(static_offsets.begin(), static_offsets.end(),
+                                          [](int64_t d) { return !mlir::ShapedType::isDynamic(d); });
+        auto dynamicDims = std::count_if(static_offsets.begin(), static_offsets.end(),
+                                          [](int64_t d) { return mlir::ShapedType::isDynamic(d); });
+
+        auto dims = offsets.size() + staticDims;
+        assert((isStaticShapedMemRef(source) && 
+                   dims == getRankOf(source) && 
+                           shape.size() == 0 && 
+                           strides.size() == 0
+               ) || 
+               ((!isMemRef(source) || dims == getRankOf(source)) && 
+                                               shape.size() != 0 && 
+                                            dims == shape.size() && 
+                                            shape.size() == strides.size()
+               )
+              );
+        assert(offsets.size() == dynamicDims);
+
+        $_state.addOperands(source);
         $_state.addOperands(offsets);
         $_state.addOperands(shape);
         $_state.addOperands(strides);
         $_state.addAttribute(getOperandSegmentSizesAttrName($_state.name), $_builder.getDenseI32ArrayAttr({1, static_cast<int32_t>(offsets.size()), static_cast<int32_t>(shape.size()), static_cast<int32_t>(strides.size())}));
         $_state.addAttribute(getStaticOffsetsAttrName($_state.name), $_builder.getDenseI64ArrayAttr(static_offsets));
-        $_state.addAttribute(getMemoryScopeAttrName($_state.name), ::imex::xegpu::MemoryScopeAttr::get($_builder.getContext(), memory_scope));
         $_state.addAttribute(getBoundaryCheckAttrName($_state.name), $_builder.getBoolAttr(boundary_check));
-        $_state.addAttribute(getBoundaryCheckAttrName($_state.name), ::imex::xegpu::ModeAttr::get($_builder.getContext(), mode));
+        $_state.addAttribute(getModeAttrName($_state.name), ::imex::xegpu::ModeAttr::get($_builder.getContext(), mode));
         $_state.addTypes(TensorDesc); }]>,
 
     OpBuilder<(ins "::mlir::Type": $tdesc, "::mlir::Value": $source, "::llvm::ArrayRef<mlir::OpFoldResult>": $offsets,
-                  CArg<"::imex::xegpu::MemoryScope", "::imex::xegpu::MemoryScope::GLOBAL">:$memory_scope,
                   CArg<"bool", "true">:$boundary_check, CArg<"::imex::xegpu::Mode", "imex::xegpu::Mode::SIMT">: $mode),
-    [{  assert(offsets.size() == getRankOf(source));
+    [{  assert(isStaticShapedMemRef(source) && offsets.size() == getRankOf(source));
         llvm::SmallVector<int64_t> staticOffsets;
         llvm::SmallVector<mlir::Value> dynamicOffsets;
         dispatchIndexOpFoldResults(offsets, dynamicOffsets, staticOffsets);
@@ -120,16 +135,14 @@ def XeGPU_CreateNdDescOp : XeGPU_Op<"create_nd_tdesc", [Pure, AttrSizedOperandSe
                                              ::mlir::ValueRange({})     /* empty dynamic shape   */,
                                              ::mlir::ValueRange({})     /* empty dynamic strides */,
                                              staticOffsets              /* static offsets        */,
-                                             memory_scope,
                                              boundary_check,
                                              mode); }]>,
 
 
     OpBuilder<(ins "::mlir::Type": $tdesc, "::mlir::Value": $source, "::llvm::ArrayRef<mlir::OpFoldResult>": $offsets,
                    "::mlir::ValueRange": $shape, "::mlir::ValueRange": $stride,
-                   CArg<"::imex::xegpu::MemoryScope", "xegpu::MemoryScope::GLOBAL">:$memory_scope,
                    CArg<"bool", "true">:$boundary_check, CArg<"::imex::xegpu::Mode", "imex::xegpu::Mode::SIMT">: $mode),
-    [{  assert((!isMemRef(source) || getRankOf(source) == offsets.size()) && shape.size() == stride.size() &&
+    [{  assert((!isMemRef(source) || getRankOf(source) == offsets.size()) && shape.size() != 0 && shape.size() == stride.size() &&
                offsets.size() == shape.size() && isIntegerOrDynamicShapedMemref(source));
 
         llvm::SmallVector<int64_t> staticOffsets;
@@ -141,7 +154,6 @@ def XeGPU_CreateNdDescOp : XeGPU_Op<"create_nd_tdesc", [Pure, AttrSizedOperandSe
                                              shape              /* empty dynamic shape   */,
                                              stride             /* empty dynamic strides */,
                                              staticOffsets      /* static offsets        */,
-                                             memory_scope,
                                              boundary_check,
                                              mode); }]>
   ];
@@ -170,6 +182,59 @@ def XeGPU_CreateNdDescOp : XeGPU_Op<"create_nd_tdesc", [Pure, AttrSizedOperandSe
       if (isMemRef(value))
         return !llvm::cast<::mlir::MemRefType>(type).hasStaticShape();
       assert(0 && "Unreachable");
+    }
+
+    void getOffsets(llvm::SmallVectorImpl<mlir::OpFoldResult> &offsets) {
+      auto dynamicOffsets = getOffsets(); //dynamic offsets
+      auto staticOffsets = getStaticOffsets();
+
+      if (staticOffsets.size() == 0) {
+        offsets.assign(dynamicOffsets.begin(), dynamicOffsets.end());
+        return;
+      }
+
+      for (size_t i = 0, j = 0; i < staticOffsets.size(); i++) {
+        if (mlir::ShapedType::isDynamic(staticOffsets[i])) {
+          assert(j < dynamicOffsets.size());
+          offsets.push_back(dynamicOffsets[j++]);
+        } else {
+          auto attr = mlir::IntegerAttr::get(mlir::IndexType::get(getContext()), staticOffsets[i]);
+          offsets.push_back(attr);
+        }
+      }
+    }
+
+    void getShape(llvm::SmallVectorImpl<mlir::OpFoldResult> &shape) {
+      if (isIntegerOrDynamicShapedMemref(getSource())) {
+        shape.append(getShape().begin(), getShape().end());
+      } else {
+        for (auto dim: getSourceType().cast<::mlir::MemRefType>().getShape()) {
+          auto attr = mlir::IntegerAttr::get(mlir::IndexType::get(getContext()), dim);
+          shape.push_back(attr);
+        }
+      } 
+    }
+
+    void getStrides(llvm::SmallVectorImpl<mlir::OpFoldResult> &strides) {
+      if (isIntegerOrDynamicShapedMemref(getSource())) {
+        strides.append(getStrides().begin(), getStrides().end());
+      } else {
+        auto [staticStrides, offset] = mlir::getStridesAndOffset(getSourceType().cast<mlir::MemRefType>());
+        for (auto dim: staticStrides) {
+          auto attr = mlir::IntegerAttr::get(mlir::IndexType::get(getContext()), dim);
+          strides.push_back(attr);
+        }
+      } 
+    }
+
+    size_t getNumStaticOffsets() {
+      return std::count_if(getStaticOffsets().begin(), getStaticOffsets().end(),
+                           [](int64_t dSize) { return !mlir::ShapedType::isDynamic(dSize); });
+    }
+
+    size_t getNumDynamicOffsets() {
+      return std::count_if(getStaticOffsets().begin(), getStaticOffsets().end(),
+                           [](int64_t dSize) { return mlir::ShapedType::isDynamic(dSize); });
     }
 
     size_t getOffsetsRank() {
@@ -259,7 +324,6 @@ def XeGPU_CreateDescOp
                supportted group size, e.g., vector<16xindex>. And each element in the vector corresponds to a
                work item (SIMT lane) in the subgroup.
                In SIMT mode (default), it is an index scalar representing the offset of the access point.
-    * memory_scope: [optional attribute] indicates where the memory is located, "global" for global memory (default), and "slm" for shared memory.
     * chunk_size_per_lane: [optional attribute] indicates number of continious elements accessed for each offset, default is 1.
 
     Example 1. It assumes subgroup size is 4, and accesses a[0], a[16], a[32], a[64]
@@ -283,7 +347,6 @@ def XeGPU_CreateDescOp
 
   let arguments = (ins XeGPU_BaseAddrType: $source,
                        XeGPU_OffsetType: $offsets,
-                       DefaultValuedAttr<XeGPU_MemoryScopeAttr, "imex::xegpu::MemoryScope::GLOBAL">: $memory_scope,
                        DefaultValuedAttr<I32Attr, "1">: $chunk_size_per_lane,
                        DefaultValuedAttr<XeGPU_ModeAttr, "imex::xegpu::Mode::SIMT">: $mode);
 
@@ -303,7 +366,7 @@ def XeGPU_CreateDescOp
 
   }];
 
-  // Format: xegpu.create_tdesc %src, %offsets {mode=simt, memory_scope=slm, chunk_size_per_lane=1}
+  // Format: xegpu.create_tdesc %src, %offsets {mode=simt, chunk_size_per_lane=1}
   //                   : ui64, vector<16 x index> -> !xegpu.tensor_desc<16xf32, #xegpu.scattered>
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;

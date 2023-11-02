@@ -72,7 +72,7 @@ func.func @test_create_tdesc(%src: ui64, %offsets : vector<16x8xindex>) {
 func.func @test_load_gather(%src: ui64, %offsets : vector<16xindex>) {
   %0 = arith.constant dense<1>: vector<16x8xi1>
   // CHECK: xegpu.create_tdesc
-  // CHECK-SAME: {mode = vc, memory_scope = global, chunk_size_per_lane = 8}
+  // CHECK-SAME: {mode = vc, chunk_size_per_lane = 8}
   // CHECK-SAME: ui64, vector<16xindex> -> !xegpu.tensor_desc<16x8xf32, #xegpu.scattered>
   %1 = xegpu.create_tdesc %src, %offsets {mode = vc, chunk_size_per_lane = 8}
                               : ui64, vector<16xindex> -> !xegpu.tensor_desc<16x8xf16, #xegpu.scattered>

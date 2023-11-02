@@ -77,9 +77,54 @@ static void printShapeAndType(mlir::AsmPrinter &printer,
   printer << type;
 }
 
-template <typename T>
-static mlir::LogicalResult parseArrayList(mlir::AsmParser &parser,
-                                          llvm::SmallVector<T> &array,
+static mlir::LogicalResult parseTensorDescAttr(mlir::AsmParser &parser, 
+                                               imex::xegpu::MemoryScope &scope, 
+                                               mlir::Attribute &encoding) {
+  // implies no attrbutes
+  if (mlir::failed(parser.parseOptionalComma()))
+    return mlir::success();
+
+  auto parseElt = [&]() -> mlir::ParseResult {
+    llvm::StringRef nameId;
+
+    if (!parser.parseOptionalKeyword(&nameId, {"memory_scope"})) {
+      auto loc = parser.getCurrentLocation();
+      if(parser.parseEqual())
+        return mlir::failure();
+ 
+      auto attrOptional = ::mlir::FieldParser<::imex::xegpu::MemoryScope, ::imex::xegpu::MemoryScope>::parse(parser);
+      if(mlir::failed(attrOptional))
+        return parser.emitError(loc, "Invalid memory scope attribute specification.\n");
+      scope = *attrOptional;
+      return mlir::success();
+    } else {
+      auto loc = parser.getCurrentLocation();
+      auto attrOptional = ::mlir::FieldParser<::mlir::Attribute>::parse(parser);
+      if(mlir::failed(attrOptional))
+        return parser.emitError(loc, "Failed to parse XeGPU_TensorDesc parameter 'encoding' which is to be a `::mlir::Attribute`.\n");
+      encoding = *attrOptional; 
+      return mlir::success();
+    }
+    llvm_unreachable("Unexpected.");
+  };
+
+  if (parser.parseCommaSeparatedList(parseElt))
+    return mlir::failure();
+
+  return mlir::success();
+}
+
+static void printTensorDescAttr(mlir::AsmPrinter &printer, 
+                                imex::xegpu::MemoryScope scope, 
+                                mlir::Attribute encoding) {
+  if (scope != imex::xegpu::MemoryScope::GLOBAL) 
+    printer << ", memory_scope = " << scope;
+  if (encoding) printer << ", " << encoding;
+}
+
+template<typename T>
+static mlir::LogicalResult parseArrayList(mlir::AsmParser &parser, 
+                                          llvm::SmallVector<T> &array, 
                                           bool parsePrecedenceEqual = false) {
   mlir::FailureOr<llvm::SmallVector<T>> result;
   // Parse literal '='
@@ -121,38 +166,27 @@ static mlir::LogicalResult parseSgMapAttrElements(
   auto loc = parser.getCurrentLocation();
   auto parseElt = [&]() -> mlir::LogicalResult {
     return mlir::AsmParser::KeywordSwitch<mlir::LogicalResult>(parser)
-        .Case("mma_block_size",
-              [&](llvm::StringRef, llvm::SMLoc) {
-                return parseArrayList(parser, mmaBlockSize, true);
-              })
-        .Case("wi_layout",
-              [&](llvm::StringRef, llvm::SMLoc) {
-                return parseArrayList(parser, layout, true);
-              })
-        .Case("wi_data",
-              [&](llvm::StringRef, llvm::SMLoc) {
-                return parseArrayList(parser, data, true);
-              })
-        .Default([&](llvm::StringRef keyword, llvm::SMLoc) {
-          llvm::dbgs() << "\n3. Default currLoc: "
-                       << llvm::StringRef(
-                              parser.getCurrentLocation().getPointer())
-                       << "\n";
-          llvm::dbgs() << "\n3. keyword: " << keyword << "\n";
-          return mlir::failure();
-        });
-  };
-
-  if (parser.parseLBrace())
-    return mlir::failure();
-  if (parser.parseCommaSeparatedList(parseElt))
-    return mlir::failure();
-  if (parser.parseRBrace())
-    return mlir::failure();
-  if (mmaBlockSize.size() != 2) {
-    parser.emitError(loc,
-                     "failed to parse SgMapAttr: missing mma_block_size which "
-                     "is to be a `llvm::ArrayRef<unsigned>` with size 2");
+      .Case("mma_block_size", [&](llvm::StringRef, llvm::SMLoc) {
+        return parseArrayList(parser, mmaBlockSize, true);
+      })
+      .Case("wi_layout", [&](llvm::StringRef, llvm::SMLoc) {
+        return parseArrayList(parser, layout, true);
+      })
+      .Case("wi_data", [&](llvm::StringRef, llvm::SMLoc) {
+        return parseArrayList(parser, data, true);
+      })
+      .Default([&](llvm::StringRef keyword, llvm::SMLoc) {
+        parser.emitError(loc, "SgMapAttr Parser meet an unexpected keywoard: ") << keyword << "\n";
+        return mlir::failure();
+      });
+  }; 
+  
+  if (parser.parseLBrace()) return mlir::failure();
+  if (parser.parseCommaSeparatedList(parseElt)) return mlir::failure();
+  if (parser.parseRBrace()) return mlir::failure();
+  if (mmaBlockSize.size() != 2 && mmaBlockSize.size() != 0) {
+    parser.emitError(loc, "failed to parse SgMapAttr: mma_block_size should be a `llvm::ArrayRef<unsigned>` " 
+                          "with size 2 or empty. But it got ") << mmaBlockSize.size() << ".\n" ;
     return mlir::failure();
   }
   if (layout.size() != 2) {
@@ -173,8 +207,10 @@ static void printSgMapAttrElements(mlir::AsmPrinter &printer,
                                    llvm::ArrayRef<unsigned> layout,
                                    llvm::ArrayRef<unsigned> data) {
   printer << "{";
-  printArrayElement(printer, "mma_block_size", mmaBlockSize);
-  printer << "," << ' ';
+  if (mmaBlockSize.size()) {
+    printArrayElement(printer, "mma_block_size", mmaBlockSize);
+    printer << "," << ' ';
+  }
   printArrayElement(printer, "wi_layout", layout);
   printer << "," << ' ';
   printArrayElement(printer, "wi_data", data);
@@ -237,39 +273,30 @@ mlir::Attribute XeMapAttr::parse(mlir::AsmParser &parser, mlir::Type type) {
   if (parser.parseLess())
     return {};
 
-  auto parseElt = [&]() -> mlir::ParseResult {
-    mlir::OptionalParseResult result =
-        mlir::AsmParser::KeywordSwitch<mlir::OptionalParseResult>(parser)
-            .Case("sg",
-                  [&](llvm::StringRef, llvm::SMLoc) {
-                    if (parser.parseEqual())
-                      return mlir::failure();
-                    llvm::SmallVector<unsigned> mmaBlockSize;
-                    llvm::SmallVector<unsigned> wiLayout;
-                    llvm::SmallVector<unsigned> wiData;
-                    if (mlir::failed(parseSgMapAttrElements(
-                            parser, mmaBlockSize, wiLayout, wiData)))
-                      return mlir::failure();
-                    sg = imex::xegpu::SgMapAttr::get(
-                        parser.getContext(), mmaBlockSize, wiLayout, wiData);
-                    return mlir::success(!!sg);
-                  })
-            .Case("wg",
-                  [&](llvm::StringRef, llvm::SMLoc) {
-                    if (parser.parseEqual())
-                      return mlir::failure();
-                    llvm::SmallVector<unsigned> sgLayout;
-                    llvm::SmallVector<unsigned> sgData;
-                    if (mlir::failed(
-                            parseWgMapAttrElements(parser, sgLayout, sgData)))
-                      return mlir::failure();
-                    wg = imex::xegpu::WgMapAttr::get(parser.getContext(),
-                                                     sgLayout, sgData);
-                    return mlir::success(!!wg);
-                  })
-            .Default([&](llvm::StringRef keyword, llvm::SMLoc) {
-              return std::nullopt;
-            });
+  auto parseElt = [&]() ->  mlir::ParseResult {
+    mlir::OptionalParseResult result = mlir::AsmParser::KeywordSwitch<mlir::OptionalParseResult>(parser)
+      .Case("sg", [&](llvm::StringRef, llvm::SMLoc) {
+        if (parser.parseEqual()) return mlir::failure();
+        llvm::SmallVector<unsigned> mmaBlockSize;
+        llvm::SmallVector<unsigned> wiLayout;
+        llvm::SmallVector<unsigned> wiData;
+        if (mlir::failed(parseSgMapAttrElements(parser, mmaBlockSize, wiLayout, wiData)))
+          return mlir::failure();
+        sg = imex::xegpu::SgMapAttr::get(parser.getContext(), wiLayout, wiData, mmaBlockSize);
+        return mlir::success(!!sg);
+      })
+      .Case("wg", [&](llvm::StringRef, llvm::SMLoc) {
+        if (parser.parseEqual()) return mlir::failure();
+        llvm::SmallVector<unsigned> sgLayout;
+        llvm::SmallVector<unsigned> sgData;
+        if(mlir::failed(parseWgMapAttrElements(parser, sgLayout, sgData)))
+          return mlir::failure();
+        wg = imex::xegpu::WgMapAttr::get(parser.getContext(), sgLayout, sgData);
+        return mlir::success(!!wg);
+      })
+      .Default([&](llvm::StringRef keyword, llvm::SMLoc) {
+        return std::nullopt;
+      });
     return result.value();
   };
 

@@ -70,15 +70,6 @@ static void transpose(llvm::ArrayRef<int64_t> trans,
     shape[i] = old[trans[i]];
 };
 
-static void dropOnes(std::vector<int64_t> &array) {
-  std::vector<int64_t> old = array;
-  array.clear();
-  for (auto v : old) {
-    if (v != 1)
-      array.push_back(v);
-  }
-};
-
 static bool isMappingAttr(mlir::Attribute attr) {
   return attr && (llvm::isa<imex::xegpu::SgMapAttr>(attr) ||
                   llvm::isa<imex::xegpu::WgMapAttr>(attr) ||
@@ -129,8 +120,7 @@ static mlir::ParseResult parseCustomEnumAttr(mlir::OpAsmParser &parser,
   auto loc = parser.getCurrentLocation();
   auto attrOptional = mlir::FieldParser<CustomEnum, CustomEnum>::parse(parser);
   if (mlir::failed(attrOptional))
-    return parser.emitError(loc, "invalid ")
-           << "memory_scope attribute specification";
+    return parser.emitError(loc, "invalid ") << "attribute specification";
   auto attr =
       CustomEnumAttr::get(parser.getBuilder().getContext(), *attrOptional);
   result.addAttribute(attrKeyword, attr);
@@ -186,10 +176,6 @@ parseOptionalAttrDict(mlir::OpAsmParser &parser, mlir::OperationState &result,
 
     if (parser.parseEqual())
       return ::mlir::failure();
-
-    if (nameId == "memory_scope")
-      return parseCustomEnumAttr<MemoryScope, MemoryScopeAttr>(parser, result,
-                                                               nameId);
 
     if (nameId == "l1_hint" || nameId == "l2_hint" || nameId == "l3_hint") {
       if (isWrite)
@@ -296,8 +282,7 @@ mlir::ParseResult CreateNdDescOp::parse(mlir::OpAsmParser &parser,
       return ::mlir::failure();
   }
 
-  if (parseOptionalAttrDict(parser, result,
-                            {"memory_scope", "boundary_check", "mode"}))
+  if (parseOptionalAttrDict(parser, result, {"boundary_check", "mode"}))
     return mlir::failure();
 
   if (parser.parseColon())
@@ -359,8 +344,6 @@ void CreateNdDescOp::print(::mlir::OpAsmPrinter &printer) {
   printer << ' ' << "{";
   printer << "mode = " << getMode();
   printer << "," << ' ';
-  printer << "memory_scope = " << getMemoryScope();
-  printer << "," << ' ';
   printer << "boundary_check = " << getBoundaryCheck();
   printer << "}";
 
@@ -414,8 +397,7 @@ mlir::ParseResult CreateDescOp::parse(mlir::OpAsmParser &parser,
   if (parser.parseOperand(offsetsRawOperands[0]))
     return mlir::failure();
 
-  if (parseOptionalAttrDict(parser, result,
-                            {"memory_scope", "chunk_size_per_lane", "mode"}))
+  if (parseOptionalAttrDict(parser, result, {"chunk_size_per_lane", "mode"}))
     return mlir::failure();
 
   if (parser.parseColon())
@@ -459,8 +441,6 @@ void CreateDescOp::print(::mlir::OpAsmPrinter &printer) {
 
   printer << ' ' << "{";
   printer << "mode = " << getMode();
-  printer << "," << ' ';
-  printer << "memory_scope = " << getMemoryScope();
   printer << "," << ' ';
   printer << "chunk_size_per_lane = " << getChunkSizePerLane();
   printer << "}";
@@ -664,7 +644,6 @@ mlir::LogicalResult LoadNDOp::verify() {
               "tdescShape[i] % sgData[i] == 0");
         tdescShape[i] /= sgLayout[i];
       }
-      // dropOnes(tdescShape);
     }
 
     if (sgMap) {
@@ -675,16 +654,23 @@ mlir::LogicalResult LoadNDOp::verify() {
         if (tdescShape[i] % blockSize[i] != 0 ||
             blockSize[i] % wiLayout[i] != 0 || blockSize[i] % wiData[i] != 0 ||
             blockSize[i] % (wiLayout[i] * wiData[i]) != 0) {
-          return emitOpError(
-              "Invalid SgMapAttr. It should meet the following conditions: "
-              "blockSize[i] % wiLayout[i] == 0 && "
-              "blockSize[i] % wiData[i] == 0 && "
-              "blockSize[i] % wiData[i] == 0 && "
-              "tdescShape[i] % blockSize[i] == 0");
+          return emitOpError("Invalid SgMapAttr. It should meet the following conditions: "
+                             "tdescShape[i] % blockSize[i] == 0 && "
+                             "blockSize[i] % wiLayout[i] == 0 && "
+                             "blockSize[i] % wiData[i] == 0 && "
+                             "blockSize[i] % (wiLayout[i] * wiData[i]) == 0 ");
+
         }
-        auto tmp = blockSize[i] / wiLayout[i];
-        tdescShape[i] /= blockSize[i];
-        tdescShape[i] *= tmp;
+      }
+
+      for (size_t i = 0; i < wiLayout.size(); i++) {
+        if (tdescShape[i] % wiData[i] != 0 || 
+            tdescShape[i] % (wiLayout[i] * wiData[i]) != 0) {
+          return emitOpError("Invalid SgMapAttr. It should meet the following conditions: "
+                             "tdescShape[i] % wiData[i] == 0 && "
+                             "tdescShape[i] % (wiLayout[i] * wiData[i]) == 0 ");
+        }
+        tdescShape[i] /= wiLayout[i];
       }
     }
   }
@@ -702,8 +688,8 @@ mlir::LogicalResult LoadNDOp::verify() {
     auto vnni_factor = valueShape.back();
     tdescShape[axis] /= vnni_factor;
     tdescShape.push_back(vnni_factor);
-    dropOnes(tdescShape);
   }
+
   if (tdescShape != valueShape)
     return emitOpError(
         "Result shape doesn't match TensorDesc shape."
@@ -879,14 +865,29 @@ mlir::LogicalResult StoreNDOp::verify() {
       auto wiLayout = sgMap.getWiLayout();
       auto wiData = sgMap.getWiData();
       for (size_t i = 0; i < shape.size(); i++) {
-        assert(blockSize[i] % (wiLayout[i] * wiData[i]) == 0);
-        assert(blockSize[i] % wiLayout[i] == 0);
-        assert(blockSize[i] % wiData[i] == 0);
-        assert(shape[i] % blockSize[i] == 0);
-        auto tmp = blockSize[i] / wiLayout[i];
-        shape[i] /= blockSize[i];
-        shape[i] *= tmp;
+        if (blockSize[i] % (wiLayout[i] * wiData[i]) != 0 || 
+            blockSize[i] % wiLayout[i] != 0 || 
+            blockSize[i] % wiData[i] == 0   || 
+            shape[i] % blockSize[i] == 0) {
+              return emitOpError("Invalid SgMapAttr. It should meet the following conditions: "
+                                  "tdescShape[i] % blockSize[i] == 0 && "
+                                  "blockSize[i] % wiLayout[i] == 0 && "
+                                  "blockSize[i] % wiData[i] == 0 && "
+                                  "blockSize[i] % (wiLayout[i] * wiData[i]) == 0 ");
+
+        }
       }
+
+      for (size_t i = 0; i < wiLayout.size(); i++) {
+        if (shape[i] % wiData[i] != 0 || 
+            shape[i] % (wiLayout[i] * wiData[i]) != 0) {
+          return emitOpError("Invalid SgMapAttr. It should meet the following conditions: "
+                             "tdescShape[i] % wiData[i] == 0 && "
+                             "tdescShape[i] % (wiLayout[i] * wiData[i]) == 0 ");
+        }
+        shape[i] /= wiLayout[i];
+      }
+
     }
 
     if (shape != valTy.getShape().vec())
@@ -977,8 +978,8 @@ mlir::LogicalResult DpasOp::verify() {
   //   return emitOpError("Incorrect shapes for dpas op");
   // }
 
-  if (lhsRank != rhsRank) {
-    return emitOpError("lhs and rhs rank does not match for dpas op");
+  if (lhsRank != rhsRank || lhsRank != 3) {
+    return emitOpError("lhs and rhs rank does not match for dpas op, or their rank is not 3.");
   }
 
   return mlir::success();
@@ -1134,7 +1135,6 @@ mlir::LogicalResult LoadGatherOp::verify() {
     auto vnni_factor = valueShape.back();
     tdescShape[axis] /= vnni_factor;
     tdescShape.push_back(vnni_factor);
-    dropOnes(tdescShape);
   }
 
   if (valueShape != tdescShape)
