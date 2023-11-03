@@ -25,10 +25,10 @@ func.func @test_create_nd_tdesc_vc(%src: memref<24x32xf32>) {
 // CHECK-LABEL: func @test_create_tdesc_vc({{.*}}) {
 func.func @test_create_tdesc_vc(%src: ui64, %offsets : vector<16 x index>) {
   // CHECK: xegpu.create_tdesc
-  // CHECK-SAME: {mode = vc, memory_scope = slm, chunk_size_per_lane = 2}
-  // CHECK-SAME: ui64, vector<16xindex> -> !xegpu.tensor_desc<16x2xf32, #xegpu.scattered>
-  %1 = xegpu.create_tdesc %src, %offsets {mode = vc, memory_scope = slm, chunk_size_per_lane = 2}
-                          : ui64, vector<16 x index> -> !xegpu.tensor_desc<16x2xf32, #xegpu.scattered>
+  // CHECK-SAME: {mode = vc, chunk_size_per_lane = 2}
+  // CHECK-SAME: ui64, vector<16xindex> -> !xegpu.tensor_desc<16x2xf32, memory_scope = slm, #xegpu.scattered>
+  %1 = xegpu.create_tdesc %src, %offsets {mode = vc, chunk_size_per_lane = 2}
+                          : ui64, vector<16 x index> -> !xegpu.tensor_desc<16x2xf32, memory_scope = slm, #xegpu.scattered>
   return
 }
 
@@ -53,13 +53,13 @@ func.func @test_store_nd_vc(%src: memref<24x32xf16>, %dst: memref<24x32xf16>) {
   %c1 = arith.constant 4 : index
 
   // CHECK: xegpu.create_nd_tdesc
-  // CHECK-SAME: {mode = vc, memory_scope = global, boundary_check = true}
+  // CHECK-SAME: {mode = vc, boundary_check = true}
   // CHECK-SAME: memref<24x32xf16> -> !xegpu.tensor_desc<8x16xf16>
   %1 = xegpu.create_nd_tdesc %src[%c0, %c1] {mode = vc}
       : memref<24x32xf16> -> !xegpu.tensor_desc<8x16xf16>
 
   // CHECK: xegpu.create_nd_tdesc
-  // CHECK-SAME: {mode = vc, memory_scope = global, boundary_check = true}
+  // CHECK-SAME: {mode = vc, boundary_check = true}
   // CHECK-SAME: memref<24x32xf16> -> !xegpu.tensor_desc<8x16xf16>
   %2 = xegpu.create_nd_tdesc %dst[%c0, %c1] {mode = vc}
       : memref<24x32xf16> -> !xegpu.tensor_desc<8x16xf16>
@@ -92,7 +92,7 @@ func.func @test_update_nd_offset_vc(%src: memref<24x32xf32>) {
   %c1 = arith.constant 4 : index
 
   // CHECK: xegpu.create_nd_tdesc
-  // CHECK-SAME: {mode = vc, memory_scope = global, boundary_check = true}
+  // CHECK-SAME: {mode = vc, boundary_check = true}
   // CHECK-SAME: memref<24x32xf32> -> !xegpu.tensor_desc<8x16xf32>
   %1 = xegpu.create_nd_tdesc %src[%c0, %c1] {mode = vc}
       : memref<24x32xf32> -> !xegpu.tensor_desc<8x16xf32>
@@ -112,7 +112,7 @@ func.func @test_update_nd_offset_vc(%src: memref<24x32xf32>) {
 // CHECK-LABEL: func @test_prefetch_nd_vc({{.*}}) {
 func.func @test_prefetch_nd_vc(%src: memref<24x32xf16>, %x : index, %y : index) {
   // CHECK: xegpu.create_nd_tdesc
-  // CHECK-SAME: {mode = vc, memory_scope = global, boundary_check = true}
+  // CHECK-SAME: {mode = vc, boundary_check = true}
   // CHECK-SAME: memref<24x32xf16> -> !xegpu.tensor_desc<8x16xf16>
   %1 = xegpu.create_nd_tdesc %src[%x, %y] {mode = vc} : memref<24x32xf16> -> !xegpu.tensor_desc<8x16xf16>
   // CHECK: xegpu.prefetch_nd
