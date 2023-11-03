@@ -107,9 +107,8 @@ void lookupOrInsertIntrinsic(ConversionPatternRewriter &rewriter, Operation *op,
     auto linkageTypeAttr =
         rewriter.getAttr<spirv::LinkageTypeAttr>(spirv::LinkageType::Import);
     std::replace(name.begin(), name.end(), '_', '.');
-    auto nameAttr = StringAttr::get(rewriter.getContext(), name);
     auto linkage = spirv::LinkageAttributesAttr::get(rewriter.getContext(),
-                                                     nameAttr, linkageTypeAttr);
+                                                     name, linkageTypeAttr);
     func.setLinkageAttributesAttr(linkage);
     func->setAttr("VectorComputeFunctionINTEL", rewriter.getUnitAttr());
   }
