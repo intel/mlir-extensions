@@ -36,6 +36,7 @@ git clone https://github.com/intel/mlir-extensions.git
 git clone https://github.com/llvm/llvm-project.git
 cd llvm-project
 git checkout `cat ../mlir-extensions/build_tools/llvm_version.txt`
+git apply ../mlir-extensions/build_tools/patches/*
 cmake -G Ninja -B build -S llvm \
    -DLLVM_ENABLE_PROJECTS=mlir \
    -DLLVM_BUILD_EXAMPLES=ON \
