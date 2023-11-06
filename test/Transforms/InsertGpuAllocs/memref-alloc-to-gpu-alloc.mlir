@@ -23,10 +23,10 @@ func.func @main() {
     %8 = memref.load %0[%7] : memref<8xf32>
     %9 = memref.load %1[%7] : memref<8xf32>
 
-    // OPENCL: [[VAR1:.*]] = memref.load %[[MEMREF0:.*]][[[VAR0:.*]]] : memref<8xf32>
-    // OPENCL: [[VAR2:.*]] = memref.load %[[MEMREF1:.*]][[[VAR0:.*]]] : memref<8xf32>
-    // VULKAN: [[VAR1:.*]] = memref.load %[[MEMREF0:.*]][[[VAR0:.*]]] : memref<8xf32>
-    // VULKAN: [[VAR2:.*]] = memref.load %[[MEMREF1:.*]][[[VAR0:.*]]] : memref<8xf32>
+    // OPENCL: [[VAR1:.*]] = memref.load %[[MEMREF0]][[[VAR0]]] : memref<8xf32>
+    // OPENCL: [[VAR2:.*]] = memref.load %[[MEMREF1]][[[VAR0]]] : memref<8xf32>
+    // VULKAN: [[VAR1:.*]] = memref.load %[[MEMREF0]][[[VAR0]]] : memref<8xf32>
+    // VULKAN: [[VAR2:.*]] = memref.load %[[MEMREF1]][[[VAR0]]] : memref<8xf32>
     %10 = arith.addf %8, %9 : f32
     memref.store %10, %2[%7] : memref<8xf32>
     gpu.terminator

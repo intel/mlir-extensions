@@ -9,26 +9,26 @@ module @eltwise_add attributes {gpu.container_module} {
     %c10 = arith.constant 10 : index
     %c1 = arith.constant 1 : index
     // CHECK: %[[MEMREF:.*]] = gpu.alloc  host_shared () : memref<400xi8>
-    // CHECK: %[[VIEW:.*]] = memref.view %[[MEMREF:.*]][%[[CONST0:.*]]][] : memref<400xi8> to memref<10x20xbf16>
-    // CHECK: %[[VIEW_0:.*]] = memref.view %[[MEMREF:.*]][%[[CONST0:.*]]][] : memref<400xi8> to memref<10x20xi16>
-    // CHECK: memref.copy %arg1, %[[VIEW:.*]] : memref<10x20xbf16> to memref<10x20xbf16>
+    // CHECK: %[[VIEW:.*]] = memref.view %[[MEMREF]][%[[CONST0]]][] : memref<400xi8> to memref<10x20xbf16>
+    // CHECK: %[[VIEW_0:.*]] = memref.view %[[MEMREF]][%[[CONST0]]][] : memref<400xi8> to memref<10x20xi16>
+    // CHECK: memref.copy %arg1, %[[VIEW]] : memref<10x20xbf16> to memref<10x20xbf16>
     %memref = gpu.alloc  host_shared () : memref<10x20xbf16>
     memref.copy %arg1, %memref : memref<10x20xbf16> to memref<10x20xbf16>
     // CHECK: %[[MEMREF_1:.*]] = gpu.alloc  host_shared () : memref<400xi8>
-    // CHECK: %[[VIEW_2:.*]] = memref.view %[[MEMREF_1:.*]][%[[CONST0:.*]]][] : memref<400xi8> to memref<10x20xbf16>
-    // CHECK: %[[VIEW_3:.*]] = memref.view %[[MEMREF_1:.*]][%[[CONST0:.*]]][] : memref<400xi8> to memref<10x20xi16>
-    // CHECK: memref.copy %arg0, %[[VIEW_2:.*]] : memref<10x20xbf16> to memref<10x20xbf16>
+    // CHECK: %[[VIEW_2:.*]] = memref.view %[[MEMREF_1]][%[[CONST0]]][] : memref<400xi8> to memref<10x20xbf16>
+    // CHECK: %[[VIEW_3:.*]] = memref.view %[[MEMREF_1]][%[[CONST0]]][] : memref<400xi8> to memref<10x20xi16>
+    // CHECK: memref.copy %arg0, %[[VIEW_2]] : memref<10x20xbf16> to memref<10x20xbf16>
     %memref_0 = gpu.alloc  host_shared () : memref<10x20xbf16>
     memref.copy %arg0, %memref_0 : memref<10x20xbf16> to memref<10x20xbf16>
     // CHECK: %[[MEMREF_4:.*]] = gpu.alloc  host_shared () : memref<400xi8>
-    // CHECK: %[[VIEW_5:.*]] = memref.view %[[MEMREF_4:.*]][%[[CONST0:.*]]][] : memref<400xi8> to memref<10x20xbf16>
-    // CHECK: %[[VIEW_6:.*]] = memref.view %[[MEMREF_4:.*]][%[[CONST0:.*]]][] : memref<400xi8> to memref<10x20xi16>
+    // CHECK: %[[VIEW_5:.*]] = memref.view %[[MEMREF_4]][%[[CONST0]]][] : memref<400xi8> to memref<10x20xbf16>
+    // CHECK: %[[VIEW_6:.*]] = memref.view %[[MEMREF_4]][%[[CONST0]]][] : memref<400xi8> to memref<10x20xi16>
     %memref_1 = gpu.alloc  host_shared () : memref<10x20xbf16>
-    // CHECK: args(%[[VIEW_3:.*]] : memref<10x20xi16>, %[[VIEW_0:.*]] : memref<10x20xi16>, %[[VIEW_6:.*]] : memref<10x20xi16>)
+    // CHECK: args(%[[VIEW_3]] : memref<10x20xi16>, %[[VIEW_0]] : memref<10x20xi16>, %[[VIEW_6]] : memref<10x20xi16>)
     gpu.launch_func  @test_kernel::@test_kernel blocks in (%c10, %c20, %c1) threads in (%c1, %c1, %c1) args(%memref_0 : memref<10x20xbf16>, %memref : memref<10x20xbf16>, %memref_1 : memref<10x20xbf16>)
-    // CHECK: gpu.dealloc  %[[MEMREF_1:.*]] : memref<400xi8>
-    // CHECK: gpu.dealloc  %[[MEMREF:.*]] : memref<400xi8>
-    // CHECK: return %[[VIEW_5:.*]] : memref<10x20xbf16>
+    // CHECK: gpu.dealloc  %[[MEMREF_1]] : memref<400xi8>
+    // CHECK: gpu.dealloc  %[[MEMREF]] : memref<400xi8>
+    // CHECK: return %[[VIEW_5]] : memref<10x20xbf16>
     gpu.dealloc  %memref_0 : memref<10x20xbf16>
     gpu.dealloc  %memref : memref<10x20xbf16>
     return %memref_1 : memref<10x20xbf16>
@@ -40,17 +40,17 @@ module @eltwise_add attributes {gpu.container_module} {
       %1 = gpu.block_id  y
       // CHECK: %[[VAR2:.*]] = memref.load %arg0[%[[VAR0:.*]], %[[VAR1:.*]]] : memref<10x20xi16>
       %2 = memref.load %arg0[%0, %1] : memref<10x20xbf16>
-      // CHECK: %[[VAR3:.*]] = memref.load %arg1[%[[VAR0:.*]], %[[VAR1:.*]]] : memref<10x20xi16>
+      // CHECK: %[[VAR3:.*]] = memref.load %arg1[%[[VAR0]], %[[VAR1]]] : memref<10x20xi16>
       %3 = memref.load %arg1[%0, %1] : memref<10x20xbf16>
-      // CHECK: %[[VAR4:.*]] = arith.bitcast %[[VAR2:.*]] : i16 to bf16
-      // CHECK: %[[VAR5:.*]] = arith.extf %[[VAR4:.*]] : bf16 to f32
-      // CHECK: %[[VAR6:.*]] = arith.bitcast %[[VAR3:.*]] : i16 to bf16
-      // CHECK: %[[VAR7:.*]] = arith.extf %[[VAR6:.*]] : bf16 to f32
-      // CHECK: %[[VAR8:.*]] = arith.addf %[[VAR5:.*]], %[[VAR7:.*]] : f32
-      // CHECK: %[[VAR9:.*]] = arith.truncf %[[VAR8:.*]] : f32 to bf16
-      // CHECK: %[[VAR10:.*]] = arith.bitcast %[[VAR9:.*]] : bf16 to i16
+      // CHECK: %[[VAR4:.*]] = arith.bitcast %[[VAR2]] : i16 to bf16
+      // CHECK: %[[VAR5:.*]] = arith.extf %[[VAR4]] : bf16 to f32
+      // CHECK: %[[VAR6:.*]] = arith.bitcast %[[VAR3]] : i16 to bf16
+      // CHECK: %[[VAR7:.*]] = arith.extf %[[VAR6]] : bf16 to f32
+      // CHECK: %[[VAR8:.*]] = arith.addf %[[VAR5]], %[[VAR7]] : f32
+      // CHECK: %[[VAR9:.*]] = arith.truncf %[[VAR8]] : f32 to bf16
+      // CHECK: %[[VAR10:.*]] = arith.bitcast %[[VAR9]] : bf16 to i16
       %4 = arith.addf %2, %3 : bf16
-      // CHECK: memref.store %[[VAR10:.*]], %arg2[%[[VAR0:.*]], %[[VAR1:.*]]] : memref<10x20xi16>
+      // CHECK: memref.store %[[VAR10]], %arg2[%[[VAR0]], %[[VAR1]]] : memref<10x20xi16>
       memref.store %4, %arg2[%0, %1] : memref<10x20xbf16>
       gpu.return
     }

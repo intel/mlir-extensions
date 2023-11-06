@@ -20,28 +20,28 @@ module @gemm attributes {gpu.container_module} {
     %c1 = arith.constant 1 : index
     %c0 = arith.constant 0 : index
     // CHECK: %[[MEMREF:.*]] = gpu.alloc  host_shared () : memref<18xi8>
-    // CHECK: %[[VIEW:.*]] = memref.view %[[MEMREF:.*]][%[[CONST0:.*]]][] : memref<18xi8> to memref<3x3xbf16>
-    // CHECK: %[[VIEW_0:.*]] = memref.view %[[MEMREF:.*]][%[[CONST0:.*]]][] : memref<18xi8> to memref<3x3xi16>
-    // CHECK: memref.copy %arg1, %[[VIEW:.*]] : memref<3x3xbf16> to memref<3x3xbf16>
+    // CHECK: %[[VIEW:.*]] = memref.view %[[MEMREF]][%[[CONST0]]][] : memref<18xi8> to memref<3x3xbf16>
+    // CHECK: %[[VIEW_0:.*]] = memref.view %[[MEMREF]][%[[CONST0]]][] : memref<18xi8> to memref<3x3xi16>
+    // CHECK: memref.copy %arg1, %[[VIEW]] : memref<3x3xbf16> to memref<3x3xbf16>
     %memref = gpu.alloc  host_shared () : memref<3x3xbf16>
     memref.copy %arg1, %memref : memref<3x3xbf16> to memref<3x3xbf16>
     // CHECK: %[[MEMREF_1:.*]] = gpu.alloc  host_shared () : memref<18xi8>
-    // CHECK: %[[VIEW_2:.*]] = memref.view %[[MEMREF_1:.*]][%[[CONST0:.*]]][] : memref<18xi8> to memref<3x3xbf16>
-    // CHECK: %[[VIEW_3:.*]] = memref.view %[[MEMREF_1:.*]][%[[CONST0:.*]]][] : memref<18xi8> to memref<3x3xi16>
-    // CHECK: memref.copy %arg0, %[[VIEW_2:.*]] : memref<3x3xbf16> to memref<3x3xbf16>
+    // CHECK: %[[VIEW_2:.*]] = memref.view %[[MEMREF_1]][%[[CONST0]]][] : memref<18xi8> to memref<3x3xbf16>
+    // CHECK: %[[VIEW_3:.*]] = memref.view %[[MEMREF_1]][%[[CONST0]]][] : memref<18xi8> to memref<3x3xi16>
+    // CHECK: memref.copy %arg0, %[[VIEW_2]] : memref<3x3xbf16> to memref<3x3xbf16>
     %memref_0 = gpu.alloc  host_shared () : memref<3x3xbf16>
     memref.copy %arg0, %memref_0 : memref<3x3xbf16> to memref<3x3xbf16>
     // CHECK: %[[MEMREF_4:.*]] = gpu.alloc  host_shared () : memref<18xi8>
-    // CHECK: %[[VIEW_5:.*]] = memref.view %[[MEMREF_1:.*]][%[[CONST0:.*]]][] : memref<18xi8> to memref<3x3xbf16>
-    // CHECK: %[[VIEW_6:.*]] = memref.view %[[MEMREF_1:.*]][%[[CONST0:.*]]][] : memref<18xi8> to memref<3x3xi16>
-    // CHECK: memref.copy %arg2, %[[VIEW_5:.*]] : memref<3x3xbf16> to memref<3x3xbf16>
+    // CHECK: %[[VIEW_5:.*]] = memref.view %[[MEMREF_1]][%[[CONST0]]][] : memref<18xi8> to memref<3x3xbf16>
+    // CHECK: %[[VIEW_6:.*]] = memref.view %[[MEMREF_1]][%[[CONST0]]][] : memref<18xi8> to memref<3x3xi16>
+    // CHECK: memref.copy %arg2, %[[VIEW_5]] : memref<3x3xbf16> to memref<3x3xbf16>
     %memref_1 = gpu.alloc  host_shared () : memref<3x3xbf16>
     memref.copy %arg2, %memref_1 : memref<3x3xbf16> to memref<3x3xbf16>
-    // CHECK: args(%[[VIEW_3:.*]] : memref<3x3xi16>, %[[VIEW_0:.*]] : memref<3x3xi16>, %[[VIEW_6:.*]] : memref<3x3xi16>
+    // CHECK: args(%[[VIEW_3]] : memref<3x3xi16>, %[[VIEW_0]] : memref<3x3xi16>, %[[VIEW_6]] : memref<3x3xi16>
     gpu.launch_func  @test_kernel::@test_kernel blocks in (%c3, %c3, %c1) threads in (%c1, %c1, %c1) args(%memref_0 : memref<3x3xbf16>, %memref : memref<3x3xbf16>, %memref_1 : memref<3x3xbf16>, %c0 : index, %c3 : index, %c1 : index)
-    // CHECK: gpu.dealloc  %[[MEMREF_1:.*]] : memref<18xi8>
-    // CHECK: gpu.dealloc  %[[MEMREF:.*]] : memref<18xi8>
-    // CHECK: return %[[VIEW_5:.*]] : memref<3x3xbf16>
+    // CHECK: gpu.dealloc  %[[MEMREF_1]] : memref<18xi8>
+    // CHECK: gpu.dealloc  %[[MEMREF]] : memref<18xi8>
+    // CHECK: return %[[VIEW_5]] : memref<3x3xbf16>
     gpu.dealloc  %memref_0 : memref<3x3xbf16>
     gpu.dealloc  %memref : memref<3x3xbf16>
     return %memref_1 : memref<3x3xbf16>
@@ -54,25 +54,25 @@ module @gemm attributes {gpu.container_module} {
       scf.for %arg6 = %arg3 to %arg4 step %arg5 {
         // CHECK: %[[VAR2:.*]] = memref.load %arg0[%[[VAR0:.*]], %arg6] : memref<3x3xi16>
         // CHECK: %[[VAR3:.*]] = memref.load %arg1[%arg6, %[[VAR1:.*]]] : memref<3x3xi16>
-        // CHECK: %[[VAR4:.*]] = memref.load %arg2[%[[VAR0:.*]], %[[VAR1:.*]]] : memref<3x3xi16>
+        // CHECK: %[[VAR4:.*]] = memref.load %arg2[%[[VAR0]], %[[VAR1]]] : memref<3x3xi16>
         %2 = memref.load %arg0[%0, %arg6] : memref<3x3xbf16>
         %3 = memref.load %arg1[%arg6, %1] : memref<3x3xbf16>
         %4 = memref.load %arg2[%0, %1] : memref<3x3xbf16>
-        // CHECK: %[[VAR5:.*]] = arith.bitcast %[[VAR2:.*]] : i16 to bf16
-        // CHECK: %[[VAR6:.*]] = arith.extf %[[VAR5:.*]] : bf16 to f32
-        // CHECK: %[[VAR7:.*]] = arith.bitcast %[[VAR3:.*]] : i16 to bf16
-        // CHECK: %[[VAR8:.*]] = arith.extf %[[VAR7:.*]] : bf16 to f32
-        // CHECK: %[[VAR9:.*]] = arith.mulf %[[VAR6:.*]], %[[VAR8:.*]] : f32
-        // CHECK: %[[VAR10:.*]] = arith.truncf %[[VAR9:.*]] : f32 to bf16
+        // CHECK: %[[VAR5:.*]] = arith.bitcast %[[VAR2]] : i16 to bf16
+        // CHECK: %[[VAR6:.*]] = arith.extf %[[VAR5]] : bf16 to f32
+        // CHECK: %[[VAR7:.*]] = arith.bitcast %[[VAR3]] : i16 to bf16
+        // CHECK: %[[VAR8:.*]] = arith.extf %[[VAR7]] : bf16 to f32
+        // CHECK: %[[VAR9:.*]] = arith.mulf %[[VAR6]], %[[VAR8]] : f32
+        // CHECK: %[[VAR10:.*]] = arith.truncf %[[VAR9]] : f32 to bf16
         %5 = arith.mulf %2, %3 : bf16
-        // CHECK: %[[VAR11:.*]] = arith.bitcast %[[VAR4:.*]] : i16 to bf16
-        // CHECK: %[[VAR12:.*]] = arith.extf %[[VAR11:.*]] : bf16 to f32
-        // CHECK: %[[VAR13:.*]] = arith.extf %[[VAR10:.*]] : bf16 to f32
-        // CHECK: %[[VAR14:.*]] = arith.addf %[[VAR12:.*]], %[[VAR13:.*]] : f32
-        // CHECK: %[[VAR15:.*]] = arith.truncf %[[VAR14:.*]] : f32 to bf16
-        // CHECK: %[[VAR16:.*]] = arith.bitcast %[[VAR15:.*]] : bf16 to i16
+        // CHECK: %[[VAR11:.*]] = arith.bitcast %[[VAR4]] : i16 to bf16
+        // CHECK: %[[VAR12:.*]] = arith.extf %[[VAR11]] : bf16 to f32
+        // CHECK: %[[VAR13:.*]] = arith.extf %[[VAR10]] : bf16 to f32
+        // CHECK: %[[VAR14:.*]] = arith.addf %[[VAR12]], %[[VAR13]] : f32
+        // CHECK: %[[VAR15:.*]] = arith.truncf %[[VAR14]] : f32 to bf16
+        // CHECK: %[[VAR16:.*]] = arith.bitcast %[[VAR15]] : bf16 to i16
         %6 = arith.addf %4, %5 : bf16
-        // CHECK: memref.store %[[VAR16:.*]], %arg2[%[[VAR0:.*]], %[[VAR1:.*]]] : memref<3x3xi16>
+        // CHECK: memref.store %[[VAR16]], %arg2[%[[VAR0]], %[[VAR1]]] : memref<3x3xi16>
         memref.store %6, %arg2[%0, %1] : memref<3x3xbf16>
       }
       gpu.return
