@@ -15,17 +15,17 @@ func.func @addt(%arg0: memref<2x5xf32>, %arg1: memref<2x5xf32>) -> memref<2x5xf3
   %1 = memref.get_global @__constant_2x5xf32_0 : memref<2x5xf32>
   %2 = memref.alloc() {alignment = 128 : i64} : memref<2x5xf32>
 
-  // OPENCL: [[VAR0:.*]] = memref.get_global @__constant_2x5xf32 : memref<2x5xf32>
+  // OPENCL: [[VAR0:%.*]] = memref.get_global @__constant_2x5xf32 : memref<2x5xf32>
   // OPENCL: %[[MEMREF0:.*]] = gpu.alloc host_shared () : memref<2x5xf32>
   // OPENCL: memref.copy [[VAR0]], %[[MEMREF0]] : memref<2x5xf32> to memref<2x5xf32>
-  // OPENCL: [[VAR1:.*]] = memref.get_global @__constant_2x5xf32_0 : memref<2x5xf32>
+  // OPENCL: [[VAR1:%.*]] = memref.get_global @__constant_2x5xf32_0 : memref<2x5xf32>
   // OPENCL: %[[MEMREF1:.*]] = gpu.alloc host_shared () : memref<2x5xf32>
   // OPENCL: memref.copy [[VAR1]], %[[MEMREF1]] : memref<2x5xf32> to memref<2x5xf32>
   // OPENCL: %[[MEMREF2:.*]] = gpu.alloc host_shared () : memref<2x5xf32>
-  // VULKAN: [[VAR0:.*]] = memref.get_global @__constant_2x5xf32 : memref<2x5xf32>
+  // VULKAN: [[VAR0:%.*]] = memref.get_global @__constant_2x5xf32 : memref<2x5xf32>
   // VULKAN: %[[MEMREF0:.*]] = memref.alloc() : memref<2x5xf32>
   // VULKAN: memref.copy [[VAR0]], %[[MEMREF0]] : memref<2x5xf32> to memref<2x5xf32>
-  // VULKAN: [[VAR1:.*]] = memref.get_global @__constant_2x5xf32_0 : memref<2x5xf32>
+  // VULKAN: [[VAR1:%.*]] = memref.get_global @__constant_2x5xf32_0 : memref<2x5xf32>
   // VULKAN: %[[MEMREF1:.*]] = memref.alloc() : memref<2x5xf32>
   // VULKAN: memref.copy [[VAR1]], %[[MEMREF1]] : memref<2x5xf32> to memref<2x5xf32>
 
@@ -42,10 +42,10 @@ func.func @addt(%arg0: memref<2x5xf32>, %arg1: memref<2x5xf32>) -> memref<2x5xf3
     %7 = memref.load %0[%5, %6] : memref<2x5xf32>
     %8 = memref.load %1[%5, %6] : memref<2x5xf32>
 
-    // OPENCL: [[VAR2:.*]] = memref.load %[[MEMREF0]][%4, %5] : memref<2x5xf32>
-    // OPENCL: [[VAR3:.*]] = memref.load %[[MEMREF1]][%4, %5] : memref<2x5xf32>
-    // VULKAN: [[VAR2:.*]] = memref.load %[[MEMREF0]][%4, %5] : memref<2x5xf32>
-    // VULKAN: [[VAR3:.*]] = memref.load %[[MEMREF1]][%4, %5] : memref<2x5xf32>
+    // OPENCL: [[VAR2:%.*]] = memref.load %[[MEMREF0]][%4, %5] : memref<2x5xf32>
+    // OPENCL: [[VAR3:%.*]] = memref.load %[[MEMREF1]][%4, %5] : memref<2x5xf32>
+    // VULKAN: [[VAR2:%.*]] = memref.load %[[MEMREF0]][%4, %5] : memref<2x5xf32>
+    // VULKAN: [[VAR3:%.*]] = memref.load %[[MEMREF1]][%4, %5] : memref<2x5xf32>
 
     %9 = arith.addf %7, %8 : f32
     memref.store %9, %2[%5, %6] : memref<2x5xf32>

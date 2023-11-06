@@ -20,7 +20,7 @@ module @gemm attributes {gpu.container_module} {
     %c1 = arith.constant 1 : index
     %c0 = arith.constant 0 : index
     // CHECK: %[[MEMREF:.*]] = gpu.alloc  host_shared () : memref<18xi8>
-    // CHECK: %[[VIEW:.*]] = memref.view %[[MEMREF]][%[[CONST0]]][] : memref<18xi8> to memref<3x3xbf16>
+    // CHECK: %[[VIEW:.*]] = memref.view %[[MEMREF]][%[[CONST0:.*]]][] : memref<18xi8> to memref<3x3xbf16>
     // CHECK: %[[VIEW_0:.*]] = memref.view %[[MEMREF]][%[[CONST0]]][] : memref<18xi8> to memref<3x3xi16>
     // CHECK: memref.copy %arg1, %[[VIEW]] : memref<3x3xbf16> to memref<3x3xbf16>
     %memref = gpu.alloc  host_shared () : memref<3x3xbf16>
@@ -32,8 +32,8 @@ module @gemm attributes {gpu.container_module} {
     %memref_0 = gpu.alloc  host_shared () : memref<3x3xbf16>
     memref.copy %arg0, %memref_0 : memref<3x3xbf16> to memref<3x3xbf16>
     // CHECK: %[[MEMREF_4:.*]] = gpu.alloc  host_shared () : memref<18xi8>
-    // CHECK: %[[VIEW_5:.*]] = memref.view %[[MEMREF_1]][%[[CONST0]]][] : memref<18xi8> to memref<3x3xbf16>
-    // CHECK: %[[VIEW_6:.*]] = memref.view %[[MEMREF_1]][%[[CONST0]]][] : memref<18xi8> to memref<3x3xi16>
+    // CHECK: %[[VIEW_5:.*]] = memref.view %[[MEMREF_4]][%[[CONST0]]][] : memref<18xi8> to memref<3x3xbf16>
+    // CHECK: %[[VIEW_6:.*]] = memref.view %[[MEMREF_4]][%[[CONST0]]][] : memref<18xi8> to memref<3x3xi16>
     // CHECK: memref.copy %arg2, %[[VIEW_5]] : memref<3x3xbf16> to memref<3x3xbf16>
     %memref_1 = gpu.alloc  host_shared () : memref<3x3xbf16>
     memref.copy %arg2, %memref_1 : memref<3x3xbf16> to memref<3x3xbf16>

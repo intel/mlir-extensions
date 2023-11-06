@@ -6,11 +6,11 @@ func.func @addt(%arg0: memref<2x5xf32>, %arg1: memref<?x?xf32>) -> memref<2x5xf3
   %c2 = arith.constant 2 : index
   %c1 = arith.constant 1 : index
   %c5 = arith.constant 5 : index
-  // OPENCL: [[VAR0:.*]] = memref.dim %arg1, %c0 : memref<?x?xf32>
-  // OPENCL: [[VAR1:.*]] = memref.dim %arg1, %c1 : memref<?x?xf32>
+  // OPENCL: [[VAR0:%.*]] = memref.dim %arg1, %c0 : memref<?x?xf32>
+  // OPENCL: [[VAR1:%.*]] = memref.dim %arg1, %c1 : memref<?x?xf32>
   // OPENCL: %[[MEMREF0:.*]] = gpu.alloc host_shared ([[VAR0]], [[VAR1]]) : memref<?x?xf32>
-  // VULKAN: [[VAR0:.*]] = memref.dim %arg1, %c0 : memref<?x?xf32>
-  // VULKAN: [[VAR1:.*]] = memref.dim %arg1, %c1 : memref<?x?xf32>
+  // VULKAN: [[VAR0:%.*]] = memref.dim %arg1, %c0 : memref<?x?xf32>
+  // VULKAN: [[VAR1:%.*]] = memref.dim %arg1, %c1 : memref<?x?xf32>
   // VULKAN: %[[MEMREF0:.*]] = memref.alloc([[VAR0]], [[VAR1]]) : memref<?x?xf32>
   %0 = memref.alloc() {alignment = 128 : i64} : memref<2x5xf32>
   %c1_0 = arith.constant 1 : index

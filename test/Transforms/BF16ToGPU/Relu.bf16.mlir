@@ -29,7 +29,7 @@ module @relu attributes {gpu.container_module} {
     // CHECK: %[[VIEW_3:.*]] = memref.view %[[MEMREF_2]][%c0][] : memref<40xi8> to memref<4x5xbf16>
     // CHECK: %[[VIEW_4:.*]] = memref.view %[[MEMREF_2]][%c0][] : memref<40xi8> to memref<4x5xi16>
     %memref_1 = gpu.alloc  host_shared () : memref<4x5xbf16>
-    // CHECK: args(%[[MEMREF_1]] : memref<4x5xi1>, %[[VIEW_0]] : memref<4x5xi16>, %[[CONST0_I16]] : i16, %[[VIEW_4]] : memref<4x5xi16>)
+    // CHECK: args(%[[MEMREF_1:.*]] : memref<4x5xi1>, %[[VIEW_0]] : memref<4x5xi16>, %[[CONST0_I16]] : i16, %[[VIEW_4]] : memref<4x5xi16>)
     gpu.launch_func  @test_kernel_0::@test_kernel blocks in (%c4, %c5, %c1) threads in (%c1, %c1, %c1) args(%memref_0 : memref<4x5xi1>, %memref : memref<4x5xbf16>, %cst : bf16, %memref_1 : memref<4x5xbf16>)
     gpu.dealloc  %memref_0 : memref<4x5xi1>
     // CHECK: gpu.dealloc  %[[MEMREF]] : memref<40xi8>
@@ -42,7 +42,7 @@ module @relu attributes {gpu.container_module} {
     gpu.func @test_kernel(%arg0: memref<4x5xbf16>, %arg1: bf16, %arg2: memref<4x5xi1>) kernel attributes {gpu.known_block_size = array<i32: 1, 1, 1>, gpu.known_grid_size = array<i32: 4, 5, 1>, spirv.entry_point_abi = #spirv.entry_point_abi<>} {
       %0 = gpu.block_id  x
       %1 = gpu.block_id  y
-      // CHECK: %[[VAR2_1:.*]] = memref.load %arg0[%[[VAR0_1]], %[[VAR1_1]]] : memref<4x5xi16>
+      // CHECK: %[[VAR2_1:.*]] = memref.load %arg0[%[[VAR0_1:.*]], %[[VAR1_1:.*]]] : memref<4x5xi16>
       %2 = memref.load %arg0[%0, %1] : memref<4x5xbf16>
       // CHECK: %[[VAR3_1:.*]] = arith.bitcast %[[VAR2_1]] : i16 to bf16
       // CHECK: %[[VAR4_1:.*]] = arith.extf %[[VAR3_1]] : bf16 to f32
@@ -60,13 +60,13 @@ module @relu attributes {gpu.container_module} {
       %0 = gpu.block_id  x
       %1 = gpu.block_id  y
       %2 = memref.load %arg0[%0, %1] : memref<4x5xi1>
-      // CHECK: %[[VAR3_2:.*]] = memref.load %arg1[%[[VAR0_2]], %[[VAR1_2]]] : memref<4x5xi16>
+      // CHECK: %[[VAR3_2:.*]] = memref.load %arg1[%[[VAR0_2:.*]], %[[VAR1_2:.*]]] : memref<4x5xi16>
       %3 = memref.load %arg1[%0, %1] : memref<4x5xbf16>
       // CHECK: %[[VAR4_2:.*]] = arith.bitcast %arg2 : i16 to bf16
       // CHECK: %[[VAR5_2:.*]] = arith.extf %[[VAR4_2]] : bf16 to f32
       // CHECK: %[[VAR6_2:.*]] = arith.bitcast %[[VAR3_2]] : i16 to bf16
       // CHECK: %[[VAR7_2:.*]] = arith.extf %[[VAR6_2]] : bf16 to f32
-      // CHECK: %[[VAR8_2:.*]] = arith.select %[[VAR2_2]], %[[VAR5_2]], %[[VAR7_2]] : f32
+      // CHECK: %[[VAR8_2:.*]] = arith.select %[[VAR2_2:.*]], %[[VAR5_2]], %[[VAR7_2]] : f32
       // CHECK: %[[VAR9_2:.*]] = arith.truncf %[[VAR8_2]] : f32 to bf16
       // CHECK: %[[VAR10_2:.*]] = arith.bitcast %[[VAR9_2]] : bf16 to i16
       %4 = arith.select %2, %arg2, %3 : bf16

@@ -19,10 +19,10 @@ func.func @main() {
     // OPENCL: gpu.launch {{.*}}
     // VULKAN: gpu.launch {{.*}}
     %7 = gpu.block_id  x
-    // OPENCL: [[VAR0:.*]] = gpu.block_id  x
-    // VULKAN: [[VAR0:.*]] = gpu.block_id  x
+    // OPENCL: [[VAR0:%.*]] = gpu.block_id  x
+    // VULKAN: [[VAR0:%.*]] = gpu.block_id  x
 
-    // OPENCL: [[VAR1:.*]] = memref.load %[[MEMREF]][[[VAR0:.*]]] : memref<8xf32>
+    // OPENCL: [[VAR1:%.*]] = memref.load %[[MEMREF]][[[VAR0]]] : memref<8xf32>
     %8 = memref.load %0[%7] : memref<8xf32>
     %9 = memref.load %1[%7] : memref<8xf32>
     %10 = func.call @addf(%8, %9) : (f32, f32) -> f32

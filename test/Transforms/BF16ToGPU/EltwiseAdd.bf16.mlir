@@ -9,7 +9,7 @@ module @eltwise_add attributes {gpu.container_module} {
     %c10 = arith.constant 10 : index
     %c1 = arith.constant 1 : index
     // CHECK: %[[MEMREF:.*]] = gpu.alloc  host_shared () : memref<400xi8>
-    // CHECK: %[[VIEW:.*]] = memref.view %[[MEMREF]][%[[CONST0]]][] : memref<400xi8> to memref<10x20xbf16>
+    // CHECK: %[[VIEW:.*]] = memref.view %[[MEMREF]][%[[CONST0:.*]]][] : memref<400xi8> to memref<10x20xbf16>
     // CHECK: %[[VIEW_0:.*]] = memref.view %[[MEMREF]][%[[CONST0]]][] : memref<400xi8> to memref<10x20xi16>
     // CHECK: memref.copy %arg1, %[[VIEW]] : memref<10x20xbf16> to memref<10x20xbf16>
     %memref = gpu.alloc  host_shared () : memref<10x20xbf16>
