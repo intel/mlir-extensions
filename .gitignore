@@ -9,6 +9,7 @@ _install/
 cmake-build-debug/
 cmake-build-release/
 .github/
+dev_scripts/
 
 compile_commands.json
 *~
