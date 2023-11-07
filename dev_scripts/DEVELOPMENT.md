@@ -13,7 +13,7 @@ $> ./dev_scripts/prepare_upstream.sh
 
 Step 3: Push the new branch to public repo “main”.
 ```
-$> git push origin foo_for_upstream:main
+$> git push upstream foo_for_upstream:main
 ```
 
 Step 4: Delete the new branch.
