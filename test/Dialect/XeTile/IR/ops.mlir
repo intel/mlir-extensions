@@ -111,19 +111,6 @@ func.func @test_init_tile_using_addr(%src: i64, %dim0_size : index, %dim1_size :
   return
 }
 
-// CHECK-LABEL: func @test_init_coop_tile({{.*}}) {
-func.func @test_init_coop_tile(%src: !xetile.tile<64x64xf16>) {
-  %c0 = arith.constant 0 : index
-  %c1 = arith.constant 64 : index
-
-  // CHECK: xetile.init_coop_tile
-  // CHECK-SAME: !xetile.tile<64x64xf16>, index, index -> !xetile.tile<8x8xf16>
-  %1 = xetile.init_coop_tile %src, %c0, %c1
-    : !xetile.tile<64x64xf16>, index, index -> !xetile.tile<8x8xf16>
-
-  return
-}
-
 
 // CHECK-LABEL: func @test_load_tile({{.*}}) {
 func.func @test_load_tile(%src: !xetile.tile<64x32xf16>, %src1 : !xetile.tile<128x128xf16, #xe_map>) {
@@ -180,19 +167,12 @@ func.func @test_store_tile(%value1 : vector<64x32xf16>,
   return
 }
 
-// CHECK-LABEL: func @test_coop_prefetch_tile({{.*}}) {
-func.func @test_coop_prefetch_tile(%src: !xetile.tile<64x64xf16>) {
-  %c0 = arith.constant 0 : index
-  %c1 = arith.constant 64 : index
-
-  // CHECK: xetile.init_coop_tile
-  // CHECK-SAME: !xetile.tile<64x64xf16>, index, index -> !xetile.tile<8x8xf16>
-  %1 = xetile.init_coop_tile %src, %c0, %c1
-    : !xetile.tile<64x64xf16>, index, index -> !xetile.tile<8x8xf16>
+// CHECK-LABEL: func @test_prefetch_tile({{.*}}) {
+func.func @test_prefetch_tile(%src: !xetile.tile<64x64xf16>) {
 
   // CHECK: xetile.prefetch_tile
-  // CHECK-SAME: (!xetile.tile<8x8xf16>)
-  xetile.prefetch_tile %1 : (!xetile.tile<8x8xf16>)
+  // CHECK-SAME: !xetile.tile<64x64xf16>
+  xetile.prefetch_tile %src : !xetile.tile<64x64xf16>
 
   return
 }

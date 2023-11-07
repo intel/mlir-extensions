@@ -206,40 +206,6 @@ def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments]>
 
 }
 
-def XeTile_InitCoopTileOp : XeTile_Op<"init_coop_tile", [Pure]> {
-    let summary = "splits XeTile into multiple smaller tiles for cooprative work among subgroups";
-    let description = [{
-        The "init_coop_tile" operation splits an XeTile among multiple subgroups within the same
-        workgroup. This enables cooperative work among the subgroups such as cooperative prefetch,
-        load A or B matrices. Subgroups within the same workgroup share the memory accesses.
-
-        This operation has the following arguments:
-        * source : this is the XeTile that will be split among subgroups
-        * coop_id : ID assigned to each subgroup
-        * coop_size : size assigned to each subgroup
-
-        Example 1:
-
-        ```mlir
-        %1 = xetile.init_coop_tile %src, 0, 64
-            : tile<64x64xf32>, index, index -> tile<8x8xf32>
-        ```
-    }];
-
-    let arguments = (ins
-        XeTile: $source,
-        Index: $coop_id,
-        Index: $coop_size);
-    let results = (outs XeTile: $result);
-
-    let assemblyFormat = [{
-        $source `,` ` ` $coop_id `,` ` ` $coop_size attr-dict
-        `:` qualified(type($source)) `,` qualified(type($coop_id))   `,` qualified(type($coop_size))
-        `->` qualified(type($result))
-    }];
-
-}
-
 def XeTile_LoadTileOp : XeTile_Op<"load_tile", []> {
     let summary = "Loads a tile into a register region";
     let description = [{
@@ -339,19 +305,17 @@ def XeTile_StoreTileOp : XeTile_Op<"store_tile", []> {
 def XeTile_PrefetchTileOp : XeTile_Op<"prefetch_tile", []> {
     let summary = "preftech tiles into cache cooperatively";
     let description = [{
-        "preftech_tile" operation can be used to prefetch smaller tiles into the cache.
-        A larger tile can be split into smaller tiles using the init_coop_tile operation and
-        then the resulting smaller tiles can be passed into this operation for prefetching.
+        "preftech_tile" operation can be used to  smaller tiles into the cache.
 
         This operation takes following arguments:
         * tile : tile to prefetch into the cache
 
         Example 1:
         ```mlir
-            %1 = xetile.init_coop_tile %src, %c0, %c1
-                : tile<64x64xf32>, index, index -> tile<8x8xf32>
+            %1 = memref.alloc() : memref<1024x1024xf16>
+            %2 = xetile.init_tile %src[0, 0] : !xetile.tile<128x128xf16>
 
-            xetile.prefetch_tile %1 : (tile<8x8xf32>)
+            xetile.prefetch_tile %2 : tile<8x8xf32>
 
         ```
 
@@ -360,7 +324,7 @@ def XeTile_PrefetchTileOp : XeTile_Op<"prefetch_tile", []> {
     let arguments = (ins XeTile:$tile);
 
     let assemblyFormat = [{
-        $tile attr-dict `:` `(` qualified(type($tile)) `)`
+        $tile attr-dict `:`  qualified(type($tile))
     }];
 }
 
@@ -409,8 +373,8 @@ def XeTile_TileMMAOp : XeTile_Op<"tile_mma", [Pure]> {
     let results = (outs XeTile_2DOr4DVector: $output);
 
     // let assemblyFormat = [{
-    //     $a`,` ` `$b (`,` ` `$c^)? attr-dict `:` `(`qualified(type($a))`,` ` `qualified(type($b))
-    //         (`,` ` `qualified(type($c))^)?`)` `->` qualified(type($output))
+    //     $a`,` ` `$b (`,` ` `$c^)? attr-dict `:` qualified(type($a))`,` ` `qualified(type($b))
+    //         (`,` ` `qualified(type($c))^)? `->` qualified(type($output))
     // }];
 
     let hasCustomAssemblyFormat = true;
