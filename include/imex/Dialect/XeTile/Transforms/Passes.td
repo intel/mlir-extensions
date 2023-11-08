@@ -17,23 +17,17 @@
 
 include "mlir/Pass/PassBase.td"
 
-//===----------------------------------------------------------------------===//
-// XeTileToXeGPU pass
-//===----------------------------------------------------------------------===//
+def XeTileTiling : Pass<"xetile-tiling", "::mlir::ModuleOp">{
+  let summary = "transform XeTile large tiles(input) into register region block layout";
 
-// def XeTileToXeGPU: Pass<"xetile-xegpu", "::mlir::func::FuncOp"> {
-//   let summary = "Add a pass for lowering XeTile dialect ops to XeGPU";
-//   let description = [{
-//
-//     #### Input invariant
-//
-//
-//     #### Output IR
-//
-//   }];
-//   let constructor = "::imex::createXeTileToXeGPUPass()";
-//   let dependentDialects = ["::imex::xetile::XeTileDialect"];
-//   let options = [];
-// }
+  let description = [{
+    This pass transforms XeTile large tiles smaller tiles with blocked layout to map to register region.
+    This blocked layout is represented by high dimension vectors, inner dimension matches to DPAS size
+    config, This lowers 2D vector to 4D vector.
+  }];
+
+  let constructor = "imex::createXeTileTilingPass()";
+  let dependentDialects = ["::imex::xetile::XeTileDialect"];
+}
 
 #endif // _XeTile_PASSES_TD_INCLUDED_

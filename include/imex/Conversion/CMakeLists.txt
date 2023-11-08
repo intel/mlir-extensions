@@ -6,3 +6,4 @@ add_public_tablegen_target(IMEXConversionPassIncGen)
 
 add_mlir_doc(Passes IMEXConversionPasses ./ -gen-pass-doc)
 add_subdirectory(DistToStandard)
+add_subdirectory(XeTileToXeGPU)

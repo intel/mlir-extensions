@@ -441,7 +441,7 @@ def XeGPU_DpasOp : XeGPU_Op<"dpas"> {
   );
   let results = (outs XeGPU_Vector2DType: $result);
   let assemblyFormat = [{
-     $lhs `,` $rhs (`,` $acc^)? (`{` `mode` `=` $mode^ `}`)? attr-dict `:`
+     $lhs `,` $rhs (`,` $acc^)? (` ``{` `mode` `=` $mode^ `}`)? attr-dict `:`
      qualified(type($lhs)) `,` qualified(type($rhs)) (`,` qualified(type($acc))^)? `->` qualified(type($result))
   }];
 

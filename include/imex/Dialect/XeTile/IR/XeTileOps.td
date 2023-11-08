@@ -328,7 +328,7 @@ def XeTile_PrefetchTileOp : XeTile_Op<"prefetch_tile", []> {
     }];
 }
 
-def XeTile_TileMMAOp : XeTile_Op<"tile_mma", [Pure]> {
+def XeTile_TileMMAOp : XeTile_Op<"tile_mma", []> {
     let summary = "matrix multiplication in blocked layout";
     let description = [{
         "tile_mma" operation represents matrix multiplication on 2D or 4D vectors. This operation

@@ -108,5 +108,4 @@ def BF16ToGPU : Pass<"bf16-to-gpu", "::mlir::ModuleOp"> {
     "::mlir::arith::ArithDialect"
     ];
 }
-
 #endif // _IMEX_TRANSFORMS_PASSES_TD_INCLUDED_

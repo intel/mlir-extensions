@@ -28,16 +28,17 @@ class RewritePatternSet;
 
 namespace imex {
 
+class XeTypeConverter;
+
 //===----------------------------------------------------------------------===//
 /// XeTile passes.
 //===----------------------------------------------------------------------===//
 
-/// Create a pass for converting XeTile Ops to XeGPU Ops
-std::unique_ptr<::mlir::Pass> createXeTileToXeGPUPass();
+std::unique_ptr<mlir::Pass> createXeTileTilingPass();
 
-/// Populate the given list with patterns that eliminate XeTile ops
-void populateXeTileToXeGPUPatterns(::mlir::LLVMTypeConverter &converter,
-                                   ::mlir::RewritePatternSet &patterns);
+///
+void populateXeTileTilingPatterns(imex::XeTypeConverter &converter,
+                                  mlir::RewritePatternSet &patterns);
 
 //===----------------------------------------------------------------------===//
 // Registration
