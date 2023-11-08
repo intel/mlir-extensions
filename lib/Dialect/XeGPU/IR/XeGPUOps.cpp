@@ -27,7 +27,7 @@
 #include <numeric>
 #include <type_traits>
 
-#include "imex/Utils/XeUtils.h"
+#include "imex/Utils/DebugUtils.h"
 
 #define DEBUG_TYPE "xegpu"
 
@@ -71,8 +71,8 @@ static void transpose(llvm::ArrayRef<int64_t> trans,
 };
 
 static bool isMappingAttr(mlir::Attribute attr) {
-  return attr && (llvm::isa<imex::xegpu::SgMapAttr>(attr) ||
-                  llvm::isa<imex::xegpu::WgMapAttr>(attr) ||
+  return attr && (llvm::isa<imex::xegpu::SubGroupMapAttr>(attr) ||
+                  llvm::isa<imex::xegpu::WorkGroupMapAttr>(attr) ||
                   llvm::isa<imex::xegpu::XeMapAttr>(attr));
 }
 
@@ -614,8 +614,8 @@ mlir::LogicalResult LoadNDOp::verify() {
   auto valueShape = valueTy.getShape().vec();
 
   if (mode == imex::xegpu::Mode::SIMT) {
-    imex::xegpu::WgMapAttr wgMap;
-    imex::xegpu::SgMapAttr sgMap;
+    imex::xegpu::WorkGroupMapAttr wgMap;
+    imex::xegpu::SubGroupMapAttr sgMap;
 
     auto encoding = tdescTy.getEncoding();
     if (!isMappingAttr(encoding)) {
@@ -627,8 +627,8 @@ mlir::LogicalResult LoadNDOp::verify() {
       wgMap = xeMapAttr.getWg();
       sgMap = xeMapAttr.getSg();
     } else {
-      wgMap = llvm::dyn_cast<imex::xegpu::WgMapAttr>(encoding);
-      sgMap = llvm::dyn_cast<imex::xegpu::SgMapAttr>(encoding);
+      wgMap = llvm::dyn_cast<imex::xegpu::WorkGroupMapAttr>(encoding);
+      sgMap = llvm::dyn_cast<imex::xegpu::SubGroupMapAttr>(encoding);
     }
 
     if (wgMap) {
@@ -636,12 +636,13 @@ mlir::LogicalResult LoadNDOp::verify() {
       auto sgLayout = wgMap.getSgLayout();
       for (size_t i = 0; i < sgData.size(); i++) {
         if (tdescShape[i] % sgLayout[i] != 0 ||
-            tdescShape[i] % sgData[i] != 0 || tdescShape[i] % sgData[i] != 0)
-          return emitOpError(
-              "Invalid WgMapAttr. It should meet the following conditions: "
-              "tdescShape[i] % sgLayout[i] == 0 && "
-              "tdescShape[i] % sgData[i] == 0 && "
-              "tdescShape[i] % sgData[i] == 0");
+            tdescShape[i] % sgData[i] != 0 ||
+            tdescShape[i] % (sgLayout[i] * sgData[i]) != 0)
+          return emitOpError("Invalid WorkGroupMapAttr. It should meet the "
+                             "following conditions: "
+                             "tdescShape[i] % sgLayout[i] == 0 && "
+                             "tdescShape[i] % sgData[i] == 0 && "
+                             "tdescShape[i] % (sgLayout[i] *sgData[i]) == 0");
         tdescShape[i] /= sgLayout[i];
       }
     }
@@ -654,22 +655,22 @@ mlir::LogicalResult LoadNDOp::verify() {
         if (tdescShape[i] % blockSize[i] != 0 ||
             blockSize[i] % wiLayout[i] != 0 || blockSize[i] % wiData[i] != 0 ||
             blockSize[i] % (wiLayout[i] * wiData[i]) != 0) {
-          return emitOpError(
-              "Invalid SgMapAttr. It should meet the following conditions: "
-              "tdescShape[i] % blockSize[i] == 0 && "
-              "blockSize[i] % wiLayout[i] == 0 && "
-              "blockSize[i] % wiData[i] == 0 && "
-              "blockSize[i] % (wiLayout[i] * wiData[i]) == 0 ");
+          return emitOpError("Invalid SubGroupMapAttr. It should meet the "
+                             "following conditions: "
+                             "tdescShape[i] % blockSize[i] == 0 && "
+                             "blockSize[i] % wiLayout[i] == 0 && "
+                             "blockSize[i] % wiData[i] == 0 && "
+                             "blockSize[i] % (wiLayout[i] * wiData[i]) == 0 ");
         }
       }
 
       for (size_t i = 0; i < wiLayout.size(); i++) {
         if (tdescShape[i] % wiData[i] != 0 ||
             tdescShape[i] % (wiLayout[i] * wiData[i]) != 0) {
-          return emitOpError(
-              "Invalid SgMapAttr. It should meet the following conditions: "
-              "tdescShape[i] % wiData[i] == 0 && "
-              "tdescShape[i] % (wiLayout[i] * wiData[i]) == 0 ");
+          return emitOpError("Invalid SubGroupMapAttr. It should meet the "
+                             "following conditions: "
+                             "tdescShape[i] % wiData[i] == 0 && "
+                             "tdescShape[i] % (wiLayout[i] * wiData[i]) == 0 ");
         }
         tdescShape[i] /= wiLayout[i];
       }
@@ -838,25 +839,29 @@ mlir::LogicalResult StoreNDOp::verify() {
                          "SIMT mode operators.\n");
     }
 
-    imex::xegpu::WgMapAttr wgMap;
-    imex::xegpu::SgMapAttr sgMap;
+    imex::xegpu::WorkGroupMapAttr wgMap;
+    imex::xegpu::SubGroupMapAttr sgMap;
     std::vector<int64_t> shape = dstTy.getShape().vec();
 
     if (auto xeMapAttr = llvm::dyn_cast<imex::xegpu::XeMapAttr>(encoding)) {
       wgMap = xeMapAttr.getWg();
       sgMap = xeMapAttr.getSg();
     } else {
-      wgMap = llvm::dyn_cast<imex::xegpu::WgMapAttr>(encoding);
-      sgMap = llvm::dyn_cast<imex::xegpu::SgMapAttr>(encoding);
+      wgMap = llvm::dyn_cast<imex::xegpu::WorkGroupMapAttr>(encoding);
+      sgMap = llvm::dyn_cast<imex::xegpu::SubGroupMapAttr>(encoding);
     }
 
     if (wgMap) {
       auto sgData = wgMap.getSgData();
       auto sgLayout = wgMap.getSgLayout();
       for (size_t i = 0; i < sgData.size(); i++) {
-        assert(shape[i] % sgLayout[i] == 0);
-        assert(shape[i] % sgData[i] == 0);
-        assert(shape[i] % (sgLayout[i] * sgData[i]) == 0);
+        if (shape[i] % sgLayout[i] != 0 || shape[i] % sgData[i] != 0 ||
+            shape[i] % (sgLayout[i] * sgData[i]) != 0)
+          return emitOpError("Invalid WorkGroupMapAttr. It should meet the "
+                             "following conditions: "
+                             "tdescShape[i] % sgLayout[i] == 0 && "
+                             "tdescShape[i] % sgData[i] == 0 && "
+                             "tdescShape[i] % (sgLayout[i] *sgData[i]) == 0");
         shape[i] /= sgLayout[i];
       }
     }
@@ -867,24 +872,24 @@ mlir::LogicalResult StoreNDOp::verify() {
       auto wiData = sgMap.getWiData();
       for (size_t i = 0; i < shape.size(); i++) {
         if (blockSize[i] % (wiLayout[i] * wiData[i]) != 0 ||
-            blockSize[i] % wiLayout[i] != 0 || blockSize[i] % wiData[i] == 0 ||
-            shape[i] % blockSize[i] == 0) {
-          return emitOpError(
-              "Invalid SgMapAttr. It should meet the following conditions: "
-              "tdescShape[i] % blockSize[i] == 0 && "
-              "blockSize[i] % wiLayout[i] == 0 && "
-              "blockSize[i] % wiData[i] == 0 && "
-              "blockSize[i] % (wiLayout[i] * wiData[i]) == 0 ");
+            blockSize[i] % wiLayout[i] != 0 || blockSize[i] % wiData[i] != 0 ||
+            shape[i] % blockSize[i] != 0) {
+          return emitOpError("Invalid SubGroupMapAttr. It should meet the "
+                             "following conditions: "
+                             "tdescShape[i] % blockSize[i] == 0 && "
+                             "blockSize[i] % wiLayout[i] == 0 && "
+                             "blockSize[i] % wiData[i] == 0 && "
+                             "blockSize[i] % (wiLayout[i] * wiData[i]) == 0 ");
         }
       }
 
       for (size_t i = 0; i < wiLayout.size(); i++) {
         if (shape[i] % wiData[i] != 0 ||
             shape[i] % (wiLayout[i] * wiData[i]) != 0) {
-          return emitOpError(
-              "Invalid SgMapAttr. It should meet the following conditions: "
-              "tdescShape[i] % wiData[i] == 0 && "
-              "tdescShape[i] % (wiLayout[i] * wiData[i]) == 0 ");
+          return emitOpError("Invalid SubGroupMapAttr. It should meet the "
+                             "following conditions: "
+                             "tdescShape[i] % wiData[i] == 0 && "
+                             "tdescShape[i] % (wiLayout[i] * wiData[i]) == 0 ");
         }
         shape[i] /= wiLayout[i];
       }
@@ -981,6 +986,10 @@ mlir::LogicalResult DpasOp::verify() {
   if (lhsRank != rhsRank || lhsRank != 3) {
     return emitOpError(
         "lhs and rhs rank does not match for dpas op, or their rank is not 3.");
+  }
+
+  if (lhsRank < 3) {
+    return emitOpError("dpas op requires 3d vector. Rank is not 3");
   }
 
   return mlir::success();

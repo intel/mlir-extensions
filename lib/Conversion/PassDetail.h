@@ -70,6 +70,10 @@ class TensorDialect;
 namespace gpu {
 class GPUDialect;
 } // namespace gpu
+
+namespace vector {
+class VectorDialect;
+}
 } // namespace mlir
 
 namespace imex {
@@ -84,6 +88,14 @@ class DistDialect;
 namespace gpux {
 class GPUXDialect;
 } // namespace gpux
+
+namespace xegpu {
+class XeGPUDialect;
+}
+
+namespace xetile {
+class XeTileDialect;
+}
 
 #define GEN_PASS_CLASSES
 #include <imex/Conversion/Passes.h.inc>

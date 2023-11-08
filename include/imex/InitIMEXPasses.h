@@ -20,6 +20,7 @@
 #include <imex/Dialect/PTensor/Transforms/Passes.h>
 // #include <imex/Dialect/*/Transforms/Passes.h>
 #include "imex/Transforms/Passes.h"
+#include <imex/Dialect/XeTile/Transforms/Passes.h>
 
 #include <cstdlib>
 
@@ -41,6 +42,7 @@ inline void registerAllPasses() {
 
   // Dialect passes
   registerPTensorPasses();
+  registerXeTilePasses();
   // register*Passes();
 
   // Dialect pipelines

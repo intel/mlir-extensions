@@ -330,4 +330,48 @@ def ConvertGPUXToLLVM : Pass<"convert-gpux-to-llvm", "::mlir::ModuleOp"> {
 }
 
 
+//===----------------------------------------------------------------------===//
+// XeTileToXeGPU
+//===----------------------------------------------------------------------===//
+
+def ConvertXeTileToXeGPU: Pass<"convert-xetile-to-xegpu", "::mlir::ModuleOp"> {
+  let summary = "Convert from the XeTile dialect to the XeGPU dialect.";
+  let description = [{
+    Convert XeTile dialect operations into the XeGPU dialect operations. It expects
+    the input code is tiled using xetile-tiling.
+
+    #### Input invariant
+
+    func.func @sglevel_tiled_load_tile(%a: memref<1024x1024xf16>, %b: memref<1024x1024xf16>, %c: memref<1024x1024xf32>) {
+      %c0 = arith.constant 0 : index
+      %c64 = arith.constant 64 : index
+	    %1 = xetile.init_tile %a[%c0, %c64] : memref<1024x1024xf16> -> !xetile.tile<2x1x8x16xf16>
+      %2 = xetile.load_tile %1 : !xetile.tile<2x1x8x16xf16> -> vector<2x1x8x16xf16>
+	    return
+    }
+
+    #### Output IR
+
+    func.func @sglevel_tiled_load_tile(%a: memref<1024x1024xf16>, %b: memref<1024x1024xf16>, %c: memref<1024x1024xf32>) {
+      %c0 = arith.constant 0 : index
+      %c64 = arith.constant 64 : index
+      %0 = xegpu.create_nd_tdesc %arg0[%c0, %c64] {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+      %c8 = arith.constant 8 : index
+      %c64_0 = arith.constant 64 : index
+      %1 = xegpu.create_nd_tdesc %arg0[%c8, %c64_0] {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+      %2 = xegpu.load_nd %0 {mode = vc, l1_hint = uncached, l2_hint = uncached, l3_hint = uncached} : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
+      %3 = xegpu.load_nd %1 {mode = vc, l1_hint = uncached, l2_hint = uncached, l3_hint = uncached} : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>
+	    return
+    }
+  }];
+
+  let constructor = "::imex::createConvertXeTileToXeGPUPass()";
+  let dependentDialects = ["::imex::xegpu::XeGPUDialect",
+                           "::imex::xetile::XeTileDialect",
+                           "::mlir::vector::VectorDialect",
+                           "::mlir::arith::ArithDialect",
+                           ];
+  let options = [];
+}
+
 #endif // _IMEX_CONVERSION_PASSES_TD_INCLUDED_
