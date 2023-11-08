@@ -88,7 +88,7 @@ jobs:
         run: |
           export PATH="$HOME/miniconda:$PATH"
           source $HOME/miniconda/bin/activate
-          conda install cmake ninja graphviz conda-forge::lit conda-forge::doxygen
+          conda install conda-forge::cmake ninja graphviz conda-forge::lit conda-forge::doxygen
           conda list
 
       - name: Setup TBB
