@@ -6,10 +6,8 @@
 
 // CHECK-LABEL: func @alloc_nbarrier({{.*}}) {
 func.func @alloc_nbarrier() {
-  %c8_i8 = arith.constant 8 : i8
   // CHECK: xegpu.alloc_nbarrier
-  // CHECK-SAME: : i8
-  xegpu.alloc_nbarrier %c8_i8 : i8
+  xegpu.alloc_nbarrier 8
   return
 }
 
