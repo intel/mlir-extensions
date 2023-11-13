@@ -155,6 +155,7 @@ struct SCFForOpPattern : public XeTileConversion<mlir::scf::ForOp> {
         adaptor.getStep(), adaptor.getInitArgs());
     mlir::Block *block = op.getBody();
     mlir::Block *newBlock = newOp.getBody();
+    newBlock->clear();
     rewriter.mergeBlocks(block, newBlock, newBlock->getArguments());
     rewriter.replaceOp(op, newOp);
     return mlir::success();

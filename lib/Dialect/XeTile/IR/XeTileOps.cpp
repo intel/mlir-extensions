@@ -341,8 +341,6 @@ void LoadTileOp::print(mlir::OpAsmPrinter &printer) {
   printer << " { ";
   if ((*this)->getAttrs().size()) {
     if (getTransposeAttr()) {
-      if (printSep)
-        printer << ", ";
       printer << "transpose = ";
       getTransposeAttr().print(printer);
       printSep = true;
