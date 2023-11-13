@@ -211,4 +211,4 @@ jobs:
         env:
           no_proxy: coverityent.devtools.intel.com, intel.com
         run: |
-          cov-commit-defects --dir frameworks.ai.mlir.mlir-extensions/cov_dir --url https://coverityent.devtools.intel.com/prod5 --user fanxinyu --password ${{ secrets.LUNAEMAILPWD }} --stream "MLIR_Prod_main"
+          cov-commit-defects --dir frameworks.ai.mlir.mlir-extensions/cov_dir --url https://coverityent.devtools.intel.com/prod5 --user nbpatel --password ${{ secrets.NISHANTPASSWORD }} --stream "MLIR_Prod_main"
