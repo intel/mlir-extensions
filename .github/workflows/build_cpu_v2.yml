@@ -3,7 +3,7 @@ name: "CPU Build with composite action"
 on:
   pull_request:
     branches:
-      - main
+      - dummy
   workflow_dispatch:
 
 jobs:
