@@ -990,10 +990,6 @@ mlir::LogicalResult DpasOp::verify() {
         "lhs and rhs rank does not match for dpas op, or their rank is not 3.");
   }
 
-  if (lhsRank < 3) {
-    return emitOpError("dpas op requires 3d vector. Rank is not 3");
-  }
-
   return mlir::success();
 }
 
