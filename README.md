@@ -7,7 +7,7 @@ Intel® Extension for MLIR (IMEX) is a collection of MLIR dialects and passes fr
 
 ## Requirements for building and development
 ### For build
-* CMake > 3.14.3 (3.18 if using Conda)
+* CMake >= 3.20.0
 * Ninja
 * doxygen (Optional for building docs)
 ### Additionals for development
