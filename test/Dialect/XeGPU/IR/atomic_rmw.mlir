@@ -9,8 +9,8 @@ func.func @test_atomic_rmw(%src: ui64, %offsets : vector<16 x index>, %value : v
   %1 = xegpu.create_tdesc %src, %offsets {mode = vc} : ui64, vector<16 x index> -> !xegpu.tensor_desc<16xf32, #xegpu.scattered>
 
   // CHECK: xegpu.atomic_rmw
-  // CHECK-SAME: (vector<16x1xf32>, !xegpu.tensor_desc<16xf32, #xegpu.scattered>, vector<16xi1>)
-  xegpu.atomic_rmw "addf" %value, %1, %mask {mode = vc} : (vector<16x1xf32>, !xegpu.tensor_desc<16xf32, #xegpu.scattered>, vector<16xi1>)
+  // CHECK-SAME: !xegpu.tensor_desc<16xf32, #xegpu.scattered>, vector<16xi1>, vector<16x1xf32>
+  xegpu.atomic_rmw "addf" %1, %mask, %value {mode = vc} : !xegpu.tensor_desc<16xf32, #xegpu.scattered>, vector<16xi1>, vector<16x1xf32> -> vector<16x1xf32>
 
   return
 }
@@ -20,8 +20,8 @@ func.func @test_atomic_rmw_0(%src: ui64, %offsets : vector<16 x index>, %value :
   %1 = xegpu.create_tdesc %src, %offsets {mode = vc, chunk_size_per_lane = 2}: ui64, vector<16 x index> -> !xegpu.tensor_desc<16x2xf32, #xegpu.scattered>
 
   // CHECK: xegpu.atomic_rmw
-  // CHECK-SAME: (vector<16x2xf32>, !xegpu.tensor_desc<16x2xf32, #xegpu.scattered>, vector<16xi1>)
-  xegpu.atomic_rmw "mulf" %value, %1, %mask {mode = vc} : (vector<16x2xf32>, !xegpu.tensor_desc<16x2xf32, #xegpu.scattered>, vector<16xi1>)
+  // CHECK-SAME: !xegpu.tensor_desc<16x2xf32, #xegpu.scattered>, vector<16xi1>, vector<16x2xf32>
+  xegpu.atomic_rmw "mulf" %1, %mask, %value {mode = vc} : !xegpu.tensor_desc<16x2xf32, #xegpu.scattered>, vector<16xi1>, vector<16x2xf32> -> vector<16x2xf32>
 
   return
 }
@@ -31,8 +31,8 @@ func.func @test_atomic_rmw_1(%src: ui64, %offsets : vector<16 x index>, %value :
   %1 = xegpu.create_tdesc %src, %offsets {mode = vc, chunk_size_per_lane = 2}: ui64, vector<16 x index> -> !xegpu.tensor_desc<16x2xi32, #xegpu.scattered>
 
   // CHECK: xegpu.atomic_rmw
-  // CHECK-SAME: (vector<16x2xi32>, !xegpu.tensor_desc<16x2xi32, #xegpu.scattered>, vector<16xi1>)
-  xegpu.atomic_rmw "andi" %value, %1, %mask {mode = vc} : (vector<16x2xi32>, !xegpu.tensor_desc<16x2xi32, #xegpu.scattered>, vector<16xi1>)
+  // CHECK-SAME: !xegpu.tensor_desc<16x2xi32, #xegpu.scattered>, vector<16xi1>, vector<16x2xi32>
+  xegpu.atomic_rmw "andi" %1, %mask, %value {mode = vc} : !xegpu.tensor_desc<16x2xi32, #xegpu.scattered>, vector<16xi1>, vector<16x2xi32> -> vector<16x2xf32>
 
   return
 }

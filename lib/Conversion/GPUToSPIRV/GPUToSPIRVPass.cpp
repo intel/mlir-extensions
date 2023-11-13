@@ -158,7 +158,8 @@ void GPUXToSPIRVPass::runOnOperation() {
     target->addIllegalDialect<imex::xegpu::XeGPUDialect>();
     typeConverter.addConversion(
         [&](xegpu::TensorDescType type) -> ::mlir::Type {
-          return ::mlir::IntegerType::get(context, 64);
+          auto i64Type = ::mlir::IntegerType::get(context, 64);
+          return ::mlir::VectorType::get(2, i64Type);
         });
     typeConverter.addConversion([&](::mlir::VectorType type) -> ::mlir::Type {
       unsigned rank = type.getRank();
@@ -175,6 +176,8 @@ void GPUXToSPIRVPass::runOnOperation() {
         for (unsigned i = 0; i < rank; i++) {
           sum *= type.getShape()[i];
         }
+        if (llvm::isa<mlir::IndexType>(elemType))
+          elemType = ::mlir::IntegerType::get(context, 64);
         return ::mlir::VectorType::get(sum, elemType);
       }
     });

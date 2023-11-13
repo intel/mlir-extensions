@@ -457,9 +457,9 @@ void CreateDescOp::print(::mlir::OpAsmPrinter &printer) {
 }
 
 mlir::LogicalResult CreateDescOp::verify() {
-  if (getRankOf(getSource()) > 1)
+  if (getRankOf(getSource()) > 2)
     return emitOpError(
-        "Expecting the source is a 1D memref or pointer (uint64_t).");
+        "Expecting the source is a 2D/1D memref or pointer (uint64_t).");
 
   std::vector<int64_t> shape;
 
@@ -471,9 +471,10 @@ mlir::LogicalResult CreateDescOp::verify() {
 
   if (llvm::isa<mlir::VectorType>(offsetTy)) {
     shape = llvm::dyn_cast<mlir::VectorType>(offsetTy).getShape().vec();
-    if (shape.size() != 1)
-      return emitOpError("Expecting the offset is either a 1D vector (for VC) "
-                         "or scalar (for SIMT).");
+    if (shape.size() > 2)
+      return emitOpError(
+          "Expecting the offset is either a 2D/1D vector (for VC) "
+          "or scalar (for SIMT).");
   }
 
   if (offsetTy.isIndex() || chunkSize != 1) {
@@ -572,9 +573,9 @@ mlir::LogicalResult LoadNDOp::verify() {
   auto tdescTy = getTensorDesc().getType();
   auto valueTy = llvm::dyn_cast<mlir::VectorType>(getValue().getType());
 
-  if (tdescTy.getRank() != 2)
+  if (tdescTy.getRank() > 2)
     return emitOpError(
-        "The TensorDesc for LoadNDOp should be a 2D TensorDesc.");
+        "The TensorDesc for LoadNDOp should be a 2D/1D TensorDesc.");
 
   if (!valueTy)
     return emitOpError("Invalid result, it should be a VectorType.\n");
@@ -586,7 +587,8 @@ mlir::LogicalResult LoadNDOp::verify() {
     return emitOpError(
         "Value should have the same element type as TensorDesc.");
 
-  { // TODO: The following logic are architecture dependent, pending to be moved
+  if (tdescTy.getRank() == 2) { // TODO: The following logic are architecture
+                                // dependent, pending to be moved
     // out
     auto width = tdescTy.getShape()[1];
     auto height = tdescTy.getShape()[0];
@@ -789,7 +791,7 @@ mlir::LogicalResult StoreNDOp::verify() {
   auto dstTy = getTensorDesc().getType();                              // Tile
   auto valTy = llvm::dyn_cast<mlir::VectorType>(getValue().getType()); // Vector
 
-  if (dstTy.getRank() != 2)
+  if (dstTy.getRank() > 2)
     return emitOpError(
         "The TensorDesc for StoreNdOp should be a 2D TensorDesc.");
 
@@ -804,7 +806,8 @@ mlir::LogicalResult StoreNDOp::verify() {
                        "the elem type of memory (dst) shape.\n");
   }
 
-  { // TODO: The following logic are architecture dependent, pending to be moved
+  if (dstTy.getRank() == 2) { // TODO: The following logic are architecture
+                              // dependent, pending to be moved
     // out
     auto width = dstTy.getShape()[1];
     auto height = dstTy.getShape()[0];
@@ -900,7 +903,6 @@ mlir::LogicalResult StoreNDOp::verify() {
           "In SIMT mode, the value (vector) shape doesn't match the memory"
           "(dst) shape as derived according to the mapping rule.\n");
   }
-
   return mlir::success();
 }
 

@@ -575,38 +575,28 @@ def XeGPU_InvokeSIMDOp : XeGPU_Op<"invoke_SIMD", []> {
 
 }
 
-def XeGPU_AtomicRMWOp
-  : XeGPU_Op<"atomic_rmw", []> {
-    let summary = "performa ready-modify-write operation that is free from data races.";
-
-    let arguments = (ins
-      XeGPU_AtomicRMWKindAttr:$kind,
-      XeGPU_Vector2DType:$value,
-      XeGPU_TensorDesc:$tensorDesc,
-      XeGPU_MaskType:$mask,
-      DefaultValuedAttr<XeGPU_ModeAttr, "imex::xegpu::Mode::SIMT">: $mode
-    );
-
-    let assemblyFormat = [{
-      $kind $value `,` $tensorDesc `,` $mask (`{` `mode` `=` $mode^ `}`)?
-      attr-dict
-        `:` `(` qualified(type($value)) `,` qualified(type($tensorDesc)) `,` qualified(type($mask)) `)`
-    }];
-  }
+def XeGPU_AtomicRMWOp: XeGPU_Op<"atomic_rmw", []> {
+  let summary = "perform ready-modify-write operation that is free from data races.";
+  let arguments = (ins
+    XeGPU_AtomicRMWKindAttr:$kind,
+    XeGPU_TensorDesc:$tensorDesc,
+    XeGPU_MaskType:$mask,
+    Optional<XeGPU_ValueType>:$value,
+    DefaultValuedAttr<XeGPU_ModeAttr, "imex::xegpu::Mode::SIMT">: $mode
+  );
+  let results = (outs XeGPU_ValueType:$result);
+  let assemblyFormat = [{
+    $kind $tensorDesc `,` $mask (`,` $value^)? (`{` `mode` `=` $mode^ `}`)? attr-dict `:` qualified(type(operands)) `->` type($result)
+  }];
+}
 
 
-def XeGPU_AllocNbarrierOp
-  : XeGPU_Op<"alloc_nbarrier", []> {
+def XeGPU_AllocNbarrierOp: XeGPU_Op<"alloc_nbarrier", []> {
       let summary = "allocate a specific number of named barriers.";
+      let arguments = (ins I32Attr: $nbarrierCount);
+      let assemblyFormat = "$nbarrierCount attr-dict";
+}
 
-      let arguments = (ins
-        I8: $nbarrier_count
-      );
-
-      let assemblyFormat = [{
-        $nbarrier_count attr-dict `:` qualified(type($nbarrier_count))
-      }];
-  }
 
 def XeGPU_CreateNbarrierOp
   : XeGPU_Op<"create_nbarrier", []> {
