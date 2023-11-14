@@ -31,7 +31,7 @@ struct SgSCFForOpBlockPattern
     llvm::SmallVector<mlir::Value> convertedArgs;
     // OpAdaptor is defined with ValueRange, so it contains results after
     // One-to-N mapping
-    for (auto values : adaptor.getInitArgs())
+    for (auto &values : adaptor.getInitArgs())
       convertedArgs.append(values.begin(), values.end());
 
     auto argumentTys = op.getRegion().getArgumentTypes();
@@ -74,7 +74,7 @@ struct SgSCFYieldOpPattern
   matchAndRewrite(mlir::scf::YieldOp op, OpAdaptor adaptor,
                   imex::XeGPUOneToNPatterRewriter &rewriter) const override {
     llvm::SmallVector<mlir::Value> convertedResults;
-    for (auto values : adaptor.getResults())
+    for (auto &values : adaptor.getResults())
       convertedResults.append(values.begin(), values.end());
 
     auto newOp =
