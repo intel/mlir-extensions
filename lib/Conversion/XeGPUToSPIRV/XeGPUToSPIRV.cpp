@@ -219,6 +219,10 @@ void lookupOrInsertIntrinsic(ConversionPatternRewriter &rewriter, Operation *op,
   }
 }
 
+/// @brief
+/// convert the tensor descriptor to [2xi64] which is of the format
+/// -> [base pointer: i64, offsetX: i32, offsetY: i32] for 2D tensor desc
+/// -> [base pointer: i64, unused] for 1D and scattered tensor desc
 class CreateNdDescToVCPattern : public OpConversionPattern<CreateNdDescOp> {
 public:
   using OpConversionPattern<CreateNdDescOp>::OpConversionPattern;
@@ -494,7 +498,7 @@ public:
   }
 };
 
-xegpu::CreateNdDescOp findDescOp(mlir::Value val) {
+std::optional<xegpu::CreateNdDescOp> findDescOp(mlir::Value val) {
   if (auto op = val.getDefiningOp()) {
     if (auto descOp = dyn_cast<xegpu::CreateNdDescOp>(op)) {
       return descOp;
@@ -508,6 +512,7 @@ xegpu::CreateNdDescOp findDescOp(mlir::Value val) {
     return findDescOp(init);
   } else {
     assert(0 && "add more support");
+    return std::nullopt;
   }
 }
 
@@ -582,7 +587,6 @@ public:
     // message descriptor
     uint32_t rawSendMsg = 0;
     if (rank == 2) {
-      // https://gfxspecs.intel.com/Predator/Home/Index/53680
       rawSendMsg |= (isLoad || isPrefetch) ? 3 : 7;
       rawSendMsg |= (vnni ? 1 : 0) << 7;
       rawSendMsg |= (encodeDataum(elmType) - 1) << 9;
@@ -592,7 +596,6 @@ public:
       rawSendMsg |= 1 << 25;
     } else {
       // rank == 1
-      // https://gfxspecs.intel.com/Predator/Home/Index/53523
       rawSendMsg |= (isLoad || isPrefetch) ? 0 : 4;
       rawSendMsg |= 3 << 7;
       rawSendMsg |= 3 << 9;
@@ -604,8 +607,12 @@ public:
     }
     auto msg = createIntConstant(i32Type, rawSendMsg);
     // payload
+    // payload is v8i32 = [base:i64, surfaceWidth:i32, surfaceHeight:i32,
+    // surefacePitch:i32, offsetX:i32, offsetY:i32, blockInfo:i32]
+    // the base/surfaceInfo/blockInfo are staticly from the tensor desc
+    // while the offsetX/Y are dynamicly udpated
     auto insertPoint = rewriter.saveInsertionPoint();
-    CreateNdDescOp createDescOp = findDescOp(op.template getTensorDesc());
+    CreateNdDescOp createDescOp = *findDescOp(op.template getTensorDesc());
     rewriter.setInsertionPointAfter(createDescOp);
     auto v8i32 = VectorType::get(8, i32Type);
     auto v4i64 = VectorType::get(4, i64Type);
@@ -1031,7 +1038,6 @@ public:
     Value nbarrier_src =
         rewriter.create<spirv::ConstantOp>(loc, v8i32Type, constantData);
 
-    // payload format https://gfxspecs.intel.com/Predator/Home/Index/72064
     Value payload = zext(i32Type, nbarrier_id);
 
     Value payload_nbarrier_role =
@@ -1071,11 +1077,9 @@ public:
     Value exec_size = i8_val(0);
     Value predicate = i1_val(1);
     Value numsrc1 = i8_val(1); // register nums of payload
-    Value sfid =
-        i8_val(3); // https://gfxspecs.intel.com/Predator/Home/Index/47532
+    Value sfid = i8_val(3);
     Value etDesc = i32_val(0);
-    Value msg_desc = i32_val(
-        0x2000004); // https://gfxspecs.intel.com/Predator/Home/Index/53524
+    Value msg_desc = i32_val(0x2000004);
 
     SmallVector<Value> args{modifier, exec_size, predicate, numsrc1,
                             sfid,     etDesc,    msg_desc,  payload};
