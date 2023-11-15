@@ -318,7 +318,7 @@ struct SgUpdateTileOffsetOpPattern
     auto tiles = adaptor.getTile();
 
     llvm::SmallVector<mlir::Value> xegpuOps;
-    for (auto tile : tiles) {
+    for (const auto &tile : tiles) {
       auto xegpuTile = rewriter.create<xegpu::UpdateNDOffsetOp>(
           op.getLoc(), tile.getType(), tile, mlir::ValueRange{offsetX, offsetY},
           imex::xegpu::Mode::VC);
