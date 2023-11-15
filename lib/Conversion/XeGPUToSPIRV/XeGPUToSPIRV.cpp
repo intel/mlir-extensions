@@ -219,10 +219,6 @@ void lookupOrInsertIntrinsic(ConversionPatternRewriter &rewriter, Operation *op,
   }
 }
 
-/// @brief
-/// convert the tensor descriptor to [2xi64] which is of the format
-/// -> [base pointer: i64, offsetX: i32, offsetY: i32] for 2D tensor desc
-/// -> [base pointer: i64, unused] for 1D and scattered tensor desc
 class CreateNdDescToVCPattern : public OpConversionPattern<CreateNdDescOp> {
 public:
   using OpConversionPattern<CreateNdDescOp>::OpConversionPattern;
@@ -498,7 +494,7 @@ public:
   }
 };
 
-std::optional<xegpu::CreateNdDescOp> findDescOp(mlir::Value val) {
+xegpu::CreateNdDescOp findDescOp(mlir::Value val) {
   if (auto op = val.getDefiningOp()) {
     if (auto descOp = dyn_cast<xegpu::CreateNdDescOp>(op)) {
       return descOp;
@@ -510,9 +506,9 @@ std::optional<xegpu::CreateNdDescOp> findDescOp(mlir::Value val) {
     auto forOp = cast<scf::ForOp>(ownerOp);
     auto init = forOp.getInits()[arg.getArgNumber() - 1];
     return findDescOp(init);
-  } 
-  // Add more support
-  return std::nullopt;
+  } else {
+    assert(0 && "add more support");
+  }
 }
 
 template <typename OpType>
@@ -606,12 +602,8 @@ public:
     }
     auto msg = createIntConstant(i32Type, rawSendMsg);
     // payload
-    // payload is v8i32 = [base:i64, surfaceWidth:i32, surfaceHeight:i32,
-    // surefacePitch:i32, offsetX:i32, offsetY:i32, blockInfo:i32]
-    // the base/surfaceInfo/blockInfo are staticly from the tensor desc
-    // while the offsetX/Y are dynamicly udpated
     auto insertPoint = rewriter.saveInsertionPoint();
-    CreateNdDescOp createDescOp = *findDescOp(op.template getTensorDesc());
+    CreateNdDescOp createDescOp = findDescOp(op.template getTensorDesc());
     rewriter.setInsertionPointAfter(createDescOp);
     auto v8i32 = VectorType::get(8, i32Type);
     auto v4i64 = VectorType::get(4, i64Type);
