@@ -510,10 +510,9 @@ std::optional<xegpu::CreateNdDescOp> findDescOp(mlir::Value val) {
     auto forOp = cast<scf::ForOp>(ownerOp);
     auto init = forOp.getInits()[arg.getArgNumber() - 1];
     return findDescOp(init);
-  } else {
-    assert(0 && "add more support");
-    return std::nullopt;
-  }
+  } 
+  // Add more support
+  return std::nullopt;
 }
 
 template <typename OpType>

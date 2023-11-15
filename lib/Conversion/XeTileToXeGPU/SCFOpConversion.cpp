@@ -100,7 +100,7 @@ bool isLegalSCFOp(mlir::Operation *op) {
 
   if (llvm::isa<mlir::scf::YieldOp>(op)) {
     auto yieldOp = llvm::cast<mlir::scf::YieldOp>(op);
-    for (const auto arg : yieldOp.getResults()) {
+    for (const auto &arg : yieldOp.getResults()) {
       auto type = arg.getType();
       result &= !type.isa<imex::xetile::TileType>();
       if (type.isa<mlir::VectorType>())
