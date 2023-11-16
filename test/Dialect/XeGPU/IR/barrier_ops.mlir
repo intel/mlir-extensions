@@ -17,32 +17,32 @@ func.func @create_nbarrier() {
   %nbarrier_role = arith.constant 0 : i8
   // CHECK: xegpu.create_nbarrier
   // CHECK-SAME: {num_consumers = 32 : i8, num_producers = 32 : i8}
-  // CHECK-SAME: (i8, i8) -> vector<8xi32>
+  // CHECK-SAME: (i8, i8) -> !xegpu.nbarrier
   %nbarrier = xegpu.create_nbarrier %nbarrier_id, %nbarrier_role {num_producers = 32 :i8 , num_consumers = 32 : i8}
-    : (i8, i8) -> vector<8xi32>
+    : (i8, i8) -> !xegpu.nbarrier
   return
 }
 
 // CHECK-LABEL: func @nbarrier_arrive({{.*}}) {
-func.func @nbarrier_arrive(%nbarrier : vector<8xi32>) {
+func.func @nbarrier_arrive(%nbarrier : !xegpu.nbarrier) {
   // CHECK:  xegpu.nbarrier_arrive
-  // CHECK-SAME: vector<8xi32>
-  xegpu.nbarrier_arrive %nbarrier : vector<8xi32>
+  // CHECK-SAME: !xegpu.nbarrier
+  xegpu.nbarrier_arrive %nbarrier : !xegpu.nbarrier
   return
 }
 
 // CHECK-LABEL: func @nbarrier_wait({{.*}}) {
-func.func @nbarrier_wait(%nbarrier : vector<8xi32>) {
+func.func @nbarrier_wait(%nbarrier : !xegpu.nbarrier) {
   // CHECK: xegpu.nbarrier_wait
-  // CHECK-SAME: vector<8xi32>
-  xegpu.nbarrier_wait %nbarrier : vector<8xi32>
+  // CHECK-SAME: !xegpu.nbarrier
+  xegpu.nbarrier_wait %nbarrier : !xegpu.nbarrier
   return
 }
 
-// CHECK-LABEL: func @compiler_hint({{.*}}) {
-func.func @compiler_hint() {
-  // CHECK: xegpu.compiler_hint
-  xegpu.compiler_hint
+// CHECK-LABEL: func @compile_hint({{.*}}) {
+func.func @compile_hint() {
+  // CHECK: xegpu.compile_hint
+  xegpu.compile_hint
   return
 }
 

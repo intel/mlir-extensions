@@ -40,7 +40,7 @@ class XeGPUTypeDef<string name, string typeMnemonic,
   let mnemonic = typeMnemonic;
 }
 
-// TODO:
+// TensorDesc contains dim and element type info
 def XeGPU_TensorDesc: XeGPUTypeDef<"TensorDesc", "tensor_desc",
         [ShapedTypeInterface], "::mlir::TensorType"> {
   let summary = "TensorDesc type describing all kinds of memory and tensors scatter tensor, 1d tensor, 2d tensor, … 5d tensor";
@@ -100,6 +100,17 @@ def XeGPU_TensorDesc: XeGPUTypeDef<"TensorDesc", "tensor_desc",
   }];
 
   let assemblyFormat = "`<` custom<ShapeAndType>($shape, $elementType)``custom<TensorDescAttr>($memory_scope, $encoding)`>`";
+}
+
+
+def XeGPU_Nbarrier: XeGPUTypeDef<"Nbarrier", "nbarrier", [], "mlir::Type"> {
+  let summary = "!xegpu.nbarrier a custom XeGPU type representing a barrier.";
+
+  let extraClassDeclaration = [{
+    static NbarrierType get(mlir::MLIRContext *context) {
+      return Base::get(context);
+    };
+  }];
 }
 
 #endif // _XEGPU_TYPES_TD_INCLUDED_

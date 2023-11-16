@@ -156,6 +156,10 @@ void GPUXToSPIRVPass::runOnOperation() {
       eraseOp->erase();
     }
     target->addIllegalDialect<imex::xegpu::XeGPUDialect>();
+    typeConverter.addConversion([&](xegpu::NbarrierType type) -> ::mlir::Type {
+      auto i32Type = ::mlir::IntegerType::get(context, 32);
+      return mlir::VectorType::get(8, i32Type);
+    });
     typeConverter.addConversion(
         [&](xegpu::TensorDescType type) -> ::mlir::Type {
           auto i64Type = ::mlir::IntegerType::get(context, 64);

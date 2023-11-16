@@ -83,7 +83,8 @@ bool dpasSupportedTypes(mlir::Type type, bool isResult) {
     else
       return false;
   } else {
-    if (type.isF16() || type.isBF16() || type.isInteger(8))
+    if (type.isF16() || type.isBF16() || type.isInteger(16) ||
+        type.isInteger(8))
       return true;
     else
       return false;
