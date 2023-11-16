@@ -24,11 +24,11 @@ module @gemm attributes {gpu.container_module} {
       xegpu.alloc_nbarrier 16
       %nbarrier_id = arith.constant 1 : i8
       %nbarrier_role = arith.constant 0 : i8
-      %payload = xegpu.create_nbarrier %nbarrier_id, %nbarrier_role {num_producers = 32 : i8, num_consumers = 32 : i8} : (i8, i8) -> vector<8xi32>
-      xegpu.nbarrier_arrive %payload : vector<8xi32>
+      %payload = xegpu.create_nbarrier %nbarrier_id, %nbarrier_role {num_producers = 32 : i8, num_consumers = 32 : i8} : (i8, i8) -> !xegpu.nbarrier
+      xegpu.nbarrier_arrive %payload : !xegpu.nbarrier
       xegpu.mfence {memory_kind = "ugm" , fence_op = "none", fence_scope = "local"}
-      xegpu.compiler_hint
-      xegpu.nbarrier_wait %payload : vector<8xi32>
+      xegpu.compile_hint
+      xegpu.nbarrier_wait %payload : !xegpu.nbarrier
       gpu.return
     }
   }

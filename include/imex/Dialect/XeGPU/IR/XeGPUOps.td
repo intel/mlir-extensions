@@ -610,7 +610,7 @@ def XeGPU_CreateNbarrierOp
         DefaultValuedAttr<XeGPU_ModeAttr, "imex::xegpu::Mode::SIMT">: $mode
       );
 
-      let results = (outs Builtin_Vector: $result);
+      let results = (outs XeGPU_Nbarrier: $result);
 
       let assemblyFormat = [{
         $nbarrier_id `,` $nbarrier_role
@@ -626,7 +626,7 @@ def XeGPU_NbarrierArriveOp
       let summary = "arrive at a named barrier.";
 
       let arguments = (ins
-        Builtin_Vector: $payload
+        XeGPU_Nbarrier: $payload
       );
 
       let assemblyFormat = [{
@@ -639,7 +639,7 @@ def XeGPU_NbarrierWaitOp
       let summary = "wait for a named barrier.";
 
       let arguments = (ins
-        Builtin_Vector: $payload
+        XeGPU_Nbarrier: $payload
       );
 
       let assemblyFormat = [{
@@ -647,8 +647,8 @@ def XeGPU_NbarrierWaitOp
       }];
   }
 
-def XeGPU_CompilerHintOp
-  : XeGPU_Op<"compiler_hint", []> {
+def XeGPU_CompileHintOp
+  : XeGPU_Op<"compile_hint", []> {
       let summary = "prevents the compiler from scheduling.";
 
       let assemblyFormat = [{

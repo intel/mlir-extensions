@@ -1066,7 +1066,7 @@ public:
   matchAndRewrite(NbarrierArriveOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    auto payload = op.getPayload();
+    auto payload = adaptor.getPayload();
 
     std::string funcName = "llvm_genx_raw_send2_noresult_i1_v8i32";
 
@@ -1101,7 +1101,7 @@ public:
   matchAndRewrite(NbarrierWaitOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    auto payload = op.getPayload();
+    auto payload = adaptor.getPayload();
 
     auto i8Type = rewriter.getIntegerType(8);
     auto i32Type = rewriter.getIntegerType(32);
@@ -1127,11 +1127,11 @@ public:
   }
 };
 
-class CompilerHintToVCPattern : public OpConversionPattern<CompilerHintOp> {
+class CompilerHintToVCPattern : public OpConversionPattern<CompileHintOp> {
 public:
-  using OpConversionPattern<CompilerHintOp>::OpConversionPattern;
+  using OpConversionPattern<CompileHintOp>::OpConversionPattern;
   LogicalResult
-  matchAndRewrite(CompilerHintOp op, OpAdaptor adaptor,
+  matchAndRewrite(CompileHintOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
 
