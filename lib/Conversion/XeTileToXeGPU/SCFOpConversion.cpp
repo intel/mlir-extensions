@@ -89,7 +89,7 @@ bool isLegalSCFOp(mlir::Operation *op) {
   bool result = true;
   if (llvm::isa<mlir::scf::ForOp>(op)) {
     auto forOp = llvm::cast<mlir::scf::ForOp>(op);
-    for (auto arg : forOp.getInitArgs()) {
+    for (const auto &arg : forOp.getInitArgs()) {
       auto type = arg.getType();
       result &= !type.isa<imex::xetile::TileType>();
 
