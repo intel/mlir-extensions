@@ -95,8 +95,9 @@ CMake so that it installs `FileCheck` to the chosen installation prefix.
 Additonally, `lit` has to be installed separately as it does not install with
 the rest of LLVM.
 
-Make sure your LLVM install is built from the git commit sha as stated in
+Make sure the installed LLVM is built from the git commit sha as stated in
 `build_tools/llvm_version.txt`.
+And has all LLVM patches in `build_tools/patches` applied.
 ```sh
 cmake -G Ninja -B build -S . \
    -DMLIR_DIR=<PATH_TO_DIRECTORY_WITH_MLIRConfig.cmake> \
@@ -115,8 +116,9 @@ cmake --build build --target check-imex
 ### Option 3: Build IMEX with LLVM build tree (out-of-tree)
 This is similar to option 2. Instead of installed LLVM, LLVM build tree is used.
 
-Make sure your LLVM install is built from the git commit sha as stated in
+Make sure before building LLVM, checkout the git commit sha as stated in
 `build_tools/llvm_version.txt`.
+And apply all LLVM patches in `build_tools/patches`.
 ```sh
 cmake -G Ninja -B build -S . \
    -DMLIR_DIR=<PATH_TO_DIRECTORY_WITH_MLIRConfig.cmake> \

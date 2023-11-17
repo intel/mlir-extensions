@@ -611,7 +611,7 @@ public:
     // the base/surfaceInfo/blockInfo are staticly from the tensor desc
     // while the offsetX/Y are dynamicly udpated
     auto insertPoint = rewriter.saveInsertionPoint();
-    CreateNdDescOp createDescOp = *findDescOp(op.template getTensorDesc());
+    CreateNdDescOp createDescOp = *findDescOp(op.getTensorDesc());
     rewriter.setInsertionPointAfter(createDescOp);
     auto v8i32 = VectorType::get(8, i32Type);
     auto v4i64 = VectorType::get(4, i64Type);
