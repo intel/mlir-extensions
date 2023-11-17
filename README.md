@@ -10,10 +10,39 @@ Intel® Extension for MLIR (IMEX) is a collection of MLIR dialects and passes fr
 * CMake >= 3.20.0
 * Ninja
 * doxygen (Optional for building docs)
+
 ### Additionals for development
 * pre-commit
 * clang-format
-* lit (If set up as an out-of-tree build of LLVM)
+* lit (If building with option 2 below. https://pypi.org/project/lit/)
+
+### For building GPU runtime (Optional)
+#### Installing Intel® software for general purpose GPU capability
+```
+Instructions here
+https://dgpu-docs.intel.com/installation-guides/index.html
+```
+
+#### Getting DPC++ compiler (For Sycl runtime)
+```
+Install DPC++ compiler : Instructions here
+https://www.intel.com/content/www/us/en/developer/articles/tool/oneapi-standalone-components.html#dpcpp-cpp
+
+Once DPC++ is installed source the compiler vars:
+source /PATH_TO/intel/oneapi/compiler/latest/env/vars.sh
+```
+
+#### Getting Level Zero loader (For Level zero runtime and Sycl runtime)
+* Build from source for non system-wide(local) install
+```sh
+git clone https://github.com/oneapi-src/level-zero.git
+cd level-zero
+cmake -G Ninja -B build -S . \
+   -DCMAKE_BUILD_TYPE=Release \
+   -DCMAKE_INSTALL_PREFIX=../level-zero-install
+cmake --build build --target install
+```
+* Binary package for system-wide install: https://github.com/oneapi-src/level-zero/releases
 
 ### Example: Setting up requirements using Conda
 ```sh
@@ -23,15 +52,16 @@ conda activate imex-dev
 ```
 
 ### Setting up pre-commit
-```
+```sh
 pre-commit install -f -c .pre-commit-config.yaml
 ```
 
 ## Building IMEX
 IMEX supports three different ways of building depending on how LLVM is set up.
-### Option 1: Build IMEX together with LLVM source as an LLVM external project
+Option 1 is in-tree (Built as part of LLVM) and option 2 and 3 are out-of-tree (Built outside of LLVM)
+### Option 1: Build IMEX as an LLVM external project (in-tree)
 IMEX can be treated like a sub-project of LLVM and built as part of LLVM by using an LLVM config option called LLVM_EXTERNAL_PROJECTS.
-```
+```sh
 git clone https://github.com/intel/mlir-extensions.git
 git clone https://github.com/llvm/llvm-project.git
 cd llvm-project
@@ -46,6 +76,12 @@ cmake -G Ninja -B build -S llvm \
    -DLLVM_EXTERNAL_PROJECTS="Imex" \
    -DLLVM_EXTERNAL_IMEX_SOURCE_DIR=../mlir-extensions
 
+# For GPU support pass thes cmake variables to enable the required runtime libraries
+#  -DIMEX_ENABLE_L0_RUNTIME=1
+#  -DIMEX_ENABLE_SYCL_RUNTIME=1
+# Additional if using a non system wide Level Zero Loader built from source
+#  -DLEVEL_ZERO_DIR=/PATH_TO/level-zero-install
+
 cmake --build build --target check-imex
 ```
 **Note**: `-DLLVM_INSTALL_UTILS=ON` is not needed for this build since all tests
@@ -53,69 +89,59 @@ will run using the `FileCheck` utility that is available in the build tree.
 An external `lit` is not needed as well, since all tests will run using `llvm-lit`
 in the build tree.
 
-### Option 2: Build IMEX with a separately built and installed LLVM
+### Option 2: Build IMEX with an installed LLVM (out-of-tree)
 **Note**: Make sure to pass `-DLLVM_INSTALL_UTILS=ON` when building LLVM with
 CMake so that it installs `FileCheck` to the chosen installation prefix.
-
-#### Using bundled build script
-
-The script `build_tools/build_imex.py` can build both LLVM/MLIR and IMEX for you. Use
-`build_imex.py -h` to look at all the options provided by the script. It is
-advisable to use an external lit when building IMEX.
-
-If you want the script to build LLVM and then IMEX, do as follows:
-
-```sh
-external_lit=`which lit`
-python build_tools/build_imex.py                        \
-    --working-dir $local-working-dir-to-build-llvm  \
-    --external-lit ${external_lit}
-```
-
-To reuse a previously built LLVM, use the following steps:
+Additonally, `lit` has to be installed separately as it does not install with
+the rest of LLVM.
 
 Make sure your LLVM install is built from the git commit sha as stated in
-'build_tools/llvm_version.txt'.
-
+`build_tools/llvm_version.txt`.
 ```sh
-external_lit=`which lit`
-python build_tools/build_imex.py                        \
-    --working-dir $local-working-dir-to-build-llvm  \
-    --llvm-install $llvm-target-dir                 \
-    --external-lit ${external_lit}
+cmake -G Ninja -B build -S . \
+   -DMLIR_DIR=<PATH_TO_DIRECTORY_WITH_MLIRConfig.cmake> \
+   -DLLVM_EXTERNAL_LIT=<PATH_TO_LIT> \
+   -DCMAKE_BUILD_TYPE=Release
+
+# For GPU support pass thes cmake variables to enable the required runtime libraries
+#  -DIMEX_ENABLE_L0_RUNTIME=1
+#  -DIMEX_ENABLE_SYCL_RUNTIME=1
+# Additional if using a non system wide Level Zero Loader built from source
+#  -DLEVEL_ZERO_DIR=/PATH_TO/level-zero-install
+
+cmake --build build --target check-imex
 ```
 
-#### Building Bare Metal With Existing LLVM/MLIR
+### Option 3: Build IMEX with LLVM build tree (out-of-tree)
+This is similar to option 2. Instead of installed LLVM, LLVM build tree is used.
+
 Make sure your LLVM install is built from the git commit sha as stated in
-'build_tools/llvm_version.txt'.
+`build_tools/llvm_version.txt`.
 ```sh
-mkdir build
-cd build
-CC=gcc-9 CXX=g++-9 MLIR_DIR=<llvm-install-directory> cmake ..
-make -j 12
+cmake -G Ninja -B build -S . \
+   -DMLIR_DIR=<PATH_TO_DIRECTORY_WITH_MLIRConfig.cmake> \
+   -DCMAKE_BUILD_TYPE=Release
 
+# For GPU support pass thes cmake variables to enable the required runtime libraries
+#  -DIMEX_ENABLE_L0_RUNTIME=1
+#  -DIMEX_ENABLE_SYCL_RUNTIME=1
+# Additional if using a non system wide Level Zero Loader built from source
+#  -DLEVEL_ZERO_DIR=/PATH_TO/level-zero-install
 
-For GPU support, pass the cmake variables to enable the required runtime libraries
-
-CC=gcc-9 CXX=g++-9 MLIR_DIR=<llvm-install-directory> cmake .. -DSYCL_DIR=/PATH_TO/intel/oneapi/compiler/latest/linux/ -DLEVEL_ZERO_DIR=/PATH_TO/level-zero-install/ -DIMEX_ENABLE_L0_RUNTIME=1 -DIMEX_ENABLE_SYCL_RUNTIME=1
-make -j 12
+cmake --build build --target check-imex
 ```
-
-### Option 3: Build IMEX with LLVM build tree
-This is similar to Option 2. Instead of building and installing LLVM. Just build LLVM and set "MLIR_DIR" to the sub-directory in the LLVM build tree that has generated file MLIRConfig.cmake. Rest of the step is the same as Option 2.
 
 ### Building docs
 To build user documentation do
 ```sh
-cd build
-cmake --build . --target mlir-doc
+cmake --build build --target mlir-doc
 ```
 It will render docs to the 'doc' directory.
 
 To build code documentation use '-DIMEX_INCLUDE_DOCS' when configuring with cmake and do
 ```sh
 cd build
-cmake --build . --target doc_doxygen
+cmake --build build --target doc_doxygen
 ```
 
 ## Adding a new dialect
@@ -167,31 +193,12 @@ will be extracted and a file `doc/Conversions.md` will be generated automaticall
 * Write your Pattern rewriters
 
 
-## Getting Level Zero loader (Optional, needed for GPU support with Level zero runtime)
-```Bash
-git clone https://github.com/oneapi-src/level-zero.git
-cd level-zero
-mkdir build
-cd build
-cmake ../level-zero -GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=../level-zero-install
-ninja install
-```
-
-## Getting DPC++ compiler (Optional, needed for GPU support with Sycl runtime)
-```
-Install DPC++ compiler : Instructions here
-https://www.intel.com/content/www/us/en/developer/articles/tool/oneapi-standalone-components.html#dpcpp-cpp
-
-Once DPC++ is installed source the compiler vars:
-source /PATH_TO/intel/oneapi/compiler/latest/env/vars.sh
-```
 
 ## Run the lit tests
 To run the FileCheck based tests, follow the following steps:
 
 ```sh
-cd <to your IMEX build directory>
-cmake --build . --target check-imex
+cmake --build build --target check-imex
 ```
 Add '-v' to the above command-line to get verbose output.
 
