@@ -184,6 +184,15 @@ static ze_module_handle_t loadModule(GPUSYCLQUEUE *queue, const void *data,
                            (const uint8_t *)data,
                            nullptr,
                            nullptr};
+
+  // enable large register file if needed
+  if (getenv("IMEX_ENABLE_LARGE_REG_FILE")) {
+    desc.pBuildFlags =
+        "-vc-codegen -doubleGRF -Xfinalizer -noLocalSplit -Xfinalizer "
+        "-DPASTokenReduction -Xfinalizer -SWSBDepReduction -Xfinalizer "
+        "'-printregusage -enableBCR' ";
+  }
+
   auto zeDevice = sycl::get_native<sycl::backend::ext_oneapi_level_zero>(
       syclQueue.get_device());
   auto zeContext = sycl::get_native<sycl::backend::ext_oneapi_level_zero>(
@@ -279,12 +288,15 @@ static void launchKernel(GPUSYCLQUEUE *queue, sycl::kernel *kernel,
 
     // warmups
     for (int r = 0; r < warmups; r++) {
-      enqueueKernel(syclQueue, kernel, syclNdRange, params, sharedMemBytes);
+      auto e =
+          enqueueKernel(syclQueue, kernel, syclNdRange, params, sharedMemBytes);
+      e.wait();
     }
 
     for (int r = 0; r < rounds; r++) {
       sycl::event event =
           enqueueKernel(syclQueue, kernel, syclNdRange, params, sharedMemBytes);
+      event.wait();
 
       auto startTime = event.get_profiling_info<
           cl::sycl::info::event_profiling::command_start>();

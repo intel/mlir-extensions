@@ -50,6 +50,9 @@ _mlir_ciface_fillResource1DF16(MemRefDescriptor<f16, 1> *ptr, // NOLINT
 extern "C" IMEX_RUNNERUTILS_EXPORT void
 _mlir_ciface_fillResource1DF32(MemRefDescriptor<float, 1> *ptr, // NOLINT
                                float value);
+extern "C" IMEX_RUNNERUTILS_EXPORT void
+_mlir_ciface_fillMatrixRandomBF16(MemRefDescriptor<bf16, 1> *ptr, // NOLINT
+                                  int nrows, int ncols);
 
 extern "C" IMEX_RUNNERUTILS_EXPORT void
 _mlir_ciface_printMemrefBF16(UnrankedMemRefType<bf16> *m);

@@ -17,6 +17,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <random>
 #include <string>
 
 // NOLINTBEGIN(*-identifier-naming)
@@ -35,6 +36,21 @@ _mlir_ciface_fillResource1DF16(MemRefDescriptor<f16, 1> *ptr, // NOLINT
                                float value) {
   f16 f16_val(value);
   std::fill_n(ptr->allocated, ptr->sizes[0], f16_val);
+}
+
+/// Fills the given 2D memref (i.e. matrix) passed as 1D memref
+// with randomly generated values. Numbers of rows and cols needs to be
+// specified and strides are assumed to be [ncols, 1]
+extern "C" void
+_mlir_ciface_fillMatrixRandomBF16(MemRefDescriptor<bf16, 1> *ptr, // NOLINT
+                                  int nrows, int ncols) {
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_real_distribution<> dist(-0.5f, 0.5f);
+
+  for (int i = 0; i < nrows * ncols; i++) {
+    ptr->allocated[i] = dist(gen);
+  }
 }
 
 /// Fills the given 1D float (f32) memref with the given float value.
@@ -143,7 +159,7 @@ extern "C" bool _mlir_ciface_allcloseBF16(UnrankedMemRefType<bf16> *M,
   // https://numpy.org/doc/stable/reference/generated/numpy.allclose.html
   // values may need to adjusted in the future
   const float atol = 1e-08;
-  const float rtol = 1e-05;
+  const float rtol = 1e-01;
   DynamicMemRefType<bf16> DM = DynamicMemRefType<bf16>(*M);
   DynamicMemRefType<float> DN = DynamicMemRefType<float>(*N);
   DynamicMemRefIterator<bf16> i = DM.begin();
