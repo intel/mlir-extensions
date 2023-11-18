@@ -68,12 +68,12 @@ def XeTile_WorkGroupMapAttr : XeTile_Attr<"WorkGroupMap", "wg_map"> {
 
 def XeTile_XeMapAttr : XeTile_Attr<"XeMap", "xe_map"> {
   let parameters = (ins
-    XeTile_WorkGroupMapAttr:$wg,
+    OptionalParameter<"imex::xetile::WorkGroupMapAttr">:$wg,
     XeTile_SubGroupMapAttr:$sg
   );
   let assemblyFormat = "`<` struct(params) `>`";
   let builders = [
-    AttrBuilder<(ins "llvm::ArrayRef<int32_t>":$mma_block_size,
+    AttrBuilder<(ins  "llvm::ArrayRef<int32_t>":$mma_block_size,
                       "llvm::ArrayRef<int32_t>":$wi_layout,
                       "llvm::ArrayRef<int32_t>":$wi_data,
                       "llvm::ArrayRef<int32_t>":$sg_layout,
@@ -82,6 +82,7 @@ def XeTile_XeMapAttr : XeTile_Attr<"XeMap", "xe_map"> {
         return $_get($_ctxt, WorkGroupMapAttr::get($_ctxt, sg_layout, sg_data),
           SubGroupMapAttr::get($_ctxt, mma_block_size, wi_layout, wi_data)) ;
     }]>,
+    // building XeMap without mma blocks size
     AttrBuilder<(ins  "llvm::ArrayRef<int32_t>":$wi_layout,
                       "llvm::ArrayRef<int32_t>":$wi_data,
                       "llvm::ArrayRef<int32_t>":$sg_layout,
@@ -89,7 +90,21 @@ def XeTile_XeMapAttr : XeTile_Attr<"XeMap", "xe_map"> {
     [{
         return $_get($_ctxt, WorkGroupMapAttr::get($_ctxt, sg_layout, sg_data),
           SubGroupMapAttr::get($_ctxt, wi_layout, wi_data)) ;
+    }]>,
+    // building XeMap without sub group map
+    AttrBuilder<(ins  "llvm::ArrayRef<int32_t>":$mma_block_size,
+                      "llvm::ArrayRef<int32_t>":$wi_layout,
+                      "llvm::ArrayRef<int32_t>":$wi_data),
+    [{
+        return $_get($_ctxt, WorkGroupMapAttr(), SubGroupMapAttr::get($_ctxt, mma_block_size, wi_layout, wi_data));
+    }]>,
+    // building XeMap without sub group map and mma block size
+    AttrBuilder<(ins  "llvm::ArrayRef<int32_t>":$wi_layout,
+                      "llvm::ArrayRef<int32_t>":$wi_data),
+    [{
+        return $_get($_ctxt, WorkGroupMapAttr(), SubGroupMapAttr::get($_ctxt, wi_layout, wi_data)) ;
     }]>
+
   ];
 }
 
