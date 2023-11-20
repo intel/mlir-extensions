@@ -198,7 +198,10 @@ void GPUXToSPIRVPass::runOnOperation() {
     mlir::populateSCFToSPIRVPatterns(typeConverter, scfToSpirvCtx, patterns);
     mlir::cf::populateControlFlowToSPIRVPatterns(typeConverter, patterns);
     mlir::populateMathToSPIRVPatterns(typeConverter, patterns);
-    imex::populateXeGPUToVCIntrinsicsPatterns(typeConverter, patterns);
+    if (this->enableVCIntrinsic)
+      imex::populateXeGPUToVCIntrinsicsPatterns(typeConverter, patterns);
+    else
+      imex::populateXeGPUToGenISAPatterns(typeConverter, patterns);
 
     if (failed(applyFullConversion(gpuModule, *target, std::move(patterns))))
       return signalPassFailure();
