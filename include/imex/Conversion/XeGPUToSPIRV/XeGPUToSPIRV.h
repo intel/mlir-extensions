@@ -27,6 +27,9 @@ namespace imex {
 // XeGPU to VC Intrinsics pattern
 void populateXeGPUToVCIntrinsicsPatterns(
     mlir::SPIRVTypeConverter &typeConverter, mlir::RewritePatternSet &patterns);
+// XeGPU to genISA Intrinsics pattern
+void populateXeGPUToGenISAPatterns(mlir::SPIRVTypeConverter &typeConverter,
+                                   mlir::RewritePatternSet &patterns);
 } // namespace imex
 
 #endif // IMEX_CONVERSION_XEGPUTOSPIRV_H

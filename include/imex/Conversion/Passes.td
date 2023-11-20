@@ -251,8 +251,8 @@ memref, arith and math.
   let constructor = "imex::createConvertGPUXToSPIRVPass()";
   let dependentDialects = ["::mlir::spirv::SPIRVDialect"];
   let options = [
-    Option<"enableSimtIntrinsic", "enable-simt-intrinsic","bool", "false",
-           "Enable XeGPU.simt Ops lowered to intel genISA simt Intrinsics">
+    Option<"enableVCIntrinsic", "enable-vc-intrinsic","bool", "true",
+           "Enable XeGPU Ops lowered to intel vc Intrinsics">
   ];
 }
 
