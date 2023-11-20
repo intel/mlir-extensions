@@ -165,7 +165,7 @@ module @gemm_using_jointmatrix_module attributes {gpu.container_module} {
       %load_offset_C = spirv.IAdd %mul_c_2, %mul_c_3 : i64
       %load_address_C = spirv.AccessChain %arg2[%load_offset_C] : !spirv.ptr<!spirv.array<4194304xf32>, CrossWorkgroup>, i64
 
-      %joint_matrix_C = spirv.INTEL.JointMatrixLoad <Subgroup> <RowMajor> %load_address_C, %c_N {memory_access = #spirv.memory_access<Volatile>} : (!spirv.ptr<f32, CrossWorkgroup>, i64) -> !spirv.jointmatrix<8x16xf32, RowMajor, Subgroup, Accumulator>
+      %joint_matrix_C = spirv.INTEL.JointMatrixLoad <Subgroup> <RowMajor> %load_address_C, %c_N  : (!spirv.ptr<f32, CrossWorkgroup>, i64) -> !spirv.jointmatrix<8x16xf32, RowMajor, Subgroup, Accumulator>
 
       // Loop through (k = 0; k < colsA / tK; k++)
       %loop_cnt = spirv.UDiv %c_K, %c_tK : i64
@@ -185,7 +185,7 @@ module @gemm_using_jointmatrix_module attributes {gpu.container_module} {
           %load_offset_A = spirv.IAdd %mul_2, %mul_3 : i64
           %load_address_A = spirv.AccessChain %arg0[%load_offset_A] : !spirv.ptr<!spirv.array<4194304xi16>, CrossWorkgroup>, i64
 
-          %joint_matrix_A = spirv.INTEL.JointMatrixLoad <Subgroup> <RowMajor> %load_address_A, %c_K {memory_access = #spirv.memory_access<Volatile>} : (!spirv.ptr<i16, CrossWorkgroup>, i64) -> !spirv.jointmatrix<8x16xi16, RowMajor, Subgroup, MatrixA>
+          %joint_matrix_A = spirv.INTEL.JointMatrixLoad <Subgroup> <RowMajor> %load_address_A, %c_K  : (!spirv.ptr<i16, CrossWorkgroup>, i64) -> !spirv.jointmatrix<8x16xi16, RowMajor, Subgroup, MatrixA>
 
           // Loading B
           // %load_offset_B = (k * tK / vnniFactor) * (colsB * vnniFactor) + sg_start_y / SG_SIZE * tN * vnniFactor
@@ -206,7 +206,7 @@ module @gemm_using_jointmatrix_module attributes {gpu.container_module} {
           %stride_B = spirv.IMul %c_N, %c_vnni_factor : i64
 
 
-          %joint_matrix_B = spirv.INTEL.JointMatrixLoad <Subgroup> <Packed> %load_address_B, %stride_B {memory_access = #spirv.memory_access<Volatile>} : (!spirv.ptr<i16, CrossWorkgroup>, i64) -> !spirv.jointmatrix<16x16xi16, Packed, Subgroup, MatrixB>
+          %joint_matrix_B = spirv.INTEL.JointMatrixLoad <Subgroup> <Packed> %load_address_B, %stride_B  : (!spirv.ptr<i16, CrossWorkgroup>, i64) -> !spirv.jointmatrix<16x16xi16, Packed, Subgroup, MatrixB>
 
           %r = spirv.INTEL.JointMatrixMad <Subgroup> %joint_matrix_A, %joint_matrix_B, %matrixC1 : !spirv.jointmatrix<8x16xi16, RowMajor, Subgroup, MatrixA>, !spirv.jointmatrix<16x16xi16, Packed, Subgroup, MatrixB> -> !spirv.jointmatrix<8x16xf32,  RowMajor, Subgroup, Accumulator>
 
@@ -215,7 +215,7 @@ module @gemm_using_jointmatrix_module attributes {gpu.container_module} {
           spirv.BranchConditional %6, ^continue(%incr_k, %r : i64, !spirv.jointmatrix<8x16xf32,  RowMajor, Subgroup, Accumulator>), ^store(%incr_k, %r : i64, !spirv.jointmatrix<8x16xf32, RowMajor, Subgroup, Accumulator>)
 
         ^store(%k2: i64, %matrixC2: !spirv.jointmatrix<8x16xf32, RowMajor, Subgroup, Accumulator>):
-          spirv.INTEL.JointMatrixStore <Subgroup> <RowMajor> %load_address_C, %matrixC2, %c_N {memory_access = #spirv.memory_access<Volatile>} : (!spirv.ptr<f32, CrossWorkgroup>, !spirv.jointmatrix<8x16xf32, RowMajor, Subgroup, Accumulator>, i64)
+          spirv.INTEL.JointMatrixStore <Subgroup> <RowMajor> %load_address_C, %matrixC2, %c_N  : (!spirv.ptr<f32, CrossWorkgroup>, !spirv.jointmatrix<8x16xf32, RowMajor, Subgroup, Accumulator>, i64)
           spirv.Branch ^continue(%k2, %matrixC2: i64, !spirv.jointmatrix<8x16xf32, RowMajor, Subgroup, Accumulator>)
 
         ^continue(%k3: i64, %matrixC3: !spirv.jointmatrix<8x16xf32, RowMajor, Subgroup, Accumulator>):
