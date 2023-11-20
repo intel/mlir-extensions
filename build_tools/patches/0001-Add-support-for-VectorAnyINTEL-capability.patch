@@ -72,10 +72,10 @@ index 1e61aa747967..6f0f728f811e 100644
 
  class SPIRV_MatrixOrCoopMatrixOf<Type type> :
 diff --git a/mlir/include/mlir/IR/CommonTypeConstraints.td b/mlir/include/mlir/IR/CommonTypeConstraints.td
-index 4fc14e30b8a1..74739ecccd0d 100644
+index b0b5348baaad..2c569a651f8b 100644
 --- a/mlir/include/mlir/IR/CommonTypeConstraints.td
 +++ b/mlir/include/mlir/IR/CommonTypeConstraints.td
-@@ -546,6 +546,92 @@ class ScalableVectorOfRankAndLengthAndType<list<int> allowedRanks,
+@@ -604,6 +604,92 @@ class ScalableVectorOfRankAndLengthAndType<list<int> allowedRanks,
    ScalableVectorOfLength<allowedLengths>.summary,
    "::mlir::VectorType">;
 
@@ -104,7 +104,7 @@ index 4fc14e30b8a1..74739ecccd0d 100644
 +// Whether the number of elements of a scalable vector is from the given
 +// `allowedRanges` list, the list has two values, start and end of the range (inclusive)
 +class IsScalableVectorOfLengthRangePred<list<int> allowedRanges> :
-+  And<[IsScalableVectorTypePred,
++  And<[IsVectorTypeWithAnyDimScalablePred,
 +       And<[CPred<[{$_self.cast<::mlir::VectorType>().getNumElements()
 +                           >= }]
 +                         # allowedRanges[0]>,
@@ -165,9 +165,9 @@ index 4fc14e30b8a1..74739ecccd0d 100644
 +  ScalableVectorOfLengthRange<allowedRanges>.summary,
 +  "::mlir::VectorType">;
 +
- def AnyVector : VectorOf<[AnyType]>;
- // Temporary vector type clone that allows gradual transition to 0-D vectors.
- def AnyVectorOfAnyRank : VectorOfAnyRankOf<[AnyType]>;
+ // Any ShapedType where the size of the n-th dim is contained in `allowedSizes`.
+ // Negative values for `n` index in reverse.
+ class ShapedTypeWithNthDimOfSize<int n, list<int> allowedSizes> : Type<
 diff --git a/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp b/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp
 index 124d4ed6e8e6..9188f8b699b4 100644
 --- a/mlir/lib/Dialect/SPIRV/IR/SPIRVDialect.cpp
