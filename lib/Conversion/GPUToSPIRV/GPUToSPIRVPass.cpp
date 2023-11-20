@@ -162,8 +162,8 @@ void GPUXToSPIRVPass::runOnOperation() {
     });
     typeConverter.addConversion(
         [&](xegpu::TensorDescType type) -> ::mlir::Type {
-          auto i64Type = ::mlir::IntegerType::get(context, 64);
-          return ::mlir::VectorType::get(2, i64Type);
+          auto i32Type = ::mlir::IntegerType::get(context, 32);
+          return ::mlir::VectorType::get(8, i32Type);
         });
     typeConverter.addConversion([&](::mlir::VectorType type) -> ::mlir::Type {
       unsigned rank = type.getRank();
