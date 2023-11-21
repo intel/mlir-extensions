@@ -22,12 +22,12 @@ XeTile provides a middle-level abstraction for matmul operation, sits between Li
 
 | Ops	| Syntax	| Example |
 | :---   | :----   | :--- |
-|init_tile	| operation ::= XeTile.init_tile $base_memref  `$offset0 `, `$offset1 `:` type($base_memref) `,` index `,` index  `->` type($tile, attr-dict)	| ```mlir  %block = XeTile.init_tile %base_memref, %tile_offset:2 memref<128x128xbf16> into tile<8x16xbf16> ```|
-|load_tile	| operation ::= `XeTile.load_tile` $tile  attr-dict `:` type($tile)  `->` type($res)	 |```mlir  %vector_a = XeTile.load_tile %tile_a  transpose = [1,0] padding=0 tile<64x32xbf16> into vector <32x64xbf16> ``` |
-|store_tile	| operation ::= `XeTile.store_tile` $value `,` $tile attr-dict `:` type($value) `,` type($tile) | XeTile.store_tile %tile_a  %vector_a  vector <64x64xbf16> into tile<64x64xbf16> |
-| Update_tile_offset	| operation ::= `XeTile.update_tile_offset` $tile `,` $delta0 `,` $delta1 `:` type($tile) `,` index `,` index `->` type($tile)	| %tdesc_updated = XeTile.update_nd_offset %tdesc, %offset_x, offset_y tensor_desc<32x64xbf16>, index, index -> tensor_desc<32x64xbf16> |
-| prefetch_tile	| operation ::= `XeTile.prefetch_tile` $tile `,` attr-dict `:` type($tile)	  | XeTile.prefetch_tile %coop_tile:  tile<16x32xbf16> | 
-| Tile_mma	| operation ::= `XeTile.dpas` $matC, $matA, $matB attr_dict `:` type($matC) `,` type($matA) `,` type($matB) `->` type($res)	 | %vector_c = XeTile.tile_mma %vector_c, %vector_a, %vector_b : vector <64x128xfloat>, vector <64x32xbf16>, vector<32x128xbf16>  into vector <64x128xfloat>  |
+|init_tile	| operation ::= XeTile.init_tile $base_memref $offset0, $offset1: type($base_memref), index, index -> type($tile, attr-dict)	| %block = XeTile.init_tile %base_memref, %tile_offset:2 memref<128x128xbf16> into tile<8x16xbf16> |
+|load_tile	| operation ::=XeTile.load_tile $tile  attr-dict:type($tile) ->type($res)	 | %vector_a = XeTile.load_tile %tile_a  transpose = [1,0] padding=0 tile<64x32xbf16> into vector <32x64xbf16>|
+|store_tile	| operation ::=XeTile.store_tile $value, $tile attr-dict: type($value), type($tile) | XeTile.store_tile %tile_a  %vector_a  vector <64x64xbf16> into tile<64x64xbf16> |
+| Update_tile_offset	| operation ::=XeTile.update_tile_offset $tile, $delta0, $delta1: type($tile), index, index-> type($tile)	| %tdesc_updated = XeTile.update_nd_offset %tdesc, %offset_x, offset_y tensor_desc<32x64xbf16>, index, index -> tensor_desc<32x64xbf16> |
+| prefetch_tile	| operation ::=XeTile.prefetch_tile $tile, attr-dict: type($tile)	  | XeTile.prefetch_tile %coop_tile:  tile<16x32xbf16> | 
+| Tile_mma	| operation ::=XeTile.dpas $matC, $matA, $matB attr_dict: type($matC), type($matA), type($matB)-> type($res)	 | %vector_c = XeTile.tile_mma %vector_c, %vector_a, %vector_b : vector <64x128xfloat>, vector <64x32xbf16>, vector<32x128xbf16>  into vector <64x128xfloat>  |
 
 To create a 2D Tile memory descriptor, the user needs to set up a tile (init_tile) describing a 2D region within the global memory.  Setting up a tile requires the shape of the parent tile and the underneath physical memory buffer size, known as the base matrix.  The base matrix must be 2D and must be contiguous.  The XeTile takes the base matrix address pointer, shape, and strides, and the tile’s offsets and shape.  Offsets, strides, and shapes are for two dimensions and in the number of elements. base_stride[0] describes the number of elements between the two rows, describing the width of the underneath physical memory buffer, and *%base_strides[1] must be 1, as the innermost dimension of the base matrix must be contiguous. The current version only supports 2D memref with a row-major layout.  
 
@@ -67,28 +67,28 @@ Attribute `padding` specifies the padding value for the out-of-boundary access. 
 ```
 `load_tile` need to be used together with the tile_mma.  The VNNI layout is not exposed to tile dialect users.  A lowering pass will add the VNNI transformation at the XeGPU dialect. 
 
-store_tile stores a vector to memory. Transpose and padding attributes are not supported. 
+`store_tile` stores a vector to memory. Transpose and padding attributes are not supported. 
 ```mlir  
   XeTile.store_tile %tile_a  %vector_a  :
    vector <64x64xbf16> into tile<64x64xbf16> 
 ```
-prefetch_tile prefetches the tile to cache.  
+`prefetch_tile` prefetches the tile to cache.  
 ```mlir
   XeTile.prefetch_tile %coop_tile:  tile<8x8xbf16> 
 ```
-Tile_mma represents the matrix multiplication on 2D vectors. The semantics can be represented by vector.contract, so tile_mma works more like a syntax sugar. This also means that the code can be lowered to vector.contract and mapped to HW without DPAS support nicely.  
+`tile_mma` represents the matrix multiplication on 2D vectors. The semantics can be represented by vector.contract, so tile_mma works more like a syntax sugar. This also means that the code can be lowered to vector.contract and mapped to HW without DPAS support nicely.  
 ```mlir
   %vector_c = XeTile.tile_mma %vector_a, %vector_b, %vector_c   :
      vector <64x128xfloat>, vector <64x32xbf16>, vector<32x128xbf16>
 	   into vector <64x128xfloat>  
 ```
-An tile_mma variant without vector_c initialization. 
+A `tile_mma` variant without vector_c initialization. 
 ```mlir
   %vector_c = XeTile.tile_mma %vector_a, %vector_b   :
      vector <64x32xbf16>, vector<32x128xbf16>
 	   into vector <64x128xfloat>  
 ```
-Update_tile_offset updates tile with offset_x and offset_y, to move the current tile to a new position.  These offsets are relative offset to the current position and counted in the number of elements.  Usually only one value is needed to update since the tile is only moving along the K dimension. Users should avoid initializing new tiles repeatedly. For best performance, the user should only initialize one tile as a base tile and update the tile offset to move to a new tile.  
+`update_tile_offset` updates tile with offset_x and offset_y, to move the current tile to a new position.  These offsets are relative offset to the current position and counted in the number of elements.  Usually only one value is needed to update since the tile is only moving along the K dimension. Users should avoid initializing new tiles repeatedly. For best performance, the user should only initialize one tile as a base tile and update the tile offset to move to a new tile.  
 ```mlir
   %tile_updated = XeTile.update_tile_offset %tile, %offset_x, offset_y :
 		tile<64x64xbf16>, index, index into tile <64x64xbf16>
@@ -102,12 +102,12 @@ Below is an example.
 
    %a_init_tile = xetile.init_tile %A[%m, %c0] : memref<1024x1024xf16> -> !xetile.tile<128x128xf16, #xe_map_a>
 ``` 
-wg_map describes the mapping between subgroup thread and the memory specified by tile. 
-wg_map.sg_layout specifies the subgroup layout, and wg_map.sg_data specifies the tile size owned by each subgroup. In the example above, sg_layout=[2,2] means that each workgroup has 4 subgroups with 2D layout [2,2]. sg_data = [32,128] means that each subgroup works on a submatrix [32, 128].
+`wg_map` describes the mapping between subgroup thread and the memory specified by tile. 
+`wg_map.sg_layout` specifies the subgroup layout, and `wg_map.sg_data` specifies the tile size owned by each subgroup. In the example above, sg_layout=[2,2] means that each workgroup has 4 subgroups with 2D layout [2,2]. sg_data = [32,128] means that each subgroup works on a submatrix [32, 128].
 
 The tile size must be divisible by wg_map.sg_data.  For each dimension, the size of wg_map.sg_data must be divisible by wg_map.sg_data, and the data elements assigned to each subgroup thread must be contiguous. When the tile size is smaller than the submatrix size specified by wg_map.sg_layout and wg_map.sg_data, it is distributed to subgroup threads in a round-robin fashion. If there is no more data to assign along a certain dimension, it wraps around to the beginning of the tile along that dimension.  For example, for the tile size [128, 128], the tile would be sliced to four subtiles with size [32,128], with the first and third subtile assigned to subgroup thread 0 and 1, and the second and fourth to thread 2 and 3. 
 
-sg_map describes the mapping between WI thread and the memory specified by the tensor descriptor. sg_map.wi_layout specifies the layout in which WI threads corresponding to the memory, and sg_map.wi_data describes the data block accessed by each WI thread.  In the example above, wi_layout=[2, 8] means that each subgroup has 16 WI threads, and wi_data=[1,2] means that each WI thread owns a [1,2] data fragment from total [2,16] submatrix at the subgroup level.  
+`sg_map` describes the mapping between WI thread and the memory specified by the tensor descriptor. `sg_map.wi_layout` specifies the layout in which WI threads corresponding to the memory, and `sg_map.wi_data` describes the data block accessed by each WI thread.  In the example above, wi_layout=[2, 8] means that each subgroup has 16 WI threads, and wi_data=[1,2] means that each WI thread owns a [1,2] data fragment from total [2,16] submatrix at the subgroup level.  
 
 The wg_map.sg_data size must be divisible by sg_map.wi_layout multiplying with sg_map.wi_data.  For each dimension, the size of wg_map.sg_data must be divisible by wi_layout x wi_data, and the data elements assigned to each WI thread must be contiguous. When subgroup owned submatrix is larger than the submatrix size specified by sg_map.wi_layout and sg_map.wi_data, it is distributed to WI threads in a round-robin fashion. The full wg_map.sg_data[0:1] is distributed with the submatrix size from multiplying wi_layout[0:1] and wi_data[0:1], so each element is mapped to one and only WI thread.
 
@@ -118,30 +118,30 @@ Below is a summary.
 
 | Ops	| Syntax	| Example |
 | :---   | :----   | :--- |
-|create_tdesc	| operation ::= `XeGPU.create_tdesc` $base_addr `,` $offset attr-dict `:` type($base_addr) `,` type($offset) `->` type($tdesc)	| %scatter_tdesc1 = XeGPU.create_tdesc %mem_addr, %offset: int64, Vector<16 x index> -> tensor_desc <16 x bf16, #scattered,  memory_scope=slm, chunk_size_per_lane=1 > |
-|load_gather	| operation ::= `XeGPU.load_gather` $tdesc `,` $mask attr-dict `:` type($tdesc) `,` type($mask) `->` type($res)	| %result = XeGPU.load_gather %scatter_tdesc2, %mask {L1 = cached, L2 = uncached, transpose=[1,0]}: tensor_desc <16x8xbf16, #Scattered>, vector<16xi1> -> vector<8x16xbf16> |
-|store_scatter	| operation ::= `XeGPU.store_scatter` $value `,` $tdesc `,` $mask attr-dict `:` type($value) `,` type($tdesc) `,` type($mask)	| XeGPU.store_scatter %value, %scatter_tdesc2, %mask {L1 = cached, L2 = uncached}: vector<16xbf16>, tensor_desc <16xbf16, #scattered>, vector<16xi1> |
-|update_offset	| operation ::= `XeGPU.update_offset` $tdesc `,` $delta `:` type($tdesc) `,` type($delta) `->` type($tdesc)	| %tdesc_updated = XeGpu.update_offset %tdesc, %offsets: tensor_desc<16xbf16, #scattered>, vector<16x index> -> tensor_desc<16xbf16, #scattered> |
-|Prefetch	| operation ::= `XeGPU.prefetch` $tdesc ` attr-dict `:` type($tdesc) `	| XeGPU.prefetch %scatter_tdesc1 {L1 = cached, L2 = uncached}: tensor_desc <16xbf16, #scattered> |
-|atomic_rmw	| operation ::= `XeGPU.atomic_rmw `$kind `, ` $value `,` $tdesc `,` $mask attr-dict `:` type($value) `,` type($tdesc) `,` type($mask) 	| %ret_value = XeGPU.atomic_rmw “addf”, %value, %scatter_mem2, %mask : vector<16xbf16>, tensor_desc <16xbf16, #scattered>, vector<16xi1> |
-|create_nd_tdesc	| operation ::= `XeGPU.create_nd_tdesc` $base_addr  `,` $offset0 `,` $offset1 `,` $tdim0 `,` $tdim1 `,` $tstride0 attr-dict `:` type($base_addr) `,` index `,` index `,` index `,` index `,` index `,` index  `->` type($tdesc)	| %tdesc2 = XeGPU.create_nd_tdesc %mem_addr, %tile_offset:2, %base_shape:2,%base_strides:2: int64, index, index, index, index, index, index  -> tensor_desc <8x16xbf16, memory_scope=global> |
-|load_nd	| operation ::= `XeGPU.load_nd` $tdesc  attr-dict `:` type($tdesc)  `->` type($res)	| %result = XeGPU.load_nd %tdesc2 {L1_hint = uncached, L3_hint = uncached}: tensor_desc <8x16xbf16> -> vector<8x16xbf16> |
-|dpas	| operation ::= `XeGPU.dpas` $matC, $matA, $matB attr_dict `:` type($matC) `,` type($matA) `,` type($matB) `->` type($res)	| %vector_c = XeGPU.dpas %vector_c, %vector_a, %vector_b    vector <8x16xfloat> , vector <8x8x2xbf16>, vector<8x16x2xbf16>  -> vector <8x16xfloat> |
-|store_nd	| operation ::= `XeGPU.store_nd` $value `,` $tdesc attr-dict `:` type($value) `,` type($tdesc) | XeGPU.store_nd %value, %tdesc2  {L1_hint = uncached, L3_hint = uncached}: vector<8x16xbf16>, tensor_desc <8x16xbf16> |
-|update_nd_offset	| operation ::= `XeGPU.update_nd_offset` $tdesc `,` $delta0 `,` $delta1 `:` type($tdesc) `,` index `,` index `->` type($tdesc)	| %tdesc_updated = XeGpu.update_nd_offset %tdesc, %offset_x, offset_y, tensor_desc<8x16xbf16>, index, index -> tensor_desc<8x16xbf16> |
-|prefetch_nd	| operation ::= `XeGPU.prefetch_nd` $tdesc `,` attr-dict `:` type($tdesc) | XeGPU.prefetch_nd %tdesc2: tensor_desc <8x16xbf16> |
-|alloc_nbarrier	| operation ::= `XeGPU.alloc_nbarrier` $barrier_couter `:` uint8_t | XeGPU.alloc_nbarrier %nbarrier_count: Uint8_t |
-|create_nbarrier	| operation ::= `XeGPU.create_nbarrier` $nbarrier_id `,` $nbarrier_role  attr-dict `:` uint8_t `,` type($nbarrier_role)   `->` type($nbarrier) | %nbarrier = XeGPU.create_nbarrier %nbarrier_id, %nbarrier_role {num_producers = 2, num_consumers = 2}: Uint8_t, nbarrier_role -> !XeGPU.nbarrier |
-|nbarrier_arrive	| operation ::= `XeGPU.nbarrier_arrive` $nbarrier_id   `:` type($nbarrier) | XeGPU.nbarrier_arrive %nbarrier : !XeGPU.nbarrier |
-|nbarrier_wait	| operation ::= `XeGPU.nbarrier_wait` $nbarrier_id   `:` type($nbarrier) | XeGPU.nbarrier_wait %nbarrier : !XeGPU.nbarrier |
-|Mfence	| operation ::= `XeGPU.mfence` attr-dict | XeGPU.mfence {fence_scope = global} | 
-|complile-hint	| operation ::= `XeGPU.compile_hint` attr-dict	| XeGPU.compile_hint {scheduling_barrier} |
+|create_tdesc	| operation ::= XeGPU.create_tdesc $base_addr , $offset attr-dict : type($base_addr) , type($offset) -> type($tdesc)	| %scatter_tdesc1 = XeGPU.create_tdesc %mem_addr, %offset: int64, Vector<16 x index> -> tensor_desc <16 x bf16, #scattered,  memory_scope=slm, chunk_size_per_lane=1 > |
+|load_gather	| operation ::= XeGPU.load_gather $tdesc , $mask attr-dict : type($tdesc) , type($mask) -> type($res)	| %result = XeGPU.load_gather %scatter_tdesc2, %mask {L1 = cached, L2 = uncached, transpose=[1,0]}: tensor_desc <16x8xbf16, #Scattered>, vector<16xi1> -> vector<8x16xbf16> |
+|store_scatter	| operation ::= XeGPU.store_scatter $value , $tdesc , $mask attr-dict : type($value) , type($tdesc) , type($mask)	| XeGPU.store_scatter %value, %scatter_tdesc2, %mask {L1 = cached, L2 = uncached}: vector<16xbf16>, tensor_desc <16xbf16, #scattered>, vector<16xi1> |
+|update_offset	| operation ::= XeGPU.update_offset $tdesc , $delta : type($tdesc) , type($delta) -> type($tdesc)	| %tdesc_updated = XeGpu.update_offset %tdesc, %offsets: tensor_desc<16xbf16, #scattered>, vector<16x index> -> tensor_desc<16xbf16, #scattered> |
+|Prefetch	| operation ::= XeGPU.prefetch $tdesc  attr-dict : type($tdesc) 	| XeGPU.prefetch %scatter_tdesc1 {L1 = cached, L2 = uncached}: tensor_desc <16xbf16, #scattered> |
+|atomic_rmw	| operation ::= XeGPU.atomic_rmw $kind ,  $value , $tdesc , $mask attr-dict : type($value) , type($tdesc) , type($mask) 	| %ret_value = XeGPU.atomic_rmw “addf”, %value, %scatter_mem2, %mask : vector<16xbf16>, tensor_desc <16xbf16, #scattered>, vector<16xi1> |
+|create_nd_tdesc	| operation ::= XeGPU.create_nd_tdesc $base_addr  , $offset0 , $offset1 , $tdim0 , $tdim1 , $tstride0 attr-dict : type($base_addr) , index , index , index , index , index , index  -> type($tdesc)	| %tdesc2 = XeGPU.create_nd_tdesc %mem_addr, %tile_offset:2, %base_shape:2,%base_strides:2: int64, index, index, index, index, index, index  -> tensor_desc <8x16xbf16, memory_scope=global> |
+|load_nd	| operation ::= XeGPU.load_nd $tdesc  attr-dict : type($tdesc)  -> type($res)	| %result = XeGPU.load_nd %tdesc2 {L1_hint = uncached, L3_hint = uncached}: tensor_desc <8x16xbf16> -> vector<8x16xbf16> |
+|dpas	| operation ::= XeGPU.dpas $matC, $matA, $matB attr_dict : type($matC) , type($matA) , type($matB) -> type($res)	| %vector_c = XeGPU.dpas %vector_c, %vector_a, %vector_b    vector <8x16xfloat> , vector <8x8x2xbf16>, vector<8x16x2xbf16>  -> vector <8x16xfloat> |
+|store_nd	| operation ::= XeGPU.store_nd $value , $tdesc attr-dict : type($value) , type($tdesc) | XeGPU.store_nd %value, %tdesc2  {L1_hint = uncached, L3_hint = uncached}: vector<8x16xbf16>, tensor_desc <8x16xbf16> |
+|update_nd_offset	| operation ::= XeGPU.update_nd_offset $tdesc , $delta0 , $delta1 : type($tdesc) , index , index -> type($tdesc)	| %tdesc_updated = XeGpu.update_nd_offset %tdesc, %offset_x, offset_y, tensor_desc<8x16xbf16>, index, index -> tensor_desc<8x16xbf16> |
+|prefetch_nd	| operation ::= XeGPU.prefetch_nd $tdesc , attr-dict : type($tdesc) | XeGPU.prefetch_nd %tdesc2: tensor_desc <8x16xbf16> |
+|alloc_nbarrier	| operation ::= XeGPU.alloc_nbarrier $barrier_couter : uint8_t | XeGPU.alloc_nbarrier %nbarrier_count: Uint8_t |
+|create_nbarrier	| operation ::= XeGPU.create_nbarrier $nbarrier_id , $nbarrier_role  attr-dict : uint8_t , type($nbarrier_role)   -> type($nbarrier) | %nbarrier = XeGPU.create_nbarrier %nbarrier_id, %nbarrier_role {num_producers = 2, num_consumers = 2}: Uint8_t, nbarrier_role -> !XeGPU.nbarrier |
+|nbarrier_arrive	| operation ::= XeGPU.nbarrier_arrive $nbarrier_id   : type($nbarrier) | XeGPU.nbarrier_arrive %nbarrier : !XeGPU.nbarrier |
+|nbarrier_wait	| operation ::= XeGPU.nbarrier_wait $nbarrier_id   : type($nbarrier) | XeGPU.nbarrier_wait %nbarrier : !XeGPU.nbarrier |
+|Mfence	| operation ::= XeGPU.mfence attr-dict | XeGPU.mfence {fence_scope = global} | 
+|complile-hint	| operation ::= XeGPU.compile_hint attr-dict	| XeGPU.compile_hint {scheduling_barrier} |
 
 The XeGPU dialect supports lowering from XeTile dialects, so the tile-based XeTile operation can be further decomposed to multiple XeGPU ops. For example, XeTile.load_tile operation could be lowered to XeGPU’s load_nd or load_gather operations. Compared with the XeTile dialect, the XeGPU dialect works with smaller memory size, since the core XeGPU operation maps to one hardware instruction underneath.  
 
 XeGPU supports two flavors of load/store operations: n-dimension load (nd load) and scattered load. Both need to create a tensor descriptor to describe the addresses/offsets to the tensor data, use it to load/store/prefetch, and then update it to the next data blocks.  Nd_load can be used to map to PVC’s 1D load, 2D load, or future nd load. Scattered load requires a special tensor descriptor, which contains one separate address offset for each WI thread.  
 
-Create_nd_tdesc creates a tensor descriptor for an n-dimensional tensor, which describes a subview of n-dimensional base tensor. The information of the base tensor is passed as operands including base address, offsets, and strides. The shape and element data type of the tensor view (subtensor) are specified in the output tensor_desc data type, and they must be known at the compile-time. The tensor_desc design is extensible for future Xe hardware if it will cover higher rank. To create a n-dimension tensor descriptor, the user needs to pass “n” number of base_shape and base_stride for the base nd-tile, and “n” number of offesets, and the shape in the result tensor_desc has be “n” numbers.  
+`create_nd_tdesc` creates a tensor descriptor for an n-dimensional tensor, which describes a subview of n-dimensional base tensor. The information of the base tensor is passed as operands including base address, offsets, and strides. The shape and element data type of the tensor view (subtensor) are specified in the output tensor_desc data type, and they must be known at the compile-time. The tensor_desc design is extensible for future Xe hardware if it will cover higher rank. To create a n-dimension tensor descriptor, the user needs to pass “n” number of base_shape and base_stride for the base nd-tile, and “n” number of offesets, and the shape in the result tensor_desc has be “n” numbers.  
 
 The example below creates a 2D tensor_desc with base matrix address, shapes, strides, and the offsets of the 2D subtensor. the tensor_desc “remembers” the base tensor buffer’s information, so when it is used to load the subtensor, the lowering will handle the out-of-boundary access implicitly and preferably using hardware auto-padding features for the out-of-boundary elements.  On PVC, the stride of the innermost dimension (base_stride[0]) must be 1.   
 ```mlir
@@ -154,7 +154,7 @@ The example below creates a 2D tensor_desc with base matrix address, shapes, str
 		: uint64, index, index, index, index, index, index
      	into tensor_desc <8x16xbf16>
 ```
-Attribute xegpu.sg_map follows the same definition used in xeTile.sg_map. 
+Attribute `xegpu.sg_map` follows the same definition used in xeTile.sg_map. 
 create_nd also accepts memref as input instead of memory address.  The example below ignores the mode and sg_map attribute for simplicity, but works for both cases. 
 ```mlir
   %tdesc2 = XeGPU.create_nd_tdesc %mref, %offsets:2 
@@ -170,20 +170,20 @@ The example below accepts a memory address and an offset and creates a 1D tensor
 		uint64, index into tensor_desc <16xbf16, #sg_map_a>
 ```
 The outer dimension of wi_layout must be 1 for 1D tensor_desc.  
-Attribute memory_scope indicates whether the tensor is located in the global or shared local memory. The default value is global. 
-Attribute boundary_check indicates whether the operation detects the boundary and pads with zero for out-of-boundary access. The default value is true. 
+Attribute `memory_scope` indicates whether the tensor is located in the global or shared local memory. The default value is global. 
+Attribute `boundary_check` indicates whether the operation detects the boundary and pads with zero for out-of-boundary access. The default value is true. 
 
-Vector Compute (VC) mode means that the XeGPU op is carried out by all the WI threads within subgroup, so effectively input and output are vectors. Under this mode, there is no need to specify the mapping of each individual WI thread to the data fragments. The XeGPU operation works on the vectors as a whole. 
+Attribute `mode` indicates whether the XeGPU operation is working under “Vector Compute” (VC) mode.  Under this mode, the XeGPU op is carried out by all the WI threads within a subgroup. There is no need to specify the mapping of each individual WI thread to the data fragments. The XeGPU operation works on the vectors as a whole. 
 ```mlir
   %tdesc1 = XeGPU.create _nd_tdesc %mem_addr, %offset  
 		{memory_scope=slm, boundary_check=false, mode = vc}: 
 		uint64, index into tensor_desc <16xbf16>
 ```
-Attribute mode indicates whether the XeGPU operation is working under “Vector Compute” (VC) mode.  Any XeGPU operation working at VC mode needs to explicitly declare this attribute. The default mode is SIMT mode. When VC mode is on, the sg_map attribute should not be presented in the associated tensor_desc. 
+ Any XeGPU operation working at VC mode needs to explicitly declare this attribute. The default mode is SIMT mode. When VC mode is on, the sg_map attribute should not be presented in the associated tensor_desc. 
 
 For 1D tensor description, the base_shape and base_stride are optional, the attribute “boundary_check” must be false, “%mem_add + %offset” must not access out-of-boundary memory to avoid undefined behavior. 
 
-load_nd works with create_nd_tdesc and loads the memory specified by tensor_desc to a multi-dimension vector.  
+`load_nd` works with create_nd_tdesc and loads the memory specified by tensor_desc to a multi-dimension vector.  
 ```mlir
   #sg_map_a = xegpu.sg_map<{wi_layout = [2, 8], wi_data = [1, 2]}>
   %result = XeGPU.load_nd %tdesc2 {L1_hint = uncached, L3_hint = uncached }: 
@@ -192,9 +192,9 @@ load_nd works with create_nd_tdesc and loads the memory specified by tensor_desc
   %result = XeGPU.load_nd %tdesc2 {L1_hint = uncached, L3_hint = uncached, mode = vc }: 
           tensor_desc <8x16xbf16> into vector<8x16xbf16>
 ```
-Attributes L1_hint, L2_hint, and L3_hint can be applied to Load_nd, specifying hint directives for different levels of cache hierarchy. On PVC, cache directive for load could be "uncached, cached, streaming, read_invaldiate".  Streaming means that the data is cached but is more likely to be swapped out, and read_invaldiate simply invalidates the cache line after read. For write, cache policy could be "uncached, write_through, write_back, streaming". Write_through writes to the next level cache immediately, and write_back holds the modification until the cache line is kicked out due to the cache replacement policy.  PVC uses L1_hint and L3_hint and omits L2_hint.  There are only a few valid combinations between L1_hint and L3_hint for PVC.  
+Attributes `L1_hint`, `L2_hint`, and `L3_hint` can be applied to Load_nd, specifying hint directives for different levels of cache hierarchy. On PVC, cache directive for load could be "uncached, cached, streaming, read_invaldiate".  Streaming means that the data is cached but is more likely to be swapped out, and read_invaldiate simply invalidates the cache line after read. For write, cache policy could be "uncached, write_through, write_back, streaming". Write_through writes to the next level cache immediately, and write_back holds the modification until the cache line is kicked out due to the cache replacement policy.  PVC uses L1_hint and L3_hint and omits L2_hint.  There are only a few valid combinations between L1_hint and L3_hint for PVC.  
 
-Attribute Transpose specifies the dimensions to be transposed during the load. On the backward path of training model computation, the input matrix needs to be transposed. The operation definition supports all data types, but hardware may have limitations.  PVC only supports data types with 4-byte (DW) and 8-byte (DQ).  
+Attribute `transpose` specifies the dimensions to be transposed during the load. On the backward path of training model computation, the input matrix needs to be transposed. The operation definition supports all data types, but hardware may have limitations.  PVC only supports data types with 4-byte (DW) and 8-byte (DQ).  
 ```mlir
   #sg_map_a = xegpu.sg_map<{wi_layout = [1, 16], wi_data = [1, 1]}>
   %at = XeGPU.load_nd %block_a   {transpose = [1,0] }:
@@ -204,9 +204,9 @@ Attribute Transpose specifies the dimensions to be transposed during the load. O
      tile<8x16xf32> into vector <16x8xf32>
 ```
 
-Attribute vnni_axis supports VNNI transform for low-precision data types like fp16, bf16, and int8. VNNI transformation takes multiple low-precision data elements along the column dimension and fits them into 32-bit data along the row dimension. It effectively splits a 2D matrix [col, row] to be 3-d matrix [col/vnni_factor, row, vnni_factor] when vnni_axis is specified to be axis 0.  When vnni_axis is specified as axis 1, the VNNI transformation doesn’t change the layout but splits the VNNI axis to 2 axes.  
+Attribute `vnni_axis` supports VNNI transform for low-precision data types like fp16, bf16, and int8. VNNI transformation takes multiple low-precision data elements along the column dimension and fits them into 32-bit data along the row dimension. It effectively splits a 2D matrix [col, row] to be 3-d matrix [col/vnni_factor, row, vnni_factor] when vnni_axis is specified to be axis 0.  When vnni_axis is specified as axis 1, the VNNI transformation doesn’t change the layout but splits the VNNI axis to 2 axes.  
 
-PVC only support loading with VNNI transformation for low-precision data types like fp16, bf16, and int8. The VNNI layout must be applied to the weight matrix for the DPAS operation, with vnni_axis being set to 0.
+PVC only supports loading with VNNI transformation for low-precision data types like fp16, bf16, and int8. The VNNI layout must be applied to the weight matrix for the DPAS operation, with vnni_axis being set to 0.
 ```mlir  
   #sg_map_b = xegpu.sg_map<{ wi_layout = [1, 16], wi_data = [2, 1]}>
   %bt = XeGPU.load_nd %block_b   {vnni_axis = 0 }:
@@ -234,7 +234,7 @@ VNNI transformation and transpose can be combined for low-precision data type li
   %at = XeGPU.load_nd %block_a   {transpose = [1, 0]  vnni_axis = 0, mode = vc }:
      tile<8x16xbf16> into vector <8x8x2bf16>
 ``` 
-Dpas does the matrix multiplication on the 2D matrix represented as 2D or 3-d vectors.  When the input matrix is a lower-precision data type (lower than 32bit), the matrix B must be in VNNI layout, meaning the reduction dimension needs to be split into 2 dimensions and the 3rd inner dimension has multiple data elements fitting the 32bit. 
+`dpas` does the matrix multiplication on the 2D matrix represented as 2D or 3-d vectors.  When the input matrix is a lower-precision data type (lower than 32bit), the matrix B must be in VNNI layout, meaning the reduction dimension needs to be split into 2 dimensions and the 3rd inner dimension has multiple data elements fitting the 32bit. 
 ```mlir  
   %vector_c = XeGPU.dpas %vector_a, %vector_b :
      vector <4x2xbf16>, vector<8x2xbf16> 
@@ -244,7 +244,7 @@ Dpas does the matrix multiplication on the 2D matrix represented as 2D or 3-d ve
      vector <8x8x2xbf16>, vector<8x16x2xbf16> 
 	   into vector <8x16xfloat>   
 ```
-store_nd stores a vector to memory specified by tensor_desc. 
+`store_nd` stores a vector to memory specified by tensor_desc. 
 Attributes L1_hint, L2_hint, and L3_hint can be applied to store_nd. 
 ```mlir  
   #sg_map_c = xegpu.sg_map<{ wi_layout = [1, 16], wi_data = [1, 1]}>
@@ -254,7 +254,7 @@ Attributes L1_hint, L2_hint, and L3_hint can be applied to store_nd.
   XeGPU.store_nd %value, %tdesc2  { mode = vc}:
           vector<8x16xbf16>, tensor_desc <8x16xbf16> 
 ```
-prefetch_nd prefetches the memory specified by tensor_desc to cache. 
+`prefetch_nd` prefetches the memory specified by tensor_desc to cache. 
 Attributes L1_hint, L2_hint, L3_hint, and memory_scope can be applied to prefetch_nd. 
 ```mlir  
   XeGPU.prefetch_nd %tdesc2: tensor_desc <8x16xbf16, #sg_map_a>  
@@ -262,7 +262,7 @@ Attributes L1_hint, L2_hint, L3_hint, and memory_scope can be applied to prefetc
   XeGPU.prefetch_nd %tdesc2: tensor_desc <16xbf16, #sg_map_a>
   XeGPU.prefetch_nd %tdesc2 {mode = vc}: tensor_desc <16xbf16 >
 ```
-update_nd_offset updates the subtensor’s offsets for the tensor descriptor. These offsets are relative offset to the current position in the number of elements.  The operation is used when the processing over one subtensor is completed and moves to a new one. Usually, only one offset value is changed since the subtensor is only moving along one dimension. 
+`update_nd_offset` updates the subtensor’s offsets for the tensor descriptor. These offsets are relative offset to the current position in the number of elements.  The operation is used when the processing over one subtensor is completed and moves to a new one. Usually, only one offset value is changed since the subtensor is only moving along one dimension. 
 ```mlir  
   %tdesc_updated = XeGpu.update_nd_offset %tdesc, %offsets:2:
   	  tensor_desc<8x16xbf16, #sg_map_a>, index, index into tensor_desc<8x16xbf16, #sg_map_a>
@@ -270,7 +270,7 @@ update_nd_offset updates the subtensor’s offsets for the tensor descriptor. Th
   %tdesc_updated = XeGpu.update_nd_offset %tdesc, %offsets:2 {mode = vc}:
   	  tensor_desc<8x16xbf16>, index, index into tensor_desc<8x16xbf16>
 ``` 
-create_tdesc creates a tensor descriptor for scattered load. It accepts a memory address and a vector of offsets. The element data type and size are specified in the output tensor_desc data type, and they must be known at the compile-time.
+`create_tdesc` creates a tensor descriptor for scattered load. It accepts a memory address and a vector of offsets. The element data type and size are specified in the output tensor_desc data type, and they must be known at the compile-time.
 ```mlir  
 // SIMD lane == 16. max is 32. Meaning 32 number of individual WI elements 
   #sg_map_a = xegpu.sg_map<{ wi_layout = [1, 16], wi_data = [1, 1]}>
