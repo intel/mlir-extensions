@@ -21,7 +21,7 @@ The XeGPU dialect provides almost 1:1 mapping to match Xe instructions like DPAS
 XeTile provides a middle-level abstraction for matmul operation, sits between Linalg matmul named op and XeGPU Dpas op. It is not tied to specific Xe architecture. The XeTile dialect design facilitates optimization using hardware auto-padding, which generates simpler and more efficient code than the software padding. Using the tile dialect, the user doesn’t need to detect the out-of-boundary case, and the dialect takes care of unaligned shapes, so the same code runs for the unaligned use case.  Users can focus on high-level optimization like software pipelining, cooperative prefetch, and K-slicing. 
 
 | Ops	| Syntax	| Example |
-| :---        |    :----:   |          ---: |
+| :---   | :----   | :--- |
 |init_tile	| operation ::= `XeTile.init_tile `$base_memref  `$offset0 `, `$offset1 `:` type($base_memref) `,` index `,` index  `->` type($tile, attr-dict)	| %block = XeTile.init_tile %base_memref, %tile_offset:2 memref<128x128xbf16> into tile<8x16xbf16> |
 |load_tile	| operation ::= `XeTile.load_tile` $tile  attr-dict `:` type($tile)  `->` type($res)	 | %vector_a = XeTile.load_tile %tile_a  transpose = [1,0] padding=0 tile<64x32xbf16> into vector <32x64xbf16> |
 |store_tile	| operation ::= `XeTile.store_tile` $value `,` $tile attr-dict `:` type($value) `,` type($tile) | XeTile.store_tile %tile_a  %vector_a  vector <64x64xbf16> into tile<64x64xbf16> |
@@ -117,7 +117,7 @@ XeGPU dialect models a subset of Xe GPU’s ISA. This is the counterpart of NVGP
 Below is a summary. 
 
 | Ops	| Syntax	| Example |
-| :---        |    :----:   |          ---: |
+| :---   | :----   | :--- |
 |create_tdesc	| operation ::= `XeGPU.create_tdesc` $base_addr `,` $offset attr-dict `:` type($base_addr) `,` type($offset) `->` type($tdesc)	| %scatter_tdesc1 = XeGPU.create_tdesc %mem_addr, %offset: int64, Vector<16 x index> -> tensor_desc <16 x bf16, #scattered,  memory_scope=slm, chunk_size_per_lane=1 > |
 |load_gather	| operation ::= `XeGPU.load_gather` $tdesc `,` $mask attr-dict `:` type($tdesc) `,` type($mask) `->` type($res)	| %result = XeGPU.load_gather %scatter_tdesc2, %mask {L1 = cached, L2 = uncached, transpose=[1,0]}: tensor_desc <16x8xbf16, #Scattered>, vector<16xi1> -> vector<8x16xbf16> |
 |store_scatter	| operation ::= `XeGPU.store_scatter` $value `,` $tdesc `,` $mask attr-dict `:` type($value) `,` type($tdesc) `,` type($mask)	| XeGPU.store_scatter %value, %scatter_tdesc2, %mask {L1 = cached, L2 = uncached}: vector<16xbf16>, tensor_desc <16xbf16, #scattered>, vector<16xi1> |
