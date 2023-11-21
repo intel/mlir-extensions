@@ -251,7 +251,11 @@ memref, arith and math.
   let constructor = "imex::createConvertGPUXToSPIRVPass()";
   let dependentDialects = ["::mlir::spirv::SPIRVDialect"];
   let options = [
-    Option<"enableVCIntrinsic", "enable-vc-intrinsic","bool", "true",
+    Option<"enableJointMatrix", "enable-joint-matrix","bool", "false",
+           "Enable XeGPU SIMT mode Ops lowered to JointMatrix based Ops">,
+    Option<"enableGenISAIntrinsic", "enable-genisa-intrinsic","bool", "false",
+           "Enable XeGPU SIMT mode Ops lowered to JointMatrix based Ops">,
+    Option<"enableVCIntrinsic", "enable-vc-intrinsic","bool", "false",
            "Enable XeGPU Ops lowered to intel vc Intrinsics">
   ];
 }

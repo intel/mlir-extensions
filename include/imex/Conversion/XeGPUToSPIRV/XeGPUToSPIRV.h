@@ -30,6 +30,9 @@ void populateXeGPUToVCIntrinsicsPatterns(
 // XeGPU to genISA Intrinsics pattern
 void populateXeGPUToGenISAPatterns(mlir::SPIRVTypeConverter &typeConverter,
                                    mlir::RewritePatternSet &patterns);
+// XeGPU to JointMatrix pattern
+void populateXeGPUToJointMatrixPatterns(mlir::SPIRVTypeConverter &typeConverter,
+                                        mlir::RewritePatternSet &patterns);
 } // namespace imex
 
 #endif // IMEX_CONVERSION_XEGPUTOSPIRV_H

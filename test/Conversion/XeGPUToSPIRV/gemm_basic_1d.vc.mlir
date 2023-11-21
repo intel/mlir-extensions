@@ -1,5 +1,5 @@
-// RUN: imex-opt -imex-convert-gpu-to-spirv  %s | FileCheck %s --check-prefix=CHECK-RAW
-// RUN: IMEX_NOT_PREFER_RAWSEND=1 imex-opt -imex-convert-gpu-to-spirv  %s | FileCheck %s --check-prefix=CHECK-LSC
+// RUN: imex-opt -imex-convert-gpu-to-spirv='enable-vc-intrinsic=true'  %s | FileCheck %s --check-prefix=CHECK-RAW
+// RUN: IMEX_NOT_PREFER_RAWSEND=1 imex-opt -imex-convert-gpu-to-spirv='enable-vc-intrinsic=true'  %s | FileCheck %s --check-prefix=CHECK-LSC
 module @gemm attributes {gpu.container_module} {
   memref.global "private" constant @__constant_8x16xf16 : memref<8x16xf16> = dense<5.000000e-01>
   memref.global "private" constant @__constant_16x16xf16 : memref<16x16xf16> = dense<1.099610e+00>

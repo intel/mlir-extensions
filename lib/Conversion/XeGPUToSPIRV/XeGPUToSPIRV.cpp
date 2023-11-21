@@ -1438,3 +1438,513 @@ void imex::populateXeGPUToGenISAPatterns(SPIRVTypeConverter &typeConverter,
                LoadStorePrefetchNdToGenISA<PrefetchNDOp>>(
       typeConverter, patterns.getContext());
 }
+
+namespace {
+// PVC-specific subgroup size for JointMatrix
+constexpr uint64_t jointMatrixSubGroupSize = 16;
+// Calculate flattened offsets
+// Calculate flattened offsets based on dims and offsets(indices)
+Value linearizeOffset(OpBuilder builder, Location loc,
+                      SmallVectorImpl<Value> &offsets,
+                      SmallVectorImpl<Value> &dims) {
+  assert(offsets.size() == dims.size() &&
+         "number of offsets & dimensions must be same");
+  auto createIntConstant = [&](Type type, unsigned value) {
+    auto attr = builder.getIntegerAttr(type, value);
+    return builder.create<spirv::ConstantOp>(loc, type, attr);
+  };
+
+  auto i64Type = builder.getI64Type();
+  auto rank = dims.size();
+  Value linearizedOffset = createIntConstant(i64Type, 0);
+  for (unsigned i = 0; i < rank; i++) {
+    Value perDimstrideMultiplier = createIntConstant(i64Type, 1);
+    for (unsigned j = i + 1; j < rank; j++) {
+      perDimstrideMultiplier = builder.create<spirv::IMulOp>(
+          loc, i64Type, perDimstrideMultiplier, dims[j]);
+    }
+    perDimstrideMultiplier = builder.create<spirv::IMulOp>(
+        loc, i64Type, perDimstrideMultiplier, offsets[i]);
+
+    linearizedOffset = builder.create<spirv::IAddOp>(
+        loc, i64Type, linearizedOffset, perDimstrideMultiplier);
+  }
+  return linearizedOffset;
+}
+
+unsigned getElementPerWI(imex::xegpu::TensorDescType tDescType) {
+  imex::xegpu::SubGroupMapAttr sgMap;
+  auto encoding = tDescType.getEncoding();
+  if (auto xeMapAttr = llvm::dyn_cast<imex::xegpu::XeMapAttr>(encoding)) {
+    sgMap = xeMapAttr.getSg();
+  } else {
+    sgMap = llvm::dyn_cast<imex::xegpu::SubGroupMapAttr>(encoding);
+  }
+  auto blockSize = tDescType.getShape();
+  auto wiLayout = sgMap.getWiLayout();
+  auto wiData = sgMap.getWiData();
+  unsigned elemPerWI = 1;
+  for (size_t i = 0; i < wiData.size(); i++) {
+    if (wiData[i] != 1)
+      llvm_unreachable("wi_data must be 1 for all dimension for "
+                       "JointMatrix lowering");
+    elemPerWI *= (blockSize[i] / wiLayout[i]);
+  }
+  return elemPerWI;
+}
+
+class CreateNdDescToJointMatrix : public OpConversionPattern<CreateNdDescOp> {
+public:
+  using OpConversionPattern<CreateNdDescOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(CreateNdDescOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    assert(op.getBoundaryCheck() == false &&
+           "for xegpu to joint matrix lowering boundary_check attribute must "
+           "be false");
+    auto loc = op.getLoc();
+    auto tileType = op.getTensorDesc().getType();
+    auto rank = tileType.getRank();
+
+    // Set the SPIR-V Struct to represent the Tensor Descriptor
+    // The create_nd_tdesc returns a spirv.struct
+    // The elements in the struct contains the following elements
+    // element 0 = base address pointer : spirv.ptr
+    // element 1 = 1D offset : i64
+    // element 2 = X Dim Size : i64
+    // element 3 = Y Dim Size : i64
+    // [SPIR-V lowering uses 1D flattened addresses passed as kernel parameters]
+    SmallVector<Type, 4> memberTypes;
+    auto i64Type = rewriter.getI64Type();
+    // Default storage class is spirv::StorageClass::CrossWorkgroup
+    auto spirvStorageClass = spirv::StorageClass::CrossWorkgroup;
+    // For memref use memref spirv storage attribute if available
+    auto srcType = op.getSourceType();
+    if (llvm::isa<mlir::MemRefType>(srcType)) {
+      auto sc = dyn_cast_or_null<spirv::StorageClassAttr>(
+          llvm::cast<mlir::MemRefType>(srcType).getMemorySpace());
+      if (sc)
+        spirvStorageClass = sc.getValue();
+    }
+    auto spirvBaseAddressType =
+        spirv::PointerType::get(op.getSourceElementType(), spirvStorageClass);
+
+    memberTypes.push_back(spirvBaseAddressType);
+    memberTypes.push_back(i64Type);
+    // For nD descriptor, dimesion=rank, so we need dimSize for all the
+    // dimensions
+    for (int i = 0; i < rank; i++) {
+      memberTypes.push_back(i64Type);
+    }
+
+    auto ndDescStruct = spirv::StructType::get(memberTypes);
+
+    Value payLoad = rewriter.create<spirv::UndefOp>(loc, ndDescStruct);
+    auto createIntConstant = [&](Type type, unsigned value) {
+      auto attr = rewriter.getIntegerAttr(type, value);
+      return rewriter.create<spirv::ConstantOp>(loc, type, attr);
+    };
+
+    // Insert the base address to the ndDescStruct struct
+    Value genericBasePtr;
+    // If the base type is memref, add a bitcast op
+    // If the base type is not memref type, add a ConvertUToPtr op
+    if (llvm::isa<mlir::MemRefType>(srcType)) {
+      genericBasePtr = rewriter.create<spirv::BitcastOp>(
+          loc, spirvBaseAddressType, adaptor.getSource());
+    } else {
+      genericBasePtr = rewriter.create<spirv::ConvertUToPtrOp>(
+          loc, spirvBaseAddressType, adaptor.getSource());
+    }
+
+    payLoad = rewriter.create<spirv::CompositeInsertOp>(
+        loc, genericBasePtr, payLoad, llvm::ArrayRef(0));
+
+    // TODO: We should be able to use op.getOffsets() directly with index cast
+    //  But we need support from XeGPU dialect definition to return i64_t
+
+    auto createOffset = [&](unsigned idx) -> Value {
+      Value val;
+      if (ShapedType::isDynamic(op.getStaticOffsets()[idx])) {
+        val = op.getOffsets()[idx];
+        // Cast index type to i64
+        val = rewriter.create<arith::IndexCastOp>(loc, i64Type, val);
+      } else {
+        val = createIntConstant(i64Type, op.getStaticOffsets()[idx]);
+      }
+      return val;
+    };
+
+    // TODO: We should be able to use op.getShape() directly with index cast
+    // But we need support from XeGPU dialect definition to return i64_t
+
+    auto createShape = [&](unsigned idx) -> Value {
+      Value val;
+      if (ShapedType::isDynamic(op.getStaticShape()[idx])) {
+        val = op.getShape()[idx];
+        // Cast index type to i64
+        val = rewriter.create<arith::IndexCastOp>(loc, i64Type, val);
+      } else {
+        val = createIntConstant(i64Type, op.getStaticShape()[idx]);
+      }
+      return val;
+    };
+
+    SmallVector<Value, 4> nDOffsets;
+    SmallVector<Value, 4> nDDims;
+    for (unsigned i = 0; i < rank; i++) {
+      nDOffsets.push_back(createOffset(i));
+    }
+
+    for (unsigned i = 0; i < rank; i++) {
+      nDDims.push_back(createShape(i));
+    }
+
+    // Calculate the 1-D offset, since the memrefs are flattened when
+    // passed to SPIR-V
+    Value linearizedOffset = linearizeOffset(rewriter, loc, nDOffsets, nDDims);
+    // Insert the flattened (1D) offset to the ndDescStruct struct
+
+    payLoad = rewriter.create<spirv::CompositeInsertOp>(
+        loc, linearizedOffset, payLoad, llvm::ArrayRef(1));
+    for (int i = 0; i < rank; i++) {
+      payLoad = rewriter.create<spirv::CompositeInsertOp>(loc, nDDims[i],
+                                                          payLoad, (i + 2));
+    }
+    rewriter.replaceOp(op, payLoad);
+    return success();
+  }
+};
+
+class UpdateNDOffsetJointMatrix : public OpConversionPattern<UpdateNDOffsetOp> {
+public:
+  using OpConversionPattern<UpdateNDOffsetOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(UpdateNDOffsetOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    auto desc = adaptor.getTensorDesc();
+    const int dimStartIdx = 2;
+    auto i64Type = rewriter.getI64Type();
+    auto createIntConstant = [&](Type type, unsigned value) {
+      auto attr = rewriter.getIntegerAttr(type, value);
+      return rewriter.create<spirv::ConstantOp>(loc, type, attr);
+    };
+    // Calculate the 1-D offset, since the memrefs are flattened when
+    // passed to SPIR-V
+    Value offset1D;
+    offset1D = createIntConstant(i64Type, 0);
+    auto offsets = adaptor.getOffsets();
+    auto rank = op.getTensorDesc().getType().getRank();
+    // number of offsets & tensorDescriptor rank must be same
+    assert(offsets.size() == (size_t)op.getTensorDesc().getType().getRank() &&
+           "number of offsets & tensorDescriptor rank must be same");
+    for (unsigned i = 0; i < rank; i++) {
+      Value perDimstrideMultiplier;
+      perDimstrideMultiplier = createIntConstant(i64Type, 1);
+      for (unsigned j = i + 1; j < rank; j++) {
+        Value dimSize = rewriter.create<spirv::CompositeExtractOp>(
+            loc, desc, (j + dimStartIdx));
+        perDimstrideMultiplier = rewriter.create<spirv::IMulOp>(
+            loc, i64Type, perDimstrideMultiplier, dimSize);
+      }
+      // Cast index type to i64
+      Value offsetVal =
+          rewriter.create<arith::IndexCastOp>(loc, i64Type, offsets[i]);
+      perDimstrideMultiplier = rewriter.create<spirv::IMulOp>(
+          loc, i64Type, perDimstrideMultiplier, offsetVal);
+
+      offset1D = rewriter.create<spirv::IAddOp>(loc, i64Type, offset1D,
+                                                perDimstrideMultiplier);
+    }
+
+    // Add the newOffset to previous offset
+    Value prev1DOffset = rewriter.create<spirv::CompositeExtractOp>(
+        loc, desc, llvm::ArrayRef(1));
+    offset1D =
+        rewriter.create<spirv::IAddOp>(loc, i64Type, offset1D, prev1DOffset);
+    // Update the descriptor with the new offset
+    desc = rewriter.create<spirv::CompositeInsertOp>(loc, offset1D, desc,
+                                                     llvm::ArrayRef(1));
+    rewriter.replaceOp(op, desc);
+    return success();
+  }
+};
+
+class LoadNDJointMatrix : public OpConversionPattern<LoadNDOp> {
+public:
+  using OpConversionPattern<LoadNDOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(LoadNDOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (op.getTranspose())
+      op.emitError("transpose is not currently supported for XeGPU to "
+                   "JointMatrix lowering");
+    auto loc = op.getLoc();
+    auto tDesc = adaptor.getTensorDesc();
+    auto tDescType = op.getTensorDesc().getType();
+    int rank = tDescType.getRank();
+    assert(rank == 2 && "only support 2d load for now");
+
+    // Get the base address
+    Value baseAddress = rewriter.create<spirv::CompositeExtractOp>(
+        loc, tDesc, llvm::ArrayRef(0));
+    // Get the offset
+    Value offset = rewriter.create<spirv::CompositeExtractOp>(
+        loc, tDesc, llvm::ArrayRef(1));
+
+    SmallVector<Value, 2> linearizedIndices;
+    // Get the load address
+    Value loadAddress = rewriter.create<spirv::InBoundsPtrAccessChainOp>(
+        loc, baseAddress, offset, linearizedIndices);
+
+    // Stride for jointMatrixLoad = Y Dim size
+    // TODO: what do we do for transpose case?
+    Value stride = rewriter.create<spirv::CompositeExtractOp>(
+        loc, tDesc, llvm::ArrayRef(3));
+
+    // Figure out the Matrix Use type (MatrixA, MatrixB, Accumulator)
+    uint32_t matrixUse;
+    // Don't expect vnni axis to be set for the Accumulator
+
+    if (auto vnniAxis = adaptor.getVnniAxis())
+      // vnniAxis 0 -> MatrixB -> matrixUse = 1
+      // vnniAxis 1 -> MatrixA -> matrixUse = 0
+      matrixUse = (*vnniAxis + 1) % 2;
+    else
+      // vnniAxis empty -> Accumulator -> matrixUse = 2
+      matrixUse = 2;
+
+    // TODO: Need to discuss how to handle transpose, load then transpose or
+    // transposed load?
+    auto jointMatrixtype = spirv::JointMatrixINTELType::get(
+        tDescType.getElementType(), spirv::Scope::Subgroup,
+        tDescType.getDimSize(0), tDescType.getDimSize(1),
+        spirv::MatrixLayout::RowMajor, *spirv::symbolizeMatrixUse(matrixUse));
+
+    auto jointMatrixLoaded = rewriter.create<spirv::INTELJointMatrixLoadOp>(
+        loc, jointMatrixtype, loadAddress, stride,
+        ::mlir::spirv::MatrixLayout::RowMajor, ::mlir::spirv::Scope::Subgroup,
+        nullptr, nullptr);
+
+    // TODO: Once architecture-spcific info are in place, add subgroup_size
+    // restriction verification
+    unsigned elemPerWI = getElementPerWI(tDescType);
+    auto elemType = tDescType.getElementType();
+    auto perWIVectorType = VectorType::get(elemPerWI, elemType);
+    Value payLoad = rewriter.create<spirv::UndefOp>(loc, perWIVectorType);
+    llvm::SmallVector<Value, 8> extractedVal;
+    for (unsigned i = 0; i < elemPerWI; i++) {
+      auto idx = createConstantI32(loc, rewriter, i);
+      extractedVal.push_back(rewriter.create<spirv::VectorExtractDynamicOp>(
+          loc, jointMatrixLoaded, idx));
+    }
+
+    // Putting all the extract and insert operations together, may make it
+    // easier for compiler (IGC) to reason about
+    for (unsigned i = 0; i < elemPerWI; i++) {
+      auto idx = createConstantI32(loc, rewriter, i);
+      payLoad = rewriter.create<spirv::VectorInsertDynamicOp>(
+          loc, payLoad, extractedVal[i], idx);
+    }
+    rewriter.replaceOp(op, payLoad);
+    return success();
+  }
+};
+
+class StoreNDJointMatrix : public OpConversionPattern<StoreNDOp> {
+public:
+  using OpConversionPattern<StoreNDOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(StoreNDOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    auto tDesc = adaptor.getTensorDesc();
+    auto tDescType = op.getTensorDesc().getType();
+    int rank = tDescType.getRank();
+    assert(rank == 2 && "only support 2d load for now");
+
+    // Get the base address
+    Value baseAddress = rewriter.create<spirv::CompositeExtractOp>(
+        loc, tDesc, llvm::ArrayRef(0));
+    // Get the offset
+    Value offset = rewriter.create<spirv::CompositeExtractOp>(
+        loc, tDesc, llvm::ArrayRef(1));
+
+    SmallVector<Value, 2> linearizedIndices;
+    // Get the load address
+    Value loadAddress = rewriter.create<spirv::InBoundsPtrAccessChainOp>(
+        loc, baseAddress, offset, linearizedIndices);
+
+    // Stride for jointMatrixLoad = Y Dim size
+    // TODO: what do we do for transpose case?
+    Value stride = rewriter.create<spirv::CompositeExtractOp>(
+        loc, tDesc, llvm::ArrayRef(3));
+
+    // For Store, we only allow Accumulator type matrix to store.
+    // TODO: We need to Add option on the xegpu.store_nd to support storing B
+    // matrix for that we need to add vnni_axis attribute to store_nd op as
+    // well.
+    uint32_t matrixUse = 2;
+    // Don't expect vnni axis to be set for the Accumulator
+    auto jointMatrixtype = spirv::JointMatrixINTELType::get(
+        tDescType.getElementType(), spirv::Scope::Subgroup,
+        tDescType.getDimSize(0), tDescType.getDimSize(1),
+        spirv::MatrixLayout::RowMajor, *spirv::symbolizeMatrixUse(matrixUse));
+    Value matrix = rewriter.create<spirv::UndefOp>(loc, jointMatrixtype);
+
+    // TODO: Once architecture-spcific info are in place, add subgroup_size
+    // restriction verification
+    unsigned elemPerWI = getElementPerWI(tDescType);
+    // auto elemType = tDescType.getElementType();
+    // Get the 2D vector
+    auto perWIVector = adaptor.getValue();
+    llvm::SmallVector<Value, 8> extractedVal;
+    for (unsigned i = 0; i < elemPerWI; i++) {
+      auto idx = createConstantI32(loc, rewriter, i);
+      extractedVal.push_back(rewriter.create<spirv::VectorExtractDynamicOp>(
+          loc, perWIVector, idx));
+    }
+
+    // Putting all the extract and insert operations together, may make it
+    // easier for compiler (IGC) to reason about
+    for (unsigned i = 0; i < elemPerWI; i++) {
+      auto idx = createConstantI32(loc, rewriter, i);
+      matrix = rewriter.create<spirv::VectorInsertDynamicOp>(
+          loc, matrix, extractedVal[i], idx);
+    }
+    auto payLoad = rewriter.create<spirv::INTELJointMatrixStoreOp>(
+        loc, loadAddress, matrix, stride, ::mlir::spirv::MatrixLayout::RowMajor,
+        ::mlir::spirv::Scope::Subgroup, nullptr, nullptr);
+    rewriter.replaceOp(op, payLoad);
+    return success();
+  }
+};
+
+class DpasJointMatrix : public OpConversionPattern<DpasOp> {
+public:
+  using OpConversionPattern<DpasOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(DpasOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    auto vectorA = op.getLhs();
+    auto vectorB = op.getRhs();
+    auto vectorC = op.getAcc();
+    {
+      OpBuilder::InsertionGuard guard(rewriter);
+      auto func = op->getParentOfType<spirv::FuncOp>();
+      rewriter.setInsertionPointAfter(func);
+      rewriter.create<spirv::ExecutionModeOp>(
+          op.getLoc(), func, spirv::ExecutionMode::SubgroupSize,
+          int(jointMatrixSubGroupSize));
+    }
+    // Matrix row = 1st dim of input vector
+    // Matrix colomn = 2nd dim of input vector * jointMatrixSubGroupSize
+    auto matrixAType = spirv::JointMatrixINTELType::get(
+        vectorA.getType().getElementType(), spirv::Scope::Subgroup,
+        vectorA.getType().getShape()[0],
+        vectorA.getType().getShape()[1] * jointMatrixSubGroupSize,
+        spirv::MatrixLayout::RowMajor, spirv::MatrixUse::MatrixA);
+
+    // B matrix vector is passed VNNI-transformed, so row = dim0 *dim3
+    auto matrixBType = spirv::JointMatrixINTELType::get(
+        vectorB.getType().getElementType(), spirv::Scope::Subgroup,
+        vectorB.getType().getShape()[0] * vectorB.getType().getShape()[2],
+        vectorB.getType().getShape()[1] * jointMatrixSubGroupSize,
+        spirv::MatrixLayout::RowMajor, spirv::MatrixUse::MatrixB);
+
+    auto matrixCType = spirv::JointMatrixINTELType::get(
+        vectorC.getType().getElementType(), spirv::Scope::Subgroup,
+        vectorC.getType().getShape()[0],
+        vectorC.getType().getShape()[1] * jointMatrixSubGroupSize,
+        spirv::MatrixLayout::RowMajor, spirv::MatrixUse::Accumulator);
+
+    Value matrixA = rewriter.create<spirv::UndefOp>(loc, matrixAType);
+    Value matrixB = rewriter.create<spirv::UndefOp>(loc, matrixBType);
+    Value matrixC = rewriter.create<spirv::UndefOp>(loc, matrixCType);
+    // Create Matrices from the vectors
+    // Get the flattened vectors through the adaptor, since SPIRV only allows 1D
+    // vector
+    auto perWIVectorA = adaptor.getLhs();
+    auto perWIVectorB = adaptor.getRhs();
+    auto perWIVectorC = adaptor.getAcc();
+
+    llvm::SmallVector<Value, 8> extractedValA;
+    auto perWIelemsA =
+        llvm::cast<mlir::VectorType>(perWIVectorA.getType()).getNumElements();
+    for (unsigned i = 0; i < perWIelemsA; i++) {
+      auto idx = createConstantI32(loc, rewriter, i);
+      extractedValA.push_back(rewriter.create<spirv::VectorExtractDynamicOp>(
+          loc, perWIVectorA, idx));
+    }
+    // Putting all the extract and insert operations together, may make it
+    // easier for compiler (IGC) to reason about
+    for (unsigned i = 0; i < perWIelemsA; i++) {
+      auto idx = createConstantI32(loc, rewriter, i);
+      matrixA = rewriter.create<spirv::VectorInsertDynamicOp>(
+          loc, matrixA, extractedValA[i], idx);
+    }
+
+    llvm::SmallVector<Value, 8> extractedValB;
+    auto perWIelemsB =
+        llvm::cast<mlir::VectorType>(perWIVectorB.getType()).getNumElements();
+    for (unsigned i = 0; i < perWIelemsB; i++) {
+      auto idx = createConstantI32(loc, rewriter, i);
+      extractedValB.push_back(rewriter.create<spirv::VectorExtractDynamicOp>(
+          loc, perWIVectorB, idx));
+    }
+    // Putting all the extract and insert operations together, may make it
+    // easier for compiler (IGC) to reason about
+    for (unsigned i = 0; i < perWIelemsB; i++) {
+      auto idx = createConstantI32(loc, rewriter, i);
+      matrixB = rewriter.create<spirv::VectorInsertDynamicOp>(
+          loc, matrixB, extractedValB[i], idx);
+    }
+
+    llvm::SmallVector<Value, 8> extractedValC;
+    auto perWIelemsC =
+        llvm::cast<mlir::VectorType>(perWIVectorC.getType()).getNumElements();
+    for (unsigned i = 0; i < perWIelemsC; i++) {
+      auto idx = createConstantI32(loc, rewriter, i);
+      extractedValC.push_back(rewriter.create<spirv::VectorExtractDynamicOp>(
+          loc, perWIVectorC, idx));
+    }
+    // Putting all the extract and insert operations together, may make it
+    // easier for compiler (IGC) to reason about
+    for (unsigned i = 0; i < perWIelemsC; i++) {
+      auto idx = createConstantI32(loc, rewriter, i);
+      matrixC = rewriter.create<spirv::VectorInsertDynamicOp>(
+          loc, matrixC, extractedValC[i], idx);
+    }
+
+    Value result = rewriter.create<spirv::INTELJointMatrixMadOp>(
+        loc, matrixA, matrixB, matrixC, spirv::Scope::Subgroup);
+
+    Value payLoad =
+        rewriter.create<spirv::UndefOp>(loc, perWIVectorC.getType());
+    llvm::SmallVector<Value, 8> extractedValResult;
+    auto perWIelemsResult = perWIelemsC;
+    for (unsigned i = 0; i < perWIelemsResult; i++) {
+      auto idx = createConstantI32(loc, rewriter, i);
+      extractedValResult.push_back(
+          rewriter.create<spirv::VectorExtractDynamicOp>(loc, result, idx));
+    }
+    for (unsigned i = 0; i < perWIelemsResult; i++) {
+      auto idx = createConstantI32(loc, rewriter, i);
+      payLoad = rewriter.create<spirv::VectorInsertDynamicOp>(
+          loc, payLoad, extractedValResult[i], idx);
+    }
+    rewriter.replaceOp(op, payLoad);
+    return success();
+  }
+};
+
+} // namespace
+
+void imex::populateXeGPUToJointMatrixPatterns(SPIRVTypeConverter &typeConverter,
+                                              RewritePatternSet &patterns) {
+  patterns.add<CreateNdDescToJointMatrix, UpdateNDOffsetJointMatrix,
+               LoadNDJointMatrix, StoreNDJointMatrix, DpasJointMatrix,
+               ::VectorShapeCast>(typeConverter, patterns.getContext());
+}

@@ -156,35 +156,79 @@ void GPUXToSPIRVPass::runOnOperation() {
       eraseOp->erase();
     }
     target->addIllegalDialect<imex::xegpu::XeGPUDialect>();
-    typeConverter.addConversion([&](xegpu::NbarrierType type) -> ::mlir::Type {
-      auto i32Type = ::mlir::IntegerType::get(context, 32);
-      return mlir::VectorType::get(8, i32Type);
-    });
-    typeConverter.addConversion(
-        [&](xegpu::TensorDescType type) -> ::mlir::Type {
-          auto i32Type = ::mlir::IntegerType::get(context, 32);
-          return ::mlir::VectorType::get(8, i32Type);
-        });
-    typeConverter.addConversion([&](::mlir::VectorType type) -> ::mlir::Type {
-      unsigned rank = type.getRank();
-      auto elemType = type.getElementType();
-      if (rank < 1)
-        return type;
-      else {
-        // load2d/store2d is vnni format with 3 dims
-        if (rank == 3 && elemType.getIntOrFloatBitWidth() < 32) {
-          elemType = ::mlir::IntegerType::get(context, 32);
-          rank--;
+    // Only one of the following options should be enabled.
+    if ((this->enableVCIntrinsic && this->enableGenISAIntrinsic) ||
+        (this->enableVCIntrinsic && this->enableJointMatrix) ||
+        (this->enableGenISAIntrinsic && this->enableJointMatrix))
+      return signalPassFailure();
+    if (this->enableJointMatrix) {
+      // Tensor descriptor conversion pattern for SIMT JointMatrix
+      typeConverter.addConversion(
+          [&](xegpu::TensorDescType type) -> ::mlir::spirv::StructType {
+            llvm::SmallVector<::mlir::Type, 4> memberTypes;
+            auto i64Type = ::mlir::IntegerType::get(context, 64);
+            // Default storage class is spirv::StorageClass::CrossWorkgroup
+            auto spirvStorageClass =
+                ::mlir::spirv::StorageClass::CrossWorkgroup;
+            if (type.getMemoryScope() == xegpu::MemoryScope::SLM)
+              spirvStorageClass = ::mlir::spirv::StorageClass::Workgroup;
+            auto baseAddressType = ::mlir::spirv::PointerType::get(
+                type.getElementType(), spirvStorageClass);
+            memberTypes.push_back(baseAddressType);
+            memberTypes.push_back(i64Type);
+
+            for (int i = 0; i < type.getRank(); i++) {
+              memberTypes.push_back(i64Type);
+            }
+            return ::mlir::spirv::StructType::get(memberTypes);
+          });
+      typeConverter.addConversion([&](::mlir::VectorType type) -> ::mlir::Type {
+        unsigned rank = type.getRank();
+        auto elemType = type.getElementType();
+        if (rank < 1)
+          return type;
+        else {
+          unsigned sum = 1;
+          for (unsigned i = 0; i < rank; i++) {
+            sum *= type.getShape()[i];
+          }
+          if (llvm::isa<mlir::IndexType>(elemType))
+            elemType = ::mlir::IntegerType::get(context, 64);
+          return ::mlir::VectorType::get(sum, elemType);
         }
-        unsigned sum = 1;
-        for (unsigned i = 0; i < rank; i++) {
-          sum *= type.getShape()[i];
+      });
+    } else {
+      typeConverter.addConversion(
+          [&](xegpu::TensorDescType type) -> ::mlir::Type {
+            auto i32Type = ::mlir::IntegerType::get(context, 32);
+            return ::mlir::VectorType::get(8, i32Type);
+          });
+      typeConverter.addConversion([&](::mlir::VectorType type) -> ::mlir::Type {
+        unsigned rank = type.getRank();
+        auto elemType = type.getElementType();
+        if (rank < 1)
+          return type;
+        else {
+          // load2d/store2d is vnni format with 3 dims
+          if (rank == 3 && elemType.getIntOrFloatBitWidth() < 32) {
+            elemType = ::mlir::IntegerType::get(context, 32);
+            rank--;
+          }
+          unsigned sum = 1;
+          for (unsigned i = 0; i < rank; i++) {
+            sum *= type.getShape()[i];
+          }
+          if (llvm::isa<mlir::IndexType>(elemType))
+            elemType = ::mlir::IntegerType::get(context, 64);
+          return ::mlir::VectorType::get(sum, elemType);
         }
-        if (llvm::isa<mlir::IndexType>(elemType))
-          elemType = ::mlir::IntegerType::get(context, 64);
-        return ::mlir::VectorType::get(sum, elemType);
-      }
-    });
+      });
+      typeConverter.addConversion(
+          [&](xegpu::NbarrierType type) -> ::mlir::Type {
+            auto i32Type = ::mlir::IntegerType::get(context, 32);
+            return mlir::VectorType::get(8, i32Type);
+          });
+    }
 
     //------- Upstream Conversion------------
     mlir::populateGPUToSPIRVPatterns(typeConverter, patterns);
@@ -200,9 +244,16 @@ void GPUXToSPIRVPass::runOnOperation() {
     mlir::populateMathToSPIRVPatterns(typeConverter, patterns);
     if (this->enableVCIntrinsic)
       imex::populateXeGPUToVCIntrinsicsPatterns(typeConverter, patterns);
-    else
+    else if (this->enableJointMatrix)
+      imex::populateXeGPUToJointMatrixPatterns(typeConverter, patterns);
+    else if (this->enableGenISAIntrinsic)
       imex::populateXeGPUToGenISAPatterns(typeConverter, patterns);
-
+    else
+      module.emitOpError(
+          "'-imex-convert-gpu-to-spirv' pass must be run with one of the "
+          "following options to be 'true': "
+          "'enable-vc-intrinsic', 'enable-joint-matrix', "
+          "'enable-genisa-intrinsic'");
     if (failed(applyFullConversion(gpuModule, *target, std::move(patterns))))
       return signalPassFailure();
   }
