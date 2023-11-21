@@ -45,7 +45,7 @@ module @gemm attributes {gpu.container_module} {
     %1 = memref.get_global @__constant_16x16xf16 : memref<16x16xf16>
     %2 = call @test(%0, %1) : (memref<8x16xf16>, memref<16x16xf16>) -> memref<8x16xf32>
     %cast = memref.cast %2 : memref<8x16xf32> to memref<*xf32>
-    //call @printMemrefF32(%cast) : (memref<*xf32>) -> ()
+    // call @printMemrefF32(%cast) : (memref<*xf32>) -> ()
     return
   }
   func.func private @printMemrefF32(memref<*xf32>) attributes {llvm.emit_c_interface}
