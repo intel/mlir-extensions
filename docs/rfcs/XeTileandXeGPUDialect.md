@@ -22,50 +22,50 @@ XeTile provides a middle-level abstraction for matmul operation, sits between Li
 
 | Ops	| Syntax	| Example |
 | :---   | :----   | :--- |
-|init_tile	| operation ::= `XeTile.init_tile `$base_memref  `$offset0 `, `$offset1 `:` type($base_memref) `,` index `,` index  `->` type($tile, attr-dict)	| %block = XeTile.init_tile %base_memref, %tile_offset:2 memref<128x128xbf16> into tile<8x16xbf16> |
-|load_tile	| operation ::= `XeTile.load_tile` $tile  attr-dict `:` type($tile)  `->` type($res)	 | %vector_a = XeTile.load_tile %tile_a  transpose = [1,0] padding=0 tile<64x32xbf16> into vector <32x64xbf16> |
+|init_tile	| operation ::= XeTile.init_tile $base_memref  `$offset0 `, `$offset1 `:` type($base_memref) `,` index `,` index  `->` type($tile, attr-dict)	| ```mlir  %block = XeTile.init_tile %base_memref, %tile_offset:2 memref<128x128xbf16> into tile<8x16xbf16> ```|
+|load_tile	| operation ::= `XeTile.load_tile` $tile  attr-dict `:` type($tile)  `->` type($res)	 |```mlir  %vector_a = XeTile.load_tile %tile_a  transpose = [1,0] padding=0 tile<64x32xbf16> into vector <32x64xbf16> ``` |
 |store_tile	| operation ::= `XeTile.store_tile` $value `,` $tile attr-dict `:` type($value) `,` type($tile) | XeTile.store_tile %tile_a  %vector_a  vector <64x64xbf16> into tile<64x64xbf16> |
-| Update_tile_offset	| operation ::= `XeTile.update_tile_offset` $tile `,` $delta0 `,` $delta1 `:` type($tile) `,` index `,` index `->` type($tile)	| %tdesc_updated = XeGpu.update_nd_offset %tdesc, %offset_x, offset_y tensor_desc<32x64xbf16>, index, index -> tensor_desc<32x64xbf16> |
+| Update_tile_offset	| operation ::= `XeTile.update_tile_offset` $tile `,` $delta0 `,` $delta1 `:` type($tile) `,` index `,` index `->` type($tile)	| %tdesc_updated = XeTile.update_nd_offset %tdesc, %offset_x, offset_y tensor_desc<32x64xbf16>, index, index -> tensor_desc<32x64xbf16> |
 | prefetch_tile	| operation ::= `XeTile.prefetch_tile` $tile `,` attr-dict `:` type($tile)	  | XeTile.prefetch_tile %coop_tile:  tile<16x32xbf16> | 
 | Tile_mma	| operation ::= `XeTile.dpas` $matC, $matA, $matB attr_dict `:` type($matC) `,` type($matA) `,` type($matB) `->` type($res)	 | %vector_c = XeTile.tile_mma %vector_c, %vector_a, %vector_b : vector <64x128xfloat>, vector <64x32xbf16>, vector<32x128xbf16>  into vector <64x128xfloat>  |
 
 To create a 2D Tile memory descriptor, the user needs to set up a tile (init_tile) describing a 2D region within the global memory.  Setting up a tile requires the shape of the parent tile and the underneath physical memory buffer size, known as the base matrix.  The base matrix must be 2D and must be contiguous.  The XeTile takes the base matrix address pointer, shape, and strides, and the tile’s offsets and shape.  Offsets, strides, and shapes are for two dimensions and in the number of elements. base_stride[0] describes the number of elements between the two rows, describing the width of the underneath physical memory buffer, and *%base_strides[1] must be 1, as the innermost dimension of the base matrix must be contiguous. The current version only supports 2D memref with a row-major layout.  
 
-Init_tile takes memref as the description of the base matrix with the offsets of the specific tile. The tile shape and element data type are specified in the output tile data type, and they must be known at compile-time.  
+`init_tile` takes memref as the description of the base matrix with the offsets of the specific tile. The tile shape and element data type are specified in the output tile data type, and they must be known at compile-time.  
 
-Init_tile with memref of static shape. Tile uses memref’s shape and strides as base_shape and base_strides. 
+`init_tile` with memref of static shape. Tile uses memref’s shape and strides as base_shape and base_strides. 
 ```mlir 
   %block = XeTile.init_tile %base_memref, [%tile_offset:2] :
      memref<128x128xbf16> into tile<8x16xbf16 >
 ```
-Init_tile with memref of dynamic shape. The memref has a dynamic shape, so that its shape and strides have to be passed as runtime parameters to init_tile. 
+`init_tile` with memref of dynamic shape. The memref has a dynamic shape, so that its shape and strides have to be passed as runtime parameters to init_tile. 
 ```mlir
   %block = XeTile.init_tile %base_memref, [%tile_offset:2], [%base_shape:2[, [%base_strides:2]:
      memref<?x?xbf16> into tile<8x16xbf16>
 ```
- Init_tile with an address for the base matrix. This form is to support the use case which doesn’t use a memref to describe the base matrix. 
+ `init_tile` with an address for the base matrix. This form is to support the use case which doesn’t use a memref to describe the base matrix. 
 ```mlir 
   %block = XeTile.init_tile %base_addr, [%tile_offset:2], [%base_shape:2], [%base_strides:2]:
      i64 into tile<8x16xbf16>
 ```
 With the tile date type, XeTile supports load_tile, prefetch_tile, and store_tile. 
 
-load_tile loads a tile to a vector, which could be backed by a register region. 
+`load_tile` loads a tile to a vector, which could be backed by a register region. 
 ```mlir 
   %vector_a = XeTile.load_tile %tile_a   
      tile<64x64xbf16> into vector <64x64xb16>
 ```
-Attribute transpose specifies the dimensions being transposed along the load. It is commonly used for the GEMM on the backward path of DNN model, where one of input matrices needs to be transposed for matmul operation. 
+Attribute `transpose` specifies the dimensions being transposed along the load. It is commonly used for the GEMM on the backward path of DNN model, where one of input matrices needs to be transposed for matmul operation. 
 ```mlir
   %vector_a = XeTile.load_tile  %tile_a  { transpose = [1, 0] } :
      tile<32x64xbf16> into vector <64x32xbf16>
 ```
-Attribute padding specifies the padding value for the out-of-boundary access. The default value is zero.  
+Attribute `padding` specifies the padding value for the out-of-boundary access. The default value is zero.  
 ```mlir
   %vector_a = XeTile.load_tile %tile_a  { padding = 1.0 }
      tile<64x64xbf16> into vector <64x64xb16>
 ```
-load_tile need to be used together with the tile_mma.  The VNNI layout is not exposed to tile dialect users.  A lowering pass will add the VNNI transformation at the XeGPU dialect. 
+`load_tile` need to be used together with the tile_mma.  The VNNI layout is not exposed to tile dialect users.  A lowering pass will add the VNNI transformation at the XeGPU dialect. 
 
 store_tile stores a vector to memory. Transpose and padding attributes are not supported. 
 ```mlir  
