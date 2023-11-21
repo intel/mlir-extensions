@@ -67,6 +67,56 @@ func.func @test_load_nd_fp16(%A: memref<24x32xf16>, %B : memref<24x32xf16>, %C :
   return
 }
 
+#sg_map_bf16_a = #xegpu.sg_map<{mma_block_size = [8, 16], wi_layout = [2, 8], wi_data = [1, 2]}>
+#sg_map_bf16_b = #xegpu.sg_map<{mma_block_size = [16, 16], wi_layout = [1, 16], wi_data = [1, 1]}>
+#sg_map_bf16_c = #xegpu.sg_map<{mma_block_size = [8, 16], wi_layout = [1, 16], wi_data = [1, 1]}>
+// CHECK-LABEL: func @test_load_nd_bf16({{.*}}) {
+func.func @test_load_nd_bf16(%A: memref<24x32xbf16>, %B : memref<24x32xbf16>, %C : memref<24x32xbf16>) {
+  %c0 = arith.constant 2 : index
+  %c1 = arith.constant 4 : index
+
+  // CHECK: xegpu.create_nd_tdesc
+  // CHECK-SAME: {mode = simt, boundary_check = true}
+  // CHECK-SAME: memref<24x32xbf16>
+  // CHECK-SAME: -> !xegpu.tensor_desc<8x16xbf16, #xegpu.sg_map<{mma_block_size = [8, 16], wi_layout = [2, 8], wi_data = [1, 2]}>>
+  %1 = xegpu.create_nd_tdesc %A[%c0, %c1]
+      : memref<24x32xbf16> -> !xegpu.tensor_desc<8x16xbf16, #sg_map_bf16_a>
+
+  // CHECK: xegpu.load_nd
+  // CHECK-SAME: {mode = simt, vnni_axis = 1}
+  // CHECK-SAME: !xegpu.tensor_desc<8x16xbf16, #xegpu.sg_map<{mma_block_size = [8, 16], wi_layout = [2, 8], wi_data = [1, 2]}>>
+  // CHECK-SAME: -> vector<4x1x2xbf16>
+  %2 = xegpu.load_nd %1 {vnni_axis = 1} : !xegpu.tensor_desc<8x16xbf16, #sg_map_bf16_a> -> vector<4x1x2xbf16>
+
+  // CHECK: xegpu.create_nd_tdesc
+  // CHECK-SAME: {mode = simt, boundary_check = true}
+  // CHECK-SAME: memref<24x32xbf16>
+  // CHECK-SAME: -> !xegpu.tensor_desc<16x16xbf16, #xegpu.sg_map<{mma_block_size = [16, 16], wi_layout = [1, 16], wi_data = [1, 1]}>>
+  %3 = xegpu.create_nd_tdesc %B[%c0, %c1]
+    : memref<24x32xbf16> -> !xegpu.tensor_desc<16x16xbf16, #sg_map_bf16_b>
+
+  // CHECK: xegpu.load_nd
+  // CHECK-SAME: {mode = simt, vnni_axis = 0}
+  // CHECK-SAME: !xegpu.tensor_desc<16x16xbf16, #xegpu.sg_map<{mma_block_size = [16, 16], wi_layout = [1, 16], wi_data = [1, 1]}>>
+  // CHECK-SAME: -> vector<8x1x2xbf16>
+  %4 = xegpu.load_nd %3 {vnni_axis = 0} : !xegpu.tensor_desc<16x16xbf16, #sg_map_bf16_b> -> vector<8x1x2xbf16>
+
+  // CHECK: xegpu.create_nd_tdesc
+  // CHECK-SAME: {mode = simt, boundary_check = true}
+  // CHECK-SAME: memref<24x32xbf16>
+  // CHECK-SAME: -> !xegpu.tensor_desc<8x16xf32, #xegpu.sg_map<{mma_block_size = [8, 16], wi_layout = [1, 16], wi_data = [1, 1]}>>
+  %5 = xegpu.create_nd_tdesc %C[%c0, %c1]
+    : memref<24x32xbf16> -> !xegpu.tensor_desc<8x16xf32, #sg_map_fp16_c>
+
+  // CHECK: xegpu.load_nd
+  // CHECK-SAME: {mode = simt}
+  // CHECK-SAME: !xegpu.tensor_desc<8x16xf32, #xegpu.sg_map<{mma_block_size = [8, 16], wi_layout = [1, 16], wi_data = [1, 1]}>>
+  // CHECK-SAME: -> vector<8x1xf32>
+  %6 = xegpu.load_nd %5 : !xegpu.tensor_desc<8x16xf32, #sg_map_bf16_c> -> vector<8x1xf32>
+
+  return
+}
+
 #sg_map_i8_a = #xegpu.sg_map<{mma_block_size = [8, 32], wi_layout = [2, 8], wi_data = [1, 4]}>
 #sg_map_i8_b = #xegpu.sg_map<{mma_block_size = [32, 16], wi_layout = [1, 16], wi_data = [1, 1]}>
 #sg_map_i8_c = #xegpu.sg_map<{mma_block_size = [8, 16], wi_layout = [1, 16], wi_data = [1, 1]}>
@@ -116,7 +166,6 @@ func.func @test_load_nd_i8(%A: memref<64x64xi8>, %B : memref<64x64xi8>, %C : mem
 
   return
 }
-
 
 #sg_map_f64_a = #xegpu.sg_map<{mma_block_size = [4, 8], wi_layout = [2, 8], wi_data = [1, 1]}>
 #sg_map_f64_b = #xegpu.sg_map<{mma_block_size = [8, 8], wi_layout = [2, 8], wi_data = [1, 1]}>
