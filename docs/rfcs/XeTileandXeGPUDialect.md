@@ -1,229 +1,383 @@
 # RFC for XeTile and XeGPU Dialect
 
 ## Summary
-Lowering GEMM (General matrix multiplication) to an efficient nested loop is a complicated task, with multiple factors determining the efficiency. After decomposing the task into workgroup kernels and further down to subgroup kernels, each subgroup kernel executes a GEMM operation on submatrices. Generating efficient code for GEMM requires a good decomposition that creates enough subtasks to drive high core utilization and large enough subgroup-level submatrix size for code efficiency. On top of this, each hardware has its own recipe for the best code sequence for sub-group level GEMM, which contains both common target-independent techniques and target-specific optimizations. 
-
-This RFC propose XeTile and XeGPU Dialect to support effecitient code generation for Xe GPU. 
+This RFC proposes XeTile and XeGPU Dialect to support efficient code generation for Xe GPU. 
 
 ## Motivation
+Lowering GEMM (General matrix multiplication) to an efficient tiled loop structure that can be mapped to GPU compute hierarchy is a complicated task, with multiple factors determining the efficiency. After decomposing the task into workgroup kernels and further down to subgroup kernels, each subgroup kernel executes a GEMM operation on submatrices. Generating efficient code for GEMM requires a good decomposition that creates enough subtasks to drive high core utilization and large enough subgroup-level submatrix size for code efficiency. Besides the parallel decomposition, each hardware has its recipe for the best code sequence for GEMM, which includes high-level algorithm, like cooperative prefetch/load, k-slicing and software pipelining, and target-specific code sequences for submatrix operations. 
+To facilitate efficient code generation for GEMM, we introduce two new dialects, XeTile and XeGPU dialects. XeTile dialect supports the tile-based programming model and decomposes the GEMM kernel to large pre-defined tile sizes at the subgroup and workgroup level. With the XeTile dialect, the high-level GEMM algorithm can be easily expressed. Underneath XeTile, the implementation uses target-specific recipes and HW features to get the best performance on specific hardware. Based on XeTile representation, as the GEMM is decomposed at submatrix granularity and mapped to registers, it naturally supports optimization like fusing with neighbor operations. 
 
-To facilitate efficient code generation for GEMM, we introduce two new dialects, XeTile and XeGPU dialects. XeTile dialect supports the tile-based programming model and decomposes the GEMM kernel to a large enough tile size at the subgroup level.  Users can use the XeTile dialect to build a workgroup-level microkernel that implements batch-reduced gemm, using the best-known recipe for specific hardware. The recipe at this level includes target-independent optimizations like cooperative prefetch, cooperative load, K-slicing, and software pipelining. Users can further perform optimization like fusing with neighbor operations.  
+The XeTile dialect provides microkernel-level functionality to build high-performance GEMM using pure MLIR lowering pipeline. It supports matrix operations on tile sizes larger than hardware matrix tiles, so that the lowering pass optimize a larger scope of multiple matrix instructions with target-specific recipes that gives the best performance. For example, it uses the most efficient 2D block loader instead of a general but inefficient load instruction whenever the 2D block fits HW requirements. Xe GPU’s 2D blocker load which loads a large chunk of data and autopad the out-of-boundary access, when the matrix address and sizes meet HW requirements. As XeTile abstracts out the HW difference, the same XeTile-based code works on any type of Xe GPU that XeTile supports. 
 
-The XeTile dialect works as the lowest abstraction layer which hides the matrix hardware difference between different Xe GPU micro-architectures by working at tiles with larger size than the underneath hardware support. With the XeTile dialect, the lowering pass can set up hardware 2D block loader to autopad the out-of-boundary access.  XeTile dialect also abstracts out the hard limitations so that it can support arbitrary input matrix sizes.  When the input matrix sizes don’t meet 2D block load requirements, the lowering pass implements 2D tile load using 1d load and scalar load with target-specific recipes. 
+Based on XeTile, users can implement different GEMM algorithms. Based on the input GEMM shapes and micro architecture info, the GEMM lowering chooses one high-level algorithm, decides decomposition parameters, and generates XeTile code. 
 
-The XeGPU dialect provides 1:1 mapping to match Xe instructions like DPAS and 2D block load. The matrix size being processed at this level exactly match the hardware instructions or the intrinsic supported by the lower-level GPU compiler.  All the optimizations built on top of XeGPU dialect is target specific. One optimization is to decompose a large contiguous 2D tile to several smaller tiles, to help lower-level compiler to provide better register allocation. After lowering to XeGPU dialect, user could estimate the total register size used by the sub-group level GEMM assuming the lower-level compiler does proper register allocation to facilitate the GEMM decomposition. 
-
-## High level Design Consideration
-
-The XeTile dialect is designed to support the lowering from workgroup level device function to subgroup (warp counterpart) level device function. It supports cooperative prefetching, loading the 2D tile to registers, doing matrix multiplication, and storing it back.  Users may use XeTile to implement a higher-level microkernel like BRGemm. It works on a 2D tile (like 64x64) so that it could be lowered to the best-known code sequence like a lowest-level microkernel. 
-
-The XeTile dialect is designed to complement the MLIR Vector dialect. It is target-independent and could be assimilated into the Vector dialect in the future. The vector dialect is used to support similar tasks but covers a broad range of vectors like 1-D and n_D. The XeTile dialect limits the vector to be 2-D and also extends the Vector dialect semantics. It introduces a Tile data type, which combines the base tile info with memory description, and supports functionality like load/store/prefetch Tiles to vectors. 
-
-The XeTile dialect design is strongly influenced by the XeTLA::tile API, and the lowering to XeGPU dialect should closely follow XeTLA::tile implementation.  It supports the efficient mapping of tile-based programming model to PVC’s 2D block loader. The implementation should recommend subgroup-level tile sizes for best performance and optionally code efficiency for the subgroup tile size (could be at the BRGEMM level).  The XeTile supports arbitrary input matrix sizes, so that user don’t need to deal with out-of-boundary cases and hardware limitations.  The support details are summarized below. 
-1.	Support the input matrix size well divisible by the subgroup level tile size. There is no out-of-boundary cases. 
-2.	Support the input matrix size not divisible by the subgroup level tile size, but the matrix size still meets the 2D block load requirements.  The compiler-generated code set up the 2D block loader hardware to detect the out-of-boundary and perform padding automatically.
-3.	Support the row dimension of the subgroup tile for matrix A to be not multiple of DPAS HW size (say 8 on PVC).  This gives some flexibility in subgroup-level tile size so gives more flexibility to GEMM decomposition. It handles the remaining rows automatically, if it is not a multiple of 8 in the memory, it is loaded to registers as 8 rows (or multiple of 8 rows). 
-4.	Support the input matrix with an unaligned shape. For example, in case the size (in byte) of N, K dims are not divided by 8, then the micro-kernel uses 1d load and scalar load and does the software padding. 
-5.	Optimize the preparation of the 2D block load address (AKA payload. The initial address setup is more expensive since it involves the base tile (surface) sizes, tile offsets and sizes. The initial address preparations could be hoisted out of loop, so only offset update is performed within the loop. 
-6.	Tile prefetch support cooperative prefetch. for example, if total subgraph thread number is 8, then 8 subgroup threads to cooperatively fetch the tile A. Subgroup id and total thread number is passed to tile prefetch to do the split. 
-
-The XeTile dialect hides the VNNI layout and exposes the register block layout to the user. This diverges from the XeTLA::tile API design. For a DPAS instruction with input matrix_A[8, 16] and matrix_B[16, 16], the input matrix need to re-layout to be matrix_A[8, 16/2, 2] and matrix _B[16/2, 16, 2].  This causes a real physical layout difference for the matrix_B. However, since this layout is very short-lived and only affects the loading of matrix_B and DPAS instruction, the XeTile hides the VNNI layout from user and expects the vector re-layout operations are inserted automatically in the lowering process. The XeGPU dialect supports load instruction with VNNI transformation capability so a target-specific optimization pass could merge the re-layout to the 2D load operation. 
-
-The XeTile dialect requires user to specify a register block size for tile load operation. The tile is loaded to a high dimension vector with blocked layout, which represents how the tile is loaded to registers. Each XeGPU register can be very large so it can hold the entire input matrix to a DPAS instruction.  So conceptually the 2D tile is loaded into a 2D array of registers, each with the size of register block.  For example, the tile for submatrix A[32, 64] is loaded to a register region with a blocked layout [32/8, 64/16, 8, 16].  Exposing the inner-block allows gradual lowering. Since the pre-processing of matrix A/B and post-processing of matrix C needs to represented on the vectors in blocked lyout vectors, so the XeTile-based program is closer to lowered form and help understand the lowering. 
-
-The XeGPU dialect models the Xe ISA semantics but works at vector and tile data type, so it works like a bridge dialect before it is lowering to LLVM/SPIRV which works on llvm.struct or spriv.vector. The scope of XeGPU dialect includes the following. 
-1.	DPAS  
-2.	2D block load/store/prefetch
-3.	1D load/store/prefetch, scalar load/store/prefetch
-
-Since there are existing dialects operating on vector data type, including vector, arith, and math. XeGPU dialect doesn’t intend to include full Xe ISA instructions but to include all the target-specific operations beyond the scope of existing dialects. Together with vector/arith/math dialects, it supports the following features: 
-1.	Register region access, to access register subblock from a larger register block 
-2.	Barrier, fence, atomic operations
-3.	Data type conversion, to support mixed data type 
-4.	Math operations 
+The XeGPU dialect provides almost 1:1 mapping to match Xe instructions like DPAS and 2D block load. The matrix instructions being processed at this level exactly match the hardware instructions’ semantics including the matrix sizes. The lowering and optimizations built on top of the XeGPU dialect are target-specific. 
 
 
 ## Proposal
 ### XeTile Dialect
 
-The XeTile dialect exploits the hardware features to do the auto-padding, which provides a simple and efficient generated code than the software padding. Using the tile dialect, user don’t need to detect the out-of-boundary case, and also the dialect takes care of unaligned shape, so the same code runs for the unaligned use case.  Users can focus on high-level optimization like software pipelining, cooperative prefetch, and K-slicing. 
+XeTile provides a middle-level abstraction for matmul operation, sits between Linalg matmul named op and XeGPU Dpas op. It is not tied to specific Xe architecture. The XeTile dialect design facilitates optimization using hardware auto-padding, which generates simpler and more efficient code than the software padding. Using the tile dialect, the user doesn’t need to detect the out-of-boundary case, and the dialect takes care of unaligned shapes, so the same code runs for the unaligned use case.  Users can focus on high-level optimization like software pipelining, cooperative prefetch, and K-slicing. 
 
-To create a 2D Tile memory descriptor, user needs to set up a tile with a subview of memref. The subview has it parent memref, also called as “base tile” information. The “base tile” must be 2D and must be contiguous. With the tile abstraction, XeTile does load_tile, prefetch_tile, and store_tile.  The XeTile only takes the base memref, offsets, sizes, and stride. Offsets and sizes describe the tile along the row and column, in the number of elements. Stride describe the number of elements between the two elements along the leading dimension.  The innermost dimension must be contiguous. The current version only supports the 2D memref has row-major layout.  
+ Ops	Syntax	Example
+init_tile	operation ::= `XeTile.init_tile `$base_memref  `$offset0 `, `$offset1 `:` type($base_memref) `,` index `,` index  `->` type($tile, attr-dict)	  %block = XeTile.init_tile %base_memref, %tile_offset:2
+     memref<128x128xbf16> into tile<8x16xbf16>
+load_tile	operation ::= `XeTile.load_tile` $tile  attr-dict `:` type($tile)  `->` type($res)	  %vector_a = XeTile.load_tile %tile_a  transpose = [1,0] padding=0 tile<64x32xbf16> into vector <32x64xbf16>
+store_tile	operation ::= `XeTile.store_tile` $value `,` $tile attr-dict `:` type($value) `,` type($tile) 	  XeTile.store_tile %tile_a  %vector_a    
+   vector <64x64xbf16> into tile<64x64xbf16>
+Update_tile_offset	operation ::= `XeTile.update_tile_offset` $tile `,` $delta0 `,` $delta1 `:` type($tile) `,` index `,` index `->` type($tile)	%tdesc_updated = XeTile.update_nd_offset %tdesc, %offset_x, offset_y
+      tensor_desc<32x64xbf16>, index, index -> tensor_desc<32x64xbf16>
+prefetch_tile	operation ::= `XeTile.prefetch_tile` $tile `,` attr-dict `:` type($tile)	  XeTile.prefetch_tile %coop_tile:  tile<16x32xbf16> 
+Tile_mma	operation ::= `XeTile.tile_mma` $matC, $matA, $matB attr_dict `:` type($matC) `,` type($matA) `,` type($matB) `->` type($res)	  %vector_c = XeTile.tile_mma %vector_c, %vector_a, %vector_b   :
+     vector <64x128xfloat>, vector <64x32xbf16>, vector<32x128xbf16>  into vector <64x128xfloat>  
+
+To create a 2D Tile memory descriptor, the user needs to set up a tile (init_tile) describing a 2D region within the global memory.  Setting up a tile requires the shape of the parent tile and the underneath physical memory buffer size, known as the base matrix.  The base matrix must be 2D and must be contiguous.  The XeTile takes the base matrix address pointer, shape, and strides, and the tile’s offsets and shape.  Offsets, strides, and shapes are for two dimensions and in the number of elements. base_stride[0] describes the number of elements between the two rows, describing the width of the underneath physical memory buffer, and *%base_strides[1] must be 1, as the innermost dimension of the base matrix must be contiguous. The current version only supports 2D memref with a row-major layout.  
+
+Init_tile takes memref as the description of the base matrix with the offsets of the specific tile. The tile shape and element data type are specified in the output tile data type, and they must be known at compile-time.  
+
+Init_tile with memref of static shape. Tile uses memref’s shape and strides as base_shape and base_strides. 
 ```mlir 
-  %tile = XeTile.init_tile %memref_subview
-     memref<64x64xbf16, strided<[1, 1], offset: 128> into tile<64x64xbf16>
+  %block = XeTile.init_tile %base_memref, [%tile_offset:2] :
+     memref<128x128xbf16> into tile<8x16xbf16 >
 ```
-The lowering pass could initiate a tile with a memref subview.  Tile is similar to memref.subview in terms of setting up a memory region out of a larger memory region. However, the memref subveiw is designed to support individual element access, and tile is to support tile load and mma. The memref.subview can cause out-of-bound access and leaves the handling of out-of-bounds access to the user, but the tile hides the details from the user. 
+Init_tile with memref of dynamic shape. The memref has a dynamic shape, so that its shape and strides have to be passed as runtime parameters to init_tile. 
+  %block = XeTile.init_tile %base_memref, [%tile_offset:2], [%base_shape:2[, [%base_strides:2]:
+     memref<?x?xbf16> into tile<8x16xbf16>
 
-```mlir 
-%3 = memref.subview %2[0, 128][32, 64][1, 1] :
-  memref<1024x1024xbf16> to memref<32x64xbf16, strided<[1, 1], offset: 128>
+ Init_tile with an address for the base matrix. This form is to support the use case which doesn’t use a memref to describe the base matrix. 
+  %block = XeTile.init_tile %base_addr, [%tile_offset:2], [%base_shape:2], [%base_strides:2]:
+     i64 into tile<8x16xbf16>
 
-%tile XeTile.init_tile %3 :
-	memref<32x64xbf16, strided<[1, 1], offset: 128> into tile<32x64xbf16>
-```
+With the tile date type, XeTile supports load_tile, prefetch_tile, and store_tile. 
 
-Init_ccop_tile splits a tile into multiple smaller tile so that the current thread can cooperatively work on the tile with the neighbour subgroup thread within the same workgroup. This can be used by cooperative prefetch and load on matrix A and B, where subgroup shares the memory access with its peer subgroups.   
-```mlir 
-  %tile = XeTile.init_coop_tile %tile, %coop_id, %coop_size
-     tile<64x64xbf16>, uint_32, uint_32 into tile<8x8xbf16>
-```
+load_tile loads a tile to vector, which could be backed by a register region. 
+  %vector_a = XeTile.load_tile %tile_a   
+     tile<64x64xbf16> into vector <64x64xb16>
 
-load_tile loads a tile to register region. Optionally with blocked layout, which was represented with the high dimension vector.  The blocking don’t changes the order of the outer dimension, so for vector [m, n] with blockfactor [MB, NB], the register region has layout as [m/MB, n/NB, MB, NB].  
+Attribute transpose specifies the dimensions being transposed along the load. It is commonly used for the GEMM on the backward path of DNN model, where one of input matrices needs to be transposed for matmul operation. 
+  %vector_a = XeTile.load_tile  %tile_a  { transpose = [1, 0] } :
+     tile<32x64xbf16> into vector <64x32xbf16>
 
-```mlir 
-  %vector_a = XeTile.load_tile %tile_a   inner_blocks = [8, 16]
-     tile<64x64xbf16> into vector <8x4x8x16xb16>
-```
+Attribute padding specifies the padding value for the out-of-boundary access. The default value is zero.  
+  %vector_a = XeTile.load_tile %tile_a  { padding = 1.0 }
+     tile<64x64xbf16> into vector <64x64xb16>
 
-load_tile supports transpose. The inner_blocks describe the memory layout before the transpose. On the backward path, one of input matrices needs to be transposed for matmul operation. 
-```mlir 
-  %vector_a = XeTile.load_tile %tile_a   inner_blocks = [8, 16] Transpose = TRUE
-     tile<64x64xbf16> into vector <4x8x16x8xbf16>
-```
+load_tile need to be used together with the tile_mma.  The VNNI layout is not exposed to tile dialect users.  A lowering pass will add the VNNI transformation at the XeGPU dialect. 
 
-These load_tile variants need to be used together with the tile_mma.  The VNNI layout transformation is not exposed to tile dialect users.  A lowering pass will add the VNNI transformation at the XeGPU dialect. 
-store_tile stores the blocked register region back to memory in plain layout. VNNI_transform and transpose are not supported. 
-```mlir 
-  XeTile.store_tile %tile_a  %vector_a  inner_blocks = [8, 16]  
-	   vector <8x4x8x16> into tile<64x64xbf16> 
-```
+store_tile stores a vector to memory. Transpose and padding attributes are not supported. 
+  XeTile.store_tile %tile_a  %vector_a  :
+   vector <64x64xbf16> into tile<64x64xbf16> 
 
-coop_prefetch_tile prefetches the tile to cache.  
+prefetch_tile prefetches the tile to cache.  
+  XeTile.prefetch_tile %coop_tile:  tile<8x8xbf16> 
 
-```mlir 
-  XeTile.prefetch_tile %coop_tile_a  
-     tile<8x8xbf16> 
-```
+Tile_mma represents the matrix multiplication on 2D vectors. The semantics can be represented by vector.contract, so tile_mma works more like a syntax sugar. This also means that the code can be lowered to vector.contract and mapped to HW without DPAS support nicely.  
+  %vector_c = XeTile.tile_mma %vector_a, %vector_b, %vector_c   :
+     vector <64x128xfloat>, vector <64x32xbf16>, vector<32x128xbf16>
+	   into vector <64x128xfloat>  
 
-load_tile can be used to load the tile to registers in a cooperative flavor. The coop_tile is created out of tile and is a tile with a smaller size. So the load operation is the same.  
+An tile_mma variant without vector_c initialization. 
 
-```mlir 
-  %a = XeTile.load_tile %coop_tile_a  
-     tile<16x16xbf16> into Vector <16x16xbf16>
-```
+  %vector_c = XeTile.tile_mma %vector_a, %vector_b   :
+     vector <64x32xbf16>, vector<32x128xbf16>
+	   into vector <64x128xfloat>  
 
-Once with the block-layout register region, tile_mma represents the matrix multiplication on 4 D vectors. The semantics can be represented by vector.contract, so tile_mma works like a syntax sugar. This also means that the code can be mapped to HW without DPAS support nicely.  
+Update_tile_offset updates tile with offset_x and offset_y, to move the current tile to a new position.  These offsets are relative offset to the current position and counted in the number of elements.  Usually only one value is needed to update since the tile is only moving along the K dimension. Users should avoid initializing new tiles repeatedly. For best performance, the user should only initialize one tile as a base tile and update the tile offset to move to a new tile.  
 
-```mlir 
-  %vector_c = XeTile.tile_mma %vector_a, %vector_b   
-     vector <8x4x8x8xbf16>, vector<4x8x8x16xbf16> into vector <8x8x8x16float>  
-```
+  %tile_updated = XeTile.update_tile_offset %tile, %offset_x, offset_y :
+		tile<64x64xbf16>, index, index into tile <64x64xbf16>
 
-Tile can be updated using the offset_x and offset_y.  These operations are used when one tile is being processed and moved to a new tile. Usually only one value is needed to update since the tile is only moving along the K dimension. 
+XeTile mapping attributes are experimental features, which maps an XeTile-based operation to subgroup threads and further to WI threads.  Without these attributes, the XeTile works at the subgroup level. With wg_map attributes, XeTile operations can be mapped to workgroup-level functions. The attributes guide the lowering from workgroup level to subgroup level by specifying how the data distributed across parallel subgroups. With sg_map attributes, user can further specify the mapping of each data element to each work item thread. These maps gives user full control on the lowering process, so that the user can tune the tiling size for both the workgroup and subgroup to tune the performance. 
+Below is an example.
 
-```mlir
-  XeTile.update_tile_offset %tile, %offset_x, offset_y
-		tile<64x64xbf16>, index, index
-```
+#wg_map_a = #xetile.wg_map<sg_layout = [2, 2], sg_data = [32, 128]>
+#sg_map_a = #xetile.sg_map<wi_layout = [2, 8], wi_data = [1, 2]>
+#xe_map_a = #xetile.xe_map<wg = #wg_map_a, sg = #sg_map_a>
+
+%a_init_tile = xetile.init_tile %A[%m, %c0] : memref<1024x1024xf16> -> !xetile.tile<128x128xf16, #xe_map_a>
+
+wg_map describes the mapping between subgroup thread and the memory specified by tile. 
+wg_map.sg_layout specifies the subgroup layout, and wg_map.sg_data specifies the tile size owned by each subgroup. In the example above, sg_layout=[2,2] means that each workgroup has 4 subgroups with 2D layout [2,2]. sg_data = [32,128] means that each subgroup works on a submatrix [32, 128].
+
+The tile size must be divisible by wg_map.sg_data.  For each dimension, the size of wg_map.sg_data must be divisible by wg_map.sg_data, and the data elements assigned to each subgroup thread must be contiguous. When the tile size is smaller than the submatrix size specified by wg_map.sg_layout and wg_map.sg_data, it is distributed to subgroup threads in a round-robin fashion. If there is no more data to assign along a certain dimension, it wraps around to the beginning of the tile along that dimension.  For example, for the tile size [128, 128], the tile would be sliced to four subtiles with size [32,128], with the first and third subtile assigned to subgroup thread 0 and 1, and the second and fourth to thread 2 and 3. 
+
+sg_map describes the mapping between WI thread and the memory specified by the tensor descriptor. sg_map.wi_layout specifies the layout in which WI threads corresponding to the memory, and sg_map.wi_data describes the data block accessed by each WI thread.  In the example above, wi_layout=[2, 8] means that each subgroup has 16 WI threads, and wi_data=[1,2] means that each WI thread owns a [1,2] data fragment from total [2,16] submatrix at the subgroup level.  
+
+The wg_map.sg_data size must be divisible by sg_map.wi_layout multiplying with sg_map.wi_data.  For each dimension, the size of wg_map.sg_data must be divisible by wi_layout x wi_data, and the data elements assigned to each WI thread must be contiguous. When subgroup owned submatrix is larger than the submatrix size specified by sg_map.wi_layout and sg_map.wi_data, it is distributed to WI threads in a round-robin fashion. The full wg_map.sg_data[0:1] is distributed with the submatrix size from multiplying wi_layout[0:1] and wi_data[0:1], so each element is mapped to one and only WI thread.
+
 
 ### XeGPU dialect
-The XeGPU dialect models Xe GPU’s ISA but works on MLIR vector type and memref-based tile type as a bridge dialect.  XeGPU operations are only introduced only when vector-based dialects (vector/math/arith) can’t express the operation semantics. This is consistent with the design NV and AMD does with NVGPU ( alink) and AMDGPU (alink) dialects, which work with vector and memref type.  
+XeGPU dialect models a subset of Xe GPU’s ISA. This is the counterpart of NVGPU and AMDGPU  dialects, which provide a bridge dialect in the MLIR gradual lowering.  XeGPU dialect works with MLIR memref and vector type and complements with Arith/Math/Vector/Memref dialect. XeGPU operations are introduced when there is a special Xe instruction not modeled by LLVM/SPIRV dialect. In some cases, one XeGPU op is mapped to multiple hardware instructions when there is no performance disadvantage by grouping them. For example, create_tdesc is mapped to a fixed sequence of instructions to create the 32-byte long address description. 
+Below is a summary. 
 
-The XeGPU dialect supports XeTile dialects lowering, so the tile-based XeTile operation can be further decomposed to many XeGPU ops. Besides tile-based operation, it also includes 1D load and scatter load.  For tile-based operation, the XeGPU dialect reuses the tile data type so it looks similar the to XeTile dialect. Compared with the XeTile dialect, the XeGPU dialect works at smaller tile size and lower-dimension vectors and expects each operation to be mapped to one instruction underneath. 
+ Ops	Syntax	Example
+create_tdesc	operation ::= `XeGPU.create_tdesc` $base_addr `,` $offset attr-dict `:` type($base_addr) `,` type($offset) `->` type($tdesc)	%scatter_tdesc1 = XeGPU.create_tdesc %mem_addr, %offset: 
+        int64, Vector<16 x index> -> tensor_desc <16 x bf16, #scattered,  memory_scope=slm, chunk_size_per_lane=1 >
+load_gather	operation ::= `XeGPU.load_gather` $tdesc `,` $mask attr-dict `:` type($tdesc) `,` type($mask) `->` type($res)	%result = XeGPU.load_gather %scatter_tdesc2, %mask
+    {L1 = cached, L2 = uncached, transpose=[1,0]}: 
+          tensor_desc <16x8xbf16, #Scattered>, vector<16xi1> -> vector<8x16xbf16>
+store_scatter	operation ::= `XeGPU.store_scatter` $value `,` $tdesc `,` $mask attr-dict `:` type($value) `,` type($tdesc) `,` type($mask)	XeGPU.store_scatter %value, %scatter_tdesc2, %mask {L1 = cached, L2 = uncached}: 
+          vector<16xbf16>, tensor_desc <16xbf16, #scattered>, vector<16xi1>
+update_offset	operation ::= `XeGPU.update_offset` $tdesc `,` $delta `:` type($tdesc) `,` type($delta) `->` type($tdesc)	%tdesc_updated = XeGpu.update_offset %tdesc, %offsets:
+          tensor_desc<16xbf16, #scattered>, vector<16x index>   -> tensor_desc<16xbf16, #scattered>
+Prefetch	operation ::= `XeGPU.prefetch` $tdesc ` attr-dict `:` type($tdesc) `	XeGPU.prefetch %scatter_tdesc1 {L1 = cached, L2 = uncached}: tensor_desc <16xbf16, #scattered>
+atomic_rmw	operation ::= `XeGPU.atomic_rmw `$kind `, ` $value `,` $tdesc `,` $mask attr-dict `:` type($value) `,` type($tdesc) `,` type($mask) 	%ret_value = XeGPU.atomic_rmw “addf”, %value, %scatter_mem2, %mask 
+: vector<16xbf16>, tensor_desc <16xbf16, #scattered>, vector<16xi1>
+create_nd_tdesc	operation ::= `XeGPU.create_nd_tdesc` $base_addr  `,` $offset0 `,` $offset1 `,` $tdim0 `,` $tdim1 `,` $tstride0 attr-dict `:` type($base_addr) `,` index `,` index `,` index `,` index `,` index `,` index  `->` type($tdesc)	%tdesc2 = XeGPU.create_nd_tdesc %mem_addr, %tile_offset:2, %base_shape:2,%base_strides:2: int64, index, index, index, index, index, index  -> tensor_desc <8x16xbf16, memory_scope=global>
+load_nd	operation ::= `XeGPU.load_nd` $tdesc  attr-dict `:` type($tdesc)  `->` type($res)	%result = XeGPU.load_nd %tdesc2 {L1_hint = uncached, L3_hint = uncached}: tensor_desc <8x16xbf16> -> vector<8x16xbf16>
+dpas	operation ::= `XeGPU.dpas` $matC, $matA, $matB attr_dict `:` type($matC) `,` type($matA) `,` type($matB) `->` type($res)	%vector_c = XeGPU.dpas %vector_c, %vector_a, %vector_b    vector <8x16xfloat> , vector <8x8x2xbf16>, vector<8x16x2xbf16>  -> vector <8x16xfloat>   
+store_nd	operation ::= `XeGPU.store_nd` $value `,` $tdesc attr-dict `:` type($value) `,` type($tdesc) 	XeGPU.store_nd %value, %tdesc2  {L1_hint = uncached, L3_hint = uncached}: 
+          vector<8x16xbf16>, tensor_desc <8x16xbf16>
+update_nd_offset	operation ::= `XeGPU.update_nd_offset` $tdesc `,` $delta0 `,` $delta1 `:` type($tdesc) `,` index `,` index `->` type($tdesc)	%tdesc_updated = XeGpu.update_nd_offset %tdesc, %offset_x, offset_y
+        tensor_desc<8x16xbf16>, index, index -> tensor_desc<8x16xbf16>
+prefetch_nd	operation ::= `XeGPU.prefetch_nd` $tdesc `,` attr-dict `:` type($tdesc)	XeGPU.prefetch_nd %tdesc2: tensor_desc <8x16xbf16>
+alloc_nbarrier	operation ::= `XeGPU.alloc_nbarrier` $barrier_couter `:` uint8_t	XeGPU.alloc_nbarrier %nbarrier_count: Uint8_t
+create_nbarrier	operation ::= `XeGPU.create_nbarrier` $nbarrier_id `,` $nbarrier_role  attr-dict `:` uint8_t `,` type($nbarrier_role)   `->` type($nbarrier)	%nbarrier   = XeGPU.create_nbarrier %nbarrier_id, %nbarrier_role, {num_producers = 2, num_consumers = 2}:     Uint8_t, nbarrier_role -> !XeGPU.nbarrier
+nbarrier_arrive	operation ::= `XeGPU.nbarrier_arrive` $nbarrier_id   `:` type($nbarrier)	XeGPU.nbarrier_arrive %nbarrier : !XeGPU.nbarrier
+nbarrier_wait	operation ::= `XeGPU.nbarrier_wait` $nbarrier_id   `:` type($nbarrier)	XeGPU.nbarrier_wait %nbarrier : !XeGPU.nbarrier
+Mfence	operation ::= `XeGPU.mfence` attr-dict	XeGPU.mfence {fence_scope = global}
+compliler-hint	operation ::= `XeGPU.compiler_hint` attr-dict	XeGPU.compiler_hint {scheduling_barrier}
 
-Instead of load, store, and prefetch tile, the XeGPU dialect offers load_2D, store_2D, prefetch_2D operation on a 2D block. We reuse tile to describe the 2D block, since it is essentially a tile but with a smaller size to fit exactly one Xe ISA instruction. 
+The XeGPU dialect supports lowering from XeTile dialects, so the tile-based XeTile operation can be further decomposed to multiple XeGPU ops. For example, XeTile.load_tile operation could be lowered to XeGPU’s load_nd or load_gather operations. Compared with the XeTile dialect, the XeGPU dialect works with smaller memory size, since the core XeGPU operation maps to one hardware instruction underneath.  
 
-```mlir
-  %block = XeGPU.init_tile %base_memref, %offset:2, %sizes:2, %strides
-     memref<8x16xbf16> into tile<8x16xbf16>
-```
+XeGPU supports two flavors of load/store operations: n-dimension load (nd load) and scattered load. Both need to create a tensor descriptor to describe the addresses/offsets to the tensor data, use it to load/store/prefetch, and then update it to the next data blocks.  Nd_load can be used to map to PVC’s 1D load, 2D load, or future nd load. Scattered load requires a special tensor descriptor, which contains one separate address offset for each WI thread.  
 
-load_2D loads a 2D block from global memory, represented by tile, to registers, represented by a vector. The vector data used in the XeGPU is expected to exactly describe the data layout and establish exact mapping to physical registers. The vector data used in the XeTile is a conceptual vector, which doesn’t reflect the exact data layout in the physical registers. For example, the vector A[4, 8, 16, 8] used in the XeTile would be lowered to 32 separate smaller vectors with a VNNI data layout, like a_vnni[8, 8, 2]. The a_vnni would be mapped to registers and used exactly as is to feed to DPAS instruction. 
+Create_nd_tdesc creates a tensor descriptor for an n-dimensional tensor, which describes a subview of n-dimensional base tensor. The information of the base tensor is passed as operands including base address, offsets, and strides. The shape and element data type of the tensor view (subtensor) are specified in the output tensor_desc data type, and they must be known at the compile-time. The tensor_desc design is extensible for future Xe hardware if it will cover higher rank. To create a n-dimension tensor descriptor, the user needs to pass “n” number of base_shape and base_stride for the base nd-tile, and “n” number of offesets, and the shape in the result tensor_desc has be “n” numbers.  
 
-```mlir 
-  %a = XeGPU.load_2D %block 
-     tile<8x16xbf16> into vector<8x16xbf16>
-```
+The example below creates a 2D tensor_desc with base matrix address, shapes, strides, and the offsets of the 2D subtensor. the tensor_desc “remembers” the base tensor buffer’s information, so when it is used to load the subtensor, the lowering will handle the out-of-boundary access implicitly and preferably using hardware auto-padding features for the out-of-boundary elements.  On PVC, the stride of the innermost dimension (base_stride[0]) must be 1.   
 
-load_2D supports VNNI transform for low-precision data type like fp16, bf16, int8, and int4. VNNI transformation takes a number of low-precision data and fits them into 32-bit data. For example, it takes 2 bf16 or 4 int8 values from matrix A’s row dimension, or B’s column dimension and puts them into the innermost dimension.  The VNNI transformation doesn’t change the overall size but splits the dimension to 3. 
-Load_2D doesn’t support converting the VNNI layout back to a non-VNNI layout. The VNNI layout is supposed to be applied to the weight matrix only for the DPAS operation, and this is only the use and no need to convert the layout back.  
+ #sg_map_a = xegpu.sg_map<{wi_layout = [2, 8], wi_data = [1, 2]}>
+%tdesc2 = XeGPU.create_nd_tdesc %mem_addr, %offsets:2, %base_shape:2,%base_stride:2 
+		: uint64, index, index, index, index, index, index
+     	into tensor_desc <8x1xbf16, #sg_map_a>
 
-```mlir
-  %bt = XeGPU.load_2D %block_b   VNNI_AXIS = 1 
+%tdesc2 = XeGPU.create_nd_tdesc %mem_addr, %offsets:2, %base_shape:2,%base_stride:2 {mode =vc}
+		: uint64, index, index, index, index, index, index
+     	into tensor_desc <8x16xbf16>
+Attribute xegpu.sg_map follows the same definition used in xeTile.sg_map. 
+create_nd also accepts memref as input instead of memory address.  The example below ignores the mode and sg_map attribute for simplicity, but works for both cases. 
+
+  %tdesc2 = XeGPU.create_nd_tdesc %mref, %offsets:2 
+		: memref<1024x1024xbf16>, index, index
+     	into tensor_desc <8x16xbf16>
+
+
+The example below accepts a memory address and an offset and creates a 1D tensor_desc.  The tensor_desc describes a 1D vector that can be loaded cooperatively by all work item (WI) threads within the subgroup. 
+#sg_map_a = xegpu.sg_map<{ wi_layout = [1, 16], wi_data = [1, 1]}>
+  %tdesc1 = XeGPU.create _nd_tdesc %mem_addr, %offset  
+		{memory_scope=slm, boundary_check=false}: 
+		uint64, index into tensor_desc <16xbf16, #sg_map_a>
+The outer dimension of wi_layout must be 1 for 1D tensor_desc.  
+Attribute memory_scope indicates whether the tensor is located in the global or shared local memory. The default value is global. 
+Attribute boundary_check indicates whether the operation detects the boundary and pads with zero for out-of-boundary access. The default value is true. 
+
+Vector Compute (VC) mode means that the XeGPU op is carried out by all the WI threads within subgroup, so effectively input and output are vectors. Under this mode, there is no need to specify the mapping of each individual WI thread to the data fragments. The XeGPU operation works on the vectors as a whole. 
+
+  %tdesc1 = XeGPU.create _nd_tdesc %mem_addr, %offset  
+		{memory_scope=slm, boundary_check=false, mode = vc}: 
+		uint64, index into tensor_desc <16xbf16>
+
+Attribute mode indicates whether the XeGPU operation is working under “Vector Compute” (VC) mode.  Any XeGPU operation working at VC mode needs to explicitly declare this attribute. The default mode is SIMT mode. When VC mode is on, the sg_map attribute should not be presented in the associated tensor_desc. 
+
+For 1D tensor description, the base_shape and base_stride are optional, the attribute “boundary_check” must be false, “%mem_add + %offset” must not access out-of-boundary memory to avoid undefined behavior. 
+
+load_nd works with create_nd_tdesc and loads the memory specified by tensor_desc to a multi-dimension vector.  
+#sg_map_a = xegpu.sg_map<{wi_layout = [2, 8], wi_data = [1, 2]}>
+%result = XeGPU.load_nd %tdesc2 {L1_hint = uncached, L3_hint = uncached }: 
+          tensor_desc <8x16xbf16, #sg_map_a > into vector<8x1xbf16 >
+
+%result = XeGPU.load_nd %tdesc2 {L1_hint = uncached, L3_hint = uncached, mode = vc }: 
+          tensor_desc <8x16xbf16> into vector<8x16xbf16>
+
+Attributes L1_hint, L2_hint, and L3_hint can be applied to Load_nd, specifying hint directives for different levels of cache hierarchy. On PVC, cache directive for load could be "uncached, cached, streaming, read_invaldiate".  Streaming means that the data is cached but is more likely to be swapped out, and read_invaldiate simply invalidates the cache line after read. For write, cache policy could be "uncached, write_through, write_back, streaming". Write_through writes to the next level cache immediately, and write_back holds the modification until the cache line is kicked out due to the cache replacement policy.  PVC uses L1_hint and L3_hint and omits L2_hint.  There are only a few valid combinations between L1_hint and L3_hint for PVC.  
+
+Attribute Transpose specifies the dimensions to be transposed during the load. On the backward path of training model computation, the input matrix needs to be transposed. The operation definition supports all data types, but hardware may have limitations.  PVC only supports data types with 4-byte (DW) and 8-byte (DQ).  
+
+#sg_map_a = xegpu.sg_map<{wi_layout = [1, 16], wi_data = [1, 1]}>
+  %at = XeGPU.load_nd %block_a   {transpose = [1,0] }:
+     tile<8x16xf32, #sg_map > into vector <1x8xf32>
+
+  %at = XeGPU.load_nd %block_a   {transpose = [1,0]  mode = vc}:
+     tile<8x16xf32> into vector <16x8xf32>
+
+
+Attribute vnni_axis supports VNNI transform for low-precision data types like fp16, bf16, and int8. VNNI transformation takes multiple low-precision data elements along the column dimension and fits them into 32-bit data along the row dimension. It effectively splits a 2D matrix [col, row] to be 3-d matrix [col/vnni_factor, row, vnni_factor] when vnni_axis is specified to be axis 0.  When vnni_axis is specified as axis 1, the VNNI transformation doesn’t change the layout but splits the VNNI axis to 2 axes.  
+
+PVC only support loading with VNNI transformation for low-precision data types like fp16, bf16, and int8. The VNNI layout must be applied to the weight matrix for the DPAS operation, with vnni_axis being set to 0.
+#sg_map_b = xegpu.sg_map<{ wi_layout = [1, 16], wi_data = [2, 1]}>
+  %bt = XeGPU.load_nd %block_b   {vnni_axis = 0 }:
+     tile<16x16xbf16, #sg_map_b> into vector <8x1x2xbf16>
+
+  %bt = XeGPU.load_nd %block_b   {vnni_axis = 0, mode = vc }:
      tile<16x16xbf16> into vector <8x16x2xbf16>
 
-  %at = XeGPU.load_2D %block_a   VNNI_AXIS = 0 (default)
+For the sg_map, the wi_data size along the vnni_axis must match with the size required to “pack” the low-precision data into 32-bit. 
+
+When setting vnni_axis to 1, VNNI transformation has no impact on the physical data layout, so it can be optimized away from code sequence. However, it does contribute to the code readability, since it is much easier to understand that A[8, 8, 2]  x B[8, 16, 2], vs. A[8, 16] x B[8, 16, 2]. 
+#sg_map_a = xegpu.sg_map<{ wi_layout = [2, 8], wi_data = [1, 2]}>
+  %at = XeGPU.load_nd %block_a   {vnni_axis  = 1 }:
+     tile<8x16xbf16, #sg_map_a> into vector <4x1x2xbf16>
+
+  %at = XeGPU.load_nd %block_a   {vnni_axis  = 1, mode = vc}:
      tile<8x16xbf16> into vector <8x8x2xbf16>
-```
 
-The variant of VNNI transformation has no impact on the physical data layout, so it can be optimized away from code sequence. However, it does contribute to the code readability, since it is much easier to understand that A[8, 8, 2]  x B[8, 16, 2], vs. A[8, 16] x B[8, 16, 2]. 
-load_2D supports transpose. This is to support tile transposition. The operation definition supports all data types, but hardware may have limitations. For example, PVC only supports data types with 4-byte (DW) and 8-byte (DQ). 
-There is a use case to transpose a low-precision matrix on the backward path. In this case, the lowering path on PVC would need to use an alternative XeGPU code sequence to emulate the effects. 
+VNNI transformation and transpose can be combined for low-precision data type like fp16, bf16, int8. The example below shows that a bf16 matrix [8row, 16col] is transposed to [16col, 8row], and then VNNI transform to [8col, 8row, 2col].  On PVC, this specific combination can be fulfilled by a hardware transpose on DW data type, the bf16 [8row, 16col] is viewed as DW [8row, 8col], and transposed to DW[8col, 8row], and then can be viewed as bf16 [8col, 8row, 2col].  
+#sg_map_a = xegpu.sg_map<{ wi_layout = [2, 8], wi_data = [1, 2]}>
+  %at = XeGPU.load_nd %block_a   {transpose = [1, 0]  vnni_axis = 0 }:
+     tile<8x16xbf16, #sg_map_a> into vector <4x1x2bf16>
 
-```mlir
-  %at = XeGPU.load_2D %block_a   Transpose = TRUE
-     tile<8x16xf32> into vector <16x8xf32>
-```
-
-load_2d supports VNNI transformation and transpose combined for low-precision data type like fp16, bf16, int8, and int4. The operation definition supports VNNI_AXIS to be both row and column, but it is only supported when VNNI_AXIS = 1 along column dimension on PVC. The example below shows that a bf16 matrix [8row, 16col] is transposed to [16col, 8row], and then VNNI transform to [8col, 8row, 2col]. In PVC hardware, it is fulfilled by a hardware transpose on DW data type, the bf16 [8row, 16col] is viewed as DW [8row, 8col], and transpose to DW[8col, 8row], and then can be viewed as [8col, 8row, 2col]. 
-
-```mlir
-  %at = XeGPU.load_2D %block_a   Transpose = TRUE   VNNI_AXIS = 1
+  %at = XeGPU.load_nd %block_a   {transpose = [1, 0]  vnni_axis = 0, mode = vc }:
      tile<8x16xbf16> into vector <8x8x2bf16>
-```
 
-Dpas operation. The dimension of the vector is reduced to 3 dimensions and fits the hardware directly.  When the input matrix is lowa -precision data type (lower than 32bit), the matrix B must be in VNNI layout, meaning the reduction axis needs to be split into 2 axis and the inner dimension has multiple data elements fitting the 32bit. 
+Dpas does the matrix multiplication on the 2D matrix represented as 2D or 3-d vectors.  When the input matrix is a lower-precision data type (lower than 32bit), the matrix B must be in VNNI layout, meaning the reduction dimension needs to be split into 2 dimensions and the 3rd inner dimension has multiple data elements fitting the 32bit. 
+  %vector_c = XeGPU.dpas %vector_a, %vector_b :
+     vector <4x2xbf16>, vector<8x2xbf16> 
+	   into vector <8x1xfloat>   
 
-```mlir
-  %vector_c = XeGPU.dpas %vector_a, %vector_b   
-     vector <8x8x2xbf16>, vector<8x16x2xbf16> into vector <8x16xfloat>   
-```
+  %vector_c = XeGPU.dpas %vector_a, %vector_b   { mode = vc}:
+     vector <8x8x2xbf16>, vector<8x16x2xbf16> 
+	   into vector <8x16xfloat>   
+store_nd stores a vector to memory specified by tensor_desc. 
+Attributes L1_hint, L2_hint, and L3_hint can be applied to store_nd. 
+#sg_map_c = xegpu.sg_map<{ wi_layout = [1, 16], wi_data = [1, 1]}>
+XeGPU.store_nd %value, %tdesc2:
+          vector<8x1xfp32>, tensor_desc <8x16xfp32, #sg_map_c > 
 
-store_2D stores the blocked register region back to memory in plain layout. VNNI_transform and transpose are not supported. 
+XeGPU.store_nd %value, %tdesc2  { mode = vc}:
+          vector<8x16xbf16>, tensor_desc <8x16xbf16> 
 
-```mlir
-  XeGPU.store_2D %tile_a  %vector_a 
-	   vector <8x16> into tile<8x16xbf16> 
-```
+prefetch_nd prefetches the memory specified by tensor_desc to cache. 
+Attributes L1_hint, L2_hint, L3_hint, and memory_scope can be applied to prefetch_nd. 
+XeGPU.prefetch_nd %tdesc2: tensor_desc <8x16xbf16, #sg_map_a>  
+XeGPU.prefetch_nd %tdesc2 {mode = vc} : tensor_desc <8x16xbf16 >  
+XeGPU.prefetch_nd %tdesc2: tensor_desc <16xbf16, #sg_map_a>
+XeGPU.prefetch_nd %tdesc2 {mode = vc}: tensor_desc <16xbf16 >
 
-prefetch_2D prefetches a 2D block to cache.  
+update_nd_offset updates the subtensor’s offsets for the tensor descriptor. These offsets are relative offset to the current position in the number of elements.  The operation is used when the processing over one subtensor is completed and moves to a new one. Usually, only one offset value is changed since the subtensor is only moving along one dimension. 
 
-```mlir
-  XeTile.prefetch_2D %block_a  
-     tile<64x64xbf16> 
-```
+%tdesc_updated = XeGpu.update_nd_offset %tdesc, %offsets:2:
+  	  tensor_desc<8x16xbf16, #sg_map_a>, index, index into tensor_desc<8x16xbf16, #sg_map_a>
 
-Due to hardware limitation, XeGPU’s load_2D operation can’t fully support XeTile to load arbitrary 2D matrix size, the lowering pass maps the XeTile’s load_tile to load_1d and load_scalar. 
-Load_1d, store_1d load a 1d vector using a memory pointer and size.  User can use load_tile to load a vector with shape [1, x]. However, on PVC, this gives lower efficiency than 1d block load since the maximum of x is limited to 64 bytes. 
+%tdesc_updated = XeGpu.update_nd_offset %tdesc, %offsets:2 {mode = vc}:
+  	  tensor_desc<8x16xbf16>, index, index into tensor_desc<8x16xbf16>
 
-```mlir
- %result = XeGPU.load_1d %base, %offset: uint64, uint64 into vector<8xf32>
- XeGPU.store_1d %value, %base, %offset: vector<8xf32>, uint64, uint64
-```
+create_tdesc creates a tensor descriptor for scattered load. It accepts a memory address and a vector of offsets. The element data type and size are specified in the output tensor_desc data type, and they must be known at the compile-time.  
+// SIMD lane == 16. max is 32. Meaning 32 number of individual WI elements 
+#sg_map_a = xegpu.sg_map<{ wi_layout = [1, 16], wi_data = [1, 1]}>
+%scatter_tdesc0 = XeGPU.create_tdesc %mem_addr, %offsets { mode = vc}:
+     	uint64, index, into tensor_desc<16 x uint8, #scattered, #sg_map_a>
 
-There is a counterpart in vector dialect like 1d vector load and store, which can be lowered to XeGPU’s load_1d and store_1d. 
+ %scatter_tdesc0 = XeGPU.create_tdesc %mem_addr, %offsets, mode = vc}:
+     	uint64, Vector<16 x index>, into tensor_desc<16 x uint8, #scattered>
+The example above creates a tensor_desc, which describes the memory base address and offsets for 16 uint8 values in the memory.  For PVC, the number of work items (SIMD lanes) on PVC can be 1, 2, 4, 8, 16, 32. 
+#sg_map_a = xegpu.sg_map<{ wi_layout = [1, 16], wi_data = [8, 1]}>
+%scatter_tdesc_chunk = XeGPU.create_tdesc, %base_addr, %offsets 
+		{memory_scope=slm, chunk_size_per_lane=8 }: 
+		uint64, index into tensor_desc <16x8xuint16, #scattered, #sg_map_a>
 
-```mlir
- %result = vector.load %base[%i, %j] : memref<100x100xf32>, vector<8xf32>
- vector.store %value, %memref[%i, %j]: vector<8xf32>, memref<200x100xf32>
-```
+%scatter_tdesc_chunk = XeGPU.create_tdesc, %base_addr, %offsets 
+		{memory_scope=slm, chunk_size_per_lane=8, mode = vc}: 
+		uint64, vector<16xindex> into tensor_desc <16x8xuint16, #scattered>
 
-load_scalar, store_scalar
-scatter loader is the most flexible load. It can be used to load unaligned cases. Each WI thread can read multiple data elements.  On PVC, it is up to 4 or 8 DW. Scatter load allows each WI thread to use different addresses, or addresses with strides. However, it is not common that deep learning use case requires strided load at the innermost dimension. 
+Attribute memory_scope indicates whether the tensor is located in the global (default) or shared local memory. 
 
-```mlir
-%result = XeGPU.load_scalar %base, %offset, %mask, %mask_val: 
-                             uint64, uint64, i1, any, into any
-XeGPU.store_scalar %value, %base, %offset, %mask: 
-                         any, uint64, uint64, i1
-```
+Attribute chunk_size_per_lane specifies the size being loaded per each work item (WI).  Its default value is 1, but can be set to 2, 3, 4, 8 on PVC. Each WI thread may load a consecutive chunk of data elements from the memory but put them along the column dimension. The chunk_size_per_lane attribute is VC mode only.
 
-There is a counterpart in vector dialect like 1d vector.gather and vector.scatter, which can be lowered to XeGPU’s load_scalar and store_scalar. 
+load_gather (aka. load) load data per each work item. The output vector size is consistent with the number of WI threads, as the output describes the data being loaded at the subgroup level. 
 
-```mlir
-%0 = vector.gather %base[%c0][%v], %mask, %pass_thru
-   : memref<?xf32>, vector<16xi32>, vector<16xi1>, vector<16xf32> into vector<16xf32>
+#sg_map_a = xegpu.sg_map<{ wi_layout = [1, 16], wi_data = [1, 1]}>
+%result0 = XeGPU.load_gather %scatter_tdesc0, %mask {L1_hint = cached, L2_hint = uncached }: 
+        	  tensor_desc <16xuint8, #Scattered, #sg_map_a>, i1 into uint8
 
-vector.scatter %base[%c0][%v], %mask, %value
-    : memref<?xf32>, vector<16xi32>, vector<16xi1>, vector<16xf32>
-```
+%result0 = XeGPU.load_gather %scatter_tdesc0, %mask {L1_hint = cached, L2_hint = uncached, mode = vc}: 
+        	  tensor_desc <16xuint8, #Scattered>, vector<16xi1> into vector<16xuint8>
+
+When loading a tensor_desc with chunk_size_per_lane attribute, the output vector must be 2D vector, with the chunk being treated as a separate dimension. On PVC, the consecutive 1D tensor data being loaded can be viewed as a 2D tensor loaded with transposition, with the chunk dimension transposed to the outer dimension. The use of tensor_desc creatd with chunk_size_per_lane attribute is VC mode only. 
+%result = XeGPU.load_gather %scatter_tdesc_chunk, %mask  {L1 = cached, L2 = uncached, transpose=[1,0], mode = vc}}: 
+          tensor_desc <16x8xbf16, #Scattered>, vector<16xi1> -> vector<8x16xbf16>
+
+The mask operand masks out memory access so that it is safe to pass out-of-boundary addresses/offsets as long as they are masked. There is no modification to the result vector registers for the masked SIMD lanes.  For tensor_desc with chunk_size_per_lane attribute, the mask applies to the first dimension in memory and not the second dimension (Chunk Size). 
+
+Load_gather is a slightly higher level operation than PVC’s native hardware instruction. When PVC load gather, it loads each low-precision element to a uint32, then a separate instruction is needed to further gather them from the registers to fully-packed vectors. Load_gather returns a vector of uint8 fully packed. 
+The data type being loaded could be uint8, uint16, uint32, uint64.  
+
+store_scatter (aka. store) stores data to the memory specified by tensor_desc.  
+#sg_map_a = xegpu.sg_map<{ wi_layout = [1, 16], wi_data = [1, 1]}>
+XeGPU.store_scatter %value, %scatter_tdesc1, %mask : 
+     	 uint16, i1, tensor_desc <16xuint16, #scattered, #sg_map_a>
+
+XeGPU.store_scatter %value, %scatter_tdesc1, %mask  { mode = vc}: 
+     	 vector<16xuint16>, vector<16xi1>, tensor_desc <16xuint16, #scattered>
+
+Attributes L1_hint, L2_hint, L3_hint, and memory_scope can be applied to store_scatter. 
+
+prefetch prefetches data from the memory specified by tensor_desc.  
+
+#sg_map = xegpu.sg_map<{ wi_layout = [1, 16], wi_data = [1, 1]}>
+XeGPU.prefetch %scatter_tdesc0: tensor_desc <16xuint8, #scattered, #sg_map>
+
+XeGPU.prefetch %scatter_tdesc0  {mode = vc}: tensor_desc <16xuint8, #scattered>
+
+Attributes L1_hint, L2_hint, L3_hint can be applied to prefetch. 
+
+update_offset updates the tensor descriptor for scatter load.
+
+#sg_map = xegpu.sg_map<{ wi_layout = [1, 16], wi_data = [1, 1]}>
+%tdesc_updated = XeGpu.update_offsets %scatter_tdesc1, %offsets
+  tensor_desc <16xuint16, #scattered, #sg_map>,uint16,into tensor_desc <16xuint16, #scattered, #sg_map>
+
+%tdesc_updated = XeGpu.update_offsets %scatter_tdesc1, %offsets  {mode = vc}:
+  	tensor_desc <16xuint16, #scattered>, vector<16xuint16>, into tensor_desc <16xuint16, #scattered>
+
+Atomic_rmw atomically reads, modifies, and writes back data to the memory specified by the tensor_desc.  XeGPU.atomic_rmw reduce to a subtensor described by the tensor_desc. 
+
+#sg_map = xegpu.sg_map<{ wi_layout = [1, 16], wi_data = [1, 1]}>
+%ret_value = XeGPU.atomic_rmw “addf” %value, %scatter_Desc1, %mask}: 
+          bf16, tensor_desc <16xbf16, #scattered, #sg_map>, i1 to bf16
+
+%ret_value = XeGPU.atomic_rmw “addf” %value, %scatter_Desc1, %mask {mode = vc}: 
+          vector<16xbf16>, tensor_desc <16xbf16, #scattered>, vector<16xi1> to vector<16xbf16>
+XeGPU.atomic_rmw reuses the arith dialect attribute, ::mlir::arith::AtomicRMWKindAttr. 
+PVC doesn’t support atomic operation on BF16/FP16 add. The BF16/FP16 matrix needs to be converted to FP32 to perform the reduction. 
+alloc_nbarrier allocates a number of named barriers. Named barrier is workgroup level resource, shared by all subgroups. 
+	
+  XeGPU.alloc_nbarrier %nbarrier_count: i8
+
+create_nbarrier assigns a role for a specific named barrier to be producer and/or consumer. The returned nbarrier object holds a description to the specified barrier, which encodes all the barrier information.  It also binds the current thread with the named barrier by holding the returned nbarrier object.  Multiple threads may bind to a same nbarrier so that they can sync with each other. 
+
+  %nbarrier  = XeGPU.create_nbarrier  %nbarrier_id, %nbarrier_role, {num_producers = 2, num_consumers = 2} : i8, i8, nbarrier_role into nbarrier
+
+enum class nbarrier_role : uint8_t {producer_consumer = 0,  producer = 1, consumer = 2 };
+
+nbarrier_arrive notifies other threads sharing the same named barrier that it has arrived. 
+ 
+  XeGPU.nbarrier_arrive %nbarrier  
+
+nbarrier_wait waits until all other threads sharing the same named barrier has signaled the arrival. 
+
+  XeGPU. nbarrier_wait %nbarrier  
+
+
+Mfence 
+Mfence is inserted to synchronize between write and following access. 
+
+  XeGPU.mfence { {memory_kind = "ugm" , fence_op = "none", fence_scope = "local"}
+
+    Fence_op: {"none",    "evict", "invalidate", "discard", "clean", "flushl3"};
+    Fence_scope : {"group", "local",  "tile",  "gpu",  "gpus",  "system", "sysacq"};
+    Memory_kind: {"ugm", "ugml", "tgm", "slm"};
+
+compile_hint passes performance hint to lower-level compiler. The schedule_barrier hint prevents instructions from being reordered by a lower-level compiler. For example, a prefetch instruction is location-sensitive, but the lower-level compiler may schedule it to an undesired location.  
+
+XeGPU.compile_hint {hint=schedule_barrier}
+
+nbarrrier, mfence, and compile_hint works on both VC mode and SIMT mode, since they access uniform values. 
 
 
 ## Alternative
 
-Alternative design is to not introduce XeTile dialect. Instead we just provide XeGPU dialect. The benefit of XeTile dialect support gradual lowering and allow some ciritical optimization. For example, the XeTile dialect could be used to support microkenrel level interface like BRGEMM to choose the best the subgroup tile size. This XeTile dialect suggests a list of subgroup tile size with good performance, and it also allows more choices of decomposition by support row number not divisble by DPAS size (8). It can assist the microkenrel to estimate the register use and code efficiency at the subgroup level, which can eventually contribute to searchign for an optimized GEMM decomposition.  The other example is that the 2d load block size could be larger than the DPAS size for best code efficiency. Having XeTile working at the same size and allowing the lowering pass to handle the size differnce works better than leaving all these level of details to the lowering from vector dialect at subgroup level.  The VNNI layout transform is another example which XeTile helps to hide the low level detail.  
+The alternative design of tile data type is to reuse the memref data type. The memref data type needs to be enhanced to allow attributes. So the XeTile's tile data type can be expressed with memref associated with Tile attributes. XeTile.wg_map and XeTile.sg_map are examples of these attributes.    
 
 ## Questions
 
-Currently there is no NVVM counterpart. XeGPU dialect uses SPIRV Intel extension to access joint-matrix or SPRIV external function to access intel GPU VC intrinsics. This may change in the future, so we expect XeGPU dialect may have changes. 
+Currently there is no NVVM counterpart. XeGPU dialect uses SPIRV Intel extension to access joint-matrix or SPRIV external function to access intel GPU VC intrinsics. This may change in the future, so we expect XeGPU lowering may change accordingly.  
