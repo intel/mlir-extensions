@@ -1,4 +1,4 @@
-// RUN: imex-opt -imex-convert-gpu-to-spirv='enable-vc-intrinsic=false'  %s | FileCheck %s
+// RUN: imex-opt -imex-convert-gpu-to-spirv='enable-genisa-intrinsic=true'  %s | FileCheck %s
 
 #sg_map_fp16_a = #xegpu.sg_map<{mma_block_size = [8, 16], wi_layout = [2, 8], wi_data = [1, 2]}>
 #sg_map_fp16_b = #xegpu.sg_map<{mma_block_size = [16, 16], wi_layout = [1, 16], wi_data = [1, 1]}>

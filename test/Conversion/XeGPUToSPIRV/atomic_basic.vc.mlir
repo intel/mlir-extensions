@@ -1,4 +1,4 @@
-// RUN: imex-opt -imex-convert-gpu-to-spirv  %s | FileCheck %s --check-prefix=CHECK
+// RUN: imex-opt -imex-convert-gpu-to-spirv='enable-vc-intrinsic=true'  %s | FileCheck %s --check-prefix=CHECK
 module @gemm attributes {gpu.container_module} {
   memref.global "private" @__constant_8x16xf32 : memref<8x16xf32> = dense<4.000000e-01>
   func.func @test(%arg0: memref<8x16xf32>) -> memref<8x16xf32> attributes {llvm.emit_c_interface} {
