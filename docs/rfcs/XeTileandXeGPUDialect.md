@@ -113,7 +113,7 @@ The wg_map.sg_data size must be divisible by sg_map.wi_layout multiplying with s
 
 
 ### XeGPU dialect
-XeGPU dialect models a subset of Xe GPU’s ISA. This is the counterpart of NVGPU and AMDGPU  dialects, which provide a bridge dialect in the MLIR gradual lowering.  XeGPU dialect works with MLIR memref and vector type and complements with Arith/Math/Vector/Memref dialect. XeGPU operations are introduced when there is a special Xe instruction not modeled by LLVM/SPIRV dialect. In some cases, one XeGPU op is mapped to multiple hardware instructions when there is no performance disadvantage by grouping them. For example, create_tdesc is mapped to a fixed sequence of instructions to create the 32-byte long address description.
+XeGPU dialect models a subset of Xe GPU’s ISA. This is the counterpart of NVGPU and AMDGPU  dialects, which provide a bridge dialect in the MLIR gradual lowering.  XeGPU dialect works with MLIR memref and vector type and complements with Arith/Math/Vector/Memref dialect. XeGPU operations are introduced when there is a special Xe instruction not modeled by LLVM/SPIR-V dialect. In some cases, one XeGPU op is mapped to multiple hardware instructions when there is no performance disadvantage by grouping them. For example, create_tdesc is mapped to a fixed sequence of instructions to create the 32-byte long address description.
 Below is a summary.
 
 | Ops	| Syntax	| Example |
@@ -397,4 +397,4 @@ The alternative design of tile data type is to reuse the memref data type. The m
 
 ## Notes
 
-Currently, there is no lower-level GPU IR like NVVM available for Intel GPU compiler toolchain. XeGPU dialect uses SPIRV Intel extension to access joint-matrix or SPRIV external function to access intel GPU VC intrinsics. This may change in the future, so we expect XeGPU lowering may change accordingly.  
+Currently, there is no lower-level GPU IR like NVVM available for Intel GPU compiler toolchain. XeGPU dialect uses SPIR-V Intel extension to access joint-matrix or SPIR-V external function to access intel GPU VC intrinsics. This may change in the future, so we expect XeGPU lowering may change accordingly.
