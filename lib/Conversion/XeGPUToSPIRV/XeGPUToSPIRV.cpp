@@ -1474,11 +1474,11 @@ Value linearizeOffset(OpBuilder builder, Location loc,
 
 unsigned getElementPerWI(imex::xegpu::TensorDescType tDescType) {
   imex::xegpu::SubGroupMapAttr sgMap;
-  auto encoding = tDescType.getEncoding();
-  if (auto xeMapAttr = llvm::dyn_cast<imex::xegpu::XeMapAttr>(encoding)) {
+  auto mapping = tDescType.getMapping();
+  if (auto xeMapAttr = llvm::dyn_cast<imex::xegpu::XeMapAttr>(mapping)) {
     sgMap = xeMapAttr.getSg();
   } else {
-    sgMap = llvm::dyn_cast<imex::xegpu::SubGroupMapAttr>(encoding);
+    sgMap = llvm::dyn_cast<imex::xegpu::SubGroupMapAttr>(mapping);
   }
   auto blockSize = tDescType.getShape();
   auto wiLayout = sgMap.getWiLayout();

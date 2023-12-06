@@ -8,7 +8,7 @@
 func.func @test_update_offset_VC(%src: ui64, %offsets : vector<16 x index>) {
   %0 = arith.constant dense<1>: vector<16xi1>
   // CHECK: xegpu.create_tdesc
-  // CHECK-SAME: {mode = vc, chunk_size_per_lane = 1}
+  // CHECK-SAME: {mode = vc}
   // CHECK-SAME: ui64, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.scattered>
   %1 = xegpu.create_tdesc %src, %offsets {mode = vc}
               : ui64, vector<16 x index> -> !xegpu.tensor_desc<16xf32, #xegpu.scattered>

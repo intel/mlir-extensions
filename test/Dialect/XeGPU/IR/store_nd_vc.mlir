@@ -10,13 +10,13 @@ func.func @test_store_nd_vc_bf16(%src: memref<24x32xbf16>, %dst: memref<24x32xbf
   %c1 = arith.constant 4 : index
 
   // CHECK: xegpu.create_nd_tdesc
-  // CHECK-SAME: {mode = vc, boundary_check = true}
+  // CHECK-SAME: {mode = vc}
   // CHECK-SAME: memref<24x32xbf16> -> !xegpu.tensor_desc<8x16xbf16>
   %1 = xegpu.create_nd_tdesc %src[%c0, %c1] {mode = vc}
       : memref<24x32xbf16> -> !xegpu.tensor_desc<8x16xbf16>
 
   // CHECK: xegpu.create_nd_tdesc
-  // CHECK-SAME: {mode = vc, boundary_check = true}
+  // CHECK-SAME: {mode = vc}
   // CHECK-SAME: memref<24x32xbf16> -> !xegpu.tensor_desc<8x16xbf16>
   %2 = xegpu.create_nd_tdesc %dst[%c0, %c1] {mode = vc}
       : memref<24x32xbf16> -> !xegpu.tensor_desc<8x16xbf16>
@@ -39,13 +39,13 @@ func.func @test_store_nd_vc_f64(%src: memref<24x32xf64>, %dst: memref<24x32xf64>
   %c1 = arith.constant 4 : index
 
   // CHECK: xegpu.create_nd_tdesc
-  // CHECK-SAME: {mode = vc, boundary_check = true}
+  // CHECK-SAME: {mode = vc}
   // CHECK-SAME: memref<24x32xf64> -> !xegpu.tensor_desc<8x16xf64>
   %1 = xegpu.create_nd_tdesc %src[%c0, %c1] {mode = vc}
       : memref<24x32xf64> -> !xegpu.tensor_desc<8x16xf64>
 
   // CHECK: xegpu.create_nd_tdesc
-  // CHECK-SAME: {mode = vc, boundary_check = true}
+  // CHECK-SAME: {mode = vc}
   // CHECK-SAME: memref<24x32xf64> -> !xegpu.tensor_desc<8x16xf64>
   %2 = xegpu.create_nd_tdesc %dst[%c0, %c1] {mode = vc}
       : memref<24x32xf64> -> !xegpu.tensor_desc<8x16xf64>
@@ -68,13 +68,13 @@ func.func @test_store_nd_vc_i8(%src: memref<24x32xi8>, %dst: memref<24x32xi8>) {
   %c1 = arith.constant 4 : index
 
   // CHECK: xegpu.create_nd_tdesc
-  // CHECK-SAME: {mode = vc, boundary_check = true}
+  // CHECK-SAME: {mode = vc}
   // CHECK-SAME: memref<24x32xi8> -> !xegpu.tensor_desc<8x16xi8>
   %1 = xegpu.create_nd_tdesc %src[%c0, %c1] {mode = vc}
       : memref<24x32xi8> -> !xegpu.tensor_desc<8x16xi8>
 
   // CHECK: xegpu.create_nd_tdesc
-  // CHECK-SAME: {mode = vc, boundary_check = true}
+  // CHECK-SAME: {mode = vc}
   // CHECK-SAME: memref<24x32xi8> -> !xegpu.tensor_desc<8x16xi8>
   %2 = xegpu.create_nd_tdesc %dst[%c0, %c1] {mode = vc}
       : memref<24x32xi8> -> !xegpu.tensor_desc<8x16xi8>

@@ -40,7 +40,7 @@ class SgInitTileOpPattern
     llvm::SmallVector<mlir::Value> offsets;
     auto staticOffsets = op.getStaticOffsets();
     auto dynamicOffsets = op.getOffsets();
-    for (int i = 0, j = 0; i != staticOffsets.size(); i++) {
+    for (size_t i = 0, j = 0; i != staticOffsets.size(); i++) {
       if (mlir::ShapedType::isDynamic(staticOffsets[i])) {
         offsets.push_back(dynamicOffsets[j++]);
       } else {
@@ -76,8 +76,6 @@ class SgInitTileOpPattern
             rewriter.createOrFold<mlir::arith::AddIOp>(loc, subOffY, offsetsY);
         mlir::SmallVector<mlir::OpFoldResult> tDescOffsets{tDescOffsetX,
                                                            tDescOffsetY};
-
-        constexpr int64_t kDynamic = std::numeric_limits<int64_t>::min();
 
         // TODO: this needs improvement, it assumes the source is static
         // memeref.
@@ -116,9 +114,6 @@ struct SgPrefetchTileOpPattern
       return mlir::failure();
     }
 
-    auto elementTy = tileTy.getElementType();
-    auto subVectorTy = mlir::VectorType::get({shape[2], shape[3]}, elementTy);
-
     auto L1 = xegpu::CacheReadHintAttr::get(op.getContext(),
                                             xegpu::CacheReadHint::CACHED);
     auto L2 = xegpu::CacheReadHintAttr::get(op.getContext(),
@@ -129,9 +124,8 @@ struct SgPrefetchTileOpPattern
     for (int i = 0; i < shape[0]; i++) {
       for (int j = 0; j < shape[1]; j++) {
         auto tile = tiles[i * shape[1] + j];
-        rewriter.create<xegpu::LoadNDOp>(
-            op.getLoc(), subVectorTy, tile, mlir::IntegerAttr(),
-            mlir::DenseI64ArrayAttr(), L1, L2, L3, imex::xegpu::Mode::VC);
+        rewriter.create<xegpu::PrefetchNDOp>(op.getLoc(), tile, L1, L2, L3,
+                                             imex::xegpu::Mode::VC);
       }
     }
 
@@ -175,11 +169,11 @@ struct SgLoadTileOpPattern
     mlir::IntegerAttr vnniAxisAttr;
     auto transposeAttr = op.getTransposeAttr();
     auto L1 = xegpu::CacheReadHintAttr::get(op.getContext(),
-                                            xegpu::CacheReadHint::UNCACHED);
+                                            xegpu::CacheReadHint::CACHED);
     auto L2 = xegpu::CacheReadHintAttr::get(op.getContext(),
-                                            xegpu::CacheReadHint::UNCACHED);
+                                            xegpu::CacheReadHint::CACHED);
     auto L3 = xegpu::CacheReadHintAttr::get(op.getContext(),
-                                            xegpu::CacheReadHint::UNCACHED);
+                                            xegpu::CacheReadHint::CACHED);
 
     llvm::SmallVector<int64_t> newShape = {shape[2], shape[3]};
     // needs vnni transform;
@@ -235,11 +229,11 @@ struct SgStoreTileOpPattern
 
     auto context = op.getContext();
     auto L1 = xegpu::CacheWriteHintAttr::get(context,
-                                             xegpu::CacheWriteHint::UNCACHED);
+                                             xegpu::CacheWriteHint::WRITE_BACK);
     auto L2 = xegpu::CacheWriteHintAttr::get(context,
-                                             xegpu::CacheWriteHint::UNCACHED);
+                                             xegpu::CacheWriteHint::WRITE_BACK);
     auto L3 = xegpu::CacheWriteHintAttr::get(context,
-                                             xegpu::CacheWriteHint::UNCACHED);
+                                             xegpu::CacheWriteHint::WRITE_BACK);
     for (size_t i = 0; i < tiles.size(); i++)
       rewriter.create<xegpu::StoreNDOp>(op.getLoc(), tiles[i], values[i], L1,
                                         L2, L3, imex::xegpu::Mode::VC);

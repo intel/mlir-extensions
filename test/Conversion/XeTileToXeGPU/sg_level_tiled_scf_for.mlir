@@ -8,10 +8,10 @@ func.func @sglevel_tiled_gemm(%a: memref<1024x1024xf16>, %b: memref<1024x1024xf1
   %c1024 = arith.constant 1024 : index
   //CHECK: arith.constant 0 : index
   //CHECK: arith.constant 64 : index
-  //CHECK: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  //CHECK: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
   //CHECK: arith.constant 8 : index
   //CHECK: arith.constant 64 : index
-  //CHECK: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  //CHECK: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
 	%1 = xetile.init_tile %a[%c0, %c64] : memref<1024x1024xf16> -> !xetile.tile<2x1x8x16xf16>
   //CHECK: arith.constant dense<0.000000e+00> : vector<8x16xf16>
   //CHECK: arith.constant dense<0.000000e+00> : vector<8x16xf16>
@@ -30,10 +30,10 @@ func.func @sglevel_tiled_gemm(%a: memref<1024x1024xf16>, %b: memref<1024x1024xf1
   }
   //CHECK: arith.constant 0 : index
   //CHECK-NEXT: arith.constant 64 : index
-  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
   //CHECK-NEXT: arith.constant 8 : index
   //CHECK-NEXT: arith.constant 64 : index
-  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
 	%5 = xetile.init_tile %b[%c0, %c64] : memref<1024x1024xf16> -> !xetile.tile<2x1x8x16xf16>
   //CHECK: xegpu.store_nd {{.*}} {mode = vc, {{.*}}} : vector<8x16xf16>, !xegpu.tensor_desc<8x16xf16>
   //CHECK-NEXT: xegpu.store_nd {{.*}} {mode = vc, {{.*}}} : vector<8x16xf16>, !xegpu.tensor_desc<8x16xf16>
