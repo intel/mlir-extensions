@@ -15,162 +15,162 @@ func.func @test_gemm(%A: memref<1024x1024xf16>, %B: memref<1024x1024xf16>, %C: m
   // intialize C tile and load it
   //CHECK: arith.addi {{.*}} : index
   //CHECK-NEXT: arith.addi {{.*}} : index
-  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
   //CHECK-NEXT: arith.constant 0 : index
   //CHECK-NEXT: arith.constant 16 : index
   //CHECK-NEXT: arith.addi {{.*}} : index
   //CHECK-NEXT: arith.addi {{.*}} : index
-  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
   //CHECK-NEXT: arith.constant 0 : index
   //CHECK-NEXT: arith.constant 32 : index
   //CHECK-NEXT: arith.addi {{.*}} : index
   //CHECK-NEXT: arith.addi {{.*}} : index
-  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
   //CHECK-NEXT: arith.constant 0 : index
   //CHECK-NEXT: arith.constant 48 : index
   //CHECK-NEXT: arith.addi {{.*}} : index
   //CHECK-NEXT: arith.addi {{.*}} : index
-  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
   //CHECK-NEXT: arith.constant 8 : index
   //CHECK-NEXT: arith.constant 0 : index
   //CHECK-NEXT: arith.addi {{.*}} : index
   //CHECK-NEXT: arith.addi {{.*}} : index
-  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
   //CHECK-NEXT: arith.constant 8 : index
   //CHECK-NEXT: arith.constant 16 : index
   //CHECK-NEXT: arith.addi {{.*}} : index
   //CHECK-NEXT: arith.addi {{.*}} : index
-  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
   //CHECK-NEXT: arith.constant 8 : index
   //CHECK-NEXT: arith.constant 32 : index
   //CHECK-NEXT: arith.addi {{.*}} : index
   //CHECK-NEXT: arith.addi {{.*}} : index
-  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
   //CHECK-NEXT: arith.constant 8 : index
   //CHECK-NEXT: arith.constant 48 : index
   //CHECK-NEXT: arith.addi {{.*}} : index
   //CHECK-NEXT: arith.addi {{.*}} : index
-  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
   //CHECK-NEXT: arith.constant 16 : index
   //CHECK-NEXT: arith.constant 0 : index
   //CHECK-NEXT: arith.addi {{.*}} : index
   //CHECK-NEXT: arith.addi {{.*}} : index
-  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
   //CHECK-NEXT: arith.constant 16 : index
   //CHECK-NEXT: arith.constant 16 : index
   //CHECK-NEXT: arith.addi %2, %c16_14 : index
   //CHECK-NEXT: arith.addi %3, %c16_15 : index
-  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
   //CHECK-NEXT: arith.constant 16 : index
   //CHECK-NEXT: arith.constant 32 : index
   //CHECK-NEXT: arith.addi {{.*}} : index
   //CHECK-NEXT: arith.addi {{.*}} : index
-  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
   //CHECK-NEXT: arith.constant 16 : index
   //CHECK-NEXT: arith.constant 48 : index
   //CHECK-NEXT: arith.addi {{.*}} : index
   //CHECK-NEXT: arith.addi {{.*}} : index
-  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
   //CHECK-NEXT: arith.constant 24 : index
   //CHECK-NEXT: arith.constant 0 : index
   //CHECK-NEXT: arith.addi {{.*}} : index
   //CHECK-NEXT: arith.addi {{.*}} : index
-  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
   //CHECK-NEXT: arith.constant 24 : index
   //CHECK-NEXT: arith.constant 16 : index
   //CHECK-NEXT: arith.addi {{.*}} : index
   //CHECK-NEXT: arith.addi {{.*}} : index
-  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
   //CHECK-NEXT: arith.constant 24 : index
   //CHECK-NEXT: arith.constant 32 : index
   //CHECK-NEXT: arith.addi {{.*}} : index
   //CHECK-NEXT: arith.addi {{.*}} : index
-  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
   //CHECK-NEXT: arith.constant 24 : index
   //CHECK-NEXT: arith.constant 48 : index
   //CHECK-NEXT: arith.addi {{.*}} : index
   //CHECK-NEXT: arith.addi {{.*}} : index
-  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
   //CHECK-NEXT: arith.constant 32 : index
   //CHECK-NEXT: arith.constant 0 : index
   //CHECK-NEXT: arith.addi {{.*}} : index
   //CHECK-NEXT: arith.addi {{.*}} : index
-  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
   //CHECK-NEXT: arith.constant 32 : index
   //CHECK-NEXT: arith.constant 16 : index
   //CHECK-NEXT: arith.addi {{.*}} : index
   //CHECK-NEXT: arith.addi {{.*}} : index
-  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
   //CHECK-NEXT: arith.constant 32 : index
   //CHECK-NEXT: arith.constant 32 : index
   //CHECK-NEXT: arith.addi {{.*}} : index
   //CHECK-NEXT: arith.addi {{.*}} : index
-  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
   //CHECK-NEXT: arith.constant 32 : index
   //CHECK-NEXT: arith.constant 48 : index
   //CHECK-NEXT: arith.addi {{.*}} : index
   //CHECK-NEXT: arith.addi {{.*}} : index
-  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
   //CHECK-NEXT: arith.constant 40 : index
   //CHECK-NEXT: arith.constant 0 : index
   //CHECK-NEXT: arith.addi {{.*}} : index
   //CHECK-NEXT: arith.addi {{.*}} : index
-  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
   //CHECK-NEXT: arith.constant 40 : index
   //CHECK-NEXT: arith.constant 16 : index
   //CHECK-NEXT: arith.addi {{.*}} : index
   //CHECK-NEXT: arith.addi {{.*}} : index
-  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
   //CHECK-NEXT: arith.constant 40 : index
   //CHECK-NEXT: arith.constant 32 : index
   //CHECK-NEXT: arith.addi {{.*}} : index
   //CHECK-NEXT: arith.addi {{.*}} : index
-  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
   //CHECK-NEXT: arith.constant 40 : index
   //CHECK-NEXT: arith.constant 48 : index
   //CHECK-NEXT: arith.addi {{.*}} : index
   //CHECK-NEXT: arith.addi {{.*}} : index
-  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
   //CHECK-NEXT: arith.constant 48 : index
   //CHECK-NEXT: arith.constant 0 : index
   //CHECK-NEXT: arith.addi {{.*}} : index
   //CHECK-NEXT: arith.addi {{.*}} : index
-  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
   //CHECK-NEXT: arith.constant 48 : index
   //CHECK-NEXT: arith.constant 16 : index
   //CHECK-NEXT: arith.addi {{.*}} : index
   //CHECK-NEXT: arith.addi {{.*}} : index
-  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
   //CHECK-NEXT: arith.constant 48 : index
   //CHECK-NEXT: arith.constant 32 : index
   //CHECK-NEXT: arith.addi {{.*}} : index
   //CHECK-NEXT: arith.addi {{.*}} : index
-  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
   //CHECK-NEXT: arith.constant 48 : index
   //CHECK-NEXT: arith.constant 48 : index
   //CHECK-NEXT: arith.addi {{.*}} : index
   //CHECK-NEXT: arith.addi {{.*}} : index
-  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
   //CHECK-NEXT: arith.constant 56 : index
   //CHECK-NEXT: arith.constant 0 : index
   //CHECK-NEXT: arith.addi {{.*}} : index
   //CHECK-NEXT: arith.addi {{.*}} : index
-  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
   //CHECK-NEXT: arith.constant 56 : index
   //CHECK-NEXT: arith.constant 16 : index
   //CHECK-NEXT: arith.addi {{.*}} : index
   //CHECK-NEXT: arith.addi {{.*}} : index
-  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
   //CHECK-NEXT: arith.constant 56 : index
   //CHECK-NEXT: arith.constant 32 : index
   //CHECK-NEXT: arith.addi {{.*}} : index
   //CHECK-NEXT: arith.addi {{.*}} : index
-  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
   //CHECK-NEXT: arith.constant 56 : index
   //CHECK-NEXT: arith.constant 48 : index
   //CHECK-NEXT: arith.addi {{.*}} : index
   //CHECK-NEXT: arith.addi {{.*}} : index
-  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
+  //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf32> -> !xegpu.tensor_desc<8x16xf32>
   %c_init_tile = xetile.init_tile %C[%m, %n] : memref<1024x1024xf32> -> !xetile.tile<64x64xf32>
   //CHECK: xegpu.load_nd {{.*}} {mode = vc, {{.*}}} : !xegpu.tensor_desc<8x16xf32> -> vector<8x16xf32>
   //CHECK-NEXT: xegpu.load_nd {{.*}} {mode = vc, {{.*}}} : !xegpu.tensor_desc<8x16xf32> -> vector<8x16xf32>
@@ -209,196 +209,196 @@ func.func @test_gemm(%A: memref<1024x1024xf16>, %B: memref<1024x1024xf16>, %C: m
   // CHECK:  arith.constant 0 : index
   // CHECK-NEXT:  arith.constant 0 : index
   // CHECK-NEXT:  arith.addi {{.*}} : index
-  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
   // CHECK-NEXT:  arith.constant 0 : index
   // CHECK-NEXT:  arith.constant 16 : index
   // CHECK-NEXT:  arith.addi {{.*}} : index
-  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
   // CHECK-NEXT:  arith.constant 0 : index
   // CHECK-NEXT:  arith.constant 32 : index
   // CHECK-NEXT:  arith.addi {{.*}} : index
-  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
   // CHECK-NEXT:  arith.constant 0 : index
   // CHECK-NEXT:  arith.constant 48 : index
   // CHECK-NEXT:  arith.addi {{.*}} : index
-  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
   // CHECK-NEXT:  arith.constant 8 : index
   // CHECK-NEXT:  arith.constant 0 : index
   // CHECK-NEXT:  arith.addi {{.*}} : index
-  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
   // CHECK-NEXT:  arith.constant 8 : index
   // CHECK-NEXT:  arith.constant 16 : index
   // CHECK-NEXT:  arith.addi {{.*}} : index
-  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
   // CHECK-NEXT:  arith.constant 8 : index
   // CHECK-NEXT:  arith.constant 32 : index
   // CHECK-NEXT:  arith.addi {{.*}} : index
-  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
   // CHECK-NEXT:  arith.constant 8 : index
   // CHECK-NEXT:  arith.constant 48 : index
   // CHECK-NEXT:  arith.addi {{.*}} : index
-  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
   // CHECK-NEXT:  arith.constant 16 : index
   // CHECK-NEXT:  arith.constant 0 : index
   // CHECK-NEXT:  arith.addi {{.*}} : index
-  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
   // CHECK-NEXT:  arith.constant 16 : index
   // CHECK-NEXT:  arith.constant 16 : index
   // CHECK-NEXT:  arith.addi {{.*}} : index
-  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
   // CHECK-NEXT:  arith.constant 16 : index
   // CHECK-NEXT:  arith.constant 32 : index
   // CHECK-NEXT:  arith.addi {{.*}} : index
-  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
   // CHECK-NEXT:  arith.constant 16 : index
   // CHECK-NEXT:  arith.constant 48 : index
   // CHECK-NEXT:  arith.addi {{.*}} : index
-  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
   // CHECK-NEXT:  arith.constant 24 : index
   // CHECK-NEXT:  arith.constant 0 : index
   // CHECK-NEXT:  arith.addi {{.*}} : index
-  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
   // CHECK-NEXT:  arith.constant 24 : index
   // CHECK-NEXT:  arith.constant 16 : index
   // CHECK-NEXT:  arith.addi {{.*}} : index
-  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
   // CHECK-NEXT:  arith.constant 24 : index
   // CHECK-NEXT:  arith.constant 32 : index
   // CHECK-NEXT:  arith.addi {{.*}} : index
-  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
   // CHECK-NEXT:  arith.constant 24 : index
   // CHECK-NEXT:  arith.constant 48 : index
   // CHECK-NEXT:  arith.addi {{.*}} : index
-  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
   // CHECK-NEXT:  arith.constant 32 : index
   // CHECK-NEXT:  arith.constant 0 : index
   // CHECK-NEXT:  arith.addi {{.*}} : index
-  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
   // CHECK-NEXT:  arith.constant 32 : index
   // CHECK-NEXT:  arith.constant 16 : index
   // CHECK-NEXT:  arith.addi {{.*}} : index
-  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
   // CHECK-NEXT:  arith.constant 32 : index
   // CHECK-NEXT:  arith.constant 32 : index
   // CHECK-NEXT:  arith.addi {{.*}} : index
-  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
   // CHECK-NEXT:  arith.constant 32 : index
   // CHECK-NEXT:  arith.constant 48 : index
   // CHECK-NEXT:  arith.addi {{.*}} : index
-  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
   // CHECK-NEXT:  arith.constant 40 : index
   // CHECK-NEXT:  arith.constant 0 : index
   // CHECK-NEXT:  arith.addi {{.*}} : index
-  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
   // CHECK-NEXT:  arith.constant 40 : index
   // CHECK-NEXT:  arith.constant 16 : index
   // CHECK-NEXT:  arith.addi {{.*}} : index
-  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
   // CHECK-NEXT:  arith.constant 40 : index
   // CHECK-NEXT:  arith.constant 32 : index
   // CHECK-NEXT:  arith.addi {{.*}} : index
-  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
   // CHECK-NEXT:  arith.constant 40 : index
   // CHECK-NEXT:  arith.constant 48 : index
   // CHECK-NEXT:  arith.addi {{.*}} : index
-  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
   // CHECK-NEXT:  arith.constant 48 : index
   // CHECK-NEXT:  arith.constant 0 : index
   // CHECK-NEXT:  arith.addi {{.*}} : index
-  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
   // CHECK-NEXT:  arith.constant 48 : index
   // CHECK-NEXT:  arith.constant 16 : index
   // CHECK-NEXT:  arith.addi {{.*}} : index
-  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
   // CHECK-NEXT:  arith.constant 48 : index
   // CHECK-NEXT:  arith.constant 32 : index
   // CHECK-NEXT:  arith.addi {{.*}} : index
-  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
   // CHECK-NEXT:  arith.constant 48 : index
   // CHECK-NEXT:  arith.constant 48 : index
   // CHECK-NEXT:  arith.addi {{.*}} : index
-  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
   // CHECK-NEXT:  arith.constant 56 : index
   // CHECK-NEXT:  arith.constant 0 : index
   // CHECK-NEXT:  arith.addi {{.*}} : index
-  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
   // CHECK-NEXT:  arith.constant 56 : index
   // CHECK-NEXT:  arith.constant 16 : index
   // CHECK-NEXT:  arith.addi {{.*}} : index
-  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
   // CHECK-NEXT:  arith.constant 56 : index
   // CHECK-NEXT:  arith.constant 32 : index
   // CHECK-NEXT:  arith.addi {{.*}} : index
-  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
   // CHECK-NEXT:  arith.constant 56 : index
   // CHECK-NEXT:  arith.constant 48 : index
   // CHECK-NEXT:  arith.addi {{.*}} : index
-  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+  // CHECK-NEXT:  xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
   %a_init_tile = xetile.init_tile %A[%m, %c0] : memref<1024x1024xf16> -> !xetile.tile<64x64xf16>
   // CHECK: arith.constant 0 : index
   // CHECK-NEXT: arith.constant 0 : index
   // CHECK-NEXT: arith.addi {{.*}} : index
-  // CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
+  // CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
   // CHECK-NEXT: arith.constant 0 : index
   // CHECK-NEXT: arith.constant 16 : index
   // CHECK-NEXT: arith.addi {{.*}} : index
-  // CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
+  // CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
   // CHECK-NEXT: arith.constant 0 : index
   // CHECK-NEXT: arith.constant 32 : index
   // CHECK-NEXT: arith.addi {{.*}} : index
-  // CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
+  // CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
   // CHECK-NEXT: arith.constant 0 : index
   // CHECK-NEXT: arith.constant 48 : index
   // CHECK-NEXT: arith.addi {{.*}} : index
-  // CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
+  // CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
   // CHECK-NEXT: arith.constant 16 : index
   // CHECK-NEXT: arith.constant 0 : index
   // CHECK-NEXT: arith.addi {{.*}} : index
-  // CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
+  // CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
   // CHECK-NEXT: arith.constant 16 : index
   // CHECK-NEXT: arith.constant 16 : index
   // CHECK-NEXT: arith.addi {{.*}} : index
-  // CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
+  // CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
   // CHECK-NEXT: arith.constant 16 : index
   // CHECK-NEXT: arith.constant 32 : index
   // CHECK-NEXT: arith.addi {{.*}} : index
-  // CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
+  // CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
   // CHECK-NEXT: arith.constant 16 : index
   // CHECK-NEXT: arith.constant 48 : index
   // CHECK-NEXT: arith.addi {{.*}} : index
-  // CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
+  // CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
   // CHECK-NEXT: arith.constant 32 : index
   // CHECK-NEXT: arith.constant 0 : index
   // CHECK-NEXT: arith.addi {{.*}} : index
-  // CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
+  // CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
   // CHECK-NEXT: arith.constant 32 : index
   // CHECK-NEXT: arith.constant 16 : index
   // CHECK-NEXT: arith.addi {{.*}} : index
-  // CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
+  // CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
   // CHECK-NEXT: arith.constant 32 : index
   // CHECK-NEXT: arith.constant 32 : index
   // CHECK-NEXT: arith.addi {{.*}} : index
-  // CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
+  // CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
   // CHECK-NEXT: arith.constant 32 : index
   // CHECK-NEXT: arith.constant 48 : index
   // CHECK-NEXT: arith.addi {{.*}} : index
-  // CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
+  // CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
   // CHECK-NEXT: arith.constant 48 : index
   // CHECK-NEXT: arith.constant 0 : index
   // CHECK-NEXT: arith.addi {{.*}} : index
-  // CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
+  // CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
   // CHECK-NEXT: arith.constant 48 : index
   // CHECK-NEXT: arith.constant 16 : index
   // CHECK-NEXT: arith.addi {{.*}} : index
-  // CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
+  // CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
   // CHECK-NEXT: arith.constant 48 : index
   // CHECK-NEXT: arith.constant 32 : index
   // CHECK-NEXT: arith.addi {{.*}} : index
-  // CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
+  // CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
   // CHECK-NEXT: arith.constant 48 : index
   // CHECK-NEXT: arith.constant 48 : index
   // CHECK-NEXT: arith.addi {{.*}} : index
-  // CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
+  // CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<16x16xf16>
   %b_init_tile = xetile.init_tile %B[%c0, %n] : memref<1024x1024xf16> -> !xetile.tile<64x64xf16>
   // compute the value of C tile by iterating over tiles in k-dimension and doing dpas
   // CHECK: scf.for

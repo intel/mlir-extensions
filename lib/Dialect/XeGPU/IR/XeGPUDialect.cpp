@@ -47,6 +47,13 @@ void XeGPUDialect::initialize() {
       >();
 }
 
+bool printDefaultValues() {
+  auto *env = getenv("IMEX_XEGPU_PRINT_DEFAULTS");
+  if (env && std::string(env) == "true")
+    return true;
+  return false;
+}
+
 // custom parser for XeGPU_TensorDesc (shape and type parameter)
 static mlir::LogicalResult parseShapeAndType(mlir::AsmParser &parser,
                                              llvm::SmallVector<int64_t> &shape,
@@ -77,9 +84,11 @@ static void printShapeAndType(mlir::AsmPrinter &printer,
   printer << type;
 }
 
+// custom parser for XeGPU_TensorDesc (scope, encoding and mapping parameter)
 static mlir::LogicalResult parseTensorDescAttr(mlir::AsmParser &parser,
                                                imex::xegpu::MemoryScope &scope,
-                                               mlir::Attribute &encoding) {
+                                               mlir::Attribute &encoding,
+                                               mlir::Attribute &mapping) {
   // implies no attrbutes
   if (mlir::failed(parser.parseOptionalComma()))
     return mlir::success();
@@ -107,7 +116,14 @@ static mlir::LogicalResult parseTensorDescAttr(mlir::AsmParser &parser,
         return parser.emitError(
             loc, "Failed to parse XeGPU_TensorDesc parameter 'encoding' which "
                  "is to be a `::mlir::Attribute`.\n");
-      encoding = *attrOptional;
+
+      if (llvm::isa<imex::xegpu::ScatteredAttr>(*attrOptional))
+        encoding = *attrOptional;
+
+      if (llvm::isa<imex::xegpu::SubGroupMapAttr>(*attrOptional) ||
+          llvm::isa<imex::xegpu::WorkGroupMapAttr>(*attrOptional) ||
+          llvm::isa<imex::xegpu::XeMapAttr>(*attrOptional))
+        mapping = *attrOptional;
       return mlir::success();
     }
   };
@@ -118,170 +134,57 @@ static mlir::LogicalResult parseTensorDescAttr(mlir::AsmParser &parser,
   return mlir::success();
 }
 
+// custom printer for XeGPU_TensorDesc (scope, encoding and mapping parameter)
 static void printTensorDescAttr(mlir::AsmPrinter &printer,
                                 imex::xegpu::MemoryScope scope,
-                                mlir::Attribute encoding) {
-  if (scope != imex::xegpu::MemoryScope::GLOBAL)
+                                mlir::Attribute encoding,
+                                mlir::Attribute mapping) {
+  if (printDefaultValues() || scope != imex::xegpu::MemoryScope::GLOBAL)
     printer << ", memory_scope = " << scope;
   if (encoding)
     printer << ", " << encoding;
-}
-
-template <typename T>
-static mlir::LogicalResult parseArrayList(mlir::AsmParser &parser,
-                                          llvm::SmallVector<T> &array,
-                                          bool parsePrecedenceEqual = false) {
-  mlir::FailureOr<llvm::SmallVector<T>> result;
-  // Parse literal '='
-  if (parsePrecedenceEqual)
-    if (parser.parseEqual())
-      return mlir::failure();
-
-  // Parse literal '['
-  if (parser.parseLSquare())
-    return mlir::failure();
-
-  result = mlir::FieldParser<::llvm::SmallVector<T>>::parse(parser);
-
-  if (::mlir::failed(result))
-    return mlir::failure();
-
-  // Parse literal ']'
-  if (parser.parseRSquare())
-    return mlir::failure();
-
-  array = result.value();
-  return mlir::success();
-}
-
-template <typename T>
-static void printArrayElement(mlir::AsmPrinter &printer,
-                              llvm::StringRef keyword,
-                              llvm::ArrayRef<T> array) {
-  printer << keyword;
-  printer << ' ' << "=";
-  printer << ' ' << "[";
-  printer.printStrippedAttrOrType(array);
-  printer << "]";
-}
-
-static mlir::LogicalResult
-parseSubGroupMapAttrElements(mlir::AsmParser &parser,
-                             llvm::SmallVector<unsigned> &layout,
-                             llvm::SmallVector<unsigned> &data,
-                             llvm::SmallVector<unsigned> &mmaBlockSize) {
-  auto parseElt = [&]() -> mlir::LogicalResult {
-    return mlir::AsmParser::KeywordSwitch<mlir::LogicalResult>(parser)
-        .Case("mma_block_size",
-              [&](llvm::StringRef, llvm::SMLoc) {
-                return parseArrayList(parser, mmaBlockSize, true);
-              })
-        .Case("wi_layout",
-              [&](llvm::StringRef, llvm::SMLoc) {
-                return parseArrayList(parser, layout, true);
-              })
-        .Case("wi_data",
-              [&](llvm::StringRef, llvm::SMLoc) {
-                return parseArrayList(parser, data, true);
-              })
-        .Default([&](llvm::StringRef keyword, llvm::SMLoc) {
-          parser.emitError(
-              parser.getCurrentLocation(),
-              "SubGroupMapAttr Parser meet an unexpected keywoard: ")
-              << keyword << "\n";
-          return mlir::failure();
-        });
-  };
-
-  if (parser.parseLBrace())
-    return mlir::failure();
-  if (parser.parseCommaSeparatedList(parseElt))
-    return mlir::failure();
-  if (parser.parseRBrace())
-    return mlir::failure();
-
-  return mlir::success();
-}
-
-static void printSubGroupMapAttrElements(
-    mlir::AsmPrinter &printer, llvm::ArrayRef<unsigned> layout,
-    llvm::ArrayRef<unsigned> data, llvm::ArrayRef<unsigned> mmaBlockSize) {
-  printer << "{";
-  if (mmaBlockSize.size()) {
-    printArrayElement(printer, "mma_block_size", mmaBlockSize);
-    printer << "," << ' ';
-  }
-  printArrayElement(printer, "wi_layout", layout);
-  printer << "," << ' ';
-  printArrayElement(printer, "wi_data", data);
-  printer << "}";
-}
-
-static mlir::LogicalResult
-parseWorkGroupMapAttrElements(mlir::AsmParser &parser,
-                              llvm::SmallVector<unsigned> &layout,
-                              llvm::SmallVector<unsigned> &data) {
-  auto parseElt = [&]() -> mlir::LogicalResult {
-    return mlir::AsmParser::KeywordSwitch<mlir::LogicalResult>(parser)
-        .Case("sg_layout",
-              [&](llvm::StringRef, llvm::SMLoc) {
-                return parseArrayList(parser, layout, true);
-              })
-        .Case("sg_data",
-              [&](llvm::StringRef, llvm::SMLoc) {
-                return parseArrayList(parser, data, true);
-              })
-        .Default([&](llvm::StringRef keyword, llvm::SMLoc) {
-          parser.emitError(
-              parser.getCurrentLocation(),
-              "WorkGroupMapAttr Parser meet an unexpected keywoard: ")
-              << keyword << "\n";
-          return mlir::failure();
-        });
-  };
-
-  if (parser.parseLBrace())
-    return mlir::failure();
-  if (parser.parseCommaSeparatedList(parseElt))
-    return mlir::failure();
-  if (parser.parseRBrace())
-    return mlir::failure();
-  return mlir::success();
-}
-
-static void printWorkGroupMapAttrElements(mlir::AsmPrinter &printer,
-                                          llvm::ArrayRef<unsigned> layout,
-                                          llvm::ArrayRef<unsigned> data) {
-  printer << "{";
-  printArrayElement(printer, "sg_layout", layout);
-  printer << "," << ' ';
-  printArrayElement(printer, "sg_data", data);
-  printer << "}";
+  if (mapping)
+    printer << ", " << mapping;
 }
 
 mlir::LogicalResult SubGroupMapAttr::verify(
     llvm::function_ref<mlir::InFlightDiagnostic()> emitError,
-    llvm::ArrayRef<unsigned> layout, llvm::ArrayRef<unsigned> data,
-    llvm::ArrayRef<unsigned> mmaBlockSize) {
-
-  if (mmaBlockSize.size() != 2 && mmaBlockSize.size() != 0) {
-    emitError()
-        << "Failed to parse SubGroupMapAttr: mma_block_size should be a "
-           "`llvm::ArrayRef<unsigned>` with size 2 or empty. But it got "
-        << mmaBlockSize.size() << ".\n";
-    return mlir::failure();
-  }
+    mlir::DenseI32ArrayAttr mmaBlockSize, mlir::DenseI32ArrayAttr layout,
+    mlir::DenseI32ArrayAttr data) {
 
   if (layout.size() != 2) {
     emitError() << "Failed to parse SubGroupMapAttr: missing wi_layout which "
-                   "is to be a `llvm::ArrayRef<unsigned>` with size 2.\n";
+                   "is to be an integer array of size 2.\n";
     return mlir::failure();
   }
 
   if (data.size() != 2) {
     emitError() << "Failed to parse SubGroupMapAttr: missing wi_data which is "
-                   "to be a `llvm::ArrayRef<unsigned>` with size 2.\n";
+                   "to be an integer array of size 2.\n";
     return mlir::failure();
+  }
+
+  if (mmaBlockSize) {
+    if (mmaBlockSize.size() != 2) {
+      emitError()
+          << "Failed to parse SubGroupMapAttr: the optional mma_block_size "
+             "should be an integer array of size 2 or empty. But it got "
+          << mmaBlockSize.size() << ".\n";
+      return mlir::failure();
+    }
+    for (int i = 0; i < mmaBlockSize.size(); i++) {
+      if ((mmaBlockSize[i] % (layout[i] * data[i]) != 0 &&
+           (layout[i] * data[i]) % mmaBlockSize[i] != 0) ||
+          mmaBlockSize[i] % layout[i] != 0 || mmaBlockSize[i] % data[i] != 0) {
+        return emitError()
+               << "Invalid SubGroupMapAttr. A valid SubGroupMapAttr should "
+                  "meet the following conditions: "
+                  "\n\tmmaBlockSize[i] % wi_layout[i] == 0 && "
+                  "\n\tmmaBlockSize[i] % wi_data[i] == 0 && "
+                  "\n\t(mmaBlockSize[i] % (wi_layout[i] * wi_data[i]) == 0 || "
+                  "\n\t (wi_layout[i] * wi_data[i]) % mmaBlockSize[i] == 0)";
+      }
+    }
   }
 
   return mlir::success();
@@ -289,101 +192,19 @@ mlir::LogicalResult SubGroupMapAttr::verify(
 
 mlir::LogicalResult WorkGroupMapAttr::verify(
     llvm::function_ref<mlir::InFlightDiagnostic()> emitError,
-    llvm::ArrayRef<unsigned> layout, llvm::ArrayRef<unsigned> data) {
+    mlir::DenseI32ArrayAttr layout, mlir::DenseI32ArrayAttr data) {
 
   if (layout.size() != 2) {
     emitError() << "Failed to parse WorkGroupMapAttr: missing sg_layout which "
-                   "is to be a `llvm::ArrayRef<unsigned>` with size 2.\n";
+                   "is to be a `llvm::ArrayRef<int32_t>` with size 2.\n";
     return mlir::failure();
   }
   if (data.size() != 2) {
     emitError() << "Failed to parse WorkGroupMapAttr: missing sg_data which is "
-                   "to be a `llvm::ArrayRef<unsigned>` with size 2.\n";
+                   "to be a `llvm::ArrayRef<int32_t>` with size 2.\n";
     return mlir::failure();
   }
   return mlir::success();
-}
-
-mlir::Attribute XeMapAttr::parse(mlir::AsmParser &parser, mlir::Type type) {
-  imex::xegpu::WorkGroupMapAttr wg;
-  imex::xegpu::SubGroupMapAttr sg;
-  // Parse literal '<'
-  if (parser.parseLess())
-    return {};
-
-  auto parseElt = [&]() -> mlir::ParseResult {
-    mlir::OptionalParseResult result =
-        mlir::AsmParser::KeywordSwitch<mlir::OptionalParseResult>(parser)
-            .Case("sg",
-                  [&](llvm::StringRef, llvm::SMLoc) {
-                    if (parser.parseEqual())
-                      return mlir::failure();
-                    llvm::SmallVector<unsigned> mmaBlockSize;
-                    llvm::SmallVector<unsigned> wiLayout;
-                    llvm::SmallVector<unsigned> wiData;
-                    if (mlir::failed(parseSubGroupMapAttrElements(
-                            parser, wiLayout, wiData, mmaBlockSize)))
-                      return mlir::failure();
-                    sg = imex::xegpu::SubGroupMapAttr::get(
-                        parser.getContext(), wiLayout, wiData, mmaBlockSize);
-                    return mlir::success(!!sg);
-                  })
-            .Case("wg",
-                  [&](llvm::StringRef, llvm::SMLoc) {
-                    if (parser.parseEqual())
-                      return mlir::failure();
-                    llvm::SmallVector<unsigned> sgLayout;
-                    llvm::SmallVector<unsigned> sgData;
-                    if (mlir::failed(parseWorkGroupMapAttrElements(
-                            parser, sgLayout, sgData)))
-                      return mlir::failure();
-                    wg = imex::xegpu::WorkGroupMapAttr::get(parser.getContext(),
-                                                            sgLayout, sgData);
-                    return mlir::success(!!wg);
-                  })
-            .Default([&](llvm::StringRef keyword, llvm::SMLoc) {
-              return std::nullopt;
-            });
-    return result.value();
-  };
-
-  // Parse wg and sg attrs
-  if (parser.parseCommaSeparatedList(parseElt))
-    return {};
-
-  // Parse literal '>'
-  if (parser.parseGreater())
-    return {};
-
-  if (!wg && !sg) {
-    parser.emitError(parser.getCurrentLocation(),
-                     "Expecting at least one of sg and wg attributes.\n");
-    return {};
-  }
-
-  return XeMapAttr::get(parser.getContext(), wg, sg);
-}
-
-void XeMapAttr::print(mlir::AsmPrinter &printer) const {
-  bool printSep = false;
-  printer << "<";
-  if (getWg()) {
-    printer << "wg = ";
-    printWorkGroupMapAttrElements(printer, getWg().getSgLayout(),
-                                  getWg().getSgData());
-    printSep = true;
-  }
-
-  if (getSg()) {
-    if (printSep)
-      printer << ", ";
-    printer << "sg = ";
-    printSubGroupMapAttrElements(printer, getSg().getWiLayout(),
-                                 getSg().getWiData(),
-                                 getSg().getMmaBlockSize());
-  }
-
-  printer << ">";
 }
 
 } // namespace xegpu

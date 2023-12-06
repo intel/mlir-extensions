@@ -22,30 +22,27 @@ def XeGPU_ScatteredAttr : XeGPUAttr<"Scattered", "scattered"> {
 
 def XeGPU_SgMapAttr: XeGPUAttr<"SubGroupMap", "sg_map"> {
   let parameters = (ins
-        ArrayRefParameter<"unsigned">:$wiLayout,
-        ArrayRefParameter<"unsigned">:$wiData,
-        ArrayRefParameter<"unsigned">:$mmaBlockSize);
+        OptionalParameter<"mlir::DenseI32ArrayAttr">:$mma_block_size,
+        "mlir::DenseI32ArrayAttr":$wi_layout,
+        "mlir::DenseI32ArrayAttr":$wi_data
+      );
 
   // In format of #xegpu.sg_map<{mma_block_size = [2, 4], wi_layout = [2, 4], wi_data = [2, 4]}>
-  let assemblyFormat = "`<` custom<SubGroupMapAttrElements>($wiLayout, $wiData, $mmaBlockSize) `>`";
+  let assemblyFormat = "`<` struct(params) `>`";
 
   let genVerifyDecl = true;
 
-  let extraClassDeclaration = [{
-    bool hasMMABlockSizeAttr() {
-      return getMmaBlockSize().size() == 2;
-    }
-  }];
-
   let builders = [
     AttrBuilder<(ins
-      "::llvm::ArrayRef<unsigned>":$wiLayout,
-      "::llvm::ArrayRef<unsigned>":$wiData,
-      CArg<"::llvm::ArrayRef<unsigned>", "{}">:$mmaBlockSize
+      "::llvm::ArrayRef<int32_t>":$wiLayout,
+      "::llvm::ArrayRef<int32_t>":$wiData,
+      CArg<"::llvm::ArrayRef<int32_t>", "{}">:$mmaBlockSize
     ), [{
       assert(wiLayout.size() == 2 && wiData.size() == 2 && "wiLayout and wiData should be 2D arrays.\n");
       assert((mmaBlockSize.size() == 2 || mmaBlockSize.size() == 0) && "mmaBlockSize can be either empty or a 2D array.\n");
-      return $_get($_ctxt, wiLayout, wiData, mmaBlockSize);
+      return $_get($_ctxt, mlir::DenseI32ArrayAttr::get($_ctxt, mmaBlockSize),
+                           mlir::DenseI32ArrayAttr::get($_ctxt, wiLayout),
+                           mlir::DenseI32ArrayAttr::get($_ctxt, wiData));
     }]>
   ];
 
@@ -54,16 +51,18 @@ def XeGPU_SgMapAttr: XeGPUAttr<"SubGroupMap", "sg_map"> {
 
 def XeGPU_WgMapAttr: XeGPUAttr<"WorkGroupMap", "wg_map"> {
   let parameters = (ins
-        ArrayRefParameter<"unsigned">:$sgLayout,
-        ArrayRefParameter<"unsigned">:$sgData);
+        "mlir::DenseI32ArrayAttr":$sg_layout,
+        "mlir::DenseI32ArrayAttr":$sg_data
+      );
 
   let builders = [
     AttrBuilder<(ins
-      "::llvm::ArrayRef<unsigned>":$sgLayout,
-      "::llvm::ArrayRef<unsigned>":$sgData
+      "::llvm::ArrayRef<int32_t>":$sgLayout,
+      "::llvm::ArrayRef<int32_t>":$sgData
     ), [{
       assert(sgLayout.size() == 2 && sgData.size() == 2 && "sgLayout and sgData should be 2D arrays.\n");
-      return $_get($_ctxt, sgLayout, sgData);
+      return $_get($_ctxt, mlir::DenseI32ArrayAttr::get($_ctxt, sgLayout),
+                           mlir::DenseI32ArrayAttr::get($_ctxt, sgData));
     }]>
   ];
 
@@ -71,7 +70,7 @@ def XeGPU_WgMapAttr: XeGPUAttr<"WorkGroupMap", "wg_map"> {
   let skipDefaultBuilders = 1;
 
   // In format of #xegpu.wg_map<{sg_layout = [2, 4], sg_data = [2, 4]}>
-  let assemblyFormat = "`<` custom<WorkGroupMapAttrElements>($sgLayout, $sgData) `>`";
+  let assemblyFormat = "`<` struct(params) `>`";
 }
 
 def XeGPU_XeMapAttr: XeGPUAttr<"XeMap", "xe_map"> {
@@ -81,23 +80,27 @@ def XeGPU_XeMapAttr: XeGPUAttr<"XeMap", "xe_map"> {
 
   let builders = [
     AttrBuilder<(ins
-      "::llvm::ArrayRef<unsigned>":$sgLayout,
-      "::llvm::ArrayRef<unsigned>":$sgData,
-      "::llvm::ArrayRef<unsigned>":$wiLayout,
-      "::llvm::ArrayRef<unsigned>":$wiData,
-      CArg<"::llvm::ArrayRef<unsigned>", "{}">:$mmaBlockSize
+      "::llvm::ArrayRef<int32_t>":$sgLayout,
+      "::llvm::ArrayRef<int32_t>":$sgData,
+      "::llvm::ArrayRef<int32_t>":$wiLayout,
+      "::llvm::ArrayRef<int32_t>":$wiData,
+      CArg<"::llvm::ArrayRef<int32_t>", "{}">:$mmaBlockSize
     ), [{
       assert(sgLayout.size() == 2 && sgData.size() == 2 && "sgLayout and sgData should be 2D arrays.\n");
       assert(wiLayout.size() == 2 && wiData.size() == 2 && "wiLayout and wiData should be 2D arrays.\n");
       assert((mmaBlockSize.size() == 2 || mmaBlockSize.size() == 0) && "mmaBlockSize can be either empty or a 2D array.\n");
-      auto wg = WorkGroupMapAttr::get($_ctxt, sgLayout, sgData);
-      auto sg = SubGroupMapAttr::get($_ctxt, wiLayout, wiData, mmaBlockSize);
+      auto wg = WorkGroupMapAttr::get($_ctxt, mlir::DenseI32ArrayAttr::get($_ctxt, sgLayout),
+                                              mlir::DenseI32ArrayAttr::get($_ctxt, sgData));
+      auto sg = SubGroupMapAttr::get($_ctxt, mlir::DenseI32ArrayAttr::get($_ctxt, mmaBlockSize),
+                                             mlir::DenseI32ArrayAttr::get($_ctxt, wiLayout),
+                                             mlir::DenseI32ArrayAttr::get($_ctxt, wiData));
       return $_get($_ctxt, wg, sg);
     }]>
   ];
 
   // In format of #xegpu.xe_map<wg = {sg_layout = [2, 4], sg_data = [2, 4]}, sg = {mma_block_size = [2, 4], sg_layout = [2, 4], sg_data = [2, 4]}>
-  let hasCustomAssemblyFormat = 1;
+  let assemblyFormat = "`<` struct(params) `>`";
+
 }
 
 def XeGPU_ArgTypeAttr : I32EnumAttr<

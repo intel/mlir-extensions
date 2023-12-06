@@ -14,8 +14,8 @@ module @gemm attributes {gpu.container_module} {
       %mask = arith.constant dense<true> : vector<16xi1>
       %offsets = arith.constant dense<[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]> : vector<16xindex>
       %1 = arith.constant dense<0.5> : vector<16xf32>
-      %2 = xegpu.create_tdesc %arg0, %offsets {chunk_size_per_lane = 1} : memref<8x16xf32>, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.scattered>
-      %3 = xegpu.atomic_rmw "addf" %2, %mask, %1 : !xegpu.tensor_desc<16xf32, #xegpu.scattered>, vector<16xi1>, vector<16xf32> -> vector<16xf32>
+      %2 = xegpu.create_tdesc %arg0, %offsets {mode = vc, chunk_size_per_lane = 1} : memref<8x16xf32>, vector<16xindex> -> !xegpu.tensor_desc<16xf32, #xegpu.scattered>
+      %3 = xegpu.atomic_rmw "addf" %2, %mask, %1 {mode = vc} : !xegpu.tensor_desc<16xf32, #xegpu.scattered>, vector<16xi1>, vector<16xf32> -> vector<16xf32>
       gpu.return
     }
   }

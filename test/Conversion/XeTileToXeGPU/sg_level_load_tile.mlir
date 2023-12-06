@@ -5,10 +5,10 @@ func.func @sglevel_tiled_load_tile(%a: memref<1024x1024xf16>, %b: memref<1024x10
 
     //CHECK: arith.constant 0 : index
     //CHECK-NEXT: arith.constant 64 : index
-    //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+    //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
     //CHECK-NEXT: arith.constant 8 : index
     //CHECK-NEXT: arith.constant 64 : index
-    //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc, boundary_check = true} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
+    //CHECK-NEXT: xegpu.create_nd_tdesc {{.*}} {mode = vc} : memref<1024x1024xf16> -> !xegpu.tensor_desc<8x16xf16>
 	%1 = xetile.init_tile %a[%c0, %c64] : memref<1024x1024xf16> -> !xetile.tile<16x16xf16>
 
     //CHECK: xegpu.load_nd {{.*}} {mode = vc, {{.*}}} : !xegpu.tensor_desc<8x16xf16> -> vector<8x16xf16>

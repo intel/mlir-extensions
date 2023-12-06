@@ -317,13 +317,12 @@ def XeGPU_CreateDescOp
   let description = [{
     "create_tdesc" is similar to "create_nd_tdesc" in terms that it creates a TensorDesc for a memory region.
     while "create_nd_tdesc" is for creating continious subviews, "create_tdesc" is for creating non-continious
-    (scattered) subviews. It accepts the following parameters:
+    (scattered) subviews. It only works with VectorCompute (VC) mode and accepts the following parameters:
 
     * source: a 1D memref or pointer (uint64_t) represents the memory object.
-    * offsets: In VectorCompute (VC) mode, it is a 1D vector containing offsets of each access point, the size is aligned with
+    * offsets: It is a 1D vector containing offsets of each access point, the size should be aligned with
                supportted group size, e.g., vector<16xindex>. And each element in the vector corresponds to a
                work item (SIMT lane) in the subgroup.
-               In SIMT mode (default), it is an index scalar representing the offset of the access point.
     * chunk_size_per_lane: [optional attribute] indicates number of continious elements accessed for each offset, default is 1.
 
     Example 1. It assumes subgroup size is 4, and accesses a[0], a[16], a[32], a[64]
@@ -336,13 +335,6 @@ def XeGPU_CreateDescOp
     %0 = memref.alloc() : memref<1024xf32>
     %c0 = arith.constant dense<0, 16, 32, 64> : vector<4xindex>
     %1 = xegpu.create_tdesc %0, %c0 {chunk_size_per_lane = 8}: memref<1024xf32> -> TensorDesc<4x8xf32>
-
-    Example 3. an SIMT mode example, accessing a[16].
-    %a = memref.alloc() : memref<1024xf32>
-    %c0 = arith.constant 16 : index
-    %1 = xegpu.create_tdesc %a, %c0: memref<1024xf32> -> TensorDesc<1xf32>
-
-
   }];
 
   let arguments = (ins XeGPU_BaseAddrType: $source,
@@ -365,6 +357,28 @@ def XeGPU_CreateDescOp
     }
 
   }];
+
+  let builders = [
+    OpBuilder<(ins "::imex::xegpu::TensorDescType": $TensorDesc, "::mlir::Value": $source,
+                  "::mlir::Value": $offsets, CArg<"uint32_t", "1"> : $chunk_size_per_lane), [{
+        $_state.addOperands(source);
+        $_state.addOperands(offsets);
+        $_state.getOrAddProperties<Properties>().chunk_size_per_lane = $_builder.getIntegerAttr($_builder.getIntegerType(32), chunk_size_per_lane);
+        $_state.getOrAddProperties<Properties>().mode = ::imex::xegpu::ModeAttr::get($_builder.getContext(), imex::xegpu::Mode::VC);
+        $_state.addTypes(TensorDesc);
+    }]>,
+
+    OpBuilder<(ins "::imex::xegpu::TensorDescType": $TensorDesc, "::mlir::Value": $source,
+                  "::mlir::Value": $offsets, "::mlir::IntegerAttr": $chunk_size_per_lane), [{
+        $_state.addOperands(source);
+        $_state.addOperands(offsets);
+        if(chunk_size_per_lane)
+          $_state.getOrAddProperties<Properties>().chunk_size_per_lane = chunk_size_per_lane;
+        $_state.getOrAddProperties<Properties>().mode = ::imex::xegpu::ModeAttr::get($_builder.getContext(), imex::xegpu::Mode::VC);
+        $_state.addTypes(TensorDesc);
+    }]>
+  ];
+  let skipDefaultBuilders = 1;
 
   // Format: xegpu.create_tdesc %src, %offsets {mode=simt, chunk_size_per_lane=1}
   //                   : ui64, vector<16 x index> -> !xegpu.tensor_desc<16xf32, #xegpu.scattered>
@@ -431,6 +445,25 @@ def XeGPU_PrefetchNDOp : XeGPU_Op<"prefetch_nd", []> {
   let hasCustomAssemblyFormat = 1;
 }
 
+def XeGPU_UpdateNDOffsetOp : XeGPU_Op<"update_nd_offset", []> {
+  let summary = "update the offsets for the given tensor descriptor";
+
+  let arguments = (ins
+    XeGPU_TensorDesc: $TensorDesc,
+    Variadic<Index>: $offsets,
+    DefaultValuedAttr<XeGPU_ModeAttr, "imex::xegpu::Mode::SIMT">: $mode);
+
+  let results = (outs XeGPU_TensorDesc: $result);
+
+  let assemblyFormat = [{
+    $TensorDesc `,` (`[` $offsets^ `]`)? (`{` `mode` `=` $mode^ `}`)?
+    attr-dict `:` qualified(type($TensorDesc)) `->` qualified(type($result))
+  }];
+
+  let hasVerifier = 1;
+}
+
+
 def XeGPU_DpasOp : XeGPU_Op<"dpas"> {
   let summary = "performs dpas computation";
   let arguments = (ins
@@ -480,6 +513,55 @@ def XeGPU_LoadGatherOp : XeGPU_Op<"load"> {
 
   let results = (outs XeGPU_ValueType: $value);
 
+  let builders = [
+    OpBuilder<(ins "::mlir::Type": $value, "::mlir::Value": $TensorDesc, "::mlir::Value": $mask, "::mlir::IntegerAttr": $vnni_axis,
+                    CArg<"::mlir::DenseI64ArrayAttr", "::mlir::DenseI64ArrayAttr()">: $transpose,
+                    CArg<"::imex::xegpu::CacheReadHintAttr", "::imex::xegpu::CacheReadHintAttr()">: $l1_hint,
+                    CArg<"::imex::xegpu::CacheReadHintAttr", "::imex::xegpu::CacheReadHintAttr()">: $l2_hint,
+                    CArg<"::imex::xegpu::CacheReadHintAttr", "::imex::xegpu::CacheReadHintAttr()">: $l3_hint), [{
+      $_state.addOperands(TensorDesc);
+      $_state.addOperands(mask);
+      if (vnni_axis) {
+        $_state.getOrAddProperties<Properties>().vnni_axis = vnni_axis;
+      }
+      if (transpose) {
+        $_state.getOrAddProperties<Properties>().transpose = transpose;
+      }
+      if (l1_hint) {
+        $_state.getOrAddProperties<Properties>().l1_hint = l1_hint;
+      }
+      if (l2_hint) {
+        $_state.getOrAddProperties<Properties>().l2_hint = l2_hint;
+      }
+      if (l3_hint) {
+        $_state.getOrAddProperties<Properties>().l3_hint = l3_hint;
+      }
+      $_state.getOrAddProperties<Properties>().mode = ::imex::xegpu::ModeAttr::get($_builder.getContext(), imex::xegpu::Mode::VC);
+      $_state.addTypes(value); }]>,
+
+    OpBuilder<(ins "::mlir::Type": $value, "::mlir::Value": $TensorDesc, "::mlir::Value": $mask, "::mlir::IntegerAttr": $vnni_axis,
+                    CArg<"::mlir::DenseI64ArrayAttr", "::mlir::DenseI64ArrayAttr()">: $transpose,
+                    CArg<"::imex::xegpu::CacheReadHint", "::imex::xegpu::CacheReadHint::CACHED">: $l1_hint,
+                    CArg<"::imex::xegpu::CacheReadHint", "::imex::xegpu::CacheReadHint::CACHED">: $l2_hint,
+                    CArg<"::imex::xegpu::CacheReadHint", "::imex::xegpu::CacheReadHint::CACHED">: $l3_hint), [{
+      $_state.addOperands(TensorDesc);
+      $_state.addOperands(mask);
+      if (vnni_axis) {
+        $_state.getOrAddProperties<Properties>().vnni_axis = vnni_axis;
+      }
+      if (transpose) {
+        $_state.getOrAddProperties<Properties>().transpose = transpose;
+      }
+
+      $_state.getOrAddProperties<Properties>().l1_hint = ::imex::xegpu::CacheReadHintAttr::get($_builder.getContext(), l1_hint);
+      $_state.getOrAddProperties<Properties>().l2_hint = ::imex::xegpu::CacheReadHintAttr::get($_builder.getContext(), l2_hint);
+      $_state.getOrAddProperties<Properties>().l3_hint = ::imex::xegpu::CacheReadHintAttr::get($_builder.getContext(), l3_hint);
+      $_state.getOrAddProperties<Properties>().mode = ::imex::xegpu::ModeAttr::get($_builder.getContext(), imex::xegpu::Mode::VC);
+      $_state.addTypes(value); }]>
+
+  ];
+  let skipDefaultBuilders = 1;
+
   // In format of: %2 = xegpu.load %1, %0 {transpose = [1, 0], l1_hint = cached, l2_hint = uncached}
   //                 : !xegpu.tensor_desc<16x8xf32, #xegpu.scattered>, vector<16x8xi1> -> vector<8x16xf32>
   let hasCustomAssemblyFormat = 1;
@@ -499,27 +581,44 @@ def XeGPU_StoreScatterOp : XeGPU_Op<"store", []> {
     DefaultValuedAttr<XeGPU_ModeAttr, "imex::xegpu::Mode::SIMT">: $mode
   );
 
+  let builders = [
+    OpBuilder<(ins "::mlir::Value": $value, "::mlir::Value": $TensorDesc, "::mlir::Value": $mask,
+                CArg<"::imex::xegpu::CacheWriteHintAttr", "::imex::xegpu::CacheWriteHintAttr()">: $l1_hint,
+                CArg<"::imex::xegpu::CacheWriteHintAttr", "::imex::xegpu::CacheWriteHintAttr()">: $l2_hint,
+                CArg<"::imex::xegpu::CacheWriteHintAttr", "::imex::xegpu::CacheWriteHintAttr()">: $l3_hint), [{
+    $_state.addOperands(value);
+    $_state.addOperands(TensorDesc);
+    $_state.addOperands(mask);
+    if (l1_hint) {
+      $_state.getOrAddProperties<Properties>().l1_hint = l1_hint;
+    }
+    if (l2_hint) {
+      $_state.getOrAddProperties<Properties>().l2_hint = l2_hint;
+    }
+    if (l3_hint) {
+      $_state.getOrAddProperties<Properties>().l3_hint = l3_hint;
+    }
+    $_state.getOrAddProperties<Properties>().mode = ::imex::xegpu::ModeAttr::get($_builder.getContext(), imex::xegpu::Mode::VC);
+    }]>,
+
+    OpBuilder<(ins "::mlir::Value": $value, "::mlir::Value": $TensorDesc, "::mlir::Value": $mask,
+                CArg<"::imex::xegpu::CacheWriteHint", "::imex::xegpu::CacheWriteHint::WRITE_BACK">: $l1_hint,
+                CArg<"::imex::xegpu::CacheWriteHint", "::imex::xegpu::CacheWriteHint::WRITE_BACK">: $l2_hint,
+                CArg<"::imex::xegpu::CacheWriteHint", "::imex::xegpu::CacheWriteHint::WRITE_BACK">: $l3_hint), [{
+    $_state.addOperands(value);
+    $_state.addOperands(TensorDesc);
+    $_state.addOperands(mask);
+    $_state.getOrAddProperties<Properties>().l1_hint = ::imex::xegpu::CacheWriteHintAttr::get($_builder.getContext(), l1_hint);
+    $_state.getOrAddProperties<Properties>().l2_hint = ::imex::xegpu::CacheWriteHintAttr::get($_builder.getContext(), l2_hint);;
+    $_state.getOrAddProperties<Properties>().l3_hint = ::imex::xegpu::CacheWriteHintAttr::get($_builder.getContext(), l3_hint);;
+    $_state.getOrAddProperties<Properties>().mode = ::imex::xegpu::ModeAttr::get($_builder.getContext(), imex::xegpu::Mode::VC);
+    }]>
+  ];
+  let skipDefaultBuilders = 1;
+
   // Format: %3 = xegpu.load %1, %0 {l1_hint = cached, l2_hint = uncached}
   //                      : !xegpu.tensor_desc<16xf32, #xegpu.scattered>, vector<16xi1> -> vector<16xf32>
   let hasCustomAssemblyFormat = 1;
-  let hasVerifier = 1;
-}
-
-def XeGPU_UpdateNDOffsetOp : XeGPU_Op<"update_nd_offset", []> {
-  let summary = "update the offsets for the given tensor descriptor";
-
-  let arguments = (ins
-    XeGPU_TensorDesc: $TensorDesc,
-    Variadic<Index>: $offsets,
-    DefaultValuedAttr<XeGPU_ModeAttr, "imex::xegpu::Mode::SIMT">: $mode);
-
-  let results = (outs XeGPU_TensorDesc: $result);
-
-  let assemblyFormat = [{
-    $TensorDesc `,` (`[` $offsets^ `]`)? (`{` `mode` `=` $mode^ `}`)?
-    attr-dict `:` qualified(type($TensorDesc)) `->` qualified(type($result))
-  }];
-
   let hasVerifier = 1;
 }
 
@@ -535,6 +634,17 @@ def XeGPU_UpdateOffsetOp
 
       let results = (outs XeGPU_TensorDesc: $result);
 
+      let builders = [
+        OpBuilder<(ins "::mlir::Type": $result, "::mlir::Value": $TensorDesc, "::mlir::Value": $offsets), [{
+          $_state.addOperands(TensorDesc);
+          $_state.addOperands(offsets);
+          $_state.getOrAddProperties<Properties>().mode = ::imex::xegpu::ModeAttr::get($_builder.getContext(), imex::xegpu::Mode::VC);
+          $_state.addTypes(result);
+        }]>
+      ];
+
+      let skipDefaultBuilders = 1;
+
       let assemblyFormat = [{
         $TensorDesc `,` $offsets (`{` `mode` `=` $mode^ `}`)?
         attr-dict `:` qualified(type($TensorDesc)) `,` qualified(type($offsets)) `->`  qualified(type($result))
@@ -542,6 +652,53 @@ def XeGPU_UpdateOffsetOp
 
       let hasVerifier = 1;
   }
+
+def XeGPU_PrefetchOp : XeGPU_Op<"prefetch", []> {
+  let summary = "prefetches a nD block to cache";
+  let arguments = (ins XeGPU_TensorDesc: $TensorDesc,
+            OptionalAttr<XeGPU_CacheReadAttr>: $l1_hint,
+            OptionalAttr<XeGPU_CacheReadAttr>: $l2_hint,
+            OptionalAttr<XeGPU_CacheReadAttr>: $l3_hint,
+            DefaultValuedAttr<XeGPU_ModeAttr, "imex::xegpu::Mode::SIMT">: $mode
+  );
+
+  let builders = [
+    OpBuilder<(ins "::mlir::Value": $TensorDesc,
+      CArg<"::imex::xegpu::CacheReadHintAttr", "::imex::xegpu::CacheReadHintAttr()">: $l1_hint,
+      CArg<"::imex::xegpu::CacheReadHintAttr", "::imex::xegpu::CacheReadHintAttr()">: $l2_hint,
+      CArg<"::imex::xegpu::CacheReadHintAttr", "::imex::xegpu::CacheReadHintAttr()">: $l3_hint), [{
+      $_state.addOperands(TensorDesc);
+      if (l1_hint) {
+        $_state.getOrAddProperties<Properties>().l1_hint = l1_hint;
+      }
+      if (l2_hint) {
+        $_state.getOrAddProperties<Properties>().l2_hint = l2_hint;
+      }
+      if (l3_hint) {
+        $_state.getOrAddProperties<Properties>().l3_hint = l3_hint;
+      }
+      $_state.getOrAddProperties<Properties>().mode = ::imex::xegpu::ModeAttr::get($_builder.getContext(), imex::xegpu::Mode::VC);
+      }]>,
+
+    OpBuilder<(ins "::mlir::Value": $TensorDesc,
+      CArg<"::imex::xegpu::CacheReadHint", "::imex::xegpu::CacheReadHint::CACHED">: $l1_hint,
+      CArg<"::imex::xegpu::CacheReadHint", "::imex::xegpu::CacheReadHint::CACHED">: $l2_hint,
+      CArg<"::imex::xegpu::CacheReadHint", "::imex::xegpu::CacheReadHint::CACHED">: $l3_hint), [{
+      $_state.addOperands(TensorDesc);
+      $_state.getOrAddProperties<Properties>().l1_hint = ::imex::xegpu::CacheReadHintAttr::get($_builder.getContext(), l1_hint);
+      $_state.getOrAddProperties<Properties>().l2_hint = ::imex::xegpu::CacheReadHintAttr::get($_builder.getContext(), l2_hint);
+      $_state.getOrAddProperties<Properties>().l3_hint = ::imex::xegpu::CacheReadHintAttr::get($_builder.getContext(), l3_hint);;
+      $_state.getOrAddProperties<Properties>().mode = ::imex::xegpu::ModeAttr::get($_builder.getContext(), imex::xegpu::Mode::VC);
+      }]>
+  ];
+
+  let skipDefaultBuilders = 1;
+
+  // In format of: xegpu.prefetch %tdesc {l1_hint = cached, l2_hint = uncached}:
+  //                                    !xegpu.tensor_desc<8x16xf16>
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+}
 
 def XeGPU_InvokeSIMDOp : XeGPU_Op<"invoke_SIMD", []> {
     let summary = "Invoke_SIMD operation";
@@ -588,6 +745,36 @@ def XeGPU_AtomicRMWOp: XeGPU_Op<"atomic_rmw", []> {
   let assemblyFormat = [{
     $kind $tensorDesc `,` $mask (`,` $value^)? (`{` `mode` `=` $mode^ `}`)? attr-dict `:` qualified(type(operands)) `->` type($result)
   }];
+
+  let builders = [
+    OpBuilder<(ins "::mlir::Type": $result, "::imex::xegpu::AtomicRMWKindAttr": $kind,
+                   "::mlir::Value": $tensorDesc, "::mlir::Value": $mask,
+                   "::mlir::Value": $value), [{
+      $_state.addOperands(tensorDesc);
+      $_state.addOperands(mask);
+      if (value)
+        $_state.addOperands(value);
+      $_state.getOrAddProperties<Properties>().kind = kind;
+      $_state.getOrAddProperties<Properties>().mode = ::imex::xegpu::ModeAttr::get($_builder.getContext(), imex::xegpu::Mode::VC);
+      $_state.addTypes(result);
+    }]>,
+
+    OpBuilder<(ins "::mlir::Type": $result, "::imex::xegpu::AtomicRMWKind": $kind,
+                   "::mlir::Value": $tensorDesc, "::mlir::Value": $mask,
+                   "::mlir::Value": $value), [{
+      $_state.addOperands(tensorDesc);
+      $_state.addOperands(mask);
+      if (value)
+        $_state.addOperands(value);
+      $_state.getOrAddProperties<Properties>().kind = ::imex::xegpu::AtomicRMWKindAttr::get($_builder.getContext(), kind);
+      $_state.getOrAddProperties<Properties>().mode = ::imex::xegpu::ModeAttr::get($_builder.getContext(), imex::xegpu::Mode::VC);
+      $_state.addTypes(result);
+    }]>
+  ];
+
+  let skipDefaultBuilders = 1;
+
+  let hasVerifier = 1;
 }
 
 

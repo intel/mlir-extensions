@@ -27,7 +27,8 @@ def XeGPU_FloatType: AnyTypeOf<[F16, F32, F64, BF16, TF32]>;
 def XeGPU_ScalarType: AnyTypeOf<[XeGPU_IntType, XeGPU_FloatType]>;
 def XeGPU_BaseAddrType: AnyTypeOf<[MemRefRankOf<[XeGPU_ScalarType], [1, 2]>, UI64, UI32, I64, I32]>;
 def XeGPU_DpasOpType: VectorOfRankAndType<[2, 3], [XeGPU_ScalarType]>;
-def XeGPU_OffsetType: AnyTypeOf<[VectorOfRankAndType<[1], [Index]>, Index]>;
+// def XeGPU_OffsetType: AnyTypeOf<[VectorOfRankAndType<[1], [Index]>, Index]>;
+def XeGPU_OffsetType: VectorOfRankAndType<[1], [Index]>;
 def XeGPU_MaskType: AnyTypeOf<[VectorOfRankAndType<[1,2], [I1]>, I1]>;
 def XeGPU_ValueType: AnyTypeOf<[VectorOfRankAndType<[1,2,3], [XeGPU_ScalarType]>, XeGPU_ScalarType]>;
 
@@ -70,16 +71,19 @@ def XeGPU_TensorDesc: XeGPUTypeDef<"TensorDesc", "tensor_desc",
   let parameters = (ins ArrayRefParameter<"int64_t">:$shape,
                         "::mlir::Type":$elementType,
                         DefaultValuedParameter<"::imex::xegpu::MemoryScope", "xegpu::MemoryScope::GLOBAL">: $memory_scope,
-                        OptionalParameter<"::mlir::Attribute"> :$encoding);
+                        OptionalParameter<"::mlir::Attribute">: $encoding,
+                        OptionalParameter<"::mlir::Attribute">: $mapping
+                        );
 
   let builders = [
     TypeBuilderWithInferredContext<(ins
       "::llvm::ArrayRef<int64_t>":$shape,
       "::mlir::Type":$elementType,
       CArg<"::imex::xegpu::MemoryScope", "xegpu::MemoryScope::GLOBAL">: $memory_scope,
-      CArg<"::mlir::Attribute", "{}">:$encoding
+      CArg<"::mlir::Attribute", "{}">:$encoding,
+      CArg<"::mlir::Attribute", "{}">:$mapping
     ), [{
-      return $_get(elementType.getContext(), shape, elementType, memory_scope, encoding);
+      return $_get(elementType.getContext(), shape, elementType, memory_scope, encoding, mapping);
     }]>
   ];
 
@@ -99,7 +103,7 @@ def XeGPU_TensorDesc: XeGPUTypeDef<"TensorDesc", "tensor_desc",
     }
   }];
 
-  let assemblyFormat = "`<` custom<ShapeAndType>($shape, $elementType)``custom<TensorDescAttr>($memory_scope, $encoding)`>`";
+  let assemblyFormat = "`<` custom<ShapeAndType>($shape, $elementType)``custom<TensorDescAttr>($memory_scope, $encoding, $mapping)`>`";
 }
 
 

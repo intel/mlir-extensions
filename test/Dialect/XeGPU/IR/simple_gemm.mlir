@@ -6,9 +6,9 @@
 
 // ---- BF16 ------
 
-#sg_map_fp16_a = #xegpu.sg_map<{mma_block_size = [8, 16], wi_layout = [2, 8], wi_data = [1, 2]}>
-#sg_map_fp16_b = #xegpu.sg_map<{mma_block_size = [16, 16], wi_layout = [1, 16], wi_data = [1, 1]}>
-#sg_map_fp16_c = #xegpu.sg_map<{mma_block_size = [8, 16], wi_layout = [1, 16], wi_data = [1, 1]}>
+#sg_map_fp16_a = #xegpu.sg_map<mma_block_size = [8, 16], wi_layout = [2, 8], wi_data = [1, 2]>
+#sg_map_fp16_b = #xegpu.sg_map<mma_block_size = [16, 16], wi_layout = [1, 16], wi_data = [1, 1]>
+#sg_map_fp16_c = #xegpu.sg_map<mma_block_size = [8, 16], wi_layout = [1, 16], wi_data = [1, 1]>
 // CHECK-LABEL: func @test_gemm_bf16({{.*}}) {
 func.func @test_gemm_bf16(%a : memref<1024x1024xbf16>, %b: memref<1024x1024xbf16>, %c: memref<1024x1024xf32>) {
   %c0 = arith.constant 0 : index
@@ -25,12 +25,12 @@ func.func @test_gemm_bf16(%a : memref<1024x1024xbf16>, %b: memref<1024x1024xbf16
     scf.for %j= %c0 to %c1024 step %c16 {
       // CHECK: xegpu.create_nd_tdesc
       // CHECK-SAME: memref<1024x1024xbf16>
-      // CHECK-SAME: -> !xegpu.tensor_desc<8x16xbf16, #xegpu.sg_map<{mma_block_size = [8, 16], wi_layout = [2, 8], wi_data = [1, 2]}>>
+      // CHECK-SAME: -> !xegpu.tensor_desc<8x16xbf16, #xegpu.sg_map<mma_block_size = [8, 16], wi_layout = [2, 8], wi_data = [1, 2]>>
       %1 = xegpu.create_nd_tdesc %a[%i, %c0] : memref<1024x1024xbf16> -> !xegpu.tensor_desc<8x16xbf16, #sg_map_fp16_a>
 
       // CHECK: xegpu.create_nd_tdesc
       // CHECK-SAME: memref<1024x1024xbf16>
-      // CHECK-SAME: -> !xegpu.tensor_desc<16x16xbf16, #xegpu.sg_map<{mma_block_size = [16, 16], wi_layout = [1, 16], wi_data = [1, 1]}>>
+      // CHECK-SAME: -> !xegpu.tensor_desc<16x16xbf16, #xegpu.sg_map<mma_block_size = [16, 16], wi_layout = [1, 16], wi_data = [1, 1]>>
       %2 = xegpu.create_nd_tdesc %b[%c0, %j] : memref<1024x1024xbf16> -> !xegpu.tensor_desc<16x16xbf16, #sg_map_fp16_b>
 
       %3 = arith.constant dense<0.0> : vector<8x1xf32>
