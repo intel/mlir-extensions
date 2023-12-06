@@ -6,19 +6,19 @@ module attributes {gpu.container_module, spirv.target_env = #spirv.target_env<#s
   func.func @main() attributes {llvm.emit_c_interface} {
     %c1 = arith.constant 1 : index
     %c8 = arith.constant 8 : index
-    // CHECK: %[[DEVICE:.*]] =  llvm.mlir.zero : !llvm.ptr<i8>
-    // CHECK: %[[CONTEXT:.*]] =  llvm.mlir.zero : !llvm.ptr<i8>
-    // CHECK: %[[STREAM:.*]] = llvm.call @gpuCreateStream(%[[DEVICE:.*]], %[[CONTEXT:.*]]) : (!llvm.ptr<i8>, !llvm.ptr<i8>) -> !llvm.ptr<i8>
+    // CHECK: %[[DEVICE:.*]] =  llvm.mlir.zero : !llvm.ptr
+    // CHECK: %[[CONTEXT:.*]] =  llvm.mlir.zero : !llvm.ptr
+    // CHECK: %[[STREAM:.*]] = llvm.call @gpuCreateStream(%[[DEVICE:.*]], %[[CONTEXT:.*]]) : (!llvm.ptr, !llvm.ptr) -> !llvm.ptr
     %0 = "gpux.create_stream"() : () -> !gpux.StreamType
     %memref = "gpux.alloc"(%0) {operandSegmentSizes = array<i32: 0, 1, 0, 0>} : (!gpux.StreamType) -> memref<8xf32>
     %memref_0 = "gpux.alloc"(%0) {operandSegmentSizes = array<i32: 0, 1, 0, 0>} : (!gpux.StreamType) -> memref<8xf32>
     %memref_1 = "gpux.alloc"(%0) {operandSegmentSizes = array<i32: 0, 1, 0, 0>} : (!gpux.StreamType) -> memref<8xf32>
 
-    // CHECK: llvm.mlir.addressof @Kernels_spirv_binary : !llvm.ptr<array<552 x i8>>
-    // CHECK: %[[MODULE:.*]] = llvm.call @gpuModuleLoad(%[[STREAM:.*]], %{{.*}}, %{{.*}}) : (!llvm.ptr<i8>, !llvm.ptr<i8>, i64) -> !llvm.ptr<i8>
-    // CHECK: llvm.mlir.addressof @Kernels_kernel_1_kernel_name : !llvm.ptr<array<9 x i8>>
-    // CHECK: %[[KERNEL:.*]] = llvm.call @gpuKernelGet(%[[STREAM:.*]], %[[MODULE:.*]], %{{.*}}) : (!llvm.ptr<i8>, !llvm.ptr<i8>, !llvm.ptr<i8>) -> !llvm.ptr<i8>
-    // CHECK: llvm.call @gpuLaunchKernel(%[[STREAM:.*]], %[[KERNEL:.*]], %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}) : (!llvm.ptr<i8>, !llvm.ptr<i8>, i64, i64, i64, i64, i64, i64, i32, !llvm.ptr<struct<(ptr<i8>, i64)>>) -> ()
+    // CHECK: llvm.mlir.addressof @Kernels_spirv_binary : !llvm.ptr
+    // CHECK: %[[MODULE:.*]] = llvm.call @gpuModuleLoad(%[[STREAM:.*]], %{{.*}}, %{{.*}}) : (!llvm.ptr, !llvm.ptr, i64) -> !llvm.ptr
+    // CHECK: llvm.mlir.addressof @Kernels_kernel_1_kernel_name : !llvm.ptr
+    // CHECK: %[[KERNEL:.*]] = llvm.call @gpuKernelGet(%[[STREAM:.*]], %[[MODULE:.*]], %{{.*}}) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    // CHECK: llvm.call @gpuLaunchKernel(%[[STREAM:.*]], %[[KERNEL:.*]], %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}) : (!llvm.ptr, !llvm.ptr, i64, i64, i64, i64, i64, i64, i32, !llvm.ptr) -> ()
     "gpux.launch_func"(%0, %c8, %c1, %c1, %c1, %c1, %c1, %memref, %memref_0, %memref_1) {kernel = @Kernels::@kernel_1, operandSegmentSizes = array<i32: 0, 1, 1, 1, 1, 1, 1, 1, 0, 3>} : (!gpux.StreamType, index, index, index, index, index, index, memref<8xf32>, memref<8xf32>, memref<8xf32>) -> ()
     "gpux.dealloc"(%0, %memref) : (!gpux.StreamType, memref<8xf32>) -> ()
     "gpux.dealloc"(%0, %memref_0) : (!gpux.StreamType, memref<8xf32>) -> ()

@@ -4,12 +4,10 @@ Date: Mon, 24 Jul 2023 18:25:05 +0000
 Subject: [PATCH 2/2] Add serialization and de-serialization support for
  several decorations.
 
-Added decoratios:
+Added decorations:
 - Alignment
 - DescriptorSet
 - FuncParamIOKindINTEL
-- NoSignedWrap
-- NoUnsignedWrap
 - SingleElementVectorINTEL
 - VectorComputeCallableFunctionINTEL
 - VectorComputeFunctionINTEL
@@ -20,13 +18,13 @@ Added decoratios:
  2 files changed, 17 insertions(+), 1 deletion(-)
 
 diff --git a/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp b/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
-index b84d1d9c2187..90416289134b 100644
+index 89e2e7ad52fa..f6bdc646f384 100644
 --- a/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
 +++ b/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
-@@ -242,8 +242,9 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
-   auto attrName = llvm::convertToSnakeFromCamelCase(decorationName);
-   auto symbol = opBuilder.getStringAttr(attrName);
-   switch (static_cast<spirv::Decoration>(words[1])) {
+@@ -251,8 +251,9 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
+         symbol, FPFastMathModeAttr::get(opBuilder.getContext(),
+                                         static_cast<FPFastMathMode>(words[2])));
+     break;
 -  case spirv::Decoration::DescriptorSet:
 +  case spirv::Decoration::Alignment:
    case spirv::Decoration::Binding:
@@ -34,14 +32,10 @@ index b84d1d9c2187..90416289134b 100644
      if (words.size() != 3) {
        return emitError(unknownLoc, "OpDecorate with ")
               << decorationName << " needs a single integer literal";
-@@ -295,8 +296,14 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
-   case spirv::Decoration::NonReadable:
-   case spirv::Decoration::NonWritable:
-   case spirv::Decoration::NoPerspective:
-+  case spirv::Decoration::NoSignedWrap:
-+  case spirv::Decoration::NoUnsignedWrap:
-   case spirv::Decoration::Restrict:
+@@ -308,6 +309,10 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
+   case spirv::Decoration::NoUnsignedWrap:
    case spirv::Decoration::RelaxedPrecision:
+   case spirv::Decoration::Restrict:
 +  case spirv::Decoration::SingleElementVectorINTEL:
 +  case spirv::Decoration::VectorComputeCallableFunctionINTEL:
 +  case spirv::Decoration::VectorComputeFunctionINTEL:
@@ -49,7 +43,7 @@ index b84d1d9c2187..90416289134b 100644
      if (words.size() != 2) {
        return emitError(unknownLoc, "OpDecoration with ")
               << decorationName << "needs a single target <id>";
-@@ -307,6 +314,7 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
+@@ -318,6 +323,7 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
      // it is needed for many validation rules.
      decorations[words[0]].set(symbol, opBuilder.getUnitAttr());
      break;
@@ -58,13 +52,13 @@ index b84d1d9c2187..90416289134b 100644
    case spirv::Decoration::SpecId:
      if (words.size() != 3) {
 diff --git a/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp b/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
-index 1ef8ff043e69..988e60d08edf 100644
+index 9e9a16456cc1..b4d467f6656c 100644
 --- a/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
 +++ b/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
-@@ -231,8 +231,10 @@ LogicalResult Serializer::processDecoration(Location loc, uint32_t resultID,
-     args.push_back(static_cast<uint32_t>(linkageType));
-     break;
-   }
+@@ -247,8 +247,10 @@ LogicalResult Serializer::processDecoration(Location loc, uint32_t resultID,
+     }
+     return emitError(loc, "expected FPFastMathModeAttr attribute for ")
+            << attrName;
 +  case spirv::Decoration::Alignment:
    case spirv::Decoration::Binding:
    case spirv::Decoration::DescriptorSet:
@@ -72,14 +66,10 @@ index 1ef8ff043e69..988e60d08edf 100644
    case spirv::Decoration::Location:
      if (auto intAttr = dyn_cast<IntegerAttr>(attr.getValue())) {
        args.push_back(intAttr.getValue().getZExtValue());
-@@ -255,8 +257,14 @@ LogicalResult Serializer::processDecoration(Location loc, uint32_t resultID,
-   case spirv::Decoration::NonReadable:
-   case spirv::Decoration::NonWritable:
-   case spirv::Decoration::NoPerspective:
-+  case spirv::Decoration::NoSignedWrap:
-+  case spirv::Decoration::NoUnsignedWrap:
-   case spirv::Decoration::Restrict:
+@@ -275,6 +277,10 @@ LogicalResult Serializer::processDecoration(Location loc, uint32_t resultID,
+   case spirv::Decoration::NoUnsignedWrap:
    case spirv::Decoration::RelaxedPrecision:
+   case spirv::Decoration::Restrict:
 +  case spirv::Decoration::SingleElementVectorINTEL:
 +  case spirv::Decoration::VectorComputeCallableFunctionINTEL:
 +  case spirv::Decoration::VectorComputeFunctionINTEL:
