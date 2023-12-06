@@ -764,7 +764,7 @@ module attributes {gpu.container_module}  {
     // Initialize B matrix to 2.0
     // call @fillResource1DBF16(%memref_B_bf16, %cst_2) : (memref<?xbf16>, f32) -> ()
     // Or initialize B matrix to random values in (-0.5 , 0.5)
-    call @fillMatrixRandomBF16(%memref_B_bf16, %c4096_i32, %c4096_i32) : (memref<?xbf16>, i32, i32) -> ()
+    call @fillMatrixRandomBF16(%memref_B_bf16) : (memref<?xbf16>) -> ()
 
     // Setting up the Vector A
     %A_size = arith.muli %arg_M, %arg_K : index
@@ -783,7 +783,7 @@ module attributes {gpu.container_module}  {
     // Initialize A to 1.0
     // call @fillResource1DBF16(%memref_A_bf16, %cst_1) : (memref<?xbf16>, f32) -> ()
     // Or initialize A to random values in (-0.5, 0.5)
-    call @fillMatrixRandomBF16(%memref_A_bf16, %c4096_i32, %c4096_i32) : (memref<?xbf16>, i32, i32) -> ()
+    call @fillMatrixRandomBF16(%memref_A_bf16) : (memref<?xbf16>) -> ()
 
     // Calling the GPU version, using bf16 view of B and A vector
     call @gemm4k_gpu(%arg_M, %arg_N, %arg_K, %memref_C, %memref_B_i16, %memref_A_i16) : (index, index, index, memref<?xi16>, memref<?xi16>, memref<?xi16>) -> ()
@@ -845,5 +845,5 @@ module attributes {gpu.container_module}  {
   func.func private @printMemrefF16(memref<*xf16>) attributes {llvm.emit_c_interface}
   func.func private @printMemrefF32(memref<*xf32>) attributes {llvm.emit_c_interface}
   func.func private @printAllcloseBF16(memref<*xbf16>, memref<*xf32>) attributes {llvm.emit_c_interface}
-  func.func private @fillMatrixRandomBF16(memref<?xbf16>, i32, i32) attributes {llvm.emit_c_interface}
+  func.func private @fillMatrixRandomBF16(memref<?xbf16>) attributes {llvm.emit_c_interface}
 }
