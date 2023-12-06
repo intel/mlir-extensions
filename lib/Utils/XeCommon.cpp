@@ -70,7 +70,7 @@ static mlir::Value getOperandForArg(mlir::scf::ForOp &forOp,
                                     mlir::Value &value) {
   auto arg = llvm::dyn_cast_or_null<mlir::BlockArgument>(value);
   if (arg && arg.getArgNumber() >= forOp.getNumInductionVars()) {
-    auto &iterOperand = forOp.getOpOperandForRegionIterArg(arg);
+    auto &iterOperand = *forOp.getTiedLoopInit(arg);
     auto numCtrlOperands = forOp.getNumControlOperands();
     auto operandIdx = iterOperand.getOperandNumber();
     return forOp.getInitArgs()[operandIdx - numCtrlOperands];

@@ -98,22 +98,16 @@ protected:
   mlir::MLIRContext *context = &this->getTypeConverter()->getContext();
 
   mlir::Type llvmVoidType = mlir::LLVM::LLVMVoidType::get(context);
-  mlir::Type llvmPointerType =
-      mlir::LLVM::LLVMPointerType::get(mlir::IntegerType::get(context, 8));
-  mlir::Type llvmPointerPointerType =
-      mlir::LLVM::LLVMPointerType::get(llvmPointerType);
+  mlir::Type llvmPointerType = mlir::LLVM::LLVMPointerType::get(context);
   mlir::Type llvmInt8Type = mlir::IntegerType::get(context, 8);
   mlir::Type llvmInt32Type = mlir::IntegerType::get(context, 32);
   mlir::Type llvmInt64Type = mlir::IntegerType::get(context, 64);
   mlir::Type llvmIndexType = mlir::IntegerType::get(
       context, this->getTypeConverter()->getPointerBitwidth(0));
 
-  mlir::Type llvmI32PtrType = mlir::LLVM::LLVMPointerType::get(llvmIndexType);
-
   mlir::Type llvmRangeType = mlir::LLVM::LLVMStructType::getLiteral(
       context, {llvmPointerType, llvmIndexType});
-  mlir::Type llvmRangePointerType =
-      mlir::LLVM::LLVMPointerType::get(llvmRangeType);
+  mlir::Type llvmRangePointerType = mlir::LLVM::LLVMPointerType::get(context);
 
   FunctionCallBuilder moduleLoadCallBuilder = {
       "gpuModuleLoad",
@@ -346,7 +340,7 @@ private:
     return mlir::LLVM::createGlobalString(
         loc, builder, globalName,
         mlir::StringRef(kernelName.data(), kernelName.size()),
-        mlir::LLVM::Linkage::Internal, false);
+        mlir::LLVM::Linkage::Internal);
   }
 
   mlir::LogicalResult
@@ -375,7 +369,7 @@ private:
     nameBuffer.append(kGpuBinaryStorageSuffix);
     mlir::Value data = mlir::LLVM::createGlobalString(
         loc, rewriter, nameBuffer.str(), binaryAttr.getValue(),
-        mlir::LLVM::Linkage::Internal, false);
+        mlir::LLVM::Linkage::Internal);
 
     auto size = rewriter.create<mlir::LLVM::ConstantOp>(
         loc, llvmIndexType,
@@ -414,7 +408,6 @@ private:
     auto paramsCount = static_cast<unsigned>(kernelParams.size());
     auto paramsArrayType =
         mlir::LLVM::LLVMArrayType::get(llvmRangeType, paramsCount + 1);
-    auto paramsArrayPtrType = mlir::LLVM::LLVMPointerType::get(paramsArrayType);
 
     auto getKernelParamType = [&](unsigned i) -> mlir::Type {
       if (launchOp.getKernelOperands()[i].getType().isa<mlir::MemRefType>()) {
@@ -430,19 +423,19 @@ private:
       auto size = rewriter.create<mlir::LLVM::ConstantOp>(
           loc, llvmInt64Type, rewriter.getI64IntegerAttr(1));
       for (auto i : llvm::seq(0u, paramsCount)) {
-        auto ptrType = mlir::LLVM::LLVMPointerType::get(getKernelParamType(i));
-        paramsStorage[i] =
-            rewriter.create<mlir::LLVM::AllocaOp>(loc, ptrType, size, 0);
+        paramsStorage[i] = rewriter.create<mlir::LLVM::AllocaOp>(
+            loc, llvmPointerType, getKernelParamType(i), size, 0);
       }
-      return rewriter.create<mlir::LLVM::AllocaOp>(loc, paramsArrayPtrType,
-                                                   size, 0);
+      return rewriter.create<mlir::LLVM::AllocaOp>(loc, llvmPointerType,
+                                                   paramsArrayType, size, 0);
     });
 
     mlir::Value one = rewriter.create<mlir::LLVM::ConstantOp>(
         loc, llvmInt32Type, rewriter.getI32IntegerAttr(1));
     auto computeTypeSize = [&](mlir::Type type) -> mlir::Value {
       auto nullPtr = rewriter.create<mlir::LLVM::ZeroOp>(loc, type);
-      auto gep = rewriter.create<mlir::LLVM::GEPOp>(loc, type, nullPtr, one);
+      auto gep = rewriter.create<mlir::LLVM::GEPOp>(loc, type, llvmPointerType,
+                                                    nullPtr, one);
       return rewriter.create<mlir::LLVM::PtrToIntOp>(loc, llvmIndexType, gep);
     };
 
@@ -615,8 +608,7 @@ void imex::populateGpuxToLLVMPatternsAndLegality(
     mlir::LLVMTypeConverter &converter, mlir::RewritePatternSet &patterns,
     mlir::ConversionTarget &target) {
   auto context = patterns.getContext();
-  auto llvmPointerType =
-      mlir::LLVM::LLVMPointerType::get(mlir::IntegerType::get(context, 8));
+  auto llvmPointerType = mlir::LLVM::LLVMPointerType::get(context);
   converter.addConversion(
       [llvmPointerType](imex::gpux::OpaqueType) -> mlir::Type {
         return llvmPointerType;

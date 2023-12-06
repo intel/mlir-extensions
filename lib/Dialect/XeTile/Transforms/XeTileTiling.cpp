@@ -119,7 +119,7 @@ struct ArithConstantOpPattern
       // the direct user is an scf::ForOp, but the corresponding argument
       // is used by an xetile operator
       if (auto forOp = llvm::dyn_cast<mlir::scf::ForOp>(owner)) {
-        auto arg = forOp.getRegionIterArgForOpOperand(op);
+        auto arg = forOp.getTiedLoopRegionIterArg(&op);
 
         auto haveXeTileUsers = std::any_of(
             arg.user_begin(), arg.user_end(), [&](mlir::Operation *op) {
@@ -128,7 +128,7 @@ struct ArithConstantOpPattern
 
         if (auto yieldOp = llvm::dyn_cast<mlir::scf::YieldOp>(
                 forOp.getRegion().front().getTerminator())) {
-          auto idx = forOp.getResultForOpOperand(op).getResultNumber();
+          auto idx = forOp.getTiedLoopResult(&op).getResultNumber();
           auto definingOp = yieldOp.getResults()[idx].getDefiningOp();
           haveXeTileUsers |=
               llvm::isa<imex::xetile::XeTileDialect>(definingOp->getDialect());
