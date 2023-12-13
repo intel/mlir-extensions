@@ -112,7 +112,7 @@ def XeGPU_CreateNdDescOp : XeGPU_Op<"create_nd_tdesc", [Pure, AttrSizedOperandSe
                                             shape.size() == strides.size()
                )
               );
-        assert(offsets.size() == dynamicDims);
+        assert((std::ptrdiff_t)offsets.size() == dynamicDims);
 
         $_state.addOperands(source);
         $_state.addOperands(offsets);

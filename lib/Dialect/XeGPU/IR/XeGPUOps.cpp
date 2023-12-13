@@ -237,7 +237,8 @@ static bool verifyAndInferShape(std::vector<int64_t> &shape,
     auto sgData = wgMap.getSgData();
     auto sgLayout = wgMap.getSgLayout();
 
-    if (shape.size() != sgData.size() || shape.size() != sgLayout.size())
+    if ((int64_t)shape.size() != sgData.size() ||
+        (int64_t)shape.size() != sgLayout.size())
       return false;
 
     for (size_t i = 0; i < shape.size(); i++) {
@@ -254,11 +255,12 @@ static bool verifyAndInferShape(std::vector<int64_t> &shape,
     auto wiLayout = sgMap.getWiLayout();
     auto wiData = sgMap.getWiData();
 
-    if (blockSize && shape.size() != blockSize.size()) {
+    if (blockSize && (int64_t)shape.size() != blockSize.size()) {
       return false;
     }
 
-    if (shape.size() != wiData.size() || shape.size() != wiLayout.size()) {
+    if ((int64_t)shape.size() != wiData.size() ||
+        (int64_t)shape.size() != wiLayout.size()) {
       return false;
     }
 
@@ -840,7 +842,7 @@ void LoadNDOp::print(::mlir::OpAsmPrinter &printer) {
 
 void StoreNDOp::print(::mlir::OpAsmPrinter &printer) {
   auto mode = getMode();
-  bool printSep = false;
+  [[maybe_unused]] bool printSep = false;
   auto printDefaults = printDefaultValues();
   auto numAttrs = (*this)->getAttrs().size();
 
@@ -997,7 +999,7 @@ void StoreNDOp::print(::mlir::OpAsmPrinter &printer) {
 
 void PrefetchNDOp::print(::mlir::OpAsmPrinter &printer) {
   auto mode = getMode();
-  bool printSep = false;
+  [[maybe_unused]] bool printSep = false;
   auto printDefaults = printDefaultValues();
   auto numAttrs = (*this)->getAttrs().size();
   printer << ' ';
@@ -1537,7 +1539,7 @@ void PrefetchOp::print(::mlir::OpAsmPrinter &printer) {
 
 ::mlir::LogicalResult UpdateNDOffsetOp::verify() {
   // number of offsets specified must match the rank of the tensor descriptor
-  if (getTensorDesc().getType().getRank() != getOffsets().size()) {
+  if (getTensorDesc().getType().getRank() != (int64_t)getOffsets().size()) {
     return emitOpError("Invalid number of offsets.");
   }
   return ::mlir::success();

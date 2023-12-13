@@ -1484,7 +1484,7 @@ unsigned getElementPerWI(imex::xegpu::TensorDescType tDescType) {
   auto wiLayout = sgMap.getWiLayout();
   auto wiData = sgMap.getWiData();
   unsigned elemPerWI = 1;
-  for (size_t i = 0; i < wiData.size(); i++) {
+  for (int64_t i = 0; i < wiData.size(); i++) {
     if (wiData[i] != 1)
       llvm_unreachable("wi_data must be 1 for all dimension for "
                        "JointMatrix lowering");
