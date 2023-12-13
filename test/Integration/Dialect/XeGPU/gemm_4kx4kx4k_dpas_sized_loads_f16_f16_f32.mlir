@@ -383,6 +383,38 @@ module @gemm attributes {gpu.container_module} {
       gpu.return
     }
   }
+
+  // compute CPU reference (takes minutes)
+  func.func @cpu_reference(%A : memref<4096x4096xf16>, %B : memref<4096x4096xf16>, %C : memref<4096x4096xf32>) {
+    %c4096 = arith.constant 4096 : index
+    %c16 = arith.constant 16 : index
+    %c1 = arith.constant 1 : index
+    %c0 = arith.constant 0 : index
+    scf.for %i = %c0 to %c4096 step %c1 {
+      scf.for %j = %c0 to %c4096 step %c1 {
+        %c_curr = memref.load %C[%i, %j] : memref<4096x4096xf32>
+        %c_val = scf.for %k_tile = %c0 to %c4096 step %c16 iter_args(%c_partial = %c_curr) -> f32 {
+          %c_val_dpas = scf.for %k = %c0 to %c16 step %c1 iter_args(%c_dpas_partial = %c_partial) -> f32 {
+            %k_dpas = arith.addi %k_tile, %k : index
+            %a_val = memref.load %A[%i, %k_dpas] : memref<4096x4096xf16>
+            %b_val = memref.load %B[%k_dpas, %j] : memref<4096x4096xf16>
+            %a_cast = arith.extf %a_val : f16 to f32
+            %b_cast = arith.extf %b_val : f16 to f32
+            %t = arith.mulf %a_cast, %b_cast : f32
+            // %t_cast = arith.extf %t : f16 to f16
+            %c_sum = arith.addf %t, %c_dpas_partial : f32
+            scf.yield %c_sum : f32
+          }
+          scf.yield %c_val_dpas : f32
+        }
+        // %c_val_f16 = arith.truncf %c_val : f32 to f16
+        // %c_val_ = arith.extf %c_val_f16 : f16 to f32
+        memref.store %c_val , %C[%i, %j] : memref<4096x4096xf32>
+      }
+    }
+    return
+  }
+
   func.func @main() attributes {llvm.emit_c_interface} {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
@@ -448,23 +480,8 @@ module @gemm attributes {gpu.container_module} {
     // run GPU
     %2 = call @test(%A, %B, %C) : (memref<4096x4096xf16>, memref<4096x4096xf16>, memref<4096x4096xf32>) -> memref<4096x4096xf32>
 
-    // compute CPU reference (takes minutes)
-    scf.for %i = %c0 to %c4096 step %c1 {
-      scf.for %j = %c0 to %c4096 step %c1 {
-        %c_curr = memref.load %C_ref[%i, %j] : memref<4096x4096xf32>
-        %c_val = scf.for %k = %c0 to %c4096 step %c1 iter_args(%c_partial = %c_curr) -> f32 {
-          %a_val = memref.load %A[%i, %k] : memref<4096x4096xf16>
-          %b_val = memref.load %B[%k, %j] : memref<4096x4096xf16>
-          %a_cast = arith.extf %a_val : f16 to f32
-          %b_cast = arith.extf %b_val : f16 to f32
-          %t = arith.mulf %a_cast, %b_cast : f32
-          // %t_cast = arith.extf %t : f16 to f32
-          %c_sum = arith.addf %t, %c_partial : f32
-          scf.yield %c_sum : f32
-        }
-        memref.store %c_val , %C_ref[%i, %j] : memref<4096x4096xf32>
-      }
-    }
+    // run CPU
+    call @cpu_reference(%A, %B, %C_ref) : (memref<4096x4096xf16>, memref<4096x4096xf16>, memref<4096x4096xf32>) -> ()
 
     // %cast = memref.cast %A : memref<4096x4096xf16> to memref<*xf16>
     // call @printMemrefF16(%cast) : (memref<*xf16>) -> ()

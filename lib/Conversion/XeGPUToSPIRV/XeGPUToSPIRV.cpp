@@ -59,6 +59,9 @@ encodeVectorType(ConversionPatternRewriter &rewriter, VectorType type,
   case 128:
     str += "v128";
     break;
+  case 256:
+    str += "v256";
+    break;
   default:
     assert(0 && "add more support");
     break;

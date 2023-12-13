@@ -1,7 +1,0 @@
-Benchmark name : gemm_4kx4kx4k_f16_f16_f32
-Platform : Intel(R) Data Center GPU Max 1100
-Notes : this run uses doubleGRF that requires modifications to L0 and SYCL runtime wrappers in IMEX
-
-        Kernel register usage : 250 registers
-the kernel execution time is (ms, on L0 runtime):avg: 0.7011, min: 0.6958, max: 0.7298 (over 1000 runs)
-avg TFLOPS : 196.033
