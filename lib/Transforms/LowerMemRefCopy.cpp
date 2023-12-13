@@ -38,46 +38,45 @@ struct LowerMemRefCopy
     auto &domInfo = getAnalysis<DominanceInfo>();
     auto func = getOperation();
     // walk through memref.copy ops in the funcion body
-    WalkResult result =
-        func.walk<WalkOrder::PreOrder>([&](memref::CopyOp op) -> WalkResult {
-          if (op->getParentOp() != func)
-            return WalkResult::skip();
-          auto src = op.getSource();
-          auto dst = op.getTarget();
-          // supposed to work on same memref type
-          auto srcType = src.getType().cast<MemRefType>();
-          auto dstType = dst.getType().cast<MemRefType>();
-          if (srcType != dstType)
-            return WalkResult::skip();
-          // supposed to work on memref.alloc
-          auto srcOp = src.getDefiningOp<memref::AllocOp>();
-          auto dstOp = dst.getDefiningOp<memref::AllocOp>();
-          if (!srcOp || !dstOp)
-            return WalkResult::skip();
-          // check use of src after this copyOp, being conservative
-          // FIXME: handle dealloc of src and dst
-          bool hasSubsequentUse = false;
-          for (auto user : src.getUsers()) {
-            if (isa<memref::DeallocOp>(user)) {
-              continue;
-            }
-            if (domInfo.properlyDominates(op, user)) {
-              hasSubsequentUse = true;
-              break;
-            }
-          }
+    (void)func.walk<WalkOrder::PreOrder>([&](memref::CopyOp op) -> WalkResult {
+      if (op->getParentOp() != func)
+        return WalkResult::skip();
+      auto src = op.getSource();
+      auto dst = op.getTarget();
+      // supposed to work on same memref type
+      auto srcType = src.getType().cast<MemRefType>();
+      auto dstType = dst.getType().cast<MemRefType>();
+      if (srcType != dstType)
+        return WalkResult::skip();
+      // supposed to work on memref.alloc
+      auto srcOp = src.getDefiningOp<memref::AllocOp>();
+      auto dstOp = dst.getDefiningOp<memref::AllocOp>();
+      if (!srcOp || !dstOp)
+        return WalkResult::skip();
+      // check use of src after this copyOp, being conservative
+      // FIXME: handle dealloc of src and dst
+      bool hasSubsequentUse = false;
+      for (auto user : src.getUsers()) {
+        if (isa<memref::DeallocOp>(user)) {
+          continue;
+        }
+        if (domInfo.properlyDominates(op, user)) {
+          hasSubsequentUse = true;
+          break;
+        }
+      }
 
-          // replace copy with linalg.generic
-          if (hasSubsequentUse) {
-            OpBuilder builder(op);
-            linalg::makeMemRefCopyOp(builder, op.getLoc(), src, dst);
-          } else {
-            // coalesce buffer
-            dst.replaceAllUsesWith(src);
-          }
-          op.erase();
-          return WalkResult::advance();
-        });
+      // replace copy with linalg.generic
+      if (hasSubsequentUse) {
+        OpBuilder builder(op);
+        linalg::makeMemRefCopyOp(builder, op.getLoc(), src, dst);
+      } else {
+        // coalesce buffer
+        dst.replaceAllUsesWith(src);
+      }
+      op.erase();
+      return WalkResult::advance();
+    });
   }
 };
 } // namespace

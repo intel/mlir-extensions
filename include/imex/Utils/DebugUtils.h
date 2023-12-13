@@ -8,7 +8,8 @@
 #include <fstream>
 #include <string>
 
-static std::string getValueAsString(mlir::Value op, bool asOperand = false) {
+[[maybe_unused]] static std::string getValueAsString(mlir::Value op,
+                                                     bool asOperand = false) {
   std::string buf;
   buf.clear();
   llvm::raw_string_ostream os(buf);

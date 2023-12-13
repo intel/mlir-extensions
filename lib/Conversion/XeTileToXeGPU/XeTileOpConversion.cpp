@@ -108,7 +108,7 @@ struct SgPrefetchTileOpPattern
       return mlir::failure();
     auto shape = tileTy.getShape();
 
-    if (shape[0] * shape[1] != tiles.size()) {
+    if (shape[0] * shape[1] != (int64_t)tiles.size()) {
       op.emitOpError("Failed to lower LoadTileOp because shape[0] * shape[1] "
                      "!= sources.size().");
       return mlir::failure();
@@ -153,7 +153,7 @@ struct SgLoadTileOpPattern
     auto shape = resultTy.getShape();
     auto sources = adaptor.getSource();
 
-    if (shape[0] * shape[1] != sources.size()) {
+    if (shape[0] * shape[1] != (int64_t)sources.size()) {
       op.emitOpError("Failed to lower LoadTileOp because shape[0] * shape[1] "
                      "!= sources.size().");
       return mlir::failure();
