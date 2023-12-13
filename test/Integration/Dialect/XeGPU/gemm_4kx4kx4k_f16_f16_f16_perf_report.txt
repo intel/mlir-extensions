@@ -4,9 +4,4 @@ Requirements : doubleGRF
 
         Kernel test_kernel : 240 registers
 the kernel execution time is (ms, on L0 runtime):avg: 0.7084, min: 0.4811, max: 3.0830 (over 1000 runs)
-TFlops : avg:194.013, min:44.580, max:285.676        
-        
-        
-        
-        
-        
+TFlops : avg:194.013, min:44.580, max:285.676
