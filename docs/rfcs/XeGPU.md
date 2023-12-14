@@ -256,4 +256,4 @@ The same syntax of nbarrrier, mfence, and compile_hint operations work on VC mod
 
 ## Notes
 
-Currently, there is no lower-level GPU IR like NVVM available for Intel GPU compiler toolchain. XeGPU dialect uses SPIRV Intel extension to access joint-matrix or SPIR-V external function to access intel GPU VC intrinsics. This may change in the future, so we expect XeGPU lowering may change accordingly.  
+Currently, there is no lower-level GPU IR like NVVM available for the Intel GPU compiler toolchain. XeGPU dialect uses LLVM or SPIRV intrinsic to access advanced intel GPU instructions. When the lower-level software changes, we expect XeGPU lowering passes to change accordingly.  
