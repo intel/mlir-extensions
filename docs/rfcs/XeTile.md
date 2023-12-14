@@ -90,9 +90,10 @@ A `tile_mma` variant without vector_c initialization.
   %tile_updated = XeTile.update_tile_offset %tile, %offset_x, offset_y :
 		tile<64x64xbf16>, index, index into tile <64x64xbf16>
 ```
-`XeTile.wg_map` mapping attribute allows XeTile operation to work at the workgroup level. Without these attributes, the XeTile works at the subgroup level. With wg_map attributes, XeTile operations can be applied to workgroup-level tile sizes. The attribute `XeTile.wg_map` guide the lowering from the workgroup level to the subgroup level by specifying how the data is distributed across parallel subgroups. 
-`XeTile.sg_map` attributes allows the user to further specify the mapping of each data element to each work item thread. It works the same way as `XeGPU.sg_map`. 
-`XeTile.wg_map` and `XeTile.sg_map` maps give the user full control over the lowering process so that the user can tune the tiling size for both the workgroup and subgroup to tune the performance.
+
+`xetile.wg_map` mapping attribute allows XeTile operation to work at the workgroup level. Without these attributes, the XeTile works at the subgroup level. With wg_map attributes, XeTile operations can be applied to workgroup-level tile sizes. The attribute `xetile.wg_map` guide the lowering from the workgroup level to the subgroup level by specifying how the data is distributed across parallel subgroups. 
+`xetile.sg_map` attributes allows the user to further specify the mapping of each data element to each work item thread. It works the same way as `xegpu.sg_map` defined in XeGPU dialect. 
+`xetile.wg_map` and `xeTile.sg_map` maps give the user full control over the lowering process so that the user can tune the tiling size for both the workgroup and subgroup to tune the performance.
 
 Below is an example.
 ```mlir
