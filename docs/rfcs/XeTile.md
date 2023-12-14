@@ -90,7 +90,10 @@ A `tile_mma` variant without vector_c initialization.
   %tile_updated = XeTile.update_tile_offset %tile, %offset_x, offset_y :
 		tile<64x64xbf16>, index, index into tile <64x64xbf16>
 ```
-XeTile mapping attributes are experimental features, which maps an XeTile-based operation to subgroup threads and further to WI threads. Without these attributes, the XeTile works at the subgroup level. With wg_map attributes, XeTile operations can be mapped to workgroup-level functions. The attributes guide the lowering from workgroup level to subgroup level by specifying how the data distributed across parallel subgroups. With sg_map attributes, user can further specify the mapping of each data element to each work item thread. These maps gives user full control on the lowering process, so that the user can tune the tiling size for both the workgroup and subgroup to tune the performance.
+`XeTile.wg_map` mapping attribute allows XeTile operation to work at the workgroup level. Without these attributes, the XeTile works at the subgroup level. With wg_map attributes, XeTile operations can be applied to workgroup-level tile sizes. The attribute `XeTile.wg_map` guide the lowering from the workgroup level to the subgroup level by specifying how the data is distributed across parallel subgroups. 
+`XeTile.sg_map` attributes allows the user to further specify the mapping of each data element to each work item thread. It works the same way as `XeGPU.sg_map`. 
+`XeTile.wg_map` and `XeTile.sg_map` maps give the user full control over the lowering process so that the user can tune the tiling size for both the workgroup and subgroup to tune the performance.
+
 Below is an example.
 ```mlir
    #wg_map_a = #xetile.wg_map<sg_layout = [2, 2], sg_data = [32, 128]>
@@ -99,14 +102,17 @@ Below is an example.
 
    %a_init_tile = xetile.init_tile %A[%m, %c0] : memref<1024x1024xf16> -> !xetile.tile<128x128xf16, #xe_map_a>
 ```
-`wg_map` describes the mapping between subgroup thread and the memory specified by tile.
-`wg_map.sg_layout` specifies the subgroup layout, and `wg_map.sg_data` specifies the tile size owned by each subgroup. In the example above, sg_layout=[2,2] means that each workgroup has 4 subgroups with 2D layout [2,2]. sg_data = [32,128] means that each subgroup works on a submatrix [32, 128].
+Within the `xetile.wg_map`, `sg_layout` specifies the subgroup layout, and `sg_data` specifies the tile size owned by each subgroup. In the example above, sg_layout [2,2] means that each workgroup has 4 subgroups with 2 rows and 2 columns. sg_data [32,128] means that each subgroup works on a submatrix [32, 128]. The data elements assigned to each subgroup thread must be contiguous.
 
-The tile size must be divisible by wg_map.sg_data, which means for each dimension, the size of tile[i] must be divisible by wg_map.sg_data[i], and the data elements assigned to each subgroup thread must be contiguous. When the tile size is smaller than the submatrix size specified by wg_map.sg_layout and wg_map.sg_data, it is distributed to subgroup threads in a round-robin fashion. If there is no more data to assign along a certain dimension, it wraps around to the beginning of the tile along that dimension. For example, for the tile size [128, 128], the tile would be sliced to four subtiles with size [32,128], with the first and third subtile assigned to subgroup thread 0 and 1, and the second and fourth to thread 2 and 3.
+For each dimension, the tile size must be divisible by sg_data, and the size of sg_layout multiplying sg_data must be divisible by the tile size. The tile is distributed to sg_data in a round-robin fashion. When the tile size is smaller than the size of sg_layout multiplying sg_data, the tile data is wrapped around and continues to be distributed to subgroup threads. For example, for the tile size [128, 128] and sg_data [32, 128], along the second dimension, there is no more data left to assign after the first subgroup, it wraps around and moves to the beginning of the tile and continues the assignment. Instead, for the first dimension, there is more data left after the first round of distribution, so it move to the next subtile and continue the assignement. As a result, the tile would be sliced to four subtiles with size [32,128], with the following mapping: 
+ 	[  0:31, 0:127] : [0, 0] [0, 1]
+	[ 32:63, 0:127] : [1, 0] [1, 1]
+  	[ 64:95, 0:127] : [0, 0] [0, 1]
+   	[96:127, 0:127] : [1, 0] [1, 1]
+	 
+Within the `xetile.sg_map`, `wi_layout` specifies the layout in which WI threads correspond to the memory, and `wi_data` describes the data block accessed by each WI thread. In the example above, wi_layout=[2, 8] means that each subgroup has 16 WI threads in 2 rows and 8 columns, and wi_data=[1,2] means that each WI thread owns a [1,2] data fragment. The data elements with each data fragment assigned to a WI thread must be contiguous. So the sg_map describes a total [2,16] submatrix at the subgroup level.
 
-`sg_map` describes the mapping between WI thread and the memory specified by the tensor descriptor. `sg_map.wi_layout` specifies the layout in which WI threads corresponding to the memory, and `sg_map.wi_data` describes the data block accessed by each WI thread. In the example above, wi_layout=[2, 8] means that each subgroup has 16 WI threads, and wi_data=[1,2] means that each WI thread owns a [1,2] data fragment from total [2,16] submatrix at the subgroup level.  
-
-The wg_map.sg_data size must be divisible by sg_map.wi_layout multiplying with sg_map.wi_data. For each dimension, the size of wg_map.sg_data must be divisible by wi_layout x wi_data, and the data elements assigned to each WI thread must be contiguous. When subgroup owned submatrix is larger than the submatrix size specified by sg_map.wi_layout and sg_map.wi_data, it is distributed to WI threads in a round-robin fashion. The full wg_map.sg_data[0:1] is distributed with the submatrix size from multiplying wi_layout[0:1] and wi_data[0:1], so each element is mapped to one and only one WI thread.
+The size of `sg_data` within `xetile.wg_map` must be divisible by sg_map size, which comes from wi_layout multiplying with wi_data. More specifically, for each dimension, the sg_data size must be divisible by wi_layout x wi_data. The wg_map.sg_data size must be larger than or equal to the sg_map size. When the 2D subtensor size is larger than the sg_map size, it is distributed to WI threads in a round-robin fashion.
 
 
 ## Alternative design considerations
