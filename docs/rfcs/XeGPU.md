@@ -1,10 +1,10 @@
 # RFC for XeGPU Dialect
 
 ## Summary
-The XeGPU dialect provides an abstraction close to Xe instructions like DPAS and 2D block load. The matrix instructions being processed at this level exactly match the hardware instructions’ semantics including the matrix sizes. The lowering and optimizations built on top of the XeGPU dialect are target-specific.
+The XeGPU dialect provides  an abstraction that closely models Xe instructions to support high-perf GEMM code generation. The matrix instructions being processed at this level exactly match the hardware instructions’ semantics including the matrix sizes. The lowering and optimizations built on top of the XeGPU dialect are target-specific.
 
 ## Proposal
-XeGPU dialect models a subset of Xe GPU’s ISA. This is the counterpart of NVGPU and AMDGPU dialects, which provide a bridge dialect in the MLIR gradual lowering. XeGPU dialect works with MLIR memref and vector type and complements with Arith/Math/Vector/Memref dialect. XeGPU operations are introduced when there is a special Xe instruction not modeled by LLVM/SPIR-V dialect. In some cases, one XeGPU op is mapped to multiple hardware instructions when there is no performance disadvantage by grouping them. For example, create_tdesc is mapped to a fixed sequence of instructions to create the 32-byte long address description.
+XeGPU dialect models a subset of Xe GPU’s ISA. This is the counterpart of NVGPU and AMDGPU dialects, which provide a bridge dialect in the MLIR gradual lowering. XeGPU dialect works with MLIR memref and vector type and complements with Arith/Math/Vector/Memref dialect. XeGPU operations are introduced when there is a special Xe instruction not modeled by LLVM/SPIR-V dialect, for example, like DPAS and 2D block load. In some cases, one XeGPU op may lower to a sequence of instructions for a dedicated and performance-critical function. For example, create_tdesc is mapped to a fixed sequence of instructions to create an address description.
 Below is a summary.
 
 | Ops	| Syntax	| Example |
