@@ -31,7 +31,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
         with:
-          token: ${{ secrets.WORKFLOW_TOKEN }}
+          token: ${{ secrets.IMEX_GHA_TOKEN }}
           ref: main
           fetch-depth: 0
           path: ${{env.HOME_DIR}}/frameworks.ai.mlir.mlir-extensions
