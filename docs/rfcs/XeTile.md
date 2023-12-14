@@ -1,22 +1,21 @@
 # RFC for XeTile Dialect
 
 ## Summary
-This RFC proposes XeTile and XeGPU Dialect to support efficient code generation for Xe GPU.
+This RFC proposes XeTile Dialect to support efficient code generation for GEMM operation.
 
 ## Motivation
 Lowering GEMM (General matrix multiplication) to an efficient tiled loop structure that can be mapped to GPU compute hierarchy is a complicated task, with multiple factors determining the efficiency. After decomposing the task into workgroup kernels and further down to subgroup kernels, each subgroup kernel executes a GEMM operation on submatrices. Generating efficient code for GEMM requires a good decomposition that creates enough subtasks to drive high core utilization and large enough subgroup-level submatrix size for code efficiency. Besides the parallel decomposition, each hardware has its recipe for the best code sequence for GEMM, which includes high-level algorithms, like cooperative prefetch/load, k-slicing and software pipelining, and target-specific code sequences for submatrix operations.
 
-To facilitate efficient code generation for GEMM, we introduce two new dialects, XeTile and XeGPU dialects. XeTile dialect supports the tile-based programming model and decomposes the GEMM kernel to large pre-defined tile sizes at the subgroup and workgroup level. With the XeTile dialect, the high-level GEMM algorithm can be easily expressed. Underneath XeTile, the implementation uses target-specific recipes and HW features to get the best performance on specific hardware. Based on XeTile representation, as the GEMM is decomposed at submatrix granularity and mapped to registers, it naturally supports optimization like fusing with neighbor operations.
+To facilitate efficient code generation for GEMM, we introduce XeTile dialect. XeTile dialect supports the tile-based programming model and decomposes the GEMM kernel to large pre-defined tile sizes at the subgroup and workgroup level. With the XeTile dialect, the high-level GEMM algorithm can be easily expressed. Underneath XeTile, the implementation uses target-specific recipes and HW features to get the best performance on specific hardware. Based on XeTile representation, as the GEMM is decomposed at submatrix granularity and mapped to registers, it naturally supports optimization like fusing with neighbor operations.
 
-The XeTile dialect provides microkernel-level functionality to build high-performance GEMM using pure MLIR lowering pipeline. It supports matrix operations on tile sizes larger than hardware matrix tiles, so that the lowering pass optimize a larger scope of multiple matrix instructions with target-specific recipes that gives the best performance. For example, it uses the most efficient 2D block loader instead of a general but inefficient load instruction whenever the 2D block fits HW requirements. Xe GPU’s 2D blocker load which loads a large chunk of data and autopad the out-of-boundary access, when the matrix address and sizes meet HW requirements. As XeTile abstracts out the HW difference, the same XeTile-based code works on any type of Xe GPU that XeTile supports.
+The XeTile dialect provides microkernel-level functionality to build high-performance GEMM using a pure MLIR lowering pipeline. It supports matrix operations on tile sizes larger than hardware matrix tiles so that the lowering pass optimizes a larger scope of multiple matrix instructions with target-specific recipes that give the best performance. For example, it uses the most efficient 2D block loader instead of a general but inefficient load instruction whenever the 2D block fits HW requirements. Xe GPU’s 2D block load loads a large chunk of data and autopad the out-of-boundary access, when the matrix address and sizes meet HW requirements. As XeTile abstracts out the HW difference, the same XeTile-based code works on any type of GPUs.
 
-Based on XeTile, users can implement different GEMM algorithms. Based on the input GEMM shapes and micro architecture info, the GEMM lowering chooses one high-level algorithm, decides decomposition parameters, and generates XeTile code.
-
+Based on XeTile, users can implement different GEMM algorithms. Based on the input GEMM shapes and microarchitecture info, the GEMM lowering chooses one high-level algorithm, decides decomposition parameters, and generates XeTile code.
 
 ## Proposal
 ### XeTile Dialect
 
-XeTile provides a middle-level abstraction for matmul operation, and sits between Linalg matmul named op and XeGPU Dpas op. It is not tied to specific Xe architecture. The XeTile dialect design facilitates optimization using hardware auto-padding, which generates simpler and more efficient code than the software padding. Using the tile dialect, the user doesn’t need to detect the out-of-boundary case, and the dialect takes care of unaligned shapes, so the same code runs for the unaligned use case. Users can focus on high-level optimization like software pipelining, cooperative prefetch, and K-slicing.
+XeTile provides a middle-level abstraction for matmul operation and sits between Linalg matmul named op and XeGPU Dpas op. The implementation starts from Xe GPU, but it is not tied to specific Xe architecture. The XeTile dialect design facilitates optimization using hardware auto-padding, which generates simpler and more efficient code than the software padding. Using the tile dialect, the user doesn’t need to detect the out-of-boundary case, and the dialect takes care of unaligned shapes, so the same code runs for the unaligned use case. Users can focus on high-level optimization like software pipelining, cooperative prefetch, and K-slicing.
 
 | Ops	| Syntax	| Example |
 | :---   | :----   | :--- |
@@ -63,7 +62,7 @@ Attribute `padding` specifies the padding value for the out-of-boundary access. 
   %vector_a = XeTile.load_tile %tile_a {padding = 1.0} :
      tile<64x64xbf16> into vector<64x64xb16>
 ```
-`load_tile` need to be used together with the tile_mma. The VNNI layout is not exposed to tile dialect users. A lowering pass will add the VNNI transformation at the XeGPU dialect.
+`load_tile` need to be used together with the tile_mma. 
 
 `store_tile` stores a vector to memory. Transpose and padding attributes are not supported.
 ```mlir  
