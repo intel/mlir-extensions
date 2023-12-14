@@ -1044,7 +1044,6 @@ public:
     std::string funcName = "llvm_genx_raw_send2_noresult_i1_v8i32";
 
     // desc format
-    // https://github.com/intel-innersource/drivers.gpu.compute.vc-intrinsics/blob/cmc_experimental/GenXIntrinsics/include/llvm/GenXIntrinsics/Intrinsic_definitions.py#L4595
     Value modifier = i8_val(0);
     Value exec_size = i8_val(0);
     Value predicate = i1_val(1);
