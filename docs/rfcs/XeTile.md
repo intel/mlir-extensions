@@ -62,7 +62,7 @@ Attribute `padding` specifies the padding value for the out-of-boundary access. 
   %vector_a = XeTile.load_tile %tile_a {padding = 1.0} :
      tile<64x64xbf16> into vector<64x64xb16>
 ```
-`load_tile` need to be used together with the tile_mma. 
+`load_tile` need to be used together with the tile_mma.
 
 `store_tile` stores a vector to memory. Transpose and padding attributes are not supported.
 ```mlir  
@@ -91,8 +91,8 @@ A `tile_mma` variant without vector_c initialization.
 		tile<64x64xbf16>, index, index into tile <64x64xbf16>
 ```
 
-`xetile.wg_map` mapping attribute allows XeTile operation to work at the workgroup level. Without these attributes, the XeTile works at the subgroup level. With wg_map attributes, XeTile operations can be applied to workgroup-level tile sizes. The attribute `xetile.wg_map` guide the lowering from the workgroup level to the subgroup level by specifying how the data is distributed across parallel subgroups. 
-`xetile.sg_map` attributes allows the user to further specify the mapping of each data element to each work item thread. It works the same way as `xegpu.sg_map` defined in XeGPU dialect. 
+`xetile.wg_map` mapping attribute allows XeTile operation to work at the workgroup level. Without these attributes, the XeTile works at the subgroup level. With wg_map attributes, XeTile operations can be applied to workgroup-level tile sizes. The attribute `xetile.wg_map` guide the lowering from the workgroup level to the subgroup level by specifying how the data is distributed across parallel subgroups.
+`xetile.sg_map` attributes allows the user to further specify the mapping of each data element to each work item thread. It works the same way as `xegpu.sg_map` defined in XeGPU dialect.
 `xetile.wg_map` and `xeTile.sg_map` maps give the user full control over the lowering process so that the user can tune the tiling size for both the workgroup and subgroup to tune the performance.
 
 Below is an example.
@@ -107,10 +107,10 @@ Within the `xetile.wg_map`, `sg_layout` specifies the subgroup layout, and `sg_d
 
 For each dimension, the size of `sg_layout` multiplying `sg_data` must be divisible by the wg_tile size or vice versa. The wg_tile is distributed to sg_data x sg_layout in a round-robin fashion. If sg_data[i] x sg_layout[i] < wg_tile[i], we have data left after all subgroups are assigned for the first round. In this case, we continue to assign the rest data starting from the first subgroup until the data is completely assigned. If sg_data[i] x sg_layout[i] >= wg_tile[i], we may have already used up all the data before all subgroups are assigned. In this case, we wrap around the wg_tile and continue the assignment, and the rest subgroups along that dimension share the same data.
 
-For example, for the tile size [128, 128] and sg_data [32, 128], along the second dimension, there is no more data left to assign after the first subgroup, it wraps around and moves to the beginning of the tile and continues the assignment. Instead, for the first dimension, there is more data left after the first round of distribution, so it move to the next subtile and continue the assignement. As a result, the tile would be sliced to four subtiles with size [32,128], with the following mapping: 
+For example, for the tile size [128, 128] and sg_data [32, 128], along the second dimension, there is no more data left to assign after the first subgroup, it wraps around and moves to the beginning of the tile and continues the assignment. Instead, for the first dimension, there is more data left after the first round of distribution, so it move to the next subtile and continue the assignement. As a result, the tile would be sliced to four subtiles with size [32,128], with the following mapping:
 
-| subtiles	| threads	| 
-| :---   | :----   | 
+| subtiles	| threads	|
+| :---   | :----   |
 | [  0:31, 0:127] | [0, 0] , [0, 1] |
 | [ 32:63, 0:127] | [1, 0] , [1, 1] |
 | [ 64:95, 0:127] | [0, 0] , [0, 1] |
@@ -125,4 +125,3 @@ The size of `sg_data` within `xetile.wg_map` must be divisible by sg_map size, w
 ## Alternative design considerations
 
 The alternative design of tile data type is to reuse the memref data type. The memref data type needs to be enhanced to allow attributes. So the XeTile's tile data type can be expressed with memref associated with Tile attributes. XeTile.wg_map and XeTile.sg_map are examples of these attributes.  
-

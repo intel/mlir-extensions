@@ -35,7 +35,7 @@ XeGPU supports two flavors of load/store operations: n-dimension load (nd load) 
 
 `create_nd_tdesc` creates a tensor descriptor for an n-dimensional tensor, which describes a subview of an n-dimensional base tensor. The information of the base tensor is passed as operands including base address, offsets, and strides. The shape and element data type of the tensor view (subtensor) are specified in the output tensor_desc data type, and they must be known at the compile time. The tensor_desc design is extensible for future Xe hardware to support higher-dimension tensors. n-dimension tensor descriptor requires “n” number of base_shape and base_stride for the base nd-tile, “n” number of offsets.  
 
-The example below creates a 2D tensor_desc with base matrix address, shapes, strides, and the offsets of the 2D subtensor. the tensor_desc “remembers” the base tensor buffer’s information, so when it is used to load the subtensor, lowering will handle the out-of-boundary access implicitly and preferably using hardware auto-padding features for the out-of-boundary elements. On PVC, the stride of the innermost dimension (base_stride[0]) must be 1. 
+The example below creates a 2D tensor_desc with base matrix address, shapes, strides, and the offsets of the 2D subtensor. the tensor_desc “remembers” the base tensor buffer’s information, so when it is used to load the subtensor, lowering will handle the out-of-boundary access implicitly and preferably using hardware auto-padding features for the out-of-boundary elements. On PVC, the stride of the innermost dimension (base_stride[0]) must be 1.
 
 ```mlir
  #sg_map_a = xegpu.sg_map<wi_layout = [2, 8], wi_data = [1, 2]>
@@ -49,13 +49,13 @@ The example below creates a 2D tensor_desc with base matrix address, shapes, str
 ```
 Attribute `xegpu.sg_map` describes the mapping between WI threads and the 2D subtensor specified by the tensor descriptor. With the sg_map, `wi_layout` specifies the layout in which WI threads correspond to the memory, and `wi_data` describes the data block accessed by each work item (WI) thread. In the example above, wi_layout=[2, 8] means that each subgroup has 16 WI threads in 2 rows and 8 columns, and wi_data=[1,2] means that each WI thread owns a [1,2] data fragment. The data elements with each data fragment assigned to a WI thread must be contiguous. So the sg_map describes a total [2,16] submatrix at the subgroup level.
 
-The size of the 2D subtensor referred by the result tensor_desc must be divisible by sg_map size, which comes from wi_layout multiplied by wi_data. For each dimension, the size of the 2D subtensor must be divisible by wi_layout x wi_data. The 2D subtensor size must be larger than or equal to the sg_map size. When the 2D subtensor size is larger than the sg_map size, it is distributed to WI threads in a round-robin fashion. 
+The size of the 2D subtensor referred by the result tensor_desc must be divisible by sg_map size, which comes from wi_layout multiplied by wi_data. For each dimension, the size of the 2D subtensor must be divisible by wi_layout x wi_data. The 2D subtensor size must be larger than or equal to the sg_map size. When the 2D subtensor size is larger than the sg_map size, it is distributed to WI threads in a round-robin fashion.
 
 Attribute `mode` indicates whether the XeGPU operation is working under “Vector Compute” (VC) mode. Under this mode, the XeGPU op is carried out by all the WI threads within a subgroup. There is no need to specify the mapping of each WI thread to the data fragments. The XeGPU operation works on the vectors as a whole.
 
 Any XeGPU operation working at VC mode needs to explicitly declare this attribute. The default mode is SIMT mode. When VC mode is on, the sg_map attribute should not be presented in the associated tensor_desc.
 
-create_nd also accepts a memref as input instead of a memory address, shapes, and sizes. 
+create_nd also accepts a memref as input instead of a memory address, shapes, and sizes.
 ```mlir
  #sg_map_a = xegpu.sg_map<wi_layout = [2, 8], wi_data = [1, 2]>
  %tdesc1 = XeGPU.create_nd_tdesc %mref, %offsets:2
@@ -67,7 +67,7 @@ create_nd also accepts a memref as input instead of a memory address, shapes, an
      	into tensor_desc<8x16xbf16>
 ```
 
-The example below accepts a memory address and an offset and creates a 1D tensor_desc. The tensor_desc describes a 1D vector that is loaded by all WI threads combined within the subgroup. 
+The example below accepts a memory address and an offset and creates a 1D tensor_desc. The tensor_desc describes a 1D vector that is loaded by all WI threads combined within the subgroup.
 ```mlir
   #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
   %tdesc1 = XeGPU.create_nd_tdesc %mem_addr, %offset  
@@ -125,7 +125,7 @@ When setting vnni_axis to 1, VNNI transformation has no impact on the physical d
   %at = XeGPU.load_nd %tdesc2 {vnni_axis = 1, mode = vc} :
      tile<8x16xbf16> into vector<8x8x2xbf16>
 ```
-VNNI transformation and transpose can be combined for low-precision data type like fp16, bf16, int8. The example below shows that a bf16 matrix [8row, 16col] is transposed to [16col, 8row], and then VNNI transform to [8col, 8row, 2col].   
+VNNI transformation and transpose can be combined for low-precision data type like fp16, bf16, int8. The example below shows that a bf16 matrix [8row, 16col] is transposed to [16col, 8row], and then VNNI transform to [8col, 8row, 2col].  
 ```mlir  
   #sg_map_a = xegpu.sg_map<wi_layout = [2, 8], wi_data = [1, 2]>
   %at = XeGPU.load_nd %block_a {transpose = [1, 0], vnni_axis = 0} :
@@ -135,7 +135,7 @@ VNNI transformation and transpose can be combined for low-precision data type li
      tile<8x16xbf16> into vector<8x8x2bf16>
 ```
 
-`dpas` does the matrix multiplication on the 2D matrix represented as 2D or 3D vectors. When the input matrix is a lower-precision data type (lower than 32bit), the input vectors uses 3D representation. As the matrix B must be in VNNI layout, the reduction dimension needs to be split into 2 dimensions, and the 3rd inner dimension has 2 or 4 data elements fitting the 32bit. The result tensor is always in 2D. 
+`dpas` does the matrix multiplication on the 2D matrix represented as 2D or 3D vectors. When the input matrix is a lower-precision data type (lower than 32bit), the input vectors uses 3D representation. As the matrix B must be in VNNI layout, the reduction dimension needs to be split into 2 dimensions, and the 3rd inner dimension has 2 or 4 data elements fitting the 32bit. The result tensor is always in 2D.
 ```mlir
   // WI mapping for vector_a, vector_b, vector_c refer to the sg_mapping associated with tensor_desc
   %vector_c = XeGPU.dpas %vector_a, %vector_b :
@@ -199,7 +199,7 @@ Attribute `chunk_size_per_lane` specifies the size being loaded per each work it
         	  tensor_desc<16xuint8, #Scattered>, vector<16xi1> into vector<16xuint8>
 ```
 
-When loading a tensor_desc with chunk_size_per_lane attribute, the output vector must be 2D vector, with the chunk being treated as a new dimension. On PVC, the consecutive 1D tensor data being loaded can be viewed as a 2D tensor loaded with transposition, with the chunk dimension transposed to the outer dimension. 
+When loading a tensor_desc with chunk_size_per_lane attribute, the output vector must be 2D vector, with the chunk being treated as a new dimension. On PVC, the consecutive 1D tensor data being loaded can be viewed as a 2D tensor loaded with transposition, with the chunk dimension transposed to the outer dimension.
 
 ```mlir  
 %result = XeGPU.load_gather %scatter_tdesc_chunk, %mask {L1 = cached, L2 = uncached, transpose=[1,0], mode = vc} :
@@ -260,9 +260,9 @@ enum class nbarrier_role : uint8_t {producer_consumer = 0, producer = 1, consume
 ```mlir  
   XeGPU.mfence {memory_kind = "ugm", fence_op = "none", fence_scope = "local"}
 ```
-Attribute `Fence_op` describes the operations associated with the fence, the current value is limited to {"none"}. 
-Attribute `Fence_scope` describes the scope of fence. "local" means that the scope would be within each XeCore. "tile" means the scope would be across XeCore with one tile. 
-Attribute `Memory_kind` describes the memory kind. "ugm" means the global memory, "slm" means the share local memory. 
+Attribute `Fence_op` describes the operations associated with the fence, the current value is limited to {"none"}.
+Attribute `Fence_scope` describes the scope of fence. "local" means that the scope would be within each XeCore. "tile" means the scope would be across XeCore with one tile.
+Attribute `Memory_kind` describes the memory kind. "ugm" means the global memory, "slm" means the share local memory.
 
 `compile_hint` passes performance hints to the lower-level compiler. The schedule_barrier hint prevents instructions from being reordered by a lower-level compiler. For example, a prefetch instruction is location-sensitive, but the lower-level compiler may schedule it to an undesired location.  
 ```mlir  
