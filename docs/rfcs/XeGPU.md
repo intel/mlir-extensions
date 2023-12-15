@@ -272,4 +272,4 @@ nbarrrier, mfence, and compile_hint operations lower to uniform instructions, so
 
 ## Notes
 
-Currently, there is no lower-level dialect for the Intel GPU compiler toolchain to represent GPU ops with values based on LLVM data types such as NVVM dialect for the Nvidia GPU compiler toolchain. XeGPU dialect uses LLVM or SPIRV intrinsic to access advanced intel GPU instructions. When the lower-level software changes, we expect XeGPU lowering passes to change accordingly.  
+Currently, there is no lower-level dialect for the Intel GPU compiler toolchain to represent GPU ops with values based on LLVM data types such as NVVM dialect for the Nvidia GPU compiler toolchain. XeGPU dialect uses LLVM or SPIR-V intrinsic to access advanced intel GPU instructions. When the lower-level software changes, we expect XeGPU lowering passes to change accordingly.  
