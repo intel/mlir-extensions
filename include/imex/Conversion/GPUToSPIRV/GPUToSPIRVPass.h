@@ -14,10 +14,15 @@
 
 #ifndef IMEX_GPUTOSPIRV_PASS_H_
 #define IMEX_GPUTOSPIRV_PASS_H_
+#include <mlir/Dialect/SPIRV/IR/SPIRVDialect.h>
+#include <mlir/Dialect/SPIRV/IR/SPIRVOps.h>
+#include <mlir/Transforms/DialectConversion.h>
 
 #include <memory>
 
 namespace mlir {
+class SPIRVTypeConverter;
+class RewritePatternSet;
 class Pass;
 struct ScfToSPIRVContextImpl;
 class ModuleOp;
@@ -26,6 +31,10 @@ template <typename T> class OperationPass;
 } // namespace mlir
 
 namespace imex {
+
+void populateGPUPrintfToSPIRVPatterns(mlir::SPIRVTypeConverter &typeConverter,
+                                      mlir::RewritePatternSet &patterns);
+
 /// Create a pass
 std::unique_ptr<::mlir::OperationPass<::mlir::ModuleOp>>
 createConvertGPUXToSPIRVPass(bool mapMemorySpace = true);
