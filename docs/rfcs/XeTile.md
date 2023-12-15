@@ -101,11 +101,13 @@ Below is an example.
    #sg_map_a = #xetile.sg_map<wi_layout = [2, 8], wi_data = [1, 2]>
    #xe_map_a = #xetile.xe_map<wg = #wg_map_a, sg = #sg_map_a>
 
-   %a_init_tile = xetile.init_tile %A[%m, %c0] : memref<1024x1024xf16> -> !xetile.tile<128x128xf16, #xe_map_a>
+   %wg_tile = xetile.init_tile %A[%m, %c0] : memref<1024x1024xf16> -> !xetile.tile<128x128xf16, #xe_map_a>
 ```
-Within the `xetile.wg_map`, `sg_layout` specifies the subgroup layout, and `sg_data` specifies the tile size owned by each subgroup. In the example above, sg_layout [2,2] means that each workgroup has 4 subgroups with 2 rows and 2 columns. sg_data [32,128] means that each subgroup works on a submatrix [32, 128]. The data elements assigned to each subgroup thread must be contiguous.
+Within the `xetile.wg_map`, `sg_layout` specifies the subgroup layout, and `sg_data` specifies the tile size owned by each subgroup. The tile created by init_tile is a workgroup-level tile. In the example above, sg_layout [2,2] means that each workgroup has 4 subgroups with 2 rows and 2 columns. sg_data [32,128] means that each subgroup works on a submatrix [32, 128]. The data elements assigned to each subgroup thread must be contiguous.
 
-For each dimension, the tile size must be divisible by `sg_data`, and the size of `sg_layout` multiplying `sg_data` must be divisible by the tile size. The tile is distributed to sg_data in a round-robin fashion. When the tile size is smaller than the size of sg_layout multiplying sg_data, the tile data is wrapped around and continues to be distributed to subgroup threads. For example, for the tile size [128, 128] and sg_data [32, 128], along the second dimension, there is no more data left to assign after the first subgroup, it wraps around and moves to the beginning of the tile and continues the assignment. Instead, for the first dimension, there is more data left after the first round of distribution, so it move to the next subtile and continue the assignement. As a result, the tile would be sliced to four subtiles with size [32,128], with the following mapping: 
+For each dimension, the size of `sg_layout` multiplying `sg_data` must be divisible by the wg_tile size or vice versa. The wg_tile is distributed to sg_data x sg_layout in a round-robin fashion. If sg_data[i] x sg_layout[i] < wg_tile[i], we have data left after all subgroups are assigned for the first round. In this case, we continue to assign the rest data starting from the first subgroup until the data is completely assigned. If sg_data[i] x sg_layout[i] >= wg_tile[i], we may have already used up all the data before all subgroups are assigned. In this case, we wrap around the wg_tile and continue the assignment, and the rest subgroups along that dimension share the same data.
+
+For example, for the tile size [128, 128] and sg_data [32, 128], along the second dimension, there is no more data left to assign after the first subgroup, it wraps around and moves to the beginning of the tile and continues the assignment. Instead, for the first dimension, there is more data left after the first round of distribution, so it move to the next subtile and continue the assignement. As a result, the tile would be sliced to four subtiles with size [32,128], with the following mapping: 
 
 | subtiles	| threads	| 
 | :---   | :----   | 
