@@ -263,16 +263,42 @@ public:
             alloc.getSymbolOperands(), hostShared);
         auto allocResult = gpuAlloc.getResult(0);
         builder.setInsertionPoint(term);
-        for (mlir::OpOperand &use : alloc.getResult().getUses()) {
-          if (use.getOwner() == term) {
-            auto newAlloc = builder.create<mlir::memref::AllocOp>(
-                loc, alloc.getType(), alloc.getDynamicSizes(),
-                alloc.getSymbolOperands());
-            builder.create<mlir::memref::CopyOp>(loc, allocResult,
-                                                 newAlloc.getResult());
-            use.set(newAlloc.getResult());
-          }
+
+        // follow the users of alloc if they are view-like
+        // insert copy if they are terminator
+        auto insertCopyIfViewInTerminal = [&](auto &use) -> bool {
+          auto _insertCopyIfViewInTerminal =
+              [&](auto &use, auto _insertCopyIfViewInTerminal_) -> bool {
+            auto user = use.getOwner();
+            if (user == term) {
+              auto newAlloc = builder.create<mlir::memref::AllocOp>(
+                  loc, alloc.getType(), alloc.getDynamicSizes(),
+                  alloc.getSymbolOperands());
+              builder.create<mlir::memref::CopyOp>(loc, allocResult,
+                                                   newAlloc.getResult());
+              auto castop = builder.create<mlir::memref::CastOp>(
+                  loc, use.get().getType(), newAlloc);
+              use.set(castop.getResult());
+              return true;
+            }
+            if (::mlir::isa<::mlir::ViewLikeOpInterface>(user)) {
+              assert(user->getNumResults() == 1);
+              for (auto &_use : user->getResult(0).getUses()) {
+                if (_insertCopyIfViewInTerminal_(_use,
+                                                 _insertCopyIfViewInTerminal_))
+                  return true;
+              }
+            }
+            // on all other cases we do nothing
+            return true;
+          };
+          return _insertCopyIfViewInTerminal(use, _insertCopyIfViewInTerminal);
+        };
+
+        for (auto &use : alloc.getResult().getUses()) {
+          insertCopyIfViewInTerminal(use);
         }
+
         alloc.replaceAllUsesWith(allocResult);
         builder.create<mlir::gpu::DeallocOp>(loc, std::nullopt, allocResult);
         alloc.erase();
