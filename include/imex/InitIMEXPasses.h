@@ -17,7 +17,6 @@
 
 #include <imex/Conversion/Passes.h>
 // #include <imex/Transforms/IMEXPasses.h>
-#include <imex/Dialect/PTensor/Transforms/Passes.h>
 // #include <imex/Dialect/*/Transforms/Passes.h>
 #include "imex/Transforms/Passes.h"
 #include <imex/Dialect/XeTile/Transforms/Passes.h>
@@ -41,7 +40,6 @@ inline void registerAllPasses() {
   registerConversionPasses();
 
   // Dialect passes
-  registerPTensorPasses();
   registerXeTilePasses();
   // register*Passes();
 

@@ -19,9 +19,7 @@
 #include <mlir/IR/DialectRegistry.h>
 #include <mlir/IR/MLIRContext.h>
 
-#include <imex/Dialect/Dist/IR/DistOps.h>
 #include <imex/Dialect/GPUX/IR/GPUXOps.h>
-#include <imex/Dialect/PTensor/IR/PTensorOps.h>
 #include <imex/Dialect/XeGPU/IR/XeGPUOps.h>
 
 namespace imex {
@@ -29,9 +27,7 @@ namespace imex {
 /// Add all the IMEX dialects to the provided registry.
 inline void registerAllDialects(::mlir::DialectRegistry &registry) {
   // clang-format off
-    registry.insert<::imex::ptensor::PTensorDialect,
-                    ::imex::dist::DistDialect,
-                    ::imex::xetile::XeTileDialect,
+    registry.insert<::imex::xetile::XeTileDialect,
                     ::imex::gpux::GPUXDialect,
                     ::imex::xegpu::XeGPUDialect>();
   // clang-format on
