@@ -11,18 +11,18 @@ func.func @main() attributes {llvm.emit_c_interface} {
   // CHECK: %[[C1:.*]] =  arith.constant 1 : index
   // CHECK: %[[C8:.*]] =  arith.constant 8 : index
   // CHECK: %[[STREAM:.*]] = "gpux.create_stream"() : () -> !gpux.StreamType
-  // CHECK: %[[ALLOC_0:.*]] = "gpux.alloc"(%[[STREAM:.*]]) <{operandSegmentSizes = array<i32: 0, 1, 0, 0>}> : (!gpux.StreamType) -> memref<8xf32>
+  // CHECK: %[[ALLOC_0:.*]] = "gpux.alloc"(%[[STREAM]]) <{operandSegmentSizes = array<i32: 0, 1, 0, 0>}> : (!gpux.StreamType) -> memref<8xf32>
   %memref = gpu.alloc  () : memref<8xf32>
-  // CHECK: %[[ALLOC_1:.*]] = "gpux.alloc"(%[[STREAM:.*]]) <{operandSegmentSizes = array<i32: 0, 1, 0, 0>}> : (!gpux.StreamType) -> memref<8xf32>
+  // CHECK: %[[ALLOC_1:.*]] = "gpux.alloc"(%[[STREAM]]) <{operandSegmentSizes = array<i32: 0, 1, 0, 0>}> : (!gpux.StreamType) -> memref<8xf32>
   %memref_1 = gpu.alloc  () : memref<8xf32>
-  // CHECK: %[[ALLOC_2:.*]] = "gpux.alloc"(%[[STREAM:.*]]) <{operandSegmentSizes = array<i32: 0, 1, 0, 0>}> : (!gpux.StreamType) -> memref<8xf32>
+  // CHECK: %[[ALLOC_2:.*]] = "gpux.alloc"(%[[STREAM]]) <{operandSegmentSizes = array<i32: 0, 1, 0, 0>}> : (!gpux.StreamType) -> memref<8xf32>
   %memref_2 = gpu.alloc  () : memref<8xf32>
-  // CHECK: "gpux.launch_func"(%[[STREAM:.*]], %[[C8:.*]], %[[C1:.*]], %[[C1:.*]], %[[C1:.*]], %[[C1:.*]], %[[C1:.*]], %[[ALLOC_0:.*]], %[[ALLOC_1:.*]], %[[ALLOC_2:.*]]) <{kernel = @Kernels::@kernel_1, operandSegmentSizes = array<i32: 0, 1, 1, 1, 1, 1, 1, 1, 0, 3>}> : (!gpux.StreamType, index, index, index, index, index, index, memref<8xf32>, memref<8xf32>, memref<8xf32>) -> ()
+  // CHECK: "gpux.launch_func"(%[[STREAM]], %[[C8]], %[[C1]], %[[C1]], %[[C1]], %[[C1]], %[[C1]], %[[ALLOC_0]], %[[ALLOC_1]], %[[ALLOC_2]]) <{kernel = @Kernels::@kernel_1, operandSegmentSizes = array<i32: 0, 1, 1, 1, 1, 1, 1, 1, 0, 3>}> : (!gpux.StreamType, index, index, index, index, index, index, memref<8xf32>, memref<8xf32>, memref<8xf32>) -> ()
   gpu.launch_func @Kernels::@kernel_1 blocks in (%c8, %c1, %c1) threads in (%c1, %c1, %c1) args(%memref : memref<8xf32>, %memref_1 : memref<8xf32>, %memref_2 : memref<8xf32>)
   gpu.dealloc  %memref : memref<8xf32>
   gpu.dealloc  %memref_1 : memref<8xf32>
   gpu.dealloc  %memref_2 : memref<8xf32>
-  // CHECK: "gpux.destroy_stream"(%[[STREAM:.*]]) : (!gpux.StreamType) -> ()
+  // CHECK: "gpux.destroy_stream"(%[[STREAM]]) : (!gpux.StreamType) -> ()
   return
 }
 
