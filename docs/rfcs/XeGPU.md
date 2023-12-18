@@ -31,11 +31,11 @@ Below is a summary.
 
 The XeGPU dialect supports lowering from [XeTile dialects]{./XeTile.md}. The tile-based XeTile operation can be further decomposed to multiple XeGPU ops. For example, XeTile.load_tile operation is lowered to XeGPU’s load_nd or load_gather operations. Compared with the XeTile dialect, the XeGPU dialect works with even smaller matrix sizes, since XeGPU operations map to one hardware instruction in most cases.  
 
-XeGPU supports two flavors of load/store operations: n-dimension load (nd load) and scattered load. Both need a tensor descriptor to describe the addresses/offsets to a data block. The descriptor is used for load/store/prefetch, and then updated for reuse with the next data block. Nd_load can be used to map to PVC’s 1D load, 2D load, or future nd load. Scattered load requires a special tensor descriptor, which contains one separate address offset for each WI thread.  
+XeGPU supports two flavors of load/store operations: n-dimension load (nd load) and scattered load. Both need a tensor descriptor to describe the addresses/offsets to a data block. The descriptor is used for load/store/prefetch, and then updated for reuse with the next data block. Nd_load can be used to map to 1D load, 2D load, or nd load. Scattered load requires a special tensor descriptor, which contains one separate address offset for each WI thread.  
 
 `create_nd_tdesc` creates a tensor descriptor for an n-dimensional tensor, which describes a subview of an n-dimensional base tensor. The information of the base tensor is passed as operands including base address, offsets, and strides. The shape and element data type of the tensor view (subtensor) are specified in the output tensor_desc data type, and they must be known at the compile time. The tensor_desc design is extensible for future Xe hardware to support higher-dimension tensors. n-dimension tensor descriptor requires “n” number of base_shape and base_stride for the base nd-tile, “n” number of offsets.  
 
-The example below creates a 2D tensor_desc with base matrix address, shapes, strides, and the offsets of the 2D subtensor. the tensor_desc “remembers” the base tensor buffer’s information, so when it is used to load the subtensor, lowering will handle the out-of-boundary access implicitly and preferably using hardware auto-padding features for the out-of-boundary elements. On PVC, the stride of the innermost dimension (base_stride[0]) must be 1.
+The example below creates a 2D tensor_desc with base matrix address, shapes, strides, and the offsets of the 2D subtensor. The tensor_desc “remembers” the base tensor buffer’s information, so when it is used to load the subtensor, lowering will handle the out-of-boundary access implicitly and preferably using hardware auto-padding features for the out-of-boundary elements. For most Xe GPU targets, the stride of the innermost dimension (base_stride[0]) must be 1.
 
 ```mlir
  #sg_map_a = xegpu.sg_map<wi_layout = [2, 8], wi_data = [1, 2]>
@@ -92,9 +92,9 @@ For 1D tensor description, the base_shape and base_stride are optional, the attr
   %result = XeGPU.load_nd %tdesc2 {L1_hint = uncached, L3_hint = uncached, mode = vc} :
           tensor_desc<8x16xbf16> into vector<8x16xbf16>
 ```
-Attributes `L1_hint`, `L2_hint`, and `L3_hint` can be applied to Load_nd. They serve as hint directives for different levels of the cache hierarchy. On PVC, the cache directive for load could be "uncached, cached, streaming, read_invaldiate".  Streaming means that the data is cached but is more likely to be swapped out, and read_invaldiate simply invalidates the cache line after read. For write, cache policy could be "uncached, write_through, write_back, streaming". Write_through writes to the next level cache immediately, and write_back holds the modification until the cache line is kicked out due to the cache replacement policy.  PVC uses L1_hint and L3_hint and omits L2_hint.  There are only a few valid combinations between L1_hint and L3_hint for PVC.  
+Attributes `L1_hint`, `L2_hint`, and `L3_hint` can be applied to Load_nd. They serve as hint directives for different levels of the cache hierarchy. The cache directive for load could be "uncached, cached, streaming, read_invaldiate".  Streaming means that the data is cached but is more likely to be swapped out, and read_invaldiate simply invalidates the cache line after read. For write, cache policy could be "uncached, write_through, write_back, streaming". Write_through writes to the next level cache immediately, and write_back holds the modification until the cache line is kicked out due to the cache replacement policy.  An Xe GPU target may use L1_hint and L3_hint and omits L2_hint.  There are only a few valid combinations between L1_hint and L3_hint for a certain Xe GPU target.  
 
-Attribute `transpose` specifies the dimensions to be transposed during the load. On the backward path of training model computation, the input matrix needs to be transposed. The operation definition supports all data types, but hardware may have limitations. PVC only supports data types with 4-byte (DW) and 8-byte (DQ).  
+Attribute `transpose` specifies the dimensions to be transposed during the load. On the backward path of training model computation, the input matrix needs to be transposed. The operation definition supports all data types, but hardware may have limitations. An Xe GPU target may only support data types with size of 4-byte (DW) or 8-byte (DQ).  
 ```mlir
   #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
   %at = XeGPU.load_nd %tdesc1 {transpose = [1,0]} :
@@ -106,7 +106,7 @@ Attribute `transpose` specifies the dimensions to be transposed during the load.
 
 Attribute `vnni_axis` supports VNNI transform for low-precision data types like fp16, bf16, and int8. VNNI transformation takes multiple low-precision data elements along the column dimension and fits them into 32-bit data along the row dimension. It effectively splits a 2D matrix [col, row] to be 3-d matrix [col/vnni_factor, row, vnni_factor] when vnni_axis is specified to be axis 0.  When vnni_axis is specified as axis 1, the VNNI transformation doesn’t change the layout but splits the VNNI axis to 2 axes.  
 
-PVC only supports loading with VNNI transformation for low-precision data types like fp16, bf16, and int8. The VNNI layout must be applied to the weight matrix for the DPAS operation, with vnni_axis being set to 0.
+An Xe GPU target may only support loading with VNNI transformation for low-precision data types like fp16, bf16, and int8. The VNNI layout must be applied to the weight matrix for the DPAS operation, with vnni_axis being set to 0.
 ```mlir  
   #sg_map_b = xegpu.sg_map<wi_layout = [1, 16], wi_data = [2, 1]>
   %bt = XeGPU.load_nd %tdesc1 {vnni_axis = 0} :
@@ -182,7 +182,7 @@ Attributes `L1_hint`, `L2_hint`, `L3_hint`, and `memory_scope` can be applied to
   %scatter_tdesc0 = XeGPU.create_tdesc %mem_addr, %offsets, mode = vc} :
      	uint64, Vector<16 x index>, into tensor_desc<16 x uint8, #scattered>
 ```
-The example above creates a tensor_desc, which describes the memory base address and offsets for 16 uint8 values in the memory.  For PVC, the number of work items (SIMD lanes) on PVC can be 1, 2, 4, 8, 16, 32.
+The example above creates a tensor_desc, which describes the memory base address and offsets for 16 uint8 values in the memory.  The number of work items (SIMD lanes) can be 1, 2, 4, 8, 16, 32.
 ```mlir  
   %scatter_tdesc_chunk = XeGPU.create_tdesc, %base_addr, %offsets
 		{memory_scope=slm, chunk_size_per_lane=8, mode = vc} :
@@ -190,7 +190,7 @@ The example above creates a tensor_desc, which describes the memory base address
 ```
 Attribute `memory_scope` indicates whether the tensor is located in the global (default) or shared local memory.
 
-Attribute `chunk_size_per_lane` specifies the size being loaded per each work item (WI). Its default value is 1, but can be set to 2, 3, 4, 8 on PVC. Each WI thread may load a consecutive chunk of data elements from the memory but put them along the column dimension.
+Attribute `chunk_size_per_lane` specifies the size being loaded per each work item (WI). Its default value is 1, but can be set to 2, 3, 4, 8. Each WI thread may load a consecutive chunk of data elements from the memory but put them along the column dimension.
 
 `load_gather` (aka. load) load data per each work item. The output vector size is consistent with the number of WI threads, as the output describes the data being loaded at the subgroup level. `load_gather` is VC mode only.
 
@@ -199,7 +199,7 @@ Attribute `chunk_size_per_lane` specifies the size being loaded per each work it
         	  tensor_desc<16xuint8, #Scattered>, vector<16xi1> into vector<16xuint8>
 ```
 
-When loading a tensor_desc with chunk_size_per_lane attribute, the output vector must be 2D vector, with the chunk being treated as a new dimension. On PVC, the consecutive 1D tensor data being loaded can be viewed as a 2D tensor loaded with transposition, with the chunk dimension transposed to the outer dimension.
+When loading a tensor_desc with chunk_size_per_lane attribute, the output vector must be 2D vector, with the chunk being treated as a new dimension. The consecutive 1D tensor data being loaded can be viewed as a 2D tensor loaded with transposition, with the chunk dimension transposed to the outer dimension.
 
 ```mlir  
 %result = XeGPU.load_gather %scatter_tdesc_chunk, %mask {L1 = cached, L2 = uncached, transpose=[1,0], mode = vc} :
@@ -207,7 +207,7 @@ When loading a tensor_desc with chunk_size_per_lane attribute, the output vector
 ```
 The mask operand masks out memory access so that it is safe to pass out-of-boundary addresses/offsets as long as they are masked. There is no modification to the result vector registers for the masked SIMD lanes.  For tensor_desc with chunk_size_per_lane attribute, the mask applies to the first dimension in memory and not the second dimension (Chunk Size).
 
-Load_gather is a slightly higher level operation than PVC’s native hardware instruction. When PVC performs load_gather, it loads each low-precision element to a uint32, then a separate instruction is needed to further gather them from the registers to fully-packed vectors. Load_gather returns a vector of uint8 fully packed.
+Load_gather is a slightly higher level operation than native hardware instruction. When the hardware performs load_gather, it may load each low-precision element to a uint32. In this case, the lowering uses an additional instruction to further gather the value from the registers to fully-packed vectors. Load_gather returns a vector of uint8 fully packed.
 The data type being loaded could be uint8, uint16, uint32, uint64.  
 
 `store_scatter` (aka. store) stores data to the memory specified by tensor_desc.  `store_scatter` is VC mode only.
@@ -235,7 +235,7 @@ Attributes `L1_hint`, `L2_hint`, and `L3_hint` can be applied to prefetch.
           vector<16xbf16>, tensor_desc<16xbf16, #scattered>, vector<16xi1> to vector<16xbf16>
 ```
 XeGPU.atomic_rmw reuses the arith dialect attribute, ::mlir::arith::AtomicRMWKindAttr.
-PVC doesn’t support atomic operation on BF16/FP16 add. The BF16/FP16 matrix needs to be converted to FP32 to perform the reduction.
+In case that certain Xe GPU target does not support atomic operation for a certain data type, the user needs to convert the matrix to the supported datatype to perform the atomic operation.
 
 alloc_nbarrier allocates named barriers. Named barrier is workgroup level resource, shared by all subgroups.
 ```mlir
