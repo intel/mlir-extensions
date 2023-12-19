@@ -25,6 +25,8 @@ XeTile provides a middle-level abstraction for matmul operation and sits between
 |update_tile_offset	| operation ::=XeTile.update_tile_offset $tile, $delta0, $delta1: type($tile), index, index-> type($tile)	| %tdesc_updated = XeTile.update_nd_offset %tdesc, %offset_x, offset_y tensor_desc<32x64xbf16>, index, index -> tensor_desc<32x64xbf16> |
 |prefetch_tile	| operation ::=XeTile.prefetch_tile $tile, attr-dict: type($tile)	  | XeTile.prefetch_tile %coop_tile: tile<16x32xbf16> |
 |tile_mma	| operation ::=XeTile.tile_mma $matC, $matA, $matB attr_dict: type($matC), type($matA), type($matB)-> type($res)	 | %vector_c = XeTile.tile_mma %vector_c, %vector_a, %vector_b : vector<64x128xfloat>, vector<64x32xbf16>, vector<32x128xbf16> into vector<64x128xfloat>  |
+|tile_pack	| operation ::=XeTile.tile_pack $matA attr_dict: type($matA) -> type($res)	 | %vector_a = XeTile.tile_pack %vector_b inner_blocks=[16, 16] : vector<64x32xfloat> into vector<4x2x16x16xfloat>  |
+|tile_unpack	| operation ::=XeTile.tile_upack $matA attr_dict: type($matA) -> type($res)	 | %vector_a = XeTile.tile_unpack %vector_b : vector<1x2x64x16xfloat> into vector<64x32xbf16> |
 
 To create a 2D Tile memory descriptor, the user needs to set up a tile (init_tile) describing a 2D region within the global memory. Setting up a tile requires the shape of the parent tile and the underneath physical memory buffer size, known as the base matrix. The base matrix must be 2D and must be contiguous. The XeTile takes the base matrix address pointer, shape, and strides, and the tile’s offsets and shape. Offsets, strides, and shapes are for two dimensions and in the number of elements. base_stride[0] describes the number of elements between the two rows, describing the width of the underneath physical memory buffer, and *%base_strides[1] must be 1, as the innermost dimension of the base matrix must be contiguous. The current version only supports 2D memref with a row-major layout.  
 
@@ -91,17 +93,37 @@ A `tile_mma` variant without vector_c initialization.
 		tile<64x64xbf16>, index, index into tile <64x64xbf16>
 ```
 
+`tile_pack` packs a 2D vector, representing the loaded value from 2D tile, to a 4D vector with an inner block size. The 4D vector was introduced to support blocking to fit the hardware matrix operation sizes.  The blocking follows an implicit rule: dim[0] is split to dim[0] and dim[2], and dim[1] is split to dim[1] and dim[3]. The dim[2] and dim[3] of result 4D vector must be same as the size of `inner_blocks` attribute. 
+
+```mlir
+  %0 = XeTile.tile_pack %1 inner_blocks = [16, 16]
+    : vector<64x32xf32> -> vector<4x2x16x16xf32>
+```
+`tile_unpack` unpacks a 4D blocked vector back to original 2D unpacked 2D vector. 
+`tile_unpack`
+```mlir
+  %0 = XeTile.tile_unpack %1 inner_blocks = [64, 16]
+    : vector<1x2x64x16xf32> -> vector<64x32xf32>
+```
+The tile_pack and tile_unpack operation is similar to pack and unpack operation of tensor dialect. The source vector must be a 2D dimension vector, and no permutation is allowed for the result 4D vector, so effectively the blocking effect is identical to tensor pack/unpack operation with inner_dims_pos = [0,1] inner_dims_pos = [0, 1]. 
+
+`inner_blocks` attribute describes the block size for each memory load and store operation when the tile is being loaded. The block size for load may be larger than the block size for MMA operation. 
+
+`order` attribute describes the order of the tile elements stored in the memory. "0" indicates the fastest changing dimension. So if the base matrix is stored as row major, order is specified as [1, 0]. If the base matrix is stored as column major, order is specified as [0, 1]. The default is row major. 
+
 `xetile.wg_map` mapping attribute allows XeTile operation to work at the workgroup level. Without these attributes, the XeTile works at the subgroup level. With wg_map attributes, XeTile operations can be applied to workgroup-level tile sizes. The attribute `xetile.wg_map` guide the lowering from the workgroup level to the subgroup level by specifying how the data is distributed across parallel subgroups.
 `xetile.sg_map` attributes allows the user to further specify the mapping of each data element to each work item thread. It works the same way as `xegpu.sg_map` defined in XeGPU dialect.
 `xetile.wg_map` and `xeTile.sg_map` maps give the user full control over the lowering process so that the user can tune the tiling size for both the workgroup and subgroup to tune the performance.
+
+
 
 Below is an example.
 ```mlir
    #wg_map_a = #xetile.wg_map<sg_layout = [2, 2], sg_data = [32, 128]>
    #sg_map_a = #xetile.sg_map<wi_layout = [2, 8], wi_data = [1, 2]>
-   #xe_map_a = #xetile.xe_map<wg = #wg_map_a, sg = #sg_map_a>
+   #tile_attr = #xetile.tile_attr<wg = #wg_map_a, sg = #sg_map_a, order = [0, 1], inner_blocks=[32,16]>
 
-   %wg_tile = xetile.init_tile %A[%m, %c0] : memref<1024x1024xf16> -> !xetile.tile<128x128xf16, #xe_map_a>
+   %wg_tile = xetile.init_tile %A[%m, %c0] : memref<1024x1024xf16> -> !xetile.tile<128x128xf16, #tile_attr>
 ```
 Within the `xetile.wg_map`, `sg_layout` specifies the subgroup layout, and `sg_data` specifies the tile size owned by each subgroup. The tile created by init_tile is a workgroup-level tile. In the example above, sg_layout [2,2] means that each workgroup has 4 subgroups with 2 rows and 2 columns. sg_data [32,128] means that each subgroup works on a submatrix [32, 128]. The data elements assigned to each subgroup thread must be contiguous.
 
