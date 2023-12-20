@@ -55,7 +55,7 @@ Attribute `mode` indicates whether the XeGPU operation is working under “Vecto
 
 Any XeGPU operation working at VC mode needs to explicitly declare this attribute. The default mode is SIMT mode. When VC mode is on, the sg_map attribute should not be presented in the associated tensor_desc.
 
-create_nd_tdesc creates a tensor descriptor that covers an array of 2D subtensor. The size being covered by the tensor_desc is multiplied with the array_length along the innermost dimension. The subtensor being created in the example below covers 8x32xbf16. 
+create_nd_tdesc creates a tensor descriptor that covers an array of 2D subtensor. The size being covered by the tensor_desc is multiplied with the array_length along the innermost dimension. The subtensor being created in the example below covers 8x32xbf16.
 ```mlir
 %tdesc2 = XeGPU.create_nd_tdesc %mem_addr, %offsets:2, %base_shape:2,%base_stride:2 {mode =vc}
 		: uint64, index, index, index, index, index, index
@@ -77,11 +77,11 @@ create_nd_tdesc also accepts a memref as input instead of a memory address, shap
 The example below accepts a memory address and an offset and creates a 1D tensor_desc. The tensor_desc describes a 1D vector that is loaded by all WI threads combined within the subgroup.
 ```mlir
   #sg_map_a = xegpu.sg_map<wi_layout = [1, 16], wi_data = [1, 1]>
-  #tdesc_attr1 = !xegpu.tdesc_attr< memory_scope=slm, boundary_check=false, sg= #sg_map_a> 
+  #tdesc_attr1 = !xegpu.tdesc_attr< memory_scope=slm, boundary_check=false, sg= #sg_map_a>
   %tdesc1 = XeGPU.create_nd_tdesc %mem_addr, %offset :
 		uint64, index into tensor_desc<16xbf16, #tdesc_attr1>
 
-  #tdesc_attr2 = !xegpu.tdesc_attr< memory_scope=slm, boundary_check=false> 
+  #tdesc_attr2 = !xegpu.tdesc_attr< memory_scope=slm, boundary_check=false>
   %tdesc2 = XeGPU.create_nd_tdesc %mem_addr, %offset {mode = vc} :
 		uint64, index into tensor_desc<16xbf16, #tdesc_attr2>
 ```
@@ -192,7 +192,7 @@ Attributes `L1_hint`, `L2_hint`, `L3_hint`, and `memory_scope` can be applied to
 The example above creates a tensor_desc, which describes the memory base address and offsets for 16 uint8 values in the memory.  The number of work items (SIMD lanes) can be 1, 2, 4, 8, 16, 32.
 ```mlir  
 
-  #tdesc_attr = !xegpu.tdesc_attr< memory_scope=slm, scattered=true> 
+  #tdesc_attr = !xegpu.tdesc_attr< memory_scope=slm, scattered=true>
   %scatter_tdesc_chunk = XeGPU.create_tdesc, %base_addr, %offsets
 		{chunk_size_per_lane=8, mode = vc} :
 		uint64, vector<16xindex> into tensor_desc<16x8xuint16, #tdesc_attr>
