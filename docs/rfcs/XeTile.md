@@ -51,7 +51,7 @@ To create a 2D Tile memory descriptor, the user needs to set up a tile (init_til
 `init_tile` with an `order` to access the base matrix. The `order` attribute describes the order of the tile elements stored in the memory. "0" indicates the fastest-changing dimension. So if the base matrix is stored as row-major, the order is specified as [1, 0]. If the base matrix is stored as column major, the order is specified as [0, 1]. The default is row-major. The output tile carries the `order` attribute in its attribute set. 
 
 ```mlir
-  #tile_attr = #xetile.tile_ttr<order = [0, 1]>
+  #tile_attr = #xetile.tile_attr<order = [0, 1]>
   %tile0 = XeTile.init_tile %base_memref, [%tile_offset:2]:
      memref<128x128xbf16> into tile<64x32xbf16, #tile_attr>
 ```
@@ -59,7 +59,7 @@ To create a 2D Tile memory descriptor, the user needs to set up a tile (init_til
 `init_tile` with an `inner_block` for 2D block access of the base matrix. The `inner_blocks` attribute describes the block size for each memory load and store operation when the tile is being loaded. The block size for load may be larger than the block size for MMA operation. The output tile carries the `inner_block` attribute in its attribute set. 
 
 ```mlir
-  #tile_attr = #xetile.tile_ttr<inner_blocks=[16,16]>
+  #tile_attr = #xetile.tile_attr<inner_blocks=[16,16]>
   %tile0 = XeTile.init_tile %base_memref, [%tile_offset:2]:
      memref<128x128xbf16> into tile<64x32xbf16, #tile_attr>
 ```
@@ -77,9 +77,9 @@ Attribute `padding` specifies the padding value for the out-of-boundary access. 
   %vector_a = XeTile.load_tile %tile_a {padding = 1.0} :
      tile<64x64xbf16> into vector<64x64xb16>
 ```
-`load_tile` needs to be used together with the tile_mma.
+`load_tile` needs to be used with the tile_mma.
 
-`load_tile` loads a tile with an `order` attribute. The `order` attribute only affects the physical memory address calculation for the tile, however, it doesn't change the logical representation of loading a 2D tile to a 2D vector. There is no need to reverse the order of vector length at the XeTile level regardless of the `order` attribute value. 
+`load_tile` loads a tile with an `order` attribute. The `order` attribute affects the indexing order for the tile access, however, it doesn't change the logical representation of loading a 2D tile to a 2D vector. There is no need to reverse the order of vector length at the XeTile level regardless of the `order` attribute value. 
 ```mlir
   #tile_attr = #xetile.tile_ttr<order = [0, 1]>
   %vector_a = XeTile.load_tile %tile_a :
@@ -98,7 +98,7 @@ Attribute `padding` specifies the padding value for the out-of-boundary access. 
   XeTile.store_tile %tile_a, %vector_a :
    vector<64x64xbf16> into tile<64x64xbf16>
 ```
-`store_tile` loads a tile with an `order` attribute. With the `order` attribute, there is no need to reorder the 2D vector dimension before saving it to a column-major matrix storage. 
+`store_tile` stores a tile according to the `order` attribute. With the `order` attribute, there is no need to reorder the 2D vector dimensions. The op does the reordering. 
 ```mlir
   #tile_attr = #xetile.tile_ttr<order = [0, 1]>
   %vector_a = XeTile.store_tile %tile_a :
@@ -146,7 +146,7 @@ A `tile_mma` variant without vector_c initialization.
   %0 = XeTile.tile_pack %1 inner_blocks = [16, 16]
     : vector<64x32xf32> -> vector<4x2x16x16xf32>
 ```
-`tile_unpack` unpacks a 4D blocked vector back to original 2D unpacked 2D vector. 
+`tile_unpack` unpacks a 4D blocked vector back to original unpacked 2D vector. 
 `tile_unpack`
 ```mlir
   %0 = XeTile.tile_unpack %1 inner_blocks = [64, 16]
