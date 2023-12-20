@@ -48,7 +48,7 @@ To create a 2D Tile memory descriptor, the user needs to set up a tile (init_til
      i64 into tile<8x16xbf16>
 ```
 
-`init_tile` with an `order` to access the base matrix. The `order` attribute describes the order of the tile elements stored in the memory. "0" indicates the fastest-changing dimension. So if the base matrix is stored as row-major, the order is specified as [1, 0]. If the base matrix is stored as column major, the order is specified as [0, 1]. The default is row-major. The output tile carries the `order` attribute in its attribute set. 
+`init_tile` with an `order` to access the base matrix. The `order` attribute describes the order of the tile elements stored in the memory. "0" indicates the fastest-changing dimension. So if the base matrix is stored as row-major, the order is specified as [1, 0]. If the base matrix is stored as column major, the order is specified as [0, 1]. The default is row-major. The output tile carries the `order` attribute in its attribute set.
 
 ```mlir
   #tile_attr = #xetile.tile_attr<order = [0, 1]>
@@ -56,7 +56,7 @@ To create a 2D Tile memory descriptor, the user needs to set up a tile (init_til
      memref<128x128xbf16> into tile<64x32xbf16, #tile_attr>
 ```
 
-`init_tile` with an `inner_block` for 2D block access of the base matrix. The `inner_blocks` attribute describes the block size for each memory load and store operation when the tile is being loaded. The block size for load may be larger than the block size for MMA operation. The output tile carries the `inner_block` attribute in its attribute set. 
+`init_tile` with an `inner_block` for 2D block access of the base matrix. The `inner_blocks` attribute describes the block size for each memory load and store operation when the tile is being loaded. The block size for load may be larger than the block size for MMA operation. The output tile carries the `inner_block` attribute in its attribute set.
 
 ```mlir
   #tile_attr = #xetile.tile_attr<inner_blocks=[16,16]>
@@ -79,7 +79,7 @@ Attribute `padding` specifies the padding value for the out-of-boundary access. 
 ```
 `load_tile` needs to be used with the tile_mma.
 
-`load_tile` loads a tile with an `order` attribute. The `order` attribute affects the indexing order for the tile access, however, it doesn't change the logical representation of loading a 2D tile to a 2D vector. There is no need to reverse the order of vector length at the XeTile level regardless of the `order` attribute value. 
+`load_tile` loads a tile with an `order` attribute. The `order` attribute affects the indexing order for the tile access, however, it doesn't change the logical representation of loading a 2D tile to a 2D vector. There is no need to reverse the order of vector length at the XeTile level regardless of the `order` attribute value.
 ```mlir
   #tile_attr = #xetile.tile_ttr<order = [0, 1]>
   %vector_a = XeTile.load_tile %tile_a :
@@ -98,7 +98,7 @@ Attribute `padding` specifies the padding value for the out-of-boundary access. 
   XeTile.store_tile %tile_a, %vector_a :
    vector<64x64xbf16> into tile<64x64xbf16>
 ```
-`store_tile` stores a tile according to the `order` attribute. With the `order` attribute, there is no need to reorder the 2D vector dimensions. The op does the reordering. 
+`store_tile` stores a tile according to the `order` attribute. With the `order` attribute, there is no need to reorder the 2D vector dimensions. The op does the reordering.
 ```mlir
   #tile_attr = #xetile.tile_ttr<order = [0, 1]>
   %vector_a = XeTile.store_tile %tile_a :
@@ -122,7 +122,7 @@ Attribute `padding` specifies the padding value for the out-of-boundary access. 
      vector<64x128xfloat>, vector<64x32xbf16>, vector<32x128xbf16>
 	   into vector<64x128xfloat>  
 
-To support blocking, `tile_mma` also works on 4D vectors. Since dimension 1 is split into dimensions 1 and 3, the reduction of matrix multiplication is along these two dimensions. 
+To support blocking, `tile_mma` also works on 4D vectors. Since dimension 1 is split into dimensions 1 and 3, the reduction of matrix multiplication is along these two dimensions.
 %vector_c = XeTile.tile_mma %vector_a, %vector_b, %vector_c :
      vector<8x8x8x16xfloat>, vector<8x4x8x8xbf16>, vector<4x8x8x16xbf16>
 	   into vector<8x8x8x16xfloat>  
@@ -140,21 +140,21 @@ A `tile_mma` variant without vector_c initialization.
 		tile<64x64xbf16>, index, index into tile <64x64xbf16>
 ```
 
-`tile_pack` packs a 2D vector, representing the loaded value from 2D tile, to a 4D vector with an inner block size. The 4D vector was introduced to support blocking to fit the hardware matrix operation sizes.  The blocking follows an implicit rule: out_dim[0] = in_dim[0]/inner_blocks[0] , out_dim[1] = in_dim[1]/inner_blocks[1], out_dim[2] = inner_blocks[0], and out_dim[3] = inner_blocks[1]. The dim[2] and dim[3] of result 4D vector must be same as the size of `inner_blocks` attribute. 
+`tile_pack` packs a 2D vector, representing the loaded value from 2D tile, to a 4D vector with an inner block size. The 4D vector was introduced to support blocking to fit the hardware matrix operation sizes.  The blocking follows an implicit rule: out_dim[0] = in_dim[0]/inner_blocks[0] , out_dim[1] = in_dim[1]/inner_blocks[1], out_dim[2] = inner_blocks[0], and out_dim[3] = inner_blocks[1]. The dim[2] and dim[3] of result 4D vector must be same as the size of `inner_blocks` attribute.
 
 ```mlir
   %0 = XeTile.tile_pack %1 inner_blocks = [16, 16]
     : vector<64x32xf32> -> vector<4x2x16x16xf32>
 ```
-`tile_unpack` unpacks a 4D blocked vector back to original unpacked 2D vector. 
+`tile_unpack` unpacks a 4D blocked vector back to original unpacked 2D vector.
 `tile_unpack`
 ```mlir
   %0 = XeTile.tile_unpack %1 inner_blocks = [64, 16]
     : vector<1x2x64x16xf32> -> vector<64x32xf32>
 ```
-The tile_pack and tile_unpack operation is similar to pack and unpack operation of tensor dialect. The source vector must be a 2D dimension vector, and no permutation is allowed for the result 4D vector, so effectively the blocking effect is identical to tensor pack/unpack operation with inner_dims_pos = [0,1] inner_dims_pos = [0, 1]. 
+The tile_pack and tile_unpack operation is similar to pack and unpack operation of tensor dialect. The source vector must be a 2D dimension vector, and no permutation is allowed for the result 4D vector, so effectively the blocking effect is identical to tensor pack/unpack operation with inner_dims_pos = [0,1] inner_dims_pos = [0, 1].
 
-atomic_rmw atomically reads, modifies, and writes back data to the memory specified by the tile. 
+atomic_rmw atomically reads, modifies, and writes back data to the memory specified by the tile.
   %ret_value = XeTile.atomic_rmw “addf” %value, %tile:
           vector<8x16xbf16>, tile<8x16xbf16> to vector<8x16xbf16>
 XeTile.atomic_rmw reuses the arith dialect attribute, mlir::arith::AtomicRMWKindAttr.
