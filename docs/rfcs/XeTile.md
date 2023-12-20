@@ -52,7 +52,7 @@ To create a 2D Tile memory descriptor, the user needs to set up a tile (init_til
 
 ```mlir
   #tile_attr = #xetile.tile_ttr<order = [0, 1]>
-  %tile0 = XeTile.init_tile %base_memref, [%tile_offset:2] {order = [0, 1]}:
+  %tile0 = XeTile.init_tile %base_memref, [%tile_offset:2]:
      memref<128x128xbf16> into tile<64x32xbf16, #tile_attr>
 ```
 
@@ -60,7 +60,7 @@ To create a 2D Tile memory descriptor, the user needs to set up a tile (init_til
 
 ```mlir
   #tile_attr = #xetile.tile_ttr<inner_blocks=[16,16]>
-  %tile0 = XeTile.init_tile %base_memref, [%tile_offset:2] {inner_blocks=[16,16]}:
+  %tile0 = XeTile.init_tile %base_memref, [%tile_offset:2]:
      memref<128x128xbf16> into tile<64x32xbf16, #tile_attr>
 ```
 
@@ -71,11 +71,7 @@ With the tile date type, XeTile supports load_tile, prefetch_tile, and store_til
   %vector_a = XeTile.load_tile %tile_a :
      tile<64x64xbf16> into vector<64x64xb16>
 ```
-Attribute `transpose` specifies the dimensions being transposed along the load. It is commonly used for the GEMM on the backward path of DNN model, where one of input matrices needs to be transposed for matmul operation.
-```mlir
-  %vector_a = XeTile.load_tile %tile_a {transpose = [0, 1]} :
-     tile<32x64xbf16> into vector<64x32xbf16>
-```
+
 Attribute `padding` specifies the padding value for the out-of-boundary access. The default value is zero.  
 ```mlir
   %vector_a = XeTile.load_tile %tile_a {padding = 1.0} :
@@ -144,7 +140,7 @@ A `tile_mma` variant without vector_c initialization.
 		tile<64x64xbf16>, index, index into tile <64x64xbf16>
 ```
 
-`tile_pack` packs a 2D vector, representing the loaded value from 2D tile, to a 4D vector with an inner block size. The 4D vector was introduced to support blocking to fit the hardware matrix operation sizes.  The blocking follows an implicit rule: dim[0] is split to dim[0] and dim[2], and dim[1] is split to dim[1] and dim[3]. The dim[2] and dim[3] of result 4D vector must be same as the size of `inner_blocks` attribute. 
+`tile_pack` packs a 2D vector, representing the loaded value from 2D tile, to a 4D vector with an inner block size. The 4D vector was introduced to support blocking to fit the hardware matrix operation sizes.  The blocking follows an implicit rule: out_dim[0] = in_dim[0]/inner_blocks[0] , out_dim[1] = in_dim[1]/inner_blocks[1], out_dim[2] = inner_blocks[0], and out_dim[3] = inner_blocks[1]. The dim[2] and dim[3] of result 4D vector must be same as the size of `inner_blocks` attribute. 
 
 ```mlir
   %0 = XeTile.tile_pack %1 inner_blocks = [16, 16]
