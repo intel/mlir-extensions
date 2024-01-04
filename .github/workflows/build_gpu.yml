@@ -11,22 +11,23 @@ on:
 jobs:
   build:
     if: github.repository == 'intel-innersource/frameworks.ai.mlir.mlir-extensions'
-    runs-on: gpu
+    runs-on: [self-hosted, pvc, glados]
     timeout-minutes: 450
 
     env:
       TBB_VER: 2021.6.0
       LEVEL_ZERO_VER: v1.8.1
-      BUILD_ROOT: /home/gta/actions-runner/_work/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions/build_gpu
-      HOME_DIR: /home/gta/actions-runner/_work/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions/build_gpu/home
-      HOME: /github/home
       TBB_URL_PREFIX: https://github.com/oneapi-src/oneTBB/releases/download/
       LLVM_SHA_FILE: llvm_version.txt
 
     steps:
       - name: Check build root
         run: |
-          if [ ! -d "$BUILD_ROOT" ]; then mkdir -p $BUILD_ROOT; fi
+            export BUILD_ROOT=$(pwd)/build_gpu
+            echo BUILD_ROOT=${BUILD_ROOT} >> $GITHUB_ENV
+            export HOME_DIR=${BUILD_ROOT}/home
+            echo HOME_DIR=${HOME_DIR} >> $GITHUB_ENV
+            if [ ! -d "$BUILD_ROOT" ]; then mkdir -p $BUILD_ROOT; fi
 
       - name: Clear home dir
         run: |
@@ -37,9 +38,9 @@ jobs:
       - uses: actions/checkout@v3
         with:
           repository: intel-innersource/frameworks.ai.mlir.mlir-extensions
-          token: ${{secrets.WORKFLOW_TOKEN}}
+          token: ${{ secrets.WORKFLOW_TOKEN }}
           fetch-depth: 0
-          path: ${{env.HOME_DIR}}/frameworks.ai.mlir.mlir-extensions
+          path: ${{ env.HOME_DIR }}/frameworks.ai.mlir.mlir-extensions
 
       - name: Setup Level Zero
         shell: bash -l {0}
@@ -73,7 +74,7 @@ jobs:
           # /home/gta/anaconda3/envs/imex-dev/bin/python $HOME_DIR/mlir-extensions/build/bin/imex-runner.py -i $HOME_DIR/mlir-extensions/test/Integration/Dialect/Linalg/OpenCL/linalg_addf.mlir -e main --pass-pipeline-file=$HOME_DIR/mlir-extensions/test/Integration/Dialect/Linalg/OpenCL/linalg-to-gpux-opencl.pp -entry-point-result=void --shared-libs=$HOME_DIR/llvm-mlir/_mlir_install/lib/libmlir_runner_utils.so,$HOME_DIR/mlir-extensions/build/lib/liblevel-zero-runtime.so
       #- name: Run perf script
       #  run: |
-      #    cd ${{env.HOME_DIR}}/mlir-extensions/scripts
+      #    cd ${{ env.HOME_DIR }}/mlir-extensions/scripts
       #    ./run_perf_test.sh
 
       - name: Upload tests.txt
@@ -81,10 +82,10 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: tests.txt
-          path: ${{env.HOME_DIR}}/frameworks.ai.mlir.mlir-extensions/build/tests.txt
+          path: ${{ env.HOME_DIR }}/frameworks.ai.mlir.mlir-extensions/build/tests.txt
 
             #- name: Upload report.txt
             # uses: actions/upload-artifact@v2
             #with:
             #name: report.txt
-            #path: ${{env.HOME_DIR}}/frameworks.ai.mlir.mlir-extensions/scripts/report.txt
+            #path: ${{ env.HOME_DIR }}/frameworks.ai.mlir.mlir-extensions/scripts/report.txt

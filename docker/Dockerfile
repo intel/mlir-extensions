@@ -11,5 +11,5 @@ RUN set -ex \
     && echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" \
         | sudo tee /etc/apt/sources.list.d/oneAPI.list \
     && sudo apt-get update --yes \
-    && sudo apt-get install intel-opencl-icd clinfo intel-basekit --yes \
+    && sudo apt-get install build-essential cmake ninja-build intel-opencl-icd intel-level-zero-gpu clinfo intel-basekit --yes \
     && sudo rm -rf /var/lib/apt/lists/*

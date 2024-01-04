@@ -11,7 +11,7 @@ on:
 jobs:
   build:
     if: github.repository == 'intel-innersource/frameworks.ai.mlir.mlir-extensions'
-    runs-on: cpu1
+    runs-on: [self-hosted, pvc, glados]
     timeout-minutes: 450
 
     env:
@@ -23,7 +23,11 @@ jobs:
     steps:
       - name: Check build root
         run: |
-          if [ ! -d "$BUILD_ROOT" ]; then mkdir -p $BUILD_ROOT; fi
+          export BUILD_ROOT=$(pwd)/build_cpu
+            echo BUILD_ROOT=${BUILD_ROOT} >> $GITHUB_ENV
+            export HOME_DIR=${BUILD_ROOT}/home
+            echo HOME_DIR=${HOME_DIR} >> $GITHUB_ENV
+            if [ ! -d "$BUILD_ROOT" ]; then mkdir -p $BUILD_ROOT; fi
 
       - name: Clear home dir
         run: |
