@@ -27,15 +27,14 @@ namespace xetile {
 //   return TileType::get(shape.value_or(getShape()), elementType, encoding);
 // }
 
-static mlir::LogicalResult
-parseXeTileType(mlir::AsmParser &parser, llvm::SmallVector<int64_t> &shape,
-                mlir::Type &type, llvm::SmallVector<int64_t> &inner_blocks,
-                mlir::Attribute &xe_map) {
+static mlir::LogicalResult parseXeTileType(mlir::AsmParser &parser,
+                                           llvm::SmallVector<int64_t> &shape,
+                                           mlir::Type &type,
+                                           mlir::Attribute &tile_attr) {
   mlir::Builder odsBuilder(parser.getContext());
   llvm::SMLoc odsLoc = parser.getCurrentLocation();
   (void)odsLoc;
-  mlir::FailureOr<::imex::xetile::XeMapAttr> _result_xe_map;
-  mlir::FailureOr<llvm::SmallVector<int64_t>> _result_inner_blocks;
+  mlir::FailureOr<::imex::xetile::XeTileAttr> _result_tile_attr;
   llvm::SmallVector<int64_t> dimensions;
   if (parser.parseDimensionList(dimensions))
     return mlir::failure();
@@ -47,49 +46,16 @@ parseXeTileType(mlir::AsmParser &parser, llvm::SmallVector<int64_t> &shape,
   shape = std::move(dimensions);
   type = std::move(t);
 
-  bool shouldParseXeMap = true;
-
   if (mlir::succeeded(parser.parseOptionalComma())) {
-    // try to parse 'inner_blocks'
-    if (mlir::succeeded(parser.parseOptionalKeyword("inner_blocks"))) {
-      if (parser.parseEqual())
-        return mlir::failure();
-      if (parser.parseLSquare())
-        return mlir::failure();
-      // Parse variable 'inner_blocks'
-      _result_inner_blocks =
-          mlir::FieldParser<llvm::SmallVector<int64_t>>::parse(parser);
-      if (mlir::failed(_result_inner_blocks)) {
-        parser.emitError(parser.getCurrentLocation(),
-                         "failed to parse XeTile parameter 'inner_blocks' "
-                         "which is to be a `llvm::ArrayRef<int64_t>`");
-        return mlir::failure();
-      }
-      if (parser.parseRSquare())
-        return mlir::failure();
-
-      for (auto v : *_result_inner_blocks)
-        inner_blocks.push_back(v);
-
-      // check if there an additional comma, if so we need to parse XeMap
-      if (mlir::failed(parser.parseOptionalComma())) {
-        shouldParseXeMap = false;
-      }
+    _result_tile_attr =
+        mlir::FieldParser<::imex::xetile::XeTileAttr>::parse(parser);
+    if (mlir::failed(_result_tile_attr)) {
+      parser.emitError(parser.getCurrentLocation(),
+                       "failed to parse XeTile encoding parameter which is to "
+                       "be a `::imex::xetile::XeTileAttr`");
+      return mlir::failure();
     }
-
-    // Parse variable 'xe_map'
-    if (shouldParseXeMap) {
-      _result_xe_map =
-          mlir::FieldParser<::imex::xetile::XeMapAttr>::parse(parser);
-      if (mlir::failed(_result_xe_map)) {
-        parser.emitError(
-            parser.getCurrentLocation(),
-            "failed to parse XeTile encoding parameter which is to "
-            "be a `::imex::xetile::XeMapAttr`");
-        return mlir::failure();
-      }
-      xe_map = std::move(_result_xe_map->dyn_cast<mlir::Attribute>());
-    }
+    tile_attr = std::move(_result_tile_attr->dyn_cast<mlir::Attribute>());
   }
 
   return mlir::success();
@@ -97,8 +63,7 @@ parseXeTileType(mlir::AsmParser &parser, llvm::SmallVector<int64_t> &shape,
 
 static void printXeTileType(mlir::AsmPrinter &printer,
                             llvm::ArrayRef<int64_t> shape, mlir::Type type,
-                            llvm::ArrayRef<int64_t> inner_blocks,
-                            mlir::Attribute xe_map) {
+                            mlir::Attribute tile_attr) {
   for (int64_t dim : shape) {
     if (mlir::ShapedType::isDynamic(dim))
       printer << '?';
@@ -108,33 +73,20 @@ static void printXeTileType(mlir::AsmPrinter &printer,
   }
   printer << type;
 
-  if (inner_blocks.size()) {
+  if (tile_attr) {
     printer << ", ";
-    printer << "inner_blocks";
-    printer << ' ' << "=";
-    printer << ' ' << "[";
-    printer.printStrippedAttrOrType(inner_blocks);
-    printer << "]";
-  }
-
-  if (xe_map) {
-    printer << ", ";
-    printer.printStrippedAttrOrType(xe_map);
+    printer.printStrippedAttrOrType(tile_attr);
   }
 }
 
 mlir::LogicalResult
 TileType::verify(llvm::function_ref<mlir::InFlightDiagnostic()> emitError,
                  llvm::ArrayRef<int64_t> shape, mlir::Type elementType,
-                 llvm::ArrayRef<int64_t> inner_blocks,
                  mlir::Attribute encoding) {
-  if (inner_blocks.size() > 0 && inner_blocks.size() != 2)
-    emitError() << "expect integer array of size 2 for inner_blocks";
-
   if (encoding) {
-    auto xeMap = llvm::dyn_cast<imex::xetile::XeMapAttr>(encoding);
-    if (!xeMap)
-      emitError() << "expect xetile::XeMapAttr for encoding";
+    auto xeTileAttr = llvm::dyn_cast<imex::xetile::XeTileAttr>(encoding);
+    if (!xeTileAttr)
+      emitError() << "expect xetile::XeTileAttr for encoding";
   }
 
   return mlir::success();
@@ -142,10 +94,7 @@ TileType::verify(llvm::function_ref<mlir::InFlightDiagnostic()> emitError,
 
 mlir::LogicalResult SubGroupMapAttr::verify(
     llvm::function_ref<mlir::InFlightDiagnostic()> emitError,
-    mlir::DenseI32ArrayAttr mma_block_size, mlir::DenseI32ArrayAttr wi_layout,
-    mlir::DenseI32ArrayAttr wi_data) {
-  if (mma_block_size && mma_block_size.size() != 2)
-    emitError() << "expect integer array of size 2 for mma_block_size";
+    mlir::DenseI32ArrayAttr wi_layout, mlir::DenseI32ArrayAttr wi_data) {
   if (wi_layout.size() != 2)
     emitError() << "expect integer array of size 2 for wi_layout";
   if (wi_data.size() != 2)
@@ -160,6 +109,21 @@ mlir::LogicalResult WorkGroupMapAttr::verify(
     emitError() << "expect integer array of size 2 for sg_layout";
   if (sg_data.size() != 2)
     emitError() << "expect integer array of size 2 for sg_data";
+  return mlir::success();
+}
+
+mlir::LogicalResult XeTileAttr::verify(
+    ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
+    ::imex::xetile::SubGroupMapAttr sg_map, xetile::WorkGroupMapAttr wg_map,
+    mlir::DenseI32ArrayAttr order, mlir::DenseI32ArrayAttr inner_blocks,
+    mlir::DenseI32ArrayAttr wg_data) {
+
+  if (order != mlir::DenseI32ArrayAttr() && order.size() != 2)
+    emitError() << "expect integer array of size 2 for order";
+  if (inner_blocks != mlir::DenseI32ArrayAttr() && inner_blocks.size() != 2)
+    emitError() << "expect integer array of size 2 for inner_blocks";
+  if (wg_data != mlir::DenseI32ArrayAttr() && wg_data.size() != 2)
+    emitError() << "expect integer array of size 2 for wg_data";
   return mlir::success();
 }
 

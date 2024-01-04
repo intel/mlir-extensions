@@ -51,12 +51,11 @@ def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments]>
         * dynamic_strides : 2 stride arguments specifying the strides of the 2D "source" memory region.
                 This is only required if a dynmaic shaped memref or an address is used as "source".
                 dynamic_strides needs to be operands i.e. dynamic SSA values (e.g., [%c128, %c1]).
-        * inner_blocks : Optional 2 element integer array describing [rows, cols] of the blocked layout.
 
         For the follwing examples, suppose the tile shape used by the compiler is 32x64.
 
         Example 1:
-        Creating an xetile using a static shaped 2D memref.
+        Creating a tile using a static shaped 2D memref.
 
         ```mlir
         %0 = memref.alloc() : memref<1024x1024xf32>
@@ -65,16 +64,7 @@ def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments]>
         ```
 
         Example 2:
-        Creating an xetile using a static shaped 2D memref and inner blocks attribute.
-
-        ```mlir
-        %0 = memref.alloc() : memref<1024x1024xf32>
-        %c128 = arith.constant 128 : index
-        %2 = xetile.init_tile %0[%c128, 512] { inner_blocks = [8, 16]} : memref<1024x1024xf32> -> !xetile.tile<32x64xf32>
-        ```
-
-        Example 2:
-        Creating an xetile using a dynamic shaped 2D memref.
+        Creating a tile using a dynamic shaped 2D memref.
 
         ```mlir
         %c1 = arith.constant 1 : index
@@ -86,7 +76,7 @@ def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments]>
         ```
 
         Example 3:
-        Creating an xetile using an address
+        Creating a tile using an address
 
         ```mlir
         %src = .... : i64
@@ -96,6 +86,17 @@ def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments]>
         %c256 = arith.constant 256 : index
         %c1024 = arith.constant 1024 : index
         %1 = xetile.init_tile %src[%c128, %c256], [%c1024, %c1024], [%c1024, %c1] : i64 -> !xetile.tile<32x64xf32>
+        ```
+
+        Example 4:
+        Creating a tile using a static shaped 2D memref with additional attributes asscociated.
+        with the tile.
+
+        ```mlir
+        %0 = memref.alloc() : memref<1024x1024xf32>
+        %c128 = arith.constant 128 : index
+        %2 = xetile.init_tile %0[%c128, 512] : memref<1024x1024xf32>
+            -> !xetile.tile<32x64xf32, #xetile.tile_attr<order=[0, 1]>>
         ```
 
     }];
@@ -122,13 +123,6 @@ def XeTile_InitTileOp : XeTile_Op<"init_tile", [Pure, AttrSizedOperandSegments]>
             "llvm::ArrayRef<mlir::Value>":$dynamic_strides)>
     ];
 
-    // let assemblyFormat = [{
-    //     $source ``
-    //     custom<DynamicIndexList>($offsets, $static_offsets)
-    //     (`,` `[` $dynamic_shape^ `]`)?
-    //     (`,` `[` $dynamic_strides^ `]`)?
-    //     attr-dict `:` qualified(type($source)) `->` qualified(type($tile))
-    // }];
     let hasCustomAssemblyFormat = true;
 
     let extraClassDeclaration = [{
@@ -210,49 +204,42 @@ def XeTile_LoadTileOp : XeTile_Op<"load_tile", []> {
     let summary = "Loads a tile into a register region";
     let description = [{
         "load_tile" operation loads the values of a tile into a register region with 2D or 4D layout.
-        4D layout is used when the tile is in blocked layout.
-
-        If optional "transpose" 2-element array attribute is specified, the loaded tile will be
-        transposed along the specified non-zero dimension.
+        4D layout is used when the tile is in blocked layout (specified by tile's attributes).
 
         If optional "padding" value is specified, out-of-bounds memory accesses will be padded with the
         specified padding values. This value defaults to "0.0f".
 
-        This operatio has following arguments:
+        This operation has following arguments:
         * source : source tile that is loaded from
-        * transpose : optional 2-element array attibute to specify along which axis the transpose
-                        operation must be applied to the input tile
         * padding : optional string attribute to specify the padding value if out-of-bounds
-                        memory accesses occurs
+                        memory accesses occurs. Padding value defaults to zero.
 
         Example 1: loading into a 2D regsiter region
         ```mlir
             %4 = xetile.load_tile %src : !xetile.tile<64x32xf32> -> vector<64x32xf32>
         ```
 
-        Example 2: loading with tranpose and padding attributes enabled.
+        Example 2: loading with padding attributes enabled.
         ```mlir
-            %4 = xetile.load_tile %src { transpose = [1, 0], padding = 1.0 : f32}
+            %4 = xetile.load_tile %src { padding = 1.0 : f32}
                 : !xetile.tile<64x32xf32> -> vector<32x64xf32>
         ```
 
         Example 3: loading into a 4D register region.
         ```mlir
-            %4 = xetile.load_tile %src : !xetile.tile<64x32xf32> -> vector<8x2x8x16xf32>
+            %4 = xetile.load_tile %src : !xetile.tile<64x32xf32, #xetile.tile_attr<inner_blocks = [8, 16]>>
+                -> vector<8x2x8x16xf32>
         ```
     }];
 
     let arguments = (ins
         XeTile: $source,
-        OptionalAttr<DenseI64ArrayAttr>: $transpose,
         OptionalAttr<XeTile_PaddingValueAttr>: $padding
     );
     let results = (outs XeTile_2DOr4DVector: $value);
 
-    // let assemblyFormat = [{
-    //     $source attr-dict `:` qualified(type($source)) `->` qualified(type($value))
-    // }];
     let hasCustomAssemblyFormat = true;
+    let hasVerifier = true;
 
     let extraClassDeclaration = [{
         // padding value defaults to zero in the appropriate type if its not specified
@@ -266,7 +253,6 @@ def XeTile_LoadTileOp : XeTile_Op<"load_tile", []> {
         }
     }];
 
-    let hasVerifier = 1;
 }
 
 def XeTile_StoreTileOp : XeTile_Op<"store_tile", []> {
@@ -274,7 +260,7 @@ def XeTile_StoreTileOp : XeTile_Op<"store_tile", []> {
     let description = [{
         "store_tile" operation can be used to store a register region into a 2D memory region
         decribed by a tile. The register region can be in 2D or 4D. 4D register region is used
-        when the stored value is in blocked layout.
+        when the stored value is in blocked layout (specified by tile's attributes).
 
         This operation takes the following arguments:
         * value : vector specifying the values to store
@@ -282,12 +268,13 @@ def XeTile_StoreTileOp : XeTile_Op<"store_tile", []> {
 
         Example 1: storing a 2D register region
         ```mlir
-            xetile.store_tile %value, %dst : !tile<64x32xf32>,  vector<64x32xf32>
+            xetile.store_tile %value, %dst : vector<64x32xf32>, !tile<64x32xf32>
         ```
 
-        Example 1: storing a 4D register region
+        Example 2: storing a 4D register region
         ```mlir
-            xetile.store_tile %value, %dst : !tile<64x32xf32>,  vector<8x2x8x16xf32>
+            xetile.store_tile %value, %dst : vector<8x2x8x16xf32>,
+                !tile<64x32xf32, #xetile.tile_attr<inner_blocks=[8, 16]>>
         ```
     }];
 
@@ -299,13 +286,14 @@ def XeTile_StoreTileOp : XeTile_Op<"store_tile", []> {
     let assemblyFormat = [{
         $value`,`` `$tile attr-dict `:` qualified(type($value)) `,` qualified(type($tile))
     }];
-    // let hasCustomAssemblyFormat = true;
+    let hasVerifier = true;
 }
 
 def XeTile_PrefetchTileOp : XeTile_Op<"prefetch_tile", []> {
     let summary = "preftech tiles into cache cooperatively";
     let description = [{
-        "preftech_tile" operation can be used to  smaller tiles into the cache.
+        "preftech_tile" operation can be used to  prefetch contents of a memory region (i.e. tile)
+        in to the cache.
 
         This operation takes following arguments:
         * tile : tile to prefetch into the cache
@@ -315,8 +303,7 @@ def XeTile_PrefetchTileOp : XeTile_Op<"prefetch_tile", []> {
             %1 = memref.alloc() : memref<1024x1024xf16>
             %2 = xetile.init_tile %src[0, 0] : !xetile.tile<128x128xf16>
 
-            xetile.prefetch_tile %2 : tile<8x8xf32>
-
+            xetile.prefetch_tile %2 : !xetile.tile<128x128xf16>
         ```
 
     }];
@@ -371,12 +358,6 @@ def XeTile_TileMMAOp : XeTile_Op<"tile_mma", []> {
     );
 
     let results = (outs XeTile_2DOr4DVector: $output);
-
-    // let assemblyFormat = [{
-    //     $a`,` ` `$b (`,` ` `$c^)? attr-dict `:` qualified(type($a))`,` ` `qualified(type($b))
-    //         (`,` ` `qualified(type($c))^)? `->` qualified(type($output))
-    // }];
-
     let hasCustomAssemblyFormat = true;
 
     let extraClassDeclaration = [{
@@ -392,7 +373,7 @@ def XeTile_UpdateTileOffsetOp : XeTile_Op<"update_tile_offset", []> {
     let summary = "update the offsets of a tile";
     let description = [{
         "update_tile_offset" operation is used for iterating over the tiles. It takes in a
-        tile and offsets x and y relative to the current tile to reach the new tile.
+        `tile` and offsets `x` and `y`. `x` and `y` are specified relative to the current tile.
 
         Arguments:
         * tile : original tile
@@ -422,6 +403,81 @@ def XeTile_UpdateTileOffsetOp : XeTile_Op<"update_tile_offset", []> {
              qualified(type($offset_x)) `,`
              qualified(type($offset_y)) ` `
             `->` qualified(type($result))
+    }];
+}
+
+def XeTile_TilePackOp : XeTile_Op<"tile_pack", []> {
+    let summary = "pack 2D vector into a 4D blocked vector";
+    let description = [{
+        "tile_pack" operation is used for converting a 2D vector into a blocked 4D vector. The
+        block size is specified by the `inner_blocks` atrribute. The outermost 2 dimensions of
+        the output specify the number of blocks along row and col dimensions, and innermost 2
+        dimensions of the output is equal to the dimensions of the `inner_blocks` i.e. blocking
+        follows this rule:
+            out_vec_shape[0] = in_vec_shape[0]/inner_blocks[0]
+            out_vec_shape[1] = in_vec_shape[1]/inner_blocks[1]
+            out_vec_shape[2] = inner_blocks[0]
+            out_vec_shape[3] = inner_blocks[1]
+
+        Example 1:
+        ```mlir
+            %1 = xetile.tile_pack %0 {inner_blocks = [16, 16]}
+                : vector<64x32xf32> -> vector<4x2x16x16xf32>
+        ```
+    }];
+
+    let arguments = (ins XeTile_2DVector: $in_vec, DenseI64ArrayAttr: $inner_blocks);
+    let results = (outs XeTile_4DVector: $out_vec);
+
+    let hasCustomAssemblyFormat = true;
+    let hasVerifier = true;
+}
+
+def XeTile_TileUnpackOp : XeTile_Op<"tile_unpack", []> {
+    let summary = "unpack a blocked 4D vector into a 2D vector";
+    let description = [{
+        "tile_unpack" operation performs the reverse of "tile_pack". Given a 4D vector and
+        an `inner_block` attribute, this operation unpacks the blocked vector into a 2D vector.
+        Similar to "tile_pack" this operation follows the rule:
+            out_vec_shape[0] == in_vec_shape[0]*inner_blocks[0]
+            out_vec_shape[1] == in_vec_shape[1]*inner_blocks[1]
+            inner_blocks[0] == in_vec_shape[2]
+            inner_blocks[1] == in_vec_shape[3]
+
+        Example 1:
+        ```mlir
+            %1 = xetile.tile_unpack %0 {inner_blocks = [16, 16]}
+                : vector<4x2x16x16xf16> -> vector<64x32xf16>
+        ```
+    }];
+
+    let arguments = (ins XeTile_4DVector: $in_vec, DenseI64ArrayAttr: $inner_blocks);
+    let results = (outs XeTile_2DVector: $out_vec);
+
+    let hasCustomAssemblyFormat = true;
+    let hasVerifier = true;
+}
+
+def XeTile_AtomicRMWOp : XeTile_Op<"atomic_rmw", []> {
+    let summary = "performs  a read modify write operation that is free from data races.";
+    let description = [{
+        This operation performs a atomic read-modify-write on the memroy location
+        specified by the tile. Operation reuses the arith dialect attribute
+         mlir::arith::AtomicRMWKindAttr to specify the atomic operation kind.
+
+        Example 1:
+        ```mlir
+            %ret_value = xetile.atomic_rmw “addf” %value, %tile:
+                vector<8x16xbf16>, tile<8x16xbf16> -> vector<8x16xbf16>
+        ```
+    }];
+    let arguments = (ins XeTile_AtomicRMWKindAttr:$kind,
+                        XeTile_2DOr4DVector:$value,
+                        XeTile:$tile);
+    let results = (outs XeTile_2DOr4DVector:$result);
+    let assemblyFormat = [{
+        $kind $value `,` $tile  attr-dict `:` qualified(type($value)) `,` qualified(type($tile))
+                `->` qualified(type($result))
     }];
 }
 
