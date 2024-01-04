@@ -19,28 +19,26 @@ include "imex/Dialect/XeTile/IR/XeTileDialect.td"
 
 // common base class for types in XeTile dialect
 class XeTile_Type<string name, string typeMnemonic, list<Trait> traits = [],
-                 string baseCppClass = "::mlir::Type">
+                 string baseCppClass = "mlir::Type">
     : TypeDef<XeTile_Dialect, name, traits, baseCppClass> {
     let mnemonic = typeMnemonic;
 }
 
 def XeTile : XeTile_Type<"Tile", "tile", [ShapedTypeInterface],
-                            "::mlir::TensorType">
+                            "mlir::TensorType">
 {
   let summary = "A type representing a N-D tile";
   let description = [{
       Tile data type in XeTile dialect is used to represent an N-D memory region. This captures the
       2d shape and type of the memory region it points to. Optional encoding attribute can be
-      attached to the tile type to carry extra information such as data layout information. Optional
-      inner_blocks attribute can be used to specify the 2D tiling layout within the larger tile.
+      attached to the tile type to carry extra information such as data layout information.
 
       Syntax:
 
       ```
-      tile-type ::= `tile` `<` tile-dim-list element-type (`,` `inner_blocks` = `[` int-array `]` )?  (`,` encoding )? `>`
+      tile-type ::= `tile` `<` tile-dim-list element-type (`,` encoding )? `>`
       element-type ::= float-type | integer-type
       tile-dim-list := (decimal-literal `x`)*
-      int-array ::= int-array-attribute
       encoding ::= attribute-value
       ```
 
@@ -56,27 +54,20 @@ def XeTile : XeTile_Type<"Tile", "tile", [ShapedTypeInterface],
       // 2D tile with i16 elements and encoding
       tile<64x64xi16, #encoding>
 
-      // 2D tile with i16 elements and inner_blocks
-      tile<64x64xi16, inner_blocks = [8,16]>
-
-      // 2D tile with i16 elements and inner_blocks and encoding
-      tile<64x64xi16, inner_blocks = [8,16], #encoding>
       ```
   }];
 
   let parameters = (ins ArrayRefParameter<"int64_t">:$shape,
-                        "::mlir::Type":$elementType,
-                        OptionalArrayRefParameter<"int64_t">:$inner_blocks,
-                        OptionalParameter<"::mlir::Attribute">:$encoding);
+                        "mlir::Type":$elementType,
+                        OptionalParameter<"mlir::Attribute">:$encoding);
 
   let builders = [
     TypeBuilderWithInferredContext<(ins
-      "::llvm::ArrayRef<int64_t>":$shape,
-      "::mlir::Type":$elementType,
-      CArg<"llvm::ArrayRef<int64_t>", "{}">:$inner_blocks,
-      CArg<"::mlir::Attribute", "{}">:$encoding
+      "llvm::ArrayRef<int64_t>":$shape,
+      "mlir::Type":$elementType,
+      CArg<"mlir::Attribute", "{}">:$encoding
     ), [{
-      return $_get(elementType.getContext(), shape, elementType, inner_blocks, encoding);
+      return $_get(elementType.getContext(), shape, elementType, encoding);
     }]>
   ];
 
@@ -91,12 +82,12 @@ def XeTile : XeTile_Type<"Tile", "tile", [ShapedTypeInterface],
     using mlir::ShapedType::Trait<TileType>::getDimSize;
     using mlir::ShapedType::Trait<TileType>::getDynamicDimIndex;
 
-    TileType clone(::mlir::Type elementType) {
-      return ::llvm::cast<TileType>(cloneWith(getShape(), elementType));
+    TileType clone(mlir::Type elementType) {
+      return llvm::cast<TileType>(cloneWith(getShape(), elementType));
     }
   }];
 
-  let assemblyFormat = "`<` custom<XeTileType>($shape, $elementType, $inner_blocks, $encoding) `>`";
+  let assemblyFormat = "`<` custom<XeTileType>($shape, $elementType, $encoding) `>`";
   let genVerifyDecl = true;
 }
 
@@ -114,6 +105,10 @@ def XeTile_DynamicMemref : MemRefRankOf<[XeTile_ScalarType], [1, 2]>;
 
 // define the source type for XeTile init_tile
 def XeTile_BaseAddrType : AnyTypeOf<[XeTile_DynamicMemref, UI64, UI32, I64, I32]>;
+
+// input and output types needed for pack and unpack ops
+def XeTile_2DVector : VectorOfRankAndType<[2], [XeTile_ScalarType]>;
+def XeTile_4DVector : VectorOfRankAndType<[4], [XeTile_ScalarType]>;
 
 // define the value type for XeTile load_tile and store_tile op
 def XeTile_2DOr4DVector: VectorOfRankAndType<[2, 4], [XeTile_ScalarType]>;

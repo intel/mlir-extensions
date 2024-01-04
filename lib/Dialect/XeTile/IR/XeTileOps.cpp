@@ -22,6 +22,7 @@
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/Support/Casting.h"
+#include "llvm/Support/Error.h"
 #include "llvm/Support/raw_ostream.h"
 #include <cassert>
 #include <cstdint>
@@ -75,7 +76,7 @@ parseOptionalAttrDict(mlir::OpAsmParser &parser, mlir::OperationState &result,
     if (parser.parseEqual())
       return mlir::failure();
 
-    if (nameId == "transpose")
+    if (nameId == "inner_blocks")
       return parseAttributeHelper<mlir::DenseI64ArrayAttr>(parser, result,
                                                            nameId);
     if (nameId == "padding") {
@@ -277,16 +278,6 @@ void InitTileOp::print(mlir::OpAsmPrinter &printer) {
   printer << getTile().getType();
 }
 
-mlir::LogicalResult LoadTileOp::verify() {
-  auto transpose = getTransposeAttr();
-
-  if (transpose && transpose.size() != 2) {
-    return emitOpError("transpose must be two dimensional");
-  }
-
-  return mlir::success();
-}
-
 mlir::ParseResult LoadTileOp::parse(mlir::OpAsmParser &parser,
                                     mlir::OperationState &result) {
 
@@ -298,7 +289,7 @@ mlir::ParseResult LoadTileOp::parse(mlir::OpAsmParser &parser,
     return mlir::failure();
 
   // try to parse the optional dictionary attributes
-  if (parseOptionalAttrDict(parser, result, {"transpose", "padding"}))
+  if (parseOptionalAttrDict(parser, result, {"padding"}))
     return mlir::failure();
 
   if (parser.parseColon())
@@ -336,28 +327,98 @@ static void printPaddingValue(mlir::Attribute paddingValue,
 void LoadTileOp::print(mlir::OpAsmPrinter &printer) {
   printer << ' ';
   printer << getSource();
-  bool printSep = false;
-
   printer << " { ";
-  if ((*this)->getAttrs().size()) {
-    if (getTransposeAttr()) {
-      printer << "transpose = ";
-      getTransposeAttr().print(printer);
-      printSep = true;
-    }
-  }
-  if (printSep)
-    printer << ", ";
   printer << "padding = ";
   printPaddingValue(getPaddingValueOrDefault(), printer);
-  printSep = true;
-
   printer << " } ";
-
   printer << " : ";
   printer << getSource().getType();
   printer << " -> ";
   printer << getValue().getType();
+}
+
+bool verifyInnerBlocksWithVecShape(mlir::DenseI32ArrayAttr &innerBlocks,
+                                   llvm::ArrayRef<int64_t> &vecShape,
+                                   llvm::ArrayRef<int64_t> &tileShape) {
+  if (!(vecShape[2] == innerBlocks[0] && vecShape[3] == innerBlocks[1] &&
+        ((tileShape[0] / innerBlocks[0]) == vecShape[0]) &&
+        ((tileShape[1] / innerBlocks[1]) == vecShape[1])))
+    return false;
+
+  return true;
+}
+
+mlir::LogicalResult LoadTileOp::verify() {
+  auto encoding = getSource().getType().getEncoding();
+  auto tileShape = getSource().getType().getShape();
+  if (!encoding)
+    return mlir::success();
+
+  auto tileAttr = encoding.dyn_cast<xetile::XeTileAttr>();
+  auto innerBlocks = tileAttr.getInnerBlocks();
+
+  // if inner_blocks is not present in the tile_attr, the output of the load
+  // must be 2D
+  if (innerBlocks == mlir::DenseI32ArrayAttr() &&
+      getResult().getType().getShape().size() != 2)
+    return emitOpError(
+        "output must be a 2D vector if inner_blocks is not used in tile_attr.");
+
+  if (innerBlocks != mlir::DenseI32ArrayAttr()) {
+    auto vecShape = getResult().getType().getShape();
+    // if inner_blocks is present in the tile_attr, the output of the load
+    // must be 4D
+    if (vecShape.size() != 4)
+      return emitOpError(
+          "output must be a 4D vector if inner_blocks is used in tile_attr.");
+    // and, tile shape, output vector shape must be consistent with inner_blocks
+    if (!verifyInnerBlocksWithVecShape(innerBlocks, vecShape, tileShape))
+      return emitOpError(
+          "shapes of the source tile, output value and inner_blocks must "
+          "satisfy : "
+          "valueShape[0] == tileShape[0]/innerBlocks[0] && valueShape[1] == "
+          "tileShape[1]/innerBlocks[1] && "
+          "valueShape[2] == innerBlocks[0] && valueShape[3] == "
+          "innerBlocks[1].");
+  }
+  return mlir::success();
+}
+
+mlir::LogicalResult StoreTileOp::verify() {
+  auto encoding = getTile().getType().getEncoding();
+  if (!encoding)
+    return mlir::success();
+
+  auto tileAttr = encoding.dyn_cast<xetile::XeTileAttr>();
+  auto innerBlocks = tileAttr.getInnerBlocks();
+  auto tileShape = getTile().getType().getShape();
+
+  // if inner_blocks is not present in the tile_attr, the stored value
+  // must be 2D
+  if (innerBlocks == mlir::DenseI32ArrayAttr() &&
+      getValue().getType().getShape().size() != 2)
+    return emitOpError(
+        "value must be a 2D vector if inner_blocks is not used in tile_attr.");
+
+  if (innerBlocks != mlir::DenseI32ArrayAttr()) {
+    auto vecShape = getValue().getType().getShape();
+    // if inner_blocks is present in the tile_attr, the stored value
+    // must be 4D
+    if (vecShape.size() != 4)
+      return emitOpError(
+          "value must be a 4D vector if inner_blocks is used in tile_attr.");
+    // and, tile shape, input vector shape must be consistent with inner_blocks
+    if (!verifyInnerBlocksWithVecShape(innerBlocks, vecShape, tileShape))
+      return emitOpError(
+          "shapes of the destination tile, value and inner_blocks must "
+          "satisfy : "
+          "valueShape[0] == tileShape[0]/innerBlocks[0] && valueShape[1] == "
+          "tileShape[1]/innerBlocks[1] && "
+          "valueShape[2] == innerBlocks[0] && valueShape[3] == "
+          "innerBlocks[1].");
+  }
+
+  return mlir::success();
 }
 
 mlir::ParseResult TileMMAOp::parse(mlir::OpAsmParser &parser,
@@ -528,8 +589,191 @@ mlir::LogicalResult TileMMAOp::verify() {
   return mlir::success();
 }
 
+mlir::ParseResult TilePackOp::parse(mlir::OpAsmParser &parser,
+                                    mlir::OperationState &result) {
+  mlir::OpAsmParser::UnresolvedOperand in_vecRawOperands[1];
+  llvm::ArrayRef<mlir::OpAsmParser::UnresolvedOperand> in_vecOperands(
+      in_vecRawOperands);
+  llvm::SMLoc in_vecOperandsLoc;
+  (void)in_vecOperandsLoc;
+  mlir::Type in_vecRawTypes[1];
+  llvm::ArrayRef<mlir::Type> in_vecTypes(in_vecRawTypes);
+  mlir::Type out_vecRawTypes[1];
+  llvm::ArrayRef<mlir::Type> out_vecTypes(out_vecRawTypes);
+
+  in_vecOperandsLoc = parser.getCurrentLocation();
+  if (parser.parseOperand(in_vecRawOperands[0]))
+    return mlir::failure();
+  // try to parse the optional dictionary attributes
+  {
+    auto loc = parser.getCurrentLocation();
+    (void)loc;
+    if (parseOptionalAttrDict(parser, result, {"inner_blocks"}))
+      return ::mlir::failure();
+    if (failed(verifyInherentAttrs(result.name, result.attributes, [&]() {
+          return parser.emitError(loc)
+                 << "'" << result.name.getStringRef() << "' op ";
+        })))
+      return ::mlir::failure();
+  }
+  if (parser.parseColon())
+    return mlir::failure();
+
+  if (parser.parseType(in_vecRawTypes[0]))
+    return mlir::failure();
+  if (parser.parseArrow())
+    return mlir::failure();
+
+  if (parser.parseType(out_vecRawTypes[0]))
+    return mlir::failure();
+  result.addTypes(out_vecTypes);
+  if (parser.resolveOperands(in_vecOperands, in_vecTypes, in_vecOperandsLoc,
+                             result.operands))
+    return mlir::failure();
+  return mlir::success();
+}
+
+void TilePackOp::print(mlir::OpAsmPrinter &printer) {
+  printer << ' ';
+  printer << getInVec();
+  printer << " { ";
+  printer << "inner_blocks = ";
+  getInnerBlocksAttr().print(printer);
+  printer << " } ";
+  printer << ' ' << ":";
+  printer << ' ';
+  printer << getInVec().getType();
+  printer << ' ' << "->";
+  printer << ' ';
+  printer << getOutVec().getType();
+}
+
+mlir::LogicalResult TilePackOp::verify() {
+  auto inVecShape = getInVec().getType().getShape();
+  auto outVecShape = getOutVec().getType().getShape();
+  auto innerBlocks = getInnerBlocks();
+  auto inElemTy = getInVec().getType().getElementType();
+  auto outElemTy = getOutVec().getType().getElementType();
+
+  // input and output vector element types must match
+  if (inElemTy != outElemTy)
+    return emitOpError("input and output vector element type mismatch.");
+
+  // innermost 2 dimensions of the output vector must satisfy:
+  //    outVecShape[2] == innerBlocks[0]
+  //    outVecShape[3] == innerBlocks[1]
+  if (!(outVecShape[2] == innerBlocks[0] && outVecShape[3] == innerBlocks[1]))
+    return emitOpError(
+        "innermost 2 dimensions of output vector must satisfy : "
+        "outVecShape[2] == innerBlocks[0] && outVecShape[3] == innerBlocks[1]");
+
+  // outermost 2 dimensions of the output vector must satisfy:
+  //    outVecShape[0] == inVecShape[0]/innerBlocks[0]
+  //    outVecShape[1] == inVecShape[1]/innerBlocks[1]
+  if (!(outVecShape[0] == inVecShape[0] / innerBlocks[0] &&
+        outVecShape[1] == inVecShape[1] / innerBlocks[1]))
+    return emitOpError(
+        "outermost 2 dimensions of the output vector must satisfy : "
+        "outVecShape[0] == inVecShape[0]/innerBlocks[0] && "
+        "outVecShape[1] == inVecShape[1]/innerBlocks[1]");
+
+  return mlir::success();
+}
+
+mlir::ParseResult TileUnpackOp::parse(mlir::OpAsmParser &parser,
+                                      mlir::OperationState &result) {
+  mlir::OpAsmParser::UnresolvedOperand in_vecRawOperands[1];
+  llvm::ArrayRef<mlir::OpAsmParser::UnresolvedOperand> in_vecOperands(
+      in_vecRawOperands);
+  llvm::SMLoc in_vecOperandsLoc;
+  (void)in_vecOperandsLoc;
+  mlir::Type in_vecRawTypes[1];
+  llvm::ArrayRef<mlir::Type> in_vecTypes(in_vecRawTypes);
+  mlir::Type out_vecRawTypes[1];
+  llvm::ArrayRef<mlir::Type> out_vecTypes(out_vecRawTypes);
+
+  in_vecOperandsLoc = parser.getCurrentLocation();
+  if (parser.parseOperand(in_vecRawOperands[0]))
+    return mlir::failure();
+  // try to parse the optional dictionary attributes
+  {
+    auto loc = parser.getCurrentLocation();
+    (void)loc;
+    if (parseOptionalAttrDict(parser, result, {"inner_blocks"}))
+      return ::mlir::failure();
+    if (failed(verifyInherentAttrs(result.name, result.attributes, [&]() {
+          return parser.emitError(loc)
+                 << "'" << result.name.getStringRef() << "' op ";
+        })))
+      return ::mlir::failure();
+  }
+  if (parser.parseColon())
+    return mlir::failure();
+
+  if (parser.parseType(in_vecRawTypes[0]))
+    return mlir::failure();
+  if (parser.parseArrow())
+    return mlir::failure();
+
+  if (parser.parseType(out_vecRawTypes[0]))
+    return mlir::failure();
+  result.addTypes(out_vecTypes);
+  if (parser.resolveOperands(in_vecOperands, in_vecTypes, in_vecOperandsLoc,
+                             result.operands))
+    return mlir::failure();
+  return mlir::success();
+}
+
+void TileUnpackOp::print(mlir::OpAsmPrinter &printer) {
+  printer << ' ';
+  printer << getInVec();
+  printer << " { ";
+  printer << "inner_blocks = ";
+  getInnerBlocksAttr().print(printer);
+  printer << " } ";
+  printer << ' ' << ":";
+  printer << ' ';
+  printer << getInVec().getType();
+  printer << ' ' << "->";
+  printer << ' ';
+  printer << getOutVec().getType();
+}
+
+mlir::LogicalResult TileUnpackOp::verify() {
+  auto inVecShape = getInVec().getType().getShape();
+  auto outVecShape = getOutVec().getType().getShape();
+  auto innerBlocks = getInnerBlocks();
+  auto inElemTy = getInVec().getType().getElementType();
+  auto outElemTy = getOutVec().getType().getElementType();
+
+  // input and output vector element types must match
+  if (inElemTy != outElemTy)
+    return emitOpError("input and output vector element type mismatch.");
+
+  // innermost 2 dimensions of the input vector must satisfy
+  //    outVecShape[2] == innerBlocks[0]
+  //    outVecShape[3] == innerBlocks[1]
+  if (!(inVecShape[2] == innerBlocks[0] && inVecShape[3] == innerBlocks[1]))
+    return emitOpError(
+        "innermost 2 dimensions of the input vector must satisfy : "
+        "inVecShape[2] == innerBlocks[0] && "
+        "inVecShape[3] == innerBlocks[1]");
+
+  // output vector must satisfy :
+  //     outVecShape[0] == inVecShape[0] * innerBlocks[0]
+  //     outVecShape[1] == inVecShape[1] * innerBlocks[1] &&
+  if (!(outVecShape[0] == inVecShape[0] * innerBlocks[0] &&
+        outVecShape[1] == inVecShape[1] * innerBlocks[1]))
+    return emitOpError("output vector must satisfy : "
+                       "outVecShape[0] == inVecShape[0] * innerBlocks[0] && "
+                       "outVecShape[1] == inVecShape[1] * innerBlocks[1]");
+
+  return mlir::success();
+}
+
 } // namespace xetile
 } // namespace imex
 
+#include <imex/Dialect/XeTile/IR/XeTileOpsEnums.cpp.inc>
 #define GET_OP_CLASSES
 #include <imex/Dialect/XeTile/IR/XeTileOps.cpp.inc>

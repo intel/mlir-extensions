@@ -17,6 +17,7 @@
 
 include "mlir/IR/AttrTypeBase.td"
 include "imex/Dialect/XeTile/IR/XeTileDialect.td"
+include "mlir/IR/EnumAttr.td"
 
 class XeTile_Attr<string name, string attrMnemonic, list<Trait> traits = []>
   : AttrDef<XeTile_Dialect, name, traits> {
@@ -25,25 +26,16 @@ class XeTile_Attr<string name, string attrMnemonic, list<Trait> traits = []>
 
 def XeTile_SubGroupMapAttr : XeTile_Attr<"SubGroupMap", "sg_map"> {
   let parameters = (ins
-    OptionalParameter<"mlir::DenseI32ArrayAttr">:$mma_block_size,
     "mlir::DenseI32ArrayAttr":$wi_layout,
     "mlir::DenseI32ArrayAttr":$wi_data
   );
   let assemblyFormat = "`<` struct(params) `>`";
   let genVerifyDecl = true;
   let builders = [
-    AttrBuilder<(ins "llvm::ArrayRef<int32_t>":$mma_block_size,
-                      "llvm::ArrayRef<int32_t>":$wi_layout,
+    AttrBuilder<(ins  "llvm::ArrayRef<int32_t>":$wi_layout,
                       "llvm::ArrayRef<int32_t>":$wi_data),
     [{
-        return $_get($_ctxt, mlir::DenseI32ArrayAttr::get($_ctxt, mma_block_size),
-                            mlir::DenseI32ArrayAttr::get($_ctxt, wi_layout),
-                            mlir::DenseI32ArrayAttr::get($_ctxt, wi_data));
-    }]>,
-    AttrBuilder<(ins "llvm::ArrayRef<int32_t>":$wi_layout,
-                      "llvm::ArrayRef<int32_t>":$wi_data),
-    [{
-        return $_get($_ctxt, mlir::DenseI32ArrayAttr(), mlir::DenseI32ArrayAttr::get($_ctxt, wi_layout),
+        return $_get($_ctxt, mlir::DenseI32ArrayAttr::get($_ctxt, wi_layout),
                             mlir::DenseI32ArrayAttr::get($_ctxt, wi_data));
     }]>
   ];
@@ -66,46 +58,54 @@ def XeTile_WorkGroupMapAttr : XeTile_Attr<"WorkGroupMap", "wg_map"> {
   ];
 }
 
-def XeTile_XeMapAttr : XeTile_Attr<"XeMap", "xe_map"> {
+def XeTile_TileAttr : XeTile_Attr<"XeTile", "tile_attr"> {
   let parameters = (ins
-    OptionalParameter<"imex::xetile::WorkGroupMapAttr">:$wg,
-    XeTile_SubGroupMapAttr:$sg
+    OptionalParameter<"xetile::SubGroupMapAttr">:$sg_map,
+    OptionalParameter<"xetile::WorkGroupMapAttr">:$wg_map,
+    DefaultValuedParameter<"mlir::DenseI32ArrayAttr", "mlir::DenseI32ArrayAttr::get($_ctxt, {1, 0})">:$order,
+    OptionalParameter<"mlir::DenseI32ArrayAttr">:$inner_blocks,
+    OptionalParameter<"mlir::DenseI32ArrayAttr">:$wg_data
   );
   let assemblyFormat = "`<` struct(params) `>`";
+  let genVerifyDecl = true;
   let builders = [
-    AttrBuilder<(ins  "llvm::ArrayRef<int32_t>":$mma_block_size,
-                      "llvm::ArrayRef<int32_t>":$wi_layout,
-                      "llvm::ArrayRef<int32_t>":$wi_data,
-                      "llvm::ArrayRef<int32_t>":$sg_layout,
-                      "llvm::ArrayRef<int32_t>":$sg_data),
+    AttrBuilder<(ins  CArg<"xetile::SubGroupMapAttr", "{}">:$sg_map,
+                      CArg<"xetile::WorkGroupMapAttr", "{}">:$wg_map,
+                      CArg<"llvm::ArrayRef<int32_t>", "{1, 0}">:$order,
+                      CArg<"llvm::ArrayRef<int32_t>", "{}">:$inner_blocks,
+                      CArg<"llvm::ArrayRef<int32_t>", "{}">:$wg_data),
     [{
-        return $_get($_ctxt, WorkGroupMapAttr::get($_ctxt, sg_layout, sg_data),
-          SubGroupMapAttr::get($_ctxt, mma_block_size, wi_layout, wi_data)) ;
-    }]>,
-    // building XeMap without mma blocks size
-    AttrBuilder<(ins  "llvm::ArrayRef<int32_t>":$wi_layout,
-                      "llvm::ArrayRef<int32_t>":$wi_data,
-                      "llvm::ArrayRef<int32_t>":$sg_layout,
-                      "llvm::ArrayRef<int32_t>":$sg_data),
-    [{
-        return $_get($_ctxt, WorkGroupMapAttr::get($_ctxt, sg_layout, sg_data),
-          SubGroupMapAttr::get($_ctxt, wi_layout, wi_data)) ;
-    }]>,
-    // building XeMap without sub group map
-    AttrBuilder<(ins  "llvm::ArrayRef<int32_t>":$mma_block_size,
-                      "llvm::ArrayRef<int32_t>":$wi_layout,
-                      "llvm::ArrayRef<int32_t>":$wi_data),
-    [{
-        return $_get($_ctxt, WorkGroupMapAttr(), SubGroupMapAttr::get($_ctxt, mma_block_size, wi_layout, wi_data));
-    }]>,
-    // building XeMap without sub group map and mma block size
-    AttrBuilder<(ins  "llvm::ArrayRef<int32_t>":$wi_layout,
-                      "llvm::ArrayRef<int32_t>":$wi_data),
-    [{
-        return $_get($_ctxt, WorkGroupMapAttr(), SubGroupMapAttr::get($_ctxt, wi_layout, wi_data)) ;
+        return $_get($_ctxt, sg_map, wg_map, mlir::DenseI32ArrayAttr::get($_ctxt, order),
+                      mlir::DenseI32ArrayAttr::get($_ctxt, inner_blocks),
+                      mlir::DenseI32ArrayAttr::get($_ctxt, wg_data));
     }]>
 
   ];
+}
+
+// RMW kind attribute
+def ATOMIC_RMW_KIND_ADDF    : I64EnumAttrCase<"addf", 0>;
+def ATOMIC_RMW_KIND_ADDI    : I64EnumAttrCase<"addi", 1>;
+def ATOMIC_RMW_KIND_ASSIGN  : I64EnumAttrCase<"assign", 2>;
+def ATOMIC_RMW_KIND_MAXF    : I64EnumAttrCase<"maxf", 3>;
+def ATOMIC_RMW_KIND_MAXS    : I64EnumAttrCase<"maxs", 4>;
+def ATOMIC_RMW_KIND_MAXU    : I64EnumAttrCase<"maxu", 5>;
+def ATOMIC_RMW_KIND_MINF    : I64EnumAttrCase<"minf", 6>;
+def ATOMIC_RMW_KIND_MINS    : I64EnumAttrCase<"mins", 7>;
+def ATOMIC_RMW_KIND_MINU    : I64EnumAttrCase<"minu", 8>;
+def ATOMIC_RMW_KIND_MULF    : I64EnumAttrCase<"mulf", 9>;
+def ATOMIC_RMW_KIND_MULI    : I64EnumAttrCase<"muli", 10>;
+def ATOMIC_RMW_KIND_ORI     : I64EnumAttrCase<"ori", 11>;
+def ATOMIC_RMW_KIND_ANDI    : I64EnumAttrCase<"andi", 12>;
+
+def XeTile_AtomicRMWKindAttr : I64EnumAttr<
+    "AtomicRMWKind", "",
+    [ATOMIC_RMW_KIND_ADDF, ATOMIC_RMW_KIND_ADDI, ATOMIC_RMW_KIND_ASSIGN,
+     ATOMIC_RMW_KIND_MAXF, ATOMIC_RMW_KIND_MAXS, ATOMIC_RMW_KIND_MAXU,
+     ATOMIC_RMW_KIND_MINF, ATOMIC_RMW_KIND_MINS, ATOMIC_RMW_KIND_MINU,
+     ATOMIC_RMW_KIND_MULF, ATOMIC_RMW_KIND_MULI, ATOMIC_RMW_KIND_ORI,
+     ATOMIC_RMW_KIND_ANDI]> {
+  let cppNamespace = "::imex::xetile";
 }
 
 #endif // _XETILE_ATTR_DEF_TD_INCLUDED_

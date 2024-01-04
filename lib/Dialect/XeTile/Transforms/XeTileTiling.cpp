@@ -40,6 +40,7 @@
 
 #include "PassDetail.h"
 #include "XeTileTiling.h"
+#include "mlir/IR/BuiltinAttributes.h"
 
 using namespace mlir;
 using namespace imex;
@@ -241,8 +242,7 @@ struct LoadTileOpPattern : public XeTileConversion<xetile::LoadTileOp> {
                                          resultTy.getElementType());
 
     auto newOp = rewriter.create<::imex::xetile::LoadTileOp>(
-        loc, vecTy, adaptor.getSource(), op.getTransposeAttr(),
-        op.getPaddingAttr());
+        loc, vecTy, adaptor.getSource(), op.getPaddingAttr());
 
     rewriter.replaceOp(op, newOp);
     return mlir::success();

@@ -18,6 +18,7 @@
 #include "ArithOpConversion.h"
 #include "SCFOpConversion.h"
 #include "XeTileOpConversion.h"
+#include "mlir/IR/BuiltinAttributes.h"
 
 namespace imex {
 
@@ -167,7 +168,9 @@ struct SgLoadTileOpPattern
 
     int vnniAxis = 1;
     mlir::IntegerAttr vnniAxisAttr;
-    auto transposeAttr = op.getTransposeAttr();
+    // FIXME : remove the usage of tranpose attribute and rely on order
+    // attribute.
+    mlir::DenseI64ArrayAttr transposeAttr;
     auto L1 = xegpu::CacheReadHintAttr::get(op.getContext(),
                                             xegpu::CacheReadHint::CACHED);
     auto L2 = xegpu::CacheReadHintAttr::get(op.getContext(),

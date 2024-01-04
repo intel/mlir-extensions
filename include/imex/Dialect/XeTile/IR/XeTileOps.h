@@ -61,6 +61,7 @@ public:
 } // namespace imex
 
 #include <imex/Dialect/XeTile/IR/XeTileOpsDialect.h.inc>
+#include <imex/Dialect/XeTile/IR/XeTileOpsEnums.h.inc>
 #define GET_ATTRDEF_CLASSES
 #include <imex/Dialect/XeTile/IR/XeTileOpsAttrs.h.inc>
 #define GET_TYPEDEF_CLASSES
