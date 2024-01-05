@@ -12,7 +12,7 @@ on:
     - cron: '30 19 * * *' # runs every day at 19:30 pm UTC which is 11:30 am PST
 jobs:
   invoke-sync:
-    runs-on: gpu
+    runs-on: [self-hosted, pvc, glados]
     steps:
       - name: Retrieve version
         run: |
@@ -24,7 +24,7 @@ jobs:
           token: ${{secrets.IMEX_CI_RAVI_GH}}
 
   invoke-cpu-tests:
-    runs-on: gpu
+    runs-on: [self-hosted, pvc, glados]
     needs: invoke-sync
     steps:
       - name: Invoke main Build_CPU Workflow
@@ -33,24 +33,10 @@ jobs:
           workflow: CPU Build
           token: ${{secrets.WORKFLOW_TOKEN}}
 
-      - name: Invoke numba-dev Build_CPU Workflow
-        uses: intel-innersource/frameworks.actions.thirdparty.workflow-dispatch@v1
-        with:
-          workflow: CPU Build
-          ref: numba-dev
-          token: ${{secrets.WORKFLOW_TOKEN}}
-
   invoke-gpu-tests:
-    runs-on: gpu
+    runs-on: [self-hosted, pvc, glados]
     needs: invoke-cpu-tests
     steps:
-      - name: Invoke numba-dev Build_GPU Workflow
-        uses: intel-innersource/frameworks.actions.thirdparty.workflow-dispatch@v1
-        with:
-          workflow: GPU Build
-          ref: numba-dev
-          token: ${{secrets.WORKFLOW_TOKEN}}
-
       - name: Invoke main Build_GPU Workflow
         uses: intel-innersource/frameworks.actions.thirdparty.workflow-dispatch@v1
         with:
@@ -58,7 +44,7 @@ jobs:
           token: ${{secrets.WORKFLOW_TOKEN}}
 
   generate_report:
-    runs-on: gpu
+    runs-on: [self-hosted, pvc, glados]
     needs: invoke-gpu-tests
     steps:
       - name: Echo Report info
