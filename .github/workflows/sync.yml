@@ -11,17 +11,17 @@ jobs:
   ###
   # Syncs main branch of this repo to open source intel/mlir-extensions
   ###
-    runs-on: gpu
-
-    env:
-      BUILD_ROOT: /home/gta/actions-runner/_work/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions/sync
-      HOME_DIR: /home/gta/actions-runner/_work/frameworks.ai.mlir.mlir-extensions/frameworks.ai.mlir.mlir-extensions/sync/home
+    runs-on: [self-hosted, pvc, glados]
 
     steps:
       - name: Check build root
         run: |
+          export BUILD_ROOT=$(pwd)/sync
+          echo BUILD_ROOT=${BUILD_ROOT} >> $GITHUB_ENV
+          export HOME_DIR=${BUILD_ROOT}/home
+          echo HOME_DIR=${HOME_DIR} >> $GITHUB_ENV
           if [ ! -d "$BUILD_ROOT" ]; then mkdir -p $BUILD_ROOT; fi
-
+          
       - name: Clear home dir
         run: |
           mkdir -p $HOME_DIR
