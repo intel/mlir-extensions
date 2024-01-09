@@ -13,11 +13,13 @@
 ///
 //===----------------------------------------------------------------------===//
 #include "imex/Conversion/XeGPUToSPIRV/XeGPUToSPIRV.h"
-#include "imex/Dialect/XeGPU/IR/XeGPUOps.h"
+#include "imex/Dialect/XeGPU/IR/XeGPU.h"
 
 #include "../PassDetail.h"
 
 #include <llvm/ADT/ArrayRef.h>
+#include <llvm/Support/Debug.h>
+
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/Dialect/SPIRV/IR/SPIRVDialect.h>
@@ -29,6 +31,8 @@
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Support/LLVM.h>
 #include <mlir/Transforms/DialectConversion.h>
+
+#include <numeric>
 
 using namespace imex;
 using namespace imex::xegpu;
@@ -282,11 +286,14 @@ public:
                                                               surfaceP, idx4);
       auto createOffset = [&](unsigned idx) -> Value {
         Value val;
-        if (ShapedType::isDynamic(op.getStaticOffsets()[idx])) {
-          val = op.getOffsets()[idx];
+        OpFoldResult ofr = op.getOffsets()[idx];
+        auto v = llvm::dyn_cast_if_present<Value>(ofr);
+        if (v) {
+          val = ofr.get<Value>();
           val = rewriter.create<arith::TruncIOp>(loc, i32Type, val);
         } else {
-          val = createIntConstant(i32Type, op.getStaticOffsets()[idx]);
+          int off = llvm::cast<IntegerAttr>(ofr.get<Attribute>()).getInt();
+          val = createIntConstant(i32Type, off);
         }
         return val;
       };
@@ -296,7 +303,9 @@ public:
                                                               offsetX, idx5);
       payLoad = rewriter.create<spirv::VectorInsertDynamicOp>(loc, payLoad,
                                                               offsetY, idx6);
-      unsigned blockVal = ((blockHeight - 1) << 8) | (blockWidth - 1);
+      int array_length = op.getTensorDescType().getArrayLength();
+      unsigned blockVal = (array_length - 1) << 16;
+      blockVal |= ((blockHeight - 1) << 8) | (blockWidth - 1);
       auto blockInfo = createIntConstant(i32Type, blockVal);
       payLoad = rewriter.create<spirv::VectorInsertDynamicOp>(loc, payLoad,
                                                               blockInfo, idx7);
@@ -423,8 +432,8 @@ public:
     unsigned dataSize = encodeDataum(vecType.getElementType());
     auto dataum = createIntConstant(i8Type, dataSize);
     auto trans = createIntConstant(i8Type, transpose ? 2 : 1);
-    // number of blocks(1 for now)
-    auto nBlks = createIntConstant(i8Type, 1);
+    auto array_length = op.getTensorDescType().getArrayLength();
+    auto nBlks = createIntConstant(i8Type, array_length);
     auto tensorDesc = adaptor.getTensorDesc();
     auto idx0 = createIntConstant(i32Type, 0);
     auto cast = rewriter.create<spirv::BitcastOp>(loc, v4i64, tensorDesc);
@@ -1196,6 +1205,67 @@ struct VectorShapeCast final : public OpConversionPattern<vector::ShapeCastOp> {
     return success();
   }
 };
+struct VectorExtract final : public OpConversionPattern<vector::ExtractOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(vector::ExtractOp extractOp, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto dstTy = getTypeConverter()->convertType(extractOp.getType());
+    if (!dstTy)
+      return failure();
+
+    // dynamic position is not supported
+    if (extractOp.hasDynamicPosition())
+      return failure();
+
+    auto srcTy = extractOp.getVector().getType();
+    auto shape = srcTy.getShape();
+    auto size = srcTy.getNumElements();
+    auto vec = adaptor.getVector();
+    auto vecTy = llvm::dyn_cast_if_present<mlir::VectorType>(vec.getType());
+
+    if (!vecTy)
+      return mlir::failure();
+
+    // for some cases of vector types, current VectorType Converter could
+    // convert e.g., vector of fp16/bf16 into vector of i32s, so the size
+    // and strides is reduced half. (This is partially because load_2d
+    // intrinsics handles i32 types for fp16/bf16, and current converter guess
+    // the vector type is used by load/store based on the dims of vector shape)
+    auto factor = vecTy.getElementType().getIntOrFloatBitWidth() /
+                  srcTy.getElementType().getIntOrFloatBitWidth();
+    size /= factor;
+
+    // dstTy is vector<2xf16> or f16, and srcTy is <8x16x2xf16>, but vecTy is
+    // <128xi32> because src is the result of load. it is a mismatch of ty.
+    // This is an issue raised from current desgin of type converter, and
+    // needs to be fixed.
+    auto ty = llvm::dyn_cast<mlir::VectorType>(dstTy);
+    if ((ty && ty.getElementType() != vecTy.getElementType()) ||
+        (!ty && dstTy != vecTy.getElementType()))
+      return mlir::failure();
+
+    // compute linearized offset
+    int64_t linearizedOffset = 0;
+    auto offsets = extractOp.getStaticPosition();
+    for (auto [i, off] : llvm::enumerate(offsets)) {
+      size /= shape[i];
+      linearizedOffset += offsets[i] * size;
+    }
+
+    if (ty) { // use VectorShuffer for vector result
+      llvm::SmallVector<int32_t, 2> indices(size);
+      std::iota(indices.begin(), indices.end(), linearizedOffset);
+      rewriter.replaceOpWithNewOp<mlir::spirv::VectorShuffleOp>(
+          extractOp, dstTy, vec, vec, rewriter.getI32ArrayAttr(indices));
+    } else { // use CompositExtract for scalar result
+      rewriter.replaceOpWithNewOp<mlir::spirv::CompositeExtractOp>(
+          extractOp, vec, linearizedOffset);
+    }
+
+    return success();
+  }
+};
 } // namespace
 
 void imex::populateXeGPUToVCIntrinsicsPatterns(
@@ -1204,7 +1274,7 @@ void imex::populateXeGPUToVCIntrinsicsPatterns(
                AllocNbarrierToVCPattern, CreateNbarrierToVCPattern,
                NbarrierArriveToVCPattern, NbarrierWaitToVCPattern,
                CompilerHintToVCPattern, MfenceToVCPattern, VectorShapeCast,
-               GatherScatterToRawSend<LoadGatherOp>,
+               VectorExtract, GatherScatterToRawSend<LoadGatherOp>,
                GatherScatterToRawSend<StoreScatterOp>, AtomicToLsc,
                UpdateNDOffsetToVCPattern>(typeConverter, patterns.getContext());
   if (getenv("IMEX_NOT_PREFER_RAWSEND"))
@@ -1297,8 +1367,8 @@ public:
     unsigned dataSize = vecType.getElementType().getIntOrFloatBitWidth();
     auto elemSize = createIntConstant(i8Type, dataSize);
     auto trans = createIntConstant(i1Type, transpose ? 1 : 0);
-    // number of blocks(1 for now)
-    auto nBlks = createIntConstant(i8Type, 1);
+    auto array_length = op.getTensorDescType().getArrayLength();
+    auto nBlks = createIntConstant(i8Type, array_length);
     auto tensorDesc = adaptor.getTensorDesc();
     auto idx0 = createIntConstant(i32Type, 0);
     auto cast = rewriter.create<spirv::BitcastOp>(loc, v4i64, tensorDesc);
@@ -1477,11 +1547,9 @@ Value linearizeOffset(OpBuilder builder, Location loc,
 unsigned getElementPerWI(imex::xegpu::TensorDescType tDescType) {
   imex::xegpu::SubGroupMapAttr sgMap;
   auto mapping = tDescType.getMapping();
-  if (auto xeMapAttr = llvm::dyn_cast<imex::xegpu::XeMapAttr>(mapping)) {
-    sgMap = xeMapAttr.getSg();
-  } else {
-    sgMap = llvm::dyn_cast<imex::xegpu::SubGroupMapAttr>(mapping);
-  }
+
+  sgMap = llvm::dyn_cast<imex::xegpu::SubGroupMapAttr>(mapping);
+
   auto blockSize = tDescType.getShape();
   auto wiLayout = sgMap.getWiLayout();
   auto wiData = sgMap.getWiData();
@@ -1501,7 +1569,7 @@ public:
   LogicalResult
   matchAndRewrite(CreateNdDescOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    assert(op.getBoundaryCheck() == false &&
+    assert(op.getTensorDescType().getBoundaryCheck() == false &&
            "for xegpu to joint matrix lowering boundary_check attribute must "
            "be false");
     auto loc = op.getLoc();
@@ -1529,7 +1597,7 @@ public:
         spirvStorageClass = sc.getValue();
     }
     auto spirvBaseAddressType =
-        spirv::PointerType::get(op.getSourceElementType(), spirvStorageClass);
+        spirv::PointerType::get(op.getElementType(), spirvStorageClass);
 
     memberTypes.push_back(spirvBaseAddressType);
     memberTypes.push_back(i64Type);
@@ -1563,16 +1631,19 @@ public:
         loc, genericBasePtr, payLoad, llvm::ArrayRef(0));
 
     // TODO: We should be able to use op.getOffsets() directly with index cast
-    //  But we need support from XeGPU dialect definition to return i64_t
+    // But we need support from XeGPU dialect definition to return i64_t
 
     auto createOffset = [&](unsigned idx) -> Value {
       Value val;
-      if (ShapedType::isDynamic(op.getStaticOffsets()[idx])) {
-        val = op.getOffsets()[idx];
+      OpFoldResult ofr = op.getOffsets()[idx];
+      auto v = llvm::dyn_cast_if_present<Value>(ofr);
+      if (v) {
+        val = ofr.get<Value>();
         // Cast index type to i64
         val = rewriter.create<arith::IndexCastOp>(loc, i64Type, val);
       } else {
-        val = createIntConstant(i64Type, op.getStaticOffsets()[idx]);
+        int off = llvm::cast<IntegerAttr>(ofr.get<Attribute>()).getInt();
+        val = createIntConstant(i64Type, off);
       }
       return val;
     };
@@ -1582,12 +1653,15 @@ public:
 
     auto createShape = [&](unsigned idx) -> Value {
       Value val;
-      if (ShapedType::isDynamic(op.getStaticShape()[idx])) {
-        val = op.getShape()[idx];
+      OpFoldResult ofr = op.getShape()[idx];
+      auto v = llvm::dyn_cast_if_present<Value>(ofr);
+      if (v) {
+        val = ofr.get<Value>();
         // Cast index type to i64
         val = rewriter.create<arith::IndexCastOp>(loc, i64Type, val);
       } else {
-        val = createIntConstant(i64Type, op.getStaticShape()[idx]);
+        int dim = llvm::cast<IntegerAttr>(ofr.get<Attribute>()).getInt();
+        val = createIntConstant(i64Type, dim);
       }
       return val;
     };
@@ -1948,5 +2022,6 @@ void imex::populateXeGPUToJointMatrixPatterns(SPIRVTypeConverter &typeConverter,
                                               RewritePatternSet &patterns) {
   patterns.add<CreateNdDescToJointMatrix, UpdateNDOffsetJointMatrix,
                LoadNDJointMatrix, StoreNDJointMatrix, DpasJointMatrix,
-               ::VectorShapeCast>(typeConverter, patterns.getContext());
+               VectorShapeCast, VectorExtract>(typeConverter,
+                                               patterns.getContext());
 }

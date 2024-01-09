@@ -20,7 +20,7 @@
 #include <mlir/IR/MLIRContext.h>
 
 #include <imex/Dialect/GPUX/IR/GPUXOps.h>
-#include <imex/Dialect/XeGPU/IR/XeGPUOps.h>
+#include <imex/Dialect/XeGPU/IR/XeGPU.h>
 
 namespace imex {
 

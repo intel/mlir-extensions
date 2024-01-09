@@ -1,4 +1,4 @@
-//===- XeGPUOps.h - XeGPU dialect  -------*- C++ -*-===//
+//===- XeGPU.h - XeGPU dialect  ---------------------------------*- C++ -*-===//
 //
 // Copyright 2022 Intel Corporation
 // Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -12,8 +12,8 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#ifndef _XeGPU_OPS_H_INCLUDED_
-#define _XeGPU_OPS_H_INCLUDED_
+#ifndef IMEX_DIALECT_XEGPU_IR_XEGPU_H
+#define IMEX_DIALECT_XEGPU_IR_XEGPU_H
 
 #include <mlir/IR/BuiltinTypes.h>
 #include <mlir/IR/Dialect.h>
@@ -46,13 +46,13 @@ class TensorDescType;
 } // namespace xegpu
 } // namespace imex
 
-#include <imex/Dialect/XeGPU/IR/XeGPUOpsDialect.h.inc>
-#include <imex/Dialect/XeGPU/IR/XeGPUOpsEnums.h.inc>
+#include <imex/Dialect/XeGPU/IR/XeGPUDialect.h.inc>
+#include <imex/Dialect/XeGPU/IR/XeGPUEnums.h.inc>
 #define GET_ATTRDEF_CLASSES
-#include <imex/Dialect/XeGPU/IR/XeGPUOpsAttrs.h.inc>
+#include <imex/Dialect/XeGPU/IR/XeGPUAttrs.h.inc>
 #define GET_TYPEDEF_CLASSES
-#include <imex/Dialect/XeGPU/IR/XeGPUOpsTypes.h.inc>
+#include <imex/Dialect/XeGPU/IR/XeGPUTypes.h.inc>
 #define GET_OP_CLASSES
-#include <imex/Dialect/XeGPU/IR/XeGPUOps.h.inc>
+#include <imex/Dialect/XeGPU/IR/XeGPU.h.inc>
 
-#endif // _XeGPU_OPS_H_INCLUDED_
+#endif // IMEX_DIALECT_XEGPU_IR_XEGPU_H
