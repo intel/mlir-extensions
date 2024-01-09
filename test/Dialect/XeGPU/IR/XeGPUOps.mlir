@@ -26,9 +26,9 @@ func.func @test_create_nd_tdesc_vc(%src: memref<24x32xf32>) {
 func.func @test_create_tdesc_vc(%src: ui64, %offsets : vector<16 x index>) {
   // CHECK: xegpu.create_tdesc
   // CHECK-SAME: {mode = vc, chunk_size_per_lane = 2}
-  // CHECK-SAME: ui64, vector<16xindex> -> !xegpu.tensor_desc<16x2xf32, memory_scope = slm, #xegpu.scattered>
+  // CHECK-SAME: ui64, vector<16xindex> -> !xegpu.tensor_desc<16x2xf32, #xegpu.tdesc_attr<memory_scope = slm, #xegpu.scattered>>
   %1 = xegpu.create_tdesc %src, %offsets {mode = vc, chunk_size_per_lane = 2}
-                          : ui64, vector<16 x index> -> !xegpu.tensor_desc<16x2xf32, memory_scope = slm, #xegpu.scattered>
+                          : ui64, vector<16 x index> -> !xegpu.tensor_desc<16x2xf32, #xegpu.tdesc_attr<memory_scope = slm, #xegpu.scattered>>
   return
 }
 

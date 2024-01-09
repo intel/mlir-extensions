@@ -28,7 +28,7 @@
 #include <mlir/Transforms/DialectConversion.h>
 #include <mlir/Transforms/OneToNTypeConversion.h>
 
-#include "imex/Dialect/XeGPU/IR/XeGPUOps.h"
+#include "imex/Dialect/XeGPU/IR/XeGPU.h"
 #include "imex/Dialect/XeTile/IR/XeTileOps.h"
 #include "imex/Utils/DebugUtils.h"
 #include "imex/Utils/PassWrapper.h"

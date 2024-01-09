@@ -33,29 +33,27 @@ def XeGPU_CreateNdDescOp : XeGPU_Op<"create_nd_tdesc", [Pure, AttrSizedOperandSe
   let summary = "create nd tensor descriptor operation";
   let description = [{
     The "create_nd_tdesc" operation creates a TensorDescType which represents
-    a sub-view of the original memref. Elements in the subview continuous in each dimention.
-    It takes the following arguments:
+    a sub-view of a 2D memory region (It can be extended to support N-D memory
+    region if needed in future). Elements in the subview continuous in each dimention.
+    It encodes the following important information for supporting intel hardware features:
 
-    * source:  a 2D "source" memref represents a 2D memory region or a uint64_t represents a memory pointer.
-               When the pointer is used, the shape and strides info of the 2d memory region must be provided
-               via the following shape and strides arguments.
-    * offsets: 2 index values represents offsets from the "source" at the each dimension at which to
-               create the "view" memref. offsets can be operands (e.g., [%c0, %c]), attributes (e.g., [2, 4])).
-    * shape: [optional] the shape of the memory region pointed by the "source". It is valid only when source is uint64_t type.
-    * strides: [optional] the strides of the memory region pointed by the "source". It is valid only when "source" is uint64_t type.
-
-    "shape" and "strides" have to go with together. They have the same expression format as of "offset".
-
-    In cases where the memory region can be expressed as memref with static shapes
-    in the original program, e.g., memref<1024x1024>, we do not need to specify the
-    shape and strides arguments. Otherwise, the instruction is invalid.
-
-    In cases where pointer, with seperate variables are used to describe memory regions,
-    both shape and strides are required to to carry the respect information. Otherwise,
-    the operator is invalid.
-
-    The operation also supports the following attribute:
-    * boundary_check (BoolAttr): indicates whether the operation detects the boundary and pads with zero for out-of-boundary access (default)
+    * source: an object representing (starting address/pointer of) a 2D memory reagion. It can
+              be either a 2D memref object, or simply a pointer represented by uint64_t type.
+    * offsets: two index values represents offsets from the "source" at the each dimension at
+               which the subview of the target memory will be created. It is encoded via two
+               variables, including "dynamic_offsets" and "static_offsets", such that it can
+               accept various forms, such as, operands (e.g., [%c0, %c]) and attributes (e.g., [2, 4])).
+    * shape: the shape information of the memory region pointed by the "source".  It is typically
+             encoded via the MemRefType of the source, e.g., memref<4096x4096xf16>. But if "source"
+             is simply a pointer represented as uint64_t type, or a memref type without shape information
+             e.g., memref<?x?xf16>, the shape information has to be explicitly passed via the "dynamic_shape"
+             argument. Currently "dynamic_shape" only accepts operands(e.g., [%c4096, %c4096]),
+             not attributes(e.g., [4096, 4096]).
+    * strides: the strides of the memory region pointed by the "source". Similar to shape, it is typically
+             encoded via the MemRefType of the source too. But if "source" is simply a pointer represented
+             as uint64_t type, or a memref type without shape information e.g., memref<?x?xf16>, the strides
+             information has to be explicitly passed via the "dynamic_strides" argument. And it currently
+             only accepts operands two.
 
     Example 1 (suppose the tensor shape inferred by the compiler is 8x16):
     %0 = memref.alloc() : memref<32x24xf32>
@@ -77,11 +75,10 @@ def XeGPU_CreateNdDescOp : XeGPU_Op<"create_nd_tdesc", [Pure, AttrSizedOperandSe
   }];
 
   let arguments = (ins XeGPU_BaseAddrType: $source,
-                       Variadic<Index>: $offsets,
-                       Variadic<Index>: $shape,
-                       Variadic<Index>: $strides,
+                       Variadic<Index>: $dynamic_offsets,
+                       Variadic<Index>: $dynamic_shape,
+                       Variadic<Index>: $dynamic_strides,
                        DenseI64ArrayAttr: $static_offsets,
-                       DefaultValuedAttr<BoolAttr, "true">: $boundary_check,
                        DefaultValuedAttr<XeGPU_ModeAttr, "imex::xegpu::Mode::SIMT">: $mode);
 
   let results = (outs XeGPU_TensorDesc:$TensorDesc);
@@ -91,219 +88,65 @@ def XeGPU_CreateNdDescOp : XeGPU_Op<"create_nd_tdesc", [Pure, AttrSizedOperandSe
   let skipDefaultBuilders = 1;
 
   let builders = [
-    OpBuilder<(ins "::mlir::Type": $TensorDesc, "::mlir::Value": $source, "::mlir::ValueRange": $offsets,
-                   "::mlir::ValueRange": $shape, "::mlir::ValueRange": $strides, "::llvm::ArrayRef<int64_t>": $static_offsets,
-                   CArg<"bool", "true">: $boundary_check, CArg<"::imex::xegpu::Mode", "imex::xegpu::Mode::SIMT">: $mode),
-    [{
-        auto staticDims = std::count_if(static_offsets.begin(), static_offsets.end(),
-                                          [](int64_t d) { return !mlir::ShapedType::isDynamic(d); });
-        auto dynamicDims = std::count_if(static_offsets.begin(), static_offsets.end(),
-                                          [](int64_t d) { return mlir::ShapedType::isDynamic(d); });
+    OpBuilder<(ins "mlir::Type": $TensorDesc, "mlir::Value": $source, "mlir::ValueRange": $offsets,
+                   "mlir::ValueRange": $shape, "mlir::ValueRange": $strides, "::llvm::ArrayRef<int64_t>": $static_offsets,
+                    CArg<"imex::xegpu::Mode", "imex::xegpu::Mode::SIMT">: $mode)>,
 
-        auto dims = offsets.size() + staticDims;
-        assert((isStaticShapedMemRef(source) &&
-                   dims == getRankOf(source) &&
-                           shape.size() == 0 &&
-                           strides.size() == 0
-               ) ||
-               ((!isMemRef(source) || dims == getRankOf(source)) &&
-                                               shape.size() != 0 &&
-                                            dims == shape.size() &&
-                                            shape.size() == strides.size()
-               )
-              );
-        assert((std::ptrdiff_t)offsets.size() == dynamicDims);
+    OpBuilder<(ins "mlir::Type": $tdesc, "mlir::Value": $source, "::llvm::ArrayRef<mlir::OpFoldResult>": $offsets,
+                   CArg<"imex::xegpu::Mode", "imex::xegpu::Mode::SIMT">: $mode)>,
 
-        $_state.addOperands(source);
-        $_state.addOperands(offsets);
-        $_state.addOperands(shape);
-        $_state.addOperands(strides);
-        $_state.addAttribute(getOperandSegmentSizesAttrName($_state.name), $_builder.getDenseI32ArrayAttr({1, static_cast<int32_t>(offsets.size()), static_cast<int32_t>(shape.size()), static_cast<int32_t>(strides.size())}));
-        $_state.addAttribute(getStaticOffsetsAttrName($_state.name), $_builder.getDenseI64ArrayAttr(static_offsets));
-        $_state.addAttribute(getBoundaryCheckAttrName($_state.name), $_builder.getBoolAttr(boundary_check));
-        $_state.addAttribute(getModeAttrName($_state.name), ::imex::xegpu::ModeAttr::get($_builder.getContext(), mode));
-        $_state.addTypes(TensorDesc); }]>,
-
-    OpBuilder<(ins "::mlir::Type": $tdesc, "::mlir::Value": $source, "::llvm::ArrayRef<mlir::OpFoldResult>": $offsets,
-                  CArg<"bool", "true">:$boundary_check, CArg<"::imex::xegpu::Mode", "imex::xegpu::Mode::SIMT">: $mode),
-    [{  assert(isStaticShapedMemRef(source) && offsets.size() == getRankOf(source));
-        llvm::SmallVector<int64_t> staticOffsets;
-        llvm::SmallVector<mlir::Value> dynamicOffsets;
-        dispatchIndexOpFoldResults(offsets, dynamicOffsets, staticOffsets);
-
-        build($_builder, $_state, tdesc, source, dynamicOffsets         /* empty dynamic offsets */,
-                                             ::mlir::ValueRange({})     /* empty dynamic shape   */,
-                                             ::mlir::ValueRange({})     /* empty dynamic strides */,
-                                             staticOffsets              /* static offsets        */,
-                                             boundary_check,
-                                             mode); }]>,
-
-
-    OpBuilder<(ins "::mlir::Type": $tdesc, "::mlir::Value": $source, "::llvm::ArrayRef<mlir::OpFoldResult>": $offsets,
-                   "::mlir::ValueRange": $shape, "::mlir::ValueRange": $stride,
-                   CArg<"bool", "true">:$boundary_check, CArg<"::imex::xegpu::Mode", "imex::xegpu::Mode::SIMT">: $mode),
-    [{  assert((!isMemRef(source) || getRankOf(source) == offsets.size()) && shape.size() != 0 && shape.size() == stride.size() &&
-               offsets.size() == shape.size() && isIntegerOrDynamicShapedMemref(source));
-
-        llvm::SmallVector<int64_t> staticOffsets;
-        llvm::SmallVector<mlir::Value> dynamicOffsets;
-
-        dispatchIndexOpFoldResults(offsets, dynamicOffsets, staticOffsets);
-
-        build($_builder, $_state, tdesc, source, dynamicOffsets /* empty dynamic offsets */,
-                                             shape              /* empty dynamic shape   */,
-                                             stride             /* empty dynamic strides */,
-                                             staticOffsets      /* static offsets        */,
-                                             boundary_check,
-                                             mode); }]>
+    OpBuilder<(ins "mlir::Type": $tdesc, "mlir::Value": $source, "::llvm::ArrayRef<mlir::OpFoldResult>": $offsets,
+                   "mlir::ValueRange": $shape, "mlir::ValueRange": $stride,
+                   CArg<"imex::xegpu::Mode", "imex::xegpu::Mode::SIMT">: $mode)>
   ];
 
   let extraClassDeclaration = [{
-    static size_t getRankOf(mlir::Value value) {
-      if (llvm::isa<::mlir::IntegerType>(value.getType()))
-        return 0;
-      if (llvm::isa<::mlir::MemRefType>(value.getType()))
-        return llvm::cast<::mlir::MemRefType>(value.getType()).getRank();
-      assert(0 && "Unreachable");
-    }
-
-    static bool isStaticShapedMemRef(mlir::Value value) {
-      return isMemRef(value) && llvm::cast<::mlir::MemRefType>(value.getType()).hasStaticShape();
-    }
-
-    static bool isMemRef(mlir::Value value) {
-      return llvm::isa<::mlir::MemRefType>(value.getType());
-    }
-
-    static bool isIntegerOrDynamicShapedMemref(mlir::Value value) {
-      auto type = value.getType();
-      if (llvm::isa<::mlir::IntegerType>(type))
-        return true;
-      if (isMemRef(value))
-        return !llvm::cast<::mlir::MemRefType>(type).hasStaticShape();
-      assert(0 && "Unreachable");
-    }
-
-    void getOffsets(llvm::SmallVectorImpl<mlir::OpFoldResult> &offsets) {
-      auto dynamicOffsets = getOffsets(); //dynamic offsets
-      auto staticOffsets = getStaticOffsets();
-
-      if (staticOffsets.size() == 0) {
-        offsets.assign(dynamicOffsets.begin(), dynamicOffsets.end());
-        return;
-      }
-
-      for (size_t i = 0, j = 0; i < staticOffsets.size(); i++) {
-        if (mlir::ShapedType::isDynamic(staticOffsets[i])) {
-          assert(j < dynamicOffsets.size());
-          offsets.push_back(dynamicOffsets[j++]);
-        } else {
-          auto attr = mlir::IntegerAttr::get(mlir::IndexType::get(getContext()), staticOffsets[i]);
-          offsets.push_back(attr);
-        }
-      }
-    }
-
-    void getShape(llvm::SmallVectorImpl<mlir::OpFoldResult> &shape) {
-      if (isIntegerOrDynamicShapedMemref(getSource())) {
-        shape.append(getShape().begin(), getShape().end());
-      } else {
-        for (auto dim: getSourceType().cast<::mlir::MemRefType>().getShape()) {
-          auto attr = mlir::IntegerAttr::get(mlir::IndexType::get(getContext()), dim);
-          shape.push_back(attr);
-        }
-      }
-    }
-
-    void getStrides(llvm::SmallVectorImpl<mlir::OpFoldResult> &strides) {
-      if (isIntegerOrDynamicShapedMemref(getSource())) {
-        strides.append(getStrides().begin(), getStrides().end());
-      } else {
-        auto [staticStrides, offset] = mlir::getStridesAndOffset(getSourceType().cast<mlir::MemRefType>());
-        for (auto dim: staticStrides) {
-          auto attr = mlir::IntegerAttr::get(mlir::IndexType::get(getContext()), dim);
-          strides.push_back(attr);
-        }
-      }
-    }
-
-    size_t getNumStaticOffsets() {
-      return std::count_if(getStaticOffsets().begin(), getStaticOffsets().end(),
-                           [](int64_t dSize) { return !mlir::ShapedType::isDynamic(dSize); });
-    }
-
-    size_t getNumDynamicOffsets() {
-      return std::count_if(getStaticOffsets().begin(), getStaticOffsets().end(),
-                           [](int64_t dSize) { return mlir::ShapedType::isDynamic(dSize); });
-    }
-
-    size_t getOffsetsRank() {
-      return getOffsets().size() + std::count_if(getStaticOffsets().begin(), getStaticOffsets().end(),
-                                          [](int64_t dSize) { return !mlir::ShapedType::isDynamic(dSize); });
-    }
-
-    size_t getShapeRank() {
-      return hasDynamicShape() ? getShape().size(): getRankOf(getSource());
-    }
-
-    size_t getStridesRank() {
-      return hasDynamicStrides() ? getStrides().size(): getRankOf(getSource());
-
-    };
-
     /// Returns the type of the source memref operand.
-    ::mlir::Type getSourceType() {
+    mlir::Type getSourceType() {
       return getSource().getType();
     }
 
-    /// Return the element type of the source if it is a memref type
-    ::mlir::Type getSourceElementType() {
-      auto srcTy = getSourceType();
-      if (llvm::isa<::mlir::IntegerType>(srcTy))
-        return srcTy;
-      assert(llvm::isa<::mlir::MemRefType>(srcTy) && "Expecting either an integer-type or 2D MemRef-type source operand.");
-      return srcTy.cast<::mlir::MemRefType>().getElementType();
-    }
+    /// Returns the type of the result TensorDesc.
+    xegpu::TensorDescType getTensorDescType();
 
-    /// Return the shape of the orginal memref
-    ::llvm::ArrayRef<int64_t> getStaticShape() {
-      assert(isStaticShapedMemRef(getSource()) && "This method is valid only if the source type is a memref.");
-      return getSourceType().cast<::mlir::MemRefType>().getShape();
-    }
+    /// Returns the offsets info to the source. It consolidates
+    /// information from both dynamic_offsets and static_offsets
+    /// parameters. static_offsets parameter always has the expected
+    /// ranks with some dim could have mlir::ShapeType::kDynamic value
+    /// indicating the corresponding value should be from dynamic_offsets.
+    llvm::SmallVector<mlir::OpFoldResult> getOffsets();
 
-    /// The result of an create_nd_tdesc is always of TensorDescType.
-    TensorDescType getType() {
-      return getTensorDesc().getType().cast<TensorDescType>();
-    }
+    /// returns the shape info of the source. It is either from the
+    /// memref type, if source is a memref with static shape
+    /// information or from the dynamic_shape parameter. If both
+    /// exists, the dynamic_shape parameter will be used and the
+    /// shape information from  memref type will be ignored.
+    llvm::SmallVector<mlir::OpFoldResult> getShape();
+
+    /// returns the strides info of the source. It is either from the
+    /// memref type, if source is a memref with static shape
+    /// information or from the dynamic_stride parameter. If both
+    /// exists, the dynamic_strides parameter will be used and the
+    /// strides information from  memref type will be ignored.
+    llvm::SmallVector<mlir::OpFoldResult> getStrides();
+
+
+    /// return the shape embeded in the memref type of the source.
+    /// If source is not memref type. array of kDynamic will be returned.
+    llvm::ArrayRef<int64_t> getStaticShape();
+
+    /// return the strides embeded in the memref type of the source.
+    /// If source is not memref type. array of kDynamic will be returned.
+    llvm::ArrayRef<int64_t> getStaticStrides();
+
 
     /// Return the element type of the TensorDesc
-    ::mlir::Type getElementType() {
-      return getType().getElementType();
-    }
+    mlir::Type getElementType();
 
     /// Return the shape of the TensorDesc
-    ::llvm::ArrayRef<int64_t> getTensorDescShape() {
-      return getType().getShape();
-    }
+    llvm::ArrayRef<int64_t> getTensorDescShape();
 
-    bool hasStaticOffsets() {
-      return !::mlir::ShapedType::isDynamicShape(CreateNdDescOp::getStaticOffsets());
-    }
 
-    /// Check if the source memref has static shape information
-    bool hasStaticShape() {
-      return isStaticShapedMemRef(getSource());
-    }
-
-    /// Check if the dynamic shape argument presents
-    bool hasDynamicShape() {
-      return getShape().size();
-    }
-
-    /// Check if the dynamic strides argument presents
-    bool hasDynamicStrides() {
-      return getStrides().size();
-    }
 
   }];
 
@@ -344,40 +187,14 @@ def XeGPU_CreateDescOp
 
   let results = (outs XeGPU_TensorDesc:$TensorDesc);
 
-  let extraClassDeclaration = [{
-
-    static size_t getRankOf(mlir::Value value) {
-      if (value.getType().isIntOrIndexOrFloat())
-        return 0;
-      if (llvm::isa<mlir::MemRefType>(value.getType()))
-        return llvm::cast<mlir::MemRefType>(value.getType()).getRank();
-      if (llvm::isa<mlir::VectorType>(value.getType()))
-        return llvm::cast<mlir::VectorType>(value.getType()).getRank();
-      assert(0 && "Unreachable");
-    }
-
-  }];
-
   let builders = [
-    OpBuilder<(ins "::imex::xegpu::TensorDescType": $TensorDesc, "::mlir::Value": $source,
-                  "::mlir::Value": $offsets, CArg<"uint32_t", "1"> : $chunk_size_per_lane), [{
-        $_state.addOperands(source);
-        $_state.addOperands(offsets);
-        $_state.getOrAddProperties<Properties>().chunk_size_per_lane = $_builder.getIntegerAttr($_builder.getIntegerType(32), chunk_size_per_lane);
-        $_state.getOrAddProperties<Properties>().mode = ::imex::xegpu::ModeAttr::get($_builder.getContext(), imex::xegpu::Mode::VC);
-        $_state.addTypes(TensorDesc);
-    }]>,
+    OpBuilder<(ins "imex::xegpu::TensorDescType": $TensorDesc, "mlir::Value": $source,
+                  "mlir::Value": $offsets, CArg<"uint32_t", "1"> : $chunk_size_per_lane)>,
 
-    OpBuilder<(ins "::imex::xegpu::TensorDescType": $TensorDesc, "::mlir::Value": $source,
-                  "::mlir::Value": $offsets, "::mlir::IntegerAttr": $chunk_size_per_lane), [{
-        $_state.addOperands(source);
-        $_state.addOperands(offsets);
-        if(chunk_size_per_lane)
-          $_state.getOrAddProperties<Properties>().chunk_size_per_lane = chunk_size_per_lane;
-        $_state.getOrAddProperties<Properties>().mode = ::imex::xegpu::ModeAttr::get($_builder.getContext(), imex::xegpu::Mode::VC);
-        $_state.addTypes(TensorDesc);
-    }]>
+    OpBuilder<(ins "imex::xegpu::TensorDescType": $TensorDesc, "mlir::Value": $source,
+                  "mlir::Value": $offsets, "mlir::IntegerAttr": $chunk_size_per_lane)>
   ];
+
   let skipDefaultBuilders = 1;
 
   // Format: xegpu.create_tdesc %src, %offsets {mode=simt, chunk_size_per_lane=1}
@@ -407,6 +224,17 @@ def XeGPU_LoadNDOp : XeGPU_Op<"load_nd"> {
     DefaultValuedAttr<XeGPU_ModeAttr, "imex::xegpu::Mode::SIMT">: $mode);
   let results = (outs XeGPU_ValueType: $value);
 
+  let extraClassDeclaration = [{
+    mlir::VectorType getValueType() {
+      return llvm::dyn_cast_if_present<mlir::VectorType>(getValue().getType());
+    }
+
+    imex::xegpu::TensorDescType getTensorDescType() {
+      return getTensorDesc().getType();
+    }
+
+  }];
+
   // Format: xegpu.load_nd %1 {transpose = [1, 0], l1_hint = cached, l2_hint = uncached, l3_hint=streaming}
   //                          : !xegpu.tensor_desc<8x16xf32> -> vector<16x8xf32>
   let hasCustomAssemblyFormat = 1;
@@ -425,6 +253,17 @@ def XeGPU_StoreNDOp : XeGPU_Op<"store_nd", []> {
     DefaultValuedAttr<XeGPU_ModeAttr, "imex::xegpu::Mode::SIMT">: $mode
     );
 
+  let extraClassDeclaration = [{
+    mlir::VectorType getValueType() {
+      return llvm::dyn_cast_if_present<mlir::VectorType>(getValue().getType());
+    }
+
+    imex::xegpu::TensorDescType getTensorDescType() {
+      return getTensorDesc().getType();
+    }
+
+  }];
+
   // Format: xegpu.store_nd %3, %2 {l1_hint = write_back, l2_hint = uncached}
   //                        : vector<8x16xf16>, !xegpu.tensor_desc<8x16xf16>
   let hasCustomAssemblyFormat = 1;
@@ -439,6 +278,12 @@ def XeGPU_PrefetchNDOp : XeGPU_Op<"prefetch_nd", []> {
             OptionalAttr<XeGPU_CacheReadAttr>: $l3_hint,
             DefaultValuedAttr<XeGPU_ModeAttr, "imex::xegpu::Mode::SIMT">: $mode
   );
+
+  let extraClassDeclaration = [{
+    imex::xegpu::TensorDescType getTensorDescType() {
+      return getTensorDesc().getType();
+    }
+  }];
 
   // In format of: xegpu.prefetch_nd %tdesc {l1_hint = cached, l2_hint = uncached}:
   //                                    !xegpu.tensor_desc<8x16xf16>
@@ -514,52 +359,34 @@ def XeGPU_LoadGatherOp : XeGPU_Op<"load"> {
   let results = (outs XeGPU_ValueType: $value);
 
   let builders = [
-    OpBuilder<(ins "::mlir::Type": $value, "::mlir::Value": $TensorDesc, "::mlir::Value": $mask, "::mlir::IntegerAttr": $vnni_axis,
-                    CArg<"::mlir::DenseI64ArrayAttr", "::mlir::DenseI64ArrayAttr()">: $transpose,
-                    CArg<"::imex::xegpu::CacheReadHintAttr", "::imex::xegpu::CacheReadHintAttr()">: $l1_hint,
-                    CArg<"::imex::xegpu::CacheReadHintAttr", "::imex::xegpu::CacheReadHintAttr()">: $l2_hint,
-                    CArg<"::imex::xegpu::CacheReadHintAttr", "::imex::xegpu::CacheReadHintAttr()">: $l3_hint), [{
-      $_state.addOperands(TensorDesc);
-      $_state.addOperands(mask);
-      if (vnni_axis) {
-        $_state.getOrAddProperties<Properties>().vnni_axis = vnni_axis;
-      }
-      if (transpose) {
-        $_state.getOrAddProperties<Properties>().transpose = transpose;
-      }
-      if (l1_hint) {
-        $_state.getOrAddProperties<Properties>().l1_hint = l1_hint;
-      }
-      if (l2_hint) {
-        $_state.getOrAddProperties<Properties>().l2_hint = l2_hint;
-      }
-      if (l3_hint) {
-        $_state.getOrAddProperties<Properties>().l3_hint = l3_hint;
-      }
-      $_state.getOrAddProperties<Properties>().mode = ::imex::xegpu::ModeAttr::get($_builder.getContext(), imex::xegpu::Mode::VC);
-      $_state.addTypes(value); }]>,
+    OpBuilder<(ins "mlir::Type": $value, "mlir::Value": $TensorDesc, "mlir::Value": $mask, "mlir::IntegerAttr": $vnni_axis,
+                    CArg<"mlir::DenseI64ArrayAttr", "mlir::DenseI64ArrayAttr()">: $transpose,
+                    CArg<"imex::xegpu::CacheReadHintAttr", "imex::xegpu::CacheReadHintAttr()">: $l1_hint,
+                    CArg<"imex::xegpu::CacheReadHintAttr", "imex::xegpu::CacheReadHintAttr()">: $l2_hint,
+                    CArg<"imex::xegpu::CacheReadHintAttr", "imex::xegpu::CacheReadHintAttr()">: $l3_hint)>,
 
-    OpBuilder<(ins "::mlir::Type": $value, "::mlir::Value": $TensorDesc, "::mlir::Value": $mask, "::mlir::IntegerAttr": $vnni_axis,
-                    CArg<"::mlir::DenseI64ArrayAttr", "::mlir::DenseI64ArrayAttr()">: $transpose,
-                    CArg<"::imex::xegpu::CacheReadHint", "::imex::xegpu::CacheReadHint::CACHED">: $l1_hint,
-                    CArg<"::imex::xegpu::CacheReadHint", "::imex::xegpu::CacheReadHint::CACHED">: $l2_hint,
-                    CArg<"::imex::xegpu::CacheReadHint", "::imex::xegpu::CacheReadHint::CACHED">: $l3_hint), [{
-      $_state.addOperands(TensorDesc);
-      $_state.addOperands(mask);
-      if (vnni_axis) {
-        $_state.getOrAddProperties<Properties>().vnni_axis = vnni_axis;
-      }
-      if (transpose) {
-        $_state.getOrAddProperties<Properties>().transpose = transpose;
-      }
-
-      $_state.getOrAddProperties<Properties>().l1_hint = ::imex::xegpu::CacheReadHintAttr::get($_builder.getContext(), l1_hint);
-      $_state.getOrAddProperties<Properties>().l2_hint = ::imex::xegpu::CacheReadHintAttr::get($_builder.getContext(), l2_hint);
-      $_state.getOrAddProperties<Properties>().l3_hint = ::imex::xegpu::CacheReadHintAttr::get($_builder.getContext(), l3_hint);
-      $_state.getOrAddProperties<Properties>().mode = ::imex::xegpu::ModeAttr::get($_builder.getContext(), imex::xegpu::Mode::VC);
-      $_state.addTypes(value); }]>
+    OpBuilder<(ins "mlir::Type": $value, "mlir::Value": $TensorDesc, "mlir::Value": $mask, "mlir::IntegerAttr": $vnni_axis,
+                    CArg<"mlir::DenseI64ArrayAttr", "mlir::DenseI64ArrayAttr()">: $transpose,
+                    CArg<"imex::xegpu::CacheReadHint", "imex::xegpu::CacheReadHint::CACHED">: $l1_hint,
+                    CArg<"imex::xegpu::CacheReadHint", "imex::xegpu::CacheReadHint::CACHED">: $l2_hint,
+                    CArg<"imex::xegpu::CacheReadHint", "imex::xegpu::CacheReadHint::CACHED">: $l3_hint)>
 
   ];
+
+  let extraClassDeclaration = [{
+    mlir::Type getValueType() {
+      return getValue().getType();
+    }
+
+    imex::xegpu::TensorDescType getTensorDescType() {
+      return getTensorDesc().getType();
+    }
+
+    mlir::Type getMaskType() {
+      return getMask().getType();
+    }
+  }];
+
   let skipDefaultBuilders = 1;
 
   // In format of: %2 = xegpu.load %1, %0 {transpose = [1, 0], l1_hint = cached, l2_hint = uncached}
@@ -582,39 +409,32 @@ def XeGPU_StoreScatterOp : XeGPU_Op<"store", []> {
   );
 
   let builders = [
-    OpBuilder<(ins "::mlir::Value": $value, "::mlir::Value": $TensorDesc, "::mlir::Value": $mask,
-                CArg<"::imex::xegpu::CacheWriteHintAttr", "::imex::xegpu::CacheWriteHintAttr()">: $l1_hint,
-                CArg<"::imex::xegpu::CacheWriteHintAttr", "::imex::xegpu::CacheWriteHintAttr()">: $l2_hint,
-                CArg<"::imex::xegpu::CacheWriteHintAttr", "::imex::xegpu::CacheWriteHintAttr()">: $l3_hint), [{
-    $_state.addOperands(value);
-    $_state.addOperands(TensorDesc);
-    $_state.addOperands(mask);
-    if (l1_hint) {
-      $_state.getOrAddProperties<Properties>().l1_hint = l1_hint;
-    }
-    if (l2_hint) {
-      $_state.getOrAddProperties<Properties>().l2_hint = l2_hint;
-    }
-    if (l3_hint) {
-      $_state.getOrAddProperties<Properties>().l3_hint = l3_hint;
-    }
-    $_state.getOrAddProperties<Properties>().mode = ::imex::xegpu::ModeAttr::get($_builder.getContext(), imex::xegpu::Mode::VC);
-    }]>,
+    OpBuilder<(ins "mlir::Value": $value, "mlir::Value": $TensorDesc, "mlir::Value": $mask,
+                CArg<"imex::xegpu::CacheWriteHintAttr", "imex::xegpu::CacheWriteHintAttr()">: $l1_hint,
+                CArg<"imex::xegpu::CacheWriteHintAttr", "imex::xegpu::CacheWriteHintAttr()">: $l2_hint,
+                CArg<"imex::xegpu::CacheWriteHintAttr", "imex::xegpu::CacheWriteHintAttr()">: $l3_hint)>,
 
-    OpBuilder<(ins "::mlir::Value": $value, "::mlir::Value": $TensorDesc, "::mlir::Value": $mask,
-                CArg<"::imex::xegpu::CacheWriteHint", "::imex::xegpu::CacheWriteHint::WRITE_BACK">: $l1_hint,
-                CArg<"::imex::xegpu::CacheWriteHint", "::imex::xegpu::CacheWriteHint::WRITE_BACK">: $l2_hint,
-                CArg<"::imex::xegpu::CacheWriteHint", "::imex::xegpu::CacheWriteHint::WRITE_BACK">: $l3_hint), [{
-    $_state.addOperands(value);
-    $_state.addOperands(TensorDesc);
-    $_state.addOperands(mask);
-    $_state.getOrAddProperties<Properties>().l1_hint = ::imex::xegpu::CacheWriteHintAttr::get($_builder.getContext(), l1_hint);
-    $_state.getOrAddProperties<Properties>().l2_hint = ::imex::xegpu::CacheWriteHintAttr::get($_builder.getContext(), l2_hint);;
-    $_state.getOrAddProperties<Properties>().l3_hint = ::imex::xegpu::CacheWriteHintAttr::get($_builder.getContext(), l3_hint);;
-    $_state.getOrAddProperties<Properties>().mode = ::imex::xegpu::ModeAttr::get($_builder.getContext(), imex::xegpu::Mode::VC);
-    }]>
+    OpBuilder<(ins "mlir::Value": $value, "mlir::Value": $TensorDesc, "mlir::Value": $mask,
+                CArg<"imex::xegpu::CacheWriteHint", "imex::xegpu::CacheWriteHint::WRITE_BACK">: $l1_hint,
+                CArg<"imex::xegpu::CacheWriteHint", "imex::xegpu::CacheWriteHint::WRITE_BACK">: $l2_hint,
+                CArg<"imex::xegpu::CacheWriteHint", "imex::xegpu::CacheWriteHint::WRITE_BACK">: $l3_hint)>
   ];
+
   let skipDefaultBuilders = 1;
+
+  let extraClassDeclaration = [{
+    mlir::Type getValueType() {
+      return getValue().getType();
+    }
+
+    imex::xegpu::TensorDescType getTensorDescType() {
+      return getTensorDesc().getType();
+    }
+
+    mlir::Type getMaskType() {
+      return getMask().getType();
+    }
+  }];
 
   // Format: %3 = xegpu.load %1, %0 {l1_hint = cached, l2_hint = uncached}
   //                      : !xegpu.tensor_desc<16xf32, #xegpu.scattered>, vector<16xi1> -> vector<16xf32>
@@ -635,12 +455,7 @@ def XeGPU_UpdateOffsetOp
       let results = (outs XeGPU_TensorDesc: $result);
 
       let builders = [
-        OpBuilder<(ins "::mlir::Type": $result, "::mlir::Value": $TensorDesc, "::mlir::Value": $offsets), [{
-          $_state.addOperands(TensorDesc);
-          $_state.addOperands(offsets);
-          $_state.getOrAddProperties<Properties>().mode = ::imex::xegpu::ModeAttr::get($_builder.getContext(), imex::xegpu::Mode::VC);
-          $_state.addTypes(result);
-        }]>
+        OpBuilder<(ins "mlir::Type": $result, "mlir::Value": $TensorDesc, "mlir::Value": $offsets)>
       ];
 
       let skipDefaultBuilders = 1;
@@ -663,36 +478,24 @@ def XeGPU_PrefetchOp : XeGPU_Op<"prefetch", []> {
   );
 
   let builders = [
-    OpBuilder<(ins "::mlir::Value": $TensorDesc,
-      CArg<"::imex::xegpu::CacheReadHintAttr", "::imex::xegpu::CacheReadHintAttr()">: $l1_hint,
-      CArg<"::imex::xegpu::CacheReadHintAttr", "::imex::xegpu::CacheReadHintAttr()">: $l2_hint,
-      CArg<"::imex::xegpu::CacheReadHintAttr", "::imex::xegpu::CacheReadHintAttr()">: $l3_hint), [{
-      $_state.addOperands(TensorDesc);
-      if (l1_hint) {
-        $_state.getOrAddProperties<Properties>().l1_hint = l1_hint;
-      }
-      if (l2_hint) {
-        $_state.getOrAddProperties<Properties>().l2_hint = l2_hint;
-      }
-      if (l3_hint) {
-        $_state.getOrAddProperties<Properties>().l3_hint = l3_hint;
-      }
-      $_state.getOrAddProperties<Properties>().mode = ::imex::xegpu::ModeAttr::get($_builder.getContext(), imex::xegpu::Mode::VC);
-      }]>,
+    OpBuilder<(ins "mlir::Value": $TensorDesc,
+      CArg<"imex::xegpu::CacheReadHintAttr", "imex::xegpu::CacheReadHintAttr()">: $l1_hint,
+      CArg<"imex::xegpu::CacheReadHintAttr", "imex::xegpu::CacheReadHintAttr()">: $l2_hint,
+      CArg<"imex::xegpu::CacheReadHintAttr", "imex::xegpu::CacheReadHintAttr()">: $l3_hint)>,
 
-    OpBuilder<(ins "::mlir::Value": $TensorDesc,
-      CArg<"::imex::xegpu::CacheReadHint", "::imex::xegpu::CacheReadHint::CACHED">: $l1_hint,
-      CArg<"::imex::xegpu::CacheReadHint", "::imex::xegpu::CacheReadHint::CACHED">: $l2_hint,
-      CArg<"::imex::xegpu::CacheReadHint", "::imex::xegpu::CacheReadHint::CACHED">: $l3_hint), [{
-      $_state.addOperands(TensorDesc);
-      $_state.getOrAddProperties<Properties>().l1_hint = ::imex::xegpu::CacheReadHintAttr::get($_builder.getContext(), l1_hint);
-      $_state.getOrAddProperties<Properties>().l2_hint = ::imex::xegpu::CacheReadHintAttr::get($_builder.getContext(), l2_hint);
-      $_state.getOrAddProperties<Properties>().l3_hint = ::imex::xegpu::CacheReadHintAttr::get($_builder.getContext(), l3_hint);;
-      $_state.getOrAddProperties<Properties>().mode = ::imex::xegpu::ModeAttr::get($_builder.getContext(), imex::xegpu::Mode::VC);
-      }]>
+    OpBuilder<(ins "mlir::Value": $TensorDesc,
+      CArg<"imex::xegpu::CacheReadHint", "imex::xegpu::CacheReadHint::CACHED">: $l1_hint,
+      CArg<"imex::xegpu::CacheReadHint", "imex::xegpu::CacheReadHint::CACHED">: $l2_hint,
+      CArg<"imex::xegpu::CacheReadHint", "imex::xegpu::CacheReadHint::CACHED">: $l3_hint)>
   ];
 
   let skipDefaultBuilders = 1;
+
+  let extraClassDeclaration = [{
+    imex::xegpu::TensorDescType getTensorDescType() {
+      return getTensorDesc().getType();
+    }
+  }];
 
   // In format of: xegpu.prefetch %tdesc {l1_hint = cached, l2_hint = uncached}:
   //                                    !xegpu.tensor_desc<8x16xf16>
@@ -714,21 +517,12 @@ def XeGPU_InvokeSIMDOp : XeGPU_Op<"invoke_SIMD", []> {
 
   let builders = [
     OpBuilder<(ins "mlir::SymbolRefAttr":$callee, "mlir::TypeRange":$results,
-      "imex::xegpu::ArgTypeAttr":$argType, CArg<"mlir::ValueRange", "{}">:$operands), [{
-      $_state.addOperands(operands);
-      $_state.addAttribute("argType", argType);
-      $_state.addAttribute("callee", callee);
-      $_state.addTypes(results);
-    }]>,
+      "imex::xegpu::ArgTypeAttr":$argType, CArg<"mlir::ValueRange", "{}">:$operands)>,
     OpBuilder<(ins "mlir::StringAttr":$callee, "mlir::TypeRange":$results,
-      "imex::xegpu::ArgTypeAttr":$argType, CArg<"mlir::ValueRange", "{}">:$operands), [{
-      build($_builder, $_state, mlir::SymbolRefAttr::get(callee), results, argType, operands);
-    }]>,
+      "imex::xegpu::ArgTypeAttr":$argType, CArg<"mlir::ValueRange", "{}">:$operands)>,
     OpBuilder<(ins "llvm::StringRef":$callee, "mlir::TypeRange":$results,
-      "imex::xegpu::ArgTypeAttr":$argType, CArg<"mlir::ValueRange", "{}">:$operands), [{
-      build($_builder, $_state, mlir::StringAttr::get($_builder.getContext(), callee),
-            results, argType, operands);
-    }]>];
+      "imex::xegpu::ArgTypeAttr":$argType, CArg<"mlir::ValueRange", "{}">:$operands)>
+  ];
 
 }
 
@@ -747,29 +541,13 @@ def XeGPU_AtomicRMWOp: XeGPU_Op<"atomic_rmw", []> {
   }];
 
   let builders = [
-    OpBuilder<(ins "::mlir::Type": $result, "::imex::xegpu::AtomicRMWKindAttr": $kind,
-                   "::mlir::Value": $tensorDesc, "::mlir::Value": $mask,
-                   "::mlir::Value": $value), [{
-      $_state.addOperands(tensorDesc);
-      $_state.addOperands(mask);
-      if (value)
-        $_state.addOperands(value);
-      $_state.getOrAddProperties<Properties>().kind = kind;
-      $_state.getOrAddProperties<Properties>().mode = ::imex::xegpu::ModeAttr::get($_builder.getContext(), imex::xegpu::Mode::VC);
-      $_state.addTypes(result);
-    }]>,
+    OpBuilder<(ins "mlir::Type": $result, "imex::xegpu::AtomicRMWKindAttr": $kind,
+                   "mlir::Value": $tensorDesc, "mlir::Value": $mask,
+                   "mlir::Value": $value)>,
 
-    OpBuilder<(ins "::mlir::Type": $result, "::imex::xegpu::AtomicRMWKind": $kind,
-                   "::mlir::Value": $tensorDesc, "::mlir::Value": $mask,
-                   "::mlir::Value": $value), [{
-      $_state.addOperands(tensorDesc);
-      $_state.addOperands(mask);
-      if (value)
-        $_state.addOperands(value);
-      $_state.getOrAddProperties<Properties>().kind = ::imex::xegpu::AtomicRMWKindAttr::get($_builder.getContext(), kind);
-      $_state.getOrAddProperties<Properties>().mode = ::imex::xegpu::ModeAttr::get($_builder.getContext(), imex::xegpu::Mode::VC);
-      $_state.addTypes(result);
-    }]>
+    OpBuilder<(ins "mlir::Type": $result, "imex::xegpu::AtomicRMWKind": $kind,
+                   "mlir::Value": $tensorDesc, "mlir::Value": $mask,
+                   "mlir::Value": $value)>
   ];
 
   let skipDefaultBuilders = 1;

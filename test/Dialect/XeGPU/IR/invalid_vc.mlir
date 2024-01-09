@@ -5,24 +5,10 @@ func.func @test_create_nd_tdesc_vc_1(%src: memref<24xf32>) {
   %c0 = arith.constant 2 : index
   %c1 = arith.constant 4 : index
 
-  // expected-error@+1 {{Expecting the rank of shape, strides and offsets should match with each other}}
+  // expected-error@+1 {{Expecting the rank of shape, strides, offsets and memref type should match with each other}}
   %1 = xegpu.create_nd_tdesc %src[%c0, %c1] {mode = vc} : memref<24xf32> -> !xegpu.tensor_desc<8x16xf32>
   return
 }
-
-// -----
-func.func @test_create_nd_tdesc_vc_2(%input: memref<24x32xf32>) {
-  %c0 = arith.constant 2 : index
-  %c1 = arith.constant 4 : index
-
-  %c8 = arith.constant 8 : index
-  %c16 = arith.constant 16 : index
-
-  // expected-error@+1 {{It is invalid to have both or none of dynamic shape and static shape. Only one of them is needed.}}
-  %1 = xegpu.create_nd_tdesc %input[%c0, %c1], [%c8, %c16], [%c16, %c1] {mode = vc} : memref<24x32xf32> -> !xegpu.tensor_desc<8x16xf32>
-  return
-}
-
 
 // -----
 func.func @test_create_nd_tdesc_vc_3(%input: memref<?xf32>) {
@@ -32,7 +18,7 @@ func.func @test_create_nd_tdesc_vc_3(%input: memref<?xf32>) {
   %c8 = arith.constant 8 : index
   %c16 = arith.constant 16 : index
 
-  // expected-error@+1 {{Expecting the rank of shape, strides and offsets should match with each other}}
+  // expected-error@+1 {{Expecting the rank of shape, strides, offsets and memref type should match with each other}}
   %1 = xegpu.create_nd_tdesc %input[%c0, %c1], [%c8, %c16], [%c16, %c1] {mode = vc} : memref<?xf32> -> !xegpu.tensor_desc<8x16xf32>
   return
 }
@@ -43,7 +29,7 @@ func.func @test_create_nd_tdesc_vc_4(%input: memref<?x?xf32>) {
   %c1 = arith.constant 2 : index
   %c8 = arith.constant 8 : index
 
-  // expected-error@+1 {{Expecting the rank of shape, strides and offsets should match with each other}}
+  // expected-error@+1 {{Expecting the rank of shape, strides, offsets and memref type should match with each other}}
   %1 = xegpu.create_nd_tdesc %input[%c1], [%c8], [%c1] {mode = vc}
                               : memref<?x?xf32> -> !xegpu.tensor_desc<8x16xf32>
   return

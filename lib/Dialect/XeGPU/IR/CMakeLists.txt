@@ -6,8 +6,7 @@ add_mlir_dialect_library(IMEXXeGPUDialect
   ${PROJECT_SOURCE_DIR}/include/imex/Dialect/XeGPU
 
   DEPENDS
-  MLIRXeGPUOpsIncGen
-  XeGPUOpsAttrsIncGen
+  MLIRXeGPUIncGen
 
   LINK_LIBS PUBLIC
   MLIRIR

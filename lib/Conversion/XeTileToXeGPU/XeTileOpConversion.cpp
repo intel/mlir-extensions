@@ -62,8 +62,7 @@ class SgInitTileOpPattern
     };
 
     auto tDescTy = xegpu::TensorDescType::get(
-        {resTileShape[2], resTileShape[3]}, resTileType.getElementType(),
-        imex::xegpu::MemoryScope::GLOBAL /*memory scope*/);
+        {resTileShape[2], resTileShape[3]}, resTileType.getElementType());
 
     rewriter.setInsertionPoint(op);
     llvm::SmallVector<mlir::Value> xegpuOps;
@@ -82,8 +81,7 @@ class SgInitTileOpPattern
         // memeref.
         auto createNdOp = rewriter.create<xegpu::CreateNdDescOp>(
             op.getLoc(), tDescTy /*resultTy*/, source /*source*/,
-            tDescOffsets /*offsets*/, true /*boboundary_check*/,
-            imex::xegpu::Mode::VC /*mode*/);
+            tDescOffsets /*offsets*/, imex::xegpu::Mode::VC /*mode*/);
 
         xegpuOps.push_back(createNdOp);
       }
@@ -198,6 +196,8 @@ struct SgLoadTileOpPattern
     for (int i = 0; i < shape[0]; i++) {
       for (int j = 0; j < shape[1]; j++) {
         auto tile = sources[i * shape[1] + j];
+        // FIXME: (chencha3) it assumes arr_len is 1,
+        // pending improvement in the new lowering passes.
         auto ldOp = rewriter.create<xegpu::LoadNDOp>(
             op.getLoc(), subVectorTy, tile, vnniAxisAttr, transposeAttr, L1, L2,
             L3, imex::xegpu::Mode::VC);

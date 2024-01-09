@@ -15,10 +15,12 @@
 //===----------------------------------------------------------------------===//
 #include "imex/Conversion/GPUToSPIRV/GPUToSPIRVPass.h"
 #include "imex/Conversion/XeGPUToSPIRV/XeGPUToSPIRV.h"
-#include "imex/Dialect/XeGPU/IR/XeGPUOps.h"
+#include "imex/Dialect/XeGPU/IR/XeGPU.h"
 
 #include "../PassDetail.h"
 
+#include <llvm/ADT/ArrayRef.h>
+#include <llvm/Support/Debug.h>
 #include <mlir/Conversion/ArithToSPIRV/ArithToSPIRV.h>
 #include <mlir/Conversion/ControlFlowToSPIRV/ControlFlowToSPIRV.h>
 #include <mlir/Conversion/FuncToSPIRV/FuncToSPIRV.h>
@@ -26,26 +28,17 @@
 #include <mlir/Conversion/MathToSPIRV/MathToSPIRV.h>
 #include <mlir/Conversion/MemRefToSPIRV/MemRefToSPIRV.h>
 #include <mlir/Conversion/SCFToSPIRV/SCFToSPIRV.h>
-
-#include "mlir/Dialect/Arith/IR/Arith.h"
-#include "mlir/Dialect/GPU/IR/GPUDialect.h"
-
-#include "mlir/Conversion/GPUCommon/GPUCommonPass.h"
-#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
-#include "mlir/IR/Attributes.h"
-#include "mlir/IR/Builders.h"
-#include "mlir/IR/BuiltinTypes.h"
-#include "llvm/ADT/SmallVectorExtras.h"
-#include "llvm/Support/FormatVariadic.h"
-
-#include "mlir/Dialect/SPIRV/IR/SPIRVOps.h"
-#include "mlir/IR/BuiltinOps.h"
-#include "mlir/IR/Matchers.h"
-#include "mlir/Support/LLVM.h"
-#include "mlir/Transforms/DialectConversion.h"
-#include "llvm/ADT/ArrayRef.h"
+#include <mlir/Conversion/VectorToSPIRV/VectorToSPIRV.h>
+#include <mlir/Dialect/Arith/IR/Arith.h>
+#include <mlir/Dialect/GPU/IR/GPUDialect.h>
 #include <mlir/Dialect/SPIRV/IR/SPIRVDialect.h>
+#include <mlir/Dialect/SPIRV/IR/SPIRVOps.h>
+#include <mlir/Dialect/SPIRV/IR/SPIRVTypes.h>
 #include <mlir/Dialect/SPIRV/Transforms/SPIRVConversion.h>
+#include <mlir/IR/BuiltinOps.h>
+#include <mlir/IR/Matchers.h>
+#include <mlir/Support/LLVM.h>
+#include <mlir/Transforms/DialectConversion.h>
 
 namespace imex {
 
@@ -324,25 +317,42 @@ void GPUXToSPIRVPass::runOnOperation() {
             return ::mlir::VectorType::get(8, i32Type);
           });
       typeConverter.addConversion([&](::mlir::VectorType type) -> ::mlir::Type {
+        // TODO: it looks like needs some improvement for matching upstream
+        // passes
         unsigned rank = type.getRank();
         auto elemType = type.getElementType();
-        if (rank < 1)
-          return type;
-        else {
-          // load2d/store2d is vnni format with 3 dims
-          if (rank == 3 && elemType.getIntOrFloatBitWidth() < 32) {
-            elemType = ::mlir::IntegerType::get(context, 32);
-            rank--;
-          }
-          unsigned sum = 1;
-          for (unsigned i = 0; i < rank; i++) {
-            sum *= type.getShape()[i];
-          }
-          if (llvm::isa<mlir::IndexType>(elemType))
-            elemType = ::mlir::IntegerType::get(context, 64);
-          return ::mlir::VectorType::get(sum, elemType);
+
+        if (llvm::isa<mlir::IndexType>(elemType))
+          elemType = mlir::IntegerType::get(context, 64);
+
+        auto scalarType =
+            llvm::dyn_cast_or_null<mlir::spirv::ScalarType>(elemType);
+        if (!scalarType) {
+          llvm::dbgs() << type
+                       << " illegal: cannot convert non-scalar element type\n";
+          return nullptr;
         }
+
+        if (rank < 1 || type.getNumElements() == 1)
+          return elemType;
+
+        // load2d/store2d is 3-d with vnni format, and 4d with array_length
+        // TODO: what if load without any vnni? are we going to transform all
+        // fp16/bf16
+        auto factor = 32 / elemType.getIntOrFloatBitWidth();
+        if ((rank == 3 || rank == 4) && type.getShape()[rank - 1] == factor) {
+          elemType = ::mlir::IntegerType::get(context, 32);
+          rank--;
+        }
+
+        unsigned sum = 1;
+        for (unsigned i = 0; i < rank; i++) {
+          sum *= type.getShape()[i];
+        }
+
+        return ::mlir::VectorType::get(sum, elemType);
       });
+
       typeConverter.addConversion(
           [&](xegpu::NbarrierType type) -> ::mlir::Type {
             auto i32Type = ::mlir::IntegerType::get(context, 32);
