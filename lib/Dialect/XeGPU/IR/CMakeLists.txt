@@ -7,6 +7,8 @@ add_mlir_dialect_library(IMEXXeGPUDialect
 
   DEPENDS
   MLIRXeGPUIncGen
+  MLIRXeGPUAttrsIncGen
+  MLIRXeGPUEnumsIncGen
 
   LINK_LIBS PUBLIC
   MLIRIR
