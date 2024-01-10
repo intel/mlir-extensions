@@ -15,19 +15,21 @@
 #ifndef _IMEX_INITALLDIALECTS_H_
 #define _IMEX_INITALLDIALECTS_H_
 
-#include "imex/Dialect/XeTile/IR/XeTileOps.h"
 #include <mlir/IR/DialectRegistry.h>
 #include <mlir/IR/MLIRContext.h>
 
 #include <imex/Dialect/GPUX/IR/GPUXOps.h>
+#include <imex/Dialect/Region/IR/RegionOps.h>
 #include <imex/Dialect/XeGPU/IR/XeGPU.h>
+#include <imex/Dialect/XeTile/IR/XeTileOps.h>
 
 namespace imex {
 
 /// Add all the IMEX dialects to the provided registry.
 inline void registerAllDialects(::mlir::DialectRegistry &registry) {
   // clang-format off
-    registry.insert<::imex::xetile::XeTileDialect,
+    registry.insert<::imex::region::RegionDialect,
+                    ::imex::xetile::XeTileDialect,
                     ::imex::gpux::GPUXDialect,
                     ::imex::xegpu::XeGPUDialect>();
   // clang-format on
