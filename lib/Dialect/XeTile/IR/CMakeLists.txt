@@ -1,4 +1,4 @@
-add_mlir_dialect_library(IMEXXeTileDialect
+add_imex_dialect_library(IMEXXeTileDialect
   XeTileOps.cpp
   XeTileDialect.cpp
 

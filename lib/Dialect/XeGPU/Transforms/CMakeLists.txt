@@ -1,4 +1,4 @@
-add_mlir_dialect_library(IMEXXeGPUTransforms
+add_imex_dialect_library(IMEXXeGPUTransforms
   XeGPUToSPIRVWithVCIntrinsics.cpp
   XeGPUToSPIRVWithJointMatrix.cpp
 

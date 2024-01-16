@@ -68,7 +68,7 @@ add_mlir_doc(Passes {args.name}Passes ./ -gen-pass-doc)
 
 # Default rules for tblgen'erated cpps
 with open(jp(libroot, args.name, "IR", "CMakeLists.txt"), "w") as f:
-    f.write(f"""add_mlir_dialect_library(IMEX{args.name}Dialect
+    f.write(f"""add_imex_dialect_library(IMEX{args.name}Dialect
   {args.name}Ops.cpp
 
   ADDITIONAL_HEADER_DIRS
@@ -84,7 +84,7 @@ with open(jp(libroot, args.name, "IR", "CMakeLists.txt"), "w") as f:
 
 # Default rules for Transforms
 with open(jp(libroot, args.name, "Transforms", "CMakeLists.txt"), "w") as f:
-    f.write(f"""add_mlir_dialect_library(IMEX{args.name}Transforms
+    f.write(f"""add_imex_dialect_library(IMEX{args.name}Transforms
   # FIXME.cpp
 
   ADDITIONAL_HEADER_DIRS
