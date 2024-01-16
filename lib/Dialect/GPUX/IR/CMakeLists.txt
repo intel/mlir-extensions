@@ -1,4 +1,4 @@
-add_mlir_dialect_library(IMEXGPUXDialect
+add_imex_dialect_library(IMEXGPUXDialect
   GPUXOps.cpp
 
   ADDITIONAL_HEADER_DIRS

@@ -1,4 +1,4 @@
-add_mlir_dialect_library(IMEXXeTileTransforms
+add_imex_dialect_library(IMEXXeTileTransforms
   XeTileTiling.cpp
 
   ADDITIONAL_HEADER_DIRS

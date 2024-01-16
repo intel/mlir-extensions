@@ -15,6 +15,8 @@
 #ifndef _IMEX_CONVERSION_PASSES_H_INCLUDED_
 #define _IMEX_CONVERSION_PASSES_H_INCLUDED_
 
+#include "mlir/Pass/Pass.h"
+
 #include <imex/Conversion/GPUToGPUX/GPUToGPUX.h>
 #include <imex/Conversion/GPUToSPIRV/GPUToSPIRVPass.h>
 #include <imex/Conversion/GPUXToLLVM/GPUXToLLVMPass.h>

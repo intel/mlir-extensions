@@ -1,4 +1,4 @@
-add_mlir_dialect_library(IMEXXeGPUDialect
+add_imex_dialect_library(IMEXXeGPUDialect
   XeGPUDialect.cpp
   XeGPUOps.cpp
 

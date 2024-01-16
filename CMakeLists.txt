@@ -38,6 +38,7 @@ endif()
 # Expected LLVM SHA
 file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/build_tools/llvm_version.txt EXPECTED_LLVM_SHA)
 message(STATUS "Expected llvm sha: \"${EXPECTED_LLVM_SHA}\"")
+option(IMEX_CHECK_LLVM_VERSION "Check expected llvm version." ON)
 
 if(IMEX_EXTERNAL_PROJECT_BUILD)
     message(STATUS "Building IMEX with LLVM_EXTERNAL_PROJECTS")
@@ -47,7 +48,7 @@ if(IMEX_EXTERNAL_PROJECT_BUILD)
     get_source_info(${LLVM_MAIN_SRC_DIR}/.. LLVM_SHA repository)
     message(STATUS "Actual llvm sha:   \"${LLVM_SHA}\"")
 
-    if (NOT EXPECTED_LLVM_SHA STREQUAL LLVM_SHA)
+    if (IMEX_CHECK_LLVM_VERSION AND (NOT EXPECTED_LLVM_SHA STREQUAL LLVM_SHA))
         message(FATAL_ERROR "Invalid llvm version")
     endif()
 
@@ -78,7 +79,7 @@ else()
     string(REPLACE "\"" "" LLVM_SHA ${LLVM_SHA})
     message(STATUS "llvm sha: \"${LLVM_SHA}\"")
 
-    if (NOT EXPECTED_LLVM_SHA STREQUAL LLVM_SHA)
+    if (IMEX_CHECK_LLVM_VERSION AND (NOT EXPECTED_LLVM_SHA STREQUAL LLVM_SHA))
         message(FATAL_ERROR "Invalid llvm version")
     endif()
 
@@ -110,11 +111,8 @@ include(TableGen)
 include(AddLLVM)
 include(AddMLIR)
 
-# Instead of creating a separate AddIMEX,
-# redefine some functions included from include(AddMLIR)
-# and change the behavior of add_mlir_* functions to
-# properly generate IMEXConfig.cmake and IMEXTargets.cmake
-function(add_mlir_library_install name)
+# Functions to generate IMEXConfig.cmake and IMEXTargets.cmake.
+function(add_imex_library_install name)
   get_target_export_arg(${name} IMEX export_to_mlirtargets UMBRELLA imex-libraries)
   install(TARGETS ${name}
     COMPONENT ${name}
@@ -136,22 +134,22 @@ function(add_mlir_library_install name)
 endfunction()
 
 # Declare the library associated with a dialect.
-function(add_mlir_dialect_library name)
+function(add_imex_dialect_library name)
   set_property(GLOBAL APPEND PROPERTY IMEX_DIALECT_LIBS ${name})
   add_mlir_library(${ARGV} DEPENDS mlir-headers)
-endfunction(add_mlir_dialect_library)
+endfunction(add_imex_dialect_library)
 
 # Declare the library associated with a conversion.
-function(add_mlir_conversion_library name)
+function(add_imex_conversion_library name)
   set_property(GLOBAL APPEND PROPERTY IMEX_CONVERSION_LIBS ${name})
   add_mlir_library(${ARGV} DEPENDS mlir-headers)
-endfunction(add_mlir_conversion_library)
+endfunction(add_imex_conversion_library)
 
 # Declare the library associated with a translation.
-function(add_mlir_translation_library name)
+function(add_imex_translation_library name)
   set_property(GLOBAL APPEND PROPERTY IMEX_TRANSLATION_LIBS ${name})
   add_mlir_library(${ARGV} DEPENDS mlir-headers)
-endfunction(add_mlir_translation_library)
+endfunction(add_imex_translation_library)
 
 macro(add_imex_tool name)
     add_llvm_executable(${name} ${ARGN})
