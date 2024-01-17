@@ -18,7 +18,7 @@ module @test attributes {
   // CHECK-LABEL: spirv.module @{{.*}} Physical64 OpenCL
   // CHECK-DAG: spirv.SpecConstant [[SPECCST:@.*]] = {{.*}} : i8
   // CHECK-DAG: spirv.SpecConstantComposite [[SPECCSTCOMPOSITE:@.*]] ([[SPECCST]], {{.*}}) : !spirv.array<[[ARRAYSIZE:.*]] x i8>
-  // CHECK-DAG: spirv.GlobalVariable [[PRINTMSG:@.*]] initializer([[SPECCSTCOMPOSITE]]) : !spirv.ptr<!spirv.array<[[ARRAYSIZE]] x i8>, UniformConstant>
+  // CHECK-DAG: spirv.GlobalVariable [[PRINTMSG:@.*]] initializer([[SPECCSTCOMPOSITE]]) {Constant} : !spirv.ptr<!spirv.array<[[ARRAYSIZE]] x i8>, UniformConstant>
     // spirv.SpecConstantComposite
   gpu.module @kernel_module0 {
       gpu.func @test_printf(%arg0: i32, %arg1: f32) kernel
@@ -37,7 +37,7 @@ module @test attributes {
   // CHECK-LABEL: spirv.module @{{.*}} Physical64 OpenCL
   // CHECK-DAG: spirv.SpecConstant [[SPECCST:@.*]] = {{.*}} : i8
   // CHECK-DAG: spirv.SpecConstantComposite [[SPECCSTCOMPOSITE:@.*]] ([[SPECCST]], {{.*}}) : !spirv.array<[[ARRAYSIZE:.*]] x i8>
-  // CHECK-DAG: spirv.GlobalVariable [[PRINTMSG:@.*]] initializer([[SPECCSTCOMPOSITE]]) : !spirv.ptr<!spirv.array<[[ARRAYSIZE]] x i8>, UniformConstant>
+  // CHECK-DAG: spirv.GlobalVariable [[PRINTMSG:@.*]] initializer([[SPECCSTCOMPOSITE]]) {Constant} : !spirv.ptr<!spirv.array<[[ARRAYSIZE]] x i8>, UniformConstant>
     // spirv.SpecConstantComposite
   gpu.module @kernel_module1 {
       gpu.func @test_printf_arg(%arg0: i32, %arg1: f32) kernel

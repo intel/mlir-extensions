@@ -140,6 +140,7 @@ public:
           mlir::spirv::PointerType::get(
               globalType, mlir::spirv::StorageClass::UniformConstant),
           globalVarName, mlir::FlatSymbolRefAttr::get(specCstComposite));
+      globalVar->setAttr("Constant", rewriter.getUnitAttr());
     }
 
     // Get SSA value of Global variable

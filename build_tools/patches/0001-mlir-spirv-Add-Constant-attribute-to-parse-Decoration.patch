@@ -1,0 +1,36 @@
+From c187c9330f8e5cfc3db62ae198302520a1199741 Mon Sep 17 00:00:00 2001
+From: "Prajapati, Dimple" <dimpalben.r.prajapati@intel.com>
+Date: Thu, 11 Jan 2024 19:22:15 -0800
+Subject: [PATCH] [mlir][spirv] Add Constant attribute to parse Decoration
+
+---
+ mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp | 1 +
+ mlir/lib/Target/SPIRV/Serialization/Serializer.cpp     | 1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp b/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
+index 89e2e7ad52fa..8768481803bd 100644
+--- a/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
++++ b/mlir/lib/Target/SPIRV/Deserialization/Deserializer.cpp
+@@ -308,6 +308,7 @@ LogicalResult spirv::Deserializer::processDecoration(ArrayRef<uint32_t> words) {
+   case spirv::Decoration::NoUnsignedWrap:
+   case spirv::Decoration::RelaxedPrecision:
+   case spirv::Decoration::Restrict:
++  case spirv::Decoration::Constant:
+     if (words.size() != 2) {
+       return emitError(unknownLoc, "OpDecoration with ")
+              << decorationName << "needs a single target <id>";
+diff --git a/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp b/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
+index 9e9a16456cc1..b694a9a31ea3 100644
+--- a/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
++++ b/mlir/lib/Target/SPIRV/Serialization/Serializer.cpp
+@@ -275,6 +275,7 @@ LogicalResult Serializer::processDecoration(Location loc, uint32_t resultID,
+   case spirv::Decoration::NoUnsignedWrap:
+   case spirv::Decoration::RelaxedPrecision:
+   case spirv::Decoration::Restrict:
++  case spirv::Decoration::Constant:
+     // For unit attributes, the args list has no values so we do nothing
+     if (auto unitAttr = dyn_cast<UnitAttr>(attr.getValue()))
+       break;
+--
+2.34.1
