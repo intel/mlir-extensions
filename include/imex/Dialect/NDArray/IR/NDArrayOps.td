@@ -159,6 +159,22 @@ class NDArray_Op<string mnemonic, list<Trait> traits = []> :
     Op<NDArray_Dialect, mnemonic, traits>;
 
 
+def DeleteOp : NDArray_Op<"delete"> {
+  let summary = "Explicitly delete an NDArray, freeing its memory";
+  let description = [{
+      Allow explicitly deleting the memory of an NDArray. It is assumed
+      that the memory had been allocated by one of NDArray's creation functions.
+      It must be the last use of the input array.
+  }];
+
+  let arguments = (ins NDArray_NDArray:$input);
+
+  let assemblyFormat = [{
+    $input attr-dict `:` qualified(type($input))
+  }];
+}
+
+
 def ToTensorOp : NDArray_Op<"to_tensor", [Pure]> {
   let summary = "Convert a NDArray value to a value of MLIR's builtin tensor type";
   let description = [{
@@ -908,6 +924,17 @@ def ReductionOp : NDArray_Op<"reduction", []> {
   let assemblyFormat = [{
     $input attr-dict `:` qualified(type($input)) `->` qualified(type(results))
   }];
+}
+
+def CastElemTypeOp: NDArray_Op<"cast_elemtype", [Pure]> {
+    let summary = "Cast array from one element type to another";
+
+    let arguments = (ins AnyType:$input, OptionalAttr<I1Attr>:$copy);
+    let results = (outs NDArray_NDArray:$output);
+
+    let assemblyFormat = "$input attr-dict `:` qualified(type($input)) `to` qualified(type($output))";
+
+    let hasCanonicalizer = 1;
 }
 
 #endif // _NDARRAY_OPS_TD_INCLUDED_
