@@ -1266,6 +1266,51 @@ struct VectorExtract final : public OpConversionPattern<vector::ExtractOp> {
     return success();
   }
 };
+
+struct VectorExtractStridedSlice final
+    : public OpConversionPattern<vector::ExtractStridedSliceOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(vector::ExtractStridedSliceOp extractOp, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto dstType = getTypeConverter()->convertType(extractOp.getType());
+    if (!dstType)
+      return failure();
+
+    // fixme : currently only support 1D vectors
+    if (extractOp.getSourceVectorType().getRank() != 1)
+      return failure();
+
+    auto getFirstIntValue = [](mlir::ArrayAttr attr) -> uint64_t {
+      return (*attr.getAsValueRange<IntegerAttr>().begin()).getZExtValue();
+    };
+
+    uint64_t offset = getFirstIntValue(extractOp.getOffsets());
+    uint64_t size = getFirstIntValue(extractOp.getSizes());
+    uint64_t stride = getFirstIntValue(extractOp.getStrides());
+
+    if (stride != 1)
+      return failure();
+
+    Value srcVector = adaptor.getOperands().front();
+
+    // Extract vector<1xT> case.
+    if (isa<spirv::ScalarType>(dstType)) {
+      rewriter.replaceOpWithNewOp<spirv::CompositeExtractOp>(extractOp,
+                                                             srcVector, offset);
+      return success();
+    }
+
+    SmallVector<int32_t, 2> indices(size);
+    std::iota(indices.begin(), indices.end(), offset);
+
+    rewriter.replaceOpWithNewOp<spirv::VectorShuffleOp>(
+        extractOp, dstType, srcVector, srcVector,
+        rewriter.getI32ArrayAttr(indices));
+
+    return success();
+  }
+};
 } // namespace
 
 void imex::populateXeGPUToVCIntrinsicsPatterns(
@@ -1274,7 +1319,8 @@ void imex::populateXeGPUToVCIntrinsicsPatterns(
                AllocNbarrierToVCPattern, CreateNbarrierToVCPattern,
                NbarrierArriveToVCPattern, NbarrierWaitToVCPattern,
                CompilerHintToVCPattern, MfenceToVCPattern, VectorShapeCast,
-               VectorExtract, GatherScatterToRawSend<LoadGatherOp>,
+               VectorExtract, VectorExtractStridedSlice,
+               GatherScatterToRawSend<LoadGatherOp>,
                GatherScatterToRawSend<StoreScatterOp>, AtomicToLsc,
                UpdateNDOffsetToVCPattern>(typeConverter, patterns.getContext());
   if (getenv("IMEX_NOT_PREFER_RAWSEND"))
@@ -2022,6 +2068,6 @@ void imex::populateXeGPUToJointMatrixPatterns(SPIRVTypeConverter &typeConverter,
                                               RewritePatternSet &patterns) {
   patterns.add<CreateNdDescToJointMatrix, UpdateNDOffsetJointMatrix,
                LoadNDJointMatrix, StoreNDJointMatrix, DpasJointMatrix,
-               VectorShapeCast, VectorExtract>(typeConverter,
-                                               patterns.getContext());
+               VectorShapeCast, VectorExtract, VectorExtractStridedSlice>(
+      typeConverter, patterns.getContext());
 }
