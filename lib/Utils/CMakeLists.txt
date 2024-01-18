@@ -1,5 +1,6 @@
 add_mlir_library(IMEXUtil
     FuncUtils.cpp
+    PassUtils.cpp
     TypeConversion.cpp
     XeCommon.cpp
 

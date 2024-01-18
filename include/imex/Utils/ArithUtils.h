@@ -1,6 +1,6 @@
 //===- PassUtils.h - Pass Utility Functions --------------------*- C++ -*-===//
 //
-// Copyright 2022 Intel Corporation
+// Copyright 2023 Intel Corporation
 // Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
@@ -33,13 +33,40 @@ template <typename T> struct EasyVal {
   EasyVal(const ::mlir::Location &loc, ::mlir::OpBuilder &builder,
           const ElType &value)
       : _value(value), _loc(&loc), _builder(&builder) {}
+
+  /// Create Index Value from OpFoldResult
+  // This is provided as a template because otherwise we get warnings about ISO
+  // C++ ambiguity
+  // template <typename T, typename std::enable_if<std::is_same<
+  //                           T, ::mlir::OpFoldResult>::value>::type * =
+  //                           nullptr>
+  EasyVal(const mlir::Location &loc, mlir::OpBuilder &builder,
+          const ::mlir::OpFoldResult &value)
+      : _value(value.is<::mlir::Value>()
+                   ? value.get<::mlir::Value>()
+                   : builder.create<::mlir::arith::ConstantOp>(
+                         *_loc, ::mlir::cast<::mlir::IntegerAttr>(
+                                    value.get<::mlir::Attribute>()))),
+        _loc(&loc), _builder(&builder) {}
+
   /// Create Value from C++ value
-  template <typename X = T, typename std::enable_if<
-                                std::is_integral<X>::value>::type * = nullptr>
+  template <
+      typename X = T,
+      typename std::enable_if<std::is_integral<X>::value &&
+                              !std::is_same<X, bool>::value>::type * = nullptr>
   EasyVal(const ::mlir::Location &loc, ::mlir::OpBuilder &builder, X value)
-      : _value(createInt<sizeof(T) * 8>(loc, builder, value)), _loc(&loc),
+      : _value(createInt(loc, builder, value, sizeof(T) * 8)), _loc(&loc),
         _builder(&builder) {
     static_assert(std::is_integral_v<T>);
+  }
+
+  /// Create Value from C++ bool is_same
+  template <typename X = T, typename std::enable_if<
+                                std::is_same<X, bool>::value>::type * = nullptr>
+  EasyVal(const ::mlir::Location &loc, ::mlir::OpBuilder &builder, bool value)
+      : _value(createInt(loc, builder, value, 1)), _loc(&loc),
+        _builder(&builder) {
+    static_assert(std::is_same_v<T, bool>);
   }
 
   /// @return wrapped mlir::Value
@@ -49,56 +76,71 @@ template <typename T> struct EasyVal {
   template <typename X = T, typename std::enable_if<
                                 std::is_integral<X>::value>::type * = nullptr>
   EasyVal<X> operator+(EasyVal<X> const &r) const {
-    return {*_loc, *_builder,
-            _builder->create<::mlir::arith::AddIOp>(*_loc, _value, r.get())};
+    return {
+        *_loc, *_builder,
+        _builder->createOrFold<::mlir::arith::AddIOp>(*_loc, _value, r.get())};
   }
 
   /// subtraction of the expressions
   template <typename X = T, typename std::enable_if<
                                 std::is_integral<X>::value>::type * = nullptr>
   EasyVal<X> operator-(EasyVal<X> const &r) const {
-    return {*_loc, *_builder,
-            _builder->create<::mlir::arith::SubIOp>(*_loc, _value, r.get())};
+    return {
+        *_loc, *_builder,
+        _builder->createOrFold<::mlir::arith::SubIOp>(*_loc, _value, r.get())};
   }
 
   // multiplication of the expressions
   template <typename X = T, typename std::enable_if<
                                 std::is_integral<X>::value>::type * = nullptr>
   EasyVal<X> operator*(EasyVal<X> const &r) const {
-    return {*_loc, *_builder,
-            _builder->create<::mlir::arith::MulIOp>(*_loc, _value, r.get())};
+    return {
+        *_loc, *_builder,
+        _builder->createOrFold<::mlir::arith::MulIOp>(*_loc, _value, r.get())};
   }
 
   /// division of the expressions
   template <typename X = T, typename std::enable_if<
                                 std::is_integral<X>::value>::type * = nullptr>
   EasyVal<X> operator/(EasyVal<X> const &r) const {
-    return {*_loc, *_builder,
-            _builder->create<::mlir::arith::DivSIOp>(*_loc, _value, r.get())};
+    return {
+        *_loc, *_builder,
+        _builder->createOrFold<::mlir::arith::DivSIOp>(*_loc, _value, r.get())};
+  }
+
+  /// modulo expressions
+  template <typename X = T, typename std::enable_if<
+                                std::is_integral<X>::value>::type * = nullptr>
+  EasyVal<X> operator%(EasyVal<X> const &r) const {
+    return {
+        *_loc, *_builder,
+        _builder->createOrFold<::mlir::arith::RemSIOp>(*_loc, _value, r.get())};
   }
 
   /// min of the expressions
   template <typename X = T, typename std::enable_if<
                                 std::is_integral<X>::value>::type * = nullptr>
   EasyVal<X> min(EasyVal<X> const &r) const {
-    return {*_loc, *_builder,
-            _builder->create<::mlir::arith::MinSIOp>(*_loc, _value, r.get())};
+    return {
+        *_loc, *_builder,
+        _builder->createOrFold<::mlir::arith::MinSIOp>(*_loc, _value, r.get())};
   }
 
   /// max of the expressions
   template <typename X = T, typename std::enable_if<
                                 std::is_integral<X>::value>::type * = nullptr>
   EasyVal<X> max(EasyVal<X> const &r) const {
-    return {*_loc, *_builder,
-            _builder->create<::mlir::arith::MaxSIOp>(*_loc, _value, r.get())};
+    return {
+        *_loc, *_builder,
+        _builder->createOrFold<::mlir::arith::MaxSIOp>(*_loc, _value, r.get())};
   }
 
   /// generic comparison of expressions for integral types
   EasyVal<bool> easyCompare(::mlir::arith::CmpIPredicate cmp,
                             EasyVal<T> const &r) const {
-    return {
-        *_loc, *_builder,
-        _builder->create<::mlir::arith::CmpIOp>(*_loc, cmp, _value, r.get())};
+    return {*_loc, *_builder,
+            _builder->createOrFold<::mlir::arith::CmpIOp>(*_loc, cmp, _value,
+                                                          r.get())};
   }
 
   /// integral type equal
@@ -162,14 +204,45 @@ template <typename T> struct EasyVal {
     return easyCompare(::mlir::arith::CmpIPredicate::uge, r);
   }
 
+  /// logical XOR
+  template <typename X = T, typename std::enable_if<
+                                std::is_same<X, bool>::value>::type * = nullptr>
+  EasyVal<bool> lxor(EasyVal<X> const &r) const {
+    static_assert(std::is_same_v<T, bool>);
+    return {
+        *_loc, *_builder,
+        _builder->createOrFold<::mlir::arith::XOrIOp>(*_loc, _value, r.get())};
+    // return EasyVal<bool>(*_loc, *_builder, true) - ((*this) * r);
+  }
+
+  /// logical or
+  template <typename X = T, typename std::enable_if<
+                                std::is_same<X, bool>::value>::type * = nullptr>
+  EasyVal<bool> lor(EasyVal<X> const &r) const {
+    static_assert(std::is_same_v<T, bool>);
+    return {
+        *_loc, *_builder,
+        _builder->createOrFold<::mlir::arith::OrIOp>(*_loc, _value, r.get())};
+  }
+
+  /// logical and
+  template <typename X = T, typename std::enable_if<
+                                std::is_same<X, bool>::value>::type * = nullptr>
+  EasyVal<bool> land(EasyVal<X> const &r) const {
+    static_assert(std::is_same_v<T, bool>);
+    return {
+        *_loc, *_builder,
+        _builder->createOrFold<::mlir::arith::AndIOp>(*_loc, _value, r.get())};
+  }
+
   /// select lhs or rhs dependent on comparison
   template <
       typename LHS, typename RHS, typename X = T,
       typename std::enable_if<std::is_same<X, bool>::value>::type * = nullptr>
   EasyVal<typename LHS::CType> select(RHS const &l, LHS const &r) const {
     return {*_loc, *_builder,
-            _builder->create<::mlir::arith::SelectOp>(*_loc, _value, l.get(),
-                                                      r.get())};
+            _builder->createOrFold<::mlir::arith::SelectOp>(*_loc, _value,
+                                                            l.get(), r.get())};
   }
 };
 
@@ -179,13 +252,27 @@ using EasyIdx = EasyVal<int64_t>;
 
 /// Create Index Value from MLIR value, potentially by casting
 inline EasyIdx easyIdx(const ::mlir::Location &loc, ::mlir::OpBuilder &builder,
-                       const EasyIdx::ElType &value) {
+                       const ::mlir::Value &value) {
   return EasyIdx(loc, builder, createIndexCast(loc, builder, value));
 }
+
 /// Create Index Value from C++ value
 inline EasyIdx easyIdx(const ::mlir::Location &loc, ::mlir::OpBuilder &builder,
                        int64_t value) {
   return EasyIdx(loc, builder, createIndex(loc, builder, value));
+}
+
+/// Create Index Value from OpFoldResult
+// This is provided as a template because otherwise we get warnings about ISO
+// C++ ambiguity
+template <typename T, typename std::enable_if<std::is_same<
+                          T, ::mlir::OpFoldResult>::value>::type * = nullptr>
+inline EasyIdx easyIdx(const mlir::Location &loc, mlir::OpBuilder &builder,
+                       const T &value) {
+  return value.template is<::mlir::Value>()
+             ? easyIdx(loc, builder, value.template get<::mlir::Value>())
+             : easyIdx(loc, builder,
+                       ::mlir::getConstantIntValue(value).value());
 }
 
 } // namespace imex
