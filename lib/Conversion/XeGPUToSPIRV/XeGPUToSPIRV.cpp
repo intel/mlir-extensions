@@ -16,6 +16,7 @@
 #include "imex/Dialect/XeGPU/IR/XeGPU.h"
 
 #include "../PassDetail.h"
+#include "mlir/Support/LogicalResult.h"
 
 #include <llvm/ADT/ArrayRef.h>
 #include <llvm/Support/Debug.h>
@@ -65,6 +66,9 @@ encodeVectorType(ConversionPatternRewriter &rewriter, VectorType type,
     break;
   case 256:
     str += "v256";
+    break;
+  case 512:
+    str += "v512";
     break;
   default:
     assert(0 && "add more support");
@@ -616,6 +620,10 @@ public:
     if (rank == 1) {
       numDstVal *= 2;
     }
+    // numDstVal is given only 5 bits in raw_send message. Therefore value 32 is
+    // encoded as 31 to avoid overflow
+    if (numDstVal == 32)
+      numDstVal = 31;
     auto numDst = createIntConstant(i8Type, numDstVal);
     // 15 for ugm
     auto sfid = createIntConstant(i8Type, 15);
@@ -1266,7 +1274,6 @@ struct VectorExtract final : public OpConversionPattern<vector::ExtractOp> {
     return success();
   }
 };
-
 struct VectorExtractStridedSlice final
     : public OpConversionPattern<vector::ExtractStridedSliceOp> {
   using OpConversionPattern::OpConversionPattern;

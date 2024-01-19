@@ -1,8 +1,8 @@
-// RUN: %python_executable %imex_runner --requires=l0-runtime -i %s --pass-pipeline-file=%p/xegpu-to-llvm.pp \
+// RUN: IMEX_ENABLE_LARGE_REG_FILE=1 %python_executable %imex_runner --requires=l0-runtime -i %s --pass-pipeline-file=%p/xegpu-to-llvm.pp \
 // RUN:                                       --runner imex-cpu-runner -e main \
 // RUN:                                       --entry-point-result=void \
 // RUN:                                       --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%levelzero_runtime --filecheck
-// RUN: %python_executable %imex_runner --requires=sycl-runtime -i %s --pass-pipeline-file=%p/xegpu-to-llvm.pp \
+// RUN: IMEX_ENABLE_LARGE_REG_FILE=1 %python_executable %imex_runner --requires=sycl-runtime -i %s --pass-pipeline-file=%p/xegpu-to-llvm.pp \
 // RUN:                                        --runner imex-cpu-runner -e main \
 // RUN:                                        --entry-point-result=void \
 // RUN:                                        --shared-libs=%irunner_utils,%mlir_runner_utils,%mlir_c_runner_utils,%sycl_runtime --filecheck
@@ -150,14 +150,14 @@ module @gemm attributes {gpu.container_module} {
 
 
       // two 32x16 A tiles from 256x32 WG slice
-      %A_sg_init_tile_0 = xegpu.create_nd_tdesc %A[%C_sg_tile_offset_x, %c0] {mode = vc}: memref<4096x4096xf16> -> !xegpu.tensor_desc<32x16xf16>
-      %A_sg_init_tile_1 = xegpu.create_nd_tdesc %A[%C_sg_tile_offset_x, %c16] {mode = vc} : memref<4096x4096xf16> -> !xegpu.tensor_desc<32x16xf16>
+      %A_sg_init_tile_0 = xegpu.create_nd_tdesc %A[%C_sg_tile_offset_x, %c0] {mode = vc}: memref<4096x4096xf16> -> !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<array_length =2>>
+      // %A_sg_init_tile_1 = xegpu.create_nd_tdesc %A[%C_sg_tile_offset_x, %c16] {mode = vc} : memref<4096x4096xf16> -> !xegpu.tensor_desc<32x16xf16>
 
       //create B tiles
-      %B_sg_init_tile_0 = xegpu.create_nd_tdesc %B[%c0, %C_sg_tile_offset_y] {mode = vc}: memref<4096x4096xf16> -> !xegpu.tensor_desc<32x16xf16>
-      %B_sg_init_tile_1 = xegpu.update_nd_offset %B_sg_init_tile_0, [%c0, %c16] {mode = vc}:  !xegpu.tensor_desc<32x16xf16> -> !xegpu.tensor_desc<32x16xf16>
-      %B_sg_init_tile_2 = xegpu.update_nd_offset %B_sg_init_tile_1, [%c0, %c16] {mode = vc}:  !xegpu.tensor_desc<32x16xf16> -> !xegpu.tensor_desc<32x16xf16>
-      %B_sg_init_tile_3 = xegpu.update_nd_offset %B_sg_init_tile_2, [%c0, %c16] {mode = vc}:  !xegpu.tensor_desc<32x16xf16> -> !xegpu.tensor_desc<32x16xf16>
+      %B_sg_init_tile_0 = xegpu.create_nd_tdesc %B[%c0, %C_sg_tile_offset_y] {mode = vc}: memref<4096x4096xf16> -> !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<array_length = 2>>
+      %B_sg_init_tile_1 = xegpu.update_nd_offset %B_sg_init_tile_0, [%c0, %c32] {mode = vc}:  !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr< array_length = 2>> -> !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<array_length = 2>>
+      // %B_sg_init_tile_2 = xegpu.update_nd_offset %B_sg_init_tile_1, [%c0, %c16] {mode = vc}:  !xegpu.tensor_desc<32x16xf16> -> !xegpu.tensor_desc<32x16xf16>
+      // %B_sg_init_tile_3 = xegpu.update_nd_offset %B_sg_init_tile_2, [%c0, %c16] {mode = vc}:  !xegpu.tensor_desc<32x16xf16> -> !xegpu.tensor_desc<32x16xf16>
 
       // init 16 C tiles of size 8x16 each is initialized to 0.0 assuming a zero C matrix
       %zero_vec = arith.constant dense<0.0> : vector<128xf32>
@@ -184,14 +184,14 @@ module @gemm attributes {gpu.container_module} {
       %nbarrier_role = arith.constant 0 : i8
       %nbarrier = xegpu.create_nbarrier %nbarrier_id, %nbarrier_role {num_producers = 32 : i8, num_consumers = 32 : i8} : (i8, i8) -> !xegpu.nbarrier
       // K loop advances in 32 steps
-      %k_loop_result:24 = scf.for %k = %c0 to %c4096 step %c32 iter_args (
+      %k_loop_result:21 = scf.for %k = %c0 to %c4096 step %c32 iter_args (
           %A_tile_0 = %A_sg_init_tile_0,
-          %A_tile_1 = %A_sg_init_tile_1,
+          // %A_tile_1 = %A_sg_init_tile_1,
 
           %B_tile_0 = %B_sg_init_tile_0,
           %B_tile_1 = %B_sg_init_tile_1,
-          %B_tile_2 = %B_sg_init_tile_2,
-          %B_tile_3 = %B_sg_init_tile_3,
+          // %B_tile_2 = %B_sg_init_tile_2,
+          // %B_tile_3 = %B_sg_init_tile_3,
 
           %c_val_0_0 = %c_init_val_0_0,
           %c_val_0_1 = %c_init_val_0_1,
@@ -213,7 +213,9 @@ module @gemm attributes {gpu.container_module} {
           %A_prefetch_tile = %A_sg_prefetch_tile_iter3,
           %B_prefetch_tile = %B_sg_prefetch_tile_iter3
           ) ->
-          (!xegpu.tensor_desc<32x16xf16>, !xegpu.tensor_desc<32x16xf16>, !xegpu.tensor_desc<32x16xf16>, !xegpu.tensor_desc<32x16xf16>,  !xegpu.tensor_desc<32x16xf16>,  !xegpu.tensor_desc<32x16xf16>,
+          (!xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<array_length = 2>>,
+          !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<array_length = 2>>,
+          !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<array_length = 2>>,
           vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,
           !xegpu.tensor_desc<8x32xf16>, !xegpu.tensor_desc<8x32xf16>
           )
@@ -226,14 +228,18 @@ module @gemm attributes {gpu.container_module} {
           xegpu.nbarrier_arrive %nbarrier : !xegpu.nbarrier
         }
         // load A tiles
-        %a_val_0 = xegpu.load_nd %A_tile_0 {vnni_axis = 1, l1_hint = cached, l2_hint = cached, l3_hint = cached, mode = vc} : !xegpu.tensor_desc<32x16xf16> -> vector<32x8x2xf16>
-        %a_val_1 = xegpu.load_nd %A_tile_1 {vnni_axis = 1, l1_hint = cached, l2_hint = cached, l3_hint = cached, mode = vc} : !xegpu.tensor_desc<32x16xf16> -> vector<32x8x2xf16>
+        %a_val = xegpu.load_nd %A_tile_0 {vnni_axis = 1, l1_hint = cached, l2_hint = cached, l3_hint = cached, mode = vc} : !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<array_length = 2>> -> vector<2x32x8x2xf16>
+        %a_val_0 = vector.extract %a_val [0] : vector<32x8x2xf16> from vector<2x32x8x2xf16>
+        %a_val_1 = vector.extract %a_val [1] : vector<32x8x2xf16> from vector<2x32x8x2xf16>
 
         // load B tiles
-        %b_val_0 = xegpu.load_nd %B_tile_0 {vnni_axis = 0, l1_hint = cached, l2_hint = cached, l3_hint = cached, mode = vc} : !xegpu.tensor_desc<32x16xf16> -> vector<16x16x2xf16>
-        %b_val_1 = xegpu.load_nd %B_tile_1 {vnni_axis = 0, l1_hint = cached, l2_hint = cached, l3_hint = cached, mode = vc} : !xegpu.tensor_desc<32x16xf16> -> vector<16x16x2xf16>
-        %b_val_2 = xegpu.load_nd %B_tile_2 {vnni_axis = 0, l1_hint = cached, l2_hint = cached, l3_hint = cached, mode = vc} : !xegpu.tensor_desc<32x16xf16> -> vector<16x16x2xf16>
-        %b_val_3 = xegpu.load_nd %B_tile_3 {vnni_axis = 0, l1_hint = cached, l2_hint = cached, l3_hint = cached, mode = vc} : !xegpu.tensor_desc<32x16xf16> -> vector<16x16x2xf16>
+        %b_val_arr_0 = xegpu.load_nd %B_tile_0 {vnni_axis = 0, l1_hint = cached, l2_hint = cached, l3_hint = cached, mode = vc} : !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<array_length = 2>> -> vector<2x16x16x2xf16>
+        %b_val_arr_1 = xegpu.load_nd %B_tile_1 {vnni_axis = 0, l1_hint = cached, l2_hint = cached, l3_hint = cached, mode = vc} : !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<array_length = 2>> -> vector<2x16x16x2xf16>
+
+        %b_val_0 = vector.extract %b_val_arr_0 [0] : vector<16x16x2xf16> from vector<2x16x16x2xf16>
+        %b_val_1 = vector.extract %b_val_arr_0 [1] : vector<16x16x2xf16> from vector<2x16x16x2xf16>
+        %b_val_2 = vector.extract %b_val_arr_1 [0] : vector<16x16x2xf16> from vector<2x16x16x2xf16>
+        %b_val_3 = vector.extract %b_val_arr_1 [1] : vector<16x16x2xf16> from vector<2x16x16x2xf16>
 
         xegpu.compile_hint
 
@@ -248,13 +254,13 @@ module @gemm attributes {gpu.container_module} {
         %next_A_prefetch_tile = xegpu.update_nd_offset %A_prefetch_tile, [%c0, %c32] {mode = vc}: !xegpu.tensor_desc<8x32xf16> -> !xegpu.tensor_desc<8x32xf16>
         %next_B_prefetch_tile = xegpu.update_nd_offset %B_prefetch_tile, [%c32, %c0] {mode = vc}: !xegpu.tensor_desc<8x32xf16> -> !xegpu.tensor_desc<8x32xf16>
         // advance A and B tiles
-        %next_A_tile_0 = xegpu.update_nd_offset %A_tile_0, [%c0, %c32] {mode = vc} : !xegpu.tensor_desc<32x16xf16> -> !xegpu.tensor_desc<32x16xf16>
-        %next_A_tile_1 = xegpu.update_nd_offset %A_tile_1, [%c0, %c32] {mode = vc} : !xegpu.tensor_desc<32x16xf16> -> !xegpu.tensor_desc<32x16xf16>
+        %next_A_tile_0 = xegpu.update_nd_offset %A_tile_0, [%c0, %c32] {mode = vc} : !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<array_length = 2>> -> !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<array_length = 2>>
+        // %next_A_tile_1 = xegpu.update_nd_offset %A_tile_1, [%c0, %c32] {mode = vc} : !xegpu.tensor_desc<32x16xf16> -> !xegpu.tensor_desc<32x16xf16>
 
-        %next_B_tile_0 = xegpu.update_nd_offset %B_tile_0, [%c32, %c0] {mode = vc} : !xegpu.tensor_desc<32x16xf16> -> !xegpu.tensor_desc<32x16xf16>
-        %next_B_tile_1 = xegpu.update_nd_offset %B_tile_1, [%c32, %c0] {mode = vc} : !xegpu.tensor_desc<32x16xf16> -> !xegpu.tensor_desc<32x16xf16>
-        %next_B_tile_2 = xegpu.update_nd_offset %B_tile_2, [%c32, %c0] {mode = vc} : !xegpu.tensor_desc<32x16xf16> -> !xegpu.tensor_desc<32x16xf16>
-        %next_B_tile_3 = xegpu.update_nd_offset %B_tile_3, [%c32, %c0] {mode = vc} : !xegpu.tensor_desc<32x16xf16> -> !xegpu.tensor_desc<32x16xf16>
+        %next_B_tile_0 = xegpu.update_nd_offset %B_tile_0, [%c32, %c0] {mode = vc} : !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<array_length = 2>> -> !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<array_length = 2>>
+        %next_B_tile_1 = xegpu.update_nd_offset %B_tile_1, [%c32, %c0] {mode = vc} : !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<array_length = 2>> -> !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<array_length = 2>>
+        // %next_B_tile_2 = xegpu.update_nd_offset %B_tile_2, [%c32, %c0] {mode = vc} : !xegpu.tensor_desc<32x16xf16> -> !xegpu.tensor_desc<32x16xf16>
+        // %next_B_tile_3 = xegpu.update_nd_offset %B_tile_3, [%c32, %c0] {mode = vc} : !xegpu.tensor_desc<32x16xf16> -> !xegpu.tensor_desc<32x16xf16>
 
         xegpu.compile_hint
         %a_val_0_flat = vector.shape_cast %a_val_0 : vector<32x8x2xf16> to vector<512xf16>
@@ -359,31 +365,33 @@ module @gemm attributes {gpu.container_module} {
           xegpu.nbarrier_wait %nbarrier : !xegpu.nbarrier
         }
 
-        scf.yield %next_A_tile_0, %next_A_tile_1, %next_B_tile_0, %next_B_tile_1, %next_B_tile_2, %next_B_tile_3,
+        scf.yield %next_A_tile_0, %next_B_tile_0, %next_B_tile_1,
                   %new_c_val_0_0, %new_c_val_0_1, %new_c_val_0_2, %new_c_val_0_3, %new_c_val_1_0, %new_c_val_1_1, %new_c_val_1_2, %new_c_val_1_3, %new_c_val_2_0, %new_c_val_2_1, %new_c_val_2_2, %new_c_val_2_3, %new_c_val_3_0, %new_c_val_3_1, %new_c_val_3_2, %new_c_val_3_3,
                   %next_A_prefetch_tile, %next_B_prefetch_tile
-                  : !xegpu.tensor_desc<32x16xf16>, !xegpu.tensor_desc<32x16xf16>, !xegpu.tensor_desc<32x16xf16>, !xegpu.tensor_desc<32x16xf16>,  !xegpu.tensor_desc<32x16xf16>,  !xegpu.tensor_desc<32x16xf16>,
+                  : !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<array_length = 2>>,
+                  !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<array_length = 2>>,
+                  !xegpu.tensor_desc<32x16xf16, #xegpu.tdesc_attr<array_length = 2>>,
                   vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,vector<8x16xf32>,
                   !xegpu.tensor_desc<8x32xf16>, !xegpu.tensor_desc<8x32xf16>
       }
 
       // trunc to f16
-      %c_result_0_0_f16 = arith.truncf %k_loop_result#6 : vector<8x16xf32> to vector<8x16xf16>
-      %c_result_0_1_f16 = arith.truncf %k_loop_result#7 : vector<8x16xf32> to vector<8x16xf16>
-      %c_result_0_2_f16 = arith.truncf %k_loop_result#8 : vector<8x16xf32> to vector<8x16xf16>
-      %c_result_0_3_f16 = arith.truncf %k_loop_result#9 : vector<8x16xf32> to vector<8x16xf16>
-      %c_result_1_0_f16 = arith.truncf %k_loop_result#10 : vector<8x16xf32> to vector<8x16xf16>
-      %c_result_1_1_f16 = arith.truncf %k_loop_result#11 : vector<8x16xf32> to vector<8x16xf16>
-      %c_result_1_2_f16 = arith.truncf %k_loop_result#12 : vector<8x16xf32> to vector<8x16xf16>
-      %c_result_1_3_f16 = arith.truncf %k_loop_result#13 : vector<8x16xf32> to vector<8x16xf16>
-      %c_result_2_0_f16 = arith.truncf %k_loop_result#14 : vector<8x16xf32> to vector<8x16xf16>
-      %c_result_2_1_f16 = arith.truncf %k_loop_result#15 : vector<8x16xf32> to vector<8x16xf16>
-      %c_result_2_2_f16 = arith.truncf %k_loop_result#16 : vector<8x16xf32> to vector<8x16xf16>
-      %c_result_2_3_f16 = arith.truncf %k_loop_result#17 : vector<8x16xf32> to vector<8x16xf16>
-      %c_result_3_0_f16 = arith.truncf %k_loop_result#18 : vector<8x16xf32> to vector<8x16xf16>
-      %c_result_3_1_f16 = arith.truncf %k_loop_result#19 : vector<8x16xf32> to vector<8x16xf16>
-      %c_result_3_2_f16 = arith.truncf %k_loop_result#20 : vector<8x16xf32> to vector<8x16xf16>
-      %c_result_3_3_f16 = arith.truncf %k_loop_result#21 : vector<8x16xf32> to vector<8x16xf16>
+      %c_result_0_0_f16 = arith.truncf %k_loop_result#3 : vector<8x16xf32> to vector<8x16xf16>
+      %c_result_0_1_f16 = arith.truncf %k_loop_result#4 : vector<8x16xf32> to vector<8x16xf16>
+      %c_result_0_2_f16 = arith.truncf %k_loop_result#5 : vector<8x16xf32> to vector<8x16xf16>
+      %c_result_0_3_f16 = arith.truncf %k_loop_result#6 : vector<8x16xf32> to vector<8x16xf16>
+      %c_result_1_0_f16 = arith.truncf %k_loop_result#7 : vector<8x16xf32> to vector<8x16xf16>
+      %c_result_1_1_f16 = arith.truncf %k_loop_result#8 : vector<8x16xf32> to vector<8x16xf16>
+      %c_result_1_2_f16 = arith.truncf %k_loop_result#9 : vector<8x16xf32> to vector<8x16xf16>
+      %c_result_1_3_f16 = arith.truncf %k_loop_result#10 : vector<8x16xf32> to vector<8x16xf16>
+      %c_result_2_0_f16 = arith.truncf %k_loop_result#11 : vector<8x16xf32> to vector<8x16xf16>
+      %c_result_2_1_f16 = arith.truncf %k_loop_result#12 : vector<8x16xf32> to vector<8x16xf16>
+      %c_result_2_2_f16 = arith.truncf %k_loop_result#13 : vector<8x16xf32> to vector<8x16xf16>
+      %c_result_2_3_f16 = arith.truncf %k_loop_result#14 : vector<8x16xf32> to vector<8x16xf16>
+      %c_result_3_0_f16 = arith.truncf %k_loop_result#15 : vector<8x16xf32> to vector<8x16xf16>
+      %c_result_3_1_f16 = arith.truncf %k_loop_result#16 : vector<8x16xf32> to vector<8x16xf16>
+      %c_result_3_2_f16 = arith.truncf %k_loop_result#17 : vector<8x16xf32> to vector<8x16xf16>
+      %c_result_3_3_f16 = arith.truncf %k_loop_result#18 : vector<8x16xf32> to vector<8x16xf16>
 
       // each SG needs to write to 32x64 C tile.
       // DPAS output size is 8x16. So each SG needs to write 16 (4x4) DPAS outputs.
