@@ -1,0 +1,203 @@
+//===- DistRuntimeOps.td - DistRuntime dialect  -------*- tablegen -*-===//
+//
+// Copyright 2023 Intel Corporation
+// Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+///
+/// \file
+/// This file defines the basic operations for the DistRuntime dialect.
+///
+//===----------------------------------------------------------------------===//
+
+#ifndef _DistRuntime_OPS_TD_INCLUDED_
+#define _DistRuntime_OPS_TD_INCLUDED_
+
+include "mlir/IR/OpBase.td"
+include "mlir/IR/AttrTypeBase.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
+
+// Provide a definition of the 'DistRuntime' dialect in the ODS framework so that we
+// can define our operations.
+def DistRuntime_Dialect : Dialect {
+    // The namespace of our dialect
+  let name = "distruntime";
+
+  // A short one-line summary of our dialect.
+  let summary = "This dialect provides distributed runtime calls.";
+
+  // A longer description of our dialect.
+  let description = [{
+    The DistRuntime dialect supports communication in SPMD environments. The
+    general assumption is that teams (e.g., groups) of processes/threads execute the
+    same set of operations but operate on different data. Most operations in this
+    dialect hence require the team argument. It is up to the lowering/runtime to
+    interpret the value of a given team argument.
+
+    Two kinds of operations are provided:
+
+    1. A set of basic operations providing information about the state of the
+      runtime, like the id of the caller within a team or the number of members
+      within a team. These operations do not require the participation of other
+      team members.
+    2. A set of high-level primitives that typically require communication and,
+      therefore, involve - implicitly or explicitly - other team members.
+
+    Some operations are defined to enable asynchronous communication which allows
+    for overlapping communication and computation. Such operations return a value of
+    the opaque type `AsyncHandle`. It is up to the runtime and related lowering
+    passes to give life to the type. The results of such an asynchronous
+    operation, whether they are written in-place or returned as values, must be
+    preceded with a ca
+  }];
+
+  // The C++ namespace that the dialect class definition resides in.
+  let cppNamespace = "::imex::distruntime";
+
+  //  We use the default parser/printer which handles registered types
+  let useDefaultTypePrinterParser = true;
+
+  // to be defined by the lowerer
+  let hasConstantMaterializer = 1;
+}
+
+// common base class for types in DistRuntime dialect.
+class DistRuntime_Type<string name, string typeMnemonic, list<Trait> traits = []>
+    : TypeDef<DistRuntime_Dialect, name, traits> {
+  let mnemonic = typeMnemonic;
+}
+
+def DistRuntime_AsyncHandle : DistRuntime_Type<"AsyncHandle", "asynchandle">
+{
+  let summary = "Custom Type for representing a handle for asynchronous operation.";
+  let description = [{
+    Custom Type for representing a handle for asynchronous operation/communication.
+
+    Asynchronous runtime operations return handles. Uses of other outputs
+    of such operations require a prior call to wait.
+  }];
+}
+
+def AsyncOpInterface : OpInterface<"AsyncOpInterface"> {
+  let description = [{
+    Interface definition for asynchronous operations of the DistRuntime dialect.
+  }];
+
+  let methods = [
+    InterfaceMethod<
+      "Return all results of the asynchronous operation and arguments it mutates",
+      "::mlir::SmallVector<::mlir::Value>", "getDependent"
+    >,
+  ];
+}
+
+// Base class for dialect operations. This operation inherits from the base
+// `Op` class in OpBase.td, and provides:
+//   * The parent dialect of the operation.
+//   * The mnemonic for the operation, or the name without the dialect prefix.
+//   * A list of traits for the operation.
+class DistRuntime_Op<string mnemonic, list<Trait> traits = []> :
+    Op<DistRuntime_Dialect, mnemonic, traits>;
+
+def TeamSizeOp : DistRuntime_Op<"team_size", [Pure]> {
+  let summary = "Get number of members in given team";
+  let description = [{
+    Operation that returns the number of team members of a given team.
+  }];
+  let arguments = (ins AnyAttr:$team);
+  let results = (outs Index);
+  let builders = [
+    OpBuilder<(ins "::mlir::Attribute":$team), [{
+      build($_builder, $_state, $_builder.getIndexType(), team);
+    }]>,
+  ];
+  // to be defined by the lowerer
+  let hasFolder = 1;
+}
+
+def TeamMemberOp : DistRuntime_Op<"team_member", [Pure]> {
+  let summary = "Get member of given team";
+  let description = [{
+    Operation that returns the member of the given team that the caller
+    represents. Members of a team are represented as Index types.
+  }];
+  let arguments = (ins AnyAttr:$team);
+  let results = (outs Index);
+  let builders = [
+    OpBuilder<(ins "::mlir::Attribute":$team), [{
+      build($_builder, $_state, $_builder.getIndexType(), team);
+    }]>,
+  ];
+  // to be defined by the lowerer
+  let hasFolder = 1;
+}
+
+def AllReduceOp : DistRuntime_Op<"allreduce", []> {
+  let summary = "Inplace allreduce";
+  let description = [{
+    Operation that performs an in-place all-reduce with a given operation.
+    The shape of the data argument must be identical for all members of the team.
+    Reduction happens for each element of the argument over all team members.
+    The meaning of the 'op' attribute is defined by the lowering passes.
+  }];
+  // reduction operation and local tensor
+  let arguments = (ins AnyAttr:$op, AnyMemRef:$data);
+}
+
+def GetHaloOp : DistRuntime_Op<"get_halo",
+    [SameVariadicOperandSize, DeclareOpInterfaceMethods<AsyncOpInterface>]> {
+  let summary = "Get left and right halos";
+  let description = [{
+    For a given, distributed array, compute and return the left and right
+    halo as implied by the locally owned data and requested bounding box.
+
+    Data that is not locally owned will be provided in the left or right
+    halo, depending on if the data is from before or after the local part
+    in the first dimension of the global array. Hence it is possible that
+    one or both returned halos are empty.
+
+    The local data is not modified.
+
+    Arguments:
+
+    - `local`: the locally owned data
+    - `gShape`: the global shape of the distributed array
+    - `lOffsets`: the offset of the local data within the global array
+    - `bbOffsets`: the offsets of the requested data part
+    - `bbSizes`: the shape of the requested data part
+    - `team`: the distributed team owning the distributed array
+    - `key` [optional]: a statically assigned id for the given operation (to allow caching)
+
+    `gShape`, `lOffsets`, `bbOffsets` and `bbSizes` are variadic arguments
+    with same size `r` where `r` is the rank of the global array (e.g., one
+    number for each dimension of the global array).
+
+    Returns an `AsyncHandle`, the left and the right halo.
+  }];
+  let arguments = (ins AnyType:$local, Variadic<Index>:$gShape, Variadic<Index>:$lOffsets,
+                       Variadic<Index>:$bbOffsets, Variadic<Index>:$bbSizes,
+                       AnyAttr:$team, DefaultValuedAttr<I64Attr, "-1L">:$key);
+  let results = (outs DistRuntime_AsyncHandle:$handle, AnyType:$lHalo, AnyType:$rHalo);
+
+  let builders = [
+    // auto-deduce return type
+    OpBuilder<(ins "::mlir::Value":$local, "::mlir::ValueRange":$gShape, "::mlir::ValueRange":$lOffsets,
+                   "::mlir::ValueRange":$bbOffsets, "::mlir::ValueRange":$bbSizes,
+                   "::mlir::ValueRange":$lHSizes, "::mlir::ValueRange":$rHSizes,
+                   "::mlir::Attribute":$team, CArg<"int64_t", "-1L">:$key)>
+  ];
+  let hasCanonicalizer = 1;
+}
+
+def WaitOp : DistRuntime_Op<"wait", []> {
+  let summary = "Wait for asynchronous operation to finish.";
+  let description = [{
+    Wait for asynchronous operation to finish.
+    Accepts an `AsyncHandle`.
+  }];
+  let arguments = (ins DistRuntime_AsyncHandle:$handle);
+}
+
+#endif // _DistRuntime_OPS_TD_INCLUDED_
