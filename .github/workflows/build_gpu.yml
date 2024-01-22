@@ -7,6 +7,7 @@ on:
       - upstream
       - 'dist-ndarray'
   workflow_dispatch:
+  workflow_call:
 
 jobs:
   build:
@@ -81,7 +82,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v3
         with:
-          name: tests.txt
+          name: tests_gpu.txt
           path: ${{ env.HOME_DIR }}/frameworks.ai.mlir.mlir-extensions/build/tests.txt
 
             #- name: Upload report.txt

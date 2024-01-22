@@ -1,69 +1,23 @@
 name: Nightly CI
 on:
   workflow_dispatch:
-  # add input for email address
-    inputs:
-      email:
-        description: 'Email address to send report to'
-        required: true
-        default: 'dimpalben.r.prajapati@intel.com'
   schedule:
 #   - cron: '0 0 * * *' # every 24 hrs
     - cron: '30 19 * * *' # runs every day at 19:30 pm UTC which is 11:30 am PST
 jobs:
   invoke-sync:
-    runs-on: [self-hosted, pvc, glados]
-    steps:
-      - name: Retrieve version
-        run: |
-          echo "TAG_NAME=$(pwd)" >> $GITHUB_OUTPUT
-      - name: Invoke Sync
-        uses: intel-innersource/frameworks.actions.thirdparty.workflow-dispatch@v1
-        with:
-          workflow: Sync to Upstream Public Repo
-          token: ${{secrets.IMEX_CI_RAVI_GH}}
+    name: Invoke Sync
+    uses: ./.github/workflows/sync.yml
+    secrets: inherit
 
   invoke-cpu-tests:
-    runs-on: [self-hosted, pvc, glados]
     needs: invoke-sync
-    steps:
-      - name: Invoke main Build_CPU Workflow
-        uses: intel-innersource/frameworks.actions.thirdparty.workflow-dispatch@v1
-        with:
-          workflow: CPU Build
-          token: ${{secrets.WORKFLOW_TOKEN}}
+    name: Invoke main Build_CPU Workflow
+    uses: ./.github/workflows/build_cpu.yml
+    secrets: inherit
 
   invoke-gpu-tests:
-    runs-on: [self-hosted, pvc, glados]
-    needs: invoke-cpu-tests
-    steps:
-      - name: Invoke main Build_GPU Workflow
-        uses: intel-innersource/frameworks.actions.thirdparty.workflow-dispatch@v1
-        with:
-          workflow: GPU Build
-          token: ${{secrets.WORKFLOW_TOKEN}}
-
-  generate_report:
-    runs-on: [self-hosted, pvc, glados]
-    needs: invoke-gpu-tests
-    steps:
-      - name: Echo Report info
-        run: echo "sending to dimpalben.r.prajapati@intel.com by default trigger."
-
-      - name: Send Report
-      # run this only if workflow dispatch is not called
-        if: ${{ github.event_name != 'workflow_dispatch' }}
-        uses: intel-innersource/frameworks.actions.thirdparty.workflow-dispatch@v1
-        with:
-          workflow: Send Report
-          inputs: '{ "email": "aia.core.mlir.compiler@intel.com"}'
-          token: ${{secrets.WORKFLOW_TOKEN}}
-
-      - name: Send Report
-        # send report using this if workflow dispatch is called
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        uses: intel-innersource/frameworks.actions.thirdparty.workflow-dispatch@v1
-        with:
-          workflow: Send Report
-          inputs: '{ "email": "${{ github.event.inputs.email }}"}'
-          token: ${{secrets.WORKFLOW_TOKEN}}
+    needs: invoke-sync
+    name: Invoke main Build_GPU Workflow
+    uses: ./.github/workflows/build_gpu.yml
+    secrets: inherit
