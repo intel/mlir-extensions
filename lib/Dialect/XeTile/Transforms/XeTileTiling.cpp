@@ -194,7 +194,8 @@ struct InitTileOpPattern : public XeTileConversion<xetile::InitTileOp> {
     auto newTileTy = imex::xetile::TileType::get({shape[0] / blockSizes[0],
                                                   shape[1] / blockSizes[1],
                                                   blockSizes[0], blockSizes[1]},
-                                                 tileTy.getElementType());
+                                                 tileTy.getElementType(),
+                                                 tileTy.getEncoding());
 
     auto newOp = rewriter.create<::imex::xetile::InitTileOp>(
         op.getLoc(), newTileTy, op.getSource(), op.getOffsets(),

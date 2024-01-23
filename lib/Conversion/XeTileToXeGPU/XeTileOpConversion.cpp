@@ -22,6 +22,19 @@
 
 namespace imex {
 
+static bool isColumnMajor(xetile::TileType type) {
+  auto encoding = mlir::dyn_cast_if_present<xetile::XeTileAttr>(type.getEncoding());
+  if (!encoding)
+    return false;
+
+  mlir::DenseI32ArrayAttr order = encoding.getOrder();
+  assert(order.size() == 2 && "Invalid order");
+  if (order[0] == 0 && order[1] == 1)
+    return true;
+
+  return false;
+}
+
 // Sg-level XeTile::init_tile -> XeGPU::init_tile
 class SgInitTileOpPattern
     : public SgXeTileToXeGPUConversion<xetile::InitTileOp> {
@@ -38,6 +51,9 @@ class SgInitTileOpPattern
     auto resTileShape = resTileType.getShape();
     auto indexType = rewriter.getIndexType();
 
+    if (resTileType.getRank() != 4)
+      return mlir::failure();
+
     llvm::SmallVector<mlir::Value> offsets;
     auto staticOffsets = op.getStaticOffsets();
     auto dynamicOffsets = op.getOffsets();
@@ -46,15 +62,22 @@ class SgInitTileOpPattern
         offsets.push_back(dynamicOffsets[j++]);
       } else {
         offsets.push_back(rewriter.create<mlir::arith::ConstantOp>(
-            op.getLoc(), rewriter.getIndexAttr(staticOffsets[i])));
+            loc, rewriter.getIndexAttr(staticOffsets[i])));
       }
     }
 
     auto offsetsX = offsets[0];
     auto offsetsY = offsets[1];
+    auto sizeX = resTileShape[0];
+    auto sizeY = resTileShape[1];
+    auto stepX = resTileShape[2];
+    auto stepY = resTileShape[3];
 
-    if (resTileType.getRank() != 4)
-      return mlir::failure();
+    bool isColMajor = isColumnMajor(op.getType());
+    if (isColMajor) {
+      std::swap(sizeX, sizeY);
+      std::swap(stepX, stepY);
+    }
 
     auto createIndexConstant = [&](mlir::Type type, int64_t value) {
       auto attr = rewriter.getIndexAttr(value);
@@ -66,10 +89,10 @@ class SgInitTileOpPattern
 
     rewriter.setInsertionPoint(op);
     llvm::SmallVector<mlir::Value> xegpuOps;
-    for (int i = 0; i < resTileShape[0]; i++) {
-      for (int j = 0; j < resTileShape[1]; j++) {
-        auto subOffX = createIndexConstant(indexType, (resTileShape[2] * i));
-        auto subOffY = createIndexConstant(indexType, (resTileShape[3] * j));
+    for (int i = 0; i < sizeX; i++) {
+      for (int j = 0; j < sizeY; j++) {
+        auto subOffX = createIndexConstant(indexType, (stepX * i));
+        auto subOffY = createIndexConstant(indexType, (stepY * j));
         auto tDescOffsetX =
             rewriter.createOrFold<mlir::arith::AddIOp>(loc, subOffX, offsetsX);
         auto tDescOffsetY =
@@ -80,7 +103,7 @@ class SgInitTileOpPattern
         // TODO: this needs improvement, it assumes the source is static
         // memeref.
         auto createNdOp = rewriter.create<xegpu::CreateNdDescOp>(
-            op.getLoc(), tDescTy /*resultTy*/, source /*source*/,
+            loc, tDescTy /*resultTy*/, source /*source*/,
             tDescOffsets /*offsets*/, imex::xegpu::Mode::VC /*mode*/);
 
         xegpuOps.push_back(createNdOp);
