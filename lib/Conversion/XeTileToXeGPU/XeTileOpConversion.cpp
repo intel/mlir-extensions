@@ -35,6 +35,28 @@ static bool isColumnMajor(xetile::TileType type) {
   return false;
 }
 
+static mlir::DenseI64ArrayAttr getTransposeAttr(xetile::TileType type) {
+  auto encoding = mlir::dyn_cast_if_present<xetile::XeTileAttr>(type.getEncoding());
+  if (!encoding)
+    return {};
+
+  auto order = encoding.getOrder();
+  assert(order.size() == 2 && "Invalid order");
+  int64_t transpose[] = {order[1], order[0]};
+  return mlir::DenseI64ArrayAttr::get(type.getContext(), transpose);
+}
+
+static void transpose(mlir::DenseI64ArrayAttr attr,
+                      mlir::MutableArrayRef<int64_t> shape) {
+  if (!attr)
+    return;
+
+  auto old = llvm::to_vector(shape);
+  for (int i = 0; i < attr.size(); i++)
+    shape[i] = old[attr[i]];
+};
+
+
 // Sg-level XeTile::init_tile -> XeGPU::init_tile
 class SgInitTileOpPattern
     : public SgXeTileToXeGPUConversion<xetile::InitTileOp> {
@@ -189,9 +211,7 @@ struct SgLoadTileOpPattern
 
     int vnniAxis = 1;
     mlir::IntegerAttr vnniAxisAttr;
-    // FIXME : remove the usage of tranpose attribute and rely on order
-    // attribute.
-    mlir::DenseI64ArrayAttr transposeAttr;
+    mlir::DenseI64ArrayAttr transposeAttr = getTransposeAttr(tileTy);
     auto L1 = xegpu::CacheReadHintAttr::get(op.getContext(),
                                             xegpu::CacheReadHint::CACHED);
     auto L2 = xegpu::CacheReadHintAttr::get(op.getContext(),
@@ -200,6 +220,8 @@ struct SgLoadTileOpPattern
                                             xegpu::CacheReadHint::CACHED);
 
     llvm::SmallVector<int64_t> newShape = {shape[2], shape[3]};
+    transpose(transposeAttr, newShape);
+
     // needs vnni transform;
     if (vnniFactor > 1 && (isA(op) || isB(op))) {
       if (isB(op))
