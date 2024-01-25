@@ -275,6 +275,8 @@ struct SgStoreTileOpPattern
       return mlir::failure();
     }
 
+    // FIXME: no transpose support for store_nd? How to handle order?
+
     auto context = op.getContext();
     auto L1 = xegpu::CacheWriteHintAttr::get(context,
                                              xegpu::CacheWriteHint::WRITE_BACK);
