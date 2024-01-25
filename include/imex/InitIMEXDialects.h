@@ -18,6 +18,7 @@
 #include <mlir/IR/DialectRegistry.h>
 #include <mlir/IR/MLIRContext.h>
 
+#include <imex/Dialect/Dist/IR/DistOps.h>
 #include <imex/Dialect/DistRuntime/IR/DistRuntimeOps.h>
 #include <imex/Dialect/GPUX/IR/GPUXOps.h>
 #include <imex/Dialect/NDArray/IR/NDArrayOps.h>
@@ -30,7 +31,8 @@ namespace imex {
 /// Add all the IMEX dialects to the provided registry.
 inline void registerAllDialects(::mlir::DialectRegistry &registry) {
   // clang-format off
-    registry.insert<::imex::distruntime::DistRuntimeDialect,
+    registry.insert<::imex::dist::DistDialect,
+                    ::imex::distruntime::DistRuntimeDialect,
                     ::imex::ndarray::NDArrayDialect,
                     ::imex::region::RegionDialect,
                     ::imex::xetile::XeTileDialect,
