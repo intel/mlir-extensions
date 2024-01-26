@@ -23,7 +23,8 @@
 namespace imex {
 
 static bool isColumnMajor(xetile::TileType type) {
-  auto encoding = mlir::dyn_cast_if_present<xetile::XeTileAttr>(type.getEncoding());
+  auto encoding =
+      mlir::dyn_cast_if_present<xetile::XeTileAttr>(type.getEncoding());
   if (!encoding)
     return false;
 
@@ -36,7 +37,8 @@ static bool isColumnMajor(xetile::TileType type) {
 }
 
 static mlir::DenseI64ArrayAttr getTransposeAttr(xetile::TileType type) {
-  auto encoding = mlir::dyn_cast_if_present<xetile::XeTileAttr>(type.getEncoding());
+  auto encoding =
+      mlir::dyn_cast_if_present<xetile::XeTileAttr>(type.getEncoding());
   if (!encoding)
     return {};
 
@@ -55,7 +57,6 @@ static void transpose(mlir::DenseI64ArrayAttr attr,
   for (int i = 0; i < attr.size(); i++)
     shape[i] = old[attr[i]];
 };
-
 
 // Sg-level XeTile::init_tile -> XeGPU::init_tile
 class SgInitTileOpPattern
