@@ -21,21 +21,6 @@
 #include "mlir/IR/BuiltinAttributes.h"
 
 namespace imex {
-
-static bool isColumnMajor(xetile::TileType type) {
-  auto encoding =
-      mlir::dyn_cast_if_present<xetile::XeTileAttr>(type.getEncoding());
-  if (!encoding)
-    return false;
-
-  mlir::DenseI32ArrayAttr order = encoding.getOrder();
-  assert(order.size() == 2 && "Invalid order");
-  if (order[0] == 0 && order[1] == 1)
-    return true;
-
-  return false;
-}
-
 static mlir::DenseI64ArrayAttr getTransposeAttr(xetile::TileType type) {
   auto encoding =
       mlir::dyn_cast_if_present<xetile::XeTileAttr>(type.getEncoding());
@@ -91,16 +76,12 @@ class SgInitTileOpPattern
 
     auto offsetsX = offsets[0];
     auto offsetsY = offsets[1];
-    auto sizeX = resTileShape[0];
-    auto sizeY = resTileShape[1];
-    auto stepX = resTileShape[2];
-    auto stepY = resTileShape[3];
+    int64_t sizeXY[] = {resTileShape[0], resTileShape[1]};
+    int64_t stepXY[] = {resTileShape[2], resTileShape[3]};
 
-    bool isColMajor = isColumnMajor(op.getType());
-    if (isColMajor) {
-      std::swap(sizeX, sizeY);
-      std::swap(stepX, stepY);
-    }
+    auto transposeAttr = getTransposeAttr(op.getType());
+    transpose(transposeAttr, sizeXY);
+    transpose(transposeAttr, stepXY);
 
     auto createIndexConstant = [&](mlir::Type type, int64_t value) {
       auto attr = rewriter.getIndexAttr(value);
@@ -112,10 +93,10 @@ class SgInitTileOpPattern
 
     rewriter.setInsertionPoint(op);
     llvm::SmallVector<mlir::Value> xegpuOps;
-    for (int i = 0; i < sizeX; i++) {
-      for (int j = 0; j < sizeY; j++) {
-        auto subOffX = createIndexConstant(indexType, (stepX * i));
-        auto subOffY = createIndexConstant(indexType, (stepY * j));
+    for (int64_t i = 0; i < sizeXY[0]; i++) {
+      for (int64_t j = 0; j < sizeXY[1]; j++) {
+        auto subOffX = createIndexConstant(indexType, (stepXY[0] * i));
+        auto subOffY = createIndexConstant(indexType, (stepXY[1] * j));
         auto tDescOffsetX =
             rewriter.createOrFold<mlir::arith::AddIOp>(loc, subOffX, offsetsX);
         auto tDescOffsetY =
