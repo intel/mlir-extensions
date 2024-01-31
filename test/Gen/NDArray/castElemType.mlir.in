@@ -1,0 +1,29 @@
+// NUMPLACEHOLDERS 5 NUMVARIANTS 10
+// PLACEHOLDER FROMTYPE   ui64  f64  f64 ui32 ui32  i64  f64 ui16  i16 ui16
+// PLACEHOLDER TOTYPE      i32  f32  i32  f32  i32 ui32 ui32 ui32 ui32  i32
+// PLACEHOLDER INITTYPE    i64  f64  f64  i32  i32  i64  f64  i16  i16  i16
+// PLACEHOLDER DTYPEID       3    0    0    5    5    2    0    7    6    7
+// PLACEHOLDER INITVALUE    10 10.0 10.0   10   10   10 10.0   10   10   10
+// RUN: %python_executable %imex_runner -i %s -f %p/ndarray.pp -e main -entry-point-result=void --shared-libs=%mlir_c_runner_utils --shared-libs=%mlir_runner_utils | FileCheck %s
+
+func.func private @printMemrefI32(tensor<*xi32>)
+func.func @main() {
+  call @test_cast_elemtype() : () -> ()
+  return
+}
+
+func.func @test_cast_elemtype() {
+  %i4 = arith.constant 4 : index
+  %c10 = arith.constant @INITVALUE@ : @INITTYPE@
+  %c10_1 = builtin.unrealized_conversion_cast %c10 : @INITTYPE@ to @FROMTYPE@
+  %0 = ndarray.create %i4 value %c10_1 {dtype = @DTYPEID@ : i8} : (index, @FROMTYPE@) -> !ndarray.ndarray<4x@FROMTYPE@>
+  %1 = ndarray.cast_elemtype %0 : !ndarray.ndarray<4x@FROMTYPE@> to !ndarray.ndarray<4x@TOTYPE@>
+  %2 = ndarray.cast_elemtype %1 : !ndarray.ndarray<4x@TOTYPE@> to !ndarray.ndarray<4xi32>
+  %3 = "ndarray.to_tensor"(%2) : (!ndarray.ndarray<4xi32>) -> tensor<4xi32>
+  %cast = tensor.cast %3 : tensor<4xi32> to tensor<*xi32>
+  call @printMemrefI32(%cast) : (tensor<*xi32>) -> ()
+  return
+  // CHECK: Unranked Memref base@ = {{(0x)?[-9a-f]*}}
+  // CHECK-SAME: rank = 1 offset = 0 sizes = [4] strides = [1] data =
+  // CHECK-NEXT: [10, 10, 10, 10]
+}

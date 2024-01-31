@@ -1,6 +1,6 @@
 //===- InitIMEXPasses.h - IMEX Registration ---------------------*- C++ -*-===//
 //
-// Copyright 2022 Intel Corporation
+// Copyright 2023 Intel Corporation
 // Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
@@ -17,6 +17,10 @@
 
 #include <imex/Conversion/Passes.h>
 // #include <imex/Transforms/IMEXPasses.h>
+#include <imex/Dialect/Dist/Transforms/Passes.h>
+#include <imex/Dialect/DistRuntime/Transforms/Passes.h>
+#include <imex/Dialect/NDArray/Transforms/Passes.h>
+#include <imex/Dialect/Region/Transforms/Passes.h>
 // #include <imex/Dialect/*/Transforms/Passes.h>
 #include "imex/Transforms/Passes.h"
 #include <imex/Dialect/XeTile/Transforms/Passes.h>
@@ -40,6 +44,10 @@ inline void registerAllPasses() {
   registerConversionPasses();
 
   // Dialect passes
+  registerNDArrayPasses();
+  registerDistPasses();
+  registerDistRuntimePasses();
+  registerRegionPasses();
   registerXeTilePasses();
   // register*Passes();
 

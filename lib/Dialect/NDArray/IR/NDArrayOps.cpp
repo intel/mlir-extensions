@@ -118,12 +118,16 @@ bool imex::ndarray::NDArrayBase::isValidElementType(Type type) {
   return type.isIntOrIndexOrFloat();
 }
 
-bool imex::ndarray::NDArrayType::hasUnitSize() const {
-  for (auto d : getShape()) {
+bool imex::ndarray::isUnitShape(const llvm::ArrayRef<int64_t> shp) {
+  for (auto d : shp) {
     if (d != 1)
       return false;
   }
   return true;
+}
+
+bool imex::ndarray::NDArrayType::hasUnitSize() const {
+  return isUnitShape(getShape());
 }
 
 bool imex::ndarray::NDArrayType::hasZeroSize() const {

@@ -1,6 +1,6 @@
 //===-- IMEXPasses.td - Conversion pass definition file ----*- tablegen -*-===//
 //
-// Copyright 2022 Intel Corporation
+// Copyright 2023 Intel Corporation
 // Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
@@ -26,6 +26,89 @@ include "mlir/Interfaces/LoopLikeInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/ViewLikeInterface.td"
 include "mlir/IR/EnumAttr.td"
+
+//===----------------------------------------------------------------------===//
+// NDArrayToLinalg
+//===----------------------------------------------------------------------===//
+
+def ConvertNDArrayToLinalg : Pass<"convert-ndarray-to-linalg"> {
+  let summary = "Convert from the NDArray dialect to the Linalg and Dist dialects";
+  let description = [{
+    Convert NDArray dialect operations into the LLVM IR dialect operations.
+
+    #### Input invariant
+
+    -   all tensors are NDArrayType
+
+    #### Output IR
+
+    - a NDArrayType will be lowered to a unrealized_conversion_cast to tuple of
+      * tensor: RankedTensor
+      * device: device where the tensor lives (AnyType, default=None)
+      * team: a group of processes among which the tensor is distributed
+        (AnyType, default=None)
+      * rthandle: a handle for communication with the dist dialect/runtime
+        (AnyType, default=None)
+    - On function boundaries (func::callOp, func::returnOp, func::functionOp)
+      NDArrayTypes get expanded into 4 separate arguments (rtensor, device, team, handle).
+    - NDArray operations are converted to Linalg operations, accompaigned by
+      * operations of the Dist dialect if the input tensors are distributed
+      * FIXME iGPU::deviceRegionOps if the input tensors live on a device
+  }];
+  let constructor = "imex::createConvertNDArrayToLinalgPass()";
+  let dependentDialects = ["::mlir::linalg::LinalgDialect",
+                           "::mlir::affine::AffineDialect",
+                           "::mlir::func::FuncDialect",
+                           "::mlir::arith::ArithDialect",
+                           "::mlir::tensor::TensorDialect",
+                           "::mlir::tosa::TosaDialect",
+                           "::mlir::scf::SCFDialect",
+                           "::mlir::memref::MemRefDialect",
+                           "::mlir::shape::ShapeDialect",
+                           "::mlir::bufferization::BufferizationDialect",
+                           "::imex::region::RegionDialect"];
+  let options = [];
+}
+
+//===----------------------------------------------------------------------===//
+// DistToStandard
+//===----------------------------------------------------------------------===//
+
+def ConvertDistToStandard: Pass<"convert-dist-to-standard"> {
+  let summary = "Convert from the Dist dialect to runtime calls.";
+  let description = [{
+    Convert Dist dialect operations into standard dialect operations
+    by inserting calls into a distributed runtime.
+
+    Necessary prototypes of runtime functions will be added.
+  }];
+  let constructor = "::imex::createConvertDistToStandardPass()";
+  let dependentDialects = ["::imex::ndarray::NDArrayDialect",
+                           "::imex::distruntime::DistRuntimeDialect",
+                           "::mlir::linalg::LinalgDialect",
+                           "::mlir::func::FuncDialect",
+                           "::mlir::tensor::TensorDialect",
+                           "::mlir::memref::MemRefDialect",
+                           "::mlir::arith::ArithDialect",
+                           "::mlir::scf::SCFDialect",
+                           "::mlir::bufferization::BufferizationDialect"];
+  let options = [];
+}
+
+//===----------------------------------------------------------------------===//
+// DropRegions
+//===----------------------------------------------------------------------===//
+
+def DropRegions: Pass<"drop-regions"> {
+  let summary = "Remove all Region dialect operations.";
+  let description = [{
+    Removes all Region dialect operations.
+  }];
+  let constructor = "::imex::createDropRegionsPass()";
+  let dependentDialects = [];
+  let options = [];
+}
+
 
 //===----------------------------------------------------------------------===//
 // GPUToSPIRV

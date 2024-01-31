@@ -112,6 +112,9 @@ bool canFoldIntoConsumerOp(CastOp castOp);
 /// that can be folded.
 mlir::LogicalResult foldArrayCast(mlir::Operation *op);
 
+/// @return true if shape is known to span exactly one element
+bool isUnitShape(const llvm::ArrayRef<int64_t> shp);
+
 } // namespace ndarray
 } // namespace imex
 

@@ -1,0 +1,36 @@
+builtin.module(
+    convert-ndarray-to-linalg
+    canonicalize
+    func.func(tosa-make-broadcastable)
+    func.func(tosa-to-linalg)
+    func.func(tosa-to-tensor)
+    canonicalize
+    linalg-fuse-elementwise-ops
+    arith-expand
+    memref-expand
+    arith-bufferize
+    func-bufferize
+    func.func(empty-tensor-to-alloc-tensor)
+    func.func(scf-bufferize)
+    func.func(tensor-bufferize)
+    func.func(bufferization-bufferize)
+    func.func(linalg-bufferize)
+    func.func(linalg-detensorize)
+    func.func(tensor-bufferize)
+    func.func(finalizing-bufferize)
+    imex-remove-temporaries
+    func.func(convert-linalg-to-parallel-loops)
+    func.func(scf-parallel-loop-fusion)
+    drop-regions
+    canonicalize
+    fold-memref-alias-ops
+    expand-strided-metadata
+    convert-math-to-funcs
+    lower-affine
+    convert-scf-to-cf
+    finalize-memref-to-llvm
+    convert-math-to-llvm
+    convert-math-to-libm
+    convert-func-to-llvm
+    reconcile-unrealized-casts
+)

@@ -1,6 +1,6 @@
 //===-- Passes.td - Transform pass definition file ---------*- tablegen -*-===//
 //
-// Copyright 2022 Intel Corporation
+// Copyright 2023 Intel Corporation
 // Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
@@ -39,7 +39,9 @@ def InsertGPUAllocs : Pass<"insert-gpu-allocs", "::mlir::func::FuncOp"> {
                            "::mlir::arith::ArithDialect"];
   let options = [
     Option<"clientAPI", "client-api", "std::string", /*default=*/"\"opencl\"",
-           "The client API to use for inserting gpu allocs">
+           "The client API to use for inserting gpu allocs">,
+    Option<"inRegions", "in-regions", "bool", "false",
+           "Add gpu allocs only for memref.AllocOps within GPU regions">
   ];
 }
 
@@ -108,4 +110,15 @@ def BF16ToGPU : Pass<"bf16-to-gpu", "::mlir::ModuleOp"> {
     "::mlir::arith::ArithDialect"
     ];
 }
+
+def RemoveTemporaries : Pass<"imex-remove-temporaries"> {
+  let summary = "Remove redundant memref.alloc and memref.copy operations";
+  let description = [{
+    This pass removes redundant temporary allocations, i.e. memref.alloc, memref.copy, and memref.dealloc operations when possible. A typical use case is in-place elementwise binary operations which often include a temporary memref allocation, linalg.generic loop, and memref.copy to the destination.
+
+    This pass is intended to run after bufferization and buffer-deallocation.
+  }];
+  let constructor = "imex::createRemoveTemporariesPass()";
+}
+
 #endif // _IMEX_TRANSFORMS_PASSES_TD_INCLUDED_

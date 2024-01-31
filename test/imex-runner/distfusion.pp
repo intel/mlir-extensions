@@ -1,0 +1,18 @@
+builtin.module(
+    add-gpu-regions
+    canonicalize
+    ndarray-dist
+    func.func(dist-coalesce)
+    func.func(dist-infer-elementwise-cores)
+    convert-dist-to-standard
+    canonicalize
+    overlap-comm-and-compute
+    add-comm-cache-keys
+    lower-distruntime-to-idtr
+    convert-ndarray-to-linalg
+    canonicalize
+    func.func(tosa-to-linalg)
+    func.func(tosa-to-tensor)
+    canonicalize
+    linalg-fuse-elementwise-ops
+)
