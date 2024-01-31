@@ -1,0 +1,16 @@
+add_mlir_dialect_library(IMEXNDArrayTransforms
+  NDArrayDist.cpp
+  AddGPURegions.cpp
+
+  ADDITIONAL_HEADER_DIRS
+  ${PROJECT_SOURCE_DIR}/include/imex/Dialect/NDArray
+
+  DEPENDS
+  IMEXNDArrayPassIncGen
+
+  LINK_LIBS PUBLIC
+  MLIRIR
+  MLIRPass
+  IMEXNDArrayDialect
+  IMEXDistDialect
+)

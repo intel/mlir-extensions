@@ -21,6 +21,7 @@
 #include "llvm/Support/Threading.h"
 #include <imex/Transforms/Passes.h>
 
+#include <imex/Dialect/Region/RegionUtils.h>
 #include <mlir/Dialect/Affine/IR/AffineOps.h>
 #include <mlir/Dialect/Bufferization/Transforms/BufferViewFlowAnalysis.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
@@ -40,7 +41,7 @@ class InsertGPUAllocsPass final
     : public imex::impl::InsertGPUAllocsBase<InsertGPUAllocsPass> {
 
 public:
-  explicit InsertGPUAllocsPass() { m_clientAPI = "vulkan"; }
+  explicit InsertGPUAllocsPass() : m_clientAPI("vulkan") {}
   explicit InsertGPUAllocsPass(const mlir::StringRef &clientAPI)
       : m_clientAPI(clientAPI) {}
 
@@ -55,6 +56,9 @@ public:
     if (clientAPI != "vulkan" && clientAPI != "opencl")
       return mlir::failure();
 
+    if (clientAPI.getValue() != "opencl" && inRegions.getValue())
+      return mlir::failure();
+
     return mlir::success();
   }
 
@@ -66,6 +70,49 @@ public:
     } else if (!llvm::hasSingleElement(funcBody)) {
       func.emitError("Function must have exactly one block");
       signalPassFailure();
+      return;
+    }
+
+    mlir::OpBuilder builder(func);
+
+    if (inRegions.getValue()) {
+      // collecting alloc ops in GPU regions
+      ::mlir::SmallVector<::mlir::memref::AllocOp> allocOpsInGpuRegion;
+      ::mlir::SmallVector<::mlir::memref::DeallocOp> deallocOpsInGpuRegion;
+
+      // Traverse ops and identify memref.alloc ops which are in GPU region
+      (void)func.walk([&](mlir::Operation *op) {
+        // identify and store memref.alloc ops which are inside a GPU-region
+        if (::imex::region::isInGpuRegion(op)) {
+          if (auto tyOp = ::mlir::dyn_cast<::mlir::memref::AllocOp>(op)) {
+            allocOpsInGpuRegion.emplace_back(tyOp);
+          } else if (auto tyOp =
+                         ::mlir::dyn_cast<::mlir::memref::DeallocOp>(op)) {
+            deallocOpsInGpuRegion.emplace_back(tyOp);
+          }
+        }
+      });
+
+      // Now rudely replace allocs with gpu allocs
+      for (auto alloc : allocOpsInGpuRegion) {
+        builder.setInsertionPoint(alloc);
+        auto allocResult = builder.create<::mlir::gpu::AllocOp>(
+            alloc.getLoc(), alloc.getType(), /*asyncToken*/ nullptr,
+            /*asyncDependencies*/ std::nullopt, alloc.getDynamicSizes(),
+            alloc.getSymbolOperands(), true);
+        alloc.replaceAllUsesWith(allocResult);
+        alloc.erase();
+      }
+
+      // finally rudely handle deallocs
+      for (auto dealloc : deallocOpsInGpuRegion) {
+        builder.setInsertionPoint(dealloc);
+        (void)builder.create<::mlir::gpu::DeallocOp>(
+            dealloc.getLoc(), std::nullopt /*async*/, dealloc.getMemref());
+        dealloc.erase();
+      }
+
+      // Done, it can be as simple as that!
       return;
     }
 
@@ -243,7 +290,6 @@ public:
       return ret;
     };
 
-    mlir::OpBuilder builder(func);
     auto &block = funcBody.front();
     auto term = block.getTerminator();
     assert(term);
@@ -263,42 +309,16 @@ public:
             alloc.getSymbolOperands(), hostShared);
         auto allocResult = gpuAlloc.getResult(0);
         builder.setInsertionPoint(term);
-
-        // follow the users of alloc if they are view-like
-        // insert copy if they are terminator
-        auto insertCopyIfViewInTerminal = [&](auto &use) -> bool {
-          auto _insertCopyIfViewInTerminal =
-              [&](auto &use, auto _insertCopyIfViewInTerminal_) -> bool {
-            auto user = use.getOwner();
-            if (user == term) {
-              auto newAlloc = builder.create<mlir::memref::AllocOp>(
-                  loc, alloc.getType(), alloc.getDynamicSizes(),
-                  alloc.getSymbolOperands());
-              builder.create<mlir::memref::CopyOp>(loc, allocResult,
-                                                   newAlloc.getResult());
-              auto castop = builder.create<mlir::memref::CastOp>(
-                  loc, use.get().getType(), newAlloc);
-              use.set(castop.getResult());
-              return true;
-            }
-            if (::mlir::isa<::mlir::ViewLikeOpInterface>(user)) {
-              assert(user->getNumResults() == 1);
-              for (auto &_use : user->getResult(0).getUses()) {
-                if (_insertCopyIfViewInTerminal_(_use,
-                                                 _insertCopyIfViewInTerminal_))
-                  return true;
-              }
-            }
-            // on all other cases we do nothing
-            return true;
-          };
-          return _insertCopyIfViewInTerminal(use, _insertCopyIfViewInTerminal);
-        };
-
-        for (auto &use : alloc.getResult().getUses()) {
-          insertCopyIfViewInTerminal(use);
+        for (mlir::OpOperand &use : alloc.getResult().getUses()) {
+          if (use.getOwner() == term) {
+            auto newAlloc = builder.create<mlir::memref::AllocOp>(
+                loc, alloc.getType(), alloc.getDynamicSizes(),
+                alloc.getSymbolOperands());
+            builder.create<mlir::memref::CopyOp>(loc, allocResult,
+                                                 newAlloc.getResult());
+            use.set(newAlloc.getResult());
+          }
         }
-
         alloc.replaceAllUsesWith(allocResult);
         builder.create<mlir::gpu::DeallocOp>(loc, std::nullopt, allocResult);
         alloc.erase();

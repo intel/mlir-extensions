@@ -18,11 +18,6 @@
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/DialectImplementation.h>
 
-extern "C" {
-int _idtr_nprocs(void *) __attribute__((weak));
-int _idtr_prank(void *) __attribute__((weak));
-}
-
 namespace imex {
 namespace distruntime {
 
@@ -35,52 +30,6 @@ void DistRuntimeDialect::initialize() {
 #define GET_OP_LIST
 #include <imex/Dialect/DistRuntime/IR/DistRuntimeOps.cpp.inc>
       >();
-}
-
-static auto DNDA_NPROCS = getenv("DNDA_NPROCS");
-static auto DNDA_PRANK = getenv("DNDA_PRANK");
-
-::mlir::OpFoldResult TeamSizeOp::fold(FoldAdaptor adaptor) {
-  // call runtime at compile time if available and team is constant
-  if (DNDA_NPROCS) {
-    auto np = std::stoi(DNDA_NPROCS);
-    ::mlir::Builder builder(getContext());
-    return builder.getIndexAttr(np);
-  }
-  if (_idtr_nprocs != NULL) {
-    ::mlir::Builder builder(getContext());
-    auto team = adaptor.getTeam().cast<::mlir::IntegerAttr>().getInt();
-    auto np = _idtr_nprocs(reinterpret_cast<void *>(team));
-    return builder.getIndexAttr(np);
-  }
-  return nullptr;
-}
-
-::mlir::OpFoldResult TeamMemberOp::fold(FoldAdaptor adaptor) {
-  // call runtime at compile time if available and team is constant
-  if (DNDA_PRANK) {
-    auto np = std::stoi(DNDA_PRANK);
-    ::mlir::Builder builder(getContext());
-    return builder.getIndexAttr(np);
-  }
-  if (_idtr_prank != NULL) {
-    ::mlir::Builder builder(getContext());
-    auto team = adaptor.getTeam().cast<::mlir::IntegerAttr>().getInt();
-    auto np = _idtr_prank(reinterpret_cast<void *>(team));
-    return builder.getIndexAttr(np);
-  }
-  return nullptr;
-}
-
-/// Materialize a single constant operation from a given attribute value with
-/// the desired resultant type.
-/// Ported from mlir::tensor dialect
-mlir::Operation *imex::distruntime::DistRuntimeDialect::materializeConstant(
-    mlir::OpBuilder &builder, mlir::Attribute value, mlir::Type type,
-    mlir::Location loc) {
-  if (auto op = mlir::arith::ConstantOp::materialize(builder, value, type, loc))
-    return op;
-  return nullptr;
 }
 
 } // namespace distruntime

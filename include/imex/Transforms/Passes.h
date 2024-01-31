@@ -1,6 +1,6 @@
 //===- Passes.h - Pass Entrypoints ------------------------------*- C++ -*-===//
 //
-// Copyright 2022 Intel Corporation
+// Copyright 2023 Intel Corporation
 // Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
@@ -27,6 +27,7 @@ std::unique_ptr<mlir::Pass> createSetSPIRVAbiAttributePass();
 std::unique_ptr<mlir::Pass> createAddOuterParallelLoopPass();
 std::unique_ptr<mlir::Pass> createLowerMemRefCopyPass();
 std::unique_ptr<mlir::Pass> createBF16ToGPUPass();
+std::unique_ptr<mlir::Pass> createRemoveTemporariesPass();
 
 #define GEN_PASS_DECL
 #include "imex/Transforms/Passes.h.inc"

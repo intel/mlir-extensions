@@ -135,6 +135,7 @@ function(imex_gen_test src_base tgt_base)
 endfunction()
 
 add_subdirectory(PlaidML)
+add_subdirectory(NDArray)
 # Add other directories in the future
 
 add_lit_testsuite(check-gen "Running the IMEX generated regression tests in ${GEN_TEST_SRC_ROOT}"

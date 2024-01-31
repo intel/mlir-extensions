@@ -75,7 +75,7 @@ with open(jp(libroot, args.name, "IR", "CMakeLists.txt"), "w") as f:
   ${{PROJECT_SOURCE_DIR}}/include/imex/Dialect/{args.name}
 
   DEPENDS
-  IMEX{args.name}OpsIncGen
+  MLIR{args.name}OpsIncGen
 
   LINK_LIBS PUBLIC
   MLIRIR
@@ -105,7 +105,7 @@ fn = jp(incroot, args.name, "IR", f"{args.name}Ops.td")
 with open(fn, "w") as f:
     f.write(f"""//===- {os.path.basename(fn)} - {args.name} dialect  -------*- tablegen -*-===//
 //
-// Copyright 2022 Intel Corporation
+// Copyright 2023 Intel Corporation
 // Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
@@ -159,7 +159,7 @@ fn = jp(incroot, args.name, "IR", f"{args.name}Ops.h")
 with open(fn, "w") as f:
     f.write(f"""//===- {os.path.basename(fn)} - {args.name} dialect  -------*- C++ -*-===//
 //
-// Copyright 2022 Intel Corporation
+// Copyright 2023 Intel Corporation
 // Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
@@ -200,7 +200,7 @@ fn = jp(libroot, args.name, "IR", f"{args.name}Ops.cpp")
 with open(fn, "w") as f:
     f.write(f"""//===- {os.path.basename(fn)} - {args.name} dialect -------*- C++ -*-===//
 //
-// Copyright 2022 Intel Corporation
+// Copyright 2023 Intel Corporation
 // Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
@@ -247,7 +247,7 @@ fn = jp(incroot, args.name, "Transforms", "Passes.td")
 with open(fn, "w") as f:
     f.write(f"""//===-- {os.path.basename(fn)} - {args.name} pass definition file --------*- tablegen -*-===//
 //
-// Copyright 2022 Intel Corporation
+// Copyright 2023 Intel Corporation
 // Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
@@ -294,7 +294,7 @@ fn = jp(incroot, args.name, "Transforms", "Passes.h")
 with open(fn, "w") as f:
     f.write(f"""//===-- {os.path.basename(fn)} - {args.name} pass declaration file --------*- tablegen -*-===//
 //
-// Copyright 2022 Intel Corporation
+// Copyright 2023 Intel Corporation
 // Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
@@ -351,7 +351,7 @@ fn = jp(libroot, args.name, "Transforms", "PassDetail.h")
 with open(fn, "w") as f:
     f.write(f"""//===-- {os.path.basename(fn)} - {args.name} pass details --------*- tablegen -*-===//
 //
-// Copyright 2022 Intel Corporation
+// Copyright 2023 Intel Corporation
 // Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception

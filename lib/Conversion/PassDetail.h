@@ -1,6 +1,6 @@
 //===- IMEXPassDetail.h - Conversion Pass class details ---------*- C++ -*-===//
 //
-// Copyright 2022 Intel Corporation
+// Copyright 2023 Intel Corporation
 // Part of the IMEX Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
@@ -67,6 +67,10 @@ namespace tensor {
 class TensorDialect;
 } // namespace tensor
 
+namespace tosa {
+class TosaDialect;
+} // namespace tosa
+
 namespace gpu {
 class GPUDialect;
 } // namespace gpu
@@ -77,13 +81,21 @@ class VectorDialect;
 } // namespace mlir
 
 namespace imex {
-namespace ptensor {
-class PTensorDialect;
-} // namespace ptensor
+namespace ndarray {
+class NDArrayDialect;
+} // namespace ndarray
 
 namespace dist {
 class DistDialect;
 } // namespace dist
+
+namespace distruntime {
+class DistRuntimeDialect;
+} // namespace distruntime
+
+namespace region {
+class RegionDialect;
+} // namespace region
 
 namespace gpux {
 class GPUXDialect;

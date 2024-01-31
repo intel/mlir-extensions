@@ -1,6 +1,6 @@
 #===- imex-runner.py ----------------------------------------*- Python -*-===#
 #
-# Copyright 2022 Intel Corporation
+# Copyright 2023 Intel Corporation
 # This file is licensed under the Apache License v2.0 with LLVM Exceptions.
 # See https:#llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
@@ -42,7 +42,7 @@ imex-opt to enable printing IR before and after running passes.
 Option --check-prefix gets forwarded to FileCheck.
 
 To use this in a lit test, you can do something similar to
-`// RUN: %python_executable %imex-runner -i %s --pass-pipeline-file=%p/ptensor.pp -e main -entry-point-result=void --shared-libs=%mlir_c_runner_utils,%mlir_runner_utils --filecheck`
+`// RUN: %python_executable %imex-runner -i %s --pass-pipeline-file=%p/ndarray.pp -e main -entry-point-result=void --shared-libs=%mlir_c_runner_utils,%mlir_runner_utils --filecheck`
 """
 
 import os, sys, re
