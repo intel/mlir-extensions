@@ -1,0 +1,26 @@
+--------------------------------------------------------------------------------------------------------
+Benchmark name : gemm_4kx4kx4k_dpas_sized_loads_f16_f16_f16_w_8x32xf16_stores
+Platform :  Intel(R) Data Center GPU Max 1550
+Requirements : doubleGRF
+
+Kernel test_kernel : 237 registers
+the kernel execution time is (ms, on L0 runtime):avg: 0.6626, min: 0.4598, max: 2.6310 (over 1000 runs)
+TFlops : avg:207.424, min:52.238, max:298.910
+
+---------------------------------------------------------------------------------------------------------
+Benchmark name : gemm_4kx4kx4k_dpas_sized_loads_f16_f16_f16
+Platform :  Intel(R) Data Center GPU Max 1550
+Requirements : doubleGRF
+
+Kernel test_kernel : 237 registers
+the kernel execution time is (ms, on L0 runtime):avg: 0.6637, min: 0.4611, max: 2.2963 (over 1000 runs)
+TFlops : avg:207.080, min:59.852, max:298.068
+
+---------------------------------------------------------------------------------------------------------
+Benchmark name : gemm_4kx4kx4k_dpas_sized_loads_f16_f16_f32
+Platform :  Intel(R) Data Center GPU Max 1550
+Requirements : doubleGRF
+
+Kernel test_kernel : 250 registers
+the kernel execution time is (ms, on L0 runtime):avg: 0.7909, min: 0.5862, max: 2.3459 (over 1000 runs)
+TFlops : avg:173.775, min:58.587, max:234.457

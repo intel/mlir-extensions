@@ -16,8 +16,13 @@
 #include "imex/Dialect/XeGPU/IR/XeGPU.h"
 
 #include "../PassDetail.h"
+#include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/Support/LogicalResult.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/Support/ErrorHandling.h"
 
+#include <cstdint>
 #include <llvm/ADT/ArrayRef.h>
 #include <llvm/Support/Debug.h>
 
@@ -620,8 +625,9 @@ public:
     if (rank == 1) {
       numDstVal *= 2;
     }
-    // numDstVal is given only 5 bits in raw_send message. Therefore value 32 is
-    // encoded as 31 to avoid overflow
+    // numDstVal is represented using only 5 bits in the raw_send message.
+    // So, value 32 is represented as 31 and data port hardware derives the
+    // correct destination length based on message parameters.
     if (numDstVal == 32)
       numDstVal = 31;
     auto numDst = createIntConstant(i8Type, numDstVal);
@@ -1274,6 +1280,11 @@ struct VectorExtract final : public OpConversionPattern<vector::ExtractOp> {
     return success();
   }
 };
+
+static uint64_t getFirstIntValue(mlir::ArrayAttr attr) {
+  return (*attr.getAsValueRange<IntegerAttr>().begin()).getZExtValue();
+};
+
 struct VectorExtractStridedSlice final
     : public OpConversionPattern<vector::ExtractStridedSliceOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -1287,10 +1298,6 @@ struct VectorExtractStridedSlice final
     // fixme : currently only support 1D vectors
     if (extractOp.getSourceVectorType().getRank() != 1)
       return failure();
-
-    auto getFirstIntValue = [](mlir::ArrayAttr attr) -> uint64_t {
-      return (*attr.getAsValueRange<IntegerAttr>().begin()).getZExtValue();
-    };
 
     uint64_t offset = getFirstIntValue(extractOp.getOffsets());
     uint64_t size = getFirstIntValue(extractOp.getSizes());
@@ -1318,6 +1325,66 @@ struct VectorExtractStridedSlice final
     return success();
   }
 };
+
+struct VectorShuffle final : public OpConversionPattern<vector::ShuffleOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(vector::ShuffleOp shuffleOp, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto dstType = getTypeConverter()->convertType(shuffleOp.getType());
+    if (!dstType)
+      return failure();
+
+    auto vec1 = adaptor.getV1();
+    auto vec2 = adaptor.getV2();
+
+    int shuffleSliceLen = 1;
+    int rank = shuffleOp.getV1().getType().getRank();
+
+    // if rank > 1, we need to do the shuffle in the granularity of slices
+    // instead of scalars. Size of the slice is equal to the rank-1 innermost
+    // dims. Mask of the shuffle op specifies which slice to take from the
+    // outermost dim.
+    if (rank > 1) {
+      auto shape = shuffleOp.getV1().getType().getShape();
+      for (unsigned i = 1; i < shape.size(); i++) {
+        shuffleSliceLen *= shape[i];
+      }
+    }
+
+    // llvm shufflevector does not support  shuffling vectors with
+    // unequal sizes. Howver if both vectors are constants this restriction
+    // does not apply.
+    // FIXME : Currently this only checks for spirv::ConstantOp as the operands.
+    // Need to use constant analyis for better support.
+    bool bothConstants = isa<spirv::ConstantOp>(vec1.getDefiningOp()) &&
+                         isa<spirv::ConstantOp>(vec2.getDefiningOp());
+    bool sizeMismatch = shuffleOp.getV1().getType().getShape()[0] !=
+                        shuffleOp.getV2().getType().getShape()[0];
+    if (!bothConstants && sizeMismatch)
+      return rewriter.notifyMatchFailure(
+          shuffleOp, "Two source vectors must have equal number of elements.");
+
+    auto mask = shuffleOp.getMask();
+    auto totalSize = mask.size() * shuffleSliceLen;
+
+    SmallVector<int32_t, 2> indices(totalSize);
+    for (auto [i, value] :
+         llvm::enumerate(mask.getAsValueRange<IntegerAttr>())) {
+
+      int32_t v = value.getZExtValue();
+      std::iota(indices.begin() + shuffleSliceLen * i,
+                indices.begin() + shuffleSliceLen * (i + 1),
+                shuffleSliceLen * v);
+    }
+
+    rewriter.replaceOpWithNewOp<spirv::VectorShuffleOp>(
+        shuffleOp, dstType, vec1, vec2, rewriter.getI32ArrayAttr(indices));
+
+    return success();
+  }
+};
 } // namespace
 
 void imex::populateXeGPUToVCIntrinsicsPatterns(
@@ -1326,7 +1393,7 @@ void imex::populateXeGPUToVCIntrinsicsPatterns(
                AllocNbarrierToVCPattern, CreateNbarrierToVCPattern,
                NbarrierArriveToVCPattern, NbarrierWaitToVCPattern,
                CompilerHintToVCPattern, MfenceToVCPattern, VectorShapeCast,
-               VectorExtract, VectorExtractStridedSlice,
+               VectorExtract, VectorExtractStridedSlice, VectorShuffle,
                GatherScatterToRawSend<LoadGatherOp>,
                GatherScatterToRawSend<StoreScatterOp>, AtomicToLsc,
                UpdateNDOffsetToVCPattern>(typeConverter, patterns.getContext());
@@ -2075,6 +2142,6 @@ void imex::populateXeGPUToJointMatrixPatterns(SPIRVTypeConverter &typeConverter,
                                               RewritePatternSet &patterns) {
   patterns.add<CreateNdDescToJointMatrix, UpdateNDOffsetJointMatrix,
                LoadNDJointMatrix, StoreNDJointMatrix, DpasJointMatrix,
-               VectorShapeCast, VectorExtract, VectorExtractStridedSlice>(
-      typeConverter, patterns.getContext());
+               VectorShapeCast, VectorExtract, VectorExtractStridedSlice,
+               VectorShuffle>(typeConverter, patterns.getContext());
 }
