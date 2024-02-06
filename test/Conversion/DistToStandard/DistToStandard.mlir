@@ -53,8 +53,18 @@ module {
     }
 }
 // CHECK-LABEL: func.func @test_local_partition(%arg0: index, %arg1: index, %arg2: index) -> (index, index) {
-// CHECK: arith.subi
-// CHECK: arith.muli
+// CHECK: arith.remsi
+// CHECK: arith.divsi
+// CHECK-DAG: arith.addi
+// CHECK-DAG: arith.cmpi
+// CHECK-DAG: arith.select
+// CHECK-DAG: arith.addi
+// CHECK-DAG: arith.subi
+// CHECK-DAG: arith.subi
+// CHECK-DAG: arith.maxsi
+// CHECK-DAG: arith.muli
+// CHECK: arith.addi
+// CHECK: arith.maxsi
 
 
 // -----
