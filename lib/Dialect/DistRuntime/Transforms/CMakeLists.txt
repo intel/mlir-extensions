@@ -1,4 +1,4 @@
-add_mlir_dialect_library(IMEXDistRuntimeTransforms
+add_imex_dialect_library(IMEXDistRuntimeTransforms
   DistRuntimeToIDTR.cpp
   OverlapCommAndCompute.cpp
   AddCommCacheKeys.cpp

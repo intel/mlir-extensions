@@ -1,4 +1,4 @@
-add_mlir_conversion_library(IMEXXeTileToXeGPU
+add_imex_conversion_library(IMEXXeTileToXeGPU
   ArithOpConversion.cpp
   SCFOpConversion.cpp
   XeTileToXeGPU.cpp

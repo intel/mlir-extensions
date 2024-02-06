@@ -1,4 +1,4 @@
-add_mlir_conversion_library(IMEXGPUToSPIRV
+add_imex_conversion_library(IMEXGPUToSPIRV
   GPUToSPIRVPass.cpp
 
   ADDITIONAL_HEADER_DIRS

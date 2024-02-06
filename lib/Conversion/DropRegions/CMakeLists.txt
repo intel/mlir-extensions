@@ -1,4 +1,4 @@
-add_mlir_conversion_library(IMEXDropRegions
+add_imex_conversion_library(IMEXDropRegions
   DropRegions.cpp
 
   ADDITIONAL_HEADER_DIRS
