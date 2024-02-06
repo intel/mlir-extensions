@@ -1,4 +1,4 @@
-add_mlir_dialect_library(IMEXNDArrayDialect
+add_imex_dialect_library(IMEXNDArrayDialect
   NDArrayOps.cpp
   SubviewOp.cpp
   InsertSliceOp.cpp

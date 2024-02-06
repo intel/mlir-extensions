@@ -1,4 +1,4 @@
-add_mlir_dialect_library(IMEXRegionDialect
+add_imex_dialect_library(IMEXRegionDialect
   RegionOps.cpp
 
   ADDITIONAL_HEADER_DIRS

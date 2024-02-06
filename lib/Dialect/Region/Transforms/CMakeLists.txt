@@ -1,4 +1,4 @@
-add_mlir_dialect_library(IMEXRegionTransforms
+add_imex_dialect_library(IMEXRegionTransforms
   RegionConversions.cpp
   RegionBufferize.cpp
 

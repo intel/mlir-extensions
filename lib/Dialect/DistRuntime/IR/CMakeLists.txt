@@ -1,4 +1,4 @@
-add_mlir_dialect_library(IMEXDistRuntimeDialect
+add_imex_dialect_library(IMEXDistRuntimeDialect
   DistRuntimeOps.cpp
   GetHaloOp.cpp
 

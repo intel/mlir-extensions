@@ -1,4 +1,4 @@
-add_mlir_conversion_library(XeGPUToSPIRV
+add_imex_conversion_library(XeGPUToSPIRV
   XeGPUToSPIRV.cpp
 
   DEPENDS
