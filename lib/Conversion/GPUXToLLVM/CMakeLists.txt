@@ -1,4 +1,4 @@
-add_mlir_conversion_library(IMEXGPUXToLLVM
+add_imex_conversion_library(IMEXGPUXToLLVM
   GPUXToLLVMPass.cpp
 
   ADDITIONAL_HEADER_DIRS

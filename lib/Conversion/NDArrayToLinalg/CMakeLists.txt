@@ -1,4 +1,4 @@
-add_mlir_conversion_library(IMEXNDArrayToLinalg
+add_imex_conversion_library(IMEXNDArrayToLinalg
   NDArrayToLinalg.cpp
 
   ADDITIONAL_HEADER_DIRS

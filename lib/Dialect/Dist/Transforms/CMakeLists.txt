@@ -1,4 +1,4 @@
-add_mlir_dialect_library(IMEXDistTransforms
+add_imex_dialect_library(IMEXDistTransforms
   DistCoalesce.cpp
   DistInferElementwiseCores.cpp
 

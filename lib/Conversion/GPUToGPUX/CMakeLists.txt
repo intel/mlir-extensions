@@ -1,4 +1,4 @@
-add_mlir_conversion_library(IMEXGPUToGPUX
+add_imex_conversion_library(IMEXGPUToGPUX
   GPUToGPUX.cpp
 
   ADDITIONAL_HEADER_DIRS

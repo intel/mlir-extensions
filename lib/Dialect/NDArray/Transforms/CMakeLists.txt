@@ -1,4 +1,4 @@
-add_mlir_dialect_library(IMEXNDArrayTransforms
+add_imex_dialect_library(IMEXNDArrayTransforms
   NDArrayDist.cpp
   AddGPURegions.cpp
 

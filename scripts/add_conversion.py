@@ -47,7 +47,7 @@ with open(fn, "w") as f:
 
 # Create CMakeLists.txt
 with open(jp(libroot, name, f"CMakeLists.txt"), "w") as f:
-    f.write(f"""add_mlir_conversion_library(IMEX{name}
+    f.write(f"""add_imex_conversion_library(IMEX{name}
   {name}.cpp
 
   ADDITIONAL_HEADER_DIRS
