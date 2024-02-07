@@ -43,6 +43,7 @@ module @gemm attributes {gpu.container_module} {
     %A_cast = memref.cast %A : memref<8x16xf16> to memref<*xf16>
     // call @printMemrefF16(%A_cast) : (memref<*xf16>) -> ()
     // call @printMemrefF32(%B_cast) : (memref<*xf32>) -> ()
+    // CHECK: [ALLCLOSE: TRUE]
     call @printAllcloseF16(%A_cast, %B_cast) : (memref<*xf16>, memref<*xf32>) -> ()
 
     memref.dealloc %A : memref<8x16xf16>

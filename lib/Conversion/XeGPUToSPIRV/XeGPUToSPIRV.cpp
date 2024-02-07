@@ -22,7 +22,6 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorHandling.h"
-#include "llvm/Support/raw_ostream.h"
 
 #include <cstdint>
 #include <llvm/ADT/ArrayRef.h>
@@ -282,7 +281,6 @@ public:
       // fixme: support memref for now
       auto memType = cast<MemRefType>(op.getSource().getType());
       unsigned bitWidth = memType.getElementType().getIntOrFloatBitWidth();
-      // int64_t surfaceWidth, surfaceHeight;
       Value surfaceW, surfaceH, surfaceP;
       if (memType.hasStaticShape()) {
         auto surfaceWidth = memType.getShape()[1] * (bitWidth / 8) - 1;
