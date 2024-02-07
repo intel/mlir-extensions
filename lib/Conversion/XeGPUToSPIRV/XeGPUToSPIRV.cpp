@@ -293,7 +293,7 @@ public:
 
       } else {
         // get the surfaceWidth and Height from the op attributes
-        // compute surface width =
+        // compute surface width
         auto bytesPerElem = createIntConstant(i32Type, bitWidth / 8);
         auto one = createIntConstant(i32Type, 1);
         surfaceW = rewriter.create<spirv::UConvertOp>(
