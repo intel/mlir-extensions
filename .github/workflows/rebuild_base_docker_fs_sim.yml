@@ -1,4 +1,4 @@
-name: Rebuild base docker image for PVC runners
+name: Rebuild base docker image for FS simulator runners
 
 on:
   workflow_dispatch:
@@ -31,17 +31,17 @@ jobs:
     runs-on:
       - self-hosted
       - glados
-      - pvc
+      - fs-sim
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build image ${{ env.DOCKER_REGISTRY }}/mlir-extensions-actions-runner:${{ inputs.image_tag }}
+      - name: Build image ${{ env.DOCKER_REGISTRY }}/mlir-extensions-actions-runner-fs-sim:${{ inputs.image_tag }}
         run: |
           cd docker
-          docker build . \
-            --tag ${{ env.DOCKER_REGISTRY }}/mlir-extensions-actions-runner:${{ inputs.image_tag }}
+          docker build . -f Dockerfile.fs-sim \
+            --tag ${{ env.DOCKER_REGISTRY }}/mlir-extensions-actions-runner-fs-sim:${{ inputs.image_tag }}
 
-      - name: Push image ${{ env.DOCKER_REGISTRY }}/mlir-extensions-actions-runner:${{ inputs.image_tag }}
+      - name: Push image ${{ env.DOCKER_REGISTRY }}/mlir-extensions-actions-runner-fs-sim:${{ inputs.image_tag }}
         if: ${{ inputs.push == 'true' }}
-        run: docker push ${{ env.DOCKER_REGISTRY }}/mlir-extensions-actions-runner:${{ inputs.image_tag }}
+        run: docker push ${{ env.DOCKER_REGISTRY }}/mlir-extensions-actions-runner-fs-sim:${{ inputs.image_tag }}
