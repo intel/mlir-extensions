@@ -130,7 +130,7 @@ def NDArray_NDArray : NDArray_Type<"NDArray", "ndarray", [ShapedTypeInterface],
   ];
 
   let extraClassDeclaration = [{
-    ::mlir::MemRefType getMemRefType() const;
+    ::mlir::MemRefType getMemRefType(::mlir::Value = {}) const;
     ::mlir::RankedTensorType getTensorType() const;
     ::imex::ndarray::NDArrayType cloneWithDynDims() const;
     bool hasUnitSize() const;
@@ -171,6 +171,21 @@ def DeleteOp : NDArray_Op<"delete"> {
 
   let assemblyFormat = [{
     $input attr-dict `:` qualified(type($input))
+  }];
+}
+
+
+def FromMemRefOp : NDArray_Op<"from_memref", [Pure]> {
+  let summary = "Convert a builtin memref value to a value of type NDArray";
+  let description = [{
+    Result type possibly adds NDArray annotations.
+  }];
+
+  let arguments = (ins AnyMemRef:$input);
+  let results = (outs NDArray_NDArray);
+
+  let assemblyFormat = [{
+    $input attr-dict `:` qualified(type($input)) `->` qualified(type(results))
   }];
 }
 

@@ -127,6 +127,23 @@ struct CastLowering
   }
 };
 
+/// Convert FromMemRefOp to bufferize.to_tensor
+struct FromMemRefLowering
+    : public ::mlir::OpConversionPattern<::imex::ndarray::FromMemRefOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  ::mlir::LogicalResult
+  matchAndRewrite(::imex::ndarray::FromMemRefOp op,
+                  ::imex::ndarray::FromMemRefOp::Adaptor adaptor,
+                  ::mlir::ConversionPatternRewriter &rewriter) const override {
+
+    rewriter.replaceOpWithNewOp<::mlir::bufferization::ToTensorOp>(
+        op, adaptor.getInput());
+
+    return ::mlir::success();
+  }
+};
+
 /// Lower to the input operand of the defining op.
 struct ToTensorLowering
     : public ::mlir::OpConversionPattern<::imex::ndarray::ToTensorOp> {
@@ -163,7 +180,7 @@ struct SubviewLowering
                          .dyn_cast_or_null<::imex::ndarray::NDArrayType>();
     if (!srcArType)
       return mlir::failure();
-    auto srcMRType = srcArType.getMemRefType();
+    auto srcMRType = srcArType.getMemRefType(srcTnsr);
     auto srcMR = createToMemRef(loc, rewriter, srcTnsr, srcMRType);
 
     auto *converter = getTypeConverter();
@@ -298,8 +315,8 @@ struct InsertSliceLowering
     auto dstArType =
         op.getDestination().getType().cast<imex::ndarray::NDArrayType>();
 
-    auto srcMRTyp = srcArType.getMemRefType();
-    auto dstMRTyp = dstArType.getMemRefType();
+    auto srcMRTyp = srcArType.getMemRefType(src);
+    auto dstMRTyp = dstArType.getMemRefType(dst);
     mlir::Value srcMR = createToMemRef(loc, rewriter, src, srcMRTyp);
     auto dstMR = createToMemRef(loc, rewriter, dst, dstMRTyp);
 
@@ -509,8 +526,8 @@ struct CopyLowering
         loc, mrTyp, dynDims, rewriter.getI64IntegerAttr(8));
     // and copy if non-0
     if (!retArTyp.hasZeroSize()) {
-      auto srcMR = rewriter.create<::mlir::bufferization::ToMemrefOp>(
-          loc, srcArTyp.getMemRefType(), src);
+      auto srcMR =
+          createToMemRef(loc, rewriter, src, srcArTyp.getMemRefType(src));
       // create a region with given env, add copy op within it
       auto env = rewriter.getStringAttr("protect_copy_op");
       rewriter.create<::imex::region::EnvironmentRegionOp>(
@@ -545,8 +562,9 @@ struct DeleteLowering
       return ::mlir::failure();
     }
 
-    auto inpMR = rewriter.create<::mlir::bufferization::ToMemrefOp>(
-        op.getLoc(), inpArType.getMemRefType(), adaptor.getInput());
+    auto inp = adaptor.getInput();
+    auto inpMR = createToMemRef(op.getLoc(), rewriter, inp,
+                                inpArType.getMemRefType(inp));
     rewriter.replaceOpWithNewOp<::mlir::memref::DeallocOp>(op, inpMR);
 
     return ::mlir::success();
@@ -650,7 +668,8 @@ struct ReshapeLowering
       auto cpyMR =
           createToMemRef(loc, rewriter, cpy,
                          getMemRefType(op.getContext(), rank, elTyp, false));
-      auto srcMR = createToMemRef(loc, rewriter, src, srcArTyp.getMemRefType());
+      auto srcMR =
+          createToMemRef(loc, rewriter, src, srcArTyp.getMemRefType(src));
       rewriter.create<::mlir::memref::CopyOp>(loc, srcMR, cpyMR);
       src = cpy;
     }
@@ -1304,12 +1323,12 @@ struct ConvertNDArrayToLinalgPass
         [&](mlir::Operation *op) { return typeConverter.isLegal(op); });
 
     ::mlir::RewritePatternSet patterns(&ctxt);
-    patterns.insert<ToTensorLowering, SubviewLowering, ExtractSliceLowering,
-                    InsertSliceLowering, ImmutableInsertSliceLowering,
-                    LinSpaceLowering, LoadOpLowering, CreateLowering,
-                    EWBinOpLowering, DimOpLowering, EWUnyOpLowering,
-                    ReductionOpLowering, ReshapeLowering, CastLowering,
-                    CopyLowering, DeleteLowering, CastElemTypeLowering>(
+    patterns.insert<
+        ToTensorLowering, SubviewLowering, ExtractSliceLowering,
+        InsertSliceLowering, ImmutableInsertSliceLowering, LinSpaceLowering,
+        LoadOpLowering, CreateLowering, EWBinOpLowering, DimOpLowering,
+        EWUnyOpLowering, ReductionOpLowering, ReshapeLowering, CastLowering,
+        CopyLowering, DeleteLowering, CastElemTypeLowering, FromMemRefLowering>(
         typeConverter, &ctxt);
     ::imex::populateRegionTypeConversionPatterns(patterns, typeConverter);
 

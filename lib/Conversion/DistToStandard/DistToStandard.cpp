@@ -1693,7 +1693,7 @@ struct ConvertDistToStandardPass
         if (rank) {
           lOffs = createValuesFromMemRef(builder, loc, inputs[nParts]);
           for (auto i = 0u; i < sOffs.size(); ++i) {
-            if (sOffs[i] != ::mlir::ShapedType::kDynamic) {
+            if (!::mlir::ShapedType::isDynamic(sOffs[i])) {
               lOffs[i] = createIndex(loc, builder, sOffs[i]);
             }
           }
