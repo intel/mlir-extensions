@@ -18,6 +18,25 @@ func.func @test_subview(%arg0: !ndarray.ndarray<?xi64>) -> !ndarray.ndarray<?xi6
 // CHECK-NEXT: return [[V2]] : memref<?xi64, strided<[?], offset: ?>>
 
 // -----
+func.func @test_static_mr_2_tnsr_2_static_mr(%arg0: memref<55xi32, strided<[1], offset: 2>>) -> !ndarray.ndarray<3xi32> {
+    %c0 = arith.constant 0 : index
+    %c3 = arith.constant 3 : index
+    %nda = ndarray.from_memref %arg0 : memref<55xi32, strided<[1], offset: 2>> -> !ndarray.ndarray<55xi32>
+    %0 = ndarray.subview %nda[%c0][%c3][%c3] : !ndarray.ndarray<55xi32> to !ndarray.ndarray<3xi32>
+    return %0 : !ndarray.ndarray<3xi32>
+}
+// CHECK-LABEL: @test_static_mr_2_tnsr_2_static_mr
+// CHECK-NEXT: [[C0:%.*]] = arith.constant
+// CHECK-NEXT: [[C1:%.*]] = arith.constant
+// CHECK-NEXT: [[V:%.*]] = bufferization.to_tensor %arg0 : memref<55xi32, strided<[1], offset: 2>>
+// CHECK-NEXT: [[V0:%.*]] = bufferization.to_memref [[V]] : memref<55xi32, strided<[1], offset: 2>>
+// CHECK-NEXT: [[S0:%.*]] = memref.subview [[V0]][[[C0]]] [[[C1]]] [[[C1]]] : memref<55xi32, strided<[1], offset: 2>> to memref<?xi32, strided<[?], offset: ?>>
+// CHECK-NEXT: [[V1:%.*]] = bufferization.to_tensor [[S0]] writable : memref<?xi32, strided<[?], offset: ?>>
+// CHECK-NEXT: [[V2:%.*]] = bufferization.to_memref
+// CHECK-NEXT: [[V3:%.*]] = memref.cast [[V2]]
+// CHECK-NEXT: return [[V3]] : memref<3xi32, strided<[?], offset: ?>>
+
+// -----
 func.func @test_extract_slice(%arg0: !ndarray.ndarray<?xi64>) -> !ndarray.ndarray<?xi64> {
     %c0 = arith.constant 0 : index
     %c3 = arith.constant 3 : index
@@ -439,3 +458,13 @@ func.func @test_cast_elemtype_copy(%arg0: !ndarray.ndarray<16xi32>) -> !ndarray.
 // CHECK: region.env_region "protect_copy_op"
 // CHECK-NEXT: memref.copy
 // CHECK-NEXT: }
+
+// -----
+func.func @test_from_memref(%arg0: memref<5xi32, strided<[?], offset: ?>>) -> !ndarray.ndarray<5xi32> {
+    %0 = ndarray.from_memref %arg0 : memref<5xi32, strided<[?], offset: ?>> -> !ndarray.ndarray<5xi32>
+    return %0 : !ndarray.ndarray<5xi32>
+}
+// CHECK-LABEL: @test_from_memref
+// CHECK: [[V0:%.*]] = bufferization.to_tensor
+// CHECK: [[V1:%.*]] = bufferization.to_memref [[V0]]
+// CHECK-NEXT: return [[V1]] : memref<5xi32, strided<[?], offset: ?>>

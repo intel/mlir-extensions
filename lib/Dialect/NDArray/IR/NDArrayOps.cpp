@@ -15,6 +15,7 @@
 #include <imex/Dialect/NDArray/IR/NDArrayOps.h>
 #include <imex/Utils/PassUtils.h>
 #include <llvm/ADT/TypeSwitch.h>
+#include <mlir/Dialect/Bufferization/IR/Bufferization.h>
 #include <mlir/Dialect/Utils/StaticValueUtils.h>
 #include <mlir/IR/DialectImplementation.h>
 
@@ -72,7 +73,16 @@ NDArrayType NDArrayType::get(::llvm::ArrayRef<int64_t> shape,
   return get(ctx, shape, elementType, environments, layout);
 }
 
-::mlir::MemRefType NDArrayType::getMemRefType() const {
+::mlir::MemRefType NDArrayType::getMemRefType(::mlir::Value val) const {
+  if (val) {
+    auto defOp = val.getDefiningOp<::mlir::bufferization::ToTensorOp>();
+    if (defOp) {
+      return defOp.getMemref()
+          .getType()
+          .cloneWith(getShape(), getElementType())
+          .cast<::mlir::MemRefType>();
+    }
+  }
   return ::imex::getMemRefType(getContext(), getShape(), getElementType());
 }
 
